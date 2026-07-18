@@ -1,0 +1,63 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SQL_OB_ALTER_OUTLINE_STMT_H_
+#define OCEANBASE_SQL_OB_ALTER_OUTLINE_STMT_H_
+
+#include "lib/string/ob_string.h"
+#include "sql/resolver/ddl/ob_ddl_stmt.h"
+namespace oceanbase
+{
+namespace sql
+{
+class ObAlterOutlineStmt : public ObDDLStmt
+{
+public:
+  ObAlterOutlineStmt() :
+      ObDDLStmt(stmt::T_ALTER_OUTLINE),
+      alter_outline_arg_(),
+      outline_stmt_(NULL)
+  {}
+  virtual ~ObAlterOutlineStmt() { }
+  void set_database_name(const common::ObString &database_name)
+  { alter_outline_arg_.db_name_ = database_name; }
+  void set_outline_name(const common::ObString &outline_name)
+  { alter_outline_arg_.alter_outline_info_.set_name(outline_name); }
+  void set_outline_sql(const common::ObString &outline_sql)
+  { alter_outline_arg_.alter_outline_info_.set_sql_text(outline_sql);}
+  void set_outline_stmt(ObStmt *stmt) { outline_stmt_ = stmt; }
+  void set_format_outline(bool is_format) { alter_outline_arg_.alter_outline_info_.set_format_outline(is_format); }
+
+  const common::ObString &get_format_outline_sql() const { return alter_outline_arg_.alter_outline_info_.get_format_sql_text_str(); }
+  common::ObString &get_format_outline_sql() { return alter_outline_arg_.alter_outline_info_.get_format_sql_text_str(); }
+  const common::ObString &get_outline_sql() const { return alter_outline_arg_.alter_outline_info_.get_sql_text_str(); }
+  common::ObString &get_outline_sql() { return alter_outline_arg_.alter_outline_info_.get_sql_text_str(); }
+  const common::ObString &get_target_sql() const { return alter_outline_arg_.alter_outline_info_.get_outline_target_str(); }
+  common::ObString &get_target_sql() { return alter_outline_arg_.alter_outline_info_.get_outline_target_str(); }
+  ObStmt *&get_outline_stmt() { return outline_stmt_; }
+  obcall::ObAlterOutlineArg &get_alter_outline_arg() { return alter_outline_arg_; }
+  const obcall::ObAlterOutlineArg &get_alter_outline_arg() const { return alter_outline_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return alter_outline_arg_; }
+  TO_STRING_KV(K_(alter_outline_arg),
+               K_(outline_stmt));
+private:
+  obcall::ObAlterOutlineArg alter_outline_arg_;
+  ObStmt *outline_stmt_;//the stmt for outline
+  DISALLOW_COPY_AND_ASSIGN(ObAlterOutlineStmt);
+};
+}//namespace sql
+}//namespace oceanbase
+#endif //OCEANBASE_SQL_OB_ALTER_OUTLINE_STMT_H_

@@ -1,0 +1,104 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_MOCK_OB_SERVER_H_
+#define OCEANBASE_MOCK_OB_SERVER_H_
+
+#include "storage/tx/ob_trans_service.h"
+#include "lib/string/ob_sql_string.h"
+#include "storage/blocksstable/ob_block_sstable_struct.h"
+#include "storage/tx/ob_gts_rpc.h"
+#include "sql/session/ob_sql_session_mgr.h"
+#include "observer/ob_srv_network_frame.h"
+#include "share/config/ob_server_config.h"
+#include "share/config/ob_config_manager.h"
+#include "share/config/ob_reload_config.h"
+#include "observer/ob_service.h"
+#include "observer/omt/ob_multi_tenant.h"
+#include "observer/omt/ob_worker_processor.h"
+#include "observer/ob_srv_xlator.h"
+#include "observer/ob_server_options.h"
+
+#include "mock_ob_schema_service.h"
+#include "../../share/schema/mock_schema_service.h"
+
+#define MAX_PATH_SIZE 1024
+#define DATADIR "data"
+#define APPNAME "test"
+
+namespace oceanbase
+{
+
+using namespace common;
+using namespace storage;
+using namespace observer;
+using namespace share;
+using namespace share::schema;
+using namespace transaction;
+
+namespace unittest
+{
+
+class MockObServer
+{
+public:
+  MockObServer(const ObServerOptions &opts)
+      : is_inited_(false),
+      schema_service_(nullptr), gctx_(GCTX), net_frame_(gctx_),
+      ob_service_(gctx_),
+      session_mgr_(),
+      warm_up_start_time_(0),
+      opts_(opts), config_(ObServerConfig::get_instance()),
+      reload_config_(&config_), config_mgr_(config_, reload_config_),
+      multi_tenant_(), bandwidth_throttle_() {}
+  ~MockObServer() { destroy(); }
+  int init(const char *schema_file,
+           int64_t data_file_size = 5LL << 30, int64_t macro_block_size = 2LL << 20);
+  int init_multi_tenant();
+  int start();
+  void destroy();
+  int stop();
+  int wait();
+public:
+  ObAddr &get_self() { return self_addr_; }
+  MockSchemaService *get_schema_service();
+  ObSchemaGetterGuard &get_schema_guard() { return restore_schema_.get_schema_guard(); }
+protected:
+  bool is_inited_;
+protected:
+  //MockObSchemaService schema_service_;
+  ObRestoreSchema restore_schema_;
+  MockSchemaService *schema_service_;
+  ObGlobalContext &gctx_;
+  ObSrvNetworkFrame net_frame_;
+  common::ObMySQLProxy sql_proxy_;
+  ObService ob_service_;
+  ObSQLSessionMgr session_mgr_;
+  int64_t warm_up_start_time_;
+protected:
+  ObServerOptions opts_;
+  ObAddr self_addr_;
+  ObServerConfig &config_;
+  ObReloadConfig reload_config_;
+  ObConfigManager config_mgr_;
+  omt::ObMultiTenant multi_tenant_;
+  common::ObInOutBandwidthThrottle bandwidth_throttle_;
+};
+
+} // unittest
+} // oceanbase
+
+#endif

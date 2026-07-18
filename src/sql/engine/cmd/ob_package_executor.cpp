@@ -1,0 +1,98 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_ENG
+#include "ob_package_executor.h"
+#include "rootserver/ob_rs_serial_call.h"
+#include "rootserver/ob_root_service.h"
+#include "sql/resolver/ddl/ob_create_package_stmt.h"
+#include "sql/resolver/ddl/ob_drop_package_stmt.h"
+#include "pl/ob_pl_resolver.h"
+#include "pl/ob_pl_build_utils.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+using namespace common;
+using namespace share::schema;
+
+int ObCreatePackageExecutor::execute(ObExecContext &ctx, ObCreatePackageStmt &stmt)
+{
+  int ret = OB_SUCCESS;
+  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  obcall::UInt64 table_id;
+  obcall::ObCreatePackageArg &arg = stmt.get_create_package_arg();
+  
+  bool has_error = ERROR_STATUS_HAS_ERROR == arg.error_info_.get_error_status();
+  ObString &db_name = arg.db_name_;
+  const ObString &package_name = arg.package_info_.get_package_name();
+  share::schema::ObPackageType type = arg.package_info_.get_type();
+  ObString first_stmt;
+  obcall::ObRoutineDDLRes res;
+  if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
+    LOG_WARN("fail to get first stmt" , K(ret));
+  } else {
+    arg.ddl_stmt_str_ = first_stmt;
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("get task executor context failed", K(ret));
+  } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->create_package_with_res(arg, res); }))) {
+    LOG_WARN("rpc proxy create package failed", K(ret),
+             "dst", GCTX.self_addr());
+  }
+  if (OB_SUCC(ret)
+      && !has_error
+      && true
+      && GCONF.plsql_v2_compatibility) {
+    OZ (ObSPIService::force_refresh_schema(res.store_routine_schema_version_));
+    OZ (ctx.get_task_exec_ctx().schema_service_->
+      get_tenant_schema_guard(*ctx.get_sql_ctx()->schema_guard_));
+    OZ (pl::ObPLBuildUtils::build(ctx,
+                                       db_name,
+                                       package_name,
+                                       pl::ObPLBuildUtils::get_pl_unit_type(type),
+                                       res.store_routine_schema_version_));
+  }
+  return ret;
+}
+
+int ObDropPackageExecutor::execute(ObExecContext &ctx, ObDropPackageStmt &stmt)
+{
+  int ret = OB_SUCCESS;
+  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  obcall::UInt64 table_id;
+  obcall::ObDropPackageArg &arg = stmt.get_drop_package_arg();
+  ObString first_stmt;
+  if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
+    LOG_WARN("fail to get first stmt" , K(ret));
+  } else {
+    arg.ddl_stmt_str_ = first_stmt;
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("get task executor context failed", K(ret));
+  } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_package(arg); }))) {
+    LOG_WARN("rpc proxy drop package failed", K(ret), "dst", GCTX.self_addr());
+  }
+  return ret;
+}
+
+}
+}

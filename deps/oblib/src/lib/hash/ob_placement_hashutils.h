@@ -1,0 +1,112 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_COMMON_OB_PLACEMENT_HASHUTILS_
+#define OCEANBASE_COMMON_OB_PLACEMENT_HASHUTILS_
+
+#include "lib/hash/ob_hashutils.h"
+#include "lib/hash_func/ob_hash_func.h"
+#include "lib/container/ob_bit_set.h"
+
+namespace oceanbase
+{
+namespace common
+{
+namespace hash
+{
+template <class K, uint64_t N, typename BlockAllocatorT, bool auto_free = false>
+int placement_hash_search(const K keys[N], const ObBitSet<N, BlockAllocatorT, auto_free> &flags,
+    const K &key, uint64_t &pos)
+{
+  int hash_ret = OB_SUCCESS;
+
+  if (0 == N) {
+    hash_ret = OB_HASH_NOT_EXIST;
+  } else {
+    pos = do_hash(key) % N;
+    uint64_t i = 0;
+    for (; i < N; i++, pos++) {
+      if (pos == N) {
+        pos = 0;
+      }
+      if (!flags.has_member(static_cast<int64_t>(pos))) {
+        hash_ret = OB_HASH_NOT_EXIST;
+        break;
+      } else if (do_equal(keys[pos],  key)) {
+        break;
+      }
+    }
+    if (N == i) {
+      hash_ret = OB_HASH_NOT_EXIST;
+    }
+  }
+  return hash_ret;
+}
+
+  template <class K, uint64_t N, typename BlockAllocatorT, bool auto_free>
+int placement_hash_check_pos(const K keys[N], ObBitSet<N, BlockAllocatorT, auto_free> &flags,
+    uint64_t pos, const K &key, int flag, bool &exist)
+{
+  int ret = OB_SUCCESS;
+  if (0 == N) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (!flags.has_member(static_cast<int64_t>(pos))) {
+    if (OB_FAIL(flags.add_member(static_cast<int64_t>(pos)))) {
+    } else {
+      exist = false;
+    }
+  } else if (keys[pos] == key) {
+    exist = true;
+    if (0 == flag) {
+      ret = OB_HASH_EXIST;
+    }
+  } else {
+    ret = OB_HASH_PLACEMENT_RETRY;
+  }
+  return ret;
+}
+
+template <class K, uint64_t N, typename BlockAllocatorT, bool auto_free>
+int placement_hash_find_set_pos(const K keys[N], ObBitSet<N, BlockAllocatorT, auto_free> &flags,
+    const K &key, int flag, uint64_t &pos, bool &exist)
+{
+  int hash_ret = OB_SUCCESS;
+  if (0 == N) {
+    hash_ret = OB_ERR_UNEXPECTED;
+  } else {
+    pos = do_hash(key) % N;
+    uint64_t i = 0;
+    for (; i < N; i++, pos++) {
+      if (pos == N) {
+        pos = 0;
+      }
+      hash_ret = placement_hash_check_pos<K, N, BlockAllocatorT, auto_free>(keys, flags, pos, key, flag, exist);
+      if (hash_ret != OB_HASH_PLACEMENT_RETRY) {
+        break;
+      }
+    }
+    if (N == i) {
+      OB_LOG(DEBUG, "hash buckets are full");
+      hash_ret = OB_HASH_FULL;
+    }
+  }
+  return hash_ret;
+}
+} // end namespace hash
+} // end namespace common
+} // end namespace oceanbase
+
+#endif // OCEANBASE_COMMON_OB_PLACEMENT_HASHUTILS_

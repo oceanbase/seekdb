@@ -1,0 +1,230 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_DTL
+
+#include "ob_dtl_channel_mem_manager.h"
+#include "share/rc/ob_module_provider.h"
+#include "storage/tx_storage/ob_tenant_freezer.h"
+
+using namespace oceanbase::common;
+using namespace oceanbase::lib;
+using namespace oceanbase::omt;
+using namespace oceanbase::sql;
+using namespace oceanbase::sql::dtl;
+
+ObDtlChannelMemManager::ObDtlChannelMemManager(ObDtlTenantMemManager &tenant_mgr) :
+  size_per_buffer_(GCONF.dtl_buffer_size), seqno_(-1), allocator_{}, pre_alloc_cnt_(0),
+  max_mem_percent_(0), memstore_limit_percent_(0), alloc_cnt_(0), free_cnt_(0), real_alloc_cnt_(0), real_free_cnt_(0), tenant_mgr_(tenant_mgr),
+  mem_used_(0), last_update_memory_time_(-1)
+{}
+
+int ObDtlChannelMemManager::init()
+{
+  int ret = OB_SUCCESS;
+  ObMemAttr attr("SqlDtlBuf");
+  if (OB_FAIL(allocator_.init(
+                lib::ObMallocAllocator::get_instance(),
+                OB_MALLOC_NORMAL_BLOCK_SIZE,
+                attr))) {
+    LOG_WARN("failed to init fifo allocator", K(ret));
+  } else if (OB_FAIL(free_queue_.init(MAX_CAPACITY, "SqlDtlQueue"))) {
+    LOG_WARN("failed to init channel memory manager", K(ret));
+  } else {
+    allocator_.set_label("SqlDtlBuf");
+  }
+  if (OB_FAIL(ret)) {
+    allocator_.reset();
+  }
+  return ret;
+}
+
+int ObDtlChannelMemManager::get_max_mem_percent()
+{
+  int ret = OB_SUCCESS;
+  max_mem_percent_ = GCONF._px_max_message_pool_pct;
+  return ret;
+}
+
+int ObDtlChannelMemManager::get_memstore_limit_percentage_()
+{
+  int ret = OB_SUCCESS;
+  MOD_SCOPE {
+    memstore_limit_percent_ = share::g_mp->tenant_freezer()->get_memstore_limit_percentage();
+  }
+  return ret;
+}
+
+void ObDtlChannelMemManager::destroy()
+{
+  int ret = OB_SUCCESS;
+  void *buf = nullptr;
+  int64_t free_cnt = 0;
+  while (OB_SUCC(ret) && 0 < free_queue_.size()) {
+    if (OB_FAIL(free_queue_.pop(buf, 10))) {
+      LOG_WARN("failed to pop buffer from free queue", K(ret), K(seqno_));
+    } else {
+      real_free(static_cast<ObDtlLinkedBuffer *>(buf));
+      ++ free_cnt;
+    }
+  }
+  LOG_INFO("pop buffer from free queue to destroy",
+    K(ret), K(seqno_), K(free_cnt_), K(alloc_cnt_), K(free_queue_.size()), K(free_cnt));
+  free_queue_.reset();
+  free_queue_.destroy();
+  allocator_.reset();
+}
+
+ObDtlLinkedBuffer *ObDtlChannelMemManager::alloc(int64_t chid, int64_t size)
+{
+  int ret = OB_SUCCESS;
+  ObDtlLinkedBuffer *allocated_buf = NULL;
+  const int64_t size_per_buffer = size_per_buffer_;
+  void *buf = nullptr;
+  if (size <= size_per_buffer) {
+    if (OB_SUCC(free_queue_.pop(buf, 0)) && NULL != buf) {
+      int64_t real_size = (static_cast<ObDtlLinkedBuffer *> (buf))->size();
+      if (real_size >= size_per_buffer) {
+        allocated_buf = new (buf) ObDtlLinkedBuffer(
+        static_cast<char *>(buf) + sizeof (ObDtlLinkedBuffer), real_size);
+        allocated_buf->allocated_chid() = chid;
+      } else {
+        real_free(static_cast<ObDtlLinkedBuffer *> (buf));
+        increase_free_cnt();
+        buf = nullptr;
+      }
+    } else {
+      if (OB_ENTRY_NOT_EXIST == ret) {
+        LOG_TRACE("queue has no element", K(ret), K(seqno_), K(free_queue_.size()));
+        ret = OB_SUCCESS;
+      } else {
+        LOG_WARN("failed to pop back buffer", K(ret), K(seqno_), K(free_queue_.size()));
+      }
+    }
+  }
+  if (nullptr != allocated_buf) {
+  } else {
+    const int64_t alloc_size = sizeof (ObDtlLinkedBuffer)
+        + std::max(size, size_per_buffer);
+    char *buf = reinterpret_cast<char*>(allocator_.alloc(alloc_size));
+    if (nullptr == buf) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("alloc memory failed", K(ret));
+    } else {
+      allocated_buf = new (buf) ObDtlLinkedBuffer(
+          buf + sizeof (ObDtlLinkedBuffer),
+          alloc_size - sizeof(ObDtlLinkedBuffer));
+      allocated_buf->allocated_chid() = chid;
+      if (0 < get_free_queue_length()) {
+        LOG_TRACE("Trace to allocate buffer", K(ret), K(seqno_), K(allocated_buf), K(lbt()),
+          K(get_free_cnt()), K(get_free_queue_length()), K(queue_cnt()), K(get_alloc_cnt()));
+      }
+      if (nullptr != allocated_buf) {
+        ++real_alloc_cnt_;
+      }
+      LOG_TRACE("Trace to allocate memory", K(ret), K(seqno_), K(allocated_buf), K(lbt()));
+    }
+  }
+  if (nullptr != allocated_buf) {
+    increase_alloc_cnt();
+  }
+  uint64_t opt = std::abs(EVENT_CALL(EventTable::EN_PX_DTL_TRACE_LOG_ENABLE));
+  if (0 != opt) {
+    share::ObTaskController::get().allow_next_syslog();
+    LOG_INFO("alloc dtl buffer", KP(allocated_buf));
+  }
+  LOG_TRACE("channel memory status", K(get_alloc_cnt()), K(get_free_cnt()),
+    K(get_free_queue_length()), K(get_max_tenant_memory_limit_size()), K(get_max_dtl_memory_size()),
+    K(get_used_memory_size()), K(max_mem_percent_), KP(allocated_buf), K(seqno_));
+  return allocated_buf;
+}
+
+int ObDtlChannelMemManager::free(ObDtlLinkedBuffer *buf, bool auto_free)
+{
+  int ret = OB_SUCCESS;
+  if (NULL != buf) {
+    buf->reset_batch_info();
+    if (auto_free && buf->size() == size_per_buffer_) {
+      if (OB_FAIL(free_queue_.push(buf))) {
+        LOG_TRACE("failed to push back buffer", K(ret), K(seqno_), K(free_queue_.size()));
+      } else {
+        increase_free_cnt();
+        buf = NULL;
+      }
+    }
+    if (NULL != buf) {
+      real_free(buf);
+      increase_free_cnt();
+    }
+    LOG_TRACE("channel memory status", K(get_alloc_cnt()), K(get_free_cnt()), K(get_free_queue_length()), KP(buf), K(seqno_), K(auto_free));
+  }
+  return ret;
+}
+
+void ObDtlChannelMemManager::real_free(ObDtlLinkedBuffer *buf)
+{
+  if (NULL != buf) {
+    ++real_free_cnt_;
+    buf->~ObDtlLinkedBuffer();
+    allocator_.free(buf);
+    LOG_TRACE("Trace to free buffer", K(seqno_), KP(buf));
+  }
+}
+
+int ObDtlChannelMemManager::auto_free_on_time(int64_t cur_max_reserve_count)
+{
+  int ret = OB_SUCCESS;
+  const int64_t ts = 10;
+  if (cur_max_reserve_count <= 0) {
+    cur_max_reserve_count = 1;
+  }
+  LOG_TRACE("trace auto free", K(get_alloc_cnt()), K(get_free_cnt()), K(get_free_queue_length()),  K(seqno_), K(cur_max_reserve_count));
+  if (free_queue_.size() > cur_max_reserve_count) {
+    int64_t delta = alloc_cnt_ - pre_alloc_cnt_;
+    int64_t delta_per_sec = delta / ts;
+    int64_t reserve_cnt = cur_max_reserve_count;
+    if (delta_per_sec > cur_max_reserve_count) {
+      reserve_cnt = delta_per_sec;
+    }
+    if (0 < reserve_cnt) {
+      // Considering concurrency, here we either release enough buffer or free_queue_.size() greater than reserve_cnt
+      int64_t need_free_cnt = free_queue_.size() - reserve_cnt;
+      void *buf = nullptr;
+      while (OB_SUCC(ret) && (0 < need_free_cnt && reserve_cnt < free_queue_.size())) {
+        if (OB_FAIL(free_queue_.pop(buf, 0))) {
+          LOG_WARN("failed to pop buffer from free queue", K(ret), K(seqno_));
+        } else {
+          free(static_cast<ObDtlLinkedBuffer *>(buf), false);
+          --need_free_cnt;
+        }
+      }
+    }
+  }
+  pre_alloc_cnt_ = alloc_cnt_;
+  update_max_memory_percent();
+  //LOG_INFO("auto free channel buffer", K(max_mem_percent_));
+  return ret;
+}
+
+int64_t ObDtlChannelMemManager::get_used_memory_size()
+{
+  int64_t curr_time = ::oceanbase::common::ObTimeUtility::current_time();
+  if (OB_UNLIKELY(curr_time - last_update_memory_time_ >= static_cast<int64_t> (100_ms))) {
+    last_update_memory_time_ = curr_time;
+    mem_used_ = tenant_mgr_.get_used_memory_size();
+  }
+  return mem_used_;
+}

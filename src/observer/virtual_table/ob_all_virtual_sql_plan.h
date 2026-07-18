@@ -1,0 +1,151 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+ 
+#ifndef SRC_OBSERVER_VIRTUAL_SQL_PLAN_H_
+#define SRC_OBSERVER_VIRTUAL_SQL_PLAN_H_
+
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "sql/plan_cache/ob_plan_cache.h"
+#include "lib/container/ob_se_array.h"
+#include "common/ob_range.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+struct ObSqlPlanItem;
+}
+namespace common
+{
+class ObIAllocator;
+}
+
+namespace share
+{
+class ObTenantSpaceFetcher;
+}
+
+namespace observer
+{
+
+class ObAllVirtualSqlPlan : public common::ObVirtualTableScannerIterator
+{
+public:
+  ObAllVirtualSqlPlan ();
+  virtual ~ObAllVirtualSqlPlan();
+
+  int inner_open();
+  virtual void reset();
+  virtual int inner_get_next_row(common::ObNewRow *&row);
+
+private:
+  int fill_cells(sql::ObSqlPlanItem *plan_item);
+  int extract_tenant_and_plan_id(const common::ObIArray<common::ObNewRange> &ranges);
+  int dump_all_tenant_plans();
+  int dump_tenant_plans();
+  int prepare_next_plan();
+
+private:
+  enum WAIT_COLUMN
+  {
+    PLAN_ID = common::OB_APP_MIN_COLUMN_ID,
+    SQL_ID,
+    DB_ID,
+    PLAN_HASH,
+    GMT_CREATE,
+    OPERATOR,
+    OPTIONS,
+    OBJECT_NODE,
+    OBJECT_ID,
+    OBJECT_OWNER,
+    OBJECT_NAME,
+    OBJECT_ALIAS,
+    OBJECT_TYPE,
+    OPTIMIZER,
+    ID,
+    PARENT_ID,
+    DEPTH,
+    POSITION,
+    SEARCH_COLUMNS,
+    IS_LAST_CHILD,
+    COST,
+    REAL_COST,
+    CARDINALITY,
+    REAL_CARDINALITY,
+    BYTES,
+    ROWSET,
+    OTHER_TAG,
+    PARTITION_START,
+    PARTITION_STOP,
+    PARTITION_ID,
+    OTHER,
+    DISTRIBUTION,
+    CPU_COST,
+    IO_COST,
+    TEMP_SPACE,
+    ACCESS_PREDICATES,
+    FILTER_PREDICATES,
+    STARTUP_PREDICATES,
+    PROJECTION,
+    SPECIAL_PREDICATES,
+    TIME,
+    QBLOCK_NAME,
+    REMARKS,
+    OTHER_XML
+  };
+
+  const static int64_t KEY_PLAN_ID_IDX   = 0;
+  const static int64_t ROWKEY_COUNT      = 1;
+  const static int64_t MAX_LENGTH        = 4000;
+
+  struct PlanInfo {
+    PlanInfo();
+    virtual ~PlanInfo();
+    void reset();
+    int64_t plan_id_;
+    
+    TO_STRING_KV(
+      K_(plan_id)
+    );
+  };
+
+  struct DumpAllPlan
+  {
+    DumpAllPlan();
+    virtual ~DumpAllPlan();
+    void reset();
+    int operator()(common::hash::HashMapPair<sql::ObCacheObjID, sql::ObILibCacheObject *> &entry);
+    ObSEArray<PlanInfo, 8> *plan_ids_;
+    
+  };
+
+  DISALLOW_COPY_AND_ASSIGN(ObAllVirtualSqlPlan);
+  ObSEArray<PlanInfo, 8> plan_ids_;
+  int64_t plan_idx_;
+  //current scan plan info
+  ObSEArray<sql::ObSqlPlanItem*, 10> plan_items_;
+  int64_t plan_item_idx_;
+  char sql_id_[common::OB_MAX_SQL_ID_LENGTH + 1];
+  uint64_t db_id_;
+  uint64_t plan_hash_;
+  int64_t  gmt_create_;
+  
+  int64_t plan_id_;
+};
+}
+}
+
+#endif /* SRC_OBSERVER_VIRTUAL_SQL_PLAN_H_ */

@@ -1,0 +1,43 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SRC_SQL_RESOLVER_PREPARE_OB_PREPARE_RESOLVER_H_
+#define OCEANBASE_SRC_SQL_RESOLVER_PREPARE_OB_PREPARE_RESOLVER_H_
+
+#include "sql/resolver/ob_stmt_resolver.h"
+#include "sql/resolver/prepare/ob_prepare_stmt.h"
+namespace oceanbase
+{
+namespace sql
+{
+class ObPrepareResolver : public ObStmtResolver
+{
+public:
+  explicit ObPrepareResolver(ObResolverParams &params) : ObStmtResolver(params) {}
+  virtual ~ObPrepareResolver() {}
+
+  virtual int resolve(const ParseNode &parse_tree);
+  ObPrepareStmt *get_prepare_stmt() { return static_cast<ObPrepareStmt*>(stmt_); }
+
+private:
+
+};
+
+}
+}
+
+
+#endif /* OCEANBASE_SRC_SQL_RESOLVER_PREPARE_OB_PREPARE_RESOLVER_H_ */

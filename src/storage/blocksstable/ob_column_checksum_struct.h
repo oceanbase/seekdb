@@ -1,0 +1,77 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#ifndef OB_STORAGE_BLOCKSSTABLE_COLUMN_CHECKSUM_STRUCT_H_
+#define OB_STORAGE_BLOCKSSTABLE_COLUMN_CHECKSUM_STRUCT_H_
+#include "lib/container/ob_iarray.h"
+namespace oceanbase
+{
+namespace common
+{
+class ObArenaAllocator;
+}
+namespace blocksstable
+{
+
+struct ObColumnCkmStruct final
+{
+public:
+  ObColumnCkmStruct()
+    : column_checksums_(nullptr),
+      count_(0)
+  {}
+  ~ObColumnCkmStruct() { reset(); }
+  void reset()
+  {
+    count_ = 0;
+    column_checksums_ = nullptr;
+  }
+  bool is_valid() const
+  {
+    return 0 == count_ || (count_ > 0 && NULL != column_checksums_);
+  }
+  bool is_empty() const
+  {
+    return 0 == count_;
+  }
+  int assign(common::ObArenaAllocator &allocator, const ObColumnCkmStruct &other);
+  int reserve(common::ObArenaAllocator &allocator, const int64_t column_cnt);
+  int assign(
+    common::ObArenaAllocator &allocator,
+    const common::ObIArray<int64_t> &column_checksums);
+  int get_column_checksums(ObIArray<int64_t> &column_checksums) const;
+  /* serialize need consider count */
+  int serialize(char *buf, const int64_t buf_len, int64_t &pos) const;
+  int deserialize(common::ObArenaAllocator &allocator, const char *buf,
+                  const int64_t data_len, int64_t &pos);
+  int64_t get_serialize_size() const;
+
+  /* only deep copy array */
+  int64_t get_deep_copy_size() const;
+  int deep_copy(
+      char *buf,
+      const int64_t buf_len,
+      int64_t &pos,
+      ObColumnCkmStruct &dest) const;
+  int64_t to_string(char *buf, const int64_t buf_len) const;
+
+  int64_t *column_checksums_;
+  int64_t count_;
+};
+
+} // namespace blocksstable
+} // namespace oceanbase
+
+#endif // OB_STORAGE_BLOCKSSTABLE_COLUMN_CHECKSUM_STRUCT_H_

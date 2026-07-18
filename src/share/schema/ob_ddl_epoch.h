@@ -1,0 +1,88 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_DDL_EPOCH_H
+#define OCEANBASE_DDL_EPOCH_H
+
+#include "lib/container/ob_se_array.h"
+#include "common/mysqlclient/ob_mysql_transaction.h"
+
+namespace oceanbase
+{
+
+namespace common
+{
+class ObMySQLProxy;
+}
+
+namespace share
+{
+namespace schema
+{
+class ObMultiVersionSchemaService;
+
+struct ObDDLEpoch
+{
+  int64_t ddl_epoch_;
+  TO_STRING_KV(K_(ddl_epoch));
+};
+
+
+// use ddl_epoch to promise only ddl_service master execute ddl trans
+// promote ddl_epoch when ddl_service init
+// compare ddl_epoch in ddl trans
+class ObDDLEpochMgr
+{
+public:
+  ObDDLEpochMgr()
+    : inited_(false),
+      sql_proxy_(NULL),
+      schema_service_(NULL),
+      ddl_epoch_stat_(),
+      lock_(),
+      lock_for_promote_(),
+      mutex_for_promote_() {}
+  int init(ObMySQLProxy *sql_proxy, share::schema::ObMultiVersionSchemaService *schema_service);
+  // Get local ddl_epoch
+  int get_ddl_epoch(int64_t &ddl_epoch);
+  // Increase the internal table ddl_epoch
+  int promote_ddl_epoch(int64_t wait_us, int64_t &ddl_epoch_ret);
+  int remove_ddl_epoch();
+  int remove_all_ddl_epoch();
+  int check_and_lock_ddl_epoch(
+      common::ObMySQLTransaction &trans,
+      const int64_t ddl_epoch_local);
+private:
+  int promote_ddl_epoch_inner_(int64_t &new_ddl_epoch);
+  int update_ddl_epoch_(const int64_t ddl_epoch);
+private:
+  bool inited_;
+  ObMySQLProxy *sql_proxy_;
+  share::schema::ObMultiVersionSchemaService *schema_service_;
+  ObSEArray<ObDDLEpoch, 10> ddl_epoch_stat_;
+  common::SpinRWLock lock_; // protect ddl_epoch_stat_
+  common::SpinRWLock lock_for_promote_; // promise only one thread to promote
+  lib::ObMutex mutex_for_promote_; // to make promote ddl epoch serially to avoid conflict
+};
+
+
+} // end schema
+} // end share
+} // end oceanbase
+
+
+#endif
+

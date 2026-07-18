@@ -1,0 +1,106 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_ROW_QUEUE_H_
+#define OB_ROW_QUEUE_H_
+
+#include "lib/container/ob_raw_se_array.h"
+#include "lib/oblog/ob_log_module.h"
+#include "storage/blocksstable/ob_block_sstable_struct.h"
+
+namespace oceanbase
+{
+namespace storage
+{
+  class ObNopPos;
+}
+
+namespace blocksstable
+{
+
+class ObRowQueue
+{
+public:
+  enum RowQueueIndex {
+    QI_FIRST_ROW = 0,
+    QI_LAST_ROW = 1,
+    QI_MAX,
+  };
+  ObRowQueue() : col_cnt_(0), cur_pos_(0), is_inited_(false) {}
+  int init(const int64_t col_cnt);
+  int add_empty_row(common::ObIAllocator &allocator);
+  int add_row(const ObDatumRow &row, common::ObIAllocator &allocator);
+  int get_next_row(const ObDatumRow *&row);
+  OB_INLINE bool is_empty() { return 0 == rows_.count(); }
+  OB_INLINE bool has_next() const { return cur_pos_ < rows_.count(); }
+  OB_INLINE ObDatumRow *get_first()
+  {
+    ObDatumRow *row = NULL;
+    if (!is_empty()) {
+      row = rows_.at(0);
+    }
+    return row;
+  }
+  OB_INLINE ObDatumRow *get_last()
+  {
+    ObDatumRow *row = NULL;
+    if (!is_empty()) {
+      row = rows_.at(rows_.count() - 1);
+    }
+    return row;
+  }
+  OB_INLINE int64_t count() const { return rows_.count(); }
+  int compact_border_row(const ObDatumRow *row,
+                         const bool last_row,
+                         storage::ObNopPos *&nop_pos,
+                         common::ObIAllocator &allocator);
+  int add_shadow_row(const int64_t trans_seq_idx, common::ObIAllocator &allocator);
+  void reset()
+  {
+    col_cnt_ = 0;
+    cur_pos_ = 0;
+    rows_.reset();
+    is_inited_ = false;
+  }
+
+  void reuse()
+  {
+    cur_pos_ = 0;
+    rows_.reuse();
+  }
+  void print_rows()
+  {
+    for (int64_t i = 0; i < rows_.count(); i++) {
+      STORAGE_LOG_RET(WARN, common::OB_SUCCESS, "print rows of row queue", K(i), KPC(rows_.at(i)));
+    }
+  }
+  TO_STRING_KV(K_(col_cnt),
+               K_(cur_pos),
+               "count", rows_.count());
+private:
+  int alloc_row(ObDatumRow *&row, common::ObIAllocator &allocator);
+private:
+  static const int64_t DEFAULT_MULTIVERSION_ROW_COUNT = 64;
+  int64_t col_cnt_;
+  int64_t cur_pos_;
+  common::ObRawSEArray<ObDatumRow *, DEFAULT_MULTIVERSION_ROW_COUNT> rows_;
+  bool is_inited_;
+};
+
+} // namespace blocksstable
+} // namespace oceanbase
+
+#endif

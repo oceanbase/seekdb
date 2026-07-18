@@ -1,0 +1,82 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include <gtest/gtest.h>
+#include "lib/net/ob_addr.h"
+
+namespace oceanbase
+{
+using namespace common;
+namespace unittest
+{
+int64_t cal_hash_v1(const common::ObAddr &addr, const int64_t cluster_id)
+{
+  // This calculation may cause hash conflicts
+  int64_t ret_hash = murmurhash(&OB_SERVER_TENANT_ID, sizeof(OB_SERVER_TENANT_ID), addr.hash());
+  ret_hash = (ret_hash | (cluster_id << 56));
+  return ret_hash;
+}
+
+int64_t cal_hash_v2(const common::ObAddr &addr, const int64_t cluster_id)
+{
+  // ObAddr.hash() only generates a 32-bit value, so the algorithm of shifting cluster_id to the left by 32 bits is effective
+  int64_t ret_hash = (addr.hash() | (cluster_id << 48));
+  ret_hash = murmurhash(&OB_SERVER_TENANT_ID, sizeof(OB_SERVER_TENANT_ID), ret_hash);
+  return ret_hash;
+}
+
+TEST(test_cluster_id_hash_conflict, test_cluster_id_hash)
+{
+  common::ObAddr addr;
+  addr.parse_from_cstring("127.0.0.1:8080");
+
+  int64_t tenant_id = OB_SERVER_TENANT_ID;
+
+  // The binary of 112 and 120 are only one bit different
+  int64_t cluster_id_11 = 112;
+  int64_t cluster_id_12 = 120;
+
+  int64_t cluster_id_21 = 111;
+  int64_t cluster_id_22 = 112;
+
+
+//  EXPECT_NE(cal_hash_v1(tenant_id, addr, cluster_id_11), cal_hash_v1(tenant_id, addr, cluster_id_12)); // hash conflict
+
+  EXPECT_NE(cal_hash_v2(addr, cluster_id_11), cal_hash_v2(addr, cluster_id_12));
+  EXPECT_NE(cal_hash_v2(addr, cluster_id_21), cal_hash_v2(addr, cluster_id_22));
+
+  CLOG_LOG(INFO, "v1 ret_hash is ", "result", cal_hash_v1(addr, cluster_id_11));
+  CLOG_LOG(INFO, "v1 ret_hash is ", "result", cal_hash_v1(addr, cluster_id_12));
+  CLOG_LOG(INFO, "v1 ret_hash is ", "result", cal_hash_v1(addr, cluster_id_21));
+  CLOG_LOG(INFO, "v1 ret_hash is ", "result", cal_hash_v1(addr, cluster_id_22));
+
+  CLOG_LOG(INFO, "v2 ret_hash is ", "result", cal_hash_v2(addr, cluster_id_11));
+  CLOG_LOG(INFO, "v2 ret_hash is ", "result", cal_hash_v2(addr, cluster_id_12));
+  CLOG_LOG(INFO, "v2 ret_hash is ", "result", cal_hash_v2(addr, cluster_id_21));
+  CLOG_LOG(INFO, "v2 ret_hash is ", "result", cal_hash_v2(addr, cluster_id_22));
+
+}
+} // namespace unittest
+} // namespace oceanbase
+
+int main(int argc, char **argv)
+{
+  OB_LOGGER.set_file_name("test_cluster_id_hash_conflict.log", true);
+  OB_LOGGER.set_log_level("INFO");
+  CLOG_LOG(INFO, "begin unittest:test_cluster_id_hash_conflict");
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}

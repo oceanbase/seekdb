@@ -1,0 +1,92 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_ALL_VIRTUAL_TABLET_COMPACTION_HISTORY_H_
+#define OB_ALL_VIRTUAL_TABLET_COMPACTION_HISTORY_H_
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "storage/compaction/ob_sstable_merge_info_mgr.h"
+#include "storage/compaction/ob_compaction_diagnose.h"
+#include "storage/compaction/ob_sstable_merge_history.h"
+
+namespace oceanbase
+{
+namespace observer
+{
+
+class ObAllVirtualTabletCompactionHistory : public common::ObVirtualTableScannerIterator
+{
+public:
+  enum COLUMN_ID_LIST { // FARM COMPAT WHITELIST
+        TABLET_ID = common::OB_APP_MIN_COLUMN_ID,
+    MERGE_TYPE,
+    MERGE_VERSION,
+    MERGE_START_TIME,
+    MERGE_FINISH_TIME,
+    TASK_ID,
+    OCCUPY_SIZE,
+    MACRO_BLOCK_COUNT,
+    MULTIPLEXED_MACRO_BLOCK_COUNT,
+    NEW_MICRO_COUNT_IN_NEW_MACRO,
+    MULTIPLEXED_MICRO_COUNT_IN_NEW_MACRO,
+    TOTAL_ROW_COUNT,
+    INCREMENTAL_ROW_COUNT,
+    COMPRESSION_RATIO,
+    NEW_FLUSH_DATA_RATE,
+    PROGRESSIVE_MREGE_ROUND,
+    PROGRESSIVE_MREGE_NUM,
+    PARALLEL_DEGREE,
+    PARALLEL_INFO,
+    PARTICIPANT_TABLE_INFO,
+    MACRO_ID_LIST,
+    COMMENT,
+    START_CG_ID,
+    END_CG_ID,
+    KEPT_SNAPSHOT,
+    MERGE_LEVEL,
+    EXEC_MODE,
+    IS_FULL_MERGE,
+    IO_COST_TIME_PERCENTAGE,
+    MERGE_REASON,
+    BASE_MAJOR_STATUS,
+    CO_MERGE_TYPE,
+    MDS_FILTER_INFO,
+    EXECUTE_TIME
+  };
+  ObAllVirtualTabletCompactionHistory();
+  virtual ~ObAllVirtualTabletCompactionHistory();
+  virtual int inner_get_next_row(common::ObNewRow *&row);
+  virtual void reset();
+protected:
+  int fill_cells(compaction::ObSSTableMergeHistory *merge_history);
+private:
+private:
+  char ip_buf_[common::OB_IP_STR_BUFF];
+  char parallel_merge_info_buf_[common::OB_PARALLEL_MERGE_INFO_LENGTH];
+  char dag_id_buf_[common::OB_TRACE_STAT_BUFFER_SIZE];
+  char participant_table_str_[common::OB_PART_TABLE_INFO_LENGTH];
+  char macro_id_list_[common::OB_MACRO_ID_INFO_LENGTH];
+  char other_info_[common::OB_COMPACTION_EVENT_STR_LENGTH];
+  char comment_[common::OB_COMPACTION_COMMENT_STR_LENGTH];
+  char kept_snapshot_info_[common::OB_COMPACTION_INFO_LENGTH];
+  compaction::ObSSTableMergeHistory merge_history_;
+  compaction::ObIDiagnoseInfoMgr::Iterator major_merge_info_iter_;
+  compaction::ObIDiagnoseInfoMgr::Iterator minor_merge_info_iter_;
+  DISALLOW_COPY_AND_ASSIGN(ObAllVirtualTabletCompactionHistory);
+};
+
+} /* namespace observer */
+} /* namespace oceanbase */
+#endif

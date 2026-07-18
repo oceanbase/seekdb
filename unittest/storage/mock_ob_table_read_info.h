@@ -1,0 +1,88 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_STORAGE_MOCK_OB_TABLE_READ_INFO_H_
+#define OCEANBASE_STORAGE_MOCK_OB_TABLE_READ_INFO_H_
+
+#include <gtest/gtest.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <gmock/gmock.h>
+#include "src/storage/access/ob_table_read_info.h"
+#include "src/storage/ob_i_store.h"
+
+namespace oceanbase
+{
+using namespace common;
+namespace storage
+{
+
+// only for unittest
+class MockObTableReadInfo final : public ObTableReadInfo
+{
+public:
+  MockObTableReadInfo() = default;
+  ~MockObTableReadInfo() = default;
+  int init(
+    common::ObIAllocator &allocator,
+    const int64_t schema_column_count,
+    const int64_t schema_rowkey_cnt,
+    const common::ObIArray<ObColDesc> &cols_desc,
+    const common::ObIArray<int32_t> *storage_cols_index = nullptr,
+    const common::ObIArray<ObColumnParam *> *cols_param = nullptr);
+};
+
+int MockObTableReadInfo::init(common::ObIAllocator &allocator,
+    const int64_t schema_column_count,
+    const int64_t schema_rowkey_cnt,
+    const common::ObIArray<ObColDesc> &cols_desc,
+    const common::ObIArray<int32_t> *storage_cols_index,
+    const common::ObIArray<ObColumnParam *> *cols_param)
+{
+  int ret = OB_SUCCESS;
+  const int64_t out_cols_cnt = cols_desc.count();
+
+  const int64_t extra_rowkey_col_cnt = storage::ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
+  const bool is_cg_sstable = (schema_rowkey_cnt == 0 && schema_column_count == 1);
+  init_basic_info(schema_column_count, schema_rowkey_cnt, is_cg_sstable,
+    false /*is_cs_replica_compat*/, false /*is_delete_insert_table*/, false/*is_global_index_table*/); // init basic info
+  if (OB_FAIL(prepare_arrays(allocator, cols_desc, out_cols_cnt))) {
+    STORAGE_LOG(WARN, "failed to prepare arrays", K(ret), K(out_cols_cnt));
+  } else if (nullptr != cols_param && OB_FAIL(cols_param_.init_and_assign(*cols_param, allocator))) {
+    STORAGE_LOG(WARN, "Fail to assign cols_param", K(ret));
+  } else if (OB_UNLIKELY(cols_index_.rowkey_mode_ || memtable_cols_index_.rowkey_mode_)) {
+    ret = OB_ERR_UNEXPECTED;
+    STORAGE_LOG(WARN, "cols index is unexpected rowkey_mode", K(ret), K(cols_index_), K(memtable_cols_index_));
+  } else {
+    int32_t col_index = OB_INVALID_INDEX;
+    for (int64_t i = 0; i < out_cols_cnt; i++) {
+      col_index = (nullptr == storage_cols_index) ? i : storage_cols_index->at(i);
+      cols_index_.array_[i] = col_index;
+      memtable_cols_index_.array_[i] = col_index;
+    }
+    if (FAILEDx(init_datum_utils(allocator, false/*is_cg_sstable*/))) {
+      STORAGE_LOG(WARN, "failed to init sequence read info & datum utils", K(ret));
+    } else {
+      is_inited_ = true;
+    }
+  }
+  return ret;
+}
+
+}
+}
+
+#endif

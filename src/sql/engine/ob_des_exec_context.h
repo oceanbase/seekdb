@@ -1,0 +1,46 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SQL_ENGINE_OB_DES_EXEC_CONTEXT_
+#define OCEANBASE_SQL_ENGINE_OB_DES_EXEC_CONTEXT_
+
+#include "sql/engine/ob_exec_context.h"
+#include "sql/session/ob_sql_session_mgr.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+class ObDesExecContext : public ObExecContext
+{
+public:
+  ObDesExecContext(common::ObIAllocator &allocator, ObSQLSessionMgr *session_mgr);
+  virtual ~ObDesExecContext();
+  int create_my_session();
+  virtual int deserialize(const char* buf, const int64_t data_len, int64_t& pos);
+  void cleanup_session();
+  void show_session();
+  void hide_session();
+protected:
+  ObFreeSessionCtx free_session_ctx_;
+  ObSqlCtx sql_ctx_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObDesExecContext);
+};
+
+}
+}
+#endif /* OCEANBASE_SQL_ENGINE_OB_DES_EXEC_CONTEXT_ */

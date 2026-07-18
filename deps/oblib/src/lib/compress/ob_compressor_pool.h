@@ -1,0 +1,71 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_COMPRESSOR_POOL_H_
+#define OB_COMPRESSOR_POOL_H_
+
+#include "lib/compress/ob_compressor.h"
+#include "lib/compress/ob_stream_compressor.h"
+#include "lib/allocator/ob_vslice_alloc.h"
+#include "none/ob_none_compressor.h"
+#include "zstd_1_3_8/ob_zstd_compressor_1_3_8.h"
+#include "zstd_1_3_8/ob_zstd_stream_compressor_1_3_8.h"
+#include "zlib/ob_zlib_compressor.h"
+
+namespace oceanbase
+{
+namespace common
+{
+
+class ObCompressorPool
+{
+public:
+  static ObCompressorPool &get_instance();
+  int get_compressor(const char *compressor_name, ObCompressor *&compressor);
+  int get_compressor(const ObCompressorType &compressor_type, ObCompressor *&compressor);
+  int get_compressor_type(const char *compressor_name, ObCompressorType &compressor_type) const;
+  int get_compressor_type(const ObString &compressor_name, ObCompressorType &compressor_type) const;
+
+  int get_stream_compressor(const char *compressor_name, ObStreamCompressor *&stream_compressor);
+  int get_stream_compressor(const ObCompressorType &compressor_type, ObStreamCompressor *&stream_compressor);
+  static bool need_common_compress(const ObCompressorType &compressor_type)
+  {
+    return (need_compress(compressor_type) && (!need_stream_compress(compressor_type)));
+  }
+  static bool need_stream_compress(const ObCompressorType &compressor_type)
+  {
+    return (STREAM_ZSTD_1_3_8_COMPRESSOR == compressor_type);
+  }
+
+  static bool need_compress(const ObCompressorType &compressor_type)
+  {
+    return ((INVALID_COMPRESSOR != compressor_type) && (NONE_COMPRESSOR != compressor_type));
+  }
+private:
+  ObCompressorPool();
+  virtual ~ObCompressorPool() {}
+
+  ObVSliceAlloc allocator_;
+  ObNoneCompressor none_compressor;
+  zstd_1_3_8::ObZstdCompressor_1_3_8 zstd_compressor_1_3_8;
+  zstd_1_3_8::ObZstdStreamCompressor_1_3_8 zstd_stream_compressor_1_3_8;
+  ObZlibCompressor zlib_compressor;
+};
+
+} /* namespace common */
+} /* namespace oceanbase */
+
+#endif /* OB_COMPRESSOR_POOL_H_ */

@@ -1,0 +1,160 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "ob_show_database_status.h"
+
+#include "observer/ob_server.h"
+
+namespace oceanbase
+{
+using namespace common;
+using namespace share::schema;
+namespace observer
+{
+
+ObShowDatabaseStatus::ObShowDatabaseStatus()
+    : ObVirtualTableScannerIterator()
+{
+}
+
+ObShowDatabaseStatus::~ObShowDatabaseStatus()
+{
+  reset();
+}
+
+void ObShowDatabaseStatus::reset()
+{
+  ObVirtualTableScannerIterator::reset();
+}
+
+int ObShowDatabaseStatus::add_database_status(const ObAddr &server_addr,
+                                              const ObDatabaseSchema &database_schema,
+                                              ObObj *cells,
+                                              const int64_t col_count)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(server_addr);
+  int64_t cell_idx = 0;
+  if (OB_ISNULL(cells) || col_count > reserved_column_cnt_) {
+    ret = OB_ERR_UNEXPECTED;
+    SERVER_LOG(WARN, "cells is null or col_count is error", K(col_count), K(ret));
+  }
+  for (int64_t j = 0; OB_SUCC(ret) && j < col_count; ++j) {
+    int64_t col_id = output_column_ids_.at(j);
+    switch(col_id) {
+      case DATABASE_NAME: {
+        cells[cell_idx].set_varchar(database_schema.get_database_name());//db_name
+        cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+        break;
+      }
+      case READ_ONLY: {
+        if (database_schema.is_read_only()) {
+          cells[cell_idx].set_int(1);
+        } else {
+          cells[cell_idx].set_int(0);
+        }
+        break;
+      }
+      default: {
+        ret = OB_ERR_UNEXPECTED;
+        SERVER_LOG(WARN, "invalid column id", K(ret), K(cell_idx),
+                   K(j), K(output_column_ids_), K(col_id));
+        break;
+      }
+    }
+    if (OB_SUCC(ret)) {
+      cell_idx++;
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(scanner_.add_row(cur_row_))) {
+      SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
+    }
+  }
+  return ret;
+}
+
+int ObShowDatabaseStatus::add_all_database_status()
+{
+  int ret = OB_SUCCESS;
+  ObObj *cells = NULL;
+  const int64_t col_count = output_column_ids_.count();
+  if (0 > col_count || col_count > DATABASE_STATUS_COLUMN_COUNT) {
+    ret = OB_ERR_UNEXPECTED;
+    SERVER_LOG(WARN, "column count error ", K(ret), K(col_count));
+  } else if (NULL == (cells = cur_row_.cells_)) {
+    ret = OB_ERR_UNEXPECTED;
+    SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
+  } else {
+    ObSArray<const ObDatabaseSchema *> database_schemas;
+    if (OB_ISNULL(schema_guard_)) {
+      ret = OB_ERR_UNEXPECTED;
+      SERVER_LOG(WARN, "schema manager should not be null", K(ret));
+    } else if (OB_FAIL(schema_guard_->get_database_schemas_in_tenant(database_schemas))) {
+      SERVER_LOG(WARN, "failed to get database schema of tenant");
+    } else {
+      ObServer &server = ObServer::get_instance();
+      const ObAddr server_ip = server.get_self();
+      for (int64_t i = 0; OB_SUCC(ret) && i < database_schemas.count(); ++i) {
+        const ObDatabaseSchema* database_schema = database_schemas.at(i);
+        const ObString database_name(database_schema->get_database_name());
+        if (OB_ISNULL(database_schema)) {
+          ret = OB_ERR_UNEXPECTED;
+          SERVER_LOG(WARN, "database not exist", K(ret));
+        } else if (database_schema->is_in_recyclebin() || database_schema->is_hidden()) {
+          continue;
+        } else if (OB_FAIL(add_database_status(server_ip, *database_schema, cells, col_count))) {
+          SERVER_LOG(WARN, "failed to add table constraint of database schema!", K(ret));
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObShowDatabaseStatus::inner_get_next_row(ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(allocator_)) {
+    ret = OB_NOT_INIT;
+    SERVER_LOG(WARN, "allocator is NULL", K(ret));
+  } else if (OB_ISNULL(schema_guard_)) {
+    ret = OB_NOT_INIT;
+    SERVER_LOG(WARN, "schema manager is NULL", K(ret));
+  } else {
+    if (!start_to_read_) {
+      if (OB_FAIL(add_all_database_status())) {
+        SERVER_LOG(WARN, "failed to add all database status!", K(ret));
+      } else {
+        scanner_it_ = scanner_.begin();
+        start_to_read_ = true;
+      }
+    }
+    if (OB_SUCCESS == ret && start_to_read_) {
+      if (OB_FAIL(scanner_it_.get_next_row(cur_row_))) {
+        if (OB_ITER_END != ret) {
+          SERVER_LOG(WARN, "fail to get next row", K(ret));
+        }
+      } else {
+        row = &cur_row_;
+      }
+    }
+  }
+  return ret;
+}
+
+}/* ns observer*/
+}/* ns oceanbase */

@@ -1,0 +1,83 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_COMMON_OB_TIMER_
+#define OCEANBASE_COMMON_OB_TIMER_
+
+#include "lib/task/ob_timer_service.h"
+
+namespace oceanbase
+{
+
+namespace common
+{
+
+class ObTimer
+{
+  friend class TaskToken;
+public:
+  ObTimer()
+      : is_inited_(false),
+        is_stopped_(true),
+        timer_service_(nullptr),
+        run_wrapper_(nullptr)
+  {
+    timer_name_[0] = '\0';
+    timer_service_ = &(ObTimerService::get_instance());
+  }
+  ~ObTimer();
+  int init(const char* timer_name = nullptr,
+           const ObMemAttr &attr = ObMemAttr("timer")); // init and start
+  bool inited() const;
+  int start();  // only start
+  void stop();  // only stop
+  void wait();  // wait all running task finish
+  void destroy();
+  int set_run_wrapper_with_ret(lib::IRunWrapper *run_wrapper);
+  lib::IRunWrapper *get_run_wrapper() const
+  {
+    return run_wrapper_;
+  }
+  int64_t to_string(char *buf, const int64_t buf_len) const
+  {
+    int64_t pos = 0;
+    if (NULL != buf && buf_len > 0) {
+      databuff_printf(buf, buf_len, pos, "timer_type:%s", typeid(*this).name());
+    }
+    return pos;
+  }
+public:
+  int schedule(ObTimerTask &task, const int64_t delay, bool repeate = false, bool immediate = false);
+  int schedule_repeate_task_immediately(ObTimerTask &task, const int64_t delay);
+  bool task_exist(const common::ObTimerTask &task);
+  int cancel(const ObTimerTask &task);
+  int cancel_task(const ObTimerTask &task);
+  int wait_task(const ObTimerTask &task);
+  void cancel_all();
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObTimer);
+private:
+  bool is_inited_;
+  bool is_stopped_;
+  char timer_name_[OB_THREAD_NAME_BUF_LEN];
+  ObTimerService *timer_service_;
+  lib::IRunWrapper *run_wrapper_;
+};
+
+} /* common */
+} /* oceanbase */
+
+#endif // OCEANBASE_COMMON_OB_TIMER_

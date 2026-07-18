@@ -1,0 +1,183 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "ob_all_virtual_server_compaction_progress.h"
+#include "share/rc/ob_module_provider.h"
+#include "storage/compaction/ob_server_compaction_event_history.h"
+
+namespace oceanbase
+{
+using namespace storage;
+using namespace common;
+namespace observer
+{
+ObAllVirtualServerCompactionProgress::ObAllVirtualServerCompactionProgress()
+    : progress_(),
+      progress_iter_(),
+      is_inited_(false)
+{
+}
+
+ObAllVirtualServerCompactionProgress::~ObAllVirtualServerCompactionProgress()
+{
+  reset();
+}
+
+int ObAllVirtualServerCompactionProgress::init()
+{
+  int ret = OB_SUCCESS;
+  if (IS_INIT) {
+    ret = OB_INIT_TWICE;
+    SERVER_LOG(WARN, "ObAllVirtualServerCompactionProgress has been inited", K(ret));
+  } else if (OB_FAIL(progress_iter_.open())) {
+    SERVER_LOG(WARN, "Fail to open suggestion iter", K(ret));
+  } else {
+    is_inited_ = true;
+  }
+  return ret;
+}
+
+int ObAllVirtualServerCompactionProgress::inner_get_next_row(common::ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
+
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    SERVER_LOG(WARN, "ObAllVirtualServerCompactionProgress has been inited", K(ret));
+  } else if (OB_FAIL(progress_iter_.get_next_info(progress_))) {
+    if (OB_ITER_END != ret) {
+      STORAGE_LOG(WARN, "Fail to get next suggestion info", K(ret));
+    }
+  } else if (OB_FAIL(fill_cells())) {
+    STORAGE_LOG(WARN, "Fail to fill cells", K(ret), K(progress_));
+  } else {
+    row = &cur_row_;
+  }
+  return ret;
+}
+
+int ObAllVirtualServerCompactionProgress::fill_cells()
+{
+  int ret = OB_SUCCESS;
+  int tmp_ret = OB_SUCCESS;
+  const int64_t col_count = output_column_ids_.count();
+  ObObj *cells = cur_row_.cells_;
+  int64_t compression_ratio = 0;
+  int64_t update_estimated_finish_time = 0;
+  compaction::ObServerCompactionEvent tmp_event;
+  if (!progress_.is_inited_) {
+    progress_.total_tablet_cnt_ = -1;
+    progress_.unfinished_tablet_cnt_ = -1;
+    progress_.data_size_ = -1;
+    progress_.unfinished_data_size_ = -1;
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
+    uint64_t col_id = output_column_ids_.at(i);
+    switch (col_id) {
+    case MERGE_TYPE:
+      cells[i].set_varchar(merge_type_to_str(progress_.merge_type_));
+      cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+      break;
+    case COMPACTION_SCN:
+      cells[i].set_uint64(progress_.merge_version_ < 0 ? 0 : progress_.merge_version_);
+      break;
+    case STATUS:
+      cells[i].set_varchar(share::ObIDag::get_dag_status_str(progress_.status_));
+      cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+      break;
+    case TOTAL_PARTITION_CNT:
+      cells[i].set_int(progress_.total_tablet_cnt_);
+      break;
+    case UNFIINISHED_PARTITION_CNT:
+      cells[i].set_int(progress_.unfinished_tablet_cnt_);
+      break;
+    case DATA_SIZE:
+      cells[i].set_int(progress_.data_size_);
+      break;
+    case UNFINISHED_DATA_SIZE:
+      cells[i].set_int(progress_.unfinished_data_size_);
+      break;
+    case COMPRESSION_RATIO:
+      if (0 == progress_.original_size_) {
+        cells[i].set_double(1);
+      } else {
+        compression_ratio = progress_.compressed_size_ * 1.0 / progress_.original_size_ * 100;
+        cells[i].set_double(compression_ratio * 1.0 / 100);
+      }
+      break;
+    case START_TIME:
+      cells[i].set_timestamp(progress_.start_time_);
+      break;
+    case ESTIMATED_FINISH_TIME:
+      if (share::ObIDag::DAG_STATUS_FINISH != progress_.status_) {
+        update_estimated_finish_time = 0;
+        MOD_SCOPE {
+          if (OB_TMP_FAIL(share::g_mp->tenant_dag_scheduler()->get_max_major_finish_time(progress_.merge_version_, update_estimated_finish_time))) {
+            SERVER_LOG(WARN, "failed to get max major_finish_time", K(tmp_ret));
+          }
+        }
+        progress_.estimated_finish_time_ = MAX(progress_.estimated_finish_time_, update_estimated_finish_time);
+        int64_t current_time = ObTimeUtility::fast_current_time();
+        // update before select, update estimated_finish_time
+        if (progress_.estimated_finish_time_ < current_time) {
+          progress_.estimated_finish_time_ = current_time + SERVER_PROGRESS_EXTRA_TIME;
+        }
+      }
+      cells[i].set_timestamp(progress_.estimated_finish_time_);
+      break;
+    case COMMENTS:
+      MEMSET(event_buf_, '\0', sizeof(event_buf_));
+      tmp_event.reset();
+      if (share::ObIDag::DAG_STATUS_FINISH != progress_.status_) {
+        MOD_SCOPE {
+          share::g_mp->server_compaction_event_history()->get_last_event(tmp_event);
+          if (tmp_event.compaction_scn_ == progress_.merge_version_) {
+            if (OB_FAIL(tmp_event.generate_event_str(event_buf_, sizeof(event_buf_)))) {
+              SERVER_LOG(WARN, "failed to generate event str", K(ret), K(tmp_event));
+            }
+          }
+        }
+      } else {
+        progress_.sum_time_guard_.to_string(event_buf_, sizeof(event_buf_));
+      }
+      {
+        int64_t pos = strlen(event_buf_);
+        databuff_printf(event_buf_, sizeof(event_buf_), pos, "is_inited:%d,real_finish_cnt:%ld",
+            progress_.is_inited_, progress_.real_finish_cnt_);
+      }
+      cells[i].set_varchar(event_buf_);
+      cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+      break;
+    default:
+      ret = OB_ERR_UNEXPECTED;
+      SERVER_LOG(WARN, "invalid column id", K(ret), K(col_id));
+    }
+  }
+
+  return ret;
+}
+
+void ObAllVirtualServerCompactionProgress::reset()
+{
+  ObVirtualTableScannerIterator::reset();
+  progress_iter_.reset();
+  memset(ip_buf_, 0, sizeof(ip_buf_));
+  memset(event_buf_, 0, sizeof(event_buf_));
+  is_inited_ = false;
+}
+
+} /* namespace observer */
+} /* namespace oceanbase */

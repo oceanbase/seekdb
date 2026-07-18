@@ -1,0 +1,186 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#pragma once
+
+#include "lib/container/ob_array.h"
+#include "lib/hash/ob_hashmap.h"
+#include "lib/ob_define.h"
+#include "ob_tablet_id.h"
+#include "storage/access/ob_table_param.h"
+
+namespace oceanbase
+{
+namespace share
+{
+namespace schema
+{
+class ObTableSchema;
+} // namespace schema
+} // namespace share
+namespace blocksstable
+{
+class ObDatumRow;
+class ObBatchDatumRows;
+} // namespace blocksstable
+namespace storage
+{
+class ObDirectLoadDatumRow;
+} // namespace storage
+namespace observer
+{
+class ObTableLoadRowProjector
+{
+public:
+  ObTableLoadRowProjector();
+  virtual ~ObTableLoadRowProjector();
+  int init(const share::schema::ObTableSchema *src_table_schema,
+           const share::schema::ObTableSchema *dest_table_schema);
+  int init(const uint64_t src_table_id, const uint64_t dest_table_id);
+  virtual int projector(const ObTabletID &src_tablet_id,
+                        const storage::ObDirectLoadDatumRow &src_datum_row,
+                        ObTabletID &dest_tablet_id,
+                        storage::ObDirectLoadDatumRow &dest_datum_row) const = 0;
+  virtual int projector(const ObTabletID &src_tablet_id,
+                        const blocksstable::ObDatumRow &src_datum_row,
+                        ObTabletID &dest_tablet_id,
+                        storage::ObDirectLoadDatumRow &dest_datum_row) const = 0;
+  virtual int projector(const blocksstable::ObBatchDatumRows &src_datum_rows,
+                        const int64_t row_idx,
+                        storage::ObDirectLoadDatumRow &dest_datum_row) const = 0;
+  int get_dest_tablet_id_and_part_id_by_src_tablet_id(const ObTabletID &src_tablet_id,
+                                                      ObTabletID &dest_tablet_id,
+                                                      ObObjectID &part_id) const;
+
+  int get_dest_tablet_id(const ObTabletID &src_tablet_id, ObTabletID &dest_tablet_id);
+  int64_t get_src_column_num() const { return src_column_num_; }
+  int64_t get_dest_column_num() const { return dest_column_num_; }
+
+protected:
+  int build_projector(const share::schema::ObTableSchema *src_table_schema,
+                      const share::schema::ObTableSchema *dest_table_schema);
+  int build_tablet_projector(const share::schema::ObTableSchema *src_table_schema,
+                             const share::schema::ObTableSchema *dest_table_schema);
+  virtual int build_row_projector(const share::schema::ObTableSchema *src_table_schema,
+                                  const share::schema::ObTableSchema *dest_table_schema) = 0;
+
+  int project_row(const storage::ObDirectLoadDatumRow &src_datum_row,
+                  storage::ObDirectLoadDatumRow &dest_datum_row) const;
+  int project_row(const blocksstable::ObDatumRow &src_datum_row,
+                  const int64_t src_rowkey_column_num,
+                  storage::ObDirectLoadDatumRow &dest_datum_row) const;
+  int project_row(const blocksstable::ObBatchDatumRows &src_datum_rows,
+                  const int64_t row_idx,
+                  const int64_t src_rowkey_column_num,
+                  storage::ObDirectLoadDatumRow &dest_datum_row) const;
+  
+  int check_index_lob_inrow(storage::ObDirectLoadDatumRow &dest_datum_row) const;
+
+protected:
+  common::ObArray<int64_t> col_projector_;
+  common::hash::ObHashMap<ObTabletID, ObTabletID, common::hash::NoPthreadDefendMode>
+    tablet_projector_;
+  common::hash::ObHashMap<ObTabletID, ObObjectID, common::hash::NoPthreadDefendMode>
+    dest_tablet_id_to_part_id_map_;
+  ObSEArray<share::schema::ObColDesc, 16> index_column_descs_;
+  ObSEArray<bool, 16> main_table_rowkey_col_flag_;
+  int64_t src_column_num_;
+  int64_t dest_column_num_;
+  int64_t dest_rowkey_column_num_;
+  int64_t lob_inrow_threshold_;
+  bool index_has_lob_;
+  bool is_inited_;
+};
+
+class ObTableLoadMainToIndexProjector : public ObTableLoadRowProjector
+{
+public:
+  ObTableLoadMainToIndexProjector();
+  virtual ~ObTableLoadMainToIndexProjector();
+  int projector(const ObTabletID &src_tablet_id,
+                const storage::ObDirectLoadDatumRow &src_datum_row,
+                ObTabletID &dest_tablet_id,
+                storage::ObDirectLoadDatumRow &dest_datum_row) const override;
+  int projector(const ObTabletID &src_tablet_id,
+                const blocksstable::ObDatumRow &src_datum_row,
+                ObTabletID &dest_tablet_id,
+                storage::ObDirectLoadDatumRow &dest_datum_row) const override;
+  int projector(const blocksstable::ObBatchDatumRows &src_datum_rows,
+                const int64_t row_idx,
+                storage::ObDirectLoadDatumRow &dest_datum_row) const override;
+private:
+  int build_row_projector(const share::schema::ObTableSchema *src_table_schema,
+                          const share::schema::ObTableSchema *dest_table_schema) override;
+private:
+  int64_t src_rowkey_column_num_;
+};
+
+class ObTableLoadMainToUniqueIndexProjector : public ObTableLoadRowProjector
+{
+public:
+  ObTableLoadMainToUniqueIndexProjector();
+  virtual ~ObTableLoadMainToUniqueIndexProjector();
+  int projector(const ObTabletID &src_tablet_id,
+                const storage::ObDirectLoadDatumRow &src_datum_row,
+                ObTabletID &dest_tablet_id,
+                storage::ObDirectLoadDatumRow &dest_datum_row) const override;
+  int projector(const ObTabletID &src_tablet_id,
+                const blocksstable::ObDatumRow &src_datum_row,
+                ObTabletID &dest_tablet_id,
+                storage::ObDirectLoadDatumRow &dest_datum_row) const override;
+  int projector(const blocksstable::ObBatchDatumRows &src_datum_rows,
+                const int64_t row_idx,
+                storage::ObDirectLoadDatumRow &dest_datum_row) const override;
+private:
+  int build_row_projector(const share::schema::ObTableSchema *src_table_schema,
+                          const share::schema::ObTableSchema *dest_table_schema) override;
+  void shadow_columns(storage::ObDirectLoadDatumRow &datum_row) const;
+private:
+  int64_t src_rowkey_column_num_;
+  int64_t dest_rowkey_cnt_;
+  int64_t dest_spk_cnt_;
+  int64_t dest_index_rowkey_cnt_;
+};
+
+class ObTableLoadUniqueIndexToMainRowkeyProjector : public ObTableLoadRowProjector
+{
+public:
+  ObTableLoadUniqueIndexToMainRowkeyProjector() = default;
+  virtual ~ObTableLoadUniqueIndexToMainRowkeyProjector() = default;
+  int projector(const ObTabletID &src_tablet_id,
+                const storage::ObDirectLoadDatumRow &src_datum_row,
+                ObTabletID &dest_tablet_id,
+                storage::ObDirectLoadDatumRow &dest_datum_row) const override;
+  int projector(const ObTabletID &src_tablet_id,
+                const blocksstable::ObDatumRow &src_datum_row,
+                ObTabletID &dest_tablet_id,
+                storage::ObDirectLoadDatumRow &dest_datum_row) const override
+  {
+    return OB_ERR_UNEXPECTED;
+  }
+  int projector(const blocksstable::ObBatchDatumRows &src_datum_rows,
+                const int64_t row_idx,
+                storage::ObDirectLoadDatumRow &dest_datum_row) const override
+  {
+    return OB_ERR_UNEXPECTED;
+  }
+private:
+  int build_row_projector(const share::schema::ObTableSchema *src_table_schema,
+                          const share::schema::ObTableSchema *dest_table_schema) override;
+};
+
+} // namespace observer
+} // namespace oceanbase

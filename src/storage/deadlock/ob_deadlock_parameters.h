@@ -1,0 +1,73 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SHARE_DEADLOCK_OB_DEADLOCK_PARAMETERS_
+#define OCEANBASE_SHARE_DEADLOCK_OB_DEADLOCK_PARAMETERS_
+#include <stdint.h>
+
+namespace oceanbase
+{
+namespace share
+{
+namespace detector
+{
+// UserBinaryKey inner buffer size limit
+constexpr const int64_t BUFFER_LIMIT_SIZE = 128;
+// common used within deadlock module
+// special value indicate invalid value within deadlock module
+constexpr const int64_t INVALID_VALUE = INT64_MAX;
+// used within ObDeadLockDetectorMgr
+// timeWheel polling granularity, set to 10ms
+constexpr const int64_t TIME_WHEEL_PRECISION_US = 10 * 1000;
+constexpr const int TIMER_THREAD_COUNT = 1;// timeWheel thread number
+constexpr const char *DETECTOR_TIMER_NAME = "DetectorTimer";// timeWheel thread name
+// used within ObDeadLockRpc
+constexpr const int64_t OB_DETECTOR_RPC_TIMEOUT = 5 * 1000 * 1000;// timeout time for rpc, set to 5s
+// used within ObDetectUserReportInfo
+// 3 extra columns in inner table that user could describe more things
+constexpr const int64_t EXTRA_INFO_COLUMNS = 3;
+// used within ObDetectUserReportInfo
+// the length of string showed in inner table should less than 65536
+constexpr const int64_t STR_LEN_LIMIT = 65536;
+// used within ObDeadLockDetector
+// at lest 1s between two collect info process in one detector
+constexpr const int64_t COLLECT_INFO_INTERVAL = 1000 * 1000;
+// used within ObDeadLockInnerTableServic::ObDeadLockEventHistoryTableOperator::async_delete
+// remain last 7 days event records
+constexpr const int64_t REMAIN_RECORD_DURATION = 7LL * 24LL * 60LL * 60LL * 1000LL * 1000LL;
+// used when report deadlock inner info
+struct ROLE
+{
+  // the detector who find there is a deadlock exist, starting collect info phase
+  static constexpr const char *EXECUTOR = "executor";
+  // the detectors who tansfer message between executor and victim
+  static constexpr const char *WITNESS = "witness";
+  static constexpr const char *VICTIM = "victim";// the detector who finally killed
+  static constexpr const char *SUICIDE = "executor-victim";// the executor who suicide
+};
+// detector priority range, lower priority range means higher possiblity to be killed
+enum class PRIORITY_RANGE
+{
+  EXTREMELY_LOW = -2,
+  LOW = -1,
+  NORMAL = 0,
+  HIGH = 1,
+  EXTREMELY_HIGH = 2
+};
+}// namespace detector
+}// namespace share
+}// namespace oceanbase
+#endif

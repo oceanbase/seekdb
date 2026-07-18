@@ -1,0 +1,74 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_MEMTABLE_OB_CRTP_UTIL_
+#define OCEANBASE_MEMTABLE_OB_CRTP_UTIL_
+
+#include "share/ob_define.h"
+#include "lib/objectpool/ob_resource_pool.h"
+#include "lib/utility/data_buffer.h"
+
+namespace oceanbase
+{
+namespace memtable
+{
+
+template <int64_t N = 0>
+class ObWithArenaT
+{
+public:
+  ObWithArenaT(common::ObIAllocator &allocator, const int64_t page_size)
+      : page_allocator_(allocator),
+        arena_(page_size, page_allocator_) {}
+  ObWithArenaT(const int64_t page_size)
+      : page_allocator_(),
+        arena_(page_size, page_allocator_) {}
+  ObWithArenaT() {}
+  //common::ModulePageAllocator &get_page_allocator() { return page_allocator_; }
+  int init(const int64_t page_size, common::ObIAllocator &allocator)
+  {
+    int ret = common::OB_SUCCESS;
+    page_allocator_.set_allocator(&allocator);
+    if (OB_FAIL(arena_.init(page_size, page_allocator_))) {
+      //do nothing
+    }
+    return ret;
+  }
+  common::ModuleArena &get_arena() { return arena_; }
+  void set_allocator(common::ObIAllocator *allocator) { page_allocator_.set_allocator(allocator); }
+  void set_label(const char *label) { page_allocator_.set_label(label); arena_.set_label(label); }
+  
+private:
+  common::ModulePageAllocator page_allocator_;
+  common::ModuleArena arena_;
+};
+typedef ObWithArenaT<> ObWithArena;
+
+template <int64_t BUF_SIZE>
+class ObWithDataBuffer
+{
+public:
+  ObWithDataBuffer() : data_buffer_(memory_, sizeof(memory_)) {}
+  common::ObDataBuffer &get_buf() { return data_buffer_; }
+private:
+  char memory_[BUF_SIZE];
+  common::ObDataBuffer data_buffer_;
+};
+
+}
+}
+
+#endif //OCEANBASE_MEMTABLE_OB_CRTP_UTIL_

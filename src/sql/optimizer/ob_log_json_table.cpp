@@ -1,0 +1,189 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_OPT
+
+#include "sql/optimizer/ob_log_json_table.h"
+
+using namespace oceanbase::common;
+
+namespace oceanbase
+{
+namespace sql
+{
+
+
+int ObLogJsonTable::generate_access_exprs()
+{
+  int ret = OB_SUCCESS;
+  const ObDMLStmt *stmt = get_stmt();
+  if (OB_ISNULL(stmt)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_column_size(); ++i) {
+      const ColumnItem *col_item = stmt->get_column_item(i);
+      if (OB_ISNULL(col_item) || OB_ISNULL(col_item->expr_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null", K(ret));
+      } else if (col_item->table_id_ == table_id_ &&
+                 col_item->expr_->is_explicited_reference() &&
+                 OB_FAIL(access_exprs_.push_back(col_item->expr_))) {
+        LOG_WARN("failed to push back column expr", K(ret));
+      } else { /*do nothing*/ }
+    }
+  }
+  return ret;
+}
+
+int ObLogJsonTable::allocate_expr_post(ObAllocExprContext &ctx)
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < access_exprs_.count(); ++i) {
+    ObRawExpr *value_col = access_exprs_.at(i);
+    if (OB_FAIL(mark_expr_produced(value_col, branch_id_, id_, ctx))) {
+      LOG_WARN("makr expr produced failed", K(ret));
+    } else if (!is_plan_root() && OB_FAIL(add_var_to_array_no_dup(output_exprs_, value_col))) {
+      LOG_WARN("add expr no duplicate key failed", K(ret));
+    } else { /*do nothing*/ }
+  }
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(ObLogicalOperator::allocate_expr_post(ctx))) {
+      LOG_WARN("failed to allocate expr post", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObLogJsonTable::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
+{
+  int ret = OB_SUCCESS;
+  const ObDMLStmt *stmt = get_stmt();
+  
+  if (OB_FAIL(generate_access_exprs())) {
+    LOG_WARN("failed to generate access exprs", K(ret));
+  } else if (OB_FAIL(append(all_exprs, access_exprs_))) {
+    LOG_WARN("failed to append exprs", K(ret));
+  } else {
+    // add value expr into all exprs
+    for (int64_t i = 0; OB_SUCC(ret) && i < value_exprs_.count(); i ++) {
+      if (OB_NOT_NULL(value_exprs_.at(i)) && OB_FAIL(all_exprs.push_back(value_exprs_.at(i)))) {
+        LOG_WARN("push value expr to array failed", K(ret));
+      }
+    }
+    // add default value into all exprs
+    for (int64_t i = 0; OB_SUCC(ret) && i < column_param_default_exprs_.count(); i ++) {
+      if (OB_NOT_NULL(column_param_default_exprs_.at(i).default_error_expr_)
+          && OB_FAIL(all_exprs.push_back(column_param_default_exprs_.at(i).default_error_expr_))) {
+        LOG_WARN("push error expr to array failed", K(ret));
+      } else if (OB_NOT_NULL(column_param_default_exprs_.at(i).default_empty_expr_)
+          && OB_FAIL(all_exprs.push_back(column_param_default_exprs_.at(i).default_empty_expr_))) {
+        LOG_WARN("push empty expr to array failed", K(ret));
+      }
+    }
+  } 
+  
+  if (OB_SUCC(ret) && OB_FAIL(ObLogicalOperator::get_op_exprs(all_exprs))) {
+    LOG_WARN("failed to get op exprs", K(ret));
+  }
+
+  return ret;
+}
+
+int ObLogJsonTable::get_plan_item_info(PlanText &plan_text, 
+                                       ObSqlPlanItem &plan_item)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(ObLogicalOperator::get_plan_item_info(plan_text, plan_item))) {
+    LOG_WARN("failed to get plan item info", K(ret));
+  } else if (get_value_expr().empty()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null value expr", K(ret));
+  } else {
+    BEGIN_BUF_PRINT;
+    const ObIArray<ObRawExpr*> &value =  get_value_expr();
+    EXPLAIN_PRINT_EXPRS(value, type);
+    END_BUF_PRINT(plan_item.special_predicates_,
+                  plan_item.special_predicates_len_);
+  }
+  if (OB_SUCC(ret)) {
+    const ObString &name = get_table_name();
+    BUF_PRINT_OB_STR(name.ptr(), 
+                     name.length(), 
+                     plan_item.object_alias_, 
+                     plan_item.object_alias_len_);
+    BUF_PRINT_STR("JSON_TABLE",
+                  plan_item.object_type_,
+                  plan_item.object_type_len_);
+  }
+  return ret;
+}
+
+uint64_t ObLogJsonTable::hash(uint64_t seed) const
+{
+  seed = do_hash(table_name_, seed);
+  seed = ObLogicalOperator::hash(seed);
+  return seed;
+}
+
+int ObLogJsonTable::set_namespace_arr(ObIArray<ObString> &namespace_arr)
+{
+  int ret = OB_SUCCESS;
+  for (size_t i = 0; OB_SUCC(ret) && i < namespace_arr.count(); i++) {
+    if (OB_FAIL(namespace_arr_.push_back(namespace_arr.at(i)))) {
+      LOG_WARN("fail to push ns to arr", K(ret), K(i));
+    }
+  }
+  return ret;
+}
+
+int ObLogJsonTable::get_namespace_arr(ObIArray<ObString> &namespace_arr)
+{
+  int ret = OB_SUCCESS;
+  for (size_t i = 0; OB_SUCC(ret) && i < namespace_arr_.count(); i++) {
+    if (OB_FAIL(namespace_arr.push_back(namespace_arr_.at(i)))) {
+      LOG_WARN("fail to push ns to arr", K(ret), K(i));
+    }
+  }
+  return ret;
+}
+
+int ObLogJsonTable::set_column_param_default_arr(ObIArray<ObColumnDefault> &column_param_default_exprs)
+{
+  int ret = OB_SUCCESS;
+  for (size_t i = 0; OB_SUCC(ret) && i < column_param_default_exprs.count(); i++) {
+    if (OB_FAIL(column_param_default_exprs_.push_back(column_param_default_exprs.at(i)))) {
+      LOG_WARN("fail to push ns to arr", K(ret), K(i));
+    }
+  }
+  return ret;
+}
+
+
+ObColumnDefault* ObLogJsonTable::get_column_param_default_val(int64_t index)
+{
+  ObColumnDefault* val = NULL;
+  for (size_t i = 0; i < column_param_default_exprs_.count(); i++) {
+    if (index == column_param_default_exprs_.at(i).column_id_) {
+      val = &column_param_default_exprs_.at(i);
+    }
+  }
+  return val;
+}
+
+} // namespace sql
+}// namespace oceanbase

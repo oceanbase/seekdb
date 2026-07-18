@@ -1,0 +1,94 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#include <gtest/gtest.h>
+
+#define USING_LOG_PREFIX STORAGE
+
+#define protected public
+#define private public
+
+#include "lib/guard/ob_light_shared_gaurd.h"
+#include "storage/tablet/ob_tablet_meta.h"
+#include "storage/tablet/ob_mds_schema_helper.h"
+namespace oceanbase {
+namespace storage {
+namespace mds {
+void *DefaultAllocator::alloc(const int64_t size) {
+  void *ptr = std::malloc(size);// ob_malloc(size, "MDS"); 
+  ATOMIC_INC(&alloc_times_);
+  MDS_LOG(DEBUG, "alloc obj", KP(ptr), K(size), K(lbt()));
+  return ptr;
+}
+void DefaultAllocator::free(void *ptr) {
+  ATOMIC_INC(&free_times_);
+  MDS_LOG(DEBUG, "free obj", KP(ptr), K(lbt()));
+  std::free(ptr);// ob_free(ptr);
+}
+void *MdsAllocator::alloc(const int64_t size) {
+  void *ptr = std::malloc(size);// ob_malloc(size, "MDS"); 
+  ATOMIC_INC(&alloc_times_);
+  MDS_LOG(DEBUG, "alloc obj", KP(ptr), K(size), K(lbt()));
+  return ptr;
+}
+void MdsAllocator::free(void *ptr) {
+  ATOMIC_INC(&free_times_);
+  MDS_LOG(DEBUG, "free obj", KP(ptr), K(lbt()));
+  std::free(ptr);// ob_free(ptr);
+}
+}}}
+
+namespace oceanbase
+{
+//using namespace share;
+namespace storage
+{
+class TestMdsTableHandle : public ::testing::Test
+{
+public:
+  TestMdsTableHandle() { ObMdsSchemaHelper::get_instance().init(); }
+  virtual ~TestMdsTableHandle() = default;
+  virtual void SetUp() override {}
+  virtual void TearDown() override {}
+};
+
+TEST_F(TestMdsTableHandle, normal) {
+  ObLightSharedPtr<unittest::ExampleUserData1> lsp;
+  lsp.construct(mds::MdsAllocator::get_instance());
+  ObLightSharedPtr<unittest::ExampleUserData1> lsp2 = lsp;
+}
+
+} // end namespace storage
+} // end namespace oceanbase
+
+int main(int argc, char **argv)
+{
+  int ret = 0;
+  system("rm -f test_mds_table_handle.log*");
+  OB_LOGGER.set_file_name("test_mds_table_handle.log", true);
+  OB_LOGGER.set_log_level("INFO");
+  signal(49, SIG_IGN);
+  testing::InitGoogleTest(&argc, argv);
+  ret = RUN_ALL_TESTS();
+  int64_t alloc_times = oceanbase::storage::mds::MdsAllocator::get_alloc_times();
+  int64_t free_times = oceanbase::storage::mds::MdsAllocator::get_free_times();
+  if (alloc_times != free_times) {
+    MDS_LOG(ERROR, "memory may leak", K(free_times), K(alloc_times));
+    ret = -1;
+  } else {
+    MDS_LOG(INFO, "all memory released", K(free_times), K(alloc_times));
+  }
+  return ret;
+}

@@ -1,0 +1,263 @@
+# ----------------------------------------------------------------------
+# Base test of rb_and_null2empty_cardinality, rb_or_null2empty_cardinality, rb_andnot_null2empty_cardinality.
+# ----------------------------------------------------------------------
+drop table if exists t1,t2,t3;
+SET @p1 = x'0100';
+SET @p2 = x'010101000000';
+SET @p3 = x'010102000000';
+SET @p4 = x'010303010000000200000003000000';
+SET @p5 = x'010303020000000300000004000000';
+SET @p6 = x'01060100000000000000000000003a30000001000000000020001000000000000100020003000400050006000700080009000a000b000c000d000e000f0010001100120013001400150016001700180019001a001b001c001d001e001f002000';
+SET @p7 = x'01060100000000000000000000003a3000000100000000002000100000000a000b000c000d000e000f0010001100120013001400150016001700180019001a001b001c001d001e001f0020002100220023002400250026002700280029002a00';
+select rb_and_null2empty_cardinality(NULL, @p1);
+rb_and_null2empty_cardinality(NULL, @p1)
+0
+select rb_and_null2empty_cardinality(@p1, NULL);
+rb_and_null2empty_cardinality(@p1, NULL)
+0
+select rb_and_null2empty_cardinality(NULL, @p2);
+rb_and_null2empty_cardinality(NULL, @p2)
+0
+select rb_and_null2empty_cardinality(@p2, NULL);
+rb_and_null2empty_cardinality(@p2, NULL)
+0
+select rb_and_null2empty_cardinality(NULL, @p4);
+rb_and_null2empty_cardinality(NULL, @p4)
+0
+select rb_and_null2empty_cardinality(@p4, NULL);
+rb_and_null2empty_cardinality(@p4, NULL)
+0
+select rb_and_null2empty_cardinality(NULL, @p6);
+rb_and_null2empty_cardinality(NULL, @p6)
+0
+select rb_and_null2empty_cardinality(@p6, NULL);
+rb_and_null2empty_cardinality(@p6, NULL)
+0
+select rb_and_null2empty_cardinality(@p1, @p2);
+rb_and_null2empty_cardinality(@p1, @p2)
+0
+select rb_and_null2empty_cardinality(@p2, @p1);
+rb_and_null2empty_cardinality(@p2, @p1)
+0
+select rb_and_null2empty_cardinality(@p1, @p4);
+rb_and_null2empty_cardinality(@p1, @p4)
+0
+select rb_and_null2empty_cardinality(@p4, @p1);
+rb_and_null2empty_cardinality(@p4, @p1)
+0
+select rb_and_null2empty_cardinality(@p1, @p6);
+rb_and_null2empty_cardinality(@p1, @p6)
+0
+select rb_and_null2empty_cardinality(@p6, @p1);
+rb_and_null2empty_cardinality(@p6, @p1)
+0
+select rb_and_null2empty_cardinality(@p2, @p3);
+rb_and_null2empty_cardinality(@p2, @p3)
+0
+select rb_and_null2empty_cardinality(@p3, @p2);
+rb_and_null2empty_cardinality(@p3, @p2)
+0
+select rb_and_null2empty_cardinality(@p2, @p4);
+rb_and_null2empty_cardinality(@p2, @p4)
+1
+select rb_and_null2empty_cardinality(@p4, @p2);
+rb_and_null2empty_cardinality(@p4, @p2)
+1
+select rb_and_null2empty_cardinality(@p2, @p6);
+rb_and_null2empty_cardinality(@p2, @p6)
+1
+select rb_and_null2empty_cardinality(@p6, @p2);
+rb_and_null2empty_cardinality(@p6, @p2)
+1
+select rb_and_null2empty_cardinality(@p4, @p5);
+rb_and_null2empty_cardinality(@p4, @p5)
+2
+select rb_and_null2empty_cardinality(@p5, @p4);
+rb_and_null2empty_cardinality(@p5, @p4)
+2
+select rb_and_null2empty_cardinality(@p4, @p6);
+rb_and_null2empty_cardinality(@p4, @p6)
+3
+select rb_and_null2empty_cardinality(@p6, @p4);
+rb_and_null2empty_cardinality(@p6, @p4)
+3
+select rb_and_null2empty_cardinality(@p4, @p7);
+rb_and_null2empty_cardinality(@p4, @p7)
+0
+select rb_and_null2empty_cardinality(@p7, @p4);
+rb_and_null2empty_cardinality(@p7, @p4)
+0
+select rb_and_null2empty_cardinality(@p6, @p7);
+rb_and_null2empty_cardinality(@p6, @p7)
+23
+select rb_and_null2empty_cardinality(@p7, @p6);
+rb_and_null2empty_cardinality(@p7, @p6)
+23
+select rb_or_null2empty_cardinality(NULL, @p1);
+rb_or_null2empty_cardinality(NULL, @p1)
+0
+select rb_or_null2empty_cardinality(@p1, NULL);
+rb_or_null2empty_cardinality(@p1, NULL)
+0
+select rb_or_null2empty_cardinality(NULL, @p2);
+rb_or_null2empty_cardinality(NULL, @p2)
+1
+select rb_or_null2empty_cardinality(@p2, NULL);
+rb_or_null2empty_cardinality(@p2, NULL)
+1
+select rb_or_null2empty_cardinality(NULL, @p4);
+rb_or_null2empty_cardinality(NULL, @p4)
+3
+select rb_or_null2empty_cardinality(@p4, NULL);
+rb_or_null2empty_cardinality(@p4, NULL)
+3
+select rb_or_null2empty_cardinality(NULL, @p6);
+rb_or_null2empty_cardinality(NULL, @p6)
+33
+select rb_or_null2empty_cardinality(@p6, NULL);
+rb_or_null2empty_cardinality(@p6, NULL)
+33
+select rb_or_null2empty_cardinality(@p1, @p2);
+rb_or_null2empty_cardinality(@p1, @p2)
+1
+select rb_or_null2empty_cardinality(@p2, @p1);
+rb_or_null2empty_cardinality(@p2, @p1)
+1
+select rb_or_null2empty_cardinality(@p1, @p4);
+rb_or_null2empty_cardinality(@p1, @p4)
+3
+select rb_or_null2empty_cardinality(@p4, @p1);
+rb_or_null2empty_cardinality(@p4, @p1)
+3
+select rb_or_null2empty_cardinality(@p1, @p6);
+rb_or_null2empty_cardinality(@p1, @p6)
+33
+select rb_or_null2empty_cardinality(@p6, @p1);
+rb_or_null2empty_cardinality(@p6, @p1)
+33
+select rb_or_null2empty_cardinality(@p2, @p3);
+rb_or_null2empty_cardinality(@p2, @p3)
+2
+select rb_or_null2empty_cardinality(@p3, @p2);
+rb_or_null2empty_cardinality(@p3, @p2)
+2
+select rb_or_null2empty_cardinality(@p2, @p4);
+rb_or_null2empty_cardinality(@p2, @p4)
+3
+select rb_or_null2empty_cardinality(@p4, @p2);
+rb_or_null2empty_cardinality(@p4, @p2)
+3
+select rb_or_null2empty_cardinality(@p2, @p6);
+rb_or_null2empty_cardinality(@p2, @p6)
+33
+select rb_or_null2empty_cardinality(@p6, @p2);
+rb_or_null2empty_cardinality(@p6, @p2)
+33
+select rb_or_null2empty_cardinality(@p4, @p5);
+rb_or_null2empty_cardinality(@p4, @p5)
+4
+select rb_or_null2empty_cardinality(@p5, @p4);
+rb_or_null2empty_cardinality(@p5, @p4)
+4
+select rb_or_null2empty_cardinality(@p4, @p6);
+rb_or_null2empty_cardinality(@p4, @p6)
+33
+select rb_or_null2empty_cardinality(@p6, @p4);
+rb_or_null2empty_cardinality(@p6, @p4)
+33
+select rb_or_null2empty_cardinality(@p4, @p7);
+rb_or_null2empty_cardinality(@p4, @p7)
+36
+select rb_or_null2empty_cardinality(@p7, @p4);
+rb_or_null2empty_cardinality(@p7, @p4)
+36
+select rb_or_null2empty_cardinality(@p6, @p7);
+rb_or_null2empty_cardinality(@p6, @p7)
+43
+select rb_or_null2empty_cardinality(@p7, @p6);
+rb_or_null2empty_cardinality(@p7, @p6)
+43
+select rb_andnot_null2empty_cardinality(NULL, @p1);
+rb_andnot_null2empty_cardinality(NULL, @p1)
+0
+select rb_andnot_null2empty_cardinality(@p1, NULL);
+rb_andnot_null2empty_cardinality(@p1, NULL)
+0
+select rb_andnot_null2empty_cardinality(NULL, @p2);
+rb_andnot_null2empty_cardinality(NULL, @p2)
+0
+select rb_andnot_null2empty_cardinality(@p2, NULL);
+rb_andnot_null2empty_cardinality(@p2, NULL)
+1
+select rb_andnot_null2empty_cardinality(NULL, @p4);
+rb_andnot_null2empty_cardinality(NULL, @p4)
+0
+select rb_andnot_null2empty_cardinality(@p4, NULL);
+rb_andnot_null2empty_cardinality(@p4, NULL)
+3
+select rb_andnot_null2empty_cardinality(NULL, @p6);
+rb_andnot_null2empty_cardinality(NULL, @p6)
+0
+select rb_andnot_null2empty_cardinality(@p6, NULL);
+rb_andnot_null2empty_cardinality(@p6, NULL)
+33
+select rb_andnot_null2empty_cardinality(@p1, @p2);
+rb_andnot_null2empty_cardinality(@p1, @p2)
+0
+select rb_andnot_null2empty_cardinality(@p2, @p1);
+rb_andnot_null2empty_cardinality(@p2, @p1)
+1
+select rb_andnot_null2empty_cardinality(@p1, @p4);
+rb_andnot_null2empty_cardinality(@p1, @p4)
+0
+select rb_andnot_null2empty_cardinality(@p4, @p1);
+rb_andnot_null2empty_cardinality(@p4, @p1)
+3
+select rb_andnot_null2empty_cardinality(@p1, @p6);
+rb_andnot_null2empty_cardinality(@p1, @p6)
+0
+select rb_andnot_null2empty_cardinality(@p6, @p1);
+rb_andnot_null2empty_cardinality(@p6, @p1)
+33
+select rb_andnot_null2empty_cardinality(@p2, @p3);
+rb_andnot_null2empty_cardinality(@p2, @p3)
+1
+select rb_andnot_null2empty_cardinality(@p3, @p2);
+rb_andnot_null2empty_cardinality(@p3, @p2)
+1
+select rb_andnot_null2empty_cardinality(@p2, @p4);
+rb_andnot_null2empty_cardinality(@p2, @p4)
+0
+select rb_andnot_null2empty_cardinality(@p4, @p2);
+rb_andnot_null2empty_cardinality(@p4, @p2)
+2
+select rb_andnot_null2empty_cardinality(@p2, @p6);
+rb_andnot_null2empty_cardinality(@p2, @p6)
+0
+select rb_andnot_null2empty_cardinality(@p6, @p2);
+rb_andnot_null2empty_cardinality(@p6, @p2)
+32
+select rb_andnot_null2empty_cardinality(@p4, @p5);
+rb_andnot_null2empty_cardinality(@p4, @p5)
+1
+select rb_andnot_null2empty_cardinality(@p5, @p4);
+rb_andnot_null2empty_cardinality(@p5, @p4)
+1
+select rb_andnot_null2empty_cardinality(@p4, @p6);
+rb_andnot_null2empty_cardinality(@p4, @p6)
+0
+select rb_andnot_null2empty_cardinality(@p6, @p4);
+rb_andnot_null2empty_cardinality(@p6, @p4)
+30
+select rb_andnot_null2empty_cardinality(@p4, @p7);
+rb_andnot_null2empty_cardinality(@p4, @p7)
+3
+select rb_andnot_null2empty_cardinality(@p7, @p4);
+rb_andnot_null2empty_cardinality(@p7, @p4)
+33
+select rb_andnot_null2empty_cardinality(@p6, @p7);
+rb_andnot_null2empty_cardinality(@p6, @p7)
+10
+select rb_andnot_null2empty_cardinality(@p7, @p6);
+rb_andnot_null2empty_cardinality(@p7, @p6)
+10

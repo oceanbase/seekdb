@@ -1,0 +1,53 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX RS
+
+#include "ob_sys_ddl_util.h"
+#include "share/rc/ob_module_provider.h"
+#include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
+#include "share/ob_ddl_common.h" // for ObDDLUtil
+namespace oceanbase
+{
+namespace rootserver
+{
+int ObSysDDLReplicaBuilderUtil::push_task(ObAsyncTask &task)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(GCTX.omt_)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), KP(GCTX.omt_));
+  } else if (OB_UNLIKELY(!GCTX.omt_->has_tenant())) {
+    ret = OB_TENANT_NOT_EXIST;
+    LOG_WARN("local server does not have SYS tenant resource", KR(ret));
+  } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
+    ret = OB_STATE_NOT_MATCH;
+    LOG_WARN("ddl service not started", KR(ret));
+  } else {
+    MOD_SCOPE {
+      rootserver::ObDDLScheduler* sys_ddl_scheduler = share::g_mp->ddl_scheduler();
+      if (OB_ISNULL(sys_ddl_scheduler)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("sys ddl scheduler service is null", KR(ret), KP(sys_ddl_scheduler));
+      } else if (OB_FAIL(sys_ddl_scheduler->get_ddl_builder().push_task(task))) {
+        LOG_WARN("add task to ddl builder failed", KR(ret));
+      }
+    }
+  }
+  return ret;
+}
+} // end name space rootserver
+} // end namespace oceanbase

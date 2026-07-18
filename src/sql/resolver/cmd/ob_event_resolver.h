@@ -1,0 +1,66 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef _OB_EVENT_RESOLVER_H
+#define _OB_EVENT_RESOLVER_H 1
+
+#include "sql/resolver/cmd/ob_cmd_resolver.h"
+#include "sql/resolver/cmd/ob_event_stmt.h"
+namespace oceanbase
+{
+namespace sql
+{
+class ObEventResolver: public ObCMDResolver
+{
+public:
+  explicit ObEventResolver(ObResolverParams &params);
+  virtual ~ObEventResolver() = default;
+
+  virtual int resolve(const ParseNode &parse_tree);
+private:
+  static const int OB_EVENT_DEFINER_MAX_LEN = common::OB_MAX_USER_NAME_LENGTH + common::OB_MAX_HOST_NAME_LENGTH + 2;
+  static const int OB_EVENT_NAME_MAX_LEN = 128;
+  static const int OB_EVENT_REPEAT_MAX_LEN = 128;
+  static const int OB_EVENT_SQL_MAX_LEN = 16 * 1024;
+  static const int OB_EVENT_COMMENT_MAX_LEN = 4096;
+  static const int OB_EVENT_BODY_MAX_LEN = 64 * 1024;
+  static const int OB_EVENT_INTERVAL_MAX_VALUE = 1000000000L;
+
+  ObItemType stmt_type_;
+
+  int resolve_create_event_stmt(const ParseNode &parse_node, ObEventInfo &event_info);
+  int resolve_alter_event_stmt(const ParseNode &parse_node, ObEventInfo &event_info);
+  int resolve_drop_event_stmt(const ParseNode &parse_node, ObEventInfo &event_info);
+  int resolve_event_definer(const ParseNode *parse_node, ObEventInfo &event_info);
+  int resolve_event_exist(const ParseNode *parse_node, ObEventInfo &event_info);
+  int resolve_event_name(const ParseNode *parse_node, ObEventInfo &event_info);
+  int resolve_event_schedule(const ParseNode *parse_node, ObEventInfo &event_info);
+  int resolve_event_preserve(const ParseNode *parse_node, ObEventInfo &event_info);
+  int resolve_event_enable(const ParseNode *parse_node, ObEventInfo &event_info);
+  int resolve_event_comment(const ParseNode *parse_node, ObEventInfo &event_info);
+  int resolve_event_body(const ParseNode *parse_node, ObEventInfo &event_info);
+  int resolve_schedule_and_comple(const ParseNode *parse_node, ObEventInfo &event_info);
+  int resolve_event_rename(const ParseNode *parse_node, ObEventInfo &event_info);
+
+  int get_event_exec_env(ObEventInfo &event_info);
+  int get_event_time_node_value(const ParseNode *parse_node, int64_t &time_us);
+  int get_repeat_interval(const ParseNode *repeat_num_node, const ParseNode *repeat_type_node, char *repeat_interval_str, int64_t &max_run_duration);
+  // disallow copy
+  DISALLOW_COPY_AND_ASSIGN(ObEventResolver);
+};
+}//namespace sql
+}//namespace oceanbase
+#endif // _OB_EVENT_RESOLVER_H

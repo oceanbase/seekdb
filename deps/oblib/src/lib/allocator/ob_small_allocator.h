@@ -1,0 +1,71 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_ALLOCATOR_OB_SMALL_ALLOCATOR_V2_H_
+#define OCEANBASE_ALLOCATOR_OB_SMALL_ALLOCATOR_V2_H_
+
+#include "lib/allocator/ob_slice_alloc.h"
+namespace oceanbase
+{
+namespace common
+{
+class ObSmallAllocator: public ObSliceAlloc
+{
+public:
+  typedef ObBlockAllocMgr BlockAlloc;
+  static const int64_t DEFAULT_MIN_OBJ_COUNT_ON_BLOCK = 1;
+  ObSmallAllocator() {}
+  ~ObSmallAllocator() { destroy(); }
+
+  int init(const int64_t obj_size,
+           const lib::ObLabel &label = nullptr,
+           const int64_t block_size = OB_MALLOC_NORMAL_BLOCK_SIZE,
+           const int64_t min_obj_count_on_block = DEFAULT_MIN_OBJ_COUNT_ON_BLOCK,
+           const int64_t limit_num = INT64_MAX) {
+    lib::ObMemAttr attr;
+    attr.label_ = label;
+    
+    return init(obj_size, attr, block_size, min_obj_count_on_block, limit_num);
+  }
+  int init(const int64_t obj_size,
+           const lib::ObMemAttr &attr,
+           const int64_t block_size = OB_MALLOC_NORMAL_BLOCK_SIZE,
+           const int64_t min_obj_count_on_block = DEFAULT_MIN_OBJ_COUNT_ON_BLOCK,
+           const int64_t limit_num = INT64_MAX) {
+    int ret = OB_SUCCESS;
+    attr_ = attr;
+    UNUSED(min_obj_count_on_block);
+    if (limit_num < INT64_MAX) {
+      block_alloc_.set_limit(limit_num * obj_size);
+    }
+    if (obj_size < 0 || obj_size > INT32_MAX || block_size < 0 || block_size > INT32_MAX) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (OB_FAIL(ObSliceAlloc::init(static_cast<int32_t>(obj_size),
+        static_cast<int32_t>(block_size), block_alloc_, attr_))) {
+    } else {
+      ObSliceAlloc::set_nway(OB_MAX_CPU_NUM * 16);
+    }
+    return ret;
+  }
+  void set_total_limit(int64_t total_limit) { block_alloc_.set_limit(total_limit); }
+  int destroy() { purge_extra_cached_block(0); return OB_SUCCESS; }
+private:
+  BlockAlloc block_alloc_;
+};
+}; // end namespace common
+}; // end namespace oceanbase
+
+#endif /* OCEANBASE_ALLOCATOR_OB_SMALL_ALLOCATOR_V2_H_ */

@@ -1,0 +1,126 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SIMPLE_OB_STORAGE_LOG_H
+#define OCEANBASE_SIMPLE_OB_STORAGE_LOG_H
+
+#define USING_LOG_PREFIX STORAGE_REDO
+
+#include "lib/list/ob_list.h"
+#include "lib/file/file_directory_utils.h"
+#include "lib/file/ob_file.h"
+#include "lib/random/ob_random.h"
+#include "lib/utility/ob_mod_define.h"
+#include "storage/slog/ob_storage_log_struct.h"
+
+namespace oceanbase
+{
+using namespace common;
+
+namespace storage
+{
+
+class SimpleObSlog : public ObIBaseStorageLogEntry
+{
+public:
+  SimpleObSlog();
+  SimpleObSlog(const int64_t data_len, const char content);
+  ~SimpleObSlog();
+  bool operator == (const SimpleObSlog &slog);
+  bool is_valid() const;
+  void init(const int64_t data_len_, const char content);
+  void destroy();
+  void set(const int64_t data_len, const char content);
+
+  char *buf_;
+  int64_t len_;
+
+  TO_STRING_EMPTY();
+  NEED_SERIALIZE_AND_DESERIALIZE;
+};
+
+SimpleObSlog::SimpleObSlog()
+  : buf_(nullptr), len_(0)
+{
+}
+
+SimpleObSlog::SimpleObSlog(const int64_t data_len, const char content)
+{
+  buf_ = new char[data_len];
+  MEMSET(buf_, content, data_len);
+  len_ = data_len;
+}
+
+SimpleObSlog::~SimpleObSlog()
+{
+  if (nullptr != buf_) {
+    delete[] buf_;
+    buf_ = nullptr;
+  }
+}
+
+void SimpleObSlog::set(const int64_t data_len, const char content)
+{
+  if (buf_ == nullptr && len_ == 0) {
+    len_ = data_len;
+    buf_ = new char[data_len];
+    MEMSET(buf_, content, data_len);
+  }
+}
+
+bool SimpleObSlog::operator == (const SimpleObSlog &slog)
+{
+  return 0 == STRCMP(buf_, slog.buf_) && len_ == slog.len_;
+}
+
+bool SimpleObSlog::is_valid() const
+{
+  return true;
+}
+
+DEFINE_SERIALIZE(SimpleObSlog)
+{
+  int ret = OB_SUCCESS;
+
+  if (nullptr == buf || buf_len <= 0 || pos < 0) {
+    ret = OB_INVALID_ARGUMENT;
+    STORAGE_REDO_LOG(WARN, "Invalid argument.", K(buf_len), K(pos));
+  } else if (pos + len_ > buf_len) {
+    ret = OB_BUF_NOT_ENOUGH;
+    STORAGE_REDO_LOG(WARN, "Buffer is not enough.", K_(len), K(pos), K(buf_len));
+  } else {
+    MEMCPY(buf + pos, buf_, len_);
+    pos += len_;
+  }
+
+  return ret;
+}
+
+DEFINE_DESERIALIZE(SimpleObSlog)
+{
+  UNUSEDx(buf, data_len, pos);
+  return OB_NOT_SUPPORTED;
+}
+
+DEFINE_GET_SERIALIZE_SIZE(SimpleObSlog)
+{
+  return len_;
+}
+
+}
+}
+
+#endif

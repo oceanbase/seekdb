@@ -1,0 +1,102 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_RESV
+#include "sql/resolver/dcl/ob_create_user_stmt.h"
+
+
+using namespace oceanbase;
+using namespace oceanbase::common;
+using namespace oceanbase::sql;
+
+ObCreateUserStmt::ObCreateUserStmt(ObIAllocator *name_pool)
+    : ObDDLStmt(name_pool, stmt::T_CREATE_USER),
+      users_(),
+      masked_sql_(),
+      if_not_exist_(false),
+      profile_id_(OB_INVALID_ID),
+      max_connections_per_hour_(0),
+      max_user_connections_(0)
+{
+}
+
+ObCreateUserStmt::ObCreateUserStmt()
+    : ObDDLStmt(NULL, stmt::T_CREATE_USER),
+      users_(),
+      masked_sql_(),
+      if_not_exist_(false),
+      profile_id_(OB_INVALID_ID),
+      max_connections_per_hour_(0),
+      max_user_connections_(0)
+{
+}
+
+ObCreateUserStmt::~ObCreateUserStmt()
+{
+}
+
+int ObCreateUserStmt::add_user(const common::ObString &user_name,
+                               const common::ObString &host_name,
+                               const common::ObString &password,
+                               const common::ObString &need_enc)
+{
+  int ret = OB_SUCCESS;
+
+  if (OB_FAIL(users_.add_string(user_name))) {
+    LOG_WARN("failed to add user", K(ret));
+  } else if (OB_FAIL(users_.add_string(host_name))) {
+    LOG_WARN("failed to add host_name", K(ret));
+  } else if (OB_FAIL(users_.add_string(password))) {
+    LOG_WARN("failed to add password", K(ret));
+  } else if (OB_FAIL(users_.add_string(need_enc))) {
+    LOG_WARN("failed to add need enc", K(ret));
+  } else {
+    //do nothing
+  }
+  return ret;
+}
+
+int ObCreateUserStmt::add_ssl_info(const common::ObString &ssl_type,
+                                   const common::ObString &ssl_cipher,
+                                   const common::ObString &x509_issuer,
+                                   const common::ObString &x509_subject)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(users_.add_string(ssl_type))) {
+    LOG_WARN("failed to add ssl_type", K(ret));
+  } else if (OB_FAIL(users_.add_string(ssl_cipher))) {
+    LOG_WARN("failed to add ssl_cipher", K(ret));
+  } else if (OB_FAIL(users_.add_string(x509_issuer))) {
+    LOG_WARN("failed to add x509_issuer", K(ret));
+  } else if (OB_FAIL(users_.add_string(x509_subject))) {
+    LOG_WARN("failed to add x509_subject", K(ret));
+  } else {
+    //do nothing
+  }
+  return ret;
+}
+
+int64_t ObCreateUserStmt::to_string(char *buf, const int64_t buf_len) const
+{
+  int64_t pos = 0;
+  if (NULL != buf) {
+    J_OBJ_START();
+    J_KV(N_STMT_TYPE, ((int)stmt_type_),
+         "users_to_create", users_);
+    J_OBJ_END();
+  }
+  return pos;
+}

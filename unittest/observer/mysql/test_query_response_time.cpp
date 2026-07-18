@@ -1,0 +1,110 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include <gtest/gtest.h>
+#include "observer/mysql/ob_query_response_time.h"
+#include "sql/resolver/ob_stmt_type.h"
+
+using namespace oceanbase::common;
+using namespace oceanbase::observer;
+
+class TestQueryRsponseTime: public ::testing::Test
+{
+public:
+  TestQueryRsponseTime();
+  virtual ~TestQueryRsponseTime();
+  virtual void SetUp();
+  virtual void TearDown();
+private:
+  // disallow copy
+  DISALLOW_COPY_AND_ASSIGN(TestQueryRsponseTime);
+protected:
+  // function members
+};
+
+TestQueryRsponseTime::TestQueryRsponseTime()
+{
+}
+
+TestQueryRsponseTime::~TestQueryRsponseTime()
+{
+}
+
+void TestQueryRsponseTime::SetUp()
+{
+}
+
+void TestQueryRsponseTime::TearDown()
+{
+}
+
+TEST_F(TestQueryRsponseTime, basic_test){
+    ObRespTimeInfoCollector time_collector;
+    ASSERT_EQ(OB_SUCCESS, time_collector.setup(10));
+    ASSERT_EQ(100,time_collector.utility().bound(2));
+    ASSERT_EQ(13,time_collector.utility().bound_count());
+    ASSERT_EQ(OB_SUCCESS, time_collector.collect(oceanbase::sql::stmt::StmtType::T_SELECT, false/*is_inner_sql*/, 5));
+    ASSERT_EQ(OB_SUCCESS, time_collector.collect(oceanbase::sql::stmt::StmtType::T_SELECT, false/*is_inner_sql*/, 50));
+
+    int64_t val = -1;
+    ASSERT_EQ(OB_SUCCESS, time_collector.get_count_val(RespTimeSqlType::select_sql, 1, val));
+    ASSERT_EQ(1, val);
+
+    ASSERT_EQ(OB_SUCCESS, time_collector.get_total_time_val(RespTimeSqlType::select_sql, 1, val));
+    ASSERT_EQ(5, val);
+
+    ASSERT_EQ(OB_SUCCESS, time_collector.get_count_val(RespTimeSqlType::select_sql, 2, val));
+    ASSERT_EQ(1, val);
+
+    ASSERT_EQ(OB_SUCCESS, time_collector.get_total_time_val(RespTimeSqlType::select_sql, 2, val));
+    ASSERT_EQ(50, val);
+    ASSERT_EQ(OB_SUCCESS, time_collector.flush());
+
+    ASSERT_EQ(OB_SUCCESS, time_collector.get_count_val(RespTimeSqlType::select_sql, 1, val));
+    ASSERT_EQ(0, val);
+
+    ASSERT_EQ(OB_SUCCESS, time_collector.get_total_time_val(RespTimeSqlType::select_sql, 1, val));
+    ASSERT_EQ(0, val);
+
+    ASSERT_EQ(OB_SUCCESS, time_collector.get_count_val(RespTimeSqlType::select_sql, 2, val));
+    ASSERT_EQ(0, val);
+    ASSERT_EQ(0,time_collector.get_total_time_val(RespTimeSqlType::select_sql, 2, val));
+
+    ASSERT_EQ(OB_SUCCESS, time_collector.setup(100));
+    ASSERT_EQ(100,time_collector.utility().bound(1));
+    ASSERT_EQ(7,time_collector.utility().bound_count());
+    ASSERT_EQ(OB_SUCCESS, time_collector.collect(oceanbase::sql::stmt::StmtType::T_SELECT, false/*is_inner_sql*/, 5));
+    ASSERT_EQ(OB_SUCCESS, time_collector.collect(oceanbase::sql::stmt::StmtType::T_SELECT, false/*is_inner_sql*/, 50));
+
+    ASSERT_EQ(OB_SUCCESS, time_collector.get_count_val(RespTimeSqlType::select_sql, 1, val));
+    ASSERT_EQ(2, val);
+
+    ASSERT_EQ(OB_SUCCESS, time_collector.get_total_time_val(RespTimeSqlType::select_sql, 1, val));
+    ASSERT_EQ(55, val);
+    ASSERT_EQ(OB_SUCCESS, time_collector.get_count_val(RespTimeSqlType::select_sql, 2, val));
+    ASSERT_EQ(0, val);
+    ASSERT_EQ(OB_SUCCESS, time_collector.get_total_time_val(RespTimeSqlType::select_sql, 2, val));
+    ASSERT_EQ(0, val);
+}
+
+int main(int argc, char** argv)
+{
+  oceanbase::common::ObLogger::get_logger().set_log_level("INFO");
+  OB_LOGGER.set_log_level("INFO");
+  OB_LOGGER.set_file_name("test_ob_query_response_time.log", true);
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}

@@ -1,0 +1,162 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL
+#include "ob_geo_latlong_check_visitor.h"
+
+namespace oceanbase {
+namespace common {
+
+double ObGeoLatlongCheckVisitor::ob_normalize_latitude(double lat)
+{
+  bool modified = false;
+  const double TOLERANCE = 1e-10; // according to pg
+  if (lat > 90.0 && (lat - 90) <= TOLERANCE) {
+    lat = 90.0;
+    modified = true;
+  } else if (lat < -90.0 && (-90 - lat) <= TOLERANCE) {
+    lat = -90.0;
+    modified = true;
+  }
+
+  if (!modified) {
+    if (lat > 360.0) {
+      lat = remainder(lat, 360.0);
+    }
+
+    if (lat < -360.0) {
+      lat = remainder(lat, -360.0);
+    }
+
+    if (lat > 180.0) {
+      lat = 180.0 - lat;
+    }
+
+    if (lat < -180.0) {
+      lat = -180.0 - lat;
+    }
+
+    if (lat > 90.0) {
+      lat = 180.0 - lat;
+    }
+
+    if (lat < -90.0) {
+      lat = -180.0 - lat;
+    }
+  }
+
+  return lat;
+}
+
+double ObGeoLatlongCheckVisitor::ob_normalize_longitude(double lon)
+{
+  bool modified = false;
+  const double TOLERANCE = 1e-10; // according to pg
+  if (lon > 180.0 && (lon - 180) <= TOLERANCE) {
+    lon = 180.0;
+    modified = true;
+  } else if (lon < -180.0 && (-180 - lon) <= TOLERANCE) {
+    lon = -180.0;
+    modified = true;
+  }
+
+  if (!modified) {
+    if (lon > 360.0) {
+      lon = remainder(lon, 360.0);
+    }
+
+    if (lon < -360.0) {
+      lon = remainder(lon, -360.0);
+    }
+
+    if (lon > 180.0) {
+      lon = -360.0 + lon;
+    }
+
+    if (lon < -180.0) {
+      lon = 360 + lon;
+    }
+
+    if (lon == -180.0) {
+      lon = 180.0;
+    }
+
+    if (lon == -360.0) {
+      lon = 0.0;
+    }
+  }
+
+  return lon;
+}
+
+bool ObGeoLatlongCheckVisitor::prepare(ObGeometry *geo)
+{
+  UNUSED(geo);
+  int res = true;
+  if (srs_ == NULL || srs_->srs_type() == ObSrsType::PROJECTED_SRS) {
+    res = false;
+  }
+  return res;
+}
+
+template<typename Geo_type>
+int ObGeoLatlongCheckVisitor::calculate_point_range(Geo_type *geo)
+{
+  double longti = geo->x();
+  double lati = geo->y();
+  if (longti < -180.0 || longti > 180.0 || 
+      lati < -90.0 || lati > 90.0 ) {
+    longti = ob_normalize_longitude(longti);
+    lati = ob_normalize_latitude(lati);
+    geo->x(longti);
+    geo->y(lati);
+    changed_ = true;
+  }
+  return OB_SUCCESS;
+}
+
+int ObGeoLatlongCheckVisitor::visit(ObIWkbGeogPoint *geo)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(srs_)) {
+    ret = OB_ERR_NULL_VALUE;
+    LOG_WARN("srs is null", K(ret));
+  } else if (srs_->srs_type() == ObSrsType::PROJECTED_SRS) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("srs is projected type", K(srs_));
+  } else if (OB_FAIL(calculate_point_range(geo))){
+    LOG_WARN("failed to calculate point range", K(ret));
+  }
+  return ret;
+}
+
+int ObGeoLatlongCheckVisitor::visit(ObGeographPoint *geo)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(srs_)) {
+    ret = OB_ERR_NULL_VALUE;
+    LOG_WARN("srs is null", K(ret));
+  } else if (srs_->srs_type() == ObSrsType::PROJECTED_SRS) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("srs is projected type", K(srs_));
+  } else if (OB_FAIL(calculate_point_range(geo))) {
+    LOG_WARN("failed to calculate point range", K(ret));
+  }
+  return ret;
+}
+
+} // namespace common
+} // namespace oceanbase

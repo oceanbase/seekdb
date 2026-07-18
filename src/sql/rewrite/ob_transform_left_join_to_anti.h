@@ -1,0 +1,78 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef _OB_TRANSFORM_LEFT_JOIN_TO_ANTI_H
+#define _OB_TRANSFORM_LEFT_JOIN_TO_ANTI_H
+
+#include "sql/rewrite/ob_transform_rule.h"
+#include "sql/rewrite/ob_transform_utils.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+class ObTransformLeftJoinToAnti: public ObTransformRule 
+{
+public:
+  explicit ObTransformLeftJoinToAnti(ObTransformerCtx *ctx) :
+    ObTransformRule(ctx, TransMethod::POST_ORDER, T_LEFT_TO_ANTI) {}
+  virtual ~ObTransformLeftJoinToAnti() {}
+  virtual int transform_one_stmt(common::ObIArray<ObParentDMLStmt> &parent_stmts,
+                                 ObDMLStmt *&stmt,
+                                 bool &trans_happened) override;
+  virtual int construct_transform_hint(ObDMLStmt &stmt, void *trans_params) override;
+private:
+  int check_can_be_trans(ObDMLStmt *stmt,
+                         const ObIArray<ObRawExpr *> &cond_exprs,
+                         const JoinedTable *joined_table,
+                         ObIArray<ObRawExpr *> &target_exprs,
+                         ObIArray<ObRawExpr *> &constraints,
+                         bool &is_valid);
+  int check_hint_valid(const ObDMLStmt &stmt,
+                       const TableItem &table,
+                       bool &is_valid);
+  int transform_left_join_to_anti_join_rec(ObDMLStmt *stmt,
+                                           TableItem *table,
+                                           ObIArray<ObSEArray<TableItem *, 4>> &trans_tables,
+                                           bool is_root_table,
+                                           bool &trans_happened);
+  int transform_left_join_to_anti_join(ObDMLStmt *&stmt,
+                                       TableItem *table,
+                                       ObIArray<ObSEArray<TableItem *, 4>> &trans_tables,
+                                       bool is_root_table,
+                                       bool &trans_happened);
+  int trans_stmt_to_anti(ObDMLStmt *stmt,
+                         JoinedTable *joined_table);
+  int construct_trans_table_list(const ObDMLStmt *stmt,
+                                 const TableItem *table,
+                                 ObIArray<ObSEArray<TableItem *, 4>> &trans_tables);
+  
+  int get_column_ref_in_is_null_condition(const ObRawExpr *expr, 
+                                          ObIArray<const ObRawExpr*> &target);
+  int check_condition_expr_validity(const ObRawExpr *expr,
+                                    ObDMLStmt *stmt,
+                                    const JoinedTable *joined_table,
+                                    ObIArray<ObRawExpr *> &constraints,
+                                    bool &is_valid);
+  int clear_for_update(TableItem *table);
+  int fill_not_null_context(ObIArray<JoinedTable*> &joined_tables,
+                            const JoinedTable *target_joined_table, 
+                            ObNotNullContext &not_null_context);
+};
+} /* namespace sql */
+} /* namespace oceanbase */
+
+#endif /* _OB_TRANSFORM_LEFT_JOIN_TO_ANTI_H */

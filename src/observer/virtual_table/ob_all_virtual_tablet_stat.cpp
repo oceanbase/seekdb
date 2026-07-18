@@ -1,0 +1,127 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "ob_all_virtual_tablet_stat.h"
+#include "share/rc/ob_module_provider.h"
+
+namespace oceanbase
+{
+using namespace storage;
+using namespace common;
+namespace observer
+{
+ObAllVirtualTabletStat::ObAllVirtualTabletStat()
+  : ip_buf_(),
+    tablet_stats_(),
+    cur_stat_(),
+    cur_idx_(0),
+    need_collect_stats_(true)
+{
+}
+
+ObAllVirtualTabletStat::~ObAllVirtualTabletStat()
+{
+  reset();
+}
+
+void ObAllVirtualTabletStat::reset()
+{
+  MEMSET(ip_buf_, 0, sizeof(ip_buf_));
+  tablet_stats_.reset();
+  cur_idx_ = 0;
+  need_collect_stats_ = true;
+  ObVirtualTableScannerIterator::reset();
+}
+
+int ObAllVirtualTabletStat::inner_get_next_row(ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
+  row = nullptr;
+  
+  if (need_collect_stats_) {
+    tablet_stats_.reset();
+    if (OB_FAIL(share::g_mp->tenant_tablet_stat_mgr()->get_all_tablet_stats(tablet_stats_))) {
+      SERVER_LOG(WARN, "failed to get all tablet stats", K(ret));
+    } else {
+      need_collect_stats_ = false;
+      cur_idx_ = 0;
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (cur_idx_ < tablet_stats_.count()) {
+      cur_stat_ = tablet_stats_.at(cur_idx_);
+      cur_idx_++;
+    } else {
+      ret = OB_ITER_END;
+    }
+  }
+  if (OB_SUCC(ret)) {
+    const int64_t col_cnt = output_column_ids_.count();
+    ObObj *cells = cur_row_.cells_;
+    for (int64_t i = 0; OB_SUCC(ret) && i < col_cnt; ++i) {
+      uint64_t col_id = output_column_ids_.at(i);
+      switch (col_id) {
+      case TABLET_ID:
+        cells[i].set_int(cur_stat_.tablet_id_);
+        break;
+      case QUERY_CNT:
+        cells[i].set_int(cur_stat_.query_cnt_);
+        break;
+      case MINI_MERGE_CNT:
+        cells[i].set_int(cur_stat_.merge_cnt_);
+        break;
+      case SCAN_OUTPUT_ROW_CNT:
+        cells[i].set_int(cur_stat_.scan_logical_row_cnt_);
+        break;
+      case SCAN_TOTAL_ROW_CNT:
+        cells[i].set_int(cur_stat_.scan_physical_row_cnt_);
+        break;
+      case PUSHDOWN_MICRO_BLOCK_CNT:
+        cells[i].set_int(cur_stat_.scan_micro_block_cnt_);
+        break;
+      case TOTAL_MICRO_BLOCK_CNT:
+        cells[i].set_int(cur_stat_.pushdown_micro_block_cnt_);
+        break;
+      case EXIST_ITER_TABLE_CNT:
+        cells[i].set_int(cur_stat_.exist_row_total_table_cnt_);
+        break;
+      case EXIST_TOTAL_TABLE_CNT:
+        cells[i].set_int(cur_stat_.exist_row_read_table_cnt_);
+        break;
+      case INSERT_ROW_CNT:
+        cells[i].set_int(cur_stat_.insert_row_cnt_);
+        break;
+      case UPDATE_ROW_CNT:
+        cells[i].set_int(cur_stat_.update_row_cnt_);
+        break;
+      case DELETE_ROW_CNT:
+        cells[i].set_int(cur_stat_.delete_row_cnt_);
+        break;
+      default:
+        ret = OB_ERR_UNEXPECTED;
+        SERVER_LOG(WARN, "invalid column id", K(ret), K(col_id));
+        break;
+      } // end switch
+    } // end for
+  }
+  if (OB_SUCC(ret)) {
+    row = &cur_row_;
+  }
+  return ret;
+}
+
+} // observer
+} // oceanbase

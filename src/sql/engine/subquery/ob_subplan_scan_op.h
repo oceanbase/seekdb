@@ -1,0 +1,63 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SUBQUERY_OB_SUBPLAN_SCAN_OP_H_
+#define OCEANBASE_SUBQUERY_OB_SUBPLAN_SCAN_OP_H_
+
+#include "sql/engine/ob_operator.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+
+class ObSubPlanScanSpec : public ObOpSpec
+{
+  OB_UNIS_VERSION_V(1);
+public:
+  ObSubPlanScanSpec(common::ObIAllocator &alloc, const ObPhyOperatorType type);
+  // project child output to subplan scan column.
+  // projector_is filled with [child output, scan column] pairs, even index is child output,
+  // odd is scan column. e.g.:
+  //   [child output, scan column, child output, scan column, ...]
+  ExprFixedArray projector_;
+};
+
+class ObSubPlanScanOp : public ObOperator
+{
+public:
+  ObSubPlanScanOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOpInput *input);
+
+  virtual int inner_open() override;
+
+  virtual int inner_rescan() override;
+
+  virtual int inner_get_next_row() override;
+
+  virtual int inner_get_next_batch(const int64_t max_row_cnt) override;
+
+  virtual void destroy() override { ObOperator::destroy(); }
+private:
+  int init_monitor_info();
+  int next_vector(const int64_t max_row_cnt);
+  int next_batch(const int64_t max_row_cnt);
+  int nested_next_vector(ObExpr &from, ObExpr &to);
+};
+
+} // end namespace sql
+} // end namespace oceanbase
+
+#endif // OCEANBASE_SUBQUERY_OB_SUBPLAN_SCAN_OP_H_

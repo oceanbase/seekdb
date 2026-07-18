@@ -1,0 +1,90 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OBDEV_SRC_SQL_DAS_ITER_OB_DAS_GLOBAL_LOOKUP_ITER_H_
+#define OBDEV_SRC_SQL_DAS_ITER_OB_DAS_GLOBAL_LOOKUP_ITER_H_
+
+#include "sql/das/iter/ob_das_lookup_iter.h"
+namespace oceanbase
+{
+using namespace common;
+namespace sql
+{
+
+class ObDASScanOp;
+struct ObDASBaseRtDef;
+struct ObDASAttachRtInfo;
+
+struct ObDASGlobalLookupIterParam : public ObDASLookupIterParam
+{
+public:
+  ObDASGlobalLookupIterParam()
+    : ObDASLookupIterParam(true /*global lookup*/),
+      can_retry_(false),
+      calc_part_id_(nullptr),
+      attach_ctdef_(nullptr),
+      attach_rtinfo_(nullptr)
+  {}
+  bool can_retry_;
+  const ObExpr *calc_part_id_;
+  ObDASBaseCtDef *attach_ctdef_;
+  ObDASAttachRtInfo *attach_rtinfo_;
+
+  virtual bool is_valid() const override
+  {
+    return ObDASLookupIterParam::is_valid() && calc_part_id_ != nullptr;
+  }
+};
+
+class ObDASGlobalLookupIter : public ObDASLookupIter
+{
+public:
+  ObDASGlobalLookupIter()
+    : ObDASLookupIter(ObDASIterType::DAS_ITER_GLOBAL_LOOKUP),
+      can_retry_(false),
+      calc_part_id_(nullptr),
+      index_ordered_idx_(0),
+      attach_ctdef_(nullptr),
+      attach_rtinfo_(nullptr)
+  {}
+  virtual ~ObDASGlobalLookupIter() {}
+
+protected:
+  virtual int inner_init(ObDASIterParam &param) override;
+  virtual int inner_reuse() override;
+  virtual int inner_release() override;
+  virtual int add_rowkey() override;
+  virtual int add_rowkeys(int64_t count) override;
+  virtual int do_index_lookup() override;
+  virtual int check_index_lookup() override;
+  virtual void reset_lookup_state();
+  int pushdown_attach_task_to_das(ObDASScanOp &target_op);
+  int attach_related_taskinfo(ObDASScanOp &target_op, ObDASBaseRtDef *attach_rtdef);
+
+private:
+  bool can_retry_;
+  const ObExpr *calc_part_id_;
+  int64_t index_ordered_idx_; // used for keep order of global lookup
+  ObDASBaseCtDef *attach_ctdef_;
+  ObDASAttachRtInfo *attach_rtinfo_;
+};
+
+}  // namespace sql
+}  // namespace oceanbase
+
+
+
+#endif /* OBDEV_SRC_SQL_DAS_ITER_OB_DAS_GLOBAL_LOOKUP_ITER_H_ */

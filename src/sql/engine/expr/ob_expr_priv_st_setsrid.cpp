@@ -1,0 +1,93 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_ENG
+#include "sql/engine/expr/ob_expr_priv_st_setsrid.h"
+#include "src/sql/session/ob_sql_session_info.h"
+
+using namespace oceanbase::common;
+using namespace oceanbase::sql;
+
+namespace oceanbase
+{
+namespace sql
+{
+ObExprPrivSTSetSRID::ObExprPrivSTSetSRID(ObIAllocator &alloc)
+    : ObExprSTSRID(alloc, T_FUN_SYS_PRIV_ST_SETSRID, N_PRIV_ST_SETSRID, 2, NOT_ROW_DIMENSION)
+{
+}
+
+ObExprPrivSTSetSRID::~ObExprPrivSTSetSRID()
+{
+}
+
+int ObExprPrivSTSetSRID::calc_result_type2(ObExprResType &type,
+                                           ObExprResType &type1,
+                                           ObExprResType &type2,
+                                           common::ObExprTypeCtx &type_ctx) const
+{
+  int ret = OB_SUCCESS;
+  UNUSED(type_ctx);
+  ObObjType type_geom = type1.get_type();
+  ObObjType type_srid = type2.get_type();
+
+  if (!ob_is_geometry(type_geom)) {
+    ret = OB_ERR_GIS_INVALID_DATA;
+    LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, get_name());
+  } else {
+    const ObSQLSessionInfo *session =
+    dynamic_cast<const ObSQLSessionInfo*>(type_ctx.get_session());
+    if (OB_ISNULL(session)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("cast basic session to sql session info failed", K(ret));
+    } else if (!ob_is_integer_type(type_srid)
+        && !ob_is_string_type(type_srid)
+        && !ob_is_null(type_srid)) {
+      ret = OB_ERR_INVALID_TYPE_FOR_OP;
+      LOG_WARN("invalid input type srid", K(ret), K(type_srid));
+    } else if (ob_is_string_type(type_srid)) {
+      type2.set_calc_type(ObIntType);
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+      ObCastMode cast_mode = type_ctx.get_cast_mode();
+      cast_mode &= ~CM_WARN_ON_FAIL; // make cast return error when fail
+      cast_mode |= CM_STRING_INTEGER_TRUNC; // make cast check range when string to int
+      type_ctx.set_cast_mode(cast_mode); // cast mode only do work in new sql engine cast frame.
+      type.set_geometry();
+      type.set_length((ObAccuracy::DDL_DEFAULT_ACCURACY[ObGeometryType]).get_length());
+  }
+  
+  return ret;
+}
+
+int ObExprPrivSTSetSRID::eval_priv_st_setsrid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+{
+  return eval_st_srid_common(expr, ctx, res, N_PRIV_ST_SETSRID);
+}
+
+int ObExprPrivSTSetSRID::cg_expr(ObExprCGCtx &expr_cg_ctx,
+                                 const ObRawExpr &raw_expr,
+                                 ObExpr &rt_expr) const
+{
+  UNUSEDx(expr_cg_ctx, raw_expr);
+  rt_expr.eval_func_ = eval_priv_st_setsrid;
+  return OB_SUCCESS;
+}
+
+} // namespace sql
+} // namespace oceanbase

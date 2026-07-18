@@ -1,0 +1,127 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SQL_OB_EXPR_ST_X
+#define OCEANBASE_SQL_OB_EXPR_ST_X
+
+#include "sql/engine/expr/ob_expr_operator.h"
+#include "share/geo/ob_geo_ibin.h"
+#include "share/geo/ob_srs_info.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+// common superclass of st_x, s_y, st_longitude and st_latitude
+class ObExprSTCoordinate: public ObExprOperator
+{
+public:
+  ObExprSTCoordinate(common::ObIAllocator &alloc,
+                     ObExprOperatorType type,
+                     const char *name)
+    :ObExprOperator(alloc, type, name, ONE_OR_TWO, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION) { }
+  virtual ~ObExprSTCoordinate() {}
+  virtual int calc_result_typeN(ObExprResType &type,
+                                ObExprResType *texts,
+                                int64_t param_num,
+                                common::ObExprTypeCtx &type_ctx) const;
+  int calc_common(common::ObObj &result,
+                  const common::ObObj *params,
+                  int64_t param_num,
+                  common::ObExprCtx &expr_ctx,
+                  bool is_first_d,
+                  bool only_geog) const;
+
+  static int eval_common(const ObExpr &expr,
+                         ObEvalCtx &ctx,
+                         ObDatum &expr_datum,
+                         bool is_first_d,
+                         bool only_geog,
+                         const char *func_name);
+
+  static int check_longitude(double new_val_radian,
+                             const common::ObSrsItem *srs,
+                             double new_val,
+                             const char *func_name);
+  static int check_latitude(double new_val_radian,
+                            const common::ObSrsItem *srs,
+                            double new_val,
+                            const char *func_name);
+};
+
+class ObExprSTX : public ObExprSTCoordinate
+{
+public:
+  explicit ObExprSTX(common::ObIAllocator &alloc)
+    : ObExprSTCoordinate(alloc, T_FUN_SYS_ST_X, N_ST_X) {}
+  virtual ~ObExprSTX() {}
+  static int eval_st_x(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
+                      const ObRawExpr &raw_expr,
+                      ObExpr &rt_expr) const override;
+  virtual bool need_rt_ctx() const override { return true; }
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObExprSTX);
+};
+
+class ObExprSTY : public ObExprSTCoordinate
+{
+public:
+  explicit ObExprSTY(common::ObIAllocator &alloc)
+    : ObExprSTCoordinate(alloc, T_FUN_SYS_ST_Y, N_ST_Y) {}
+  virtual ~ObExprSTY() {}
+  static int eval_st_y(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
+                      const ObRawExpr &raw_expr,
+                      ObExpr &rt_expr) const override;
+  virtual bool need_rt_ctx() const override { return true; }
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObExprSTY);
+};
+
+class ObExprSTLatitude : public ObExprSTCoordinate
+{
+public:
+  explicit ObExprSTLatitude(common::ObIAllocator &alloc)
+    : ObExprSTCoordinate(alloc, T_FUN_SYS_ST_LATITUDE, N_ST_LATITUDE) {}
+  virtual ~ObExprSTLatitude() {}
+  static int eval_st_latitude(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
+                      const ObRawExpr &raw_expr,
+                      ObExpr &rt_expr) const override;
+  virtual bool need_rt_ctx() const override { return true; }
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObExprSTLatitude);
+};
+
+class ObExprSTLongitude : public ObExprSTCoordinate
+{
+public:
+  explicit ObExprSTLongitude(common::ObIAllocator &alloc)
+    : ObExprSTCoordinate(alloc, T_FUN_SYS_ST_LONGITUDE, N_ST_LONGITUDE) {}
+  virtual ~ObExprSTLongitude() {}
+  static int eval_st_longitude(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
+                      const ObRawExpr &raw_expr,
+                      ObExpr &rt_expr) const override;
+  virtual bool need_rt_ctx() const override { return true; }
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObExprSTLongitude);
+};
+
+} // sql
+} // oceanbase
+#endif // OCEANBASE_SQL_OB_EXPR_ST_X

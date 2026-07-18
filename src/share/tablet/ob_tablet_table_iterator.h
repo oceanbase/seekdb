@@ -1,0 +1,127 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SHARE_TABLET_OB_TABLET_TABLE_ITERATOR_H
+#define OCEANBASE_SHARE_TABLET_OB_TABLET_TABLE_ITERATOR_H
+
+#include "share/tablet/ob_tablet_filter.h"
+#include "share/tablet/ob_tablet_table_operator.h"
+
+namespace oceanbase
+{
+namespace common
+{
+class ObISQLClient;
+}
+namespace share
+{
+class ObTabletToLSTableOperator;
+class ObTabletTableOperator;
+class ObTabletInfo;
+
+class ObTabletMetaIterator
+{
+public:
+  ObTabletMetaIterator();
+  ~ObTabletMetaIterator() { reset(); }
+  virtual void reset();
+  virtual int next(ObTabletInfo &tablet_info);
+protected:
+  int inner_init(
+    );
+  virtual int prefetch() = 0;
+protected:
+  bool is_inited_;
+  int64_t prefetch_tablet_idx_;
+  
+  common::ObArray<ObTabletInfo> prefetched_tablets_;
+  ObTabletReplicaFilterHolder filters_;
+};
+
+class ObCompactionTabletMetaIterator : public ObTabletMetaIterator
+{
+public:
+  ObCompactionTabletMetaIterator(
+    const bool first_check,
+    const int64_t compaction_scn);
+  ~ObCompactionTabletMetaIterator() { reset(); }
+  int init(
+    const int64_t batch_size);
+  virtual void reset() override;
+  virtual int next(ObTabletInfo &tablet_info) override;
+
+private:
+   virtual int prefetch() override;
+  const static int64_t TABLET_META_TABLE_RANGE_GET_SIZE = 1500;
+
+  bool first_check_;
+  int64_t compaction_scn_;
+  int64_t batch_size_;
+  ObTabletID end_tablet_id_;
+};
+
+class ObTenantTabletMetaIterator : public ObTabletMetaIterator
+{
+public:
+  ObTenantTabletMetaIterator();
+  virtual ~ObTenantTabletMetaIterator();
+  int init(common::ObISQLClient &sql_proxy);
+  virtual void reset() override;
+  void set_batch_size(int64_t batch_size) {tablet_table_operator_.set_batch_size(batch_size);}
+
+private:
+  virtual int prefetch() override;
+  int prefetch_valid_tablet_ids();
+  int prefetch_sys_table_tablet_ids();
+  int prefetch_user_table_tablet_ids();
+  int prefetch_tablets();
+
+private:
+  bool first_prefetch_;
+  common::ObISQLClient *sql_proxy_;
+  int64_t valid_tablet_ls_pairs_idx_;
+  common::ObArray<ObTabletLSPair> valid_tablet_ls_pairs_;
+  ObTabletTableOperator tablet_table_operator_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObTenantTabletMetaIterator);
+};
+
+// ObTenantTabletTableIterator is used to iterate __all_tablet_meta_table according to target tenant.
+// Notes: This iterator will get residual tablet from meta table. If you want to iterate all valid tablet infos,
+//        you'd better use ObTenantTabletMetaIterator.
+class ObTenantTabletTableIterator
+{
+public:
+  ObTenantTabletTableIterator();
+  virtual ~ObTenantTabletTableIterator() {}
+  int init(ObTabletTableOperator &tt_operator);
+  int next(ObTabletInfo &tablet_info);
+  ObTabletReplicaFilterHolder &get_filters() { return filters_; }
+private:
+  int prefetch_();
+
+  bool inited_;
+  
+  int64_t inner_idx_;
+  ObTabletTableOperator *tt_operator_;
+  common::ObArray<ObTabletInfo> inner_tablet_infos_;
+  ObTabletReplicaFilterHolder filters_;
+};
+
+} // end namespace
+} // end namespace oceanbase
+
+#endif // OCEANBASE_SHARE_TABLET_OB_TABLET_TABLE_ITERATOR_H

@@ -1,0 +1,84 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef _OB_EXEC_FEEDBACK_INFO_H
+#define _OB_EXEC_FEEDBACK_INFO_H
+
+#include "sql/monitor/ob_sql_plan_monitor_node_list.h"
+#include "lib/container/ob_array.h"
+#include "lib/container/ob_iarray.h"
+#include "lib/container/ob_array_serialization.h"
+namespace oceanbase
+{
+namespace sql
+{
+
+
+struct ObExecFeedbackNode final
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObExecFeedbackNode(int64_t op_id) : op_id_(op_id), output_row_count_(0),
+      op_open_time_(INT64_MAX), op_close_time_(0), op_first_row_time_(INT64_MAX),
+      op_last_row_time_(0), db_time_(0),  block_time_(0), worker_count_(0), pdml_op_write_rows_(0) {}
+  ObExecFeedbackNode() : op_id_(OB_INVALID_ID), output_row_count_(0),
+      op_open_time_(INT64_MAX), op_close_time_(0), op_first_row_time_(INT64_MAX),
+      op_last_row_time_(0), db_time_(0),  block_time_(0), worker_count_(0), pdml_op_write_rows_(0) {}
+  ~ObExecFeedbackNode() {}
+  TO_STRING_KV(K_(op_id), K_(output_row_count), K_(op_open_time),
+               K_(op_close_time), K_(op_first_row_time), K_(op_last_row_time),
+               K_(db_time), K_(block_time), K_(pdml_op_write_rows));
+public:
+  int64_t op_id_;
+  int64_t output_row_count_;
+  int64_t op_open_time_;
+  int64_t op_close_time_;
+  int64_t op_first_row_time_;
+  int64_t op_last_row_time_;
+  int64_t db_time_;    // rdtsc cpu cycles spend on this op, include cpu instructions & io
+  int64_t block_time_; // rdtsc cpu cycles wait for network, io etc
+  int64_t worker_count_;
+  int64_t pdml_op_write_rows_;
+};
+
+class ObExecFeedbackInfo final
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObExecFeedbackInfo() : nodes_(), total_db_time_(0), is_valid_(true) {}
+  ~ObExecFeedbackInfo() { reset(); }
+  int merge_feedback_info(const ObExecFeedbackInfo &info);
+  int add_feedback_node(ObExecFeedbackNode &node) { return nodes_.push_back(node); };
+  common::ObIArray<ObExecFeedbackNode> &get_feedback_nodes() { return nodes_; };
+  const common::ObIArray<ObExecFeedbackNode> &get_feedback_nodes() const { return nodes_; };
+  bool is_valid() const { return is_valid_ && nodes_.count() > 0; }
+  int assign(const ObExecFeedbackInfo &other);
+  int64_t get_total_db_time() const { return total_db_time_; }
+  int64_t &get_total_db_time() { return total_db_time_; }
+  void reset() { nodes_.reset(); }
+  TO_STRING_KV(K_(nodes), K_(total_db_time), K_(is_valid));
+private:
+  common::ObSArray<ObExecFeedbackNode> nodes_;
+  int64_t total_db_time_;
+  bool is_valid_;
+};
+
+
+
+}
+}
+
+#endif

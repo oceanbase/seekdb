@@ -1,0 +1,62 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_SCHEMA_MEMORY_H_
+#define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_SCHEMA_MEMORY_H_
+
+
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "sql/ob_scanner.h"
+#include "share/schema/ob_multi_version_schema_service.h"
+#include "common/row/ob_row.h"
+
+namespace oceanbase
+{
+class ObSchemaMemory;
+namespace observer
+{
+class ObAllVirtualSchemaMemory: public common::ObVirtualTableScannerIterator
+{
+  enum COLUMN_ID_LIST
+  {
+        ALLOCATOR_TYPE = common::OB_APP_MIN_COLUMN_ID,
+    USED_SCHEMA_MGR_CNT,
+    FREE_SCHEMA_MGR_CNT,
+    MEM_USED,
+    MEM_TOTAL,
+    ALLOCATOR_IDX,
+  };
+public:
+  explicit ObAllVirtualSchemaMemory(share::schema::ObMultiVersionSchemaService &schema_service)
+             : t_loop_idx_(OB_INVALID_INDEX), mem_idx_(0),
+               schema_service_(schema_service) {}
+  virtual ~ObAllVirtualSchemaMemory() {}
+public:
+  virtual int inner_open();
+  virtual int inner_get_next_row(common::ObNewRow *&row);
+  int get_next_tenant_mem_info(ObSchemaMemory &schema_mem);
+private:
+  int64_t t_loop_idx_;
+  int64_t mem_idx_;
+  const static int64_t DEFAULT_TENANT_NUM = 10;
+  const static int64_t DEFAULT_ALLOCATOR_COUNT = 2;
+  char ip_buffer_[OB_MAX_SERVER_ADDR_SIZE];
+  share::schema::ObMultiVersionSchemaService &schema_service_;
+  common::ObSEArray<ObSchemaMemory, DEFAULT_ALLOCATOR_COUNT> schema_mem_infos_;
+}; //class ObAllVirtualServerSchemaMem
+}//namespace observer
+}//namespace oceanbase
+#endif //OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_SCHEMA_MEM_H_

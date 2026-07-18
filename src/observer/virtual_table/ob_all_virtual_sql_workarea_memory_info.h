@@ -1,0 +1,83 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_ALL_VIRTUAL_SQL_WORKAREA_MEMORY_INFO_H
+#define OB_ALL_VIRTUAL_SQL_WORKAREA_MEMORY_INFO_H
+
+#include "sql/engine/ob_tenant_sql_memory_manager.h"
+#include "lib/utility/ob_macro_utils.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "common/row/ob_row.h"
+
+namespace oceanbase
+{
+namespace observer
+{
+
+class ObSqlWorkareaMemoryInfoIterator
+{
+public:
+  ObSqlWorkareaMemoryInfoIterator();
+  ~ObSqlWorkareaMemoryInfoIterator() { destroy(); }
+public:
+  void destroy();
+  void reset();
+  int init();
+  int get_next_wa_memory_info(sql::ObSqlWorkareaCurrentMemoryInfo *&wa_stat);
+private:
+  int get_next_batch_wa_memory_info();
+private:
+  sql::ObSqlWorkareaCurrentMemoryInfo memory_info_;
+  bool done_;
+};
+
+class ObSqlWorkareaMemoryInfo : public common::ObVirtualTableScannerIterator
+{
+public:
+  ObSqlWorkareaMemoryInfo();
+  virtual ~ObSqlWorkareaMemoryInfo() { destroy(); }
+
+public:
+  void destroy();
+  void reset();
+  int inner_get_next_row(common::ObNewRow *&row);
+private:
+  enum STORAGE_COLUMN
+  {
+        MAX_WORKAREA_SIZE = common::OB_APP_MIN_COLUMN_ID,
+    WORKAREA_HOLD_SIZE,
+    MAX_AUTO_WORKAREA_SIZE,
+    MEM_TARGET, // OB_APP_MIN_COLUMN_ID + 5
+    TOTAL_MEM_USED,
+    GLOBAL_MEM_BOUND,
+    DRIFT_SIZE,
+    WORKAREA_COUNT,
+    MANUAL_CALC_COUNT,      // OB_APP_MIN_COLUMN_ID + 10
+  };
+  int get_server_ip_and_port();
+  int fill_row(
+    sql::ObSqlWorkareaCurrentMemoryInfo &memory_info,
+    common::ObNewRow *&row);
+private:
+  common::ObString ipstr_;
+  int32_t port_;
+  ObSqlWorkareaMemoryInfoIterator iter_;
+};
+
+} /* namespace observer */
+} /* namespace oceanbase */
+
+#endif /* OB_ALL_VIRTUAL_SQL_WORKAREA_MEMORY_INFO_H */

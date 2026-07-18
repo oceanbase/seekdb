@@ -1,0 +1,66 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#include "storage/multi_data_source/mds_key_serialize_util.h"
+#include "lib/ob_errno.h"
+#include "lib/utility/ob_macro_utils.h"
+namespace oceanbase
+{
+namespace storage
+{
+namespace mds
+{
+
+int ObMdsSerializeUtil::mds_key_serialize(const int64_t key, char *buf,
+                                          const int64_t buf_len, int64_t &pos)
+{
+  int ret = OB_SUCCESS;
+  int64_t tmp = key;
+  if (pos >= buf_len) {
+    ret = OB_BUF_NOT_ENOUGH;
+  } else {
+    for (int64_t idx = 0; idx < 8 && OB_SUCC(ret); ++idx) {
+      if (pos >= buf_len) {
+        ret = OB_BUF_NOT_ENOUGH;
+      } else {
+        buf[pos++] = ((tmp >> (56 - 8 * idx)) & 0x00000000000000FF);
+      }
+    } // for
+  }
+  return ret;
+}
+
+int ObMdsSerializeUtil::mds_key_deserialize(const char *buf, const int64_t buf_len,
+                               int64_t &pos, int64_t &key)
+{
+  int ret = OB_SUCCESS;
+  int64_t tmp = 0;
+  for (int64_t idx = 0; idx < 8 && OB_SUCC(ret); ++idx) {
+    if (pos >= buf_len) {
+      ret = OB_BUF_NOT_ENOUGH;
+    } else {
+      tmp <<= 8;
+      tmp |= (0x00000000000000FF & buf[pos++]);
+    }
+  }
+  if (OB_SUCC(ret)) {
+    key = tmp;
+  }
+  return ret;
+}
+
+} // namespace mds
+} // namespace storage
+} // namespace oceanbase

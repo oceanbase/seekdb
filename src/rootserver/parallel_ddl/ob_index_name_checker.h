@@ -1,0 +1,108 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#ifndef OCEANBASE_ROOTSERVER_OB_INDEX_NAME_CHECKER_H_
+#define OCEANBASE_ROOTSERVER_OB_INDEX_NAME_CHECKER_H_
+
+#include "lib/hash/ob_pointer_hashmap.h"
+#include "share/schema/ob_schema_struct.h"
+#include "share/schema/ob_table_schema.h"
+
+namespace oceanbase
+{
+namespace share
+{
+namespace schema
+{
+
+/*
+ * ObIndexNameCache will be protected by mutex
+ *
+ * Any failure when call related function will reset cache immediately for correctness.
+ */
+class ObIndexNameCache
+{
+public:
+  ObIndexNameCache() = delete;
+  ObIndexNameCache(common::ObMySQLProxy &sql_proxy);
+  ~ObIndexNameCache() {}
+
+  void reset_cache();
+  int check_index_name_exist(const uint64_t database_id,
+                             const ObString &index_name,
+                             bool &is_exist);
+  int add_index_name(const share::schema::ObTableSchema &index_schema);
+private:
+  void inner_reset_cache_();
+  int try_load_cache_();
+private:
+  lib::ObMutex mutex_;
+  common::ObMySQLProxy &sql_proxy_;
+  common::ObArenaAllocator allocator_;
+  ObIndexNameMap cache_;
+  bool loaded_;
+  DISALLOW_COPY_AND_ASSIGN(ObIndexNameCache);
+};
+
+/*
+ * design doc: ob/rootservice/ffa2062ce3n1tvi0#SLpFs
+ *
+ * usage: for parallel ddl to check if index name is duplicated in oracle mode
+ *
+ * notice:
+ * 1. ObIndexNameChecker should be used in ObDDLSQLTransaction only.
+ * 2. nothing will be done for mysql tenant.
+ */
+class ObIndexNameChecker
+{
+public:
+  ObIndexNameChecker();
+  ~ObIndexNameChecker();
+
+  int init(common::ObMySQLProxy &sql_proxy);
+  void destroy();
+
+  // release memory when RS changed.
+  void reset_all_cache();
+
+  // will be called in the following cases:
+  // 1. before non parallel ddl commit.
+  // 2. after non parallel ddl commit failed.
+  int reset_cache();
+
+  // lock object by original index name first before call check_index_name_exist().
+  int check_index_name_exist(const uint64_t database_id,
+                             const ObString &index_name,
+                             bool &is_exist);
+
+  // call add_index_name() before parallel ddl trans commit.
+  int add_index_name(const share::schema::ObTableSchema &index_schema);
+private:
+  int check_tenant_can_be_skipped_(bool &can_skip);
+  int try_init_index_name_cache_map_();
+private:
+  common::SpinRWLock rwlock_;
+  common::ObArenaAllocator allocator_;
+  // single-tenant: only sys tenant entry, collapsed to single member
+  ObIndexNameCache *index_name_cache_member_;
+  common::ObMySQLProxy *sql_proxy_;
+  bool inited_;
+};
+
+} // end schema
+} // end share
+} // end oceanbase
+
+#endif//OCEANBASE_ROOTSERVER_OB_INDEX_NAME_CHECKER_H_

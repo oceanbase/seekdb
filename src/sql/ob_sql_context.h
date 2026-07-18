@@ -1,0 +1,934 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SQL_CONTEXT_
+#define OCEANBASE_SQL_CONTEXT_
+
+#include "ob_sql_utils.h"
+#include "lib/net/ob_addr.h"
+#include "lib/hash/ob_placement_hashset.h"
+#include "lib/container/ob_2d_array.h"
+#include "lib/random/ob_random.h"
+#include "sql/optimizer/ob_table_partition_info.h"
+#include "sql/monitor/ob_exec_stat.h"
+#include "lib/hash_func/murmur_hash.h"
+#include "sql/ob_sql_temp_table.h"
+#include "sql/plan_cache/ob_plan_cache_util.h"
+#include "share/config/ob_tenant_config_mgr.h"
+#include "sql/monitor/ob_sql_stat_record.h"
+#include "sql/optimizer/stat/ob_opt_ds_stat_cache.h"
+#include "sql/ob_sql_ccl_rule_manager.h"
+
+namespace oceanbase
+{
+namespace common
+{
+class ObMySQLProxy;
+class ObPartMgr;
+}
+namespace share
+{
+class ObExternalObject;
+namespace schema
+{
+class ObSchemaGetterGuard;
+class ObTableSchema;
+class ObColumnSchemaV2;
+}
+}
+namespace pl
+{
+class ObPL;
+}
+namespace sql
+{
+typedef common::ObIArray<ObTablePartitionInfo *> ObTablePartitionInfoArray;
+//ObLocationConstraint if there is only one item, then only need to constrain whether the location type is consistent;
+//                    If there are multiple items, then it is necessary to verify whether the physical distribution corresponding to each location is the same
+struct LocationConstraint;
+typedef common::ObSEArray<LocationConstraint, 1, common::ModulePageAllocator, true> ObLocationConstraint;
+typedef common::ObFixedArray<LocationConstraint, common::ObIAllocator> ObPlanLocationConstraint;
+typedef common::ObSEArray<int64_t, 4, common::ModulePageAllocator, true> ObPwjConstraint;
+typedef common::ObFixedArray<int64_t, common::ObIAllocator> ObPlanPwjConstraint;
+class ObShardingInfo;
+
+struct ObPCResourceMapRule
+{
+public:
+  ObPCResourceMapRule() :
+    resource_group_(),
+    res_map_rule_id_(common::OB_INVALID_ID),
+    res_map_rule_param_idx_(common::OB_INVALID_INDEX)
+  {}
+
+  void reset()
+  {
+    resource_group_.reset();
+    res_map_rule_id_ = common::OB_INVALID_ID;
+    res_map_rule_param_idx_ = common::OB_INVALID_INDEX;
+  }
+
+  void shadow_copy(const ObPCResourceMapRule &resource_map_rule)
+  {
+    resource_group_ = resource_map_rule.resource_group_;
+    res_map_rule_id_ = resource_map_rule.res_map_rule_id_;
+    res_map_rule_param_idx_ = resource_map_rule.res_map_rule_param_idx_;
+  }
+  int deep_copy(const ObPCResourceMapRule &resource_map_rule, ObIAllocator &allocator)
+  {
+    int ret = OB_SUCCESS;
+    common::ob_write_string(allocator, resource_map_rule.get_resource_group(), resource_group_);
+    res_map_rule_id_ = resource_map_rule.res_map_rule_id_;
+    res_map_rule_param_idx_ = resource_map_rule.res_map_rule_param_idx_;
+    return ret;
+  }
+
+  void set_resource_group(const common::ObString &resource_group)
+  {
+    resource_group_ = resource_group;
+  }
+
+  void set_column_map_rule(uint64_t res_map_rule_id, int64_t res_map_rule_param_idx)
+  {
+    res_map_rule_id_ = res_map_rule_id;
+    res_map_rule_param_idx_ = res_map_rule_param_idx;
+  }
+
+  inline bool use_hint_control_resource()
+  {
+    return !resource_group_.empty();
+  }
+
+  inline const ObString &get_resource_group() const
+  {
+    return resource_group_;
+  }
+  inline uint64_t get_res_map_rule_id() const
+  {
+    return res_map_rule_id_;
+  }
+  inline int64_t get_res_map_rule_param_idx() const
+  {
+    return res_map_rule_param_idx_;
+  }
+
+  TO_STRING_KV(K_(resource_group), K_(res_map_rule_id), K_(res_map_rule_param_idx));
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObPCResourceMapRule);
+  // currently only PlanSet in plan cache module will have a deep copy version string to classify
+  // plan
+  common::ObString resource_group_;
+  uint64_t res_map_rule_id_;
+  int64_t res_map_rule_param_idx_;
+};
+
+struct LocationConstraint
+{
+  enum InclusionType {
+    NotSubset = 0,              // no inclusion relationship
+    LeftIsSuperior,             // left contains all the elements in right set
+    RightIsSuperior             // right contains all the elements in left set
+  };
+  enum ConstraintFlag {
+    NoExtraFlag        = 0,
+    IsMultiPartInsert  = 1,
+    // Partition pruning results in the base table involving only one first-level partition
+    SinglePartition    = 1 << 1,
+    // After partition pruning, each level one partition of the base table only involves one level two partition
+    SingleSubPartition = 1 << 2,
+    // is duplicate table not in dml
+    DupTabNotInDML     = 1 << 3
+  };
+  TableLocationKey key_;
+  ObTableLocationType phy_loc_type_;
+  int64_t constraint_flags_;
+  // only used in plan generate
+  ObTablePartitionInfo *table_partition_info_;
+
+  LocationConstraint() : key_(), phy_loc_type_(), constraint_flags_(NoExtraFlag), table_partition_info_(NULL) {}
+
+  inline uint64_t hash() const {
+    uint64_t hash_ret = key_.hash();
+    hash_ret = common::murmurhash(&phy_loc_type_, sizeof(ObTableLocationType), hash_ret);
+    return hash_ret;
+  }
+  inline void add_constraint_flag(ConstraintFlag flag) { constraint_flags_ |= flag; }
+  inline bool is_multi_part_insert() const { return constraint_flags_ & IsMultiPartInsert; }
+  inline bool is_partition_single() const { return constraint_flags_ & SinglePartition; }
+  inline bool is_subpartition_single() const { return constraint_flags_ & SingleSubPartition; }
+  inline bool is_dup_table_not_in_dml() const {return constraint_flags_ & DupTabNotInDML; }
+
+  bool operator==(const LocationConstraint &other) const;
+
+  // calculate the inclusion relationship between ObLocationConstraints
+
+  TO_STRING_KV(K_(key), K_(phy_loc_type), K_(constraint_flags));
+};
+
+struct ObLocationConstraintContext
+{
+  enum InclusionType {
+    NotSubset = 0,              // no inclusion relationship
+    LeftIsSuperior,             // left contains all the elements in right set
+    RightIsSuperior             // right contains all the elements in left set
+  };
+
+  ObLocationConstraintContext()
+      : base_table_constraints_(),
+        strict_constraints_(),
+        non_strict_constraints_(),
+        dup_table_replica_cons_()
+  {
+  }
+  ~ObLocationConstraintContext()
+  {
+  }
+  static int calc_constraints_inclusion(const ObPwjConstraint *left,
+                                        const ObPwjConstraint *right,
+                                        InclusionType &inclusion_result);
+
+  TO_STRING_KV(K_(base_table_constraints),
+               K_(strict_constraints),
+               K_(non_strict_constraints),
+               K_(dup_table_replica_cons));
+  // Base table location constraint, including base tables on TABLE_SCAN operator and base tables on INSERT operator
+  ObLocationConstraint base_table_constraints_;
+  // Strict partition-wise join constraint, requires that the base table partitions within the same group are logically and physically equal.
+  // Each group is an array, saving the offset of the corresponding base table in base_table_constraints_
+  common::ObSEArray<ObPwjConstraint *, 8, common::ModulePageAllocator, true> strict_constraints_;
+  // Strict partition-wise join constraint, requires that the base table partitions within a group are physically equal.
+  // Each group is an array, saving the offset of the corresponding base table in base_table_constraints_
+  common::ObSEArray<ObPwjConstraint *, 8, common::ModulePageAllocator, true> non_strict_constraints_;
+  // constraints for duplicate table's replica selection
+  // if not found values in this array, just use local server's replica.
+  common::ObSEArray<ObDupTabConstraint, 1, common::ModulePageAllocator, true> dup_table_replica_cons_;
+};
+
+class ObIVtScannerableFactory;
+class ObSQLSessionMgr;
+class ObSQLSessionInfo;
+class ObIVirtualTableIteratorFactory;
+class ObRawExpr;
+class ObSQLSessionInfo;
+
+class ObSelectStmt;
+class ObCCLRuleConcurrencyValueWrapper;
+
+class ObMultiStmtItem
+{
+public:
+  ObMultiStmtItem()
+    : is_part_of_multi_stmt_(false),
+      seq_num_(0),
+      sql_(),
+      batched_queries_(NULL),
+      is_ps_mode_(false),
+      ab_cnt_(0)
+  {
+  }
+  ObMultiStmtItem(bool is_part_of_multi, int64_t seq_num, const common::ObString &sql)
+    : is_part_of_multi_stmt_(is_part_of_multi),
+      seq_num_(seq_num),
+      sql_(sql),
+      batched_queries_(NULL),
+      is_ps_mode_(false),
+      ab_cnt_(0)
+  {
+  }
+
+  ObMultiStmtItem(bool is_part_of_multi,
+                  int64_t seq_num,
+                  const common::ObString &sql,
+                  const common::ObIArray<ObString> *queries,
+                  bool is_multi_vas_opt)
+    : is_part_of_multi_stmt_(is_part_of_multi),
+      seq_num_(seq_num),
+      sql_(sql),
+      batched_queries_(queries),
+      is_ps_mode_(false),
+      ab_cnt_(0)
+  {
+  }
+  virtual ~ObMultiStmtItem() {}
+
+  void reset()
+  {
+    is_part_of_multi_stmt_ = false;
+    seq_num_ = 0;
+    sql_.reset();
+    batched_queries_ = NULL;
+  }
+
+  inline bool is_part_of_multi_stmt() const { return is_part_of_multi_stmt_; }
+  inline int64_t get_seq_num() const { return seq_num_; }
+  inline const common::ObString &get_sql() const { return sql_; }
+  inline bool is_batched_multi_stmt() const
+  {
+    bool is_batch = false;
+    if (is_ps_mode_) {
+      is_batch = (ab_cnt_ > 0);
+    } else {
+      is_batch = NULL != batched_queries_;
+    }
+    return is_batch;
+  }
+  inline int64_t get_batched_stmt_cnt() const
+  {
+    int64_t batch_cnt = 0;
+    if (is_ps_mode_) {
+      batch_cnt = ab_cnt_;
+    } else if (batched_queries_ != nullptr) {
+      batch_cnt = batched_queries_->count();
+    }
+    return batch_cnt;
+  }
+  inline const common::ObIArray<ObString> *get_queries() const { return batched_queries_; }
+  inline void set_batched_queries(const common::ObIArray<ObString> *batched_queries)
+  { batched_queries_ = batched_queries; }
+  inline bool is_ab_batch_opt() { return (is_ps_mode_ && ab_cnt_ > 0); }
+  inline void set_ps_mode(bool ps) { is_ps_mode_ = ps; }
+  inline bool is_ps_mode() { return is_ps_mode_; }
+  inline void set_ab_cnt(int64_t cnt) { ab_cnt_ = cnt; }
+  inline int64_t get_ab_cnt() { return ab_cnt_; }
+
+  TO_STRING_KV(K_(is_part_of_multi_stmt), K_(seq_num), K_(sql), KPC_(batched_queries),
+               K_(is_ps_mode), K_(ab_cnt));
+
+private:
+  bool is_part_of_multi_stmt_; // whether it is a multi stmt, non-multi stmt also uses this structure, therefore this flag is needed
+  int64_t seq_num_; // indicates the sequence number in multi stmt
+  common::ObString sql_;
+  // is set only when doing multi-stmt optimization
+  const common::ObIArray<ObString> *batched_queries_;
+  bool is_ps_mode_;
+  int64_t ab_cnt_;
+};
+
+struct ObInsertRewriteOptCtx
+{
+  ObInsertRewriteOptCtx()
+    : can_do_opt_(false),
+      row_count_(0)
+  {}
+
+  void set_can_do_insert_batch_opt(int64_t row_count)
+  {
+    can_do_opt_ = true;
+    row_count_ = row_count;
+  }
+  bool is_do_insert_batch_opt() const
+  {
+    bool bret = false;
+    if (can_do_opt_ && row_count_ > 1) {
+      bret = true;
+    }
+    return bret;
+  }
+  inline void clear()
+  {
+    can_do_opt_ = false;
+    row_count_ = 0;
+  }
+  inline void reset() { clear(); }
+
+  bool can_do_opt_;
+  int64_t row_count_;
+};
+
+// Stub: ASH diagnostic subsystem has been removed.
+struct ObQueryRetryAshInfo
+{
+  void reset() {}
+};
+
+// Stub: ObQueryRetryAshGuard was used for ASH retry diagnostics tracking.
+class ObQueryRetryAshGuard
+{
+public:
+  static ObQueryRetryAshInfo *get_info_ptr() { return nullptr; }
+  static void set_info(ObQueryRetryAshInfo *) {}
+  static void reset_info() {}
+};
+
+class ObQueryRetryInfo
+{
+public:
+  ObQueryRetryInfo()
+    : inited_(false),
+      is_rpc_timeout_(false),
+      last_query_retry_err_(common::OB_SUCCESS),
+      retry_cnt_(0),
+      query_switch_leader_retry_timeout_ts_(0),
+      query_retry_ash_info_()
+  {
+  }
+  virtual ~ObQueryRetryInfo() {}
+
+  int init();
+  void reset();
+  void clear();
+  void clear_state_before_each_retry()
+  {
+    is_rpc_timeout_ = false;
+    // Here cannot clear the accumulated members from each retry, such as: invalid_servers_, last_query_retry_err_
+  }
+
+  bool is_inited() const { return inited_; }
+  void set_is_rpc_timeout(bool is_rpc_timeout);
+  bool is_rpc_timeout() const;
+  void set_last_query_retry_err(int last_query_retry_err)
+  {
+    last_query_retry_err_ = last_query_retry_err;
+  }
+  bool should_fast_fail()
+  {
+    bool fast_fail = false;
+    if (0 == query_switch_leader_retry_timeout_ts_) {
+      query_switch_leader_retry_timeout_ts_ = INT64_MAX;
+      // start timing from first retry, not from query start
+
+      int64_t timeout = GCONF.ob_query_switch_leader_retry_timeout;
+      if (timeout > 0) {
+        query_switch_leader_retry_timeout_ts_ = timeout + common::ObTimeUtility::current_time();
+      }
+
+    }
+    if (query_switch_leader_retry_timeout_ts_ < common::ObTimeUtility::current_time()) {
+      fast_fail = true;
+    }
+    return fast_fail;
+  }
+  // 1. In the timeout scenario, try to feedback the error code from the last attempt, so that the reason for the error is understandable
+  // 2. In other scenarios, used to obtain the last error code to decide local retry behavior (such as whether remote plan optimization should proceed)
+  int get_last_query_retry_err() const { return last_query_retry_err_; }
+  void inc_retry_cnt() { retry_cnt_++; }
+  int64_t get_retry_cnt() const { return retry_cnt_; }
+  ObQueryRetryAshInfo& get_retry_ash_info() { return query_retry_ash_info_; }
+
+  TO_STRING_KV(K_(inited), K_(is_rpc_timeout), K_(last_query_retry_err));
+
+private:
+  bool inited_; // This variable is used to write some defensive code, basically useless
+  // Used to mark whether it is a timeout error code returned by rpc (including local timeout and timeout error codes in the response)
+  bool is_rpc_timeout_;
+  // Retry phase can divide the error code handling into three categories:
+  // 1.Retry until timeout, then return timeout to the client;
+  // 2.Errors that should not be retried, directly return them to the client;
+  // 3.Retry until timeout, but return the original error code to the client, currently only OB_NOT_SUPPORTED,
+  //   For this type of error code, it needs to be correctly recorded in last_query_retry_err_, and should not be overwritten by error codes of type 1 or 2.
+  int last_query_retry_err_;
+  // this value include local retry & packet retry
+  int64_t retry_cnt_;
+  // for fast fail, 
+  int64_t query_switch_leader_retry_timeout_ts_;
+  ObQueryRetryAshInfo query_retry_ash_info_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObQueryRetryInfo);
+};
+
+class ObSqlSchemaGuard
+{
+public:
+  ObSqlSchemaGuard()
+  { reset(); }
+  ~ObSqlSchemaGuard()
+  { reset(); }
+  void set_schema_guard(share::schema::ObSchemaGetterGuard *schema_guard)
+  { schema_guard_ = schema_guard; }
+  share::schema::ObSchemaGetterGuard *get_schema_guard() const
+  { return schema_guard_; }
+  void reset();
+  int get_table_schema(uint64_t table_id,
+                       uint64_t ref_table_id,
+                       const ObDMLStmt *stmt,
+                       const ObTableSchema *&table_schema);
+  int get_table_schema(uint64_t table_id,
+                       const TableItem *table_item,
+                       const ObTableSchema *&table_schema);
+  int get_table_schema(uint64_t table_id,
+                       const share::schema::ObTableSchema *&table_schema,
+                       bool is_link = false) const;
+  int get_database_schema(
+                          const uint64_t database_id,
+                          const ObDatabaseSchema *&database_schema);
+  int get_table_schema(
+                       const uint64_t table_id,
+                       const share::schema::ObTableSchema *&table_schema,
+                       bool is_link = false);
+  int get_catalog_database_schema(const uint64_t catalog_id,
+                                  const ObString &database_name,
+                                  const ObDatabaseSchema *&database_schema);
+  int get_catalog_database_id(const uint64_t catalog_id,
+                              const ObString &database_name,
+                              uint64_t &database_id);
+  int get_catalog_table_schema(const uint64_t catalog_id,
+                               const uint64_t database_id,
+                               const ObString &database_name,
+                               const ObString &tbl_name,
+                               const ObTableSchema *&table_schema);
+  int get_catalog_table_schema(const uint64_t catalog_id,
+                               const uint64_t database_id,
+                               const ObString &tbl_name,
+                               const ObTableSchema *&table_schema);
+  int get_catalog_table_id(const uint64_t catalog_id,
+                           const uint64_t database_id,
+                           const ObString &tbl_name,
+                           uint64_t &table_id);
+  int get_column_schema(uint64_t table_id, const common::ObString &column_name,
+                        const share::schema::ObColumnSchemaV2 *&column_schema,
+                        bool is_link = false) const;
+  int get_column_schema(uint64_t table_id, uint64_t column_id,
+                        const share::schema::ObColumnSchemaV2 *&column_schema,
+                        bool is_link = false) const;
+  int get_table_schema_version(const uint64_t table_id, int64_t &schema_version) const;
+  int get_can_read_index_array(uint64_t table_id,
+                               uint64_t *index_tid_array,
+                               int64_t &size,
+                               bool with_mv,
+                               bool with_global_index = true,
+                               bool with_domain_index = true,
+                               bool with_spatial_index = true,
+                               bool with_vector_index = true);
+  int get_table_mlog_schema(const uint64_t table_id, const ObTableSchema *&mlog_schema);
+  uint64_t get_next_mocked_schema_id() { return ++mocked_schema_id_counter_; }
+  int get_mocked_table_schema(uint64_t ref_table_id, const share::schema::ObTableSchema *&table_schema) const;
+  int add_mocked_table_schema(const share::schema::ObTableSchema &table_schema);
+  int add_mocked_database_schema(const share::schema::ObDatabaseSchema &database_schema);
+  int recover_schema_from_external_object(const share::ObExternalObject &external_object);
+  int recover_schema_from_external_objects(const ObIArray<share::ObExternalObject> &external_objects);
+  common::ObIArray<const share::schema::ObDatabaseSchema *> &get_mocked_database_schemas();
+  common::ObIArray<const share::schema::ObTableSchema *> &get_mocked_table_schemas();
+public:
+
+private:
+  share::schema::ObSchemaGetterGuard *schema_guard_;
+  common::ObArenaAllocator allocator_;
+  common::ObSEArray<const share::schema::ObTableSchema *, 1> table_schemas_;
+  common::ObSEArray<const share::schema::ObDatabaseSchema *, 1> mocked_database_schemas_;
+  uint64_t next_link_table_id_;
+  int64_t mocked_schema_id_counter_;
+};
+
+struct ObBaselineKey
+{
+  ObBaselineKey()
+  : db_id_(common::OB_INVALID_ID),
+    constructed_sql_(),
+    sql_id_(),
+    format_sql_id_(),
+    format_sql_() {}
+  ObBaselineKey(uint64_t db_id, const ObString &constructed_sql,
+                const ObString &sql_id, const ObString &format_sql_id,
+                const ObString &format_sql)
+  : db_id_(db_id),
+    constructed_sql_(constructed_sql),
+    sql_id_(sql_id),
+    format_sql_id_(format_sql_id),
+    format_sql_(format_sql) {}
+
+  inline void reset()
+  {
+    db_id_ = common::OB_INVALID_ID;
+    constructed_sql_.reset();
+    sql_id_.reset();
+    format_sql_id_.reset();
+    format_sql_.reset();
+  }
+
+  TO_STRING_KV(K_(db_id),
+               K_(constructed_sql),
+               K_(sql_id),
+               K_(format_sql_id),
+               K_(format_sql));
+
+  uint64_t  db_id_;
+  common::ObString constructed_sql_;
+  common::ObString sql_id_;
+  common::ObString format_sql_id_;
+  common::ObString format_sql_;
+};
+
+struct ObSqlCtx
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObSqlCtx();
+  ~ObSqlCtx() { reset(); }
+  int set_partition_infos(const ObTablePartitionInfoArray &info, common::ObIAllocator &allocator);
+  int set_related_user_var_names(const common::ObIArray<common::ObString> &user_var_names, common::ObIAllocator &allocator);
+  int set_location_constraints(const ObLocationConstraintContext &location_constraint,
+                               ObIAllocator &allocator);
+  int set_multi_stmt_rowkey_pos(const common::ObIArray<int64_t> &multi_stmt_rowkey_pos,
+                                common::ObIAllocator &alloctor);
+  void reset();
+
+  bool handle_batched_multi_stmt() const { return multi_stmt_item_.is_batched_multi_stmt(); }
+  bool is_batch_params_execute() const
+  {
+    return multi_stmt_item_.is_batched_multi_stmt() || is_do_insert_batch_opt();
+  }
+
+  int64_t get_batch_params_count() const
+  {
+    int64_t count = 0;
+    if (multi_stmt_item_.is_batched_multi_stmt()) {
+      count = multi_stmt_item_.get_batched_stmt_cnt();
+    } else if (is_do_insert_batch_opt()) {
+      count = get_insert_batch_row_cnt();
+    }
+    return count;
+  }
+
+  bool is_do_insert_batch_opt() const
+  {
+    return ins_opt_ctx_.is_do_insert_batch_opt();
+  }
+
+  inline int64_t get_insert_batch_row_cnt() const
+  {
+    return ins_opt_ctx_.row_count_;
+  }
+  void set_is_do_insert_batch_opt(int64_t row_count)
+  {
+    ins_opt_ctx_.set_can_do_insert_batch_opt(row_count);
+  }
+  void reset_do_insert_batch_opt()
+  {
+    ins_opt_ctx_.reset();
+  }
+
+  void set_enable_strict_defensive_check(bool v)
+  {
+    enable_strict_defensive_check_ = v;
+  }
+
+  bool get_enable_strict_defensive_check()
+  {
+    return enable_strict_defensive_check_;
+  }
+
+  // release dynamic allocated memory
+  // 
+  void clear();
+
+public:
+  ObMultiStmtItem multi_stmt_item_;
+  ObSQLSessionInfo *session_info_;
+  share::schema::ObSchemaGetterGuard *schema_guard_;
+  pl::ObPLBlockNS *secondary_namespace_;
+  bool plan_cache_hit_;
+  bool self_add_plan_; //used for retry query, and add plan to plan cache in this query;
+  int  disable_privilege_check_;  //internal user set disable privilege check
+  bool force_print_trace_; // [OUT]if the trace log is enabled by hint
+  bool is_show_trace_stmt_;  // [OUT]
+  int64_t retry_times_;
+  char sql_id_[common::OB_MAX_SQL_ID_LENGTH + 1];
+  char format_sql_id_[common::OB_MAX_SQL_ID_LENGTH + 1];
+  ExecType exec_type_;
+  bool is_prepare_protocol_;
+  bool is_pre_execute_;
+  bool is_prepare_stage_;
+  bool is_dynamic_sql_;
+  bool is_dbms_sql_;
+  bool is_cursor_;
+  bool is_remote_sql_;
+  uint64_t statement_id_;
+  common::ObString cur_sql_;
+  stmt::StmtType stmt_type_;
+  common::ObFixedArray<ObTablePartitionInfo*, common::ObIAllocator> partition_infos_;
+  bool is_restore_;
+  common::ObFixedArray<common::ObString, common::ObIAllocator> related_user_var_names_;
+  //use for plan cache support dist plan
+  // Base table location constraint, including base tables on TABLE_SCAN operator and base tables on INSERT operator
+  common::ObFixedArray<LocationConstraint, common::ObIAllocator> base_constraints_;
+  // Strict partition-wise join constraint, requires that base table partitions within the same group are logically and physically equal.
+  // Each group is an array, saving the offset of the corresponding base table in base_table_constraints_
+  common::ObFixedArray<ObPwjConstraint *, common::ObIAllocator> strict_constraints_;
+  // Strict partition-wise join constraint, requires that the base table partitions within a group are physically equal.
+  // Each group is an array, saving the offset of the corresponding base table in base_table_constraints_
+  common::ObFixedArray<ObPwjConstraint *, common::ObIAllocator> non_strict_constraints_;
+  // constraints for duplicate table's replica selection
+  // if not found values in this array, just use local server's replica.
+  common::ObFixedArray<ObDupTabConstraint, common::ObIAllocator> dup_table_replica_cons_;
+
+  // Constants constraints passed from resolver
+  // all_possible_const_param_constraints_ indicates all possible constant constraints in this sql
+  // all_plan_const_param_constraints_ indicates all constant constraints existing in this sql
+  // For example: create table t (a bigint, b bigint as (a + 1 + 2), c bigint as (a + 2 + 3), index idx_b(b), index idx_c(c));
+  // For: select * from t where a + 1 + 2 > 0;
+  // all_plan_const_param_constraints_ = {[1, 2]}, all_possible_const_param_constraints_ = {[1, 2], [2, 3]}
+  // For: select * from t where a + 3 + 4 > 0;
+  // all_plan_const_param_constraints_ = {}, all_possible_const_param_constraints_ = {[1, 2], [2, 3]}
+  common::ObIArray<ObPCConstParamInfo> *all_plan_const_param_constraints_;
+  common::ObIArray<ObPCConstParamInfo> *all_possible_const_param_constraints_;
+  common::ObIArray<ObPCParamEqualInfo> *all_equal_param_constraints_;
+  common::ObDList<ObPreCalcExprConstraint> *all_pre_calc_constraints_;
+  common::ObIArray<ObExprConstraint> *all_expr_constraints_;
+  common::ObIArray<ObPCPrivInfo> *all_priv_constraints_;
+  bool need_match_all_params_; //only used for matching plans
+  common::ObIArray<ObLocalSessionVar> *all_local_session_vars_; //store the old values of session vars which have changed after creating generated columns
+  bool is_ddl_from_primary_;//DDL SQL statements from the primary cluster that need to be processed
+  const sql::ObStmt *cur_stmt_;
+  const ObPhysicalPlan *cur_plan_;
+
+  bool is_sensitive_;    // whether it contains sensitive information, if so, do not record in sql_audit
+  bool is_protocol_weak_read_; // record whether proxy set weak read for this request in protocol flag
+  common::ObFixedArray<int64_t, common::ObIAllocator> multi_stmt_rowkey_pos_;
+  ObRawExpr *flashback_query_expr_;
+  ObBaselineKey bl_key_;
+  bool is_execute_call_stmt_;
+  bool enable_sql_resource_manage_;
+  ObPCResourceMapRule resource_map_rule_;
+  bool is_text_ps_mode_;
+  uint64_t first_plan_hash_;
+  common::ObString first_outline_data_;
+  int64_t first_equal_param_cons_cnt_;
+  int64_t first_const_param_cons_cnt_;
+  int64_t first_expr_cons_cnt_;
+  bool is_bulk_;
+  ObInsertRewriteOptCtx ins_opt_ctx_;
+  union
+  {
+    uint32_t flags_;
+    struct {
+      uint32_t enable_strict_defensive_check_: 1; //TRUE if the _enable_defensive_check is '2'
+      uint32_t is_from_pl_ : 1;
+      uint32_t reserved_ : 30;
+    };
+  };
+  common::ObString raw_sql_;
+  uint64_t ccl_rule_id_;
+  uint64_t ccl_match_time_;
+  common::ObString reconstruct_ps_sql_;
+  common::ObSEArray<ObCCLRuleConcurrencyValueWrapper*, 4> matched_ccl_rule_level_values_;
+  common::ObSEArray<ObCCLRuleConcurrencyValueWrapper*, 4> matched_ccl_format_sqlid_level_values_;
+  TO_STRING_KV(K(stmt_type_));
+};
+
+struct ObQueryCtx
+{
+public:
+  ObQueryCtx()
+    : question_marks_count_(0),
+      calculable_items_(),
+      ab_param_exprs_(),
+      fetch_cur_time_(true),
+      is_contain_virtual_table_(false),
+      is_contain_inner_table_(false),
+      is_contain_select_for_update_(false),
+      has_dml_write_stmt_(false),
+      ins_values_batch_opt_(false),
+      available_tb_id_(common::OB_INVALID_ID - 1),
+      stmt_count_(0),
+      subquery_count_(0),
+      temp_table_count_(0),
+      anonymous_view_count_(0),
+      all_user_variable_(),
+      need_match_all_params_(false),
+      has_udf_(false),
+      disable_udf_parallel_(false),
+      has_is_table_(false),
+      reference_obj_tables_(),
+      is_table_gen_col_with_udf_(false),
+      query_hint_(),
+      literal_stmt_type_(stmt::T_NONE),
+      sql_stmt_(),
+      sql_stmt_coll_type_(CS_TYPE_INVALID),
+      prepare_param_count_(0),
+      is_prepare_stmt_(false),
+      has_nested_sql_(false),
+      tz_info_(NULL),
+      root_stmt_(NULL),
+      optimizer_features_enable_version_(0),
+      udf_flag_(0),
+      injected_random_status_(false),
+      ori_question_marks_count_(0),
+      type_demotion_flag_(0),
+      has_hybrid_search_(false)
+  {
+  }
+  TO_STRING_KV(N_PARAM_NUM, question_marks_count_,
+               N_FETCH_CUR_TIME, fetch_cur_time_,
+               K_(calculable_items));
+
+  void reset()
+  {
+    question_marks_count_ = 0;
+    calculable_items_.reset();
+    fetch_cur_time_ = true;
+    is_contain_virtual_table_ = false;
+    is_contain_inner_table_ = false;
+    is_contain_select_for_update_ = false;
+    has_dml_write_stmt_ = false;
+    ins_values_batch_opt_ = false;
+    available_tb_id_ = common::OB_INVALID_ID - 1;
+    stmt_count_ = 0;
+    subquery_count_ = 0;
+    temp_table_count_ = 0;
+    anonymous_view_count_ = 0;
+    all_user_variable_.reset();
+    need_match_all_params_= false;
+    has_udf_ = false;
+    disable_udf_parallel_ = false;
+    has_is_table_ = false;
+    sql_schema_guard_.reset();
+    reference_obj_tables_.reset();
+    is_table_gen_col_with_udf_ = false;
+    query_hint_.reset();
+    literal_stmt_type_ = stmt::T_NONE;
+    sql_stmt_.reset();
+    sql_stmt_coll_type_ = CS_TYPE_INVALID;
+    prepare_param_count_ = 0;
+    is_prepare_stmt_ = false;
+    has_nested_sql_ = false;
+    tz_info_ = NULL;
+    root_stmt_ = NULL;
+    udf_flag_ = 0;
+    optimizer_features_enable_version_ = 0;
+    ori_question_marks_count_ = 0;
+    filter_ds_stat_cache_.reuse();
+    type_demotion_flag_ = 0;
+    has_hybrid_search_ = false;
+  }
+
+  int64_t get_new_stmt_id() { return stmt_count_++; }
+  int64_t get_new_subquery_id() { return ++subquery_count_; }
+  int64_t get_temp_table_id() { return ++temp_table_count_; }
+  int64_t get_anonymous_view_id() { return ++anonymous_view_count_; }
+
+  ObQueryHint &get_query_hint_for_update() { return query_hint_; };
+  const ObQueryHint &get_query_hint() const { return query_hint_; };
+  const ObGlobalHint &get_global_hint() const { return query_hint_.get_global_hint(); }
+  int get_qb_name(int64_t stmt_id, ObString &qb_name) const { return query_hint_.get_qb_name(stmt_id, qb_name); }
+  void set_literal_stmt_type(const stmt::StmtType type) { literal_stmt_type_ = type; }
+  stmt::StmtType get_literal_stmt_type() const { return literal_stmt_type_; }
+  inline common::ObString &get_sql_stmt() { return sql_stmt_; }
+  inline const common::ObString &get_sql_stmt() const { return sql_stmt_; }
+  inline void set_sql_stmt(const char *sql, int32_t sql_len) { sql_stmt_.assign_ptr(sql, sql_len); }
+  inline void set_sql_stmt(const common::ObString sql_stmt) { sql_stmt_ = sql_stmt; }
+  void set_sql_stmt_coll_type(common::ObCollationType coll_type) { sql_stmt_coll_type_ = coll_type;}
+  common::ObCollationType get_sql_stmt_coll_type() { return sql_stmt_coll_type_; }
+  void set_prepare_param_count(const int64_t prepare_param_count) { prepare_param_count_ = prepare_param_count; }
+  int64_t get_prepare_param_count() const { return prepare_param_count_; }
+  bool is_prepare_stmt() const { return is_prepare_stmt_; }
+  void set_is_prepare_stmt(bool is_prepare) { is_prepare_stmt_ = is_prepare; }
+  bool has_nested_sql() const { return has_nested_sql_; }
+  void set_has_nested_sql(bool has_nested_sql) { has_nested_sql_ = has_nested_sql; }
+  void set_timezone_info(const common::ObTimeZoneInfo *tz_info) { tz_info_ = tz_info; }
+  const common::ObTimeZoneInfo *get_timezone_info() const { return tz_info_; }
+  int add_local_session_vars(ObIAllocator *alloc, const ObLocalSessionVar &local_session_var, int64_t &idx);
+  int get_local_session_vars(const int64_t idx, const ObLocalSessionVar *&local_session_var) const;
+  bool get_injected_random_status() const { return injected_random_status_; }
+  void set_injected_random_status(bool injected_random_status) { injected_random_status_ = injected_random_status; }
+  void set_random_plan_seed(uint64_t seed) {rand_gen_.seed(seed);}
+  // check whether optimizer_features_enable_version_ in [v1, v2) or [v3, v4) or ... or [vn, +inf)
+  template<typename... Args>
+  bool check_opt_compat_version(uint64_t v1, uint64_t v2, Args... args) const;
+  bool check_opt_compat_version(uint64_t v1) const { return optimizer_features_enable_version_ >= v1; }
+  bool check_opt_compat_version(uint64_t v1, uint64_t v2) const {
+    return optimizer_features_enable_version_ >= v1 && optimizer_features_enable_version_ < v2;
+  }
+  void set_questionmark_count(int64_t count) {
+    ori_question_marks_count_ = count;
+    question_marks_count_ = count;
+  };
+  bool has_hybrid_search() const { return has_hybrid_search_; }
+
+public:
+  static const int64_t CALCULABLE_EXPR_NUM = 1;
+  typedef common::ObSEArray<ObHiddenColumnItem, CALCULABLE_EXPR_NUM, common::ModulePageAllocator, true> CalculableItems;
+public:
+  int64_t question_marks_count_;
+  CalculableItems calculable_items_;
+  //array binding param exprs, mark the all array binding param expr in the batch stmt
+  common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> ab_param_exprs_;
+  common::ObSArray<share::schema::ObSchemaObjVersion> global_dependency_tables_;
+  bool fetch_cur_time_;
+  bool is_contain_virtual_table_;
+  bool is_contain_inner_table_;
+  bool is_contain_select_for_update_;
+  bool has_dml_write_stmt_;
+  bool ins_values_batch_opt_;
+  uint64_t available_tb_id_;
+  int64_t stmt_count_;
+  int64_t subquery_count_;
+  int64_t temp_table_count_;
+  int64_t anonymous_view_count_;
+  // record all system variables or user variables in this statement
+  common::ObSArray<ObVarInfo, common::ModulePageAllocator, true> variables_;
+  common::ObSArray<ObPCConstParamInfo, common::ModulePageAllocator, true> all_plan_const_param_constraints_;
+  common::ObSArray<ObPCConstParamInfo, common::ModulePageAllocator, true> all_possible_const_param_constraints_;
+  common::ObSArray<ObPCParamEqualInfo, common::ModulePageAllocator, true> all_equal_param_constraints_;
+  common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> var_init_exprs_;
+  common::ObDList<ObPreCalcExprConstraint> all_pre_calc_constraints_;
+  common::ObSArray<ObExprConstraint, common::ModulePageAllocator, true> all_expr_constraints_;
+  common::ObSArray<ObPCPrivInfo, common::ModulePageAllocator, true> all_priv_constraints_;
+  common::ObSArray<ObLocalSessionVar, common::ModulePageAllocator, true> all_local_session_vars_;
+  common::ObSArray<ObUserVarIdentRawExpr *, common::ModulePageAllocator, true> all_user_variable_;
+  common::hash::ObHashMap<uint64_t, ObObj, common::hash::NoPthreadDefendMode> calculable_expr_results_;
+  bool need_match_all_params_; //only used for matching plans
+  bool has_udf_;
+  bool disable_udf_parallel_; //used to deterministic pl udf parallel execute
+  bool has_is_table_; // used to mark query has information schema table
+  ObSqlSchemaGuard sql_schema_guard_;
+  share::schema::ObReferenceObjTable reference_obj_tables_;
+  bool is_table_gen_col_with_udf_; // for data consistent check
+  ObQueryHint query_hint_;
+  stmt::StmtType  literal_stmt_type_;
+  common::ObString sql_stmt_;
+  common::ObCollationType sql_stmt_coll_type_;
+  int64_t prepare_param_count_;
+  bool is_prepare_stmt_;
+  bool has_nested_sql_;
+  const common::ObTimeZoneInfo *tz_info_;
+  ObDMLStmt *root_stmt_;
+  uint64_t optimizer_features_enable_version_;
+  union {
+    int8_t udf_flag_;
+    struct {
+      int8_t has_pl_udf_ : 1; // used to mark sql contain pl udf
+      int8_t udf_has_select_stmt_ : 1; // udf has select stmt, not contain other dml stmt
+      int8_t udf_has_dml_stmt_ : 1; // udf has dml stmt
+      int8_t reserved_:4;
+    };
+  };
+  bool injected_random_status_;
+  ObRandom rand_gen_;
+  int64_t ori_question_marks_count_;
+  common::hash::ObHashMap<ObOptDSStat::Key, ObOptDSStat, common::hash::NoPthreadDefendMode> filter_ds_stat_cache_;
+  union {
+    int8_t type_demotion_flag_;
+    struct {
+      int8_t type_demotion_flag_inited_     : 1;
+      int8_t enable_constant_type_demotion_ : 1;
+      int8_t non_standard_equal_comparison_ : 1;
+      int8_t non_standard_range_comparison_ : 1;
+      int8_t type_demotion_flag_reserved_   : 4;
+    };
+  };
+  bool has_hybrid_search_;
+};
+
+template<typename... Args>
+bool ObQueryCtx::check_opt_compat_version(uint64_t v1, uint64_t v2, Args... args) const
+{
+  return check_opt_compat_version(v1, v2) || check_opt_compat_version(args...);
+}
+
+} /* ns sql*/
+} /* ns oceanbase */
+#endif //OCEANBASE_SQL_CONTEXT_

@@ -1,0 +1,186 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "log_block_pool_interface.h"
+#include "log_io_utils.h"
+#ifdef _WIN32
+#include <io.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <windows.h>
+#ifndef O_DIRECTORY
+#define O_DIRECTORY 0
+#endif
+static bool ob_resolve_path_at3(int dir_fd, const char *rel_path, char *out, size_t out_size) {
+  if (rel_path && (rel_path[0] == '/' || rel_path[0] == '\\' ||
+      (rel_path[0] != '\0' && rel_path[1] == ':'))) {
+    return false;
+  }
+  HANDLE h = (HANDLE)_get_osfhandle(dir_fd);
+  if (h == INVALID_HANDLE_VALUE) return false;
+  char dir_path[1024];
+  DWORD len = GetFinalPathNameByHandleA(h, dir_path, sizeof(dir_path), FILE_NAME_NORMALIZED);
+  if (len == 0 || len >= sizeof(dir_path)) return false;
+  const char *clean = dir_path;
+  if (len > 4 && strncmp(dir_path, "\\\\?\\", 4) == 0) clean = dir_path + 4;
+  int written = snprintf(out, out_size, "%s\\%s", clean, rel_path);
+  return written > 0 && (size_t)written < out_size;
+}
+#endif
+
+namespace oceanbase
+{
+namespace palf
+{
+
+int is_block_used_for_palf(const int fd, const char *path, bool &result)
+{
+  int ret = OB_SUCCESS;
+  result = false;
+  struct stat st;
+#ifdef _WIN32
+  char abs[1024];
+  const char *p = path;
+  if (ob_resolve_path_at3(fd, path, abs, sizeof(abs))) p = abs;
+  if (-1 == ::stat(p, &st)) {
+#else
+  if (-1 == ::fstatat(fd, path, &st, 0)) {
+#endif
+    ret = convert_sys_errno();
+    PALF_LOG(ERROR, "::fstat failed", K(ret), K(path), K(errno));
+  } else if (st.st_size == PALF_PHY_BLOCK_SIZE) {
+    result = true;
+  } else {
+    result = false;
+  }
+  return ret;
+}
+
+int remove_file_at(const char *dir, const char *path, ILogBlockPool *log_block_pool)
+{
+  int ret = OB_SUCCESS;
+  int fd = open_directory(dir);
+  bool result = false;
+  if (-1 == fd) {
+    ret = convert_sys_errno();
+    PALF_LOG(ERROR, "open_directory failed", K(ret), K(dir));
+  } else if (OB_FAIL(log_block_pool->remove_block_at(fd, path))) {
+    PALF_LOG(ERROR, "remove_block_at failed", K(ret));
+    // otherwise, unlink it.
+  } else {
+    PALF_LOG(INFO, "remove_file_at success", K(dir), K(path));
+  }
+
+  if (-1 != fd) {
+#ifdef _WIN32
+    if (0 != _commit(fd)) {
+      HANDLE h = (HANDLE)_get_osfhandle(fd);
+      if (h != INVALID_HANDLE_VALUE) {
+        FlushFileBuffers(h);
+      }
+    }
+    _close(fd);
+#else
+    ::fsync(fd);
+    ::close(fd);
+#endif
+  }
+  return ret;
+}
+
+int remove_directory_rec(const char *path, ILogBlockPool *log_block_pool)
+{
+  int ret = OB_SUCCESS;
+  DIR *dir = NULL;
+  struct dirent *entry = NULL;
+  if (NULL == (dir = opendir(path))) {
+    ret = convert_sys_errno();
+    PALF_LOG(WARN, "opendir failed", K(path));
+  } else {
+    char current_file_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
+    while ((entry = readdir(dir)) != NULL && OB_SUCC(ret)) {
+      bool is_dir = false;
+      MEMSET(current_file_path, '\0', OB_MAX_FILE_NAME_LENGTH);
+      if (0 == strcmp(entry->d_name, ".") || 0 == strcmp(entry->d_name, "..")) {
+        // do nothing
+      } else if (0 >= snprintf(current_file_path, OB_MAX_FILE_NAME_LENGTH, "%s/%s", path, entry->d_name)) {
+        ret = OB_ERR_UNEXPECTED;
+        PALF_LOG(WARN, "snprintf failed", K(ret), K(current_file_path), K(path), K(entry->d_name));
+      } else if (OB_FAIL(FileDirectoryUtils::is_directory(current_file_path, is_dir))) {
+        PALF_LOG(WARN, "is_directory failed", K(ret), K(entry->d_name));
+        // delecte directory recursive
+      } else if (true == is_dir && OB_FAIL(remove_directory_rec(current_file_path, log_block_pool))) {
+        PALF_LOG(WARN, "remove directory failed", K(ret), K(entry->d_name), K(path));
+        // delete normal file
+      } else if (false == is_dir && OB_FAIL(remove_file_at(path, entry->d_name, log_block_pool))) {
+        PALF_LOG(WARN, "remove_file_at failed", K(ret), K(current_file_path));
+      } else {
+        PALF_LOG(INFO, "remove directory or file success", K(path), K(current_file_path));
+      }
+    }
+  }
+  if (OB_SUCC(ret) && OB_FAIL(FileDirectoryUtils::delete_directory(path))) {
+    PALF_LOG(WARN, "delete_directory failed", K(ret), K(path));
+  }
+  if (NULL != dir) {
+    closedir(dir);
+  }
+  return ret;
+}
+
+int remove_tmp_file_or_directory_at(const char *path, ILogBlockPool *log_block_pool)
+{
+  int ret = OB_SUCCESS;
+  DIR *dir = NULL;
+  struct dirent *entry = NULL;
+  if (NULL == (dir = opendir(path))) {
+    ret = OB_ERR_SYS;
+    PALF_LOG(WARN, "opendir failed", K(path));
+  } else {
+    auto check_is_tmp_file_or_dir = [](const char* file_name) -> bool {
+      return NULL != strstr(file_name, ".tmp");
+    };
+    char current_file_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
+    while ((entry = readdir(dir)) != NULL && OB_SUCC(ret)) {
+      bool is_dir = false;
+      MEMSET(current_file_path, '\0', OB_MAX_FILE_NAME_LENGTH);
+      if (0 == strcmp(entry->d_name, ".") || 0 == strcmp(entry->d_name, "..")) {
+        // do nothing
+      } else if (0 >= snprintf(current_file_path, OB_MAX_FILE_NAME_LENGTH, "%s/%s", path, entry->d_name)) {
+        ret = OB_ERR_UNEXPECTED;
+        PALF_LOG(WARN, "snprintf failed", K(ret), K(current_file_path), K(path), K(entry->d_name));
+      } else if (OB_FAIL(FileDirectoryUtils::is_directory(current_file_path, is_dir))) {
+        PALF_LOG(WARN, "is_directory failed", K(ret), K(entry->d_name));
+      } else if (true == check_is_tmp_file_or_dir(current_file_path)) {
+        if (true == is_dir && OB_FAIL(remove_directory_rec(current_file_path, log_block_pool))) {
+          PALF_LOG(WARN, "delete_directory_rec failed", K(ret), K(entry->d_name), K(path));
+        } else if (false == is_dir && OB_FAIL(remove_file_at(path, entry->d_name, log_block_pool))) {
+          PALF_LOG(WARN, "delete_file failed", K(ret), K(current_file_path));
+        } else {
+        }
+      } else if (true == is_dir && OB_FAIL(remove_tmp_file_or_directory_at(current_file_path, log_block_pool))) {
+        PALF_LOG(WARN, "delete_tmp_file_or_directory_at failed", K(ret), K(current_file_path));
+      } else {
+      }
+    }
+  }
+  if (NULL != dir) {
+    closedir(dir);
+  }
+  return ret;
+}
+} // end namespace oceanbase
+} // end namespace palf

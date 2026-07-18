@@ -1,0 +1,88 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "lib/encode/ob_base64_encode.h"
+#include "lib/ob_errno.h"
+#include <cstring>
+
+#include <gtest/gtest.h>
+#include <string>
+
+namespace oceanbase
+{
+namespace common
+{
+class TestBase64Encoder: public ::testing::Test
+{
+public:
+  virtual void SetUp() {}
+  virtual void TearDown() {}
+};
+
+TEST_F(TestBase64Encoder, str_encode)
+{
+  const char* test_str = "hello, this is a test";
+  const char* expect_str = "aGVsbG8sIHRoaXMgaXMgYSB0ZXN0";
+  int64_t encode_buf_len = ObBase64Encoder::needed_encoded_length(strlen(test_str));
+  ASSERT_EQ(encode_buf_len, strlen(expect_str));
+
+  char *encoded_buffer = (char*)std::malloc(encode_buf_len);
+  int64_t encoded_pos = 0;
+
+  ASSERT_EQ(OB_SUCCESS, ObBase64Encoder::encode((const uint8_t *)test_str, strlen(test_str),
+                                                encoded_buffer, encode_buf_len, encoded_pos));
+  ASSERT_EQ(0, std::strncmp(encoded_buffer, expect_str, strlen(expect_str)));
+
+  int64_t decoded_buf_len = ObBase64Encoder::needed_decoded_length(encoded_pos);
+  uint8_t *decoded_buf = (uint8_t *)std::malloc(decoded_buf_len);
+  int64_t decode_pos = 0;
+  ASSERT_EQ(OB_SUCCESS, ObBase64Encoder::decode(encoded_buffer, encoded_pos,
+                                                decoded_buf,
+                                                decoded_buf_len, decode_pos));
+  ASSERT_EQ(decode_pos, strlen(test_str));
+  ASSERT_EQ(0, std::strncmp((char *)decoded_buf, test_str, strlen(test_str)));
+}
+
+TEST_F(TestBase64Encoder, bin_encode)
+{
+  uint8_t bin_test[] = {254, 253, 253, 251, 100, 102, 103, 178, 179, 180};
+  const char* expect_str = "/v39+2RmZ7KztA==";
+  int64_t encoded_buf_len = ObBase64Encoder::needed_encoded_length(sizeof(bin_test));
+  ASSERT_EQ(16, encoded_buf_len);
+
+  char *encoded_buffer = (char *)std::malloc(encoded_buf_len);
+  int64_t encoded_pos = 0;
+
+  ASSERT_EQ(OB_SUCCESS, ObBase64Encoder::encode(bin_test, sizeof(bin_test),
+                                                 encoded_buffer, encoded_buf_len, encoded_pos));
+  ASSERT_EQ(0, std::strncmp(expect_str, encoded_buffer, strlen(expect_str)));
+
+  int64_t decoded_buf_len = ObBase64Encoder::needed_decoded_length(encoded_pos);
+  uint8_t *decoded_buffer = (uint8_t *)std::malloc(decoded_buf_len);
+  int64_t decoded_pos = 0;
+  ASSERT_EQ(OB_SUCCESS, ObBase64Encoder::decode(encoded_buffer, encoded_pos,
+                                                decoded_buffer, decoded_buf_len, decoded_pos));
+  ASSERT_EQ(sizeof(bin_test), decoded_pos);
+  ASSERT_EQ(0, std::memcmp(bin_test, decoded_buffer, decoded_pos));
+}
+} // end oceanbase common
+} // end namespace oceanbase
+
+int main(int argc, char **argv)
+{
+  testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}

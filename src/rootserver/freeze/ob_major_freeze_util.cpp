@@ -1,0 +1,113 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX RS_COMPACTION
+
+
+#include "ob_major_freeze_util.h"
+#include "rootserver/freeze/ob_major_freeze_service.h"
+
+namespace oceanbase
+{
+namespace rootserver
+{
+
+int ObMajorFreezeUtil::get_major_freeze_service(
+    ObPrimaryMajorFreezeService *primary_major_freeze_service,
+    ObRestoreMajorFreezeService *restore_major_freeze_service,
+    ObMajorFreezeService *&major_freeze_service,
+    bool &is_primary_service)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(primary_major_freeze_service) || OB_ISNULL(restore_major_freeze_service)) {
+    ret = OB_INVALID_ARGUMENT;
+    RS_LOG(ERROR, "primary or restore major_freeze_service is nullptr", KR(ret),
+           KP(primary_major_freeze_service), KP(restore_major_freeze_service));
+  } else {
+    bool is_primary_service_paused = primary_major_freeze_service->is_paused();
+    bool is_restore_service_paused = restore_major_freeze_service->is_paused();
+    if ((is_primary_service_paused && is_restore_service_paused)
+        || (!is_primary_service_paused && !is_restore_service_paused)) {
+      ret = OB_LEADER_NOT_EXIST;
+      RS_LOG(WARN, "both primary and restore major_freeze_service are paused or not paused, may be "
+             "switching leader", KR(ret), K(is_primary_service_paused), K(is_restore_service_paused));
+    } else if (!is_primary_service_paused) {
+      major_freeze_service = primary_major_freeze_service;
+      is_primary_service = true;
+    } else if (!is_restore_service_paused) {
+      major_freeze_service = restore_major_freeze_service;
+      is_primary_service = false;
+    }
+  }
+  return ret;
+}
+
+ObFreezeTimeGuard::ObFreezeTimeGuard(
+  const char *file,
+  const int64_t line,
+  const char *func,
+  const char *mod)
+  : warn_threshold_us_(FREEZE_WARN_THRESHOLD_US),
+    start_time_us_(common::ObTimeUtility::fast_current_time()),
+    file_(file),
+    line_(line),
+    func_name_(func),
+    log_mod_(mod)
+{
+}
+
+ObFreezeTimeGuard::~ObFreezeTimeGuard()
+{
+  int64_t now_us = common::ObTimeUtility::fast_current_time();
+  int64_t total_cost_us = now_us - start_time_us_;
+  if (OB_UNLIKELY(total_cost_us >= warn_threshold_us_)) {
+    constexpr int buffer_size = 256;
+    char strbuffer[buffer_size] = { 0 };
+    int n = snprintf(strbuffer, buffer_size, "cost too much time: %s (%s:%ld), ",
+                     func_name_, strrchr(file_, '/') ? (strrchr(file_, '/') + 1) : file_, line_);
+    if (n >= buffer_size) {
+      snprintf(&strbuffer[buffer_size - 6], 6, "..., ");
+    }
+    int ret = OB_ERR_TOO_MUCH_TIME;
+    OB_MOD_LOG_RET(log_mod_, WARN, ret, strbuffer, K_(warn_threshold_us), K(total_cost_us), K_(start_time_us), K(now_us));
+  }
+}
+
+const char * ObMajorFreezeReasonStr[] = {
+  "DAILY_MERGE",
+  "USER_REQUEST",
+  "MAJOR_COMPACT_TRIGGER"
+};
+const char *major_freeze_reason_to_str(const int64_t freeze_reason)
+{
+  STATIC_ASSERT(static_cast<int64_t>(MF_REASON_MAX) == ARRAYSIZEOF(ObMajorFreezeReasonStr),
+                "major freeze reason str len is mismatch");
+  const char *str = "";
+  if (OB_UNLIKELY(!is_valid_major_freeze_reason((ObMajorFreezeReason)freeze_reason))) {
+    str = "invalid_freeze_reason";
+  } else {
+    str = ObMajorFreezeReasonStr[freeze_reason];
+  }
+  return str;
+}
+bool is_valid_major_freeze_reason(const ObMajorFreezeReason &freeze_reason)
+{
+  return freeze_reason >= ObMajorFreezeReason::MF_DAILY_MERGE
+    && freeze_reason < ObMajorFreezeReason::MF_REASON_MAX;
+}
+
+} // end namespace rootserver
+} // end namespace oceanbase

@@ -1,0 +1,139 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "log_meta_entry.h"
+
+namespace oceanbase
+{
+namespace palf
+{
+using namespace common;
+LogMetaEntry::LogMetaEntry() : header_(),
+                                   buf_(NULL)
+{
+}
+
+LogMetaEntry::~LogMetaEntry()
+{
+  reset();
+}
+
+int LogMetaEntry::generate(const LogMetaEntryHeader &header,
+                           const char *buf)
+{
+  int ret = OB_SUCCESS;
+  if (NULL == buf || false == header.is_valid()) {
+  ret = OB_INVALID_ARGUMENT;
+  } else {
+    header_ = header;
+    buf_ = buf;
+  }
+  return ret;
+}
+
+bool LogMetaEntry::is_valid() const
+{
+  return true == header_.is_valid()
+         && NULL != buf_;
+}
+
+void LogMetaEntry::reset()
+{
+  header_.reset();
+  buf_ = NULL;
+}
+
+int LogMetaEntry::shallow_copy(const LogMetaEntry &entry)
+{
+  int ret = OB_SUCCESS;
+  if (false == entry.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+  header_ = entry.header_;
+  buf_ = entry.buf_;
+  }
+  return ret;
+}
+
+const LogMetaEntryHeader& LogMetaEntry::get_log_meta_entry_header() const
+{
+  return header_;
+}
+
+const char *LogMetaEntry::get_buf() const
+{
+  return buf_;
+}
+
+bool LogMetaEntry::check_integrity() const
+{
+  int32_t data_len = header_.get_data_len();
+  return header_.check_integrity(buf_, data_len);
+}
+
+DEFINE_SERIALIZE(LogMetaEntry)
+{
+  int ret = OB_SUCCESS;
+  int64_t data_len = header_.get_data_len();
+  int64_t new_pos = pos;
+  if (OB_UNLIKELY((NULL == buf) || (buf_len <= 0))) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(header_.serialize(buf, buf_len, new_pos))) {
+    PALF_LOG(TRACE, "header serialize error", K(ret), K(buf_len), K(new_pos));
+  } else if ((buf_len - new_pos) < data_len) {
+    ret = OB_BUF_NOT_ENOUGH;
+    PALF_LOG(TRACE, "buf not enough", K(buf_len), K(data_len), K(new_pos));
+  } else if (0 == data_len) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    MEMCPY(static_cast<char *>(buf + new_pos), buf_, data_len);
+    pos = new_pos + data_len;
+    PALF_LOG(TRACE, "LogMetaEntry serialize", K(ret), K(buf_), K(buf), K(data_len), K(new_pos), K(pos));
+  }
+  return ret;
+}
+
+DEFINE_DESERIALIZE(LogMetaEntry)
+{
+  int ret = OB_SUCCESS;
+  int64_t new_pos = pos;
+  if (NULL == buf || data_len <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(header_.deserialize(buf, data_len, new_pos))) {
+    PALF_LOG(TRACE, "header deserialize error", K(ret), K(data_len), K(new_pos));
+  } else if (data_len - new_pos < header_.get_data_len()) {
+    ret = OB_BUF_NOT_ENOUGH;
+    PALF_LOG(TRACE, "buffer not enough", K(ret), K(data_len),
+        K(data_len), K(new_pos));
+  } else if (header_.get_data_len() <= 0) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    buf_ = const_cast<char *>(buf + new_pos);
+    pos = new_pos + header_.get_data_len();
+    PALF_LOG(TRACE, "LogMetaEntry deserialize", KP(this), K(pos), K(new_pos), K(buf), K_(buf));
+  }
+  return ret;
+}
+
+DEFINE_GET_SERIALIZE_SIZE(LogMetaEntry)
+{
+  int64_t size = 0;
+  size += header_.get_serialize_size();
+  size += header_.get_data_len();
+  return size;
+}
+} // end namespace palf
+} // end namespace oceanbase

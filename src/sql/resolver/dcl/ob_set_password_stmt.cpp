@@ -1,0 +1,92 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_RESV
+#include "sql/resolver/dcl/ob_set_password_stmt.h"
+using namespace oceanbase::common;
+using namespace oceanbase::sql;
+
+ObSetPasswordStmt::ObSetPasswordStmt(ObIAllocator *name_pool)
+    : ObDDLStmt(name_pool, stmt::T_SET_PASSWORD),
+      masked_sql_(), need_enc_(false), for_current_user_(false),
+      modify_max_connections_(false), max_connections_per_hour_(OB_INVALID_ID),
+      max_user_connections_(OB_INVALID_ID)
+{
+}
+
+ObSetPasswordStmt::ObSetPasswordStmt()
+    : ObDDLStmt(NULL, stmt::T_SET_PASSWORD),
+      masked_sql_(), need_enc_(false), for_current_user_(false),
+      modify_max_connections_(false), max_connections_per_hour_(OB_INVALID_ID),
+      max_user_connections_(OB_INVALID_ID)
+{
+}
+
+ObSetPasswordStmt::~ObSetPasswordStmt()
+{
+}
+
+int ObSetPasswordStmt::set_user_password(const common::ObString &user_name,
+                                         const common::ObString &host_name,
+                                         const common::ObString &password)
+{
+  int ret = OB_SUCCESS;
+  if (0 != user_pwd_.count()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("should be only set once", K(ret));
+  } else if (OB_FAIL(user_pwd_.add_string(user_name))) {
+    LOG_WARN("failed to add string", K(ret));
+  } else if (OB_FAIL(user_pwd_.add_string(host_name))) {
+    LOG_WARN("failed to add string", K(ret));
+  } else if (OB_FAIL(user_pwd_.add_string(password))) {
+    LOG_WARN("failed to add string", K(ret));
+  } else {
+    //do nothing
+  }
+  return ret;
+}
+
+int ObSetPasswordStmt::add_ssl_info(const common::ObString &ssl_type,
+                                    const common::ObString &ssl_cipher,
+                                    const common::ObString &x509_issuer,
+                                    const common::ObString &x509_subject)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(user_pwd_.add_string(ssl_type))) {
+    LOG_WARN("failed to add ssl_type", K(ret));
+  } else if (OB_FAIL(user_pwd_.add_string(ssl_cipher))) {
+    LOG_WARN("failed to add ssl_cipher", K(ret));
+  } else if (OB_FAIL(user_pwd_.add_string(x509_issuer))) {
+    LOG_WARN("failed to add x509_issuer", K(ret));
+  } else if (OB_FAIL(user_pwd_.add_string(x509_subject))) {
+    LOG_WARN("failed to add x509_subject", K(ret));
+  } else {
+    //do nothing
+  }
+  return ret;
+}
+
+int64_t ObSetPasswordStmt::to_string(char *buf, const int64_t buf_len) const
+{
+  int64_t pos = 0;
+  if (NULL != buf) {
+    J_OBJ_START();
+    J_KV(N_STMT_TYPE, ((int)stmt_type_),
+         "user_pwd", user_pwd_);
+    J_OBJ_END();
+  }
+  return pos;
+}

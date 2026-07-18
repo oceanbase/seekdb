@@ -1,0 +1,95 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_ROOTSERVER_OB_RS_REENTRANT_THREAD_
+#define OCEANBASE_ROOTSERVER_OB_RS_REENTRANT_THREAD_
+
+#include "lib/thread/ob_reentrant_thread.h"
+#include "share/rc/ob_context.h"
+#ifdef __APPLE__
+#include <pthread.h>
+#endif
+namespace oceanbase
+{
+namespace rootserver
+{
+
+//can set Rootserver Thread properties,
+//before real running and after running
+class ObRsReentrantThread
+    : public share::ObReentrantThread
+{
+public:
+  ObRsReentrantThread();
+  explicit ObRsReentrantThread(bool need_check);
+  virtual ~ObRsReentrantThread();
+
+  virtual void run2() override {
+    int ret = common::OB_SUCCESS;
+#ifdef __APPLE__
+    uint64_t thread_id = 0;
+    pthread_threadid_np(NULL, &thread_id);
+    thread_id_ = (pid_t)thread_id;
+#elif defined(_WIN32)
+    thread_id_ = (pid_t)GetCurrentThreadId();
+#else
+    thread_id_ = (pid_t)syscall(__NR_gettid); // only called by thread self
+#endif
+    run3();
+  }
+  virtual void run3() = 0;
+
+  //Set RS thread properties
+  virtual int before_blocking_run()
+  { common::ObThreadFlags::set_rs_flag(); return common::OB_SUCCESS; }
+
+  virtual int after_blocking_run()
+  { common::ObThreadFlags::cancel_rs_flag(); return common::OB_SUCCESS; }
+  
+  virtual bool need_monitor_check() const;
+  virtual int64_t get_schedule_interval() const
+  { return -1; }
+
+  int64_t get_last_run_timestamp() const;
+  void update_last_run_timestamp();
+
+  int create(const int64_t thread_cnt, const char* name = nullptr,
+             const int64_t wait_event_id = ObWaitEventIds::REENTRANT_THREAD_COND_WAIT);
+  int destroy();
+  int start();
+  void stop();
+  void wait();
+  void reset_last_run_timestamp() { ATOMIC_STORE(&last_run_timestamp_, 0); }
+  pid_t get_thread_id() const { return thread_id_; }
+  TO_STRING_KV("name", get_thread_name());
+
+private:
+  // >0 :last run timestamp;
+  // =0 :pause check thread;
+  // =-1 :close check thread;
+  int64_t last_run_timestamp_;
+  pid_t thread_id_;
+#ifdef ERRSIM   //for obtest
+  static const int64_t MAX_THREAD_SCHEDULE_OVERRUN_TIME = 5LL * 1000LL * 1000LL;
+#else
+  static const int64_t MAX_THREAD_SCHEDULE_OVERRUN_TIME = 10LL * 60LL * 1000LL * 1000LL;
+#endif
+};
+
+}//ns rootserver
+}//ns oceanbase
+
+#endif // OCEANBASE_ROOTSERVER_OB_RS_REENTRANT_THREAD_

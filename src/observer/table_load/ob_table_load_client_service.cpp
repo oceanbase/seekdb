@@ -1,0 +1,139 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SERVER
+
+#include "ob_table_load_client_service.h"
+#include "share/rc/ob_module_provider.h"
+#include "observer/table_load/ob_table_load_client_task.h"
+#include "observer/table_load/ob_table_load_service.h"
+
+namespace oceanbase
+{
+namespace observer
+{
+using namespace common;
+using namespace table;
+
+/**
+ * ObTableLoadClientService
+ */
+
+int64_t ObTableLoadClientService::next_task_sequence_ = 0;
+
+int64_t ObTableLoadClientService::generate_task_id()
+{
+  return ObTimeUtil::current_time() * 1000 + ATOMIC_FAA(&next_task_sequence_, 1) % 1000;
+}
+
+int ObTableLoadClientService::alloc_task(ObTableLoadClientTask *&client_task)
+{
+  int ret = OB_SUCCESS;
+  ObTableLoadService *service = nullptr;
+  if (OB_ISNULL(service = share::g_mp->table_load_service())) {
+    ret = OB_ERR_SYS;
+    LOG_WARN("null table load service", KR(ret));
+  } else if (OB_UNLIKELY(service->is_stop())) {
+    ret = OB_IN_STOP_STATE;
+    LOG_WARN("service is stop", KR(ret));
+  } else if (OB_FAIL(service->get_manager().acquire_client_task(client_task))) {
+    LOG_WARN("fail to acquire client task", KR(ret));
+  }
+  return ret;
+}
+
+void ObTableLoadClientService::revert_task(ObTableLoadClientTask *client_task)
+{
+  int ret = OB_SUCCESS;
+  ObTableLoadService *service = nullptr;
+  if (OB_ISNULL(service = share::g_mp->table_load_service())) {
+    ret = OB_ERR_SYS;
+    LOG_WARN("null table load service", KR(ret));
+  } else {
+    service->get_manager().revert_client_task(client_task);
+  }
+}
+
+int ObTableLoadClientService::add_task(ObTableLoadClientTask *client_task)
+{
+  int ret = OB_SUCCESS;
+  ObTableLoadService *service = nullptr;
+  if (OB_ISNULL(service = share::g_mp->table_load_service())) {
+    ret = OB_ERR_SYS;
+    LOG_WARN("null table load service", KR(ret));
+  } else if (OB_UNLIKELY(service->is_stop())) {
+    ret = OB_IN_STOP_STATE;
+    LOG_WARN("service is stop", KR(ret));
+  } else {
+    ObTableLoadUniqueKey key(client_task->get_table_id(), client_task->get_task_id());
+    ret = service->get_manager().add_client_task(key, client_task);
+  }
+  return ret;
+}
+
+int ObTableLoadClientService::get_task(const ObTableLoadUniqueKey &key,
+                                       ObTableLoadClientTask *&client_task)
+{
+  int ret = OB_SUCCESS;
+  ObTableLoadService *service = nullptr;
+  if (OB_ISNULL(service = share::g_mp->table_load_service())) {
+    ret = OB_ERR_SYS;
+    LOG_WARN("null table load service", KR(ret));
+  } else if (OB_UNLIKELY(service->is_stop())) {
+    ret = OB_IN_STOP_STATE;
+    LOG_WARN("service is stop", KR(ret));
+  } else {
+    ret = service->get_manager().get_client_task(key, client_task);
+  }
+  return ret;
+}
+
+int ObTableLoadClientService::get_task_brief(const ObTableLoadUniqueKey &key,
+                                             ObTableLoadClientTaskBrief *&client_task_brief)
+{
+  int ret = OB_SUCCESS;
+  ObTableLoadService *service = nullptr;
+  if (OB_ISNULL(service = share::g_mp->table_load_service())) {
+    ret = OB_ERR_SYS;
+    LOG_WARN("null table load service", KR(ret));
+  } else if (OB_UNLIKELY(service->is_stop())) {
+    ret = OB_IN_STOP_STATE;
+    LOG_WARN("service is stop", KR(ret));
+  } else {
+    if (OB_FAIL(service->get_manager().get_client_task_brief(key, client_task_brief))) {
+      LOG_WARN("fail to get client task brief", KR(ret), K(key));
+    } else {
+      // update active time
+      client_task_brief->active_time_ = ObTimeUtil::current_time();
+    }
+  }
+  return ret;
+}
+
+void ObTableLoadClientService::revert_task_brief(ObTableLoadClientTaskBrief *client_task_brief)
+{
+  int ret = OB_SUCCESS;
+  ObTableLoadService *service = nullptr;
+  if (OB_ISNULL(service = share::g_mp->table_load_service())) {
+    ret = OB_ERR_SYS;
+    LOG_WARN("null table load service", KR(ret));
+  } else {
+    service->get_manager().revert_client_task_brief(client_task_brief);
+  }
+}
+
+} // namespace observer
+} // namespace oceanbase

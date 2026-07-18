@@ -1,0 +1,90 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX COMMON
+
+#include "ob_common_id.h"
+
+
+namespace oceanbase
+{
+using namespace common;
+namespace share
+{
+
+uint64_t ObCommonID::hash() const
+{
+  OB_ASSERT(id_ >= 0);
+  return id_;
+}
+
+int ObCommonID::serialize(char* buf, const int64_t buf_len, int64_t& pos) const
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid args", KR(ret), KP(buf), K(buf_len));
+  } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, id_))) {
+    LOG_WARN("serialize ID failed", KR(ret), KP(buf), K(buf_len), K(pos));
+  }
+  return ret;
+}
+
+int ObCommonID::deserialize(const char* buf, const int64_t data_len, int64_t& pos)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(buf) || OB_UNLIKELY(data_len <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid args", KR(ret), KP(buf), K(data_len));
+  } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &id_))) {
+    LOG_WARN("deserialize ID failed", KR(ret), KP(buf), K(data_len), K(pos));
+  }
+  return ret;
+}
+
+int64_t ObCommonID::get_serialize_size() const
+{
+  int64_t size = 0;
+  size += serialization::encoded_length_vi64(id_);
+  return size;
+}
+
+int ObCommonID::parse_from_display_str(const common::ObString &str)
+{
+  int ret = OB_SUCCESS;
+  errno = 0;
+  if (OB_UNLIKELY(1 != sscanf(str.ptr(), "%ld", &id_))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid ObCommonID str", KR(ret), K(str), K(errno), KERRMSG, K(id_));
+  }
+  return ret;
+}
+
+int ObCommonID::to_display_str(char *buf, const int64_t len, int64_t &pos) const
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(buf) || OB_UNLIKELY(len <= 0 || pos < 0 || pos >= len || !is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), KP(buf), K(len), K(pos), KPC(this));
+  } else if (OB_FAIL(databuff_printf(buf, len, pos, "%ld", id_))) {
+    LOG_WARN("databuff_printf failed", KR(ret), K(len), K(pos), K(buf), KPC(this));
+  }
+  return ret;
+}
+
+
+} // end namespace share
+} // end namespace oceanbase

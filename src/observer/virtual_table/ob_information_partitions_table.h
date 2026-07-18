@@ -1,0 +1,100 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_INFORMATION_PARTITIONS_TABLE_
+#define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_INFORMATION_PARTITIONS_TABLE_
+
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "lib/container/ob_se_array.h"
+namespace oceanbase
+{
+namespace common
+{
+class ObObj;
+}
+namespace share
+{
+namespace schema
+{
+class ObSimpleTableSchemaV2;
+class ObDatabaseSchema;
+}
+}
+
+namespace observer
+{
+class ObInfoSchemaPartitionsTable : public common::ObVirtualTableScannerIterator
+{
+public:
+  ObInfoSchemaPartitionsTable();
+  virtual ~ObInfoSchemaPartitionsTable();
+  virtual int inner_get_next_row(common::ObNewRow *&row);
+  virtual void reset();
+
+
+private:
+  int add_partitions(const share::schema::ObDatabaseSchema &database_schema,
+                     common::ObObj *cells,
+                     const int64_t col_count);
+  int add_partitions(const share::schema::ObSimpleTableSchemaV2 &table_schema,
+                     const common::ObString &database_name,
+                     common::ObObj *cells,
+                     const int64_t col_count);
+  int gen_high_bound_val_str(
+      const share::schema::ObBasePartition *part,
+      common::ObString &val_str);
+  int gen_list_bound_val_str(
+      const share::schema::ObBasePartition *part,
+      common::ObString &val_str);
+private:
+  enum PARTITION_COLUMN
+  {
+    TABLE_CATALOG = common::OB_APP_MIN_COLUMN_ID,
+    TABLE_SCHEMA,
+    TABLE_NAME,
+    PARTITION_NAME,
+    SUBPARTITION_NAME,
+    PARTITION_ORDINAL_POSITION,
+    SUBPARTITION_ORDINAL_POSITION,
+    PARTITION_METHOD,
+    SUBPARTITION_METHOD,
+    PARTITION_EXPRESSION,
+    SUBPARTITION_EXPRESSION,
+    PARTITION_DESCRIPTION,
+    TABLE_ROWS,
+    AVG_ROW_LENGTH,
+    DATA_LENGTH,
+    MAX_DATA_LENGTH,
+    INDEX_LENGTH,
+    DATA_FREE,
+    CREATE_TIME,
+    UPDATE_TIME,
+    CHECK_TIME,
+    CHECKSUM,
+    PARTITION_COMMENT,
+    NODEGROUP,
+    TABLESPACE_NAME,
+    MAX_PARTITIONS_COLUMN
+  };
+  static const int64_t PARTITION_COLUMN_COUNT = 25;
+  DISALLOW_COPY_AND_ASSIGN(ObInfoSchemaPartitionsTable);
+};
+
+
+
+}
+}
+#endif /* OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_INFORMATION_PARTITIONS_TABLE */

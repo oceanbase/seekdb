@@ -1,0 +1,117 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "ob_empty_read_bucket.h"
+#include "share/config/ob_tenant_config_mgr.h"
+
+namespace oceanbase
+{
+namespace storage
+{
+ObEmptyReadBucket::ObEmptyReadBucket()
+  : allocator_(ObModIds::OB_BLOOM_FILTER, OB_MALLOC_NORMAL_BLOCK_SIZE),
+    buckets_(NULL),
+    bucket_size_(0)
+{
+}
+
+ObEmptyReadBucket::~ObEmptyReadBucket()
+{
+}
+
+int ObEmptyReadBucket::init(const int64_t lower_bound)
+{
+  int ret = OB_SUCCESS;
+  char *buf = NULL;
+  //size must be 2^n, for fast mod
+  int64_t size = 1;
+  while (size <= lower_bound) {
+    size <<= 1;
+  }
+  STORAGE_LOG(DEBUG, "bucket number, ", K(size));
+  if (OB_UNLIKELY(size <= 0 || (size & (size - 1)))) {
+    ret = OB_INVALID_ARGUMENT;
+    STORAGE_LOG(WARN, "ObBloomFilterCache bucket size should be > 0 and 2^n ", K(size), K(ret));
+  } else if (OB_ISNULL(buf = static_cast<char*>(allocator_.alloc(sizeof(ObEmptyReadCell) * size)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    STORAGE_LOG(WARN, "Fail to allocate memory, ", K(ret));
+  } else {
+    buckets_ = new (buf) ObEmptyReadCell[size];
+    bucket_size_ = size;
+  }
+  return ret;
+}
+
+int ObEmptyReadBucket::mtl_init(ObEmptyReadBucket *&bucket)
+{
+  int ret = OB_SUCCESS;
+  int64_t global_mem_limit = GMEMCONF.get_server_memory_avail();
+  if (global_mem_limit <= 0) {
+    ret = OB_ERR_UNEXPECTED;
+    STORAGE_LOG(WARN, "Global memory should be greater than 0, ", K(global_mem_limit));
+  } else {
+    int64_t bucket_num_lower_bound = common::calculate_scaled_value_by_memory(BUCKET_SIZE_LOWER_LIMIT, BUCKET_SIZE_LIMIT);
+    if(OB_FAIL(bucket->init(bucket_num_lower_bound))) {
+      STORAGE_LOG(WARN, "failed to init EmptyReadBucket, ", K(ret));
+    }
+  }
+  return ret;
+}
+
+void ObEmptyReadBucket::destroy()
+{
+  if (NULL != buckets_) {
+    for (int64_t i = 0; i < bucket_size_; ++i) {
+      buckets_[i].~ObEmptyReadCell();
+    }
+    allocator_.free(buckets_);
+    allocator_.reset();
+    buckets_ = NULL;
+    bucket_size_ = 0;
+  }
+}
+
+void ObEmptyReadBucket::mtl_destroy(ObEmptyReadBucket *&bucket)
+{
+  if (OB_NOT_NULL(bucket)) {
+    bucket->destroy();
+    common::ob_delete(bucket);
+  }
+}
+
+int ObEmptyReadBucket::get_cell(const uint64_t hashcode, ObEmptyReadCell *&cell)
+{
+  int ret = OB_SUCCESS;
+  uint64_t idx = hashcode & (bucket_size_ - 1);
+  cell = NULL;
+  if (OB_UNLIKELY(!is_valid())) {
+    ret = OB_NOT_INIT;
+    STORAGE_LOG(WARN, "ObBloomFilterCache bucket not init ", K(ret));
+  } else {
+    cell = &buckets_[idx];
+  }
+  return ret;
+}
+
+void ObEmptyReadBucket::reset()
+{
+  for (int64_t i = 0; i < bucket_size_; ++i) {
+    buckets_[i].reset();
+  }
+}
+
+} // namespace storage
+} // namespace oceanbase

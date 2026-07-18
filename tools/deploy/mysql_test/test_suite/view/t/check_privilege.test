@@ -1,0 +1,35 @@
+#owner: liangjinrong.ljr
+#owner group: PERF
+#tags: views
+#description:
+# CHECK_PRIVILEGE
+
+connect (sys,$OBMYSQL_MS0,root,,oceanbase,$OBMYSQL_PORT);
+connection sys;
+
+# prepare
+--disable_warnings
+drop user if exists check_privilege_user;
+drop database if exists check_privilege_db;
+--enable_warnings
+create database check_privilege_db;
+use check_privilege_db;
+create table t1(id int, name char(20));
+
+# case 1: __all_virtual_information_columns
+select count(privileges)>10000 from oceanbase.__all_virtual_information_columns;
+
+# case 2: __tenant_virtual_privilege_grant
+create user if not exists 'check_privilege_user';
+grant select on check_privilege_db.* to check_privilege_user;
+show grants for check_privilege_user;
+
+# case 3: __tenant_virtual_table_column
+show columns from t1;
+
+# case 4: __tenant_virtual_show_tables
+show tables;
+
+# clear
+drop user if exists check_privilege_user;
+drop database if exists check_privilege_db;

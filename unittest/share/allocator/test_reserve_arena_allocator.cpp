@@ -1,0 +1,158 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include <gtest/gtest.h>
+#define protected public
+#define private public
+#include "share/allocator/ob_reserve_arena.h"
+#include "share/rc/ob_tenant_base.h"
+
+#define OK(ass) ASSERT_EQ(OB_SUCCESS, (ass))
+
+namespace oceanbase
+{
+using namespace oceanbase::common;
+using namespace oceanbase::share;
+using namespace std;
+
+namespace unittest
+{
+class TestReserveArenaAllocator : public::testing::Test
+{
+public:
+  typedef ObReserveArenaAllocator<1024> ObStorageReserveAllocator;
+  TestReserveArenaAllocator();
+  virtual ~TestReserveArenaAllocator();
+
+  ObReserveArenaAllocator<1024> test_allocator_;
+};
+TestReserveArenaAllocator::TestReserveArenaAllocator():
+  test_allocator_(ObMemAttr(ObModIds::OB_STORE_ROW_EXISTER), OB_MALLOC_NORMAL_BLOCK_SIZE)
+{
+}
+
+TestReserveArenaAllocator::~TestReserveArenaAllocator()
+{
+}
+
+TEST_F(TestReserveArenaAllocator, test_reset)
+{
+  // test reset
+  // alloc buf
+  int64_t sz = 256;
+  void* p;
+  for (int64_t i = 0; i < 3; ++i) {
+    p = test_allocator_.alloc(sz);
+  }
+  ASSERT_EQ(test_allocator_.used(), 768);
+  ASSERT_EQ(test_allocator_.total(), 768);
+  ASSERT_EQ(test_allocator_.pos_, 768);
+
+  test_allocator_.reset();
+  ASSERT_EQ(test_allocator_.used(), 0);
+  ASSERT_EQ(test_allocator_.total(), 0);
+  ASSERT_EQ(test_allocator_.pos_, 0);
+  // alloc new page 1k < size < 8k
+  sz = 2048;
+  p = test_allocator_.alloc(sz);
+  STORAGE_LOG(INFO, "alloc 2K", K(test_allocator_.allocator_));
+  ASSERT_NE(p, nullptr);
+  ASSERT_EQ(test_allocator_.pos_, 0);
+  ASSERT_GE(test_allocator_.used(), sz);
+  ASSERT_GE(test_allocator_.total(), sz);
+
+  test_allocator_.reset();
+  ASSERT_EQ(test_allocator_.pos_, 0);
+  ASSERT_EQ(test_allocator_.used(), 0);
+  ASSERT_EQ(test_allocator_.total(), 0);
+
+  // alloc new page  size > 8k
+  sz = 10240;
+  p = test_allocator_.alloc(sz);
+  STORAGE_LOG(INFO, "alloc 10K", K(test_allocator_.allocator_));
+  ASSERT_NE(p, nullptr);
+  ASSERT_EQ(test_allocator_.pos_, 0);
+  ASSERT_GE(test_allocator_.used(), sz);
+  ASSERT_GE(test_allocator_.total(), sz);
+
+  test_allocator_.reset();
+  ASSERT_EQ(test_allocator_.pos_, 0);
+  ASSERT_EQ(test_allocator_.used(), 0);
+  ASSERT_EQ(test_allocator_.total(), 0);
+
+}
+
+TEST_F(TestReserveArenaAllocator, test_reuse)
+{
+  // test reuse
+  // alloc buf
+  int64_t sz = 256;
+  void* p;
+  for (int64_t i = 0; i < 3; ++i) {
+    p = test_allocator_.alloc(sz);
+  }
+  ASSERT_EQ(test_allocator_.used(), 768);
+  ASSERT_EQ(test_allocator_.total(), 768);
+  ASSERT_EQ(test_allocator_.pos_, 768);
+
+  test_allocator_.reuse();
+  STORAGE_LOG(INFO, "after reuse", K(test_allocator_.allocator_));
+  ASSERT_EQ(test_allocator_.pos_, 0);
+  // alloc new page 1k < size < 8k
+  sz = 2048;
+  p = test_allocator_.alloc(sz);
+  STORAGE_LOG(INFO, "alloc 2K", K(test_allocator_.allocator_));
+  ASSERT_NE(p, nullptr);
+  ASSERT_EQ(test_allocator_.pos_, 0);
+  ASSERT_GE(test_allocator_.used(), sz);
+  ASSERT_GE(test_allocator_.total(), sz);
+  int allocate_total = test_allocator_.total();
+
+  test_allocator_.reuse();
+  STORAGE_LOG(INFO, "after reuse 2K", K(test_allocator_.allocator_));
+  ASSERT_EQ(test_allocator_.pos_, 0);
+  ASSERT_EQ(test_allocator_.used(), 0);
+  ASSERT_LE(test_allocator_.total(), allocate_total);
+
+  // alloc new page  size > 8k
+  sz = 10240;
+  p = test_allocator_.alloc(sz);
+  STORAGE_LOG(INFO, "alloc 10K", K(test_allocator_.allocator_));
+  ASSERT_NE(p, nullptr);
+  ASSERT_EQ(test_allocator_.pos_, 0);
+  ASSERT_GE(test_allocator_.used(), sz);
+  ASSERT_GE(test_allocator_.total(), sz);
+  allocate_total = test_allocator_.total();
+
+  test_allocator_.reuse();
+  STORAGE_LOG(INFO, "after reuse 10K", K(test_allocator_.allocator_));
+  ASSERT_EQ(test_allocator_.pos_, 0);
+  ASSERT_EQ(test_allocator_.used(), 0);
+  ASSERT_LT(test_allocator_.total(), allocate_total);
+
+}
+
+}//end namespace unittest
+}//end namespace oceanbase
+int main(int argc, char **argv)
+{
+  system("rm -f test_reserve_arena_allocator.log*");
+  oceanbase::common::ObLogger::get_logger().set_log_level("DEBUG");
+  OB_LOGGER.set_file_name("test_reserve_arena_allocator.log", true);
+  srand(time(NULL));
+  testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}

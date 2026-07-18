@@ -1,0 +1,354 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#define USING_LOG_PREFIX RS_COMPACTION
+#include "rootserver/freeze/ob_major_merge_progress_util.h"
+#include "share/tablet/ob_tablet_to_ls_operator.h"
+#include "share/compaction/ob_schedule_batch_size_mgr.h"
+#include "src/share/ob_tablet_replica_checksum_operator.h"
+
+namespace oceanbase
+{
+using namespace share;
+using namespace common;
+namespace compaction
+{
+ERRSIM_POINT_DEF(EN_COMPACTION_SKIP_CREATE_MAP);
+
+ObTableCompactionInfo &ObTableCompactionInfo::operator=(const ObTableCompactionInfo &other)
+{
+  table_id_ = other.table_id_;
+  tablet_cnt_ = other.tablet_cnt_;
+  status_ = other.status_;
+  unfinish_index_cnt_ = other.unfinish_index_cnt_;
+  need_check_fts_ = other.need_check_fts_;
+  return *this;
+}
+
+const char *ObTableCompactionInfo::TableStatusStr[] = {
+  "INITIAL",
+  "COMPACTED",
+  "CAN_SKIP_VERIFYING",
+  "INDEX_CKM_VERIFIED",
+  "VERIFIED"
+};
+
+const char *ObTableCompactionInfo::status_to_str(const Status &status)
+{
+  STATIC_ASSERT(static_cast<int64_t>(TB_STATUS_MAX) == ARRAYSIZEOF(TableStatusStr), "table status str len is mismatch");
+  const char *str = "";
+  if (status < INITIAL || status >= TB_STATUS_MAX) {
+    str = "invalid_status";
+  } else {
+    str = TableStatusStr[status];
+  }
+  return str;
+}
+
+ObTableCompactionInfo::ObTableCompactionInfo()
+  : table_id_(OB_INVALID_ID),
+    tablet_cnt_(0),
+    unfinish_index_cnt_(INVALID_INDEX_CNT),
+    status_(Status::INITIAL),
+    need_check_fts_(false)
+{
+}
+/**
+ * -------------------------------------------------------------------ObMergeProgress-------------------------------------------------------------------
+ */
+int64_t ObMergeProgress::to_string(char *buf, const int64_t buf_len) const
+{
+  int64_t pos = 0;
+  if (OB_ISNULL(buf) || buf_len <= 0) {
+  } else {
+    J_OBJ_START();
+    if (merge_finish_) {
+      J_KV(K_(merge_finish), K_(total_table_cnt));
+    } else {
+      J_KV(KP(this), K_(merge_finish), K_(unmerged_tablet_cnt), K_(merged_tablet_cnt), K_(total_table_cnt));
+      for (int64_t i = 0; i < RECORD_TABLE_TYPE_CNT; ++i) {
+        J_COMMA();
+        J_KV(ObTableCompactionInfo::TableStatusStr[i], table_cnt_[i]);
+      }
+    }
+    J_OBJ_END();
+  }
+  return pos;
+}
+
+/**
+ * -------------------------------------------------------------------ObTabletLSPairCache-------------------------------------------------------------------
+ */
+const int64_t ObTabletLSPairCache::TABLET_LS_MAP_BUCKET_CNT;
+const int64_t ObTabletLSPairCache::RANGE_SIZE;
+ObTabletLSPairCache::ObTabletLSPairCache()
+  : last_refresh_ts_(0)
+{
+}
+
+ObTabletLSPairCache::~ObTabletLSPairCache()
+{
+  destroy();
+}
+
+void ObTabletLSPairCache::reuse()
+{
+  last_refresh_ts_ = 0;
+  map_.reuse();
+}
+
+void ObTabletLSPairCache::destroy()
+{
+  last_refresh_ts_ = 0;
+  if (map_.created()) {
+    map_.destroy();
+  }
+}
+
+int ObTabletLSPairCache::refresh()
+{
+  int ret = OB_SUCCESS;
+  ObTabletID start_tablet_id;
+  int64_t cost_ts = ObTimeUtility::fast_current_time();
+  if (OB_ISNULL(GCTX.sql_proxy_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("sql proxy is unexpected null", KR(ret));
+  } else {
+    map_.reuse();
+  }
+  SMART_VAR(ObArray<ObTabletLSPair>, tablet_ls_pair_array) {
+    tablet_ls_pair_array.set_attr(ObMemAttr("RSCompPairCache"));
+    if (OB_FAIL(tablet_ls_pair_array.reserve(RANGE_SIZE))) {
+      LOG_WARN("failed to reserve array", KR(ret));
+    }
+    while (OB_SUCC(ret)) {
+      tablet_ls_pair_array.reuse();
+      if (OB_FAIL(ObTabletToLSTableOperator::range_get_tablet(
+                                                *GCTX.sql_proxy_,
+                                                start_tablet_id,
+                                                RANGE_SIZE,
+                                                tablet_ls_pair_array))) {
+        LOG_WARN("fail to get a range of tablet through tablet_to_ls_table_operator",
+                KR(ret), K(start_tablet_id), K(RANGE_SIZE),
+                K(tablet_ls_pair_array));
+      } else if (tablet_ls_pair_array.empty()) {
+        break;
+#ifdef ERRSIM
+      } else if (OB_UNLIKELY(EN_COMPACTION_SKIP_CREATE_MAP)) {
+        LOG_INFO("ERRSIM EN_COMPACTION_SKIP_CREATE_MAP, skip set map"); // tablet_ls_pair_array is empty
+        break;
+#endif
+      } else {
+        for (int64_t idx = 0; OB_SUCC(ret) && idx < tablet_ls_pair_array.count(); ++idx) {
+          ObTabletLSPair &pair = tablet_ls_pair_array.at(idx);
+          if (OB_FAIL(map_.set_refactored(pair.get_tablet_id(), pair.get_ls_id()))) {
+            LOG_WARN("fail set tablet ls map", KR(ret));
+          }
+        } // end of for
+        if (OB_SUCC(ret)) {
+          start_tablet_id = tablet_ls_pair_array.at(tablet_ls_pair_array.count() - 1).get_tablet_id();
+        }
+      }
+    } // end of while
+  }
+  if (OB_SUCC(ret)) {
+    last_refresh_ts_ = ObTimeUtility::fast_current_time();
+    cost_ts = last_refresh_ts_ - cost_ts;
+    LOG_INFO("success to refresh tablet ls pair cache", KR(ret), K(cost_ts), "map_item_cnt", map_.size(), K(map_.bucket_count()));
+  }
+  return ret;
+}
+
+int ObTabletLSPairCache::rebuild_map_by_tablet_cnt()
+{
+  int ret = OB_SUCCESS;
+  int64_t tablet_cnt = 0;
+  if (map_.empty()) {
+    if (OB_FAIL(ObTabletToLSTableOperator::get_tablet_ls_pairs_cnt(*GCTX.sql_proxy_, tablet_cnt))) {
+      LOG_WARN("failed to get tablet_ls pair cnt", KR(ret));
+    }
+#ifdef ERRSIM
+    if (OB_FAIL(ret)) {
+    } else if (OB_UNLIKELY(EN_COMPACTION_SKIP_CREATE_MAP)) {
+      tablet_cnt = 0;
+      LOG_INFO("ERRSIM EN_COMPACTION_SKIP_CREATE_MAP, set tablet_cnt to 0", K(tablet_cnt));
+    }
+#endif
+  } else {
+    tablet_cnt = map_.size();
+  }
+  if (OB_FAIL(ret) || tablet_cnt == 0) {
+  } else {
+    int64_t recommend_map_bucked_cnt = 0;
+    const int64_t cur_bucket_cnt = map_.created() ? map_.bucket_count() : 0;
+    bool rebuild_map_flag = ObScheduleBatchSizeMgr::need_rebuild_map(
+      TABLET_LS_MAP_BUCKET_CNT, tablet_cnt, cur_bucket_cnt, recommend_map_bucked_cnt);
+    if (rebuild_map_flag) {
+      if (map_.created()) {
+        map_.destroy();
+      }
+      if (OB_FAIL(map_.create(recommend_map_bucked_cnt, "RSCompPairCache", "RSCompPairCache"))) {
+        LOG_WARN("fail to create tablet ls pair map", KR(ret), K(recommend_map_bucked_cnt));
+      } else {
+        LOG_INFO("success to rebuild or create map", KR(ret), K(tablet_cnt), K(map_.bucket_count()));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTabletLSPairCache::try_refresh(const bool force_refresh/* = false*/)
+{
+  int ret = OB_SUCCESS;
+  if ((force_refresh || !map_.created()) && OB_FAIL(rebuild_map_by_tablet_cnt())) {
+    LOG_WARN("failed to rebuild map by tablet cnt", KR(ret), K(force_refresh));
+  } else if (force_refresh) {
+    if (OB_FAIL(refresh())) {
+      LOG_WARN("failed to refresh", KR(ret));
+    }
+  }
+  return ret;
+}
+
+int ObTabletLSPairCache::get_tablet_ls_pairs(
+    const uint64_t table_id,
+    const ObIArray<ObTabletID> &tablet_ids,
+    ObIArray<share::ObTabletLSPair> &pairs) const
+{
+  int ret = OB_SUCCESS;
+  if (true || is_sys_table(table_id)) {
+    ObLSID tmp_ls_id(ObLSID::SYS_LS_ID);
+    for (int64_t idx = 0; OB_SUCC(ret) && idx < tablet_ids.count(); ++idx) {
+      if (OB_FAIL(pairs.push_back(ObTabletLSPair(tablet_ids.at(idx), tmp_ls_id)))) {
+        LOG_WARN("fail to push back pair", KR(ret), K(table_id));
+      }
+    } // end of for
+  } else {
+    ObLSID tmp_ls_id;
+    for (int64_t idx = 0; OB_SUCC(ret) && idx < tablet_ids.count(); ++idx) {
+      if (OB_FAIL(map_.get_refactored(tablet_ids.at(idx), tmp_ls_id))) {
+        if (OB_HASH_NOT_EXIST == ret) {
+          ret = OB_ITEM_NOT_MATCH;
+        } else {
+          LOG_WARN("failed to get ls id", KR(ret), K(idx), K(tablet_ids));
+        }
+      } else if (OB_FAIL(pairs.push_back(ObTabletLSPair(tablet_ids.at(idx), tmp_ls_id)))) {
+        LOG_WARN("fail to push back pair", KR(ret), K(table_id));
+      }
+    } // end of for
+  }
+  return ret;
+}
+
+int ObTabletLSPairCache::get_tablet_ls_id(
+  const uint64_t table_id,
+  const ObTabletID tablet_id,
+  share::ObLSID &ls_id) const
+{
+  int ret = OB_SUCCESS;
+  if (true || is_sys_table(table_id)) {
+    ls_id = ObLSID(ObLSID::SYS_LS_ID);
+  } else if (OB_FAIL(map_.get_refactored(tablet_id, ls_id))) {
+    if (OB_HASH_NOT_EXIST == ret) {
+      ret = OB_ITEM_NOT_MATCH;
+    } else {
+      LOG_WARN("failed to get ls id", KR(ret), K(table_id), K(tablet_id));
+    }
+  }
+  return ret;
+}
+
+/**
+ * -------------------------------------------------------------------ObUncompactInfo-------------------------------------------------------------------
+ */
+ObUncompactInfo::ObUncompactInfo()
+  : diagnose_rw_lock_(ObLatchIds::MAJOR_FREEZE_DIAGNOSE_LOCK),
+    tablets_(),
+    table_ids_()
+{}
+
+ObUncompactInfo::~ObUncompactInfo()
+{
+  reset();
+}
+
+void ObUncompactInfo::reset()
+{
+  SpinWLockGuard w_guard(diagnose_rw_lock_);
+  tablets_.reuse();
+  table_ids_.reuse();
+  skip_verify_tables_.reuse();
+}
+
+void ObUncompactInfo::add_table(const uint64_t table_id)
+{
+  int ret = OB_SUCCESS;
+  SpinWLockGuard w_guard(diagnose_rw_lock_);
+  if (table_ids_.count() < DEBUG_INFO_CNT
+      && OB_FAIL(table_ids_.push_back(table_id))) {
+    LOG_WARN("fail to push_back", KR(ret), K(table_id));
+  }
+}
+
+void ObUncompactInfo::add_skip_verify_table(const uint64_t table_id)
+{
+  int ret = OB_SUCCESS;
+  // no need lock, just print log, not show in virtual_table
+  if (skip_verify_tables_.count() < SKIP_VERIFY_TABLE_CNT
+      && OB_FAIL(skip_verify_tables_.push_back(table_id))) {
+    LOG_WARN("fail to push_back", KR(ret), K(table_id));
+  }
+}
+
+void ObUncompactInfo::add_tablet(const share::ObTabletReplica &replica)
+{
+  int ret = OB_SUCCESS;
+  SpinWLockGuard w_guard(diagnose_rw_lock_);
+  if (tablets_.count() < DEBUG_INFO_CNT
+      && OB_FAIL(tablets_.push_back(replica))) {
+    LOG_WARN("fail to push_back", KR(ret), K(replica));
+  }
+}
+
+void ObUncompactInfo::add_tablet(
+    const share::ObLSID &ls_id,
+    const common::ObTabletID &tablet_id)
+{
+  int ret = OB_SUCCESS;
+  ObTabletReplica fake_replica;
+  fake_replica.fake_for_diagnose( ls_id, tablet_id);
+  SpinWLockGuard w_guard(diagnose_rw_lock_);
+  if (tablets_.count() < DEBUG_INFO_CNT
+      && OB_FAIL(tablets_.push_back(fake_replica))) {
+    LOG_WARN("fail to push_back", KR(ret), K(fake_replica));
+  }
+}
+
+int ObUncompactInfo::get_uncompact_info(
+    ObIArray<ObTabletReplica> &input_tablets,
+    ObIArray<uint64_t> &input_table_ids) const
+{
+  int ret = OB_SUCCESS;
+  SpinRLockGuard r_guard(diagnose_rw_lock_);
+  if (OB_FAIL(input_tablets.assign(tablets_))) {
+    LOG_WARN("fail to assign uncompacted_tablets", KR(ret), K_(tablets));
+  } else if (OB_FAIL(input_table_ids.assign(table_ids_))) {
+    LOG_WARN("fail to assign uncompacted_tablets", KR(ret), K_(table_ids));
+  }
+  return ret;
+}
+
+} // namespace compaction
+} // namespace oceanbase

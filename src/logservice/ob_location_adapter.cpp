@@ -1,0 +1,105 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#define USING_LOG_PREFIX CLOG
+#include "ob_location_adapter.h"
+#include "share/location_cache/ob_location_service.h"
+
+namespace oceanbase
+{
+using namespace share;
+namespace logservice
+{
+
+ObLocationAdapter::ObLocationAdapter() :
+    is_inited_(false),
+    location_service_(NULL)
+  {}
+
+ObLocationAdapter::~ObLocationAdapter()
+{
+  destroy();
+}
+
+int ObLocationAdapter::init(ObLocationService *location_service)
+{
+  int ret = OB_SUCCESS;
+  if (is_inited_) {
+    ret = OB_INIT_TWICE;
+    CLOG_LOG(WARN, "ObLocationAdapter init twice", K(ret));
+  } else if (OB_ISNULL(location_service)) {
+    ret = OB_INVALID_ARGUMENT;
+    CLOG_LOG(WARN, "invalid arguments", K(location_service), K(ret));
+  } else {
+    location_service_ = location_service;
+    is_inited_ = true;
+    PALF_LOG(INFO, "ObLocationAdapter init success", K(ret), K(location_service_));
+  }
+  return ret;
+}
+
+void ObLocationAdapter::destroy()
+{
+  is_inited_ = false;
+  location_service_ = NULL;
+}
+
+int ObLocationAdapter::get_leader(const int64_t id, common::ObAddr &leader)
+{
+  int ret = OB_SUCCESS;
+  int64_t cluster_id = 1L; // obcall CLUSTER_ID inlined
+  
+  ObLSID ls_id(id);
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    CLOG_LOG(WARN, "location adapter is not inited", K(ret));
+  } else if (OB_FAIL(location_service_->get_leader(
+                     cluster_id, ls_id, false, leader))) {
+    if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
+      CLOG_LOG(WARN, "location adapter get_leader failed", K(ret), K(id), K(leader));
+    }
+  } else {
+    // do nothing
+  }
+  return ret;
+}
+int ObLocationAdapter::nonblock_get_leader(int64_t id,
+                                           common::ObAddr &leader)
+{
+  int ret = OB_SUCCESS;
+  int64_t cluster_id = 1L; // obcall CLUSTER_ID inlined
+  ObLSID ls_id(id);
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    CLOG_LOG(WARN, "location adapter is not inited", K(ret));
+  } else if (OB_FAIL(location_service_->nonblock_get_leader(
+                     cluster_id, ls_id, leader))) {
+    if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
+      CLOG_LOG(WARN, "location adapter nonblock_get_leader failed", K(ret), K(id), K(leader));
+    }
+  } else {
+    // do nothing
+  }
+  return ret;
+}
+
+bool ObLocationAdapter::is_location_service_renew_error(const int err) const
+{
+  return err == OB_LS_LOCATION_NOT_EXIST
+      || err == OB_LS_LOCATION_LEADER_NOT_EXIST
+      || err == OB_GET_LOCATION_TIME_OUT;
+}
+}
+}

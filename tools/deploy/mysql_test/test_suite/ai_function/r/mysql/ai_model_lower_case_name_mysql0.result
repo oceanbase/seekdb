@@ -1,0 +1,31 @@
+call DBMS_AI_SERVICE.DROP_AI_MODEL('cafe');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('CAFE');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('café');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'cafe', '{
+    "type": "dense_embedding",
+    "model_name": "text-embedding-v1"
+  }');
+select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME in ('cafe', 'CAFE', 'café');
+NAME	TYPE	MODEL_NAME
+cafe	DENSE_EMBEDDING	text-embedding-v1
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'café', '{
+    "type": "dense_embedding",
+    "model_name": "text-embedding-v2"
+  }');
+ERROR HY000: This ai model 'café' is already exists
+select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME in ('cafe', 'CAFE', 'café');
+NAME	TYPE	MODEL_NAME
+cafe	DENSE_EMBEDDING	text-embedding-v1
+call DBMS_AI_SERVICE.DROP_AI_MODEL('CAFE');
+select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME in ('cafe', 'CAFE', 'café');
+NAME	TYPE	MODEL_NAME
+call DBMS_AI_SERVICE.DROP_AI_MODEL('cafe');
+ERROR HY000: This ai model 'cafe' not found in the tenant
+select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME in ('cafe', 'CAFE', 'café');
+NAME	TYPE	MODEL_NAME
+call DBMS_AI_SERVICE.DROP_AI_MODEL('café');
+ERROR HY000: This ai model 'café' not found in the tenant
+select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME in ('cafe', 'CAFE', 'café');
+NAME	TYPE	MODEL_NAME

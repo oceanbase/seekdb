@@ -1,0 +1,142 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX STORAGE_REDO
+#include "ob_storage_log_nop_log.h"
+#include "storage/slog/ob_storage_log_entry.h"
+#include "storage/slog/ob_storage_log_item.h"
+#include "storage/slog/ob_storage_log_batch_header.h"
+
+namespace oceanbase
+{
+using namespace common;
+namespace storage
+{
+ObStorageLogNopLog::ObStorageLogNopLog()
+  : is_inited_(false), buffer_(nullptr),
+    buffer_size_(0), needed_size_(0)
+{
+
+}
+
+ObStorageLogNopLog::~ObStorageLogNopLog()
+{
+  destroy();
+}
+
+int ObStorageLogNopLog::init(const int64_t buffer_size)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(is_inited_)) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("init twice", K(ret));
+  } else if (OB_UNLIKELY(buffer_size <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid args", K(ret), K(buffer_size));
+  } else {
+    buffer_ = static_cast<char *>(ob_malloc_align(
+        ObLogConstants::LOG_FILE_ALIGN_SIZE,
+        buffer_size, ObMemAttr("SlogNopLog")));
+    if (OB_ISNULL(buffer_)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to alloc nop log buffer", K(ret));
+    } else {
+      buffer_size_ = buffer_size;
+      MEMSET(buffer_, 0x01, buffer_size_);
+      is_inited_ = true;
+    }
+  }
+
+  if (!is_inited_) {
+    destroy();
+  }
+  return ret;
+}
+
+void ObStorageLogNopLog::destroy()
+{
+  if (nullptr != buffer_) {
+    ob_free_align(buffer_);
+    buffer_ = nullptr;
+  }
+  buffer_size_ = 0;
+  needed_size_ = 0;
+  is_inited_ = false;
+}
+
+int ObStorageLogNopLog::set_needed_size(const int64_t size)
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    STORAGE_REDO_LOG(WARN, "Not init", K(ret));
+  } else if (OB_UNLIKELY(size < 0 || size > buffer_size_)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid args", K(ret), K(size), K_(buffer_size));
+  } else {
+    needed_size_ = size;
+  }
+  return ret;
+}
+
+int ObStorageLogNopLog::serialize(char *buf, const int64_t limit, int64_t &pos) const
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    STORAGE_REDO_LOG(WARN, "Not init", K(ret));
+  } else if (OB_UNLIKELY(nullptr == buf || limit < 0 || pos < 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid args", K(ret), KP(buf), K(limit), K(pos));
+  } else if (OB_UNLIKELY(pos + needed_size_ > limit)) {
+    ret = OB_BUF_NOT_ENOUGH;
+  } else {
+    MEMCPY(buf + pos, buffer_, needed_size_);
+    pos += needed_size_;
+  }
+  return ret;
+}
+
+int ObStorageLogNopLog::deserialize(const char *buf, const int64_t limit, int64_t &pos)
+{
+  UNUSED(buf);
+  UNUSED(limit);
+  UNUSED(pos);
+  return OB_NOT_SUPPORTED;
+}
+
+int64_t ObStorageLogNopLog::to_string(char* buf, const int64_t buf_len) const
+{
+  UNUSED(buf);
+  UNUSED(buf_len);
+  return OB_NOT_SUPPORTED;
+}
+
+int64_t ObStorageLogNopLog::get_fixed_serialize_len(const int64_t used_len)
+{
+  int64_t ret_len = 0;
+  const ObStorageLogEntry dummy_entry;
+  const ObStorageLogBatchHeader dummy_header;
+  int64_t occupied_size = used_len +
+                          dummy_entry.get_serialize_size() +
+                          dummy_header.get_serialize_size();
+  ret_len = ObStorageLogItem::get_align_padding_size(occupied_size,
+      ObLogConstants::LOG_FILE_ALIGN_SIZE);
+  LOG_DEBUG("log data len", K(occupied_size));
+  return ret_len;
+}
+} // namespace blocksstable
+} // namespace oceanbase

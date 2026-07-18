@@ -1,0 +1,120 @@
+#!/bin/bash
+set -u
+
+CONFIG_FILE="${SEEKDB_CONFIG_FILE:-/opt/seekdb/etc/seekdb/seekdb.cnf}"
+SEEKDB_BIN="${SEEKDB_BIN:-/opt/seekdb/bin/seekdb}"
+BASE_DIR="/opt/seekdb/var/seekdb/data"
+DATA_DIR=""
+REDO_DIR=""
+LOG_DIR=""
+PORT="2881"
+RUNTIME_DIR="/opt/seekdb/var/seekdb/run"
+ACTIVE_PATHS_FILE="${RUNTIME_DIR}/active_paths"
+ADDITIONAL_ARGS=()
+
+trim() {
+  local value="$*"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf "%s" "$value"
+}
+
+read_config() {
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="$(trim "$line")"
+    [ -z "$line" ] && continue
+    case "$line" in
+      \#*|\;*) continue ;;
+    esac
+
+    key="$(trim "${line%%=*}")"
+    value="$(trim "${line#*=}")"
+    [ -z "$key" ] && continue
+
+    case "$key" in
+      base-dir)
+        BASE_DIR="$value"
+        ;;
+      data-dir)
+        DATA_DIR="$value"
+        ADDITIONAL_ARGS+=("--data-dir=$value")
+        ;;
+      redo-dir)
+        REDO_DIR="$value"
+        ADDITIONAL_ARGS+=("--redo-dir=$value")
+        ;;
+      port)
+        PORT="$value"
+        ADDITIONAL_ARGS+=("--port=$value")
+        ;;
+      plugin-dir)
+        ADDITIONAL_ARGS+=("--variable" "plugin_dir=$value")
+        ;;
+      *)
+        ADDITIONAL_ARGS+=("--parameter" "$key=$value")
+        ;;
+    esac
+  done < "$CONFIG_FILE"
+}
+
+if [ ! -x "$SEEKDB_BIN" ]; then
+  echo "Error: seekdb binary not found or not executable: $SEEKDB_BIN" >&2
+  exit 1
+fi
+
+if [ ! -f "$CONFIG_FILE" ]; then
+  echo "Error: configuration file not found: $CONFIG_FILE" >&2
+  exit 1
+fi
+
+read_config
+
+if [ -z "$DATA_DIR" ]; then
+  DATA_DIR="$BASE_DIR/store"
+fi
+
+if [ -z "$REDO_DIR" ]; then
+  REDO_DIR="$BASE_DIR/store/redo"
+fi
+
+if [ -z "$LOG_DIR" ]; then
+  LOG_DIR="$BASE_DIR/log"
+fi
+
+UNINSTALL_MARKER="$BASE_DIR/run/uninstalling"
+if [ -f "$UNINSTALL_MARKER" ]; then
+  echo "seekdb is marked for uninstall; not starting."
+  exit 0
+fi
+
+mkdir -p "$BASE_DIR" "$DATA_DIR" "$REDO_DIR" "$BASE_DIR/run" "$LOG_DIR"
+chmod 755 "$BASE_DIR" "$BASE_DIR/run"
+mkdir -p "$RUNTIME_DIR"
+chmod 755 "$RUNTIME_DIR"
+
+tmp_active="$(mktemp "${RUNTIME_DIR}/active_paths.XXXXXX")"
+{
+  printf "base-dir=%s\n" "$BASE_DIR"
+  printf "data-dir=%s\n" "$DATA_DIR"
+  printf "redo-dir=%s\n" "$REDO_DIR"
+  printf "log-dir=%s\n" "$LOG_DIR"
+  printf "pid-dir=%s\n" "$BASE_DIR/run"
+  printf "port=%s\n" "$PORT"
+} > "$tmp_active"
+chmod 644 "$tmp_active"
+mv "$tmp_active" "$ACTIVE_PATHS_FILE"
+
+ARGS=("--base-dir=$BASE_DIR" "--nodaemon")
+if [ "${#ADDITIONAL_ARGS[@]}" -gt 0 ]; then
+  ARGS+=("${ADDITIONAL_ARGS[@]}")
+fi
+
+# Ensure working directory matches base-dir (plist WorkingDirectory is hardcoded)
+cd "$BASE_DIR" || exit 0
+
+# Redirect launchd logs to the actual log dir
+exec > "$LOG_DIR/launchd.out.log" 2> "$LOG_DIR/launchd.err.log"
+
+echo "Starting seekdb with command: $SEEKDB_BIN ${ARGS[*]}"
+echo "Configuration loaded from: $CONFIG_FILE"
+exec "$SEEKDB_BIN" "${ARGS[@]}"

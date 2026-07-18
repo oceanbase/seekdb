@@ -1,0 +1,104 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_STORAGE_TMP_FILE_OB_I_TMP_FILE_MANAGER_H_
+#define OCEANBASE_STORAGE_TMP_FILE_OB_I_TMP_FILE_MANAGER_H_
+
+#include "lib/hash/ob_linear_hash_map.h"
+#include "lib/container/ob_array.h"
+#include "storage/tmp_file/ob_i_tmp_file.h"
+#include "storage/tmp_file/ob_tmp_file_io_info.h"
+#include "storage/tmp_file/ob_tmp_file_io_handle.h"
+
+namespace oceanbase
+{
+namespace tmp_file
+{
+class ObITenantTmpFileManager
+{
+public:
+  typedef common::ObLinearHashMap<ObTmpFileKey, ObITmpFileHandle> TmpFileMap;
+public:
+  ObITenantTmpFileManager();
+  ~ObITenantTmpFileManager();
+  virtual int init();
+  virtual int start();
+  virtual void stop();
+  virtual void wait();
+  virtual void destroy();
+  OB_INLINE bool is_running() const { return is_running_; }
+
+public:
+  virtual int alloc_dir(int64_t &dir_id) = 0;
+  virtual int open(int64_t &fd, const int64_t &dir_id, const char* const label) = 0;
+  int remove(const int64_t fd);
+  int aio_read(const ObTmpFileIOInfo &io_info, ObTmpFileIOHandle &io_handle);
+  int aio_pread(const ObTmpFileIOInfo &io_info, const int64_t offset, ObTmpFileIOHandle &io_handle);
+  int read(const ObTmpFileIOInfo &io_info, ObTmpFileIOHandle &io_handle);
+  int pread(const ObTmpFileIOInfo &io_info, const int64_t offset, ObTmpFileIOHandle &io_handle);
+  // NOTE:
+  //   only support append write.
+  int aio_write(const ObTmpFileIOInfo &io_info, ObTmpFileIOHandle &io_handle);
+  // NOTE:
+  //   only support append write.
+  int write(const ObTmpFileIOInfo &io_info);
+  int truncate(const int64_t fd, const int64_t offset);
+  int seal(const int64_t fd);
+
+public:
+  virtual int get_tmp_file(const int64_t fd, ObITmpFileHandle &file_handle);
+  int get_tmp_file_size(const int64_t fd, int64_t &size);
+  virtual int get_tmp_file_disk_usage(int64_t &disk_data_size, int64_t &occupied_disk_size) = 0;
+
+public:
+  //for virtual table to show
+  int get_tmp_file_fds(ObIArray<int64_t> &fd_arr);
+  int get_tmp_file_info(const int64_t fd, ObTmpFileInfo &tmp_file_info);
+
+protected:
+  virtual int init_sub_module_() = 0;
+  virtual int start_sub_module_() = 0;
+  virtual int stop_sub_module_() = 0;
+  virtual int wait_sub_module_() = 0;
+  virtual int destroy_sub_module_() = 0;
+
+protected:
+  class CollectTmpFileKeyFunctor final
+  {
+  public:
+    CollectTmpFileKeyFunctor(ObIArray<int64_t> &fds)
+        : fds_(fds) {}
+    bool operator()(const ObTmpFileKey &key, const ObITmpFileHandle &tmp_file_handle);
+
+  private:
+    ObIArray<int64_t> &fds_;
+  };
+
+protected:
+  bool is_inited_;
+  bool is_running_;
+  
+  common::ObConcurrentFIFOAllocator tmp_file_allocator_;
+  common::ObFIFOAllocator callback_allocator_;
+  common::ObFIFOAllocator wbp_index_cache_allocator_;
+  common::ObFIFOAllocator wbp_index_cache_bucket_allocator_;
+  TmpFileMap files_;
+};
+
+}  // end namespace tmp_file
+}  // end namespace oceanbase
+
+#endif // OCEANBASE_STORAGE_TMP_FILE_OB_I_TMP_FILE_MANAGER_H_

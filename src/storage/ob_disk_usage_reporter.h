@@ -1,0 +1,101 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_STORAGE_OB_DISK_USAGE_REPORTER_H_
+#define OCEANBASE_STORAGE_OB_DISK_USAGE_REPORTER_H_
+
+#include "lib/task/ob_timer.h"
+#include "lib/hash/ob_hashmap.h"
+#include "lib/container/ob_array.h"
+#include "observer/report/ob_i_disk_report.h"
+#include "lib/allocator/ob_fifo_allocator.h"
+
+namespace oceanbase
+{
+namespace common
+{
+  class ObMySQLProxy;
+}
+
+namespace storage
+{
+class ObTenantTabletIterator;
+enum class ObDiskReportFileType : uint8_t
+{
+  TENANT_DATA = 0,
+  TENANT_META_DATA = 1,
+  TENANT_INDEX_DATA = 2,
+  TENANT_TMP_DATA = 3,
+  TENANT_SLOG_DATA = 4,
+  TENANT_CLOG_DATA = 5,
+  TENANT_MAJOR_SSTABLE_DATA = 6, // shared_data in shared_storage_mode
+  TENANT_MAJOR_LOCAL_DATA = 7,
+  TENANT_BACKUP_DATA = 8,
+  TYPE_MAX
+};
+
+struct ObDiskUsageReportKey
+{
+  ObDiskReportFileType file_type_;
+
+  uint64_t hash() const
+  {
+    uint64_t hash_value = static_cast<uint64_t>(file_type_) * 10000L;
+    return hash_value;
+  }
+
+  int hash(uint64_t &hash_val) const
+  {
+    hash_val = hash();
+    return OB_SUCCESS;
+  }
+
+  bool operator ==(const ObDiskUsageReportKey report_key) const
+  {
+    return report_key.file_type_ == file_type_ && true;
+  }
+
+  TO_STRING_KV(K_(file_type));
+};
+
+typedef hash::HashMapPair<ObDiskUsageReportKey, std::pair<int64_t, int64_t>> ObDiskUsageReportMap;// pair(occupy_size, required_size)
+
+class ObDiskUsageReportTask : public observer::ObIDiskReport
+{
+public:
+  ObDiskUsageReportTask();
+  virtual ~ObDiskUsageReportTask() {};
+  int init(common::ObMySQLProxy &sql_proxy);
+  void destroy();
+  virtual int delete_tenant_usage_stat() override;
+
+  // get data disk used size of specified tenant in current observer
+  int get_data_disk_used_size(int64_t &used_size);
+
+private:
+  int count_tenant_data();
+
+  typedef common::hash::ObHashMap<ObDiskUsageReportKey, std::pair<int64_t, int64_t>> ReportResultMap; // pair(occupy_size, required_size)
+private:
+  bool is_inited_;
+  ReportResultMap result_map_;
+  common::ObMySQLProxy *sql_proxy_;
+};
+
+} // namespace storage
+} // namespace oceanbase
+
+#endif // OCEANBASE_STORAGE_OB_DISK_USAGE_REPORTER_H_

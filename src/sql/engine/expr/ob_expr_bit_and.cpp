@@ -1,0 +1,54 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_ENG
+#include "ob_expr_bit_and.h"
+
+using namespace oceanbase::common;
+using namespace oceanbase::lib;
+namespace oceanbase
+{
+namespace sql
+{
+
+ObExprBitAnd::ObExprBitAnd(ObIAllocator &alloc)
+    : ObBitwiseExprOperator(alloc, T_OP_BIT_AND, N_BIT_AND, 2, NOT_ROW_DIMENSION)
+{};
+
+ObExprBitAnd::ObExprBitAnd(ObIAllocator &alloc,
+                           ObExprOperatorType type,
+                           const char *name,
+                           int32_t param_num,
+                           int32_t dimension)
+    : ObBitwiseExprOperator(alloc, type, name, param_num, dimension)
+{};
+
+int ObExprBitAnd::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
+                       ObExpr &rt_expr) const
+{
+  int ret = OB_SUCCESS;
+  const BitOperator op = BIT_AND;
+  if (OB_FAIL(cg_bitwise_expr(expr_cg_ctx, raw_expr, rt_expr, op))) {
+    LOG_WARN("cg_bitwise_expr failed", K(ret), K(rt_expr), K(op));
+  }
+
+  return ret;
+}
+
+}/* ns sql*/
+}/* ns oceanbase */
+
+

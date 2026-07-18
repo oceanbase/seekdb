@@ -1,0 +1,183 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_COMMON_ROW_ITERATOR_
+#define OCEANBASE_COMMON_ROW_ITERATOR_
+
+#include "common/row/ob_row.h"
+
+namespace oceanbase
+{
+
+namespace common
+{
+
+class ObRowDiagnosisInfo
+{
+public:
+  virtual ~ObRowDiagnosisInfo() {}
+  virtual void set_cur_file_url(ObString file_url) = 0;
+  virtual ObString get_cur_file_url() const = 0;
+  virtual void set_cur_line_number(int64_t line_number) = 0;
+  virtual int64_t get_cur_line_number() const = 0;
+};
+
+class ObNewRowIterator
+{
+public:
+  enum IterType
+  {
+    Other = 0,
+    ObTableScanIterator = 1,
+    ObLocalIndexLookupIterator = 2,
+    ObGroupLookupOp = 3,
+    ObTextRetrievalOp = 4,
+  };
+public:
+  ObNewRowIterator() : type_(Other) {}
+  explicit ObNewRowIterator(const IterType type) : type_(type) {}
+  virtual ~ObNewRowIterator() {}
+  virtual int get_diagnosis_info(ObRowDiagnosisInfo *diagnosis_info) { UNUSED(diagnosis_info); return OB_SUCCESS; }
+  /**
+   * get the next row and move the cursor
+   *
+   * @param row [out]
+   *
+   * @return OB_ITER_END if end of iteration
+   */
+  virtual int get_next_row(ObNewRow *&row) = 0;
+  virtual int get_next_rows(ObNewRow *&rows, int64_t &row_count)
+  {
+    int ret = get_next_row(rows);
+    if (OB_SUCCESS == ret) {
+      row_count = 1;
+    } else {
+      row_count = 0;
+    }
+    return ret;
+  }
+
+  // Iterate row interface for sql static typing engine.
+  virtual int get_next_row()
+  {
+    int ret = common::OB_NOT_IMPLEMENT;
+    COMMON_LOG(WARN, "interface not implement", K(ret));
+    return ret;
+  }
+
+  // Iterate row interface for vectorized engine.
+  virtual int get_next_rows(int64_t &count, int64_t capacity)
+  {
+    UNUSEDx(count, capacity);
+    int ret = common::OB_NOT_IMPLEMENT;
+    COMMON_LOG(WARN, "interface not implement", K(ret));
+    return ret;
+  }
+
+  /// rewind the iterator
+  virtual void reset() = 0;
+  TO_STRING_EMPTY();
+
+  IterType get_type() const { return type_; }
+private:
+  const IterType type_;
+};
+
+class ObNewIterIterator
+{
+public:
+  enum IterType
+  {
+    Other = 0,
+    ObTableScanIterIterator = 1,
+  };
+public:
+  ObNewIterIterator() : type_(Other) {}
+  explicit ObNewIterIterator(const IterType type) : type_(type) {}
+  virtual ~ObNewIterIterator() {}
+  virtual int get_next_iter(ObNewRowIterator *&iter) = 0;
+  virtual void reset() = 0;
+
+  IterType get_type() const { return type_; }
+private:
+  const IterType type_;
+};
+
+/// wrap one row as an iterator
+class ObSingleRowIteratorWrapper: public ObNewRowIterator
+{
+public:
+  ObSingleRowIteratorWrapper();
+  ObSingleRowIteratorWrapper(ObNewRow *row);
+  virtual ~ObSingleRowIteratorWrapper() {}
+
+  void set_row(ObNewRow *row) { row_ = row; }
+  virtual int get_next_row(ObNewRow *&row);
+	virtual void reset() { iter_end_ = false; }
+private:
+  // disallow copy
+  DISALLOW_COPY_AND_ASSIGN(ObSingleRowIteratorWrapper);
+private:
+  // data members
+  ObNewRow *row_;
+  bool iter_end_;
+};
+
+inline ObSingleRowIteratorWrapper::ObSingleRowIteratorWrapper()
+    :row_(NULL),
+     iter_end_(false)
+{}
+
+inline ObSingleRowIteratorWrapper::ObSingleRowIteratorWrapper(ObNewRow *row)
+    :row_(row),
+     iter_end_(false)
+{}
+
+inline int ObSingleRowIteratorWrapper::get_next_row(ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(row_)) {
+    ret = OB_NOT_INIT;
+  } else if (iter_end_) {
+    ret = OB_ITER_END;
+  } else {
+    row = row_;
+    iter_end_ = true;
+  }
+  return ret;
+}
+
+class ObOuterRowIterator
+{
+public:
+  ObOuterRowIterator() {}
+  virtual ~ObOuterRowIterator() {}
+  /**
+   * get the next row and move the cursor
+   *
+   * @param row [out]
+   *
+   * @return OB_ITER_END if end of iteration
+   */
+  virtual int get_next_row(ObNewRow &row) = 0;
+  /// rewind the iterator
+  virtual void reset() = 0;
+};
+
+}
+}
+
+#endif //OCEANBASE_COMMON_ROW_ITERATOR_

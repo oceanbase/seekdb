@@ -1,0 +1,118 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL
+#include "sql/printer/ob_delete_stmt_printer.h"
+namespace oceanbase
+{
+using namespace common;
+namespace sql
+{
+
+
+int ObDeleteStmtPrinter::do_print()
+{
+  int ret = OB_SUCCESS;
+
+  if (OB_ISNULL(stmt_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("stmt should not be NULL", K(ret));
+  } else {
+    expr_printer_.init(buf_, 
+                       buf_len_, 
+                       pos_, 
+                       schema_guard_, 
+                       print_params_,
+                       param_store_);
+    if (OB_FAIL(print())) {
+      LOG_WARN("fail to print stmt", K(ret));
+    }
+  }
+
+  return ret;
+}
+
+
+int ObDeleteStmtPrinter::print()
+{
+  int ret = OB_SUCCESS;
+
+  if (OB_ISNULL(stmt_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("stmt_ should not be NULL", K(ret));
+  } else if (OB_FAIL(print_basic_stmt())) {
+    LOG_WARN("fail to print basic stmt", K(ret), K(*stmt_));
+  } else { /*do nothing*/ }
+
+  return ret;
+}
+
+int ObDeleteStmtPrinter::print_basic_stmt()
+{
+  int ret = OB_SUCCESS;
+
+  if (OB_ISNULL(stmt_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("stmt_ should not be NULL", K(ret));
+  } else if (OB_FAIL(print_with())) {
+    LOG_WARN("failed to print with", K(ret));
+  } else if (OB_FAIL(print_temp_table_as_cte())) {
+    LOG_WARN("failed to print cte", K(ret));
+  } else if (OB_FAIL(print_delete())) {
+    LOG_WARN("fail to print select", K(ret), K(*stmt_));
+  } else if (OB_FAIL(print_from())) {
+    LOG_WARN("fail to print from", K(ret), K(*stmt_));
+  } else if (OB_FAIL(print_where())) {
+    LOG_WARN("fail to print where", K(ret), K(*stmt_));
+  } else if (OB_FAIL(print_order_by())) {
+    LOG_WARN("fail to print order by", K(ret), K(*stmt_));
+  } else if (OB_FAIL(print_limit())) {
+    LOG_WARN("fail to print limit", K(ret), K(*stmt_));
+  } else if (OB_FAIL(print_returning())) {
+    LOG_WARN("fail to print_returning", K(ret), K(*stmt_));
+  } else {
+    // do-nothing
+  }
+
+  return ret;
+}
+
+int ObDeleteStmtPrinter::print_delete()
+{
+  int ret = OB_SUCCESS;
+
+  if (OB_ISNULL(stmt_) || OB_ISNULL(buf_) || OB_ISNULL(pos_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("stmt_ is NULL or buf_ is NULL or pos_ is NULL", K(ret));
+  } else if (!stmt_->is_delete_stmt()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("Not a valid delete stmt", K(stmt_->get_stmt_type()), K(ret));
+  } else {
+    DATA_PRINTF("delete ");
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(print_hint())) { // hint
+        LOG_WARN("fail to print hint", K(ret), K(*stmt_));
+      }
+    }
+  }
+  return ret;
+}
+
+} //end of namespace sql
+} //end of namespace oceanbase
+
+
+

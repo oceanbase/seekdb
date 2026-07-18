@@ -1,0 +1,138 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_PC
+
+#include "sql/plan_cache/ob_id_manager_allocator.h"
+
+namespace oceanbase
+{
+using namespace common;
+
+namespace sql
+{
+
+ObIdManagerAllocator::ObIdManagerAllocator()
+    : small_alloc_(),
+      m_alloc_(),
+      object_size_(0),
+      inited_(false)
+{
+}
+
+ObIdManagerAllocator::~ObIdManagerAllocator()
+{
+  reset();
+}
+
+void ObIdManagerAllocator::reset()
+{
+  if (inited_) {
+    // destroy() print enough errmsg
+    (void) small_alloc_.destroy();
+    m_alloc_.reset();
+  }
+  object_size_ = 0;
+  inited_ = false;
+}
+
+
+void *ObIdManagerAllocator::alloc_(const int64_t sz)
+{
+  int ret = OB_SUCCESS;
+  void *buf = NULL;
+  int64_t *tmp = NULL;
+  int64_t size = 0;
+
+  if (OB_UNLIKELY(!inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObIdManagerAllocator not inited", K(ret));
+  } else if (OB_UNLIKELY(sz <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(sz), K(ret));
+  } else if (sz <= object_size_ - EXTEND_SIZE) {
+    if (OB_UNLIKELY(NULL == (buf = small_alloc_.alloc()))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_ERROR("allocate memory by ObSmallAllocator failed", K(sz), K(object_size_), K(ret));
+    } else {
+      tmp = static_cast<int64_t *>(buf);
+      *tmp = ALLOC_MAGIC;
+      tmp++;
+      *tmp = SMALL_ALLOC_SYMBOL;
+    }
+  } else {
+    size = sz + EXTEND_SIZE;
+    if (OB_UNLIKELY(NULL == (buf = m_alloc_.alloc(size, mem_attr_)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_ERROR("allocate memory by ObMalloc failed", K(sz), K(object_size_), K(ret));
+    } else {
+      tmp = static_cast<int64_t *>(buf);
+      *tmp = ALLOC_MAGIC;
+      tmp++;
+      *tmp = M_ALLOC_SYMBOL;
+    }
+  }
+
+  if (OB_SUCC(ret) && OB_LIKELY(NULL != buf)) {
+    tmp = static_cast<int64_t *>(buf);
+    tmp += 2;
+    buf = tmp;
+  }
+
+  return buf;
+}
+
+void ObIdManagerAllocator::free_(void *ptr)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObIdManagerAllocator not inited", K(ret));
+  } else if (OB_UNLIKELY(NULL == ptr)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KP(ptr), K(ret));
+  } else {
+    int64_t *tmp_magic = static_cast<int64_t *>(ptr);
+    int64_t *tmp_symbol = static_cast<int64_t *>(ptr);
+    tmp_magic -= 2;
+    tmp_symbol -= 1;
+    if (OB_UNLIKELY(ALLOC_MAGIC != *tmp_magic)) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid magic", KP(ptr), K(*tmp_magic), K(ret));
+    } else {
+      switch (*tmp_symbol) {
+      case SMALL_ALLOC_SYMBOL: {
+          small_alloc_.free(static_cast<void *>(tmp_magic));
+          break;
+        }
+      case M_ALLOC_SYMBOL: {
+          m_alloc_.free(static_cast<void *>(tmp_magic));
+          break;
+        }
+      default: {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid symbol magic", KP(ptr), K(*tmp_symbol), K(ret));
+          break;
+        }
+      }
+    }
+    tmp_magic = NULL;
+    tmp_symbol = NULL;
+  }
+}
+
+} // namespace sql
+} // namespace oceanbase

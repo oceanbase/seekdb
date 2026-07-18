@@ -1,0 +1,89 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#pragma once
+
+#include "lib/ob_define.h"
+#include "lib/hash/ob_hashmap.h"
+#include "lib/container/ob_se_array.h"
+#include "lib/container/ob_fixed_array.h"
+#include "common/object/ob_object.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+// for runtime filter extract query range,
+// we need to maintain the runtime filter info in GI operator
+struct ObPxRFStaticInfo
+{
+  OB_UNIS_VERSION(1);
+
+public:
+  ObPxRFStaticInfo() : is_inited_(false), is_shared_(false), p2p_dh_ids_()
+  {}
+  int init(const ObIArray<int64_t> &p2p_dh_ids, bool is_shared);
+  int assign(const ObPxRFStaticInfo &other);
+  inline void destroy() {
+    p2p_dh_ids_.reset();
+  }
+
+public:
+  bool is_inited_;
+  bool is_shared_; // whether the RF is shared in sql level
+  ObSEArray<int64_t, 2> p2p_dh_ids_; // 2 ids, for in msg && range msg
+  TO_STRING_KV(K(is_inited_), K(p2p_dh_ids_), K(is_shared_));
+};
+
+struct ObPxQueryRangeInfo
+{
+  OB_UNIS_VERSION(1);
+
+public:
+  static const int64_t MAX_IN_FILTER_QUERY_RANGE_COUNT = 128;
+public:
+  ObPxQueryRangeInfo(common::ObIAllocator &allocator)
+      : table_id_(OB_INVALID_ID), range_column_cnt_(-1), prefix_col_idxs_(allocator),
+        prefix_col_obj_metas_(allocator)
+  {}
+  int init(int64_t table_id, int64_t range_column_cnt, const ObIArray<int64_t> &prefix_col_idxs,
+           const ObIArray<ObObjMeta> &prefix_col_obj_metas);
+  int assign(const ObPxQueryRangeInfo &other);
+  inline bool can_extract() const { return 0 < prefix_col_idxs_.count() ; }
+  inline void destroy() {
+    prefix_col_idxs_.reset();
+    prefix_col_obj_metas_.reset();
+  }
+public:
+  int64_t table_id_;
+  // if the coloumn extracted by runtime filter is less than
+  // the origin column count, range_column_cnt_ tells we how many columns we need
+  // to fill with (min, max)
+  int64_t range_column_cnt_;
+  // the sequence of join key may be different from the index range column,
+  // here we maintain the mapping info for these different for output query range.
+  // for example
+  // join key: A.c1=B.c1 && A.c2=B.c2; the index of table B: (c2, c1, c3)
+  // then the prefix_col_idxs_ = [1, 0],
+  // and we should fill (min, max) for c3
+  ObFixedArray<int64_t, common::ObIAllocator> prefix_col_idxs_;
+  ObFixedArray<ObObjMeta, common::ObIAllocator> prefix_col_obj_metas_;
+  TO_STRING_KV(K_(table_id), K_(range_column_cnt), K_(prefix_col_idxs), K_(prefix_col_obj_metas));
+};
+
+} //end name space sql
+
+} //end name space oceanbase

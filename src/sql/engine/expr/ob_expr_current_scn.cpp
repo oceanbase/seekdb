@@ -1,0 +1,89 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_ENG
+#include "sql/engine/expr/ob_expr_current_scn.h"
+#include "share/rc/ob_module_provider.h"
+#include "sql/engine/ob_exec_context.h"
+
+namespace oceanbase
+{
+using namespace common;
+using namespace share;
+using namespace transaction;
+namespace sql
+{
+ObExprCurrentScn::ObExprCurrentScn(ObIAllocator &alloc)
+    : ObFuncExprOperator(alloc, T_FUN_SYS_CURRENT_SCN, N_CURRENT_SCN, 0, NOT_VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
+{
+}
+ObExprCurrentScn::~ObExprCurrentScn()
+{
+}
+
+int ObExprCurrentScn::calc_result_type0(ObExprResType &type, ObExprTypeCtx &type_ctx) const
+{
+  UNUSED(type_ctx);
+  const ObAccuracy &acc = common::ObAccuracy::DDL_DEFAULT_ACCURACY[common::ObUInt64Type];
+  type.set_uint64();
+  type.set_scale(acc.get_scale());
+  type.set_precision(acc.get_precision());
+  type.set_result_flag(NOT_NULL_FLAG);
+  return OB_SUCCESS;
+}
+
+int ObExprCurrentScn::eval_current_scn(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+{
+  int ret = OB_SUCCESS;
+  ObSQLSessionInfo *session = NULL;
+  if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session is null", K(ret));
+  } else {
+    share::SCN current_scn;
+    ObTransService *txs = share::g_mp->trans_service();
+    int64_t query_timeout = 0;
+    session->get_query_timeout(query_timeout);
+    int64_t expire_ts = session->get_query_start_time() + query_timeout;
+    if (OB_FAIL(txs->get_read_snapshot_version(expire_ts, current_scn))) {
+      LOG_WARN("get read snapshot version", K(ret));
+    } else if (ObUInt64Type == expr.datum_meta_.type_) {
+      expr_datum.set_uint(current_scn.get_val_for_sql());
+    } else {
+      uint64_t scn_version = current_scn.get_val_for_sql();
+      ObNumStackOnceAlloc tmp_alloc;
+      number::ObNumber num;
+      if (OB_FAIL(num.from(scn_version, tmp_alloc))) {
+        LOG_WARN("copy number fail", K(ret));
+      } else {
+        expr_datum.set_number(num);
+      }
+    }
+  }
+  return ret;
+}
+
+int ObExprCurrentScn::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr,
+    ObExpr &rt_expr) const
+{
+  UNUSED(raw_expr);
+  UNUSED(op_cg_ctx);
+  rt_expr.eval_func_ = ObExprCurrentScn::eval_current_scn;
+  return OB_SUCCESS;
+}
+
+} //namespace sql
+} //namespace oceanbase

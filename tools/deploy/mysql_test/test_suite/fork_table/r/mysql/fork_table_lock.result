@@ -1,0 +1,257 @@
+drop database if exists db_fork_lock;
+create database db_fork_lock;
+use db_fork_lock;
+SET wait_timeout=30000000;
+SET ob_trx_timeout = 100000000;
+SET ob_query_timeout = 100000000;
+# 启用debug sync
+alter system set debug_sync_timeout = '120s';
+set ob_global_debug_sync = 'reset';
+============================================
+Case 1: 基础Fork - fork A to B
+场景: 单个fork任务，验证__all_virtual_obj_lock的状态
+============================================
+drop table if exists t_a0;
+Warnings:
+Note	1051	Unknown table 'db_fork_lock.t_a0'
+drop table if exists t_b0;
+Warnings:
+Note	1051	Unknown table 'db_fork_lock.t_b0'
+create table t_a0 (
+id int primary key,
+name varchar(50),
+value int
+);
+insert into t_a0 values (1, 'Data1', 100);
+insert into t_a0 values (2, 'Data2', 200);
+# 获取源表table_id
+# 设置debug sync: fork A to B 卡在 BUILD_DATA 阶段
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for signal_base execute 1';
+# 执行 fork A to B（会卡在 BUILD_DATA）
+fork table t_a0 to t_b0;
+# 等待任务进入 BUILD_DATA 阶段（要求同时指定src/dest）
+# 验证: fork任务进行中，源表A的锁应该存在
+# 检查DDL任务状态
+ddl_type	status
+10009	48
+# 检查__all_virtual_obj_lock中Fork相关的锁（源表A）
+count(*)	lock_mode	owner_id	obj_type	owner_type
+1	RS	1	TABLE	2
+1	RS	1	TABLET	2
+1	RX	1	ONLINE_DDL_TABLET	2
+1	X	1	ONLINE_DDL_TABLE	2
+# 检查__all_virtual_obj_lock中Fork相关的锁（fork表B）
+count(*)	lock_mode	owner_id	obj_type	owner_type
+1	RS	1	TABLET	2
+1	RX	1	ONLINE_DDL_TABLET	2
+1	X	1	ONLINE_DDL_TABLE	2
+# 释放 fork A to B，让它继续执行
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal signal_base';
+# 等待 fork A to B 完成
+# 验证: fork完成后，源表A的锁应该被释放
+# 确认Fork完成后任务状态
+pending_fork_tasks
+0
+# 确认Fork完成后锁已释放
+select count(*) as fork_locks from oceanbase.__all_virtual_obj_lock;
+fork_locks
+0
+# 验证数据完整性
+select 't_b0' as table_name, * from t_b0 order by id;
+table_name	id	name	value
+t_b0	1	Data1	100
+t_b0	2	Data2	200
+============================================
+Case 2: 并行Fork - fork A to B, fork A to C
+场景: fork A to C 先执行完，fork A to B 后执行完
+验证: fork A to C 完成后，源表A的锁不应被释放（因为fork A to B还在进行）
+============================================
+drop table if exists t_a1;
+Warnings:
+Note	1051	Unknown table 'db_fork_lock.t_a1'
+drop table if exists t_b1;
+Warnings:
+Note	1051	Unknown table 'db_fork_lock.t_b1'
+drop table if exists t_c1;
+Warnings:
+Note	1051	Unknown table 'db_fork_lock.t_c1'
+create table t_a1 (
+id int primary key,
+name varchar(50),
+value int
+);
+insert into t_a1 values (1, 'Data1', 100);
+insert into t_a1 values (2, 'Data2', 200);
+# 获取源表table_id
+# 设置debug sync: fork A to B 卡在 BUILD_DATA 阶段
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for signal_ab1 execute 1';
+# 执行 fork A to B（会卡在 BUILD_DATA）
+fork table t_a1 to t_b1;
+# 等待任务进入 BUILD_DATA 阶段（要求同时指定src/dest）
+# 设置debug sync: fork A to C 卡在 WAIT_DATA_COMPLEMENT 阶段（不同的sync point）
+set ob_global_debug_sync = 'FORK_TABLE_WAIT_DATA_COMPLEMENT wait_for signal_ac1 execute 1';
+# 执行 fork A to C（会通过 BUILD_DATA，卡在 WAIT_DATA_COMPLEMENT）
+fork table t_a1 to t_c1;
+# 等待任务进入 WAIT_DATA_COMPLEMENT 阶段（要求同时指定src/dest）
+# 验证: 两个fork任务都在进行中，源表A的锁应该存在
+# 检查DDL任务状态
+ddl_type	status
+10009	49
+10009	48
+# 检查__all_virtual_obj_lock中Fork相关的锁（源表A）
+count(*)	lock_mode	owner_id	obj_type	owner_type
+1	RS	1	TABLE	2
+1	RS	1	TABLET	2
+1	RX	1	ONLINE_DDL_TABLET	2
+1	X	1	ONLINE_DDL_TABLE	2
+# 检查__all_virtual_obj_lock中Fork相关的锁（fork表B）
+count(*)	lock_mode	owner_id	obj_type	owner_type
+1	RS	1	TABLET	2
+1	RX	1	ONLINE_DDL_TABLET	2
+1	X	1	ONLINE_DDL_TABLE	2
+# 检查__all_virtual_obj_lock中Fork相关的锁（fork表C）
+count(*)	lock_mode	owner_id	obj_type	owner_type
+1	RS	1	TABLET	2
+1	RX	1	ONLINE_DDL_TABLET	2
+1	X	1	ONLINE_DDL_TABLE	2
+# 释放 fork A to C，让它先完成
+set ob_global_debug_sync = 'FORK_TABLE_WAIT_DATA_COMPLEMENT clear';
+set ob_global_debug_sync = 'now signal signal_ac1';
+# 等待 fork A to C 完成
+# 验证: fork A to C 完成后，源表A的锁应该还存在（因为fork A to B还在进行）
+# 检查DDL任务状态
+ddl_type	status
+10009	48
+# 检查__all_virtual_obj_lock中Fork相关的锁（源表A）
+count(*)	lock_mode	owner_id	obj_type	owner_type
+1	RS	1	TABLE	2
+1	RS	1	TABLET	2
+1	RX	1	ONLINE_DDL_TABLET	2
+1	X	1	ONLINE_DDL_TABLE	2
+# 检查__all_virtual_obj_lock中Fork相关的锁（fork表B）
+count(*)	lock_mode	owner_id	obj_type	owner_type
+1	RS	1	TABLET	2
+1	RX	1	ONLINE_DDL_TABLET	2
+1	X	1	ONLINE_DDL_TABLE	2
+# 释放 fork A to B，让它继续执行
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal signal_ab1';
+# 等待 fork A to B 完成
+# 验证: 所有fork完成后，源表A的锁应该被释放
+# 确认Fork完成后任务状态
+pending_fork_tasks
+0
+# 确认Fork完成后锁已释放
+select count(*) as fork_locks from oceanbase.__all_virtual_obj_lock;
+fork_locks
+0
+# 验证数据完整性
+select 't_b1' as table_name, * from t_b1 order by id;
+table_name	id	name	value
+t_b1	1	Data1	100
+t_b1	2	Data2	200
+select 't_c1' as table_name, * from t_c1 order by id;
+table_name	id	name	value
+t_c1	1	Data1	100
+t_c1	2	Data2	200
+============================================
+Case 3: 链式Fork - fork A to B, fork B to C
+场景: fork B to C 先执行完，fork A to B 后执行完
+验证: fork B to C 完成后，表B的锁不应被释放（因为fork A to B还在进行）
+============================================
+drop table if exists t_a2;
+Warnings:
+Note	1051	Unknown table 'db_fork_lock.t_a2'
+drop table if exists t_b2;
+Warnings:
+Note	1051	Unknown table 'db_fork_lock.t_b2'
+drop table if exists t_c2;
+Warnings:
+Note	1051	Unknown table 'db_fork_lock.t_c2'
+create table t_a2 (
+id int primary key,
+name varchar(50),
+value int
+);
+insert into t_a2 values (1, 'Data1', 100);
+insert into t_a2 values (2, 'Data2', 200);
+# 获取表ID
+# 设置debug sync: fork A to B 卡在 SUCCESS 阶段（数据已构建完成，但任务未结束）
+set ob_global_debug_sync = 'FORK_TABLE_SUCCESS wait_for signal_ab2 execute 1';
+# 执行 fork A to B（会卡在 SUCCESS 阶段，此时B已经构建完成）
+fork table t_a2 to t_b2;
+# 等待任务进入 SUCCESS 阶段
+# 设置debug sync: fork B to C 卡在 BUILD_DATA 阶段
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for signal_bc2 execute 1';
+# 此时B已经构建完成，可以执行 fork B to C（会卡在 BUILD_DATA）
+fork table t_b2 to t_c2;
+# 等待任务进入 BUILD_DATA 阶段
+# 验证: 两个fork任务都在进行中，表B的锁应该存在
+# 获取目标表table_id
+# 检查DDL任务状态
+ddl_type	status
+10009	48
+10009	100
+# 检查__all_virtual_obj_lock中Fork相关的锁（表B）
+count(*)	lock_mode	owner_id	obj_type	owner_type
+1	RS	1	TABLE	2
+1	RS	1	TABLET	2
+1	RX	1	ONLINE_DDL_TABLET	2
+1	X	1	ONLINE_DDL_TABLE	2
+# 检查__all_virtual_obj_lock中Fork相关的锁（fork表C）
+count(*)	lock_mode	owner_id	obj_type	owner_type
+1	RS	1	TABLET	2
+1	RX	1	ONLINE_DDL_TABLET	2
+1	X	1	ONLINE_DDL_TABLE	2
+# 释放 fork B to C，让它先完成
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal signal_bc2';
+# 等待 fork B to C 完成
+# 验证: fork B to C 完成后，表B的锁应该还存在（因为fork A to B还在进行）
+# 检查DDL任务状态
+ddl_type	status
+10009	100
+# 检查__all_virtual_obj_lock中Fork相关的锁（表B）
+count(*)	lock_mode	owner_id	obj_type	owner_type
+1	RS	1	TABLE	2
+1	RS	1	TABLET	2
+1	RX	1	ONLINE_DDL_TABLET	2
+1	X	1	ONLINE_DDL_TABLE	2
+# 检查__all_virtual_obj_lock中Fork相关的锁（fork表C）
+count(*)	lock_mode	owner_id	obj_type	owner_type
+# 释放 fork A to B，让它完成
+set ob_global_debug_sync = 'FORK_TABLE_SUCCESS clear';
+set ob_global_debug_sync = 'now signal signal_ab2';
+# 等待 fork A to B 完成
+# 验证: 所有fork完成后，表B的锁应该被释放
+# 确认Fork完成后任务状态
+pending_fork_tasks
+0
+# 确认Fork完成后锁已释放
+select count(*) as fork_locks from oceanbase.__all_virtual_obj_lock;
+fork_locks
+0
+# 验证数据完整性
+select 't_b2' as table_name, * from t_b2 order by id;
+table_name	id	name	value
+t_b2	1	Data1	100
+t_b2	2	Data2	200
+select 't_c2' as table_name, * from t_c2 order by id;
+table_name	id	name	value
+t_c2	1	Data1	100
+t_c2	2	Data2	200
+============================================
+清理
+============================================
+# 重置debug sync
+set ob_global_debug_sync = 'reset';
+drop table if exists t_a0;
+drop table if exists t_b0;
+drop table if exists t_a1;
+drop table if exists t_b1;
+drop table if exists t_c1;
+drop table if exists t_a2;
+drop table if exists t_b2;
+drop table if exists t_c2;
+drop database if exists db_fork_lock;

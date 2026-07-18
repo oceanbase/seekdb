@@ -1,0 +1,84 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_EXTERNAL_OBJECT_CTX_H
+#define OB_EXTERNAL_OBJECT_CTX_H
+
+
+namespace oceanbase
+{
+namespace share
+{
+
+namespace schema
+{
+class ObSchemaGetterGuard;
+class ObTableSchema;
+class ObSimpleDatabaseSchema;
+class ObDatabaseSchema;
+} // namespace schema
+
+enum class ObExternalObjectType
+{
+  INVALID = 0,
+  TABLE_SCHEMA,
+  DATABASE_SCHEMA
+};
+
+struct ObExternalObject
+{
+  OB_UNIS_VERSION(1);
+
+public:
+  // TABLE_SCHEMA will store catalog_id/database_id/table_id/table_name
+  // DATABASE_SCHEMA will store catalog_id/database_id/database_name
+  ObExternalObjectType type = ObExternalObjectType::INVALID;
+  
+  uint64_t catalog_id = OB_INVALID_ID;
+  uint64_t database_id = OB_INVALID_ID;
+  common::ObString database_name;
+  uint64_t table_id = OB_INVALID_ID;
+  common::ObString table_name;
+  TO_STRING_KV(K(type), K(catalog_id), K(database_id), K(database_name), K(table_id), K(table_name));
+};
+
+class ObExternalObjectCtx
+{
+  OB_UNIS_VERSION(1);
+
+public:
+  explicit ObExternalObjectCtx(common::ObIAllocator &allocator) : allocator_(allocator), external_objects_(allocator) {}
+  ~ObExternalObjectCtx() = default;
+  int init(int64_t capacity);
+  int add_table_schema(const uint64_t catalog_id,
+                       const uint64_t database_id,
+                       const uint64_t table_id,
+                       const common::ObString &table_name);
+  int add_database_schema(const uint64_t catalog_id,
+                          const uint64_t database_id,
+                          const common::ObString &database_name);
+  int get_database_schema(const uint64_t database_id, const ObExternalObject *&obj) const;
+  const common::ObIArray<ObExternalObject> &get_external_objects() const;
+  TO_STRING_KV(K_(external_objects));
+private:
+  common::ObIAllocator &allocator_;
+  common::ObFixedArray<ObExternalObject, common::ObIAllocator> external_objects_;
+};
+
+} // namespace share
+} // namespace oceanbase
+
+#endif // OB_EXTERNAL_OBJECT_ID_NAME_MAPPING_H

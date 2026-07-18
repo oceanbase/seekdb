@@ -1,0 +1,139 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_CACHE_OB_KVCACHE_MAP_H_
+#define OCEANBASE_CACHE_OB_KVCACHE_MAP_H_
+
+#include "lib/allocator/ob_malloc.h"
+#include "lib/allocator/ob_lf_fifo_allocator.h"
+#include "lib/lock/ob_bucket_lock.h"
+#include "share/cache/ob_kvcache_struct.h"
+#include "share/cache/ob_kvcache_store.h"
+#include "share/cache/ob_kvcache_hazard_version.h"
+
+namespace oceanbase
+{
+namespace blocksstable
+{
+class ObMicroBlockCacheKey;
+}
+namespace common
+{
+class ObKVCacheIterator;
+class HazptrHolder;
+class ObKVCacheMap
+{
+  static constexpr int64_t DEFAULT_BUCKET_SIZE = (16L << 20); // 16M
+  static constexpr int64_t MIN_BUCKET_SIZE     = ( 4L << 10); //  4K
+  static const int64_t HAZARD_STATION_WAITING_THRESHOLD = 512;
+  static const int64_t HAZARD_STATION_SLOT_NUM = 1L << 10; //  1K
+  static constexpr int64_t BUCKET_SIZE_ARRAY_LEN = 4;
+  static constexpr int64_t BUCKET_SIZE_ARRAY[BUCKET_SIZE_ARRAY_LEN] = {MIN_BUCKET_SIZE, MIN_BUCKET_SIZE << 4,  MIN_BUCKET_SIZE << 8, DEFAULT_BUCKET_SIZE};
+  static const int64_t DEFAULT_LFU_THRESHOLD_BASE = 2;
+public:
+  ObKVCacheMap();
+  virtual ~ObKVCacheMap();
+  int init(const int64_t bucket_num, ObKVCacheStore *store);
+  void destroy();
+  int erase_all();
+  int erase_all(const int64_t cache_id);
+  int erase_tenant(const bool force_erase = false);
+  int clean_garbage_node(int64_t &start_pos, const int64_t clean_num);
+  int replace_fragment_node(int64_t &start_pos, int64_t &replace_node_count, const int64_t replace_num);
+  int put(
+    ObKVCacheInst &inst,
+    const ObIKVCacheKey &key,
+    const ObKVCachePair *kvpair,
+    HazptrHolder &hazptr_holder,
+    bool overwrite = true);
+  int get(
+    const int64_t cache_id,
+    const ObIKVCacheKey &key,
+    const ObIKVCacheValue *&pvalue,
+    HazptrHolder &hazptr_holder);
+  int erase(const int64_t cache_id, const ObIKVCacheKey &key);
+  int get_batch_data_block_cache_key(const int bucket_count, ObIArray<blocksstable::ObMicroBlockCacheKey> &keys);
+  OB_INLINE int64_t get_bucket_num() const { return bucket_num_; }
+  OB_INLINE ObLfFIFOAllocator *get_node_allocator() { return &node_allocator_; }
+  void print_hazard_version_info();
+private:
+  friend class ObKVCacheIterator;
+  struct Node : public ObKVCacheHazardNode
+  {
+    ObKVCacheInst *inst_;
+    uint64_t hash_code_;
+    int32_t seq_num_;
+    int32_t kvpair_size_;
+    ObKVMemBlockHandle *mb_handle_;
+    const ObIKVCacheKey *key_;
+    const ObIKVCacheValue *value_;
+    Node *next_;
+    int64_t get_cnt_;
+    Node() :
+        inst_(NULL),
+        hash_code_(0),
+        seq_num_(0),
+        kvpair_size_(0),
+        mb_handle_(NULL),
+        key_(NULL),
+        value_(NULL),
+        next_(NULL),
+        get_cnt_(0)
+    {}
+    virtual ~Node() {};
+    virtual void retire() override;  // only free memory of itself
+    INHERIT_TO_STRING_KV("Node", ObKVCacheHazardNode, KPC_(inst), K_(hash_code), K_(seq_num), K_(kvpair_size), KP_(mb_handle), KP_(key),
+                         KP_(value), KP_(next), K_(get_cnt));
+  };
+  struct Bucket
+  {
+    Node **nodes_;
+  };
+private:
+  int multi_get(const int64_t cache_id, const int64_t pos, common::ObList<Node, common::ObArenaAllocator> &list);
+  void internal_map_erase(const ObKVCacheHazardGuard &guard, Node *&prev, Node *&iter, Node *&bucket_ptr);
+  void internal_map_replace(const ObKVCacheHazardGuard &guard, Node *&prev, Node *&iter, Node *&bucket_ptr);
+  int internal_data_move(const ObKVCacheHazardGuard &guard, Node *&prev, Node *&iter, Node *&bucket_ptr);
+  OB_INLINE bool need_modify_cache(const int64_t iter_get_cnt, const int64_t total_get_cnt, const int64_t kv_cnt) const
+  {
+    bool ret = false;
+    int64_t threshold = total_get_cnt / (kv_cnt + 1) + DEFAULT_LFU_THRESHOLD_BASE;
+    ret = iter_get_cnt > threshold;
+    return ret;
+  }
+  Node *&get_bucket_node(const int64_t idx)
+  {
+    const int64_t bucket_idx = idx / bucket_size_;
+    return buckets_[bucket_idx].nodes_[idx & (bucket_size_ - 1)];
+  }
+private:
+
+  bool is_inited_;
+  ObMalloc bucket_allocator_;
+  ObLfFIFOAllocator node_allocator_;
+  int64_t bucket_start_pos_;
+  int64_t bucket_num_;
+  int64_t bucket_size_;
+  Bucket *buckets_;
+  ObBucketLock bucket_lock_;
+  ObKVCacheStore *store_;
+  ObKVCacheHazardStation global_hazard_station_;
+};
+
+}//end namespace common
+}//end namespace oceanbase
+
+#endif //OCEANBASE_CACHE_OB_KVCACHE_MAP_H_

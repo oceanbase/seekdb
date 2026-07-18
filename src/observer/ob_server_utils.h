@@ -1,0 +1,117 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_OB_SERVER_UTILS_
+#define OCEANBASE_OB_SERVER_UTILS_
+
+#ifndef _WIN32
+#include <sys/statvfs.h>
+#else
+#include <windows.h>
+#include <stdint.h>
+struct statvfs {
+  unsigned long f_bsize;
+  uint64_t f_blocks;
+  uint64_t f_bfree;
+  uint64_t f_bavail;
+  unsigned long f_fsid;
+};
+static inline int statvfs(const char *path, struct statvfs *buf) {
+  ULARGE_INTEGER free_bytes_available, total_bytes, total_free_bytes;
+  if (!GetDiskFreeSpaceExA(path, &free_bytes_available, &total_bytes, &total_free_bytes)) {
+    return -1;
+  }
+  memset(buf, 0, sizeof(*buf));
+  buf->f_bsize = 4096;
+  buf->f_blocks = total_bytes.QuadPart / buf->f_bsize;
+  buf->f_bfree = total_free_bytes.QuadPart / buf->f_bsize;
+  buf->f_bavail = free_bytes_available.QuadPart / buf->f_bsize;
+  buf->f_fsid = 0;
+  return 0;
+}
+#endif
+#include "lib/allocator/ob_allocator.h"
+#include "lib/string/ob_string.h"
+
+namespace oceanbase
+{
+namespace common
+{
+class ObAddr;
+}
+using common::ObIAllocator;
+using common::ObString;
+
+namespace observer
+{
+class ObServerUtils
+{
+public:
+  // Get the server's ipstr.
+  // @param [in] allocator.
+  // @param [out] server's ip str.
+  // @return the error code.
+  static int get_server_ip(ObIAllocator *allocator, ObString &ipstr);
+
+  static int get_log_disk_info_in_config(int64_t& log_disk_size,
+                                         int64_t& log_disk_percentage,
+                                         int64_t& total_log_disk_size);
+
+  static int get_data_disk_info_in_config(int64_t& data_disk_size,
+                                          int64_t& data_disk_percentage);
+
+  static int cal_all_part_disk_size(const int64_t suggested_data_disk_size,
+                                    const int64_t suggested_log_disk_size,
+                                    const int64_t suggested_data_disk_percentage,
+                                    const int64_t suggested_log_disk_percentage,
+                                    int64_t& data_disk_size,
+                                    int64_t& log_disk_size,
+                                    int64_t& data_disk_percentage,
+                                    int64_t& log_disk_percentage);
+
+  // Build info for syslog files which is logged when new file created.
+  // The following infors are included:
+  // - self address
+  // - observer version
+  // - OS info
+  // - timezone info
+  static const char *build_syslog_file_info();
+  static int calc_auto_extend_size(int64_t &cur_datafile_size, int64_t &actual_extend_size);
+
+private:
+  static int decide_disk_size(const struct statvfs& svfs,
+                              const int64_t suggested_disk_size,
+                              const int64_t suggested_disk_percentage,
+                              const int64_t default_disk_percentage,
+                              const char* dir,
+                              int64_t& disk_size,
+                              int64_t& disk_percentage);
+  static int decide_disk_size(const int64_t disk_total_size,
+                              const int64_t suggested_disk_size,
+                              const int64_t suggested_disk_percentage,
+                              const int64_t default_disk_percentage,
+                              int64_t& disk_size,
+                              int64_t& disk_percentage);
+  static int cal_all_part_disk_default_percentage(int64_t &data_disk_total_size,
+                                                  int64_t& data_disk_percentage,
+                                                  int64_t &log_disk_total_size,
+                                                  int64_t& log_disk_percentage,
+                                                  bool &shared_mode);
+  DISALLOW_COPY_AND_ASSIGN(ObServerUtils);
+};
+} // namespace observer
+} // namespace oceanbase
+#endif // OCEANBASE_OB_SERVER_UTILS_

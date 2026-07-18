@@ -1,0 +1,58 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "ob_vector_norm.h"
+namespace oceanbase
+{
+namespace common
+{
+int ObVectorNorm::vector_norm_square_func(const float *a, const int64_t len, double &norm_square) 
+{
+  return vector_norm_square_normal(a, len, norm_square);
+}
+
+int ObVectorNorm::vector_norm_func(const float *a, const int64_t len, double &norm)
+{
+  int ret = OB_SUCCESS;
+  double norm_square = 0;
+  norm = 0;
+  if (OB_FAIL(vector_norm_square_func(a, len, norm_square))) {
+    LIB_LOG(WARN, "failed to cal l2 square", K(ret));
+  } else {
+    norm = sqrt(norm_square);
+  }
+  return ret;
+}
+
+OB_INLINE int ObVectorNorm::vector_norm_square_normal(const float *a, const int64_t len, double &norm_square)
+{
+  int ret = OB_SUCCESS;
+  double sum = 0;
+  double diff = 0;
+  for (int64_t i = 0; OB_SUCC(ret) && i < len; ++i) {
+    sum += (a[i] * a[i]);
+    if (OB_UNLIKELY(0 != ::isinf(sum))) {
+      ret = OB_NUMERIC_OVERFLOW;
+      LIB_LOG(WARN, "value is overflow", K(ret), K(diff), K(sum));
+    }
+  }
+  if (OB_SUCC(ret)) {
+    norm_square = sum;
+  }
+  return ret;
+}
+}
+}

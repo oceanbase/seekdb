@@ -1,0 +1,72 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#define USING_LOG_PREFIX STORAGE
+#include "ob_co_sstable_row_multi_scanner.h"
+#include "storage/access/ob_sstable_row_multi_scanner.h"
+
+namespace oceanbase
+{
+namespace storage
+{
+
+void ObCOSSTableRowMultiScanner::reset()
+{
+  ObCOSSTableRowScanner::reset();
+  ranges_ = nullptr;
+}
+
+void ObCOSSTableRowMultiScanner::reuse()
+{
+  ObCOSSTableRowScanner::reuse();
+  ranges_ = nullptr;
+}
+
+int ObCOSSTableRowMultiScanner::init_row_scanner(
+    const ObTableIterParam &param,
+    ObTableAccessContext &context,
+    ObITable *table,
+    const void *query_range)
+{
+  int ret = OB_SUCCESS;
+  if (nullptr == row_scanner_) {
+    if (OB_ISNULL(row_scanner_ = OB_NEWx(ObSSTableRowMultiScanner<ObCOPrefetcher>, context.stmt_allocator_))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("Fail to alloc row scanner", K(ret));
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(row_scanner_->init(param, context, table, query_range))) {
+    LOG_WARN("Fail to init row scanner", K(ret), K(param), KPC(table));
+  } else {
+    ranges_ = static_cast<const common::ObIArray<blocksstable::ObDatumRange> *>(query_range);
+  }
+  return ret;
+}
+
+int ObCOSSTableRowMultiScanner::get_group_idx(int64_t &group_idx)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(nullptr == ranges_ || range_idx_ >= ranges_->count() )) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("Unexpected ranges", K(ret), K(range_idx_), KPC(ranges_));
+  } else {
+    group_idx = ranges_->at(range_idx_).get_group_idx();
+  }
+  return ret;
+}
+
+}
+}

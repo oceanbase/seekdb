@@ -1,0 +1,32 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifdef TG_DEF
+// (tg_def_id, name, type, args...)
+// for test
+TG_DEF(TEST1, test1, TIMER)
+TG_DEF(TEST2, test2, QUEUE_THREAD, 1, 10)
+TG_DEF(TEST3, test3, DEDUP_QUEUE, 1, 8, 8, 16L << 20, 16L << 20,8192, "test")
+TG_DEF(TEST4, test4, THREAD_POOL, 1)
+TG_DEF(TEST5, test5, ASYNC_TASK_QUEUE, 1, 16)
+TG_DEF(TEST6, test6, MAP_QUEUE_THREAD, 2)
+// TG_DEF(TEST7, test7, QUEUE_THREAD, 10, 10)
+TG_DEF(TEST8, test8, REENTRANT_THREAD_POOL, 1)
+// other
+TG_DEF(MEMORY_DUMP, memDump, THREAD_POOL, 1)
+TG_DEF(QUEUE_THREAD_MANAGER, qth_mgr, THREAD_POOL, 1)
+TG_DEF(SYSLOG_COMPRESS, SyslogCompress, TIMER)
+#endif

@@ -1,0 +1,53 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_INFORMATION_CHECK_CONSTRAINTS_
+#define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_INFORMATION_CHECK_CONSTRAINTS_
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+
+namespace oceanbase {
+namespace observer {
+class ObInfoSchemaCheckConstraintsTable : public common::ObVirtualTableScannerIterator {
+public:
+  ObInfoSchemaCheckConstraintsTable();
+  virtual ~ObInfoSchemaCheckConstraintsTable();
+  virtual int inner_get_next_row(common::ObNewRow*& row);
+  virtual void reset();
+
+  
+
+private:
+  int add_check_constraints(
+      const share::schema::ObDatabaseSchema& database_schema, common::ObObj* cells, const int64_t col_count);
+  int add_check_constraints(const share::schema::ObTableSchema& table_schema, const common::ObString& database_name,
+      common::ObObj* cells, const int64_t col_count);
+
+
+private:
+  enum TABLE_CONSTRAINTS_COLUMN {
+    CONSTRAINT_CATALOG = common::OB_APP_MIN_COLUMN_ID,
+    CONSTRAINT_SCHEMA,
+    CONSTRAINT_NAME,
+    CHECK_CLAUSE,
+    MAX_CHECK_CONSTRAINTS_COLUMN
+  };
+  static const int64_t CHECK_CONSTRAINTS_COLUMN_COUNT = 4;
+  DISALLOW_COPY_AND_ASSIGN(ObInfoSchemaCheckConstraintsTable);
+};
+
+}  // namespace observer
+}  // namespace oceanbase
+#endif /* OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_INFORMATION_CHECK_CONSTRAINTS_ */

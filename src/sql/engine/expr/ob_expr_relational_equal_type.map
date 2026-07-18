@@ -1,0 +1,101 @@
+/*
+ * the following array is used to determine whether the equal compare is transitive in optimizer
+ */
+static constexpr ObObjType RELATIONAL_EQUAL_TYPE[ObMaxType] =
+{ 
+  ObMaxType,            /* NullType             */
+  ObIntType,            /* TinyIntType          */
+  ObIntType,            /* SmallIntType         */
+  ObIntType,            /* MediumIntType        */
+  ObIntType,            /* Int32Type            */
+  ObIntType,            /* IntType              */
+  ObIntType,            /* UTinyIntType         */
+  ObIntType,            /* USmallIntType        */
+  ObIntType,            /* UMediumIntType       */
+  ObIntType,            /* UInt32Type           */
+  ObIntType,            /* UIntType             */
+  ObFloatType,          /* FloatType            */
+  ObDoubleType,         /* DoubleType           */
+  ObFloatType,          /* UFloatType           */
+  ObDoubleType,         /* UDoubleType          */
+  ObNumberType,         /* NumberType           */
+  ObNumberType,         /* UNumberType          */
+  ObDateTimeType,       /* DateTimeType         */
+  ObTimestampType,      /* TimestampType        */
+  ObDateType,           /* DateType             */
+  ObTimeType,           /* TimeType             */
+  ObYearType,           /* YearType             */
+  ObVarcharType,        /* VarcharType          */
+  ObVarcharType,        /* CharType             */
+  ObHexStringType,      /* HexStringType        */
+  ObMaxType,            /* ExtendType           */
+  ObMaxType,            /* UnknownType          */
+  ObVarcharType,        /* TinyTextType         */
+  ObVarcharType,        /* TextType             */
+  ObVarcharType,        /* MediumTextType       */
+  ObVarcharType,        /* LongTextType         */
+  ObBitType,            /* BitType              */
+  ObMaxType,            /* ObEnumType           */
+  ObMaxType,            /* ObSetType            */
+  ObMaxType,            /* ObEnumInnerType      */
+  ObMaxType,            /* ObSetInnerType       */
+  ObJsonType,           /* ObJsonType           */
+  ObGeometryType,       /* ObGeometryType       */
+  ObMaxType,            /* ObUserDefinedSqlType */
+  ObDecimalIntType,     /* ObDecimalIntType     */
+  ObMaxType,            /* ObCollectionSQLType  */
+  ObMySQLDateType,      /* ObMySQLDateType      */
+  ObMySQLDateTimeType,  /* ObMySQLDateTimeType  */
+  ObMaxType,            /* ObRoaringBitmapType  */
+};
+
+static constexpr ObObjType ORACLE_RELATIONAL_EQUAL_TYPE[ObMaxType] =
+{       
+  ObMaxType,            /* NullType             */
+  ObIntType,            /* TinyIntType          */
+  ObIntType,            /* SmallIntType         */
+  ObIntType,            /* MediumIntType        */
+  ObIntType,            /* Int32Type            */
+  ObIntType,            /* IntType              */
+  ObIntType,            /* UTinyIntType         */
+  ObIntType,            /* USmallIntType        */
+  ObIntType,            /* UMediumIntType       */
+  ObIntType,            /* UInt32Type           */
+  ObIntType,            /* UIntType             */
+  ObFloatType,          /* FloatType            */
+  ObDoubleType,         /* DoubleType           */
+  ObMaxType,            /* UFloatType           */
+  ObMaxType,            /* UDoubleType          */
+  ObNumberType,         /* NumberType           */
+  ObMaxType,            /* UNumberType          */
+  ObDateTimeType,       /* DateTimeType         */
+  ObMaxType,            /* TimestampType        */
+  ObMaxType,            /* DateType             */
+  ObMaxType,            /* TimeType             */
+  ObMaxType,            /* YearType             */
+  ObVarcharType,        /* VarcharType          */
+  ObCharType,           /* CharType             */
+  ObMaxType,            /* HexStringType        */
+  ObMaxType,            /* ExtendType           */
+  ObMaxType,            /* UnknownType          */
+  ObMaxType,            /* TinyTextType         */
+  ObMaxType,            /* TextType             */
+  ObMaxType,            /* MediumTextType       */
+  ObLongTextType,       /* LongTextType         */
+  ObMaxType,            /* BitType              */
+  ObMaxType,            /* ObEnumType           */
+  ObMaxType,            /* ObSetType            */
+  ObMaxType,            /* ObEnumInnerType      */
+  ObMaxType,            /* ObSetInnerType       */
+  ObJsonType,           /* ObJsonType           */
+  ObGeometryType,       /* ObGeometryType       */
+  ObMaxType,            /* ObUserDefinedSqlType */
+  ObDecimalIntType,     /* ObDecimalIntType     */
+  ObMaxType,            /* ObCollectionSQLType  */
+  ObMaxType,            /* ObMySQLDateType      */
+  ObMaxType,            /* ObMySQLDateTimeType  */
+  ObMaxType,            /* ObRoaringBitmapType  */
+};
+
+static_assert(is_array_fully_initialized(RELATIONAL_EQUAL_TYPE), "RELATIONAL_EQUAL_TYPE is partially initlized");
+static_assert(is_array_fully_initialized(ORACLE_RELATIONAL_EQUAL_TYPE), "ORACLE_RELATIONAL_EQUAL_TYPE is partially initlized");

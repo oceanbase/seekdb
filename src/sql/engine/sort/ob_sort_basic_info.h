@@ -1,0 +1,66 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SQL_ENGINE_SORT_SORT_BASIC_INFO_H_
+#define OCEANBASE_SQL_ENGINE_SORT_SORT_BASIC_INFO_H_
+
+#include "lib/ob_define.h"
+#include "common/datum/ob_datum.h"
+#include "share/datum/ob_datum_funcs.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+struct ObSortFieldCollation
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObSortFieldCollation(uint32_t field_idx,
+      common::ObCollationType cs_type,
+      bool is_ascending,
+      common::ObCmpNullPos null_pos,
+      bool is_not_null = false)
+    : field_idx_(field_idx),
+    cs_type_(cs_type),
+    is_ascending_(is_ascending),
+    null_pos_(null_pos),
+    is_not_null_(is_not_null)
+  {}
+  ObSortFieldCollation()
+    : field_idx_(UINT32_MAX),
+    cs_type_(common::CS_TYPE_INVALID),
+    is_ascending_(true),
+    null_pos_(common::NULL_LAST),
+    is_not_null_(false)
+  {}
+  TO_STRING_KV(K_(field_idx), K_(cs_type), K_(is_ascending), K_(null_pos), K_(is_not_null));
+  uint32_t field_idx_;
+  common::ObCollationType cs_type_;
+  bool is_ascending_;
+  common::ObCmpNullPos null_pos_;
+  // if is_not_null_ is true, the sort key must not be null
+  bool is_not_null_;
+};
+
+typedef common::ObCmpFunc ObSortCmpFunc;
+typedef common::ObFixedArray<ObSortFieldCollation, common::ObIAllocator> ObSortCollations;
+typedef common::ObFixedArray<ObSortCmpFunc, common::ObIAllocator> ObSortFuncs;
+
+} // end namespace sql
+} // end namespace oceanbase
+
+#endif /* OCEANBASE_SQL_ENGINE_SORT_SORT_BASIC_INFO_H_ */

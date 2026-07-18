@@ -1,0 +1,120 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SQL_RESOLVER_DROP_INDEX_STMT_
+#define OCEANBASE_SQL_RESOLVER_DROP_INDEX_STMT_
+
+#include "lib/string/ob_string.h"
+#include "lib/allocator/ob_allocator.h"
+#include "sql/resolver/ddl/ob_ddl_stmt.h"
+#include "sql/parser/parse_node.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+class ObDropIndexStmt : public ObDDLStmt
+{
+public:
+  explicit ObDropIndexStmt(common::ObIAllocator *name_pool);
+  ObDropIndexStmt();
+  virtual ~ObDropIndexStmt();
+
+  void set_name_pool(common::ObIAllocator *name_pool);
+  void set_index_name(const common::ObString &index_name);
+  void set_table_name(const common::ObString &table_name);
+  void set_database_name(const common::ObString &db_name);
+  
+  uint64_t get_table_id() const { return table_id_; };
+  void set_table_id(const uint64_t table_id);
+
+  inline const common::ObString &get_database_name() const;
+  inline const common::ObString &get_table_name() const;
+  inline const common::ObString &get_index_name() const;
+  inline common::ObString &get_table_name();
+  obcall::ObDropIndexArg &get_drop_index_arg();
+  const obcall::ObDropIndexArg &get_drop_index_arg() const;
+  virtual bool cause_implicit_commit() const { return true; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return drop_index_arg_; }
+  TO_STRING_KV(K_(stmt_type), K_(drop_index_arg));
+protected:
+  common::ObIAllocator *name_pool_;
+
+private:
+  obcall::ObDropIndexArg drop_index_arg_;
+  uint64_t table_id_;
+  DISALLOW_COPY_AND_ASSIGN(ObDropIndexStmt);
+};
+
+inline void ObDropIndexStmt::set_name_pool(common::ObIAllocator *name_pool)
+{
+  name_pool_ = name_pool;
+}
+
+inline const obcall::ObDropIndexArg &ObDropIndexStmt::get_drop_index_arg() const
+{
+  return drop_index_arg_;
+}
+
+inline obcall::ObDropIndexArg &ObDropIndexStmt::get_drop_index_arg()
+{
+  return drop_index_arg_;
+}
+
+inline void ObDropIndexStmt::set_index_name(const common::ObString &index_name)
+{
+  drop_index_arg_.index_name_ = index_name;
+}
+
+inline void ObDropIndexStmt::set_database_name(const common::ObString &db_name)
+{
+  drop_index_arg_.database_name_ = db_name;
+}
+
+inline void ObDropIndexStmt::set_table_name(const common::ObString &table_name)
+{
+  drop_index_arg_.table_name_ = table_name;
+}
+
+inline const common::ObString &ObDropIndexStmt::get_database_name() const
+{
+  return drop_index_arg_.database_name_;
+}
+
+inline const common::ObString &ObDropIndexStmt::get_table_name() const
+{
+  return drop_index_arg_.table_name_;
+}
+
+inline common::ObString &ObDropIndexStmt::get_table_name()
+{
+  return drop_index_arg_.table_name_;
+}
+
+inline const common::ObString &ObDropIndexStmt::get_index_name() const
+{
+  return drop_index_arg_.index_name_;
+}
+
+
+inline void ObDropIndexStmt::set_table_id(const uint64_t table_id)
+{
+  table_id_ = table_id;
+}
+
+}//end of namespace sql
+}//end of namespace oceanbase
+#endif //OCEANBASE_SQL_RESOLVER_DROP_INDEX_STMT_

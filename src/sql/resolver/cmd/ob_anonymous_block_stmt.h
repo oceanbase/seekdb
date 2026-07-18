@@ -1,0 +1,99 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SRC_SQL_RESOLVER_DDL_OB_DO_ANONYMOUS_BLOCK_STMT_H_
+#define OCEANBASE_SRC_SQL_RESOLVER_DDL_OB_DO_ANONYMOUS_BLOCK_STMT_H_
+
+#include "lib/container/ob_se_array.h"
+#include "lib/string/ob_string.h"
+#include "lib/allocator/ob_allocator.h"
+#include "common/object/ob_object.h"
+#include "share/schema/ob_table_schema.h"
+#include "sql/parser/parse_node.h"
+#include "sql/resolver/cmd/ob_cmd_stmt.h"
+namespace oceanbase
+{
+namespace sql
+{
+
+class ObAnonymousBlockStmt : public ObCMDStmt
+{
+public:
+  explicit ObAnonymousBlockStmt(common::ObIAllocator *name_pool)
+    : ObCMDStmt(name_pool, stmt::T_ANONYMOUS_BLOCK),
+      body_(NULL),
+      sql_(),
+      statement_id_(OB_INVALID_ID),
+      is_prepare_protocol_(false),
+      params_(NULL),
+      out_idx_()
+  {
+  }
+  ObAnonymousBlockStmt()
+    : ObCMDStmt(stmt::T_ANONYMOUS_BLOCK),
+      body_(NULL),
+      sql_(),
+      statement_id_(OB_INVALID_ID),
+      is_prepare_protocol_(false),
+      params_(NULL),
+      out_idx_()
+  {
+  }
+  virtual ~ObAnonymousBlockStmt() {}
+
+  inline const ParseNode *get_body() const { return body_; }
+  inline void set_body(ParseNode *body) { body_ = body; }
+
+  inline const ObString &get_sql() const { return sql_;}
+  inline void set_sql(const ObString &sql) { sql_ = sql; }
+
+  inline uint64_t get_stmt_id() const { return statement_id_; }
+  inline void set_stmt_id(uint64_t stmt_id) { statement_id_ = stmt_id; }
+\
+  inline bool is_prepare_protocol() const {return is_prepare_protocol_; }
+  inline void set_prepare_protocol(bool is_prepare) { is_prepare_protocol_ = is_prepare; }
+  inline void set_params(ParamStore *params) { params_ = params; }
+  inline ParamStore *get_params() { return params_; }
+  int add_param(const common::ObObjParam& param);
+  virtual obcall::ObDDLArg &get_ddl_arg() { return ddl_arg_; }
+
+  int resolve_inout_param(ParseNode &block_node, ObAnonymousBlockStmt &stmt);
+  const ObBitSet<>& get_out_idx() const { return out_idx_; }
+  ObBitSet<>& get_out_idx() { return out_idx_; }
+
+  TO_STRING_KV(K_(stmt_type),
+               K_(sql),
+               K_(statement_id),
+               K_(is_prepare_protocol));
+
+private:
+  ParseNode *body_;
+  ObString sql_;
+  uint64_t statement_id_;
+  bool is_prepare_protocol_;
+  ParamStore *params_;//for ps param
+  obcall::ObDDLArg ddl_arg_; // used to return exec_tid_
+  ObBitSet<> out_idx_;
+  DISALLOW_COPY_AND_ASSIGN(ObAnonymousBlockStmt);
+};
+
+
+}//namespace sql
+}//namespace oceanbase
+
+
+
+#endif /* OCEANBASE_SRC_SQL_RESOLVER_DDL_OB_DO_ANONYMOUS_BLOCK_STMT_H_ */

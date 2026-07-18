@@ -1,0 +1,132 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_SERVER_SCHEMA_UPDATER_H
+#define OB_SERVER_SCHEMA_UPDATER_H
+
+#include "share/ob_define.h"
+#include "lib/thread/ob_dedup_queue.h"
+#include "lib/net/ob_addr.h"
+#include "share/schema/ob_schema_struct.h"
+#include "ob_uniq_task_queue.h"
+
+namespace oceanbase
+{
+namespace share
+{
+namespace schema
+{
+class ObMultiVersionSchemaService;
+struct ObRefreshSchemaInfo;
+}
+}
+namespace observer
+{
+class ObServerSchemaTask;
+class ObServerSchemaUpdater;
+typedef ObUniqTaskQueue<ObServerSchemaTask, ObServerSchemaUpdater> ObServerSchemaTaskQueue;
+
+class ObServerSchemaTask : public ObIUniqTaskQueueTask<ObServerSchemaTask>
+{
+public:
+  friend class ObServerSchemaUpdater;
+  enum TYPE {
+    ASYNC_REFRESH,  // async schema refresh task caused by sql
+    REFRESH,        // schema refresh task caused by heartbeat
+    RELEASE,        // schema memory release task
+    INVALID
+  };
+  ObServerSchemaTask();
+  // for refresh
+  explicit ObServerSchemaTask(TYPE type,
+                              bool did_retry);
+  // for refresh
+  explicit ObServerSchemaTask(TYPE type,
+                              bool did_retry,
+                              const share::schema::ObRefreshSchemaInfo &schema_info);
+  // for release
+  explicit ObServerSchemaTask(TYPE type);
+  // for async refresh
+  explicit ObServerSchemaTask(TYPE type,
+                              const int64_t schema_version);
+  virtual ~ObServerSchemaTask() {}
+
+  virtual bool need_process_alone() const;
+  virtual bool is_valid() const;
+  virtual void reset();
+
+  virtual int64_t hash() const;
+  virtual int hash(uint64_t &hash_val) const { hash_val = hash(); return OB_SUCCESS; };
+  virtual bool operator ==(const ObServerSchemaTask &other) const;
+  virtual bool compare_without_version(const ObServerSchemaTask &other) const;
+  static bool greator_than(const ObServerSchemaTask &lt,
+                           const ObServerSchemaTask &rt);
+  virtual uint64_t get_group_id() const;
+  virtual bool is_barrier() const;
+
+  
+  uint64_t get_schema_version() const { return schema_info_.get_schema_version(); }
+
+  TO_STRING_KV(K_(type), K_(did_retry), K_(schema_info));
+
+private:
+  TYPE type_;
+  bool did_retry_;
+  share::schema::ObRefreshSchemaInfo schema_info_;
+};
+
+class ObServerSchemaUpdater
+{
+public:
+  ObServerSchemaUpdater() : schema_mgr_(NULL), inited_(false)
+  {}
+  ~ObServerSchemaUpdater() { destroy(); }
+  int init(const common::ObAddr &host_, share::schema::ObMultiVersionSchemaService *schema_mgr);
+  void destroy();
+  void stop();
+  void wait();
+
+  int try_reload_schema(const share::schema::ObRefreshSchemaInfo &schema_info,
+                        const bool set_received_schema_version);
+  int try_release_schema();
+  int async_refresh_schema(const int64_t schema_version);
+  int process_barrier(const ObServerSchemaTask &task, bool &stopped);
+  int batch_process_tasks(const common::ObIArray<ObServerSchemaTask> &batch_tasks, bool &stopped);
+private:
+  int process_refresh_task(const ObServerSchemaTask &task);
+  int construct_tenants_to_refresh_schema_(
+      const share::schema::ObRefreshSchemaInfo &local_schema_info,
+      const share::schema::ObRefreshSchemaInfo &new_schema_info,
+      ObIArray<uint64_t> &batch_ids,
+      bool &skip_refresh);
+  int process_release_task();
+  int process_async_refresh_tasks(const common::ObIArray<ObServerSchemaTask> &tasks);
+
+  int try_load_baseline_schema_version_();
+private:
+  static const int32_t SSU_MAX_THREAD_NUM = 1;
+  static const int64_t SSU_TASK_QUEUE_SIZE = 1024;
+  static const int64_t SSU_TASK_MAP_SIZE = 1024;
+  common::ObAddr host_;
+  share::schema::ObMultiVersionSchemaService *schema_mgr_;
+  ObServerSchemaTaskQueue task_queue_;
+  bool inited_;
+};
+
+}
+}
+
+#endif

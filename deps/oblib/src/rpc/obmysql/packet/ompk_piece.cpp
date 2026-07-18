@@ -1,0 +1,71 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX RPC_OBMYSQL
+#include "rpc/obmysql/packet/ompk_piece.h"
+
+
+using namespace oceanbase::obmysql;
+
+int OMPKPiece::serialize(char* buffer, int64_t length, int64_t& pos) const
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(buffer) || OB_UNLIKELY(length - pos < 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KP(buffer), K(length), K(pos), K(ret));
+  } else if (OB_UNLIKELY(length - pos < static_cast<int64_t>(get_serialize_size()))) {
+    ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("size is overflow",  K(length), K(pos), "need_size", get_serialize_size(), K(ret));
+  } else {
+    if (OB_FAIL(ObMySQLUtil::store_int1(buffer, length, piece_mode_, pos))) {
+      LOG_WARN("store failed", KP(buffer), K(length), K_(piece_mode), K(pos));
+    } else if (OB_FAIL(ObMySQLUtil::store_int1(buffer, 
+                                               length, 
+                                               is_null_, 
+                                               pos))) {
+      LOG_WARN("store is null failed", KP(buffer), K(length), K(pos));
+    } else if (OB_FAIL(ObMySQLUtil::store_int8(buffer, length, data_length_, pos))) {
+      LOG_WARN("store length failed", KP(buffer), K(length), K_(data_length), K(pos));
+    } else if (!is_array_) {
+      if (length >= pos && data_length_ <= static_cast<uint64_t>(length - pos)) {
+        MEMCPY(buffer + pos, data_.ptr(), data_length_);
+        pos += data_length_;
+      } else {
+        // need OB_SIZE_OVERFLOW to extend easy_buf size in  try_encode_with
+        ret = OB_SIZE_OVERFLOW;
+        LOG_DEBUG("piece size overflow", K(data_length_));
+      }
+    } else {
+      // is_array_ must be true
+      // TODO: array type would support long data protocol in the furture
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("not support array type yet.", K(ret)); 
+    }
+  }
+  return ret;
+}
+
+int64_t OMPKPiece::get_serialize_size() const
+{
+  int64_t len = 0;
+  len += 1;                 // piece mode
+  len += 8;                 // len
+  len += 1;                 // is_null
+  if (!is_array_) {
+    len += data_.size();              // data
+  }
+  return len;
+}

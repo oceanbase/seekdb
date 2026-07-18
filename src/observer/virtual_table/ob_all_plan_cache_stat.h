@@ -1,0 +1,145 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef _OB_ALL_PLAN_CACHE_STAT_H_
+#define _OB_ALL_PLAN_CACHE_STAT_H_
+
+#include "share/ob_define.h"
+#include "lib/net/ob_addr.h"
+#include "lib/container/ob_se_array.h"
+
+#include "observer/virtual_table/ob_virtual_table_iterator.h"
+#include "sql/ob_scanner.h"
+#include "common/row/ob_row.h"
+
+#include "sql/plan_cache/ob_plan_cache_util.h"
+namespace oceanbase
+{
+namespace sql
+{
+class ObPlanCacheValue;
+class ObPlanCacheRlockAndRef;
+class ObPlanCache;
+class ObPlanStat;
+} // end of namespace sql
+
+namespace observer
+{
+
+enum ObPlanCacheStatType
+{
+  TENANT_INVALID = 0,
+  TENANT_PLAN_CACHE = 1,
+  TENANT_PLAN =2,
+};
+
+class ObAllPlanCacheBase : public common::ObVirtualTableIterator
+{
+public:
+  ObAllPlanCacheBase();
+  virtual ~ObAllPlanCacheBase();
+  int inner_get_next_row(common::ObNewRow *&row);
+  void reset();
+  // deriative class specific
+  virtual int inner_get_next_row() = 0;
+protected:
+  // Single-shot iteration guard
+  bool iter_end_;
+  DISALLOW_COPY_AND_ASSIGN(ObAllPlanCacheBase);
+};
+
+class ObAllPlanCacheStat : public ObAllPlanCacheBase
+{
+public:
+  ObAllPlanCacheStat() {}
+  virtual ~ObAllPlanCacheStat() {}
+  virtual int inner_open();
+  int inner_get_next_row() { return get_row_from_tenants(); }
+protected:
+  int get_row_from_tenants();
+  int fill_cells(sql::ObPlanCache &plan_cache);
+  virtual int get_all_ids(common::ObIArray<uint64_t> &batch_ids);
+private:
+  enum
+  {
+        SQL_NUM = common::OB_APP_MIN_COLUMN_ID,
+    MEM_USED,
+    MEM_HOLD,
+    ACCESS_COUNT,
+    HIT_COUNT,
+    HIT_RATE,
+    PLAN_NUM,
+    MEM_LIMIT,
+    HASH_BUCKET,
+    STMTKEY_NUM,
+    PC_REF_PLAN_LOCAL,
+    PC_REF_PLAN_REMOTE,
+    PC_REF_PLAN_DIST,
+    PC_REF_PLAN_ARR,
+    PC_REF_PLAN_STAT,
+    PC_REF_PL,
+    PC_REF_PL_STAT,
+    PLAN_GEN,
+    CLI_QUERY,
+    OUTLINE_EXEC,
+    PLAN_EXPLAIN,
+    ASYN_BASELINE,
+    LOAD_BASELINE,
+    PS_EXEC,
+    GV_SQL,
+    PL_ANON,
+    PL_ROUTINE,
+    PACKAGE_VAR,
+    PACKAGE_TYPE,
+    PACKAGE_SPEC,
+    PACKAGE_BODY,
+    PACKAGE_RESV,
+    GET_PKG,
+    INDEX_BUILDER,
+    PCV_SET,
+    PCV_RD,
+    PCV_WR,
+    PCV_GET_PLAN_KEY,
+    PCV_GET_PL_KEY,
+    PCV_EXPIRE_BY_USED,
+    PCV_EXPIRE_BY_MEM,
+    LC_REF_CACHE_NODE,
+    LC_NODE,
+    LC_NODE_RD,
+    LC_NODE_WR,
+    LC_REF_CACHE_OBJ_STAT,
+    PLAN_BASELINE
+  };
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObAllPlanCacheStat);
+}; // end of class ObAllPlanCacheStat
+
+class ObAllPlanCacheStatI1 : public ObAllPlanCacheStat
+{
+
+public:
+  ObAllPlanCacheStatI1() {}
+  virtual ~ObAllPlanCacheStatI1() {}
+protected:
+  int set_ids(const common::ObIArray<common::ObNewRange> &ranges, common::ObIArray<uint64_t> &batch_ids);
+  virtual int get_all_ids(common::ObIArray<uint64_t> &batch_ids);
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObAllPlanCacheStatI1);
+};
+
+} // end of namespace observer
+} // end of namespace oceanbase
+#endif /* _OB_ALL_PLAN_CACHE_STAT_H_ */

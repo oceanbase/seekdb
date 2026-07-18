@@ -1,0 +1,83 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_ALL_VIRTUAL_SQL_WORKAREA_HISTOGRAM_H
+#define OB_ALL_VIRTUAL_SQL_WORKAREA_HISTOGRAM_H
+
+#include "sql/engine/ob_tenant_sql_memory_manager.h"
+#include "lib/utility/ob_macro_utils.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "common/row/ob_row.h"
+
+namespace oceanbase
+{
+namespace observer
+{
+
+class ObSqlWorkareaHistogramIterator
+{
+public:
+  ObSqlWorkareaHistogramIterator();
+  ~ObSqlWorkareaHistogramIterator() { destroy(); }
+public:
+  void destroy();
+  void reset();
+  int init();
+  int get_next_wa_histogram(sql::ObWorkareaHistogram *&wa_histogram);
+private:
+  int get_next_batch_wa_histograms();
+private:
+  common::ObSEArray<sql::ObWorkareaHistogram, 32> wa_histograms_;
+  int64_t cur_nth_wa_hist_;
+  bool done_;
+};
+
+class ObSqlWorkareaHistogram : public common::ObVirtualTableScannerIterator
+{
+public:
+  ObSqlWorkareaHistogram();
+  virtual ~ObSqlWorkareaHistogram() { destroy(); }
+
+public:
+  void destroy();
+  void reset();
+  int inner_get_next_row(common::ObNewRow *&row);
+
+private:
+  enum STORAGE_COLUMN
+  {
+        LOW_OPTIMAL_SIZE = common::OB_APP_MIN_COLUMN_ID,
+    HIGH_OPTIMAL_SIZE,
+    OPTIMAL_EXECUTIONS,
+    ONEPASS_EXECUTIONS, // OB_APP_MIN_COLUMN_ID + 5
+    MULTIPASSES_EXECUTIONS,
+    TOTAL_EXECUTIONS,
+  };
+  int fill_row(
+    sql::ObWorkareaHistogram &wa_histogram,
+    common::ObNewRow *&row);
+  int get_server_ip_and_port();
+private:
+  common::ObString ipstr_;
+  int32_t port_;
+  ObSqlWorkareaHistogramIterator iter_;
+};
+
+
+} /* namespace observer */
+} /* namespace oceanbase */
+
+#endif /* OB_ALL_VIRTUAL_SQL_WORKAREA_HISTOGRAM_H */

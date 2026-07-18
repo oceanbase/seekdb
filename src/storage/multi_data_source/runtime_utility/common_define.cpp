@@ -1,0 +1,92 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "common_define.h"
+#include "share/rc/ob_module_provider.h"
+#include "storage/tablet/ob_mds_schema_helper.h"
+#include "storage/allocator/ob_shared_memory_allocator_mgr.h"
+namespace oceanbase
+{
+namespace storage
+{
+namespace mds
+{
+
+OB_WEAK_SYMBOL void *DefaultAllocator::alloc(const int64_t size)  { return ob_malloc(size, "MDS"); }
+void *DefaultAllocator::alloc(const int64_t size, const ObMemAttr &attr) { return ob_malloc(size, attr); }
+OB_WEAK_SYMBOL void DefaultAllocator::free(void *ptr) { ob_free(ptr); }
+void DefaultAllocator::set_label(const lib::ObLabel &) {}
+DefaultAllocator &DefaultAllocator::get_instance() { static DefaultAllocator alloc; return alloc; }
+int64_t DefaultAllocator::get_alloc_times() { return ATOMIC_LOAD(&get_instance().alloc_times_); }
+int64_t DefaultAllocator::get_free_times() { return ATOMIC_LOAD(&get_instance().free_times_); }
+
+OB_WEAK_SYMBOL void *MdsAllocator::alloc(const int64_t size)
+{
+  void *ptr = share::g_mp->shared_mem_alloc_mgr()->mds_allocator().alloc(size);
+  if (OB_NOT_NULL(ptr)) {
+    ATOMIC_INC(&alloc_times_);
+  }
+  return ptr;
+}
+
+void *MdsAllocator::alloc(const int64_t size, const ObMemAttr &attr)
+{
+  return share::g_mp->shared_mem_alloc_mgr()->mds_allocator().alloc(size, attr);
+}
+
+OB_WEAK_SYMBOL void MdsAllocator::free(void *ptr) {
+  if (OB_NOT_NULL(ptr)) {
+    ATOMIC_INC(&free_times_);
+    share::g_mp->shared_mem_alloc_mgr()->mds_allocator().free(ptr);
+  }
+}
+
+void MdsAllocator::set_label(const lib::ObLabel &) {}
+
+MdsAllocator &MdsAllocator::get_instance() { static MdsAllocator alloc; return alloc; }
+
+int64_t MdsAllocator::get_alloc_times() { return ATOMIC_LOAD(&get_instance().alloc_times_); }
+int64_t MdsAllocator::get_free_times() { return ATOMIC_LOAD(&get_instance().free_times_); }
+
+int compare_mds_serialized_buffer(const char *lhs_buffer,
+                                  const int64_t lhs_buffer_len,
+                                  const char *rhs_buffer,
+                                  const int64_t rhs_buffer_len,
+                                  int &compare_result)
+{
+  int ret = OB_SUCCESS;
+  ObObjMeta binary_meta;
+  binary_meta.set_binary();
+  ObDatum lhs_datum;
+  ObDatum rhs_datum;
+  lhs_datum.set_string((const char *)lhs_buffer, lhs_buffer_len);
+  rhs_datum.set_string((const char *)rhs_buffer, rhs_buffer_len);
+  bool is_null_last = false; // MySQL mode: null first
+  sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(binary_meta.get_type(),
+                                                                    binary_meta.get_collation_type());
+  common::ObDatumCmpFuncType cmp_func = is_null_last ? basic_funcs->null_last_cmp_ : basic_funcs->null_first_cmp_;
+  if (OB_FAIL(cmp_func(lhs_datum, rhs_datum, compare_result))) {
+    MDS_LOG(WARN, "Failed to compare datum", K(ret), K(lhs_datum), K(rhs_datum), K(binary_meta));
+  } else {
+    MDS_LOG(DEBUG, "comapre mds serialized buffer", K(ret), K(compare_result), K(lhs_datum), K(rhs_datum),
+            K(binary_meta), KP(lhs_buffer), K(lhs_buffer_len), KP(rhs_buffer), K(rhs_buffer_len));
+  }
+  return ret;
+}
+
+}
+}
+}

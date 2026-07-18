@@ -1,0 +1,103 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_RPC_OB_LONELY_TABLE_CLEAN_RPC_STRUCT_H_
+#define OCEANBASE_RPC_OB_LONELY_TABLE_CLEAN_RPC_STRUCT_H_
+
+#include "share/ob_ddl_args.h"
+
+namespace oceanbase
+{
+namespace obcall
+{
+
+struct ObForceDropLonelyLobAuxTableArg: public ObDDLArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObForceDropLonelyLobAuxTableArg():
+      ObDDLArg(),
+      data_table_id_(common::OB_INVALID_ID),
+      aux_lob_meta_table_id_(common::OB_INVALID_ID),
+      aux_lob_piece_table_id_(common::OB_INVALID_ID)
+  {}
+  virtual ~ObForceDropLonelyLobAuxTableArg() {}
+
+  int init(const uint64_t data_table_id,
+           const uint64_t aux_lob_meta_table_id,
+           const uint64_t aux_lob_piece_table_id)
+  {
+    int ret = OB_SUCCESS;
+    if (common::OB_INVALID_ID == data_table_id
+        || common::OB_INVALID_ID == aux_lob_meta_table_id
+        || common::OB_INVALID_ID == aux_lob_piece_table_id) {
+      ret = OB_INVALID_ARGUMENT;
+      SHARE_LOG(WARN, "invalid arg", KR(ret), K(data_table_id), K(aux_lob_meta_table_id), K(aux_lob_piece_table_id));
+    } else {
+      
+      
+      data_table_id_ = data_table_id;
+      aux_lob_meta_table_id_ = aux_lob_meta_table_id;
+      aux_lob_piece_table_id_ = aux_lob_piece_table_id;
+    }
+    return ret;
+  }
+
+  void reset()
+  {
+    ObDDLArg::reset();
+    
+    data_table_id_ = common::OB_INVALID_ID;
+    aux_lob_meta_table_id_ = common::OB_INVALID_ID;
+    aux_lob_piece_table_id_ = common::OB_INVALID_ID;
+  }
+  bool is_valid() const
+  {
+    return common::OB_INVALID_ID != data_table_id_
+      && common::OB_INVALID_ID != aux_lob_meta_table_id_
+      && common::OB_INVALID_ID != aux_lob_piece_table_id_;
+  }
+  int assign(const ObForceDropLonelyLobAuxTableArg &other)
+  {
+    int ret = OB_SUCCESS;
+    if (OB_FAIL(ObDDLArg::assign(other))) {
+      SHARE_LOG(WARN, "fail to assign ddl arg", KR(ret));
+    } else {
+      
+      data_table_id_ = other.data_table_id_;
+      aux_lob_meta_table_id_ = other.aux_lob_meta_table_id_;
+      aux_lob_piece_table_id_ = other.aux_lob_piece_table_id_;
+    }
+    return ret;
+  }
+
+  
+  uint64_t get_data_table_id() const { return data_table_id_; }
+  uint64_t get_aux_lob_meta_table_id() const { return aux_lob_meta_table_id_; }
+  uint64_t get_aux_lob_piece_table_id() const { return aux_lob_piece_table_id_; }
+
+private:
+  
+  uint64_t data_table_id_;
+  uint64_t aux_lob_meta_table_id_;
+  uint64_t aux_lob_piece_table_id_;
+public:
+  INHERIT_TO_STRING_KV("ObDDLArg", ObDDLArg, K_(data_table_id), K_(aux_lob_meta_table_id), K_(aux_lob_piece_table_id));
+};
+
+}//end namespace obcall
+}//end namespace oceanbase
+#endif

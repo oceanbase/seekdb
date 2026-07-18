@@ -1,0 +1,70 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef _OB_LOG_FOR_UPDATE_H
+#define _OB_LOG_FOR_UPDATE_H
+#include "sql/optimizer/ob_logical_operator.h"
+#include "sql/optimizer/ob_log_del_upd.h"
+namespace oceanbase
+{
+namespace sql
+{
+class ObLogForUpdate : public ObLogicalOperator
+{
+public:
+  ObLogForUpdate(ObLogPlan &plan);
+  virtual ~ObLogForUpdate() {}
+  virtual const char *get_name() const;
+  virtual int get_op_exprs(ObIArray<ObRawExpr*> &all_exprs) override;
+  inline void set_lock_rownum(ObRawExpr *lock_rownum) { lock_rownum_ = lock_rownum; }
+  inline ObRawExpr* get_lock_rownum() { return lock_rownum_; }
+  virtual int est_cost();
+  virtual int compute_op_ordering();
+  int compute_sharding_info() override;
+  int allocate_granule_pre(AllocGIContext &ctx) override;
+  int allocate_granule_post(AllocGIContext &ctx) override;
+
+  void set_skip_locked(bool skip) { skip_locked_ = skip; }
+  bool is_skip_locked() const { return skip_locked_; }
+
+  void set_wait_ts(int64_t wait_ts) { wait_ts_ = wait_ts; }
+  int64_t get_wait_ts() const { return wait_ts_; }
+
+  ObIArray<IndexDMLInfo *> &get_index_dml_infos(){ return index_dml_info_; }
+  bool is_multi_table_skip_locked();
+  bool is_multi_part_dml() const { return is_multi_part_dml_; }
+  void set_is_multi_part_dml(bool is_multi_part_dml) { is_multi_part_dml_ = is_multi_part_dml; }
+  bool is_gi_above() const { return gi_charged_; }
+  void set_gi_above(bool gi_above) { gi_charged_ = gi_above; }
+  virtual int inner_replace_op_exprs(ObRawExprReplacer &replacer) override;
+  virtual int get_plan_item_info(PlanText &plan_text, 
+                                ObSqlPlanItem &plan_item) override;
+protected:
+  int generate_multi_part_partition_id_expr();
+  int get_for_update_dependant_exprs(ObIArray<ObRawExpr*> &dep_exprs);
+private:
+  bool skip_locked_; // is not used now
+  bool is_multi_part_dml_;
+  bool gi_charged_;
+  int64_t wait_ts_;
+  ObRawExpr *lock_rownum_; // only used for skip locked
+  ObSEArray<IndexDMLInfo*, 1, common::ModulePageAllocator, true> index_dml_info_;
+  DISALLOW_COPY_AND_ASSIGN(ObLogForUpdate);
+};
+} // end of namespace sql
+} // end of namespace oceanbase
+
+#endif // _OB_LOG_FOR_UPDATE_H

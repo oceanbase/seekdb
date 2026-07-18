@@ -1,0 +1,71 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX LIB
+#include "ob_point_location_analyzer.h"
+#include "ob_geo_topology_calculate.h"
+
+namespace oceanbase {
+namespace common {
+
+int ObPointLocationAnalyzer::calculate_point_position(const ObPoint2d &test_point)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(cache_geo_)) {
+    ret = OB_ERR_NULL_VALUE;
+    LOG_WARN("rtree index or cache geo is null", K(cache_geo_), K(ret));
+  } else if (!rtree_index_.is_built()) {
+    if (OB_ISNULL(cache_geo_->get_segments())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("should not be null.", K(ret));
+    } else if (OB_FAIL(rtree_index_.construct_rtree_index(*(cache_geo_->get_segments())))) {
+      LOG_WARN("construct rtree index failed", K(ret));
+    }
+  } 
+  if (OB_SUCC(ret)) {
+    clear_result();
+    std::vector<RtreeNodeValue> res;
+    ObCartesianBox box;
+    box.set_box(std::min(cache_geo_->get_x_min() - 1.0, test_point.x), test_point.y,
+                std::max(cache_geo_->get_x_max() + 1.0, test_point.x), test_point.y);
+    if (OB_FAIL(rtree_index_.query(QueryRelation::INTERSECTS, box, res))) {
+      LOG_WARN("failed to query rtree", K(ret));
+    } else {
+      bool is_on_boundary = false;
+      for (uint32_t i = 0; i < res.size() && OB_SUCC(ret) && !is_on_boundary; i++) {
+        const ObSegment* seg1 = res[i].second;
+        if (seg1 != NULL
+            && LineIntersect::POINT_INTERSECT == ObGeoTopology::calculate_point_inersect_horizontally(seg1->begin, seg1->end,
+                                                                                                      test_point, is_on_boundary)) {
+          intersect_cnt_++;
+        }
+      }
+      if (OB_SUCC(ret)) {
+        if (is_on_boundary) {
+          position_ = ObPointLocation::BOUNDARY;
+        } else if ((intersect_cnt_ % 2) == 1) {
+          position_ = ObPointLocation::INTERIOR;
+        } else {
+          position_ = ObPointLocation::EXTERIOR;
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+} // namespace common
+} // namespace oceanbase

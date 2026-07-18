@@ -1,0 +1,77 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_STORAGE_CONCURRENCY_CONTROL_OB_TRANS_STAT_ROW
+#define OCEANBASE_STORAGE_CONCURRENCY_CONTROL_OB_TRANS_STAT_ROW
+
+#include "share/scn.h"
+#include "common/datum/ob_datum.h"
+#include "storage/access/ob_table_access_param.h"
+
+namespace oceanbase
+{
+namespace concurrency_control
+{
+
+class ObTransStatRow
+{
+public:
+  ObTransStatRow()
+    : trans_version_(share::SCN::max_scn()),
+    scn_(share::SCN::max_scn()),
+    trans_id_(),
+    seq_no_() {}
+
+  void set(const share::SCN trans_version,
+           const share::SCN scn,
+           const transaction::ObTransID trans_id,
+           const transaction::ObTxSEQ &seq_no)
+  {
+    trans_version_ = trans_version;
+    scn_ = scn;
+    trans_id_ = trans_id;
+    seq_no_ = seq_no;
+  }
+
+  void reset()
+  {
+    trans_version_ = share::SCN::max_scn();
+    scn_ = share::SCN::max_scn();
+    trans_id_.reset();
+    seq_no_.reset();
+  }
+
+  TO_STRING_KV(K_(trans_version), K_(scn), K_(trans_id), K_(seq_no));
+  share::SCN trans_version_;
+  share::SCN scn_;
+  transaction::ObTransID trans_id_;
+  transaction::ObTxSEQ seq_no_;
+public:
+  static const int64_t MAX_TRANS_STRING_SIZE = 120;
+};
+
+void build_trans_stat_datum(const storage::ObTableIterParam *param,
+                            const blocksstable::ObDatumRow &row,
+                            const ObTransStatRow &trans_stat_row);
+
+void build_trans_stat_(const ObTransStatRow &trans_stat_row,
+                       const int64_t trans_stat_len,
+                       char *trans_stat_ptr);
+
+} // namespace concurrency_control
+} // namespace oceanbase
+
+#endif // OCEANBASE_STORAGE_CONCURRENCY_CONTROL_OB_TRANS_STAT_ROW

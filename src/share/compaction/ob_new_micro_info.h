@@ -1,0 +1,68 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#ifndef OB_SHARE_COMPACTION_NEW_MICRO_INFO_H_
+#define OB_SHARE_COMPACTION_NEW_MICRO_INFO_H_
+#include <stdint.h>
+#include "lib/utility/ob_print_utils.h"
+namespace oceanbase
+{
+namespace compaction
+{
+
+// will collect new generated micro info when major
+struct ObNewMicroInfo
+{
+  ObNewMicroInfo()
+    : version_(NEW_MICRO_INFO_V1),
+      reserved_(0),
+      meta_micro_size_(0),
+      data_micro_size_(0)
+  {}
+  void reset()
+  {
+    meta_micro_size_ = 0;
+    data_micro_size_ = 0;
+  }
+  bool is_empty() const
+  {
+    return meta_micro_size_ > 0 && data_micro_size_ >= 0;
+  }
+  void add(const ObNewMicroInfo &input_info);
+  int64_t get_data_micro_size() const { return data_micro_size_; }
+  int64_t get_meta_micro_size() const { return meta_micro_size_; }
+  void add_data_micro_size(const int64_t data_micro_size) { data_micro_size_ += data_micro_size; }
+  void add_meta_micro_size(const int64_t meta_micro_size) { meta_micro_size_ += meta_micro_size; }
+  NEED_SERIALIZE_AND_DESERIALIZE;
+  TO_STRING_KV(K_(meta_micro_size), K_(data_micro_size));
+  static const int32_t SRCS_ONE_BYTE = 8;
+  static const int32_t SRCS_RESERVED_BITS = 56;
+  static const int64_t NEW_MICRO_INFO_V1 = 1;
+private:
+  union {
+    uint64_t info_;
+    struct {
+      uint64_t version_   : SRCS_ONE_BYTE;
+      uint64_t reserved_  : SRCS_RESERVED_BITS;
+    };
+  };
+  int64_t meta_micro_size_;
+  int64_t data_micro_size_;
+};
+
+} // namespace compaction
+} // namespace oceanbase
+
+#endif // OB_SHARE_COMPACTION_NEW_MICRO_INFO_H_

@@ -1,0 +1,148 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SRC_SQL_OB_DML_STMT_PRINTER_H_
+#define OCEANBASE_SRC_SQL_OB_DML_STMT_PRINTER_H_
+
+#include "sql/resolver/dml/ob_dml_stmt.h"
+#include "sql/resolver/dml/ob_dml_resolver.h"
+#include "sql/printer/ob_raw_expr_printer.h"
+#include "share/schema/ob_schema_struct.h"
+#include "share/catalog/ob_catalog_utils.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+
+
+#define PRINT_TABLE_NAME(print_params, table_item)                          \
+  do {                                                                		  \
+    ObString catalog_name = table_item->catalog_name_;                      \
+    ObString database_name = table_item->synonym_name_.empty() ?         \
+                             table_item->database_name_ :                 \
+                             table_item->synonym_db_name_;                  \
+    ObString table_name = table_item->synonym_name_.empty() ? table_item->table_name_ : table_item->synonym_name_ ; \
+    if (table_item->cte_type_ == TableItem::NOT_CTE) {								      \
+      if (!catalog_name.empty() && table_item->type_ == TableItem::BASE_TABLE && need_print_catalog_name(catalog_name)) { \
+        PRINT_IDENT_WITH_QUOT(catalog_name);                               \
+        DATA_PRINTF(".");                                                   \
+      }                                                                     \
+      if (!database_name.empty()) {                                         \
+        PRINT_IDENT_WITH_QUOT(database_name);                               \
+        DATA_PRINTF(".");                                                   \
+      }                                                                     \
+      PRINT_IDENT_WITH_QUOT(table_name);                                      \
+    } else {																																\
+      PRINT_IDENT_WITH_QUOT(table_name);                                    \
+    }																																				\
+  } while (0)
+
+#define PRINT_COLUMN_NAME(column_name) \
+  do {\
+    if (column_name.empty()) { \
+    } else {\
+      PRINT_IDENT_WITH_QUOT(column_name);\
+    }\
+  } while (0);
+
+class ObDMLStmtPrinter {
+public:
+  ObDMLStmtPrinter()=delete;
+  ObDMLStmtPrinter(char *buf, int64_t buf_len, int64_t *pos, const ObDMLStmt *stmt,
+                   ObSchemaGetterGuard *schema_guard,
+                   common::ObObjPrintParams print_params,
+                   const ParamStore *param_store = NULL,
+                   const ObSQLSessionInfo *session = NULL);
+  virtual ~ObDMLStmtPrinter();
+  void enable_print_temp_table_as_cte() { print_cte_ = true; }
+  void disable_print_temp_table_as_cte() { print_cte_ = false; }
+  void init(char *buf, int64_t buf_len, int64_t *pos, ObDMLStmt *stmt);
+  virtual int do_print() = 0;
+
+  int print_from(bool need_from = true);
+  int print_semi_join();
+  int print_where();
+  int print_order_by();
+  int print_approx();
+  int print_limit();
+  int print_vector_index_query_param();
+  int print_fetch();
+  int print_returning();
+  int print_json_table(const TableItem *table_item);
+  int print_values_table(const TableItem &table_item, bool no_print_alias);
+  int print_table(const TableItem *table_item,
+                  bool no_print_alias = false);
+  int print_table_with_subquery(const TableItem *table_item);
+  int print_base_table(const TableItem *table_item);
+  int print_hint();
+  void set_is_root(bool is_root) { is_root_ = is_root; }
+  void set_is_first_stmt_for_hint(bool is_first_stmt) { is_first_stmt_for_hint_ = is_first_stmt; }
+  void set_print_params(const ObObjPrintParams& obj_print_params)
+  {
+    print_params_ = obj_print_params;
+  }
+
+  enum SubqueryPrintParam {
+    PRINT_BRACKET          =  1 << 0,
+    FORCE_COL_ALIAS        =  1 << 1,
+    PRINT_CTE       =  1 << 2
+  };
+
+  int print_subquery(const ObSelectStmt *subselect_stmt,
+                     uint64_t subquery_print_params);
+  int print_temp_table_as_cte();
+
+  int print_quote_for_const(ObRawExpr* expr, bool &print_quote);
+  int print_expr_except_const_number(ObRawExpr* expr, ObStmtScope scope);
+  int print_cte_define_title(TableItem* cte_table);
+  int print_cte_define_title(const ObSelectStmt *sub_select_stmt);
+  bool is_root_stmt() const { return is_root_; }
+  int print_with();
+  bool need_print_catalog_name(const ObString& catalog_name);
+private:
+  // added for json table
+  int print_json_table_nested_column(const TableItem *table_item, const ObDmlJtColDef& col_def);
+  int print_json_return_type(int64_t value, ObDataType data_type);
+  int print_mysql_json_return_type(int64_t value, ObDataType data_type);
+  int print_binary_charset_collation(int64_t value, ObDataType data_type);
+  int get_json_table_column_if_exists(int32_t id, ObDmlJtColDef* root, ObDmlJtColDef*& col);
+  int build_json_table_nested_tree(const TableItem* table_item, ObIAllocator* allocator, ObDmlJtColDef*& root);
+  // add xml table namespace
+  int print_xml_namespace(const TableItem *table_item);
+  // disallow copy
+  DISALLOW_COPY_AND_ASSIGN(ObDMLStmtPrinter);
+
+protected:
+  // data members
+  char *buf_;
+  int64_t buf_len_;
+  int64_t *pos_;
+  const ObDMLStmt *stmt_;
+  bool is_root_;
+  bool is_first_stmt_for_hint_;
+  bool print_cte_;
+  ObSchemaGetterGuard *schema_guard_;
+  ObObjPrintParams print_params_;
+  ObRawExprPrinter expr_printer_;
+  const ParamStore *param_store_;
+  const ObSQLSessionInfo *session_;
+};
+
+}
+}
+
+#endif /* OCEANBASE_SRC_SQL_OB_DML_STMT_PRINTER_H_ */

@@ -1,0 +1,94 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#ifndef OB_STORAGE_COLUMN_STORE_OB_CG_TILE_SCANNER_H_
+#define OB_STORAGE_COLUMN_STORE_OB_CG_TILE_SCANNER_H_
+#include "ob_i_cg_iterator.h"
+
+namespace oceanbase
+{
+namespace storage
+{
+class ObCGScanner;
+class ObCGRowScanner;
+class ObCGTileScanner : public ObICGIterator
+{
+public:
+  ObCGTileScanner() :
+      ObICGIterator(),
+      is_inited_(false),
+      is_reverse_scan_(false),
+      sql_batch_size_(0),
+      access_ctx_(nullptr),
+      cg_scanners_(),
+      datum_row_()
+  {}
+  virtual ~ObCGTileScanner() { reset(); }
+  virtual int init(
+      const ObTableIterParam &iter_param,
+      ObTableAccessContext &access_ctx,
+      ObSSTableWrapper &wrapper) override
+  { return OB_NOT_SUPPORTED; }
+  int switch_context(
+      const ObTableIterParam &iter_param,
+      ObTableAccessContext &access_ctx,
+      ObSSTableWrapper &wrapper) override
+  { return OB_NOT_SUPPORTED; }
+  int init(
+      const ObIArray<ObTableIterParam*> &iter_params,
+      const bool project_single_row,
+      const bool project_without_filter,
+      ObTableAccessContext &access_ctx,
+      ObITable *table);
+  int switch_context(
+      const ObIArray<ObTableIterParam*> &iter_params,
+      const bool project_single_row,
+      const bool project_without_filter,
+      ObTableAccessContext &access_ctx,
+      ObITable *table,
+      const bool col_cnt_changed);
+  virtual void reset() override;
+  virtual void reuse() override;
+  virtual int locate(
+      const ObCSRange &range,
+      const ObCGBitmap *bitmap = nullptr) override;
+  virtual int apply_filter(
+      sql::ObPushdownFilterExecutor *parent,
+      sql::PushdownFilterInfo &filter_info,
+      const int64_t row_count,
+      const ObCGBitmap *parent_bitmap,
+      ObCGBitmap &result_bitmap) override;
+  virtual int get_next_rows(uint64_t &count, const uint64_t capacity) override;
+  virtual int get_next_row(const blocksstable::ObDatumRow *&datum_row) override;
+  virtual ObCGIterType get_type() override final
+  { return OB_CG_TILE_SCANNER; }
+  OB_INLINE common::ObIArray<ObICGIterator*> &get_inner_cg_scanners() { return cg_scanners_; }
+  virtual int get_current_row_id(ObCSRowId& current_row_id) const override final;
+  TO_STRING_KV(K_(is_inited), K_(is_reverse_scan), K_(sql_batch_size), KP_(access_ctx));
+
+private:
+  int get_next_aligned_rows(ObCGRowScanner *cg_scanner, const uint64_t target_row_count);
+  int get_next_aggregated_rows(ObCGScanner *cg_scanner);
+  bool is_inited_;
+  bool is_reverse_scan_;
+  int64_t sql_batch_size_;
+  ObTableAccessContext* access_ctx_;
+  common::ObFixedArray<ObICGIterator*, common::ObIAllocator> cg_scanners_;
+  blocksstable::ObDatumRow datum_row_;
+};
+}
+}
+
+#endif

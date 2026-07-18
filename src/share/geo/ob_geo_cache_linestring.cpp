@@ -1,0 +1,99 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX LIB
+#include "share/geo/ob_geo_cache_linestring.h"
+#include "share/geo/ob_geo_point_location_visitor.h"
+#include "share/geo/ob_geo_segment_collect_visitor.h"
+#include "share/geo/ob_geo_vertex_collect_visitor.h"
+
+namespace oceanbase
+{
+namespace common
+{
+
+int ObCachedGeoLinestring::init()
+{
+  int ret = OB_SUCCESS;
+  if (!is_inited()) {
+    ObGeoSegmentCollectVisitor seg_visitor(&line_segments_);
+    if (OB_FAIL(ObCachedGeomBase::init())) {
+      LOG_WARN("cache geom base init failed", K(ret));
+    } else if (OB_FAIL(get_cached_geom()->do_visit(seg_visitor))) {
+      LOG_WARN("do segment visit failed", K(ret));
+    } else if (OB_ISNULL(lAnalyzer_)) {
+      ObLineIntersectionAnalyzer *buf = static_cast<ObLineIntersectionAnalyzer *>(allocator_->alloc(sizeof(ObLineIntersectionAnalyzer)));
+      if (OB_ISNULL(buf)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("alloc point location analyzer failed", K(ret));
+      } else {
+        lAnalyzer_ = new(buf) ObLineIntersectionAnalyzer(this, rtree_);
+      }
+    }
+  }
+  return ret;
+}
+
+int ObCachedGeoLinestring::intersects(ObGeometry& geo, ObGeoEvalCtx& gis_context, bool &res)
+{
+  int ret = OB_SUCCESS;
+  res = false;
+  ObGeoDimension dim = ObGeoDimension::MAX_DIMENSION;
+  bool has_dimension = false;
+  if (!is_inited() && OB_FAIL(init())) {
+    LOG_WARN("cached polygon init failed", K(ret));
+  } else if (OB_FAIL(ObGeoTypeUtil::get_geo_dimension(&geo, dim))) {
+    LOG_WARN("fail to get geo dimension.", K(ret));
+  } else if (OB_FAIL(lAnalyzer_->segment_intersection_query(&geo))) { // check if lines intersect
+    LOG_WARN("calculate segment intersection failed", K(ret));
+  } else if (lAnalyzer_->is_intersects()) {
+    res = lAnalyzer_->is_intersects();
+  } else if (dim == ObGeoDimension::TWO_DIMENSION) {
+    // check if cached line in geo polygon
+    for (uint32_t i = 0; i < get_vertexes().size() && OB_SUCC(ret) && !res; i++) {
+      ObGeoPointLocationVisitor point_loc_visitor(get_vertexes()[i]);
+      if (OB_FAIL(geo.do_visit(point_loc_visitor))) {
+        LOG_WARN("failed to do point location visitor", K(ret));
+      } else if (point_loc_visitor.get_point_location() == ObPointLocation::INTERIOR
+                || point_loc_visitor.get_point_location() == ObPointLocation::BOUNDARY) {
+        res = true;
+      }
+    }
+  }
+  if (OB_FAIL(ret) || res) {
+  } else if (OB_SUCC(ObGeoTypeUtil::has_dimension(geo, ObGeoDimension::ZERO_DIMENSION, has_dimension)) && has_dimension) {
+    // check if geo point on cached line
+    input_vertexes_.reset();
+    ObGeoVertexCollectVisitor vertex_visitor(input_vertexes_);
+    if (OB_FAIL(geo.do_visit(vertex_visitor))) {
+      LOG_WARN("failed to collect geo vertexes", K(ret));
+    } else {
+      for (uint32_t i = 0; i < input_vertexes_.size() && OB_SUCC(ret) && !res; i++) {
+        ObGeoPointLocationVisitor point_loc_visitor(input_vertexes_[i]);
+        if (OB_FAIL(get_cached_geom()->do_visit(point_loc_visitor))) {
+          LOG_WARN("failed to do point location visitor", K(ret));
+        } else if (point_loc_visitor.get_point_location() == ObPointLocation::INTERIOR
+                  || point_loc_visitor.get_point_location() == ObPointLocation::BOUNDARY) {
+          res = true;
+        }
+      }
+    }
+  } 
+  return ret;
+}
+
+} // namespace common
+} // namespace oceanbase

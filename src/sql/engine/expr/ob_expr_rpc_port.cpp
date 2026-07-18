@@ -1,0 +1,69 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_ENG
+#include "sql/engine/expr/ob_expr_rpc_port.h"
+
+using namespace oceanbase::common;
+using namespace oceanbase::sql;
+
+namespace oceanbase
+{
+namespace sql
+{
+
+
+ObExprRpcPort::ObExprRpcPort(ObIAllocator &alloc)
+    : ObFuncExprOperator(alloc, T_FUN_SYS_RPC_PORT, N_RPC_PORT, 0, NOT_VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
+{
+}
+
+ObExprRpcPort::~ObExprRpcPort()
+{
+}
+
+int ObExprRpcPort::calc_result_type0(ObExprResType &type, ObExprTypeCtx &type_ctx) const
+{
+  int ret = OB_SUCCESS;
+  UNUSED(type_ctx);
+  type.set_int32();
+  type.set_scale(ObAccuracy::DDL_DEFAULT_ACCURACY[ObInt32Type].scale_);
+  type.set_precision(ObAccuracy::DDL_DEFAULT_ACCURACY[ObInt32Type].precision_);
+  return ret;
+}
+
+int ObExprRpcPort::eval_rpc_port(const ObExpr &expr, ObEvalCtx &ctx,
+    ObDatum &expr_datum)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(expr);
+  UNUSED(ctx);
+  //see 
+  ObAddr addr = ObCurTraceId::get_addr();
+  expr_datum.set_int32(addr.get_port());
+  return ret;
+}
+
+int ObExprRpcPort::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr,
+    ObExpr &rt_expr) const
+{
+  UNUSED(raw_expr);
+  UNUSED(op_cg_ctx);
+  rt_expr.eval_func_ = ObExprRpcPort::eval_rpc_port;
+  return OB_SUCCESS;
+}
+} // namespace sql
+} // namespace oceanbase

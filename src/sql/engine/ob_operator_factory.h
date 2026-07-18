@@ -1,0 +1,95 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_ENGINE_OB_OPERATOR_FACTORY_H_
+#define OCEANBASE_ENGINE_OB_OPERATOR_FACTORY_H_
+
+#include "lib/allocator/ob_allocator.h"
+#include "share/ob_cluster_version.h"
+#include "sql/engine/ob_phy_operator_type.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+
+class ObOpSpec;
+class ObOperator;
+class ObOpInput;
+class ObExecContext;
+class ObStaticEngineCG;
+class ObLogicalOperator;
+
+struct ObOperatorFactory
+{
+public:
+  // allocate operator specification
+  static int alloc_op_spec(common::ObIAllocator &alloc, const ObPhyOperatorType type,
+                           const int64_t child_cnt, ObOpSpec *&spec);
+
+  // allocate operator
+  static int alloc_operator(common::ObIAllocator &alloc,
+                            ObExecContext &exec_ctx, const ObOpSpec &spec, ObOpInput *input,
+                            const int64_t child_cnt, ObOperator *&op);
+
+  // allocate operator input
+  static int alloc_op_input(common::ObIAllocator &alloc, ObExecContext &exec_ctx,
+                            const ObOpSpec &spec, ObOpInput *&input);
+
+  // generate operator specification
+  static int generate_spec(ObStaticEngineCG &cg, ObLogicalOperator &log_op, ObOpSpec &spec,
+                           const bool in_root_job);
+
+  static inline bool is_registered(const ObPhyOperatorType type)
+  {
+    return type >= 0 && type < PHY_END && NULL != G_ALL_ALLOC_FUNS_[type].op_func_;
+  }
+
+  static inline bool has_op_input(const ObPhyOperatorType type)
+  {
+    return type >= 0 && type < PHY_END && NULL != G_ALL_ALLOC_FUNS_[type].input_func_;
+  }
+
+  static inline bool is_vectorized(const ObPhyOperatorType type)
+  {
+    return type >= 0 && type < PHY_END && G_VECTORIZED_OP_ARRAY_[type];
+  }
+
+  static inline bool support_rich_format(const ObPhyOperatorType type)
+  {
+    // consider upgrade case: disable vectorize if high version observer support
+    // vectorization, while low version observer does NOT
+    return type >= 0 && type < PHY_END && G_SUPPORT_RICH_FMT_ARRAY_[type];
+  }
+
+  struct AllocFun
+  {
+    __typeof__(&ObOperatorFactory::alloc_op_spec) spec_func_;
+    __typeof__(&ObOperatorFactory::alloc_operator) op_func_;
+    __typeof__(&ObOperatorFactory::alloc_op_input) input_func_;
+    __typeof__(&ObOperatorFactory::generate_spec) gen_spec_func_;
+  };
+private:
+  static AllocFun *G_ALL_ALLOC_FUNS_;
+  static bool *G_VECTORIZED_OP_ARRAY_;
+  static uint64_t *G_OB_VERSION_ARRAY_;
+  static bool *G_SUPPORT_RICH_FMT_ARRAY_;
+};
+
+} // end namespace sql
+} // end namespace oceanbase
+
+#endif // OCEANBASE_ENGINE_OB_OPERATOR_FACTORY_H_

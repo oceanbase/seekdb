@@ -1,0 +1,95 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_ROOTSERVER_OB_MODIFY_AUTOINC_TASK_H
+#define OCEANBASE_ROOTSERVER_OB_MODIFY_AUTOINC_TASK_H
+
+#include "rootserver/ddl_task/ob_ddl_task.h"
+
+namespace oceanbase
+{
+namespace rootserver
+{
+
+class ObUpdateAutoincSequenceTask : public share::ObAsyncTask
+{
+public:
+  ObUpdateAutoincSequenceTask(
+    const int64_t data_table_id,
+    const int64_t dest_table_id,
+    const int64_t schema_version,
+    const uint64_t column_id,
+    const ObObjType &orig_column_type,
+    const ObSQLMode &sql_mode,
+    const common::ObCurTraceId::TraceId &trace_id,
+    const int64_t task_id);
+  virtual ~ObUpdateAutoincSequenceTask() = default;
+  virtual int process() override;
+  virtual int64_t get_deep_copy_size() const override { return sizeof(*this); }
+  virtual ObAsyncTask *deep_copy(char *buf, const int64_t buf_size) const override;
+private:
+  int64_t data_table_id_;
+  int64_t dest_table_id_;
+  int64_t schema_version_;
+  uint64_t column_id_;
+  ObObjType orig_column_type_;
+  ObSQLMode sql_mode_;
+  common::ObCurTraceId::TraceId trace_id_;
+  int64_t task_id_;
+};
+
+class ObModifyAutoincTask : public ObDDLTask
+{
+public:
+  ObModifyAutoincTask();
+  virtual ~ObModifyAutoincTask() = default;
+  int init(const int64_t task_id,
+           const int64_t table_id,
+           const int64_t schema_version,
+           const int64_t consumer_group_id,
+           const int32_t sub_task_trace_id,
+           const obcall::ObAlterTableArg &alter_table_arg,
+           const int64_t task_status = share::ObDDLTaskStatus::MODIFY_AUTOINC,
+           const int64_t snapshot_version = 0);
+  int init(const ObDDLTaskRecord &task_record);
+  virtual int process() override;
+  virtual int serialize_params_to_message(char *buf, const int64_t buf_size, int64_t &pos) const override;
+  virtual int deserialize_params_from_message(const char *buf, const int64_t buf_size, int64_t &pos) override;
+  virtual int64_t get_serialize_param_size() const override;
+  int notify_update_autoinc_finish(const uint64_t autoinc_val, const int ret_code);
+private:
+  int unlock_table();
+  int modify_autoinc();
+  int wait_trans_end();
+  int fail();
+  int success();
+  virtual int cleanup_impl() override;
+  int set_schema_available();
+  int rollback_schema();
+  int check_update_autoinc_end(bool &is_end);
+  int check_health();
+private:
+  static const int64_t OB_MODIFY_AUTOINC_TASK_VERSION = 1L; 
+  common::TCRWLock lock_;
+  obcall::ObAlterTableArg alter_table_arg_;
+  int64_t update_autoinc_job_ret_code_;
+  int64_t update_autoinc_job_time_;
+};
+
+}  // end namespace rootserver
+}  // end namespace oceanbase
+
+#endif // OCEANBASE_ROOTSERVER_OB_MODIFY_AUTOINC_TASK_H

@@ -1,0 +1,134 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_STORAGE_OB_CHECKPOINT_EXECUTOR_H_
+#define OCEANBASE_STORAGE_OB_CHECKPOINT_EXECUTOR_H_
+
+#include "lib/lock/ob_spin_rwlock.h"           // SpinRWLock
+#include "logservice/ob_log_base_type.h"
+#include "logservice/ob_log_handler.h"
+#include "share/scn.h"
+
+namespace oceanbase
+{
+namespace storage
+{
+class ObLS;
+namespace checkpoint
+{
+
+struct ObCheckpointVTInfo
+{
+  share::SCN rec_scn;
+  int service_type;
+
+  TO_STRING_KV(
+    K(rec_scn),
+    K(service_type)
+  );
+};
+
+struct ObLsClogCheckpointStat
+{
+  ObLsClogCheckpointStat() { reset(); }
+  ~ObLsClogCheckpointStat() { reset(); }
+  share::SCN clog_checkpoint_scn_;
+  share::SCN min_rec_scn_;
+  logservice::ObLogBaseType min_rec_scn_log_type_;
+  TO_STRING_KV(K(clog_checkpoint_scn_),
+               K(min_rec_scn_),
+               K(min_rec_scn_log_type_));
+  void reset()
+  {
+    clog_checkpoint_scn_.reset();
+    min_rec_scn_.reset();
+    min_rec_scn_log_type_ = logservice::ObLogBaseType::INVALID_LOG_BASE_TYPE;
+  }
+};
+
+class ObCheckpointExecutor
+{
+public:
+  ObCheckpointExecutor();
+  virtual ~ObCheckpointExecutor();
+
+  int init(ObLS *ls, logservice::ObILogHandler *ob_loghandler);
+  void reset();
+  void start();
+  void online();
+  void offline();
+
+  // services register into checkpoint_executor by logservice frame
+  int register_handler(const logservice::ObLogBaseType &type, logservice::ObICheckpointSubHandler *handler);
+  void unregister_handler(const logservice::ObLogBaseType &type);
+
+  // calculate clog checkpoint and update in ls_meta
+  int update_clog_checkpoint();
+  void add_server_event_history_for_update_clog_checkpoint(
+      const SCN &checkpoint_scn,
+      const char *service_type);
+
+  // the service will flush and advance checkpoint
+  // after flush, checkpoint_scn will be equal or greater than recycle_scn
+  int advance_checkpoint_by_flush(const share::SCN input_recycle_scn);
+
+  // for __all_virtual_checkpoint
+  int get_checkpoint_info(ObIArray<ObCheckpointVTInfo> &checkpoint_array);
+
+
+  void get_min_rec_scn(int &log_type, share::SCN &min_rec_scn) const;
+
+  int get_clog_checkpoint_stat(ObLsClogCheckpointStat &stat) const;
+
+  int traversal_flush() const;
+
+private:
+  int check_need_flush_(const SCN max_decided_scn, const SCN recycle_scn);
+  int calculate_recycle_scn_(const SCN max_decided_scn, SCN &recycle_scn);
+  int calculate_min_recycle_scn_(const palf::LSN clog_checkpoint_lsn, SCN &min_recycle_scn);
+  int calculate_expected_recycle_scn_(const palf::LSN clog_checkpoint_lsn, SCN &expected_recycle_scn);
+
+private:
+  static const int64_t CLOG_GC_PERCENT = 60;
+  static const int64_t ADD_SERVER_HISTORY_INTERVAL = 10 * 60 * 1000 * 1000; // 10 min
+
+  ObLS *ls_;
+  logservice::ObILogHandler *loghandler_;
+  logservice::ObICheckpointSubHandler *handlers_[logservice::ObLogBaseType::MAX_LOG_BASE_TYPE];
+  // be used to avoid checkpoint concurrently,
+  // no need to protect handlers_[] because ls won't be destroyed(hold lshandle)
+  // when the public interfaces are invoked
+  typedef common::SpinRWLock RWLock;
+  typedef common::SpinRLockGuard  RLockGuard;
+  typedef common::SpinWLockGuard  WLockGuard;
+  RWLock rwlock_;
+  RWLock rwlock_for_update_clog_checkpoint_;
+
+  bool update_checkpoint_enabled_;
+  int64_t reuse_recycle_scn_times_;
+
+  palf::LSN prev_clog_checkpoint_lsn_;
+  share::SCN prev_recycle_scn_;
+
+  int64_t update_clog_checkpoint_times_;
+  int64_t last_add_server_history_time_;
+};
+
+
+}  // namespace checkpoint
+}  // namespace storage
+}  // namespace oceanbase
+#endif

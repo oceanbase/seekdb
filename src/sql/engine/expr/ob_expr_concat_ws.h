@@ -1,0 +1,60 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef SRC_SQL_ENGINE_EXPR_OB_EXPR_CONCAT_WS_H_
+#define SRC_SQL_ENGINE_EXPR_OB_EXPR_CONCAT_WS_H_
+#include "sql/engine/expr/ob_expr_operator.h"
+namespace oceanbase
+{
+namespace sql
+{
+//stands for Concatenate With Separator and is a special form of CONCAT()
+class ObExprConcatWs: public ObStringExprOperator
+{
+public:
+  ObExprConcatWs();
+  explicit  ObExprConcatWs(common::ObIAllocator &alloc);
+  virtual ~ObExprConcatWs();
+   virtual int calc_result_typeN(ObExprResType &type,
+                                 ObExprResType *types,
+                                 int64_t param_num,
+                                 common::ObExprTypeCtx &type_ctx) const;
+  // connect two strings by separator
+  static int concat_ws(const common::ObString obj1,
+                       const common::ObString obj2,
+                       const int64_t buf_len,
+                       char **string_buf,
+                       int64_t &pos);
+  virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
+                       ObExpr &rt_expr) const override;
+  static int calc_concat_ws_expr(const ObExpr &expr, ObEvalCtx &ctx,
+                                 ObDatum &res);
+  static int calc(const common::ObString &sep_str, const common::ObIArray<common::ObString> &words,
+                        common::ObIAllocator &alloc, common::ObString &res_str);
+  static int calc_text(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int calc_text(const ObExpr &expr, ObEvalCtx &ctx, const ObString &sep_str,
+                       const ObIArray<ObExpr *> &words, ObIAllocator &temp_allocator, ObDatum &res);
+  DECLARE_SET_LOCAL_SESSION_VARS;
+  
+private:
+  // disallow copy
+  DISALLOW_COPY_AND_ASSIGN(ObExprConcatWs);
+};
+
+}
+}
+
+#endif /* SRC_SQL_ENGINE_EXPR_OB_EXPR_CONCAT_WS_H_ */

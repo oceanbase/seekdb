@@ -1,0 +1,145 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "ob_trans_version_mgr.h"
+
+namespace oceanbase
+{
+using namespace common;
+using namespace common::hash;
+
+namespace transaction
+{
+
+void ObTransVersionMgr::destroy()
+{
+  TRANS_LOG(INFO, "ObTransVersionMgr destroyed");
+}
+
+void ObTransVersionMgr::reset()
+{
+  publish_version_ = 0;
+  local_trans_version_ = 0;
+}
+
+int ObTransVersionMgr::get_and_update_local_trans_version(int64_t &local_trans_version)
+{
+  int ret = OB_SUCCESS;
+
+  const int64_t cur_ts = ObClockGenerator::getClock();
+  const int64_t tmp_trans_version = ATOMIC_LOAD(&local_trans_version_) + 1;
+  const int64_t ret_trans_version = (cur_ts >= tmp_trans_version ? cur_ts : tmp_trans_version);
+  if (OB_FAIL(update_local_trans_version_(ret_trans_version))) {
+    TRANS_LOG(WARN, "update local transaction version error", KR(ret), K(ret_trans_version));
+  } else if (OB_FAIL(update_publish_version_(ret_trans_version))) {
+    TRANS_LOG(WARN, "update publish version error", KR(ret), K(ret_trans_version));
+  } else {
+    local_trans_version = ret_trans_version;
+  }
+
+  return ret;
+}
+
+int ObTransVersionMgr::get_local_trans_version(int64_t &local_trans_version)
+{
+  int ret = OB_SUCCESS;
+  local_trans_version = ATOMIC_LOAD(&local_trans_version_);
+  return ret;
+}
+
+int ObTransVersionMgr::update_local_trans_version(const int64_t local_trans_version)
+{
+  int ret = OB_SUCCESS;
+
+  if (!ObTransVersion::is_valid(local_trans_version)) {
+    TRANS_LOG(WARN, "invalid argument", K(local_trans_version));
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(update_local_trans_version_(local_trans_version))) {
+    TRANS_LOG(WARN, "update local transaction version error", KR(ret), K(local_trans_version));
+  } else {
+    // do nothing
+  }
+
+  return ret;
+}
+
+int ObTransVersionMgr::get_publish_version(int64_t &publish_version)
+{
+  int ret = OB_SUCCESS;
+  publish_version = ATOMIC_LOAD(&publish_version_);
+  return ret;
+}
+
+int ObTransVersionMgr::update_publish_version(const int64_t publish_version)
+{
+  int ret = OB_SUCCESS;
+
+  if (!ObTransVersion::is_valid(publish_version)) {
+    TRANS_LOG(WARN, "invalid arugment", K(publish_version));
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(update_local_trans_version_(publish_version))) {
+    TRANS_LOG(WARN, "update local transaction version error", KR(ret), K(publish_version));
+  } else if (OB_FAIL(update_publish_version_(publish_version))) {
+    TRANS_LOG(WARN, "update publish transaction version error", KR(ret), K(publish_version));
+  } else {
+    // do nothing
+  }
+
+  return ret;
+}
+
+int ObTransVersionMgr::update_publish_version_(const int64_t publish_version)
+{
+  int ret = OB_SUCCESS;
+  bool bool_ret = true;
+  int64_t cur_publish_version = ATOMIC_LOAD(&publish_version_);
+
+  while (bool_ret && cur_publish_version < publish_version) {
+    if (ATOMIC_BCAS(&publish_version_, cur_publish_version, publish_version)) {
+      bool_ret = false;
+    } else {
+      cur_publish_version = ATOMIC_LOAD(&publish_version_);
+    }
+  }
+
+  return ret;
+}
+
+int ObTransVersionMgr::update_local_trans_version_(const int64_t local_trans_version)
+{
+  int ret = OB_SUCCESS;
+  bool bool_ret = true;
+  int64_t tmp_trans_version = ATOMIC_LOAD(&local_trans_version_);
+
+  while (bool_ret && tmp_trans_version < local_trans_version) {
+    if (ATOMIC_BCAS(&local_trans_version_, tmp_trans_version, local_trans_version)) {
+      bool_ret = false;
+    } else {
+      tmp_trans_version = ATOMIC_LOAD(&local_trans_version_);
+    }
+  }
+
+  return ret;
+}
+
+ObTransVersionMgr &ObTransVersionMgr::get_instance()
+{
+  static ObTransVersionMgr trans_version_mgr;
+  return trans_version_mgr;
+}
+
+} // transaction
+} // oceanbase

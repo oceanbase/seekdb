@@ -1,0 +1,76 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_ROOTSERVER_OB_LOB_META_BUILDER_H_
+#define OCEANBASE_ROOTSERVER_OB_LOB_META_BUILDER_H_
+#include "share/ob_ddl_task_executor.h"
+#include "share/schema/ob_schema_struct.h"
+#include "rootserver/ob_ddl_service.h"
+
+namespace oceanbase
+{
+namespace rootserver
+{
+class ObDDLService;
+class ObLobMetaBuilder
+{
+public:
+  enum LOB_META_COLUMN {
+    LOB_ID = common::OB_APP_MIN_COLUMN_ID,
+    SEQ_ID,
+    BYTE_LEN,
+    CHAR_LEN,
+    PIECE_ID,
+    LOB_DATA
+  };
+public:
+  explicit ObLobMetaBuilder(ObDDLService &ddl_service);
+  virtual ~ObLobMetaBuilder();
+
+  // won't fetch new table id if specified_table_id is valid
+  int generate_aux_lob_meta_schema(
+      share::schema::ObSchemaService *schema_service,
+      const share::schema::ObTableSchema &data_schema,
+      const uint64_t specified_table_id,
+      share::schema::ObTableSchema &aux_lob_meta_schema,
+      bool generate_id);
+
+  static int generate_lob_meta_table_name(
+      const uint64_t new_table_id,
+      char *buf,
+      const int64_t buf_size,
+      int64_t &pos);
+
+private:
+  int generate_schema(const share::schema::ObTableSchema &data_schema,
+                      share::schema::ObTableSchema &aux_lob_meta_schema);
+  
+  int set_basic_infos(const share::schema::ObTableSchema &data_schema,
+                      share::schema::ObTableSchema &aux_lob_meta_schema);
+  
+  int set_lob_table_column_store_if_need(share::schema::ObTableSchema &table_schema);
+private:
+  static const uint64_t LOB_SEQ_ID_LENGHT = 8 * 1024; // 8K
+  static const uint64_t LOB_META_INLINE_DATA_LENGHT = 256 * 1024; // 256K
+private:
+  ObDDLService &ddl_service_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObLobMetaBuilder);
+};
+}//end namespace rootserver
+}//end namespace oceanbase
+
+#endif //OCEANBASE_ROOTSERVER_OB_LOB_META_BUILDER_H_

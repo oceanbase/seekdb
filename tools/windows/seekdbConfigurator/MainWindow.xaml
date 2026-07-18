@@ -1,0 +1,228 @@
+<Window x:Class="seekdbConfigurator.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="seekdb Configurator"
+        Width="820" Height="560"
+        MinWidth="820" MinHeight="560"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="CanMinimize"
+        Background="{StaticResource ContentBg}">
+    <Window.Resources>
+        <Style x:Key="SidebarItem" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource SidebarFg}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Padding" Value="18,6" />
+        </Style>
+        <Style x:Key="SidebarItemActive" TargetType="TextBlock" BasedOn="{StaticResource SidebarItem}">
+            <Setter Property="Foreground" Value="{StaticResource SidebarActiveFg}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+        </Style>
+        <Style x:Key="PageTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="22" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+        </Style>
+        <Style x:Key="PageSubtitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="#555" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="0,0,0,18" />
+        </Style>
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Margin" Value="0,10,0,4" />
+        </Style>
+        <Style x:Key="NavButton" TargetType="Button">
+            <Setter Property="MinWidth" Value="90" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Margin" Value="6,0,0,0" />
+            <Setter Property="Padding" Value="14,2" />
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="210" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Left sidebar -->
+        <Border Grid.Column="0" Grid.RowSpan="2" Background="{StaticResource SidebarBg}">
+            <StackPanel Margin="0,14,0,0">
+                <TextBlock Text="seekdb Configurator" FontSize="15" FontWeight="Bold"
+                           Foreground="White" Margin="18,0,0,4" />
+                <TextBlock Text="seekdb Server" FontSize="12" Foreground="#999" Margin="18,0,0,16" />
+                <StackPanel x:Name="SidebarPanel">
+                    <!-- Populated dynamically -->
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- Content area -->
+        <Grid Grid.Column="1" Grid.Row="0" Margin="28,20,28,10">
+            <!-- Page 0: Welcome -->
+            <StackPanel x:Name="PageWelcome" Visibility="Visible">
+                <TextBlock Style="{StaticResource PageTitle}" Text="Welcome to the seekdb Server Configurator" />
+                <TextBlock Style="{StaticResource PageSubtitle}"
+                           Text="With this wizard you will be able to configure your seekdb Server installation.&#x0a;Simply click Next when you are ready to proceed." />
+            </StackPanel>
+
+            <!-- Page 1: Data Directory -->
+            <StackPanel x:Name="PageDataDir" Visibility="Collapsed">
+                <TextBlock Style="{StaticResource PageTitle}" Text="Data Directory" />
+                <TextBlock Style="{StaticResource PageSubtitle}"
+                           Text="Information managed by seekdb Server is stored under a directory known as the data directory.&#x0a;Enter the path to the data directory to begin with the configuration process (if the path does not exist it will be created):" />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="TxtDataDir" Grid.Column="0" Height="26" VerticalContentAlignment="Center" FontSize="13" />
+                    <Button Grid.Column="1" Content="..." Width="36" Height="26" Margin="6,0,0,0" Click="BrowseDataDir_Click" />
+                </Grid>
+            </StackPanel>
+
+            <!-- Page 2: Type and Networking -->
+            <StackPanel x:Name="PageNetworking" Visibility="Collapsed">
+                <TextBlock Style="{StaticResource PageTitle}" Text="Type and Networking" />
+
+                <TextBlock Style="{StaticResource FieldLabel}" Text="Server Configuration Type" FontWeight="SemiBold" />
+                <TextBlock Style="{StaticResource PageSubtitle}"
+                           Text="Choose the correct server configuration type for this seekdb Server installation. This setting will define how much system resources are assigned to the seekdb Server instance." />
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                    <TextBlock Text="Config Type:" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <ComboBox x:Name="CmbConfigType" Width="240" Height="26" SelectedIndex="0">
+                        <ComboBoxItem Content="Development Computer" />
+                        <ComboBoxItem Content="Server Computer" />
+                        <ComboBoxItem Content="Dedicated Computer" />
+                    </ComboBox>
+                </StackPanel>
+
+                <TextBlock Style="{StaticResource FieldLabel}" Text="Connectivity" FontWeight="SemiBold" />
+                <StackPanel Orientation="Horizontal" Margin="0,6,0,6">
+                    <CheckBox x:Name="ChkTcpIp" IsChecked="True" Content="TCP/IP" VerticalAlignment="Center" />
+                    <TextBlock Text="Port:" VerticalAlignment="Center" Margin="24,0,6,0" />
+                    <TextBox x:Name="TxtPort" Width="70" Height="26" VerticalContentAlignment="Center" Text="2881" />
+                </StackPanel>
+                <CheckBox x:Name="ChkFirewall" IsChecked="True" Content="Open Windows Firewall port for network access" Margin="20,2,0,0" />
+            </StackPanel>
+
+            <!-- Page 3: Accounts and Roles -->
+            <StackPanel x:Name="PageAccounts" Visibility="Collapsed">
+                <TextBlock Style="{StaticResource PageTitle}" Text="Accounts and Roles" />
+                <TextBlock Style="{StaticResource FieldLabel}" Text="Root Account Password" FontWeight="SemiBold" />
+                <TextBlock Style="{StaticResource PageSubtitle}"
+                           Text="Enter the password for the root account. Please remember to store this password in a secure place." />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="140" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Root Password:" VerticalAlignment="Center" />
+                    <PasswordBox x:Name="TxtRootPwd" Grid.Row="0" Grid.Column="1" Height="26" MaxWidth="280" HorizontalAlignment="Left" MinWidth="280" />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Repeat Password:" VerticalAlignment="Center" Margin="0,8,0,0" />
+                    <PasswordBox x:Name="TxtRootPwdRepeat" Grid.Row="1" Grid.Column="1" Height="26" Margin="0,8,0,0" MaxWidth="280" HorizontalAlignment="Left" MinWidth="280" />
+                    <TextBlock x:Name="LblPwdStrength" Grid.Row="2" Grid.Column="1" Margin="0,4,0,0" FontSize="12" />
+                </Grid>
+            </StackPanel>
+
+            <!-- Page 4: Windows Service -->
+            <StackPanel x:Name="PageService" Visibility="Collapsed">
+                <TextBlock Style="{StaticResource PageTitle}" Text="Windows Service" />
+                <CheckBox x:Name="ChkAsService" IsChecked="True" Content="Configure seekdb Server as a Windows Service" FontWeight="SemiBold" Margin="0,0,0,14" />
+
+                <StackPanel x:Name="ServiceDetailsPanel">
+                    <TextBlock Style="{StaticResource FieldLabel}" Text="Windows Service Details" FontWeight="SemiBold" />
+                    <StackPanel Orientation="Horizontal" Margin="0,6,0,6">
+                        <TextBlock Text="Windows Service Name:" VerticalAlignment="Center" Margin="0,0,8,0" />
+                        <TextBox x:Name="TxtServiceName" Width="180" Height="26" VerticalContentAlignment="Center" Text="seekdb" />
+                    </StackPanel>
+                    <CheckBox x:Name="ChkAutoStart" IsChecked="True" Content="Start the seekdb Server at System Startup" Margin="20,4,0,0" />
+
+                    <TextBlock Style="{StaticResource FieldLabel}" Text="Run Windows Service as ..." FontWeight="SemiBold" Margin="0,18,0,4" />
+                    <TextBlock Text="The seekdb Server needs to run under a given user account. Based on the security requirements of your system you need to pick one of the options below."
+                               TextWrapping="Wrap" FontSize="12" Foreground="#555" Margin="0,0,0,8" />
+                    <RadioButton x:Name="RbStandardAccount" IsChecked="True" GroupName="ServiceAccount" Margin="18,2">
+                        <StackPanel>
+                            <TextBlock Text="Standard System Account" FontWeight="SemiBold" />
+                            <TextBlock Text="Recommended for most scenarios." FontSize="12" Foreground="#777" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton GroupName="ServiceAccount" Margin="18,6" IsEnabled="False">
+                        <StackPanel>
+                            <TextBlock Text="Custom User" />
+                            <TextBlock Text="(Not available in this version)" FontSize="12" Foreground="#999" />
+                        </StackPanel>
+                    </RadioButton>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Page 5: Apply Configuration -->
+            <Grid x:Name="PageApply" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Style="{StaticResource PageTitle}" Text="Apply Configuration" />
+                <TextBlock Grid.Row="1" Style="{StaticResource PageSubtitle}" x:Name="LblApplySubtitle"
+                           Text="Click [Execute] to apply the changes." />
+
+                <Border Grid.Row="2" BorderBrush="#CCC" BorderThickness="1" Padding="12" CornerRadius="2">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="StepListPanel">
+                            <!-- Populated dynamically -->
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+
+                <Button Grid.Row="3" x:Name="BtnExecute" Content="Execute" Style="{StaticResource NavButton}"
+                        HorizontalAlignment="Center" Margin="0,12,0,0" Click="Execute_Click" />
+            </Grid>
+
+            <!-- Page 6: Configuration Complete -->
+            <StackPanel x:Name="PageComplete" Visibility="Collapsed">
+                <TextBlock Style="{StaticResource PageTitle}" Text="Configuration Complete" Foreground="{StaticResource SuccessGreen}" />
+                <TextBlock Style="{StaticResource PageSubtitle}" Text="The configuration procedure has been completed." />
+                <Button x:Name="BtnCopyLog" Content="Copy Log to Clipboard" Width="200" Height="28"
+                        HorizontalAlignment="Left" Margin="0,10,0,18" Click="CopyLog_Click" />
+                <TextBlock TextWrapping="Wrap" FontSize="13">
+                    <Run Text="You can now connect to seekdb:" />
+                </TextBlock>
+                <Border Background="#F5F5F5" Padding="14,10" CornerRadius="4" Margin="0,8,0,0">
+                    <TextBlock FontFamily="Consolas" FontSize="13" x:Name="LblConnectHint"
+                               Text="mysql -h 127.0.0.1 -P 2881 -uroot -p" />
+                </Border>
+            </StackPanel>
+        </Grid>
+
+        <!-- Footer with navigation buttons -->
+        <Border Grid.Column="1" Grid.Row="1" Background="{StaticResource FooterBg}" Padding="16,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="LblStatusBar" Grid.Column="0" VerticalAlignment="Center" FontSize="12" Foreground="#666" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button x:Name="BtnBack" Content="&lt; Back" Style="{StaticResource NavButton}" Click="Back_Click" />
+                    <Button x:Name="BtnNext" Content="Next &gt;" Style="{StaticResource NavButton}" Click="Next_Click" IsDefault="True" />
+                    <Button x:Name="BtnCancel" Content="Cancel" Style="{StaticResource NavButton}" Click="Cancel_Click" />
+                    <Button x:Name="BtnFinish" Content="Finish" Style="{StaticResource NavButton}" Visibility="Collapsed" Click="Finish_Click" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

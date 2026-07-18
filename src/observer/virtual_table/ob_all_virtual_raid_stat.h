@@ -1,0 +1,91 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef SRC_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_DISK_STAT_H_
+#define SRC_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_DISK_STAT_H_
+
+
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "sql/ob_scanner.h"
+#include "common/row/ob_row.h"
+
+namespace oceanbase
+{
+namespace observer
+{
+
+struct ObDiskStat final
+{
+  int64_t disk_idx_;
+  int64_t install_seq_;
+  int64_t create_ts_;
+  int64_t finish_ts_;
+  int64_t percent_;
+  const char *status_;
+  char alias_name_[common::MAX_PATH_SIZE];
+
+  ObDiskStat();
+  TO_STRING_KV(K_(disk_idx), K_(install_seq), K_(create_ts), K_(finish_ts), K_(percent),
+      K_(status), K_(alias_name));
+};
+
+struct ObDiskStats final
+{
+  ObArray<ObDiskStat> disk_stats_;
+  int64_t data_num_;
+  int64_t parity_num_;
+
+  ObDiskStats();
+  void reset();
+  TO_STRING_KV(K_(data_num), K_(parity_num), K_(disk_stats));
+};
+
+class ObAllVirtualRaidStat: public common::ObVirtualTableScannerIterator
+{
+  enum COLUMN_ID_LIST
+  {
+        DISK_INDEX = common::OB_APP_MIN_COLUMN_ID,
+    INSTALL_SEQ,
+    DATA_NUM,
+    PARITY_NUM,
+    CREATE_TS,
+    FINISH_TS,
+    ALIAS_NAME,
+    STATUS,
+    PERCENT,
+  };
+public:
+  ObAllVirtualRaidStat();
+  virtual ~ObAllVirtualRaidStat();
+  int init(const common::ObAddr &addr);
+public:
+  virtual int inner_get_next_row(common::ObNewRow *&row);
+  virtual void reset();
+private:
+  char ip_buf_[common::OB_IP_STR_BUFF];
+  ObDiskStats disk_stats_;
+  int64_t cur_idx_;
+  common::ObAddr addr_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObAllVirtualRaidStat);
+};
+
+}
+}
+
+
+
+#endif /* SRC_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_DISK_STAT_H_ */

@@ -1,0 +1,53 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_ENCODING_OB_INT_DICT_COLUMN_DECODER_H_
+#define OCEANBASE_ENCODING_OB_INT_DICT_COLUMN_DECODER_H_
+
+#include "ob_dict_column_decoder.h"
+
+namespace oceanbase
+{
+namespace blocksstable
+{
+
+class ObIntDictColumnDecoder : public ObDictColumnDecoder
+{
+public:
+  static const ObCSColumnHeader::Type type_ = ObCSColumnHeader::INT_DICT;
+  ObIntDictColumnDecoder() {}
+  virtual ~ObIntDictColumnDecoder() {}
+  ObIntDictColumnDecoder(const ObDictColumnDecoder &) = delete;
+  ObIntDictColumnDecoder &operator=(const ObDictColumnDecoder &) = delete;
+
+  virtual int decode(
+    const ObColumnCSDecoderCtx &ctx, const int32_t row_id, common::ObDatum &datum) const override;
+  virtual int batch_decode(const ObColumnCSDecoderCtx &ctx, const int32_t *row_ids,
+    const int64_t row_cap, common::ObDatum *datums) const override;
+  virtual int decode_vector(const ObColumnCSDecoderCtx &ctx, ObVectorDecodeCtx &vector_ctx) const override;
+  virtual int decode_and_aggregate(
+    const ObColumnCSDecoderCtx &ctx,
+    const int64_t row_id,
+    ObStorageDatum &datum,
+    storage::ObAggCellBase &agg_cell) const override;
+
+  virtual ObCSColumnHeader::Type get_type() const override { return type_; }
+};
+
+}  // end namespace blocksstable
+}  // end namespace oceanbase
+
+#endif  // OCEANBASE_ENCODING_OB_INT_DICT_COLUMN_DECODER_H_

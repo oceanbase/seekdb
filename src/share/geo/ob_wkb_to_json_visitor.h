@@ -1,0 +1,129 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_LIB_GEO_OB_GEO_TO_JSON_VISITOR_
+#define OCEANBASE_LIB_GEO_OB_GEO_TO_JSON_VISITOR_
+#include "share/geo/ob_geo_visitor.h"
+#include "share/geo/ob_geo_utils.h"
+
+
+namespace oceanbase
+{
+namespace common
+{
+enum ObGeoJsonFormat {
+  DEFAULT = 0,
+  BBOX = 1,
+  SHORT_SRID = 2,
+  LONG_SRID = 4
+};
+
+class ObWkbToJsonVisitor : public ObEmptyGeoVisitor
+{
+public:
+  static const int MAX_DIGITS_IN_DOUBLE = 25;
+  explicit ObWkbToJsonVisitor(ObIAllocator *allocator, uint32_t max_dec_digits = UINT_MAX32, uint8_t flag = 0, const ObGeoSrid srid = 0);
+
+  ~ObWkbToJsonVisitor() {}
+  bool prepare(ObGeometry *geo) { UNUSED(geo); return true; }
+  bool prepare(ObIWkbGeogMultiPoint *geo);
+  bool prepare(ObIWkbGeomMultiPoint *geo);
+  bool prepare(ObIWkbGeogMultiLineString *geo);
+  bool prepare(ObIWkbGeomMultiLineString *geo);
+  bool prepare(ObIWkbGeogMultiPolygon *geo);
+  bool prepare(ObIWkbGeomMultiPolygon *geo);
+  bool prepare(ObIWkbGeogCollection *geo);
+  bool prepare(ObIWkbGeomCollection *geo);
+  // wkb
+  int visit(ObIWkbGeogPoint *geo);
+  int visit(ObIWkbGeomPoint *geo);
+  int visit(ObIWkbGeogLineString *geo);
+  int visit(ObIWkbGeomLineString *geo);  
+  int visit(ObIWkbGeogMultiPoint *geo);  
+  int visit(ObIWkbGeomMultiPoint *geo);
+  int visit(ObIWkbGeogMultiLineString *geo);
+  int visit(ObIWkbGeomMultiLineString *geo);
+  int visit(ObIWkbGeogPolygon *geo);
+  int visit(ObIWkbGeomPolygon *geo);
+  int visit(ObIWkbGeogMultiPolygon *geo);
+  int visit(ObIWkbGeomMultiPolygon *geo);
+  int visit(ObIWkbGeogCollection *geo);
+  int visit(ObIWkbGeomCollection *geo);
+ 
+  bool is_end(ObIWkbGeogLineString *geo) { UNUSED(geo); return true; }
+  bool is_end(ObIWkbGeomLineString *geo) { UNUSED(geo); return true; }
+  bool is_end(ObIWkbGeogLinearRing *geo) { UNUSED(geo); return true; }
+  bool is_end(ObIWkbGeomLinearRing *geo) { UNUSED(geo); return true; }
+  bool is_end(ObIWkbGeogPolygon *geo) { UNUSED(geo); return true; }
+  bool is_end(ObIWkbGeomPolygon *geo) { UNUSED(geo); return true; }
+
+  virtual int finish(ObIWkbGeogMultiPoint *geo) override;
+  virtual int finish(ObIWkbGeomMultiPoint *geo) override;
+  virtual int finish(ObIWkbGeogMultiLineString *geo) override;
+  virtual int finish(ObIWkbGeomMultiLineString *geo) override;
+  virtual int finish(ObIWkbGeogMultiPolygon *geo) override;
+  virtual int finish(ObIWkbGeomMultiPolygon *geo) override;
+  virtual int finish(ObIWkbGeogCollection *geo) override;
+  virtual int finish(ObIWkbGeomCollection *geo) override;
+
+  void get_geojson(ObString &geojson);
+  void reset();
+private:
+  // for Point
+  template<typename T_IBIN>
+  int appendPoint(T_IBIN *geo);
+  int appendInnerPoint(double x, double y);
+  int appendDouble(double x);
+  // for LineString
+  template<typename T_IBIN, typename T_BIN>
+  int appendLine(T_IBIN *geo);
+  // for Polygon
+  template<typename T_IBIN, typename T_BIN,
+           typename T_BIN_RING, typename T_BIN_INNER_RING>
+  int appendPolygon(T_IBIN *geo);
+  // for multi
+  int appendMultiPrefix(ObGeoType geo_type, const char *type_name, ObGeometry *geo);
+  int appendMultiSuffix(ObGeoType type);
+  template<typename T_IBIN>
+  int appendCollectionSuffix(T_IBIN *geo);
+  // common
+  int appendJsonFields(ObGeoType type, const char *type_name, ObGeometry *geo);
+  bool in_colloction_visit() { return colloction_level_ > 0; }
+  bool in_oracle_colloction_visit() { return (colloction_level_ > 0) && !is_mysql_mode_; }
+  int appendMySQLFlagInfo(ObGeometry *geo);
+  int appendBox(ObGeogBox &box);
+
+  ObGeoStringBuffer buffer_;
+  bool in_multi_visit_;
+  int colloction_level_;
+  bool is_mysql_mode_;
+  uint8_t flag_;
+  uint32_t max_dec_digits_;
+  ObGeoSrid srid_;
+  ObIAllocator *allocator_;
+  bool append_crs_;
+
+  ObString right_curly_bracket_;
+  ObString left_curly_bracket_;
+  ObString left_sq_bracket_;
+  ObString right_sq_bracket_;
+  DISALLOW_COPY_AND_ASSIGN(ObWkbToJsonVisitor);
+};
+
+} // namespace common
+} // namespace oceanbase
+
+#endif

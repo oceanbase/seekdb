@@ -1,0 +1,130 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_ENCODING_OB_RAW_ENCODER_H_
+#define OCEANBASE_ENCODING_OB_RAW_ENCODER_H_
+
+#include "ob_icolumn_encoder.h"
+#include "ob_encoding_util.h"
+#include "ob_bit_stream.h"
+
+namespace oceanbase
+{
+namespace blocksstable
+{
+
+class ObRawEncoder : public ObIColumnEncoder
+{
+public:
+  static const ObColumnHeader::Type type_ = ObColumnHeader::RAW;
+
+  struct ValueGetter
+  {
+    explicit ValueGetter(const int64_t len)
+    {
+      mask_ = ObBitStream::get_mask(len);
+    }
+
+    inline int operator()(const int64_t, const ObDatum &datum, uint64_t &v)
+    {
+      v = datum.get_uint64() & mask_;
+      return common::OB_SUCCESS;
+    }
+
+    uint64_t mask_;
+  };
+
+  ObRawEncoder();
+  virtual ~ObRawEncoder();
+
+  virtual int init(const ObColumnEncodingCtx &ctx,
+      const int64_t column_index, const ObConstDatumRowArray &rows) override;
+  virtual void reuse() override;
+
+  virtual int set_data_pos(const int64_t offset, const int64_t length) override;
+  virtual int get_var_length(const int64_t row_id, int64_t &length) override;
+  virtual int get_encoding_store_meta_need_space(int64_t &need_size) const override;
+  virtual int store_meta(ObBufferWriter &buf_writer) override;
+  virtual int store_data(
+      const int64_t row_id, ObBitStream &bs, char *buf, const int64_t len) override;
+
+  virtual int traverse(bool &suitable) override;
+  int traverse(const bool force_var_store, bool &suitable);
+  virtual int64_t calc_size() const override;
+
+  virtual ObColumnHeader::Type get_type() const override { return type_; }
+
+  virtual int store_fix_data(ObBufferWriter &buf_writer) override;
+  INHERIT_TO_STRING_KV("ObIColumnEncoder", ObIColumnEncoder, K_(type_store_size), K_(null_cnt),
+      K_(nope_cnt), K_(fix_data_size), K_(max_integer), K_(var_data_size));
+
+private:
+  struct DatumDataSetter;
+
+private:
+  ObObjTypeStoreClass store_class_;
+  int64_t type_store_size_;
+  int64_t null_cnt_;
+  int64_t nope_cnt_;
+  int64_t fix_data_size_; // -1 for var data store
+  // max value for integer store type
+  uint64_t max_integer_;
+  int64_t var_data_size_; // for calculate size
+};
+
+OB_INLINE int ObRawEncoder::store_data(
+    const int64_t row_id, ObBitStream &bs, char *buf, const int64_t len)
+{
+  int ret = common::OB_SUCCESS;
+  const ObDatum &datum = rows_->at(row_id).get_datum(column_index_);
+  const ObStoredExtValue ext_val = get_stored_ext_value(datum);
+  if (STORED_NOT_EXT != ext_val) {
+    if (OB_FAIL(bs.set(column_header_.extend_value_index_,
+        extend_value_bit_, static_cast<int64_t>(ext_val)))) {
+      STORAGE_LOG(WARN,"store extend value bit failed",
+          K(ret), K_(column_header), K_(extend_value_bit), K(ext_val), K_(column_index));
+    }
+  } else if (!column_header_.is_fix_length() || column_header_.length_ > 0) { // need row value store
+    switch (store_class_) {
+      case ObIntSC:
+      case ObUIntSC: {
+        MEMCPY(buf, datum.ptr_, len);
+        break;
+      }
+      case ObNumberSC:
+      case ObDecimalIntSC:
+      case ObStringSC:
+      case ObTextSC: 
+      case ObJsonSC:
+      case ObGeometrySC:
+      case ObRoaringBitmapSC: {
+        MEMCPY(buf, datum.ptr_, datum.len_);
+        break;
+      }
+      default:
+        ret = common::OB_INNER_STAT_ERROR;
+        STORAGE_LOG(WARN,"not supported store class",
+            K(ret), K_(store_class), K_(column_type), K(datum));
+    }
+  }
+  return ret;
+}
+
+
+} // end namespace blocksstable
+} // end namespace oceanbase
+
+#endif // OCEANBASE_ENCODING_OB_RAW_ENCODER_H_

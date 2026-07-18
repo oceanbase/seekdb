@@ -1,0 +1,152 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_ROOTSERVER_FREEZE_OB_MAJOR_FREEZE_SERVICE_
+#define OCEANBASE_ROOTSERVER_FREEZE_OB_MAJOR_FREEZE_SERVICE_
+
+#include "share/ob_ls_id.h"
+#include "logservice/ob_log_base_type.h"
+#include "share/scn.h"
+#include "lib/lock/ob_recursive_mutex.h"
+#include "rootserver/freeze/ob_tenant_major_freeze.h"
+
+namespace oceanbase
+{
+namespace rootserver
+{
+class ObTenantMajorFreeze;
+
+enum ObMajorFreezeServiceType : uint8_t {
+  SERVICE_TYPE_INVALID = 0,
+  SERVICE_TYPE_PRIMARY = 1,
+  SERVICE_TYPE_RESTORE = 2,
+  SERVICE_TYPE_MAX = 3
+};
+
+class ObMajorFreezeService : public logservice::ObIReplaySubHandler,
+                             public logservice::ObICheckpointSubHandler,
+                             public logservice::ObIRoleChangeSubHandler
+{
+public:
+  ObMajorFreezeService() 
+    : is_inited_(false), 
+      is_launched_(false), lock_(common::ObLatchIds::MAJOR_FREEZE_SERVICE_LOCK),
+      rw_lock_(common::ObLatchIds::MAJOR_FREEZE_LOCK),
+      switch_lock_(common::ObLatchIds::MAJOR_FREEZE_SWITCH_LOCK),
+      tenant_major_freeze_(nullptr)
+  {}
+  virtual ~ObMajorFreezeService();
+
+  int init();
+
+  int flush(share::SCN &rec_scn)
+  {
+    UNUSED(rec_scn);
+    return OB_SUCCESS;
+  }
+  share::SCN get_rec_scn() override { return share::SCN::max_scn(); }
+ 
+  // for replay, do nothing
+  int replay(const void *buffer,
+             const int64_t buf_size,
+             const palf::LSN &lsn,
+             const share::SCN &scn) 
+  { 
+    UNUSED(buffer);
+    UNUSED(buf_size);
+    UNUSED(lsn);
+    UNUSED(scn);
+    return OB_SUCCESS; 
+  }
+
+  // switch leader
+  void switch_to_follower_forcedly(); 
+  int switch_to_leader(); 
+
+  int switch_to_follower_gracefully();
+  int resume_leader() { return switch_to_leader(); }
+
+  int launch_major_freeze(const ObMajorFreezeReason freeze_reason);
+  int suspend_merge();
+  int resume_merge();
+  int clear_merge_error();
+
+  
+
+  int start() { return common::OB_SUCCESS; };
+  void stop();
+  void wait();
+  void destroy();
+
+  bool is_paused() const;
+  int get_uncompacted_tablets(
+    common::ObArray<share::ObTabletReplica> &uncompacted_tablets,
+    common::ObArray<uint64_t> &uncompacted_table_ids) const;
+
+protected:
+  virtual ObMajorFreezeServiceType get_service_type() const 
+  { 
+    return ObMajorFreezeServiceType::SERVICE_TYPE_INVALID; 
+  }
+
+private:
+  int alloc_tenant_major_freeze();
+  int delete_tenant_major_freeze();
+  int inner_switch_to_follower();
+  int check_inner_stat();
+
+private:
+  bool is_inited_;
+  bool is_launched_;
+  // lock_: used for avoiding launching, suspend, resume, etc. ops concurrently execute
+  common::ObRecursiveMutex lock_;
+  // rw_lock_: used for switch_role, not use lock_ in switch_role. Otherwise, if major_freeze
+  // hang, switch_role may also hang
+  // 
+  common::SpinRWLock rw_lock_;
+  // switch_lock_: used for avoiding switch_to_leader, switch_to_follower concurrently execute. 
+  common::ObRecursiveMutex switch_lock_;
+  ObTenantMajorFreeze *tenant_major_freeze_;
+};
+
+class ObPrimaryMajorFreezeService : public ObMajorFreezeService
+{
+public:
+  ObPrimaryMajorFreezeService();
+  virtual ~ObPrimaryMajorFreezeService();
+
+  static int mtl_init(ObPrimaryMajorFreezeService *&service);
+
+protected:
+  virtual ObMajorFreezeServiceType get_service_type() const override;
+};
+
+class ObRestoreMajorFreezeService : public ObMajorFreezeService
+{
+public:
+  ObRestoreMajorFreezeService();
+  virtual ~ObRestoreMajorFreezeService();
+
+  static int mtl_init(ObRestoreMajorFreezeService *&service);
+
+protected:
+  virtual ObMajorFreezeServiceType get_service_type() const override;
+};
+
+} // end namespace rootserver
+} // end namespace oceanbase
+
+#endif // OCEANBASE_ROOTSERVER_FREEZE_OB_MAJOR_FREEZE_SERVICE_

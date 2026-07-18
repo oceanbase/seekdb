@@ -1,0 +1,75 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "sql/engine/expr/ob_expr_database.h"
+#include "sql/engine/ob_exec_context.h"
+
+using namespace oceanbase::common;
+
+namespace oceanbase
+{
+namespace sql
+{
+
+ObExprDatabase::ObExprDatabase(ObIAllocator &alloc)
+  : ObStringExprOperator(alloc, T_FUN_SYS_DATABASE, N_DATABASE, 0, NOT_VALID_FOR_GENERATED_COL)
+{
+}
+
+ObExprDatabase::~ObExprDatabase()
+{
+}
+
+int ObExprDatabase::calc_result_type0(ObExprResType &type, ObExprTypeCtx &type_ctx) const
+{
+  UNUSED(type_ctx);
+  type.set_varchar();
+  type.set_default_collation_type();
+  type.set_collation_level(CS_LEVEL_SYSCONST);
+  type.set_length(OB_MAX_DATABASE_NAME_LENGTH);
+  return OB_SUCCESS;
+}
+
+int ObExprDatabase::eval_database(const ObExpr &expr, ObEvalCtx &ctx,
+    ObDatum &expr_datum)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(expr);
+  const ObBasicSessionInfo *session_info = NULL;
+  if (OB_ISNULL(session_info = ctx.exec_ctx_.get_my_session())) {
+    ret = OB_ERR_UNEXPECTED;
+    SQL_ENG_LOG(WARN, "session info is null", K(ret));
+  } else {
+    const ObString database_name = session_info->get_database_name();
+    if (database_name.empty()) {
+      expr_datum.set_null();
+    } else {
+      expr_datum.set_string(database_name);
+    }
+  }
+  return ret;
+}
+
+int ObExprDatabase::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr,
+    ObExpr &rt_expr) const
+{
+  UNUSED(raw_expr);
+  UNUSED(op_cg_ctx);
+  rt_expr.eval_func_ = ObExprDatabase::eval_database;
+  return OB_SUCCESS;
+}
+}
+}

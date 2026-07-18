@@ -1,0 +1,320 @@
+#!/bin/bash
+
+TOPDIR=$(cd "$(dirname "$0")" && pwd)
+BUILD_SH=$TOPDIR/build.sh
+
+DEP_DIR=${TOPDIR}/deps/3rd/usr/local/oceanbase/deps/devel
+TOOLS_DIR=${TOPDIR}/deps/3rd/usr/local/oceanbase/devtools
+
+# Get CPU cores and CMAKE command, compatible with macOS and Linux
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  CMAKE_COMMAND="cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1"
+  CPU_CORES=$(sysctl -n hw.ncpu)
+  KERNEL_RELEASE=""
+else
+  CMAKE_COMMAND="${TOOLS_DIR}/bin/cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1"
+  CPU_CORES=$(grep -c ^processor /proc/cpuinfo)
+  KERNEL_RELEASE=$(grep -Po 'release [0-9]{1}' /etc/issue 2>/dev/null)
+fi
+
+ALL_ARGS=("$@")
+BUILD_ARGS=()
+MAKE_ARGS=(-j $CPU_CORES)
+NEED_MAKE=false
+NEED_INIT=false
+ANDROID_BUILD=false
+LLD_OPTION=ON
+ASAN_OPTION=ON
+STATIC_LINK_LGPL_DEPS_OPTION=ON
+
+echo "$0 ${ALL_ARGS[@]}"
+
+function echo_log() {
+  echo -e "[build.sh] $@"
+}
+
+function echo_err() {
+  echo -e "[build.sh][ERROR] $@" 1>&2
+}
+
+function usage
+{
+    echo -e "Usage:"
+    echo -e "\t./build.sh -h"
+    echo -e "\t./build.sh init"
+    echo -e "\t./build.sh clean"
+    echo -e "\t./build.sh [BuildType] [--init] [--make [MakeOptions]]"
+    echo -e "\t./build.sh [BuildType] [--init] [--ob-make [MakeOptions]]"
+
+    echo -e "\nOPTIONS:"
+    echo -e "\tBuildType => debug(default), release, errsim, dissearray, rpm"
+    echo -e "\t--android  => Cross-compile for Android NDK (arm64-v8a)"
+    echo -e "\tMakeOptions => Options to make command, default: -j N"
+
+    echo -e "\nExamples:"
+    echo -e "\t# Build by debug mode and make with -j24."
+    echo -e "\t./build.sh debug --make -j24"
+
+    echo -e "\n\t# Init and build with release mode but not compile."
+    echo -e "\t./build.sh release --init"
+
+    echo -e "\n\t# Build for Android with release mode."
+    echo -e "\t./build.sh release --android --init"
+
+    echo -e "\n\t# Build with rpm mode and make with default arguments."
+    echo -e "\t./build.sh rpm --make"
+}
+
+# parse arguments
+function parse_args
+{
+    for i in "${ALL_ARGS[@]}"; do
+        if [[ "$i" == "--init" ]]
+        then
+            NEED_INIT=true
+        elif [[ "$i" == "--android" ]]
+        then
+            ANDROID_BUILD=true
+        elif [[ "$i" == "--make" ]]
+        then
+            NEED_MAKE=make
+        elif [[ "$i" == "--ob-make" ]]
+        then
+            NEED_MAKE=ob-make
+            MAKE_ARGS=()
+        elif [[ "$i" == "-DBUILD_CDC_ONLY=ON" ]]
+        then
+            BUILD_ARGS+=("$i")
+        elif [[ $NEED_MAKE == false ]]
+        then
+            BUILD_ARGS+=("$i")
+        else
+            MAKE_ARGS+=("$i")
+        fi
+    done
+
+    if [[ "$KERNEL_RELEASE" == "release 6" ]]; then
+        echo_log '[NOTICE] lld is disabled in kernel release 6'
+        LLD_OPTION="OFF"
+    fi
+}
+
+# try call command make, if use give --make in command line.
+function try_make
+{
+    if [[ $NEED_MAKE != false ]]
+    then
+        $NEED_MAKE "${MAKE_ARGS[@]}"
+    fi
+}
+
+# try call init if --init given.
+function try_init
+{
+    if [[ $NEED_INIT == true ]]
+    then
+        do_init || exit $?
+    fi
+}
+
+# create build directory and cd it.
+function prepare_build_dir
+{
+    TYPE=$1
+    if [[ $ANDROID_BUILD == true ]]; then
+      TYPE="android_${TYPE}"
+    fi
+    mkdir -p $TOPDIR/build_$TYPE && cd $TOPDIR/build_$TYPE
+}
+
+# Get millisecond timestamp, compatible with macOS and Linux
+function get_timestamp_ms
+{
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        # macOS: date doesn't support %N, use Python or just seconds
+        if command -v python3 &> /dev/null; then
+            python3 -c "import time; print(int(time.time() * 1000))"
+        else
+            echo $(($(date +%s) * 1000))
+        fi
+    else
+        # Linux: use date +%s%N
+        echo $(($(date +%s%N)/1000000))
+    fi
+}
+
+# dep_create
+function do_init
+{
+    time1_ms=$(get_timestamp_ms)
+    (cd $TOPDIR/deps/init && ANDROID_BUILD=$ANDROID_BUILD bash dep_create.sh)
+    if [ $? -ne 0 ]; then
+      exit $?
+    fi
+    time2_ms=$(get_timestamp_ms)
+
+    cost_time_ms=$(($time2_ms - $time1_ms))
+    cost_time_s=`expr $cost_time_ms / 1000`
+    let min=cost_time_s/60
+    let sec=cost_time_s%60
+    echo_log "use dep_create.sh to create deps cost time: ${min}m${sec}s"
+
+}
+
+# make build directory && cmake && make (if need)
+function do_build
+{
+    # Check if cmake exists, compatible with macOS and Linux
+    CMAKE_PATH=""
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+      # macOS: cmake may be at /opt/homebrew/bin/cmake or /usr/local/bin/cmake
+      if [ -f /opt/homebrew/bin/cmake ]; then
+        CMAKE_PATH="/opt/homebrew/bin/cmake"
+      elif [ -f /usr/local/bin/cmake ]; then
+        CMAKE_PATH="/usr/local/bin/cmake"
+      fi
+    else
+      # Linux
+      CMAKE_PATH="${TOOLS_DIR}/bin/cmake"
+    fi
+    
+    if [ -z "$CMAKE_PATH" ]; then
+      echo_log "[NOTICE] Your workspace has not initialized dependencies, please append '--init' args to initialize dependencies"
+      exit 1
+    fi
+
+    TYPE=$1; shift
+    prepare_build_dir $TYPE || return
+
+    ANDROID_CMAKE_ARGS=""
+    if [[ $ANDROID_BUILD == true ]]; then
+      ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$HOME/Library/Android/sdk/ndk/27.3.13750724}"
+      if [ ! -d "$ANDROID_NDK_HOME" ]; then
+        echo_err "ANDROID_NDK_HOME not found: $ANDROID_NDK_HOME"
+        echo_err "Set ANDROID_NDK_HOME or install the NDK"
+        exit 1
+      fi
+      ANDROID_CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28"
+      echo_log "Android NDK: $ANDROID_NDK_HOME"
+    fi
+
+    ${CMAKE_COMMAND} ${TOPDIR} ${ANDROID_CMAKE_ARGS} "$@"
+    if [ $? -ne 0 ]; then
+      echo_err "Failed to generate Makefile"
+      exit 1
+    fi
+}
+
+# clean build directories
+function do_clean
+{
+    echo_log "cleaning..."
+    find . -maxdepth 1 -type d -name 'build_*' | grep -v 'build_ccls' | xargs rm -rf
+}
+
+function build_package
+{
+    STATIC_LINK_LGPL_DEPS_OPTION=ON
+    do_build "$@" -DOB_BUILD_PACKAGE=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DENABLE_FATAL_ERROR_HANG=OFF -DENABLE_AUTO_FDO=ON -DENABLE_THIN_LTO=ON -DENABLE_HOTFUNC=ON -DOB_STATIC_LINK_LGPL_DEPS=$STATIC_LINK_LGPL_DEPS_OPTION -DDEFAULT_LOG_LEVEL=OB_LOG_LEVEL_DBA_WARN -DDEFAULT_LOG_FILE_SIZE_MB=16
+}
+
+function build_package_tgz
+{
+    STATIC_LINK_LGPL_DEPS_OPTION=ON
+    do_build "$@" -DOB_BUILD_PACKAGE=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DENABLE_THIN_LTO=ON -DDEFAULT_LOG_LEVEL=OB_LOG_LEVEL_DBA_WARN -DDEFAULT_LOG_FILE_SIZE_MB=16 -DENABLE_FATAL_ERROR_HANG=OFF -DENABLE_AUTO_FDO=OFF -DENABLE_HOTFUNC=OFF -DOB_STATIC_LINK_LGPL_DEPS=$STATIC_LINK_LGPL_DEPS_OPTION
+}
+
+# build - configurate project and prepare to compile, by calling make
+function build
+{
+    set -- "${BUILD_ARGS[@]}"
+    case "x$1" in
+      xrelease)
+        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION
+        ;;
+      xrelease_no_unity)
+        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DOB_ENABLE_UNITY=OFF
+        ;;
+      xrelease_asan)
+        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DOB_USE_ASAN=$ASAN_OPTION -DOB_ENABLE_MCMODEL=OFF
+        ;;
+      xrelease_coverage)
+        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DWITH_COVERAGE=ON
+        ;;
+      xrelease_embedded)
+        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DBUILD_EMBED_MODE=ON
+        ;;
+      xdebug)
+        do_build "$@" -DCMAKE_BUILD_TYPE=Debug -DOB_USE_LLD=$LLD_OPTION
+        ;;
+      xdebug_no_unity)
+        do_build "$@" -DCMAKE_BUILD_TYPE=Debug -DOB_USE_LLD=$LLD_OPTION -DOB_ENABLE_UNITY=OFF
+        ;;
+      xccls)
+        do_build "$@" -DCMAKE_BUILD_TYPE=Debug -DOB_USE_LLD=$LLD_OPTION -DOB_BUILD_CCLS=ON
+        # build soft link for ccls
+        ln -sf ${TOPDIR}/build_ccls/compile_commands.json ${TOPDIR}/compile_commands.json
+        ;;
+      xclangd)
+        do_build "$@" -DCMAKE_BUILD_TYPE=Debug -DOB_USE_LLD=$LLD_OPTION -DOB_ENABLE_UNITY=OFF
+        # build soft link for clangd
+        ln -sf ${TOPDIR}/build_clangd/compile_commands.json ${TOPDIR}/compile_commands.json
+        ;;
+      xperf)
+        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_AUTO_FDO=ON -DENABLE_THIN_LTO=ON -DOB_USE_LLD=$LLD_OPTION -DENABLE_HOTFUNC=ON -DENABLE_FATAL_ERROR_HANG=OFF
+        ;;
+      xmac_perf)
+        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_THIN_LTO=ON -DOB_USE_LLD=ON -DENABLE_AUTO_FDO=OFF -DENABLE_HOTFUNC=OFF -DENABLE_FATAL_ERROR_HANG=OFF
+        ;;
+      xerrsim)
+        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_ERRSIM=ON -DOB_USE_LLD=$LLD_OPTION
+        ;;
+      xrpm)
+        build_package "$@" -DCMAKE_BUILD_RPM=ON
+        ;;
+      xtgz)
+        build_package_tgz "$@" -DCMAKE_BUILD_TGZ=ON
+        ;;
+      xdeb) 
+        build_package "$@" -DCMAKE_BUILD_DEB=ON
+        ;;
+      xpackage) 
+        # automatic determination of packaging type 
+        build_package "$@"
+        ;;
+      xcoverage)
+        do_build "$@" -DCMAKE_BUILD_TYPE=Debug -DOB_USE_LLD=$LLD_OPTION -DWITH_COVERAGE=ON
+        ;;
+      xsanity)
+        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DENABLE_SANITY=ON -DOB_ENABLE_MCMODEL=ON
+        ;;
+      *)
+        BUILD_ARGS=(debug "${BUILD_ARGS[@]}")
+        build
+        ;;
+    esac
+}
+
+function main
+{
+    case "$1" in
+        -h)
+            usage
+            ;;
+        init)
+            parse_args
+            do_init
+            ;;
+        clean)
+            do_clean
+            ;;
+        *)
+            parse_args
+            try_init
+            build
+            try_make
+            ;;
+    esac
+}
+
+main "$@"

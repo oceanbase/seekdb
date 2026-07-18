@@ -1,0 +1,81 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX COMMON
+
+#include "common/row/ob_row_util.h"
+#include "common/cell/ob_cell_reader.h"
+
+namespace oceanbase
+{
+namespace common
+{
+
+int ObRowUtil::convert(const ObString &compact_row, ObNewRow &row)
+{
+  return convert(compact_row.ptr(), compact_row.length(), row);
+}
+
+int ObRowUtil::convert(const char *compact_row, int64_t buf_len, ObNewRow &row)
+{
+  int ret = OB_SUCCESS;
+  ObCellReader cell_reader;
+  bool is_row_finished = false;
+  uint64_t column_id = OB_INVALID_ID;
+  int64_t cell_idx = 0;
+  ObObj cell;
+  if (OB_FAIL(cell_reader.init(compact_row, buf_len, DENSE))) {
+    LOG_WARN("fail to init cell reader", K(ret));
+  }
+  while (OB_SUCC(ret) && !is_row_finished && OB_SUCC(cell_reader.next_cell())) {
+    if (OB_FAIL(cell_reader.get_cell(column_id, cell, &is_row_finished))) {
+      LOG_WARN("failed to get cell", K(column_id), K(ret));
+    } else if (is_row_finished) {
+      ret = OB_SUCCESS;
+    } else if (cell_idx < row.count_) {
+      row.cells_[cell_idx++] = cell;
+    } else {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("accept row column count is not enough", K(ret), K(cell_idx), K_(row.count));
+    }
+  }
+  return ret;
+}
+
+int ObRowUtil::compare_row(const ObNewRow &lrow, const ObNewRow &rrow, int &cmp)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(lrow.is_invalid()) || OB_UNLIKELY(rrow.is_invalid())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("lrow or rrow is invalid", K(lrow.is_invalid()), K(rrow.is_invalid()));
+  } else {
+    int64_t cmp_cnt = lrow.get_count() >= rrow.get_count() ? lrow.get_count() : rrow.get_count();
+    int64_t min_cnt = lrow.get_count() < rrow.get_count() ? lrow.get_count() : rrow.get_count();
+    for (int64_t i = 0; 0 == cmp && i < cmp_cnt; ++i) {
+      if (i < min_cnt) {
+        cmp = lrow.get_cell(i).compare(rrow.get_cell(i));
+      } else if (i < lrow.get_count()) {
+        cmp = lrow.get_cell(i).is_min_value() ? 0 : 1;
+      } else {
+        //i < rrow.get_count() && i >= lrow.get_count()
+        cmp = rrow.get_cell(i).is_min_value() ? 0 : -1;
+      }
+    }
+  }
+  return ret;
+}
+} // end namespace common
+} // end namespace oceanbase

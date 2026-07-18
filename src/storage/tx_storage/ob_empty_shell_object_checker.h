@@ -1,0 +1,84 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEABASE_STORAGE_OB_EMPTY_SHELL_OBJECT_CHECKER
+#define OCEABASE_STORAGE_OB_EMPTY_SHELL_OBJECT_CHECKER
+
+#include "lib/oblog/ob_log.h"
+#include "lib/task/ob_timer.h"
+#include "storage/tablet/ob_tablet_create_delete_mds_user_data.h"
+#include "storage/tablet/ob_tablet.h"
+
+namespace oceanbase
+{
+namespace common
+{
+class ObTabletID;
+}
+namespace storage
+{
+class ObLS;
+// check whether the ddl tablet can become empty shell.
+class ObDDLEmptyShellChecker
+{
+public:
+  ObDDLEmptyShellChecker() 
+    : ls_(nullptr),
+      last_check_normal_time_(),
+      delayed_gc_tablet_infos_(),
+      is_inited_(false)
+    { }
+  ~ObDDLEmptyShellChecker() { reset(); }
+  void reset();
+  int init(storage::ObLS *ls);
+  int check_split_src_deleted_tablet(
+      const ObTablet &tablet, 
+      const ObTabletCreateDeleteMdsUserData &user_data, 
+      bool &can_become_empty_shell, 
+      bool &need_retry);
+  int erase_tablet_record(
+      const ObTabletID &tablet_id);
+private:
+  int check_disk_space_exceeds(
+      const ObTabletID &tablet_id,
+      bool &can_become_empty_shell);
+  int check_tablets_cnt_exceeds(
+      const ObTabletID &tablet_id,
+      bool &can_become_empty_shell);
+  int check_delay_deleted_time_exceeds(
+      const ObTabletID &tablet_id,
+      bool &can_become_empty_shell);
+  int periodic_check_normal();
+private:
+  typedef typename common::hash::ObHashMap<common::ObTabletID,
+                                          int64_t,
+                                          common::hash::NoPthreadDefendMode,
+                                          common::hash::hash_func<common::ObTabletID>,
+                                          common::hash::equal_to<common::ObTabletID>,
+                                          common::hash::SimpleAllocer<common::hash::HashMapTypes<common::ObTabletID, int64_t>::AllocType>,
+                                          common::hash::NormalPointer,
+                                          oceanbase::common::ObMalloc,
+                                          2/*MAP_EXTEND_RATIO*/> DelayedGCTabletMap;
+  typedef typename DelayedGCTabletMap::iterator DelayedGCTabletIterator;
+  storage::ObLS *ls_;
+  int64_t last_check_normal_time_; // to decide whether to check map leak.
+  DelayedGCTabletMap delayed_gc_tablet_infos_;
+  bool is_inited_;
+};
+} // storage
+} // oceanbase
+
+#endif

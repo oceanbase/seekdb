@@ -1,0 +1,141 @@
+# owner: xinglipeng.xlp(eryang)
+# owner group: storage
+# description: check tokenize result with function.
+
+--disable_warnings
+drop database if exists fts;
+create database fts;
+use fts;
+set ob_query_timeout = 10000000000;
+
+create table memo (id BIGINT AUTO_INCREMENT,title VARCHAR(100), body TEXT, FULLTEXT INDEX fti(title, body));
+
+INSERT INTO memo (title, body) VALUES ('', '');
+INSERT INTO memo (title, body) VALUES ('电影评论', '昨晚看的一部电影非常感人，让我思考了很多。');
+INSERT INTO memo (title, body) VALUES ('音乐欣赏', '最近迷上了一位古典音乐家的作品，他的钢琴曲非常优美。');
+INSERT INTO memo (title, body) VALUES ('旅行日记', '这次旅行中发生了很多有趣的事情，记录下来留作纪念。');
+INSERT INTO memo (title, body) VALUES ('Security Audit', 'Completed the annual security audit. No major vulnerabilities were found, but we will implement additional measures for data protection.');
+INSERT INTO memo (title, body) VALUES ('Employee Training', 'Scheduled training sessions for all employees on the latest industry standards and compliance requirements.');
+INSERT INTO memo (title, body) VALUES ('Client Meeting', 'Prepared for the client meeting next week. We will present our progress and discuss future plans.');
+INSERT INTO memo (title, body) VALUES ('Sales Report', 'Sales have increased by 15% compared to last quarter. The sales team is working on strategies to maintain this growth.');
+
+--enable_warnings
+
+--result_format 4
+
+
+
+# happy path test
+
+select tokenize('hello world');
+select tokenize("hello world");
+select tokenize('hello world', 'space');
+select tokenize('hello world', 'beng');
+select tokenize('hello world', 'ngram');
+select tokenize('hello world', 'space', '[{"output": "all"}]');
+select tokenize('hello world', 'space', '[{"output": "default"}]');
+
+
+# output empty result
+
+select tokenize("");
+select tokenize('');
+
+select tokenize('hello world', ' ngram');
+select tokenize('hello world', 'ngram ');
+
+# Error Test
+
+--error ER_WRONG_PARAMCOUNT_TO_NATIVE_FCT
+select tokenize('hello world', 'space', '[{"output": "all"}]', 'extra');
+
+--error ER_WRONG_PARAMCOUNT_TO_NATIVE_FCT
+select tokenize();
+
+--error ER_WRONG_ARGUMENTS
+select tokenize('hello world', '');
+
+--error ER_WRONG_ARGUMENTS
+select tokenize('hello world', ' ');
+
+--error ER_FUNCTION_NOT_DEFINED
+select tokenize('hello world', 'ng ram');
+
+
+--error ER_FUNCTION_NOT_DEFINED
+select tokenize('hello world', 'ngramm', '[{"output": "default"}]');
+
+--error ER_FUNCTION_NOT_DEFINED
+select tokenize('hello world', 'ngra', '[{"output": "default"}]');
+
+--error ER_WRONG_ARGUMENTS
+select tokenize('hello world', 'ngram', '[{"output": "defaults"}]');
+
+--error ER_WRONG_ARGUMENTS
+select tokenize('hello world', 'ngram', '[{"undefined": "all"}]');
+
+--error ER_NOT_SUPPORTED_YET
+select tokenize('hello world', 'ngram', '[{"case": "upper"}]');
+
+--error ER_WRONG_ARGUMENTS
+select tokenize('hello world', 'ngram', '[{"additional-args": ""}]');
+
+--error ER_NOT_SUPPORTED_YET
+select tokenize('hello world', 'ngram', '[{"stopwords": "abc,def"}]');
+
+--error ER_INVALID_JSON_TEXT_IN_PARAM
+select tokenize('hello world', 'ngram', '[{"output": "default"]');
+
+# from table
+
+select tokenize(title, "ngram", "[{}]") as ttoken, tokenize(body, 'space', '[{"output": "all"}]') as btoken from memo;
+
+select * from memo where '电影' member of (tokenize(title, "ngram")) OR 'growth' member of (tokenize(body, "space"));
+
+
+# config test
+
+--error ER_WRONG_ARGUMENTS
+select tokenize('hello world abcdefghijklmnopqrstuvwxyz', 'ngram', '[{"output": "all"}, {"additional_args": [{"ngram_token_size": 0}]}]');
+
+select tokenize('hello world abcdefghijklmnopqrstuvwxyz', 'ngram', '[{"output": "all"}, {"additional_args": [{"ngram_token_size": 1}]}]');
+select tokenize('hello world abcdefghijklmnopqrstuvwxyz', 'ngram', '[{"output": "all"}, {"additional_args": [{"ngram_token_size": 2}]}]');
+select tokenize('hello world abcdefghijklmnopqrstuvwxyz', 'ngram', '[{"output": "all"}, {"additional_args": [{"ngram_token_size": 10}]}]');
+
+--error ER_WRONG_ARGUMENTS
+select tokenize('hello world abcdefghijklmnopqrstuvwxyz', 'ngram', '[{"output": "all"}, {"additional_args": [{"ngram_token_size": 11}]}]');
+
+select tokenize('hello world abcdefghijklmnopqrstuvwxyz', 'space', '[{"output": "all"}, {"additional_args": [{"min_token_size": 5}]}]');
+select tokenize('hello world abcdefghijklmnopqrstuvwxyz', 'space', '[{"output": "all"}, {"additional_args": [{"min_token_size": 6}]}]');
+
+--error ER_WRONG_ARGUMENTS
+select tokenize('hello world abcdefghijklmnopqrstuvwxyz', 'space', '[{"output": "all"}, {"additional_args": [{"min_token_size": 5}, {"max_token_size": 9}]}]');
+
+select tokenize('hello world abcdefghijklmnopqrstuvwxyz', 'space', '[{"output": "all"}, {"additional_args": [{"min_token_size": 5}, {"max_token_size": 10}]}]');
+
+--error ER_WRONG_ARGUMENTS
+select tokenize('hello world abcdefghijklmnopqrstuvwxyz', 'space', '[{"output": "all"}, {"additional_args": [{"min_token_size": 11}, {"max_token_size": 10}]}]');
+
+
+--error ER_WRONG_ARGUMENTS
+select tokenize('hello world abcdefghijklmnopqrstuvwxyz', 'space', '[{"output": "all"}, {"additional_args": [{"min_token_size": 0}]}]');
+
+--error ER_WRONG_ARGUMENTS
+select tokenize('hello world abcdefghijklmnopqrstuvwxyz', 'space', '[{"output": "all"}, {"additional_args": [{"min_token_size": 17}]}]');
+
+--error ER_NOT_SUPPORTED_YET
+select tokenize('hello world abcdefghijklmnopqrstuvwxyz', 'space', '[{"output": "all"}, {"additional_args": [{"not_existed_name": 11}, {"max_token_size": 10}]}]');
+
+--error ER_NOT_SUPPORTED_YET
+select tokenize('hello world abcdefghijklmnopqrstuvwxyz', 'space', '[{"output": "all"}, {"additional_args": [{"ngram_token_size": 6}, {"max_token_size": 10}]}]');
+
+# invalid json
+--error ER_NOT_SUPPORTED_YET
+select tokenize('hello world abcdefghijklmnopqrstuvwxyz', 'ik', '[{"output": "all"}, {"additional_args": [{"ngram_token_size": 6}, {"max_token_size": 10}]}]');
+
+
+--disable_warnings
+drop table if exists memo;
+--enable_warnings
+
+drop database fts;

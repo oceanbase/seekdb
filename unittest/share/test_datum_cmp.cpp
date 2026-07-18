@@ -1,0 +1,130 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+
+#define private public
+#include "sql/test_sql_utils.h"
+
+
+#undef private
+
+namespace oceanbase
+{
+namespace share
+{
+using namespace common;
+using namespace sql;
+static bool is_equal_content(const char *tmp_file, const char *result_file)
+{
+  std::ifstream if_tmp(tmp_file);
+  std::ifstream if_result(result_file);
+
+  EXPECT_TRUE(if_tmp.is_open());
+  EXPECT_TRUE(if_result.is_open());
+
+  std::istream_iterator<std::string> if_tmp_iter(if_tmp);
+  std::istream_iterator<std::string> if_result_iter(if_result);
+
+  return std::equal(if_tmp_iter, std::istream_iterator<std::string>(), if_result_iter);
+}
+
+class ObTestDatumCmp: public ::testing::Test
+{
+public:
+  ObTestDatumCmp() {}
+  ~ObTestDatumCmp() {}
+  virtual void SetUp() {}
+  virtual void TearDown() {}
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObTestDatumCmp);
+};
+
+TEST(ObTestDatumCmp, defined_nullsafe_func_by_type)
+{
+  const char* defined_func_file = "./test_defined_func_by_type.result";
+  const char* tmp_file = "./test_defined_func_by_type.tmp";
+  std::ofstream of_result(tmp_file);
+
+  for (int i = 0; i < ObMaxType; i++) {
+    of_result << "/**************** " << inner_obj_type_str(static_cast<ObObjType>(i))
+              << " ****************/" << "\n\n";
+    for (int j = 0; j < ObMaxType; j++) {
+      of_result << "<"
+                << inner_obj_type_str(static_cast<ObObjType>(i))
+                << ", "
+                << inner_obj_type_str(static_cast<ObObjType>(j))
+                << ">"
+                << " : ";
+      if (NULL != ObDatumFuncs::get_nullsafe_cmp_func(static_cast<ObObjType>(i),
+                                                      static_cast<ObObjType>(j),
+                                                      NULL_FIRST,
+                                                      CS_TYPE_COLLATION_FREE,
+                                                      SCALE_UNKNOWN_YET,
+                                                      false, false)) {
+        of_result << "defined\n";
+      } else {
+        of_result << "not defined\n";
+      }
+    } // for end
+    of_result << "\n";
+  } // for end
+  of_result.flush();
+  EXPECT_TRUE(is_equal_content(tmp_file, defined_func_file));
+}
+
+TEST(ObTestDatumCmp, defined_expr_func_by_type)
+{
+  const char* defined_func_file = "./test_defined_expr_func_by_type.result";
+  const char* tmp_file = "./test_defined_expr_func.tmp";
+  std::ofstream of_result(tmp_file);
+
+  for (int i = 0; i < ObMaxType; i++) {
+    of_result << "/**************** " << inner_obj_type_str(static_cast<ObObjType>(i))
+              << " ****************/" << "\n\n";
+    for (int j = 0; j < ObMaxType; j++) {
+      of_result << "<"
+                << inner_obj_type_str(static_cast<ObObjType>(i))
+                << ", "
+                << inner_obj_type_str(static_cast<ObObjType>(j))
+                << "> : ";
+      if (NULL != ObExprCmpFuncsHelper::get_datum_expr_cmp_func(static_cast<ObObjType>(i),
+                                                        static_cast<ObObjType>(j),
+                                                        SCALE_UNKNOWN_YET,
+                                                        SCALE_UNKNOWN_YET,
+                                                        PRECISION_UNKNOWN_YET,
+                                                        PRECISION_UNKNOWN_YET,
+                                                        CS_TYPE_COLLATION_FREE,
+                                                        false)) {
+        of_result << "defined\n";
+      } else {
+        of_result << "not defined\n";
+      }
+    } // for end
+    of_result << "\n";
+  } // for end
+  of_result.flush();
+  EXPECT_TRUE(is_equal_content(tmp_file, defined_func_file));
+}
+} // end namespace share
+} // end namespace oceanbase
+
+int main(int argc, char **argv)
+{
+  ::testing::InitGoogleTest(&argc, argv);
+  OB_LOGGER.set_log_level("INFO");
+  OB_LOGGER.set_file_name("test_datum_cmp.log", true);
+  return RUN_ALL_TESTS();
+}

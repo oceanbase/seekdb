@@ -1,0 +1,71 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_ENG
+
+#include "sql/engine/basic/chunk_store/ob_default_block_reader.h"
+
+namespace oceanbase
+{
+using namespace common;
+
+namespace sql
+{
+
+int ObDefaultBlockReader::get_row(const ObChunkDatumStore::StoredRow *&sr)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(cur_blk_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("cur block is null", K(ret));
+  } else if (!blk_has_next_row()) {
+    ret = OB_ITER_END;
+  } else if (cur_pos_in_blk_ > cur_blk_->raw_size_ - sizeof(ObTempBlockStore::Block)) {
+    ret = OB_INDEX_OUT_OF_RANGE;
+    LOG_WARN("get unexpected index", K(ret));
+  } else {
+    const ObChunkDatumStore::StoredRow *row = reinterpret_cast<const ObChunkDatumStore::StoredRow *>(&cur_blk_->payload_[cur_pos_in_blk_]);
+    sr = row;
+    cur_pos_in_blk_ += row->row_size_;
+    cur_row_in_blk_ += 1;
+  }
+
+  return ret;
+}
+
+int ObDefaultBlockReader::prepare_blk_for_read(ObTempBlockStore::Block *blk)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(blk)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fail to block is null", K(ret));
+  } else {
+    int64_t cur_row = 0;
+    int64_t cur_pos = 0;
+    const int64_t buf_size = blk->raw_size_ - sizeof(ObTempBlockStore::Block);
+    while (cur_row < blk->cnt_ && cur_pos < buf_size) {
+      ObChunkDatumStore::StoredRow *sr = reinterpret_cast<ObChunkDatumStore::StoredRow*>(blk->payload_ + cur_pos);
+      sr->swizzling();
+      cur_pos += sr->row_size_;
+      cur_row++;
+    }
+  }
+
+  return ret;
+}
+
+}
+}

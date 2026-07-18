@@ -1,0 +1,200 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "log_io_task_cb_utils.h"
+
+namespace oceanbase
+{
+using namespace share;
+namespace palf
+{
+FlushLogCbCtx::FlushLogCbCtx()
+    : log_id_(OB_INVALID_LOG_ID),
+      scn_(),
+      lsn_(),
+      log_proposal_id_(INVALID_PROPOSAL_ID),
+      total_len_(0),
+      curr_proposal_id_(INVALID_PROPOSAL_ID),
+      begin_ts_(OB_INVALID_TIMESTAMP)
+{
+}
+
+FlushLogCbCtx::FlushLogCbCtx(const int64_t log_id, const SCN &scn, const LSN &lsn,
+                             const int64_t &log_proposal_id, const int64_t total_len,
+                             const int64_t &curr_proposal_id, const int64_t begin_ts)
+    : log_id_(log_id),
+      lsn_(lsn),
+      log_proposal_id_(log_proposal_id),
+      total_len_(total_len),
+      curr_proposal_id_(curr_proposal_id),
+      begin_ts_(begin_ts)
+{
+  scn_ = scn;
+}
+
+FlushLogCbCtx::~FlushLogCbCtx()
+{
+  reset();
+}
+
+void FlushLogCbCtx::reset()
+{
+  log_id_ = OB_INVALID_LOG_ID;
+  scn_.reset();
+  lsn_.reset();
+  log_proposal_id_ = INVALID_PROPOSAL_ID;
+  total_len_ = 0;
+  curr_proposal_id_ = INVALID_PROPOSAL_ID;
+  begin_ts_ = OB_INVALID_TIMESTAMP;
+}
+
+FlushLogCbCtx& FlushLogCbCtx::operator=(const FlushLogCbCtx &arg)
+{
+  log_id_ = arg.log_id_;
+  scn_ = arg.scn_;
+  lsn_ = arg.lsn_;
+  log_proposal_id_ = arg.log_proposal_id_;
+  total_len_ = arg.total_len_;
+  curr_proposal_id_ = arg.curr_proposal_id_;
+  begin_ts_ = arg.begin_ts_;
+  return *this;
+}
+
+TruncateLogCbCtx::TruncateLogCbCtx()
+    : lsn_()
+{
+}
+
+TruncateLogCbCtx::TruncateLogCbCtx(const LSN &lsn)
+    : lsn_(lsn)
+{
+}
+
+TruncateLogCbCtx::~TruncateLogCbCtx()
+{
+  reset();
+}
+
+void TruncateLogCbCtx::reset()
+{
+  lsn_.reset();
+}
+
+TruncateLogCbCtx& TruncateLogCbCtx::operator=(const TruncateLogCbCtx &arg)
+{
+  lsn_ = arg.lsn_;
+  return *this;
+}
+
+FlushMetaCbCtx::FlushMetaCbCtx()
+    : type_ (INVALID_META_TYPE),
+      proposal_id_(INVALID_PROPOSAL_ID),
+      config_version_(),
+      base_lsn_(),
+      allow_vote_(true),
+      is_applied_mode_meta_(false),
+      log_mode_meta_()
+{
+}
+
+FlushMetaCbCtx::~FlushMetaCbCtx()
+{
+  reset();
+}
+
+void FlushMetaCbCtx::reset()
+{
+  type_ = INVALID_META_TYPE;
+  proposal_id_ = INVALID_PROPOSAL_ID;
+  config_version_.reset();
+  base_lsn_.reset();
+  allow_vote_ = true;
+  is_applied_mode_meta_ = false;
+  log_mode_meta_.reset();
+}
+
+FlushMetaCbCtx &FlushMetaCbCtx::operator=(const FlushMetaCbCtx &arg)
+{
+  this->type_ = arg.type_;
+  this->proposal_id_ = arg.proposal_id_;
+  this->config_version_ = arg.config_version_;
+  this->base_lsn_ = arg.base_lsn_;
+  this->allow_vote_ = arg.allow_vote_;
+  this->is_applied_mode_meta_ = arg.is_applied_mode_meta_;
+  this->log_mode_meta_ = arg.log_mode_meta_;
+  return *this;
+}
+
+TruncatePrefixBlocksCbCtx::TruncatePrefixBlocksCbCtx(const LSN &lsn) : lsn_(lsn)
+{
+}
+
+TruncatePrefixBlocksCbCtx::TruncatePrefixBlocksCbCtx() : lsn_()
+{
+}
+
+TruncatePrefixBlocksCbCtx::~TruncatePrefixBlocksCbCtx()
+{
+}
+
+void TruncatePrefixBlocksCbCtx::reset()
+{
+  lsn_.reset();
+}
+
+TruncatePrefixBlocksCbCtx& TruncatePrefixBlocksCbCtx::operator=(const TruncatePrefixBlocksCbCtx& truncate_prefix_blocks_ctx)
+{
+  lsn_ = truncate_prefix_blocks_ctx.lsn_;
+  return *this;
+}
+
+FlashbackCbCtx::FlashbackCbCtx(const SCN &flashback_scn)
+{
+  flashback_scn_ = flashback_scn;
+}
+
+FlashbackCbCtx::FlashbackCbCtx()
+{
+  reset();
+}
+
+FlashbackCbCtx::~FlashbackCbCtx()
+{
+  reset();
+}
+
+void FlashbackCbCtx::reset()
+{
+  flashback_scn_.reset();
+}
+
+FlashbackCbCtx &FlashbackCbCtx::operator=(const FlashbackCbCtx &rhf)
+{
+  flashback_scn_ = rhf.flashback_scn_;
+  return *this;
+}
+
+bool PurgeThrottlingCbCtx::is_valid() const
+{
+  return (purge_type_ > INVALID_PURGE_TYPE && purge_type_ < MAX_PURGE_TYPE);
+}
+
+void PurgeThrottlingCbCtx::reset()
+{
+  purge_type_ = MAX_PURGE_TYPE;
+} 
+} // end of logservice
+} // end of oceanbase

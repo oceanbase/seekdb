@@ -1,0 +1,87 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_ENG
+#include "sql/engine/expr/ob_expr_host_ip.h"
+#include "sql/session/ob_sql_session_info.h"
+
+using namespace oceanbase::common;
+using namespace oceanbase::observer;
+using namespace oceanbase::sql;
+
+namespace oceanbase
+{
+namespace sql
+{
+
+
+ObExprHostIP::ObExprHostIP(ObIAllocator &alloc)
+    : ObFuncExprOperator(alloc, T_FUN_SYS_HOST_IP, N_HOST_IP, 0, NOT_VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
+{
+}
+
+ObExprHostIP::~ObExprHostIP()
+{
+}
+
+int ObExprHostIP::calc_result_type0(ObExprResType &type, ObExprTypeCtx &type_ctx) const
+{
+  int ret = OB_SUCCESS;
+  type.set_varchar();
+  type.set_length(MAX_IP_ADDR_LENGTH);
+  const ObLengthSemantics default_length_semantics =
+    (OB_NOT_NULL(type_ctx.get_session()) ?
+      type_ctx.get_session()->get_actual_nls_length_semantics() : LS_BYTE);
+  type.set_length_semantics(default_length_semantics);
+  type.set_default_collation_type();
+  type.set_collation_level(CS_LEVEL_SYSCONST);
+  return ret;
+}
+
+int ObExprHostIP::eval_host_ip(const ObExpr &expr, ObEvalCtx &ctx,
+    ObDatum &expr_datum)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(expr);
+  char *buf = expr.get_str_res_mem(ctx, OB_IP_STR_BUFF);
+  if (OB_ISNULL(buf)) {
+    ret = OB_ERR_UNEXPECTED;
+    SERVER_LOG(WARN, "buff is null", K(ret));
+  } else {
+    //see 
+    ObAddr addr = ObCurTraceId::get_addr();
+    MEMSET(buf, 0, OB_IP_STR_BUFF);
+    if (!addr.ip_to_string(buf, OB_IP_STR_BUFF)) {
+      ret = OB_ERR_UNEXPECTED;
+      SERVER_LOG(WARN, "ip to string failed", K(ret));
+    } else {
+      expr_datum.set_string(buf, strlen(buf));
+    }
+  }
+  return ret;
+}
+
+int ObExprHostIP::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr,
+    ObExpr &rt_expr) const
+{
+  UNUSED(raw_expr);
+  UNUSED(op_cg_ctx);
+  rt_expr.eval_func_ = ObExprHostIP::eval_host_ip;
+  return OB_SUCCESS;
+}
+
+} // namespace sql
+} // namespace oceanbase

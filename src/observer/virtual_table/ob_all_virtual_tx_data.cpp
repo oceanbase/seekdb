@@ -1,0 +1,186 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#include "ob_all_virtual_tx_data.h"
+#include "share/rc/ob_module_provider.h"
+
+#include "storage/tx_storage/ob_ls_service.h"
+
+namespace oceanbase {
+namespace observer {
+
+using namespace share;
+using namespace storage;
+using namespace transaction;
+using namespace omt;
+
+int ObAllVirtualTxData::inner_get_next_row(common::ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
+
+  if (false == start_to_read_) {
+    if (OB_FAIL(get_primary_key_())) {
+      SERVER_LOG(WARN, "get primary key failed", KR(ret));
+    } else if (OB_FAIL(generate_virtual_tx_data_row_(tx_data_row_))) {
+      if (OB_ITER_END == ret) {
+      } else if (OB_TRANS_CTX_NOT_EXIST == ret) {
+        ret = OB_ITER_END;
+      } else {
+        SERVER_LOG(WARN, "generate virtual tx data row failed", KR(ret));
+      }
+    } else if (OB_FAIL(fill_in_row_(tx_data_row_, row))) {
+      SERVER_LOG(WARN, "fill in row failed", KR(ret));
+    } else {
+      start_to_read_ = true;
+    }
+  } else {
+    ret = OB_ITER_END;
+  }
+  return ret;
+}
+
+int ObAllVirtualTxData::fill_in_row_(const VirtualTxDataRow &row_data, common::ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
+  const int64_t col_count = output_column_ids_.count();
+  for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
+    uint64_t col_id = output_column_ids_.at(i);
+    switch (col_id) {
+      case TX_ID_COL:
+        cur_row_.cells_[i].set_int(tx_id_.get_id());
+        break;
+      case STATE_COL:
+        cur_row_.cells_[i].set_varchar(ObTxCommitData::get_state_string(row_data.state_));
+        cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+        break;
+      case START_SCN_COL: {
+        uint64_t v = row_data.start_scn_.get_val_for_inner_table_field();
+        cur_row_.cells_[i].set_uint64(v);
+        break;
+      }
+      case END_SCN_COL: {
+        uint64_t v = row_data.end_scn_.get_val_for_inner_table_field();
+        cur_row_.cells_[i].set_uint64(v);
+        break;
+      }
+      case COMMIT_VERSION_COL: {
+        uint64_t v = row_data.commit_version_.get_val_for_inner_table_field();
+        cur_row_.cells_[i].set_uint64(v);
+        break;
+      }
+      case UNDO_STATUS_COL:
+        cur_row_.cells_[i].set_varchar(row_data.undo_status_list_str_);
+        cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+        break;
+      case TX_OP_COL:
+        cur_row_.cells_[i].set_varchar(row_data.tx_op_str_);
+        cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+        break;
+      default:
+        ret = OB_ERR_UNEXPECTED;
+        break;
+    }
+  }
+  if (OB_SUCC(ret)) {
+    row = &cur_row_;
+  }
+
+  return ret;
+}
+
+int ObAllVirtualTxData::get_primary_key_()
+{
+  int ret = OB_SUCCESS;
+  // In single-node mode, rowkey only has tx_id (index 0)
+  if (key_ranges_.count() != 1) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "only support select a single tx data once, multiple range select is ");
+    SERVER_LOG(WARN, "invalid key ranges", KR(ret));
+  } else {
+    ObNewRange &key_range = key_ranges_.at(0);
+    if (OB_UNLIKELY(key_range.get_start_key().get_obj_cnt() < 1 || key_range.get_end_key().get_obj_cnt() < 1)) {
+      ret = OB_ERR_UNEXPECTED;
+      SERVER_LOG(ERROR,
+                 "unexpected key_ranges_ of rowkey columns",
+                 KR(ret),
+                 "size of start key",
+                 key_range.get_start_key().get_obj_cnt(),
+                 "size of end key",
+                 key_range.get_end_key().get_obj_cnt());
+    } else if (OB_FAIL(handle_key_range_(key_range))) {
+      SERVER_LOG(WARN, "handle key range faield", KR(ret));
+    }
+  }
+  return ret;
+}
+
+int ObAllVirtualTxData::handle_key_range_(ObNewRange &key_range)
+{
+  int ret = OB_SUCCESS;
+  // In single-node mode, rowkey only has tx_id (index 0)
+  ObObj tx_id_obj_low = (key_range.get_start_key().get_obj_ptr()[0]);
+  ObObj tx_id_obj_high = (key_range.get_end_key().get_obj_ptr()[0]);
+
+  ObTransID tx_id_low = tx_id_obj_low.is_min_value() ? ObTransID(0) : ObTransID(tx_id_obj_low.get_int());
+  ObTransID tx_id_high = tx_id_obj_high.is_min_value() ? ObTransID(INT64_MAX) : ObTransID(tx_id_obj_high.get_int());
+
+  if (tx_id_low != tx_id_high) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "trans id must be specified. range select is ");
+    SERVER_LOG(WARN,
+               "only support point select.",
+               KR(ret),
+               K(tx_id_low),
+               K(tx_id_high));
+  } else {
+// Use sys tenant in single-node mode
+    tx_id_ = tx_id_low;
+  }
+
+  return ret;
+}
+
+int ObAllVirtualTxData::generate_virtual_tx_data_row_(VirtualTxDataRow &tx_data_row)
+{
+  int ret = OB_SUCCESS;
+  MOD_SCOPE
+  {
+    ObLSHandle ls_handle;
+    ObLS *ls = nullptr;
+    ObLSService *ls_service = share::g_mp->ls_service();
+    if (OB_FAIL(ls_service->get_ls(share::SYS_LS, ls_handle, ObLSGetMod::OBSERVER_MOD))) {
+      if (OB_LS_NOT_EXIST == ret) {
+        ret = OB_ITER_END;
+      } else {
+        SERVER_LOG(WARN, "get ls from ls service failed", KR(ret));
+      }
+    } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
+      ret = OB_ERR_UNEXPECTED;
+      SERVER_LOG(ERROR, "get ls failed from ls handle", KR(ret), K(ls_handle));
+    } else if (OB_FAIL(ls->generate_virtual_tx_data_row(tx_id_, tx_data_row))) {
+      SERVER_LOG(WARN, "ls genenrate virtual tx data row failed", KR(ret), K(ls_handle));
+    } else {
+      SERVER_LOG(DEBUG, "generate tx data row succeed", KPC(ls), K(tx_data_row));
+    }
+  }
+
+  if (OB_FAIL(ret) && OB_TENANT_NOT_IN_SERVER == ret) {
+    ret = OB_ITER_END;
+  }
+  return ret;
+}
+
+}  // namespace observer
+}  // namespace oceanbase

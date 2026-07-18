@@ -1,0 +1,82 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SHARE_DEVICE_OB_DEVICE_CONFIG_PARSER_H_
+#define OCEANBASE_SHARE_DEVICE_OB_DEVICE_CONFIG_PARSER_H_
+
+#include "share/object_storage/ob_object_storage_struct.h"
+
+namespace oceanbase
+{
+namespace share
+{
+class ObDeviceConfigParser
+{
+public:
+  static const char USED_FOR[];
+  static const char PATH[];
+  static const char ENDPOINT[];
+  static const char ACCESS_INFO[];
+  static const char ENCRYPT_INFO[];
+  static const char EXTENSION[];
+  static const char OLD_ACCESS_INFO[];
+  static const char OLD_ENCRYPT_INFO[];
+  static const char OLD_EXTENSION[];
+  static const char RAM_URL[];
+  static const char OLD_RAM_URL[];
+  static const char STATE[];
+  static const char STATE_INFO[];
+  static const char CREATE_TIMESTAMP[];
+  static const char LAST_CHECK_TIMESTAMP[];
+  static const char OP_ID[];
+  static const char SUB_OP_ID[];
+  static const char STORAGE_ID[];
+  static const char MAX_IOPS[];
+  static const char MAX_BANDWIDTH[];
+  static const char INVALID_OP_ID[];
+
+public:
+  static int parse_device_config_field(const char *buf, ObDeviceConfig &device_config);
+  static int parse_config_type_int(const char *key_name, const char *token, int64_t &value);
+  static int parse_config_type_uint(const char *key_name, const char *token, uint64_t &value);
+  static int parse_config_type_char_array(const char *key_name,
+                                          const char *token,
+                                          const int64_t max_value_len,
+                                          char *value);
+
+private:
+  enum class FieldType
+  {
+    TYPE_CHAR_ARRAY = 0,
+    TYPE_INT = 1,
+    TYPE_UINT = 2,
+  };
+
+  // @max_field_len is used for TYPE_CHAR_ARRAY, not used for TYPE_INT and TYPE_UINT
+  static int parse_common_field_(const char *token,
+                                 void *field,
+                                 const FieldType &field_type,
+                                 const char *field_name,
+                                 const int64_t max_field_len = 0);
+  static int parse_access_info_(const char *token, char *access_info, const bool is_old = false);
+  static int parse_encrypt_info_(const char *token, char *encrypt_info, const bool is_old = false);
+  static int parse_extension_(const char *token, char *extension, const bool is_old = false);
+};
+
+}  // namespace share
+}  // namespace oceanbase
+
+#endif  // OCEANBASE_SHARE_DEVICE_OB_DEVICE_CONFIG_PARSER_H_

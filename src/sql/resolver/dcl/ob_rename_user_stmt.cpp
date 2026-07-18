@@ -1,0 +1,70 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "sql/resolver/dcl/ob_rename_user_stmt.h"
+using namespace oceanbase::common;
+using namespace oceanbase::sql;
+
+ObRenameUserStmt::ObRenameUserStmt(ObIAllocator *name_pool)
+    : ObDDLStmt(name_pool, stmt::T_RENAME_USER)
+{
+}
+
+ObRenameUserStmt::ObRenameUserStmt()
+    : ObDDLStmt(NULL, stmt::T_RENAME_USER)
+{
+}
+
+ObRenameUserStmt::~ObRenameUserStmt()
+{
+}
+
+int ObRenameUserStmt::add_rename_info(const common::ObString &from_user,
+    const common::ObString &from_host, const common::ObString &to_user,
+    const common::ObString &to_host)
+{
+  int ret = OB_SUCCESS;
+  if (0 == from_user.compare(OB_SYS_USER_NAME)
+      && 0 == from_host.compare(OB_SYS_HOST_NAME)) {
+    ret = OB_ERR_NO_PRIVILEGE;
+    SQL_RESV_LOG(WARN, "Can not rename root to other name", K(ret));
+  } else if (OB_FAIL(rename_infos_.add_string(from_user))) {
+    SQL_RESV_LOG(WARN, "failed to add string", K(ret));
+  } else if (OB_FAIL(rename_infos_.add_string(from_host))) {
+    SQL_RESV_LOG(WARN, "failed to add string", K(ret));
+  } else if (OB_FAIL(rename_infos_.add_string(to_user))) {
+    SQL_RESV_LOG(WARN, "failed to add string", K(ret));
+  } else if (OB_FAIL(rename_infos_.add_string(to_host))) {
+    SQL_RESV_LOG(WARN, "failed to add string", K(ret));
+  }
+  return ret;
+}
+const ObStrings *ObRenameUserStmt::get_rename_infos() const
+{
+  return &rename_infos_;
+}
+
+int64_t ObRenameUserStmt::to_string(char *buf, const int64_t buf_len) const
+{
+  int64_t pos = 0;
+  if (NULL != buf) {
+    J_OBJ_START();
+    J_KV(N_STMT_TYPE, ((int)stmt_type_),
+         "rename_infos", rename_infos_);
+    J_OBJ_END();
+  }
+  return pos;
+}

@@ -1,0 +1,107 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OBDEV_SRC_SQL_DAS_ITER_OB_DAS_SORT_ITER_H_
+#define OBDEV_SRC_SQL_DAS_ITER_OB_DAS_SORT_ITER_H_
+
+#include "sql/das/iter/ob_das_iter.h"
+#include "sql/engine/sort/ob_sort_op_impl.h"
+
+namespace oceanbase
+{
+using namespace common;
+namespace sql
+{
+
+struct ObDASSortIterParam : public ObDASIterParam
+{
+public:
+  ObDASSortIterParam()
+    : ObDASIterParam(ObDASIterType::DAS_ITER_SORT),
+      sort_ctdef_(nullptr),
+      child_(nullptr),
+      limit_param_(),
+      need_rewind_(false),
+      need_distinct_(false) {}
+  virtual ~ObDASSortIterParam() {}
+  const ObDASSortCtDef *sort_ctdef_;
+  ObDASIter *child_;
+  common::ObLimitParam limit_param_;
+  bool need_rewind_;
+  bool need_distinct_;
+  virtual bool is_valid() const override
+  {
+    return ObDASIterParam::is_valid() && nullptr != sort_ctdef_ && nullptr != child_;
+  }
+};
+
+class ObDASSortIter : public ObDASIter
+{
+public:
+  ObDASSortIter()
+    : ObDASIter(ObDASIterType::DAS_ITER_SORT),
+      sort_impl_(nullptr),
+      sort_memctx_(),
+      sort_ctdef_(nullptr),
+      sort_row_(),
+      child_(nullptr),
+      sort_finished_(false),
+      need_rewind_(false),
+      need_distinct_(false),
+      limit_param_(),
+      input_row_cnt_(0),
+      output_row_cnt_(0),
+      fake_skip_(nullptr)
+  {}
+  virtual ~ObDASSortIter() {}
+
+  virtual int do_table_scan() override;
+  virtual int rescan() override;
+  virtual void clear_evaluated_flag() override;
+
+protected:
+  virtual int inner_init(ObDASIterParam &param) override;
+  virtual int inner_reuse() override;
+  virtual int inner_release() override;
+  virtual int inner_get_next_row() override;
+  virtual int inner_get_next_rows(int64_t &count, int64_t capacity) override;
+
+private:
+  int init_sort_impl();
+  int do_sort(bool is_vectorized);
+
+private:
+  ObSortOpImpl *sort_impl_;
+  lib::MemoryContext sort_memctx_;
+  const ObDASSortCtDef *sort_ctdef_;
+  ObSEArray<ObExpr *, 2> sort_row_;
+  ObDASIter *child_;
+  bool sort_finished_;
+  bool need_rewind_;
+  bool need_distinct_;
+  // limit param was set only once at do_table_scan of TSC, which means it should not be reset at reuse,
+  // input row cnt and output row cnt are the same as well.
+  common::ObLimitParam limit_param_;
+  int64_t input_row_cnt_;
+  int64_t output_row_cnt_;
+  ObBitVector *fake_skip_;
+};
+
+
+}  // namespace sql
+}  // namespace oceanbase
+
+#endif /* OBDEV_SRC_SQL_DAS_ITER_OB_DAS_SORT_ITER_H_ */

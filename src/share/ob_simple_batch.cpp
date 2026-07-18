@@ -1,0 +1,141 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SHARE
+
+#include "share/ob_simple_batch.h"
+namespace oceanbase
+{
+namespace common
+{
+
+void ObSimpleBatch::destroy()
+{
+  if (T_SCAN == type_ && range_ != NULL) {
+    range_->~SQLScanRange();
+    range_ = NULL;
+  } else if (T_MULTI_SCAN == type_ && ranges_ != NULL) {
+    ranges_->~SQLScanRangeArray();
+    ranges_ = NULL;
+  }
+}
+
+int64_t ObSimpleBatch::get_serialize_size(void) const
+{
+  int64_t len = 0;
+  OB_UNIS_ADD_LEN(type_);
+  if (T_NONE == type_) {
+    /*do nothing*/
+  } else if (OB_ISNULL(range_)) {
+    LOG_ERROR_RET(OB_ERR_UNEXPECTED, "NULL data on calc size", K(range_));
+  } else if (T_SCAN == type_) {
+    len += range_->get_serialize_size();
+  } else if (T_MULTI_SCAN == type_) {
+    len += ranges_->get_serialize_size();
+  }
+
+  return len;
+}
+
+int ObSimpleBatch::serialize(char *buf, const int64_t buf_len, int64_t &pos) const
+{
+  int ret = OB_SUCCESS;
+  OB_UNIS_ENCODE(type_);
+  if (OB_FAIL(ret)) {
+    // do nothing
+  } else if (T_NONE == type_) {
+    /* send nothing */
+  } else if (OB_ISNULL(range_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("NULL data", K(ret));
+  } else if (T_SCAN == type_) {
+    if (OB_FAIL(range_->serialize(buf, buf_len, pos))) {
+      LOG_WARN("fail to serialize range", K(ret));
+    }
+  } else if (T_MULTI_SCAN == type_) {
+    if (OB_FAIL(ranges_->serialize(buf, buf_len, pos))) {
+      LOG_WARN("fail to serialize ranges", K(ret));
+    }
+  }
+
+  return ret;
+}
+
+#define ALLOC_VAR(type, x) \
+    do { \
+      if (OB_ISNULL(x = (type*)allocator.alloc(sizeof(type)))) {  \
+        ret = OB_ERR_UNEXPECTED;  \
+        LOG_WARN("NULL value", K(ret), K(x));  \
+      } else {  \
+        (x) = new((x)) type;  \
+      } \
+    } while(0)
+
+#define GET_DESERIALIZED_VAR(type, x)  \
+    do {  \
+      ALLOC_VAR(type, x); \
+      if (OB_SUCC(ret) && OB_FAIL((x)->deserialize(allocator, buf, data_len, pos))) { \
+        LOG_WARN("fail to serialize var", K(ret));  \
+      } \
+    } while(0)
+
+int ObSimpleBatch::deserialize(common::ObIAllocator &allocator,
+                         const char *buf,
+                         const int64_t data_len,
+                         int64_t &pos)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(serialization::decode(buf, data_len, pos, type_))) {
+    LOG_WARN("fail to deserialize batch type", K(ret));
+  } else if (T_NONE == type_) {
+    /* send nothing */
+  } else if (T_SCAN == type_) {
+    SQLScanRange *range = NULL;
+    GET_DESERIALIZED_VAR(SQLScanRange, range);
+    if (OB_SUCC(ret)) {
+      range_ = range;
+    }
+  } else if (T_MULTI_SCAN == type_) {
+    SQLScanRangeArray *ranges = NULL;
+    int64_t M = 0;
+    ALLOC_VAR(SQLScanRangeArray, ranges);
+    if (OB_SUCC(ret) && OB_FAIL(serialization::decode_vi64(buf,
+                                                           data_len,
+                                                           pos,
+                                                           ((int64_t *)(&M))))) {
+      LOG_WARN("failed to deserialize count", K(ret));
+    }
+
+    for (int64_t i = 0; OB_SUCC(ret) && i < M; i++) {
+      SQLScanRange range;
+      if (OB_FAIL(range.deserialize(allocator, buf, data_len, pos))) {
+        LOG_WARN("failed to deserialize range", K(ret));
+      } else if (OB_FAIL(ranges->push_back(range))) {
+        LOG_WARN("failed to push back range to batch", K(ret));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      ranges_ = ranges;
+    }
+  }
+
+  return ret;
+}
+#undef ALLOC_VAR
+#undef GET_DESERIALIZED_VAR
+
+} // end namespace share
+} // end namespace oceanbase

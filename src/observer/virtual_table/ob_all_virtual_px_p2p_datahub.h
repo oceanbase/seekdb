@@ -1,0 +1,86 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_ALL_PX_P2P_DATAHUB_TABLE_
+#define OCEANBASE_OBSERVER_VIRTUAL_TABLE_ALL_PX_P2P_DATAHUB_TABLE_
+
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "lib/net/ob_addr.h"
+#include "sql/engine/px/p2p_datahub/ob_p2p_dh_mgr.h"
+namespace oceanbase
+{
+
+namespace observer
+{
+
+
+
+class ObAllPxP2PDatahubTable : public common::ObVirtualTableScannerIterator
+{
+public:
+  struct P2PDatahubNode {
+    common::ObCurTraceId::TraceId trace_id_;
+    int64_t p2p_datahub_id_;
+    
+    int64_t msg_type_;
+    int64_t hold_size_;
+    int64_t timeout_ts_;
+    int64_t start_time_;
+    TO_STRING_KV(K(trace_id_), K(p2p_datahub_id_),
+                 K(msg_type_), K(hold_size_), K(timeout_ts_), K(start_time_));
+  };
+public:
+  struct P2PMsgTraverseCall
+  {
+    P2PMsgTraverseCall(common::ObArray<P2PDatahubNode> &node_array) :
+        node_array_(node_array) {};
+    ~P2PMsgTraverseCall() = default;
+    int operator() (common::hash::HashMapPair<sql::ObP2PDhKey, sql::ObP2PDatahubMsgBase *> &entry);
+    common::ObArray<P2PDatahubNode> &node_array_;
+    
+  };
+public:
+  ObAllPxP2PDatahubTable();
+  virtual ~ObAllPxP2PDatahubTable();
+  virtual void reset();
+  virtual int inner_get_next_row(common::ObNewRow *&row);
+  inline void set_addr(common::ObAddr &addr) { addr_ = &addr; }
+private:
+  int p2p_datahub_map_to_array();
+private:
+  common::ObAddr *addr_;
+  bool start_to_read_;
+  char trace_id_[128];
+  common::ObArray<P2PDatahubNode> node_array_;
+  int64_t index_;
+
+  enum INSPECT_COLUMN
+  {
+        TRACE_ID = common::OB_APP_MIN_COLUMN_ID,
+    DATAHUB_ID,
+    MESSAGE_TYPE,
+    HOLD_SIZE,
+    TIMEOUT_TS,
+    START_TIME
+  };
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObAllPxP2PDatahubTable);
+};
+
+} // namespace observer
+} // namespace oceanbase
+#endif // OCEANBASE_OBSERVER_VIRTUAL_TABLE_ALL_PX_P2P_DATAHUB_TABLE_
+

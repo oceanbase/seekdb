@@ -1,0 +1,25 @@
+drop database if exists ddl_yiren;
+create database ddl_yiren;
+use ddl_yiren;
+drop trigger if exists `DDL_TEST_TRIGGER_NAME`;
+drop table if exists ddl_trigger_action_table;
+create table ddl_trigger_action_table(c1 int, c2 int, c3 char(20));
+drop table if exists ddl_test_trigger_table;
+create table ddl_test_trigger_table(c1 int, c2 int, c3 char(20));
+CREATE TRIGGER `DDL_TEST_TRIGGER_NAME` BEFORE INSERT ON ddl_yiren.ddl_test_trigger_table FOR EACH ROW INSERT INTO ddl_yiren.ddl_trigger_action_table VALUES(1, 1, 'mysql');
+CREATE TRIGGER `DDL_TEST_TRIGGER_NAME` BEFORE INSERT ON ddl_yiren.ddl_test_trigger_table FOR EACH ROW INSERT INTO ddl_yiren.ddl_trigger_action_table VALUES(1, 1, 'mysql');
+ERROR HY000: trigger 'DDL_TEST_TRIGGER_NAME' already exist
+CREATE TRIGGER `ddl_test_trigger_name` BEFORE INSERT ON ddl_yiren.ddl_test_trigger_table FOR EACH ROW INSERT INTO ddl_yiren.ddl_trigger_action_table VALUES(1, 1, 'mysql');
+ERROR HY000: trigger 'ddl_test_trigger_name' already exist
+use test;
+CREATE TRIGGER `DDL_TEST_TRIGGER_NAME` BEFORE INSERT ON ddl_yiren.ddl_test_trigger_table FOR EACH ROW INSERT INTO ddl_yiren.ddl_trigger_action_table VALUES(3, 3, 'oracle');
+ERROR HY000: Trigger in wrong schema
+use ddl_yiren;
+alter table ddl_test_trigger_table modify c3 varchar(20);
+insert into ddl_test_trigger_table VALUES (3, 3, 'oracle');
+select * from ddl_yiren.ddl_trigger_action_table order by c1, c2, c3;
+c1	c2	c3
+1	1	mysql
+drop table ddl_yiren.ddl_trigger_action_table;
+drop table ddl_test_trigger_table;
+drop database ddl_yiren;

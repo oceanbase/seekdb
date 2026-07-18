@@ -1,0 +1,155 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SHARE_OB_TABLET_TABLE_OPERATOR
+#define OCEANBASE_SHARE_OB_TABLET_TABLE_OPERATOR
+
+#include "lib/container/ob_iarray.h" //ObIArray
+#include "storage/compaction/ob_tablet_check_info.h"
+#include "share/tablet/ob_tablet_info.h" // ObTabletReplica, ObTabletInfo
+#include "share/compaction/ob_array_with_map.h"
+#include "share/tablet/ob_tablet_meta_table_storage.h"
+
+namespace oceanbase
+{
+namespace common
+{
+class ObMySQLProxy;
+class ObISQLClient;
+class ObAddr;
+class ObTabletID;
+
+namespace sqlclient
+{
+class ObMySQLResult;
+}
+}
+namespace share
+{
+class ObDMLSqlSplicer;
+class ObTabletLSPair;
+class ObLSID;
+
+// Operator for __all_tablet_meta_table.
+// Providing (batch-)get, (batch-)update, remove capabilities by sql.
+// Notes:
+//   __all_tablet_meta_table in SYS_TENANT: record tablet meta for itself;
+//   __all_tablet_meta_table in META_TENANT: recod tablet meta for META_TENANT and USER_TENANT;
+//   USER_TENANT dosen't have __all_tablet_meta_table.
+class ObTabletTableOperator
+{
+public:
+  ObTabletTableOperator();
+  virtual ~ObTabletTableOperator();
+  // Initialize with SQLite storage
+  int init(share::ObSQLiteConnectionPool *pool);
+  void reset();
+  void set_batch_size(int64_t batch_size) {batch_size_ = batch_size;}
+  int get(
+      const common::ObTabletID &tablet_id,
+      const ObLSID &ls_id,
+      const common::ObAddr &addr,
+      ObTabletReplica &tablet_replica);
+  // get ObTabletInfo according to tablet_id
+  //
+  // @param [in] tenant, tenant for query
+  // @param [in] tablet_id, tablet id for query
+  // @param [in] ls_id, the ls which tablet belongs to
+  // @param [out] tablet_info, tablet info get from __all_tablet_meta_table.
+  //              return empty tablet_info if tablet does not exist in meta table.
+  int get(
+      const common::ObTabletID &tablet_id,
+      const ObLSID &ls_id,
+      ObTabletInfo &tablet_info);
+  // update ObTabletReplica into __all_tablet_meta_table
+  //
+  // @param [in] replica, ObTabletReplica for update
+  // batch get ObTabletInfos according to tenant, ls_id and tablet_ids
+  //
+  // @param [in] tenant, tenant for query
+  // @param [in] tablet_ls_pairs, tablet_id with ls_id
+  // @param [out] tablet_infos, array of tablet infos from __all_tablet_meta_table.
+  // @return empty tablet_info if tablet does not exist in meta table.
+  int batch_get(
+      const ObIArray<ObTabletLSPair> &tablet_ls_pairs,
+      ObIArray<ObTabletInfo> &tablet_infos);
+  // range get tablet infos from start_tablet_id
+  //
+  // @param [in] tenant, tenant for query
+  // @param [in] start_tablet_id, starting point of the range (not included in output!)
+  //             Usually start from 0.
+  // @param [in] range_size, range size of the query
+  // @param [out] tablet_infos, ObTabletInfos from __all_tablet_meta_table
+  // @return OB_SUCCESS if success
+  int range_get(const common::ObTabletID &start_tablet_id,
+      const int64_t range_size,
+      ObIArray<ObTabletInfo> &tablet_infos);
+  // batch update replicas into __all_tablet_meta_table
+  //
+  // @param [in] tenant, tenant for query
+  // @param [in] replicas, ObTabletReplicas for updating(should belong to the same tenant!)
+  int batch_update(
+      const ObIArray<ObTabletReplica> &replicas);
+  // batch update replicas within an external SQLite transaction
+  int batch_update(
+      ObSQLiteConnection *conn,
+      const ObIArray<ObTabletReplica> &replicas);
+  // batch remove replicas from __all_tablet_meta_table
+  //
+  // @param [in] tenant, target tenant
+  // @param [in] replicas, ObTabletReplicas for removing(should belong to the same tenant!)
+  //             (only tenant, tablet_id, ls_id, server are used in this interface)
+  // Legacy method for backward compatibility (will use SQLite internally)
+  int batch_remove(
+      const ObIArray<ObTabletReplica> &replicas);
+  // batch remove replicas within an external SQLite transaction
+  int batch_remove(
+      ObSQLiteConnection *conn,
+      const ObIArray<ObTabletReplica> &replicas);
+  // remove residual tablet in __all_tablet_meta_table for ObServerMetaTableChecker
+  //
+  // @param [in] sql_client, client for executing query (legacy, will use SQLite internally)
+  // @param [in] tenant, tenant for query
+  // @param [in] server, target ObAddr
+  // @param [in] limit, limit number for delete sql
+  // @param [out] residual_count, count of residual tablets in table
+  int remove_residual_tablet(
+      ObISQLClient &sql_client,
+      const ObAddr &server,
+      const int64_t limit,
+      int64_t &affected_rows);
+  static int construct_tablet_infos(
+      common::sqlclient::ObMySQLResult &res,
+      std::function<int(ObTabletInfo&)> &&push_tablet);
+public:
+  static int batch_get_tablet_info(
+      common::ObISQLClient *sql_proxy,
+      const ObIArray<compaction::ObTabletCheckInfo> &tablet_ls_infos,
+      const int32_t group_id,
+      ObArrayWithMap<ObTabletInfo> &tablet_infos);
+private:
+  static int construct_tablet_replica_(
+      common::sqlclient::ObMySQLResult &res,
+      ObTabletReplica &replica);
+  const static int64_t MAX_BATCH_COUNT = 100;
+  bool inited_;
+  ObTabletMetaTableStorage storage_;
+  int64_t batch_size_;
+  int32_t group_id_;
+};
+} // end namespace share
+} // end namespace oceanbase
+#endif

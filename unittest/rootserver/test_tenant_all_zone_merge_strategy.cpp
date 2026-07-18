@@ -1,0 +1,118 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX RS
+
+#include <gmock/gmock.h>
+
+#include "ob_rs_test_utils.h"
+#include "fake_zone_merge_manager.h"
+#include "rootserver/freeze/ob_tenant_all_zone_merge_strategy.h"
+#include "observer/ob_server_struct.h"
+#include "share/partition_table/fake_part_property_getter.h"
+
+namespace oceanbase
+{
+using namespace storage;
+using namespace common;
+using namespace share;
+using namespace share::schema;
+using namespace share::host;
+using namespace obcall;
+using ::testing::_;
+namespace rootserver
+{
+class TestTenantAllZoneMergeStrategy :  public testing::Test
+{
+public:
+  TestTenantAllZoneMergeStrategy() {}
+  ~TestTenantAllZoneMergeStrategy() {}
+  virtual void SetUp();
+  virtual void TearDown() {}
+
+  void gen_zone_merge_info(const int64_t frozen_version,
+                           const int64_t broadcast_version,
+                           ObZoneMergeInfo &zone_merge_info);
+  void gen_global_merge_info(const int64_t global_broadcast_version,
+                             ObGlobalMergeInfo &global_merge_info);
+public:
+  const static uint64_t CUR_TENANT_ID = 1100;
+  const static int64_t ZONE_COUNT = 5;
+  ObArray<ObZone> zone_list_;
+  ObMySQLProxy sql_proxy_;
+  FakeZoneMergeManager zone_merge_mgr_;
+};
+
+void TestTenantAllZoneMergeStrategy::gen_zone_merge_info(
+    const int64_t frozen_version,
+    const int64_t broadcast_version,
+    ObZoneMergeInfo &zone_merge_info)
+{
+  zone_merge_info.frozen_scn_.set_scn(frozen_version);
+  zone_merge_info.broadcast_scn_.set_scn(broadcast_version);
+}
+
+void TestTenantAllZoneMergeStrategy::gen_global_merge_info(
+    const int64_t global_broadcast_version,
+    ObGlobalMergeInfo &global_merge_info)
+{
+  global_merge_info.global_broadcast_scn_.set_scn(global_broadcast_version);
+}
+
+void TestTenantAllZoneMergeStrategy::SetUp()
+{
+  zone_merge_mgr_.init(sql_proxy_);
+  zone_merge_mgr_.set_is_loaded(true);
+
+  ObServerConfig &config = ObServerConfig::get_instance();
+  GCTX.config_ = &config;
+  ObZoneMergeInfo zone_merge_info;
+  gen_zone_merge_info(1, 1, zone_merge_info);
+  ASSERT_EQ(OB_SUCCESS, zone_merge_mgr_.add_zone_merge_info(zone_merge_info));
+
+  ObGlobalMergeInfo global_merge_info;
+  gen_global_merge_info(2, global_merge_info);
+  ASSERT_EQ(OB_SUCCESS, zone_merge_mgr_.set_global_merge_info(global_merge_info));
+}
+
+TEST_F(TestTenantAllZoneMergeStrategy, get_next_zone)
+{
+  ObTenantAllZoneMergeStrategy merge_strategy;
+  ASSERT_EQ(OB_SUCCESS, merge_strategy.init(&zone_merge_mgr_));
+  
+  ObArray<ObZone> to_merge;
+  ASSERT_EQ(OB_SUCCESS, merge_strategy.get_next_zone(to_merge));
+  ASSERT_EQ(1, to_merge.size());
+
+  // filter ZONE4 cuz its broadcast_version is equal to global_broadcast_version, that means
+  // ZONE4 is in merging, no need to start merge again
+  ObZoneMergeInfo zone_merge_info;
+  gen_zone_merge_info(2, 2, zone_merge_info);
+  ASSERT_EQ(OB_SUCCESS, zone_merge_mgr_.update_zone_merge_info(zone_merge_info));
+  to_merge.reuse();
+  ASSERT_EQ(OB_SUCCESS, merge_strategy.get_next_zone(to_merge));
+  ASSERT_EQ(0, to_merge.size());
+}
+
+} //namespace rootserver
+} //namespace oceanbase
+
+int main(int argc, char **argv)
+{
+  init_oblog_for_rs_test("test_tenant_all_zone_merge_strategy");
+  ::testing::InitGoogleTest(&argc,argv);
+  return RUN_ALL_TESTS();
+}

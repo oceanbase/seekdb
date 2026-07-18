@@ -1,0 +1,67 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX STORAGE_FTS
+
+#include "ob_ik_surrogate_processor.h"
+
+#include "lib/utility/ob_macro_utils.h"
+
+namespace oceanbase
+{
+namespace storage
+{
+int ObIKSurrogateProcessor::do_process(TokenizeContext &ctx,
+                                       const char *ch,
+                                       const uint8_t char_len,
+                                       const ObFTCharUtil::CharType type)
+{
+  int ret = OB_SUCCESS;
+  if (ObFTCharUtil::CharType::SURROGATE_HIGH == type) {
+    high_offset_ = ctx.get_cursor();
+    low_offset_ = ctx.get_end_cursor();
+  } else if (ObFTCharUtil::CharType::SURROGATE_LOW == type && has_high()) {
+    // out pair and reset
+    low_offset_ = ctx.get_end_cursor();
+    if (OB_FAIL(ctx.add_token(
+            ctx.fulltext(), high_offset_, low_offset_ - high_offset_, 1, ObIKTokenType::IK_SURROGATE_TOKEN))) {
+      LOG_WARN("Fail to add token", K(ret));
+    }
+    reset();
+  } else if (has_high()) { // so char is not surrogate
+    // add high as the single char token
+    if (OB_FAIL(ctx.add_token(
+            ctx.fulltext(), high_offset_, low_offset_ - high_offset_, 1, ObIKTokenType::IK_SURROGATE_TOKEN))) {
+      LOG_WARN("Fail to add token", K(ret));
+    }
+    reset();
+  } else if (ObFTCharUtil::CharType::SURROGATE_LOW == type) { // only a low surrogate, ignore
+    reset();
+  } else {
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (ctx.is_last() && has_high()
+             && OB_FAIL(ctx.add_token(
+                 ctx.fulltext(), high_offset_, low_offset_ - high_offset_, 1, ObIKTokenType::IK_SURROGATE_TOKEN))) {
+    LOG_WARN("Fail to add last token", K(ret));
+  } else if (ctx.is_last() && has_high()) { // Succeed to add the last token
+    reset();
+  }
+  return ret;
+}
+} //  namespace storage
+} //  namespace oceanbase

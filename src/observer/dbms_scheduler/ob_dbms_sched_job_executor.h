@@ -1,0 +1,68 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef SRC_OBSERVER_DBMS_SCHED_JOB_EXECUTOR_H_
+#define SRC_OBSERVER_DBMS_SCHED_JOB_EXECUTOR_H_
+
+#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "lib/utility/ob_mod_define.h"
+#include "share/schema/ob_multi_version_schema_service.h"
+#include "observer/dbms_scheduler/ob_dbms_sched_table_operator.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+class ObExecEnv;
+}
+namespace dbms_scheduler
+{
+class ObDBMSSchedJobInfo;
+class ObDBMSSchedTableOperator;
+class ObDBMSSchedJobExecutor
+{
+public:
+  ObDBMSSchedJobExecutor() : inited_(false), sql_proxy_(NULL), schema_service_(NULL) {}
+
+  virtual ~ObDBMSSchedJobExecutor() {}
+  int init(
+    common::ObMySQLProxy *sql_proxy, share::schema::ObMultiVersionSchemaService *schema_service);
+  int run_dbms_sched_job(bool is_oracle_tenant, uint64_t job_id, const ObString &job_name);
+  int init_env(ObDBMSSchedJobInfo &job_info, sql::ObSQLSessionInfo &session);
+
+private:
+  const static int OLAP_ASYNC_JOB_DEVIATION_SECOND = 60;
+  static int init_session(
+    sql::ObSQLSessionInfo &session,
+    share::schema::ObSchemaGetterGuard &schema_guard,
+    const common::ObString &tenant_name,
+    const common::ObString &database_name, uint64_t database_id,
+    const share::schema::ObUserInfo* user_info,
+    ObDBMSSchedJobInfo &job_info);
+  int create_session(sql::ObFreeSessionCtx &free_session_ctx, sql::ObSQLSessionInfo *&session_info);
+  int destroy_session(sql::ObFreeSessionCtx &free_session_ctx, sql::ObSQLSessionInfo *session_info);
+  int run_dbms_sched_job(ObDBMSSchedJobInfo &job_info);
+
+  bool inited_;
+  ObDBMSSchedTableOperator table_operator_;
+  common::ObMySQLProxy *sql_proxy_;
+  share::schema::ObMultiVersionSchemaService *schema_service_;
+};
+
+}
+}
+#endif /* SRC_OBSERVER_DBMS_SCHED_JOB_EXECUTOR_H_ */
+

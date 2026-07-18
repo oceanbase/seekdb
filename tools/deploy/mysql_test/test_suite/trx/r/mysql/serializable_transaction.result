@@ -1,0 +1,181 @@
+drop table if exists t1;
+drop table if exists t2;
+set autocommit=0;
+CREATE TABLE t1 (i int primary key, c varchar(50));
+INSERT INTO t1 VALUES (1, 'a');
+INSERT INTO t1 VALUES (2, 'b');
+commit;
+set autocommit=0;
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+update t1 set c='aaa' where i=1;
+commit;
+select * from t1;
+i	c
+1	aaa
+2	b
+DROP TABLE t1;
+set autocommit=0;
+CREATE TABLE t1 (i int primary key, c varchar(50));
+INSERT INTO t1 VALUES (1, 'a');
+INSERT INTO t1 VALUES (2, 'b');
+commit;
+set autocommit=0;
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+select * from t1;
+i	c
+1	a
+2	b
+SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET GLOBAL TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+DROP TABLE t1;
+set autocommit=0;
+CREATE TABLE t1 (i int primary key, c varchar(50));
+INSERT INTO t1 VALUES (1, 'a');
+INSERT INTO t1 VALUES (2, 'b');
+commit;
+set autocommit=0;
+SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+rollback;
+rollback;
+update t1 set c='a111' where i=1;
+insert into t1 values (2, 'b');
+ERROR 23000: Duplicate entry 'xxx' for key 'PRIMARY'
+commit;
+select * from t1;
+i	c
+1	a111
+2	b
+rollback;
+update t1 set c='a222' where i=1;
+insert into t2 values (2, 'b');
+ERROR 42S02: Table 'test.t2' doesn't exist
+commit;
+select * from t1;
+i	c
+1	a222
+2	b
+rollback;
+select * from t1;
+i	c
+1	a222
+2	b
+update t1 set c='a333' where i=1;
+commit;
+update t1 set c='a444' where i=1;
+ERROR 25000: can't serialize access for this transaction
+update t1 set c='a444' where i=1;
+ERROR 25000: can't serialize access for this transaction
+select * from t1;
+i	c
+1	a222
+2	b
+rollback;
+DROP TABLE t1;
+set autocommit=0;
+CREATE TABLE t1 (i int primary key, c varchar(50));
+INSERT INTO t1 VALUES (1, 'a');
+INSERT INTO t1 VALUES (2, 'b');
+commit;
+set autocommit=0;
+SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+select * from t1 where i = 1;
+i	c
+1	a
+update t1 set c = 'aaa' where i = 1;
+commit;
+select * from t1 where i = 1;
+i	c
+1	a
+DROP TABLE t1;
+set autocommit=0;
+CREATE TABLE t1 (i int primary key, c varchar(50));
+INSERT INTO t1 VALUES (1, 'a');
+INSERT INTO t1 VALUES (2, 'b');
+commit;
+set autocommit=0;
+SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED;
+select * from t1 where i = 1;
+i	c
+1	a
+update t1 set c = 'aaa' where i = 1;
+commit;
+select * from t1 where i = 1;
+i	c
+1	aaa
+DROP TABLE t1;
+set autocommit=0;
+CREATE TABLE t1 (i int primary key, c varchar(50));
+INSERT INTO t1 VALUES (1, 'a');
+INSERT INTO t1 VALUES (2, 'b');
+commit;
+set autocommit=0;
+SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+select count(*) from t1;
+count(*)
+2
+delete from t1 where i = 1;
+commit;
+select count(*) from t1;
+count(*)
+2
+DROP TABLE t1;
+set autocommit=0;
+CREATE TABLE t1 (i int primary key, c varchar(50));
+INSERT INTO t1 VALUES (1, 'a');
+INSERT INTO t1 VALUES (2, 'b');
+commit;
+set autocommit=0;
+SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED;
+select count(*) from t1;
+count(*)
+2
+delete from t1 where i = 1;
+commit;
+select count(*) from t1;
+count(*)
+1
+DROP TABLE t1;
+set autocommit=0;
+CREATE TABLE t1 (i int primary key, c varchar(50));
+INSERT INTO t1 VALUES (1, 'a');
+INSERT INTO t1 VALUES (2, 'b');
+commit;
+set autocommit=0;
+SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+select * from t1;
+i	c
+1	a
+2	b
+update t1 set c = 'aaa' where i = 1;
+commit;
+update t1 set c = '2aaa' where i = 1;
+ERROR 25000: can't serialize access for this transaction
+select * from t1;
+i	c
+1	a
+2	b
+DROP TABLE t1;
+drop table if exists t1;
+Warnings:
+Note	1051	Unknown table 'test.t1'
+alter system set undo_retention=3;
+create table t1(id int);
+insert into t1 values(1);
+set session transaction_isolation = 'REPEATABLE-READ';
+set autocommit=0;
+select * from t1;
+id
+1
+insert into t1 values(1);
+commit;
+insert into t1 values(1);
+commit;
+delete from t1 where id = 1;
+commit;
+select * from t1;
+id
+alter system minor freeze;
+select * from t1;
+id
+1
+drop table t1;

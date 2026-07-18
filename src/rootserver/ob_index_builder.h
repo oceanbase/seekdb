@@ -1,0 +1,211 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_ROOTSERVER_OB_INDEX_BUILDER_H_
+#define OCEANBASE_ROOTSERVER_OB_INDEX_BUILDER_H_
+
+#include "lib/container/ob_array.h"
+#include "share/ob_ddl_task_executor.h"
+#include "share/ob_rpc_struct.h"
+#include "share/schema/ob_schema_struct.h"
+
+namespace oceanbase
+{
+
+namespace common
+{
+class ObMySQLProxy;
+}
+
+namespace share
+{
+class ObReplicaFilterHolder;
+class SCN;
+namespace schema
+{
+class ObMultiVersionSchemaService;
+class ObTableSchema;
+}
+}
+
+namespace obcall
+{
+}
+
+namespace rootserver
+{
+class ObDDLService;
+class ObDDLTaskRecord;
+struct ObCreateDDLTaskParam;
+
+class ObIndexBuilder
+{
+public:
+  explicit ObIndexBuilder(ObDDLService &ddl_service);
+  virtual ~ObIndexBuilder();
+
+  int create_index(const obcall::ObCreateIndexArg &arg,
+                   obcall::ObAlterTableRes &res);
+  int drop_index(const obcall::ObDropIndexArg &const_arg, obcall::ObDropIndexRes &res);
+  // Check and update local index status.
+  // if not all index table updated return OB_EAGAIN.
+  int do_create_index(
+      const obcall::ObCreateIndexArg &arg,
+      obcall::ObAlterTableRes &res);
+  int do_create_global_index(
+      share::schema::ObSchemaGetterGuard &schema_guard,
+      const obcall::ObCreateIndexArg &arg,
+      const share::schema::ObTableSchema &table_schema,
+      obcall::ObAlterTableRes &res);
+  int do_create_local_index(
+      share::schema::ObSchemaGetterGuard &schema_guard,
+      const obcall::ObCreateIndexArg &arg,
+      const share::schema::ObTableSchema &table_schema,
+      obcall::ObAlterTableRes &res);
+  int generate_schema(const obcall::ObCreateIndexArg &arg,
+                      share::schema::ObTableSchema &data_schema,
+                      const bool global_index_without_column_info,
+                      const bool generate_id,
+                      share::schema::ObTableSchema &index_schema);
+  bool is_drop_dense_vec_index_task(const obcall::ObDropIndexArg &arg, const share::schema::ObTableSchema &index_schema);
+  bool is_drop_with_docid_index_task(const obcall::ObDropIndexArg &arg, const share::schema::ObTableSchema &index_schema);
+  int check_drop_with_docid_indexs_ith_valid(
+      const obcall::ObDropIndexArg &arg,
+      const share::schema::ObTableSchema &index_schema,
+      const int64_t schema_count,
+      int64_t &aux_rowkey_doc_ith,
+      int64_t &aux_doc_rowkey_ith,
+      int64_t &aux_doc_word_ith);
+  int submit_drop_index_task(
+      common::ObMySQLTransaction &trans,
+      const share::schema::ObTableSchema &data_schema,
+      const common::ObIArray<share::schema::ObTableSchema> &index_schemas,
+      const obcall::ObDropIndexArg &arg,
+      const common::ObIArray<common::ObTabletID> *inc_data_tablet_ids,
+      const common::ObIArray<common::ObTabletID> *del_data_tablet_ids,
+      common::ObIAllocator &allocator,
+      bool &task_has_exist,
+      ObDDLTaskRecord &task_record);
+  int submit_drop_vec_index_task(
+      common::ObMySQLTransaction &trans,
+      const share::schema::ObTableSchema &data_schema,
+      const common::ObIArray<share::schema::ObTableSchema> &index_schemas,
+      const obcall::ObDropIndexArg &arg,
+      common::ObIAllocator &allocator,
+      bool &task_has_exist,
+      ObDDLTaskRecord &task_record);
+  int submit_build_index_task(common::ObMySQLTransaction &trans,
+                              const obcall::ObCreateIndexArg &arg,
+                              const share::schema::ObTableSchema *data_schema,
+                              const common::ObIArray<common::ObTabletID> *inc_data_tablet_ids,
+                              const common::ObIArray<common::ObTabletID> *del_data_tablet_ids,
+                              const share::schema::ObTableSchema *index_schema,
+                              const int64_t parallelism,
+                              const int64_t group_id,
+                              const uint64_t tenant_data_version,
+                              common::ObIAllocator &allocator,
+                              ObDDLTaskRecord &task_record,
+                              const int64_t new_fetched_snapshot = 0);
+  int submit_rebuild_index_task(common::ObMySQLTransaction &trans,
+                                const obcall::ObRebuildIndexArg &arg,
+                                const share::schema::ObTableSchema *data_schema,
+                                const common::ObIArray<common::ObTabletID> *inc_data_tablet_ids,
+                                const common::ObIArray<common::ObTabletID> *del_data_tablet_ids,
+                                const share::schema::ObTableSchema *index_schema,
+                                const int64_t parallelism,
+                                const int64_t group_id,
+                                const uint64_t tenant_data_version,
+                                common::ObIAllocator &allocator,
+                                ObDDLTaskRecord &task_record);
+  int drop_index_on_failed(const obcall::ObDropIndexArg &arg, obcall::ObDropIndexRes &res);
+private:
+  int recognize_vec_hnsw_index_schemas(
+      const common::ObIArray<share::schema::ObTableSchema> &index_schemas,
+      const bool is_vec_inner_drop,
+      int64_t &index_ith,
+      int64_t &rowkey_vid_ith,
+      int64_t &vid_rowkey_ith,
+      int64_t &domain_index_ith,
+      int64_t &index_id_ith,
+      int64_t &snapshot_data_ith,
+      int64_t &embedded_vec_ith);
+  int recognize_vec_ivf_index_schemas(
+      const common::ObIArray<share::schema::ObTableSchema> &index_schemas,
+      const bool is_vec_inner_drop,
+      int64_t &index_ith,
+      int64_t &centroid_ith,
+      int64_t &cid_vector_ith,
+      int64_t &rowkey_cid_ith,
+      int64_t &sq_meta_ith,
+      int64_t &pq_centroid_ith,
+      int64_t &pq_code_ith);
+  int recognize_fts_or_multivalue_index_schemas(
+      const common::ObIArray<share::schema::ObTableSchema> &index_schemas,
+      const bool is_parent_task_dropping_fts,
+      const bool is_parent_task_dropping_multivalue,
+      const bool is_parent_task_dropping_spiv,
+      int64_t &index_ith,
+      int64_t &aux_doc_word_ith,
+      int64_t &aux_rowkey_doc_ith,
+      int64_t &domain_index_ith,
+      int64_t &aux_doc_rowkey_ith);
+  int set_basic_infos(const obcall::ObCreateIndexArg &arg,
+                      const share::schema::ObTableSchema &data_schema,
+                      share::schema::ObTableSchema &schema);
+  int set_global_index_auto_partition_infos(const share::schema::ObTableSchema &data_schema,
+                                            share::schema::ObTableSchema &schema);
+  int set_index_table_columns(const obcall::ObCreateIndexArg &arg,
+                              const share::schema::ObTableSchema &data_schema,
+                              share::schema::ObTableSchema &schema);
+  int set_index_table_options(const obcall::ObCreateIndexArg &arg,
+                              const share::schema::ObTableSchema &data_schema,
+                              share::schema::ObTableSchema &schema);
+
+  int set_local_index_partition_schema(const share::schema::ObTableSchema &data_schema,
+                                       share::schema::ObTableSchema &index_schema);
+
+  int check_has_none_shared_index_tables_for_fts_or_multivalue_index_(const uint64_t data_table_id,
+      share::schema::ObSchemaGetterGuard &schema_guard,
+      bool &has_fts_or_multivalue_index);
+  int check_has_none_shared_index_tables_for_vector_index_(const uint64_t data_table_id,
+      share::schema::ObSchemaGetterGuard &schema_guard,
+      bool &has_none_share_vector_index);
+  bool ignore_error_code_for_domain_index(
+      const int ret,
+      const obcall::ObDropIndexArg &arg,
+      const share::schema::ObTableSchema *index_schema = nullptr);
+  int create_index_column_group(const obcall::ObCreateIndexArg &arg,
+                                share::schema::ObTableSchema &index_table_schema);
+
+  bool rowkey_doc_index_valid(const bool has_docid_col,
+                              const int64_t aux_rowkey_doc_ith,
+                              const int64_t aux_doc_rowkey_ith,
+                              const int64_t schema_count);
+
+  int check_index_for_if_not_exist_(const ObString database_name,
+                                    const ObString index_name,
+                                    share::schema::ObSchemaGetterGuard &schema_guard,
+                                    obcall::ObAlterTableRes &res);
+
+private:
+  ObDDLService &ddl_service_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObIndexBuilder);
+};
+}//end namespace rootserver
+}//end namespace oceanbase
+
+#endif //OCEANBASE_ROOTSERVER_OB_INDEX_BUILDER_H_

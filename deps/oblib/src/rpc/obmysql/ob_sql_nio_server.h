@@ -1,0 +1,59 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_OBMYSQL_OB_SQL_NIO_SERVER_H_
+#define OCEANBASE_OBMYSQL_OB_SQL_NIO_SERVER_H_
+#include "rpc/obmysql/ob_sql_nio.h"
+#include "rpc/obmysql/ob_sql_sock_handler.h"
+#include "rpc/obmysql/ob_sql_sock_processor.h"
+
+namespace oceanbase
+{
+namespace obmysql
+{
+class ObSqlNioServer
+{
+public:
+  ObSqlNioServer(ObISMConnectionCallback &conn_cb)
+      : thread_processor_(),
+        io_handler_(conn_cb, thread_processor_, nio_) {}
+  virtual ~ObSqlNioServer() {}
+  ObSqlNio *get_nio() { return &nio_; }
+  int start(int port, rpc::frame::ObReqDeliver* deliver, int n_thread, bool enable_numa_aware, bool disable_tcp);
+  void revert_sock(void* sess);
+  int peek_data(void* sess, int64_t limit, const char*& buf, int64_t& sz);
+  int consume_data(void* sess, int64_t sz);
+  int write_data(void* sess, const char* buf, int64_t sz);
+  int set_thread_count(const int thread_num);
+  void stop();
+  void wait();
+  void destroy();
+  void update_tcp_keepalive_params(int keepalive_enabled, uint32_t tcp_keepidle, uint32_t tcp_keepintvl, uint32_t tcp_keepcnt);
+
+  ObSqlSockProcessor& get_sql_sock_processor();
+
+private:
+  ObSqlSockProcessor thread_processor_; // for tenant worker
+  ObSqlSockHandler io_handler_; // for io thread
+  ObSqlNio nio_;
+  
+};
+extern ObSqlNioServer* global_sql_nio_server;
+}; // end namespace obmysql
+}; // end namespace oceanbase
+
+#endif /* OCEANBASE_OBMYSQL_OB_SQL_NIO_SERVER_H_ */
+

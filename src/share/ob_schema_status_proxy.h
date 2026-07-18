@@ -1,0 +1,102 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SHARE_OB_SCHEMA_STATUS_PROXY_H_
+#define OCEANBASE_SHARE_OB_SCHEMA_STATUS_PROXY_H_
+
+#include "share/ob_define.h"
+#include "lib/oblog/ob_log.h"
+#include "lib/oblog/ob_log_module.h"
+#include "lib/utility/ob_print_utils.h"
+#include "lib/container/ob_iarray.h"
+#include "share/schema/ob_schema_struct.h"
+#include "lib/lock/ob_spin_rwlock.h"
+
+namespace oceanbase
+{
+namespace common
+{
+class ObMySQLProxy;
+class ObISQLClient;
+class ObAddr;
+namespace sqlclient
+{
+class ObMySQLResult;
+}
+}
+namespace share
+{
+
+class ObSchemaStatusUpdater
+{
+public:
+  ObSchemaStatusUpdater(share::schema::ObRefreshSchemaStatus schema_status)
+    : schema_status_(schema_status) {}
+  virtual ~ObSchemaStatusUpdater() {}
+
+  int operator() (common::hash::HashMapPair<uint64_t, share::schema::ObRefreshSchemaStatus> &entry);
+private:
+  share::schema::ObRefreshSchemaStatus schema_status_;
+  DISALLOW_COPY_AND_ASSIGN(ObSchemaStatusUpdater);
+};
+
+// dodge the bug : 
+// all operation of __all_core_table must be single partition transaction
+class ObSchemaStatusProxy
+{
+public:
+  static const char *OB_ALL_SCHEMA_STATUS_TNAME;
+  static const char *ROW_ID_CNAME;
+  static const char *SNAPSHOT_TIMESTAMP_CNAME;
+  static const char *READABLE_SCHEMA_VERSION_CNAME;
+  static const char *CREATED_SCHEMA_VERSION_CNAME;
+  static const int64_t TENANT_SCHEMA_STATUS_BUCKET_NUM = 100;
+public:
+  ObSchemaStatusProxy(common::ObISQLClient &sql_proxy)
+    : sql_proxy_(sql_proxy),
+      schema_status_cache_(),
+      schema_status_cache_lock_(),
+      is_inited_(false) {}
+  virtual ~ObSchemaStatusProxy() {}
+
+  int init();
+
+
+  int get_refresh_schema_status(
+      share::schema::ObRefreshSchemaStatus &refresh_schema_status);
+
+  int get_refresh_schema_status(
+      common::ObIArray<share::schema::ObRefreshSchemaStatus> &refresh_schema_status_array);
+
+  int load_refresh_schema_status();
+
+  int set_tenant_schema_status(
+    const share::schema::ObRefreshSchemaStatus &refresh_schema_status);
+
+
+private:
+  int check_inner_stat();
+private:
+  common::ObISQLClient &sql_proxy_;
+  // single-tenant: collapsed from ObHashMap<tenant, ObRefreshSchemaStatus> (only OB_SYS entry) to a single value + class-level RWLock
+  share::schema::ObRefreshSchemaStatus schema_status_cache_;
+  mutable common::SpinRWLock schema_status_cache_lock_;
+  bool is_inited_;
+};
+
+} // end namespace share
+} // end namespace oceanbase
+#endif

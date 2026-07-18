@@ -1,0 +1,105 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SQL_RESOLVER_CMD_VARIABLE_SET_STMT_
+#define OCEANBASE_SQL_RESOLVER_CMD_VARIABLE_SET_STMT_
+
+#include "lib/string/ob_string.h"
+#include "lib/container/ob_array.h"
+#include "sql/resolver/ddl/ob_ddl_stmt.h"
+#include "sql/session/ob_system_variable.h"
+#include "sql/resolver/cmd/ob_set_names_stmt.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+class ObVariableSetStmt : public ObDDLStmt
+{
+public:
+  class VariableSetNode
+  {
+  public:
+    VariableSetNode() : variable_name_(),
+                        is_system_variable_(false),
+                        set_scope_(sql::ObSetVar::SET_SCOPE_NEXT_TRANS),
+                        value_expr_(NULL),
+                        is_set_default_(false),
+                        set_names_stmt_(NULL)
+    {}
+    virtual ~VariableSetNode() {}
+    TO_STRING_KV(K_(variable_name), K_(is_system_variable),
+                 K_(set_scope), K_(value_expr), K_(is_set_default));
+
+    common::ObString variable_name_;
+    bool is_system_variable_;
+    sql::ObSetVar::SetScopeType set_scope_;
+    ObRawExpr *value_expr_;
+    bool is_set_default_;
+    ObSetNamesStmt *set_names_stmt_;
+  };
+
+  ObVariableSetStmt() : ObDDLStmt(stmt::T_VARIABLE_SET),
+                        variable_nodes_(),
+                        has_global_variable_(false)
+  {}
+  virtual ~ObVariableSetStmt() {}
+
+  
+  
+  inline int add_variable_node(const VariableSetNode &node);
+  inline int64_t get_variables_size() const;
+  int get_variable_node(int64_t index, VariableSetNode &node) const;
+  inline void set_has_global_variable(bool has_global_variable)
+  { has_global_variable_ = has_global_variable; }
+  inline bool has_global_variable() const { return has_global_variable_; }
+
+  virtual int get_cmd_type() const { return get_stmt_type(); }
+  virtual bool cause_implicit_commit() const {
+    /* when VariableSet is SET AUTOCOMMIT=? statement,
+     * and autocommit turns from 0 to 1,
+     * it cause implicit commit in its executor.
+     * Other set statement do not trigger implicit commit.
+     * If it does, SET AUTOCOMMIT should use another new stmt
+     */
+    return false;
+  }
+
+  const common::ObIArray<VariableSetNode> &get_variable_nodes() const
+  { return variable_nodes_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return modify_sysvar_arg_; }
+  TO_STRING_KV(K_(variable_nodes));
+private:
+  
+  common::ObArray<VariableSetNode, common::ModulePageAllocator, true> variable_nodes_;
+  bool has_global_variable_;
+  obcall::ObModifySysVarArg modify_sysvar_arg_; // used to return exec_tid_
+  DISALLOW_COPY_AND_ASSIGN(ObVariableSetStmt);
+};
+
+inline int ObVariableSetStmt::add_variable_node(const VariableSetNode &node)
+{
+  return variable_nodes_.push_back(node);
+}
+
+inline int64_t ObVariableSetStmt::get_variables_size() const
+{
+  return variable_nodes_.count();
+}
+}//end of namespace sql
+}//end of namespace oceanbase
+
+#endif //OCEANBASE_SQL_RESOLVER_CMD_VARIABLE_SET_STMT_

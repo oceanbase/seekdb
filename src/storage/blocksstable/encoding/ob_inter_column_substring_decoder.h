@@ -1,0 +1,123 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_ENCODING_OB_INTER_COLUMN_SUBSTR_DECODER_H_
+#define OCEANBASE_ENCODING_OB_INTER_COLUMN_SUBSTR_DECODER_H_
+
+#include "ob_icolumn_decoder.h"
+#include "ob_encoding_util.h"
+#include "ob_integer_array.h"
+#include "ob_encoding_bitset.h"
+#include "ob_inter_column_substring_encoder.h"
+
+namespace oceanbase
+{
+namespace blocksstable
+{
+
+struct ObColumnHeader;
+struct ObInterColSubStrMetaHeader;
+
+class ObInterColSubStrDecoder : public ObSpanColumnDecoder
+{
+public:
+  static const ObColumnHeader::Type type_ = ObColumnHeader::COLUMN_SUBSTR;
+  ObInterColSubStrDecoder();
+  virtual ~ObInterColSubStrDecoder();
+
+  OB_INLINE int init(
+                  const ObMicroBlockHeader &micro_block_header,
+                  const ObColumnHeader &column_header,
+                  const char *meta);
+
+  virtual int decode(const ObColumnDecoderCtx &ctx, common::ObDatum &datum, const int64_t row_id,
+      const ObBitStream &bs, const char *data, const int64_t len) const override;
+
+  virtual int decode_vector(
+      const ObColumnDecoderCtx &decoder_ctx,
+      const ObIRowIndex *row_index,
+      ObVectorDecodeCtx &vector_ctx) const override;
+
+  virtual int update_pointer(const char *old_block, const char *cur_block) override;
+
+  virtual int get_ref_col_idx(int64_t &ref_col_idx) const override;
+
+  void reset() { this->~ObInterColSubStrDecoder(); new (this) ObInterColSubStrDecoder(); }
+  OB_INLINE void reuse();
+  virtual ObColumnHeader::Type get_type() const override { return type_; }
+
+  bool is_inited() const { return NULL != meta_header_; }
+
+  virtual bool can_vectorized() const override { return false; }
+
+protected:
+  template<typename VectorType>
+  int inner_decode_vector(
+      const ObColumnDecoderCtx &decoder_ctx,
+      const ObIRowIndex *row_index,
+      ObVectorDecodeCtx &vector_ctx) const;
+  template<typename VectorType>
+  int rearrange_sub_str_column_len(
+      const ObColumnDecoderCtx &decoder_ctx,
+      ObVectorDecodeCtx &vec_ctx) const;
+  inline bool has_exc(const ObColumnDecoderCtx &ctx) const
+  { return ctx.col_header_->length_ > sizeof(ObInterColSubStrMetaHeader); }
+
+private:
+  const ObInterColSubStrMetaHeader *meta_header_;
+};
+
+OB_INLINE int ObInterColSubStrDecoder::init(
+    const ObMicroBlockHeader &micro_block_header,
+    const ObColumnHeader &column_header,
+    const char *meta)
+{
+  int ret = common::OB_SUCCESS;
+  UNUSEDx(micro_block_header, column_header);
+  // performance critical, don't check params, already checked upper layer
+  if (OB_UNLIKELY(is_inited())) {
+    ret = common::OB_INIT_TWICE;
+    STORAGE_LOG(WARN, "init twice", K(ret));
+  } else {
+    meta += column_header.offset_;
+    meta_header_ = reinterpret_cast<const ObInterColSubStrMetaHeader *>(meta);
+    STORAGE_LOG(DEBUG, "decoder meta", K(*meta_header_));
+  }
+  return ret;
+}
+
+OB_INLINE void ObInterColSubStrDecoder::reuse()
+{
+  meta_header_ = NULL;
+  /*
+  ref_decoder_ = NULL;
+  obj_meta_.reset();
+  micro_block_header_ = NULL;
+  column_header_ = NULL;
+  meta_header_ = NULL;
+  meta_data_ = NULL;
+  //len_ = 0;
+  //count_ = 0;
+  opt_.reset();
+  meta_reader_.reuse();
+  */
+}
+
+
+} // end namespace blocksstable
+} // end namespace oceanbase
+
+#endif // OCEANBASE_ENCODING_OB_INTER_COLUMN_SUBSTR_DECODER_H_

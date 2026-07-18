@@ -1,0 +1,67 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SHARE_TABLE_OB_TABLE_UTIL_
+#define OCEANBASE_SHARE_TABLE_OB_TABLE_UTIL_
+
+#include "lib/string/ob_string.h"
+#include "lib/container/ob_iarray.h"
+#include "share/schema/ob_schema_getter_guard.h"
+#include "share/schema/ob_table_schema.h"
+#include "common/ob_tablet_id.h"
+
+using namespace oceanbase::common;
+
+namespace oceanbase
+{
+namespace table
+{
+
+class ObTableUtils 
+{
+public:
+  static bool has_exist_in_columns(const ObIArray<ObString> &columns, const ObString &name);
+
+public:
+  static int get_tablet_id_by_part_idx(share::schema::ObSchemaGetterGuard &schema_guard,
+                                       const uint64_t table_id,
+                                       const int64_t part_idx,
+                                       const int64_t subpart_idx,
+                                       common::ObTabletID &tablet_id);
+
+  static int get_part_idx_by_tablet_id(share::schema::ObSchemaGetterGuard &schema_guard,
+                                       uint64_t arg_table_id,
+                                       common::ObTabletID arg_tablet_id,
+                                       int64_t &part_idx,
+                                       int64_t &subpart_idx);
+
+  static int get_tablet_id_by_part_idx(const share::schema::ObSimpleTableSchemaV2 &table_schema,
+                                       const int64_t part_idx,
+                                       const int64_t subpart_idx,
+                                       common::ObTabletID &tablet_id);
+
+  static int get_part_idx_by_tablet_id(const share::schema::ObSimpleTableSchemaV2 &table_schema,
+                                       uint64_t arg_table_id,
+                                       common::ObTabletID arg_tablet_id,
+                                       int64_t &part_idx,
+                                       int64_t &subpart_idx);
+
+};
+
+}  // namespace table
+}  // namespace oceanbase
+
+#endif /* OCEANBASE_SHARE_TABLE_OB_TABLE_UTIL_ */

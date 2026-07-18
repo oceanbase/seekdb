@@ -1,0 +1,239 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_STORAGE_OB_STORAGE_LOG_H_
+#define OCEANBASE_STORAGE_OB_STORAGE_LOG_H_
+
+#include "storage/slog/ob_storage_log_struct.h"
+#include <inttypes.h>
+#include "storage/ob_super_block_struct.h"
+#include "observer/omt/ob_tenant_meta.h"
+#include "share/ob_unit_getter.h"
+#include "storage/ls/ob_ls_meta.h"
+
+namespace oceanbase
+{
+
+namespace share
+{
+  class ObLSID;
+}
+namespace storage
+{
+class ObTablet;
+struct ObCreateTenantPrepareLog : public ObIBaseStorageLogEntry
+{
+public:
+  explicit ObCreateTenantPrepareLog(omt::ObTenantMeta &meta);
+  virtual ~ObCreateTenantPrepareLog() {}
+  virtual bool is_valid() const override;
+  TO_STRING_KV(K_(meta));
+  OB_UNIS_VERSION_V(1);
+
+private:
+  omt::ObTenantMeta &meta_;
+};
+
+struct ObCreateTenantCommitLog : public ObIBaseStorageLogEntry
+{
+public:
+  explicit ObCreateTenantCommitLog();
+  virtual ~ObCreateTenantCommitLog() {}
+  virtual bool is_valid() const override;
+  TO_STRING_KV("type", "ObCreateTenantCommitLog");
+  OB_UNIS_VERSION_V(1);
+};
+
+struct ObCreateTenantAbortLog : public ObIBaseStorageLogEntry
+{
+public:
+  explicit ObCreateTenantAbortLog();
+  virtual ~ObCreateTenantAbortLog() {}
+  virtual bool is_valid() const override;
+  TO_STRING_KV("type", "ObCreateTenantAbortLog");
+  OB_UNIS_VERSION_V(1);
+};
+
+struct ObDeleteTenantPrepareLog : public ObIBaseStorageLogEntry
+{
+public:
+  explicit ObDeleteTenantPrepareLog();
+  virtual ~ObDeleteTenantPrepareLog() {}
+  virtual bool is_valid() const override;
+  TO_STRING_KV("type", "ObDeleteTenantPrepareLog");
+  OB_UNIS_VERSION_V(1);
+};
+struct ObDeleteTenantCommitLog : public ObIBaseStorageLogEntry
+{
+public:
+  explicit ObDeleteTenantCommitLog();
+  virtual ~ObDeleteTenantCommitLog() {}
+  virtual bool is_valid() const override;
+  TO_STRING_KV("type", "ObDeleteTenantCommitLog");
+  OB_UNIS_VERSION_V(1);
+};
+
+struct ObUpdateTenantUnitLog : public ObIBaseStorageLogEntry
+{
+public:
+  explicit ObUpdateTenantUnitLog(share::ObUnitInfoGetter::ObTenantConfig &unit);
+  virtual ~ObUpdateTenantUnitLog() {}
+  virtual bool is_valid() const override;
+
+  TO_STRING_KV(K_(unit));
+
+  OB_UNIS_VERSION_V(1);
+
+private:
+  share::ObUnitInfoGetter::ObTenantConfig  &unit_;
+};
+
+struct ObUpdateTenantSuperBlockLog : public ObIBaseStorageLogEntry
+{
+public:
+  explicit ObUpdateTenantSuperBlockLog(ObTenantSuperBlock &super_block);
+  virtual ~ObUpdateTenantSuperBlockLog() {}
+  virtual bool is_valid() const override;
+
+  TO_STRING_KV(K_(super_block));
+
+  OB_UNIS_VERSION_V(1);
+
+private:
+  ObTenantSuperBlock &super_block_;
+};
+
+struct ObLSMetaLog : public ObIBaseStorageLogEntry
+{
+public:
+  ObLSMetaLog() : ls_meta_() {}
+  ObLSMetaLog(const ObLSMeta &ls_meta);
+  const ObLSMeta &get_ls_meta() const { return ls_meta_; }
+  virtual ~ObLSMetaLog() {}
+  virtual bool is_valid() const override;
+
+  DECLARE_TO_STRING;
+  OB_UNIS_VERSION_V(1);
+
+private:
+  ObLSMeta ls_meta_;
+};
+
+struct ObLSIDLog : public ObIBaseStorageLogEntry
+{
+public:
+  explicit ObLSIDLog(share::ObLSID &ls_id);
+  virtual ~ObLSIDLog() {}
+  virtual bool is_valid() const override;
+
+  DECLARE_TO_STRING;
+  OB_UNIS_VERSION_V(1);
+
+protected:
+  share::ObLSID &ls_id_;
+};
+
+using ObCreateLSPrepareSlog = ObLSMetaLog;
+using ObCreateLSAbortSLog = ObLSIDLog;
+using ObCreateLSCommitSLog = ObLSIDLog;
+using ObDeleteLSLog = ObLSIDLog;
+
+struct ObCreateTabletLog : public ObIBaseStorageLogEntry
+{
+public:
+  ObCreateTabletLog() {}
+  explicit ObCreateTabletLog(ObTablet *tablet);
+  virtual ~ObCreateTabletLog() {}
+  virtual int serialize(char *buf, const int64_t buf_len, int64_t &pos) const override;
+  virtual int deserialize(const char *buf, const int64_t data_len, int64_t &pos) override;
+  virtual int64_t get_serialize_size() const override;
+  virtual bool is_valid() const override;
+
+  DECLARE_TO_STRING;
+
+public:
+  ObTablet *tablet_;
+};
+
+struct ObDeleteTabletLog : public ObIBaseStorageLogEntry
+{
+public:
+  ObDeleteTabletLog();
+  ObDeleteTabletLog(const share::ObLSID &ls_id, const common::ObTabletID &tablet_id);
+  virtual ~ObDeleteTabletLog() {}
+  virtual bool is_valid() const override;
+
+  DECLARE_TO_STRING;
+  OB_UNIS_VERSION_V(1);
+
+public:
+  share::ObLSID ls_id_;
+  common::ObTabletID tablet_id_;
+};
+
+struct ObUpdateTabletLog : public ObIBaseStorageLogEntry
+{
+public:
+  ObUpdateTabletLog() = default;
+  ObUpdateTabletLog(
+      const share::ObLSID &ls_id,
+      const common::ObTabletID &tablet_id,
+      const ObMetaDiskAddr &disk_addr);
+  virtual ~ObUpdateTabletLog() = default;
+  virtual bool is_valid() const override;
+  DECLARE_TO_STRING;
+  OB_UNIS_VERSION_V(1);
+public:
+  share::ObLSID ls_id_;
+  common::ObTabletID tablet_id_;
+  ObMetaDiskAddr disk_addr_;
+};
+
+struct ObEmptyShellTabletLog : public ObIBaseStorageLogEntry
+{
+public:
+  const int64_t EMPTY_SHELL_SLOG_VERSION = 1;
+public:
+  ObEmptyShellTabletLog() = default;
+  explicit ObEmptyShellTabletLog(const ObLSID &ls_id_, const ObTabletID &tablet_id, ObTablet *tablet);
+  virtual ~ObEmptyShellTabletLog() {}
+  virtual bool is_valid() const override;
+  virtual int serialize(
+      char* buf,
+      const int64_t buf_len,
+      int64_t& pos) const;
+  virtual int deserialize(
+      const char* buf,
+      const int64_t data_len,
+      int64_t& pos);
+  int deserialize_id(
+      const char* buf,
+      const int64_t data_len,
+      int64_t& pos);
+  virtual int64_t get_serialize_size() const;
+
+  DECLARE_TO_STRING;
+public:
+  int64_t version_;
+  share::ObLSID ls_id_;
+  common::ObTabletID tablet_id_;
+  ObTablet *tablet_;
+};
+
+}
+}
+
+#endif

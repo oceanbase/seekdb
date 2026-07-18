@@ -1,0 +1,79 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX LIB
+#include "ob_geo_normalize_visitor.h"
+
+namespace oceanbase {
+namespace common {
+
+bool ObGeoNormalizeVisitor::prepare(ObGeometry *geo)
+{
+  bool bret = true;
+  if (!no_srs_ && (OB_ISNULL(geo) || OB_ISNULL(srs_))) {
+    bret = false;
+  }
+  return bret;
+}
+
+int ObGeoNormalizeVisitor::normalize(ObIWkbPoint *geo)
+{
+  INIT_SUCC(ret);
+  double nx = 1.0;
+  double ny = 1.0;
+  ObWkbGeogPoint* point = reinterpret_cast<ObWkbGeogPoint*>(geo->val());
+
+  if (OB_ISNULL(point)) {
+    ret = OB_ERR_NULL_VALUE;
+    LOG_WARN("unexpected null geo value", K(ret));
+  } else if (no_srs_) {
+    nx = geo->x() * M_PI / 180.0;
+    ny = geo->y() * M_PI / 180.0;
+  } else {
+    if (OB_FAIL(srs_->latitude_convert_to_radians(geo->y(), ny))) {
+      LOG_WARN("normalize y failed", K(ret));
+    } else if (OB_FAIL(srs_->longtitude_convert_to_radians(geo->x(), nx))) {
+      LOG_WARN("normalize x failed", K(ret));
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    point->set<0>(nx);
+    point->set<1>(ny);
+  }
+  return ret;
+}
+
+int ObGeoNormalizeVisitor::visit(ObIWkbGeogPoint *geo)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(normalize(geo))){
+    LOG_WARN("failed to normalize geographical point", K(ret));
+  }
+  return ret;
+}
+
+// for st_transform
+int ObGeoNormalizeVisitor::visit(ObIWkbGeomPoint *geo)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(normalize(geo))){
+    LOG_WARN("failed to normalize cartesian point", K(ret));
+  }
+  return ret;
+}
+} // namespace common
+} // namespace oceanbase

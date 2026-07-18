@@ -1,0 +1,67 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_INDEX_BLOCK_DUAL_META_ITERATOR_H_
+#define OB_INDEX_BLOCK_DUAL_META_ITERATOR_H_
+
+#include "ob_index_block_tree_cursor.h"
+#include "ob_index_block_macro_iterator.h"
+#include "ob_sstable_sec_meta_iterator.h"
+#include "storage/blocksstable/ob_datum_rowkey.h"
+
+namespace oceanbase {
+namespace blocksstable {
+
+// Wrap-up of iterate both index block tree and secondary meta in sstable
+class ObDualMacroMetaIterator final : public ObIMacroBlockIterator
+{
+public:
+  ObDualMacroMetaIterator();
+  virtual ~ObDualMacroMetaIterator() {}
+
+  void reset() override;
+  int open(
+      ObSSTable &sstable,
+      const ObDatumRange &query_range,
+      const ObITableReadInfo &rowkey_read_info,
+      ObIAllocator &allocator,
+      const bool is_reverse_scan = false,
+      const bool need_record_micro_info = false) override;
+  int get_next_macro_block(blocksstable::ObMacroBlockDesc &block_desc) override;
+  int get_current_clustered_index_info(
+      const blocksstable::ObMicroBlockData *&clustered_micro_block_data) override;
+  const ObIArray<blocksstable::ObMicroIndexInfo> &get_micro_index_infos() const override
+  {
+    return macro_iter_.get_micro_index_infos();
+  }
+  const ObIArray<ObDatumRowkey> &get_micro_endkeys() const override
+  {
+    return macro_iter_.get_micro_endkeys();
+  }
+  TO_STRING_KV(K_(iter_end), K_(is_inited), K_(macro_iter), K_(sec_meta_iter));
+private:
+  ObIAllocator *allocator_; // allocator for member struct and macro endkeys
+  ObIndexBlockMacroIterator macro_iter_;
+  ObSSTableSecMetaIterator sec_meta_iter_;
+  bool iter_end_;
+  bool is_inited_;
+  DISALLOW_COPY_AND_ASSIGN(ObDualMacroMetaIterator);
+};
+
+} // namespace blocksstable
+} // namespace oceanbase
+
+#endif // OB_INDEX_BLOCK_DUAL_META_ITERATOR_H_

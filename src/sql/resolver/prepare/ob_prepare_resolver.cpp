@@ -1,0 +1,71 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_RESV
+
+#include "sql/resolver/prepare/ob_prepare_resolver.h"
+#include "sql/resolver/ob_resolver_utils.h"
+namespace oceanbase
+{
+using namespace common;
+namespace sql
+{
+
+int ObPrepareResolver::resolve(const ParseNode &parse_tree)
+{
+  int ret = OB_SUCCESS;
+  ObPrepareStmt *prepare_stmt = NULL;
+  const ParseNode *name_node = parse_tree.children_[0];
+  const ParseNode *stmt_node = parse_tree.children_[1];
+  if (OB_ISNULL(name_node) || OB_ISNULL(stmt_node)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid prepare node", K(name_node), K(stmt_node), K(ret));
+  } else if (OB_ISNULL(prepare_stmt = create_stmt<ObPrepareStmt>())) {
+    ret = OB_SQL_RESOLVER_NO_MEMORY;
+    LOG_WARN("failed to create execute stmt", K(ret));
+  } else {
+    stmt_ = prepare_stmt;
+  }
+
+  if (OB_SUCC(ret)) {
+    if (T_IDENT != name_node->type_) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid name node", K(name_node->type_), K(ret));
+    } else {
+      prepare_stmt->set_prepare_name(ObString(name_node->str_len_, name_node->str_value_));
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    if (T_VARCHAR == stmt_node->type_ || T_HEX_STRING == stmt_node->type_ || T_OP_GET_USER_VAR == stmt_node->type_) {
+      ObRawExpr *stmt_expr = NULL;
+      if (OB_FAIL(ObResolverUtils::resolve_const_expr(params_, *stmt_node, stmt_expr, NULL))) {
+        LOG_WARN("failed to resolve const expr", K(ret));
+      } else {
+        prepare_stmt->set_prepare_sql(stmt_expr);
+      }
+    } else {
+      ret = OB_ERR_PARSER_SYNTAX;
+      LOG_WARN("invalid name node", K(name_node->type_), K(ret));
+    }
+  }
+  return ret;
+}
+
+}
+}
+
+

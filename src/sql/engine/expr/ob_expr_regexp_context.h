@@ -1,0 +1,192 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef  OCEANBASE_SQL_ENGINE_REGEX_OB_POSIX_REGEX_
+#define  OCEANBASE_SQL_ENGINE_REGEX_OB_POSIX_REGEX_
+#include "easy_define.h"  // for conflict of macro likely
+#include "lib/utility/ob_print_utils.h"
+#include "lib/charset/ob_mysql_global.h"
+#include "lib/charset/ob_ctype.h"
+#include <sys/types.h>
+#include <assert.h>
+#include "lib/charset/ob_charset.h"
+#ifdef _WIN32
+#include <unicode/uregex.h>
+#else
+#include <icu/i18n/unicode/uregex.h>
+#endif
+#include <unicode/ustring.h>
+#include "sql/engine/expr/ob_expr_operator.h"
+
+// this regex is compatible with mysql 8.0
+
+namespace oceanbase
+{
+namespace sql
+{
+
+struct ObExprRegexpSessionVariables {
+  TO_STRING_KV(K_(regexp_stack_limit), K_(regexp_time_limit));
+  ObExprRegexpSessionVariables():
+    regexp_stack_limit_(0),
+    regexp_time_limit_(0)
+  {}
+  int64_t regexp_stack_limit_;
+  int64_t regexp_time_limit_;
+  OB_UNIS_VERSION(1);
+};
+
+class ObExprRegexContext : public ObExprOperatorCtx
+{
+public:
+  ObExprRegexContext();
+  virtual ~ObExprRegexContext();
+public:
+  static const char *icu_version_string() { return U_ICU_VERSION; }
+  inline bool is_inited() const { return inited_; }
+  void destroy();
+  void reset();
+
+  // The previous regex compile result can be used if pattern not change, if %reusable is true.
+  // %string_buf must be the same with previous init too if %reusable is true.
+  int init(ObExprStringBuf &string_buf,
+           const ObExprRegexpSessionVariables &regex_vars,
+           const ObString &origin_pattern,
+           const uint32_t cflags,
+           const bool reusable,
+           const ObCollationType cs_type);
+
+  int match(ObExprStringBuf &string_buf,
+            const ObString &text,
+            const ObCollationType,
+            const int64_t start,
+            bool &result) const;
+
+  int find(ObExprStringBuf &string_buf,
+           const ObString &text,
+           const ObCollationType cs_type,
+           const int64_t start,
+           const int64_t occurrence,
+           const int64_t return_option,
+           const int64_t subexpr,
+           int64_t &result) const;
+
+
+  int substr(ObExprStringBuf &string_buf,
+             const ObString &text,
+             const ObCollationType cs_type,
+             const int64_t start,
+             const int64_t occurrence,
+             const int64_t subexpr,
+             ObString &result) const;
+
+  int replace(ObExprStringBuf &string_buf,
+              const ObString &text_string,
+              const ObCollationType cs_type,
+              const ObString &replace_string,
+              const int64_t start,
+              const int64_t occurrence,
+              ObString &result) const;
+
+  int append_head(ObExprStringBuf &string_buf,
+                  const int32_t current_pos,
+                  UChar *&replace_buff,
+                  int32_t &buff_size,
+                  int32_t &buff_pos) const;
+
+  int append_replace_str(ObExprStringBuf &string_buf,
+                         const UChar *u_replace,
+                         const int32_t u_replace_length,
+                         UChar *&replace_buff,
+                         int32_t &buff_size,
+                         int32_t &buff_pos) const;
+
+  int append_tail(ObExprStringBuf &string_buf,
+                  UChar *&replace_buff,
+                  int32_t &buff_size,
+                  int32_t &buff_pos) const;
+
+  static int get_regexp_flags(const ObString &match_param,
+                              const bool is_case_sensitive,
+                              const bool is_som_leftmost,
+                              const bool is_single_match,
+                              uint32_t &flags);
+
+  static int check_need_utf8(ObRawExpr *expr, bool &is_nstring);
+
+  static inline common::ObCollationType get_regexp_calc_collation(const common::ObCollationType res_cs_type,
+                                                                  const bool is_case_sensitive)
+  {
+    return common::CS_TYPE_BINARY == res_cs_type
+        ? common::CS_TYPE_BINARY
+        : (is_case_sensitive ? common::CS_TYPE_UTF8MB4_BIN : common::CS_TYPE_UTF8MB4_GENERAL_CI);
+  }
+
+  static inline bool is_regexp_calc_collation(const common::ObCollationType cs_type)
+  {
+    return common::CS_TYPE_BINARY == cs_type
+        || common::CS_TYPE_UTF8MB4_GENERAL_CI == cs_type
+        || common::CS_TYPE_UTF8MB4_BIN == cs_type
+        || common::CS_TYPE_UTF16_GENERAL_CI == cs_type
+        || common::CS_TYPE_UTF16_BIN == cs_type;
+  }
+
+  static int convert_to_regexp_utf16(common::ObIAllocator &alloc,
+                                     const common::ObString &src,
+                                     const common::ObCollationType src_coll,
+                                     common::ObString &dst);
+
+  static int convert_from_regexp_utf16(common::ObIAllocator &alloc,
+                                       const common::ObString &src,
+                                       const common::ObCollationType dst_coll,
+                                       common::ObString &dst);
+
+  static inline bool is_binary_string(const ObExprResType &type) {
+    return CS_TYPE_BINARY == type.get_collation_type() && (ObVarcharType == type.get_type() || ObHexStringType == type.get_type());
+  }
+
+  static inline bool is_binary_compatible(const ObExprResType &type) {
+    return CS_TYPE_BINARY == type.get_collation_type() || !ob_is_string_or_lob_type(type.get_type());
+  }
+  TO_STRING_KV(K_(inited));
+
+  static int check_binary_compatible(const ObExprResType *types, int64_t num);
+
+private:
+  int preprocess_pattern(common::ObExprStringBuf &string_buf,
+                         const common::ObString &origin_pattern,
+                         common::ObString &pattern);
+  int check_icu_regexp_status(UErrorCode u_error_code, const UParseError *parse_error = NULL) const;
+  int get_valid_unicode_string(ObExprStringBuf &string_buf,
+                               const ObString &origin_str,
+                               UChar *&u_str,
+                               int32_t &u_str_len) const;
+  int get_valid_replace_string(ObIAllocator &alloc,
+                               const ObString &origin_replace,
+                               UChar *&u_replace,
+                               int32_t &u_replace_len) const;
+private:
+  bool inited_;
+  ObInplaceAllocator pattern_allocator_;
+  common::ObString pattern_;
+  int cflags_;
+  ObInplaceAllocator pattern_wc_allocator_;
+  URegularExpression *regexp_engine_;
+};
+}
+}
+
+#endif //OCEANBASE_SQL_ENGINE_REGEX_OB_POSIX_REGEX_

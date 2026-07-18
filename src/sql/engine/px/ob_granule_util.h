@@ -1,0 +1,489 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_EXECUTOR_UTIL_H_
+#define OB_EXECUTOR_UTIL_H_
+
+#include "share/config/ob_server_config.h"
+#include "lib/utility/ob_print_utils.h"
+#include "lib/utility/utility.h"
+#include "sql/das/ob_das_define.h"
+#include "sql/ob_sql_define.h"
+#include "sql/engine/ob_engine_op_traits.h"
+
+namespace oceanbase
+{
+namespace share {
+}
+namespace common
+{
+class ObStoreRange;
+}
+namespace sql
+{
+
+#define NON_ZERO_VALUE(num) \
+     ((num == 0) ? 1 : num)
+
+/**
+ *    ----JOIN----
+ *    |          |
+ *  pkey         |
+ *    |GI        |GI
+ *    A          B
+ *  GI above A,B are affinitize.
+ */
+#define GI_AFFINITIZE                 (1ULL)
+/**
+*         |GI
+*    ----JOIN---
+*    |         |
+*    A         B
+*  Join row by partition pairs.
+*/
+#define GI_PARTITION_WISE             (1ULL << 1)
+/**
+*         |
+*    ----NLJ----
+*    |         |
+*  B2HOST      |
+*    |         |GI(access all)
+*    A         B
+* Scan all partition for every row from left.
+*/
+#define GI_ACCESS_ALL                 (1ULL << 2)
+// Unused. This is intended for use in bloom filter scenarios, used to filter data thrown upwards
+// GI maintains a partition filter, outputting each row only if it is in the partition list
+// This is an enhanced version of Bloom Filter
+#define GI_USE_PARTITION_FILTER       (1ULL << 3)
+/**
+*         |
+*    ----NLJ----
+*    |         |
+*  Bcast       |
+*    |         |GI(nlj_param_down)
+*    A         B
+* Get a partition granule.
+*/
+#define GI_NLJ_PARAM_DOWN             (1ULL << 4)
+// Sort partition in asc partition order.
+#define GI_ASC_ORDER        (1ULL << 5)
+// Sort partition in desc order.
+#define GI_DESC_ORDER       (1ULL << 6)
+// Force to do partition
+#define GI_FORCE_PARTITION_GRANULE    (1ULL << 7)
+// divide task into groups（slave mapping）
+#define GI_SLAVE_MAPPING              (1ULL << 8)
+// Notify GI to use partition pruning mode, only process specific partitions, other partitions are pruned
+#define GI_ENABLE_PARTITION_PRUNING (1ULL << 9)
+
+class ObTablePartitionInfo;
+class ObGranulePump;
+class ObGranulePumpArgs;
+enum ObGranuleType
+{
+  OB_GRANULE_UNINITIALIZED,
+  // task in granule is partition + range
+  OB_BLOCK_RANGE_GRANULE,
+  OB_PARTITION_GRANULE
+};
+
+// 
+// The Detailed Implementation of PX's GI
+enum ObGranuleSplitterType
+{
+  GIT_UNINITIALIZED,
+
+  /**
+    *           [Hash Join]
+    *                |
+    *        ----------------
+    *        |              |
+    *        EX(PKEY)      GI (GIT_AFFINITY)
+    *        |              |
+    *        GI            TSC2
+    *        |
+    *       TSC1
+    */
+  /*
+    * Here is an example of "partition + affinitized" within table B
+    * for each row from C, it can only flow to certain workers dealing
+    * with coresponding partitions of B.
+    *
+    * |   PX COORDINATOR                |          |
+    * |    EXCHANGE OUT DISTR           |:EX20001  |
+    * |      NESTED-LOOP JOIN           |          |
+    * |       EXCHANGE IN DISTR         |          |
+    * |        EXCHANGE OUT DISTR (PKEY)|:EX20000  |
+    * |         PX PARTITION ITERATOR   |          |
+    * |          TABLE SCAN             |C         |
+    * |       PX PARTITION ITERATOR     |          |
+    * |        TABLE SCAN               |B         |
+    */
+  GIT_AFFINITY,
+
+  /**
+    *        [Nested Loop Join]
+    *                |
+    *        ----------------
+    *        |              |
+    *        EX(BC2HOST)    GI (GIT_ACCESS_ALL)
+    *        |              |
+    *        GI            TSC2
+    *        |
+    *       TSC1
+    */
+  /*
+    * Each worker must have full access with table B's data
+    *
+    * |   PX COORDINATOR                     |          |
+    * |    EXCHANGE OUT DISTR                |:EX20001  |
+    * |      NESTED-LOOP JOIN                |          |
+    * |       EXCHANGE IN DISTR              |          |
+    * |        EXCHANGE OUT DISTR (B2HOST)   |:EX20000  |
+    * |         PX PARTITION ITERATOR        |          |
+    * |          TABLE SCAN                  |C         |
+    * |       PX PARTITION ITERATOR          |          |
+    * |        TABLE SCAN                    |B         |
+    */
+  GIT_ACCESS_ALL,
+
+  /**
+    *                GI (GIT_PARTITION_WISE)
+    *                |
+    *            [Hash Join]
+    *                |
+    *        ----------------
+    *        |              |
+    *        TSC1           TSC2
+    */
+  /*
+    * If two tables can do join in full partition wise way, it will
+    * be the most efficient way.
+    *
+    * |      PX PARTITION ITERATOR      |          |
+    * |       HASH JOIN                 |          |
+    * |        TABLE SCAN               |A         |
+    * |        TABLE SCAN               |B         |
+    */
+  GIT_FULL_PARTITION_WISE,
+
+  /* consist of full/partial partition wise affinity
+    *
+    *                      [Hash Join]
+    *                           |
+    *                ---------------------
+    *                |                   |
+    *           [Hash Join]              GI(partial partition wise with affinity)
+    *                |                   |
+    *        ----------------            TSC3
+    *        |              |
+    *        EX(PKEY)      GI(partial partition wise with affinity)
+    *        |              |
+    *        GI            TSC2
+    *        |
+    *       TSC
+    */
+  /*
+    * Here is an example of "pwj_gi + affinitized" within table B and A
+    *
+    * |   PX COORDINATOR                |          |
+    * |    EXCHANGE OUT DISTR           |:EX20001  |
+    * |     NESTED-LOOP JOIN            |          |
+    * |      NESTED-LOOP JOIN           |          |
+    * |       EXCHANGE IN DISTR         |          |
+    * |        EXCHANGE OUT DISTR (PKEY)|:EX20000  |
+    * |         PX PARTITION ITERATOR   |          |
+    * |          TABLE SCAN             |C         |
+    * |       PX PARTITION ITERATOR     |          |
+    * |        TABLE GET                |B         |
+    * |      PX PARTITION ITERATOR      |          |
+    * |       TABLE GET                 |A         |
+
+    *
+    *                      [Hash Join]
+    *                           |
+    *                ---------------------
+    *                |                   |
+    *             EX(PKEY)              GI(full partition wise with affinity)
+    *                |                   |
+    *               TSC             [Hash Join]
+    *                                    |
+    *                             ----------------
+    *                             |              |
+    *                            TSC2           TSC3
+    */
+  GIT_PARTITION_WISE_WITH_AFFINITY,
+  /*
+    * This is the most commonly used GI
+    *
+    * |      PX BLOCK ITERATOR          |          |
+    * |       TABLE SCAN                |A         |
+    * or
+    * |      PX PARTITION ITERATOR      |          |
+    * |       TABLE SCAN                |A         |
+    */
+  GIT_RANDOM,
+};
+
+// the params used to decide the load of every task
+struct ObParallelBlockRangeTaskParams
+{
+  ObParallelBlockRangeTaskParams() :
+    parallelism_(0),
+    expected_task_load_(sql::OB_EXPECTED_TASK_LOAD),
+    min_task_count_per_thread_(sql::OB_MIN_PARALLEL_TASK_COUNT),
+    max_task_count_per_thread_(sql::OB_MAX_PARALLEL_TASK_COUNT),
+    min_task_access_size_(GCONF.px_task_size >> 10),
+    marcos_count_(0)
+  { }
+  virtual ~ObParallelBlockRangeTaskParams()
+  { }
+  int valid() const;
+  TO_STRING_KV(K(parallelism_), K(expected_task_load_), K(min_task_count_per_thread_), K(max_task_count_per_thread_), K(min_task_access_size_), K(marcos_count_));
+  /* parallelism */
+  int64_t parallelism_;
+  /**
+   * Unit is KB
+   * Default is 102400, meaning it expects a task to read 100M of data from disk.
+   * Currently, tablet size is used instead of the default value.
+   */
+  int64_t expected_task_load_;
+  /**
+   * Unit is individual
+   * Expected minimum number of tasks each thread should hold, default is magic number 13
+   */
+  int64_t min_task_count_per_thread_;
+  /**
+   * Unit is individual
+   * Expected maximum number of tasks each thread can hold, default is magic number 100
+   */
+  int64_t max_task_count_per_thread_;
+  /**
+   * Unit is KB
+   * The minimum amount of data each task is responsible for, default is one macroblock, 2M.
+   * This value can be changed via system settings.
+   */
+  int64_t min_task_access_size_;
+  /**
+   * Total number of macroblocks
+   */
+  uint64_t marcos_count_;
+};
+
+
+class ObGranuleUtil
+{
+public:
+  /**
+   *  table_partition_info  IN    partition info
+   *  parallelism           IN    the parallelism from hint
+   *  type                  OUT   granule type
+   *
+   */
+  static int get_granule_type(const ObTablePartitionInfo *table_partition_info,
+                              int64_t parallelism,
+                              ObGranuleType &type);
+  /**
+   * allocator                  IN  memory allocator
+   * ranges                     IN  ranges from the query range(by optimizer)
+   * pkeys                      IN  partition keys
+   * das                        IN  data access service
+   * parallelism                IN  the parallelism from hint or optimizer
+   * tablet_size                IN  the tablet size will deside the workload
+   * force_partition_granule    IN  force to be partition granule iterator
+   * granule_pkeys              OUT the pkey info of granule_ranges
+   * granule_ranges             OUT the ranges info include ranges
+   * granule_idx                OUT the idx used to divide the granule ranges
+   * range_independent          IN  the random type witch affects the granule_idx
+   *
+   */
+  static int split_block_ranges(ObExecContext &exec_ctx,
+                                common::ObIAllocator &allocator,
+                                const ObTableScanSpec *tsc,
+                                const common::ObIArray<common::ObNewRange> &ranges,
+                                const common::ObIArray<ObDASTabletLoc*> &tablets,
+                                int64_t parallelism,
+                                int64_t tablet_size,
+                                bool force_partition_granule,
+                                common::ObIArray<ObDASTabletLoc*> &granule_tablets,
+                                common::ObIArray<common::ObNewRange> &granule_ranges,
+                                common::ObIArray<int64_t> &granule_idx,
+                                bool range_independent);
+
+  static int use_partition_granule(ObGranulePumpArgs &args, bool &partition_granule);
+  static bool use_partition_granule(int64_t partition_count,
+                                    int64_t parallelism,
+                                    int64_t partition_scan_hold,
+                                    int64_t hash_partition_scan_hold,
+                                    bool hash_part);
+
+  static bool gi_has_attri(uint64_t bit_map, uint64_t attri) { return 0 != (bit_map & attri); }
+
+  static bool is_partition_task_mode(uint64_t gi_attri_flag)
+  {
+    return affinitize(gi_attri_flag) || pwj_gi(gi_attri_flag) ||
+           access_all(gi_attri_flag) || with_param_down(gi_attri_flag);
+  }
+  static bool is_partition_granule_flag(uint64_t gi_attri_flag)
+  {
+    return is_partition_task_mode(gi_attri_flag) ||
+           ObGranuleUtil::gi_has_attri(gi_attri_flag, GI_FORCE_PARTITION_GRANULE);
+  }
+  static bool partition_filter(uint64_t gi_attri_flag)
+  {
+    return gi_has_attri(gi_attri_flag, GI_USE_PARTITION_FILTER);
+  }
+  static bool pwj_gi(uint64_t gi_attri_flag)
+  {
+    return gi_has_attri(gi_attri_flag, GI_PARTITION_WISE);
+  }
+  static bool affinitize(uint64_t gi_attri_flag)
+  {
+    return gi_has_attri(gi_attri_flag, GI_AFFINITIZE);
+  }
+  static bool access_all(uint64_t gi_attri_flag)
+  {
+    return gi_has_attri(gi_attri_flag, GI_ACCESS_ALL);
+  }
+  static bool with_param_down(uint64_t gi_attri_flag)
+  {
+    return gi_has_attri(gi_attri_flag, GI_NLJ_PARAM_DOWN);
+  }
+  static bool asc_order(uint64_t gi_attri_flag)
+  {
+    return gi_has_attri(gi_attri_flag, GI_ASC_ORDER);
+  }
+  static bool desc_order(uint64_t gi_attri_flag)
+  {
+    return gi_has_attri(gi_attri_flag, GI_DESC_ORDER);
+  }
+  static bool force_partition_granule(uint64_t gi_attri_flag)
+  {
+    return gi_has_attri(gi_attri_flag, GI_FORCE_PARTITION_GRANULE);
+  }
+
+  static bool slave_mapping_flag(uint64_t gi_attri_flag) {
+    return gi_has_attri(gi_attri_flag, GI_SLAVE_MAPPING);
+  }
+  static bool enable_partition_pruning(uint64_t gi_attri_flag)
+  {
+    return gi_has_attri(gi_attri_flag, GI_ENABLE_PARTITION_PRUNING);
+  }
+
+
+  static int remove_empty_range(const common::ObIArray<common::ObNewRange> &in_ranges,
+                                common::ObIArray<common::ObNewRange> &ranges,
+                                bool &only_empty_range);
+
+  static bool can_resplit_gi_task(uint64_t gi_attri_flag)
+  {
+    return !is_partition_granule_flag(gi_attri_flag) && !asc_order(gi_attri_flag)
+           && !desc_order(gi_attri_flag);
+  }
+
+public:
+  /**
+   * split tasks by block granule method
+   * allocator                   IN  memory allocator
+   * input_ranges                IN  query ranges extracted in optimizer stage
+   * pkeys                       IN  the key of all partitions belonging to the query
+   * partition_service           IN  utils for spliting tasks
+   * parallelism                 IN  the parallelism which should be greater than 1
+   * tablet_size                 IN  the expected size for each task,
+   *                                  which default value is OB_DEFAULT_TABLET_SIZE(128MB)
+   *
+   * granule_pkeys               OUT the pkey info of granule_ranges
+   * granule_ranges              OUT the ranges info include ranges
+   * granule_idx                 OUT the idx used to divide the granule ranges
+   * range_independent           IN  the random type witch affects the granule_idx
+   *
+   */
+  static int split_block_granule(ObExecContext &exec_ctx,
+                                common::ObIAllocator &allocator,
+                                const ObTableScanSpec *tsc,
+                                const common::ObIArray<common::ObNewRange> &input_ranges,
+                                const common::ObIArray<ObDASTabletLoc*> &tablet_array,
+                                int64_t parallelism,
+                                int64_t tablet_size,
+                                common::ObIArray<ObDASTabletLoc*> &granule_tablets,
+                                common::ObIArray<common::ObNewRange> &granule_ranges,
+                                common::ObIArray<int64_t> &granule_idx,
+                                bool range_independent);
+
+  /**
+   * get the total task count for all partitions
+   * params                     IN the parameters for splitting
+   * total_size                 IN the estimated size for all partitions
+   *
+   * total_task_count           OUT the expected total count for tasks
+   */
+  static int compute_total_task_count(const ObParallelBlockRangeTaskParams &params,
+                                int64_t total_size,
+                                int64_t &total_task_count);
+  static ObGranuleSplitterType calc_split_type(uint64_t gi_attr_flag);
+
+private:
+  /**
+   * calc task count for each partition by the weight of partition data in the total data
+   * total_size                 IN size for total data
+   * total_task_size            IN the expected total count of tasks which will be splitted
+   *
+   * task_cnt_each_partition    OUT task count for each partition
+   */
+  static int compute_task_count_each_partition(int64_t total_size,
+                                               int64_t total_task_cnt,
+                                               const common::ObIArray<int64_t> &size_each_partition,
+                                               common::ObIArray<int64_t> &task_cnt_each_partition);
+
+  /**
+   * get the splitted tasks for each partition
+   * allocator                   IN  memory allocator
+   * expected_task_cnt           IN  the expected count of tasks for this partition
+   * pkey                        IN  the identifier for partition
+   * partition_service           IN  utils for splitting tasks
+   * input_storage_ranges        IN  query ranges extracted in optimizer stage
+   *
+   * granule_pkeys               OUT the pkey info of granule_ranges
+   * granule_ranges              OUT the ranges info include ranges
+   * granule_idx                 OUT the idx used to divide the granule ranges
+   * pkey_idx                    OUT the idx in granule ranges
+   * range_independent           IN  the random type witch affects the granule_idx
+   */
+  static int get_tasks_for_partition(ObExecContext &exec_ctx,
+                                     common::ObIAllocator &allocator,
+                                     int64_t expected_task_cnt,
+                                     ObDASTabletLoc &tablet,
+                                     common::ObIArray<common::ObStoreRange> &input_storage_ranges,
+                                     common::ObIArray<ObDASTabletLoc*> &tablet_array,
+                                     common::ObIArray<common::ObNewRange> &granule_ranges,
+                                     common::ObIArray<int64_t> &granule_idx,
+                                     int64_t &pkey_idx,
+                                     bool range_independent);
+
+  static int convert_new_range_to_store_range(common::ObIAllocator &allocator,
+                                              const ObTableScanSpec *tsc,
+                                              const common::ObTabletID &tablet_id,
+                                              const common::ObIArray<common::ObNewRange> &input_ranges,
+                                              common::ObIArray<common::ObStoreRange> &input_store_ranges,
+                                              bool &need_convert_new_range);
+};
+
+
+}//sql
+}//oceanbase
+
+#endif

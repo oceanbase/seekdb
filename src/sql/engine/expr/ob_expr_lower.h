@@ -1,0 +1,100 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SQL_ENGINE_EXPR_LOWER_
+#define OCEANBASE_SQL_ENGINE_EXPR_LOWER_
+
+#include "sql/engine/expr/ob_expr_operator.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+class ObExprLowerUpper : public ObStringExprOperator
+{
+public:
+  static const char SEPARATOR_IN_NLS_SORT_PARAM = '=';
+  ObExprLowerUpper(common::ObIAllocator &alloc,
+                   ObExprOperatorType type, const char *name, int32_t param_num);
+  virtual ~ObExprLowerUpper() {}
+  // For lower/upper of mysql and oracle
+  virtual int calc_result_type1(ObExprResType &type, ObExprResType &text,
+                                common::ObExprTypeCtx &type_ctx) const;
+  // For oracle only nls_lower/nls_upper
+  virtual int calc_result_typeN(ObExprResType &type,
+                              ObExprResType *texts,
+                              int64_t param_num,
+                              common::ObExprTypeCtx &type_ctx) const;
+  static int calc_common(const ObExpr &expr, ObEvalCtx &ctx,
+                         ObDatum &expr_datum, bool lower, common::ObCollationType cs_type);
+  template <char CA, char CZ>
+  static void calc_common_inner_optimized(char *buf, const int32_t &buf_len,
+                                          const ObString &m_text);
+  template <bool lower>
+  static int calc_common_vector(const ObExpr &expr, ObEvalCtx &ctx,
+      const ObBitVector &skip, const EvalBound &bound, common::ObCollationType cs_type);
+
+  int cg_expr_common(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObExpr &rt_expr) const;
+  DECLARE_SET_LOCAL_SESSION_VARS;
+  
+protected:
+  virtual int calc(const common::ObCollationType cs_type, char *src, int32_t src_len,
+                   char *dest, int32_t det_len, int32_t &out_len) const = 0;
+  virtual int32_t get_case_mutiply(const common::ObCollationType cs_type) const = 0;
+
+private:
+  template <typename ArgVec, typename ResVec, bool lower>
+  static int vector_lower_upper(VECTOR_EVAL_FUNC_ARG_DECL, common::ObCollationType cs_type);
+  DISALLOW_COPY_AND_ASSIGN(ObExprLowerUpper);
+};
+
+class ObExprLower : public ObExprLowerUpper
+{
+public:
+  explicit  ObExprLower(common::ObIAllocator &alloc);
+  virtual ~ObExprLower() {}
+  virtual int calc(const common::ObCollationType cs_type, char *src, int32_t src_len,
+                   char *dest, int32_t det_len, int32_t &out_len) const;
+  virtual int32_t get_case_mutiply(const common::ObCollationType cs_type) const;
+  virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
+                      const ObRawExpr &raw_expr,
+                      ObExpr &rt_expr) const override;
+  static int calc_lower(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_lower_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObExprLower);
+};
+
+class ObExprUpper : public ObExprLowerUpper
+{
+public:
+  explicit  ObExprUpper(common::ObIAllocator &alloc);
+  virtual ~ObExprUpper() {}
+  virtual int calc(const common::ObCollationType cs_type, char *src, int32_t src_len,
+                   char *dest, int32_t det_len, int32_t &out_len) const;
+  virtual int32_t get_case_mutiply(const common::ObCollationType cs_type) const;
+  virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
+                      const ObRawExpr &raw_expr,
+                      ObExpr &rt_expr) const override;
+  static int calc_upper(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_upper_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObExprUpper);
+};
+
+}
+}
+#endif /* OCEANBASE_SQL_ENGINE_EXPR_LOWER_ */

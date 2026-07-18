@@ -1,0 +1,184 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "ob_i_tablet_mds_customized_interface.h"
+#include "storage/tablet/ob_tablet_ddl_complete_mds_data.h"
+namespace oceanbase
+{
+namespace storage
+{
+
+int ObITabletMdsCustomizedInterface::get_ddl_data(ObTabletBindingMdsUserData &ddl_data)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(get_latest_committed_data(ddl_data))) {
+    if (OB_EMPTY_RESULT == ret) {
+      ddl_data.set_default_value(); // use default value
+      ret = OB_SUCCESS;
+    }
+  }
+  return ret;
+}
+
+int ObITabletMdsCustomizedInterface::get_autoinc_seq(share::ObTabletAutoincSeq &inc_seq, ObIAllocator &allocator)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(get_latest_committed_data(inc_seq, &allocator))) {
+    if (OB_EMPTY_RESULT == ret) {
+      inc_seq.reset(); // use default value
+      ret = OB_SUCCESS;
+    }
+  }
+  return ret;
+}
+
+int ObITabletMdsCustomizedInterface::get_latest_split_data(
+    ObTabletSplitMdsUserData &data,
+    mds::MdsWriter &writer,
+    mds::TwoPhaseCommitState &trans_stat,
+    share::SCN &trans_version,
+    const int64_t read_seq) const
+{
+  #define PRINT_WRAPPER KR(ret), K(data)
+  MDS_TG(10_ms);
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!check_is_inited_())) {
+    ret = OB_NOT_INIT;
+    MDS_LOG_GET(WARN, "not inited");
+  } else {
+    ObITabletMdsInterface *src = nullptr;
+    ObTabletHandle src_tablet_handle;
+    if (get_tablet_meta_().has_transfer_table()) {
+      if (CLICK_FAIL(get_src_tablet_handle_and_base_ptr_(src_tablet_handle, src))) {
+        MDS_LOG(WARN, "fail to get src tablet handle", K(ret), K(get_tablet_meta_()));
+      }
+    }
+
+    if (OB_FAIL(ret)) {
+    } else if (CLICK_FAIL((cross_ls_get_latest<ObTabletSplitMdsUserData>(
+        src,
+        ReadSplitDataOp(data),
+        writer,
+        trans_stat,
+        trans_version,
+        read_seq)))) {
+      if (OB_EMPTY_RESULT != ret) {
+        MDS_LOG_GET(WARN, "fail to cross ls get latest", K(lbt()));
+      }
+    }
+  }
+  return ret;
+  #undef PRINT_WRAPPER
+}
+
+int ObITabletMdsCustomizedInterface::get_latest_autoinc_seq(
+    ObTabletAutoincSeq &data,
+    ObIAllocator &allocator,
+    mds::MdsWriter &writer,
+    mds::TwoPhaseCommitState &trans_stat,
+    share::SCN &trans_version,
+    const int64_t read_seq) const
+{
+  #define PRINT_WRAPPER KR(ret), K(data)
+  MDS_TG(10_ms);
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!check_is_inited_())) {
+    ret = OB_NOT_INIT;
+    MDS_LOG_GET(WARN, "not inited");
+  } else {
+    ObITabletMdsInterface *src = nullptr;
+    ObTabletHandle src_tablet_handle;
+    if (get_tablet_meta_().has_transfer_table()) {
+      if (CLICK_FAIL(get_src_tablet_handle_and_base_ptr_(src_tablet_handle, src))) {
+        MDS_LOG(WARN, "fail to get src tablet handle", K(ret), K(get_tablet_meta_()));
+      }
+    }
+
+    if (OB_FAIL(ret)) {
+    } else if (CLICK_FAIL((cross_ls_get_latest<ObTabletAutoincSeq>(
+        src,
+        ReadAutoIncSeqOp(allocator, data),
+        writer,
+        trans_stat,
+        trans_version,
+        read_seq)))) {
+      if (OB_EMPTY_RESULT != ret) {
+        MDS_LOG_GET(WARN, "fail to cross ls get latest", K(lbt()));
+      }
+    }
+  }
+  return ret;
+  #undef PRINT_WRAPPER
+}
+
+int ObITabletMdsCustomizedInterface::get_ddl_complete(const share::SCN &snapshot,
+                                                      ObIAllocator &allocator,
+                                                      ObTabletDDLCompleteMdsUserData &data,
+                                                      const int64_t timeout) const
+{
+  #define PRINT_WRAPPER KR(ret), K(data)
+  MDS_TG(10_ms);
+  int ret = OB_SUCCESS;
+  if (CLICK_FAIL((get_snapshot<mds::DummyKey, ObTabletDDLCompleteMdsUserData>(
+      mds::DummyKey(),
+      ReadDDLCompleteOp(allocator, data),
+      snapshot,
+      timeout)))) {
+    if (OB_EMPTY_RESULT != ret) {
+      MDS_LOG(WARN, "fail to get snapshot", K(ret));
+    }
+  }
+  return ret;
+  #undef PRINT_WRAPPER
+}
+
+int ObITabletMdsCustomizedInterface::get_latest_committed_tablet_status(ObTabletCreateDeleteMdsUserData &data) const
+{
+  #define PRINT_WRAPPER KR(ret), K(data)
+  MDS_TG(10_ms);
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!check_is_inited_())) {
+    ret = OB_NOT_INIT;
+    MDS_LOG_GET(WARN, "not inited");
+  } else if (CLICK_FAIL((get_latest_committed<ObTabletCreateDeleteMdsUserData>(
+      ReadTabletStatusOp(data))))) {
+    if (OB_EMPTY_RESULT != ret) {
+      MDS_LOG_GET(WARN, "fail to get latest committed", K(ret));
+    }
+  } 
+  return ret;
+  #undef PRINT_WRAPPER
+}
+
+int ObITabletMdsCustomizedInterface::get_latest_binding_info(
+    ObTabletBindingMdsUserData &data,
+    mds::MdsWriter &writer,
+    mds::TwoPhaseCommitState &trans_stat,
+    share::SCN &trans_version) const
+{
+  #define PRINT_WRAPPER KR(ret), K(data)
+  MDS_TG(10_ms);
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(get_latest(data, writer, trans_stat, trans_version))) {
+    if (OB_EMPTY_RESULT != ret) {
+      MDS_LOG(WARN, "failed to get latest binding info", KR(ret));
+    }
+  }
+  return ret;
+  #undef PRINT_WRAPPER
+}
+}
+}

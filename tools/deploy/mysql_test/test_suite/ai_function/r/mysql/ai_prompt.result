@@ -1,0 +1,226 @@
+select ai_prompt('{0}+{1}={2} 吗？请回答true或false','1');
+ai_prompt('{0}+{1}={2} 吗？请回答true或false','1')
+{"args": ["1"], "template": "{0}+{1}={2} 吗？请回答true或false"}
+select ai_prompt('{0}+{1}={2} 吗？请回答true或false',json_object("a","1"));
+ERROR 0A000: json type is not supported not supported
+select ai_prompt();
+ERROR 42000: Incorrect parameter count in the call to native function 'ai_prompt'
+select ai_prompt(1);
+ERROR 22000: Invalid data type for the operation
+select ai_prompt(1.2);
+ERROR 22000: Invalid data type for the operation
+select ai_prompt(json_object("a","1"));
+ERROR 22000: Invalid data type for the operation
+select ai_prompt('{0}+{1}={2} 吗？请回答true或false',1);
+ERROR 22000: Invalid data type for the operation
+drop table if exists t1;
+create table t1 (nr char(5), a varchar(10), b BINARY(20), c VARBINARY(20));
+insert into t1 values( 'a', 'b', "oExGTLHmkvIGQekFkd" , "oExGTLHmkvIGQekFkd");
+insert into t1 values('aa', 'bb', 'oExGTLHmkvIGQekFkd', 'lmtBeletLiSQIwqhwr');
+insert into t1 values('aaa', 'bbb', 'RioBRrIKsEiedMVmtUqq', 'eIKamHGwnY');
+select ai_prompt(nr) from t1;
+ai_prompt(nr)
+{"args": [], "template": "a"}
+{"args": [], "template": "aa"}
+{"args": [], "template": "aaa"}
+select ai_prompt(a) from t1;
+ai_prompt(a)
+{"args": [], "template": "b"}
+{"args": [], "template": "bb"}
+{"args": [], "template": "bbb"}
+select ai_prompt(b) from t1;
+ai_prompt(b)
+{"args": [], "template": "oExGTLHmkvIGQekFkd\u0000\u0000"}
+{"args": [], "template": "oExGTLHmkvIGQekFkd\u0000\u0000"}
+{"args": [], "template": "RioBRrIKsEiedMVmtUqq"}
+select ai_prompt(c) from t1;
+ai_prompt(c)
+{"args": [], "template": "oExGTLHmkvIGQekFkd"}
+{"args": [], "template": "lmtBeletLiSQIwqhwr"}
+{"args": [], "template": "eIKamHGwnY"}
+drop table t1;
+drop table if exists t1;
+create table t1 (nr int, a tinyblob, b text, c mediumblob, d longtext);
+insert into t1 values(1, 'a', 'b', 'c', 'd');
+insert into t1 values(2, 'aa', 'bb', 'cc', 'dd');
+insert into t1 values(3, 'aaa', 'bbb', 'ccc', 'ddd');
+insert into t1 values(6, 'aaa', 'BBB', 'ccc', 'DDD');
+insert into t1 values(7, 'AA', 'bb', 'CC', 'dd');
+select ai_prompt(nr) from t1;
+ERROR 22000: Invalid data type for the operation
+select ai_prompt(a) from t1;
+ERROR 22000: Invalid data type for the operation
+select ai_prompt(b) from t1;
+ERROR 22000: Invalid data type for the operation
+select ai_prompt(c) from t1;
+ERROR 22000: Invalid data type for the operation
+select ai_prompt(d) from t1;
+ERROR 22000: Invalid data type for the operation
+drop table t1;
+drop table if exists t1;
+create table t1 (nr char(5), a varchar(10), b BINARY(20), c VARBINARY(20));
+insert into t1 values( 'a', 'b', "oExGTLHmkvIGQekFkd" , "oExGTLHmkvIGQekFkd");
+insert into t1 values('aa', 'bb', 'oExGTLHmkvIGQekFkd', 'lmtBeletLiSQIwqhwr');
+insert into t1 values('aaa', 'bbb', 'RioBRrIKsEiedMVmtUqq', 'eIKamHGwnY');
+select ai_prompt(nr) from t1;
+ai_prompt(nr)
+{"args": [], "template": "a"}
+{"args": [], "template": "aa"}
+{"args": [], "template": "aaa"}
+select ai_prompt(nr,a) from t1;
+ai_prompt(nr,a)
+{"args": ["b"], "template": "a"}
+{"args": ["bb"], "template": "aa"}
+{"args": ["bbb"], "template": "aaa"}
+select ai_prompt(nr,a,b) from t1;
+ai_prompt(nr,a,b)
+{"args": ["b", "oExGTLHmkvIGQekFkd\u0000\u0000"], "template": "a"}
+{"args": ["bb", "oExGTLHmkvIGQekFkd\u0000\u0000"], "template": "aa"}
+{"args": ["bbb", "RioBRrIKsEiedMVmtUqq"], "template": "aaa"}
+select ai_prompt(nr,a,b,c) from t1;
+ai_prompt(nr,a,b,c)
+{"args": ["b", "oExGTLHmkvIGQekFkd\u0000\u0000", "oExGTLHmkvIGQekFkd"], "template": "a"}
+{"args": ["bb", "oExGTLHmkvIGQekFkd\u0000\u0000", "lmtBeletLiSQIwqhwr"], "template": "aa"}
+{"args": ["bbb", "RioBRrIKsEiedMVmtUqq", "eIKamHGwnY"], "template": "aaa"}
+drop table t1;
+drop table if exists t1;
+create table t1 (nr int primary key, a1 tinyblob, a2 text, a3 mediumblob, a4 longtext);
+insert into t1 values(1, 'aa', 'bb', 'cc', 'dd');
+insert into t1 values(2, 'AA', 'BB', 'CC', 'DD');
+insert into t1 values(3, 'aaa', '世界', 'ccc', '和平');
+select ai_prompt(cast(a1 AS datetime)) from t1 order by nr asc;
+ERROR 22000: Invalid data type for the operation
+select ai_prompt(cast(a1 AS char(2)),cast(a1 AS datetime)) from t1 order by nr asc;
+ERROR 22000: Invalid data type for the operation
+select ai_prompt(cast(a1 AS decimal(9,2))) from t1 order by nr asc;
+ERROR 22000: Invalid data type for the operation
+select ai_prompt(cast(a1 AS char(2)),cast(a1 AS decimal(9,2))) from t1 order by nr asc;
+ERROR 22000: Invalid data type for the operation
+select ai_prompt(cast(a1 AS decimal(9))) from t1 order by nr asc;
+ERROR 22000: Invalid data type for the operation
+select ai_prompt(cast(a1 AS char(2)),cast(a1 AS decimal(9))) from t1 order by nr asc;
+ERROR 22000: Invalid data type for the operation
+select ai_prompt(cast(a1 AS date)) from t1 order by nr asc;
+ERROR 22000: Invalid data type for the operation
+select ai_prompt(cast(a1 AS char(2)),cast(a1 AS date)) from t1 order by nr asc;
+ERROR 22000: Invalid data type for the operation
+select ai_prompt(cast(a1 AS signed integer)) from t1 order by nr asc;
+ERROR 22000: Invalid data type for the operation
+select ai_prompt(cast(a1 AS char(2)),cast(a1 AS signed integer)) from t1 order by nr asc;
+ERROR 22000: Invalid data type for the operation
+select ai_prompt(cast(a1 AS unsigned)) from t1 order by nr asc;
+ERROR 22000: Invalid data type for the operation
+select ai_prompt(cast(a1 AS char(2)),cast(a1 AS unsigned)) from t1 order by nr asc;
+ERROR 22000: Invalid data type for the operation
+select ai_prompt(cast(a1 AS time)) from t1 order by nr asc;
+ERROR 22000: Invalid data type for the operation
+select ai_prompt(cast(a1 AS char(2)),cast(a1 AS time)) from t1 order by nr asc;
+ERROR 22000: Invalid data type for the operation
+select ai_prompt(cast(a1 AS signed)) from t1 order by nr asc;
+ERROR 22000: Invalid data type for the operation
+select ai_prompt(cast(a1 AS char(2)),cast(a1 AS signed)) from t1 order by nr asc;
+ERROR 22000: Invalid data type for the operation
+select ai_prompt(cast(a1 AS binary)) from t1 order by nr asc;
+ai_prompt(cast(a1 AS binary))
+{"args": [], "template": "aa"}
+{"args": [], "template": "AA"}
+{"args": [], "template": "aaa"}
+select ai_prompt(cast(a1 AS binary),cast(a1 AS binary)) from t1 order by nr asc;
+ai_prompt(cast(a1 AS binary),cast(a1 AS binary))
+{"args": ["aa"], "template": "aa"}
+{"args": ["AA"], "template": "AA"}
+{"args": ["aaa"], "template": "aaa"}
+select ai_prompt(cast(a1 AS char)) from t1 order by nr asc;
+ai_prompt(cast(a1 AS char))
+{"args": [], "template": "aa"}
+{"args": [], "template": "AA"}
+{"args": [], "template": "aaa"}
+select ai_prompt(cast(a1 AS char(2))) from t1 order by nr asc;
+ai_prompt(cast(a1 AS char(2)))
+{"args": [], "template": "aa"}
+{"args": [], "template": "AA"}
+{"args": [], "template": "aa"}
+drop table t1;
+select ai_prompt(null);
+ERROR 22000: Invalid data type for the operation
+select ai_prompt('a',null);
+ERROR 22000: Invalid data type for the operation
+select ai_prompt('');
+ERROR HY000: Invalid argument
+select ai_prompt('1+1=?','');
+ai_prompt('1+1=?','')
+{"args": [""], "template": "1+1=?"}
+select ai_prompt('1+1=?{0}','');
+ai_prompt('1+1=?{0}','')
+{"args": [""], "template": "1+1=?{0}"}
+select ai_prompt('\0');
+ai_prompt('\0')
+{"args": [], "template": "\u0000"}
+drop table if exists t1;
+create table t1 (nr int, a varchar(10), b BINARY(20), d int);
+insert into t1 values( 1, 'b', "oExGTLHmkvIGQekFkd" , 10);
+insert into t1 values( 2, 'bbb', 'RioBRrIKsEiedMVmtUqq', 20);
+insert into t1 values( 1, 'bb', 'oExGTLHmkvIGQekFkd', 30);
+select ai_prompt(a,b) from t1 order by nr;
+ai_prompt(a,b)
+{"args": ["oExGTLHmkvIGQekFkd\u0000\u0000"], "template": "b"}
+{"args": ["oExGTLHmkvIGQekFkd\u0000\u0000"], "template": "bb"}
+{"args": ["RioBRrIKsEiedMVmtUqq"], "template": "bbb"}
+select ai_prompt(a,b),sum(d) from t1 group by nr;
+ai_prompt(a,b)	sum(d)
+{"args": ["oExGTLHmkvIGQekFkd\u0000\u0000"], "template": "b"}	40
+{"args": ["RioBRrIKsEiedMVmtUqq"], "template": "bbb"}	20
+select ai_prompt(a,b),sum(d) from t1 group by nr having nr>1;
+ai_prompt(a,b)	sum(d)
+{"args": ["RioBRrIKsEiedMVmtUqq"], "template": "bbb"}	20
+select ai_prompt(w.a, w.b), b from t1 as w;
+ai_prompt(w.a, w.b)	b
+{"args": ["oExGTLHmkvIGQekFkd\u0000\u0000"], "template": "b"}	oExGTLHmkvIGQekFkd  
+{"args": ["RioBRrIKsEiedMVmtUqq"], "template": "bbb"}	RioBRrIKsEiedMVmtUqq
+{"args": ["oExGTLHmkvIGQekFkd\u0000\u0000"], "template": "bb"}	oExGTLHmkvIGQekFkd  
+select cast(ai_prompt(w.a, w.b) as char), b from t1 as w;
+cast(ai_prompt(w.a, w.b) as char)	b
+{"args": ["oExGTLHmkvIGQekFkd\u0000\u0000"], "template": "b"}	oExGTLHmkvIGQekFkd  
+{"args": ["RioBRrIKsEiedMVmtUqq"], "template": "bbb"}	RioBRrIKsEiedMVmtUqq
+{"args": ["oExGTLHmkvIGQekFkd\u0000\u0000"], "template": "bb"}	oExGTLHmkvIGQekFkd  
+select ai_prompt(a,b) from t1 where d>10;
+ai_prompt(a,b)
+{"args": ["RioBRrIKsEiedMVmtUqq"], "template": "bbb"}
+{"args": ["oExGTLHmkvIGQekFkd\u0000\u0000"], "template": "bb"}
+select ai_prompt(a,b) from t1 where d=10;
+ai_prompt(a,b)
+{"args": ["oExGTLHmkvIGQekFkd\u0000\u0000"], "template": "b"}
+select ai_prompt(a,b) from t1 where d<10;
+ai_prompt(a,b)
+select /*+ ENABLE_PARALLEL_DML parallel(256) */ ai_prompt(a,b) from t1 order by nr;
+ai_prompt(a,b)
+{"args": ["oExGTLHmkvIGQekFkd\u0000\u0000"], "template": "b"}
+{"args": ["oExGTLHmkvIGQekFkd\u0000\u0000"], "template": "bb"}
+{"args": ["RioBRrIKsEiedMVmtUqq"], "template": "bbb"}
+drop table t1;
+drop table if exists t1;
+drop table if exists t2;
+create table t1 (nr int, a varchar(10), b BINARY(20), d int);
+insert into t1 values( 1, 'b', "oExGTLHmkvIGQekFkd" , 10);
+insert into t1 values( 2, 'bbb', 'RioBRrIKsEiedMVmtUqq', 20);
+insert into t1 values( 1, 'bb', 'oExGTLHmkvIGQekFkd', 30);
+create table t2 (nr int, a varchar(10), b BINARY(20), d int);
+insert into t2 values( 3, 'b', "oExGTLHmkvIGQekFkd" , 10);
+insert into t2 values( 2, 'bbb', 'RioBRrIKsEiedMVmtUqq', 20);
+insert into t2 values( 1, 'bb', 'oExGTLHmkvIGQekFkd', 30);
+select ai_prompt(t1.a) from t1 INNER JOIN t2 on t1.nr = t2.nr;
+ai_prompt(t1.a)
+{"args": [], "template": "b"}
+{"args": [], "template": "bbb"}
+{"args": [], "template": "bb"}
+WITH t3 AS (
+SELECT ai_prompt(t1.a) AS result
+FROM t1
+INNER JOIN t2 ON t1.nr = t2.nr
+)
+SELECT * FROM t3;
+result
+{"args": [], "template": "b"}
+{"args": [], "template": "bbb"}
+{"args": [], "template": "bb"}
+drop table t1;

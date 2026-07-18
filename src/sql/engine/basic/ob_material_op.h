@@ -1,0 +1,92 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SRC_SQL_ENGINE_BASIC_OB_MATERIAL_OP_H_
+#define OCEANBASE_SRC_SQL_ENGINE_BASIC_OB_MATERIAL_OP_H_
+
+#include "sql/engine/ob_operator.h"
+#include "sql/engine/basic/ob_chunk_datum_store.h"
+#include "sql/engine/ob_sql_mem_mgr_processor.h"
+#include "sql/engine/basic/ob_material_op_impl.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+
+class ObMaterialSpec : public ObOpSpec
+{
+OB_UNIS_VERSION_V(1);
+public:
+  ObMaterialSpec(common::ObIAllocator &alloc, const ObPhyOperatorType type)
+    : ObOpSpec(alloc, type)
+  {}
+};
+
+class ObMaterialOpInput : public ObOpInput
+{
+  OB_UNIS_VERSION_V(1);
+  friend ObMaterialOp;
+public:
+  ObMaterialOpInput(ObExecContext &ctx, const ObOpSpec &spec)
+    : ObOpInput(ctx, spec), bypass_(false) {};
+  virtual ~ObMaterialOpInput() = default;
+  virtual int init(ObTaskInfo &task_info) override { UNUSED(task_info); return common::OB_SUCCESS; }
+  virtual void reset() override { bypass_ = false; }
+  void set_bypass(bool bypass) { bypass_ = bypass; }
+  int64_t is_bypass() const { return bypass_; }
+protected:
+  bool bypass_; // if true, do bypass
+};
+
+class ObMaterialOp : public ObOperator
+{
+public:
+  ObMaterialOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOpInput *input)
+    : ObOperator(exec_ctx, spec, input),
+    is_first_(false),
+    material_impl_(op_monitor_info_)
+  {}
+
+  virtual int inner_open() override;
+  virtual int inner_rescan() override;
+  virtual int inner_get_next_row() override;
+  virtual int inner_get_next_batch(int64_t max_row_cnt) override;
+  virtual int inner_close() override;
+  virtual void destroy() override;
+  int init_material_impl(int64_t row_count);
+
+  int get_material_row_count(int64_t &count) const
+  {
+    count = material_impl_.get_material_row_count();
+    return common::OB_SUCCESS;
+  }
+  // reset material iterator, used for NLJ/NL connectby
+  int rewind();
+private:
+  int get_all_row_from_child(ObSQLSessionInfo &session);
+  int get_all_batch_from_child(ObSQLSessionInfo &session);
+
+private:
+  friend class ObValues;
+  bool is_first_;
+  ObMaterialOpImpl material_impl_;
+};
+
+} // end namespace sql
+} // end namespace oceanbase
+
+#endif /* OCEANBASE_SRC_SQL_ENGINE_BASIC_OB_MATERIAL_OP_H_ */

@@ -1,0 +1,66 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_SCHEMA_SLOT_H_
+#define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_SCHEMA_SLOT_H_
+
+
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "sql/ob_scanner.h"
+#include "share/schema/ob_multi_version_schema_service.h"
+#include "common/row/ob_row.h"
+#include "lib/string/ob_string.h"
+#include "lib/container/ob_se_array.h"
+#include "lib/string/ob_sql_string.h"
+
+namespace oceanbase
+{
+namespace observer
+{
+class ObAllVirtualSchemaSlot: public common::ObVirtualTableScannerIterator
+{
+  enum COLUMN_ID_LIST
+  {
+        SLOT_ID = common::OB_APP_MIN_COLUMN_ID,
+    SCHEMA_VERSION,
+    SCHEMA_COUNT,
+    REF_CNT,
+    REF_INFO,
+    ALLOCATOR_IDX,
+  };
+public:
+  explicit ObAllVirtualSchemaSlot(share::schema::ObMultiVersionSchemaService &schema_service)
+             : t_loop_idx_(OB_INVALID_INDEX), slot_idx_(0), 
+               schema_service_(schema_service), schema_slot_infos_() {}
+  virtual ~ObAllVirtualSchemaSlot() {}
+public:
+  virtual int inner_open();
+  virtual int inner_get_next_row(common::ObNewRow *&row);
+  void reset(common::ObIAllocator &allocator, common::ObIArray<ObSchemaSlot> &schema_slot_infos);
+  int get_next_tenant_slot_info(ObSchemaSlot &schema_slot);
+
+private:
+  int64_t t_loop_idx_;// tenant_iterator
+  int64_t slot_idx_;// slot iterator
+  const static int64_t DEFAULT_TENANT_NUM = 10;
+  const static int64_t DEFAULT_SLOT_NUM = 128;
+  char ip_buffer_[OB_MAX_SERVER_ADDR_SIZE];
+  share::schema::ObMultiVersionSchemaService &schema_service_;
+  common::ObSEArray<ObSchemaSlot, DEFAULT_SLOT_NUM> schema_slot_infos_;// specified tenant's all slot info
+}; //class ObAllVirtualSchemaSlot
+}//namespace observer
+}//namespace oceanbase
+#endif //OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_SCHEMA_SLOT_H_

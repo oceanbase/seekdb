@@ -1,0 +1,101 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX LIB
+
+#include "share/geo/ob_geo_dispatcher.h"
+#include "share/geo/ob_geo_func_area.h"
+
+using namespace oceanbase::common;
+namespace oceanbase
+{
+namespace common
+{
+
+class ObGeoFuncAreaImpl : public ObIGeoDispatcher<double, ObGeoFuncAreaImpl>
+{
+public:
+  ObGeoFuncAreaImpl();
+  virtual ~ObGeoFuncAreaImpl() = default;
+
+  OB_GEO_UNARY_FUNC_DEFAULT(double, OB_ERR_NOT_IMPLEMENTED_FOR_GEOGRAPHIC_SRS);
+  OB_GEO_TREE_UNARY_FUNC_DEFAULT(double, OB_ERR_NOT_IMPLEMENTED_FOR_GEOGRAPHIC_SRS);
+  OB_GEO_CART_BINARY_FUNC_DEFAULT(double, OB_ERR_NOT_IMPLEMENTED_FOR_CARTESIAN_SRS);
+  OB_GEO_GEOG_BINARY_FUNC_DEFAULT(double, OB_ERR_NOT_IMPLEMENTED_FOR_GEOGRAPHIC_SRS);
+  OB_GEO_CART_TREE_FUNC_DEFAULT(double, OB_ERR_NOT_IMPLEMENTED_FOR_CARTESIAN_SRS);
+  OB_GEO_GEOG_TREE_FUNC_DEFAULT(double, OB_ERR_NOT_IMPLEMENTED_FOR_GEOGRAPHIC_SRS);
+};
+
+// cartisain
+// inputs: (const ObGeometry *g, const ObGeoEvalCtx &context, double &result)
+OB_GEO_UNARY_FUNC_BEGIN(ObGeoFuncAreaImpl, ObWkbGeomPolygon, double)
+{
+  UNUSED(context);
+  INIT_SUCC(ret);
+  const ObWkbGeomPolygon *geo = reinterpret_cast<const ObWkbGeomPolygon *>(g->val());
+  result = boost::geometry::area(*geo);
+  return ret;
+} OB_GEO_FUNC_END;
+
+OB_GEO_UNARY_FUNC_BEGIN(ObGeoFuncAreaImpl, ObWkbGeomMultiPolygon, double)
+{
+  UNUSED(context);
+  INIT_SUCC(ret);
+  const ObWkbGeomMultiPolygon *geo = reinterpret_cast<const ObWkbGeomMultiPolygon *>(g->val());
+  result = boost::geometry::area(*geo);
+  return ret;
+} OB_GEO_FUNC_END;
+
+// geography
+OB_GEO_UNARY_FUNC_BEGIN(ObGeoFuncAreaImpl, ObWkbGeogPolygon, double)
+{
+  INIT_SUCC(ret);
+  const ObSrsItem *srs = context.get_srs();
+  if (OB_ISNULL(srs)) {
+    ret = OB_ERR_NULL_VALUE;
+    LOG_WARN("srs is null", K(ret), K(g->get_srid()), K(g));
+  } else {
+    boost::geometry::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
+    boost::geometry::strategy::area::geographic<> area_strategy(geog_sphere);
+    const ObWkbGeogPolygon *geo = reinterpret_cast<const ObWkbGeogPolygon *>(g->val());
+    result = boost::geometry::area(*geo, area_strategy);
+  }
+  return ret;
+} OB_GEO_FUNC_END;
+
+OB_GEO_UNARY_FUNC_BEGIN(ObGeoFuncAreaImpl, ObWkbGeogMultiPolygon, double)
+{
+  INIT_SUCC(ret);
+  const ObSrsItem *srs = context.get_srs();
+  if (OB_ISNULL(srs)) {
+    ret = OB_ERR_NULL_VALUE;
+    LOG_WARN("srs is null", K(ret), K(g->get_srid()), K(g));
+  } else {
+    boost::geometry::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
+    boost::geometry::strategy::area::geographic<> area_strategy(geog_sphere);
+    const ObWkbGeogMultiPolygon *geo = reinterpret_cast<const ObWkbGeogMultiPolygon *>(g->val());
+    result = boost::geometry::area(*geo, area_strategy);
+  }
+  return ret;
+} OB_GEO_FUNC_END;
+
+int ObGeoFuncArea::eval(const ObGeoEvalCtx &gis_context, double &result)
+{
+  return ObGeoFuncAreaImpl::eval_geo_func(gis_context, result);
+}
+
+} // sql
+} // oceanbase

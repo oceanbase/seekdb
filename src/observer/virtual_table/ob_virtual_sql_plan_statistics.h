@@ -1,0 +1,69 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_OBSERVER_OB_VIRTUAL_SQL_PLAN_STATISTICS_H
+#define OCEANBASE_OBSERVER_OB_VIRTUAL_SQL_PLAN_STATISTICS_H 1
+
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "sql/plan_cache/ob_plan_cache_util.h"
+#include "lib/container/ob_se_array.h"
+#include "common/ob_range.h"
+namespace oceanbase
+{
+namespace observer
+{
+class ObVirtualSqlPlanStatistics : public common::ObVirtualTableScannerIterator
+{
+public:
+  ObVirtualSqlPlanStatistics();
+  virtual ~ObVirtualSqlPlanStatistics();
+  int inner_open();
+  virtual int inner_get_next_row(common::ObNewRow *&row);
+  virtual void reset();
+  
+private:
+
+
+int get_row_from_specified_tenant(bool &is_end);
+int fill_cells(const sql::ObOperatorStat &pstat);
+private:
+  enum COLUMN_ID
+  {
+        PLAN_ID = common::OB_APP_MIN_COLUMN_ID,
+    OPERATION_ID,
+    EXECUTIONS,
+    OUTPUT_ROWS,
+    INPUT_ROWS,
+    RESCAN_TIMES,
+    BUFFER_GETS,
+    DISK_READS,
+    DISK_WRITES,
+    ELAPSED_TIME,
+    EXTEND_INFO1,
+    EXTEND_INFO2
+  };
+  common::ObSEArray<sql::ObOperatorStat, 128> operator_stat_array_;
+  bool iter_end_;
+  int64_t operator_stat_array_idx_;
+  DISALLOW_COPY_AND_ASSIGN(ObVirtualSqlPlanStatistics);
+};
+
+} //end namespace observer
+} //end namespace oceanbase
+
+#endif /* OCEANBASE_OBSERVER_OB_VIRTUAL_SQL_PLAN_STATISTICS_H */
+
+

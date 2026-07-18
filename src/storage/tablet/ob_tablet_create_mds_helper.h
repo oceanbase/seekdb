@@ -1,0 +1,196 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_STORAGE_OB_TABLET_CREATE_MDS_HELPER
+#define OCEANBASE_STORAGE_OB_TABLET_CREATE_MDS_HELPER
+
+#include "storage/tablet/ob_batch_create_tablet_arg.h"
+#include <stdint.h>
+#include "lib/worker.h"
+#include "lib/container/ob_iarray.h"
+#include "storage/tx/ob_trans_define.h"
+#include "storage/tablet/ob_tablet_create_delete_mds_user_data.h"
+#include "storage/ob_storage_schema.h"
+
+namespace oceanbase
+{
+namespace share
+{
+namespace schema
+{
+class ObTableSchema;
+}
+
+class ObLSID;
+class SCN;
+}
+
+namespace common
+{
+class ObTabletID;
+}
+
+namespace obcall
+{
+struct ObBatchCreateTabletArg;
+struct ObCreateTabletInfo;
+struct ObCreateTabletExtraInfo;
+}
+
+namespace storage
+{
+namespace mds
+{
+struct BufferCtx;
+}
+
+class ObLSHandle;
+class ObTabletHandle;
+class ObLSTabletService;
+
+#ifdef _WIN32
+// minwindef.h defines STRICT=1. Permanently undef to avoid conflict.
+#pragma push_macro("STRICT")
+#undef STRICT
+#endif
+enum class ObTabletCreateThrottlingLevel : uint8_t
+{
+    STRICT = 0, // throttling by config like 1G2W, used in leader creation
+    SOFT = 1,   // adaptive, could break config to 1G3W, used in HA scene
+    FREE = 2,   // most free, 1G4W is the max creation speed without influcing stability
+    MAX
+};
+// Do NOT restore STRICT macro
+
+class ObTabletCreateMdsHelper
+{
+public:
+  static int on_register(
+      const char* buf,
+      const int64_t len,
+      mds::BufferCtx &ctx);
+  static int on_replay(
+      const char* buf,
+      const int64_t len,
+      const share::SCN &scn,
+      mds::BufferCtx &ctx);
+  static int on_commit_for_old_mds(
+    const char* buf,
+    const int64_t len,
+    const transaction::ObMulSourceDataNotifyArg &arg);
+  static int register_process(
+      const obcall::ObBatchCreateTabletArg &arg,
+      mds::BufferCtx &ctx);
+  static int replay_process(
+      const obcall::ObBatchCreateTabletArg &arg,
+      const share::SCN &scn,
+      mds::BufferCtx &ctx);
+  static int check_create_new_tablets(const int64_t inc_tablet_cnt, const ObTabletCreateThrottlingLevel level);
+private:
+  static int check_create_new_tablets(const obcall::ObBatchCreateTabletArg &arg, const bool is_replay = false);
+  static int check_create_arg(
+      const obcall::ObBatchCreateTabletArg &arg,
+      bool &valid);
+  static int create_tablets(
+    const obcall::ObBatchCreateTabletArg &arg,
+    const bool for_replay,
+    const share::SCN &scn,
+    mds::BufferCtx &ctx,
+    common::ObIArray<common::ObTabletID> &tablet_id_array);
+  static int get_table_schema_index(
+      const common::ObTabletID &tablet_id,
+      const common::ObIArray<common::ObTabletID> &tablet_ids,
+      int64_t &index);
+  static bool is_pure_data_tablets(const obcall::ObCreateTabletInfo &info);
+  static bool is_mixed_tablets(const obcall::ObCreateTabletInfo &info);
+  static bool is_pure_aux_tablets(const obcall::ObCreateTabletInfo &info);
+  static bool is_bind_hidden_tablets(const obcall::ObCreateTabletInfo &info);
+  static int check_pure_data_or_mixed_tablets_info(
+      const share::ObLSID &ls_id,
+      const obcall::ObCreateTabletInfo &info,
+      bool &valid);
+  static int check_pure_aux_tablets_info(
+      const share::ObLSID &ls_id,
+      const obcall::ObCreateTabletInfo &info,
+      bool &valid);
+  static int check_hidden_tablets_info(
+      const share::ObLSID &ls_id,
+      const obcall::ObCreateTabletInfo &hidden_info,
+      const obcall::ObCreateTabletInfo *aux_info,
+      bool &valid);
+  static bool find_aux_info_for_hidden_tablets(
+      const obcall::ObBatchCreateTabletArg &arg,
+      const common::ObTabletID &tablet_id,
+      int64_t &aux_info_idx);
+  static int build_pure_data_tablet(
+      const obcall::ObBatchCreateTabletArg &arg,
+      const obcall::ObCreateTabletInfo &info,
+      const bool for_replay,
+      const share::SCN &scn,
+      mds::BufferCtx &ctx,
+      common::ObIArray<common::ObTabletID> &tablet_id_array);
+  static int build_mixed_tablets(
+      const obcall::ObBatchCreateTabletArg &arg,
+      const obcall::ObCreateTabletInfo &info,
+      const bool for_replay,
+      const share::SCN &scn,
+      mds::BufferCtx &ctx,
+      common::ObIArray<common::ObTabletID> &tablet_id_array);
+  static int build_pure_aux_tablets(
+      const obcall::ObBatchCreateTabletArg &arg,
+      const obcall::ObCreateTabletInfo &info,
+      const bool for_replay,
+      const share::SCN &scn,
+      mds::BufferCtx &ctx,
+      common::ObIArray<common::ObTabletID> &tablet_id_array);
+  static int build_bind_hidden_tablets(
+      const obcall::ObBatchCreateTabletArg &arg,
+      const obcall::ObCreateTabletInfo &info,
+      const bool for_replay,
+      const share::SCN &scn,
+      mds::BufferCtx &ctx,
+      common::ObIArray<common::ObTabletID> &tablet_id_array);
+  static int rollback_remove_tablets(
+      const share::ObLSID &ls_id,
+      const common::ObIArray<common::ObTabletID> &tablet_id_array);
+  static int get_ls(
+      const share::ObLSID &ls_id,
+      ObLSHandle &ls_handle);
+  static int set_tablet_status(
+      ObLSTabletService *ls_tablet_service,
+      ObTabletHandle &tablet_handle,
+      const bool for_replay,
+      const share::SCN &scn,
+      mds::BufferCtx &ctx,
+      const bool for_old_mds,
+      const storage::ObTabletMdsUserDataType &create_type,
+      const int64_t create_commit_version);
+  static void handle_ret_for_replay(int &ret);
+  static int convert_schemas(obcall::ObBatchCreateTabletArg &arg);
+  static int check_and_get_create_tablet_schema_info(
+      const ObSArray<ObCreateTabletSchema*> &create_tablet_schemas,
+      const ObSArray<obcall::ObCreateTabletExtraInfo> &create_tablet_extra_infos,
+      const obcall::ObCreateTabletInfo &info,
+      const int64_t index,
+      const ObCreateTabletSchema *&create_tablet_schema,
+      bool &need_create_empty_major_sstable,
+      bool &micro_index_clustered,
+      ObTabletID &split_src_tablet_id);
+};
+} // namespace storage
+} // namespace oceanbase
+
+#endif // OCEANBASE_STORAGE_OB_TABLET_CREATE_MDS_HELPER

@@ -1,0 +1,96 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SQL_ENGINE_JOIN_OB_JOIN_OP_
+#define OCEANBASE_SQL_ENGINE_JOIN_OB_JOIN_OP_
+
+#include "sql/engine/ob_operator.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+class ObJoinSpec: public ObOpSpec
+{
+  OB_UNIS_VERSION_V(1);
+public:
+  ObJoinSpec(common::ObIAllocator &alloc, const ObPhyOperatorType type)
+    : ObOpSpec(alloc, type),
+      join_type_(UNKNOWN_JOIN),
+      other_join_conds_(alloc)
+  {}
+
+public:
+  ObJoinType join_type_;
+  common::ObFixedArray<ObExpr *, common::ObIAllocator> other_join_conds_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObJoinSpec);
+};
+
+class ObJoinOp: public ObOperator
+{
+public:
+  ObJoinOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOpInput *input)
+    : ObOperator(exec_ctx, spec, input),
+      output_row_produced_(false),
+      left_row_joined_(false)
+  {}
+  virtual ~ObJoinOp() {}
+
+  virtual int inner_open() override { return ObOperator::inner_open(); }
+  virtual int inner_rescan() override;
+  virtual void destroy() override { ObOperator::destroy(); }
+  virtual int inner_close() override { return ObOperator::inner_close(); }
+
+  int blank_row(const ExprFixedArray &exprs);
+  void blank_row_batch(const ExprFixedArray &exprs, int64_t batch_size);
+  void blank_row_batch_one(const ExprFixedArray &exprs);
+
+  inline bool need_left_join() const;
+  inline bool need_right_join() const;
+
+  int calc_other_conds(bool &is_match);
+
+  virtual int get_next_left_row();
+  virtual int get_next_right_row();
+
+  const ObJoinSpec &get_spec() const
+  { return static_cast<const ObJoinSpec &>(spec_); }
+
+public:
+  // Record whether the current join operator output is generated, used to end the while loop of the state machine
+  bool output_row_produced_;
+  bool left_row_joined_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObJoinOp);
+};
+
+inline bool ObJoinOp::need_left_join() const
+{
+  return (LEFT_OUTER_JOIN == get_spec().join_type_
+          || FULL_OUTER_JOIN == get_spec().join_type_);
+}
+
+inline bool ObJoinOp::need_right_join() const
+{
+  return (RIGHT_OUTER_JOIN == get_spec().join_type_
+          || FULL_OUTER_JOIN == get_spec().join_type_);
+}
+
+} // end namespace sql
+} // end namespace oceanbase
+#endif
+

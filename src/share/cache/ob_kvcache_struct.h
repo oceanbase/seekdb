@@ -1,0 +1,255 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_CACHE_OB_KVCACHE_STRUCT_H_
+#define OCEANBASE_CACHE_OB_KVCACHE_STRUCT_H_
+
+#include "share/ob_define.h"
+#include "lib/atomic/ob_atomic.h"
+#include "lib/atomic/ob_atomic_reference.h"
+#include "lib/list/ob_list.h"
+#include "lib/list/ob_dlist.h"
+#include "lib/queue/ob_link.h" // lock free double linked list
+#include "lib/resource/ob_resource_mgr.h"
+#include "lib/allocator/ob_lf_fifo_allocator.h"
+#include "lib/metrics/ob_counter.h"
+
+namespace oceanbase
+{
+namespace common
+{
+
+static const int64_t MAX_CACHE_NUM = 32;
+static const int64_t INVALID_CACHE_ID = -1;  // cache id must be in [0,MAX_CACHE_NUM)
+static const int32_t MAX_CACHE_NAME_LENGTH = 127;
+static const double CACHE_SCORE_DECAY_FACTOR = 0.9;
+
+class ObIKVCacheKey
+{
+public:
+  ObIKVCacheKey() {}
+  virtual ~ObIKVCacheKey() {}
+  virtual bool operator ==(const ObIKVCacheKey &other) const { return false; }
+  virtual uint64_t hash() const { return 0; }
+  virtual int equal(const ObIKVCacheKey &other, bool &equal) const { equal = *this == other; return OB_SUCCESS; }
+  virtual int hash(uint64_t &hash_value) const  { hash_value = hash(); return OB_SUCCESS; }
+  
+  virtual int64_t size() const = 0;
+  virtual int deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey *&key) const = 0;
+};
+
+class ObIKVCacheValue
+{
+public:
+  ObIKVCacheValue() {}
+  virtual ~ObIKVCacheValue() {}
+  virtual int64_t size() const = 0;
+  virtual int deep_copy(char *buf, const int64_t buf_len, ObIKVCacheValue *&value) const = 0;
+};
+
+struct ObKVCachePair
+{
+  uint32_t magic_;
+  int32_t size_;
+  ObIKVCacheKey *key_;
+  ObIKVCacheValue *value_;
+  static const uint32_t KVPAIR_MAGIC_NUM = 0x4B564B56;  //"KVKV"
+  ObKVCachePair()
+      : magic_(KVPAIR_MAGIC_NUM), size_(0), key_(NULL), value_(NULL)
+  {
+  }
+  TO_STRING_KV(K_(magic), K_(size), KP_(key), KP_(value));
+};
+
+enum ObKVCachePolicy
+{
+  LRU = 0,
+  LFU = 1,
+  MAX_POLICY = 2
+};
+
+class ObKVStoreMemBlock
+{
+public:
+  ObKVStoreMemBlock(char *buffer, const int64_t size);
+  virtual ~ObKVStoreMemBlock();
+  static int64_t upper_align(int64_t input, int64_t align);
+  static int64_t get_align_size(const ObIKVCacheKey &key, const ObIKVCacheValue &value);
+  static int64_t get_align_size(const int64_t key_size, const int64_t value_size);
+  int store(const ObIKVCacheKey &key, const ObIKVCacheValue &value, ObKVCachePair *&kvpair);
+  int alloc(const int64_t key_size, const int64_t value_size, const int64_t align_kv_size, ObKVCachePair *&kvpair);
+  int64_t get_payload_size() const { return payload_size_; }
+  int64_t get_hold_size() const { return payload_size_ + sizeof(ObKVStoreMemBlock); }
+  int64_t get_size() const { return atomic_pos_.buffer; }
+  int64_t get_kv_cnt() const { return atomic_pos_.pairs; }
+private:
+  static const int64_t ALIGN_SIZE = sizeof(size_t);
+  AtomicInt64 atomic_pos_;
+  int64_t payload_size_;
+  char *buffer_;
+};
+
+enum ObKVMBHandleStatus
+{
+  FREE = 0,
+  USING = 1,
+  FULL = 2,
+};
+
+struct ObKVCacheInst;
+class ObWorkingSet;
+struct ObKVMemBlockHandle : public common::ObDLink
+{
+  ObKVStoreMemBlock * volatile mem_block_;
+  enum ObKVCachePolicy policy_;
+  int64_t get_cnt_;
+  int64_t recent_get_cnt_;
+  double score_;
+  int64_t kv_cnt_;
+  int64_t ref_cnt_;
+  int64_t seq_num_;
+  int64_t last_modified_time_us_;
+  ObKVMBHandleStatus status_;
+  common::ObLink retire_link_;
+
+  ObKVMemBlockHandle();
+  virtual ~ObKVMemBlockHandle();
+  void reset();
+  bool is_mark_delete() const { return is_last_bit_set((uint64_t)ATOMIC_LOAD(&next_)); }
+  int64_t get_seq_num() const { return seq_num_; }
+  int64_t get_seq_num_for_node() const;
+  ObKVMBHandleStatus get_status() const { return status_; }
+  int alloc(const int64_t key_size, const int64_t value_size, const int64_t align_kv_size, ObKVCachePair *&kvpair);
+  void set_full(const double base_mb_score);
+  ObKVMemBlockHandle *get_mb_handle() { return this; }
+  bool retire();
+
+  TO_STRING_KV(KP_(mem_block), K_(policy), K_(get_cnt),
+      K_(recent_get_cnt), K_(score), K_(kv_cnt));
+};
+
+struct ObKVCacheInstKey
+{
+  ObKVCacheInstKey() : cache_id_(-1) {}
+  ObKVCacheInstKey(const int64_t cache_id)
+  : cache_id_(cache_id) {}
+  int64_t cache_id_;
+  inline uint64_t hash() const { return cache_id_; }
+  inline int hash(uint64_t &hash_val) const { hash_val = hash(); return OB_SUCCESS; }
+  inline bool operator==(const ObKVCacheInstKey &other) const
+  {
+    return cache_id_ == other.cache_id_;
+  }
+  inline bool operator!=(const ObKVCacheInstKey &other) const
+  {
+    return !(*this == other);
+  }
+  inline bool is_valid() const { return cache_id_ >= 0 && cache_id_ < MAX_CACHE_NUM; }
+  inline void reset()
+  {
+    cache_id_ = -1;
+  }
+  TO_STRING_KV(K_(cache_id));
+};
+
+struct ObKVCacheConfig
+{
+public:
+  ObKVCacheConfig();
+  void reset();
+  bool is_valid_;
+  int64_t mem_limit_pct_;
+  char cache_name_[MAX_CACHE_NAME_LENGTH];
+};
+
+struct ObKVCacheStatus
+{
+public:
+  ObKVCacheStatus();
+  void refresh(const int64_t period_us);
+  double get_hit_ratio() const;
+  void reset();
+  TO_STRING_KV(KP_(config), K_(kv_cnt), K_(store_size), K_(lru_mb_cnt),
+      K_(lfu_mb_cnt), K_(base_mb_score));
+
+  const ObKVCacheConfig *config_;
+  ObPCNonAtomicCounter total_put_cnt_;
+  ObPCNonAtomicCounter total_hit_cnt_;
+  int64_t kv_cnt_;
+  int64_t store_size_;
+  int64_t retired_size_;
+  int64_t lru_mb_cnt_;
+  int64_t lfu_mb_cnt_;
+  int64_t last_hit_cnt_;
+  int64_t total_miss_cnt_;
+  double base_mb_score_;
+};
+
+struct ObKVCacheInfo
+{
+  ObKVCacheInstKey inst_key_;
+  ObKVCacheStatus status_;
+  ObKVCacheInfo() : inst_key_(), status_() {}
+  TO_STRING_KV(K_(inst_key), K_(status));
+};
+
+struct ObKVCacheStoreMemblockInfo 
+{
+public:
+  ObKVCacheStoreMemblockInfo()
+    : ref_count_(-1),
+      using_status_(-1),
+      policy_(-1),
+      kv_cnt_(-1),
+      get_cnt_(-1),
+      recent_get_cnt_(-1),
+      score_(-1),
+      align_size_(-1),
+      memblock_ptr_()
+  {
+    memset(memblock_ptr_, 0, 32);
+  }
+  ~ObKVCacheStoreMemblockInfo() = default;
+  bool is_valid() const { return score_ >= 0; }
+  TO_STRING_KV(K_(ref_count), K_(using_status), K_(policy), K_(kv_cnt), K_(get_cnt),
+          K_(recent_get_cnt), K_(score), K_(align_size), KP_(memblock_ptr));
+public: 
+  int64_t ref_count_;
+  int64_t using_status_;
+  int64_t policy_;
+  int64_t kv_cnt_;
+  int64_t get_cnt_;
+  int64_t recent_get_cnt_;
+  double score_;
+  int64_t align_size_;
+  char memblock_ptr_[32];  // store memblock address by char[]
+};
+
+class ObIMBHandleAllocator
+{
+public:
+  virtual int alloc_mbhandle(const int64_t block_size, ObKVMemBlockHandle *&mb_handle) = 0;
+  virtual int alloc_mbhandle(ObKVMemBlockHandle *&mb_handle) = 0;
+  virtual int free_mbhandle(ObKVMemBlockHandle *mb_handle, const bool do_retire) = 0;
+
+
+  virtual int64_t get_block_size() const = 0;
+};
+
+}//end namespace common
+}//end namespace oceanbase
+
+#endif //OCEANBASE_CACHE_OB_KVCACHE_STRUCT_H_

@@ -1,0 +1,146 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+ 
+#include "ob_all_virtual_tablet_buffer_info.h"
+#include "share/rc/ob_module_provider.h"
+
+namespace oceanbase
+{
+using namespace storage;
+using namespace blocksstable;
+using namespace common;
+namespace observer
+{
+ObAllVirtualTabletBufferInfo::ObAllVirtualTabletBufferInfo()
+  : addr_(), index_(0), pool_type_(ObTabletPoolType::TP_MAX), buffer_infos_()
+{
+}
+
+ObAllVirtualTabletBufferInfo::~ObAllVirtualTabletBufferInfo()
+{
+  reset();
+}
+
+void ObAllVirtualTabletBufferInfo::reset()
+{
+  addr_.reset();
+  index_ = 0;
+  pool_type_ = ObTabletPoolType::TP_MAX;
+  buffer_infos_.reset();
+  ObVirtualTableScannerIterator::reset();
+}
+
+int ObAllVirtualTabletBufferInfo::init(common::ObAddr &addr)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!addr.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    SERVER_LOG(WARN, "invalid arg", K(ret), K(addr));
+  } else if (OB_FAIL(OB_UNLIKELY(!addr.ip_to_string(ip_buf_, sizeof(ip_buf_))))) {
+    ret = OB_ERR_UNEXPECTED;
+    SERVER_LOG(WARN, "fail to transfer ip to string", K(ret));
+  } else {
+    addr_ = addr;
+  }
+  return ret;
+}
+
+int ObAllVirtualTabletBufferInfo::get_tablet_pool_infos()
+{
+  int ret = OB_SUCCESS;
+  ObMemAttr attr("TabletBuffer");
+  buffer_infos_.set_attr(attr);
+  if (OB_FAIL(share::g_mp->tenant_meta_mem_mgr()->get_tablet_buffer_infos(buffer_infos_))) {
+    SERVER_LOG(WARN, "fail to get tablet buffer infos", K(ret));
+  }
+  return ret;
+}
+
+int ObAllVirtualTabletBufferInfo::inner_get_next_row(common::ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(cur_row_.cells_)) {
+    ret = OB_ERR_UNEXPECTED;
+    SERVER_LOG(ERROR, "cur row cell is nullptr", K(ret));
+  } else if (0 == buffer_infos_.size() && OB_FAIL(get_tablet_pool_infos())) {
+    SERVER_LOG(WARN, "fail to get tablet pool infos", K(ret));
+  } else if (buffer_infos_.size() <= index_) {
+    ret = OB_ITER_END;
+  } else if (OB_FAIL(gen_row(buffer_infos_[index_], row))) {
+    SERVER_LOG(WARN, "fail to gen_row", K(ret));
+  } else {
+    index_++;
+  }
+  return ret;
+}
+
+int ObAllVirtualTabletBufferInfo::gen_row(
+    const ObTabletBufferInfo &buffer_info,
+    common::ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
+  int64_t pos = 0;
+  for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); i++) {
+    uint64_t col_id = output_column_ids_.at(i);
+    switch(col_id) {
+    case TABLET_BUFFER_PTR:
+      //tablet_buffer_ptr
+      MEMSET(tablet_buffer_pointer_, 0, STR_LEN);
+      pos = 0;
+      databuff_print_obj(tablet_buffer_pointer_, STR_LEN, pos, static_cast<void *>(buffer_info.tablet_buffer_ptr_));
+      cur_row_.cells_[i].set_varchar(tablet_buffer_pointer_);
+      cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+      break;
+    case TABLET_OBJ_PTR:
+      //tablet_obj_ptr
+      MEMSET(tablet_pointer_, 0, STR_LEN);
+      pos = 0;
+      databuff_print_obj(tablet_pointer_, STR_LEN, pos, static_cast<void *>(buffer_info.tablet_));
+      cur_row_.cells_[i].set_varchar(tablet_pointer_);
+      cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+      break;
+    case POOL_TYPE:
+      //pool_type
+      cur_row_.cells_[i].set_varchar(buffer_info.pool_type_ == ObTabletPoolType::TP_LARGE 
+        ? "TP_LARGE" : "TP_NORMAL");
+      cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+      break;
+    case TABLET_ID:
+      //tablet_id
+      cur_row_.cells_[i].set_int(buffer_info.tablet_id_.id());
+      break;
+    case IN_MAP:
+      //in_map
+      cur_row_.cells_[i].set_bool(buffer_info.in_map_);
+      break;
+    case LAST_ACCESS_TIME:
+      //last_access_time
+      cur_row_.cells_[i].set_timestamp(buffer_info.last_access_time_ / 1000L);
+      break;
+    default:{
+      ret = OB_ERR_UNEXPECTED;
+      SERVER_LOG(ERROR, "invalid column_id", K(ret), K(col_id));
+    }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    row = &cur_row_;
+  }
+  return ret;
+}
+
+} // observer
+} // oceanbase

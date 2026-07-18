@@ -1,0 +1,128 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SERVER
+#include "lib/stat/ob_diagnostic_info_guard.h"
+#include "obmp_stmt_close.h"
+#include "lib/trace/ob_trace.h"
+#include "observer/omt/ob_tenant.h"
+
+namespace oceanbase
+{
+using namespace common;
+using namespace rpc;
+using namespace obmysql;
+using namespace sql;
+
+namespace observer
+{
+
+int ObMPStmtClose::deserialize()
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(req_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid packet", K(ret), K_(req));
+  } else if (OB_UNLIKELY(req_->get_type() != ObRequest::OB_MYSQL)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid packet", K(ret), K_(req), K(req_->get_type()));
+  } else {
+    const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
+    const char* pos = pkt.get_cdata();
+    uint32_t stmt_id = -1; //INVALID_STMT_ID
+    ObMySQLUtil::get_uint4(pos, stmt_id);
+    stmt_id_ = stmt_id;
+  }
+  return ret;
+}
+
+int ObMPStmtClose::process()
+{
+  int ret = OB_SUCCESS;
+  sql::ObSQLSessionInfo *session = NULL;
+  trace::UUID ps_close_span_id;
+  if (OB_ISNULL(req_) || OB_ISNULL(get_conn())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid packet", K(ret), KP(req_));
+  } else if (OB_INVALID_STMT_ID == stmt_id_) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("stmt_id is invalid", K(ret));
+  } else if (OB_FAIL(get_session(session))) {
+    LOG_WARN("get session failed");
+  } else if (OB_ISNULL(session)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session is NULL or invalid", K(ret), K(session));
+  } else if (OB_FAIL(update_transmission_checksum_flag(*session))) {
+    LOG_WARN("update transmisson checksum flag failed", K(ret));
+  } else {
+    const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
+    ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
+    session->init_use_rich_format();
+    const bool enable_flt = session->get_control_info().is_valid();
+    LOG_TRACE("close ps stmt or cursor", K_(stmt_id), K(session->get_server_sid()));
+    if (OB_FAIL(session->check_tenant_status())) {
+      LOG_INFO("unit has been migrated, need deny new request", K(ret));
+    } else if (OB_FAIL(sql::ObFLTUtils::init_flt_info(
+                 pkt.get_extra_info(), *session,
+                 get_conn()->proxy_cap_flags_.is_full_link_trace_support(),
+                 enable_flt))) {
+      LOG_WARN("failed to init flt extra info", K(ret));
+    }
+    FLTSpanGuardIfEnable(ps_close, enable_flt);
+    if (OB_FAIL(ret)) {
+    } else if (is_cursor_close()) {
+      if (OB_FAIL(session->close_cursor(stmt_id_))) {
+        LOG_WARN("fail to close cursor", K(ret), K_(stmt_id), K(session->get_server_sid()));
+      }
+    } else {
+      int tmp_ret = OB_SUCCESS;
+      if (OB_NOT_NULL(session->get_cursor(stmt_id_))) {
+        if (OB_FAIL(session->close_cursor(stmt_id_))) {
+          tmp_ret = ret;
+          LOG_WARN("fail to close cursor", K(ret), K_(stmt_id), K(session->get_server_sid()));
+        }
+      }
+      if (OB_FAIL(session->close_ps_stmt(stmt_id_))) {
+        // overwrite ret, low priority, will be overridden
+        LOG_WARN("fail to close ps stmt", K(ret), K_(stmt_id), K(session->get_server_sid()));
+      }
+      if (OB_SUCCESS != tmp_ret) {
+        // close_cursor failure error code priority is higher than close_ps_stmt, here we override
+        ret = tmp_ret;
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (pkt.exist_trace_info()
+          && OB_FAIL(session->update_sys_variable(share::SYS_VAR_OB_TRACE_INFO,
+                                                  pkt.get_trace_info()))) {
+        LOG_WARN("fail to update trace info", K(ret));
+      }
+    }
+  }
+  {
+    int64_t exec_end = ObTimeUtility::current_time();
+    const int64_t time_cost = exec_end - get_receive_timestamp();
+    EVENT_INC(SQL_PS_CLOSE_COUNT);
+    EVENT_ADD(SQL_PS_CLOSE_TIME, time_cost);
+  }
+  if (NULL != session) {
+    revert_session(session);
+  }
+  return ret;
+}
+
+} //end of namespace sql
+} //end of namespace oceanbase

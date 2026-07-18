@@ -1,0 +1,56 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_ALL_VIRTUAL_COMPACTION_SUGGESTION_H_
+#define OB_ALL_VIRTUAL_COMPACTION_SUGGESTION_H_
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "lib/container/ob_array.h"
+#include "storage/compaction/ob_compaction_suggestion.h"
+
+namespace oceanbase
+{
+namespace observer
+{
+
+class ObAllVirtualCompactionSuggestion : public common::ObVirtualTableScannerIterator
+{
+public:
+  enum COLUMN_ID_LIST
+  {
+        MERGE_TYPE = common::OB_APP_MIN_COLUMN_ID,
+    TABLET_ID,
+    MERGE_START_TIME,
+    MERGE_FINISH_TIME,
+    SUGGESTION,
+  };
+  ObAllVirtualCompactionSuggestion();
+  virtual ~ObAllVirtualCompactionSuggestion();
+  int init();
+  virtual int inner_get_next_row(common::ObNewRow *&row);
+  virtual void reset();
+protected:
+  int fill_cells();
+private:
+  char ip_buf_[common::OB_IP_STR_BUFF];
+  compaction::ObCompactionSuggestion suggestion_;
+  compaction::ObCompactionSuggestionIterator suggestion_iter_;
+  bool is_inited_;
+  DISALLOW_COPY_AND_ASSIGN(ObAllVirtualCompactionSuggestion);
+};
+
+} /* namespace observer */
+} /* namespace oceanbase */
+#endif

@@ -1,0 +1,121 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SQL_RESOLVER_DCL_OB_REVOKE_STMT_
+#define OCEANBASE_SQL_RESOLVER_DCL_OB_REVOKE_STMT_
+#include "lib/string/ob_strings.h"
+#include "share/schema/ob_priv_type.h"
+#include "sql/resolver/ddl/ob_ddl_stmt.h"
+#include "share/schema/ob_schema_struct.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+
+class ObRevokeStmt: public ObDDLStmt
+{
+public:
+  explicit ObRevokeStmt(common::ObIAllocator *name_pool);
+  ObRevokeStmt();
+  virtual ~ObRevokeStmt();
+
+  int add_user(const uint64_t user_id);
+  int add_role(const uint64_t role_id);
+  void set_grant_level(share::schema::ObPrivLevel grant_level);
+  void set_priv_set(ObPrivSet priv_set);
+  int set_database_name(const common::ObString &database_name);
+  int set_table_name(const common::ObString &table_name);
+  
+  void set_revoke_all(bool revoke_all) { revoke_all_ = revoke_all; }
+  void set_object_id(uint64_t obj_id) { obj_id_ = obj_id; }
+  void set_grantor_id(uint64_t grantor_id) { grantor_id_ = grantor_id; }
+  void set_revoke_all_ora(bool flag) { revoke_all_ora_ = flag; }
+  int add_grantee(const common::ObString &grantee);
+
+  const common::ObIArray<uint64_t>& get_users() const;
+  const common::ObIArray<uint64_t>& get_roles() const;
+  const common::ObString& get_database_name() const;
+  const common::ObString& get_table_name() const;
+  share::schema::ObPrivLevel get_grant_level() const {return grant_level_;}
+  share::schema::ObObjectType get_object_type() const {return object_type_;}
+  void set_object_type(share::schema::ObObjectType object_type) { object_type_ = object_type; }
+  const share::ObRawPrivArray& get_priv_array() const {return sys_priv_array_;}
+  const share::ObRawObjPrivArray& get_obj_priv_array() const {return obj_priv_array_;}
+  uint64_t get_object_id() const { return obj_id_; }
+  uint64_t get_grantor_id() const { return grantor_id_; }
+  bool get_revoke_all_ora() const { return revoke_all_ora_; }
+
+  ObPrivSet get_priv_set() const;
+  
+  bool get_revoke_all() const { return revoke_all_; }
+  const common::ObStrings& get_grantees() const { return grantees_; }
+  virtual bool cause_implicit_commit() const { return true; }
+  void set_has_warning() { has_warning_ = true; }
+  bool get_has_warning() const { return has_warning_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() 
+  { 
+    return share::schema::OB_PRIV_USER_LEVEL == grant_level_ ? static_cast<obcall::ObDDLArg &>(user_arg_) 
+        : (share::schema::OB_PRIV_DB_LEVEL == grant_level_ ? static_cast<obcall::ObDDLArg &>(db_arg_)
+        : (share::schema::OB_PRIV_TABLE_LEVEL == grant_level_ ?  static_cast<obcall::ObDDLArg &>(table_arg_)
+        : (share::schema::OB_PRIV_ROUTINE_LEVEL == grant_level_ ?  static_cast<obcall::ObDDLArg &>(routine_arg_)
+        : (share::schema::OB_PRIV_CATALOG_LEVEL == grant_level_ ?  static_cast<obcall::ObDDLArg &>(catalog_arg_)
+        : (share::schema::OB_PRIV_OBJECT_LEVEL == grant_level_ ?  static_cast<obcall::ObDDLArg &>(obj_mysql_arg_)
+        : static_cast<obcall::ObDDLArg &>(syspriv_arg_)))))); 
+  }
+  int add_column_privs(const ObString& column_name,const ObPrivSet priv_set) { return column_names_priv_.push_back(std::make_pair(column_name, priv_set)); }
+  const ObIArray<std::pair<ObString, ObPrivType>> &get_column_privs() const { return column_names_priv_; }
+  void set_table_schema_version(int64_t schema_version) { table_schema_version_ = schema_version; }
+  int64_t get_table_schema_version() { return table_schema_version_; }
+  void set_catalog_name(const common::ObString &catalog_name) { catalog_arg_.catalog_ = catalog_name; }
+  const common::ObString& get_catalog_name() const { return catalog_arg_.catalog_; }
+
+  bool is_grant_stmt() const { return false; }
+  DECLARE_VIRTUAL_TO_STRING;
+private:
+  // data members
+  ObPrivSet priv_set_;
+  share::schema::ObPrivLevel grant_level_;
+  common::ObString database_;
+  common::ObString table_;
+  common::ObArray<uint64_t, common::ModulePageAllocator, true> users_;
+  bool revoke_all_;
+  common::ObStrings grantees_;
+  obcall::ObRevokeUserArg user_arg_;
+  obcall::ObRevokeDBArg db_arg_;
+  obcall::ObRevokeTableArg table_arg_;
+  obcall::ObRevokeRoutineArg routine_arg_;
+  obcall::ObRevokeSysPrivArg syspriv_arg_;
+  obcall::ObRevokeObjMysqlArg obj_mysql_arg_;
+  common::hash::ObPlacementHashSet<uint64_t, common::MAX_ENABLED_ROLES> role_id_set_;
+  share::schema::ObObjectType object_type_;
+  share::ObRawPrivArray sys_priv_array_;
+  share::ObRawObjPrivArray obj_priv_array_;
+  uint64_t obj_id_;
+  uint64_t obj_type_;
+  uint64_t grantor_id_;
+  bool revoke_all_ora_;
+  bool has_warning_;
+  ObSEArray<std::pair<ObString, ObPrivType>, 4, common::ModulePageAllocator, true> column_names_priv_;
+  int64_t table_schema_version_;
+  obcall::ObRevokeCatalogArg catalog_arg_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObRevokeStmt);
+};
+} // end namespace sql
+} // end namespace oceanbase
+
+#endif //OCEANBASE_SQL_RESOLVER_DCL_OB_REVOKE_STMT_

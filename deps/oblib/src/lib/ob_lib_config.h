@@ -1,0 +1,138 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_LIB_CONFIG_H_
+#define OB_LIB_CONFIG_H_
+
+#include "lib/atomic/ob_atomic.h"
+
+namespace oceanbase
+{
+
+namespace common
+{
+class ObDiagnosticInfoSwitchGuard;
+}
+
+namespace lib
+{
+bool is_diagnose_info_enabled();
+void reload_diagnose_info_config(const bool);
+bool is_trace_log_enabled();
+void reload_trace_log_config(const bool);
+bool is_ash_enabled();
+void reload_ash_config(const bool);
+
+class ObLibConfig
+{
+  friend bool is_diagnose_info_enabled();
+  friend void reload_diagnose_info_config(const bool);
+  friend bool is_trace_log_enabled();
+  friend void reload_trace_log_config(const bool);
+  friend bool is_ash_enabled();
+  friend void reload_ash_config(const bool);
+private:
+  static bool enable_diagnose_info_ CACHE_ALIGNED;
+  static volatile bool enable_trace_log_ CACHE_ALIGNED;
+  static bool enable_ash_ CACHE_ALIGNED;
+};
+
+class ObPerfModeGuard
+{
+  friend class common::ObDiagnosticInfoSwitchGuard;
+  friend class ObEnableDiagnoseGuard;
+  friend bool is_diagnose_info_enabled();
+  friend bool is_trace_log_enabled();
+public:
+  explicit ObPerfModeGuard() : old_value_(get_tl_instance())
+  {
+    get_tl_instance() = true;
+  }
+  ~ObPerfModeGuard()
+  {
+    get_tl_instance() = old_value_;
+  }
+private:
+  static bool &get_tl_instance()
+  {
+    static thread_local bool in_disable_diagnose_guard = PERF_MODE_VALUE;
+
+    return in_disable_diagnose_guard;
+  }
+private:
+  static bool PERF_MODE_VALUE;
+  bool old_value_;
+};
+
+class ObEnableDiagnoseGuard
+{
+  friend class common::ObDiagnosticInfoSwitchGuard;
+  friend bool is_diagnose_info_enabled();
+  friend bool is_trace_log_enabled();
+public:
+  explicit ObEnableDiagnoseGuard() : old_value_(ObPerfModeGuard::get_tl_instance())
+  {
+    ObPerfModeGuard::get_tl_instance() = ObPerfModeGuard::PERF_MODE_VALUE;
+  }
+  ~ObEnableDiagnoseGuard()
+  {
+    ObPerfModeGuard::get_tl_instance() = old_value_;
+  }
+private:
+  bool old_value_;
+};
+
+using ObDisableDiagnoseGuard = ObPerfModeGuard;
+
+inline bool is_diagnose_info_enabled()
+{
+  return ObLibConfig::enable_diagnose_info_ && !ObPerfModeGuard::get_tl_instance();
+}
+
+inline void reload_diagnose_info_config(const bool enable_diagnose_info)
+{
+  ATOMIC_STORE(&ObLibConfig::enable_diagnose_info_, enable_diagnose_info);
+}
+
+inline bool is_trace_log_enabled()
+{
+  bool bool_ret = ObLibConfig::enable_trace_log_;
+#ifdef ENABLE_DEBUG_LOG
+  if (!bool_ret) {
+    bool_ret = true;
+  }
+#endif
+  return bool_ret && !ObPerfModeGuard::get_tl_instance();
+}
+
+inline void reload_trace_log_config(const bool enable_trace_log)
+{
+  ATOMIC_STORE(&ObLibConfig::enable_trace_log_, enable_trace_log);
+}
+
+inline bool is_ash_enabled()
+{
+  return ObLibConfig::enable_ash_;
+}
+
+inline void reload_ash_config(const bool enable_ash)
+{
+  ATOMIC_STORE(&ObLibConfig::enable_ash_, enable_ash);
+}
+
+} //lib
+} //oceanbase
+#endif // OB_LIB_CONFIG_H_

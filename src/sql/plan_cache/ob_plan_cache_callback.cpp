@@ -1,0 +1,77 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_PC
+#include "ob_plan_cache_callback.h"
+
+using namespace oceanbase;
+using namespace oceanbase::sql;
+using namespace oceanbase::common;
+
+void ObLibCacheAtomicOp::operator()(LibCacheKV &entry)
+{
+  if (NULL != entry.second) {
+    entry.second->inc_ref_count(ref_handle_);
+    cache_node_ = entry.second;
+    SQL_PC_LOG(DEBUG, "succ to get cache_node", "ref_count", cache_node_->get_ref_count());
+  } else {
+    // if no cache node found, no need to do anything now
+  }
+}
+
+//get cache node and lock
+int ObLibCacheAtomicOp::get_value(ObILibCacheNode *&cache_node)
+{
+  int ret = OB_SUCCESS;
+  cache_node = NULL;
+  if (OB_ISNULL(cache_node_)) {
+    ret = OB_NOT_INIT;
+    SQL_PC_LOG(WARN, "invalid argument", K(cache_node_));
+  } else if (OB_SUCC(lock(*cache_node_))) {
+    cache_node = cache_node_;
+  } else {
+    if (NULL != cache_node_) {
+      cache_node_->dec_ref_count(ref_handle_);
+    }
+    SQL_PC_LOG(DEBUG, "failed to get read lock of lib cache value", K(ret));
+  }
+  return ret;
+}
+
+/*
+worker thread:                   |  evict thread
+                                 |  get all plan id array(contains plan id x)
+deleting .... remove plan id x   |
+from map                         |
+dec ref cnt => ref_cnt=0         |
+                                 | ref plan id x. inc_ref=1
+deleting plan x                  |
+                                 | access plan x --> cause core!
+*/
+
+void ObCacheObjAtomicOp::operator()(ObjKV &entry)
+{
+  if (NULL != entry.second) {
+    if (entry.second->try_inc_ref_count(ref_handle_)) {
+      cache_obj_ = entry.second;
+    } else {
+      cache_obj_ = nullptr;
+    }
+    SQL_PC_LOG(DEBUG, "succ to get plan");
+  } else {
+    // do nothing
+  }
+}

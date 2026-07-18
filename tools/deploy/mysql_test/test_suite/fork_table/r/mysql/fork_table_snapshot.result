@@ -1,0 +1,40 @@
+drop database if exists db_fork_snapshot;
+create database db_fork_snapshot;
+use db_fork_snapshot;
+SET wait_timeout=30000000;
+SET ob_trx_timeout = 100000000;
+SET ob_query_timeout = 100000000;
+============================================
+1. snapshot_gc_scn 锁冲突（NOWAIT）重试直到释放
+============================================
+drop table if exists t1_src;
+Warnings:
+Note	1051	Unknown table 'db_fork_snapshot.t1_src'
+drop table if exists t1_dst;
+Warnings:
+Note	1051	Unknown table 'db_fork_snapshot.t1_dst'
+create table t1_src (
+id int primary key,
+name varchar(50)
+);
+start transaction;
+select count(*) from __all_core_table where TABLE_NAME = '__all_global_stat' and COLUMN_NAME = 'snapshot_gc_scn' for update;
+count(*)
+1
+SET ob_query_timeout = 10000000;
+fork table t1_src to t1_dst;;
+rollback;
+show create table t1_dst;
+Table	Create Table
+t1_dst	CREATE TABLE `t1_dst` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+SET ob_query_timeout = 100000000;
+============================================
+2. 清理
+============================================
+drop table if exists t1_src;
+drop table if exists t1_dst;
+drop database if exists db_fork_snapshot;

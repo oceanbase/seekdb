@@ -1,0 +1,171 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 930" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <defs>
+    <linearGradient id="seekdb-g" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#2563EB"/><stop offset="100%" style="stop-color:#3B82F6"/>
+    </linearGradient>
+    <linearGradient id="es-g" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#F59E0B"/><stop offset="100%" style="stop-color:#FBBF24"/>
+    </linearGradient>
+    <linearGradient id="milvus-g" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#8B5CF6"/><stop offset="100%" style="stop-color:#A78BFA"/>
+    </linearGradient>
+    <linearGradient id="seekdb12-g" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#94A3B8"/><stop offset="100%" style="stop-color:#CBD5E1"/>
+    </linearGradient>
+    <linearGradient id="chroma-g" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#EC4899"/><stop offset="100%" style="stop-color:#F472B6"/>
+    </linearGradient>
+    <linearGradient id="qdrant-g" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#EF4444"/><stop offset="100%" style="stop-color:#F87171"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="820" height="930" rx="12" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1"/>
+
+  <!-- Title -->
+  <text x="410" y="36" text-anchor="middle" font-size="18" font-weight="700" fill="#111827">VectorDBBench StreamingPerformanceCase</text>
+  <text x="410" y="56" text-anchor="middle" font-size="12" fill="#6B7280">Cohere 10M · 768-dim · continuous write (500 rows/s) + concurrent search</text>
+  <text x="410" y="74" text-anchor="middle" font-size="11" fill="#9CA3AF">16 vCPU · 64 GiB RAM · HNSW (M=16, ef_construction=256, ef_search=200)</text>
+
+  <!-- Legend row 1 -->
+  <rect x="60" y="90" width="12" height="12" rx="2" fill="url(#seekdb-g)"/>
+  <text x="77" y="101" font-size="10" fill="#374151" font-weight="600">seekdb v1.3.0</text>
+  <rect x="190" y="90" width="12" height="12" rx="2" fill="url(#es-g)"/>
+  <text x="207" y="101" font-size="10" fill="#374151">ES v9.3.3</text>
+  <rect x="300" y="90" width="12" height="12" rx="2" fill="url(#milvus-g)"/>
+  <text x="317" y="101" font-size="10" fill="#374151">Milvus v2.6.9</text>
+  <rect x="430" y="90" width="12" height="12" rx="2" fill="url(#seekdb12-g)"/>
+  <text x="447" y="101" font-size="10" fill="#374151">seekdb v1.2.0</text>
+  <rect x="565" y="90" width="12" height="12" rx="2" fill="url(#chroma-g)"/>
+  <text x="582" y="101" font-size="10" fill="#374151">Chroma</text>
+  <rect x="650" y="90" width="12" height="12" rx="2" fill="url(#qdrant-g)"/>
+  <text x="667" y="101" font-size="10" fill="#374151">Qdrant</text>
+
+  <!-- ==================== QPS ==================== -->
+  <text x="40" y="136" font-size="14" font-weight="700" fill="#111827">QPS</text>
+  <text x="77" y="136" font-size="11" fill="#9CA3AF">(higher is better)</text>
+
+  <!-- max QPS = 1523, bar area width = 480, label area starts at 200 -->
+  <!-- seekdb 1523: w=480 -->
+  <rect x="200" y="148" width="480" height="20" rx="4" fill="url(#seekdb-g)" opacity="0.9"/>
+  <text x="688" y="163" font-size="12" font-weight="700" fill="#2563EB">1,523</text>
+
+  <!-- ES 470: w=148 -->
+  <rect x="200" y="172" width="148" height="20" rx="4" fill="url(#es-g)" opacity="0.9"/>
+  <text x="356" y="187" font-size="12" font-weight="600" fill="#D97706">470</text>
+
+  <!-- Milvus 142: w=45 -->
+  <rect x="200" y="196" width="45" height="20" rx="4" fill="url(#milvus-g)" opacity="0.9"/>
+  <text x="253" y="211" font-size="12" font-weight="600" fill="#7C3AED">142</text>
+
+  <!-- seekdb v1.2 69: w=22 -->
+  <rect x="200" y="220" width="22" height="20" rx="4" fill="url(#seekdb12-g)" opacity="0.9"/>
+  <text x="230" y="235" font-size="12" font-weight="600" fill="#64748B">69</text>
+
+  <!-- Chroma 10: w=3 (min 3) -->
+  <rect x="200" y="244" width="4" height="20" rx="2" fill="url(#chroma-g)" opacity="0.9"/>
+  <text x="212" y="259" font-size="12" font-weight="600" fill="#DB2777">10</text>
+
+  <!-- Qdrant 4: w=2 (min 2) -->
+  <rect x="200" y="268" width="3" height="20" rx="2" fill="url(#qdrant-g)" opacity="0.9"/>
+  <text x="211" y="283" font-size="12" font-weight="600" fill="#DC2626">4</text>
+
+  <line x1="40" y1="300" x2="780" y2="300" stroke="#E5E7EB" stroke-width="1"/>
+
+  <!-- ==================== Concurrent P99 ==================== -->
+  <text x="40" y="328" font-size="14" font-weight="700" fill="#111827">Concurrent P99 Latency</text>
+  <text x="228" y="328" font-size="11" fill="#9CA3AF">(lower is better)</text>
+
+  <!-- max = 3717.1 (Chroma), bar area = 480. Scale: log-ish for readability -->
+  <!-- Use linear but cap for visual: normalize to 500ms range for top 4, show Chroma/Qdrant as full -->
+
+  <!-- seekdb 21.7ms: w = (21.7/400)*380 = 21 -->
+  <rect x="200" y="340" width="21" height="20" rx="4" fill="url(#seekdb-g)" opacity="0.9"/>
+  <text x="229" y="355" font-size="12" font-weight="700" fill="#2563EB">21.7 ms</text>
+
+  <!-- ES 53.6ms: w = (53.6/400)*380 = 51 -->
+  <rect x="200" y="364" width="51" height="20" rx="4" fill="url(#es-g)" opacity="0.9"/>
+  <text x="259" y="379" font-size="12" font-weight="600" fill="#D97706">53.6 ms</text>
+
+  <!-- Milvus 153.6ms: w = (153.6/400)*380 = 146 -->
+  <rect x="200" y="388" width="146" height="20" rx="4" fill="url(#milvus-g)" opacity="0.9"/>
+  <text x="354" y="403" font-size="12" font-weight="600" fill="#7C3AED">153.6 ms</text>
+
+  <!-- seekdb v1.2 410.4ms: w = (410.4/400)*380 ≈ 390, cap at 390 -->
+  <rect x="200" y="412" width="390" height="20" rx="4" fill="url(#seekdb12-g)" opacity="0.9"/>
+  <text x="598" y="427" font-size="12" font-weight="600" fill="#64748B">410.4 ms</text>
+
+  <!-- Chroma 3717.1ms: w = 480 (full) -->
+  <rect x="200" y="436" width="480" height="20" rx="4" fill="url(#chroma-g)" opacity="0.9"/>
+  <text x="688" y="451" font-size="11" font-weight="600" fill="#DB2777">3,717 ms</text>
+
+  <!-- Qdrant 3686.4ms: w = 476 -->
+  <rect x="200" y="460" width="476" height="20" rx="4" fill="url(#qdrant-g)" opacity="0.9"/>
+  <text x="684" y="475" font-size="11" font-weight="600" fill="#DC2626">3,686 ms</text>
+
+  <line x1="40" y1="496" x2="780" y2="496" stroke="#E5E7EB" stroke-width="1"/>
+
+  <!-- ==================== P99 Jitter ==================== -->
+  <text x="40" y="524" font-size="14" font-weight="700" fill="#111827">P99 Jitter (serial → concurrent)</text>
+  <text x="290" y="524" font-size="11" fill="#9CA3AF">(closer to 1× is more stable)</text>
+
+  <!-- max jitter = 10.3, bar area = 480 -->
+  <!-- seekdb 1.1×: w = (1.1/10.3)*480 = 51 -->
+  <rect x="200" y="536" width="51" height="20" rx="4" fill="url(#seekdb-g)" opacity="0.9"/>
+  <text x="259" y="551" font-size="12" font-weight="700" fill="#2563EB">1.1×</text>
+
+  <!-- ES 10.3×: w = 480 -->
+  <rect x="200" y="560" width="480" height="20" rx="4" fill="url(#es-g)" opacity="0.9"/>
+  <text x="688" y="575" font-size="12" font-weight="600" fill="#D97706">10.3×</text>
+
+  <!-- Milvus 9.7×: w = (9.7/10.3)*480 = 452 -->
+  <rect x="200" y="584" width="452" height="20" rx="4" fill="url(#milvus-g)" opacity="0.9"/>
+  <text x="660" y="599" font-size="12" font-weight="600" fill="#7C3AED">9.7×</text>
+
+  <!-- Qdrant 8.3×: w = (8.3/10.3)*480 = 387 -->
+  <rect x="200" y="608" width="387" height="20" rx="4" fill="url(#qdrant-g)" opacity="0.9"/>
+  <text x="595" y="623" font-size="12" font-weight="600" fill="#DC2626">8.3×</text>
+
+  <!-- seekdb v1.2 1.9×: w = (1.9/10.3)*480 = 89 -->
+  <rect x="200" y="632" width="89" height="20" rx="4" fill="url(#seekdb12-g)" opacity="0.9"/>
+  <text x="297" y="647" font-size="12" font-weight="600" fill="#64748B">1.9×</text>
+
+  <!-- Chroma 1.4×: w = (1.4/10.3)*480 = 65 -->
+  <rect x="200" y="656" width="65" height="20" rx="4" fill="url(#chroma-g)" opacity="0.9"/>
+  <text x="273" y="671" font-size="12" font-weight="600" fill="#DB2777">1.4×</text>
+
+  <line x1="40" y1="688" x2="780" y2="688" stroke="#E5E7EB" stroke-width="1"/>
+
+  <!-- ==================== Recall ==================== -->
+  <text x="40" y="716" font-size="14" font-weight="700" fill="#111827">Recall</text>
+  <text x="95" y="716" font-size="11" fill="#9CA3AF">(higher is better · snapshot at 80% write progress, theoretical max ≈ 0.80)</text>
+
+  <!-- Qdrant 0.8067: w = 480 -->
+  <rect x="200" y="728" width="480" height="20" rx="4" fill="url(#qdrant-g)" opacity="0.9"/>
+  <text x="688" y="743" font-size="12" font-weight="600" fill="#DC2626">0.8067</text>
+
+  <!-- Milvus 0.7825: w = 466 -->
+  <rect x="200" y="752" width="466" height="20" rx="4" fill="url(#milvus-g)" opacity="0.9"/>
+  <text x="674" y="767" font-size="12" font-weight="600" fill="#7C3AED">0.7825</text>
+
+  <!-- seekdb v1.2 0.7429: w = 442 -->
+  <rect x="200" y="776" width="442" height="20" rx="4" fill="url(#seekdb12-g)" opacity="0.9"/>
+  <text x="650" y="791" font-size="12" font-weight="600" fill="#64748B">0.7429</text>
+
+  <!-- seekdb 0.7397: w = 440 -->
+  <rect x="200" y="800" width="440" height="20" rx="4" fill="url(#seekdb-g)" opacity="0.9"/>
+  <text x="648" y="815" font-size="12" font-weight="700" fill="#2563EB">0.7397</text>
+
+  <!-- ES 0.7208: w = 429 -->
+  <rect x="200" y="824" width="429" height="20" rx="4" fill="url(#es-g)" opacity="0.9"/>
+  <text x="637" y="839" font-size="12" font-weight="600" fill="#D97706">0.7208</text>
+
+  <!-- Chroma 0.6622: w = 394 -->
+  <rect x="200" y="848" width="394" height="20" rx="4" fill="url(#chroma-g)" opacity="0.9"/>
+  <text x="602" y="863" font-size="12" font-weight="600" fill="#DB2777">0.6622</text>
+
+  <!-- Bottom highlight -->
+  <rect x="80" y="886" width="660" height="32" rx="6" fill="#EFF6FF"/>
+  <text x="410" y="907" text-anchor="middle" font-size="13" font-weight="700" fill="#1E40AF">seekdb: 10.7× QPS of Milvus, 3.2× of ES — P99 barely moves under concurrency</text>
+
+</svg>

@@ -1,0 +1,137 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "observer/virtual_table/ob_all_virtual_tx_ctx_mgr_stat.h"
+#include "observer/ob_server.h"
+
+using namespace oceanbase::common;
+using namespace oceanbase::transaction;
+
+namespace oceanbase
+{
+namespace observer
+{
+void ObGVTxCtxMgrStat::reset()
+{
+  memstore_version_buffer_[0] = '\0';
+
+  ObVirtualTableScannerIterator::reset();
+}
+
+void ObGVTxCtxMgrStat::destroy()
+{
+  trans_service_ = NULL;
+  memset(memstore_version_buffer_, 0, common::MAX_VERSION_LENGTH);
+
+  ObVirtualTableScannerIterator::reset();
+}
+
+int ObGVTxCtxMgrStat::prepare_start_to_read_()
+{
+  int ret = OB_SUCCESS;
+  ObObj *cells = NULL;
+
+  if (NULL == allocator_ || NULL == trans_service_) {
+    SERVER_LOG(WARN, "invalid argument, allocator_ or trans_service_ is null", "allocator",
+        OB_P(allocator_), "trans_service", OB_P(trans_service_));
+    ret = OB_INVALID_ARGUMENT;
+  } else if (NULL == (cells = cur_row_.cells_)) {
+    ret = OB_ERR_UNEXPECTED;
+    SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
+  } else if (OB_FAIL(trans_service_->iterate_tx_ctx_mgr_stat(tx_ctx_mgr_stat_iter_))) {
+    SERVER_LOG(WARN, "iterate_tx_ctx_mgr_stat error", K(ret));
+    if (OB_NOT_RUNNING == ret || OB_NOT_INIT == ret) {
+      ret = OB_SUCCESS;
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(tx_ctx_mgr_stat_iter_.set_ready())) {
+    TRANS_LOG(WARN, "tx_ctx_mgr_stat_iter set ready error", KR(ret));
+  } else {
+    start_to_read_ = true;
+  }
+
+  return ret;
+}
+
+int ObGVTxCtxMgrStat::inner_get_next_row(ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
+  ObLSTxCtxMgrStat ls_tx_ctx_mgr_stat;
+
+  if (!start_to_read_ && OB_SUCCESS != (ret = prepare_start_to_read_())) {
+    SERVER_LOG(WARN, "prepare_start_to_read_ error", K(ret), K(start_to_read_));
+  } else if (OB_SUCCESS != (ret = tx_ctx_mgr_stat_iter_.get_next(ls_tx_ctx_mgr_stat))) {
+    if (OB_ITER_END != ret) {
+      SERVER_LOG(WARN, "tx_ctx_mgr_stat_iter_ get next error", K(ret));
+    } else {
+      SERVER_LOG(DEBUG, "tx_ctx_mgr_stat_iter_ end success");
+    }
+  } else {
+    // Column order after removing svr_ip and svr_port:
+    // OB_APP_MIN_COLUMN_ID (16): is_master
+    // OB_APP_MIN_COLUMN_ID + 1 (17): is_stopped
+    // OB_APP_MIN_COLUMN_ID + 2 (18): state
+    // OB_APP_MIN_COLUMN_ID + 3 (19): state_str
+    // OB_APP_MIN_COLUMN_ID + 4 (20): total_trans_ctx_count
+    // OB_APP_MIN_COLUMN_ID + 5 (21): mgr_addr
+    const int64_t col_count = output_column_ids_.count();
+    for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
+      uint64_t col_id = output_column_ids_.at(i);
+      switch (col_id) {
+        case OB_APP_MIN_COLUMN_ID:
+           // is_master_
+          cur_row_.cells_[i].set_int(ls_tx_ctx_mgr_stat.is_master()? 1 : 0);
+          break;
+        case OB_APP_MIN_COLUMN_ID + 1:
+          // is_stopped_
+          cur_row_.cells_[i].set_int(ls_tx_ctx_mgr_stat.is_stopped()? 1 : 0);
+          break;
+        case OB_APP_MIN_COLUMN_ID + 2:
+          // state_
+          cur_row_.cells_[i].set_int(ls_tx_ctx_mgr_stat.get_state());
+          break;
+        case OB_APP_MIN_COLUMN_ID + 3: {
+          // state_str
+          ObCStringHelper helper;
+          int64_t state = ls_tx_ctx_mgr_stat.get_state();
+          cur_row_.cells_[i].set_varchar(helper.convert((ObTxLSStateMgr::TxLSStateContainer::StateVal*)&state));
+          cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+          break;
+        }
+        case OB_APP_MIN_COLUMN_ID + 4:
+          // total_tx_ctx_count
+          cur_row_.cells_[i].set_int(ls_tx_ctx_mgr_stat.get_total_tx_ctx_count());
+          break;
+        case OB_APP_MIN_COLUMN_ID + 5:
+          cur_row_.cells_[i].set_int(ls_tx_ctx_mgr_stat.get_mgr_addr());
+          break;
+        default:
+          ret = OB_ERR_UNEXPECTED;
+          SERVER_LOG(WARN, "invalid column_id", K(ret), K(col_id));
+          break;
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    row = &cur_row_;
+  }
+
+  return ret;
+}
+
+}/* ns observer*/
+}/* ns oceanbase */

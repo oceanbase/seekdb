@@ -1,0 +1,107 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_LOGSERVICE_LOG_ENTRY_HEADER_
+#define OCEANBASE_LOGSERVICE_LOG_ENTRY_HEADER_
+
+#include "lib/ob_define.h"
+#include "lib/utility/ob_print_utils.h"
+#include "share/scn.h"
+
+namespace oceanbase
+{
+namespace palf
+{
+class LogEntryHeader
+{
+public:
+  LogEntryHeader();
+  ~LogEntryHeader();
+public:
+  int generate_header(const char *log_data,
+                      const int64_t data_len,
+                      const share::SCN &scn);
+  LogEntryHeader& operator=(const LogEntryHeader &header);
+  void reset();
+  bool is_valid() const;
+  bool check_integrity(const char *buf, const int64_t buf_len) const;
+  int32_t get_data_len() const { return log_size_; }
+  const share::SCN get_scn() const { return scn_; }
+  int64_t get_data_checksum() const { return data_checksum_; }
+  bool check_header_integrity() const;
+
+  // @brief: generate padding log entry
+  // @param[in]: padding_data_len, the data len of padding entry(the group_size_ in LogGroupEntry
+  //             - sizeof(LogEntryHeader))
+  // @param[in]: scn, the SCN of padding log entry
+  // @param[in&out]: out_buf, out_buf just only include LogEntryHeader and ObLogBaseHeader
+  // @param[in]: padding_valid_data_len, the valid data len of padding LogEntry(just only include
+  //             LogEntryHeader and ObLogBaseHeader).
+  static int generate_padding_log_buf(const int64_t padding_data_len,
+                                      const share::SCN &scn,
+                                      char *out_buf,
+                                      const int64_t padding_valid_data_len);
+  NEED_SERIALIZE_AND_DESERIALIZE;
+  TO_STRING_KV("magic", magic_,
+               "version", version_,
+               "log_size", log_size_,
+               "scn_", scn_,
+               "data_checksum", data_checksum_,
+               "flag", flag_);
+public:
+  static const int16_t MAGIC;  // 'LH' means LOG ENTRY HEADER
+  static const int64_t HEADER_SER_SIZE;
+  static const int64_t PADDING_LOG_ENTRY_SIZE;
+private:
+  uint16_t calculate_header_checksum_() const;
+  void update_header_checksum_();
+  bool check_header_checksum_() const;
+  bool is_padding_log_() const;
+
+  int generate_padding_header_(const char *log_data,
+                               const int64_t base_header_len,
+                               const int64_t padding_data_len,
+                               const share::SCN &scn);
+  int16_t get_version_() const;
+  int64_t get_padding_mask_() const;
+  int64_t get_header_checksum_mask_() const;
+  void reset_header_checksum_();
+private:
+  static const int16_t LOG_ENTRY_HEADER_VERSION;
+  static const int64_t PADDING_TYPE_MASK;
+  static const int16_t LOG_ENTRY_HEADER_VERSION2;
+  static const int64_t PADDING_TYPE_MASK_VERSION2;
+  static const int64_t CRC16_MASK;
+  static const int64_t PARITY_MASK;
+private:
+  int16_t magic_;
+  int16_t version_;
+  int32_t log_size_;
+  share::SCN scn_;
+  int64_t data_checksum_;
+  // The lowest bit is used for parity check.
+  // LOG_ENTRY_HEADER_VERSION
+  // | sign bit | 61 unused bit | PADDING bit | PARITY CHECKSUM bit |
+  //
+  // LOG_ENTRY_HEADER_VERSION2
+  // | sign bit | PADDING bit | 46 unused bit | 16 crc16 bit |
+  mutable int64_t flag_;
+};
+
+int16_t xxhash_16(int16_t checksum, const uint8_t* data, const int64_t data_len);
+}
+}
+#endif // OCEANBASE_LOGSERVICE_LOG_ENTRY_HEADER_

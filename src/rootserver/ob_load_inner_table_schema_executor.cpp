@@ -1,0 +1,267 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX RS
+
+#include "ob_load_inner_table_schema_executor.h"
+
+#include "share/inner_table/ob_load_inner_table_schema.h"
+#include "lib/utility/utility.h"
+#include "share/ob_server_struct.h"
+#include "share/location_cache/ob_location_service.h"
+#include "share/ob_global_stat_proxy.h"
+#include "share/inner_table/ob_dump_inner_table_schema.h"
+
+namespace oceanbase
+{
+namespace rootserver
+{
+ERRSIM_POINT_DEF(ERRSIM_LOAD_INNER_TABLE_SCHEMA);
+
+int ObLoadInnerTableSchemaExecutor::load_inner_table_schema(
+    const obcall::ObLoadTenantTableSchemaArg &arg)
+{
+  int ret = OB_SUCCESS;
+  DEBUG_SYNC(LOAD_INNER_TABLE_SCHEMA);
+  const int64_t start_ts = ObTimeUtility::current_time();
+  if (!arg.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(arg));
+  } else if (OB_FAIL(ERRSIM_LOAD_INNER_TABLE_SCHEMA)) {
+    LOG_WARN("ERRSIM_LOAD_INNER_TABLE_SCHEMA", KR(ret));
+  }
+  bool find = false;
+  const ObIArray<share::ObLoadInnerTableSchemaInfo> *infos = arg.get_infos();
+  for (int64_t i = 0; !find && OB_SUCC(ret) && i < infos->count(); i++) {
+    const share::ObLoadInnerTableSchemaInfo *info = &infos->at(i);
+    if (OB_ISNULL(info)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("info is NULL", KR(ret), KP(info), K(i));
+    } else if (arg.get_table_id() == info->get_inner_table_id()) {
+      find = true;
+      if (OB_FAIL(load_inner_table_schema(arg, *info))) {
+        LOG_WARN("failed to load inner table schema", KR(ret), K(arg), KPC(info));
+      }
+    }
+  }
+  if (OB_SUCC(ret) && OB_UNLIKELY(!find)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("failed to find match table_id", KR(ret), K(arg));
+  }
+  LOG_INFO("finish load inner table schema", KR(ret),
+      "cost", ObTimeUtility::current_time() - start_ts, K(arg));
+  return ret;
+}
+
+int ObLoadInnerTableSchemaExecutor::load_inner_table_schema(
+    const obcall::ObLoadTenantTableSchemaArg &arg,
+    const share::ObLoadInnerTableSchemaInfo &info)
+{
+  int ret = OB_SUCCESS;
+  ObMySQLTransaction trans;
+  ObSqlString insert_header;
+  if (!arg.is_valid() || arg.get_table_id() != info.get_inner_table_id() || OB_ISNULL(GCTX.sql_proxy_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid argument", KR(ret), K(arg), K(info), KP(GCTX.sql_proxy_));
+  } else if (OB_FAIL(insert_header.append_fmt("INSERT INTO %s(%s) VALUES ", info.get_inner_table_name(),
+              info.get_inner_table_column_names()))) {
+    LOG_WARN("failed to append insert header", KR(ret), K(info));
+  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+    LOG_WARN("failed to start trans", KR(ret), K(arg));
+  } else {
+    ObSqlString sql;
+    const ObIArray<int64_t> &insert_idx = arg.get_insert_idx();
+    for (int64_t i = 0; OB_SUCC(ret) && i < insert_idx.count(); i += LOAD_ROWS_PER_INSERT) {
+      int64_t affected_rows = 0;
+      int64_t current_row_count = 0;
+      uint64_t table_id = 0;
+      const char *row = nullptr;
+      sql.reuse();
+      if (OB_FAIL(sql.append(insert_header.string()))) {
+        LOG_WARN("failed to append header", KR(ret), K(insert_header));
+      }
+      for (int64_t j = 0; OB_SUCC(ret) && j < LOAD_ROWS_PER_INSERT && i + j < insert_idx.count(); j++) {
+        int64_t idx = insert_idx.at(i + j);
+        if (idx >= info.get_row_count() || idx < 0) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("index is out of range", KR(ret), K(i), K(j), K(idx), K(info));
+        } else if (OB_FAIL(info.get_row(idx, row, table_id))) {
+          LOG_WARN("failed to get row", KR(ret), K(idx));
+        } else if (OB_FAIL(sql.append_fmt("%s(%s)", j != 0 ? ", " : "", row))) {
+          LOG_WARN("failed to append value", KR(ret), K(j), K(idx), K(row));
+        } else {
+          current_row_count++;
+        }
+      }
+      if (FAILEDx(trans.write(sql.ptr(), affected_rows))) {
+        LOG_WARN("failed to write sql", KR(ret), K(sql), K(arg));
+      } else if (current_row_count != affected_rows) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("insert rows not match", KR(ret), K(current_row_count), K(affected_rows), K(sql));
+      }
+    }
+  }
+  if (trans.is_started()) {
+    int temp_ret = OB_SUCCESS;
+    if (OB_SUCCESS != (temp_ret = trans.end(OB_SUCC(ret)))) {
+      LOG_WARN("trans end failed", "is_commit", OB_SUCCESS == ret, K(temp_ret));
+      ret = (OB_SUCC(ret)) ? temp_ret : ret;
+    }
+  }
+  return ret;
+}
+
+int ObLoadInnerTableSchemaExecutor::append_arg(const ObIArray<int64_t> &insert_idx,
+    const share::ObLoadInnerTableSchemaInfo &info)
+{
+  int ret = OB_SUCCESS;
+  obcall::ObLoadTenantTableSchemaArg arg;
+  if (insert_idx.count() == 0) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("idx is empty", KR(ret), K(info), K(insert_idx));
+  } else if (OB_FAIL(arg.init(info.get_inner_table_id(), &infos_, insert_idx, DATA_CURRENT_VERSION))) {
+    LOG_WARN("failed to init arg", KR(ret), K(info), K(insert_idx));
+  } else if (OB_FAIL(args_.push_back(arg))) {
+    LOG_WARN("failed to push_back", KR(ret), K(arg));
+  }
+  return ret;
+}
+
+int ObLoadInnerTableSchemaExecutor::init_args_(ObIArray<ObTableSchema> &table_schemas)
+{
+  int ret = OB_SUCCESS;
+  int tmp_ret = OB_SUCCESS;
+  int64_t rpc_count = 0;
+  hash::ObHashSet<uint64_t> all_table_ids;
+  ObArray<int64_t> insert_idx;
+
+  // generate inner table schema info
+  share::ObInnerTableSchemaDumper dumper(table_schemas, allocator_);
+  if (OB_FAIL(dumper.get_inner_table_schema_info(infos_))) {
+    LOG_WARN("failed to get inner table schema info", KR(ret));
+  }
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(all_table_ids.create(hash::cal_next_prime(table_schemas.count())))) {
+      LOG_WARN("failed to create hashset", KR(ret), "count", table_schemas.count());
+    } else if (OB_FAIL(insert_idx.reserve(LOAD_ROWS_PER_BATCH))) {
+      LOG_WARN("failed to reserve insert_idx", KR(ret));
+    }
+  }
+  FOREACH_CNT_X(table, table_schemas, OB_SUCC(ret)) {
+    if (OB_ISNULL(table)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("pointer is null", KP(table));
+    } else if (OB_FAIL(all_table_ids.set_refactored(table->get_table_id()))) {
+      LOG_WARN("failed to add table_id", KR(ret), K(table->get_table_id()));
+    }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < infos_.count(); i++) {
+    const share::ObLoadInnerTableSchemaInfo *info = &infos_.at(i);
+    insert_idx.reuse();
+    if (OB_ISNULL(info)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("pointer is null", KR(ret), KP(info), K(i));
+    } else {
+      const char *row = nullptr;
+      uint64_t table_id = 0;
+      for (int64_t j = 0; OB_SUCC(ret) && j < info->get_row_count(); j++) {
+        if (OB_FAIL(info->get_row(j, row, table_id))) {
+          LOG_WARN("failed to get row", KR(ret), K(i));
+        } else if (FALSE_IT(tmp_ret = all_table_ids.exist_refactored(table_id))) {
+        } else if (OB_HASH_EXIST == tmp_ret || share::OB_ALL_CORE_TABLE_TID == table_id) {
+          if (OB_FAIL(insert_idx.push_back(j))) {
+            LOG_WARN("failed to push_back row_id", KR(ret), K(j));
+          } else if (insert_idx.count() == LOAD_ROWS_PER_BATCH) {
+            if (OB_FAIL(append_arg(insert_idx, *info))) {
+              LOG_WARN("failed to push args to queue", KR(ret), K(insert_idx), KPC(info));
+            }
+            insert_idx.reuse();
+          }
+        } else if (OB_HASH_NOT_EXIST == tmp_ret) {
+        } else {
+          ret = tmp_ret;
+          LOG_WARN("failed to check table_id exist", KR(ret), K(table_id));
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (insert_idx.count() > 0 && OB_FAIL(append_arg(insert_idx, *info))) {
+        LOG_WARN("failed to push args to queue", KR(ret), K(insert_idx), KPC(info));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObLoadInnerTableSchemaExecutor::init(ObIArray<ObTableSchema> &table_schemas, const int64_t max_cpu)
+{
+  int ret = OB_SUCCESS;
+  
+  if (max_cpu <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("parallel count should be positive", KR(ret), K(max_cpu));
+  } else {
+    parallel_count_ = common::max(THREAD_PER_CPU * max_cpu, 1);
+    load_rpc_timeout_ = parallel_count_ * GCONF.internal_sql_execute_timeout;
+  }
+  if (FAILEDx(init_args_(table_schemas))) {
+    LOG_WARN("failed to init args", KR(ret));
+  } else {
+    inited_ = true;
+  }
+  FLOG_INFO("ObLoadInnerTableSchemaExecutor inited", KR(ret),
+      K(parallel_count_), K(load_rpc_timeout_));
+  return ret;
+}
+
+
+int ObLoadInnerTableSchemaExecutor::load_schema_version(common::ObISQLClient &client,
+    const int64_t core_schema_version,
+    const int64_t sys_schema_version)
+{
+  int ret = OB_SUCCESS;
+  share::ObGlobalStatProxy proxy(client);
+  if (OB_FAIL(proxy.set_core_schema_version(core_schema_version))) {
+    LOG_WARN("failed to set core_schema_version", KR(ret));
+  } else if (OB_FAIL(proxy.set_sys_schema_version(sys_schema_version))) {
+    LOG_WARN("failed to set sys_schema_version", KR(ret));
+  }
+  return ret;
+}
+
+int ObLoadInnerTableSchemaExecutor::execute()
+{
+  int ret = OB_SUCCESS;
+  const int64_t start_ts = ObTimeUtility::current_time();
+  FLOG_INFO("start to load inner table schema", KR(ret));
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not inited", KR(ret), K_(inited));
+  } else {
+    // seekdb: all local, sequential direct calls.
+    for (next_arg_index_ = 0; OB_SUCC(ret) && next_arg_index_ < args_.count(); ++next_arg_index_) {
+      if (OB_FAIL(load_inner_table_schema(args_[next_arg_index_]))) {
+        LOG_WARN("failed to load inner table schema", KR(ret), K_(next_arg_index));
+      }
+    }
+  }
+  FLOG_INFO("finish load all inner table schema", KR(ret),
+      "cost", ObTimeUtility::current_time() - start_ts);
+  return ret;
+}
+
+}
+}

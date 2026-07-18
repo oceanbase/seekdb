@@ -1,0 +1,64 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_ALL_VIRTUAL_MDS_EVENT_HISTORY_H
+#define OB_ALL_VIRTUAL_MDS_EVENT_HISTORY_H
+
+#include "lib/container/ob_tuple.h"
+#include "ob_tablet_id.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "observer/omt/ob_multi_tenant.h"
+#include "ob_mds_event_buffer.h"
+
+namespace oceanbase
+{
+namespace storage
+{
+namespace mds
+{
+struct MdsNodeInfoForVirtualTable;
+}
+}
+namespace observer
+{
+
+class ObAllVirtualMdsEventHistory : public common::ObVirtualTableScannerIterator
+{
+  static constexpr int64_t IP_BUFFER_SIZE = 65;  // >= MAX_IP_ADDR_LENGTH (e.g. INET6 on Windows)
+public:
+  explicit ObAllVirtualMdsEventHistory(omt::ObMultiTenant *omt) : omt_(omt) {}
+  virtual int inner_get_next_row(common::ObNewRow *&row) override;
+  TO_STRING_KV(K_(tablet_ranges), K_(tablet_points))
+private:
+  int convert_event_info_to_row_(const MdsEventKey &key,
+                                 const MdsEvent &event,
+                                 char *buffer,
+                                 const int64_t buffer_size,
+                                 common::ObNewRow &row);
+  int get_primary_key_ranges_();
+  bool judge_key_in_ranges_(const MdsEventKey &key) const;
+  int range_scan_(char *temp_buffer, int64_t buf_len);
+  int point_read_(char *temp_buffer, int64_t buf_len);
+  DISALLOW_COPY_AND_ASSIGN(ObAllVirtualMdsEventHistory);
+  omt::ObMultiTenant *omt_;
+  char ip_buffer_[IP_BUFFER_SIZE];
+  ObArray<ObTuple<common::ObTabletID, common::ObTabletID>> tablet_ranges_;
+  ObArray<common::ObTabletID> tablet_points_;
+};
+
+} // observer
+} // oceanbase
+#endif

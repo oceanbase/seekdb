@@ -1,0 +1,74 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "storage/concurrency_control/ob_trans_stat_row.h"
+
+namespace oceanbase
+{
+namespace concurrency_control
+{
+
+void build_trans_stat_datum(const storage::ObTableIterParam *param,
+                            const blocksstable::ObDatumRow &row,
+                            const ObTransStatRow &trans_stat_row)
+{
+  const int64_t MAX_SIZE_FOR_TRANS_STAT_DATUM = 100;
+  // trans stat datum index for vectorized execution
+  TRANS_LOG(DEBUG, "memtable try to generate trans_info",
+            K(trans_stat_row), K(param), K(param->op_), K(row.trans_info_),
+            K(lbt()));
+  char *trans_stat_ptr = row.trans_info_;
+  if (param->need_trans_info()
+      && OB_NOT_NULL(trans_stat_ptr)) {
+    trans_stat_ptr[0] = '\0';
+    concurrency_control::build_trans_stat_(trans_stat_row,
+                                           MAX_SIZE_FOR_TRANS_STAT_DATUM,
+                                           trans_stat_ptr);
+    TRANS_LOG(DEBUG, "memtable generate trans_info",
+        K(ObString(strlen(trans_stat_ptr), trans_stat_ptr)),
+        K(trans_stat_row), K(param));
+  }
+}
+
+void build_trans_stat_(const ObTransStatRow &trans_stat_row,
+                       const int64_t trans_stat_len,
+                       char *trans_stat_ptr)
+{
+  int ret = OB_SUCCESS;
+  int64_t pos = 0;
+  if (OB_FAIL(databuff_printf(trans_stat_ptr,
+                              trans_stat_len,
+                              pos,
+                              "[%ld, %ld, %ld, (%d,%ld)]",
+                              trans_stat_row.trans_version_.get_val_for_tx(),
+                              trans_stat_row.scn_.get_val_for_tx(),
+                              trans_stat_row.trans_id_.get_id(),
+                              trans_stat_row.seq_no_.get_branch(),
+                              trans_stat_row.seq_no_.get_seq()))) {
+    TRANS_LOG(WARN, "failed to printf", K(ret), K(pos), K(trans_stat_len), K(trans_stat_row));
+    trans_stat_ptr[0] = '\0';
+  } else {
+    if (pos > trans_stat_len) {
+      ret = OB_ERR_UNEXPECTED;
+      TRANS_LOG(ERROR, "unexpected length for datum", K(pos));
+      trans_stat_ptr[0] = '\0';
+    }
+  }
+}
+
+
+} // namespace concurrency_control
+} // namespace oceanbase

@@ -1,0 +1,122 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX PL
+
+#include "pl/ob_pl_package_encode_info.h"
+#include "lib/oblog/ob_log_module.h"
+
+namespace oceanbase
+{
+using namespace common;
+namespace pl
+{
+
+int ObPackageVarEncodeInfo::construct()
+{
+  int ret = OB_SUCCESS;
+  CK (var_idx_ != common::OB_INVALID_INDEX);
+
+  if (OB_SUCC(ret)) {
+    if (encode_value_.is_null()) {
+      value_type_ = PackageValueType::NULL_TYPE;
+      value_len_ = 0;
+    } else if (encode_value_.is_tinyint()) {
+      value_type_ = PackageValueType::BOOL_TYPE;
+      bool val = false;
+      value_len_ = serialization::encoded_length(val);
+    } else if (encode_value_.is_hex_string()) {
+      value_type_ = PackageValueType::HEX_STRING_TYPE;
+      value_len_ = encode_value_.get_hex_string().length();
+    } else {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected value type", K(ret));
+    }
+  }
+
+  return ret;
+}
+
+int ObPackageVarEncodeInfo::get_serialize_size(int64_t &size)
+{
+  int ret = OB_SUCCESS;
+  size = 0;
+  size += serialization::encoded_length(var_idx_);
+  size += serialization::encoded_length(value_type_);
+  size += serialization::encoded_length(value_len_);
+  size += value_len_;
+
+  return ret;
+}
+
+int ObPackageVarEncodeInfo::encode(char *dst, const int64_t dst_len, int64_t &dst_pos)
+{
+  int ret = OB_SUCCESS;
+
+  OZ (serialization::encode(dst, dst_len, dst_pos, var_idx_));
+  OZ (serialization::encode(dst, dst_len, dst_pos, value_type_));
+  OZ (serialization::encode(dst, dst_len, dst_pos, value_len_));
+  if (OB_SUCC(ret)) {
+    if (PackageValueType::NULL_TYPE == value_type_) {
+      // do nothing
+    } else if (PackageValueType::BOOL_TYPE == value_type_) {
+      bool obj_val = encode_value_.get_bool();
+      OZ (serialization::encode(dst, dst_len, dst_pos, obj_val));
+    } else if (PackageValueType::HEX_STRING_TYPE == value_type_) {
+      CK (value_len_ == encode_value_.get_hex_string().length());
+      if (OB_SUCC(ret)) {
+        MEMCPY(dst + dst_pos, encode_value_.get_hex_string().ptr(), encode_value_.get_hex_string().length());
+        dst_pos += encode_value_.get_hex_string().length();
+      }
+    } else {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected value type", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObPackageVarEncodeInfo::decode(const char *src, const int64_t src_len, int64_t &src_pos)
+{
+  int ret = OB_SUCCESS;
+
+  OZ (serialization::decode(src, src_len, src_pos, var_idx_));
+  OZ (serialization::decode(src, src_len, src_pos, value_type_));
+  OZ (serialization::decode(src, src_len, src_pos, value_len_));
+  if (OB_SUCC(ret)) {
+    if (PackageValueType::NULL_TYPE == value_type_) {
+      CK (0 == value_len_);
+      OX (encode_value_.set_null());
+    } else if (PackageValueType::BOOL_TYPE == value_type_) {
+      bool val = false;
+      CK (1 == value_len_);
+      OZ (serialization::decode(src, src_len, src_pos, val));
+      OX (encode_value_.set_bool(val));
+    } else if (PackageValueType::HEX_STRING_TYPE == value_type_) {
+      // shallow copy
+      OX (encode_value_.set_hex_string(ObString(value_len_, src + src_pos)));
+      OX (src_pos += value_len_);
+    } else {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected value type", K(ret));
+    }
+  }
+
+  return ret;
+}
+
+} // end namespace pl
+} // end namespace oceanbase

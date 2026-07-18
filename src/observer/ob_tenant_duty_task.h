@@ -1,0 +1,76 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_TENANT_DUTY_TASK_H
+#define OB_TENANT_DUTY_TASK_H
+#include <stdint.h>
+#include "lib/task/ob_timer.h"
+#include "lib/allocator/page_arena.h"
+#include "common/object/ob_object.h"
+#include "share/system_variable/ob_sys_var_class_type.h"
+
+namespace oceanbase {
+namespace observer {
+
+class ObTenantDutyTask
+    : private common::ObTimerTask
+{
+  static constexpr int64_t SCHEDULE_PERIOD = 10 * 1000L * 1000L;
+public:
+  int schedule(int tg_id);
+  ObTenantDutyTask();
+private:
+  void runTimerTask() override;
+  void update_all_tenants();
+
+private:
+  int read_obj(share::ObSysVarClassType sys_var, common::ObObj &obj);
+  int read_int64(share::ObSysVarClassType sys_var, int64_t &val);
+  // There's no system variable with double type, so here the function
+  // would transform variable with decimal type to double instead. If
+  // someone adds double type system variable in the future, be
+  // careful when using this method.
+  int read_double(share::ObSysVarClassType sys_var, double &val);
+
+  // Update tenant work area settings.
+  int update_tenant_wa_percentage();
+  // Read tenant sql throttle settings from tenant system variables
+  // and set to corresponding tenant.
+  int update_tenant_sql_throttle();
+  // Read tenant ctx memory limit settings from tenant system variables
+  // and set to corresponding tenant.
+  int update_tenant_ctx_memory_throttle();
+  // Read tenant work area memory settings from tenant system variables.
+  int read_tenant_wa_percentage(int64_t &pctg);
+  int update_tenant_rpc_percentage();
+private:
+  common::ObArenaAllocator allocator_;
+};
+
+class ObTenantSqlMemoryTimerTask : private common::ObTimerTask
+{
+public:
+  int schedule(int tg_id);
+private:
+  void runTimerTask() override;
+private:
+  static constexpr int64_t SCHEDULE_PERIOD = 3 * 1000L * 1000L;
+};
+
+}  // observer
+}  // oceanbase
+
+#endif /* OB_TENANT_DUTY_TASK_H */

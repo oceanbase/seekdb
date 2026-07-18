@@ -1,0 +1,177 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX COMMON
+
+#include "common/ob_record_header.h"
+
+namespace oceanbase
+{
+namespace common
+{
+ObRecordHeader::ObRecordHeader()
+    : magic_(0), header_length_(0), version_(0), header_checksum_(0)
+    , timestamp_(0), data_length_(0), data_zlength_(0), data_checksum_(0)
+{
+}
+
+void ObRecordHeader::set_header_checksum()
+{
+  header_checksum_ = 0;
+  int16_t checksum = 0;
+
+  format_i64(magic_, checksum);
+  checksum = checksum ^ header_length_;
+  checksum = checksum ^ version_;
+  checksum = checksum ^ header_checksum_;
+  checksum = static_cast<int16_t>(checksum ^ timestamp_);
+  format_i32(data_length_, checksum);
+  format_i32(data_zlength_, checksum);
+  format_i64(data_checksum_, checksum);
+  header_checksum_ = checksum;
+}
+
+int ObRecordHeader::check_header_checksum() const
+{
+  int ret           = OB_SUCCESS;
+  int16_t checksum  = 0;
+
+  format_i64(magic_, checksum);
+  checksum = checksum ^ header_length_;
+  checksum = checksum ^ version_;
+  checksum = checksum ^ header_checksum_;
+  checksum = static_cast<int16_t>(checksum ^ timestamp_);
+  format_i32(data_length_, checksum);
+  format_i32(data_zlength_, checksum);
+  format_i64(data_checksum_, checksum);
+  if (0 != checksum) {
+    ret = OB_CHECKSUM_ERROR;
+    COMMON_LOG(WARN, "record check checksum failed.", K(*this), K(ret));
+  }
+
+  return ret;
+}
+
+int ObRecordHeader::check_payload_checksum(const char *buf, const int64_t len) const
+{
+  int ret = OB_SUCCESS;
+
+  /**
+   * for network package, maybe there is only one recorder header
+   * without payload data, so the payload data lenth is 0, and
+   * checksum is 0. we skip this case and return success
+   */
+  if (NULL == buf || len < 0) {
+    ret = OB_INVALID_ARGUMENT;
+    COMMON_LOG(WARN, "invalid arguments.", KP(buf), K(len), K(ret));
+  } else if (0 == len && (0 != data_zlength_ || 0 != data_length_ || 0 != data_checksum_)) {
+    ret = OB_INVALID_ARGUMENT;
+    COMMON_LOG(WARN, "invalid arguments.",
+               KP(buf), K(len),
+               K_(data_zlength), K_(data_length),
+               K_(data_checksum), K(ret));
+  } else if ((data_zlength_ != len)) {
+    ret = OB_INVALID_ARGUMENT;
+    COMMON_LOG(WARN, "data length is not correct.",
+               K_(data_zlength), K(len), K(ret));
+  } else {
+    int64_t crc_check_sum = ob_crc64(buf, len);
+    if (crc_check_sum != data_checksum_) {
+      ret = OB_CHECKSUM_ERROR;
+      COMMON_LOG(WARN, "checksum error.",
+                 K(crc_check_sum), K_(data_checksum), K(ret));
+    }
+  }
+
+  return ret;
+}
+
+
+
+
+
+
+DEFINE_SERIALIZE(ObRecordHeader)
+{
+  int ret = OB_SUCCESS;
+
+  if ((NULL == buf) || (buf_len <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    COMMON_LOG(WARN, "invalid arguments.", KP(buf), K(buf_len), K(ret));
+  } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, pos, magic_))) {
+    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(magic), K(ret));
+  } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, pos, header_length_))) {
+    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(header_length), K(ret));
+  } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, pos, version_))) {
+    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(version), K(ret));
+  } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, pos, header_checksum_))) {
+    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(header_checksum), K(ret));
+  } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, timestamp_))) {
+    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(timestamp), K(ret));
+  } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, data_length_))) {
+    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(data_length), K(ret));
+  } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, data_zlength_))) {
+    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(data_zlength), K(ret));
+  } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, data_checksum_))) {
+    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(data_checksum), K(ret));
+  }
+
+  return ret;
+}
+
+DEFINE_DESERIALIZE(ObRecordHeader)
+{
+  int ret = OB_SUCCESS;
+
+  if ((NULL == buf) || (data_len <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    COMMON_LOG(WARN, "invalid arguments.", KP(buf), K(data_len), K(ret));
+  } else if (OB_FAIL(serialization::decode_i16(buf, data_len, pos, &magic_))) {
+    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(magic), K(ret));
+  } else if (OB_FAIL(serialization::decode_i16(buf, data_len, pos, &header_length_))) {
+    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(header_length), K(ret));
+  }  else if (OB_FAIL(serialization::decode_i16(buf, data_len, pos, &version_))) {
+    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(version), K(ret));
+  } else if (OB_FAIL(serialization::decode_i16(buf, data_len, pos, &header_checksum_))) {
+    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(header_checksum), K(ret));
+  } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, &timestamp_))) {
+    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(timestamp), K(ret));
+  } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &data_length_))) {
+    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(data_length), K(ret));
+  } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &data_zlength_))) {
+    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(data_zlength), K(ret));
+  } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, &data_checksum_))) {
+    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(data_checksum), K(ret));
+  }
+  // Subsequent new members should use header_length_ as the limit for deserialization length to ensure upgrade compatibility
+
+  return ret;
+}
+
+DEFINE_GET_SERIALIZE_SIZE(ObRecordHeader)
+{
+  return (serialization::encoded_length_i16(magic_)
+          + serialization::encoded_length_i16(header_length_)
+          + serialization::encoded_length_i16(version_)
+          + serialization::encoded_length_i16(header_checksum_)
+          + serialization::encoded_length_i64(timestamp_)
+          + serialization::encoded_length_i32(data_length_)
+          + serialization::encoded_length_i32(data_zlength_)
+          + serialization::encoded_length_i64(data_checksum_));
+}
+
+} // end namespace common
+} // end namespace oceanbase

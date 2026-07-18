@@ -1,0 +1,96 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SQL_OB_EXPR_COLLECTION_CONSTRUCT_H_
+#define OCEANBASE_SQL_OB_EXPR_COLLECTION_CONSTRUCT_H_
+
+#include "common/object/ob_object.h"
+#include "sql/engine/expr/ob_expr_operator.h"
+#include "pl/ob_pl_type.h"
+#include "sql/engine/expr/ob_i_expr_extra_info.h"
+#include "pl/ob_pl_user_type.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+
+class ObExprCollectionConstruct : public ObFuncExprOperator
+{
+  OB_UNIS_VERSION(1);
+public:
+  explicit ObExprCollectionConstruct(common::ObIAllocator &alloc);
+  virtual ~ObExprCollectionConstruct();
+
+  virtual int calc_result_typeN(ObExprResType &type,
+                                ObExprResType *types_stack,
+                                int64_t param_num,
+                                common::ObExprTypeCtx &type_ctx) const;
+
+  virtual inline void reset() {
+    elem_type_.reset();
+    ObFuncExprOperator::reset();
+  }
+
+  inline void set_type(pl::ObPLType type) { type_ = type; }
+  inline void set_not_null(bool not_null) { not_null_ = not_null; }
+  inline void set_elem_type(const common::ObDataType &elem_type) { elem_type_ = elem_type; }
+  inline void set_capacity(int64_t capacity) { capacity_ = capacity; }
+  inline void set_udt_id(uint64_t udt_id) { udt_id_ = udt_id; }
+
+  virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
+                      const ObRawExpr &raw_expr, ObExpr &rt_expr) const override;
+
+  static int eval_collection_construct(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+
+  struct ExtraInfo : public ObIExprExtraInfo
+  {
+    OB_UNIS_VERSION(1);
+  public:
+    ExtraInfo(common::ObIAllocator &alloc, ObExprOperatorType type)
+        : ObIExprExtraInfo(alloc, type),
+        type_(pl::ObPLType::PL_INVALID_TYPE),
+        not_null_(false),
+        elem_type_(),
+        capacity_(common::OB_INVALID_SIZE),
+        udt_id_(common::OB_INVALID_ID)
+    {
+    }
+    virtual int deep_copy(common::ObIAllocator &allocator,
+                        const ObExprOperatorType type,
+                        ObIExprExtraInfo *&copied_info) const override;
+
+    pl::ObPLType type_;
+    bool not_null_;
+    common::ObDataType elem_type_;
+    int64_t capacity_;
+    uint64_t udt_id_;
+  };
+
+private:
+  pl::ObPLType type_;
+  bool not_null_;
+  common::ObDataType elem_type_;
+  int64_t capacity_;
+  uint64_t udt_id_;
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObExprCollectionConstruct);
+};
+
+} //sql
+} //oceanbase
+#endif //OCEANBASE_SQL_OB_EXPR_USER_DEFINED_FUNC_H_

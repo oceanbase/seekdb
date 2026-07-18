@@ -1,0 +1,89 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SQL_OB_DROP_DATABASE_STMT_H_
+#define OCEANBASE_SQL_OB_DROP_DATABASE_STMT_H_
+
+#include "share/ob_rpc_struct.h"
+#include "sql/resolver/ddl/ob_ddl_stmt.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+class ObDropDatabaseStmt : public ObDDLStmt
+{
+public:
+  ObDropDatabaseStmt(common::ObIAllocator *name_pool)
+      :ObDDLStmt(name_pool, stmt::T_DROP_DATABASE),
+      drop_database_arg_(),
+      server_charset_(),
+      server_collation_()
+  {
+  }
+  ObDropDatabaseStmt() : ObDDLStmt(stmt::T_DROP_DATABASE),
+                         drop_database_arg_(),
+                         server_charset_(),
+                         server_collation_()
+  {
+  }
+  virtual ~ObDropDatabaseStmt()
+  {
+  }
+
+  
+
+  void set_if_exist(const bool if_exist)
+  {
+    drop_database_arg_.if_exist_ = if_exist;
+  }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return drop_database_arg_; }
+
+  TO_STRING_KV(K_(drop_database_arg));
+  inline obcall::ObDropDatabaseArg &get_drop_database_arg();
+  virtual bool cause_implicit_commit() const { return true; }
+
+  inline void set_database_name(const common::ObString &database_name);
+  const common::ObString& get_database_name() const
+  { return drop_database_arg_.database_name_; }
+  const common::ObString& get_server_charset() const { return server_charset_; }
+  void set_server_charset(const common::ObString &server_charset)
+  { server_charset_ = server_charset; }
+  const common::ObString& get_server_collation() const { return server_collation_; }
+  void set_server_collation(const common::ObString &server_collation)
+  { server_collation_ = server_collation; }
+  void set_to_recyclebin(const bool to_recyclebin)
+  { drop_database_arg_.to_recyclebin_ = to_recyclebin; }
+private:
+  obcall::ObDropDatabaseArg drop_database_arg_;
+  common::ObString server_charset_;
+  common::ObString server_collation_;
+};
+
+inline obcall::ObDropDatabaseArg &ObDropDatabaseStmt::get_drop_database_arg()
+{
+  return drop_database_arg_;
+}
+
+inline void ObDropDatabaseStmt::set_database_name(const common::ObString &database_name)
+{
+  drop_database_arg_.database_name_ = database_name;
+}
+
+} //namespace sql
+} //namespace oceanbase
+
+#endif //OCEANBASE_SQL_OB_DROP_DATABASE_STMT_H_

@@ -1,0 +1,130 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_OB_ARRAY_CAST_
+#define OCEANBASE_OB_ARRAY_CAST_
+#include "common/udt/ob_collection_type.h"
+#include "common/udt/ob_array_type.h"
+#include "common/udt/ob_array_fixed_size.h"
+#include "common/udt/ob_array_binary.h"
+#include "common/udt/ob_array_nested.h"
+#include "common/udt/ob_vector_type.h"
+#include "common/udt/ob_map_type.h"
+#include "share/object/ob_obj_cast.h"
+#include "common/json_type/ob_json_tree.h"
+
+namespace oceanbase {
+namespace common {
+class ObJsonNode;
+}
+namespace sql {
+
+enum ARRAY_CAST_TYPE {
+  FIXED_SIZE_FIXED_SIZE = 0,
+  CAST_TYPE_MAX,
+};
+
+class ObArrayTypeCast
+{
+public:
+  ObArrayTypeCast() {};
+  virtual ~ObArrayTypeCast() {};
+  virtual int cast(common::ObIAllocator &alloc, ObIArrayType *src, const ObCollectionTypeBase *src_coll_type, 
+                   ObIArrayType *&dst, const ObCollectionTypeBase *dst_coll_type, ObCastMode mode = 0) = 0;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObArrayTypeCast);
+};
+
+class ObArrayFixedSizeCast : public ObArrayTypeCast
+{
+public:
+  int cast(common::ObIAllocator &alloc, ObIArrayType *src, const ObCollectionTypeBase *src_coll_type, 
+           ObIArrayType *&dst, const ObCollectionTypeBase *dst_coll_type, ObCastMode mode = 0);
+};
+
+class ObVectorDataCast : public ObArrayTypeCast
+{
+public:
+  int cast(common::ObIAllocator &alloc, ObIArrayType *src, const ObCollectionTypeBase *src_coll_type, 
+           ObIArrayType *&dst, const ObCollectionTypeBase *dst_coll_type, ObCastMode mode = 0);
+  uint32_t dim_cnt_;
+};
+
+class ObArrayBinaryCast : public ObArrayTypeCast
+{
+public:
+  int cast(common::ObIAllocator &alloc, ObIArrayType *src, const ObCollectionTypeBase *src_coll_type, 
+           ObIArrayType *&dst, const ObCollectionTypeBase *dst_coll_type, ObCastMode mode = 0);
+};
+
+class ObArrayNestedCast : public ObArrayTypeCast
+{
+public :
+int cast(common::ObIAllocator &alloc, ObIArrayType *src, const ObCollectionTypeBase *src_coll_type, 
+         ObIArrayType *&dst, const ObCollectionTypeBase *dst_coll_type, ObCastMode mode = 0);
+}
+;
+
+class ObMapCast : public ObArrayTypeCast
+{
+public :
+int cast(common::ObIAllocator &alloc, ObIArrayType *src, const ObCollectionTypeBase *src_coll_type, 
+         ObIArrayType *&dst, const ObCollectionTypeBase *dst_coll_type, ObCastMode mode = 0);
+}
+;
+
+class ObArrayCastUtils
+{
+public:
+  // moved down from sql ObArrayExprUtils(obj_cast is the only consumer,signature uses only share vocabulary)
+  static int set_array_obj_res(ObIArrayType *arr_obj, ObObjCastParams *params, ObObj *obj);
+  static int string_cast_map(
+      common::ObIAllocator &alloc, 
+      ObString &arr_text, 
+      ObIArrayType *&dst, 
+      const ObCollectionMapType *dst_map_type, 
+      ObCastMode cast_mode,
+      const bool is_sparse_vector = false);
+  static int string_cast_array(ObString &arr_text, ObIArrayType *&dst, const ObCollectionTypeBase *dst_type);
+  static int string_cast_sparse_vector_fast(
+      common::ObIAllocator &alloc,
+      ObString &arr_text,
+      ObIArrayType *&dst,
+      const ObCollectionMapType *dst_map_type);
+  static int string_cast_vector(common::ObIAllocator &alloc, ObString &arr_text, ObIArrayType *&dst, const ObCollectionTypeBase *dst_type, bool is_binary);
+  static int string_cast(common::ObIAllocator &alloc, ObString &arr_text, ObIArrayType *&dst, const ObCollectionTypeBase *dst_elem_type);
+  static int cast_get_element(ObIArrayType *src, const ObCollectionBasicType *elem_type, uint32_t idx, ObObj &src_elem);
+  static int cast_add_element(common::ObIAllocator &alloc, ObObj &src_elem,  ObIArrayType *dst, const ObCollectionBasicType *dst_elem_type, ObCastMode mode);
+  static int add_json_node_to_array(common::ObIAllocator &alloc, ObJsonNode &j_node, const ObCollectionTypeBase *elem_type, ObIArrayType *dst);
+  static int add_vector_element(const double value, const ObCollectionTypeBase *elem_type, ObIArrayType *dst);
+public:
+  static const int32_t NULL_STR_LEN = 4;
+};
+
+class ObArrayTypeCastFactory
+{
+public:
+  ObArrayTypeCastFactory() {};
+  virtual ~ObArrayTypeCastFactory() {};
+  static int alloc(common::ObIAllocator &alloc, const ObCollectionTypeBase &src_array_meta,
+                   const ObCollectionTypeBase &dst_array_meta, ObArrayTypeCast *&arr_cast);
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObArrayTypeCastFactory);
+};
+
+} // namespace sql
+} // namespace oceanbase
+#endif // OCEANBASE_OB_ARRAY_CAST_

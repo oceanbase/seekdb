@@ -1,0 +1,7 @@
+#owner: gjw228474
+#owner group: trans
+#description: test serializable in mysql mode
+
+let $ser_or_rr = SERIALIZABLE;
+
+--source mysql_test/test_suite/trx/include/serializable_or_rr_trans_basic.inc

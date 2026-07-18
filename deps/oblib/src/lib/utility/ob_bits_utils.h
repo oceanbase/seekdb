@@ -1,0 +1,142 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef _OB_BITS_UTILS_H
+#define _OB_BITS_UTILS_H 1
+#include <stdint.h>
+#include <assert.h>
+#include "ob_macro_utils.h"
+namespace oceanbase
+{
+namespace common
+{
+OB_INLINE constexpr bool ob_is_power_of_two(uint32_t x)
+{
+  //assert(0 != x);
+  return ((x & (x - 1)) == 0);
+}
+
+OB_INLINE constexpr uint32_t ob_ceiling_div(uint32_t x, uint32_t y)
+{
+  return (x + y - 1) / y;
+}
+
+OB_INLINE bool ob_is_aligned(void *memptr, uint32_t alignment)
+{
+  assert(ob_is_power_of_two(alignment));
+  return ((reinterpret_cast<uint64_t>(memptr)%alignment) == 0);
+}
+
+OB_INLINE constexpr int64_t ob_aligned_to(int64_t x, uint32_t alignment)
+{
+  return (x + alignment - 1) / alignment * alignment;
+}
+
+OB_INLINE constexpr int64_t ob_aligned_to2(int64_t x, uint32_t alignment)
+{
+  //assert(ob_is_power_of_two(alignment));
+  return (x + alignment - 1) & ~(static_cast<uint64_t>(alignment) - 1);
+}
+
+OB_INLINE void* ob_aligned_to(void* memptr, uint32_t alignment)
+{
+  return reinterpret_cast<void*>(ob_aligned_to2(reinterpret_cast<uint64_t>(memptr), alignment));
+}
+
+// count of ones
+OB_INLINE uint64_t ob_popcount64(uint64_t v)
+{
+  int64_t cnt = 0;
+#if __POPCNT__
+  // v is uint64_t; __builtin_popcountl takes `unsigned long` which is only
+  // 32-bit on Windows LLP64. Use __builtin_popcountll to count all 64 bits.
+  cnt = __builtin_popcountll(v);
+#else
+  if (0 != v) {
+    v -= ((v >> 1) & 0x5555555555555555UL);
+    v = (v & 0x3333333333333333UL) + ((v >> 2) & 0x3333333333333333UL);
+    cnt = (((v + (v >> 4)) & 0xF0F0F0F0F0F0F0FUL) * 0x101010101010101UL) >> 56;
+  }
+#endif
+  return cnt;
+}
+
+OB_INLINE uint32_t ob_popcount32(uint32_t x)
+{
+#if __POPCNT__
+  return __builtin_popcount(x);
+#else
+  /* 32-bit recursive reduction using SWAR...
+       but first step is mapping 2-bit values
+       into sum of 2 1-bit values in sneaky way
+  */
+  x -= ((x >> 1) & 0x55555555);
+  x = (((x >> 2) & 0x33333333) + (x & 0x33333333));
+  x = (((x >> 4) + x) & 0x0f0f0f0f);
+  x += (x >> 8);
+  x += (x >> 16);
+  return(x & 0x0000003f);
+#endif
+}
+
+// leader zero count
+OB_INLINE uint32_t ob_lzc32(uint32_t x)
+{
+  x |= (x >> 1);
+  x |= (x >> 2);
+  x |= (x >> 4);
+  x |= (x >> 8);
+  x |= (x >> 16);
+  return (32 - ob_popcount32(x));
+}
+
+// the min bits count to hold a value
+OB_INLINE uint32_t ob_min_bits(uint32_t x)
+{
+  x |= (x >> 1);
+  x |= (x >> 2);
+  x |= (x >> 4);
+  x |= (x >> 8);
+  x |= (x >> 16);
+  return ob_popcount32(x);
+}
+
+// next largest power of 2
+OB_INLINE uint32_t ob_nlpo2(uint32_t x)
+{
+  x |= (x >> 1);
+  x |= (x >> 2);
+  x |= (x >> 4);
+  x |= (x >> 8);
+  x |= (x >> 16);
+  return (x+1);
+}
+
+// the floor of the base 2 log of x
+OB_INLINE uint32_t ob_floor_log2(uint32_t x)
+{
+  x |= (x >> 1);
+  x |= (x >> 2);
+  x |= (x >> 4);
+  x |= (x >> 8);
+  x |= (x >> 16);
+  return (ob_popcount32(x >> 1));
+}
+
+} // end namespace common
+} // end namespace oceanbase
+
+#endif /* _OB_BITS_UTILS_H */
