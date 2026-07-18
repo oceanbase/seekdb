@@ -2855,6 +2855,8 @@ int ObTscCgService::extract_text_ir_access_columns(
     ObIArray<ObRawExpr*> &access_exprs)
 {
   int ret = OB_SUCCESS;
+  const bool need_ranking_columns = tr_info.need_calc_relevance_
+      || OB_NOT_NULL(tr_info.pushdown_match_filter_);
   if (OB_UNLIKELY(op.need_skip_rowkey_doc() &&
       (scan_ctdef.ref_table_id_ == op.get_doc_id_index_table_id() || scan_ctdef.ref_table_id_ == op.get_rowkey_doc_table_id()))) {
     ret = OB_ERR_UNEXPECTED;
@@ -2865,11 +2867,18 @@ int ObTscCgService::extract_text_ir_access_columns(
   } else {
     switch (scan_ctdef.ir_scan_type_) {
     case ObTSCIRScanType::OB_IR_INV_IDX_SCAN:
-      if (OB_FAIL(add_var_to_array_no_dup(access_exprs, static_cast<ObRawExpr*>(tr_info.token_cnt_column_)))) {
+      // FTS PERF OPT 13: a truth-only MATCH consumes only the DocID. Avoid
+      // decoding token frequency and document length unless score/filter
+      // evaluation can actually read those ranking columns.
+      if (need_ranking_columns
+          && OB_FAIL(add_var_to_array_no_dup(
+              access_exprs, static_cast<ObRawExpr*>(tr_info.token_cnt_column_)))) {
         LOG_WARN("failed to push token cnt column to access exprs", K(ret));
       } else if (OB_FAIL(add_var_to_array_no_dup(access_exprs, static_cast<ObRawExpr*>(tr_info.docid_or_rowkey_column_)))) {
         LOG_WARN("failed to push document id column to access exprs", K(ret));
-      } else if (OB_FAIL(add_var_to_array_no_dup(access_exprs, static_cast<ObRawExpr*>(tr_info.doc_length_column_)))) {
+      } else if (need_ranking_columns
+          && OB_FAIL(add_var_to_array_no_dup(
+              access_exprs, static_cast<ObRawExpr*>(tr_info.doc_length_column_)))) {
         LOG_WARN("failed to add document length column to access exprs", K(ret));
       }
       break;
@@ -3318,14 +3327,16 @@ int ObTscCgService::extract_text_ir_das_output_column_ids(
     ObIArray<uint64_t> &output_cids)
 {
   int ret = OB_SUCCESS;
+  const bool need_ranking_columns = tr_info.need_calc_relevance_
+      || OB_NOT_NULL(tr_info.pushdown_match_filter_);
   if (ObTSCIRScanType::OB_IR_INV_IDX_SCAN == scan_ctdef.ir_scan_type_) {
-    if (OB_FAIL(output_cids.push_back(
+    if (need_ranking_columns && OB_FAIL(output_cids.push_back(
         static_cast<ObColumnRefRawExpr *>(tr_info.token_cnt_column_)->get_column_id()))) {
       LOG_WARN("failed to push output token cnt col id", K(ret));
     } else if (OB_FAIL(output_cids.push_back(
         static_cast<ObColumnRefRawExpr *>(tr_info.docid_or_rowkey_column_)->get_column_id()))) {
       LOG_WARN("failed to push output doc id col id", K(ret));
-    } else if (OB_FAIL(output_cids.push_back(
+    } else if (need_ranking_columns && OB_FAIL(output_cids.push_back(
         static_cast<ObColumnRefRawExpr *>(tr_info.doc_length_column_)->get_column_id()))) {
       LOG_WARN("failed to push output doc length col id", K(ret));
     }
@@ -3689,6 +3700,8 @@ int ObTscCgService::generate_text_ir_spec_exprs(const ObTextRetrievalInfo &tr_in
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObExpr *, 4> result_output;
+  const bool need_ranking_columns = tr_info.need_calc_relevance_
+      || OB_NOT_NULL(tr_info.pushdown_match_filter_);
   if (OB_ISNULL(tr_info.match_expr_) || OB_ISNULL(tr_info.relevance_expr_) ||
       OB_ISNULL(tr_info.docid_or_rowkey_column_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -3712,15 +3725,17 @@ int ObTscCgService::generate_text_ir_spec_exprs(const ObTextRetrievalInfo &tr_in
         doc_length_col_idx = i;
       }
     }
-    if (OB_UNLIKELY(-1 == doc_id_col_idx || -1 == doc_length_col_idx)) {
+    if (OB_UNLIKELY(-1 == doc_id_col_idx
+        || (need_ranking_columns && -1 == doc_length_col_idx))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected doc id not found in inverted index scan access columns",
           K(ret), K(text_ir_scan_ctdef), K(doc_id_col_idx), K(doc_length_col_idx));
     } else {
       text_ir_scan_ctdef.inv_scan_domain_id_col_ =
           text_ir_scan_ctdef.get_inv_idx_scan_ctdef()->pd_expr_spec_.access_exprs_.at(doc_id_col_idx);
-      text_ir_scan_ctdef.inv_scan_doc_length_col_ =
-          text_ir_scan_ctdef.get_inv_idx_scan_ctdef()->pd_expr_spec_.access_exprs_.at(doc_length_col_idx);
+      text_ir_scan_ctdef.inv_scan_doc_length_col_ = need_ranking_columns
+          ? text_ir_scan_ctdef.get_inv_idx_scan_ctdef()->pd_expr_spec_.access_exprs_.at(doc_length_col_idx)
+          : nullptr;
       if (OB_FAIL(result_output.push_back(text_ir_scan_ctdef.inv_scan_domain_id_col_))) {
         LOG_WARN("failed to append output exprs", K(ret));
       }
