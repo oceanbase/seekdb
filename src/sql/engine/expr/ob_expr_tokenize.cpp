@@ -19,6 +19,7 @@
 #include "lib/alloc/alloc_struct.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
+#include "lib/lock/ob_mutex.h"
 #include "common/json_type/ob_json_base.h"
 #include "common/json_type/ob_json_tree.h"
 #include "lib/ob_errno.h"
@@ -40,6 +41,68 @@ namespace oceanbase
 {
 namespace sql
 {
+namespace
+{
+// TOKENIZE() without explicit properties always reforms the same default
+// property JSON for a given parser; cache the result process-wide so each
+// statement skips the JSON init/parse/rebuild/serialize round-trip.
+class ObTokenizeDefaultPropsCache final
+{
+public:
+  bool get(const ObString &parser_name, ObString &props_json)
+  {
+    bool hit = false;
+    lib::ObMutexGuard guard(lock_);
+    for (int64_t i = 0; !hit && i < cnt_; ++i) {
+      if (parser_name.length() == entries_[i].name_len_
+          && 0 == MEMCMP(parser_name.ptr(), entries_[i].name_, entries_[i].name_len_)) {
+        props_json.assign_ptr(entries_[i].json_, static_cast<int32_t>(entries_[i].json_len_));
+        hit = true;
+      }
+    }
+    return hit;
+  }
+
+  void put(const ObString &parser_name, const ObString &props_json)
+  {
+    if (parser_name.length() > 0 && parser_name.length() <= MAX_NAME_LEN
+        && props_json.length() > 0 && props_json.length() <= MAX_JSON_LEN) {
+      lib::ObMutexGuard guard(lock_);
+      bool exist = false;
+      for (int64_t i = 0; !exist && i < cnt_; ++i) {
+        exist = (parser_name.length() == entries_[i].name_len_
+                 && 0 == MEMCMP(parser_name.ptr(), entries_[i].name_, entries_[i].name_len_));
+      }
+      if (!exist && cnt_ < MAX_ENTRY) {
+        Entry &entry = entries_[cnt_];
+        MEMCPY(entry.name_, parser_name.ptr(), parser_name.length());
+        entry.name_len_ = parser_name.length();
+        MEMCPY(entry.json_, props_json.ptr(), props_json.length());
+        entry.json_len_ = props_json.length();
+        ++cnt_;
+      }
+    }
+  }
+
+private:
+  static const int64_t MAX_ENTRY = 8;
+  static const int64_t MAX_NAME_LEN = 128;
+  static const int64_t MAX_JSON_LEN = 1024;
+  struct Entry
+  {
+    char name_[MAX_NAME_LEN];
+    int64_t name_len_;
+    char json_[MAX_JSON_LEN];
+    int64_t json_len_;
+  };
+  lib::ObMutex lock_;
+  Entry entries_[MAX_ENTRY];
+  int64_t cnt_ = 0;
+};
+
+ObTokenizeDefaultPropsCache g_tokenize_default_props_cache;
+} // namespace
+
 ObExprTokenize::ObExprTokenize(common::ObIAllocator &alloc)
     : ObStringExprOperator(alloc,
                            T_FUN_TOKENIZE,
@@ -418,19 +481,27 @@ int ObExprTokenize::parse_parser_properties(const ObExpr &expr,
 int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &properties)
 {
   int ret = OB_SUCCESS;
-  storage::ObFTParserJsonProps parser_properties;
 
-  if (OB_FAIL(parser_properties.init())) {
-    LOG_WARN("fail to init parser properties", K(ret));
-  } else if (OB_FAIL(parser_properties.parse_from_valid_str(properties))) {
-    LOG_WARN("fail to parse properties", K(ret));
-    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "parser properties invalid.");
-  } else if (OB_FAIL(parser_properties.rebuild_props_for_ddl(parser_name_,
-                                                             ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                                                             true))) {
-    LOG_WARN("fail to serialize to string", K(ret), K(parser_properties));
-  } else if (OB_FAIL(parser_properties.to_format_json(allocator_, properties_))) {
-    LOG_WARN("fail to serialize to string", K(ret), K(parser_properties));
+  if (properties.empty() && g_tokenize_default_props_cache.get(parser_name_, properties_)) {
+    // reformed default properties for this parser served from the cache
+  } else {
+    storage::ObFTParserJsonProps parser_properties;
+    if (OB_FAIL(parser_properties.init())) {
+      LOG_WARN("fail to init parser properties", K(ret));
+    } else if (OB_FAIL(parser_properties.parse_from_valid_str(properties))) {
+      LOG_WARN("fail to parse properties", K(ret));
+      LOG_USER_ERROR(OB_INVALID_ARGUMENT, "parser properties invalid.");
+    } else if (OB_FAIL(parser_properties.rebuild_props_for_ddl(parser_name_,
+                                                               ObCollationType::CS_TYPE_UTF8MB4_BIN,
+                                                               true))) {
+      LOG_WARN("fail to serialize to string", K(ret), K(parser_properties));
+    } else if (OB_FAIL(parser_properties.to_format_json(allocator_, properties_))) {
+      LOG_WARN("fail to serialize to string", K(ret), K(parser_properties));
+    } else if (properties.empty()) {
+      // the default reform result only depends on the parser, keep it for
+      // the next statements
+      g_tokenize_default_props_cache.put(parser_name_, properties_);
+    }
   }
 
   return ret;
