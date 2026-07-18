@@ -231,7 +231,7 @@ int ObLinkedMacroBlockReader::check_data_checksum(const char *buf, const int64_t
       ob_crc64(buf + sizeof(ObMacroBlockCommonHeader), common_header->get_payload_size());
     if (expected_payload_checksum != calc_payload_checksum) {
       ret = OB_CHECKSUM_ERROR;
-      LOG_WARN("common header checksum error", K(ret), KPC(common_header),
+      LOG_ERROR("common header checksum error", K(ret), KPC(common_header),
         K(expected_payload_checksum), K(calc_payload_checksum));
     }
   }
@@ -449,7 +449,7 @@ int ObLinkedMacroBlockItemReader::check_item_crc(
   const int32_t calc_item_crc = static_cast<int32_t>(ob_crc64(item_buf, item_buf_len));
   if (crc != calc_item_crc) {
     ret = OB_CHECKSUM_ERROR;
-    LOG_WARN("item checksum error", K(ret), K(crc), K(calc_item_crc));
+    LOG_ERROR("item checksum error", K(ret), K(crc), K(calc_item_crc));
   }
   return ret;
 }

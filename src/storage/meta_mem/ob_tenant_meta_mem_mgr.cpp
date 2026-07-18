@@ -2198,7 +2198,7 @@ int ObTenantMetaMemMgr::compare_and_swap_tablet(
     if (CLICK_FAIL(tablet_map_.compare_and_swap_addr_and_object(key, old_handle, new_handle, update_pointer_param))) {
       LOG_WARN("fail to compare and swap tablet", K(ret), K(key), K(old_handle), K(new_handle), K(update_pointer_param));
     } else if (CLICK_FAIL(update_tablet_buffer_header(old_handle.get_obj(), new_handle.get_obj()))) {
-      LOG_WARN("fail to update tablet buffer header", K(ret), K(old_handle), K(new_handle));
+      LOG_ERROR("fail to update tablet buffer header", K(ret), K(old_handle), K(new_handle));
     } else if (old_handle.get_obj() != new_handle.get_obj()) { // skip first init, old_handle == new_handle
       // TODO yunshan.tys update min minor sstable by link
       const ObTabletPointerHandle &ptr_hdl = old_handle.get_obj()->get_pointer_handle();

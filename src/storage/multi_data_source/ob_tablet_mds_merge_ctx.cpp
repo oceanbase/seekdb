@@ -103,7 +103,7 @@ int ObTabletMdsMinorMergeCtx::update_tablet(ObTabletHandle &new_tablet_handle)
       ObCompactionTableStoreParam(get_merge_type(), sstable->get_end_scn()/*clog_checkpoint_scn*/, false/*need_report*/, false/*has_truncate_info*/)))) {
       LOG_WARN("failed to init with compaction info", KR(ret));
     } else if (OB_FAIL(get_ls()->update_tablet_table_store(get_tablet_id(), mds_param, new_tablet_handle))) {
-      LOG_WARN("failed to update tablet table store", K(ret), K(mds_param), K(new_tablet_handle));
+      LOG_ERROR("failed to update tablet table store", K(ret), K(mds_param), K(new_tablet_handle));
       CTX_SET_DIAGNOSE_LOCATION(*this);
     } else {
       LOG_INFO("success to update tablet table store with mds table", K(sstable), K(new_tablet_handle));

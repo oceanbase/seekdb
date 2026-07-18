@@ -5706,7 +5706,7 @@ bool ObSchemaGetterGuard::ignore_tenant_not_exist_error()
   bool is_restore = false;
   int tmp_ret = check_tenant_is_restore(is_restore);
   if (OB_SUCCESS != tmp_ret) {
-    LOG_WARN_RET(tmp_ret, "fail to check tenant is restore", K(bret), K(tmp_ret));
+    LOG_ERROR_RET(tmp_ret, "fail to check tenant is restore", K(bret), K(tmp_ret));
   } else if (is_restore) {
     bret = true;
   }

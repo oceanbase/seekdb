@@ -799,7 +799,7 @@ int ObCompactionDiagnoseMgr::diagnose_tenant( //TODO(mingqiao): check tenant res
                     ObTimeUtility::fast_current_time(),
                     "error_code", ret,
                     "freeze_info is invalid, merged_version", merged_version))) {
-        LOG_WARN("failed to add dignose info about freeze_info", K(tmp_ret), K(merged_version));
+        LOG_ERROR("failed to add dignose info about freeze_info", K(tmp_ret), K(merged_version));
       }
     } else {
       compaction_scn = freeze_infos.at(0).frozen_scn_.get_val_for_tx();

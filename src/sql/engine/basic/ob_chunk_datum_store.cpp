@@ -2416,7 +2416,7 @@ int ObChunkDatumStore::Iterator::read_next_blk()
   }
   if (OB_SUCC(ret) && !aio_blk_->magic_check()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("read corrupt data", K(ret), K(aio_blk_->magic_),
+    LOG_ERROR("read corrupt data", K(ret), K(aio_blk_->magic_),
              K(store_->file_size_), K(cur_iter_pos_));
   }
   if (OB_SUCC(ret)) {

@@ -1226,11 +1226,11 @@ int ObMigrationSSTableParam::deserialize_(const char *buf, const int64_t data_le
   if (pos < data_len && OB_FAIL(basic_meta_.deserialize(buf, data_len, pos))) {
     LOG_WARN("fail to deserialize basic meta", K(ret), KP(buf), K(data_len), K(pos));
   } else if (pos < data_len && OB_FAIL(column_checksums_.deserialize(buf, data_len, pos))) {
-    LOG_WARN("fail to deserialize column checksums", K(ret), KP(buf), K(data_len), K(pos));
+    LOG_ERROR("fail to deserialize column checksums", K(ret), KP(buf), K(data_len), K(pos));
   } else if (pos < data_len && OB_FAIL(table_key_.deserialize(buf, data_len, pos))) {
     LOG_WARN("fail to deserialize table key", K(ret), KP(buf), K(data_len), K(pos), K(table_key_));
   } else if (pos < data_len && OB_FAIL(column_default_checksums_.deserialize(buf, data_len, pos))) {
-    LOG_WARN("fail to deserialize default column checksums", K(ret), KP(buf), K(data_len), K(pos));
+    LOG_ERROR("fail to deserialize default column checksums", K(ret), KP(buf), K(data_len), K(pos));
   } else if (pos < data_len && OB_FAIL(serialization::decode_bool(buf, data_len, pos, &is_small_sstable_))) {
     LOG_WARN("fail to deserialize is_small_sstable_", K(ret), KP(buf), K(data_len), K(pos));
   } else if (pos < data_len && OB_FAIL(serialization::decode_i32(buf, data_len, pos, &column_group_cnt_))) {
@@ -1351,11 +1351,11 @@ int ObSSTableMetaChecker::check_sstable_meta_strict_equality(
     LOG_WARN("new sstable basic meta is not equal to old one", K(ret));
   } else if (OB_UNLIKELY(old_sstable_meta.get_col_checksum_cnt() != new_sstable_meta.get_col_checksum_cnt())) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("new sstable column checksum count is not equal to old one", K(ret));
+    LOG_ERROR("new sstable column checksum count is not equal to old one", K(ret));
   } else if (OB_UNLIKELY(0 != MEMCMP(old_sstable_meta.get_col_checksum(), new_sstable_meta.get_col_checksum(),
                                     old_sstable_meta.get_col_checksum_cnt()*sizeof(int64_t)))) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("new sstable column checksum is not equal to one", K(ret));
+    LOG_ERROR("new sstable column checksum is not equal to one", K(ret));
   }
 
   return ret;

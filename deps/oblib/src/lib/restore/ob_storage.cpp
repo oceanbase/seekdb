@@ -2506,7 +2506,7 @@ int ObStorageAppender::repeatable_pwrite_(const char *buf, const int64_t size, c
     STORAGE_LOG(WARN, "failed to pread", K(ret));
   } else if (0 != MEMCMP(buf, read_buffer, read_buf_size)) {
     ret = OB_OBJECT_STORAGE_PWRITE_CONTENT_NOT_MATCH;
-    STORAGE_LOG(WARN, "data inconsistent", K(ret));
+    STORAGE_LOG(ERROR, "data inconsistent", K(ret));
   } else if (offset + size > reader->get_length()) {
     if (OB_FAIL(appender_->pwrite(buf + actual_write_offset, size - actual_write_offset, reader->get_length()))) {
       if (OB_OBJECT_STORAGE_PWRITE_OFFSET_NOT_MATCH == ret) {

@@ -4648,7 +4648,7 @@ int ObTableSchema::check_column_can_be_altered_online(
                 && (dst_schema->get_data_length() < src_schema->get_data_length())) {
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "Truncate the data of column schema");
-        LOG_WARN("The data of column schema can not be truncated",
+        LOG_ERROR("The data of column schema can not be truncated",
                   K(ret), KPC(dst_schema), KPC(src_schema));
       } else if ((src_schema->get_data_type() == ObCharType
                   && dst_schema->get_data_type() != ObCharType)) {
@@ -4661,7 +4661,7 @@ int ObTableSchema::check_column_can_be_altered_online(
                  && (dst_schema->get_data_length() != src_schema->get_data_length())) {
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "Truncated data or change binary column length");
-        LOG_WARN("The data of column schema can not be truncated, "
+        LOG_ERROR("The data of column schema can not be truncated, "
                  "binary column can't change length",
                   K(ret), KPC(src_schema), KPC(dst_schema));
       } else if (dst_schema->get_data_type() == ObCharType && dst_schema->get_collation_type() == CS_TYPE_BINARY

@@ -587,7 +587,7 @@ int ObSQLiteConnection::commit()
     int sqlite_ret = sqlite3_exec(db_, "COMMIT", nullptr, nullptr, &err_msg);
     if (SQLITE_OK != sqlite_ret) {
       ret = OB_ERROR;
-      LOG_WARN("failed to commit transaction", K(ret), "sqlite_err", err_msg ? err_msg : sqlite3_errmsg(db_));
+      LOG_ERROR("failed to commit transaction", K(ret), "sqlite_err", err_msg ? err_msg : sqlite3_errmsg(db_));
       if (err_msg) {
         sqlite3_free(err_msg);
       }
@@ -612,7 +612,7 @@ int ObSQLiteConnection::rollback()
     int sqlite_ret = sqlite3_exec(db_, "ROLLBACK", nullptr, nullptr, &err_msg);
     if (SQLITE_OK != sqlite_ret) {
       ret = OB_ERROR;
-      LOG_WARN("failed to rollback transaction", K(ret), "sqlite_err", err_msg ? err_msg : sqlite3_errmsg(db_));
+      LOG_ERROR("failed to rollback transaction", K(ret), "sqlite_err", err_msg ? err_msg : sqlite3_errmsg(db_));
       if (err_msg) {
         sqlite3_free(err_msg);
       }

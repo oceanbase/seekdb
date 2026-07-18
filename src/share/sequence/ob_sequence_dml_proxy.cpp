@@ -308,7 +308,7 @@ int ObSequenceDMLProxy::next_batch(
     int temp_ret = OB_SUCCESS;
     bool is_commit = (OB_SUCCESS == ret);
     if (OB_SUCCESS != (temp_ret = trans.end(is_commit))) {
-      LOG_WARN("trans end failed", "is_commit", is_commit, K(temp_ret));
+      LOG_ERROR("trans end failed", "is_commit", is_commit, K(temp_ret));
       ret = (OB_SUCC(ret)) ? temp_ret : ret;
     }
   }

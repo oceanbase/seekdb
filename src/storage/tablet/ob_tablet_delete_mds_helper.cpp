@@ -167,7 +167,7 @@ int ObTabletDeleteMdsHelper::delete_tablets(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("tablet does not exist", K(ret), K(key));
       } else if (CLICK_FAIL(set_tablet_deleted_status(ls->get_tablet_svr(), tablet_handle, ctx))) {
-        LOG_WARN("failed to set tablet deleted status", K(ret), K(key));
+        LOG_ERROR("failed to set tablet deleted status", K(ret), K(key));
       }
     }
   }
@@ -194,13 +194,13 @@ int ObTabletDeleteMdsHelper::replay_delete_tablets(
     remove_tablet_arg.tablet_id_ = arg.tablet_ids_.at(i);
     ObTabletDeleteReplayExecutor replayer;
     if (CLICK_FAIL(replayer.init(ctx, scn, arg.is_old_mds_))) {
-      LOG_WARN("failed to init tablet delete replay executor", K(ret), K(remove_tablet_arg));
+      LOG_ERROR("failed to init tablet delete replay executor", K(ret), K(remove_tablet_arg));
     } else if (CLICK_FAIL(replayer.execute(scn, remove_tablet_arg.ls_id_, remove_tablet_arg.tablet_id_))) {
       if (OB_TABLET_NOT_EXIST == ret) {
         exist = false;
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("failed to replay", K(ret), K(remove_tablet_arg), K(scn));
+        LOG_ERROR("failed to replay", K(ret), K(remove_tablet_arg), K(scn));
       }
     }
 

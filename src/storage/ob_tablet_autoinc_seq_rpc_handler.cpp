@@ -329,7 +329,7 @@ int ObTabletAutoincSeqRpcHandler::replay_update_tablet_autoinc_seq(
       } else if (OB_EAGAIN == ret) {
         // retry replay again
       } else {
-        LOG_WARN("fail to replay get tablet, retry again", K(ret), K(tablet_id), K(replay_scn));
+        LOG_ERROR("fail to replay get tablet, retry again", K(ret), K(tablet_id), K(replay_scn));
         ret = OB_EAGAIN;
       }
     }
@@ -389,10 +389,10 @@ int ObTabletAutoincSeqRpcHandler::set_tablet_autoinc_seq_in_trans(
   } else {
     ObTabletAutoincSeqReplayExecutor replay_executor;
     if (CLICK_FAIL(replay_executor.init(ctx, replay_scn, data))) {
-      LOG_WARN("failed to init replay executor", K(ret));
+      LOG_ERROR("failed to init replay executor", K(ret));
     } else if (CLICK_FAIL(replay_executor.execute(replay_scn, ls_id, tablet_id))) {
       if (OB_EAGAIN != ret) {
-        LOG_WARN("failed to replay mds", K(ret));
+        LOG_ERROR("failed to replay mds", K(ret));
       }
     }
   }

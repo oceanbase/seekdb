@@ -199,7 +199,7 @@ int ObTabletReplicaReportColumnMeta::check_checksum(
       K(column_checksums_), K(other.column_checksums_));
   } else if (column_checksums_.at(pos) != other.column_checksums_.at(pos)) {
     is_equal = false;
-    LOG_WARN("column checksum is not equal!", K(pos), "col_ckm", column_checksums_.at(pos),
+    LOG_ERROR("column checksum is not equal!", K(pos), "col_ckm", column_checksums_.at(pos),
       "other_col_ckm", other.column_checksums_.at(pos), K(col_ckm_cnt), K(other_col_ckm_cnt),
       K(column_checksums_), K(other.column_checksums_));
   }
@@ -238,7 +238,7 @@ int ObTabletReplicaReportColumnMeta::check_equal(
     LOG_WARN("compat version is not equal !", K(*this), K(other));
   } else if (checksum_method_ != other.checksum_method_) {
     is_equal = false;
-    LOG_WARN("checksum method is different !", K(*this), K(other));
+    LOG_ERROR("checksum method is different !", K(*this), K(other));
   } else if (OB_FAIL(check_all_checksums(other, is_equal))) {
     LOG_WARN("fail to check all checksum", KR(ret), K(*this), K(other));
   }
@@ -789,7 +789,7 @@ int ObTabletReplicaChecksumOperator::construct_tablet_replica_checksum_items_(
     } else {
       item.reset();
       if (OB_FAIL(construct_tablet_replica_checksum_item_(res, item))) {
-        LOG_WARN("fail to construct tablet checksum item", KR(ret));
+        LOG_ERROR("fail to construct tablet checksum item", KR(ret));
 #ifdef ERRSIM
       } else if (item.get_tablet_id().id() > ObTabletID::MIN_USER_TABLET_ID) {
           ret = OB_E(EventTable::EN_RS_CANT_GET_ALL_TABLET_CHECKSUM) ret;
@@ -890,7 +890,7 @@ int ObTabletReplicaChecksumOperator::construct_tablet_replica_checksum_item_(
       if (OB_FAIL(ret)) {
         ret = OB_SUCCESS;
         if (OB_FAIL(recover_mock_column_meta(item.column_meta_))) {
-          LOG_WARN("fail to recover mock large column meta", KR(ret));
+          LOG_ERROR("fail to recover mock large column meta", KR(ret));
         } else {
           LOG_INFO("ERRSIM EN_MOCK_LARGE_COLUMN_META", K(ret));
         }
@@ -1223,7 +1223,7 @@ int ObTabletDataChecksumChecker::check_data_checksum(const ObTabletReplicaChecks
                             && curr_item.co_base_snapshot_version_ == item->co_base_snapshot_version_
                             && curr_item.data_checksum_ != item->data_checksum_)) {
           ret = OB_CHECKSUM_ERROR;
-          LOG_WARN("find cs replica data checksum error", K(ret), K(curr_item), KPC(item));
+          LOG_ERROR("find cs replica data checksum error", K(ret), K(curr_item), KPC(item));
         }
       }
       if (FAILEDx(cs_replica_ckm_items_.push_back(&curr_item))) {
@@ -1237,7 +1237,7 @@ int ObTabletDataChecksumChecker::check_data_checksum(const ObTabletReplicaChecks
       LOG_INFO("no need to check data checksum", K(curr_item), KPC(this));
     } else if (normal_ckm_item_->data_checksum_ != curr_item.data_checksum_) {
       ret = OB_CHECKSUM_ERROR;
-      LOG_WARN("find data checksum error", K(ret), K(curr_item), KPC_(normal_ckm_item));
+      LOG_ERROR("find data checksum error", K(ret), K(curr_item), KPC_(normal_ckm_item));
     }
   }
   return ret;

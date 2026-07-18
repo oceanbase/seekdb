@@ -233,7 +233,7 @@ int ObVectorRefreshIdxTransaction::end(const bool commit)
   }
   close();
   if (OB_TMP_FAIL(session_param_saved_.restore())) {
-    LOG_WARN("fail to restore session param", KR(tmp_ret));
+    LOG_ERROR("fail to restore session param", KR(tmp_ret));
     ret = COVER_SUCC(tmp_ret);
   }
   return ret;

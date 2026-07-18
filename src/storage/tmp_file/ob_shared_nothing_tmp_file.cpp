@@ -1456,9 +1456,9 @@ int ObSharedNothingTmpFile::update_meta_after_flush(const int64_t info_idx, cons
     LOG_WARN("fail to cal end position for update after flush", KR(ret), K(info_idx), KPC(this));
   } else if (start_pos < end_pos) { // have new continuous finished flush infos
     if (is_meta && OB_FAIL(update_meta_tree_after_flush_(start_pos, end_pos))) {
-      LOG_WARN("fail to update meta tree", KR(ret), K(start_pos), K(end_pos), KPC(this));
+      LOG_ERROR("fail to update meta tree", KR(ret), K(start_pos), K(end_pos), KPC(this));
     } else if (!is_meta && OB_FAIL(update_file_meta_after_flush_(start_pos, end_pos, flushed_data_page_num))) {
-      LOG_WARN("fail to update file meta", KR(ret), K(start_pos), K(end_pos), K(flushed_data_page_num), KPC(this));
+      LOG_ERROR("fail to update file meta", KR(ret), K(start_pos), K(end_pos), K(flushed_data_page_num), KPC(this));
     } else {
       // When the flush info segment between [start_pos, end_pos] is updated, the corresponding pages can be immediately freed.
       // However, the flush context in flush_mgr may still contain stale flush positions.
@@ -2021,7 +2021,7 @@ int ObSharedNothingTmpFile::generate_meta_flush_info_(
     flush_task.set_type(ObTmpFileFlushTask::META);
     inner_flush_ctx_.flush_seq_ = flush_sequence;
   } else {
-    LOG_WARN("fail to generate meta flush info", KR(ret), K(fd_), K(flush_task),
+    LOG_ERROR("fail to generate meta flush info", KR(ret), K(fd_), K(flush_task),
         K(meta_flush_context), K(flush_sequence), K(need_flush_tail));
     if (flush_infos.size() == origin_info_num + 1) {
       flush_infos.pop_back();

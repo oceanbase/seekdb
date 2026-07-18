@@ -1719,7 +1719,7 @@ int ObSSTableIndexBuilder::close_with_macro_seq_inner(
       }
     }
     if (is_retriable_error(ret)) {
-      STORAGE_LOG(WARN, "fail to close sstable index builder", K(ret),
+      STORAGE_LOG(ERROR, "fail to close sstable index builder", K(ret),
                   K(data_blocks_cnt), K(sstable_allocator_.total()),
                   K(sstable_allocator_.used()), K(self_allocator_.total()),
                   K(self_allocator_.used()), K(row_allocator_.total()),

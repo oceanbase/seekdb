@@ -227,7 +227,7 @@ int ObDDLRedefinitionSSTableBuildTask::process()
           }
           tmp_ret = OB_SUCCESS;
           if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-            LOG_WARN("failed to commit trans", KR(ret), KR(tmp_ret));
+            LOG_ERROR("failed to commit trans", KR(ret), KR(tmp_ret));
             ret = OB_SUCC(ret) ? tmp_ret : ret;
           }
         } else {
@@ -762,7 +762,7 @@ int ObDDLRedefinitionTask::check_data_dest_tables_columns_checksum(const int64_t
             K(dest_table_column_checksum), "data_table_column_checksum", iter->second);
           } else {
             ret = OB_CHECKSUM_ERROR;
-            LOG_WARN("column checksum is not equal", K(ret), K(object_id_), "dest_table_id", target_object_id_, "column_id", iter->first,
+            LOG_ERROR("column checksum is not equal", K(ret), K(object_id_), "dest_table_id", target_object_id_, "column_id", iter->first,
             "column_name", data_table_schema->get_column_schema(iter->first)->get_column_name(), K(dest_table_column_checksum), "data_table_column_checksum", iter->second);
           }
         }
@@ -2331,7 +2331,7 @@ int ObDDLRedefinitionTask::check_and_do_sync_tablet_autoinc_seq(ObSchemaGetterGu
   } else if (has_fts_index && table_schema->is_table_with_hidden_pk_column()
       && !(DDL_ALTER_PARTITION_BY == task_type_ || DDL_DROP_PRIMARY_KEY == task_type_)
       && OB_FAIL(sync_tablet_autoinc_seq())) {
-    LOG_WARN("fail to sync tablet autoinc seq", K(ret));
+    LOG_ERROR("fail to sync tablet autoinc seq", K(ret));
   }
   return ret;
 }
@@ -2343,7 +2343,7 @@ int ObDDLRedefinitionTask::sync_tablet_autoinc_seq()
     LOG_WARN("ddl sim failure", K(ret), K(task_id_));
   } else if (!sync_tablet_autoinc_seq_ctx_.is_inited()
       && OB_FAIL(sync_tablet_autoinc_seq_ctx_.init(object_id_, target_object_id_))) {
-    LOG_WARN("failed to init sync tablet autoinc seq ctx", K(ret));
+    LOG_ERROR("failed to init sync tablet autoinc seq ctx", K(ret));
   } else if (OB_FAIL(sync_tablet_autoinc_seq_ctx_.sync())) {
     LOG_WARN("failed to sync tablet autoinc seq", K(ret));
   }
@@ -2645,7 +2645,7 @@ int ObSyncTabletAutoincSeqCtx::call_and_process_all_tablet_autoinc_seqs(const bo
                                                          need_renew_location_,
                                                          true/*by src tablet*/,
                                                          ls_to_tablet_map))) {
-        LOG_WARN("failed to build ls to tabmap", K(ret));
+        LOG_ERROR("failed to build ls to tabmap", K(ret));
       }
     } else {
       if (OB_FAIL(build_ls_to_tablet_map(location_service,

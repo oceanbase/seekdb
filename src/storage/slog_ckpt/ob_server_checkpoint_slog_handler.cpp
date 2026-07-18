@@ -218,7 +218,7 @@ int ObServerCheckpointSlogHandler::try_write_checkpoint_for_compat()
     }
     if (OB_SUCC(ret)) {
       if (need_svr_ckpt && OB_FAIL(write_checkpoint(true/*is_force*/))) {
-        LOG_WARN("fail to write server checkpoint", K(ret));
+        LOG_ERROR("fail to write server checkpoint", K(ret));
       }
     }
   }

@@ -71,7 +71,7 @@ int ObMviewAlterService::alter_mview_or_mlog_in_trans(obcall::ObAlterTableArg &a
     if (trans.is_started()) {
       int temp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (temp_ret = trans.end(is_commit))) {
-        LOG_WARN("trans end failed", K(is_commit), K(temp_ret));
+        LOG_ERROR("trans end failed", K(is_commit), K(temp_ret));
         ret = is_commit ? temp_ret : ret;
       }
     }
@@ -195,7 +195,7 @@ int ObMviewAlterService::alter_mview_attributes(const ObTableSchema *orig_table_
         } else if (need_alter_mview_schema &&
                    OB_FAIL(ddl_operator.alter_table_options(schema_guard, new_mview_schema,
                                                             *orig_table_schema, false, trans))) {
-          LOG_WARN("failed to update mview schema", KR(ret), K(new_mview_schema));
+          LOG_ERROR("failed to update mview schema", KR(ret), K(new_mview_schema));
         } else if (need_alter_mview_refresh_job &&
                    OB_FAIL(ObMViewSchedJobUtils::replace_mview_refresh_job(
                        trans, mview_info, db_schema->get_database_name_str(),

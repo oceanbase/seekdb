@@ -658,7 +658,7 @@ int ObDDLIncRedoLogWriter::remote_write_inc_commit_log(
         LOG_WARN("init sstable redo writer", K(ret), K(arg.tablet_id_));
       } else if (OB_FAIL(sstable_redo_writer.write_inc_commit_log_with_retry(
               false, arg.lob_meta_tablet_id_, arg.tx_desc_))) {
-        LOG_WARN("fail to write inc commit log", K(ret), K(arg));
+        LOG_ERROR("fail to write inc commit log", K(ret), K(arg));
       } else if (OB_FAIL(trans_service->get_tx_exec_result(*arg.tx_desc_, res.tx_result_))) {
         LOG_WARN("fail to get_tx_exec_result", K(ret), K(arg));
       }

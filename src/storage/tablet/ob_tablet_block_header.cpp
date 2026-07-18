@@ -155,7 +155,7 @@ int ObSecondaryMetaHeader::deserialize(const char* buf, const int64_t data_len, 
   } else if (OB_FAIL(serialization::decode_i32(buf, data_len, new_pos, &size_))) {
     LOG_WARN("fail to deserialize size", K(ret), K(data_len), K(new_pos));
   } else if (new_pos - pos < size_ && OB_FAIL(serialization::decode_i32(buf, data_len, new_pos, &checksum_))) {
-    LOG_WARN("fail to deserialize checksum", K(ret), K(data_len), K(new_pos));
+    LOG_ERROR("fail to deserialize checksum", K(ret), K(data_len), K(new_pos));
   } else if (new_pos - pos < size_ && OB_FAIL(serialization::decode_i32(buf, data_len, new_pos, &payload_size_))) {
     LOG_WARN("fail to deserialize length", K(ret), K(data_len), K(new_pos));
   } else if (OB_UNLIKELY(new_pos - pos != size_)) {

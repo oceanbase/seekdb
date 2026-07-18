@@ -358,7 +358,7 @@ int ObSPIResultSet::check_nested_stmt_legal(ObExecContext &exec_ctx, const ObStr
       // select func() from dual is allowed in mysql mode
     } else if (ObStmt::is_ddl_stmt(stmt_type, has_global_variable) || ObStmt::is_tcl_stmt(stmt_type)) {
       ret = OB_ER_COMMIT_NOT_ALLOWED_IN_SF_OR_TRG;
-      LOG_WARN("OBE-14552: Cannot Perform a DDL Commit or Rollback Inside a Query or DML tips",
+      LOG_ERROR("OBE-14552: Cannot Perform a DDL Commit or Rollback Inside a Query or DML tips",
                K(ret), K(stmt_type), K(lbt()));
       if (OB_NOT_SUPPORTED == ret) {
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "OBE-14552: Cannot Perform a DDL Commit or Rollback Inside a Query or DML tips");
@@ -6678,7 +6678,7 @@ int ObSPIService::store_result(ObPLExecCtx *ctx,
           OZ (spi_set_variable(ctx, static_cast<const ObSqlExpression*>(result_expr), &value, false));
           int tmp_ret = OB_SUCCESS;
           if (OB_SUCCESS != (tmp_ret = ctx->exec_ctx_->get_my_session()->restore_session(session_value))) {
-            LOG_WARN("failed to restore session", K(tmp_ret));
+            LOG_ERROR("failed to restore session", K(tmp_ret));
             ret = COVER_SUCC(tmp_ret);
           }
           ctx->exec_ctx_->get_my_session()->set_nested_count(nested_count);

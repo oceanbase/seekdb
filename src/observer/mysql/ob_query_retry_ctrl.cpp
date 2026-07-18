@@ -560,7 +560,7 @@ public:
         v.client_ret_ = v.err_;
         v.retry_type_ = RETRY_TYPE_NONE;
         v.no_more_test_ = true;
-        LOG_WARN_RET(v.client_ret_, "can not retry local. need to terminate to prevent thread resouce deadlock", K(v));
+        LOG_ERROR_RET(v.client_ret_, "can not retry local. need to terminate to prevent thread resouce deadlock", K(v));
       }
     }
   }

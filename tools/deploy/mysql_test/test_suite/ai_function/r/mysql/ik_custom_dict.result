@@ -1,0 +1,24 @@
+=== load dictionary when creating IK fulltext index ===
+select id from docs_auto_load where match(body) against('银河数据库' in boolean mode) order by id;
+id
+1
+select id from docs_auto_load where match(body) against('星际向量检索' in boolean mode) order by id;
+id
+1
+select '银河数据库' member of (tokenize('银河数据库支持星际向量检索', 'ik',
+'[{"additional_args": [{"dict_table": "custom_words"}, {"ik_mode": "smart"}]}]')) as has_auto_word;
+has_auto_word
+1
+=== refresh dictionary and use new word ===
+select id from docs_dynamic where match(body) against('量子事务引擎' in boolean mode) order by id;
+id
+1
+select '量子事务引擎' member of (tokenize('量子事务引擎已经上线', 'ik',
+'[{"additional_args": [{"dict_table": "ai_ik_custom_dict.custom_words"}, {"ik_mode": "smart"}]}]')) as has_refreshed_word;
+has_refreshed_word
+1
+=== reject invalid dictionary table ===
+create fulltext index fidx_bad_body on docs_bad(body)
+with parser ik parser_properties=(dict_table="normal_words", ik_mode="smart");
+ERROR 0A000: use non FULLTEXT_DICT table as fulltext parser dictionary not supported
+=== cleanup ===

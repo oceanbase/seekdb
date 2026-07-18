@@ -890,7 +890,7 @@ int ObRebuildIndexTask::cleanup_impl()
     if (trans.is_started()) {
       int tmp_ret = trans.end(true/*commit*/);
       if (OB_SUCCESS != tmp_ret) {
-        LOG_WARN("trans end failed", "is_commit", OB_SUCCESS == ret, K(tmp_ret));
+        LOG_ERROR("trans end failed", "is_commit", OB_SUCCESS == ret, K(tmp_ret));
         ret = (OB_SUCCESS == ret) ? tmp_ret : ret;
       }
     }

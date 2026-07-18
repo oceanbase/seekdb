@@ -378,7 +378,7 @@ int ObLockTable::remove_tablet()
   if (IS_NOT_INIT) {
     LOG_WARN("lock table does not inited, remove do nothing");
   } else if (OB_FAIL(parent_->remove_ls_inner_tablet(ls_id, LS_LOCK_TABLET))) {
-    LOG_WARN("failed to remove ls inner tablet", K(ret), K(ls_id), K(LS_LOCK_TABLET));
+    LOG_ERROR("failed to remove ls inner tablet", K(ret), K(ls_id), K(LS_LOCK_TABLET));
     ob_usleep(1000 * 1000);
     ob_abort();
   }

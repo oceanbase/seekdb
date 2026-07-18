@@ -102,7 +102,7 @@ private:
       installed_ = false;
       for (int j = 0; j < i; j++) {
         if (sigaction(signals_[j], &sa_old_[j], nullptr) != 0) {
-          LOG_WARN_RET(OB_ERR_SYS, "failed to restore signal handler", K(errno));
+          LOG_ERROR_RET(OB_ERR_SYS, "failed to restore signal handler", K(errno));
         }
       }
     }
@@ -113,7 +113,7 @@ private:
     if (installed_) {
       for (int i = 0; i < ARRAYSIZEOF(signals_); i++) {
         if (sigaction(signals_[i], &sa_old_[i], nullptr) != 0) {
-          LOG_WARN_RET(OB_ERR_SYS, "failed to restore signal handler", K(errno));
+          LOG_ERROR_RET(OB_ERR_SYS, "failed to restore signal handler", K(errno));
         }
       }
       installed_ = false;

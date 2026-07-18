@@ -883,7 +883,7 @@ void ObBasicTabletMergeCtx::add_sstable_merge_info(
   }
 
   if (OB_TMP_FAIL(share::g_mp->tenant_ss_table_merge_info_mgr()->add_sstable_merge_info(merge_history))) {
-    LOG_WARN_RET(tmp_ret, "failed to add sstable merge info", K(merge_history));
+    LOG_ERROR_RET(tmp_ret, "failed to add sstable merge info", K(merge_history));
   }
   merge_history.info_param_ = nullptr;
 
@@ -976,9 +976,9 @@ void ObBasicTabletMergeCtx::after_update_tablet_for_major()
     const ObLSID &ls_id = get_ls_id();
     const ObTabletID &tablet_id = get_tablet_id();
     if (OB_TMP_FAIL(share::g_mp->tablet_table_updater()->submit_tablet_update_task(ls_id, tablet_id, true/*need_diagnose*/))) {
-      LOG_WARN_RET(tmp_ret, "failed to submit tablet update task to report", K(ls_id), K(tablet_id));
+      LOG_ERROR_RET(tmp_ret, "failed to submit tablet update task to report", K(ls_id), K(tablet_id));
     } else if (OB_TMP_FAIL(get_ls()->get_tablet_svr()->update_tablet_report_status(tablet_id))) {
-      LOG_WARN_RET(tmp_ret, "failed to update tablet report status", K(ls_id), K(tablet_id));
+      LOG_ERROR_RET(tmp_ret, "failed to update tablet report status", K(ls_id), K(tablet_id));
     }
     if (OB_TMP_FAIL(share::g_mp->tenant_medium_checker()->add_tablet_ls(tablet_id, ls_id, get_merge_version()))) {
       LOG_WARN_RET(tmp_ret, "failed to add tablet ls for check", K(ls_id), 
@@ -1055,7 +1055,7 @@ int ObBasicTabletMergeCtx::update_tablet(
     LOG_WARN("failed to build table store param", KR(ret), K(param));
   } else if (OB_FAIL(get_ls()->update_tablet_table_store(
       get_tablet_id(), param, new_tablet_handle))) {
-    LOG_WARN("failed to update tablet table store", K(ret), K(param), K(new_tablet_handle));
+    LOG_ERROR("failed to update tablet table store", K(ret), K(param), K(new_tablet_handle));
     CTX_SET_DIAGNOSE_LOCATION(*this);
   } else {
     time_guard_click(ObStorageCompactionTimeGuard::UPDATE_TABLET);

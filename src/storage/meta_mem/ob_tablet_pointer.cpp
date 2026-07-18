@@ -159,7 +159,7 @@ int ObTabletPointer::hook_obj(const ObTabletAttr &attr, ObTablet *&t,  ObMetaObj
     guard.set_obj(obj_);
     ObMetaObjBufferHelper::set_in_map(reinterpret_cast<char *>(t), true/*in_map*/);
     if (!is_attr_valid() && OB_FAIL(set_tablet_attr(attr))) { // only set tablet attr when first hook obj
-      STORAGE_LOG(WARN, "failed to update tablet attr", K(ret), K(guard));
+      STORAGE_LOG(ERROR, "failed to update tablet attr", K(ret), K(guard));
     }
   }
 

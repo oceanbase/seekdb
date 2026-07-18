@@ -4557,7 +4557,7 @@ int ObVectorIndexUtil::generate_index_schema_from_exist_table(
 
       if (new_index_schema.is_vec_ivf_index()
           && OB_FAIL(reconstruct_ivf_index_schema_in_rebuild(trans, ddl_service, create_index_arg, data_table_schema, new_index_schema))) {
-        LOG_WARN("failed to reconstruct ivf index schema in rebuild", K(ret), K(new_index_schema));
+        LOG_ERROR("failed to reconstruct ivf index schema in rebuild", K(ret), K(new_index_schema));
       } // end is_vec_ivf_index.
     }
   }

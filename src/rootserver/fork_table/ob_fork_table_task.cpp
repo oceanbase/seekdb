@@ -666,7 +666,7 @@ int ObForkTableTask::cleanup_impl()
         int tmp_ret = trans.end(commit);
         if (OB_SUCCESS != tmp_ret) {
           ret = (OB_SUCCESS == ret) ? tmp_ret : ret;
-          LOG_WARN("trans end failed", K(ret), K(tmp_ret), K(commit));
+          LOG_ERROR("trans end failed", K(ret), K(tmp_ret), K(commit));
         }
       }
     }

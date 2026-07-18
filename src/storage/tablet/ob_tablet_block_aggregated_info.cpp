@@ -349,7 +349,7 @@ int ObTabletMacroInfo::deserialize(ObArenaAllocator &allocator, const char *buf,
   } else if (FALSE_IT(crc = ob_crc64(buf + new_pos, meta_header.payload_size_))) {
   } else if (OB_UNLIKELY(crc != meta_header.checksum_)) {
     ret = OB_PHYSIC_CHECKSUM_ERROR;
-    LOG_WARN("tablet macro info's checksum doesn't match", K(ret), K(meta_header), K(crc));
+    LOG_ERROR("tablet macro info's checksum doesn't match", K(ret), K(meta_header), K(crc));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, &version))) {
     LOG_WARN("fail to deserialize version", K(ret), KP(buf), K(data_len));
   } else if (OB_UNLIKELY(TABLET_MACRO_INFO_VERSION != version)) {

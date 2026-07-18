@@ -483,7 +483,7 @@ int ObSqlPlan::inner_store_sql_plan_for_explain(ObExecContext *ctx,
                                   save_tx_desc,
                                   save_nested_count);
     if (OB_SUCCESS != end_ret) {
-      LOG_WARN("failed to restore session", K(end_ret), K(ret));
+      LOG_ERROR("failed to restore session", K(end_ret), K(ret));
       if (OB_SUCCESS == ret) {
         ret = end_ret;
       }

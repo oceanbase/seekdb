@@ -312,11 +312,11 @@ OB_INLINE int ObTxCtxLogOperator<T>::submit_log_block_out_()
   } else if (tx_ctx_->is_force_abort_logging_()
              || tx_ctx_->get_downstream_state() == ObTxState::ABORT) {
     ret = OB_TRANS_KILLED;
-    TRANS_LOG(WARN, "tx has been aborting, can not submit log", K(ret), K(T::LOG_TYPE),
+    TRANS_LOG(ERROR, "tx has been aborting, can not submit log", K(ret), K(T::LOG_TYPE),
               KPC(tx_ctx_));
   } else if (tx_ctx_->is_follower_()) {
     ret = OB_NOT_MASTER;
-    TRANS_LOG(WARN, "we can not submit a tx log on the follower", K(ret), K(T::LOG_TYPE),
+    TRANS_LOG(ERROR, "we can not submit a tx log on the follower", K(ret), K(T::LOG_TYPE),
               KPC(tx_ctx_));
   } else if (tx_ctx_->exec_info_.data_complete_
              && tx_ctx_->start_working_log_ts_ > tx_ctx_->exec_info_.max_applying_log_ts_) {
@@ -329,7 +329,7 @@ OB_INLINE int ObTxCtxLogOperator<T>::submit_log_block_out_()
   } else if (ObTxLogTypeChecker::is_data_log(T::LOG_TYPE)
              && tx_ctx_->get_downstream_state() >= ObTxState::REDO_COMPLETE) {
     ret = OB_STATE_NOT_MATCH;
-    TRANS_LOG(WARN, "the data log can not be submitted after the commit info log", K(ret),
+    TRANS_LOG(ERROR, "the data log can not be submitted after the commit info log", K(ret),
               K(T::LOG_TYPE), KPC(tx_ctx_));
   } else if (is_contain_stat_log(log_block_->get_cb_arg_array())
              && FALSE_IT(is_2pc_state_log = true)) {

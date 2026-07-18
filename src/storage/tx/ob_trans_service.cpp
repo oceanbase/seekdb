@@ -593,7 +593,7 @@ int ObTransService::register_mds_into_tx(ObTxDesc &tx_desc,
           if (OB_SUCC(ret)) {
             ret = tmp_ret;
           }
-          TRANS_LOG(WARN, "set exec result failed when register mds", K(ret), K(tmp_ret),
+          TRANS_LOG(ERROR, "set exec result failed when register mds", K(ret), K(tmp_ret),
                     K(*(arg.tx_desc_)));
         }
       } else if (this->self_ != tx_desc.addr_) {
