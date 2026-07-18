@@ -238,12 +238,19 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
     LOG_WARN("Fail to parse parser params.", K(ret));
   } else if (OB_FAIL(parse_parser_properties(expr, ctx, temp_allocator, param))) {
     LOG_WARN("Fail to parse parser params.", K(ret));
-  } else if (OB_FAIL(param.reform_parser_properties(param.properties_))) {
+  // FTS PERF OPT 16: TOKENIZE(text, parser) has no user properties. The
+  // parser property object already supplies the same built-in defaults, so
+  // avoid materializing default JSON and parsing it again in the helper.
+  // Keep the complete normalization path for an explicit third argument.
+  } else if (expr.arg_cnt_ >= 3
+             && OB_FAIL(param.reform_parser_properties(param.properties_))) {
     LOG_WARN("Fail to reform parser params.", K(ret));
-  } else if (OB_ISNULL(ctx.exec_ctx_.get_my_session())) {
+  } else if (expr.arg_cnt_ >= 3 && OB_ISNULL(ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session info is null", K(ret));
-  } else if (OB_FAIL(param.normalize_ik_dict_table_names(ctx.exec_ctx_.get_my_session()->get_database_name()))) {
+  } else if (expr.arg_cnt_ >= 3
+             && OB_FAIL(param.normalize_ik_dict_table_names(
+                            ctx.exec_ctx_.get_my_session()->get_database_name()))) {
     LOG_WARN("Fail to normalize ik dict table names.", K(ret));
   } else if (OB_FAIL(param.try_load_dictionary_for_ik())) {
     LOG_WARN("fail to try load dictionary for ik", K(ret));
