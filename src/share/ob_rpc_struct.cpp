@@ -2341,7 +2341,8 @@ OB_SERIALIZE_MEMBER((ObCreateAuxIndexArg, ObDDLArg),
                     
                     data_table_id_,
                     create_index_arg_,
-                    snapshot_version_);
+                    snapshot_version_,
+                    build_mode_);
 OB_SERIALIZE_MEMBER(ObCreateAuxIndexRes,
                     aux_table_id_,
                     ddl_task_id_,

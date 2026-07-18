@@ -128,9 +128,11 @@ private:
   int get_next_status(share::ObDDLTaskStatus &next_status);
   int prepare_aux_table(
       const ObIndexType index_type,
+      const obcall::ObAuxIndexBuildMode build_mode,
       bool &task_submitted,
       uint64_t &aux_table_id,
       int64_t &task_id);
+  int enable_fused_doc_word_index();
   int prepare_rowkey_doc_table();
   int prepare_aux_index_tables();
   int construct_create_index_arg(

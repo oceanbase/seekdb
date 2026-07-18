@@ -5585,14 +5585,21 @@ int ObLogPlan::try_push_aggr_into_table_scan(ObLogicalOperator *top,
     ObLogTableScan *scan_op = static_cast<ObLogTableScan*>(top);
     bool is_get = false;
     bool has_npd_filter = false; //has non-pushdown filter
+    const bool is_fts_count_star = scan_op->is_text_retrieval_scan()
+        && groupby_columns.empty()
+        && 1 == aggr_items.count()
+        && nullptr != aggr_items.at(0)
+        && T_FUN_COUNT == aggr_items.at(0)->get_expr_type()
+        && 0 == aggr_items.at(0)->get_real_param_count()
+        && !aggr_items.at(0)->is_param_distinct();
     if (OB_FAIL(scan_op->is_table_get(is_get))) {
       LOG_WARN("failed to check is get", K(ret));
     } else if (OB_FAIL(scan_op->has_nonpushdown_filter(has_npd_filter))) {
       LOG_WARN("check whether hash non-pushdown filter failed", K(ret));
     } else if (is_get ||
                has_npd_filter ||
-               scan_op->get_index_back() ||
-               scan_op->is_text_retrieval_scan() ||
+               (scan_op->get_index_back() && !is_fts_count_star) ||
+               (scan_op->is_text_retrieval_scan() && !is_fts_count_star) ||
                scan_op->is_sample_scan() ||
                (scan_op->is_index_scan() && !groupby_columns.empty()) ||
                (is_descending_direction(scan_op->get_scan_direction()) && !groupby_columns.empty())) {
@@ -11939,7 +11946,10 @@ int ObLogPlan::collect_location_related_info(ObLogicalOperator &op)
       ObTableID table_loc_id = index_info.loc_table_id_;
       ObTableID ref_table_id = index_info.ref_table_id_;
       TableLocRelInfo *loc_rel_info = nullptr;
-      if (index_info.is_primary_index_) {
+      const bool is_online_ddl_with_related_index =
+          optimizer_context_.is_online_ddl()
+          && !index_info.related_index_ids_.empty();
+      if (index_info.is_primary_index_ || is_online_ddl_with_related_index) {
         if (OB_ISNULL(loc_rel_info = optimizer_context_.get_loc_rel_info_by_id(
                                        table_loc_id, ref_table_id))) {
           //init table location related info with the main table
@@ -11964,7 +11974,23 @@ int ObLogPlan::collect_location_related_info(ObLogicalOperator &op)
           }
         }
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(append_array_no_dup(loc_rel_info->related_ids_, index_info.related_index_ids_))) {
+          const ObTableSchema *index_schema = nullptr;
+          ObSchemaGetterGuard *schema_guard = optimizer_context_.get_schema_guard();
+          if (is_online_ddl_with_related_index && OB_ISNULL(schema_guard)) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("schema guard is nullptr", K(ret));
+          } else if (is_online_ddl_with_related_index
+                     && OB_FAIL(schema_guard->get_table_schema(ref_table_id, index_schema))) {
+            LOG_WARN("failed to get online ddl index schema", K(ret), K(ref_table_id));
+          } else if (is_online_ddl_with_related_index && OB_ISNULL(index_schema)) {
+            ret = OB_TABLE_NOT_EXIST;
+            LOG_WARN("online ddl index schema is nullptr", K(ret), K(ref_table_id));
+          } else if (is_online_ddl_with_related_index
+                     && index_schema->is_storage_local_index_table()
+                     && OB_FAIL(add_var_to_array_no_dup(
+                         loc_rel_info->related_ids_, index_schema->get_data_table_id()))) {
+            LOG_WARN("add online ddl data table id failed", K(ret), KPC(index_schema));
+          } else if (OB_FAIL(append_array_no_dup(loc_rel_info->related_ids_, index_info.related_index_ids_))) {
             LOG_WARN("add the ref table id to the related ids failed", K(ret));
           } else {
             LOG_DEBUG("collect dml op related table id", KPC(loc_rel_info), K(table_loc_id), K(ref_table_id));
@@ -14895,7 +14921,6 @@ int ObLogPlan::prepare_text_retrieval_info(const uint64_t ref_table_id,
     }
   }
   if (OB_SUCC(ret)) {
-    /*
     if (OB_FAIL(ObTransformUtils::check_need_calc_match_score(get_optimizer_context().get_exec_ctx(),
                                                               get_stmt(),
                                                               match_against,
@@ -14906,7 +14931,8 @@ int ObLogPlan::prepare_text_retrieval_info(const uint64_t ref_table_id,
                OB_FAIL(append_array_no_dup(get_optimizer_context().get_query_ctx()->all_expr_constraints_, constraints))) {
       LOG_WARN("failed to append array no dup", K(ret));
     }
-    */
+  }
+  if (OB_SUCC(ret)) {
     tr_info.match_expr_ = match_against;
     tr_info.inv_idx_tid_ = inv_idx_tid;
     tr_info.fwd_idx_tid_ = fwd_idx_tid;

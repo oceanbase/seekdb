@@ -242,7 +242,7 @@ END_P SET_VAR DELIMITER
         DATABASE DATABASES DAY_HOUR DAY_MICROSECOND DAY_MINUTE DAY_SECOND /*DEC*/ DECLARE DECIMAL DEFAULT
         DELAYED DELETE DESC DESCRIBE DETERMINISTIC DISTINCT DISTINCTROW DIV DOUBLE DROP DUAL
         EACH ELSE ELSEIF ENCLOSED ESCAPED EXISTS EXIT EXPLAIN
-        /*FALSE*/ FETCH FLOAT FLOAT4 FLOAT8 FOR FORCE FOREIGN FROM FULLTEXT
+        /*FALSE*/ FETCH FLOAT FLOAT4 FLOAT8 FOR FORCE FOREIGN FROM FULLTEXT FULLTEXT_DICT
         GENERATED GET GRANT GROUP
         HAVING HIGH_PRIORITY HOUR_MICROSECOND HOUR_MINUTE HOUR_SECOND
         IF IGNORE IN INDEX INFILE INNER INOUT INSENSITIVE INSERT INT INT1 INT2 INT3 INT4 INT8 INTEGER
@@ -307,7 +307,7 @@ END_P SET_VAR DELIMITER
         GENERAL GEOMETRY GEOMCOLLECTION GEOMETRYCOLLECTION GET_FORMAT GLOBAL GRANTS GRANULARITY GROUP_CONCAT GROUPING GTS
         GLOBAL_NAME GLOBAL_ALIAS
 
-        HANDLER HASH HEAP HELP HISTOGRAM HOST HOSTS HOT_RETENTION HOUR HIDDEN HYBRID HYBRID_HIST HYBRID_SEARCH
+        HANDLER HASH HEAP HELP HISTOGRAM HOST HOSTS HOT_RETENTION HOUR HIDDEN HYBRID HYBRID_HIST HYBRID_SEARCH AI_SPLIT_DOCUMENT
 
         ID IDENTIFIED IGNORE_SERVER_IDS IK_MODE ILOG IMMEDIATE IMPORT INCLUDING INCR INDEXES INDEX_TABLE_ID INFO INITIAL_SIZE
         INNODB INSERT_METHOD INSTALL INSTANCE INVOKER IO IOPS_WEIGHT IO_THREAD IPC ISOLATE ISOLATION ISSUER
@@ -558,7 +558,7 @@ END_P SET_VAR DELIMITER
 %type <node> column_list_with_boost with_param_column_ref
 %type <node> es_sql_opt
 %type <node> operator_list
-%type <node> hybrid_search_expr hybrid_search_param
+%type <node> hybrid_search_expr hybrid_search_param ai_split_document_expr ai_split_document_core ai_split_document_arguments
 %type <node> create_location_stmt alter_location_stmt drop_location_stmt location_name location_url credential_option_list credential_option opt_credential
 
 %type <node> vector_similarity_expr vector_similarity_metric
@@ -6864,6 +6864,11 @@ TABLE_MODE opt_equal_mark STRING_VALUE
   (void)($2);
   malloc_non_terminal_node($$, result->malloc_pool_, T_TABLE_MODE, 1, $3);
 }
+| FULLTEXT_DICT opt_equal_mark STRING_VALUE
+{
+  (void)($2);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FULLTEXT_DICT, 1, $3);
+}
 | DUPLICATE_SCOPE opt_equal_mark STRING_VALUE
 {
   (void)($2);
@@ -12991,6 +12996,10 @@ tbl_name
 {
   $$ = $1;
 }
+| ai_split_document_expr
+{
+  $$ = $1;
+}
 ;
 
 tbl_name:
@@ -18445,6 +18454,28 @@ alter_with_opt_hint SYSTEM REFRESH MEMORY STAT
   malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_MEMORY_STAT, 1, NULL);
 }
 |
+alter_with_opt_hint SYSTEM REFRESH FULLTEXT relation_name relation_factor
+{
+  (void)($1);
+  if (!nodename_equal($5, "DICT", 4)) {
+    yyerror(&@5, result, "expect DICT after FULLTEXT");
+    YYERROR;
+  } else {
+    malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_FULLTEXT_DICT, 1, $6);
+  }
+}
+|
+alter_with_opt_hint SYSTEM REFRESH FULLTEXT relation_name STRING_VALUE
+{
+  (void)($1);
+  if (!nodename_equal($5, "DICT", 4)) {
+    yyerror(&@5, result, "expect DICT after FULLTEXT");
+    YYERROR;
+  } else {
+    malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_FULLTEXT_DICT, 1, $6);
+  }
+}
+|
 alter_with_opt_hint SYSTEM WASH MEMORY FRAGMENTATION
 {
   (void)($1);
@@ -21858,6 +21889,131 @@ HYBRID_SEARCH '(' literal ',' hybrid_search_param ')'
 | HYBRID_SEARCH '(' literal ',' hybrid_search_param ')' AS relation_name
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_HYBRID_SEARCH_EXPRESSION, 3, $3, $5, $8);
+}
+;
+
+ai_split_document_expr:
+ai_split_document_core %prec FULL
+{
+  $$ = $1;
+}
+| ai_split_document_core relation_name
+{
+  $$ = $1;
+  $$->children_[4] = $2;
+}
+| ai_split_document_core AS relation_name
+{
+  $$ = $1;
+  $$->children_[4] = $3;
+}
+;
+
+ai_split_document_arguments:
+simple_expr
+{
+  ParseNode *default_parameters = NULL;
+  malloc_terminal_node(default_parameters, result->malloc_pool_, T_VARCHAR);
+  default_parameters->str_value_ = parse_strdup("{}", result->malloc_pool_, &(default_parameters->str_len_));
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, default_parameters);
+}
+| simple_expr ',' simple_expr
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
+}
+;
+
+ai_split_document_core:
+AI_SPLIT_DOCUMENT '(' ai_split_document_arguments ')'
+{
+  ParseNode *function_name = NULL;
+  ParseNode *function_params = NULL;
+  ParseNode *function_node = NULL;
+  ParseNode *root_path = NULL;
+  ParseNode *mock_empty = NULL;
+  ParseNode *mock_error = NULL;
+  ParseNode *mock_clause = NULL;
+  ParseNode *default_type = NULL;
+  ParseNode *default_value = NULL;
+  ParseNode *error_type = NULL;
+  ParseNode *error_value = NULL;
+  ParseNode *mismatch_type = NULL;
+  ParseNode *mismatch_value = NULL;
+  ParseNode *mismatch_clause = NULL;
+  ParseNode *value_clause = NULL;
+  ParseNode *columns = NULL;
+  ParseNode *column_params = NULL;
+  ParseNode *default_alias = NULL;
+  const char *column_names[4] = {"chunk_id", "chunk_offset", "chunk_length", "chunk_text"};
+  const char *column_paths[4] = {"$.chunk_id", "$.chunk_offset", "$.chunk_length", "$.chunk_text"};
+
+  make_name_node(function_name, result->malloc_pool_, "ai_split_document");
+  merge_nodes(function_params, result, T_EXPR_LIST, $3);
+  malloc_non_terminal_node(function_node, result->malloc_pool_, T_FUN_SYS, 2, function_name, function_params);
+
+  malloc_terminal_node(root_path, result->malloc_pool_, T_VARCHAR);
+  root_path->str_value_ = parse_strdup("$[*]", result->malloc_pool_, &(root_path->str_len_));
+  malloc_terminal_node(mock_empty, result->malloc_pool_, T_INT);
+  mock_empty->value_ = 3;
+  mock_empty->is_hidden_const_ = 1;
+  malloc_terminal_node(mock_error, result->malloc_pool_, T_INT);
+  mock_error->value_ = 3;
+  mock_error->is_hidden_const_ = 1;
+  malloc_non_terminal_node(mock_clause, result->malloc_pool_, T_LINK_NODE, 2, mock_error, mock_empty);
+
+  malloc_terminal_node(default_type, result->malloc_pool_, T_INT);
+  default_type->value_ = 3;
+  default_type->is_hidden_const_ = 1;
+  malloc_terminal_node(default_value, result->malloc_pool_, T_NULL);
+  malloc_terminal_node(error_type, result->malloc_pool_, T_INT);
+  error_type->value_ = 3;
+  error_type->is_hidden_const_ = 1;
+  malloc_terminal_node(error_value, result->malloc_pool_, T_NULL);
+  malloc_terminal_node(mismatch_type, result->malloc_pool_, T_INT);
+  mismatch_type->value_ = 3;
+  mismatch_type->is_hidden_const_ = 1;
+  malloc_terminal_node(mismatch_value, result->malloc_pool_, T_INT);
+  mismatch_value->value_ = 3;
+  mismatch_value->is_hidden_const_ = 1;
+  malloc_non_terminal_node(mismatch_clause, result->malloc_pool_, T_LINK_NODE, 2, mismatch_type, mismatch_value);
+  malloc_non_terminal_node(value_clause, result->malloc_pool_, T_LINK_NODE, 5,
+                           default_type, default_value, error_type, error_value, mismatch_clause);
+
+  for (int64_t i = 0; i < 4; ++i) {
+    ParseNode *column_name = NULL;
+    ParseNode *return_type = NULL;
+    ParseNode *truncate_node = NULL;
+    ParseNode *path_node = NULL;
+    ParseNode *column_node = NULL;
+    make_name_node(column_name, result->malloc_pool_, column_names[i]);
+    if (i < 3) {
+      malloc_terminal_node(return_type, result->malloc_pool_, T_INT32);
+      return_type->int16_values_[0] = -1;
+    } else {
+      malloc_non_terminal_node(return_type, result->malloc_pool_, T_VARCHAR, 3, NULL, NULL, NULL);
+      return_type->int32_values_[0] = 1048576;
+      return_type->int32_values_[1] = 0;
+    }
+    malloc_terminal_node(truncate_node, result->malloc_pool_, T_INT);
+    truncate_node->value_ = 0;
+    truncate_node->is_hidden_const_ = 1;
+    malloc_terminal_node(path_node, result->malloc_pool_, T_VARCHAR);
+    path_node->str_value_ = parse_strdup(column_paths[i], result->malloc_pool_, &(path_node->str_len_));
+    malloc_non_terminal_node(column_node, result->malloc_pool_, T_JSON_TABLE_COLUMN, 5,
+                             column_name, return_type, truncate_node, path_node, value_clause);
+    column_node->value_ = 4;
+    if (NULL == columns) {
+      columns = column_node;
+    } else {
+      ParseNode *link = NULL;
+      malloc_non_terminal_node(link, result->malloc_pool_, T_LINK_NODE, 2, columns, column_node);
+      columns = link;
+    }
+  }
+  merge_nodes(column_params, result, T_EXPR_LIST, columns);
+  make_name_node(default_alias, result->malloc_pool_, "ai_split_document");
+  malloc_non_terminal_node($$, result->malloc_pool_, T_JSON_TABLE_EXPRESSION, 5,
+                           function_node, root_path, mock_clause, column_params, default_alias);
 }
 ;
 

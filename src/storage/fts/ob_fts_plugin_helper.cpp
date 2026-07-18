@@ -228,63 +228,70 @@ int ObFTParsePluginData::get_dict_hub(ObFTDictHub *&hub)
 
 ////////////////////////////////////////////////////////////////////////////////
 // ObFTParseHelper
-int ObFTParseHelper::segment(
-    const ObFTParserProperty &property,
-    const int64_t parser_version,
-    const ObIFTParserDesc *parser_desc,
-    ObPluginParam *plugin_param,
+int ObFTParseHelper::prepare_parser_param(
     const ObCharsetInfo *cs,
     const char *ft,
     const int64_t ft_len,
-    common::ObIAllocator &allocator,
-    ObAddWord &add_word)
+    common::ObIAllocator &scratch_allocator)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(parser_version < 0 || nullptr == parser_desc || nullptr == cs || nullptr == ft || 0 >= ft_len)) {
+  if (OB_ISNULL(allocator_) || OB_ISNULL(cs) || OB_ISNULL(ft) || ft_len <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(parser_version), KP(parser_desc), KP(cs), K(ft), K(ft_len));
+    LOG_WARN("invalid parser arguments", K(ret), KP_(allocator), KP(cs), KP(ft), K(ft_len));
   } else {
-    ObFTParserParam param;
-    ObITokenIterator *iter = nullptr;
-    param.allocator_ = &allocator;
-    param.cs_ = cs;
-    param.fulltext_ = ft;
-    param.ft_length_ = ft_len;
-    param.parser_version_ = parser_version;
-    param.plugin_param_ = plugin_param;
-    param.ngram_token_size_ = property.ngram_token_size_;
-    param.ik_param_.mode_
-        = (property.ik_mode_smart_ ? ObFTIKParam::Mode::SMART : ObFTIKParam::Mode::MAX_WORD);
-    param.min_ngram_size_ = property.min_ngram_token_size_;
-    param.max_ngram_size_ = property.max_ngram_token_size_;
+    parser_param_.parser_allocator_ = allocator_;
+    parser_param_.allocator_ = &scratch_allocator;
+    parser_param_.cs_ = cs;
+    parser_param_.fulltext_ = ft;
+    parser_param_.ft_length_ = ft_len;
+    parser_param_.parser_version_ = parser_name_.get_parser_version();
+    parser_param_.plugin_param_ = plugin_param_;
+    parser_param_.ngram_token_size_ = parser_property_.ngram_token_size_;
+    parser_param_.ik_param_.mode_ = parser_property_.ik_mode_smart_
+        ? ObFTIKParam::Mode::SMART
+        : ObFTIKParam::Mode::MAX_WORD;
+    parser_param_.ik_param_.main_dict_ = parser_property_.dict_table_;
+    parser_param_.ik_param_.quan_dict_ = parser_property_.quantifier_table_;
+    parser_param_.ik_param_.stopword_dict_ = parser_property_.stopword_table_;
+    parser_param_.min_ngram_size_ = parser_property_.min_ngram_token_size_;
+    parser_param_.max_ngram_size_ = parser_property_.max_ngram_token_size_;
+  }
+  return ret;
+}
 
-    if (OB_FAIL(parser_desc->segment(&param, iter))) {
-      LOG_WARN("fail to segment", K(ret), K(param));
-    } else if (OB_ISNULL(iter)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error, token iterator is nullptr", K(ret), KP(iter));
-    } else {
-      const char *word = nullptr;
-      int64_t word_len = 0;
-      int64_t char_cnt = 0;
-      int64_t word_freq = 0;
-      while (OB_SUCC(ret)) {
-        if (OB_FAIL(iter->get_next_token(word, word_len, char_cnt, word_freq))) {
-          if (OB_ITER_END != ret) {
-            LOG_WARN("fail to get next token", K(ret), KPC(iter));
-          }
-        } else if (OB_FAIL(add_word.process_word(word, word_len, char_cnt, word_freq))) {
-          LOG_WARN("fail to process one word", K(ret), KP(word), K(word_len), K(char_cnt), K(word_freq));
-        }
-      }
-      if (OB_ITER_END == ret) {
-        ret = OB_SUCCESS;
-      }
+int ObFTParseHelper::segment_with_iter(ObAddWord &add_word)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(parser_desc_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("parser descriptor is nullptr", K(ret), KP_(parser_desc));
+  } else if (OB_ISNULL(parser_iter_)) {
+    if (OB_FAIL(parser_desc_->create_token_iter(&parser_param_, parser_iter_))) {
+      LOG_WARN("failed to create token iterator", K(ret), K(parser_param_));
     }
-    if (OB_NOT_NULL(iter)) {
-      parser_desc->free_token_iter(&param, iter);
-      iter = nullptr;
+  } else if (OB_FAIL(parser_desc_->reuse_token_iter(&parser_param_, parser_iter_))) {
+    LOG_WARN("failed to reuse token iterator", K(ret), K(parser_param_), KPC(parser_iter_));
+  }
+
+  if (OB_SUCC(ret) && OB_ISNULL(parser_iter_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("token iterator is nullptr", K(ret), KP_(parser_iter));
+  }
+  while (OB_SUCC(ret)) {
+    const char *word = nullptr;
+    int64_t word_len = 0;
+    int64_t char_cnt = 0;
+    int64_t word_freq = 0;
+    if (OB_FAIL(parser_iter_->get_next_token(word, word_len, char_cnt, word_freq))) {
+      if (OB_ITER_END != ret) {
+        LOG_WARN("failed to get next token", K(ret), KPC(parser_iter_));
+      }
+    } else if (OB_FAIL(add_word.process_word(word, word_len, char_cnt, word_freq))) {
+      LOG_WARN("failed to process token", K(ret), KP(word), K(word_len), K(char_cnt), K(word_freq));
     }
+  }
+  if (OB_ITER_END == ret) {
+    ret = OB_SUCCESS;
   }
   return ret;
 }
@@ -296,6 +303,8 @@ ObFTParseHelper::ObFTParseHelper()
     parser_name_(),
     add_word_flag_(),
     parser_property_(),
+    parser_param_(),
+    parser_iter_(nullptr),
     is_inited_(false)
 {
 }
@@ -346,6 +355,11 @@ int ObFTParseHelper::init(
 
 void ObFTParseHelper::reset()
 {
+  if (OB_NOT_NULL(parser_desc_) && OB_NOT_NULL(parser_iter_)) {
+    parser_desc_->destroy_token_iter(&parser_param_, parser_iter_);
+  }
+  parser_iter_ = nullptr;
+  parser_param_.reset();
   parser_desc_ = nullptr;
   plugin_param_ = nullptr;
   allocator_ = nullptr;
@@ -358,7 +372,53 @@ int ObFTParseHelper::segment(
     const char *fulltext,
     const int64_t fulltext_len,
     int64_t &doc_length,
-    ObFTWordMap &words) const
+    ObFTWordMap &words)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(allocator_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("parser helper allocator is nullptr", K(ret), KP_(allocator));
+  } else if (OB_FAIL(inner_segment(meta,
+                                   fulltext,
+                                   fulltext_len,
+                                   *allocator_,
+                                   add_word_flag_,
+                                   doc_length,
+                                   words))) {
+    LOG_WARN("failed to segment fulltext", K(ret), K(meta), KP(fulltext), K(fulltext_len));
+  }
+  return ret;
+}
+
+int ObFTParseHelper::segment(
+    const ObObjMeta &meta,
+    const char *fulltext,
+    const int64_t fulltext_len,
+    common::ObIAllocator &scratch_allocator,
+    int64_t &doc_length,
+    ObFTWordMap &words)
+{
+  ObAddWordFlag index_add_word_flag = add_word_flag_;
+  if (index_add_word_flag.casedown()) {
+    index_add_word_flag.set_persist_unique_word();
+  }
+  return inner_segment(meta,
+                       fulltext,
+                       fulltext_len,
+                       scratch_allocator,
+                       index_add_word_flag,
+                       doc_length,
+                       words);
+}
+
+int ObFTParseHelper::inner_segment(
+    const ObObjMeta &meta,
+    const char *fulltext,
+    const int64_t fulltext_len,
+    common::ObIAllocator &scratch_allocator,
+    const ObAddWordFlag &add_word_flag,
+    int64_t &doc_length,
+    ObFTWordMap &words)
 {
   int ret = OB_SUCCESS;
   const ObCharsetInfo *cs = nullptr;
@@ -377,24 +437,17 @@ int ObFTParseHelper::segment(
     LOG_WARN("unexpected error, charset info is nullptr", K(ret), K(type));
   } else {
     words.reuse();
-    ObAddWord add_word(parser_property_, meta, add_word_flag_, *allocator_, words);
-    if (OB_FAIL(segment(
-                    parser_property_,
-                    parser_name_.get_parser_version(),
-                    parser_desc_,
-                    plugin_param_,
-                    cs,
-                    fulltext,
-                    fulltext_len,
-                    *allocator_,
-                    add_word))) {
+    ObAddWord add_word(parser_property_, meta, add_word_flag, scratch_allocator, words);
+    if (OB_FAIL(prepare_parser_param(cs, fulltext, fulltext_len, scratch_allocator))) {
+      LOG_WARN("failed to prepare parser param", K(ret), KP(cs), KP(fulltext), K(fulltext_len));
+    } else if (OB_FAIL(segment_with_iter(add_word))) {
       LOG_WARN("fail to segment fulltext", K(ret), K(parser_name_), KP(parser_desc_), KP(cs), KP(fulltext),
           K(fulltext_len), KP(allocator_), K(parser_property_));
     } else {
       doc_length = add_word.get_add_word_count();
     }
   }
-  LOG_DEBUG("ft parse segment", K(ret), K(type), K(add_word_flag_), K(parser_name_),
+  LOG_DEBUG("ft parse segment", K(ret), K(type), K(add_word_flag), K(parser_name_),
       K(ObString(fulltext_len, fulltext)), K(words.size()));
   return ret;
 }
@@ -430,6 +483,22 @@ int ObFTParseHelper::make_detail_json(
     const int64_t doc_length,
     common::ObIJsonBase *&json_root)
 {
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(allocator_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("parser helper allocator is nullptr", K(ret), KP_(allocator));
+  } else if (OB_FAIL(make_detail_json(words, doc_length, *allocator_, json_root))) {
+    LOG_WARN("failed to make detail json", K(ret), K(doc_length), K(words.size()));
+  }
+  return ret;
+}
+
+int ObFTParseHelper::make_detail_json(
+    const ObFTWordMap &words,
+    const int64_t doc_length,
+    common::ObIAllocator &result_allocator,
+    common::ObIJsonBase *&json_root)
+{
  int ret = OB_SUCCESS;
 
  ObJsonObject *root_obj = nullptr;
@@ -438,13 +507,13 @@ int ObFTParseHelper::make_detail_json(
 
  ObJsonArray *token_array = nullptr;
 
- if (OB_ISNULL(root_obj = OB_NEWx(ObJsonObject, allocator_, allocator_))) {
+ if (OB_ISNULL(root_obj = OB_NEWx(ObJsonObject, &result_allocator, &result_allocator))) {
    ret = OB_ALLOCATE_MEMORY_FAILED;
    LOG_WARN("Fail to alloc memory for json", K(ret));
- } else if (OB_ISNULL(cnt = OB_NEWx(ObJsonInt, allocator_, doc_length))) {
+ } else if (OB_ISNULL(cnt = OB_NEWx(ObJsonInt, &result_allocator, doc_length))) {
    ret = OB_ALLOCATE_MEMORY_FAILED;
    LOG_WARN("Fail to alloc memory for json", K(ret));
- } else if (OB_ISNULL(token_array = OB_NEWx(ObJsonArray, allocator_, allocator_))) {
+ } else if (OB_ISNULL(token_array = OB_NEWx(ObJsonArray, &result_allocator, &result_allocator))) {
    ret = OB_ALLOCATE_MEMORY_FAILED;
    LOG_WARN("Fail to alloc memory for json", K(ret));
  } else {
@@ -452,10 +521,10 @@ int ObFTParseHelper::make_detail_json(
      ObString key = it->first.get_word().get_string();
      ObJsonObject *node = nullptr;
      ObJsonInt *token_cnt_node = nullptr;
-     if (OB_ISNULL(node = OB_NEWx(ObJsonObject, allocator_, allocator_))) {
+     if (OB_ISNULL(node = OB_NEWx(ObJsonObject, &result_allocator, &result_allocator))) {
        ret = OB_ALLOCATE_MEMORY_FAILED;
        LOG_WARN("Fail to alloc memory for json int", K(ret));
-     } else if (OB_ISNULL(token_cnt_node = OB_NEWx(ObJsonInt, allocator_, it->second))) {
+     } else if (OB_ISNULL(token_cnt_node = OB_NEWx(ObJsonInt, &result_allocator, it->second))) {
        ret = OB_ALLOCATE_MEMORY_FAILED;
        LOG_WARN("Fail to alloc memory for json", K(ret));
      } else if (OB_FAIL(node->add(key, token_cnt_node))) {
@@ -467,8 +536,8 @@ int ObFTParseHelper::make_detail_json(
      }
 
      if (OB_FAIL(ret)) {
-       OB_DELETEx(ObJsonObject, allocator_, node);
-       OB_DELETEx(ObJsonInt, allocator_, token_cnt_node);
+       OB_DELETEx(ObJsonObject, &result_allocator, node);
+       OB_DELETEx(ObJsonInt, &result_allocator, token_cnt_node);
      }
    } // for
 
@@ -483,9 +552,9 @@ int ObFTParseHelper::make_detail_json(
   if (OB_SUCC(ret)) {
     json_root = root_obj;
   } else {
-    OB_DELETEx(ObJsonObject, allocator_, root_obj);
-    OB_DELETEx(ObJsonInt, allocator_, cnt);
-    OB_DELETEx(ObJsonArray, allocator_, token_array);
+    OB_DELETEx(ObJsonObject, &result_allocator, root_obj);
+    OB_DELETEx(ObJsonInt, &result_allocator, cnt);
+    OB_DELETEx(ObJsonArray, &result_allocator, token_array);
   }
 
   return ret;
@@ -496,21 +565,38 @@ int ObFTParseHelper::make_token_array_json(
     common::ObIJsonBase *&json_root)
 {
   int ret = OB_SUCCESS;
+  if (OB_ISNULL(allocator_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("parser helper allocator is nullptr", K(ret), KP_(allocator));
+  } else if (OB_FAIL(make_token_array_json(words, *allocator_, json_root))) {
+    LOG_WARN("failed to make token array json", K(ret), K(words.size()));
+  }
+  return ret;
+}
+
+int ObFTParseHelper::make_token_array_json(
+    const ObFTWordMap &words,
+    common::ObIAllocator &result_allocator,
+    common::ObIJsonBase *&json_root)
+{
+  int ret = OB_SUCCESS;
   ObJsonArray *token_array = nullptr;
-  if (OB_UNLIKELY(OB_ISNULL(token_array = OB_NEWx(ObJsonArray, allocator_, allocator_)))) {
+  if (OB_UNLIKELY(OB_ISNULL(token_array = OB_NEWx(ObJsonArray,
+                                                  &result_allocator,
+                                                  &result_allocator)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Fail to alloc memory for json", K(ret));
   } else {
     for (ObFTWordMap::const_iterator it = words.begin(); OB_SUCC(ret) && it != words.end(); ++it) {
       ObString key = it->first.get_word().get_string();
       ObJsonString *token = nullptr;
-      if (OB_UNLIKELY(OB_ISNULL(token = OB_NEWx(ObJsonString, allocator_, key)))) {
+      if (OB_UNLIKELY(OB_ISNULL(token = OB_NEWx(ObJsonString, &result_allocator, key)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("Fail to alloc memory for json int", K(ret));
       } else {
         if (OB_FAIL(token_array->append(token))) {
           LOG_WARN("Fail to append json string", K(ret));
-          OB_DELETEx(ObJsonString, allocator_, token);
+          OB_DELETEx(ObJsonString, &result_allocator, token);
         } else {
         }
       }
@@ -519,7 +605,7 @@ int ObFTParseHelper::make_token_array_json(
   if (OB_SUCC(ret)) {
     json_root = token_array;
   } else {
-    OB_DELETEx(ObJsonArray, allocator_, token_array);
+    OB_DELETEx(ObJsonArray, &result_allocator, token_array);
   }
   return ret;
 }

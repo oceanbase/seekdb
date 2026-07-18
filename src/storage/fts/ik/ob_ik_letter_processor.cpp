@@ -31,6 +31,13 @@ namespace storage
 {
 ObIKLetterProcessor::ObIKLetterProcessor() {}
 
+void ObIKLetterProcessor::reuse()
+{
+  reset_english_state();
+  reset_arabic_state();
+  reset_mix_state();
+}
+
 int ObIKLetterProcessor::do_process(TokenizeContext &ctx,
                                     const char *ch,
                                     const uint8_t char_len,

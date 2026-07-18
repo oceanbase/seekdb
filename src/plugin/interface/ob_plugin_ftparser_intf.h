@@ -101,6 +101,8 @@ public:
 public:
   ObFTParserParam()
       : ObFTParserParamExport(),
+        parser_allocator_(nullptr),
+        allocator_(nullptr),
         ngram_token_size_(NGRAM_TOKEN_SIZE),
         min_ngram_size_(NGRAM_TOKEN_SIZE),
         max_ngram_size_(NGRAM_TOKEN_SIZE)
@@ -111,13 +113,19 @@ public:
   inline void reset()
   {
     ObFTParserParamExport::reset();
+    parser_allocator_ = nullptr;
     allocator_ = nullptr;
+    ik_param_ = ObFTIKParam();
     ngram_token_size_ = NGRAM_TOKEN_SIZE;
+    min_ngram_size_ = NGRAM_TOKEN_SIZE;
+    max_ngram_size_ = NGRAM_TOKEN_SIZE;
   }
 
-  INHERIT_TO_STRING_KV("base", ObFTParserParamExport, KP_(allocator), K_(ngram_token_size));
+  INHERIT_TO_STRING_KV(
+      "base", ObFTParserParamExport, KP_(parser_allocator), KP_(allocator), K_(ngram_token_size));
 
 public:
+  common::ObIAllocator *parser_allocator_ = nullptr;
   common::ObIAllocator *allocator_ = nullptr;
 
   // ik parser params
@@ -158,18 +166,37 @@ public:
    *
    * @return error code, such as, OBP_SUCCESS, OBP_INVALID_ARGUMENT, ...
    */
-  virtual int segment(ObFTParserParam *param, ObITokenIterator *&iter) const = 0;
+  virtual int create_token_iter(ObFTParserParam *param, ObITokenIterator *&iter) const = 0;
+
+  virtual int reuse_token_iter(ObFTParserParam *param, ObITokenIterator *iter) const = 0;
+
+  int segment(ObFTParserParam *param, ObITokenIterator *&iter) const
+  {
+    if (OB_NOT_NULL(param) && OB_ISNULL(param->parser_allocator_)) {
+      param->parser_allocator_ = param->allocator_;
+    }
+    return create_token_iter(param, iter);
+  }
 
   /**
    * Release resources held by the iterator and free token iterator.
    * @param[in] param the fulltext parameter
    * @param[out] iter The token iterator which retrieve tokens
    */
-  virtual void free_token_iter(ObFTParserParam *param, ObITokenIterator *&iter) const
+  virtual void destroy_token_iter(ObFTParserParam *param, ObITokenIterator *&iter) const
   {
     if (OB_NOT_NULL(iter)) {
       iter->~ObITokenIterator();
+      iter = nullptr;
     }
+  }
+
+  void free_token_iter(ObFTParserParam *param, ObITokenIterator *&iter) const
+  {
+    if (OB_NOT_NULL(param) && OB_ISNULL(param->parser_allocator_)) {
+      param->parser_allocator_ = param->allocator_;
+    }
+    destroy_token_iter(param, iter);
   }
 
   /**

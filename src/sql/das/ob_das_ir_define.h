@@ -76,6 +76,7 @@ public:
       topk_limit_expr_(nullptr),
       topk_offset_expr_(nullptr),
       token_col_(nullptr),
+      count_agg_expr_(nullptr),
       block_max_spec_(alloc),
       avg_doc_len_est_spec_(alloc),
       mode_flag_(NATURAL_LANGUAGE_MODE),
@@ -88,6 +89,7 @@ public:
   bool need_block_max_scan() const { return has_block_max_scan_; }
   bool need_avg_doc_len_est() const { return has_avg_doc_len_est_ && nullptr != avg_doc_token_cnt_expr_; }
   bool has_pushdown_topk() const { return nullptr != topk_limit_expr_; }
+  bool is_count_agg() const { return nullptr != count_agg_expr_; }
   bool is_block_scan_valid() const
   {
     return has_block_max_scan_
@@ -174,6 +176,7 @@ public:
                        KPC_(topk_limit_expr),
                        KPC_(topk_offset_expr),
                        K_(token_col),
+                       KPC_(count_agg_expr),
                        K_(block_max_spec),
                        K_(mode_flag),
                        KPC_(field_boost_expr));
@@ -189,6 +192,7 @@ public:
   ObExpr *topk_limit_expr_;
   ObExpr *topk_offset_expr_;
   ObExpr *token_col_;
+  ObExpr *count_agg_expr_;
   ObTextBlockMaxSpec block_max_spec_;
   ObTextAvgDocLenEstSpec avg_doc_len_est_spec_;
   ObMatchAgainstMode mode_flag_; // for MySQL search mode flag

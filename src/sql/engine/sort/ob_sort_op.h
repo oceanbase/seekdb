@@ -25,11 +25,38 @@
 #include "sql/engine/basic/chunk_store/ob_compact_store.h"
 #include "sql/engine/basic/ob_chunk_datum_store.h"
 #include "sql/engine/px/p2p_datahub/ob_pushdown_topn_filter_msg.h"
+#include "share/ob_thread_pool.h"
 
 namespace oceanbase
 {
 namespace sql
 {
+
+class ObSQLSessionInfo;
+class ObSortVecOpProvider;
+
+class ObFtsSecondarySortThread final : public share::ObThreadPool
+{
+public:
+  ObFtsSecondarySortThread();
+  virtual ~ObFtsSecondarySortThread();
+
+  int init(ObSortVecOpProvider *sort_provider, ObSQLSessionInfo *session_info);
+  int start_sort();
+  int wait_sort();
+  bool is_started() const { return is_started_; }
+
+  virtual void run1() override;
+
+private:
+  bool is_inited_;
+  bool is_started_;
+  ObSortVecOpProvider *sort_provider_;
+  ObSQLSessionInfo *session_info_;
+  int sort_ret_;
+
+  DISALLOW_COPY_AND_ASSIGN(ObFtsSecondarySortThread);
+};
 
 class ObSortSpec : public ObOpSpec
 {
@@ -152,5 +179,3 @@ private:
 } // end namespace oceanbase
 
 #endif /* OCEANBASE_SQL_ENGINE_SORT_SORT_OP_H_ */
-
-

@@ -47,6 +47,7 @@ public:
 
   int set_px_finished();
   int update_tablet_range_count();
+  int set_uniform_tablet_slice_count(const int64_t slice_count);
   int64_t get_total_slice_count() const { return total_slice_count_; }
   virtual bool is_scan_finished() override { return px_thread_count_ > 0 && px_finished_count_ >= px_thread_count_; }
 

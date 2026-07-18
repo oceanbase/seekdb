@@ -34,6 +34,7 @@ public:
   virtual ~ObNgramFTParser();
 
   int init(plugin::ObFTParserParam *param);
+  int reuse(plugin::ObFTParserParam *param);
   void reset();
   virtual int get_next_token(
       const char *&word,
@@ -57,8 +58,12 @@ public:
   virtual ~ObNgramFTParserDesc() = default;
   virtual int init(plugin::ObPluginParam *param) override;
   virtual int deinit(plugin::ObPluginParam *param) override;
-  virtual int segment(plugin::ObFTParserParam *param, plugin::ObITokenIterator *&iter) const override;
-  virtual void free_token_iter(plugin::ObFTParserParam *param, plugin::ObITokenIterator *&iter) const override;
+  virtual int create_token_iter(plugin::ObFTParserParam *param,
+                                plugin::ObITokenIterator *&iter) const override;
+  virtual int reuse_token_iter(plugin::ObFTParserParam *param,
+                               plugin::ObITokenIterator *iter) const override;
+  virtual void destroy_token_iter(plugin::ObFTParserParam *param,
+                                  plugin::ObITokenIterator *&iter) const override;
   virtual int get_add_word_flag(ObAddWordFlag &flag) const override;
   OB_INLINE void reset() { is_inited_ = false; }
 private:

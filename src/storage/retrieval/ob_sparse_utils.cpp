@@ -83,10 +83,7 @@ int ObSRDaaTBooleanRelevanceCollector::init(ObIAllocator *allocator, const int64
 void ObSRDaaTBooleanRelevanceCollector::reset()
 {
   boolean_relevances_.reset();
-  if (OB_NOT_NULL(boolean_compute_node_)) {
-    boolean_compute_node_->release();
-    boolean_compute_node_ = nullptr;
-  }
+  boolean_compute_node_ = nullptr;
 }
 
 void ObSRDaaTBooleanRelevanceCollector::reuse()

@@ -29,10 +29,23 @@ namespace oceanbase
 namespace sql
 {
 
+struct ObFTIndexToken final
+{
+  ObFTIndexToken() : word_(), word_count_(0) {}
+  ObFTIndexToken(const common::ObString &word, const int64_t word_count)
+      : word_(word), word_count_(word_count)
+  {}
+
+  TO_STRING_KV(K_(word), K_(word_count));
+
+  common::ObString word_;
+  int64_t word_count_;
+};
 
 class ObFTIndexRowCache final
 {
 public:
+  static constexpr int64_t FTS_COLUMN_COUNT = 4;
   static ObObjDatumMapType FTS_INDEX_TYPES[4];
   static ObObjDatumMapType FTS_DOC_WORD_TYPES[4];
   static ObExprOperatorType FTS_INDEX_EXPR_TYPE[4];
@@ -46,15 +59,33 @@ public:
       const common::ObString &parser_properties);
   int segment(const common::ObObjMeta &ft_obj_meta, const ObDatum &doc_id, const common::ObString &fulltext);
   int get_next_row(blocksstable::ObDatumRow *&row);
+  int get_next_batch(const ObFTIndexToken *&tokens,
+                     const int64_t max_count,
+                     int64_t &token_count);
+  const ObDatum &get_doc_id() const { return doc_id_; }
+  int64_t get_document_length() const { return document_length_; }
   void reset();
   void reuse();
-  TO_STRING_KV(K_(row_idx), K_(is_fts_index_aux), K_(helper), K_(is_inited), K_(rows));
+  TO_STRING_KV(K_(token_idx), K_(document_length), K_(is_fts_index_aux), K_(helper),
+      K_(is_inited), K_(tokens));
 private:
-  lib::MemoryContext merge_memctx_;
-  ObDomainIndexRow rows_;
-  uint64_t row_idx_;
+  int prepare_word_map(const int64_t fulltext_length);
+  int materialize_word_map_tokens();
+  int fill_scalar_row(const ObFTIndexToken &token);
+
+  lib::MemoryContext parser_memctx_;
+  lib::MemoryContext document_memctx_;
+  common::ObSEArray<ObFTIndexToken, 32> tokens_;
+  storage::ObFTWordMap word_map_;
+  int64_t word_map_bucket_count_;
+  int64_t token_idx_;
+  ObDatum doc_id_;
+  int64_t document_length_;
   bool is_fts_index_aux_;
+  common::ObString parser_name_;
+  common::ObString parser_properties_;
   storage::ObFTParseHelper helper_;
+  blocksstable::ObDatumRow scalar_row_;
   bool is_inited_;
 
   DISALLOW_COPY_AND_ASSIGN(ObFTIndexRowCache);
@@ -183,6 +214,33 @@ public:
                                          const ObString &fulltext,
                                          const bool is_fts_index_aux,
                                          ObDomainIndexRow &word_rows);
+  static int generate_fulltext_word_rows(common::ObIAllocator &allocator,
+                                         storage::ObFTParseHelper *helper,
+                                         const common::ObObjMeta &ft_obj_meta,
+                                         const ObDatum &doc_id_datum,
+                                         const ObString &fulltext,
+                                         const bool is_fts_index_aux,
+                                         storage::ObFTWordMap &word_map,
+                                         ObDomainIndexRow &word_rows);
+  static int segment_fulltext(common::ObIAllocator &allocator,
+                              storage::ObFTParseHelper *helper,
+                              const common::ObObjMeta &meta,
+                              const common::ObString &fulltext,
+                              int64_t &document_length,
+                              storage::ObFTWordMap &word_map);
+  static int generate_fulltext_word_rows(common::ObIAllocator &allocator,
+                                         const ObDatum &doc_id_datum,
+                                         const bool is_fts_index_aux,
+                                         const int64_t document_length,
+                                         const storage::ObFTWordMap &word_map,
+                                         ObDomainIndexRow &word_rows);
+  static int generate_fulltext_word_rows(common::ObIAllocator &allocator,
+                                         const ObDatum &doc_id_datum,
+                                         const bool is_fts_index_aux,
+                                         const int64_t document_length,
+                                         const int64_t word_count,
+                                         const common::ObString &serialized_words,
+                                         ObDomainIndexRow &word_rows);
   static int generate_multivalue_index_rows(
       ObIAllocator &allocator,
       const ObDASDMLBaseCtDef &das_ctdef,
@@ -193,13 +251,6 @@ public:
       const ObDASWriteBuffer::DmlRow &dml_row,
       ObDomainIndexRow &domain_rows);
 private:
-  static int segment_and_calc_word_count(
-      common::ObIAllocator &allocator,
-      storage::ObFTParseHelper *helper,
-      const common::ObObjMeta &meta,
-      const ObString &fulltext,
-      int64_t &doc_length,
-      ObFTWordMap &words_count);
   static int calc_save_rowkey_policy(
     ObIAllocator &allocator,
     const ObDASDMLBaseCtDef &das_ctdef,
@@ -339,6 +390,7 @@ public:
   : ObDomainDMLIterator(allocator, row_projector, write_iter, das_ctdef, main_ctdef),
     doc_word_info_(ft_doc_word_info),
     ft_doc_word_iter_(),
+    parser_allocator_(lib::ObMemAttr("FTDMLParser")),
     ft_parse_helper_(),
     is_inited_(false)
   {
@@ -371,6 +423,7 @@ protected:
 private:
   const ObFTDocWordInfo *doc_word_info_;
   storage::ObFTDocWordScanIterator ft_doc_word_iter_;
+  common::ObArenaAllocator parser_allocator_;
   storage::ObFTParseHelper ft_parse_helper_;
   bool is_inited_;
 };

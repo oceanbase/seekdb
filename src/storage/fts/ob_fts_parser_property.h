@@ -18,6 +18,7 @@
 #define OB_FTS_PARSER_PROPERTY_H_
 
 #include "lib/allocator/ob_allocator.h"
+#include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/json/ob_json.h"
 #include "common/json_type/ob_json_base.h"
@@ -68,6 +69,7 @@ public:
   int rebuild_props_for_ddl(const ObString &parser_name,
                             const common::ObCollationType &type,
                             const bool log_to_user);
+  int qualify_ik_dict_tables(const ObString &database_name);
 
   int check_unsupported_config(const char **config_array,
                                int32_t config_count,
@@ -123,6 +125,10 @@ private:
   int beng_rebuild_props_for_ddl(bool log_to_user);
   int ngram2_rebuild_props_for_ddl(bool log_to_user);
   int plugin_rebuild_props_for_ddl(bool log_to_user);
+  int qualify_ik_dict_table(const char *config_name,
+                            const ObString &database_name,
+                            const ObString &table_name);
+  int normalize_legacy_quantifier_table();
 
 private:
   common::ObArenaAllocator allocator_;
@@ -160,6 +166,7 @@ public:
                K_(ik_mode_smart));
 
 public:
+  common::ObArenaAllocator allocator_;
   int64_t min_token_size_;
   int64_t max_token_size_;
   int64_t ngram_token_size_;

@@ -155,6 +155,12 @@ public:
   virtual int get_curr_score(double &score) const override;
   virtual int get_curr_id(const ObDatum *&id_datum) const override;
 public:
+  int ensure_count_row(bool &has_row);
+  int get_count_doc_id(const ObDocIdExt *&doc_id) const;
+  int compare_count_doc_ids(const ObDocIdExt &left, const ObDocIdExt &right, int64_t &cmp_ret) const;
+  int count_cached_docs_before(const ObDocIdExt &upper_bound, int64_t &count) const;
+  int consume_cached_docs(const int64_t count);
+  int64_t get_cached_doc_count() const { return cur_idx_ >= 0 && cur_idx_ < count_ ? count_ - cur_idx_ : 0; }
   int get_token_doc_cnt(int64_t &token_doc_cnt) const { return token_iter_->get_token_doc_cnt(token_doc_cnt); }
   virtual int get_dim_max_score(double &score) override {
     int ret = OB_SUCCESS;
@@ -168,6 +174,18 @@ public:
 private:
   int save_relevances_and_docids();
   int save_docids();
+  OB_INLINE int compare_doc_id(const ObDatum &lhs, const ObDatum &rhs, int &cmp_ret) const
+  {
+    int ret = OB_SUCCESS;
+    if (OB_LIKELY(use_binary_string_cmp_ && 0 == lhs.null_ && 0 == rhs.null_)) {
+      const int64_t min_len = MIN(lhs.len_, rhs.len_);
+      const int byte_cmp = min_len > 0 ? MEMCMP(lhs.ptr_, rhs.ptr_, min_len) : 0;
+      cmp_ret = byte_cmp > 0 ? 1 : (byte_cmp < 0 ? -1
+          : (lhs.len_ > rhs.len_ ? 1 : (lhs.len_ < rhs.len_ ? -1 : 0)));
+    } else if (OB_FAIL(cmp_func_(lhs, rhs, cmp_ret))) {
+    }
+    return ret;
+  }
   ObArenaAllocator *allocator_;
   ObTextRetrievalTokenIter *token_iter_;
   sql::ObEvalCtx *eval_ctx_;
@@ -179,6 +197,7 @@ private:
   ObFixedArray<double, ObIAllocator> relevance_; // when ~ObFixedArray(), wikll destory itself
   ObFixedArray<ObDocIdExt, ObIAllocator> doc_id_;
   common::ObDatumCmpFuncType cmp_func_;
+  bool use_binary_string_cmp_;
   bool is_inited_;
   DISALLOW_COPY_AND_ASSIGN(ObTextRetrievalDaaTTokenIter);
 };

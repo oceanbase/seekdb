@@ -1255,6 +1255,8 @@
 #define N_INNER_INFO_COLS_COLUMN_TYPE_PRINTER "inner_info_cols_column_type_printer"
 #define N_INNER_INFO_COLS_COLUMN_KEY_PRINTER "inner_info_cols_column_key_printer"
 #define N_AI_COMPLETE                       "ai_complete"
+#define N_LOAD_FILE                         "load_file"
+#define N_AI_SPLIT_DOCUMENT                 "ai_split_document"
 #define N_AI_EMBED                          "ai_embed"
 #define N_AI_RERANK                         "ai_rerank"
 #define N_AI_PROMPT                         "ai_prompt"

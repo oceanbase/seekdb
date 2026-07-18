@@ -203,7 +203,9 @@ class ObDASTRCacheIter : public ObDASTextRetrievalIter
 public:
   ObDASTRCacheIter();
   virtual ~ObDASTRCacheIter() {}
+  int advance_cached_row();
   int get_cur_row(double &relevance, ObDocIdExt &doc_id) const;
+  int get_cur_doc_id(ObDocIdExt &doc_id) const;
   INHERIT_TO_STRING_KV("ObDASTextRetrievalIter", ObDASTextRetrievalIter, K_(cur_idx), K_(count),
       K_(relevance), K_(doc_id));
 protected:

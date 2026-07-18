@@ -25,6 +25,9 @@
 #include "storage/ddl/ob_ddl_struct.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
 #include "storage/direct_load/ob_direct_load_vector_utils.h"
+#include "share/datum/ob_datum_funcs.h"
+#include "sql/das/ob_das_utils.h"
+#include "sql/engine/sort/ob_sort_vec_op.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -144,6 +147,8 @@ int ObPxMultiPartSSTableInsertOp::inner_open()
         LOG_WARN("check need idempotence failed", K(ret));
       } else if (OB_FAIL(locate_exprs())) {
         LOG_WARN("locate exprs failed", K(ret));
+      } else if (OB_FAIL(init_fused_fts_build())) {
+        LOG_WARN("init fused fulltext build failed", K(ret));
       } else if (is_heap_plan() && OB_FAIL(heap_tablet_writer_map_.create(MAP_HASH_BUCKET_NUM, ObMemAttr("tblt_writer_map")))) {
         LOG_WARN("init tablet writer map failed", K(ret));
       }
@@ -154,6 +159,8 @@ int ObPxMultiPartSSTableInsertOp::inner_open()
 
 void ObPxMultiPartSSTableInsertOp::destroy()
 {
+  fts_doc_word_sort_impl_.unregister_profile_if_necessary();
+  fts_doc_word_sort_impl_.reset();
   if (heap_tablet_writer_map_.created()) {
     TabletWriterMap::iterator iter = heap_tablet_writer_map_.begin();
     for (; iter != heap_tablet_writer_map_.end(); ++iter) {
@@ -231,20 +238,53 @@ int ObPxMultiPartSSTableInsertOp::finish_dag()
   if (OB_ISNULL(ddl_dag_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ddl dag is null", K(ret));
+  } else if (is_fused_fts_build_ && OB_ISNULL(fts_doc_word_ddl_dag_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fulltext doc word ddl dag is null", K(ret));
+  } else if (OB_FAIL(ddl_dag_->set_px_finished())) {
+    LOG_WARN("set px finished failed", K(ret));
   } else {
-    // px thread should not exit here, otherwise the session finished and the ddl dag threads will stop
-    if (OB_FAIL(ddl_dag_->set_px_finished())) {
-      LOG_WARN("set px finished failed", K(ret));
-    } else if (OB_FAIL(ddl_dag_->process())) {
-      LOG_WARN("dag process failed", K(ret), K(ddl_dag_->get_dag_ret()), KPC(ddl_dag_));
+    // Domain merge can run while the secondary sorter is finishing and doc-word
+    // slices are being written by this PX thread.
+    int flush_ret = OB_SUCCESS;
+    int doc_word_signal_ret = OB_SUCCESS;
+    int doc_word_ret = OB_SUCCESS;
+    if (is_fused_fts_build_) {
+      flush_ret = flush_fused_doc_word_rows();
+      if (OB_SUCCESS != flush_ret) {
+        fts_doc_word_ddl_dag_->set_ret_code(flush_ret);
+        LOG_WARN("flush fused fulltext doc word rows failed", K(flush_ret));
+      }
+      doc_word_signal_ret = fts_doc_word_ddl_dag_->set_px_finished();
+      if (OB_SUCCESS != doc_word_signal_ret) {
+        LOG_WARN("set fulltext doc word px finished failed", K(doc_word_signal_ret));
+      } else {
+        doc_word_ret = finish_fused_doc_word_dag();
+        if (OB_SUCCESS != doc_word_ret) {
+          LOG_WARN("finish fused fulltext doc word dag failed", K(doc_word_ret));
+        }
+      }
     }
 
-    if (OB_SUCC(ret)) {
-      ret = ddl_dag_->get_dag_ret();
-    } else if (ddl_dag_->is_dag_failed()) {
-      int tmp_ret = ret;
-      ret = ddl_dag_->get_dag_ret();
-      LOG_WARN("dag failed, return first failed task's error code", K(ret), K(tmp_ret));
+    int domain_ret = ddl_dag_->process();
+    if (OB_SUCCESS != domain_ret) {
+      LOG_WARN("dag process failed", K(domain_ret), K(ddl_dag_->get_dag_ret()), KPC(ddl_dag_));
+    }
+    if (ddl_dag_->is_dag_failed()) {
+      const int process_ret = domain_ret;
+      domain_ret = ddl_dag_->get_dag_ret();
+      LOG_WARN("dag failed, return first failed task's error code", K(domain_ret), K(process_ret));
+    } else if (OB_SUCCESS == domain_ret) {
+      domain_ret = ddl_dag_->get_dag_ret();
+    }
+    if (OB_SUCCESS != flush_ret) {
+      ret = flush_ret;
+    } else if (OB_SUCCESS != doc_word_signal_ret) {
+      ret = doc_word_signal_ret;
+    } else if (OB_SUCCESS != doc_word_ret) {
+      ret = doc_word_ret;
+    } else {
+      ret = domain_ret;
     }
   }
   return ret;
@@ -422,6 +462,7 @@ int ObPxMultiPartSSTableInsertOp::locate_exprs()
   const ObExprPtrIArray &child_output_exprs = child_->get_spec().output_;
   const int64_t part_id_idx = get_spec().row_desc_.get_part_id_index();
   if (NO_PARTITION_ID_FLAG == part_id_idx) {
+    is_partitioned_table_ = false;
     ObDASTableLoc *table_loc = ins_rtdef_.das_rtdef_.table_loc_;
     if (OB_ISNULL(table_loc) || table_loc->get_tablet_locs().size() != 1) {
       ret = OB_ERR_UNEXPECTED;
@@ -433,6 +474,7 @@ int ObPxMultiPartSSTableInsertOp::locate_exprs()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("error unexpected, part_id_idx is not valid", K(ret), K(part_id_idx), K(child_output_exprs.count()));
   } else {
+    is_partitioned_table_ = true;
     tablet_id_expr_ = child_output_exprs.at(part_id_idx);
   }
 
@@ -472,6 +514,443 @@ int ObPxMultiPartSSTableInsertOp::locate_exprs()
         }
       }
     }
+  }
+  return ret;
+}
+
+int ObPxMultiPartSSTableInsertOp::init_fused_fts_build()
+{
+  int ret = OB_SUCCESS;
+  int64_t doc_word_ctdef_idx = OB_INVALID_INDEX;
+  fts_doc_word_ddl_dag_ = ctx_.get_sqc_handler()->get_sub_coord().get_fts_doc_word_ddl_dag();
+  if (OB_ISNULL(fts_doc_word_ddl_dag_)) {
+  } else if (is_heap_plan()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fused fulltext build cannot use heap plan", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.ins_ctdef_.related_ctdefs_.count(); ++i) {
+      const ObDASInsCtDef *related_ctdef = static_cast<const ObDASInsCtDef *>(
+          MY_SPEC.ins_ctdef_.related_ctdefs_.at(i));
+      if (OB_ISNULL(related_ctdef)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("related insert ctdef is null", K(ret), K(i));
+      } else if (related_ctdef->is_access_vidx_as_master_table_) {
+        if (OB_INVALID_INDEX != doc_word_ctdef_idx) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("multiple fulltext doc word ctdefs", K(ret), K(doc_word_ctdef_idx), K(i));
+        } else {
+          doc_word_ctdef_idx = i;
+          fts_doc_word_ctdef_ = related_ctdef;
+        }
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (OB_INVALID_INDEX == doc_word_ctdef_idx || OB_ISNULL(fts_doc_word_ctdef_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("fulltext doc word ctdef is missing", K(ret), K_(MY_SPEC.ins_ctdef));
+    } else if (fts_doc_word_ctdef_->rowkey_cnt_ <= 0
+               || fts_doc_word_ctdef_->rowkey_cnt_
+                      > fts_doc_word_ctdef_->new_row_projector_.count()) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid fulltext doc word rowkey count", K(ret),
+          K(fts_doc_word_ctdef_->rowkey_cnt_),
+          K(fts_doc_word_ctdef_->new_row_projector_.count()));
+    } else {
+      fts_doc_word_table_id_ = fts_doc_word_ctdef_->index_tid_;
+      const ExprFixedArray &new_row = MY_SPEC.ins_ctdef_.new_row_;
+      if (OB_FAIL(fts_doc_word_row_exprs_.init(
+              fts_doc_word_ctdef_->new_row_projector_.count()))) {
+        LOG_WARN("initialize fulltext doc word row expressions failed", K(ret));
+      } else if (OB_FAIL(fts_doc_word_sort_exprs_.init(
+                     fts_doc_word_ctdef_->new_row_projector_.count()
+                     + (is_partitioned_table_ ? 1 : 0)))) {
+        LOG_WARN("initialize fulltext doc word sort expressions failed", K(ret));
+      }
+      for (int64_t i = 0;
+           OB_SUCC(ret) && i < fts_doc_word_ctdef_->new_row_projector_.count();
+           ++i) {
+        const int64_t projector_idx = fts_doc_word_ctdef_->new_row_projector_.at(i);
+        if (OB_UNLIKELY(projector_idx < 0 || projector_idx >= new_row.count())) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("invalid fulltext doc word projector", K(ret), K(projector_idx),
+              K(new_row.count()));
+        } else if (OB_FAIL(fts_doc_word_row_exprs_.push_back(new_row.at(projector_idx)))) {
+          LOG_WARN("append fulltext doc word row expression failed", K(ret), K(projector_idx));
+        }
+      }
+      if (OB_SUCC(ret) && is_partitioned_table_
+          && OB_FAIL(fts_doc_word_sort_exprs_.push_back(tablet_id_expr_))) {
+        LOG_WARN("append fulltext tablet expression failed", K(ret));
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && i < fts_doc_word_row_exprs_.count(); ++i) {
+        if (OB_FAIL(fts_doc_word_sort_exprs_.push_back(fts_doc_word_row_exprs_.at(i)))) {
+          LOG_WARN("append fulltext doc word sort expression failed", K(ret), K(i));
+        }
+      }
+      const int64_t tablet_key_count = is_partitioned_table_ ? 1 : 0;
+      const int64_t sort_key_count = tablet_key_count + fts_doc_word_ctdef_->rowkey_cnt_;
+      for (int64_t i = 0; OB_SUCC(ret) && i < sort_key_count; ++i) {
+        ObExpr *expr = fts_doc_word_sort_exprs_.at(i);
+        ObSortFieldCollation collation(i, expr->datum_meta_.cs_type_, true, NULL_FIRST);
+        ObSortCmpFunc cmp_func;
+        cmp_func.cmp_func_ = ObDatumFuncs::get_nullsafe_cmp_func(
+            expr->datum_meta_.type_,
+            expr->datum_meta_.type_,
+            collation.null_pos_,
+            collation.cs_type_,
+            expr->datum_meta_.scale_,
+            expr->obj_meta_.has_lob_header(),
+            expr->datum_meta_.precision_,
+            expr->datum_meta_.precision_);
+        if (OB_ISNULL(cmp_func.cmp_func_)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("fulltext doc word compare function is null", K(ret), K(i), KPC(expr));
+        } else if (OB_FAIL(fts_doc_word_sort_collations_.push_back(collation))) {
+          LOG_WARN("append fulltext doc word collation failed", K(ret), K(i));
+        } else if (OB_FAIL(fts_doc_word_sort_cmp_funs_.push_back(cmp_func))) {
+          LOG_WARN("append fulltext doc word compare function failed", K(ret), K(i));
+        }
+      }
+      if (OB_SUCC(ret) && OB_NOT_NULL(child_)
+                 && PHY_VEC_SORT == child_->get_spec().type_) {
+        fts_input_vec_sort_op_ = static_cast<ObSortVecOp *>(child_);
+        if (OB_FAIL(fts_input_vec_sort_op_->init_fts_secondary_sort(
+                &fts_doc_word_sort_collations_,
+                &fts_doc_word_sort_cmp_funs_,
+                &fts_doc_word_sort_exprs_,
+                MY_SPEC.rows_,
+                MY_SPEC.width_,
+                child_->get_spec().type_,
+                child_->get_spec().id_))) {
+          LOG_WARN("initialize vector pre-sort fulltext doc word pipeline failed", K(ret),
+              K(child_->get_spec().type_), K(child_->get_spec().id_));
+        }
+      } else if (OB_SUCC(ret)
+                 && OB_FAIL(fts_doc_word_sort_impl_.init(
+                        &fts_doc_word_sort_collations_,
+                        &fts_doc_word_sort_cmp_funs_,
+                        &get_eval_ctx(),
+                        &ctx_,
+                        false,
+                        false,
+                        false,
+                        0,
+                        INT64_MAX,
+                        false,
+                        ObChunkDatumStore::BLOCK_SIZE,
+                        NONE_COMPRESSOR,
+                        &fts_doc_word_sort_exprs_,
+                        MY_SPEC.rows_))) {
+        LOG_WARN("initialize fallback fulltext doc word sorter failed", K(ret));
+      }
+      if (OB_SUCC(ret)) {
+        if (OB_ISNULL(fts_input_vec_sort_op_)) {
+          fts_doc_word_sort_impl_.set_input_rows(MY_SPEC.rows_);
+          fts_doc_word_sort_impl_.set_input_width(MY_SPEC.width_);
+          fts_doc_word_sort_impl_.set_operator_type(MY_SPEC.type_);
+          fts_doc_word_sort_impl_.set_operator_id(MY_SPEC.id_);
+        }
+        is_fused_fts_build_ = true;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObPxMultiPartSSTableInsertOp::add_fused_doc_word_row(
+    const ObTabletID &tablet_id)
+{
+  int ret = OB_SUCCESS;
+  if (!is_fused_fts_build_) {
+  } else if (OB_NOT_NULL(fts_input_vec_sort_op_)) {
+  } else if (is_partitioned_table_ && OB_UNLIKELY(!tablet_id.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid fulltext tablet id", K(ret), K(tablet_id));
+  } else {
+    ObEvalCtx &eval_ctx = get_eval_ctx();
+    if (is_partitioned_table_) {
+      tablet_id_expr_->locate_expr_datum(eval_ctx).set_int(tablet_id.id());
+      tablet_id_expr_->set_evaluated_flag(eval_ctx);
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < fts_doc_word_sort_exprs_.count(); ++i) {
+      ObDatum *datum = nullptr;
+      if (OB_FAIL(fts_doc_word_sort_exprs_.at(i)->eval(eval_ctx, datum))) {
+        LOG_WARN("evaluate fulltext doc word sort expression failed", K(ret), K(i));
+      } else if (OB_ISNULL(datum)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("fulltext doc word sort datum is null", K(ret), K(i));
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(fts_doc_word_sort_impl_.add_row(fts_doc_word_sort_exprs_))) {
+      LOG_WARN("add fulltext doc word row to sorter failed", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObPxMultiPartSSTableInsertOp::add_fused_doc_word_batch(const ObBatchRows &brs)
+{
+  int ret = OB_SUCCESS;
+  if (!is_fused_fts_build_ || brs.size_ <= 0) {
+  } else if (OB_NOT_NULL(fts_input_vec_sort_op_)) {
+  } else if (OB_ISNULL(brs.skip_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fulltext doc word batch skip vector is null", K(ret), K(brs));
+  } else {
+    ObEvalCtx &eval_ctx = get_eval_ctx();
+    for (int64_t i = 0; OB_SUCC(ret) && i < fts_doc_word_sort_exprs_.count(); ++i) {
+      if (OB_FAIL(fts_doc_word_sort_exprs_.at(i)->eval_vector(eval_ctx, brs))) {
+        LOG_WARN("evaluate fulltext doc word sort vector failed", K(ret), K(i));
+      }
+    }
+    if (OB_SUCC(ret)
+        && OB_FAIL(fts_doc_word_sort_impl_.add_batch(
+               fts_doc_word_sort_exprs_, *brs.skip_, brs.size_, 0, nullptr))) {
+      LOG_WARN("add fulltext doc word batch to sorter failed", K(ret), K(brs.size_));
+    }
+  }
+  return ret;
+}
+
+int ObPxMultiPartSSTableInsertOp::get_fused_doc_word_tablet_id(
+    const ObTabletID &fts_tablet_id,
+    ObTabletID &doc_word_tablet_id) const
+{
+  int ret = OB_SUCCESS;
+  ObDASTableLoc *table_loc = ins_rtdef_.das_rtdef_.table_loc_;
+  ObDASTabletLoc *fts_tablet_loc = nullptr;
+  ObDASTabletLoc *doc_word_tablet_loc = nullptr;
+  doc_word_tablet_id.reset();
+  if (OB_ISNULL(table_loc) || OB_UNLIKELY(!fts_tablet_id.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid fulltext tablet location", K(ret), KP(table_loc), K(fts_tablet_id));
+  } else {
+    for (DASTabletLocListIter iter = table_loc->tablet_locs_begin();
+         OB_ISNULL(fts_tablet_loc) && iter != table_loc->tablet_locs_end();
+         ++iter) {
+      if (OB_NOT_NULL(*iter) && (*iter)->tablet_id_ == fts_tablet_id) {
+        fts_tablet_loc = *iter;
+      }
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_ISNULL(fts_tablet_loc)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fulltext tablet location is null", K(ret), K(fts_tablet_id));
+  } else if (OB_ISNULL(doc_word_tablet_loc = ObDASUtils::get_related_tablet_loc(
+                            *fts_tablet_loc, fts_doc_word_table_id_))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fulltext doc word tablet location is null", K(ret), K(fts_tablet_id),
+        K(fts_doc_word_table_id_));
+  } else {
+    doc_word_tablet_id = doc_word_tablet_loc->tablet_id_;
+  }
+  return ret;
+}
+
+int ObPxMultiPartSSTableInsertOp::switch_fused_doc_word_slice_if_need(
+    const ObTabletID &tablet_id,
+    ObISliceWriter *&slice_writer)
+{
+  int ret = OB_SUCCESS;
+  const int64_t slice_idx = ctx_.get_px_task_id();
+  if (OB_ISNULL(fts_doc_word_ddl_dag_) || OB_UNLIKELY(!tablet_id.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid fulltext doc word writer arguments", K(ret),
+        KP(fts_doc_word_ddl_dag_), K(tablet_id));
+  } else if (OB_NOT_NULL(slice_writer)
+             && slice_writer->get_tablet_id() == tablet_id
+             && slice_writer->get_slice_idx() == slice_idx) {
+  } else {
+    if (OB_NOT_NULL(slice_writer)) {
+      if (OB_FAIL(slice_writer->close())) {
+        LOG_WARN("close fulltext doc word slice writer failed", K(ret), KPC(slice_writer));
+      } else {
+        slice_writer->~ObISliceWriter();
+        ob_free(slice_writer);
+        slice_writer = nullptr;
+      }
+    }
+    ObWriteMacroParam write_param;
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(ObDDLUtil::fill_writer_param(
+                   tablet_id, slice_idx, -1, fts_doc_word_ddl_dag_, 0, write_param))) {
+      LOG_WARN("fill fulltext doc word writer param failed", K(ret), K(tablet_id),
+          K(slice_idx));
+    } else if (OB_ISNULL(slice_writer = OB_NEW(ObRsSliceWriter,
+                                               ObMemAttr("fts_dw_writer")))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate fulltext doc word slice writer failed", K(ret));
+    } else if (OB_FAIL(static_cast<ObRsSliceWriter *>(slice_writer)->init(write_param))) {
+      LOG_WARN("initialize fulltext doc word slice writer failed", K(ret), K(write_param));
+    }
+  }
+  return ret;
+}
+
+int ObPxMultiPartSSTableInsertOp::flush_fused_doc_word_rows()
+{
+  int ret = OB_SUCCESS;
+  ObISliceWriter *slice_writer = nullptr;
+  if (!is_fused_fts_build_) {
+  } else if (OB_NOT_NULL(fts_input_vec_sort_op_)
+             && OB_FAIL(fts_input_vec_sort_op_->wait_fts_secondary_sort())) {
+    LOG_WARN("wait vector pre-sort fulltext doc word pipeline failed", K(ret));
+  } else if (OB_ISNULL(fts_input_vec_sort_op_)
+             && OB_FAIL(fts_doc_word_sort_impl_.sort())) {
+    LOG_WARN("sort fallback fulltext doc word rows failed", K(ret));
+  } else if (OB_NOT_NULL(fts_input_vec_sort_op_)) {
+    while (OB_SUCC(ret)) {
+      int64_t read_rows = 0;
+      const int next_ret = fts_input_vec_sort_op_->get_next_fts_secondary_batch(read_rows);
+      if (OB_ITER_END == next_ret) {
+        break;
+      } else if (OB_SUCCESS != next_ret) {
+        ret = next_ret;
+        LOG_WARN("get sorted fulltext doc word batch failed", K(ret));
+      } else if (OB_UNLIKELY(read_rows <= 0)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("empty fulltext doc word sort batch", K(ret), K(read_rows));
+      } else if (OB_FAIL(append_fused_doc_word_vector_batch(read_rows, slice_writer))) {
+        LOG_WARN("append sorted fulltext doc word batch failed", K(ret), K(read_rows));
+      }
+    }
+  } else {
+    while (OB_SUCC(ret)) {
+      const int next_ret = fts_doc_word_sort_impl_.get_next_row(fts_doc_word_sort_exprs_);
+      if (OB_SUCCESS != next_ret) {
+        ret = next_ret;
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+          break;
+        }
+        LOG_WARN("get sorted fulltext doc word row failed", K(ret));
+      } else {
+        ObTabletID fts_tablet_id = non_partitioned_tablet_id_;
+        ObTabletID doc_word_tablet_id;
+        if (is_partitioned_table_) {
+          ObDatum &tablet_datum = fts_doc_word_sort_exprs_.at(0)->locate_expr_datum(
+              get_eval_ctx());
+          fts_tablet_id = ObTabletID(tablet_datum.get_int());
+        }
+        if (OB_FAIL(get_fused_doc_word_tablet_id(fts_tablet_id,
+                                                 doc_word_tablet_id))) {
+          LOG_WARN("get fulltext doc word tablet id failed", K(ret), K(fts_tablet_id));
+        } else if (OB_FAIL(switch_fused_doc_word_slice_if_need(
+                       doc_word_tablet_id, slice_writer))) {
+          LOG_WARN("switch fulltext doc word slice writer failed", K(ret),
+              K(doc_word_tablet_id));
+        } else {
+          ObSEArray<ObDatum *, 4> datums;
+          for (int64_t i = 0; OB_SUCC(ret) && i < fts_doc_word_row_exprs_.count(); ++i) {
+            ObDatum *datum = &fts_doc_word_row_exprs_.at(i)->locate_expr_datum(get_eval_ctx());
+            if (OB_FAIL(datums.push_back(datum))) {
+              LOG_WARN("append fulltext doc word datum failed", K(ret), K(i));
+            }
+          }
+          if (OB_SUCC(ret) && OB_FAIL(slice_writer->append_current_row(datums))) {
+            LOG_WARN("append sorted fulltext doc word row failed", K(ret),
+                K(doc_word_tablet_id));
+          }
+        }
+      }
+    }
+  }
+  if (OB_NOT_NULL(slice_writer)) {
+    int tmp_ret = OB_SUCCESS;
+    if (OB_TMP_FAIL(slice_writer->close())) {
+      LOG_WARN("close fulltext doc word slice writer failed", K(tmp_ret));
+      ret = COVER_SUCC(tmp_ret);
+    }
+    slice_writer->~ObISliceWriter();
+    ob_free(slice_writer);
+    slice_writer = nullptr;
+  }
+  return ret;
+}
+
+int ObPxMultiPartSSTableInsertOp::append_fused_doc_word_vector_batch(
+    const int64_t row_count,
+    ObISliceWriter *&slice_writer)
+{
+  int ret = OB_SUCCESS;
+  ObEvalCtx &eval_ctx = get_eval_ctx();
+  ObIVector *tablet_id_vector = nullptr;
+  if (OB_UNLIKELY(row_count <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid fulltext doc word vector batch size", K(ret), K(row_count));
+  } else if (is_partitioned_table_
+             && OB_ISNULL(tablet_id_vector =
+                 fts_doc_word_sort_exprs_.at(0)->get_vector(eval_ctx))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fulltext tablet id vector is null", K(ret));
+  }
+  for (int64_t row_idx = 0; OB_SUCC(ret) && row_idx < row_count; ++row_idx) {
+    ObTabletID fts_tablet_id = non_partitioned_tablet_id_;
+    ObTabletID doc_word_tablet_id;
+    if (is_partitioned_table_) {
+      if (OB_UNLIKELY(tablet_id_vector->is_null(row_idx))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("fulltext tablet id is null", K(ret), K(row_idx));
+      } else {
+        fts_tablet_id = ObTabletID(tablet_id_vector->get_int(row_idx));
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(get_fused_doc_word_tablet_id(fts_tablet_id,
+                                                    doc_word_tablet_id))) {
+      LOG_WARN("get fulltext doc word tablet id failed", K(ret), K(fts_tablet_id));
+    } else if (OB_FAIL(switch_fused_doc_word_slice_if_need(
+                   doc_word_tablet_id, slice_writer))) {
+      LOG_WARN("switch fulltext doc word slice writer failed", K(ret),
+          K(doc_word_tablet_id));
+    } else {
+      ObSEArray<ObDatum, 4> row_datums;
+      ObSEArray<ObDatum *, 4> datum_ptrs;
+      for (int64_t col_idx = 0;
+           OB_SUCC(ret) && col_idx < fts_doc_word_row_exprs_.count();
+           ++col_idx) {
+        ObExpr *expr = fts_doc_word_row_exprs_.at(col_idx);
+        ObIVector *vector = expr->get_vector(eval_ctx);
+        ObDatum datum;
+        if (OB_ISNULL(vector)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("fulltext doc word output vector is null", K(ret), K(col_idx));
+        } else if (vector->is_null(row_idx)) {
+          datum.set_null();
+        } else {
+          datum = ObDatum(vector->get_payload(row_idx), vector->get_length(row_idx), false);
+        }
+        if (OB_SUCC(ret) && OB_FAIL(row_datums.push_back(datum))) {
+          LOG_WARN("append fulltext doc word output datum failed", K(ret), K(col_idx));
+        }
+      }
+      for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < row_datums.count(); ++col_idx) {
+        if (OB_FAIL(datum_ptrs.push_back(&row_datums.at(col_idx)))) {
+          LOG_WARN("append fulltext doc word output datum pointer failed", K(ret), K(col_idx));
+        }
+      }
+      if (OB_SUCC(ret) && OB_FAIL(slice_writer->append_current_row(datum_ptrs))) {
+        LOG_WARN("append sorted fulltext doc word vector row failed", K(ret),
+            K(doc_word_tablet_id), K(row_idx));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObPxMultiPartSSTableInsertOp::finish_fused_doc_word_dag()
+{
+  int ret = OB_SUCCESS;
+  if (!is_fused_fts_build_) {
+  } else if (OB_ISNULL(fts_doc_word_ddl_dag_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fulltext doc word ddl dag is null", K(ret));
+  } else if (OB_FAIL(fts_doc_word_ddl_dag_->process())) {
+    LOG_WARN("process fulltext doc word ddl dag failed", K(ret),
+        K(fts_doc_word_ddl_dag_->get_dag_ret()), KPC(fts_doc_word_ddl_dag_));
+  } else {
+    ret = fts_doc_word_ddl_dag_->get_dag_ret();
   }
   return ret;
 }
@@ -790,6 +1269,10 @@ int ObPxMultiPartSSTableInsertOp::write_ordered_slice_by_batch()
         tablet_id_vector = tablet_id_expr_->get_vector(eval_ctx);
       }
     }
+    if (OB_SUCC(ret) && brs->size_ > 0
+        && OB_FAIL(add_fused_doc_word_batch(*brs))) {
+      LOG_WARN("add fused fulltext doc word batch failed", K(ret));
+    }
     while (OB_SUCC(ret) && offset < brs->size_) {
       if (OB_FAIL(get_continue_slice(tablet_id_vector, slice_info_vector, *brs, tablet_id, slice_idx, offset, row_count))) {
         LOG_WARN("get continue slice failed", K(ret));
@@ -859,6 +1342,8 @@ int ObPxMultiPartSSTableInsertOp::write_ordered_slice_by_row()
                                                                      autoinc_param.autoinc_range_interval_))) {
     } else if (OB_FAIL(eval_current_row(datums))) {
       LOG_WARN("eval current row failed", K(ret));
+    } else if (OB_FAIL(add_fused_doc_word_row(tablet_id))) {
+      LOG_WARN("add fused fulltext doc word row failed", K(ret));
     } else if (OB_FAIL(slice_writer->append_current_row(datums))) {
       LOG_WARN("append current row failed", K(ret));
     }
@@ -870,7 +1355,6 @@ int ObPxMultiPartSSTableInsertOp::write_ordered_slice_by_row()
       LOG_WARN("close slice writer failed", K(ret));
     }
   }
-
   // ignore ret
   if (nullptr != slice_writer) {
     slice_writer->~ObISliceWriter();
@@ -1081,4 +1565,3 @@ int ObPxMultiPartSSTableInsertOp::sync_table_level_autoinc_value()
   }
   return ret;
 }
-

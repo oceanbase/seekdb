@@ -238,7 +238,7 @@ int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
     }
     if (OB_SUCC(ret)) {
       if (stmt->get_match_exprs().count() > 0 &&
-          OB_FAIL(preserve_order_for_fulltext_search(stmt, is_happened))) {
+          OB_FAIL(preserve_order_for_fulltext_search(parent_stmts, stmt, is_happened))) {
         LOG_WARN("failed to preserve order for fulltext search", K(ret));
       } else {
         trans_happened |= is_happened;
@@ -4615,12 +4615,16 @@ int ObTransformPreProcess::do_flatten_conditions(ObDMLStmt *stmt, ObIArray<ObRaw
 
 // full-text index queries on a single base table are processed with order preservation. 
 // (Order is not preserved in multi-table join scenarios.)
-int ObTransformPreProcess::preserve_order_for_fulltext_search(ObDMLStmt *stmt, bool& trans_happened)
+int ObTransformPreProcess::preserve_order_for_fulltext_search(
+    const ObIArray<ObParentDMLStmt> &parent_stmts,
+    ObDMLStmt *stmt,
+    bool &trans_happened)
 {
   int ret = OB_SUCCESS;
   trans_happened = false;
   TableItem *table_item = NULL;
   ObRawExpr *match_expr = nullptr;
+  bool can_eliminate_order = false;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
@@ -4641,6 +4645,19 @@ int ObTransformPreProcess::preserve_order_for_fulltext_search(ObDMLStmt *stmt, b
     // do nothing
   } else if (0 == stmt->get_match_exprs().count()) {
     // do nothing
+  } else if (OB_FAIL(check_count_over_fts_limit(
+      parent_stmts, *static_cast<ObSelectStmt *>(stmt), can_eliminate_order))) {
+    LOG_WARN("failed to check count over fulltext limit", K(ret));
+  } else if (can_eliminate_order) {
+    ObConstRawExpr *one_expr = nullptr;
+    if (OB_FAIL(ObRawExprUtils::build_const_int_expr(
+        *ctx_->expr_factory_, ObIntType, 1, one_expr))) {
+      LOG_WARN("failed to build constant projection for fulltext limit", K(ret));
+    } else {
+      static_cast<ObSelectStmt *>(stmt)->get_select_item(0).expr_ = one_expr;
+      trans_happened = true;
+      LOG_TRACE("eliminate fulltext order for count over limit", KPC(stmt));
+    }
   } else if (stmt->get_match_exprs().at(0) != nullptr && stmt->get_match_exprs().at(0)->is_es_match()) {
     ObSEArray<ObRawExpr*, 2> relation_exprs;
     if (OB_FAIL(stmt->get_relation_exprs(relation_exprs))) {
@@ -4787,6 +4804,64 @@ int ObTransformPreProcess::preserve_order_for_fulltext_search(ObDMLStmt *stmt, b
       trans_happened = true;
     }
   } 
+  return ret;
+}
+
+int ObTransformPreProcess::check_count_over_fts_limit(
+    const ObIArray<ObParentDMLStmt> &parent_stmts,
+    ObSelectStmt &stmt,
+    bool &can_eliminate_order)
+{
+  int ret = OB_SUCCESS;
+  can_eliminate_order = false;
+  ObSelectStmt *parent_stmt = nullptr;
+  TableItem *generated_table = nullptr;
+  ObAggFunRawExpr *count_expr = nullptr;
+  ObRawExpr *select_expr = nullptr;
+  if (parent_stmts.empty()
+      || !stmt.has_limit()
+      || nullptr != stmt.get_limit_percent_expr()
+      || stmt.is_fetch_with_ties()
+      || stmt.has_fetch()
+      || 1 != stmt.get_select_item_size()) {
+  } else if (OB_ISNULL(select_expr = stmt.get_select_item(0).expr_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null fulltext limit select expression", K(ret));
+  } else if (!select_expr->is_column_ref_expr()) {
+  } else if (OB_ISNULL(parent_stmts.at(parent_stmts.count() - 1).stmt_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null parent statement", K(ret));
+  } else if (!parent_stmts.at(parent_stmts.count() - 1).stmt_->is_select_stmt()) {
+  } else if (OB_FALSE_IT(parent_stmt = static_cast<ObSelectStmt *>(
+      parent_stmts.at(parent_stmts.count() - 1).stmt_))) {
+  } else if (!parent_stmt->is_single_table_stmt()
+      || parent_stmt->is_set_stmt()
+      || parent_stmt->has_limit()
+      || 0 != parent_stmt->get_group_expr_size()
+      || 0 != parent_stmt->get_rollup_expr_size()
+      || parent_stmt->has_having()
+      || parent_stmt->has_order_by()
+      || parent_stmt->has_distinct()
+      || parent_stmt->has_window_function()
+      || parent_stmt->has_sequence()
+      || 0 != parent_stmt->get_condition_size()
+      || 1 != parent_stmt->get_select_item_size()
+      || 1 != parent_stmt->get_aggr_item_size()) {
+  } else if (OB_FAIL(ObTransformUtils::get_generated_table_item(
+      *parent_stmt, &stmt, generated_table))) {
+    LOG_WARN("failed to get generated table for fulltext limit", K(ret));
+  } else if (OB_ISNULL(generated_table)
+      || generated_table != parent_stmt->get_table_item(0)) {
+  } else if (OB_ISNULL(count_expr = parent_stmt->get_aggr_item(0))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null count expression", K(ret));
+  } else if (T_FUN_COUNT != count_expr->get_expr_type()
+      || count_expr->is_param_distinct()
+      || 0 != count_expr->get_real_param_count()
+      || parent_stmt->get_select_item(0).expr_ != count_expr) {
+  } else {
+    can_eliminate_order = true;
+  }
   return ret;
 }
 

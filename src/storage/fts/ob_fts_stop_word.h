@@ -17,6 +17,7 @@
 #ifndef OB_FTS_STOP_WORD_H_
 #define OB_FTS_STOP_WORD_H_
 
+#include "lib/allocator/page_arena.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/hash/ob_hashset.h"
 #include "object/ob_object.h"
@@ -78,7 +79,7 @@ public:
 
   int init();
   void destroy();
-  int check_stopword(const ObFTWord &word, bool &is_stopword);
+  int check_stopword(const ObFTWord &word, bool &is_stopword, common::ObIAllocator *scratch_alloc = nullptr);
 
 private:
   static const int64_t DEFAULT_STOPWORD_BUCKET_NUM = 37L;
@@ -120,9 +121,11 @@ public:
 
 private:
   bool is_min_max_word(const int64_t c_len) const;
-  int casedown_word(const ObFTWord &src, ObFTWord &dst);
+  bool is_ascii_casedown_noop(const ObFTWord &word) const;
+  int casedown_word(const ObFTWord &src, ObFTWord &dst, bool &owns_word);
   int check_stopword(const ObFTWord &word, bool &is_stopword);
-  int groupby_word(const ObFTWord &word, const int64_t word_cnt);
+  int persist_word(const ObFTWord &src, ObFTWord &dst);
+  int groupby_word(const ObFTWord &word, const int64_t word_cnt, const bool owns_word);
 private:
   ObObjMeta word_meta_;
   common::ObIAllocator &allocator_;
@@ -133,6 +136,7 @@ private:
   int64_t min_token_size_;
   int64_t max_token_size_;
   ObAddWordFlag flag_;
+  common::ObArenaAllocator scratch_alloc_;
 };
 
 } // end namespace storage
