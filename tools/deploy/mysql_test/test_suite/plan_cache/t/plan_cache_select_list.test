@@ -15,7 +15,6 @@ connection obsys;
 --disable_query_log
 --disable_result_log
 alter system flush plan cache global;
-alter system set large_query_threshold = '1s';
 --sleep 3
 
 connection default;
@@ -174,4 +173,3 @@ drop view if exists test_view;
 --enable_warnings
 
 connection obsys;
-alter system set large_query_threshold = '100ms';

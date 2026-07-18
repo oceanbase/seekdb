@@ -345,14 +345,6 @@ DEF_PARAM(workers_per_cpu_quota, INT, OB_CLUSTER_PARAMETER, "10", "[2,20]",
         "the ratio(integer) between the number of system allocated workers vs "
         "the maximum number of threads that can be scheduled concurrently. Range: [2, 20]",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(large_query_worker_percentage, DBL, OB_CLUSTER_PARAMETER, "30", "[0,100]",
-        "the percentage of the workers reserved to serve large query request. "
-        "Range: [0, 100] in percentage",
-        ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE))
-DEF_PARAM(large_query_threshold, TIME, OB_CLUSTER_PARAMETER, "5s", "[0ms,)",
-         "threshold for execution time beyond "
-         "which a request may be paused and rescheduled as a \\'large request\\', 0ms means disable \\'large request\\'. Range: [0ms, +∞)",
-         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_ob_max_thread_num, INT, OB_CLUSTER_PARAMETER, "0", "[0,10000)",
          "ob max thread number "
          "upper limit of observer thread count. Range: [0, 10000), 0 means no limit.",

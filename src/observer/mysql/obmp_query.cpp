@@ -302,7 +302,7 @@ int ObMPQuery::process()
         }
       }
     }
-    // THIS_WORKER.need_retry() means whether to put it back in the queue for retry, including the case of large queries being put back in the queue.
+    // THIS_WORKER.need_retry() means whether to put the request back in the queue for scheduler retry.
     session.check_and_reset_retry_info(*cur_trace_id, THIS_WORKER.need_retry());
     session.set_last_trace_id(ObCurTraceId::get_trace_id());
     // clear thread-local variables used for queue waiting
@@ -381,7 +381,7 @@ int ObMPQuery::try_batched_multi_stmt_optimization(sql::ObSQLSessionInfo &sessio
                                          need_disconnect))) {
     int tmp_ret = ret;
     if (THIS_WORKER.need_retry()) {
-      // fail optimize, is a large query, just go back to large query queue and retry
+      // Keep the retry decision for the upper scheduler.
     } else {
       ret = OB_SUCCESS;
     }

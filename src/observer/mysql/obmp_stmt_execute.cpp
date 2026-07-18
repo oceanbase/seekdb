@@ -1745,7 +1745,7 @@ int ObMPStmtExecute::process()
       // Print out the SQL statement before exiting, for easy problem location
       if (OB_FAIL(ret)) {
         if (OB_EAGAIN == ret) {
-          //large query, do nothing
+          // Retryable request is handled by the upper scheduler.
         } else if (is_conn_valid()) {// The memory of sql string is invalid if conn_valid_ has been set false.
           LOG_WARN("fail execute sql", "sql_id", ctx_.sql_id_, K_(stmt_id), K(ret));
         } else {

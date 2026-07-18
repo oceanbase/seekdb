@@ -45,11 +45,6 @@
           "comment": "forbid recording sql and transaction trace event"
         },
         {
-          "name": "large_query_threshold",
-          "value": "600s",
-          "comment": "for complex OLTP scenario, some query will run for very long time."
-        },
-        {
           "name": "max_syslog_file_count",
           "value": 300,
           "comment": "300 is an empirical value."
@@ -83,11 +78,6 @@
           "name": "enable_record_trace_log",
           "value": false,
           "comment": "disable trace log for better KV performance"
-        },
-        {
-          "name": "large_query_threshold",
-          "value": "0ms",
-          "comment": "disable large query detection for KV mode"
         },
         {
           "name": "max_syslog_file_count",

@@ -3523,8 +3523,6 @@ def_table_schema(**all_catalog_privilege_def)
 def_table_schema(**gen_history_table_def(540, all_catalog_privilege_def))
 
 # 542: __sslog_table
-# 543: __all_license (abandoned)
-
 def_table_schema(
   owner = 'jiabokai.jbk',
   table_name = '__all_pl_recompile_objinfo',
@@ -4192,8 +4190,6 @@ def_table_schema(
       ('rows_processed', 'int'),
       ('elapsed_time', 'uint'),
       ('cpu_time', 'uint'),
-      ('large_querys', 'int'),
-      ('delayed_large_querys', 'int'),
       ('outline_version', 'int'),
       ('outline_id', 'int'),
       ('outline_data', 'longtext', 'false'),
@@ -4989,8 +4985,6 @@ def_table_schema(
     ('remain_slice', 'double'),
     ('token_cnt', 'bigint:20'),
     ('ass_token_cnt', 'bigint:20'),
-    ('lq_tokens', 'bigint:20'),
-    ('used_lq_tokens', 'bigint:20'),
     ('stopped', 'bigint:20'),
     ('idle_us', 'bigint:20'),
     ('recv_hp_rpc_cnt', 'bigint:20'),
@@ -4998,19 +4992,15 @@ def_table_schema(
     ('recv_lp_rpc_cnt', 'bigint:20'),
     ('recv_mysql_cnt', 'bigint:20'),
     ('recv_task_cnt', 'bigint:20'),
-    ('recv_large_req_cnt', 'bigint:20'),
-    ('recv_large_queries', 'bigint:20'),
     ('actives', 'bigint:20'),
     ('workers', 'bigint:20'),
-    ('lq_waiting_workers', 'bigint:20'),
     ('req_queue_total_size', 'bigint:20'),
     ('queue_0', 'bigint:20'),
     ('queue_1', 'bigint:20'),
     ('queue_2', 'bigint:20'),
     ('queue_3', 'bigint:20'),
     ('queue_4', 'bigint:20'),
-    ('queue_5', 'bigint:20'),
-    ('large_queued', 'bigint:20')
+    ('queue_5', 'bigint:20')
   ],  vtable_route_policy = 'local'
   )
 
@@ -9269,8 +9259,8 @@ def_table_schema(
     DB_ID,STATEMENT,QUERY_SQL,SPECIAL_PARAMS,PARAM_INFOS, SYS_VARS, CONFIGS, PLAN_HASH,
     FIRST_LOAD_TIME,SCHEMA_VERSION,LAST_ACTIVE_TIME,AVG_EXE_USEC,SLOWEST_EXE_TIME,SLOWEST_EXE_USEC,
     SLOW_COUNT,HIT_COUNT,PLAN_SIZE,EXECUTIONS,DISK_READS,DIRECT_WRITES,BUFFER_GETS,APPLICATION_WAIT_TIME,
-    CONCURRENCY_WAIT_TIME,USER_IO_WAIT_TIME,ROWS_PROCESSED,ELAPSED_TIME,CPU_TIME,LARGE_QUERYS,
-    DELAYED_LARGE_QUERYS,DELAYED_PX_QUERYS,OUTLINE_VERSION,OUTLINE_ID,OUTLINE_DATA,ACS_SEL_INFO,
+    CONCURRENCY_WAIT_TIME,USER_IO_WAIT_TIME,ROWS_PROCESSED,ELAPSED_TIME,CPU_TIME,
+    DELAYED_PX_QUERYS,OUTLINE_VERSION,OUTLINE_ID,OUTLINE_DATA,ACS_SEL_INFO,
     TABLE_SCAN,EVOLUTION, EVO_EXECUTIONS, EVO_CPU_TIME, TIMEOUT_COUNT, PS_STMT_ID, SESSID,
     TEMP_TABLES, OBJECT_TYPE,HINTS_INFO,HINTS_ALL_WORKED, PL_SCHEMA_ID,
     IS_BATCHED_MULTI_STMT, RULE_NAME,
@@ -16670,8 +16660,6 @@ def_table_schema(
 
 # 21635: GV$OB_PLUGINS # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_plugin_info)
 # 21636: V$OB_PLUGINS # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_plugin_info)
-
-# 21639: DBA_OB_LICENSE (abandoned)
 
 def_table_schema(
   owner           = 'yangjiali.yjl',

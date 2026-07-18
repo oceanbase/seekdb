@@ -607,7 +607,7 @@ public:
                                   bool is_packet_retry)
   {
     // 1.If it is a local retry, by the time it reaches here, all retries have been completed, so just reset the retry info in the session;
-    // 2.If it is retried by putting back into the queue (including the case of large queries being put back into the queue), the retry info in the session should not be reset;
+    // 2.If it is retried by putting back into the queue, the retry info in the session should not be reset;
     // 3.If it is not a retry, the retry info in the session needs to be reset here.
     // Note, here we need to reset the retry info to not init state, so we should call reset, not clear.
     if (!is_packet_retry) {

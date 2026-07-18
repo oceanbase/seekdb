@@ -264,7 +264,7 @@ public:
 
   // get request from request queue, waiting at most TIMEOUT us.
   // if IN_HIGH_PRIORITY is set, get request from hp queue.
-  int get_new_request(ObThWorker &w, int64_t timeout, rpc::ObRequest *&req);
+  int get_new_request(int64_t timeout, rpc::ObRequest *&req);
 
   // receive request from network
   int recv_request(rpc::ObRequest &req);
@@ -321,10 +321,6 @@ public:
   // Node balance thread would periodically check tenant status by
   // calling this function.
   void periodically_check();
-  int64_t lq_retry_queue_size()
-  {
-    return 0;
-  }
   ReqQueue& get_req_queue() { return req_queue_; }
   int acquire_more_worker(int64_t num, int64_t &succ_num, bool force = false);
   bool do_add_worker();
@@ -372,10 +368,8 @@ protected:
   volatile uint64_t recv_mysql_cnt_;
   volatile uint64_t recv_task_cnt_;
   volatile uint64_t recv_sql_task_cnt_;
-  volatile uint64_t recv_large_req_cnt_;
   volatile uint64_t recv_retry_on_lock_rpc_cnt_;
   volatile uint64_t recv_retry_on_lock_mysql_cnt_;
-  volatile uint64_t tt_large_quries_;
 
 public:
   common::ObLatch lock_;

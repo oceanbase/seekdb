@@ -44,7 +44,6 @@ public:
 
   virtual Status check_wait();
   virtual int check_status() { check_wait(); return common::OB_SUCCESS; }
-  virtual int check_large_query_quota() { return common::OB_SUCCESS; }
   // check if retry disabled for the query
   virtual bool can_retry() const { return false; }
   // Set retry flag so that scheduler will reprocess this request then

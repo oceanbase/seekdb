@@ -223,9 +223,7 @@ int ObMPStmtPrepare::process()
       }
 
       if (OB_FAIL(ret)) {
-        //if (OB_EAGAIN == ret) {
-          //large query, do nothing
-        //} else
+        // Log the current attempt; retryable errors are handled by the upper scheduler.
         if (is_conn_valid()) {//The memory of sql sting is invalid if conn_valid_ has ben set false.
           LOG_WARN("execute sql failed", "sql_id", ctx_.sql_id_, K_(sql), K(ret));
         } else {

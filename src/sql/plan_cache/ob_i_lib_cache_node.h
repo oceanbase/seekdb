@@ -111,9 +111,7 @@ public:
       co_list_(allocator_),
       is_invalid_(false),
       added_mem_size_(0)
-  {
-    lock_timeout_ts_ = GCONF.large_query_threshold;
-  }
+  {}
   virtual ~ObILibCacheNode();
   /**
    * @brief initialize library cache node
@@ -171,13 +169,9 @@ public:
   ObPlanCache *get_lib_cache() const { return lib_cache_; }
   bool is_invalid() const { return is_invalid_; }
 
-  VIRTUAL_TO_STRING_KV(K_(ref_count), K_(lock_timeout_ts));
+  VIRTUAL_TO_STRING_KV(K_(ref_count));
 
 protected:
-  void set_lock_timeout_threshold(int64_t threshold)
-  {
-    lock_timeout_ts_ = threshold;
-  }
   /**
    * @brief called by get_cache_obj(), each object in the ObLibCacheNameSpace enumeration structure
    * needs to inherit this interface and implement its own inner get implementation
@@ -216,7 +210,6 @@ protected:
   common::ObIAllocator &allocator_;
   common::TCRWLock rwlock_;
   int64_t ref_count_;
-  int64_t lock_timeout_ts_;
   StmtStat node_stat_;
   ObPlanCache *lib_cache_;
   common::SpinRWLock co_list_lock_;

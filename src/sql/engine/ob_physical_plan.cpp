@@ -388,16 +388,6 @@ int ObPhysicalPlan::set_stmt_need_privs(const ObStmtNeedPrivs& stmt_need_privs)
   return ret;
 }
 
-void ObPhysicalPlan::inc_large_querys()
-{
-  ATOMIC_INC(&(stat_.large_querys_));
-}
-
-void ObPhysicalPlan::inc_delayed_large_querys()
-{
-  ATOMIC_INC(&(stat_.delayed_large_querys_));
-}
-
 void ObPhysicalPlan::inc_delayed_px_querys()
 {
   ATOMIC_INC(&(stat_.delayed_px_querys_));
@@ -1192,8 +1182,6 @@ int ObPhysicalPlan::update_cache_obj_stat(ObILibCacheCtx &ctx)
         SQL_PC_LOG(WARN, "fail to set truncate string", K(ret));
       }
     }
-    stat_.large_querys_= 0;
-    stat_.delayed_large_querys_= 0;
     stat_.delayed_px_querys_= 0;
     stat_.outline_version_ = get_outline_state().outline_version_.version_;
     stat_.outline_id_ = get_outline_state().outline_version_.object_id_;

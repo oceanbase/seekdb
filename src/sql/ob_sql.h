@@ -371,10 +371,6 @@ private:
                        ObOutlineState &outline_state,
                        ObString &outline_content);
 
-  int handle_large_query(int tmp_ret,
-                         ObResultSet &result,
-                         bool &need_disconnect,
-                         ObExecContext &exec_ctx);
   int pc_get_plan_and_fill_result(ObPlanCacheCtx &pc_ctx,
                                   ObResultSet &result_set,
                                   int &get_plan_err,

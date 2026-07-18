@@ -693,26 +693,6 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
       }
       break;
     }
-    case share::ALL_VIRTUAL_PLAN_STAT_CDE::LARGE_QUERYS: {
-      if (!cache_stat_updated) {
-        cells[i].set_null();
-      } else if (cache_obj->is_sql_crsr()) {
-        cells[i].set_int(plan->stat_.large_querys_);
-      } else {
-        cells[i].set_int(0);
-      }
-      break;
-    }
-    case share::ALL_VIRTUAL_PLAN_STAT_CDE::DELAYED_LARGE_QUERYS: {
-      if (!cache_stat_updated) {
-        cells[i].set_null();
-      } else if (cache_obj->is_sql_crsr()) {
-        cells[i].set_int(plan->stat_.delayed_large_querys_);
-      } else {
-        cells[i].set_int(0);
-      }
-      break;
-    }
     case share::ALL_VIRTUAL_PLAN_STAT_CDE::OUTLINE_VERSION: {
       if (!cache_stat_updated) {
         cells[i].set_null();

@@ -444,11 +444,6 @@ function sysbench {
   obd test sysbench $deploy_name $OBCLIENT_BIN_ARGS $extra_args
 }
 
-function tpch {
-  get_deploy_name
-  obd test tpch $deploy_name $OBCLIENT_BIN_ARGS $extra_args
-}
-
 function tpcc {
   get_deploy_name
   obd test tpcc $deploy_name $OBCLIENT_BIN_ARGS $extra_args
@@ -491,7 +486,6 @@ upgrade [-n DEPLOY_NAME]                 Upgrade cluster.
 list [-n DEPLOY_NAME]                    List cluster.
 display [-n DEPLOY_NAME]                 Display cluster info.
 sysbench [-n DEPLOY_NAME]                Run sysbench, use '--help' for more details.
-tpch [-n DEPLOY_NAME]                    Run tpch test, use '--help' for more details.
 tpcc [-n DEPLOY_NAME]                    Run tpcc test, use '--help' for more details.
 mysqltest [-n DEPLOY_NAME]               Run mysqltest, use '--help' for more details.
 pid [-n DEPLOY_NAME]                     Get pid list for servers, use '--help' for more details.
@@ -655,9 +649,6 @@ function main() {
     ;;
     sysbench)
     sysbench
-    ;;
-    tpch)
-    tpch
     ;;
     tpcc)
     tpcc

@@ -120,8 +120,6 @@ public:
                         const int64_t sample_exec_usec);
   bool is_expired() const { return NOT_EXPIRED != stat_.is_expired_; }
   void set_is_expired(ObPlanExpiredStat expired_stat) { stat_.is_expired_ = expired_stat; }
-  void inc_large_querys();
-  void inc_delayed_large_querys();
   void inc_delayed_px_querys();
   bool is_need_trans() const { return is_need_trans_; }
   bool is_stmt_modify_trans() const;
