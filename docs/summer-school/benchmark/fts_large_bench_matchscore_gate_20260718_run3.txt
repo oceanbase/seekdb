@@ -1,0 +1,227 @@
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8)
+=== FTS Large Benchmark (label=matchscore_gate_20260718_run3) ===
+rows=20000 batch=500 rounds=3000 query_rounds=200 samples=3
+[diag] runtime context ...
+  diag=1
+  heartbeat_sec=5
+  mysql_cmd=mysql -h127.0.0.1 -P2881 -uroot -N -s --default-character-set=utf8mb4
+  mysql_verbose_cmd=mysql -h127.0.0.1 -P2881 -uroot --default-character-set=utf8mb4
+  pwd:
+tools/benchmark/fts_large_bench.sh: line 121: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8)
+    /workspace/dxy_data/seekdb_index
+  uname:
+tools/benchmark/fts_large_bench.sh: line 121: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8)
+    Linux node-49-52-27-34 3.10.0-1160.118.1.el7.x86_64 #1 SMP Wed Apr 24 16:01:50 UTC 2024 x86_64 x86_64 x86_64 GNU/Linux
+  cpu_count:
+tools/benchmark/fts_large_bench.sh: line 121: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8)
+    96
+  workspace_fs:
+tools/benchmark/fts_large_bench.sh: line 121: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8)
+    /dev/pmem0p1   ext4 257898948 62397700 182377664  26% /workspace
+  server_version:
+    VERSION()
+    5.7.25-OceanBase seekdb-v1.3.0.0
+  show_parameters_stack_size:
+    zone	svr_type	name	data_type	value	info	section	scope	source	edit_level	default_value	isdefault
+    z1	observer	stack_size	CAPACITY	8M	the size of routine execution stackRange: [256K, 20M]	OBSERVER	CLUSTER	DEFAULT	STATIC_EFFECTIVE	256K	0
+  show_parameters_cpu_count:
+    zone	svr_type	name	data_type	value	info	section	scope	source	edit_level	default_value	isdefault
+    z1	observer	cpu_count	INT	0	the number of CPU\\'s in the system. If this parameter is set to zero, the number will be set according to sysconf; otherwise, this parameter is used. Range: [0,+∞) in integer	OBSERVER	CLUSTER	DEFAULT	DYNAMIC_EFFECTIVE	0	1
+  show_parameters_memory_limit:
+    zone	svr_type	name	data_type	value	info	section	scope	source	edit_level	default_value	isdefault
+    z1	observer	memory_limit	CAPACITY	0M	the size of the memory reserved for internal use(for testing purpose), 0 means follow memory_limit_percentage. Range: 0, [1G,).	OBSERVER	CLUSTER	DEFAULT	DYNAMIC_EFFECTIVE	0M	1
+  show_parameters_system_memory:
+    zone	svr_type	name	data_type	value	info	section	scope	source	edit_level	default_value	isdefault
+    z1	observer	system_memory	CAPACITY	0M	the memory reserved for internal use which cannot be allocated to any outer-tenant, and should be determined to guarantee every server functions normally. Range: [0M,)	OBSERVER	CLUSTER	DEFAULT	DYNAMIC_EFFECTIVE	0M	1
+  show_parameters_workers_per_cpu_quota:
+    zone	svr_type	name	data_type	value	info	section	scope	source	edit_level	default_value	isdefault
+    z1	observer	workers_per_cpu_quota	INT	10	the ratio(integer) between the number of system allocated workers vs the maximum number of threads that can be scheduled concurrently. Range: [2, 20]	TENANT	CLUSTER	DEFAULT	DYNAMIC_EFFECTIVE	10	1
+[0/5] SQL baseline ...
+  select1: sample=1/3 rounds=3000 total_ms=537.051 avg_ms=0.1790
+  select1: sample=2/3 rounds=3000 total_ms=539.899 avg_ms=0.1800
+  select1: sample=3/3 rounds=3000 total_ms=534.708 avg_ms=0.1782
+[1/5] setup raw schema ...
+[2/5] raw bulk load 20000 docs (batch=500) ...
+  raw load done: 1.340s (14925.4 rows/s)
+  table rows: 20000
+[3/5] build fulltext indexes ...
+    build_ik_all: running 5.003s ...
+    build_ik_all: running 10.008s ...
+    build_ik_all: running 15.014s ...
+  build_ik_all: 19.013s
+    build_ik_content: running 5.004s ...
+    build_ik_content: running 10.008s ...
+    build_ik_content: running 15.013s ...
+  build_ik_content: 15.683s
+    build_beng_en: running 5.004s ...
+  build_beng_en: 8.220s
+[diag] schema snapshot ...
+  docs_row_count:
+    docs_count
+    20000
+  show_create_table_docs:
+    Table	Create Table
+    docs	CREATE TABLE `docs` (\n  `id` bigint(20) NOT NULL AUTO_INCREMENT,\n  `category` int(11) NOT NULL,\n  `title` varchar(256) NOT NULL,\n  `content` text NOT NULL,\n  `title_en` varchar(256) NOT NULL,\n  `content_en` text NOT NULL,\n  PRIMARY KEY (`id`),\n  FULLTEXT KEY `fti_all_ik` (`title`, `content`) WITH PARSER ik PARSER_PROPERTIES=(ik_mode="smart") BLOCK_SIZE 16384,\n  FULLTEXT KEY `fti_content_ik` (`content`) WITH PARSER ik PARSER_PROPERTIES=(ik_mode="smart") BLOCK_SIZE 16384,\n  FULLTEXT KEY `fti_en_beng` (`title_en`, `content_en`) WITH PARSER beng PARSER_PROPERTIES=(min_token_size=3,max_token_size=84) BLOCK_SIZE 16384\n) ORGANIZATION INDEX AUTO_INCREMENT = 20001 AUTO_INCREMENT_MODE = 'ORDER' DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 COMMENT = 'FTS large benchmark table'
+  show_index_docs:
+    Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+    docs	0	PRIMARY	1	id	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+    docs	1	fti_all_ik	1	title	A	NULL	NULL	NULL		FULLTEXT	available		YES	NULL
+    docs	1	fti_all_ik	2	content	A	NULL	NULL	NULL		FULLTEXT	available		YES	NULL
+    docs	1	fti_content_ik	1	content	A	NULL	NULL	NULL		FULLTEXT	available		YES	NULL
+    docs	1	fti_en_beng	1	title_en	A	NULL	NULL	NULL		FULLTEXT	available		YES	NULL
+    docs	1	fti_en_beng	2	content_en	A	NULL	NULL	NULL		FULLTEXT	available		YES	NULL
+[diag] tokenize snapshot ...
+  tokenize_ik_once:
+    ik_tokens
+    ["技术", "一款", "是", "在", "显著", "场景", "下", "的", "全文索引", "开销", "内存", "分词器", "cpu", "数据结构", "热", "非常", "索引", "化", "池", "大量", "停", "实例", "等", "oceanbase", "可以", "单", "稳定", "复用", "数据库", "和", "包括", "查询", "优化", "路径", "用词", "降低", "文档", "全局", "解析器", "例"]
+  tokenize_beng_once:
+    beng_tokens
+    ["text", "quick", "search", "brown", "jumps", "efficient", "requires", "fox", "path", "dog", "full", "hot", "indexing", "over", "tokenization", "lazy"]
+[4/5] TOKENIZE hot-path ...
+  tokenize_ik: sample=1/3 rounds=3000 total_ms=822.690 avg_ms=0.2742
+  tokenize_ik: sample=2/3 rounds=3000 total_ms=805.235 avg_ms=0.2684
+  tokenize_ik: sample=3/3 rounds=3000 total_ms=813.722 avg_ms=0.2712
+  tokenize_beng: sample=1/3 rounds=3000 total_ms=706.666 avg_ms=0.2356
+  tokenize_beng: sample=2/3 rounds=3000 total_ms=698.933 avg_ms=0.2330
+  tokenize_beng: sample=3/3 rounds=3000 total_ms=725.713 avg_ms=0.2419
+[diag] query plan snapshot ...
+  query_cn_sql: SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title, content) AGAINST('全文索引 分词器')
+  query_cn_explain:
+    Query Plan
+    =================================================================
+    |ID|OPERATOR             |NAME            |EST.ROWS|EST.TIME(us)|
+    -----------------------------------------------------------------
+    |0 |SCALAR GROUP BY      |                |1       |587536      |
+    |1 |└─TEXT RETRIEVAL SCAN|docs(fti_all_ik)|12669   |587307      |
+    =================================================================
+    Outputs & filters:
+    -------------------------------------
+      0 - output([T_FUN_COUNT(*)]), filter(nil), rowset=256
+          group(nil), agg_func([T_FUN_COUNT(*)])
+      1 - output(nil), filter(nil), rowset=256
+          access(nil), partitions(p0)
+          is_index_back=false, is_global_index=false, 
+          calc_relevance=false, match_expr(MATCH(docs.title, docs.content) AGAINST('全文索引 分词器'))
+  query_beng_sql: SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title_en, content_en) AGAINST('database performance audit')
+  query_beng_explain:
+    Query Plan
+    ==================================================================
+    |ID|OPERATOR             |NAME             |EST.ROWS|EST.TIME(us)|
+    ------------------------------------------------------------------
+    |0 |SCALAR GROUP BY      |                 |1       |834767      |
+    |1 |└─TEXT RETRIEVAL SCAN|docs(fti_en_beng)|18000   |834441      |
+    ==================================================================
+    Outputs & filters:
+    -------------------------------------
+      0 - output([T_FUN_COUNT(*)]), filter(nil), rowset=256
+          group(nil), agg_func([T_FUN_COUNT(*)])
+      1 - output(nil), filter(nil), rowset=256
+          access(nil), partitions(p0)
+          is_index_back=false, is_global_index=false, 
+          calc_relevance=false, match_expr(MATCH(docs.title_en, docs.content_en) AGAINST('database performance audit'))
+  query_mixed_sql: SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title, content) AGAINST('OceanBase 稳定 database')
+  query_mixed_explain:
+    Query Plan
+    =================================================================
+    |ID|OPERATOR             |NAME            |EST.ROWS|EST.TIME(us)|
+    -----------------------------------------------------------------
+    |0 |SCALAR GROUP BY      |                |1       |587359      |
+    |1 |└─TEXT RETRIEVAL SCAN|docs(fti_all_ik)|12665   |587130      |
+    =================================================================
+    Outputs & filters:
+    -------------------------------------
+      0 - output([T_FUN_COUNT(*)]), filter(nil), rowset=256
+          group(nil), agg_func([T_FUN_COUNT(*)])
+      1 - output(nil), filter(nil), rowset=256
+          access(nil), partitions(p0)
+          is_index_back=false, is_global_index=false, 
+          calc_relevance=false, match_expr(MATCH(docs.title, docs.content) AGAINST('OceanBase 稳定 database'))
+  query_limit_sql: SELECT COUNT(*) FROM (SELECT id FROM fts_large_bench.docs WHERE MATCH(content) AGAINST('倒排索引 tokenizer') LIMIT 20) t
+  query_limit_explain:
+    Query Plan
+    =======================================================================
+    |ID|OPERATOR               |NAME                |EST.ROWS|EST.TIME(us)|
+    -----------------------------------------------------------------------
+    |0 |SCALAR GROUP BY        |                    |1       |406515      |
+    |1 |└─SUBPLAN SCAN         |t                   |14000   |406262      |
+    |2 |  └─TEXT RETRIEVAL SCAN|docs(fti_content_ik)|14000   |406225      |
+    =======================================================================
+    Outputs & filters:
+    -------------------------------------
+      0 - output([T_FUN_COUNT(*)]), filter(nil), rowset=256
+          group(nil), agg_func([T_FUN_COUNT(*)])
+      1 - output(nil), filter(nil), rowset=256
+          access(nil)
+      2 - output([docs.id]), filter(nil), rowset=256
+          access([docs.id]), partitions(p0)
+          is_index_back=true, is_global_index=false, 
+          calc_relevance=true, match_expr(MATCH(docs.content) AGAINST('倒排索引 tokenizer')), 
+          pushdown_match_filter(MATCH(docs.content) AGAINST('倒排索引 tokenizer')), 
+          sort_keys([MATCH(docs.content) AGAINST('倒排索引 tokenizer'), DESC]), limit(20), offset(nil), with_ties(false)
+[5/5] MATCH query ...
+  query_cn: warmup_hits=8001
+  query_cn: sample=1/3 rounds=200 total_ms=1188.246 avg_ms=5.9412
+  query_cn: sample=2/3 rounds=200 total_ms=1193.201 avg_ms=5.9660
+  query_cn: sample=3/3 rounds=200 total_ms=1197.914 avg_ms=5.9896
+  query_beng: warmup_hits=11000
+  query_beng: sample=1/3 rounds=200 total_ms=1764.465 avg_ms=8.8223
+  query_beng: sample=2/3 rounds=200 total_ms=1760.419 avg_ms=8.8021
+  query_beng: sample=3/3 rounds=200 total_ms=1755.708 avg_ms=8.7785
+  query_mixed: warmup_hits=7332
+  query_mixed: sample=1/3 rounds=200 total_ms=1305.050 avg_ms=6.5252
+  query_mixed: sample=2/3 rounds=200 total_ms=1308.655 avg_ms=6.5433
+  query_mixed: sample=3/3 rounds=200 total_ms=1305.793 avg_ms=6.5290
+  query_limit: warmup_hits=20
+  query_limit: sample=1/3 rounds=200 total_ms=2723.620 avg_ms=13.6181
+  query_limit: sample=2/3 rounds=200 total_ms=2767.185 avg_ms=13.8359
+  query_limit: sample=3/3 rounds=200 total_ms=2717.104 avg_ms=13.5855
+========================================
+FTS Large Benchmark Report
+========================================
+timestamp:              2026-07-18 12:08:14
+label:                  matchscore_gate_20260718_run3
+git_head:               33bb947b2
+git_dirty:              1
+rows:                   20000
+batch:                  500
+rounds:                 3000
+query_rounds:           200
+samples:                3
+warmup:                 30
+skip_load:              0
+diag:                   1
+----------------------------------------
+select1_avg_ms:         0.1791
+select1_stdev_ms:       0.0007
+raw_load_sec:           1.340
+raw_load_rows_per_sec:  14925.4
+build_ik_all_sec:       19.013
+build_ik_content_sec:   15.683
+build_beng_en_sec:      8.220
+build_total_sec:        42.928
+----------------------------------------
+tokenize_ik_avg_ms:     0.2713
+tokenize_ik_median_ms:  0.2712
+tokenize_ik_stdev_ms:   0.0024
+tokenize_beng_avg_ms:   0.2368
+tokenize_beng_median_ms:0.2356
+tokenize_beng_stdev_ms: 0.0037
+----------------------------------------
+query_cn_hits:          8001
+query_cn_avg_ms:        5.9656
+query_cn_stdev_ms:      0.0198
+query_beng_hits:        11000
+query_beng_avg_ms:      8.8010
+query_beng_stdev_ms:    0.0179
+query_mixed_hits:       7332
+query_mixed_avg_ms:     6.5325
+query_mixed_stdev_ms:   0.0078
+query_limit_hits:       20
+query_limit_avg_ms:     13.6798
+query_limit_stdev_ms:   0.1112
+========================================
+
+Compare before/after on these fields:
+  build_ik_all_sec, build_ik_content_sec, build_beng_en_sec, build_total_sec
+  tokenize_ik_avg_ms/stdev, tokenize_beng_avg_ms/stdev, select1_avg_ms as SQL-loop baseline
+  query_cn_avg_ms, query_beng_avg_ms, query_mixed_avg_ms, query_limit_avg_ms with *_hits

@@ -93,9 +93,10 @@ int ObExprWordSegment::cg_expr(
     ObEvalCtx::TempAllocGuard alloc_guard(eval_ctx);
     int64_t res_str_len = 0;
     ObSEArray<ObString, 1> ft_parts;
-    const int64_t mb_max_len = cs->mbmaxlen;
-    char mb_separator[mb_max_len];
-    int32_t length_of_separator = 0;
+    int64_t part_count = 0;
+    if (OB_FAIL(ft_parts.prepare_allocate(raw_ctx.arg_cnt_))) {
+      LOG_WARN("fail to prepare fulltext parts array", K(ret), K(raw_ctx.arg_cnt_));
+    }
     for (int64_t i = 0; OB_SUCC(ret) && i < raw_ctx.arg_cnt_; ++i) {
       ObString res;
       common::ObDatum *datum = nullptr;
@@ -113,41 +114,66 @@ int ObExprWordSegment::cg_expr(
       } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(alloc_guard.get_allocator(), *datum, raw_ctx.args_[i]->datum_meta_,
               raw_ctx.args_[i]->obj_meta_.has_lob_header(), res))) {
         LOG_WARN("fail to get real data.", K(ret), K(res));
-      } else if (OB_FAIL(ft_parts.push_back(res))) {
-        LOG_WARN("fail to push back ft part array", K(ret), K(res));
       } else {
-        res_str_len += ft_parts.at(ft_parts.count() - 1).length();
+        ft_parts.at(part_count++) = res;
+        res_str_len += res.length();
       }
     }
-    wchar_t wide_char = L' ';
     if (OB_FAIL(ret)) {
-    } else if (0 == ft_parts.count()) {
+    } else if (0 == part_count) {
       expr_datum.set_null();
       LOG_TRACE("generate fulltext column is null", K(raw_ctx), K(eval_ctx), K(expr_datum));
-    } else if (OB_FAIL(ObCharset::wc_mb(raw_ctx.args_[0]->obj_meta_.get_collation_type(), wide_char, mb_separator,
-              mb_max_len, length_of_separator))) {
-      LOG_WARN("fail to wc_mb", K(ret), K(mb_max_len), KPHEX(mb_separator, mb_max_len));
-    } else {
-      res_str_len = res_str_len + length_of_separator * (ft_parts.count() - 1);
-      ObExprStrResAlloc res_alloc(raw_ctx, eval_ctx);
-      char *ptr = static_cast<char*>(res_alloc.alloc(res_str_len));
-      if (OB_UNLIKELY(NULL == ptr)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate memory", K(ret), K(res_str_len));
+    } else if (1 == part_count) {
+      const ObString &part = ft_parts.at(0);
+      if (0 == part.length()) {
+        expr_datum.set_string(ObString());
       } else {
-        char* cur_ptr = ptr;
-        for (int64_t i = 0; OB_SUCC(ret) && i < ft_parts.count(); ++i) {
-          if (0 != i) {
-            MEMCPY(cur_ptr, mb_separator, length_of_separator);
-            cur_ptr += length_of_separator;
-          }
-          MEMCPY(cur_ptr, ft_parts.at(i).ptr(), ft_parts.at(i).length());
-          cur_ptr += ft_parts.at(i).length();
+        ObExprStrResAlloc res_alloc(raw_ctx, eval_ctx);
+        char *ptr = static_cast<char *>(res_alloc.alloc(part.length()));
+        if (OB_UNLIKELY(nullptr == ptr)) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("failed to allocate memory", K(ret), K(part));
+        } else {
+          MEMCPY(ptr, part.ptr(), part.length());
+          expr_datum.set_string(ObString(part.length(), ptr));
         }
-        if (OB_SUCC(ret)) {
-          ObString str(res_str_len, ptr);
-          expr_datum.set_string(str);
-          LOG_TRACE("generate fulltext column", K(str), K(raw_ctx), K(eval_ctx), K(expr_datum));
+      }
+    } else {
+      const int64_t mb_max_len = cs->mbmaxlen;
+      char mb_separator[mb_max_len];
+      int32_t length_of_separator = 0;
+      if (CHARSET_UTF8MB4 == ObCharset::charset_type_by_coll(raw_ctx.args_[0]->obj_meta_.get_collation_type())) {
+        mb_separator[0] = ' ';
+        length_of_separator = 1;
+      } else if (OB_FAIL(ObCharset::wc_mb(raw_ctx.args_[0]->obj_meta_.get_collation_type(),
+                                          L' ',
+                                          mb_separator,
+                                          mb_max_len,
+                                          length_of_separator))) {
+        LOG_WARN("fail to wc_mb", K(ret), K(mb_max_len), KPHEX(mb_separator, mb_max_len));
+      }
+      if (OB_SUCC(ret)) {
+        res_str_len += length_of_separator * (part_count - 1);
+        ObExprStrResAlloc res_alloc(raw_ctx, eval_ctx);
+        char *ptr = static_cast<char*>(res_alloc.alloc(res_str_len));
+        if (OB_UNLIKELY(NULL == ptr)) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("failed to allocate memory", K(ret), K(res_str_len));
+        } else {
+          char* cur_ptr = ptr;
+          for (int64_t i = 0; OB_SUCC(ret) && i < part_count; ++i) {
+            if (0 != i) {
+              MEMCPY(cur_ptr, mb_separator, length_of_separator);
+              cur_ptr += length_of_separator;
+            }
+            MEMCPY(cur_ptr, ft_parts.at(i).ptr(), ft_parts.at(i).length());
+            cur_ptr += ft_parts.at(i).length();
+          }
+          if (OB_SUCC(ret)) {
+            ObString str(res_str_len, ptr);
+            expr_datum.set_string(str);
+            LOG_TRACE("generate fulltext column", K(str), K(raw_ctx), K(eval_ctx), K(expr_datum));
+          }
         }
       }
     }

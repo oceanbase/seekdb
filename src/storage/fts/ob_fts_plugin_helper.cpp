@@ -25,6 +25,7 @@
 #include "plugin/sys/ob_plugin_helper.h"
 #include "share/ob_force_print_log.h"
 #include "storage/fts/dict/ob_ft_dict_hub.h"
+#include "storage/fts/ob_i_reusable_ft_parser.h"
 #include "storage/fts/ob_fts_parser_property.h"
 #include "storage/fts/ob_fts_stop_word.h"
 
@@ -34,6 +35,21 @@ namespace oceanbase
 {
 namespace storage
 {
+
+namespace
+{
+
+OB_INLINE void prefetch_next_token_bytes(const char *word, const int64_t word_len)
+{
+  if (OB_NOT_NULL(word) && word_len > 0) {
+    __builtin_prefetch(word, 0 /* read */, 1 /* low locality */);
+    if (word_len > 64) {
+      __builtin_prefetch(word + 64, 0 /* read */, 1 /* low locality */);
+    }
+  }
+}
+
+} // namespace
 
 const char *ObFTParser::NAME_STR[ObFTParser::ParserType::FTP_MAX + 1] = {
   "non-builtin",
@@ -237,6 +253,9 @@ int ObFTParseHelper::segment(
     const char *ft,
     const int64_t ft_len,
     common::ObIAllocator &allocator,
+    common::ObIAllocator &metadata_allocator,
+    const bool reuse_parser,
+    ObITokenIterator *&iter,
     ObAddWord &add_word)
 {
   int ret = OB_SUCCESS;
@@ -245,8 +264,8 @@ int ObFTParseHelper::segment(
     LOG_WARN("invalid arguments", K(ret), K(parser_version), KP(parser_desc), KP(cs), K(ft), K(ft_len));
   } else {
     ObFTParserParam param;
-    ObITokenIterator *iter = nullptr;
     param.allocator_ = &allocator;
+    param.metadata_allocator_ = &metadata_allocator;
     param.cs_ = cs;
     param.fulltext_ = ft;
     param.ft_length_ = ft_len;
@@ -255,33 +274,93 @@ int ObFTParseHelper::segment(
     param.ngram_token_size_ = property.ngram_token_size_;
     param.ik_param_.mode_
         = (property.ik_mode_smart_ ? ObFTIKParam::Mode::SMART : ObFTIKParam::Mode::MAX_WORD);
+    param.ik_param_.main_dict_ = property.dict_table_;
+    param.ik_param_.quan_dict_ = property.quantifier_table_;
+    param.ik_param_.stopword_dict_ = property.stopword_table_;
     param.min_ngram_size_ = property.min_ngram_token_size_;
     param.max_ngram_size_ = property.max_ngram_token_size_;
 
-    if (OB_FAIL(parser_desc->segment(&param, iter))) {
+    if (reuse_parser && OB_NOT_NULL(iter)) {
+      if (OB_FAIL(static_cast<ObIReusableFTParser *>(iter)->reuse_parser(ft, ft_len))) {
+        if (OB_NOT_SUPPORTED == ret) {
+          parser_desc->free_token_iter(&param, iter);
+          iter = nullptr;
+          ret = parser_desc->segment(&param, iter);
+        }
+        if (OB_FAIL(ret)) {
+          LOG_WARN("fail to reuse parser", K(ret), K(param));
+        }
+      }
+    } else if (OB_FAIL(parser_desc->segment(&param, iter))) {
       LOG_WARN("fail to segment", K(ret), K(param));
-    } else if (OB_ISNULL(iter)) {
+    }
+    if (OB_SUCC(ret) && OB_ISNULL(iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected error, token iterator is nullptr", K(ret), KP(iter));
-    } else {
+    } else if (OB_SUCC(ret)) {
       const char *word = nullptr;
       int64_t word_len = 0;
       int64_t char_cnt = 0;
       int64_t word_freq = 0;
-      while (OB_SUCC(ret)) {
-        if (OB_FAIL(iter->get_next_token(word, word_len, char_cnt, word_freq))) {
-          if (OB_ITER_END != ret) {
+      if (OB_FAIL(iter->get_next_token(word, word_len, char_cnt, word_freq))) {
+        if (OB_ITER_END != ret) {
+          LOG_WARN("fail to get next token", K(ret), KPC(iter));
+        }
+      } else {
+        ObFTWord curr_dst_word;
+        int64_t curr_dst_word_freq = 0;
+        bool curr_need_commit = false;
+        if (OB_FAIL(add_word.prepare_word(
+                word, word_len, char_cnt, word_freq, curr_dst_word, curr_dst_word_freq, curr_need_commit))) {
+          LOG_WARN("fail to prepare first token", K(ret), KP(word), K(word_len), K(char_cnt), K(word_freq));
+        }
+        while (OB_SUCC(ret)) {
+          const char *next_word = nullptr;
+          int64_t next_word_len = 0;
+          int64_t next_char_cnt = 0;
+          int64_t next_word_freq = 0;
+          const int next_ret = iter->get_next_token(next_word, next_word_len, next_char_cnt, next_word_freq);
+          if (OB_UNLIKELY(OB_ITER_END != next_ret && OB_SUCCESS != next_ret)) {
+            ret = next_ret;
             LOG_WARN("fail to get next token", K(ret), KPC(iter));
+          } else {
+            if (OB_SUCCESS == next_ret) {
+              prefetch_next_token_bytes(next_word, next_word_len);
+            }
+            if (curr_need_commit) {
+              add_word.prefetch_word_map_key(curr_dst_word);
+            }
+            ObFTWord next_dst_word;
+            int64_t next_dst_word_freq = 0;
+            bool next_need_commit = false;
+            if (OB_SUCCESS == next_ret
+                && OB_FAIL(add_word.prepare_word(next_word,
+                                                 next_word_len,
+                                                 next_char_cnt,
+                                                 next_word_freq,
+                                                 next_dst_word,
+                                                 next_dst_word_freq,
+                                                 next_need_commit))) {
+              LOG_WARN(
+                  "fail to prepare next token", K(ret), KP(next_word), K(next_word_len), K(next_char_cnt), K(next_word_freq));
+            } else if (curr_need_commit
+                       && OB_FAIL(add_word.commit_prepared_word(curr_dst_word, curr_dst_word_freq))) {
+              LOG_WARN("fail to commit current token", K(ret), K(curr_dst_word), K(curr_dst_word_freq));
+            } else if (OB_ITER_END == next_ret) {
+              break;
+            } else {
+              curr_dst_word = next_dst_word;
+              curr_dst_word_freq = next_dst_word_freq;
+              curr_need_commit = next_need_commit;
+            }
           }
-        } else if (OB_FAIL(add_word.process_word(word, word_len, char_cnt, word_freq))) {
-          LOG_WARN("fail to process one word", K(ret), KP(word), K(word_len), K(char_cnt), K(word_freq));
         }
       }
       if (OB_ITER_END == ret) {
         ret = OB_SUCCESS;
       }
     }
-    if (OB_NOT_NULL(iter)) {
+    if (OB_NOT_NULL(iter) && (!reuse_parser || OB_FAIL(ret))) {
       parser_desc->free_token_iter(&param, iter);
       iter = nullptr;
     }
@@ -295,7 +374,10 @@ ObFTParseHelper::ObFTParseHelper()
     plugin_param_(nullptr),
     parser_name_(),
     add_word_flag_(),
+    property_allocator_(lib::ObMemAttr("FTParserProp")),
+    parser_allocator_("FTParserMeta"),
     parser_property_(),
+    token_iterator_(nullptr),
     is_inited_(false)
 {
 }
@@ -319,7 +401,8 @@ int ObFTParseHelper::init(
     LOG_WARN("invalid argument", K(ret), KP(allocator), K(plugin_name));
   } else if (OB_FAIL(parser_name_.parse_from_str(plugin_name.ptr(), plugin_name.length()))) {
     LOG_WARN("fail to parse name from cstring", K(ret), K(plugin_name));
-  } else if (OB_FAIL(parser_property_.parse_for_parser_helper(parser_name_, plugin_properties))) {
+  } else if (OB_FAIL(parser_property_.parse_for_parser_helper(
+                 parser_name_, plugin_properties, property_allocator_))) {
     LOG_WARN("fail to parse parser property from cstring", K(ret), K(plugin_properties), K(parser_name_));
   } else if (OB_FAIL(ObPluginHelper::find_ftparser(parser_name_.get_parser_name().str(),
                                                    parser_desc_, plugin_param_))) {
@@ -346,10 +429,19 @@ int ObFTParseHelper::init(
 
 void ObFTParseHelper::reset()
 {
+  if (OB_NOT_NULL(token_iterator_) && OB_NOT_NULL(parser_desc_)) {
+    ObFTParserParam param;
+    param.allocator_ = &parser_allocator_;
+    param.metadata_allocator_ = &parser_allocator_;
+    parser_desc_->free_token_iter(&param, token_iterator_);
+    token_iterator_ = nullptr;
+  }
   parser_desc_ = nullptr;
   plugin_param_ = nullptr;
   allocator_ = nullptr;
+  property_allocator_.reset();
   add_word_flag_.clear();
+  parser_allocator_.reset();
   is_inited_ = false;
 }
 
@@ -387,6 +479,9 @@ int ObFTParseHelper::segment(
                     fulltext,
                     fulltext_len,
                     *allocator_,
+                    parser_allocator_,
+                    parser_name_.is_ik() || parser_name_.is_beng(),
+                    token_iterator_,
                     add_word))) {
       LOG_WARN("fail to segment fulltext", K(ret), K(parser_name_), KP(parser_desc_), KP(cs), KP(fulltext),
           K(fulltext_len), KP(allocator_), K(parser_property_));
@@ -409,12 +504,14 @@ int ObFTParseHelper::check_is_the_same(
   if (is_inited_) {
     storage::ObFTParser parser_name;
     ObFTParserProperty parser_property;
+    ObArenaAllocator property_allocator("FTPropCmp");
     if (OB_UNLIKELY(plugin_name.empty())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret), K(plugin_name));
     } else if (OB_FAIL(parser_name.parse_from_str(plugin_name.ptr(), plugin_name.length()))) {
       LOG_WARN("fail to parse name from cstring", K(ret), K(plugin_name));
-    } else if (OB_FAIL(parser_property.parse_for_parser_helper(parser_name, plugin_properties))) {
+    } else if (OB_FAIL(parser_property.parse_for_parser_helper(
+                   parser_name, plugin_properties, property_allocator))) {
       LOG_WARN("fail to parse parser property from cstring", K(ret), K(plugin_properties), K(parser_name_));
     } else if (parser_name == parser_name_ && parser_property.is_equal(parser_property_)) {
       is_same = true;

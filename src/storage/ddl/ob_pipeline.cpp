@@ -1,17 +1,13 @@
-/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
  */
 
 #include "storage/ddl/ob_pipeline.h"
@@ -27,7 +23,7 @@ using namespace oceanbase::blocksstable;
 using namespace oceanbase::share;
 using namespace oceanbase::table;
 
-ObChunk::~ObChunk() 
+ObChunk::~ObChunk()
 {
   if (type_ == DIRECT_LOAD_BATCH_DATUM_ROWS && direct_load_batch_rows_ != nullptr) {
     direct_load_batch_rows_->~ObDirectLoadBatchDatumRows();
@@ -48,7 +44,17 @@ ObChunk::~ObChunk()
     cg_row_file_arr_ = nullptr;
     type_ = INVALID_TYPE;
   } else if (DIRECT_LOAD_ROW_ARRAY == type_) {
-    OB_DELETE(ObTableLoadTabletObjRowArray, ObMemAttr("TLD_RowArray"), row_array_);
+    OB_DELETE(ObTableLoadTabletObjRowArray, ObMemAttr(MTL_ID(), "TLD_RowArray"), row_array_);
+  } else if (DDL_SORT_CHUNK_ARRAY == type_ && nullptr != ddl_sort_chunk_array_) {
+    // NOTE: ddl_sort_chunk_array_ is allocated dynamically in pipeline (see get_next_chunk implementations).
+    // We must destruct it here so that its internal buffer (allocated via tenant allocator) can be released.
+    for (int64_t i = 0; i < ddl_sort_chunk_array_->count(); ++i) {
+      ddl_sort_chunk_array_->at(i).free_sort_op_chunk();
+    }
+    ddl_sort_chunk_array_->~ObArray<ObDDLSortChunk>();
+    ob_free(ddl_sort_chunk_array_);
+    ddl_sort_chunk_array_ = nullptr;
+    type_ = INVALID_TYPE;
   }
 }
 
@@ -70,6 +76,7 @@ bool ObChunk::is_valid() const
       case ChunkType::BATCH_DATUM_ROWS:
       case ChunkType::DIRECT_LOAD_ROW_ARRAY:
       case ChunkType::TASK_BATCH_INFO:
+      case ChunkType::DDL_SORT_CHUNK_ARRAY:
         bret = nullptr != data_ptr_;
         break;
       default:

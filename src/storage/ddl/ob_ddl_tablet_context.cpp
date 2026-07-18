@@ -1,17 +1,13 @@
-/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
  */
 
 #include "storage/ddl/ob_ddl_tablet_context.h"
@@ -24,6 +20,7 @@
 #include "storage/ddl/ob_ddl_pipeline.h"
 #include "storage/ob_storage_schema_util.h"
 #include "storage/ddl/ob_ddl_merge_helper.h"
+#include "storage/ddl/ob_ddl_sort_provider.h"
 
 #define USING_LOG_PREFIX STORAGE
 
@@ -34,10 +31,10 @@ using namespace oceanbase::blocksstable;
 using namespace oceanbase::share;
 
 
-ObDDLTabletContext::MergeCtx::~MergeCtx() 
+ObDDLTabletContext::MergeCtx::~MergeCtx()
 {
   fifo_.reset();
-  for (hash::ObHashMap<int64_t, ObArray<ObTableHandleV2>*>::const_iterator iter = slice_cg_sstables_.begin(); 
+  for (hash::ObHashMap<int64_t, ObArray<ObTableHandleV2>*>::const_iterator iter = slice_cg_sstables_.begin();
       iter != slice_cg_sstables_.end();
       iter++) {
     if (nullptr != iter->second) {
@@ -67,8 +64,49 @@ int ObDDLTabletContext::MergeCtx::init(const ObDirectLoadType direct_load_type)
   return ret;
 }
 
+ObDDLSortChunk::ObDDLSortChunk()
+  : sort_op_chunk_(nullptr),
+    file_size_(0),
+    allocator_(nullptr)
+{
+}
+
+ObDDLSortChunk::~ObDDLSortChunk()
+{
+  reset();
+}
+
+void ObDDLSortChunk::reset()
+{
+  sort_op_chunk_ = nullptr;
+  file_size_ = 0;
+  allocator_ = nullptr;
+}
+
+bool ObDDLSortChunk::is_valid() const
+{
+  return nullptr != sort_op_chunk_ && nullptr != allocator_ && file_size_ >= 0;
+}
+
+void ObDDLSortChunk::free_sort_op_chunk()
+{
+  if (is_valid()) {
+    ChunkType *chunk = reinterpret_cast<ChunkType *>(sort_op_chunk_);
+    chunk->~ObSortVecOpChunk<ObDDLSortProvider::StoreRow, false>();
+    allocator_->free(sort_op_chunk_);
+    reset();
+  }
+}
+
 ObDDLSlice::ObDDLSlice()
-  : is_inited_(false), has_end_chunk_(false), slice_idx_(-1)
+  : is_inited_(false),
+    has_end_chunk_(false),
+    tablet_id_(),
+    slice_idx_(-1),
+    chunk_queue_(),
+    remain_cg_blocks_(),
+    ddl_sort_chunks_(),
+    sorted_mutex_(common::ObLatchIds::DDL_TABLET_CONTEXT_LOCK)
 {
 
 }
@@ -99,6 +137,94 @@ ObDDLSlice::~ObDDLSlice()
     }
   }
   chunk_queue_.destroy();
+  {
+    lib::ObMutexGuard guard(sorted_mutex_);
+    for (int64_t i = 0; i < ddl_sort_chunks_.count(); ++i) {
+      ObDDLSortChunk &ddl_chunk = ddl_sort_chunks_.at(i);
+      ddl_chunk.free_sort_op_chunk();
+    }
+    ddl_sort_chunks_.reset();
+  }
+}
+
+int ObDDLSlice::push_sorted_chunk(ChunkType *&sort_op_chunk, const int64_t file_size, ObIAllocator *chunk_allocator)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(nullptr == sort_op_chunk || nullptr == chunk_allocator || file_size < 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KP(sort_op_chunk), KP(chunk_allocator), K(file_size));
+  } else {
+    ObDDLSortChunk ddl_sort_chunk;
+    ddl_sort_chunk.set_sort_op_chunk(sort_op_chunk, file_size, chunk_allocator);
+    lib::ObMutexGuard guard(sorted_mutex_);
+    if (OB_FAIL(ddl_sort_chunks_.push_back(ddl_sort_chunk))) {
+      LOG_WARN("push sorted chunk failed", K(ret));
+    } else {
+      sort_op_chunk = nullptr;
+    }
+  }
+  return ret;
+}
+
+// Compare function for ObDDLSortChunk, sort by file_size in descending order
+static bool compare_ddl_sort_chunk_by_file_size_desc(const ObDDLSortChunk &a, const ObDDLSortChunk &b)
+{
+  return a.get_file_size() > b.get_file_size();
+}
+
+int ObDDLSlice::pop_sorted_chunks(const int64_t final_merge_ways, const int64_t current_merge_ways, common::ObIArray<ObDDLSortChunk> &ddl_sort_chunks)
+{
+  int ret = OB_SUCCESS;
+  ddl_sort_chunks.reset();
+  if (OB_UNLIKELY(final_merge_ways <= 2 || current_merge_ways <= 2)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid max count", K(ret), K(final_merge_ways), K(current_merge_ways));
+  } else {
+    lib::ObMutexGuard guard(sorted_mutex_);
+    if (ddl_sort_chunks_.count() <= final_merge_ways) {
+      ret = OB_ENTRY_NOT_EXIST;
+    } else {
+      const int64_t pop_cnt = min(current_merge_ways, ddl_sort_chunks_.count() - final_merge_ways + 1);
+      ob_sort(ddl_sort_chunks_.begin(), ddl_sort_chunks_.end(), compare_ddl_sort_chunk_by_file_size_desc);
+      for (int64_t i = 0; OB_SUCC(ret) && i < pop_cnt; ++i) {
+        const int64_t chunk_idx = ddl_sort_chunks_.count() - 1 - i;
+        ObDDLSortChunk &current_chunk = ddl_sort_chunks_.at(chunk_idx);
+        if (OB_FAIL(ddl_sort_chunks.push_back(current_chunk))) {
+          LOG_WARN("push chunk into result failed", K(ret), K(chunk_idx));
+        }
+      }
+      // avoid partial failure
+      for (int64_t i = 0; OB_SUCC(ret) && i < pop_cnt; ++i) {
+        ddl_sort_chunks_.pop_back();
+      }
+    }
+  }
+  if (OB_FAIL(ret)) {
+    ddl_sort_chunks.reset();
+  }
+  return ret;
+}
+
+int ObDDLSlice::pop_all_sorted_chunks(common::ObIArray<ObDDLSortChunk> &ddl_sort_chunks)
+{
+  int ret = OB_SUCCESS;
+  // clean up output array
+  ddl_sort_chunks.reuse();
+  lib::ObMutexGuard guard(sorted_mutex_);
+
+  if (OB_FAIL(ddl_sort_chunks.assign(ddl_sort_chunks_))) {
+    LOG_WARN("assign ddl sort chunks failed", K(ret));
+  } else {
+    // clean up member array
+    ddl_sort_chunks_.reuse();
+  }
+  return ret;
+}
+
+int64_t ObDDLSlice::get_sorted_chunk_count() const
+{
+  lib::ObMutexGuard guard(sorted_mutex_);
+  return ddl_sort_chunks_.count();
 }
 
 int ObDDLSlice::init(const ObTabletID &tablet_id, const int64_t slice_idx, const int64_t column_group_count)
@@ -222,10 +348,11 @@ int ObDDLSlice::get_remain_block(const int64_t cg_idx, ObRemainCgBlock &remain_b
 }
 
 ObDDLTabletContext::ObDDLTabletContext()
-  : is_inited_(false), arena_(ObMemAttr("ddl_tblt_ctx")),
-    slice_count_(0), table_slice_offset_(0), scan_task_(nullptr),
+  : is_inited_(false), arena_(ObMemAttr(MTL_ID(), "ddl_tblt_ctx")),
+    slice_count_(0), table_slice_offset_(0), scan_task_(nullptr), mutex_(common::ObLatchIds::DDL_TABLET_CONTEXT_LOCK),
     last_lob_id_(0), last_autoinc_val_(0), bucket_count_(0),
-    macro_meta_store_mgr_(nullptr), vector_index_ctx_(nullptr)
+    macro_meta_store_mgr_(nullptr), vector_index_ctx_(nullptr),
+    fts_expect_range_cnt_(0)
 {
 
 }
@@ -244,8 +371,9 @@ int init_tablet_param(ObTablet *tablet, ObStorageSchema *storage_schema, const O
   } else {
     ObDDLKvMgrHandle ddl_kv_mgr_handle;
     const ObTabletMeta &tablet_meta = tablet->get_tablet_meta();
-    tablet_param.tablet_transfer_seq_ = 0;
+    tablet_param.tablet_transfer_seq_ = tablet->get_transfer_seq();
     tablet_param.is_micro_index_clustered_ = tablet_meta.micro_index_clustered_;
+    tablet_param.reorganization_scn_.set_min();
     tablet_param.storage_schema_ = storage_schema;
     if (is_incremental_minor_direct_load(direct_load_type)) {
       // do nothing
@@ -262,7 +390,8 @@ int ObDDLTabletContext::init(
     const int64_t ddl_thread_count,
     const int64_t snapshot_version,
     const ObDirectLoadType direct_load_type,
-    const ObDDLTableSchema &ddl_table_schema)
+    const ObDDLTableSchema &ddl_table_schema,
+    const int64_t ddl_task_id)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
@@ -277,12 +406,12 @@ int ObDDLTabletContext::init(
     ls_id_ = ls_id;
     tablet_id_ = tablet_id;
     bucket_count_ = ddl_thread_count * 2;
-    if (GCTX.is_shared_storage_mode() && OB_ISNULL(macro_meta_store_mgr_ = OB_NEW(ObMacroMetaStoreManager, ObMemAttr("mb_meta_mgr")))) {
+    if (GCTX.is_shared_storage_mode() && OB_ISNULL(macro_meta_store_mgr_ = OB_NEW(ObMacroMetaStoreManager, ObMemAttr(MTL_ID(), "mb_meta_mgr")))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate memory for macro meta manager failed", K(ret));
-    } else if (OB_FAIL(slice_map_.create(bucket_count_, ObMemAttr("tblt_slice_map")))) {
+    } else if (OB_FAIL(slice_map_.create(bucket_count_, ObMemAttr(MTL_ID(), "tblt_slice_map")))) {
       LOG_WARN("create slice map failed", K(ret), K(bucket_count_));
-    } else if (OB_FAIL(bucket_lock_.init(bucket_count_))) {
+    } else if (OB_FAIL(bucket_lock_.init(bucket_count_, common::ObLatchIds::DDL_TABLET_CONTEXT_LOCK))) {
       LOG_WARN("init bucket lock failed", K(ret), K(bucket_count_));
     } else {
       ObLSHandle ls_handle;
@@ -328,7 +457,7 @@ int ObDDLTabletContext::init(
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(init_vector_index_context(snapshot_version, ddl_table_schema))) {
+      if (OB_FAIL(init_vector_index_context(snapshot_version, ddl_task_id, ddl_table_schema))) {
         LOG_WARN("init vector index context failed", K(ret));
       } else {
         is_inited_ = true;
@@ -339,7 +468,7 @@ int ObDDLTabletContext::init(
   return ret;
 }
 
-int ObDDLTabletContext::init_vector_index_context(const int64_t snapshot_version, const ObDDLTableSchema &ddl_table_schema)
+int ObDDLTabletContext::init_vector_index_context(const int64_t snapshot_version, const int64_t ddl_task_id, const ObDDLTableSchema &ddl_table_schema)
 {
   int ret = OB_SUCCESS;
   void *buf = nullptr;
@@ -349,7 +478,7 @@ int ObDDLTabletContext::init_vector_index_context(const int64_t snapshot_version
       LOG_WARN("allocate memory failed", K(ret));
     } else {
       vector_index_ctx_ = new (buf) ObVectorIndexTabletContext();
-      if (OB_FAIL(vector_index_ctx_->init(ls_id_, tablet_id_, tablet_param_.storage_schema_->get_index_type(), snapshot_version, ddl_table_schema))) {
+      if (OB_FAIL(vector_index_ctx_->init(ls_id_, tablet_id_, tablet_param_.storage_schema_->get_index_type(), snapshot_version, ddl_task_id, ddl_table_schema))) {
         LOG_WARN("init vector index ctx failed", K(ret));
       }
     }
@@ -395,6 +524,11 @@ void ObDDLTabletContext::reset()
     arena_.free(vector_index_ctx_);
     vector_index_ctx_ = nullptr;
   }
+  fts_forward_part_ranges_.reset();
+  fts_inverted_part_ranges_.reset();
+  fts_forward_final_range_.reset();
+  fts_inverted_final_range_.reset();
+  fts_expect_range_cnt_ = 0;
   arena_.reset();
 }
 
@@ -446,7 +580,7 @@ int ObDDLTabletContext::get_or_create_slice(const int64_t slice_idx, ObDDLSlice 
       ObStorageSchema *storage_schema = tablet_param_.with_cs_replica_ ?
                                         tablet_param_.cs_replica_storage_schema_ :
                                         tablet_param_.storage_schema_;
-      ObDDLSlice *tmp_slice = OB_NEW(ObDDLSlice, ObMemAttr("dag_ddl_slice"));
+      ObDDLSlice *tmp_slice = OB_NEW(ObDDLSlice, ObMemAttr(MTL_ID(), "dag_ddl_slice"));
       if (OB_ISNULL(tmp_slice)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("allocate memory failed", K(ret));
@@ -517,3 +651,52 @@ int ObDDLTabletContext::get_all_slices(ObIArray<ObDDLSlice *> &ddl_slices)
   return ret;
 }
 
+int ObDDLTabletContext::append_sample_range(const bool is_inverted, const sql::ObPxTabletRange &range)
+{
+  int ret = OB_SUCCESS;
+  sql::ObPxTabletRange copied_range;
+  int64_t pos = 0;
+  lib::ObMutexGuard guard(mutex_);
+  if (!range.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid sample range", K(ret), K(range));
+  } else if (OB_FAIL(copied_range.deep_copy_from<true>(range, arena_, nullptr, 0, pos))) {
+    LOG_WARN("deep copy sample range failed", K(ret), K(range));
+  } else {
+    common::Ob2DArray<sql::ObPxTabletRange> &target =
+        is_inverted ? fts_inverted_part_ranges_ : fts_forward_part_ranges_;
+    if (OB_FAIL(target.push_back(copied_range))) {
+      LOG_WARN("push back sample range failed", K(ret), K(is_inverted));
+    }
+  }
+  return ret;
+}
+
+int ObDDLTabletContext::set_final_sample_range(const bool is_inverted, const sql::ObPxTabletRange &range)
+{
+  int ret = OB_SUCCESS;
+  lib::ObMutexGuard guard(mutex_);
+  sql::ObPxTabletRange &target = is_inverted ? fts_inverted_final_range_ : fts_forward_final_range_;
+  // Not used when use_allocator=true
+  char *dummy_buf = nullptr;
+  int64_t dummy_size = 0;
+  int64_t dummy_pos = 0;
+  target.reset();
+  if (OB_FAIL(target.deep_copy_from<true>(range, arena_, dummy_buf, dummy_size, dummy_pos))) {
+    LOG_WARN("deep copy final sample range failed", K(ret), K(is_inverted));
+  }
+  return ret;
+}
+
+int ObDDLTabletContext::set_expect_range_count(const int64_t expect_cnt)
+{
+  int ret = OB_SUCCESS;
+  if (expect_cnt <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid expect range count", K(ret), K(expect_cnt));
+  } else {
+    lib::ObMutexGuard guard(mutex_);
+    fts_expect_range_cnt_ = expect_cnt;//every thread should have a same expect range count
+  }
+  return ret;
+}

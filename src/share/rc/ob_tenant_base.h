@@ -343,6 +343,7 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
   )
 // Get tenant epoch id
 #define MTL_EPOCH_ID() share::ObTenantEnv::get_tenant_local()->get_epoch()
+#define MTL_ID() (share::ObTenantEnv::get_tenant() == nullptr ? OB_INVALID_TENANT_ID : share::ObTenantEnv::get_tenant()->id())
 // tenant switchover epoch
 #define MTL_GET_SWITCHOVER_EPOCH() share::ObTenantEnv::get_tenant()->get_switchover_epoch()
 #define MTL_SET_SWITCHOVER_EPOCH(switchover_epoch) share::ObTenantEnv::get_tenant()->set_switchover_epoch(switchover_epoch)

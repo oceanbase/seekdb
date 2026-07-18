@@ -404,3 +404,7 @@ test/var
 .worktrees/
 .claude/
 CLAUDE.md
+
+src/share/inner_table
+*rootbak
+docs/summer-school

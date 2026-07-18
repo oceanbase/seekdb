@@ -30,6 +30,11 @@ namespace storage
 class TokenizeContext
 {
 public:
+  typedef size_t (*WellFormedLenFunc)(const ObCharsetInfo *,
+                                      const char *,
+                                      const char *,
+                                      size_t,
+                                      int *);
   TokenizeContext(ObCollationType coll_type,
                   ObIAllocator &allocator,
                   const char *fulltext,
@@ -39,6 +44,7 @@ public:
   ~TokenizeContext();
 
   int init();
+  int reuse_context(const char *fulltext, const int64_t fulltext_len);
   int reset_resource();
 
   int get_next_token(const char *&word, int64_t &word_len, int64_t &offset, int64_t &char_cnt);
@@ -47,6 +53,7 @@ public:
 
   int current_char(const char *&ch, uint8_t &char_len);
   int current_char_type(ObFTCharUtil::CharType &type);
+  int current_char_and_type(const char *&ch, uint8_t &char_len, ObFTCharUtil::CharType &type);
 
   int step_next();
 
@@ -55,10 +62,12 @@ public:
   const char *fulltext() const;
   int64_t fulltext_len() const;
   int64_t get_cursor() const;
+  int64_t get_ascii_run_end() const;
 
   bool is_last() const;
   bool iter_end() const;
   bool is_smart() const;
+  bool is_ascii_fast_path() const;
 
   int add_chain(ObIKTokenChain *chain);
   int add_token(const char *fulltext,
@@ -77,12 +86,16 @@ private:
   int prepare_next_char();
 
   ObCollationType coll_type_;
+  ObCharsetType charset_type_;
+  const ObCharsetInfo *cs_;
+  WellFormedLenFunc well_formed_len_func_;
   const char *fulltext_;
   int64_t fulltext_len_;
 
   int64_t cursor_;
   int64_t next_char_len_;
   ObFTCharUtil::CharType next_char_type_;
+  int64_t ascii_run_end_;
 
   uint32_t handle_size_;
   bool is_smart_;
@@ -102,12 +115,18 @@ public:
   virtual ~ObIIKProcessor() {}
 
   int process(TokenizeContext &ctx);
+  int process(TokenizeContext &ctx,
+              const char *ch,
+              const uint8_t char_len,
+              const ObFTCharUtil::CharType type);
 
   virtual int do_process(TokenizeContext &ctx,
                          const char *ch,
                          const uint8_t char_len,
                          const ObFTCharUtil::CharType type)
       = 0;
+
+  virtual void reuse() = 0;
 };
 
 } // namespace storage

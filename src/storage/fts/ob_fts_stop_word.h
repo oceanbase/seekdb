@@ -81,11 +81,18 @@ public:
   int check_stopword(const ObFTWord &word, bool &is_stopword);
 
 private:
+  int check_stopword_set_(const ObFTWord &word, bool &is_stopword) const;
+  static bool is_ascii_string_(const ObString &word);
+  static bool equals_ascii_ci_(const ObString &word, const char *literal);
+  static bool match_ascii_stopword_(const ObString &word);
+
+private:
   static const int64_t DEFAULT_STOPWORD_BUCKET_NUM = 37L;
   typedef common::hash::ObHashSet<storage::ObFTWord> StopWordSet;
 
   StopWordSet stopword_set_;
   ObObjMeta stopword_type_;
+  int64_t max_stopword_len_ = 0;
 
   bool inited_ = false;
 
@@ -108,6 +115,16 @@ public:
       const int64_t word_len,
       const int64_t char_cnt,
       const int64_t word_freq);
+  int prepare_word(
+      const char *word,
+      const int64_t word_len,
+      const int64_t char_cnt,
+      const int64_t word_freq,
+      ObFTWord &dst_word,
+      int64_t &dst_word_freq,
+      bool &need_commit);
+  int commit_prepared_word(const ObFTWord &word, const int64_t word_freq);
+  void prefetch_word_map_key(const ObFTWord &word) const;
   virtual int64_t get_add_word_count() const { return non_stopword_cnt_; }
   VIRTUAL_TO_STRING_KV(
       K_(word_meta),
@@ -116,7 +133,7 @@ public:
       K_(stopword_cnt),
       K_(min_token_size),
       K_(max_token_size),
-      K(word_map_.size()));
+      KP_(word_map));
 
 private:
   bool is_min_max_word(const int64_t c_len) const;
@@ -126,13 +143,18 @@ private:
 private:
   ObObjMeta word_meta_;
   common::ObIAllocator &allocator_;
-  ObFTWordMap &word_map_;
+  ObFTWordMap *word_map_;
   int64_t min_max_word_cnt_;
   int64_t non_stopword_cnt_;
   int64_t stopword_cnt_;
   int64_t min_token_size_;
   int64_t max_token_size_;
   ObAddWordFlag flag_;
+  ObStopWordChecker *stop_word_checker_;
+  bool has_min_max_word_;
+  bool has_stopword_;
+  bool has_casedown_;
+  bool has_groupby_word_;
 };
 
 } // end namespace storage

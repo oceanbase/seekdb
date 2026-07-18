@@ -23,6 +23,7 @@
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_macro_utils.h"
+#include "storage/fts/utils/ob_ft_ascii_utils.h"
 #include "storage/fts/utils/unicode_utils.h"
 
 #include <cstdint>
@@ -52,6 +53,12 @@ public:
                                  const uint8_t char_len,
                                  CharType &type);
 
+  static int classify_first_valid_char(ObCollationType coll_type,
+                                       const char *input,
+                                       const int64_t input_len,
+                                       int64_t &char_len,
+                                       CharType &type);
+
   static int check_cn_number(ObCollationType coll_type,
                              const char *input,
                              const uint8_t char_len,
@@ -74,6 +81,69 @@ public:
                                   bool &ignore);
 
 private:
+  static OB_INLINE bool is_ascii_fast_char_(ObCharsetType cs_type,
+                                            const char *input,
+                                            const uint8_t char_len)
+  {
+    return CHARSET_UTF8MB4 == cs_type
+        && nullptr != input
+        && 1 == char_len
+        && 0 == (static_cast<uint8_t>(input[0]) & 0x80);
+  }
+
+  static OB_INLINE CharType to_ft_char_type_(const ascii::CharType type)
+  {
+    CharType ft_type = CharType::USELESS;
+    switch (type) {
+      case ascii::CharType::ARABIC:
+        ft_type = CharType::ARABIC_LETTER;
+        break;
+      case ascii::CharType::ENGLISH:
+        ft_type = CharType::ENGLISH_LETTER;
+        break;
+      case ascii::CharType::USELESS:
+      default:
+        break;
+    }
+    return ft_type;
+  }
+
+  static OB_INLINE bool try_classify_ascii_char_(ObCharsetType cs_type,
+                                                 const char *input,
+                                                 const uint8_t char_len,
+                                                 CharType &type)
+  {
+    bool hit = is_ascii_fast_char_(cs_type, input, char_len);
+    if (hit) {
+      type = to_ft_char_type_(ascii::classify_ascii_byte(static_cast<uint8_t>(input[0])));
+    }
+    return hit;
+  }
+
+  static OB_INLINE bool try_check_ascii_letter_connector_(ObCharsetType cs_type,
+                                                          const char *input,
+                                                          const uint8_t char_len,
+                                                          bool &is_connector)
+  {
+    bool hit = is_ascii_fast_char_(cs_type, input, char_len);
+    if (hit) {
+      is_connector = ascii::is_ascii_letter_connector_byte(static_cast<uint8_t>(input[0]));
+    }
+    return hit;
+  }
+
+  static OB_INLINE bool try_check_ascii_num_connector_(ObCharsetType cs_type,
+                                                       const char *input,
+                                                       const uint8_t char_len,
+                                                       bool &is_connector)
+  {
+    bool hit = is_ascii_fast_char_(cs_type, input, char_len);
+    if (hit) {
+      is_connector = ascii::is_ascii_num_connector_byte(static_cast<uint8_t>(input[0]));
+    }
+    return hit;
+  }
+
   template <ObCharsetType CS_TYPE>
   static int do_classify(const char *input, const uint8_t char_len, CharType &type);
 
@@ -395,15 +465,17 @@ inline int ObFTCharUtil::check_num_connector(ObCollationType coll_type,
 {
   int ret = OB_SUCCESS;
   ObCharsetType cs_type = ObCharset::charset_type_by_coll(coll_type);
-
-  switch (cs_type) {
-  case CHARSET_UTF8MB4: {
-    ret = ObFTCharUtil::is_num_connector<CHARSET_UTF8MB4>(input, char_len, is_connector);
-    break;
-  }
-  default:
-    ret = OB_NOT_SUPPORTED;
-    STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(cs_type));
+  if (try_check_ascii_num_connector_(cs_type, input, char_len, is_connector)) {
+  } else {
+    switch (cs_type) {
+      case CHARSET_UTF8MB4: {
+        ret = ObFTCharUtil::is_num_connector<CHARSET_UTF8MB4>(input, char_len, is_connector);
+        break;
+      }
+      default:
+        ret = OB_NOT_SUPPORTED;
+        STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(cs_type));
+    }
   }
   return ret;
 }
@@ -415,17 +487,17 @@ inline int ObFTCharUtil::check_letter_connector(ObCollationType coll_type,
 {
   int ret = OB_SUCCESS;
   ObCharsetType cs_type = ObCharset::charset_type_by_coll(coll_type);
-
-  switch (cs_type) {
-  case CHARSET_UTF8MB4: {
-    // ret = ObFTCharUtil::do_check_letter_connector<CHARSET_UTF8MB4>(input, char_len,
-    // is_connector);
-    ret = ObFTCharUtil::is_letter_connector<CHARSET_UTF8MB4>(input, char_len, is_connector);
-    break;
-  }
-  default:
-    ret = OB_NOT_SUPPORTED;
-    STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(cs_type));
+  if (try_check_ascii_letter_connector_(cs_type, input, char_len, is_connector)) {
+  } else {
+    switch (cs_type) {
+      case CHARSET_UTF8MB4: {
+        ret = ObFTCharUtil::is_letter_connector<CHARSET_UTF8MB4>(input, char_len, is_connector);
+        break;
+      }
+      default:
+        ret = OB_NOT_SUPPORTED;
+        STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(cs_type));
+    }
   }
   return ret;
 }
@@ -492,24 +564,52 @@ inline int ObFTCharUtil::classify_first_char(ObCollationType coll_type,
 {
   int ret = OB_SUCCESS;
   ObCharsetType cs_type = ObCharset::charset_type_by_coll(coll_type);
+  if (try_classify_ascii_char_(cs_type, input, char_len, type)) {
+  } else {
+    switch (cs_type) {
+      case CHARSET_UTF8MB4: {
+        ret = do_classify<CHARSET_UTF8MB4>(input, char_len, type);
+        break;
+      }
+      case CHARSET_UTF16: {
+        ret = do_classify<CHARSET_UTF16>(input, char_len, type);
+        break;
+      }
+      case CHARSET_UTF16LE: {
+        ret = do_classify<CHARSET_UTF16LE>(input, char_len, type);
+        break;
+      }
+      default:
+        ret = OB_NOT_SUPPORTED;
+        STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(cs_type));
+        break;
+    }
+  }
+  return ret;
+}
 
-  switch (cs_type) {
-  case CHARSET_UTF8MB4: {
-    ret = do_classify<CHARSET_UTF8MB4>(input, char_len, type);
-    break;
-  }
-  case CHARSET_UTF16: {
-    ret = do_classify<CHARSET_UTF16>(input, char_len, type);
-    break;
-  }
-  case CHARSET_UTF16LE: {
-    ret = do_classify<CHARSET_UTF16LE>(input, char_len, type);
-    break;
-  }
-  default:
-    ret = OB_NOT_SUPPORTED;
-    STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(cs_type));
-    break;
+inline int ObFTCharUtil::classify_first_valid_char(ObCollationType coll_type,
+                                                   const char *input,
+                                                   const int64_t input_len,
+                                                   int64_t &char_len,
+                                                   CharType &type)
+{
+  int ret = OB_SUCCESS;
+  char_len = 0;
+  const ObCharsetType cs_type = ObCharset::charset_type_by_coll(coll_type);
+  if (OB_ISNULL(input) || OB_UNLIKELY(input_len <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    STORAGE_FTS_LOG(WARN, "invalid argument", K(ret), KP(input), K(input_len));
+  } else if (CHARSET_UTF8MB4 == cs_type && 0 == (static_cast<uint8_t>(input[0]) & 0x80)) {
+    char_len = 1;
+    type = to_ft_char_type_(ascii::classify_ascii_byte(static_cast<uint8_t>(input[0])));
+  } else if (OB_FAIL(ObCharset::first_valid_char(coll_type, input, input_len, char_len))) {
+    STORAGE_FTS_LOG(WARN, "failed to get first valid char", K(ret), KP(input), K(input_len));
+  } else if (OB_UNLIKELY(char_len <= 0 || char_len > UINT8_MAX)) {
+    ret = OB_ERR_UNEXPECTED;
+    STORAGE_FTS_LOG(WARN, "unexpected valid char length", K(ret), K(char_len));
+  } else if (OB_FAIL(classify_first_char(coll_type, input, static_cast<uint8_t>(char_len), type))) {
+    STORAGE_FTS_LOG(WARN, "failed to classify first char", K(ret), K(char_len));
   }
   return ret;
 }

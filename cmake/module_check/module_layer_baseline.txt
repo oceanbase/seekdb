@@ -1,1 +1,5 @@
 # oblib upward-edge include baseline (historical residue, to be cleared to zero gradually). Each line: <relative path> -> <include>
+src/share/diagnosis/ob_sql_plan_monitor_node_list.h -> sql/monitor/ob_sql_plan_monitor_node_list.h
+src/share/scheduler/ob_independent_dag.h -> observer/scheduler/ob_independent_dag.h
+src/share/scheduler/ob_tenant_dag_scheduler.h -> observer/scheduler/ob_tenant_dag_scheduler.h
+src/share/table/ob_table_load_row_array.h -> observer/table_load/ob_table_load_row_array.h

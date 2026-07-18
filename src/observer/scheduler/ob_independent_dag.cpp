@@ -28,7 +28,8 @@ namespace share
 
 ObIndependentDag::ObIndependentDag(const ObDagType::ObDagTypeEnum type)
   : ObIDag(type),
-    compat_mode_(THIS_WORKER.get_compatibility_mode())
+    compat_mode_(THIS_WORKER.get_compatibility_mode()),
+    monitor_node_(nullptr)
 {
   is_independent_ = true;
 }

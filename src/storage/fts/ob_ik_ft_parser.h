@@ -18,10 +18,13 @@
 #define _OCEANBASE_STORAGE_FTS_OB_IK_FT_PARSER_H_
 
 #include "lib/allocator/ob_allocator.h"
+#include "lib/allocator/page_arena.h"
 #include "storage/fts/dict/ob_ft_cache_container.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
+#include "storage/fts/ik/ob_ik_arbitrator.h"
 #include "storage/fts/ik/ob_ik_processor.h"
+#include "storage/fts/ob_i_reusable_ft_parser.h"
 #include "plugin/interface/ob_plugin_ftparser_intf.h"
 
 #include <cstdint>
@@ -30,16 +33,19 @@ namespace oceanbase
 namespace storage
 {
 class ObFTDictHub;
+class ObIKLetterProcessor;
 
-class ObIKFTParser final : public plugin::ObITokenIterator
+class ObIKFTParser final : public ObIReusableFTParser
 {
 public:
   ObIKFTParser(ObIAllocator &allocator, ObFTDictHub *hub)
       : allocator_(allocator),
+        scratch_allocator_("IKParserData"),
         is_inited_(false),
         coll_type_(ObCollationType::CS_TYPE_INVALID),
         ctx_(nullptr),
         hub_(hub),
+        letter_segmenter_(nullptr),
         segmenters_(allocator_),
         cache_main_(allocator),
         cache_quan_(allocator),
@@ -53,6 +59,7 @@ public:
   virtual ~ObIKFTParser() { reset(); }
 
   int init(const plugin::ObFTParserParam &param);
+  int reuse_parser(const char *fulltext, const int64_t fulltext_len) override;
 
   int get_next_token(const char *&word,
                      int64_t &word_len,
@@ -70,11 +77,16 @@ private:
                        const char *ch,
                        const uint8_t char_len,
                        const ObFTCharUtil::CharType type);
+  int process_ascii_tail(bool &do_seg);
+
+  int add_segmenter(ObIIKProcessor *segmenter);
 
 private:
   int init_dict(const plugin::ObFTParserParam &param);
 
-  int init_single_dict(ObFTDictDesc desc, ObFTCacheRangeContainer &container);
+  int init_single_dict(const ObFTDictDesc &desc,
+                       ObFTCacheRangeContainer &container,
+                       const bool build_if_missing = true);
 
   int init_segmenter(const plugin::ObFTParserParam &param);
 
@@ -89,14 +101,20 @@ private:
                             ObIFTDict *&dict);
 
 private:
+  static constexpr int MAX_SEGMENTER_CNT = 4;
   static constexpr int SEGMENT_LIMIT = 1000;
   ObIAllocator &allocator_;
+  ObArenaAllocator scratch_allocator_;
   bool is_inited_;
 
   ObCollationType coll_type_;
   TokenizeContext *ctx_;
   ObFTDictHub *hub_;
+  ObIKLetterProcessor *letter_segmenter_;
   ObList<ObIIKProcessor *, ObIAllocator> segmenters_;
+  ObIIKProcessor *segmenter_cache_[MAX_SEGMENTER_CNT] = {};
+  int64_t segmenter_cnt_ = 0;
+  ObIKArbitrator arbitrator_;
 
   // For now there's no change of dict in one query, so we can pin dict this level.
   ObFTCacheRangeContainer cache_main_;

@@ -1248,7 +1248,7 @@ int ObDelUpdLogPlan::get_ddl_sample_sort_column_count(int64_t &sample_sort_colum
     LOG_WARN("error unexpected, table item size is not as expected", K(ret), "table_item_size", ins_stmt->get_table_size());
   } else {
     TableItem* table_item = ins_stmt->get_table_item_by_id(ins_stmt->get_insert_table_info().table_id_);
-    
+
     ObSchemaGetterGuard *schema_guard = nullptr;
     const ObTableSchema *table_schema = nullptr;
     if (OB_ISNULL(schema_guard = optimizer_context_.get_schema_guard())) {
@@ -1257,11 +1257,15 @@ int ObDelUpdLogPlan::get_ddl_sample_sort_column_count(int64_t &sample_sort_colum
     } else if (OB_ISNULL(table_item)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("table item of insert stmt is null", K(ret));
-    } else if (OB_FAIL(schema_guard->get_table_schema( table_item->ddl_table_id_, table_schema))) {
+    } else if (OB_FAIL(schema_guard->get_table_schema(table_item->ddl_table_id_, table_schema))) {
       LOG_WARN("get target table schema failed", K(ret), KPC(table_item));
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
       LOG_WARN("target table not exist", K(ret), KPC(table_item));
+    } else if (table_schema->is_fts_doc_word_aux()) {
+      // FTS doc-word build repartitions rows by doc_id ranges so each PX worker writes
+      // non-overlapping document ranges, while the full sort key is preserved later.
+      sample_sort_column_count = 1;
     } else if (table_schema->is_unique_index()) {
       sample_sort_column_count = table_schema->get_index_column_num();
     }
@@ -1298,11 +1302,11 @@ int ObDelUpdLogPlan::get_ddl_sort_keys_with_part_expr(ObExchangeInfo &exch_info,
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < tmp_sort_keys.count(); ++i) {
     if (OB_FAIL(sort_keys.push_back(tmp_sort_keys.at(i)))) {
-      LOG_WARN("push back sort keys failed", K(ret));
+      LOG_WARN("push back sort keys failed", K(ret), K(i));
     } else if (sample_sort_column_count > 0 && i >= sample_sort_column_count) {
       // skip
     } else if (OB_FAIL(sample_sort_keys.push_back(tmp_sort_keys.at(i)))) {
-      LOG_WARN("push back sample sort keys failed", K(ret));
+      LOG_WARN("push back sample sort keys failed", K(ret), K(i));
     }
   }
   LOG_INFO("get ddl sort keys and sample sort keys", K(ret), K(sort_keys.count()), K(sample_sort_keys.count()), K(sample_sort_column_count));

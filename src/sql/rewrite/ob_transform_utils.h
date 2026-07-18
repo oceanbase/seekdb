@@ -1893,7 +1893,7 @@ public:
                                            const ObIArray<ObRawExpr*> &raw_having_exprs,
                                            const ObIArray<ObRawExpr*> &group_clause_exprs,
                                            ObIArray<ObRawExpr*> &having_exprs_for_deduce);
-  static int check_expr_used_as_condition(ObDMLStmt *stmt, 
+  static int check_expr_used_as_condition(const ObDMLStmt *stmt,
                                           ObRawExpr *root_expr, 
                                           ObRawExpr *expr,
                                           bool &used_as_condition);
@@ -2009,6 +2009,11 @@ public:
                                   ObSelectStmt *view_stmt,
                                   ObIArray<ObRawExpr *> &common_exprs,
                                   const ObIArray<ObRawExpr *> *extra_view_exprs = NULL);
+  static int check_need_calc_match_score(ObExecContext *exec_ctx,
+                                         const ObDMLStmt *stmt,
+                                         ObRawExpr *match_expr,
+                                         bool &need_calc,
+                                         ObIArray<ObExprConstraint> &constraints);
 private:
   static int is_scalar_expr(ObRawExpr* expr, bool &is_scalar);
 

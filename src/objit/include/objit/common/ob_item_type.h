@@ -946,6 +946,7 @@ typedef enum ObItemType
   T_FUN_SYS_INNER_DECIMAL_TO_YEAR = 1820,
   T_FUN_SYS_SPLIT_PART = 1821,
   T_FUN_SYS_KEYVALUE = 1822,
+  T_FUN_SYS_POS_LIST = 1938,
   T_FUN_SYS_VEC_VID = 1900,   // vector index
   T_FUN_SYS_VEC_TYPE = 1901,
   T_FUN_SYS_VEC_VECTOR = 1902,
@@ -977,6 +978,7 @@ typedef enum ObItemType
   T_FUN_SYS_EMBEDDED_VEC = 1928,
   T_FUN_SYS_AI_PROMPT = 1929,
   T_FUN_SYS_VEC_VISIBLE = 1930, // vector index table 5
+  T_FUN_SYS_LOAD_FILE = 1941,
 
   ///< @note add new sys function type before this line
   T_FUN_SYS_END = 2000,
@@ -2882,6 +2884,7 @@ typedef enum ObItemType
   T_FORK_DATABASE = 4917,
   T_DIFF_TABLE = 4918,
   T_MERGE_TABLE = 4919,
+  T_AI_SPLIT_DOCUMENT_EXPRESSION = 4960,
   T_MAX //Attention: add a new type before T_MAX
 } ObItemType;
 

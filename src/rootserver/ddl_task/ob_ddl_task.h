@@ -130,8 +130,9 @@ struct ObDDLSliceInfo final
 public:
   ObDDLSliceInfo() : autoinc_range_interval_(AUTOINC_RANGE_INTERVAL) {}
   ~ObDDLSliceInfo() {}
-  TO_STRING_KV(K_(part_ranges), K_(autoinc_range_interval));
+  TO_STRING_KV(K_(part_ranges), K_(inverted_part_ranges), K_(autoinc_range_interval));
   bool is_valid() const { return part_ranges_.count() > 0; }
+  bool is_inverted_valid() const { return inverted_part_ranges_.count() > 0; }
   int assign(const ObDDLSliceInfo &other);
   int deep_copy(const ObDDLSliceInfo &other, ObIAllocator &allocator);
   void reset();
@@ -139,6 +140,7 @@ public:
 public:
   static const int64_t AUTOINC_RANGE_INTERVAL = 10000;
   common::Ob2DArray<sql::ObPxTabletRange> part_ranges_;
+  common::Ob2DArray<sql::ObPxTabletRange> inverted_part_ranges_;
   int64_t autoinc_range_interval_;
 };
 

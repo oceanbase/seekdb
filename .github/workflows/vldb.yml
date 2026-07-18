@@ -337,7 +337,7 @@ jobs:
           export LABEL="vldb-ci-${{ github.run_id }}-${{ github.run_attempt }}"
           export OUTPUT="$BENCH_OUTPUT"
 
-          "$WORKSPACE/tools/benchmark/fts_large_bench.sh" | tee "$VLDB_WORK_DIR/fts_large_bench.log"
+          "$WORKSPACE/tools/benchmark/fts_large_bench.sh" 2>&1 | tee "$VLDB_WORK_DIR/fts_large_bench.log"
           "$WORKSPACE/tools/benchmark/fts_large_bench_score.py" "$BENCH_OUTPUT" | tee "$SCORE_OUTPUT"
 
           if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
@@ -386,6 +386,9 @@ jobs:
           fi
           if [[ -f "$AI_FUNCS_SCORE" ]]; then
             cp -f "$AI_FUNCS_SCORE" "$ARTIFACT_DIR/ai_funcs_score.txt"
+          fi
+          if [[ -f "$VLDB_WORK_DIR/fts_large_bench.log" ]]; then
+            cp -f "$VLDB_WORK_DIR/fts_large_bench.log" "$ARTIFACT_DIR/fts_large_bench.log"
           fi
           echo "${{ github.event.pull_request.number }}" > "$ARTIFACT_DIR/pr_number"
           echo "${{ github.run_id }}" > "$ARTIFACT_DIR/source_run_id"

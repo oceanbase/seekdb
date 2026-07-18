@@ -16,11 +16,234 @@
 
 #define USING_LOG_PREFIX SHARE
 
+#include "lib/utility/ob_target_specific.h"
 #include "share/text_analysis/ob_token_stream.h"
 #include "share/rc/ob_tenant_base.h"
+#if OB_USE_MULTITARGET_CODE
+#include <immintrin.h>
+#endif
 
 namespace oceanbase
 {
+namespace common
+{
+
+static constexpr uint64_t ASCII_HIGH_BIT_MASK = 0x8080808080808080ULL;
+
+inline bool is_ascii_alnum(const uint8_t c)
+{
+  return (c >= '0' && c <= '9')
+      || (c >= 'A' && c <= 'Z')
+      || (c >= 'a' && c <= 'z');
+}
+
+inline bool is_ascii_upper(const uint8_t c)
+{
+  return c >= 'A' && c <= 'Z';
+}
+
+inline char to_ascii_lower(const char c)
+{
+  return static_cast<char>(static_cast<uint8_t>(c)
+      + (is_ascii_upper(static_cast<uint8_t>(c)) ? 32 : 0));
+}
+
+inline bool is_ascii_text(const char *str, const int64_t len)
+{
+  bool bret = true;
+  int64_t pos = 0;
+  for (; bret && pos + static_cast<int64_t>(sizeof(uint64_t)) <= len; pos += sizeof(uint64_t)) {
+    uint64_t chunk = 0;
+    MEMCPY(&chunk, str + pos, sizeof(chunk));
+    if (chunk & ASCII_HIGH_BIT_MASK) {
+      bret = false;
+    }
+  }
+  for (; bret && pos < len; ++pos) {
+    bret = 0 == (static_cast<uint8_t>(str[pos]) & 0x80);
+  }
+  return bret;
+}
+
+inline int64_t count_leading_non_alnum_scalar(const char *str, const int64_t len)
+{
+  int64_t pos = 0;
+  for (; pos < len && !is_ascii_alnum(static_cast<uint8_t>(str[pos])); ++pos) {
+  }
+  return pos;
+}
+
+inline int64_t count_leading_alnum_scalar(const char *str, const int64_t len)
+{
+  int64_t pos = 0;
+  for (; pos < len && is_ascii_alnum(static_cast<uint8_t>(str[pos])); ++pos) {
+  }
+  return pos;
+}
+
+inline bool has_ascii_upper_scalar(const char *str, const int64_t len)
+{
+  bool found = false;
+  for (int64_t i = 0; !found && i < len; ++i) {
+    found = is_ascii_upper(static_cast<uint8_t>(str[i]));
+  }
+  return found;
+}
+
+inline void lowercase_ascii_copy_scalar(const char *src, const int64_t len, char *dst)
+{
+  for (int64_t i = 0; i < len; ++i) {
+    dst[i] = to_ascii_lower(src[i]);
+  }
+}
+
+OB_DECLARE_AVX2_SPECIFIC_CODE(
+
+static constexpr int64_t AVX2_BYTES = sizeof(__m256i);
+
+inline uint32_t get_ascii_alnum_mask(const char *str)
+{
+  const __m256i bytes = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(str));
+  const __m256i zero = _mm256_set1_epi8('0' - 1);
+  const __m256i nine = _mm256_set1_epi8('9' + 1);
+  const __m256i upper_a = _mm256_set1_epi8('A' - 1);
+  const __m256i upper_z = _mm256_set1_epi8('Z' + 1);
+  const __m256i lower_a = _mm256_set1_epi8('a' - 1);
+  const __m256i lower_z = _mm256_set1_epi8('z' + 1);
+  const __m256i digits = _mm256_and_si256(_mm256_cmpgt_epi8(bytes, zero), _mm256_cmpgt_epi8(nine, bytes));
+  const __m256i uppers = _mm256_and_si256(_mm256_cmpgt_epi8(bytes, upper_a), _mm256_cmpgt_epi8(upper_z, bytes));
+  const __m256i lowers = _mm256_and_si256(_mm256_cmpgt_epi8(bytes, lower_a), _mm256_cmpgt_epi8(lower_z, bytes));
+  return static_cast<uint32_t>(
+      _mm256_movemask_epi8(_mm256_or_si256(_mm256_or_si256(digits, uppers), lowers)));
+}
+
+inline uint32_t get_ascii_upper_mask(const char *str)
+{
+  const __m256i bytes = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(str));
+  const __m256i upper_a = _mm256_set1_epi8('A' - 1);
+  const __m256i upper_z = _mm256_set1_epi8('Z' + 1);
+  const __m256i uppers = _mm256_and_si256(_mm256_cmpgt_epi8(bytes, upper_a), _mm256_cmpgt_epi8(upper_z, bytes));
+  return static_cast<uint32_t>(_mm256_movemask_epi8(uppers));
+}
+
+inline int64_t count_leading_non_alnum_avx2(const char *str, const int64_t len)
+{
+  int64_t pos = 0;
+  for (; pos + AVX2_BYTES <= len; pos += AVX2_BYTES) {
+    if (pos + 128 < len) {
+      __builtin_prefetch(str + pos + 128, 0 /* read */, 1 /* low locality */);
+    }
+    const uint32_t mask = get_ascii_alnum_mask(str + pos);
+    if (0 != mask) {
+      return pos + __builtin_ctz(mask);
+    }
+  }
+  return pos + oceanbase::common::count_leading_non_alnum_scalar(str + pos, len - pos);
+}
+
+inline int64_t count_leading_alnum_avx2(const char *str, const int64_t len)
+{
+  int64_t pos = 0;
+  for (; pos + AVX2_BYTES <= len; pos += AVX2_BYTES) {
+    if (pos + 128 < len) {
+      __builtin_prefetch(str + pos + 128, 0 /* read */, 1 /* low locality */);
+    }
+    const uint32_t mask = get_ascii_alnum_mask(str + pos);
+    if (UINT32_MAX != mask) {
+      return pos + __builtin_ctz(~mask);
+    }
+  }
+  return pos + oceanbase::common::count_leading_alnum_scalar(str + pos, len - pos);
+}
+
+inline bool has_ascii_upper_avx2(const char *str, const int64_t len)
+{
+  bool found = false;
+  int64_t pos = 0;
+  for (; !found && pos + AVX2_BYTES <= len; pos += AVX2_BYTES) {
+    if (pos + 128 < len) {
+      __builtin_prefetch(str + pos + 128, 0 /* read */, 1 /* low locality */);
+    }
+    found = 0 != get_ascii_upper_mask(str + pos);
+  }
+  return found || oceanbase::common::has_ascii_upper_scalar(str + pos, len - pos);
+}
+
+inline void lowercase_ascii_copy_avx2(const char *src, const int64_t len, char *dst)
+{
+  int64_t pos = 0;
+  const __m256i upper_a = _mm256_set1_epi8('A' - 1);
+  const __m256i upper_z = _mm256_set1_epi8('Z' + 1);
+  const __m256i flip_mask = _mm256_set1_epi8(32);
+  for (; pos + AVX2_BYTES <= len; pos += AVX2_BYTES) {
+    if (pos + 128 < len) {
+      __builtin_prefetch(src + pos + 128, 0 /* read */, 1 /* low locality */);
+    }
+    const __m256i bytes = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(src + pos));
+    const __m256i uppers = _mm256_and_si256(_mm256_cmpgt_epi8(bytes, upper_a), _mm256_cmpgt_epi8(upper_z, bytes));
+    _mm256_storeu_si256(reinterpret_cast<__m256i *>(dst + pos), _mm256_xor_si256(bytes, _mm256_and_si256(uppers, flip_mask)));
+  }
+  oceanbase::common::lowercase_ascii_copy_scalar(src + pos, len - pos, dst + pos);
+}
+
+)
+
+inline int64_t count_leading_non_alnum(const char *str, const int64_t len)
+{
+  int64_t skip = 0;
+#if OB_USE_MULTITARGET_CODE
+  if (len >= specific::avx2::AVX2_BYTES && is_arch_supported(ObTargetArch::AVX2)) {
+    skip = specific::avx2::count_leading_non_alnum_avx2(str, len);
+  } else
+#endif
+  {
+    skip = count_leading_non_alnum_scalar(str, len);
+  }
+  return skip;
+}
+
+inline int64_t count_leading_alnum(const char *str, const int64_t len)
+{
+  int64_t token_len = 0;
+#if OB_USE_MULTITARGET_CODE
+  if (len >= specific::avx2::AVX2_BYTES && is_arch_supported(ObTargetArch::AVX2)) {
+    token_len = specific::avx2::count_leading_alnum_avx2(str, len);
+  } else
+#endif
+  {
+    token_len = count_leading_alnum_scalar(str, len);
+  }
+  return token_len;
+}
+
+inline bool has_ascii_upper(const char *str, const int64_t len)
+{
+  bool found = false;
+#if OB_USE_MULTITARGET_CODE
+  if (len >= specific::avx2::AVX2_BYTES && is_arch_supported(ObTargetArch::AVX2)) {
+    found = specific::avx2::has_ascii_upper_avx2(str, len);
+  } else
+#endif
+  {
+    found = has_ascii_upper_scalar(str, len);
+  }
+  return found;
+}
+
+inline void lowercase_ascii_copy(const char *src, const int64_t len, char *dst)
+{
+#if OB_USE_MULTITARGET_CODE
+  if (len >= specific::avx2::AVX2_BYTES && is_arch_supported(ObTargetArch::AVX2)) {
+    specific::avx2::lowercase_ascii_copy_avx2(src, len, dst);
+  } else
+#endif
+  {
+    lowercase_ascii_copy_scalar(src, len, dst);
+  }
+}
+
+} // namespace common
+
 namespace share
 {
 
@@ -70,7 +293,8 @@ int ObTextTokenizer::open(const ObDatum &document, const ObCharsetInfo *cs)
 ObTextWhitespaceTokenizer::ObTextWhitespaceTokenizer()
   : ObTextTokenizer(),
     curr_token_ptr_(nullptr),
-    trav_pos_(0)
+    trav_pos_(0),
+    is_ascii_doc_(false)
 {
 }
 
@@ -78,6 +302,7 @@ void ObTextWhitespaceTokenizer::reset()
 {
   curr_token_ptr_ = nullptr;
   trav_pos_ = 0;
+  is_ascii_doc_ = false;
   ObTextTokenizer::reset();
 }
 
@@ -86,6 +311,7 @@ int ObTextWhitespaceTokenizer::inner_open(const ObDatum &document, const ObChars
   int ret = OB_SUCCESS;
   curr_token_ptr_ = nullptr;
   trav_pos_ = 0;
+  is_ascii_doc_ = !document.is_null() && document.len_ > 0 && common::is_ascii_text(document.ptr_, document.len_);
   return ret;
 }
 
@@ -101,31 +327,47 @@ int ObTextWhitespaceTokenizer::get_next(ObDatum &next_token, int64_t &token_freq
     const char *doc = input_doc_->ptr_;
     const uint32_t doc_len = get_input_buf_len();
     int64_t token_len = 0;
-    // to next non-whitespace pos
-    while (OB_SUCC(ret) && found_delimiter()) {
-      const int64_t c_len = ob_mbcharlen_ptr(cs_, doc + trav_pos_, doc + doc_len);
-      trav_pos_ += c_len;
-      if (trav_pos_ >= doc_len || 0 == c_len) {// if char is invalid, just skip the rest of document
+    if (is_ascii_doc_) {
+      trav_pos_ += common::count_leading_non_alnum(doc + trav_pos_, doc_len - trav_pos_);
+      if (trav_pos_ >= doc_len) {
         iter_end_ = true;
         ret = OB_ITER_END;
-      }
-    }
-
-    if (OB_SUCC(ret)) {
-      curr_token_ptr_ = get_trav_ptr();
-    }
-
-    // to next whitespace pos
-    while (OB_SUCC(ret) && !found_delimiter()) {
-      const int64_t c_len = ob_mbcharlen_ptr(cs_, doc + trav_pos_, doc + doc_len);
-      trav_pos_ += c_len;
-      token_len += c_len;
-      if (trav_pos_ >= doc_len || 0 == c_len) {
-        iter_end_ = true;
+      } else {
+        curr_token_ptr_ = get_trav_ptr();
+        token_len = common::count_leading_alnum(curr_token_ptr_, doc_len - trav_pos_);
+        trav_pos_ += token_len;
+        iter_end_ = trav_pos_ >= doc_len;
         if (0 == token_len) {
           ret = OB_ITER_END;
         }
-        break;
+      }
+    } else {
+      // to next non-whitespace pos
+      while (OB_SUCC(ret) && found_delimiter()) {
+        const int64_t c_len = ob_mbcharlen_ptr(cs_, doc + trav_pos_, doc + doc_len);
+        trav_pos_ += c_len;
+        if (trav_pos_ >= doc_len || 0 == c_len) {// if char is invalid, just skip the rest of document
+          iter_end_ = true;
+          ret = OB_ITER_END;
+        }
+      }
+
+      if (OB_SUCC(ret)) {
+        curr_token_ptr_ = get_trav_ptr();
+      }
+
+      // to next whitespace pos
+      while (OB_SUCC(ret) && !found_delimiter()) {
+        const int64_t c_len = ob_mbcharlen_ptr(cs_, doc + trav_pos_, doc + doc_len);
+        trav_pos_ += c_len;
+        token_len += c_len;
+        if (trav_pos_ >= doc_len || 0 == c_len) {
+          iter_end_ = true;
+          if (0 == token_len) {
+            ret = OB_ITER_END;
+          }
+          break;
+        }
       }
     }
 
@@ -259,6 +501,8 @@ int ObBasicEnglishNormalizer::get_next(ObDatum &next_token, int64_t &token_freq)
     norm_allocator_.reuse();
     ObDatum tmp_datum;
     bool found_alnum = false;
+    bool ascii_token = false;
+    const bool upstream_ascii_alnum = in_stream_->is_ascii_alnum_token_stream();
     uint32_t norm_token_len = 0;
     const char *norm_token_ptr = nullptr;
     while (OB_SUCC(ret) && !found_alnum) {
@@ -266,6 +510,29 @@ int ObBasicEnglishNormalizer::get_next(ObDatum &next_token, int64_t &token_freq)
       if (OB_FAIL(in_stream_->get_next(tmp_datum, token_freq))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
           LOG_WARN("failed to get next datum", K(ret));
+        }
+      } else if (upstream_ascii_alnum) {
+        found_alnum = tmp_datum.len_ > 0;
+        ascii_token = true;
+        norm_token_ptr = tmp_datum.ptr_;
+        norm_token_len = tmp_datum.len_;
+      } else if (common::is_ascii_text(tmp_datum.ptr_, tmp_datum.len_)) {
+        const char *token = tmp_datum.ptr_;
+        int64_t start = 0;
+        int64_t end = tmp_datum.len_ - 1;
+        while (start < tmp_datum.len_ && !common::is_ascii_alnum(static_cast<uint8_t>(token[start]))) {
+          ++start;
+        }
+        while (end >= start && !common::is_ascii_alnum(static_cast<uint8_t>(token[end]))) {
+          --end;
+        }
+        if (start > end) {
+          // skip
+        } else {
+          found_alnum = true;
+          ascii_token = true;
+          norm_token_ptr = token + start;
+          norm_token_len = end - start + 1;
         }
       } else {
         // trim leading and trailing non-alnum characters
@@ -307,6 +574,19 @@ int ObBasicEnglishNormalizer::get_next(ObDatum &next_token, int64_t &token_freq)
     } else if (OB_UNLIKELY(!found_alnum)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected unfounded alnum in token", K(ret), K(tmp_datum));
+    } else if (ascii_token) {
+      if (common::has_ascii_upper(norm_token_ptr, norm_token_len)) {
+        char *buf = static_cast<char *>(norm_allocator_.alloc(norm_token_len));
+        if (OB_ISNULL(buf)) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("failed to allocate ascii normalized token", K(ret), K(norm_token_len));
+        } else {
+          common::lowercase_ascii_copy(norm_token_ptr, norm_token_len, buf);
+          next_token.set_string(buf, static_cast<uint32_t>(norm_token_len));
+        }
+      } else {
+        next_token.set_string(norm_token_ptr, static_cast<uint32_t>(norm_token_len));
+      }
     } else {
       ObString norm_alnum_token(norm_token_len, norm_token_ptr);
       ObString norm_lower_token;

@@ -820,6 +820,42 @@ public:
   {
     return inited(buckets_);
   }
+  OB_INLINE void prefetch_hash_read(const uint64_t hash_value, const bool prefetch_node = true) const
+  {
+    if (OB_LIKELY(inited(buckets_)) && OB_LIKELY(bucket_num_ > 0)) {
+      const hashbucket *bucket = &buckets_[hash_value % bucket_num_];
+      __builtin_prefetch(bucket, 0 /* read */, 2 /* medium locality */);
+      if (prefetch_node && NULL != bucket->node) {
+        __builtin_prefetch(bucket->node, 0 /* read */, 2 /* medium locality */);
+      }
+    }
+  }
+  OB_INLINE void prefetch_hash_write(const uint64_t hash_value, const bool prefetch_node = true) const
+  {
+    if (OB_LIKELY(inited(buckets_)) && OB_LIKELY(bucket_num_ > 0)) {
+      const hashbucket *bucket = &buckets_[hash_value % bucket_num_];
+      __builtin_prefetch(bucket, 1 /* write */, 2 /* medium locality */);
+      if (prefetch_node && NULL != bucket->node) {
+        __builtin_prefetch(bucket->node, 1 /* write */, 2 /* medium locality */);
+      }
+    }
+  }
+  OB_INLINE void prefetch_read(const _key_type &key, const bool prefetch_node = true) const
+  {
+    uint64_t hash_value = 0;
+    if (OB_LIKELY(inited(buckets_)) && OB_LIKELY(NULL != allocer_)
+        && OB_SUCCESS == hashfunc_(key, hash_value)) {
+      prefetch_hash_read(hash_value, prefetch_node);
+    }
+  }
+  OB_INLINE void prefetch_write(const _key_type &key, const bool prefetch_node = true) const
+  {
+    uint64_t hash_value = 0;
+    if (OB_LIKELY(inited(buckets_)) && OB_LIKELY(NULL != allocer_)
+        && OB_SUCCESS == hashfunc_(key, hash_value)) {
+      prefetch_hash_write(hash_value, prefetch_node);
+    }
+  }
   int create(int64_t bucket_num, _allocer *allocer, _bucket_allocer *bucket_allocer)
   {
     int ret = OB_SUCCESS;;

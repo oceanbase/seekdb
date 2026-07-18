@@ -254,6 +254,7 @@ private:
       const uint64_t col_id,
       const char *col_name_buf,
       const int64_t name_pos,
+      const uint64_t expected_flag,
       bool &col_exists);
   static int get_word_segment_col(
       const ObTableSchema &data_schema,

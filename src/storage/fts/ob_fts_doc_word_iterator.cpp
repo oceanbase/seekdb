@@ -224,6 +224,7 @@ int ObFTDocWordScanIterator::build_table_param(
     common::ObIArray<uint64_t> &column_ids)
 {
   int ret = OB_SUCCESS;
+  static const int64_t LEGACY_FTS_DOC_WORD_TABLE_COL_CNT = 5;
   
   share::schema::ObSchemaGetterGuard schema_guard;
   const share::schema::ObTableSchema *table_schema = nullptr;
@@ -241,9 +242,10 @@ int ObFTDocWordScanIterator::build_table_param(
     LOG_WARN("unexpected error, table scheam is nullptr", K(ret), K(table_id));
   } else if (OB_FAIL(table_schema->get_column_ids(column_ids))) {
     LOG_WARN("fail to get all column ids", K(ret), KPC(table_schema));
-  } else if (OB_UNLIKELY(4 != column_ids.count())) {
+  } else if (OB_UNLIKELY(share::ObFtsIndexBuilderUtil::OB_FTS_INDEX_OR_DOC_WORD_TABLE_COL_CNT != column_ids.count()
+                         && LEGACY_FTS_DOC_WORD_TABLE_COL_CNT != column_ids.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, column count isn't 4 for fts doc word", K(ret), K(column_ids));
+    LOG_WARN("unexpected error, column count isn't expected for fts doc word", K(ret), K(column_ids));
   } else if (OB_FAIL(table_param.convert(*table_schema, column_ids, sql::ObStoragePushdownFlag()))) {
     LOG_WARN("fail to convert table param", K(ret), K(column_ids), KPC(table_schema));
   } else {

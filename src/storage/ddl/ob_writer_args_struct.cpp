@@ -1,23 +1,20 @@
-/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
  */
 
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/ddl/ob_writer_args_struct.h"
 #include "storage/ddl/ob_ddl_storage_util.h"
+#include "storage/ddl/ob_direct_load_type.h"
 #include "storage/ddl/ob_macro_meta_store_manager.h"
 #include "storage/ddl/ob_ddl_inc_redo_log_writer.h"
 #include "storage/ddl/ob_ddl_independent_dag.h"
@@ -44,7 +41,9 @@ int ObWriterArgs::init(const ObWriteMacroParam &param,
     ObStorageSchema *storage_schema = with_cs_replica ?
                                       tablet_param.cs_replica_storage_schema_ :
                                       tablet_param.storage_schema_;
-    if (OB_UNLIKELY(nullptr == storage_schema || storage_schema->is_row_store())) {
+    const bool is_inc_major = is_incremental_major_direct_load(param.direct_load_type_);
+    const bool is_column_store_table = param.ddl_table_schema_.table_item_.is_column_store_;
+    if (OB_UNLIKELY(nullptr == storage_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected storage schema", K(ret), K(storage_schema));
     } else {
@@ -65,12 +64,17 @@ int ObWriterArgs::init(const ObWriteMacroParam &param,
         cg_table_key.tablet_id_ = param.tablet_id_;
         cg_table_key.version_range_.snapshot_version_ = param.snapshot_version_;
         cg_table_key.column_group_idx_ = param.cg_idx_;
-        if (cg_schema.is_rowkey_column_group() || cg_schema.is_all_column_group()) {
-          cg_table_key.table_type_ = ObITable::COLUMN_ORIENTED_SSTABLE;
+        if (!is_column_store_table) {
+          cg_table_key.table_type_ = is_inc_major ? ObITable::INC_MAJOR_SSTABLE
+                                                  : ObITable::MAJOR_SSTABLE;
+        } else if (cg_schema.is_rowkey_column_group() || cg_schema.is_all_column_group()) {
+          cg_table_key.table_type_ = is_inc_major ? ObITable::INC_COLUMN_ORIENTED_SSTABLE
+                                                  : ObITable::COLUMN_ORIENTED_SSTABLE;
           cg_table_key.slice_range_.start_slice_idx_ = param.slice_idx_;
           cg_table_key.slice_range_.end_slice_idx_ = param.slice_idx_;
         } else {
-          cg_table_key.table_type_ = ObITable::NORMAL_COLUMN_GROUP_SSTABLE;
+          cg_table_key.table_type_ = is_inc_major ? ObITable::INC_NORMAL_COLUMN_GROUP_SSTABLE
+                                                  : ObITable::NORMAL_COLUMN_GROUP_SSTABLE;
           cg_table_key.slice_range_.start_slice_idx_ = param.slice_idx_;
           cg_table_key.slice_range_.end_slice_idx_ = param.slice_idx_;
         }
@@ -80,11 +84,8 @@ int ObWriterArgs::init(const ObWriteMacroParam &param,
           macro_seq_param_.start_ = param.start_sequence_.macro_data_seq_;
         } else {
           ObMacroDataSeq start_sequence;
-          if (OB_FAIL(ObDDLStorageUtil::init_macro_block_seq(param.slice_idx_,
-                                                      start_sequence))) {
-            LOG_WARN("fail to initialize start sequence", K(ret), K(param.direct_load_type_),
-                                                          K(param.tablet_id_),
-                                                          K(param.slice_idx_));
+          if (OB_FAIL(ObDDLStorageUtil::init_macro_block_seq(param.slice_idx_, start_sequence))) {
+            LOG_WARN("fail to initialize start sequence", K(ret), K(param.slice_idx_));
           } else {
             parallel_idx_ = param.slice_idx_;
             macro_seq_param_.seq_type_ = ObMacroSeqParam::SEQ_TYPE_INC;
@@ -124,7 +125,45 @@ int ObWriterArgs::init(const ObWriteMacroParam &param,
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("object cleaner is nullptr", KR(ret));
           }
+#ifdef OB_BUILD_SHARED_STORAGE
+          else if (GCTX.is_shared_storage_mode() && OB_FAIL(object_cleaner_->mark_succeed())) {
+            LOG_WARN("fail to mark succeed", KR(ret));
+          }
+#endif
         }
+
+      #ifdef OB_BUILD_SHARED_STORAGE
+        if (OB_SUCC(ret) && GCTX.is_shared_storage_mode()) {
+          ObMacroMetaStoreManager *macro_meta_store_mgr = param.macro_meta_store_mgr_;
+          data_desc_.get_static_desc().schema_version_ = param.schema_version_;
+          if (is_need_ddl_redo_callback_type(writer_type)) {
+            if (OB_ISNULL(macro_meta_store_mgr)) {
+              ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("macro meta store manager in shared storage mode is null", K(ret));
+            } else if (OB_FAIL(macro_meta_store_mgr->get_macro_meta_store(cg_table_key.tablet_id_,
+                                                                          param.cg_idx_,
+                                                                          parallel_idx_,
+                                                                          macro_meta_store))) {
+              if (OB_ENTRY_NOT_EXIST == ret) {
+                ret = OB_SUCCESS;
+                if (nullptr != macro_meta_store) {
+                  ret = OB_ERR_UNEXPECTED;
+                  LOG_WARN("macro meta store is not null", K(ret));
+                } else if (OB_FAIL(macro_meta_store_mgr->add_macro_meta_store(cg_table_key.tablet_id_,
+                                                                              param.cg_idx_,
+                                                                              parallel_idx_,
+                                                                              0/*lob_start_seq*/,
+                                                                              macro_meta_store))) {
+                  LOG_WARN("fail to add macro meta store", K(ret), K(param.cg_idx_), K(parallel_idx_));
+                }
+              } else {
+                LOG_WARN("fail to get macro meta store",
+                    K(ret), K(cg_table_key.tablet_id_), K(param.cg_idx_), K(parallel_idx_));
+              }
+            }
+          }
+        }
+      #endif
 
         if (OB_SUCC(ret) && is_need_ddl_redo_callback_type(writer_type)) {
           const int64_t row_offset = param.row_offset_;

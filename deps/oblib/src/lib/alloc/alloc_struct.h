@@ -141,6 +141,26 @@ struct ObMemAttr
     ObAllocPrio prio = OB_NORMAL_ALLOC)
       : label_(label),
         ctx_id_(ctx_id),
+        sub_ctx_id_(0),
+        prio_(prio),
+        use_500_(false),
+        expect_500_(true),
+        alloc_extra_info_(false),
+        use_malloc_v2_(false)
+  {}
+  explicit ObMemAttr(
+    uint64_t ctx_id,
+    ObLabel label)
+      : ObMemAttr(label, ctx_id, OB_NORMAL_ALLOC)
+  {}
+  explicit ObMemAttr(
+    uint64_t ctx_id,
+    ObLabel label,
+    int32_t sub_ctx_id,
+    ObAllocPrio prio = OB_NORMAL_ALLOC)
+      : label_(label),
+        ctx_id_(ctx_id),
+        sub_ctx_id_(sub_ctx_id),
         prio_(prio),
         use_500_(false),
         expect_500_(true),

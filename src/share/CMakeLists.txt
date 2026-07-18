@@ -94,6 +94,7 @@ ob_set_subtarget(ob_share common
   ob_ddl_checksum.cpp
   ob_ddl_sim_point.cpp
   ob_fork_table_info.cpp
+  ob_fts_pos_list_codec.cpp
   ob_scheduled_job_utils.cpp
   ob_ddl_common.cpp
   ob_ddl_error_message_table_operator.cpp

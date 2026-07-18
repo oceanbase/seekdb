@@ -235,9 +235,15 @@ int ObDocIdExt::from_obj(const ObObj &obj)
 int ObDocIdExt::from_datum(const ObDatum &datum)
 {
   int ret = common::OB_SUCCESS;
-  int64_t dummy_pos = 0;
-  if (OB_FAIL(datum_.deep_copy(datum, buf_, OB_DOC_ID_EXT_SIZE, dummy_pos))) {
-    LOG_WARN("failed to copy datum to doc id ext", K(ret));
+  datum_ = datum;
+  if (!datum_.is_null()) {
+    if (OB_UNLIKELY(datum_.len_ > OB_DOC_ID_EXT_SIZE)) {
+      ret = common::OB_BUF_NOT_ENOUGH;
+      LOG_WARN("doc id datum is too large for fixed buffer", K(ret), K_(datum), K(datum));
+    } else if (datum_.len_ > 0) {
+      MEMCPY(buf_, datum.ptr_, datum.len_);
+      datum_.ptr_ = buf_;
+    }
   }
   return ret;
 }

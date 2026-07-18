@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "objit/common/ob_item_type.h"
 #include "ob_expr_operator_factory.h"
 #include "sql/engine/expr/ob_expr_substring_index.h"
 #include "sql/engine/expr/ob_expr_strcmp.h"
@@ -178,6 +179,7 @@
 #include "sql/engine/expr/ob_expr_des_hex_str.h"
 #include "sql/engine/expr/ob_expr_doc_id.h"
 #include "sql/engine/expr/ob_expr_doc_length.h"
+#include "sql/engine/expr/ob_expr_pos_list.h"
 #include "sql/engine/expr/ob_expr_word_segment.h"
 #include "sql/engine/expr/ob_expr_word_count.h"
 #include "sql/engine/expr/ob_expr_ascii.h"
@@ -440,6 +442,7 @@
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_embed.h"
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_rerank.h"
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_prompt.h"
+#include "sql/engine/expr/ob_expr_ai/ob_expr_load_file.h"
 #include "sql/engine/expr/ob_expr_vector_similarity.h"
 #include "sql/engine/expr/ob_expr_check_location_access.h"
 
@@ -806,6 +809,7 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprLastExecId);
     REG_OP(ObExprDocID);
     REG_OP(ObExprDocLength);
+    REG_OP(ObExprPosList);
     REG_OP(ObExprWordSegment);
     REG_OP(ObExprWordCount);
     REG_OP(ObExprObjAccess);
@@ -1147,6 +1151,7 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprAIEmbed);
     REG_OP(ObExprAIRerank);
     REG_OP(ObExprAIPrompt);
+    REG_OP(ObExprLoadFile);
     REG_OP(ObExprCheckLocationAccess);
   }();
 }
@@ -1307,6 +1312,8 @@ void ObExprOperatorFactory::get_function_alias_name(const ObString &origin_name,
       alias_name = ObString::make_string(N_WORD_COUNT);
     } else if (0 == origin_name.case_compare("DOC_LENGTH")) {
       alias_name = ObString::make_string(N_DOC_LENGTH);
+    } else if (0 == origin_name.case_compare("POS_LIST")) {
+      alias_name = ObString::make_string(N_POS_LIST);
     } else if (0 == origin_name.case_compare("inet_ntoa")) {
       // inet_ntoa is synonym for int2ip
       alias_name = ObString::make_string(N_INT2IP);
@@ -1332,4 +1339,3 @@ void ObExprOperatorFactory::get_function_alias_name(const ObString &origin_name,
 
 } //end sql
 } //end oceanbase
-

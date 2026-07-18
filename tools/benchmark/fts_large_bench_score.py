@@ -1,23 +1,21 @@
 #!/usr/bin/env python3
 """Score one fts_large_bench.sh report against the checked-in CI baseline."""
 
-from __future__ import annotations
-
 import argparse
 import json
 import re
 import sys
 from pathlib import Path
 from statistics import mean
-from typing import Any
+from typing import Any, Dict, List
 
 
 METRIC_RE = re.compile(r"^\s*([A-Za-z0-9_]+):\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+))\s*$")
 DEFAULT_BASELINE = Path(__file__).with_name("fts_large_bench_baseline.json")
 
 
-def load_report(path: Path) -> dict[str, float]:
-    metrics: dict[str, float] = {}
+def load_report(path: Path) -> Dict[str, float]:
+    metrics: Dict[str, float] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
         match = METRIC_RE.match(line)
         if match:
@@ -25,15 +23,15 @@ def load_report(path: Path) -> dict[str, float]:
     return metrics
 
 
-def load_baseline(path: Path) -> dict[str, Any]:
+def load_baseline(path: Path) -> Dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
 def check_config(
-    report: dict[str, float],
-    baseline: dict[str, Any],
+    report: Dict[str, float],
+    baseline: Dict[str, Any],
     allow_config_mismatch: bool,
-) -> list[str]:
+) -> List[str]:
     mismatches = []
     for key, expected in baseline["benchmark_config"].items():
         actual = report.get(key)
@@ -53,13 +51,13 @@ def improvement(baseline_value: float, current_value: float) -> float:
     return (baseline_value - current_value) / baseline_value
 
 
-def calculate_score(report: dict[str, float], baseline: dict[str, Any]) -> dict[str, Any]:
+def calculate_score(report: Dict[str, float], baseline: Dict[str, Any]) -> Dict[str, Any]:
     baseline_metrics = baseline["baseline_metrics"]
     categories = baseline["score_categories"]
     full_score_improvement = float(baseline["score_rule"]["full_score_improvement"])
     max_score = float(baseline["score_rule"]["max_score"])
 
-    category_results: dict[str, Any] = {}
+    category_results: Dict[str, Any] = {}
     for category, metric_names in categories.items():
         metric_results = []
         for metric in metric_names:
@@ -97,7 +95,7 @@ def format_percent(value: float) -> str:
     return f"{value * 100:.2f}%"
 
 
-def print_human(result: dict[str, Any], config_mismatches: list[str]) -> None:
+def print_human(result: Dict[str, Any], config_mismatches: List[str]) -> None:
     print("FTS Large Benchmark Score")
     print("=========================")
     print(f"score: {result['score']:.2f} / 100")

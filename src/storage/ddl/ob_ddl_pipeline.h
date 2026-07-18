@@ -1,17 +1,13 @@
-/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
  */
 
 #ifndef OB_OCEANBASE_STORAGE_DDL_DDL_PIPELINE_H
@@ -22,6 +18,7 @@
 #include "storage/ddl/ob_ddl_tablet_context.h"
 #include "common/ob_tablet_id.h"
 #include "observer/vector_index/ob_vector_index_util.h"
+#include "observer/vector_index/ob_plugin_vector_index_adaptor.h"
 #include "observer/vector_index/ob_vector_kmeans_ctx.h"
 #include "observer/vector_index/ob_vector_embedding_handler.h"
 #include "storage/ddl/ob_hnsw_embedmgr.h"
@@ -69,6 +66,9 @@ public:
   {}
   virtual ~ObIDDLPipeline() = default;
   int init(const ObTabletID &tablet_id, const int64_t slice_idx);
+  // Accessors for monitoring / debugging.
+  const ObTabletID &get_tablet_id() const { return tablet_id_; }
+  int64_t get_slice_idx() const { return slice_idx_; }
   virtual int preprocess() { return OB_SUCCESS; }
   virtual void postprocess(int &ret_code) { UNUSED(ret_code); }
   virtual int get_next_chunk(ObChunk *&chunk) = 0;
@@ -124,11 +124,12 @@ public:
       const ObTabletID &tablet_id,
       const ObIndexType &index_type,
       const int64_t snapshot_version,
+      const int64_t ddl_task_id,
       const ObDDLTableSchema &ddl_table_schema);
 
   int build_extra_column_idxs(const int32_t chunk_col_idx, common::ObSEArray<int32_t, 4> &extra_column_idxs) const;
 
-TO_STRING_KV(K_(ls_id), K_(tablet_id), K_(snapshot_version), K_(index_type));
+TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(tablet_id), K_(snapshot_version), K_(index_type), K_(is_vec_tablet_rebuild));
 
 private:
   int init_hnsw_index(const ObDDLTableSchema &ddl_table_schema);
@@ -143,7 +144,7 @@ private:
 public:
   int64_t row_cnt_;
   int64_t vec_dim_;
-  
+  int64_t tenant_id_;
   share::ObLSID ls_id_;
   ObTabletID tablet_id_;
   common::ObString vec_idx_param_;
@@ -152,6 +153,7 @@ public:
   int32_t vector_col_idx_;
   int32_t vector_key_col_idx_;
   int32_t vector_data_col_idx_;
+  int32_t vector_visible_col_idx_;
   int32_t vector_chunk_col_idx_;
   int32_t center_id_col_idx_;
   int32_t center_vector_col_idx_;
@@ -166,17 +168,22 @@ public:
   int64_t snapshot_version_;
   ObVectorIndexAlgorithmType index_type_;
   ObIvfBuildHelper *helper_;
+  int64_t ddl_task_id_;
+  bool is_vec_tablet_rebuild_;
+  ObPluginVectorIndexAdapterGuard adapter_guard_;
+  transaction::ObTxDesc *tx_desc_;
   common::ObArenaAllocator allocator_;
   lib::MemoryContext &memory_context_;
   uint64_t *all_vsag_use_mem_;
+  uint64_t table_id_;
 };
 
 class ObVectorIndexRowIterator
 {
 public:
   ObVectorIndexRowIterator()
-    : is_inited_(false), cur_row_pos_(0), current_row_(), iter_allocator_("VectoIndeIter", OB_MALLOC_NORMAL_BLOCK_SIZE),
-      row_allocator_("VectoRow", OB_MALLOC_NORMAL_BLOCK_SIZE),
+    : is_inited_(false), cur_row_pos_(0), current_row_(), iter_allocator_("VectoIndeIter", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+      row_allocator_("VectoRow", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
       tablet_id_(), vec_dim_(0)
   {}
   ~ObVectorIndexRowIterator() = default;
@@ -200,7 +207,7 @@ public:
   ObHNSWIndexRowIterator()
     : rowkey_cnt_(0), column_cnt_(0), snapshot_version_(0), index_type_(),
       row_cnt_(0), ls_id_(),vec_idx_param_(),
-      vector_vid_col_idx_(-1), vector_col_idx_(-1), vector_key_col_idx_(-1), vector_data_col_idx_(-1),
+      vector_vid_col_idx_(-1), vector_col_idx_(-1), vector_key_col_idx_(-1), vector_data_col_idx_(-1), vector_visible_col_idx_(-1), is_vec_tablet_rebuild_(false),
       ctx_(nullptr), extra_column_idx_types_()
   {}
   ~ObHNSWIndexRowIterator() = default;
@@ -223,6 +230,8 @@ private:
   int32_t vector_col_idx_;
   int32_t vector_key_col_idx_;
   int32_t vector_data_col_idx_;
+  int32_t vector_visible_col_idx_;
+  bool is_vec_tablet_rebuild_;
   ObVecIdxSnapshotDataWriteCtx *ctx_;
   ObSEArray<share::ObExtraInfoIdxType, 4> extra_column_idx_types_;
 };
@@ -238,7 +247,7 @@ protected:
   int64_t lob_inrow_threshold_;
 };
 
-class ObIVFCenterRowIterator : public ObIVFBaseRowIterator 
+class ObIVFCenterRowIterator : public ObIVFBaseRowIterator
 {
 public:
   ObIVFCenterRowIterator()
@@ -282,7 +291,7 @@ private:
   ObIvfSq8BuildHelper *helper_;
 };
 
-class ObIVFPqRowIterator : public ObIVFBaseRowIterator 
+class ObIVFPqRowIterator : public ObIVFBaseRowIterator
 {
 public:
   ObIVFPqRowIterator()
@@ -330,7 +339,7 @@ public:
   virtual int init(
       const ObTabletID &tablet_id);
   TO_STRING_KV(K_(vec_dim), K_(vec_idx_param), K_(vector_vid_col_idx), K_(vector_col_idx),
-      K_(vector_key_col_idx), K_(vector_data_col_idx), K_(extra_column_idx_types));
+      K_(vector_key_col_idx), K_(vector_data_col_idx), K_(vector_visible_col_idx), K_(extra_column_idx_types));
 protected:
   virtual int execute(
       const ObChunk &input_chunk,
@@ -359,6 +368,7 @@ private:
   int32_t vector_col_idx_;
   int32_t vector_key_col_idx_;
   int32_t vector_data_col_idx_;
+  int32_t vector_visible_col_idx_;
   ObSEArray<share::ObExtraInfoIdxType, 4> extra_column_idx_types_;
 };
 
@@ -377,11 +387,12 @@ public:
   TO_STRING_KV(K_(tablet_id));
 private:
   int serialize_vector_index(
-    ObIAllocator *allocator,
-    transaction::ObTxDesc *tx_desc,
-    int64_t lob_inrow_threshold,
-    ObVectorIndexAlgorithmType &type,
-    ObVectorIndexTabletContext &ctx);
+      ObIAllocator *allocator,
+      transaction::ObTxDesc *tx_desc,
+      int64_t lob_inrow_threshold,
+      ObVectorIndexAlgorithmType &type,
+      ObVectorIndexTabletContext &ctx,
+      const bool is_vec_tablet_rebuild);
 };
 
 class ObVectorIndexWriteMacroBaseOperator : public ObVectorIndexBaseOperator
@@ -404,6 +415,25 @@ public:
   {}
   virtual ~ObHNSWIndexWriteMacroOperator() = default;
   int init(const ObTabletID &tablet_id);
+  virtual int execute(
+      const ObChunk &input_chunk,
+      ResultState &result_state,
+      ObChunk &output_chunk) override;
+  TO_STRING_KV(K_(tablet_id), K_(slice_idx));
+private:
+  ObHNSWIndexRowIterator iter_;
+};
+
+
+class ObHNSWIndexDMLWriteOperator : public ObVectorIndexWriteMacroBaseOperator
+{
+public:
+  explicit ObHNSWIndexDMLWriteOperator(ObPipeline *pipeline)
+    : ObVectorIndexWriteMacroBaseOperator(pipeline), iter_()
+  {}
+  virtual ~ObHNSWIndexDMLWriteOperator() = default;
+  int init(const ObTabletID &tablet_id);
+  int dml_write(const ObChunk &input_chunk, ObVectorIndexRowIterator &iter);
   virtual int execute(
       const ObChunk &input_chunk,
       ResultState &result_state,
@@ -518,7 +548,6 @@ void ObVectorIndexBuildAndWritePipeline<BuildOp, WriteOp>::postprocess(int &ret_
   if (OB_SUCCESS != ret_code && OB_NOT_NULL(get_dag())) {
     ObDDLIndependentDag *dag = static_cast<ObDDLIndependentDag *>(get_dag());
     dag->set_ret_code(ret_code);
-    ret_code = OB_SUCCESS;
   }
 }
 
@@ -527,11 +556,12 @@ class ObIVFIndexBaseOperator : public ObVectorIndexBaseOperator
 public:
   explicit ObIVFIndexBaseOperator(ObPipeline *pipeline)
     : ObVectorIndexBaseOperator(pipeline),
-      helper_(nullptr)
+      table_id_(), helper_(nullptr)
   {}
   ~ObIVFIndexBaseOperator() = default;
   int init(const ObTabletID &tablet_id);
 protected:
+  ObTableID table_id_;
   ObIvfBuildHelper *helper_;
 };
 
@@ -613,7 +643,7 @@ private:
   ObIVFCenterRowIterator iter_;
 };
 
-class ObIVFSq8MetaAppendBufferOperator : public ObIVFIndexAppendBufferBaseOperator 
+class ObIVFSq8MetaAppendBufferOperator : public ObIVFIndexAppendBufferBaseOperator
 {
 public:
   explicit ObIVFSq8MetaAppendBufferOperator(ObPipeline *pipeline)
@@ -638,7 +668,7 @@ public:
       ObChunk &ouput_chunk) override;
 };
 
-class ObIVFSq8MetaWriteMacroOperator : public ObVectorIndexWriteMacroBaseOperator 
+class ObIVFSq8MetaWriteMacroOperator : public ObVectorIndexWriteMacroBaseOperator
 {
 public:
   explicit ObIVFSq8MetaWriteMacroOperator(ObPipeline *pipeline)
@@ -685,7 +715,7 @@ public:
       ObChunk &ouput_chunk) override;
 };
 
-class ObIVFPqWriteMacroOperator : public ObVectorIndexWriteMacroBaseOperator 
+class ObIVFPqWriteMacroOperator : public ObVectorIndexWriteMacroBaseOperator
 {
 public:
   explicit ObIVFPqWriteMacroOperator(ObPipeline *pipeline)
@@ -711,6 +741,7 @@ typedef ObVectorIndexAppendPipeline<ObHNSWIndexAppendBufferOperator> ObHNSWAppen
 typedef ObVectorIndexAppendPipeline<ObIVFCenterAppendBufferOperator> ObIVFCenterAppendPipeline;
 typedef ObVectorIndexAppendPipeline<ObIVFSq8MetaAppendBufferOperator> ObIVFSq8MetaAppendPipeline;
 typedef ObVectorIndexAppendPipeline<ObIVFPqAppendBufferOperator> ObIVFPqAppendPipeline;
+typedef ObVectorIndexBuildAndWritePipeline<ObHNSWIndexBuildOperator, ObHNSWIndexDMLWriteOperator> ObHNSWBuildAndDMLWritePipeline;
 typedef ObVectorIndexBuildAndWritePipeline<ObHNSWIndexBuildOperator, ObHNSWIndexWriteMacroOperator> ObHNSWBuildAndWritePipeline;
 typedef ObVectorIndexBuildAndWritePipeline<ObIVFCenterIndexBuildOperator, ObIVFCenterWriteMacroOperator> ObIVFCenterBuildAndWritePipeline;
 typedef ObVectorIndexBuildAndWritePipeline<ObIVFSq8MetaIndexBuildOperator, ObIVFSq8MetaWriteMacroOperator> ObIVFSq8MetaBuildAndWritePipeline;
@@ -796,7 +827,7 @@ public:
     batch_info_ = nullptr;
     cur_result_pos_ = 0;
     extra_column_idxs_.reset();
-  }  
+  }
 private:
   bool is_embedding_col_invalid(const int64_t column_cnt) const {
     return vector_col_idx_ < 0 || vector_col_idx_ >= column_cnt;
@@ -863,8 +894,8 @@ public:
     }
     return ret;
   }
-  
-  virtual int set_remain_block() override { 
+
+  virtual int set_remain_block() override {
     if (OB_ISNULL(ddl_slice_)) {
       return OB_NOT_INIT;
     } else {

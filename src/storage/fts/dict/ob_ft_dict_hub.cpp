@@ -23,11 +23,25 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "storage/fts/dict/ob_ft_cache_container.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
+#include "storage/fts/dict/ob_ft_dict_table_iter.h"
 #include "storage/fts/dict/ob_ft_range_dict.h"
 namespace oceanbase
 {
 namespace storage
 {
+int ObFTDictInfoKey::set(const ObFTDictType type, const ObString &name)
+{
+  int ret = OB_SUCCESS;
+  if (name.empty() || name.length() >= MAX_DICT_NAME_LENGTH) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    type_ = static_cast<uint64_t>(type);
+    name_len_ = name.length();
+    MEMCPY(name_, name.ptr(), name_len_);
+  }
+  return ret;
+}
+
 int ObFTDictHub::init()
 {
   static constexpr int K_MAX_DICT_BUCKET = 128; // for now, only built-in dicts.
@@ -51,13 +65,16 @@ int ObFTDictHub::destroy()
 int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container)
 {
   int ret = OB_SUCCESS;
-  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_));
+  ObFTDictInfoKey key;
   ObFTDictInfo info;
+  ObFTDictDesc resolved_desc(desc);
   container.reset();
 
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("dict hub not init", K(ret));
+  } else if (OB_FAIL(key.set(desc.type_, desc.name_))) {
+    LOG_WARN("Invalid dictionary identity", K(ret), K(desc.name_), K(desc.type_));
   } else {
     ObBucketHashWLockGuard guard(rw_dict_lock_, key.hash());
 
@@ -69,7 +86,9 @@ int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &
       } else {
         LOG_WARN("Failed to get dict info", K(ret));
       }
-    } else if (OB_FAIL(ObFTRangeDict::try_load_cache(desc, info.range_count_, container))) {
+    } else if (FALSE_IT(resolved_desc.cache_id_ = info.cache_id_)) {
+    } else if (FALSE_IT(resolved_desc.version_ = info.version_)) {
+    } else if (OB_FAIL(ObFTRangeDict::try_load_cache(resolved_desc, info.range_count_, container))) {
       if (OB_ENTRY_NOT_EXIST == ret) {
       } else {
         LOG_WARN("Failed to load cache", K(ret));
@@ -78,8 +97,13 @@ int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &
 
     if (OB_FAIL(ret)) {
       if (OB_ENTRY_NOT_EXIST == ret) {
-        if (OB_FAIL(ObFTRangeDict::build_cache_from_ik_dict(desc, container))) {
+        // Keep the legacy type-based cache id for built-in dictionaries.
+        // If metadata existed but the KV entry was evicted, resolved_desc
+        // already carries the published id/version and rebuilds that entry.
+        if (OB_FAIL(ObFTRangeDict::build_cache_from_ik_dict(resolved_desc, container))) {
           LOG_WARN("Failed to build cache", K(ret));
+        } else if (FALSE_IT(info.cache_id_ = resolved_desc.cache_id_)) {
+        } else if (FALSE_IT(info.version_ = resolved_desc.version_)) {
         } else if (FALSE_IT(info.range_count_ = container.get_handles().size())) {
         } else if (OB_FAIL(put_dict_info(key, info))) {
           LOG_WARN("Failed to put dict info", K(ret));
@@ -95,10 +119,13 @@ int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &c
   int ret = OB_SUCCESS;
   ObFTDictInfo info;
   container.reset();
-  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_));
+  ObFTDictInfoKey key;
+  ObFTDictDesc resolved_desc(desc);
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("dict hub not init", K(ret));
+  } else if (OB_FAIL(key.set(desc.type_, desc.name_))) {
+    LOG_WARN("Invalid dictionary identity", K(ret), K(desc.name_), K(desc.type_));
   } else {
     {
       ObBucketHashRLockGuard guard(rw_dict_lock_, key.hash());
@@ -112,7 +139,9 @@ int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &c
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObFTRangeDict::try_load_cache(desc, info.range_count_, container))) {
+    } else if (FALSE_IT(resolved_desc.cache_id_ = info.cache_id_)) {
+    } else if (FALSE_IT(resolved_desc.version_ = info.version_)) {
+    } else if (OB_FAIL(ObFTRangeDict::try_load_cache(resolved_desc, info.range_count_, container))) {
       if (OB_ENTRY_NOT_EXIST == ret) {
         // dict not exist, make new one, by caller
       } else {
@@ -121,6 +150,67 @@ int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &c
     }
   }
 
+  return ret;
+}
+
+int ObFTDictHub::refresh_user_dict(const ObFTDictDesc &desc,
+                                   ObISQLClient &sql_client,
+                                   const ObString &database_name,
+                                   const ObString &table_name)
+{
+  int ret = OB_SUCCESS;
+  ObFTDictInfoKey key;
+  ObFTDictInfo old_info;
+  ObFTDictInfo new_info;
+  ObFTDictDesc candidate(desc);
+  ObArenaAllocator allocator(lib::ObMemAttr("FTUserDict"));
+  ObFTCacheRangeContainer container(allocator);
+  SMART_VAR(ObISQLClient::ReadResult, result)
+  {
+    ObFTDictTableIter iter(result);
+    if (!is_inited_) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("dict hub not init", K(ret));
+    } else if (OB_FAIL(key.set(desc.type_, desc.name_))) {
+      LOG_WARN("Invalid dictionary identity", K(ret), K(desc.name_), K(desc.type_));
+    } else {
+      {
+        ObBucketHashRLockGuard guard(rw_dict_lock_, key.hash());
+        int tmp_ret = get_dict_info(key, old_info);
+        if (OB_SUCCESS == tmp_ret) {
+          candidate.cache_id_ = old_info.cache_id_;
+        } else if (OB_HASH_NOT_EXIST == tmp_ret) {
+          candidate.cache_id_ = next_cache_id_.fetch_add(1);
+        } else {
+          ret = tmp_ret;
+          LOG_WARN("Failed to get dictionary info", K(ret));
+        }
+      }
+      candidate.version_ = next_version_.fetch_add(1);
+    }
+
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(iter.init(sql_client, database_name, table_name))) {
+      LOG_WARN("Failed to initialize user dictionary iterator", K(ret));
+    } else if (OB_FAIL(ObFTRangeDict::build_cache(candidate, iter, container))) {
+      LOG_WARN("Failed to build user dictionary cache", K(ret));
+    } else {
+      new_info.cache_id_ = candidate.cache_id_;
+      new_info.version_ = candidate.version_;
+      new_info.range_count_ = container.get_handles().size();
+      ObBucketHashWLockGuard guard(rw_dict_lock_, key.hash());
+      int tmp_ret = get_dict_info(key, old_info);
+      if (OB_HASH_NOT_EXIST == tmp_ret ||
+          (OB_SUCCESS == tmp_ret && new_info.version_ > old_info.version_)) {
+        if (OB_FAIL(put_dict_info(key, new_info))) {
+          LOG_WARN("Failed to publish user dictionary cache", K(ret));
+        }
+      } else if (OB_SUCCESS != tmp_ret) {
+        ret = tmp_ret;
+        LOG_WARN("Failed to read dictionary info before publish", K(ret));
+      }
+    }
+  }
   return ret;
 }
 

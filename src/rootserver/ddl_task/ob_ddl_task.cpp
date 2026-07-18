@@ -117,12 +117,17 @@ void ObDDLSliceInfo::reset()
 {
   autoinc_range_interval_ = 0;
   part_ranges_.reset();
+  inverted_part_ranges_.reset();
 }
 
 int ObDDLSliceInfo::assign(const ObDDLSliceInfo &other)
 {
   autoinc_range_interval_ = other.autoinc_range_interval_;
-  return part_ranges_.assign(other.part_ranges_);
+  int ret = part_ranges_.assign(other.part_ranges_);
+  if (OB_SUCC(ret)) {
+    ret = inverted_part_ranges_.assign(other.inverted_part_ranges_);
+  }
+  return ret;
 }
 
 int ObDDLSliceInfo::deep_copy(const ObDDLSliceInfo &other, ObIAllocator &allocator)
@@ -142,10 +147,19 @@ int ObDDLSliceInfo::deep_copy(const ObDDLSliceInfo &other, ObIAllocator &allocat
       LOG_WARN("push back tablet range failed", K(ret), K(cur_tablet_range));
     }
   }
+  for (int64_t i = 0; OB_SUCC(ret) && i < other.inverted_part_ranges_.count(); ++i) {
+    ObPxTabletRange cur_tablet_range;
+    if (OB_FAIL(cur_tablet_range.deep_copy_from<true/*use allocator*/>(other.inverted_part_ranges_.at(i), allocator,
+            dummy_buf, dummy_size, dummy_pos))) {
+      LOG_WARN("deep copy inverted tablet ranges failed", K(ret), K(other.inverted_part_ranges_.at(i)), K(i));
+    } else if (OB_FAIL(inverted_part_ranges_.push_back(cur_tablet_range))) {
+      LOG_WARN("push back inverted tablet range failed", K(ret), K(cur_tablet_range));
+    }
+  }
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(ObDDLSliceInfo, part_ranges_, autoinc_range_interval_);
+OB_SERIALIZE_MEMBER(ObDDLSliceInfo, part_ranges_, inverted_part_ranges_, autoinc_range_interval_);
 
 ObDDLTaskSerializeField::ObDDLTaskSerializeField(const int64_t task_version,
                                                  const int64_t parallelism,

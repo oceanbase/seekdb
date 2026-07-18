@@ -34,6 +34,9 @@ using namespace share::schema;
 
 namespace share
 {
+
+const int64_t ObFtsIndexBuilderUtil::OB_FTS_INDEX_OR_DOC_WORD_TABLE_COL_CNT;
+
 namespace
 {
 bool get_function_args(const ObString &expr_string,
@@ -877,7 +880,7 @@ int ObFtsIndexBuilderUtil::set_fts_index_table_columns(
       arg.index_columns_.count() != 2 ||
       arg.store_columns_.count() != 2) {
     // expect word col, doc id col in index_columns,
-    // expect worc count, doc length col in store_columns.
+    // expect word count, doc length col in store_columns.
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(data_schema), K(arg.index_type_),
         K(arg.index_columns_.count()), K(arg.store_columns_.count()),
@@ -1171,6 +1174,7 @@ int ObFtsIndexBuilderUtil::generate_doc_id_column(
                                        col_id,
                                        col_name_buf,
                                        name_pos,
+                                       GENERATED_DOC_ID_COLUMN_FLAG,
                                        col_exists))) {
     LOG_WARN("check doc id col failed", K(ret));
   } else if (!col_exists) {
@@ -1288,6 +1292,7 @@ int ObFtsIndexBuilderUtil::generate_word_segment_column(
                                        col_id,
                                        col_name_buf,
                                        name_pos,
+                                       GENERATED_FTS_WORD_SEGMENT_COLUMN_FLAG,
                                        col_exists))) {
     LOG_WARN("check word segment col failed", K(ret));
   } else if (!col_exists) {
@@ -1417,6 +1422,7 @@ int ObFtsIndexBuilderUtil::generate_word_count_column(
                                        col_id,
                                        col_name_buf,
                                        name_pos,
+                                       GENERATED_FTS_WORD_COUNT_COLUMN_FLAG,
           col_exists))) {
     LOG_WARN("check word count col failed", K(ret));
   } else if (!col_exists) {
@@ -1530,7 +1536,12 @@ int ObFtsIndexBuilderUtil::generate_doc_length_column(
                                                    name_pos,
                                                    col_id))) {
     LOG_WARN("fail to construct document length column name", K(ret));
-  } else if (OB_FAIL(check_fts_gen_col(data_schema, col_id, col_name_buf, name_pos, col_exists))) {
+  } else if (OB_FAIL(check_fts_gen_col(data_schema,
+                                       col_id,
+                                       col_name_buf,
+                                       name_pos,
+                                       GENERATED_FTS_DOC_LENGTH_COLUMN_FLAG,
+                                       col_exists))) {
     LOG_WARN("fail to check document count", K(ret), K(col_id));
   } else if (!col_exists) {
     ObColumnSchemaV2 column_schema;
@@ -1743,6 +1754,7 @@ int ObFtsIndexBuilderUtil::check_fts_gen_col(
     const uint64_t col_id,
     const char *col_name_buf,
     const int64_t name_pos,
+    const uint64_t expected_flag,
     bool &col_exists)
 {
   int ret = OB_SUCCESS;
@@ -1750,10 +1762,11 @@ int ObFtsIndexBuilderUtil::check_fts_gen_col(
   if (!data_schema.is_valid() ||
       OB_INVALID_ID == col_id ||
       OB_ISNULL(col_name_buf) ||
-      name_pos < 0) {
+      name_pos < 0 ||
+      0 == expected_flag) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(data_schema), K(col_id),
-        KP(col_name_buf), K(name_pos));
+        KP(col_name_buf), K(name_pos), K(expected_flag));
   } else {
     // another fulltext index could have created the generated column
     const ObColumnSchemaV2 *ft_col = data_schema.get_column_schema(col_name_buf);
@@ -1777,11 +1790,11 @@ int ObFtsIndexBuilderUtil::check_fts_gen_col(
     } else if (OB_NOT_NULL(ft_col)) {
       // the generated colum is created
       col_exists = true;
-      if (OB_UNLIKELY(!ft_col->has_column_flag(GENERATED_FTS_WORD_SEGMENT_COLUMN_FLAG))) {
+      if (OB_UNLIKELY(!ft_col->has_column_flag(expected_flag))) {
         ret = OB_ERR_COLUMN_DUPLICATE;
         LOG_USER_ERROR(OB_ERR_COLUMN_DUPLICATE, static_cast<int>(name_pos),
             col_name_buf);
-        LOG_WARN("Generate column name has been used", K(ret), K(*ft_col));
+        LOG_WARN("generate column name has been used", K(ret), K(expected_flag), K(*ft_col));
       }
     } else {
       col_exists = false;
@@ -2610,6 +2623,8 @@ int ObFtsIndexBuilderUtil::add_skip_index_for_index_column(schema::ObColumnSchem
     skip_index_attr.set_sum();
   } else if (column_schema.is_doc_length_column()) {
     skip_index_attr.set_bm25_doc_len_param();
+  } else if (column_schema.is_pos_list_column()) {
+    // keep default skip-index behavior for compressed binary payload.
   } else if (column_schema.is_doc_id_column()) {
     skip_index_attr.set_loose_min_max();
   } else if (column_schema.is_word_segment_column()) {

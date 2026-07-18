@@ -226,7 +226,8 @@ bool ObSchemaUtils::is_fulltext_column(const uint64_t flag)
   return is_doc_id_column(flag)
       || is_word_segment_column(flag)
       || is_word_count_column(flag)
-      || is_doc_length_column(flag);
+      || is_doc_length_column(flag)
+      || is_pos_list_column(flag);
 }
 
 bool ObSchemaUtils::is_doc_id_column(const uint64_t flag)
@@ -247,6 +248,11 @@ bool ObSchemaUtils::is_word_count_column(const uint64_t flag)
 bool ObSchemaUtils::is_doc_length_column(const uint64_t flag)
 {
   return flag & GENERATED_FTS_DOC_LENGTH_COLUMN_FLAG;
+}
+
+bool ObSchemaUtils::is_pos_list_column(const uint64_t flag)
+{
+  return flag & GENERATED_FTS_POSITION_LIST_COLUMN_FLAG;
 }
 
 bool ObSchemaUtils::is_spatial_generated_column(uint64_t flag)

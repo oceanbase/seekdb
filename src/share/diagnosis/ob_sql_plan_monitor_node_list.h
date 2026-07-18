@@ -1,0 +1,6 @@
+#ifndef OCEANBASE_SHARE_DIAGNOSIS_OB_SQL_PLAN_MONITOR_NODE_LIST_WRAPPER_H_
+#define OCEANBASE_SHARE_DIAGNOSIS_OB_SQL_PLAN_MONITOR_NODE_LIST_WRAPPER_H_
+
+#include "sql/monitor/ob_sql_plan_monitor_node_list.h"
+
+#endif

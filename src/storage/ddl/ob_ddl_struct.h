@@ -1,17 +1,13 @@
-/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
  */
 
 #ifndef OCEANBASE_STORAGE_OB_DDL_STRUCT_H_
@@ -19,6 +15,7 @@
 
 #include "lib/container/ob_array.h"
 #include "share/ob_ddl_common.h"
+#include "share/rc/ob_tenant_base.h"
 #include "share/scn.h"
 #include "storage/access/ob_store_row_iterator.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
@@ -70,9 +67,10 @@ public:
   ObDDLMacroBlock();
   ~ObDDLMacroBlock();
   const blocksstable::MacroBlockId &get_block_id() const { return block_handle_.get_block_id(); }
+  int deep_copy(ObDDLMacroBlock &dst_block, common::ObIAllocator &allocator) const;
   int set_data_macro_meta(const blocksstable::MacroBlockId &macro_id,
-                          const char* macor_block_buf, 
-                          const int64_t size, 
+                          const char* macor_block_buf,
+                          const int64_t size,
                           const ObDDLMacroBlockType &block_type,
                           const bool force_set_macro_meta = false);
   bool is_valid() const;
@@ -129,29 +127,37 @@ private:
   common::ObIAllocator *allocator_;
 };
 
+
 class ObTablet;
 class ObTabletDirectLoadMgrHandle;
 class ObDDLKVPendingGuard final
 {
 public:
   static int set_macro_block(
-    ObTablet *tablet, 
-    const ObDDLMacroBlock &macro_block, 
+    ObTablet *tablet,
+    const ObDDLMacroBlock &macro_block,
     const int64_t snapshot_version,
     const uint64_t data_format_version,
     ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
     const ObDirectLoadType direct_load_type);
+  static int set_skip_block_scn(ObTablet *tablet,
+      const share::SCN &scn,
+      const share::SCN &start_scn,
+      const int64_t snapshot_version,
+      const uint64_t data_format_version,
+      const ObDirectLoadType direct_load_type);
 public:
   ObDDLKVPendingGuard(
-    ObTablet *tablet, 
-    const share::SCN &scn, 
+    ObTablet *tablet,
+    const share::SCN &scn,
     const share::SCN &start_scn,
     const int64_t snapshot_version, // used for shared-storage mode.
     const uint64_t data_format_version, // used for shared-storage mode.
     ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
     const ObDirectLoadType direct_load_type,
     const transaction::ObTransID &trans_id = transaction::ObTransID(),
-    const transaction::ObTxSEQ &seq_no = transaction::ObTxSEQ());
+    const transaction::ObTxSEQ &seq_no = transaction::ObTxSEQ(),
+    const ObITable::TableType table_type = ObITable::TableType::MAX_TABLE_TYPE);
   ~ObDDLKVPendingGuard();
   int get_ret() const { return ret_; }
   int get_ddl_kv(ObDDLKV *&kv);
@@ -172,11 +178,12 @@ public:
   ObDDLMacroBlockRedoInfo();
   ~ObDDLMacroBlockRedoInfo() = default;
   bool is_valid() const;
-  /* 
-   * For tow conditions: 
+  bool is_column_group_info_valid() const;
+  /*
+   * For tow conditions:
    *   1. column store table, unnessasery to generate double redo clog.
    *   2. row store table, but unnessasery to process cs replica.
-   *     (a) cs replica not exist, may not be created or is creating. 
+   *     (a) cs replica not exist, may not be created or is creating.
    *     (b) table is not user data table.
    */
   bool is_not_compat_cs_replica() const;
@@ -253,7 +260,26 @@ private:
   ObIAllocator *allocator;
 };
 
-class ObIDirectLoadRowIterator : public ObIStoreRowIterator 
+#ifdef OB_BUILD_SHARED_STORAGE
+struct ObDDLFinishLogInfo
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObDDLFinishLogInfo();
+  ~ObDDLFinishLogInfo() = default;
+  bool is_valid() const;
+  int assign(const ObDDLFinishLogInfo &other);
+  void reset();
+  TO_STRING_KV(K_(ls_id), K_(table_key), K_(data_buffer), K_(data_format_version));
+public:
+  share::ObLSID ls_id_;
+  storage::ObITable::TableKey table_key_;
+  ObString data_buffer_;
+  uint64_t data_format_version_;
+};
+#endif
+
+class ObIDirectLoadRowIterator : public ObIStoreRowIterator
 {
 public:
   ObIDirectLoadRowIterator() {}
@@ -301,7 +327,7 @@ static ObDDLKVType convert_direct_load_type_to_ddl_kv_type(const ObDirectLoadTyp
       ddl_kv_type = ObDDLKVType::DDL_KV_INC_MAJOR;
       break;
     default:
-      ddl_kv_type = ObDDLKVType::DDL_KV_FULL; 
+      ddl_kv_type = ObDDLKVType::DDL_KV_FULL;
       break;
   }
   return ddl_kv_type;
@@ -315,7 +341,8 @@ public:
         inserted_cg_row_cnt_(cg_insert_row),
         vec_index_task_thread_pool_cnt_(nullptr),
         vec_index_task_total_cnt_(nullptr),
-        vec_index_task_finish_cnt_(nullptr){};
+        vec_index_task_finish_cnt_(nullptr)
+  {}
   ~ObInsertMonitor() {}
 
 public:
@@ -343,11 +370,33 @@ public:
   int64_t row_count_;
 };
 
+struct ObFTSBuildStat final
+{
+public:
+  ObFTSBuildStat() : tokenized_word_cnt_(0), forward_written_row_cnt_(0),
+                     inverted_sorted_row_cnt_(0), inverted_written_row_cnt_(0) {}
+  ~ObFTSBuildStat() {}
+  void reset()
+  {
+    tokenized_word_cnt_ = 0;
+    forward_written_row_cnt_ = 0;
+    inverted_sorted_row_cnt_ = 0;
+    inverted_written_row_cnt_ = 0;
+  }
+  TO_STRING_KV(K_(tokenized_word_cnt), K_(forward_written_row_cnt),
+               K_(inverted_sorted_row_cnt), K_(inverted_written_row_cnt));
+public:
+  int64_t tokenized_word_cnt_;
+  int64_t forward_written_row_cnt_;
+  int64_t inverted_sorted_row_cnt_;
+  int64_t inverted_written_row_cnt_;
+};
+
 struct ObDDLTaskParam
 {
 public:
-  ObDDLTaskParam() : tenant_data_version_(0), snapshot_version_(0), schema_version_(0), ddl_task_id_(0), execution_id_(0), 
-    target_table_id_(0),  is_no_logging_(false), max_batch_size_(0), is_offline_index_rebuild_(false) {}
+  ObDDLTaskParam() : tenant_data_version_(0), snapshot_version_(0), schema_version_(0), ddl_task_id_(0), execution_id_(0),
+    target_table_id_(0),  is_no_logging_(false), max_batch_size_(0), is_offline_index_rebuild_(false), is_partition_local_(false) {}
   void reset()
   {
     tenant_data_version_ = 0;
@@ -359,14 +408,15 @@ public:
     is_no_logging_ = false;
     max_batch_size_ = 0;
     is_offline_index_rebuild_ = false;
+    is_partition_local_ = false;
   }
   bool is_valid() const { return ddl_task_id_ > 0 && execution_id_ >= 0 && tenant_data_version_ > 0 && snapshot_version_ >= 0 && target_table_id_ > 0 && schema_version_ > 0; }
-  TO_STRING_KV(K_(ddl_task_id), K_(execution_id), K_(tenant_data_version), K_(snapshot_version), K_(target_table_id), K_(schema_version), K_(is_no_logging), K_(max_batch_size), K_(is_offline_index_rebuild));
+  TO_STRING_KV(K_(ddl_task_id), K_(execution_id), K_(tenant_data_version), K_(snapshot_version), K_(target_table_id), K_(schema_version), K_(is_no_logging), K_(max_batch_size), K_(is_offline_index_rebuild), K_(is_partition_local));
 public:
   /* necessary param */
-  int64_t tenant_data_version_;
+  uint64_t tenant_data_version_;
   int64_t snapshot_version_;
-  
+
   /* optional param only used for leader major merge */
   int64_t schema_version_;
   int64_t ddl_task_id_;
@@ -375,6 +425,7 @@ public:
   bool is_no_logging_;
   int64_t max_batch_size_; // for batch rows when load data, from hint named load_batch_size
   bool is_offline_index_rebuild_;
+  bool is_partition_local_;
 };
 
 struct ObDDLAutoincParam
@@ -395,6 +446,7 @@ struct ObTableSchemaItem final
 public:
   ObTableSchemaItem()
     : is_column_store_(false), is_index_table_(false), is_unique_index_(false), has_lob_rowkey_(false),
+      is_table_with_clustering_key_(false), is_vec_tablet_rebuild_(false),
       rowkey_column_num_(0), compress_type_(NONE_COMPRESSOR), lob_inrow_threshold_(OB_DEFAULT_LOB_INROW_THRESHOLD),
       vec_idx_param_(), vec_dim_(0), index_type_(INDEX_TYPE_IS_NOT)
   {}
@@ -406,6 +458,8 @@ public:
     is_index_table_ = false;
     is_unique_index_ = false;
     has_lob_rowkey_ = false;
+    is_table_with_clustering_key_ = false;
+    is_vec_tablet_rebuild_ = false;
     rowkey_column_num_ = 0;
     compress_type_ = NONE_COMPRESSOR;
     lob_inrow_threshold_ = OB_DEFAULT_LOB_INROW_THRESHOLD;
@@ -414,6 +468,7 @@ public:
     index_type_ = INDEX_TYPE_IS_NOT;
   }
   TO_STRING_KV(K_(is_column_store), K_(is_index_table), K_(is_unique_index), K_(has_lob_rowkey),
+    K_(is_table_with_clustering_key), K_(is_vec_tablet_rebuild),
     K_(rowkey_column_num), K_(compress_type), K_(lob_inrow_threshold), K_(vec_idx_param), K_(vec_dim),
     K_(index_type));
 
@@ -422,6 +477,8 @@ public:
   bool is_index_table_;
   bool is_unique_index_;
   bool has_lob_rowkey_;
+  bool is_table_with_clustering_key_;
+  bool is_vec_tablet_rebuild_;
   int64_t rowkey_column_num_;
   common::ObCompressorType compress_type_;
   int64_t lob_inrow_threshold_;
@@ -484,23 +541,28 @@ public:
 struct ObDDLTableSchema
 {
 public:
-  static int fill_ddl_table_schema(const uint64_t table_id,
+  static int fill_ddl_table_schema(ObSchemaGetterGuard &schema_guard,
+                                   const uint64_t tenant_id,
+                                   const uint64_t table_id,
+                                   const uint64_t tenant_data_version,
                                    common::ObArenaAllocator &allocator,
                                    ObDDLTableSchema &ddl_table_schema);
 private:
-  static int fill_vector_index_schema_item(ObSchemaGetterGuard &schema_guard,
+  static int fill_vector_index_schema_item(const uint64_t tenant_id,
+                                           ObSchemaGetterGuard &schema_guard,
                                            const ObTableSchema *table_schema,
                                            common::ObArenaAllocator &allocator,
                                            const ObIArray<ObColDesc> &column_descs,
                                            ObDDLTableSchema &ddl_table_schema);
 
 public:
-  ObDDLTableSchema() : storage_schema_(nullptr), lob_meta_storage_schema_(nullptr) {}
-  TO_STRING_KV(K_(table_id), K_(table_item), KPC_(storage_schema), KPC_(lob_meta_storage_schema), K_(reshape_column_idxs), K_(lob_column_idxs), K_(column_items));
+  ObDDLTableSchema() : storage_schema_(nullptr), lob_meta_storage_schema_(nullptr), src_tenant_id_(MTL_ID()), dst_tenant_id_(MTL_ID()) {}
+  TO_STRING_KV(K_(src_tenant_id), K_(dst_tenant_id), K_(data_table_id), K_(table_id), K_(table_item), KPC_(storage_schema), KPC_(lob_meta_storage_schema), K_(reshape_column_idxs), K_(lob_column_idxs), K_(column_items));
   void reset();
   int assign(const ObDDLTableSchema &other);
 
 public:
+  ObTableID data_table_id_;
   ObTableID table_id_;
   // sql layer table level schema
   ObTableSchemaItem table_item_;
@@ -514,6 +576,11 @@ public:
   ObArray<int64_t> reshape_column_idxs_;
   ObArray<int64_t> lob_column_idxs_;
   ObArray<share::schema::ObColDesc> column_descs_;
+
+
+  // src_tenant_id, used for restore tenant table
+  uint64_t src_tenant_id_;
+  uint64_t dst_tenant_id_;
 };
 
 // transaction info for inc direct load
@@ -531,7 +598,7 @@ public:
   TO_STRING_KV(K_(trans_id), K_(seq_no), K_(tx_desc));
 public:
   transaction::ObTxDesc *tx_desc_;
-  transaction::ObTransID trans_id_; 
+  transaction::ObTransID trans_id_;
   int64_t seq_no_;
 };
 
@@ -586,7 +653,9 @@ public:
   int64_t get_logic_parallel_count() const { return slice_count_ > 0 ? slice_count_ : ddl_thread_count_; }
   TO_STRING_KV(K_(ls_id), K_(tablet_id), K_(lob_meta_tablet_id), K_(tenant_data_version), K_(is_no_logging), KP_(macro_meta_store_mgr),
       K_(schema_version), K_(slice_idx), K_(slice_count), K_(ddl_thread_count), K_(snapshot_version), K_(direct_load_type),
-      K_(task_id), K_(is_index_table), K_(ddl_table_schema), K_(tablet_param), K_(lob_meta_tablet_param), KP_(tablet_context),
+      K_(task_id), K_(is_index_table), K_(tx_info),
+      K_(ddl_table_schema), K_(tablet_param), K_(lob_meta_tablet_param), K_(cg_idx), KP(ddl_dag_), KP_(tablet_context),
+      K_(max_batch_size), K_(start_sequence), K_(row_offset),
       K_(is_sorted_table_load));
 public:
   share::ObLSID ls_id_;

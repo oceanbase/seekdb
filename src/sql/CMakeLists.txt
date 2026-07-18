@@ -550,6 +550,7 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_dll_udf.cpp
   engine/expr/ob_expr_doc_id.cpp
   engine/expr/ob_expr_doc_length.cpp
+  engine/expr/ob_expr_pos_list.cpp
   engine/expr/ob_expr_elt.cpp
   engine/expr/ob_expr_encrypt.cpp
   engine/expr/ob_expr_equal.cpp
@@ -960,6 +961,7 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_ai/ob_expr_ai_embed.cpp
   engine/expr/ob_expr_ai/ob_expr_ai_rerank.cpp
   engine/expr/ob_expr_ai/ob_expr_ai_prompt.cpp
+  engine/expr/ob_expr_ai/ob_expr_load_file.cpp
 )
 
 ob_set_subtarget(ob_sql_extra ALONE
