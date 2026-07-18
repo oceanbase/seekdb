@@ -31,6 +31,7 @@ public:
   virtual ~ObNgram2FTParser();
 
   int init(plugin::ObFTParserParam *param);
+  int reuse(plugin::ObFTParserParam *param);
   void reset();
   virtual int get_next_token(const char *&word,
                              int64_t &word_len,

@@ -31,19 +31,13 @@ namespace oceanbase
 {
 namespace storage
 {
-int ObIIKProcessor::process(TokenizeContext &ctx)
+int ObIIKProcessor::process(TokenizeContext &ctx,
+                            const char *ch,
+                            const uint8_t char_len,
+                            const ObFTCharUtil::CharType type)
 {
   int ret = OB_SUCCESS;
-
-  ObFTCharUtil::CharType type;
-  const char *ch = nullptr;
-  uint8_t char_len = 0;
-
-  if (OB_FAIL(ctx.current_char_type(type))) {
-    LOG_WARN("fail to get current char type", K(ret));
-  } else if (OB_FAIL(ctx.current_char(ch, char_len))) {
-    LOG_WARN("Fail to get current char", K(ret));
-  } else if (OB_FAIL(do_process(ctx, ch, char_len, type))) {
+  if (OB_FAIL(do_process(ctx, ch, char_len, type))) {
     LOG_WARN("Failed to do process char", K(ret));
   }
   return ret;
@@ -54,7 +48,12 @@ TokenizeContext::TokenizeContext(ObCollationType coll_type,
                                  const char *fulltext,
                                  int64_t fulltext_len,
                                  bool is_smart)
-    : coll_type_(coll_type), fulltext_(fulltext), fulltext_len_(fulltext_len), cursor_(0),
+    : coll_type_(coll_type), charset_info_(ObCharset::get_charset(coll_type)),
+      charset_type_(ObCharset::charset_type_by_coll(coll_type)),
+      well_formed_len_(OB_ISNULL(charset_info_) || OB_ISNULL(charset_info_->cset)
+                           ? nullptr
+                           : charset_info_->cset->well_formed_len),
+      fulltext_(fulltext), fulltext_len_(fulltext_len), cursor_(0),
       next_char_len_(0), handle_size_(0), is_smart_(is_smart), token_list_(allocator),
       result_list_(allocator)
 {
@@ -64,7 +63,8 @@ int TokenizeContext::init()
 {
   int ret = OB_SUCCESS;
 
-  if (OB_ISNULL(fulltext_) || fulltext_len_ <= 0) {
+  if (OB_ISNULL(fulltext_) || fulltext_len_ <= 0 || OB_ISNULL(charset_info_)
+      || OB_ISNULL(well_formed_len_)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(prepare_next_char())) {
     LOG_WARN("Failed to prepare next char", K(ret));
@@ -103,19 +103,81 @@ int TokenizeContext::current_char_type(ObFTCharUtil::CharType &type)
   return ret;
 }
 
+int TokenizeContext::current_char_and_type(const char *&ch,
+                                           uint8_t &char_len,
+                                           ObFTCharUtil::CharType &type) const
+{
+  int ret = OB_SUCCESS;
+  if (cursor_ >= fulltext_len_) {
+    ret = OB_ITER_END;
+  } else {
+    ch = fulltext_ + cursor_;
+    char_len = next_char_len_;
+    type = next_char_type_;
+  }
+  return ret;
+}
+
+int TokenizeContext::reuse(ObCollationType coll_type,
+                           const char *fulltext,
+                           int64_t fulltext_len,
+                           bool is_smart)
+{
+  int ret = OB_SUCCESS;
+  coll_type_ = coll_type;
+  charset_info_ = ObCharset::get_charset(coll_type);
+  charset_type_ = ObCharset::charset_type_by_coll(coll_type);
+  well_formed_len_ = OB_ISNULL(charset_info_) || OB_ISNULL(charset_info_->cset)
+                         ? nullptr
+                         : charset_info_->cset->well_formed_len;
+  fulltext_ = fulltext;
+  fulltext_len_ = fulltext_len;
+  cursor_ = 0;
+  next_char_len_ = 0;
+  handle_size_ = 0;
+  is_smart_ = is_smart;
+  token_list_.reset();
+  result_list_.reset();
+  if (OB_FAIL(init())) {
+    LOG_WARN("failed to reuse tokenize context", K(ret), K(coll_type), K(fulltext_len));
+  }
+  return ret;
+}
+
+int TokenizeContext::classify_char_at(const int64_t offset,
+                                      uint8_t &char_len,
+                                      ObFTCharUtil::CharType &type) const
+{
+  int ret = OB_SUCCESS;
+  if (offset < 0 || offset >= fulltext_len_) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid character offset", K(ret), K(offset), K(fulltext_len_));
+  } else if (OB_FAIL(ObFTCharUtil::classify_first_valid_char(charset_info_,
+                                                             charset_type_,
+                                                             well_formed_len_,
+                                                             fulltext_ + offset,
+                                                             fulltext_len_ - offset,
+                                                             char_len,
+                                                             type))) {
+    LOG_WARN("failed to classify character", K(ret), K(offset));
+  }
+  return ret;
+}
+
 int TokenizeContext::prepare_next_char()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObCharset::first_valid_char(coll_type_,
-                                          fulltext_ + cursor_,
-                                          fulltext_len_ - cursor_,
-                                          next_char_len_))) {
-    LOG_WARN("Failed to get first valid char, ", K(ret));
-  } else if (OB_FAIL(ObFTCharUtil::classify_first_char(coll_type_,
-                                                       fulltext_ + cursor_,
-                                                       next_char_len_,
-                                                       next_char_type_))) {
-    LOG_WARN("Failed to classify first char", K(ret));
+  uint8_t char_len = 0;
+  if (OB_FAIL(ObFTCharUtil::classify_first_valid_char(charset_info_,
+                                                      charset_type_,
+                                                      well_formed_len_,
+                                                      fulltext_ + cursor_,
+                                                      fulltext_len_ - cursor_,
+                                                      char_len,
+                                                      next_char_type_))) {
+    LOG_WARN("Failed to classify first valid char", K(ret));
+  } else {
+    next_char_len_ = char_len;
   }
   return ret;
 }

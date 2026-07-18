@@ -399,6 +399,9 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
               SQL_RESV_LOG(WARN, "resolve table options failed", K(ret));
             } else if (OB_FAIL(set_table_option_to_schema(table_schema))) {
               SQL_RESV_LOG(WARN, "set table option to schema failed", K(ret));
+            } else if (table_schema.is_fulltext_dict_table()
+                       && OB_FAIL(ObFtsIndexBuilderUtil::check_fulltext_dict_table_schema(table_schema))) {
+              SQL_RESV_LOG(WARN, "invalid fulltext dictionary table schema", K(ret), K(table_schema));
             } else if (OB_FAIL(check_max_row_data_length(table_schema))) {
               SQL_RESV_LOG(WARN, "check max row data length failed", K(ret));
             } else {

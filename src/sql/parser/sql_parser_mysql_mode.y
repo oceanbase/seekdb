@@ -274,7 +274,7 @@ END_P SET_VAR DELIMITER
 //-----------------------------reserved keyword end-------------------------------------------------
 %token <non_reserved_keyword>
 //-----------------------------non_reserved keyword begin-------------------------------------------
-        ACCESS ACCESS_INFO ACCESSID ACCESSKEY ACCESSTYPE ACCOUNT ACTION ACTIVE ADDDATE AFTER AGAINST AGGREGATE AI ALGORITHM ALL_META ALL_USER ALWAYS ALLOW ANALYSE ANY
+        ACCESS ACCESS_INFO ACCESSID ACCESSKEY ACCESSTYPE ACCOUNT ACTION ACTIVE ADDDATE AFTER AGAINST AGGREGATE AI AI_SPLIT_DOCUMENT ALGORITHM ALL_META ALL_USER ALWAYS ALLOW ANALYSE ANY
         APPID APPROX_COUNT_DISTINCT APPROX_COUNT_DISTINCT_SYNOPSIS APPROX_COUNT_DISTINCT_SYNOPSIS_MERGE
         ARRAY ASCII ASIS AT ATTRIBUTE AUTHORS AUTO AUTOEXTEND_SIZE AUTO_INCREMENT AUTO_INCREMENT_MODE AUTO_INCREMENT_CACHE_SIZE
         AVG AVG_ROW_LENGTH ACTIVATE AVAILABILITY ARCHIVELOG ASYNCHRONOUS AUDIT ADMIN AUTO_REFRESH API_MODE APPROX APPROXIMATE ARRAY_AGG ARRAY_FILTER ARRAY_FIRST ARRAY_MAP ARRAY_SORTBY 
@@ -301,7 +301,7 @@ END_P SET_VAR DELIMITER
         EXTENDED_NOADDR EXTENT_SIZE EXTRACT EXCEPT EXPIRED ENCODING EMPTY_FIELD_AS_NULL EUCLIDEAN EXTERNAL EXTERNAL_STORAGE_DEST EXPIRE_TIME EXCLUSIVE
 
         FAIL FAILOVER FAST FAULTS FILE_BLOCK_SIZE FIELDS FILEX FINAL_COUNT FIRST FIRST_VALUE FIXED FLUSH FOLLOWER FORMAT
-        FOUND FORK FREEZE FREQUENCY FUNCTION FOLLOWING FLASHBACK FULL FRAGMENTATION FROZEN FILE_ID FILTER
+        FOUND FORK FREEZE FREQUENCY FUNCTION FOLLOWING FLASHBACK FULL FRAGMENTATION FROZEN FILE_ID FILTER FULLTEXT_DICT
         FIELD_OPTIONALLY_ENCLOSED_BY FIELD_DELIMITER FIELD_ENCLOSED_BY FILE_EXTENSION
 
         GENERAL GEOMETRY GEOMCOLLECTION GEOMETRYCOLLECTION GET_FORMAT GLOBAL GRANTS GRANULARITY GROUP_CONCAT GROUPING GTS
@@ -309,7 +309,7 @@ END_P SET_VAR DELIMITER
 
         HANDLER HASH HEAP HELP HISTOGRAM HOST HOSTS HOT_RETENTION HOUR HIDDEN HYBRID HYBRID_HIST HYBRID_SEARCH
 
-        ID IDENTIFIED IGNORE_SERVER_IDS IK_MODE ILOG IMMEDIATE IMPORT INCLUDING INCR INDEXES INDEX_TABLE_ID INFO INITIAL_SIZE
+        ID IDENTIFIED IGNORE_SERVER_IDS IK_MODE ILOG IMMEDIATE IMPORT INCLUDING INCR INDEXES INDEX_TABLE_ID INFO INITIAL_SIZE DICT
         INNODB INSERT_METHOD INSTALL INSTANCE INVOKER IO IOPS_WEIGHT IO_THREAD IPC ISOLATE ISOLATION ISSUER
         INCREMENT IS_TENANT_SYS_POOL INVISIBLE MERGE ISNULL INTERSECT INCREMENTAL INNER_PARSE ILOGCACHE INPUT INDEXED INPLACE INSTANT INCONSISTENT INDIVIDUAL
 
@@ -559,6 +559,7 @@ END_P SET_VAR DELIMITER
 %type <node> es_sql_opt
 %type <node> operator_list
 %type <node> hybrid_search_expr hybrid_search_param
+%type <node> ai_split_document_expr ai_split_document_args
 %type <node> create_location_stmt alter_location_stmt drop_location_stmt location_name location_url credential_option_list credential_option opt_credential
 
 %type <node> vector_similarity_expr vector_similarity_metric
@@ -7170,6 +7171,11 @@ TABLE_MODE opt_equal_mark STRING_VALUE
   (void)($2);
   malloc_non_terminal_node($$, result->malloc_pool_, T_ORGANIZATION, 1, $3);
 }
+| FULLTEXT_DICT opt_equal_mark STRING_VALUE
+{
+  (void)($2);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FULLTEXT_DICT, 1, $3);
+}
 | SEMISTRUCT_ENCODING_TYPE opt_equal_mark STRING_VALUE
 {
   (void)($2);
@@ -12991,6 +12997,10 @@ tbl_name
 {
   $$ = $1;
 }
+| ai_split_document_expr
+{
+  $$ = $1;
+}
 ;
 
 tbl_name:
@@ -18445,6 +18455,18 @@ alter_with_opt_hint SYSTEM REFRESH MEMORY STAT
   malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_MEMORY_STAT, 1, NULL);
 }
 |
+alter_with_opt_hint SYSTEM REFRESH FULLTEXT DICT normal_relation_factor
+{
+  (void)($1);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_FULLTEXT_DICT, 1, $6);
+}
+|
+alter_with_opt_hint SYSTEM REFRESH FULLTEXT DICT STRING_VALUE
+{
+  (void)($1);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_FULLTEXT_DICT, 1, $6);
+}
+|
 alter_with_opt_hint SYSTEM WASH MEMORY FRAGMENTATION
 {
   (void)($1);
@@ -21872,6 +21894,45 @@ literal
 }
 ;
 
+ai_split_document_expr:
+AI_SPLIT_DOCUMENT '(' ai_split_document_args ')'
+{
+  ParseNode *name_node = NULL;
+  ParseNode *func_node = NULL;
+  ParseNode *alias_node = NULL;
+  make_name_node(name_node, result->malloc_pool_, "ai_split_document");
+  make_name_node(alias_node, result->malloc_pool_, "");
+  malloc_non_terminal_node(func_node, result->malloc_pool_, T_FUN_SYS, 2, name_node, $3);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_SPLIT_DOCUMENT_EXPRESSION, 2, func_node, alias_node);
+}
+| AI_SPLIT_DOCUMENT '(' ai_split_document_args ')' relation_name
+{
+  ParseNode *name_node = NULL;
+  ParseNode *func_node = NULL;
+  make_name_node(name_node, result->malloc_pool_, "ai_split_document");
+  malloc_non_terminal_node(func_node, result->malloc_pool_, T_FUN_SYS, 2, name_node, $3);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_SPLIT_DOCUMENT_EXPRESSION, 2, func_node, $5);
+}
+| AI_SPLIT_DOCUMENT '(' ai_split_document_args ')' AS relation_name
+{
+  ParseNode *name_node = NULL;
+  ParseNode *func_node = NULL;
+  make_name_node(name_node, result->malloc_pool_, "ai_split_document");
+  malloc_non_terminal_node(func_node, result->malloc_pool_, T_FUN_SYS, 2, name_node, $3);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_SPLIT_DOCUMENT_EXPRESSION, 2, func_node, $6);
+}
+;
+ai_split_document_args:
+expr
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_EXPR_LIST, 1, $1);
+}
+| expr ',' expr
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_EXPR_LIST, 2, $1, $3);
+}
+;
+
 create_ccl_rule_stmt:
 CREATE CONCURRENT_LIMITING_RULE opt_if_not_exists relation_name 
 ON ccl_database_table_optition
@@ -22872,6 +22933,8 @@ ACCESS_INFO
 |       RB_OR_AGG
 |       RB_AND_AGG
 |       ORGANIZATION
+|       FULLTEXT_DICT
+|       DICT
 |       OVERWRITE
 |       OPTIMIZER_COSTS
 |       MICRO_INDEX_CLUSTERED
@@ -22881,6 +22944,7 @@ ACCESS_INFO
 |       INCONSISTENT 
 |       INDIVIDUAL
 |       HYBRID_SEARCH
+|       AI_SPLIT_DOCUMENT
 ;
 
 unreserved_keyword_special:

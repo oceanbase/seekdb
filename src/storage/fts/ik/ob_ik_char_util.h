@@ -36,6 +36,12 @@ namespace storage
 class ObFTCharUtil
 {
 public:
+  typedef size_t (*WellFormedLenFunc)(const ObCharsetInfo *,
+                                      const char *,
+                                      const char *,
+                                      size_t,
+                                      int *);
+
   enum class CharType : int8_t
   {
     USELESS = 0,
@@ -51,6 +57,19 @@ public:
                                  const char *input,
                                  const uint8_t char_len,
                                  CharType &type);
+
+  static int classify_first_char(ObCharsetType cs_type,
+                                 const char *input,
+                                 const uint8_t char_len,
+                                 CharType &type);
+
+  static int classify_first_valid_char(const ObCharsetInfo *cs,
+                                       ObCharsetType cs_type,
+                                       WellFormedLenFunc well_formed_len,
+                                       const char *input,
+                                       const int64_t input_len,
+                                       uint8_t &char_len,
+                                       CharType &type);
 
   static int check_cn_number(ObCollationType coll_type,
                              const char *input,
@@ -490,8 +509,15 @@ inline int ObFTCharUtil::classify_first_char(ObCollationType coll_type,
                                              const uint8_t char_len,
                                              CharType &type)
 {
+  return classify_first_char(ObCharset::charset_type_by_coll(coll_type), input, char_len, type);
+}
+
+inline int ObFTCharUtil::classify_first_char(ObCharsetType cs_type,
+                                             const char *input,
+                                             const uint8_t char_len,
+                                             CharType &type)
+{
   int ret = OB_SUCCESS;
-  ObCharsetType cs_type = ObCharset::charset_type_by_coll(coll_type);
 
   switch (cs_type) {
   case CHARSET_UTF8MB4: {
@@ -510,6 +536,34 @@ inline int ObFTCharUtil::classify_first_char(ObCollationType coll_type,
     ret = OB_NOT_SUPPORTED;
     STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(cs_type));
     break;
+  }
+  return ret;
+}
+
+inline int ObFTCharUtil::classify_first_valid_char(const ObCharsetInfo *cs,
+                                                   ObCharsetType cs_type,
+                                                   WellFormedLenFunc well_formed_len,
+                                                   const char *input,
+                                                   const int64_t input_len,
+                                                   uint8_t &char_len,
+                                                   CharType &type)
+{
+  int ret = OB_SUCCESS;
+  int error = 0;
+  size_t length = 0;
+  if (OB_ISNULL(cs) || OB_ISNULL(well_formed_len) || OB_ISNULL(input) || input_len <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    STORAGE_FTS_LOG(WARN, "invalid character classification arguments", K(ret), KP(cs),
+                    KP(well_formed_len), KP(input), K(input_len));
+  } else if (0 == (length = well_formed_len(cs, input, input + input_len, 1, &error))
+             || 0 != error || length > UINT8_MAX) {
+    ret = OB_INVALID_ARGUMENT;
+    STORAGE_FTS_LOG(WARN, "invalid encoding found", K(ret), K(error), K(length));
+  } else {
+    char_len = static_cast<uint8_t>(length);
+    if (OB_FAIL(classify_first_char(cs_type, input, char_len, type))) {
+      STORAGE_FTS_LOG(WARN, "failed to classify first valid character", K(ret), K(cs_type));
+    }
   }
   return ret;
 }

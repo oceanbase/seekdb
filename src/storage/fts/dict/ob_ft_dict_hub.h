@@ -52,11 +52,11 @@ struct ObFTDictInfoKey
 {
 public:
   ObFTDictInfoKey()
-      : type_(static_cast<uint64_t>(ObFTDictType::DICT_TYPE_INVALID))
+      : name_(0), type_(ObFTDictType::DICT_TYPE_INVALID)
   {
   } // default constructor
-  ObFTDictInfoKey(const uint64_t type)
-      : type_(type)
+  ObFTDictInfoKey(const uint64_t name, const ObFTDictType type)
+      : name_(name), type_(type)
   {
   }
   int hash(uint64_t &hash_value) const
@@ -69,34 +69,41 @@ public:
   uint64_t hash() const
   {
     uint64_t hash = 0;
-    hash = common::murmurhash(&type_, sizeof(int64_t), hash);
+    hash = common::murmurhash(&name_, sizeof(name_), hash);
+    hash = common::murmurhash(&type_, sizeof(type_), hash);
     return hash;
   }
 
   bool operator==(const ObFTDictInfoKey &other) const
   {
-    return type_ == other.type_ && true;
+    return name_ == other.name_ && type_ == other.type_;
   }
 
   int compare(const ObFTDictInfoKey &other) const
   {
     int ret = 0;
-    if (0 == ret) {
-      ret = type_ - other.type_;
+    if (name_ < other.name_) {
+      ret = -1;
+    } else if (name_ > other.name_) {
+      ret = 1;
+    } else if (type_ < other.type_) {
+      ret = -1;
+    } else if (type_ > other.type_) {
+      ret = 1;
     }
     return ret;
   }
 
 private:
-  uint64_t type_;
-  // name
+  uint64_t name_;
+  ObFTDictType type_;
 };
 
 class ObFTCacheRangeContainer;
 class ObFTDictHub
 {
 public:
-  ObFTDictHub() : is_inited_(false), dict_map_(), rw_dict_lock_() {}
+  ObFTDictHub() : is_inited_(false), dict_map_(), rw_dict_lock_(), refresh_generation_(0) {}
   ~ObFTDictHub() {}
 
   int init();
@@ -106,6 +113,10 @@ public:
   int build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
 
   int load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
+
+  int refresh_dict(const ObString &name, const uint64_t tenant_id);
+
+  uint64_t get_refresh_generation() const { return ATOMIC_LOAD(&refresh_generation_); }
 
 private:
   int get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info);
@@ -118,6 +129,7 @@ private:
   // holds info of dict
   hash::ObHashMap<ObFTDictInfoKey, ObFTDictInfo> dict_map_;
   ObBucketLock rw_dict_lock_;
+  uint64_t refresh_generation_;
 };
 
 } //  namespace storage

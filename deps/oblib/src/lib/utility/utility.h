@@ -27,6 +27,9 @@
 #ifdef ERROR
 #undef ERROR
 #endif
+#ifdef IGNORE
+#undef IGNORE
+#endif
 // Windows: define useconds_t and usleep
 typedef unsigned int useconds_t;
 inline int usleep(useconds_t usec) {
@@ -47,7 +50,7 @@ inline int usleep(useconds_t usec) {
 #include "lib/allocator/ob_malloc.h"
 #include "lib/time/ob_clock_generator.h"
 
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(_WIN32)
 #include <sys/types.h>  // includes BSD type definitions
 using uint = unsigned int;
 #endif

@@ -20,6 +20,7 @@
 #include "sql/resolver/cmd/ob_alter_system_stmt.h"
 #include "sql/resolver/ddl/ob_create_table_resolver.h"
 #include "sql/resolver/ddl/ob_drop_table_stmt.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/resolver/cmd/ob_variable_set_stmt.h"
 #include "observer/ob_server.h"
 #include "observer/mysql/ob_query_response_time.h"
@@ -1140,6 +1141,86 @@ int ObRefreshMemStatResolver::resolve(const ParseNode &parse_tree)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("children should not be null");
       }
+    }
+  }
+  return ret;
+}
+
+int ObRefreshFulltextDictResolver::resolve(const ParseNode &parse_tree)
+{
+  int ret = OB_SUCCESS;
+  ObRefreshFulltextDictStmt *stmt = nullptr;
+  ObString database_name;
+  ObString table_name;
+  const ObTableSchema *table_schema = nullptr;
+  if (OB_UNLIKELY(T_REFRESH_FULLTEXT_DICT != parse_tree.type_)
+      || 1 != parse_tree.num_child_ || OB_ISNULL(parse_tree.children_)
+      || OB_ISNULL(parse_tree.children_[0])) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid refresh fulltext dictionary parse tree", K(ret));
+  } else if (OB_ISNULL(session_info_) || OB_ISNULL(schema_checker_) || OB_ISNULL(allocator_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("resolver is not initialized", K(ret));
+  } else if (T_RELATION_FACTOR == parse_tree.children_[0]->type_) {
+    if (OB_FAIL(resolve_table_relation_node(parse_tree.children_[0], table_name, database_name))) {
+      LOG_WARN("failed to resolve dictionary table relation", K(ret));
+    }
+  } else if (T_VARCHAR == parse_tree.children_[0]->type_) {
+    ObString input(static_cast<int32_t>(parse_tree.children_[0]->str_len_),
+                   parse_tree.children_[0]->str_value_);
+    table_name = input;
+    database_name = table_name.split_on('.');
+    if (database_name.empty()) {
+      database_name = session_info_->get_database_name();
+      table_name = input;
+    }
+    if (database_name.empty() || table_name.empty() || OB_NOT_NULL(table_name.find('.'))) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_USER_ERROR(OB_INVALID_ARGUMENT, "dictionary table name must be table or database.table");
+    }
+  } else {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid dictionary table name node", K(ret), K(parse_tree.children_[0]->type_));
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(schema_checker_->get_table_schema(database_name, table_name, false, table_schema))) {
+    LOG_WARN("failed to get dictionary table schema", K(ret), K(database_name), K(table_name));
+  } else if (OB_ISNULL(table_schema)) {
+    ret = OB_TABLE_NOT_EXIST;
+    LOG_USER_ERROR(OB_TABLE_NOT_EXIST,
+                   database_name.length(), database_name.ptr(),
+                   table_name.length(), table_name.ptr());
+  } else if (!table_schema->is_fulltext_dict_table()) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "table is not a FULLTEXT_DICT table");
+  } else if (OB_FAIL(ObFtsIndexBuilderUtil::check_fulltext_dict_table_schema(*table_schema))) {
+    LOG_WARN("invalid fulltext dictionary table schema", K(ret), KPC(table_schema));
+  } else if (OB_ISNULL(stmt = create_stmt<ObRefreshFulltextDictStmt>())) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to create refresh fulltext dictionary statement", K(ret));
+  } else {
+    const ObDatabaseSchema *database_schema = nullptr;
+    ObSqlString qualified_name;
+    if (OB_ISNULL(schema_checker_->get_schema_guard())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("schema guard is null", K(ret));
+    } else if (OB_FAIL(schema_checker_->get_schema_guard()->get_database_schema(
+                           table_schema->get_database_id(), database_schema))) {
+      LOG_WARN("failed to get dictionary database schema", K(ret));
+    } else if (OB_ISNULL(database_schema)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("dictionary database schema is null", K(ret));
+    } else if (OB_FAIL(qualified_name.append_fmt("%.*s.%.*s",
+                                                 database_schema->get_database_name_str().length(),
+                                                 database_schema->get_database_name_str().ptr(),
+                                                 table_schema->get_table_name_str().length(),
+                                                 table_schema->get_table_name_str().ptr()))) {
+      LOG_WARN("failed to build qualified dictionary name", K(ret));
+    } else if (OB_FAIL(stmt->set_dictionary_name(*allocator_, qualified_name.string()))) {
+      LOG_WARN("failed to set dictionary name", K(ret));
+    } else {
+      stmt_ = stmt;
     }
   }
   return ret;

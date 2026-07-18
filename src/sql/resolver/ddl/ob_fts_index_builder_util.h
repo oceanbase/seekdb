@@ -92,6 +92,16 @@ public:
       const share::schema::ObTableSchema &table_schema,
       sql::ObSqlSchemaGuard &schema_guard,
      bool &has_valid_index);
+  static int check_fulltext_dict_table_schema(
+      const share::schema::ObTableSchema &table_schema);
+  static int validate_and_qualify_ik_dictionary_tables(
+      common::ObIAllocator &allocator,
+      const common::ObString &default_database,
+      common::ObString &parser_properties);
+  static int is_fulltext_dict_table_referenced(
+      share::schema::ObSchemaGetterGuard &schema_guard,
+      const share::schema::ObTableSchema &dict_table_schema,
+      bool &is_referenced);
 
   static int append_fts_rowkey_doc_arg(
       const obcall::ObCreateIndexArg &index_arg,

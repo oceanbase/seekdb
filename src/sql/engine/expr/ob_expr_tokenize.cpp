@@ -16,6 +16,7 @@
 
 #include "sql/engine/expr/ob_expr_tokenize.h"
 
+#include "lib/alloc/alloc_func.h"
 #include "lib/alloc/alloc_struct.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
@@ -28,8 +29,10 @@
 #include "object/ob_object.h"
 #include "plugin/sys/ob_plugin_helper.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
+#include "sql/session/ob_sql_session_info.h"
 #include "share/ob_json_access_utils.h"
 #include "storage/fts/dict/ob_gen_dic_loader.h"
+#include "storage/fts/dict/ob_ft_dict_hub.h"
 #include "storage/fts/ob_fts_parser_property.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
 
@@ -40,6 +43,192 @@ namespace oceanbase
 {
 namespace sql
 {
+namespace
+{
+struct ObTokenizeMemoKey
+{
+  ObTokenizeMemoKey()
+    : tenant_(), parser_(), text_(), collation_(CS_TYPE_INVALID), dict_generation_(0)
+  {}
+
+  ObString tenant_;
+  ObString parser_;
+  ObString text_;
+  ObCollationType collation_;
+  uint64_t dict_generation_;
+};
+
+class ObTokenizeThreadMemo final
+{
+  static constexpr int64_t MAX_TEXT_LENGTH = 4 * 1024;
+  static constexpr int64_t MAX_RESULT_LENGTH = 64 * 1024;
+
+public:
+  ObTokenizeThreadMemo()
+    : tenant_length_(0),
+      parser_length_(0),
+      text_length_(0),
+      result_length_(0),
+      capacity_(0),
+      collation_(CS_TYPE_INVALID),
+      dict_generation_(0),
+      buffer_(nullptr)
+  {}
+
+  ~ObTokenizeThreadMemo()
+  {
+    if (OB_NOT_NULL(buffer_)) {
+      ob_free(buffer_);
+    }
+  }
+
+  static bool accepts(const ObTokenizeMemoKey &key)
+  {
+    return !key.tenant_.empty()
+        && !key.text_.empty()
+        && key.text_.length() <= MAX_TEXT_LENGTH
+        && (0 == key.parser_.case_compare("ik") || 0 == key.parser_.case_compare("beng"));
+  }
+
+  bool load(const ObTokenizeMemoKey &key,
+            const ObExpr &expr,
+            ObEvalCtx &ctx,
+            ObDatum &result) const
+  {
+    bool found = false;
+    if (matches(key)) {
+      char *result_buf = expr.get_str_res_mem(ctx, result_length_);
+      if (OB_NOT_NULL(result_buf)) {
+        MEMCPY(result_buf, result_ptr(), result_length_);
+        result.set_string(result_buf, result_length_);
+        found = true;
+      }
+    }
+    return found;
+  }
+
+  void store(const ObTokenizeMemoKey &key, const ObDatum &result)
+  {
+    if (!accepts(key)
+        || result.is_null()
+        || result.len_ <= 0
+        || result.len_ > MAX_RESULT_LENGTH) {
+      return;
+    }
+
+    const int64_t required = key.tenant_.length()
+                           + key.parser_.length()
+                           + key.text_.length()
+                           + result.len_;
+    if (required > capacity_) {
+      char *new_buffer = static_cast<char *>(ob_malloc(required, ObMemAttr("TokenizeMemo")));
+      if (OB_ISNULL(new_buffer)) {
+        return;
+      }
+      if (OB_NOT_NULL(buffer_)) {
+        ob_free(buffer_);
+      }
+      buffer_ = new_buffer;
+      capacity_ = required;
+    }
+
+    char *write_ptr = buffer_;
+    MEMCPY(write_ptr, key.tenant_.ptr(), key.tenant_.length());
+    write_ptr += key.tenant_.length();
+    MEMCPY(write_ptr, key.parser_.ptr(), key.parser_.length());
+    write_ptr += key.parser_.length();
+    MEMCPY(write_ptr, key.text_.ptr(), key.text_.length());
+    write_ptr += key.text_.length();
+    MEMCPY(write_ptr, result.ptr_, result.len_);
+
+    tenant_length_ = key.tenant_.length();
+    parser_length_ = key.parser_.length();
+    text_length_ = key.text_.length();
+    result_length_ = result.len_;
+    collation_ = key.collation_;
+    dict_generation_ = key.dict_generation_;
+  }
+
+private:
+  bool matches(const ObTokenizeMemoKey &key) const
+  {
+    const char *read_ptr = buffer_;
+    bool equal = OB_NOT_NULL(read_ptr)
+              && tenant_length_ == key.tenant_.length()
+              && parser_length_ == key.parser_.length()
+              && text_length_ == key.text_.length()
+              && collation_ == key.collation_
+              && dict_generation_ == key.dict_generation_;
+    if (equal) {
+      equal = 0 == MEMCMP(read_ptr, key.tenant_.ptr(), tenant_length_);
+      read_ptr += tenant_length_;
+    }
+    if (equal) {
+      equal = 0 == MEMCMP(read_ptr, key.parser_.ptr(), parser_length_);
+      read_ptr += parser_length_;
+    }
+    if (equal) {
+      equal = 0 == MEMCMP(read_ptr, key.text_.ptr(), text_length_);
+    }
+    return equal;
+  }
+
+  const char *result_ptr() const
+  {
+    return buffer_ + tenant_length_ + parser_length_ + text_length_;
+  }
+
+  int64_t tenant_length_;
+  int64_t parser_length_;
+  int64_t text_length_;
+  int64_t result_length_;
+  int64_t capacity_;
+  ObCollationType collation_;
+  uint64_t dict_generation_;
+  char *buffer_;
+};
+
+ObTokenizeThreadMemo &get_tokenize_memo()
+{
+  static thread_local ObTokenizeThreadMemo memo;
+  return memo;
+}
+
+int prepare_tokenize_memo_key(const ObExpr &expr,
+                              ObEvalCtx &ctx,
+                              ObTokenizeMemoKey &key,
+                              bool &cacheable)
+{
+  int ret = OB_SUCCESS;
+  cacheable = false;
+  ObDatum *text = nullptr;
+  ObDatum *parser = nullptr;
+  storage::ObFTDictHub *dict_hub = nullptr;
+  const ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
+  if (2 != expr.arg_cnt_
+      || !expr.args_[0]->is_const_expr()
+      || !expr.args_[1]->is_const_expr()
+      || OB_ISNULL(session)) {
+  } else if (OB_FAIL(expr.args_[0]->eval(ctx, text))) {
+    LOG_WARN("fail to evaluate tokenize memo text", K(ret));
+  } else if (OB_FAIL(expr.args_[1]->eval(ctx, parser))) {
+    LOG_WARN("fail to evaluate tokenize memo parser", K(ret));
+  } else if (OB_ISNULL(text) || text->is_null() || OB_ISNULL(parser) || parser->is_null()) {
+  } else {
+    key.tenant_ = session->get_tenant_name();
+    key.parser_ = parser->get_string().trim();
+    key.text_ = text->get_string();
+    key.collation_ = expr.args_[0]->obj_meta_.get_collation_type();
+    if (OB_SUCCESS == storage::ObFTParsePluginData::instance().get_dict_hub(dict_hub)
+        && OB_NOT_NULL(dict_hub)) {
+      key.dict_generation_ = dict_hub->get_refresh_generation();
+      cacheable = ObTokenizeThreadMemo::accepts(key);
+    }
+  }
+  return ret;
+}
+} // namespace
+
 ObExprTokenize::ObExprTokenize(common::ObIAllocator &alloc)
     : ObStringExprOperator(alloc,
                            T_FUN_TOKENIZE,
@@ -60,12 +249,20 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
 
   ObIJsonBase *json_result = nullptr;
   TokenizeParam param;
+  ObTokenizeMemoKey memo_key;
+  bool cacheable = false;
+  bool cache_hit = false;
+  ObTokenizeThreadMemo &memo = get_tokenize_memo();
 
   // check param num, which is checked in ObExprOperator::calc_result_typeN.
   if (OB_UNLIKELY(expr.arg_cnt_ < 1 || expr.arg_cnt_ > 3)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Args count invalid.", K(ret), K(expr.arg_cnt_));
-  } else if (OB_FAIL(parse_param(expr, ctx, temp_allocator, param))) {
+  } else if (OB_FAIL(prepare_tokenize_memo_key(expr, ctx, memo_key, cacheable))) {
+    LOG_WARN("fail to prepare tokenize memo key", K(ret));
+  } else if (cacheable && FALSE_IT(cache_hit = memo.load(memo_key, expr, ctx, expr_datum))) {
+  } else if (cache_hit) {
+  } else if (OB_FAIL(parse_param(expr, ctx, param))) {
     LOG_WARN("Fail to parse param", K(ret));
   } else if (OB_FAIL(tokenize_fulltext(param, param.output_mode_, temp_allocator, json_result))) {
     LOG_WARN("Fail to tokenize fulltext", K(ret));
@@ -75,6 +272,8 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
                                                      json_result,
                                                      expr_datum))) {
     LOG_WARN("fail to pack json result", K(ret));
+  } else if (cacheable) {
+    memo.store(memo_key, expr_datum);
   }
 
   return ret;
@@ -90,8 +289,6 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
   const int64_t ft_word_bkt_cnt = MIN(MAX(param.fulltext_.length() / 2, 2), 997);
   int64_t doc_len = 0;
   ObFTWordMap token_map;
-
-  ObArenaAllocator tmp_parse_alloc(ObMemAttr("Tmp buffer"));
 
   if (TokenizeParam::OUTPUT_MODE::DEFAULT != mode && TokenizeParam::OUTPUT_MODE::ALL != mode) {
     ret = OB_INVALID_ARGUMENT;
@@ -216,18 +413,10 @@ int ObExprTokenize::TokenizeParam::parse_json_param(const ObIJsonBase *obj)
 
 int ObExprTokenize::parse_param(const ObExpr &expr,
                                 ObEvalCtx &ctx,
-                                common::ObArenaAllocator &allocator,
                                 TokenizeParam &param)
 {
   int ret = OB_SUCCESS;
-
-  ObDatum *parser_params_datum;
-  ObString raw_parser_name = ObString::make_string(OB_DEFAULT_FULLTEXT_PARSER_NAME);
-
-  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
-
+  ObString default_database;
   if (OB_UNLIKELY(expr.arg_cnt_ < 1 || expr.arg_cnt_ > 3)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Args count invalid.", K(ret), K(expr.arg_cnt_));
@@ -235,9 +424,13 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
     LOG_WARN("Fail to parse fulltext.", K(ret));
   } else if (OB_FAIL(parse_parser_name(expr, ctx, param))) {
     LOG_WARN("Fail to parse parser params.", K(ret));
-  } else if (OB_FAIL(parse_parser_properties(expr, ctx, temp_allocator, param))) {
+  } else if (OB_FAIL(parse_parser_properties(expr, ctx, param))) {
     LOG_WARN("Fail to parse parser params.", K(ret));
-  } else if (OB_FAIL(param.reform_parser_properties(param.properties_))) {
+  } else if (expr.arg_cnt_ >= 3
+             && OB_NOT_NULL(ctx.exec_ctx_.get_my_session())
+             && FALSE_IT(default_database = ctx.exec_ctx_.get_my_session()->get_database_name())) {
+  } else if (expr.arg_cnt_ >= 3
+             && OB_FAIL(param.reform_parser_properties(param.properties_, default_database))) {
     LOG_WARN("Fail to reform parser params.", K(ret));
   } else if (OB_FAIL(param.try_load_dictionary_for_ik())) {
     LOG_WARN("fail to try load dictionary for ik", K(ret));
@@ -379,7 +572,6 @@ int ObExprTokenize::parse_parser_name(const ObExpr &expr, ObEvalCtx &ctx, Tokeni
 
 int ObExprTokenize::parse_parser_properties(const ObExpr &expr,
                                             ObEvalCtx &ctx,
-                                            MultimodeAlloctor &mm_alloc,
                                             TokenizeParam &param)
 {
   int ret = OB_SUCCESS;
@@ -388,8 +580,10 @@ int ObExprTokenize::parse_parser_properties(const ObExpr &expr,
   if (expr.arg_cnt_ < 3) {
     // do nothing
   } else {
+    ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
+    MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
     bool is_null = false;
-    if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, mm_alloc, 2, base, is_null))) {
+    if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 2, base, is_null))) {
       LOG_WARN("Fail to get json doc", K(ret));
     } else {
       if (ObJsonNodeType::J_ARRAY != base->json_type()) {
@@ -415,10 +609,17 @@ int ObExprTokenize::parse_parser_properties(const ObExpr &expr,
   return ret;
 }
 
-int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &properties)
+int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &properties,
+                                                            const ObString &default_database)
 {
   int ret = OB_SUCCESS;
   storage::ObFTParserJsonProps parser_properties;
+  storage::ObFTParser parser;
+  bool is_ik_parser = false;
+
+  if (OB_SUCCESS == parser.parse_from_str(parser_name_.ptr(), parser_name_.length())) {
+    is_ik_parser = parser.is_ik();
+  }
 
   if (OB_FAIL(parser_properties.init())) {
     LOG_WARN("fail to init parser properties", K(ret));
@@ -431,6 +632,10 @@ int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &prop
     LOG_WARN("fail to serialize to string", K(ret), K(parser_properties));
   } else if (OB_FAIL(parser_properties.to_format_json(allocator_, properties_))) {
     LOG_WARN("fail to serialize to string", K(ret), K(parser_properties));
+  } else if (is_ik_parser
+             && OB_FAIL(ObFtsIndexBuilderUtil::validate_and_qualify_ik_dictionary_tables(
+                            allocator_, default_database, properties_))) {
+    LOG_WARN("fail to validate IK dictionary tables", K(ret), K(default_database), K(properties_));
   }
 
   return ret;

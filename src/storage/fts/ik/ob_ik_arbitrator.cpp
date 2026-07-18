@@ -119,21 +119,13 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
 {
   int ret = OB_SUCCESS;
 
-  int64_t char_len = 0;
+  uint8_t char_len = 0;
   ObIKTokenChain *chain = nullptr;
   for (int64_t current = 0; OB_SUCC(ret) && current < ctx.fulltext_len();) {
     ObFTCharUtil::CharType type;
     // maybe not so good to keep single, check it later
-    if (OB_FAIL(ObCharset::first_valid_char(ctx.collation(),
-                                            ctx.fulltext() + current,
-                                            ctx.fulltext_len() - current,
-                                            char_len))) {
-      LOG_WARN("Failed to get next valid char", K(ret));
-    } else if (OB_FAIL(ObFTCharUtil::classify_first_char(ctx.collation(),
-                                                         ctx.fulltext() + current,
-                                                         char_len,
-                                                         type))) {
-      LOG_WARN("Failed to classify first char", K(ret));
+    if (OB_FAIL(ctx.classify_char_at(current, char_len, type))) {
+      LOG_WARN("Failed to classify next valid char", K(ret));
     } else if (ObFTCharUtil::CharType::USELESS == type) {
       current += char_len; // skip useless char
     } else if (OB_FAIL(chains_.get_refactored(current, chain)) && OB_HASH_NOT_EXIST != ret) {
@@ -180,11 +172,8 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
         } else {
           // output single word between two token
           while (OB_SUCC(ret) && current < token.offset_) {
-            if (OB_FAIL(ObCharset::first_valid_char(ctx.collation(),
-                                                    ctx.fulltext() + current,
-                                                    ctx.fulltext_len() - current,
-                                                    char_len))) {
-              LOG_WARN("Failed to get next valid char, ", K(ret));
+            if (OB_FAIL(ctx.classify_char_at(current, char_len, type))) {
+              LOG_WARN("Failed to classify next valid char", K(ret));
               break;
             } else {
               ObIKToken token;
@@ -330,13 +319,27 @@ int ObIKArbitrator::prepare(TokenizeContext &ctx)
 
   int cal_bucket_num = MAX(ctx.fulltext_len() / 100, 10);
   cal_bucket_num = MIN(cal_bucket_num, 100);
-  if (OB_FAIL(chains_.create(cal_bucket_num, ObMemAttr("IK ARBITRATE")))) {
+  if (OB_FAIL(reuse())) {
+    LOG_WARN("reuse arbitrator failed", K(ret));
+  } else if (!chains_.created()
+             && OB_FAIL(chains_.create(cal_bucket_num, ObMemAttr("IK ARBITRATE")))) {
     LOG_WARN("create chain map failed", K(ret));
   }
   return ret;
 }
 
 ObIKArbitrator::ObIKArbitrator() : alloc_(lib::ObMemAttr("IK Arbitrator")) {}
+
+int ObIKArbitrator::reuse()
+{
+  int ret = OB_SUCCESS;
+  if (chains_.created() && OB_FAIL(chains_.reuse())) {
+    LOG_WARN("reuse chain map failed", K(ret));
+  } else {
+    alloc_.reuse();
+  }
+  return ret;
+}
 
 int ObIKArbitrator::add_chain(ObIKTokenChain *chain)
 {

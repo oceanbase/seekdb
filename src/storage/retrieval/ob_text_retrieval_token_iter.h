@@ -23,6 +23,7 @@
 #include "sql/das/ob_das_ir_define.h"
 #include "ob_block_max_iter.h"
 #include "ob_i_sparse_retrieval_iter.h"
+#include "ob_sparse_retrieval_util.h"
 namespace oceanbase
 {
 namespace storage
@@ -168,6 +169,15 @@ public:
 private:
   int save_relevances_and_docids();
   int save_docids();
+  OB_INLINE int compare_doc_id(const ObDatum &lhs, const ObDatum &rhs, int &cmp_ret) const
+  {
+    int ret = OB_SUCCESS;
+    if (OB_LIKELY(use_binary_string_cmp_ && 0 == lhs.null_ && 0 == rhs.null_)) {
+      cmp_ret = compare_binary_datum(lhs, rhs);
+    } else if (OB_FAIL(cmp_func_(lhs, rhs, cmp_ret))) {
+    }
+    return ret;
+  }
   ObArenaAllocator *allocator_;
   ObTextRetrievalTokenIter *token_iter_;
   sql::ObEvalCtx *eval_ctx_;
@@ -178,7 +188,10 @@ private:
   int64_t count_;
   ObFixedArray<double, ObIAllocator> relevance_; // when ~ObFixedArray(), wikll destory itself
   ObFixedArray<ObDocIdExt, ObIAllocator> doc_id_;
+  double *relevance_data_;
+  ObDocIdExt *doc_id_data_;
   common::ObDatumCmpFuncType cmp_func_;
+  bool use_binary_string_cmp_;
   bool is_inited_;
   DISALLOW_COPY_AND_ASSIGN(ObTextRetrievalDaaTTokenIter);
 };

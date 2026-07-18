@@ -63,7 +63,7 @@ private:
     int parse_json_param(const ObIJsonBase *obj);
 
     // check and reform parser properties to standard format
-    int reform_parser_properties(const ObString &properties);
+    int reform_parser_properties(const ObString &properties, const ObString &default_database);
     int try_load_dictionary_for_ik();
 
   public:
@@ -83,14 +83,12 @@ private:
 private:
   static int parse_param(const ObExpr &expr,
                          ObEvalCtx &ctx,
-                         common::ObArenaAllocator &allocator,
                          TokenizeParam &param);
 
   static int parse_fulltext(const ObExpr &expr, ObEvalCtx &ctx, TokenizeParam &param);
   static int parse_parser_name(const ObExpr &expr, ObEvalCtx &ctx, TokenizeParam &param);
   static int parse_parser_properties(const ObExpr &expr,
                                      ObEvalCtx &ctx,
-                                     MultimodeAlloctor &mm_alloc,
                                      TokenizeParam &param);
 
   static int tokenize_fulltext(const TokenizeParam &param,

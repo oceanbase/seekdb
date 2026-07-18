@@ -298,6 +298,12 @@ enum ObDDLIgnoreSyncCdcFlag
   DONT_SYNC_LOG_FOR_CDC = 1,
 };
 
+enum ObFulltextDictTableFlag
+{
+  IS_NOT_FULLTEXT_DICT_TABLE = 0,
+  IS_FULLTEXT_DICT_TABLE = 1,
+};
+
 enum ObMVMajorRefreshFlag
 {
   IS_NOT_MV_MAJOR_REFRESH = 0,
@@ -343,7 +349,7 @@ private:
   static const int32_t TM_DDL_IGNORE_SYNC_CDC_BITS = 1;
   static const int32_t TM_TABLE_ORGANIZATION_MODE_OFFSET = 30;
   static const int32_t TM_TABLE_ORGANIZATION_MODE_BITS = 1;
-  static const int32_t TM_RESERVED = 1;
+  static const int32_t TM_FULLTEXT_DICT_TABLE_BITS = 1;
 
   static const uint32_t MODE_FLAG_MASK = (1U << TM_MODE_FLAG_BITS) - 1;
   static const uint32_t PK_MODE_MASK = (1U << TM_PK_MODE_BITS) - 1;
@@ -444,7 +450,8 @@ public:
                "mv_enable_query_rewrite_flag", mv_enable_query_rewrite_flag_,
                "mv_on_query_computation_flag", mv_on_query_computation_flag_,
                "ddl_table_ignore_sync_cdc_flag", ddl_table_ignore_sync_cdc_flag_,
-               "table_organization_mode", table_organization_mode_);
+               "table_organization_mode", table_organization_mode_,
+               "fulltext_dict_table_flag", fulltext_dict_table_flag_);
   union {
     int32_t mode_;
     struct {
@@ -465,7 +472,7 @@ public:
       uint32_t ddl_table_ignore_sync_cdc_flag_ : TM_DDL_IGNORE_SYNC_CDC_BITS;
       // heap_organization_mode_ will indicate whether the table is index organized(0) or heap organized(1)
       uint32_t table_organization_mode_: TM_TABLE_ORGANIZATION_MODE_BITS;
-      uint32_t reserved_ : TM_RESERVED;
+      uint32_t fulltext_dict_table_flag_ : TM_FULLTEXT_DICT_TABLE_BITS;
     };
   };
 };
@@ -846,6 +853,10 @@ public:
   { return (ObTablePrimaryKeyExistsMode)table_mode_.pk_exists_; }
   inline ObTableOrganizationMode get_table_organization_mode() const
   { return (ObTableOrganizationMode)table_mode_.table_organization_mode_; }
+  inline void set_fulltext_dict_table(const ObFulltextDictTableFlag flag)
+  { table_mode_.fulltext_dict_table_flag_ = flag; }
+  inline bool is_fulltext_dict_table() const
+  { return IS_FULLTEXT_DICT_TABLE == (ObFulltextDictTableFlag)table_mode_.fulltext_dict_table_flag_; }
   inline void set_view_created_method_flag(const ObViewCreatedMethodFlag view_created_method_flag)
     { table_mode_.view_created_method_flag_ =  view_created_method_flag; }
   inline ObViewCreatedMethodFlag get_view_created_method_flag() const

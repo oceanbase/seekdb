@@ -458,6 +458,10 @@ int ObFTParserJsonProps::config_get_quantifier_table(ObString &str) const
     if (OB_FAIL(
             root_->get_object_value(ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE), value))) {
       if (OB_SEARCH_NOT_FOUND == ret) {
+        ret = root_->get_object_value(
+            ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE_LEGACY), value);
+      }
+      if (OB_SEARCH_NOT_FOUND == ret) {
       } else {
         LOG_WARN("Fail to get quantifier_table", K(ret));
       }
@@ -629,6 +633,7 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
   static const char *supported[] = {
       ObFTSLiteral::CONFIG_NAME_DICT_TABLE,
       ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE,
+      ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE_LEGACY,
       ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE,
       ObFTSLiteral::CONFIG_NAME_IK_MODE,
   };
@@ -660,15 +665,15 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
 
     if (OB_FAIL(ret)) {
       // do nothing
-    } else if (OB_FAIL(config_get_quantifier_table(table_name))) {
+    } else if (OB_FAIL(config_get_stopword_table(table_name))) {
       if (OB_SEARCH_NOT_FOUND == ret) {
         if (OB_FAIL(
-                config_set_quantifier_table(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE))) {
-          LOG_WARN("Failed to set default quantifier table", K(ret));
+                config_set_stopword_table(ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE))) {
+          LOG_WARN("Failed to set default stopword table", K(ret));
         }
       }
     } else {
-      // check quantifier table valid
+      // check stopword table valid
     }
 
     if (OB_FAIL(ret)) {
@@ -1148,22 +1153,38 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
 
 #undef __FT_PARSER_PROPERTY_SHOW_COMMA
 
-int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const ObString &json_str)
+int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser,
+                                                const ObString &json_str,
+                                                ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
   ObFTParserJsonProps props;
-  if (OB_FAIL(props.init())) {
+  if (json_str.empty()) {
+    // All parser defaults are initialized by ObFTParserProperty's constructor.  Keep
+    // empty IK table names here so the parser selects its built-in dictionaries.
+  } else if (OB_FAIL(props.init())) {
     LOG_WARN("fail to init props", K(ret));
   } else if (OB_FAIL(props.parse_from_valid_str(json_str))) {
     LOG_WARN("fail to parse from json str", K(ret), K(json_str));
   } else {
     if (parser.is_ik()) {
-      // set dict tables and copy dict name
-      dict_table_ = ObString(ObFTSLiteral::CONFIG_NAME_DICT_TABLE);
-      stopword_table_ = ObString(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE);
-      quantifier_table_ = ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE);
       ObString ik_smart;
-      if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
+      ObString dict_table;
+      ObString stopword_table;
+      ObString quantifier_table;
+      if (OB_FAIL(props.config_get_dict_table(dict_table))) {
+        LOG_WARN("fail to get dict table", K(ret));
+      } else if (OB_FAIL(props.config_get_stopword_table(stopword_table))) {
+        LOG_WARN("fail to get stopword table", K(ret));
+      } else if (OB_FAIL(props.config_get_quantifier_table(quantifier_table))) {
+        LOG_WARN("fail to get quantifier table", K(ret));
+      } else if (OB_FAIL(ob_write_string(allocator, dict_table, dict_table_))) {
+        LOG_WARN("fail to copy dict table", K(ret));
+      } else if (OB_FAIL(ob_write_string(allocator, stopword_table, stopword_table_))) {
+        LOG_WARN("fail to copy stopword table", K(ret));
+      } else if (OB_FAIL(ob_write_string(allocator, quantifier_table, quantifier_table_))) {
+        LOG_WARN("fail to copy quantifier table", K(ret));
+      } else if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
         if (OB_SEARCH_NOT_FOUND == ret) {
           // from old version, ik_mode is not set, so use default value
           ik_mode_smart_ = true;

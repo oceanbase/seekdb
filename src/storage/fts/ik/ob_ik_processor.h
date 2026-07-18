@@ -39,6 +39,10 @@ public:
   ~TokenizeContext();
 
   int init();
+  int reuse(ObCollationType coll_type,
+            const char *fulltext,
+            int64_t fulltext_len,
+            bool is_smart);
   int reset_resource();
 
   int get_next_token(const char *&word, int64_t &word_len, int64_t &offset, int64_t &char_cnt);
@@ -47,6 +51,12 @@ public:
 
   int current_char(const char *&ch, uint8_t &char_len);
   int current_char_type(ObFTCharUtil::CharType &type);
+  int current_char_and_type(const char *&ch,
+                            uint8_t &char_len,
+                            ObFTCharUtil::CharType &type) const;
+  int classify_char_at(const int64_t offset,
+                       uint8_t &char_len,
+                       ObFTCharUtil::CharType &type) const;
 
   int step_next();
 
@@ -77,6 +87,9 @@ private:
   int prepare_next_char();
 
   ObCollationType coll_type_;
+  const ObCharsetInfo *charset_info_;
+  ObCharsetType charset_type_;
+  ObFTCharUtil::WellFormedLenFunc well_formed_len_;
   const char *fulltext_;
   int64_t fulltext_len_;
 
@@ -101,7 +114,12 @@ public:
 
   virtual ~ObIIKProcessor() {}
 
-  int process(TokenizeContext &ctx);
+  virtual void reuse() {}
+
+  int process(TokenizeContext &ctx,
+              const char *ch,
+              const uint8_t char_len,
+              const ObFTCharUtil::CharType type);
 
   virtual int do_process(TokenizeContext &ctx,
                          const char *ch,

@@ -15,6 +15,7 @@
  */
 
 #include "sql/resolver/ddl/ob_drop_table_resolver.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 namespace oceanbase
 {
 using namespace common;
@@ -116,8 +117,23 @@ int ObDropTableResolver::resolve(const ParseNode &parse_tree)
                                                   db_name))) {
             SQL_RESV_LOG(WARN, "failed to resolve table relation node!", K(ret));
           } else {
+            const share::schema::ObTableSchema *table_schema = nullptr;
+            bool is_referenced = false;
             table_item.reset();
-            if (OB_FAIL(session_info_->get_name_case_mode(table_item.mode_))) {
+            if (OB_ISNULL(schema_checker_) || OB_ISNULL(schema_checker_->get_schema_guard())) {
+              ret = OB_ERR_UNEXPECTED;
+              SQL_RESV_LOG(WARN, "schema checker is null", K(ret));
+            } else if (OB_FAIL(schema_checker_->get_table_schema(db_name, table_name, false, table_schema))) {
+              SQL_RESV_LOG(WARN, "failed to get table schema", K(ret), K(db_name), K(table_name));
+            } else if (OB_NOT_NULL(table_schema) && table_schema->is_fulltext_dict_table()
+                       && OB_FAIL(ObFtsIndexBuilderUtil::is_fulltext_dict_table_referenced(
+                                      *schema_checker_->get_schema_guard(), *table_schema, is_referenced))) {
+              SQL_RESV_LOG(WARN, "failed to check dictionary table reference", K(ret));
+            } else if (is_referenced) {
+              ret = OB_OP_NOT_ALLOW;
+              LOG_USER_ERROR(OB_OP_NOT_ALLOW,
+                             "drop a FULLTEXT_DICT table referenced by a fulltext index");
+            } else if (OB_FAIL(session_info_->get_name_case_mode(table_item.mode_))) {
               SQL_RESV_LOG(WARN, "failed to get name case mode!", K(ret));
             } else {
               table_item.database_name_ = db_name;

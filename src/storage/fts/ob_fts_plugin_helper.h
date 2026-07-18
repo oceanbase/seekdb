@@ -35,6 +35,7 @@ class ObIJsonBase;
 namespace plugin
 {
 class ObIFTParserDesc;
+class ObITokenIterator;
 class ObPluginParam;
 }
 
@@ -218,7 +219,9 @@ private:
       const char *fulltext,
       const int64_t fulltext_len,
       common::ObIAllocator &allocator,
-      ObAddWord &add_word);
+      ObAddWord &add_word,
+      const bool reuse_parser,
+      plugin::ObITokenIterator *&iter);
   int set_add_word_flag(const plugin::ObIFTParserDesc &ftparser_desc);
 private:
   common::ObIAllocator *allocator_;
@@ -226,7 +229,10 @@ private:
   plugin::ObPluginParam *plugin_param_;
   ObFTParser parser_name_;
   ObAddWordFlag add_word_flag_;
+  common::ObArenaAllocator property_allocator_;
+  mutable common::ObArenaAllocator parser_allocator_;
   ObFTParserProperty parser_property_;
+  mutable plugin::ObITokenIterator *parser_iter_;
   bool is_inited_;
 
 private:

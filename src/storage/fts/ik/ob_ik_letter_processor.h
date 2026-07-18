@@ -29,6 +29,13 @@ public:
   ObIKLetterProcessor();
   ~ObIKLetterProcessor() override {}
 
+  void reuse() override
+  {
+    reset_english_state();
+    reset_arabic_state();
+    reset_mix_state();
+  }
+
   int do_process(TokenizeContext &ctx,
                  const char *ch,
                  const uint8_t char_len,

@@ -3233,6 +3233,10 @@ int ObDMLResolver::resolve_table(const ParseNode &parse_tree,
         OZ (resolve_json_table_item(*table_node, table_item));
         break;
       }
+      case T_AI_SPLIT_DOCUMENT_EXPRESSION: {
+        OZ (resolve_ai_split_document_item(*table_node, table_item));
+        break;
+      }
       case T_RB_ITERATE_EXPRESSION: {
         if (OB_ISNULL(session_info_)) {
           ret = OB_INVALID_ARGUMENT;
@@ -4865,6 +4869,151 @@ int ObDMLResolver::resolve_json_table_item(const ParseNode &parse_tree, TableIte
   } else if (OB_FAIL(resolve_json_table_column_item(*chil_col_node, item,
                                                     root_col_def, -1, id, cur_column_id))) {
     LOG_WARN("failed to resovle json table column item", K(ret));
+  }
+  return ret;
+}
+
+int ObDMLResolver::resolve_ai_split_document_item(const ParseNode &parse_tree,
+                                                  TableItem *&tbl_item)
+{
+  int ret = OB_SUCCESS;
+  ObDMLStmt *stmt = get_stmt();
+  ObRawExpr *json_doc_expr = NULL;
+  TableItem *item = NULL;
+  ObJsonTableDef *table_def = NULL;
+  ObDmlJtColDef *root_col_def = NULL;
+  ParseNode *doc_node = NULL;
+  ParseNode *alias_node = NULL;
+
+  if (T_AI_SPLIT_DOCUMENT_EXPRESSION != parse_tree.type_
+      || 2 != parse_tree.num_child_
+      || OB_ISNULL(doc_node = parse_tree.children_[0])
+      || OB_ISNULL(alias_node = parse_tree.children_[1])) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid ai_split_document table node", K(ret), K(parse_tree.type_),
+             K(parse_tree.num_child_));
+  } else if (OB_ISNULL(stmt) || OB_ISNULL(allocator_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("resolver isn't initialized", K(ret), KP(stmt), KP(allocator_));
+  } else if (OB_FAIL(resolve_sql_expr(*doc_node, json_doc_expr))) {
+    LOG_WARN("failed to resolve ai_split_document expression", K(ret));
+  } else if (OB_ISNULL(json_doc_expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ai_split_document expression is null", K(ret));
+  } else if (OB_FAIL(json_doc_expr->deduce_type(session_info_))) {
+    LOG_WARN("failed to deduce ai_split_document expression type", K(ret));
+  }
+
+  if (OB_SUCC(ret)) {
+    void *buf = allocator_->alloc(sizeof(ObJsonTableDef));
+    if (OB_ISNULL(buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate ai_split_document table definition", K(ret));
+    } else {
+      table_def = new (buf) ObJsonTableDef();
+      table_def->table_type_ = MulModeTableType::OB_ORA_JSON_TABLE_TYPE;
+      if (OB_FAIL(table_def->doc_exprs_.push_back(json_doc_expr))) {
+        LOG_WARN("failed to store ai_split_document expression", K(ret));
+      }
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    ObString alias_name;
+    if (alias_node->str_len_ > 0) {
+      alias_name.assign_ptr(alias_node->str_value_, alias_node->str_len_);
+    } else if (OB_FAIL(stmt->generate_json_table_name(*allocator_, alias_name))) {
+      LOG_WARN("failed to generate ai_split_document table name", K(ret));
+    }
+    if (OB_FAIL(ret)) {
+    } else if (OB_ISNULL(item = stmt->create_table_item(*allocator_))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to create ai_split_document table item", K(ret));
+    } else {
+      item->table_name_ = alias_name;
+      item->alias_name_ = alias_name;
+      item->table_id_ = generate_table_id();
+      item->type_ = TableItem::JSON_TABLE;
+      item->json_table_def_ = table_def;
+      tbl_item = item;
+      if (OB_FAIL(stmt->add_table_item(session_info_, item))) {
+        LOG_WARN("failed to add ai_split_document table item", K(ret));
+      }
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    void *buf = allocator_->alloc(sizeof(ObDmlJtColDef));
+    if (OB_ISNULL(buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate ai_split_document root column", K(ret));
+    } else {
+      root_col_def = new (buf) ObDmlJtColDef();
+      root_col_def->table_id_ = item->table_id_;
+      root_col_def->col_base_info_.col_type_ = NESTED_COL_TYPE;
+      root_col_def->col_base_info_.parent_id_ = -1;
+      root_col_def->col_base_info_.id_ = 0;
+      if (OB_FAIL(ob_write_string(*allocator_, ObString("$[*]"),
+                                  root_col_def->col_base_info_.path_))) {
+        LOG_WARN("failed to store ai_split_document root path", K(ret));
+      } else if (OB_FAIL(table_def->all_cols_.push_back(&root_col_def->col_base_info_))) {
+        LOG_WARN("failed to store ai_split_document root column", K(ret));
+      } else if (OB_FAIL(json_table_infos_.push_back(root_col_def))) {
+        LOG_WARN("failed to store ai_split_document column tree", K(ret));
+      }
+    }
+  }
+
+  static const char *COLUMN_NAMES[] = {
+    "chunk_id", "chunk_offset", "chunk_length", "chunk_text"
+  };
+  static const char *COLUMN_PATHS[] = {
+    "$.chunk_id", "$.chunk_offset", "$.chunk_length", "$.chunk_text"
+  };
+  for (int64_t i = 0; OB_SUCC(ret) && i < 4; ++i) {
+    ObDmlJtColDef *col_def = NULL;
+    ColumnItem *col_item = NULL;
+    ObDataType data_type;
+    void *buf = allocator_->alloc(sizeof(ObDmlJtColDef));
+    if (OB_ISNULL(buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate ai_split_document output column", K(ret), K(i));
+    } else {
+      col_def = new (buf) ObDmlJtColDef();
+      col_def->table_id_ = item->table_id_;
+      col_def->col_base_info_.col_type_ = COL_TYPE_VALUE;
+      col_def->col_base_info_.parent_id_ = 0;
+      col_def->col_base_info_.id_ = static_cast<int32_t>(i + 1);
+      col_def->col_base_info_.output_column_idx_ = OB_APP_MIN_COLUMN_ID + i;
+      if (i < 3) {
+        data_type.set_int();
+        data_type.set_accuracy(ObAccuracy::DDL_DEFAULT_ACCURACY[ObIntType]);
+      } else {
+        data_type.set_obj_type(ObVarcharType);
+        data_type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+        data_type.set_collation_level(CS_LEVEL_IMPLICIT);
+        data_type.set_length(OB_MAX_VARCHAR_LENGTH);
+      }
+      col_def->col_base_info_.data_type_ = data_type;
+      if (OB_FAIL(ob_write_string(*allocator_, ObString(COLUMN_NAMES[i]),
+                                  col_def->col_base_info_.col_name_))) {
+        LOG_WARN("failed to store ai_split_document column name", K(ret), K(i));
+      } else if (OB_FAIL(ob_write_string(*allocator_, ObString(COLUMN_PATHS[i]),
+                                         col_def->col_base_info_.path_))) {
+        LOG_WARN("failed to store ai_split_document column path", K(ret), K(i));
+      } else if (OB_FAIL(generate_json_table_output_column_item(
+                   item, data_type, col_def->col_base_info_.col_name_,
+                   col_def->col_base_info_.output_column_idx_, col_item))) {
+        LOG_WARN("failed to generate ai_split_document output column", K(ret), K(i));
+      } else {
+        col_item->col_idx_ = table_def->all_cols_.count();
+        if (OB_FAIL(table_def->all_cols_.push_back(&col_def->col_base_info_))) {
+          LOG_WARN("failed to store ai_split_document output column", K(ret), K(i));
+        } else if (OB_FAIL(root_col_def->regular_cols_.push_back(col_def))) {
+          LOG_WARN("failed to store ai_split_document regular column", K(ret), K(i));
+        }
+      }
+    }
   }
   return ret;
 }

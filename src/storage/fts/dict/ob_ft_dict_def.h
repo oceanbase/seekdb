@@ -63,9 +63,16 @@ public:
   ObFTDictDesc(const ObString &name,
                const ObFTDictType type,
                const ObCharsetType charset,
-               const ObCollationType coll_type)
-      : name_(name), type_(type), charset_(charset), coll_type_(coll_type)
+               const ObCollationType coll_type,
+               const uint64_t tenant_id)
+      : name_(name), type_(type), charset_(charset), coll_type_(coll_type), tenant_id_(tenant_id)
   {
+  }
+
+  uint64_t cache_id() const { return calc_cache_id(name_, tenant_id_); }
+  static uint64_t calc_cache_id(const ObString &name, const uint64_t tenant_id)
+  {
+    return name.hash(tenant_id);
   }
 
 public:
@@ -73,6 +80,7 @@ public:
   ObFTDictType type_;
   ObCharsetType charset_;
   ObCollationType coll_type_;
+  uint64_t tenant_id_;
 };
 
 } //  namespace storage

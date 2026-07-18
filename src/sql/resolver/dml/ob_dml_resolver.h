@@ -209,6 +209,8 @@ public:
                                   TableItem *&table_item);
   int resolve_json_table_item(const ParseNode &table_node,
                               TableItem *&table_item);
+  int resolve_ai_split_document_item(const ParseNode &table_node,
+                                     TableItem *&table_item);
   int resolve_rb_iterate_item(const ParseNode &table_node,
                               TableItem *&table_item);
   int resolve_unnest_item(const ParseNode &table_node, TableItem *&table_item);
