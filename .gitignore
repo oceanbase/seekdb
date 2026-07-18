@@ -405,10 +405,6 @@ test/var
 .claude/
 CLAUDE.md
 
-docs/ai_functions_implementation_zh.md
-task.md
-tools/deploy/mysql_test/run_ai_funcs_pymysql.py
-
 ## Generated inner-table and virtual-table sources
 src/observer/virtual_table/ob_all_virtual_sqlite_tables.cpp
 src/observer/virtual_table/ob_all_virtual_sqlite_tables.h
