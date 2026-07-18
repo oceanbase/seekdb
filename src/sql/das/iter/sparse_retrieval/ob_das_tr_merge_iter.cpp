@@ -25,6 +25,108 @@ using namespace share;
 namespace sql
 {
 
+namespace
+{
+struct ObFTQueryTokenCache
+{
+  ObFTQueryTokenCache()
+      : allocator_(ObMemAttr("FTQueryCache")),
+        search_text_(),
+        parser_name_(),
+        parser_properties_(),
+        tokens_(),
+        meta_type_(ObNullType),
+        collation_type_(CS_TYPE_INVALID),
+        is_valid_(false)
+  {
+  }
+
+  void reuse()
+  {
+    search_text_.reset();
+    parser_name_.reset();
+    parser_properties_.reset();
+    tokens_.reuse();
+    allocator_.reuse();
+    meta_type_ = ObNullType;
+    collation_type_ = CS_TYPE_INVALID;
+    is_valid_ = false;
+  }
+
+  bool match(const ObString &search_text,
+             const ObString &parser_name,
+             const ObString &parser_properties,
+             const ObObjMeta &meta) const
+  {
+    return is_valid_
+        && meta_type_ == meta.get_type()
+        && collation_type_ == meta.get_collation_type()
+        && search_text_ == search_text
+        && parser_name_ == parser_name
+        && parser_properties_ == parser_properties;
+  }
+
+  int copy_tokens(ObIAllocator &alloc, ObArray<ObString> &query_tokens) const
+  {
+    int ret = OB_SUCCESS;
+    for (int64_t i = 0; OB_SUCC(ret) && i < tokens_.count(); ++i) {
+      ObString token;
+      if (OB_FAIL(ob_write_string(alloc, tokens_.at(i), token))) {
+        LOG_WARN("failed to copy cached query token", K(ret));
+      } else if (OB_FAIL(query_tokens.push_back(token))) {
+        LOG_WARN("failed to append cached query token", K(ret));
+      }
+    }
+    return ret;
+  }
+
+  int assign(const ObString &search_text,
+             const ObString &parser_name,
+             const ObString &parser_properties,
+             const ObObjMeta &meta,
+             const ObIArray<ObString> &tokens)
+  {
+    int ret = OB_SUCCESS;
+    reuse();
+    if (OB_FAIL(ob_write_string(allocator_, search_text, search_text_))) {
+      LOG_DEBUG("failed to cache query text", K(ret));
+    } else if (OB_FAIL(ob_write_string(allocator_, parser_name, parser_name_))) {
+      LOG_DEBUG("failed to cache query parser name", K(ret));
+    } else if (OB_FAIL(ob_write_string(allocator_, parser_properties, parser_properties_))) {
+      LOG_DEBUG("failed to cache query parser properties", K(ret));
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < tokens.count(); ++i) {
+      ObString token;
+      if (OB_FAIL(ob_write_string(allocator_, tokens.at(i), token))) {
+        LOG_DEBUG("failed to cache query token", K(ret));
+      } else if (OB_FAIL(tokens_.push_back(token))) {
+        LOG_DEBUG("failed to append query token to cache", K(ret));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      meta_type_ = meta.get_type();
+      collation_type_ = meta.get_collation_type();
+      is_valid_ = true;
+    } else {
+      reuse();
+    }
+    return ret;
+  }
+
+  ObArenaAllocator allocator_;
+  ObString search_text_;
+  ObString parser_name_;
+  ObString parser_properties_;
+  ObSEArray<ObString, 8> tokens_;
+  ObObjType meta_type_;
+  ObCollationType collation_type_;
+  bool is_valid_;
+};
+
+static constexpr int64_t MAX_CACHEABLE_QUERY_LENGTH = 4 * 1024;
+static constexpr int64_t MAX_CACHEABLE_QUERY_TOKEN_BYTES = 64 * 1024;
+} // namespace
+
 ObDASTRMergeIter::ObDASTRMergeIter()
   : ObDASIter(ObDASIterType::DAS_ITER_TEXT_RETRIEVAL_MERGE),
     mem_context_(nullptr),
@@ -1377,31 +1479,52 @@ int ObDASTRMergeIter::build_query_tokens(const ObDASIRScanCtDef *ir_ctdef,
 
     const ObObjMeta &meta = search_text->obj_meta_;
     int64_t doc_length = 0;
-    storage::ObFTParseHelper tokenize_helper;
-    common::ObSEArray<ObFTToken, 16> tokens;
-    ObFTTokenMap token_map;
-    const int64_t ft_word_bkt_cnt = MAX(search_text_string.length() / 10, 2);
-    if (OB_FAIL(tokenize_helper.init(&alloc, parser_name, parser_properties, share::schema::OB_FTS_INDEX_TYPE_MATCH))) {
-      LOG_WARN("failed to init tokenize helper", K(ret));
-    } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("ft_token_map")))) {
-      LOG_WARN("failed to create token map", K(ret));
-    } else if (OB_FAIL(tokenize_helper.segment(
-                           meta,
-                           search_text_string.ptr(),
-                           search_text_string.length(),
-                           doc_length,
-                           token_map))) {
-      LOG_WARN("failed to segment", K(ret), K(search_text_string), K(meta), K(doc_length));
+    static thread_local ObFTQueryTokenCache token_cache;
+    const bool cacheable = search_text_string.length() <= MAX_CACHEABLE_QUERY_LENGTH;
+    const bool cache_hit = cacheable
+        && token_cache.match(search_text_string, parser_name, parser_properties, meta);
+    if (cache_hit) {
+      if (OB_FAIL(token_cache.copy_tokens(alloc, query_tokens))) {
+        LOG_WARN("failed to copy cached query tokens", K(ret));
+      }
     } else {
-      for (ObFTTokenMap::const_iterator iter = token_map.begin();
-          OB_SUCC(ret) && iter != token_map.end();
-          ++iter) {
-        const ObFTToken &token = iter->first;
-        ObString token_string;
-        if (OB_FAIL(ob_write_string(alloc, token.get_token().get_string(), token_string))) {
-          LOG_WARN("failed to deep copy query token", K(ret));
-        } else if (OB_FAIL(query_tokens.push_back(token_string))) {
-          LOG_WARN("failed to append query token", K(ret));
+      storage::ObFTParseHelper tokenize_helper;
+      ObFTTokenMap token_map;
+      const int64_t ft_word_bkt_cnt = MAX(search_text_string.length() / 10, 2);
+      if (OB_FAIL(tokenize_helper.init(&alloc, parser_name, parser_properties, share::schema::OB_FTS_INDEX_TYPE_MATCH))) {
+        LOG_WARN("failed to init tokenize helper", K(ret));
+      } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("ft_token_map")))) {
+        LOG_WARN("failed to create token map", K(ret));
+      } else if (OB_FAIL(tokenize_helper.segment(
+                             meta,
+                             search_text_string.ptr(),
+                             search_text_string.length(),
+                             doc_length,
+                             token_map))) {
+        LOG_WARN("failed to segment", K(ret), K(search_text_string), K(meta), K(doc_length));
+      } else {
+        int64_t token_bytes = 0;
+        for (ObFTTokenMap::const_iterator iter = token_map.begin();
+            OB_SUCC(ret) && iter != token_map.end();
+            ++iter) {
+          const ObFTToken &token = iter->first;
+          ObString token_string;
+          if (OB_FAIL(ob_write_string(alloc, token.get_token().get_string(), token_string))) {
+            LOG_WARN("failed to deep copy query token", K(ret));
+          } else if (OB_FAIL(query_tokens.push_back(token_string))) {
+            LOG_WARN("failed to append query token", K(ret));
+          } else {
+            token_bytes += token_string.length();
+          }
+        }
+        if (OB_SUCC(ret)
+            && cacheable
+            && token_bytes <= MAX_CACHEABLE_QUERY_TOKEN_BYTES) {
+          const int cache_ret = token_cache.assign(
+              search_text_string, parser_name, parser_properties, meta, query_tokens);
+          if (OB_UNLIKELY(OB_SUCCESS != cache_ret)) {
+            LOG_DEBUG("failed to update query token cache", K(cache_ret));
+          }
         }
       }
     }
