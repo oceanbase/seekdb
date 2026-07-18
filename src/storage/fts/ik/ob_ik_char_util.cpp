@@ -20,6 +20,11 @@ inline typename std::enable_if<(CS_TYPE == CHARSET_UTF8MB4 || CS_TYPE == CHARSET
 ObFTCharUtil::is_alpha(const char *input, const uint8_t char_len, bool &is_alpha)
 {
   int ret = OB_SUCCESS;
+  if (CS_TYPE == CHARSET_UTF8MB4 && OB_LIKELY(char_len == 1) && OB_NOT_NULL(input)) {
+    unsigned char c = static_cast<unsigned char>(input[0]);
+    is_alpha = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+    return ret;
+  }
   ob_wc_t unicode = 0;
   if (OB_FAIL(decode_unicode<CS_TYPE>(input, char_len, unicode))) {
     STORAGE_FTS_LOG(WARN, "Failed to decode unicode", K(ret));
@@ -36,6 +41,11 @@ inline typename std::enable_if<(CS_TYPE == CHARSET_UTF8MB4 || CS_TYPE == CHARSET
 ObFTCharUtil::is_arabic(const char *input, const uint8_t char_len, bool &is_arabic)
 {
   int ret = OB_SUCCESS;
+  if (CS_TYPE == CHARSET_UTF8MB4 && OB_LIKELY(char_len == 1) && OB_NOT_NULL(input)) {
+    unsigned char c = static_cast<unsigned char>(input[0]);
+    is_arabic = (c >= '0' && c <= '9');
+    return ret;
+  }
   ob_wc_t unicode = 0;
   if (OB_FAIL(decode_unicode<CS_TYPE>(input, char_len, unicode))) {
     STORAGE_FTS_LOG(WARN, "Failed to decode unicode", K(ret));
@@ -52,6 +62,10 @@ inline typename std::enable_if<(CS_TYPE == CHARSET_UTF8MB4 || CS_TYPE == CHARSET
 ObFTCharUtil::is_chinese(const char *input, const uint8_t char_len, bool &is_chinese)
 {
   int ret = OB_SUCCESS;
+  if (CS_TYPE == CHARSET_UTF8MB4 && OB_LIKELY(char_len == 1) && OB_NOT_NULL(input)) {
+    is_chinese = false;
+    return ret;
+  }
   ob_wc_t unicode = 0;
   if (OB_FAIL(decode_unicode<CS_TYPE>(input, char_len, unicode))) {
     STORAGE_FTS_LOG(WARN, "Failed to decode unicode", K(ret));
@@ -68,6 +82,10 @@ inline typename std::enable_if<(CS_TYPE == CHARSET_UTF8MB4 || CS_TYPE == CHARSET
 ObFTCharUtil::is_other_cjk(const char *input, const uint8_t char_len, bool &is_other_cjk)
 {
   int ret = OB_SUCCESS;
+  if (CS_TYPE == CHARSET_UTF8MB4 && OB_LIKELY(char_len == 1) && OB_NOT_NULL(input)) {
+    is_other_cjk = false;
+    return ret;
+  }
   ob_wc_t unicode = 0;
   if (OB_FAIL(decode_unicode<CS_TYPE>(input, char_len, unicode))) {
     STORAGE_FTS_LOG(WARN, "Failed to decode unicode", K(ret));
@@ -130,6 +148,10 @@ inline typename std::enable_if<(CS_TYPE == CHARSET_UTF8MB4 || CS_TYPE == CHARSET
 ObFTCharUtil::is_ignore(const char *input, const uint8_t char_len, bool &ignore)
 {
   int ret = OB_SUCCESS;
+  if (CS_TYPE == CHARSET_UTF8MB4 && OB_LIKELY(char_len == 1) && OB_NOT_NULL(input)) {
+    ignore = false;
+    return ret;
+  }
   ob_wc_t unicode = 0;
   if (OB_FAIL(decode_unicode<CS_TYPE>(input, char_len, unicode))) {
     STORAGE_FTS_LOG(WARN, "Failed to decode unicode", K(ret));
@@ -146,6 +168,10 @@ inline typename std::enable_if<(CS_TYPE == CHARSET_UTF8MB4 || CS_TYPE == CHARSET
 ObFTCharUtil::is_cn_number(const char *input, const uint8_t char_len, bool &is_cn_number)
 {
   int ret = OB_SUCCESS;
+  if (CS_TYPE == CHARSET_UTF8MB4 && OB_LIKELY(char_len == 1) && OB_NOT_NULL(input)) {
+    is_cn_number = false;
+    return ret;
+  }
   ob_wc_t unicode = 0;
   if (OB_FAIL(decode_unicode<CS_TYPE>(input, char_len, unicode))) {
     STORAGE_FTS_LOG(WARN, "Failed to decode unicode", K(ret));
@@ -162,6 +188,11 @@ inline typename std::enable_if<(CS_TYPE == CHARSET_UTF8MB4 || CS_TYPE == CHARSET
 ObFTCharUtil::is_letter_connector(const char *input, const uint8_t char_len, bool &is_connector)
 {
   int ret = OB_SUCCESS;
+  if (CS_TYPE == CHARSET_UTF8MB4 && OB_LIKELY(char_len == 1) && OB_NOT_NULL(input)) {
+    unsigned char c = static_cast<unsigned char>(input[0]);
+    is_connector = (c == '#' || c == '&' || c == '+' || c == '-' || c == '.' || c == '@' || c == '_');
+    return ret;
+  }
   ob_wc_t unicode = 0;
   if (OB_FAIL(decode_unicode<CS_TYPE>(input, char_len, unicode))) {
     STORAGE_FTS_LOG(WARN, "Failed to decode unicode", K(ret));
@@ -178,6 +209,11 @@ inline typename std::enable_if<(CS_TYPE == CHARSET_UTF8MB4 || CS_TYPE == CHARSET
 ObFTCharUtil::is_num_connector(const char *input, const uint8_t char_len, bool &is_connector)
 {
   int ret = OB_SUCCESS;
+  if (CS_TYPE == CHARSET_UTF8MB4 && OB_LIKELY(char_len == 1) && OB_NOT_NULL(input)) {
+    unsigned char c = static_cast<unsigned char>(input[0]);
+    is_connector = (c == ',' || c == '.');
+    return ret;
+  }
   ob_wc_t unicode = 0;
   if (OB_FAIL(decode_unicode<CS_TYPE>(input, char_len, unicode))) {
     STORAGE_FTS_LOG(WARN, "Failed to decode unicode", K(ret));
@@ -279,6 +315,15 @@ inline int ObFTCharUtil::do_classify(const char *input, const uint8_t char_len, 
 {
   int ret = OB_SUCCESS;
   type = CharType::USELESS;
+  if (CS_TYPE == CHARSET_UTF8MB4 && OB_LIKELY(char_len == 1) && OB_NOT_NULL(input)) {
+    unsigned char c = static_cast<unsigned char>(input[0]);
+    if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
+      type = CharType::ENGLISH_LETTER;
+    } else if (c >= '0' && c <= '9') {
+      type = CharType::ARABIC_LETTER;
+    }
+    return ret;
+  }
   ob_wc_t unicode = 0;
   if (OB_FAIL(decode_unicode<CS_TYPE>(input, char_len, unicode))) {
     STORAGE_FTS_LOG(WARN, "Failed to decode unicode", K(ret));

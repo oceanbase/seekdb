@@ -128,6 +128,23 @@ int ObSRBMWIterImpl::top_k_search()
     } else {
       status_ = BMWStatus::FINISHED;
     }
+  } else if (dim_iters_->count() <= 3) {
+    bool need_project = true;
+    double relevance = 0.0;
+    const ObDatum *id_datum = nullptr;
+    while (OB_SUCC(ret)) {
+      if (OB_FAIL(fill_merge_heap())) {
+        if (OB_UNLIKELY(OB_ITER_END != ret)) {
+          LOG_WARN("failed to fill merge heap in sequential top k scan", K(ret));
+        }
+      } else if (OB_FAIL(collect_dims_by_id(id_datum, relevance, need_project))) {
+        LOG_WARN("failed to collect dimensions in sequential top k scan", K(ret));
+      }
+    }
+    if (OB_ITER_END == ret) {
+      ret = OB_SUCCESS;
+      status_ = BMWStatus::FINISHED;
+    }
   } else if (OB_FAIL(init_before_wand_process())) {
     LOG_WARN("failed to init before wand process", K(ret));
   } else {
