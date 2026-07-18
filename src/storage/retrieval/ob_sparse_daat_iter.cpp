@@ -117,6 +117,11 @@ ObSRDaaTIterImpl::ObSRDaaTIterImpl()
     small_active_iter_idxes_{},
     small_active_iter_cnt_(0),
     use_small_any_match_merge_(false),
+    small_batch_doc_ids_{},
+    small_batch_counts_{},
+    small_batch_positions_{},
+    small_batch_ended_{},
+    use_small_any_match_batch_merge_(false),
     set_datum_func_(nullptr)
 {
 }
@@ -191,6 +196,16 @@ int ObSRDaaTIterImpl::init(
         next_round_iter_idxes_[i] = i;
       }
       dim_iter_data_ = &dim_iter_cache_[0];
+      // FTS PERF OPT 9: measurements show that retaining whole posting
+      // batches pays off for the common two-token, unbounded OR.  A LIMIT can
+      // stop after only a few rows and would make this path over-fetch, while
+      // three-token merges did not amortize the extra cursor bookkeeping.
+      use_small_any_match_batch_merge_ = use_small_any_match_merge_
+          && 2 == dim_iter_cnt_
+          && !iter_param_->limit_param_->is_valid();
+      for (int64_t i = 0; use_small_any_match_batch_merge_ && i < dim_iter_cnt_; ++i) {
+        use_small_any_match_batch_merge_ = dim_iter_data_[i]->supports_id_batch();
+      }
     }
 
     if (OB_SUCC(ret)) {
@@ -223,6 +238,13 @@ void ObSRDaaTIterImpl::reset()
   next_round_cnt_ = 0;
   small_active_iter_cnt_ = 0;
   use_small_any_match_merge_ = false;
+  for (int64_t i = 0; i < SMALL_ANY_MATCH_MAX_ITER_CNT; ++i) {
+    small_batch_doc_ids_[i] = nullptr;
+    small_batch_counts_[i] = 0;
+    small_batch_positions_[i] = 0;
+    small_batch_ended_[i] = false;
+  }
+  use_small_any_match_batch_merge_ = false;
   input_row_cnt_ = 0;
   output_row_cnt_ = 0;
   is_inited_ = false;
@@ -240,6 +262,12 @@ void ObSRDaaTIterImpl::reuse(const bool switch_tablet)
       next_round_iter_idxes_[i] = i;
     }
     small_active_iter_cnt_ = 0;
+    for (int64_t i = 0; i < SMALL_ANY_MATCH_MAX_ITER_CNT; ++i) {
+      small_batch_doc_ids_[i] = nullptr;
+      small_batch_counts_[i] = 0;
+      small_batch_positions_[i] = 0;
+      small_batch_ended_[i] = false;
+    }
   }
   if (OB_NOT_NULL(relevance_collector_)) {
     relevance_collector_->reuse();
@@ -307,10 +335,18 @@ int ObSRDaaTIterImpl::get_next_rows(const int64_t capacity, int64_t &count)
   } else {
     count = 0;
     const int64_t real_capacity = MIN(capacity, iter_param_->max_batch_size_);
-    while (OB_SUCC(ret) && count < real_capacity) {
-      if (OB_FAIL(do_one_merge_round(count))) {
+    if (use_small_any_match_batch_merge_) {
+      if (OB_FAIL(do_small_any_match_batch_merge(real_capacity, count))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("failed to do one merge round", K(ret), K(count));
+          LOG_WARN("failed to do batched small-OR merge", K(ret), K(count));
+        }
+      }
+    } else {
+      while (OB_SUCC(ret) && count < real_capacity) {
+        if (OB_FAIL(do_one_merge_round(count))) {
+          if (OB_UNLIKELY(OB_ITER_END != ret)) {
+            LOG_WARN("failed to do one merge round", K(ret), K(count));
+          }
         }
       }
     }
@@ -321,6 +357,98 @@ int ObSRDaaTIterImpl::get_next_rows(const int64_t capacity, int64_t &count)
       }
     }
 
+  }
+  return ret;
+}
+
+int ObSRDaaTIterImpl::refill_small_any_match_batch(const int64_t iter_idx)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(iter_idx < 0 || iter_idx >= dim_iter_cnt_)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid small-OR batch iterator index", K(ret), K(iter_idx), K_(dim_iter_cnt));
+  } else if (small_batch_ended_[iter_idx]
+      || small_batch_positions_[iter_idx] < small_batch_counts_[iter_idx]) {
+    // The current batch still has a head item, or this dimension is exhausted.
+  } else {
+    const ObDocIdExt *doc_ids = nullptr;
+    int64_t count = 0;
+    if (OB_FAIL(get_dim_iter(iter_idx)->get_next_id_batch(doc_ids, count))) {
+      if (OB_ITER_END == ret) {
+        ret = OB_SUCCESS;
+        small_batch_ended_[iter_idx] = true;
+        small_batch_doc_ids_[iter_idx] = nullptr;
+        small_batch_counts_[iter_idx] = 0;
+        small_batch_positions_[iter_idx] = 0;
+      } else {
+        LOG_WARN("failed to refill posting batch", K(ret), K(iter_idx));
+      }
+    } else if (OB_ISNULL(doc_ids) || OB_UNLIKELY(count <= 0)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected empty posting batch", K(ret), K(iter_idx), KP(doc_ids), K(count));
+    } else {
+      small_batch_doc_ids_[iter_idx] = doc_ids;
+      small_batch_counts_[iter_idx] = count;
+      small_batch_positions_[iter_idx] = 0;
+    }
+  }
+  return ret;
+}
+
+int ObSRDaaTIterImpl::do_small_any_match_batch_merge(
+    const int64_t capacity,
+    int64_t &count)
+{
+  int ret = OB_SUCCESS;
+  while (OB_SUCC(ret) && count < capacity) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < dim_iter_cnt_; ++i) {
+      if (OB_FAIL(refill_small_any_match_batch(i))) {
+        LOG_WARN("failed to prepare posting batch", K(ret), K(i));
+      } else if (!small_batch_ended_[i]) {
+        iter_domain_ids_[i] = &small_batch_doc_ids_[i][small_batch_positions_[i]].get_datum();
+      }
+    }
+
+    int64_t winner_iter_idx = -1;
+    for (int64_t i = 0; OB_SUCC(ret) && i < dim_iter_cnt_; ++i) {
+      if (small_batch_ended_[i]) {
+        // Skip exhausted dimensions.
+      } else if (winner_iter_idx < 0) {
+        winner_iter_idx = i;
+      } else {
+        int64_t cmp_ret = 0;
+        if (OB_FAIL(merge_cmp_.cmp(i, winner_iter_idx, cmp_ret))) {
+          LOG_WARN("failed to compare posting batch heads", K(ret), K(i), K(winner_iter_idx));
+        } else if (cmp_ret < 0) {
+          winner_iter_idx = i;
+        }
+      }
+    }
+
+    if (OB_FAIL(ret)) {
+    } else if (winner_iter_idx < 0) {
+      ret = OB_ITER_END;
+    } else {
+      const ObDatum &winner_id = *iter_domain_ids_[winner_iter_idx];
+      for (int64_t i = 0; OB_SUCC(ret) && i < dim_iter_cnt_; ++i) {
+        if (small_batch_ended_[i]) {
+          // Skip exhausted dimensions.
+        } else {
+          int64_t cmp_ret = 0;
+          if (OB_FAIL(merge_cmp_.cmp(i, winner_iter_idx, cmp_ret))) {
+            LOG_WARN("failed to deduplicate posting batch heads", K(ret), K(i), K(winner_iter_idx));
+          } else if (0 == cmp_ret) {
+            ++small_batch_positions_[i];
+          }
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(cache_result(count, winner_id, 0.0))) {
+        if (OB_ITER_END != ret) {
+          LOG_WARN("failed to cache batched small-OR result", K(ret));
+        }
+      }
+    }
   }
   return ret;
 }

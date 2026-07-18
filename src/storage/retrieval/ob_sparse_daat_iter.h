@@ -100,6 +100,8 @@ protected:
   virtual int project_results(const int64_t count);
   int init_merge_heap(const int64_t count);
   int do_small_any_match_merge_round(int64_t &count);
+  int do_small_any_match_batch_merge(const int64_t capacity, int64_t &count);
+  int refill_small_any_match_batch(const int64_t iter_idx);
   int refill_small_any_match_iters();
 protected:
   OB_INLINE ObISRDaaTDimIter *get_dim_iter(const int64_t iter_idx) const
@@ -129,6 +131,14 @@ protected:
   int64_t small_active_iter_idxes_[SMALL_ANY_MATCH_MAX_ITER_CNT];
   int64_t small_active_iter_cnt_;
   bool use_small_any_match_merge_;
+  // FTS PERF OPT 9: keep one sorted posting batch per small-OR dimension and
+  // merge it with direct cursors. This removes two virtual calls per posting
+  // while retaining the existing scalar path as a compatibility fallback.
+  const ObDocIdExt *small_batch_doc_ids_[SMALL_ANY_MATCH_MAX_ITER_CNT];
+  int64_t small_batch_counts_[SMALL_ANY_MATCH_MAX_ITER_CNT];
+  int64_t small_batch_positions_[SMALL_ANY_MATCH_MAX_ITER_CNT];
+  bool small_batch_ended_[SMALL_ANY_MATCH_MAX_ITER_CNT];
+  bool use_small_any_match_batch_merge_;
   void (*set_datum_func_)(ObDatum &, const ObDocIdExt &);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSRDaaTIterImpl);

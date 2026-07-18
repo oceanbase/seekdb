@@ -834,6 +834,43 @@ int ObTextRetrievalDaaTTokenIter::save_docids()
   return ret;
 }
 
+bool ObTextRetrievalDaaTTokenIter::supports_id_batch() const
+{
+  return is_inited_ && nullptr != eval_ctx_ && eval_ctx_->is_vectorized()
+      && nullptr == relevance_expr_;
+}
+
+int ObTextRetrievalDaaTTokenIter::get_next_id_batch(
+    const ObDocIdExt *&doc_ids,
+    int64_t &count)
+{
+  int ret = OB_SUCCESS;
+  doc_ids = nullptr;
+  count = 0;
+  count_ = 0;
+  cur_idx_ = -1;
+  if (OB_UNLIKELY(!supports_id_batch())) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("id batch is not supported by token iterator", K(ret), K_(is_inited),
+             KP_(eval_ctx), KP_(relevance_expr));
+  } else if (OB_FAIL(token_iter_->get_next_batch(max_batch_size_, count_))) {
+    if (OB_UNLIKELY(OB_ITER_END != ret)) {
+      LOG_WARN("failed to get posting batch", K(ret));
+    }
+  } else if (OB_UNLIKELY(count_ <= 0)) {
+    ret = OB_ITER_END;
+  } else if (OB_FAIL(save_docids())) {
+    LOG_WARN("failed to retain posting batch doc ids", K(ret), K_(count));
+  } else {
+    // FTS PERF OPT 9: doc_id_ owns the batch, so the merge iterator can keep
+    // direct cursors until it requests the next batch from this dimension.
+    doc_ids = &doc_id_[0];
+    count = count_;
+    cur_idx_ = count_;
+  }
+  return ret;
+}
+
 int ObTextRetrievalDaaTTokenIter::get_next_batch(const int64_t capacity, int64_t &count)
 {
   return OB_NOT_IMPLEMENT;

@@ -72,6 +72,16 @@ public:
   // interface for daat processing
   virtual int get_curr_score(double &score) const = 0;
   virtual int get_curr_id(const ObDatum *&datum) const = 0;
+  // Truth-only text retrieval can retain a whole posting batch inside the
+  // concrete iterator. Batch-aware mergers use this optional interface to
+  // amortize virtual dispatch without changing the scalar iterator contract.
+  virtual bool supports_id_batch() const { return false; }
+  virtual int get_next_id_batch(const sql::ObDocIdExt *&doc_ids, int64_t &count)
+  {
+    UNUSED(doc_ids);
+    count = 0;
+    return OB_NOT_SUPPORTED;
+  }
   // interface for plain dynamic pruning algorithms such as WAND and MaxScore
   virtual int get_dim_max_score(double &score)
   {
