@@ -717,6 +717,75 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
   return ret;
 }
 
+int ObFTParserJsonProps::check_has_custom_ik_dictionary(
+    const ObString &parser_name,
+    const ObString &parser_properties,
+    bool &has_custom_dictionary)
+{
+  int ret = OB_SUCCESS;
+  has_custom_dictionary = false;
+  ObFTParserJsonProps properties;
+  ObString table_name;
+  // Auxiliary-index schemas store the serialized plugin name (for example
+  // "ik.0"), while callers outside DDL may still pass the bare name.  Compare
+  // the name component in both cases.
+  ObString real_parser_name = parser_name;
+  if (nullptr != real_parser_name.find('.')) {
+    real_parser_name = real_parser_name.split_on('.');
+  }
+  const bool is_ik =
+      0 == real_parser_name.case_compare(ObString(ObFTSLiteral::PARSER_NAME_IK));
+  if (!is_ik || parser_properties.empty()) {
+    // Only IK has dictionary-table properties.  Empty properties cannot name
+    // a custom dictionary.
+  } else if (OB_FAIL(properties.init())) {
+    LOG_WARN("fail to init fulltext parser properties", K(ret));
+  } else if (OB_FAIL(properties.parse_from_valid_str(parser_properties))) {
+    LOG_WARN("fail to parse fulltext parser properties", K(ret), K(parser_properties));
+  } else if (OB_FAIL(properties.config_get_dict_table(table_name))) {
+    if (OB_SEARCH_NOT_FOUND == ret) {
+      ret = OB_SUCCESS;
+    } else {
+      LOG_WARN("fail to get ik main dictionary table", K(ret));
+    }
+  } else if (!table_name.empty()
+             && 0 != table_name.case_compare(
+                    ObString(ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE))) {
+    has_custom_dictionary = true;
+  }
+
+  if (OB_SUCC(ret) && is_ik && !parser_properties.empty() && !has_custom_dictionary) {
+    table_name.reset();
+    if (OB_FAIL(properties.config_get_stopword_table(table_name))) {
+      if (OB_SEARCH_NOT_FOUND == ret) {
+        ret = OB_SUCCESS;
+      } else {
+        LOG_WARN("fail to get ik stopword dictionary table", K(ret));
+      }
+    } else if (!table_name.empty()
+               && 0 != table_name.case_compare(
+                      ObString(ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE))) {
+      has_custom_dictionary = true;
+    }
+  }
+
+  if (OB_SUCC(ret) && is_ik && !parser_properties.empty() && !has_custom_dictionary) {
+    table_name.reset();
+    if (OB_FAIL(properties.config_get_quantifier_table(table_name))) {
+      if (OB_SEARCH_NOT_FOUND == ret) {
+        ret = OB_SUCCESS;
+      } else {
+        LOG_WARN("fail to get ik quantifier dictionary table", K(ret));
+      }
+    } else if (!table_name.empty()
+               && 0 != table_name.case_compare(
+                      ObString(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE))) {
+      has_custom_dictionary = true;
+    }
+  }
+  return ret;
+}
+
 int ObFTParserJsonProps::ngram_rebuild_props_for_ddl(const bool log_to_user)
 {
   int ret = OB_SUCCESS;

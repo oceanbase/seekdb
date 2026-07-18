@@ -75,6 +75,13 @@ public:
 
   int to_format_json(ObIAllocator &alloc, ObString &str);
 
+  // Custom IK dictionaries execute through a compatibility path during online
+  // index build.  Keep the detection in one place so codegen and DDL SQL
+  // generation make the same decision.
+  static int check_has_custom_ik_dictionary(const ObString &parser_name,
+                                            const ObString &parser_properties,
+                                            bool &has_custom_dictionary);
+
   static bool is_valid_min_token_size(const int64_t size)
   {
     return size >= ObFTSLiteral::FT_MIN_TOKEN_SIZE_LOWER_BOUND

@@ -140,66 +140,6 @@ using namespace share::schema;
 namespace sql
 {
 
-namespace
-{
-int check_has_custom_ik_dictionary(const ObString &parser_properties,
-                                   bool &has_custom_dictionary)
-{
-  int ret = OB_SUCCESS;
-  has_custom_dictionary = false;
-  storage::ObFTParserJsonProps properties;
-  ObString table_name;
-  if (parser_properties.empty()) {
-    // A parser without properties cannot reference a custom IK dictionary.
-  } else if (OB_FAIL(properties.init())) {
-    LOG_WARN("fail to init fulltext parser properties", K(ret));
-  } else if (OB_FAIL(properties.parse_from_valid_str(parser_properties))) {
-    LOG_WARN("fail to parse fulltext parser properties", K(ret), K(parser_properties));
-  } else if (OB_FAIL(properties.config_get_dict_table(table_name))) {
-    if (OB_SEARCH_NOT_FOUND == ret) {
-      ret = OB_SUCCESS;
-    } else {
-      LOG_WARN("fail to get ik main dictionary table", K(ret));
-    }
-  } else if (!table_name.empty()
-             && 0 != table_name.case_compare(
-                    ObString(storage::ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE))) {
-    has_custom_dictionary = true;
-  }
-
-  if (OB_SUCC(ret) && !has_custom_dictionary) {
-    table_name.reset();
-    if (OB_FAIL(properties.config_get_stopword_table(table_name))) {
-      if (OB_SEARCH_NOT_FOUND == ret) {
-        ret = OB_SUCCESS;
-      } else {
-        LOG_WARN("fail to get ik stopword dictionary table", K(ret));
-      }
-    } else if (!table_name.empty()
-               && 0 != table_name.case_compare(
-                      ObString(storage::ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE))) {
-      has_custom_dictionary = true;
-    }
-  }
-
-  if (OB_SUCC(ret) && !has_custom_dictionary) {
-    table_name.reset();
-    if (OB_FAIL(properties.config_get_quantifier_table(table_name))) {
-      if (OB_SEARCH_NOT_FOUND == ret) {
-        ret = OB_SUCCESS;
-      } else {
-        LOG_WARN("fail to get ik quantifier dictionary table", K(ret));
-      }
-    } else if (!table_name.empty()
-               && 0 != table_name.case_compare(
-                      ObString(storage::ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE))) {
-      has_custom_dictionary = true;
-    }
-  }
-  return ret;
-}
-} // namespace
-
 struct ObFilterTSC
 {
 };
@@ -5405,15 +5345,15 @@ int ObStaticEngineCG::generate_normal_tsc(ObLogTableScan &op, ObTableScanSpec &s
           LOG_WARN("unexpected error, parser name is empty", K(ret), KPC(ddl_table_schema));
         } else {
           bool has_custom_ik_dictionary = false;
-          if (OB_FAIL(check_has_custom_ik_dictionary(
-                  ddl_table_schema->get_parser_property_str(), has_custom_ik_dictionary))) {
+          if (OB_FAIL(storage::ObFTParserJsonProps::check_has_custom_ik_dictionary(
+                  ddl_table_schema->get_parser_name_str(),
+                  ddl_table_schema->get_parser_property_str(),
+                  has_custom_ik_dictionary))) {
             LOG_WARN("fail to check custom ik dictionary", K(ret), KPC(ddl_table_schema));
           } else {
-            // The vectorized FTS DDL path tokenizes while the online-DDL scan
-            // keeps its batch open.  A custom IK parser may issue an internal
-            // SELECT against the user dictionary table, which can wait on the
-            // DDL lock in that context.  Keep custom dictionaries on the
-            // proven row-at-a-time path; built-in IK/BEng retain vectorization.
+            // Keep custom IK dictionaries on the compatibility path used
+            // before FTS DDL vectorization.  Built-in IK/BEng retain the fast
+            // vectorized path exercised by the large benchmark.
             if (has_custom_ik_dictionary) {
               spec.max_batch_size_ = 0;
             }

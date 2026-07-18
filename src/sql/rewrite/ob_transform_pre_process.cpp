@@ -35,31 +35,53 @@ namespace sql
 
 namespace
 {
-bool is_count_star_over_limited_fulltext_view(
+bool get_count_star_over_limited_fulltext_view(
     const common::ObIArray<ObParentDMLStmt> &parent_stmts,
-    const ObDMLStmt *stmt)
+    ObDMLStmt *stmt,
+    ObSelectStmt *&parent_stmt,
+    TableItem *&table_item)
 {
   bool is_valid = false;
-  const ObSelectStmt *child_stmt = nullptr;
-  const ObSelectStmt *parent_stmt = nullptr;
-  const TableItem *table_item = nullptr;
+  ObSelectStmt *child_stmt = nullptr;
+  const TableItem *child_table_item = nullptr;
   const ObAggFunRawExpr *count_expr = nullptr;
   const ObRawExpr *child_select_expr = nullptr;
+  parent_stmt = nullptr;
+  table_item = nullptr;
   if (OB_NOT_NULL(stmt)
       && stmt->is_select_stmt()
       && !parent_stmts.empty()
-      && OB_NOT_NULL(child_stmt = static_cast<const ObSelectStmt *>(stmt))
+      && OB_NOT_NULL(child_stmt = static_cast<ObSelectStmt *>(stmt))
+      && !child_stmt->is_set_stmt()
+      && child_stmt->get_match_exprs().count() > 0
+      && child_stmt->get_table_items().count() == 1
+      && child_stmt->get_from_item_size() == 1
+      && !child_stmt->get_from_item(0).is_joined_
+      && OB_NOT_NULL(child_table_item = child_stmt->get_table_item(0))
+      && child_table_item->is_basic_table()
+      && child_stmt->get_from_item(0).table_id_ == child_table_item->table_id_
       && child_stmt->has_limit()
       && OB_ISNULL(child_stmt->get_offset_expr())
       && OB_ISNULL(child_stmt->get_limit_percent_expr())
       && !child_stmt->is_fetch_with_ties()
+      && !child_stmt->has_distinct()
+      && !child_stmt->has_having()
+      && !child_stmt->has_order_by()
+      && !child_stmt->has_window_function()
+      && !child_stmt->has_select_into()
       && !child_stmt->is_contains_assignment()
+      && !child_stmt->has_sequence()
+      && !child_stmt->has_for_update()
+      && !child_stmt->is_calc_found_rows()
+      && child_stmt->get_aggr_item_size() == 0
+      && child_stmt->get_group_expr_size() == 0
+      && child_stmt->get_rollup_expr_size() == 0
       && child_stmt->get_select_item_size() == 1
       && OB_NOT_NULL(child_select_expr = child_stmt->get_select_item(0).expr_)
       && child_select_expr->is_column_ref_expr()
       && OB_NOT_NULL(parent_stmts.at(parent_stmts.count() - 1).stmt_)
       && parent_stmts.at(parent_stmts.count() - 1).stmt_->is_select_stmt()
-      && OB_NOT_NULL(parent_stmt = static_cast<const ObSelectStmt *>(
+      && OB_NOT_NULL(parent_stmt = static_cast<ObSelectStmt *>(
              parent_stmts.at(parent_stmts.count() - 1).stmt_))
       && !parent_stmt->is_set_stmt()
       && parent_stmt->get_table_items().count() == 1
@@ -77,6 +99,7 @@ bool is_count_star_over_limited_fulltext_view(
       && !parent_stmt->is_contains_assignment()
       && !parent_stmt->has_sequence()
       && !parent_stmt->has_for_update()
+      && !parent_stmt->is_calc_found_rows()
       && parent_stmt->get_condition_exprs().empty()
       && OB_NOT_NULL(count_expr = parent_stmt->get_aggr_item(0))
       && T_FUN_COUNT == count_expr->get_expr_type()
@@ -84,6 +107,8 @@ bool is_count_star_over_limited_fulltext_view(
       && parent_stmt->get_select_item(0).expr_ == count_expr
       && OB_NOT_NULL(table_item = parent_stmt->get_table_item(0))
       && table_item->is_generated_table()
+      && !parent_stmt->get_from_item(0).is_joined_
+      && parent_stmt->get_from_item(0).table_id_ == table_item->table_id_
       && table_item->ref_query_ == child_stmt) {
     is_valid = true;
   }
@@ -296,19 +321,33 @@ int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
       }
     }
     if (OB_SUCC(ret)) {
-      const bool skip_fulltext_order =
-          is_count_star_over_limited_fulltext_view(parent_stmts, stmt);
+      ObSelectStmt *count_parent_stmt = nullptr;
+      TableItem *count_view = nullptr;
+      const bool skip_fulltext_order = get_count_star_over_limited_fulltext_view(
+          parent_stmts, stmt, count_parent_stmt, count_view);
       is_happened = false;
-      if (stmt->get_match_exprs().count() > 0 && !skip_fulltext_order &&
+      if (skip_fulltext_order) {
+        ObSqlBitSet<> removed_idx;
+        ObSelectStmt *child_stmt = static_cast<ObSelectStmt *>(stmt);
+        if (OB_FAIL(removed_idx.add_member(0))) {
+          LOG_WARN("failed to mark unused fulltext view output", K(ret));
+        } else if (OB_FAIL(ObTransformUtils::remove_select_items(ctx_,
+                                                                 count_view->table_id_,
+                                                                 *child_stmt,
+                                                                 *count_parent_stmt,
+                                                                 removed_idx))) {
+          LOG_WARN("failed to prune unused fulltext view output", K(ret));
+        } else {
+          is_happened = true;
+          OPT_TRACE("prune output and skip unobservable fulltext order for count over limited view");
+        }
+      } else if (stmt->get_match_exprs().count() > 0 &&
           OB_FAIL(preserve_order_for_fulltext_search(stmt, is_happened))) {
         LOG_WARN("failed to preserve order for fulltext search", K(ret));
       } else {
-        trans_happened |= is_happened;
-        if (skip_fulltext_order) {
-          OPT_TRACE("skip unobservable fulltext order for count over limited view");
-        }
         LOG_TRACE("succeed to transform for preserve order for fulltext search",K(is_happened), K(ret));
       }
+      trans_happened |= is_happened;
     }
     if (OB_SUCC(ret) && OB_FAIL(reset_view_base(stmt))) {
       LOG_WARN("failed to reset view base item", K(ret));

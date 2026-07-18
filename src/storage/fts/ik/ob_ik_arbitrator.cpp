@@ -328,13 +328,40 @@ int ObIKArbitrator::prepare(TokenizeContext &ctx)
 
   int64_t bucket_num = MAX(ctx.fulltext_len() / 100, 10);
   bucket_num = MIN(bucket_num, 100);
-  if (OB_FAIL(chains_.create(bucket_num, ObMemAttr("IK ARBITRATE")))) {
+  if (map_created_ && bucket_num > bucket_capacity_) {
+    chains_.destroy();
+    map_created_ = false;
+    bucket_capacity_ = 0;
+  }
+  if (!map_created_
+      && OB_FAIL(chains_.create(bucket_num, ObMemAttr("IK ARBITRATE")))) {
     LOG_WARN("create chain map failed", K(ret));
+  } else if (!map_created_) {
+    map_created_ = true;
+    bucket_capacity_ = bucket_num;
   }
   return ret;
 }
 
-ObIKArbitrator::ObIKArbitrator() : alloc_(lib::ObMemAttr("IK Arbitrator")) {}
+void ObIKArbitrator::reuse()
+{
+  if (map_created_) {
+    const int ret = chains_.reuse();
+    if (OB_SUCCESS != ret) {
+      LOG_WARN("failed to reuse ik arbitrator chain map", K(ret));
+      chains_.destroy();
+      map_created_ = false;
+      bucket_capacity_ = 0;
+    }
+  }
+  alloc_.reuse();
+}
+
+ObIKArbitrator::ObIKArbitrator()
+    : alloc_(lib::ObMemAttr("IK Arbitrator")),
+      bucket_capacity_(0),
+      map_created_(false)
+{}
 
 int ObIKArbitrator::add_chain(ObIKTokenChain *chain)
 {
@@ -352,7 +379,9 @@ int ObIKArbitrator::add_chain(ObIKTokenChain *chain)
 
 ObIKArbitrator::~ObIKArbitrator()
 {
-  chains_.destroy();
+  if (map_created_) {
+    chains_.destroy();
+  }
   alloc_.reset();
 }
 } // namespace storage
