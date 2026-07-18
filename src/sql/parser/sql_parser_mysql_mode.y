@@ -7186,6 +7186,11 @@ TABLE_MODE opt_equal_mark STRING_VALUE
   merge_nodes($$, result, T_DYNAMIC_PARTITION_POLICY, $4);
   dup_expr_string($$, result, @4.first_column, @4.last_column);
 }
+| FULLTEXT_DICT opt_equal_mark STRING_VALUE
+{
+  (void)($2);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FULLTEXT_DICT, 1, $3);
+}
 ;
 
 dynamic_partition_option_list:
