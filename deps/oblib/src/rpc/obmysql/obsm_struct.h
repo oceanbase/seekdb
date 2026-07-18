@@ -45,6 +45,7 @@ public:
   ObSMConnection()
   {
     cap_flags_.capability_ = 0;
+    autocommit_snapshot_ = false;
     is_sess_alloc_ = false;
     is_sess_free_ = false;
     has_inc_active_num_ = false;
@@ -52,6 +53,7 @@ public:
     is_tenant_locked_ = false;
     connection_phase_ = rpc::ConnectionPhaseEnum::CPE_CONNECTED;
     sessid_ = INITIAL_SESSID;
+    sess_create_time_ = 0;
     tenant_ = NULL;
     MEMSET(tenant_name_buf_, 0, sizeof(tenant_name_buf_));
     MEMSET(user_name_buf_, 0, sizeof(user_name_buf_));
@@ -110,6 +112,7 @@ public:
   inline void set_logined(bool logined) { logined_ = logined; }
 public:
   obmysql::ObMySQLCapabilityFlags cap_flags_;
+  bool autocommit_snapshot_; // global value advertised by the initial handshake
   bool is_sess_alloc_;
   bool is_sess_free_;
   bool has_inc_active_num_;
@@ -119,7 +122,8 @@ public:
   rpc::ConnectionPhaseEnum connection_phase_;
   uint32_t sessid_;
   uint32_t version_;
-
+  int64_t sess_create_time_; // proxy connection mode, record the session connection time from client to proxy
+  
   // Errors may occur during the ObSMHandler::on_connect stage, and these error messages need to be returned to the client;
   // And in on_connect, accurate error information cannot be returned to the client, therefore it is recorded here, and processed in ObMPConnect::Process
   int ret_;

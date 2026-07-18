@@ -77,9 +77,7 @@ OMPKHandshake::OMPKHandshake()
   }
 
   server_language_ = 46;  // utf8mb4_bin
-  // The greeting is sent before the SQL session is created. Advertise seekdb's
-  // default so clients do not skip an explicit SET AUTOCOMMIT based on stale state.
-  server_status_ = static_cast<uint16_t>(1U << OB_SERVER_STATUS_AUTOCOMMIT_POS);
+  server_status_ = 0;     // no this value in mysql protocol document
   memset(reserved_, 0, sizeof(reserved_));
   memset(auth_plugin_data2_, 'b', sizeof(auth_plugin_data2_) - 1);
   auth_plugin_data2_[sizeof(auth_plugin_data2_) - 1] = '\0';

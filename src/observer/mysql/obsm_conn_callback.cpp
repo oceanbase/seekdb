@@ -21,6 +21,7 @@
 #include "lib/random/ob_mysql_random.h"
 #include "observer/omt/ob_tenant.h"
 #include "observer/ob_srv_task.h"
+#include "share/schema/ob_schema_utils.h"
 
 namespace oceanbase
 {
@@ -112,12 +113,25 @@ static int sm_conn_build_handshake(ObSMConnection& conn, obmysql::OMPKHandshake&
   const bool support_ssl = GCONF.ssl_client_authentication;
   hsp.set_ssl_cap(support_ssl);
   const int64_t BUF_LEN = sizeof(conn.scramble_buf_);
-  if (OB_FAIL(create_scramble_string(conn.scramble_buf_, BUF_LEN, thread_scramble_rand))) {
-    LOG_WARN("create scramble string failed", K(ret));
-  } else if (OB_FAIL(hsp.set_scramble(conn.scramble_buf_, BUF_LEN))) {
-    LOG_WARN("set scramble failed", K(ret));
+  int64_t autocommit = 0;
+  if (OB_FAIL(share::schema::ObSchemaUtils::get_tenant_int_variable(
+          share::SYS_VAR_AUTOCOMMIT, autocommit))) {
+    LOG_WARN("get global autocommit failed", K(ret));
+  } else if (OB_UNLIKELY(0 != autocommit && 1 != autocommit)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected global autocommit", K(ret), K(autocommit));
   } else {
-    LOG_INFO("new mysql sessid created", K(conn.sessid_), K(support_ssl));
+    conn.autocommit_snapshot_ = (0 != autocommit);
+    ObServerStatusFlags status_flags;
+    status_flags.status_flags_.OB_SERVER_STATUS_AUTOCOMMIT = conn.autocommit_snapshot_;
+    hsp.set_server_status(status_flags.flags_);
+    if (OB_FAIL(create_scramble_string(conn.scramble_buf_, BUF_LEN, thread_scramble_rand))) {
+      LOG_WARN("create scramble string failed", K(ret));
+    } else if (OB_FAIL(hsp.set_scramble(conn.scramble_buf_, BUF_LEN))) {
+      LOG_WARN("set scramble failed", K(ret));
+    } else {
+      LOG_INFO("new mysql sessid created", K(conn.sessid_), K(support_ssl), K(autocommit));
+    }
   }
   return ret;
 }
