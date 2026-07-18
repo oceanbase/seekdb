@@ -4868,6 +4868,11 @@ int ObTransformPreProcess::preserve_order_for_fulltext_search(
     OrderItem item(match_expr, default_desc_direction());
     if (OB_FAIL(try_prune_count_limited_view(ctx_, parent_stmts, stmt, count_view_pruned))) {
       LOG_WARN("failed to prune limited count view", K(ret));
+    } else if (count_view_pruned) {
+      // The outer COUNT(*) only observes how many rows the LIMIT retained.
+      // The default relevance order is therefore unobservable and would only
+      // force score calculation and the Top-K retrieval path.
+      trans_happened = true;
     } else if (OB_FAIL(stmt->add_order_item(item))) {
       LOG_WARN("failed to add order item", K(ret), K(item));
     } else {
