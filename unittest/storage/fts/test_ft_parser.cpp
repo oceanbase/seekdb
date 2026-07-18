@@ -194,7 +194,7 @@ TEST_F(FTParserTest, test_cache)
   dat.mem_block_size_ = sizeof(ObFTDAT);
   ObFTDAT *ptr = &dat;
 
-  ObDictCacheKey key(1, ObFTDictType::DICT_IK_MAIN, 0);
+  ObDictCacheKey key(1, 500001, 1, 0);
   ObDictCacheValue value(ptr);
   ret = cache.put(key, value);
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -205,6 +205,23 @@ TEST_F(FTParserTest, test_cache)
 
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(new_value->dat_block_->mem_block_size_, dat.mem_block_size_);
+}
+
+TEST(FTDictCacheKeyTest, distinguishes_table_generation_and_range)
+{
+  ObDictCacheKey base(1, 500001, 1, 0);
+  ObDictCacheKey same(1, 500001, 1, 0);
+  ObDictCacheKey another_tenant(2, 500001, 1, 0);
+  ObDictCacheKey another_table(1, 500002, 1, 0);
+  ObDictCacheKey another_generation(1, 500001, 2, 0);
+  ObDictCacheKey another_range(1, 500001, 1, 1);
+
+  ASSERT_TRUE(base == same);
+  ASSERT_FALSE(base == another_tenant);
+  ASSERT_FALSE(base == another_table);
+  ASSERT_FALSE(base == another_generation);
+  ASSERT_FALSE(base == another_range);
+  ASSERT_EQ(base.hash(), same.hash());
 }
 
 TEST_F(FTParserTest, test_trie)
@@ -328,8 +345,8 @@ TEST_F(FTParserTest, test_trie)
     }
 
     ObArenaAllocator allocator(ObModIds::TEST);
-    size_t size = ObArrayHashMap::estimate_size(words.size());
-    ObArrayHashMap *map = static_cast<ObArrayHashMap *>(allocator.alloc(size));
+    size_t size = ObFTArrayHashMap::estimate_size(words.size());
+    ObFTArrayHashMap *map = static_cast<ObFTArrayHashMap *>(allocator.alloc(size));
     map->init(words.size());
     for (int i = 0; i < words.size(); i++) {
       ObString str(words[i].size(), words[i].data());

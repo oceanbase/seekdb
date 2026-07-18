@@ -465,35 +465,19 @@ int ObFTRangeDict::build_dict_from_cache(const ObFTCacheRangeContainer &range_co
 int ObFTRangeDict::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &range_container)
 {
   int ret = OB_SUCCESS;
-
-  ObString table_name;
-  switch (desc.type_) {
-  case ObFTDictType::DICT_IK_MAIN: {
-    table_name = ObString(share::OB_FT_DICT_IK_UTF8_TNAME);
-  } break;
-  case ObFTDictType::DICT_IK_QUAN: {
-    table_name = ObString(share::OB_FT_QUANTIFIER_IK_UTF8_TNAME);
-  } break;
-  case ObFTDictType::DICT_IK_STOP: {
-    table_name = ObString(share::OB_FT_STOPWORD_IK_UTF8_TNAME);
-  } break;
-  default:
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("Not supported dict type.", K(ret));
-  }
-
-  if (OB_SUCC(ret)) {
-    SMART_VAR(ObISQLClient::ReadResult, result)
-    {
-      ObFTDictTableIter iter_table(result);
-      if (OB_FAIL(iter_table.init(table_name))) {
-        LOG_WARN("Failed to init iterator.", K(ret));
-      } else if (OB_FAIL(ObFTRangeDict::build_ranges(desc, iter_table, range_container))) {
-        LOG_WARN("Failed to build ranges.", K(ret));
-      }
+  SMART_VAR(ObISQLClient::ReadResult, result)
+  {
+    ObFTDictTableIter iter_table(result);
+    if (desc.is_builtin_) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("built-in dictionary must use compiled data", K(ret), K(desc));
+    } else if (OB_FAIL(iter_table.init(desc))) {
+      LOG_WARN("Failed to init dictionary table iterator", K(ret), K(desc));
+    } else if (OB_FAIL(ObFTRangeDict::build_ranges_concurrently_thread_pool(
+                           desc, iter_table, range_container))) {
+      LOG_WARN("Failed to build dictionary table ranges", K(ret), K(desc));
     }
   }
-
   return ret;
 }
 
@@ -502,10 +486,8 @@ int ObFTRangeDict::try_load_cache(const ObFTDictDesc &desc,
                                   ObFTCacheRangeContainer &range_container)
 {
   int ret = OB_SUCCESS;
-  uint64_t name = static_cast<uint64_t>(desc.type_);
-
   for (int64_t i = 0; OB_SUCC(ret) && i < range_count; ++i) {
-    ObDictCacheKey key(name, desc.type_, i);
+    ObDictCacheKey key(desc.tenant_id_, desc.table_id_, desc.generation_, i);
     ObFTCacheRangeHandle *info = nullptr;
     if (OB_FAIL(range_container.fetch_info_for_dict(info))) {
       LOG_WARN("Failed to fetch info for dict.", K(ret));
