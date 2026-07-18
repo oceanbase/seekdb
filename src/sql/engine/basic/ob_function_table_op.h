@@ -70,6 +70,7 @@ private:
   {
     AISplitRange() : start_(0), end_(0) {}
     AISplitRange(int64_t start, int64_t end) : start_(start), end_(end) {}
+    TO_STRING_KV(K_(start), K_(end));
     int64_t start_;
     int64_t end_;
   };
@@ -77,6 +78,7 @@ private:
   struct AISplitChunk
   {
     AISplitChunk() : chunk_id_(0), chunk_offset_(0), chunk_length_(0), chunk_text_() {}
+    TO_STRING_KV(K_(chunk_id), K_(chunk_offset), K_(chunk_length), K_(chunk_text));
     int64_t chunk_id_;
     int64_t chunk_offset_;
     int64_t chunk_length_;
