@@ -26,6 +26,8 @@ namespace storage
 ObSRMergeCmp::ObSRMergeCmp()
   : cmp_func_(nullptr),
     iter_ids_(nullptr),
+    iter_id_data_(nullptr),
+    is_uint64_id_(false),
     is_inited_(false)
 {
 }
@@ -36,14 +38,19 @@ int ObSRMergeCmp::init(ObDatumMeta id_meta, const ObFixedArray<const ObDatum *, 
   if (OB_ISNULL(iter_ids)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr", K(ret), KP(iter_ids));
+  } else if (OB_UNLIKELY(iter_ids->empty())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("unexpected empty iter ids", K(ret));
   } else {
     iter_ids_ = iter_ids;
+    iter_id_data_ = &iter_ids_->at(0);
     sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(id_meta.type_, id_meta.cs_type_);
     cmp_func_ = basic_funcs->null_first_cmp_;
     if (OB_ISNULL(cmp_func_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to init IRIterLoserTreeCmp", K(ret));
     } else {
+      is_uint64_id_ = id_meta.type_ == common::ObUInt64Type;
       is_inited_ = true;
     }
   }
@@ -55,13 +62,28 @@ int ObSRMergeCmp::cmp(
     const ObSRMergeItem &r,
     int64_t &cmp_ret)
 {
+  return cmp(l.iter_idx_, r.iter_idx_, cmp_ret);
+}
+
+int ObSRMergeCmp::cmp(
+    const int64_t l_iter_idx,
+    const int64_t r_iter_idx,
+    int64_t &cmp_ret)
+{
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret));
   } else {
     int tmp_ret = 0;
-    if (OB_FAIL(cmp_func_(get_id_datum(l.iter_idx_), get_id_datum(r.iter_idx_), tmp_ret))) {
+    const ObDatum &left = get_id_datum(l_iter_idx);
+    const ObDatum &right = get_id_datum(r_iter_idx);
+    if (OB_LIKELY(is_uint64_id_ && !left.is_null() && !right.is_null())) {
+      const uint64_t left_id = left.get_uint64();
+      const uint64_t right_id = right.get_uint64();
+      tmp_ret = left_id < right_id ? -1 : (left_id > right_id ? 1 : 0);
+      cmp_ret = tmp_ret;
+    } else if (OB_FAIL(cmp_func_(left, right, tmp_ret))) {
       LOG_WARN("failed to compare doc id by datum", K(ret));
     } else {
       cmp_ret = tmp_ret;
@@ -83,6 +105,7 @@ ObSRDaaTIterImpl::ObSRDaaTIterImpl()
     buffered_relevances_(),
     next_round_iter_idxes_(),
     next_round_cnt_(0),
+    count_emitted_(false),
     set_datum_func_(nullptr)
 {
 }
@@ -125,15 +148,21 @@ int ObSRDaaTIterImpl::init(
       LOG_WARN("failed to init next round iter idxes array", K(ret));
     } else if (OB_FAIL(next_round_iter_idxes_.prepare_allocate(dim_iters.count()))) {
       LOG_WARN("failed to prepare allocate next round iter idxes array", K(ret));
-    } else if (FALSE_IT(buffered_domain_ids_.set_allocator(iter_allocator_))) {
-    } else if (OB_FAIL(buffered_domain_ids_.init(max_batch_size))) {
+    } else if (!iter_param_->is_count_only()
+        && FALSE_IT(buffered_domain_ids_.set_allocator(iter_allocator_))) {
+    } else if (!iter_param_->is_count_only()
+        && OB_FAIL(buffered_domain_ids_.init(max_batch_size))) {
       LOG_WARN("failed to init buffered domain ids array", K(ret));
-    } else if (OB_FAIL(buffered_domain_ids_.prepare_allocate(max_batch_size))) {
+    } else if (!iter_param_->is_count_only()
+        && OB_FAIL(buffered_domain_ids_.prepare_allocate(max_batch_size))) {
       LOG_WARN("failed to prepare allocate buffered domain ids array", K(ret));
-    } else if (FALSE_IT(buffered_relevances_.set_allocator(iter_allocator_))) {
-    } else if (OB_FAIL(buffered_relevances_.init(max_batch_size))) {
+    } else if (iter_param_->need_project_relevance()
+        && FALSE_IT(buffered_relevances_.set_allocator(iter_allocator_))) {
+    } else if (iter_param_->need_project_relevance()
+        && OB_FAIL(buffered_relevances_.init(max_batch_size))) {
       LOG_WARN("failed to init buffered relevances array", K(ret));
-    } else if (OB_FAIL(buffered_relevances_.prepare_allocate(max_batch_size))) {
+    } else if (iter_param_->need_project_relevance()
+        && OB_FAIL(buffered_relevances_.prepare_allocate(max_batch_size))) {
       LOG_WARN("failed to prepare allocate buffered relevances array", K(ret));
     } else if (OB_FAIL(merge_cmp_.init(iter_param_->id_proj_expr_->datum_meta_, &iter_domain_ids_))) {
       LOG_WARN("failed to init loser tree comparator", K(ret));
@@ -147,6 +176,7 @@ int ObSRDaaTIterImpl::init(
 
     if (OB_SUCC(ret)) {
       next_round_cnt_ = dim_iters.count();
+      count_emitted_ = false;
       input_row_cnt_ = 0;
       output_row_cnt_ = 0;
       is_inited_ = true;
@@ -170,6 +200,7 @@ void ObSRDaaTIterImpl::reset()
   buffered_relevances_.reset();
   next_round_iter_idxes_.reset();
   next_round_cnt_ = 0;
+  count_emitted_ = false;
   input_row_cnt_ = 0;
   output_row_cnt_ = 0;
   is_inited_ = false;
@@ -190,6 +221,7 @@ void ObSRDaaTIterImpl::reuse(const bool switch_tablet)
   if (OB_NOT_NULL(relevance_collector_)) {
     relevance_collector_->reuse();
   }
+  count_emitted_ = false;
   input_row_cnt_ = 0;
   output_row_cnt_ = 0;
 }
@@ -240,6 +272,8 @@ int ObSRDaaTIterImpl::get_next_rows(const int64_t capacity, int64_t &count)
     LOG_WARN("not inited", K(ret));
   } else if (OB_UNLIKELY(0 == capacity)) {
     count = 0;
+  } else if (iter_param_->is_count_only()) {
+    ret = get_next_count(count);
   } else if (0 == dim_iters_->count()) {
     ret = OB_ITER_END;
   } else if (iter_param_->limit_param_->is_valid() && output_row_cnt_ >= iter_param_->limit_param_->limit_) {
@@ -267,6 +301,75 @@ int ObSRDaaTIterImpl::get_next_rows(const int64_t capacity, int64_t &count)
       }
     }
 
+  }
+  return ret;
+}
+
+int ObSRDaaTIterImpl::get_next_count(int64_t &count)
+{
+  int ret = OB_SUCCESS;
+  int64_t matched_count = 0;
+  count = 0;
+  if (count_emitted_) {
+    ret = OB_ITER_END;
+  } else if (0 == dim_iters_->count()) {
+    // A pushed COUNT(*) must still emit one partial row for an empty query.
+  } else if (OB_FAIL(pre_process())) {
+    if (OB_ITER_END == ret) {
+      ret = OB_SUCCESS;
+    } else {
+      LOG_WARN("failed to pre process count-only retrieval", K(ret));
+    }
+  }
+
+  while (OB_SUCC(ret) && dim_iters_->count() > 0) {
+    bool got_valid_id = false;
+    double relevance = 0.0;
+    const ObDatum *id_datum = nullptr;
+    if (OB_FAIL(fill_merge_heap())) {
+      if (OB_ITER_END == ret) {
+        ret = OB_SUCCESS;
+        break;
+      } else {
+        LOG_WARN("failed to fill count-only merge heap", K(ret));
+      }
+    } else if (OB_FAIL(collect_dims_by_id(id_datum, relevance, got_valid_id))) {
+      LOG_WARN("failed to collect count-only dimensions", K(ret));
+    } else if (got_valid_id) {
+      ++matched_count;
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    input_row_cnt_ += matched_count;
+    output_row_cnt_ += matched_count;
+    if (OB_FAIL(project_count(matched_count))) {
+      LOG_WARN("failed to project count-only result", K(ret), K(matched_count));
+    } else {
+      count = 1;
+      count_emitted_ = true;
+    }
+  }
+  return ret;
+}
+
+int ObSRDaaTIterImpl::project_count(const int64_t matched_count)
+{
+  int ret = OB_SUCCESS;
+  ObExpr *count_expr = iter_param_->count_expr_;
+  ObEvalCtx *eval_ctx = iter_param_->eval_ctx_;
+  if (OB_ISNULL(count_expr) || OB_ISNULL(eval_ctx)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null count-only projection", K(ret), KP(count_expr), KP(eval_ctx));
+  } else {
+    ObEvalCtx::BatchInfoScopeGuard guard(*eval_ctx);
+    guard.set_batch_idx(0);
+    ObDatum &count_datum = count_expr->locate_datum_for_write(*eval_ctx);
+    count_datum.set_int(matched_count);
+    if (eval_ctx->is_vectorized()) {
+      count_expr->get_evaluated_flags(*eval_ctx).set(0);
+    }
+    count_expr->set_evaluated_projected(*eval_ctx);
   }
   return ret;
 }
@@ -323,7 +426,6 @@ int ObSRDaaTIterImpl::fill_merge_heap()
     } else if (OB_FAIL(merge_heap_->push(item))) {
       LOG_WARN("fail to push item to merge heap", K(ret), K(item));
     } else {
-      LOG_DEBUG("push item to merge heap", K(ret), K(i), K(iter_idx), K(next_round_cnt_), K(item), K(iter_domain_ids_[iter_idx]));
     }
   }
 
@@ -354,26 +456,36 @@ int ObSRDaaTIterImpl::collect_dims_by_id(const ObDatum *&id_datum, double &relev
     }
     if (OB_FAIL(merge_heap_->top(top_item))) {
       LOG_WARN("failed to get top item from merge heap", K(ret));
-    } else if (OB_FAIL(relevance_collector_->collect_one_dim(top_item->iter_idx_, top_item->relevance_))) {
-      LOG_WARN("failed to collect one dimension", K(ret));
-    } else if (FALSE_IT(iter_idx = top_item->iter_idx_)) {
-    } else if (OB_FAIL(merge_heap_->pop())) {
-      LOG_WARN("failed to pop top item in heap", K(ret));
     } else {
-      next_round_iter_idxes_[next_round_cnt_++] = iter_idx;
+      iter_idx = top_item->iter_idx_;
+      if (!predicate_only_fast_path()
+          && OB_FAIL(relevance_collector_->collect_one_dim(iter_idx, top_item->relevance_))) {
+        LOG_WARN("failed to collect one dimension", K(ret));
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(merge_heap_->pop())) {
+        LOG_WARN("failed to pop top item in heap", K(ret));
+      } else {
+        next_round_iter_idxes_[next_round_cnt_++] = iter_idx;
+      }
     }
   }
 
   if (OB_SUCC(ret)) {
     id_datum = iter_domain_ids_[iter_idx];
-    LOG_DEBUG("collect one dim", KPC(id_datum));
     if (OB_ISNULL(id_datum)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null id datum", K(ret));
-    } else if (OB_FAIL(relevance_collector_->get_result(relevance, got_valid_id))) {
-      LOG_WARN("failed to get result", K(ret));
-    } else if (got_valid_id && OB_FAIL(process_collected_row(*id_datum, relevance))) {
-      LOG_WARN("failed to process collected row", K(ret));
+    } else {
+      if (predicate_only_fast_path()) {
+        got_valid_id = true;
+      } else if (OB_FAIL(relevance_collector_->get_result(relevance, got_valid_id))) {
+        LOG_WARN("failed to get result", K(ret));
+      }
+      if (OB_FAIL(ret)) {
+      } else if (got_valid_id && OB_FAIL(process_collected_row(*id_datum, relevance))) {
+        LOG_WARN("failed to process collected row", K(ret));
+      }
     }
   }
 
@@ -435,12 +547,16 @@ int ObSRDaaTIterImpl::cache_result(int64_t &count, const ObDatum &id_datum, cons
   if (limit_param->is_valid() && input_row_cnt_ <= offset) {
     // TODO: Maybe we should not process offset logic here
     // don't need to project
-  } else if (OB_UNLIKELY(count >= buffered_domain_ids_.count() || count >= buffered_relevances_.count())) {
+  } else if (OB_UNLIKELY(count >= buffered_domain_ids_.count()
+      || (iter_param_->need_project_relevance()
+          && count >= buffered_relevances_.count()))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid buffered idx", K(ret), K(count), K(buffered_domain_ids_.count()), K(buffered_relevances_.count()));
   } else {
     buffered_domain_ids_[count].from_datum(id_datum);
-    buffered_relevances_[count] = relevance;
+    if (iter_param_->need_project_relevance()) {
+      buffered_relevances_[count] = relevance;
+    }
     ++count;
     ++output_row_cnt_;
     if (limit_param->is_valid() && output_row_cnt_ >= limit) {
@@ -460,22 +576,20 @@ int ObSRDaaTIterImpl::project_results(const int64_t count)
 
   if (eval_ctx->is_vectorized()) {
     sql::ObBitVector &id_evaluated_flags = id_proj_expr->get_evaluated_flags(*eval_ctx);
+    ObDatum *id_proj_datums = id_proj_expr->locate_batch_datums(*eval_ctx);
     for (int64_t i = 0; i < count; ++i) {
-      guard.set_batch_idx(i);
-      ObDatum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
-      set_datum_func_(id_proj_datum, buffered_domain_ids_[i]);
-      id_evaluated_flags.set(i);
-      id_proj_expr->set_evaluated_projected(*eval_ctx);
+      set_datum_func_(id_proj_datums[i], buffered_domain_ids_[i]);
     }
+    id_evaluated_flags.set_all(count);
+    id_proj_expr->set_evaluated_projected(*eval_ctx);
     if (iter_param_->need_project_relevance()) {
       sql::ObBitVector &relevance_evaluated_flags = relevance_proj_expr->get_evaluated_flags(*eval_ctx);
+      ObDatum *relevance_proj_datums = relevance_proj_expr->locate_batch_datums(*eval_ctx);
       for (int64_t i = 0; i < count; ++i) {
-        guard.set_batch_idx(i);
-        ObDatum &relevance_proj_datum = relevance_proj_expr->locate_datum_for_write(*eval_ctx);
-        relevance_proj_datum.set_double(buffered_relevances_[i]);
-        relevance_evaluated_flags.set(i);
-        relevance_proj_expr->set_evaluated_projected(*eval_ctx);
+        relevance_proj_datums[i].set_double(buffered_relevances_[i]);
       }
+      relevance_evaluated_flags.set_all(count);
+      relevance_proj_expr->set_evaluated_projected(*eval_ctx);
     }
   } else if (OB_UNLIKELY(1 != count)) {
     ret = OB_ERR_UNEXPECTED;
@@ -485,9 +599,11 @@ int ObSRDaaTIterImpl::project_results(const int64_t count)
     ObDatum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
     set_datum_func_(id_proj_datum, buffered_domain_ids_[0]);
     id_proj_expr->set_evaluated_projected(*eval_ctx);
-    ObDatum &relevance_proj_datum = relevance_proj_expr->locate_datum_for_write(*eval_ctx);
-    relevance_proj_datum.set_double(buffered_relevances_[0]);
-    relevance_proj_expr->set_evaluated_projected(*eval_ctx);
+    if (iter_param_->need_project_relevance()) {
+      ObDatum &relevance_proj_datum = relevance_proj_expr->locate_datum_for_write(*eval_ctx);
+      relevance_proj_datum.set_double(buffered_relevances_[0]);
+      relevance_proj_expr->set_evaluated_projected(*eval_ctx);
+    }
   }
   return ret;
 }

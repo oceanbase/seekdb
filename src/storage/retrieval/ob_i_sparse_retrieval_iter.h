@@ -103,6 +103,7 @@ struct ObSparseRetrievalMergeParam
       limit_param_(nullptr),
       eval_ctx_(nullptr),
       id_proj_expr_(nullptr),
+      count_expr_(nullptr),
       relevance_expr_(nullptr),
       relevance_proj_expr_(nullptr),
       filter_expr_(nullptr),
@@ -112,15 +113,17 @@ struct ObSparseRetrievalMergeParam
   {}
   ~ObSparseRetrievalMergeParam() {}
   bool need_project_relevance() const { return relevance_proj_expr_ != nullptr; }
+  bool is_count_only() const { return count_expr_ != nullptr; }
   bool need_filter() const { return filter_expr_ != nullptr; }
   bool need_pushdown_topk() const { return topk_limit_ > 0; }
   TO_STRING_KV(KPC_(dim_weights), KPC(limit_param_), KP_(eval_ctx),
-      KP_(id_proj_expr), KP_(relevance_expr), KP_(relevance_proj_expr), KP_(filter_expr),
+      KP_(id_proj_expr), KP_(count_expr), KP_(relevance_expr), KP_(relevance_proj_expr), KP_(filter_expr),
       K_(topk_limit), K_(max_batch_size));
   const ObIArray<double> *dim_weights_; // score weight for each dimension
   const common::ObLimitParam *limit_param_;
   sql::ObEvalCtx *eval_ctx_;
   sql::ObExpr *id_proj_expr_;
+  sql::ObExpr *count_expr_;
   sql::ObExpr *relevance_expr_;
   sql::ObExpr *relevance_proj_expr_;
   sql::ObExpr *filter_expr_; // filter expr on score

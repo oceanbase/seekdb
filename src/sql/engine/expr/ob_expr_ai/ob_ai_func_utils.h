@@ -421,6 +421,9 @@ public:
    // completion
    int call_completion(ObString &prompt, ObJsonObject *config, ObString &result);
    int call_completion_vector(ObArray<ObString> &prompts, ObJsonObject *config, ObArray<ObString> &results);
+   // ai_parse_doc: build an OpenAI-compatible vision message (image_url + text prompt)
+   // and send it to the completion endpoint.
+   int call_parse_doc(ObString &prompt, const ObIArray<ObString> &image_urls, ObJsonObject *config, ObString &result);
    // dense_embedding
    int call_dense_embedding(ObString &content, ObJsonObject *config, ObString &result);
    int call_dense_embedding_vector(ObArray<ObString> &contents, ObJsonObject *config, ObArray<ObString> &results);
@@ -432,6 +435,8 @@ public:
    bool is_dense_embedding_type() {return info_.type_ == share::EndpointType::DENSE_EMBEDDING;}
    bool is_rerank_type() {return info_.type_ == share::EndpointType::RERANK;}
    const ObString get_request_model_name();
+   int build_vision_body(const ObString &request_model_name, ObString &prompt,
+                         const ObIArray<ObString> &image_urls, ObJsonObject *config, ObJsonObject *&body);
    ObIAllocator *allocator_;
    const ObAIFuncExprInfo &info_;
    const ObAiModelEndpointInfo &endpoint_info_;

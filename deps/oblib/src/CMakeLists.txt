@@ -342,7 +342,7 @@ else()
     ${DEP_DIR}/lib/sqlite/libsqlite3.a
     ${DEP_DIR}/lib/libz.a
     ${DEP_DIR}/lib/libicui18n.a
-    ${DEP_DIR}/lib/libicustubdata.a
+    ${DEP_DIR}/lib/libicudata.a
     ${DEP_DIR}/lib/libicuuc.a
     ${DEP_DIR}/lib/libprotobuf-c.a
     $<$<NOT:$<BOOL:${BUILD_EMBED_MODE}>>:${_LIB_PATH}/libarrow.a>

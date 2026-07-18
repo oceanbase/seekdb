@@ -5585,6 +5585,15 @@ int ObLogPlan::try_push_aggr_into_table_scan(ObLogicalOperator *top,
     ObLogTableScan *scan_op = static_cast<ObLogTableScan*>(top);
     bool is_get = false;
     bool has_npd_filter = false; //has non-pushdown filter
+    const bool is_text_count_pushdown = scan_op->is_text_retrieval_scan()
+        && !scan_op->use_index_merge()
+        && groupby_columns.empty()
+        && 1 == aggr_items.count()
+        && OB_NOT_NULL(aggr_items.at(0))
+        && T_FUN_COUNT == aggr_items.at(0)->get_expr_type()
+        && 0 == aggr_items.at(0)->get_real_param_count()
+        && scan_op->get_filter_exprs().empty()
+        && scan_op->get_pushdown_filter_exprs().empty();
     if (OB_FAIL(scan_op->is_table_get(is_get))) {
       LOG_WARN("failed to check is get", K(ret));
     } else if (OB_FAIL(scan_op->has_nonpushdown_filter(has_npd_filter))) {
@@ -5592,7 +5601,7 @@ int ObLogPlan::try_push_aggr_into_table_scan(ObLogicalOperator *top,
     } else if (is_get ||
                has_npd_filter ||
                scan_op->get_index_back() ||
-               scan_op->is_text_retrieval_scan() ||
+               (scan_op->is_text_retrieval_scan() && !is_text_count_pushdown) ||
                scan_op->is_sample_scan() ||
                (scan_op->is_index_scan() && !groupby_columns.empty()) ||
                (is_descending_direction(scan_op->get_scan_direction()) && !groupby_columns.empty())) {
@@ -5601,7 +5610,7 @@ int ObLogPlan::try_push_aggr_into_table_scan(ObLogicalOperator *top,
       //2. TSC is sample scan operator
       //3. TSC contains filters that cannot be pushed down to the storage
       //4. TSC is point get
-      //5. TSC is text retrieval scan
+      //5. TSC is a text retrieval scan other than pure scalar COUNT(*)
       //6. TSC is index table scan with group by
           } else if (OB_FAIL(scan_op->get_pushdown_aggr_exprs().assign(aggr_items))) {
       LOG_WARN("failed to assign group exprs", K(ret));
@@ -14650,7 +14659,7 @@ int ObLogPlan::prepare_text_retrieval_scan(const ObIArray<ObRawExpr *> &scan_mat
   } else {
     ObTextRetrievalInfo &tr_info = table_scan->get_text_retrieval_info();
     tr_info.match_expr_ = match_against;
-    tr_info.pushdown_match_filter_ = match_pred;
+    tr_info.pushdown_match_filter_ = tr_info.need_calc_relevance_ ? match_pred : nullptr;
     // in new version, doc_id_idx_tid_ is invalid.
     table_scan->set_doc_id_index_table_id(tr_info.doc_id_idx_tid_);
     if (table_scan->is_vec_adaptive_scan() || table_scan->is_vec_idx_scan_post_filter()) {
@@ -14895,8 +14904,9 @@ int ObLogPlan::prepare_text_retrieval_info(const uint64_t ref_table_id,
     }
   }
   if (OB_SUCC(ret)) {
-    /*
-    if (OB_FAIL(ObTransformUtils::check_need_calc_match_score(get_optimizer_context().get_exec_ctx(),
+    if (BOOLEAN_MODE == match_against->get_mode_flag()) {
+      need_calc_relevance = true;
+    } else if (OB_FAIL(ObTransformUtils::check_need_calc_match_score(get_optimizer_context().get_exec_ctx(),
                                                               get_stmt(),
                                                               match_against,
                                                               need_calc_relevance,
@@ -14906,7 +14916,6 @@ int ObLogPlan::prepare_text_retrieval_info(const uint64_t ref_table_id,
                OB_FAIL(append_array_no_dup(get_optimizer_context().get_query_ctx()->all_expr_constraints_, constraints))) {
       LOG_WARN("failed to append array no dup", K(ret));
     }
-    */
     tr_info.match_expr_ = match_against;
     tr_info.inv_idx_tid_ = inv_idx_tid;
     tr_info.fwd_idx_tid_ = fwd_idx_tid;

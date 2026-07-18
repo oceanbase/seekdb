@@ -106,6 +106,8 @@ DEF_SIMPLE_CMD_RESOLVER(ObReloadGtsResolver);
 
 DEF_SIMPLE_CMD_RESOLVER(ObClearMergeErrorResolver);
 
+DEF_SIMPLE_CMD_RESOLVER(ObRefreshFulltextDictResolver);
+
 DEF_SIMPLE_CMD_RESOLVER(ObUpgradeVirtualSchemaResolver);
 
 DEF_SIMPLE_CMD_RESOLVER(ObCancelTaskResolver);

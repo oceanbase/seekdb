@@ -2345,6 +2345,26 @@ int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
     if (OB_FAIL(generate_text_ir_spec_exprs(tr_info, *ir_scan_ctdef))) {
       LOG_WARN("failed to generate text ir spec exprs", K(ret), KPC(match_against));
     } else {
+      const ObIArray<ObAggFunRawExpr *> &pushdown_aggr_exprs = op.get_pushdown_aggr_exprs();
+      if (!pushdown_aggr_exprs.empty()) {
+        ObAggFunRawExpr *count_expr = pushdown_aggr_exprs.count() == 1
+            ? pushdown_aggr_exprs.at(0) : nullptr;
+        if (OB_ISNULL(count_expr)
+            || OB_UNLIKELY(T_FUN_COUNT != count_expr->get_expr_type()
+                || 0 != count_expr->get_real_param_count())) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected text retrieval pushdown aggregate", K(ret), K(pushdown_aggr_exprs));
+        } else if (OB_FAIL(cg_.generate_rt_expr(*count_expr, ir_scan_ctdef->count_expr_))) {
+          LOG_WARN("failed to generate text retrieval count expr", K(ret));
+        } else if (OB_FAIL(cg_.mark_expr_self_produced(count_expr))) {
+          LOG_WARN("failed to mark text retrieval count expr", K(ret));
+        } else if (OB_UNLIKELY(1 != ir_scan_ctdef->result_output_.count())) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected count-only text retrieval output", K(ret), K(ir_scan_ctdef->result_output_));
+        } else {
+          ir_scan_ctdef->result_output_.at(0) = ir_scan_ctdef->count_expr_;
+        }
+      }
       const ObCostTableScanInfo *est_cost_info = op.get_est_cost_info();
       int partition_row_cnt = 0;
       if (!use_approx_pre_agg

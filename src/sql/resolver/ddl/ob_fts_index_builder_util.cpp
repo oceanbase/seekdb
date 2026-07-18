@@ -14,17 +14,21 @@
  * limitations under the License.
  */
 
+#include "storage/fts/ob_fts_literal.h"
 #define USING_LOG_PREFIX STORAGE_FTS
 #include "ob_fts_index_builder_util.h"
 #include "ob_index_builder_util.h"
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
+#include "storage/fts/ob_fts_plugin_helper.h"
 #include "storage/fts/dict/ob_gen_dic_loader.h"
 #include "storage/fts/dict/ob_dic_lock.h"
 #include "share/ob_server_struct.h"
 #include "rootserver/ob_root_service.h"
 #include "plugin/sys/ob_plugin_helper.h"
 #include "share/schema/ob_schema_utils.h"  // relocated-definition owner
+#include "plugin/interface/ob_plugin_ftparser_intf.h"
+#include "storage/fts/ob_fts_parser_property.h"
 
 namespace oceanbase
 {

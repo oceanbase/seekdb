@@ -98,7 +98,8 @@ OB_DEF_SERIALIZE(ObDASIRScanCtDef)
     OB_UNIS_ENCODE(avg_doc_len_est_spec_);
   }
   LST_DO_CODE(OB_UNIS_ENCODE,
-    avg_doc_token_cnt_expr_);
+    avg_doc_token_cnt_expr_,
+    count_expr_);
   return ret;
 }
 
@@ -129,7 +130,8 @@ OB_DEF_DESERIALIZE(ObDASIRScanCtDef)
     OB_UNIS_DECODE(avg_doc_len_est_spec_);
   }
   LST_DO_CODE(OB_UNIS_DECODE,
-    avg_doc_token_cnt_expr_);
+    avg_doc_token_cnt_expr_,
+    count_expr_);
   return ret;
 }
 
@@ -158,7 +160,8 @@ OB_DEF_SERIALIZE_SIZE(ObDASIRScanCtDef)
     OB_UNIS_ADD_LEN(avg_doc_len_est_spec_);
   }
   LST_DO_CODE(OB_UNIS_ADD_LEN,
-    avg_doc_token_cnt_expr_);
+    avg_doc_token_cnt_expr_,
+    count_expr_);
   return len;
 }
 
@@ -235,9 +238,19 @@ int ObDocIdExt::from_obj(const ObObj &obj)
 int ObDocIdExt::from_datum(const ObDatum &datum)
 {
   int ret = common::OB_SUCCESS;
-  int64_t dummy_pos = 0;
-  if (OB_FAIL(datum_.deep_copy(datum, buf_, OB_DOC_ID_EXT_SIZE, dummy_pos))) {
-    LOG_WARN("failed to copy datum to doc id ext", K(ret));
+  if (OB_LIKELY(!datum.is_null()
+      && OB_DOC_ID_COLUMN_BYTE_LENGTH == datum.len_)) {
+    // FTS PERF OPT 8: generated DocIDs are fixed-size binary values.  This is
+    // called for every posting and merged result, so avoid the generic datum
+    // deep-copy bounds/position bookkeeping on the overwhelmingly common path.
+    datum_ = datum;
+    MEMCPY(buf_, datum.ptr_, OB_DOC_ID_COLUMN_BYTE_LENGTH);
+    datum_.ptr_ = buf_;
+  } else {
+    int64_t dummy_pos = 0;
+    if (OB_FAIL(datum_.deep_copy(datum, buf_, OB_DOC_ID_EXT_SIZE, dummy_pos))) {
+      LOG_WARN("failed to copy datum to doc id ext", K(ret));
+    }
   }
   return ret;
 }

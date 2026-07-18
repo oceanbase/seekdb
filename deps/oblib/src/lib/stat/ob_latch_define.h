@@ -299,7 +299,9 @@ LATCH_DEF(STORAGE_CACHE_POLICY_TASK_LOCK, 354, "storage cache policy task lock",
 LATCH_DEF(UNIQUE_CHECKING_CONTEXT_LOCK, 355, "unique checking context lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(TABLET_SPLIT_CONTEXT_LOCK, 356, "tablet split context lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(MAX_ID_CACHE_LOCK, 357, "max id cache", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(LATCH_END, 358, "latch end", LATCH_FIFO, 2000, 0, true)
+LATCH_DEF(OB_FTS_STOP_TOKEN_CHECKER_GEN_LOCK, 358, "ob fts stop token checker gen lock", LATCH_FIFO, 2000, 0, true)
+LATCH_DEF(OB_GEN_DIC_LOADER_LOCK, 359, "ob gen dic loader lock", LATCH_FIFO, 2000, 0, true)
+LATCH_DEF(LATCH_END, 360, "latch end", LATCH_FIFO, 2000, 0, true)
 
 #endif
 

@@ -1545,6 +1545,148 @@ int ObAIFuncModel::call_completion(ObString &prompt, ObJsonObject *config, ObStr
   return ret;
 }
 
+int ObAIFuncModel::build_vision_body(const ObString &request_model_name, ObString &prompt,
+                                     const ObIArray<ObString> &image_urls, ObJsonObject *config, ObJsonObject *&body)
+{
+  // {"model": M, "messages":[{"role":"user","content":[
+  //     {"type":"image_url","image_url":{"url":IMG}}, ...one per page...,
+  //     {"type":"text","text":PROMPT}]}]}
+  int ret = OB_SUCCESS;
+  ObJsonObject *body_obj = nullptr;
+  ObJsonString *model_str = nullptr;
+  ObJsonArray *messages_array = nullptr;
+  ObJsonObject *user_msg = nullptr;
+  ObJsonString *user_role = nullptr;
+  ObJsonArray *content_array = nullptr;
+  ObJsonObject *text_item = nullptr;
+  ObJsonString *text_type_str = nullptr;
+  ObJsonString *text_str = nullptr;
+  ObString model_name_copy = request_model_name;
+  ObString user_role_name("user");
+  ObString image_url_type("image_url");
+  ObString text_type("text");
+  if (image_urls.count() <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("no image url", K(ret));
+  } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(*allocator_, body_obj))) {
+    LOG_WARN("fail to get body obj", K(ret));
+  } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(*allocator_, model_name_copy, model_str))) {
+    LOG_WARN("fail to get model str", K(ret));
+  } else if (OB_FAIL(body_obj->add("model", model_str))) {
+    LOG_WARN("fail to add model", K(ret));
+  } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_array(*allocator_, messages_array))) {
+    LOG_WARN("fail to get messages array", K(ret));
+  } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(*allocator_, user_msg))) {
+    LOG_WARN("fail to get user msg", K(ret));
+  } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(*allocator_, user_role_name, user_role))) {
+    LOG_WARN("fail to get user role", K(ret));
+  } else if (OB_FAIL(user_msg->add("role", user_role))) {
+    LOG_WARN("fail to add role", K(ret));
+  } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_array(*allocator_, content_array))) {
+    LOG_WARN("fail to get content array", K(ret));
+  }
+  // one image_url content item per page
+  for (int64_t i = 0; OB_SUCC(ret) && i < image_urls.count(); ++i) {
+    ObJsonObject *image_item = nullptr;
+    ObJsonString *image_type_str = nullptr;
+    ObJsonObject *image_url_obj = nullptr;
+    ObJsonString *url_str = nullptr;
+    ObString one_url = image_urls.at(i);
+    if (one_url.empty()) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("empty image url", K(ret), K(i));
+    } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(*allocator_, image_item))) {
+      LOG_WARN("fail to get image item", K(ret));
+    } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(*allocator_, image_url_type, image_type_str))) {
+      LOG_WARN("fail to get image type", K(ret));
+    } else if (OB_FAIL(image_item->add("type", image_type_str))) {
+      LOG_WARN("fail to add image type", K(ret));
+    } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(*allocator_, image_url_obj))) {
+      LOG_WARN("fail to get image url obj", K(ret));
+    } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(*allocator_, one_url, url_str))) {
+      LOG_WARN("fail to get url str", K(ret));
+    } else if (OB_FAIL(image_url_obj->add("url", url_str))) {
+      LOG_WARN("fail to add url", K(ret));
+    } else if (OB_FAIL(image_item->add("image_url", image_url_obj))) {
+      LOG_WARN("fail to add image_url obj", K(ret));
+    } else if (OB_FAIL(content_array->append(image_item))) {
+      LOG_WARN("fail to append image item", K(ret));
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(*allocator_, text_item))) {
+    LOG_WARN("fail to get text item", K(ret));
+  } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(*allocator_, text_type, text_type_str))) {
+    LOG_WARN("fail to get text type", K(ret));
+  } else if (OB_FAIL(text_item->add("type", text_type_str))) {
+    LOG_WARN("fail to add text type", K(ret));
+  } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(*allocator_, prompt, text_str))) {
+    LOG_WARN("fail to get text str", K(ret));
+  } else if (OB_FAIL(text_item->add("text", text_str))) {
+    LOG_WARN("fail to add text", K(ret));
+  } else if (OB_FAIL(content_array->append(text_item))) {
+    LOG_WARN("fail to append text item", K(ret));
+  } else if (OB_FAIL(user_msg->add("content", content_array))) {
+    LOG_WARN("fail to add content", K(ret));
+  } else if (OB_FAIL(messages_array->append(user_msg))) {
+    LOG_WARN("fail to append user msg", K(ret));
+  } else if (OB_FAIL(body_obj->add("messages", messages_array))) {
+    LOG_WARN("fail to add messages", K(ret));
+  } else if (OB_NOT_NULL(config) && OB_FAIL(ObAIFuncJsonUtils::compact_json_object(*allocator_, config, body_obj))) {
+    LOG_WARN("fail to merge config", K(ret));
+  } else {
+    body = body_obj;
+  }
+  return ret;
+}
+
+int ObAIFuncModel::call_parse_doc(ObString &prompt, const ObIArray<ObString> &image_urls, ObJsonObject *config, ObString &result)
+{
+  int ret = OB_SUCCESS;
+  ObArray<ObString> headers;
+  ObJsonObject *body = nullptr;
+  ObJsonObject *response = nullptr;
+  ObIJsonBase *result_base = nullptr;
+  ObAIFuncIComplete *complete_provider = nullptr;
+  ObString result_str;
+  ObAIFuncClient client;
+  ObString unencrypted_access_key;
+  ObString request_model_name = get_request_model_name();
+  if (!is_completion_type()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("info type is not completion", K(ret));
+    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_parse_doc, model type is not completion");
+  } else if (OB_FAIL(ObAIFuncUtils::get_complete_provider(*allocator_, endpoint_info_.get_provider(), complete_provider))) {
+    LOG_WARN("Failed to get complete provider", K(ret));
+  } else if (OB_FAIL(endpoint_info_.get_unencrypted_access_key(*allocator_, unencrypted_access_key))) {
+    LOG_WARN("Failed to get unencrypted access key", K(ret));
+  } else if (OB_FAIL(complete_provider->get_header(*allocator_, unencrypted_access_key, headers))) {
+    LOG_WARN("Failed to get header", K(ret));
+  } else if (OB_FAIL(build_vision_body(request_model_name, prompt, image_urls, config, body))) {
+    LOG_WARN("Failed to build vision body", K(ret));
+  } else if (OB_FAIL(client.send_post(*allocator_, endpoint_info_.get_url(), headers, body, response))) {
+    LOG_WARN("Failed to send post", K(ret));
+  } else if (OB_FAIL(complete_provider->parse_output(*allocator_, response, result_base))) {
+    LOG_WARN("Failed to parse output", K(ret));
+  } else if (OB_FAIL(ObAIFuncJsonUtils::print_json_to_str(*allocator_, result_base, result_str))) {
+    LOG_WARN("Failed to print json to string", K(ret));
+  } else {
+    result = result_str;
+  }
+  if (ret == OB_INVALID_DATA) {
+    ObString response_str;
+    if (OB_SUCCESS == ObAIFuncJsonUtils::print_json_to_str(*allocator_, response, response_str)) {
+      char http_message_str[1024];
+      snprintf(http_message_str, sizeof(http_message_str), "unexpected http message: %s", response_str.ptr());
+      ObString ob_http_message_str(http_message_str);
+      FORWARD_USER_ERROR(ret, ob_http_message_str.ptr());
+    } else {
+      FORWARD_USER_ERROR(ret, "unexpected http message");
+    }
+  }
+  return ret;
+}
+
 int ObAIFuncModel::call_completion_vector(ObArray<ObString> &prompts, ObJsonObject *config, ObArray<ObString> &results)
 {
   int ret = OB_SUCCESS;

@@ -107,6 +107,59 @@ int ObFTDictTableIter::init(const ObString &table_name)
   return ret;
 }
 
+int ObFTDictTableIter::init(const ObString &db_name, const ObString &table_name)
+{
+  int ret = OB_SUCCESS;
+  common::ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
+
+  if (IS_INIT) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("Inited twice.", K(ret));
+  } else if (OB_ISNULL(sql_proxy)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("sql proxy is null", K(ret));
+  } else if (OB_UNLIKELY(table_name.empty())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("custom dict table name is empty", K(ret));
+  } else {
+    SMART_VAR(ObSqlString, sql_string)
+    {
+      if (db_name.empty()) {
+        if (OB_FAIL(sql_string.append_fmt("SELECT word FROM `%.*s` ORDER BY word",
+                                          table_name.length(), table_name.ptr()))) {
+          LOG_WARN("Failed to append sql", K(ret));
+        }
+      } else if (OB_FAIL(sql_string.append_fmt("SELECT word FROM `%.*s`.`%.*s` ORDER BY word",
+                                               db_name.length(), db_name.ptr(),
+                                               table_name.length(), table_name.ptr()))) {
+        LOG_WARN("Failed to append sql", K(ret));
+      }
+      if (OB_FAIL(ret)) {
+        // already logged
+      } else if (OB_FAIL(sql_proxy->read(res_, sql_string.ptr()))) {
+        LOG_WARN("Failed to execute custom dict sql", K(ret), K(sql_string));
+      }
+    }
+
+    if (OB_FAIL(ret)) {
+      // already logged
+    } else if (OB_ISNULL(res_.get_result())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("Failed to get result", K(ret));
+    } else if (OB_FAIL(res_.get_result()->next())) {
+      if (OB_ITER_END != ret) {
+        LOG_WARN("Failed to get next row", K(ret));
+      } else {
+        is_inited_ = true;
+      }
+    } else {
+      is_inited_ = true;
+    }
+  }
+
+  return ret;
+}
+
 void ObFTDictTableIter::reset()
 {
   res_.close();

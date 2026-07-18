@@ -27,8 +27,10 @@
 #include "observer/scheduler/ob_dag_warning_history_mgr.h"
 #include "observer/omt/ob_tenant.h" //ObTenant
 #include "rootserver/freeze/ob_major_freeze_helper.h" //ObMajorFreezeHelper
+#include "lib/string/ob_sql_string.h"
 #include "pl/pl_cache/ob_pl_cache_mgr.h"
 #include "sql/plan_cache/ob_ps_cache.h"
+#include "storage/fts/ob_fts_plugin_helper.h"
 
 #include "rootserver/ob_tenant_event_def.h"
 #include "sql/engine/cmd/ob_redis_importer.h"
@@ -549,6 +551,69 @@ int ObClearMergeErrorExecutor::execute(ObExecContext &ctx, ObClearMergeErrorStmt
   } else if (OB_FAIL(GCTX.root_service_->admin_clear_merge_error(arg))) {
 		LOG_WARN("clear merge error failed", K(ret), "rpc_arg", arg);
 	}
+  return ret;
+}
+
+// seekdb: ALTER SYSTEM REFRESH FULLTEXT DICT db.table
+int ObRefreshFulltextDictExecutor::execute(ObExecContext &ctx, ObRefreshFulltextDictStmt &stmt)
+{
+  int ret = OB_SUCCESS;
+  ObSQLSessionInfo *session = ctx.get_my_session();
+  if (OB_ISNULL(session)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session is null", K(ret));
+  } else {
+    share::schema::ObSchemaGetterGuard schema_guard;
+    const share::schema::ObTableSchema *table_schema = nullptr;
+    const share::schema::ObDatabaseSchema *database_schema = nullptr;
+    const ObString &database_name = stmt.get_database_name();
+    const ObString &table_name = stmt.get_table_name();
+    if (OB_ISNULL(GCTX.schema_service_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("schema service is null", K(ret));
+    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+      LOG_WARN("get schema guard failed", K(ret));
+    } else if (OB_FAIL(schema_guard.get_database_schema(database_name, database_schema))) {
+      LOG_WARN("get database schema failed", K(ret), K(database_name));
+    } else if (OB_ISNULL(database_schema)) {
+      ret = OB_ERR_BAD_DATABASE;
+      LOG_WARN("database not exist", K(ret), K(database_name));
+    } else if (OB_FAIL(schema_guard.get_table_schema(database_schema->get_database_id(),
+                                                     table_name,
+                                                     false, /*is_index*/
+                                                     table_schema))) {
+      LOG_WARN("get table schema failed", K(ret), K(table_name));
+    } else if (OB_ISNULL(table_schema)) {
+      ret = OB_TABLE_NOT_EXIST;
+      LOG_WARN("table not exist", K(ret), K(database_name), K(table_name));
+    } else if (!table_schema->is_fulltext_dict()) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("table is not a fulltext dictionary table", K(ret), K(database_name), K(table_name));
+      LOG_USER_ERROR(OB_INVALID_ARGUMENT, "table is not a fulltext dictionary table");
+    } else {
+      ObSqlString qualified_table_name;
+      int64_t range_count = 0;
+      const ObString &canonical_database_name = database_schema->get_database_name_str();
+      const ObString &canonical_table_name = table_schema->get_table_name_str();
+      if (OB_FAIL(qualified_table_name.append_fmt("%.*s.%.*s",
+                                                  canonical_database_name.length(),
+                                                  canonical_database_name.ptr(),
+                                                  canonical_table_name.length(),
+                                                  canonical_table_name.ptr()))) {
+        LOG_WARN("build qualified dictionary table name failed", K(ret),
+                 K(canonical_database_name), K(canonical_table_name));
+      } else if (OB_FAIL(storage::ObFTParsePluginData::instance().refresh_custom_dict(
+                     table_schema->get_table_id(),
+                     qualified_table_name.string(),
+                     range_count))) {
+        LOG_WARN("refresh custom fulltext dict failed", K(ret),
+                 K(database_name), K(table_name));
+      } else {
+        LOG_INFO("custom fulltext dict refreshed", K(database_name), K(table_name),
+                 "table_id", table_schema->get_table_id(), K(range_count));
+      }
+    }
+  }
   return ret;
 }
 

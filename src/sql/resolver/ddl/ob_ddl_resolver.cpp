@@ -1643,6 +1643,28 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
         }
         break;
       }
+      case T_FULLTEXT_DICT: {
+        // seekdb: CREATE TABLE ... FULLTEXT_DICT='Y' marks a custom fulltext dictionary table.
+        if (OB_ISNULL(option_node->children_[0])) {
+          ret = OB_ERR_UNEXPECTED;
+          SQL_RESV_LOG(WARN, "option_node child is null", K(option_node->children_[0]), K(ret));
+        } else if (stmt::T_CREATE_TABLE == stmt_->get_stmt_type()) {
+          ObCreateTableArg &arg = static_cast<ObCreateTableStmt*>(stmt_)->get_create_table_arg();
+          ObString tmp_str(static_cast<int32_t>(option_node->children_[0]->str_len_),
+                           (char *)(option_node->children_[0]->str_value_));
+          if (0 == tmp_str.case_compare("Y")) {
+            arg.schema_.set_fulltext_dict();
+          } else {
+            ret = OB_ERR_PARSER_SYNTAX;
+            SQL_RESV_LOG(WARN, "failed to resolve fulltext dictionary str!", K(ret), K(tmp_str));
+          }
+        } else {
+          ret = OB_NOT_SUPPORTED;
+          LOG_WARN("FULLTEXT_DICT table option is only supported in CREATE TABLE", K(ret), K(stmt_->get_stmt_type()));
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "FULLTEXT_DICT option outside CREATE TABLE");
+        }
+        break;
+      }
       case T_TABLEGROUP: {
         if (!is_index_option) {
           if (OB_ISNULL(option_node->children_[0])) {

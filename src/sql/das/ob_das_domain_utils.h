@@ -23,6 +23,8 @@
 #include "sql/das/ob_das_dml_ctx_define.h"
 #include "storage/fts/ob_fts_doc_word_iterator.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
+#include "storage/fts/ob_ft_token_processor.h"
+#include "storage/fts/ob_i_ft_parser.h"
 
 namespace oceanbase
 {
@@ -46,16 +48,42 @@ public:
       const common::ObString &parser_properties);
   int segment(const common::ObObjMeta &ft_obj_meta, const ObDatum &doc_id, const common::ObString &fulltext);
   int get_next_row(blocksstable::ObDatumRow *&row);
+  int build_word_rows(common::ObIAllocator &row_allocator, ObDomainIndexRow &word_rows);
+  int check_is_the_same(const common::ObString &parser_name,
+                        const common::ObString &parser_properties,
+                        bool &is_same) const;
+  void set_is_fts_index_aux(bool v) { is_fts_index_aux_ = v; }
   void reset();
   void reuse();
-  TO_STRING_KV(K_(row_idx), K_(is_fts_index_aux), K_(helper), K_(is_inited), K_(rows));
+  TO_STRING_KV(K_(is_inited), K_(is_fts_index_aux), K_(is_buildin_parser),
+               KP_(token_iterator), K_(row_pool_index), K_(helper));
 private:
-  lib::MemoryContext merge_memctx_;
-  ObDomainIndexRow rows_;
-  uint64_t row_idx_;
-  bool is_fts_index_aux_;
-  storage::ObFTParseHelper helper_;
+  static const int64_t FT_TOKEN_ARR_CAPACITY = 64L * 1024L;
+  static const uint64_t MIN_FT_TOKEN_BUCKET_COUNT = 4;
+  static const uint64_t MAX_FT_TOKEN_BUCKET_COUNT = 2L * 1024L * 1024L;
+  static const int64_t FT_COL_CNT = 4;
+
+  int prepare_parser(const common::ObObjMeta &ft_obj_meta,
+                     const char *fulltext,
+                     const int64_t fulltext_len);
+  int create_ft_token_map(const int64_t ft_token_bkt_cnt);
+
+private:
   bool is_inited_;
+  bool is_fts_index_aux_;
+  bool is_buildin_parser_;
+  bool processor_inited_;
+  plugin::ObITokenIterator *token_iterator_;
+  int64_t chars_per_token_;
+  int64_t row_pool_index_;
+  blocksstable::ObDatumRow datum_row_;
+  ObArray<const ObFTTokenPair *> token_arr_;
+  storage::ObFTParseHelper helper_;
+  common::ObArenaAllocator metadata_allocator_;
+  common::ObArenaAllocator scratch_allocator_;
+  plugin::ObFTParserParam parser_context_;
+  ObFTTokenMap ft_token_map_;
+  storage::ObFTTokenProcessor ft_token_processor_;
 
   DISALLOW_COPY_AND_ASSIGN(ObFTIndexRowCache);
 };
@@ -199,7 +227,7 @@ private:
       const common::ObObjMeta &meta,
       const ObString &fulltext,
       int64_t &doc_length,
-      ObFTWordMap &words_count);
+      ObFTTokenMap &words_count);
   static int calc_save_rowkey_policy(
     ObIAllocator &allocator,
     const ObDASDMLBaseCtDef &das_ctdef,
@@ -339,7 +367,7 @@ public:
   : ObDomainDMLIterator(allocator, row_projector, write_iter, das_ctdef, main_ctdef),
     doc_word_info_(ft_doc_word_info),
     ft_doc_word_iter_(),
-    ft_parse_helper_(),
+    fts_cache_(),
     is_inited_(false)
   {
     ObDomainDMLIterator::mode_ = mode;
@@ -353,7 +381,7 @@ public:
   int init(const common::ObString &parser_name,
            const common::ObString &parser_property);
 
-  INHERIT_TO_STRING_KV("ObDomainDMLIterator", ObDomainDMLIterator, K_(ft_parse_helper), K_(is_inited));
+  INHERIT_TO_STRING_KV("ObDomainDMLIterator", ObDomainDMLIterator, K_(fts_cache), K_(is_inited));
 protected:
   virtual int generate_domain_rows(const ObChunkDatumStore::StoredRow *store_row) override;
   int get_ft_and_doc_id(const ObChunkDatumStore::StoredRow *store_row,
@@ -371,7 +399,7 @@ protected:
 private:
   const ObFTDocWordInfo *doc_word_info_;
   storage::ObFTDocWordScanIterator ft_doc_word_iter_;
-  storage::ObFTParseHelper ft_parse_helper_;
+  ObFTIndexRowCache fts_cache_;
   bool is_inited_;
 };
 
