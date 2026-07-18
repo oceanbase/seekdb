@@ -271,7 +271,7 @@ if(OB_AIO AND OB_AIO STREQUAL "libaio1t64" AND NOT APPLE)
     list(APPEND AIO_SEARCH_PATHS /usr/lib/aarch64-linux-gnu)
   endif()
   list(APPEND AIO_SEARCH_PATHS /usr/lib)
-  find_library(AIO_LIBRARY
+  find_file(AIO_LIBRARY
     NAMES libaio.so.1t64
     PATHS ${AIO_SEARCH_PATHS}
     NO_DEFAULT_PATH

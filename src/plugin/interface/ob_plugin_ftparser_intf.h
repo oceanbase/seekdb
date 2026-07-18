@@ -77,7 +77,13 @@ public:
   };
 
   ObFTIKParam(Mode mode = Mode::SMART)
-      : mode_(mode), main_dict_(""), quan_dict_(""), stopword_dict_("")
+      : mode_(mode),
+        main_dict_(""),
+        quan_dict_(""),
+        stopword_dict_(""),
+        main_dict_id_(common::OB_INVALID_ID),
+        quan_dict_id_(common::OB_INVALID_ID),
+        stopword_dict_id_(common::OB_INVALID_ID)
   {
   }
 
@@ -86,6 +92,9 @@ public:
   common::ObString main_dict_;
   common::ObString quan_dict_;
   common::ObString stopword_dict_;
+  uint64_t main_dict_id_;
+  uint64_t quan_dict_id_;
+  uint64_t stopword_dict_id_;
 };
 
 /**
@@ -103,7 +112,8 @@ public:
       : ObFTParserParamExport(),
         ngram_token_size_(NGRAM_TOKEN_SIZE),
         min_ngram_size_(NGRAM_TOKEN_SIZE),
-        max_ngram_size_(NGRAM_TOKEN_SIZE)
+        max_ngram_size_(NGRAM_TOKEN_SIZE),
+        tenant_id_(common::OB_INVALID_TENANT_ID)
   {
   }
   virtual ~ObFTParserParam() { reset(); }
@@ -112,7 +122,11 @@ public:
   {
     ObFTParserParamExport::reset();
     allocator_ = nullptr;
+    ik_param_ = ObFTIKParam();
     ngram_token_size_ = NGRAM_TOKEN_SIZE;
+    min_ngram_size_ = NGRAM_TOKEN_SIZE;
+    max_ngram_size_ = NGRAM_TOKEN_SIZE;
+    tenant_id_ = common::OB_INVALID_TENANT_ID;
   }
 
   INHERIT_TO_STRING_KV("base", ObFTParserParamExport, KP_(allocator), K_(ngram_token_size));
@@ -125,6 +139,7 @@ public:
   int64_t ngram_token_size_;
   int64_t min_ngram_size_;
   int64_t max_ngram_size_;
+  uint64_t tenant_id_;
 };
 
 class ObITokenIterator

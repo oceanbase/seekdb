@@ -36,10 +36,11 @@ namespace storage
 class ObDictCacheKey : public common::ObIKVCacheKey
 {
 public:
-  ObDictCacheKey(const uint64_t name,
-                 const ObFTDictType dict_type,
-                 int32_t range_id)
-      : name_(name), dict_type_(dict_type), range_id_(range_id)
+  ObDictCacheKey(const uint64_t tenant_id,
+                 const uint64_t table_id,
+                 const uint64_t generation,
+                 const int32_t range_id)
+      : tenant_id_(tenant_id), table_id_(table_id), generation_(generation), range_id_(range_id)
   {
   }
   ~ObDictCacheKey() override {}
@@ -48,14 +49,18 @@ public:
   {
     const ObDictCacheKey &other_key = reinterpret_cast<const ObDictCacheKey &>(other);
     return (&other == this)
-           || ((other_key.name_ == name_) && (other_key.dict_type_ == dict_type_));
+           || (other_key.tenant_id_ == tenant_id_
+               && other_key.table_id_ == table_id_
+               && other_key.generation_ == generation_
+               && other_key.range_id_ == range_id_);
   }
 
   uint64_t hash() const override
   {
     uint64_t hash_val = 0;
-    hash_val = murmurhash(&name_, sizeof(name_), hash_val);
-    hash_val = murmurhash(&dict_type_, sizeof(dict_type_), hash_val);
+    hash_val = murmurhash(&tenant_id_, sizeof(tenant_id_), hash_val);
+    hash_val = murmurhash(&table_id_, sizeof(table_id_), hash_val);
+    hash_val = murmurhash(&generation_, sizeof(generation_), hash_val);
     hash_val = murmurhash(&range_id_, sizeof(range_id_), hash_val);
     return hash_val;
   }
@@ -80,17 +85,18 @@ public:
       ret = OB_INVALID_ARGUMENT;
       CLOG_LOG(WARN, "invalid argument for ob dict cache", K(ret), K(buf_len), K(size()));
     } else {
-      ObDictCacheKey *new_key = new (buf) ObDictCacheKey(name_, dict_type_, range_id_);
+      ObDictCacheKey *new_key = new (buf) ObDictCacheKey(
+          tenant_id_, table_id_, generation_, range_id_);
       key = new_key;
     }
     return ret;
   }
 
-  TO_STRING_KV(K_(name), K_(dict_type), K_(range_id));
+  TO_STRING_KV(K_(tenant_id), K_(table_id), K_(generation), K_(range_id));
 private:
-  // to change to name
-  uint64_t name_; // when build dict
-  ObFTDictType dict_type_;
+  uint64_t tenant_id_;
+  uint64_t table_id_;
+  uint64_t generation_;
   int32_t range_id_;
 };
 

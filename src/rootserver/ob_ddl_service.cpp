@@ -2029,6 +2029,10 @@ int ObDDLService::create_tables_in_trans(const bool if_not_exist,
                                                      0 == i ? &tmp_ddl_stmt_str : NULL,
                                                      i == table_schemas.count() - 1))) {
           LOG_WARN("failed to create table schema, ", K(ret));
+        } else if (table_schema.is_fts_index_aux()
+                   && OB_FAIL(ObFtsIndexBuilderUtil::record_fts_dict_table_dependencies(
+                          table_schema, trans))) {
+          LOG_WARN("fail to record fulltext dictionary dependencies", K(ret), K(table_schema));
         } else if (OB_FAIL(ddl_operator.insert_temp_table_info(trans, table_schema))) {
           LOG_WARN("failed to insert_temp_table_info!", K(ret));
         } else if (table_schema.is_view_table() && dep_infos != nullptr && 0 == i) {

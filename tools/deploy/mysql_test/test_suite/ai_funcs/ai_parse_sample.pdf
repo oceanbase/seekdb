@@ -1,0 +1,49 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 460 380] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 340 >>
+stream
+BT
+/F1 22 Tf
+1 0 0 1 72 320 Tm
+(seekdb Document AI) Tj
+/F1 14 Tf
+1 0 0 1 72 270 Tm
+(ai_parse_doc turns a PDF into text.) Tj
+/F1 14 Tf
+1 0 0 1 72 244 Tm
+(pdfium renders each page to an image.) Tj
+/F1 14 Tf
+1 0 0 1 72 218 Tm
+(A vision model then reads the page.) Tj
+/F1 12 Tf
+1 0 0 1 72 176 Tm
+(Sample document for ai_parse_doc tests.) Tj
+ET
+
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000000632 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+702
+%%EOF

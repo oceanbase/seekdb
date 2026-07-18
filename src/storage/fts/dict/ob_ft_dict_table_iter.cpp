@@ -30,7 +30,7 @@ namespace oceanbase
 namespace storage
 {
 ObFTDictTableIter::ObFTDictTableIter(ObISQLClient::ReadResult &result)
-    : ObIFTDictIterator(), is_inited_(false), res_(result)
+    : ObIFTDictIterator(), is_inited_(false), iter_end_(false), res_(result)
 {
 }
 
@@ -40,6 +40,8 @@ int ObFTDictTableIter::get_key(ObString &str)
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("Not inited.", K(ret));
+  } else if (iter_end_) {
+    ret = OB_ITER_END;
   } else if (OB_FAIL(res_.get_result()->get_varchar("word", str))) {
     LOG_WARN("Failed to get varchar", K(ret));
   }
@@ -58,29 +60,50 @@ int ObFTDictTableIter::next()
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("Not inited.", K(ret));
+  } else if (iter_end_) {
+    ret = OB_ITER_END;
   } else if (OB_FAIL(res_.get_result()->next())) {
-    if (OB_ITER_END != ret) {
+    if (OB_ITER_END == ret) {
+      iter_end_ = true;
+    } else {
       LOG_WARN("Failed to get next row", K(ret));
     }
   }
   return ret;
 }
 
-int ObFTDictTableIter::init(const ObString &table_name)
+int ObFTDictTableIter::init(const ObFTDictDesc &desc)
 {
   int ret = OB_SUCCESS;
   common::ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
+  const char *dot = desc.table_name_.find('.');
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("Inited twice.", K(ret));
+  } else if (OB_ISNULL(sql_proxy) || OB_ISNULL(dot)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid dictionary table descriptor", K(ret), K(desc), KP(sql_proxy));
   } else {
+    const ObString database_name(static_cast<int32_t>(dot - desc.table_name_.ptr()),
+                                 desc.table_name_.ptr());
+    const ObString table_name(static_cast<int32_t>(
+                                  desc.table_name_.length() - (dot - desc.table_name_.ptr()) - 1),
+                              dot + 1);
     SMART_VAR(ObSqlString, sql_string)
     {
-      if (OB_FAIL(sql_string.append("SELECT word FROM oceanbase."))) {
-        LOG_WARN("Failed to append sql", K(ret));
-      } else if (OB_FAIL(sql_string.append(table_name))) {
-        LOG_WARN("Failed to append sql", K(ret));
+      if (desc.need_casedown_) {
+        if (OB_FAIL(sql_string.append_fmt("SELECT DISTINCT LOWER(word) AS word FROM `%.*s`.`%.*s`",
+                                         database_name.length(), database_name.ptr(),
+                                         table_name.length(), table_name.ptr()))) {
+          LOG_WARN("Failed to append lowercase dictionary sql", K(ret));
+        }
+      } else if (OB_FAIL(sql_string.append_fmt("SELECT word FROM `%.*s`.`%.*s`",
+                                              database_name.length(), database_name.ptr(),
+                                              table_name.length(), table_name.ptr()))) {
+        LOG_WARN("Failed to append dictionary sql", K(ret));
+      }
+      if (OB_FAIL(ret)) {
       } else if (OB_FAIL(sql_string.append(" ORDER BY word"))) {
         LOG_WARN("Failed to append sql", K(ret));
       } else if (OB_FAIL(sql_proxy->read(res_, sql_string.ptr()))) {
@@ -94,10 +117,12 @@ int ObFTDictTableIter::init(const ObString &table_name)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Failed to get result", K(ret));
     } else if (OB_FAIL(res_.get_result()->next())) {
-      if (OB_ITER_END != ret) {
-        LOG_WARN("Failed to get next row", K(ret));
-      } else {
+      if (OB_ITER_END == ret) {
+        ret = OB_SUCCESS;
+        iter_end_ = true;
         is_inited_ = true;
+      } else {
+        LOG_WARN("Failed to get next row", K(ret));
       }
     } else {
       is_inited_ = true;
@@ -111,6 +136,7 @@ void ObFTDictTableIter::reset()
 {
   res_.close();
   is_inited_ = false;
+  iter_end_ = false;
 }
 
 } //  namespace storage
