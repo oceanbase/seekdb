@@ -188,6 +188,23 @@ public:
         const share::schema::ObIndexType index_type,
         const int64_t original_parallelism,
         int64_t &decided_parallelism);
+  static int decide_ddl_parallelism(
+        const share::schema::ObIndexType index_type,
+        const int64_t original_parallelism,
+        const bool has_parallel_hint,
+        int64_t &decided_parallelism);
+  static int is_fulltext_dict_referenced(
+      share::schema::ObSchemaGetterGuard &schema_guard,
+      const share::schema::ObTableSchema &dict_table_schema,
+      bool &is_referenced);
+  static int validate_fulltext_dict_table_schema(
+      const share::schema::ObTableSchema &table_schema,
+      const bool require_marker);
+  static int find_fts_doc_word_schema(
+      share::schema::ObSchemaGetterGuard &schema_guard,
+      const share::schema::ObTableSchema &data_schema,
+      const share::schema::ObTableSchema &fts_index_schema,
+      const share::schema::ObTableSchema *&doc_word_schema);
 private:
   static int build_fts_aux_index_name(
     const ObIndexType type,

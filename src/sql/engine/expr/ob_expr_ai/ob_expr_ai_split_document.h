@@ -1,0 +1,70 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SQL_OB_EXPR_AI_SPLIT_DOCUMENT_H_
+#define OCEANBASE_SQL_OB_EXPR_AI_SPLIT_DOCUMENT_H_
+
+#include "lib/container/ob_se_array.h"
+#include "sql/engine/expr/ob_expr_operator.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+
+struct ObAISplitDocumentChunk final
+{
+  ObAISplitDocumentChunk() : offset_(0), length_(0), text_() {}
+  ObAISplitDocumentChunk(const int64_t offset, const int64_t length, const common::ObString &text)
+      : offset_(offset), length_(length), text_(text)
+  {
+  }
+
+  int64_t offset_;
+  int64_t length_;
+  common::ObString text_;
+
+  TO_STRING_KV(K_(offset), K_(length), K_(text));
+};
+
+class ObExprAISplitDocument final : public ObFuncExprOperator
+{
+public:
+  explicit ObExprAISplitDocument(common::ObIAllocator &allocator);
+  virtual ~ObExprAISplitDocument() = default;
+
+  int calc_result_typeN(ObExprResType &type,
+                        ObExprResType *types,
+                        int64_t param_num,
+                        common::ObExprTypeCtx &type_ctx) const override;
+  int cg_expr(ObExprCGCtx &expr_cg_ctx,
+              const ObRawExpr &raw_expr,
+              ObExpr &rt_expr) const override;
+
+  static int eval_ai_split_document(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &result);
+  static int split_document(common::ObIAllocator &allocator,
+                            const common::ObString &content,
+                            const common::ObString *parameters,
+                            common::ObIArray<ObAISplitDocumentChunk> &chunks);
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObExprAISplitDocument);
+};
+
+} // namespace sql
+} // namespace oceanbase
+
+#endif // OCEANBASE_SQL_OB_EXPR_AI_SPLIT_DOCUMENT_H_

@@ -404,3 +404,16 @@ test/var
 .worktrees/
 .claude/
 CLAUDE.md
+
+############# generated source #############
+/src/observer/virtual_table/ob_all_virtual_sqlite_tables.cpp
+/src/observer/virtual_table/ob_all_virtual_sqlite_tables.h
+/src/share/inner_table/ob_inner_table_schema.*.cpp
+/src/share/inner_table/ob_inner_table_schema.h
+/src/share/inner_table/ob_inner_table_schema_constants.h
+/src/share/inner_table/ob_inner_table_schema_misc.ipp
+/src/share/inner_table/table_id_to_name
+
+############# local seekdb test instances #############
+/tools/deploy/q[0-9]*data*/
+/tools/deploy/q[0-9]*tmp*/

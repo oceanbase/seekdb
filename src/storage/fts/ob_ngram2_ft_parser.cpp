@@ -65,6 +65,12 @@ int ObNgram2FTParser::init(ObFTParserParam *param)
   return ret;
 }
 
+int ObNgram2FTParser::reuse(ObFTParserParam *param)
+{
+  reset();
+  return init(param);
+}
+
 int ObNgram2FTParser::get_next_token(const char *&word,
                                      int64_t &word_len,
                                      int64_t &char_len,
@@ -101,42 +107,55 @@ int ObNgram2FTParserDesc::deinit(ObPluginParam *param)
   return OB_SUCCESS;
 }
 
-int ObNgram2FTParserDesc::segment(ObFTParserParam *param, ObITokenIterator *&iter) const
+int ObNgram2FTParserDesc::create_token_iter(ObFTParserParam *param, ObITokenIterator *&iter) const
 {
   int ret = OB_SUCCESS;
   ObNgram2FTParser *parser = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ngram ft parser desc hasn't be initialized", K(ret), K(is_inited_));
-  } else if (OB_ISNULL(param) || OB_ISNULL(param->fulltext_) || OB_UNLIKELY(!param->is_valid())) {
+  } else if (OB_ISNULL(param) || OB_ISNULL(param->parser_allocator_)
+             || OB_ISNULL(param->fulltext_) || OB_UNLIKELY(!param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(param));
-  } else if (OB_ISNULL(parser = OB_NEWx(ObNgram2FTParser, param->allocator_))) {
+  } else if (OB_ISNULL(parser = OB_NEWx(ObNgram2FTParser, param->parser_allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate ngram ft parser", K(ret));
   } else {
     if (OB_FAIL(parser->init(param))) {
       LOG_WARN("fail to init ngram fulltext parser", K(ret), KPC(param));
-      param->allocator_->free(parser);
     } else {
       iter = parser;
     }
   }
 
   if (OB_FAIL(ret)) {
-    OB_DELETEx(ObNgram2FTParser, param->allocator_, parser);
+    OB_DELETEx(ObNgram2FTParser, param->parser_allocator_, parser);
   }
 
   return ret;
 }
 
-void ObNgram2FTParserDesc::free_token_iter(ObFTParserParam *param, ObITokenIterator *&iter) const
+int ObNgram2FTParserDesc::reuse_token_iter(ObFTParserParam *param, ObITokenIterator *iter) const
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(param) || OB_ISNULL(iter)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KPC(param), KP(iter));
+  } else if (OB_FAIL(static_cast<ObNgram2FTParser *>(iter)->reuse(param))) {
+    LOG_WARN("fail to reuse ngram2 fulltext parser", K(ret), KPC(param));
+  }
+  return ret;
+}
+
+void ObNgram2FTParserDesc::destroy_token_iter(ObFTParserParam *param, ObITokenIterator *&iter) const
 {
   if (OB_NOT_NULL(iter)) {
     abort_unless(nullptr != param);
-    abort_unless(nullptr != param->allocator_);
+    abort_unless(nullptr != param->parser_allocator_);
     iter->~ObITokenIterator();
-    param->allocator_->free(iter);
+    param->parser_allocator_->free(iter);
+    iter = nullptr;
   }
 }
 

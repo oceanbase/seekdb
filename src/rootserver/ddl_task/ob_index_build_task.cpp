@@ -85,6 +85,7 @@ int ObIndexSSTableBuildTask::process()
   ObAddr unused_addr;
   const ObTableSchema *data_schema = nullptr;
   const ObTableSchema *index_schema = nullptr;
+  const ObTableSchema *doc_word_schema = nullptr;
   bool need_padding = false;
   bool need_exec_new_inner_sql = true;
 #ifdef ERRSIM
@@ -121,6 +122,10 @@ int ObIndexSSTableBuildTask::process()
   } else if (nullptr == index_schema) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("error unexpected, index schema must not be nullptr", K(ret), K(dest_table_id_));
+  } else if (index_schema->is_fts_index_aux()
+             && OB_FAIL(ObFtsIndexBuilderUtil::find_fts_doc_word_schema(
+                    schema_guard, *data_schema, *index_schema, doc_word_schema))) {
+    LOG_WARN("failed to find fused fulltext doc word schema", K(ret), KPC(data_schema), KPC(index_schema));
   } else {
     #ifdef ERRSIM
       if ((index_schema->is_vec_ivfflat_rowkey_cid_index() 
@@ -215,6 +220,12 @@ int ObIndexSSTableBuildTask::process()
           } else if (OB_FAIL(ObCheckTabletDataComplementOp::check_finish_report_checksum(dest_table_id_, execution_id_, task_id_))) {
             LOG_WARN("fail to check sstable checksum_report_finish",
               K(ret), K(dest_table_id_), K(execution_id_), K(task_id_));
+          }
+          if (OB_SUCC(ret) && OB_NOT_NULL(doc_word_schema)
+              && OB_FAIL(ObCheckTabletDataComplementOp::check_finish_report_checksum(
+                     doc_word_schema->get_table_id(), execution_id_, task_id_))) {
+            LOG_WARN("failed to check fused fulltext doc word checksum report",
+                K(ret), K(doc_word_schema->get_table_id()), K(execution_id_), K(task_id_));
           }
         }
       }

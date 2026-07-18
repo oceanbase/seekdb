@@ -72,6 +72,7 @@ public:
   virtual ~ObSRDaaTIterImpl() {}
   virtual int get_next_row() override;
   virtual int get_next_rows(const int64_t capacity, int64_t &count) override;
+  virtual int get_total_count(int64_t &count) override;
   int init(
       ObSparseRetrievalMergeParam &iter_param,
       ObIArray<ObISRDaaTDimIter *> &dim_iters,

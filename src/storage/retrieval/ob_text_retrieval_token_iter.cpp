@@ -370,7 +370,9 @@ int ObTextRetrievalTokenIter::get_next_row()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("retrieval token iterator not inited", K(ret));
-  } else if (!token_doc_cnt_calculated_ && OB_FAIL(estimate_token_doc_cnt())) {
+  } else if (need_calc_relevance()
+             && !token_doc_cnt_calculated_
+             && OB_FAIL(estimate_token_doc_cnt())) {
     LOG_WARN("failed to estimate token doc cnt", K(ret));
   } else if (OB_FAIL(inv_idx_scan_iter_->get_next_row())) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
@@ -455,7 +457,9 @@ int ObTextRetrievalTokenIter::get_next_batch(const int64_t capacity, int64_t &co
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("retrieval token iterator not inited", K(ret));
-  } else if (!token_doc_cnt_calculated_ && OB_FAIL(estimate_token_doc_cnt())) {
+  } else if (need_calc_relevance()
+             && !token_doc_cnt_calculated_
+             && OB_FAIL(estimate_token_doc_cnt())) {
     LOG_WARN("failed to estimate token doc cnt", K(ret));
   } else if (OB_FAIL(inv_idx_scan_iter_->get_next_rows(count, OB_MIN(max_batch_size_, capacity)))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
@@ -528,11 +532,15 @@ int ObTextRetrievalTokenIter::advance_to(const ObDatum &id_datum)
 int ObTextRetrievalTokenIter::update_scan_param(const ObString &token, common::ObArenaAllocator &allocator)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(inv_idx_agg_param_->key_ranges_.count() != 1)) {
+  ObTableScanParam *range_param = need_inv_idx_agg() ? inv_idx_agg_param_ : inv_idx_scan_param_;
+  if (OB_ISNULL(range_param)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected key range count", K(ret), K(inv_idx_agg_param_->key_ranges_.count()));
+    LOG_WARN("unexpected null range parameter", K(ret), KP(range_param));
+  } else if (OB_UNLIKELY(range_param->key_ranges_.count() != 1)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected key range count", K(ret), K(range_param->key_ranges_.count()));
   } else {
-    ObNewRange scan_range = inv_idx_agg_param_->key_ranges_.at(0);
+    ObNewRange scan_range = range_param->key_ranges_.at(0);
     ObObj tmp_obj;
     tmp_obj.set_string(ObVarcharType, token);
     tmp_obj.set_meta_type(scan_range.start_key_.get_obj_ptr()->meta_);
@@ -817,10 +825,8 @@ int ObTextRetrievalDaaTTokenIter::save_docids()
     cur_idx_ = 0;
     const ObDatumVector &doc_id_datum = inv_scan_domain_id_col_->locate_expr_datumvector(*eval_ctx_);
     for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
-      if (OB_LIKELY(!token_iter_->get_skip()->at(i))) {
-        if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
-          LOG_WARN("failed to get doc id", K(ret));
-        };
+      if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
+        LOG_WARN("failed to get doc id", K(ret));
       }
     }
   }
@@ -882,6 +888,8 @@ int ObTextRetrievalDaaTTokenIter::get_curr_score(double &score) const
     LOG_WARN("array index out of bounds", K(ret), K_(cur_idx), K_(count));
   } else if (relevance_expr_) {
     score = relevance_[cur_idx_];
+  } else {
+    score = 1.0;
   }
   return ret;
 }
@@ -894,6 +902,98 @@ int ObTextRetrievalDaaTTokenIter::get_curr_id(const ObDatum *&id_datum) const
     LOG_WARN("array index out of bounds", K(ret), K_(cur_idx), K_(count));
   } else {
     id_datum = &doc_id_[cur_idx_].get_datum();
+  }
+  return ret;
+}
+
+int ObTextRetrievalDaaTTokenIter::ensure_count_row(bool &has_row)
+{
+  int ret = OB_SUCCESS;
+  has_row = false;
+  if (cur_idx_ >= 0 && cur_idx_ < count_) {
+    has_row = true;
+  } else if (OB_FAIL(get_next_row())) {
+    if (OB_ITER_END == ret) {
+      ret = OB_SUCCESS;
+    } else {
+      LOG_WARN("failed to load count posting batch", K(ret));
+    }
+  } else {
+    has_row = true;
+  }
+  return ret;
+}
+
+int ObTextRetrievalDaaTTokenIter::get_count_doc_id(const ObDocIdExt *&doc_id) const
+{
+  int ret = OB_SUCCESS;
+  doc_id = nullptr;
+  if (OB_UNLIKELY(cur_idx_ < 0 || cur_idx_ >= count_)) {
+    ret = OB_ARRAY_OUT_OF_RANGE;
+    LOG_WARN("count posting cursor is out of range", K(ret), K_(cur_idx), K_(count));
+  } else {
+    doc_id = &doc_id_[cur_idx_];
+  }
+  return ret;
+}
+
+int ObTextRetrievalDaaTTokenIter::compare_count_doc_ids(
+    const ObDocIdExt &left,
+    const ObDocIdExt &right,
+    int64_t &cmp_ret) const
+{
+  int ret = OB_SUCCESS;
+  int tmp_ret = 0;
+  if (OB_ISNULL(cmp_func_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("count posting comparator is not initialized", K(ret));
+  } else if (OB_FAIL(cmp_func_(left.get_datum(), right.get_datum(), tmp_ret))) {
+    LOG_WARN("failed to compare count posting document ids", K(ret));
+  } else {
+    cmp_ret = tmp_ret;
+  }
+  return ret;
+}
+
+int ObTextRetrievalDaaTTokenIter::count_cached_docs_before(
+    const ObDocIdExt &upper_bound,
+    int64_t &count) const
+{
+  int ret = OB_SUCCESS;
+  count = 0;
+  if (OB_UNLIKELY(cur_idx_ < 0 || cur_idx_ >= count_)) {
+    ret = OB_ARRAY_OUT_OF_RANGE;
+    LOG_WARN("count posting cursor is out of range", K(ret), K_(cur_idx), K_(count));
+  } else {
+    int64_t left = cur_idx_;
+    int64_t right = count_;
+    while (OB_SUCC(ret) && left < right) {
+      const int64_t middle = left + (right - left) / 2;
+      int64_t cmp_ret = 0;
+      if (OB_FAIL(compare_count_doc_ids(doc_id_[middle], upper_bound, cmp_ret))) {
+        LOG_WARN("failed to compare cached count posting", K(ret), K(middle));
+      } else if (cmp_ret < 0) {
+        left = middle + 1;
+      } else {
+        right = middle;
+      }
+    }
+    if (OB_SUCC(ret)) {
+      count = left - cur_idx_;
+    }
+  }
+  return ret;
+}
+
+int ObTextRetrievalDaaTTokenIter::consume_cached_docs(const int64_t count)
+{
+  int ret = OB_SUCCESS;
+  const int64_t cached_count = get_cached_doc_count();
+  if (OB_UNLIKELY(count <= 0 || count > cached_count)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid count posting consume size", K(ret), K(count), K(cached_count));
+  } else {
+    cur_idx_ += count;
   }
   return ret;
 }

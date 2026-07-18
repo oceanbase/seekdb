@@ -404,6 +404,9 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
             } else {
               table_schema.set_collation_type(collation_type_);
               table_schema.set_charset_type(charset_type_);
+              if (is_fulltext_dict_ && OB_FAIL(validate_fulltext_dict_table(table_schema))) {
+                SQL_RESV_LOG(WARN, "validate fulltext dictionary table failed", K(ret), K(table_schema));
+              }
               // No longer need this step. At the beginning of resolve, directly parse out the collation/charset information of the table, by the time column information is resolved, it can already be obtained
               // Table's collation/charset information
               //if (OB_FAIL(table_schema.fill_column_collation_info())) {
@@ -2474,6 +2477,25 @@ int ObCreateTableResolver::check_max_row_data_length(const ObTableSchema &table_
     }
   }
 
+  return ret;
+}
+
+int ObCreateTableResolver::validate_fulltext_dict_table(ObTableSchema &table_schema)
+{
+  int ret = OB_SUCCESS;
+  if (!is_table_organization_explicit_
+      || ObTableOrganizationType::OB_INDEX_ORGANIZATION != table_organization_) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED,
+                   "FULLTEXT_DICT tables without explicit ORGANIZATION INDEX");
+    SQL_RESV_LOG(WARN, "fulltext dictionary table must explicitly use index organization", K(ret));
+  } else if (OB_FAIL(share::ObFtsIndexBuilderUtil::validate_fulltext_dict_table_schema(
+                 table_schema, false))) {
+    SQL_RESV_LOG(WARN, "validate fulltext dictionary table schema failed", K(ret), K(table_schema));
+  } else if (OB_FAIL(table_schema.set_parser_name(
+                 ObString::make_string(OB_FULLTEXT_DICT_TABLE_MARKER)))) {
+    SQL_RESV_LOG(WARN, "set fulltext dictionary table marker failed", K(ret));
+  }
   return ret;
 }
 

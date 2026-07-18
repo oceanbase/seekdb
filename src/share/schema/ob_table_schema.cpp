@@ -54,6 +54,24 @@ const char *table_mode_flag_to_str(const ObTableModeFlag &table_mode)
   return str;
 }
 
+bool ObTableSchema::is_valid_fulltext_dict_table_schema(const bool require_marker) const
+{
+  const ObColumnSchemaV2 *word_column = 1 == get_column_count()
+      ? get_column_schema_by_idx(0)
+      : nullptr;
+  return (!require_marker || is_fulltext_dict_table())
+         && is_index_organized_table()
+         && nullptr != word_column
+         && 0 == word_column->get_column_name_str().case_compare("word")
+         && ObVarcharType == word_column->get_data_type()
+         && word_column->get_accuracy().get_length() >= 1
+         && word_column->get_accuracy().get_length() <= 500
+         && CHARSET_UTF8MB4 == get_charset_type()
+         && CHARSET_UTF8MB4 == word_column->get_charset_type()
+         && 1 == get_rowkey_column_num()
+         && word_column->is_rowkey_column();
+}
+
 ObColumnIdKey ObGetColumnKey<ObColumnIdKey, ObColumnSchemaV2 *>::operator()(const ObColumnSchemaV2 *column_schema) const
 {
   return ObColumnIdKey(column_schema->get_column_id());

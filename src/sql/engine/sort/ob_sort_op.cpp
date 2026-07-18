@@ -20,11 +20,112 @@
 #include "sql/engine/px/ob_px_util.h"
 #include "sql/engine/aggregate/ob_hash_groupby_op.h"
 #include "sql/engine/expr/ob_expr_topn_filter.h"
+#include "sql/engine/sort/ob_sort_vec_op_provider.h"
+#include "sql/session/ob_sql_session_info.h"
 
 namespace oceanbase
 {
 namespace sql
 {
+
+ObFtsSecondarySortThread::ObFtsSecondarySortThread()
+  : is_inited_(false),
+    is_started_(false),
+    sort_provider_(nullptr),
+    session_info_(nullptr),
+    sort_ret_(OB_SUCCESS)
+{
+}
+
+ObFtsSecondarySortThread::~ObFtsSecondarySortThread()
+{
+  if (is_started_) {
+    stop();
+    wait();
+    is_started_ = false;
+  }
+}
+
+int ObFtsSecondarySortThread::init(
+    ObSortVecOpProvider *sort_provider,
+    ObSQLSessionInfo *session_info)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(is_inited_)) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("initialize fts secondary sort thread twice", K(ret));
+  } else if (OB_ISNULL(sort_provider) || OB_ISNULL(session_info)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid fts secondary sort thread arguments", K(ret), KP(sort_provider),
+        KP(session_info));
+  } else if (OB_FAIL(set_thread_count(1))) {
+    LOG_WARN("set fts secondary sort thread count failed", K(ret));
+  } else {
+    set_run_wrapper(MTL_CTX());
+    sort_provider_ = sort_provider;
+    session_info_ = session_info;
+    sort_ret_ = OB_SUCCESS;
+    is_inited_ = true;
+  }
+  return ret;
+}
+
+int ObFtsSecondarySortThread::start_sort()
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("fts secondary sort thread is not initialized", K(ret));
+  } else if (OB_UNLIKELY(is_started_)) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("fts secondary sort thread already started", K(ret));
+  } else if (OB_FAIL(start())) {
+    LOG_WARN("start fts secondary sort thread failed", K(ret));
+  } else {
+    is_started_ = true;
+  }
+  return ret;
+}
+
+int ObFtsSecondarySortThread::wait_sort()
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("fts secondary sort thread is not initialized", K(ret));
+  } else if (is_started_) {
+    wait();
+    is_started_ = false;
+    ret = sort_ret_;
+  }
+  return ret;
+}
+
+void ObFtsSecondarySortThread::run1()
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_ || OB_ISNULL(sort_provider_) || OB_ISNULL(session_info_))) {
+    sort_ret_ = OB_NOT_INIT;
+    ret = sort_ret_;
+    LOG_WARN("invalid fts secondary sort thread state", K(sort_ret_), K(is_inited_),
+        KP(sort_provider_), KP(session_info_));
+  } else {
+    lib::set_thread_name("FTSDualSort");
+    CONSUMER_GROUP_FUNC_GUARD(ObFunctionType::PRIO_DDL);
+    THIS_WORKER.set_session(session_info_);
+    const lib::Worker::CompatMode worker_compat_mode =
+        ObCompatibilityMode::MYSQL_MODE == session_info_->get_compatibility_mode()
+            ? lib::Worker::CompatMode::MYSQL
+            : lib::Worker::CompatMode::ORACLE;
+    THIS_WORKER.set_compatibility_mode(worker_compat_mode);
+    sort_ret_ = sort_provider_->sort();
+    if (OB_SUCCESS != sort_ret_) {
+      ret = sort_ret_;
+      LOG_WARN("fts secondary sort failed", K(sort_ret_));
+    }
+    THIS_WORKER.set_session(nullptr);
+  }
+}
 
 ObSortSpec::ObSortSpec(common::ObIAllocator &alloc, const ObPhyOperatorType type)
   : ObOpSpec(alloc, type),

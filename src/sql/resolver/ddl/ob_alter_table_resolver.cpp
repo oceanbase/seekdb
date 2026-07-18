@@ -36,6 +36,28 @@ using namespace common;
 using namespace obcall;
 namespace sql
 {
+namespace
+{
+bool contains_restricted_fulltext_dict_action(const ParseNode &node)
+{
+  bool is_restricted = T_TABLE_RENAME == node.type_
+                       || T_COLUMN_ADD == node.type_
+                       || T_COLUMN_ADD_WITH_LOB_PARAMS == node.type_
+                       || T_COLUMN_CHANGE == node.type_
+                       || T_COLUMN_RENAME == node.type_
+                       || T_COLUMN_MODIFY == node.type_
+                       || T_COLUMN_DROP == node.type_;
+  for (int32_t index = 0;
+       !is_restricted && OB_NOT_NULL(node.children_) && index < node.num_child_;
+       ++index) {
+    if (OB_NOT_NULL(node.children_[index])) {
+      is_restricted = contains_restricted_fulltext_dict_action(*node.children_[index]);
+    }
+  }
+  return is_restricted;
+}
+}
+
 ObAlterTableResolver::ObAlterTableResolver(ObResolverParams &params)
     : ObDDLResolver(params),
       table_schema_(NULL),
@@ -177,7 +199,24 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
     }
     //resolve action list
     if (OB_SUCCESS == ret && NULL != parse_tree.children_[ACTION_LIST]){
-      if (OB_FAIL(resolve_action_list(*(parse_tree.children_[ACTION_LIST])))) {
+      if (table_schema_->is_fulltext_dict_table()
+          && contains_restricted_fulltext_dict_action(*parse_tree.children_[ACTION_LIST])) {
+        bool is_referenced = false;
+        ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_guard();
+        if (OB_ISNULL(schema_guard)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("schema guard is null", K(ret));
+        } else if (OB_FAIL(share::ObFtsIndexBuilderUtil::is_fulltext_dict_referenced(
+                       *schema_guard, *table_schema_, is_referenced))) {
+          LOG_WARN("check fulltext dictionary reference failed", K(ret), KPC(table_schema_));
+        } else if (is_referenced) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED,
+                         "alter a fulltext dictionary table referenced by an index");
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(resolve_action_list(*(parse_tree.children_[ACTION_LIST])))) {
         SQL_RESV_LOG(WARN, "failed to resolve action list.", K(ret));
       } else if (alter_table_bitset_.has_member(obcall::ObAlterTableArg::LOCALITY)
                  && alter_table_bitset_.has_member(obcall::ObAlterTableArg::TABLEGROUP_NAME)) {
@@ -289,6 +328,8 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
       if (OB_FAIL(resolve_hints(parse_tree.children_[ALTER_HINT],
           *alter_table_stmt, nullptr == index_schema_ ? *table_schema_ : *index_schema_))) {
         LOG_WARN("resolve hints failed", K(ret));
+      } else if (OB_FAIL(adjust_fts_ddl_parallelism(*alter_table_stmt))) {
+        LOG_WARN("adjust fulltext ddl parallelism failed", K(ret));
       }
     }
     if (OB_SUCC(ret)){
@@ -308,6 +349,31 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
     }
   }
   DEBUG_SYNC(HANG_BEFORE_RESOLVER_FINISH);
+  return ret;
+}
+
+int ObAlterTableResolver::adjust_fts_ddl_parallelism(ObAlterTableStmt &alter_table_stmt)
+{
+  int ret = OB_SUCCESS;
+  const ObIArray<obcall::ObCreateIndexArg *> &index_args = alter_table_stmt.get_index_arg_list();
+  const int64_t original_parallelism = alter_table_stmt.get_parallelism();
+  int64_t decided_parallelism = original_parallelism;
+  for (int64_t i = 0; OB_SUCC(ret) && i < index_args.count(); ++i) {
+    const obcall::ObCreateIndexArg *index_arg = index_args.at(i);
+    if (OB_ISNULL(index_arg)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("index argument is null", K(ret), K(i), K(index_args.count()));
+    } else if (OB_FAIL(share::ObFtsIndexBuilderUtil::decide_ddl_parallelism(
+                   index_arg->index_type_,
+                   original_parallelism,
+                   alter_table_stmt.get_has_parallel_hint(),
+                   decided_parallelism))) {
+      LOG_WARN("decide fulltext ddl parallelism failed", K(ret), K(i), KPC(index_arg));
+    } else if (decided_parallelism != original_parallelism) {
+      alter_table_stmt.set_parallelism(decided_parallelism);
+      break;
+    }
+  }
   return ret;
 }
 

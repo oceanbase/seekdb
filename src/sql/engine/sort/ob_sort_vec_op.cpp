@@ -40,7 +40,10 @@ OB_SERIALIZE_MEMBER((ObSortVecSpec, ObOpSpec), topn_expr_, topk_limit_expr_, top
                     pd_topn_filter_info_, enable_single_col_compare_opt_);
 
 ObSortVecOp::ObSortVecOp(ObExecContext &ctx_, const ObOpSpec &spec, ObOpInput *input) :
-  ObOperator(ctx_, spec, input), sort_op_provider_(op_monitor_info_), sort_row_count_(0),
+  ObOperator(ctx_, spec, input), sort_op_provider_(op_monitor_info_),
+  fts_secondary_monitor_info_(), fts_secondary_sort_provider_(fts_secondary_monitor_info_),
+  fts_secondary_sort_thread_(),
+  fts_secondary_sort_enabled_(false), sort_row_count_(0),
   is_first_(true), ret_row_count_(0), sk_row_store_(), addon_row_store_(), sk_row_iter_(),
   addon_row_iter_()
 {}
@@ -67,6 +70,14 @@ void ObSortVecOp::reset_pd_topn_filter_expr_ctx()
 
 void ObSortVecOp::reset()
 {
+  if (fts_secondary_sort_thread_.is_started()) {
+    const int tmp_ret = fts_secondary_sort_thread_.wait_sort();
+    if (OB_SUCCESS != tmp_ret) {
+      int ret = tmp_ret;
+      LOG_WARN("wait vector fts secondary sort during reset failed", K(tmp_ret));
+    }
+  }
+  fts_secondary_sort_provider_.reset();
   sort_row_count_ = 0;
   ret_row_count_ = 0;
   is_first_ = true;
@@ -80,6 +91,8 @@ void ObSortVecOp::reset()
 void ObSortVecOp::destroy()
 {
   reset();
+  fts_secondary_sort_provider_.unregister_profile_if_necessary();
+  fts_secondary_sort_provider_.~ObSortVecOpProvider();
   sk_row_store_.~ObTempRowStore();
   addon_row_store_.~ObTempRowStore();
   sort_op_provider_.unregister_profile_if_necessary();
@@ -89,14 +102,127 @@ void ObSortVecOp::destroy()
 
 int ObSortVecOp::inner_close()
 {
+  int ret = OB_SUCCESS;
+  if (fts_secondary_sort_thread_.is_started()
+      && OB_FAIL(fts_secondary_sort_thread_.wait_sort())) {
+    LOG_WARN("wait vector fts secondary sort during close failed", K(ret));
+  }
   sort_op_provider_.collect_memory_dump_info(op_monitor_info_);
   sort_op_provider_.unregister_profile();
+  fts_secondary_sort_provider_.collect_memory_dump_info(fts_secondary_monitor_info_);
+  fts_secondary_sort_provider_.unregister_profile();
   if (MY_SPEC.enable_pd_topn_filter()) {
     // TODO XUNSI: update plan monitor info of pushdown topn filter
     // but all the others_values of the plan_monitor_node is used,
     // add an extra string in json format is a considered way
   }
-  return OB_SUCCESS;
+  return ret;
+}
+
+int ObSortVecOp::init_fts_secondary_sort(
+    const common::ObIArray<ObSortFieldCollation> *sort_collations,
+    const common::ObIArray<ObSortCmpFunc> *sort_cmp_funs,
+    const ExprFixedArray *sort_exprs,
+    const int64_t input_rows,
+    const int64_t input_width,
+    const ObPhyOperatorType operator_type,
+    const uint64_t operator_id)
+{
+  int ret = OB_SUCCESS;
+  ObSQLSessionInfo *session_info = GET_MY_SESSION(ctx_);
+  ObSortVecOpContext context;
+  if (OB_UNLIKELY(fts_secondary_sort_enabled_)) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("initialize vector fts secondary sorter twice", K(ret));
+  } else if (OB_ISNULL(sort_collations) || OB_ISNULL(sort_cmp_funs)
+             || OB_ISNULL(sort_exprs) || sort_exprs->empty()
+             || OB_ISNULL(session_info)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid vector fts secondary sorter arguments", K(ret), KP(sort_collations),
+        KP(sort_cmp_funs), KP(sort_exprs), KP(session_info));
+  } else if (FALSE_IT(context.sk_exprs_ = sort_exprs)) {
+  } else if (FALSE_IT(context.sk_collations_ = sort_collations)) {
+  } else if (FALSE_IT(context.eval_ctx_ = &eval_ctx_)) {
+  } else if (FALSE_IT(context.exec_ctx_ = &ctx_)) {
+  } else if (FALSE_IT(context.op_ = this)) {
+  } else if (FALSE_IT(context.compress_type_ = MY_SPEC.compress_type_)) {
+  } else if (FALSE_IT(context.pd_topn_filter_info_ = nullptr)) {
+  } else if (OB_FAIL(fts_secondary_sort_provider_.init(context))) {
+    LOG_WARN("initialize vector fts secondary sort provider failed", K(ret));
+  } else if (OB_FAIL(fts_secondary_sort_thread_.init(
+                 &fts_secondary_sort_provider_, session_info))) {
+    LOG_WARN("initialize vector fts secondary sort thread failed", K(ret));
+  } else {
+    fts_secondary_sort_provider_.set_input_rows(input_rows);
+    fts_secondary_sort_provider_.set_input_width(input_width);
+    fts_secondary_sort_provider_.set_operator_type(operator_type);
+    fts_secondary_sort_provider_.set_operator_id(operator_id);
+    fts_secondary_sort_provider_.set_io_event_observer(&io_event_observer_);
+    fts_secondary_sort_enabled_ = true;
+  }
+  return ret;
+}
+
+int ObSortVecOp::add_fts_secondary_batch(const ObBatchRows &brs)
+{
+  int ret = OB_SUCCESS;
+  if (!fts_secondary_sort_enabled_ || brs.size_ <= 0) {
+  } else if (OB_ISNULL(brs.skip_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid vector fts secondary sort batch", K(ret),
+        KP(brs.skip_), K(brs.size_));
+  } else {
+    bool need_dump = false;
+    if (OB_FAIL(fts_secondary_sort_provider_.add_batch(brs, need_dump))) {
+      LOG_WARN("add vector fts secondary sort batch failed", K(ret), K(brs.size_));
+    }
+  }
+  return ret;
+}
+
+int ObSortVecOp::start_fts_secondary_sort()
+{
+  int ret = OB_SUCCESS;
+  if (!fts_secondary_sort_enabled_) {
+  } else if (OB_FAIL(fts_secondary_sort_thread_.start_sort())) {
+    LOG_WARN("start vector fts secondary sort failed", K(ret));
+  }
+  return ret;
+}
+
+int ObSortVecOp::wait_fts_secondary_sort()
+{
+  int ret = OB_SUCCESS;
+  if (!fts_secondary_sort_enabled_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("vector fts secondary sorter is not enabled", K(ret));
+  } else if (OB_FAIL(fts_secondary_sort_thread_.wait_sort())) {
+    LOG_WARN("wait vector fts secondary sort failed", K(ret));
+  }
+  return ret;
+}
+
+int ObSortVecOp::get_next_fts_secondary_batch(int64_t &read_rows)
+{
+  int ret = OB_SUCCESS;
+  read_rows = 0;
+  if (!fts_secondary_sort_enabled_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("vector fts secondary sorter is not initialized", K(ret));
+  } else if (OB_UNLIKELY(MY_SPEC.max_batch_size_ <= 0)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid vector fts secondary batch size", K(ret),
+        K(MY_SPEC.max_batch_size_));
+  } else {
+    clear_evaluated_flag();
+    ret = fts_secondary_sort_provider_.get_next_batch(MY_SPEC.max_batch_size_, read_rows);
+    if (OB_ITER_END != ret) {
+      if (OB_FAIL(ret)) {
+        LOG_WARN("get next vector fts secondary sort batch failed", K(ret));
+      }
+    }
+  }
+  return ret;
 }
 
 int ObSortVecOp::get_int_value(const ObExpr *in_val, int64_t &out_val)
@@ -187,6 +313,7 @@ int ObSortVecOp::process_sort_batch()
         if (input_brs->size_ > 0) {
           sort_row_count_ +=
             input_brs->size_ - input_brs->skip_->accumulate_bit_cnt(input_brs->size_);
+          OZ(add_fts_secondary_batch(*input_brs));
           OZ(sort_op_provider_.add_batch(*input_brs, need_dump));
           sort_op_provider_.collect_memory_dump_info(op_monitor_info_);
         }
@@ -207,6 +334,7 @@ int ObSortVecOp::process_sort_batch()
     op_monitor_info_.otherstat_7_id_ = ObSqlMonitorStatIds::ROW_COUNT;
     op_monitor_info_.otherstat_7_value_ = sort_row_count_; 
     OZ(sort_op_provider_.sort());
+    OZ(start_fts_secondary_sort());
     sort_op_provider_.collect_memory_dump_info(op_monitor_info_);
   }
   return ret;

@@ -183,7 +183,7 @@ int ObDASTextRetrievalIter::inner_init(ObDASIterParam &param)
     need_inv_idx_agg_ = ir_ctdef_->need_inv_idx_agg();
     need_inv_idx_agg_reset_ = retrieval_param.need_inv_idx_agg_reset_;
     max_batch_size_ = ir_rtdef_->eval_ctx_->max_batch_size_;
-  
+
     if (need_inv_idx_agg_) {
       inverted_idx_agg_iter_ = static_cast<ObDASScanIter *>(retrieval_param.inv_idx_agg_iter_);
     }
@@ -1100,13 +1100,29 @@ int ObDASTRCacheIter::inner_release()
 int ObDASTRCacheIter::inner_get_next_rows(int64_t &count, int64_t capacity)
 {
   int ret = OB_SUCCESS;
+  count = 0;
+  if (OB_FAIL(advance_cached_row())) {
+    if (OB_UNLIKELY(OB_ITER_END != ret)) {
+      LOG_WARN("get next rows failed", K(ret));
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    count = 1;
+  }
+  return ret;
+}
+
+int ObDASTRCacheIter::advance_cached_row()
+{
+  int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("retrieval iterator not inited", K(ret));
   } else if (!inv_idx_agg_evaluated_ && need_inv_idx_agg_) {
     if (OB_FAIL(do_doc_cnt_agg())) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
-        LOG_WARN("Fail to do document count aggregation", K(ret), K_(inv_idx_agg_param));
+        LOG_WARN("failed to do document count aggregation", K(ret), K_(inv_idx_agg_param));
       } else {
         inv_idx_agg_evaluated_ = true;
       }
@@ -1114,16 +1130,10 @@ int ObDASTRCacheIter::inner_get_next_rows(int64_t &count, int64_t capacity)
       inv_idx_agg_evaluated_ = true;
     }
   }
-  count = 0;
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(get_next_batch_inner())) {
+  if (OB_SUCC(ret) && OB_FAIL(get_next_batch_inner())) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("get next rows failed", K(ret));
+      LOG_WARN("failed to advance cached retrieval row", K(ret));
     }
-  }
-  
-  if (OB_SUCC(ret)) {
-    count = 1;
   }
   return ret;
 }
@@ -1222,6 +1232,18 @@ int ObDASTRCacheIter::get_cur_row(double &relevance, ObDocIdExt &doc_id) const
     if (ir_ctdef_->need_calc_relevance()) {
       relevance = relevance_[cur_idx_];
     }
+    doc_id = doc_id_[cur_idx_];
+  }
+  return ret;
+}
+
+int ObDASTRCacheIter::get_cur_doc_id(ObDocIdExt &doc_id) const
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(cur_idx_ < 0 || cur_idx_ >= count_)) {
+    ret = OB_ARRAY_OUT_OF_RANGE;
+    LOG_WARN("cached doc id index out of bounds", K(ret), K_(cur_idx), K_(count));
+  } else {
     doc_id = doc_id_[cur_idx_];
   }
   return ret;

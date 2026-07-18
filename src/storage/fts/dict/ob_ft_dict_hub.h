@@ -52,11 +52,11 @@ struct ObFTDictInfoKey
 {
 public:
   ObFTDictInfoKey()
-      : type_(static_cast<uint64_t>(ObFTDictType::DICT_TYPE_INVALID))
+      : name_(0)
   {
   } // default constructor
-  ObFTDictInfoKey(const uint64_t type)
-      : type_(type)
+  ObFTDictInfoKey(const uint64_t name)
+      : name_(name)
   {
   }
   int hash(uint64_t &hash_value) const
@@ -69,34 +69,33 @@ public:
   uint64_t hash() const
   {
     uint64_t hash = 0;
-    hash = common::murmurhash(&type_, sizeof(int64_t), hash);
+    hash = common::murmurhash(&name_, sizeof(name_), hash);
     return hash;
   }
 
   bool operator==(const ObFTDictInfoKey &other) const
   {
-    return type_ == other.type_ && true;
+    return name_ == other.name_;
   }
 
   int compare(const ObFTDictInfoKey &other) const
   {
     int ret = 0;
     if (0 == ret) {
-      ret = type_ - other.type_;
+      ret = name_ < other.name_ ? -1 : (name_ > other.name_ ? 1 : 0);
     }
     return ret;
   }
 
 private:
-  uint64_t type_;
-  // name
+  uint64_t name_;
 };
 
 class ObFTCacheRangeContainer;
 class ObFTDictHub
 {
 public:
-  ObFTDictHub() : is_inited_(false), dict_map_(), rw_dict_lock_() {}
+  ObFTDictHub() : is_inited_(false), dictionary_epoch_(1), dict_map_(), rw_dict_lock_() {}
   ~ObFTDictHub() {}
 
   int init();
@@ -107,6 +106,10 @@ public:
 
   int load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
 
+  int refresh_cache(const ObString &table_name);
+
+  uint64_t get_dictionary_epoch() const { return ATOMIC_LOAD(&dictionary_epoch_); }
+
 private:
   int get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info);
 
@@ -115,6 +118,7 @@ private:
 
 private:
   bool is_inited_;
+  uint64_t dictionary_epoch_;
   // holds info of dict
   hash::ObHashMap<ObFTDictInfoKey, ObFTDictInfo> dict_map_;
   ObBucketLock rw_dict_lock_;

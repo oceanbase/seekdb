@@ -161,3 +161,35 @@ int ObColumnClusteredDag::update_tablet_range_count()
   return ret;
 }
 
+int ObColumnClusteredDag::set_uniform_tablet_slice_count(const int64_t slice_count)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else if (OB_UNLIKELY(slice_count <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid slice count", K(ret), K(slice_count));
+  } else {
+    ObMutexGuard mutex_guard(mutex_);
+    total_slice_count_ = 0;
+    for (int64_t i = 0; OB_SUCC(ret) && i < ls_tablet_ids_.count(); ++i) {
+      ObDDLTabletContext *tablet_context = nullptr;
+      const ObTabletID &tablet_id = ls_tablet_ids_.at(i).second;
+      if (OB_FAIL(get_tablet_context(tablet_id, tablet_context))) {
+        LOG_WARN("get ddl tablet context failed", K(ret), K(tablet_id));
+      } else if (OB_ISNULL(tablet_context)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("ddl tablet context is null", K(ret), K(tablet_id));
+      } else {
+        tablet_context->slice_count_ = slice_count;
+        tablet_context->table_slice_offset_ = total_slice_count_;
+        total_slice_count_ += slice_count;
+      }
+    }
+    if (OB_SUCC(ret)) {
+      is_range_count_ready_ = true;
+    }
+  }
+  return ret;
+}

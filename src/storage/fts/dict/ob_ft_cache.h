@@ -26,6 +26,7 @@
 #include "share/cache/ob_kvcache_struct.h"
 #include "storage/fts/dict/ob_ft_dat_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
+#include "storage/fts/ob_fts_struct.h"
 
 #include <cstdint>
 
@@ -48,7 +49,8 @@ public:
   {
     const ObDictCacheKey &other_key = reinterpret_cast<const ObDictCacheKey &>(other);
     return (&other == this)
-           || ((other_key.name_ == name_) && (other_key.dict_type_ == dict_type_));
+           || ((other_key.name_ == name_) && (other_key.dict_type_ == dict_type_)
+               && (other_key.range_id_ == range_id_));
   }
 
   uint64_t hash() const override
@@ -142,6 +144,93 @@ public:
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDictCache);
+};
+
+class ObFTTokenCacheKey : public common::ObIKVCacheKey
+{
+public:
+  ObFTTokenCacheKey();
+  ObFTTokenCacheKey(const uint64_t tenant_id,
+                    const uint64_t dictionary_epoch,
+                    const common::ObCollationType collation_type,
+                    const common::ObString &parser_name,
+                    const common::ObString &parser_properties,
+                    const common::ObString &fulltext);
+  ~ObFTTokenCacheKey() override = default;
+
+  int equal(const common::ObIKVCacheKey &other, bool &equal) const override;
+  int hash(uint64_t &hash_value) const override;
+  int64_t size() const override;
+  int deep_copy(char *buf,
+                const int64_t buf_len,
+                common::ObIKVCacheKey *&key) const override;
+  bool is_valid() const;
+
+  TO_STRING_KV(K_(tenant_id), K_(dictionary_epoch), K_(collation_type),
+      K_(parser_name), K_(parser_properties), K_(fulltext));
+
+private:
+  uint64_t tenant_id_;
+  uint64_t dictionary_epoch_;
+  common::ObCollationType collation_type_;
+  common::ObString parser_name_;
+  common::ObString parser_properties_;
+  common::ObString fulltext_;
+};
+
+class ObFTTokenCacheValue : public common::ObIKVCacheValue
+{
+public:
+  ObFTTokenCacheValue();
+  ObFTTokenCacheValue(const int64_t document_length,
+                      const int64_t word_count,
+                      const common::ObString &serialized_words);
+  ~ObFTTokenCacheValue() override = default;
+
+  int64_t size() const override;
+  int deep_copy(char *buf,
+                const int64_t buf_len,
+                common::ObIKVCacheValue *&value) const override;
+  bool is_valid() const;
+  int deserialize(common::ObIAllocator &allocator,
+                  const common::ObObjMeta &word_meta,
+                  ObFTWordMap &word_map) const;
+  static int serialize(common::ObIAllocator &allocator,
+                       const int64_t document_length,
+                       const ObFTWordMap &word_map,
+                       ObFTTokenCacheValue &value);
+
+  int64_t get_document_length() const { return document_length_; }
+  int64_t get_word_count() const { return word_count_; }
+  const common::ObString &get_serialized_words() const { return serialized_words_; }
+
+  TO_STRING_KV(K_(document_length), K_(word_count), K_(serialized_words));
+
+private:
+  int64_t document_length_;
+  int64_t word_count_;
+  common::ObString serialized_words_;
+};
+
+class ObFTTokenCache : public common::ObKVCache<ObFTTokenCacheKey, ObFTTokenCacheValue>
+{
+public:
+  ObFTTokenCache() = default;
+  ~ObFTTokenCache() override = default;
+
+  int get_token(const ObFTTokenCacheKey &key,
+                const ObFTTokenCacheValue *&value,
+                common::ObKVCacheHandle &handle);
+  int put_token(const ObFTTokenCacheKey &key, const ObFTTokenCacheValue &value);
+
+  static ObFTTokenCache &get_instance()
+  {
+    static ObFTTokenCache cache;
+    return cache;
+  }
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObFTTokenCache);
 };
 
 } //  namespace storage

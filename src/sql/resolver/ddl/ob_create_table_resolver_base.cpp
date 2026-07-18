@@ -362,6 +362,7 @@ int ObCreateTableResolverBase::resolve_column_group(const ParseNode *cg_node)
 int ObCreateTableResolverBase::resolve_table_organization(common::ObServerConfig *tenant_config, ParseNode *node)
 {
   int ret = OB_SUCCESS;
+  is_table_organization_explicit_ = false;
   // get the table organization from the tenant config
   {
     const char *ptr = NULL;
@@ -393,6 +394,7 @@ int ObCreateTableResolverBase::resolve_table_organization(common::ObServerConfig
         SQL_RESV_LOG(WARN, "node is null", K(ret));
       } else if (T_ORGANIZATION == option_node->type_) {
         if (stmt_->get_stmt_type() == stmt::T_CREATE_TABLE) {
+          is_table_organization_explicit_ = true;
           if (OB_ISNULL(option_node->children_[0])) {
             ret = OB_ERR_UNEXPECTED;
             SQL_RESV_LOG(WARN, "option_node child is null", K(option_node->children_[0]), K(ret));

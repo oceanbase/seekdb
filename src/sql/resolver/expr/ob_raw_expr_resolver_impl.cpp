@@ -1222,6 +1222,10 @@ int ObRawExprResolverImpl::do_recursive_resolve(const ParseNode *node,
         OZ (process_vector_similarity_func_node(node, expr));
         break;
       }
+      case T_FUN_SYS_AI_SPLIT_DOCUMENT: {
+        OZ (process_ai_split_document_node(node, expr));
+        break;
+      }
       case T_FUNC_SYS_ARRAY_FIRST:
       case T_FUNC_SYS_ARRAY_SORTBY:
       case T_FUNC_SYS_ARRAY_FILTER:
@@ -2736,6 +2740,43 @@ int ObRawExprResolverImpl::process_vector_similarity_func_node(const ParseNode *
         LOG_WARN("fail to recursive resolve expr list item", K(ret));
       } else if (OB_FAIL(func_expr->add_param_expr(para_expr))) {
         LOG_WARN("fail to add param expr to expr", K(ret));
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    expr = func_expr;
+  }
+  return ret;
+}
+
+int ObRawExprResolverImpl::process_ai_split_document_node(const ParseNode *node, ObRawExpr *&expr)
+{
+  int ret = OB_SUCCESS;
+  ObSysFunRawExpr *func_expr = NULL;
+  if (OB_ISNULL(node)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(node));
+  } else if (OB_UNLIKELY(node->num_child_ < 1 || node->num_child_ > 2)) {
+    ret = OB_ERR_PARAM_SIZE;
+    LOG_WARN("invalid AI_SPLIT_DOCUMENT parameter count", K(ret), K(node->num_child_));
+  } else if (OB_FAIL(ctx_.expr_factory_.create_raw_expr(node->type_, func_expr))) {
+    LOG_WARN("failed to create AI_SPLIT_DOCUMENT raw expression", K(ret));
+  } else if (OB_ISNULL(func_expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("AI_SPLIT_DOCUMENT raw expression is null", K(ret));
+  } else if (OB_FAIL(func_expr->init_param_exprs(node->num_child_))) {
+    LOG_WARN("failed to initialize AI_SPLIT_DOCUMENT parameters", K(ret));
+  } else {
+    func_expr->set_func_name(N_AI_SPLIT_DOCUMENT);
+    for (int64_t index = 0; OB_SUCC(ret) && index < node->num_child_; ++index) {
+      ObRawExpr *parameter_expr = NULL;
+      if (OB_ISNULL(node->children_) || OB_ISNULL(node->children_[index])) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("invalid AI_SPLIT_DOCUMENT parameter node", K(ret), K(index));
+      } else if (OB_FAIL(SMART_CALL(recursive_resolve(node->children_[index], parameter_expr)))) {
+        LOG_WARN("failed to resolve AI_SPLIT_DOCUMENT parameter", K(ret), K(index));
+      } else if (OB_FAIL(func_expr->add_param_expr(parameter_expr))) {
+        LOG_WARN("failed to add AI_SPLIT_DOCUMENT parameter", K(ret), K(index));
       }
     }
   }

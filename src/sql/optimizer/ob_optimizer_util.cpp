@@ -8058,6 +8058,7 @@ int ObOptimizerUtil::check_can_encode_sortkey(const common::ObIArray<OrderItem> 
   ObSEArray<ObRawExpr *, 4> sort_keys;
   double avg_len = 0;
   bool has_hint = false;
+  bool has_fts_sort_key = false;
   can_sort_opt = true;
   bool old_can_opt = false;
   const ObOptParamHint opt_params = plan.get_optimizer_context().get_global_hint().opt_params_;
@@ -8071,6 +8072,13 @@ int ObOptimizerUtil::check_can_encode_sortkey(const common::ObIArray<OrderItem> 
     can_sort_opt &= GCONF._enable_newsort;
 
     for (int64_t i = 0; OB_SUCC(ret) && can_sort_opt && i < order_keys.count(); i++) {
+      ObRawExpr *sort_expr = order_keys.at(i).expr_;
+      ObRawExpr *dependent_expr = sort_expr->is_column_ref_expr()
+          ? static_cast<ObColumnRefRawExpr *>(sort_expr)->get_dependant_expr()
+          : nullptr;
+      has_fts_sort_key |= sort_expr->get_expr_type() == T_FUN_SYS_WORD_SEGMENT
+          || (OB_NOT_NULL(dependent_expr)
+              && dependent_expr->get_expr_type() == T_FUN_SYS_WORD_SEGMENT);
       if (!ObOrderPerservingEncoder::can_encode_sortkey(
                             order_keys.at(i).expr_->get_data_type(),
                             order_keys.at(i).expr_->get_collation_type())) {
@@ -8091,6 +8099,8 @@ int ObOptimizerUtil::check_can_encode_sortkey(const common::ObIArray<OrderItem> 
                                                               sort_keys,
                                                               avg_len))) {
       LOG_WARN("failed to estimate width for output join column exprs", K(ret));
+    } else if (plan.get_optimizer_context().is_online_ddl() && has_fts_sort_key) {
+      // FTS index construction always has a large sort input after token expansion.
     } else if (avg_len > 256) {
       can_sort_opt = false;
     } else if (card < 1000) {
@@ -8109,7 +8119,7 @@ int ObOptimizerUtil::check_can_encode_sortkey(const common::ObIArray<OrderItem> 
       can_sort_opt = old_can_opt;
     }
     LOG_TRACE("check encode sortkey", K(can_sort_opt), K(order_keys), K(card), K(avg_len),
-              K(old_can_opt));
+              K(old_can_opt), K(has_fts_sort_key));
   }
   return ret;
 }

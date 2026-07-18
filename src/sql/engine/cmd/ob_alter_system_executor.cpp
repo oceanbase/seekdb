@@ -29,6 +29,9 @@
 #include "rootserver/freeze/ob_major_freeze_helper.h" //ObMajorFreezeHelper
 #include "pl/pl_cache/ob_pl_cache_mgr.h"
 #include "sql/plan_cache/ob_ps_cache.h"
+#include "storage/fts/ob_fts_plugin_helper.h"
+#include "storage/fts/dict/ob_ft_dict_hub.h"
+#include "lib/string/ob_sql_string.h"
 
 #include "rootserver/ob_tenant_event_def.h"
 #include "sql/engine/cmd/ob_redis_importer.h"
@@ -471,6 +474,30 @@ int ObRefreshMemStatExecutor::execute(ObExecContext &ctx, ObRefreshMemStatStmt &
   } else if (OB_FAIL(GCTX.root_service_->admin_refresh_memory_stat(
                          stmt.get_rpc_arg()))) {
     LOG_WARN("refresh memory stat failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
+  }
+  return ret;
+}
+
+int ObRefreshFulltextDictExecutor::execute(ObExecContext &ctx,
+                                           ObRefreshFulltextDictStmt &stmt)
+{
+  UNUSED(ctx);
+  int ret = OB_SUCCESS;
+  storage::ObFTDictHub *dict_hub = nullptr;
+  ObSqlString qualified_name;
+  if (OB_FAIL(storage::ObFTParsePluginData::instance().get_dict_hub(dict_hub))) {
+    LOG_WARN("get fulltext dictionary hub failed", K(ret));
+  } else if (OB_ISNULL(dict_hub)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fulltext dictionary hub is null", K(ret));
+  } else if (OB_FAIL(qualified_name.append_fmt(
+                 "%.*s.%.*s",
+                 stmt.get_database_name().length(), stmt.get_database_name().ptr(),
+                 stmt.get_table_name().length(), stmt.get_table_name().ptr()))) {
+    LOG_WARN("build qualified fulltext dictionary table name failed", K(ret), K(stmt));
+  } else if (OB_FAIL(dict_hub->refresh_cache(qualified_name.string()))) {
+    LOG_WARN("refresh fulltext dictionary cache failed", K(ret),
+             "table_name", qualified_name.string());
   }
   return ret;
 }

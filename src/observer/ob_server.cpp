@@ -454,6 +454,8 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init px target mgr failed", KR(ret));
     } else if (OB_FAIL(ObDictCache::get_instance().init("dict_cache"))) {
       LOG_ERROR("init dict cache failed", KR(ret));
+    } else if (OB_FAIL(ObFTTokenCache::get_instance().init("fts_token_cache"))) {
+      LOG_ERROR("init fulltext token cache failed", KR(ret));
 
 #ifndef OB_BUILD_LITE
     } else if (OB_FAIL(ObServerBlacklist::get_instance().init(self_addr_))) {
@@ -676,6 +678,7 @@ void ObServer::destroy()
     FLOG_INFO("server startup task handler destroyed");
 
     FLOG_INFO("begin to destroy dict cache");
+    ObFTTokenCache::get_instance().destroy();
     ObDictCache::get_instance().destroy();
     FLOG_INFO("dict cache destroyed");
 

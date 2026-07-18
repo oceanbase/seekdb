@@ -38,6 +38,18 @@ int ObTokenIteratorAdaptor::get_next_token(const char *&word, int64_t &word_len,
   return ret;
 }
 
+int ObTokenIteratorAdaptor::reuse(ObFTParserParam *param)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(param)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid parser param", K(ret), KP(param));
+  } else {
+    param_ = param;
+  }
+  return ret;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 int ObFtParserAdaptor::init_adaptor(const ObPluginFTParser &ftparser, int64_t ftparser_sizeof)
 {
@@ -83,20 +95,21 @@ int ObFtParserAdaptor::deinit(ObPluginParam *param)
   return ret;
 }
 
-int ObFtParserAdaptor::segment(ObFTParserParam *param, ObITokenIterator *&iter) const
+int ObFtParserAdaptor::create_token_iter(ObFTParserParam *param, ObITokenIterator *&iter) const
 {
   int ret = OB_SUCCESS;
   ObTokenIteratorAdaptor *iter_adaptor = nullptr;
   if (!inited_) {
     ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(param) || OB_ISNULL(param->allocator_)) {
+  } else if (OB_ISNULL(param) || OB_ISNULL(param->parser_allocator_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(param));
   } else if (OB_ISNULL(ftparser_.scan_begin) || OB_ISNULL(ftparser_.next_token)) {
     ret = OB_NOT_SUPPORTED;
   } else if (OB_FAIL(ftparser_.scan_begin(param))) {
     LOG_WARN("failed to call ftparser.init", K(ret));
-  } else if (OB_ISNULL(iter_adaptor = static_cast<ObTokenIteratorAdaptor *>(param->allocator_->alloc(sizeof(ObTokenIteratorAdaptor))))) {
+  } else if (OB_ISNULL(iter_adaptor = static_cast<ObTokenIteratorAdaptor *>(
+                           param->parser_allocator_->alloc(sizeof(ObTokenIteratorAdaptor))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (FALSE_IT(new (iter_adaptor) ObTokenIteratorAdaptor(ftparser_, param))) {
   } else if (FALSE_IT(iter = iter_adaptor)) {
@@ -104,22 +117,43 @@ int ObFtParserAdaptor::segment(ObFTParserParam *param, ObITokenIterator *&iter) 
   return ret;
 }
 
-void ObFtParserAdaptor::free_token_iter(ObFTParserParam *param, ObITokenIterator *&iter) const
+int ObFtParserAdaptor::reuse_token_iter(ObFTParserParam *param, ObITokenIterator *iter) const
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
   } else if (OB_ISNULL(param) || OB_ISNULL(iter)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_NOT_NULL(ftparser_.scan_end)) {
-    int tmp_ret = ftparser_.scan_end(param);
-    if (tmp_ret != OB_SUCCESS) {
+    LOG_WARN("invalid argument", K(ret), KPC(param), KP(iter));
+  } else if (OB_ISNULL(ftparser_.scan_begin) || OB_ISNULL(ftparser_.next_token)) {
+    ret = OB_NOT_SUPPORTED;
+  } else if (OB_NOT_NULL(ftparser_.scan_end) && OB_FAIL(ftparser_.scan_end(param))) {
+    LOG_WARN("failed to finish previous plugin parser scan", K(ret), KPC(param));
+  } else if (OB_FAIL(ftparser_.scan_begin(param))) {
+    LOG_WARN("failed to begin plugin parser scan", K(ret), KPC(param));
+  } else if (OB_FAIL(static_cast<ObTokenIteratorAdaptor *>(iter)->reuse(param))) {
+    LOG_WARN("failed to reuse token iterator adaptor", K(ret), KPC(param));
+  }
+  return ret;
+}
+
+void ObFtParserAdaptor::destroy_token_iter(ObFTParserParam *param, ObITokenIterator *&iter) const
+{
+  int ret = OB_SUCCESS;
+  int tmp_ret = OB_SUCCESS;
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("parser adaptor is not initialized", K(inited_));
+  } else if (OB_ISNULL(param) || OB_ISNULL(iter)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KPC(param), KP(iter));
+  } else {
+    if (OB_NOT_NULL(ftparser_.scan_end) && OB_SUCCESS != (tmp_ret = ftparser_.scan_end(param))) {
       LOG_WARN("failed to call ftparser.scan_end(ignore)", K(tmp_ret));
     }
-  } else {
     ObTokenIteratorAdaptor *iter_adaptor = static_cast<ObTokenIteratorAdaptor *>(iter);
     iter_adaptor->~ObTokenIteratorAdaptor();
-    param->allocator_->free(iter_adaptor);
+    param->parser_allocator_->free(iter_adaptor);
     iter = nullptr;
   }
 }

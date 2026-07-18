@@ -418,11 +418,11 @@ int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict 
   int ret = OB_SUCCESS;
   bool found = false;
   for (int i = 0; OB_SUCC(ret) && !found && i < range_dicts_.size(); ++i) {
-    if (ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
+    if (ObCharset::strcmp(desc_.coll_type_,
                           range_dicts_[i].start_.get_word(),
                           single_word)
             <= 0
-        && ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
+        && ObCharset::strcmp(desc_.coll_type_,
                              range_dicts_[i].end_.get_word(),
                              single_word)
                >= 0) {
@@ -446,7 +446,7 @@ int ObFTRangeDict::build_dict_from_cache(const ObFTCacheRangeContainer &range_co
     ObFTCacheRangeHandle *ptr = *iter;
     ObFTCacheDict *dict = nullptr;
     ObFTDAT *dat = ptr->value_->dat_block_;
-    if (OB_ISNULL(dict = OB_NEWx(ObFTCacheDict, &range_alloc_, ObCollationType::CS_TYPE_UTF8MB4_BIN, dat))) {
+    if (OB_ISNULL(dict = OB_NEWx(ObFTCacheDict, &range_alloc_, desc_.coll_type_, dat))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("Failed to alloc memory.", K(ret));
     } else {
@@ -465,30 +465,21 @@ int ObFTRangeDict::build_dict_from_cache(const ObFTCacheRangeContainer &range_co
 int ObFTRangeDict::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &range_container)
 {
   int ret = OB_SUCCESS;
-
-  ObString table_name;
-  switch (desc.type_) {
-  case ObFTDictType::DICT_IK_MAIN: {
-    table_name = ObString(share::OB_FT_DICT_IK_UTF8_TNAME);
-  } break;
-  case ObFTDictType::DICT_IK_QUAN: {
-    table_name = ObString(share::OB_FT_QUANTIFIER_IK_UTF8_TNAME);
-  } break;
-  case ObFTDictType::DICT_IK_STOP: {
-    table_name = ObString(share::OB_FT_STOPWORD_IK_UTF8_TNAME);
-  } break;
-  default:
+  if (ObFTDictType::DICT_IK_MAIN != desc.type_
+      && ObFTDictType::DICT_IK_QUAN != desc.type_
+      && ObFTDictType::DICT_IK_STOP != desc.type_) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("Not supported dict type.", K(ret));
+    LOG_WARN("not supported dict type", K(ret), K(desc.type_));
   }
 
   if (OB_SUCC(ret)) {
     SMART_VAR(ObISQLClient::ReadResult, result)
     {
       ObFTDictTableIter iter_table(result);
-      if (OB_FAIL(iter_table.init(table_name))) {
-        LOG_WARN("Failed to init iterator.", K(ret));
-      } else if (OB_FAIL(ObFTRangeDict::build_ranges(desc, iter_table, range_container))) {
+      if (OB_FAIL(iter_table.init(desc.name_))) {
+        LOG_WARN("failed to init dictionary table iterator", K(ret), K(desc.name_));
+      } else if (!iter_table.is_empty()
+                 && OB_FAIL(ObFTRangeDict::build_ranges(desc, iter_table, range_container))) {
         LOG_WARN("Failed to build ranges.", K(ret));
       }
     }
@@ -502,7 +493,7 @@ int ObFTRangeDict::try_load_cache(const ObFTDictDesc &desc,
                                   ObFTCacheRangeContainer &range_container)
 {
   int ret = OB_SUCCESS;
-  uint64_t name = static_cast<uint64_t>(desc.type_);
+  const uint64_t name = desc.get_cache_key();
 
   for (int64_t i = 0; OB_SUCC(ret) && i < range_count; ++i) {
     ObDictCacheKey key(name, desc.type_, i);
