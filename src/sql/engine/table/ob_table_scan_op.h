@@ -755,6 +755,9 @@ protected:
   bool in_rescan_;
   ObDomainIndexCache domain_index_;
   ObFTIndexRowCache fts_index_;
+  // Temporary storage used to materialize an out-row LOB before FTS DDL
+  // tokenization. The index row cache owns the token data after segment().
+  common::ObArenaAllocator fts_lob_allocator_;
   ObExpr *fts_output_exprs_[share::ObFtsIndexBuilderUtil::OB_FTS_INDEX_OR_DOC_WORD_TABLE_COL_CNT];
 
   // output_ is used to output data, TSC operator directly invokes output_::get_next_row(s),
