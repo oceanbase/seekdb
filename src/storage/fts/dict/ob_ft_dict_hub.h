@@ -52,13 +52,22 @@ struct ObFTDictInfoKey
 {
 public:
   ObFTDictInfoKey()
-      : type_(static_cast<uint64_t>(ObFTDictType::DICT_TYPE_INVALID))
+      : name_hash_(0),
+        type_(static_cast<uint64_t>(ObFTDictType::DICT_TYPE_INVALID))
   {
   } // default constructor
-  ObFTDictInfoKey(const uint64_t type)
-      : type_(type)
+
+  ObFTDictInfoKey(
+      const common::ObString &name,
+      const uint64_t type)
+      : name_hash_(common::murmurhash(
+            name.ptr(),
+            name.length(),
+            0)),
+        type_(type)
   {
   }
+
   int hash(uint64_t &hash_value) const
   {
     int ret = OB_SUCCESS;
@@ -68,28 +77,49 @@ public:
 
   uint64_t hash() const
   {
-    uint64_t hash = 0;
-    hash = common::murmurhash(&type_, sizeof(int64_t), hash);
-    return hash;
+    uint64_t hash_value = 0;
+
+    hash_value = common::murmurhash(
+        &name_hash_,
+        sizeof(name_hash_),
+        hash_value);
+
+    hash_value = common::murmurhash(
+        &type_,
+        sizeof(type_),
+        hash_value);
+
+    return hash_value;
   }
 
-  bool operator==(const ObFTDictInfoKey &other) const
+  bool operator==(
+      const ObFTDictInfoKey &other) const
   {
-    return type_ == other.type_ && true;
+    return name_hash_ == other.name_hash_
+        && type_ == other.type_;
   }
 
-  int compare(const ObFTDictInfoKey &other) const
+  int compare(
+      const ObFTDictInfoKey &other) const
   {
     int ret = 0;
-    if (0 == ret) {
-      ret = type_ - other.type_;
+
+    if (name_hash_ < other.name_hash_) {
+      ret = -1;
+    } else if (name_hash_ > other.name_hash_) {
+      ret = 1;
+    } else if (type_ < other.type_) {
+      ret = -1;
+    } else if (type_ > other.type_) {
+      ret = 1;
     }
+
     return ret;
   }
 
 private:
+  uint64_t name_hash_;
   uint64_t type_;
-  // name
 };
 
 class ObFTCacheRangeContainer;
@@ -106,6 +136,10 @@ public:
   int build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
 
   int load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
+
+  int refresh_dict(
+      const common::ObString &database_name,
+      const common::ObString &table_name);
 
 private:
   int get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info);

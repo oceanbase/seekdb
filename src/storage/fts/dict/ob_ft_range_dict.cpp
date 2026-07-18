@@ -76,6 +76,56 @@ int ObFTRangeDict::build_cache_from_ik_dict(const ObFTDictDesc &desc, ObFTCacheR
   return ret;
 }
 
+int ObFTRangeDict::build_cache_from_table(
+    const ObFTDictDesc &desc,
+    const ObString &database_name,
+    const ObString &table_name,
+    ObFTCacheRangeContainer &range_container)
+{
+  int ret = OB_SUCCESS;
+
+  range_container.reset();
+
+  if (database_name.empty()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("dictionary database name is empty",
+             K(ret),
+             K(database_name),
+             K(table_name));
+  } else if (table_name.empty()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("dictionary table name is empty",
+             K(ret),
+             K(database_name),
+             K(table_name));
+  } else {
+    SMART_VAR(ObISQLClient::ReadResult, result)
+    {
+      ObFTDictTableIter iter_table(result);
+
+      if (OB_FAIL(iter_table.init(database_name, table_name))) {
+        LOG_WARN("failed to initialize custom dictionary table iterator",
+                 K(ret),
+                 K(database_name),
+                 K(table_name),
+                 K(desc.type_));
+      } else if (OB_FAIL(
+                     ObFTRangeDict::build_ranges_concurrently_thread_pool(
+                         desc,
+                         iter_table,
+                         range_container))) {
+        LOG_WARN("failed to build custom dictionary cache",
+                 K(ret),
+                 K(database_name),
+                 K(table_name),
+                 K(desc.type_));
+      }
+    }
+  }
+
+  return ret;
+}
+
 // Thread pool for building DATs concurrently
 class DATBuilderThreadPool : public lib::Threads
 {
@@ -502,7 +552,7 @@ int ObFTRangeDict::try_load_cache(const ObFTDictDesc &desc,
                                   ObFTCacheRangeContainer &range_container)
 {
   int ret = OB_SUCCESS;
-  uint64_t name = static_cast<uint64_t>(desc.type_);
+  const uint64_t name = desc.get_cache_name();
 
   for (int64_t i = 0; OB_SUCC(ret) && i < range_count; ++i) {
     ObDictCacheKey key(name, desc.type_, i);

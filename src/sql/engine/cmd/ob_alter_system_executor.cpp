@@ -23,6 +23,8 @@
 #include "share/io/ob_io_manager.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/meta_store/ob_tenant_storage_meta_service.h"
+#include "storage/fts/ob_fts_plugin_helper.h"
+#include "storage/fts/dict/ob_ft_dict_hub.h"
 #include "observer/ob_server.h"
 #include "observer/scheduler/ob_dag_warning_history_mgr.h"
 #include "observer/omt/ob_tenant.h" //ObTenant
@@ -472,6 +474,46 @@ int ObRefreshMemStatExecutor::execute(ObExecContext &ctx, ObRefreshMemStatStmt &
                          stmt.get_rpc_arg()))) {
     LOG_WARN("refresh memory stat failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
   }
+  return ret;
+}
+
+int ObRefreshFulltextDictExecutor::execute(
+    ObExecContext &ctx,
+    ObRefreshFulltextDictStmt &stmt)
+{
+  int ret = OB_SUCCESS;
+  storage::ObFTDictHub *dict_hub = NULL;
+
+  UNUSED(ctx);
+
+  if (stmt.get_database_name().empty()
+      || stmt.get_table_name().empty()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid fulltext dictionary table name",
+             K(ret),
+             K(stmt.get_database_name()),
+             K(stmt.get_table_name()));
+  } else if (OB_FAIL(
+                 storage::ObFTParsePluginData::instance()
+                     .get_dict_hub(dict_hub))) {
+    LOG_WARN("failed to get fulltext dictionary hub", K(ret));
+  } else if (OB_ISNULL(dict_hub)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fulltext dictionary hub is null", K(ret));
+  } else if (OB_FAIL(
+                 dict_hub->refresh_dict(
+                     stmt.get_database_name(),
+                     stmt.get_table_name()))) {
+    LOG_WARN("failed to refresh fulltext dictionary",
+             K(ret),
+             K(stmt.get_database_name()),
+             K(stmt.get_table_name()));
+  } else {
+    LOG_INFO("successfully refreshed fulltext dictionary",
+             K(stmt.get_database_name()),
+             K(stmt.get_table_name()));
+  }
+
   return ret;
 }
 

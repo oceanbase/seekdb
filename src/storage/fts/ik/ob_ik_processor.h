@@ -19,6 +19,7 @@
 
 #include "lib/allocator/ob_allocator.h"
 #include "lib/charset/ob_charset.h"
+#include "lib/container/ob_se_array.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "storage/fts/ik/ob_ik_char_util.h"
 #include "storage/fts/ik/ob_ik_token.h"
@@ -30,6 +31,16 @@ namespace storage
 class TokenizeContext
 {
 public:
+  struct ObIKResultToken : public ObIKToken
+  {
+    ObIKResultToken() = default;
+    ObIKResultToken(const ObIKToken &token) : ObIKToken(token) {}
+
+    TO_STRING_KV(KP(ptr_), K(offset_), K(length_), K(char_cnt_), K(type_));
+  };
+
+  using ObIKResultArray = common::ObSEArray<ObIKResultToken, 64>;
+
   TokenizeContext(ObCollationType coll_type,
                   ObIAllocator &allocator,
                   const char *fulltext,
@@ -69,7 +80,9 @@ public:
 
   ObFTSortList &token_list() { return token_list_; }
 
-  ObList<ObIKToken, ObIAllocator> &result_list() { return result_list_; }
+  ObIKResultArray &result_list() { return result_list_; }
+
+  bool has_pending_result() const { return result_head_ < result_list_.count(); }
 
   int32_t handle_size() const { return handle_size_; }
 
@@ -88,7 +101,8 @@ private:
   bool is_smart_;
 
   ObFTSortList token_list_;
-  ObList<ObIKToken, ObIAllocator> result_list_;
+  ObIKResultArray result_list_;
+  int64_t result_head_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(TokenizeContext);
@@ -101,13 +115,18 @@ public:
 
   virtual ~ObIIKProcessor() {}
 
-  int process(TokenizeContext &ctx);
+  int process(TokenizeContext &ctx,
+              const char *ch,
+              const uint8_t char_len,
+              const ObFTCharUtil::CharType type);
 
   virtual int do_process(TokenizeContext &ctx,
                          const char *ch,
                          const uint8_t char_len,
                          const ObFTCharUtil::CharType type)
       = 0;
+
+  virtual void reset_document() = 0;
 };
 
 } // namespace storage

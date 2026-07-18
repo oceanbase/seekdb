@@ -34,6 +34,7 @@ public:
   ObIKArbitrator();
   ~ObIKArbitrator();
 
+  int reuse();
   int process(TokenizeContext &ctx);
 
   int output_result(TokenizeContext &ctx);
