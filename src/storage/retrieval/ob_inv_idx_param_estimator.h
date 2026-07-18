@@ -78,6 +78,7 @@ public:
   int64_t get_total_doc_cnt() const { return total_doc_cnt_; }
   double get_avg_doc_token_cnt() const { return avg_doc_token_cnt_; }
   bool is_estimated() const { return estimated_; }
+  bool is_inited() const { return is_inited_; }
 private:
   ObBM25ParamEstCtx est_ctx_;
   int64_t total_doc_cnt_;

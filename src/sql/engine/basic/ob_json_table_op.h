@@ -50,6 +50,7 @@ enum table_type : int8_t {
   OB_XML_TABLE = 2,
   OB_RB_ITERATE_TABLE = 3,
   OB_UNNEST_TABLE = 4,
+  OB_AI_SPLIT_DOC_TABLE = 5,
 };
 
 typedef enum JtNodeType {
@@ -166,6 +167,10 @@ struct JtScanCtx {
 
   bool is_unnest_table_func() {
     return spec_ptr_->table_type_ == OB_UNNEST_TABLE_TYPE;
+  }
+
+  bool is_ai_split_doc_table_func() {
+    return spec_ptr_->table_type_ == OB_AI_SPLIT_DOC_TABLE_TYPE;
   }
 
   ObJsonTableSpec* spec_ptr_;
@@ -324,6 +329,36 @@ public:
   UnnestTableFunc()
   : MulModeTableFunc() {}
   ~UnnestTableFunc() {}
+
+  int init_ctx(ObRegCol &scan_node, JtScanCtx*& ctx);
+  int eval_input(ObJsonTableOp &jt, JtScanCtx& ctx, ObEvalCtx &eval_ctx);
+  int reset_path_iter(ObRegCol &scan_node, void* in, JtScanCtx*& ctx, ScanType init_flag, bool &is_null_value);
+  int get_iter_value(ObRegCol &col_node, JtScanCtx* ctx, bool &is_null_value);
+  int reset_ctx(ObRegCol &scan_node, JtScanCtx*& ctx);
+};
+
+// per-input-row state of one AI_SPLIT_DOCUMENT evaluation
+struct ObAiSplitDocState {
+  struct Chunk {
+    Chunk() : offset_(0), text_() {}
+    int64_t offset_;      // offset of the chunk body inside the whole document
+    common::ObString text_;  // final chunk text (may carry a markdown heading prefix)
+    TO_STRING_KV(K_(offset), K_(text));
+  };
+  explicit ObAiSplitDocState(common::ObIAllocator &alloc)
+    : content_(),
+      chunks_(OB_MALLOC_NORMAL_BLOCK_SIZE, common::ModulePageAllocator(alloc)),
+      cur_idx_(-1) {}
+  common::ObString content_;  // deep copy allocated from ctx->row_alloc_
+  common::ObSEArray<Chunk, 16, common::ModulePageAllocator, true> chunks_;
+  int64_t cur_idx_;
+};
+
+class AiSplitDocTableFunc : public MulModeTableFunc {
+public:
+  AiSplitDocTableFunc()
+  : MulModeTableFunc() {}
+  ~AiSplitDocTableFunc() {}
 
   int init_ctx(ObRegCol &scan_node, JtScanCtx*& ctx);
   int eval_input(ObJsonTableOp &jt, JtScanCtx& ctx, ObEvalCtx &eval_ctx);
