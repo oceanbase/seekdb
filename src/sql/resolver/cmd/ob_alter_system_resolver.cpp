@@ -1145,6 +1145,55 @@ int ObRefreshMemStatResolver::resolve(const ParseNode &parse_tree)
   return ret;
 }
 
+int ObRefreshFulltextDictResolver::resolve(const ParseNode &parse_tree)
+{
+  int ret = OB_SUCCESS;
+  ObRefreshFulltextDictStmt *refresh_stmt = NULL;
+  ObString database_name;
+  ObString table_name;
+  ObString copied_database_name;
+  ObString copied_table_name;
+
+  if (OB_UNLIKELY(T_REFRESH_FULLTEXT_DICT != parse_tree.type_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected refresh fulltext dictionary node type",
+             K(ret),
+             K(parse_tree.type_));
+  } else if (OB_UNLIKELY(1 != parse_tree.num_child_
+                         || OB_ISNULL(parse_tree.children_)
+                         || OB_ISNULL(parse_tree.children_[0]))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid refresh fulltext dictionary parse tree",
+             K(ret),
+             K(parse_tree.num_child_));
+  } else if (OB_ISNULL(allocator_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("allocator is null", K(ret));
+  } else if (OB_ISNULL(
+                 refresh_stmt = create_stmt<ObRefreshFulltextDictStmt>())) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to create refresh fulltext dictionary stmt", K(ret));
+  } else if (OB_FAIL(resolve_table_relation_node(parse_tree.children_[0],
+                                                 table_name,
+                                                 database_name))) {
+    LOG_WARN("failed to resolve fulltext dictionary table name", K(ret));
+  } else if (OB_FAIL(ob_write_string(*allocator_,
+                                     database_name,
+                                     copied_database_name))) {
+    LOG_WARN("failed to copy database name", K(ret), K(database_name));
+  } else if (OB_FAIL(ob_write_string(*allocator_,
+                                     table_name,
+                                     copied_table_name))) {
+    LOG_WARN("failed to copy table name", K(ret), K(table_name));
+  } else {
+    refresh_stmt->set_database_name(copied_database_name);
+    refresh_stmt->set_table_name(copied_table_name);
+    stmt_ = refresh_stmt;
+  }
+
+  return ret;
+}
+
 int ObWashMemFragmentationResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;

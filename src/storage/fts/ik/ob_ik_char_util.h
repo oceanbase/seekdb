@@ -52,6 +52,75 @@ public:
                                  const uint8_t char_len,
                                  CharType &type);
 
+  static int get_first_valid_char_and_type(ObCollationType coll_type,
+                                           const char *input,
+                                           const int64_t input_len,
+                                           int64_t &char_len,
+                                           CharType &type)
+  {
+    int ret = OB_SUCCESS;
+    int32_t decoded_len = 0;
+    int32_t unicode = 0;
+    const ObCharsetType cs_type = ObCharset::charset_type_by_coll(coll_type);
+
+    char_len = 0;
+    type = CharType::USELESS;
+
+    if (OB_ISNULL(input) || input_len <= 0) {
+      ret = OB_INVALID_ARGUMENT;
+      STORAGE_FTS_LOG(WARN,
+                      "invalid input for character decoding",
+                      K(ret),
+                      KP(input),
+                      K(input_len));
+    } else if (CHARSET_UTF8MB4 != cs_type && CHARSET_UTF16 != cs_type
+               && CHARSET_UTF16LE != cs_type) {
+      ret = OB_NOT_SUPPORTED;
+      STORAGE_FTS_LOG(WARN,
+                      "unsupported charset type",
+                      K(ret),
+                      K(cs_type),
+                      K(coll_type));
+    } else if (OB_FAIL(
+                   ObCharset::mb_wc(coll_type, input, input_len, decoded_len, unicode))) {
+      STORAGE_FTS_LOG(WARN,
+                      "failed to decode first character",
+                      K(ret),
+                      K(coll_type),
+                      K(input_len));
+    } else if (OB_UNLIKELY(decoded_len <= 0)) {
+      ret = OB_ERR_UNEXPECTED;
+      STORAGE_FTS_LOG(WARN,
+                      "invalid decoded character length",
+                      K(ret),
+                      K(decoded_len),
+                      K(unicode));
+    } else {
+      char_len = decoded_len;
+
+      /*
+       * Keep this order consistent with do_classify().
+       */
+      if (ObUnicodeBlockUtils::is_alpha(unicode)) {
+        type = CharType::ENGLISH_LETTER;
+      } else if (ObUnicodeBlockUtils::is_arabic(unicode)) {
+        type = CharType::ARABIC_LETTER;
+      } else if (ObUnicodeBlockUtils::is_chinese(unicode)) {
+        type = CharType::CHINESE;
+      } else if (ObUnicodeBlockUtils::is_other_cjk(unicode)) {
+        type = CharType::OTHER_CJK;
+      } else if ((CHARSET_UTF16 == cs_type || CHARSET_UTF16LE == cs_type)
+                 && ObUnicodeBlockUtils::check_high_surrogate(unicode)) {
+        type = CharType::SURROGATE_HIGH;
+      } else if ((CHARSET_UTF16 == cs_type || CHARSET_UTF16LE == cs_type)
+                 && ObUnicodeBlockUtils::check_low_surrogate(unicode)) {
+        type = CharType::SURROGATE_LOW;
+      }
+    }
+
+    return ret;
+  }
+
   static int check_cn_number(ObCollationType coll_type,
                              const char *input,
                              const uint8_t char_len,

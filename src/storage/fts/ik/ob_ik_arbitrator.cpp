@@ -39,7 +39,9 @@ int ObIKArbitrator::process(TokenizeContext &ctx)
   ObList<ObIKToken, ObIAllocator> &tokens = ctx.token_list().tokens();
   ObIKTokenChain *chain_need_arbitrate = nullptr;
   bool use_smart = ctx.is_smart();
-  if (OB_FAIL(prepare(ctx))) {
+  if (OB_FAIL(reuse())) {
+    LOG_WARN("failed to reuse ik arbitrator", K(ret));
+  } else if (OB_FAIL(prepare(ctx))) {
   } else if (OB_ISNULL(chain_need_arbitrate = OB_NEWx(ObIKTokenChain, &alloc_, alloc_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc memory failed");
@@ -124,16 +126,15 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
   for (int64_t current = 0; OB_SUCC(ret) && current < ctx.fulltext_len();) {
     ObFTCharUtil::CharType type;
     // maybe not so good to keep single, check it later
-    if (OB_FAIL(ObCharset::first_valid_char(ctx.collation(),
-                                            ctx.fulltext() + current,
-                                            ctx.fulltext_len() - current,
-                                            char_len))) {
-      LOG_WARN("Failed to get next valid char", K(ret));
-    } else if (OB_FAIL(ObFTCharUtil::classify_first_char(ctx.collation(),
-                                                         ctx.fulltext() + current,
-                                                         char_len,
-                                                         type))) {
-      LOG_WARN("Failed to classify first char", K(ret));
+    if (OB_FAIL(ObFTCharUtil::get_first_valid_char_and_type(ctx.collation(),
+                                                            ctx.fulltext() + current,
+                                                            ctx.fulltext_len() - current,
+                                                            char_len,
+                                                            type))) {
+      LOG_WARN("failed to get first valid character and type",
+               K(ret),
+               K(current),
+               K(ctx.fulltext_len()));
     } else if (ObFTCharUtil::CharType::USELESS == type) {
       current += char_len; // skip useless char
     } else if (OB_FAIL(chains_.get_refactored(current, chain)) && OB_HASH_NOT_EXIST != ret) {
@@ -180,11 +181,15 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
         } else {
           // output single word between two token
           while (OB_SUCC(ret) && current < token.offset_) {
-            if (OB_FAIL(ObCharset::first_valid_char(ctx.collation(),
-                                                    ctx.fulltext() + current,
-                                                    ctx.fulltext_len() - current,
-                                                    char_len))) {
-              LOG_WARN("Failed to get next valid char, ", K(ret));
+            if (OB_FAIL(ObFTCharUtil::get_first_valid_char_and_type(ctx.collation(),
+                                                                    ctx.fulltext() + current,
+                                                                    ctx.fulltext_len() - current,
+                                                                    char_len,
+                                                                    type))) {
+              LOG_WARN("failed to get supplementary character and type",
+                       K(ret),
+                       K(current),
+                       K(ctx.fulltext_len()));
               break;
             } else {
               ObIKToken token;
@@ -327,16 +332,37 @@ int ObIKArbitrator::remove_conflict(const ObIKToken &token, ObIKTokenChain *opti
 int ObIKArbitrator::prepare(TokenizeContext &ctx)
 {
   int ret = OB_SUCCESS;
-
-  int cal_bucket_num = MAX(ctx.fulltext_len() / 100, 10);
+  int64_t cal_bucket_num = MAX(ctx.fulltext_len() / 100, 10);
   cal_bucket_num = MIN(cal_bucket_num, 100);
-  if (OB_FAIL(chains_.create(cal_bucket_num, ObMemAttr("IK ARBITRATE")))) {
-    LOG_WARN("create chain map failed", K(ret));
+
+  if (!chains_.created()) {
+    if (OB_FAIL(chains_.create(cal_bucket_num, ObMemAttr("IK ARBITRATE")))) {
+      LOG_WARN("failed to create chain map", K(ret), K(cal_bucket_num));
+    }
+  } else if (OB_UNLIKELY(!chains_.empty())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("arbitrator chain map is not empty after reuse", K(ret), K(chains_.size()));
   }
+
   return ret;
 }
 
 ObIKArbitrator::ObIKArbitrator() : alloc_(lib::ObMemAttr("IK Arbitrator")) {}
+
+int ObIKArbitrator::reuse()
+{
+  int ret = OB_SUCCESS;
+
+  if (chains_.created() && OB_FAIL(chains_.reuse())) {
+    LOG_WARN("failed to reuse arbitrator chain map", K(ret));
+  }
+
+  if (OB_SUCC(ret)) {
+    alloc_.reuse();
+  }
+
+  return ret;
+}
 
 int ObIKArbitrator::add_chain(ObIKTokenChain *chain)
 {

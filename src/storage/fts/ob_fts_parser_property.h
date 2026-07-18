@@ -160,6 +160,7 @@ public:
                K_(ik_mode_smart));
 
 public:
+  common::ObArenaAllocator allocator_;
   int64_t min_token_size_;
   int64_t max_token_size_;
   int64_t ngram_token_size_;

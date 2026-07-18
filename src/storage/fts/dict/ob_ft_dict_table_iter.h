@@ -39,11 +39,16 @@ public:
 public:
   int init(const ObString &table_name);
 
+  int init(
+      const ObString &database_name,
+      const ObString &table_name);
+
 private:
   void reset();
 
 private:
   bool is_inited_;
+  bool has_current_row_;
   ObISQLClient::ReadResult &res_;
 };
 

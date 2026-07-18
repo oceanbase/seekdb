@@ -1015,6 +1015,7 @@ protected:
   uint64_t virtual_column_id_; // for restore fulltext index
   bool read_only_;
   bool with_rowid_;
+  bool fulltext_dict_;
   common::ObString table_name_;
   common::ObString database_name_;
   share::schema::ObPartitionFuncType partition_func_type_;

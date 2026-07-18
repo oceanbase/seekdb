@@ -399,6 +399,8 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
               SQL_RESV_LOG(WARN, "resolve table options failed", K(ret));
             } else if (OB_FAIL(set_table_option_to_schema(table_schema))) {
               SQL_RESV_LOG(WARN, "set table option to schema failed", K(ret));
+            } else if (OB_FAIL(check_fulltext_dict_table_schema(table_schema))) {
+              SQL_RESV_LOG(WARN, "check fulltext dictionary table schema failed", K(ret));
             } else if (OB_FAIL(check_max_row_data_length(table_schema))) {
               SQL_RESV_LOG(WARN, "check max row data length failed", K(ret));
             } else {
@@ -2412,6 +2414,67 @@ int ObCreateTableResolver::resolve_table_charset_info(const ParseNode *node) {
     } else if (OB_FAIL(ObCharset::check_and_fill_info(charset_type_, collation_type_))) {
       SQL_RESV_LOG(WARN, "fail to fill collation info", K(ret));
     }
+  }
+
+  return ret;
+}
+
+int ObCreateTableResolver::check_fulltext_dict_table_schema(
+    const ObTableSchema &table_schema)
+{
+  int ret = OB_SUCCESS;
+  const ObColumnSchemaV2 *word_column = NULL;
+
+  if (!table_schema.is_fulltext_dict()) {
+    // Normal tables do not require fulltext dictionary table validation.
+  } else if (OB_UNLIKELY(1 != table_schema.get_column_count())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("fulltext dictionary table must contain exactly one column",
+             K(ret),
+             K(table_schema.get_column_count()));
+  } else if (OB_UNLIKELY(1 != get_primary_key_size())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("fulltext dictionary table must contain exactly one primary key",
+             K(ret),
+             K(get_primary_key_size()));
+  } else if (OB_ISNULL(
+                 word_column =
+                     table_schema.get_column_schema(primary_keys_.at(0)))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("failed to get fulltext dictionary word column",
+             K(ret),
+             K(primary_keys_.at(0)));
+  } else if (0 != word_column->get_column_name_str().case_compare("word")) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("fulltext dictionary column name must be word",
+             K(ret),
+             K(word_column->get_column_name_str()));
+  } else if (ObVarcharType != word_column->get_data_type()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("fulltext dictionary word column must be varchar",
+             K(ret),
+             K(word_column->get_data_type()));
+  } else if (word_column->get_data_length() < 1
+             || word_column->get_data_length() > 500) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("fulltext dictionary word column length must be between 1 and 500",
+             K(ret),
+             K(word_column->get_data_length()));
+  } else if (CHARSET_UTF8MB4 != word_column->get_charset_type()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("fulltext dictionary word column must use utf8mb4",
+             K(ret),
+             K(word_column->get_charset_type()));
+  } else if (!word_column->is_rowkey_column()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("fulltext dictionary word column must be the primary key",
+             K(ret),
+             K(word_column->get_rowkey_position()));
+  } else if (!table_schema.is_index_organized_table()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("fulltext dictionary table must use organization index",
+             K(ret),
+             K(table_schema.get_table_organization_mode()));
   }
 
   return ret;

@@ -386,6 +386,7 @@
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_embed.h"
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_rerank.h"
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_prompt.h"
+#include "sql/engine/expr/ob_expr_ai/ob_expr_load_file.h"
 #include "ob_expr_vector_similarity.h"
 #include "ob_expr_check_location_access.h"
 
@@ -1341,6 +1342,7 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   ObExprVectorCosineSimilarity::calc_cosine_similarity,                /* 872 */
   ObExprVectorIPSimilarity::calc_ip_similarity,                        /* 873 */
   ObExprVectorSimilarity::calc_similarity,                             /* 874 */
+  ObExprLoadFile::eval_load_file,                                      /* 875 */
 };
 
 static ObExpr::EvalBatchFunc g_expr_eval_batch_functions[] = {
