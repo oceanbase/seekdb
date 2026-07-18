@@ -17,8 +17,11 @@
 #ifndef OB_FTS_PLUGIN_HELPER_H_
 #define OB_FTS_PLUGIN_HELPER_H_
 
+#include <atomic>
+
 #include "lib/allocator/ob_fifo_allocator.h"
 #include "lib/charset/ob_charset.h"
+#include "lib/lock/ob_mutex.h"
 #include "lib/string/ob_string.h"
 #include "object/ob_object.h"
 #include "share/ob_plugin_helper.h"
@@ -44,6 +47,8 @@ namespace storage
 class ObStopWordChecker;
 class ObFTDictHub;
 class ObAddWord;
+class ObIFTDict;
+class ObFTCacheRangeContainer;
 
 #define FTS_BUILD_IN_PARSER_LIST                                                                   \
   FT_PARSER_TYPE(FTP_SPACE, space)                                                                 \
@@ -121,16 +126,30 @@ public:
 public:
   ObStopWordChecker *stop_word_checker() const { return stop_word_checker_; }
   int get_dict_hub(ObFTDictHub *&hub);
+  // Process-wide, lazily built, read-only dictionaries for the built-in IK
+  // dictionaries (main / quantifier / stopword). Sharing them across parser
+  // instances removes the KV-cache lookups and dictionary object rebuilds
+  // that used to happen on every tokenization.
+  int get_builtin_ik_dicts(ObIFTDict *&main_dict, ObIFTDict *&quan_dict, ObIFTDict *&stop_dict);
 
 private:
   int init_and_set_stopword_list();
   int init_dict_hub();
+  int build_builtin_ik_dicts();
+  void destroy_builtin_ik_dicts();
 
 private:
+  static const int64_t IK_DICT_CNT = 3;
+
   ObStopWordChecker *     stop_word_checker_ = nullptr;
   ObFTDictHub *           dict_hub_          = nullptr;
   common::ObFIFOAllocator handler_allocator_;
   bool                    is_inited_         = false;
+  // shared built-in IK dictionaries, built once on first use
+  ObFTCacheRangeContainer *builtin_ik_containers_[IK_DICT_CNT] = {nullptr, nullptr, nullptr};
+  ObIFTDict *             builtin_ik_dicts_[IK_DICT_CNT] = {nullptr, nullptr, nullptr};
+  std::atomic<bool>       builtin_ik_ready_{false};
+  lib::ObMutex            builtin_ik_lock_;
 };
 
 class ObFTParseHelper final

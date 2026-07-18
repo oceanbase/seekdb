@@ -39,10 +39,8 @@ int ObIIKProcessor::process(TokenizeContext &ctx)
   const char *ch = nullptr;
   uint8_t char_len = 0;
 
-  if (OB_FAIL(ctx.current_char_type(type))) {
-    LOG_WARN("fail to get current char type", K(ret));
-  } else if (OB_FAIL(ctx.current_char(ch, char_len))) {
-    LOG_WARN("Fail to get current char", K(ret));
+  if (OB_FAIL(ctx.current_char_and_type(ch, char_len, type))) {
+    LOG_WARN("fail to get current char and type", K(ret));
   } else if (OB_FAIL(do_process(ctx, ch, char_len, type))) {
     LOG_WARN("Failed to do process char", K(ret));
   }
@@ -54,9 +52,10 @@ TokenizeContext::TokenizeContext(ObCollationType coll_type,
                                  const char *fulltext,
                                  int64_t fulltext_len,
                                  bool is_smart)
-    : coll_type_(coll_type), fulltext_(fulltext), fulltext_len_(fulltext_len), cursor_(0),
-      next_char_len_(0), handle_size_(0), is_smart_(is_smart), token_list_(allocator),
-      result_list_(allocator)
+    : coll_type_(coll_type), cs_type_(ObCharset::charset_type_by_coll(coll_type)),
+      fulltext_(fulltext), fulltext_len_(fulltext_len), cursor_(0),
+      next_char_len_(0), next_char_unicode_(0), handle_size_(0), is_smart_(is_smart),
+      token_list_(allocator), result_list_(allocator)
 {
 }
 
@@ -103,10 +102,33 @@ int TokenizeContext::current_char_type(ObFTCharUtil::CharType &type)
   return ret;
 }
 
+int TokenizeContext::current_char_and_type(const char *&ch,
+                                           uint8_t &char_len,
+                                           ObFTCharUtil::CharType &type)
+{
+  int ret = OB_SUCCESS;
+  if (cursor_ >= fulltext_len_) {
+    ret = OB_ITER_END;
+  } else {
+    ch = fulltext_ + cursor_;
+    char_len = next_char_len_;
+    type = next_char_type_;
+  }
+  return ret;
+}
+
 int TokenizeContext::prepare_next_char()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObCharset::first_valid_char(coll_type_,
+  // decode length, code point and char type in one pass for unicode charsets;
+  // the generic path below decodes the same bytes twice per char
+  if (OB_LIKELY(CHARSET_UTF8MB4 == cs_type_)) {
+    ret = ObFTCharUtil::decode_and_classify<CHARSET_UTF8MB4>(fulltext_ + cursor_,
+                                                             fulltext_len_ - cursor_,
+                                                             next_char_len_,
+                                                             next_char_unicode_,
+                                                             next_char_type_);
+  } else if (OB_FAIL(ObCharset::first_valid_char(coll_type_,
                                           fulltext_ + cursor_,
                                           fulltext_len_ - cursor_,
                                           next_char_len_))) {
@@ -145,6 +167,48 @@ int TokenizeContext::step_next()
 }
 
 ObCollationType TokenizeContext::collation() const { return coll_type_; }
+
+int TokenizeContext::check_num_connector(bool &is_connector) const
+{
+  int ret = OB_SUCCESS;
+  if (OB_LIKELY(CHARSET_UTF8MB4 == cs_type_)) {
+    is_connector = ObUnicodeBlockUtils::check_num_connector(next_char_unicode_);
+  } else {
+    ret = ObFTCharUtil::check_num_connector(coll_type_,
+                                            fulltext_ + cursor_,
+                                            next_char_len_,
+                                            is_connector);
+  }
+  return ret;
+}
+
+int TokenizeContext::check_letter_connector(bool &is_connector) const
+{
+  int ret = OB_SUCCESS;
+  if (OB_LIKELY(CHARSET_UTF8MB4 == cs_type_)) {
+    is_connector = ObUnicodeBlockUtils::check_letter_connector(next_char_unicode_);
+  } else {
+    ret = ObFTCharUtil::check_letter_connector(coll_type_,
+                                               fulltext_ + cursor_,
+                                               next_char_len_,
+                                               is_connector);
+  }
+  return ret;
+}
+
+int TokenizeContext::check_cn_number(bool &is_cn_number) const
+{
+  int ret = OB_SUCCESS;
+  if (OB_LIKELY(CHARSET_UTF8MB4 == cs_type_)) {
+    is_cn_number = ObUnicodeBlockUtils::is_unicode_cn_number(next_char_unicode_);
+  } else {
+    ret = ObFTCharUtil::check_cn_number(coll_type_,
+                                        fulltext_ + cursor_,
+                                        next_char_len_,
+                                        is_cn_number);
+  }
+  return ret;
+}
 
 int64_t TokenizeContext::get_end_cursor() const { return cursor_ + next_char_len_; }
 

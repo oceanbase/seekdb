@@ -2005,10 +2005,17 @@ private:
                             ObIArray<ObRawExpr*> &view_exprs);
 
 public:
-  static int extract_shared_exprs(ObDMLStmt *parent, 
+  static int extract_shared_exprs(ObDMLStmt *parent,
                                   ObSelectStmt *view_stmt,
                                   ObIArray<ObRawExpr *> &common_exprs,
                                   const ObIArray<ObRawExpr *> *extra_view_exprs = NULL);
+  // check whether the score calculated by a match expr is actually used by
+  // any predicate or projection; if not, relevance calculation can be skipped
+  static int check_need_calc_match_score(ObExecContext *exec_ctx,
+                                         const ObDMLStmt* stmt,
+                                         ObRawExpr* match_expr,
+                                         bool &need_calc,
+                                         ObIArray<ObExprConstraint> &constraints);
 private:
   static int is_scalar_expr(ObRawExpr* expr, bool &is_scalar);
 

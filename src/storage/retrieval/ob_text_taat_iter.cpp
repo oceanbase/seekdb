@@ -36,7 +36,10 @@ int ObTextTaaTIter::init(const ObTextTaaTParam &param)
     LOG_WARN("failed to create text taat iter memory context", K(ret));
   } else if (OB_FAIL(ObSRTaaTIterImpl::init(*param.base_param_, *param.dim_iter_, *param.allocator_))) {
     LOG_WARN("failed to init sr taat iter", K(ret));
-  } else if (OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
+  } else if (param.bm25_param_est_ctx_.is_valid()
+             && OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
+    // when relevance calculation is skipped there is no estimation context,
+    // and BM25 parameters are not needed
     LOG_WARN("failed to init bm25 param estimator", K(ret));
   } else {
     query_tokens_ = param.query_tokens_;
@@ -68,7 +71,7 @@ void ObTextTaaTIter::reuse(const bool switch_tablet)
 int ObTextTaaTIter::pre_process()
 {
   int ret = OB_SUCCESS;
-  if (iter_param_->need_project_relevance()) {
+  if (iter_param_->need_project_relevance() && bm25_param_estimator_.is_inited()) {
     const bool is_first_estimation = !bm25_param_estimator_.is_estimated();
     if (!is_first_estimation) {
       // skip
@@ -78,6 +81,9 @@ int ObTextTaaTIter::pre_process()
       const int64_t total_doc_cnt = bm25_param_estimator_.get_total_doc_cnt();
       partition_cnt_ = MIN((total_doc_cnt-1) / OB_HASHMAP_DEFAULT_SIZE + 1, OB_MAX_HASHMAP_COUNT);
     }
+  } else if (0 == partition_cnt_) {
+    // no BM25 estimation (relevance calculation skipped), use a single partition
+    partition_cnt_ = 1;
   }
   return ret;
 }
