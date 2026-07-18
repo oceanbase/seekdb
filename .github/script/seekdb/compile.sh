@@ -18,9 +18,26 @@ export SEEKDB_TASK_DIR="$TASK_DIR"
 export PACKAGE_TYPE="${RELEASE_MODE:+release}"
 export PACKAGE_TYPE="${PACKAGE_TYPE:-debug}"
 export MAKE="${MAKE:-make}"
-export MAKE_ARGS="${MAKE_ARGS:--j32}"
 export PATH="$WORKSPACE/deps/3rd/usr/local/oceanbase/devtools/bin:$PATH"
 [[ -n "$FORWARDING_HOST" ]] && echo "$FORWARDING_HOST mirrors.oceanbase.com" >> /etc/hosts 2>/dev/null || true
+
+if [[ -z "${MAKE_ARGS:-}" ]]; then
+  # Leave some headroom for the ARC runner sidecars and container networking.
+  cpu_count="$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 8)"
+  max_jobs="${CI_SAFE_MAKE_JOBS:-24}"
+  if [[ ! "$cpu_count" =~ ^[0-9]+$ ]] || (( cpu_count < 1 )); then
+    cpu_count=8
+  fi
+  if [[ ! "$max_jobs" =~ ^[0-9]+$ ]] || (( max_jobs < 1 )); then
+    max_jobs=24
+  fi
+  if (( cpu_count > max_jobs )); then
+    cpu_count="$max_jobs"
+  fi
+  export MAKE_ARGS="-j${cpu_count} -l${cpu_count}"
+fi
+echo "[compile.sh] MAKE=$MAKE"
+echo "[compile.sh] MAKE_ARGS=$MAKE_ARGS"
 
 cd "$WORKSPACE"
 mkdir -p "$TASK_DIR"
