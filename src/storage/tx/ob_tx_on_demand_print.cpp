@@ -74,8 +74,6 @@ IMPL_ON_DEMAND_PRINT_FUNC(ObTxExecInfo)
   TX_KV_PRINT_WITH_ERR(serial_final_scn_.is_valid(), serial_final_scn, serial_final_scn_, ", ");
   TX_KV_PRINT_WITH_ERR(serial_final_seq_no_.is_valid(), serial_final_seq_no,serial_final_seq_no_, ", ");
 
-  TX_KV_PRINT_WITH_ERR(!dli_batch_set_.empty(), dli_batch_count, dli_batch_set_.size(), ", ");
-  TX_KV_PRINT_WITH_ERR(!dli_batch_set_.empty(), dli_batch_set, dli_batch_set_, " ");
 
   ON_DEMAND_END_PRINT(ExecInfo);
 

@@ -20,9 +20,6 @@
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "share/rc/ob_module_provider.h"
-#ifdef OB_BUILD_LOG_STORAGE_COMPRESS
-#include "logservice/ob_log_compression.h"
-#endif
 #include "logservice/ob_log_service.h"
 
 namespace oceanbase
@@ -46,9 +43,6 @@ ObLogHandler::ObLogHandler() : self_(),
                                deps_lock_(),
                                append_cost_stat_("[PALF STAT APPEND COST TIME]", 1 * 1000 * 1000),
                                is_offline_(false),
-#ifdef OB_BUILD_LOG_STORAGE_COMPRESS
-                               compressor_wrapper_(),
-#endif
                                get_max_decided_scn_debug_time_(OB_INVALID_TIMESTAMP)
 {
 }
@@ -61,8 +55,7 @@ ObLogHandler::~ObLogHandler()
 int ObLogHandler::init(const common::ObAddr &self,
                        ObLogApplyService *apply_service,
                        ObLogReplayService *replay_service,
-                       PalfEnv *palf_env,
-                       common::ObILogAllocator *alloc_mgr)
+                       PalfEnv *palf_env)
 {
   int ret = OB_SUCCESS;
   ObApplyStatus *apply_status = NULL;
@@ -70,10 +63,9 @@ int ObLogHandler::init(const common::ObAddr &self,
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
   } else if (OB_ISNULL(palf_env) ||
-             OB_ISNULL(apply_service) ||
-             OB_ISNULL(alloc_mgr)) {
+             OB_ISNULL(apply_service)) {
     ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "invalid arguments", KP(palf_env), KP(alloc_mgr));
+    CLOG_LOG(WARN, "invalid arguments", KP(palf_env));
   } else if (OB_FAIL(apply_service->get_apply_status(guard))) {
     CLOG_LOG(WARN, "guard get apply status failed", K(ret));
   } else if (NULL == (apply_status_ = guard.get_apply_status())) {
@@ -81,10 +73,6 @@ int ObLogHandler::init(const common::ObAddr &self,
     CLOG_LOG(WARN, "apply status is not exist", K(ret));
   } else if (OB_FAIL(palf_env->open(palf_handle_))) {
     CLOG_LOG(WARN, "open palf failed", K(ret));
-#ifdef OB_BUILD_LOG_STORAGE_COMPRESS
-  } else if (OB_FAIL(compressor_wrapper_.init(1, alloc_mgr))) {
-    CLOG_LOG(WARN, "failed to init compressor_wrapper_");
-#endif
   } else {
     get_max_decided_scn_debug_time_ = OB_INVALID_TIMESTAMP;
     apply_service_ = apply_service;
@@ -113,9 +101,6 @@ bool ObLogHandler::is_valid() const
          NULL != palf_env_ &&
          NULL != apply_status_ &&
          NULL != apply_service_ &&
-#ifdef OB_BUILD_LOG_STORAGE_COMPRESS
-         compressor_wrapper_.is_valid() &&
-#endif
          NULL != replay_service_;
 }
 
@@ -161,16 +146,12 @@ void ObLogHandler::destroy()
   }
   palf_env_ = NULL;
   get_max_decided_scn_debug_time_ = OB_INVALID_TIMESTAMP;
-#ifdef OB_BUILD_LOG_STORAGE_COMPRESS
-  compressor_wrapper_.reset();
-#endif
 }
 
 int ObLogHandler::append(const void *buffer,
                          const int64_t nbytes,
                          const SCN &ref_scn,
                          const bool need_nonblock,
-                         const bool allow_compress,
                          AppendCb *cb,
                          LSN &lsn,
                          SCN &scn)
@@ -179,9 +160,8 @@ int ObLogHandler::append(const void *buffer,
   if (nbytes > MAX_NORMAL_LOG_BODY_SIZE) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "nbytes is greater than expected size", K(nbytes), K(MAX_NORMAL_LOG_BODY_SIZE));
-  } else if (OB_FAIL(append_(buffer, nbytes, ref_scn, need_nonblock, allow_compress, cb, lsn, scn))) {
-    CLOG_LOG(WARN, "appending log fails", K(buffer), K(nbytes), K(ref_scn), K(need_nonblock),
-             K(allow_compress), K(lsn), K(scn));
+  } else if (OB_FAIL(append_(buffer, nbytes, ref_scn, need_nonblock, cb, lsn, scn))) {
+    CLOG_LOG(WARN, "appending log fails", K(buffer), K(nbytes), K(ref_scn), K(need_nonblock), K(lsn), K(scn));
   }
   return ret;
 }
@@ -190,7 +170,6 @@ int ObLogHandler::append_big_log(const void *buffer,
                                  const int64_t nbytes,
                                  const SCN &ref_scn,
                                  const bool need_nonblock,
-                                 const bool allow_compress,
                                  AppendCb *cb,
                                  LSN &lsn,
                                  SCN &scn)
@@ -199,9 +178,9 @@ int ObLogHandler::append_big_log(const void *buffer,
   if (nbytes <= MAX_NORMAL_LOG_BODY_SIZE) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "nbytes is smaller than expected size", K(nbytes), K(MAX_NORMAL_LOG_BODY_SIZE));
-  } else if (OB_FAIL(append_(buffer, nbytes, ref_scn, need_nonblock, allow_compress, cb, lsn, scn))) {
+  } else if (OB_FAIL(append_(buffer, nbytes, ref_scn, need_nonblock, cb, lsn, scn))) {
     CLOG_LOG(WARN, "append big log to palf failed", K(buffer), K(nbytes), K(ref_scn),
-             K(need_nonblock), K(allow_compress), K(lsn), K(scn));
+             K(need_nonblock), K(lsn), K(scn));
   }
   return ret;
 }
@@ -351,7 +330,6 @@ int ObLogHandler::append_(const void *buffer,
                           const int64_t nbytes,
                           const share::SCN &ref_scn,
                           const bool need_nonblock,
-                          const bool allow_compress,
                           AppendCb *cb,
                           palf::LSN &lsn,
                           share::SCN &scn)
@@ -361,19 +339,6 @@ int ObLogHandler::append_(const void *buffer,
   PalfAppendOptions opts;
   opts.need_nonblock = need_nonblock;
   ObTimeGuard tg("ObLogHandler::append", 100000);
-  const void *final_buf = buffer;
-  int64_t final_nbytes = nbytes;
-  void *compression_buf = NULL;
-  bool log_compressed = false;
-#ifdef OB_BUILD_LOG_STORAGE_COMPRESS
-  if (allow_compress) {
-    if (OB_FAIL(compressor_wrapper_.compress_payload(buffer, nbytes, compression_buf,
-                                                     log_compressed, final_buf, final_nbytes))) {
-      //compress_payload() always return OB_SUCCESS
-    }
-  }
-#endif
-  const int64_t begin_ts = ObClockGenerator::getClock();
   while (true) {
     do {
       RLockGuard guard(lock_);
@@ -383,7 +348,7 @@ int ObLogHandler::append_(const void *buffer,
         ret = OB_NOT_INIT;
       } else if (is_in_stop_state_ || is_offline_) {
         ret = OB_NOT_RUNNING;
-      } else if (OB_FAIL(palf_handle_.append(opts, final_buf, final_nbytes, ref_scn, lsn, scn))) {
+      } else if (OB_FAIL(palf_handle_.append(opts, buffer, nbytes, ref_scn, lsn, scn))) {
         if (REACH_TIME_INTERVAL(1*1000*1000)) {
           CLOG_LOG(WARN, "palf_handle_ append failed", K(ret), KPC(this));
         }
@@ -392,13 +357,7 @@ int ObLogHandler::append_(const void *buffer,
         cb->__set_lsn(lsn);
         cb->__set_scn(scn);
         ret = apply_status_->push_append_cb(cb);
-        CLOG_LOG(TRACE, "palf_handle_ push_append_cb success", K(lsn), K(scn), K(log_compressed),
-                 K(nbytes), K(final_nbytes));
-#ifdef OB_BUILD_LOG_STORAGE_COMPRESS
-        //add stat event
-        EVENT_ADD(LOG_STORAGE_COMPRESS_ORIGINAL_SIZE, nbytes);
-        EVENT_ADD(LOG_STORAGE_COMPRESS_COMPRESSED_SIZE, final_nbytes);
-#endif
+        CLOG_LOG(TRACE, "palf_handle_ push_append_cb success", K(lsn), K(scn), K(nbytes));
       }
     } while (0);
     // check if need wait and retry append
@@ -414,27 +373,12 @@ int ObLogHandler::append_(const void *buffer,
         sleep_us = MAX_SLEEP_US;
       }
       ob_usleep(sleep_us);
-#ifdef OB_BUILD_LOG_STORAGE_COMPRESS
-      if (log_compressed) {
-        int64_t cur_ts = ObClockGenerator::getClock();
-        if ((cur_ts - begin_ts > MAX_APPEND_RETRY_INTERNAL)) {
-          //to avoid holding compression buf for long time
-          final_buf = buffer;
-          final_nbytes = nbytes;
-          compressor_wrapper_.free_compression_buf(compression_buf);
-          log_compressed = false;
-        }
-      }
-#endif
     } else {
       // other ret code, end loop
       break;
     }
   }
 
-#ifdef OB_BUILD_LOG_STORAGE_COMPRESS
-  compressor_wrapper_.free_compression_buf(compression_buf);
-#endif
   append_cost_stat_.stat(tg.get_diff());
   return ret;
 }

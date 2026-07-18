@@ -2821,12 +2821,6 @@ OB_INLINE int ObBasicSessionInfo::process_session_variable(ObSysVarClassType var
       OX (sys_vars_cache_.set_compat_version(uint_val));
       break;
     }
-    case SYS_VAR_ENABLE_SQL_PLAN_MONITOR: {
-      int64_t int_val = 0;
-      OZ (val.get_int(int_val), val);
-      OX (sys_vars_cache_.set_enable_sql_plan_monitor(int_val != 0));
-      break;
-    }
     case SYS_VAR_OB_SECURITY_VERSION: {
       uint64_t uint_val = 0;
       OZ (val.get_uint64(uint_val), val);
@@ -3238,11 +3232,6 @@ int ObBasicSessionInfo::fill_sys_vars_cache_base_value(
             get_runtime_filter_type(str.ptr(), str.length());
         sys_vars_cache.set_base_runtime_filter_type(run_time_filter_type);
       }
-    }
-    case SYS_VAR_ENABLE_SQL_PLAN_MONITOR: {
-      int64_t int_val = 0;
-      OZ (val.get_int(int_val), val);
-      OX (sys_vars_cache.set_enable_sql_plan_monitor(int_val != 0));
       break;
     }
     case SYS_VAR_OB_ENABLE_PS_PARAMETER_ANONYMOUS_BLOCK: {
@@ -4323,7 +4312,6 @@ OB_DEF_SERIALIZE(ObBasicSessionInfo::SysVarsCacheData)
               runtime_filter_max_in_num_,
               runtime_bloom_filter_max_size_,
               enable_rich_vector_format_,
-              enable_sql_plan_monitor_,
               current_default_catalog_);
   return ret;
 }
@@ -4350,7 +4338,6 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo::SysVarsCacheData)
               runtime_filter_max_in_num_,
               runtime_bloom_filter_max_size_,
               enable_rich_vector_format_,
-              enable_sql_plan_monitor_,
               current_default_catalog_);
   set_ob_trace_info(ob_trace_info_);
   return ret;
@@ -4378,7 +4365,6 @@ OB_DEF_SERIALIZE_SIZE(ObBasicSessionInfo::SysVarsCacheData)
               runtime_filter_max_in_num_,
               runtime_bloom_filter_max_size_,
               enable_rich_vector_format_,
-              enable_sql_plan_monitor_,
               current_default_catalog_);
   return len;
 }

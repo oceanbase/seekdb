@@ -45,11 +45,8 @@ bool ObTabletDDLCompleteMdsUserData::is_valid() const
 {
   return (!has_complete_) ||
          (has_complete_  && table_key_.is_valid() 
-                         && (direct_load_type_ > ObDirectLoadType::DIRECT_LOAD_INVALID &&
-                             direct_load_type_ < ObDirectLoadType::DIRECT_LOAD_MAX)
-                         && storage_schema_.is_valid() && write_stat_.is_valid())
-          || (is_incremental_major_direct_load(direct_load_type_)
-              && storage_schema_.is_valid());
+                         && is_valid_direct_load(direct_load_type_)
+                         && storage_schema_.is_valid() && write_stat_.is_valid());
 }
 
 int ObTabletDDLCompleteMdsUserData::set_storage_schema(const ObStorageSchema &other, common::ObIAllocator &allocator)

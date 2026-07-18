@@ -47,9 +47,6 @@ __MemoryContext__ &__MemoryContext__::root()
   }
   return *root;
 }
-#ifdef OB_USE_ASAN
-bool __MemoryContext__::enable_asan_allocator = false;
-#endif
 MemoryContext &MemoryContext::root()
 {
   static MemoryContext root(&__MemoryContext__::root());

@@ -139,8 +139,7 @@ private:
                              const char *log_buf,
                              const palf::LSN &cur_lsn,
                              const share::SCN &cur_log_submit_scn,
-                             const int64_t log_size,
-                             const int64_t header_pos);
+                             const int64_t log_size);
   bool is_tenant_out_of_memory_() const;
   int handle_submit_task_(ObReplayServiceSubmitTask *submit_task,
                           bool &is_timeslice_run_out);
@@ -157,18 +156,6 @@ private:
                               const int64_t first_handle_time);
   void on_replay_error_(ObLogReplayTask &replay_task, int ret);
   void on_replay_error_();
-#ifdef OB_BUILD_LOG_STORAGE_COMPRESS
-  int prepare_decompression_buf_(const char *log_buf,
-                                 const ObLogBaseHeader &header,
-                                 const int64_t log_size,
-                                 const int64_t base_header_len,
-                                 void *&decompression_buf,
-                                 int64_t &decompressed_len);
-  int transform_replay_task_(ObLogReplayTask *replay_task,
-                             ObReplayStatus *replay_status,
-                             ObLogReplayBuffer *replay_log_buf);
-#endif
-  void free_decompression_buf_(void *&decompression_buf);
   void free_replay_log_buf_(ObLogReplayBuffer *&replay_buf);
 
   share::SCN inner_get_replayable_point_() const;

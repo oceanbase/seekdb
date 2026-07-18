@@ -36,9 +36,6 @@
 #include "lib/hash/ob_hashmap.h"
 #include "lib/time/ob_clock_generator.h"
 
-#ifdef OB_USE_ASAN
-#include "lib/allocator/ob_asan_allocator.h"
-#endif
 namespace oceanbase
 {
 namespace lib
@@ -332,9 +329,6 @@ public:
       freeable_alloc_(nullptr),
       default_allocator_(nullptr)
   {
-  #ifdef OB_USE_ASAN
-    use_asan_allocator_ = enable_asan_allocator;
-  #endif
   }
   int64_t get_static_id() const { return static_id_; }
   const DynamicInfo &get_dynamic_info() const { return di_; }
@@ -434,15 +428,7 @@ public:
     if (ablock_size != lib::INTACT_MIDDLE_AOBJECT_SIZE) {
       ablock_size = lib::INTACT_NORMAL_AOBJECT_SIZE;
     }
-#ifdef OB_USE_ASAN
-    if (use_asan_allocator_) {
-      ret = init_asan_alloc(asan_alloc_, thread_safe);
-    } else {
-      ret = init_alloc(alloc_, thread_safe, ablock_size);
-    }
-#else
     ret = init_alloc(alloc_, thread_safe, ablock_size);
-#endif
     if (OB_SUCC(ret)) {
       // init arena allocator
       p_arena_alloc_ = new (&arena_alloc_) common::ObArenaAllocator(*p_alloc_, param_.page_size_,
@@ -481,26 +467,6 @@ public:
     return ret;
   }
 
-  #ifdef OB_USE_ASAN
-  int init_asan_alloc(common::ObAsanAllocator& allocator, const bool thread_safe)
-  {
-    int ret = common::OB_SUCCESS;
-    p_alloc_ = new (&allocator) common::ObAsanAllocator;
-    if (OB_UNLIKELY(thread_safe)) {
-      void *ptr = allocator.alloc(sizeof(common::ObParallelAsanAllocator));
-      if (OB_UNLIKELY(nullptr == ptr)) {
-        ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        parallel_alloc_ = new (ptr) common::ObParallelAsanAllocator(allocator, param_.parallel_);
-        freeable_alloc_ = parallel_alloc_;
-      }
-    } else {
-      freeable_alloc_ = p_alloc_;
-    }
-    return ret;
-  }
-  #endif
-
   void deinit()
   {
     default_allocator_ = nullptr;
@@ -525,12 +491,6 @@ public:
     }
     tree_node_.deinit();
   }
-#ifdef OB_USE_ASAN
-  static void set_enable_asan_allocator(bool enable)
-  {
-    enable_asan_allocator = enable;
-  }
-#endif
   template<typename ... Args>
   int create_context(MemoryContext &context,
                      const DynamicInfo &di,
@@ -645,9 +605,6 @@ public:
   // Delayed member
   union {
     common::ObAllocator alloc_;
-#ifdef OB_USE_ASAN
-    common::ObAsanAllocator asan_alloc_;
-#endif
   };
   union {
     common::ObArenaAllocator arena_alloc_;
@@ -665,11 +622,6 @@ public:
   common::ObIAllocator *freeable_alloc_;
   // Allocator returned by get_allocator()
   ObIAllocator *default_allocator_;
-#ifdef OB_USE_ASAN
-private:
-  static bool enable_asan_allocator;
-  bool use_asan_allocator_;
-#endif
 };
 
 inline MemoryContext &MemoryContext::operator=(__MemoryContext__ *ref_context)

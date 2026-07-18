@@ -796,7 +796,6 @@ int ObCSAsyncIndexProcessor::build_das_ins_rtdef_(common::ObArenaAllocator &allo
     ins_rtdef->need_fetch_conflict_ = false;
     ins_rtdef->is_duplicated_ = false;
     ins_rtdef->use_put_ = false;
-    ins_rtdef->direct_insert_task_id_ = 0;
     ins_rtdef->ddl_task_id_ = 0;
     insert_op->set_das_rtdef(ins_rtdef);
   }

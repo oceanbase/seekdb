@@ -54,21 +54,13 @@ public:
       header_(NULL), hold_(0), pushes_(0), pops_(0), with_mutex_(with_mutex)
   {
     mutex_.enable_record_stat(false);
-#ifdef OB_USE_ASAN
-    max_chunk_cache_size_ = 0;
-#endif
   }
   virtual ~AChunkList()
   {}
 
   void set_max_chunk_cache_size(const int64_t max_cache_size)
   {
-#ifdef OB_USE_ASAN
-    UNUSED(max_cache_size);
-    max_chunk_cache_size_ = 0;
-#else
     max_chunk_cache_size_ = max_cache_size;
-#endif
   }
 
   inline bool push(AChunk *chunk)

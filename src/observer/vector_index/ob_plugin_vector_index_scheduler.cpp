@@ -1281,7 +1281,6 @@ int ObPluginVectorIndexLoadScheduler::submit_log_()
                                                       pos,
                                                       base_scn,
                                                       false,
-                                                      false,
                                                       &cb_,
                                                       lsn,
                                                       scn))) {

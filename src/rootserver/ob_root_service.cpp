@@ -1338,12 +1338,7 @@ int ObRootService::execute_ddl_task(const obcall::ObAlterTableArg &arg,
         break;
       }
       case share::MAKE_DDL_TAKE_EFFECT_TASK: {
-        if (arg.is_direct_load_partition_) {
-          if (OB_FAIL(ddl_service_.swap_orig_and_hidden_table_partitions(
-              const_cast<obcall::ObAlterTableArg &>(arg)))) {
-            LOG_WARN("failed to swap orig and hidden table partitions", K(ret));
-          }
-        } else if (OB_FAIL(ddl_service_.swap_orig_and_hidden_table_state(
+        if (OB_FAIL(ddl_service_.swap_orig_and_hidden_table_state(
             const_cast<obcall::ObAlterTableArg &>(arg)))) {
           LOG_WARN("failed to swap orig and hidden table state", K(ret));
         }
@@ -1518,34 +1513,6 @@ int ObRootService::precheck_interval_part(const obcall::ObAlterTableArg &arg)
       ret = OB_ERR_INTERVAL_PARTITION_EXIST;
     }
   }
-  return ret;
-}
-
-int ObRootService::create_hidden_table(const obcall::ObCreateHiddenTableArg &arg,
-                                       obcall::ObCreateHiddenTableRes &res)
-{
-  LOG_DEBUG("receive create hidden table arg", K(arg));
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (OB_UNLIKELY(!arg.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(arg));
-  } else if (OB_FAIL(DDL_SIM(arg.task_id_, CREATE_HIDDEN_TABLE_RPC_FAILED))) {
-    LOG_WARN("ddl sim failure", K(ret), K(arg));
-  } else if (OB_FAIL(DDL_SIM(arg.task_id_, CREATE_HIDDEN_TABLE_RPC_SLOW))) {
-    LOG_WARN("ddl sim failure", K(ret), K(arg));
-  } else if (OB_FAIL(ddl_service_.create_hidden_table(arg, res))) {
-    LOG_WARN("do create hidden table in trans failed", K(ret), K(arg));
-  }
-  ROOTSERVICE_EVENT_ADD("ddl scheduler", "create hidden table",
-                        "ret", ret,
-                        "trace_id", *ObCurTraceId::get_trace_id(),
-                        "task_id", res.task_id_,
-                        "table_id", arg.get_table_id(),
-                        "schema_version", res.schema_version_);
-  LOG_INFO("finish create hidden table ddl", K(ret), K(arg), K(res), "ddl_event_info", ObDDLEventInfo());
   return ret;
 }
 

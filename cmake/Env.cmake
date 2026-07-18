@@ -10,13 +10,10 @@ endif()
 ob_define(DEBUG_PREFIX "-fdebug-prefix-map=${CMAKE_SOURCE_DIR}=.")
 ob_define(FILE_PREFIX "-ffile-prefix-map=${CMAKE_SOURCE_DIR}=.")
 ob_define(OB_LD_BIN ld)
-ob_define(ASAN_IGNORE_LIST "${CMAKE_SOURCE_DIR}/asan_ignore_list.txt")
-
 ob_define(DEP_3RD_DIR "${CMAKE_SOURCE_DIR}/deps/3rd")
 ob_define(DEVTOOLS_DIR "${CMAKE_SOURCE_DIR}/deps/3rd/usr/local/oceanbase/devtools")
 ob_define(DEP_DIR "${CMAKE_SOURCE_DIR}/deps/3rd/usr/local/oceanbase/deps/devel")
 
-ob_define(BUILD_CDC_ONLY OFF)
 # Deprecated no-op retained for compatibility with existing build invocations.
 ob_define(BUILD_EMBED_MODE OFF)
 if(BUILD_EMBED_MODE)
@@ -25,11 +22,6 @@ endif()
 ob_define(OB_USE_CLANG ON)
 ob_define(OB_ERRSIM OFF)
 ob_define(BUILD_NUMBER 1)
-ob_define(OB_GPERF_MODE OFF)
-ob_define(ENABLE_OBJ_LEAK_CHECK OFF)
-ob_define(ENABLE_FATAL_ERROR_HANG ON)
-ob_define(DETECT_RECURSION OFF)
-ob_define(ENABLE_COMPILE_DLL_MODE OFF)
 ob_define(OB_CMAKE_RULES_CHECK ON)
 ob_define(OB_STATIC_LINK_LGPL_DEPS ON)
 ob_define(OB_BUILD_CCLS OFF)
@@ -40,14 +32,8 @@ ob_define(NEED_PARSER_CACHE ON)
 # get compiler from build.sh
 ob_define(OB_CC "")
 ob_define(OB_CXX "")
-ob_define(OB_BUILD_STANDALONE OFF)
 ob_define(DEFAULT_LOG_LEVEL OB_LOG_LEVEL_ERROR)
 ob_define(DEFAULT_LOG_FILE_SIZE_MB 256)
-
-# 'ENABLE_PERF_MODE' use for offline system insight performance test
-# PERF_MODE macro controls many special code path in system
-# we can open this to benchmark our system partial/layered
-ob_define(ENABLE_PERF_MODE OFF)
 
 # begin of unity build config
 ob_define(OB_MAX_UNITY_BATCH_SIZE 30)
@@ -61,8 +47,6 @@ ob_define(OB_DISABLE_PIE ON)
 ob_define(OB_ENABLE_MCMODEL OFF)
 
 ob_define(USE_LTO_CACHE OFF)
-
-ob_define(ASAN_DISABLE_STACK ON)
 
 # 开源模式默认支持系统租户使用向量索引
 ob_define(OB_BUILD_SYS_VEC_IDX ON)
@@ -150,24 +134,10 @@ endif()
 
 set(ob_close_deps_static_name "")
 
-set(OB_BUILD_CLOSE_MODULES OFF)
-
-if(OB_BUILD_STANDALONE)
-  add_definitions(-DOB_BUILD_STANDALONE)
-endif()
-
-if (OB_USE_TEST_PUBKEY)
-  add_definitions(-DOB_USE_TEST_PUBKEY)
-endif()
-
 if (OB_BUILD_SYS_VEC_IDX)
  add_definitions(-DOB_BUILD_SYS_VEC_IDX)
 endif()
  
-if(BUILD_CDC_ONLY)
-  add_definitions(-DOB_BUILD_CDC_DISABLE_VSAG)
-endif()
-
 # Find objcopy - on macOS it may be installed via Homebrew or available as llvm-objcopy
 set(OB_CLANG_BIN "clang-17")
 set(OB_CLANGXX_BIN "clang++-17")
@@ -326,14 +296,6 @@ if (OB_USE_CLANG)
   set(_CMAKE_TOOLCHAIN_PREFIX llvm-)
   set(_CMAKE_TOOLCHAIN_LOCATION "${CMAKE_TOOLCHAIN_PATH}/bin")
 
-  if (OB_USE_ASAN)
-    if (ASAN_DISABLE_STACK)
-      ob_define(CMAKE_ASAN_FLAG "-mllvm -asan-stack=0 -fsanitize=address -fno-optimize-sibling-calls -fsanitize-blacklist=${ASAN_IGNORE_LIST}")
-    else()
-      ob_define(CMAKE_ASAN_FLAG "-fstack-protector-strong -fsanitize=address -fno-optimize-sibling-calls -fsanitize-blacklist=${ASAN_IGNORE_LIST}")
-    endif()
-  endif()
-
   if (OB_USE_LLD)
     if(OB_ANDROID)
       # Android: OB_LD_BIN already set in platform block above
@@ -359,33 +321,33 @@ if (OB_USE_CLANG)
   if(OB_ANDROID)
     # Android NDK: no --gcc-toolchain, no macOS frameworks
     # -D_LIBCPP_ENABLE_CXX17_REMOVED_UNARY_BINARY_FUNCTION: Boost headers use std::unary_function removed in C++17
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8 ${CMAKE_ASAN_FLAG} -D_LIBCPP_ENABLE_CXX17_REMOVED_UNARY_BINARY_FUNCTION")
-    set(CMAKE_C_FLAGS "${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8 ${CMAKE_ASAN_FLAG}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8 -D_LIBCPP_ENABLE_CXX17_REMOVED_UNARY_BINARY_FUNCTION")
+    set(CMAKE_C_FLAGS "${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8")
     set(CMAKE_CXX_LINK_FLAGS "${LD_OPT} ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT}")
     set(CMAKE_SHARED_LINKER_FLAGS "${LD_OPT} ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT}")
     set(CMAKE_EXE_LINKER_FLAGS "${LD_OPT} ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT} ${CMAKE_COVERAGE_EXE_LINKER_OPTIONS}")
   elseif(APPLE)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8 ${CMAKE_ASAN_FLAG}")
-    set(CMAKE_C_FLAGS "${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8 ${CMAKE_ASAN_FLAG}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8")
+    set(CMAKE_C_FLAGS "${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8")
     set(CMAKE_CXX_LINK_FLAGS "${LD_OPT} ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT}")
     set(CMAKE_SHARED_LINKER_FLAGS "${LD_OPT} ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT} ${COMPACT_UNWIND_FLAG}")
     set(CMAKE_EXE_LINKER_FLAGS "${LD_OPT} ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT} ${CMAKE_COVERAGE_EXE_LINKER_OPTIONS} ${COMPACT_UNWIND_FLAG}")
   elseif(WIN32)
     set(OB_OBJCOPY_BIN "llvm-objcopy")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} ${REORDER_COMP_OPT} ${CMAKE_ASAN_FLAG}")
-    set(CMAKE_C_FLAGS "${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} ${REORDER_COMP_OPT} ${CMAKE_ASAN_FLAG}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} ${REORDER_COMP_OPT}")
+    set(CMAKE_C_FLAGS "${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} ${REORDER_COMP_OPT}")
     set(CMAKE_CXX_LINK_FLAGS "${LD_OPT} ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT}")
     set(CMAKE_SHARED_LINKER_FLAGS "/INCREMENTAL:NO ${LD_OPT} ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT} ${COMPACT_UNWIND_FLAG}")
     set(CMAKE_EXE_LINKER_FLAGS "/INCREMENTAL:NO ${LD_OPT} ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT} ${CMAKE_COVERAGE_EXE_LINKER_OPTIONS} ${COMPACT_UNWIND_FLAG}")
   elseif(OB_ANDROID)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8 ${CMAKE_ASAN_FLAG}")
-    set(CMAKE_C_FLAGS "${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8 ${CMAKE_ASAN_FLAG}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8")
+    set(CMAKE_C_FLAGS "${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8")
     set(CMAKE_CXX_LINK_FLAGS "${LD_OPT} ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT}")
     set(CMAKE_SHARED_LINKER_FLAGS "${LD_OPT} ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT}")
     set(CMAKE_EXE_LINKER_FLAGS "${LD_OPT} ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT} ${CMAKE_COVERAGE_EXE_LINKER_OPTIONS}")
   else()
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --gcc-toolchain=${GCC9} -gdwarf-4 ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8 ${CMAKE_ASAN_FLAG}")
-    set(CMAKE_C_FLAGS "--gcc-toolchain=${GCC9} -gdwarf-4 ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8 ${CMAKE_ASAN_FLAG}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --gcc-toolchain=${GCC9} -gdwarf-4 ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8")
+    set(CMAKE_C_FLAGS "--gcc-toolchain=${GCC9} -gdwarf-4 ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8")
     set(CMAKE_CXX_LINK_FLAGS "${LD_OPT} --gcc-toolchain=${GCC9} ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT}")
     set(CMAKE_SHARED_LINKER_FLAGS "${LD_OPT} -Wl,-z,noexecstack ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT}")
     set(CMAKE_EXE_LINKER_FLAGS "${LD_OPT} -Wl,-z,noexecstack ${PIE_OPT} ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT} ${CMAKE_COVERAGE_EXE_LINKER_OPTIONS}")

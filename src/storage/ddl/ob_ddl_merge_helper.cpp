@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "storage/ddl/ob_ddl_merge_helper.h"
 #include "share/rc/ob_module_provider.h"
-#include "storage/ddl/ob_inc_ddl_merge_helper.h"
 #include "storage/ddl/ob_ddl_merge_task_utils.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
@@ -55,13 +54,8 @@ int ObIDDLMergeHelper::get_merge_helper(ObIAllocator &allocator,
 
   char *buf = nullptr;
   switch(direct_load_type) {
-    case ObDirectLoadType::DIRECT_LOAD_INCREMENTAL:
-      BUILD_MERGE_HELPER(ObIncMinDDLMergeHelper);
-      break;
     case ObDirectLoadType::SN_IDEM_DIRECT_LOAD_DDL:
-    case ObDirectLoadType::SN_IDEM_DIRECT_LOAD_DATA:
       BUILD_MERGE_HELPER(ObSNDDLMergeHelperV2);
-      break;
       break;
     default:
       ret = OB_NOT_SUPPORTED;
@@ -459,8 +453,6 @@ int ObIDDLMergeHelper::prepare_ddl_param(const ObDDLTabletMergeDagParamV2 &merge
     ddl_param.start_scn_           = merge_param.start_scn_;
     ddl_param.snapshot_version_    = merge_param.ddl_task_param_.snapshot_version_;
     ddl_param.data_format_version_ = merge_param.ddl_task_param_.tenant_data_version_;
-    ddl_param.trans_id_            = merge_param.trans_id_;
-    ddl_param.seq_no_              = merge_param.seq_no_;
     LOG_INFO("prepare_ddl_param", K(ddl_param));
   }
   return ret;
@@ -660,8 +652,7 @@ int ObSNDDLMergeHelperV2::assemble_sstable(ObDDLTabletMergeDagParamV2 &merge_par
 
 bool ObSNDDLMergeHelperV2::is_supported_direct_load_type(const ObDirectLoadType direct_load_type)
 {
-  return ObDirectLoadType::SN_IDEM_DIRECT_LOAD_DDL  == direct_load_type ||
-         ObDirectLoadType::SN_IDEM_DIRECT_LOAD_DATA == direct_load_type;
+  return ObDirectLoadType::SN_IDEM_DIRECT_LOAD_DDL == direct_load_type;
 }
 
 

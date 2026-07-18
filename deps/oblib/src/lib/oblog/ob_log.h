@@ -989,7 +989,6 @@ inline int ObLogger::check_log_end(ObPLogItem &log_item, int64_t pos)
   int ret = OB_SUCCESS;
   const int64_t buf_size = log_item.get_buf_size();
   if (buf_size > 0) {
-    DEBUG_ASSERT(pos >=0 && pos <= buf_size);
     if (pos > buf_size - 2) {
       pos = buf_size - 2;
       ret = OB_SIZE_OVERFLOW;

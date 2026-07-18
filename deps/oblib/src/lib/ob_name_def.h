@@ -340,8 +340,6 @@
 #define N_VIRTUAL_COLUMN_EXPRS "virtual_column_exprs"
 #define N_CALC_EXPRS "calc_exprs"
 #define N_INDEX_FILTER_EXPRS "index_filter_exprs"
-#define N_OPERATOR_MONITOR_INFO "op_info"
-#define N_PLAN_MONITOR_INFO "plan_info"
 #define N_ANY_VAL "any_value"
 #define N_VALIDATE_PASSWORD_STRENGTH "validate_password_strength"
 #define N_ENCODE_SORTKEY "encode_sortkey"

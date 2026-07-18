@@ -23,9 +23,6 @@
 #include "share/ob_ddl_sim_point.h"
 #include "common/object/ob_object.h"
 #include "share/compaction/ob_shared_storage_compaction_util.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "close_modules/shared_storage/meta_store/ob_shared_storage_obj_meta.h"
-#endif
 #include "share/tablet/ob_tablet_table_operator.h"
 #include "share/storage/ob_tablet_replica_checksum_table_storage.h"
 #include "sql/engine/table/ob_table_scan_op.h"

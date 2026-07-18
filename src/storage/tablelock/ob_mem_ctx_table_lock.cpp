@@ -73,7 +73,7 @@ int ObLockMemCtx::init(ObLSTxCtxMgr *ls_tx_ctx_mgr)
 }
 
 // for mintest
-int ObLockMemCtx::init(ObTableHandleV2 &handle)
+int ObLockMemCtx::init(storage::ObTableHandleV2 &handle)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!handle.is_valid())) {

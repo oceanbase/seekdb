@@ -24,9 +24,6 @@ namespace oceanbase
 namespace common
 {
 
-//#define OB_HAS_128BIT_CAS 1
-#define DOUBLE_FREE_CHECK 1
-
 // Generic atomic list Implementation (for pointer data types only). Uses
 // atomic memory operations to avoid blocking.
 // Warning: it only supports x86_64, doesn't support i386
@@ -43,15 +40,7 @@ namespace common
 #define QUEUE_LD64(dst,src) \
   *(reinterpret_cast<volatile uint64_t *>(&((dst).data_))) = *(reinterpret_cast<volatile uint64_t *>(&((src).data_)))
 
-#if OB_HAS_128BIT_CAS
-#define QUEUE_LD(dst, src) \
-do { \
-  *reinterpret_cast<volatile  __int128_t *>(&(dst)) = \
-    __sync_val_compare_and_swap(reinterpret_cast<volatile __int128_t *>(&(src)), 0, 0); \
-} while (0)
-#else
 #define QUEUE_LD(dst,src) QUEUE_LD64(dst,src)
-#endif
 
 // Warning: ObHeadNode is read and written in multiple threads without
 // a lock, use QUEUE_LD to read safely.
@@ -60,16 +49,7 @@ union ObHeadNode
   ObHeadNode() : data_(0) { }
   ~ObHeadNode() { }
 
-#if OB_HAS_128BIT_CAS
-  struct
-  {
-    void *pointer_;
-    int64_t version_;
-  } s_;
-  __int128_t data_;
-#else
   int64_t data_;
-#endif
 };
 
 // Why is version required? One scenario is described below
@@ -81,20 +61,10 @@ union ObHeadNode
 // If the version check is not there, the list will look like
 // -> C -> D after the pop, which will result in the loss of "B"
 
-#ifdef DOUBLE_FREE_CHECK
 #define FROM_PTR(x) reinterpret_cast<void *>(((uintptr_t)(x)) + 1)
 #define TO_PTR(x) reinterpret_cast<void *>(((uintptr_t)(x)) - 1)
-#else
-#define FROM_PTR(x) (reinterpret_cast<void *>(x))
-#define TO_PTR(x) (reinterpret_cast<void *>(x))
-#endif
 
-#if OB_HAS_128BIT_CAS
-#define FREELIST_POINTER(x) (x).s_.pointer_
-#define FREELIST_VERSION(x) (x).s_.version_
-#define SET_FREELIST_POINTER_VERSION(x,p,v) \
-  (x).s_.pointer_ = p; (x).s_.version_ = v
-#elif defined(__x86_64__) || defined(__ia64__)
+#if defined(__x86_64__) || defined(__ia64__)
 #define FREELIST_POINTER(x) (reinterpret_cast<void *>((((static_cast<intptr_t>((x).data_)) <<16) >> 16) | \
  (((~(((static_cast<intptr_t>((x).data_)) << 16 >> 63) - 1)) >> 48) << 48)))  // sign extend
 #define FREELIST_VERSION(x) ((static_cast<intptr_t>((x).data_)) >> 48)
@@ -167,22 +137,16 @@ inline void *ObAtomicList::push(void *item)
     h = FREELIST_POINTER(head);
     *adr_of_next = h;
 
-#ifdef DOUBLE_FREE_CHECK
     if (TO_PTR(h) == item) {
       OB_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "atomic list push: trying to free item twice");
     }
     if (((reinterpret_cast<uint64_t>(TO_PTR(h))) & 3) != 0) {
       OB_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "atomic list push: bad list");
     }
-#endif
 
     SET_FREELIST_POINTER_VERSION(item_pair, FROM_PTR(item), FREELIST_VERSION(head));
 
-#if OB_HAS_128BIT_CAS
     result = ATOMIC_BCAS(&head_.data_, head.data_, item_pair.data_);
-#else
-    result = ATOMIC_BCAS(&head_.data_, head.data_, item_pair.data_);
-#endif
   } while (!result);
 
   return TO_PTR((void *)(h));
@@ -201,22 +165,16 @@ inline void *ObAtomicList::batch_push(void *head_item, void *tail_item)
     h = FREELIST_POINTER(head);
     *adr_of_next = h;
 
-#ifdef DOUBLE_FREE_CHECK
     if (TO_PTR(h) == tail_item) {
       OB_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "atomic list push: trying to free item twice");
     }
     if ((reinterpret_cast<uint64_t>(TO_PTR(h))) & 3) {
       OB_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "atomic list push: bad list");
     }
-#endif
 
     SET_FREELIST_POINTER_VERSION(item_pair, FROM_PTR(head_item), FREELIST_VERSION(head));
 
-#if OB_HAS_128BIT_CAS
     result = ATOMIC_BCAS(&head_.data_, head.data_, item_pair.data_);
-#else
-    result = ATOMIC_BCAS(&head_.data_, head.data_, item_pair.data_);
-#endif
   } while (!result);
 
   return TO_PTR((void *)(h));
@@ -237,13 +195,8 @@ inline void *ObAtomicList::pop()
     } else {
       SET_FREELIST_POINTER_VERSION(next, *ADDRESS_OF_NEXT(TO_PTR(FREELIST_POINTER(item)), offset_),
                                    FREELIST_VERSION(item) + 1);
-#if OB_HAS_128BIT_CAS
       result = ATOMIC_BCAS(&head_.data_, item.data_, next.data_);
-#else
-      result = ATOMIC_BCAS(&head_.data_, item.data_, next.data_);
-#endif
 
-#ifdef DOUBLE_FREE_CHECK
       if (result) {
         if (FREELIST_POINTER(item) == TO_PTR(FREELIST_POINTER(next))) {
           OB_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "atomic list pop: loop detected");
@@ -252,7 +205,6 @@ inline void *ObAtomicList::pop()
           OB_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "atomic list pop: bad list");
         }
       }
-#endif
     }
   } while (!result && !finish);
 
@@ -278,11 +230,7 @@ inline void *ObAtomicList::popall()
       finish = true;
     } else {
       SET_FREELIST_POINTER_VERSION(next, FROM_PTR(NULL), FREELIST_VERSION(item) + 1);
-#if OB_HAS_128BIT_CAS
       result = ATOMIC_BCAS(&head_.data_, item.data_, next.data_);
-#else
-      result = ATOMIC_BCAS(&head_.data_, item.data_, next.data_);
-#endif
     }
   } while (!result && !finish);
 
@@ -318,11 +266,7 @@ inline void *ObAtomicList::remove(void *item)
   QUEUE_LD(head, head_);
   while (TO_PTR(FREELIST_POINTER(head)) == item && !finish) {
     SET_FREELIST_POINTER_VERSION(next, item_next, FREELIST_VERSION(head) + 1);
-#if OB_HAS_128BIT_CAS
     result = ATOMIC_BCAS(&head_.data_, head.data_, next.data_);
-#else
-    result = ATOMIC_BCAS(&head_.data_, head.data_, next.data_);
-#endif
 
     if (result) {
       *addr_next = NULL;

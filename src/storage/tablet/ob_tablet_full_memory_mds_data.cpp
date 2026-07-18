@@ -313,7 +313,7 @@ int ObTabletFullMemoryMdsData::mock_convert_auto_inc_seq_to_mds_dump_kv(
   mds::MdsDumpKey &key = dump_kv.k_;
   mds::MdsDumpNode &node = dump_kv.v_;
 
-  constexpr uint8_t table_id = mds::TupleTypeIdx<mds::MdsTableTypeTuple, mds::NormalMdsTable>::value;
+  constexpr uint8_t table_id = mds::GET_MDS_TABLE_ID<mds::NormalMdsTable>::value;
   constexpr uint8_t unit_id = mds::TupleTypeIdx<mds::NormalMdsTable, mds::MdsUnit<mds::DummyKey, share::ObTabletAutoincSeq>>::value;
   mds::DummyKey dummy_key;
   if (OB_FAIL(key.init(table_id, unit_id, dummy_key, allocator))) {
@@ -340,7 +340,7 @@ int ObTabletFullMemoryMdsData::mock_convert_medium_info_to_mds_dump_kv(
   dump_kv.reset();
   mds::MdsDumpKey &key = dump_kv.k_;
   mds::MdsDumpNode &node = dump_kv.v_;
-  constexpr uint8_t table_id = mds::TupleTypeIdx<mds::MdsTableTypeTuple, mds::NormalMdsTable>::value;
+  constexpr uint8_t table_id = mds::GET_MDS_TABLE_ID<mds::NormalMdsTable>::value;
   constexpr uint8_t unit_id = mds::TupleTypeIdx<mds::NormalMdsTable, mds::MdsUnit<compaction::ObMediumCompactionInfoKey, compaction::ObMediumCompactionInfo>>::value;
 
   compaction::ObMediumCompactionInfoKey medium_key(medium_info.medium_snapshot_);

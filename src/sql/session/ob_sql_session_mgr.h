@@ -177,11 +177,7 @@ private:
     static const int64_t MAX_SYS_VAR_MEM = 256 * 1024;
   };
 
-#ifdef OB_USE_ASAN
-  typedef common::ObTenantLinkHashMap<Key, ObSQLSessionInfo, ValueAlloc, ZeroRefHandle> HashMap;
-#else
   typedef common::ObTenantLinkHashMap<Key, ObSQLSessionInfo, ValueAlloc> HashMap;
-#endif
 
   struct DumpHoldSession
   {

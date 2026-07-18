@@ -112,20 +112,6 @@ int ObDBMSSchedJobExecutor::init_session(
   } else {
     OX (session.set_shadow(false));
   }
-  if (OB_SUCC(ret)) {
-    if (job_info.is_mview_job()) {
-      // set larger timeout for mview scheduler jobs
-      const int64_t QUERY_TIMEOUT_US = (24 * 60 * 60 * 1000000L); // 24hours
-      const int64_t TRX_TIMEOUT_US = (24 * 60 * 60 * 1000000L); // 24hours
-      ObObj query_timeout_obj;
-      ObObj trx_timeout_obj;
-      query_timeout_obj.set_int(QUERY_TIMEOUT_US);
-      trx_timeout_obj.set_int(TRX_TIMEOUT_US);
-      OZ (session.update_sys_variable(SYS_VAR_OB_QUERY_TIMEOUT, query_timeout_obj));
-      OZ (session.update_sys_variable(SYS_VAR_OB_TRX_TIMEOUT, trx_timeout_obj));
-    }
-  }
-
   return ret;
 }
 

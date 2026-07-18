@@ -129,9 +129,6 @@ int ObServerReloadConfig::operator()()
     const int64_t reserved_memory = GCONF.cache_wash_threshold;
     LOG_INFO("set reserved memory", K(reserved_memory));
     ob_set_reserved_memory(reserved_memory);
-#ifdef OB_USE_ASAN
-    __MemoryContext__::set_enable_asan_allocator(GCONF.enable_asan_for_memory_context);
-#endif
     ObMallocSampleLimiter::set_interval(GCONF._max_malloc_sample_interval,
                                      GCONF._min_malloc_sample_interval);
     enable_memleak_light_backtrace(GCONF._enable_memleak_light_backtrace);

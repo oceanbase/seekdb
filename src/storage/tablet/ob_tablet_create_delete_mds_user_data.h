@@ -35,17 +35,12 @@ enum class ObTabletMdsUserDataType : int64_t
   CREATE_TABLET = 1,
   //for drop tablet
   REMOVE_TABLET = 2,
-  RESERVED_MDS_TYPE_3 = 3,
-  RESERVED_MDS_TYPE_4 = 4,
-  RESERVED_MDS_TYPE_5 = 5,
-  RESERVED_MDS_TYPE_6 = 6,
-  RESERVED_MDS_TYPE_7 = 7,
   MAX_TYPE,
 };
 
 class ObTabletCreateDeleteMdsUserData
 {
-  OB_UNIS_VERSION(2);
+  OB_UNIS_VERSION(1);
 public:
   ObTabletCreateDeleteMdsUserData();
   ~ObTabletCreateDeleteMdsUserData() = default;
@@ -65,18 +60,15 @@ public:
   static int set_tablet_gc_trigger();
   static int set_tablet_empty_shell_trigger();
 
-  TO_STRING_KV(K_(tablet_status), K_(reserved_scn),
-      K_(data_type),
+  TO_STRING_KV(K_(tablet_status), K_(data_type),
       K_(create_commit_scn), K_(create_commit_version),
-      K_(delete_commit_scn), K_(delete_commit_version),
-      K_(reserved_commit_version));
+      K_(delete_commit_scn), K_(delete_commit_version));
 private:
   void create_tablet_on_commit_(const share::SCN &commit_version, const share::SCN &commit_scn);
   void delete_tablet_on_commit_(const share::SCN &commit_version, const share::SCN &commit_scn);
 
 public:
   ObTabletStatus tablet_status_;
-  share::SCN reserved_scn_;
   ObTabletMdsUserDataType data_type_;
 
   // create_commit_scn_ remain unchanged throughout the entire tablet lifecycle
@@ -84,7 +76,6 @@ public:
   int64_t create_commit_version_; // create tx commit trans version
   share::SCN delete_commit_scn_; // delete tx commit log scn
   int64_t delete_commit_version_; // delete tx commit trans version
-  int64_t reserved_commit_version_;
 };
 
 inline bool ObTabletCreateDeleteMdsUserData::is_valid() const

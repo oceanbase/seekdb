@@ -25,7 +25,6 @@
 #undef NEED_MDS_REGISTER_DEFINE
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 #include "logservice/ob_log_service.h"
-#include "storage/ddl/ob_ddl_inc_clog_callback.h"
 #include "storage/tx/ob_tx_log_operator.h"
 #include "storage/tx/ob_tx_print_time_guard.h"
 
@@ -98,7 +97,6 @@ int ObTxCtx::init(const uint32_t session_id,
   }
 
   if (OB_SUCC(ret)) {
-    
     session_id_ = session_id;
     client_sid_ = client_sid;
     associated_session_id_ = associated_session_id;
@@ -191,8 +189,6 @@ void ObTxCtx::destroy()
       TRANS_LOG(ERROR, "some BUG may happen !!!", K(lbt()), K(*this), K(trans_id_),
                 K(busy_cbs_.get_size()));
     }
-
-    (void)check_dli_batch_completed_(ObTxLogType::TX_CLEAR_LOG);
 
     if (NULL == ls_tx_ctx_mgr_) {
       TRANS_LOG(ERROR, "ls_tx_ctx_mgr_ is null, unexpected error", KP(ls_tx_ctx_mgr_), "context",
@@ -2035,11 +2031,6 @@ int ObTxCtx::on_success_ops_(ObTxLogCb *log_cb)
         log_cb->get_mds_range().reset();
         log_cb->reset_tx_op_array();
       }
-    } else if (ObTxLogType::TX_DIRECT_LOAD_INC_LOG == log_type) {
-      ObTxCtxLogOperator<ObTxDirectLoadIncLog> dli_log_op(this, log_cb);
-      if (OB_FAIL(dli_log_op(ObTxLogOpType::APPLY_SUCC))) {
-        TRANS_LOG(WARN, "try to apply direct load inc log failed", K(ret), KPC(this));
-      }
     } else if (ObTxLogType::TX_BIG_SEGMENT_LOG == log_type) {
       remove_unsynced_segment_cb_(log_cb->get_log_ts());
     } else if (ObTxLogType::TX_COMMIT_INFO_LOG == log_type) {
@@ -2230,12 +2221,6 @@ int ObTxCtx::on_failure(ObTxLogCb *log_cb)
       }
       if (is_contain(log_cb->get_cb_arg_array(), ObTxLogType::TX_BIG_SEGMENT_LOG)) {
         remove_unsynced_segment_cb_(log_cb->get_log_ts());
-      }
-      if (ObTxLogType::TX_DIRECT_LOAD_INC_LOG == log_type) {
-        ObTxCtxLogOperator<ObTxDirectLoadIncLog> dli_log_op(this, log_cb);
-        if (OB_FAIL(dli_log_op(ObTxLogOpType::APPLY_FAIL))) {
-          TRANS_LOG(WARN, "try to apply direct load inc log failed", K(ret), KPC(this));
-        }
       }
       if (ObTxLogType::TX_ROLLBACK_TO_LOG == log_type) {
         ObTxData *tx_data = log_cb->get_tx_data();
@@ -2638,8 +2623,6 @@ int ObTxCtx::submit_redo_commit_info_log_(ObTxLogBlock &log_block,
     // state log already submitted, do nothing
   } else if (OB_FAIL(submit_redo_if_serial_logging_(log_block, has_redo, helper))) {
     TRANS_LOG(WARN, "submit redo log failed", KR(ret), K(*this));
-  } else if (OB_FAIL(check_dli_batch_completed_(ObTxLogType::TX_COMMIT_INFO_LOG))) {
-    TRANS_LOG(WARN, "check direct load inc batch completed", K(ret), KPC(this));
   } else if (OB_FAIL(decide_state_log_barrier_type_(ObTxLogType::TX_COMMIT_INFO_LOG, barrier))) {
     TRANS_LOG(WARN, "decide commit info log barrier failed", K(ret), K(barrier), KPC(this));
   } else {
@@ -2786,8 +2769,6 @@ int ObTxCtx::submit_commit_log_()
     if (OB_SUCC(ret)) {
       if (OB_FAIL(set_start_scn_in_commit_log_(commit_log))) {
         TRANS_LOG(WARN, "set start scn in commit log failed", K(ret), K(commit_log));
-      } else if (OB_FAIL(check_dli_batch_completed_(ObTxLogType::TX_COMMIT_LOG))) {
-        TRANS_LOG(WARN, "check dli batch completed error", KR(ret), K(*this));
       } else if ((exec_info_.multi_data_source_.count() > 0 || mds_cache_.count() > 0)
                  && OB_FAIL(try_alloc_retain_ctx_func_())) {
         TRANS_LOG(WARN, "alloc retain ctx func for mds trans failed", K(ret), K(mds_cache_), KPC(this));
@@ -2938,9 +2919,7 @@ int ObTxCtx::submit_abort_log_()
 
   logservice::ObReplayBarrierType abort_log_barrier_type =
       logservice::ObReplayBarrierType::NO_NEED_BARRIER;
-  if (OB_FAIL(check_dli_batch_completed_(ObTxLogType::TX_ABORT_LOG))) {
-    TRANS_LOG(WARN, "check dli batch completed error", KR(ret), K(*this));
-  } else if (OB_FAIL(mds_cache_.reserve_final_notify_array(exec_info_.multi_data_source_))) {
+  if (OB_FAIL(mds_cache_.reserve_final_notify_array(exec_info_.multi_data_source_))) {
     TRANS_LOG(WARN, "reserve final notify array failed", K(ret), K(mds_cache_), KPC(this));
   } else if (OB_FAIL(mds_cache_.generate_final_notify_array(exec_info_.multi_data_source_,
                                                             true /*need_merge_cache*/,
@@ -3088,230 +3067,7 @@ int ObTxCtx::submit_record_log_()
   return ret;
 }
 
-template <typename DLI_LOG>
-int ObTxCtx::submit_direct_load_inc_log_(
-    DLI_LOG &dli_log,
-    const ObTxDirectLoadIncLog::DirectLoadIncLogType dli_log_type,
-    const ObDDLIncLogBasic &batch_key,
-    logservice::AppendCb *extra_cb,
-    const logservice::ObReplayBarrierType replay_barrier,
-    const int64_t replay_hint,
-    share::SCN &scn,
-    bool need_free_extra_cb)
-{
 
-  int ret = OB_SUCCESS;
-
-  ObTxLogBlock log_block;
-
-  ObTxDLIncLogBuf dli_buf;
-  ObTxDirectLoadIncLog::ConstructArg construct_arg(dli_log_type, batch_key, dli_buf);
-
-  ObTxDirectLoadIncLog::SubmitArg submit_arg;
-  submit_arg.reset();
-  submit_arg.replay_barrier_type_ = replay_barrier;
-  submit_arg.replay_hint_ = replay_hint;
-  submit_arg.log_cb_ = nullptr;
-  submit_arg.extra_cb_ = extra_cb;
-  submit_arg.need_free_extra_cb_ = need_free_extra_cb;
-  submit_arg.base_scn_ = share::SCN::min_scn();
-  submit_arg.suggested_buf_size_ = dli_log.get_serialize_size() + 200;
-
-  ObTxCtxLogOperator<ObTxDirectLoadIncLog> dli_log_op(this, &log_block, &construct_arg, submit_arg);
-  if (OB_FAIL(dli_buf.serialize_log_object(&dli_log))) {
-    TRANS_LOG(WARN, "serialize direct load log failed", K(ret), K(dli_log), K(replay_hint),
-              KPC(this));
-  } else if (OB_FAIL(dli_log_op(ObTxLogOpType::SUBMIT))) {
-    if (ret == OB_TX_NOLOGCB) {
-      if (REACH_COUNT_PER_SEC(10) && REACH_TIME_INTERVAL(100 * 1000)) {
-        TRANS_LOG(INFO, "no log cb with dli log", KR(ret), K(dli_log_type), K(batch_key),
-                  "busy_cbs.first", PC(busy_cbs_.is_empty() ? NULL : busy_cbs_.get_first()));
-      }
-    } else {
-      TRANS_LOG(WARN, "try to submit direct load inc log failed", K(ret), KPC(this));
-    }
-  } else {
-    scn = dli_log_op.get_scn();
-  }
-
-  TRANS_LOG(DEBUG, "<ObTxDirectLoadIncLog> submit direct load inc log", K(ret), K(get_trans_id()),
-            K(dli_log), K(dli_log_type), K(batch_key), K(replay_barrier),
-            K(replay_hint), K(scn));
-  return ret;
-}
-
-int ObTxCtx::submit_direct_load_inc_redo_log(storage::ObDDLRedoLog &ddl_redo_log,
-                                                    logservice::AppendCb *extra_cb,
-                                                    const int64_t replay_hint,
-                                                    share::SCN &scn)
-{
-  int ret = OB_SUCCESS;
-  common::ObTimeGuard timeguard("ObTxCtx::submit_direct_load_inc_redo_log",
-                                1 * 1000 * 1000); // 1s
-  ObDDLIncLogBasic inc_log_basic;
-  if (OB_FAIL(check_status_())) {
-    TRANS_LOG(WARN, "check tx status before submitting dli log", K(ret), K(ddl_redo_log),
-              KPC(this));
-  } else {
-    ret = submit_direct_load_inc_log_(
-        ddl_redo_log, ObTxDirectLoadIncLog::DirectLoadIncLogType::DLI_REDO, inc_log_basic, extra_cb,
-        logservice::ObReplayBarrierType::NO_NEED_BARRIER, replay_hint, scn);
-  }
-  return ret;
-}
-
-int ObTxCtx::submit_direct_load_inc_start_log(storage::ObDDLIncStartLog &ddl_start_log,
-                                                     logservice::AppendCb *extra_cb,
-                                                     share::SCN &scn)
-{
-  int ret = OB_SUCCESS;
-  common::ObTimeGuard timeguard("ObTxCtx::submit_direct_load_inc_start_log",
-                                1 * 1000 * 1000); // 1s
-  ObDDLIncLogBasic inc_log_basic = ddl_start_log.get_log_basic();
-  if (OB_FAIL(check_status_())) {
-    TRANS_LOG(WARN, "check tx status before submitting dli log", K(ret), K(ddl_start_log),
-              KPC(this));
-  } else {
-    ret = submit_direct_load_inc_log_(
-        ddl_start_log, ObTxDirectLoadIncLog::DirectLoadIncLogType::DLI_START, inc_log_basic,
-        extra_cb, logservice::ObReplayBarrierType::STRICT_BARRIER, get_trans_id().get_id(), scn);
-  }
-  return ret;
-}
-
-int ObTxCtx::submit_direct_load_inc_commit_log(storage::ObDDLIncCommitLog &ddl_commit_log,
-                                                      logservice::AppendCb *extra_cb,
-                                                      share::SCN &scn,
-                                                      bool need_free_extra_cb)
-{
-  int ret = OB_SUCCESS;
-  common::ObTimeGuard timeguard("ObTxCtx::submit_direct_load_inc_commit_log",
-                                1 * 1000 * 1000); // 1s
-  ObDDLIncLogBasic inc_log_basic = ddl_commit_log.get_log_basic();
-  if (OB_FAIL(check_status_())) {
-    TRANS_LOG(WARN, "check tx status before submitting dli log", K(ret), K(ddl_commit_log),
-              KPC(this));
-  } else {
-    ret = submit_direct_load_inc_log_(
-        ddl_commit_log, ObTxDirectLoadIncLog::DirectLoadIncLogType::DLI_END, inc_log_basic,
-        extra_cb, logservice::ObReplayBarrierType::STRICT_BARRIER, get_trans_id().get_id(), scn,
-        need_free_extra_cb);
-  }
-  return ret;
-}
-
-int ObTxCtx::check_dli_batch_completed_(ObTxLogType submit_log_type)
-{
-  int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
-  const int64_t start_ts = ObTimeUtility::fast_current_time();
-
-  if (exec_info_.dli_batch_set_.size() > 0) {
-    int64_t need_ddl_end_count = 0;
-    int64_t compensate_ddl_end_fail_cnt = 0;
-    const int64_t MAX_COMPENSATE_FAIL_CNT = 100;
-
-    ObTxDirectLoadBatchKeyArray unused_batch_key_array;
-    for (ObDLIBatchSet::iterator iter = exec_info_.dli_batch_set_.begin();
-         iter != exec_info_.dli_batch_set_.end(); iter++) {
-      if (iter->first.need_compensate_ddl_end()) {
-        TRANS_LOG(DEBUG, "<ObTxDirectLoadIncLog> need compensate ddl end log", K(ret), K(tmp_ret),
-                  K(submit_log_type), K(trans_id_), K(iter->first));
-        if (compensate_ddl_end_fail_cnt <= MAX_COMPENSATE_FAIL_CNT
-            && (ObTxLogType::TX_ABORT_LOG == submit_log_type
-                || ObTxLogType::TX_COMMIT_INFO_LOG == submit_log_type)) {
-          ObDDLIncCommitLog inc_commit_log;
-          ObDDLIncCommitClogCb *extra_cb = static_cast<ObDDLIncCommitClogCb *>(
-              mtl_malloc(sizeof(ObDDLIncCommitClogCb), "TxExtraCb"));
-
-          share::SCN submitted_scn;
-          if (OB_ISNULL(extra_cb)) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-            TRANS_LOG(WARN, "alloc memory failed", K(ret), K(trans_id_),
-                      K(submit_log_type));
-          } else {
-            new (extra_cb) ObDDLIncCommitClogCb();
-          }
-
-          if (OB_TMP_FAIL(ret)) {
-            // do nothing
-          } else if (OB_TMP_FAIL(extra_cb->init(iter->first.get_batch_key()))) {
-            TRANS_LOG(WARN, "init extra cb failed", K(ret), K(iter->first), K(trans_id_));
-            extra_cb->~ObDDLIncCommitClogCb();
-            mtl_free(extra_cb);
-          } else if (OB_TMP_FAIL(inc_commit_log.init(iter->first.get_batch_key()))) {
-            TRANS_LOG(WARN, "init inc commit log failed", K(ret), K(inc_commit_log), K(iter->first),
-                      K(trans_id_));
-            extra_cb->~ObDDLIncCommitClogCb();
-            mtl_free(extra_cb);
-          } else if (OB_TMP_FAIL(
-                       submit_direct_load_inc_log_(inc_commit_log,
-                                                   ObTxDirectLoadIncLog::DirectLoadIncLogType::DLI_END,
-                                                   iter->first.get_batch_key(),
-                                                   extra_cb,
-                                                   logservice::ObReplayBarrierType::STRICT_BARRIER,
-                                                   get_trans_id().get_id(),
-                                                   submitted_scn,
-                                                   true))) {
-            if (tmp_ret != OB_TX_NOLOGCB) {
-              TRANS_LOG(WARN, "submit direct load inc commit log failed", K(ret), K(inc_commit_log),
-                        KPC(extra_cb), K(submitted_scn), K(trans_id_));
-            }
-            extra_cb->~ObDDLIncCommitClogCb();
-            mtl_free(extra_cb);
-          } else {}
-        }
-
-        if (OB_TMP_FAIL(tmp_ret)) {
-          compensate_ddl_end_fail_cnt += 1;
-        }
-
-        if (iter->first.need_compensate_ddl_end()) {
-          need_ddl_end_count += 1;
-        }
-      } else if (iter->first.is_ddl_start_logging()) {
-        need_ddl_end_count += 1;
-        TRANS_LOG(INFO, "the DDL inc start is logging", K(ret), K(tmp_ret), K(iter->first),
-                  K(trans_id_));
-      } else if (iter->first.is_ddl_end_logging()) {
-        TRANS_LOG(INFO, "the DDL inc end is logging", K(ret), K(tmp_ret), K(iter->first),
-                  K(trans_id_));
-      } else if (OB_TMP_FAIL(unused_batch_key_array.push_back(iter->first.get_batch_key()))) {
-        TRANS_LOG(WARN, "push back unused batch key failed", K(ret), K(tmp_ret), K(submit_log_type),
-                  K(trans_id_), K(iter->first));
-      } else {
-        TRANS_LOG(INFO, "<ObTxDirectLoadIncLog> Try to remove unused batch info", K(ret),
-                  K(tmp_ret), K(submit_log_type), K(trans_id_), K(iter->first),
-                  K(unused_batch_key_array.count()));
-      }
-    }
-
-    if (OB_TMP_FAIL(exec_info_.dli_batch_set_.remove_unlog_batch_info(unused_batch_key_array))) {
-      TRANS_LOG(WARN, "remove unlog batch_info failed", K(ret), K(tmp_ret), K(submit_log_type),
-                K(trans_id_), K(unused_batch_key_array));
-    }
-
-    if (OB_SUCC(ret) && need_ddl_end_count > 0) {
-      if (ObTxLogTypeChecker::is_state_log(submit_log_type)
-          && submit_log_type != ObTxLogType::TX_ABORT_LOG
-          && (get_downstream_state() >= ObTxState::REDO_COMPLETE
-              || submit_log_type != ObTxLogType::TX_CLEAR_LOG)) {
-        ret = OB_TRANS_NEED_ROLLBACK;
-        TRANS_LOG(ERROR,
-                  "<ObTxDirectLoadIncLog> incompleted direct load inc batch info with state log",
-                  K(ret), K(tmp_ret), K(submit_log_type), K(trans_id_), K(need_ddl_end_count), K(ObTimeUtility::fast_current_time() - start_ts));
-      } else {
-        ret = OB_TRANS_CANNOT_BE_KILLED;
-        TRANS_LOG(WARN,
-                  "<ObTxDirectLoadIncLog> The trx can not be finished because of a incompleted "
-                  "direct load inc batch info",
-                  K(ret), K(tmp_ret), K(submit_log_type), K(trans_id_), K(need_ddl_end_count), K(ObTimeUtility::fast_current_time() - start_ts));
-      }
-    }
-  }
-
-  return ret;
-}
 int ObTxCtx::submit_big_segment_log_()
 {
   int ret = OB_SUCCESS;
@@ -3532,12 +3288,12 @@ int ObTxCtx::submit_log_impl_(const ObTxLogType log_type)
         break;
       }
       case ObTxLogType::TX_COMMIT_LOG: {
-      	if (!mt_ctx_.is_prepared()) {
+        if (!mt_ctx_.is_prepared()) {
           ret = generate_commit_version_();
-      	}
-      	if (OB_SUCC(ret) && mt_ctx_.is_prepared()) {
-      	  ret = submit_commit_log_();
-      	}
+        }
+        if (OB_SUCC(ret) && mt_ctx_.is_prepared()) {
+          ret = submit_commit_log_();
+        }
         break;
       }
       case ObTxLogType::TX_ABORT_LOG: {

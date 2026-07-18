@@ -37,7 +37,7 @@ template <>
 int ObTabletDumpMdsNodeOperator::dump<mds::DummyKey, ObTabletCreateDeleteMdsUserData>(const mds::MdsDumpKV &kv, bool &dumped)
 {
   int ret = OB_SUCCESS;
-  constexpr uint8_t table_id = mds::TupleTypeIdx<mds::MdsTableTypeTuple, mds::NormalMdsTable>::value;
+  constexpr uint8_t table_id = mds::GET_MDS_TABLE_ID<mds::NormalMdsTable>::value;
   constexpr uint8_t unit_id = mds::TupleTypeIdx<mds::NormalMdsTable, mds::MdsUnit<mds::DummyKey, ObTabletCreateDeleteMdsUserData>>::value;
   const mds::MdsDumpKey &key = kv.k_;
   const mds::MdsDumpNode &node = kv.v_;
@@ -94,7 +94,7 @@ template <>
 int ObTabletDumpMdsNodeOperator::dump<mds::DummyKey, ObTabletBindingMdsUserData>(const mds::MdsDumpKV &kv, bool &dumped)
 {
   int ret = OB_SUCCESS;
-  constexpr uint8_t table_id = mds::TupleTypeIdx<mds::MdsTableTypeTuple, mds::NormalMdsTable>::value;
+  constexpr uint8_t table_id = mds::GET_MDS_TABLE_ID<mds::NormalMdsTable>::value;
   constexpr uint8_t unit_id = mds::TupleTypeIdx<mds::NormalMdsTable, mds::MdsUnit<mds::DummyKey, ObTabletBindingMdsUserData>>::value;
   const mds::MdsDumpKey &key = kv.k_;
   const mds::MdsDumpNode &node = kv.v_;
@@ -151,7 +151,7 @@ template <>
 int ObTabletDumpMdsNodeOperator::dump<mds::DummyKey, share::ObTabletAutoincSeq>(const mds::MdsDumpKV &kv, bool &dumped)
 {
   int ret = OB_SUCCESS;
-  constexpr uint8_t table_id = mds::TupleTypeIdx<mds::MdsTableTypeTuple, mds::NormalMdsTable>::value;
+  constexpr uint8_t table_id = mds::GET_MDS_TABLE_ID<mds::NormalMdsTable>::value;
   constexpr uint8_t unit_id = mds::TupleTypeIdx<mds::NormalMdsTable, mds::MdsUnit<mds::DummyKey, share::ObTabletAutoincSeq>>::value;
   const mds::MdsDumpKey &key = kv.k_;
   const mds::MdsDumpNode &node = kv.v_;
@@ -185,7 +185,7 @@ template <>
 int ObTabletDumpMdsNodeOperator::dump<compaction::ObMediumCompactionInfoKey, compaction::ObMediumCompactionInfo>(const mds::MdsDumpKV &kv, bool &dumped)
 {
   int ret = OB_SUCCESS;
-  constexpr uint8_t table_id = mds::TupleTypeIdx<mds::MdsTableTypeTuple, mds::NormalMdsTable>::value;
+  constexpr uint8_t table_id = mds::GET_MDS_TABLE_ID<mds::NormalMdsTable>::value;
   constexpr uint8_t unit_id = mds::TupleTypeIdx<mds::NormalMdsTable, mds::MdsUnit<compaction::ObMediumCompactionInfoKey, compaction::ObMediumCompactionInfo>>::value;
   const mds::MdsDumpKey &key = kv.k_;
   const mds::MdsDumpNode &node = kv.v_;

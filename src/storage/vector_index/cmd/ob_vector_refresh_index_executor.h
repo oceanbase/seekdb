@@ -165,12 +165,6 @@ private:
                                      const uint64_t data_table_id,
                                      const ObString &index_name,
                                      ObString &real_index_name);
-  int mock_check_idx_col_name(
-      const ObString &idx_col_name,
-      const share::schema::ObTableSchema *base_table_schema,
-      const share::schema::ObTableSchema *delta_buf_table_schema,
-      const share::schema::ObTableSchema *index_id_table_schema);
-  // Only for mock testing.
   int resolve_and_check_table_valid(
       const ObString &arg_idx_name, const ObString &arg_base_name,
       const ObString &idx_col_name,

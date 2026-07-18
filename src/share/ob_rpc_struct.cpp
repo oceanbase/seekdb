@@ -292,177 +292,6 @@ bool ObUpdateDDLTaskActiveTimeArg::is_valid() const
 
 
 
-bool ObCreateHiddenTableArg::is_valid() const
-{
-  return (true
-          && OB_INVALID_ID != table_id_
-          && share::DDL_INVALID != ddl_type_);
-}
-
-int ObCreateHiddenTableArg::init(const uint64_t dest_tid,
-                                 const uint64_t table_id, const uint64_t session_id,
-                                 const int64_t parallelism, const share::ObDDLType ddl_type, const ObSQLMode sql_mode,
-                                 const ObTimeZoneInfo &tz_info, const common::ObString &local_nls_date,
-                                 const common::ObString &local_nls_timestamp, const common::ObString &local_nls_timestamp_tz,
-                                 const ObTimeZoneInfoWrap &tz_info_wrap, const ObIArray<ObTabletID> &tablet_ids,
-                                 const bool need_reorder_column_id, const bool foreign_key_checks)
-{
-  int ret = OB_SUCCESS;
-  reset();
-  if (OB_FAIL(tz_info_wrap_.deep_copy(tz_info_wrap))) {
-    LOG_WARN("failed to deep copy tz_info_wrap", KR(ret));
-  } else if (FALSE_IT(nls_formats_[ObNLSFormatEnum::NLS_DATE].assign_ptr(local_nls_date.ptr(), static_cast<int32_t>(local_nls_date.length())))) {
-    // do nothing
-  } else if (FALSE_IT(nls_formats_[ObNLSFormatEnum::NLS_TIMESTAMP].assign_ptr(local_nls_timestamp.ptr(), static_cast<int32_t>(local_nls_timestamp.length())))) {
-    // do nothing
-  } else if (FALSE_IT(nls_formats_[ObNLSFormatEnum::NLS_TIMESTAMP_TZ].assign_ptr(local_nls_timestamp_tz.ptr(), static_cast<int32_t>(local_nls_timestamp_tz.length())))) {
-    // do nothing
-  } else if (OB_FAIL(tablet_ids_.assign(tablet_ids))) {
-    LOG_WARN("failed to assign tablet ids", KR(ret), K(tablet_ids));
-  } else {
-    
-    
-    
-    table_id_ = table_id;
-    parallelism_ = parallelism;
-    ddl_type_ = ddl_type;
-    session_id_ = session_id;
-    sql_mode_ = sql_mode;
-    tz_info_ = tz_info;
-    // load data no need to reorder column id
-    need_reorder_column_id_ = need_reorder_column_id;
-    foreign_key_checks_ = foreign_key_checks;
-  }
-  return ret;
-}
-
-OB_DEF_SERIALIZE(ObCreateHiddenTableArg)
-{
-  int ret = OB_SUCCESS;
-  if (!is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
-  } else if (OB_FAIL(ObDDLArg::serialize(buf, buf_len, pos))) {
-    LOG_WARN("fail to serialize DDLArg", K(ret), K(buf_len), K(pos));
-  } else {
-    LST_DO_CODE(OB_UNIS_ENCODE,
-                
-                table_id_,
-                
-                session_id_,
-                parallelism_,
-                ddl_type_,
-                sql_mode_,
-                tz_info_,
-                tz_info_wrap_);
-    if (OB_SUCC(ret)) {
-      for (int64_t i = 0; OB_SUCC(ret) && i < ObNLSFormatEnum::NLS_MAX; i++) {
-        if (OB_FAIL(nls_formats_[i].serialize(buf, buf_len, pos))) {
-          LOG_WARN("fail to serialize nls_formats_[i]", K(ret), K(nls_formats_[i]));
-        }
-      }
-    }
-    if (OB_SUCC(ret)) {
-      OB_UNIS_ENCODE(tablet_ids_);
-    }
-    if (OB_SUCC(ret)) {
-      LST_DO_CODE(OB_UNIS_ENCODE, need_reorder_column_id_, foreign_key_checks_);
-    }
-  }
-  return ret;
-}
-OB_DEF_DESERIALIZE(ObCreateHiddenTableArg)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObDDLArg::deserialize(buf, data_len, pos))) {
-    LOG_WARN("fail to deserialize DDLArg", K(ret), K(data_len), K(pos));
-  } else {
-    LST_DO_CODE(OB_UNIS_DECODE,
-              
-              table_id_,
-              
-              session_id_,
-              parallelism_,
-              ddl_type_,
-              sql_mode_,
-              tz_info_,
-              tz_info_wrap_);
-    ObString tmp_string;
-    char *tmp_ptr[ObNLSFormatEnum::NLS_MAX] = {};
-    for (int64_t i = 0; OB_SUCC(ret) && i < ObNLSFormatEnum::NLS_MAX; i++) {
-      if (OB_FAIL(tmp_string.deserialize(buf, data_len, pos))) {
-        LOG_WARN("fail to deserialize nls_formats_", K(ret), K(i));
-      } else if (OB_ISNULL(tmp_ptr[i] = (char *)allocator_.alloc(tmp_string.length()))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to alloc memory!", K(ret));
-      } else {
-        MEMCPY(tmp_ptr[i], tmp_string.ptr(), tmp_string.length());
-        nls_formats_[i].assign_ptr(tmp_ptr[i], tmp_string.length());
-        tmp_string.reset();
-      }
-    }
-    if (OB_FAIL(ret)) {
-      for (int64_t i = 0; i < ObNLSFormatEnum::NLS_MAX; i++) {
-        allocator_.free(tmp_ptr[i]);
-      }
-    }
-    if (OB_SUCC(ret)) {
-      OB_UNIS_DECODE(tablet_ids_);
-    }
-    if (OB_SUCC(ret)) {
-      LST_DO_CODE(OB_UNIS_DECODE, need_reorder_column_id_, foreign_key_checks_);
-    }
-  }
-  return ret;
-}
-OB_DEF_SERIALIZE_SIZE(ObCreateHiddenTableArg)
-{
-  int64_t len = 0;
-  int ret = OB_SUCCESS;
-  if (!is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
-  } else {
-    len += ObDDLArg::get_serialize_size();
-    LST_DO_CODE(OB_UNIS_ADD_LEN,
-                
-                table_id_,
-                
-                session_id_,
-                parallelism_,
-                ddl_type_,
-                sql_mode_,
-                tz_info_,
-                tz_info_wrap_);
-    if (OB_SUCC(ret)) {
-      for (int64_t i = 0; i < ObNLSFormatEnum::NLS_MAX; i++) {
-        len += nls_formats_[i].get_serialize_size();
-      }
-    }
-    if (OB_SUCC(ret)) {
-      OB_UNIS_ADD_LEN(tablet_ids_);
-    }
-    if (OB_SUCC(ret)) {
-      LST_DO_CODE(OB_UNIS_ADD_LEN, need_reorder_column_id_, foreign_key_checks_);
-    }
-  }
-  if (OB_FAIL(ret)) {
-    len = -1;
-  }
-  return len;
-}
-
-
-OB_SERIALIZE_MEMBER(ObCreateHiddenTableRes,
-                    
-                    table_id_,
-                    
-                    dest_table_id_,
-                    trace_id_,
-                    task_id_,
-                    schema_version_,
-                    is_no_logging_);
-
 OB_SERIALIZE_MEMBER(ObStartRedefTableRes,
                     task_id_,
                     
@@ -1525,8 +1354,7 @@ OB_DEF_SERIALIZE(ObAlterTableArg)
               rebuild_index_arg_list_,
               client_session_id_,
               client_session_create_ts_,
-              lock_priority_,
-              is_direct_load_partition_);
+              lock_priority_);
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(rebuild_index_arg_list_.serialize(buf, buf_len, pos))) {
@@ -1631,8 +1459,7 @@ OB_DEF_DESERIALIZE(ObAlterTableArg)
               rebuild_index_arg_list_,
               client_session_id_,
               client_session_create_ts_,
-              lock_priority_,
-              is_direct_load_partition_);
+              lock_priority_);
 
   if (OB_SUCC(ret) && pos < data_len) {
     if (OB_FAIL(rebuild_index_arg_list_.deserialize(buf, data_len, pos))) {
@@ -1691,7 +1518,6 @@ OB_DEF_SERIALIZE_SIZE(ObAlterTableArg)
                 client_session_id_,
                 client_session_create_ts_,
                 lock_priority_,
-                is_direct_load_partition_,
                 part_storage_cache_policy_,
                 data_version_);
   }

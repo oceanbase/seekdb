@@ -72,10 +72,8 @@ bool ObTabletDDLCompleteArg::is_valid() const
 {
   return (!has_complete_ && tablet_id_.is_valid()) ||
          (has_complete_ && tablet_id_.is_valid() && table_key_.is_valid()
-                        && nullptr != storage_schema_ && storage_schema_->is_valid() && write_stat_.is_valid())
-          || (is_incremental_major_direct_load(direct_load_type_)
-              && OB_NOT_NULL(storage_schema_)
-              && storage_schema_->is_valid());
+                        && is_valid_direct_load(direct_load_type_)
+                        && nullptr != storage_schema_ && storage_schema_->is_valid() && write_stat_.is_valid());
 }
 int ObTabletDDLCompleteArg::set_storage_schema(const ObStorageSchema &other)
 {

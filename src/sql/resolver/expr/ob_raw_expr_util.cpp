@@ -4318,20 +4318,6 @@ bool ObRawExprUtils::need_column_conv(const ObRawExprResType &expected_type,
   return bret;
 }
 
-bool ObRawExprUtils::check_exprs_type_collation_accuracy_equal(const ObRawExpr *expr1, const ObRawExpr *expr2)
-{
-  int equal = false;
-  if (expr1->get_data_type() == expr2->get_data_type()
-      && expr1->get_collation_type() == expr2->get_collation_type()
-      && expr1->get_accuracy() == expr2->get_accuracy()) {
-    equal = true;
-    if (ob_is_collection_sql_type(expr1->get_data_type())
-        && expr1->get_subschema_id() != expr2->get_subschema_id()) {
-      equal = false;
-    }
-  }
-  return equal;
-}
 // This method should be used with caution, it will lose enum type enum_set_values
 int ObRawExprUtils::build_column_conv_expr(ObRawExprFactory &expr_factory,
                                            const share::schema::ObColumnSchemaV2 *column_schema,

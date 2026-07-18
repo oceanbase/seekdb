@@ -125,9 +125,7 @@ private:
   pthread_t pth_;
   Threads *threads_;
   int64_t idx_;
-#ifndef OB_USE_ASAN
   void *stack_addr_;
-#endif
   int64_t stack_size_;
   bool stop_;
   int64_t join_concurrency_;

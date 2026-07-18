@@ -328,9 +328,6 @@ int ObPartitionMergePolicy::find_mini_merge_tables(
     if (OB_ISNULL(memtable = static_cast<ObIMemtable *>(memtable_handles.at(i).get_table()))) {
       ret = OB_ERR_SYS;
       LOG_ERROR("memtable must not null", K(ret), K(tablet));
-    } else if (memtable->is_direct_load_memtable()) {
-      FLOG_INFO("mini merge only flush data memtables", K(i), K(memtable_handles), KP(memtable));
-      break;
     } else if (OB_UNLIKELY(memtable->is_active_memtable())) {
       LOG_DEBUG("skip active memtable", K(i), KPC(memtable), K(memtable_handles));
       break;

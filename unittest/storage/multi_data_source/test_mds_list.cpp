@@ -15,6 +15,7 @@
  */
 #define UNITTEST_DEBUG
 #include <gtest/gtest.h>
+#include "storage/multi_data_source/example_user_data_define.h"
 #define private public
 #define protected public
 #include "storage/multi_data_source/mds_row.h"

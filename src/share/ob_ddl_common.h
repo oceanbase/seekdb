@@ -64,7 +64,7 @@ class ObDDLMacroBlockWriter;
 class ObLobMacroBlockWriter;
 class ObDDLTableSchema;
 class ObWriteMacroParam;
-class ObDirectLoadBatchRows;
+class ObDDLBatchRows;
 class ObITabletSliceWriter;
 class ObLS;
 struct ObDDLWriteStat;
@@ -91,7 +91,7 @@ using storage::ObColumnSchemaItem;
 using storage::ObStorageSchema;
 using storage::ObDDLTableSchema;
 using storage::ObDDLIndependentDag;
-using storage::ObDirectLoadBatchRows;
+using storage::ObDDLBatchRows;
 using storage::ObITabletSliceWriter;
 using storage::ObDDLWriteStat;
 using storage::ObLS;
@@ -150,9 +150,7 @@ enum ObDDLType
   DDL_ADD_COLUMN_OFFLINE = 1008, // only add columns
   DDL_COLUMN_REDEFINITION = 1009, // only add/drop columns
   DDL_TABLE_REDEFINITION = 1010,
-  DDL_DIRECT_LOAD = 1011, // load data
-  DDL_DIRECT_LOAD_INSERT = 1012, // insert into select
-  // 1013 was used by removed table restore DDL. Do not reuse.
+  // 1011-1013 were used by removed DDL types. Do not reuse.
   // 1016 is reserved. Do not reuse.
   DDL_MODIFY_AUTO_INCREMENT_WITH_REDEFINITION = 1017,
 
@@ -419,11 +417,6 @@ static inline bool is_long_running_ddl(const ObDDLType type)
   return is_simple_table_long_running_ddl(type) || is_double_table_long_running_ddl(type);
 }
 
-static inline bool is_direct_load_task(const ObDDLType type)
-{
-  return DDL_DIRECT_LOAD == type || DDL_DIRECT_LOAD_INSERT == type;
-}
-
 static inline bool is_complement_data_relying_on_dag(const ObDDLType type)
 {
   return DDL_DROP_COLUMN == type
@@ -454,21 +447,6 @@ static inline bool is_ddl_stmt_packet_retry_err(const int ret)
       || OB_TRANS_NEED_ROLLBACK == ret // transaction killed by leader switch
       || OB_ERR_DDL_RESOURCE_NOT_ENOUGH == ret // tenant ddl resource not enough
       ;
-}
-
-static inline bool is_direct_load_retry_err(const int ret)
-{
-  return is_ddl_stmt_packet_retry_err(ret)
-    || ret == OB_TABLET_NOT_EXIST
-    || ret == OB_TASK_EXPIRED
-    || ret == OB_TRANS_CTX_NOT_EXIST
-    || ret == OB_SCHEMA_ERROR
-    || ret == OB_SCHEMA_EAGAIN
-    || ret == OB_SCHEMA_NOT_UPTODATE
-    || ret == OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH
-    || ret == OB_ERR_REMOTE_SCHEMA_NOT_FULL
-    || ret == OB_SQL_RETRY_SPM
-    ;
 }
 
 static inline bool is_column_redifinition_like_ddl_type(const ObDDLType type)
@@ -534,176 +512,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObColumnNameMap);
 };
 
-enum class RedefinitionState
-{
-  BEFORESCAN = 0,
-  SCAN,
-  INMEM_SORT,
-  MERGE_SORT,
-  INSERT,
-  DDL_DIAGNOSE_V1
-};
-
-struct ScanMonitorNodeInfo final
-{
-public:
-  ScanMonitorNodeInfo():
-    task_id_(0), execution_id_(0), first_change_time_(0), last_change_time_(0), last_refresh_time_(0), output_rows_(0)
-  {}
-  ~ScanMonitorNodeInfo() = default;
-  TO_STRING_KV(K(task_id_), K(execution_id_), K(first_change_time_), K(last_change_time_), K(last_refresh_time_), K(output_rows_));
-public:
-  
-  int64_t task_id_;
-  int64_t execution_id_;
-  int64_t first_change_time_;
-  int64_t last_change_time_;
-  int64_t last_refresh_time_;
-  int64_t output_rows_;
-};
-
-struct SortMonitorNodeInfo final
-{
-public:
-  SortMonitorNodeInfo():
-    task_id_(0), execution_id_(0), thread_id_(0), row_count_id_(0), first_change_time_(0), last_change_time_(0),
-    output_rows_(0), row_sorted_(0), dump_size_(0), row_count_(0), sort_expected_round_count_(0), merge_sort_start_time_(0), compress_type_(0)
-  {}
-  ~SortMonitorNodeInfo() = default;
-  TO_STRING_KV(K(task_id_), K(execution_id_), K(thread_id_), K(row_count_id_),
-  K(first_change_time_), K(last_change_time_), K(output_rows_), K(row_sorted_), K(dump_size_),
-  K(row_count_), K(sort_expected_round_count_), K(merge_sort_start_time_), K(compress_type_));
-
-public:
-  
-  int64_t task_id_;
-  int64_t execution_id_;
-  int64_t thread_id_;
-  int16_t row_count_id_;
-  int64_t first_change_time_;
-  int64_t last_change_time_;
-  int64_t output_rows_;
-  int64_t row_sorted_;
-  int64_t dump_size_;
-  int64_t row_count_;
-  int64_t sort_expected_round_count_;
-  int64_t merge_sort_start_time_;
-  int64_t compress_type_;
-};
-
-struct InsertMonitorNodeInfo final
-{
-public:
-  InsertMonitorNodeInfo():
-    task_id_(0), execution_id_(0), thread_id_(0), last_refresh_time_(0), curr_row_inserted_(0), sstable_row_inserted_(0),
-    vec_task_thread_pool_cnt_(0), vec_task_total_cnt_(0), vec_task_finish_cnt_(0)
-  {}
-  ~InsertMonitorNodeInfo() = default;
-  TO_STRING_KV(K(task_id_), K(execution_id_), K(thread_id_), K(last_refresh_time_), K(curr_row_inserted_), K(sstable_row_inserted_),
-  K(vec_task_thread_pool_cnt_), K(vec_task_total_cnt_), K(vec_task_finish_cnt_));
-
-public:
-  
-  int64_t task_id_;
-  int64_t execution_id_;
-  int64_t thread_id_;
-  int64_t last_refresh_time_;
-  int64_t curr_row_inserted_;
-  int64_t sstable_row_inserted_;
-  // for vec index
-  int64_t vec_task_thread_pool_cnt_;
-  int64_t vec_task_total_cnt_;
-  int64_t vec_task_finish_cnt_;
-};
-
-struct ObSqlMonitorStats final
-{
-  ObSqlMonitorStats():
-    is_inited_(false), task_id_(0), ddl_type_(ObDDLType::DDL_INVALID), execution_id_(-1), is_empty_(true)
-  {}
-  ~ObSqlMonitorStats() = default;
-  TO_STRING_KV(K(task_id_), K(execution_id_), K(ddl_type_), K(is_empty_), K(scan_node_), K(sort_node_), K(insert_node_));
-
-public:
-  int init(const int64_t task_id, const ObDDLType ddl_type);
-  int clean_invalid_data(const int64_t execution_id);
-  void reuse()
-  {
-    is_empty_ = true;
-    execution_id_ = -1;
-    scan_node_.reset();
-    sort_node_.reset();
-    insert_node_.reset();
-  }
-
-public:
-  bool is_inited_;
-  
-  int64_t task_id_;
-  ObDDLType ddl_type_;
-  int64_t execution_id_;
-  bool is_empty_;
-  ObSEArray<ScanMonitorNodeInfo, 10> scan_node_;
-  ObSEArray<SortMonitorNodeInfo, 10> sort_node_;
-  ObSEArray<InsertMonitorNodeInfo, 10> insert_node_;
-};
-
-class ObSqlMonitorStatsCollector final
-{
-public:
-  ObSqlMonitorStatsCollector()
-    :sql_proxy_(nullptr), scan_task_id_(), is_inited_(false),
-     scan_res_(), sort_res_(), insert_res_(), scan_index_id_(0), sort_index_id_(0), insert_index_id_(0), task_id_(0), execution_id_(0), ddl_type_(DDL_INVALID)
-  {}
-  int init(ObMySQLProxy *sql_proxy);
-  int get_next_sql_plan_monitor_stat(ObSqlMonitorStats &sql_monitor_stats);
-
-private:
-  int get_scan_monitor_stats_batch(sqlclient::ObMySQLResult *scan_result);
-  int get_sort_monitor_stats_batch(sqlclient::ObMySQLResult *scan_result);
-  int get_insert_monitor_stats_batch(sqlclient::ObMySQLResult *scan_result);
-
-  int get_next_scanned_stats(ObSqlMonitorStats &sql_monitor_stats);
-  int get_next_sorted_stats(ObSqlMonitorStats &sql_monitor_stats);
-  int get_next_inserted_stats(ObSqlMonitorStats &sql_monitor_stats);
-
-  bool inline next_ddl_monitor_node(const int64_t task_id)
-  {
-    return task_id < task_id_;
-  }
-
-  bool inline previous_ddl_monitor_node(const int64_t task_id)
-  {
-    return task_id > task_id_;
-  }
-
-  bool inline outdated_monitor_node(const int64_t execution_id)
-  {
-    return execution_id < execution_id_ && ddl_type_ != ObDDLType::DDL_CREATE_PARTITIONED_LOCAL_INDEX;
-  }
-  bool inline not_local_index_case()
-  {
-    return ddl_type_ != ObDDLType::DDL_CREATE_PARTITIONED_LOCAL_INDEX;
-  }
-
-public:
-  ObMySQLProxy *sql_proxy_;
-  ObSEArray<int64_t, 100> scan_task_id_;
-  
-private:
-  bool is_inited_;
-  ObSEArray<ScanMonitorNodeInfo, 100> scan_res_;
-  ObSEArray<SortMonitorNodeInfo, 100> sort_res_;
-  ObSEArray<InsertMonitorNodeInfo, 100> insert_res_;
-  uint64_t scan_index_id_;
-  uint64_t sort_index_id_;
-  uint64_t insert_index_id_;
-  
-  int64_t task_id_;
-  int64_t execution_id_;
-  ObDDLType ddl_type_;
-};
-
 struct ObDDLTaskStatInfo final
 {
 public:
@@ -720,267 +528,6 @@ public:
   char op_name_[common::MAX_LONG_OPS_NAME_LENGTH];
   char target_[common::MAX_LONG_OPS_TARGET_LENGTH];
   char message_[common::MAX_LONG_OPS_MESSAGE_LENGTH];
-};
-
-class ObDDLDiagnoseInfo final
-{
-public:
-  ObDDLDiagnoseInfo()
-  {
-    is_inited_ = false;
-    task_id_ = 0;
-    ddl_type_ = ObDDLType::DDL_INVALID;
-
-    scan_thread_num_ = 0;
-    row_scanned_ = 0;
-    max_row_scan_ = 0;
-    min_row_scan_= INT64_MAX;
-    scan_spend_time_ = 0;
-
-    inmem_sort_thread_num_ = 0;
-    row_sorted_ = 0;
-    inmem_sort_remain_time_ = 0;
-    inmem_sort_progress_ = 1;
-    inmem_sort_spend_time_ = 0;
-    inmem_sort_slowest_thread_id_ = 0;
-
-    merge_sort_thread_num_ = 0;
-    row_merge_sorted_ = 0;
-    expected_round_ = 0;
-    merge_sort_remain_time_= 0;
-    merge_sort_progress_ = 1;
-    dump_size_ = 0;
-    compress_type_ = 0;
-    merge_sort_spend_time_ = 0;
-    merge_sort_slowest_thread_id_ = 0;
-
-    row_inserted_file_ = 0;
-    insert_thread_num_ = 0;
-    finish_thread_num_ = 0;
-    insert_progress_ = 1;
-    insert_remain_time_ = 0;
-    insert_slowest_thread_id_ = 0;
-
-    vec_task_thread_pool_cnt_ = 0;
-    vec_task_total_cnt_ = 0;
-    vec_task_finish_cnt_ = 0;
-    vec_task_trigger_cnt_ = 0;
-    vec_task_progress_ = 1;
-
-    state_ = RedefinitionState::BEFORESCAN;
-    is_empty_ = true;
-    finish_ddl_ = false;
-    create_local_index_batch_ = false;
-    parallelism_ = 0;
-    real_parallelism_ = 0;
-    execution_id_ = 0;
-    slowest_thread_id_ = 0;
-    row_max_ = 0;
-    row_max_thread_ = 0;
-    row_min_ = 0;
-    row_min_thread_ = 0;
-    scan_start_time_ = 0;
-    scan_end_time_ = 0;
-    sort_end_time_ = 0;
-    insert_end_time_ = 0;
-    pos_ = 0;
-    thread_index_ = 0;
-  }
-
-  ~ObDDLDiagnoseInfo() = default;
-  int init(const int64_t task_id, const ObDDLType ddl_type, const int64_t execution_id);
-
-  void inline reuse()
-  {
-    scan_thread_num_ = 0;
-    row_scanned_ = 0;
-    max_row_scan_ = 0;
-    min_row_scan_= INT64_MAX;
-    scan_spend_time_ = 0;
-
-    inmem_sort_thread_num_ = 0;
-    row_sorted_ = 0;
-    inmem_sort_remain_time_ = 0;
-    inmem_sort_progress_ = 1;
-    inmem_sort_spend_time_ = 0;
-    inmem_sort_slowest_thread_id_ = 0;
-
-    merge_sort_thread_num_ = 0;
-    row_merge_sorted_ = 0;
-    expected_round_ = 0;
-    merge_sort_remain_time_= 0;
-    merge_sort_progress_ = 1;
-    dump_size_ = 0;
-    compress_type_ = 0;
-    merge_sort_spend_time_ = 0;
-    merge_sort_slowest_thread_id_ = 0;
-
-    row_inserted_file_ = 0;
-    insert_thread_num_ = 0;
-    insert_progress_ = 1;
-    insert_remain_time_ = 0;
-    insert_slowest_thread_id_ = 0;
-
-    vec_task_thread_pool_cnt_ = 0;
-    vec_task_total_cnt_ = 0;
-    vec_task_finish_cnt_ = 0;
-    vec_task_trigger_cnt_ = 0;
-    vec_task_progress_ = 1;
-
-    state_ = RedefinitionState::BEFORESCAN;
-    finish_thread_num_ = 0;
-    is_empty_ = true;
-    parallelism_ = 0;
-    real_parallelism_ = 0;
-    execution_id_ = 0;
-    slowest_thread_id_ = 0;
-    row_max_ = 0;
-    row_max_thread_ = 0;
-    row_min_ = 0;
-    row_min_thread_ = 0;
-    scan_start_time_ = 0;
-    scan_end_time_ = 0;
-    sort_end_time_ = 0;
-    insert_end_time_ = 0;
-    diagnose_message_[0] = '\0';
-    pos_ = 0;
-    thread_index_ = 0;
-  }
-
-  int diagnose(const ObSqlMonitorStats &sql_monitor_stats);
-  int process_sql_monitor_and_generate_longops_message(const ObSqlMonitorStats &sql_monitor_stats, ObDDLTaskStatInfo &stat_info, int64_t &pos);
-  const inline char *get_diagnose_info()
-  {
-    return diagnose_message_;
-  }
-  TO_STRING_KV(K(task_id_),
-  K(scan_thread_num_), K(row_scanned_), K(max_row_scan_), K(min_row_scan_), K(scan_start_time_), K(scan_end_time_), K(scan_spend_time_),
-  K(inmem_sort_thread_num_), K(row_sorted_), K(inmem_sort_remain_time_), K(inmem_sort_progress_),
-  K(merge_sort_thread_num_), K(row_merge_sorted_), K(expected_round_), K(merge_sort_remain_time_), K(merge_sort_progress_),
-  K(dump_size_), K(compress_type_),
-  K(row_inserted_file_), K(insert_thread_num_), K(insert_progress_), K(insert_remain_time_),
-  K(vec_task_thread_pool_cnt_), K(vec_task_total_cnt_), K(vec_task_finish_cnt_), K(vec_task_trigger_cnt_), K(vec_task_progress_),
-  K(state_), K(parallelism_), K(real_parallelism_), K(execution_id_), K(finish_thread_num_),
-  K(min_inmem_sort_row_), K(min_merge_sort_row_), K(min_insert_row_));
-
-private:
-  int calculate_sql_plan_monitor_node_info(const ObSqlMonitorStats &sql_monitor_stats);
-  int calculate_scan_monitor_node_info(const ObSqlMonitorStats &sql_monitor_stats);
-  int calculate_sort_and_insert_info(const ObSqlMonitorStats &sql_monitor_stats);
-  int calculate_inmem_sort_info(
-      const int64_t row_sorted,
-      const int64_t row_count,
-      const int64_t first_change_time,
-      const int64_t thread_id);
-  int calculate_merge_sort_info(
-      const int64_t row_count,
-      const int64_t row_sorted,
-      const SortMonitorNodeInfo &sort_info);
-  int calculate_insert_info(
-      const int64_t row_count,
-      const SortMonitorNodeInfo &sort_info,
-      const ObSqlMonitorStats &sql_monitor_stats);
-  int calculate_vec_task_info(const InsertMonitorNodeInfo &insert_monitor_node);
-  int local_index_diagnose();
-  int finish_ddl_diagnose();
-  int running_ddl_diagnose();
-  int check_diagnose_case();
-  int diagnose_stats_analysis();
-  int generate_session_longops_message(ObDDLTaskStatInfo &stat_info, int64_t &pos);
-  int generate_session_longops_message_v1(ObDDLTaskStatInfo &stat_info, int64_t &pos);
-  bool inline is_skip_case() // finish ddl without sql plan monitor node
-  {
-    return finish_ddl_ && is_empty_;
-  }
-  bool inline is_data_skew()
-  {
-    if (row_min_ > 0) {
-      if (static_cast<double>(row_max_ - row_min_) / row_min_ > DATA_SKEW_RATE) {
-        return true;
-      }
-    }
-    return false;
-  }
-  bool inline is_thread_without_data()
-  {
-    return real_parallelism_ < parallelism_;
-  }
-
-static constexpr double DATA_SKEW_RATE = 1.00;
-
-private:
-  // ddl info
-  bool is_inited_;
-  int64_t task_id_;
-  ObDDLType ddl_type_;
-
-  // scan
-  int64_t scan_thread_num_;
-  int64_t row_scanned_;
-  int64_t max_row_scan_;
-  int64_t min_row_scan_;
-  double scan_spend_time_;
-
-  // inmem_sort
-  int64_t inmem_sort_thread_num_;
-  int64_t row_sorted_;
-  double inmem_sort_remain_time_;
-  double inmem_sort_progress_;
-  int64_t min_inmem_sort_row_;
-  double inmem_sort_spend_time_;
-  int64_t inmem_sort_slowest_thread_id_;
-
-  // merge_sort
-  int64_t merge_sort_thread_num_;
-  int64_t row_merge_sorted_;
-  int64_t expected_round_;
-  double merge_sort_progress_;
-  double merge_sort_remain_time_;
-  int64_t min_merge_sort_row_;
-  int64_t compress_type_;
-  int64_t dump_size_;
-  double merge_sort_spend_time_;
-  int64_t merge_sort_slowest_thread_id_;
-
-  //insert
-  int64_t insert_thread_num_;
-  int64_t row_inserted_file_;
-  double insert_progress_;
-  double insert_remain_time_;
-  int64_t min_insert_row_;
-  double insert_spend_time_;
-  int64_t insert_slowest_thread_id_ = 0;
-  // for vec index
-  int64_t vec_task_thread_pool_cnt_;
-  int64_t vec_task_total_cnt_;
-  int64_t vec_task_finish_cnt_;
-  int64_t vec_task_trigger_cnt_;
-  double vec_task_progress_;
-
-  // analysis data
-  bool is_empty_;
-  bool finish_ddl_;
-  bool create_local_index_batch_;
-  RedefinitionState state_;
-  int64_t parallelism_;
-  int64_t real_parallelism_ ;
-  int64_t execution_id_;
-  int64_t finish_thread_num_;
-
-
-  int64_t slowest_thread_id_;
-  uint64_t row_max_;
-  uint64_t row_max_thread_;
-  uint64_t row_min_;
-  uint64_t row_min_thread_;
-
-  int64_t scan_start_time_;
-  int64_t scan_end_time_;
-  int64_t sort_end_time_;
-  int64_t insert_end_time_;
-  uint64_t thread_index_;
-  char diagnose_message_[common::OB_DIAGNOSE_INFO_LENGTH];
-  int64_t pos_;
 };
 
 class ObDDLUtil
@@ -1188,10 +735,6 @@ public:
   static int check_schema_version_refreshed(const int64_t target_schema_version);
   static bool reach_time_interval(const int64_t i, volatile int64_t &last_time);
   static int is_major_exist(const common::ObTabletID &tablet_id, bool &is_exist);
-#ifdef OB_BUILD_SHARED_STORAGE
-  static int upload_block_for_ss(const char* buf, const int64_t len, const blocksstable::MacroBlockId &macro_block_id);
-  static int update_tablet_gc_info(const ObTabletID &tablet_id, const int64_t pre_snapshot_version, const int64_t new_snapshot_version);
-#endif
   static int set_tablet_autoinc_seq(const ObTabletID &tablet_id, const int64_t seq_value);
   static int check_table_compaction_checksum_error(const uint64_t table_id);
   static int get_temp_store_compress_type(const ObCompressorType schema_compr_type,
@@ -1214,8 +757,6 @@ public:
       case DDL_ADD_COLUMN_OFFLINE:
       case DDL_COLUMN_REDEFINITION:
       case DDL_TABLE_REDEFINITION:
-      case DDL_DIRECT_LOAD:
-      case DDL_DIRECT_LOAD_INSERT:
       case DDL_CREATE_INDEX:
       case DDL_CREATE_FTS_INDEX:
       case DDL_CREATE_VEC_INDEX:
@@ -1332,10 +873,6 @@ public:
       const ObWriteMacroParam &param,
       ObIAllocator &allocator,
       ObDDLMacroBlockWriter *&macro_block_writer);
-  static int init_inc_macro_block_writer(
-      const ObWriteMacroParam &param,
-      ObIAllocator &allocator,
-      ObDDLMacroBlockWriter *&macro_block_writer);
   static int prepare_lob_writer(
       const ObTabletID &tablet_id,
       const int64_t slice_idx,
@@ -1382,7 +919,7 @@ public:
   static int init_batch_rows(
       const ObDDLTableSchema &ddl_table_schema,
       const int64_t batch_size,
-      ObDirectLoadBatchRows &batch_rows);
+      ObDDLBatchRows &batch_rows);
   static bool is_vector_index_complement(const ObIndexType index_type);
   static int64_t generate_idempotent_value(
       const int64_t slice_count,

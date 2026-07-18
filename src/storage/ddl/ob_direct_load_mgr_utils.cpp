@@ -120,18 +120,7 @@ int ObDirectLoadMgrUtil::alloc_direct_load_mgr(
         LOG_WARN("failed to alloc direct load mgr", K(ret), K(direct_load_type));
       }
       break;
-    case ObDirectLoadType::SN_IDEM_DIRECT_LOAD_DATA :
-      if (OB_ISNULL(direct_load_mgr = OB_NEWx(ObSNTabletDirectLoadMgr, &allocator))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to alloc direct load mgr", K(ret), K(direct_load_type));
-      }
-      break;
     case ObDirectLoadType::SS_IDEM_DIRECT_LOAD_DDL :
-      if (OB_ISNULL(direct_load_mgr = OB_NEWx(ObSSTabletDirectLoadMgr, &allocator))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      }
-      break;
-    case ObDirectLoadType::SS_IDEM_DIRECT_LOAD_DATA :
       if (OB_ISNULL(direct_load_mgr = OB_NEWx(ObSSTabletDirectLoadMgr, &allocator))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
       }
@@ -211,22 +200,6 @@ ObDirectLoadType ObDirectLoadMgrUtil::ddl_get_direct_load_type(const uint64_t da
     direct_load_type = ObDirectLoadType::DIRECT_LOAD_DDL;
   } else {
     direct_load_type = ObDirectLoadType::SN_IDEM_DIRECT_LOAD_DDL;
-  }
-  return direct_load_type;
-}
-
-ObDirectLoadType ObDirectLoadMgrUtil::load_data_get_direct_load_type(const bool is_incremental,
-                                                                     const uint64_t data_format_version)
-{
-  ObDirectLoadType direct_load_type = ObDirectLoadType::DIRECT_LOAD_INVALID;
-  if (is_incremental)  {
-    direct_load_type = ObDirectLoadType::DIRECT_LOAD_INCREMENTAL;
-  } else {
-    if (data_format_version >= DDL_IDEM_DATA_FORMAT_VERSION) {
-      direct_load_type = ObDirectLoadType::SN_IDEM_DIRECT_LOAD_DATA;
-    } else {
-      direct_load_type = ObDirectLoadType::DIRECT_LOAD_LOAD_DATA;
-    }
   }
   return direct_load_type;
 }

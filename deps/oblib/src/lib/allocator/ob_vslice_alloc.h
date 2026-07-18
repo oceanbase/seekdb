@@ -149,9 +149,6 @@ public:
     return alloc(size);
   }
   virtual void* alloc(const int64_t size) override {
-#ifdef OB_USE_ASAN
-    return ::malloc(size);
-#else
     Block::Item* ret = NULL;
     int64_t aligned_size = upper_align(size, 16);
     if (bsize_ <= aligned_size + sizeof(Block) + sizeof(Block::Item)) {
@@ -207,13 +204,8 @@ public:
       }
     }
     return NULL == ret? NULL: (void*)(ret + 1);
-#endif
   }
   virtual void free(void* p) override {
-
-#ifdef OB_USE_ASAN
-    ::free(p);
-#else
     if (NULL != p) {
       Block::Item* item = (Block::Item*)p - 1;
       abort_unless(Block::ITEM_MAGIC_CODE == item->MAGIC_CODE_);
@@ -236,8 +228,6 @@ public:
         purge_extra_cached_block(*arena);
       }
     }
-
-#endif
   }
 
   void purge_extra_cached_block(Arena &arena, bool need_check = false) {
@@ -267,7 +257,6 @@ public:
   }
   double get_block_using_ratio(void* p) {
     double ratio = 1.0;
-#ifndef OB_USE_ASAN
     if (NULL != p) {
       Block::Item* item = (Block::Item*)p - 1;
       Block* blk = item->host_;
@@ -277,7 +266,6 @@ public:
         ratio = 1.0 * using_bytes / total_bytes;
       }
     }
-#endif
     return ratio;
   }
 private:

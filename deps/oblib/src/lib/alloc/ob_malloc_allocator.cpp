@@ -72,10 +72,6 @@ void *ObMallocAllocator::alloc(const int64_t size, const oceanbase::lib::ObMemAt
 void *ObMallocAllocator::realloc(
   const void *ptr, const int64_t size, const oceanbase::lib::ObMemAttr &attr)
 {
-#if defined(OB_USE_ASAN)
-  UNUSED(attr);
-  return ::realloc(const_cast<void *>(ptr), size);
-#else
   SANITY_DISABLE_CHECK_RANGE(); // prevent sanity_check_range
   // Won't create tenant allocator!!
   void *nptr = NULL;
@@ -89,18 +85,13 @@ void *ObMallocAllocator::realloc(
     // do nothing
   }
   return nptr;
-#endif
 }
 
 void ObMallocAllocator::free(void *ptr)
 {
-#if defined(OB_USE_ASAN)
-  ::free(ptr);
-#else
   SANITY_DISABLE_CHECK_RANGE(); // prevent sanity_check_range
   // directly free object instead of using tenant allocator.
   ObTenantCtxAllocator::common_free(ptr);
-#endif
 }
 
 ObTenantCtxAllocatorGuard ObMallocAllocator::get_tenant_ctx_allocator(uint64_t ctx_id) const

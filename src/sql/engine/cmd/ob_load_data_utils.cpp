@@ -271,7 +271,6 @@ int ObLoadDataUtils::check_need_opt_stat_gather(ObExecContext &ctx,
   ObSQLSessionInfo *session = nullptr;
   const ObLoadDataHint &hint = load_stmt.get_hints();
   ObObj obj;
-  int64_t append = 0;
   int64_t gather_optimizer_statistics = 0;
   need_opt_stat_gather = false;
   if (OB_ISNULL(session = ctx.get_my_session())) {
@@ -279,11 +278,9 @@ int ObLoadDataUtils::check_need_opt_stat_gather(ObExecContext &ctx,
     LOG_WARN("session is null", KR(ret));
   } else if (OB_FAIL(session->get_sys_variable(share::SYS_VAR__OPTIMIZER_GATHER_STATS_ON_LOAD, obj))) {
     LOG_WARN("fail to get sys variable", K(ret));
-  } else if (OB_FAIL(hint.get_value(ObLoadDataHint::APPEND, append))) {
-    LOG_WARN("fail to get value of APPEND", K(ret));
   } else if (OB_FAIL(hint.get_value(ObLoadDataHint::GATHER_OPTIMIZER_STATISTICS, gather_optimizer_statistics))) {
-    LOG_WARN("fail to get value of APPEND", K(ret));
-  } else if (((append != 0) || (gather_optimizer_statistics != 0)) && obj.get_bool()) {
+    LOG_WARN("fail to get GATHER_OPTIMIZER_STATISTICS hint", K(ret));
+  } else if (gather_optimizer_statistics != 0 && obj.get_bool()) {
     need_opt_stat_gather = true;
   }
   return ret;

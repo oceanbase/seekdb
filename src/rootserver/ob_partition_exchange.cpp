@@ -102,67 +102,6 @@ int ObPartitionExchange::check_and_exchange_partition(const obcall::ObExchangePa
   return ret;
 }
 
-int ObPartitionExchange::check_exchange_partition_for_direct_load(
-    ObSchemaGetterGuard &schema_guard,
-    const ObTableSchema *table_schema)
-{
-  int ret = OB_SUCCESS;
-  bool has_instant_column = false;
-  bool has_unused_column = false;
-  if (OB_ISNULL(table_schema)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table schema is nullptr", KR(ret));
-  } else if (OB_FAIL(table_schema->has_add_column_instant(has_instant_column))) {
-    LOG_WARN("fail to get has add column instant", KR(ret), KPC(table_schema));
-  } else if (OB_UNLIKELY(has_instant_column)) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("table has add column instant, not supported to exchange partition", KR(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "partition level direct-load for table has add column instant is");
-  } else if (OB_FAIL(table_schema->has_unused_column(has_unused_column))) {
-    LOG_WARN("fail to get has unused column", KR(ret));
-  } else if (OB_UNLIKELY(has_unused_column)) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("table has drop column instant, not supported to exchange partition", KR(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "partition level direct-load for table has drop column instant is");
-  } else if (OB_UNLIKELY(!in_supported_table_type_white_list_(*table_schema))) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("exchange partition table is not user table", KR(ret), KPC(table_schema));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "partition level direct-load for non-user table is");
-  } else if (OB_UNLIKELY(table_schema->is_duplicate_table())) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("exchange partition table is duplicate table", KR(ret), KPC(table_schema));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "partition level direct-load for duplicate table is");
-  } else if (OB_UNLIKELY(0 != table_schema->get_autoinc_column_id())) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("table has auto increment column, not supported to exchange partition", KR(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "partition level direct-load for table has auto increment column is");
-  }
-
-  if (OB_SUCC(ret)) {
-    
-    ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
-    if (OB_FAIL(table_schema->get_simple_index_infos(simple_index_infos))) {
-      LOG_WARN("failed to get simple index infos", KR(ret));
-    } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
-        const uint64_t index_table_id = simple_index_infos.at(i).table_id_;
-        const ObTableSchema *index_schema = nullptr;
-        if (OB_FAIL(schema_guard.get_table_schema( index_table_id, index_schema))) {
-          LOG_WARN("fail to get table schema", KR(ret));
-        } else if (OB_ISNULL(index_schema)) {
-          ret = OB_TABLE_NOT_EXIST;
-          LOG_WARN("index schema from schema guard is NULL", KR(ret), K(index_table_id), KP(index_schema));
-        } else if (OB_UNLIKELY(index_schema->is_global_index_table())) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("table has global index, not supported to exchange partition", KR(ret), KPC(index_schema));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "partition level direct-load for table has global index is");
-        }
-      }
-    }
-  }
-  return ret;
-}
-
 int ObPartitionExchange::check_partition_exchange_schema_for_user(
     const ObTableSchema &base_table_schema,
     const ObTableSchema &inc_table_schema,

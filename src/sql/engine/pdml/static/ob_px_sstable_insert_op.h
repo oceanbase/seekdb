@@ -26,7 +26,6 @@ namespace storage
 {
 struct ObInsertMonitor;
 struct ObTabletSliceParam;
-class ObDirectLoadMgrAgent;
 class ObDDLInsertDag;
 class ObISliceWriter;
 class ObHeapBatchSliceWriter;

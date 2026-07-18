@@ -44,6 +44,6 @@ INSERT INTO dst_articles SELECT * FROM src_articles;
 
 SELECT * FROM dst_articles;
 
-INSERT /*+ append enable_parallel_dml parallel(16) */ INTO dst_articles SELECT * FROM src_articles;
+INSERT /*+ enable_parallel_dml parallel(16) */ INTO dst_articles SELECT * FROM src_articles;
 
 SELECT count(*) FROM dst_articles;

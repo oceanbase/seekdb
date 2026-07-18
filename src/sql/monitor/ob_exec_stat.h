@@ -332,7 +332,7 @@ struct ObAuditRecordData {
   int status_; //error code
   common::ObCurTraceId::TraceId trace_id_;
   int64_t request_id_; //set by request_manager automatic when add record
-  int64_t execution_id_;  //used to jion v$sql_plan_monitor
+  int64_t execution_id_;
   uint64_t session_id_;
   uint64_t proxy_session_id_;
   uint64_t qc_id_;  //px framework id

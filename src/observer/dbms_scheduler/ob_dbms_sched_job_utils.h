@@ -231,10 +231,8 @@ public:
   common::ObString &get_this_exec_trace_id() { return this_exec_trace_id_; }
 
   bool is_default_job_class() const { return (0 == job_class_.case_compare("DEFAULT_JOB_CLASS")); }
-  bool is_mview_job() const { return ObDBMSSchedFuncType::MVIEW_JOB == get_func_type(); }
   bool is_mysql_event_job() const { return ObDBMSSchedFuncType::MYSQL_EVENT_JOB == get_func_type(); }
   bool is_stats_maintenance_job() const { return ObDBMSSchedFuncType::STAT_MAINTENANCE_JOB == get_func_type(); }
-  bool is_dynamic_partition_job() const {return ObDBMSSchedFuncType::DYNAMIC_PARTITION_MANAGE_JOB == get_func_type(); }
   bool is_user_job() const { return ObDBMSSchedFuncType::USER_JOB == get_func_type(); }
   bool is_shadow() const { return ObDBMSSchedFuncSet::instance_.is_shadow(get_func_type()); }
 
@@ -289,7 +287,6 @@ public:
   common::ObString this_exec_trace_id_;
 
 public:
-  static const int64_t JOB_SCHEDULER_FLAG_DATE_EXPRESSION_JOB_CLASS = 1;
   static const int64_t DEFAULT_MAX_END_DATE = 64060560000000000LL;
 };
 

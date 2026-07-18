@@ -856,7 +856,7 @@ int ObAutoincrementService::get_table_node(const AutoincParam &param, TableNode 
   
   key.table_id_  = table_id;
   key.column_id_ = column_id;
-  int64_t autoinc_version = get_modify_autoinc_version(param.autoinc_version_);
+  int64_t autoinc_version = param.autoinc_version_;
   if (OB_FAIL(node_map_.get(key, table_node))) {
     if (ret != OB_ENTRY_NOT_EXIST) {
       LOG_ERROR("get from map failed", K(ret));
@@ -1686,7 +1686,7 @@ int ObAutoIncInnerTableProxy::next_autoinc_value(const AutoincKey &key,
   const uint64_t column_id = key.column_id_;
   uint64_t sequence_value = 0;
   int64_t inner_autoinc_version = OB_INVALID_VERSION;
-  int64_t tmp_autoinc_version = get_modify_autoinc_version(autoinc_version);
+  int64_t tmp_autoinc_version = autoinc_version;
   if (OB_ISNULL(mysql_proxy_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("mysql proxy is null", K(ret));
@@ -1833,7 +1833,7 @@ int ObAutoIncInnerTableProxy::get_autoinc_value(const AutoincKey &key,
 {
   int ret = OB_SUCCESS;
   
-  const int64_t tmp_autoinc_version = get_modify_autoinc_version(autoinc_version);
+  const int64_t tmp_autoinc_version = autoinc_version;
   SMART_VARS_2((ObMySQLProxy::MySQLResult, res), (char[OB_MAX_SQL_LENGTH], sql)) {
     ObASHSetInnerSqlWaitGuard ash_inner_sql_guard(ObInnerSqlWaitTypeId::SEQUENCE_LOAD);
     ObMySQLResult *result = NULL;
@@ -2002,7 +2002,7 @@ int ObAutoIncInnerTableProxy::sync_autoinc_value(const AutoincKey &key,
   bool with_snap_shot = true;
   uint64_t fetch_seq_value = 0;
   int64_t inner_autoinc_version = OB_INVALID_VERSION;
-  int64_t tmp_autoinc_version = get_modify_autoinc_version(autoinc_version);
+  int64_t tmp_autoinc_version = autoinc_version;
   if (OB_ISNULL(mysql_proxy_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("mysql proxy is null", K(ret));

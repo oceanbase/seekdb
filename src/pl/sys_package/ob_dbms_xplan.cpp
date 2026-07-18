@@ -1146,9 +1146,9 @@ int ObDbmsXplan::get_plan_info_by_session_id(sql::ObExecContext &ctx,
                       SEARCH_COLUMNS,\
                       IS_LAST_CHILD,\
                       COST,\
-                      CAST(D.REAL_COST AS NUMBER(20,0)) REAL_COST,\
+                      CAST(NULL AS NUMBER(20,0)) REAL_COST,\
                       CARDINALITY,\
-                      CAST(D.REAL_CARD AS NUMBER(20,0)) REAL_CARDINALITY,\
+                      CAST(NULL AS NUMBER(20,0)) REAL_CARDINALITY,\
                       BYTES,\
                       ROWSET,\
                       OTHER_TAG,\
@@ -1157,8 +1157,8 @@ int ObDbmsXplan::get_plan_info_by_session_id(sql::ObExecContext &ctx,
                       PARTITION_ID,\
                       OTHER,\
                       DISTRIBUTION,\
-                      CAST(D.CPU_COST AS NUMBER(20,0)) CPU_COST,\
-                      CAST(D.IO_COST AS NUMBER(20,0)) IO_COST,\
+                      CAST(NULL AS NUMBER(20,0)) CPU_COST,\
+                      CAST(NULL AS NUMBER(20,0)) IO_COST,\
                       TEMP_SPACE,\
                       ACCESS_PREDICATES,\
                       FILTER_PREDICATES,\
@@ -1176,23 +1176,8 @@ int ObDbmsXplan::get_plan_info_by_session_id(sql::ObExecContext &ctx,
                         WHERE ID=%ld \
                         LIMIT 1) E\
                       ON A.PLAN_ID = E.PLAN_ID\
-                      LEFT JOIN\
-                      (SELECT B.PLAN_LINE_ID ID, \
-                              SUM(OUTPUT_ROWS) REAL_CARD,\
-                              MAX(DB_TIME) CPU_COST, \
-                              MAX(USER_IO_WAIT_TIME) IO_COST, \
-                              (UNIX_TIMESTAMP(MAX(LAST_CHANGE_TIME)) - UNIX_TIMESTAMP(MIN(FIRST_CHANGE_TIME)))*1000000 REAL_COST\
-                              FROM OCEANBASE.__ALL_VIRTUAL_SQL_PLAN_MONITOR B,\
-                                    (SELECT TRACE_ID\
-                                    FROM OCEANBASE.__ALL_VIRTUAL_PROCESSLIST \
-                                    WHERE ID=%ld \
-                                    LIMIT 1) C\
-                              WHERE B.TRACE_ID = C.TRACE_ID\
-                              GROUP BY B.PLAN_LINE_ID) D\
-                        ON A.ID = D.ID\
                     WHERE %.*s\
                     ORDER BY A.ID",
-                    session_id,
                     session_id,
                     (int)tenant_filter.length(),
                     tenant_filter.ptr()))) {

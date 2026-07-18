@@ -42,19 +42,6 @@ bool ObDDLFullNeedStopWriteChecker::check_need_stop_write()
   return ddl_kv_mgr_handle_.get_obj()->get_count() >= ObTabletDDLKvMgr::MAX_DDL_KV_CNT_IN_STORAGE - 1;
 }
 
-bool ObDDLIncNeedStopWriteChecker::check_need_stop_write()
-{
-  int ret = OB_SUCCESS;
-  bool ret_value = false;
-  ObProtectedMemtableMgrHandle *memtable_mgr_handle = nullptr;
-  if (OB_FAIL(tablet_.get_protected_memtable_mgr_handle(memtable_mgr_handle))) {
-    LOG_WARN("failed to get protected memtable mgr handle", K(ret));
-  } else if (memtable_mgr_handle->get_memtable_count() >= common::MAX_MEMSTORE_CNT - 1) {
-    ret_value = true;
-  }
-  return ret_value;
-}
-
 int ObDDLCtrlSpeedItem::init()
 {
   int ret = OB_SUCCESS;
@@ -423,7 +410,6 @@ int ObDDLRedoLogWriter::local_write_ddl_macro_redo(
 
   palf::LSN lsn;
   const bool need_nonblock= false;
-  const bool allow_compression = false;
   SCN base_scn = SCN::min_scn();
   SCN scn;
   int64_t real_sleep_us = 0;
@@ -480,7 +466,6 @@ int ObDDLRedoLogWriter::local_write_ddl_macro_redo(
                                          buffer_size,
                                          base_scn,
                                          need_nonblock,
-                                         allow_compression,
                                          cb,
                                          lsn,
                                          scn))) {
@@ -524,7 +509,6 @@ int ObDDLRedoLogWriter::local_write_ddl_start_log(
 
   palf::LSN lsn;
   const bool need_nonblock= false;
-  const bool allow_compression = false;
   SCN scn = SCN::min_scn();
   ObDDLRedoLockGuard guard(log.get_table_key().get_tablet_id().hash());
   if (OB_ISNULL(cb = op_alloc(ObDDLStartClogCb))) {
@@ -547,7 +531,6 @@ int ObDDLRedoLogWriter::local_write_ddl_start_log(
                                          buffer_size,
                                          SCN::min_scn(),
                                          need_nonblock,
-                                         allow_compression,
                                          cb,
                                          lsn,
                                          scn))) {
@@ -615,7 +598,6 @@ int ObDDLRedoLogWriter::local_write_ddl_commit_log(
 
   palf::LSN lsn;
   const bool need_nonblock= false;
-  const bool allow_compression = false;
   SCN base_scn = SCN::min_scn();
   SCN scn = SCN::min_scn();
 if (OB_ISNULL(buffer = static_cast<char *>(ob_malloc(buffer_size, ObMemAttr("DDL_COMMIT_LOG"))))) {
@@ -638,7 +620,6 @@ if (OB_ISNULL(buffer = static_cast<char *>(ob_malloc(buffer_size, ObMemAttr("DDL
                                          buffer_size,
                                          base_scn,
                                          need_nonblock,
-                                         allow_compression,
                                          cb,
                                          lsn,
                                          scn))) {
@@ -717,7 +698,6 @@ int ObDDLRedoLogWriter::write_auto_fork_log(
                                                                   buffer_size,
                                                                   SCN::min_scn(),
                                                                   need_nonblock,
-                                                                  false/*allow_compression*/,
                                                                   cb,
                                                                   lsn,
                                                                   scn))) {
@@ -1112,8 +1092,7 @@ ObDDLRedoLogWriterCallbackInitParam::ObDDLRedoLogWriterCallbackInitParam()
     need_submit_io_(true),
     merge_slice_idx_(0),
     macro_meta_store_(nullptr),
-    write_stat_(nullptr),
-    tx_desc_(nullptr)
+    write_stat_(nullptr)
 {
 }
 
@@ -1146,7 +1125,6 @@ void ObDDLRedoLogWriterCallbackInitParam::reset()
   merge_slice_idx_ = 0;
   macro_meta_store_ = nullptr;
   write_stat_ = nullptr;
-  tx_desc_ = nullptr;
 }
 
 ObDDLRedoLogWriterCallback::ObDDLRedoLogWriterCallback()

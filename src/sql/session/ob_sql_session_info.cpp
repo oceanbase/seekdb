@@ -20,6 +20,7 @@
 #include "ob_sql_session_info.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/memtable/mvcc/ob_btree_iter_cache.h"
+#include "storage/tx/ob_ts_mgr.h"
 #include "rootserver/ob_rs_serial_call.h"
 #include "pl/ob_pl_package.h"
 #include "observer/mysql/obmp_stmt_send_piece_data.h"
@@ -2318,10 +2319,8 @@ void ObSQLSessionInfo::ObCachedTenantConfigInfo::refresh()
     } else {
       ATOMIC_STORE(&data_version_, data_version);
     }
-      // 1.Does it support external consistency
-    is_external_consistent_ = transaction::ObTsMgr::get_instance().is_external_consistent();
     if (OB_LIKELY(true)) {
-      // 2.Is batch_multi_statement allowed
+      // 1.Is batch_multi_statement allowed
       enable_batched_multi_statement_ = GCONF.ob_enable_batched_multi_statement;
       // 3.Is bloom_filter allowed
       if (GCONF._bloom_filter_enabled) {
@@ -2333,7 +2332,6 @@ void ObSQLSessionInfo::ObCachedTenantConfigInfo::refresh()
       ATOMIC_STORE(&sort_area_size_, GCONF._sort_area_size);
       ATOMIC_STORE(&hash_area_size_, GCONF._hash_area_size);
       ATOMIC_STORE(&enable_query_response_time_stats_, GCONF.query_response_time_stats);
-      ATOMIC_STORE(&enable_insertup_replace_gts_opt_, GCONF._enable_insertup_replace_gts_opt);
       ATOMIC_STORE(&enable_immediate_row_conflict_check_, GCONF._ob_immediate_row_conflict_check);
       ATOMIC_STORE(&range_optimizer_max_mem_size_, GCONF.range_optimizer_max_mem_size);
       ATOMIC_STORE(&_query_record_size_limit_, GCONF._query_record_size_limit);

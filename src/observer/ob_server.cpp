@@ -314,13 +314,11 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init io failed", KR(ret));
     }
     }
-    #ifndef OB_USE_ASAN
     if (OB_SUCC(ret)) {
     if (OB_FAIL(ObMemoryDump::get_instance().init())) {
       LOG_ERROR("init memory dumper failed", KR(ret));
     }
     }
-    #endif
     if (OB_SUCC(ret)) {
     if (OB_FAIL(init_global_kvcache())) {
       LOG_ERROR("init global kvcache failed", KR(ret));
@@ -426,10 +424,6 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init timer monitor failed", KR(ret));
     } else if (OB_FAIL(PX_P2P_DH.init())) {
       LOG_ERROR("init px p2p datahub failed", KR(ret));
-#ifdef ENABLE_IMC
-    } else if (OB_FAIL(imc_tasks_.init())) {
-      LOG_ERROR("init imc tasks failed", KR(ret));
-#endif
     } else if (OB_FAIL(init_px_target_mgr())) {
       LOG_ERROR("init px target mgr failed", KR(ret));
     } else if (OB_FAIL(ObDictCache::get_instance().init("dict_cache"))) {
@@ -771,14 +765,6 @@ int ObServer::start()
       FLOG_INFO("success to start timer monitor");
     }
 
-#ifdef ENABLE_IMC
-    if (FAILEDx(imc_tasks_.start())) {
-      LOG_ERROR("fail to start imc tasks", KR(ret));
-    } else {
-      FLOG_INFO("success to start imc tasks");
-    }
-#endif
-
     if (OB_SUCC(ret)) {
       FLOG_INFO("[OBSERVER_NOTICE] server instance start succeed");
       LOG_DBA_INFO_V2(OB_SERVER_INSTANCE_START_SUCCESS,
@@ -1064,12 +1050,6 @@ int ObServer::stop()
   FLOG_INFO("begin to stop config manager");
   config_mgr_.stop();
   FLOG_INFO("stop config manager success");
-
-#ifdef ENABLE_IMC
-    FLOG_INFO("begin to stop imc tasks", KR(ret));
-    ret = imc_tasks_.stop();
-    FLOG_INFO("end to stop imc tasks", KR(ret));
-#endif
 
     FLOG_INFO("begin stop signal handle");
     signal_handle_.stop();

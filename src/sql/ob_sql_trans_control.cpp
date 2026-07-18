@@ -990,16 +990,6 @@ int ObSqlTransControl::end_stmt(ObExecContext &exec_ctx, const bool rollback, co
       // overwrite ret
       ret = OB_TRANS_NEED_ROLLBACK;
       LOG_WARN("trans result incomplete, trans aborted", K(ret));
-    } else if (plan->get_enable_append()
-               && plan->get_enable_inc_direct_load()
-               && OB_UNLIKELY(OB_SUCCESS != exec_errcode)) {
-      if (!rollback) {
-        LOG_ERROR("direct load failed, but rollback not issued");
-      }
-      (void) txs->abort_tx(*tx_desc, ObTxAbortCause::TX_RESULT_INCOMPLETE);
-      // overwrite ret
-      ret = OB_TRANS_NEED_ROLLBACK;
-      LOG_ERROR("direct load failed, trans aborted", KR(ret));
     } else {
       int save_ret = OB_SUCCESS;
       if (OB_FAIL(ret)) {

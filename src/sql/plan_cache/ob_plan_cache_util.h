@@ -1086,8 +1086,6 @@ public:
     bloom_filter_ratio_(0),
     realistic_runtime_bloom_filter_size_(false),
     enable_parallel_das_dml_(false),
-    direct_load_allow_fallback_(false),
-    default_load_mode_(0),
     hash_rollup_policy_(0),
     ndv_runtime_bloom_filter_size_(false),
     enable_topn_runtime_filter_(false),
@@ -1142,8 +1140,6 @@ public:
   int bloom_filter_ratio_;
   bool realistic_runtime_bloom_filter_size_;
   bool enable_parallel_das_dml_;
-  bool direct_load_allow_fallback_;
-  int default_load_mode_;
   int hash_rollup_policy_;
   bool ndv_runtime_bloom_filter_size_;
   bool enable_topn_runtime_filter_;

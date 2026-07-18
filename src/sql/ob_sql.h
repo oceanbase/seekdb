@@ -24,7 +24,6 @@
 #include "sql/resolver/prepare/ob_execute_stmt.h"
 #include "sql/resolver/prepare/ob_deallocate_stmt.h"
 #include "sql/plan_cache/ob_plan_cache.h"
-#include "sql/monitor/ob_monitor_info_manager.h"
 #include "sql/optimizer/ob_optimizer.h"
 #include "sql/rewrite/ob_transform_rule.h"
 #include "sql/executor/ob_maintain_dependency_info_task.h"

@@ -121,8 +121,6 @@ public:
   int update_local_cache(ObOptDmlStat &dml_stat);
   int update_column_usage_info(const bool with_check);
   int update_dml_stat_info();
-  int update_dml_stat_info(const ObIArray<ObOptDmlStat *> &dml_stats,
-                           common::sqlclient::ObISQLConnection *conn = nullptr);
   int get_column_usage_sql(const StatKey &col_key,
                            const int64_t flags,
                            const bool need_add_comma,
@@ -143,8 +141,6 @@ public:
   int check_table_writeable(bool &is_writeable);
   int generate_opt_stat_monitoring_info_rows(observer::ObOptDmlStatMapGetter &getter);
   int clean_useless_dml_stat_info();
-  static int update_dml_stat_info_from_direct_load(const ObIArray<ObOptDmlStat *> &dml_stats,
-                                                   common::sqlclient::ObISQLConnection *conn = nullptr);
   int get_col_usage_info(const bool with_check,
                          ObIArray<StatKey> &col_stat_keys,
                          ObIArray<int64_t> &col_flags);
@@ -152,14 +148,12 @@ public:
   ObOptStatMonitorFlushAllTask &get_flush_all_task() { return flush_all_task_; }
   ObOptStatMonitorCheckTask &get_check_task() { return check_task_; }
   int init();
-  int check_opt_stats_expired(ObIArray<ObOptDmlStat> &dml_stats, bool is_from_direct_load = false);
+  int check_opt_stats_expired(ObIArray<ObOptDmlStat> &dml_stats);
   int get_opt_stats_expired_table_info(ObIArray<ObOptDmlStat> &dml_stats,
-                                       ObIArray<OptStatExpiredTableInfo> &stale_infos,
-                                       bool is_from_direct_load);
+                                       ObIArray<OptStatExpiredTableInfo> &stale_infos);
   int gen_tablet_list(const ObIArray<ObOptDmlStat> &dml_stats,
                       const int64_t begin_idx,
                       const int64_t end_idx,
-                      const bool is_from_direct_load,
                       ObSqlString &tablet_list);
   int do_get_opt_stats_expired_table_info(const ObSqlString &where_str,
                                           ObIArray<OptStatExpiredTableInfo> &stale_infos);

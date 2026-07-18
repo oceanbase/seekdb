@@ -363,7 +363,7 @@ int ObLobAccessParam::init_seq_no(const uint64_t modified_len)
         LOG_WARN("get and inc tx seq failed", K(ret), K(need_seq_cnt), KPC(this));
       }
     } else {
-      // do nothing, for direct load has no tx desc, do not use seq no
+      // Callers without a transaction descriptor do not use sequence numbers.
       LOG_DEBUG("tx_desc is null", KPC(this));
     }
   }

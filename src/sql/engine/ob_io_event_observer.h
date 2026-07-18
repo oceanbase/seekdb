@@ -17,7 +17,7 @@
 #ifndef _OB_SQL_IO_EVENT_OBSERVER_H_
 #define _OB_SQL_IO_EVENT_OBSERVER_H_
 
-#include "sql/monitor/ob_sql_plan_monitor_node_list.h"
+#include "sql/monitor/ob_monitor_node.h"
 
 namespace oceanbase
 {
@@ -42,4 +42,3 @@ private:
 }
 #endif /* _OB_SQL_IO_EVENT_OBSERVER_H_ */
 //// end of header file
-

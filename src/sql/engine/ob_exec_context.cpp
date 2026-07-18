@@ -193,9 +193,7 @@ ObExecContext::ObExecContext(ObIAllocator &allocator)
     parent_ctx_(nullptr),
     nested_level_(0),
     is_ps_prepare_stage_(false),
-    register_op_id_(OB_INVALID_ID),
     tmp_alloc_used_(false),
-    table_direct_insert_ctx_(),
     errcode_(OB_SUCCESS),
     user_logging_ctx_(),
     is_online_stats_gathering_(false),
@@ -854,7 +852,6 @@ int ObExecContext::init_physical_plan_ctx(const ObPhysicalPlan &plan)
       } else {
         consistency = STRONG;
       }
-      phy_plan_ctx_->set_is_direct_insert_plan(plan.get_enable_append());
       phy_plan_ctx_->set_consistency_level(consistency);
       phy_plan_ctx_->set_timeout_timestamp(start_time + plan_timeout);
       phy_plan_ctx_->set_rich_format(my_session_->use_rich_format());

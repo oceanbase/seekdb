@@ -101,7 +101,6 @@ DEFINE_ERROR_DEP(OB_DISCONTINUOUS_LOG, -4028, -1, "HY000", "Log entry not contin
 DEFINE_ERROR(OB_SCHEMA_ERROR, -4029, -1, "HY000", "Schema error");
 DEFINE_ERROR(OB_TENANT_OUT_OF_MEM, -4030, -1, "HY000", "Over tenant memory limits");
 DEFINE_ERROR(OB_UNKNOWN_OBJ, -4031, -1, "HY004", "Unknown object");
-DEFINE_ERROR(OB_NO_MONITOR_DATA, -4032, -1, "02000", "No monitor data");
 DEFINE_ERROR_DEP(OB_SERIALIZE_ERROR, -4033, -1, "HY000", "Serialize error");
 DEFINE_ERROR_DEP(OB_DESERIALIZE_ERROR, -4034, -1, "HY000", "Deserialize error");
 DEFINE_ERROR_DEP(OB_AIO_TIMEOUT, -4035, -1, "HY000", "Asynchronous IO error");
@@ -457,7 +456,6 @@ DEFINE_ERROR(OB_MIGRATE_TX_DATA_NOT_CONTINUES, -4408, -1, "HY000", "migrate tx d
 ////////////////////////////////////////////////////////////////
 DEFINE_ERROR(OB_IMPORT_NOT_IN_SERVER, -4505, -1, "HY000", "Import not in service");
 DEFINE_ERROR(OB_CONVERT_ERROR, -4507, -1, "42000", "Convert error");
-DEFINE_ERROR(OB_BYPASS_TIMEOUT, -4510, -1, "HY000", "Bypass timeout");
 DEFINE_ERROR(OB_RS_STATE_NOT_ALLOW, -4512, -1, "HY000", "RootServer state error");
 DEFINE_ERROR(OB_NO_REPLICA_VALID, -4515, -1, "HY000", "No replica is valid");
 DEFINE_ERROR(OB_NO_NEED_UPDATE, -4517, -1, "HY000", "No need to update");
@@ -2232,7 +2230,6 @@ DEFINE_ERROR(OB_NO_SUCH_FILE_OR_DIRECTORY, -9100, -1, "HY000", "no such file or 
 DEFINE_ERROR(OB_FILE_OR_DIRECTORY_EXIST, -9101, -1, "HY000", "file or directory already exist");
 DEFINE_ERROR(OB_FILE_OR_DIRECTORY_PERMISSION_DENIED, -9102, -1, "HY000", "file or directory permission denied");
 DEFINE_ERROR(OB_TOO_MANY_OPEN_FILES, -9103, -1, "HY000", "too many open files");
-DEFINE_ERROR(OB_DIRECT_LOAD_COMMIT_ERROR, -9104, -1, "HY000", "fail to commit direct load");
 // do not use OB_S3_ERROR, use OB_OBJECT_STORAGE_IO_ERROR instead
 DEFINE_ERROR_DEP(OB_S3_ERROR, -9105, -1, "HY000", "S3 error");
 

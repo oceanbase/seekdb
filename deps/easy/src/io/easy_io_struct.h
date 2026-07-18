@@ -28,9 +28,6 @@ EASY_CPP_START
 #include "util/easy_array.h"
 #include "util/easy_util.h"
 
-#ifdef EASY_DEBUG_DOING
-extern easy_atomic_t easy_debug_uuid;
-#endif
 ///// define
 #define EASY_MAX_THREAD_CNT         64
 #define EASY_IOTH_DOING_REQ_CNT     65536
@@ -330,9 +327,6 @@ struct easy_ratelimitor_t {
 };
 // Corresponds to a SOCKET connection
 struct easy_connection_t {
-#ifdef EASY_DEBUG_MAGIC
-    uint64_t                magic;
-#endif
     struct ev_loop          *loop;
     easy_pool_t             *pool;
     easy_io_thread_t        *ioth;
@@ -412,12 +406,6 @@ struct easy_connection_t {
 // Todo: add response size, ratelimit and bg/fg flags.
 // ipacket incoming packet, opacket outgoing packet
 struct easy_request_t {
-#ifdef EASY_DEBUG_DOING
-    uint64_t                uuid;
-#endif
-#ifdef EASY_DEBUG_MAGIC
-    uint64_t                magic;
-#endif
     easy_message_session_t  *ms;
 
     easy_list_t             request_list_node;
@@ -475,16 +463,10 @@ struct easy_request_t {
     int                     align;
 
 struct easy_message_session_t {
-#ifdef EASY_DEBUG_MAGIC
-    uint64_t                magic;
-#endif
     EASY_MESSAGE_SESSION_HEADER(list_node);
 };
 // Used to receive, one or more easy_request_t
 struct easy_message_t {
-#ifdef EASY_DEBUG_MAGIC
-    uint64_t                magic;
-#endif
     EASY_MESSAGE_SESSION_HEADER(message_list_node)
 
     easy_buf_t              *input;
@@ -515,9 +497,6 @@ struct easy_summary_node_t {
 };
 // Used for sending, only with one easy_request_t
 struct easy_session_t {
-#ifdef EASY_DEBUG_MAGIC
-    uint64_t                magic;
-#endif
     EASY_MESSAGE_SESSION_HEADER(session_list_node);
     easy_list_t             write_list_node;
     easy_list_t             rlmtr_queue_node;

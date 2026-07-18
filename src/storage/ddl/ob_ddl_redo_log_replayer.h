@@ -18,7 +18,6 @@
 #define OCEANBASE_STORAGE_OB_DDL_REDO_LOG_REPLAYER_H
 
 #include "storage/ddl/ob_ddl_clog.h"
-#include "storage/ddl/ob_ddl_inc_clog.h"
 #include "storage/ddl/ob_ddl_struct.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 
@@ -42,13 +41,8 @@ public:
   int replay_table_fork_freeze(const ObTableForkFreezeLog &log, const share::SCN &scn);
   int replay_table_fork_start(const ObTableForkStartLog &log, const share::SCN &scn);
   int replay_table_fork_finish(const ObTableForkFinishLog &log, const share::SCN &scn);
-  int replay_inc_start(const ObDDLIncStartLog &log, const share::SCN &scn);
-  int replay_inc_commit(const ObDDLIncCommitLog &log, const share::SCN &scn);
 private:
   void destroy();
-  template <typename IncType, typename ...Args>
-  int do_replay_inc_start(const common::ObTabletID &tablet_id, const SCN &scn, Args&&... args);
-  int do_replay_inc_minor_commit(const common::ObTabletID &tablet_id, const SCN &scn);  
 private:
   static const int64_t TOTAL_LIMIT = 10 * 1024 * 1024 * 1024LL;
   static const int64_t HOLD_LIMIT = 10 * 1024 * 1024 * 1024LL;

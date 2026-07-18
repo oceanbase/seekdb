@@ -73,7 +73,6 @@ namespace common
 #define CM_CONST_TO_DECIMAL_INT_EQ        (1ULL << 19)
 #define CM_BY_TRANSFORMER                (1ULL << 20)
 #define CM_CONST_TO_DECIMAL_INT_UP       (1ULL << 21)
-#define CM_FAST_COLUMN_CONV              (1ULL << 22)
 #define CM_INTERNAL_CAST_IGNORE          (1ULL << 23)
 #define CM_DEMOTE_CAST                   (1ULL << 24)
 // string->integer(int/uint) when default rounding (round to nearest) is performed,

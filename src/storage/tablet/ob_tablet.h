@@ -555,10 +555,6 @@ public:
   int get_memtables(
       common::ObIArray<ObTableHandleV2> &memtables) const;
 
-  int set_macro_block(
-      const ObDDLMacroBlock &macro_block,
-      const int64_t snapshot_version,
-      const uint64_t data_format_version);
   int get_fork_info(share::ObForkTabletInfo &fork_info) const;
 protected:// for MDS use
   virtual bool check_is_inited_() const override final { return is_inited_; }

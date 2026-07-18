@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_operator.h"
-#include "share/rc/ob_module_provider.h"
 #include "ob_operator_factory.h"
 #include "observer/ob_server.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
@@ -499,7 +498,7 @@ int ObOpSpec::create_exec_feedback_node_recursive(ObExecContext &exec_ctx) const
         continue;
       } else if (OB_FAIL(SMART_CALL(children_[i]->create_exec_feedback_node_recursive(
             exec_ctx)))) {
-        LOG_WARN("fail to link sql plan monitor", K(ret));
+        LOG_WARN("fail to link exec feedback node", K(ret));
       }
     }
   }
@@ -563,7 +562,6 @@ ObOperator::ObOperator(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOpInput 
     left_(NULL),
     right_(NULL),
     try_check_tick_(0),
-    try_monitor_tick_(0),
     opened_(false),
     startup_passed_(spec_.startup_filters_.empty()),
     exch_drained_(false),
@@ -852,9 +850,6 @@ int ObOperator::open()
       eval_ctx_.set_batch_size(1);
       eval_ctx_.set_batch_idx(0);
     }
-    if (ctx_.get_my_session()->is_user_session() || spec_.plan_->get_phy_plan_hint().monitor_) {
-      IGNORE_RETURN try_register_rt_monitor_node(0);
-    }
     while (OB_SUCC(ret) && open_order != OPEN_EXIT) {
       switch (open_order) {
       case OPEN_CHILDREN_FIRST:
@@ -1081,68 +1076,6 @@ int ObOperator::inner_switch_iterator()
   return ret;
 }
 
-bool ObOperator::match_rt_monitor_condition(int64_t rows)
-{
-  bool ret = false;
-  if (OB_ISNULL(spec_.plan_)) {
-  } else if (spec_.plan_->get_phy_plan_hint().monitor_) {
-    ret = true;
-  } else if (spec_.plan_->get_px_dop() > 1) {
-    ret = true;
-  } else {
-    try_monitor_tick_ += rows;
-    if (try_monitor_tick_ > REAL_TIME_MONITOR_TRY_TIMES) {
-      try_monitor_tick_ = 0;
-      int64_t cur_time = oceanbase::common::ObClockGenerator::getClock();
-      if (cur_time - ctx_.get_plan_start_time() > REAL_TIME_MONITOR_THRESHOLD) {
-        ret = true;
-      }
-    }
-  }
-  return ret;
-}
-
-int ObOperator::try_register_rt_monitor_node(int64_t rows)
-{
-  int ret = OB_SUCCESS;
-  if (!ctx_.is_rt_monitor_node_registered() &&
-              match_rt_monitor_condition(rows)) {
-    ObPlanMonitorNodeList *list = share::g_mp->plan_monitor_node_list();
-    const ObOpSpec *root_spec = spec_.plan_->get_root_op_spec();
-    if (OB_ISNULL(list) || OB_ISNULL(root_spec)) {
-      /*do nothing*/
-    } else {
-      ObOperatorKit *kit = ctx_.get_operator_kit(root_spec->id_);
-      if (OB_ISNULL(kit) || OB_ISNULL(kit->op_)) {
-        /*do nothing*/
-      } else if (OB_FAIL(list->register_monitor_node(kit->op_->get_monitor_info()))) {
-        LOG_WARN("fail to register monitor node", K(ret));
-      } else {
-        ctx_.set_register_op_id(root_spec->id_);
-      }
-    }
-  }
-  return ret;
-}
-
-int ObOperator::try_deregister_rt_monitor_node()
-{
-  int ret = OB_SUCCESS;
-  if (spec_.id_ == ctx_.get_register_op_id()
-      && ctx_.is_rt_monitor_node_registered()) {
-    ObPlanMonitorNodeList *list = share::g_mp->plan_monitor_node_list();
-    if (OB_ISNULL(list)) {
-      // ignore ret
-      LOG_WARN("fail to revert monitor node", K(list));
-    } else if (OB_FAIL(list->revert_monitor_node(op_monitor_info_))) {
-      LOG_ERROR("fail to revert monitor node", K(ret), K(op_monitor_info_));
-    } else {
-      ctx_.set_register_op_id(OB_INVALID_ID);
-    }
-  }
-  return ret;
-}
-
 int check_child_closed_helper(ObOperator *child, bool &closed)
 {
   closed = true;
@@ -1186,7 +1119,7 @@ int ObOperator::close()
     ret = tmp_ret; // overwrite child's error code.
     LOG_WARN("Close this operator failed", K(ret), "op_type", op_name());
   }
-  IGNORE_RETURN submit_op_monitor_node();
+  op_monitor_info_.close_time_ = oceanbase::common::ObClockGenerator::getClock();
   IGNORE_RETURN setup_op_feedback_info();
   #ifdef ENABLE_DEBUG_LOG
     if (nullptr != dummy_mem_context_) {
@@ -1234,31 +1167,6 @@ int ObOperator::setup_op_feedback_info()
   return ret;
 }
 
-int ObOperator::submit_op_monitor_node()
-{
-  int ret = OB_SUCCESS;
-  {
-    // Record monitor info in sql_plan_monitor
-    // Some records that meets the conditions needs to be archived
-    // Reference document:
-    op_monitor_info_.close_time_ = oceanbase::common::ObClockGenerator::getClock();
-    ObPlanMonitorNodeList *list = share::g_mp->plan_monitor_node_list();
-    if (list && spec_.plan_ && ctx_.get_physical_plan_ctx()) {
-      if (spec_.plan_->get_phy_plan_hint().monitor_
-          || (ctx_.get_my_session()->is_user_session()
-              && (spec_.plan_->get_px_dop() > 1
-                  || (op_monitor_info_.close_time_
-                      - ctx_.get_plan_start_time()
-                      > MONITOR_RUNNING_TIME_THRESHOLD)))) {
-        IGNORE_RETURN list->submit_node(op_monitor_info_);
-        LOG_DEBUG("debug monitor", K(spec_.id_));
-      }
-    }
-  }
-  IGNORE_RETURN try_deregister_rt_monitor_node();
-  return ret;
-}
-
 int ObOperator::get_next_row()
 {
   int ret = OB_SUCCESS;
@@ -1276,9 +1184,6 @@ int ObOperator::get_next_row()
 #endif
   if (OB_FAIL(ret)) {
   } else {
-    if (ctx_.get_my_session()->is_user_session() || spec_.plan_->get_phy_plan_hint().monitor_) {
-      IGNORE_RETURN try_register_rt_monitor_node(1);
-    }
     if (row_reach_end_) {
       ret = OB_ITER_END;
     } else if (OB_UNLIKELY(get_spec().is_vectorized())) {
@@ -1488,9 +1393,6 @@ int ObOperator::get_next_batch(const int64_t max_row_cnt, const ObBatchRows *&ba
               reset_batchrows();
               continue;
             }
-          }
-          if (OB_SUCC(ret) && (ctx_.get_my_session()->is_user_session() || spec_.plan_->get_phy_plan_hint().monitor_)) {
-            IGNORE_RETURN try_register_rt_monitor_node(brs_.size_);
           }
           all_filtered = false;
           if (OB_FAIL(ret)) {

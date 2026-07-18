@@ -167,7 +167,6 @@ public:
   DELEGATE_FOR_MEMTABLE_MGR(set_is_tablet_freeze_for_active_memtable, false);
   DELEGATE_FOR_MEMTABLE_MGR(get_last_frozen_memtable, false);
   DELEGATE_FOR_MEMTABLE_MGR(get_memtable_for_replay, false);
-  DELEGATE_FOR_MEMTABLE_MGR(get_direct_load_memtables_for_write, true);
 
   DELEGATE_FOR_MEMTABLE_MGR_WITH_CREATE(create_memtable);
 

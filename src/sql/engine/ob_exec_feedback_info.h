@@ -17,7 +17,7 @@
 #ifndef _OB_EXEC_FEEDBACK_INFO_H
 #define _OB_EXEC_FEEDBACK_INFO_H
 
-#include "sql/monitor/ob_sql_plan_monitor_node_list.h"
+#include "sql/monitor/ob_monitor_node.h"
 #include "lib/container/ob_array.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/container/ob_array_serialization.h"

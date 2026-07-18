@@ -43,36 +43,34 @@ namespace blocksstable
 // STORAGE_OBJECT_TYPE_INFO(obj_id, obj_str, is_pin_local, is_read_through, is_valid, to_local_path_format, to_remote_path_format, get_parent_dir, create_parent_dir)
 #define OB_STORAGE_OBJECT_TYPE_LIST \
   STORAGE_OBJECT_TYPE_INFO(PRIVATE_DATA_MACRO, "PRIVATE_DATA_MACRO", false/*is_pin_local*/, false/*is_read_through*/, \
-    /*is_valid second_id:tablet_id, third_id:server_id, fourth_id:macro_path_id+tenant_seq */ \
-    ((file_id_.second_id() > 0) && (file_id_.second_id() < INT64_MAX) && (file_id_.third_id() > 0) && (file_id_.macro_path_id() >= 0) && (file_id_.tenant_seq() >= 0)), \
-    /*to_local_path_format: tablet_data/tablet_id/path_id/data/macro_server_id_seq_id */ \
-    (databuff_printf(path_, length, pos, "%s/%s/%ld/%ld/%s/%ld_%ld", \
+    /*is_valid second_id:tablet_id, third_id:server_id, fourth_id:tenant_seq */ \
+    ((file_id_.second_id() > 0) && (file_id_.second_id() < INT64_MAX) && (file_id_.third_id() > 0) && (file_id_.tenant_seq() != ObStorageObjectOpt::INVALID_TABLET_VERSION)), \
+    /*to_local_path_format: tablet_data/tablet_id/data/macro_server_id_seq_id */ \
+    (databuff_printf(path_, length, pos, "%s/%s/%ld/%s/%ld_%ld", \
                      OB_DIR_MGR.get_local_cache_root_dir(), \
-                     TABLET_DATA_DIR_STR, file_id_.second_id(), file_id_.macro_path_id(), \
+                     TABLET_DATA_DIR_STR, file_id_.second_id(), \
                      DATA_MACRO_DIR_STR, file_id_.third_id(), file_id_.tenant_seq())), \
-    /*to_remote_path_format: cluster_id/server_id/tablet_data/tablet_id/path_id/data/macro_server_id_seq_id */ \
-    (databuff_printf(path_, length, pos, "%s/%s_%ld/%s_%ld/%s/%ld/%ld/%s/%ld_%ld", \
+    /*to_remote_path_format: cluster_id/server_id/tablet_data/tablet_id/data/macro_server_id_seq_id */ \
+    (databuff_printf(path_, length, pos, "%s/%s_%ld/%s_%ld/%s/%ld/%s/%ld_%ld", \
                      object_storage_root_dir, CLUSTER_DIR_STR, cluster_id, SERVER_DIR_STR, \
                      file_id_.third_id(), TABLET_DATA_DIR_STR, file_id_.second_id(), \
-                     file_id_.macro_path_id(), DATA_MACRO_DIR_STR, file_id_.third_id(), file_id_.tenant_seq())), \
-    /*get_parent_dir: tablet_data/tablet_id/path_id/data/ */ \
-    (OB_DIR_MGR.get_local_tablet_id_macro_dir(path, length, file_id.second_id(), file_id.macro_path_id(), ObMacroType::DATA_MACRO)), \
+                     DATA_MACRO_DIR_STR, file_id_.third_id(), file_id_.tenant_seq())), \
+    /*get_parent_dir*/OB_NOT_SUPPORTED, \
     /*create_parent_dir*/OB_NOT_SUPPORTED) \
   STORAGE_OBJECT_TYPE_INFO(PRIVATE_META_MACRO, "PRIVATE_META_MACRO", false/*is_pin_local*/, false/*is_read_through*/, \
-    /*is_valid second_id:tablet_id, third_id:server_id, fourth_id:macro_path_id+tenant_seq */ \
-    ((file_id_.second_id() > 0) && (file_id_.second_id() < INT64_MAX) && (file_id_.third_id() > 0) && (file_id_.macro_path_id() >= 0) && (file_id_.tenant_seq() >= 0)), \
-    /*to_local_path_format: tablet_data/tablet_id/path_id/meta/macro_server_id_seq_id */ \
-    (databuff_printf(path_, length, pos, "%s/%s/%ld/%ld/%s/%ld_%ld", \
+    /*is_valid second_id:tablet_id, third_id:server_id, fourth_id:tenant_seq */ \
+    ((file_id_.second_id() > 0) && (file_id_.second_id() < INT64_MAX) && (file_id_.third_id() > 0) && (file_id_.tenant_seq() != ObStorageObjectOpt::INVALID_TABLET_VERSION)), \
+    /*to_local_path_format: tablet_data/tablet_id/meta/macro_server_id_seq_id */ \
+    (databuff_printf(path_, length, pos, "%s/%s/%ld/%s/%ld_%ld", \
                      OB_DIR_MGR.get_local_cache_root_dir(), \
-                     TABLET_DATA_DIR_STR, file_id_.second_id(), file_id_.macro_path_id(), \
+                     TABLET_DATA_DIR_STR, file_id_.second_id(), \
                      META_MACRO_DIR_STR, file_id_.third_id(), file_id_.tenant_seq())), \
-    /*to_remote_path_format: cluster_id/server_id/tablet_data/tablet_id/path_id/meta/macro_server_id_seq_id */ \
-    (databuff_printf(path_, length, pos, "%s/%s_%ld/%s_%ld/%s/%ld/%ld/%s/%ld_%ld", \
+    /*to_remote_path_format: cluster_id/server_id/tablet_data/tablet_id/meta/macro_server_id_seq_id */ \
+    (databuff_printf(path_, length, pos, "%s/%s_%ld/%s_%ld/%s/%ld/%s/%ld_%ld", \
                      object_storage_root_dir, CLUSTER_DIR_STR, cluster_id, SERVER_DIR_STR, \
                      file_id_.third_id(), TABLET_DATA_DIR_STR, file_id_.second_id(), \
-                     file_id_.macro_path_id(), META_MACRO_DIR_STR, file_id_.third_id(), file_id_.tenant_seq())), \
-    /*get_parent_dir: tablet_data/tablet_id/path_id/meta/ */ \
-    (OB_DIR_MGR.get_local_tablet_id_macro_dir(path, length, file_id.second_id(), file_id.macro_path_id(), ObMacroType::META_MACRO)), \
+                     META_MACRO_DIR_STR, file_id_.third_id(), file_id_.tenant_seq())), \
+    /*get_parent_dir*/OB_NOT_SUPPORTED, \
     /*create_parent_dir*/OB_NOT_SUPPORTED) \
   STORAGE_OBJECT_TYPE_INFO(SHARED_MINI_DATA_MACRO, "SHARED_MINI_DATA_MACRO", false/*is_pin_local*/, false/*is_read_through*/, \
     /*is_valid second_id:tablet_id, third_id:seq_id, fourth_id:N/A */ \
@@ -455,12 +453,8 @@ public:
   void set_storage_object_type(const uint64_t storage_object_type) { storage_object_type_ = storage_object_type; }
   int64_t incarnation_id() const { return incarnation_id_; }
   void set_incarnation_id(const uint64_t incarnation_id) { incarnation_id_ = incarnation_id; }
-  int64_t macro_path_id() const { return macro_path_id_; }
-  void set_macro_path_id(const int64_t macro_path_id) { macro_path_id_ = macro_path_id; }
   uint64_t tenant_seq() const { return tenant_seq_; }
   void set_tenant_seq(const uint64_t tenant_seq) { tenant_seq_ = tenant_seq; }
-  int64_t meta_path_id() const { return meta_path_id_; }
-  void set_meta_path_id(const int64_t meta_path_id) { meta_path_id_ = meta_path_id; }
   uint64_t meta_version_id() const { return meta_version_id_; }
   void set_meta_version_id(const uint64_t meta_version_id) { meta_version_id_ = meta_version_id; }
 
@@ -503,14 +497,9 @@ public:
   static const uint64_t SF_BIT_RESERVED = 20;
   static const uint64_t SF_BIT_ID_MODE = 8;
   static const uint64_t SF_BIT_VERSION = 4;
-  static const uint64_t SF_BIT_PATH_ID = 20;
-  static const uint64_t SF_BIT_TENANT_SEQ = 44;
-  static constexpr uint64_t SF_BIT_META_VERSION_ID = 44;
 #ifndef _WIN32
-  static const uint64_t MAX_PATH_ID = (0x1UL << MacroBlockId::SF_BIT_PATH_ID) - 1;
   static const uint64_t MAX_WRITE_SEQ = (0x1UL << MacroBlockId::SF_BIT_WRITE_SEQ) - 1;
 #else
-  static const uint64_t MAX_PATH_ID = (UINT64_C(0x1) << MacroBlockId::SF_BIT_PATH_ID) - 1;
   static const uint64_t MAX_WRITE_SEQ = (UINT64_C(0x1) << MacroBlockId::SF_BIT_WRITE_SEQ) - 1;
 #endif
 
@@ -548,15 +537,8 @@ private:
   };
   union {
     int64_t fourth_id_;
-    // for PRIVATE_DATA_MACRO and PRIVATE_META_MACRO
-    struct {
-      int64_t macro_path_id_       : SF_BIT_PATH_ID;
-      int64_t tenant_seq_          : SF_BIT_TENANT_SEQ;
-    };
-    struct {
-      int64_t meta_path_id_        : SF_BIT_PATH_ID;
-      uint64_t meta_version_id_    : SF_BIT_META_VERSION_ID;
-    };
+    uint64_t tenant_seq_;        // for PRIVATE_DATA_MACRO and PRIVATE_META_MACRO
+    uint64_t meta_version_id_;   // for PRIVATE_TABLET_META
   };
 };
 

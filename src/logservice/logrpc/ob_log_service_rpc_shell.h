@@ -30,7 +30,6 @@ namespace obcall
 // framework; it is kept only as a (dead) member/pointer type held by ObLogService
 // and ObLogHandler. The remaining real RPC methods (acquire_log_rebuild_info /
 // sync_base_lsn) are shared-storage only and routed solely under
-// OB_BUILD_SHARED_STORAGE, which seekdb does not build.
 class ObLogServiceRpcProxy
 {
 public:

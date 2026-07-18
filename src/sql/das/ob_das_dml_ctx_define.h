@@ -186,7 +186,6 @@ public:
     : ObDASDMLBaseRtDef(DAS_OP_TABLE_INSERT),
       need_fetch_conflict_(false),
       is_duplicated_(false),
-      direct_insert_task_id_(0),
       use_put_(false),
       ddl_task_id_(0)
   { }
@@ -194,7 +193,6 @@ public:
   INHERIT_TO_STRING_KV("ObDASBaseRtDef", ObDASDMLBaseRtDef,
                        K_(need_fetch_conflict),
                        K_(is_duplicated),
-                       K_(direct_insert_task_id),
                        K_(use_put),
                        K_(ddl_task_id));
 
@@ -203,8 +201,6 @@ public:
   // used to check whether duplicate_key error occurred, will be set in das_insert_op
   // not need to serialize
   bool is_duplicated_;
-  // used in direct-insert mode
-  int64_t direct_insert_task_id_;
   // use put semantics for overlay writing.
   bool use_put_;
   int64_t ddl_task_id_;

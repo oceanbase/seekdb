@@ -301,7 +301,8 @@ bool ObDbmsStatsUtils::is_no_stat_virtual_table(const int64_t table_id)
 
 bool ObDbmsStatsUtils::is_virtual_index_table(const int64_t table_id)
 {
-  return table_id == share::OB_ALL_VIRTUAL_SQL_PLAN_MONITOR_ALL_VIRTUAL_SQL_PLAN_MONITOR_I1_TID;
+  UNUSED(table_id);
+  return false;
 }
 
 int ObDbmsStatsUtils::parse_granularity(const ObString &granularity, ObGranularityType &granu_type)

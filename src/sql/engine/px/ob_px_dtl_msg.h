@@ -82,32 +82,6 @@ public:
   int64_t row_deleted_count_;
 };
 
-// keep for compatiblity. never should be used anymore
-class ObPxTaskMonitorInfo
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObPxTaskMonitorInfo() : sched_exec_time_start_(0), sched_exec_time_end_(0),
-                          exec_time_start_(0), exec_time_end_(0) {}
-  ObPxTaskMonitorInfo &operator = (const ObPxTaskMonitorInfo &other)
-  {
-    sched_exec_time_start_ = other.sched_exec_time_start_;
-    sched_exec_time_end_ = other.sched_exec_time_end_;
-    exec_time_start_ = other.exec_time_start_;
-    exec_time_end_ = other.exec_time_end_;
-    metrics_.assign(other.metrics_);
-    return *this;
-  }
-  TO_STRING_KV(K_(sched_exec_time_start), K_(sched_exec_time_end), K_(exec_time_start), K_(exec_time_end), K(metrics_.count()));
-private:
-  int64_t sched_exec_time_start_;          // sqc observed task execution start timestamp
-  int64_t sched_exec_time_end_;            // sqc observed task execution end timestamp
-  int64_t exec_time_start_;                // task execution start time
-  int64_t exec_time_end_;                  // task execution end time
-  common::ObSEArray<sql::ObOpMetric, 1> metrics_;     // operator metric
-};
-
-typedef common::ObSEArray<ObPxTaskMonitorInfo, 1> ObPxTaskMonitorInfoArray;
 // Each Task has a set of output channels, connecting to all Tasks of the consumer DFO
 class ObPxTaskChSet : public dtl::ObDtlChSet
 {
@@ -348,7 +322,6 @@ public:
         sqc_id_(common::OB_INVALID_ID),
         rc_(common::OB_SUCCESS),
         das_retry_rc_(common::OB_SUCCESS),
-        task_monitor_info_array_(),
         sqc_affected_rows_(0),
         dml_row_info_(),
         temp_table_id_(common::OB_INVALID_ID),
@@ -367,7 +340,6 @@ public:
     rc_ = common::OB_SUCCESS;
     das_retry_rc_ = common::OB_SUCCESS;
     trans_result_.reset();
-    task_monitor_info_array_.reset();
     dml_row_info_.reset();
     interm_result_ids_.reset();
     fb_info_.reset();
@@ -382,7 +354,6 @@ public:
   int rc_; // error code
   int das_retry_rc_; //record the error code that cause DAS to retry
   transaction::ObTxExecResult trans_result_;
-  ObPxTaskMonitorInfoArray task_monitor_info_array_; // deprecated, keep for compatiblity
   int64_t sqc_affected_rows_; // pdml case, the number of rows affected by an sqc
   ObPxDmlRowInfo dml_row_info_; // SQC exists DML operator, need to statistics row information
   uint64_t temp_table_id_;

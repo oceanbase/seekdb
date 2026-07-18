@@ -1219,7 +1219,7 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   ObExprRegexpLike::eval_regexp_like,                                 /* 746 */
   ObExprRegexpReplace::eval_regexp_replace,                           /* 747 */
   ObExprRegexpSubstr::eval_regexp_substr,                             /* 748 */
-  ObExprColumnConv::column_convert_fast,                              /* 749 */
+  NULL, /* retired slot */                                           /* 749 */
   ObExprArrayContains::eval_array_contains_int64_t,                   /* 750 */
   ObExprArrayContains::eval_array_contains_float,                     /* 751 */
   ObExprArrayContains::eval_array_contains_double,                    /* 752 */
@@ -1486,7 +1486,7 @@ static ObExpr::EvalBatchFunc g_expr_eval_batch_functions[] = {
   ObExprMul::mul_vec_vec_batch,                                       /* 135 */
   ObExprDiv::div_vec_batch,                                           /* 136 */
   ObExprColumnConv::column_convert_batch,                             /* 137 */
-  ObExprColumnConv::column_convert_batch_fast,                        /* 138 */
+  NULL, /* retired slot */                                            /* 138 */
   ObExprArrayContains::eval_array_contains_batch_int64_t,             /* 139 */
   ObExprArrayContains::eval_array_contains_batch_float,               /* 140 */
   ObExprArrayContains::eval_array_contains_batch_double,              /* 141 */
@@ -1737,7 +1737,7 @@ static ObExpr::EvalVectorFunc g_expr_eval_vector_functions[] = {
   NULL, // ObExprArrayReplace::eval_array_replace_vector,                /* 205 */
   NULL, // ObExprArrayPopfront::eval_array_popfront_vector,              /* 206 */
   ObExprColumnConv::column_convert_vector,                               /* 207 */
-  ObExprColumnConv::column_convert_vector_fast,                          /* 208 */
+  NULL, /* retired slot */                                              /* 208 */
   NULL, // ObExprConcat::eval_concat_vector,                             /* 209 */
   NULL, // ObExprLpad::calc_mysql_lpad_expr_vector,                      /* 210 */
   NULL, // ObExprRpad::calc_mysql_rpad_expr_vector,                      /* 211 */

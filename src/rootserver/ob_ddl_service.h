@@ -173,8 +173,6 @@ public:
                          const share::schema::ObTableType expected_table_type,
                          share::schema::ObSchemaGetterGuard &guard,
                          const share::schema::ObTableSchema **table_schema);
-  int create_hidden_table(const obcall::ObCreateHiddenTableArg &create_hidden_table_arg,
-                                      obcall::ObCreateHiddenTableRes &res);
   /**
    * For recover restore table ddl task, it is a cross-tenant task, including,
    * 1. Create a hidden table under different tenant but associated with the source table;
@@ -457,7 +455,6 @@ public:
    *    step5: rename hidden table name to orig table name and modify the state to non-hidden
    */
   int swap_orig_and_hidden_table_state(obcall::ObAlterTableArg &alter_table_arg);
-  int swap_orig_and_hidden_table_partitions(obcall::ObAlterTableArg &alter_table_arg);
   
   /**
    * The function is designed for the recover restore table ddl, which is to check whether the object 

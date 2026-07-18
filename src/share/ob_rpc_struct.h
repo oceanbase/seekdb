@@ -60,8 +60,6 @@
 #include "share/scn.h"//SCN
 #include "share/ob_server_status.h"  // ObServerMode
 #include "share/resource_limit_calculator/ob_resource_limit_calculator.h"//ObUserResourceCalculateArg
-#ifdef OB_BUILD_SHARED_STORAGE
-#endif
 #include "share/sequence/ob_sequence_cache.h" // ObSeqCleanCacheRes
 #include "share/schema/ob_catalog_schema_struct.h"
 #include "share/schema/ob_ccl_schema_struct.h"
@@ -1292,139 +1290,6 @@ public:
 };
 
 
-struct ObCreateHiddenTableArg : public ObDDLArg
-{
-  OB_UNIS_VERSION(1);
-public:
-  TO_STRING_KV(
-               
-               K_(table_id),
-               
-               K_(session_id),
-               K_(parallelism),
-               K_(ddl_type),
-               K_(ddl_stmt_str),
-               K_(sql_mode),
-               K_(tz_info_wrap),
-               "nls_formats", common::ObArrayWrap<common::ObString>(nls_formats_, common::ObNLSFormatEnum::NLS_MAX),
-               K_(tablet_ids),
-               K_(need_reorder_column_id),
-               K_(foreign_key_checks));
-  ObCreateHiddenTableArg() :
-    ObDDLArg(),
-    
-    table_id_(common::OB_INVALID_ID),
-    session_id_(common::OB_INVALID_ID),
-    ddl_type_(share::DDL_INVALID),
-    ddl_stmt_str_(),
-    sql_mode_(0),
-    tz_info_wrap_(),
-    nls_formats_{},
-    tablet_ids_(),
-    need_reorder_column_id_(false),
-    foreign_key_checks_(true)
-    {}
-  ~ObCreateHiddenTableArg()
-  {
-    allocator_.clear();
-  }
-  bool is_valid() const;
-  void reset()
-  {
-    
-    table_id_ = common::OB_INVALID_ID;
-    
-    session_id_ = common::OB_INVALID_ID;
-    ddl_type_ = share::DDL_INVALID;
-    ddl_stmt_str_.reset();
-    sql_mode_ = 0;
-    tablet_ids_.reset();
-    need_reorder_column_id_ = false;
-    foreign_key_checks_ = true;
-  }
-  int init(const uint64_t dest_tid,
-           const uint64_t table_id, const uint64_t session_id,
-           const int64_t parallelism, const share::ObDDLType ddl_type,
-           const ObSQLMode sql_mode, const ObTimeZoneInfo &tz_info,
-           const common::ObString &local_nls_date, const common::ObString &local_nls_timestamp,
-           const common::ObString &local_nls_timestamp_tz, const ObTimeZoneInfoWrap &tz_info_wrap,
-           const common::ObIArray<common::ObTabletID> &tablet_ids, const bool need_reorder_column_id,
-           const bool foreign_key_checks);
-  
-  int64_t get_table_id() const { return table_id_; }
-  
-  uint64_t get_session_id() const { return session_id_; }
-  uint64_t get_parallelism() const { return parallelism_; }
-  share::ObDDLType get_ddl_type() const { return ddl_type_; }
-  const common::ObString &get_ddl_stmt_str() const { return ddl_stmt_str_; }
-  ObSQLMode get_sql_mode() const { return sql_mode_; }
-  common::ObArenaAllocator &get_allocator() { return allocator_; }
-  common::ObTimeZoneInfo get_tz_info() const { return tz_info_; }
-  const common::ObTimeZoneInfoWrap &get_tz_info_wrap() const { return tz_info_wrap_; }
-  const common::ObString *get_nls_formats() const { return nls_formats_; }
-  const common::ObIArray<common::ObTabletID> &get_tablet_ids() const { return tablet_ids_; }
-  bool get_need_reorder_column_id() const { return need_reorder_column_id_; }
-  bool get_foreign_key_checks() const { return foreign_key_checks_; }
-private:
-  
-  int64_t table_id_;
-  
-  uint64_t session_id_;
-  uint64_t parallelism_;
-  share::ObDDLType ddl_type_;
-  common::ObString ddl_stmt_str_;
-  ObSQLMode sql_mode_;
-  common::ObArenaAllocator allocator_;
-  common::ObTimeZoneInfo tz_info_;
-  common::ObTimeZoneInfoWrap tz_info_wrap_;
-  common::ObString nls_formats_[common::ObNLSFormatEnum::NLS_MAX];
-  common::ObSArray<common::ObTabletID> tablet_ids_;
-  bool need_reorder_column_id_;
-  bool foreign_key_checks_;
-};
-
-struct ObCreateHiddenTableRes final
-{
-  OB_UNIS_VERSION(1);
-public:
-  TO_STRING_KV(
-               K_(table_id),
-               
-               K_(dest_table_id),
-               K_(trace_id),
-               K_(task_id),
-               K_(schema_version),
-               K_(is_no_logging));
-  ObCreateHiddenTableRes() :
-    
-    table_id_(common::OB_INVALID_ID),
-    dest_table_id_(common::OB_INVALID_ID),
-    task_id_(0),
-    schema_version_(0),
-    is_no_logging_(false) {}
-  ~ObCreateHiddenTableRes() = default;
-  void reset()
-  {
-    
-    table_id_ = common::OB_INVALID_ID;
-    
-    dest_table_id_ = common::OB_INVALID_ID;
-    task_id_ = 0;
-    schema_version_ = 0;
-    is_no_logging_ = false;
-  }
-public:
-  
-  int64_t table_id_;
-  
-  int64_t dest_table_id_;
-  int64_t task_id_;
-  int64_t schema_version_;
-  share::ObTaskId trace_id_;
-  bool is_no_logging_;
-};
-
-
 struct ObCreateForeignKeyArg : public ObIndexArg
 {
   OB_UNIS_VERSION_V(1);
@@ -1698,7 +1563,6 @@ public:
       client_session_id_(0),
       client_session_create_ts_(0),
       lock_priority_(transaction::tablelock::ObTableLockPriority::NORMAL),
-      is_direct_load_partition_(false),
       part_storage_cache_policy_(),
       data_version_(0)
   {
@@ -1803,7 +1667,6 @@ public:
                K_(client_session_id),
                K_(client_session_create_ts),
                K_(lock_priority),
-               K_(is_direct_load_partition),
                K_(part_storage_cache_policy),
                K_(data_version));
 private:
@@ -1843,7 +1706,6 @@ public:
   uint32_t client_session_id_;
   int64_t client_session_create_ts_;
   transaction::tablelock::ObTableLockPriority lock_priority_;
-  bool is_direct_load_partition_;
   common::ObString part_storage_cache_policy_;
   uint64_t data_version_;
   int serialize_index_args(char *buf, const int64_t data_len, int64_t &pos) const;

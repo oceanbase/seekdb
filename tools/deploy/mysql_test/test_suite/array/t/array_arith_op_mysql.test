@@ -270,8 +270,8 @@ create table t1(c1 int, c2 vector(3)) partition by hash(c1);
 insert into t1 values(1,'[1,1,3]');
 insert into t1 values(2,'[1,2,4]');
 insert into t1 values(3,'[2,4,1]');
-insert /*+ direct(true,100) enable_parallel_dml parallel(2) append*/ into t1(c2) select sum(c2)+avg(c2) from t1;
-insert /*+ direct(true,100) enable_parallel_dml parallel(2) append*/ into t1(c2) select sum(c2)+avg(c2) from t1;
+insert /*+ enable_parallel_dml parallel(2) */ into t1(c2) select sum(c2)+avg(c2) from t1;
+insert /*+ enable_parallel_dml parallel(2) */ into t1(c2) select sum(c2)+avg(c2) from t1;
 select * from t1 order by c1;
 drop table t1;
 

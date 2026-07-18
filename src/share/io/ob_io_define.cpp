@@ -102,9 +102,6 @@ const char *oceanbase::common::get_io_sys_group_name(ObIOModule module)
     case ObIOModule::DETECT_IO:
       ret_name = "DETECT_IO";
       break;
-    case ObIOModule::DIRECT_LOAD_IO:
-      ret_name = "DIRECT_LOAD_IO";
-      break;
     case ObIOModule::SHARED_BLOCK_RW_IO:
       ret_name = "SHARED_BLOCK_ReaderWriter_IO";
       break;

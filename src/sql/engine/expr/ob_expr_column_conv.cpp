@@ -375,21 +375,12 @@ int ObExprColumnConv::cg_expr(ObExprCGCtx &op_cg_ctx,
                                 | CM_CHARSET_CONVERT_IGNORE_ERR;
     }
     enumset_info->cast_mode_ |= CM_COLUMN_CONVERT;
-    if ((enumset_info->cast_mode_ & CM_FAST_COLUMN_CONV)
+    rt_expr.eval_func_ = column_convert;
+    if (rt_expr.args_[4]->is_batch_result()
         && !ob_is_enum_or_set_type(rt_expr.datum_meta_.type_)) {
-      rt_expr.eval_func_ = column_convert_fast;
-      if (rt_expr.args_[4]->is_batch_result()) {
-        rt_expr.eval_batch_func_ = column_convert_batch_fast;
-        rt_expr.eval_vector_func_ = column_convert_vector_fast;
-      }
-    } else {
-      rt_expr.eval_func_ = column_convert;
-      if (rt_expr.args_[4]->is_batch_result()
-          && !ob_is_enum_or_set_type(rt_expr.datum_meta_.type_)) {
-        rt_expr.eval_batch_func_ = column_convert_batch;
-        if (!is_lob_storage(rt_expr.datum_meta_.type_) || is_string_text_cast(rt_expr)) {
-          rt_expr.eval_vector_func_ = column_convert_vector;
-        }
+      rt_expr.eval_batch_func_ = column_convert_batch;
+      if (!is_lob_storage(rt_expr.datum_meta_.type_) || is_string_text_cast(rt_expr)) {
+        rt_expr.eval_vector_func_ = column_convert_vector;
       }
     }
   }
@@ -617,20 +608,6 @@ int ObExprColumnConv::column_convert(const ObExpr &expr,
     }
   }
 
-  return ret;
-}
-
-int ObExprColumnConv::column_convert_fast(const ObExpr &expr,
-                                          ObEvalCtx &ctx,
-                                          ObDatum &datum)
-{
-  int ret = OB_SUCCESS;
-  ObDatum *val = nullptr;
-  if (OB_FAIL(expr.args_[4]->eval(ctx, val))) {
-    LOG_WARN("evaluate parameter failed", K(ret));
-  } else {
-    datum.set_datum(*val);
-  }
   return ret;
 }
 
@@ -1011,103 +988,6 @@ int ObExprColumnConv::column_convert_vector(const ObExpr &expr,
                                                 ctx.exec_ctx_.get_diagnosis_manager()))) {
         LOG_WARN("fail to calculate column name for diagnosis", K(ret), K(expr));
       }
-    }
-  }
-  return ret;
-}
-
-int ObExprColumnConv::column_convert_batch_fast(const ObExpr &expr,
-                                                ObEvalCtx &ctx,
-                                                const ObBitVector &skip,
-                                                const int64_t batch_size)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(expr.args_[4]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("failed to eval batch vals", K(ret));
-  } else {
-    ObDatum *vals = expr.args_[4]->locate_batch_datums(ctx);
-    ObDatum *results = expr.locate_batch_datums(ctx);
-    ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-    for (int64_t i = 0; OB_SUCC(ret) && i < batch_size; ++i) {
-      if (skip.at(i) || eval_flags.at(i)) {
-        continue;
-      }
-      results[i].set_datum(vals[i]);
-      eval_flags.set(i);
-    }
-  }
-  return ret;
-}
-
-int ObExprColumnConv::column_convert_vector_fast(const ObExpr &expr,
-                                                 ObEvalCtx &ctx,
-                                                 const ObBitVector &skip,
-                                                 const EvalBound &bound)
-{
-  int ret = OB_SUCCESS;
-  VectorFormat res_format = expr.get_format(ctx);
-  VectorFormat arg_format = expr.args_[4]->get_format(ctx);
-  ObObjType out_type = expr.datum_meta_.type_;
-  if (OB_FAIL(expr.args_[4]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("failed to eval args", K(ret));
-  } else {
-    if (VEC_FIXED == res_format && VEC_FIXED == arg_format) {
-      if (ob_is_integer_type(out_type)) {
-        ret = inner_calc_column_convert_vector_fast<ObFixedLengthFormat<RTCType<VEC_TC_INTEGER>>,
-                                                    ObFixedLengthFormat<RTCType<VEC_TC_INTEGER>>> (expr, ctx, skip, bound);
-      } else if (ObDoubleType == out_type) {
-        ret = inner_calc_column_convert_vector_fast<ObFixedLengthFormat<RTCType<VEC_TC_DOUBLE>>,
-                                                    ObFixedLengthFormat<RTCType<VEC_TC_DOUBLE>>> (expr, ctx, skip, bound);
-      } else if (ObFloatType == out_type) {
-        ret = inner_calc_column_convert_vector_fast<ObFixedLengthFormat<RTCType<VEC_TC_FLOAT>>,
-                                                    ObFixedLengthFormat<RTCType<VEC_TC_FLOAT>>> (expr, ctx, skip, bound);
-      } else {
-        ret = inner_calc_column_convert_vector_fast<ObVectorBase, ObVectorBase> (expr, ctx, skip, bound);
-      }
-      if (OB_FAIL(ret)) {
-        LOG_WARN("failed to convert args", K(ret));
-      }
-    } else if (VEC_DISCRETE == res_format && VEC_DISCRETE == arg_format) {
-      if (OB_SUCCESS != inner_calc_column_convert_vector_fast<ObDiscreteFormat, ObDiscreteFormat>(expr, ctx, skip, bound)) {
-        LOG_WARN("failed to convert args", K(ret));
-      }
-    } else if (OB_SUCCESS != inner_calc_column_convert_vector_fast<ObVectorBase, ObVectorBase>(expr, ctx, skip, bound)) {
-      LOG_WARN("failed to convert args", K(ret));
-    }
-  }
-  return ret;
-}
-
-template <typename ArgVec, typename ResVec>
-int ObExprColumnConv::inner_calc_column_convert_vector_fast(const ObExpr &expr,
-                                                            ObEvalCtx &ctx,
-                                                            const ObBitVector &skip,
-                                                            const EvalBound &bound)
-{
-  int ret = OB_SUCCESS;
-  ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-  ResVec *res_vec = static_cast<ResVec *>(expr.get_vector(ctx));
-  ArgVec *arg_vec = static_cast<ArgVec *>(expr.args_[4]->get_vector(ctx));
-  if (bound.get_all_rows_active()) {
-    for (int64_t i = bound.start(); i < bound.end(); ++i) {
-      if (arg_vec->is_null(i)) {
-        res_vec->set_null(i);
-      } else {
-        res_vec->set_payload_shallow(i, arg_vec->get_payload(i), arg_vec->get_length(i));
-      }
-    }
-    eval_flags.set_all(bound.start(), bound.end());
-  } else {
-    for (int64_t i = bound.start(); i < bound.end(); ++i) {
-      if (skip.at(i) || eval_flags.at(i)) {
-        continue;
-      }
-      if (arg_vec->is_null(i)) {
-        res_vec->set_null(i);
-      } else {
-        res_vec->set_payload_shallow(i, arg_vec->get_payload(i), arg_vec->get_length(i));
-      }
-      eval_flags.set(i);
     }
   }
   return ret;

@@ -371,10 +371,6 @@ int ObDBMSSchedTableOperator::update_for_end(ObDBMSSchedJobInfo &job_info, int e
     if (OB_SUCC(ret) && job_info.max_failures_ > 0 && job_info.failures_ >= job_info.max_failures_) {
       // when if failures > max_failures then set broken state, and disable job
       job_info.state_ = ObString("BROKEN");
-    } else if (job_info.is_mview_job()) {
-      if (now >= job_info.end_date_) {
-        job_info.state_ = ObString("COMPLETED");
-      }
     } else if (now >= job_info.end_date_ || (job_info.get_interval_ts() == 0 && (job_info.get_repeat_interval().empty() || 0 == job_info.get_repeat_interval().case_compare("null")))) {
       // when end_date is reach and auto_drop is set false, disable set completed state.
       // for once job, not wait until end date, set completed state when running end
@@ -946,10 +942,6 @@ int ObDBMSSchedTableOperator::purge_run_detail()
     // default job class
     if (OB_TMP_FAIL(_purge(ObString("DEFAULT_JOB_CLASS"), DEFAULT_LOG_HISTORY))) {
       LOG_WARN("purge default class run detail failed", K(tmp_ret));
-    }
-    // for compatible, purge old mview refresh job run detail
-    if (OB_TMP_FAIL(_purge(ObString("DATE_EXPRESSION_JOB_CLASS"), DEFAULT_LOG_HISTORY))) {
-      LOG_WARN("purge mview refresh job class run detail failed", K(tmp_ret));
     }
     // for compatible, purge old mysql event job run detail
     if (OB_TMP_FAIL(_purge(ObString("MYSQL_EVENT_JOB_CLASS"), DEFAULT_LOG_HISTORY))) {

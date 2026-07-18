@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX RPC_FRAME
 
 #include "rpc/frame/ob_sql_processor.h"
-#include "lib/other/recursion.h"
 using namespace oceanbase::common;
 using namespace oceanbase::rpc::frame;
 
@@ -26,7 +25,6 @@ int ObSqlProcessor::run()
   int ret = OB_SUCCESS;
   bool deseri_succ = true;
 
-  RECURSION_CHECKER_GUARD;
   run_timestamp_ = ObTimeUtility::current_time();
   if (OB_FAIL(setup_packet_sender())) {
     deseri_succ = false;

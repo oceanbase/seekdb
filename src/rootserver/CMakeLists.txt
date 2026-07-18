@@ -118,9 +118,6 @@ ob_set_subtarget(ob_rootserver virtual_table
   virtual_table/ob_virtual_core_inner_table.cpp
 )
 
-ob_set_subtarget(ob_rootserver direct_load
-  direct_load/ob_direct_load_partition_exchange.cpp
-)
 
 ob_set_subtarget(ob_rootserver fork_table
   fork_table/ob_fork_table_info_builder.cpp

@@ -10065,19 +10065,6 @@ int ObDDLResolver::resolve_hints(const ParseNode *node, ObDDLStmt &stmt, const O
             hint_parallel = parallel_node->value_;
             stmt.set_has_parallel_hint(true);
           }
-        } else if (T_APPEND == hint_node->type_) {
-          stmt.set_has_append_hint(true);
-        } else if (T_DIRECT == hint_node->type_) {
-          ObDirectLoadHint direct_load_hint;
-          if (OB_FAIL(ObDMLResolver::resolve_direct_load_hint(*hint_node, direct_load_hint))) {
-            LOG_WARN("resolve direct load hint failed", K(ret));
-          } else {
-            stmt.set_direct_load_hint(direct_load_hint);
-          }
-        } else if (T_NO_DIRECT == hint_node->type_) {
-          ObDirectLoadHint direct_load_hint;
-          direct_load_hint.has_no_direct_ = true;
-          stmt.set_direct_load_hint(direct_load_hint);
         }
       }
     }
@@ -10848,139 +10835,7 @@ namespace share
 }  // namespace share
 }  // namespace oceanbase
 
-// ===== definition moved from share/ob_ddl_common.cpp(storage/monitor vocabularyround 3) =====
-#include "storage/tablet/ob_tablet_obj_load_helper.h"
-#include "sql/monitor/ob_sql_plan_monitor_node_list.h"
-#include "share/catalog/ob_catalog_properties.h"  // relocated-definition owner
-namespace oceanbase
-{
-namespace share
-{
-
-// convert_to_storage_schema moved to ob_ddl_common_storage_impl.cpp end of file (ObDDLStorageUtil)
-
-int ObSqlMonitorStatsCollector::init(ObMySQLProxy *sql_proxy)
-{
-  int ret = OB_SUCCESS;
-  ObSqlString select_sql_monitor_sql;
-  ObSqlString cond_sql;
-  int64_t task_id_tmp = 0;
-  sql_proxy_ = sql_proxy;
-  if (scan_task_id_.count() == 0 || OB_ISNULL(sql_proxy_) || !sql_proxy_->is_inited()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("empty scan task id", K(ret), K(scan_task_id_.count()), KP(sql_proxy_));
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && i < scan_task_id_.count(); ++i) {
-    task_id_tmp = scan_task_id_.at(i);
-    if (task_id_tmp > 0) {
-      if (i == 0) {
-        if (OB_FAIL(cond_sql.assign_fmt("(OTHERSTAT_5_VALUE='%ld') " ,task_id_tmp))) {
-          LOG_WARN("failed to assign sql", K(ret));
-        }
-      } else if (OB_FAIL(cond_sql.append_fmt("OR (OTHERSTAT_5_VALUE='%ld') " ,task_id_tmp))) {
-          LOG_WARN("failed to assign sql", K(ret));
-      }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(select_sql_monitor_sql.assign_fmt(
-        "SELECT TRACE_ID, THREAD_ID, OUTPUT_ROWS, FIRST_CHANGE_TIME, LAST_CHANGE_TIME, LAST_REFRESH_TIME, PLAN_OPERATION, OTHERSTAT_5_VALUE AS TASK_ID,  "
-        "OTHERSTAT_1_VALUE, OTHERSTAT_2_VALUE, OTHERSTAT_6_VALUE, OTHERSTAT_7_ID, OTHERSTAT_7_VALUE, OTHERSTAT_8_VALUE, OTHERSTAT_9_VALUE, OTHERSTAT_10_VALUE FROM %s "
-        "WHERE PLAN_OPERATION in ('PHY_STAT_COLLECTOR', 'PHY_SORT', 'PHY_VEC_SORT', 'PHY_PX_MULTI_PART_SSTABLE_INSERT', 'PHY_VEC_PX_MULTI_PART_SSTABLE_INSERT') AND OTHERSTAT_5_ID = '%d' AND (%s) ORDER BY OTHERSTAT_5_VALUE DESC, THREAD_ID ASC",
-        OB_ALL_VIRTUAL_SQL_PLAN_MONITOR_TNAME, sql::ObSqlMonitorStatIds::DDL_TASK_ID, cond_sql.ptr()))) {
-      LOG_WARN("failed to assign sql", K(ret), K(select_sql_monitor_sql));
-    } else {
-      sqlclient::ObMySQLResult *scan_result = nullptr;
-      char op_type_str[OB_MAX_OPERATOR_NAME_LENGTH] = "";
-      SMART_VAR(ObMySQLProxy::MySQLResult, scan_res) {
-        if (!select_sql_monitor_sql.is_valid() || OB_ISNULL(sql_proxy_)) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("assign get invalid argument", K(ret), K(select_sql_monitor_sql), KP(sql_proxy_));
-        } else if (OB_FAIL(sql_proxy_->read(scan_res, common::OB_SERVER_TENANT_ID, select_sql_monitor_sql.ptr()))) {
-          LOG_WARN("fail to execute sql", K(ret), K(select_sql_monitor_sql));
-        } else if (OB_ISNULL(scan_result = scan_res.get_result())) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("error unexpected, query result must not be NULL", K(ret));
-        } else {
-          while (OB_SUCC(ret)) {
-            if (OB_FAIL(scan_result->next())) {
-              if (OB_ITER_END == ret) {
-                ret = OB_SUCCESS;
-                break;
-              } else {
-                LOG_WARN("failed to get next row", K(ret));
-              }
-            } else {
-              int op_type_len = 0;
-              EXTRACT_STRBUF_FIELD_MYSQL(*scan_result, "PLAN_OPERATION", op_type_str, OB_MAX_OPERATOR_NAME_LENGTH, op_type_len);
-              if (OB_FAIL(ret)) {
-                LOG_WARN("failed to extract str buf field", K(ret), K(op_type_str));
-              } else if (strcmp(op_type_str, "PHY_STAT_COLLECTOR") == 0) { // scan monitor node
-                if (OB_FAIL(get_scan_monitor_stats_batch(scan_result))) {
-                  LOG_WARN("fail to execute sql", K(ret));
-                }
-              } else if (strcmp(op_type_str, "PHY_SORT") == 0 || strcmp(op_type_str, "PHY_VEC_SORT") == 0) { // sort monitor node
-                if (OB_FAIL(get_sort_monitor_stats_batch(scan_result))) {
-                  LOG_WARN("fail to execute sql", K(ret));
-                }
-              } else if (strcmp(op_type_str, "PHY_PX_MULTI_PART_SSTABLE_INSERT") == 0 || strcmp(op_type_str, "PHY_VEC_PX_MULTI_PART_SSTABLE_INSERT") == 0) { // insert monitor node
-                if (OB_FAIL(get_insert_monitor_stats_batch(scan_result))) {
-                  LOG_WARN("fail to execute sql", K(ret));
-                }
-              } else {
-                ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("unexpected op type", K(ret), K(op_type_str));
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    scan_index_id_ = 0;
-    sort_index_id_ = 0;
-    insert_index_id_ = 0;
-    is_inited_ = true;
-  }
-  return ret;
-}
-
-int ObDDLDiagnoseInfo::calculate_sort_and_insert_info(const ObSqlMonitorStats &sql_monitor_stats)
-{
-  int ret = OB_SUCCESS;
-  for (int64_t i = 0; OB_SUCC(ret) && i < sql_monitor_stats.sort_node_.count(); ++i) {
-    const SortMonitorNodeInfo &sort_monitor_node = sql_monitor_stats.sort_node_.at(i);
-    parallelism_++;
-    int64_t row_sorted_tmp = sort_monitor_node.row_sorted_;
-    if (row_sorted_tmp == 0) {
-      continue;
-    }
-    real_parallelism_++;
-    int64_t row_count_tmp = 0;
-    if (sort_monitor_node.row_count_id_ != sql::ObSqlMonitorStatIds::ROW_COUNT) {
-      row_count_tmp = sort_monitor_node.output_rows_;
-    } else {
-      row_count_tmp = sort_monitor_node.row_count_;
-    }
-    if (row_count_tmp == 0) {
-      continue;
-    } else if (OB_FAIL(calculate_inmem_sort_info(row_sorted_tmp, row_count_tmp, sort_monitor_node.first_change_time_, sort_monitor_node.thread_id_))) { // inmem sort
-      LOG_WARN("failed to calculate inmem sort info", K(ret));
-    } else if (OB_FAIL(calculate_merge_sort_info(row_count_tmp, row_sorted_tmp, sort_monitor_node))) {
-      LOG_WARN("failed to calculate merge sort info", K(ret));
-    } else if (OB_FAIL(calculate_insert_info(row_count_tmp, sort_monitor_node, sql_monitor_stats))) {
-      LOG_WARN("failed to calculate insert info", K(ret));
-    }
-  }
-  return ret;
-}
-
-// get_column_checksums moved to ObDDLStorageUtil
-
-}  // namespace share
-}  // namespace oceanbase
-
+// ===== definition moved from share/ob_ddl_common.cpp(is_rowkey_based_co_sstable) =====
 namespace oceanbase
 {
 namespace share
@@ -10991,6 +10846,7 @@ namespace share
 }  // namespace oceanbase
 
 // ===== definition moved from share/catalog/ob_catalog_properties.cpp(resolve family) =====
+#include "share/catalog/ob_catalog_properties.h"  // relocated-definition owner
 #include "sql/parser/parse_node.h"
 namespace oceanbase
 {

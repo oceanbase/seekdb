@@ -75,13 +75,9 @@ int ObTabletDirectLoadMgrV3::get_target_table_type(const ObStorageSchema &storag
                                                    ObITable::TableType &table_type)
 {
   int ret = OB_SUCCESS;
-  if (!storage_schema.is_valid() ||
-      ObDirectLoadType::DIRECT_LOAD_INVALID > direct_load_type ||
-      ObDirectLoadType::DIRECT_LOAD_MAX <= direct_load_type) {
+  if (!storage_schema.is_valid() || !is_valid_direct_load(direct_load_type)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(direct_load_type), K(storage_schema));
-  } else if (DIRECT_LOAD_INCREMENTAL == direct_load_type) {
-    table_type = ObITable::MINOR_SSTABLE;
   } else {
     table_type = ObITable::MAJOR_SSTABLE;
   }
@@ -432,39 +428,6 @@ int ObTabletDirectLoadMgrV3::fill_sstable_slice_v2(const ObDirectLoadSliceInfo &
 }
 
 
-int ObTabletDirectLoadMgrV3::fill_lob_meta_sstable_slice(const ObDirectLoadSliceInfo &slice_info,
-                                                           ObIStoreRowIterator *iter,
-                                                           ObDirectLoadSliceWriter &slice_writer,
-                                                           int64_t &affected_rows)
-{
-  int ret = OB_SUCCESS;
-  affected_rows = 0;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (OB_UNLIKELY(!slice_info.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(slice_info));
-  } else if (ObDirectLoadMgrRole::LOB_TABLET_TYPE != role_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("func should be called only by lob direct load mgr", K(ret), KPC(this));
-  } else if (OB_UNLIKELY(!is_incremental_direct_load(direct_load_type_))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected direct load type", K(ret), K(direct_load_type_));
-  } else if (OB_FAIL(slice_writer.fill_lob_meta_sstable_slice(start_scn_,
-                                                                 build_param_.runtime_only_param_.table_id_,
-                                                                 tablet_id_,
-                                                                 iter,
-                                                                 affected_rows))) {
-    LOG_WARN("fail to fill lob meta sstable slice", K(ret), K(tablet_id_), K(build_param_.runtime_only_param_));
-  }
-  return ret;
-}
-
-/*
-* we still kept the close sstable slice
-* but it should be used to control the sync action for differrent slice
-*/
 int ObTabletDirectLoadMgrV3::close_sstable_slice_v2(const ObDirectLoadSliceInfo &slice_info,
                                                     ObDirectLoadSliceWriter &slice_writer,
                                                     blocksstable::ObMacroDataSeq &next_seq,
@@ -542,10 +505,7 @@ int ObTabletDirectLoadMgrV3::fill_lob_sstable_slice_row_v2(ObIAllocator &allocat
     /* prepare batch slice info with data table direct load mgr*/
     ObBatchSliceWriteInfo info(data_direct_load_mgr->tablet_id_,
                                trans_version,
-                               direct_load_type_,
-                               data_direct_load_mgr->build_param_.runtime_only_param_.trans_id_,
-                               data_direct_load_mgr->build_param_.runtime_only_param_.seq_no_,
-                               data_direct_load_mgr->build_param_.runtime_only_param_.tx_desc_);
+                               direct_load_type_);
     if (OB_FAIL(slice_writer.fill_lob_sstable_slice(build_param_.runtime_only_param_.table_id_, allocator, allocator,
                                                      start_scn_,info, pk_interval,
                                                      data_direct_load_mgr->lob_column_idxs_,
@@ -580,10 +540,7 @@ int ObTabletDirectLoadMgrV3::fill_lob_sstable_slice_row_v2(ObIAllocator &allocat
     const int64_t trans_version = is_full_direct_load(direct_load_type_) ? table_key_.get_snapshot_version() : INT64_MAX;
     ObBatchSliceWriteInfo info(data_direct_load_mgr->tablet_id_,
                                trans_version,
-                               direct_load_type_,
-                               data_direct_load_mgr->build_param_.runtime_only_param_.trans_id_,
-                               data_direct_load_mgr->build_param_.runtime_only_param_.seq_no_,
-                               data_direct_load_mgr->build_param_.runtime_only_param_.tx_desc_);
+                               direct_load_type_);
     if (OB_FAIL(slice_writer.fill_lob_sstable_slice(build_param_.runtime_only_param_.table_id_,
                                                     allocator, allocator,
                                                     start_scn_, info, pk_interval,

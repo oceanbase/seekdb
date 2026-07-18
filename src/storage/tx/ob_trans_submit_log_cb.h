@@ -87,8 +87,7 @@ class ObTxLogCb : public ObTxBaseLogCb,
                   public common::ObDLinkBase<ObTxLogCb>
 {
 public:
-  ObTxLogCb() : extra_cb_(nullptr), need_free_extra_cb_(false), tx_op_array_(nullptr),
-  undo_node_(nullptr) { reset(); }
+  ObTxLogCb() : tx_op_array_(nullptr), undo_node_(nullptr) { reset(); }
   ~ObTxLogCb() { destroy(); }
 
   int init(ObTxLogCbGroup * group_ptr);
@@ -134,18 +133,6 @@ public:
   // int64_t get_execute_hint() { return trans_id_.hash(); }
   ObTxMDSRange &get_mds_range() { return mds_range_; }
 
-  void set_ddl_log_type(const ObTxDirectLoadIncLog::DirectLoadIncLogType ddl_log_type)
-  {
-    ddl_log_type_ = ddl_log_type;
-  }
-  ObTxDirectLoadIncLog::DirectLoadIncLogType get_ddl_log_type() { return ddl_log_type_; }
-  void set_ddl_batch_key(const storage::ObDDLIncLogBasic &batch_key) { dli_batch_key_ = batch_key; }
-  const storage::ObDDLIncLogBasic &get_batch_key() { return dli_batch_key_; }
-
-  void set_extra_cb(logservice::AppendCb *extra_cb) { extra_cb_ = extra_cb; }
-  logservice::AppendCb *get_extra_cb() { return extra_cb_; }
-  void set_need_free_extra_cb() { need_free_extra_cb_ = true; }
-  bool need_free_extra_cb() { return need_free_extra_cb_; }
   void set_first_part_scn(const share::SCN &first_part_scn) { first_part_scn_ = first_part_scn; }
   share::SCN get_first_part_scn() const { return first_part_scn_; }
 
@@ -162,8 +149,6 @@ public:
                        K(mds_range_),
                        K(cb_arg_array_),
                        K(first_part_scn_),
-                       KP(extra_cb_),
-                       K(need_free_extra_cb_),
                        K(callbacks_.count()),
                        KPC(group_ptr_));
 private:
@@ -181,10 +166,6 @@ public:
   ObTxMDSRange mds_range_;
   ObTxCbArgArray cb_arg_array_;
   share::SCN first_part_scn_;
-  ObTxDirectLoadIncLog::DirectLoadIncLogType ddl_log_type_;
-  storage::ObDDLIncLogBasic dli_batch_key_;
-  logservice::AppendCb * extra_cb_;
-  bool need_free_extra_cb_;
   ObUndoAction undo_action_;
   storage::ObTxOpArray *tx_op_array_;
   storage::ObUndoStatusNode *undo_node_;

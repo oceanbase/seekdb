@@ -41,13 +41,11 @@ public:
                      const int64_t nbytes,
                      const share::SCN &ref_scn,
                      const bool need_nonblock,
-                     const bool allow_compress,
                      logservice::AppendCb *cb,
                      palf::LSN &lsn,
                      share::SCN &scn)
   {
     UNUSED(need_nonblock);
-    UNUSED(allow_compress);
     UNUSED(buffer);
     UNUSED(nbytes);
     UNUSED(ref_scn);
@@ -61,13 +59,11 @@ public:
                              const int64_t nbytes,
                              const share::SCN &ref_scn,
                              const bool need_nonblock,
-                             const bool allow_compress,
                              logservice::AppendCb *cb,
                              palf::LSN &lsn,
                              share::SCN &scn)
   {
     UNUSED(need_nonblock);
-    UNUSED(allow_compress);
     UNUSED(buffer);
     UNUSED(nbytes);
     UNUSED(ref_scn);

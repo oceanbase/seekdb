@@ -101,11 +101,9 @@ bool MacroBlockId::is_valid() const
     if (is_private_data_or_meta()) {
       if (static_cast<uint64_t>(ObStorageObjectType::PRIVATE_DATA_MACRO) == storage_object_type_
           || static_cast<uint64_t>(ObStorageObjectType::PRIVATE_META_MACRO) == storage_object_type_) {
-        is_valid &= macro_path_id() != -1
-            && tenant_seq() != ObStorageObjectOpt::INVALID_TABLET_VERSION;
+        is_valid &= tenant_seq() != ObStorageObjectOpt::INVALID_TABLET_VERSION;
       } else {
-        is_valid &= meta_path_id() != -1
-            && meta_version_id() != ObStorageObjectOpt::INVALID_TABLET_VERSION;
+        is_valid &= meta_version_id() != ObStorageObjectOpt::INVALID_TABLET_VERSION;
       }
     } else if (is_shared_data_or_meta()) {
       is_valid &= third_id_ != -1; // macro_seq != -1
@@ -131,11 +129,10 @@ int64_t MacroBlockId::to_string(char *buf, const int64_t buf_len) const
     databuff_printf(buf, buf_len, pos,
         "[2nd=%lu]"
         "[3rd=%lu]"
-        "[4th=(path_id=%lu,sec_id=%lu)]}",
+        "[4th=%lu]}",
         (uint64_t) second_id_,
         (uint64_t) third_id_,
-        (int64_t) macro_path_id_,
-        (uint64_t) tenant_seq_);
+        (uint64_t) fourth_id_);
     break;
   default:
     databuff_printf(buf, buf_len, pos,

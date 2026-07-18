@@ -28,8 +28,6 @@ using namespace share::schema;
 namespace sql
 {
 
-#define USE_MULTI_GET_ARRAY_BINDING 1
-
 using dtl::ObDTLIntermResultInfo;
 static const uint64_t TEMP_TABLE_VEC_PAGE_SIZE = 100000;
 
@@ -391,4 +389,3 @@ int ObTempTableInsertVecOp::process_dump(dtl::ObDTLIntermResultInfo &interm_res_
 
 } // end namespace sql
 } // end namespace oceanbase
-

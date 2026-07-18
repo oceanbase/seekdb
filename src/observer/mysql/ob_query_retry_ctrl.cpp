@@ -22,7 +22,6 @@
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "observer/mysql/obmp_query.h"
 #include "observer/ob_server_event_history_table_operator.h"
-#include "sql/resolver/cmd/ob_load_data_stmt.h"
 
 namespace oceanbase
 {
@@ -246,23 +245,6 @@ public:
   ObStmtTypeRetryPolicy() = default;
   ~ObStmtTypeRetryPolicy() = default;
 
-  bool is_direct_load(ObRetryParam &v) const
-  {
-    ObExecContext &exec_ctx = v.result_.get_exec_context();
-    return exec_ctx.get_table_direct_insert_ctx().get_is_direct();
-  }
-
-  bool is_load_local(ObRetryParam &v) const
-  {
-    bool bret = false;
-    const ObICmd *cmd = v.result_.get_cmd();
-    if (OB_NOT_NULL(cmd) && cmd->get_cmd_type() == stmt::T_LOAD_DATA) {
-      const ObLoadDataStmt *load_data_stmt = static_cast<const ObLoadDataStmt *>(cmd);
-      bret = load_data_stmt->get_load_arguments().load_file_storage_ == ObLoadFileLocation::CLIENT_DISK;
-    }
-    return bret;
-  }
-
   virtual void test(ObRetryParam &v) const override
   {
     int err = v.err_;
@@ -284,18 +266,6 @@ public:
           SERVER_EVENT_SYNC_ADD("ddl_errsim", "ddl_retry", KR(err));
         }
 #endif
-      } else {
-        v.client_ret_ = err;
-        v.retry_type_ = RETRY_TYPE_NONE;
-      }
-      v.no_more_test_ = true;
-    } else if (is_direct_load(v) && !is_load_local(v)) {
-      if (is_direct_load_retry_err(err)) {
-        if (OB_SQL_RETRY_SPM == err) {
-          v.retry_type_ = RETRY_TYPE_LOCAL;
-        } else {
-          try_packet_retry(v);
-        }
       } else {
         v.client_ret_ = err;
         v.retry_type_ = RETRY_TYPE_NONE;
@@ -644,8 +614,7 @@ public:
     }
     // nested transaction already supported In 32x and can only rollback nested sql.
     // for forigen key, we keep old logic and do not retry. for pl will retry current nested sql.
-    else if (is_nested_conn(v) && !is_static_engine_retry(v.err_) && !v.is_from_pl_
-             && !is_direct(v)) {
+    else if (is_nested_conn(v) && !is_static_engine_retry(v.err_) && !v.is_from_pl_) {
       // right now, top session will retry, bug we can do something here like refresh XXX cache.
       // in future, nested session can retry if nested transaction is supported.
       v.no_more_test_ = true;
@@ -692,11 +661,6 @@ private:
     return is_pl_nested || is_fk_nested || is_online_stat_gathering_nested;
   }
 
-  bool is_direct(ObRetryParam &v) const
-  {
-    ObExecContext *parent_ctx = v.session_.get_cur_exec_ctx();
-    return nullptr == parent_ctx ? false : parent_ctx->get_table_direct_insert_ctx().get_is_direct();
-  }
 };
 
 class ObAutoincCacheNotEqualRetryPolicy: public ObRetryPolicy

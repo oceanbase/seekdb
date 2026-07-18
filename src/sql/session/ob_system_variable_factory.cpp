@@ -1009,7 +1009,6 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarInnodbSyncDebug)
         + sizeof(ObSysVarDefaultCollationForUtf8mb4)
         + sizeof(ObSysVarEnableOldCharsetAggregation)
-        + sizeof(ObSysVarEnableSqlPlanMonitor)
         + sizeof(ObSysVarInsertId)
         + sizeof(ObSysVarJoinBufferSize)
         + sizeof(ObSysVarMaxJoinSize)
@@ -4877,15 +4876,6 @@ int ObSysVarFactory::create_all_sys_vars_()
       } else {
         store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR__ENABLE_OLD_CHARSET_AGGREGATION))] = sys_var_ptr;
         ptr = (void *)((char *)ptr + sizeof(ObSysVarEnableOldCharsetAggregation));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarEnableSqlPlanMonitor())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarEnableSqlPlanMonitor", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_ENABLE_SQL_PLAN_MONITOR))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarEnableSqlPlanMonitor));
       }
     }
     if (OB_SUCC(ret)) {
@@ -10246,10 +10236,6 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, share::ObSysVarCla
     }
     case share::SYS_VAR__ENABLE_OLD_CHARSET_AGGREGATION: {
       ret = create_one_sys_var<ObSysVarEnableOldCharsetAggregation>(allocator_, sys_var_ptr, "ObSysVarEnableOldCharsetAggregation");
-      break;
-    }
-    case share::SYS_VAR_ENABLE_SQL_PLAN_MONITOR: {
-      ret = create_one_sys_var<ObSysVarEnableSqlPlanMonitor>(allocator_, sys_var_ptr, "ObSysVarEnableSqlPlanMonitor");
       break;
     }
     case share::SYS_VAR_INSERT_ID: {

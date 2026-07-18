@@ -960,9 +960,6 @@ struct TCExprCmpFuncIniter
   }
 };
 
-// macro to help use the old string relation eval functions, which are always inline
-// we choose ObNewRelationalStrFunc here to compile faster.
-#define USE_OLD_STR_RELATION_EVAL_FUNC 0
 template<int X, int Y>
 struct TCExprCmpFuncIniter<X, Y, false>: public ExprDummyIniter{};
 
@@ -972,19 +969,10 @@ using TCExprCmpIniter = TCExprCmpFuncIniter<X, Y, datum_cmp::ObDatumTCCmp<static
 template<int X, int Y>
 struct StrExprFuncIniter
 {
-#if USE_OLD_STR_RELATION_EVAL_FUNC
-  using Def = datum_cmp::ObDatumStrCmp<static_cast<ObCollationType>(X), false>;
-  template<bool WITH_END_SPACE>
-  using EvalCmp = ObRelationalStrFunc<Def::defined_,
-        static_cast<ObCollationType>(X),
-        WITH_END_SPACE,
-        static_cast<ObCmpOp>(Y)>;
-#else
   template<bool WITH_END_SPACE>
   using EvalCmp = ObStrRelationEvalWrap<static_cast<ObCollationType>(X),
         WITH_END_SPACE,
         static_cast<ObCmpOp>(Y)>;
-#endif
   static void init_array()
   {
     EVAL_STR_CMP_FUNCS[X][Y][0] = EvalCmp<0>::eval;
@@ -1001,19 +989,10 @@ struct StrExprFuncIniter<CS_TYPE_MAX, Y>
 template<int X, int Y>
 struct TextExprFuncIniter
 {
-#if USE_OLD_STR_RELATION_EVAL_FUNC
-  using Def = datum_cmp::ObDatumTextCmp<static_cast<ObCollationType>(X), false>;
-  template<bool WITH_END_SPACE>
-  using EvalCmp = ObRelationalTextFunc<Def::defined_,
-        static_cast<ObCollationType>(X),
-        WITH_END_SPACE,
-        static_cast<ObCmpOp>(Y)>;
-#else
   template<bool WITH_END_SPACE>
   using EvalCmp = ObTextRelationEvalWrap<static_cast<ObCollationType>(X),
         WITH_END_SPACE,
         static_cast<ObCmpOp>(Y)>;
-#endif
   static void init_array()
   {
     EVAL_TEXT_CMP_FUNCS[X][Y][0] = EvalCmp<0>::eval;
@@ -1030,27 +1009,16 @@ struct TextExprFuncIniter<CS_TYPE_MAX, Y>
 template<int X, int Y>
 struct TextStrExprFuncIniter
 {
-#if USE_OLD_STR_RELATION_EVAL_FUNC
-  using Def = datum_cmp::ObDatumTextStringCmp<static_cast<ObCollationType>(X), false>;
-  template<bool WITH_END_SPACE>
-  using EvalCmp = ObRelationalTextStrFunc<Def::defined_,
-        static_cast<ObCollationType>(X),
-        WITH_END_SPACE,
-        static_cast<ObCmpOp>(Y)>;
-#else
   template<bool WITH_END_SPACE>
   using EvalCmp = ObTextStrRelationEvalWrap<static_cast<ObCollationType>(X),
         WITH_END_SPACE,
         static_cast<ObCmpOp>(Y)>;
-#endif
   static void init_array()
   {
     EVAL_TEXT_STR_CMP_FUNCS[X][Y][0] = EvalCmp<0>::eval;
     EVAL_TEXT_STR_CMP_FUNCS[X][Y][1] = EvalCmp<1>::eval;
   }
 };
-
-#undef USE_OLD_STR_RELATION_EVAL_FUNC
 
 template<int Y>
 struct TextStrExprFuncIniter<CS_TYPE_MAX, Y>
@@ -1061,19 +1029,10 @@ struct TextStrExprFuncIniter<CS_TYPE_MAX, Y>
 template<int X, int Y>
 struct StrTextExprFuncIniter
 {
-#if USE_OLD_STR_RELATION_EVAL_FUNC
-  using Def = datum_cmp::ObDatumStringTextCmp<static_cast<ObCollationType>(X), false>;
-  template<bool WITH_END_SPACE>
-  using EvalCmp = ObRelationalStrTextFunc<Def::defined_,
-        static_cast<ObCollationType>(X),
-        WITH_END_SPACE,
-        static_cast<ObCmpOp>(Y)>;
-#else
   template<bool WITH_END_SPACE>
   using EvalCmp = ObStrTextRelationEvalWrap<static_cast<ObCollationType>(X),
         WITH_END_SPACE,
         static_cast<ObCmpOp>(Y)>;
-#endif
   static void init_array()
   {
     EVAL_STR_TEXT_CMP_FUNCS[X][Y][0] = EvalCmp<0>::eval;

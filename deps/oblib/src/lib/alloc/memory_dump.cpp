@@ -174,7 +174,6 @@ ObMemoryDump &ObMemoryDump::get_instance()
 int ObMemoryDump::init()
 {
   int ret = OB_SUCCESS;
-#ifndef OB_USE_ASAN
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
@@ -224,9 +223,6 @@ int ObMemoryDump::init()
   if (OB_FAIL(ret)) {
     destroy();
   }
-#else
-// do nothing
-#endif
   return ret;
 }
 

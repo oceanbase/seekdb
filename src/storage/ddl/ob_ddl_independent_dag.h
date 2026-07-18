@@ -35,31 +35,26 @@ class ObIDDLMergeHelper;
 struct ObDDLIndependentDagInitParam : public share::ObIDagInitParam
 {
 public:
-  ObDDLIndependentDagInitParam() : direct_load_type_(ObDirectLoadType::DIRECT_LOAD_INVALID), ddl_thread_count_(0), is_inc_major_log_(false) {}
+  ObDDLIndependentDagInitParam() : direct_load_type_(ObDirectLoadType::DIRECT_LOAD_INVALID), ddl_thread_count_(0) {}
   ObDDLIndependentDagInitParam(const ObDDLIndependentDagInitParam &other)
       : direct_load_type_(other.direct_load_type_),
         ddl_thread_count_(other.ddl_thread_count_),
         ddl_task_param_(other.ddl_task_param_),
-        tx_info_(other.tx_info_),
-        tablet_ids_(other.tablet_ids_),
-        is_inc_major_log_(other.is_inc_major_log_) {}
+        tablet_ids_(other.tablet_ids_) {}
   virtual bool is_valid() const override
   {
     return is_valid_direct_load(direct_load_type_) &&
            ddl_thread_count_ > 0 &&
            ddl_task_param_.is_valid() &&
-           (!is_incremental_direct_load(direct_load_type_) || tx_info_.is_valid()) &&
            tablet_ids_.count() > 0;
   }
-  VIRTUAL_TO_STRING_KV(K(direct_load_type_), K(ddl_thread_count_), K(ddl_task_param_), K(tablet_ids_), K(is_inc_major_log_));
+  VIRTUAL_TO_STRING_KV(K(direct_load_type_), K(ddl_thread_count_), K(ddl_task_param_), K(tablet_ids_));
 
 public:
   ObDirectLoadType direct_load_type_;
   int64_t ddl_thread_count_;
   ObDDLTaskParam ddl_task_param_;
-  ObDirectLoadTxInfo tx_info_;
   ObArray<ObTabletID> tablet_ids_;
-  bool is_inc_major_log_;
 };
 
 class ObDDLIndependentDag : public share::ObIndependentDag
@@ -74,7 +69,6 @@ public:
   int64_t get_ddl_thread_count() const { return ddl_thread_count_; }
   const ObDDLTaskParam &get_ddl_task_param() const { return ddl_task_param_; }
   const ObDDLTableSchema &get_ddl_table_schema() const { return ddl_table_schema_; }
-  const ObDirectLoadTxInfo &get_tx_info() const { return tx_info_; }
   const ObIArray<ObTabletID> &get_tablet_ids() { return tablet_ids_; }
   int64_t get_pipeline_count() const { return ATOMIC_LOAD(&pipeline_count_); }
   void inc_pipeline_count() { ATOMIC_INC(&pipeline_count_); }
@@ -90,7 +84,6 @@ public:
                                               share::ObITask *next_task = nullptr);
   int schedule_tablet_merge_task();
   virtual bool use_tablet_mode() const { return false; }
-  bool is_inc_major_log() const { return is_inc_major_log_; }
   INHERIT_TO_STRING_KV("IndependentDag", ObIndependentDag, K_(is_inited), K_(direct_load_type),
                        K_(ddl_thread_count), K_(ddl_task_param), K_(pipeline_count), K_(ret_code));
 
@@ -109,14 +102,8 @@ private:
   template<typename T>
   int add_pipeline(ObDDLTabletContext *tablet_context, ObDDLSlice *ddl_slice, T *&pipeline);
 
-  // for_major: true means full direct load, false means inc major
-  //          : In ss mode, for inc major direct load, 'for_major' is also true.
   int init_tablet_merge_task(const ObTabletID &tablet_id, const bool for_major, share::ObITask *&data_merge_task, share::ObITask *&lob_merge_task);
   int init_merge_tasks(bool for_major, ObArray<share::ObITask*> &data_merge_tasks, ObArray<share::ObITask*> &lob_merge_tasks);
-  int check_is_first_ddl_kv(bool &is_first);
-  int check_is_first_ddl_kv(ObTabletDDLKvMgr &ddl_kv_mgr, bool &is_first);
-
-  int inc_generate_write_macro_block_tasks(common::ObIArray<share::ObITask *> &write_macro_block_tasks, share::ObITask *next_task);
   int full_generate_write_macro_block_tasks(common::ObIArray<share::ObITask *> &write_macro_block_tasks, share::ObITask *next_task);
   int finish_chunk(ObChunk *&chunk);
 
@@ -127,12 +114,10 @@ protected:
   int64_t ddl_thread_count_;
   ObDDLTaskParam ddl_task_param_;
   ObDDLTableSchema ddl_table_schema_;
-  ObDirectLoadTxInfo tx_info_;
   ObArray<ObTabletID> tablet_ids_;
   hash::ObHashMap<ObTabletID, ObDDLTabletContext *> tablet_context_map_;
   int64_t pipeline_count_;
   int ret_code_;
-  bool is_inc_major_log_;
 };
 
 }// namespace storage

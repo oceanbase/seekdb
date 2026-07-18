@@ -98,10 +98,6 @@ int ObCreateTableExecutor::ObInsSQLPrinter::inner_print(char *buf, int64_t buf_l
     char parallel_str[parallel_str_max_len] = {0};
     int64_t parallel_str_pos = 0;
     const char *osg_str = NULL;
-    const char *append_str = "";
-    const int64_t direct_str_max_len = 256;
-    char direct_str[direct_str_max_len] = {0};
-    int64_t direct_str_pos = 0;
     insert_mode = stmt_->get_insert_mode();
     if (insert_mode != 0 &&
         insert_mode != 1 &&
@@ -115,25 +111,16 @@ int ObCreateTableExecutor::ObInsSQLPrinter::inner_print(char *buf, int64_t buf_l
           OB_FAIL(databuff_printf(parallel_str, parallel_str_max_len, parallel_str_pos,
                                   "PARALLEL(%lu)", stmt_->get_parallelism()))) {
         LOG_WARN("fail to print parallel hint", K(ret), K(stmt_->get_parallelism()));
-      } else {
-        append_str = stmt_->get_has_append_hint() ? "append" : "";
-        const ObDirectLoadHint &direct_load_hint = stmt_->get_direct_load_hint();
-        if (OB_FAIL(direct_load_hint.print_direct_load_hint(direct_str, direct_str_max_len,
-                                                                   direct_str_pos))) {
-          LOG_WARN("fail to print direct load hint", K(ret), K(direct_load_hint));
-        }
       }
-    } 
+    }
     if (OB_FAIL(ret)) {
 
-    } else if (OB_FAIL(databuff_printf(buf, buf_len, pos1, 
-                                       "%s /*+ ENABLE_PARALLEL_DML %s %s %s %s */ into %c%.*s%c.%c%.*s%c", 
+    } else if (OB_FAIL(databuff_printf(buf, buf_len, pos1,
+                                       "%s /*+ ENABLE_PARALLEL_DML %s %s */ into %c%.*s%c.%c%.*s%c",
                                        insert_str,
                                        parallel_str,
-                                       osg_str, 
-                                       append_str, 
-                                       direct_str,
-                                       sep_char, 
+                                       osg_str,
+                                       sep_char,
                                        stmt_->get_database_name().length(),
                                        stmt_->get_database_name().ptr(),
                                        sep_char,

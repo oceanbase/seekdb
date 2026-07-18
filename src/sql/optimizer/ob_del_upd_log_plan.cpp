@@ -54,8 +54,6 @@ int ObDelUpdLogPlan::compute_dml_parallel()
   int64_t server_cnt = 0;
   if (OB_FAIL(get_parallel_info_from_candidate_plans(server_cnt, dml_parallel))) {
     LOG_WARN("failed to get parallel info", K(ret));
-  } else if (OB_FAIL(get_parallel_info_from_direct_load(dml_parallel))) {
-    LOG_WARN("failed to get parallel info from direct load", K(ret));
   } else if (OB_FAIL(compute_dml_dop_by_auto_dop(dml_parallel, dml_parallel))) {
     LOG_WARN("failed to compute dml dop by auto dop", K(ret));
   } else if (OB_UNLIKELY(ObGlobalHint::DEFAULT_PARALLEL > dml_parallel)) {
@@ -102,8 +100,6 @@ int ObDelUpdLogPlan::compute_dml_dop_by_auto_dop(const int64_t min_dml_parallel,
     /* do nothing */
   } else if (!stmt->is_update_stmt() && !stmt->is_delete_stmt() && !stmt->is_insert_stmt()) {
     /* do nothing */
-  } else if (get_optimizer_context().get_direct_load_optimizer_ctx().can_use_direct_load()) {
-    /* do nothing */
   } else if (OB_FAIL(inner_compute_dml_dop_by_auto_dop(*stmt, calc_dop))) {
     LOG_WARN("failed to inner compute dml dop by auto dop", K(ret));
   } else if (min_dml_parallel < calc_dop) {
@@ -144,77 +140,6 @@ int ObDelUpdLogPlan::inner_compute_dml_dop_by_auto_dop(const ObDelUpdStmt &stmt,
     dop = std::min(calc_dop, calc_dop_limit);
     OPT_TRACE("finish compute dml parallel degree:", dop);
     LOG_TRACE("finish compute dml parallel degree", K(cost_threshold_us), K(op_cost), K(calc_dop_limit), K(calc_dop), K(dop));
-  }
-  return ret;
-}
-
-int ObDelUpdLogPlan::get_parallel_info_from_direct_load(int64_t &dml_parallel) const
-{
-  int ret = OB_SUCCESS;
-  ObOptimizerContext &opt_ctx = get_optimizer_context();
-  ObDirectLoadOptimizerCtx &direct_load_opt_ctx = opt_ctx.get_direct_load_optimizer_ctx();
-  if (direct_load_opt_ctx.is_insert_overwrite()) {
-    const int64_t default_insert_overwrite_parallel = 2;
-    dml_parallel = MAX(dml_parallel, default_insert_overwrite_parallel);
-  } else if (opt_ctx.get_parallel_rule() == PXParallelRule::MANUAL_HINT) {
-    // do nothing
-  } else if (direct_load_opt_ctx.can_use_direct_load() && direct_load_opt_ctx.is_optimized_by_default_load_mode()) {
-    const int64_t default_direct_insert_parallel = 2;
-    if (opt_ctx.can_use_pdml()) {
-      dml_parallel = MAX(dml_parallel, default_direct_insert_parallel);
-    }
-  }
-  return ret;
-}
-
-int ObDelUpdLogPlan::check_use_direct_load()
-{
-  int ret = OB_SUCCESS;
-  ObOptimizerContext &opt_ctx = get_optimizer_context();
-  ObDirectLoadOptimizerCtx &direct_load_opt_ctx = opt_ctx.get_direct_load_optimizer_ctx();
-  ObExecContext *exec_ctx = nullptr;
-  int64_t dml_parallel = ObGlobalHint::UNSET_PARALLEL;
-  int64_t server_cnt = 0;
-  if (OB_ISNULL(exec_ctx = opt_ctx.get_exec_ctx())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), KP(opt_ctx.get_exec_ctx()));
-  } else if (!direct_load_opt_ctx.can_use_direct_load()) {
-    /* do nothing */
-  } else if (OB_FAIL(get_parallel_info_from_candidate_plans(server_cnt, dml_parallel))) {
-    LOG_WARN("failed to get parallel info", K(ret));
-  } else if (OB_FAIL(get_parallel_info_from_direct_load(dml_parallel))) {
-    LOG_WARN("failed to get parallel info from direct load", K(ret));
-  } else {
-    dml_parallel = opt_ctx.get_global_hint().has_dml_parallel_hint()
-                   ? opt_ctx.get_global_hint().get_dml_parallel_degree() : dml_parallel;
-    bool use_pdml = opt_ctx.can_use_pdml() && ObGlobalHint::DEFAULT_PARALLEL < dml_parallel;
-    bool use_direct_load = false;
-    if (direct_load_opt_ctx.is_insert_overwrite()) {
-      if (OB_UNLIKELY(!use_pdml)) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "PDML is disabled, insert overwrite is");
-      } else {
-        use_direct_load = true;
-      }
-    } else if (direct_load_opt_ctx.can_use_direct_load()) {
-      if (OB_UNLIKELY(!use_pdml)) {
-        bool allow_fallback = false;
-        if (OB_FAIL(ObDirectLoadOptimizerCtx::check_direct_load_allow_fallback(direct_load_opt_ctx, exec_ctx, allow_fallback))) {
-          LOG_WARN("fail to check support direct load allow fallback", K(ret));
-        } else if (!allow_fallback) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "PDML is disabled, direct load is");
-        }
-      } else {
-        use_direct_load = true;
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (use_direct_load) {
-        direct_load_opt_ctx.set_use_direct_load();
-        exec_ctx->get_table_direct_insert_ctx().set_is_direct(true);
-      }
-    }
   }
   return ret;
 }
@@ -1355,9 +1280,6 @@ int ObDelUpdLogPlan::allocate_pdml_insert_as_top(ObLogicalOperator *&top,
         insert_op->set_constraint_infos(&(static_cast<ObInsertLogPlan *>(this)->get_uk_constraint_infos()));
       }
       insert_op->set_is_insert_select(insert_stmt->value_from_select());
-      if (OB_NOT_NULL(insert_stmt->get_table_item(0))) {
-        insert_op->set_append_table_id(insert_stmt->get_table_item(0)->ref_id_);
-      }
       if (insert_stmt->is_insert_up() && OB_FAIL(insert_op->get_insert_up_index_dml_infos().assign(
             static_cast<ObInsertLogPlan *>(this)->get_insert_up_index_upd_infos()))) {
         LOG_WARN("assign insert up index upd infos failed", K(ret));
@@ -1625,12 +1547,9 @@ int ObDelUpdLogPlan::collect_related_local_index_ids(IndexDMLInfo &primary_dml_i
   uint64_t index_tid_array[OB_MAX_AUX_TABLE_PER_MAIN_TABLE];
   ObArray<uint64_t> base_column_ids;
   
-  ObInsertLogPlan *insert_plan = dynamic_cast<ObInsertLogPlan*>(this);
   if (OB_ISNULL(stmt) || OB_ISNULL(schema_guard = optimizer_context_.get_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema guard is nullptr", K(ret), K(stmt), K(schema_guard));
-  } else if (NULL != insert_plan && get_optimizer_context().get_direct_load_optimizer_ctx().use_direct_load()) {
-    index_tid_array_size = 0; // no need building index
   } else if (OB_FAIL(schema_guard->get_can_write_index_array(primary_dml_info.ref_table_id_,
                                                              index_tid_array,
                                                              index_tid_array_size,
@@ -1822,10 +1741,7 @@ int ObDelUpdLogPlan::prepare_table_dml_info_basic(const ObDmlTableInfo& table_in
   if (OB_SUCC(ret) && !has_tg) {
     uint64_t index_tid[OB_MAX_AUX_TABLE_PER_MAIN_TABLE];
     int64_t index_cnt = OB_MAX_AUX_TABLE_PER_MAIN_TABLE;
-    ObInsertLogPlan *insert_plan = dynamic_cast<ObInsertLogPlan*>(this);
-    if (NULL != insert_plan && get_optimizer_context().get_direct_load_optimizer_ctx().use_direct_load()) {
-      index_cnt = 0; // no need building index
-    } else if (OB_FAIL(schema_guard->get_can_write_index_array(table_info.ref_table_id_, index_tid, index_cnt, true))) {
+    if (OB_FAIL(schema_guard->get_can_write_index_array(table_info.ref_table_id_, index_tid, index_cnt, true))) {
       LOG_WARN("failed to get can read index array", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < index_cnt; ++i) {

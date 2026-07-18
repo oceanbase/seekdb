@@ -112,7 +112,6 @@ ObPhysicalPlanCtx::ObPhysicalPlanCtx(common::ObIAllocator &allocator)
       all_local_session_vars_(allocator),
       total_memstore_read_row_count_(0),
       total_ssstore_read_row_count_(0),
-      is_direct_insert_plan_(false),
       check_pdml_affected_rows_(false),
       enable_adaptive_pc_(false)
 {
@@ -663,7 +662,6 @@ OB_DEF_SERIALIZE(ObPhysicalPlanCtx)
       OB_UNIS_ENCODE(*all_local_session_vars_.at(i).get_local_vars());
     }
   }
-  OB_UNIS_ENCODE(is_direct_insert_plan_);
   OB_UNIS_ENCODE(check_pdml_affected_rows_);
   return ret;
 }
@@ -761,7 +759,6 @@ OB_DEF_SERIALIZE_SIZE(ObPhysicalPlanCtx)
       OB_UNIS_ADD_LEN(*all_local_session_vars_.at(i).get_local_vars());
     }
   }
-  OB_UNIS_ADD_LEN(is_direct_insert_plan_);
   OB_UNIS_ADD_LEN(check_pdml_affected_rows_);
   return len;
 }
@@ -884,7 +881,6 @@ OB_DEF_DESERIALIZE(ObPhysicalPlanCtx)
       LOG_WARN("failed to deserialize param store", K(ret));
     }
   }
-  OB_UNIS_DECODE(is_direct_insert_plan_);
   OB_UNIS_DECODE(check_pdml_affected_rows_);
   return ret;
 }

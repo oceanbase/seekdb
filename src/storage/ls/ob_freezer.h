@@ -304,7 +304,6 @@ private:
                                const bool is_try,
                                const ObITabletMemtable *freeze_memtable = nullptr /* used for tablet freeze */);
   int wait_data_memtable_freeze_finish_(ObITabletMemtable *tablet_memtable);
-  int wait_direct_load_memtable_freeze_finish_(ObITabletMemtable *tablet_memtable);
   int set_tablet_freeze_flag_(const ObTabletID tablet_id,
                               const bool need_rewrite_meta,
                               const SCN freeze_snapshot_version,

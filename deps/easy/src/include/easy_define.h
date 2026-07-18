@@ -98,9 +98,6 @@ typedef int sigset_t;
     bret; \
   })
 
-// DEBUG
-//#define EASY_DEBUG_DOING            1
-//#define EASY_DEBUG_MAGIC            1
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // typedef
 #include <stdint.h>

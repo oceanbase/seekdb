@@ -33,10 +33,7 @@ public:
     NORMAL   = 1,
     DELETING = 2, // deprecated after 4.1
     DELETED  = 3,
-    RESERVED_STATUS_4 = 4,
-    RESERVED_STATUS_5  = 5,
-    RESERVED_STATUS_6 = 6,
-    NONE = 7,
+    NONE = 4,
     MAX,
   };
 public:
@@ -69,9 +66,6 @@ private:
     "NORMAL",
     "DELETING",
     "DELETED",
-    "RESERVED_STATUS_4",
-    "RESERVED_STATUS_5",
-    "RESERVED_STATUS_6",
     "NONE",
     "MAX"
   };

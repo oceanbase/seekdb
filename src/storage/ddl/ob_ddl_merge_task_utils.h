@@ -67,16 +67,6 @@ public:
 
   /* some static functional for tablet utils */
 
-  static int prepare_incremental_direct_load_ddl_kvs(ObTablet &tablet, ObIArray<ObDDLKVHandle> &ddl_kvs_handle);
-
-  static int refine_incremental_direct_load_merge_param(const ObTablet &tablet,
-                                                        ObITable::TableKey &ddl_param,
-                                                        bool &need_check_tablet);
-  static int update_storage_schema(ObTablet &tablet,
-                                   const ObTabletDDLParam &ddl_param,
-                                   ObArenaAllocator &allocator,
-                                   ObStorageSchema *&storage_schema,
-                                   const ObIArray<ObDDLKVHandle> &frozen_ddl_kvs);
   static int get_ddl_tables_from_ddl_kvs(const ObArray<ObDDLKVHandle> &frozen_ddl_kvs, 
                                          const int64_t start_slice_idx,
                                          const int64_t end_slice_idx,

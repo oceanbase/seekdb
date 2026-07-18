@@ -219,13 +219,6 @@ else()
     DESTINATION usr/bin
     COMPONENT server)
 
-  if (OB_BUILD_STANDALONE)
-    install(PROGRAMS
-    deps/3rd/home/admin/oceanbase/bin/obshell
-    DESTINATION usr/bin
-    COMPONENT server)
-  endif()
-
   # Install systemd service to /usr/lib/systemd/system
   install(FILES
     tools/systemd/profile/seekdb.service

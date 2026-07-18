@@ -100,7 +100,6 @@ WAIT_EVENT_DEF(PX_LOOP_COND_WAIT, 15160, "px loop condition wait", "address", ""
 WAIT_EVENT_DEF(SQL_SHARED_HJ_COND_WAIT, 15165, "shared hash join cond wait", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(RESOURCE_SERVICE_LOCK_WAIT, 15263, "latch: resource_service lock wait", "address", "number", "tries", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(DIRECT_LOAD_RESCAN_LOCK_WAIT, 15265, "latch: direct load rescan lock wait", "address", "number", "tries", CONCURRENCY, true, true)
-WAIT_EVENT_DEF(TABLET_DIRECT_LOAD_MGR_SCHEMA_WAIT, 15266, "latch: tablet direct load mgr schema wait", "address", "number", "tries", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(TENANT_SNAPSHOT_SERVICE_COND_WAIT, 15267, "tenant snapshot service condition wait", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(ASYNC_COMMITTING_WAIT, 16018, "tx commiting wait", "", "", "", COMMIT, false, true)
 WAIT_EVENT_DEF(OBCDC_PART_MGR_SCHEMA_VERSION_WAIT, 18000, "oblog part mgr schema version wait", "", "", "", CONCURRENCY, true, true)

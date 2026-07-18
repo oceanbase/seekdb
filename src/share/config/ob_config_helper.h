@@ -828,17 +828,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigSQLSpillCompressionCodecChecker);
 };
 
-class ObDefaultLoadModeChecker
-  : public ObConfigChecker
-{
-public:
-  ObDefaultLoadModeChecker() {}
-  virtual ~ObDefaultLoadModeChecker() {}
-  bool check(const ObConfigItem &t) const;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObDefaultLoadModeChecker);
-};
-
 class ObModeConfigParserUitl
 {
 public:

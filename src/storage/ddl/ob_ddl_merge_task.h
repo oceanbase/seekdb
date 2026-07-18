@@ -73,7 +73,6 @@ private:
   int init_tablet_ctx();
   int prepare_ddl_kvs(ObTablet &tablet, ObIArray<ObDDLKVHandle> &ddl_kvs_handle);
   int prepare_full_direct_load_ddl_kvs(ObTablet &tablet, ObIArray<ObDDLKVHandle> &ddl_kvs_handle);
-  int prepare_incremental_direct_load_ddl_kvs(ObTablet &tablet, ObIArray<ObDDLKVHandle> &ddl_kvs_handle);
 private:
   bool is_inited_;
   ObArenaAllocator arena_;
@@ -106,7 +105,6 @@ private:
                                          ObTablet &tablet,
                                          SCN &compact_start_scn,
                                          SCN &compact_end_scn);
-  int merge_incremental_direct_load_ddl_kvs(ObLS *ls, ObTablet &tablet);
 private:
   bool is_inited_;
   ObDDLTableMergeDagParam merge_param_;
@@ -180,12 +178,6 @@ public:
       common::ObArenaAllocator &allocator,
       ObTableHandleV2 &compacted_sstable_handle);
 
-  static int update_storage_schema(
-      ObTablet &tablet,
-      const ObTabletDDLParam &ddl_param,
-      common::ObArenaAllocator &allocator,
-      ObStorageSchema *&storage_schema,
-      const ObIArray<ObDDLKVHandle> &frozen_ddl_kvs);
 
   static int report_ddl_checksum(const ObTabletID &tablet_id,
                                  const uint64_t table_id,

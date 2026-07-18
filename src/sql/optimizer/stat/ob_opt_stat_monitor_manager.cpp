@@ -660,67 +660,6 @@ int ObOptStatMonitorManager::clean_useless_dml_stat_info()
   return ret;
 }
 
-int ObOptStatMonitorManager::update_dml_stat_info_from_direct_load(
-    const ObIArray<ObOptDmlStat *> &dml_stats,
-    ObISQLConnection *conn)
-{
-  int ret = OB_SUCCESS;
-  ObOptStatMonitorManager *optstat_monitor_mgr = NULL;
-  LOG_TRACE("begin to update dml stat info from direct load", K(dml_stats));
-  if (dml_stats.empty() || OB_ISNULL(dml_stats.at(0))) {
-    //do nothing
-  } else if (OB_ISNULL(optstat_monitor_mgr = share::g_mp->opt_stat_monitor_manager())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(optstat_monitor_mgr));
-  } else if (OB_FAIL(optstat_monitor_mgr->update_dml_stat_info(dml_stats, conn))) {
-    LOG_WARN("failed to update dml stat info", K(ret));
-  } else {/*do nothing*/}
-  return ret;
-}
-
-int ObOptStatMonitorManager::update_dml_stat_info(const ObIArray<ObOptDmlStat *> &dml_stats,
-                                                  ObISQLConnection *conn)
-{
-  int ret = OB_SUCCESS;
-  ObSqlString value_sql;
-  int64_t count = 0;
-  LOG_TRACE("begin to update dml stat info from direct load", K(dml_stats));
-  ObSEArray<ObOptDmlStat, 16> tmp_dml_stats;
-  for (int64_t i = 0; OB_SUCC(ret) && i < dml_stats.count(); ++i) {
-    if (OB_ISNULL(dml_stats.at(i))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpcted error", K(ret), K(dml_stats.at(i)));
-    } else if (OB_FAIL(tmp_dml_stats.push_back(*dml_stats.at(i)))) {
-      LOG_WARN("failed to push back", K(ret));
-    } else {
-      if (OB_FAIL(get_dml_stat_sql(*dml_stats.at(i), 0 != count, value_sql))) {
-        LOG_WARN("failed to get dml stat sql", K(ret));
-      } else if (UPDATE_OPT_STAT_BATCH_CNT == ++count) {
-        if (OB_FAIL(exec_insert_monitor_modified_sql(value_sql, conn))) {
-          LOG_WARN("failed to exec insert sql", K(ret));
-        } else {
-          count = 0;
-          value_sql.reset();
-        }
-      }
-    }
-  }
-  if (OB_SUCC(ret) && count != 0) {
-    if (OB_FAIL(exec_insert_monitor_modified_sql(value_sql, conn))) {
-      LOG_WARN("failed to exec insert sql", K(ret));
-    }
-  }
-  if (OB_SUCC(ret) && !tmp_dml_stats.empty()) {
-    bool no_check = (OB_E(EventTable::EN_LEADER_STORAGE_ESTIMATION) OB_SUCCESS) != OB_SUCCESS;
-    if (no_check) {
-      //do nothing
-    } else if (OB_FAIL(check_opt_stats_expired(tmp_dml_stats, true/*is_from_direct_load*/))) {
-      LOG_WARN("failed to check opt stats expired", K(ret));
-    } else {/*do nohting*/}
-  }
-  return ret;
-}
-
 int ObOptStatMonitorManager::mtl_init(ObOptStatMonitorManager* &optstat_monitor_mgr)
 {
   int ret = OB_SUCCESS;
@@ -813,8 +752,7 @@ int ObOptStatMonitorManager::get_dml_stats(ObIArray<ObOptDmlStat> &dml_stats)
   return ret;
 }
 
-int ObOptStatMonitorManager::check_opt_stats_expired(ObIArray<ObOptDmlStat> &dml_stats,
-                                                     bool is_from_direct_load/*default false*/)
+int ObOptStatMonitorManager::check_opt_stats_expired(ObIArray<ObOptDmlStat> &dml_stats)
 {
   int ret = OB_SUCCESS;
   if (!dml_stats.empty()) {
@@ -827,7 +765,7 @@ int ObOptStatMonitorManager::check_opt_stats_expired(ObIArray<ObOptDmlStat> &dml
       LOG_WARN("failed to get async stale max table size", K(ret));
     } else if (OB_UNLIKELY(global_async_stale_max_table_size <= 0)) {
       LOG_WARN("skip to check opt stats expired", K(global_async_stale_max_table_size));
-    } else if (OB_FAIL(get_opt_stats_expired_table_info(dml_stats, stale_infos, is_from_direct_load))) {
+    } else if (OB_FAIL(get_opt_stats_expired_table_info(dml_stats, stale_infos))) {
       LOG_WARN("failed to get opt stats expired table info", K(ret));
     } else {
       const int64_t MIN_ASYNC_GATHER_TABLE_ROW_CNT = 500;
@@ -847,8 +785,7 @@ int ObOptStatMonitorManager::check_opt_stats_expired(ObIArray<ObOptDmlStat> &dml
 }
 
 int ObOptStatMonitorManager::get_opt_stats_expired_table_info(ObIArray<ObOptDmlStat> &dml_stats,
-                                                              ObIArray<OptStatExpiredTableInfo> &stale_infos,
-                                                              bool is_from_direct_load)
+                                                              ObIArray<OptStatExpiredTableInfo> &stale_infos)
 {
   int ret = OB_SUCCESS;
   int64_t begin_idx = 0;
@@ -856,7 +793,7 @@ int ObOptStatMonitorManager::get_opt_stats_expired_table_info(ObIArray<ObOptDmlS
     ObSqlString where_list;
     int64_t end_idx = std::min(begin_idx + MAX_PROCESS_BATCH_TABLET_CNT, dml_stats.count());
     
-    if (OB_FAIL(gen_tablet_list(dml_stats, begin_idx, end_idx, is_from_direct_load, where_list))) {
+    if (OB_FAIL(gen_tablet_list(dml_stats, begin_idx, end_idx, where_list))) {
       LOG_WARN("failed to gen tablet list", K(ret));
     } else if (where_list.empty()) {
       //do nothing
@@ -871,7 +808,6 @@ int ObOptStatMonitorManager::get_opt_stats_expired_table_info(ObIArray<ObOptDmlS
 int ObOptStatMonitorManager::gen_tablet_list(const ObIArray<ObOptDmlStat> &dml_stats,
                                              const int64_t begin_idx,
                                              const int64_t end_idx,
-                                             const bool is_from_direct_load,
                                              ObSqlString &tablet_list)
 {
   int ret = OB_SUCCESS;
@@ -890,11 +826,11 @@ int ObOptStatMonitorManager::gen_tablet_list(const ObIArray<ObOptDmlStat> &dml_s
   } else {
     bool is_first = true;
     for (int64_t i = begin_idx; OB_SUCC(ret) && i < end_idx; ++i) {
-      bool is_valid = is_from_direct_load && !is_inner_table(dml_stats.at(i).table_id_);
-      if (!is_valid && OB_FAIL(ObDbmsStatsUtils::check_is_stat_table(schema_guard,
-                                                                     dml_stats.at(i).table_id_,
-                                                                     false,
-                                                                     is_valid))) {
+      bool is_valid = false;
+      if (OB_FAIL(ObDbmsStatsUtils::check_is_stat_table(schema_guard,
+                                                        dml_stats.at(i).table_id_,
+                                                        false,
+                                                        is_valid))) {
         LOG_WARN("failed to check is stat table", K(ret));
       } else if (is_valid) {
         

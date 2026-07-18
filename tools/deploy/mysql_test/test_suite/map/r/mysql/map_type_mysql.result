@@ -945,7 +945,7 @@ id	m1	m2	m3
 4	{1:13,2:25}	{"a3":["hi4","hello"],"b4":["ocean3","base"]}	{1.14:[[14],[2]],2.24:[[1,2]]}
 5	{1:14,2:26}	{"a4":["hi5","hello"],"b5":["ocean5","base"]}	{1.15:[[15],[2]],2.25:[[1,2]]}
 CREATE TABLE t2(id int, m1 map(TINYINT, TINYINT), m2 map(varchar(10),array(varchar(10))), m3 map(double, array(array(SMALLINT))));
-INSERT /*+ direct(true,100) enable_parallel_dml parallel(2) append*/ INTO t2  SELECT * from t1;
+INSERT /*+ enable_parallel_dml parallel(2) */ INTO t2  SELECT * from t1;
 SELECT * from t2;
 id	m1	m2	m3
 1	{1:11,2:22}	{"a1":["hi1","hello"],"b1":["ocean1","base"]}	{1.1100000143051147:[[11],[2]],2.2100000381469727:[[1,2]]}

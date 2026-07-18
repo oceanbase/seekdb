@@ -17,10 +17,6 @@
 #ifndef OCEANBASE_SQL_LOAD_DATA_IMPL_H_
 #define OCEANBASE_SQL_LOAD_DATA_IMPL_H_
 
-#ifndef TIME_STAT_ON
-#define TIME_STAT_ON
-#endif
-
 #include "share/ob_define.h"
 #include "lib/file/ob_file.h"
 #include "lib/hash/ob_build_in_hashmap.h"
@@ -831,7 +827,6 @@ public:
                     insert_column_number_(0),
                     params_count_(0),
                     allocated_buffer_cnt_(0),
-                    non_string_type_direct_insert_column_count_(0),
 
                     //statistics
                     total_err_lines_(0),
@@ -958,7 +953,6 @@ private:
   int64_t insert_column_number_;
   int64_t params_count_;
   int64_t allocated_buffer_cnt_;
-  int64_t non_string_type_direct_insert_column_count_;
 
   //statistics
   int64_t total_err_lines_;
@@ -999,17 +993,6 @@ private:
   ObKMPStateMachine line_start_detector_;
   ObKMPStateMachine line_term_detector_;
   ObKMPStateMachine field_term_detector_;
-
-  //timers
-  ObLoadDataTimer total_timer_;
-  ObLoadDataTimer file_read_timer_;
-  ObLoadDataTimer parsing_execute_timer_;
-  ObLoadDataTimer rpc_timer_;
-  ObLoadDataTimer calc_timer_;
-  ObLoadDataTimer buffer_copy_timer_;
-  ObLoadDataTimer serialize_timer_;
-  ObLoadDataTimer wait_task_timer_;
-  ObLoadDataTimer handle_result_timer_;
 
   //hashmaps: use tenant 500 memory
   PartitionBufferHashMap part_buffer_map_; //hash map(partition id -> BufferInfo)

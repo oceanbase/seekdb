@@ -1948,15 +1948,8 @@ void ObIOBenchRunner::run1()
       io_info.fd_.device_handle_ = &LOCAL_DEVICE_INSTANCE;
       io_info.offset_ = ObRandom::rand(0, OB_DEFAULT_MACRO_BLOCK_SIZE - load_.size_);
       io_info.timeout_us_ = MAX_IO_WAIT_TIME_MS * 1000;
-#ifdef OB_BUILD_SHARED_STORAGE
-      {
-        io_info.fd_.first_id_ = block_handles_[block_idx].get_macro_id().first_id();
-        io_info.fd_.second_id_ = block_handles_[block_idx].get_macro_id().second_id();
-      }
-#else
       io_info.fd_.first_id_ = block_handles_[block_idx].get_macro_id().first_id();
       io_info.fd_.second_id_ = block_handles_[block_idx].get_macro_id().second_id();
-#endif
 
       if (ObIOMode::WRITE == load_.mode_) {
         io_info.offset_ = lower_align(io_info.offset_, DIO_READ_ALIGN_SIZE);
@@ -1996,10 +1989,6 @@ void ObIOBenchController::run1()
   const int64_t MAX_CALIBRATION_BLOCK_COUNT = 20LL * 1024LL * 1024LL * 1024LL / OB_DEFAULT_MACRO_BLOCK_SIZE;
   int64_t free_block_count = OB_STORAGE_OBJECT_MGR.get_free_macro_block_count();
   int64_t total_block_count = OB_STORAGE_OBJECT_MGR.get_total_macro_block_count();
-#ifdef OB_BUILD_SHARED_STORAGE
-  ;
-#endif
-
   if (free_block_count <= MIN_CALIBRATION_BLOCK_COUNT
       || 1.0 * free_block_count / total_block_count < MIN_FREE_SPACE_PERCENTAGE) {
     ret = OB_SERVER_OUTOF_DISK_SPACE;
@@ -2011,14 +2000,6 @@ void ObIOBenchController::run1()
     if (OB_FAIL(runner.init(benchmark_block_count))) {
       LOG_WARN("init benchmark runner failed", K(ret), K(benchmark_block_count));
     }
-#ifdef OB_BUILD_SHARED_STORAGE
-    if (OB_SUCC(ret)) {
-      if (false && OB_FAIL(OB_SERVER_FILE_MGR.create_io_calibration_file(
-          benchmark_block_count))) {
-        LOG_WARN("fail to create io calibration file", KR(ret), K(benchmark_block_count));
-      }
-    }
-#endif
   }
 
   // execute io benchmark
@@ -2057,13 +2038,6 @@ void ObIOBenchController::run1()
       LOG_WARN("update io ability failed", K(ret));
     }
   }
-
-#ifdef OB_BUILD_SHARED_STORAGE
-  int tmp_ret = OB_SUCCESS;
-  if (false && OB_TMP_FAIL(OB_SERVER_FILE_MGR.delete_io_calibration_file())) {
-    LOG_ERROR("fail to delete io calibration file", KR(tmp_ret));
-  }
-#endif
 
   ret_code_ = ret;
   finish_ts_ = ObTimeUtility::fast_current_time();

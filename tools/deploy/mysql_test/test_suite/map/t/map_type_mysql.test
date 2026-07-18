@@ -642,7 +642,7 @@ select * from t1;
 select * from t2;
 drop table t1, t2;
 
-# direct load
+# insert
 create table t1 (id int primary key not null auto_increment, m1 map(int, int), m2 map(varchar(20),array(varchar(20))), m3 map(float, array(array(int))))
   PARTITION BY LIST(id) (PARTITION p0 VALUES IN (1,2), PARTITION p1 VALUES IN (3,4), PARTITION p2 VALUES IN (DEFAULT));
 insert into t1 values (1, '{1:11,2:22}', '{"a1":["hi1","hello"], "b1":["ocean1","base"]}', '{1.11:[[11],[2]], 2.21:[[1,2]]}');
@@ -652,7 +652,7 @@ insert into t1 values (4, '{1:13,2:25}', '{"a3":["hi4","hello"], "b4":["ocean3",
 insert into t1 values (5, '{1:14,2:26}', '{"a4":["hi5","hello"], "b5":["ocean5","base"]}', '{1.15:[[15],[2]], 2.25:[[1,2]]}');
 select * from t1 order by id;
 CREATE TABLE t2(id int, m1 map(TINYINT, TINYINT), m2 map(varchar(10),array(varchar(10))), m3 map(double, array(array(SMALLINT))));
-INSERT /*+ direct(true,100) enable_parallel_dml parallel(2) append*/ INTO t2  SELECT * from t1;
+INSERT /*+ enable_parallel_dml parallel(2) */ INTO t2  SELECT * from t1;
 --sorted_result
 SELECT * from t2;
 ALTER TABLE t1 DROP PARTITION p0;

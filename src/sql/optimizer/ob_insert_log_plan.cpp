@@ -83,9 +83,7 @@ int ObInsertLogPlan::generate_normal_raw_plan()
     OSGShareInfo *osg_info = NULL;
     double online_sample_percent = 100.;
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(check_use_direct_load())) {
-        LOG_WARN("failed to check use direct load", K(ret));
-      } else if (OB_FAIL(prepare_dml_infos())) {
+      if (OB_FAIL(prepare_dml_infos())) {
         LOG_WARN("failed to prepare dml infos", K(ret));
       } else if (OB_FAIL(compute_dml_parallel())) {
         LOG_WARN("failed to compute dml parallel", K(ret));
@@ -98,14 +96,7 @@ int ObInsertLogPlan::generate_normal_raw_plan()
                    OB_FAIL(get_online_estimate_percent(online_sample_percent))) {
           LOG_WARN("failed to get sys online sample percent", K(ret));
         } else {
-          if (get_optimizer_context().get_direct_load_optimizer_ctx().use_direct_load()) {
-            get_optimizer_context().get_exec_ctx()->get_table_direct_insert_ctx()
-              .set_is_online_gather_statistics(tmp_need_osg);
-            get_optimizer_context().get_exec_ctx()->get_table_direct_insert_ctx()
-              .set_online_sample_percent(online_sample_percent);
-          } else {
-            need_osg = tmp_need_osg;
-          }
+          need_osg = tmp_need_osg;
         }
       }
       if (OB_FAIL(ret)) {
@@ -687,7 +678,6 @@ int ObInsertLogPlan::allocate_insert_as_top(ObLogicalOperator *&top,
     insert_op->set_is_returning(insert_stmt->is_returning());
     insert_op->set_replace(insert_stmt->is_replace());
     insert_op->set_ignore(insert_stmt->is_ignore());
-    insert_op->set_overwrite(insert_stmt->is_overwrite());
     insert_op->set_is_multi_part_dml(is_multi_part_dml);
     insert_op->set_table_partition_info(table_partition_info);
     insert_op->set_lock_row_flag_expr(lock_row_flag_expr);
@@ -697,9 +687,6 @@ int ObInsertLogPlan::allocate_insert_as_top(ObLogicalOperator *&top,
       LOG_TRACE("insert das dop", K(max_dml_parallel_));
     }
     insert_op->set_is_partition_wise(is_partition_wise);
-    if (OB_NOT_NULL(insert_stmt->get_table_item(0))) {
-      insert_op->set_append_table_id(insert_stmt->get_table_item(0)->ref_id_);
-    }
     insert_op->set_strong_sharding(insert_op_sharding);
     if (insert_stmt->is_insert_up()) {
       insert_op->set_insert_up(true);

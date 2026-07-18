@@ -307,7 +307,7 @@ create vector index vector_idx1 on hhst1(c3) with (distance=l2, lib=vsag, type=h
 create vector index vector_idx2 on hhst1(c4) with (distance=l2, type=ivf_flat, nlist=2, sample_per_nlist=3);
 
 
-insert /*+ direct(true,100) enable_parallel_dml parallel(2) */ into hhst2 select * from hhst1;
+insert /*+ enable_parallel_dml parallel(2) */ into hhst2 select * from hhst1;
 select count(*) from hhst2;
 
 insert ignore into hhst1 select * from hhst2;

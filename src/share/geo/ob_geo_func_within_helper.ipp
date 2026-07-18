@@ -104,10 +104,10 @@ static int apply_bg_within(const ObGeometry *g1,
 }
 
 template <typename GeoType1, typename GeoType2>
-static int apply_bg_within_pl_pa_strategy(const ObGeometry *g1,
-                                          const ObGeometry *g2,
-                                          const ObGeoEvalCtx &context,
-                                          bool &result)
+static int apply_bg_within_geog(const ObGeometry *g1,
+                                const ObGeometry *g2,
+                                const ObGeoEvalCtx &context,
+                                bool &result)
 {
   INIT_SUCC(ret);
   const ObSrsItem *srs = context.get_srs();
@@ -115,40 +115,9 @@ static int apply_bg_within_pl_pa_strategy(const ObGeometry *g1,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("srs is null in geographic eval", K(ret));
   } else {
-    bg::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
-    ObPlPaStrategy geog_pl_pa_strategy(geog_sphere);
     const GeoType1 *geo1 = reinterpret_cast<const GeoType1 *>(g1->val());
     const GeoType2 *geo2 = reinterpret_cast<const GeoType2 *>(g2->val());
-#ifdef USE_SPHERE_GEO
-    result = bg::within(*geo1, *geo2, geog_pl_pa_strategy);
-#else
     result = bg::within(*geo1, *geo2);
-#endif
-  }
-  return ret;
-}
-
-template <typename GeoType1, typename GeoType2>
-static int apply_bg_within_ll_la_aa_strategy(const ObGeometry *g1,
-                                              const ObGeometry *g2,
-                                              const ObGeoEvalCtx &context,
-                                              bool &result)
-{
-  INIT_SUCC(ret);
-  const ObSrsItem *srs = context.get_srs();
-  if (OB_ISNULL(srs)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("srs is null in geographic eval", K(ret));
-  } else {
-    bg::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
-    ObLlLaAaStrategy geog_ll_la_aa_strategy(geog_sphere);
-    const GeoType1 *geo1 = reinterpret_cast<const GeoType1 *>(g1->val());
-    const GeoType2 *geo2 = reinterpret_cast<const GeoType2 *>(g2->val());
-#ifdef USE_SPHERE_GEO
-    result = bg::within(*geo1, *geo2, geog_ll_la_aa_strategy);
-#else
-    result = bg::within(*geo1, *geo2);
-#endif
   }
   return ret;
 }
@@ -222,22 +191,9 @@ static int ob_caculate_mp_within_l_a_geog(const ObGeometry *g1, const ObGeometry
     LOG_WARN("srs is null in geographic eval", K(ret));
   } else {
     typename MpType::iterator iter = geo1->begin();
-    bg::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
-    ObPlPaStrategy geog_pl_pa_strategy(geog_sphere);
     for (; iter != geo1->end(); ++iter) {
       typename MpType::value_type& point = *iter;
       if (!within) {
-#ifdef USE_SPHERE_GEO
-        within = bg::within(point, *geo2, geog_pl_pa_strategy);
-        if (!within) {
-          intersects = bg::intersects(point, *geo2, geog_pl_pa_strategy);
-        } else {
-          intersects = true;
-        }
-      } else {
-        intersects = bg::intersects(point, *geo2, geog_pl_pa_strategy);
-      }
-#else
         within = bg::within(point, *geo2);
         if (!within) {
           intersects = bg::intersects(point, *geo2);
@@ -247,7 +203,6 @@ static int ob_caculate_mp_within_l_a_geog(const ObGeometry *g1, const ObGeometry
       } else {
         intersects = bg::intersects(point, *geo2);
       }
-#endif
       if (!intersects) break;
     }
     result = (within && intersects);
@@ -330,18 +285,11 @@ static int ob_caculate_ml_within_gc_geog(const ObGeometry *g1, const ObGeometry 
                                            res_geo2))) {
       LOG_WARN("failed to do mulit difference", K(ret));
     } else {
-      bg::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
-      ObLlLaAaStrategy geog_ll_la_aa_strategy(geog_sphere);
       // Checks relation between a pair of geometries defined by a mask.
       bg::de9im::mask mask("T********");
       result = res_geo2->is_empty() &&
-#ifdef USE_SPHERE_GEO
-              (bg::relate(*geo1, *multi_line, mask, geog_ll_la_aa_strategy) ||
-              bg::relate(*geo1, *multi_poly, mask, geog_ll_la_aa_strategy));
-#else
               (bg::relate(*geo1, *multi_line, mask) ||
               bg::relate(*geo1, *multi_poly, mask));
-#endif
     }
   }
   return ret;
@@ -390,13 +338,7 @@ static int ob_caculate_mpl_within_gc_geog(const ObGeometry *g1, const ObGeometry
                                                            multi_poly))) {
     LOG_WARN("failed to do gc prepare", K(ret));
   } else {
-    bg::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
-    ObLlLaAaStrategy geog_ll_la_aa_strategy(geog_sphere);
-#ifdef USE_SPHERE_GEO
-    result = bg::within(*geo1, *multi_poly, geog_ll_la_aa_strategy);
-#else
     result = bg::within(*geo1, *multi_poly);
-#endif
   }
   return ret;
 }

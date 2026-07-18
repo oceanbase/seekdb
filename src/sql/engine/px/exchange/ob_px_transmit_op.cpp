@@ -1205,7 +1205,7 @@ int ObPxTransmitOp::send_eof_row()
       op_monitor_info_.otherstat_2_id_ = ObSqlMonitorStatIds::EXCHANGE_EOF_TIMESTAMP;
       op_monitor_info_.otherstat_2_value_ = oceanbase::common::ObClockGenerator::getClock();
       // It's the end time of sending all data
-      // if not, the sql plan monitor can't show the end of eof
+      // if not, operator diagnostics can't show the end of eof
       op_monitor_info_.last_row_time_ = oceanbase::common::ObClockGenerator::getClock();
     }
   }
@@ -1367,7 +1367,7 @@ int ObPxTransmitOp::broadcast_eof_row()
     op_monitor_info_.otherstat_2_id_ = ObSqlMonitorStatIds::EXCHANGE_EOF_TIMESTAMP;
     op_monitor_info_.otherstat_2_value_ = oceanbase::common::ObClockGenerator::getClock();
     // It's the end time of sending all data
-    // if not, the sql plan monitor can't show the end of eof
+    // if not, operator diagnostics can't show the end of eof
     op_monitor_info_.last_row_time_ = oceanbase::common::ObClockGenerator::getClock();
   }
   return ret;

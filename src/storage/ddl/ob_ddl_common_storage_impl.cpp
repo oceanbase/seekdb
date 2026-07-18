@@ -26,9 +26,6 @@
 #include "share/ob_ddl_sim_point.h"
 #include "common/object/ob_object.h"
 #include "share/compaction/ob_shared_storage_compaction_util.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "close_modules/shared_storage/meta_store/ob_shared_storage_obj_meta.h"
-#endif
 #include "share/tablet/ob_tablet_table_operator.h"
 #include "share/storage/ob_tablet_replica_checksum_table_storage.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -39,7 +36,7 @@
 #include "sql/das/ob_das_utils.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
 #include "storage/ddl/ob_tablet_slice_writer.h"
-#include "storage/direct_load/ob_direct_load_insert_data_table_ctx.h"
+#include "storage/ddl/ob_ddl_batch_rows.h"
 #include "storage/tablet/ob_tablet_obj_load_helper.h"
 #include "storage/tablet/ob_tablet.h"
 #include "lib/worker.h"
@@ -257,56 +254,15 @@ int ObDDLUtil::init_macro_block_writer(
     LOG_WARN("init start seq failed", K(ret), K(param.direct_load_type_),
                                       K(param.tablet_id_), K(param.slice_idx_));
   } else {
-    const bool is_inc_major = is_incremental_major_direct_load(param.direct_load_type_);
     ObITable::TableKey table_key;
     table_key.tablet_id_ = param.tablet_id_;
     table_key.version_range_.snapshot_version_ = param.snapshot_version_;
-    table_key.table_type_ = is_inc_major ? ObITable::INC_MAJOR_SSTABLE : ObITable::MAJOR_SSTABLE;
+    table_key.table_type_ = ObITable::MAJOR_SSTABLE;
     if (OB_ISNULL(macro_block_writer = OB_NEWx(ObDDLMacroBlockWriter, &allocator))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to allocate memory", K(ret));
     } else if (OB_FAIL(macro_block_writer->init(param, table_key, start_seq, row_offset))) {
       LOG_WARN("fail to initialize macro block writer", K(ret), K(table_key));
-    }
-    if (OB_FAIL(ret)) {
-      OB_DELETEx(ObDDLMacroBlockWriter, &allocator, macro_block_writer);
-    }
-  }
-  return ret;
-}
-
-int ObDDLUtil::init_inc_macro_block_writer(
-    const ObWriteMacroParam &param,
-    ObIAllocator &allocator,
-    ObDDLMacroBlockWriter *&macro_block_writer)
-{
-  int ret = OB_SUCCESS;
-  macro_block_writer = nullptr;
-  ObMacroDataSeq start_seq;
-  if (OB_UNLIKELY(!param.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(param));
-  } else if (!is_incremental_direct_load(param.direct_load_type_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected not incremental direct load", KR(ret), K(param));
-  } else if (OB_ISNULL(param.tablet_param_.storage_schema_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("storage schema is null", K(ret), K(param));
-  } else if (OB_FAIL(ObDDLStorageUtil::init_macro_block_seq(param.slice_idx_,
-                                                     start_seq))) {
-    LOG_WARN("init start seq failed", KR(ret), K(param.direct_load_type_),
-                                      K(param.tablet_id_), K(param.slice_idx_));
-  } else {
-    ObITable::TableKey table_key;
-    table_key.tablet_id_ = param.tablet_id_;
-    table_key.table_type_ = ObITable::MINI_SSTABLE;
-    table_key.scn_range_.start_scn_.convert_for_tx(1);
-    table_key.scn_range_.end_scn_.convert_for_tx(param.snapshot_version_); // for logic version
-    if (OB_ISNULL(macro_block_writer = OB_NEWx(ObDDLMacroBlockWriter, &allocator))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to new ObDDLMacroBlockWriter", KR(ret));
-    } else if (OB_FAIL(macro_block_writer->init(param, table_key, start_seq, 0 /*row_offset*/))) {
-      LOG_WARN("fail to init DDL macro block writer", KR(ret), K(param), K(table_key), K(start_seq));
     }
     if (OB_FAIL(ret)) {
       OB_DELETEx(ObDDLMacroBlockWriter, &allocator, macro_block_writer);
@@ -792,7 +748,6 @@ int ObDDLUtil::fill_writer_param(
     param.task_id_ = ddl_task_param.ddl_task_id_;
     param.tablet_param_ = tablet_context->tablet_param_;
     param.lob_meta_tablet_param_ = tablet_context->lob_meta_tablet_param_;
-    param.tx_info_ = dag->get_tx_info();
     param.is_index_table_ = dag->get_ddl_table_schema().table_item_.is_index_table_;
     param.ddl_dag_ = dag;
     param.tablet_context_ = tablet_context;
@@ -807,7 +762,7 @@ int ObDDLUtil::fill_writer_param(
 int ObDDLUtil::init_batch_rows(
     const ObDDLTableSchema &ddl_table_schema,
     const int64_t batch_size,
-    ObDirectLoadBatchRows &batch_rows)
+    ObDDLBatchRows &batch_rows)
 {
   int ret = OB_SUCCESS;
   batch_rows.reset();
@@ -830,7 +785,7 @@ int ObDDLUtil::init_batch_rows(
       }
     }
     if (OB_SUCC(ret)) {
-      ObDirectLoadRowFlag default_row_flag;
+      ObDDLRowFlag default_row_flag;
       if (OB_FAIL(batch_rows.init(sql_column_items, batch_size, default_row_flag))) {
         LOG_WARN("batch rows init failed", K(ret));
       }
@@ -873,8 +828,6 @@ int ObDDLUtil::alloc_storage_macro_block_writer(
   if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("the are invalid arguments", K(ret), K(param));
-  } else if (is_incremental_minor_direct_load(param.direct_load_type_)) {
-    tablet_slice_writer = OB_NEWx(ObTabletSliceIncWriter, &allocator);
   } else {
     tablet_slice_writer = OB_NEWx(ObTabletSliceWriter, &allocator);
   }

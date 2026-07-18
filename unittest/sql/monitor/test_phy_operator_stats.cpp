@@ -16,7 +16,6 @@
 
 #include <gtest/gtest.h>
 #include "sql/engine/ob_physical_plan.h"
-#include "sql/monitor/ob_phy_operator_monitor_info.h"
 using namespace std;
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -32,17 +31,7 @@ public:
   ~TestPhyOperatorStats() {}
   virtual void SetUp() {}
   virtual void TearDown() {}
-  static int build_operator_info(int64_t index, ObPhyOperatorMonitorInfo &info);
 };
-
-int TestPhyOperatorStats::build_operator_info(int64_t index, ObPhyOperatorMonitorInfo &info)
-{
-  int ret = OB_SUCCESS;
-  info.set_value(INPUT_ROW_COUNT, index + 1);
-  info.set_value(OUTPUT_ROW_COUNT, index + 2);
-  info.set_value(RESCAN_TIMES, index + 3);
-  return ret;
-}
 
 TEST_F(TestPhyOperatorStats, init)
 {
@@ -52,35 +41,6 @@ TEST_F(TestPhyOperatorStats, init)
   EXPECT_EQ(OB_SUCCESS, stat.init(&alloc, op_count));
   EXPECT_EQ(stat.count(), 5);
   EXPECT_EQ(stat.array_size_, 5 * (StatId::MAX_STAT * ObPhyOperatorStats::COPY_COUNT));
-}
-
-TEST_F(TestPhyOperatorStats, test_add)
-{
-  ObPhyOperatorStats stats;
-  ObArenaAllocator alloc;
-  int64_t op_count = 3;
-  EXPECT_EQ(OB_SUCCESS, stats.init(&alloc, op_count));
-  ObPhyOperatorMonitorInfo op_info;
-  for (int64_t i  = 0; i < op_count; i++) {
-    op_info.set_operator_id(i);
-    EXPECT_EQ(OB_SUCCESS, build_operator_info(i, op_info));
-    EXPECT_EQ(OB_SUCCESS, stats.add_op_stat(op_info));
-  }
-  for (int64_t i  = 0; i < op_count; i++) {
-    op_info.set_operator_id(i);
-    EXPECT_EQ(OB_SUCCESS, build_operator_info(i, op_info));
-    EXPECT_EQ(OB_SUCCESS, stats.add_op_stat(op_info));
-  }
-  ObOperatorStat stat;
-  ObPhysicalPlan plan;
-  plan.stat_.execute_times_ = 2;
-  //int64_t op_id = 0;
-  for (int64_t i = 0; i < op_count; i++) {
-    EXPECT_EQ(OB_SUCCESS, stats.get_op_stat_accumulation(&plan, i, stat));
-    EXPECT_EQ(stat.input_rows_,  (i + 1)* 2);
-    EXPECT_EQ(stat.output_rows_,  (i + 2) * 2);
-    EXPECT_EQ(stat.rescan_times_,  (i+3) * 2);
-  }
 }
 }
 }

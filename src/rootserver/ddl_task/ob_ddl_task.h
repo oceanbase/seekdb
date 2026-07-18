@@ -682,7 +682,6 @@ public:
       const bool ddl_can_retry,
       int64_t &new_execution_id);
   void check_ddl_task_execute_too_long();
-  static bool check_is_load_data(share::ObDDLType task_type);
   virtual bool support_longops_monitoring() const { return false; }
   int cleanup();
   int update_task_record_status_and_msg(common::ObISQLClient &proxy, const share::ObDDLTaskStatus real_new_status);

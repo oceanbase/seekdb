@@ -72,11 +72,6 @@ void ObLogBaseHeader::reset()
   replay_hint_ = 0;
 }
 
-void ObLogBaseHeader::set_compressed()
-{
-  flag_ = flag_ | PAYLOAD_IS_COMPRESSED;
-}
-
 bool ObLogBaseHeader::is_compressed() const 
 {
   return flag_ & PAYLOAD_IS_COMPRESSED;
@@ -138,6 +133,9 @@ DEFINE_DESERIALIZE(ObLogBaseHeader)
     CLOG_LOG(WARN, "deserialize flag_ failed", K(ret), KP(buf), K(data_len), K(pos));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, &replay_hint_))) {
     CLOG_LOG(WARN, "deserialize replay_hint_ failed", K(ret), KP(buf), K(data_len), K(pos));
+  } else if (is_compressed()) {
+    ret = OB_NOT_SUPPORTED;
+    CLOG_LOG(ERROR, "compressed log payload is not supported", K(ret), K(*this));
   }
 
   return ret;

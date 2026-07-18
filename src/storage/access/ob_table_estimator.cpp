@@ -18,42 +18,12 @@
 #include "ob_table_estimator.h"
 #include "ob_index_sstable_estimator.h"
 #include "storage/memtable/mvcc/ob_mvcc_iterator.h"
-#include "storage/ddl/ob_tablet_ddl_kv.h"
 
 namespace oceanbase
 {
 using namespace blocksstable;
 namespace storage
 {
-
-class ObDirectLoadMemtableScanRowCountEstimator
-{
-public:
-  ObDirectLoadMemtableScanRowCountEstimator(const ObTableEstimateBaseInput &base_input,
-                                            const ObDatumRange &range,
-                                            ObPartitionEst &tmp_cost)
-    : base_input_(base_input), range_(range), tmp_cost_(tmp_cost)
-  {
-  }
-  int operator()(ObDDLMemtable *ddl_memtable)
-  {
-    int ret = OB_SUCCESS;
-    if (OB_ISNULL(ddl_memtable)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected ddl memtable is null", K(ret));
-    } else if (OB_FAIL(ObTableEstimator::estimate_sstable_scan_row_count(base_input_,
-                                                                         ddl_memtable,
-                                                                         range_,
-                                                                         tmp_cost_))) {
-      LOG_WARN("failed to estimate sstable row count", K(ret), KPC(ddl_memtable));
-    }
-    return ret;
-  }
-private:
-  const ObTableEstimateBaseInput &base_input_;
-  const ObDatumRange &range_;
-  ObPartitionEst &tmp_cost_;
-};
 
 int ObTableEstimator::estimate_row_count_for_get(
     ObTableEstimateBaseInput &base_input,
@@ -190,16 +160,6 @@ int ObTableEstimator::estimate_multi_scan_row_count(
         } else {
           tmp_cost.reset();
           tmp_cost.add(sub_range_cost);
-        }
-      }
-    } else if (current_table->is_direct_load_memtable()) {
-      ObDDLKV *ddl_kv =  static_cast<ObDDLKV *>(current_table);
-      ObDirectLoadMemtableScanRowCountEstimator estimator(base_input, range, tmp_cost);
-      if (OB_FAIL(ddl_kv->access_first_ddl_memtable(estimator))) {
-        if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
-          STORAGE_LOG(WARN, "fail to access first ddl memtable", K(ret), KPC(current_table));
-        } else {
-          ret = OB_SUCCESS;
         }
       }
     } else {

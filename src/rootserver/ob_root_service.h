@@ -194,7 +194,6 @@ public:
   int finish_redef_table(const obcall::ObFinishRedefTableArg &arg);
   int abort_redef_table(const obcall::ObAbortRedefTableArg &arg);
   int update_ddl_task_active_time(const obcall::ObUpdateDDLTaskActiveTimeArg &arg);
-  int create_hidden_table(const obcall::ObCreateHiddenTableArg &arg, obcall::ObCreateHiddenTableRes &res);
   int execute_ddl_task(const obcall::ObAlterTableArg &arg, common::ObSArray<uint64_t> &obj_ids);
   int cancel_ddl_task(const obcall::ObCancelDDLTaskArg &arg);
   int alter_tablegroup(const obcall::ObAlterTablegroupArg &arg);

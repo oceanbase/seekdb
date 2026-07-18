@@ -207,34 +207,6 @@ private:
 };
 
 
-class ObLoadDataTimer
-{
-public:
-  ObLoadDataTimer(): total_time_us_(0), temp_start_time_us_(-1) {}
-  OB_INLINE void start_stat()
-  {
-    UNUSED(temp_start_time_us_);
-#ifdef TIME_STAT_ON
-    temp_start_time_us_ = ObTimeUtility::current_time();
-#endif
-  }
-  OB_INLINE void end_stat() {
-#ifdef TIME_STAT_ON
-    if (temp_start_time_us_ != -1) {
-      total_time_us_ += (ObTimeUtility::current_time() - temp_start_time_us_);
-      temp_start_time_us_ = -1;
-    }
-#endif
-  }
-  int64_t get_wait_secs() const {
-    return total_time_us_/1000000;
-  }
-  TO_STRING_KV("secs", get_wait_secs());
-private:
-  int64_t total_time_us_;
-  int64_t temp_start_time_us_;
-};
-
 /*
  * ObKMPStateMachine is a str matcher
  * efficiently implemented using KMP algorithm
@@ -303,7 +275,6 @@ struct ObLoadDataStat
   ObLoadDataStat() : allocator_(ObModIds::OB_SQL_LOAD_DATA), 
                      ref_cnt_(0),
                      job_id_(0),
-                     job_type_("normal"),
                      table_name_(),
                      file_path_(),
                      table_column_(0),
@@ -321,12 +292,7 @@ struct ObLoadDataStat
                      total_insert_task_(0),
                      shuffle_rt_sum_(0),
                      insert_rt_sum_(0),
-                     total_wait_secs_(0),
-                     max_allowed_error_rows_(0),
-                     detected_error_rows_(0),
-                     coordinator_(),
-                     store_(),
-                     message_() {}
+                     total_wait_secs_(0) {}
   int64_t aquire() {
     return ATOMIC_AAF(&ref_cnt_, 1);
   }
@@ -339,7 +305,6 @@ struct ObLoadDataStat
   volatile int64_t ref_cnt_;
   
   int64_t job_id_;
-  common::ObString job_type_; // normal / direct
   common::ObString table_name_;
   common::ObString file_path_;
   int64_t table_column_;
@@ -358,60 +323,14 @@ struct ObLoadDataStat
   int64_t shuffle_rt_sum_;
   int64_t insert_rt_sum_;
   int64_t total_wait_secs_;
-  int64_t max_allowed_error_rows_;
-  int64_t detected_error_rows_;
-  struct coordinator {
-    coordinator()
-      : received_rows_(0),
-        last_commit_segment_id_(0),
-        status_("none"),
-        trans_status_("none")
-    {}
-    volatile int64_t received_rows_; // received from client
-    int64_t last_commit_segment_id_;
-    common::ObString status_; // none / inited / loading / frozen / merging / commit / error / abort
-    common::ObString trans_status_; // none / inited / running / frozen / commit / error / abort
-    TO_STRING_KV(K(received_rows_), K(last_commit_segment_id_), K(status_), K(trans_status_));
-  } coordinator_;
-  struct store {
-    store()
-      : processed_rows_(0),
-        last_commit_segment_id_(0),
-        status_("none"),
-        trans_status_("none"),
-        compact_stage_load_rows_(0),
-        compact_stage_dump_rows_(0),
-        compact_stage_product_tmp_files_(0),
-        compact_stage_consume_tmp_files_(0),
-        compact_stage_merge_write_rows_(0),
-        merge_stage_write_rows_(0)
-    {}
-    volatile int64_t processed_rows_;
-    int64_t last_commit_segment_id_;
-    common::ObString status_;
-    common::ObString trans_status_;
-    int64_t compact_stage_load_rows_ CACHE_ALIGNED;
-    int64_t compact_stage_dump_rows_ CACHE_ALIGNED;
-    int64_t compact_stage_product_tmp_files_ CACHE_ALIGNED;
-    int64_t compact_stage_consume_tmp_files_ CACHE_ALIGNED;
-    int64_t compact_stage_merge_write_rows_ CACHE_ALIGNED;
-    int64_t merge_stage_write_rows_ CACHE_ALIGNED;
-    TO_STRING_KV(K(processed_rows_), K(last_commit_segment_id_), K(status_), K(trans_status_), 
-                 K(compact_stage_load_rows_), K(compact_stage_dump_rows_), 
-                 K(compact_stage_product_tmp_files_), K(compact_stage_consume_tmp_files_), 
-                 K(compact_stage_merge_write_rows_), K(merge_stage_write_rows_));
-  } store_;
-  char message_[common::MAX_LOAD_DATA_MESSAGE_LENGTH]; 
 
-  TO_STRING_KV(K(job_id_), K(job_type_),
+  TO_STRING_KV(K(job_id_),
       K(table_name_), K(file_path_), K(table_column_), K(file_column_),
       K(batch_size_), K(parallel_), K(load_mode_),
       K(start_time_), K(estimated_remaining_time_),
       K(total_bytes_), K(read_bytes_), K(parsed_bytes_),
       K(parsed_rows_), K(total_shuffle_task_), K(total_insert_task_),
-      K(shuffle_rt_sum_), K(insert_rt_sum_), K(total_wait_secs_),
-      K(max_allowed_error_rows_), K(detected_error_rows_),
-      K(coordinator_), K(store_), K(message_));
+      K(shuffle_rt_sum_), K(insert_rt_sum_), K(total_wait_secs_));
 };
 
 class ObGetAllJobStatusOp

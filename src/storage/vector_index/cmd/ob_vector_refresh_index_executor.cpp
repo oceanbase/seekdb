@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// #define DBMS_VECTOR_MOCK_TEST
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/vector_index/cmd/ob_vector_refresh_index_executor.h"
@@ -233,60 +232,6 @@ int ObVectorRefreshIndexExecutor::generate_vector_aux_index_name(
   }
   return ret;
 }
-
-int ObVectorRefreshIndexExecutor::mock_check_idx_col_name(
-    const ObString &idx_col_name,
-    const share::schema::ObTableSchema *base_table_schema,
-    const share::schema::ObTableSchema *delta_buf_table_schema,
-    const share::schema::ObTableSchema *index_id_table_schema) {
-  int ret = OB_SUCCESS;
-  CK(OB_NOT_NULL(base_table_schema),
-     OB_NOT_NULL(delta_buf_table_schema),
-     OB_NOT_NULL(index_id_table_schema));
-  if (OB_FAIL(ret)) {
-  } else {
-    const ObIndexInfo &delta_table_idx_info =
-        delta_buf_table_schema->get_index_info();
-    const ObIndexInfo &index_id_idx_info =
-        index_id_table_schema->get_index_info();
-    uint64_t delta_table_idx_col_id = OB_INVALID_ID;
-    uint64_t index_id_idx_col_id = OB_INVALID_ID;
-    const ObColumnSchemaV2 *col_schema = nullptr;
-    if (OB_UNLIKELY(1 != delta_table_idx_info.get_size() ||
-                    1 != index_id_idx_info.get_size())) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("the count of index column is not 1", KR(ret),
-              K(delta_table_idx_info.get_size()),
-              K(index_id_idx_info.get_size()));
-    } else if (OB_ISNULL(delta_table_idx_info.get_column(0))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("column is null", K(ret));
-    } else if (OB_ISNULL(index_id_idx_info.get_column(0))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("column is null", K(ret));
-    } else if (FALSE_IT(delta_table_idx_col_id =
-                            delta_table_idx_info.get_column(0)->column_id_)) {
-    } else if (FALSE_IT(index_id_idx_col_id =
-                            index_id_idx_info.get_column(0)->column_id_)) {
-    } else if (OB_UNLIKELY(delta_table_idx_col_id != index_id_idx_col_id)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("delta_buf_table & index_id_idx have different index column id",
-              KR(ret), K(delta_table_idx_col_id), K(index_id_idx_col_id));
-    } else if (FALSE_IT(col_schema = base_table_schema->get_column_schema(
-                            delta_table_idx_col_id))) {
-    } else if (OB_ISNULL(col_schema)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("column not exist", KR(ret), K(delta_table_idx_col_id));
-    } else if (OB_UNLIKELY(idx_col_name != col_schema->get_column_name_str())) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("idx column name does not match with index table", KR(ret),
-              K(idx_col_name), K(col_schema->get_column_name_str()));
-    }
-  }
-  return ret;
-}
-
-
 
 int ObVectorRefreshIndexExecutor::resolve_and_check_table_valid(
     const ObString &arg_idx_name, const ObString &arg_base_name,
@@ -583,15 +528,9 @@ int ObVectorRefreshIndexExecutor::resolve_refresh_arg(
   const share::schema::ObTableSchema *domain_table_schema = nullptr;
   const share::schema::ObTableSchema *index_id_table_schema = nullptr;
 
-#ifdef DBMS_VECTOR_MOCK_TEST
-  if (OB_FAIL(mock_resolve_and_check_table_valid(
-          arg.idx_name_, arg.table_name_, arg.idx_vector_col_,
-          base_table_schema, domain_table_schema, index_id_table_schema)))
-#else
   if (OB_FAIL(resolve_and_check_table_valid(
           arg.idx_name_, arg.table_name_, arg.idx_vector_col_,
           base_table_schema, domain_table_schema, index_id_table_schema)))
-#endif
   {
     LOG_WARN("fail to resolve and check table valid", KR(ret), K(arg));
   } else if (OB_ISNULL(base_table_schema) ||
@@ -669,15 +608,9 @@ int ObVectorRefreshIndexExecutor::resolve_rebuild_arg(
   const share::schema::ObTableSchema *domain_table_schema = nullptr;
   const share::schema::ObTableSchema *index_id_table_schema = nullptr;
 
-#ifdef DBMS_VECTOR_MOCK_TEST
-  if (OB_FAIL(mock_resolve_and_check_table_valid(
-          arg.idx_name_, arg.table_name_, arg.idx_vector_col_,
-          base_table_schema, domain_table_schema, index_id_table_schema)))
-#else
   if (OB_FAIL(resolve_and_check_table_valid(
           arg.idx_name_, arg.table_name_, arg.idx_vector_col_,
           base_table_schema, domain_table_schema, index_id_table_schema)))
-#endif
   {
     LOG_WARN("fail to resolve and check table valid", KR(ret), K(arg));
   } else if (OB_ISNULL(base_table_schema) || OB_ISNULL(domain_table_schema)) {

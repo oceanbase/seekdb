@@ -37,9 +37,7 @@
 #include "sql/resolver/ddl/ob_alter_table_resolver.h"
 #include "sql/resolver/ddl/ob_drop_table_resolver.h"
 #include "sql/resolver/ddl/ob_create_index_resolver.h"
-#include "sql/resolver/ddl/ob_create_mlog_resolver.h"
 #include "sql/resolver/ddl/ob_drop_index_resolver.h"
-#include "sql/resolver/ddl/ob_drop_mlog_resolver.h"
 #include "sql/resolver/ddl/ob_create_database_resolver.h"
 #include "sql/resolver/ddl/ob_alter_database_resolver.h"
 #include "sql/resolver/ddl/ob_use_database_resolver.h"
@@ -59,10 +57,9 @@
 #include "ddl/ob_alter_routine_resolver.h"
 #include "sql/resolver/ddl/ob_create_package_resolver.h"
 #include "sql/resolver/ddl/ob_drop_package_resolver.h"
-#include "sql/resolver/ddl/ob_flashback_resolver.h"
+#include "sql/resolver/ddl/ob_recyclebin_restore_resolver.h"
 #include "sql/resolver/ddl/ob_purge_resolver.h"
 #include "sql/resolver/ddl/ob_analyze_stmt_resolver.h"
-#include "sql/resolver/ddl/ob_flashback_resolver.h"
 #include "sql/resolver/ddl/ob_purge_resolver.h"
 #include "sql/resolver/ddl/ob_create_sequence_resolver.h"
 #include "sql/resolver/ddl/ob_alter_sequence_resolver.h"
@@ -99,7 +96,6 @@
 #include "sql/resolver/cmd/ob_load_data_resolver.h"
 #include "sql/resolver/prepare/ob_execute_resolver.h"
 #include "sql/resolver/prepare/ob_deallocate_resolver.h"
-#include "sql/resolver/ddl/ob_flashback_resolver.h"
 #include "sql/resolver/ddl/ob_purge_resolver.h"
 #include "sql/resolver/ddl/ob_create_sequence_resolver.h"
 #include "sql/resolver/ddl/ob_alter_sequence_resolver.h"
@@ -227,14 +223,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       }
       case T_CREATE_INDEX: {
         REGISTER_STMT_RESOLVER(CreateIndex);
-        break;
-      }
-      case T_CREATE_MLOG: {
-        REGISTER_STMT_RESOLVER(CreateMLog);
-        break;
-      }
-      case T_DROP_MLOG: {
-        REGISTER_STMT_RESOLVER(DropMLog);
         break;
       }
       case T_CREATE_VIEW: {
@@ -427,23 +415,12 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         REGISTER_STMT_RESOLVER(TruncateTable);
         break;
       }
-      case T_FLASHBACK_TABLE_FROM_RECYCLEBIN: {
-        REGISTER_STMT_RESOLVER(FlashBackTableFromRecyclebin);
+      case T_RECYCLEBIN_RESTORE_TABLE: {
+        REGISTER_STMT_RESOLVER(RecyclebinRestoreTable);
         break;
       }
-      case T_FLASHBACK_TABLE_TO_TIMESTAMP:
-      case T_FLASHBACK_TABLE_TO_SCN: {
-        ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "flashback table");
-        //REGISTER_STMT_RESOLVER(FlashBackTableToScn);
-        break;
-      }
-      case T_FLASHBACK_INDEX: {
-        REGISTER_STMT_RESOLVER(FlashBackIndex);
-        break;
-      }
-      case T_FLASHBACK_DATABASE: {
-        REGISTER_STMT_RESOLVER(FlashBackDatabase);
+      case T_RECYCLEBIN_RESTORE_DATABASE: {
+        REGISTER_STMT_RESOLVER(RecyclebinRestoreDatabase);
         break;
       }
       case T_PURGE_TABLE: {
@@ -889,13 +866,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         break;
       }
     }  // end switch
-    if (OB_SUCC(ret) && !params_.session_info_->is_inner()
-        && stmt->is_dml_stmt() && !stmt->is_explain_stmt() && 0 == stmt->get_stmt_id()) {
-      // allowed explain for dml write mv, allowed refresh mv sql write mv
-      OZ( (static_cast<ObDMLStmt*>(stmt)->disable_writing_materialized_view()) );
-    }
-
-    
     if (OB_SUCC(ret) && stmt->is_dml_write_stmt()) {
       // todo yanli:check leader-follower database
     }

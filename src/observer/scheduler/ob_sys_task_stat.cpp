@@ -40,7 +40,6 @@ const static char *ObSysTaskTypeStr[] = {
     "BACKUP_CLEAN",
     "BACKFILL_TX",
     "REMOVE_MEMBER",
-    "RESERVED",
     "MDS_MINI_MERGE",
     "TTL_TASK",
     "TENANT_SNAPSHOT_CREATE",

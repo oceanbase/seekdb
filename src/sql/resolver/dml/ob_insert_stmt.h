@@ -47,12 +47,6 @@ public:
     }
   }
   bool is_replace() const { return table_info_.is_replace_; }
-  void set_overwrite(const bool is_overwrite) {
-    table_info_.is_overwrite_ = is_overwrite;
-    set_stmt_type(stmt::T_INSERT);
-  }
-  bool is_overwrite() const { return table_info_.is_overwrite_; }
-  bool is_normal_table_overwrite() const { return is_overwrite(); }
   bool value_from_select() const { return !from_items_.empty(); }
   int get_all_assignment_exprs(common::ObIArray<ObRawExpr*> &assignment_exprs);
   common::ObIArray<ObAssignment> &get_table_assignments() { return table_info_.assignments_; }

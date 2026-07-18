@@ -7256,11 +7256,7 @@ int ObDMLResolver::add_additional_function_according_to_type(const ColumnItem *c
         OZ(build_padding_expr(session_info_, column, expr));
       }
       if (OB_SUCC(ret)) {
-        bool fast_calc = false;
-        if (OB_FAIL(check_insert_into_select_use_fast_column_convert(column->get_expr(), expr,
-                                                                     fast_calc))) {
-          LOG_WARN("fail to check insert into select need column conv expr", K(ret));
-        } else if (!in_insert_value_list && OB_FAIL(ObRawExprUtils::build_column_conv_expr(*params_.expr_factory_,
+        if (!in_insert_value_list && OB_FAIL(ObRawExprUtils::build_column_conv_expr(*params_.expr_factory_,
                                                                   *params_.allocator_,
                                                                   *column->get_expr(),
                                                                   expr,
@@ -7280,9 +7276,6 @@ int ObDMLResolver::add_additional_function_according_to_type(const ColumnItem *c
             obj.set_int(ObInt32Type, static_cast<uint32_t>(geo_type) << 16 | ObGeometryType);
             type_expr->set_value(obj);
           }
-        }
-        if (fast_calc && OB_SUCC(ret)) {
-          expr->set_cast_mode(expr->get_cast_mode() | CM_FAST_COLUMN_CONV);
         }
       }
     }
@@ -10331,95 +10324,6 @@ int ObDMLResolver::check_index_table_has_partition_keys(const ObTableSchema *ind
   return ret;
 }
 
-int ObDMLResolver::check_insert_into_select_use_fast_column_convert(const ObColumnRefRawExpr *target_expr,
-                                                                    const ObRawExpr *source_expr,
-                                                                    bool &fast_calc)
-{
-  int ret = OB_SUCCESS;
-  fast_calc = false;
-  ObDMLStmt *stmt = get_stmt();
-  if (stmt->is_insert_stmt() && GCONF._ob_enable_direct_load) {
-    const ObInsertStmt *insert_stmt = reinterpret_cast<ObInsertStmt *>(stmt);
-    ObQueryCtx *query_ctx = insert_stmt->get_query_ctx();
-    const ObGlobalHint &global_hint = query_ctx->get_query_hint().get_global_hint();
-    if (insert_stmt->value_from_select() && global_hint.has_direct_load()) {
-      // 1.first get actual raw expr
-      const ObRawExpr *target_real_ref = target_expr;
-      const ObRawExpr *source_real_ref = source_expr;
-      while (target_real_ref != NULL && T_REF_ALIAS_COLUMN == target_real_ref->get_expr_type()) {
-        target_real_ref = static_cast<const ObAliasRefRawExpr *>(target_real_ref)->get_ref_expr();
-      }
-      while (source_real_ref != NULL && T_REF_ALIAS_COLUMN == source_real_ref->get_expr_type()) {
-        source_real_ref = static_cast<const ObAliasRefRawExpr *>(source_real_ref)->get_ref_expr();
-      }
-
-      if (OB_ISNULL(target_real_ref)
-          || OB_ISNULL(source_real_ref)
-          || OB_ISNULL(session_info_)
-          || OB_ISNULL(schema_checker_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(target_real_ref), K(source_real_ref), K(session_info_), K(schema_checker_));
-      } else if (target_real_ref->is_column_ref_expr() && source_real_ref->is_column_ref_expr()) {
-        // 2.make sure they are all column_ref expr
-        const ObColumnRefRawExpr *source_real_col_ref_expr =
-          reinterpret_cast<const ObColumnRefRawExpr *>(source_real_ref);
-        const ObColumnRefRawExpr *target_real_col_ref_expr =
-          reinterpret_cast<const ObColumnRefRawExpr *>(target_real_ref);
-
-        const ColumnItem *source_expr_column_item = stmt->get_column_item_by_id(
-          source_real_col_ref_expr->get_table_id(), source_real_col_ref_expr->get_column_id());
-        const TableItem *target_table_item =
-          stmt->get_table_item_by_id(target_real_col_ref_expr->get_table_id());
-
-          target_real_col_ref_expr->is_not_null_for_write();
-
-        const schema::ObTableSchema *source_base_table_schema = nullptr;
-        if (OB_ISNULL(source_expr_column_item) || OB_ISNULL(target_table_item)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret), K(source_expr_column_item), K(target_table_item));
-        } else if (source_expr_column_item->base_tid_ != OB_INVALID_ID) {
-          if (OB_FAIL(schema_checker_->get_table_schema(
-                  source_expr_column_item->base_tid_,
-                  source_base_table_schema))) {
-            // get base table from source_expr_column_item->base_tid_
-            if (ret == OB_TABLE_NOT_EXIST) {
-              if (OB_FAIL(schema_checker_->get_table_schema(
-                      source_expr_column_item->base_tid_,
-                      source_base_table_schema, true))) {
-                LOG_WARN("fail to get source base table schema from sql_schema_guard", K(ret));
-              }
-            } else {
-              LOG_WARN("fail to get source base table schema", K(ret));
-            }
-          }
-
-          if (OB_FAIL(ret)) {
-          } else if (OB_ISNULL(source_base_table_schema)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("fail to get source base table schema", K(ret));
-          } else if (source_base_table_schema->is_user_table() &&
-                     ObRawExprUtils::check_exprs_type_collation_accuracy_equal(
-                         target_real_ref, source_real_ref) &&
-                     (!target_real_col_ref_expr->is_not_null_for_write() ||
-                      source_real_col_ref_expr->is_not_null_for_read())) {
-            // 3.then satisfy:
-            // 2-1.source col ref expr is from base table
-            // 2-2.they have same type and collation and accuracy
-            // 2-3.
-            // a.target column is nullable
-            // or
-            // b.target column is not allowed have NULL and can not read NULL from source column
-            // we just allocate fast column_conv expr
-            fast_calc = true;
-          }
-        }
-      }
-    }
-  }
-
-  return ret;
-}
-
 int ObDMLResolver::resolve_hints(const ParseNode *node)
 {
   int ret = OB_SUCCESS;
@@ -10810,10 +10714,6 @@ int ObDMLResolver::resolve_global_hint(const ParseNode &hint_node,
       }
       break;
     }
-    case T_MONITOR: {
-      global_hint.monitor_ = true;
-      break;
-    }
     case T_TRACING:
     case T_STAT:
     case T_BLOCKING: {
@@ -10834,12 +10734,6 @@ int ObDMLResolver::resolve_global_hint(const ParseNode &hint_node,
     case T_NO_GATHER_OPTIMIZER_STATISTICS: {
       CHECK_HINT_PARAM(hint_node, 0) {
         global_hint.merge_osg_hint(ObOptimizerStatisticsGatheringHint::OB_NO_OPT_STATS_GATHER);
-      }
-      break;
-    }
-    case T_APPEND: {
-      CHECK_HINT_PARAM(hint_node, 0) {
-        global_hint.merge_osg_hint(ObOptimizerStatisticsGatheringHint::OB_APPEND_HINT);
       }
       break;
     }
@@ -10877,10 +10771,6 @@ int ObDMLResolver::resolve_global_hint(const ParseNode &hint_node,
       }
       break;
     }
-    case T_NO_DIRECT: {
-      global_hint.direct_load_hint_.has_no_direct_ = true;
-      break;
-    }
     case T_NO_QUERY_TRANSFORMATION: {
       global_hint.disable_transform_ = true;
       break;
@@ -10896,15 +10786,6 @@ int ObDMLResolver::resolve_global_hint(const ParseNode &hint_node,
             child0->value_ <= ObDynamicSamplingLevel::BASIC_DYNAMIC_SAMPLING) {
           global_hint.merge_dynamic_sampling_hint(child0->value_);
         }
-      }
-      break;
-    }
-    case T_DIRECT: {
-      ObDirectLoadHint direct_load_hint;
-      if (OB_FAIL(resolve_direct_load_hint(hint_node, direct_load_hint))) {
-        LOG_WARN("fail to resolve direct load hint", KR(ret));
-      } else {
-        global_hint.merge_direct_load_hint(direct_load_hint);
       }
       break;
     }
@@ -13478,46 +13359,6 @@ int ObDMLResolver::resolve_table_dynamic_sampling_hint(const ParseNode &hint_nod
     opt_hint = dynamic_sampling_hint;
   }
   LOG_TRACE("resolve_table_dynamic_sampling_hint", K(is_valid_hint));
-  return ret;
-}
-
-int ObDMLResolver::resolve_direct_load_hint(const ParseNode &hint_node, ObDirectLoadHint &hint)
-{
-  int ret = OB_SUCCESS;
-  ParseNode *child0 = nullptr; // need_sort
-  ParseNode *child1 = nullptr; // max_error_row_count
-  ParseNode *child2 = nullptr; // load_method
-  if (OB_UNLIKELY(3 != hint_node.num_child_) ||
-      OB_ISNULL(child0 = hint_node.children_[0]) ||
-      OB_ISNULL(child1 = hint_node.children_[1])) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected hint node", K(ret), K(hint_node.num_child_), K(child0), K(child1));
-  } else {
-    const int64_t need_sort_value = child0->value_;
-    const int64_t error_rows_value = hint_node.children_[1]->value_;
-    ObString load_method_str;
-    ObDirectLoadHint::LoadMethod load_method_value = ObDirectLoadHint::INVALID_LOAD_METHOD;
-    if (OB_NOT_NULL(child2 = hint_node.children_[2])) {
-      load_method_str.assign_ptr(child2->str_value_, child2->str_len_);
-      load_method_value = ObDirectLoadHint::get_load_method_value(load_method_str);
-    } else {
-      load_method_value = ObDirectLoadHint::FULL;
-    }
-    if (OB_UNLIKELY(error_rows_value < 0)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid error rows value", KR(ret), K(error_rows_value));
-      LOG_USER_ERROR(OB_INVALID_ARGUMENT, "error rows in direct hint");
-    } else if (OB_UNLIKELY(ObDirectLoadHint::INVALID_LOAD_METHOD == load_method_value)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid load method value", KR(ret), K(load_method_str));
-      LOG_USER_ERROR(OB_INVALID_ARGUMENT, "load method in direct hint");
-    } else {
-      hint.has_direct_ = true;
-      hint.need_sort_ = (need_sort_value != 0);
-      hint.max_error_row_count_ = error_rows_value;
-      hint.load_method_ = load_method_value;
-    }
-  }
   return ret;
 }
 

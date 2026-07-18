@@ -122,10 +122,7 @@ public:
   ObLogReplayTask(const ObLogBaseHeader &header,
                   const palf::LSN &lsn,
                   const share::SCN &scn,
-                  const int64_t log_size,
-                  const int64_t base_header_len,
-                  void *decompression_buf,
-                  int64_t decompressed_log_size)
+                  const int64_t log_size)
       : log_type_(header.get_log_type()),
       lsn_(lsn),
       scn_(scn),
@@ -136,11 +133,7 @@ public:
       init_task_ts_(OB_INVALID_TIMESTAMP),
       first_handle_ts_(OB_INVALID_TIMESTAMP),
       print_error_ts_(OB_INVALID_TIMESTAMP),
-      read_log_buf_(NULL),
-      decompression_buf_(decompression_buf),
-      has_decompressed_(false),
-      decompressed_log_size_(decompressed_log_size),
-      base_header_len_(base_header_len)
+      read_log_buf_(NULL)
   {}
   virtual ~ObLogReplayTask()
   {
@@ -166,10 +159,6 @@ public:
   int64_t replay_cost_; //The processing time for this task during a successful replay
   int64_t retry_cost_; //Total time cost for retrying this task
   void *read_log_buf_;
-  void *decompression_buf_;//buf used to decompress log; if not NULL, means log should be decompessed
-  bool has_decompressed_;
-  int64_t decompressed_log_size_;
-  int64_t base_header_len_;
 
   int64_t to_string(char* buf, const int64_t buf_len) const;
 };

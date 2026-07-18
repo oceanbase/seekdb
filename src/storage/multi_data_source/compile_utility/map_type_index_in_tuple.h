@@ -35,9 +35,7 @@ struct TypeHelper {};
 template <typename FIRST, typename ...Args>
 struct DropFirstElemtTuple { typedef common::ObTuple<Args...> type; };
 
-#define GENERATE_TEST_MDS_TABLE
 #define GENERATE_NORMAL_MDS_TABLE
-#define GENERATE_LS_INNER_MDS_TABLE
 #define _GENERATE_MDS_UNIT_(KEY_TYPE, VALUE_TYPE, NEED_MULTI_VERSION) \
 ,TypeHelper<KEY_TYPE, VALUE_TYPE, NEED_MULTI_VERSION>, \
 TypeHelper<KEY_TYPE, VALUE_TYPE, !NEED_MULTI_VERSION>
@@ -45,9 +43,7 @@ typedef DropFirstElemtTuple<char
 #include "mds_register.h"
 >::type MdsTableTypeHelper;
 #undef _GENERATE_MDS_UNIT_
-#undef GENERATE_LS_INNER_MDS_TABLE
 #undef GENERATE_NORMAL_MDS_TABLE
-#undef GENERATE_TEST_MDS_TABLE
 
 #define NEED_GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION
 #define _GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION_(HELPER_CLASS, BUFFER_CTX_TYPE, ID, ENUM_NAME) \
@@ -57,6 +53,22 @@ typedef DropFirstElemtTuple<char
 >::type BufferCtxTupleHelper;
 #undef _GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION_
 #undef NEED_GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION
+
+// BufferCtx binding IDs are serialized with transaction state. Keep the IDs
+// assigned before obsolete registrations were removed; the gaps belong to
+// deleted types and are deliberately not represented in the production tuple.
+template <typename T>
+struct BufferCtxBindingTypeId;
+
+template <>
+struct BufferCtxBindingTypeId<MdsCtx> {
+  static constexpr int64_t value = 0;
+};
+
+template <>
+struct BufferCtxBindingTypeId<ObTabletCreateMdsCtx> {
+  static constexpr int64_t value = 3;
+};
 
 template <typename K, typename V>
 inline constexpr bool get_multi_version_flag() {

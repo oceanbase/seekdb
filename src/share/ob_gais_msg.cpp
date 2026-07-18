@@ -83,7 +83,7 @@ int ObGAISNextAutoIncValReq::init(const AutoincKey &autoinc_key,
     max_value_ = max_value;
     desired_cnt_ = desired_cnt;
     cache_size_ = cache_size;
-    autoinc_version_ = get_modify_autoinc_version(autoinc_version);
+    autoinc_version_ = autoinc_version;
   }
   return ret;
 }
@@ -91,7 +91,7 @@ int ObGAISNextAutoIncValReq::init(const AutoincKey &autoinc_key,
 int ObGAISAutoIncKeyArg::init(const AutoincKey &autoinc_key, const int64_t autoinc_version)
 {
   autoinc_key_ = autoinc_key;
-  autoinc_version_ = get_modify_autoinc_version(autoinc_version);
+  autoinc_version_ = autoinc_version;
   return OB_SUCCESS;
 }
 
@@ -109,7 +109,7 @@ int ObGAISPushAutoIncValReq::init(const AutoincKey &autoinc_key,
     autoinc_key_ = autoinc_key;
     base_value_ = base_value;
     max_value_ = max_value;
-    autoinc_version_ = get_modify_autoinc_version(autoinc_version);
+    autoinc_version_ = autoinc_version;
     cache_size_ = cache_size;
   }
   return ret;

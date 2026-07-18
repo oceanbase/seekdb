@@ -63,8 +63,8 @@ template <int IDX>
 int deserialize_(BufferCtx *&ctx_, int64_t type_idx, const char *buf, const int64_t buf_len, int64_t &pos, ObIAllocator &allocator) {
   int ret = OB_SUCCESS;
   MDS_TG(10_ms);
-  if (IDX == type_idx) {
-    using ImplType = GET_CTX_TYPE_BY_TUPLE_IDX(IDX);
+  using ImplType = GET_CTX_TYPE_BY_TUPLE_IDX(IDX);
+  if (BufferCtxBindingTypeId<ImplType>::value == type_idx) {
     ImplType *p_impl = nullptr;
     if (OB_ISNULL(p_impl = (ImplType *)allocator.alloc(sizeof(ImplType),
                                                        ObMemAttr("MDS_CTX_DESE",
@@ -121,7 +121,7 @@ int get_ctx_type_id_by_multi_data_source_type_idx(const transaction::ObTxDataSou
     #define _GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION_(HELPER_CLASS, BUFFER_CTX_TYPE, ID, ENUM_NAME) \
     case transaction::ObTxDataSourceType::ENUM_NAME:\
     {\
-      ctx_type_idx = TupleTypeIdx<BufferCtxTupleHelper, BUFFER_CTX_TYPE>::value;\
+      ctx_type_idx = BufferCtxBindingTypeId<BUFFER_CTX_TYPE>::value;\
     }\
     break;
     #include "storage/multi_data_source/compile_utility/mds_register.h"

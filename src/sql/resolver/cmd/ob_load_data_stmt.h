@@ -27,9 +27,6 @@ namespace oceanbase
 {
 namespace sql
 {
-class ObDirectLoadOptimizerCtx;
-
-
 enum class ObLoadFileLocation {
   SERVER_DISK = 0,
   CLIENT_DISK,
@@ -197,7 +194,6 @@ public:
     PARALLEL_THREADS = 0,  //parallel threads on the host server, for parsing and calc partition
     BATCH_SIZE,
     QUERY_TIMEOUT,
-    APPEND,
     GATHER_OPTIMIZER_STATISTICS,
     NO_GATHER_OPTIMIZER_STATISTICS,
     TOTAL_INT_ITEM
@@ -213,27 +209,22 @@ public:
     for (int64_t i = 0; i < TOTAL_STRING_ITEM; ++i) {
       string_values_[i].reset();
     }
-    direct_load_hint_.reset();
     hint_str_.reset();
   }
   int set_value(IntHintItem item, int64_t value);
   int get_value(IntHintItem item, int64_t &value) const;
   int set_value(StringHintItem item, const ObString &value);
   int get_value(StringHintItem item, ObString &value) const;
-  ObDirectLoadHint &get_direct_load_hint() { return direct_load_hint_; }
-  const ObDirectLoadHint &get_direct_load_hint() const { return direct_load_hint_; }
   ObString &get_hint_str() { return hint_str_; }
   void set_hint_str(const ObString &hint_str) { hint_str_ = hint_str; }
   TO_STRING_KV("Int Hint Item",
                common::ObArrayWrap<int64_t>(integer_values_, TOTAL_INT_ITEM),
                "String Hint Item",
                common::ObArrayWrap<ObString>(string_values_, TOTAL_STRING_ITEM),
-               K_(direct_load_hint),
                K_(hint_str));
 private:
   int64_t integer_values_[TOTAL_INT_ITEM];
   ObString string_values_[TOTAL_STRING_ITEM];
-  ObDirectLoadHint direct_load_hint_;
   ObString hint_str_;
 };
 
@@ -255,7 +246,7 @@ public:
   };
 
   ObLoadDataStmt() :
-    ObCMDStmt(stmt::T_LOAD_DATA), optimizer_ctx_(nullptr), is_default_table_columns_(false)
+    ObCMDStmt(stmt::T_LOAD_DATA), is_default_table_columns_(false)
   {
   }
   virtual ~ObLoadDataStmt()
@@ -283,10 +274,7 @@ public:
   common::ObIArray<ObString> &get_part_names() { return part_names_; }
   bool is_load_data_url() const { return is_load_data_url_; }
   void set_is_load_data_url(bool is_load_data_url) { is_load_data_url_ = is_load_data_url; }
-  void set_optimizer_ctx(ObDirectLoadOptimizerCtx *optimizer_ctx) { optimizer_ctx_ = optimizer_ctx; }
-  ObDirectLoadOptimizerCtx *get_optimizer_ctx() { return optimizer_ctx_; }
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_),
-               KP_(optimizer_ctx),
                K_(load_args),
                K_(data_struct_in_file),
                K_(field_or_var_list),
@@ -296,7 +284,6 @@ public:
                K_(part_ids));
 
 private:
-  ObDirectLoadOptimizerCtx *optimizer_ctx_;
   ObLoadArgument load_args_;
   ObDataInFileStruct data_struct_in_file_;
   common::ObSEArray<FieldOrVarStruct, 4> field_or_var_list_;

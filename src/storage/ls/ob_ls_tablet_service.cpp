@@ -38,10 +38,6 @@
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "storage/tablet/ob_tablet_service_clog_replay_executor.h"
 #include "observer/report/ob_tablet_table_updater.h" // for ObTabletTableUpdater
-#include "observer/table_load/ob_table_load_table_ctx.h"
-#include "observer/table_load/ob_table_load_coordinator.h"
-#include "observer/table_load/ob_table_load_store.h"
-#include "observer/table_load/ob_table_load_store_trans_px_writer.h"
 #include "storage/concurrency_control/ob_data_validation_service.h"
 #include "storage/concurrency_control/ob_data_validation_service.h"
 #include "storage/slog_ckpt/ob_tablet_replay_create_handler.h"
@@ -5113,9 +5109,6 @@ void ObLSTabletService::dump_diag_info_for_old_row_loss(
       } else if (table->is_data_memtable()) {
         FLOG_INFO("Found rowkey in the memtable",
             KPC(row), KPC(static_cast<memtable::ObMemtable*>(table)));
-      } else if (table->is_direct_load_memtable()) {
-        FLOG_INFO("Found rowkey in the direct load memtable",
-            KPC(row), KPC(static_cast<ObITabletMemtable*>(table)));
       }
       if (OB_SUCC(ret) && table->is_sstable()) {
         FLOG_INFO("Dump rowkey from sstable without row cache", KPC(row), KPC(reinterpret_cast<ObSSTable*>(table)));
@@ -5434,20 +5427,6 @@ int ObLSTabletService::inner_estimate_block_count_and_row_count(
     } else if (OB_ISNULL(table)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null table", K(ret), K(tablet_iter.table_iter()));
-    } else if (table->is_direct_load_memtable()) {
-      ObDDLKV *ddl_kv = static_cast<ObDDLKV *>(table);
-      int64_t macro_block_count_in_ddl_kv = 0;
-      int64_t micro_block_count_in_ddl_kv = 0;
-      int64_t row_count_in_ddl_kv = 0;
-      if (OB_FAIL(ddl_kv->get_block_count_and_row_count(macro_block_count_in_ddl_kv,
-                                                        micro_block_count_in_ddl_kv,
-                                                        row_count_in_ddl_kv))) {
-        LOG_WARN("fail to get block count and row count", K(ret));
-      } else {
-        macro_block_count += macro_block_count_in_ddl_kv;
-        micro_block_count += micro_block_count_in_ddl_kv;
-        sstable_row_count += row_count_in_ddl_kv;
-      }
     } else if (table->is_data_memtable()) {
       memtable_row_count += static_cast<memtable::ObMemtable *>(table)->get_physical_row_cnt();
     } else if (table->is_sstable()) {

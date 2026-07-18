@@ -146,11 +146,6 @@ private:
                                            ObIArray<ObOptColumnStatHandle> &no_regather_col_handles,
                                            ObIArray<ObOptStat> &subpart_opt_stats);
 
-  static int gen_opt_stat_param_by_direct_load(ObExecContext &ctx,
-                                               ObIAllocator &alloc,
-                                               const uint64_t table_id,
-                                               ObTableStatParam &param);
-
   static int get_all_part_opt_stats(const ObTableStatParam param,
                                     const ObIArray<PartInfo> &partition_infos,
                                     ObIArray<ObOptTableStat> &part_tab_stats,

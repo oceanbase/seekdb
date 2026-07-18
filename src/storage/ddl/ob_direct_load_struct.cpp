@@ -25,7 +25,6 @@
 #include "storage/ob_storage_schema_util.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/das/ob_das_utils.h"
-#include "storage/ddl/ob_direct_load_mgr_agent.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
@@ -57,245 +56,9 @@ int ObTabletDirectLoadInsertParam::assign(const ObTabletDirectLoadInsertParam &o
   return ret;
 }
 
-ObDDLInsertRowIterator::ObDDLInsertRowIterator()
-  : is_inited_(false),
-    ddl_agent_(nullptr),
-    slice_row_iter_(nullptr),
-    current_tablet_id_(), 
-    context_id_(-1),
-    macro_seq_(),
-    lob_allocator_(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE), 
-    lob_slice_id_(0),
-    lob_cols_cnt_(0),
-    is_skip_lob_(false),
-    total_slice_cnt_(-1)
-{
-  lob_id_cache_.set(1/*start*/, 0/*end*/);
-}
-
-ObDDLInsertRowIterator::~ObDDLInsertRowIterator()
-{
-
-}
-int ObDDLInsertRowIterator::init(
-    ObDirectLoadMgrAgent &agent,
-    ObIStoreRowIterator *slice_row_iter,
-    const common::ObTabletID &tablet_id,
-    const int64_t context_id,
-    const ObTabletSliceParam &tablet_slice_param,
-    const int64_t lob_cols_cnt,
-    const int64_t total_slice_cnt,
-    const bool is_skip_lob)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(is_inited_)) {
-    ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
-  } else if (OB_UNLIKELY(nullptr == slice_row_iter
-        || !tablet_id.is_valid()
-        || context_id < 0
-        // no need check tablet slice param, invalid when slice empty
-        || lob_cols_cnt < 0
-        || (is_idem_type(agent.get_direct_load_type()) && total_slice_cnt < 0))) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(slice_row_iter), K(tablet_id), K(context_id), K(tablet_slice_param), K(lob_cols_cnt), K(total_slice_cnt));
-  } else if (lob_cols_cnt > 0 && tablet_slice_param.is_valid()
-      && OB_FAIL(lob_id_generator_.init(tablet_slice_param.slice_idx_ * ObTabletSliceParam::LOB_ID_SEQ_INTERVAL, // start
-                                        ObTabletSliceParam::LOB_ID_SEQ_INTERVAL, // interval
-                                        tablet_slice_param.slice_count_ * ObTabletSliceParam::LOB_ID_SEQ_INTERVAL))) { // step
-  } else {
-    
-    ddl_agent_ = &agent;
-    slice_row_iter_ = slice_row_iter;
-    current_tablet_id_ = tablet_id;
-    context_id_ = context_id;
-    lob_cols_cnt_ = lob_cols_cnt;
-    const int64_t parallel_idx = tablet_slice_param.slice_idx_ >= 0 ? tablet_slice_param.slice_idx_ : 0;
-    is_skip_lob_ = is_skip_lob;
-    total_slice_cnt_ = total_slice_cnt;
-    is_inited_ = true;
-    if (OB_FAIL(macro_seq_.set_parallel_degree(parallel_idx))) {
-      LOG_WARN("set failed", K(ret), K(parallel_idx));
-    }
-
-    if (OB_FAIL(ret)) {
-    // Regardless of whether it contains data row or not, 
-    // the shared-storage ddl requires at least one slice to generate the major sstable in the end.
-    // And the shared-nothing ddl allocates the lobid cache when processing each row.
-    } else if (is_idem_type(ddl_agent_->get_direct_load_type())) {
-      if (!is_skip_lob && lob_cols_cnt_ > 0 && lob_id_cache_.remain_count() < lob_cols_cnt_) { // lob id cache not enough.
-        if (OB_FAIL(switch_to_new_lob_slice())) { // close the old slice, and open the new one.
-          LOG_WARN("switch to new lob slice failed", K(ret));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObDDLInsertRowIterator::close_lob_sstable_slice()
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), KP(slice_row_iter_), KP(ddl_agent_));
-  } else if (lob_slice_id_ > 0) {
-    blocksstable::ObMacroDataSeq unused_seq;
-    ObDirectLoadSliceInfo slice_info;
-    slice_info.is_full_direct_load_ = true;
-    slice_info.is_lob_slice_ = true;
-    slice_info.data_tablet_id_ = current_tablet_id_;
-    slice_info.slice_id_ = lob_slice_id_;
-    slice_info.context_id_ = context_id_;
-    if (OB_FAIL(ddl_agent_->close_sstable_slice(slice_info, nullptr/*insert_monitor*/, unused_seq))) {
-      LOG_WARN("close sstable slice failed", K(ret), K(slice_info));
-    } else if (OB_FAIL(ddl_agent_->update_max_lob_id(lob_id_generator_.get_current()))) {
-      LOG_WARN("update max lob id failed", K(ret), "last_lob_id", lob_id_generator_.get_current());
-    } else {
-      lob_slice_id_ = 0;
-    }
-  }
-  return ret;
-}
-
-int ObDDLInsertRowIterator::get_next_row(
-    const bool skip_lob,
-    const blocksstable::ObDatumRow *&row)
-{
-  int ret = OB_SUCCESS;
-  const blocksstable::ObDatumRow *current_row = nullptr;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), KP(slice_row_iter_), KP(ddl_agent_));
-  } else if (OB_FAIL(slice_row_iter_->get_next_row(current_row))) {
-    if (OB_ITER_END != ret) {
-      LOG_WARN("get next row failed", K(ret));
-    }
-  } else if (OB_ISNULL(current_row)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected err", K(ret));
-  } else if (!skip_lob && lob_cols_cnt_ > 0) { // has lob.
-    if (lob_id_cache_.remain_count() < lob_cols_cnt_) { // lob id cache not enough.
-      if (OB_FAIL(switch_to_new_lob_slice())) { // close the old slice, and open the new one.
-        LOG_WARN("switch to new lob slice failed", K(ret));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      ObDirectLoadSliceInfo slice_info;
-      slice_info.is_full_direct_load_ = true;
-      slice_info.is_lob_slice_ = true;
-      slice_info.data_tablet_id_ = current_tablet_id_;
-      slice_info.slice_id_ = lob_slice_id_;
-      slice_info.context_id_ = context_id_;
-      
-      lob_allocator_.reuse();
-      if (OB_FAIL(ddl_agent_->fill_lob_sstable_slice(lob_allocator_, slice_info,
-          lob_id_cache_, *const_cast<blocksstable::ObDatumRow *>(current_row)))) { // const_cast or new assign.
-        LOG_WARN("fill batch lob sstable slice failed", K(ret), K(slice_info), KPC(current_row));
-      }
-    }
-  }
-  if (OB_ITER_END == ret) {
-    // slice no row, or iter slice's row end.
-    int tmp_ret = OB_SUCCESS;
-    if (OB_TMP_FAIL(close_lob_sstable_slice())) {
-      LOG_WARN("fail to close lob sstable slice", K(tmp_ret));
-      ret = tmp_ret;
-    }
-  }
-  if (OB_SUCC(ret)) {
-    row = current_row;
-  }
-  return ret;
-}
-
-// close old lob sstable slice, request new lob id cache interval,
-// and construct new sstable slice writer.
-int ObDDLInsertRowIterator::switch_to_new_lob_slice()
-{
-  int ret = OB_SUCCESS;
-  // slice info to close.
-  ObDirectLoadSliceInfo slice_info;
-  uint64_t lob_id = 0;
-  slice_info.is_full_direct_load_ = true;
-  slice_info.is_lob_slice_ = true;
-  slice_info.data_tablet_id_ = current_tablet_id_;
-  slice_info.slice_id_ = lob_slice_id_;
-  slice_info.context_id_ = context_id_;
-  slice_info.total_slice_cnt_ = total_slice_cnt_;
-  ObTabletAutoincrementService &auto_inc = ObTabletAutoincrementService::get_instance();
-  ObTabletID lob_meta_tablet_id;
-  int64_t CACHE_SIZE_REQUESTED = AUTO_INC_CACHE_SIZE;
-  blocksstable::ObMacroDataSeq next_block_start_seq;
-#ifdef ERRSIM
-  if (-10000 == (OB_E(EventTable::EN_DDL_LOBID_CACHE_SIZE_INJECTED) OB_SUCCESS)) {
-    CACHE_SIZE_REQUESTED = 10000;
-    FLOG_INFO("ddl inject test, set lob cache size 1w", K(CACHE_SIZE_REQUESTED));
-  }
-#endif
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), KP(slice_row_iter_), KP(ddl_agent_));
-  } else if (OB_FAIL(ddl_agent_->get_lob_meta_tablet_id(lob_meta_tablet_id))) {
-    LOG_WARN("get tablet direct load mgr failed", K(ret), K(current_tablet_id_));
-  } else if (OB_FALSE_IT(lob_id_cache_.tablet_id_ = lob_meta_tablet_id)) {
-    // fetch cache via lob meta tablet id.
-  } else if (lob_slice_id_ > 0 && OB_FAIL(ddl_agent_->close_sstable_slice(slice_info, nullptr/*insert_monitor*/,
-  next_block_start_seq))) {
-    LOG_WARN("close old lob slice failed", K(ret), K(slice_info));
-  } else if (lob_slice_id_ > 0) {
-    if (OB_UNLIKELY(next_block_start_seq.get_data_seq() < macro_seq_.get_data_seq())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected start sequence", K(ret), K(next_block_start_seq), K(macro_seq_));
-    } else {
-      macro_seq_ = next_block_start_seq;
-    }
-  }
-
-  if (OB_FAIL(ret)) {
-    // max lob id need manual sync in ss mode
-  } else if (is_idem_type(ddl_agent_->get_direct_load_type())) {
-    int64_t lob_id_start = -1;
-    int64_t lob_id_end = -1;
-    if (!lob_id_generator_.is_inited()) {
-      // TDDO(cangdi): check this task can not retry
-      lob_id_cache_.cache_size_ = CACHE_SIZE_REQUESTED;
-      if (OB_FAIL(auto_inc.get_tablet_cache_interval(lob_id_cache_))) {
-        LOG_WARN("get_autoinc_seq fail", K(ret), K(slice_info));
-      } else if (OB_UNLIKELY(CACHE_SIZE_REQUESTED > lob_id_cache_.count())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected autoincrement value count", K(ret), K(lob_id_cache_));
-      }
-    } else if (OB_FAIL(lob_id_generator_.get_next_interval(lob_id_start, lob_id_end))) {
-      LOG_WARN("get lob id cache from ddl sequence generator fail", K(ret), K(lob_id_generator_));
-    } else {
-      lob_id_cache_.cache_size_ = lob_id_generator_.get_interval_size();
-      lob_id_cache_.set(max(lob_id_start, 1), lob_id_end);
-    }
-  } else {
-    if (OB_FALSE_IT(lob_id_cache_.cache_size_ = CACHE_SIZE_REQUESTED)) {
-    } else if (OB_FAIL(auto_inc.get_tablet_cache_interval(lob_id_cache_))) {
-      LOG_WARN("get_autoinc_seq fail", K(ret), K(slice_info), K(lob_id_cache_));
-    } else if (OB_UNLIKELY(CACHE_SIZE_REQUESTED > lob_id_cache_.count())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected autoincrement value count", K(ret), K(lob_id_cache_));
-    }
-  }
-  if (OB_SUCC(ret)) {
-    // new slice info to open.
-    slice_info.slice_id_ = 0;
-    if (OB_FAIL(ddl_agent_->open_sstable_slice(macro_seq_, slice_info))) {
-      LOG_WARN("open lob sstable slice failed", KR(ret), K(macro_seq_), K(slice_info));
-    } else {
-      lob_slice_id_ = slice_info.slice_id_;
-    }
-  }  
-  return ret;
-}
-
 ObLobMetaRowIterator::ObLobMetaRowIterator()
-  : is_inited_(false), iter_(nullptr), trans_id_(0), trans_version_(0), sql_no_(0),
-    tmp_row_(), lob_meta_write_result_(), direct_load_type_(DIRECT_LOAD_INVALID)
+  : is_inited_(false), iter_(nullptr), trans_version_(0),
+    tmp_row_(), lob_meta_write_result_()
 {
 }
 
@@ -305,26 +68,20 @@ ObLobMetaRowIterator::~ObLobMetaRowIterator()
 }
 
 int ObLobMetaRowIterator::init(ObLobMetaWriteIter *iter,
-                                const transaction::ObTransID &trans_id,
-                                const int64_t trans_version,
-                                const int64_t sql_no,
-                                const ObDirectLoadType direct_load_type)
+                                const int64_t trans_version)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_ISNULL(iter) || OB_UNLIKELY(trans_id < 0 || sql_no < 0 || trans_version < 0)) {
+  } else if (OB_ISNULL(iter) || OB_UNLIKELY(trans_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("iter is nullptr", K(ret), K(trans_id), K(sql_no), K(trans_version));
+    LOG_WARN("invalid argument", K(ret), KP(iter), K(trans_version));
   } else if (!tmp_row_.is_valid() && OB_FAIL(tmp_row_.init(ObLobMetaUtil::LOB_META_COLUMN_CNT + ObLobMetaUtil::SKIP_INVALID_COLUMN))) {
     LOG_WARN("Failed to init datum row", K(ret));
   } else {
     iter_ = iter;
-    trans_id_ = trans_id;
     trans_version_ = trans_version;
-    sql_no_ = sql_no;
-    direct_load_type_ = direct_load_type;
     is_inited_ = true;
   }
   return ret;
@@ -334,10 +91,7 @@ void ObLobMetaRowIterator::reset()
 {
   is_inited_ = false;
   iter_ = nullptr;
-  trans_id_.reset();
   trans_version_ = 0;
-  sql_no_ = 0;
-  direct_load_type_ = DIRECT_LOAD_INVALID;
   tmp_row_.reset();
 }
 
@@ -345,9 +99,7 @@ void ObLobMetaRowIterator::reuse()
 {
   is_inited_ = false;
   iter_ = nullptr;
-  trans_id_.reset();
   trans_version_ = 0;
-  sql_no_ = 0;
   tmp_row_.reuse();
 }
 
@@ -370,22 +122,16 @@ int ObLobMetaRowIterator::get_next_row(const blocksstable::ObDatumRow *&row)
       LOG_WARN("transform failed", K(ret), K(lob_meta_write_result_.info_));
     } else {
       tmp_row_.storage_datums_[ObLobMetaUtil::SEQ_ID_COL_ID + 1].set_int(-trans_version_);
-      tmp_row_.storage_datums_[ObLobMetaUtil::SEQ_ID_COL_ID + 2].set_int(-get_seq_no());
-      tmp_row_.set_trans_id(trans_id_);
+      tmp_row_.storage_datums_[ObLobMetaUtil::SEQ_ID_COL_ID + 2].set_int(0);
       tmp_row_.row_flag_.set_flag(ObDmlFlag::DF_INSERT);
       tmp_row_.mvcc_row_flag_.set_compacted_multi_version_row(true);
       tmp_row_.mvcc_row_flag_.set_first_multi_version_row(true);
       tmp_row_.mvcc_row_flag_.set_last_multi_version_row(true);
-      tmp_row_.mvcc_row_flag_.set_uncommitted_row(trans_id_.is_valid());
+      tmp_row_.mvcc_row_flag_.set_uncommitted_row(false);
       row = &tmp_row_;
     }
   }
   return ret;
-}
-
-int64_t ObLobMetaRowIterator::get_seq_no() const
-{
-  return is_incremental_direct_load(direct_load_type_) ? lob_meta_write_result_.seq_no_ : sql_no_;
 }
 
 ObTabletDDLParam::ObTabletDDLParam()
@@ -394,9 +140,7 @@ ObTabletDDLParam::ObTabletDDLParam()
     commit_scn_(SCN::min_scn()),
     data_format_version_(0),
     table_key_(),
-    snapshot_version_(0),
-    trans_id_(),
-    seq_no_()
+    snapshot_version_(0)
 {
 
 }
@@ -763,26 +507,12 @@ int ObMacroBlockSliceStore::init(
     init_param.task_id_ = ddl_task_id;
     init_param.data_format_version_ = data_format_version;
     init_param.parallel_cnt_ = tablet_direct_load_mgr->get_task_cnt();
-    if (is_incremental_direct_load(direct_load_type)) {
-      init_param.block_type_ = DDL_MB_DATA_TYPE;
-      init_param.tx_desc_ = tablet_direct_load_mgr->get_build_param().runtime_only_param_.tx_desc_;
-      init_param.trans_id_ = tablet_direct_load_mgr->get_build_param().runtime_only_param_.trans_id_;
-      init_param.seq_no_ = ObTxSEQ::cast_from_int(tablet_direct_load_mgr->get_build_param().runtime_only_param_.seq_no_);
-      if (OB_ISNULL(ddl_redo_callback_ = OB_NEW(ObDDLIncRedoLogWriterCallback, ObMemAttr("DDL_MBSS")))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to alloc memory", K(ret));
-      } else if (OB_FAIL(static_cast<ObDDLIncRedoLogWriterCallback *>(ddl_redo_callback_)->init(
-          init_param))) {
-        LOG_WARN("fail to init inc ddl_redo_callback_", K(ret), K(init_param));
-      }
-    } else {
-      init_param.block_type_ = tablet_direct_load_mgr->get_is_no_logging() ? DDL_MB_SS_EMPTY_DATA_TYPE : DDL_MB_DATA_TYPE;
-      if (OB_ISNULL(ddl_redo_callback_ = OB_NEW(ObDDLRedoLogWriterCallback, ObMemAttr("DDL_MBSS")))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to alloc memory", K(ret));
-      } else if (OB_FAIL(static_cast<ObDDLRedoLogWriterCallback *>(ddl_redo_callback_)->init(init_param))) {
-        LOG_WARN("fail to init full ddl_redo_callback_", K(ret), K(init_param));
-      }
+    init_param.block_type_ = tablet_direct_load_mgr->get_is_no_logging() ? DDL_MB_SS_EMPTY_DATA_TYPE : DDL_MB_DATA_TYPE;
+    if (OB_ISNULL(ddl_redo_callback_ = OB_NEW(ObDDLRedoLogWriterCallback, ObMemAttr("DDL_MBSS")))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to alloc memory", K(ret));
+    } else if (OB_FAIL(static_cast<ObDDLRedoLogWriterCallback *>(ddl_redo_callback_)->init(init_param))) {
+      LOG_WARN("fail to init ddl_redo_callback_", K(ret), K(init_param));
     }
     if (OB_SUCC(ret)) {
       ObMacroSeqParam macro_seq_param;
@@ -851,9 +581,8 @@ bool ObTabletDDLParam::is_valid() const
     && table_key_.is_valid()
     && start_scn_.is_valid_and_not_min()
     && commit_scn_.is_valid() && commit_scn_ != SCN::max_scn()
-    && (is_full_direct_load(direct_load_type_) ? snapshot_version_ > 0 : true)
-    && data_format_version_ > 0
-    && (is_incremental_direct_load(direct_load_type_) ? trans_id_.is_valid() : !trans_id_.is_valid());
+    && snapshot_version_ > 0
+    && data_format_version_ > 0;
 }
 
 ObDirectLoadSliceWriter::ObDirectLoadSliceWriter()
@@ -1082,12 +811,8 @@ int ObDirectLoadSliceWriter::prepare_iters(
     const int64_t trans_version,
     const ObObjType &obj_type,
     const ObCollationType &cs_type,
-    const transaction::ObTransID trans_id,
-    const int64_t seq_no,
     const int64_t timeout_ts,
     const ObLobStorageParam &lob_storage_param,
-    const ObDirectLoadType direct_load_type,
-    transaction::ObTxDesc* tx_desc,
     share::ObTabletCacheInterval &pk_interval,
     ObLobMetaRowIterator *&row_iter)
 {
@@ -1128,17 +853,12 @@ int ObDirectLoadSliceWriter::prepare_iters(
   }
   if (OB_SUCC(ret)) {
     int64_t unused_affected_rows = 0;
-    if (is_incremental_direct_load(direct_load_type) && OB_ISNULL(tx_desc)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("tx_desc should not be null if is incremental_direct_load", K(ret), K(direct_load_type), 
-          K(tablet_id), K(trans_version), K(seq_no), K(obj_type), K(cs_type), K(trans_id));
-    } else if (OB_FAIL(ObInsertLobColumnHelper::insert_lob_column(
-        allocator, *lob_allocator_, tx_desc, pk_interval, tablet_id/* tablet_id of main table */, tablet_direct_load_mgr_->get_tablet_id()/*tablet id of lob meta table*/,
+    if (OB_FAIL(ObInsertLobColumnHelper::insert_lob_column(
+        allocator, *lob_allocator_, nullptr, pk_interval, tablet_id/* tablet id of main table */, tablet_direct_load_mgr_->get_tablet_id()/*tablet id of lob meta table*/,
         obj_type, cs_type, lob_storage_param, datum, timeout_ts, true/*has_lob_header*/, *meta_write_iter_))) {
       LOG_WARN("fail to insert_lob_col", K(ret), K(tablet_id));
-    } else if (OB_FAIL(row_iterator_->init(meta_write_iter_, trans_id, 
-        trans_version, seq_no, direct_load_type))) {
-      LOG_WARN("fail to lob meta row iterator", K(ret), K(trans_id), K(trans_version), K(seq_no), K(direct_load_type));
+    } else if (OB_FAIL(row_iterator_->init(meta_write_iter_, trans_version))) {
+      LOG_WARN("fail to lob meta row iterator", K(ret), K(trans_version));
     } else {
       row_iter = row_iterator_;
     }
@@ -1218,8 +938,7 @@ int ObDirectLoadSliceWriter::fill_lob_into_macro_block(
       ObLobMetaRowIterator *row_iter = nullptr;
       if (OB_FAIL(prepare_iters(allocator, iter_allocator, datum,
           info.data_tablet_id_, info.trans_version_, col_type.get_type(), col_type.get_collation_type(),
-          info.trans_id_, info.seq_no_, timeout_ts, lob_storage_param, info.direct_load_type_,
-          info.tx_desc_, pk_interval, row_iter))) {
+          timeout_ts, lob_storage_param, pk_interval, row_iter))) {
         LOG_WARN("fail to prepare iters", K(ret), KP(row_iter), K(datum));
       } else {
         while (OB_SUCC(ret)) {
@@ -1473,59 +1192,6 @@ int ObDirectLoadSliceWriter::fill_lob_sstable_slice(
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected lob vector format", KR(ret), K(i), K(format));
           break;
-      }
-    }
-  }
-  return ret;
-}
-
-int ObDirectLoadSliceWriter::fill_lob_meta_sstable_slice(
-    const share::SCN &start_scn,
-    const uint64_t table_id,
-    const ObTabletID &curr_tablet_id,
-    ObIStoreRowIterator *row_iter,
-    int64_t &affected_rows)
-{
-  int ret = OB_SUCCESS;
-  affected_rows = 0;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObDirectLoadSliceWriter not init", KR(ret), KP(this));
-  } else {
-    const int64_t rowkey_column_count = ObLobMetaUtil::LOB_META_SCHEMA_ROWKEY_COL_CNT;
-    const int64_t column_count = ObLobMetaUtil::LOB_META_COLUMN_CNT + ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
-    while (OB_SUCC(ret)) {
-      const blocksstable::ObDatumRow *cur_row = nullptr;
-      if (OB_FAIL(THIS_WORKER.check_status())) {
-        LOG_WARN("check status failed", K(ret));
-      } else if (ATOMIC_LOAD(&is_canceled_)) {
-        ret = OB_CANCELED;
-        LOG_WARN("fil sstable task canceled", K(ret), K(is_canceled_));
-      } else if (OB_FAIL(row_iter->get_next_row(cur_row))) {
-        if (OB_ITER_END == ret) {
-          ret = OB_SUCCESS;
-          break;
-        } else {
-          LOG_WARN("get next row failed", K(ret));
-        }
-      } else if (OB_ISNULL(cur_row) || !cur_row->is_valid() || cur_row->get_column_count() != column_count) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid args", KR(ret), KPC(cur_row), K(column_count));
-      } else if (OB_FAIL(check_null_and_length(false/*is_index_table*/, false/*has_lob_rowkey*/, 
-                                               rowkey_column_count, *cur_row))) {
-        LOG_WARN("fail to check rowkey null value and length in row", KR(ret), KPC(cur_row));
-      } else if (OB_FAIL(prepare_slice_store_if_need(nullptr /*storage_schema*/,
-                                                     start_scn,
-                                                     ObString()/*unsued*/,
-                                                     0/*unsued*/,
-                                                     0/*unsued*/))) {
-        LOG_WARN("prepare macro block writer failed", K(ret));
-      } else if (OB_FAIL(slice_store_->append_row(*cur_row))) {
-        LOG_WARN("macro block writer append row failed", K(ret), KPC(cur_row));
-      }
-      if (OB_SUCC(ret)) {
-        ++affected_rows;
-        LOG_DEBUG("sstable insert op append row", K(affected_rows), KPC(cur_row));
       }
     }
   }
@@ -3348,9 +3014,6 @@ int ObDDLTableMergeDagParam::assign(const ObDDLTableMergeDagParam &merge_param)
     data_format_version_ = merge_param.data_format_version_;
     snapshot_version_    = merge_param.snapshot_version_;
     table_key_           = merge_param.table_key_;
-    trans_id_         = merge_param.trans_id_;
-    seq_no_           = merge_param.seq_no_;
-    table_type_       = merge_param.table_type_;
     if (is_commit_ && is_idem_type(direct_load_type_) &&
         OB_FAIL(user_data_.assign(arena_, merge_param.user_data_))) {
       LOG_WARN("failed to assign user data", K(ret));
@@ -3365,9 +3028,7 @@ int ObDDLTabletMergeDagParamV2::init(const bool for_major,
                                      const share::SCN start_scn,
                                      const ObDirectLoadType &direct_load_type,
                                      const ObDDLTaskParam &task_param,
-                                     ObDDLTabletContext *tablet_ctx,
-                                     const ObTransID &trans_id,
-                                     const ObTxSEQ &seq_no)
+                                     ObDDLTabletContext *tablet_ctx)
 {
   int ret = OB_SUCCESS;
   ObWriteTabletParam              *tablet_param = nullptr;
@@ -3378,11 +3039,6 @@ int ObDDLTabletMergeDagParamV2::init(const bool for_major,
       || (nullptr == tablet_ctx)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("ddl task id and execution id must be valid", K(ret), K(direct_load_type), K(task_param), KPC(tablet_ctx));
-  } else if (OB_UNLIKELY(is_incremental_major_direct_load(direct_load_type)
-      && (!trans_id.is_valid() || !seq_no.is_valid()))) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid trans_id or seq_no for incremental major direct load",
-        KR(ret), K(direct_load_type), K(trans_id), K(seq_no));
   } else if (FALSE_IT(tablet_param  = for_lob ? &tablet_ctx->lob_meta_tablet_param_ :
                                                  &tablet_ctx->tablet_param_)) {
   } else if (OB_ISNULL(tablet_param)) {
@@ -3401,30 +3057,13 @@ int ObDDLTabletMergeDagParamV2::init(const bool for_major,
   } else if (OB_FAIL(merge_ctx->slice_sstables_.create(DDL_SLICE_BUCKET_NUM, ObMemAttr("Ddl_Mrg_Task")))) {
     LOG_WARN("failed to create macro block checksum map", K(ret));
   } else {
-    // TODO@ zhuoran.zzr, reconstruct it
-    if (is_incremental_minor_direct_load(direct_load_type)) {
-      table_key_.table_type_ = ObITable::MINI_SSTABLE;
+    if (for_major) {
+      table_key_.table_type_ = ObITable::TableType::MAJOR_SSTABLE;
+      table_key_.version_range_.snapshot_version_ = task_param.snapshot_version_;
+    } else {
+      table_key_.table_type_ = ObITable::TableType::DDL_DUMP_SSTABLE;
       table_key_.scn_range_.start_scn_ = SCN::scn_dec(start_scn);
       table_key_.scn_range_.end_scn_ = start_scn;
-    } else if (is_incremental_major_direct_load(direct_load_type)) {
-      if (for_major) {
-        table_key_.table_type_ = ObITable::TableType::INC_MAJOR_SSTABLE;
-        table_key_.version_range_.snapshot_version_ = task_param.snapshot_version_;
-        table_key_.scn_range_.start_scn_ = start_scn;
-      } else {
-        table_key_.table_type_ = ObITable::TableType::INC_MAJOR_DDL_DUMP_SSTABLE;
-        table_key_.scn_range_.start_scn_ = SCN::scn_dec(start_scn);
-        table_key_.scn_range_.end_scn_ = start_scn;
-      }
-    } else {
-      if (for_major) {
-        table_key_.table_type_ = ObITable::TableType::MAJOR_SSTABLE;
-        table_key_.version_range_.snapshot_version_ = task_param.snapshot_version_;
-      } else {
-        table_key_.table_type_ = ObITable::TableType::DDL_DUMP_SSTABLE;
-        table_key_.scn_range_.start_scn_ = SCN::scn_dec(start_scn);
-        table_key_.scn_range_.end_scn_ = start_scn;
-      }
     }
 
     if (OB_FAIL(ret)) {
@@ -3438,8 +3077,6 @@ int ObDDLTabletMergeDagParamV2::init(const bool for_major,
       direct_load_type_ = direct_load_type;
       ddl_task_param_ = task_param;
       start_scn_ = start_scn;
-      trans_id_ = trans_id;
-      seq_no_ = seq_no;
       tablet_ctx_ = tablet_ctx;
       is_inited_ = true;
     }
@@ -3520,8 +3157,6 @@ int ObDDLTabletMergeDagParamV2::assign(const ObDDLTabletMergeDagParamV2 &merge_d
     rec_scn_          = merge_dag_param.rec_scn_;
     table_key_        = merge_dag_param.table_key_;
     tablet_ctx_       = merge_dag_param.tablet_ctx_;
-    trans_id_         = merge_dag_param.trans_id_;
-    seq_no_           = merge_dag_param.seq_no_;
     is_inited_        = true;
   }
   return ret;

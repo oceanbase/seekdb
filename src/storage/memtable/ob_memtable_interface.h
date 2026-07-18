@@ -87,7 +87,6 @@ struct CreateMemtableArg {
   share::SCN clog_checkpoint_scn_;
   share::SCN new_clog_checkpoint_scn_;
   bool for_replay_;
-  bool for_inc_direct_load_;
   bool is_delete_insert_;
 
   CreateMemtableArg() { reset(); }
@@ -97,7 +96,6 @@ struct CreateMemtableArg {
     clog_checkpoint_scn_.set_min();
     new_clog_checkpoint_scn_.set_min();
     for_replay_ = false;
-    for_inc_direct_load_ = false;
     is_delete_insert_ = false;
   }
 
@@ -105,7 +103,6 @@ struct CreateMemtableArg {
                K(clog_checkpoint_scn_),
                K(new_clog_checkpoint_scn_),
                K(for_replay_),
-               K(for_inc_direct_load_),
                K(is_delete_insert_));
 };
 

@@ -54,9 +54,7 @@ Thread::Thread(Threads *threads, int64_t idx, int64_t stack_size, int32_t numa_n
 #endif
       threads_(threads),
       idx_(idx),
-#ifndef OB_USE_ASAN
       stack_addr_(nullptr),
-#endif
       stack_size_(stack_size),
       stop_(true),
       join_concurrency_(0),
@@ -85,7 +83,7 @@ int Thread::start()
   } else if (stack_size_ <= 0) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid stack_size", K(ret), K(stack_size_));
-#if !defined(OB_USE_ASAN) && !defined(__APPLE__) && !defined(__ANDROID__) && !defined(_WIN32)
+#if !defined(__APPLE__) && !defined(__ANDROID__) && !defined(_WIN32)
   } else if (OB_ISNULL(stack_addr_ = g_stack_allocer.alloc(stack_size_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("alloc stack memory failed", K(stack_size_));
@@ -96,7 +94,6 @@ int Thread::start()
     int pret = pthread_attr_init(&attr);
     if (pret == 0) {
       need_destroy = true;
-#ifndef OB_USE_ASAN
       // Set high priority QoS for new threads (platform-independent)
       // On macOS, daemon processes get low QoS priority by default, causing scheduling delays.
       int qos_ret = ob_pthread_attr_set_qos(&attr, ObThreadQoS::USER_INITIATED);
@@ -122,7 +119,6 @@ int Thread::start()
       pret = pthread_attr_setstacksize(&attr, stack_size_);
 #else
       pret = pthread_attr_setstack(&attr, stack_addr_, stack_size_);
-#endif
 #endif
     }
     if (pret == 0) {
@@ -164,10 +160,7 @@ int Thread::start()
 
 void Thread::stop()
 {
-  bool stack_addr_flag = true;
-#ifndef OB_USE_ASAN
-  stack_addr_flag = (stack_addr_ != NULL);
-#endif
+  bool stack_addr_flag = (stack_addr_ != NULL);
 #if defined(ERRSIM) && !defined(_WIN32)
   if (!stop_
       && stack_addr_flag
@@ -178,7 +171,7 @@ void Thread::stop()
     return;
   }
 #endif
-#if !defined(OB_USE_ASAN) && !defined(_WIN32)
+#if !defined(_WIN32)
   if (!stop_ && stack_addr_ != NULL) {
     int tid_offset = 720;
     int pid_offset = 724;
@@ -217,7 +210,7 @@ void Thread::run()
 
 void Thread::dump_pth() // for debug pthread join faileds
 {
-#if !defined(OB_USE_ASAN) && !defined(_WIN32)
+#if !defined(_WIN32)
   int ret = OB_SUCCESS;
   int fd = 0;
   int64_t len = 0;
@@ -269,10 +262,8 @@ void Thread::wait()
 #endif
     if (0 != (ret = pthread_join(pth_, nullptr))) {
       LOG_ERROR("pthread_join failed", K(ret), K(errno));
-#ifndef OB_USE_ASAN
       dump_pth();
       ob_abort();
-#endif
     }
     destroy_stack();
   }
@@ -345,12 +336,10 @@ void Thread::destroy_stack()
 #ifdef _WIN32
   pth_ = pthread_null();
 #else
-#if !defined(OB_USE_ASAN)
   if (stack_addr_ != nullptr) {
     g_stack_allocer.dealloc(stack_addr_);
     stack_addr_ = nullptr;
   }
-#endif
   pth_ = 0;
 #endif
 }
@@ -370,7 +359,7 @@ void* Thread::__th_start(void *arg)
   current_thread_ = th;
   th->tid_ = gettid();
 
-#if  !defined(OB_USE_ASAN) && !defined(_WIN32) && !defined(__APPLE__) && !defined(__ANDROID__)
+#if !defined(_WIN32) && !defined(__APPLE__) && !defined(__ANDROID__)
   ObStackHeader *stack_header = nullptr;
   if (th->stack_addr_ != nullptr) {
     stack_header = ProtectedStackAllocator::stack_header(th->stack_addr_);
@@ -403,23 +392,10 @@ void* Thread::__th_start(void *arg)
         LOG_ERROR("create memory context failed", K(ret));
       } else {
         WITH_CONTEXT(*mem_context) {
-          try {
-            in_try_stmt = true;
 #if !defined(__APPLE__)
-            ATOMIC_STORE(&th->create_ret_, OB_SUCCESS);
+          ATOMIC_STORE(&th->create_ret_, OB_SUCCESS);
 #endif
-            th->run();
-            in_try_stmt = false;
-          } catch (OB_BASE_EXCEPTION &except) {
-            // we don't catch other exception because we don't know how to handle it
-            _LOG_ERROR("Exception caught!!! errno = %d, exception info = %s", except.get_errno(), except.what());
-            ret = OB_ERR_UNEXPECTED;
-            in_try_stmt = false;
-            if (1 == th->threads_->get_thread_count() && !th->has_set_stop()) {
-              LOG_WARN("thread exit by itself without set_stop", K(ret));
-              th->threads_->stop();
-            }
-          }
+          th->run();
         }
       }
       if (mem_context != nullptr && *mem_context != nullptr) {

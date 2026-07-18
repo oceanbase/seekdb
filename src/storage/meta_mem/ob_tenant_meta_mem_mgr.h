@@ -214,7 +214,6 @@ public:
 
   // ddl kv interface
   int acquire_ddl_kv(ObDDLKVHandle &handle);
-  int acquire_direct_load_memtable(ObTableHandleV2 &handle);
   int acquire_data_memtable(ObTableHandleV2 &handle);
   int acquire_tx_data_memtable(ObTableHandleV2 &handle);
   int acquire_tx_ctx_memtable(ObTableHandleV2 &handle);

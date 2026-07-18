@@ -20,7 +20,6 @@
 #include "sql/resolver/dml/ob_del_upd_stmt.h"
 #include "rpc/obmysql/ob_mysql_field.h"
 #include "sql/engine/px/ob_px_admission.h"
-#include "sql/engine/cmd/ob_table_direct_insert_service.h"
 #include "src/sql/plan_cache/ob_plan_cache.h"
 #include "src/sql/ob_sql_ccl_rule_manager.h"
 #include "sql/resolver/dml/ob_select_stmt.h"
@@ -103,8 +102,7 @@ OB_INLINE int ObResultSet::open_plan()
     LOG_ERROR("invalid physical plan", K(physical_plan_));
   } else {
     has_top_limit_ = physical_plan_->has_top_limit();
-    // PX admission is done in do_open_plan (right before execute_plan), not here: admitting now
-    // holds PX idle across open-phase work like direct-load's create_hidden_table -> deadlock.
+    // PX admission is done in do_open_plan (right before execute_plan), not here.
     if (OB_SUCC(ret)) {
       if (THIS_WORKER.is_timeout()) {
         // packet may have stayed in the queue for too long, by here it has already timed out,
@@ -201,17 +199,6 @@ int ObResultSet::open_result()
       }
     } else if (OB_FAIL(drive_dml_query())) {
       LOG_WARN("fail to drive dml query", K(ret));
-    } else {
-      ObPhysicalPlanCtx *plan_ctx = NULL;
-      if (OB_ISNULL(plan_ctx = get_exec_context().get_physical_plan_ctx())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("physical plan ctx is null");
-      } else if (plan_ctx->get_is_direct_insert_plan()) {
-        // for insert /*+ append */ into select clause
-        if (OB_FAIL(ObTableDirectInsertService::commit_direct_insert(get_exec_context(), *physical_plan_))) {
-          LOG_WARN("fail to commit direct insert", KR(ret));
-        }
-      }
     }
   }
   if (OB_SUCC(ret)) {
@@ -490,21 +477,12 @@ OB_INLINE int ObResultSet::do_open_plan(ObExecContext &ctx)
   } else if (OB_FAIL(start_stmt())) {
     LOG_WARN("fail start stmt", K(ret));
   } else {
-    ObPhysicalPlanCtx *plan_ctx = NULL;
-    if (OB_ISNULL(plan_ctx = get_exec_context().get_physical_plan_ctx())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("physical plan ctx is null");
-    } else if (plan_ctx->get_is_direct_insert_plan()) {
-      if (OB_FAIL(ObTableDirectInsertService::start_direct_insert(ctx, *physical_plan_))) {
-        LOG_WARN("fail to start direct insert", KR(ret));
-      }
-    }
     /* Set exec_result_ to the executor's runtime environment for returning data */
     /* execute plan,
      * whether it is a local, remote, or distributed plan, all except RootJob will be completed before the execute_plan function returns
      * exec_result_ is responsible for executing the last Job: RootJob
      **/
-    // Admit PX here -- after open-phase work (create_hidden_table etc.), just before execute_plan --
+    // Admit PX here after open-phase work, just before execute_plan,
     // so it is never held idle across pre-execution. Guard makes it idempotent across the open_plan
     // transaction_set_violation retry; no-ops for non-PX / dop==1 / EXPLAIN.
     if OB_FAIL(ret) {
@@ -766,19 +744,6 @@ OB_INLINE int ObResultSet::do_close_plan(int errcode, ObExecContext &ctx)
     }
 
     ObPxAdmission::exit_query_admission(my_session_, get_exec_context(), get_stmt_type(), *get_physical_plan());
-    // Finishing direct-insert must be executed after ObPxTargetMonitor::release_target()
-    if (plan_ctx->get_is_direct_insert_plan()) {
-      // for insert /*+ append */ into select clause
-      int tmp_ret = OB_SUCCESS;
-      if (OB_TMP_FAIL(ObTableDirectInsertService::finish_direct_insert(
-            ctx,
-            *physical_plan_,
-            (OB_SUCCESS == close_ret) && (OB_SUCCESS == errcode || OB_ITER_END == errcode)))) {
-        errcode_ = tmp_ret; // record error code
-        errcode = tmp_ret;
-        LOG_WARN("fail to finish direct insert", KR(tmp_ret));
-      }
-    }
 //    // Must be called after executor_.execute_plan runs to call a series of functions on exec_result_.
 //    if (OB_FAIL(exec_result_.close(ctx))) {
 //      SQL_LOG(WARN, "fail close main query", K(ret));

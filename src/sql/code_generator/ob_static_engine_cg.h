@@ -149,7 +149,6 @@ class HashRollupRTInfo;
 
 class ObMergeGroupByVecSpec;
 class ObNestedLoopJoinVecSpec;
-class ObTableDirectInsertSpec;
 
 typedef common::ObList<uint64_t, common::ObIAllocator> DASTableIdList;
 typedef common::ObSEArray<common::ObSEArray<int64_t, 8, common::ModulePageAllocator, true>,
@@ -460,8 +459,6 @@ private:
   template<typename MergeDistinctSpecType>
   int generate_merge_distinct_spec(ObLogDistinct &op, MergeDistinctSpecType &spec, const bool in_root_job);
 
-  // direct load
-  int generate_spec(ObLogInsert &op, ObTableDirectInsertSpec &spec, const bool in_root_job);
 private:
   int check_has_update_part_key(const ObIArray<IndexDMLInfo *> &update_index_dml_infos, bool &update_part_key);
   int disable_use_rich_format(const ObLogicalOperator &op, ObOpSpec &spec);
@@ -597,7 +594,6 @@ private:
   int generate_sort_exprs(const bool is_store_sortkey_separately, ObLogSort &op, ObSortVecSpec &spec,
                           ObIArray<OrderItem> &sk_keys);
 
-  int check_is_insert_overwrite_stmt(const ObLogPlan *plan, bool &is_insert_overwrite);
 private:
   struct BatchExecParamCache {
     BatchExecParamCache(ObExecParamRawExpr* expr, ObOpSpec* spec, bool is_left)

@@ -143,7 +143,6 @@ int ObStorageTableGuard::refresh_and_protect_memtable_for_write(ObRelativeTable 
 int ObStorageTableGuard::refresh_and_protect_memtable_for_replay()
 {
   const int64_t DEFAULT_REFRESH_WARN_INTERVAL = 10LL * 1000LL; // 10 ms
-  const int64_t FIND_DIRECT_LOAD_MT_WARN_INTERVAL = 10LL * 1000LL * 1000LL; // 10 seconds
 
   int ret = OB_SUCCESS;
   // need_retry is set to false in two situation :
@@ -166,10 +165,6 @@ int ObStorageTableGuard::refresh_and_protect_memtable_for_replay()
       }
     } else if (OB_FAIL(handle.get_tablet_memtable(tablet_memtable))) {
       LOG_WARN("fail to get memtable from ObTableHandle", K(ret), K(tablet_id));
-    } else if (tablet_memtable->is_direct_load_memtable()) {
-      // set warn interval to 1 second because freeze direct load memtable is an async task
-      warn_interval = FIND_DIRECT_LOAD_MT_WARN_INTERVAL;
-      ret = create_data_memtable_for_replay_(tablet_id, need_retry);
     } else if (OB_FAIL(check_freeze_to_inc_write_ref(static_cast<ObMemtable*>(tablet_memtable), need_retry))) {
       if (OB_EAGAIN == ret) {
       } else if (OB_MINOR_FREEZE_NOT_ALLOW != ret) {

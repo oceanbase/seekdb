@@ -192,7 +192,7 @@ insert into hhst2(c1,c2,c3,c4) values(19,'[4,1,2]','[5,2,3]','[9,9,4]');
 insert into hhst2(c1,c2,c3,c4) values(20,'[5,1,2]','[5,2,3]','[10,10,10]');
 create vector index vector_idx1 on hhst1(c3) with (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=100, ef_search=40);
 create vector index vector_idx2 on hhst1(c4) with (distance=l2, type=ivf_flat, nlist=2, sample_per_nlist=3);
-insert /*+ direct(true,100) enable_parallel_dml parallel(2) */ into hhst2 select * from hhst1;
+insert /*+ enable_parallel_dml parallel(2) */ into hhst2 select * from hhst1;
 select count(*) from hhst2;
 count(*)
 20

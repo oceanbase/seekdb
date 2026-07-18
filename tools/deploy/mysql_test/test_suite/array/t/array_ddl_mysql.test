@@ -329,7 +329,7 @@ CREATE TABLE t1(c1 TINYINT[], c2 SMALLINT[], c3 INT[]);
 INSERT INTO t1 VALUES([-10,15,39,-12,110,62,113,-31,29,-72], [-10,15,39,-12,110,62,113,-31,29,-72], [-10,15,39,-12,110,62,113,-31,29,-72]);
 
 CREATE TABLE t2(c1 INT[], c2 TINYINT[], c3 SMALLINT[]);
-INSERT /*+ direct(true,100) enable_parallel_dml parallel(2) append*/ INTO t2  SELECT * from t1;
+INSERT /*+ enable_parallel_dml parallel(2) */ INTO t2  SELECT * from t1;
 SELECT * from t2;
 
 drop table t1;
