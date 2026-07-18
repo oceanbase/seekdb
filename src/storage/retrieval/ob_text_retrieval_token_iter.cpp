@@ -637,6 +637,16 @@ int ObTextRetrievalTokenIter::set_decimal_int_by_precision(ObDatum &result_datum
 int ObTextRetrievalTokenIter::estimate_token_doc_cnt()
 {
   int ret = OB_SUCCESS;
+  struct TokenDocCntCacheEntry
+  {
+    TokenDocCntCacheEntry() : key_(0), doc_cnt_(0) {}
+    uint64_t key_;
+    int64_t doc_cnt_;
+  };
+  static constexpr int64_t TOKEN_DOC_CNT_CACHE_SIZE = 64;
+  static thread_local TokenDocCntCacheEntry token_doc_cnt_cache[TOKEN_DOC_CNT_CACHE_SIZE];
+  uint64_t cache_key = 0;
+  bool cache_hit = false;
   int64_t logical_row_cnt = 0;
   int64_t physical_row_cnt = 0;
   ObSEArray<ObEstRowCountRecord, 1> est_records;
@@ -655,7 +665,20 @@ int ObTextRetrievalTokenIter::estimate_token_doc_cnt()
   est_param.tx_id_ = inv_idx_agg_param_->tx_id_;
   est_param.schema_version_ = inv_idx_agg_param_->schema_version_;
   est_param.frozen_version_ = GET_BATCH_ROWS_READ_SNAPSHOT_VERSION;
-  if (OB_ISNULL(access_service = share::g_mp->access_service())) {
+  const ObNewRange &token_range = inv_idx_agg_param_->key_ranges_.at(0);
+  const ObObj &token_obj = token_range.start_key_.get_obj_ptr()[0];
+  const ObString token = token_obj.get_string();
+  const uint64_t tablet_id = inv_idx_agg_param_->tablet_id_.id();
+  cache_key = murmurhash(token.ptr(), token.length(), inv_idx_agg_param_->index_id_);
+  cache_key = murmurhash(&tablet_id, sizeof(tablet_id), cache_key);
+  cache_key = murmurhash(&inv_idx_agg_param_->schema_version_,
+                         sizeof(inv_idx_agg_param_->schema_version_), cache_key);
+  TokenDocCntCacheEntry &cache_entry =
+      token_doc_cnt_cache[cache_key % TOKEN_DOC_CNT_CACHE_SIZE];
+  if (OB_LIKELY(cache_entry.key_ == cache_key && cache_key != 0)) {
+    logical_row_cnt = cache_entry.doc_cnt_;
+    cache_hit = true;
+  } else if (OB_ISNULL(access_service = share::g_mp->access_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(access_service));
   } else if (OB_FAIL(table_scan_range.init(*inv_idx_agg_param_, batch, allocator))) {
@@ -668,12 +691,16 @@ int ObTextRetrievalTokenIter::estimate_token_doc_cnt()
                                                         physical_row_cnt))) {
     LOG_TRACE("OPT:[STORAGE EST FAILED, USE STAT EST]", "storage_ret", ret);
   } else {
+    cache_entry.key_ = cache_key;
+    cache_entry.doc_cnt_ = logical_row_cnt;
+  }
+  if (OB_SUCC(ret)) {
     token_doc_cnt_ = logical_row_cnt;
     token_doc_cnt_calculated_ = true;
     sql::ObExpr *total_doc_cnt_param_expr = relevance_expr_->args_[sql::ObExprBM25::TOTAL_DOC_CNT_PARAM_IDX];
     if (OB_ISNULL(total_doc_cnt_param_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null total doc cnt expr", K(ret));
+      LOG_WARN("unexpected null total doc cnt expr", K(ret), K(cache_hit));
     } else {
       int64_t total_doc_cnt = 0;
       if (total_doc_cnt_param_expr->enable_rich_format()
