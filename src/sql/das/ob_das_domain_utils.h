@@ -18,6 +18,7 @@
 #define OCEANBASE_DAS_DOMAIN_UTILS_H
 
 #include "lib/allocator/page_arena.h"
+#include "lib/container/ob_se_array.h"
 #include "lib/hash/ob_hashset.h"
 #include "common/datum/ob_datum.h"
 #include "sql/das/ob_das_dml_ctx_define.h"
@@ -48,10 +49,16 @@ public:
   int get_next_row(blocksstable::ObDatumRow *&row);
   void reset();
   void reuse();
-  TO_STRING_KV(K_(row_idx), K_(is_fts_index_aux), K_(helper), K_(is_inited), K_(rows));
+  TO_STRING_KV(K_(row_idx), K_(is_fts_index_aux), K_(helper), K_(is_inited),
+               K_(words), K_(counts));
 private:
+  static constexpr int64_t FT_WORD_MAP_BUCKET_COUNT = 128;
   lib::MemoryContext merge_memctx_;
-  ObDomainIndexRow rows_;
+  common::ObArenaAllocator row_allocator_;
+  blocksstable::ObDatumRow datum_row_;
+  ObFTWordMap word_map_;
+  common::ObSEArray<ObFTWord, 64> words_;
+  common::ObSEArray<int64_t, 64> counts_;
   uint64_t row_idx_;
   bool is_fts_index_aux_;
   storage::ObFTParseHelper helper_;

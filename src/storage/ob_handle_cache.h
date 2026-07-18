@@ -19,12 +19,25 @@
 
 #include "lib/list/ob_dlist.h"
 #include "lib/hash/ob_hashtable.h"
+#include "lib/utility/ob_macro_utils.h"
 
 
 namespace oceanbase
 {
 namespace storage
 {
+
+template<typename Key>
+struct ObHandleCacheHasher
+{
+  static uint64_t hash(const Key &key) { return static_cast<uint64_t>(key.hash()); }
+};
+
+template<>
+struct ObHandleCacheHasher<uint64_t>
+{
+  static uint64_t hash(const uint64_t key) { return key; }
+};
 
 template<typename Key, typename Handle>
 class ObHandleCacheNode : public common::ObDLinkBase<ObHandleCacheNode<Key, Handle>>
@@ -73,7 +86,8 @@ public:
   int get_handle(const Key &key, Handle &handle)
   {
     int ret = common::OB_SUCCESS;
-    int16_t idx = buckets_[key.hash() & MASK];
+    const uint64_t hash = ObHandleCacheHasher<Key>::hash(key);
+    int16_t idx = buckets_[hash & MASK];
     while (-1 < idx) {
       if (nodes_[idx].key_ == key) {
         handle = nodes_[idx].handle_;
@@ -121,7 +135,7 @@ public:
       node->reset();
       node->key_ = key;
       node->handle_ = handle;
-      node->bucket_idx_ = key.hash() & MASK;
+      node->bucket_idx_ = static_cast<int16_t>(ObHandleCacheHasher<Key>::hash(key) & MASK);
       idx_ptr = &buckets_[node->bucket_idx_];
       chain_[node_idx] = *idx_ptr;
       *idx_ptr = node_idx;
@@ -130,6 +144,22 @@ public:
     }
     return ret;
   }
+
+  template<typename Func>
+  int for_each_key(Func &&func) const
+  {
+    int ret = common::OB_SUCCESS;
+    const CacheNode *curr = lru_list_.get_first();
+    while (OB_SUCC(ret) && nullptr != curr && curr != lru_list_.get_header()) {
+      const CacheNode *next = static_cast<const CacheNode *>(curr->get_next());
+      if (OB_FAIL(func(curr->key_))) {
+      } else {
+        curr = next;
+      }
+    }
+    return ret;
+  }
+
   OB_INLINE int64_t hold() const { return hold_size_; }
 private:
   static const uint64_t BUCKET_SIZE = common::next_pow2(N * 2);

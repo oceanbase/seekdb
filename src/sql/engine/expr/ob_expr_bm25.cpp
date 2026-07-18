@@ -95,9 +95,6 @@ int ObExprBM25::eval_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ctx, ObD
       const double doc_weight = doc_token_weight(related_token_cnt, norm_len);
       const double relevance = token_weight * doc_weight;
       res_datum.set_double(relevance);
-      LOG_DEBUG("show bm25 parameters for current document",
-          K(token_doc_cnt), K(total_doc_cnt), K(related_token_cnt), K(doc_token_cnt), K(avg_doc_token_cnt),
-          K(norm_len), K(token_weight), K(doc_weight), K(relevance));
     }
   } else {
     ObDatum *token_doc_cnt_datum = nullptr;
@@ -132,9 +129,6 @@ int ObExprBM25::eval_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ctx, ObD
       const double doc_weight = doc_token_weight(related_token_cnt, norm_len);
       const double relevance = token_weight * doc_weight;
       res_datum.set_double(relevance);
-      LOG_DEBUG("show bm25 parameters for current document",
-          K(token_doc_cnt), K(total_doc_cnt), K(related_token_cnt), K(doc_token_cnt), K(avg_doc_token_cnt),
-          K(norm_len), K(token_weight), K(doc_weight), K(relevance));
     }
   }
   return ret;
@@ -171,22 +165,28 @@ int ObExprBM25::eval_batch_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ct
       const double avg_doc_token_cnt = avg_doc_token_cnt_datum.at(0)->get_double();
       ObDatum *res_datum = expr.locate_batch_datums(ctx);
       ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
+      ObDatum *doc_token_cnt_datums = doc_token_cnt_datum.datums_;
+      ObDatum *related_token_cnt_datums = related_token_cnt_datum.datums_;
+      const uint64_t doc_token_cnt_mask = doc_token_cnt_datum.mask_;
+      const uint64_t related_token_cnt_mask = related_token_cnt_datum.mask_;
       for(int64_t i = 0; OB_SUCC(ret) && i < size; ++i)
       {
-        if (OB_UNLIKELY(doc_token_cnt_datum.at(i)->is_null() || related_token_cnt_datum.at(i)->is_null())) {
+        ObDatum *doc_token_cnt = doc_token_cnt_datums + (doc_token_cnt_mask & i);
+        ObDatum *related_token_cnt = related_token_cnt_datums + (related_token_cnt_mask & i);
+        const uint64_t row_bit = 1ULL << (i & 63);
+        const int64_t word_idx = i >> 6;
+        if (OB_UNLIKELY(doc_token_cnt->is_null() || related_token_cnt->is_null())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected null datum", K(ret), KPC(doc_token_cnt_datum.at(i)), KPC(related_token_cnt_datum.at(i)));
-        }  else if (!skip.contain(i) && !eval_flags.at(i)) {
-          const int64_t related_token_cnt = related_token_cnt_datum.at(i)->get_uint();
-          const uint64_t doc_token_cnt = doc_token_cnt_datum.at(i)->get_uint();
-          const double norm_len = doc_token_cnt / avg_doc_token_cnt;
-          const double doc_weight = doc_token_weight(related_token_cnt, norm_len);
+          LOG_WARN("unexpected null datum", K(ret), KPC(doc_token_cnt), KPC(related_token_cnt));
+        } else if (0 == (skip.data_[word_idx] & row_bit)
+                   && 0 == (eval_flags.data_[word_idx] & row_bit)) {
+          const int64_t related_token_freq = related_token_cnt->get_uint();
+          const uint64_t doc_token_length = doc_token_cnt->get_uint();
+          const double norm_len = doc_token_length / avg_doc_token_cnt;
+          const double doc_weight = doc_token_weight(related_token_freq, norm_len);
           const double relevance = token_weight * doc_weight;
           res_datum[i].set_double(relevance);
-          eval_flags.set(i);
-          LOG_DEBUG("show bm25 parameters for current document",
-              K(token_doc_cnt), K(total_doc_cnt), K(related_token_cnt), K(doc_token_cnt), K(avg_doc_token_cnt),
-              K(norm_len), K(token_weight), K(doc_weight), K(relevance));
+          eval_flags.data_[word_idx] |= row_bit;
         }
       }
     }
@@ -219,33 +219,33 @@ int ObExprBM25::eval_batch_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ct
         const double avg_doc_token_cnt = avg_doc_token_cnt_datum.at(0)->get_double();
         ObDatum *res_datum = expr.locate_batch_datums(ctx);
         ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
+        ObDatum *doc_length_datums = doc_length_datum.datums_;
+        ObDatum *related_token_cnt_datums = related_token_cnt_datum.datums_;
+        const uint64_t doc_length_mask = doc_length_datum.mask_;
+        const uint64_t related_token_cnt_mask = related_token_cnt_datum.mask_;
         for(int64_t i = 0; OB_SUCC(ret) && i < size; ++i)
         {
-          if (OB_UNLIKELY(doc_length_datum.at(i)->is_null() || related_token_cnt_datum.at(i)->is_null())) {
+          ObDatum *doc_length = doc_length_datums + (doc_length_mask & i);
+          ObDatum *related_token_cnt = related_token_cnt_datums + (related_token_cnt_mask & i);
+          const uint64_t row_bit = 1ULL << (i & 63);
+          const int64_t word_idx = i >> 6;
+          if (OB_UNLIKELY(doc_length->is_null() || related_token_cnt->is_null())) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected null datum", K(ret), KPC(doc_length_datum.at(i)), KPC(related_token_cnt_datum.at(i)));
-          }  else if (!skip.contain(i) && !eval_flags.at(i)) {
-            const int64_t related_token_cnt = related_token_cnt_datum.at(i)->get_uint();
-            const uint64_t doc_token_cnt = doc_length_datum.at(i)->get_uint();
-            const double norm_len = doc_token_cnt / avg_doc_token_cnt;
-            const double doc_weight = doc_token_weight(related_token_cnt, norm_len);
+            LOG_WARN("unexpected null datum", K(ret), KPC(doc_length), KPC(related_token_cnt));
+          } else if (0 == (skip.data_[word_idx] & row_bit)
+                     && 0 == (eval_flags.data_[word_idx] & row_bit)) {
+            const int64_t related_token_freq = related_token_cnt->get_uint();
+            const uint64_t doc_token_length = doc_length->get_uint();
+            const double norm_len = doc_token_length / avg_doc_token_cnt;
+            const double doc_weight = doc_token_weight(related_token_freq, norm_len);
             const double relevance = token_weight * doc_weight;
             res_datum[i].set_double(relevance);
-            eval_flags.set(i);
-            LOG_DEBUG("show bm25 parameters for current document",
-                K(token_doc_cnt), K(total_doc_cnt), K(related_token_cnt), K(doc_token_cnt), K(avg_doc_token_cnt),
-                K(norm_len), K(token_weight), K(doc_weight), K(relevance));
+            eval_flags.data_[word_idx] |= row_bit;
           }
         }
     }
   }
   return ret;
-}
-
-double ObExprBM25::doc_token_weight(const int64_t token_freq, const double norm_len)
-{
-  const double tf = static_cast<double>(token_freq);
-  return tf / (tf + p_k1 * (1.0 - p_b + p_b * norm_len));
 }
 
 double ObExprBM25::query_token_weight(const int64_t doc_freq, const int64_t doc_cnt)

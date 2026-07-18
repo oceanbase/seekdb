@@ -100,6 +100,7 @@ private:
   virtual int generate_aux_table_schemas_() override;
   virtual int generate_foreign_keys_() override;
   virtual int generate_sequence_object_() override;
+  int record_fts_dict_dependencies_();
   int get_mock_fk_parent_table_info_(
       const obcall::ObCreateForeignKeyArg &foreign_key_arg,
       share::schema::ObForeignKeyInfo &foreign_key_info,

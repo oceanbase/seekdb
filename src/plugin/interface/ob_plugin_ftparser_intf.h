@@ -77,15 +77,27 @@ public:
   };
 
   ObFTIKParam(Mode mode = Mode::SMART)
-      : mode_(mode), main_dict_(""), quan_dict_(""), stopword_dict_("")
+      : mode_(mode),
+        main_dict_id_(OB_INVALID_ID),
+        quan_dict_id_(OB_INVALID_ID),
+        stopword_dict_id_(OB_INVALID_ID),
+        main_dict_name_(),
+        quan_dict_name_(),
+        stopword_dict_name_()
   {
   }
 
+  TO_STRING_KV(K_(mode), K_(main_dict_id), K_(quan_dict_id), K_(stopword_dict_id),
+               K_(main_dict_name), K_(quan_dict_name), K_(stopword_dict_name));
+
 public:
   Mode mode_;
-  common::ObString main_dict_;
-  common::ObString quan_dict_;
-  common::ObString stopword_dict_;
+  uint64_t main_dict_id_;
+  uint64_t quan_dict_id_;
+  uint64_t stopword_dict_id_;
+  common::ObString main_dict_name_;
+  common::ObString quan_dict_name_;
+  common::ObString stopword_dict_name_;
 };
 
 /**
@@ -101,9 +113,13 @@ public:
 public:
   ObFTParserParam()
       : ObFTParserParamExport(),
+        metadata_alloc_(nullptr),
+        scratch_alloc_(nullptr),
         ngram_token_size_(NGRAM_TOKEN_SIZE),
         min_ngram_size_(NGRAM_TOKEN_SIZE),
-        max_ngram_size_(NGRAM_TOKEN_SIZE)
+        max_ngram_size_(NGRAM_TOKEN_SIZE),
+        is_ddl_mode_(false),
+        need_casedown_(false)
   {
   }
   virtual ~ObFTParserParam() { reset(); }
@@ -112,19 +128,30 @@ public:
   {
     ObFTParserParamExport::reset();
     allocator_ = nullptr;
+    metadata_alloc_ = nullptr;
+    scratch_alloc_ = nullptr;
     ngram_token_size_ = NGRAM_TOKEN_SIZE;
+    is_ddl_mode_ = false;
+    need_casedown_ = false;
   }
 
-  INHERIT_TO_STRING_KV("base", ObFTParserParamExport, KP_(allocator), K_(ngram_token_size));
+  INHERIT_TO_STRING_KV("base", ObFTParserParamExport, KP_(allocator),
+                       KP_(metadata_alloc), KP_(scratch_alloc), K_(ngram_token_size),
+                       K_(min_ngram_size), K_(max_ngram_size), K_(ik_param),
+                       K_(is_ddl_mode), K_(need_casedown));
 
 public:
   common::ObIAllocator *allocator_ = nullptr;
+  common::ObIAllocator *metadata_alloc_;
+  common::ObIAllocator *scratch_alloc_;
 
   // ik parser params
   ObFTIKParam ik_param_;
   int64_t ngram_token_size_;
   int64_t min_ngram_size_;
   int64_t max_ngram_size_;
+  bool is_ddl_mode_;
+  bool need_casedown_;
 };
 
 class ObITokenIterator

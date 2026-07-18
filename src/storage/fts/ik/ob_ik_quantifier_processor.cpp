@@ -21,7 +21,6 @@
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "storage/fts/dict/ob_ft_dict_hub.h"
 #include "storage/fts/ik/ob_ik_char_util.h"
 #include "storage/fts/ik/ob_ik_token.h"
 
@@ -53,7 +52,8 @@ int ObIKQuantifierProcessor::process_CN_number(TokenizeContext &ctx,
   bool is_cn_number = false;
 
   if (ObFTCharUtil::CharType::CHINESE == type
-      && OB_FAIL(ObFTCharUtil::check_cn_number(ctx.collation(), ch, char_len, is_cn_number))) {
+      && OB_FAIL(ObFTCharUtil::check_cn_number(
+          ctx.charset_type(), ch, char_len, is_cn_number))) {
     LOG_WARN("Fail to check is cn number", K(ret));
   } else if (start_ == -1 && end_ == -1) {
     if (is_cn_number) {

@@ -40,6 +40,13 @@ struct ObSRMergeItem
 
 struct ObSRMergeCmp
 {
+  enum class FastCmpMode : uint8_t
+  {
+    GENERIC,
+    UINT64,
+    BINARY_STRING
+  };
+
   ObSRMergeCmp();
   virtual ~ObSRMergeCmp() {}
 
@@ -54,6 +61,7 @@ private:
   }
 private:
   common::ObDatumCmpFuncType cmp_func_;
+  FastCmpMode fast_cmp_mode_;
   // TODO: if memory lifetime of docid datum is guaranteed by dim_iters, we can use pointer to datum directly
   //       and avoid deep copy into merge heap here
   const ObFixedArray<const ObDatum *, ObIAllocator> *iter_ids_;
@@ -76,7 +84,7 @@ public:
       ObSparseRetrievalMergeParam &iter_param,
       ObIArray<ObISRDaaTDimIter *> &dim_iters,
       ObIAllocator &iter_allocator,
-      ObSRDaaTRelevanceCollector &relevance_collector);
+      ObSRDaaTRelevanceCollector *relevance_collector);
   virtual void reuse(const bool switch_tablet = false) override;
   virtual void reset() override;
   virtual int get_query_max_score(double &score) override;
@@ -97,6 +105,7 @@ protected:
   ObIAllocator *iter_allocator_;
   ObSparseRetrievalMergeParam *iter_param_;
   ObIArray<ObISRDaaTDimIter *> *dim_iters_;
+  ObISRDaaTDimIter **dim_iter_cache_;
   ObSRMergeCmp merge_cmp_;
   ObSRMergeHeap *merge_heap_;
   ObSRDaaTRelevanceCollector *relevance_collector_;

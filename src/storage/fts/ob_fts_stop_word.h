@@ -17,6 +17,7 @@
 #ifndef OB_FTS_STOP_WORD_H_
 #define OB_FTS_STOP_WORD_H_
 
+#include "lib/allocator/page_arena.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/hash/ob_hashset.h"
 #include "object/ob_object.h"
@@ -78,7 +79,10 @@ public:
 
   int init();
   void destroy();
-  int check_stopword(const ObFTWord &word, bool &is_stopword);
+  int check_stopword(const ObFTWord &word,
+                     bool &is_stopword,
+                     common::ObIAllocator &allocator);
+  bool needs_charset_conversion(const ObFTWord &word) const;
 
 private:
   static const int64_t DEFAULT_STOPWORD_BUCKET_NUM = 37L;
@@ -86,6 +90,7 @@ private:
 
   StopWordSet stopword_set_;
   ObObjMeta stopword_type_;
+  ObCharsetType stopword_charset_type_ = CHARSET_INVALID;
 
   bool inited_ = false;
 
@@ -102,7 +107,7 @@ public:
       const ObAddWordFlag &flag,
       common::ObIAllocator &allocator,
       ObFTWordMap &word_map);
-  ~ObAddWord() = default;
+  ~ObAddWord();
   int process_word(
       const char *word,
       const int64_t word_len,
@@ -126,6 +131,7 @@ private:
 private:
   ObObjMeta word_meta_;
   common::ObIAllocator &allocator_;
+  common::ObArenaAllocator *stopword_allocator_;
   ObFTWordMap &word_map_;
   int64_t min_max_word_cnt_;
   int64_t non_stopword_cnt_;

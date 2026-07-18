@@ -26,7 +26,6 @@ namespace oceanbase
 {
 namespace storage
 {
-class ObFTDictHub;
 class ObIKQuantifierProcessor : public ObIIKProcessor
 {
 public:
@@ -35,6 +34,12 @@ public:
   {
   }
   ~ObIKQuantifierProcessor() override { count_hits_.reset(); }
+
+  void reuse() override
+  {
+    count_hits_.reset();
+    reset();
+  }
 
   int do_process(TokenizeContext &ctx,
                  const char *ch,
