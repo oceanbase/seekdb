@@ -52,11 +52,11 @@ struct ObFTDictInfoKey
 {
 public:
   ObFTDictInfoKey()
-      : type_(static_cast<uint64_t>(ObFTDictType::DICT_TYPE_INVALID))
+      : type_(static_cast<uint64_t>(ObFTDictType::DICT_TYPE_INVALID)), name_hash_(0)
   {
   } // default constructor
-  ObFTDictInfoKey(const uint64_t type)
-      : type_(type)
+  ObFTDictInfoKey(const uint64_t type, const uint64_t name_hash)
+      : type_(type), name_hash_(name_hash)
   {
   }
   int hash(uint64_t &hash_value) const
@@ -70,12 +70,13 @@ public:
   {
     uint64_t hash = 0;
     hash = common::murmurhash(&type_, sizeof(int64_t), hash);
+    hash = common::murmurhash(&name_hash_, sizeof(name_hash_), hash);
     return hash;
   }
 
   bool operator==(const ObFTDictInfoKey &other) const
   {
-    return type_ == other.type_ && true;
+    return type_ == other.type_ && name_hash_ == other.name_hash_;
   }
 
   int compare(const ObFTDictInfoKey &other) const
@@ -83,20 +84,23 @@ public:
     int ret = 0;
     if (0 == ret) {
       ret = type_ - other.type_;
+      if (0 == ret) {
+        ret = name_hash_ == other.name_hash_ ? 0 : (name_hash_ < other.name_hash_ ? -1 : 1);
+      }
     }
     return ret;
   }
 
 private:
   uint64_t type_;
-  // name
+  uint64_t name_hash_;
 };
 
 class ObFTCacheRangeContainer;
 class ObFTDictHub
 {
 public:
-  ObFTDictHub() : is_inited_(false), dict_map_(), rw_dict_lock_() {}
+  ObFTDictHub() : is_inited_(false), cache_generation_(1), dict_map_(), rw_dict_lock_() {}
   ~ObFTDictHub() {}
 
   int init();
@@ -107,6 +111,13 @@ public:
 
   int load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
 
+  int refresh_cache(const ObString &table_name);
+
+  // TOKENIZE keeps a small per-worker memo for immutable calls. Refreshing a
+  // dictionary advances this generation so memoized entries are never reused
+  // after the dictionary contents have changed.
+  uint64_t get_cache_generation() const { return ATOMIC_LOAD(&cache_generation_); }
+
 private:
   int get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info);
 
@@ -115,6 +126,7 @@ private:
 
 private:
   bool is_inited_;
+  volatile uint64_t cache_generation_;
   // holds info of dict
   hash::ObHashMap<ObFTDictInfoKey, ObFTDictInfo> dict_map_;
   ObBucketLock rw_dict_lock_;

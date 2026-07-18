@@ -14771,6 +14771,52 @@ bool ObTransformUtils::is_full_group_by(ObSelectStmt& stmt, ObSQLMode mode)
   return !stmt.has_order_by() && is_only_full_group_by_on(mode);
 }
 
+int ObTransformUtils::check_need_calc_match_score(ObExecContext *exec_ctx,
+                                                   const ObDMLStmt *stmt,
+                                                   ObRawExpr *match_expr,
+                                                   bool &need_calc,
+                                                   ObIArray<ObExprConstraint> &constraints)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<ObRawExpr *, 8> relation_exprs;
+  need_calc = true;
+  if (OB_ISNULL(exec_ctx) || OB_ISNULL(stmt) || OB_ISNULL(match_expr)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid match score check argument", K(ret), KP(exec_ctx), KP(stmt), KP(match_expr));
+  } else if (OB_FAIL(stmt->get_relation_exprs(relation_exprs))) {
+    LOG_WARN("failed to get statement relation expressions", K(ret));
+  } else {
+    need_calc = false;
+    const ObIArray<ObRawExpr *> &condition_exprs = stmt->get_condition_exprs();
+    for (int64_t i = 0; OB_SUCC(ret) && !need_calc && i < relation_exprs.count(); ++i) {
+      bool expr_needs_score = false;
+      const bool is_condition_expr = ObRawExprUtils::find_expr(condition_exprs,
+                                                               relation_exprs.at(i));
+      if (!is_condition_expr
+          && (relation_exprs.at(i) == match_expr
+              || relation_exprs.at(i)->has_flag(IS_MATCH_EXPR)
+              || relation_exprs.at(i)->has_flag(CNT_MATCH_EXPR))) {
+        // Predicate truth can be obtained directly from the posting lists,
+        // but SELECT/ORDER BY/GROUP BY and other expression contexts still
+        // require the numeric MATCH value.  In particular, a projected
+        // `MATCH(...) > 0` must not be confused with the WHERE predicate.
+        need_calc = true;
+      } else if (is_condition_expr) {
+        if (OB_FAIL(SMART_CALL(inner_check_need_calc_match_score(exec_ctx,
+                                                                 relation_exprs.at(i),
+                                                                 match_expr,
+                                                                 expr_needs_score,
+                                                                 constraints)))) {
+          LOG_WARN("failed to check match score use", K(ret), K(i));
+        } else if (expr_needs_score) {
+          need_calc = true;
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 int ObTransformUtils::inner_check_need_calc_match_score(ObExecContext *exec_ctx,
                                                         ObRawExpr* expr, 
                                                         ObRawExpr* match_expr, 

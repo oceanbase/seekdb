@@ -19,6 +19,7 @@
 
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"
+#include "lib/allocator/page_arena.h"
 #include "share/text_analysis/ob_text_analyzer.h"
 #include "plugin/interface/ob_plugin_ftparser_intf.h"
 
@@ -39,11 +40,17 @@ public:
       english_analyzer_(),
       doc_(),
       token_stream_(nullptr),
+      scratch_allocator_(allocator),
+      ascii_cursor_(nullptr),
+      ascii_end_(nullptr),
+      use_ascii_scanner_(false),
+      analyzer_ready_(false),
       is_inited_(false)
   {}
   ~ObBEngFTParser() { reset(); }
 
   int init(plugin::ObFTParserParam *param);
+  int reset_document(const plugin::ObFTParserParam &param);
   void reset();
   virtual int get_next_token(
       const char *&word,
@@ -56,12 +63,26 @@ private:
   int segment(
       const common::ObDatum &doc,
       share::ObITokenStream *&token_stream);
+  int prepare_document(const char *text, int64_t text_len);
+  int ensure_analyzer();
+  int next_ascii_token(
+      const char *&word,
+      int64_t &word_len,
+      int64_t &char_len,
+      int64_t &word_freq);
+  static bool is_ascii_document(const char *text, int64_t text_len);
+  static bool is_ascii_word_char(unsigned char ch);
 private:
   common::ObIAllocator &allocator_;
   share::ObTextAnalysisCtx analysis_ctx_;
   share::ObEnglishTextAnalyzer english_analyzer_;
   common::ObDatum doc_;
   share::ObITokenStream *token_stream_;
+  common::ObArenaAllocator scratch_allocator_;
+  const char *ascii_cursor_;
+  const char *ascii_end_;
+  bool use_ascii_scanner_;
+  bool analyzer_ready_;
   bool is_inited_;
 
   DISALLOW_COPY_AND_ASSIGN(ObBEngFTParser);

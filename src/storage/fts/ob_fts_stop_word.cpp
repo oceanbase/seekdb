@@ -29,6 +29,24 @@ namespace oceanbase
 namespace storage
 {
 
+namespace
+{
+
+class WordFrequencyAdder
+{
+public:
+  explicit WordFrequencyAdder(const int64_t delta) : delta_(delta) {}
+  int operator()(common::hash::HashMapPair<ObFTWord, int64_t> &entry)
+  {
+    entry.second += delta_;
+    return OB_SUCCESS;
+  }
+private:
+  int64_t delta_;
+};
+
+} // namespace
+
 ////////////////////////////////////////////////////////////////////////////////
 // class ObStopWordChecker
 ObStopWordChecker::~ObStopWordChecker()
@@ -78,16 +96,29 @@ void ObStopWordChecker::destroy()
 int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
 {
   int ret = OB_SUCCESS;
-  
-  
-  common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
+  is_stopword = false;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObStopWordChecker hasn't been initialized", K(ret), K(inited_));
   } else if (OB_UNLIKELY(word.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("word is empty", K(ret), K(word));
+  } else if (word.get_collation_type() == stopword_type_.get_collation_type()) {
+    // The common path (BENG/space with utf8mb4_general_ci) already has the
+    // same collation as the immutable global set.  Avoid a per-token arena
+    // and charset conversion in that case.
+    ret = stopword_set_.exist_refactored(word);
+    if (OB_HASH_NOT_EXIST == ret) {
+      ret = OB_SUCCESS;
+    } else if (OB_HASH_EXIST == ret) {
+      is_stopword = true;
+      ret = OB_SUCCESS;
+    } else if (OB_SUCC(ret)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("the exist of hashset shouldn't return success", K(ret), K(word));
+    }
   } else {
+    common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
     common::ObString cmp_str;
     // do nothing set out with in if type is the same.
     if (OB_FAIL(common::ObCharset::charset_convert(
@@ -174,13 +205,26 @@ bool ObAddWord::is_min_max_word(const int64_t c_len) const
   return flag_.min_max_word() && (c_len < min_token_size_ || c_len > max_token_size_);
 }
 
+bool ObAddWord::can_keep_original_case(const ObFTWord &word) const
+{
+  const ObString &text = word.get_word().get_string();
+  bool unchanged = !text.empty();
+  for (int64_t idx = 0; unchanged && idx < text.length(); ++idx) {
+    const unsigned char ch = static_cast<unsigned char>(text.ptr()[idx]);
+    unchanged = ch < 0x80 && !(ch >= 'A' && ch <= 'Z');
+  }
+  return unchanged;
+}
+
 int ObAddWord::casedown_word(const ObFTWord &src, ObFTWord &dst)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(src.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid src ft word", K(ret), K(src));
-  } else if (flag_.casedown()) {
+  } else if (!flag_.casedown() || can_keep_original_case(src)) {
+    dst = src;
+  } else {
     ObString dst_str;
     if (OB_FAIL(ObCharset::tolower(
                     word_meta_.get_collation_type(),
@@ -192,8 +236,6 @@ int ObAddWord::casedown_word(const ObFTWord &src, ObFTWord &dst)
       ObFTWord tmp(dst_str.length(), dst_str.ptr(), word_meta_);
       dst = tmp;
     }
-  } else {
-    dst = src;
   }
   return ret;
 }
@@ -219,7 +261,6 @@ int ObAddWord::check_stopword(const ObFTWord &ft_word, bool &is_stopword)
 int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
 {
   int ret = OB_SUCCESS;
-  int64_t word_count = 0;
   if (OB_UNLIKELY(word.empty() || word_freq <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(word), K(word_freq));
@@ -227,16 +268,10 @@ int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
     if (OB_FAIL(word_map_.set_refactored(word, 1/*word count*/))) {
       LOG_WARN("fail to set fulltext word and count", K(ret), K(word));
     }
-  } else if (OB_FAIL(word_map_.get_refactored(word, word_count)) && OB_HASH_NOT_EXIST != ret) {
-    LOG_WARN("fail to get fulltext word", K(ret), K(word));
   } else {
-    if (OB_HASH_NOT_EXIST == ret) {
-      word_count = 1;
-    } else {
-      word_count += word_freq;
-    }
-    if (OB_FAIL(word_map_.set_refactored(word, word_count, 1/*overwrite*/))) {
-      LOG_WARN("fail to set fulltext word and count", K(ret), K(word), K(word_count));
+    WordFrequencyAdder add_frequency(word_freq);
+    if (OB_FAIL(word_map_.set_or_update(word, 1/*first occurrence*/, add_frequency))) {
+      LOG_WARN("fail to aggregate fulltext word count", K(ret), K(word), K(word_freq));
     }
   }
   return ret;

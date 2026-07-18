@@ -24,6 +24,7 @@
 #include "share/ob_rpc_struct.h"
 #include "share/schema/ob_table_sql_service.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 
 using namespace oceanbase::rootserver;
 using namespace oceanbase::obcall;
@@ -176,6 +177,19 @@ int ObDropTableHelper::check_legitimacy_()
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("drop table required by materialized view is not supported", KR(ret));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "drop table required by materialized view is");
+      } else if (table_schema->is_fulltext_dict()) {
+        ObSchemaGetterGuard schema_guard;
+        bool referenced = false;
+        if (OB_FAIL(schema_service_->get_tenant_schema_guard(schema_guard))) {
+          LOG_WARN("failed to get schema guard for dictionary reference check", K(ret));
+        } else if (OB_FAIL(share::ObFtsIndexBuilderUtil::check_fulltext_dict_referenced(
+                               *table_schema, schema_guard, referenced))) {
+          LOG_WARN("failed to check dictionary references", K(ret));
+        } else if (referenced) {
+          ret = OB_OP_NOT_ALLOW;
+          LOG_USER_ERROR(OB_OP_NOT_ALLOW,
+                         "drop fulltext dictionary table referenced by a fulltext index");
+        }
       }
     }
   }

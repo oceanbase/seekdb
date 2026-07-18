@@ -229,41 +229,43 @@ int ObFTParsePluginData::get_dict_hub(ObFTDictHub *&hub)
 ////////////////////////////////////////////////////////////////////////////////
 // ObFTParseHelper
 int ObFTParseHelper::segment(
-    const ObFTParserProperty &property,
-    const int64_t parser_version,
-    const ObIFTParserDesc *parser_desc,
-    ObPluginParam *plugin_param,
     const ObCharsetInfo *cs,
     const char *ft,
     const int64_t ft_len,
-    common::ObIAllocator &allocator,
-    ObAddWord &add_word)
+    ObAddWord &add_word) const
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(parser_version < 0 || nullptr == parser_desc || nullptr == cs || nullptr == ft || 0 >= ft_len)) {
+  if (OB_UNLIKELY(!is_inited_ || nullptr == parser_desc_ || nullptr == allocator_ || nullptr == cs || nullptr == ft || 0 >= ft_len)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(parser_version), KP(parser_desc), KP(cs), K(ft), K(ft_len));
+    LOG_WARN("invalid arguments", K(ret), K_(is_inited), KP_(parser_desc), KP_(allocator), KP(cs), K(ft), K(ft_len));
   } else {
     ObFTParserParam param;
     ObITokenIterator *iter = nullptr;
-    param.allocator_ = &allocator;
+    param.allocator_ = allocator_;
     param.cs_ = cs;
     param.fulltext_ = ft;
     param.ft_length_ = ft_len;
-    param.parser_version_ = parser_version;
-    param.plugin_param_ = plugin_param;
-    param.ngram_token_size_ = property.ngram_token_size_;
+    param.parser_version_ = parser_name_.get_parser_version();
+    param.plugin_param_ = plugin_param_;
+    param.ngram_token_size_ = parser_property_.ngram_token_size_;
     param.ik_param_.mode_
-        = (property.ik_mode_smart_ ? ObFTIKParam::Mode::SMART : ObFTIKParam::Mode::MAX_WORD);
-    param.min_ngram_size_ = property.min_ngram_token_size_;
-    param.max_ngram_size_ = property.max_ngram_token_size_;
+        = (parser_property_.ik_mode_smart_ ? ObFTIKParam::Mode::SMART : ObFTIKParam::Mode::MAX_WORD);
+    param.ik_param_.main_dict_ = parser_property_.dict_table_;
+    param.ik_param_.quan_dict_ = parser_property_.quantifier_table_;
+    param.ik_param_.stopword_dict_ = parser_property_.stopword_table_;
+    param.min_ngram_size_ = parser_property_.min_ngram_token_size_;
+    param.max_ngram_size_ = parser_property_.max_ngram_token_size_;
 
-    if (OB_FAIL(parser_desc->segment(&param, iter))) {
+    // A parse helper can be reached by multiple DDL workers during an FTS
+    // index build.  Token iterators retain document-local cursors and scratch
+    // storage, so keeping one on the helper would race between workers.
+    if (OB_FAIL(parser_desc_->segment(&param, iter))) {
       LOG_WARN("fail to segment", K(ret), K(param));
     } else if (OB_ISNULL(iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected error, token iterator is nullptr", K(ret), KP(iter));
-    } else {
+    }
+    if (OB_SUCC(ret) && OB_NOT_NULL(iter)) {
       const char *word = nullptr;
       int64_t word_len = 0;
       int64_t char_cnt = 0;
@@ -282,7 +284,7 @@ int ObFTParseHelper::segment(
       }
     }
     if (OB_NOT_NULL(iter)) {
-      parser_desc->free_token_iter(&param, iter);
+      parser_desc_->free_token_iter(&param, iter);
       iter = nullptr;
     }
   }
@@ -361,6 +363,24 @@ int ObFTParseHelper::segment(
     ObFTWordMap &words) const
 {
   int ret = OB_SUCCESS;
+  if (OB_ISNULL(allocator_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("full-text parser helper has no allocator", K(ret), K_(is_inited));
+  } else if (OB_FAIL(segment(meta, fulltext, fulltext_len, *allocator_, doc_length, words))) {
+    LOG_WARN("fail to segment fulltext", K(ret), K(meta), K(fulltext_len));
+  }
+  return ret;
+}
+
+int ObFTParseHelper::segment(
+    const ObObjMeta &meta,
+    const char *fulltext,
+    const int64_t fulltext_len,
+    common::ObIAllocator &output_allocator,
+    int64_t &doc_length,
+    ObFTWordMap &words) const
+{
+  int ret = OB_SUCCESS;
   const ObCharsetInfo *cs = nullptr;
   ObCollationType type = meta.get_collation_type();
   if (OB_UNLIKELY(!is_inited_)) {
@@ -377,17 +397,8 @@ int ObFTParseHelper::segment(
     LOG_WARN("unexpected error, charset info is nullptr", K(ret), K(type));
   } else {
     words.reuse();
-    ObAddWord add_word(parser_property_, meta, add_word_flag_, *allocator_, words);
-    if (OB_FAIL(segment(
-                    parser_property_,
-                    parser_name_.get_parser_version(),
-                    parser_desc_,
-                    plugin_param_,
-                    cs,
-                    fulltext,
-                    fulltext_len,
-                    *allocator_,
-                    add_word))) {
+    ObAddWord add_word(parser_property_, meta, add_word_flag_, output_allocator, words);
+    if (OB_FAIL(segment(cs, fulltext, fulltext_len, add_word))) {
       LOG_WARN("fail to segment fulltext", K(ret), K(parser_name_), KP(parser_desc_), KP(cs), KP(fulltext),
           K(fulltext_len), KP(allocator_), K(parser_property_));
     } else {

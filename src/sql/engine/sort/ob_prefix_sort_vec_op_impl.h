@@ -1,17 +1,13 @@
-/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
  */
 
 #ifndef OCEANBASE_SQL_ENGINE_SORT_PREFIX_SORT_VEC_OP_IMPL_H_
@@ -33,8 +29,10 @@ class ObPrefixSortVecImpl final : public ObSortVecOpImpl<Compare, Store_Row, has
   using CopyableComparer = typename ObSortVecOpImpl<Compare, Store_Row, has_addon>::CopyableComparer;
 
 public:
-  explicit ObPrefixSortVecImpl(ObMonitorNode &op_monitor_info, lib::MemoryContext &mem_context) :
-    ObSortVecOpImpl<Compare, Store_Row, has_addon>(op_monitor_info, mem_context),
+  explicit ObPrefixSortVecImpl(ObMonitorNode &op_monitor_info,
+                               lib::MemoryContext &mem_context,
+                               ObSqlWorkAreaType profile_type) :
+    ObSortVecOpImpl<Compare, Store_Row, has_addon>(op_monitor_info, mem_context, profile_type),
     full_sk_collations_(nullptr), base_sk_collations_(), prev_row_(nullptr),
     next_prefix_row_(nullptr), child_(nullptr), self_op_(nullptr), sort_row_count_(nullptr),
     selector_(nullptr), selector_size_(0), sort_prefix_rows_(0), prefix_pos_(0),
@@ -62,7 +60,7 @@ protected:
               allocator_, mem_context_, eval_ctx_, cmp_sk_exprs_, sk_exprs_, all_exprs_,
               addon_exprs_, addon_vec_ptrs_, sk_vec_ptrs_, comp_, part_cnt_, topn_cnt_,
               outputted_rows_cnt_, cmp_sort_collations_, exec_ctx_, enable_encode_sortkey_,
-              sk_rows_, addon_rows_, sk_store_, addon_store_, sk_row_meta_, addon_row_meta_);
+              sk_rows_, addon_rows_, store_mgr_);
 
   // fetch rows in same prefix && do sort, set %next_prefix_row_ to nullptr
   // when all child rows are fetched.

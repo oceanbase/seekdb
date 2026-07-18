@@ -32,13 +32,25 @@ public:
   ~ObFTParserResolverHelper() = default;
 
   static int resolve_parser_properties(
+      const common::ObString &index_database_name,
       const ParseNode &parse_tree,
       common::ObIAllocator &allocator,
+      ObSchemaChecker *schema_checker,
       common::ObString &parser_property);
 
 private:
-  static int resolve_fts_index_parser_properties(const ParseNode *node,
-                                                 storage::ObFTParserJsonProps &property);
+  static int resolve_fts_index_parser_properties(
+      const common::ObString &index_database_name,
+      const ParseNode *node,
+      storage::ObFTParserJsonProps &property,
+      common::ObIAllocator &allocator,
+      ObSchemaChecker *schema_checker);
+  static int resolve_table_config(
+      const common::ObString &index_database_name,
+      const ParseNode *node,
+      storage::ObFTParserJsonProps &property,
+      common::ObIAllocator &allocator,
+      ObSchemaChecker &schema_checker);
 };
 
 } // end namespace sql

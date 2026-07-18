@@ -38,6 +38,11 @@ public:
 
   int output_result(TokenizeContext &ctx);
 
+  // An IK parser processes many batches for a long document.  The arbitrator
+  // owns only batch-local state, therefore recycling it avoids repeatedly
+  // constructing its arena and hash map.
+  void reuse();
+
 private:
   int prepare(TokenizeContext &ctx);
 

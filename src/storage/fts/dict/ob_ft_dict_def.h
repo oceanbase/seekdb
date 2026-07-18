@@ -65,6 +65,7 @@ public:
                const ObCharsetType charset,
                const ObCollationType coll_type)
       : name_(name), type_(type), charset_(charset), coll_type_(coll_type)
+        , cache_id_(0)
   {
   }
 
@@ -73,6 +74,7 @@ public:
   ObFTDictType type_;
   ObCharsetType charset_;
   ObCollationType coll_type_;
+  uint64_t cache_id_;
 };
 
 } //  namespace storage

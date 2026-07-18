@@ -176,6 +176,8 @@
 #include "ob_expr_to_base64.h"
 #include "ob_expr_from_base64.h"
 #include "ob_expr_random_bytes.h"
+#include "ob_expr_load_file.h"
+#include "ob_expr_ai_split_document.h"
 #include "ob_pl_expr_subquery.h"
 #include "ob_expr_encode_sortkey.h"
 #include "ob_expr_hash.h"
@@ -1341,6 +1343,8 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   ObExprVectorCosineSimilarity::calc_cosine_similarity,                /* 872 */
   ObExprVectorIPSimilarity::calc_ip_similarity,                        /* 873 */
   ObExprVectorSimilarity::calc_similarity,                             /* 874 */
+  ObExprLoadFile::eval_load_file,                                      /* 875 */
+  ObExprAiSplitDocument::eval_ai_split_document,                       /* 876 */
 };
 
 static ObExpr::EvalBatchFunc g_expr_eval_batch_functions[] = {

@@ -1,17 +1,13 @@
-/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
  */
 
 #ifndef OCEANBASE_SQL_ENGINE_SORT_SORT_COMPARE_VEC_OP_H_
@@ -100,6 +96,19 @@ public:
   {
     encode_sk_state_ = CompareBase::FALLBACK_TO_DISABLE;
   }
+  int check_sort_key_has_null(ObEvalCtx &eval_ctx, const ObBatchRows &input_brs)
+  {
+    UNUSED(eval_ctx);
+    UNUSED(input_brs);
+    return OB_SUCCESS;
+  }
+
+  int check_sort_key_has_null(const ObCompactRow **sk_stored_rows, const int64_t row_size)
+  {
+    UNUSED(sk_stored_rows);
+    UNUSED(row_size);
+    return OB_SUCCESS;
+  }
 
 protected:
   int init_cmp_sort_key(const ObIArray<ObExpr *> *cmp_sk_exprs,
@@ -136,6 +145,21 @@ public:
   // compare function for external merge sort
   bool operator()(const SortVecOpChunk *l, const SortVecOpChunk *r);
   bool operator()(const Store_Row *r, ObEvalCtx &eval_ctx);
+  bool operator()(const Store_Row *l, const ObIArray<ObDatum> &r_datums)
+  {
+    ret_ = OB_NOT_IMPLEMENT;
+    return false;
+  }
+  bool operator()(const ObIArray<ObDatum> &l_datums, const Store_Row *r)
+  {
+    ret_ = OB_NOT_IMPLEMENT;
+    return false;
+  }
+  OB_INLINE int compare(const Store_Row *l, const ObIArray<ObDatum> &r_datums)
+  {
+    ret_ = OB_NOT_IMPLEMENT;
+    return 0;
+  }
   int with_ties_cmp(const Store_Row *r, ObEvalCtx &eval_ctx);
   int with_ties_cmp(const Store_Row *l, const Store_Row *r);
 
@@ -144,18 +168,24 @@ protected:
   int compare(const Store_Row *r, ObEvalCtx &eval_ctx, const RowMeta *row_meta);
 };
 
-template <typename Store_Row, bool is_basic_cmp, bool is_topn_sort = false>
+// for sort / topn sort, sort key only has one column, no addon column
+template <typename Store_Row, bool has_addon, bool is_basic_cmp, bool is_topn_sort = false>
 class SingleColCompare : public CompareBase
 {
-  typedef int (*CmpFunc) (const void*, const void*);
+  typedef int (*BasicNotNullCmpFunc) (const void*, const void*);
+  typedef int (*BasicCmpFunc) (const void*, const bool, const void*, const bool);
+  typedef int (SingleColCompare::*CmpFunc) (const Store_Row*, const Store_Row*, const RowMeta*);
+  typedef int (SingleColCompare::*TopNCmpFunc) (const Store_Row*, ObEvalCtx&, const RowMeta*);
 public:
-  using SortVecOpChunk = ObSortVecOpChunk<Store_Row, false>;
+  using SortVecOpChunk = ObSortVecOpChunk<Store_Row, has_addon>;
   SingleColCompare(ObIAllocator &allocator) : CompareBase(allocator)
   {}
   int init(const ObIArray<ObExpr *> *cmp_sk_exprs, const RowMeta *sk_row_meta,
            const RowMeta *addon_row_meta, const ObIArray<ObSortFieldCollation> *cmp_sort_collations,
            ObExecContext *exec_ctx, bool enable_encode_sortkey);
   int init_cmp_func(const ObIArray<ObExpr *> &cmp_sk_exprs);
+  int check_sort_key_has_null(ObEvalCtx &eval_ctx, const ObBatchRows &input_brs);
+  int check_sort_key_has_null(const ObCompactRow **sk_stored_rows, const int64_t row_size);
   // compare function for quick sort.
   OB_INLINE bool operator()(const Store_Row *l, const Store_Row *r);
   // compare function for in-memory merge sort
@@ -163,21 +193,49 @@ public:
   // compare function for external merge sort
   OB_INLINE bool operator()(const SortVecOpChunk *l, const SortVecOpChunk *r);
   OB_INLINE bool operator()(const Store_Row *r, ObEvalCtx &eval_ctx);
+  OB_INLINE bool operator()(const Store_Row *l, const ObIArray<ObDatum> &r_datums)
+  {
+    ret_ = OB_NOT_IMPLEMENT;
+    return false;
+  }
+  OB_INLINE bool operator()(const ObIArray<ObDatum> &l_datums, const Store_Row *r)
+  {
+    ret_ = OB_NOT_IMPLEMENT;
+    return false;
+  }
+  OB_INLINE int compare(const Store_Row *l, const ObIArray<ObDatum> &r_datums)
+  {
+    ret_ = OB_NOT_IMPLEMENT;
+    return 0;
+  }
   OB_INLINE int with_ties_cmp(const Store_Row *r, ObEvalCtx &eval_ctx);
   OB_INLINE int with_ties_cmp(const Store_Row *l, const Store_Row *r);
 
 protected:
   OB_INLINE int compare(const Store_Row *l, const Store_Row *r, const RowMeta *row_meta);
+  template <bool is_ascending>
+  OB_INLINE int default_compare(const Store_Row *l, const Store_Row *r, const RowMeta *row_meta);
+  template <bool is_ascending>
+  OB_INLINE int not_null_compare(const Store_Row *l, const Store_Row *r, const RowMeta *row_meta);
   OB_INLINE int compare(const Store_Row *r, ObEvalCtx &eval_ctx, const RowMeta *row_meta);
+  template <bool is_ascending>
+  OB_INLINE int default_topn_compare(const Store_Row *r, ObEvalCtx &eval_ctx, const RowMeta *row_meta);
+  template <bool is_ascending>
+  OB_INLINE int not_null_topn_compare(const Store_Row *r, ObEvalCtx &eval_ctx, const RowMeta *row_meta);
 
 private:
-  // only for fast compare in one column sort
+  // only for fast compare in single-column sort
   static constexpr uint16_t LEN_OFFSET = 13;
-  static constexpr uint16_t DATA_OFFSET = 17 + (is_topn_sort ? 8 : 0);
-  static constexpr uint16_t FIXED_DATA_OFFSET = 9 + (is_topn_sort ? 8 : 0);
+  static constexpr uint16_t DATA_OFFSET = 17 + (is_topn_sort ? 8 : 0) + (has_addon ? 8 : 0);
+  static constexpr uint16_t FIXED_DATA_OFFSET = 9 + (is_topn_sort ? 8 : 0) + (has_addon ? 8 : 0);
   common::ObObjMeta cmp_obj_meta_;
-  CmpFunc cmp_func_;
-  const ObCharsetInfo *cs_;
+  const ObCharsetInfo *cs_{nullptr};
+  bool end_with_space_{false};
+  BasicCmpFunc basic_cmp_func_{nullptr};
+  BasicNotNullCmpFunc basic_not_null_cmp_func_{nullptr};
+  NullSafeRowCmpFunc str_cmp_func_{nullptr};
+  CmpFunc cmp_func_{nullptr};
+  TopNCmpFunc topn_cmp_func_{nullptr};
 };
 
 template<VecValueTypeClass vec_tc, bool null_first>
@@ -236,8 +294,23 @@ public:
   // compare function for external merge sort
   bool operator()(const SortVecOpChunk *l, const SortVecOpChunk *r);
   bool operator()(const Store_Row *r, ObEvalCtx &eval_ctx);
+  bool operator()(const Store_Row *l, const ObIArray<ObDatum> &r_datums)
+  {
+    ret_ = OB_NOT_IMPLEMENT;
+    return false;
+  }
+  bool operator()(const ObIArray<ObDatum> &l_datums, const Store_Row *r)
+  {
+    ret_ = OB_NOT_IMPLEMENT;
+    return false;
+  }
   int with_ties_cmp(const Store_Row *r, ObEvalCtx &eval_ctx);
   int with_ties_cmp(const Store_Row *l, const Store_Row *r);
+  OB_INLINE int compare(const Store_Row *l, const ObIArray<ObDatum> &r_datums)
+  {
+    ret_ = OB_NOT_IMPLEMENT;
+    return 0;
+  }
 
 protected:
   int compare(const Store_Row *l, const Store_Row *r, const RowMeta *row_meta);

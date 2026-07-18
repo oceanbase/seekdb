@@ -764,6 +764,12 @@ int ObTableHelper::inner_generate_table_schema_(const ObCreateTableArg &arg, ObT
     }
   }
 
+  if (OB_SUCC(ret) && new_table.is_fulltext_dict()
+      && OB_FAIL(ObFtsIndexBuilderUtil::check_fulltext_dict_schema(
+          new_table, arg.index_arg_list_.count()))) {
+    LOG_WARN("fulltext dictionary table schema check failed", K(ret), K(new_table.get_table_id()));
+  }
+
 
   return ret;
 }

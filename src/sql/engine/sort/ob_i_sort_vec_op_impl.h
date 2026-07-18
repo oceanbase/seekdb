@@ -1,17 +1,13 @@
-/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
  */
 
 #ifndef OCEANBASE_SQL_ENGINE_SORT_SORT_I_VEC_OP_IMPL_H_
@@ -29,11 +25,11 @@ namespace sql {
 class ObISortVecOpImpl
 {
 public:
-  explicit ObISortVecOpImpl(ObMonitorNode &op_monitor_info, lib::MemoryContext &mem_context) :
+  explicit ObISortVecOpImpl(ObMonitorNode &op_monitor_info,
+                            lib::MemoryContext &mem_context) :
     mem_context_(mem_context), input_rows_(OB_INVALID_ID), input_width_(OB_INVALID_ID),
     op_type_(PHY_INVALID), op_id_(UINT64_MAX), io_event_observer_(nullptr),
-    profile_(ObSqlWorkAreaType::SORT_WORK_AREA), op_monitor_info_(op_monitor_info),
-    sql_mem_processor_(profile_, op_monitor_info_)
+    op_monitor_info_(op_monitor_info)
   {}
   virtual ~ObISortVecOpImpl()
   {}
@@ -47,14 +43,8 @@ public:
   virtual int add_batch_stored_row(int64_t &row_size, const ObCompactRow **sk_stored_rows,
                                    const ObCompactRow **addon_stored_rows) = 0;
   virtual int64_t get_extra_size(bool is_sort_key) = 0;
-  void unregister_profile()
-  {
-    sql_mem_processor_.unregister_profile();
-  }
-  void unregister_profile_if_necessary()
-  {
-    sql_mem_processor_.unregister_profile_if_necessary();
-  }
+  virtual void unregister_profile() = 0;
+  virtual void unregister_profile_if_necessary() = 0;
   void collect_memory_dump_info(ObMonitorNode &info)
   {
     info.otherstat_1_id_ = op_monitor_info_.otherstat_1_id_;
@@ -96,9 +86,7 @@ protected:
   ObPhyOperatorType op_type_;
   uint64_t op_id_;
   ObIOEventObserver *io_event_observer_;
-  ObSqlWorkAreaProfile profile_;
   ObMonitorNode &op_monitor_info_;
-  ObSqlMemMgrProcessor sql_mem_processor_;
 };
 
 } // end namespace sql

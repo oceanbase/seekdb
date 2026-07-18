@@ -33,6 +33,7 @@ public:
                  const char *ch,
                  const uint8_t char_len,
                  const ObFTCharUtil::CharType type) override;
+  void reset_document_state() override;
 
 private:
   int process_english_letter(TokenizeContext &ctx,

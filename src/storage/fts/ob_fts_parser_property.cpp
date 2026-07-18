@@ -455,8 +455,13 @@ int ObFTParserJsonProps::config_get_quantifier_table(ObString &str) const
     ret = OB_NOT_INIT;
   } else {
     ObIJsonBase *value = nullptr;
-    if (OB_FAIL(
-            root_->get_object_value(ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE), value))) {
+    if (OB_FAIL(root_->get_object_value(
+            ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE), value))
+        && OB_SEARCH_NOT_FOUND == ret) {
+      ret = root_->get_object_value(
+          ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE_LEGACY), value);
+    }
+    if (OB_FAIL(ret)) {
       if (OB_SEARCH_NOT_FOUND == ret) {
       } else {
         LOG_WARN("Fail to get quantifier_table", K(ret));
@@ -629,6 +634,7 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
   static const char *supported[] = {
       ObFTSLiteral::CONFIG_NAME_DICT_TABLE,
       ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE,
+      ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE_LEGACY,
       ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE,
       ObFTSLiteral::CONFIG_NAME_IK_MODE,
   };
@@ -660,11 +666,11 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
 
     if (OB_FAIL(ret)) {
       // do nothing
-    } else if (OB_FAIL(config_get_quantifier_table(table_name))) {
+    } else if (OB_FAIL(config_get_stopword_table(table_name))) {
       if (OB_SEARCH_NOT_FOUND == ret) {
         if (OB_FAIL(
-                config_set_quantifier_table(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE))) {
-          LOG_WARN("Failed to set default quantifier table", K(ret));
+                config_set_stopword_table(ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE))) {
+          LOG_WARN("Failed to set default stopword table", K(ret));
         }
       }
     } else {
@@ -1148,7 +1154,8 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
 
 #undef __FT_PARSER_PROPERTY_SHOW_COMMA
 
-int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const ObString &json_str)
+int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser,
+                                                const ObString &json_str)
 {
   int ret = OB_SUCCESS;
   ObFTParserJsonProps props;
@@ -1158,27 +1165,62 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
     LOG_WARN("fail to parse from json str", K(ret), K(json_str));
   } else {
     if (parser.is_ik()) {
-      // set dict tables and copy dict name
-      dict_table_ = ObString(ObFTSLiteral::CONFIG_NAME_DICT_TABLE);
-      stopword_table_ = ObString(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE);
-      quantifier_table_ = ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE);
-      ObString ik_smart;
-      if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
+      if (OB_FAIL(props.config_get_dict_table(dict_table_))) {
         if (OB_SEARCH_NOT_FOUND == ret) {
-          // from old version, ik_mode is not set, so use default value
-          ik_mode_smart_ = true;
+          dict_table_ = ObString(ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE);
           ret = OB_SUCCESS;
-        } else {
-          LOG_WARN("fail to get ik mode", K(ret));
         }
-      } else {
-        if (0 == ik_smart.case_compare(ObString(ObFTSLiteral::FT_IK_MODE_SMART))) {
-          ik_mode_smart_ = true;
-        } else if (0 == ik_smart.case_compare(ObString(ObFTSLiteral::FT_IK_MODE_MAX_WORD))) {
-          ik_mode_smart_ = false;
+      }
+      if (OB_SUCC(ret) && OB_FAIL(props.config_get_stopword_table(stopword_table_))) {
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          stopword_table_ = ObString(ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE);
+          ret = OB_SUCCESS;
+        }
+      }
+      if (OB_SUCC(ret) && OB_FAIL(props.config_get_quantifier_table(quantifier_table_))) {
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          quantifier_table_ = ObString(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE);
+          ret = OB_SUCCESS;
+        }
+      }
+      ObString ik_smart;
+      if (OB_SUCC(ret)) {
+        if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
+          if (OB_SEARCH_NOT_FOUND == ret) {
+            // from old version, ik_mode is not set, so use default value
+            ik_mode_smart_ = true;
+            ret = OB_SUCCESS;
+          } else {
+            LOG_WARN("fail to get ik mode", K(ret));
+          }
         } else {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid ik_smart", K(ret), K(ik_smart));
+          if (0 == ik_smart.case_compare(ObString(ObFTSLiteral::FT_IK_MODE_SMART))) {
+            ik_mode_smart_ = true;
+          } else if (0 == ik_smart.case_compare(ObString(ObFTSLiteral::FT_IK_MODE_MAX_WORD))) {
+            ik_mode_smart_ = false;
+          } else {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_WARN("invalid ik_smart", K(ret), K(ik_smart));
+          }
+        }
+      }
+      if (OB_SUCC(ret)) {
+        if (dict_table_.length() >= DICT_TABLE_NAME_BUF_LEN
+            || stopword_table_.length() >= DICT_TABLE_NAME_BUF_LEN
+            || quantifier_table_.length() >= DICT_TABLE_NAME_BUF_LEN) {
+          ret = OB_SIZE_OVERFLOW;
+          LOG_WARN("dictionary table name is too long", K(ret), K(dict_table_),
+                   K(stopword_table_), K(quantifier_table_));
+        } else {
+          MEMCPY(dict_table_buf_, dict_table_.ptr(), dict_table_.length());
+          dict_table_buf_[dict_table_.length()] = '\0';
+          dict_table_.assign_ptr(dict_table_buf_, dict_table_.length());
+          MEMCPY(stopword_table_buf_, stopword_table_.ptr(), stopword_table_.length());
+          stopword_table_buf_[stopword_table_.length()] = '\0';
+          stopword_table_.assign_ptr(stopword_table_buf_, stopword_table_.length());
+          MEMCPY(quantifier_table_buf_, quantifier_table_.ptr(), quantifier_table_.length());
+          quantifier_table_buf_[quantifier_table_.length()] = '\0';
+          quantifier_table_.assign_ptr(quantifier_table_buf_, quantifier_table_.length());
         }
       }
     } else if (parser.is_space()) {
@@ -1227,6 +1269,9 @@ ObFTParserProperty::ObFTParserProperty()
       stopword_table_(),
       dict_table_(),
       quantifier_table_(),
+      stopword_table_buf_(),
+      dict_table_buf_(),
+      quantifier_table_buf_(),
       min_ngram_token_size_(ObFTSLiteral::FT_DEFAULT_MIN_NGRAM_SIZE),
       max_ngram_token_size_(ObFTSLiteral::FT_DEFAULT_MAX_NGRAM_SIZE)
 {
@@ -1234,7 +1279,8 @@ ObFTParserProperty::ObFTParserProperty()
 
 int ObFTParserJsonProps::tokenize_array_to_props_json(ObIAllocator &allocator,
                                                       ObIJsonBase *array,
-                                                      ObString &json_str)
+                                                      ObString &json_str,
+                                                      const ObString &database_name)
 {
   int ret = OB_SUCCESS;
 
@@ -1257,6 +1303,33 @@ int ObFTParserJsonProps::tokenize_array_to_props_json(ObIAllocator &allocator,
         ret = OB_INVALID_ARGUMENT;
       } else if (OB_FAIL(array_value_item->get_object_value(0, config_name, config_value))) {
         LOG_WARN("Fail to get object value", K(ret));
+      } else if (!database_name.empty()
+                 && ObJsonNodeType::J_STRING == config_value->json_type()
+                 && (0 == config_name.case_compare(ObFTSLiteral::CONFIG_NAME_DICT_TABLE)
+                     || 0 == config_name.case_compare(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE)
+                     || 0 == config_name.case_compare(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE)
+                     || 0 == config_name.case_compare(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE_LEGACY))) {
+        ObString table_name(config_value->get_data_length(), config_value->get_data());
+        ObIJsonBase *normalized_value = config_value;
+        if (OB_ISNULL(table_name.find('.'))) {
+          const int64_t len = database_name.length() + table_name.length() + 1;
+          char *buf = static_cast<char *>(allocator.alloc(len + 1));
+          int64_t pos = 0;
+          if (OB_ISNULL(buf)) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+          } else if (OB_FAIL(databuff_printf(buf, len + 1, pos, "%.*s.%.*s",
+                                            database_name.length(), database_name.ptr(),
+                                            table_name.length(), table_name.ptr()))) {
+            LOG_WARN("failed to normalize dictionary table name", K(ret));
+          } else if (OB_ISNULL(normalized_value = OB_NEWx(
+                                 ObJsonString, &allocator,
+                                 ObString(static_cast<int32_t>(pos), buf)))) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+          }
+        }
+        if (OB_SUCC(ret) && OB_FAIL(properties_root.object_add(config_name, normalized_value))) {
+          LOG_WARN("Fail to add normalized dictionary table", K(ret));
+        }
       } else if (OB_FAIL(properties_root.object_add(config_name, config_value))) {
         LOG_WARN("Fail to add object value", K(ret));
       }

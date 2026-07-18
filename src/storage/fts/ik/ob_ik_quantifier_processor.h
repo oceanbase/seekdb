@@ -40,6 +40,11 @@ public:
                  const char *ch,
                  const uint8_t char_len,
                  const ObFTCharUtil::CharType type);
+  void reset_document_state() override
+  {
+    count_hits_.clear();
+    reset();
+  }
 
 private:
   int process_CN_number(TokenizeContext &ctx,

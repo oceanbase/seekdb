@@ -39,6 +39,7 @@ public:
   ~TokenizeContext();
 
   int init();
+  int reset_document(const char *fulltext, int64_t fulltext_len);
   int reset_resource();
 
   int get_next_token(const char *&word, int64_t &word_len, int64_t &offset, int64_t &char_cnt);
@@ -47,6 +48,12 @@ public:
 
   int current_char(const char *&ch, uint8_t &char_len);
   int current_char_type(ObFTCharUtil::CharType &type);
+  // Both values are prepared together by prepare_next_char().  Keep the pair
+  // together at call sites so the per-character hot path does not make two
+  // context calls just to read the cached state.
+  int current_char_and_type(const char *&ch,
+                            uint8_t &char_len,
+                            ObFTCharUtil::CharType &type);
 
   int step_next();
 
@@ -101,13 +108,17 @@ public:
 
   virtual ~ObIIKProcessor() {}
 
-  int process(TokenizeContext &ctx);
+  int process(TokenizeContext &ctx,
+              const char *ch,
+              const uint8_t char_len,
+              const ObFTCharUtil::CharType type);
 
   virtual int do_process(TokenizeContext &ctx,
                          const char *ch,
                          const uint8_t char_len,
                          const ObFTCharUtil::CharType type)
       = 0;
+  virtual void reset_document_state() {}
 };
 
 } // namespace storage

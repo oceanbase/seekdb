@@ -395,6 +395,7 @@ int ObSortVecOp::init_sort(int64_t row_count, int64_t topn_cnt)
 {
   int ret = OB_SUCCESS;
   ObSortVecOpContext context;
+  context.est_rows_ = row_count;
   
   context.sk_exprs_ = &MY_SPEC.sk_exprs_;
   context.addon_exprs_ = &MY_SPEC.addon_exprs_;

@@ -20,6 +20,7 @@
 #include "lib/allocator/ob_allocator.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/json/ob_json.h"
+#include "lib/ob_define.h"
 #include "common/json_type/ob_json_base.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/string/ob_string.h"
@@ -107,7 +108,8 @@ public:
 
   static int tokenize_array_to_props_json(ObIAllocator &allocator,
                                           ObIJsonBase *array,
-                                          ObString &json_str);
+                                          ObString &json_str,
+                                          const ObString &database_name = ObString());
 
   static int show_parser_properties(const ObFTParserJsonProps &properties,
                                     char *buf,
@@ -135,6 +137,8 @@ private:
 struct ObFTParserProperty final
 {
 public:
+  static constexpr int64_t DICT_TABLE_NAME_BUF_LEN
+      = common::OB_MAX_DATABASE_NAME_LENGTH + common::OB_MAX_TABLE_NAME_LENGTH + 2;
   ObFTParserProperty();
   ~ObFTParserProperty() = default;
   int parse_for_parser_helper(const ObFTParser &parser, const ObString &json_str);
@@ -167,6 +171,9 @@ public:
   common::ObString stopword_table_;
   common::ObString dict_table_;
   common::ObString quantifier_table_;
+  char stopword_table_buf_[DICT_TABLE_NAME_BUF_LEN];
+  char dict_table_buf_[DICT_TABLE_NAME_BUF_LEN];
+  char quantifier_table_buf_[DICT_TABLE_NAME_BUF_LEN];
   int64_t min_ngram_token_size_;
   int64_t max_ngram_token_size_;
 };

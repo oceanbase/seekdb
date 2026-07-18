@@ -20,6 +20,7 @@
 #include "sql/engine/ob_operator.h"
 #include "sql/engine/basic/ob_chunk_datum_store.h"
 #include "lib/charset/ob_charset.h"
+#include "lib/container/ob_se_array.h"
 
 namespace oceanbase
 {
@@ -48,7 +49,10 @@ public:
     already_calc_(false),
     row_count_(0),
     col_count_(0),
-    value_table_(NULL) 
+    value_table_(NULL),
+    ai_split_chunks_(),
+    ai_split_done_(false),
+    ai_split_row_idx_(0)
   {}
 
   virtual int inner_open() override;
@@ -59,8 +63,22 @@ public:
   virtual int inner_close() override;
   virtual void destroy() override;
 private:
+  struct ObAiSplitChunk
+  {
+    int64_t chunk_id_;
+    int64_t chunk_offset_;
+    int64_t chunk_length_;
+    common::ObString chunk_text_;
+    TO_STRING_KV(K_(chunk_id), K_(chunk_offset), K_(chunk_length), K_(chunk_text));
+  };
   int inner_get_next_row_udf();
   int inner_get_next_row_sys_func();
+  int inner_get_next_row_ai_split_document();
+  int prepare_ai_split_document_chunks();
+  int append_ai_split_chunk(const int64_t chunk_offset,
+                            const int64_t chunk_length,
+                            const common::ObString &chunk_text);
+  void reset_ai_split_document_state();
   int get_current_result(common::ObObj &result);
   int64_t node_idx_;
   bool already_calc_;
@@ -68,6 +86,9 @@ private:
   int64_t col_count_;
   common::ObObj value_;
   pl::ObPLCollection *value_table_;
+  common::ObSEArray<ObAiSplitChunk, 16> ai_split_chunks_;
+  bool ai_split_done_;
+  int64_t ai_split_row_idx_;
   int (ObFunctionTableOp::*next_row_func_)();
 };
 
