@@ -38,6 +38,13 @@ public:
 
   int output_result(TokenizeContext &ctx);
 
+  /// Reset internal state for the next batch without freeing memory.
+  void reuse()
+  {
+    chains_.destroy();
+    alloc_.reuse();
+  }
+
 private:
   int prepare(TokenizeContext &ctx);
 

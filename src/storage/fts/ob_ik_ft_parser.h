@@ -22,6 +22,7 @@
 #include "storage/fts/dict/ob_ft_cache_container.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
+#include "storage/fts/ik/ob_ik_arbitrator.h"
 #include "storage/fts/ik/ob_ik_processor.h"
 #include "plugin/interface/ob_plugin_ftparser_intf.h"
 
@@ -149,6 +150,9 @@ private:
   ObIFTDict *dict_main_;
   ObIFTDict *dict_quan_;
   ObIFTDict *dict_stop_;
+
+  // Cached arbitrator to avoid per-batch heap allocation overhead.
+  ObIKArbitrator arb_;
 
   DISABLE_COPY_ASSIGN(ObIKFTParser);
 };
