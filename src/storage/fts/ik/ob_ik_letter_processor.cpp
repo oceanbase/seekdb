@@ -235,5 +235,12 @@ void ObIKLetterProcessor::reset_mix_state()
   mix_end_ = -1;
   mix_char_cnt_ = 0;
 }
+
+void ObIKLetterProcessor::reset_document_state()
+{
+  reset_english_state();
+  reset_arabic_state();
+  reset_mix_state();
+}
 } //  namespace storage
 } //  namespace oceanbase

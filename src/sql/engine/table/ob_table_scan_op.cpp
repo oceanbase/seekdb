@@ -763,6 +763,7 @@ ObTableScanOp::ObTableScanOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOp
     in_rescan_(false),
     domain_index_(),
     fts_index_(),
+    fts_output_exprs_{nullptr, nullptr, nullptr, nullptr},
     output_   (nullptr),
     fold_iter_(nullptr),
     iter_tree_(nullptr),
@@ -1678,6 +1679,8 @@ int ObTableScanOp::inner_open()
   } else if (MY_SPEC.is_fts_ddl_ && OB_FAIL(fts_index_.init(MY_SPEC.is_fts_index_aux_, MY_SPEC.parser_name_,
           MY_SPEC.parser_properties_))) {
     LOG_WARN("fail to init fts index cache", K(ret));
+  } else if (MY_SPEC.is_fts_ddl_ && OB_FAIL(init_fts_output_exprs())) {
+    LOG_WARN("fail to cache fts output expressions", K(ret));
   } else {
     if (MY_SPEC.report_col_checksum_) {
       if (PHY_TABLE_SCAN == MY_SPEC.get_type()) {
@@ -4040,6 +4043,8 @@ int ObTableScanOp::fetch_next_fts_index_rows()
 {
   int ret = OB_SUCCESS;
   bool has_segment_word = false;
+  const int64_t word_idx = MY_SPEC.is_fts_index_aux_ ? 0 : 1;
+  const int64_t doc_id_idx = MY_SPEC.is_fts_index_aux_ ? 1 : 0;
   while (OB_SUCC(ret) && !has_segment_word) {
     ObExpr *ft_expr = nullptr;
     ObExpr *doc_id_expr = nullptr;
@@ -4050,11 +4055,8 @@ int ObTableScanOp::fetch_next_fts_index_rows()
       if (OB_ITER_END != ret) {
         LOG_WARN("fail to get next row implement", K(ret));
       }
-    } else if (OB_FAIL(get_output_fts_col_expr_by_type(T_FUN_SYS_DOC_ID, doc_id_expr))) {
-      LOG_WARN("fail to get doc id column expr from output", K(ret));
-    } else if (OB_FAIL(get_output_fts_col_expr_by_type(T_FUN_SYS_WORD_SEGMENT, ft_expr))) {
-      LOG_WARN("fail to get word segment column expr from output", K(ret));
-    } else if (OB_ISNULL(ft_expr) || OB_ISNULL(doc_id_expr)) {
+    } else if (OB_ISNULL(ft_expr = fts_output_exprs_[word_idx])
+               || OB_ISNULL(doc_id_expr = fts_output_exprs_[doc_id_idx])) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpeted error, ft or doc id expr is nullptr", K(ret), KP(ft_expr), KP(doc_id_expr));
     } else if (OB_FAIL(ft_expr->eval(eval_ctx_, ft_datum))) {
@@ -4086,6 +4088,20 @@ int ObTableScanOp::fetch_next_fts_index_rows()
   return ret;
 }
 
+int ObTableScanOp::init_fts_output_exprs()
+{
+  int ret = OB_SUCCESS;
+  const ObExprOperatorType *expr_types = MY_SPEC.is_fts_index_aux_
+      ? ObFTIndexRowCache::FTS_INDEX_EXPR_TYPE
+      : ObFTIndexRowCache::FTS_DOC_WORD_EXPR_TYPE;
+  for (int64_t i = 0; OB_SUCC(ret) && i < share::ObFtsIndexBuilderUtil::OB_FTS_INDEX_OR_DOC_WORD_TABLE_COL_CNT; ++i) {
+    if (OB_FAIL(get_output_fts_col_expr_by_type(expr_types[i], fts_output_exprs_[i]))) {
+      LOG_WARN("failed to locate fts output expression", K(ret), K(i), K(expr_types[i]));
+    }
+  }
+  return ret;
+}
+
 int ObTableScanOp::fill_generated_fts_cols(blocksstable::ObDatumRow *row)
 {
   int ret = OB_SUCCESS;
@@ -4096,9 +4112,10 @@ int ObTableScanOp::fill_generated_fts_cols(blocksstable::ObDatumRow *row)
     LOG_WARN("invalid argument, row is nullptr", K(ret), KP(row));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < share::ObFtsIndexBuilderUtil::OB_FTS_INDEX_OR_DOC_WORD_TABLE_COL_CNT; ++i) {
-      ObExpr *expr = nullptr;
-      if (OB_FAIL(get_output_fts_col_expr_by_type(expr_types[i], expr))) {
-        LOG_WARN("fail to get fts column expr", K(ret), K(i), K(expr_types[i]));
+      ObExpr *expr = fts_output_exprs_[i];
+      if (OB_ISNULL(expr)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("fts output expression is not initialized", K(ret), K(i), K(expr_types[i]));
       } else {
         ObDatum &datum = expr->locate_datum_for_write(eval_ctx_);
         ObEvalInfo &eval_info = expr->get_eval_info(eval_ctx_);

@@ -1,17 +1,13 @@
-/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
  */
 
 #define USING_LOG_PREFIX SQL_ENG
@@ -83,8 +79,9 @@ int ObSortVecOpProvider::decide_sort_key_type(ObSortVecOpContext &ctx)
   if (!ctx.enable_encode_sortkey_) {
     is_basic_cmp_ = true;
     is_str_cmp_ = true;
-    for (int64_t i = 0; is_basic_cmp_ && i < ctx.sk_exprs_->count(); i++) {
-      VecValueTypeClass vec_tc = ctx.sk_exprs_->at(i)->get_vec_value_tc();
+    for (int64_t i = 0; is_basic_cmp_ && i < ctx.sk_collations_->count(); i++) {
+      ObExpr *expr = ctx.sk_exprs_->at(ctx.sk_collations_->at(i).field_idx_);
+      VecValueTypeClass vec_tc = expr->get_vec_value_tc();
       is_basic_cmp_ = is_basic_cmp_type(vec_tc);
       is_str_cmp_ &= (vec_tc == VEC_TC_STRING);
     }
@@ -93,7 +90,7 @@ int ObSortVecOpProvider::decide_sort_key_type(ObSortVecOpContext &ctx)
 }
 
 template <typename SORT_CLASS>
-int ObSortVecOpProvider::alloc_sort_impl_instance(ObISortVecOpImpl *&sort_op_impl)
+int ObSortVecOpProvider::alloc_sort_impl_instance(ObSortVecOpContext &ctx,ObISortVecOpImpl *&sort_op_impl)
 {
   int ret = OB_SUCCESS;
   sort_op_impl = nullptr;
@@ -102,7 +99,12 @@ int ObSortVecOpProvider::alloc_sort_impl_instance(ObISortVecOpImpl *&sort_op_imp
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to create sort impl instance", K(ret));
   } else {
-    sort_op_impl = new (buf) SORT_CLASS(op_monitor_info_, mem_context_);
+    if (ctx.part_cnt_ != 0) {
+      // Sorting with a hash table is better suited for using HASH_WORK_AREA rather than SORT_WORK_AREA
+      sort_op_impl = new (buf) SORT_CLASS(op_monitor_info_, mem_context_, ObSqlWorkAreaType::HASH_WORK_AREA);
+    } else {
+      sort_op_impl = new (buf) SORT_CLASS(op_monitor_info_, mem_context_, ObSqlWorkAreaType::SORT_WORK_AREA);
+    }
   }
   return ret;
 }
@@ -115,27 +117,27 @@ int ObSortVecOpProvider::init_sort_impl_instance(ObSortVecOpContext &ctx, ObISor
   if (ctx.enable_single_col_compare_ && (is_basic_cmp_ || is_str_cmp_)) {
     if (is_basic_cmp_) {
       if (OB_SUCCESS
-          != (ret = alloc_sort_impl_instance<RTSingleColSortImplType<sk_type, true>>(
-                sort_op_impl))) {
+          != (ret = alloc_sort_impl_instance<RTSingleColSortImplType<sk_type, has_addon, true>>(
+                ctx, sort_op_impl))) {
         LOG_WARN("failed to alloc sort impl instance", K(ret));
       }
     } else {
       if (OB_SUCCESS
-          != (ret = alloc_sort_impl_instance<RTSingleColSortImplType<sk_type, false>>(
-                sort_op_impl))) {
+          != (ret = alloc_sort_impl_instance<RTSingleColSortImplType<sk_type, has_addon, false>>(
+                ctx, sort_op_impl))) {
         LOG_WARN("failed to alloc sort impl instance", K(ret));
       }
     }
   } else if (is_basic_cmp_) {
     if (OB_SUCCESS
         != (ret = alloc_sort_impl_instance<RTSortImplType<sort_type, true, sk_type, has_addon>>(
-              sort_op_impl))) {
+              ctx, sort_op_impl))) {
       LOG_WARN("failed to alloc sort impl instance", K(ret));
     }
   } else if (OB_SUCCESS
              != (ret =
                    alloc_sort_impl_instance<RTSortImplType<sort_type, false, sk_type, has_addon>>(
-                     sort_op_impl))) {
+                     ctx, sort_op_impl))) {
     LOG_WARN("failed to alloc sort impl instance", K(ret));
   }
   return ret;
@@ -177,10 +179,11 @@ int ObSortVecOpProvider::init_sort_impl(ObSortVecOpContext &ctx, ObISortVecOpImp
   return ret;
 }
 
-int ObSortVecOpProvider::init_mem_context()
+int ObSortVecOpProvider::init_mem_context(uint64_t tenant_id)
 {
   int ret = OB_SUCCESS;
   lib::ContextParam param;
+  UNUSED(tenant_id);
   param.set_mem_attr(ObModIds::OB_SQL_SORT_ROW, ObCtxIds::WORK_AREA)
     .set_properties(lib::USE_TL_PAGE_OPTIONAL);
   if (nullptr == mem_context_ && OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
@@ -200,14 +203,17 @@ int ObSortVecOpProvider::init(ObSortVecOpContext &context)
   if (is_inited()) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
+  } else if (OB_INVALID_ID == context.tenant_id_) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(context.tenant_id_));
   } else if (OB_ISNULL(context.sk_exprs_) || (context.has_addon_ && OB_ISNULL(context.addon_exprs_))
              || OB_ISNULL(context.sk_collations_) || OB_ISNULL(context.eval_ctx_)
              || OB_ISNULL(context.exec_ctx_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument: argument is null", K(ret),
+    LOG_WARN("invalid argument: argument is null", K(ret), K(context.tenant_id_),
              K(context.sk_collations_), K(context.eval_ctx_), K(context.exec_ctx_));
-  } else if (OB_FAIL(init_mem_context())) {
-    LOG_WARN("failed to init mem context", K(ret));
+  } else if (OB_FAIL(init_mem_context(context.tenant_id_))) {
+    LOG_WARN("failed to init mem context", K(ret), K(context.tenant_id_));
   } else if (OB_FAIL(init_sort_impl(context, sort_op_impl_))) {
     LOG_WARN("failed to init sort impl instance", K(ret));
   } else if (OB_FAIL(sort_op_impl_->init(context))) {

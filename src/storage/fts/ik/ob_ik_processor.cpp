@@ -31,19 +31,13 @@ namespace oceanbase
 {
 namespace storage
 {
-int ObIIKProcessor::process(TokenizeContext &ctx)
+int ObIIKProcessor::process(TokenizeContext &ctx,
+                             const char *ch,
+                             const uint8_t char_len,
+                             const ObFTCharUtil::CharType type)
 {
   int ret = OB_SUCCESS;
-
-  ObFTCharUtil::CharType type;
-  const char *ch = nullptr;
-  uint8_t char_len = 0;
-
-  if (OB_FAIL(ctx.current_char_type(type))) {
-    LOG_WARN("fail to get current char type", K(ret));
-  } else if (OB_FAIL(ctx.current_char(ch, char_len))) {
-    LOG_WARN("Fail to get current char", K(ret));
-  } else if (OB_FAIL(do_process(ctx, ch, char_len, type))) {
+  if (OB_FAIL(do_process(ctx, ch, char_len, type))) {
     LOG_WARN("Failed to do process char", K(ret));
   }
   return ret;
@@ -68,6 +62,26 @@ int TokenizeContext::init()
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(prepare_next_char())) {
     LOG_WARN("Failed to prepare next char", K(ret));
+  }
+  return ret;
+}
+
+int TokenizeContext::reset_document(const char *fulltext, const int64_t fulltext_len)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(fulltext) || fulltext_len <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    fulltext_ = fulltext;
+    fulltext_len_ = fulltext_len;
+    cursor_ = 0;
+    next_char_len_ = 0;
+    next_char_type_ = ObFTCharUtil::CharType::USELESS;
+    if (OB_FAIL(reset_resource())) {
+      LOG_WARN("failed to reset token resources", K(ret));
+    } else if (OB_FAIL(prepare_next_char())) {
+      LOG_WARN("failed to prepare first character", K(ret));
+    }
   }
   return ret;
 }
@@ -98,6 +112,21 @@ int TokenizeContext::current_char_type(ObFTCharUtil::CharType &type)
   if (cursor_ >= fulltext_len_) {
     ret = OB_ITER_END;
   } else {
+    type = next_char_type_;
+  }
+  return ret;
+}
+
+int TokenizeContext::current_char_and_type(const char *&ch,
+                                           uint8_t &char_len,
+                                           ObFTCharUtil::CharType &type)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(cursor_ >= fulltext_len_)) {
+    ret = OB_ITER_END;
+  } else {
+    ch = fulltext_ + cursor_;
+    char_len = static_cast<uint8_t>(next_char_len_);
     type = next_char_type_;
   }
   return ret;

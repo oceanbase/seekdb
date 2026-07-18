@@ -177,7 +177,11 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
     }
     //resolve action list
     if (OB_SUCCESS == ret && NULL != parse_tree.children_[ACTION_LIST]){
-      if (OB_FAIL(resolve_action_list(*(parse_tree.children_[ACTION_LIST])))) {
+      if (table_schema_->is_fulltext_dict()) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "alter fulltext dictionary table");
+        SQL_RESV_LOG(WARN, "alter fulltext dictionary table is not supported", K(ret), K(table_schema_->get_table_id()));
+      } else if (OB_FAIL(resolve_action_list(*(parse_tree.children_[ACTION_LIST])))) {
         SQL_RESV_LOG(WARN, "failed to resolve action list.", K(ret));
       } else if (alter_table_bitset_.has_member(obcall::ObAlterTableArg::LOCALITY)
                  && alter_table_bitset_.has_member(obcall::ObAlterTableArg::TABLEGROUP_NAME)) {

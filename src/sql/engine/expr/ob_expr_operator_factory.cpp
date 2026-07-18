@@ -243,6 +243,8 @@
 #include "sql/engine/expr/ob_expr_to_base64.h"
 #include "sql/engine/expr/ob_expr_from_base64.h"
 #include "sql/engine/expr/ob_expr_random_bytes.h"
+#include "sql/engine/expr/ob_expr_load_file.h"
+#include "sql/engine/expr/ob_expr_ai_split_document.h"
 #include "sql/engine/expr/ob_pl_expr_subquery.h"
 #include "sql/engine/expr/ob_expr_encode_sortkey.h"
 #include "sql/engine/expr/ob_expr_hash.h"
@@ -773,6 +775,8 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprAnyValue);
     REG_OP(ObExprUuidShort);
     REG_OP(ObExprRandomBytes);
+    REG_OP(ObExprLoadFile);
+    REG_OP(ObExprAiSplitDocument);
     /* subquery comparison experator */
     REG_OP(ObExprSubQueryRef);
     REG_OP(ObExprSubQueryEqual);

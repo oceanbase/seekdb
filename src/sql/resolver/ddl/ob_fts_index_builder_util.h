@@ -152,6 +152,13 @@ public:
       ObIAllocator *allocator);
   static int check_need_to_load_dic(const ObString &parser_name,
       bool &need_to_load_dic);
+  static int check_fulltext_dict_schema(
+      const share::schema::ObTableSchema &table,
+      const int64_t inline_index_cnt);
+  static int check_fulltext_dict_referenced(
+      const share::schema::ObTableSchema &dict_table,
+      share::schema::ObSchemaGetterGuard &schema_guard,
+      bool &referenced);
   static int try_load_and_lock_dictionary_tables(
       const ObTableSchema &index_schema,
       ObMySQLTransaction &trans);

@@ -3411,5 +3411,105 @@ int ObFtsIndexSchemaPrinter::print_fts_parser_info(
   }
   return ret;
 }
+
+int ObFtsIndexBuilderUtil::check_fulltext_dict_schema(
+    const ObTableSchema &table,
+    const int64_t inline_index_cnt)
+{
+  int ret = OB_SUCCESS;
+  if (!table.is_fulltext_dict()) {
+  } else if (table.is_heap_organized_table()) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "heap organization for fulltext dictionary table");
+  } else if (inline_index_cnt > 0) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "secondary indexes on fulltext dictionary table");
+  } else if (table.is_partitioned_table()) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "partitioning fulltext dictionary table");
+  } else if (1 != table.get_column_count()) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "fulltext dictionary table must contain exactly one column");
+  } else {
+    const ObColumnSchemaV2 *word_col = table.get_column_schema("word");
+    if (OB_ISNULL(word_col)) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "fulltext dictionary table must contain column 'word'");
+    } else if (!word_col->is_rowkey_column()) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "column 'word' must be the primary key");
+    } else if (ObVarcharType != word_col->get_data_type()) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "column 'word' must use VARCHAR");
+    } else if (CHARSET_UTF8MB4 != word_col->get_charset_type()) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "fulltext dictionary table must use utf8mb4");
+    } else if (word_col->get_data_length() < 1 || word_col->get_data_length() > 500) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_USER_ERROR(OB_INVALID_ARGUMENT, "word VARCHAR length must be between 1 and 500");
+    }
+  }
+  return ret;
+}
+
+int ObFtsIndexBuilderUtil::check_fulltext_dict_referenced(
+    const ObTableSchema &dict_table,
+    ObSchemaGetterGuard &schema_guard,
+    bool &referenced)
+{
+  int ret = OB_SUCCESS;
+  referenced = false;
+  const ObDatabaseSchema *database_schema = nullptr;
+  ObArray<const ObTableSchema *> tables;
+  char full_name_buf[OB_MAX_DATABASE_NAME_LENGTH + OB_MAX_TABLE_NAME_LENGTH + 2];
+  int64_t pos = 0;
+  ObString full_name;
+  if (!dict_table.is_fulltext_dict()) {
+  } else if (OB_FAIL(schema_guard.get_database_schema(dict_table.get_database_id(), database_schema))) {
+    LOG_WARN("failed to get dictionary database schema", K(ret));
+  } else if (OB_ISNULL(database_schema)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(databuff_printf(full_name_buf, sizeof(full_name_buf), pos,
+                                    "%.*s.%.*s",
+                                    database_schema->get_database_name_str().length(),
+                                    database_schema->get_database_name_str().ptr(),
+                                    dict_table.get_table_name_str().length(),
+                                    dict_table.get_table_name_str().ptr()))) {
+    LOG_WARN("failed to format dictionary table name", K(ret));
+  } else if (FALSE_IT(full_name.assign_ptr(full_name_buf, static_cast<int32_t>(pos)))) {
+  } else if (OB_FAIL(schema_guard.get_table_schemas_in_tenant(tables))) {
+    LOG_WARN("failed to enumerate table schemas", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && !referenced && i < tables.count(); ++i) {
+      const ObTableSchema *table = tables.at(i);
+      if (OB_ISNULL(table) || !table->is_fts_index_aux()
+          || table->get_parser_property_str().empty()) {
+      } else {
+        storage::ObFTParserJsonProps props;
+        ObString names[3];
+        if (OB_FAIL(props.init())) {
+          LOG_WARN("failed to init parser properties", K(ret));
+        } else if (OB_FAIL(props.parse_from_valid_str(table->get_parser_property_str()))) {
+          LOG_WARN("failed to parse FTS parser properties", K(ret));
+        } else {
+          int tmp_ret = props.config_get_dict_table(names[0]);
+          if (OB_SEARCH_NOT_FOUND == tmp_ret) { tmp_ret = OB_SUCCESS; }
+          if (OB_SUCCESS == tmp_ret) { tmp_ret = props.config_get_stopword_table(names[1]); }
+          if (OB_SEARCH_NOT_FOUND == tmp_ret) { tmp_ret = OB_SUCCESS; }
+          if (OB_SUCCESS == tmp_ret) { tmp_ret = props.config_get_quantifier_table(names[2]); }
+          if (OB_SEARCH_NOT_FOUND == tmp_ret) { tmp_ret = OB_SUCCESS; }
+          if (OB_SUCCESS != tmp_ret) {
+            ret = tmp_ret;
+          } else {
+            for (int64_t j = 0; !referenced && j < ARRAYSIZEOF(names); ++j) {
+              referenced = !names[j].empty() && 0 == names[j].case_compare(full_name);
+            }
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
 } // namespace share
 }//end namespace oceanbase
