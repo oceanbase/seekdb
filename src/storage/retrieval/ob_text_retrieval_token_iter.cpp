@@ -690,6 +690,8 @@ ObTextRetrievalDaaTTokenIter::ObTextRetrievalDaaTTokenIter()
     max_batch_size_(1),
     cur_idx_(-1),
     count_(0),
+    row_limit_(-1),
+    loaded_row_count_(0),
     relevance_(),
     doc_id_(),
     cmp_func_(nullptr),
@@ -716,6 +718,8 @@ int ObTextRetrievalDaaTTokenIter::init(const ObTextRetrievalScanIterParam &iter_
       eval_ctx_ = iter_param.eval_ctx_;
       relevance_expr_ = iter_param.relevance_expr_;
       inv_scan_domain_id_col_ = iter_param.inv_scan_domain_id_col_;
+      row_limit_ = iter_param.row_limit_;
+      loaded_row_count_ = 0;
       max_batch_size_ = OB_MAX(iter_param.eval_ctx_->max_batch_size_, 1);
       sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(inv_scan_domain_id_col_->datum_meta_.type_, CS_TYPE_BINARY);
       cmp_func_ = basic_funcs->null_first_cmp_;
@@ -747,6 +751,7 @@ void ObTextRetrievalDaaTTokenIter::reuse()
 {
   cur_idx_ = -1;
   count_ = 0;
+  loaded_row_count_ = 0;
   token_iter_->reuse();
 }
 
@@ -757,19 +762,26 @@ void ObTextRetrievalDaaTTokenIter::reset()
   token_iter_->reset();
   cur_idx_ = -1;
   count_ = 0;
+  row_limit_ = -1;
+  loaded_row_count_ = 0;
 }
 
 // Sparse Retrieval Dimension Iter Interfaces
 int ObTextRetrievalDaaTTokenIter::get_next_row() {
   int ret = OB_SUCCESS;
   bool need_load = false;
+  const int64_t remaining = row_limit_ < 0 ? max_batch_size_
+      : row_limit_ - loaded_row_count_;
   if (OB_LIKELY((++cur_idx_) < count_)) {
+  } else if (row_limit_ >= 0 && remaining <= 0) {
+    ret = OB_ITER_END;
   } else if (!eval_ctx_->is_vectorized() && (OB_FAIL(token_iter_->get_next_row()))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
       LOG_WARN("failed to get row from inverted index", K(ret));
     }
   } else if (!eval_ctx_->is_vectorized() && FALSE_IT(count_ = 1)) {
-  } else if (eval_ctx_->is_vectorized() && OB_FAIL(token_iter_->get_next_batch(max_batch_size_, count_))) {
+  } else if (eval_ctx_->is_vectorized()
+      && OB_FAIL(token_iter_->get_next_batch(OB_MIN(max_batch_size_, remaining), count_))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
       LOG_WARN("failed to get batch rows from inverted index", K(ret));
     } else if (count_ != 0) {
@@ -780,6 +792,7 @@ int ObTextRetrievalDaaTTokenIter::get_next_row() {
     need_load = true;
   }
   if (OB_SUCC(ret) && need_load) {
+    loaded_row_count_ += count_;
     if (OB_NOT_NULL(relevance_expr_)) {
       if (OB_FAIL(save_relevances_and_docids())) {
         LOG_WARN("failed to evaluate simarity expr", K(ret));

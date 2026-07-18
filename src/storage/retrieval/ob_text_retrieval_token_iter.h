@@ -46,6 +46,7 @@ struct ObTextRetrievalScanIterParam
       relevance_expr_(nullptr),
       inv_scan_doc_length_col_(nullptr),
       inv_scan_domain_id_col_(nullptr),
+      row_limit_(-1),
       inv_idx_agg_cache_mode_(false)
   {}
 
@@ -63,6 +64,7 @@ struct ObTextRetrievalScanIterParam
   sql::ObExpr *relevance_expr_;
   sql::ObExpr *inv_scan_doc_length_col_;
   sql::ObExpr *inv_scan_domain_id_col_;
+  int64_t row_limit_;
   bool inv_idx_agg_cache_mode_;
 };
 
@@ -176,6 +178,8 @@ private:
   int64_t max_batch_size_;
   int64_t cur_idx_;
   int64_t count_;
+  int64_t row_limit_;
+  int64_t loaded_row_count_;
   ObFixedArray<double, ObIAllocator> relevance_; // when ~ObFixedArray(), wikll destory itself
   ObFixedArray<ObDocIdExt, ObIAllocator> doc_id_;
   common::ObDatumCmpFuncType cmp_func_;

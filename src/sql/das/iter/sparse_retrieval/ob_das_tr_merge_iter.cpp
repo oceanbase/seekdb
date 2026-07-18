@@ -470,6 +470,13 @@ int ObDASTRMergeIter::init_dim_iter_param(ObTextRetrievalScanIterParam &iter_par
     iter_param.relevance_expr_ = ir_ctdef_->relevance_expr_;
     iter_param.inv_scan_doc_length_col_ = ir_ctdef_->inv_scan_doc_length_col_;
     iter_param.inv_scan_domain_id_col_ = ir_ctdef_->inv_scan_domain_id_col_;
+    const bool can_limit_posting_rows = ir_ctdef_->has_result_limit()
+        && ir_ctdef_->is_match_only()
+        && NATURAL_LANGUAGE_MODE == ir_ctdef_->mode_flag_
+        && ir_rtdef_->minimum_should_match_ <= 1
+        && result_limit_param_.is_valid()
+        && 0 == result_limit_param_.offset_;
+    iter_param.row_limit_ = can_limit_posting_rows ? result_limit_param_.limit_ : -1;
     iter_param.inv_idx_agg_cache_mode_ = function_lookup_mode_ && !taat_mode_;
   }
   return ret;
@@ -479,7 +486,8 @@ int ObDASTRMergeIter::create_sparse_retrieval_iter()
 {
   int ret = OB_SUCCESS;
   const bool has_result_limit = ir_ctdef_->has_result_limit();
-  const bool can_limit_posting_scans = has_result_limit
+  const bool can_limit_posting_rows = has_result_limit
+      && ir_ctdef_->is_match_only()
       && NATURAL_LANGUAGE_MODE == ir_ctdef_->mode_flag_
       && ir_rtdef_->minimum_should_match_ <= 1
       && result_limit_param_.is_valid()
@@ -496,22 +504,12 @@ int ObDASTRMergeIter::create_sparse_retrieval_iter()
       ? nullptr : ir_ctdef_->match_filter_;
   sr_iter_param_.topk_limit_ = topk_limit_;
   sr_iter_param_.match_only_ = ir_ctdef_->is_match_only();
-  sr_iter_param_.drain_after_limit_ = has_result_limit;
+  sr_iter_param_.drain_after_limit_ = can_limit_posting_rows;
   // For a natural-language OR, limiting every posting list to N rows preserves
   // whether the union contains at least N rows. The outer logical LIMIT still
   // chooses the final N rows across tokens and partitions. Boolean/AND modes
   // cannot use posting prefixes safely and therefore keep their full inputs.
-  for (int64_t i = 0; OB_SUCC(ret) && can_limit_posting_scans
-      && i < inv_scan_params_.count(); ++i) {
-    if (OB_ISNULL(inv_scan_params_.at(i))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null inverted index scan parameter", K(ret), K(i));
-    } else {
-      inv_scan_params_.at(i)->limit_param_ = result_limit_param_;
-    }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (sr_iter_param_.match_only_) {
+  if (sr_iter_param_.match_only_) {
     // Token presence is sufficient; field and token boosts affect only score.
   } else if (OB_NOT_NULL(ir_ctdef_->field_boost_expr_)) {
     ObDatum *boost_datum = nullptr;
