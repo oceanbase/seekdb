@@ -34,16 +34,20 @@ public:
   static const int64_t FT_MAX_WORD_LEN = 84;
 public:
   explicit ObBEngFTParser(common::ObIAllocator &allocator)
-    : allocator_(allocator),
+      : allocator_(allocator),
+      document_allocator_(nullptr),
       analysis_ctx_(),
       english_analyzer_(),
       doc_(),
       token_stream_(nullptr),
+      ascii_pos_(0),
+      use_ascii_fast_path_(false),
       is_inited_(false)
   {}
   ~ObBEngFTParser() { reset(); }
 
   int init(plugin::ObFTParserParam *param);
+  int reuse(plugin::ObFTParserParam *param);
   void reset();
   virtual int get_next_token(
       const char *&word,
@@ -56,12 +60,22 @@ private:
   int segment(
       const common::ObDatum &doc,
       share::ObITokenStream *&token_stream);
+  int get_next_ascii_token(
+      const char *&word,
+      int64_t &word_len,
+      int64_t &char_len,
+      int64_t &word_freq);
+  static bool is_ascii_document(const char *text, const int64_t text_len);
+  static bool is_ascii_alnum(const unsigned char ch);
 private:
   common::ObIAllocator &allocator_;
+  common::ObIAllocator *document_allocator_;
   share::ObTextAnalysisCtx analysis_ctx_;
   share::ObEnglishTextAnalyzer english_analyzer_;
   common::ObDatum doc_;
   share::ObITokenStream *token_stream_;
+  int64_t ascii_pos_;
+  bool use_ascii_fast_path_;
   bool is_inited_;
 
   DISALLOW_COPY_AND_ASSIGN(ObBEngFTParser);
@@ -74,8 +88,12 @@ public:
   virtual ~ObBasicEnglishFTParserDesc() = default;
   virtual int init(plugin::ObPluginParam *param) override;
   virtual int deinit(plugin::ObPluginParam *param) override;
-  virtual int segment(plugin::ObFTParserParam *param, plugin::ObITokenIterator *&iter) const override;
-  virtual void free_token_iter(plugin::ObFTParserParam *param, plugin::ObITokenIterator *&iter) const override;
+  virtual int create_token_iter(plugin::ObFTParserParam *param,
+                                plugin::ObITokenIterator *&iter) const override;
+  virtual int reuse_token_iter(plugin::ObFTParserParam *param,
+                               plugin::ObITokenIterator *iter) const override;
+  virtual void destroy_token_iter(plugin::ObFTParserParam *param,
+                                  plugin::ObITokenIterator *&iter) const override;
   virtual int get_add_word_flag(ObAddWordFlag &flag) const override;
   OB_INLINE void reset() { is_inited_ = false; }
 private:

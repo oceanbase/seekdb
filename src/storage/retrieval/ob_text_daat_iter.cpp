@@ -33,7 +33,8 @@ int ObTextDaaTIter::init(const ObTextDaaTParam &param)
   } else if (OB_FAIL(ObSRDaaTIterImpl::init(*param.base_param_, *param.dim_iters_,
                                             *param.allocator_, *param.relevance_collector_))) {
     LOG_WARN("failed to init sr daat iter", K(ret));
-  } else if (OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
+  } else if (param.base_param_->need_project_relevance()
+      && OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
     LOG_WARN("failed to init bm25 param estimator", K(ret));
   } else {
     mode_flag_ = param.mode_flag_;
@@ -57,7 +58,8 @@ void ObTextDaaTIter::reset()
 
 void ObTextDaaTIter::reuse(const bool switch_tablet)
 {
-  if ((OB_NOT_NULL(dim_iters_) && 0 == dim_iters_->count())) {
+  if (OB_ISNULL(iter_param_) || !iter_param_->need_project_relevance()
+      || (OB_NOT_NULL(dim_iters_) && 0 == dim_iters_->count())) {
     // do nothing
   } else {
     bm25_param_estimator_.reuse(switch_tablet);

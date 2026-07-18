@@ -606,9 +606,19 @@ int ObCreateIndexResolver::resolve(const ParseNode &parse_tree)
   }
 
   if (OB_SUCC(ret)) {
-    const ParseNode *parallel_node = parse_tree.children_[8];
     if (OB_FAIL(resolve_hints(parse_tree.children_[8], *crt_idx_stmt, *tbl_schema))) {
       LOG_WARN("resolve hints failed", K(ret));
+    } else {
+      int64_t decided_parallelism = crt_idx_stmt->get_parallelism();
+      if (OB_FAIL(ObFtsIndexBuilderUtil::decide_ddl_parallelism(
+              crt_idx_stmt->get_create_index_arg().index_type_,
+              crt_idx_stmt->get_parallelism(),
+              crt_idx_stmt->get_has_parallel_hint(),
+              decided_parallelism))) {
+        LOG_WARN("decide fulltext ddl parallelism failed", K(ret));
+      } else {
+        crt_idx_stmt->set_parallelism(decided_parallelism);
+      }
     }
   }
   if (OB_SUCC(ret)) {

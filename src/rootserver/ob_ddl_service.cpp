@@ -6647,7 +6647,8 @@ int ObDDLService::create_aux_index(
     obcall::ObCreateAuxIndexRes &result)
 {
   int ret = OB_SUCCESS;
-  
+  const bool create_ddl_task =
+      obcall::ObAuxIndexBuildMode::SCHEMA_AND_DATA == arg.build_mode_;
   const uint64_t data_table_id = arg.data_table_id_;
   int64_t index_status = ObIndexStatus::INDEX_STATUS_NOT_FOUND;
   ObArenaAllocator allocator(lib::ObLabel("DdlTaskTmp"));
@@ -6734,6 +6735,10 @@ int ObDDLService::create_aux_index(
       } else if (idx_schema->is_vec_delta_buffer_type() || idx_schema->is_hybrid_vec_index_log_type() || idx_schema->is_vec_index_id_type()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected index status of delta buffer and index id table here", K(ret), KPC(idx_schema));
+      } else if (!create_ddl_task) {
+        result.schema_generated_ = true;
+        result.aux_table_id_ = index_table_id;
+        result.ddl_task_id_ = OB_INVALID_ID;
       } else { // 2. index schema exists && not available, create ddl task
         result.schema_generated_ = true;
         result.aux_table_id_ = index_table_id;
@@ -6768,7 +6773,10 @@ int ObDDLService::create_aux_index(
         LOG_WARN("failed to generate aux index schema", K(ret), K(create_index_arg));
       } else if (FALSE_IT(result.schema_generated_ = true)) {
       } else if (FALSE_IT(result.aux_table_id_ = index_schema.get_table_id())) {
-      } else if (index_schema.is_vec_delta_buffer_type() || index_schema.is_hybrid_vec_index_log_type() || index_schema.is_vec_index_id_type()) {
+      } else if (!create_ddl_task
+                 || index_schema.is_vec_delta_buffer_type()
+                 || index_schema.is_hybrid_vec_index_log_type()
+                 || index_schema.is_vec_index_id_type()) {
         // no need to create ddl task
         result.ddl_task_id_ = OB_INVALID_ID;
       } else if (OB_FAIL(create_aux_index_task_(data_schema,

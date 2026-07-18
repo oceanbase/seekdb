@@ -2063,6 +2063,23 @@ int ObDmlCgService::generate_das_dml_ctdef(ObLogDelUpd &op,
     das_dml_ctdef.is_update_pk_with_dop_ = is_update_uk_parallel;
     das_dml_ctdef.is_update_pk_ = index_dml_info.is_update_primary_key_;
     das_dml_ctdef.is_vec_hnsw_index_vid_opt_ = index_dml_info.is_vec_hnsw_index_vid_opt_;
+    if (op.get_plan()->get_optimizer_context().is_insert_stmt_in_online_ddl()) {
+      ObSchemaGetterGuard *schema_guard =
+          op.get_plan()->get_optimizer_context().get_schema_guard();
+      const ObTableSchema *index_schema = nullptr;
+      if (OB_ISNULL(schema_guard)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("schema guard is null for online ddl ctdef", K(ret), K(index_tid));
+      } else if (OB_FAIL(schema_guard->get_table_schema(index_tid, index_schema))) {
+        LOG_WARN("get online ddl index schema failed", K(ret), K(index_tid));
+      } else if (OB_ISNULL(index_schema)) {
+        ret = OB_TABLE_NOT_EXIST;
+        LOG_WARN("online ddl index schema does not exist", K(ret), K(index_tid));
+      } else {
+        das_dml_ctdef.is_access_vidx_as_master_table_ =
+            index_schema->is_fts_doc_word_aux();
+      }
+    }
   }
   if (OB_FAIL(ret)) {
   } else if (das_dml_ctdef.table_param_.get_data_table().is_vector_index() &&

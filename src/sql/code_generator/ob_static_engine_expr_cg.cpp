@@ -306,7 +306,12 @@ int ObStaticEngineExprCG::cg_expr_basic(const ObIArray<ObRawExpr *> &raw_exprs)
     const ObObjMeta &result_meta = raw_expr->get_result_meta();
     // init type_
     rt_expr->type_ = raw_expr->get_expr_type();
-    rt_expr->batch_result_ = batch_size_ > 0 && raw_expr->is_vectorize_result();
+    const bool is_fts_generated_column = T_FUN_SYS_WORD_SEGMENT == rt_expr->type_
+        || T_FUN_SYS_DOC_ID == rt_expr->type_
+        || T_FUN_SYS_WORD_COUNT == rt_expr->type_
+        || T_FUN_SYS_DOC_LENGTH == rt_expr->type_;
+    rt_expr->batch_result_ = batch_size_ > 0
+        && (raw_expr->is_vectorize_result() || is_fts_generated_column);
     rt_expr->batch_idx_mask_ = rt_expr->batch_result_ ? UINT64_MAX : 0;
     rt_expr->is_called_in_sql_ = raw_expr->is_called_in_sql();
     rt_expr->is_static_const_ = raw_expr->is_static_const_expr();

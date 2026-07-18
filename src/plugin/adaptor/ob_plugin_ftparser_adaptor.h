@@ -42,6 +42,7 @@ public:
       int64_t &word_len,
       int64_t &char_cnt,
       int64_t &word_freq) override;
+  int reuse(ObFTParserParam *param);
 
   TO_STRING_KV(KP(param_));
 
@@ -61,8 +62,9 @@ public:
   virtual int init(ObPluginParam *param) override;
   virtual int deinit(ObPluginParam *param) override;
   
-  virtual int segment(ObFTParserParam *param, ObITokenIterator *&iter) const override;
-  virtual void free_token_iter(ObFTParserParam *param, ObITokenIterator *&iter) const override;
+  virtual int create_token_iter(ObFTParserParam *param, ObITokenIterator *&iter) const override;
+  virtual int reuse_token_iter(ObFTParserParam *param, ObITokenIterator *iter) const override;
+  virtual void destroy_token_iter(ObFTParserParam *param, ObITokenIterator *&iter) const override;
   virtual int get_add_word_flag(storage::ObAddWordFlag &flag) const override;
   virtual int check_if_charset_supported(const ObCharsetInfo *cs) const override;
 

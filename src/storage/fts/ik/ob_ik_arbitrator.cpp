@@ -60,10 +60,8 @@ int ObIKArbitrator::process(TokenizeContext &ctx)
           } else {
             // add ok
           }
-        } else if (OB_FAIL(optimize(ctx,
-                                    chain_need_arbitrate,
+        } else if (OB_FAIL(optimize(chain_need_arbitrate,
                                     iter,
-                                    chain_need_arbitrate->offset_len(),
                                     judge_result))) {
           LOG_WARN("Failed to optimize chain.", K(ret));
         } else if (OB_FAIL(add_chain(judge_result))) {
@@ -95,10 +93,8 @@ int ObIKArbitrator::process(TokenizeContext &ctx)
       if (OB_FAIL(add_chain(chain_need_arbitrate))) {
         LOG_WARN("Failed to add last chain", K(ret));
       }
-    } else if (OB_FAIL(optimize(ctx,
-                                chain_need_arbitrate,
+    } else if (OB_FAIL(optimize(chain_need_arbitrate,
                                 chain_need_arbitrate->list().tokens().begin(),
-                                chain_need_arbitrate->offset_len(),
                                 judge_result))) {
     } else if (OB_FAIL(add_chain(judge_result))) {
       OB_DELETEx(ObIKTokenChain, &alloc_, judge_result);
@@ -231,16 +227,14 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
   return ret;
 }
 
-int ObIKArbitrator::optimize(TokenizeContext &ctx,
-                             ObIKTokenChain *chain,
+int ObIKArbitrator::optimize(ObIKTokenChain *chain,
                              ObFTSortList::CellIter iter,
-                             int64_t fulltext_len,
                              ObIKTokenChain *&best)
 {
   int ret = OB_SUCCESS;
 
   ObIKTokenChain *option = nullptr;
-  ObList<ObFTSortList::CellIter, ObIAllocator> conflict_stack(alloc_);
+  common::ObSEArray<ObFTSortList::CellIter, 16> conflict_stack;
 
   if (OB_ISNULL(option = OB_NEWx(ObIKTokenChain, &alloc_, alloc_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -254,18 +248,14 @@ int ObIKArbitrator::optimize(TokenizeContext &ctx,
     LOG_WARN("Copy best option failed", K(ret));
   } else {
     while (OB_SUCC(ret) && !conflict_stack.empty()) {
-      ObFTSortList::CellIter iter = conflict_stack.get_last();
+      ObFTSortList::CellIter iter = conflict_stack.at(conflict_stack.count() - 1);
       conflict_stack.pop_back();
       if (OB_FAIL(remove_conflict(*iter, option))) {
         LOG_WARN("Failed to remove conflict", K(ret));
       } else if (OB_FAIL(try_add_next_words(chain, iter, option, false, conflict_stack))) {
         LOG_WARN("Failed to add next words", K(ret));
       } else if (option->better_than(*best)) {
-        OB_DELETEx(ObIKTokenChain, &alloc_, best);
-        if (OB_ISNULL(best = OB_NEWx(ObIKTokenChain, &alloc_, alloc_))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("Alloc memory failed");
-        } else if (OB_FAIL(best->copy(option))) {
+        if (OB_FAIL(best->copy(option))) {
           LOG_WARN("Copy best option failed", K(ret));
         } else {
           // best option is copied
@@ -289,7 +279,7 @@ int ObIKArbitrator::try_add_next_words(ObIKTokenChain *chain,
                                        ObFTSortList::CellIter iter,
                                        ObIKTokenChain *option,
                                        bool need_conflict,
-                                       ObList<ObFTSortList::CellIter, ObIAllocator> &conflict_stack)
+                                       common::ObSEArray<ObFTSortList::CellIter, 16> &conflict_stack)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(chain) || OB_ISNULL(option)) {
@@ -327,21 +317,48 @@ int ObIKArbitrator::remove_conflict(const ObIKToken &token, ObIKTokenChain *opti
 int ObIKArbitrator::prepare(TokenizeContext &ctx)
 {
   int ret = OB_SUCCESS;
+  static constexpr int64_t MIN_CHAIN_BUCKET_COUNT = 10;
+  static constexpr int64_t MAX_CHAIN_BUCKET_COUNT = 100;
+  const int64_t desired_bucket_count = MIN(
+      MAX(ctx.fulltext_len() / 100, MIN_CHAIN_BUCKET_COUNT), MAX_CHAIN_BUCKET_COUNT);
+  int64_t target_bucket_count = 0;
 
-  int cal_bucket_num = MAX(ctx.fulltext_len() / 100, 10);
-  cal_bucket_num = MIN(cal_bucket_num, 100);
-  if (OB_FAIL(chains_.create(cal_bucket_num, ObMemAttr("IK ARBITRATE")))) {
-    LOG_WARN("create chain map failed", K(ret));
+  if (chains_.created()) {
+    if (OB_FAIL(chains_.reuse())) {
+      LOG_WARN("reuse chain map failed", K(ret), K(ctx.fulltext_len()));
+    } else {
+      chain_bucket_count_ = chains_.bucket_count();
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (!chains_.created()) {
+      target_bucket_count = desired_bucket_count;
+    } else if (desired_bucket_count > chain_bucket_count_) {
+      target_bucket_count = MIN(
+          MAX(desired_bucket_count, chain_bucket_count_ * 2), MAX_CHAIN_BUCKET_COUNT);
+      chains_.destroy();
+      chain_bucket_count_ = 0;
+    }
+    alloc_.reuse();
+  }
+  if (OB_SUCC(ret) && target_bucket_count > 0
+      && OB_FAIL(chains_.create(target_bucket_count, ObMemAttr("IK ARBITRATE")))) {
+    LOG_WARN("create chain map failed", K(ret), K(target_bucket_count), K(ctx.fulltext_len()));
+  } else if (target_bucket_count > 0) {
+    chain_bucket_count_ = target_bucket_count;
   }
   return ret;
 }
 
-ObIKArbitrator::ObIKArbitrator() : alloc_(lib::ObMemAttr("IK Arbitrator")) {}
+ObIKArbitrator::ObIKArbitrator()
+    : alloc_(lib::ObMemAttr("IK Arbitrator")), chain_bucket_count_(0)
+{}
 
-void ObIKArbitrator::reuse()
+void ObIKArbitrator::reset()
 {
   chains_.destroy();
-  alloc_.reuse();
+  chain_bucket_count_ = 0;
+  alloc_.reset();
 }
 
 int ObIKArbitrator::add_chain(ObIKTokenChain *chain)
@@ -360,8 +377,7 @@ int ObIKArbitrator::add_chain(ObIKTokenChain *chain)
 
 ObIKArbitrator::~ObIKArbitrator()
 {
-  chains_.destroy();
-  alloc_.reset();
+  reset();
 }
 } // namespace storage
 } // namespace oceanbase

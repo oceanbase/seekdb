@@ -461,6 +461,52 @@ int ObFtsIndexBuilderUtil::generate_fts_aux_index_name(
   return ret;
 }
 
+int ObFtsIndexBuilderUtil::find_fts_doc_word_schema(
+    ObSchemaGetterGuard &schema_guard,
+    const ObTableSchema &data_schema,
+    const ObTableSchema &fts_index_schema,
+    const ObTableSchema *&doc_word_schema)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<ObAuxTableMetaInfo, 8> index_infos;
+  char doc_word_name[OB_MAX_TABLE_NAME_BUF_LENGTH] = {0};
+  doc_word_schema = nullptr;
+  if (OB_UNLIKELY(!fts_index_schema.is_fts_index_aux()
+                  || fts_index_schema.get_data_table_id() != data_schema.get_table_id())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid fulltext schema pair", K(ret), KPC(&data_schema), KPC(&fts_index_schema));
+  } else if (OB_FAIL(databuff_printf(doc_word_name,
+                                     sizeof(doc_word_name),
+                                     "%.*s_fts_doc_word",
+                                     fts_index_schema.get_table_name_str().length(),
+                                     fts_index_schema.get_table_name_str().ptr()))) {
+    LOG_WARN("failed to build fulltext doc word table name", K(ret), KPC(&fts_index_schema));
+  } else if (OB_FAIL(data_schema.get_simple_index_infos(index_infos))) {
+    LOG_WARN("failed to get data table index infos", K(ret), KPC(&data_schema));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && OB_ISNULL(doc_word_schema) && i < index_infos.count(); ++i) {
+      const ObAuxTableMetaInfo &index_info = index_infos.at(i);
+      const ObTableSchema *index_schema = nullptr;
+      if (!share::schema::is_fts_doc_word_aux(index_info.index_type_)) {
+        // Skip unrelated auxiliary indexes.
+      } else if (OB_FAIL(schema_guard.get_table_schema(index_info.table_id_, index_schema))) {
+        LOG_WARN("failed to get fulltext doc word schema", K(ret), K(index_info));
+      } else if (OB_ISNULL(index_schema)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("fulltext doc word schema is nullptr", K(ret), K(index_info));
+      } else if (0 == index_schema->get_table_name_str().case_compare(doc_word_name)) {
+        doc_word_schema = index_schema;
+      }
+    }
+    if (OB_SUCC(ret) && OB_ISNULL(doc_word_schema)) {
+      ret = OB_ENTRY_NOT_EXIST;
+      LOG_WARN("matching fulltext doc word schema does not exist", K(ret), K(doc_word_name),
+          KPC(&data_schema), KPC(&fts_index_schema));
+    }
+  }
+  return ret;
+}
+
 /*
  * this func will also:
  * 1. add cascade flag to corresponding column of data_schema
@@ -1240,9 +1286,11 @@ int ObFtsIndexBuilderUtil::decide_parallelism(
         decided_parallelism = MAX(original_parallelism, 1L);
         break;
       case share::schema::ObIndexType::INDEX_TYPE_DOC_ID_ROWKEY_LOCAL:
+        decided_parallelism = MAX(original_parallelism / 2, 1L);
+        break;
       case share::schema::ObIndexType::INDEX_TYPE_FTS_INDEX_LOCAL:
       case share::schema::ObIndexType::INDEX_TYPE_FTS_DOC_WORD_LOCAL:
-        decided_parallelism = MAX(original_parallelism / 3, 1L);
+        decided_parallelism = MAX(original_parallelism, 1L);
         break;
       case share::schema::ObIndexType::INDEX_TYPE_NORMAL_MULTIVALUE_LOCAL:
       case share::schema::ObIndexType::INDEX_TYPE_UNIQUE_MULTIVALUE_LOCAL:
@@ -1256,6 +1304,26 @@ int ObFtsIndexBuilderUtil::decide_parallelism(
         LOG_WARN("index type may be wrong", K(ret), K(index_type));
         break;
     }
+  }
+  return ret;
+}
+
+int ObFtsIndexBuilderUtil::decide_ddl_parallelism(
+    const share::schema::ObIndexType index_type,
+    const int64_t original_parallelism,
+    const bool has_parallel_hint,
+    int64_t &decided_parallelism)
+{
+  int ret = OB_SUCCESS;
+  static const int64_t DEFAULT_FTS_DDL_PARALLELISM = 2;
+  if (OB_UNLIKELY(original_parallelism <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid original parallelism", K(ret), K(original_parallelism),
+        K(index_type), K(has_parallel_hint));
+  } else if (!has_parallel_hint && share::schema::is_fts_index(index_type)) {
+    decided_parallelism = MAX(original_parallelism, DEFAULT_FTS_DDL_PARALLELISM);
+  } else {
+    decided_parallelism = original_parallelism;
   }
   return ret;
 }

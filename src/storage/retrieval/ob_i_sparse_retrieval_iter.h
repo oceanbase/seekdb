@@ -111,7 +111,11 @@ struct ObSparseRetrievalMergeParam
       max_batch_size_(1)
   {}
   ~ObSparseRetrievalMergeParam() {}
-  bool need_project_relevance() const { return relevance_proj_expr_ != nullptr; }
+  bool need_project_relevance() const
+  {
+    return relevance_expr_ != nullptr && relevance_proj_expr_ != nullptr;
+  }
+  bool need_fill_relevance_output() const { return relevance_proj_expr_ != nullptr; }
   bool need_filter() const { return filter_expr_ != nullptr; }
   bool need_pushdown_topk() const { return topk_limit_ > 0; }
   TO_STRING_KV(KPC_(dim_weights), KPC(limit_param_), KP_(eval_ctx),

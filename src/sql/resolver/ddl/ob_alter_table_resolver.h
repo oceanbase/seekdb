@@ -99,6 +99,7 @@ public:
   int resolve_set_interval(ObAlterTableStmt *stmt, const ParseNode &node);
 
 private:
+  int adjust_fts_ddl_parallelism(ObAlterTableStmt &alter_table_stmt);
   int fill_high_bound_val_for_split_partition(const AlterTableSchema &alter_table_schema, ObPartition& split_part);
   int check_dup_foreign_keys_exist(
       share::schema::ObSchemaGetterGuard *schema_guard,

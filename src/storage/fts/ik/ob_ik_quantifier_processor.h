@@ -30,11 +30,19 @@ class ObFTDictHub;
 class ObIKQuantifierProcessor : public ObIIKProcessor
 {
 public:
-  ObIKQuantifierProcessor(const ObIFTDict &quan_dict, ObIAllocator &alloc)
-      : quan_dict_(quan_dict), count_hits_(alloc), start_(-1), end_(-1), quan_char_cnt_(0)
+  ObIKQuantifierProcessor(const ObIFTDict &quan_dict)
+      : quan_dict_(quan_dict), hit_allocator_(lib::ObMemAttr("IKQuanHit")),
+        count_hits_(hit_allocator_), start_(-1), end_(-1), quan_char_cnt_(0)
   {
   }
   ~ObIKQuantifierProcessor() override { count_hits_.reset(); }
+
+  void reuse() override
+  {
+    count_hits_.reset();
+    hit_allocator_.reuse();
+    reset();
+  }
 
   int do_process(TokenizeContext &ctx,
                  const char *ch,
@@ -59,6 +67,7 @@ private:
 
 private:
   const ObIFTDict &quan_dict_;
+  ObArenaAllocator hit_allocator_;
   ObList<ObDATrieHit, ObIAllocator> count_hits_;
   int64_t start_;
   int64_t end_;

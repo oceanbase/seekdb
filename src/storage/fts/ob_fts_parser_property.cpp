@@ -23,6 +23,7 @@
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/string/ob_string.h"
+#include "lib/string/ob_sql_string.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"
 #include "storage/fts/ob_fts_literal.h"
@@ -455,20 +456,77 @@ int ObFTParserJsonProps::config_get_quantifier_table(ObString &str) const
     ret = OB_NOT_INIT;
   } else {
     ObIJsonBase *value = nullptr;
-    if (OB_FAIL(
-            root_->get_object_value(ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE), value))) {
-      if (OB_SEARCH_NOT_FOUND == ret) {
-      } else {
+    ret = root_->get_object_value(
+        ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE), value);
+    if (OB_SEARCH_NOT_FOUND == ret) {
+      ret = root_->get_object_value(
+          ObString(ObFTSLiteral::CONFIG_NAME_LEGACY_QUANTIFIER_TABLE), value);
+    }
+    if (OB_FAIL(ret)) {
+      if (OB_SEARCH_NOT_FOUND != ret) {
         LOG_WARN("Fail to get quantifier_table", K(ret));
       }
     } else if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("value is null", K(ret));
     } else if (value->json_type() != ObJsonNodeType::J_STRING) {
-      LOG_WARN("value is not string", K(ret));
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("quantifier table value is not string", K(ret),
+               "json_type", value->json_type());
     } else {
       ObJsonString *json_str = static_cast<ObJsonString *>(value);
       str = json_str->get_str();
+    }
+  }
+  return ret;
+}
+
+int ObFTParserJsonProps::normalize_legacy_quantifier_table()
+{
+  int ret = OB_SUCCESS;
+  ObIJsonBase *quantifier = nullptr;
+  ObIJsonBase *legacy_quantifier = nullptr;
+  if (!IS_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("Props not init", K(ret));
+  } else {
+    int current_ret = root_->get_object_value(
+        ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE), quantifier);
+    int legacy_ret = root_->get_object_value(
+        ObString(ObFTSLiteral::CONFIG_NAME_LEGACY_QUANTIFIER_TABLE), legacy_quantifier);
+    if (OB_SEARCH_NOT_FOUND == current_ret) {
+      current_ret = OB_SUCCESS;
+      quantifier = nullptr;
+    }
+    if (OB_SEARCH_NOT_FOUND == legacy_ret) {
+      legacy_ret = OB_SUCCESS;
+      legacy_quantifier = nullptr;
+    }
+    if (OB_SUCCESS != current_ret) {
+      ret = current_ret;
+      LOG_WARN("get quantifier table configuration failed", K(ret));
+    } else if (OB_SUCCESS != legacy_ret) {
+      ret = legacy_ret;
+      LOG_WARN("get legacy quantifier table configuration failed", K(ret));
+    } else if (OB_NOT_NULL(quantifier) && OB_NOT_NULL(legacy_quantifier)) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_USER_ERROR(OB_INVALID_ARGUMENT,
+                     "quantifier_table and legacy quanitfier_table cannot both be specified");
+      LOG_WARN("duplicate quantifier table configurations", K(ret));
+    } else if (OB_NOT_NULL(legacy_quantifier)) {
+      if (ObJsonNodeType::J_STRING != legacy_quantifier->json_type()) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("legacy quantifier table configuration must be a string", K(ret),
+                 "json_type", legacy_quantifier->json_type());
+      } else {
+        const ObString table_name = static_cast<ObJsonString *>(legacy_quantifier)->get_str();
+        if (OB_FAIL(root_->object_remove(
+                ObString(ObFTSLiteral::CONFIG_NAME_LEGACY_QUANTIFIER_TABLE)))) {
+          LOG_WARN("remove legacy quantifier table configuration failed", K(ret));
+        } else if (OB_FAIL(config_set_quantifier_table(table_name))) {
+          LOG_WARN("set normalized quantifier table configuration failed", K(ret), K(table_name));
+        }
+      }
     }
   }
   return ret;
@@ -592,21 +650,16 @@ int ObFTParserJsonProps::rebuild_props_for_ddl(const ObString &parser_name,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parser_name is empty", K(ret));
   } else if (OB_ISNULL(parser_name.find('.'))) {
-    // Parser names coming directly from SQL (for example, WITH PARSER ik) do not
-    // carry the plugin version yet.  The version is added later by
-    // generate_fts_parser_name(), while property validation must also work at
-    // resolve time.  Only the parser kind is needed below, so use a placeholder
-    // non-negative version for an unqualified name.
-    share::ObPluginName plugin_name;
-    if (OB_FAIL(plugin_name.set_name(parser_name))) {
-      LOG_WARN("fail to set parser name", K(ret), K(parser_name));
+    // SQL parser names are unversioned at resolve time; the version is attached
+    // later when the parser name is serialized into the index schema.
+    share::ObPluginName unversioned_name;
+    if (OB_FAIL(unversioned_name.set_name(parser_name))) {
+      LOG_WARN("fail to set unversioned parser name", K(ret), K(parser_name));
     } else {
-      parser.set_name_and_version(plugin_name, 0);
+      parser.set_name_and_version(unversioned_name, 0);
     }
   } else if (OB_FAIL(parser.parse_from_str(parser_name.ptr(), parser_name.length()))) {
     LOG_WARN("fail to parse versioned parser name", K(ret), K(parser_name));
-  } else {
-    // The parser name is ready for property dispatch.
   }
 
   if (OB_SUCC(ret)) {
@@ -638,6 +691,78 @@ int ObFTParserJsonProps::rebuild_props_for_ddl(const ObString &parser_name,
   return ret;
 }
 
+int ObFTParserJsonProps::qualify_ik_dict_table(const char *config_name,
+                                               const ObString &database_name,
+                                               const ObString &table_name)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(config_name) || table_name.empty()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid dictionary table configuration", K(ret), KP(config_name), K(table_name));
+  } else if (OB_NOT_NULL(table_name.find('.'))) {
+  } else if (database_name.empty()) {
+    ret = OB_ERR_NO_DB_SELECTED;
+    LOG_WARN("database name is required for unqualified dictionary table", K(ret),
+             K(config_name), K(table_name));
+  } else {
+    ObSqlString qualified_builder;
+    ObString qualified_name;
+    if (OB_FAIL(qualified_builder.append_fmt("%.*s.%.*s",
+                                             database_name.length(), database_name.ptr(),
+                                             table_name.length(), table_name.ptr()))) {
+      LOG_WARN("build qualified dictionary table name failed", K(ret),
+               K(database_name), K(table_name));
+    } else if (OB_FAIL(ob_write_string(allocator_, qualified_builder.string(), qualified_name))) {
+      LOG_WARN("copy qualified dictionary table name failed", K(ret),
+               "qualified_name", qualified_builder.string());
+    } else if (OB_FAIL(root_->object_remove(ObString(config_name)))) {
+      LOG_WARN("remove unqualified dictionary table configuration failed", K(ret), K(config_name));
+    } else {
+      ObJsonString *table_node = OB_NEWx(ObJsonString, &allocator_, qualified_name);
+      if (OB_ISNULL(table_node)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("allocate qualified dictionary table configuration failed", K(ret));
+      } else if (OB_FAIL(root_->object_add(ObString(config_name), table_node))) {
+        LOG_WARN("add qualified dictionary table configuration failed", K(ret),
+                 K(config_name), K(qualified_name));
+        OB_DELETEx(ObJsonString, &allocator_, table_node);
+      }
+    }
+  }
+  return ret;
+}
+
+int ObFTParserJsonProps::qualify_ik_dict_tables(const ObString &database_name)
+{
+  int ret = OB_SUCCESS;
+  ObString dict_table;
+  ObString stopword_table;
+  ObString quantifier_table;
+  if (!IS_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("parser properties not initialized", K(ret));
+  } else if (OB_FAIL(config_get_dict_table(dict_table))) {
+    LOG_WARN("get dictionary table configuration failed", K(ret));
+  } else if (OB_FAIL(config_get_stopword_table(stopword_table))) {
+    LOG_WARN("get stopword table configuration failed", K(ret));
+  } else if (OB_FAIL(config_get_quantifier_table(quantifier_table))) {
+    LOG_WARN("get quantifier table configuration failed", K(ret));
+  } else if (OB_FAIL(qualify_ik_dict_table(ObFTSLiteral::CONFIG_NAME_DICT_TABLE,
+                                           database_name,
+                                           dict_table))) {
+    LOG_WARN("qualify dictionary table failed", K(ret), K(database_name), K(dict_table));
+  } else if (OB_FAIL(qualify_ik_dict_table(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE,
+                                           database_name,
+                                           stopword_table))) {
+    LOG_WARN("qualify stopword table failed", K(ret), K(database_name), K(stopword_table));
+  } else if (OB_FAIL(qualify_ik_dict_table(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE,
+                                           database_name,
+                                           quantifier_table))) {
+    LOG_WARN("qualify quantifier table failed", K(ret), K(database_name), K(quantifier_table));
+  }
+  return ret;
+}
+
 int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
 {
   int ret = OB_SUCCESS;
@@ -645,12 +770,15 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
   static const char *supported[] = {
       ObFTSLiteral::CONFIG_NAME_DICT_TABLE,
       ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE,
+      ObFTSLiteral::CONFIG_NAME_LEGACY_QUANTIFIER_TABLE,
       ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE,
       ObFTSLiteral::CONFIG_NAME_IK_MODE,
   };
 
   bool has_unsupported = false;
-  if (OB_FAIL(check_unsupported_config(supported, ARRAYSIZEOF(supported), has_unsupported))) {
+  if (OB_FAIL(normalize_legacy_quantifier_table())) {
+    LOG_WARN("normalize legacy quantifier table configuration failed", K(ret));
+  } else if (OB_FAIL(check_unsupported_config(supported, ARRAYSIZEOF(supported), has_unsupported))) {
     LOG_WARN("Failed to check unsupported config", K(ret));
   } else if (has_unsupported) {
     ret = OB_NOT_SUPPORTED;
@@ -684,7 +812,7 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
         }
       }
     } else {
-      // check quantifier table valid
+      // check stopword table valid
     }
 
     if (OB_FAIL(ret)) {
@@ -1164,13 +1292,27 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
 
 #undef __FT_PARSER_PROPERTY_SHOW_COMMA
 
-int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser,
-                                                const ObString &json_str,
-                                                ObIAllocator &allocator)
+int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const ObString &json_str)
 {
   int ret = OB_SUCCESS;
   ObFTParserJsonProps props;
-  if (OB_FAIL(props.init())) {
+  allocator_.reset();
+  min_token_size_ = ObFTSLiteral::FT_DEFAULT_MIN_TOKEN_SIZE;
+  max_token_size_ = ObFTSLiteral::FT_DEFAULT_MAX_TOKEN_SIZE;
+  ngram_token_size_ = ObFTSLiteral::FT_DEFAULT_NGRAM_TOKEN_SIZE;
+  ik_mode_smart_ = true;
+  dict_table_.reset();
+  stopword_table_.reset();
+  quantifier_table_.reset();
+  min_ngram_token_size_ = ObFTSLiteral::FT_DEFAULT_MIN_NGRAM_SIZE;
+  max_ngram_token_size_ = ObFTSLiteral::FT_DEFAULT_MAX_NGRAM_SIZE;
+  if (json_str.empty()) {
+    if (parser.is_ik()) {
+      dict_table_ = ObString(ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE);
+      stopword_table_ = ObString(ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE);
+      quantifier_table_ = ObString(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE);
+    }
+  } else if (OB_FAIL(props.init())) {
     LOG_WARN("fail to init props", K(ret));
   } else if (OB_FAIL(props.parse_from_valid_str(json_str))) {
     LOG_WARN("fail to parse from json str", K(ret), K(json_str));
@@ -1180,20 +1322,41 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser,
       ObString stopword_table;
       ObString quantifier_table;
       if (OB_FAIL(props.config_get_dict_table(dict_table))) {
-        LOG_WARN("fail to get IK main dictionary", K(ret));
-      } else if (OB_FAIL(props.config_get_stopword_table(stopword_table))) {
-        LOG_WARN("fail to get IK stopword dictionary", K(ret));
-      } else if (OB_FAIL(props.config_get_quantifier_table(quantifier_table))) {
-        LOG_WARN("fail to get IK quantifier dictionary", K(ret));
-      } else if (OB_FAIL(ob_write_string(allocator, dict_table, dict_table_))) {
-        LOG_WARN("fail to copy IK main dictionary", K(ret));
-      } else if (OB_FAIL(ob_write_string(allocator, stopword_table, stopword_table_))) {
-        LOG_WARN("fail to copy IK stopword dictionary", K(ret));
-      } else if (OB_FAIL(ob_write_string(allocator, quantifier_table, quantifier_table_))) {
-        LOG_WARN("fail to copy IK quantifier dictionary", K(ret));
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          ret = OB_SUCCESS;
+          dict_table = ObString(ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE);
+        } else {
+          LOG_WARN("fail to get dict table", K(ret));
+        }
+      }
+      if (OB_SUCC(ret) && OB_FAIL(props.config_get_stopword_table(stopword_table))) {
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          ret = OB_SUCCESS;
+          stopword_table = ObString(ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE);
+        } else {
+          LOG_WARN("fail to get stopword table", K(ret));
+        }
+      }
+      if (OB_SUCC(ret) && OB_FAIL(props.config_get_quantifier_table(quantifier_table))) {
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          ret = OB_SUCCESS;
+          quantifier_table = ObString(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE);
+        } else {
+          LOG_WARN("fail to get quantifier table", K(ret));
+        }
+      }
+      if (OB_SUCC(ret)) {
+        if (OB_FAIL(ob_write_string(allocator_, dict_table, dict_table_))) {
+          LOG_WARN("fail to copy dict table", K(ret), K(dict_table));
+        } else if (OB_FAIL(ob_write_string(allocator_, stopword_table, stopword_table_))) {
+          LOG_WARN("fail to copy stopword table", K(ret), K(stopword_table));
+        } else if (OB_FAIL(ob_write_string(allocator_, quantifier_table, quantifier_table_))) {
+          LOG_WARN("fail to copy quantifier table", K(ret), K(quantifier_table));
+        }
       }
       ObString ik_smart;
-      if (OB_SUCC(ret) && OB_FAIL(props.config_get_ik_mode(ik_smart))) {
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
         if (OB_SEARCH_NOT_FOUND == ret) {
           // from old version, ik_mode is not set, so use default value
           ik_mode_smart_ = true;
@@ -1250,7 +1413,8 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser,
 }
 
 ObFTParserProperty::ObFTParserProperty()
-    : min_token_size_(ObFTSLiteral::FT_DEFAULT_MIN_TOKEN_SIZE),
+    : allocator_("FTParserProp"),
+      min_token_size_(ObFTSLiteral::FT_DEFAULT_MIN_TOKEN_SIZE),
       max_token_size_(ObFTSLiteral::FT_DEFAULT_MAX_TOKEN_SIZE),
       ngram_token_size_(ObFTSLiteral::FT_DEFAULT_NGRAM_TOKEN_SIZE),
       ik_mode_smart_(true),

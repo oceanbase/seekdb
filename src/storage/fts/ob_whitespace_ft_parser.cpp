@@ -79,6 +79,12 @@ int ObSpaceFTParser::init(ObFTParserParam *param)
   return ret;
 }
 
+int ObSpaceFTParser::reuse(ObFTParserParam *param)
+{
+  reset();
+  return init(param);
+}
+
 int ObSpaceFTParser::get_next_token(const char *&word,
                                     int64_t &word_len,
                                     int64_t &char_len,
@@ -160,7 +166,7 @@ int ObWhiteSpaceFTParserDesc::deinit(ObPluginParam *param)
   return OB_SUCCESS;
 }
 
-int ObWhiteSpaceFTParserDesc::segment(
+int ObWhiteSpaceFTParserDesc::create_token_iter(
     ObFTParserParam *param,
     ObITokenIterator *&iter) const
 {
@@ -169,10 +175,11 @@ int ObWhiteSpaceFTParserDesc::segment(
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("default ft parser desc hasn't be initialized", K(ret), K(is_inited_));
-  } else if (OB_ISNULL(param) || OB_ISNULL(param->fulltext_) || OB_UNLIKELY(!param->is_valid())) {
+  } else if (OB_ISNULL(param) || OB_ISNULL(param->parser_allocator_)
+             || OB_ISNULL(param->fulltext_) || OB_UNLIKELY(!param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(param));
-  } else if (OB_ISNULL(parser = OB_NEWx(ObSpaceFTParser, param->allocator_))) {
+  } else if (OB_ISNULL(parser = OB_NEWx(ObSpaceFTParser, param->parser_allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate space ft parser", K(ret));
   } else {
@@ -184,21 +191,34 @@ int ObWhiteSpaceFTParserDesc::segment(
   }
 
   if (OB_FAIL(ret)) {
-    OB_DELETEx(ObSpaceFTParser, param->allocator_, parser);
+    OB_DELETEx(ObSpaceFTParser, param->parser_allocator_, parser);
   }
 
   return ret;
 }
 
-void ObWhiteSpaceFTParserDesc::free_token_iter(
+int ObWhiteSpaceFTParserDesc::reuse_token_iter(ObFTParserParam *param, ObITokenIterator *iter) const
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(param) || OB_ISNULL(iter)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KPC(param), KP(iter));
+  } else if (OB_FAIL(static_cast<ObSpaceFTParser *>(iter)->reuse(param))) {
+    LOG_WARN("fail to reuse whitespace fulltext parser", K(ret), KPC(param));
+  }
+  return ret;
+}
+
+void ObWhiteSpaceFTParserDesc::destroy_token_iter(
     ObFTParserParam *param,
     ObITokenIterator *&iter) const
 {
   if (OB_NOT_NULL(iter)) {
     abort_unless(nullptr != param);
-    abort_unless(nullptr != param->allocator_);
+    abort_unless(nullptr != param->parser_allocator_);
     iter->~ObITokenIterator();
-    param->allocator_->free(iter);
+    param->parser_allocator_->free(iter);
+    iter = nullptr;
   }
 }
 

@@ -71,7 +71,7 @@ public:
   uint64_t hash() const
   {
     uint64_t hash = 0;
-    hash = common::murmurhash(&type_, sizeof(int64_t), hash);
+    hash = common::murmurhash(&type_, sizeof(type_), hash);
     hash = common::murmurhash(&name_hash_, sizeof(name_hash_), hash);
     return hash;
   }
@@ -84,9 +84,7 @@ public:
   int compare(const ObFTDictInfoKey &other) const
   {
     int ret = 0;
-    if (0 == ret) {
-      ret = type_ - other.type_;
-    }
+    ret = type_ < other.type_ ? -1 : (type_ > other.type_ ? 1 : 0);
     if (0 == ret) {
       ret = name_hash_ < other.name_hash_ ? -1 : (name_hash_ > other.name_hash_ ? 1 : 0);
     }
@@ -112,7 +110,9 @@ public:
   int build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
 
   int load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
+
   int refresh_cache(const ObFTDictDesc &desc);
+
   uint64_t get_dictionary_epoch() const
   {
     return dictionary_epoch_.load(std::memory_order_acquire);

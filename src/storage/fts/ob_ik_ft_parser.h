@@ -21,7 +21,6 @@
 #include "storage/fts/dict/ob_ft_cache_container.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
-#include "storage/fts/ik/ob_ik_arbitrator.h"
 #include "storage/fts/ik/ob_ik_processor.h"
 #include "plugin/interface/ob_plugin_ftparser_intf.h"
 
@@ -31,6 +30,7 @@ namespace oceanbase
 namespace storage
 {
 class ObFTDictHub;
+class ObIKArbitrator;
 
 class ObIKFTParser final : public plugin::ObITokenIterator
 {
@@ -40,6 +40,7 @@ public:
         is_inited_(false),
         coll_type_(ObCollationType::CS_TYPE_INVALID),
         ctx_(nullptr),
+        arbitrator_(nullptr),
         hub_(hub),
         segmenters_(allocator_),
         cache_main_(allocator),
@@ -47,13 +48,17 @@ public:
         cache_stop_(allocator),
         dict_main_(nullptr),
         dict_quan_(nullptr),
-        dict_stop_(nullptr)
+        dict_stop_(nullptr),
+        normalized_token_(nullptr),
+        normalized_token_capacity_(0),
+        ik_param_()
   {
   }
 
   virtual ~ObIKFTParser() { reset(); }
 
   int init(const plugin::ObFTParserParam &param);
+  int reuse(const plugin::ObFTParserParam &param);
 
   int get_next_token(const char *&word,
                      int64_t &word_len,
@@ -88,6 +93,7 @@ private:
   int build_dict_from_cache(const ObFTDictDesc &desc,
                             ObFTCacheRangeContainer &container,
                             ObIFTDict *&dict);
+  int match_stopword(const char *word, const int64_t word_len, bool &is_stopword);
 
 private:
   static constexpr int SEGMENT_LIMIT = 1000;
@@ -96,8 +102,8 @@ private:
 
   ObCollationType coll_type_;
   TokenizeContext *ctx_;
+  ObIKArbitrator *arbitrator_;
   ObFTDictHub *hub_;
-  ObIKArbitrator arb_;
   ObList<ObIIKProcessor *, ObIAllocator> segmenters_;
 
   // For now there's no change of dict in one query, so we can pin dict this level.
@@ -108,6 +114,9 @@ private:
   ObIFTDict *dict_main_;
   ObIFTDict *dict_quan_;
   ObIFTDict *dict_stop_;
+  char *normalized_token_;
+  int64_t normalized_token_capacity_;
+  plugin::ObFTIKParam ik_param_;
 
   DISABLE_COPY_ASSIGN(ObIKFTParser);
 };
@@ -119,9 +128,12 @@ public:
   virtual ~ObIKFTParserDesc() = default;
   virtual int init(plugin::ObPluginParam *param) override;
   virtual int deinit(plugin::ObPluginParam *param) override;
-  virtual int segment(plugin::ObFTParserParam *param, plugin::ObITokenIterator *&iter) const override;
-  virtual void free_token_iter(plugin::ObFTParserParam *param,
-                               plugin::ObITokenIterator *&iter) const override;
+  virtual int create_token_iter(plugin::ObFTParserParam *param,
+                                plugin::ObITokenIterator *&iter) const override;
+  virtual int reuse_token_iter(plugin::ObFTParserParam *param,
+                               plugin::ObITokenIterator *iter) const override;
+  virtual void destroy_token_iter(plugin::ObFTParserParam *param,
+                                  plugin::ObITokenIterator *&iter) const override;
   virtual int get_add_word_flag(ObAddWordFlag &flag) const override;
   OB_INLINE void reset() { is_inited_ = false; }
 

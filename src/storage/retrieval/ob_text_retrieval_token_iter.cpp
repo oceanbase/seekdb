@@ -287,7 +287,6 @@ int ObTextRetrievalTokenIter::do_token_cnt_agg(const ObDocIdExt &doc_id)
     } else {
       token_count = fwd_idx_agg_expr_->locate_expr_datum(*eval_ctx_).get_int();
     }
-    LOG_DEBUG("retrieval iterator get token cnt for doc", K(ret), K(doc_id), K(token_count));
   }
   return ret;
 }
@@ -370,7 +369,9 @@ int ObTextRetrievalTokenIter::get_next_row()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("retrieval token iterator not inited", K(ret));
-  } else if (!token_doc_cnt_calculated_ && OB_FAIL(estimate_token_doc_cnt())) {
+  } else if (need_calc_relevance()
+             && !token_doc_cnt_calculated_
+             && OB_FAIL(estimate_token_doc_cnt())) {
     LOG_WARN("failed to estimate token doc cnt", K(ret));
   } else if (OB_FAIL(inv_idx_scan_iter_->get_next_row())) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
@@ -455,7 +456,9 @@ int ObTextRetrievalTokenIter::get_next_batch(const int64_t capacity, int64_t &co
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("retrieval token iterator not inited", K(ret));
-  } else if (!token_doc_cnt_calculated_ && OB_FAIL(estimate_token_doc_cnt())) {
+  } else if (need_calc_relevance()
+             && !token_doc_cnt_calculated_
+             && OB_FAIL(estimate_token_doc_cnt())) {
     LOG_WARN("failed to estimate token doc cnt", K(ret));
   } else if (OB_FAIL(inv_idx_scan_iter_->get_next_rows(count, OB_MIN(max_batch_size_, capacity)))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
@@ -528,11 +531,15 @@ int ObTextRetrievalTokenIter::advance_to(const ObDatum &id_datum)
 int ObTextRetrievalTokenIter::update_scan_param(const ObString &token, common::ObArenaAllocator &allocator)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(inv_idx_agg_param_->key_ranges_.count() != 1)) {
+  ObTableScanParam *range_param = need_inv_idx_agg() ? inv_idx_agg_param_ : inv_idx_scan_param_;
+  if (OB_ISNULL(range_param)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected key range count", K(ret), K(inv_idx_agg_param_->key_ranges_.count()));
+    LOG_WARN("unexpected null range parameter", K(ret), KP(range_param));
+  } else if (OB_UNLIKELY(range_param->key_ranges_.count() != 1)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected key range count", K(ret), K(range_param->key_ranges_.count()));
   } else {
-    ObNewRange scan_range = inv_idx_agg_param_->key_ranges_.at(0);
+    ObNewRange scan_range = range_param->key_ranges_.at(0);
     ObObj tmp_obj;
     tmp_obj.set_string(ObVarcharType, token);
     tmp_obj.set_meta_type(scan_range.start_key_.get_obj_ptr()->meta_);
@@ -688,6 +695,7 @@ ObTextRetrievalDaaTTokenIter::ObTextRetrievalDaaTTokenIter()
     relevance_(),
     doc_id_(),
     cmp_func_(nullptr),
+    use_binary_string_cmp_(false),
     is_inited_(false)
 {
 }
@@ -714,6 +722,7 @@ int ObTextRetrievalDaaTTokenIter::init(const ObTextRetrievalScanIterParam &iter_
       max_batch_size_ = OB_MAX(iter_param.eval_ctx_->max_batch_size_, 1);
       sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(inv_scan_domain_id_col_->datum_meta_.type_, CS_TYPE_BINARY);
       cmp_func_ = basic_funcs->null_first_cmp_;
+      use_binary_string_cmp_ = ObDatumFuncs::is_string_type(inv_scan_domain_id_col_->datum_meta_.type_);
       if (OB_ISNULL(cmp_func_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to init IRIterLoserTreeCmp", K(ret));
@@ -817,10 +826,8 @@ int ObTextRetrievalDaaTTokenIter::save_docids()
     cur_idx_ = 0;
     const ObDatumVector &doc_id_datum = inv_scan_domain_id_col_->locate_expr_datumvector(*eval_ctx_);
     for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
-      if (OB_LIKELY(!token_iter_->get_skip()->at(i))) {
-        if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
-          LOG_WARN("failed to get doc id", K(ret));
-        };
+      if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
+        LOG_WARN("failed to get doc id", K(ret));
       }
     }
   }
@@ -844,7 +851,7 @@ int ObTextRetrievalDaaTTokenIter::advance_to(const ObDatum &id_datum)
   }
   while (OB_SUCC(ret) && !find) {
     if (cur_idx_ < count_) {
-      if (OB_FAIL(cmp_func_(id_datum, doc_id_[cur_idx_].get_datum(), result))) {
+      if (OB_FAIL(compare_doc_id(id_datum, doc_id_[cur_idx_].get_datum(), result))) {
         LOG_WARN("failed to compare datum", K(ret));
       } else if (result <= 0) {
         find = true;
@@ -862,7 +869,7 @@ int ObTextRetrievalDaaTTokenIter::advance_to(const ObDatum &id_datum)
     } else if (cur_idx_ != 0) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected result", K(ret), K(result));
-    } else if (OB_FAIL(cmp_func_(id_datum, doc_id_[cur_idx_].get_datum(), result))) {
+    } else if (OB_FAIL(compare_doc_id(id_datum, doc_id_[cur_idx_].get_datum(), result))) {
       LOG_WARN("failed to compare datum", K(ret));
     } else if (result <= 0) {
       find = true;
@@ -882,6 +889,8 @@ int ObTextRetrievalDaaTTokenIter::get_curr_score(double &score) const
     LOG_WARN("array index out of bounds", K(ret), K_(cur_idx), K_(count));
   } else if (relevance_expr_) {
     score = relevance_[cur_idx_];
+  } else {
+    score = 1.0;
   }
   return ret;
 }
@@ -1105,7 +1114,6 @@ int ObTextRetrievalBlockMaxIter::advance_to(const ObDatum &id_datum)
 int ObTextRetrievalBlockMaxIter::advance_shallow(const ObDatum &id_datum, const bool inclusive)
 {
   int ret = OB_SUCCESS;
-  LOG_DEBUG("[Sparse Retrieval] advance shallow", K(ret), K(id_datum), K(inclusive));
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not initialized", K(ret));
