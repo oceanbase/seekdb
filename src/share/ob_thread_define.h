@@ -40,7 +40,9 @@ TG_DEF(StandbyTimestampService, StandbyTimestampService, THREAD_POOL, 1)
 TG_DEF(TSnapSvc, TSnapSvc, THREAD_POOL, 1)
 TG_DEF(WeakReadService, WeakRdSrv, THREAD_POOL, 1)
 // TG_DEF(TransTaskWork, TransTaskWork, QUEUE_THREAD, ThreadCountPair(GET_THREAD_NUM_BY_NPROCESSORS(12), 1), transaction::ObThreadLocalTransCtx::MAX_BIG_TRANS_TASK)
-TG_DEF(DDLTaskExecutor3, DDLTaskExecutor3, REENTRANT_THREAD_POOL, ThreadCountPair(8, 2))
+TG_DEF(DDLTaskExecutor3, DDLTaskExecutor3, REENTRANT_THREAD_POOL,
+       ThreadCountPair(8, 2),
+       (1L << 19) - THREAD_STACK_RESERVED_SIZE - ACHUNK_PRESERVE_SIZE)
 TG_DEF(TSWorker, TSWorker, QUEUE_THREAD, ThreadCountPair(GET_THREAD_NUM_BY_NPROCESSORS(12), 1), transaction::ObTsWorker::MAX_TASK_NUM)
 TG_DEF(RLMGR, RLMGR, THREAD_POOL, 1)
 TG_DEF(LeaseQueueTh, LeaseQueueTh, THREAD_POOL, ThreadCountPair(observer::ObSrvDeliver::LEASE_TASK_THREAD_CNT, observer::ObSrvDeliver::MINI_MODE_LEASE_TASK_THREAD_CNT))
@@ -126,7 +128,8 @@ TG_DEF(LSFetchLogEngine, FetchLog, LINK_QUEUE_THREAD,
        ThreadCountPair(palf::FetchLogEngine::FETCH_LOG_THREAD_COUNT, palf::FetchLogEngine::MINI_MODE_FETCH_LOG_THREAD_COUNT),
        palf::FetchLogEngine::FETCH_LOG_TASK_MAX_COUNT_PER_LS * OB_MAX_LS_NUM_PER_TENANT_PER_SERVER_CAN_BE_SET)
 TG_DEF(DagScheduler, DagScheduler, THREAD_POOL, 1)
-TG_DEF(DagWorker, DagWorker, THREAD_POOL, 1)
+TG_DEF(DagWorker, DagWorker, THREAD_POOL, 1,
+       (1L << 19) - THREAD_STACK_RESERVED_SIZE - ACHUNK_PRESERVE_SIZE)
 TG_DEF(RCService, RCSrv, QUEUE_THREAD,
        ThreadCountPair(logservice::ObRoleChangeService::MAX_THREAD_NUM,
        logservice::ObRoleChangeService::MAX_THREAD_NUM),

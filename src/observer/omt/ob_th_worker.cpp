@@ -84,7 +84,11 @@ int destroy_worker(ObThWorker *worker)
 }// end of namespace oceanbase
 
 ObThWorker::ObThWorker()
-    : procor_(ObServer::get_instance().get_net_frame().get_xlator(), ObServer::get_instance().get_self()),
+    : lib::Threads(1,
+                    (1L << 19)
+                    - THREAD_STACK_RESERVED_SIZE
+                    - ACHUNK_PRESERVE_SIZE),
+      procor_(ObServer::get_instance().get_net_frame().get_xlator(), ObServer::get_instance().get_self()),
       is_inited_(false), tenant_(nullptr),
       run_cond_(),
       pause_flag_(false), large_query_(false),

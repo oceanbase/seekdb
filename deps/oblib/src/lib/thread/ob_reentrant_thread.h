@@ -31,7 +31,7 @@ class ObReentrantThread
     : public lib::ThreadPool
 {
 public:
-  ObReentrantThread();
+  explicit ObReentrantThread(int64_t stack_size = global_thread_stack_size);
   virtual ~ObReentrantThread();
 
   // create thread, task will not run before start() called.

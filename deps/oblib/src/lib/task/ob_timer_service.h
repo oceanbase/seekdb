@@ -102,7 +102,14 @@ class ObTimerService;
 class ObTimerTaskThreadPool final : public ObSimpleThreadPool
 {
 public:
-  ObTimerTaskThreadPool(ObTimerService &service) : service_(service) {}
+  // Timer tasks may run deep bootstrap and inner-SQL call chains. Keep their
+  // workers large without increasing the stack allocation of every thread.
+  ObTimerTaskThreadPool(ObTimerService &service)
+      : ObSimpleThreadPool((1L << 19)
+                           - THREAD_STACK_RESERVED_SIZE
+                           - ACHUNK_PRESERVE_SIZE),
+        service_(service)
+  {}
   virtual ~ObTimerTaskThreadPool() {}
   virtual void handle(void *task_token) override;
   ObTimerTaskThreadPool(const ObTimerTaskThreadPool &) = delete;

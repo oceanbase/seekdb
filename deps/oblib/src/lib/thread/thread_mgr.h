@@ -233,6 +233,9 @@ class TG;
 class MyReentrantThread : public share::ObReentrantThread
 {
 public:
+  explicit MyReentrantThread(int64_t stack_size = global_thread_stack_size)
+      : share::ObReentrantThread(stack_size)
+  {}
   virtual void run2() override
   {
     runnable_->set_thread_idx(get_thread_idx());
@@ -250,10 +253,20 @@ class TG_REENTRANT_THREAD_POOL : public ITG
 {
 public:
   TG_REENTRANT_THREAD_POOL(ThreadCountPair pair)
-    : thread_cnt_(pair.get_thread_cnt())
+    : thread_cnt_(pair.get_thread_cnt()),
+      stack_size_(global_thread_stack_size)
   {}
   TG_REENTRANT_THREAD_POOL(int64_t thread_cnt)
-    : thread_cnt_(thread_cnt)
+    : thread_cnt_(thread_cnt),
+      stack_size_(global_thread_stack_size)
+  {}
+  TG_REENTRANT_THREAD_POOL(ThreadCountPair pair, int64_t stack_size)
+    : thread_cnt_(pair.get_thread_cnt()),
+      stack_size_(stack_size)
+  {}
+  TG_REENTRANT_THREAD_POOL(int64_t thread_cnt, int64_t stack_size)
+    : thread_cnt_(thread_cnt),
+      stack_size_(stack_size)
   {}
   ~TG_REENTRANT_THREAD_POOL() { destroy(); }
   int thread_cnt() override { return (int)thread_cnt_; }
@@ -274,7 +287,7 @@ public:
     if (th_ != nullptr) {
       ret = common::OB_ERR_UNEXPECTED;
     } else {
-      th_ = new (buf_) MyReentrantThread();
+      th_ = new (buf_) MyReentrantThread(stack_size_);
       th_->runnable_ = &runnable;
       th_->set_runnable_cond();
     }
@@ -344,11 +357,15 @@ private:
   alignas(16) char buf_[sizeof(MyReentrantThread)];
   MyReentrantThread *th_ = nullptr;
   int64_t thread_cnt_;
+  int64_t stack_size_;
 
 };
 class MyThreadPool : public lib::ThreadPool
 {
 public:
+  explicit MyThreadPool(int64_t stack_size = global_thread_stack_size)
+      : lib::ThreadPool(1, stack_size)
+  {}
   void run1() override
   {
     runnable_->set_thread_idx(get_thread_idx());
@@ -361,10 +378,16 @@ class TG_THREAD_POOL : public ITG
 {
 public:
   TG_THREAD_POOL(ThreadCountPair pair)
-    : thread_cnt_(pair.get_thread_cnt())
+    : thread_cnt_(pair.get_thread_cnt()),
+      stack_size_(global_thread_stack_size)
   {}
   TG_THREAD_POOL(int64_t thread_cnt)
-    : thread_cnt_(thread_cnt)
+    : thread_cnt_(thread_cnt),
+      stack_size_(global_thread_stack_size)
+  {}
+  TG_THREAD_POOL(int64_t thread_cnt, int64_t stack_size)
+    : thread_cnt_(thread_cnt),
+      stack_size_(stack_size)
   {}
   ~TG_THREAD_POOL() { destroy(); }
   int thread_cnt() override { return (int)thread_cnt_; }
@@ -385,7 +408,7 @@ public:
     if (th_ != nullptr) {
       ret = common::OB_ERR_UNEXPECTED;
     } else {
-      th_ = new (buf_) MyThreadPool();
+      th_ = new (buf_) MyThreadPool(stack_size_);
       th_->runnable_= &runnable;
     }
     return ret;
@@ -433,6 +456,7 @@ private:
   alignas(16) char buf_[sizeof(MyThreadPool)];
   MyThreadPool *th_ = nullptr;
   int64_t thread_cnt_;
+  int64_t stack_size_;
 };
 
 template <class T = ObLightyQueue>

@@ -8251,6 +8251,9 @@ int ObDMLResolver::resolve_function_table_column_item(const TableItem &table_ite
   OX (col_expr->set_ref_id(table_item.table_id_, column_id));
   OX (result_type.set_meta(meta_type));
   OX (result_type.set_accuracy(accuracy));
+  if (ob_is_string_tc(result_type.get_type())) {
+    OX (result_type.set_collation_level(CS_LEVEL_IMPLICIT));
+  }
   OX (col_expr->set_result_type(result_type));
   if (table_item.get_object_name().empty()) {
     OX (col_expr->set_column_name(column_name));
@@ -9226,13 +9229,40 @@ int ObDMLResolver::resolve_function_table_column_item_sys_func(const TableItem &
   ObRawExpr *table_expr = NULL;
   ColumnItem *col_item = NULL;
   ObDMLStmt *stmt = get_stmt();
-  const ObUserDefinedType *user_type = NULL;
 
   CK (OB_NOT_NULL(stmt));
   CK (OB_LIKELY(table_item.is_function_table()));
   CK (OB_NOT_NULL(table_expr = table_item.function_table_expr_));
   OZ (table_expr->deduce_type(session_info_));
   if (OB_FAIL(ret)) { // do nothing ...
+  } else if (T_FUN_SYS_AI_SPLIT_DOCUMENT == table_expr->get_expr_type()) {
+    common::ObObjMeta int_meta;
+    common::ObObjMeta text_meta;
+    ObAccuracy int_accuracy = ObAccuracy::DDL_DEFAULT_ACCURACY[ObIntType];
+    ObAccuracy text_accuracy = ObAccuracy::DDL_DEFAULT_ACCURACY[ObVarcharType];
+    const ObString column_names[] = {
+      ObString("chunk_id"),
+      ObString("chunk_offset"),
+      ObString("chunk_length"),
+      ObString("chunk_text")
+    };
+    int_meta.set_int();
+    text_meta.set_varchar();
+    text_meta.set_collation_type(ObCharset::get_system_collation());
+    text_accuracy.set_length(OB_MAX_VARCHAR_LENGTH);
+    for (int64_t i = 0; OB_SUCC(ret) && i < 4; ++i) {
+      col_item = stmt->get_column_item(table_item.table_id_, column_names[i]);
+      if (NULL == col_item) {
+        OZ (resolve_function_table_column_item(table_item,
+                                               i < 3 ? int_meta : text_meta,
+                                               i < 3 ? int_accuracy : text_accuracy,
+                                               column_names[i],
+                                               OB_APP_MIN_COLUMN_ID + i,
+                                               col_item));
+      }
+      CK (OB_NOT_NULL(col_item));
+      OZ (col_items.push_back(*col_item));
+    }
   } else if (!ObResolverUtils::is_expr_can_be_used_in_table_function(*table_expr)) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "access rows from a non-nested table item");
@@ -9246,8 +9276,10 @@ int ObDMLResolver::resolve_function_table_column_item_sys_func(const TableItem &
                                            OB_APP_MIN_COLUMN_ID,
                                            col_item));
   }
-  CK (OB_NOT_NULL(col_item));
-  OZ (col_items.push_back(*col_item));
+  if (OB_SUCC(ret) && T_FUN_SYS_AI_SPLIT_DOCUMENT != table_expr->get_expr_type()) {
+    CK (OB_NOT_NULL(col_item));
+    OZ (col_items.push_back(*col_item));
+  }
   return ret;
 }
 

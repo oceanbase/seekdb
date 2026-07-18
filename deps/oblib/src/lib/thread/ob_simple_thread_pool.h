@@ -62,7 +62,7 @@ class ObSimpleThreadPoolBase
     int64_t idx_;
     WorkerNode worker_node_;
     Worker(ObSimpleThreadPoolBase *pool, int64_t idx)
-        : lib::Threads(1), pool_(pool), idx_(idx) {
+        : lib::Threads(1, pool->stack_size_), pool_(pool), idx_(idx) {
       worker_node_.get_data() = this;
     }
     void run1() override;
@@ -70,7 +70,7 @@ class ObSimpleThreadPoolBase
   friend struct Worker;
 
 public:
-  ObSimpleThreadPoolBase();
+  explicit ObSimpleThreadPoolBase(int64_t stack_size = global_thread_stack_size);
   virtual ~ObSimpleThreadPoolBase();
 
   int init(const int64_t thread_num, const int64_t task_num_limit,
@@ -119,6 +119,7 @@ private:
   bool stop_;
   T queue_;
   lib::IRunWrapper *run_wrapper_;
+  int64_t stack_size_;
   WorkerList workers_;
   lib::ObMutex workers_lock_;
   uint64_t cur_worker_idx_;

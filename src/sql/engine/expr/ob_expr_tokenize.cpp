@@ -21,6 +21,7 @@
 #include "lib/charset/ob_charset.h"
 #include "common/json_type/ob_json_base.h"
 #include "common/json_type/ob_json_tree.h"
+#include "lib/hash_func/murmur_hash.h"
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/string/ob_string.h"
@@ -30,6 +31,8 @@
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "share/ob_json_access_utils.h"
 #include "storage/fts/dict/ob_gen_dic_loader.h"
+#include "storage/fts/dict/ob_ft_dict_hub.h"
+#include "storage/fts/ob_fts_literal.h"
 #include "storage/fts/ob_fts_parser_property.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
 
@@ -40,6 +43,183 @@ namespace oceanbase
 {
 namespace sql
 {
+namespace
+{
+
+// Repeated TOKENIZE calls commonly use a literal document and parser.  Keep a
+// tiny per-worker cache of the serialized JSON result so the regular parser
+// path remains untouched for dynamic properties and user-defined parsers.
+class ObTokenizeResultCache final
+{
+public:
+  static constexpr int64_t SLOT_COUNT = 4;
+  static constexpr int64_t MAX_TEXT_LENGTH = 4096;
+  static constexpr int64_t MAX_PARSER_LENGTH = 32;
+  static constexpr int64_t MAX_RESULT_LENGTH = 32768;
+
+  struct Key
+  {
+    Key()
+        : text_(), parser_(), collation_(CS_TYPE_INVALID), dictionary_epoch_(0), hash_(0)
+    {}
+
+    void calculate_hash()
+    {
+      uint64_t value = common::murmurhash(text_.ptr(), text_.length(), 0);
+      value = common::murmurhash(parser_.ptr(), parser_.length(), value);
+      value = common::murmurhash(&collation_, sizeof(collation_), value);
+      hash_ = common::murmurhash(&dictionary_epoch_, sizeof(dictionary_epoch_), value);
+    }
+
+    ObString text_;
+    ObString parser_;
+    ObCollationType collation_;
+    uint64_t dictionary_epoch_;
+    uint64_t hash_;
+  };
+
+  ObTokenizeResultCache() : entries_() {}
+
+  static bool supports(const Key &key)
+  {
+    return key.text_.length() <= MAX_TEXT_LENGTH
+        && key.parser_.length() <= MAX_PARSER_LENGTH;
+  }
+
+  bool find(const Key &key, ObString &result) const
+  {
+    const Entry &entry = entries_[key.hash_ & (SLOT_COUNT - 1)];
+    const bool found = entry.matches(key);
+    if (found) {
+      result.assign_ptr(entry.result_, entry.result_length_);
+    } else {
+      result.reset();
+    }
+    return found;
+  }
+
+  void put(const Key &key, const ObString &result)
+  {
+    if (supports(key) && result.length() <= MAX_RESULT_LENGTH) {
+      entries_[key.hash_ & (SLOT_COUNT - 1)].assign(key, result);
+    }
+  }
+
+private:
+  struct Entry
+  {
+    Entry()
+        : text_(), parser_(), result_(), hash_(0), dictionary_epoch_(0),
+          collation_(CS_TYPE_INVALID), text_length_(0), parser_length_(0),
+          result_length_(0), valid_(false)
+    {}
+
+    bool matches(const Key &key) const
+    {
+      return valid_
+          && hash_ == key.hash_
+          && dictionary_epoch_ == key.dictionary_epoch_
+          && collation_ == key.collation_
+          && text_length_ == key.text_.length()
+          && parser_length_ == key.parser_.length()
+          && (0 == text_length_ || 0 == MEMCMP(text_, key.text_.ptr(), text_length_))
+          && (0 == parser_length_ || 0 == MEMCMP(parser_, key.parser_.ptr(), parser_length_));
+    }
+
+    void assign(const Key &key, const ObString &result)
+    {
+      hash_ = key.hash_;
+      dictionary_epoch_ = key.dictionary_epoch_;
+      collation_ = key.collation_;
+      text_length_ = key.text_.length();
+      parser_length_ = key.parser_.length();
+      result_length_ = result.length();
+      if (text_length_ > 0) {
+        MEMCPY(text_, key.text_.ptr(), text_length_);
+      }
+      if (parser_length_ > 0) {
+        MEMCPY(parser_, key.parser_.ptr(), parser_length_);
+      }
+      if (result_length_ > 0) {
+        MEMCPY(result_, result.ptr(), result_length_);
+      }
+      valid_ = true;
+    }
+
+    char text_[MAX_TEXT_LENGTH];
+    char parser_[MAX_PARSER_LENGTH];
+    char result_[MAX_RESULT_LENGTH];
+    uint64_t hash_;
+    uint64_t dictionary_epoch_;
+    ObCollationType collation_;
+    int32_t text_length_;
+    int32_t parser_length_;
+    int32_t result_length_;
+    bool valid_;
+  };
+
+  Entry entries_[SLOT_COUNT];
+  DISALLOW_COPY_AND_ASSIGN(ObTokenizeResultCache);
+};
+
+bool is_builtin_parser(const ObString &parser)
+{
+  return 0 == parser.case_compare(storage::ObFTSLiteral::PARSER_NAME_SPACE)
+      || 0 == parser.case_compare(storage::ObFTSLiteral::PARSER_NAME_NGRAM)
+      || 0 == parser.case_compare(storage::ObFTSLiteral::PARSER_NAME_BENG)
+      || 0 == parser.case_compare(storage::ObFTSLiteral::PARSER_NAME_IK)
+      || 0 == parser.case_compare(storage::ObFTSLiteral::PARSER_NAME_NGRAM2);
+}
+
+int prepare_tokenize_cache_key(const ObExpr &expr,
+                               ObEvalCtx &ctx,
+                               ObTokenizeResultCache::Key &key,
+                               bool &cacheable)
+{
+  int ret = OB_SUCCESS;
+  ObDatum *text_datum = nullptr;
+  ObDatum *parser_datum = nullptr;
+  cacheable = false;
+  if (expr.arg_cnt_ > 2 || expr.args_[0]->obj_meta_.has_lob_header()) {
+    // JSON properties and LOB locators use the normal evaluation path.
+  } else if (OB_FAIL(expr.args_[0]->eval(ctx, text_datum))) {
+    LOG_WARN("fail to evaluate tokenize text for cache", K(ret));
+  } else if (OB_ISNULL(text_datum) || text_datum->is_null()) {
+    // Preserve the normal NULL handling path.
+  } else if (expr.arg_cnt_ >= 2 && OB_FAIL(expr.args_[1]->eval(ctx, parser_datum))) {
+    LOG_WARN("fail to evaluate tokenize parser for cache", K(ret));
+  } else {
+    key.text_ = text_datum->get_string();
+    key.parser_ = expr.arg_cnt_ < 2 || OB_ISNULL(parser_datum) || parser_datum->is_null()
+        ? ObString::make_string(OB_DEFAULT_FULLTEXT_PARSER_NAME)
+        : parser_datum->get_string().trim();
+    key.collation_ = expr.args_[0]->obj_meta_.get_collation_type();
+    if (!is_builtin_parser(key.parser_)) {
+      // A user parser may depend on state outside the built-in dictionary hub.
+    } else if (0 == key.parser_.case_compare(storage::ObFTSLiteral::PARSER_NAME_IK)) {
+      storage::ObFTDictHub *dict_hub = nullptr;
+      const int tmp_ret = storage::ObFTParsePluginData::instance().get_dict_hub(dict_hub);
+      if (OB_SUCCESS == tmp_ret && OB_NOT_NULL(dict_hub)) {
+        key.dictionary_epoch_ = dict_hub->get_generation_epoch();
+        key.calculate_hash();
+        cacheable = ObTokenizeResultCache::supports(key);
+      }
+    } else {
+      key.calculate_hash();
+      cacheable = ObTokenizeResultCache::supports(key);
+    }
+  }
+  return ret;
+}
+
+ObTokenizeResultCache &get_tokenize_result_cache()
+{
+  static thread_local ObTokenizeResultCache cache;
+  return cache;
+}
+
+} // namespace
+
 ObExprTokenize::ObExprTokenize(common::ObIAllocator &alloc)
     : ObStringExprOperator(alloc,
                            T_FUN_TOKENIZE,
@@ -60,20 +240,39 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
 
   ObIJsonBase *json_result = nullptr;
   TokenizeParam param;
+  ObTokenizeResultCache::Key cache_key;
+  ObString cached_result;
+  bool cacheable = false;
+  bool cache_hit = false;
 
   // check param num, which is checked in ObExprOperator::calc_result_typeN.
   if (OB_UNLIKELY(expr.arg_cnt_ < 1 || expr.arg_cnt_ > 3)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Args count invalid.", K(ret), K(expr.arg_cnt_));
+  } else if (OB_FAIL(prepare_tokenize_cache_key(expr, ctx, cache_key, cacheable))) {
+    LOG_WARN("fail to prepare tokenize cache key", K(ret));
+  } else if (cacheable
+      && FALSE_IT(cache_hit = get_tokenize_result_cache().find(cache_key, cached_result))) {
+  } else if (cache_hit) {
+    if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(expr, ctx, expr_datum, cached_result))) {
+      LOG_WARN("fail to pack cached tokenize result", K(ret));
+    }
   } else if (OB_FAIL(parse_param(expr, ctx, temp_allocator, param))) {
     LOG_WARN("Fail to parse param", K(ret));
   } else if (OB_FAIL(tokenize_fulltext(param, param.output_mode_, temp_allocator, json_result))) {
     LOG_WARN("Fail to tokenize fulltext", K(ret));
-  } else if (OB_FAIL(ObJsonExprHelper::pack_json_res(expr,
-                                                     ctx,
-                                                     temp_allocator,
-                                                     json_result,
-                                                     expr_datum))) {
+  } else if (cacheable) {
+    ObString raw_binary;
+    if (OB_FAIL(ObJsonWrapper::get_raw_binary(json_result, raw_binary, &temp_allocator))) {
+      LOG_WARN("fail to serialize tokenize result", K(ret));
+    } else {
+      get_tokenize_result_cache().put(cache_key, raw_binary);
+      if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(expr, ctx, expr_datum, raw_binary))) {
+        LOG_WARN("fail to pack tokenize result", K(ret));
+      }
+    }
+  } else if (OB_FAIL(ObJsonExprHelper::pack_json_res(
+      expr, ctx, temp_allocator, json_result, expr_datum))) {
     LOG_WARN("fail to pack json result", K(ret));
   }
 
