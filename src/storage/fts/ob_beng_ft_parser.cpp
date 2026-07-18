@@ -36,7 +36,6 @@ int ObBEngFTParser::get_next_token(
   int ret = OB_SUCCESS;
   ObDatum token;
   int64_t token_freq = 0;
-  char *buf = nullptr;
   word = nullptr;
   word_len = 0;
   char_len = 0;
@@ -54,12 +53,14 @@ int ObBEngFTParser::get_next_token(
   } else if (OB_ISNULL(token.ptr_) || OB_UNLIKELY(0 >= token.len_ || 0 >= token_freq)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(token.ptr_), K(token.len_), K(token_freq));
-  } else if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(token.len_)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate word memory", K(ret), K(token.len_));
+  } else if (OB_UNLIKELY(word_buf_pos_ + token.len_ > word_buf_capacity_)) {
+    ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("normalized tokens exceed word buffer", K(ret), K(token.len_),
+             K(word_buf_pos_), K(word_buf_capacity_));
   } else {
-    MEMCPY(buf, token.ptr_, token.len_);
-    word = buf;
+    word = word_buf_ + word_buf_pos_;
+    MEMCPY(word_buf_ + word_buf_pos_, token.ptr_, token.len_);
+    word_buf_pos_ += token.len_;
     word_len = token.len_;
     char_len = token.len_;
     word_freq = token_freq;
@@ -85,7 +86,11 @@ int ObBEngFTParser::init(ObFTParserParam *param)
     analysis_ctx_.cs_ = param->cs_;
     analysis_ctx_.filter_stopword_ = false;
     analysis_ctx_.need_grouping_ = false;
-    if (OB_FAIL(english_analyzer_.init(analysis_ctx_, *param->allocator_))) {
+    word_buf_capacity_ = param->ft_length_ * MAX(1, param->cs_->casedn_multiply);
+    if (OB_ISNULL(word_buf_ = static_cast<char *>(allocator_.alloc(word_buf_capacity_)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to allocate beng word buffer", K(ret), K(word_buf_capacity_));
+    } else if (OB_FAIL(english_analyzer_.init(analysis_ctx_, *param->allocator_))) {
       LOG_WARN("fail to init english analyzer", K(ret), KPC(param), K(analysis_ctx_));
     } else if (OB_FAIL(segment(doc_, token_stream_))) {
       LOG_WARN("fail to segment fulltext by parser", K(ret), KP(param->fulltext_), K(param->ft_length_));
@@ -126,6 +131,9 @@ void ObBEngFTParser::reset()
   english_analyzer_.reset();
   doc_.reset();
   token_stream_ = nullptr;
+  word_buf_ = nullptr;
+  word_buf_capacity_ = 0;
+  word_buf_pos_ = 0;
   is_inited_ = false;
 }
 
