@@ -24,6 +24,9 @@ insert into docs values
 select count(*) from docs where match(content) against('alpha');
 select count(*) from docs where match(content) against('alpha beta');
 select count(*) from docs where match(content) against('alpha alpha beta');
+select count(*) from docs where match(content) against('alpha beta gamma');
+select count(*) from docs where match(content) against('alpha beta gamma transaction');
+select count(*) from docs where match(content) against('+alpha +beta' in boolean mode);
 select count(*) from (
   select id from docs where match(content) against('alpha beta') limit 2
 ) t;

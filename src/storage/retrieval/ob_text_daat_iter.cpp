@@ -38,6 +38,7 @@ int ObTextDaaTIter::init(const ObTextDaaTParam &param)
     LOG_WARN("failed to init bm25 param estimator", K(ret));
   } else {
     mode_flag_ = param.mode_flag_;
+    minimum_should_match_ = param.minimum_should_match_;
     function_lookup_mode_ = param.function_lookup_mode_;
   }
   return ret;
@@ -79,6 +80,140 @@ int ObTextDaaTIter::pre_process()
   } else if (iter_param_->need_project_relevance()) {
     if (OB_FAIL(bm25_param_estimator_.do_estimation(*iter_param_->eval_ctx_))) {
       LOG_WARN("failed to do bm25 param estimation", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObTextDaaTIter::get_total_count(int64_t &count)
+{
+  int ret = OB_SUCCESS;
+  static const int64_t MAX_COUNT_SPAN_DIM = 2;
+  count = 0;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("text retrieval count iterator is not initialized", K(ret));
+  } else if (OB_ISNULL(dim_iters_) || OB_ISNULL(iter_param_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null text retrieval count state", K(ret), KP_(dim_iters), KP_(iter_param));
+  } else if (function_lookup_mode_
+      || iter_param_->need_project_relevance()
+      || iter_param_->need_filter()
+      || iter_param_->need_pushdown_topk()) {
+    ret = OB_NOT_SUPPORTED;
+  } else if (ObMatchAgainstMode::NATURAL_LANGUAGE_MODE != mode_flag_
+      || minimum_should_match_ > 1
+      || dim_iters_->count() > MAX_COUNT_SPAN_DIM) {
+    ret = ObSRDaaTIterImpl::get_total_count(count);
+  } else {
+    bool active[MAX_COUNT_SPAN_DIM] = {false, false};
+    for (int64_t i = 0; OB_SUCC(ret) && i < dim_iters_->count(); ++i) {
+      ObTextRetrievalDaaTTokenIter *iter = static_cast<ObTextRetrievalDaaTTokenIter *>(dim_iters_->at(i));
+      if (OB_ISNULL(iter)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null text retrieval count dimension", K(ret), K(i));
+      } else if (OB_FAIL(iter->ensure_count_row(active[i]))) {
+        LOG_WARN("failed to initialize text retrieval count dimension", K(ret), K(i));
+      }
+    }
+
+    while (OB_SUCC(ret)) {
+      int64_t min_idx = OB_INVALID_INDEX;
+      const ObDocIdExt *min_doc_id = nullptr;
+      for (int64_t i = 0; OB_SUCC(ret) && i < dim_iters_->count(); ++i) {
+        if (!active[i]) {
+        } else {
+          ObTextRetrievalDaaTTokenIter *iter = static_cast<ObTextRetrievalDaaTTokenIter *>(dim_iters_->at(i));
+          const ObDocIdExt *doc_id = nullptr;
+          if (OB_FAIL(iter->get_count_doc_id(doc_id))) {
+            LOG_WARN("failed to get text retrieval count document id", K(ret), K(i));
+          } else if (OB_ISNULL(doc_id)) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("unexpected null text retrieval count document id", K(ret), K(i));
+          } else if (OB_INVALID_INDEX == min_idx) {
+            min_idx = i;
+            min_doc_id = doc_id;
+          } else {
+            int64_t cmp_ret = 0;
+            ObTextRetrievalDaaTTokenIter *min_iter =
+                static_cast<ObTextRetrievalDaaTTokenIter *>(dim_iters_->at(min_idx));
+            if (OB_FAIL(min_iter->compare_count_doc_ids(*doc_id, *min_doc_id, cmp_ret))) {
+              LOG_WARN("failed to compare text retrieval count heads", K(ret), K(i), K(min_idx));
+            } else if (cmp_ret < 0) {
+              min_idx = i;
+              min_doc_id = doc_id;
+            }
+          }
+        }
+      }
+      if (OB_FAIL(ret) || OB_INVALID_INDEX == min_idx) {
+        break;
+      }
+
+      int64_t equal_count = 0;
+      int64_t boundary_idx = OB_INVALID_INDEX;
+      const ObDocIdExt *boundary_doc_id = nullptr;
+      bool equal_heads[MAX_COUNT_SPAN_DIM] = {false, false};
+      for (int64_t i = 0; OB_SUCC(ret) && i < dim_iters_->count(); ++i) {
+        if (!active[i]) {
+        } else {
+          ObTextRetrievalDaaTTokenIter *iter = static_cast<ObTextRetrievalDaaTTokenIter *>(dim_iters_->at(i));
+          const ObDocIdExt *doc_id = nullptr;
+          int64_t cmp_ret = 0;
+          if (OB_FAIL(iter->get_count_doc_id(doc_id))) {
+            LOG_WARN("failed to get text retrieval count boundary", K(ret), K(i));
+          } else if (OB_FAIL(iter->compare_count_doc_ids(*doc_id, *min_doc_id, cmp_ret))) {
+            LOG_WARN("failed to compare text retrieval count boundary", K(ret), K(i), K(min_idx));
+          } else if (0 == cmp_ret) {
+            ++equal_count;
+            equal_heads[i] = true;
+          } else if (OB_INVALID_INDEX == boundary_idx) {
+            boundary_idx = i;
+            boundary_doc_id = doc_id;
+          } else {
+            int64_t boundary_cmp = 0;
+            if (OB_FAIL(iter->compare_count_doc_ids(*doc_id, *boundary_doc_id, boundary_cmp))) {
+              LOG_WARN("failed to compare text retrieval count upper bounds", K(ret), K(i), K(boundary_idx));
+            } else if (boundary_cmp < 0) {
+              boundary_idx = i;
+              boundary_doc_id = doc_id;
+            }
+          }
+        }
+      }
+
+      if (OB_FAIL(ret)) {
+      } else if (equal_count > 1) {
+        ++count;
+        for (int64_t i = 0; OB_SUCC(ret) && i < dim_iters_->count(); ++i) {
+          if (active[i] && equal_heads[i]) {
+            ObTextRetrievalDaaTTokenIter *iter = static_cast<ObTextRetrievalDaaTTokenIter *>(dim_iters_->at(i));
+            if (OB_FAIL(iter->consume_cached_docs(1))) {
+              LOG_WARN("failed to consume duplicate count document id", K(ret), K(i));
+            } else if (OB_FAIL(iter->ensure_count_row(active[i]))) {
+              LOG_WARN("failed to advance duplicate count dimension", K(ret), K(i));
+            }
+          }
+        }
+      } else {
+        ObTextRetrievalDaaTTokenIter *min_iter =
+            static_cast<ObTextRetrievalDaaTTokenIter *>(dim_iters_->at(min_idx));
+        int64_t run_count = min_iter->get_cached_doc_count();
+        if (OB_NOT_NULL(boundary_doc_id)
+            && OB_FAIL(min_iter->count_cached_docs_before(*boundary_doc_id, run_count))) {
+          LOG_WARN("failed to count non-overlapping posting span", K(ret), K(min_idx), K(boundary_idx));
+        } else if (OB_UNLIKELY(run_count <= 0)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected empty count posting span", K(ret), K(min_idx), K(run_count));
+        } else {
+          count += run_count;
+          if (OB_FAIL(min_iter->consume_cached_docs(run_count))) {
+            LOG_WARN("failed to consume count posting span", K(ret), K(min_idx), K(run_count));
+          } else if (OB_FAIL(min_iter->ensure_count_row(active[min_idx]))) {
+            LOG_WARN("failed to advance count posting span", K(ret), K(min_idx));
+          }
+        }
+      }
     }
   }
   return ret;

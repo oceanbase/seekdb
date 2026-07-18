@@ -21,6 +21,15 @@ count(*)
 select count(*) from docs where match(content) against('alpha alpha beta');
 count(*)
 4
+select count(*) from docs where match(content) against('alpha beta gamma');
+count(*)
+5
+select count(*) from docs where match(content) against('alpha beta gamma transaction');
+count(*)
+5
+select count(*) from docs where match(content) against('+alpha +beta' in boolean mode);
+count(*)
+1
 select count(*) from (
 select id from docs where match(content) against('alpha beta') limit 2
 ) t;

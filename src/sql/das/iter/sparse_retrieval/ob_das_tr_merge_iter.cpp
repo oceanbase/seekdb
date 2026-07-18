@@ -595,6 +595,7 @@ int ObDASTRMergeIter::init_daat_iter_param(ObTextDaaTParam &iter_param)
   iter_param.base_param_ = &sr_iter_param_;
   iter_param.allocator_ = &myself_allocator_;
   iter_param.mode_flag_ = ir_ctdef_->mode_flag_;
+  iter_param.minimum_should_match_ = ir_rtdef_->minimum_should_match_;
   iter_param.function_lookup_mode_ = function_lookup_mode_;
   const ObDASScanCtDef *doc_agg_ctdef = ir_ctdef_->get_doc_agg_ctdef();
   if (!ir_ctdef_->need_calc_relevance() || query_tokens_.count() == 0) {
@@ -1135,12 +1136,21 @@ int ObDASTRMergeIter::get_next_count_row()
     int64_t matched_doc_count = 0;
     int64_t batch_count = 0;
     const int64_t batch_size = OB_MAX(sr_iter_param_.max_batch_size_, 1);
-    while (OB_SUCC(ret)) {
-      batch_count = 0;
-      ret = sparse_retrieval_iter_->get_next_rows(batch_size, batch_count);
-      matched_doc_count += batch_count;
+    if (OB_FAIL(sparse_retrieval_iter_->get_total_count(matched_doc_count))) {
+      if (OB_NOT_SUPPORTED == ret) {
+        ret = OB_SUCCESS;
+        while (OB_SUCC(ret)) {
+          batch_count = 0;
+          ret = sparse_retrieval_iter_->get_next_rows(batch_size, batch_count);
+          matched_doc_count += batch_count;
+        }
+      } else {
+        LOG_WARN("failed to count text retrieval postings", K(ret));
+      }
     }
     if (OB_ITER_END == ret) {
+      ret = project_count_result(matched_doc_count);
+    } else if (OB_SUCC(ret)) {
       ret = project_count_result(matched_doc_count);
     } else {
       LOG_WARN("failed to count text retrieval results", K(ret), K(matched_doc_count));
