@@ -43,6 +43,8 @@ int ObBEngFTParser::get_next_token(
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("beng ft parser isn't initialized", K(ret), K(is_inited_));
+  } else if (ascii_fast_path_) {
+    ret = get_next_ascii_token(word, word_len, char_len, word_freq);
   } else if (OB_ISNULL(token_stream_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("token stream is nullptr", K(ret), KP(token_stream_));
@@ -69,6 +71,68 @@ int ObBEngFTParser::get_next_token(
   return ret;
 }
 
+int ObBEngFTParser::get_next_ascii_token(
+    const char *&word,
+    int64_t &word_len,
+    int64_t &char_len,
+    int64_t &word_freq)
+{
+  int ret = OB_SUCCESS;
+  const char *doc = doc_.ptr_;
+  const int64_t doc_len = doc_.len_;
+  bool found = false;
+  word = nullptr;
+  word_len = 0;
+  char_len = 0;
+  word_freq = 0;
+  while (OB_SUCC(ret) && ascii_pos_ < doc_len && !found) {
+    while (ascii_pos_ < doc_len
+           && (ob_isspace(cs_, doc[ascii_pos_])
+               || ob_iscntrl(cs_, doc[ascii_pos_])
+               || ob_ispunct(cs_, doc[ascii_pos_]))) {
+      ++ascii_pos_;
+    }
+    const int64_t token_start = ascii_pos_;
+    while (ascii_pos_ < doc_len
+           && !(ob_isspace(cs_, doc[ascii_pos_])
+                || ob_iscntrl(cs_, doc[ascii_pos_])
+                || ob_ispunct(cs_, doc[ascii_pos_]))) {
+      ++ascii_pos_;
+    }
+    int64_t first_alnum = token_start;
+    int64_t last_alnum = ascii_pos_;
+    while (first_alnum < last_alnum && !ob_isalnum(cs_, doc[first_alnum])) {
+      ++first_alnum;
+    }
+    while (last_alnum > first_alnum && !ob_isalnum(cs_, doc[last_alnum - 1])) {
+      --last_alnum;
+    }
+    if (first_alnum < last_alnum) {
+      const int64_t token_len = last_alnum - first_alnum;
+      if (OB_UNLIKELY(word_buf_pos_ + token_len > word_buf_capacity_)) {
+        ret = OB_SIZE_OVERFLOW;
+        LOG_WARN("ascii tokens exceed word buffer", K(ret), K(token_len),
+                 K(word_buf_pos_), K(word_buf_capacity_));
+      } else {
+        char *buf = word_buf_ + word_buf_pos_;
+        for (int64_t i = 0; i < token_len; ++i) {
+          buf[i] = static_cast<char>(ob_tolower(cs_, doc[first_alnum + i]));
+        }
+        word_buf_pos_ += token_len;
+        word = buf;
+        word_len = token_len;
+        char_len = token_len;
+        word_freq = 1;
+        found = true;
+      }
+    }
+  }
+  if (OB_SUCC(ret) && !found) {
+    ret = OB_ITER_END;
+  }
+  return ret;
+}
+
 int ObBEngFTParser::init(ObFTParserParam *param)
 {
   int ret = OB_SUCCESS;
@@ -86,10 +150,17 @@ int ObBEngFTParser::init(ObFTParserParam *param)
     analysis_ctx_.cs_ = param->cs_;
     analysis_ctx_.filter_stopword_ = false;
     analysis_ctx_.need_grouping_ = false;
+    cs_ = param->cs_;
+    ascii_fast_path_ = true;
+    for (int64_t i = 0; i < param->ft_length_ && ascii_fast_path_; ++i) {
+      ascii_fast_path_ = static_cast<unsigned char>(param->fulltext_[i]) < 0x80;
+    }
     word_buf_capacity_ = param->ft_length_ * MAX(1, param->cs_->casedn_multiply);
     if (OB_ISNULL(word_buf_ = static_cast<char *>(allocator_.alloc(word_buf_capacity_)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to allocate beng word buffer", K(ret), K(word_buf_capacity_));
+    } else if (ascii_fast_path_) {
+      is_inited_ = true;
     } else if (OB_FAIL(english_analyzer_.init(analysis_ctx_, *param->allocator_))) {
       LOG_WARN("fail to init english analyzer", K(ret), KPC(param), K(analysis_ctx_));
     } else if (OB_FAIL(segment(doc_, token_stream_))) {
@@ -134,6 +205,9 @@ void ObBEngFTParser::reset()
   word_buf_ = nullptr;
   word_buf_capacity_ = 0;
   word_buf_pos_ = 0;
+  cs_ = nullptr;
+  ascii_pos_ = 0;
+  ascii_fast_path_ = false;
   is_inited_ = false;
 }
 
