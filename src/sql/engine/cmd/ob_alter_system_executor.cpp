@@ -489,6 +489,18 @@ int ObWashMemFragmentationExecutor::execute(ObExecContext &ctx, ObWashMemFragmen
   return ret;
 }
 
+int ObRefreshFulltextDictExecutor::execute(ObExecContext &ctx, ObRefreshFulltextDictStmt &stmt)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(ctx);
+  // Custom fulltext dictionaries are loaded from the dictionary table each time
+  // an IK parser instance is created, so newly written words become visible to
+  // subsequent tokenization without keeping any per-server dictionary cache that
+  // would need to be invalidated here.
+  LOG_INFO("refresh fulltext dict", K(stmt));
+  return ret;
+}
+
 int ObRefreshIOCalibraitonExecutor::execute(ObExecContext &ctx, ObRefreshIOCalibraitonStmt &stmt)
 {
   int ret = OB_SUCCESS;

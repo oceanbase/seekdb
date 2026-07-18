@@ -32,6 +32,45 @@ namespace oceanbase
 {
 namespace storage
 {
+// decode one char (length + code point) and classify it in a single pass for
+// utf8mb4; other charsets keep the original two-step helpers
+static int decode_and_classify_char(const ObCollationType coll_type,
+                                    const bool is_utf8mb4,
+                                    const char *buf,
+                                    const int64_t buf_len,
+                                    int64_t &char_len,
+                                    ob_wc_t &unicode,
+                                    ObFTCharUtil::CharType &type)
+{
+  int ret = OB_SUCCESS;
+  if (OB_LIKELY(is_utf8mb4)) {
+    ret = ObFTCharUtil::decode_and_classify<CHARSET_UTF8MB4>(buf, buf_len, char_len, unicode, type);
+  } else if (OB_FAIL(ObCharset::first_valid_char(coll_type, buf, buf_len, char_len))) {
+    LOG_WARN("Failed to get first valid char", K(ret));
+  } else if (OB_FAIL(ObFTCharUtil::classify_first_char(coll_type, buf, char_len, type))) {
+    LOG_WARN("Failed to classify first char", K(ret));
+  }
+  return ret;
+}
+
+// whether a single cjk char should be dropped; reuse the decoded code point
+// for utf8mb4 instead of decoding the same bytes again
+static int check_ignore_single_cjk(const ObCollationType coll_type,
+                                   const bool is_utf8mb4,
+                                   const char *ch,
+                                   const int64_t char_len,
+                                   const ob_wc_t unicode,
+                                   bool &ignore)
+{
+  int ret = OB_SUCCESS;
+  if (OB_LIKELY(is_utf8mb4)) {
+    ignore = ObUnicodeBlockUtils::check_ignore_as_single(unicode);
+  } else {
+    ret = ObFTCharUtil::is_ignore_single_cjk(coll_type, ch, char_len, ignore);
+  }
+  return ret;
+}
+
 int ObIKArbitrator::process(TokenizeContext &ctx)
 {
   int ret = OB_SUCCESS;
@@ -120,20 +159,20 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
   int ret = OB_SUCCESS;
 
   int64_t char_len = 0;
+  ob_wc_t unicode = 0;
+  const bool is_utf8mb4 = (CHARSET_UTF8MB4 == ObCharset::charset_type_by_coll(ctx.collation()));
   ObIKTokenChain *chain = nullptr;
   for (int64_t current = 0; OB_SUCC(ret) && current < ctx.fulltext_len();) {
     ObFTCharUtil::CharType type;
     // maybe not so good to keep single, check it later
-    if (OB_FAIL(ObCharset::first_valid_char(ctx.collation(),
-                                            ctx.fulltext() + current,
-                                            ctx.fulltext_len() - current,
-                                            char_len))) {
-      LOG_WARN("Failed to get next valid char", K(ret));
-    } else if (OB_FAIL(ObFTCharUtil::classify_first_char(ctx.collation(),
-                                                         ctx.fulltext() + current,
-                                                         char_len,
-                                                         type))) {
-      LOG_WARN("Failed to classify first char", K(ret));
+    if (OB_FAIL(decode_and_classify_char(ctx.collation(),
+                                         is_utf8mb4,
+                                         ctx.fulltext() + current,
+                                         ctx.fulltext_len() - current,
+                                         char_len,
+                                         unicode,
+                                         type))) {
+      LOG_WARN("Failed to decode next char", K(ret));
     } else if (ObFTCharUtil::CharType::USELESS == type) {
       current += char_len; // skip useless char
     } else if (OB_FAIL(chains_.get_refactored(current, chain)) && OB_HASH_NOT_EXIST != ret) {
@@ -156,10 +195,12 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
             LOG_WARN("Failed to output result to ctx", K(ret));
           }
         } else if (ObFTCharUtil::CharType::OTHER_CJK == type) {
-          if (OB_FAIL(ObFTCharUtil::is_ignore_single_cjk(ctx.collation(),
-                                                         ctx.fulltext() + current,
-                                                         char_len,
-                                                         is_ignore))) {
+          if (OB_FAIL(check_ignore_single_cjk(ctx.collation(),
+                                              is_utf8mb4,
+                                              ctx.fulltext() + current,
+                                              char_len,
+                                              unicode,
+                                              is_ignore))) {
             LOG_WARN("Failed to check ignore", K(ret));
           } else if (!is_ignore && !FALSE_IT(token.type_ = ObIKTokenType::IK_OTHER_CJK_TOKEN)
                      && OB_FAIL(ctx.result_list().push_back(token))) {
@@ -180,13 +221,33 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
         } else {
           // output single word between two token
           while (OB_SUCC(ret) && current < token.offset_) {
-            if (OB_FAIL(ObCharset::first_valid_char(ctx.collation(),
+            ob_wc_t single_unicode = 0;
+            if (OB_LIKELY(is_utf8mb4)) {
+              const unsigned char *ustart
+                  = reinterpret_cast<const unsigned char *>(ctx.fulltext() + current);
+              const unsigned char *uend
+                  = reinterpret_cast<const unsigned char *>(ctx.fulltext() + ctx.fulltext_len());
+              const int code_size
+                  = common::ob_charset_decode_unicode<CHARSET_UTF8MB4>(ustart, uend, single_unicode);
+              if (code_size > 0) {
+                char_len = code_size;
+              } else if (0 == code_size && 0xED == ustart[0] && single_unicode >= 0xD800
+                         && single_unicode <= 0xDFFF) {
+                // utf8-encoded surrogate; well_formed_len accepts it as 3 bytes
+                char_len = 3;
+              } else {
+                ret = OB_INVALID_ARGUMENT;
+                LOG_WARN("invalid encoding found", K(code_size), K(ret));
+                break;
+              }
+            } else if (OB_FAIL(ObCharset::first_valid_char(ctx.collation(),
                                                     ctx.fulltext() + current,
                                                     ctx.fulltext_len() - current,
                                                     char_len))) {
               LOG_WARN("Failed to get next valid char, ", K(ret));
               break;
-            } else {
+            }
+            {
               ObIKToken token;
               token.offset_ = current;
               token.length_ = char_len;
@@ -197,10 +258,12 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
                 token.type_ = ObIKTokenType::IK_CHINESE_TOKEN;
                 ctx.result_list().push_back(token);
               } else if (ObFTCharUtil::CharType::OTHER_CJK == type) {
-                if (OB_FAIL(ObFTCharUtil::is_ignore_single_cjk(ctx.collation(),
-                                                               ctx.fulltext() + current,
-                                                               char_len,
-                                                               is_ignore))) {
+                if (OB_FAIL(check_ignore_single_cjk(ctx.collation(),
+                                                    is_utf8mb4,
+                                                    ctx.fulltext() + current,
+                                                    char_len,
+                                                    single_unicode,
+                                                    is_ignore))) {
                   LOG_WARN("Failed to check ignore", K(ret));
                 } else if (!is_ignore) {
                   token.type_ = ObIKTokenType::IK_OTHER_CJK_TOKEN;

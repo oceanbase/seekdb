@@ -1158,11 +1158,50 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
     LOG_WARN("fail to parse from json str", K(ret), K(json_str));
   } else {
     if (parser.is_ik()) {
-      // set dict tables and copy dict name
-      dict_table_ = ObString(ObFTSLiteral::CONFIG_NAME_DICT_TABLE);
-      stopword_table_ = ObString(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE);
-      quantifier_table_ = ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE);
+      // read the configured dictionary tables; when a config is absent the
+      // field is left empty and the built-in dictionary is used.
+      ObString table_name;
+      if (OB_FAIL(props.config_get_dict_table(table_name))) {
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          ret = OB_SUCCESS;
+          dict_table_.reset();
+        } else {
+          LOG_WARN("fail to get dict table", K(ret));
+        }
+      } else if (OB_FAIL(copy_table_name(table_name, dict_table_buf_,
+                                         MAX_FT_DICT_TABLE_NAME_LENGTH, dict_table_))) {
+        LOG_WARN("fail to copy dict table name", K(ret), K(table_name));
+      }
+
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(props.config_get_stopword_table(table_name))) {
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          ret = OB_SUCCESS;
+          stopword_table_.reset();
+        } else {
+          LOG_WARN("fail to get stopword table", K(ret));
+        }
+      } else if (OB_FAIL(copy_table_name(table_name, stopword_table_buf_,
+                                         MAX_FT_DICT_TABLE_NAME_LENGTH, stopword_table_))) {
+        LOG_WARN("fail to copy stopword table name", K(ret), K(table_name));
+      }
+
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(props.config_get_quantifier_table(table_name))) {
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          ret = OB_SUCCESS;
+          quantifier_table_.reset();
+        } else {
+          LOG_WARN("fail to get quantifier table", K(ret));
+        }
+      } else if (OB_FAIL(copy_table_name(table_name, quantifier_table_buf_,
+                                         MAX_FT_DICT_TABLE_NAME_LENGTH, quantifier_table_))) {
+        LOG_WARN("fail to copy quantifier table name", K(ret), K(table_name));
+      }
+
       ObString ik_smart;
+      if (OB_FAIL(ret)) {
+      } else
       if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
         if (OB_SEARCH_NOT_FOUND == ret) {
           // from old version, ik_mode is not set, so use default value
@@ -1230,6 +1269,27 @@ ObFTParserProperty::ObFTParserProperty()
       min_ngram_token_size_(ObFTSLiteral::FT_DEFAULT_MIN_NGRAM_SIZE),
       max_ngram_token_size_(ObFTSLiteral::FT_DEFAULT_MAX_NGRAM_SIZE)
 {
+  stopword_table_buf_[0] = '\0';
+  dict_table_buf_[0] = '\0';
+  quantifier_table_buf_[0] = '\0';
+}
+
+int ObFTParserProperty::copy_table_name(const ObString &value,
+                                        char *buf,
+                                        const int64_t buf_len,
+                                        ObString &field)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(value.length() >= buf_len)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("dictionary table name is too long", K(ret), K(value));
+  } else {
+    if (value.length() > 0) {
+      MEMCPY(buf, value.ptr(), value.length());
+    }
+    field.assign_ptr(buf, value.length());
+  }
+  return ret;
 }
 
 int ObFTParserJsonProps::tokenize_array_to_props_json(ObIAllocator &allocator,

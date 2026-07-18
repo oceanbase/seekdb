@@ -17,7 +17,9 @@
 #ifndef _OCEANBASE_STORAGE_FTS_DICT_OB_FT_DICT_H_
 #define _OCEANBASE_STORAGE_FTS_DICT_OB_FT_DICT_H_
 
+#include "lib/ob_errno.h"
 #include "lib/string/ob_string.h"
+#include "lib/utility/ob_macro_utils.h"
 
 namespace oceanbase
 {
@@ -123,6 +125,44 @@ public:
   virtual int match_with_hit(const ObString &single_word,
                              const ObDATrieHit &last_hit,
                              ObDATrieHit &hit) const = 0;
+};
+
+/**
+ * @class ObFTEmptyDict
+ * @brief A dictionary without any word, so every match misses.
+ *        Used when a custom dictionary table has no rows.
+ */
+class ObFTEmptyDict final : public ObIFTDict
+{
+public:
+  ObFTEmptyDict() = default;
+  ~ObFTEmptyDict() override = default;
+
+  int init() override { return common::OB_SUCCESS; }
+
+  int match(const ObString &words, bool &is_match) const override
+  {
+    UNUSED(words);
+    is_match = false;
+    return common::OB_SUCCESS;
+  }
+
+  int match(const ObString &single_word, ObDATrieHit &hit) const override
+  {
+    UNUSED(single_word);
+    hit.set_unmatch();
+    return common::OB_SUCCESS;
+  }
+
+  int match_with_hit(const ObString &single_word,
+                     const ObDATrieHit &last_hit,
+                     ObDATrieHit &hit) const override
+  {
+    UNUSED(single_word);
+    UNUSED(last_hit);
+    hit.set_unmatch();
+    return common::OB_SUCCESS;
+  }
 };
 
 } // namespace storage

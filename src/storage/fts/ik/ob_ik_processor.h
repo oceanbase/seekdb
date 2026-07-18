@@ -47,6 +47,19 @@ public:
 
   int current_char(const char *&ch, uint8_t &char_len);
   int current_char_type(ObFTCharUtil::CharType &type);
+  // fetch the char, its length and its type in one call to keep the
+  // per-character hot loop free of repeated bound checks
+  int current_char_and_type(const char *&ch, uint8_t &char_len, ObFTCharUtil::CharType &type);
+  // code point of the current char, decoded once in prepare_next_char so
+  // processors don't have to re-decode the same bytes
+  ob_wc_t current_char_unicode() const { return next_char_unicode_; }
+
+  // property checks on the current char; reuse the code point decoded in
+  // prepare_next_char for utf8mb4 and fall back to the byte-wise helpers
+  // (with their OB_NOT_SUPPORTED semantics) for other charsets
+  int check_num_connector(bool &is_connector) const;
+  int check_letter_connector(bool &is_connector) const;
+  int check_cn_number(bool &is_cn_number) const;
 
   int step_next();
 
@@ -77,11 +90,13 @@ private:
   int prepare_next_char();
 
   ObCollationType coll_type_;
+  ObCharsetType cs_type_;
   const char *fulltext_;
   int64_t fulltext_len_;
 
   int64_t cursor_;
   int64_t next_char_len_;
+  ob_wc_t next_char_unicode_;
   ObFTCharUtil::CharType next_char_type_;
 
   uint32_t handle_size_;
