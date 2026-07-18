@@ -1893,7 +1893,7 @@ public:
                                            const ObIArray<ObRawExpr*> &raw_having_exprs,
                                            const ObIArray<ObRawExpr*> &group_clause_exprs,
                                            ObIArray<ObRawExpr*> &having_exprs_for_deduce);
-  static int check_expr_used_as_condition(ObDMLStmt *stmt, 
+  static int check_expr_used_as_condition(const ObDMLStmt *stmt,
                                           ObRawExpr *root_expr, 
                                           ObRawExpr *expr,
                                           bool &used_as_condition);
