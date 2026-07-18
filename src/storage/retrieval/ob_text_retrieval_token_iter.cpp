@@ -111,7 +111,7 @@ void ObTextRetrievalTokenIter::reset()
 
 void ObTextRetrievalTokenIter::reuse()
 {
-  if (inv_idx_agg_cache_mode_ && !inv_idx_agg_param_->need_switch_param_) {
+  if (inv_idx_agg_cache_mode_ && OB_NOT_NULL(inv_idx_agg_param_) && !inv_idx_agg_param_->need_switch_param_) {
     // do nothing
   } else {
     token_doc_cnt_calculated_ = false;
@@ -528,22 +528,35 @@ int ObTextRetrievalTokenIter::advance_to(const ObDatum &id_datum)
 int ObTextRetrievalTokenIter::update_scan_param(const ObString &token, common::ObArenaAllocator &allocator)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(inv_idx_agg_param_->key_ranges_.count() != 1)) {
+  const bool use_inv_idx_agg = need_inv_idx_agg();
+  const bool is_function_lookup = !inv_idx_scan_param_->key_ranges_.empty()
+      && inv_idx_scan_param_->key_ranges_.at(0).start_key_.get_obj_ptr()
+      == inv_idx_scan_param_->key_ranges_.at(0).end_key_.get_obj_ptr();
+  if (use_inv_idx_agg
+      && (OB_ISNULL(inv_idx_agg_param_) || OB_UNLIKELY(inv_idx_agg_param_->key_ranges_.count() != 1))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected key range count", K(ret), K(inv_idx_agg_param_->key_ranges_.count()));
+    LOG_WARN("unexpected inv idx agg key range count", K(ret), KP_(inv_idx_agg_param),
+             K(use_inv_idx_agg), K(is_function_lookup),
+             K(inv_idx_agg_param_ == nullptr ? -1 : inv_idx_agg_param_->key_ranges_.count()));
+  } else if (!use_inv_idx_agg && OB_UNLIKELY(inv_idx_scan_param_->key_ranges_.empty())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected empty inv idx scan key range", K(ret), KPC_(inv_idx_scan_param),
+             K(is_function_lookup));
   } else {
-    ObNewRange scan_range = inv_idx_agg_param_->key_ranges_.at(0);
+    ObNewRange scan_range = use_inv_idx_agg ? inv_idx_agg_param_->key_ranges_.at(0)
+                                            : inv_idx_scan_param_->key_ranges_.at(0);
     ObObj tmp_obj;
     tmp_obj.set_string(ObVarcharType, token);
     tmp_obj.set_meta_type(scan_range.start_key_.get_obj_ptr()->meta_);
-    if (scan_range.start_key_.get_obj_ptr() + 2 != scan_range.end_key_.get_obj_ptr()) {
+    if (!is_function_lookup && scan_range.start_key_.get_obj_ptr() + 2 != scan_range.end_key_.get_obj_ptr()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected rowkey", K(ret), K_(scan_range.start_key), K_(scan_range.end_key));
     } else if (OB_FAIL(ob_write_obj(allocator, tmp_obj, *scan_range.start_key_.get_obj_ptr()))) {
       LOG_WARN("failed to write obj", K(ret));
-    } else if (OB_FAIL(ob_write_obj(allocator, tmp_obj, *scan_range.end_key_.get_obj_ptr()))) {
+    } else if (!is_function_lookup
+        && OB_FAIL(ob_write_obj(allocator, tmp_obj, *scan_range.end_key_.get_obj_ptr()))) {
       LOG_WARN("failed to write obj", K(ret));
-    } else if (!need_inv_idx_agg()) {
+    } else if (!use_inv_idx_agg) {
       // skip inverted index aggregate iterator
     } else if (OB_FAIL(inv_idx_agg_iter_->reuse())) {
       LOG_WARN("failed to reuse inverted index aggregate iterator", K(ret));
@@ -706,6 +719,7 @@ int ObTextRetrievalDaaTTokenIter::init(const ObTextRetrievalScanIterParam &iter_
 {
   int ret = OB_SUCCESS;
   void *buf = nullptr;
+  const bool need_relevance = OB_NOT_NULL(iter_param.relevance_expr_);
   allocator_ = iter_param.allocator_;
   if (OB_ISNULL(iter_param.eval_ctx_) || OB_ISNULL(iter_param.inv_scan_domain_id_col_) || OB_ISNULL(allocator_)) {
     ret = OB_INVALID_ARGUMENT;
@@ -727,10 +741,10 @@ int ObTextRetrievalDaaTTokenIter::init(const ObTextRetrievalScanIterParam &iter_
       if (OB_ISNULL(cmp_func_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to init IRIterLoserTreeCmp", K(ret));
-      } else if (FALSE_IT(relevance_.set_allocator(allocator_))) {
-      } else if (OB_FAIL(relevance_.init(max_batch_size_))) {
+      } else if (need_relevance && FALSE_IT(relevance_.set_allocator(allocator_))) {
+      } else if (need_relevance && OB_FAIL(relevance_.init(max_batch_size_))) {
         LOG_WARN("failed to init next batch iter idxes array", K(ret));
-      } else if (OB_FAIL(relevance_.prepare_allocate(max_batch_size_))) {
+      } else if (need_relevance && OB_FAIL(relevance_.prepare_allocate(max_batch_size_))) {
         LOG_WARN("failed to prepare allocate next batch iter idxes array", K(ret));
       } else if (FALSE_IT(doc_id_.set_allocator(allocator_))) {
       } else if (OB_FAIL(doc_id_.init(max_batch_size_))) {
@@ -827,11 +841,18 @@ int ObTextRetrievalDaaTTokenIter::save_docids()
     cur_idx_ = 0;
     const ObBitVector *skip = token_iter_->get_skip();
     const ObDatumVector &doc_id_datum = inv_scan_domain_id_col_->locate_expr_datumvector(*eval_ctx_);
-    for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
-      if (OB_LIKELY(nullptr == skip || !skip->at(i))) {
+    if (nullptr == skip) {
+      for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
         if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
           LOG_WARN("failed to get doc id", K(ret));
-        };
+        }
+      }
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
+        if (OB_LIKELY(!skip->at(i))
+            && OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
+          LOG_WARN("failed to get doc id", K(ret));
+        }
       }
     }
   }

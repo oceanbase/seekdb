@@ -22,10 +22,18 @@ namespace oceanbase
 {
 namespace storage
 {
+namespace
+{
+OB_INLINE bool has_relevance_expr(const ObSparseRetrievalMergeParam *param)
+{
+  return nullptr != param && nullptr != param->relevance_expr_;
+}
+} // namespace
+
 int ObTextDaaTIter::init(const ObTextDaaTParam &param)
 {
   int ret = OB_SUCCESS;
-  const bool need_calc_relevance = nullptr != param.base_param_ && nullptr != param.base_param_->relevance_expr_;
+  const bool need_calc_relevance = has_relevance_expr(param.base_param_);
   if (OB_ISNULL(param.base_param_) || OB_ISNULL(param.dim_iters_) || OB_ISNULL(param.allocator_)
       || OB_ISNULL(param.relevance_collector_)) {
     ret = OB_INVALID_ARGUMENT;
@@ -34,7 +42,8 @@ int ObTextDaaTIter::init(const ObTextDaaTParam &param)
   } else if (OB_FAIL(ObSRDaaTIterImpl::init(*param.base_param_, *param.dim_iters_,
                                             *param.allocator_, *param.relevance_collector_))) {
     LOG_WARN("failed to init sr daat iter", K(ret));
-  } else if (need_calc_relevance && OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
+  } else if (need_calc_relevance && param.dim_iters_->count() > 0
+      && OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
     LOG_WARN("failed to init bm25 param estimator", K(ret));
   } else {
     mode_flag_ = param.mode_flag_;
@@ -75,7 +84,7 @@ int ObTextDaaTIter::pre_process()
   int ret = OB_SUCCESS;
   if (dim_iters_->count() == 0) {
     ret = OB_ITER_END;
-  } else if (nullptr != iter_param_->relevance_expr_) {
+  } else if (has_relevance_expr(iter_param_)) {
     if (OB_FAIL(bm25_param_estimator_.do_estimation(*iter_param_->eval_ctx_))) {
       LOG_WARN("failed to do bm25 param estimation", K(ret));
     }

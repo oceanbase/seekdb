@@ -481,7 +481,12 @@ int ObDASTRMergeIter::create_sparse_retrieval_iter()
   sr_iter_param_.id_proj_expr_ = ir_ctdef_->inv_scan_domain_id_col_;
   sr_iter_param_.relevance_expr_ = ir_ctdef_->relevance_expr_;
   sr_iter_param_.relevance_proj_expr_ = ir_ctdef_->relevance_proj_col_;
-  sr_iter_param_.filter_expr_ = ir_ctdef_->match_filter_;
+  // Natural-language sparse retrieval already guarantees hit semantics. Keep the
+  // runtime MATCH filter only for boolean mode, where the final predicate still
+  // depends on the boolean compute tree.
+  sr_iter_param_.filter_expr_ = BOOLEAN_MODE == ir_ctdef_->mode_flag_
+      ? ir_ctdef_->match_filter_
+      : nullptr;
   sr_iter_param_.topk_limit_ = topk_limit_;
   if (OB_NOT_NULL(ir_ctdef_->field_boost_expr_)) {
     ObDatum *boost_datum = nullptr;
@@ -589,7 +594,10 @@ int ObDASTRMergeIter::create_sparse_retrieval_iter()
 int ObDASTRMergeIter::init_daat_iter_param(ObTextDaaTParam &iter_param)
 {
   int ret = OB_SUCCESS;
-  const bool need_calc_relevance = ir_ctdef_->need_calc_relevance();
+  const bool need_bm25 = sr_iter_param_.need_calc_relevance();
+  sr_iter_param_.need_collect_dims_ = need_bm25
+      || BOOLEAN_MODE == ir_ctdef_->mode_flag_
+      || ir_rtdef_->minimum_should_match_ > 1;
   iter_param.dim_iters_ = &dim_iters_;
   iter_param.base_param_ = &sr_iter_param_;
   iter_param.allocator_ = &myself_allocator_;
@@ -597,26 +605,29 @@ int ObDASTRMergeIter::init_daat_iter_param(ObTextDaaTParam &iter_param)
   iter_param.function_lookup_mode_ = function_lookup_mode_;
   if (query_tokens_.count() == 0) {
     // do nothing
-  } else if (need_calc_relevance
-      && FALSE_IT(iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_
-          = ir_ctdef_->get_doc_agg_ctdef()->pd_expr_spec_.pd_storage_aggregate_output_.at(0))) {
-  } else if (need_calc_relevance
-      && FALSE_IT(iter_param.bm25_param_est_ctx_.estimated_total_doc_cnt_ = ir_ctdef_->estimated_total_doc_cnt_)) {
-  } else if (need_calc_relevance
-      && FALSE_IT(iter_param.bm25_param_est_ctx_.need_est_avg_doc_token_cnt_ = ir_ctdef_->need_avg_doc_len_est())) {
-  } else if (need_calc_relevance
-      && FALSE_IT(iter_param.bm25_param_est_ctx_.can_est_by_sum_skip_index_ = ir_ctdef_->avg_doc_len_est_spec_.can_est_by_sum_skip_index_)) {
-  } else if (need_calc_relevance
-      && FALSE_IT(iter_param.bm25_param_est_ctx_.avg_doc_token_cnt_expr_ = ir_ctdef_->avg_doc_token_cnt_expr_)) {
-  } else if (need_calc_relevance
-      && FALSE_IT(iter_param.bm25_param_est_ctx_.doc_length_est_param_ = &doc_length_est_param_)) {
-  } else if (need_calc_relevance && OB_ISNULL(iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_)) {
+  } else if (!need_bm25) {
+    // MATCH used only as a predicate does not need BM25 statistics.
+  } else if (OB_ISNULL(ir_ctdef_->get_doc_agg_ctdef())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null document aggregate ctdef", K(ret));
+  } else if (FALSE_IT(iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_
+      = ir_ctdef_->get_doc_agg_ctdef()->pd_expr_spec_.pd_storage_aggregate_output_.at(0))) {
+  } else if (OB_ISNULL(iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null total doc cnt expr", K(ret));
-  } else if (need_calc_relevance && OB_FAIL(init_doc_length_est_param())) {
+  } else if (FALSE_IT(iter_param.bm25_param_est_ctx_.estimated_total_doc_cnt_ = ir_ctdef_->estimated_total_doc_cnt_)) {
+  } else if (FALSE_IT(iter_param.bm25_param_est_ctx_.need_est_avg_doc_token_cnt_ = ir_ctdef_->need_avg_doc_len_est())) {
+  } else if (FALSE_IT(iter_param.bm25_param_est_ctx_.can_est_by_sum_skip_index_
+      = ir_ctdef_->avg_doc_len_est_spec_.can_est_by_sum_skip_index_)) {
+  } else if (FALSE_IT(iter_param.bm25_param_est_ctx_.avg_doc_token_cnt_expr_ = ir_ctdef_->avg_doc_token_cnt_expr_)) {
+  } else if (FALSE_IT(iter_param.bm25_param_est_ctx_.doc_length_est_param_ = &doc_length_est_param_)) {
+  } else if (OB_FAIL(init_doc_length_est_param())) {
     LOG_WARN("failed to init doc length est param", K(ret));
-  } else if (need_calc_relevance && !ir_ctdef_->need_estimate_total_doc_cnt()) {
-    if (OB_UNLIKELY(!static_cast<sql::ObStoragePushdownFlag>(total_doc_cnt_scan_param_->pd_storage_flag_).is_aggregate_pushdown())) {
+  } else if (!ir_ctdef_->need_estimate_total_doc_cnt()) {
+    if (OB_ISNULL(total_doc_cnt_scan_param_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null total doc cnt scan param", K(ret));
+    } else if (OB_UNLIKELY(!static_cast<sql::ObStoragePushdownFlag>(total_doc_cnt_scan_param_->pd_storage_flag_).is_aggregate_pushdown())) {
       ret = OB_NOT_IMPLEMENT;
       LOG_ERROR("aggregate without pushdown not implemented", K(ret));
     } else {
@@ -653,7 +664,7 @@ int ObDASTRMergeIter::init_daat_iter_param(ObTextDaaTParam &iter_param)
 int ObDASTRMergeIter::init_taat_iter_param(ObTextTaaTParam &iter_param)
 {
   int ret = OB_SUCCESS;
-  const bool need_calc_relevance = ir_ctdef_->need_calc_relevance();
+  const bool need_bm25 = sr_iter_param_.need_calc_relevance();
   iter_param.query_tokens_ = &query_tokens_;
   iter_param.base_param_ = &sr_iter_param_;
   iter_param.allocator_ = &myself_allocator_;
@@ -662,26 +673,32 @@ int ObDASTRMergeIter::init_taat_iter_param(ObTextTaaTParam &iter_param)
   if (OB_ISNULL(iter_param.dim_iter_ = dim_iter_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null dim iter", K(ret));
-  } else if (need_calc_relevance
+  } else if (need_bm25 && OB_ISNULL(ir_ctdef_->get_doc_agg_ctdef())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null document aggregate ctdef", K(ret));
+  } else if (need_bm25
       && FALSE_IT(iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_
           = ir_ctdef_->get_doc_agg_ctdef()->pd_expr_spec_.pd_storage_aggregate_output_.at(0))) {
-  } else if (need_calc_relevance
+  } else if (need_bm25
       && FALSE_IT(iter_param.bm25_param_est_ctx_.estimated_total_doc_cnt_ = ir_ctdef_->estimated_total_doc_cnt_)) {
-  } else if (need_calc_relevance
+  } else if (need_bm25
       && FALSE_IT(iter_param.bm25_param_est_ctx_.need_est_avg_doc_token_cnt_ = ir_ctdef_->need_avg_doc_len_est())) {
-  } else if (need_calc_relevance
+  } else if (need_bm25
       && FALSE_IT(iter_param.bm25_param_est_ctx_.can_est_by_sum_skip_index_ = ir_ctdef_->avg_doc_len_est_spec_.can_est_by_sum_skip_index_)) {
-  } else if (need_calc_relevance
+  } else if (need_bm25
       && FALSE_IT(iter_param.bm25_param_est_ctx_.avg_doc_token_cnt_expr_ = ir_ctdef_->avg_doc_token_cnt_expr_)) {
-  } else if (need_calc_relevance
+  } else if (need_bm25
       && FALSE_IT(iter_param.bm25_param_est_ctx_.doc_length_est_param_ = &doc_length_est_param_)) {
-  } else if (need_calc_relevance && OB_ISNULL(iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_)) {
+  } else if (need_bm25 && OB_ISNULL(iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null total doc cnt expr", K(ret));
-  } else if (need_calc_relevance && OB_FAIL(init_doc_length_est_param())) {
+  } else if (need_bm25 && OB_FAIL(init_doc_length_est_param())) {
     LOG_WARN("failed to init doc length est param", K(ret));
-  } else if (need_calc_relevance && !ir_ctdef_->need_estimate_total_doc_cnt()) {
-    if (OB_UNLIKELY(!static_cast<sql::ObStoragePushdownFlag>(total_doc_cnt_scan_param_->pd_storage_flag_).is_aggregate_pushdown())) {
+  } else if (need_bm25 && !ir_ctdef_->need_estimate_total_doc_cnt()) {
+    if (OB_ISNULL(total_doc_cnt_scan_param_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null total doc cnt scan param", K(ret));
+    } else if (OB_UNLIKELY(!static_cast<sql::ObStoragePushdownFlag>(total_doc_cnt_scan_param_->pd_storage_flag_).is_aggregate_pushdown())) {
       ret = OB_NOT_IMPLEMENT;
       LOG_ERROR("aggregate without pushdown not implemented", K(ret));
     } else {
