@@ -10349,7 +10349,8 @@ int ObDMLResolver::resolve_hints(const ParseNode *node)
     } else if (get_outline_data) {
       if (OB_FAIL(query_hint.set_outline_data_hints(global_hint,
                                                     stmt->get_stmt_id(),
-                                                    hints))) {
+                                                    hints,
+                                                    true))) {
         LOG_WARN("failed to classify outline hints", K(ret));
       }
     } else if (OB_FAIL(query_hint.get_global_hint().merge_global_hint(global_hint))) {
@@ -10402,7 +10403,7 @@ int ObDMLResolver::resolve_outline_data_hints()
         LOG_WARN("failed to assign global hint.", K(ret));
       }
     } else if (OB_FAIL(query_hint.set_outline_data_hints(global_hint, stmt->get_stmt_id(),
-                                                         hints))) {
+                                                         hints, false))) {
       LOG_WARN("failed to classify outline hints", K(ret));
     }
   }

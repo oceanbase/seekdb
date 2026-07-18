@@ -4471,8 +4471,7 @@ def_table_schema(
   ('session_id', 'int'),
   ('trans_id', 'int'),
   ('state', 'int'),
-  ('coordinator', 'int'),
-  ('participants', 'varchar:1024', 'true'),
+  ('write_state', 'varchar:1024', 'true'),
   ('isolation_level', 'int'),
   ('snapshot_version', 'uint', 'true'),
   ('access_mode', 'int'),
@@ -14219,16 +14218,9 @@ def_table_schema(
       WHEN state = 8 THEN 'COMMIT_TIMEOUT'
       WHEN state = 9 THEN 'COMMIT_UNKNOWN'
       WHEN state = 10 THEN 'COMMITTED'
-      WHEN state = 11 THEN 'SUB_PREPARING'
-      WHEN state = 12 THEN 'SUB_PREPARED'
-      WHEN state = 13 THEN 'SUB_COMMITTING'
-      WHEN state = 14 THEN 'SUB_COMMITTED'
-      WHEN state = 15 THEN 'SUB_ROLLBACKING'
-      WHEN state = 16 THEN 'SUB_ROLLBACKED'
       ELSE 'UNKNOWN'
       END AS STATE,
-    coordinator AS COORDINATOR,
-    participants AS PARTICIPANTS,
+    write_state AS WRITE_STATE,
     CASE
       WHEN isolation_level = -1 THEN 'INVALID'
       WHEN isolation_level = 0 THEN 'READ UNCOMMITTED'

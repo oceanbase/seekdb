@@ -324,6 +324,54 @@ int ObMPPacketSender::send_error_packet(int err,
       }
     }
 
+    if (ObServerConfig::get_instance().enable_rich_error_msg) {
+      // During the test process, if accessing the OceanBase cluster through a proxy,
+      // Often it is unknown which observer the sql was sent to,
+      // Need to query the proxy logs first, carefully compare the SQL text and error codes to confirm, which is very inefficient.
+      // After adding this feature, it can be achieved through
+      //  1. ip:port directly locates to observer
+      //  2. Then time-stamp to the log file
+      //  3. Finally locate the log directly through the trace id
+
+      int32_t msg_buf_size = 0;
+
+      struct timeval tv;
+      struct tm tm;
+#ifdef _WIN32
+      {
+        FILETIME ft;
+        GetSystemTimePreciseAsFileTime(&ft);
+        ULARGE_INTEGER uli;
+        uli.LowPart = ft.dwLowDateTime;
+        uli.HighPart = ft.dwHighDateTime;
+        uint64_t us = (uli.QuadPart - 116444736000000000ULL) / 10;
+        tv.tv_sec = static_cast<long>(us / 1000000);
+        tv.tv_usec = static_cast<long>(us % 1000000);
+      }
+      {
+        time_t sec = tv.tv_sec;
+        localtime_s(&tm, &sec);
+      }
+#else
+      (void)gettimeofday(&tv, NULL);
+      ::localtime_r((const time_t *)&tv.tv_sec, &tm);
+#endif
+
+      char tmp_msg_buf[MAX_MSG_BUF_SIZE];
+      strncpy(tmp_msg_buf, message.ptr(), message.length()); // msg_buf is overwriten
+      char trace_id_buf[OB_MAX_TRACE_ID_BUFFER_SIZE] = {'\0'};
+      msg_buf_size = snprintf(msg_buf, MAX_MSG_BUF_SIZE,
+                           "%.*s\n"
+                           "[%04d-%02d-%02d %02d:%02d:%02d.%06ld] "
+                           "[%s]",
+                           message.length(), tmp_msg_buf,
+                           tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+                           tm.tm_hour, tm.tm_min, tm.tm_sec, tv.tv_usec,
+                           ObCurTraceId::get_trace_id_str(trace_id_buf, sizeof(trace_id_buf)));
+      (void) msg_buf_size; // make compiler happy
+      message = ObString::make_string(msg_buf); // default error message
+    }
+
     // TODO Negotiate a err for rerouting sql
     if (OB_SP_RAISE_APPLICATION_ERROR == err) {
       epacket.set_errcode(static_cast<uint16_t>(wb->get_err_code()));

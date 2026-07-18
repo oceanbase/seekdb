@@ -123,6 +123,10 @@ DEF_PARAM(max_string_print_length, INT, OB_CLUSTER_PARAMETER, "500", "[0,]",
 DEF_PARAM(enable_record_trace_id, BOOL, OB_CLUSTER_PARAMETER, "False",
          "specifies whether record app trace id is turned on.",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(enable_rich_error_msg, BOOL, OB_CLUSTER_PARAMETER, "false",
+         "specifies whether add ip:port, time and trace id to user error message. "
+         "The default value is FALSE.",
+         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(debug_sync_timeout, TIME, OB_CLUSTER_PARAMETER, "0", "[0,)",
          "Enable the debug sync facility and "
          "optionally specify a default wait timeout in micro seconds. "
