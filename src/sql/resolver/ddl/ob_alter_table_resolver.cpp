@@ -36,6 +36,53 @@ using namespace common;
 using namespace obcall;
 namespace sql
 {
+static int is_fulltext_dict_referenced(ObSchemaGetterGuard &schema_guard,
+                                       const ObTableSchema &dict_schema,
+                                       bool &referenced)
+{
+  int ret = OB_SUCCESS;
+  referenced = false;
+  const ObDatabaseSchema *database_schema = nullptr;
+  ObArray<const ObTableSchema *> schemas;
+  ObSqlString qualified_name;
+  if (OB_FAIL(schema_guard.get_database_schema(dict_schema.get_database_id(), database_schema))) {
+    LOG_WARN("failed to get dictionary database schema", K(ret));
+  } else if (OB_ISNULL(database_schema)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(qualified_name.append_fmt("%.*s.%.*s",
+                                               database_schema->get_database_name_str().length(),
+                                               database_schema->get_database_name_str().ptr(),
+                                               dict_schema.get_table_name_str().length(),
+                                               dict_schema.get_table_name_str().ptr()))) {
+    LOG_WARN("failed to build qualified dictionary name", K(ret));
+  } else if (OB_FAIL(schema_guard.get_table_schemas_in_tenant(schemas))) {
+    LOG_WARN("failed to list tenant schemas", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && !referenced && i < schemas.count(); ++i) {
+      const ObTableSchema *schema = schemas.at(i);
+      if (OB_NOT_NULL(schema) && schema->is_fts_index()
+          && !schema->get_parser_property_str().empty()) {
+        storage::ObFTParserJsonProps props;
+        ObString names[3];
+        if (OB_FAIL(props.init())
+            || OB_FAIL(props.parse_from_valid_str(schema->get_parser_property_str()))) {
+          LOG_WARN("failed to parse fulltext parser properties", K(ret));
+        } else {
+          int tmp_ret = props.config_get_dict_table(names[0]);
+          tmp_ret = OB_SUCCESS == tmp_ret ? props.config_get_stopword_table(names[1]) : tmp_ret;
+          tmp_ret = OB_SUCCESS == tmp_ret ? props.config_get_quantifier_table(names[2]) : tmp_ret;
+          if (OB_SUCCESS == tmp_ret) {
+            for (int64_t j = 0; !referenced && j < ARRAYSIZEOF(names); ++j) {
+              referenced = 0 == names[j].case_compare(qualified_name.string());
+            }
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 ObAlterTableResolver::ObAlterTableResolver(ObResolverParams &params)
     : ObDDLResolver(params),
       table_schema_(NULL),
@@ -177,7 +224,19 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
     }
     //resolve action list
     if (OB_SUCCESS == ret && NULL != parse_tree.children_[ACTION_LIST]){
-      if (OB_FAIL(resolve_action_list(*(parse_tree.children_[ACTION_LIST])))) {
+      bool dict_referenced = false;
+      ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_guard();
+      if (table_schema_->is_fulltext_dict_table() && OB_ISNULL(schema_guard)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("schema guard is null", K(ret));
+      } else if (table_schema_->is_fulltext_dict_table()
+          && OB_FAIL(is_fulltext_dict_referenced(*schema_guard, *table_schema_, dict_referenced))) {
+        LOG_WARN("failed to check fulltext dictionary references", K(ret));
+      } else if (dict_referenced) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED,
+                       "alter a FULLTEXT_DICT table referenced by a fulltext index");
+      } else if (OB_FAIL(resolve_action_list(*(parse_tree.children_[ACTION_LIST])))) {
         SQL_RESV_LOG(WARN, "failed to resolve action list.", K(ret));
       } else if (alter_table_bitset_.has_member(obcall::ObAlterTableArg::LOCALITY)
                  && alter_table_bitset_.has_member(obcall::ObAlterTableArg::TABLEGROUP_NAME)) {

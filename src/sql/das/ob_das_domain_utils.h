@@ -51,6 +51,9 @@ public:
   TO_STRING_KV(K_(row_idx), K_(is_fts_index_aux), K_(helper), K_(is_inited), K_(rows));
 private:
   lib::MemoryContext merge_memctx_;
+  common::ObArenaAllocator cache_key_allocator_;
+  common::ObString parser_name_;
+  common::ObString parser_properties_;
   ObDomainIndexRow rows_;
   uint64_t row_idx_;
   bool is_fts_index_aux_;
@@ -183,6 +186,12 @@ public:
                                          const ObString &fulltext,
                                          const bool is_fts_index_aux,
                                          ObDomainIndexRow &word_rows);
+  static int materialize_fulltext_word_rows(common::ObIAllocator &allocator,
+                                            const ObDatum &doc_id_datum,
+                                            const int64_t doc_length,
+                                            const ObFTWordMap &word_map,
+                                            const bool is_fts_index_aux,
+                                            ObDomainIndexRow &word_rows);
   static int generate_multivalue_index_rows(
       ObIAllocator &allocator,
       const ObDASDMLBaseCtDef &das_ctdef,

@@ -30,6 +30,7 @@
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "share/ob_json_access_utils.h"
 #include "storage/fts/dict/ob_gen_dic_loader.h"
+#include "storage/fts/dict/ob_ft_cache.h"
 #include "storage/fts/ob_fts_parser_property.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
 
@@ -91,8 +92,6 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
   int64_t doc_len = 0;
   ObFTWordMap token_map;
 
-  ObArenaAllocator tmp_parse_alloc(ObMemAttr("Tmp buffer"));
-
   if (TokenizeParam::OUTPUT_MODE::DEFAULT != mode && TokenizeParam::OUTPUT_MODE::ALL != mode) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid output mode", K(ret), K(mode));
@@ -100,17 +99,12 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
     LOG_WARN("Fail to init tokenize helper", K(ret));
   } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
     LOG_WARN("Fail to create token map", K(ret));
-  } else if (
-      (0 != param.fulltext_.length())
-      && OB_FAIL(tokenize_helper.segment(
-                     param.meta_,
-                     param.fulltext_.ptr(),
-                     param.fulltext_.length(),
-                     doc_len,
-                     token_map))) {
-    LOG_WARN("Fail to segment fulltext", K(ret));
+  } else if (OB_FAIL(storage::ObFTSegmentCache::get_instance().segment_with_cache(
+                 allocator, tokenize_helper, param.meta_, param.parser_name_,
+                 param.properties_, param.fulltext_, doc_len, token_map))) {
+    LOG_WARN("Fail to segment fulltext with cache", K(ret));
   } else {
-    switch (param.output_mode_) {
+    switch (mode) {
     case TokenizeParam::OUTPUT_MODE::DEFAULT: {
       if (OB_FAIL(tokenize_helper.make_token_array_json(token_map, result))) {
         LOG_WARN("Fail to construct json array", K(ret));
@@ -129,7 +123,7 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
     }
     default:
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Invalid output mode", K(ret), K(param.output_mode_));
+      LOG_WARN("Invalid output mode", K(ret), K(mode));
     }
   }
   return ret;
@@ -140,6 +134,7 @@ ObExprTokenize::TokenizeParam ::TokenizeParam()
     parser_name_(ObString(OB_DEFAULT_FULLTEXT_PARSER_NAME)),
     meta_(),
     fulltext_(),
+    database_name_(),
     output_mode_(OUTPUT_MODE::DEFAULT)
 {
 }
@@ -231,6 +226,11 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
   if (OB_UNLIKELY(expr.arg_cnt_ < 1 || expr.arg_cnt_ > 3)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Args count invalid.", K(ret), K(expr.arg_cnt_));
+  } else if (OB_ISNULL(ctx.exec_ctx_.get_my_session())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session is null", K(ret));
+  } else if (FALSE_IT(param.database_name_ =
+                          ctx.exec_ctx_.get_my_session()->get_database_name())) {
   } else if (OB_FAIL(parse_fulltext(expr, ctx, param))) {
     LOG_WARN("Fail to parse fulltext.", K(ret));
   } else if (OB_FAIL(parse_parser_name(expr, ctx, param))) {
@@ -419,6 +419,7 @@ int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &prop
 {
   int ret = OB_SUCCESS;
   storage::ObFTParserJsonProps parser_properties;
+  storage::ObFTParser parser;
 
   if (OB_FAIL(parser_properties.init())) {
     LOG_WARN("fail to init parser properties", K(ret));
@@ -429,6 +430,45 @@ int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &prop
                                                              ObCollationType::CS_TYPE_UTF8MB4_BIN,
                                                              true))) {
     LOG_WARN("fail to serialize to string", K(ret), K(parser_properties));
+  } else if (OB_FAIL(parser.parse_from_str(parser_name_.ptr(), parser_name_.length()))) {
+    LOG_WARN("fail to parse fulltext parser name", K(ret), K(parser_name_));
+  } else if (parser.is_ik()) {
+    ObString names[3];
+    ObString mode;
+    if (OB_FAIL(parser_properties.config_get_dict_table(names[0]))
+        || OB_FAIL(parser_properties.config_get_stopword_table(names[1]))
+        || OB_FAIL(parser_properties.config_get_quantifier_table(names[2]))
+        || OB_FAIL(parser_properties.config_get_ik_mode(mode))) {
+      LOG_WARN("fail to get IK parser properties", K(ret));
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(names); ++i) {
+        if (OB_ISNULL(names[i].find('.'))) {
+          if (database_name_.empty()) {
+            ret = OB_ERR_NO_DB_SELECTED;
+          } else {
+            const int64_t length = database_name_.length() + 1 + names[i].length();
+            char *buffer = static_cast<char *>(allocator_.alloc(length));
+            if (OB_ISNULL(buffer)) {
+              ret = OB_ALLOCATE_MEMORY_FAILED;
+            } else {
+              MEMCPY(buffer, database_name_.ptr(), database_name_.length());
+              buffer[database_name_.length()] = '.';
+              MEMCPY(buffer + database_name_.length() + 1, names[i].ptr(), names[i].length());
+              names[i].assign_ptr(buffer, static_cast<int32_t>(length));
+            }
+          }
+        }
+      }
+      storage::ObFTParserJsonProps normalized;
+      if (OB_SUCC(ret) && (OB_FAIL(normalized.init())
+          || OB_FAIL(normalized.config_set_dict_table(names[0]))
+          || OB_FAIL(normalized.config_set_stopword_table(names[1]))
+          || OB_FAIL(normalized.config_set_quantifier_table(names[2]))
+          || OB_FAIL(normalized.config_set_ik_mode(mode))
+          || OB_FAIL(normalized.to_format_json(allocator_, properties_)))) {
+        LOG_WARN("fail to normalize IK parser properties", K(ret));
+      }
+    }
   } else if (OB_FAIL(parser_properties.to_format_json(allocator_, properties_))) {
     LOG_WARN("fail to serialize to string", K(ret), K(parser_properties));
   }
