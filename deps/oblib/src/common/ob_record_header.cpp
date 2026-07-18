@@ -59,7 +59,7 @@ int ObRecordHeader::check_header_checksum() const
   format_i64(data_checksum_, checksum);
   if (0 != checksum) {
     ret = OB_CHECKSUM_ERROR;
-    COMMON_LOG(WARN, "record check checksum failed.", K(*this), K(ret));
+    COMMON_LOG(ERROR, "record check checksum failed.", K(*this), K(ret));
   }
 
   return ret;
@@ -91,7 +91,7 @@ int ObRecordHeader::check_payload_checksum(const char *buf, const int64_t len) c
     int64_t crc_check_sum = ob_crc64(buf, len);
     if (crc_check_sum != data_checksum_) {
       ret = OB_CHECKSUM_ERROR;
-      COMMON_LOG(WARN, "checksum error.",
+      COMMON_LOG(ERROR, "checksum error.",
                  K(crc_check_sum), K_(data_checksum), K(ret));
     }
   }

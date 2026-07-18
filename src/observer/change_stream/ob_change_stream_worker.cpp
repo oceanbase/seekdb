@@ -266,7 +266,7 @@ void ObCSExecutor::do_finish_batch_(ObCSExecCtx *ctx, ObCSDispatcher &dispatcher
         LOG_WARN("batch commit path failed, triggered global abort",
                  KR(ret), K(ctx->batch_sn_), K(executor_id_));
       } else if (OB_FAIL(ctx->trans_.end(true))) {
-        LOG_WARN("trans commit failed, triggered global abort",
+        LOG_ERROR("trans commit failed, triggered global abort",
                  KR(ret), K(ctx->batch_sn_));
         dispatcher.inc_epoch();
       } else {

@@ -25,7 +25,8 @@ namespace oceanbase
 {
 namespace storage
 {
-int ObFTSortList::add_token(const ObIKToken &token)
+template <typename ListType>
+int ObFTSortListBase<ListType>::add_token(const ObIKToken &token)
 {
   int ret = OB_SUCCESS;
 
@@ -33,30 +34,35 @@ int ObFTSortList::add_token(const ObIKToken &token)
     if (OB_FAIL(tokens_.push_back(token))) {
       LOG_WARN("Failed to push back token", K(ret));
     }
-  } else if (tokens_.get_last() == token) {
-    // pass
-  } else if (token > tokens_.get_last()) {
-    if (OB_FAIL(tokens_.push_back(token))) {
-      LOG_WARN("fail to push back token", K(ret));
-    }
-  } else if (token < tokens_.get_first()) {
-    if (OB_FAIL(tokens_.push_front(token))) {
-      LOG_WARN("fail to push back token", K(ret));
-    }
   } else {
-    for (ObFTSortList::CellIter iter = tokens_.last(); OB_SUCC(ret) && iter != tokens_.end();
-         --iter) {
-      if (token < *iter) {
-        continue;
+    // FTS index hot-path optimization: calculate each ordering relation once.
+    // The previous code re-read list ends and repeated offset/length compares
+    // on every token before falling back to the backward insertion scan.
+    const int last_cmp = token.compare(tokens_.get_last());
+    if (0 == last_cmp) {
+      // duplicate tail token, do nothing
+    } else if (last_cmp > 0) {
+      if (OB_FAIL(tokens_.push_back(token))) {
+        LOG_WARN("fail to push back token", K(ret));
       }
-      if (*iter == token) {
-        // no need to add again
-      } else if (OB_FAIL(tokens_.insert(++iter, token))) { // NOTE: insert after iter
-        LOG_WARN("fail to insert token", K(ret));
-      } else {
-        // insert ok
+    } else if (token.compare(tokens_.get_first()) < 0) {
+      if (OB_FAIL(tokens_.push_front(token))) {
+        LOG_WARN("fail to push front token", K(ret));
       }
-      break;
+    } else {
+      for (typename ObFTSortListBase<ListType>::CellIter iter = tokens_.last();
+           OB_SUCC(ret) && iter != tokens_.end();
+           --iter) {
+        const int cmp = token.compare(*iter);
+        if (cmp < 0) {
+          continue;
+        } else if (0 == cmp) {
+          // duplicate token, do nothing
+        } else if (OB_FAIL(tokens_.insert(++iter, token))) { // NOTE: insert after iter
+          LOG_WARN("fail to insert token", K(ret));
+        }
+        break;
+      }
     }
   }
 
@@ -165,7 +171,7 @@ int ObIKTokenChain::copy(ObIKTokenChain *other)
     min_offset_ = other->min_offset_;
     max_offset_ = other->max_offset_;
     payload_ = other->payload_;
-    ObFTSortList::CellIter iter = other->list().tokens().begin();
+    ObFTLightSortList::CellIter iter = other->list().tokens().begin();
 
     for (; OB_SUCC(ret) && iter != other->list().tokens().end(); ++iter) {
       bool added = false;
@@ -218,19 +224,31 @@ int ObIKTokenChain::pop_back(ObIKToken &token)
   return ret;
 }
 
-int64_t ObFTSortList::max()
+template <typename ListType>
+int64_t ObFTSortListBase<ListType>::max()
 {
   if (tokens_.empty()) {
     return 0;
   }
   return tokens_.get_last().offset_ + tokens_.get_last().length_;
 }
-int64_t ObFTSortList::min()
+template <typename ListType>
+int64_t ObFTSortListBase<ListType>::min()
 {
   if (tokens_.empty()) {
     return 0;
   }
   return tokens_.get_first().offset_;
 }
+
+// Keep template implementation out of the header while explicitly covering
+// both storage policies used by IK.
+template int ObFTSortListBase<ObList<ObIKToken, ObIAllocator>>::add_token(const ObIKToken &);
+template int64_t ObFTSortListBase<ObList<ObIKToken, ObIAllocator>>::max();
+template int64_t ObFTSortListBase<ObList<ObIKToken, ObIAllocator>>::min();
+template int ObFTSortListBase<ObFastList<ObIKToken, IK_TOKEN_BLOCK_CAPACITY>>::add_token(
+    const ObIKToken &);
+template int64_t ObFTSortListBase<ObFastList<ObIKToken, IK_TOKEN_BLOCK_CAPACITY>>::max();
+template int64_t ObFTSortListBase<ObFastList<ObIKToken, IK_TOKEN_BLOCK_CAPACITY>>::min();
 } //  namespace storage
 } //  namespace oceanbase

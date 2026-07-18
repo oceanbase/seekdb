@@ -55,9 +55,9 @@ protected:
   }
 
 private:
-  ObISRDimBlockMaxIter *get_iter(const int64_t iter_idx) const
+  OB_INLINE ObISRDimBlockMaxIter *get_iter(const int64_t iter_idx) const
   {
-    return static_cast<ObISRDimBlockMaxIter *>(dim_iters_->at(iter_idx));
+    return static_cast<ObISRDimBlockMaxIter *>(get_dim_iter(iter_idx));
   }
   int fill_merge_heap_with_shallow_dims(const ObDatum *last_range_border_id, const bool inclusive);
   int try_generate_next_range_from_merge_heap(

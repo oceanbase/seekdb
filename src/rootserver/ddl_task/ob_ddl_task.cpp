@@ -2028,7 +2028,7 @@ int ObDDLWaitTransEndCtx::do_write_defensive(const int64_t ddl_task_id,
   if (trans.is_started()) {
     int temp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (temp_ret = trans.end(OB_SUCC(ret)))) {
-      LOG_WARN_RET(temp_ret, "trans end failed", "is_commit", OB_SUCCESS == ret, K(temp_ret));
+      LOG_ERROR_RET(temp_ret, "trans end failed", "is_commit", OB_SUCCESS == ret, K(temp_ret));
       ret = (OB_SUCC(ret)) ? temp_ret : ret;
     }
   }
@@ -2372,7 +2372,7 @@ int ObDDLWaitColumnChecksumCtx::try_wait(bool &is_column_checksum_ready)
       } else if (CCS_FAILED == item.col_checksum_stat_) {
         is_calc_done = true;
         ret = item.ret_code_;
-        LOG_WARN("current column checksum status failed", K(ret), K(item));
+        LOG_ERROR("current column checksum status failed", K(ret), K(item));
       } else if (item.col_checksum_stat_ == ColChecksumStat::CCS_SUCCEED) {
         ++success_count;
       }
@@ -2435,17 +2435,17 @@ int ObDDLWaitColumnChecksumCtx::update_status(const common::ObTabletID &tablet_i
           item.retry_cnt_++;
           if (item.retry_cnt_ < ObDDLTask::MAX_ERR_TOLERANCE_CNT) {
             item.col_checksum_stat_ = CCS_NOT_MASTER;
-            LOG_WARN("column checksum calc failed, but retry", K(ret_code), K(item));
+            LOG_ERROR("column checksum calc failed, but retry", K(ret_code), K(item));
           } else {
             item.col_checksum_stat_ = CCS_FAILED;
-            LOG_WARN("column checksum calc failed", K(ret_code), K(item));
+            LOG_ERROR("column checksum calc failed", K(ret_code), K(item));
           }
         }
       }
     }
     if (!found) {
       ret = OB_ENTRY_NOT_EXIST;
-      LOG_WARN("column_checksum_stat not found", K(ret), K(tablet_id));
+      LOG_ERROR("column_checksum_stat not found", K(ret), K(tablet_id));
     } else {
       int64_t last_found_pos = -1;
       for (int64_t i = 0; i < stat_array_.count(); ++i) {
@@ -2454,7 +2454,7 @@ int ObDDLWaitColumnChecksumCtx::update_status(const common::ObTabletID &tablet_i
           if (last_found_pos < 0) {
             last_found_pos = i;
           } else {
-            LOG_WARN("duplicated tablet id for validating checksum", K(tablet_id), K(last_found_pos), K(i));
+            LOG_ERROR("duplicated tablet id for validating checksum", K(tablet_id), K(last_found_pos), K(i));
           }
         }
       }
@@ -2514,7 +2514,7 @@ int send_batch_calc_rpc(const ObAddr &leader_addr,
         LOG_INFO("send checksum rpc not success", K(ret), KPC(item));
       } else {
         ret = OB_SUCCESS == ret ? ret_code : ret; // keep first error code
-        LOG_WARN("fail to calc column checksum request", K(ret_code), K(arg), KPC(item));
+        LOG_ERROR("fail to calc column checksum request", K(ret_code), K(arg), KPC(item));
       }
     }
   }

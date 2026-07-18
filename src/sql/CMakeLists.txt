@@ -518,6 +518,7 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_char_length.cpp
   engine/expr/ob_expr_check_catalog_access.cpp
   engine/expr/ob_expr_check_location_access.cpp
+  engine/expr/ob_expr_load_file.cpp # Task2: 编译 LOAD_FILE 表达式实现
   engine/expr/ob_expr_cast.cpp
   engine/expr/ob_expr_coalesce.cpp
   engine/expr/ob_expr_coll_pred.cpp

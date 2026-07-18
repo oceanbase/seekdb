@@ -218,7 +218,7 @@ int ObDDLMergeScheduler::schedule_ddl_merge(ObLSHandle &ls_handle,
         {
           if (OB_FAIL(schedule_tablet_ddl_major_merge(ls_handle, tablet_handle))) {
             if (OB_SIZE_OVERFLOW != ret && OB_EAGAIN != ret) {
-              LOG_WARN("failed to schedule tablet ddl merge", K(ret), K(ls_id), K(tablet_id));
+              LOG_ERROR("failed to schedule tablet ddl merge", K(ret), K(ls_id), K(tablet_id));
             } else {
               LOG_TRACE("schedule ddl major merge failed", K(ret), K(ls_id), K(tablet_id));
             }

@@ -896,7 +896,7 @@ int ObTableLockService::process_lock_task_(ObTableLockCtx &ctx)
   LOG_INFO("[table lock] lock_table", K(ctx));
 
   if (!ctx.is_in_trans_ && OB_FAIL(start_tx_(ctx))) {
-    LOG_WARN("failed to start trans", K(ret));
+    LOG_ERROR("failed to start trans", K(ret));
   } else if (ctx.is_in_trans_ && OB_FAIL(start_stmt_(ctx))) {
     LOG_WARN("start stmt failed", K(ret), K(ctx));
   } else if (!ctx.is_enable_lock_priority_ && ObTableLockPriority::NORMAL != ctx.lock_priority_) {
@@ -1960,7 +1960,7 @@ int ObTableLockService::get_tablet_ls_(
                                        INT64_MAX,
                                        unused_cache_hit,
                                        ls_id))) {
-      LOG_WARN("failed to sync get ls by tablet failed.",
+      LOG_ERROR("failed to sync get ls by tablet failed.",
                K(ret), K(1UL), K(tablet_id));
     } else if (OB_FAIL(ret)) {
       LOG_WARN("failed to get ls by tablet", K(ret), K(1UL),

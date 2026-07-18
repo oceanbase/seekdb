@@ -1336,7 +1336,7 @@ int ObConstraintTask::set_check_constraint_validated()
                     LOG_INFO("already not null, maybe on retry", K(target_object_id_), K(column_id));
                   }
                 } else {
-                  LOG_WARN("failed to refresh name for alter table schema", K(ret));
+                  LOG_ERROR("failed to refresh name for alter table schema", K(ret));
                 }
               }
             }
@@ -1466,7 +1466,7 @@ int ObConstraintTask::rollback_failed_check_constraint()
       if (OB_TABLE_NOT_EXIST == ret || OB_ERR_CONTRAINT_NOT_FOUND == ret) {
         ret = OB_NO_NEED_UPDATE;
       } else {
-        LOG_WARN("failed to refresh name for alter table schema", K(ret));
+        LOG_ERROR("failed to refresh name for alter table schema", K(ret));
       }
     } else {
       ObTableSchema::const_constraint_iterator iter = alter_table_arg.alter_table_schema_.constraint_begin();
@@ -1540,7 +1540,7 @@ int ObConstraintTask::rollback_failed_foregin_key()
       if (OB_TABLE_NOT_EXIST == ret || OB_ERR_CONTRAINT_NOT_FOUND == ret) {
         ret = OB_NO_NEED_UPDATE;
       } else {
-        LOG_WARN("failed to refresh name for alter table schema", K(ret));
+        LOG_ERROR("failed to refresh name for alter table schema", K(ret));
       }
     } else if (!fk_arg.is_modify_fk_state_) {
       // alter table tbl_name drop constraint fk_cst_name without ddl_stmt_str

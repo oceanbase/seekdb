@@ -210,7 +210,7 @@ int ObIndexSSTableBuildTask::process()
               LOG_WARN("fail to check tablet checksum update status, maybe EAGAIN", K(ret), K(dest_table_id_), K(task_id_), K(execution_id_), K(addition_info_.partition_ids_), K(is_checksums_all_report));
             } else if (!is_checksums_all_report) {
               ret = OB_EAGAIN;
-              LOG_WARN("tablets checksum not all report!",K(ret), K(is_checksums_all_report));
+              LOG_ERROR("tablets checksum not all report!",K(ret), K(is_checksums_all_report));
             }
           } else if (OB_FAIL(ObCheckTabletDataComplementOp::check_finish_report_checksum(dest_table_id_, execution_id_, task_id_))) {
             LOG_WARN("fail to check sstable checksum_report_finish",
@@ -1150,7 +1150,7 @@ int ObIndexBuildTask::wait_data_complement()
     } else if (need_verify_checksum && OB_FAIL(ObDDLChecksumOperator::check_column_checksum(
             get_execution_id(), src_table_id, index_table_id_, task_id_, false/*index build*/, ignore_col_ids, dummy_equal, *GCTX.sql_proxy_))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("fail to check column checksum", K(ret), K(index_table_id_), K(src_table_id), K(task_id_));
+        LOG_ERROR("fail to check column checksum", K(ret), K(index_table_id_), K(src_table_id), K(task_id_));
         state_finished = true;
       } else if (REACH_TIME_INTERVAL(1000L * 1000L)) {
         LOG_INFO("index checksum has not been reported", K(ret), K(index_table_id_), K(src_table_id), K(task_id_));
@@ -1245,7 +1245,7 @@ int ObIndexBuildTask::wait_local_index_data_complement()
     if (OB_FAIL(ret)) {
     } else if (need_verify_checksum && OB_FAIL(ObDDLChecksumOperator::check_column_checksum_without_execution_id(object_id_, index_table_id_, task_id_, false/*index build*/, ignore_col_ids, dummy_equal, *GCTX.sql_proxy_))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("fail to check column checksum", K(ret), K(object_id_), K(index_table_id_), K(task_id_));
+        LOG_ERROR("fail to check column checksum", K(ret), K(object_id_), K(index_table_id_), K(task_id_));
       } else if (REACH_TIME_INTERVAL(1000L * 1000L)) {
         LOG_INFO("index checksum has not been reported", K(ret), K(object_id_), K(index_table_id_), K(task_id_));
       }
@@ -1395,10 +1395,10 @@ int ObIndexBuildTask::verify_checksum()
     bool dummy_equal = false;
     if (!wait_column_checksum_ctx_.is_inited() && OB_FAIL(wait_column_checksum_ctx_.init(
             task_id_, object_id_, index_table_id_, schema_version_, check_unique_snapshot_, 0/*execution_id*/, checksum_wait_timeout, parallelism_))) {
-      LOG_WARN("init context of wait column checksum failed", K(ret), K(object_id_), K(index_table_id_));
+      LOG_ERROR("init context of wait column checksum failed", K(ret), K(object_id_), K(index_table_id_));
     } else {
       if (OB_FAIL(wait_column_checksum_ctx_.try_wait(is_column_checksum_ready))) {
-        LOG_WARN("try wait column checksum failed", K(ret), K(object_id_), K(index_table_id_));
+        LOG_ERROR("try wait column checksum failed", K(ret), K(object_id_), K(index_table_id_));
         state_finished = true;
       }
     }
@@ -1412,7 +1412,7 @@ int ObIndexBuildTask::verify_checksum()
         if (OB_CHECKSUM_ERROR == ret && is_unique_index_) {
           ret = OB_ERR_DUPLICATED_UNIQUE_KEY;
         }
-        LOG_WARN("fail to check column checksum", K(ret), K(index_table_id_), K(object_id_), K(check_unique_snapshot_), K(snapshot_version_));
+        LOG_ERROR("fail to check column checksum", K(ret), K(index_table_id_), K(object_id_), K(check_unique_snapshot_), K(snapshot_version_));
       }
       state_finished = true; // no matter checksum right or not, state finished
     }
@@ -2023,7 +2023,7 @@ int ObIndexBuildTask::update_mlog_last_purge_scn()
     if (trans.is_started()) {
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-        LOG_WARN("failed to commit trans", KR(ret), KR(tmp_ret));
+        LOG_ERROR("failed to commit trans", KR(ret), KR(tmp_ret));
         ret = OB_SUCC(ret) ? tmp_ret : ret;
       }
     }

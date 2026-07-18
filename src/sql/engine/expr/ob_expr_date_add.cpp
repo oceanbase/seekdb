@@ -423,7 +423,7 @@ int ObExprLastDay::calc_result_type1(ObExprResType &type,
   bool accept_input_type = true;
   if (OB_UNLIKELY(!accept_input_type)) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("inconsistent type", K(ret), K(type1));
+    LOG_ERROR("inconsistent type", K(ret), K(type1));
   } else {
     type.set_type(type_ctx.enable_mysql_compatible_dates() ? ObMySQLDateType : ObDateType);
     type.set_scale(OB_MAX_DATE_PRECISION);

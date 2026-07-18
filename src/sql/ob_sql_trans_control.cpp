@@ -382,7 +382,7 @@ int ObSqlTransControl::rollback_trans(ObSQLSessionInfo *session,
   } else if (OB_NOT_NULL(session->get_tx_desc())) {
     need_disconnect = false;
     if (OB_FAIL(do_end_trans_(session, true, false, INT64_MAX, NULL))) {
-      LOG_WARN("fail rollback trans", K(ret), KPC(session->get_tx_desc()));
+      LOG_ERROR("fail rollback trans", K(ret), KPC(session->get_tx_desc()));
       ObSQLUtils::check_if_need_disconnect_after_end_trans(
           ret, true, false, need_disconnect);
     }
@@ -1129,7 +1129,7 @@ int ObSqlTransControl::end_stmt(ObExecContext &exec_ctx, const bool rollback, co
       (void) txs->abort_tx(*tx_desc, ObTxAbortCause::TX_RESULT_INCOMPLETE);
       // overwrite ret
       ret = OB_TRANS_NEED_ROLLBACK;
-      LOG_WARN("direct load failed, trans aborted", KR(ret));
+      LOG_ERROR("direct load failed, trans aborted", KR(ret));
     } else {
       int save_ret = OB_SUCCESS;
       if (OB_FAIL(ret)) {

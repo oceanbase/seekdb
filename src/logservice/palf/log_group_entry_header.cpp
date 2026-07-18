@@ -312,7 +312,7 @@ bool LogGroupEntryHeader::check_integrity(const char *buf,
   } else if (false == check_header_checksum_()) {
     PALF_LOG_RET(WARN, OB_ERROR, "check header checsum failed", K(*this));
   } else if (false == check_log_checksum_(buf, buf_len, group_log_checksum)) {
-    PALF_LOG_RET(WARN, OB_ERROR, "check data checksum failed", K(*buf), K(buf_len), K(*this));
+    PALF_LOG_RET(ERROR, OB_ERROR, "check data checksum failed", K(*buf), K(buf_len), K(*this));
   } else {
     bool_ret = true;
   }

@@ -1673,7 +1673,7 @@ inline bool ObSQLSessionInfo::is_terminate(int &ret) const
     ret = common::OB_ERR_QUERY_INTERRUPTED;
   } else if (QUERY_DEADLOCKED == get_session_state()) {
     bret = true;
-    SQL_ENG_LOG(WARN, "query deadlocked",
+    SQL_ENG_LOG(ERROR, "query deadlocked",
                 "query", get_current_query_string(),
                 "key", get_server_sid());
     ret = common::OB_DEAD_LOCK;

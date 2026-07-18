@@ -167,7 +167,7 @@ int ObDropTableHelper::check_legitimacy_()
         LOG_WARN("failed to check ddl conflict", KR(ret));
       } else if (has_conflict_ddl) {
         ret = OB_EAGAIN;
-        LOG_WARN("failed to drop table that has conflict ddl", KR(ret), K(table_schema->get_table_id()));
+        LOG_ERROR("failed to drop table that has conflict ddl", KR(ret), K(table_schema->get_table_id()));
       } else if (table_schema->has_mlog_table()) {
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("drop table with materialized view log is not supported", KR(ret));
@@ -1438,7 +1438,7 @@ int ObDropTableHelper::drop_table_(const ObTableSchema &table_schema, const ObSt
 
     if (OB_SUCC(ret)) {
       if (table_schema.has_tablet() && OB_FAIL(ddl_operator.drop_tablet_of_table(table_schema, get_trans_()))) {
-        LOG_WARN("fail to drop tablet", KR(ret));
+        LOG_ERROR("fail to drop tablet", KR(ret));
       }
     }
 

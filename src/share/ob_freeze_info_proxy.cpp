@@ -74,7 +74,7 @@ int ObFreezeInfoProxy::get_freeze_info(
         LOG_WARN("get more row than one", KR(ret), KR(tmp_ret));
       } else if (!frozen_status.is_valid()) {
         ret = OB_ENTRY_NOT_EXIST;
-        LOG_WARN("fail to find freeze info", KR(ret), K(frozen_scn));
+        LOG_ERROR("fail to find freeze info", KR(ret), K(frozen_scn));
       }
     }
   }

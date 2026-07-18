@@ -1868,7 +1868,7 @@ int ObMemtable::flush(share::ObLSID ls_id)
 
     if (OB_FAIL(compaction::ObScheduleDagFunc::schedule_tablet_merge_dag(param))) {
       if (OB_EAGAIN != ret && OB_SIZE_OVERFLOW != ret) {
-        TRANS_LOG(WARN, "failed to schedule tablet merge dag", K(ret));
+        TRANS_LOG(ERROR, "failed to schedule tablet merge dag", K(ret));
       }
     } else {
       mt_stat_.create_flush_dag_time_ = cur_time;

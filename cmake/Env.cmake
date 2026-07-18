@@ -38,7 +38,7 @@ ob_define(OB_CC "")
 ob_define(OB_CXX "")
 ob_define(OB_BUILD_STANDALONE OFF)
 ob_define(OB_BUILD_LITE ON)
-ob_define(DEFAULT_LOG_LEVEL OB_LOG_LEVEL_WARN)
+ob_define(DEFAULT_LOG_LEVEL OB_LOG_LEVEL_ERROR)
 ob_define(DEFAULT_LOG_FILE_SIZE_MB 256)
 
 # 'ENABLE_PERF_MODE' use for offline system insight performance test
@@ -410,7 +410,6 @@ if (OB_USE_CLANG)
     set(CMAKE_SHARED_LINKER_FLAGS "${LD_OPT} -Wl,-z,noexecstack ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT}")
     set(CMAKE_EXE_LINKER_FLAGS "${LD_OPT} -Wl,-z,noexecstack ${PIE_OPT} ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT} ${CMAKE_COVERAGE_EXE_LINKER_OPTIONS}")
   endif()
-
 else() # not clang, use gcc
   message("gcc9 not support currently, please set OB_USE_CLANG ON and we will finish it as soon as possible")
 endif()

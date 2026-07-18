@@ -572,7 +572,7 @@ int ObPLDataType::serialize(share::schema::ObSchemaGetterGuard &schema_guard,
         && !obj.is_null()) { // null already serialized into null map.
       if (obj.get_type() != get_obj_type()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to serialize pl data type, data type inconsistent with pl type",
+        LOG_ERROR("failed to serialize pl data type, data type inconsistent with pl type",
                  K(get_obj_type()), K(obj.get_type()), K(obj), K(*this), K(ret));
       } else if (obj.is_lob() || obj.is_json() || obj.is_geometry()) {
         ObArenaAllocator local_allocator(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE);

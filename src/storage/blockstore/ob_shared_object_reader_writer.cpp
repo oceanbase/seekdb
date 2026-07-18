@@ -459,7 +459,7 @@ int ObSharedObjectReadHandle::verify_checksum(
   } else if (OB_UNLIKELY(header.checksum_
       != (checksum = ob_crc64_sse42(data_buf + pos, header.data_size_)))) {
     ret = OB_CHECKSUM_ERROR;
-    LOG_WARN("Checksum error", K(ret), K(checksum), K(header));
+    LOG_ERROR("Checksum error", K(ret), K(checksum), K(header));
   } else {
     header_size = pos;
     buf_len = header.data_size_;
@@ -1133,7 +1133,7 @@ int ObSharedObjectReaderWriter::inner_write_block(
     } else {
       write_session.set_clean_state(*this);
       if (object_handle.is_valid() && OB_FAIL(shared_obj_handle.add_object_handle(object_handle))) {
-        LOG_WARN("Fail to flush last macro block", K(ret), K(object_handle));
+        LOG_ERROR("Fail to flush last macro block", K(ret), K(object_handle));
       } else if (OB_FAIL(ensure_data_buffer_for_write_(write_session))) {
         LOG_WARN("fail to ensure shared object data buffer", K(ret), K_(offset), K_(align_offset));
       } else if (OB_FAIL(calc_store_size(blk_size, need_align, store_size, align_store_size))) {

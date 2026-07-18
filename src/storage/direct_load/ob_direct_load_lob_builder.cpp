@@ -275,7 +275,7 @@ int ObDirectLoadLobBuilder::append_row(ObDatumRow &datum_row)
     // do nothing
   } else if (write_ctx_.pk_interval_.remain_count() < lob_column_cnt_ &&
              OB_FAIL(switch_sstable_slice())) {
-    LOG_WARN("fail to switch sstable slice", KR(ret));
+    LOG_ERROR("fail to switch sstable slice", KR(ret));
   } else if (OB_FAIL(insert_lob_tablet_ctx_->fill_lob_sstable_slice(*lob_allocator_,
                                                                 current_lob_slice_id_,
                                                                 write_ctx_.pk_interval_,
@@ -298,7 +298,7 @@ int ObDirectLoadLobBuilder::append_batch(ObBatchDatumRows &datum_rows)
   } else if (can_skip) {
     // do nothing
   } else if (write_ctx_.pk_interval_.remain_count() < lob_cnt && OB_FAIL(switch_sstable_slice())) {
-    LOG_WARN("fail to switch sstable slice", KR(ret));
+    LOG_ERROR("fail to switch sstable slice", KR(ret));
   } else if (OB_FAIL(insert_lob_tablet_ctx_->fill_lob_sstable_slice(*lob_allocator_,
                                                                 current_lob_slice_id_,
                                                                 write_ctx_.pk_interval_,

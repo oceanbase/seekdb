@@ -257,7 +257,7 @@ int ObTenantDDLService::create_sys_tenant(
         LOG_INFO("end create tenant", "is_commit", OB_SUCCESS == ret, K(ret));
         if (OB_SUCCESS != (temp_ret = trans.end(OB_SUCC(ret)))) {
           ret = (OB_SUCC(ret)) ? temp_ret : ret;
-          LOG_WARN("trans end failed", "is_commit", OB_SUCCESS == ret, K(temp_ret));
+          LOG_ERROR("trans end failed", "is_commit", OB_SUCCESS == ret, K(temp_ret));
         }
       }
     }

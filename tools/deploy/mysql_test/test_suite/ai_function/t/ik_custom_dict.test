@@ -1,0 +1,84 @@
+# owner: lzh
+# owner group: storage
+# description: load and use custom IK dictionary.
+
+--disable_query_log
+--disable_result_log
+--disable_warnings
+drop database if exists ai_ik_custom_dict;
+--enable_warnings
+create database ai_ik_custom_dict;
+use ai_ik_custom_dict;
+
+create table custom_words (
+  word varchar(100) primary key
+) organization index default charset = utf8mb4 collate = utf8mb4_general_ci fulltext_dict = 'Y';
+
+insert into custom_words values ('银河数据库'), ('星际向量检索');
+
+create table docs_auto_load (
+  id int primary key,
+  body varchar(200)
+) organization index default charset = utf8mb4 collate = utf8mb4_general_ci with column group(each column);
+
+insert into docs_auto_load values
+  (1, '银河数据库支持星际向量检索'),
+  (2, '普通数据库支持全文索引');
+
+create fulltext index fidx_auto_body on docs_auto_load(body)
+  with parser ik parser_properties=(dict_table="custom_words", ik_mode="smart");
+
+create table docs_dynamic (
+  id int primary key,
+  body varchar(200)
+) organization index default charset = utf8mb4 collate = utf8mb4_general_ci with column group(each column);
+
+create fulltext index fidx_dynamic_body on docs_dynamic(body)
+  with parser ik parser_properties=(dict_table="ai_ik_custom_dict.custom_words", ik_mode="smart");
+
+insert into custom_words values ('量子事务引擎');
+alter system refresh fulltext dict custom_words;
+insert into docs_dynamic values
+  (1, '量子事务引擎已经上线'),
+  (2, '事务引擎已经上线');
+
+create table normal_words (
+  word varchar(100) primary key
+) organization index default charset = utf8mb4 collate = utf8mb4_general_ci;
+
+create table docs_bad (
+  id int primary key,
+  body varchar(200)
+) organization index default charset = utf8mb4 collate = utf8mb4_general_ci with column group(each column);
+--enable_result_log
+--enable_query_log
+
+--echo === load dictionary when creating IK fulltext index ===
+select id from docs_auto_load where match(body) against('银河数据库' in boolean mode) order by id;
+select id from docs_auto_load where match(body) against('星际向量检索' in boolean mode) order by id;
+select '银河数据库' member of (tokenize('银河数据库支持星际向量检索', 'ik',
+  '[{"additional_args": [{"dict_table": "custom_words"}, {"ik_mode": "smart"}]}]')) as has_auto_word;
+
+--echo === refresh dictionary and use new word ===
+select id from docs_dynamic where match(body) against('量子事务引擎' in boolean mode) order by id;
+select '量子事务引擎' member of (tokenize('量子事务引擎已经上线', 'ik',
+  '[{"additional_args": [{"dict_table": "ai_ik_custom_dict.custom_words"}, {"ik_mode": "smart"}]}]')) as has_refreshed_word;
+
+--echo === reject invalid dictionary table ===
+--error 1235
+create fulltext index fidx_bad_body on docs_bad(body)
+  with parser ik parser_properties=(dict_table="normal_words", ik_mode="smart");
+
+--echo === cleanup ===
+--disable_query_log
+--disable_result_log
+drop table docs_bad;
+drop table normal_words;
+drop index fidx_dynamic_body on docs_dynamic;
+drop table docs_dynamic;
+drop index fidx_auto_body on docs_auto_load;
+drop table docs_auto_load;
+drop table custom_words;
+drop database ai_ik_custom_dict;
+--enable_result_log
+--enable_query_log

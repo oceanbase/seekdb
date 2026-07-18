@@ -2733,6 +2733,7 @@ typedef enum ObItemType
   // parser config: ik_mode
   T_IK_MODE = 4800,
   T_DML_PARALLEL = 4801,
+  T_FULLTEXT_DICT = 4808,
 
   //pl dbms scheduler calendar
   T_SCHED_CALENDAR = 4802,
@@ -2783,6 +2784,7 @@ typedef enum ObItemType
   T_DYNAMIC_PARTITION_BIGINT_PRECISION = 4839,
 
   T_DATABASE_FACTOR = 4840,
+  T_REFRESH_FULLTEXT_DICT = 4920,
   T_IGNORE_LAST_EMPTY_COLUMN = 4841,
   T_LOG_ERROR_LIMIT = 4842,
   T_LOG_ERROR_UNLIMITED = 4843,
@@ -2882,6 +2884,8 @@ typedef enum ObItemType
   T_FORK_DATABASE = 4917,
   T_DIFF_TABLE = 4918,
   T_MERGE_TABLE = 4919,
+  // Document AI function fix: keep this distinct from T_REFRESH_FULLTEXT_DICT (4920).
+  T_AI_SPLIT_DOCUMENT_EXPRESSION = 4921,
   T_MAX //Attention: add a new type before T_MAX
 } ObItemType;
 

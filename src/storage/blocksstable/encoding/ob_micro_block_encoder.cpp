@@ -427,7 +427,7 @@ int ObMicroBlockEncoder::append_row(const ObDatumRow &row)
       }
     } else if (header->has_column_checksum_ && OB_FAIL(checksum_helper_.cal_column_checksum(
         row, header->column_checksums_))) {
-      LOG_WARN("cal column checksum failed", K(ret), K(row));
+      LOG_ERROR("cal column checksum failed", K(ret), K(row));
     } else {
       if (need_cal_row_checksum()
           && OB_FAIL(checksum_helper_.cal_row_checksum(row.storage_datums_, row.get_column_count()))) {

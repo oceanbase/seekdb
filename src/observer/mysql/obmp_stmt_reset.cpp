@@ -143,7 +143,7 @@ int ObMPStmtReset::process()
     }
     if (OB_ERR_PREPARE_STMT_CHECKSUM == ret || need_disconnect) {
       force_disconnect();
-      LOG_WARN("prepare stmt checksum error, disconnect connection", K(ret));
+      LOG_ERROR("prepare stmt checksum error, disconnect connection", K(ret));
     }
   }
   flush_buffer(true);

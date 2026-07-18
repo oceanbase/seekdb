@@ -191,7 +191,7 @@ void ObTabletGCService::ObTabletChangeTask::runTimerTask()
           // 4. freeze unpersit_tablet_ids
           else if (OB_FAIL(tablet_gc_handler->freeze_unpersist_tablet_ids(unpersist_tablet_ids, decided_scn))) {
             need_retry = true;
-            STORAGE_LOG(WARN, "fail to freeze unpersist tablet", KR(ret), KPC(tablet_gc_handler->ls_), K(unpersist_tablet_ids));
+            STORAGE_LOG(ERROR, "fail to freeze unpersist tablet", KR(ret), KPC(tablet_gc_handler->ls_), K(unpersist_tablet_ids));
           }
           // 5. wait unpersit_tablet_ids
           else if (no_need_wait_persist) {
@@ -199,12 +199,12 @@ void ObTabletGCService::ObTabletChangeTask::runTimerTask()
             ob_usleep(ObTabletGCHandler::FLUSH_CHECK_INTERVAL, true);
           } else if(OB_FAIL(tablet_gc_handler->wait_unpersist_tablet_ids_flushed(unpersist_tablet_ids, decided_scn))) {
             need_retry = true;
-            STORAGE_LOG(WARN, "fail to wait unpersist tablet ids flushed", KR(ret), KPC(tablet_gc_handler->ls_), K(unpersist_tablet_ids));
+            STORAGE_LOG(ERROR, "fail to wait unpersist tablet ids flushed", KR(ret), KPC(tablet_gc_handler->ls_), K(unpersist_tablet_ids));
           }
           // 6. write ls active tablet array
           else if (OB_FAIL(TENANT_STORAGE_META_PERSISTER.write_active_tablet_array(ls))) {
             need_retry = true;
-            STORAGE_LOG(WARN, "fail to write active tablet array", KR(ret), KPC(ls));
+            STORAGE_LOG(ERROR, "fail to write active tablet array", KR(ret), KPC(ls));
           }
           // 7. update tablet_change_checkpoint in log meta
           else if (decided_scn > ls->get_tablet_change_checkpoint_scn()
@@ -215,7 +215,7 @@ void ObTabletGCService::ObTabletChangeTask::runTimerTask()
           // 8. set ls transfer scn
           else if (!only_persist && OB_FAIL(tablet_gc_handler->set_ls_transfer_scn(deleted_tablets))) {
             need_retry = true;
-            STORAGE_LOG(WARN, "failed to set ls transfer scn", KPC(ls), KR(ret), K(decided_scn));
+            STORAGE_LOG(ERROR, "failed to set ls transfer scn", KPC(ls), KR(ret), K(decided_scn));
           }
           // 9. check and gc deleted_tablets
           else if (!only_persist && !deleted_tablets.empty() 
@@ -657,7 +657,7 @@ int ObTabletGCHandler::gc_tablets(const common::ObIArray<ObTabletHandle> &delete
           need_retry = true;
           ret = OB_SUCCESS;
         } else {
-          STORAGE_LOG(WARN, "failed to remove tablet", K(ret), K(tablet_handle));
+          STORAGE_LOG(ERROR, "failed to remove tablet", K(ret), K(tablet_handle));
         }
       } else {
 #ifdef ERRSIM

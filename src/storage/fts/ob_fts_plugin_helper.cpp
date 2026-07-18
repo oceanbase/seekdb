@@ -237,7 +237,7 @@ int ObFTParseHelper::segment(
     const char *ft,
     const int64_t ft_len,
     common::ObIAllocator &allocator,
-    ObAddWord &add_word)
+    ObAddWord &add_word) const
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(parser_version < 0 || nullptr == parser_desc || nullptr == cs || nullptr == ft || 0 >= ft_len)) {
@@ -245,8 +245,15 @@ int ObFTParseHelper::segment(
     LOG_WARN("invalid arguments", K(ret), K(parser_version), KP(parser_desc), KP(cs), K(ft), K(ft_len));
   } else {
     ObFTParserParam param;
-    ObITokenIterator *iter = nullptr;
+    ObITokenIterator *iter = cached_iter_;
+    // Parser internals use an allocator independent of row/token output. The
+    // latter continues to use `allocator` through ObAddWord below.
+    // FTS next-stage optimization (reference 5bebabc): token scratch remains
+    // in the caller's row allocator while reusable parser metadata lives in
+    // parser_allocator_. This prevents either lifetime from extending the
+    // other one.
     param.allocator_ = &allocator;
+    param.metadata_allocator_ = &parser_allocator_;
     param.cs_ = cs;
     param.fulltext_ = ft;
     param.ft_length_ = ft_len;
@@ -255,10 +262,28 @@ int ObFTParseHelper::segment(
     param.ngram_token_size_ = property.ngram_token_size_;
     param.ik_param_.mode_
         = (property.ik_mode_smart_ ? ObFTIKParam::Mode::SMART : ObFTIKParam::Mode::MAX_WORD);
+    param.ik_param_.main_dict_ = property.dict_table_;
+    param.ik_param_.quan_dict_ = property.quantifier_table_;
+    param.ik_param_.stopword_dict_ = property.stopword_table_;
     param.min_ngram_size_ = property.min_ngram_token_size_;
     param.max_ngram_size_ = property.max_ngram_token_size_;
 
-    if (OB_FAIL(parser_desc->segment(&param, iter))) {
+    if (nullptr != iter && cached_cs_ == cs) {
+      const int reuse_ret = iter->reuse_parser(ft, ft_len);
+      if (OB_SUCCESS != reuse_ret) {
+        parser_desc->free_token_iter(&param, iter);
+        iter = nullptr;
+        cached_iter_ = nullptr;
+        cached_cs_ = nullptr;
+      }
+    } else if (nullptr != iter) {
+      parser_desc->free_token_iter(&param, iter);
+      iter = nullptr;
+      cached_iter_ = nullptr;
+      cached_cs_ = nullptr;
+    }
+
+    if (nullptr == iter && OB_FAIL(parser_desc->segment(&param, iter))) {
       LOG_WARN("fail to segment", K(ret), K(param));
     } else if (OB_ISNULL(iter)) {
       ret = OB_ERR_UNEXPECTED;
@@ -281,9 +306,13 @@ int ObFTParseHelper::segment(
         ret = OB_SUCCESS;
       }
     }
-    if (OB_NOT_NULL(iter)) {
+    if (OB_SUCC(ret) && OB_NOT_NULL(iter)) {
+      cached_iter_ = iter;
+      cached_cs_ = cs;
+    } else if (OB_NOT_NULL(iter)) {
       parser_desc->free_token_iter(&param, iter);
-      iter = nullptr;
+      cached_iter_ = nullptr;
+      cached_cs_ = nullptr;
     }
   }
   return ret;
@@ -291,11 +320,14 @@ int ObFTParseHelper::segment(
 
 ObFTParseHelper::ObFTParseHelper()
     : allocator_(nullptr),
+    parser_allocator_(),
     parser_desc_(nullptr),
     plugin_param_(nullptr),
     parser_name_(),
     add_word_flag_(),
     parser_property_(),
+    cached_iter_(nullptr),
+    cached_cs_(nullptr),
     is_inited_(false)
 {
 }
@@ -317,6 +349,10 @@ int ObFTParseHelper::init(
   } else if (OB_ISNULL(allocator) || OB_UNLIKELY(plugin_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(allocator), K(plugin_name));
+  } else if (OB_FAIL(parser_allocator_.init(lib::ObMallocAllocator::get_instance(),
+                                             OB_MALLOC_NORMAL_BLOCK_SIZE,
+                                             lib::ObMemAttr("FTParserCache")))) {
+    LOG_WARN("fail to init fulltext parser cache allocator", K(ret));
   } else if (OB_FAIL(parser_name_.parse_from_str(plugin_name.ptr(), plugin_name.length()))) {
     LOG_WARN("fail to parse name from cstring", K(ret), K(plugin_name));
   } else if (OB_FAIL(parser_property_.parse_for_parser_helper(parser_name_, plugin_properties))) {
@@ -346,10 +382,21 @@ int ObFTParseHelper::init(
 
 void ObFTParseHelper::reset()
 {
+  if (OB_NOT_NULL(cached_iter_) && OB_NOT_NULL(parser_desc_) && parser_allocator_.is_inited()) {
+    ObFTParserParam param;
+    param.allocator_ = &parser_allocator_;
+    param.metadata_allocator_ = &parser_allocator_;
+    param.plugin_param_ = plugin_param_;
+    param.parser_version_ = parser_name_.get_parser_version();
+    parser_desc_->free_token_iter(&param, cached_iter_);
+  }
+  cached_iter_ = nullptr;
+  cached_cs_ = nullptr;
   parser_desc_ = nullptr;
   plugin_param_ = nullptr;
   allocator_ = nullptr;
   add_word_flag_.clear();
+  parser_allocator_.reset();
   is_inited_ = false;
 }
 

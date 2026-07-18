@@ -138,7 +138,7 @@ int ObStorageLogItem::wait_flush_log(const uint64_t max_wait_time)
           STORAGE_REDO_LOG(ERROR, "Fail to wait log flush (reach time-interval 30s)",
               K(ret), K(max_wait_time), K(*this));
         } else {
-          STORAGE_REDO_LOG(WARN, "Fail to wait log flush", K(ret), K(max_wait_time), K(*this));
+          STORAGE_REDO_LOG(ERROR, "Fail to wait log flush", K(ret), K(max_wait_time), K(*this));
         }
       }
     }

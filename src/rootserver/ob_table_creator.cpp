@@ -71,7 +71,7 @@ int ObTableCreator::execute()
     LOG_WARN("fail to execute tablet creator", KR(ret));
   } else if (tablet_infos_.count() > 0
              && OB_FAIL(share::ObTabletToLSTableOperator::batch_update(trans_, tablet_infos_))) {
-    LOG_WARN("fail to batch update tablet info", KR(ret));
+    LOG_ERROR("fail to batch update tablet info", KR(ret));
   }
   return ret;
 }

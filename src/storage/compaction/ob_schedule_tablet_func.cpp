@@ -73,7 +73,7 @@ int ObScheduleTabletFunc::schedule_tablet(
     }
     if (tablet_status_.could_schedule_new_round() && OB_TMP_FAIL(schedule_tablet_new_round(tablet_handle, false/*user_request*/))) {
       need_diagnose = true;
-      LOG_WARN("failed to schedule tablet new round", KR(tmp_ret), K_(ls_status), K(tablet_id));
+      LOG_ERROR("failed to schedule tablet new round", KR(tmp_ret), K_(ls_status), K(tablet_id));
     }
     if (!tablet_status_.can_merge()) {
       need_diagnose = tablet_status_.need_diagnose();
@@ -81,7 +81,7 @@ int ObScheduleTabletFunc::schedule_tablet(
         && OB_TMP_FAIL(schedule_tablet_execute(*tablet))) {
       need_diagnose = true;
       if (OB_SIZE_OVERFLOW != tmp_ret && OB_EAGAIN != tmp_ret) {
-        LOG_WARN("failed to schedule tablet execute", KR(tmp_ret), K_(ls_status), K(tablet_id));
+        LOG_ERROR("failed to schedule tablet execute", KR(tmp_ret), K_(ls_status), K(tablet_id));
       }
     } else {
       LOG_DEBUG("success to schedule tablet execute", KR(tmp_ret), K_(ls_status), K(tablet_status_), K_(ls_could_schedule_merge));
@@ -182,7 +182,7 @@ int ObScheduleTabletFunc::request_schedule_new_round(
     schedule_flag = tablet_status_.tablet_merge_finish() && tablet_status_.could_schedule_new_round();
   }
   if (OB_SUCC(ret) && schedule_flag && OB_TMP_FAIL(schedule_tablet_new_round(tablet_handle, user_request))) {
-    LOG_WARN("failed to schedule tablet new round", KR(tmp_ret), K_(ls_status), K(tablet_id));
+    LOG_ERROR("failed to schedule tablet new round", KR(tmp_ret), K_(ls_status), K(tablet_id));
   }
   tablet_status_.destroy();
   return ret;
@@ -225,7 +225,7 @@ int ObScheduleTabletFunc::schedule_tablet_execute(
   } else if (can_merge) {
     if (OB_FAIL(ObTenantTabletScheduler::schedule_merge_dag(ls_id, tablet, MEDIUM_MERGE, schedule_scn, EXEC_MODE_LOCAL, nullptr/*dag_net_id*/, co_major_merge_type))) {
       if (OB_SIZE_OVERFLOW != ret && OB_EAGAIN != ret) {
-        LOG_WARN("failed to schedule medium merge dag", K(ret), K_(ls_status), K(tablet_id));
+        LOG_ERROR("failed to schedule medium merge dag", K(ret), K_(ls_status), K(tablet_id));
       }
     } else {
       LOG_DEBUG("success to schedule medium merge dag", K(ret), K(schedule_scn), K_(ls_status), K(tablet_id));

@@ -248,7 +248,7 @@ int ObTenantStorageCheckpointWriter::copy_ls_meta_for_deleting(
   if (OB_FAIL(ls_ckpt_member.deserialize(buf, buf_len, pos))) {
     LOG_WARN("fail to deserialize ls_ckpt_member", K(ret), KP(buf), K(buf_len));
   } else if (ls_id != ls_ckpt_member.ls_meta_.ls_id_ && OB_FAIL(write_item(ls_ckpt_member))) {
-    LOG_WARN("fail to write ls snapshot", K(ret), K(ls_id), K(ls_ckpt_member));
+    LOG_ERROR("fail to write ls snapshot", K(ret), K(ls_id), K(ls_ckpt_member));
   }
   return ret;
 }
@@ -399,7 +399,7 @@ int ObTenantStorageCheckpointWriter::persist_and_copy_tablet(
         LOG_INFO("skip writing checkpoint for this tablet", K(ret), K(tablet_key));
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("fail to persist and transform tablet", K(ret), K(tablet_key), K(need_compat), KPC(src_tablet));
+        LOG_ERROR("fail to persist and transform tablet", K(ret), K(tablet_key), K(need_compat), KPC(src_tablet));
       }
     } else if (FALSE_IT(new_tablet = new_tablet_handle.get_obj())) {
     } else if (FALSE_IT(slog.disk_addr_ = new_tablet->get_tablet_addr())) {
@@ -460,7 +460,7 @@ int ObTenantStorageCheckpointWriter::copy_tablet(
       if (OB_ENTRY_NOT_EXIST == ret) {
         LOG_INFO("skip writing snapshot for this tablet", K(tablet_key));
       } else {
-        LOG_WARN("fail to persist and transform tablet", K(ret), K(tablet_key), KPC(tablet));
+        LOG_ERROR("fail to persist and transform tablet", K(ret), K(tablet_key), KPC(tablet));
       }
     } else {
       old_addr = tablet->get_tablet_addr();
@@ -591,7 +591,7 @@ int ObTenantStorageCheckpointWriter::batch_compare_and_swap_tablet()
     } else {
       if (OB_FAIL(get_tablet_with_addr(addr_info, new_tablet_handle))) {
         if (OB_ENTRY_NOT_EXIST != ret) {
-          LOG_WARN("fail to load tablet", K(ret), K(addr_info));
+          LOG_ERROR("fail to load tablet", K(ret), K(addr_info));
         } else {
           ret = OB_SUCCESS;
           LOG_INFO("this tablet has been deleted, skip the swap", K(addr_info));

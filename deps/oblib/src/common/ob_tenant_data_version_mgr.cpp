@@ -480,7 +480,7 @@ int ObTenantDataVersionMgr::write_to_file_(char *buf, int64_t buf_length, int64_
       if (OB_SUCC(ret)) {
         if (0 != ::rename(file_path, hist_path) && errno != ENOENT) {
           // it's OK to continue if we fail to backup history file, so we ignore the err ret here
-          COMMON_LOG(WARN, "fail to backup history config file", KERRMSG, K(ret));
+          COMMON_LOG(ERROR, "fail to backup history config file", KERRMSG, K(ret));
         }
         // When running to here, a power outage may occur, resulting in no conf file, requiring the DBA to manually copy the tmp file here
         if (0 != ::rename(tmp_path, file_path)) {

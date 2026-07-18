@@ -799,7 +799,7 @@ void ObTransDeadlockDetectorAdapter::unregister_from_deadlock_detector(const ObT
     DETECT_LOG(WARN, "fail to get ObDeadLockDetectorMgr", K(self_trans_id), K(to_string(path)));
   } else if (OB_FAIL(mgr->unregister_key(self_trans_id))) {
     if (OB_ENTRY_NOT_EXIST != ret) {
-      DETECT_LOG(WARN, "unregister from deadlock detector failed", K(self_trans_id), K(to_string(path)));
+      DETECT_LOG(ERROR, "unregister from deadlock detector failed", K(self_trans_id), K(to_string(path)));
     } else {
       ret = OB_SUCCESS;// it's ok if detector not exist
     }

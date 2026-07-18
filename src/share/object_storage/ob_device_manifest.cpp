@@ -310,7 +310,7 @@ int ObDeviceManifest::dump2file(
         LOG_INFO("write tmp device manifest successfully", K(tmp_manifest_path), K(configs));
         if (0 != ::rename(manifest_path, his_manifest_path) && errno != ENOENT) {
           ret = ObIODeviceLocalFileOp::convert_sys_errno();
-          LOG_WARN("fail to backup history device manifest", KR(ret), K(manifest_path),
+          LOG_ERROR("fail to backup history device manifest", KR(ret), K(manifest_path),
                    K(his_manifest_path), K(errno), KERRMSG);
         } else if (0 != ::rename(tmp_manifest_path, manifest_path)) {
           ret = ObIODeviceLocalFileOp::convert_sys_errno();
@@ -551,7 +551,7 @@ int ObDeviceManifest::validate_config_checksum_(
   const int64_t head_checksum = head.calc_head_checksum();
   if ((device_checksum != head.device_checksum_) || (head_checksum != head.head_checksum_)) {
     ret = OB_CHECKSUM_ERROR;
-    LOG_WARN("config checksum error", KR(ret), K(device_checksum), "device_checksum_record_in_head",
+    LOG_ERROR("config checksum error", KR(ret), K(device_checksum), "device_checksum_record_in_head",
       head.device_checksum_, K(head_checksum), "head_checksum_record_in_head", head.head_checksum_);
   }
   return ret;

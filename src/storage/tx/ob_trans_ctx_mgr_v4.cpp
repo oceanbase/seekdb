@@ -1345,7 +1345,7 @@ int ObLSTxCtxMgr::traverse_tx_to_submit_redo_log(ObTransID &fail_tx_id, const ui
       // get real ret code
       ret = fn.get_result();
     }
-    TRANS_LOG(WARN, "failed to submit log", K(ret));
+    TRANS_LOG(ERROR, "failed to submit log", K(ret));
   } else {
     TRANS_LOG(INFO, "traverse tx to submit redo log finish", K(ret), K(freeze_clock));
   }
@@ -1365,7 +1365,7 @@ int ObLSTxCtxMgr::traverse_tx_to_submit_next_log()
       // get real ret code
       ret = fn.get_result();
     }
-    TRANS_LOG(WARN, "failed to submit log", K(ret));
+    TRANS_LOG(ERROR, "failed to submit log", K(ret));
   }
 
   return ret;

@@ -31,19 +31,16 @@ namespace oceanbase
 {
 namespace storage
 {
-int ObIIKProcessor::process(TokenizeContext &ctx)
+int ObIIKProcessor::process(TokenizeContext &ctx,
+                            const char *ch,
+                            const uint8_t char_len,
+                            const ObFTCharUtil::CharType type)
 {
   int ret = OB_SUCCESS;
-
-  ObFTCharUtil::CharType type;
-  const char *ch = nullptr;
-  uint8_t char_len = 0;
-
-  if (OB_FAIL(ctx.current_char_type(type))) {
-    LOG_WARN("fail to get current char type", K(ret));
-  } else if (OB_FAIL(ctx.current_char(ch, char_len))) {
-    LOG_WARN("Fail to get current char", K(ret));
-  } else if (OB_FAIL(do_process(ctx, ch, char_len, type))) {
+  // FTS index hot-path optimization: the parser already fetched and decoded
+  // the current character. Reuse it for all processors instead of reading the
+  // same TokenizeContext fields twice per processor.
+  if (OB_FAIL(do_process(ctx, ch, char_len, type))) {
     LOG_WARN("Failed to do process char", K(ret));
   }
   return ret;
@@ -54,9 +51,14 @@ TokenizeContext::TokenizeContext(ObCollationType coll_type,
                                  const char *fulltext,
                                  int64_t fulltext_len,
                                  bool is_smart)
-    : coll_type_(coll_type), fulltext_(fulltext), fulltext_len_(fulltext_len), cursor_(0),
+    : coll_type_(coll_type),
+      charset_info_(ObCharset::get_charset(coll_type)),
+      well_formed_len_func_(nullptr == charset_info_ || nullptr == charset_info_->cset
+                                ? nullptr
+                                : charset_info_->cset->well_formed_len),
+      fulltext_(fulltext), fulltext_len_(fulltext_len), cursor_(0),
       next_char_len_(0), handle_size_(0), is_smart_(is_smart), token_list_(allocator),
-      result_list_(allocator)
+      results_(allocator), result_idx_(0), batch_start_cursor_(0)
 {
 }
 
@@ -64,7 +66,8 @@ int TokenizeContext::init()
 {
   int ret = OB_SUCCESS;
 
-  if (OB_ISNULL(fulltext_) || fulltext_len_ <= 0) {
+  if (OB_ISNULL(fulltext_) || fulltext_len_ <= 0 || OB_ISNULL(charset_info_)
+      || OB_ISNULL(well_formed_len_func_)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(prepare_next_char())) {
     LOG_WARN("Failed to prepare next char", K(ret));
@@ -72,11 +75,34 @@ int TokenizeContext::init()
   return ret;
 }
 
+int TokenizeContext::reuse_context(const char *fulltext, int64_t fulltext_len)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(fulltext) || fulltext_len <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid fulltext for context reuse", K(ret), KP(fulltext), K(fulltext_len));
+  } else {
+    fulltext_ = fulltext;
+    fulltext_len_ = fulltext_len;
+    cursor_ = 0;
+    batch_start_cursor_ = 0;
+    if (OB_FAIL(reset_resource())) {
+      LOG_WARN("failed to reset tokenize context", K(ret));
+    } else if (OB_FAIL(prepare_next_char())) {
+      LOG_WARN("failed to prepare reused context", K(ret));
+    }
+  }
+  return ret;
+}
+
 int TokenizeContext::reset_resource()
 {
   handle_size_ = 0;
-  result_list_.reset();
-  token_list_.reset();
+  // FTS next-stage optimization (Op1): logical reuse keeps already allocated
+  // blocks hot and removes per-token alloc/free traffic.
+  results_.reuse();
+  result_idx_ = 0;
+  token_list_.reuse();
   return OB_SUCCESS;
 }
 
@@ -103,14 +129,35 @@ int TokenizeContext::current_char_type(ObFTCharUtil::CharType &type)
   return ret;
 }
 
+int TokenizeContext::current_char_and_type(const char *&ch,
+                                           uint8_t &char_len,
+                                           ObFTCharUtil::CharType &type)
+{
+  int ret = OB_SUCCESS;
+  if (cursor_ >= fulltext_len_) {
+    ret = OB_ITER_END;
+  } else {
+    ch = fulltext_ + cursor_;
+    char_len = next_char_len_;
+    type = next_char_type_;
+  }
+  return ret;
+}
+
 int TokenizeContext::prepare_next_char()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObCharset::first_valid_char(coll_type_,
-                                          fulltext_ + cursor_,
-                                          fulltext_len_ - cursor_,
-                                          next_char_len_))) {
-    LOG_WARN("Failed to get first valid char, ", K(ret));
+  int well_formed_error = 0;
+  // FTS next-stage optimization (character decoding): call the cached charset
+  // function directly; classification still decodes the code point only once.
+  next_char_len_ = static_cast<int64_t>(well_formed_len_func_(charset_info_,
+                                                              fulltext_ + cursor_,
+                                                              fulltext_ + fulltext_len_,
+                                                              1,
+                                                              &well_formed_error));
+  if (OB_UNLIKELY(0 != well_formed_error || next_char_len_ <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("failed to get first valid char", K(ret), K(well_formed_error), K(next_char_len_));
   } else if (OB_FAIL(ObFTCharUtil::classify_first_char(coll_type_,
                                                        fulltext_ + cursor_,
                                                        next_char_len_,
@@ -160,6 +207,8 @@ bool TokenizeContext::iter_end() const { return cursor_ >= fulltext_len_; }
 
 bool TokenizeContext::is_smart() const { return is_smart_; }
 
+bool TokenizeContext::is_results_exhaust() const { return result_idx_ >= results_.count(); }
+
 int TokenizeContext::add_token(const char *fulltext,
                                int64_t offset,
                                int64_t length,
@@ -182,7 +231,7 @@ int TokenizeContext::add_token(const char *fulltext,
 TokenizeContext::~TokenizeContext()
 {
   token_list_.reset();
-  result_list_.reset();
+  results_.reset();
 }
 
 int TokenizeContext::get_next_token(const char *&word,
@@ -191,10 +240,9 @@ int TokenizeContext::get_next_token(const char *&word,
                                     int64_t &char_cnt)
 {
   int ret = OB_SUCCESS;
-  if (!result_list_.empty()) {
-    ObIKToken &token = result_list_.get_first();
-    result_list_.pop_front();
-    if (!result_list_.empty()) {
+  if (result_idx_ < results_.count()) {
+    ObIKToken &token = results_.at(result_idx_++);
+    if (result_idx_ < results_.count()) {
       if (OB_FAIL(compound(token))) {
         LOG_WARN("Failed to compound", K(ret));
       } else {
@@ -216,11 +264,11 @@ int TokenizeContext::get_next_token(const char *&word,
 int TokenizeContext::compound(ObIKToken &token)
 {
   int ret = OB_SUCCESS;
-  ObList<ObIKToken, ObIAllocator> &list = result_list_;
+  ObFastSegmentArray<ObIKToken> &list = results_;
   if (is_smart_) {
-    if (!list.empty()) {
+    if (result_idx_ < list.count()) {
       if (ObIKTokenType::IK_ARABIC_TOKEN == token.type_) {
-        ObIKToken &next = list.get_first();
+        ObIKToken &next = list.at(result_idx_);
         bool append = false;
 
         if (ObIKTokenType::IK_CNNUM_TOKEN == next.type_) {
@@ -243,12 +291,12 @@ int TokenizeContext::compound(ObIKToken &token)
           // pass
         }
         if (append) {
-          list.pop_front();
+          ++result_idx_;
         }
       }
       // There may be another round of append
-      if (OB_SUCC(ret)) {
-        ObIKToken next = list.get_first();
+      if (OB_SUCC(ret) && result_idx_ < list.count()) {
+        ObIKToken &next = list.at(result_idx_);
         bool append = false;
         if (ObIKTokenType::IK_COUNT_TOKEN == next.type_) {
           if (token.offset_ + token.length_ == next.offset_) {
@@ -258,7 +306,7 @@ int TokenizeContext::compound(ObIKToken &token)
           }
         }
         if (append) {
-          list.pop_front();
+          ++result_idx_;
         }
       }
     }

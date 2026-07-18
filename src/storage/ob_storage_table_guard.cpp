@@ -402,7 +402,7 @@ int ObStorageTableGuard::check_freeze_to_inc_write_ref(ObMemtable *memtable, boo
         if (OB_FAIL(ls_handle.get_ls()->get_tablet_svr()->create_memtable(tablet_id, arg))) {
           if (OB_EAGAIN == ret) {
           } else if (OB_MINOR_FREEZE_NOT_ALLOW != ret) {
-            LOG_WARN("fail to create new memtable for freeze", K(ret), K(need_retry), K(ls_id), K(tablet_id));
+            LOG_ERROR("fail to create new memtable for freeze", K(ret), K(need_retry), K(ls_id), K(tablet_id));
           }
         }
       } else if (for_replay_) {

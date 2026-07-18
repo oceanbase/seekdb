@@ -337,7 +337,7 @@ int ObLSDDLLogHandler::replay(const void *buffer,
         } else if (OB_EAGAIN == ret) {
           // retry replay again
         } else {
-          LOG_WARN("failed to replay ddl log", K(ret), "type", ddl_header.get_ddl_clog_type());
+          LOG_ERROR("failed to replay ddl log", K(ret), "type", ddl_header.get_ddl_clog_type());
           ret = OB_EAGAIN;
         }
       }
@@ -544,7 +544,7 @@ int ObLSDDLLogHandler::replay_ddl_redo_log_(const char *log_buf,
     LOG_WARN("fail to deserialize ddl redo log", K(ret));
   } else if (OB_FAIL(ddl_log_replayer_.replay_redo(log, log_scn))) {
     if (OB_TABLET_NOT_EXIST != ret && OB_EAGAIN != ret) {
-      LOG_WARN("fail to replay ddl redo log", K(ret), K(log));
+      LOG_ERROR("fail to replay ddl redo log", K(ret), K(log));
       ret = OB_EAGAIN;
     }
   }
@@ -562,7 +562,7 @@ int ObLSDDLLogHandler::replay_ddl_commit_log_(const char *log_buf,
     LOG_WARN("fail to deserialize ddl commit log", K(ret));
   } else if (OB_FAIL(ddl_log_replayer_.replay_commit(log, log_scn))) {
     if (OB_TABLET_NOT_EXIST != ret && OB_EAGAIN != ret) {
-      LOG_WARN("fail to replay ddl commit log", K(ret), K(log));
+      LOG_ERROR("fail to replay ddl commit log", K(ret), K(log));
       ret = OB_EAGAIN;
     }
   }
@@ -587,7 +587,7 @@ int ObLSDDLLogHandler::replay_ddl_tablet_schema_version_change_log_(const char *
       LOG_WARN("no need replay tablet schema version change log", K(ret), K(log), K(log_scn));
       ret = OB_SUCCESS;
     } else if (OB_EAGAIN != ret) {
-      LOG_WARN("failed to replay", K(ret), K(log), K(log_scn));
+      LOG_ERROR("failed to replay", K(ret), K(log), K(log_scn));
     }
   }
 
@@ -605,7 +605,7 @@ int ObLSDDLLogHandler::replay_ddl_start_log_(const char *log_buf,
     LOG_WARN("fail to deserialize ddl redo log", K(ret));
   } else if (OB_FAIL(ddl_log_replayer_.replay_start(log, log_scn))) {
     if (OB_TABLET_NOT_EXIST != ret && OB_EAGAIN != ret) {
-      LOG_WARN("fail to replay ddl redo log", K(ret), K(log));
+      LOG_ERROR("fail to replay ddl redo log", K(ret), K(log));
       ret = OB_EAGAIN;
     }
   }
