@@ -17,6 +17,7 @@
 #ifndef OB_BENG_FT_PARSER_H_
 #define OB_BENG_FT_PARSER_H_
 
+#include "lib/allocator/page_arena.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"
 #include "share/text_analysis/ob_text_analyzer.h"
@@ -33,8 +34,23 @@ public:
   static const int64_t FT_MIN_WORD_LEN = 3;
   static const int64_t FT_MAX_WORD_LEN = 84;
 public:
-  explicit ObBEngFTParser(common::ObIAllocator &allocator)
-    : allocator_(allocator),
+  ObBEngFTParser()
+    : analyzer_allocator_(lib::ObMemAttr("BEngParserMeta")),
+      scratch_allocator_(lib::ObMemAttr("BEngParserTmp")),
+      token_allocator_(&scratch_allocator_),
+      analysis_ctx_(),
+      english_analyzer_(),
+      doc_(),
+      token_stream_(nullptr),
+      is_inited_(false)
+  {}
+  // Fallback/reentrant instances must put token bytes in the caller-owned
+  // document arena; their iterator can be destroyed before the word map is
+  // materialized.
+  explicit ObBEngFTParser(common::ObIAllocator &token_allocator)
+    : analyzer_allocator_(lib::ObMemAttr("BEngParserMeta")),
+      scratch_allocator_(lib::ObMemAttr("BEngParserTmp")),
+      token_allocator_(&token_allocator),
       analysis_ctx_(),
       english_analyzer_(),
       doc_(),
@@ -44,7 +60,9 @@ public:
   ~ObBEngFTParser() { reset(); }
 
   int init(plugin::ObFTParserParam *param);
+  int reuse(plugin::ObFTParserParam *param);
   void reset();
+  OB_INLINE bool is_inited() const { return is_inited_; }
   virtual int get_next_token(
       const char *&word,
       int64_t &word_len,
@@ -53,11 +71,17 @@ public:
 
   VIRTUAL_TO_STRING_KV(K_(analysis_ctx), K_(english_analyzer), KP_(token_stream), K_(is_inited));
 private:
+  int init_analyzer(const ObCharsetInfo *cs);
+  int open_document(plugin::ObFTParserParam *param);
   int segment(
       const common::ObDatum &doc,
       share::ObITokenStream *&token_stream);
 private:
-  common::ObIAllocator &allocator_;
+  // The analyzer pipeline survives across documents. Token copies only need
+  // to survive until the caller materializes the current document's word map.
+  common::ObArenaAllocator analyzer_allocator_;
+  common::ObArenaAllocator scratch_allocator_;
+  common::ObIAllocator *token_allocator_;
   share::ObTextAnalysisCtx analysis_ctx_;
   share::ObEnglishTextAnalyzer english_analyzer_;
   common::ObDatum doc_;

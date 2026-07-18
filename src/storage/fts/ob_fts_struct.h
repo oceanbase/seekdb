@@ -52,7 +52,19 @@ private:
   ObObjMeta meta_;
 };
 
-typedef common::hash::ObHashMap<ObFTWord, int64_t> ObFTWordMap;
+// Full-text word maps are request-local or thread-local and are never shared
+// across workers.  Avoid both per-bucket latches and the node allocator's
+// spinlock on the token hot path.
+typedef common::hash::HashMapTypes<ObFTWord, int64_t>::AllocType ObFTWordMapNode;
+typedef common::hash::SimpleAllocer<ObFTWordMapNode,
+                                    common::hash::NodeNumTraits<ObFTWordMapNode>::NODE_NUM,
+                                    common::hash::NoPthreadDefendMode> ObFTWordMapAlloc;
+typedef common::hash::ObHashMap<ObFTWord,
+                                int64_t,
+                                common::hash::NoPthreadDefendMode,
+                                common::hash::hash_func<ObFTWord>,
+                                common::hash::equal_to<ObFTWord>,
+                                ObFTWordMapAlloc> ObFTWordMap;
 
 class ObAddWordFlag final
 {

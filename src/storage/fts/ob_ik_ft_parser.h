@@ -18,9 +18,11 @@
 #define _OCEANBASE_STORAGE_FTS_OB_IK_FT_PARSER_H_
 
 #include "lib/allocator/ob_allocator.h"
+#include "lib/allocator/page_arena.h"
 #include "storage/fts/dict/ob_ft_cache_container.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
+#include "storage/fts/ik/ob_ik_arbitrator.h"
 #include "storage/fts/ik/ob_ik_processor.h"
 #include "plugin/interface/ob_plugin_ftparser_intf.h"
 
@@ -36,7 +38,11 @@ class ObIKFTParser final : public plugin::ObITokenIterator
 public:
   ObIKFTParser(ObIAllocator &allocator, ObFTDictHub *hub)
       : allocator_(allocator),
+        scratch_allocator_(lib::ObMemAttr("IKParserTmp")),
         is_inited_(false),
+        owns_main_dict_(false),
+        owns_quan_dict_(false),
+        owns_stop_dict_(false),
         coll_type_(ObCollationType::CS_TYPE_INVALID),
         ctx_(nullptr),
         hub_(hub),
@@ -54,12 +60,16 @@ public:
 
   int init(const plugin::ObFTParserParam &param);
 
+  int reuse(const plugin::ObFTParserParam &param);
+
   int get_next_token(const char *&word,
                      int64_t &word_len,
                      int64_t &char_cnt,
                      int64_t &word_freq) override;
 
   VIRTUAL_TO_STRING_KV(K(is_inited_));
+
+  friend class ObIKFTParserDesc;
 
 private:
   int produce();
@@ -82,16 +92,50 @@ private:
 
   void reset();
 
+  void reset_for_reuse()
+  {
+    // Light reset: just clear ctx state and processor state for caching.
+    // Full reset (with deallocation) is done in reset().
+    if (!OB_ISNULL(ctx_)) {
+      ctx_->reset_resource();
+    }
+    for (ObIIKProcessor *segmenter : segmenters_) {
+      if (!OB_ISNULL(segmenter)) {
+        segmenter->reset_state();
+      }
+    }
+    scratch_allocator_.reuse();
+  }
+
   bool should_read_newest_table() const;
 
   int build_dict_from_cache(const ObFTDictDesc &desc,
                             ObFTCacheRangeContainer &container,
                             ObIFTDict *&dict);
 
+  // Build a dictionary from a user-owned dict table (custom IK dictionary).
+  // Reads `SELECT word FROM <table_name> ORDER BY word` and constructs an
+  // in-memory DAT trie used as the IK main/quantifier/stopword dict.
+  // A custom dict_table REPLACES the built-in embedded dictionary.
+  int build_custom_dict_from_table(const common::ObString &table_name,
+                                   ObIFTDict *&dict);
+
+  // Returns true when the given table name refers to a user custom dict table
+  // (i.e. not the built-in oceanbase.__ft_* system table and not empty).
+  static bool is_custom_dict_table(const common::ObString &table_name);
+  bool owns_any_dict() const
+  {
+    return owns_main_dict_ || owns_quan_dict_ || owns_stop_dict_;
+  }
+
 private:
   static constexpr int SEGMENT_LIMIT = 1000;
   ObIAllocator &allocator_;
+  common::ObArenaAllocator scratch_allocator_;
   bool is_inited_;
+  bool owns_main_dict_;
+  bool owns_quan_dict_;
+  bool owns_stop_dict_;
 
   ObCollationType coll_type_;
   TokenizeContext *ctx_;
@@ -107,6 +151,9 @@ private:
   ObIFTDict *dict_quan_;
   ObIFTDict *dict_stop_;
 
+  // Cached arbitrator to avoid per-batch heap allocation overhead.
+  ObIKArbitrator arb_;
+
   DISABLE_COPY_ASSIGN(ObIKFTParser);
 };
 
@@ -114,7 +161,7 @@ class ObIKFTParserDesc final : public plugin::ObIFTParserDesc
 {
 public:
   ObIKFTParserDesc() {}
-  virtual ~ObIKFTParserDesc() = default;
+  virtual ~ObIKFTParserDesc() {}
   virtual int init(plugin::ObPluginParam *param) override;
   virtual int deinit(plugin::ObPluginParam *param) override;
   virtual int segment(plugin::ObFTParserParam *param, plugin::ObITokenIterator *&iter) const override;

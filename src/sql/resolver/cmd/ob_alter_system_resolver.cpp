@@ -1167,6 +1167,41 @@ int ObWashMemFragmentationResolver::resolve(const ParseNode &parse_tree)
   return ret;
 }
 
+int ObRefreshFulltextDictResolver::resolve(const ParseNode &parse_tree)
+{
+  int ret = OB_SUCCESS;
+  ObRefreshFulltextDictStmt *stmt = nullptr;
+  if (OB_UNLIKELY(T_REFRESH_FULLTEXT_DICT != parse_tree.type_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("type is not T_REFRESH_FULLTEXT_DICT", "type", get_type_name(parse_tree.type_));
+  } else if (OB_ISNULL(stmt = create_stmt<ObRefreshFulltextDictStmt>())) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_ERROR("create ObRefreshFulltextDictStmt failed");
+  } else if (FALSE_IT(stmt_ = stmt)) {
+  } else if (OB_UNLIKELY(NULL == parse_tree.children_ || 2 != parse_tree.num_child_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("parse tree children is invalid", K(ret), K(parse_tree.num_child_));
+  } else {
+    // child[0] = database name (optional), child[1] = dict table name
+    const ParseNode *db_node = parse_tree.children_[0];
+    const ParseNode *table_node = parse_tree.children_[1];
+    if (OB_NOT_NULL(db_node)) {
+      if (OB_FAIL(Util::resolve_relation_name(db_node, stmt->database_name_))) {
+        LOG_WARN("resolve database name failed", K(ret));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_ISNULL(table_node)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("dict table name node is null", K(ret));
+      } else if (OB_FAIL(Util::resolve_relation_name(table_node, stmt->table_name_))) {
+        LOG_WARN("resolve dict table name failed", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
 int ObRefreshIOCalibrationResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;

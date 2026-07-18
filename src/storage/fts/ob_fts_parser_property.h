@@ -75,6 +75,13 @@ public:
 
   int to_format_json(ObIAllocator &alloc, ObString &str);
 
+  // Custom IK dictionaries execute through a compatibility path during online
+  // index build.  Keep the detection in one place so codegen and DDL SQL
+  // generation make the same decision.
+  static int check_has_custom_ik_dictionary(const ObString &parser_name,
+                                            const ObString &parser_properties,
+                                            bool &has_custom_dictionary);
+
   static bool is_valid_min_token_size(const int64_t size)
   {
     return size >= ObFTSLiteral::FT_MIN_TOKEN_SIZE_LOWER_BOUND
@@ -159,7 +166,13 @@ public:
                K_(max_ngram_token_size),
                K_(ik_mode_smart));
 
+private:
+  // Deep-copy a source string into an internal fixed buffer so that the stored
+  // ObString does not dangle after the JSON tree that produced it is destroyed.
+  int deep_copy_str_(const common::ObString &src, common::ObString &dst, char *buf);
+
 public:
+  static constexpr int64_t DICT_TABLE_BUF_LEN = 512;
   int64_t min_token_size_;
   int64_t max_token_size_;
   int64_t ngram_token_size_;
@@ -169,6 +182,9 @@ public:
   common::ObString quantifier_table_;
   int64_t min_ngram_token_size_;
   int64_t max_ngram_token_size_;
+  char dict_table_buf_[DICT_TABLE_BUF_LEN];
+  char stopword_table_buf_[DICT_TABLE_BUF_LEN];
+  char quantifier_table_buf_[DICT_TABLE_BUF_LEN];
 };
 
 } // end namespace storage

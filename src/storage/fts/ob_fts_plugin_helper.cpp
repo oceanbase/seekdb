@@ -255,6 +255,11 @@ int ObFTParseHelper::segment(
     param.ngram_token_size_ = property.ngram_token_size_;
     param.ik_param_.mode_
         = (property.ik_mode_smart_ ? ObFTIKParam::Mode::SMART : ObFTIKParam::Mode::MAX_WORD);
+    // Propagate custom dict/stopword/quantifier table names so the IK parser can
+    // load user dictionaries on demand. Empty/default names mean: use built-in.
+    param.ik_param_.main_dict_ = property.dict_table_;
+    param.ik_param_.quan_dict_ = property.quantifier_table_;
+    param.ik_param_.stopword_dict_ = property.stopword_table_;
     param.min_ngram_size_ = property.min_ngram_token_size_;
     param.max_ngram_size_ = property.max_ngram_token_size_;
 
@@ -353,6 +358,23 @@ void ObFTParseHelper::reset()
   is_inited_ = false;
 }
 
+int ObFTParseHelper::bind_allocator(common::ObIAllocator &allocator)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("this fulltext parse helper hasn't been initialized", K(ret), K(is_inited_));
+  } else {
+    allocator_ = &allocator;
+  }
+  return ret;
+}
+
+void ObFTParseHelper::unbind_allocator()
+{
+  allocator_ = nullptr;
+}
+
 int ObFTParseHelper::segment(
     const ObObjMeta &meta,
     const char *fulltext,
@@ -375,8 +397,9 @@ int ObFTParseHelper::segment(
   } else if (OB_ISNULL(cs = common::ObCharset::get_charset(type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, charset info is nullptr", K(ret), K(type));
+  } else if (!words.empty() && OB_FAIL(words.reuse())) {
+    LOG_WARN("fail to reuse fulltext word map", K(ret), K(words.size()));
   } else {
-    words.reuse();
     ObAddWord add_word(parser_property_, meta, add_word_flag_, *allocator_, words);
     if (OB_FAIL(segment(
                     parser_property_,

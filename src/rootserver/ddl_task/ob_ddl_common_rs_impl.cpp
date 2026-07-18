@@ -44,6 +44,7 @@
 #include "observer/vector_index/ob_plugin_vector_index_utils.h"
 #include "observer/vector_index/ob_vector_index_util.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
+#include "storage/fts/ob_fts_parser_property.h"
 #include "share/location_cache/ob_location_service.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "storage/tablet/ob_tablet_binding_helper.h"
@@ -778,8 +779,21 @@ int ObDDLUtil::generate_build_replica_sql(const int64_t data_table_id,
         }
         if (OB_FAIL(ret)) {
         } else {
-          if (OB_FAIL(sql_string.assign_fmt("INSERT /*+ monitor enable_parallel_dml parallel(%ld) opt_param('ddl_execution_id', %ld) opt_param('ddl_task_id', %ld) opt_param('enable_newsort', 'false') %.*s use_px */INTO `%.*s`.`%.*s` %.*s(%.*s) SELECT /*+ index(`%.*s` primary) %.*s */ %.*s from `%.*s`.`%.*s` %.*s as of snapshot %ld %.*s",
-              real_parallelism, execution_id, task_id,
+          const bool is_fts_aux = dest_table_schema->is_fts_index_aux()
+                                  || dest_table_schema->is_fts_doc_word_aux();
+          bool has_custom_ik_dictionary = false;
+          if (is_fts_aux
+              && OB_FAIL(storage::ObFTParserJsonProps::check_has_custom_ik_dictionary(
+                  dest_table_schema->get_parser_name_str(),
+                  dest_table_schema->get_parser_property_str(),
+                  has_custom_ik_dictionary))) {
+            LOG_WARN("fail to check custom ik dictionary for ddl sort", K(ret), KPC(dest_table_schema));
+          } else {
+            // Restore the proven pre-vectorization sorter for custom IK only.
+            // Built-in IK/BEng continue using the faster new sorter.
+            const char *enable_newsort = is_fts_aux && !has_custom_ik_dictionary ? "true" : "false";
+            if (OB_FAIL(sql_string.assign_fmt("INSERT /*+ monitor enable_parallel_dml parallel(%ld) opt_param('ddl_execution_id', %ld) opt_param('ddl_task_id', %ld) opt_param('enable_newsort', '%s') %.*s use_px */INTO `%.*s`.`%.*s` %.*s(%.*s) SELECT /*+ index(`%.*s` primary) %.*s */ %.*s from `%.*s`.`%.*s` %.*s as of snapshot %ld %.*s",
+              real_parallelism, execution_id, task_id, enable_newsort,
               static_cast<int>(strlen(io_read_hint)), io_read_hint,
               static_cast<int>(new_dest_database_name.length()), new_dest_database_name.ptr(), static_cast<int>(new_dest_table_name.length()), new_dest_table_name.ptr(),
               static_cast<int>(partition_names.length()), partition_names.ptr(),
@@ -790,7 +804,8 @@ int ObDDLUtil::generate_build_replica_sql(const int64_t data_table_id,
               static_cast<int>(new_source_database_name.length()), new_source_database_name.ptr(), static_cast<int>(new_source_table_name.length()), new_source_table_name.ptr(),
               static_cast<int>(partition_names.length()), partition_names.ptr(),
               snapshot_version, static_cast<int>(rowkey_column_sql_string.length()), rowkey_column_sql_string.ptr()))) {
-            LOG_WARN("fail to assign sql string", K(ret));
+              LOG_WARN("fail to assign sql string", K(ret));
+            }
           }
         }
       }

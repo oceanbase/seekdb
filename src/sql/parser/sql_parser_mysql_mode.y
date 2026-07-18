@@ -242,7 +242,7 @@ END_P SET_VAR DELIMITER
         DATABASE DATABASES DAY_HOUR DAY_MICROSECOND DAY_MINUTE DAY_SECOND /*DEC*/ DECLARE DECIMAL DEFAULT
         DELAYED DELETE DESC DESCRIBE DETERMINISTIC DISTINCT DISTINCTROW DIV DOUBLE DROP DUAL
         EACH ELSE ELSEIF ENCLOSED ESCAPED EXISTS EXIT EXPLAIN
-        /*FALSE*/ FETCH FLOAT FLOAT4 FLOAT8 FOR FORCE FOREIGN FROM FULLTEXT
+        /*FALSE*/ FETCH FLOAT FLOAT4 FLOAT8 FOR FORCE FOREIGN FROM FULLTEXT FULLTEXT_DICT
         GENERATED GET GRANT GROUP
         HAVING HIGH_PRIORITY HOUR_MICROSECOND HOUR_MINUTE HOUR_SECOND
         IF IGNORE IN INDEX INFILE INNER INOUT INSENSITIVE INSERT INT INT1 INT2 INT3 INT4 INT8 INTEGER
@@ -292,7 +292,7 @@ END_P SET_VAR DELIMITER
         CTXCAT CTX_ID CUBE CURDATE CURRENT STACKED CURTIME CURSOR_NAME CUME_DIST CYCLE CALC_PARTITION_ID CONNECT
 
         DAG DATA DATAFILE DATA_DISK_SIZE DATA_SOURCE DATA_TABLE_ID DATE DATE_ADD DATE_SUB DATETIME DAY DEALLOCATE DECRYPT
-        DEFAULT_AUTH DEFAULT_LOB_INROW_THRESHOLD DEFINER DELAY DELAY_KEY_WRITE DEPTH DES_KEY_FILE DENSE_RANK DESCRIPTION DESTINATION DIAGNOSTICS DICT_TABLE
+        DEFAULT_AUTH DEFAULT_LOB_INROW_THRESHOLD DEFINER DELAY DELAY_KEY_WRITE DEPTH DES_KEY_FILE DENSE_RANK DESCRIPTION DESTINATION DIAGNOSTICS DICT DICT_TABLE
         DIFF DIRECTORY DISABLE DISALLOW DISCARD DISK DISKGROUP DO DOT DUMP DUMPFILE DUPLICATE DUPLICATE_SCOPE DUPLICATE_READ_CONSISTENCY DYNAMIC
         DATABASE_ID DEFAULT_TABLEGROUP DISCONNECT DEMAND DELETE_INSERT DYNAMIC_PARTITION_POLICY
 
@@ -307,7 +307,7 @@ END_P SET_VAR DELIMITER
         GENERAL GEOMETRY GEOMCOLLECTION GEOMETRYCOLLECTION GET_FORMAT GLOBAL GRANTS GRANULARITY GROUP_CONCAT GROUPING GTS
         GLOBAL_NAME GLOBAL_ALIAS
 
-        HANDLER HASH HEAP HELP HISTOGRAM HOST HOSTS HOT_RETENTION HOUR HIDDEN HYBRID HYBRID_HIST HYBRID_SEARCH
+        HANDLER HASH HEAP HELP HISTOGRAM HOST HOSTS HOT_RETENTION HOUR HIDDEN HYBRID HYBRID_HIST HYBRID_SEARCH AI_SPLIT_DOCUMENT
 
         ID IDENTIFIED IGNORE_SERVER_IDS IK_MODE ILOG IMMEDIATE IMPORT INCLUDING INCR INDEXES INDEX_TABLE_ID INFO INITIAL_SIZE
         INNODB INSERT_METHOD INSTALL INSTANCE INVOKER IO IOPS_WEIGHT IO_THREAD IPC ISOLATE ISOLATION ISSUER
@@ -471,7 +471,7 @@ END_P SET_VAR DELIMITER
 %type <node> alter_column_behavior opt_set opt_position_column
 %type <node> alter_system_stmt alter_system_set_parameter_actions alter_system_settp_actions settp_option alter_system_set_parameter_action alter_system_reset_parameter_actions alter_system_reset_parameter_action
 %type <node> opt_comment opt_as
-%type <node> column_name relation_name relation_name_list opt_relation_name function_name column_label var_name relation_name_or_string row_format_option compression_name merge_engine_types
+%type <node> column_name relation_name relation_name_list opt_relation_name fulltext_dict_relation function_name column_label var_name relation_name_or_string row_format_option compression_name merge_engine_types
 %type <node> opt_hint_list hint_option select_with_opt_hint update_with_opt_hint delete_with_opt_hint hint_list_with_end global_hint transform_hint optimize_hint
 %type <node> create_index_stmt index_name sort_column_list sort_column_key opt_index_option_list opt_fulltext_index_option_list index_option fulltext_index_option opt_sort_column_key_length opt_index_using_algorithm index_using_algorithm visibility_option opt_constraint_name constraint_name create_with_opt_hint index_expr alter_with_opt_hint
 %type <node> opt_when check_state constraint_definition
@@ -537,7 +537,7 @@ END_P SET_VAR DELIMITER
 %type <node> skip_index_type opt_skip_index_type_list
 %type <node> opt_rebuild_column_store
 %type <node> vec_index_params vec_index_param vec_index_param_value opt_with_vector_index_parameters
-%type <node> json_table_expr rb_iterate_expr unnest_expr mock_jt_on_error_on_empty jt_column_list json_table_column_def 
+%type <node> json_table_expr rb_iterate_expr unnest_expr ai_split_document_expr mock_jt_on_error_on_empty jt_column_list json_table_column_def 
 %type <node> json_table_ordinality_column_def json_table_exists_column_def json_table_value_column_def json_table_nested_column_def
 %type <node> opt_value_on_empty_or_error_or_mismatch opt_on_mismatch
 %type <node> table_values_clause table_values_clause_with_order_by_and_limit values_row_list row_value
@@ -7170,6 +7170,11 @@ TABLE_MODE opt_equal_mark STRING_VALUE
   (void)($2);
   malloc_non_terminal_node($$, result->malloc_pool_, T_ORGANIZATION, 1, $3);
 }
+| FULLTEXT_DICT opt_equal_mark STRING_VALUE
+{
+  (void)($2);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FULLTEXT_DICT, 1, $3);
+}
 | SEMISTRUCT_ENCODING_TYPE opt_equal_mark STRING_VALUE
 {
   (void)($2);
@@ -12987,6 +12992,10 @@ tbl_name
 {
   $$ = $1;
 }
+| ai_split_document_expr
+{
+  $$ = $1;
+}
 | hybrid_search_expr
 {
   $$ = $1;
@@ -18457,6 +18466,12 @@ alter_with_opt_hint SYSTEM REFRESH IO CALIBRATION opt_storage_name opt_calibrati
   malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_IO_CALIBRATION, 3, $6, $7, NULL);
 }
 |
+alter_with_opt_hint SYSTEM REFRESH FULLTEXT DICT fulltext_dict_relation
+{
+  (void)($1);
+  $$ = $6;
+}
+|
 alter_with_opt_hint SYSTEM opt_set alter_system_set_parameter_actions
 {
   (void)($1);
@@ -20696,6 +20711,23 @@ opt_relation_name:
 }
 ;
 
+fulltext_dict_relation:
+relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_FULLTEXT_DICT, 2, NULL, $1);
+}
+| relation_name '.' relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_FULLTEXT_DICT, 2, $1, $3);
+}
+| id_dot_id
+{
+  // db.table is tokenized by the lexer as a single ID_DOT_ID node with two
+  // children: [database_name, table_name].
+  malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_FULLTEXT_DICT, 2, $1->children_[0], $1->children_[1]);
+}
+;
+
 id_dot_id:
 ID_DOT_ID
 { $$ = $1; }
@@ -21844,6 +21876,33 @@ UNNEST '(' simple_expr_list ')'
 }
 ;
 
+ai_split_document_expr:
+AI_SPLIT_DOCUMENT '(' simple_expr ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_SPLIT_DOCUMENT_EXPRESSION, 3, $3, NULL, NULL);
+}
+| AI_SPLIT_DOCUMENT '(' simple_expr ',' simple_expr ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_SPLIT_DOCUMENT_EXPRESSION, 3, $3, $5, NULL);
+}
+| AI_SPLIT_DOCUMENT '(' simple_expr ',' simple_expr ')' relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_SPLIT_DOCUMENT_EXPRESSION, 3, $3, $5, $7);
+}
+| AI_SPLIT_DOCUMENT '(' simple_expr ',' simple_expr ')' AS relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_SPLIT_DOCUMENT_EXPRESSION, 3, $3, $5, $8);
+}
+| AI_SPLIT_DOCUMENT '(' simple_expr ')' relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_SPLIT_DOCUMENT_EXPRESSION, 3, $3, NULL, $5);
+}
+| AI_SPLIT_DOCUMENT '(' simple_expr ')' AS relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_SPLIT_DOCUMENT_EXPRESSION, 3, $3, NULL, $6);
+}
+;
+
 hybrid_search_expr:
 HYBRID_SEARCH '(' literal ',' hybrid_search_param ')'
 {
@@ -22881,6 +22940,7 @@ ACCESS_INFO
 |       INCONSISTENT 
 |       INDIVIDUAL
 |       HYBRID_SEARCH
+|       AI_SPLIT_DOCUMENT
 ;
 
 unreserved_keyword_special:

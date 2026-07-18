@@ -38,6 +38,10 @@ public:
 
   int output_result(TokenizeContext &ctx);
 
+  /// Reset internal state for the next batch while retaining map buckets and
+  /// the arena's hot page.
+  void reuse();
+
 private:
   int prepare(TokenizeContext &ctx);
 
@@ -45,15 +49,15 @@ private:
 
   int optimize(TokenizeContext &ctx,
                ObIKTokenChain *option,
-               ObFTSortList::CellIter iter,
+               ObFTLightSortList::CellIter iter,
                int64_t fulltext_len,
                ObIKTokenChain *&best);
 
   int try_add_next_words(ObIKTokenChain *chain,
-                         ObFTSortList::CellIter iter,
+                         ObFTLightSortList::CellIter iter,
                          ObIKTokenChain *option,
                          bool need_conflict,
-                         ObList<ObFTSortList::CellIter, ObIAllocator> &conflict_stack);
+                         ObList<ObFTLightSortList::CellIter, ObIAllocator> &conflict_stack);
 
   int remove_conflict(const ObIKToken &token, ObIKTokenChain *option);
 
@@ -62,6 +66,8 @@ private:
 private:
   ObArenaAllocator alloc_;
   hash::ObHashMap<int64_t, ObIKTokenChain *> chains_;
+  int64_t bucket_capacity_;
+  bool map_created_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObIKArbitrator);

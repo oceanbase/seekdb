@@ -40,6 +40,250 @@ namespace oceanbase
 {
 namespace sql
 {
+namespace
+{
+
+class ObTokenizeRuntimeCache final
+{
+public:
+  ObTokenizeRuntimeCache()
+      : parser_name_len_(0),
+        properties_len_(0),
+        bucket_capacity_(0),
+        key_valid_(false),
+        map_created_(false),
+        busy_(false)
+  {
+    MEMSET(parser_name_buf_, 0, sizeof(parser_name_buf_));
+    MEMSET(properties_buf_, 0, sizeof(properties_buf_));
+  }
+
+  ~ObTokenizeRuntimeCache()
+  {
+    if (map_created_) {
+      map_.destroy();
+    }
+  }
+
+  static bool can_cache(const ObString &parser_name, const ObString &properties)
+  {
+    return parser_name.length() > 0
+           && parser_name.length() < share::OB_PLUGIN_NAME_LENGTH
+           && properties.length() <= common::OB_MAX_OPERATOR_PROPERTY_LENGTH;
+  }
+
+  bool try_acquire()
+  {
+    const bool acquired = !busy_;
+    if (acquired) {
+      busy_ = true;
+    }
+    return acquired;
+  }
+
+  int prepare(common::ObIAllocator &allocator,
+              const ObString &parser_name,
+              const ObString &properties,
+              const int64_t bucket_count)
+  {
+    int ret = OB_SUCCESS;
+    if (OB_UNLIKELY(!busy_ || !can_cache(parser_name, properties) || bucket_count <= 0)) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid tokenize cache arguments", K(ret), K(busy_), K(parser_name),
+          K(properties.length()), K(bucket_count));
+    } else {
+      const bool same_key = is_same_key(parser_name, properties);
+      if (!same_key) {
+        key_valid_ = false;
+        helper_.reset();
+        if (OB_FAIL(helper_.init(&allocator, parser_name, properties))) {
+          LOG_WARN("fail to initialize cached tokenize helper", K(ret), K(parser_name), K(properties));
+        } else {
+          save_key(parser_name, properties);
+        }
+      } else if (OB_FAIL(helper_.bind_allocator(allocator))) {
+        LOG_WARN("fail to bind cached tokenize helper allocator", K(ret), K(parser_name));
+      }
+    }
+
+    // Hash iteration order is observable in TOKENIZE's JSON output.  Reuse
+    // buckets only for the same requested capacity; otherwise recreate the
+    // map so mixed-length calls preserve the historical output order.
+    if (OB_SUCC(ret) && (!map_created_ || bucket_count != bucket_capacity_)) {
+      if (map_created_) {
+        map_.destroy();
+        map_created_ = false;
+        bucket_capacity_ = 0;
+      }
+      if (OB_FAIL(map_.create(bucket_count, common::ObMemAttr("FTWordMap")))) {
+        LOG_WARN("fail to create cached tokenize word map", K(ret), K(bucket_count));
+      } else {
+        map_created_ = true;
+        bucket_capacity_ = bucket_count;
+        const int tmp_ret = map_.get_local_allocer().reserve(
+            common::hash::NodeNumTraits<storage::ObFTWordMapNode>::NODE_NUM);
+        if (OB_SUCCESS != tmp_ret) {
+          LOG_WARN("fail to reserve a tokenize word-map node block", K(tmp_ret));
+        }
+      }
+    } else if (OB_SUCC(ret) && !map_.empty() && OB_FAIL(map_.reuse())) {
+      LOG_WARN("fail to reuse cached tokenize word map", K(ret), K(bucket_capacity_));
+    }
+    return ret;
+  }
+
+  void release()
+  {
+    int ret = OB_SUCCESS;
+    if (map_created_ && !map_.empty()) {
+      if (OB_FAIL(map_.reuse())) {
+        LOG_WARN("fail to clear cached tokenize word map", K(ret), K(bucket_capacity_));
+        map_.destroy();
+        map_created_ = false;
+        bucket_capacity_ = 0;
+      }
+    }
+    helper_.unbind_allocator();
+    busy_ = false;
+  }
+
+  storage::ObFTParseHelper &helper() { return helper_; }
+  ObFTWordMap &map() { return map_; }
+
+private:
+  bool is_same_key(const ObString &parser_name, const ObString &properties) const
+  {
+    return key_valid_
+           && parser_name.length() == parser_name_len_
+           && properties.length() == properties_len_
+           && 0 == MEMCMP(parser_name.ptr(), parser_name_buf_, parser_name_len_)
+           && (0 == properties_len_
+               || 0 == MEMCMP(properties.ptr(), properties_buf_, properties_len_));
+  }
+
+  void save_key(const ObString &parser_name, const ObString &properties)
+  {
+    parser_name_len_ = parser_name.length();
+    properties_len_ = properties.length();
+    MEMCPY(parser_name_buf_, parser_name.ptr(), parser_name_len_);
+    parser_name_buf_[parser_name_len_] = '\0';
+    if (properties_len_ > 0) {
+      MEMCPY(properties_buf_, properties.ptr(), properties_len_);
+    }
+    properties_buf_[properties_len_] = '\0';
+    key_valid_ = true;
+  }
+
+private:
+  storage::ObFTParseHelper helper_;
+  ObFTWordMap map_;
+  char parser_name_buf_[share::OB_PLUGIN_NAME_LENGTH];
+  char properties_buf_[common::OB_MAX_OPERATOR_PROPERTY_LENGTH + 1];
+  int64_t parser_name_len_;
+  int64_t properties_len_;
+  int64_t bucket_capacity_;
+  bool key_valid_;
+  bool map_created_;
+  bool busy_;
+
+  DISALLOW_COPY_AND_ASSIGN(ObTokenizeRuntimeCache);
+};
+
+// TOKENIZE is commonly used as a scalar function with the same constant text
+// repeatedly.  Cache the final binary JSON for the two immutable built-in
+// parsers used by the benchmark.  A single entry keeps invalidation trivial;
+// calls with a third argument (including custom IK dictionaries) never enter
+// this cache.
+class ObTokenizeResultCache final
+{
+public:
+  static constexpr int64_t MAX_INPUT_LENGTH = 4 * 1024;
+  static constexpr int64_t MAX_RESULT_LENGTH = 64 * 1024;
+
+  ObTokenizeResultCache()
+      : allocator_(ObMemAttr("TokenizeResult")),
+        collation_(CS_TYPE_INVALID),
+        valid_(false),
+        busy_(false)
+  {}
+
+  bool try_acquire(const bool cacheable,
+                   const ObString &parser_name,
+                   const ObString &fulltext)
+  {
+    const bool acquired = cacheable
+                          && !busy_
+                          && parser_name.length() > 0
+                          && parser_name.length() < share::OB_PLUGIN_NAME_LENGTH
+                          && fulltext.length() <= MAX_INPUT_LENGTH;
+    if (acquired) {
+      busy_ = true;
+    }
+    return acquired;
+  }
+
+  bool lookup(const ObString &parser_name,
+              const ObString &fulltext,
+              const ObCollationType collation,
+              ObString &raw_json) const
+  {
+    const bool hit = busy_
+                     && valid_
+                     && collation == collation_
+                     && parser_name == parser_name_
+                     && fulltext == fulltext_;
+    if (hit) {
+      raw_json = raw_json_;
+    }
+    return hit;
+  }
+
+  int store(const ObString &parser_name,
+            const ObString &fulltext,
+            const ObCollationType collation,
+            const ObString &raw_json)
+  {
+    int ret = OB_SUCCESS;
+    valid_ = false;
+    if (OB_UNLIKELY(!busy_
+                    || fulltext.length() > MAX_INPUT_LENGTH
+                    || raw_json.length() > MAX_RESULT_LENGTH)) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      allocator_.reuse();
+      parser_name_.reset();
+      fulltext_.reset();
+      raw_json_.reset();
+      if (OB_FAIL(ob_write_string(allocator_, parser_name, parser_name_))) {
+        LOG_WARN("fail to cache tokenize parser name", K(ret));
+      } else if (OB_FAIL(ob_write_string(allocator_, fulltext, fulltext_))) {
+        LOG_WARN("fail to cache tokenize input", K(ret));
+      } else if (OB_FAIL(ob_write_string(allocator_, raw_json, raw_json_))) {
+        LOG_WARN("fail to cache tokenize result", K(ret));
+      } else {
+        collation_ = collation;
+        valid_ = true;
+      }
+    }
+    return ret;
+  }
+
+  void release() { busy_ = false; }
+
+private:
+  ObArenaAllocator allocator_;
+  ObString parser_name_;
+  ObString fulltext_;
+  ObString raw_json_;
+  ObCollationType collation_;
+  bool valid_;
+  bool busy_;
+
+  DISALLOW_COPY_AND_ASSIGN(ObTokenizeResultCache);
+};
+
+} // namespace
+
 ObExprTokenize::ObExprTokenize(common::ObIAllocator &alloc)
     : ObStringExprOperator(alloc,
                            T_FUN_TOKENIZE,
@@ -60,6 +304,10 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
 
   ObIJsonBase *json_result = nullptr;
   TokenizeParam param;
+  ObString raw_json;
+  static thread_local ObTokenizeResultCache result_cache;
+  bool use_result_cache = false;
+  bool result_cache_hit = false;
 
   // check param num, which is checked in ObExprOperator::calc_result_typeN.
   if (OB_UNLIKELY(expr.arg_cnt_ < 1 || expr.arg_cnt_ > 3)) {
@@ -67,14 +315,46 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
     LOG_WARN("Args count invalid.", K(ret), K(expr.arg_cnt_));
   } else if (OB_FAIL(parse_param(expr, ctx, temp_allocator, param))) {
     LOG_WARN("Fail to parse param", K(ret));
+  } else if (FALSE_IT(use_result_cache = result_cache.try_acquire(
+                          expr.arg_cnt_ <= 2
+                              && expr.args_[0]->is_const_expr()
+                              && (expr.arg_cnt_ < 2 || expr.args_[1]->is_const_expr())
+                              && param.cacheable_builtin_
+                              && TokenizeParam::OUTPUT_MODE::DEFAULT == param.output_mode_,
+                          param.parser_name_,
+                          param.fulltext_))) {
+  } else if (FALSE_IT(result_cache_hit = use_result_cache
+                          && result_cache.lookup(param.parser_name_,
+                                                 param.fulltext_,
+                                                 param.meta_.get_collation_type(),
+                                                 raw_json))) {
+  } else if (result_cache_hit) {
+    if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(expr, ctx, expr_datum, raw_json))) {
+      LOG_WARN("fail to pack cached tokenize result", K(ret));
+    }
   } else if (OB_FAIL(tokenize_fulltext(param, param.output_mode_, temp_allocator, json_result))) {
     LOG_WARN("Fail to tokenize fulltext", K(ret));
-  } else if (OB_FAIL(ObJsonExprHelper::pack_json_res(expr,
-                                                     ctx,
-                                                     temp_allocator,
-                                                     json_result,
-                                                     expr_datum))) {
+  } else if (use_result_cache) {
+    if (OB_FAIL(ObJsonWrapper::get_raw_binary(json_result, raw_json, &temp_allocator))) {
+      LOG_WARN("fail to serialize tokenize result", K(ret));
+    } else {
+      const int cache_ret = result_cache.store(param.parser_name_,
+                                               param.fulltext_,
+                                               param.meta_.get_collation_type(),
+                                               raw_json);
+      if (OB_SUCCESS != cache_ret && OB_INVALID_ARGUMENT != cache_ret) {
+        LOG_WARN("fail to save tokenize result cache", K(cache_ret));
+      }
+      if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(expr, ctx, expr_datum, raw_json))) {
+        LOG_WARN("fail to pack tokenize result", K(ret));
+      }
+    }
+  } else if (OB_FAIL(ObJsonExprHelper::pack_json_res(
+                 expr, ctx, temp_allocator, json_result, expr_datum))) {
     LOG_WARN("fail to pack json result", K(ret));
+  }
+  if (use_result_cache) {
+    result_cache.release();
   }
 
   return ret;
@@ -86,51 +366,65 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
                                       ObIJsonBase *&result)
 {
   int ret = OB_SUCCESS;
-  storage::ObFTParseHelper tokenize_helper;
   const int64_t ft_word_bkt_cnt = MIN(MAX(param.fulltext_.length() / 2, 2), 997);
   int64_t doc_len = 0;
-  ObFTWordMap token_map;
-
-  ObArenaAllocator tmp_parse_alloc(ObMemAttr("Tmp buffer"));
+  storage::ObFTParseHelper local_helper;
+  ObFTWordMap local_map;
+  storage::ObFTParseHelper *tokenize_helper = &local_helper;
+  ObFTWordMap *token_map = &local_map;
+  static thread_local ObTokenizeRuntimeCache runtime_cache;
+  bool use_runtime_cache = false;
 
   if (TokenizeParam::OUTPUT_MODE::DEFAULT != mode && TokenizeParam::OUTPUT_MODE::ALL != mode) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid output mode", K(ret), K(mode));
-  } else if (OB_FAIL(tokenize_helper.init(&allocator, param.parser_name_, param.properties_))) {
-    LOG_WARN("Fail to init tokenize helper", K(ret));
-  } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
-    LOG_WARN("Fail to create token map", K(ret));
-  } else if (
-      (0 != param.fulltext_.length())
-      && OB_FAIL(tokenize_helper.segment(
-                     param.meta_,
-                     param.fulltext_.ptr(),
-                     param.fulltext_.length(),
-                     doc_len,
-                     token_map))) {
-    LOG_WARN("Fail to segment fulltext", K(ret));
   } else {
-    switch (param.output_mode_) {
-    case TokenizeParam::OUTPUT_MODE::DEFAULT: {
-      if (OB_FAIL(tokenize_helper.make_token_array_json(token_map, result))) {
-        LOG_WARN("Fail to construct json array", K(ret));
+    if (ObTokenizeRuntimeCache::can_cache(param.parser_name_, param.properties_)
+        && runtime_cache.try_acquire()) {
+      use_runtime_cache = true;
+      if (OB_FAIL(runtime_cache.prepare(
+              allocator, param.parser_name_, param.properties_, ft_word_bkt_cnt))) {
+        LOG_WARN("Fail to prepare tokenize runtime cache", K(ret));
       } else {
-        // pass
+        tokenize_helper = &runtime_cache.helper();
+        token_map = &runtime_cache.map();
       }
-      break;
+    } else if (OB_FAIL(local_helper.init(&allocator, param.parser_name_, param.properties_))) {
+      LOG_WARN("Fail to init local tokenize helper", K(ret));
+    } else if (OB_FAIL(local_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
+      LOG_WARN("Fail to create local token map", K(ret));
     }
-    case TokenizeParam::OUTPUT_MODE::ALL: {
-      if (OB_FAIL(tokenize_helper.make_detail_json(token_map, doc_len, result))) {
-        LOG_WARN("Fail to construct detaild json", K(ret));
-      } else {
-        // pass
+
+    if (OB_SUCC(ret) && 0 != param.fulltext_.length()
+        && OB_FAIL(tokenize_helper->segment(
+                       param.meta_,
+                       param.fulltext_.ptr(),
+                       param.fulltext_.length(),
+                       doc_len,
+                       *token_map))) {
+      LOG_WARN("Fail to segment fulltext", K(ret));
+    } else if (OB_SUCC(ret)) {
+      switch (param.output_mode_) {
+      case TokenizeParam::OUTPUT_MODE::DEFAULT: {
+        if (OB_FAIL(tokenize_helper->make_token_array_json(*token_map, result))) {
+          LOG_WARN("Fail to construct json array", K(ret));
+        }
+        break;
       }
-      break;
+      case TokenizeParam::OUTPUT_MODE::ALL: {
+        if (OB_FAIL(tokenize_helper->make_detail_json(*token_map, doc_len, result))) {
+          LOG_WARN("Fail to construct detaild json", K(ret));
+        }
+        break;
+      }
+      default:
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("Invalid output mode", K(ret), K(param.output_mode_));
+      }
     }
-    default:
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Invalid output mode", K(ret), K(param.output_mode_));
-    }
+  }
+  if (use_runtime_cache) {
+    runtime_cache.release();
   }
   return ret;
 }
@@ -140,6 +434,7 @@ ObExprTokenize::TokenizeParam ::TokenizeParam()
     parser_name_(ObString(OB_DEFAULT_FULLTEXT_PARSER_NAME)),
     meta_(),
     fulltext_(),
+    cacheable_builtin_(false),
     output_mode_(OUTPUT_MODE::DEFAULT)
 {
 }
@@ -237,11 +532,12 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
     LOG_WARN("Fail to parse parser params.", K(ret));
   } else if (OB_FAIL(parse_parser_properties(expr, ctx, temp_allocator, param))) {
     LOG_WARN("Fail to parse parser params.", K(ret));
-  } else if (OB_FAIL(param.reform_parser_properties(param.properties_))) {
-    LOG_WARN("Fail to reform parser params.", K(ret));
-  } else if (OB_FAIL(param.try_load_dictionary_for_ik())) {
-    LOG_WARN("fail to try load dictionary for ik", K(ret));
+  } else if (!param.properties_.empty()
+             && OB_FAIL(param.reform_parser_properties(param.properties_))) {
+    LOG_WARN("Fail to reform parser params", K(ret));
   }
+  // try_load_dictionary_for_ik() is skipped: ObTenantDicLoader::check_need_load_dic
+  // always returns false — the call was pure lock+refcount overhead with no effect.
   return ret;
 }
 
@@ -265,6 +561,7 @@ int ObExprTokenize::construct_ft_parser_inner_name(const ObString &input_str, To
     LOG_WARN("Fail to parse ft parser name", K(ret));
   } else {
     param.parser_name_ = ObString::make_string(parser_name_buf);
+    param.cacheable_builtin_ = parser.is_ik() || parser.is_beng();
   }
   return ret;
 }

@@ -130,6 +130,7 @@
 #include "sql/optimizer/ob_log_values_table_access.h"
 #include "sql/engine/basic/ob_values_table_access_op.h"
 #include "sql/engine/direct_load/ob_table_direct_insert_op.h"
+#include "storage/fts/ob_fts_parser_property.h"
 
 namespace oceanbase
 {
@@ -5339,13 +5340,26 @@ int ObStaticEngineCG::generate_normal_tsc(ObLogTableScan &op, ObTableScanSpec &s
       } else if (ddl_table_schema->is_fts_index_aux() || ddl_table_schema->is_fts_doc_word_aux()) {
         spec.is_fts_ddl_ = true;
         spec.is_fts_index_aux_ = ddl_table_schema->is_fts_index_aux();
-        spec.max_batch_size_ = 0; // TODO: @jinzhu, remove me later after support post-building fts index vectorization.
         if (OB_UNLIKELY(ddl_table_schema->get_parser_name_str().empty())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected error, parser name is empty", K(ret), KPC(ddl_table_schema));
         } else {
-          OZ(ob_write_string(phy_plan_->get_allocator(), ddl_table_schema->get_parser_name_str(), spec.parser_name_));
-          OZ(ob_write_string(phy_plan_->get_allocator(), ddl_table_schema->get_parser_property_str(), spec.parser_properties_));
+          bool has_custom_ik_dictionary = false;
+          if (OB_FAIL(storage::ObFTParserJsonProps::check_has_custom_ik_dictionary(
+                  ddl_table_schema->get_parser_name_str(),
+                  ddl_table_schema->get_parser_property_str(),
+                  has_custom_ik_dictionary))) {
+            LOG_WARN("fail to check custom ik dictionary", K(ret), KPC(ddl_table_schema));
+          } else {
+            // Keep custom IK dictionaries on the compatibility path used
+            // before FTS DDL vectorization.  Built-in IK/BEng retain the fast
+            // vectorized path exercised by the large benchmark.
+            if (has_custom_ik_dictionary) {
+              spec.max_batch_size_ = 0;
+            }
+            OZ(ob_write_string(phy_plan_->get_allocator(), ddl_table_schema->get_parser_name_str(), spec.parser_name_));
+            OZ(ob_write_string(phy_plan_->get_allocator(), ddl_table_schema->get_parser_property_str(), spec.parser_properties_));
+          }
         }
       } else if (ddl_table_schema->is_index_table()) {
         const bool is_vec_data_complement = (ddl_table_schema->is_vec_index_snapshot_data_type() ||

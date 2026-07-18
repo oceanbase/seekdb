@@ -182,6 +182,12 @@ public:
       const common::ObString &plugin_name,
       const common::ObString &plugin_properties,
       bool &is_same) const;
+
+  // A cached helper owns parser configuration, but the scratch allocator is
+  // scoped to one evaluation.  Rebind it before use and detach it afterwards
+  // so a thread-local helper never retains a dangling evaluation allocator.
+  int bind_allocator(common::ObIAllocator &allocator);
+  void unbind_allocator();
   /**
    * Make json document for fulltext search
    *
