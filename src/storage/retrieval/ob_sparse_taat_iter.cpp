@@ -237,7 +237,10 @@ int ObSRTaaTIterImpl::init_chunk_stores()
         LOG_WARN("failed to allocate memory for hash map", K(ret));
       } else {
         ObSRTaaTHashMap *hash_map = new (buf) ObSRTaaTHashMap();
-        if (OB_FAIL(hash_map->create(10, common::ObMemAttr("FTTaatMap")))) {
+        // each partition map is designed to hold about OB_HASHMAP_DEFAULT_SIZE
+        // docs; size the buckets accordingly instead of forcing long chains
+        if (OB_FAIL(hash_map->create(2 * OB_HASHMAP_DEFAULT_SIZE,
+                                     common::ObMemAttr("FTTaatMap")))) {
           LOG_WARN("failed to create token map", K(ret));
         } else {
           hash_maps_[i] = hash_map;
@@ -440,7 +443,6 @@ int ObSRTaaTIterImpl::load_next_hash_map()
 
     ObDocIdExt id;
     double cur_relevance = 0.0;
-    double last_relevance = 0.0;
     while (OB_SUCC(ret)) {
       if (OB_FAIL(store_iter->get_next_row(*eval_ctx, exprs))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
@@ -455,13 +457,11 @@ int ObSRTaaTIterImpl::load_next_hash_map()
           // each dimension hit as a constant positive score
           cur_relevance = (nullptr == iter_param_->relevance_expr_) ? 1.0
               : iter_param_->relevance_expr_->locate_expr_datum(*eval_ctx).get_double();
-          if (OB_FAIL(map->get_refactored(id, last_relevance))) {
-            if (OB_HASH_NOT_EXIST != ret) {
-              LOG_WARN("failed to get relevance from hash map", K(ret));
-            } else if (OB_FAIL(map->set_refactored(id, cur_relevance, 1 /* overwrite */))) {
-              LOG_WARN("failed to set relevance in hash map", K(ret));
-            }
-          } else if (OB_FAIL(map->set_refactored(id, cur_relevance + last_relevance, 1 /* overwrite */))) {
+          // insert-or-accumulate with a single bucket pass
+          auto accumulate = [cur_relevance](hash::HashMapPair<ObDocIdExt, double> &pair) {
+            pair.second += cur_relevance;
+          };
+          if (OB_FAIL(map->set_or_update(id, cur_relevance, accumulate))) {
             LOG_WARN("failed to set relevance in hash map", K(ret));
           }
         } else {

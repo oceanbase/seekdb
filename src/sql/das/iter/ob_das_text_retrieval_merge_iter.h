@@ -212,7 +212,9 @@ protected:
   int fill_chunk_store_by_tr_iter();
   int reset_query_token(const ObString &query_token);
 protected:
-  typedef hash::ObHashMap<ObDocIdExt, double> ObDASTRTaatHashMap;
+  // the maps are only touched by the executing query thread, so skip the
+  // per-bucket latching of the default defend mode
+  typedef hash::ObHashMap<ObDocIdExt, double, hash::NoPthreadDefendMode> ObDASTRTaatHashMap;
   static const int64_t OB_MAX_HASHMAP_COUNT = 20;
   static const int64_t OB_HASHMAP_DEFAULT_SIZE = 1000;
   ObDASTRTaatHashMap **hash_maps_;
