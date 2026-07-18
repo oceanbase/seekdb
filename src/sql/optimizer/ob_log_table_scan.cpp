@@ -3326,8 +3326,13 @@ int ObLogTableScan::get_vec_idx_calc_exprs(ObIArray<ObRawExpr *> &all_exprs) // 
       }
       // for adaptive sca/iter scan, need an extra functioanal lookup, record all_tr_info
       if (OB_SUCC(ret) && (vec_info.is_vec_adaptive_scan() || vec_info.vec_index_post_filter())) {
-        if (is_text_retrieval_scan() && OB_FAIL(get_vec_iter_tr_infos().push_back(get_text_retrieval_info()))) {
-          LOG_WARN("fail to get text_retrieval tr infos", K(ret));
+        if (is_text_retrieval_scan()) {
+          // used as functional lookup here, which always calculates relevance
+          ObTextRetrievalInfo tmp_tr_info = get_text_retrieval_info();
+          tmp_tr_info.need_calc_relevance_ = true;
+          if (OB_FAIL(get_vec_iter_tr_infos().push_back(tmp_tr_info))) {
+            LOG_WARN("fail to get text_retrieval tr infos", K(ret));
+          }
         }
 
         if (OB_SUCC(ret) && has_func_lookup()) {

@@ -73,6 +73,73 @@ public:
                                   const uint8_t char_len,
                                   bool &ignore);
 
+  // Decode one char from the raw buffer and classify it in a single pass,
+  // returning its byte length, unicode code point and char type together.
+  // The per-char hot loops otherwise decode the same bytes several times
+  // (well_formed_len + one decode per classification query).
+  template <ObCharsetType CS_TYPE>
+  static typename std::enable_if<(CS_TYPE == CHARSET_UTF8MB4 || CS_TYPE == CHARSET_UTF16
+                                  || CS_TYPE == CHARSET_UTF16LE),
+                                 int>::type
+  decode_and_classify(const char *input,
+                      const int64_t buf_len,
+                      int64_t &char_len,
+                      ob_wc_t &unicode,
+                      CharType &type)
+  {
+    int ret = OB_SUCCESS;
+    if (OB_ISNULL(input) || OB_UNLIKELY(buf_len <= 0)) {
+      ret = OB_INVALID_ARGUMENT;
+      STORAGE_FTS_LOG(WARN, "Invalid input", KP(input), K(buf_len), K(ret));
+    } else {
+      unicode = 0;
+      const unsigned char *ustart = reinterpret_cast<const unsigned char *>(input);
+      const unsigned char *uend = ustart + buf_len;
+      int code_size = common::ob_charset_decode_unicode<CS_TYPE>(ustart, uend, unicode);
+      if (OB_UNLIKELY(code_size <= 0)) {
+        if (CHARSET_UTF8MB4 == CS_TYPE && 0 == code_size && 0xED == ustart[0]
+            && unicode >= 0xD800 && unicode <= 0xDFFF) {
+          // utf8-encoded surrogate (ED A0 80 .. ED BF BF): well_formed_len
+          // treats these as valid 3-byte chars and the old classify path
+          // mapped them to USELESS; keep that behavior
+          char_len = 3;
+          type = CharType::USELESS;
+        } else {
+          // ill-formed sequence; keep the same error as first_valid_char
+          ret = OB_INVALID_ARGUMENT;
+          STORAGE_FTS_LOG(WARN, "invalid encoding found", K(code_size), K(ret));
+        }
+      } else {
+        char_len = code_size;
+        type = classify_unicode<CS_TYPE>(unicode);
+      }
+    }
+    return ret;
+  }
+
+  // classify an already-decoded code point
+  template <ObCharsetType CS_TYPE>
+  static CharType classify_unicode(const ob_wc_t unicode)
+  {
+    CharType type = CharType::USELESS;
+    if (ObUnicodeBlockUtils::is_alpha(unicode)) {
+      type = CharType::ENGLISH_LETTER;
+    } else if (ObUnicodeBlockUtils::is_arabic(unicode)) {
+      type = CharType::ARABIC_LETTER;
+    } else if (ObUnicodeBlockUtils::is_chinese(unicode)) {
+      type = CharType::CHINESE;
+    } else if (ObUnicodeBlockUtils::is_other_cjk(unicode)) {
+      type = CharType::OTHER_CJK;
+    } else if ((CHARSET_UTF16 == CS_TYPE || CHARSET_UTF16LE == CS_TYPE)
+               && ObUnicodeBlockUtils::check_high_surrogate(unicode)) {
+      type = CharType::SURROGATE_HIGH;
+    } else if ((CHARSET_UTF16 == CS_TYPE || CHARSET_UTF16LE == CS_TYPE)
+               && ObUnicodeBlockUtils::check_low_surrogate(unicode)) {
+      type = CharType::SURROGATE_LOW;
+    }
+    return type;
+  }
+
 private:
   template <ObCharsetType CS_TYPE>
   static int do_classify(const char *input, const uint8_t char_len, CharType &type);
@@ -454,33 +521,17 @@ inline int ObFTCharUtil::is_ignore_single_cjk(ObCollationType coll_type,
 template <ObCharsetType CS_TYPE>
 inline int ObFTCharUtil::do_classify(const char *input, const uint8_t char_len, CharType &type)
 {
+  // Decode the character once and classify the code point directly; the
+  // per-category helpers above would each redo the same unicode decoding,
+  // which dominates the per-character cost on CJK text.
   int ret = OB_SUCCESS;
-  bool checker = false;
+  ob_wc_t unicode = 0;
   type = CharType::USELESS;
 
-  if (OB_FAIL(is_alpha<CS_TYPE>(input, char_len, checker))) {
-  } else if (checker) {
-    type = CharType::ENGLISH_LETTER;
-  } else if (OB_FAIL(is_arabic<CS_TYPE>(input, char_len, checker))) {
-    STORAGE_FTS_LOG(WARN, "Failed to check arabic letter", K(ret));
-  } else if (checker) {
-    type = CharType::ARABIC_LETTER;
-  } else if (OB_FAIL(is_chinese<CS_TYPE>(input, char_len, checker))) {
-    STORAGE_FTS_LOG(WARN, "Failed to check chinese letter", K(ret));
-  } else if (checker) {
-    type = CharType::CHINESE;
-  } else if (OB_FAIL(is_other_cjk<CS_TYPE>(input, char_len, checker))) {
-    STORAGE_FTS_LOG(WARN, "Failed to check other cjk letter", K(ret));
-  } else if (checker) {
-    type = CharType::OTHER_CJK;
-  } else if (OB_FAIL(is_surrogate_high<CS_TYPE>(input, char_len, checker))) {
-    STORAGE_FTS_LOG(WARN, "Failed to check surrogate high letter", K(ret));
-  } else if (checker) {
-    type = CharType::SURROGATE_HIGH;
-  } else if (OB_FAIL(is_surrogate_low<CS_TYPE>(input, char_len, checker))) {
-    STORAGE_FTS_LOG(WARN, "Failed to check surrogate low letter", K(ret));
-  } else if (checker) {
-    type = CharType::SURROGATE_LOW;
+  if (OB_FAIL(decode_unicode<CS_TYPE>(input, char_len, unicode))) {
+    STORAGE_FTS_LOG(WARN, "Failed to decode unicode", K(ret));
+  } else {
+    type = classify_unicode<CS_TYPE>(unicode);
   }
   return ret;
 }

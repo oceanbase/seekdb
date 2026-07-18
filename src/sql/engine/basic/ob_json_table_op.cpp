@@ -23,6 +23,8 @@
 #include "sql/engine/expr/ob_expr_rb_func_helper.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "share/roaringbitmap/ob_rb_utils.h"
+#include "sql/engine/expr/ob_expr_lob_utils.h"
+#include "common/json_type/ob_json_parse.h"
 
 namespace oceanbase
 {
@@ -333,7 +335,8 @@ OB_DEF_SERIALIZE(ObJsonTableSpec)
   }
   if (OB_FAIL(ret)) {
   } else if (table_type_ == MulModeTableType::OB_RB_ITERATE_TABLE_TYPE
-             || table_type_ == MulModeTableType::OB_UNNEST_TABLE_TYPE) {
+             || table_type_ == MulModeTableType::OB_UNNEST_TABLE_TYPE
+             || table_type_ == MulModeTableType::OB_AI_SPLIT_DOC_TABLE_TYPE) {
     OB_UNIS_ENCODE(table_type_);
     int32_t value_exprs_count = value_exprs_.count() - 1;
     OB_UNIS_ENCODE(value_exprs_count);
@@ -362,7 +365,8 @@ OB_DEF_SERIALIZE_SIZE(ObJsonTableSpec)
     OB_UNIS_ADD_LEN(info);
   }
   if (table_type_ == MulModeTableType::OB_RB_ITERATE_TABLE_TYPE
-      || table_type_ == MulModeTableType::OB_UNNEST_TABLE_TYPE) {
+      || table_type_ == MulModeTableType::OB_UNNEST_TABLE_TYPE
+      || table_type_ == MulModeTableType::OB_AI_SPLIT_DOC_TABLE_TYPE) {
     OB_UNIS_ADD_LEN(table_type_);
     int32_t value_exprs_count = value_exprs_.count() - 1;
     OB_UNIS_ADD_LEN(value_exprs_count);
@@ -408,12 +412,15 @@ OB_DEF_DESERIALIZE(ObJsonTableSpec)
         table_type_flag = OB_RB_ITERATE_TABLE;
       } else if (col_info->col_type_ == COL_TYPE_UNNEST) {
         table_type_flag = OB_UNNEST_TABLE;
+      } else if (col_info->col_type_ == COL_TYPE_AI_SPLIT_DOC) {
+        table_type_flag = OB_AI_SPLIT_DOC_TABLE;
       }
     }
   }
 
   if (OB_FAIL(ret)) {
-  } else if (table_type_flag == OB_RB_ITERATE_TABLE || table_type_flag == OB_UNNEST_TABLE) {
+  } else if (table_type_flag == OB_RB_ITERATE_TABLE || table_type_flag == OB_UNNEST_TABLE
+             || table_type_flag == OB_AI_SPLIT_DOC_TABLE) {
     OB_UNIS_DECODE(table_type_);
     int32_t value_exprs_count = 0;
     OB_UNIS_DECODE(value_exprs_count);
@@ -733,6 +740,15 @@ int ObJsonTableOp::init()
       } else if (OB_ISNULL(jt_ctx_.table_func_ = new (table_func_buf) UnnestTableFunc())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to new unnest node", K(ret));
+      }
+    } else if (jt_ctx_.is_ai_split_doc_table_func()) {
+      table_func_buf = jt_ctx_.op_exec_alloc_->alloc(sizeof(AiSplitDocTableFunc));
+      if (OB_ISNULL(table_func_buf)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to allocate table func buf", K(ret));
+      } else if (OB_ISNULL(jt_ctx_.table_func_ = new (table_func_buf) AiSplitDocTableFunc())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to new ai split document node", K(ret));
       }
     }
   }
@@ -1198,6 +1214,429 @@ int UnnestTableFunc::get_iter_value(ObRegCol &col_node, JtScanCtx* ctx, bool &is
   return ret;
 }
 
+
+// ---------------- AI_SPLIT_DOCUMENT ----------------
+// text unit inside the document: [start_, end_) byte offsets
+struct ObAiSplitUnit {
+  int64_t start_;
+  int64_t end_;
+  TO_STRING_KV(K_(start), K_(end));
+};
+
+static bool ai_split_is_space(char c)
+{
+  return c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\f' || c == '\v';
+}
+
+static bool ai_split_is_sentence_end(char c)
+{
+  return c == '.' || c == '!' || c == '?';
+}
+
+// tokenize [begin, end) of doc into words (maximal non-blank runs)
+static int ai_split_tokenize_words(const ObString &doc, int64_t begin, int64_t end,
+                                   ObIArray<ObAiSplitUnit> &units)
+{
+  int ret = OB_SUCCESS;
+  const char *buf = doc.ptr();
+  int64_t i = begin;
+  while (OB_SUCC(ret) && i < end) {
+    while (i < end && ai_split_is_space(buf[i])) {
+      ++i;
+    }
+    if (i < end) {
+      ObAiSplitUnit unit;
+      unit.start_ = i;
+      while (i < end && !ai_split_is_space(buf[i])) {
+        ++i;
+      }
+      unit.end_ = i;
+      ret = units.push_back(unit);
+    }
+  }
+  return ret;
+}
+
+// tokenize [begin, end) of doc into sentences; a sentence carries its trailing
+// terminator characters ('.', '!', '?'); unterminated tail text is one sentence
+static int ai_split_tokenize_sentences(const ObString &doc, int64_t begin, int64_t end,
+                                       ObIArray<ObAiSplitUnit> &units)
+{
+  int ret = OB_SUCCESS;
+  const char *buf = doc.ptr();
+  int64_t i = begin;
+  while (OB_SUCC(ret) && i < end) {
+    while (i < end && ai_split_is_space(buf[i])) {
+      ++i;
+    }
+    if (i < end) {
+      ObAiSplitUnit unit;
+      unit.start_ = i;
+      while (i < end && !ai_split_is_sentence_end(buf[i])) {
+        ++i;
+      }
+      while (i < end && ai_split_is_sentence_end(buf[i])) {
+        ++i;
+      }
+      int64_t unit_end = i;
+      while (unit_end > unit.start_ && ai_split_is_space(buf[unit_end - 1])) {
+        --unit_end;
+      }
+      unit.end_ = unit_end;
+      ret = units.push_back(unit);
+    }
+  }
+  return ret;
+}
+
+// emit sliding-window chunks over units; each chunk covers doc bytes
+// [units[first].start_, units[last].end_) and optionally carries a heading prefix
+static int ai_split_emit_chunks(ObIAllocator &alloc, const ObString &doc, const ObString &heading,
+                                const ObIArray<ObAiSplitUnit> &units, int64_t max_units,
+                                int64_t overlap, ObAiSplitDocState &state)
+{
+  int ret = OB_SUCCESS;
+  int64_t unit_count = units.count();
+  if (overlap >= max_units) {
+    overlap = max_units - 1;
+  }
+  if (overlap < 0) {
+    overlap = 0;
+  }
+  int64_t start = 0;
+  while (OB_SUCC(ret) && start < unit_count) {
+    int64_t end = MIN(start + max_units, unit_count);
+    int64_t byte_start = units.at(start).start_;
+    int64_t byte_end = units.at(end - 1).end_;
+    ObAiSplitDocState::Chunk chunk;
+    chunk.offset_ = byte_start;
+    if (heading.empty()) {
+      chunk.text_.assign_ptr(doc.ptr() + byte_start, static_cast<int32_t>(byte_end - byte_start));
+    } else {
+      int64_t text_len = heading.length() + 1 + (byte_end - byte_start);
+      char *text_buf = NULL;
+      if (OB_ISNULL(text_buf = static_cast<char *>(alloc.alloc(text_len)))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to allocate chunk text", K(ret), K(text_len));
+      } else {
+        MEMCPY(text_buf, heading.ptr(), heading.length());
+        text_buf[heading.length()] = '\n';
+        MEMCPY(text_buf + heading.length() + 1, doc.ptr() + byte_start, byte_end - byte_start);
+        chunk.text_.assign_ptr(text_buf, static_cast<int32_t>(text_len));
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(state.chunks_.push_back(chunk))) {
+      LOG_WARN("failed to push back chunk", K(ret));
+    }
+    if (OB_FAIL(ret) || end >= unit_count) {
+      break;
+    }
+    int64_t next = end - overlap;
+    if (next <= start) {
+      next = start + 1;
+    }
+    start = next;
+  }
+  return ret;
+}
+
+static int ai_split_one_region(ObIAllocator &alloc, const ObString &doc, const ObString &heading,
+                               int64_t begin, int64_t end, bool by_sentence, int64_t max_units,
+                               int64_t overlap, ObAiSplitDocState &state)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<ObAiSplitUnit, 32> units;
+  if (by_sentence) {
+    ret = ai_split_tokenize_sentences(doc, begin, end, units);
+  } else {
+    ret = ai_split_tokenize_words(doc, begin, end, units);
+  }
+  if (OB_FAIL(ret)) {
+    LOG_WARN("failed to tokenize document", K(ret));
+  } else if (units.count() > 0
+             && OB_FAIL(ai_split_emit_chunks(alloc, doc, heading, units, max_units, overlap, state))) {
+    LOG_WARN("failed to emit chunks", K(ret));
+  }
+  return ret;
+}
+
+static int ai_split_parse_params(ObIAllocator &alloc, const ObString &params_str, bool &is_markdown,
+                                 bool &by_sentence, int64_t &max_units, int64_t &overlap)
+{
+  int ret = OB_SUCCESS;
+  ObJsonNode *j_node = NULL;
+  const char *syntaxerr = NULL;
+  uint64_t err_offset = 0;
+  if (params_str.empty()) {
+    // keep defaults
+  } else if (OB_FAIL(ObJsonParser::parse_json_text(&alloc, params_str.ptr(), params_str.length(),
+                                                   syntaxerr, &err_offset, j_node))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_split_document, parameters is not a valid json");
+    LOG_WARN("failed to parse ai_split_document parameters", K(ret), K(params_str));
+  } else if (j_node->json_type() != ObJsonNodeType::J_OBJECT) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_split_document, parameters is not a json object");
+    LOG_WARN("parameters is not a json object", K(ret), K(params_str));
+  } else {
+    const char *keys[4] = {"type", "by", "max", "overlap"};
+    for (int64_t i = 0; OB_SUCC(ret) && i < 4; ++i) {
+      ObIJsonBase *value_node = NULL;
+      ObString key(keys[i]);
+      if (OB_FAIL(j_node->get_object_value(key, value_node))) {
+        if (ret == OB_SEARCH_NOT_FOUND) {
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("failed to get parameter", K(ret), K(key));
+        }
+      } else if (OB_ISNULL(value_node)) {
+        // ignore
+      } else if (i < 2) {  // "type" / "by" : string values
+        if (value_node->json_type() != ObJsonNodeType::J_STRING) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_split_document, type/by must be a string");
+        } else {
+          ObString str_val(value_node->get_data_length(), value_node->get_data());
+          if (i == 0) {
+            if (0 == str_val.case_compare("text")) {
+              is_markdown = false;
+            } else if (0 == str_val.case_compare("markdown")) {
+              is_markdown = true;
+            } else {
+              ret = OB_INVALID_ARGUMENT;
+              LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_split_document, type must be text or markdown");
+            }
+          } else {
+            if (0 == str_val.case_compare("word")) {
+              by_sentence = false;
+            } else if (0 == str_val.case_compare("sentence")) {
+              by_sentence = true;
+            } else {
+              ret = OB_INVALID_ARGUMENT;
+              LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_split_document, by must be word or sentence");
+            }
+          }
+        }
+      } else {  // "max" / "overlap" : integer values
+        int64_t int_val = 0;
+        if (value_node->json_type() == ObJsonNodeType::J_INT) {
+          int_val = value_node->get_int();
+        } else if (value_node->json_type() == ObJsonNodeType::J_UINT) {
+          int_val = static_cast<int64_t>(value_node->get_uint());
+        } else {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_split_document, max/overlap must be an integer");
+        }
+        if (OB_FAIL(ret)) {
+        } else if (i == 2) {
+          if (int_val < 1) {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_split_document, max must be a positive integer");
+          } else {
+            max_units = int_val;
+          }
+        } else {
+          if (int_val < 0) {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_split_document, overlap must be non-negative");
+          } else {
+            overlap = int_val;
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+static int ai_split_document(ObIAllocator &alloc, bool is_markdown, bool by_sentence,
+                             int64_t max_units, int64_t overlap, ObAiSplitDocState &state)
+{
+  int ret = OB_SUCCESS;
+  const ObString &doc = state.content_;
+  if (!is_markdown) {
+    ret = ai_split_one_region(alloc, doc, ObString(), 0, doc.length(), by_sentence,
+                              max_units, overlap, state);
+  } else {
+    // split into sections at heading lines (lines starting with '#');
+    // each chunk of a section body carries the section heading
+    const char *buf = doc.ptr();
+    int64_t doc_len = doc.length();
+    int64_t pos = 0;
+    ObString cur_heading;
+    int64_t body_start = 0;
+    while (OB_SUCC(ret) && pos < doc_len) {
+      int64_t line_start = pos;
+      int64_t line_end = pos;
+      while (line_end < doc_len && buf[line_end] != '\n') {
+        ++line_end;
+      }
+      if (buf[line_start] == '#') {
+        // flush the pending section body before this heading
+        if (line_start > body_start
+            && OB_FAIL(ai_split_one_region(alloc, doc, cur_heading, body_start, line_start,
+                                           by_sentence, max_units, overlap, state))) {
+          LOG_WARN("failed to split section body", K(ret));
+        } else {
+          int64_t heading_end = line_end;
+          while (heading_end > line_start && ai_split_is_space(buf[heading_end - 1])) {
+            --heading_end;
+          }
+          cur_heading.assign_ptr(buf + line_start, static_cast<int32_t>(heading_end - line_start));
+          body_start = (line_end < doc_len) ? line_end + 1 : doc_len;
+        }
+      }
+      pos = line_end + 1;
+    }
+    // flush the trailing section body
+    if (OB_SUCC(ret) && doc_len > body_start
+        && OB_FAIL(ai_split_one_region(alloc, doc, cur_heading, body_start, doc_len,
+                                       by_sentence, max_units, overlap, state))) {
+      LOG_WARN("failed to split trailing section body", K(ret));
+    }
+  }
+  return ret;
+}
+
+int AiSplitDocTableFunc::eval_input(ObJsonTableOp &jt, JtScanCtx &ctx, ObEvalCtx &eval_ctx)
+{
+  INIT_SUCC(ret);
+  int64_t expr_count = ctx.spec_ptr_->value_exprs_.count();
+  if (!ctx.is_ai_split_doc_table_func()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid table func", K(ret));
+  } else if (expr_count < 1 || expr_count > 2) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected value expr count", K(ret), K(expr_count));
+  } else {
+    jt.reset_columns();
+  }
+  if (OB_SUCC(ret)) {
+    ObExpr *content_expr = ctx.spec_ptr_->value_exprs_.at(0);
+    ObDatum *content_datum = NULL;
+    ObString content;
+    bool is_markdown = true;
+    bool by_sentence = false;
+    int64_t max_units = 256;
+    int64_t overlap = 0;
+    if (content_expr->datum_meta_.type_ == ObNullType) {
+      ret = OB_ITER_END;
+    } else if (!ob_is_string_type(content_expr->datum_meta_.type_)) {
+      ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
+      LOG_WARN("invalid content type for ai_split_document", K(ret), K(content_expr->datum_meta_.type_));
+    } else if (OB_FAIL(content_expr->eval(eval_ctx, content_datum))) {
+      LOG_WARN("failed to eval content expr", K(ret));
+    } else if (content_datum->is_null()) {
+      ret = OB_ITER_END;
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.row_alloc_, *content_datum,
+                                                                 content_expr->datum_meta_,
+                                                                 content_expr->obj_meta_.has_lob_header(),
+                                                                 content))) {
+      LOG_WARN("failed to read content string", K(ret));
+    }
+    if (OB_SUCC(ret) && expr_count == 2) {
+      ObExpr *param_expr = ctx.spec_ptr_->value_exprs_.at(1);
+      ObDatum *param_datum = NULL;
+      ObString params_str;
+      if (param_expr->datum_meta_.type_ == ObNullType) {
+        // keep defaults
+      } else if (!ob_is_string_type(param_expr->datum_meta_.type_)
+          && !ob_is_json(param_expr->datum_meta_.type_)) {
+        ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
+        LOG_WARN("invalid parameters type for ai_split_document", K(ret), K(param_expr->datum_meta_.type_));
+      } else if (OB_FAIL(param_expr->eval(eval_ctx, param_datum))) {
+        LOG_WARN("failed to eval parameters expr", K(ret));
+      } else if (param_datum->is_null()) {
+        // keep defaults
+      } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.row_alloc_, *param_datum,
+                                                                   param_expr->datum_meta_,
+                                                                   param_expr->obj_meta_.has_lob_header(),
+                                                                   params_str))) {
+        LOG_WARN("failed to read parameters string", K(ret));
+      } else if (ob_is_json(param_expr->datum_meta_.type_)) {
+        // binary json: convert to text before parsing
+        ObJsonBin j_bin(params_str.ptr(), params_str.length(), &ctx.row_alloc_);
+        ObJsonBuffer j_buf(&ctx.row_alloc_);
+        if (OB_FAIL(j_bin.reset_iter())) {
+          LOG_WARN("failed to reset json bin iter", K(ret));
+        } else if (OB_FAIL(j_bin.print(j_buf, true))) {
+          LOG_WARN("failed to print json bin", K(ret));
+        } else {
+          params_str.assign_ptr(j_buf.ptr(), static_cast<int32_t>(j_buf.length()));
+        }
+      }
+      if (OB_SUCC(ret) && !params_str.empty()
+          && OB_FAIL(ai_split_parse_params(ctx.row_alloc_, params_str, is_markdown, by_sentence,
+                                           max_units, overlap))) {
+        LOG_WARN("failed to parse ai_split_document parameters", K(ret));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      ObAiSplitDocState *state = NULL;
+      ObString content_copy;
+      if (OB_FAIL(ob_write_string(ctx.row_alloc_, content, content_copy))) {
+        LOG_WARN("failed to copy content", K(ret));
+      } else if (OB_ISNULL(state = OB_NEWx(ObAiSplitDocState, &ctx.row_alloc_, ctx.row_alloc_))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to allocate ai split document state", K(ret));
+      } else if (OB_FALSE_IT(state->content_ = content_copy)) {
+      } else if (OB_FAIL(ai_split_document(ctx.row_alloc_, is_markdown, by_sentence, max_units,
+                                           overlap, *state))) {
+        LOG_WARN("failed to split document", K(ret));
+      } else if (state->chunks_.count() == 0) {
+        ret = OB_ITER_END;
+      } else {
+        jt.input_ = state;
+      }
+    }
+  }
+  return ret;
+}
+
+int AiSplitDocTableFunc::reset_ctx(ObRegCol &scan_node, JtScanCtx*& ctx)
+{
+  INIT_SUCC(ret);
+  UNUSED(scan_node);
+  UNUSED(ctx);
+  return ret;
+}
+
+int AiSplitDocTableFunc::init_ctx(ObRegCol &scan_node, JtScanCtx*& ctx)
+{
+  INIT_SUCC(ret);
+  UNUSED(ctx);
+  scan_node.tab_type_ = MulModeTableType::OB_AI_SPLIT_DOC_TABLE_TYPE;
+  return ret;
+}
+
+int AiSplitDocTableFunc::reset_path_iter(ObRegCol &scan_node, void* in, JtScanCtx*& ctx, ScanType init_flag, bool &is_null_value)
+{
+  INIT_SUCC(ret);
+  UNUSED(init_flag);
+  scan_node.iter_ = in;
+  if (OB_FAIL(get_iter_value(scan_node, ctx, is_null_value))) {
+    if (ret != OB_ITER_END) {
+      LOG_WARN("failed to get iter value", K(ret));
+    }
+  }
+  return ret;
+}
+
+int AiSplitDocTableFunc::get_iter_value(ObRegCol &col_node, JtScanCtx* ctx, bool &is_null_value)
+{
+  INIT_SUCC(ret);
+  UNUSED(ctx);
+  is_null_value = false;
+  col_node.cur_pos_++;
+  ObAiSplitDocState *state = reinterpret_cast<ObAiSplitDocState *>(col_node.iter_);
+  if (OB_ISNULL(state) || col_node.cur_pos_ >= state->chunks_.count()) {
+    ret = OB_ITER_END;
+  } else {
+    state->cur_idx_ = col_node.cur_pos_;
+  }
+  return ret;
+}
+
 // default value cast type check
 bool RegularCol::check_cast_allowed(const ObObjType orig_type,
                                     const ObCollationType orig_cs_type,
@@ -1382,6 +1821,24 @@ int ObRegCol::eval_regular_col(void *in, JtScanCtx* ctx, bool& is_null_value)
   } else if (col_type == COL_TYPE_UNNEST) {
     if (OB_FAIL(RegularCol::eval_unnest_col(*this, in, ctx, col_expr))) {
       LOG_WARN("fail to eval unnest col", K(ret), K(col_type), K(cur_pos_), K(col_info_.output_column_idx_));
+    }
+  } else if (col_type == COL_TYPE_AI_SPLIT_DOC) {
+    ObAiSplitDocState *state = reinterpret_cast<ObAiSplitDocState *>(in);
+    ObDatum &res_datum = col_expr->locate_datum_for_write(*ctx->eval_ctx_);
+    if (OB_ISNULL(state) || state->cur_idx_ < 0 || state->cur_idx_ >= state->chunks_.count()) {
+      res_datum.set_null();
+    } else {
+      const ObAiSplitDocState::Chunk &chunk = state->chunks_.at(state->cur_idx_);
+      switch (this->col_info_.id_) {
+        case 1: res_datum.set_int(state->cur_idx_); break;               // chunk_id
+        case 2: res_datum.set_int(chunk.offset_); break;                 // chunk_offset
+        case 3: res_datum.set_int(chunk.text_.length()); break;         // chunk_length
+        case 4: res_datum.set_string(chunk.text_); break;               // chunk_text
+        default:
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected ai split document column id", K(ret), K(this->col_info_.id_));
+          break;
+      }
     }
   } else if (col_type == COL_TYPE_ORDINALITY) {
     if (OB_ISNULL(in)) {
@@ -1713,7 +2170,8 @@ int ObJsonTableOp::inner_get_next_row()
   bool is_root_null = false;
   if (!(jt_ctx_.is_json_table_func()
         || jt_ctx_.is_rb_iterate_table_func()
-        || jt_ctx_.is_unnest_table_func())) {
+        || jt_ctx_.is_unnest_table_func()
+        || jt_ctx_.is_ai_split_doc_table_func())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unsupport table function", K(ret));
   } else if (is_evaled_) {

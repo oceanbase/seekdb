@@ -135,6 +135,10 @@ private:
 struct ObFTParserProperty final
 {
 public:
+  // enough for "database_name.table_name" in utf8mb4
+  static const int64_t MAX_FT_DICT_TABLE_NAME_LENGTH = 512;
+
+public:
   ObFTParserProperty();
   ~ObFTParserProperty() = default;
   int parse_for_parser_helper(const ObFTParser &parser, const ObString &json_str);
@@ -169,6 +173,20 @@ public:
   common::ObString quantifier_table_;
   int64_t min_ngram_token_size_;
   int64_t max_ngram_token_size_;
+
+private:
+  // the json values parsed by parse_for_parser_helper() live in a temporary
+  // allocator, so the dictionary table names are deep copied into the buffers
+  // below and the ObString members above point at them.
+  int copy_table_name(const common::ObString &value,
+                      char *buf,
+                      const int64_t buf_len,
+                      common::ObString &field);
+
+private:
+  char stopword_table_buf_[MAX_FT_DICT_TABLE_NAME_LENGTH];
+  char dict_table_buf_[MAX_FT_DICT_TABLE_NAME_LENGTH];
+  char quantifier_table_buf_[MAX_FT_DICT_TABLE_NAME_LENGTH];
 };
 
 } // end namespace storage
