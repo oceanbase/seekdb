@@ -410,6 +410,7 @@ public:
   oceanbase::sql::ObTenantSQLSessionMgr * tenant_sql_session_mgr() override { return mods_tenant_sql_session_mgr_; }
   storage::ObTenantMetaMemMgr * tenant_meta_mem_mgr() override { return mods_tenant_meta_mem_mgr_; }
   storage::ObTenantFTPluginMgr * tenant_ft_plugin_mgr() override { return mods_tenant_ft_plugin_mgr_; }
+  storage::ObFTDictMgr * ft_dict_mgr() override { return mods_ft_dict_mgr_; }
   ObPartTransCtxObjPool * part_trans_ctx_obj_pool() override { return mods_part_trans_ctx_obj_pool_; }
   ObTableScanIteratorObjPool * table_scan_iterator_obj_pool() override { return mods_table_scan_iterator_obj_pool_; }
   common::ObTenantIOManager * tenant_io_manager() override { return mods_tenant_io_manager_; }
@@ -518,6 +519,7 @@ private:
   oceanbase::sql::ObTenantSQLSessionMgr * mods_tenant_sql_session_mgr_ = nullptr;
   storage::ObTenantMetaMemMgr * mods_tenant_meta_mem_mgr_ = nullptr;
   storage::ObTenantFTPluginMgr * mods_tenant_ft_plugin_mgr_ = nullptr;
+  storage::ObFTDictMgr * mods_ft_dict_mgr_ = nullptr;
   ObPartTransCtxObjPool * mods_part_trans_ctx_obj_pool_ = nullptr;
   ObTableScanIteratorObjPool * mods_table_scan_iterator_obj_pool_ = nullptr;
   common::ObTenantIOManager * mods_tenant_io_manager_ = nullptr;

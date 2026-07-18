@@ -1848,6 +1848,10 @@ int ObRootService::alter_table(const obcall::ObAlterTableArg &arg, obcall::ObAlt
       } else if (OB_ISNULL(orig_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("table not exist", K(ret), K(nonconst_arg.alter_table_schema_));
+      } else if (orig_table_schema->is_fulltext_dict()) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_WARN("alter fulltext dictionary table structure is not supported", K(ret));
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "alter fulltext dictionary table structure is");
       } else {
         ObCreateDDLTaskParam param(ddl_type,
                                    nullptr,

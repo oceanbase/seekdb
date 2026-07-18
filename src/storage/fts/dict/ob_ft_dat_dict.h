@@ -1,17 +1,6 @@
-/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * Copyright (c) 2024 OceanBase
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #ifndef _OCEANBASE_STORAGE_FTS_DICT_OB_FT_DAT_DICT_H_
@@ -33,16 +22,16 @@ namespace oceanbase
 {
 namespace storage
 {
-/* @class ObArrayHashMap
+/* @class ObFTDATArrayHashMap
  * @description: a fixed size hash map, used to store words and their code.
  */
-class ObArrayHashMap final
+class ObFTDATArrayHashMap final
 {
 public:
   struct Entry
   {
-    ObFTSingleWord word;
-    ObFTWordCode code;
+    ObFTSingleToken token;
+    ObFTTokenCode code;
     bool used = false;
   } __attribute__((packed));
 
@@ -51,21 +40,19 @@ public:
     uint32_t buffer_size_;
     uint32_t capacity_;
     uint32_t count_;
+    uint32_t locator_;
     Entry data[1];
   } __attribute__((packed));
 
-  static size_t estimate_capacity(size_t word_num);
+  static size_t calc_capacity(size_t token_cnt);
 
-  static size_t estimate_size(size_t word_num);
+  static size_t calc_memory_size(size_t token_cnt);
 
-  size_t capacity() const { return header_.capacity_; }
+  int init(size_t token_cnt);
 
-  int init(size_t word_num);
+  int insert(const ObString &token, ObFTTokenCode code);
 
-  // no duplicate should be inserted
-  int insert(const ObString &key, ObFTWordCode code);
-
-  int find(const ObFTSingleWord &word, ObFTWordCode &code) const;
+  int find(const ObString &token, ObFTTokenCode &code) const;
 
 private:
   struct Header header_;
@@ -100,12 +87,13 @@ public:
   // use if offset is not 0
   size_t data_offset_ = 0;
   // a buffer to store dat
-  ObFTSingleWord start_word_;
-  ObFTSingleWord end_word_;
+  ObFTSingleToken start_token_;
+  ObFTSingleToken end_token_;
   char buff[1] = {0};
 
 public:
-  ObArrayHashMap *get_map();
+  ObFTDATArrayHashMap *get_map();
+  const ObFTDATArrayHashMap *get_map() const;
 } __attribute__((packed));
 
 template <typename DataType>
@@ -130,27 +118,20 @@ public:
 
   int build_from_trie(ObFTTrie<DATA_TYPE> &trie);
 
-  // get and put to kv_cache
-  int get_mem_block(ObFTDAT *&mem, size_t &mem_len)
+  void get_mem_block(ObFTDAT *&mem)
   {
     mem = dat_;
-    if (nullptr == dat_) {
-      mem_len = 0;
-    } else {
-      mem_len = dat_->mem_block_size_;
-    }
-    return OB_SUCCESS;
   }
 
 private:
   int expand();
 
-  int encode(const ObString &word, ObFTWordCode &code, bool add);
+  int encode(const ObString &single_token, ObFTTokenCode &code);
 
 private:
   common::ObIAllocator &alloc_;
   ObFTDAT *dat_;
-  ObArrayHashMap *map_;
+  ObFTDATArrayHashMap *map_;
 
   bool is_inited_;
   int32_t next_code_;
@@ -167,15 +148,16 @@ template <typename DataType = void>
 class ObFTDATReader
 {
 public:
-  ObFTDATReader(ObFTDAT *dat) : dat_(dat) {}
+  ObFTDATReader(const ObFTDAT *dat) : dat_(dat), map_(dat->get_map()) { }
 
-  // Match single word with hit.
-  int match_with_hit(const ObString &single_word,
+  // Match single token with hit.
+  int match_with_hit(const ObString &single_token,
                      const ObDATrieHit &last_hit,
                      ObDATrieHit &hit) const;
 
 private:
-  ObFTDAT *dat_;
+  const ObFTDAT *dat_;
+  const ObFTDATArrayHashMap *map_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObFTDATReader);

@@ -169,8 +169,12 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
         }
       }
     }
+    if (OB_SUCC(ret) && OB_NOT_NULL(table_schema_) && table_schema_->is_fulltext_dict()) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "alter fulltext dictionary table structure is");
+      SQL_RESV_LOG(WARN, "alter fulltext dictionary table structure is not supported", K(ret));
+    }
     if (OB_SUCC(ret)) {
-      
       alter_table_stmt->set_table_id(table_schema_->get_table_id());
       alter_table_stmt->get_alter_table_arg().alter_table_schema_.set_charset_type(table_schema_->get_charset_type());
       alter_table_stmt->get_alter_table_arg().alter_table_schema_.set_collation_type(table_schema_->get_collation_type());
@@ -1556,7 +1560,7 @@ int ObAlterTableResolver::resolve_add_index(const ParseNode &node)
                   ret = OB_NOT_SUPPORTED;
                   LOG_WARN("specify partition option of local index not supported", K(ret));
                   LOG_USER_ERROR(OB_NOT_SUPPORTED, "Specify partition option of local index");
-                } else if (NOT_SPECIFIED == index_scope_) {
+                } else if (NOT_SPECIFIED == index_scope_ && FTS_KEY != index_keyname_) {
                   index_scope_ = GLOBAL_INDEX;
                 }
                 is_index_part_specified = true;

@@ -234,9 +234,10 @@ int ObGenDicLoader::gen_dic_loader(
   }
   if (0 == parser_name.case_compare(ObFTSLiteral::PARSER_NAME_IK)) {
     ObMemAttr attr("dic_loader");
-    switch (charset)
-    {
-      case ObCharsetType::CHARSET_UTF8MB4: {
+    switch (charset) {
+      case ObCharsetType::CHARSET_UTF8MB4:
+      case ObCharsetType::CHARSET_UTF16:
+      case ObCharsetType::CHARSET_UTF16LE: {
         dic_loader = OB_NEW(ObTenantIKUTF8DicLoader, attr);
         if (OB_ISNULL(dic_loader)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;

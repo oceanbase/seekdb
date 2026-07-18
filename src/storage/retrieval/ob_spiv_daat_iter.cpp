@@ -137,7 +137,7 @@ int ObSPIVDaaTNaiveIter::inner_init(const ObSPIVDaaTParam &param)
   if (OB_ISNULL(param.base_param_) || OB_ISNULL(param.dim_iters_) || OB_ISNULL(param.allocator_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null base param", K(ret));
-  } else if (OB_FAIL(ObSRDaaTIterImpl::init(*param.base_param_, *param.dim_iters_, *param.allocator_, *param.relevance_collector_))) {
+  } else if (OB_FAIL(ObSRDaaTIterImpl::init(*param.base_param_, *param.dim_iters_, *param.allocator_, param.relevance_collector_))) {
     LOG_WARN("failed to init spiv daat iter", K(ret));
   } else {
     is_pre_filter_ = param.is_pre_filter_;

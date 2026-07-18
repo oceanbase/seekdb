@@ -20,6 +20,7 @@
 #include "sql/engine/ob_operator.h"
 #include "sql/engine/basic/ob_chunk_datum_store.h"
 #include "lib/charset/ob_charset.h"
+#include "lib/allocator/page_arena.h"
 
 namespace oceanbase
 {
@@ -48,7 +49,10 @@ public:
     already_calc_(false),
     row_count_(0),
     col_count_(0),
-    value_table_(NULL) 
+    value_table_(NULL),
+    split_allocator_("AISplitDoc"),
+    split_chunks_(),
+    split_content_()
   {}
 
   virtual int inner_open() override;
@@ -59,8 +63,52 @@ public:
   virtual int inner_close() override;
   virtual void destroy() override;
 private:
+  enum class SplitType : int8_t { TEXT, MARKDOWN };
+  enum class SplitBy : int8_t { WORD, SENTENCE };
+  struct SplitParam
+  {
+    SplitParam() : type_(SplitType::MARKDOWN), by_(SplitBy::WORD), max_(256), overlap_(0) {}
+    SplitType type_;
+    SplitBy by_;
+    int64_t max_;
+    int64_t overlap_;
+  };
+  struct SplitUnit
+  {
+    SplitUnit() : offset_(0), length_(0) {}
+    SplitUnit(int64_t offset, int64_t length) : offset_(offset), length_(length) {}
+    int64_t offset_;
+    int64_t length_;
+    TO_STRING_KV(K_(offset), K_(length));
+  };
+  struct SplitChunk
+  {
+    SplitChunk() : offset_(0), length_(0), text_() {}
+    int64_t offset_;
+    int64_t length_;
+    common::ObString text_;
+    TO_STRING_KV(K_(offset), K_(length), K_(text));
+  };
+
   int inner_get_next_row_udf();
   int inner_get_next_row_sys_func();
+  int inner_get_next_row_ai_split_document();
+  int init_ai_split_document();
+  int parse_split_param(const common::ObString &param_str, SplitParam &param);
+  int split_text_range(const int64_t begin,
+                       const int64_t end,
+                       const common::ObString &heading,
+                       const SplitParam &param);
+  int split_markdown(const SplitParam &param);
+  int add_split_chunks(const common::ObIArray<SplitUnit> &units,
+                       const common::ObString &heading,
+                       const SplitParam &param);
+  void reset_ai_split_document();
+  static bool is_split_space(const char ch);
+  static bool is_markdown_heading(const common::ObString &content,
+                                  const int64_t begin,
+                                  const int64_t end,
+                                  int64_t &heading_begin);
   int get_current_result(common::ObObj &result);
   int64_t node_idx_;
   bool already_calc_;
@@ -69,6 +117,9 @@ private:
   common::ObObj value_;
   pl::ObPLCollection *value_table_;
   int (ObFunctionTableOp::*next_row_func_)();
+  common::ObArenaAllocator split_allocator_;
+  common::ObSEArray<SplitChunk, 16> split_chunks_;
+  common::ObString split_content_;
 };
 
 } // end namespace sql

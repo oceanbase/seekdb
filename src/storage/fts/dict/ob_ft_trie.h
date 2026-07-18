@@ -1,17 +1,6 @@
-/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * Copyright (c) 2024 OceanBase
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #ifndef _OCEANBASE_STORAGE_FTS_DICT_OB_FT_TRIE_H_
@@ -43,23 +32,23 @@ struct ObFTTrieNode
 public:
   ObFTTrieNode(ObIAllocator &alloc) : alloc_(alloc), children_(nullptr) {}
 
-  ObFTSingleWord word_;
+  ObFTSingleToken token_;
   bool is_leaf_ = false;
 
   struct DATBuildInfo
   {
     int32_t level_ = 0;
     uint32_t state_index_ = 0;
-    ObFTWordCode code_ = 0;
-    ObFTWordCode min_child_ = 0;
-    ObFTWordCode max_child_ = 0;
+    ObFTTokenCode code_ = 0;
+    ObFTTokenCode min_child_ = 0;
+    ObFTTokenCode max_child_ = 0;
   } dat_build_info_;
 
   ObFTTrieNodeData<DATA_TYPE> data_;
 
   struct NodeIndex
   {
-    ObFTSingleWord word_;
+    ObFTSingleToken token_;
     ObFTTrieNode<DATA_TYPE> *child_;
   };
 
@@ -97,8 +86,7 @@ class ObFTTrie final
 {
 public:
   ObFTTrie(ObIAllocator &allocator, ObCollationType collation_type)
-      : allocator_(allocator), collation_type_(collation_type), root_(allocator), node_num_(0),
-        level_statistics_()
+      : allocator_(allocator), collation_type_(collation_type), root_(allocator), node_num_(0)
   {
   }
 
@@ -108,24 +96,24 @@ public:
 
   size_t node_num() const { return node_num_; }
 
-  int get_start_word(ObFTSingleWord &start_word) const
+  int get_start_token(ObFTSingleToken &start_token) const
   {
     int ret = OB_SUCCESS;
     if (OB_ISNULL(root_.children_) || root_.children_->empty()) {
-      return OB_NOT_INIT;
+      start_token = ObFTSingleToken();
     } else {
-      start_word = root_.children_->get_first().word_;
+      start_token = root_.children_->get_first().token_;
     }
     return ret;
   }
 
-  int get_end_word(ObFTSingleWord &end_word) const
+  int get_end_token(ObFTSingleToken &end_token) const
   {
     int ret = OB_SUCCESS;
     if (OB_ISNULL(root_.children_) || root_.children_->empty()) {
-      return OB_NOT_INIT;
+      end_token = ObFTSingleToken();
     } else {
-      end_word = root_.children_->get_last().word_;
+      end_token = root_.children_->get_last().token_;
     }
     return ret;
   }
@@ -136,7 +124,6 @@ private:
   ObFTTrieNode<DATA_TYPE> root_;
 
   size_t node_num_;
-  uint32_t level_statistics_[64];
 };
 
 extern template class ObFTTrie<void>;

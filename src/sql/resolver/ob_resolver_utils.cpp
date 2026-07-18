@@ -95,6 +95,13 @@ int ObResolverUtils::get_all_function_table_column_names(const TableItem &table_
   CK (OB_NOT_NULL(package_guard));
   CK (OB_LIKELY(table_item.is_function_table()));
   CK (OB_NOT_NULL(table_expr = table_item.function_table_expr_));
+  if (OB_SUCC(ret) && T_FUN_SYS_AI_SPLIT_DOCUMENT == table_expr->get_expr_type()) {
+    OZ (column_names.push_back(ObString("CHUNK_ID")));
+    OZ (column_names.push_back(ObString("CHUNK_OFFSET")));
+    OZ (column_names.push_back(ObString("CHUNK_LENGTH")));
+    OZ (column_names.push_back(ObString("CHUNK_TEXT")));
+    return ret;
+  }
   CK (table_expr->get_udt_id() != OB_INVALID_ID);
 
   CK (OB_NOT_NULL(params.schema_checker_));
@@ -2093,6 +2100,10 @@ stmt::StmtType ObResolverUtils::get_stmt_type_by_item_type(const ObItemType item
         type = stmt::T_CALL_PROCEDURE;
       }
       break;
+      case T_REFRESH_FULLTEXT_DICT: {
+        type = stmt::T_REFRESH_FULLTEXT_DICT;
+      }
+      break;
       default: {
         type = stmt::T_NONE;
       }
@@ -2979,7 +2990,8 @@ bool ObResolverUtils::is_expr_can_be_used_in_table_function(const ObRawExpr &exp
   if (expr.get_result_type().is_ext()) {
     // for UDF
     bret = true;
-  } else if (T_FUN_SYS_GENERATOR == expr.get_expr_type()) {
+  } else if (T_FUN_SYS_GENERATOR == expr.get_expr_type()
+             || T_FUN_SYS_AI_SPLIT_DOCUMENT == expr.get_expr_type()) {
     // for generator(N) stream function
     bret = true;
   }

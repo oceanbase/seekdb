@@ -20,30 +20,35 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"
 #include "share/text_analysis/ob_text_analyzer.h"
-#include "plugin/interface/ob_plugin_ftparser_intf.h"
+#include "storage/fts/ob_i_ft_parser.h"
 
 namespace oceanbase
 {
 namespace storage
 {
 
-class ObBEngFTParser final : public plugin::ObITokenIterator
+class ObBEngFTParser final : public ObIFTParser
 {
 public:
   static const int64_t FT_MIN_WORD_LEN = 3;
   static const int64_t FT_MAX_WORD_LEN = 84;
 public:
-  explicit ObBEngFTParser(common::ObIAllocator &allocator)
-    : allocator_(allocator),
+  ObBEngFTParser(common::ObIAllocator &metadata_alloc,
+                 common::ObIAllocator &scratch_alloc)
+    : metadata_alloc_(metadata_alloc),
+      scratch_alloc_(scratch_alloc),
       analysis_ctx_(),
       english_analyzer_(),
       doc_(),
       token_stream_(nullptr),
+      ascii_pos_(0),
+      ascii_fast_path_(false),
       is_inited_(false)
   {}
   ~ObBEngFTParser() { reset(); }
 
   int init(plugin::ObFTParserParam *param);
+  int reuse_parser(const char *fulltext, const int64_t fulltext_len) override;
   void reset();
   virtual int get_next_token(
       const char *&word,
@@ -56,12 +61,22 @@ private:
   int segment(
       const common::ObDatum &doc,
       share::ObITokenStream *&token_stream);
+  int get_next_ascii_token(
+      const char *&word,
+      int64_t &word_len,
+      int64_t &char_len,
+      int64_t &word_freq);
+  static bool is_ascii_document(const char *text, const int64_t text_len);
+  static bool is_ascii_alnum(const unsigned char ch);
 private:
-  common::ObIAllocator &allocator_;
+  common::ObIAllocator &metadata_alloc_;
+  common::ObIAllocator &scratch_alloc_;
   share::ObTextAnalysisCtx analysis_ctx_;
   share::ObEnglishTextAnalyzer english_analyzer_;
   common::ObDatum doc_;
   share::ObITokenStream *token_stream_;
+  int64_t ascii_pos_;
+  bool ascii_fast_path_;
   bool is_inited_;
 
   DISALLOW_COPY_AND_ASSIGN(ObBEngFTParser);

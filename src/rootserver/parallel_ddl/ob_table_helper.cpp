@@ -647,6 +647,10 @@ int ObTableHelper::inner_generate_table_schema_(const ObCreateTableArg &arg, ObT
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not user tenant, create duplicate table not supported", KR(ret));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "not user tenant, create duplicate table");
+  } else if (OB_FAIL(ObFtsIndexBuilderUtil::check_fulltext_dict_schema(
+                         new_table, arg.index_arg_list_.count()))) {
+    LOG_WARN("fulltext dictionary table schema check failed",
+             KR(ret), K(new_table.get_table_id()));
   }
 
   if (FALSE_IT(new_table.set_table_id(mock_table_id))) {

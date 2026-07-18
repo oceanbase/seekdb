@@ -59,6 +59,17 @@ ObDASTRMergeIter::ObDASTRMergeIter()
 {
 }
 
+bool ObDASTRMergeIter::skip_relevance_for_predicate() const
+{
+  return OB_NOT_NULL(ir_ctdef_)
+      && OB_NOT_NULL(ir_rtdef_)
+      && !topk_mode_
+      && NATURAL_LANGUAGE_MODE == ir_ctdef_->mode_flag_
+      && ir_rtdef_->minimum_should_match_ <= 1
+      && OB_ISNULL(ir_ctdef_->relevance_proj_col_)
+      && OB_ISNULL(ir_ctdef_->match_filter_);
+}
+
 int ObDASTRMergeIter::inner_init(ObDASIterParam &param)
 {
   int ret = OB_SUCCESS;
@@ -116,7 +127,8 @@ int ObDASTRMergeIter::init_das_iter_scan_params()
 {
   int ret = OB_SUCCESS;
   const int64_t dim_iter_cnt = taat_mode_ ? 1 : query_tokens_.count();
-  if (!ir_ctdef_->need_estimate_total_doc_cnt() && 0 != dim_iter_cnt) {
+  const bool need_relevance = !skip_relevance_for_predicate();
+  if (need_relevance && !ir_ctdef_->need_estimate_total_doc_cnt() && 0 != dim_iter_cnt) {
     void *buf = nullptr;
     if (OB_ISNULL(buf = myself_allocator_.alloc(sizeof(ObTableScanParam)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -145,7 +157,7 @@ int ObDASTRMergeIter::init_das_iter_scan_params()
       LOG_WARN("failed to prepare allocate inv scan params array", K(ret));
     }
 
-    if (OB_FAIL(ret) || !ir_ctdef_->need_inv_idx_agg()) {
+    if (OB_FAIL(ret) || !need_relevance || !ir_ctdef_->need_inv_idx_agg()) {
     } else if (FALSE_IT(inv_agg_params_.set_allocator(&myself_allocator_))) {
     } else if (OB_FAIL(inv_agg_params_.init(dim_iter_cnt))) {
       LOG_WARN("failed to init inv agg params array", K(ret));
@@ -154,7 +166,7 @@ int ObDASTRMergeIter::init_das_iter_scan_params()
     }
 
     if (OB_FAIL(ret)) {
-    } else if (!ir_ctdef_->need_fwd_idx_agg()) {
+    } else if (!need_relevance || !ir_ctdef_->need_fwd_idx_agg()) {
     } else if (OB_ISNULL(ir_rtdef_->eval_ctx_) || OB_UNLIKELY(ir_rtdef_->eval_ctx_->max_batch_size_ >= 1)) {
       ret = OB_NOT_IMPLEMENT;
       LOG_ERROR("fwd idx agg with max batch size not implemented", K(ret));
@@ -186,7 +198,7 @@ int ObDASTRMergeIter::init_das_iter_scan_params()
         }
       }
 
-      if (OB_SUCC(ret) && ir_ctdef_->need_inv_idx_agg()) {
+      if (OB_SUCC(ret) && need_relevance && ir_ctdef_->need_inv_idx_agg()) {
         void *agg_buf = nullptr;
         if (OB_ISNULL(agg_buf = myself_allocator_.alloc(sizeof(ObTableScanParam) * dim_iter_cnt))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -210,7 +222,7 @@ int ObDASTRMergeIter::init_das_iter_scan_params()
         }
       }
 
-      if (OB_SUCC(ret) && ir_ctdef_->need_fwd_idx_agg()) {
+      if (OB_SUCC(ret) && need_relevance && ir_ctdef_->need_fwd_idx_agg()) {
         void *fwd_buf = nullptr;
         if (OB_ISNULL(fwd_buf = myself_allocator_.alloc(sizeof(ObTableScanParam) * dim_iter_cnt))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -432,10 +444,11 @@ int ObDASTRMergeIter::init_dim_iter_param(ObTextRetrievalScanIterParam &iter_par
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null pointer", K(ret), KP_(ir_ctdef), KP_(ir_rtdef));
   } else {
+    const bool skip_relevance = skip_relevance_for_predicate();
     const int64_t dim_iter_cnt = taat_mode_ ? 1 : query_tokens_.count();
     iter_param.inv_idx_scan_param_ = inv_scan_params_[idx];
     iter_param.inv_idx_scan_iter_ = static_cast<ObDASScanIter*>(children_[idx]);
-    if (ir_ctdef_->need_inv_idx_agg()) {
+    if (!skip_relevance && ir_ctdef_->need_inv_idx_agg()) {
       iter_param.inv_idx_agg_param_ = inv_agg_params_[idx];
       iter_param.inv_idx_agg_iter_ = static_cast<ObDASScanIter*>(children_[idx + dim_iter_cnt]);
       if (OB_UNLIKELY(1 != ir_ctdef_->get_inv_idx_agg_ctdef()
@@ -447,7 +460,7 @@ int ObDASTRMergeIter::init_dim_iter_param(ObTextRetrievalScanIterParam &iter_par
             ->pd_expr_spec_.pd_storage_aggregate_output_.at(0);
       }
     }
-    if (OB_SUCC(ret) && ir_ctdef_->need_fwd_idx_agg()) {
+    if (OB_SUCC(ret) && !skip_relevance && ir_ctdef_->need_fwd_idx_agg()) {
       iter_param.fwd_idx_scan_param_ = fwd_scan_params_[idx];
       iter_param.fwd_idx_agg_iter_ = static_cast<ObDASScanIter*>(children_[idx + dim_iter_cnt * 2]);
       if (OB_UNLIKELY(1 != ir_ctdef_->get_fwd_idx_agg_ctdef()
@@ -462,7 +475,7 @@ int ObDASTRMergeIter::init_dim_iter_param(ObTextRetrievalScanIterParam &iter_par
     iter_param.allocator_ = &myself_allocator_;
     iter_param.mem_context_ = mem_context_;
     iter_param.eval_ctx_ = ir_rtdef_->eval_ctx_;
-    iter_param.relevance_expr_ = ir_ctdef_->relevance_expr_;
+    iter_param.relevance_expr_ = skip_relevance ? nullptr : ir_ctdef_->relevance_expr_;
     iter_param.inv_scan_doc_length_col_ = ir_ctdef_->inv_scan_doc_length_col_;
     iter_param.inv_scan_domain_id_col_ = ir_ctdef_->inv_scan_domain_id_col_;
     iter_param.inv_idx_agg_cache_mode_ = function_lookup_mode_ && !taat_mode_;
@@ -481,7 +494,8 @@ int ObDASTRMergeIter::create_sparse_retrieval_iter()
   sr_iter_param_.relevance_proj_expr_ = ir_ctdef_->relevance_proj_col_;
   sr_iter_param_.filter_expr_ = ir_ctdef_->match_filter_;
   sr_iter_param_.topk_limit_ = topk_limit_;
-  if (OB_NOT_NULL(ir_ctdef_->field_boost_expr_)) {
+  sr_iter_param_.skip_relevance_for_predicate_ = skip_relevance_for_predicate();
+  if (sr_iter_param_.need_calc_relevance() && OB_NOT_NULL(ir_ctdef_->field_boost_expr_)) {
     ObDatum *boost_datum = nullptr;
     if (OB_FAIL(ir_ctdef_->field_boost_expr_->eval(*ir_rtdef_->eval_ctx_, boost_datum))) {
       LOG_WARN("failed to eval field boost expr", K(ret));
@@ -592,15 +606,22 @@ int ObDASTRMergeIter::init_daat_iter_param(ObTextDaaTParam &iter_param)
   iter_param.allocator_ = &myself_allocator_;
   iter_param.mode_flag_ = ir_ctdef_->mode_flag_;
   iter_param.function_lookup_mode_ = function_lookup_mode_;
-  iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_
-      = ir_ctdef_->get_doc_agg_ctdef()->pd_expr_spec_.pd_storage_aggregate_output_.at(0);
-  iter_param.bm25_param_est_ctx_.estimated_total_doc_cnt_ = ir_ctdef_->estimated_total_doc_cnt_;
-  iter_param.bm25_param_est_ctx_.need_est_avg_doc_token_cnt_ = ir_ctdef_->need_avg_doc_len_est();
-  iter_param.bm25_param_est_ctx_.can_est_by_sum_skip_index_ = ir_ctdef_->avg_doc_len_est_spec_.can_est_by_sum_skip_index_;
-  iter_param.bm25_param_est_ctx_.avg_doc_token_cnt_expr_ = ir_ctdef_->avg_doc_token_cnt_expr_;
-  iter_param.bm25_param_est_ctx_.doc_length_est_param_ = &doc_length_est_param_;
   if (query_tokens_.count() == 0) {
     // do nothing
+  } else if (!sr_iter_param_.need_calc_relevance()) {
+    // Predicate-only MATCH only needs document ids.
+  } else if (FALSE_IT(iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_
+             = ir_ctdef_->get_doc_agg_ctdef()->pd_expr_spec_.pd_storage_aggregate_output_.at(0))) {
+  } else if (FALSE_IT(iter_param.bm25_param_est_ctx_.estimated_total_doc_cnt_
+             = ir_ctdef_->estimated_total_doc_cnt_)) {
+  } else if (FALSE_IT(iter_param.bm25_param_est_ctx_.need_est_avg_doc_token_cnt_
+             = ir_ctdef_->need_avg_doc_len_est())) {
+  } else if (FALSE_IT(iter_param.bm25_param_est_ctx_.can_est_by_sum_skip_index_
+             = ir_ctdef_->avg_doc_len_est_spec_.can_est_by_sum_skip_index_)) {
+  } else if (FALSE_IT(iter_param.bm25_param_est_ctx_.avg_doc_token_cnt_expr_
+             = ir_ctdef_->avg_doc_token_cnt_expr_)) {
+  } else if (FALSE_IT(iter_param.bm25_param_est_ctx_.doc_length_est_param_
+             = &doc_length_est_param_)) {
   } else if (OB_ISNULL(iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null total doc cnt expr", K(ret));
@@ -614,7 +635,7 @@ int ObDASTRMergeIter::init_daat_iter_param(ObTextDaaTParam &iter_param)
       iter_param.bm25_param_est_ctx_.total_doc_cnt_iter_ = static_cast<sql::ObDASScanIter*>(children_[children_cnt_ - 1]);
     }
   }
-  if (OB_SUCC(ret)) {
+  if (OB_SUCC(ret) && sr_iter_param_.need_calc_relevance()) {
     if (BOOLEAN_MODE == ir_ctdef_->mode_flag_) {
       ObSRDaaTBooleanRelevanceCollector *boolean_relevance_collector = nullptr;
       if (OB_ISNULL(boolean_relevance_collector = OB_NEWx(ObSRDaaTBooleanRelevanceCollector, &myself_allocator_))) {

@@ -18,6 +18,7 @@
 #define OB_FTS_PLUGIN_HELPER_H_
 
 #include "lib/allocator/ob_fifo_allocator.h"
+#include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/string/ob_string.h"
 #include "object/ob_object.h"
@@ -36,13 +37,13 @@ namespace plugin
 {
 class ObIFTParserDesc;
 class ObPluginParam;
+class ObITokenIterator;
 }
 
 namespace storage
 {
 
 class ObStopWordChecker;
-class ObFTDictHub;
 class ObAddWord;
 
 #define FTS_BUILD_IN_PARSER_LIST                                                                   \
@@ -120,15 +121,12 @@ public:
 
 public:
   ObStopWordChecker *stop_word_checker() const { return stop_word_checker_; }
-  int get_dict_hub(ObFTDictHub *&hub);
 
 private:
   int init_and_set_stopword_list();
-  int init_dict_hub();
 
 private:
   ObStopWordChecker *     stop_word_checker_ = nullptr;
-  ObFTDictHub *           dict_hub_          = nullptr;
   common::ObFIFOAllocator handler_allocator_;
   bool                    is_inited_         = false;
 };
@@ -162,7 +160,9 @@ public:
   int init(
       common::ObIAllocator *allocator,
       const common::ObString &plugin_name,
-      const common::ObString &plugin_properties);
+      const common::ObString &plugin_properties,
+      const bool enable_parser_reuse = false,
+      const bool is_ddl_mode = false);
   /**
    * Split document into multiple words
    *
@@ -206,10 +206,11 @@ public:
 
   void reset();
 
-  TO_STRING_KV(KP_(allocator), K_(parser_name), KP_(parser_desc), K_(is_inited));
+  TO_STRING_KV(KP_(allocator), K_(parser_name), KP_(parser_desc), K_(parser_property),
+               K_(is_ddl_mode), K_(is_inited));
 
 private:
-  static int segment(
+  int segment(
       const ObFTParserProperty &property,
       const int64_t parser_version,
       const plugin::ObIFTParserDesc *parser_desc,
@@ -218,7 +219,11 @@ private:
       const char *fulltext,
       const int64_t fulltext_len,
       common::ObIAllocator &allocator,
-      ObAddWord &add_word);
+      ObAddWord &add_word,
+      const bool is_ddl_mode,
+      const bool need_casedown) const;
+  bool can_reuse_parser() const;
+  void destroy_cached_parser() const;
   int set_add_word_flag(const plugin::ObIFTParserDesc &ftparser_desc);
 private:
   common::ObIAllocator *allocator_;
@@ -226,7 +231,15 @@ private:
   plugin::ObPluginParam *plugin_param_;
   ObFTParser parser_name_;
   ObAddWordFlag add_word_flag_;
+  ObFTParserJsonProps props_;
   ObFTParserProperty parser_property_;
+  mutable common::ObArenaAllocator parser_metadata_alloc_;
+  mutable common::ObArenaAllocator parser_scratch_alloc_;
+  mutable plugin::ObFTParserParam parser_param_;
+  mutable plugin::ObITokenIterator *cached_iter_;
+  mutable const ObCharsetInfo *cached_charset_;
+  bool enable_parser_reuse_;
+  bool is_ddl_mode_;
   bool is_inited_;
 
 private:

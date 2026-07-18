@@ -25,7 +25,6 @@ namespace oceanbase
 {
 namespace storage
 {
-class ObFTDictHub;
 class ObIKCJKProcessor : public ObIIKProcessor
 {
 public:
@@ -34,6 +33,8 @@ public:
   {
   }
   ~ObIKCJKProcessor() override { hits_.reset(); }
+
+  void reuse() override { hits_.reset(); }
 
 public:
   int do_process(TokenizeContext &ctx,
