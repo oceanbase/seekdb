@@ -103,7 +103,7 @@ class ObFTCacheRangeContainer;
 class ObFTDictHub
 {
 public:
-  ObFTDictHub() : is_inited_(false), dict_map_(), rw_dict_lock_() {}
+  ObFTDictHub() : is_inited_(false), dict_map_(), rw_dict_lock_(), refresh_generation_(0) {}
   ~ObFTDictHub() {}
 
   int init();
@@ -116,6 +116,8 @@ public:
 
   int refresh_dict(const ObString &name, const uint64_t tenant_id);
 
+  uint64_t get_refresh_generation() const { return ATOMIC_LOAD(&refresh_generation_); }
+
 private:
   int get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info);
 
@@ -127,6 +129,7 @@ private:
   // holds info of dict
   hash::ObHashMap<ObFTDictInfoKey, ObFTDictInfo> dict_map_;
   ObBucketLock rw_dict_lock_;
+  uint64_t refresh_generation_;
 };
 
 } //  namespace storage

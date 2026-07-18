@@ -172,6 +172,9 @@ int ObFTDictHub::refresh_dict(const ObString &name, const uint64_t tenant_id)
       }
     }
   }
+  if (OB_SUCC(ret)) {
+    ATOMIC_INC(&refresh_generation_);
+  }
   return ret;
 }
 
