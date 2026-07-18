@@ -43,6 +43,8 @@ namespace oceanbase
 {
 namespace sql
 {
+static constexpr int64_t TOKENIZE_RESULT_CACHE_MIN_TEXT_LENGTH = 256;
+
 OB_SERIALIZE_MEMBER(ObTokenizeFixedConfig,
                     is_valid_,
                     cacheable_,
@@ -319,8 +321,7 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Args count invalid.", K(ret), K(expr.arg_cnt_));
   } else if (OB_NOT_NULL(fixed_config)
-             && fixed_config->is_valid_
-             && fixed_config->cacheable_) {
+             && fixed_config->is_valid_) {
     ObDatum *fulltext_datum = nullptr;
     ObString fulltext;
     if (OB_FAIL(expr.args_[0]->eval(ctx, fulltext_datum))) {
@@ -332,37 +333,41 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
     }
 
     if (OB_SUCC(ret)) {
-      const ObBasicSessionInfo *session = ctx.exec_ctx_.get_my_session();
-      const ObString tenant_name = OB_ISNULL(session) ? ObString() : session->get_tenant_name();
-      const uint64_t tenant_id = murmurhash(tenant_name.ptr(), tenant_name.length(), 0);
-      ObTokenizeResultCacheKey key(tenant_id,
-                                   tenant_name,
-                                   fulltext,
-                                   fixed_config->collation_,
-                                   fixed_config->output_mode_,
-                                   fixed_config->parser_name_,
-                                   fixed_config->parser_version_,
-                                   fixed_config->normalized_properties_,
-                                   fixed_config->fixed_hash_);
-      const ObTokenizeResultCacheValue *cached_value = nullptr;
-      ObKVCacheHandle cache_handle;
-      int cache_ret = ObTokenizeResultCache::get_instance().get(key,
-                                                                cached_value,
-                                                                cache_handle);
+      const bool use_result_cache = fixed_config->cacheable_
+                                    && fulltext.length() >= TOKENIZE_RESULT_CACHE_MIN_TEXT_LENGTH;
       bool cache_hit = false;
-      if (OB_SUCCESS == cache_ret && OB_NOT_NULL(cached_value)) {
-        const ObString &cached_json = cached_value->json();
-        char *buf = expr.get_str_res_mem(ctx, cached_json.length());
-        if (OB_ISNULL(buf)) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to allocate cached tokenize result", K(ret), K(cached_json.length()));
-        } else {
-          MEMCPY(buf, cached_json.ptr(), cached_json.length());
-          expr_datum.set_string(buf, cached_json.length());
-          cache_hit = true;
+      if (use_result_cache) {
+        const ObBasicSessionInfo *session = ctx.exec_ctx_.get_my_session();
+        const ObString tenant_name = OB_ISNULL(session) ? ObString() : session->get_tenant_name();
+        const uint64_t tenant_id = murmurhash(tenant_name.ptr(), tenant_name.length(), 0);
+        ObTokenizeResultCacheKey key(tenant_id,
+                                     tenant_name,
+                                     fulltext,
+                                     fixed_config->collation_,
+                                     fixed_config->output_mode_,
+                                     fixed_config->parser_name_,
+                                     fixed_config->parser_version_,
+                                     fixed_config->normalized_properties_,
+                                     fixed_config->fixed_hash_);
+        const ObTokenizeResultCacheValue *cached_value = nullptr;
+        ObKVCacheHandle cache_handle;
+        const int cache_ret = ObTokenizeResultCache::get_instance().get(key,
+                                                                        cached_value,
+                                                                        cache_handle);
+        if (OB_SUCCESS == cache_ret && OB_NOT_NULL(cached_value)) {
+          const ObString &cached_json = cached_value->json();
+          char *buf = expr.get_str_res_mem(ctx, cached_json.length());
+          if (OB_ISNULL(buf)) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+            LOG_WARN("failed to allocate cached tokenize result", K(ret), K(cached_json.length()));
+          } else {
+            MEMCPY(buf, cached_json.ptr(), cached_json.length());
+            expr_datum.set_string(buf, cached_json.length());
+            cache_hit = true;
+          }
+        } else if (OB_ENTRY_NOT_EXIST != cache_ret && OB_NOT_INIT != cache_ret) {
+          LOG_WARN("failed to lookup tokenize result cache", K(cache_ret));
         }
-      } else if (OB_ENTRY_NOT_EXIST != cache_ret && OB_NOT_INIT != cache_ret) {
-        LOG_WARN("failed to lookup tokenize result cache", K(cache_ret));
       }
 
       if (OB_SUCC(ret) && !cache_hit) {
@@ -389,9 +394,21 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
                                                            json_result,
                                                            expr_datum))) {
           LOG_WARN("failed to pack tokenize json result", K(ret));
-        } else {
+        } else if (use_result_cache) {
+          const ObBasicSessionInfo *session = ctx.exec_ctx_.get_my_session();
+          const ObString tenant_name = OB_ISNULL(session) ? ObString() : session->get_tenant_name();
+          const uint64_t tenant_id = murmurhash(tenant_name.ptr(), tenant_name.length(), 0);
+          ObTokenizeResultCacheKey key(tenant_id,
+                                       tenant_name,
+                                       fulltext,
+                                       fixed_config->collation_,
+                                       fixed_config->output_mode_,
+                                       fixed_config->parser_name_,
+                                       fixed_config->parser_version_,
+                                       fixed_config->normalized_properties_,
+                                       fixed_config->fixed_hash_);
           ObTokenizeResultCacheValue value(expr_datum.get_string());
-          cache_ret = ObTokenizeResultCache::get_instance().put(key, value);
+          const int cache_ret = ObTokenizeResultCache::get_instance().put(key, value);
           if (OB_SUCCESS != cache_ret && OB_NOT_INIT != cache_ret) {
             LOG_WARN("failed to cache tokenize result", K(cache_ret));
           }

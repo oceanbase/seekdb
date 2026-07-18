@@ -31,19 +31,13 @@ namespace oceanbase
 {
 namespace storage
 {
-int ObIIKProcessor::process(TokenizeContext &ctx)
+int ObIIKProcessor::process(TokenizeContext &ctx,
+                            const char *ch,
+                            const uint8_t char_len,
+                            const ObFTCharUtil::CharType type)
 {
   int ret = OB_SUCCESS;
-
-  ObFTCharUtil::CharType type;
-  const char *ch = nullptr;
-  uint8_t char_len = 0;
-
-  if (OB_FAIL(ctx.current_char_type(type))) {
-    LOG_WARN("fail to get current char type", K(ret));
-  } else if (OB_FAIL(ctx.current_char(ch, char_len))) {
-    LOG_WARN("Fail to get current char", K(ret));
-  } else if (OB_FAIL(do_process(ctx, ch, char_len, type))) {
+  if (OB_FAIL(do_process(ctx, ch, char_len, type))) {
     LOG_WARN("Failed to do process char", K(ret));
   }
   return ret;
