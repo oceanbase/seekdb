@@ -32,6 +32,65 @@ namespace oceanbase
 using namespace common;
 namespace sql
 {
+
+namespace
+{
+bool is_count_star_over_limited_fulltext_view(
+    const common::ObIArray<ObParentDMLStmt> &parent_stmts,
+    const ObDMLStmt *stmt)
+{
+  bool is_valid = false;
+  const ObSelectStmt *child_stmt = nullptr;
+  const ObSelectStmt *parent_stmt = nullptr;
+  const TableItem *table_item = nullptr;
+  const ObAggFunRawExpr *count_expr = nullptr;
+  const ObRawExpr *child_select_expr = nullptr;
+  if (OB_NOT_NULL(stmt)
+      && stmt->is_select_stmt()
+      && !parent_stmts.empty()
+      && OB_NOT_NULL(child_stmt = static_cast<const ObSelectStmt *>(stmt))
+      && child_stmt->has_limit()
+      && OB_ISNULL(child_stmt->get_offset_expr())
+      && OB_ISNULL(child_stmt->get_limit_percent_expr())
+      && !child_stmt->is_fetch_with_ties()
+      && !child_stmt->is_contains_assignment()
+      && child_stmt->get_select_item_size() == 1
+      && OB_NOT_NULL(child_select_expr = child_stmt->get_select_item(0).expr_)
+      && child_select_expr->is_column_ref_expr()
+      && OB_NOT_NULL(parent_stmts.at(parent_stmts.count() - 1).stmt_)
+      && parent_stmts.at(parent_stmts.count() - 1).stmt_->is_select_stmt()
+      && OB_NOT_NULL(parent_stmt = static_cast<const ObSelectStmt *>(
+             parent_stmts.at(parent_stmts.count() - 1).stmt_))
+      && !parent_stmt->is_set_stmt()
+      && parent_stmt->get_table_items().count() == 1
+      && parent_stmt->get_from_item_size() == 1
+      && parent_stmt->get_select_item_size() == 1
+      && parent_stmt->get_aggr_item_size() == 1
+      && parent_stmt->get_group_expr_size() == 0
+      && parent_stmt->get_rollup_expr_size() == 0
+      && !parent_stmt->has_distinct()
+      && !parent_stmt->has_having()
+      && !parent_stmt->has_order_by()
+      && !parent_stmt->has_limit()
+      && !parent_stmt->has_window_function()
+      && !parent_stmt->has_select_into()
+      && !parent_stmt->is_contains_assignment()
+      && !parent_stmt->has_sequence()
+      && !parent_stmt->has_for_update()
+      && parent_stmt->get_condition_exprs().empty()
+      && OB_NOT_NULL(count_expr = parent_stmt->get_aggr_item(0))
+      && T_FUN_COUNT == count_expr->get_expr_type()
+      && 0 == count_expr->get_param_count()
+      && parent_stmt->get_select_item(0).expr_ == count_expr
+      && OB_NOT_NULL(table_item = parent_stmt->get_table_item(0))
+      && table_item->is_generated_table()
+      && table_item->ref_query_ == child_stmt) {
+    is_valid = true;
+  }
+  return is_valid;
+}
+} // namespace
+
 int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> &parent_stmts,
                                               ObDMLStmt *&stmt,
                                               bool &trans_happened)
@@ -237,11 +296,17 @@ int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
       }
     }
     if (OB_SUCC(ret)) {
-      if (stmt->get_match_exprs().count() > 0 &&
+      const bool skip_fulltext_order =
+          is_count_star_over_limited_fulltext_view(parent_stmts, stmt);
+      is_happened = false;
+      if (stmt->get_match_exprs().count() > 0 && !skip_fulltext_order &&
           OB_FAIL(preserve_order_for_fulltext_search(stmt, is_happened))) {
         LOG_WARN("failed to preserve order for fulltext search", K(ret));
       } else {
         trans_happened |= is_happened;
+        if (skip_fulltext_order) {
+          OPT_TRACE("skip unobservable fulltext order for count over limited view");
+        }
         LOG_TRACE("succeed to transform for preserve order for fulltext search",K(is_happened), K(ret));
       }
     }

@@ -24,6 +24,59 @@ using namespace common;
 namespace sql
 {
 
+namespace
+{
+bool is_count_star_over_limited_fulltext_view(const uint64_t table_id,
+                                               const ObSelectStmt &child_stmt,
+                                               const ObDMLStmt &upper_stmt)
+{
+  bool is_valid = false;
+  const ObSelectStmt *parent_stmt = nullptr;
+  const TableItem *table_item = nullptr;
+  const ObAggFunRawExpr *count_expr = nullptr;
+  const ObRawExpr *child_select_expr = nullptr;
+  if (upper_stmt.is_select_stmt()
+      && OB_NOT_NULL(parent_stmt = static_cast<const ObSelectStmt *>(&upper_stmt))
+      && child_stmt.has_limit()
+      && OB_ISNULL(child_stmt.get_offset_expr())
+      && OB_ISNULL(child_stmt.get_limit_percent_expr())
+      && !child_stmt.is_fetch_with_ties()
+      && child_stmt.get_match_exprs().count() > 0
+      && !child_stmt.is_contains_assignment()
+      && child_stmt.get_select_item_size() == 1
+      && OB_NOT_NULL(child_select_expr = child_stmt.get_select_item(0).expr_)
+      && child_select_expr->is_column_ref_expr()
+      && !parent_stmt->is_set_stmt()
+      && parent_stmt->get_table_items().count() == 1
+      && parent_stmt->get_from_item_size() == 1
+      && parent_stmt->get_select_item_size() == 1
+      && parent_stmt->get_aggr_item_size() == 1
+      && parent_stmt->get_group_expr_size() == 0
+      && parent_stmt->get_rollup_expr_size() == 0
+      && !parent_stmt->has_distinct()
+      && !parent_stmt->has_having()
+      && !parent_stmt->has_order_by()
+      && !parent_stmt->has_limit()
+      && !parent_stmt->has_window_function()
+      && !parent_stmt->has_select_into()
+      && !parent_stmt->is_contains_assignment()
+      && !parent_stmt->has_sequence()
+      && !parent_stmt->has_for_update()
+      && parent_stmt->get_condition_exprs().empty()
+      && OB_NOT_NULL(count_expr = parent_stmt->get_aggr_item(0))
+      && T_FUN_COUNT == count_expr->get_expr_type()
+      && 0 == count_expr->get_param_count()
+      && parent_stmt->get_select_item(0).expr_ == count_expr
+      && OB_NOT_NULL(table_item = parent_stmt->get_table_item(0))
+      && table_item->table_id_ == table_id
+      && table_item->is_generated_table()
+      && table_item->ref_query_ == &child_stmt) {
+    is_valid = true;
+  }
+  return is_valid;
+}
+} // namespace
+
 int ObTransformProjectPruning::transform_one_stmt(common::ObIArray<ObParentDMLStmt> &parent_stmts,
                                                   ObDMLStmt *&stmt,
                                                   bool &trans_happened)
@@ -188,10 +241,14 @@ int ObTransformProjectPruning::project_pruning(const uint64_t table_id,
 {
   int ret = OB_SUCCESS;
   ObSqlBitSet<> removed_idx;
+  const bool prune_count_only_output =
+      is_count_star_over_limited_fulltext_view(table_id, child_stmt, upper_stmt);
   trans_happened = false;
   for (int64_t i = 0; OB_SUCC(ret) && i < child_stmt.get_select_item_size(); i++) {
     bool need_remove = false;
-    if (OB_ISNULL(upper_stmt.get_column_item_by_id(table_id, i + OB_APP_MIN_COLUMN_ID))
+    const ColumnItem *column_item =
+        upper_stmt.get_column_item_by_id(table_id, i + OB_APP_MIN_COLUMN_ID);
+    if ((OB_ISNULL(column_item) || prune_count_only_output)
         && OB_FAIL(ObTransformUtils::check_select_item_need_remove(&child_stmt, i, need_remove))) {
       LOG_WARN("fail to check column in set ordrt by", K(ret));
     } else if (need_remove) {
