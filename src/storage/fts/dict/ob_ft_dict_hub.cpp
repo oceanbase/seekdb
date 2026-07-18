@@ -22,6 +22,7 @@
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "storage/fts/dict/ob_ft_cache_container.h"
+#include "storage/fts/dict/ob_ft_cache.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 #include "storage/fts/dict/ob_ft_range_dict.h"
 namespace oceanbase
@@ -51,7 +52,7 @@ int ObFTDictHub::destroy()
 int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container)
 {
   int ret = OB_SUCCESS;
-  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_));
+  ObFTDictInfoKey key(desc.name_.hash(), static_cast<uint64_t>(desc.type_));
   ObFTDictInfo info;
   container.reset();
 
@@ -90,12 +91,49 @@ int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &
   return ret;
 }
 
+int ObFTDictHub::build_custom_cache(const ObFTDictDesc &desc,
+                                    const ObString &table_name,
+                                    ObFTCacheRangeContainer &container)
+{
+  int ret = OB_SUCCESS;
+  ObFTDictInfoKey key(desc.name_.hash(), static_cast<uint64_t>(desc.type_));
+  ObFTDictInfo info;
+  container.reset();
+
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("dict hub not init", K(ret));
+  } else {
+    ObBucketHashWLockGuard guard(rw_dict_lock_, key.hash());
+    if (OB_FAIL(get_dict_info(key, info))) {
+      if (OB_HASH_NOT_EXIST == ret) {
+        ret = OB_ENTRY_NOT_EXIST;
+      } else {
+        LOG_WARN("Failed to get custom dict info", K(ret), K(table_name));
+      }
+    } else if (OB_FAIL(ObFTRangeDict::try_load_cache(desc, info.range_count_, container))
+               && OB_ENTRY_NOT_EXIST != ret) {
+      LOG_WARN("Failed to load custom dict cache", K(ret), K(table_name));
+    }
+
+    if (OB_ENTRY_NOT_EXIST == ret) {
+      if (OB_FAIL(ObFTRangeDict::build_cache_from_table(desc, table_name, container))) {
+        LOG_WARN("Failed to build custom dict cache", K(ret), K(table_name));
+      } else if (FALSE_IT(info.range_count_ = container.get_handles().size())) {
+      } else if (OB_FAIL(put_dict_info(key, info))) {
+        LOG_WARN("Failed to put custom dict info", K(ret), K(table_name));
+      }
+    }
+  }
+  return ret;
+}
+
 int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container)
 {
   int ret = OB_SUCCESS;
   ObFTDictInfo info;
   container.reset();
-  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_));
+  ObFTDictInfoKey key(desc.name_.hash(), static_cast<uint64_t>(desc.type_));
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("dict hub not init", K(ret));
@@ -121,6 +159,51 @@ int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &c
     }
   }
 
+  return ret;
+}
+
+int ObFTDictHub::invalidate_custom_cache(const ObString &table_name)
+{
+  int ret = OB_SUCCESS;
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("dict hub not init", K(ret));
+  } else if (table_name.empty()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("custom dict table name is empty", K(ret));
+  } else {
+    const uint64_t name_hash = table_name.hash();
+    for (uint64_t type = static_cast<uint64_t>(ObFTDictType::DICT_IK_MAIN);
+         OB_SUCC(ret) && type <= static_cast<uint64_t>(ObFTDictType::DICT_IK_STOP);
+         ++type) {
+      ObFTDictInfoKey key(name_hash, type);
+      ObBucketHashWLockGuard guard(rw_dict_lock_, key.hash());
+      ObFTDictInfo info;
+      int tmp_ret = get_dict_info(key, info);
+      if (OB_HASH_NOT_EXIST == tmp_ret) {
+        tmp_ret = OB_SUCCESS;
+      } else if (OB_SUCCESS != tmp_ret) {
+        ret = tmp_ret;
+        LOG_WARN("Failed to get custom dict info for invalidation", K(ret), K(table_name), K(type));
+      } else {
+        for (int32_t range_id = 0; OB_SUCC(ret) && range_id < info.range_count_; ++range_id) {
+          ObDictCacheKey cache_key(name_hash, static_cast<ObFTDictType>(type), range_id);
+          if (OB_FAIL(ObDictCache::get_instance().erase(cache_key)) && OB_ENTRY_NOT_EXIST != ret) {
+            LOG_WARN("Failed to erase custom dict cache", K(ret), K(table_name), K(type), K(range_id));
+          } else if (OB_ENTRY_NOT_EXIST == ret) {
+            ret = OB_SUCCESS;
+          }
+        }
+        if (OB_SUCC(ret)
+            && OB_FAIL(dict_map_.erase_refactored(key))
+            && OB_HASH_NOT_EXIST != ret) {
+          LOG_WARN("Failed to erase custom dict info", K(ret), K(table_name), K(type));
+        } else if (OB_HASH_NOT_EXIST == ret) {
+          ret = OB_SUCCESS;
+        }
+      }
+    }
+  }
   return ret;
 }
 

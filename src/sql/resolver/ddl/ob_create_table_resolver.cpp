@@ -199,6 +199,26 @@ int ObCreateTableResolver::set_default_merge_engine_type_(share::schema::ObTable
   return ret;
 }
 
+int ObCreateTableResolver::check_fulltext_dict_table(const ObTableSchema &table_schema)
+{
+  int ret = OB_SUCCESS;
+  const ObColumnSchemaV2 *word_column = table_schema.get_column_schema("word");
+  if (1 != table_schema.get_column_count()
+      || 1 != table_schema.get_rowkey_column_num()
+      || OB_ISNULL(word_column)
+      || 1 != word_column->get_rowkey_position()
+      || ObVarcharType != word_column->get_data_type()
+      || word_column->get_data_length() < 1
+      || word_column->get_data_length() > 500
+      || CHARSET_UTF8MB4 != word_column->get_charset_type()
+      || !table_schema.is_index_organized_table()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_USER_ERROR(OB_INVALID_ARGUMENT,
+                   "FULLTEXT_DICT table must be an utf8mb4 index-organized table with only a VARCHAR(1..500) primary key column named word");
+  }
+  return ret;
+}
+
 int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
@@ -404,6 +424,9 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
             } else {
               table_schema.set_collation_type(collation_type_);
               table_schema.set_charset_type(charset_type_);
+              if (fulltext_dict_ && OB_FAIL(check_fulltext_dict_table(table_schema))) {
+                SQL_RESV_LOG(WARN, "invalid fulltext dictionary table", K(ret), K(table_schema));
+              }
               // No longer need this step. At the beginning of resolve, directly parse out the collation/charset information of the table, by the time column information is resolved, it can already be obtained
               // Table's collation/charset information
               //if (OB_FAIL(table_schema.fill_column_collation_info())) {
