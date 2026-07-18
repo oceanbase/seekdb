@@ -28,10 +28,11 @@ namespace common
 {
 
 template <class T>
-ObSimpleThreadPoolBase<T>::ObSimpleThreadPoolBase()
+ObSimpleThreadPoolBase<T>::ObSimpleThreadPoolBase(int64_t stack_size)
     : ObSimpleDynamicThreadPool(),
       is_inited_(false), stop_(false),
       run_wrapper_(nullptr),
+      stack_size_(stack_size),
       cur_worker_idx_(0)
 {
 }

@@ -1712,11 +1712,8 @@ int ObServer::init_pre_setting()
     ob_set_reserved_memory(reserved_memory);
   }
   if (OB_SUCC(ret)) {
-    // Startup timer and request workers can combine inner SQL, JSON parsing, and
-    // storage bootstrap in one call chain.  256KB leaves less than the reserved
-    // safety margin on debug builds before SMART_CALL can move guarded frames.
-    const int64_t minimum_stack_size = 1L << 19; // 512KB
-    const int64_t stack_size = std::max(minimum_stack_size, static_cast<int64_t>(GCONF.stack_size));
+    const int64_t default_stack_size = 1L << 18; // 256KB
+    const int64_t stack_size = std::max(static_cast<int64_t>(default_stack_size), static_cast<int64_t>(GCONF.stack_size));
     LOG_INFO("set stack_size", K(stack_size));
     global_thread_stack_size = stack_size - THREAD_STACK_RESERVED_SIZE - ACHUNK_PRESERVE_SIZE;
 #ifdef __APPLE__

@@ -37,7 +37,10 @@ namespace share
 {
 
 ObCSDispatcher::ObCSDispatcher()
-  : share::ObThreadPool(1),
+  : share::ObThreadPool(1,
+                         (1L << 19)
+                         - THREAD_STACK_RESERVED_SIZE
+                         - ACHUNK_PRESERVE_SIZE),
     is_inited_(false),
     refresh_scn_(0),
     next_sn_(0),

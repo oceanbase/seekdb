@@ -48,7 +48,10 @@ namespace share
 {
 
 ObCSFetcher::ObCSFetcher()
-  : share::ObThreadPool(1),
+  : share::ObThreadPool(1,
+                         (1L << 19)
+                         - THREAD_STACK_RESERVED_SIZE
+                         - ACHUNK_PRESERVE_SIZE),
     is_inited_(false),
     dispatcher_(nullptr),
     ls_id_(ObLSID::SYS_LS_ID),

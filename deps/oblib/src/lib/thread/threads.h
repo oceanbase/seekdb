@@ -35,11 +35,12 @@ class Threads
 {
 public:
   friend class ObPThread;
-  explicit Threads(int64_t n_threads = 1)
+  explicit Threads(int64_t n_threads = 1,
+                   int64_t stack_size = global_thread_stack_size)
       : n_threads_(n_threads),
         init_threads_(n_threads),
         threads_(nullptr),
-        stack_size_(global_thread_stack_size),
+        stack_size_(stack_size),
         stop_(true),
         run_wrapper_(nullptr),
         numa_info_()

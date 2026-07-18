@@ -26,8 +26,12 @@ using namespace lib;
 using namespace common;
 namespace share
 {
-ObReentrantThread::ObReentrantThread() : stop_(true), created_(false),
-    running_cnt_(0), thread_name_("")
+ObReentrantThread::ObReentrantThread(int64_t stack_size)
+    : lib::ThreadPool(1, stack_size),
+      stop_(true),
+      created_(false),
+      running_cnt_(0),
+      thread_name_("")
 {
 }
 
