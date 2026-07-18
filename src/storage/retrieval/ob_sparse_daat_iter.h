@@ -45,6 +45,7 @@ struct ObSRMergeCmp
 
   int init(ObDatumMeta id_meta, const ObFixedArray<const ObDatum *, ObIAllocator> *iter_ids);
   int cmp(const ObSRMergeItem &l, const ObSRMergeItem &r, int64_t &cmp_ret);
+  int cmp(const int64_t l_iter_idx, const int64_t r_iter_idx, int64_t &cmp_ret);
 private:
   OB_INLINE const ObDatum &get_id_datum(const int64_t iter_idx)
   {
@@ -98,6 +99,8 @@ protected:
   virtual int cache_result(int64_t &count, const ObDatum &id_datum, const double relevance);
   virtual int project_results(const int64_t count);
   int init_merge_heap(const int64_t count);
+  int do_small_any_match_merge_round(int64_t &count);
+  int refill_small_any_match_iters();
 protected:
   OB_INLINE ObISRDaaTDimIter *get_dim_iter(const int64_t iter_idx) const
   {
@@ -119,6 +122,13 @@ protected:
   ObFixedArray<double, ObIAllocator> buffered_relevances_;
   ObFixedArray<int64_t, ObIAllocator> next_round_iter_idxes_;
   int64_t next_round_cnt_;
+  // FTS PERF OPT 7: natural-language predicate queries normally contain only
+  // a few tokens.  Keep their active posting iterators inline so the hot OR
+  // merge does not pay the generic heap's virtual-call and shifting overhead.
+  static const int64_t SMALL_ANY_MATCH_MAX_ITER_CNT = 3;
+  int64_t small_active_iter_idxes_[SMALL_ANY_MATCH_MAX_ITER_CNT];
+  int64_t small_active_iter_cnt_;
+  bool use_small_any_match_merge_;
   void (*set_datum_func_)(ObDatum &, const ObDocIdExt &);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSRDaaTIterImpl);
