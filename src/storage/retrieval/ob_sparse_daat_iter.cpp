@@ -400,52 +400,56 @@ int ObSRDaaTIterImpl::do_small_any_match_batch_merge(
     int64_t &count)
 {
   int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(2 != dim_iter_cnt_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("two-way posting merge requires exactly two dimensions", K(ret), K_(dim_iter_cnt));
+  }
   while (OB_SUCC(ret) && count < capacity) {
-    for (int64_t i = 0; OB_SUCC(ret) && i < dim_iter_cnt_; ++i) {
-      if (OB_FAIL(refill_small_any_match_batch(i))) {
-        LOG_WARN("failed to prepare posting batch", K(ret), K(i));
-      } else if (!small_batch_ended_[i]) {
-        iter_domain_ids_[i] = &small_batch_doc_ids_[i][small_batch_positions_[i]].get_datum();
-      }
-    }
-
-    int64_t winner_iter_idx = -1;
-    for (int64_t i = 0; OB_SUCC(ret) && i < dim_iter_cnt_; ++i) {
-      if (small_batch_ended_[i]) {
-        // Skip exhausted dimensions.
-      } else if (winner_iter_idx < 0) {
-        winner_iter_idx = i;
-      } else {
-        int64_t cmp_ret = 0;
-        if (OB_FAIL(merge_cmp_.cmp(i, winner_iter_idx, cmp_ret))) {
-          LOG_WARN("failed to compare posting batch heads", K(ret), K(i), K(winner_iter_idx));
-        } else if (cmp_ret < 0) {
-          winner_iter_idx = i;
-        }
-      }
-    }
-
-    if (OB_FAIL(ret)) {
-    } else if (winner_iter_idx < 0) {
+    if (OB_FAIL(refill_small_any_match_batch(0))) {
+      LOG_WARN("failed to prepare left posting batch", K(ret));
+    } else if (OB_FAIL(refill_small_any_match_batch(1))) {
+      LOG_WARN("failed to prepare right posting batch", K(ret));
+    } else if (small_batch_ended_[0] && small_batch_ended_[1]) {
       ret = OB_ITER_END;
     } else {
-      const ObDatum &winner_id = *iter_domain_ids_[winner_iter_idx];
-      for (int64_t i = 0; OB_SUCC(ret) && i < dim_iter_cnt_; ++i) {
-        if (small_batch_ended_[i]) {
-          // Skip exhausted dimensions.
+      int64_t winner_iter_idx = -1;
+      int64_t cmp_ret = 0;
+      if (small_batch_ended_[0]) {
+        winner_iter_idx = 1;
+      } else if (small_batch_ended_[1]) {
+        winner_iter_idx = 0;
+      } else {
+        iter_domain_ids_[0]
+            = &small_batch_doc_ids_[0][small_batch_positions_[0]].get_datum();
+        iter_domain_ids_[1]
+            = &small_batch_doc_ids_[1][small_batch_positions_[1]].get_datum();
+        if (OB_FAIL(merge_cmp_.cmp(0, 1, cmp_ret))) {
+          LOG_WARN("failed to compare two posting batch heads", K(ret));
         } else {
-          int64_t cmp_ret = 0;
-          if (OB_FAIL(merge_cmp_.cmp(i, winner_iter_idx, cmp_ret))) {
-            LOG_WARN("failed to deduplicate posting batch heads", K(ret), K(i), K(winner_iter_idx));
-          } else if (0 == cmp_ret) {
-            ++small_batch_positions_[i];
-          }
+          winner_iter_idx = cmp_ret <= 0 ? 0 : 1;
         }
       }
+
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(cache_result(count, winner_id, 0.0))) {
-        if (OB_ITER_END != ret) {
-          LOG_WARN("failed to cache batched small-OR result", K(ret));
+      } else {
+        if (small_batch_ended_[1 - winner_iter_idx]) {
+          iter_domain_ids_[winner_iter_idx]
+              = &small_batch_doc_ids_[winner_iter_idx]
+                    [small_batch_positions_[winner_iter_idx]].get_datum();
+        }
+        const ObDatum &winner_id = *iter_domain_ids_[winner_iter_idx];
+        // FTS PERF OPT 10: this path is selected only for two posting lists.
+        // One comparison determines both the winner and duplicate handling;
+        // the previous generic N-way loop compared the same heads up to three
+        // times for every emitted DocID.
+        ++small_batch_positions_[winner_iter_idx];
+        if (0 == cmp_ret && !small_batch_ended_[1 - winner_iter_idx]) {
+          ++small_batch_positions_[1 - winner_iter_idx];
+        }
+        if (OB_FAIL(cache_result(count, winner_id, 0.0))) {
+          if (OB_ITER_END != ret) {
+            LOG_WARN("failed to cache two-way posting merge result", K(ret));
+          }
         }
       }
     }
