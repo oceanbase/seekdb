@@ -216,12 +216,12 @@ int ObSRDaaTIterImpl::init(
         next_round_iter_idxes_[i] = i;
       }
       dim_iter_data_ = &dim_iter_cache_[0];
-      // FTS PERF OPT 9: measurements show that retaining whole posting
-      // batches pays off for the common two-token, unbounded OR.  A LIMIT can
-      // stop after only a few rows and would make this path over-fetch, while
-      // three-token merges did not amortize the extra cursor bookkeeping.
+      // FTS PERF OPT 9/15: retain whole posting batches for common two- and
+      // three-token unbounded OR queries. A LIMIT can stop after only a few
+      // rows and would make this path over-fetch.
       use_small_any_match_batch_merge_ = use_small_any_match_merge_
-          && 2 == dim_iter_cnt_
+          && dim_iter_cnt_ >= 2
+          && dim_iter_cnt_ <= SMALL_ANY_MATCH_MAX_ITER_CNT
           && !iter_param_->limit_param_->is_valid();
       for (int64_t i = 0; use_small_any_match_batch_merge_ && i < dim_iter_cnt_; ++i) {
         use_small_any_match_batch_merge_ = dim_iter_data_[i]->supports_id_batch();
@@ -363,7 +363,14 @@ int ObSRDaaTIterImpl::get_next_rows(const int64_t capacity, int64_t &count)
     count = 0;
     const int64_t real_capacity = MIN(capacity, iter_param_->max_batch_size_);
     if (use_small_any_match_batch_merge_) {
-      if (OB_FAIL(do_small_any_match_batch_merge(real_capacity, count))) {
+      // FTS PERF OPT 15: preserve the measured two-way fast path and route
+      // only three-token queries through the new specialized merger.
+      if (2 == dim_iter_cnt_) {
+        ret = do_small_any_match_batch_merge(real_capacity, count);
+      } else {
+        ret = do_three_way_any_match_batch_merge(real_capacity, count);
+      }
+      if (OB_FAIL(ret)) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
           LOG_WARN("failed to do batched small-OR merge", K(ret), K(count));
         }
@@ -494,6 +501,116 @@ int ObSRDaaTIterImpl::do_small_any_match_batch_merge(
         } else if (OB_FAIL(cache_result(count, winner_id, 0.0))) {
           if (OB_ITER_END != ret) {
             LOG_WARN("failed to cache two-way posting merge result", K(ret));
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObSRDaaTIterImpl::do_three_way_any_match_batch_merge(
+    const int64_t capacity,
+    int64_t &count)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(3 != dim_iter_cnt_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("three-way posting merge requires exactly three dimensions",
+        K(ret), K_(dim_iter_cnt));
+  }
+  while (OB_SUCC(ret) && count < capacity) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < dim_iter_cnt_; ++i) {
+      if (OB_FAIL(refill_small_any_match_batch(i))) {
+        LOG_WARN("failed to prepare posting batch", K(ret), K(i));
+      }
+    }
+    int64_t active_iter_idxes[SMALL_ANY_MATCH_MAX_ITER_CNT];
+    int64_t active_iter_cnt = 0;
+    for (int64_t i = 0; OB_SUCC(ret) && i < dim_iter_cnt_; ++i) {
+      if (!small_batch_ended_[i]) {
+        active_iter_idxes[active_iter_cnt++] = i;
+        iter_domain_id_data_[i]
+            = &small_batch_doc_ids_[i][small_batch_positions_[i]].get_datum();
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (0 == active_iter_cnt) {
+      ret = OB_ITER_END;
+    } else {
+      // FTS PERF OPT 15: select and deduplicate three posting heads with at
+      // most two comparisons. The first comparison chooses min(A, B); the
+      // second compares that winner with C. Their equality results also tell
+      // exactly which cursors must advance, avoiding a second comparison pass.
+      bool advance_batch_heads[SMALL_ANY_MATCH_MAX_ITER_CNT] = {};
+      int64_t winner_iter_idx = active_iter_idxes[0];
+      if (active_iter_cnt >= 2) {
+        const int64_t first_iter_idx = active_iter_idxes[0];
+        const int64_t second_iter_idx = active_iter_idxes[1];
+        int64_t first_cmp = 0;
+        if (OB_FAIL(merge_cmp_.cmp(first_iter_idx, second_iter_idx, first_cmp))) {
+          LOG_WARN("failed to compare first posting batch heads", K(ret));
+        } else {
+          winner_iter_idx = first_cmp <= 0 ? first_iter_idx : second_iter_idx;
+          if (2 == active_iter_cnt) {
+            advance_batch_heads[winner_iter_idx] = true;
+            if (0 == first_cmp) {
+              advance_batch_heads[first_iter_idx] = true;
+              advance_batch_heads[second_iter_idx] = true;
+            }
+          } else {
+            const int64_t third_iter_idx = active_iter_idxes[2];
+            int64_t third_cmp = 0;
+            if (OB_FAIL(merge_cmp_.cmp(winner_iter_idx, third_iter_idx, third_cmp))) {
+              LOG_WARN("failed to compare third posting batch head", K(ret));
+            } else if (third_cmp > 0) {
+              winner_iter_idx = third_iter_idx;
+              advance_batch_heads[third_iter_idx] = true;
+            } else {
+              advance_batch_heads[winner_iter_idx] = true;
+              if (0 == first_cmp) {
+                advance_batch_heads[first_iter_idx] = true;
+                advance_batch_heads[second_iter_idx] = true;
+              }
+              if (0 == third_cmp) {
+                advance_batch_heads[third_iter_idx] = true;
+              }
+            }
+          }
+        }
+      } else {
+        advance_batch_heads[winner_iter_idx] = true;
+      }
+
+      if (OB_FAIL(ret)) {
+      } else {
+        const ObDatum &winner_id = *iter_domain_id_data_[winner_iter_idx];
+        for (int64_t i = 0; i < dim_iter_cnt_; ++i) {
+          if (advance_batch_heads[i]) {
+            ++small_batch_positions_[i];
+          }
+        }
+        if (use_fixed_doc_id_batch_output_) {
+          // FTS PERF OPT 14: the batched truth-only path emits generated
+          // 16-byte DocIDs. Cache only those bytes instead of materializing a
+          // second ObDocIdExt for every merged hit; project the stable compact
+          // buffer shallowly after the posting batches have been consumed.
+          if (OB_UNLIKELY(winner_id.is_null()
+              || OB_DOC_ID_COLUMN_BYTE_LENGTH != winner_id.len_
+              || count * 2 + 1 >= buffered_fixed_doc_ids_.count())) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("unexpected fixed DocID merge output", K(ret), K(winner_id), K(count),
+                K(buffered_fixed_doc_ids_.count()));
+          } else {
+            MEMCPY(buffered_fixed_doc_id_data_ + count * 2,
+                winner_id.ptr_, OB_DOC_ID_COLUMN_BYTE_LENGTH);
+            ++input_row_cnt_;
+            ++output_row_cnt_;
+            ++count;
+          }
+        } else if (OB_FAIL(cache_result(count, winner_id, 0.0))) {
+          if (OB_ITER_END != ret) {
+            LOG_WARN("failed to cache batched small-OR merge result", K(ret));
           }
         }
       }

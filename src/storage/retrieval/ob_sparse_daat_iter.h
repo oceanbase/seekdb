@@ -101,6 +101,7 @@ protected:
   int init_merge_heap(const int64_t count);
   int do_small_any_match_merge_round(int64_t &count);
   int do_small_any_match_batch_merge(const int64_t capacity, int64_t &count);
+  int do_three_way_any_match_batch_merge(const int64_t capacity, int64_t &count);
   int refill_small_any_match_batch(const int64_t iter_idx);
   int refill_small_any_match_iters();
 protected:
@@ -135,9 +136,10 @@ protected:
   int64_t small_active_iter_idxes_[SMALL_ANY_MATCH_MAX_ITER_CNT];
   int64_t small_active_iter_cnt_;
   bool use_small_any_match_merge_;
-  // FTS PERF OPT 9: keep one sorted posting batch per small-OR dimension and
-  // merge it with direct cursors. This removes two virtual calls per posting
-  // while retaining the existing scalar path as a compatibility fallback.
+  // FTS PERF OPT 9/15: keep one sorted posting batch per small-OR dimension
+  // and merge it with direct cursors. This removes scalar virtual dispatch for
+  // the common two- and three-token truth-only queries while retaining the
+  // existing scalar path as a compatibility fallback.
   const ObDocIdExt *small_batch_doc_ids_[SMALL_ANY_MATCH_MAX_ITER_CNT];
   int64_t small_batch_counts_[SMALL_ANY_MATCH_MAX_ITER_CNT];
   int64_t small_batch_positions_[SMALL_ANY_MATCH_MAX_ITER_CNT];
