@@ -49,8 +49,11 @@ public:
   int config_set_max_token_size(const int64_t size);
   int config_set_ngram_token_size(const int64_t size);
   int config_set_stopword_table(const ObString &str);
+  int config_set_stopword_table_id(const uint64_t table_id);
   int config_set_dict_table(const ObString &str);
+  int config_set_dict_table_id(const uint64_t table_id);
   int config_set_quantifier_table(const ObString &str);
+  int config_set_quantifier_table_id(const uint64_t table_id);
   int config_set_ik_mode(const ObString &ik_mode);
   int config_set_min_ngram_token_size(const int64_t size);
   int config_set_max_ngram_token_size(const int64_t size);
@@ -59,8 +62,13 @@ public:
   int config_get_max_token_size(int64_t &size) const;
   int config_get_ngram_token_size(int64_t &size) const;
   int config_get_stopword_table(ObString &str) const;
+  int config_get_stopword_table_id(uint64_t &table_id) const;
   int config_get_dict_table(ObString &str) const;
+  int config_get_dict_table_id(uint64_t &table_id) const;
   int config_get_quantifier_table(ObString &str) const;
+  int config_get_quantifier_table_id(uint64_t &table_id) const;
+  // 判断当前属性是否引用指定词典表，供 DDL 保护统一检查三类词典。
+  bool references_dict_table(const uint64_t table_id) const;
   int config_get_ik_mode(ObString &ik_mode) const;
   int config_get_min_ngram_token_size(int64_t &size) const;
   int config_get_max_ngram_token_size(int64_t &size) const;
@@ -145,6 +153,9 @@ public:
            && ngram_token_size_ == other.ngram_token_size_ && ik_mode_smart_ == other.ik_mode_smart_
            && stopword_table_ == other.stopword_table_ && dict_table_ == other.dict_table_
            && quantifier_table_ == other.quantifier_table_
+           && stopword_table_id_ == other.stopword_table_id_
+           && dict_table_id_ == other.dict_table_id_
+           && quantifier_table_id_ == other.quantifier_table_id_
            && min_ngram_token_size_ == other.min_ngram_token_size_
            && max_ngram_token_size_ == other.max_ngram_token_size_;
   }
@@ -155,6 +166,9 @@ public:
                K_(stopword_table),
                K_(dict_table),
                K_(quantifier_table),
+               K_(stopword_table_id),
+               K_(dict_table_id),
+               K_(quantifier_table_id),
                K_(min_ngram_token_size),
                K_(max_ngram_token_size),
                K_(ik_mode_smart));
@@ -167,8 +181,16 @@ public:
   common::ObString stopword_table_;
   common::ObString dict_table_;
   common::ObString quantifier_table_;
+  // resolver 持久化的稳定 schema ID，供运行时按词典身份读取 refresh generation。
+  uint64_t stopword_table_id_;
+  uint64_t dict_table_id_;
+  uint64_t quantifier_table_id_;
   int64_t min_ngram_token_size_;
   int64_t max_ngram_token_size_;
+
+private:
+  // 词典表名从临时 JSON 解析对象深拷贝而来，必须由运行时属性对象持有。
+  common::ObArenaAllocator dict_name_allocator_;
 };
 
 } // end namespace storage

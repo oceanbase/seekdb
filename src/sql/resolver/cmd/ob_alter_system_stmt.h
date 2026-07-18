@@ -169,6 +169,36 @@ private:
   obcall::ObAdminRefreshMemStatArg rpc_arg_;
 };
 
+class ObRefreshFulltextDictStmt : public ObSystemCmdStmt
+{
+public:
+  ObRefreshFulltextDictStmt()
+      : ObSystemCmdStmt(stmt::T_REFRESH_FULLTEXT_DICT), tenant_id_(OB_INVALID_TENANT_ID),
+        dict_table_id_(OB_INVALID_ID), dict_table_name_()
+  {}
+  virtual ~ObRefreshFulltextDictStmt() {}
+
+  // 刷新命令只传递稳定的 schema 身份，避免表重命名后执行到错误目标。
+  void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  void set_dict_table_id(const uint64_t table_id) { dict_table_id_ = table_id; }
+  uint64_t get_tenant_id() const { return tenant_id_; }
+  uint64_t get_dict_table_id() const { return dict_table_id_; }
+  // 在 resolver 完成 schema 查找前保留解析出的规范化表名。
+  int set_dict_table_name(const common::ObString &table_name)
+  {
+    dict_table_name_ = table_name;
+    return OB_SUCCESS;
+  }
+  const common::ObString &get_dict_table_name() const { return dict_table_name_; }
+  bool is_valid() const { return OB_INVALID_TENANT_ID != tenant_id_ && OB_INVALID_ID != dict_table_id_; }
+
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(tenant_id), K_(dict_table_id), K_(dict_table_name));
+private:
+  uint64_t tenant_id_;
+  uint64_t dict_table_id_;
+  common::ObString dict_table_name_;
+};
+
 class ObWashMemFragmentationStmt : public ObSystemCmdStmt
 {
 public:

@@ -124,6 +124,8 @@ private:
   uint64_t gen_column_group_id();
   int add_inner_index_for_heap_gtt();
   int check_max_row_data_length(const ObTableSchema &table_schema);  
+  // 校验全文词典表固定的 word 列、主键、字符集和 IOT 约束。
+  int check_fulltext_dict_table_(const share::schema::ObTableSchema &table_schema) const;
   int set_default_micro_index_clustered_(share::schema::ObTableSchema &table_schema);
   int resolve_primary_key_node_in_heap_table(const ParseNode *element, common::ObArray<ObColumnResolveStat> &stats,
                                              ObSEArray<ObColumnSchemaV2, SEARRAY_INIT_NUM> &resolved_cols);

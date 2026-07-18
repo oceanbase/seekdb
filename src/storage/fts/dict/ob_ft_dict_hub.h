@@ -96,7 +96,7 @@ class ObFTCacheRangeContainer;
 class ObFTDictHub
 {
 public:
-  ObFTDictHub() : is_inited_(false), dict_map_(), rw_dict_lock_() {}
+  ObFTDictHub() : is_inited_(false), dict_map_(), refresh_version_map_(), rw_dict_lock_() {}
   ~ObFTDictHub() {}
 
   int init();
@@ -106,6 +106,12 @@ public:
   int build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
 
   int load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
+
+  // 查询词典表当前刷新代次；未刷新过的词典从 0 开始。
+  int get_refresh_version(const uint64_t dict_table_id, int64_t &version);
+
+  // 成功刷新后推进代次，使后续 DAT 查询切换到新的缓存身份。
+  int advance_refresh_version(const uint64_t dict_table_id, int64_t &version);
 
 private:
   int get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info);
@@ -117,6 +123,8 @@ private:
   bool is_inited_;
   // holds info of dict
   hash::ObHashMap<ObFTDictInfoKey, ObFTDictInfo> dict_map_;
+  // 记录用户词典表的刷新代次；table ID 在租户范围内唯一。
+  hash::ObHashMap<uint64_t, int64_t> refresh_version_map_;
   ObBucketLock rw_dict_lock_;
 };
 

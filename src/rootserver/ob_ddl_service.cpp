@@ -36,6 +36,7 @@
 #include "rootserver/fork_table/ob_fork_table_util.h"
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
 #include "sql/resolver/expr/ob_raw_expr_modify_column_name.h"
+#include "storage/fts/ob_fts_parser_property.h"
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // ObSysDDLSchedulerUtil
 #include "rootserver/ob_index_builder.h"
@@ -167,6 +168,69 @@ int ObDDLService::get_tenant_schema_guard_with_version_in_inner_table(
       ret = OB_TENANT_NOT_EXIST;
       LOG_WARN("tenant not exist", K(ret), KP(src_tenant_schema_guard), KP(dst_tenant_schema_guard));
     }
+  }
+  return ret;
+}
+
+int ObDDLService::get_fulltext_indexes_referencing_dict_(
+    ObSchemaGetterGuard &schema_guard,
+    const uint64_t dict_table_id,
+    ObIArray<uint64_t> &index_table_ids) const
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<const ObTableSchema *, 16> table_schemas;
+  if (OB_INVALID_ID == dict_table_id) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid fulltext dictionary table id", K(ret), K(dict_table_id));
+  } else if (OB_FAIL(schema_guard.get_table_schemas_in_tenant(table_schemas))) {
+    LOG_WARN("failed to get tenant table schemas", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas.count(); ++i) {
+      const ObTableSchema *table_schema = table_schemas.at(i);
+      storage::ObFTParserJsonProps parser_properties;
+      // 只有全文索引的属性 JSON 才可能保存词典引用，普通表直接跳过。
+      if (OB_ISNULL(table_schema) || !table_schema->is_fts_index()
+          || table_schema->get_parser_property_str().empty()) {
+      } else if (OB_FAIL(parser_properties.init())) {
+        LOG_WARN("failed to initialize fulltext parser properties", K(ret));
+      } else if (OB_FAIL(parser_properties.parse_from_valid_str(
+                     table_schema->get_parser_property_str()))) {
+        // 属性损坏时保守失败，不能放行可能破坏索引语义的词典表 DDL。
+        LOG_WARN("failed to parse fulltext parser properties", K(ret), KPC(table_schema));
+      } else if (parser_properties.references_dict_table(dict_table_id)
+                 && OB_FAIL(index_table_ids.push_back(table_schema->get_table_id()))) {
+        LOG_WARN("failed to record referenced fulltext index", K(ret), KPC(table_schema));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObDDLService::check_fulltext_dict_ddl_allowed_(
+    const ObTableSchema &dict_table_schema,
+    ObSchemaGetterGuard &schema_guard,
+    const ObFulltextDictDdlOperation operation) const
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<uint64_t, 4> index_table_ids;
+  if (!dict_table_schema.is_fulltext_dict_table()) {
+    // 普通表不属于 Task3 词典依赖保护范围。
+  } else if (OB_FAIL(get_fulltext_indexes_referencing_dict_(schema_guard,
+                                                             dict_table_schema.get_table_id(),
+                                                             index_table_ids))) {
+    LOG_WARN("failed to check fulltext dictionary dependencies", K(ret), K(dict_table_schema));
+  } else if (!index_table_ids.empty()) {
+    if (ObFulltextDictDdlOperation::DROP_TABLE == operation) {
+      // Task3 要求删除被引用词典表返回 MySQL ERROR 4179。
+      ret = OB_OP_NOT_ALLOW;
+      LOG_USER_ERROR(OB_OP_NOT_ALLOW, "drop referenced fulltext dictionary table");
+    } else {
+      // 重命名表以及任意列级结构修改均返回 MySQL ERROR 1235。
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "DDL on referenced fulltext dictionary table is");
+    }
+    LOG_WARN("fulltext dictionary table is referenced by indexes", K(ret),
+             K(index_table_ids), K(dict_table_schema));
   }
   return ret;
 }
@@ -17763,6 +17827,13 @@ int ObDDLService::alter_table(obcall::ObAlterTableArg &alter_table_arg,
         } else if (NULL == orig_table_schema) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("NULL ptr", KR(ret), KP(orig_table_schema));
+        // 已被引用的词典表不能执行 ADD/MODIFY/DROP/RENAME COLUMN 等列级结构变更。
+        } else if (orig_table_schema->is_fulltext_dict_table()
+                   && alter_table_arg.is_alter_columns_
+                   && OB_FAIL(check_fulltext_dict_ddl_allowed_(
+                       *orig_table_schema, schema_guard, ObFulltextDictDdlOperation::ALTER_COLUMN))) {
+          LOG_WARN("alter on referenced fulltext dictionary table is not allowed", KR(ret),
+                   KPC(orig_table_schema));
         } else if (OB_FAIL(orig_table.assign(*orig_table_schema))) {
           LOG_WARN("fail to assign schema", K(ret));
         }
@@ -17942,6 +18013,11 @@ int ObDDLService::rename_table(const obcall::ObRenameTableArg &rename_table_arg)
             LOG_WARN("fail to get table schema", K(ret));
           } else if (nullptr == table_schema) {
             // skip
+          // 已被引用的词典表名称是索引属性的一部分，禁止重命名以保持引用稳定。
+          } else if (OB_FAIL(check_fulltext_dict_ddl_allowed_(
+                         *table_schema, schema_guard, ObFulltextDictDdlOperation::RENAME_TABLE))) {
+            LOG_WARN("rename referenced fulltext dictionary table is not allowed", KR(ret),
+                     KPC(table_schema));
           } else if (OB_FAIL(validate_rename_table_args(table_schema))) {
             LOG_WARN("failed to validate rename table args", KR(ret), K(rename_item));
           } else if (OB_FAIL(ObDependencyInfo::collect_all_dep_objs(
@@ -26210,6 +26286,11 @@ int ObDDLService::drop_table(const ObDropTableArg &drop_table_arg, const obcall:
         } else if (OB_ISNULL(table_schema)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("table_schema should not be null", KR(ret));
+        // 删除被引用的词典表会让全文索引失去分词配置，必须在加锁和提交前拒绝。
+        } else if (OB_FAIL(check_fulltext_dict_ddl_allowed_(
+                       *table_schema, schema_guard, ObFulltextDictDdlOperation::DROP_TABLE))) {
+          LOG_WARN("drop referenced fulltext dictionary table is not allowed", KR(ret),
+                   KPC(table_schema));
         } else if (OB_FAIL(drop_table_set.set_refactored(table_schema->get_table_id()))) {
           LOG_WARN("set table_id to hash set failed", K(table_schema->get_table_id()), K(ret));
         } else if (OB_FAIL(lock_table(trans, *table_schema))) {

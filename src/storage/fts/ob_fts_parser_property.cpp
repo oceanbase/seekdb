@@ -159,6 +159,23 @@ int ObFTParserJsonProps::config_set_dict_table(const ObString &str)
   return ret;
 }
 
+int ObFTParserJsonProps::config_set_dict_table_id(const uint64_t table_id)
+{
+  int ret = OB_SUCCESS;
+  ObJsonInt *dict_table_id = nullptr;
+  if (!IS_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (OB_ISNULL(dict_table_id = OB_NEWx(ObJsonInt, &allocator_, static_cast<int64_t>(table_id)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_DICT_TABLE_ID), dict_table_id))) {
+    LOG_WARN("failed to add internal dictionary table id", K(ret));
+  }
+  if (OB_FAIL(ret)) {
+    OB_DELETEx(ObJsonInt, &allocator_, dict_table_id);
+  }
+  return ret;
+}
+
 int ObFTParserJsonProps::config_set_stopword_table(const ObString &str)
 {
   int ret = OB_SUCCESS;
@@ -182,6 +199,24 @@ int ObFTParserJsonProps::config_set_stopword_table(const ObString &str)
   return ret;
 }
 
+int ObFTParserJsonProps::config_set_stopword_table_id(const uint64_t table_id)
+{
+  int ret = OB_SUCCESS;
+  ObJsonInt *node = nullptr;
+  if (!IS_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (OB_ISNULL(node = OB_NEWx(ObJsonInt, &allocator_, static_cast<int64_t>(table_id)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  // 词典表 ID 仅作为内部属性落盘，用于运行时刷新和 DDL 依赖反查。
+  } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE_ID), node))) {
+    LOG_WARN("failed to add stopword table id", K(ret));
+  }
+  if (OB_FAIL(ret)) {
+    OB_DELETEx(ObJsonInt, &allocator_, node);
+  }
+  return ret;
+}
+
 int ObFTParserJsonProps::config_set_quantifier_table(const ObString &str)
 {
   int ret = OB_SUCCESS;
@@ -202,6 +237,24 @@ int ObFTParserJsonProps::config_set_quantifier_table(const ObString &str)
     OB_DELETEx(ObJsonString, &allocator_, quantifier_table);
   }
 
+  return ret;
+}
+
+int ObFTParserJsonProps::config_set_quantifier_table_id(const uint64_t table_id)
+{
+  int ret = OB_SUCCESS;
+  ObJsonInt *node = nullptr;
+  if (!IS_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (OB_ISNULL(node = OB_NEWx(ObJsonInt, &allocator_, static_cast<int64_t>(table_id)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  // 词典表 ID 仅作为内部属性落盘，用于运行时刷新和 DDL 依赖反查。
+  } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE_ID), node))) {
+    LOG_WARN("failed to add quantifier table id", K(ret));
+  }
+  if (OB_FAIL(ret)) {
+    OB_DELETEx(ObJsonInt, &allocator_, node);
+  }
   return ret;
 }
 
@@ -422,6 +475,24 @@ int ObFTParserJsonProps::config_get_dict_table(ObString &str) const
   return ret;
 }
 
+int ObFTParserJsonProps::config_get_dict_table_id(uint64_t &table_id) const
+{
+  int ret = OB_SUCCESS;
+  ObIJsonBase *value = nullptr;
+  if (!IS_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(root_->get_object_value(ObString(ObFTSLiteral::CONFIG_NAME_DICT_TABLE_ID), value))) {
+    if (OB_SEARCH_NOT_FOUND != ret) {
+      LOG_WARN("failed to get internal dictionary table id", K(ret));
+    }
+  } else if (OB_ISNULL(value) || ObJsonNodeType::J_INT != value->json_type()) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    table_id = static_cast<uint64_t>(static_cast<ObJsonInt *>(value)->get_int());
+  }
+  return ret;
+}
+
 int ObFTParserJsonProps::config_get_stopword_table(ObString &str) const
 {
   int ret = OB_SUCCESS;
@@ -448,17 +519,42 @@ int ObFTParserJsonProps::config_get_stopword_table(ObString &str) const
   return ret;
 }
 
+int ObFTParserJsonProps::config_get_stopword_table_id(uint64_t &table_id) const
+{
+  int ret = OB_SUCCESS;
+  ObIJsonBase *value = nullptr;
+  if (!IS_INIT) {
+    ret = OB_NOT_INIT;
+  }
+  else if (OB_FAIL(root_->get_object_value(ObString(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE_ID), value))) {
+    if (OB_SEARCH_NOT_FOUND != ret) {
+      LOG_WARN("failed to get stopword table id", K(ret));
+    }
+  } else if (OB_ISNULL(value) || ObJsonNodeType::J_INT != value->json_type()) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    table_id = static_cast<uint64_t>(static_cast<ObJsonInt *>(value)->get_int());
+  }
+  return ret;
+}
+
 int ObFTParserJsonProps::config_get_quantifier_table(ObString &str) const
 {
+  // 量词词典属性曾以错误键名落盘；读取时需要兼容历史 schema，写入仍只使用正确键名。
   int ret = OB_SUCCESS;
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
   } else {
     ObIJsonBase *value = nullptr;
-    if (OB_FAIL(
-            root_->get_object_value(ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE), value))) {
-      if (OB_SEARCH_NOT_FOUND == ret) {
-      } else {
+    // 优先读取正确键；仅在新键不存在时读取历史错误拼写，保证旧索引 schema 可继续使用。
+    if (OB_FAIL(root_->get_object_value(
+            ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE), value))
+        && OB_SEARCH_NOT_FOUND == ret) {
+      ret = root_->get_object_value(
+          ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE_LEGACY), value);
+    }
+    if (OB_FAIL(ret)) {
+      if (OB_SEARCH_NOT_FOUND != ret) {
         LOG_WARN("Fail to get quantifier_table", K(ret));
       }
     } else if (OB_ISNULL(value)) {
@@ -472,6 +568,44 @@ int ObFTParserJsonProps::config_get_quantifier_table(ObString &str) const
     }
   }
   return ret;
+}
+
+int ObFTParserJsonProps::config_get_quantifier_table_id(uint64_t &table_id) const
+{
+  int ret = OB_SUCCESS;
+  ObIJsonBase *value = nullptr;
+  if (!IS_INIT) {
+    ret = OB_NOT_INIT;
+  }
+  else if (OB_FAIL(root_->get_object_value(ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE_ID), value))) {
+    if (OB_SEARCH_NOT_FOUND != ret) {
+      LOG_WARN("failed to get quantifier table id", K(ret));
+    }
+  } else if (OB_ISNULL(value) || ObJsonNodeType::J_INT != value->json_type()) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    table_id = static_cast<uint64_t>(static_cast<ObJsonInt *>(value)->get_int());
+  }
+  return ret;
+}
+
+bool ObFTParserJsonProps::references_dict_table(const uint64_t table_id) const
+{
+  bool is_referenced = false;
+  uint64_t configured_table_id = OB_INVALID_ID;
+  // 依次检查三类词典；旧属性没有 ID 时按“不匹配”处理，不影响普通 DDL。
+  if (OB_INVALID_ID != table_id
+      && OB_SUCCESS == config_get_dict_table_id(configured_table_id)
+      && table_id == configured_table_id) {
+    is_referenced = true;
+  } else if (OB_SUCCESS == config_get_stopword_table_id(configured_table_id)
+             && table_id == configured_table_id) {
+    is_referenced = true;
+  } else if (OB_SUCCESS == config_get_quantifier_table_id(configured_table_id)
+             && table_id == configured_table_id) {
+    is_referenced = true;
+  }
+  return is_referenced;
 }
 
 int ObFTParserJsonProps::config_get_ik_mode(ObString &ik_mode) const
@@ -628,8 +762,14 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
 
   static const char *supported[] = {
       ObFTSLiteral::CONFIG_NAME_DICT_TABLE,
+      // 三个 table_id 由 resolver 写入，属于运行时元数据而非用户 IK 配置。
+      ObFTSLiteral::CONFIG_NAME_DICT_TABLE_ID,
       ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE,
+      ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE_ID,
+      // 仅用于升级兼容：重建后会迁移为正确的 quantifier_table 键。
+      ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE_LEGACY,
       ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE,
+      ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE_ID,
       ObFTSLiteral::CONFIG_NAME_IK_MODE,
   };
 
@@ -660,15 +800,16 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
 
     if (OB_FAIL(ret)) {
       // do nothing
-    } else if (OB_FAIL(config_get_quantifier_table(table_name))) {
+    // 停用词与量词分别拥有独立词典；此处不能重复读取量词配置。
+    } else if (OB_FAIL(config_get_stopword_table(table_name))) {
       if (OB_SEARCH_NOT_FOUND == ret) {
         if (OB_FAIL(
-                config_set_quantifier_table(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE))) {
-          LOG_WARN("Failed to set default quantifier table", K(ret));
+                config_set_stopword_table(ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE))) {
+          LOG_WARN("Failed to set default stopword table", K(ret));
         }
       }
     } else {
-      // check quantifier table valid
+      // check stopword table valid
     }
 
     if (OB_FAIL(ret)) {
@@ -681,7 +822,21 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
         }
       }
     } else {
-      // check quantifier table valid
+      ObIJsonBase *legacy_value = nullptr;
+      const int legacy_ret = root_->get_object_value(
+          ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE_LEGACY), legacy_value);
+      if (OB_SUCCESS == legacy_ret) {
+        // 历史 schema 使用错误键名时，在重建阶段转换为标准键，后续写出不再携带旧键。
+        if (OB_FAIL(config_set_quantifier_table(table_name))) {
+          LOG_WARN("failed to migrate legacy quantifier table property", K(ret), K(table_name));
+        } else if (OB_FAIL(root_->object_remove(
+                       ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE_LEGACY)))) {
+          LOG_WARN("failed to remove legacy quantifier table property", K(ret));
+        }
+      } else if (OB_SEARCH_NOT_FOUND != legacy_ret) {
+        ret = legacy_ret;
+        LOG_WARN("failed to check legacy quantifier table property", K(ret));
+      }
     }
 
     if (OB_FAIL(ret)) {
@@ -1150,6 +1305,7 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
 
 int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const ObString &json_str)
 {
+  // 将持久化的属性 JSON 转换为分词器运行时配置，IK 分词器需要取得三类词典表的实际值。
   int ret = OB_SUCCESS;
   ObFTParserJsonProps props;
   if (OB_FAIL(props.init())) {
@@ -1158,12 +1314,60 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
     LOG_WARN("fail to parse from json str", K(ret), K(json_str));
   } else {
     if (parser.is_ik()) {
-      // set dict tables and copy dict name
-      dict_table_ = ObString(ObFTSLiteral::CONFIG_NAME_DICT_TABLE);
-      stopword_table_ = ObString(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE);
-      quantifier_table_ = ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE);
+      ObString dict_table;
+      ObString stopword_table;
+      ObString quantifier_table;
+      // JSON 属性对象会在本函数结束时析构；运行时属性需要自行持有三类表名。
+      dict_name_allocator_.reuse();
+      dict_table_.reset();
+      stopword_table_.reset();
+      quantifier_table_.reset();
+      dict_table_id_ = OB_INVALID_ID;
+      stopword_table_id_ = OB_INVALID_ID;
+      quantifier_table_id_ = OB_INVALID_ID;
+      // 从 JSON 属性读取实际词典表名，不能把 "dict_table" 等 JSON 键名当作表名。
+      if (OB_FAIL(props.config_get_dict_table(dict_table))) {
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("fail to get dict table", K(ret));
+        }
+      }
+      if (OB_SUCC(ret) && OB_FAIL(props.config_get_stopword_table(stopword_table))) {
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("fail to get stopword table", K(ret));
+        }
+      }
+      if (OB_SUCC(ret) && OB_FAIL(props.config_get_quantifier_table(quantifier_table))) {
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("fail to get quantifier table", K(ret));
+        }
+      }
+      if (OB_SUCC(ret) && OB_FAIL(ob_write_string(dict_name_allocator_, dict_table, dict_table_))) {
+        LOG_WARN("failed to copy dictionary table name", K(ret));
+      } else if (OB_SUCC(ret)
+                 && OB_FAIL(ob_write_string(dict_name_allocator_, stopword_table, stopword_table_))) {
+        LOG_WARN("failed to copy stopword dictionary table name", K(ret));
+      } else if (OB_SUCC(ret)
+                 && OB_FAIL(ob_write_string(dict_name_allocator_, quantifier_table, quantifier_table_))) {
+        LOG_WARN("failed to copy quantifier dictionary table name", K(ret));
+      }
+      // 旧属性 JSON 不含内部 ID 时保留无效值，兼容历史索引定义。
+      if (OB_SUCC(ret) && OB_FAIL(props.config_get_dict_table_id(dict_table_id_)) && OB_SEARCH_NOT_FOUND == ret) {
+        ret = OB_SUCCESS;
+      }
+      if (OB_SUCC(ret) && OB_FAIL(props.config_get_stopword_table_id(stopword_table_id_)) && OB_SEARCH_NOT_FOUND == ret) {
+        ret = OB_SUCCESS;
+      }
+      if (OB_SUCC(ret) && OB_FAIL(props.config_get_quantifier_table_id(quantifier_table_id_)) && OB_SEARCH_NOT_FOUND == ret) {
+        ret = OB_SUCCESS;
+      }
       ObString ik_smart;
-      if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
+      if (OB_SUCC(ret) && OB_FAIL(props.config_get_ik_mode(ik_smart))) {
         if (OB_SEARCH_NOT_FOUND == ret) {
           // from old version, ik_mode is not set, so use default value
           ik_mode_smart_ = true;
@@ -1227,8 +1431,12 @@ ObFTParserProperty::ObFTParserProperty()
       stopword_table_(),
       dict_table_(),
       quantifier_table_(),
+      stopword_table_id_(OB_INVALID_ID),
+      dict_table_id_(OB_INVALID_ID),
+      quantifier_table_id_(OB_INVALID_ID),
       min_ngram_token_size_(ObFTSLiteral::FT_DEFAULT_MIN_NGRAM_SIZE),
-      max_ngram_token_size_(ObFTSLiteral::FT_DEFAULT_MAX_NGRAM_SIZE)
+      max_ngram_token_size_(ObFTSLiteral::FT_DEFAULT_MAX_NGRAM_SIZE),
+      dict_name_allocator_("FTParserProp")
 {
 }
 

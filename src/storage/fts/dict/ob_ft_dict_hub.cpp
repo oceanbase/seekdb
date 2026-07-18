@@ -34,6 +34,8 @@ int ObFTDictHub::init()
   int ret = OB_SUCCESS;
   if (OB_FAIL(dict_map_.create(K_MAX_DICT_BUCKET, "dict_map"))) {
     LOG_WARN("init dict map failed", K(ret));
+  } else if (OB_FAIL(refresh_version_map_.create(K_MAX_DICT_BUCKET, "dict_refresh"))) {
+    LOG_WARN("init dictionary refresh version map failed", K(ret));
   } else if (OB_FAIL(rw_dict_lock_.init(K_MAX_DICT_BUCKET))) {
     LOG_WARN("init dict lock failed", K(ret));
   } else {
@@ -45,13 +47,62 @@ int ObFTDictHub::init()
 int ObFTDictHub::destroy()
 {
   int ret = OB_SUCCESS;
+  dict_map_.destroy();
+  refresh_version_map_.destroy();
   is_inited_ = false;
+  return ret;
+}
+
+int ObFTDictHub::get_refresh_version(const uint64_t dict_table_id, int64_t &version)
+{
+  int ret = OB_SUCCESS;
+  version = 0;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_UNLIKELY(OB_INVALID_ID == dict_table_id)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    ObBucketHashRLockGuard guard(rw_dict_lock_, common::murmurhash(&dict_table_id, sizeof(dict_table_id), 0));
+    ret = refresh_version_map_.get_refactored(dict_table_id, version);
+    if (OB_HASH_NOT_EXIST == ret) {
+      // 首次使用的词典尚未 refresh，按初始代次读取。
+      ret = OB_SUCCESS;
+      version = 0;
+    }
+  }
+  return ret;
+}
+
+int ObFTDictHub::advance_refresh_version(const uint64_t dict_table_id, int64_t &version)
+{
+  int ret = OB_SUCCESS;
+  int64_t old_version = 0;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_UNLIKELY(OB_INVALID_ID == dict_table_id)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    ObBucketHashWLockGuard guard(rw_dict_lock_, common::murmurhash(&dict_table_id, sizeof(dict_table_id), 0));
+    int tmp_ret = refresh_version_map_.get_refactored(dict_table_id, old_version);
+    if (OB_HASH_NOT_EXIST == tmp_ret) {
+      old_version = 0;
+    } else if (OB_SUCCESS != tmp_ret) {
+      ret = tmp_ret;
+      LOG_WARN("failed to get dictionary refresh version", K(ret), K(dict_table_id));
+    }
+    if (OB_SUCC(ret)) {
+      version = old_version + 1;
+      if (OB_FAIL(refresh_version_map_.set_refactored(dict_table_id, version, 1 /* overwrite */))) {
+        LOG_WARN("failed to advance dictionary refresh version", K(ret), K(dict_table_id), K(version));
+      }
+    }
+  }
   return ret;
 }
 int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container)
 {
   int ret = OB_SUCCESS;
-  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_));
+  ObFTDictInfoKey key(desc.get_cache_identity());
   ObFTDictInfo info;
   container.reset();
 
@@ -78,7 +129,10 @@ int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &
 
     if (OB_FAIL(ret)) {
       if (OB_ENTRY_NOT_EXIST == ret) {
-        if (OB_FAIL(ObFTRangeDict::build_cache_from_ik_dict(desc, container))) {
+        // 内置词典从程序内嵌文本构建；用户词典必须扫描其配置表，不能退化为内置词典。
+        if (OB_FAIL(desc.is_builtin()
+                        ? ObFTRangeDict::build_cache_from_ik_dict(desc, container)
+                        : ObFTRangeDict::build_cache_from_table(desc, container))) {
           LOG_WARN("Failed to build cache", K(ret));
         } else if (FALSE_IT(info.range_count_ = container.get_handles().size())) {
         } else if (OB_FAIL(put_dict_info(key, info))) {
@@ -95,7 +149,7 @@ int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &c
   int ret = OB_SUCCESS;
   ObFTDictInfo info;
   container.reset();
-  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_));
+  ObFTDictInfoKey key(desc.get_cache_identity());
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("dict hub not init", K(ret));

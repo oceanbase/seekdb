@@ -56,6 +56,9 @@ DEF_SIMPLE_EXECUTOR(ObAdminMerge);
 
 DEF_SIMPLE_EXECUTOR(ObRefreshMemStat);
 
+// 单机 seekdb 中刷新指定全文词典的本地 DAT 缓存代次。
+DEF_SIMPLE_EXECUTOR(ObRefreshFulltextDict);
+
 DEF_SIMPLE_EXECUTOR(ObWashMemFragmentation);
 
 DEF_SIMPLE_EXECUTOR(ObRefreshIOCalibraiton);

@@ -35,8 +35,7 @@ namespace storage
 class ObFTRangeDict final : public ObIFTDict
 {
 public:
-  ObFTRangeDict(ObIAllocator &alloc,
-                ObFTCacheRangeContainer *range_container,
+  ObFTRangeDict(ObFTCacheRangeContainer *range_container,
                 const ObFTDictDesc &desc)
       : is_inited_(false), desc_(desc), range_alloc_(lib::ObMemAttr("Range Dict")),
         range_dicts_(&range_alloc_), range_container_(range_container)
@@ -47,8 +46,8 @@ public:
 public:
   struct ObFTRange final
   {
-    ObFTSingleWord start_;
-    ObFTSingleWord end_;
+    ObFTSingleToken start_;
+    ObFTSingleToken end_;
     ObIFTDict *dict_; // a cache dict
   };
 
@@ -69,6 +68,10 @@ public:
   static int build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &range_container);
 
   static int build_cache_from_ik_dict(const ObFTDictDesc &desc, ObFTCacheRangeContainer &range_container);
+
+  // 从用户词典表读取 word 列并构建 DAT range 缓存。
+  static int build_cache_from_table(const ObFTDictDesc &desc,
+                                    ObFTCacheRangeContainer &range_container);
 
 private:
   // build cache

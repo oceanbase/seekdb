@@ -35,8 +35,14 @@ public:
   static constexpr const char *CONFIG_NAME_MAX_TOKEN_SIZE = "max_token_size";
   static constexpr const char *CONFIG_NAME_NGRAM_TOKEN_SIZE = "ngram_token_size";
   static constexpr const char *CONFIG_NAME_STOPWORD_TABLE = "stopword_table";
+  static constexpr const char *CONFIG_NAME_STOPWORD_TABLE_ID = "stopword_table_id";
   static constexpr const char *CONFIG_NAME_DICT_TABLE = "dict_table";
-  static constexpr const char *CONFIG_NAME_QUANTIFIER_TABLE = "quanitfier_table";
+  // 内部持久化字段：保存 resolver 解析出的稳定词典表 ID，不由用户直接配置。
+  static constexpr const char *CONFIG_NAME_DICT_TABLE_ID = "dict_table_id";
+  // 新写入的全文索引属性统一使用正确拼写；读取旧 schema 时仍兼容历史拼写。
+  static constexpr const char *CONFIG_NAME_QUANTIFIER_TABLE = "quantifier_table";
+  static constexpr const char *CONFIG_NAME_QUANTIFIER_TABLE_ID = "quantifier_table_id";
+  static constexpr const char *CONFIG_NAME_QUANTIFIER_TABLE_LEGACY = "quanitfier_table";
   static constexpr const char *CONFIG_NAME_IK_MODE = "ik_mode";
   static constexpr const char *CONFIG_NAME_MIN_NGRAM_SIZE = "min_ngram_size";
   static constexpr const char *CONFIG_NAME_MAX_NGRAM_SIZE = "max_ngram_size";

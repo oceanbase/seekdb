@@ -87,19 +87,23 @@ int ObFtParserAdaptor::segment(ObFTParserParam *param, ObITokenIterator *&iter) 
 {
   int ret = OB_SUCCESS;
   ObTokenIteratorAdaptor *iter_adaptor = nullptr;
-  if (!inited_) {
+  if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(param) || OB_ISNULL(param->allocator_)) {
+    LOG_WARN("ft parser adaptor hasn't been initialized", K(ret));
+  } else if (OB_ISNULL(param) || OB_ISNULL(param->metadata_alloc_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(param));
   } else if (OB_ISNULL(ftparser_.scan_begin) || OB_ISNULL(ftparser_.next_token)) {
     ret = OB_NOT_SUPPORTED;
   } else if (OB_FAIL(ftparser_.scan_begin(param))) {
     LOG_WARN("failed to call ftparser.init", K(ret));
-  } else if (OB_ISNULL(iter_adaptor = static_cast<ObTokenIteratorAdaptor *>(param->allocator_->alloc(sizeof(ObTokenIteratorAdaptor))))) {
+  // adaptor 对象属于解析器元数据，不能随单篇文档 scratch reuse 被回收。
+  } else if (OB_ISNULL(iter_adaptor = static_cast<ObTokenIteratorAdaptor *>(
+                           param->metadata_alloc_->alloc(sizeof(ObTokenIteratorAdaptor))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (FALSE_IT(new (iter_adaptor) ObTokenIteratorAdaptor(ftparser_, param))) {
-  } else if (FALSE_IT(iter = iter_adaptor)) {
+  } else {
+    new (iter_adaptor) ObTokenIteratorAdaptor(ftparser_, param);
+    iter = iter_adaptor;
   }
   return ret;
 }
@@ -109,22 +113,24 @@ void ObFtParserAdaptor::free_token_iter(ObFTParserParam *param, ObITokenIterator
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(param) || OB_ISNULL(iter)) {
+  } else if (OB_ISNULL(param) || OB_ISNULL(param->metadata_alloc_) || OB_ISNULL(iter)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_NOT_NULL(ftparser_.scan_end)) {
-    int tmp_ret = ftparser_.scan_end(param);
-    if (tmp_ret != OB_SUCCESS) {
-      LOG_WARN("failed to call ftparser.scan_end(ignore)", K(tmp_ret));
-    }
   } else {
+    if (OB_NOT_NULL(ftparser_.scan_end)) {
+      const int tmp_ret = ftparser_.scan_end(param);
+      if (tmp_ret != OB_SUCCESS) {
+        LOG_WARN("failed to call ftparser.scan_end(ignore)", K(tmp_ret));
+      }
+    }
+    // scan_end 只结束插件扫描；adaptor 本体始终由创建它的 metadata allocator 释放。
     ObTokenIteratorAdaptor *iter_adaptor = static_cast<ObTokenIteratorAdaptor *>(iter);
     iter_adaptor->~ObTokenIteratorAdaptor();
-    param->allocator_->free(iter_adaptor);
+    param->metadata_alloc_->free(iter_adaptor);
     iter = nullptr;
   }
 }
 
-int ObFtParserAdaptor::get_add_word_flag(ObAddWordFlag &flag) const
+int ObFtParserAdaptor::get_add_word_flag(ObProcessTokenFlag &flag) const
 {
   int ret = OB_SUCCESS;
   uint64_t iflag = 0;

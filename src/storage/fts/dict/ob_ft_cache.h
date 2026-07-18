@@ -48,7 +48,9 @@ public:
   {
     const ObDictCacheKey &other_key = reinterpret_cast<const ObDictCacheKey &>(other);
     return (&other == this)
-           || ((other_key.name_ == name_) && (other_key.dict_type_ == dict_type_));
+           // range_id_ 是 DAT 分片缓存身份的一部分，必须与 hash 字段保持一致。
+           || ((other_key.name_ == name_) && (other_key.dict_type_ == dict_type_)
+               && (other_key.range_id_ == range_id_));
   }
 
   uint64_t hash() const override

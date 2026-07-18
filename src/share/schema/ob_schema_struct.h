@@ -184,6 +184,8 @@ static const uint64_t OB_MIN_ID  = 0;//used for lower_bound
 #define EXTERNAL_TABLE_AUTO_REFRESH_INTERVAL_FLAG (INT64_C(1) << 3)
 #define EXTERNAL_TABLE_AUTO_REFRESH_FLAG_OFFSET 2
 #define EXTERNAL_TABLE_AUTO_REFRESH_FLAG_BITS 2
+// 标记该表可作为全文分词词典表，持久化在 __all_table.table_flags 中。
+#define FULLTEXT_DICT_TABLE_FLAG (INT64_C(1) << 4)
 
 // schema array size
 static const int64_t SCHEMA_SMALL_MALLOC_BLOCK_SIZE = 64;

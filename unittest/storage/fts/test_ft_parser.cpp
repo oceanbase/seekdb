@@ -328,21 +328,19 @@ TEST_F(FTParserTest, test_trie)
     }
 
     ObArenaAllocator allocator(ObModIds::TEST);
-    size_t size = ObArrayHashMap::estimate_size(words.size());
+    size_t size = ObArrayHashMap::calc_memory_size(words.size());
     ObArrayHashMap *map = static_cast<ObArrayHashMap *>(allocator.alloc(size));
     map->init(words.size());
     for (int i = 0; i < words.size(); i++) {
       ObString str(words[i].size(), words[i].data());
-      ObFTWordCode code = i;
+      ObFTTokenCode code = i;
       ret = map->insert(str, code);
     }
 
     for (int i = 0; i < words.size(); i++) {
       ObString str(words[i].size(), words[i].data());
-      ObFTWordCode code;
-      ObFTSingleWord word;
-      word.set_word(str.ptr(), str.length());
-      ret = map->find(word, code);
+      ObFTTokenCode code;
+      ret = map->find(str, code);
       ASSERT_EQ(ret, OB_SUCCESS);
       ASSERT_EQ(code, i);
     }

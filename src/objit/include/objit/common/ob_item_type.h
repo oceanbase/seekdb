@@ -1057,6 +1057,8 @@ typedef enum ObItemType
   T_FUN_SYS_AI_RERANK = 2084,
   T_FUN_MD5_CNN_WS = 2085,
   T_FUN_SYS_BUCKET = 2086,
+  T_FUN_SYS_LOAD_FILE = 2087,
+  T_FUN_SYS_AI_SPLIT_DOCUMENT = 2088,
   T_MAX_OP = 3000,
 
   //pseudo column, to mark the group iterator id
@@ -2882,6 +2884,10 @@ typedef enum ObItemType
   T_FORK_DATABASE = 4917,
   T_DIFF_TABLE = 4918,
   T_MERGE_TABLE = 4919,
+  // CREATE TABLE 的 FULLTEXT_DICT 表选项。
+  T_FULLTEXT_DICT = 4920,
+  // ALTER SYSTEM REFRESH FULLTEXT DICT 命令。
+  T_REFRESH_FULLTEXT_DICT = 4921,
   T_MAX //Attention: add a new type before T_MAX
 } ObItemType;
 

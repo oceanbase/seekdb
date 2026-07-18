@@ -25,7 +25,8 @@ namespace oceanbase
 {
 namespace storage
 {
-int ObFTSortList::add_token(const ObIKToken &token)
+template <typename ListType>
+int ObFTSortListT<ListType>::add_token(const ObIKToken &token)
 {
   int ret = OB_SUCCESS;
 
@@ -44,7 +45,7 @@ int ObFTSortList::add_token(const ObIKToken &token)
       LOG_WARN("fail to push back token", K(ret));
     }
   } else {
-    for (ObFTSortList::CellIter iter = tokens_.last(); OB_SUCC(ret) && iter != tokens_.end();
+    for (typename ObFTSortListT<ListType>::CellIter iter = tokens_.last(); OB_SUCC(ret) && iter != tokens_.end();
          --iter) {
       if (token < *iter) {
         continue;
@@ -61,6 +62,18 @@ int ObFTSortList::add_token(const ObIKToken &token)
   }
 
   return ret;
+}
+
+template <typename ListType>
+int64_t ObFTSortListT<ListType>::max()
+{
+  return tokens_.empty() ? 0 : tokens_.get_last().offset_ + tokens_.get_last().length_;
+}
+
+template <typename ListType>
+int64_t ObFTSortListT<ListType>::min()
+{
+  return tokens_.empty() ? 0 : tokens_.get_first().offset_;
 }
 
 int ObIKTokenChain::add_token_if_conflict(const ObIKToken &token, bool &added)
@@ -165,7 +178,7 @@ int ObIKTokenChain::copy(ObIKTokenChain *other)
     min_offset_ = other->min_offset_;
     max_offset_ = other->max_offset_;
     payload_ = other->payload_;
-    ObFTSortList::CellIter iter = other->list().tokens().begin();
+    ObFTLightSortList::CellIter iter = other->list().tokens().begin();
 
     for (; OB_SUCC(ret) && iter != other->list().tokens().end(); ++iter) {
       bool added = false;
@@ -218,19 +231,5 @@ int ObIKTokenChain::pop_back(ObIKToken &token)
   return ret;
 }
 
-int64_t ObFTSortList::max()
-{
-  if (tokens_.empty()) {
-    return 0;
-  }
-  return tokens_.get_last().offset_ + tokens_.get_last().length_;
-}
-int64_t ObFTSortList::min()
-{
-  if (tokens_.empty()) {
-    return 0;
-  }
-  return tokens_.get_first().offset_;
-}
 } //  namespace storage
 } //  namespace oceanbase

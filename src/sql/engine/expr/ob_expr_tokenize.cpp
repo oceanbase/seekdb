@@ -35,6 +35,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_json_func_helper.h" // file not self-contained, there're logs inside.
+#include "sql/engine/expr/ob_expr_lob_utils.h"
 
 namespace oceanbase
 {
@@ -89,16 +90,15 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
   storage::ObFTParseHelper tokenize_helper;
   const int64_t ft_word_bkt_cnt = MIN(MAX(param.fulltext_.length() / 2, 2), 997);
   int64_t doc_len = 0;
-  ObFTWordMap token_map;
-
-  ObArenaAllocator tmp_parse_alloc(ObMemAttr("Tmp buffer"));
+  ObFTTokenMap token_map;
 
   if (TokenizeParam::OUTPUT_MODE::DEFAULT != mode && TokenizeParam::OUTPUT_MODE::ALL != mode) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid output mode", K(ret), K(mode));
-  } else if (OB_FAIL(tokenize_helper.init(&allocator, param.parser_name_, param.properties_))) {
+  // seekdb 暂无 phrase DDL 枚举，TOKENIZE 固定走普通 MATCH，不生成位置列。
+  } else if (OB_FAIL(tokenize_helper.init(&allocator, param.parser_name_, param.properties_, false))) {
     LOG_WARN("Fail to init tokenize helper", K(ret));
-  } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
+  } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("ft_token_map")))) {
     LOG_WARN("Fail to create token map", K(ret));
   } else if (
       (0 != param.fulltext_.length())
@@ -231,7 +231,7 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
   if (OB_UNLIKELY(expr.arg_cnt_ < 1 || expr.arg_cnt_ > 3)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Args count invalid.", K(ret), K(expr.arg_cnt_));
-  } else if (OB_FAIL(parse_fulltext(expr, ctx, param))) {
+  } else if (OB_FAIL(parse_fulltext(expr, ctx, allocator, param))) {
     LOG_WARN("Fail to parse fulltext.", K(ret));
   } else if (OB_FAIL(parse_parser_name(expr, ctx, param))) {
     LOG_WARN("Fail to parse parser params.", K(ret));
@@ -328,7 +328,10 @@ int ObExprTokenize::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprTokenize::parse_fulltext(const ObExpr &expr, ObEvalCtx &ctx, TokenizeParam &param)
+int ObExprTokenize::parse_fulltext(const ObExpr &expr,
+                                   ObEvalCtx &ctx,
+                                   common::ObArenaAllocator &allocator,
+                                   TokenizeParam &param)
 {
   int ret = OB_SUCCESS;
 
@@ -340,8 +343,9 @@ int ObExprTokenize::parse_fulltext(const ObExpr &expr, ObEvalCtx &ctx, TokenizeP
     if (fulltext_datum->is_null()) {
       // do nothing, return empty result
       param.fulltext_ = ObString::make_empty_string();
-    } else {
-      param.fulltext_ = fulltext_datum->get_string();
+    } else if (OB_FAIL(ObTextStringHelper::get_string(
+                   expr, allocator, 0, fulltext_datum, param.fulltext_))) {
+      LOG_WARN("Fail to get fulltext string", K(ret));
     }
     param.meta_.set_varchar(); // as we hardcoded in fts_index
     param.meta_.set_collation_type(expr.args_[0]->obj_meta_.get_collation_type());

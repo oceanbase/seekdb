@@ -19,10 +19,13 @@
 
 #include "lib/allocator/ob_allocator.h"
 #include "lib/list/ob_list.h"
+#include "storage/fts/ik/ob_fast_list.h"
 namespace oceanbase
 {
 namespace storage
 {
+// 单批处理上限同时作为 fast container 的首块容量，常见文档无需额外分配。
+static constexpr uint32_t HANDLE_SIZE_LIMIT = 256;
 enum class ObIKTokenType : int8_t
 {
   IK_CHINESE_TOKEN = 0,
@@ -71,32 +74,40 @@ public:
   }
 };
 
-class ObFTSortList
+template <typename ListType>
+class ObFTSortListT
 {
 public:
-  ObFTSortList(ObIAllocator &alloc) : tokens_(alloc) {}
-  ~ObFTSortList() { tokens_.reset(); }
+  ObFTSortListT(ObIAllocator &alloc) : tokens_(alloc) {}
+  ~ObFTSortListT() { tokens_.reset(); }
 
   int add_token(const ObIKToken &token);
 
   bool is_empty() const { return tokens_.empty(); }
 
   void reset() { tokens_.reset(); }
+  // 文档间仅清空逻辑节点，保留已分配块供下一批复用。
+  void reuse() { tokens_.reuse(); }
 
   int64_t min();
 
   int64_t max();
 
-  ObList<ObIKToken, ObIAllocator> &tokens() { return tokens_; }
-  const ObList<ObIKToken, ObIAllocator> &tokens() const { return tokens_; }
+  ListType &tokens() { return tokens_; }
+  const ListType &tokens() const { return tokens_; }
 
 public:
-  typedef ObList<ObIKToken, ObIAllocator>::iterator CellIter;
-  typedef ObList<ObIKToken, ObIAllocator>::const_iterator ConstCellIter;
+  typedef typename ListType::iterator CellIter;
+  typedef typename ListType::const_iterator ConstCellIter;
 
 private:
-  ObList<ObIKToken, ObIAllocator> tokens_;
+  ListType tokens_;
 };
+
+typedef ObFTSortListT<ObList<ObIKToken, ObIAllocator>> ObFTLightSortList;
+typedef ObFTSortListT<ObFastList<ObIKToken, HANDLE_SIZE_LIMIT>> ObFTFastSortList;
+// 保留 Task2 前的公开类型名，供既有 IK 调用和单元测试使用；热路径显式使用 Fast 版本。
+typedef ObFTLightSortList ObFTSortList;
 
 class ObIKTokenChain
 {
@@ -113,7 +124,7 @@ public:
 
   bool check_conflict(const ObIKToken &token);
 
-  ObFTSortList &list() { return list_; }
+  ObFTLightSortList &list() { return list_; }
 
   bool better_than(const ObIKTokenChain &other) const;
 
@@ -135,7 +146,7 @@ private:
   int min_offset_ = -1;
   int max_offset_ = -1;
   int payload_ = -1;
-  ObFTSortList list_;
+  ObFTLightSortList list_;
 };
 
 } //  namespace storage

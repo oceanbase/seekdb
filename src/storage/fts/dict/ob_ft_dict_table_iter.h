@@ -18,6 +18,7 @@
 #define _OCEANBASE_STORAGE_FTS_DICT_OB_FT_DICT_TABLE_ITER_H_
 
 #include "common/mysqlclient/ob_isql_client.h"
+#include "storage/fts/dict/ob_ft_dict_def.h"
 #include "storage/fts/dict/ob_ft_dict_iterator.h"
 
 namespace oceanbase
@@ -37,7 +38,8 @@ public:
   int next() override;
 
 public:
-  int init(const ObString &table_name);
+  // 根据词典描述读取内置表或已通过 DDL 校验的用户词典表。
+  int init(const ObFTDictDesc &dict_desc);
 
 private:
   void reset();

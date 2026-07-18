@@ -54,6 +54,23 @@ void ObSpaceFTParser::reset()
   is_inited_ = false;
 }
 
+int ObSpaceFTParser::reuse_parser(const char *fulltext, const int64_t fulltext_len)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("space ft parser has not been initialized", K(ret));
+  } else if (OB_UNLIKELY(nullptr == fulltext || fulltext_len <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid fulltext for parser reuse", K(ret), KP(fulltext), K(fulltext_len));
+  } else {
+    start_ = fulltext;
+    next_ = fulltext;
+    end_ = fulltext + fulltext_len;
+  }
+  return ret;
+}
+
 int ObSpaceFTParser::init(ObFTParserParam *param)
 {
   int ret = OB_SUCCESS;
@@ -169,10 +186,11 @@ int ObWhiteSpaceFTParserDesc::segment(
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("default ft parser desc hasn't be initialized", K(ret), K(is_inited_));
-  } else if (OB_ISNULL(param) || OB_ISNULL(param->fulltext_) || OB_UNLIKELY(!param->is_valid())) {
+  } else if (OB_ISNULL(param) || OB_ISNULL(param->metadata_alloc_)
+             || OB_ISNULL(param->fulltext_) || OB_UNLIKELY(!param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(param));
-  } else if (OB_ISNULL(parser = OB_NEWx(ObSpaceFTParser, param->allocator_))) {
+  } else if (OB_ISNULL(parser = OB_NEWx(ObSpaceFTParser, param->metadata_alloc_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate space ft parser", K(ret));
   } else {
@@ -183,8 +201,8 @@ int ObWhiteSpaceFTParserDesc::segment(
     }
   }
 
-  if (OB_FAIL(ret)) {
-    OB_DELETEx(ObSpaceFTParser, param->allocator_, parser);
+  if (OB_FAIL(ret) && OB_NOT_NULL(param) && OB_NOT_NULL(param->metadata_alloc_)) {
+    OB_DELETEx(ObSpaceFTParser, param->metadata_alloc_, parser);
   }
 
   return ret;
@@ -196,19 +214,20 @@ void ObWhiteSpaceFTParserDesc::free_token_iter(
 {
   if (OB_NOT_NULL(iter)) {
     abort_unless(nullptr != param);
-    abort_unless(nullptr != param->allocator_);
+    abort_unless(nullptr != param->metadata_alloc_);
     iter->~ObITokenIterator();
-    param->allocator_->free(iter);
+    param->metadata_alloc_->free(iter);
+    iter = nullptr;
   }
 }
 
-int ObWhiteSpaceFTParserDesc::get_add_word_flag(ObAddWordFlag &flag) const
+int ObWhiteSpaceFTParserDesc::get_add_word_flag(ObProcessTokenFlag &flag) const
 {
   int ret = OB_SUCCESS;
-  flag.set_min_max_word();
-  flag.set_stop_word();
-  flag.set_casedown();
-  flag.set_groupby_word();
+  flag.set_min_max_token();
+  flag.set_stop_token();
+  flag.set_casedown_token();
+  flag.set_groupby_token();
   return ret;
 }
 

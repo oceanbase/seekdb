@@ -286,7 +286,8 @@ ob_set_subtarget(ob_storage fts
   fts/ob_fts_doc_word_iterator.cpp
   fts/ob_fts_parser_property.cpp
   fts/ob_fts_plugin_helper.cpp
-  fts/ob_fts_stop_word.cpp
+  fts/ob_ft_token_processor.cpp
+  fts/ob_fts_stop_token_check.cpp
   fts/ob_fts_struct.cpp
   fts/ob_ngram_ft_parser.cpp
   fts/ob_whitespace_ft_parser.cpp
@@ -300,6 +301,7 @@ ob_set_subtarget(ob_storage fts
 )
 
 ob_set_subtarget(ob_storage ik
+  fts/ik/ob_ik_char_util.cpp
   fts/ik/ob_ik_processor.cpp
   fts/ik/ob_ik_letter_processor.cpp
   fts/ik/ob_ik_cjk_processor.cpp

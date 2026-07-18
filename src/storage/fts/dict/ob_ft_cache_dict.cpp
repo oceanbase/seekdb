@@ -87,7 +87,8 @@ int ObFTCacheDict::make_and_fetch_cache_entry(const ObFTDictDesc &desc,
 {
   int ret = OB_SUCCESS;
   ObDictCache &cache = ObDictCache::get_instance();
-  uint64_t name = static_cast<uint64_t>(desc.type_);
+  // 不能仅以词典类型作为 key，否则不同用户词典会覆盖同一 DAT range。
+  uint64_t name = desc.get_cache_identity();
   const ObDictCacheKey put_key(name, desc.type_, range_id);
   const ObDictCacheValue put_value(dat_buff);
   if (OB_FAIL(cache.put_and_fetch_dict(put_key, put_value, value, handle))) {

@@ -164,7 +164,7 @@ int ObFTRangeDict::build_ranges_concurrently_thread_pool(const ObFTDictDesc &des
 
     int count = 0;
     int64_t first_char_len = 0;
-    ObFTSingleWord end_char;
+    ObFTSingleToken end_char;
     bool range_end = false;
 
     while (OB_SUCC(ret) && !range_end) {
@@ -181,10 +181,10 @@ int ObFTRangeDict::build_ranges_concurrently_thread_pool(const ObFTDictDesc &des
                                                    first_char_len))) {
           LOG_WARN("First char is not valid.");
         } else if (DEFAULT_KEY_PER_RANGE == count
-                   && OB_FAIL(end_char.set_word(key.ptr(), first_char_len))) {
+                   && OB_FAIL(end_char.set_token(key.ptr(), first_char_len))) {
           LOG_WARN("Failed to record first char.", K(ret));
         } else if (count > DEFAULT_KEY_PER_RANGE
-                   && (end_char.get_word() != ObString(first_char_len, key.ptr()))) {
+                   && (end_char.get_token() != ObString(first_char_len, key.ptr()))) {
           range_end = true;
         } else {
           if (OB_FAIL(trie->insert(key, {}))) {
@@ -264,8 +264,8 @@ int ObFTRangeDict::build_one_range(const ObFTDictDesc &desc,
   bool range_end = false;
 
   int64_t first_char_len = 0;
-  ObFTSingleWord end_char;
-  ObFTSingleWord start_char;
+  ObFTSingleToken end_char;
+  ObFTSingleToken start_char;
 
   ObFTDAT *dat_buff = nullptr;
   size_t buffer_size = 0;
@@ -283,10 +283,10 @@ int ObFTRangeDict::build_one_range(const ObFTDictDesc &desc,
                                                       first_char_len))) {
       LOG_WARN("First char is not valid.");
     } else if (DEFAULT_KEY_PER_RANGE == count
-               && OB_FAIL(end_char.set_word(key.ptr(), first_char_len))) {
+               && OB_FAIL(end_char.set_token(key.ptr(), first_char_len))) {
       LOG_WARN("Failed to record first char.", K(ret));
     } else if (count > DEFAULT_KEY_PER_RANGE
-               && (end_char.get_word() != ObString(first_char_len, key.ptr()))) {
+               && (end_char.get_token() != ObString(first_char_len, key.ptr()))) {
       // end of range, this key is not consumed.
       range_end = true;
     } else if (OB_FAIL(trie.insert(key, {}))) {
@@ -416,22 +416,35 @@ int ObFTRangeDict::match_with_hit(const ObString &single_word,
 int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict *&dict) const
 {
   int ret = OB_SUCCESS;
-  bool found = false;
-  for (int i = 0; OB_SUCC(ret) && !found && i < range_dicts_.size(); ++i) {
-    if (ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                          range_dicts_[i].start_.get_word(),
-                          single_word)
-            <= 0
-        && ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                             range_dicts_[i].end_.get_word(),
-                             single_word)
-               >= 0) {
-      dict = range_dicts_[i].dict_;
-      found = true;
+  int64_t left = 0;
+  int64_t right = range_dicts_.size() - 1;
+  int64_t candidate = -1;
+  dict = nullptr;
+  while (left <= right) {
+    const int64_t mid = left + ((right - left) >> 1);
+    const ObFTRange &mid_range = range_dicts_[mid];
+    const int cmp_start_ret = ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
+                                                mid_range.start_.get_token(),
+                                                single_word);
+    if (cmp_start_ret <= 0) {
+      candidate = mid;
+      left = mid + 1;
+    } else {
+      right = mid - 1;
     }
   }
-  if (!found) {
-    // not found, dis match
+
+  if (OB_LIKELY(candidate >= 0)) {
+    const ObFTRange &range = range_dicts_[candidate];
+    const int cmp_end_ret = ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
+                                              range.end_.get_token(),
+                                              single_word);
+    if (cmp_end_ret >= 0) {
+      dict = range.dict_;
+    } else {
+      ret = OB_ENTRY_NOT_EXIST;
+    }
+  } else {
     ret = OB_ENTRY_NOT_EXIST;
   }
   return ret;
@@ -451,8 +464,8 @@ int ObFTRangeDict::build_dict_from_cache(const ObFTCacheRangeContainer &range_co
       LOG_WARN("Failed to alloc memory.", K(ret));
     } else {
       ObFTRange range;
-      range.start_ = dat->start_word_;
-      range.end_ = dat->end_word_;
+      range.start_ = dat->start_token_;
+      range.end_ = dat->end_token_;
       range.dict_ = dict;
       if (OB_FAIL(range_dicts_.push_back(range))) {
         LOG_WARN("Failed to push back range dict.", K(ret));
@@ -464,33 +477,23 @@ int ObFTRangeDict::build_dict_from_cache(const ObFTCacheRangeContainer &range_co
 
 int ObFTRangeDict::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &range_container)
 {
+  // 保留原接口兼容已有调用，实际表读取统一收敛到专用入口。
+  return build_cache_from_table(desc, range_container);
+}
+
+int ObFTRangeDict::build_cache_from_table(const ObFTDictDesc &desc,
+                                          ObFTCacheRangeContainer &range_container)
+{
   int ret = OB_SUCCESS;
 
-  ObString table_name;
-  switch (desc.type_) {
-  case ObFTDictType::DICT_IK_MAIN: {
-    table_name = ObString(share::OB_FT_DICT_IK_UTF8_TNAME);
-  } break;
-  case ObFTDictType::DICT_IK_QUAN: {
-    table_name = ObString(share::OB_FT_QUANTIFIER_IK_UTF8_TNAME);
-  } break;
-  case ObFTDictType::DICT_IK_STOP: {
-    table_name = ObString(share::OB_FT_STOPWORD_IK_UTF8_TNAME);
-  } break;
-  default:
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("Not supported dict type.", K(ret));
-  }
-
-  if (OB_SUCC(ret)) {
-    SMART_VAR(ObISQLClient::ReadResult, result)
-    {
-      ObFTDictTableIter iter_table(result);
-      if (OB_FAIL(iter_table.init(table_name))) {
-        LOG_WARN("Failed to init iterator.", K(ret));
-      } else if (OB_FAIL(ObFTRangeDict::build_ranges(desc, iter_table, range_container))) {
-        LOG_WARN("Failed to build ranges.", K(ret));
-      }
+  // descriptor 已由上游区分内置/用户词典；本入口负责将表的 word 列转换为 DAT range。
+  SMART_VAR(ObISQLClient::ReadResult, result)
+  {
+    ObFTDictTableIter iter_table(result);
+    if (OB_FAIL(iter_table.init(desc))) {
+      LOG_WARN("Failed to init iterator.", K(ret));
+    } else if (OB_FAIL(ObFTRangeDict::build_ranges(desc, iter_table, range_container))) {
+      LOG_WARN("Failed to build ranges.", K(ret));
     }
   }
 
@@ -502,7 +505,8 @@ int ObFTRangeDict::try_load_cache(const ObFTDictDesc &desc,
                                   ObFTCacheRangeContainer &range_container)
 {
   int ret = OB_SUCCESS;
-  uint64_t name = static_cast<uint64_t>(desc.type_);
+  // 与写入路径使用相同的词典身份，确保只读取自己的 DAT range。
+  uint64_t name = desc.get_cache_identity();
 
   for (int64_t i = 0; OB_SUCC(ret) && i < range_count; ++i) {
     ObDictCacheKey key(name, desc.type_, i);

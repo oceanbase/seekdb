@@ -41,8 +41,8 @@ class ObArrayHashMap final
 public:
   struct Entry
   {
-    ObFTSingleWord word;
-    ObFTWordCode code;
+    ObFTSingleToken token;
+    ObFTTokenCode code;
     bool used = false;
   } __attribute__((packed));
 
@@ -51,21 +51,19 @@ public:
     uint32_t buffer_size_;
     uint32_t capacity_;
     uint32_t count_;
+    uint32_t locator_;
     Entry data[1];
   } __attribute__((packed));
 
-  static size_t estimate_capacity(size_t word_num);
+  static size_t calc_capacity(size_t token_cnt);
 
-  static size_t estimate_size(size_t word_num);
+  static size_t calc_memory_size(size_t token_cnt);
 
-  size_t capacity() const { return header_.capacity_; }
+  int init(size_t token_cnt);
 
-  int init(size_t word_num);
+  int insert(const ObString &token, ObFTTokenCode code);
 
-  // no duplicate should be inserted
-  int insert(const ObString &key, ObFTWordCode code);
-
-  int find(const ObFTSingleWord &word, ObFTWordCode &code) const;
+  int find(const ObString &token, ObFTTokenCode &code) const;
 
 private:
   struct Header header_;
@@ -100,8 +98,8 @@ public:
   // use if offset is not 0
   size_t data_offset_ = 0;
   // a buffer to store dat
-  ObFTSingleWord start_word_;
-  ObFTSingleWord end_word_;
+  ObFTSingleToken start_token_;
+  ObFTSingleToken end_token_;
   char buff[1] = {0};
 
 public:
@@ -145,7 +143,7 @@ public:
 private:
   int expand();
 
-  int encode(const ObString &word, ObFTWordCode &code, bool add);
+  int encode(const ObString &single_token, ObFTTokenCode &code);
 
 private:
   common::ObIAllocator &alloc_;
@@ -167,15 +165,16 @@ template <typename DataType = void>
 class ObFTDATReader
 {
 public:
-  ObFTDATReader(ObFTDAT *dat) : dat_(dat) {}
+  ObFTDATReader(ObFTDAT *dat) : dat_(dat), map_(dat->get_map()) { }
 
-  // Match single word with hit.
-  int match_with_hit(const ObString &single_word,
+  // Match single token with hit.
+  int match_with_hit(const ObString &single_token,
                      const ObDATrieHit &last_hit,
                      ObDATrieHit &hit) const;
 
 private:
   ObFTDAT *dat_;
+  ObArrayHashMap *map_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObFTDATReader);
