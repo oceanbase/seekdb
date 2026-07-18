@@ -120,7 +120,9 @@ protected:
   ObSRMergeHeap *merge_heap_;
   ObSRDaaTRelevanceCollector *relevance_collector_;
   ObFixedArray<const ObDatum *, ObIAllocator> iter_domain_ids_; // record every dim iter's output domain id, one (ObDatum *) for one dim iter
+  const ObDatum **iter_domain_id_data_;
   ObFixedArray<ObDocIdExt, ObIAllocator> buffered_domain_ids_; // cache for output
+  ObDocIdExt *buffered_domain_id_data_;
   ObFixedArray<double, ObIAllocator> buffered_relevances_;
   ObFixedArray<int64_t, ObIAllocator> next_round_iter_idxes_;
   int64_t next_round_cnt_;
