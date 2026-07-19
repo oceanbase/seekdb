@@ -249,9 +249,6 @@ LATCH_DEF(TENANT_IO_CALLBACK_LOCK, 304, "support IO callback thread num manageme
 LATCH_DEF(DISPLAY_TASKS_LOCK, 305, "display tasks lock", LATCH_READ_PREFER, 2000, 0, true)
 LATCH_DEF(TMP_FILE_MEM_BLOCK_LOCK, 306, "tmp file mem block lock", LATCH_FIFO, INT64_MAX, 0, true)
 
-LATCH_DEF(LOG_EXTERNAL_STORAGE_HANDLER_RW_LOCK, 308, "log external storage handler rw lock", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(LOG_EXTERNAL_STORAGE_HANDLER_LOCK, 309, "log external storage handler spin lock", LATCH_FIFO, 2000, 0, true)
-
 LATCH_DEF(PL_DEBUG_RUNTIMEINFO_LOCK, 310, "PL DEBUG RuntimeInfo lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(MDS_TABLE_HANDLER_LOCK, 311, "mds table handler lock", LATCH_READ_PREFER, 2000, 0, true)
 LATCH_DEF(IND_NAME_CACHE_LOCK, 312, "index name cache lock", LATCH_FIFO, 2000, 0, true)

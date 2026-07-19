@@ -27,7 +27,7 @@ namespace share
 {
 
 // ObBackupStorageInfo is the storage-info vocabulary type still used by live local-file
-// IO paths (SELECT INTO OUTFILE, LOAD DATA INFILE, logservice external storage).
+// IO paths (SELECT INTO OUTFILE and LOAD DATA INFILE).
 const int64_t OB_MAX_BACKUP_PATH_LENGTH = 1024;
 const int64_t OB_BACKUP_LS_DIR_NAME_LENGTH = 64;
 const char *const OB_STR_LS = "logstream";
@@ -80,6 +80,7 @@ public:
   bool is_valid() const;
   bool is_root_path_equal(const ObBackupDest &backup_dest) const;
   int is_backup_path_equal(const ObBackupDest &backup_dest, bool &is_equal) const;
+  bool is_assume_role_mode() const { return OB_ISNULL(storage_info_) ? false : storage_info_->is_assume_role_mode(); }
   bool is_enable_worm() const { return OB_ISNULL(storage_info_) ? false : storage_info_->is_enable_worm(); } 
   bool is_storage_type_file(){ return OB_ISNULL(storage_info_) ? 
       false : ObStorageType::OB_STORAGE_FILE == storage_info_->get_type(); }

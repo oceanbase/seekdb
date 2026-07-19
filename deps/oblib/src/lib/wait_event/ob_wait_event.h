@@ -126,7 +126,7 @@ WAIT_EVENT_DEF(STORAGE_AUTOINC_FETCH_CONFLICT_SLEEP, 20005, "sleep: tablet autoi
 WAIT_EVENT_DEF(STORAGE_HA_FINISH_TRANSFER, 20006, "sleep: finish transfer sleep wait", "sleep_interval", "", "", CONCURRENCY, true, true)
 
 // logsergice
-WAIT_EVENT_DEF(LOG_EXTERNAL_STORAGE_IO_TASK_WAIT, 20007, "latch: log external storage io task wait", "", "", "", SYSTEM_IO, true, true)
+// 20007 was used by the removed log external storage I/O task. Do not reuse.
 WAIT_EVENT_DEF(DH_LOCAL_SYNC_COND_WAIT, 20010, "datahub local sync conditional wait", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(TRANSFER_HANDLER_COND_WAIT, 20011, "transfer handler condition wait", "address", "", "", CONCURRENCY, true, true)
 
