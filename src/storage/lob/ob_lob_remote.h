@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_STORAGE_OB_LOB_REMOTE_H_
 #define OCEANBASE_STORAGE_OB_LOB_REMOTE_H_
 
-#include "storage/ob_storage_rpc.h"
 #include "storage/lob/ob_lob_rpc_struct.h"
 #include "storage/lob/ob_lob_access_param.h"
 
@@ -28,7 +27,7 @@ namespace storage
 class ObLobQueryIter;
 
 // cross-tenant LOB obcall RPC removed: the cross-tenant LOB read used to loop back to
-// this same machine via the OB_LOB_QUERY streaming RPC (obcall::ObStorageRpcProxy::lob_query).
+// this same machine via the OB_LOB_QUERY streaming RPC.
 // It is now executed fully in-process under MTL_SWITCH to the lob's tenant, driving the same
 // local ObLobQueryIter the OB_LOB_QUERY processor used. ObLobRemoteQueryCtx therefore owns the
 // in-process iterator (READ) / cached length (GET_LENGTH) instead of an SSHandle stream.

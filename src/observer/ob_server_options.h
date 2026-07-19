@@ -52,8 +52,8 @@ public:
   KeyValueArray       variables_;
   const char *        devname_ = nullptr;
   
-  // Primary-Standby configuration
-  common::ObSqlString role_;      // PRIMARY or STANDBY
+  // Server role configuration
+  common::ObSqlString role_;      // PRIMARY only
 
 #ifdef _WIN32
   bool    install_service_ = false;

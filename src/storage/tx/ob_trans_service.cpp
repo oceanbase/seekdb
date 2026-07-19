@@ -16,7 +16,6 @@
 
 
 #include "ob_trans_service.h"
-#include "storage/ob_storage_rpc.h"
 #include "storage/ob_storage_rpc_arg.h"
 #include "share/rc/ob_module_provider.h"
 #include "ob_trans_functor.h"

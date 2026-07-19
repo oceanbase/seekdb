@@ -32,12 +32,8 @@ ObSrvNetworkFrame::ObSrvNetworkFrame(ObGlobalContext &gctx)
       xlator_(gctx),
       request_qhandler_(xlator_),
       deliver_(request_qhandler_, xlator_.get_session_handler(), gctx),
-      ingress_service_(),
       last_ssl_info_hash_(UINT64_MAX),
-      lock_(),
-      standby_fetchlog_bw_limit_(0),
-      standby_fetchlog_bytes_(0),
-      standby_fetchlog_time_(0)
+      lock_()
 {
   // obcall local-procedure-call dispatch hook removed: no in-process obcall RPC
   // is delivered through deliver_ anymore. deliver_ / the request queue handler /
@@ -389,7 +385,6 @@ int ObSrvNetworkFrame::reload_ssl_config()
 }
 void ObSrvNetworkFrame::wait()
 {
-  ingress_service_.wait();
   obmysql::global_sql_nio_server->wait();
 }
 
@@ -411,33 +406,5 @@ void ObSrvNetworkFrame::sql_nio_stop()
 int ObSrvNetworkFrame::reload_rpc_auth_method()
 {
   int ret = OB_SUCCESS;
-  return ret;
-}
-
-oceanbase::rootserver::ObIngressBWAllocService *ObSrvNetworkFrame::get_ingress_service()
-{
-  return &ingress_service_;
-}
-int ObSrvNetworkFrame::net_endpoint_register(const ObNetEndpointKey &endpoint_key, int64_t expire_time)
-{
-  int ret = OB_SUCCESS;
-  
-  if (ingress_service_.is_leader() && OB_FAIL(ingress_service_.register_endpoint(endpoint_key, expire_time))) {
-    LOG_WARN("net endpoint register failed", K(ret), K(endpoint_key));
-  }
-  return ret;
-}
-
-int ObSrvNetworkFrame::net_endpoint_predict_ingress(const ObNetEndpointKey &endpoint_key, int64_t &predicted_bw)
-{
-  int ret = OB_NOT_SUPPORTED;
-  LOG_WARN("net endpoint predict ingress is not supported");
-  return ret;
-}
-
-int ObSrvNetworkFrame::net_endpoint_set_ingress(const ObNetEndpointKey &endpoint_key, int64_t assigned_bw)
-{
-  int ret = OB_NOT_SUPPORTED;
-  LOG_WARN("net endpoint set ingress is not supported");
   return ret;
 }

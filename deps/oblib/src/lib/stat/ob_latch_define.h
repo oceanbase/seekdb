@@ -138,7 +138,6 @@ LATCH_DEF(FIXED_SIZE_ALLOCATOR_LOCK, 177, "fixed size allocator lock", LATCH_FIF
 LATCH_DEF(DBMS_SCHEDULER_TASK_LOCK, 178, "dbms_scheduler task lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(DBMS_SCHEDULER_MASTER_LOCK, 179, "dbms_scheuler master lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(TENANT_WORKER_LOCK, 180, "tenant worker lock", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(SERVER_LOCALITY_CACHE_LOCK, 181, "server locality cache lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(MASTER_RS_CACHE_LOCK, 182, "master rs cache lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(SCHEMA_REFRESH_INFO_LOCK, 183, "schema refresh info lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(REFRESH_SCHEMA_LOCK, 184, "refresh schema lock", LATCH_FIFO, 2000, 0, true)

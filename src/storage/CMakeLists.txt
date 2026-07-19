@@ -571,15 +571,12 @@ ob_set_subtarget(ob_storage common
   ob_relative_table.cpp
   ob_row_fuse.cpp
   ob_row_reshape.cpp
-  ob_storage_rpc.cpp
-  ob_storage_rpc.ipp
   ob_storage_schema.cpp
   ob_storage_schema_util.cpp
   ob_storage_schema_recorder.cpp
   ob_storage_clog_recorder.cpp
   ob_storage_struct.cpp
   ob_tablet_restore_state.cpp
-  ob_storage_ha_struct.cpp
   ob_storage_table_guard.cpp
   ob_storage_util.cpp
   ob_super_block_struct.cpp

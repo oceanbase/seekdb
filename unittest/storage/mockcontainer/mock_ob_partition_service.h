@@ -27,7 +27,6 @@
 #include "ob_partition_service.h"
 
 #include "share/ob_rpc_struct.h"
-#include "share/ob_server_locality_cache.h"
 #include "common/storage/ob_freeze_define.h"
 #include "storage/tx/ob_trans_define.h"
 #include "storage/tx/ob_trans_service.h"
@@ -55,9 +54,6 @@ public:
                int(const uint64_t tenant_id));
   MOCK_METHOD1(inactivate_tenant,
                int(const uint64_t tenant_id));
-
-  MOCK_METHOD0(force_refresh_locality_info, int());
-
 
   MOCK_METHOD4(init,
                int(const blocksstable::ObStorageEnv &env, const common::ObAddr &self_addr,

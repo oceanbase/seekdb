@@ -19,7 +19,6 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "logservice/ob_log_service.h"
-#include "observer/ob_srv_network_frame.h"
 #include "rootserver/freeze/ob_major_freeze_service.h"
 #include "observer/dbms_scheduler/ob_dbms_sched_service.h"
 #include "rootserver/ddl_task/ob_ddl_scheduler.h" // for ObDDLScheduler
@@ -41,7 +40,6 @@ namespace oceanbase
 using namespace share;
 using namespace logservice;
 using namespace transaction;
-using namespace rootserver;
 
 namespace storage
 {
@@ -686,8 +684,6 @@ int ObLS::register_local_services_()
 {
   int ret = OB_SUCCESS;
 
-  ObIngressBWAllocService *ingress_service = GCTX.net_frame_->get_ingress_service();
-  REGISTER_TO_LOGSERVICE(NET_ENDPOINT_INGRESS_LOG_BASE_TYPE, ingress_service);
   REGISTER_TO_LOGSERVICE(DBMS_SCHEDULER_LOG_BASE_TYPE, share::g_mp->dbms_sched_service());
   REGISTER_TO_LOGSERVICE(SYS_DDL_SCHEDULER_LOG_BASE_TYPE, share::g_mp->ddl_scheduler());
   REGISTER_TO_LOGSERVICE(DDL_SERVICE_LAUNCHER_LOG_BASE_TYPE, share::g_mp->ddl_service_launcher());
@@ -776,7 +772,6 @@ void ObLS::unregister_common_service_()
 
 void ObLS::unregister_local_services_()
 {
-  UNREGISTER_FROM_LOGSERVICE(NET_ENDPOINT_INGRESS_LOG_BASE_TYPE, nullptr);
   UNREGISTER_FROM_LOGSERVICE(DBMS_SCHEDULER_LOG_BASE_TYPE, share::g_mp->dbms_sched_service());
   UNREGISTER_FROM_LOGSERVICE(SYS_DDL_SCHEDULER_LOG_BASE_TYPE, share::g_mp->ddl_scheduler());
   UNREGISTER_FROM_LOGSERVICE(DDL_SERVICE_LAUNCHER_LOG_BASE_TYPE, share::g_mp->ddl_service_launcher());

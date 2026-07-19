@@ -23,7 +23,6 @@
 #include "observer/ob_srv_xlator.h"
 #include "observer/ob_srv_deliver.h"
 #include "observer/ob_server_struct.h"
-#include "observer/net/ob_ingress_bw_alloc_service.h"
 
 namespace oceanbase {
 namespace rpc {
@@ -61,11 +60,6 @@ public:
 
   static int reload_rpc_auth_method();
 
-  rootserver::ObIngressBWAllocService *get_ingress_service();
-  int net_endpoint_register(const ObNetEndpointKey &endpoint_key, int64_t expire_time);
-  int net_endpoint_predict_ingress(const ObNetEndpointKey &endpoint_key, int64_t &predicted_bw);
-  int net_endpoint_set_ingress(const ObNetEndpointKey &endpoint_key, int64_t assigned_bw);
-
 private:
   ObGlobalContext &gctx_;
 
@@ -74,13 +68,9 @@ private:
 
   // generic deliver
   ObSrvDeliver deliver_;
-  rootserver::ObIngressBWAllocService ingress_service_;
 
   uint64_t last_ssl_info_hash_;
   ObSpinLock lock_;
-  int64_t standby_fetchlog_bw_limit_;
-  uint64_t standby_fetchlog_bytes_;
-  int64_t standby_fetchlog_time_;
 
   DISALLOW_COPY_AND_ASSIGN(ObSrvNetworkFrame);
 }; // end of class ObSrvNetworkFrame

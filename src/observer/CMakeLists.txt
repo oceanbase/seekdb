@@ -9,7 +9,6 @@ ob_set_subtarget(ob_server schema
 )
 
 ob_set_subtarget(ob_server common
-  ob_standby_schema_refresh_trigger.cpp
   ob_dump_task_generator.cpp
   ob_inner_sql_transmit_struct.cpp
   ob_inner_sql_connection.cpp
@@ -91,8 +90,6 @@ ob_set_subtarget(ob_server mysql
 )
 
 ob_set_subtarget(ob_server net
-  net/ob_ingress_bw_alloc_service.cpp
-  net/ob_net_endpoint_ingress_rpc_struct.cpp
   net/ob_net_queue_traver.cpp
 )
 

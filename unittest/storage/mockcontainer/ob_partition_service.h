@@ -25,7 +25,6 @@
 #include "lib/hash/ob_linear_hash_map.h"
 #include "storage/access/ob_dml_param.h"
 #include "sql/ob_end_trans_callback.h"
-#include "share/ob_server_locality_cache.h"
 
 namespace oceanbase
 {
@@ -33,11 +32,6 @@ namespace oceanbase
 namespace blocksstable
 {
 struct ObStorageEnv;
-}
-
-namespace share
-{
-class ObServerLocality;
 }
 
 namespace election
@@ -87,8 +81,6 @@ public:
                int(const uint64_t tenant_id));
   MOCK_METHOD1(inactivate_tenant,
                int(const uint64_t tenant_id));
-
-  MOCK_METHOD0(force_refresh_locality_info, int());
 
   MOCK_METHOD0(start,
                int());

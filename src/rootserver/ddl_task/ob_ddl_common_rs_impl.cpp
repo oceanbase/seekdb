@@ -21,7 +21,6 @@
 #include "observer/ob_service.h"
 #include "share/ob_ddl_common.h"
 #include "observer/omt/ob_multi_tenant.h"  // previously hidden behind the server_struct include chain, make the dependency explicit
-#include "storage/ob_storage_rpc.h"
 #include "storage/ob_storage_rpc_arg.h"
 #include "share/ob_rpc_struct.h"
 #include "share/ob_ddl_checksum.h"

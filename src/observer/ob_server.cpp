@@ -148,7 +148,7 @@ ObServer::ObServer()
     prepare_stop_(true), stop_(true), has_stopped_(true), has_destroy_(false),
     net_frame_(gctx_), sql_conn_pool_(), ddl_conn_pool_(),
     res_inner_conn_pool_(),
-    storage_rpc_proxy_(), sql_proxy_(),
+    sql_proxy_(),
     executor_rpc_(),
     config_(ObServerConfig::get_instance()),
     reload_config_(config_, gctx_), config_mgr_(config_, reload_config_),
@@ -1765,8 +1765,6 @@ int ObServer::init_network()
 
   if (OB_FAIL(net_frame_.init())) {
     LOG_ERROR("init server network fail");
-  } else if (OB_FAIL(storage_rpc_proxy_.init(GCTX.self_addr()))) {
-    LOG_ERROR("init storage rpc proxy fail");
   }
 
   return ret;
@@ -2006,7 +2004,6 @@ int ObServer::init_global_context()
   gctx_.tablet_operator_ = &tablet_operator_;
   gctx_.meta_db_pool_ = &meta_db_pool_;
   gctx_.kv_storage_ = &kv_storage_;
-  gctx_.storage_rpc_proxy_ = &storage_rpc_proxy_;
   gctx_.sql_proxy_ = &sql_proxy_;
   gctx_.ddl_sql_proxy_ = &ddl_sql_proxy_;
   gctx_.res_inner_conn_pool_ = &res_inner_conn_pool_;
@@ -2062,7 +2059,8 @@ int ObServer::parse_role_and_restore_source(const ObServerOptions &opts)
     if (0 == role_str.case_compare("PRIMARY")) {
       gctx_.server_role_ = common::PRIMARY_CLUSTER;
     } else if (0 == role_str.case_compare("STANDBY")) {
-      gctx_.server_role_ = common::STANDBY_CLUSTER;
+      ret = OB_NOT_SUPPORTED;
+      LOG_ERROR("STANDBY role is not supported in seekdb", K(opts.role_));
     } else {
       ret = OB_INVALID_ARGUMENT;
       LOG_ERROR("invalid role", K(opts.role_));
@@ -2072,8 +2070,9 @@ int ObServer::parse_role_and_restore_source(const ObServerOptions &opts)
   // Note: restore_source is now read from config parameter log_restore_source
   // Use: -o log_restore_source='ip:port;ip:port'
 
-  LOG_INFO("role parsed",
-           "role", gctx_.server_role_ == common::PRIMARY_CLUSTER ? "PRIMARY" : "STANDBY");
+  if (OB_SUCC(ret)) {
+    LOG_INFO("role parsed", "role", "PRIMARY");
+  }
 
   return ret;
 }

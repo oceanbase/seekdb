@@ -20,7 +20,6 @@
 #include "storage/tablet/ob_batch_create_tablet_arg.h"
 #include "lib/allocator/ob_concurrent_fifo_allocator.h"          // ObConcurrentFIFOAllocator
 #include "storage/ls/ob_ls.h"
-#include "storage/ob_storage_rpc.h"
 #include "share/resource_limit_calculator/ob_resource_limit_calculator.h"
 #include "storage/tx/ob_tx_result_struct.h"
 
@@ -104,8 +103,6 @@ public:
                               const obcall::ObBatchRemoveTabletArg &batch_arg,
                               obcall::ObRemoveTabletsInTransRes &result);
 
-  obcall::ObStorageRpcProxy *get_storage_rpc_proxy() { return &storage_svr_rpc_proxy_; }
-  storage::ObStorageRpc *get_storage_rpc() { return &storage_rpc_; }
   TO_STRING_KV(K_(is_inited));
 private:
   enum class ObLSCreateState {
@@ -143,10 +140,6 @@ private:
   common::ObConcurrentFIFOAllocator ls_allocator_;
   // protect the create and remove process
   lib::ObMutex change_lock_;
-
-  //TOD(muwei.ym) src rpc framework should be tenant level
-  obcall::ObStorageRpcProxy storage_svr_rpc_proxy_;
-  storage::ObStorageRpc storage_rpc_;
 
   DISALLOW_COPY_AND_ASSIGN(ObLSService);
 };

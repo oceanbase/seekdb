@@ -47,7 +47,6 @@ namespace oceanbase
 
 namespace share
 {
-class ObServerLocality;
 namespace schema
 {
 class ObSchemaGetterGuard;

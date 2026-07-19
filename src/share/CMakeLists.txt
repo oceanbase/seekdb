@@ -41,7 +41,11 @@ ob_set_subtarget(ob_share_extra ALONE
 )
 
 ob_set_subtarget(ob_share vector
+  roaringbitmap/ob_roaringbitmap.cpp
+  roaringbitmap/ob_rb_utils.cpp
+  roaringbitmap/ob_rb_bin.cpp
   roaringbitmap/ob_rb_memory_mgr.cpp
+  ob_mysql_proc_statement.cpp
 )
 
 ob_set_subtarget(ob_share ALONE
@@ -80,8 +84,6 @@ ob_set_subtarget(ob_share cache
 ob_set_subtarget(ob_share common
   ob_autoincrement_param.cpp
   ob_autoincrement_service.cpp
-  ob_cascad_member.cpp
-  ob_cascad_member_list.cpp
   ob_cluster_role.cpp
   ob_cluster_version.cpp
   ob_column_checksum_error_operator.cpp
@@ -109,14 +111,12 @@ ob_set_subtarget(ob_share common
   ob_global_autoinc_service.cpp
   ob_global_merge_table_operator.cpp
   ob_global_stat_proxy.cpp
-  ob_gts_info.cpp
   ob_i_tablet_scan.cpp
   ob_io_device_helper.cpp
   ob_kv_parser.cpp
   ob_lease_struct.cpp
   ob_list_parser.cpp
   ob_local_device.cpp
-  ob_locality_info.cpp
   ob_table_range.cpp
   ob_max_id_fetcher.cpp
   ob_max_id_cache.cpp
@@ -126,7 +126,6 @@ ob_set_subtarget(ob_share common
   ob_plugin_helper.cpp
   ob_resource_limit.cpp
   ob_schema_status_proxy.cpp
-  ob_server_locality_cache.cpp
   ob_server_status.cpp
   ob_server_struct.cpp
   ob_share_util.cpp
@@ -149,7 +148,6 @@ ob_set_subtarget(ob_share common
   ob_freeze_info_manager.cpp
   ob_zone_merge_info.cpp
   ob_zone_merge_table_operator.cpp
-  ob_rootservice_list.cpp
   ob_admin_dump_helper.cpp
   ob_inner_kv_table_operator.cpp
   ob_inner_table_operator.cpp

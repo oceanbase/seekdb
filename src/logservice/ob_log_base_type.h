@@ -78,8 +78,7 @@ enum ObLogBaseType
   // for NET_STANDBY_TNT_SERVICE
   NET_STANDBY_TNT_SERVICE_LOG_BASE_TYPE = 22,
 
-  // for endpoint ingress
-  NET_ENDPOINT_INGRESS_LOG_BASE_TYPE = 23,
+  // 23 was used by the removed endpoint ingress bandwidth service. Do not reuse.
 
   HEARTBEAT_SERVICE_LOG_BASE_TYPE = 24,
 
@@ -189,8 +188,6 @@ int log_base_type_to_string(const ObLogBaseType log_type,
     strncpy(str ,"ARBITRATION_SERVICE", str_len);
   } else if (log_type == NET_STANDBY_TNT_SERVICE_LOG_BASE_TYPE) {
     strncpy(str ,"NET_STANDBY_TNT_SERVICE", str_len);
-  } else if (log_type == NET_ENDPOINT_INGRESS_LOG_BASE_TYPE){
-    strncpy(str ,"NET_ENDPOINT_EGRESS", str_len);
   } else if (log_type == HEARTBEAT_SERVICE_LOG_BASE_TYPE) {
     strncpy(str ,"HEARTBEAT_SERVICE", str_len);
   } else if (log_type == PADDING_LOG_BASE_TYPE) {

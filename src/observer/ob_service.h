@@ -26,7 +26,7 @@
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
 #include "observer/ob_uniq_task_queue.h"
 #include "observer/report/ob_tablet_table_updater.h"
-#include "observer/ob_standby_schema_refresh_trigger.h"
+#include "lib/task/ob_timer.h"
 
 namespace oceanbase
 {
@@ -205,7 +205,6 @@ private:
   const ObGlobalContext &gctx_;
   ObSchemaReleaseTimeTask schema_release_task_;
   TelemetryTask telemetry_task_;
-  share::schema::ObStandbySchemaRefreshTrigger standby_schema_refresh_trigger_;
   bool need_bootstrap_;
 };
 

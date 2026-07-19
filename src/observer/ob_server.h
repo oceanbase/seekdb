@@ -63,7 +63,6 @@
 #include "storage/ddl/ob_ddl_heart_beat_task.h"
 
 #include "storage/ob_disk_usage_reporter.h"
-#include "storage/ob_storage_rpc.h"
 #include "logservice/ob_server_log_block_mgr.h"
 
 
@@ -276,10 +275,6 @@ private:
   ObInnerSQLConnectionPool ddl_conn_pool_;
   ObResourceInnerSQLConnectionPool res_inner_conn_pool_;
 
-
-  // The proxy by which local OceanBase server has ability to
-  // communicate with other server.
-  obcall::ObStorageRpcProxy storage_rpc_proxy_;
   common::ObMySQLProxy sql_proxy_;
   common::ObMySQLProxy ddl_sql_proxy_;
   sql::ObExecutorRpcImpl executor_rpc_;

@@ -880,12 +880,6 @@ DEF_PARAM(rpc_memory_limit_percentage, INT, OB_CLUSTER_PARAMETER, "0", "[0,100]"
 DEF_PARAM(_max_rpc_packet_size, CAP, OB_CLUSTER_PARAMETER, "2047MB", "[2M,2047M]",
         "the max rpc packet size when sending RPC or responding RPC results",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(standby_fetch_log_bandwidth_limit, CAP, OB_CLUSTER_PARAMETER, "0MB", "[0M,10000G]",
-        "the max bandwidth in bytes per second that can be occupied by the sum of the synchronizing log from primary cluster of all servers in the standby cluster",
-        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_server_standby_fetch_log_bandwidth_limit, CAP, OB_CLUSTER_PARAMETER, "0MB", "[0M,1000G]",
-        "the max bandwidth in bytes per second that can be occupied by the synchronizing log from primary cluster of a server in standby cluster",
-        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
 //// location cache config
 DEF_PARAM(virtual_table_location_cache_expire_time, TIME, OB_CLUSTER_PARAMETER, "8s", "[1s,)",
@@ -1224,6 +1218,11 @@ DEF_PARAM(plsql_debug, BOOL, OB_CLUSTER_PARAMETER, "False",
 DEF_PARAM(plsql_v2_compatibility, BOOL, OB_CLUSTER_PARAMETER, "False",
          "allows to control store routine compile action at DDL stage",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(sts_credential, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "", common::ObConfigSTScredentialChecker,
+        "STS credential for object storage, "
+        "values: sts_url=xxx&sts_ak=xxx&sts_sk=xxx",
+        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+
 // for storage cache policy of hot retention
 DEF_PARAM(default_storage_cache_policy, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "AUTO", common::ObConfigStorageCachePolicyChecker,
     "default storage cache policy for tenant, "
@@ -1749,6 +1748,15 @@ DEF_PARAM(json_document_max_depth, INT, OB_CLUSTER_PARAMETER, "100", "[100,1024]
 DEF_PARAM(_multimodel_memory_trace_level, INT, OB_CLUSTER_PARAMETER, "0", "[0,100)", 
         "Multi-mode memory tracking mechanism",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+// automatically faststack
+DEF_PARAM(_faststack_req_queue_size_threshold, INT, OB_CLUSTER_PARAMETER, "0", "[0,)",
+        "When the size of the req_queue reaches this threshold, the obstack will be "
+        "collected automatically. Default: 0, means set off. Range: [0, +∞)",
+        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(_faststack_min_interval, TIME, OB_CLUSTER_PARAMETER, "30m", "[1s,)",
+        "Minimum interval for OBServer to automatically collect the obstack. "
+        "Default: 30min. Range: [1s,+∞)",
+        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_query_record_size_limit, INT, OB_CLUSTER_PARAMETER, "65536", "[0, 67108864] in integer",
         "set sql_audit and plan stat query sql size. Range: [0,67108864] in integer in integer.",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -1864,6 +1872,12 @@ DEF_BOOL(vector_index_memory_saving_mode, OB_CLUSTER_PARAMETER, "True",
         "Specifies whether to enable the vector index memory saving mode. This can reduce the memory used by the partition table vector index rebuild.",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
+DEF_PARAM(ob_storage_s3_url_encode_type, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "default", common::ObConfigS3URLEncodeTypeChecker,
+                     "Determines the URL encoding method for S3 requests."
+                     "\"default\": Uses the S3 standard URL encoding method."
+                     "\"compliantRfc3986Encoding\": Uses URL encoding that adheres to the RFC 3986 standard.",
+                     ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE),
+                     "default, compliantRfc3986Encoding");
 DEF_PARAM(_enable_drop_and_add_index, BOOL, OB_CLUSTER_PARAMETER, "False",
          "it specifies that whether we can drop and add index in single statement",
          ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
