@@ -21,7 +21,6 @@ done
   echo '++is_cmake++'
   echo '++need_agentserver++0'
   echo '++need_libobserver_so++0'
-  echo '++need_liboblog++0'
 } > "$TASK_DIR/jobargs.output"
 
 echo "[prepare.sh] SEEKDB_TASK_DIR=$TASK_DIR run_jobs and jobargs written."

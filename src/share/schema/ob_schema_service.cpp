@@ -26,9 +26,6 @@ namespace schema
 {
 using namespace oceanbase::common;
 DEFINE_ENUM_FUNC(ObSchemaOperationType, op_type, OP_TYPE_DEF);
-//only liboblog will set it to true
-//use to ignore column retrieve error of new added column in inner table
-bool ObSchemaService::g_ignore_column_retrieve_error_ = false;
 
 ObSchemaOperation::ObSchemaOperation()
     : schema_version_(OB_INVALID_VERSION),

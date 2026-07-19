@@ -350,12 +350,6 @@ private:
               const int64_t latest_local_version,
               const RefreshSchemaMode refresh_schema_mode = RefreshSchemaMode::NORMAL);
 
-  // gc dropped tenant schema mgr
-  int try_gc_tenant_schema_mgr();
-  int try_gc_tenant_schema_mgr(uint64_t req_id);
-  int try_gc_tenant_schema_mgr_for_refresh();
-  int try_gc_tenant_schema_mgr_for_fallback();
-  int try_gc_tenant_schema_mgr(ObSchemaMemMgr *&mem_mgr, ObSchemaMgrCache *&schema_mgr_cache);
   // gc existed tenant schema mgr
   int try_gc_existed_tenant_schema_mgr();
   // try release exist tenant's another allocator
@@ -392,7 +386,7 @@ private:
                                   ObSchemaMemMgr &schema_mem_mgr,
                                   ObSchemaMgrHandle &handle);
   // Reconstruct a historical schema_mgr that has aged out of the live cache, used by
-  // FORCE_FALLBACK consumers (data dictionary dump / change stream async index) that
+  // FORCE_FALLBACK consumers (change stream async index) that
   // request a schema version which may be older than the oldest cached slot. Replays
   // increment schema operations reversely from the nearest available mgr down to
   // target_version and puts the result into the main schema_mgr_cache.

@@ -53,7 +53,6 @@
 // inlcude those classes definations header file in below MACRO BLOCK
 // CAUTION: MAKE SURE your header file is as CLEAN as possible to avoid recursive dependencies!
 #if defined (NEED_MDS_REGISTER_DEFINE) && !defined (NEED_GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION)
-  #include "src/storage/ddl/ob_ddl_change_tablet_to_table_helper.h"
   #include "src/storage/multi_data_source/compile_utility/mds_dummy_key.h"
   #include "src/storage/multi_data_source/mds_ctx.h"
   #include "src/storage/tablet/ob_tablet_create_delete_mds_user_data.h"
@@ -109,10 +108,7 @@ _GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION_(HELPER_CLASS, BUFFER_CTX_TYPE, ID, ENU
                                           ::oceanbase::storage::mds::MdsCtx,\
                                           29,\
                                           UNBIND_LOB_TABLET)
-  GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION(::oceanbase::storage::ObChangeTabletToTableHelper,\
-                                          ::oceanbase::storage::mds::MdsCtx,\
-                                          30,\
-                                          CHANGE_TABLET_TO_TABLE_MDS)
+  // Transaction MDS type 30 was CHANGE_TABLET_TO_TABLE_MDS. Do not reuse.
   GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION(::oceanbase::storage::ObTabletBindingMdsHelper,\
                                           ::oceanbase::storage::mds::MdsCtx,\
                                           34,\

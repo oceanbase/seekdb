@@ -4048,7 +4048,7 @@ bool ObDDLOperator::is_global_index_object(const ObDatabaseSchema &schema)
 
 bool ObDDLOperator::is_global_index_object(const ObTableSchema &schema)
 {
-  // For global local storage, local indexes are still seen, liboblog does not need to be synchronized
+  // A local-storage index does not participate in global-index schema propagation.
   return schema.is_global_index_table() && (!schema.is_index_local_storage());
 }
 

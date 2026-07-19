@@ -2870,22 +2870,7 @@ def_table_schema(
 # 429: __all_arbitration_service (abandoned)
 # 430: legacy ls arb replica task table (abandoned)
 
-def_table_schema(
-    owner = 'bohou.ws',
-    table_name    = '__all_data_dictionary_in_log',
-    table_id      = '431',
-    table_type = 'SYSTEM_TABLE',
-    gm_columns = ['gmt_create', 'gmt_modified'],
-    rowkey_columns = [
-        ('snapshot_scn', 'uint')
-  ],
-    normal_columns = [
-      ('start_lsn', 'uint'),
-      ('end_lsn', 'uint')
-    ],
-    in_tenant_space = True,
-    is_cluster_private = False
-  )
+# 431: __all_data_dictionary_in_log (removed: CDC data dictionary log dumping deleted)
 
 # 432: legacy ls arb replica task history table (abandoned)
 
@@ -14480,25 +14465,7 @@ WHERE T.TABLE_TYPE IN (3,6,8,9,14)
 # 21372: DBA_OB_ACCESS_POINT (abandoned)
 # 21373: CDB_OB_ACCESS_POINT (abandoned)
 
-def_table_schema(
-  owner           = 'bohou.ws',
-  table_name      = 'DBA_OB_DATA_DICTIONARY_IN_LOG',
-  table_id        = '21375',
-  table_type      = 'SYSTEM_VIEW',
-  gm_columns      = [],
-  rowkey_columns  = [],
-  normal_columns  = [],
-  in_tenant_space = True,
-  view_definition =
-  """
-    SELECT
-        SNAPSHOT_SCN,
-        GMT_CREATE AS REPORT_TIME,
-        START_LSN,
-        END_LSN
-    FROM OCEANBASE.__ALL_DATA_DICTIONARY_IN_LOG
-  """.replace("\n", " ")
-  )
+# 21375: DBA_OB_DATA_DICTIONARY_IN_LOG (removed with CDC data dictionary)
 
 # 21376: GV$OB_OPT_STAT_GATHER_MONITOR # removed (single-tenant GV/V collapse; folded into V$OB_OPT_STAT_GATHER_MONITOR)
 

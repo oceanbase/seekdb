@@ -6687,7 +6687,7 @@ int ObSchemaServiceSQLImpl::sort_subpartition_array(ObPartitionSchema &partition
   return ret;
 }
 
-// for liboblog & schema history recycle
+// Used by schema history recycling and change stream checkpoint lookup.
 int ObSchemaServiceSQLImpl::get_schema_version_by_timestamp(
     ObISQLClient &sql_client,
     const ObRefreshSchemaStatus &schema_status,
@@ -6700,8 +6700,7 @@ int ObSchemaServiceSQLImpl::get_schema_version_by_timestamp(
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", K(ret));
-  } else if (false
-             || timestamp <= 0) {
+  } else if (timestamp <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(timestamp));
   } else {

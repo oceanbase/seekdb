@@ -69,7 +69,6 @@ devname
 diag_syslog_per_error_limit
 disk_io_thread_count
 dtl_buffer_size
-dump_data_dictionary_to_log_interval
 enable_adaptive_plan_cache
 enable_async_syslog
 enable_ddl

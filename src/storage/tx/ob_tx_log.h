@@ -433,7 +433,7 @@ private:
   bool is_dup_tx_;
   bool can_elr_;
 
-  //--------- for liboblog -----------
+  // Transaction tracing and redo-chain metadata.
   common::ObString &app_trace_id_str_;
   common::ObString app_trace_info_;
   LogOffSet prev_record_lsn_;
@@ -521,7 +521,7 @@ private:
 
   ObTxDataBackup tx_data_backup_;
 
-  //--------- for liboblog -----------
+  // Transaction redo-chain metadata.
   LogOffSet prev_lsn_;
   ObTxPrevLogType prev_log_type_;
 };

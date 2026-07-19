@@ -63,8 +63,6 @@ add_subdirectory(share)
 add_subdirectory(lib)
 add_subdirectory(rootserver)
 add_subdirectory(tools)
-# add_subdirectory(data_dictionary)
-# add_subdirectory(logminer)
 add_subdirectory(plugin)
 
 # Android: single combined test binary (all TEST() macros in one executable)

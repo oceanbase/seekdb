@@ -2058,15 +2058,6 @@ TABLESPACE_NAME	varchar(268)	NO
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from information_schema.PARTITIONS limit 1);
 cnt
 1
-desc oceanbase.DBA_OB_DATA_DICTIONARY_IN_LOG;
-Field	Type	Null	Key	Default	Extra
-SNAPSHOT_SCN	bigint(20) unsigned	NO		NULL	
-REPORT_TIME	timestamp(6)	YES			
-START_LSN	bigint(20) unsigned	NO		NULL	
-END_LSN	bigint(20) unsigned	NO		NULL	
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_OB_DATA_DICTIONARY_IN_LOG limit 1);
-cnt
-1
 desc oceanbase.V$OB_OPT_STAT_GATHER_MONITOR;
 Field	Type	Null	Key	Default	Extra
 SESSION_ID	bigint(20)	NO		NULL	

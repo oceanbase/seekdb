@@ -3684,44 +3684,6 @@ int ObSchemaGetterGuard::get_primary_table_schema_in_tablegroup(const uint64_t t
   return ret;
 }
 
-int ObSchemaGetterGuard::get_simple_tenant_schemas(
-    ObIArray<const ObSimpleTenantSchema *> &tenant_schemas) const
-{
-  int ret = OB_SUCCESS;
-  const ObSchemaMgr *mgr = NULL;
-  tenant_schemas.reset();
-
-  if (!check_inner_stat()) {
-    ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret));
-  } else if (OB_FAIL(check_lazy_guard( mgr))) {
-    LOG_WARN("fail to check lazy guard", KR(ret));
-  } else if (OB_FAIL(mgr->get_tenant_schemas(tenant_schemas))) {
-    LOG_WARN("fail to get_tenant_schemas", KR(ret));
-  }
-  return ret;
-}
-
-
-int ObSchemaGetterGuard::get_user_tenant_count(int64_t &count) const
-{
-  int ret = OB_SUCCESS;
-  count = 0;
-  const ObSchemaMgr *mgr = NULL;
-
-  if (!check_inner_stat()) {
-    ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret));
-  } else if (OB_FAIL(check_lazy_guard( mgr))) {
-    LOG_WARN("fail to check lazy guard", KR(ret));
-  } else {
-    // lite: single tenant, no user tenants -> count stays 0
-  }
-  return ret;
-}
-
-// For liboblog only, this function only return tenants in normal status.
-
 int ObSchemaGetterGuard::get_tenant_name_case_mode(ObNameCaseMode &mode)
 {
   int ret = OB_SUCCESS;
@@ -4936,7 +4898,7 @@ int ObSchemaGetterGuard::get_simple_table_schema(
   } else if (OB_FAIL(get_schema_mgr( mgr))) {
     LOG_WARN("fail to get schema mgr", KR(ret));
   } else if (OB_ISNULL(mgr)) {
-    // lazy mode: only liboblog used this path; seekdb always returns EAGAIN here.
+    // This accessor requires a materialized schema_mgr; retry a lazy guard later.
     ret = OB_SCHEMA_EAGAIN;
     LOG_WARN("schema mgr is null", KR(ret), K(table_id));
   } else if (OB_FAIL(mgr->get_table_schema( table_id, table_schema))) {
@@ -5541,19 +5503,6 @@ int ObSchemaGetterGuard::get_sys_priv_with_grantee_id(const uint64_t grantee_id,
     LOG_WARN("get sys priv with user_id failed", KR(ret), K(grantee_id));
   }
 
-  return ret;
-}
-
-int ObSchemaGetterGuard::is_lazy_mode(bool &is_lazy) const
-{
-  int ret = OB_SUCCESS;
-  const ObSchemaMgr *schema_mgr = NULL;
-  is_lazy = false;
-  if (OB_FAIL(get_schema_mgr( schema_mgr))) {
-    LOG_WARN("fail to get schema mgr", KR(ret));
-  } else {
-    is_lazy = OB_ISNULL(schema_mgr);
-  }
   return ret;
 }
 

@@ -2809,7 +2809,7 @@ int ObDMLResolver::resolve_basic_table_without_cte(const ParseNode &parse_tree, 
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("get table schema failed", K_(table_item->table_name), K(database_id), K(ret));
       } else if(OB_FAIL(ObResolverUtils::check_sync_ddl_user(session_info_, is_sync_ddl_user))) {
-        // liboblog will reorder the data, which may cause updated data to be placed after the delete table, leading to operations on tables in the recycle bin during replay
+        // Internal schema-sync sessions may replay writes after a table enters the recycle bin.
         LOG_WARN("Failed to check sync_ddl_user", K(ret));
       } else if (!stmt->is_select_stmt() && table_schema->is_in_recyclebin() && !is_sync_ddl_user) {
         ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;

@@ -27,7 +27,7 @@ namespace schema
 int ObSchemaStore::init(const int64_t init_version_count)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(schema_mgr_cache_.init(init_version_count, ObSchemaMgrCache::REFRESH))) {
+  if (OB_FAIL(schema_mgr_cache_.init(init_version_count))) {
     LOG_WARN("init schema_mgr_cache fail", K(ret));
   } else {
     refreshed_version_ = OB_CORE_SCHEMA_VERSION;

@@ -129,10 +129,6 @@ int ObMulSourceTxDataNotifier::notify(const ObTxBufferNodeArray &array,
           ret = notify_ddl_trans(notify_type, buf, len, tmp_notify_arg);
           break;
         }
-        case ObTxDataSourceType::DDL_BARRIER: {
-          ret = notify_ddl_barrier(notify_type, buf, len, tmp_notify_arg);
-          break;
-        }
         default: {
           ret = OB_ERR_UNEXPECTED;
           break;
@@ -331,15 +327,6 @@ int ObMulSourceTxDataNotifier::notify_ddl_trans(const NotifyType type,
   return ret;
 }
 
-int ObMulSourceTxDataNotifier::notify_ddl_barrier(const NotifyType type,
-                                                  const char *buf, const int64_t len,
-                                                  const ObMulSourceDataNotifyArg &arg)
-{
-  int ret = OB_SUCCESS;
-  ob_abort_log_cb_notify_(type, ret, arg.for_replay_);
-  return ret;
-}
-
 //#####################################################
 // ObMulSourceTxDataDump
 //#####################################################
@@ -397,18 +384,6 @@ ObMulSourceTxDataDump::dump_buf(
         TRANS_LOG(WARN, "deserialize error", KR(ret), K(pos), K(len));
       } else {
         dump_str = helper.convert(remove_arg);
-      }
-      break;
-    }
-    case ObTxDataSourceType::DDL_BARRIER: {
-      ObDDLBarrierLog log;
-      if (OB_FAIL(log.deserialize(buf, len, pos))) {
-        TRANS_LOG(WARN, "failed to deserialize buf", K(ret));
-      } else if (pos > len) {
-        ret = OB_ERR_UNEXPECTED;
-        TRANS_LOG(WARN, "deserialize error", KR(ret), K(pos), K(len));
-      } else {
-        dump_str = helper.convert(log);
       }
       break;
     }

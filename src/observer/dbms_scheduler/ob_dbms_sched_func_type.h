@@ -19,6 +19,6 @@ FUNCTION_TYPE(MYSQL_EVENT_JOB) //mysql_event
 FUNCTION_TYPE(NODE_BALANCE_JOB, SHADOW) //load balancing
 FUNCTION_TYPE(EXT_FILE_REFRESH_JOB, SHADOW) //external table refresh
 FUNCTION_TYPE(VECTOR_INDEX_REFRESH_JOB, SHADOW) //vector index refresh
-FUNCTION_TYPE(DATA_DICT_DUMP_JOB, SHADOW) //data dictionary dump
+FUNCTION_TYPE(RESERVED_JOB_6, SHADOW) // persisted ordinal; do not reuse
 FUNCTION_TYPE(FLUSH_NCOMP_DLL_JOB, SHADOW) // flush ncomp dll
 FUNCTION_TYPE(POLLING_ASK_JOB_FOR_PL_RECOMPILE, SHADOW) // Polling check if PL recompile task needs to be started

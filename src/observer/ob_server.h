@@ -418,7 +418,6 @@ public:
   storage::ObTenantFreezeInfoMgr * tenant_freeze_info_mgr() override { return mods_tenant_freeze_info_mgr_; }
   transaction::ObTxLoopWorker * tx_loop_worker() override { return mods_tx_loop_worker_; }
   storage::ObAccessService * access_service() override { return mods_access_service_; }
-  datadict::ObDataDictService * data_dict_service() override { return mods_data_dict_service_; }
   concurrency_control::ObMultiVersionGarbageCollector * multi_version_garbage_collector() override { return mods_multi_version_garbage_collector_; }
   ObTestModule * test_module() override { return mods_test_module_; }
   storage::ObEmptyReadBucket * empty_read_bucket() override { return mods_empty_read_bucket_; }
@@ -514,7 +513,6 @@ private:
   storage::ObTenantFreezeInfoMgr * mods_tenant_freeze_info_mgr_ = nullptr;
   transaction::ObTxLoopWorker * mods_tx_loop_worker_ = nullptr;
   storage::ObAccessService * mods_access_service_ = nullptr;
-  datadict::ObDataDictService * mods_data_dict_service_ = nullptr;
   concurrency_control::ObMultiVersionGarbageCollector * mods_multi_version_garbage_collector_ = nullptr;
   ObTestModule * mods_test_module_ = nullptr;
   storage::ObEmptyReadBucket * mods_empty_read_bucket_ = nullptr;

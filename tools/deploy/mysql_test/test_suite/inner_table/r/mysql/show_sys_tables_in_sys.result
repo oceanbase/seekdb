@@ -1986,14 +1986,6 @@ id	field	type	length	precision	nullable
 27	maxY	15	0	38	1
 28	proj4text	22	2048	-1	1
 29	description	22	2048	-1	1
-table oceanbase.__all_data_dictionary_in_log column_count 5 table_id 431
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=431 order by column_id;
-id	field	type	length	precision	nullable
-16	gmt_create	18	0	25	1
-17	gmt_modified	18	0	25	1
-18	snapshot_scn	10	0	20	0
-19	start_lsn	10	0	20	0
-20	end_lsn	10	0	20	0
 table oceanbase.__all_rewrite_rules column_count 14 table_id 443
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=443 order by column_id;
 id	field	type	length	precision	nullable

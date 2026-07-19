@@ -57,9 +57,8 @@ enum class ObTxDataSourceType : int64_t
   TABLE_LOCK = 1,
   // for log stream table(create log stream)
   LS_TABLE = 2,
-  // for liboblog
-  DDL_BARRIER = 5,
-  // for all ddl trans(record incremental schema)
+  // 5 was DDL_BARRIER. Reserved; do not reuse.
+  // Marker for DDL transactions consumed by the local Change Stream.
   DDL_TRANS = 6,
 #define NEED_GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION
 #define _GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION_(helper_class_name, buffer_ctx_type, ID, ENUM_NAME) ENUM_NAME = ID,
@@ -73,7 +72,6 @@ inline bool uses_builtin_mds_notifier(const ObTxDataSourceType type)
 {
   return ObTxDataSourceType::TABLE_LOCK == type
       || ObTxDataSourceType::LS_TABLE == type
-      || ObTxDataSourceType::DDL_BARRIER == type
       || ObTxDataSourceType::DDL_TRANS == type;
 }
 
@@ -112,9 +110,6 @@ private:
   static int notify_ddl_trans(const NotifyType type,
                               const char *buf, const int64_t len,
                               const ObMulSourceDataNotifyArg &arg);
-  static int notify_ddl_barrier(const NotifyType type,
-                                const char *buf, const int64_t len,
-                                const ObMulSourceDataNotifyArg &arg);
 };
 
 class ObMulSourceTxDataDump

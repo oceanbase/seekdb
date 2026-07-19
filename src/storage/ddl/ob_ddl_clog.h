@@ -280,18 +280,6 @@ private:
   int64_t schema_version_;
 };
 
-class ObDDLBarrierLog final {
-public:
-  ObDDLBarrierLog() : hidden_tablet_ids_() {}
-  ~ObDDLBarrierLog() {}
-  bool is_valid() const { return hidden_tablet_ids_.count() > 0; }
-  TO_STRING_KV(K_(hidden_tablet_ids));
-  OB_UNIS_VERSION_V(1);
-public:
-  common::ObSArray<common::ObTabletID> hidden_tablet_ids_;
-};
-
-
 struct ObTabletFreezeLog final
 {
   OB_UNIS_VERSION(1);

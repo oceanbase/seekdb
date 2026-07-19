@@ -98,7 +98,7 @@
 
 // Macro with default value
 // 1. skip_null_error: indicates whether to ignore NULL values
-// 2. skip_column_error: indicates whether to ignore column errors, and pass in ObSchemaService::g_ignore_column_retrieve_error_
+// 2. skip_column_error: indicates whether to ignore missing-column errors
 // 3. default_value: indicates the default value passed in
 #define EXTRACT_BOOL_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, column_name, obj, skip_null_error, skip_column_error, default_value) \
   if (OB_SUCC(ret)) \
@@ -142,7 +142,7 @@
 
 // Macro with default value
 // 1. skip_null_error: indicates whether to ignore NULL values
-// 2. skip_column_error: indicates whether to ignore column errors, and pass in ObSchemaService::g_ignore_column_retrieve_error_
+// 2. skip_column_error: indicates whether to ignore missing-column errors
 // 3. default_value: indicates the default value passed in
 #define EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, column_name, field, type, skip_null_error, skip_column_error, default_value) \
   if (OB_SUCC(ret)) \
@@ -366,7 +366,7 @@
 
 // Macro with default value
 // 1. skip_null_error: indicates whether to ignore NULL values
-// 2. skip_column_error: indicates whether to ignore column errors, and pass in ObSchemaService::g_ignore_column_retrieve_error_
+// 2. skip_column_error: indicates whether to ignore missing-column errors
 // 3. default_value: indicates the default value passed in
 #define EXTRACT_UINT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, column_name, obj, type, skip_null_error, skip_column_error, default_value) \
   if (OB_SUCC(ret)) \
@@ -429,7 +429,7 @@
 
 // Macro with default value
 // 1. skip_null_error: indicates whether to ignore NULL values
-// 2. skip_column_error: indicates whether to ignore column errors, and pass in ObSchemaService::g_ignore_column_retrieve_error_
+// 2. skip_column_error: indicates whether to ignore missing-column errors
 // 3. default_value: indicates the default value passed in
 #define EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, column_name, obj, type, skip_null_error, skip_column_error, default_value) \
   if (OB_SUCC(ret)) \
@@ -520,7 +520,7 @@
 
 // Macro with default value
 // 1. skip_null_error: indicates whether to ignore NULL values
-// 2. skip_column_error: indicates whether to ignore column errors, and pass in ObSchemaService::g_ignore_column_retrieve_error_
+// 2. skip_column_error: indicates whether to ignore missing-column errors
 // 3. default_value: indicates the default value passed in
 #define EXTRACT_DOUBLE_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, column_name, obj, type, skip_null_error, skip_column_error, default_value) \
   if (OB_SUCC(ret)) \
@@ -734,7 +734,7 @@
 
 // Macro with default value
 // 1. skip_null_error: indicates whether to ignore NULL values
-// 2. skip_column_error: indicates whether to ignore column errors, and pass in ObSchemaService::g_ignore_column_retrieve_error_
+// 2. skip_column_error: indicates whether to ignore missing-column errors
 // 3. default_value: indicates the default value passed in
 #define EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, column_name, field, skip_null_error, skip_column_error, default_value) \
   if (OB_SUCC(ret)) \
@@ -796,7 +796,7 @@
 
 // Macro with default value
 // 1. skip_null_error: indicates whether to ignore NULL values
-// 2. skip_column_error: indicates whether to ignore column errors, and pass in ObSchemaService::g_ignore_column_retrieve_error_
+// 2. skip_column_error: indicates whether to ignore missing-column errors
 // 3. default_value: indicates the default value passed in
 #define EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, column_name, class_obj, skip_null_error, skip_column_error, default_value) \
   if (OB_SUCC(ret)) \
@@ -926,7 +926,7 @@
 
 // Macro with default value
 // 1. skip_null_error: indicates whether to ignore NULL values
-// 2. skip_column_error: indicates whether to ignore column errors, and pass in ObSchemaService::g_ignore_column_retrieve_error_
+// 2. skip_column_error: indicates whether to ignore missing-column errors
 // 3. default_value: indicates the default value passed in
 #define EXTRACT_STRBUF_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, column_name, class_obj, max_length, skip_null_error, skip_column_error, default_value) \
   if (OB_SUCC(ret)) \
@@ -1377,7 +1377,7 @@
 // Used to construct the ID encoded with tenant
 // Macro with default value, used to construct ID with tenant encoded
 // 1. skip_null_error: indicates whether to ignore NULL values
-// 2. skip_column_error: indicates whether to ignore column errors, and pass in ObSchemaService::g_ignore_column_retrieve_error_
+// 2. skip_column_error: indicates whether to ignore missing-column errors
 // 3. default_value: indicates the default value passed in
 #define EXTRACT_INT_FIELD_TO_CLASS_MYSQL_AND_DEFAULT_VALUE(result, column_name, obj, skip_null_error, skip_column_error, default_value) \
   if (OB_SUCC(ret)) \

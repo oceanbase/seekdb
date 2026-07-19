@@ -31,13 +31,11 @@ const char *ObMultiDataSourcePrinter::to_str_mds_type(const ObTxDataSourceType &
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, MEM_TABLE);
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, TABLE_LOCK);
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, LS_TABLE);
-    TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, DDL_BARRIER);
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, DDL_TRANS);
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, CREATE_TABLET_NEW_MDS);
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, DELETE_TABLET_NEW_MDS);
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, UNBIND_TABLET_NEW_MDS);
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, UNBIND_LOB_TABLET);
-    TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, CHANGE_TABLET_TO_TABLE_MDS);
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, TABLET_BINDING);
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, SYNC_TRUNCATE_INFO);
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, DDL_COMPLETE_MDS);

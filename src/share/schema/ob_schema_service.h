@@ -674,8 +674,6 @@ class ObAiModelSqlService;
 class ObSchemaService
 {
 public:
-  //default false, only use for liboblog to control compatable
-  static bool g_ignore_column_retrieve_error_;
   typedef common::ObSEArrayImpl<ObSchemaOperation, 0>  ObSchemaOperationSet;
   class SchemaOperationSetWithAlloc: public ObSchemaOperationSet
   {
@@ -1042,7 +1040,7 @@ public:
     return common::OB_SUCCESS;
   }
 
-  // for liboblog used
+  // Find the latest DDL transaction boundary at or before a timestamp.
   virtual int get_schema_version_by_timestamp(
       common::ObISQLClient &sql_client,
       const ObRefreshSchemaStatus &schema_status,

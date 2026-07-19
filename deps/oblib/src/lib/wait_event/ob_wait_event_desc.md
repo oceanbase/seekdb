@@ -256,38 +256,6 @@ The read and write operation on palf env meta info in multiple threads should be
 
 Registering sub role change handler to role change handler should be mutually exclusive.
 
-## latch: obcdc progress recycle lock wait
-
-The read and write operation on progress indices in progress controller of cdc connector should be mutually exclusive.
-
-## latch: obcdc metainfo lock wait
-
-The read and write operation on meteinfo in meta manager of cdc connector should be mutually exclusive.
-
-## latch: obcdc trans ctx lock wait
-
-The read and write operation on transaction context in cdc connector should be mutually exclusive.
-
-## latch: obcdc svr blacklist wait
-
-The read and write operation on server black list in cdc connector should be mutually exclusive.
-
-## latch: obcdc sqlserver lock wait
-
-The read and write operation on server list in sql server provider of cdc connector should be mutually exclusive.
-
-## latch: obcdc timezone getter lock wait
-
-The read and write operation on timezone info in cdc connector should be mutually exclusive.
-
-## latch: obcdc fetchlog arpc lock wait
-
-The read and write operation on state and rpc request in FetchLogARpc in cdc connector should be mutually exclusive.
-
-## latch: obcdc fetchstream container lock wait
-
-The read and write operation on fetchstream container in cdc connector should be mutually exclusive.
-
 ## latch: external server blacklist lock wait
 
 The read and write operation on external server black list in logroute service should be mutually exclusive.
@@ -308,9 +276,6 @@ Updating or getting max apply scn in apply status should be mutually exclusive.
 
 The read and write operation on configs in gc handler should be mutually exclusive.
 
-## latch: cdcservice clientlsctx lock wait
-
-The read and write operation on source(RemoteLogParent) in ClientLSCtx should be mutually exclusive.
 ## latch: hb respnses lock wait
 
 The read and write operation on hb_responses_ should be mutually exclusive.

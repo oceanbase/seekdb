@@ -99,7 +99,6 @@ public:
   virtual storage::ObTenantFreezeInfoMgr * tenant_freeze_info_mgr() { return nullptr; }
   virtual transaction::ObTxLoopWorker * tx_loop_worker() { return nullptr; }
   virtual storage::ObAccessService * access_service() { return nullptr; }
-  virtual datadict::ObDataDictService * data_dict_service() { return nullptr; }
   virtual concurrency_control::ObMultiVersionGarbageCollector * multi_version_garbage_collector() { return nullptr; }
   virtual ObTestModule * test_module() { return nullptr; }
   virtual storage::ObEmptyReadBucket * empty_read_bucket() { return nullptr; }

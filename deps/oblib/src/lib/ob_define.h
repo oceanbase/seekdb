@@ -673,7 +673,7 @@ enum ObServerRole
   OB_PROXYSERVER = 5,
   OB_SERVER = 6,
   OB_PROXY = 7,
-  OB_OBLOG = 8, // liboblog
+  // 8 was the removed external liboblog role. Do not reuse.
 };
 
 const int OB_FAKE_MS_PORT = 2828;

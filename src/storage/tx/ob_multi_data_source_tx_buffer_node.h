@@ -63,11 +63,6 @@ public:
   uint64_t get_register_no() const { return register_no_; }
   ObTxSEQ get_seq_no() const { return seq_no_; }
 
-  // only for some mds types of CDC
-  // can not be used by observer functions
-  bool allow_to_use_mds_big_segment() const;
-
-
   common::ObString &get_data() { return data_; }
   int64_t get_data_size() const { return data_.length(); }
   ObTxDataSourceType get_data_source_type() const { return type_; }

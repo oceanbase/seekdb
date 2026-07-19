@@ -1487,11 +1487,6 @@ DEF_PARAM(_display_non_session_cursor, BOOL, OB_CLUSTER_PARAMETER, "True",
          "whether the content of non session cursors is displayed.",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
-DEF_PARAM(dump_data_dictionary_to_log_interval, TIME, OB_CLUSTER_PARAMETER, "24h", "(0s,]",
-         "data dictionary dump to log interval"
-        "Range: (0s,+∞)",
-         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-
 DEF_PARAM(enable_user_defined_rewrite_rules, BOOL, OB_CLUSTER_PARAMETER, "False",
          "specify whether the user defined rewrite rules are enabled. "
          "Value: True: enable  False: disable",

@@ -56,7 +56,7 @@ public:
   int init(common::ObMySQLProxy &sql_proxy);
   int start();
 
-  // observer and liboblog get tenant tz map with the following function.
+  // Return the tenant timezone map used by local SQL execution.
   int get_tenant_tz(common::ObTZMapWrap &timezone_wrap);
   int get_tenant_timezone(common::ObTZMapWrap &timezone_wrap,
                           common::ObTimeZoneInfoManager *&tz_info_mgr);

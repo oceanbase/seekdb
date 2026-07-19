@@ -23,7 +23,7 @@
 namespace oceanbase
 {
 
-// ATTENTION: add this cpp file as library only if compiled target doesn't need diagnose. like unittest or cdc.
+// Use this stub only for targets that do not need diagnostic state, such as unit tests.
 
 __attribute__((constructor)) void init_diagnostic_info()
 {

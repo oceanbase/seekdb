@@ -428,7 +428,7 @@ int ObLobAccessParam::update_out_row_ctx(const ObLobMetaInfo *old_info, const Ob
     // it sholud be update when each lob meta table row is modified (insert/delete/update)
     out_row_ctx->seq_no_cnt_ = this->used_seq_cnt_;
 
-    // currently checksum and modified_len is not used by obcdc expect DIFF situation
+    // checksum and modified_len are only needed for the DIFF path
     // update checksum
     ObBatchChecksum bc;
     if (old_info != nullptr) {

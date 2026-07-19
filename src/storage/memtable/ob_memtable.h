@@ -220,7 +220,7 @@ public: // derived from ObITable
   // rowkey_len is the length of the row key in columns and new_row(NB: can we encapsulate it better?)
   // columns is the schema of the new_row, it both contains the row key and row value
   // update_idx is the index of the updated columns for update
-  // old_row is the old version of the row for set action, it contains all columns(NB: it works for liboblog only currently)
+  // old_row is the old version of the row for set action and is consumed by the local Change Stream
   // new_row is the new version of the row for set action, it only contains the necessary columns for update and entire columns for insert
   virtual int set(
       const storage::ObTableIterParam &param,

@@ -69,8 +69,7 @@ enum ObLogBaseType
 
   // for arb garbage collect service, has not been used for now
   ARB_GARBAGE_COLLECT_SERVICE_LOG_BASE_TYPE = 19,
-  // for data_dictionary_service
-  DATA_DICT_LOG_BASE_TYPE = 20,
+  // 20 was used by the removed data dictionary service. Do not reuse.
 
   // for arbitration service
   ARBITRATION_SERVICE_LOG_BASE_TYPE = 21,
@@ -182,8 +181,6 @@ int log_base_type_to_string(const ObLogBaseType log_type,
     strncpy(str ,"MEDIUM_COMPACTION", str_len);
   } else if (log_type == ARB_GARBAGE_COLLECT_SERVICE_LOG_BASE_TYPE) {
     strncpy(str ,"ARB_GARBAGE_COLLECTE_SERVICE", str_len);
-  } else if (log_type == DATA_DICT_LOG_BASE_TYPE) {
-    strncpy(str ,"DATA_DICTIONARY_SERVICE", str_len);
   } else if (log_type == ARBITRATION_SERVICE_LOG_BASE_TYPE) {
     strncpy(str ,"ARBITRATION_SERVICE", str_len);
   } else if (log_type == NET_STANDBY_TNT_SERVICE_LOG_BASE_TYPE) {
