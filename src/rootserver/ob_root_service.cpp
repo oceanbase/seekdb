@@ -3843,7 +3843,7 @@ int ObRootService::table_allow_ddl_operation(const obcall::ObAlterTableArg &arg)
   return ret;
 }
 
-// ask each server to update statistic
+// Update optimizer statistic caches on this server.
 int ObRootService::update_stat_cache(const obcall::ObUpdateStatCacheArg &arg)
 {
   int ret = OB_SUCCESS;
@@ -3853,7 +3853,7 @@ int ObRootService::update_stat_cache(const obcall::ObUpdateStatCacheArg &arg)
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else {
-    if (OB_FAIL(ex_rpc::sync_call([&]{ return ObOptStatManager::get_instance().add_refresh_stat_task(arg); }))) {
+    if (OB_FAIL(ex_rpc::sync_call([&]{ return ObOptStatManager::get_instance().refresh_stat_cache(arg); }))) {
       LOG_WARN("fail to update table statistic", K(ret));
       // OB_SQL_PC_NOT_EXIST represent evict plan failed
       if (OB_SQL_PC_NOT_EXIST == ret) {

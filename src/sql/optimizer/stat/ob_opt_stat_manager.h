@@ -17,13 +17,11 @@
 #ifndef _OB_OPT_STAT_MANAGER_H_
 #define _OB_OPT_STAT_MANAGER_H_
 
-#include "lib/thread/ob_dedup_queue.h"
 #include "sql/optimizer/stat/ob_opt_column_stat.h"
 #include "sql/optimizer/stat/ob_opt_table_stat.h"
 #include "sql/optimizer/stat/ob_opt_stat_service.h"
 #include "sql/optimizer/stat/ob_opt_stat_sql_service.h"
 #include "share/ob_rpc_struct.h"
-#include "lib/thread/ob_dedup_queue.h"
 #include "sql/optimizer/stat/ob_stat_define.h"
 #include "sql/optimizer/stat/ob_opt_ds_stat.h"
 #include "sql/optimizer/stat/ob_stat_item.h"
@@ -40,9 +38,6 @@ public:
   virtual ~ObOptStatManager() {}
   virtual int init(ObMySQLProxy *proxy,
                    ObServerConfig *config);
-  virtual void stop();
-  virtual void wait();
-  virtual void destroy();
   static int64_t get_default_data_size();
 
   static int64_t get_default_avg_row_size();
@@ -159,13 +154,9 @@ public:
   /**  @brief  External interface for obtaining row statistics information */
   virtual int get_table_stat(const ObOptTableStat::Key &key,
                              ObOptTableStat &tstat);
-  virtual int add_refresh_stat_task(const obcall::ObUpdateStatCacheArg &analyze_arg);
+  virtual int refresh_stat_cache(const obcall::ObUpdateStatCacheArg &arg);
 
   int invalidate_plan(const uint64_t table_id);
-
-  int handle_refresh_stat_task(const obcall::ObUpdateStatCacheArg &arg);
-
-  int handle_refresh_system_stat_task(const obcall::ObUpdateStatCacheArg &arg);
 
   int get_table_rowcnt(const uint64_t table_id,
                        const ObIArray<ObTabletID> &all_tablet_ids,
@@ -188,9 +179,12 @@ public:
   int add_ds_stat_cache(const ObOptDSStat::Key &key,
                         const ObOptDSStat &value,
                         ObOptDSStatHandle &ds_stat_handle);
+  int update_opt_stat_gather_stat(const ObOptStatGatherStat &gather_stat);
+
   int update_table_stat_failed_count(const uint64_t table_id,
                                      const ObIArray<int64_t> &part_ids,
                                      int64_t &affected_rows);
+  int update_opt_stat_task_stat(const ObOptStatTaskInfo &task_info);
   ObOptStatService &get_stat_service() { return stat_service_; }
 
   int get_system_stat(ObOptSystemStat &stat);
@@ -198,6 +192,9 @@ public:
   int delete_system_stats();
 
 private:
+  int refresh_table_stat_cache(const obcall::ObUpdateStatCacheArg &arg);
+  int refresh_system_stat_cache(const obcall::ObUpdateStatCacheArg &arg);
+
   int trans_col_handle_to_evals(const ObArray<ObOptColumnStatHandle> &new_handles,
                                 hash::ObHashMap<uint64_t, ObGlobalAllColEvals *> &column_id_col_evals);
 
@@ -215,9 +212,7 @@ private:
                   const hash::ObHashMap<uint64_t, ObGlobalAllColEvals *> &column_id_col_evals);
 
 protected:
-  static const int64_t REFRESH_STAT_TASK_NUM = 5;
   bool inited_;
-  common::ObDedupQueue refresh_stat_task_queue_;
   ObOptStatService stat_service_;
   int64_t last_schema_version_;
 };
