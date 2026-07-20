@@ -97,8 +97,7 @@ int ObVritualCoreInnerTable::inner_open()
             int64_t schema_version_;
             int64_t row_id_;
             bool is_deleted_;
-            TO_STRING_KV(K_(table_id), K_(column_id), K_(schema_version),
-                         K_(row_id), K_(is_deleted));
+            TO_STRING_EMPTY();
           };
           ObArray<CoreHistoryRowInfo> latest_rows;
           const bool is_column_table = OB_ALL_VIRTUAL_CORE_COLUMN_TABLE_TID == table_id_;

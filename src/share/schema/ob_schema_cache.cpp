@@ -20,7 +20,6 @@
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_schema_cache.h"
 #include "share/cache/ob_cache_name_define.h"
-#include "share/ob_sql_client_decorator.h"
 #include "share/ob_server_struct.h"
 #include "lib/utility/ob_smart_call.h"
 namespace oceanbase
@@ -1089,17 +1088,10 @@ int ObSchemaFetcher::fetch_table_schema(const ObRefreshSchemaStatus &schema_stat
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(table_id), K(schema_version));
   } else {
-    ObSQLClientRetryWeak sql_client_retry_weak(sql_client_,
-                                               false,
-                                               schema_status.snapshot_timestamp_,
-                                               false);
-    ObISQLClient *schema_sql_client = is_schema_fetch_dependency_table(table_id)
-                                      ? static_cast<ObISQLClient *>(&sql_client_retry_weak)
-                                      : sql_client_;
     if (OB_FAIL(schema_service_->get_table_schema(schema_status,
                                                   table_id,
                                                   schema_version,
-                                                  *schema_sql_client,
+                                                  *sql_client_,
                                                   allocator,
                                                   tmp_table_schema))) {
       LOG_WARN("get table schema failed", K(ret), K(table_id), K(schema_version));
@@ -1142,15 +1134,8 @@ int ObSchemaFetcher::fetch_table_schema(const ObRefreshSchemaStatus &schema_stat
   } else if (OB_FAIL(schema_keys.push_back(table_schema_key))) {
     LOG_WARN("fail to push back schema key", KR(ret), K(table_id), K(schema_version));
   } else {
-    ObSQLClientRetryWeak sql_client_retry_weak(sql_client_,
-                                               false,
-                                               schema_status.snapshot_timestamp_,
-                                               false);
-    ObISQLClient *schema_sql_client = is_schema_fetch_dependency_table(table_id)
-                                      ? static_cast<ObISQLClient *>(&sql_client_retry_weak)
-                                      : sql_client_;
     if (OB_FAIL(schema_service_->get_batch_tables(schema_status,
-                                                  *schema_sql_client,
+                                                  *sql_client_,
                                                   allocator,
                                                   schema_version,
                                                   schema_keys,

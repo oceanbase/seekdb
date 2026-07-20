@@ -18,7 +18,6 @@
 #include "share/rc/ob_module_provider.h" // for share::g_mp
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/ob_global_stat_proxy.h" // for ObGlobalStatProxy
-#include "share/ob_sql_client_decorator.h" // for ObSQLClientRetryWeak
 #include "share/schema/ob_schema_struct.h" // for ObTenantSchema
 #include "share/ob_server_struct.h"
 #include "share/io/ob_io_manager.h"  // OB_IO_MANAGER, previously hidden behind a removed include chain, make the dependency explicit
@@ -461,11 +460,7 @@ int ObShareUtil::gen_default_sys_tenant_schema(schema::ObTenantSchema &tenant_sc
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
     } else {
-      ObSQLClientRetryWeak sql_client_retry_weak(GCTX.sql_proxy_,
-                                                 false,
-                                                 OB_INVALID_TIMESTAMP,
-                                                 false);
-      ObGlobalStatProxy proxy(sql_client_retry_weak);
+      ObGlobalStatProxy proxy(*GCTX.sql_proxy_);
       if (OB_FAIL(proxy.get_baseline_schema_version(schema_version))) {
         LOG_WARN("get_baseline_schema_version failed", KR(ret));
       } else if (-1 == schema_version) {
