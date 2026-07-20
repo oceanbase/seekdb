@@ -17,8 +17,6 @@
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_ddl_epoch.h"
 
-#include <unistd.h>
-
 #include "share/ob_global_stat_proxy.h"
 #include "lib/atomic/ob_atomic.h"
 #include "lib/ob_errno.h"
@@ -158,7 +156,7 @@ int ObDDLEpochMgr::promote_ddl_epoch(int64_t wait_us, int64_t &ddl_epoch_ret)
         locked = true;
         break;
       } else {
-        ::usleep(10 * 1000);
+        ob_usleep(10 * 1000);
       }
     }
     if (locked) {
