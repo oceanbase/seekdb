@@ -148,7 +148,6 @@
 #include "observer/virtual_table/ob_all_virtual_obj_lock.h"
 #include "observer/virtual_table/ob_tenant_virtual_privilege.h"
 #include "observer/virtual_table/ob_all_virtual_kvcache_store_memblock.h"
-#include "observer/virtual_table/ob_information_query_response_time.h"
 #include "observer/virtual_table/ob_all_virtual_schema_memory.h"
 #include "observer/virtual_table/ob_all_virtual_schema_slot.h"
 #include "observer/virtual_table/ob_virtual_show_trace.h"
@@ -1247,14 +1246,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObInfoSchemaDiskStatTable, disk_stat_table))) {
               disk_stat_table->set_addr(addr_);
               vt_iter = static_cast<ObVirtualTableIterator *>(disk_stat_table);
-            }
-            break;
-          }
-          case OB_ALL_VIRTUAL_QUERY_RESPONSE_TIME_TID: {
-            ObInfoSchemaQueryResponseTimeTable* query_response_time_table = NULL;
-            if (OB_SUCC(NEW_VIRTUAL_TABLE(ObInfoSchemaQueryResponseTimeTable, query_response_time_table))) {
-              query_response_time_table->set_addr(addr_);
-              vt_iter = static_cast<ObVirtualTableIterator*>(query_response_time_table);
             }
             break;
           }

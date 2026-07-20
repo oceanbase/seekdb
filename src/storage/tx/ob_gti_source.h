@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_TRANSACTION_OB_GTI_SOURCE_
 #define OCEANBASE_TRANSACTION_OB_GTI_SOURCE_
 
+#include "lib/net/ob_addr.h"
 #include "lib/lock/ob_latch.h"
 
 namespace oceanbase
@@ -24,12 +25,6 @@ namespace oceanbase
 
 namespace transaction
 {
-struct IdCache
-{
-  int64_t start_id;
-  int64_t end_id;
-  TO_STRING_KV(K(start_id), K(end_id));
-};
 
 class ObIGtiSource
 {
@@ -47,42 +42,26 @@ class ObGtiSource : public ObIGtiSource
 public:
   ObGtiSource() { reset(); }
   ~ObGtiSource() { destroy(); }
-  int init();
+  int init(const common::ObAddr &server);
   virtual int start();
   virtual void stop();
   virtual void wait();
   virtual void destroy();
   virtual void reset();
-  int update_trans_id(const int64_t start_id, const int64_t end_id);
   virtual int get_trans_id(int64_t &trans_id);
 private:
-  void update_preallocate_count_();
-  int64_t get_preallocate_count_();
+  int refill_trans_id_range_();
 public:
-  TO_STRING_KV(K_(is_inited), K_(is_running), K_(is_requesting));
+  TO_STRING_KV(K_(is_inited), K_(is_running), K_(next_id), K_(end_id));
 public:
-  static const int64_t MIN_PREALLOCATE_COUNT = 10000;
-  static const int64_t MAX_PREALLOCATE_COUNT = 1000000;
-  static const int64_t UPDATE_FACTOR = 4;
-  static const int64_t UPDATE_PREALLOCATE_COUNT_INTERVAL = 100000;
-  static const int64_t MAX_CACHE_NUM = 16;
-  static const int64_t PRE_CACHE_NUM = MAX_CACHE_NUM / 4;
-  static const int64_t RETRY_REQUEST_INTERVAL = 100000;
-  static const int64_t BOOTSTRAP_RETRY_REQUEST_INTERVAL = 10000;
-  static const int64_t MAX_RETRY_REQUEST_INTERVAL = RETRY_REQUEST_INTERVAL * 10;
+  static const int64_t TRANS_ID_RANGE_SIZE = 10000;
 private:
   bool is_inited_;
   bool is_running_;
-  bool is_requesting_;
-  IdCache id_cache_[MAX_CACHE_NUM];
-  int64_t cur_idx_;
-  int64_t cache_idx_;
-  int64_t retry_request_cnt_;
-  int64_t last_request_ts_;
-  // lock for update trans id
+  int64_t next_id_;
+  int64_t end_id_;
+  // lock for refilling trans id range
   common::ObLatch lock_;
-  int64_t preallocate_count_;
-  int64_t last_update_ts_;
 };
 
 } // transaction

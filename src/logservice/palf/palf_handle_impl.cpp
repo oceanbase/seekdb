@@ -4881,7 +4881,7 @@ int PalfHandleImpl::force_set_member_list_(const common::ObMemberList &new_membe
     } else {
       ObMember tmp_member;
       // get removed members which are in prev_member_list but not in new_member_list 
-      // args.removed_list_ will be used for update_match_lsn_map_()
+      // args.removed_list_ will be used for update_match_lsn_info_()
       for (int64_t i = 0; OB_SUCC(ret) && i < prev_member_list.get_member_number(); ++i) {
         tmp_member.reset();
         if (OB_FAIL(prev_member_list.get_member_by_index(i, tmp_member))) {

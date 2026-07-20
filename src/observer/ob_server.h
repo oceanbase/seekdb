@@ -63,6 +63,7 @@
 #include "observer/ob_startup_accel_task_handler.h"
 #include "storage/ddl/ob_ddl_heart_beat_task.h"
 
+#include "storage/ob_storage_rpc.h"
 #include "storage/ob_disk_usage_reporter.h"
 #include "logservice/ob_server_log_block_mgr.h"
 
@@ -453,7 +454,6 @@ public:
   compaction::ObTenantTabletScheduler * tenant_tablet_scheduler() override { return mods_tenant_tablet_scheduler_; }
   compaction::ObTenantMediumChecker * tenant_medium_checker() override { return mods_tenant_medium_checker_; }
   storage::ObTenantCompactionMemPool * tenant_compaction_mem_pool() override { return mods_tenant_compaction_mem_pool_; }
-  storage::ObDDLMergeBucketLock * ddl_merge_bucket_lock() override { return mods_ddl_merge_bucket_lock_; }
   storage::ObTenantDirectLoadMgr * tenant_direct_load_mgr() override { return mods_tenant_direct_load_mgr_; }
   share::ObTenantDagScheduler * tenant_dag_scheduler() override { return mods_tenant_dag_scheduler_; }
   storage::ObStorageHAService * storage_ha_service() override { return mods_storage_ha_service_; }
@@ -480,7 +480,6 @@ public:
   common::ObRbMemMgr * rb_mem_mgr() override { return mods_rb_mem_mgr_; }
   share::ObPluginVectorIndexService * plugin_vector_index_service() override { return mods_plugin_vector_index_service_; }
   share::ObAutoSplitTaskCache * auto_split_task_cache() override { return mods_auto_split_task_cache_; }
-  observer::ObTenantQueryRespTimeCollector * tenant_query_resp_time_collector() override { return mods_tenant_query_resp_time_collector_; }
   table::ObTableGroupCommitMgr * table_group_commit_mgr() override { return mods_table_group_commit_mgr_; }
   observer::ObTableQueryASyncMgr * table_query_a_sync_mgr() override { return mods_table_query_a_sync_mgr_; }
   table::ObTableClientInfoMgr * table_client_info_mgr() override { return mods_table_client_info_mgr_; }
@@ -557,7 +556,6 @@ private:
   compaction::ObTenantTabletScheduler * mods_tenant_tablet_scheduler_ = nullptr;
   compaction::ObTenantMediumChecker * mods_tenant_medium_checker_ = nullptr;
   storage::ObTenantCompactionMemPool * mods_tenant_compaction_mem_pool_ = nullptr;
-  storage::ObDDLMergeBucketLock * mods_ddl_merge_bucket_lock_ = nullptr;
   storage::ObTenantDirectLoadMgr * mods_tenant_direct_load_mgr_ = nullptr;
   share::ObTenantDagScheduler * mods_tenant_dag_scheduler_ = nullptr;
   storage::ObStorageHAService * mods_storage_ha_service_ = nullptr;
@@ -584,7 +582,6 @@ private:
   common::ObRbMemMgr * mods_rb_mem_mgr_ = nullptr;
   share::ObPluginVectorIndexService * mods_plugin_vector_index_service_ = nullptr;
   share::ObAutoSplitTaskCache * mods_auto_split_task_cache_ = nullptr;
-  observer::ObTenantQueryRespTimeCollector * mods_tenant_query_resp_time_collector_ = nullptr;
   table::ObTableGroupCommitMgr * mods_table_group_commit_mgr_ = nullptr;
   observer::ObTableQueryASyncMgr * mods_table_query_a_sync_mgr_ = nullptr;
   table::ObTableClientInfoMgr * mods_table_client_info_mgr_ = nullptr;

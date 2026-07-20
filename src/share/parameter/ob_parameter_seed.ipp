@@ -1481,19 +1481,6 @@ DEF_PARAM(_enable_insertup_replace_gts_opt, BOOL, OB_CLUSTER_PARAMETER, "True",
 DEF_PARAM(_enable_var_assign_use_das, BOOL, OB_CLUSTER_PARAMETER, "False",
          "enable use das if the sql statement has variable assignment",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-// query response time
-DEF_PARAM(query_response_time_stats, BOOL, OB_CLUSTER_PARAMETER, "True",
-    "Enable or disable QUERY_RESPONSE_TIME statistics collecting"
-    "The default value is True. Value: TRUE: turned on FALSE: turned off",
-    ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(query_response_time_flush, BOOL, OB_CLUSTER_PARAMETER, "False",
-    "Flush QUERY_RESPONSE_TIME table and re-read query_response_time_range_base"
-    "The default value is False. Value: TRUE: trigger flush FALSE: do not trigger",
-    ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(query_response_time_range_base, INT, OB_CLUSTER_PARAMETER, "10", "[2,10000]",
-    "Select base of log for QUERY_RESPONSE_TIME ranges. WARNING: variable change takes affect only after flush."
-    "The default value is 10. Range: [2,10000]. ",
-    ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(arbitration_timeout, TIME, OB_CLUSTER_PARAMETER, "5s", "[3s,]",
         "The timeout before automatically degrading when arbitration member exists. Range: [3s,+∞]",
         ObParameterAttr(Section::TRANS, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));

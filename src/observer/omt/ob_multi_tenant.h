@@ -90,7 +90,6 @@ public:
   int update_palf_config();
   int update_tenant_dag_scheduler_config();
   int update_tenant_ddl_config();
-  int update_tenant_query_response_time_flush_config();
   int get_tenant(ObTenant *&tenant) const;
   int get_tenant_with_tenant_lock(ObTenant *&tenant) const;
   int get_active_tenant_with_tenant_lock(ObTenant *&tenant) const;

@@ -923,7 +923,7 @@ public:
   const share::SCN get_end_scn() const override final
   {
     // Based on implementation complexity, directly use last_slide_scn as end_scn
-    // Otherwise, it is necessary to maintain scn additionally in match_lsn_map
+    // Otherwise, it is necessary to maintain scn additionally in match lsn info.
     return sw_.get_last_slide_scn();
   }
   int get_last_rebuild_lsn(LSN &last_rebuild_lsn) const override final;

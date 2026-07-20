@@ -22,16 +22,32 @@ namespace oceanbase
 namespace transaction
 {
 
-int ObTransIDService::server_module_init(ObTransIDService *&trans_id_service)
+int ObTransIDService::mtl_init(ObTransIDService *&trans_id_service)
 {
   return trans_id_service->init();
 }
 
 int ObTransIDService::init()
 {
+  self_ = GCTX.self_addr();
   service_type_ = ServiceType::TransIDService;
   pre_allocated_range_ = TRANS_ID_PREALLOCATED_RANGE;
   return OB_SUCCESS;
+}
+
+int ObTransIDService::alloc_trans_id_range(const int64_t range, int64_t &start_id, int64_t &end_id)
+{
+  int ret = OB_SUCCESS;
+
+  if (OB_UNLIKELY(range <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    TRANS_LOG(WARN, "invalid argument", KR(ret), K(range));
+  } else if (OB_FAIL(get_number(range, 0, start_id, end_id))) {
+    if (OB_EAGAIN != ret) {
+      TRANS_LOG(WARN, "get trans id failed", KR(ret));
+    }
+  }
+  return ret;
 }
 
 }

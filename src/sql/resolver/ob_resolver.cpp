@@ -528,7 +528,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       case T_SHOW_FUNCTION_CODE:
       case T_SHOW_TRIGGERS:
       case T_SHOW_CREATE_TABLEGROUP:
-      case T_SHOW_QUERY_RESPONSE_TIME:
       case T_SHOW_STATUS:
       case T_SHOW_CREATE_TRIGGER:
       case T_SHOW_ENGINE:

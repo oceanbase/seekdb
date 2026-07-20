@@ -19,7 +19,6 @@
 #include "share/rc/ob_module_provider.h"
 #include "ob_trans_part_ctx.h"
 #include "storage/tx/ob_gts_rpc.h"
-#include "storage/tx/ob_gti_rpc.h"
 #include "storage/tx/ob_leak_checker.h"
 #include "observer/ob_server.h"
 
@@ -243,7 +242,6 @@ const char *TransRpcTaskFactory::get_mod_type()
 */
 
 MAKE_OB_ALLOC(ObGtsRequestRpc, ObModIds::OB_GTS_REQUEST_RPC)
-MAKE_OB_ALLOC(ObGtiRequestRpc, ObModIds::OB_GTI_REQUEST_RPC)
 
 MAKE_FACTORY_CLASS_IMPLEMENT_USE_RP_ALLOC(ClogBuf, ObModIds::OB_TRANS_CLOG_BUF)
 MAKE_FACTORY_CLASS_IMPLEMENT_USE_RP_ALLOC(MutatorBuf, ObModIds::OB_TRANS_MUTATOR_BUF)
@@ -251,7 +249,6 @@ MAKE_FACTORY_CLASS_IMPLEMENT_USE_RP_ALLOC(ObTransTraceLog, ObModIds::OB_TRANS_AU
 MAKE_FACTORY_CLASS_IMPLEMENT_USE_RP_ALLOC(ObPartitionAuditInfo, ObModIds::OB_PARTITION_AUDIT_INFO)
 MAKE_FACTORY_CLASS_IMPLEMENT_USE_RP_ALLOC(ObCoreLocalPartitionAuditInfo, ObModIds::OB_CORE_LOCAL_STORAGE)
 MAKE_FACTORY_CLASS_IMPLEMENT_USE_OB_ALLOC(ObGtsRequestRpc, ObModIds::OB_GTS_REQUEST_RPC)
-MAKE_FACTORY_CLASS_IMPLEMENT_USE_OB_ALLOC(ObGtiRequestRpc, ObModIds::OB_GTI_REQUEST_RPC)
 MAKE_FACTORY_CLASS_IMPLEMENT_USE_RP_ALLOC(ObTxCommitCallbackTask, ObModIds::OB_END_TRANS_CB_TASK)
 
 void *MultiTxDataFactory::alloc(const int64_t len, const uint64_t arg1, const uint64_t arg2)

@@ -1,2 +1,5 @@
 storage_unittest(test_session_track_sys_var mysql/test_session_track_sys_var.cpp)
+storage_unittest(test_ingress_bw_alloc_manager net/test_ingress_bw_alloc_manager.cpp)
 ob_unittest(test_uniq_task_queue)
+
+add_subdirectory(rpc EXCLUDE_FROM_ALL)

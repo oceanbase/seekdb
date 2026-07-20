@@ -23,11 +23,9 @@
 #include "share/rc/ob_tenant_base.h"
 #include "lib/task/ob_timer.h"
 #include "share/schema/ob_table_schema.h"
-#include "lib/allocator/page_arena.h"
 #include "lib/allocator/ob_fifo_allocator.h"
 #include "lib/lock/ob_bucket_lock.h"
 #include "lib/lock/ob_tc_rwlock.h"
-#include "lib/queue/ob_fixed_queue.h"
 #include "lib/list/ob_dlist.h"
 #include "lib/literals/ob_literals.h"
 
@@ -301,16 +299,15 @@ class ObTabletStreamNode : public ObDLinkBase<ObTabletStreamNode>
 {
 public:
   using QueuingMode = share::schema::ObTableModeFlag;
-  explicit ObTabletStreamNode(const int64_t flag = 0)
-    : stream_(), flag_(flag), mode_(QueuingMode::TABLE_MODE_NORMAL) {}
+  ObTabletStreamNode()
+    : stream_(), mode_(QueuingMode::TABLE_MODE_NORMAL) {}
   ~ObTabletStreamNode() { reset(); }
   void reset() { stream_.reset(); }
   void clear_stat() { stream_.clear_stat(); }
-  TO_STRING_KV(K_(stream), K_(flag));
+  TO_STRING_KV(K_(stream));
 
 public:
   ObTabletStream stream_;
-  const int64_t flag_;
   QueuingMode mode_;
 };
 
@@ -318,33 +315,23 @@ public:
 class ObTabletStreamPool
 {
 public:
-  typedef common::ObFixedQueue<ObTabletStreamNode> FreeList;
   typedef common::ObDList<ObTabletStreamNode> LruList;
-  enum NodeAllocType: int64_t {
-    FIXED_ALLOC = 0,
-    DYNAMIC_ALLOC
-  };
 
   ObTabletStreamPool();
   ~ObTabletStreamPool();
   void destroy();
-  int init(const int64_t max_free_list_num,
-           const int64_t up_limit_node_num);
+  int init(const int64_t up_limit_node_num);
   int alloc(ObTabletStreamNode *&node, bool &is_retired);
   void free(ObTabletStreamNode *node);
   bool add_lru_list(ObTabletStreamNode *node) { return lru_list_.add_first(node); }
   bool remove_lru_list(ObTabletStreamNode *node) { return lru_list_.remove(node); }
   bool update_lru_list(ObTabletStreamNode *node) { return lru_list_.move_to_first(node); }
-  OB_INLINE int64_t get_free_num() const { return free_list_.get_total(); }
-  OB_INLINE int64_t get_allocated_num() const { return (max_free_list_num_ - get_free_num()) + allocated_dynamic_num_; }
-  TO_STRING_KV(K_(max_free_list_num), K_(max_dynamic_node_num), K_(allocated_dynamic_num));
+  OB_INLINE int64_t get_allocated_num() const { return allocated_dynamic_num_; }
+  TO_STRING_KV(K_(max_dynamic_node_num), K_(allocated_dynamic_num));
 
 private:
   common::ObFIFOAllocator dynamic_allocator_;
-  common::ObArenaAllocator free_list_allocator_;
-  FreeList free_list_;
   LruList lru_list_;
-  int64_t max_free_list_num_;
   int64_t max_dynamic_node_num_;
   int64_t allocated_dynamic_num_;
   bool is_inited_;
@@ -458,9 +445,8 @@ private:
 
   static constexpr int64_t TABLET_STAT_PROCESS_INTERVAL = 5 * 1000L * 1000L; //5s
   static constexpr int64_t CHECK_INTERVAL = 120L * 1000L * 1000L; //120s
-  static constexpr int32_t DEFAULT_MAX_FREE_STREAM_CNT = 16;
   static constexpr int32_t DEFAULT_UP_LIMIT_STREAM_CNT = 20000;
-  static constexpr int32_t DEFAULT_BUCKET_NUM = 257; // should be a prime to guarantee the bucket nums of hashmap and bucketlock are equal
+  static constexpr int32_t DEFAULT_BUCKET_NUM = 1543; // should be a prime to guarantee the bucket nums of hashmap and bucketlock are equal
   static constexpr int32_t DEFAULT_MAX_PENDING_CNT = 1000;
   static constexpr int32_t MAX_REPORT_RETRY_CNT = 5;
   static constexpr int32_t MAX_SCHEMA_GUARD_REFRESH_CNT = 100;

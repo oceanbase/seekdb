@@ -40,76 +40,9 @@ namespace oceanbase
 namespace storage
 {
 
-int ObDDLMergeGuardTask::init(const bool for_replay, const ObTabletID &tablet_id)
-{
-  int ret = OB_SUCCESS;
-  char* buf = nullptr;
-  ObDDLMergeBucketLock *mtl_bucket_lock = share::g_mp->ddl_merge_bucket_lock();
-  if (!tablet_id.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id));
-  } else if (OB_ISNULL(mtl_bucket_lock)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("bucket lock should not be null", K(ret));
-  } else if (OB_FAIL(mtl_bucket_lock->lock(tablet_id))) {
-    if (OB_EAGAIN == ret && !for_replay) {
-      LOG_ERROR("failed to lock tablet, but execute again", K(ret), K(tablet_id));
-      ret = OB_DAG_TASK_IS_SUSPENDED;
-    } else {
-      LOG_WARN("failed to lock tablet", K(ret), K(tablet_id));
-    }
-  }
-  
-  if (OB_FAIL(ret)) {
-  } else {
-    tablet_id_ = tablet_id;
-    is_inited_ = true;
-  }
-  FLOG_INFO("[DDL_MERGE_TASK] success to create guard task", K(ret), K(tablet_id));
-  return ret;
-}
-
-int ObDDLMergeGuardTask::process()
-{
-  int ret = OB_SUCCESS;
-  ObDDLMergeBucketLock *mtl_bucket_lock = share::g_mp->ddl_merge_bucket_lock();
-  if (!tablet_id_.is_valid()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected tablet id val", K(ret));
-  } else if (OB_ISNULL(mtl_bucket_lock)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("bucket lock should not be null", K(ret));
-  } else if (OB_FAIL(mtl_bucket_lock->unlock(tablet_id_))) {
-    LOG_WARN("[DDL_MERGE_TASK] failed to finish guard task", K(ret), K(tablet_id_));
-  } else {
-    FLOG_INFO("[DDL_MERGE_TASK] success to finish guard task", K(ret), K(tablet_id_));
-    tablet_id_.reset();
-  }
-  return ret; 
-}
-
-ObDDLMergeGuardTask::~ObDDLMergeGuardTask()
-{
-  int ret = OB_SUCCESS;
-  ObDDLMergeBucketLock *mtl_bucket_lock = share::g_mp->ddl_merge_bucket_lock();
-   if (OB_ISNULL(mtl_bucket_lock)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("bucket lock should not be null", K(ret));
-  } else if (tablet_id_.is_valid() && OB_FAIL(mtl_bucket_lock->unlock(tablet_id_))) {
-    LOG_WARN("failed to unlock tablet", K(ret), K(tablet_id_));
-  } else {
-    is_inited_ = false;
-  }
-}
-
-void ObDDLMergeGuardTask::task_debug_info_to_string(char *buf, const int64_t buf_len, int64_t &pos) const
-{
-  BUF_PRINTF("DDL Merge Guard Task: tablet_id=%ld", tablet_id_.id());
-}
-
 ObDDLMergePrepareTask::ObDDLMergePrepareTask():
   ObITask(ObITaskType::TASK_TYPE_DDL_MERGE_PREPARE),
-  merge_param_(), guard_task_(nullptr), is_inited_(false)
+  merge_param_(), is_inited_(false)
 {}
 
 ObDDLMergePrepareTask::~ObDDLMergePrepareTask()
@@ -123,7 +56,6 @@ int ObDDLMergePrepareTask::init(const ObDDLTabletMergeDagParamV2 &merge_param)
     LOG_WARN("invalid arg", K(ret), K(merge_param));
   } else {
     merge_param_ = merge_param;
-    guard_task_  = nullptr;
     is_inited_   = true;
   }
   FLOG_INFO("[DDL_MERGE_TASK] success to create merge prepare task", K(ret), K(merge_param_));
@@ -152,7 +84,7 @@ int ObDDLMergePrepareTask::inner_process()
     DEBUG_SYNC(BEFORE_TABLET_FULL_DIRECT_LOAD_MGR_CLOSE);
   }
 
-  /* create guard task first to avoid backend build major task */
+  /* validate tablet context before generating merge tasks */
   if (OB_ISNULL(dag)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("dag should not be null", K(ret));
@@ -164,21 +96,6 @@ int ObDDLMergePrepareTask::inner_process()
   } else if (OB_ISNULL(tablet_param->storage_schema_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("storage schema should not be nullptr", K(ret), KPC(tablet_param));
-  } else if (nullptr != guard_task_) {
-    LOG_INFO("guard task has been created", K(ret), K(merge_param_));
-  } else if (OB_FAIL(dag->alloc_task(guard_task_))) {
-    LOG_WARN("failed to alloc task", K(ret));
-  } 
-  
-  if (OB_FAIL(ret)) {
-  } else if (guard_task_->is_inited_) {
-    LOG_INFO("gaurd task already init", K(tablet_id));
-  } else if (OB_FAIL(guard_task_->init(merge_param_.for_replay_, tablet_id))) {
-    LOG_WARN("failed to init merge guard task", K(ret));
-  } else if (OB_FAIL(guard_task_->deep_copy_children(get_child_nodes()))) {
-    LOG_WARN("fail to deep copy children", KR(ret));
-  } else if (OB_FAIL(add_child(*guard_task_))) {
-    LOG_WARN("failed to add child to prepare task", K(ret));
   }
   
   /* pre-check before merge */
@@ -214,8 +131,8 @@ int ObDDLMergePrepareTask::inner_process()
     LOG_WARN("assemble task should not be null", K(ret), K(merge_param_));
   } else if (OB_FAIL(assemble_task->init(merge_param_))) {
     LOG_WARN("failed to init assemble", K(ret));
-  } else if (OB_FAIL(assemble_task->add_child(*guard_task_))) {
-    LOG_WARN("faield to add guard task as child", K(ret));
+  } else if (OB_FAIL(assemble_task->deep_copy_children(get_child_nodes()))) {
+    LOG_WARN("fail to deep copy children", KR(ret));
   } else if (OB_FAIL(::ObITask::add_child(*assemble_task))) {
     LOG_WARN("failed to add assemble task to prepare task", K(ret));
   } else {
@@ -237,16 +154,9 @@ int ObDDLMergePrepareTask::inner_process()
     }
   }
 
-  // guard_task needs to be executed no matter need_merge or not
   if (OB_FAIL(ret)) {
   } else {
     // add task in reverse order of running
-    /* add merge guard task to dag */
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(dag->add_task(*guard_task_))) {
-      LOG_WARN("failed to add merge guard task", K(ret));
-    }
-
     /* generate assemble task */
     if (OB_FAIL(ret)) {
     } else if (nullptr == assemble_task) {

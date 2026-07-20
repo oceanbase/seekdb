@@ -15,6 +15,7 @@
  */
 #ifndef OBDEV_SRC_SQL_DAS_OB_DAS_PARALLEL_HANDLER_H_
 #define OBDEV_SRC_SQL_DAS_OB_DAS_PARALLEL_HANDLER_H_
+#include "rpc/frame/ob_req_processor.h"
 #include "observer/ob_srv_task.h"
 #include "sql/engine/dml/ob_dml_ctx_define.h"
 namespace oceanbase
@@ -39,7 +40,7 @@ protected:
                              ObIAllocator &alloc,
                              ObIArray<ObIDASTaskOp*> &src_task_list,
                              ObIArray<ObIDASTaskOp*> &new_task_list,
-                             ObDASCopyContext &copy_context,
+                             ObDASRemoteInfo &remote_info,
                              ObDasAggregatedTask &das_task_wrapper);
   int deep_copy_das_task(ObDASTaskFactory &das_factory,
                          ObIDASTaskOp *src_op,

@@ -22,7 +22,6 @@
 #include "sql/resolver/ddl/ob_drop_table_stmt.h"
 #include "sql/resolver/cmd/ob_variable_set_stmt.h"
 #include "observer/ob_server.h"
-#include "observer/mysql/ob_query_response_time.h"
 
 namespace oceanbase
 {

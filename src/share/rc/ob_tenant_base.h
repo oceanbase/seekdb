@@ -89,7 +89,6 @@ class ObTenantMdsService;
   }
   class ObLobManager;
   class ObTableScanIterator;
-  struct ObDDLMergeBucketLock;
   class ObTenantDirectLoadMgr;
   class ObEmptyReadBucket;
   class ObTabletMemtableMgrPool;
@@ -163,7 +162,6 @@ namespace observer
   class ObTableLoadResourceService;
   class ObStartupAccelTaskHandler;
   class ObTabletTableUpdater;
-  class ObTenantQueryRespTimeCollector;
   class ObTableQueryASyncMgr;
 }
 // for ObTenantSwitchGuard temporary use>>>>>>>>
@@ -291,7 +289,6 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       compaction::ObTenantMediumChecker*,            \
       storage::ObTenantCompactionMemPool*,           \
       TenantCompactionObjMgr                         \
-      storage::ObDDLMergeBucketLock*,                \
       storage::ObTenantDirectLoadMgr*,               \
       share::ObTenantDagScheduler*,                  \
       storage::ObStorageHAService*,                  \
@@ -323,7 +320,6 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       common::ObRbMemMgr*,                           \
       share::ObPluginVectorIndexService*,            \
       share::ObAutoSplitTaskCache*    ,              \
-      observer::ObTenantQueryRespTimeCollector*,     \
       table::ObTableGroupCommitMgr*,                 \
       observer::ObTableQueryASyncMgr*,               \
       table::ObTableClientInfoMgr*,                  \

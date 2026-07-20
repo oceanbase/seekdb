@@ -20,7 +20,6 @@
 #include "share/rc/ob_module_provider.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/engine/ob_exec_context.h"
-#include "storage/lob/ob_lob_access_param.h"
 #include "storage/lob/ob_lob_manager.h"
 
 namespace oceanbase

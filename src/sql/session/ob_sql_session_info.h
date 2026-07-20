@@ -647,7 +647,6 @@ public:
                                  sort_area_size_(128*1024*1024),
                                  hash_area_size_(128*1024*1024),
                                  data_version_(0),
-                                 enable_query_response_time_stats_(false),
                                  enable_insertup_replace_gts_opt_(false),
                                  enable_immediate_row_conflict_check_(false),
                                  range_optimizer_max_mem_size_(128*1024*1024),
@@ -676,7 +675,6 @@ public:
     int64_t get_sort_area_size() const { return ATOMIC_LOAD(&sort_area_size_); }
     int64_t get_hash_area_size() const { return ATOMIC_LOAD(&hash_area_size_); }
     uint64_t get_data_version() const { return ATOMIC_LOAD(&data_version_); }
-    bool enable_query_response_time_stats() const { return enable_query_response_time_stats_; }
     bool enable_insertup_replace_gts_opt() const { return ATOMIC_LOAD(&enable_insertup_replace_gts_opt_); }
     int64_t get_print_sample_ppm() const { return ATOMIC_LOAD(&print_sample_ppm_); }
     bool get_px_join_skew_handling() const { return px_join_skew_handling_; }
@@ -721,7 +719,6 @@ public:
     int64_t sort_area_size_;
     int64_t hash_area_size_;
     uint64_t data_version_;
-    bool enable_query_response_time_stats_;
     bool enable_insertup_replace_gts_opt_;
     bool enable_immediate_row_conflict_check_;
     int64_t range_optimizer_max_mem_size_;
@@ -1244,11 +1241,6 @@ public:
   {
     cached_tenant_config_info_.refresh();
     return cached_tenant_config_info_.get_data_version();
-  }
-  bool enable_query_response_time_stats()
-  {
-    cached_tenant_config_info_.refresh();
-    return cached_tenant_config_info_.enable_query_response_time_stats();
   }
   bool enable_insertup_replace_gts_opt()
   {

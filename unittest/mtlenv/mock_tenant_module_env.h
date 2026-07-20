@@ -98,7 +98,6 @@
 #include "share/roaringbitmap/ob_rb_memory_mgr.h"
 #include "observer/omt/ob_tenant_ai_service.h"
 #include "share/storage/ob_sqlite_connection_pool.h"
-#include "observer/mysql/ob_query_response_time.h"
 
 namespace oceanbase
 {

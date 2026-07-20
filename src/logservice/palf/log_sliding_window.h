@@ -18,7 +18,6 @@
 #define OCEANBASE_LOGSERVICE_LOG_SLIDING_WINDOW_
 
 #include <stdint.h>
-#include "lib/hash/ob_linear_hash_map.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/thread/ob_thread_lease.h"
 #include "log_ack_info.h"
@@ -155,48 +154,6 @@ struct TruncateLogInfo
   TO_STRING_KV("truncate_type", truncate_type_2_str(truncate_type_), K_(truncate_log_id), K_(truncate_begin_lsn), K_(truncate_log_proposal_id));
 };
 
-class UpdateMatchLsnFunc
-{
-public:
-  UpdateMatchLsnFunc(const LSN &end_lsn, const int64_t new_ack_time_us)
-      : new_end_lsn_(end_lsn), old_end_lsn_(), new_ack_time_us_(new_ack_time_us), old_advance_time_us_(OB_INVALID_TIMESTAMP)
-  {}
-  ~UpdateMatchLsnFunc() {}
-  bool operator()(const common::ObAddr &server, LsnTsInfo &value);
-  bool is_advance_delay_too_long() const {
-    bool bool_ret = false;
-    if (old_end_lsn_ < new_end_lsn_
-        && (new_ack_time_us_ - old_advance_time_us_) > MATCH_LSN_ADVANCE_DELAY_THRESHOLD_US) {
-      // Return true when advance delay exceeds 1s.
-      bool_ret = true;
-    }
-    return bool_ret;
-  }
-  TO_STRING_KV(K_(old_end_lsn), K_(new_end_lsn), K_(old_advance_time_us), K_(new_ack_time_us),
-      "advance delay(us)", new_ack_time_us_ - old_advance_time_us_);
-private:
-  LSN new_end_lsn_;
-  LSN old_end_lsn_;
-  int64_t new_ack_time_us_;
-  int64_t old_advance_time_us_;
-};
-
-class GetLaggedListFunc
-{
-public:
-  GetLaggedListFunc(const LSN &dst_lsn)
-      : dst_lsn_(dst_lsn), lagged_list_()
-  {}
-  ~GetLaggedListFunc() {}
-  bool operator()(const common::ObAddr &server, LsnTsInfo &value);
-  int get_lagged_list(common::ObMemberList &out_list) const
-  { return out_list.deep_copy(lagged_list_); }
-  TO_STRING_KV(K_(dst_lsn), K_(lagged_list));
-private:
-  LSN dst_lsn_;
-  common::ObMemberList lagged_list_;
-};
-
 inline bool is_need_rebuild(const LSN &end_lsn, const LSN &last_rebuild_lsn)
 {
   return (end_lsn.is_valid() &&
@@ -278,10 +235,10 @@ public:
                                     const int64_t prev_log_id,
                                     const int64_t &prev_log_proposal_id,
                                     const LSN &committed_end_lsn);
-  virtual int config_change_update_match_lsn_map(const ObMemberList &added_memberlist,
-                                                 const ObMemberList &removed_memberlist,
-                                                 const ObMemberList &new_log_sync_memberlist,
-                                                 const int64_t new_replica_num);
+  virtual int config_change_update_match_lsn_info(const ObMemberList &added_memberlist,
+                                                  const ObMemberList &removed_memberlist,
+                                                  const ObMemberList &new_log_sync_memberlist,
+                                                  const int64_t new_replica_num);
   // ================= log sync part end
   virtual int append_disk_log(const LSN &lsn, const LogGroupEntry &group_entry);
   virtual int report_log_task_trace(const int64_t log_id);
@@ -342,7 +299,7 @@ private:
   int get_fetch_log_dst_(common::ObAddr &leader) const;
   int get_leader_from_cache_(common::ObAddr &leader) const;
   int clean_log_();
-  int reset_match_lsn_map_();
+  int reset_match_lsn_info_();
   bool is_all_log_flushed_();
   int leader_wait_sw_slot_ready_(const int64_t log_id);
   bool can_receive_larger_log_(const int64_t log_id) const;
@@ -428,7 +385,7 @@ private:
                              bool &need_send_ack,
                              bool &is_local_log_valid,
                              bool &is_log_pid_match) const;
-  int try_update_match_lsn_map_(const common::ObAddr &server, const LSN &end_lsn);
+  int try_update_match_lsn_info_(const common::ObAddr &server, const LSN &end_lsn);
   int wait_group_buffer_ready_(const LSN &lsn, const int64_t data_len);
   int append_disk_log_to_sw_(const LSN &lsn, const LogGroupEntry &group_entry);
   int try_update_max_lsn_(const LSN &lsn, const LogGroupEntryHeader &header);
@@ -480,7 +437,6 @@ private:
   bool need_use_batch_rpc_(const int64_t buf_size,
                            const bool is_fetch_log) const;
 public:
-  typedef common::ObLinearHashMap<common::ObAddr, LsnTsInfo> SvrMatchOffsetMap;
   static const int64_t TMP_HEADER_SER_BUF_LEN = 256; // temporary buffer size for log header serialization
   static const int64_t APPEND_CNT_ARRAY_SIZE = 32;   // size of the append count statistics array
   static const uint64_t APPEND_CNT_ARRAY_MASK = APPEND_CNT_ARRAY_SIZE - 1;
@@ -576,9 +532,10 @@ private:
   LSN last_fetch_committed_end_lsn_;
   FetchTriggerType last_fetch_trigger_type_;
   // ---------------- fetch log info end --------------------------
-  // used to record synchronization points for each replica
-  mutable common::ObSpinLock match_lsn_map_lock_;
-  SvrMatchOffsetMap match_lsn_map_;
+  // Used to record the local synchronization point. SeekDB lite has only one
+  // log-sync member, so a single value is enough and avoids hash table allocation.
+  mutable common::ObSpinLock match_lsn_info_lock_;
+  LsnTsInfo match_lsn_info_;
   // last truncate lsn, protected by palf_handle_impl's wlock
   LSN last_truncate_lsn_;
   mutable int64_t cannot_fetch_log_warn_time_;

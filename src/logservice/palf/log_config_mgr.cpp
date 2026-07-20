@@ -1471,7 +1471,7 @@ int LogConfigMgr::append_config_meta_(const int64_t curr_proposal_id,
     // Note: can not generate committed_end_lsn while changing configs with arb.
     // The reason is described in LogSlidingWindow::gen_committed_end_lsn_.
     if (false == has_arb_member) {
-      (void) update_match_lsn_map_(args, new_config_info);
+      (void) update_match_lsn_info_(args, new_config_info);
     }
     PALF_LOG(INFO, "append_config_meta_ success", KR(ret), K_(palf_id), K_(self), K(curr_proposal_id),
        K(args), K(new_config_info), K_(log_ms_meta));
@@ -1479,7 +1479,7 @@ int LogConfigMgr::append_config_meta_(const int64_t curr_proposal_id,
   return ret;
 }
 
-int LogConfigMgr::update_match_lsn_map_(const LogConfigChangeArgs &args,
+int LogConfigMgr::update_match_lsn_info_(const LogConfigChangeArgs &args,
     const LogConfigInfoV2 &new_config_info)
 {
   int ret = OB_SUCCESS;
@@ -1492,10 +1492,10 @@ int LogConfigMgr::update_match_lsn_map_(const LogConfigChangeArgs &args,
   } else if (FORCE_SET_MEMBER_LIST == args.type_ && OB_FAIL(removed_memberlist.deep_copy(args.removed_list_))) {
     PALF_LOG(WARN, "failed to get removed members", K(ret), K_(palf_id), K_(self), K(removed_memberlist), K(args));
   }
-  if (OB_SUCC(ret) && OB_FAIL(sw_->config_change_update_match_lsn_map(added_memberlist,
+  if (OB_SUCC(ret) && OB_FAIL(sw_->config_change_update_match_lsn_info(added_memberlist,
           removed_memberlist, new_config_info.config_.log_sync_memberlist_,
           new_config_info.config_.log_sync_replica_num_))) {
-    PALF_LOG(WARN, "config_change_update_match_lsn_map failed", K(ret), K_(palf_id), K_(self), K(added_memberlist), K(removed_memberlist));
+    PALF_LOG(WARN, "config_change_update_match_lsn_info failed", K(ret), K_(palf_id), K_(self), K(added_memberlist), K(removed_memberlist));
   }
   return ret;
 }
@@ -2019,7 +2019,7 @@ int LogConfigMgr::after_config_log_majority_(const int64_t proposal_id,
         K_(self), K_(log_ms_meta), K(proposal_id), K_(state), K(config_version));
   } else if (is_reach_majority_()) {
     (void) state_mgr_->reset_changing_config_with_arb();
-    (void) update_match_lsn_map_(running_args_, log_ms_meta_.curr_);
+    (void) update_match_lsn_info_(running_args_, log_ms_meta_.curr_);
   }
   return ret;
 }

@@ -96,7 +96,6 @@ public:
   virtual compaction::ObTenantTabletScheduler * tenant_tablet_scheduler() { return nullptr; }
   virtual compaction::ObTenantMediumChecker * tenant_medium_checker() { return nullptr; }
   virtual storage::ObTenantCompactionMemPool * tenant_compaction_mem_pool() { return nullptr; }
-  virtual storage::ObDDLMergeBucketLock * ddl_merge_bucket_lock() { return nullptr; }
   virtual storage::ObTenantDirectLoadMgr * tenant_direct_load_mgr() { return nullptr; }
   virtual share::ObTenantDagScheduler * tenant_dag_scheduler() { return nullptr; }
   virtual storage::ObStorageHAService * storage_ha_service() { return nullptr; }
@@ -123,7 +122,6 @@ public:
   virtual common::ObRbMemMgr * rb_mem_mgr() { return nullptr; }
   virtual share::ObPluginVectorIndexService * plugin_vector_index_service() { return nullptr; }
   virtual share::ObAutoSplitTaskCache * auto_split_task_cache() { return nullptr; }
-  virtual observer::ObTenantQueryRespTimeCollector * tenant_query_resp_time_collector() { return nullptr; }
   virtual table::ObTableGroupCommitMgr * table_group_commit_mgr() { return nullptr; }
   virtual observer::ObTableQueryASyncMgr * table_query_a_sync_mgr() { return nullptr; }
   virtual table::ObTableClientInfoMgr * table_client_info_mgr() { return nullptr; }

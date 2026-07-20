@@ -214,7 +214,7 @@ int ObTenantMetaMemMgr::init()
   int ret = OB_SUCCESS;
   const lib::ObMemAttr map_attr("TabletMap");
   const int64_t mem_limit = 4 * 1024 * 1024 * 1024LL;
-  const int64_t bucket_num = cal_bucket_num();
+  const int64_t bucket_num = cal_adaptive_bucket_num();
   const int64_t pin_set_bucket_num = common::hash::cal_next_prime(DEFAULT_BUCKET_NUM);
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
@@ -1938,10 +1938,13 @@ int ObTenantMetaMemMgr::get_tablet_ddl_kv_mgr(
   return ret;
 }
 
-int64_t ObTenantMetaMemMgr::cal_bucket_num()
+int64_t ObTenantMetaMemMgr::cal_adaptive_bucket_num()
 {
-  const int64_t bucket_num = common::hash::cal_next_prime(DEFAULT_BUCKET_NUM);
-  LOG_INFO("use fixed tablet bucket num", K(bucket_num));
+  const int64_t min_bkt_cnt = DEFAULT_BUCKET_NUM;
+  const int64_t max_bkt_cnt = 1000000L;
+  const int64_t tablet_bucket_num = common::calculate_scaled_value_by_memory(min_bkt_cnt, max_bkt_cnt);
+  const int64_t bucket_num = common::hash::cal_next_prime(tablet_bucket_num);
+  LOG_INFO("cal adaptive bucket num", K(min_bkt_cnt), K(max_bkt_cnt), K(tablet_bucket_num), K(bucket_num));
   return bucket_num;
 }
 

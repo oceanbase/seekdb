@@ -7360,24 +7360,6 @@ def_table_schema(
 # 12323: __all_virtual_mock_fk_parent_table_column_history # removed (single-tenant: iterate VT mechanism deleted)
 # 12324: __all_virtual_log_restore_source abandoned
 
-def_table_schema(
-  owner = 'wangzelin.wzl',
-  tablegroup_id='OB_INVALID_ID',
-  table_name='__all_virtual_query_response_time',
-  table_id='12325',
-  table_type='VIRTUAL_TABLE',
-  gm_columns=[],
-  in_tenant_space=True,
-  rowkey_columns=[
-  ],
-  normal_columns=[
-    ('response_time', 'bigint', 'false', '0'),
-    ('count',  'bigint', 'false', '0'),
-    ('total',  'bigint', 'false', '0'),
-    ('sql_type', 'varchar:128', 'false', '')
-  ],  vtable_route_policy = 'local'
-  )
-
 # 12326: __all_virtual_kv_ttl_task (abandoned)
 # 12327: __all_virtual_kv_ttl_task_history (abandoned)
 # 12328: __all_virtual_tenant_datafile
@@ -13787,25 +13769,6 @@ def_table_schema(
 )
 
 
-def_table_schema(
-  owner = 'wangzelin.wzl',
-  database_id='OB_INFORMATION_SCHEMA_ID',
-  table_name='QUERY_RESPONSE_TIME',
-  table_id='21306',
-  table_type='SYSTEM_VIEW',
-  gm_columns=[],
-  rowkey_columns=[],
-  normal_columns=[],
-  in_tenant_space=True,
-  view_definition="""select
-                   response_time as RESPONSE_TIME,
-                   sum(count) as COUNT,
-                   sum(total) as TOTAL
-                   from oceanbase.__all_virtual_query_response_time
-                   group by response_time
-""".replace("\n", " ")
-  )
-
 # 21307: CDB_OB_KV_TTL_TASKS (abandoned)
 # 21308: CDB_OB_KV_TTL_TASK_HISTORY (abandoned)
 # 21309: CDB_OB_DATAFILE
@@ -17617,26 +17580,8 @@ def_table_schema(
 )
 
 # 21586: GV$OB_NIC_INFO # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_nic_info)
-# 21587: GV$OB_QUERY_RESPONSE_TIME_HISTOGRAM # removed (single-tenant GV/V collapse; folded into V$OB_QUERY_RESPONSE_TIME_HISTOGRAM)
-
-def_table_schema(
-  owner = 'jiajingzhe.jjz',
-  table_name      = 'V$OB_QUERY_RESPONSE_TIME_HISTOGRAM',
-  table_id        = '21588',
-  table_type      = 'SYSTEM_VIEW',
-  gm_columns      = [],
-  rowkey_columns  = [],
-  normal_columns  = [],
-  in_tenant_space = True,
-  view_definition = """
-  SELECT
-    sql_type as SQL_TYPE,
-    cast ((response_time/1000000 ) as decimal(24,6)) as RESPONSE_TIME,
-    count as COUNT,
-    cast ((total/1000000)  as decimal(24,6))  as TOTAL
-  FROM oceanbase.__all_virtual_query_response_time
-""".replace("\n", " ")
-  )
+# 21587: GV$OB_QUERY_RESPONSE_TIME_HISTOGRAM # removed (query response time statistics deleted)
+# 21588: V$OB_QUERY_RESPONSE_TIME_HISTOGRAM # removed (query response time statistics deleted)
 
 def_table_schema(
   owner = 'fyy280124',

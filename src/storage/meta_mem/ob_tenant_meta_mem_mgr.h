@@ -145,7 +145,7 @@ public:
   static const int64_t TABLET_TRANSFORM_INTERVAL_US = 2 * 1000 * 1000L; // 2s
 
   static const int64_t LITE_MODE_MAX_TABLET_CNT_IN_OBJ_POOL = MIN_MODE_MAX_TABLET_CNT_IN_OBJ_POOL / 4;
-  static const int64_t LITE_MODE_MAX_MEMTABLE_CNT_IN_OBJ_POOL = 2 * LITE_MODE_MAX_TABLET_CNT_IN_OBJ_POOL;
+  static const int64_t LITE_MODE_MAX_MEMTABLE_CNT_IN_OBJ_POOL = 256;
 
   static int64_t get_default_tablet_pool_count()
   {
@@ -340,7 +340,7 @@ private:
       const ObTabletPoolType pool_type,
       ObMetaObjBufferNode *tablet_buffer_node,
       ObIArray<ObTabletBufferInfo> &buffer_infos);
-  int64_t cal_bucket_num();
+  int64_t cal_adaptive_bucket_num();
   int inner_push_tablet_into_gc_queue(ObTablet *tablet);
   int get_min_end_scn_from_single_tablet(ObTablet *tablet,
                                          const bool is_old,
@@ -482,7 +482,7 @@ private:
   friend class ObT3mTabletMapIterator;
   friend class TableGCTask;
   friend class ObTabletPointer;
-  static const int64_t DEFAULT_BUCKET_NUM = 521L; // seekdb uses a single LS
+  static const int64_t DEFAULT_BUCKET_NUM = 10243L;
   static const int64_t TOTAL_LIMIT = 15LL * 1024LL * 1024LL * 1024LL;
   static const int64_t HOLD_LIMIT = 8LL * 1024LL * 1024LL;
   static const int64_t TABLE_GC_INTERVAL_US = 1000LL * 1000LL; // 1s

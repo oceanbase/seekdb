@@ -336,7 +336,6 @@ ob_set_subtarget(ob_storage tablet
 
 ob_set_subtarget(ob_storage tx
   tx/ob_ctx_tx_data.cpp
-  tx/ob_gti_rpc.cpp
   tx/ob_gti_source.cpp
   tx/ob_gts_local_cache.cpp
   tx/ob_gts_msg.cpp
