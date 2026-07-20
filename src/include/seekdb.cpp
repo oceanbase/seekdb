@@ -22,9 +22,9 @@
 #include <mutex>
 #include <string>
 #include <vector>
-#include "common/ob_common_utility.h"  // For set_stackattr()
-#include "lib/mysqlclient/ob_mysql_proxy.h"
-#include "lib/mysqlclient/ob_mysql_result.h"
+#include "lib/utility/ob_common_utility.h"  // For set_stackattr()
+#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "common/mysqlclient/ob_mysql_result.h"
 #include "lib/string/ob_string.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/resource/ob_resource_mgr.h"
@@ -47,22 +47,17 @@
 #include "sql/parser/parse_node.h"
 #include "share/schema/ob_priv_type.h"
 #include "share/ob_define.h"
-#include "share/rc/ob_tenant_base.h"  // MTL_SWITCH for read_lob_data (ObLobManager)
-#include "share/system_variable/ob_system_variable.h"
+#include "share/rc/ob_tenant_base.h"  // MOD_SCOPE for read_lob_data (ObLobManager)
+#include "sql/session/ob_system_variable.h"
 #include "share/system_variable/ob_sys_var_class_type.h"
 #include "share/ob_errno.h"  // For ob_strerror
 #include "sql/ob_sql_utils.h"  // For ObSQLUtils::update_session_last_schema_version (DDL visibility)
 #include "lib/ob_define.h"  // For OB_SYS_TENANT_NAME, OB_SYS_USER_ID
 #include "lib/profile/ob_trace_id.h"  // For ObCurTraceId
-#include "observer/omt/ob_tenant_node_balancer.h"  // For ObTenantNodeBalancer
-#include "libtable/src/libobtable.h"  // For ObTableServiceLibrary
 #include "lib/worker.h"  // For lib::Worker
-#include "logservice/palf/election/interface/election.h"  // For palf::election::INIT_TS
-#include "share/ob_thread_mgr.h"  // For ob_init_create_func
-#include "lib/thread/threads.h"  // For global_thread_stack_size
-#include "lib/signal/ob_signal_struct.h"  // For SIG_STACK_SIZE
-#include "lib/alloc/alloc_assist.h"  // For ACHUNK_PRESERVE_SIZE
-#include "common/ob_smart_call.h"  // For CALL_WITH_NEW_STACK
+#include "lib/thread/threads.h"  // For global_thread_stack_size, THREAD_STACK_RESERVED_SIZE
+#include "lib/utility/alloc_assist.h"  // For ACHUNK_PRESERVE_SIZE
+#include "lib/utility/ob_smart_call.h"  // For CALL_WITH_NEW_STACK
 #ifdef _WIN32
 #include <windows.h>
 #include <io.h>
@@ -131,10 +126,13 @@ using namespace oceanbase::sqlclient;
 using namespace oceanbase::observer;
 using namespace oceanbase::sql;
 using namespace oceanbase::share;
-namespace share = oceanbase::share;  // MTL_SWITCH macro expands to share::ObTenantSwitchGuard
+namespace share = oceanbase::share;
 using namespace oceanbase::lib;
-using namespace oceanbase::omt;
-using namespace oceanbase::palf::election;
+
+static oceanbase::observer::ObInnerSQLConnectionPool &get_embed_inner_sql_conn_pool()
+{
+  return GCTX.res_inner_conn_pool_->get_inner_sql_conn_pool();
+}
 
 // RAII: redirect stdout/stderr to /dev/null for the scope so LOG_STDOUT (e.g. "successfully init log writer") does not print.
 struct SuppressLogStdoutScope {
@@ -308,15 +306,13 @@ struct SeekdbConnection {
             embed_result = nullptr;
         }
         // Release connection (using OBSERVER macro like Python embed)
-        if (embed_conn) {
-            OBSERVER.get_inner_sql_conn_pool().release(embed_conn, true);
+        if (embed_conn && OB_NOT_NULL(GCTX.res_inner_conn_pool_)) {
+            get_embed_inner_sql_conn_pool().release(embed_conn, true);
             embed_conn = nullptr;
         }
         // Release session (like Python embed does)
         if (embed_session) {
-            uint32_t sid = embed_session->get_sid();
             GCTX.session_mgr_->revert_session(embed_session);
-            GCTX.session_mgr_->mark_sessid_unused(sid);
             embed_session = nullptr;
         }
     }
@@ -692,7 +688,7 @@ static void seekdb_library_init() {
     // This ensures threads can be created even if seekdb_open() hasn't been called yet
     // Use a larger default (2MB) to ensure it works in all scenarios
     const int64_t default_stack_size = (1LL << 21);  // 2MB
-    int64_t calculated_size = default_stack_size - SIG_STACK_SIZE - ACHUNK_PRESERVE_SIZE;
+    int64_t calculated_size = default_stack_size - THREAD_STACK_RESERVED_SIZE - ACHUNK_PRESERVE_SIZE;
     
     // Ensure stack size is at least 1MB for better compatibility
     // This is larger than the typical minimum (512KB) to handle edge cases
@@ -814,76 +810,6 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
         return SEEKDB_ERROR_MEMORY_ALLOC;
     }
     
-    // Initialize thread group creation functions BEFORE ObTableServiceLibrary::init()
-    // This is critical for dynamic library linking, where static initialization order may be uncertain
-    // This ensures ServerGTimer and other observer-specific Timer Groups are registered
-    // before any thread group operations are attempted
-    // Use init_create_func() (strong version) which calls both lib_init_create_func() and ob_init_create_func()
-    try {
-        oceanbase::lib::init_create_func();
-    } catch (const std::exception& e) {
-        return SEEKDB_ERROR_MEMORY_ALLOC;
-    }
-    
-    // Mark create_func_inited_ as true to prevent TGMgr constructor from calling weak init_create_func()
-    // This ensures that the strong version (with ob_init_create_func()) is used
-    // Note: create_func_inited_ is declared as extern in thread_mgr.h
-    oceanbase::lib::create_func_inited_ = true;
-    
-    // CRITICAL: TGMgr::instance() is a static singleton, so it may have been initialized
-    // before init_create_func() was called. We need to ensure TGMgr is re-initialized
-    // or that all Timer Groups are created after init_create_func().
-    // However, since TGMgr uses a static singleton, we cannot re-initialize it.
-    // Instead, we must ensure init_create_func() is called BEFORE any code that might
-    // trigger TGMgr::instance() initialization.
-    // 
-    // For now, we just call TGMgr::instance() to ensure it's initialized with the
-    // correct create_funcs_ (which we just set via init_create_func()).
-    // If TGMgr was already initialized, its constructor would have called the weak
-    // init_create_func(), so we need to manually create any missing Timer Groups.
-    oceanbase::lib::TGMgr* tg_mgr_ptr = nullptr;
-    try {
-        tg_mgr_ptr = &oceanbase::lib::TGMgr::instance();
-    } catch (const std::exception& e) {
-        return SEEKDB_ERROR_MEMORY_ALLOC;
-    }
-    oceanbase::lib::TGMgr& tg_mgr = *tg_mgr_ptr;
-    
-    // After TGMgr is initialized, manually create all missing system-level Timer Groups
-    // This is a workaround for the case where TGMgr was initialized before ob_init_create_func()
-    // CRITICAL: For system-level Timer Groups (tg_def_id < TGDefIDs::END), the tg_id should equal tg_def_id
-    // because TG_START uses the enum value as the index. We need to ensure tgs_[enum_value] is set.
-    // 
-    // TGMgr constructor creates Timer Groups for i=0 to i=255, but if create_funcs_[i] was null at that time,
-    // it only allocates an ID without creating the Timer Group object. We need to recreate them now.
-    // We try to create all missing Timer Groups. If create_funcs_[i] is null, create_tg will just allocate an ID.
-    // Only recreate Timer Groups that have create_funcs_ set (i.e., those that should have been created)
-    int recreated_count = 0;
-    try {
-        for (int i = 0; i < oceanbase::lib::TGDefIDs::END; i++) {
-            if (tg_mgr.tgs_[i] == nullptr) {
-                // Try to recreate the Timer Group. If create_funcs_[i] is now set, it will create the object.
-                int allocated_tg_id = -1;
-                int ret = tg_mgr.create_tg(i, allocated_tg_id, 0);
-                if (ret == oceanbase::common::OB_SUCCESS && allocated_tg_id >= 0 && allocated_tg_id != i && tg_mgr.tgs_[allocated_tg_id] != nullptr) {
-                    // Move the Timer Group from allocated_tg_id to i (enum value)
-                    tg_mgr.tgs_[i] = tg_mgr.tgs_[allocated_tg_id];
-                    tg_mgr.tgs_[allocated_tg_id] = nullptr;
-                    tg_mgr.free_tg_id(allocated_tg_id);
-                    recreated_count++;
-                }
-            }
-        }
-    } catch (const std::exception& e) {
-        return SEEKDB_ERROR_MEMORY_ALLOC;
-    }
-    
-    // Note: We do NOT call ObTableServiceLibrary::init() here, aligning with Python embed
-    // Python embed directly calls OBSERVER.init() without ObTableServiceLibrary::init()
-    // ObTableServiceLibrary::init() is mainly for Table Service Client (server mode)
-    // In embedded mode, observer.init() should initialize all required resources
-    
-    
     int ret = OB_SUCCESS;
     ObServerOptions opts;
     // Match Python embed's behavior:
@@ -895,7 +821,7 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
         opts.port_ = port;
         embed_mode = false;  // Server mode when port is specified
     }
-    opts.embed_mode_ = embed_mode;  // Set in opts for init() to use
+    opts.embedded_ = embed_mode;
     opts.use_ipv6_ = false;
     
     
@@ -1079,15 +1005,7 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
         oceanbase::lib::Worker worker;
         oceanbase::lib::Worker::set_worker_to_thread_local(&worker);
         
-        // TGMgr is already initialized earlier (after ob_init_create_func())
-        // No need to call it again here
-        
         ObPLogWriterCfg log_cfg;
-        
-        // Use OBSERVER macro directly like Python embed does
-        
-        // Set election INIT TS (aligned with main.cpp)
-        ATOMIC_STORE(&INIT_TS, get_monotonic_ts());
         
         if (OB_FAIL(ret)) {
         } else {
@@ -1142,8 +1060,7 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
         }
         
         // Continue with observer.start() if init succeeded (or OB_INIT_TWICE was ignored)
-        // Pass embed_mode directly (same value as opts.embed_mode_ used in init())
-        if (OB_SUCC(ret) && OB_FAIL(OBSERVER.start(embed_mode))) {
+        if (OB_SUCC(ret) && OB_FAIL(OBSERVER.start())) {
             // stdout already restored above
             LOG_WARN("observer start failed", K(ret));
             const char* err_msg = ob_strerror(ret);
@@ -1179,8 +1096,6 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
             }
             GCTX.in_bootstrap_ = false;
 #endif
-            // Handle tenant node balancer (aligned with Python embed)
-            ObTenantNodeBalancer::get_instance().handle();
         }
         // stdout already restored above
     }
@@ -1388,20 +1303,16 @@ void seekdb_close(void) {
 
 static void refresh_session_schema_version(oceanbase::sql::ObSQLSessionInfo* session) {
     if (OB_ISNULL(session) || OB_ISNULL(GCTX.schema_service_)) return;
-    uint64_t tenant_id = session->get_effective_tenant_id();
-    oceanbase::common::ObArray<uint64_t> tenant_ids;
-    if (OB_SUCCESS == tenant_ids.push_back(tenant_id)) {
-        (void)GCTX.schema_service_->refresh_and_add_schema(tenant_ids, false);
-    }
+    (void)GCTX.schema_service_->refresh_and_add_schema(false);
     int64_t schema_version = OB_INVALID_VERSION;
     oceanbase::share::schema::ObServerSchemaService* server_svc =
         static_cast<oceanbase::share::schema::ObServerSchemaService*>(GCTX.schema_service_);
-    if (OB_SUCCESS == server_svc->get_tenant_schema_version(tenant_id, schema_version)
+    if (OB_SUCCESS == server_svc->get_tenant_schema_version(schema_version)
         && OB_INVALID_VERSION != schema_version) {
         (void)session->update_sys_variable(oceanbase::share::SYS_VAR_OB_LAST_SCHEMA_VERSION, schema_version);
         return;
     }
-    if (OB_SUCCESS != GCTX.schema_service_->get_tenant_refreshed_schema_version(tenant_id, schema_version)
+    if (OB_SUCCESS != GCTX.schema_service_->get_tenant_refreshed_schema_version(schema_version)
         || OB_INVALID_VERSION == schema_version) {
         (void)oceanbase::sql::ObSQLUtils::update_session_last_schema_version(*GCTX.schema_service_, *session);
         return;
@@ -1412,10 +1323,9 @@ static void refresh_session_schema_version(oceanbase::sql::ObSQLSessionInfo* ses
 // Align with MySQL protocol: ObMPBase::check_and_refresh_schema. Only refresh when server (local) is behind session (last).
 static void check_and_refresh_schema_for_embed(oceanbase::sql::ObSQLSessionInfo* session) {
     if (OB_ISNULL(session) || OB_ISNULL(GCTX.schema_service_)) return;
-    uint64_t tenant_id = session->get_effective_tenant_id();
     int64_t local_version = OB_INVALID_VERSION;
     int64_t last_version = OB_INVALID_VERSION;
-    if (OB_SUCCESS != GCTX.schema_service_->get_tenant_refreshed_schema_version(tenant_id, local_version)) {
+    if (OB_SUCCESS != GCTX.schema_service_->get_tenant_refreshed_schema_version(local_version)) {
         refresh_session_schema_version(session);
         return;
     }
@@ -1479,9 +1389,7 @@ static int do_seekdb_connect_inner(ConnectParams* params) {
         delete conn;
         params->result = SEEKDB_ERROR_CONNECTION_FAILED;
         return OB_SUCCESS;
-    } else if (OB_FAIL(GCTX.session_mgr_->create_session(OB_SYS_TENANT_ID, sid, 0, 
-                                                           ObTimeUtility::current_time(), session))) {
-        GCTX.session_mgr_->mark_sessid_unused(sid);
+    } else if (OB_FAIL(GCTX.session_mgr_->create_session(sid, ObTimeUtility::current_time(), session))) {
         session = nullptr;
         set_error(conn, "Failed to create session");
         delete conn;
@@ -1489,12 +1397,12 @@ static int do_seekdb_connect_inner(ConnectParams* params) {
         return OB_SUCCESS;
     } else if (FALSE_IT(ob_setup_tsi_warning_buffer(&session->get_warnings_buffer()))) {
     } else if (FALSE_IT(conn->embed_session = session)) {
-    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(OB_SYS_TENANT_ID, schema_guard))) {
+    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
         set_error(conn, "failed to get schema guard");
         delete conn;
         params->result = SEEKDB_ERROR_CONNECTION_FAILED;
         return OB_SUCCESS;
-    } else if (OB_FAIL(schema_guard.get_user_info(OB_SYS_TENANT_ID, OB_SYS_USER_ID, user_info))) {
+    } else if (OB_FAIL(schema_guard.get_user_info(OB_SYS_USER_ID, user_info))) {
         set_error(conn, "failed to get user info");
         delete conn;
         params->result = SEEKDB_ERROR_CONNECTION_FAILED;
@@ -1505,7 +1413,7 @@ static int do_seekdb_connect_inner(ConnectParams* params) {
         params->result = SEEKDB_ERROR_CONNECTION_FAILED;
         return OB_SUCCESS;
     } else if (OB_NOT_NULL(database) && STRLEN(database) > 0) {
-        if (OB_FAIL(schema_guard.get_database_schema(OB_SYS_TENANT_ID, ObString(database), database_schema))) {
+        if (OB_FAIL(schema_guard.get_database_schema(ObString(database), database_schema))) {
             set_error(conn, "failed to get database");
             delete conn;
             params->result = SEEKDB_ERROR_CONNECTION_FAILED;
@@ -1523,7 +1431,7 @@ static int do_seekdb_connect_inner(ConnectParams* params) {
             set_error(conn, "load_default_sys_variable failed");
         } else if (OB_FAIL(session->load_default_configs_in_pc())) {
             set_error(conn, "load_default_configs_in_pc failed");
-        } else if (OB_FAIL(session->init_tenant(OB_SYS_TENANT_NAME, OB_SYS_TENANT_ID))) {
+        } else if (OB_FAIL(session->init_tenant(OB_SYS_TENANT_NAME))) {
             set_error(conn, "init_tenant failed");
         } else if (OB_FAIL(session->load_all_sys_vars(schema_guard))) {
             set_error(conn, "load_all_sys_vars failed");
@@ -1553,8 +1461,7 @@ static int do_seekdb_connect_inner(ConnectParams* params) {
                         // Non-critical, continue
                     }
                     if (OB_NOT_NULL(database) && STRLEN(database) > 0) {
-                        if (OB_FAIL(schema_guard.get_db_priv_set(OB_SYS_TENANT_ID, 
-                                                                  user_info->get_user_id(), 
+                        if (OB_FAIL(schema_guard.get_db_priv_set(user_info->get_user_id(), 
                                                                   database, db_priv_set))) {
                             // Non-critical, continue
                         } else {
@@ -1578,11 +1485,18 @@ static int do_seekdb_connect_inner(ConnectParams* params) {
     
     // Use OBSERVER macro directly like Python embed does
     if (OB_SUCC(ret)) {
-        if (OB_FAIL(OBSERVER.get_inner_sql_conn_pool().acquire(session, inner_conn))) {
+        if (OB_ISNULL(GCTX.res_inner_conn_pool_)) {
+            set_error(conn, "inner sql conn pool not ready");
+            if (session) {
+                GCTX.session_mgr_->revert_session(session);
+            }
+            delete conn;
+            params->result = SEEKDB_ERROR_CONNECTION_FAILED;
+            return OB_SUCCESS;
+        } else if (OB_FAIL(get_embed_inner_sql_conn_pool().acquire(session, inner_conn))) {
             set_error(conn, "acquire conn failed");
             if (session) {
                 GCTX.session_mgr_->revert_session(session);
-                GCTX.session_mgr_->mark_sessid_unused(sid);
             }
             delete conn;
             params->result = SEEKDB_ERROR_CONNECTION_FAILED;
@@ -1600,7 +1514,6 @@ static int do_seekdb_connect_inner(ConnectParams* params) {
     } else {
         if (session) {
             GCTX.session_mgr_->revert_session(session);
-            GCTX.session_mgr_->mark_sessid_unused(sid);
         }
         delete conn;
         params->result = SEEKDB_ERROR_CONNECTION_FAILED;
@@ -1898,7 +1811,7 @@ static int do_seekdb_execute_inner(ExecuteParams* params) {
     }
     
     ObString sql_string(sql);
-    ObMemAttr mem_attr(OB_SYS_TENANT_ID, "FFIEmbedAlloc");
+    ObMemAttr mem_attr("FFIEmbedAlloc");
     
     // Initialize trace ID (aligned with Python embed)
     ObCurTraceId::init(GCTX.self_addr());
@@ -1930,7 +1843,7 @@ static int do_seekdb_execute_inner(ExecuteParams* params) {
         check_and_refresh_schema_for_embed(conn->embed_session);
     }
     
-    ret = conn->embed_conn->execute_read(OB_SYS_TENANT_ID, sql_string, *conn->embed_result, true);
+    ret = conn->embed_conn->execute_read(sql_string, *conn->embed_result, true);
     
     // Reset warning buffer after execute (aligned with Python embed)
     if (OB_NOT_NULL(conn->embed_session)) {
@@ -1952,7 +1865,7 @@ static int do_seekdb_execute_inner(ExecuteParams* params) {
             }
         }
         if (errmsg.empty()) {
-            errmsg = std::string(ob_errpkt_strerror(ret, false));
+            errmsg = std::string(ob_errpkt_strerror(ret));
         }
         if (errmsg.empty()) {
             errmsg = "Query execution failed";
@@ -2216,9 +2129,9 @@ static int do_seekdb_execute_inner(ExecuteParams* params) {
         }
     }
     
-    // Fetch all rows (MTL_SWITCH so read_lob_data can access ObLobManager for out-of-row LOB, e.g. 100KB)
+    // Fetch all rows (MOD_SCOPE so read_lob_data can access ObLobManager for out-of-row LOB, e.g. 100KB)
     int64_t row_count = 0;
-    MTL_SWITCH(OB_SYS_TENANT_ID) {
+    MOD_SCOPE {
     while (OB_SUCCESS == sql_result->next()) {
         std::vector<std::string> row;
         std::vector<bool> row_null;
@@ -2417,7 +2330,7 @@ static int do_seekdb_execute_inner(ExecuteParams* params) {
         row_count++;
     }
     result_set->row_count = row_count;
-    }  // MTL_SWITCH
+    }  // MOD_SCOPE
     
     // Update affected rows from result set for DML statements (INSERT/UPDATE/DELETE)
     // This allows seekdb_affected_rows() to return correct value even when using seekdb_query()
@@ -2706,7 +2619,7 @@ static bool get_insert_column_types(
     
     // Get schema guard from schema service
     schema::ObSchemaGetterGuard schema_guard;
-    int schema_ret = GCTX.schema_service_->get_tenant_schema_guard(OB_SYS_TENANT_ID, schema_guard);
+    int schema_ret = GCTX.schema_service_->get_tenant_schema_guard(schema_guard);
     if (schema_ret != OB_SUCCESS) {
         // Schema service is required
         return false;
@@ -2716,7 +2629,7 @@ static bool get_insert_column_types(
     const schema::ObTableSchema* table_schema = nullptr;
     ObString table_name_str;
     table_name_str.assign_ptr(table_name.c_str(), static_cast<int32_t>(table_name.length()));
-    schema_ret = schema_guard.get_table_schema(OB_SYS_TENANT_ID, database_name, table_name_str, false, table_schema);
+    schema_ret = schema_guard.get_table_schema(database_name, table_name_str, false, table_schema);
     if (schema_ret != OB_SUCCESS || table_schema == nullptr) {
         // Table schema is required
         return false;
@@ -3345,7 +3258,7 @@ static int do_seekdb_execute_update_inner(ExecuteUpdateParams* params) {
     }
     
     ObString sql_string(sql);
-    ret = conn->embed_conn->execute_write(OB_SYS_TENANT_ID, sql_string, rows, true);
+    ret = conn->embed_conn->execute_write(sql_string, rows, true);
     
     // Reset warning buffer after execute (aligned with Python embed)
     if (OB_NOT_NULL(conn->embed_session)) {
@@ -3377,7 +3290,7 @@ static int do_seekdb_execute_update_inner(ExecuteUpdateParams* params) {
             }
         }
         if (errmsg.empty()) {
-            const char *err_str = ob_errpkt_strerror(ret, false);
+            const char *err_str = ob_errpkt_strerror(ret);
             if (nullptr != err_str && err_str[0] != '\0') {
                 errmsg = std::string(err_str);
             }
@@ -3467,7 +3380,7 @@ int seekdb_begin(SeekdbHandle handle) {
 
     // Start new transaction
     // This is equivalent to executing "START TRANSACTION" SQL statement in MySQL 5.7
-    if (OB_FAIL(conn->embed_conn->start_transaction(OB_SYS_TENANT_ID))) {
+    if (OB_FAIL(conn->embed_conn->start_transaction())) {
         set_error(conn, "Failed to start transaction");
         return SEEKDB_ERROR_QUERY_FAILED;
     }

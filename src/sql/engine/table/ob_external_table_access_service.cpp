@@ -20,10 +20,6 @@
 #include "share/backup/ob_backup_io_adapter.h"
 #include "share/external_table/ob_external_table_utils.h"
 #include "share/ob_device_manager.h"
-#ifndef OB_BUILD_EMBED_MODE
-#include "sql/engine/table/ob_parquet_table_row_iter.h"
-#include "sql/engine/table/ob_orc_table_row_iter.h"
-#endif
 #include "sql/engine/cmd/ob_load_data_file_reader.h"
 #include "sql/engine/table/ob_csv_table_row_iter.h"
 #include "sql/engine/expr/ob_expr_regexp_context.h"
@@ -572,18 +568,6 @@ int ObExternalTableAccessService::table_scan(
         LOG_WARN("alloc memory failed", K(ret));
       }
       break;
-    case ObExternalFileFormat::PARQUET_FORMAT:
-#ifndef OB_BUILD_EMBED_MODE
-      if (OB_ISNULL(row_iter = OB_NEWx(ObParquetTableRowIterator, (scan_param.allocator_)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc memory failed", K(ret));
-      }
-      break;
-#else
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("parquet is not supported in embed mode", K(ret));
-      break;
-#endif
     case ObExternalFileFormat::ODPS_FORMAT:
       if (!GCONF._use_odps_jni_connector) {
         ret = OB_NOT_SUPPORTED;
@@ -629,17 +613,8 @@ int ObExternalTableAccessService::table_rescan(ObVTableScanParam &param, ObNewRo
   } else {
     switch (param.external_file_format_.format_type_) {
       case ObExternalFileFormat::CSV_FORMAT:
-#ifndef OB_BUILD_EMBED_MODE
-      case ObExternalFileFormat::PARQUET_FORMAT:
-#endif
         result->reset();
         break;
-#ifdef OB_BUILD_EMBED_MODE
-      case ObExternalFileFormat::PARQUET_FORMAT:
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("parquet is not supported in embed mode", K(ret));
-        break;
-#endif
       case ObExternalFileFormat::ORC_FORMAT:
         ret = OB_NOT_SUPPORTED;
         break;

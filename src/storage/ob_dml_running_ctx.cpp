@@ -19,7 +19,7 @@
 #include "storage/ob_dml_running_ctx.h"
 #include "storage/ob_table_dml_param.h"
 #include "share/schema/ob_schema_getter_guard.h"
-#include "share/vector_index/ob_vector_index_util.h"
+#include "observer/vector_index/ob_vector_index_util.h"
 #include "storage/tablet/ob_tablet.h"
 #include "storage/memtable/ob_memtable_context.h"
 #include "storage/tx/ob_tx_ctx.h"
@@ -43,14 +43,13 @@ static int resolve_has_async_index_from_schema_(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(schema_service), KP(dml_param.table_param_));
   } else {
-    const uint64_t tenant_id = MTL_ID();
     const uint64_t table_id = dml_param.table_param_->get_data_table().get_table_id();
     share::schema::ObSchemaGetterGuard guard;
     const share::schema::ObTableSchema *table_schema = nullptr;
-    if (OB_FAIL(schema_service->get_tenant_schema_guard(tenant_id, guard))) {
-      LOG_WARN("get tenant schema guard failed", KR(ret), K(tenant_id));
+    if (OB_FAIL(schema_service->get_tenant_schema_guard(guard))) {
+      LOG_WARN("get tenant schema guard failed", KR(ret));
     } else if (OB_FAIL(guard.get_table_schema(table_id, table_schema))) {
-      LOG_WARN("get table schema failed", KR(ret), K(tenant_id), K(table_id));
+      LOG_WARN("get table schema failed", KR(ret), K(table_id));
     } else if (OB_ISNULL(table_schema) || !table_schema->is_user_table()) {
       // not a user data table
     } else {
@@ -59,7 +58,7 @@ static int resolve_has_async_index_from_schema_(
       for (int64_t i = 0; OB_SUCC(ret) && !has_async_index && i < index_infos.count(); ++i) {
         const share::schema::ObTableSchema *index_schema = nullptr;
         if (OB_FAIL(guard.get_table_schema(index_infos.at(i).table_id_, index_schema))) {
-          LOG_WARN("get index table schema failed", KR(ret), K(tenant_id), K(index_infos.at(i).table_id_));
+          LOG_WARN("get index table schema failed", KR(ret), K(index_infos.at(i).table_id_));
         } else if (OB_NOT_NULL(index_schema)
                    && !index_schema->get_index_params().empty()
                    && index_schema->is_vec_delta_buffer_type()) {

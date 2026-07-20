@@ -35,13 +35,11 @@ function(oblib_addtest_simd mainfile)
   get_filename_component(testname ${mainfile} NAME_WE)
   add_executable(${testname} ${ARGV})
   add_test(${testname} ${testname})
-  if(APPLE)
-    target_link_libraries(${testname} PRIVATE objit oblib oblib_testbase)
-  elseif(UNIX)
-    target_link_libraries(${testname} PRIVATE objit oblib oblib_testbase -static-libgcc -static-libstdc++
+  if(NOT APPLE)
+    target_link_libraries(${testname} PRIVATE oblib oblib_testbase -static-libgcc -static-libstdc++
         -Wl,-znorelro -Wl,-T,${CMAKE_SOURCE_DIR}/rpm/ld.lds)
-  elseif(WIN32)
-    target_link_libraries(${testname} PRIVATE objit oblib oblib_testbase)
+  else()
+    target_link_libraries(${testname} PRIVATE oblib oblib_testbase)
   endif()
   if (${ARCHITECTURE} STREQUAL "x86_64")
 	  target_compile_options(${testname}

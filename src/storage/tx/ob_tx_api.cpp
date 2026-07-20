@@ -1392,7 +1392,7 @@ int ObTransService::rollback_savepoint_(ObTxDesc &tx,
                 TRANS_LOG(WARN, "retry blocking rollback", K(ret), K(tx_id), K(retry_cnt));
               }
               ++retry_cnt;
-              const int64_t retry_interval = std::min(10 * 1000 * retry_cnt, 50 * 1000L);
+              const int64_t retry_interval = std::min<int64_t>(10 * 1000 * retry_cnt, 50 * 1000);
               ob_usleep(retry_interval);
             }
           }

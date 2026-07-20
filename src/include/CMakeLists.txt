@@ -17,10 +17,6 @@ ob_set_subtarget(seekdb_object_list common
 
 ob_add_new_object_target(seekdb_objects seekdb_object_list)
 
-# seekdb.cpp pulls headers that include generated gRPC/protobuf outputs under deps/oblib/src/grpc/.
-# Ensure protoc runs before compiling libseekdb / seekdb_objects (Ninja can otherwise race).
-add_dependencies(seekdb_objects oblib_grpc)
-
 target_include_directories(seekdb_objects
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -39,13 +35,14 @@ add_library(libseekdb
   ${FFI_SOURCES}
 )
 
-add_dependencies(libseekdb oblib_grpc)
-
 target_include_directories(libseekdb
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/src/libtable/src
 )
+
+# Propagate oblib/src and src/ include paths for seekdb.cpp (same as seekdb_objects).
+target_link_libraries(libseekdb PRIVATE ob_base)
 
 # Link oceanbase_static into the shared library
 # Use --whole-archive (Linux/Android) / -force_load (macOS) to include all symbols from static library
@@ -114,7 +111,6 @@ elseif(WIN32)
     ob_storage_static
     ob_share_static
     oblib
-    objit
     ob_malloc
     synchronization
     ${CMAKE_BINARY_DIR}/deps/oblib/src/lib/compress/zstd_1_3_8/zstd_1_3_8_objs.lib

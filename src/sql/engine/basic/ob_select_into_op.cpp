@@ -1601,21 +1601,6 @@ int ObSelectIntoOp::new_data_writer(ObExternalFileWriter *&data_writer)
       }
       break;
     }
-    case ObExternalFileFormat::FormatType::PARQUET_FORMAT:
-    {
-#ifndef OB_BUILD_EMBED_MODE
-      if (OB_ISNULL(ptr = ctx_.get_allocator().alloc(sizeof(ObParquetFileWriter)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate data writer", K(ret), K(sizeof(ObParquetFileWriter)));
-      } else {
-        data_writer = new(ptr) ObParquetFileWriter(access_info_, file_location_, parquet_writer_schema_);
-      }
-#else
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("parquet is not supported in embed mode", K(ret));
-#endif
-      break;
-    }
     case ObExternalFileFormat::FormatType::ORC_FORMAT:
     {
       ret = OB_NOT_SUPPORTED;

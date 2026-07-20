@@ -136,7 +136,6 @@ if(EXISTS "${STDC_SHARED_LIB_SYMLINK}")
 endif()
 
 add_subdirectory(deps/oblib)
-add_subdirectory(src/objit)
 include(${CMAKE_SOURCE_DIR}/cmake/EnsureWindowsDiaGuids.cmake)
 add_subdirectory(src)
 

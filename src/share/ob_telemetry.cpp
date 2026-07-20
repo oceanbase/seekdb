@@ -221,6 +221,7 @@ int send_telemetry_by_curl_cmd(const char *url)
   }
   return ret;
 }
+#ifndef __APPLE__
 // Linux: Use libcurl
 static size_t discard(void* ptr, size_t size, size_t nmemb, void* userdata) {
   return size * nmemb;
@@ -273,6 +274,7 @@ int send_telemetry_by_libcurl(const char *url, const ObString &json_str)
   }
   return ret;
 }
+#endif // __APPLE__
 
 int send_telemetry(const char *url, const ObString &json_str)
 {

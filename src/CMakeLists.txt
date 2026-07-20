@@ -12,7 +12,7 @@ target_include_directories(
 
 target_compile_features(ob_base_without_pass INTERFACE cxx_std_11)
 # RELRO + linker script are ELF-only; Windows (lld-link) and macOS must not see -Wl,-T / -Wl,-z.
-target_link_libraries(ob_base_without_pass INTERFACE oblib_base_without_pass objit_base
+target_link_libraries(ob_base_without_pass INTERFACE oblib_base_without_pass
   $<$<AND:$<NOT:$<PLATFORM_ID:Darwin>>,$<NOT:$<PLATFORM_ID:Windows>>>:${OB_RELRO_FLAG}>
   $<$<AND:$<NOT:$<PLATFORM_ID:Darwin>>,$<NOT:$<PLATFORM_ID:Windows>>>:-Wl,-T,${CMAKE_SOURCE_DIR}/rpm/ld.lds>)
 target_compile_definitions(ob_base_without_pass INTERFACE
