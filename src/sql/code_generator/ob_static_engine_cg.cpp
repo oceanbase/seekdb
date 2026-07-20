@@ -8072,13 +8072,11 @@ int ObStaticEngineCG::set_properties_post(const ObLogPlan &log_plan, ObPhysicalP
       // do nothing
     } else if (OB_FAIL(phy_plan.set_location_constraints(sql_ctx->base_constraints_,
                                                   sql_ctx->strict_constraints_,
-                                                  sql_ctx->non_strict_constraints_,
-                                                  sql_ctx->dup_table_replica_cons_))) {
+                                                  sql_ctx->non_strict_constraints_))) {
         LOG_WARN("failed to set location constraints", K(ret), K(phy_plan),
                  K(sql_ctx->base_constraints_),
                  K(sql_ctx->strict_constraints_),
-                 K(sql_ctx->non_strict_constraints_),
-                 K(sql_ctx->dup_table_replica_cons_));
+                 K(sql_ctx->non_strict_constraints_));
     }
   }
 

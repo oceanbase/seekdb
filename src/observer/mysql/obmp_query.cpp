@@ -938,7 +938,7 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
             need_response_error = false;
           }
         } else {
-          retry_ctrl_.set_packet_retry(ret);
+          retry_ctrl_.set_packet_retry();
           session.get_retry_info_for_update().set_last_query_retry_err(ret);
           session.get_retry_info_for_update().inc_retry_cnt();
         }
@@ -1252,6 +1252,7 @@ int ObMPQuery::is_readonly_stmt(ObMySQLResultSet &result, bool &is_readonly)
     case stmt::T_SHOW_SEQUENCES:
     case stmt::T_SHOW_ENGINE:
     case stmt::T_SHOW_OPEN_TABLES:
+    case stmt::T_HELP:
     case stmt::T_USE_DATABASE:
     case stmt::T_SET_NAMES: //read only not restrict it
     case stmt::T_START_TRANS:

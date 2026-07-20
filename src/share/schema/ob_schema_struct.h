@@ -28,7 +28,6 @@
 #include "common/row/ob_row_util.h"
 #include "common/rowkey/ob_rowkey_info.h"
 #include "common/ob_store_format.h"
-#include "share/ob_duplicate_scope_define.h"
 #include "share/sequence/ob_sequence_option.h"
 #include "share/system_variable/ob_sys_var_meta.h"
 #include "share/schema/ob_priv_type.h"
@@ -2617,7 +2616,6 @@ public:
       common::ObIArray<common::ObZone> &zone_list) const = 0;
   virtual uint64_t get_tablegroup_id() const = 0;
   virtual void set_tablegroup_id(const uint64_t tg_id) = 0;
-  virtual share::ObDuplicateScope get_duplicate_scope() const = 0;
   inline virtual int64_t get_part_func_expr_num() const { return 0; }
   inline virtual void set_part_func_expr_num(const int64_t part_func_expr_num) { UNUSED(part_func_expr_num); }
   inline virtual int64_t get_sub_part_func_expr_num() const { return 0; }
@@ -2975,7 +2973,6 @@ public:
       common::ObIArray<common::ObZone> &zone_list) const override;
 
   //partition related
-  virtual share::ObDuplicateScope get_duplicate_scope() const override { return share::ObDuplicateScope::DUPLICATE_SCOPE_NONE; }
   inline virtual bool is_user_partition_table() const override
   {
     return PARTITION_LEVEL_ONE == get_part_level()

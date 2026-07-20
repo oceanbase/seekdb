@@ -66,9 +66,9 @@ int ObTableGroupHelp::add_tables_to_tablegroup(ObMySQLTransaction &trans,
     const ObTableSchema *first_table_schema = NULL;
     int64_t table_items_count = table_items.count();
     ObArray<uint64_t> table_ids;
-    bool duplicate_table = false;
+    bool is_repeated_table = false;
     for (int64_t i = 0; OB_SUCC(ret) && i < table_items_count; ++i) {
-      duplicate_table = false;
+      is_repeated_table = false;
       const ObTableItem &table_item = table_items.at(i);
       const ObTableSchema *table_schema = NULL;
       uint64_t database_id = common::OB_INVALID_ID;
@@ -92,12 +92,12 @@ int ObTableGroupHelp::add_tables_to_tablegroup(ObMySQLTransaction &trans,
         LOG_USER_ERROR(OB_OP_NOT_ALLOW, "set the tablegroup of system table besides oceanbase");
       } else {
         if (is_contain(table_ids, table_schema->get_table_id())) {
-          duplicate_table = true;
+          is_repeated_table = true;
         } else if (OB_FAIL(table_ids.push_back(table_schema->get_table_id()))) {
           LOG_WARN("fail to push back table", KR(ret));
         }
       }
-      if (OB_SUCC(ret) && !duplicate_table) {
+      if (OB_SUCC(ret) && !is_repeated_table) {
         ObTableSchema new_table_schema;
         ObSqlString sql;
         if (OB_FAIL(new_table_schema.assign(*table_schema))) {
@@ -178,16 +178,6 @@ int ObTableGroupHelp::check_table_alter_tablegroup(
     } else if (OB_UNLIKELY(nullptr == new_tg)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("orig tg ptr is null", KR(ret), K(new_tg_id));
-    }
-    if (OB_SUCC(ret)) {
-      if (ObDuplicateScope::DUPLICATE_SCOPE_NONE != new_table_schema.get_duplicate_scope()
-          && OB_INVALID_ID != new_table_schema.get_tablegroup_id()) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("duplicate table in tablegroup is not supported", KR(ret),
-                 "table_id",new_table_schema.get_table_id(),
-                 "tablegroup_id", new_table_schema.get_tablegroup_id());
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "duplicate table in tablegroup");
-      }
     }
   }
   return ret;

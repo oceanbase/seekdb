@@ -58,7 +58,6 @@ class ObSqlSchemaGuard;
 typedef common::ObFixedArray<common::ObFixedArray<int64_t, common::ObIAllocator>, common::ObIAllocator> PhyRowParamMap;
 typedef common::ObFixedArray<ObTableLocation, common::ObIAllocator> TableLocationFixedArray;
 typedef common::ObFixedArray<ObPlanPwjConstraint, common::ObIAllocator> PlanPwjConstraintArray;
-typedef common::ObFixedArray<ObDupTabConstraint, common::ObIAllocator> DupTabReplicaArray;
 
 class ObPhysicalPlan : public ObPlanCacheObject
 {
@@ -336,16 +335,9 @@ public:
   const ObIArray<ObPlanPwjConstraint>& get_strict_constraints() const { return strict_constrinats_; }
   ObIArray<ObPlanPwjConstraint>& get_non_strict_constraints() { return non_strict_constrinats_; }
   const ObIArray<ObPlanPwjConstraint>& get_non_strict_constraints() const { return non_strict_constrinats_; }
-  ObIArray<ObDupTabConstraint> &get_dup_table_replica_constraints() {
-    return dup_table_replica_cons_;
-  }
-  const ObIArray<ObDupTabConstraint> &get_dup_table_replica_constraints() const {
-    return dup_table_replica_cons_;
-  }
   int set_location_constraints(const ObIArray<LocationConstraint> &base_constraints,
                                const ObIArray<ObPwjConstraint *> &strict_constraints,
-                               const ObIArray<ObPwjConstraint *> &non_strict_constraints,
-                               const ObIArray<ObDupTabConstraint> &dup_table_replica_cons);
+                               const ObIArray<ObPwjConstraint *> &non_strict_constraints);
   bool has_same_location_constraints(const ObPhysicalPlan &r) const;
   inline bool get_is_late_materialized() const
   {
@@ -548,9 +540,6 @@ private:
   // Each group is an array, saving the offset of the corresponding base table in base_table_constraints_
   // If t1, t2 need to satisfy non-strict constraints, then for each partition of t1 after partition pruning, there must be a partition of t2 on the same physical machine
   PlanPwjConstraintArray non_strict_constrinats_;
-  // constraint for duplicate table to choose replica
-  // dist plan will use this as (dup_tab_pos, advisor_tab_pos) pos is position in base constraint
-  DupTabReplicaArray dup_table_replica_cons_;
 public:
   ObExprFrameInfo expr_frame_info_;
 

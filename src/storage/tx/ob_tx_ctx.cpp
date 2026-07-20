@@ -1135,14 +1135,6 @@ int ObTxCtx::recover_tx_ctx_table_info(ObTxCtxTableInfo &ctx_info)
       if (exec_info_.serial_final_scn_.is_valid()) {
         recovery_parallel_logging_();
       }
-      if ((ObTxState::COMMIT == exec_info_.state_
-           && exec_info_.max_applying_log_ts_ == exec_info_.max_applied_log_ts_)
-          || ObTxState::CLEAR == exec_info_.state_) {
-        //update max_commit_ts for dup table because of migrate or recover
-        share::g_mp->trans_service()
-            ->get_tx_version_mgr()
-            .update_max_commit_ts(ctx_tx_data_.get_commit_version(), false);
-      }
       create_ctx_scn_ = exec_info_.max_applying_log_ts_;
 
     }
@@ -2595,7 +2587,7 @@ int ObTxCtx::submit_redo_commit_info_log_(ObTxLogBlock &log_block,
     TRANS_LOG(WARN, "decide commit info log barrier failed", K(ret), K(barrier), KPC(this));
   } else {
     ObTxCommitInfoLog commit_info_log(
-        exec_info_.is_dup_tx_, can_elr_, trace_info_.get_app_trace_id(),
+        can_elr_, trace_info_.get_app_trace_id(),
         trace_info_.get_app_trace_info(), exec_info_.prev_record_lsn_, exec_info_.redo_lsns_,
         exec_info_.xid_);
 
@@ -3249,7 +3241,7 @@ int ObTxCtx::submit_log_impl_(const ObTxLogType log_type)
                 K(trans_id_), K(big_segment_info_));
     } else {
       switch (log_type) {
-      // for xa and duplicate table
+      // for XA
       // TODO. need submit log in sync log callback
       case ObTxLogType::TX_COMMIT_INFO_LOG: {
         ret = submit_redo_commit_info_log_();

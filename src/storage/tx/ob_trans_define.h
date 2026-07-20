@@ -855,11 +855,10 @@ public:
   static const int64_t UNKNOWN = -1;
   static const int64_t END_TRANS_CB_TASK = 0;
   static const int64_t ADVANCE_LS_CKPT_TASK = 1;
-  static const int64_t DUP_TABLE_TX_REDO_SYNC_RETRY_TASK = 2;
-  static const int64_t MAX = 3;
+  static const int64_t MAX = 2;
 public:
   static bool is_valid(const int64_t task_type)
-  { return task_type > UNKNOWN && task_type < MAX; }
+  { return END_TRANS_CB_TASK == task_type || ADVANCE_LS_CKPT_TASK == task_type; }
 };
 
 class ObMemtableKeyInfo
@@ -1189,7 +1188,6 @@ static const int64_t MAX_ELR_TRANS_INTERVAL = 400 * 1000;
 // max scheudler context in single server
 static const int64_t MAX_TX_CTX_COUNT = 700 * 1000;
 
-static const int DUP_TABLE_LEASE_LIST_MAX_COUNT = 8;
 #define TRANS_AGGRE_LOG_TIMESTAMP OB_INVALID_TIMESTAMP
 
 
@@ -1280,7 +1278,6 @@ public:
                K_(checksum_scn),
                K_(max_durable_lsn),
                K_(data_complete),
-               K_(is_dup_tx),
                //K_(touched_pkeys),
                K_(xid),
                K_(need_checksum),
@@ -1304,7 +1301,6 @@ public:
   ObSEArray<share::SCN,1> checksum_scn_;
   palf::LSN max_durable_lsn_;
   bool data_complete_;
-  bool is_dup_tx_;
   // for xa
   ObXATransID xid_;
   bool need_checksum_;

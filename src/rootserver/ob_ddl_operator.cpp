@@ -28,6 +28,9 @@
 #include "share/ob_sql_client_decorator.h"
 #include "rootserver/ob_root_service.h"
 #include "rootserver/ob_tablet_drop.h"
+#include "share/ob_global_merge_table_operator.h"
+#include "share/ob_zone_merge_table_operator.h"
+#include "share/ob_zone_merge_info.h"
 #include "sql/optimizer/stat/ob_dbms_stats_maintenance_window.h"
 #include "pl/ob_pl_persistent.h"
 #include "pl/pl_cache/ob_pl_cache_mgr.h"
@@ -72,7 +75,8 @@ ObSysStat::ObSysStat()
     ob_max_used_normal_rowid_table_tablet_id_(item_list_, MAX_ID_NAME_INFO(OB_MAX_USED_NORMAL_ROWID_TABLE_TABLET_ID_TYPE)),
     ob_max_used_extended_rowid_table_tablet_id_(item_list_, MAX_ID_NAME_INFO(OB_MAX_USED_EXTENDED_ROWID_TABLE_TABLET_ID_TYPE)),
     ob_max_used_sys_pl_object_id_(item_list_, MAX_ID_NAME_INFO(OB_MAX_USED_SYS_PL_OBJECT_ID_TYPE)),
-    ob_max_used_object_id_(item_list_, MAX_ID_NAME_INFO(OB_MAX_USED_OBJECT_ID_TYPE))
+    ob_max_used_object_id_(item_list_, MAX_ID_NAME_INFO(OB_MAX_USED_OBJECT_ID_TYPE)),
+    ob_max_used_rewrite_rule_version_(item_list_, MAX_ID_NAME_INFO(OB_MAX_USED_REWRITE_RULE_VERSION_TYPE))
 {
 }
 
@@ -95,6 +99,7 @@ int ObSysStat::set_initial_values()
     ob_max_used_sys_pl_object_id_.value_.set_int(OB_MIN_SYS_PL_OBJECT_ID);
     // Use OB_INITIAL_TEST_DATABASE_ID to avoid confict when create tenant with initial user schema objects.
     ob_max_used_object_id_.value_.set_int(OB_INITIAL_TEST_DATABASE_ID);
+    ob_max_used_rewrite_rule_version_.value_.set_int(OB_INIT_REWRITE_RULE_VERSION);
   }
   return ret;
 }
@@ -3244,7 +3249,6 @@ int ObDDLOperator::update_aux_table(
           // index table should only inherit table mode and table state flag from data table
           new_aux_table_schema.set_table_mode(new_table_schema.get_table_mode_flag());
           new_aux_table_schema.set_table_state_flag(new_table_schema.get_table_state_flag());
-          new_aux_table_schema.set_duplicate_attribute(new_table_schema.get_duplicate_scope(), new_table_schema.get_duplicate_read_consistency());
           new_aux_table_schema.set_enable_macro_block_bloom_filter(new_table_schema.get_enable_macro_block_bloom_filter());
           new_aux_table_schema.set_lob_inrow_threshold(new_table_schema.get_lob_inrow_threshold());
         }
@@ -7114,6 +7118,41 @@ int ObDDLOperator::insert_ori_schema_version(
   } else if (OB_FAIL(schema_service->get_table_sql_service().insert_ori_schema_version(
              trans, table_id, ori_schema_version))) {
     LOG_WARN("insert_ori_schema_version failed", K(ret), K(table_id), K(ori_schema_version));
+  }
+  return ret;
+}
+
+int ObDDLOperator::insert_temp_table_info(ObMySQLTransaction &trans, const ObTableSchema &table_schema)
+{
+  int ret = OB_SUCCESS;
+  ObSchemaService *schema_service = schema_service_.get_schema_service();
+  if (OB_ISNULL(schema_service)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get invalid schema service", K(ret));
+  } else if (table_schema.is_ctas_tmp_table() || table_schema.is_tmp_table()) {
+    if (is_inner_table(table_schema.get_table_id())) {
+      ret = OB_OP_NOT_ALLOW;
+      LOG_WARN("create tmp sys table not allowed", K(ret), "table_id", table_schema.get_table_id());
+    } else if (OB_FAIL(schema_service->get_table_sql_service().insert_temp_table_info(trans, table_schema))) {
+      LOG_WARN("insert_temp_table_info failed", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObDDLOperator::delete_temp_table_info(ObMySQLTransaction &trans, const ObTableSchema &table_schema)
+{
+  int ret = OB_SUCCESS;
+  ObSchemaService *schema_service = schema_service_.get_schema_service();
+  if (OB_ISNULL(schema_service)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get invalid schema service", K(ret));
+  } else if (is_inner_table(table_schema.get_table_id())) {
+    ret = OB_OP_NOT_ALLOW;
+    LOG_WARN("create tmp sys table not allowed", K(ret), "table_id", table_schema.get_table_id());
+  } else if (OB_FAIL(schema_service->get_table_sql_service().delete_from_all_temp_table(
+              trans, table_schema.get_table_id()))) {
+    LOG_WARN("insert_temp_table_info failed", K(ret));
   }
   return ret;
 }

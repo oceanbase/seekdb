@@ -214,13 +214,12 @@ OB_DEF_SERIALIZE_SIZE(ObTxRedoLog)
 }
 
 OB_SERIALIZE_MEMBER(ObTxCommitInfoLog,
-                       /* 1 */ is_dup_tx_,
-                       /* 2 */ can_elr_,
-                       /* 3 */ app_trace_id_str_,
-                       /* 4 */ app_trace_info_,
-                       /* 5 */ prev_record_lsn_,
-                       /* 6 */ redo_lsns_,
-                       /* 7 */ xid_);
+                       /* 1 */ can_elr_,
+                       /* 2 */ app_trace_id_str_,
+                       /* 3 */ app_trace_info_,
+                       /* 4 */ prev_record_lsn_,
+                       /* 5 */ redo_lsns_,
+                       /* 6 */ xid_);
 
 OB_SERIALIZE_MEMBER(ObTxCommitLog,
                        /* 1 */ commit_version_,
@@ -243,14 +242,13 @@ OB_SERIALIZE_MEMBER(ObTxRollbackToLog, /* 1 */ from_, /* 2 */ to_);
 
 OB_SERIALIZE_MEMBER(ObTxMultiDataSourceLog, /* 1 */ data_);
 
-ObTxCommitInfoLog::ObTxCommitInfoLog(bool is_dup_tx,
-                                     bool is_elr,
+ObTxCommitInfoLog::ObTxCommitInfoLog(bool is_elr,
                                      common::ObString &app_trace_id,
                                      const common::ObString &app_trace_info,
                                      const LogOffSet &prev_record_lsn,
                                      ObRedoLSNArray &redo_lsns,
                                      const ObXATransID &xid)
-    : is_dup_tx_(is_dup_tx), can_elr_(is_elr),
+    : can_elr_(is_elr),
       app_trace_id_str_(app_trace_id), app_trace_info_(app_trace_info),
       prev_record_lsn_(prev_record_lsn), redo_lsns_(redo_lsns), xid_(xid)
 {}

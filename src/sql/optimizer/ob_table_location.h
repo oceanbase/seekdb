@@ -531,7 +531,6 @@ public:
     object_id_(OB_INVALID_ID),
     related_list_(allocator_),
     check_no_partition_(false),
-    is_broadcast_table_(false),
     is_dynamic_replica_select_table_(false)
   {
   }
@@ -580,7 +579,6 @@ public:
     object_id_(OB_INVALID_ID),
     related_list_(allocator_),
     check_no_partition_(false),
-    is_broadcast_table_(false),
     is_dynamic_replica_select_table_(false)
   {
   }
@@ -750,19 +748,10 @@ public:
                                        uint64_t table_id,
                                        uint64_t ref_table_id,
                                        ObDASTableLoc *&table_loc);
-  bool is_duplicate_table() const { return loc_meta_.is_dup_table_; }
   bool is_dynamic_replica_select_table() const { return is_dynamic_replica_select_table_; } 
   void set_dynamic_replica_select_table(const bool is_dynamic_replica_select_table) {
     is_dynamic_replica_select_table_ = is_dynamic_replica_select_table;
   }
-  void set_broadcast_table(const bool is_broadcast_table) {
-    is_broadcast_table_ = is_broadcast_table;
-  }
-  bool get_is_broadcast_table() const { return is_broadcast_table_; }
-  bool is_duplicate_table_not_in_dml() const
-  { return loc_meta_.is_dup_table_ && !loc_meta_.select_leader_; }
-  void set_duplicate_type(ObDuplicateType v) { duplicate_type_to_loc_meta(v, loc_meta_); }
-  ObDuplicateType get_duplicate_type() const { return loc_meta_to_duplicate_type(loc_meta_); }
   int add_part_hint_ids(const ObIArray<ObObjectID> &part_ids) {
     return append_array_no_dup(part_hint_ids_, part_ids);
   }
@@ -1247,7 +1236,6 @@ private:
   ObObjectID object_id_;
   common::ObList<DASRelatedTabletMap::MapEntry, common::ObIAllocator> related_list_;
   bool check_no_partition_;
-  bool is_broadcast_table_;
   bool is_dynamic_replica_select_table_;
 };
 

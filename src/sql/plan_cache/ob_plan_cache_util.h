@@ -315,25 +315,6 @@ struct ObPCParamEqualInfo
   }
 };
 
-struct ObDupTabConstraint
-{
-  uint64_t first_;
-  uint64_t second_;
-  TO_STRING_KV(K_(first), K_(second));
-  ObDupTabConstraint()
-    : first_(common::OB_INVALID_ID),
-      second_(common::OB_INVALID_ID)
-  {}
-  ObDupTabConstraint(int64_t first, int64_t second)
-    : first_(first),
-      second_(second)
-  {}
-  inline bool operator==(const ObDupTabConstraint &other) const
-  {
-    return first_ == other.first_ && second_ == other.second_;
-  }
-};
-
 struct ObPCPrivInfo
 {
   share::ObRawPriv sys_priv_;
@@ -1011,10 +992,9 @@ public:
                                ObIArray<ObCandiTableLoc> &phy_location_infos);
   
   // used for matching plan
-  static int get_phy_locations(const ObIArray<ObTableLocation> &table_locations,
-                               const ObPlanCacheCtx &pc_ctx,
-                               ObIArray<ObCandiTableLoc> &candi_table_locs,
-                               bool &need_check_on_same_server);
+  static int get_candi_phy_locations(const ObIArray<ObTableLocation> &table_locations,
+                                     const ObPlanCacheCtx &pc_ctx,
+                                     ObIArray<ObCandiTableLoc> &candi_table_locs);
 
   // used for adding plan
   static int get_phy_locations(const common::ObIArray<ObTablePartitionInfo *> &partition_infos,
@@ -1028,9 +1008,6 @@ public:
                                        ObExecContext &exec_ctx,
                                        DASRelatedTabletMap *&related_map);
 
-  // used for replica re-select optimization for duplicate table
-  static int reselect_duplicate_table_best_replica(const ObIArray<ObCandiTableLoc> &phy_locations,
-                                                   bool &on_same_server);
 };
 
 /**

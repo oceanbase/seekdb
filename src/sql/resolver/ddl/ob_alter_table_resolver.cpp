@@ -323,7 +323,6 @@ int ObAlterTableResolver::set_table_options()
     alter_table_schema.set_read_only(read_only_);
     alter_table_schema.set_row_store_type(row_store_type_);
     alter_table_schema.set_store_format(store_format_);
-    alter_table_schema.set_duplicate_attribute(duplicate_scope_, duplicate_read_consistency_);
     alter_table_schema.set_enable_row_movement(enable_row_movement_);
     alter_table_schema.set_storage_format_version(storage_format_version_);
     alter_table_schema.set_table_mode_struct(table_mode_);

@@ -79,10 +79,6 @@ ObCreateViewHelper::~ObCreateViewHelper()
      ret = OB_NOT_SUPPORTED;
      LOG_WARN("create view with tablegroup_id in 4.x is not supported",
               KR(ret), "tablegroup_id", arg_.schema_.get_tablegroup_id());
-   } else if (OB_UNLIKELY(arg_.schema_.is_duplicate_table())) {
-     ret = OB_NOT_SUPPORTED;
-     LOG_WARN("create duplicate view in 4.x is not supported",
-              KR(ret), K(arg_.schema_.is_duplicate_table()));
    } else if (OB_UNLIKELY(PARTITION_LEVEL_ZERO != arg_.schema_.get_part_level())) {
      ret = OB_NOT_SUPPORTED;
      LOG_WARN("create view with partition in 4.x is not supported",

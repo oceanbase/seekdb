@@ -285,7 +285,7 @@ END_P SET_VAR DELIMITER
 
         DAG DATA DATAFILE DATA_DISK_SIZE DATA_SOURCE DATA_TABLE_ID DATE DATE_ADD DATE_SUB DATETIME DAY DEALLOCATE DECRYPT
         DEFAULT_AUTH DEFAULT_LOB_INROW_THRESHOLD DEFINER DELAY DELAY_KEY_WRITE DEPTH DES_KEY_FILE DENSE_RANK DESCRIPTION DESTINATION DIAGNOSTICS DICT_TABLE
-        DIFF DIRECTORY DISABLE DISALLOW DISCARD DISK DISKGROUP DO DOT DUMP DUMPFILE DUPLICATE DUPLICATE_SCOPE DUPLICATE_READ_CONSISTENCY DYNAMIC
+        DIFF DIRECTORY DISABLE DISALLOW DISCARD DISK DISKGROUP DO DOT DUMP DUMPFILE DUPLICATE DYNAMIC
         DATABASE_ID DEFAULT_TABLEGROUP DISCONNECT DEMAND DELETE_INSERT
 
         EFFECTIVE EMPTY ENABLE ENABLE_EXTENDED_ROWID ENABLE_MACRO_BLOCK_BLOOM_FILTER ENCRYPT ENCRYPTED ENCRYPTION END ENDPOINT ENDS ENFORCED ENGINE_ ENGINES ENUM ENTITY ERROR_CODE ERROR_P ERRORS ESTIMATE
@@ -395,7 +395,7 @@ END_P SET_VAR DELIMITER
 %type <node> subpartition_template_option subpartition_individual_option opt_hash_partition_list hash_partition_list hash_partition_element opt_hash_subpartition_list hash_subpartition_list hash_subpartition_element opt_subpartition_list opt_engine_option
 %type <node> date_unit date_params timestamp_params
 %type <node> drop_table_stmt table_list drop_view_stmt table_or_tables
-%type <node> explain_stmt explainable_stmt format_name kill_stmt create_outline_stmt alter_outline_stmt drop_outline_stmt opt_outline_target
+%type <node> explain_stmt explainable_stmt format_name kill_stmt help_stmt create_outline_stmt alter_outline_stmt drop_outline_stmt opt_outline_target
 %type <node> expr_list expr expr_const conf_const simple_expr simple_expr_list expr_or_default bit_expr bool_pri predicate explain_or_desc pl_expr_stmt
 %type <node> column_ref multi_delete_table
 %type <node> case_expr func_expr in_expr sub_query_flag search_expr
@@ -647,6 +647,7 @@ stmt:
   | create_index_stmt       { $$ = $1; check_question_mark($$, result); }
   | drop_index_stmt         { $$ = $1; check_question_mark($$, result); }
   | kill_stmt               { $$ = $1; question_mark_issue($$, result); }
+  | help_stmt               { $$ = $1; check_question_mark($$, result); }
   | create_view_stmt
   {
     $$ = $1;
@@ -6646,11 +6647,6 @@ TABLE_MODE opt_equal_mark STRING_VALUE
   (void)($2);
   malloc_non_terminal_node($$, result->malloc_pool_, T_TABLE_MODE, 1, $3);
 }
-| DUPLICATE_SCOPE opt_equal_mark STRING_VALUE
-{
-  (void)($2);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_DUPLICATE_SCOPE, 1, $3);
-}
 | EXPIRE_INFO opt_equal_mark '(' expr ')'
 {
   (void)($2) ; /* make bison mute */
@@ -6838,11 +6834,6 @@ TABLE_MODE opt_equal_mark STRING_VALUE
 {
   (void)($2); /*  make bison mute*/
   malloc_non_terminal_node($$, result->malloc_pool_, T_ENABLE_MACRO_BLOCK_BLOOM_FILTER, 1, $3);  
-}
-| DUPLICATE_READ_CONSISTENCY opt_equal_mark STRING_VALUE
-{
-  (void)($2);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_DUPLICATE_READ_CONSISTENCY, 1, $3);
 }
 | STORAGE_CACHE_POLICY opt_equal_mark '(' storage_cache_policy_attribute_list ')'
 {
@@ -14224,6 +14215,24 @@ STATUS
 
 /*****************************************************************************
  *
+ *	help grammar
+ *
+ *****************************************************************************/
+help_stmt:
+HELP STRING_VALUE
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_HELP, 1, $2);
+}
+| HELP NAME_OB
+{
+  $2->type_ = T_VARCHAR;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_HELP, 1, $2);
+}
+;
+
+
+/*****************************************************************************
+ *
  *	create user grammar
  *
  *****************************************************************************/
@@ -20764,8 +20773,6 @@ ACCESS_INFO
 |       DUMP
 |       DUMPFILE
 |       DUPLICATE
-|       DUPLICATE_SCOPE
-|       DUPLICATE_READ_CONSISTENCY
 |       DYNAMIC
 |       DEFAULT_TABLEGROUP
 |       DEFAULT_LOB_INROW_THRESHOLD

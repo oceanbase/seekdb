@@ -3204,7 +3204,6 @@ int ObDmlCgService::generate_table_loc_meta(const IndexDMLInfo &index_dml_info,
     loc_meta.table_loc_id_ = index_dml_info.loc_table_id_;
     loc_meta.ref_table_id_ = index_dml_info.ref_table_id_;
     loc_meta.select_leader_ = 1;
-    loc_meta.is_dup_table_ = table_schema->is_duplicate_table();
     //related local index tablet_id pruning only can be used in local plan or remote plan(all operator
     //use the same das context),
     //because the distributed plan will pass tablet_id through exchange operator,
@@ -3526,7 +3525,6 @@ int ObDmlCgService::generate_fk_table_loc_info(uint64_t index_table_id,
     loc_meta.table_loc_id_ = index_table_id;
     loc_meta.ref_table_id_ = index_table_id;
     loc_meta.select_leader_ = 1;
-    loc_meta.is_dup_table_ = (table_schema->is_duplicate_table());
     if (PARTITION_LEVEL_ZERO == table_schema->get_part_level()) {
       tablet_id = table_schema->get_tablet_id();
     } else {
@@ -3914,7 +3912,6 @@ int ObDmlCgService::generate_rowkey_domain_ctdef(
     loc_meta->table_loc_id_ = index_dml_info.loc_table_id_;
     loc_meta->ref_table_id_ = rowkey_domain_tid;
     loc_meta->select_leader_ = 1;
-    loc_meta->is_dup_table_ = (ObDuplicateScope::DUPLICATE_SCOPE_NONE != rowkey_domain_schema->get_duplicate_scope());
     loc_meta->unuse_related_pruning_ = (OB_PHY_PLAN_DISTRIBUTED == cg_.opt_ctx_->get_phy_plan_type()
                                        && !cg_.opt_ctx_->get_root_stmt()->is_insert_stmt());
     share::ObDasSemanticIndexInfo &semantic_index_info = scan_ctdef->semantic_index_info_;

@@ -1840,8 +1840,6 @@ int ObIndexBuilder::generate_schema(
       schema.set_table_mode(data_schema.get_table_mode_flag());
       schema.set_lob_inrow_threshold(data_schema.get_lob_inrow_threshold());
       schema.set_table_state_flag(data_schema.get_table_state_flag());
-      schema.set_duplicate_attribute(data_schema.get_duplicate_scope(), data_schema.get_duplicate_read_consistency());
-
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(set_basic_infos(arg, data_schema, schema))) {
         LOG_WARN("set_basic_infos failed", K(arg), K(data_schema), K(ret));

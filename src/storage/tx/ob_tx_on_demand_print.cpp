@@ -63,7 +63,6 @@ IMPL_ON_DEMAND_PRINT_FUNC(ObTxExecInfo)
   TX_KV_PRINT_WITH_ERR(true, checksum_scn, checksum_scn_, ", ");
   TX_KV_PRINT_WITH_ERR(true, need_checksum, need_checksum_, ", ");
   TX_KV_PRINT_WITH_ERR(true, data_complete, data_complete_, ", ");
-  TX_KV_PRINT_WITH_ERR(true, is_dup_tx, is_dup_tx_, ", ");
 
 
   TX_KV_PRINT_WITH_ERR(prev_record_lsn_.is_valid(), prev_record_lsn, prev_record_lsn_, ", ");

@@ -563,7 +563,6 @@ DEFINE_ERROR(OB_CANNOT_COPY_MAJOR_SSTABLE, -4682, -1, "HY000", "cannot copy majo
 DEFINE_ERROR(OB_SRC_DO_NOT_ALLOWED_MIGRATE, -4683, -1, "HY000", "src do not allowed migrate");
 DEFINE_ERROR(OB_TOO_MANY_TENANT_PARTITIONS_ERROR, -4684, -1, "HY000", "Too many partitions were defined for this tenant");
 DEFINE_ERROR(OB_ACTIVE_MEMTBALE_NOT_EXSIT, -4685, -1, "HY000", "active memtable not exist");
-DEFINE_ERROR(OB_USE_DUP_FOLLOW_AFTER_DML, -4686, -1, "HY000", "Should use leader replica for duplicate table after DML operator");
 DEFINE_ERROR(OB_NO_DISK_NEED_REBUILD, -4687, -1, "HY000", "no disk need rebuild");
 DEFINE_ERROR(OB_STANDBY_READ_ONLY, -4688, -1, "HY000", "standby tenant is read only");
 DEFINE_ERROR(OB_INVALD_WEB_SERVICE_CONTENT, -4689, -1, "HY000", "web service content not valid");

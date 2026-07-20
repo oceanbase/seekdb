@@ -387,7 +387,6 @@ constexpr int OB_CANNOT_COPY_MAJOR_SSTABLE = -4682;
 constexpr int OB_SRC_DO_NOT_ALLOWED_MIGRATE = -4683;
 constexpr int OB_TOO_MANY_TENANT_PARTITIONS_ERROR = -4684;
 constexpr int OB_ACTIVE_MEMTBALE_NOT_EXSIT = -4685;
-constexpr int OB_USE_DUP_FOLLOW_AFTER_DML = -4686;
 constexpr int OB_NO_DISK_NEED_REBUILD = -4687;
 constexpr int OB_STANDBY_READ_ONLY = -4688;
 constexpr int OB_INVALD_WEB_SERVICE_CONTENT = -4689;
@@ -2392,7 +2391,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_SRC_DO_NOT_ALLOWED_MIGRATE__USER_ERROR_MSG "src do not allowed migrate"
 #define OB_TOO_MANY_TENANT_PARTITIONS_ERROR__USER_ERROR_MSG "Too many partitions were defined for this tenant"
 #define OB_ACTIVE_MEMTBALE_NOT_EXSIT__USER_ERROR_MSG "active memtable not exist"
-#define OB_USE_DUP_FOLLOW_AFTER_DML__USER_ERROR_MSG "Should use leader replica for duplicate table after DML operator"
 #define OB_NO_DISK_NEED_REBUILD__USER_ERROR_MSG "no disk need rebuild"
 #define OB_STANDBY_READ_ONLY__USER_ERROR_MSG "standby tenant is read only"
 #define OB_INVALD_WEB_SERVICE_CONTENT__USER_ERROR_MSG "web service content not valid"
@@ -4257,7 +4255,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_DATA_TOO_LONG_MSG_FMT_V2__USER_ERROR_MSG "Data too long for column '%.*s' at row %ld"
 #define OB_ERR_INVALID_DATE_MSG_FMT_V2__USER_ERROR_MSG "Incorrect datetime value for column '%.*s' at row %ld"
 
-extern int g_all_ob_errnos[2336];
+extern int g_all_ob_errnos[2335];
 
   const char *ob_error_name(const int oberr);
   const char* ob_error_cause(const int oberr);

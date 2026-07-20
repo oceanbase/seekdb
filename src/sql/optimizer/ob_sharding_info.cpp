@@ -897,7 +897,6 @@ int ObShardingInfo::copy_without_part_keys(const ObShardingInfo &other)
   location_type_ = other.location_type_;
   phy_table_location_info_ = other.phy_table_location_info_;
   partition_array_ = other.partition_array_;
-  can_reselect_replica_ = other.can_reselect_replica_;
   is_partition_single_ = other.is_partition_single_;
   is_subpartition_sinlge_ = other.is_subpartition_sinlge_;
   if (OB_FAIL(all_tablet_ids_.assign(other.all_tablet_ids_))) {
@@ -1057,9 +1056,7 @@ int ObShardingInfo::is_sharding_equal(const ObShardingInfo *left_sharding,
     is_equal = false;
   } else if (left_sharding->get_location_type() != right_sharding->get_location_type()) {
     is_equal = false;
-  } else if (left_sharding->get_can_reselect_replica() != right_sharding->get_can_reselect_replica()) {
-    is_equal = false;
-  } else if (left_sharding->is_remote() || left_sharding->get_can_reselect_replica()) {
+  } else if (left_sharding->is_remote()) {
     ObSEArray<common::ObAddr, 2> left_servers;
     ObSEArray<common::ObAddr, 2> right_servers;
     if (OB_FAIL(get_serverlist_from_sharding(*left_sharding, left_servers))) {

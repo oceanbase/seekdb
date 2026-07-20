@@ -185,14 +185,12 @@ public:
                                  bool force_local_retry = false,
                                  bool is_inner_sql = false,
                                  bool is_from_pl = false);
-  void set_packet_retry(const int err) {
+  void set_packet_retry() {
     retry_type_ = RETRY_TYPE_PACKET;
-    retry_err_code_ = err;
   }
   void clear_state_before_each_retry(sql::ObQueryRetryInfo &retry_info)
   {
     retry_type_ = RETRY_TYPE_NONE;
-    retry_err_code_ = OB_SUCCESS;
     retry_info.clear_state_before_each_retry();
   }
   ObQueryRetryType get_retry_type() const
@@ -203,12 +201,7 @@ public:
   {
     sql::ObSessionRetryStatus ret = sql::SESS_NOT_IN_RETRY;
     if (RETRY_TYPE_NONE != retry_type_) {
-      if (OB_USE_DUP_FOLLOW_AFTER_DML != retry_err_code_ &&
-          OB_NOT_MASTER != retry_err_code_) {
-        ret = sql::SESS_IN_RETRY;
-      } else {
-        ret = sql::SESS_IN_RETRY_FOR_DUP_TBL;
-      }
+      ret = sql::SESS_IN_RETRY;
     }
     return ret; //RETRY_TYPE_NONE != retry_type_;
   }
@@ -333,7 +326,6 @@ private:
   int64_t curr_query_sys_global_schema_version_; // System tenant schema version at the start of the query
   int64_t retry_times_;
   ObQueryRetryType retry_type_;
-  int retry_err_code_; // record the error code during retries (currently used to distinguish retries caused by table replication)
   /* disallow copy & assign */
   DISALLOW_COPY_AND_ASSIGN(ObQueryRetryCtrl);
 };

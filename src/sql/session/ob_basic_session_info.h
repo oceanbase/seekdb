@@ -138,8 +138,7 @@ enum ObSQLSessionState
 enum ObSessionRetryStatus
 {
   SESS_NOT_IN_RETRY,  // session not in retry
-  SESS_IN_RETRY,  // session retrying, and not related to replication tables
-  SESS_IN_RETRY_FOR_DUP_TBL, // retry caused by errors related to duplicate table
+  SESS_IN_RETRY,
 };
 /// ObBasicSessionInfo stores system variables and related variables, and stores the state that needs to be serialized to the remote when executing SQL tasks remotely
 /// ObSQLSessionInfo stores other state information, such as prepared statement related information, etc.
@@ -773,28 +772,13 @@ public:
   void set_session_in_retry(ObSessionRetryStatus is_retry)
   {
     LockGuard lock_guard(thread_data_mutex_);
-    if (OB_LIKELY(SESS_NOT_IN_RETRY == is_retry ||
-                  SESS_IN_RETRY_FOR_DUP_TBL != thread_data_.is_in_retry_)) {
-      thread_data_.is_in_retry_ = is_retry;
-    } else {
-      // if the last retry is for duplicate table
-      // and the SQL is retried again
-      // we still keep the retry for dup table status.
-      thread_data_.is_in_retry_ = SESS_IN_RETRY_FOR_DUP_TBL;
-    }
+    thread_data_.is_in_retry_ = is_retry;
   }
 
   void set_session_in_retry(bool is_retry, int ret)
   {
-    ObSessionRetryStatus status;
-    if (!is_retry) {
-      status = sql::SESS_NOT_IN_RETRY;
-    } else if (is_select_dup_follow_replic_err(ret) ||
-               OB_NOT_MASTER == ret) {
-      status = SESS_IN_RETRY_FOR_DUP_TBL;
-    } else {
-      status = SESS_IN_RETRY;
-    }
+    UNUSED(ret);
+    ObSessionRetryStatus status = is_retry ? SESS_IN_RETRY : SESS_NOT_IN_RETRY;
     set_session_in_retry(status);
   }
   bool get_is_in_retry() {
@@ -802,9 +786,6 @@ public:
   }
   bool get_is_in_retry() const {
     return SESS_NOT_IN_RETRY != thread_data_.is_in_retry_;
-  }
-  bool get_is_in_retry_for_dup_tbl() {
-    return SESS_IN_RETRY_FOR_DUP_TBL == thread_data_.is_in_retry_;
   }
   void set_retry_active_time(int64_t time)
   {

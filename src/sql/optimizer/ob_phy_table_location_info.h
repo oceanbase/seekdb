@@ -127,16 +127,8 @@ public:
 
   int all_select_leader(bool &is_on_same_server,
                         common::ObAddr &same_server);
-  int all_select_local_replica_or_leader(bool &is_on_same_server,
-                                         common::ObAddr &same_server,
-                                         const common::ObAddr &local_server);
   int get_all_servers(common::ObIArray<common::ObAddr> &servers) const;
-  bool is_duplicate_table() const { return ObDuplicateType::NOT_DUPLICATE != duplicate_type_; }
-  bool is_duplicate_table_not_in_dml() const { return ObDuplicateType::DUPLICATE == duplicate_type_; }
-  void set_duplicate_type(ObDuplicateType v) { duplicate_type_ = v; }
-  ObDuplicateType get_duplicate_type() const { return duplicate_type_; }
-  TO_STRING_KV(K_(table_location_key), K_(ref_table_id), K_(candi_tablet_locs),
-               K_(duplicate_type));
+  TO_STRING_KV(K_(table_location_key), K_(ref_table_id), K_(candi_tablet_locs));
 
 private:
   /* Used for addressing location by table ID (possibly generated alias id) */
@@ -145,8 +137,6 @@ private:
   uint64_t ref_table_id_;
   /* locations */
   ObCandiTabletLocSEArray candi_tablet_locs_;
-  // Copy table type, if it is a copy table and has not been modified, then a more suitable copy can be selected when allocating exg operator
-  ObDuplicateType duplicate_type_;
 private:
   /* functions */
   /* variables */

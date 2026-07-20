@@ -317,7 +317,6 @@ public:
       direct_local_plan_(NULL),
       dist_plans_(),
       need_try_plan_(0),
-      has_duplicate_table_(false),
       //has_array_binding_(false),
       is_contain_virtual_table_(false),
       enable_inner_part_parallel_exec_(false),
@@ -348,7 +347,6 @@ public:
   static int calc_phy_plan_type_v2(const common::ObIArray<ObCandiTableLoc> &candi_table_locs,
                                    const ObPlanCacheCtx &pc_ctx,
                                    ObPhyPlanType &plan_type);
-  inline bool has_duplicate_table() const { return has_duplicate_table_; }
   //inline bool has_array_binding() const { return has_array_binding_; }
   inline bool enable_inner_part_parallel() const { return enable_inner_part_parallel_exec_; }
 private:
@@ -423,8 +421,6 @@ private:
   // The common characteristic of the above special scenarios is that the table location in the plan_set cache is inconsistent with the table location within the plan,
   // Must get table location from the plan to calculate physical partition address
   int64_t need_try_plan_;
-  // Does the plan contain table replication
-  bool has_duplicate_table_;
   ObSEArray<int64_t, 4> part_param_idxs_;
   // Whether it contains a virtual table, if it contains a virtual table, do not perform the optimization of directly obtaining the local plan
   bool is_contain_virtual_table_;

@@ -397,20 +397,18 @@ class ObTxCommitInfoLog
 
 public:
   ObTxCommitInfoLog(ObTxCommitInfoLogTempRef &temp_ref)
-      : is_dup_tx_(false), can_elr_(false),
+      : can_elr_(false),
         app_trace_id_str_(temp_ref.app_trace_id_str_), app_trace_info_(temp_ref.app_trace_info_),
         prev_record_lsn_(temp_ref.prev_record_lsn_), redo_lsns_(temp_ref.redo_lsns_),
         xid_(temp_ref.xid_)
   {}
-  ObTxCommitInfoLog(bool is_dup_tx,
-                    bool is_elr,
+  ObTxCommitInfoLog(bool is_elr,
                     common::ObString &app_trace_id,
                     const common::ObString &app_trace_info,
                     const LogOffSet &prev_record_lsn,
                     ObRedoLSNArray &redo_lsns,
                     const ObXATransID &xid);
 
-  bool is_dup_tx() const { return is_dup_tx_; }
   bool is_elr() const { return can_elr_; }
   const common::ObString &get_app_trace_id() const { return app_trace_id_str_; }
   const common::ObString &get_app_trace_info() const { return app_trace_info_; }
@@ -421,7 +419,6 @@ public:
 
   static const ObTxLogType LOG_TYPE;
   TO_STRING_KV(K(LOG_TYPE),
-               K(is_dup_tx_),
                K(can_elr_),
                K(app_trace_id_str_),
                K(app_trace_info_),
@@ -430,7 +427,6 @@ public:
                K(xid_))
 
 private:
-  bool is_dup_tx_;
   bool can_elr_;
 
   // Transaction tracing and redo-chain metadata.

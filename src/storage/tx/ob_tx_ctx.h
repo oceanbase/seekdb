@@ -439,13 +439,6 @@ private:
   // and is callbacked via on_failure, redo lsns should be fixed
   int fix_redo_lsns_(const ObTxLogCb *log_cb);
 
-  // int merge_tablet_modify_record_(const common::ObTabletID &tablet_id);
-  // int check_tablet_modify_record_();
-  void set_dup_table_tx_()
-  {
-    exec_info_.is_dup_tx_ = true;
-  }
-
   int do_local_tx_end_(TxEndAction tx_end_action);
   // int on_local_tx_end_(TxEndAction tx_end_action);
   int do_local_commit_tx_();

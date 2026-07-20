@@ -344,7 +344,6 @@ void ObTxExecInfo::reset()
   checksum_scn_.push_back(share::SCN::min_scn());
   max_durable_lsn_.reset();
   data_complete_ = false;
-  is_dup_tx_ = false;
   //touched_pkeys_.reset();
   multi_data_source_.reset();
   xid_.reset();
@@ -457,7 +456,6 @@ int ObTxExecInfo::assign(const ObTxExecInfo &exec_info)
     }
     max_durable_lsn_ = exec_info.max_durable_lsn_;
     data_complete_ = exec_info.data_complete_;
-    is_dup_tx_ = exec_info.is_dup_tx_;
     xid_ = exec_info.xid_;
     need_checksum_ = exec_info.need_checksum_;
     serial_final_scn_ = exec_info.serial_final_scn_;
@@ -482,7 +480,6 @@ OB_SERIALIZE_MEMBER(ObTxExecInfo,
                     checksum_scn_[0],   // FARM COMPAT WHITELIST
                     max_durable_lsn_,
   data_complete_,
-  is_dup_tx_,
 //                    touched_pkeys_,
                     xid_,
                     need_checksum_,

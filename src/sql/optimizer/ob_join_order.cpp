@@ -467,28 +467,15 @@ int ObJoinOrder::compute_sharding_info_with_part_info(ObTableLocationType locati
                                                       ObShardingInfo *&sharding_info)
 {
   int ret = OB_SUCCESS;
-  const ObDMLStmt *stmt = NULL;
-  ObOptimizerContext *opt_ctx = NULL;
-  ObSQLSessionInfo *session_info = NULL;
-  bool is_modified = false;
   if (OB_ISNULL(table_partition_info) ||
-      OB_ISNULL(get_plan()) || OB_ISNULL(stmt = get_plan()->get_stmt()) ||
-      OB_ISNULL(opt_ctx = &get_plan()->get_optimizer_context()) ||
-      OB_ISNULL(session_info = opt_ctx->get_session_info())) {
+      OB_ISNULL(get_plan()) || OB_ISNULL(get_plan()->get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(table_partition_info), K(get_plan()), K(stmt), K(opt_ctx), K(session_info));
+    LOG_WARN("get unexpected null", K(ret), K(table_partition_info), K(get_plan()));
   } else if (OB_ISNULL(sharding_info = reinterpret_cast<ObShardingInfo*>(
                                        allocator_->alloc(sizeof(ObShardingInfo))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to allocate memory", K(ret));
-  } else if (OB_FAIL(stmt->check_table_be_modified(table_partition_info->get_ref_table_id(), is_modified))) {
-    LOG_WARN("failed to check table be modified", K(ret));
   } else {
-    const ObCandiTableLoc &phy_tbl_info = table_partition_info->get_phy_tbl_location_info();
-    bool can_reselect_replica = (phy_tbl_info.is_duplicate_table_not_in_dml() &&
-        (1 == phy_tbl_info.get_phy_part_loc_info_list().count())
-        && !session_info->get_is_in_retry_for_dup_tbl()
-        && !is_modified);
     sharding_info = new(sharding_info) ObShardingInfo();
     sharding_info->set_location_type(location_type);
     if (OB_FAIL(sharding_info->init_partition_info(
@@ -499,7 +486,6 @@ int ObJoinOrder::compute_sharding_info_with_part_info(ObTableLocationType locati
                                   table_partition_info->get_phy_tbl_location_info_for_update()))) {
       LOG_WARN("failed to set partition key", K(ret));
     } else {
-      sharding_info->set_can_reselect_replica(can_reselect_replica);
       LOG_TRACE("succeed to compute base table sharding info", K(*sharding_info));
     }
   }
@@ -546,9 +532,7 @@ int ObJoinOrder::compute_base_table_path_plan_type(AccessPath *path)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(path), K(sharding_info), K(ret));
   } else {
-    if (sharding_info->get_can_reselect_replica()) {
-      path->phy_plan_type_ = ObPhyPlanType::OB_PHY_PLAN_UNINITIALIZED;
-    } else if (sharding_info->is_local()) {
+    if (sharding_info->is_local()) {
       path->phy_plan_type_ = ObPhyPlanType::OB_PHY_PLAN_LOCAL;
     } else if (sharding_info->is_remote()) {
       path->phy_plan_type_ = ObPhyPlanType::OB_PHY_PLAN_REMOTE;
@@ -1454,8 +1438,7 @@ int ObJoinOrder::check_opt_rule_use_das(const uint64_t table_id,
   IndexInfoEntry *index_info_entry = NULL;
   if (is_rescan) {
     create_das_path = true;
-    create_basic_path = (table_meta_info_.is_broadcast_table_
-                         || (OB_SUCCESS != (OB_E(EventTable::EN_GENERATE_PLAN_WITH_NLJ) OB_SUCCESS)))
+    create_basic_path = ((OB_SUCCESS != (OB_E(EventTable::EN_GENERATE_PLAN_WITH_NLJ) OB_SUCCESS)))
                         ? false : true;
   } else if (OB_FAIL(index_info_cache.get_index_info_entry(table_id, index_id, index_info_entry))) {
     LOG_WARN("failed to get index info entry", K(table_id), K(index_id), K(ret));
@@ -8314,8 +8297,6 @@ int JoinPath::compute_join_path_plan_type()
   if (OB_ISNULL(left_path_) || OB_ISNULL(right_path_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(left_path_), K(right_path_), K(ret));
-  } else if (NULL != strong_sharding_ && strong_sharding_->get_can_reselect_replica()) {
-    phy_plan_type_ = ObPhyPlanType::OB_PHY_PLAN_UNINITIALIZED;
   } else if (is_local()) {
     phy_plan_type_ = ObPhyPlanType::OB_PHY_PLAN_LOCAL;
   } else if (is_remote()) {
@@ -15215,7 +15196,6 @@ int ObJoinOrder::compute_table_meta_info(const uint64_t table_id,
     table_meta_info_.part_count_ =
         table_partition_info_->get_phy_tbl_location_info().get_phy_part_loc_info_list().count();
     table_meta_info_.schema_version_ = table_schema->get_schema_version();
-    table_meta_info_.is_broadcast_table_ = table_schema->is_broadcast_table();
     LOG_TRACE("after compute table meta info", K(table_meta_info_));
   }
   if (OB_SUCC(ret)) {
@@ -19485,7 +19465,6 @@ int ObJoinOrder::estimate_fts_index_scan(uint64_t table_id,
       table_meta_range.part_count_ =
           index_part_info.get_phy_tbl_location_info().get_phy_part_loc_info_list().count();
       table_meta_range.schema_version_ = index_schema->get_schema_version();
-      table_meta_range.is_broadcast_table_ = index_schema->is_broadcast_table();
       if (FAILEDx(ObAccessPathEstimation::storage_estimate_range_rowcount(OPT_CTX,
                         index_part_info.get_phy_tbl_location_info().get_phy_part_loc_info_list(),
                         false,

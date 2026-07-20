@@ -7087,12 +7087,9 @@ int ObOptimizerUtil::check_basic_sharding_info(const ObAddr &local_addr,
   int64_t local_num = 0;
   int64_t remote_num = 0;
   int64_t match_all_num = 0;
-  int64_t dup_table_num = 0;
   const ObShardingInfo *sharding = NULL;
-  ObSEArray<ObAddr, 8> valid_addrs;
-  ObSEArray<ObAddr, 8> intersect_addrs;
-  ObSEArray<ObAddr, 8> candidate_addrs;
   int64_t input_size = input_shardings.count();
+  UNUSED(local_addr);
   is_basic = false;
   is_remote = false;
   if (input_size <= 1) {
@@ -7108,27 +7105,6 @@ int ObOptimizerUtil::check_basic_sharding_info(const ObAddr &local_addr,
     for (int64_t i = 0; OB_SUCC(ret) && is_basic && i < input_size; i++) {
       if (NULL == (sharding = input_shardings.at(i))) {
         is_basic = false;
-      } else if (sharding->get_can_reselect_replica()) {
-        dup_table_num++;
-        valid_addrs.reuse();
-        if (OB_ISNULL(sharding->get_phy_table_location_info())) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret));
-        } else if (OB_FAIL(get_duplicate_table_replica(*sharding->get_phy_table_location_info(), valid_addrs))) {
-          LOG_WARN("failed to get duplicated table replica", K(ret));
-        } else if (intersect_addrs.empty()) {
-          if (OB_FAIL(intersect_addrs.assign(valid_addrs))) {
-            LOG_WARN("failed to assign addrs", K(ret));
-          } else { /*do nothing*/ }
-        } else {
-          if (OB_FAIL(intersect(valid_addrs, intersect_addrs, candidate_addrs))) {
-            LOG_WARN("failed to intersect addrs", K(ret));
-          } else if (candidate_addrs.empty()) {
-            is_basic = false;
-          } else if (OB_FAIL(intersect_addrs.assign(candidate_addrs))) {
-            LOG_WARN("failed to assign addrs", K(ret));
-          } else { /*do nothing*/ }
-        }
       } else if (sharding->is_local()) {
         local_num++;
       } else if (sharding->is_remote()) {
@@ -7148,32 +7124,13 @@ int ObOptimizerUtil::check_basic_sharding_info(const ObAddr &local_addr,
       }
     }
     if (OB_SUCC(ret) && is_basic) {
-      if (local_num > 0 && (local_num + match_all_num + dup_table_num == input_size)) {
-        if (dup_table_num == 0) {
-          is_basic = true;
-        } else if (find_item(intersect_addrs, local_addr)) {
-          is_basic = true;
-        } else {
-          is_basic = false;
-        }
-      } else if (remote_num > 0 && (remote_num + match_all_num + dup_table_num == input_size)) {
-        if (dup_table_num == 0) {
-          is_basic = true;
-          is_remote = true;
-        } else if (find_item(intersect_addrs, remote_addr)) {
-          is_basic = true;
-          is_remote = true;
-        } else {
-          is_basic = false;
-        }
-      } else if (match_all_num + dup_table_num == input_size) {
-        if (dup_table_num == 0) {
-          is_basic = true;
-        } else if (intersect_addrs.empty()) {
-          is_basic = false;
-        } else {
-          is_basic = true;
-        }
+      if (local_num > 0 && (local_num + match_all_num == input_size)) {
+        is_basic = true;
+      } else if (remote_num > 0 && (remote_num + match_all_num == input_size)) {
+        is_basic = true;
+        is_remote = true;
+      } else if (match_all_num == input_size) {
+        is_basic = true;
       } else {
         is_basic = false;
       }
@@ -7224,212 +7181,33 @@ int ObOptimizerUtil::compute_basic_sharding_info(const ObAddr &local_addr,
   int ret = OB_SUCCESS;
   result_sharding = NULL;
   inherit_sharding_index = 0;
+  UNUSED(local_addr);
+  UNUSED(allocator);
   if (input_shardings.count() <= 1) {
     result_sharding = input_shardings.at(0);
-    inherit_sharding_index = 0;
   } else {
-    ObAddr basic_addr;
-    bool has_duplicated = false;
-    bool is_replicas_same = true;
     ObShardingInfo *sharding = NULL;
-    ObSEArray<ObAddr, 8> valid_addrs;
-    ObSEArray<ObAddr, 8> intersect_addrs;
-    ObSEArray<ObAddr, 8> candidate_addrs;
     for (int64_t i = 0; OB_SUCC(ret) && i < input_shardings.count(); i++) {
       if (OB_ISNULL(sharding = input_shardings.at(i))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(sharding), K(ret));
-      } else if (sharding->get_can_reselect_replica()) {
-        has_duplicated = true;
-        valid_addrs.reuse();
-        if (OB_ISNULL(sharding->get_phy_table_location_info())) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret));
-        } else if (OB_FAIL(get_duplicate_table_replica(*sharding->get_phy_table_location_info(),
-                                                        valid_addrs))) {
-          LOG_WARN("failed to get duplicated table replica", K(ret));
-        } else if (intersect_addrs.empty()) {
-          if (OB_FAIL(intersect_addrs.assign(valid_addrs))) {
-            LOG_WARN("failed to assign addrs", K(ret));
-          } else { /*do nothing*/ }
-        } else {
-          if (OB_FAIL(ObOptimizerUtil::intersect(valid_addrs, intersect_addrs, candidate_addrs))) {
-            LOG_WARN("failed to intersect addrs", K(ret));
-          } else if (OB_FALSE_IT(is_replicas_same = is_replicas_same && 
-                                                    valid_addrs.count() == candidate_addrs.count() &&
-                                                    valid_addrs.count() == intersect_addrs.count())) {
-            // do nothing
-          } else if (OB_FAIL(intersect_addrs.assign(candidate_addrs))) {
-            LOG_WARN("failed to assign addrs", K(ret));
-          } else { /*do nothing*/ }
-        }
       } else if (result_sharding != NULL) {
-        //do nothing
+        // do nothing
       } else if (sharding->is_local()) {
-        basic_addr = local_addr;
         result_sharding = sharding;
         inherit_sharding_index = i;
       } else if (sharding->is_remote()) {
-        if (OB_FAIL(sharding->get_remote_addr(basic_addr))) {
-          LOG_WARN("failed to get remote addr", K(ret));
-        } else {
-          result_sharding = sharding;
-          inherit_sharding_index = i;
-        }
+        result_sharding = sharding;
+        inherit_sharding_index = i;
       } else { /*do nothing*/ }
     }
-    if (OB_SUCC(ret)) {
-      if (result_sharding == NULL) {
-        if (has_duplicated) {
-          if (OB_UNLIKELY(intersect_addrs.empty())) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected error", K(ret));
-          } else if (ObOptimizerUtil::find_item(intersect_addrs, local_addr)) {
-            basic_addr = local_addr;
-          } else {
-            basic_addr = intersect_addrs.at(0);
-          }
-        } else {
-          result_sharding = input_shardings.at(0);
-          inherit_sharding_index = 0;
-        }
-      }
-      if (OB_FAIL(ret)) {
-        /*do nothing*/
-      } else if (!has_duplicated) {
-        /*do nothing*/
-      } else if (NULL != result_sharding) {
-        /*do nothing*/
-      } else if (is_replicas_same) {
-        for (int64_t i = 0; OB_SUCC(ret) && NULL == result_sharding && i < input_shardings.count(); i++) {
-          if (OB_ISNULL(sharding = input_shardings.at(i))) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected null", K(ret));
-          } else if (sharding->get_can_reselect_replica()) {
-            result_sharding = sharding;
-            inherit_sharding_index = i;
-          }
-        }
-      } else {
-        for (int64_t i = 0; OB_SUCC(ret) && NULL == result_sharding && i < input_shardings.count(); i++) {
-          if (OB_ISNULL(sharding = input_shardings.at(i))) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected null", K(ret));
-          } else if (sharding->get_can_reselect_replica() &&
-                     OB_FAIL(ObOptimizerUtil::compute_duplicate_table_sharding(local_addr,
-                                                                               basic_addr,
-                                                                               allocator,
-                                                                               *input_shardings.at(i),
-                                                                               intersect_addrs,
-                                                                               result_sharding))) {
-            LOG_WARN("failed to compute duplicate table sharding", K(ret));
-          } else if (NULL != result_sharding) { 
-             inherit_sharding_index = i;
-          }
-        }
-      }
+    if (OB_SUCC(ret) && NULL == result_sharding) {
+      result_sharding = input_shardings.at(0);
+      inherit_sharding_index = 0;
     }
   }
   if (OB_SUCC(ret) && NULL != result_sharding) {
     LOG_TRACE("succeed to compute basic sharding info", K(*result_sharding), K(input_shardings));
-  }
-  return ret;
-}
-
-int ObOptimizerUtil::get_duplicate_table_replica(const ObCandiTableLoc &phy_table_loc,
-                                                 ObIArray<ObAddr> &valid_addrs)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(1 != phy_table_loc.get_partition_cnt())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected partition count", K(ret), K(phy_table_loc.get_partition_cnt()));
-  } else {
-    const ObCandiTabletLoc &phy_part_loc = phy_table_loc.get_phy_part_loc_info_list().at(0);
-    if (OB_FAIL(valid_addrs.push_back(
-            phy_part_loc.get_partition_location().get_local_replica().get_server()))) {
-      LOG_WARN("failed to push back local address", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObOptimizerUtil::compute_duplicate_table_sharding(const ObAddr &local_addr,
-                                                      const ObAddr &selected_addr,
-                                                      ObIAllocator &allocator,
-                                                      ObShardingInfo &src_sharding,
-                                                      ObIArray<ObAddr> &valid_addrs,
-                                                      ObShardingInfo *&target_sharding) 
-{
-  int ret = OB_SUCCESS;
-  ObCandiTableLoc *phy_table_loc = NULL;
-  target_sharding = NULL;
-  if (OB_ISNULL(target_sharding = reinterpret_cast<ObShardingInfo*>(
-                                  allocator.alloc(sizeof(ObShardingInfo))))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory", K(ret));
-  } else if (OB_FALSE_IT(target_sharding = new(target_sharding) ObShardingInfo())) {
-  } else if (OB_FAIL(target_sharding->copy_with_part_keys(src_sharding))) {
-    LOG_WARN("failed to copy sharding info", K(ret));
-  } else if (OB_ISNULL(src_sharding.get_phy_table_location_info()) ||
-              OB_UNLIKELY(1 != src_sharding.get_phy_table_location_info()->get_partition_cnt())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected partition count", K(ret));
-  } else if (OB_FAIL(generate_duplicate_table_replicas(allocator,
-                                                        src_sharding.get_phy_table_location_info(),
-                                                        valid_addrs,
-                                                        phy_table_loc))) {
-    LOG_WARN("failed to compute duplicate table location", K(ret));
-  } else if (OB_ISNULL(phy_table_loc)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret));
-  } else if (OB_FALSE_IT(target_sharding->set_phy_table_location_info(phy_table_loc))) {
-  } else if (OB_UNLIKELY(1 != target_sharding->get_phy_table_location_info()->get_partition_cnt())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected partition count", K(ret));
-  } else {
-    ObCandiTabletLoc &phy_part_loc =
-          phy_table_loc->get_phy_part_loc_info_list_for_update().at(0);
-    if (!phy_part_loc.is_local_server(selected_addr)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("no server in replica", K(selected_addr), K(ret));
-    } else {
-      if (local_addr == selected_addr) {
-        target_sharding->set_local();
-      } else {
-        target_sharding->set_remote();
-      }
-    }
-  }
-  return ret;
-}
-
-int ObOptimizerUtil::generate_duplicate_table_replicas(ObIAllocator &allocator,
-                                                       const ObCandiTableLoc *source_table_loc,
-                                                       ObIArray<ObAddr> &valid_addrs,
-                                                       ObCandiTableLoc *&target_table_loc)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(source_table_loc)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret)); 
-  } else if (OB_UNLIKELY(1 != source_table_loc->get_partition_cnt())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected partition count", K(ret), 
-             K(source_table_loc->get_partition_cnt()));
-  } else if (OB_ISNULL(target_table_loc = static_cast<ObCandiTableLoc*>(
-                       allocator.alloc(sizeof(ObCandiTableLoc))))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory", K(ret));
-  } else if (OB_FALSE_IT(target_table_loc = new(target_table_loc) ObCandiTableLoc())) {
-    // do nothing
-  } else if (OB_FAIL(target_table_loc->assign(*source_table_loc))) {
-    LOG_WARN("failed to assign table location", K(ret));
-  } else if (!ObOptimizerUtil::find_item(
-                 valid_addrs,
-                 target_table_loc->get_phy_part_loc_info_list().at(0)
-                     .get_partition_location().get_local_replica().get_server())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("local replica is not valid for duplicate table", K(ret), K(valid_addrs));
   }
   return ret;
 }

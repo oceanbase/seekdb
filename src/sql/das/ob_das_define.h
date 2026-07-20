@@ -132,7 +132,6 @@ public:
                K_(related_table_ids),
                K_(use_dist_das),
                K_(select_leader),
-               K_(is_dup_table),
                K_(is_weak_read),
                K_(unuse_related_pruning),
                K_(is_external_table));
@@ -145,13 +144,12 @@ public:
     struct {
       uint64_t use_dist_das_                    : 1; //mark whether this table touch data through distributed DAS
       uint64_t select_leader_                   : 1; //mark whether this table use leader replica
-      uint64_t is_dup_table_                    : 1; //mark if this table is a duplicated table
       uint64_t is_weak_read_                    : 1; //mark if this tale can use weak read consistency
       uint64_t unuse_related_pruning_           : 1; //mark if this table use the related pruning to prune local index tablet_id
       uint64_t is_external_table_               : 1; //mark if this table is an external table
       uint64_t is_external_files_on_disk_       : 1; //mark if files in external table are located at local disk
       uint64_t das_empty_part_                  : 1; //mark there is false startup filter on DAS access table
-      uint64_t reserved_                        : 56;
+      uint64_t reserved_                        : 57;
     };
   };
 private:
@@ -395,35 +393,6 @@ protected:
 };
 typedef common::ObFixedArray<const ObDASBaseCtDef*, common::ObIAllocator> DASCtDefFixedArray;
 typedef common::ObFixedArray<ObDASBaseRtDef*, common::ObIAllocator> DASRtDefFixedArray;
-
-OB_INLINE void duplicate_type_to_loc_meta(ObDuplicateType v, ObDASTableLocMeta &loc_meta)
-{
-  switch (v) {
-    case ObDuplicateType::NOT_DUPLICATE:
-      loc_meta.is_dup_table_ = 0;
-      break;
-    case ObDuplicateType::DUPLICATE:
-      loc_meta.is_dup_table_ = 1;
-      loc_meta.select_leader_ = 0;
-      break;
-    case ObDuplicateType::DUPLICATE_IN_DML:
-      loc_meta.is_dup_table_ = 1;
-      loc_meta.select_leader_ = 1;
-      break;
-    default:
-      break;
-  }
-}
-
-OB_INLINE ObDuplicateType loc_meta_to_duplicate_type(const ObDASTableLocMeta &loc_meta)
-{
-  ObDuplicateType dup_type = ObDuplicateType::NOT_DUPLICATE;
-  if (loc_meta.is_dup_table_) {
-    dup_type = loc_meta.select_leader_ ?
-        ObDuplicateType::DUPLICATE_IN_DML : ObDuplicateType::DUPLICATE;
-  }
-  return dup_type;
-}
 
 enum ObTSCIRScanType : uint16_t
 {

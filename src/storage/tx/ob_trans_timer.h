@@ -147,16 +147,6 @@ protected:
   common::ObTimeWheel tw_;
 };
 
-class ObDupTableLeaseTimer : public ObTransTimer
-{
-public:
-  ObDupTableLeaseTimer() {}
-  virtual ~ObDupTableLeaseTimer() {}
-private:
-  static const int64_t DUP_TABLE_TIMEOUT_TASK_PRECISION_US = 3 * 1000 * 1000L;
-  DISALLOW_COPY_AND_ASSIGN(ObDupTableLeaseTimer);
-};
-
 } // transaction
 } // oceanbase
 
