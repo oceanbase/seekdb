@@ -1309,7 +1309,7 @@ static void refresh_session_schema_version(oceanbase::sql::ObSQLSessionInfo* ses
         static_cast<oceanbase::share::schema::ObServerSchemaService*>(GCTX.schema_service_);
     if (OB_SUCCESS == server_svc->get_tenant_schema_version(schema_version)
         && OB_INVALID_VERSION != schema_version) {
-        (void)session->update_sys_variable(oceanbase::share::SYS_VAR_OB_LAST_SCHEMA_VERSION, schema_version);
+        session->set_last_ddl_schema_version(schema_version);
         return;
     }
     if (OB_SUCCESS != GCTX.schema_service_->get_tenant_refreshed_schema_version(schema_version)
@@ -1317,7 +1317,7 @@ static void refresh_session_schema_version(oceanbase::sql::ObSQLSessionInfo* ses
         (void)oceanbase::sql::ObSQLUtils::update_session_last_schema_version(*GCTX.schema_service_, *session);
         return;
     }
-    (void)session->update_sys_variable(oceanbase::share::SYS_VAR_OB_LAST_SCHEMA_VERSION, schema_version);
+    session->set_last_ddl_schema_version(schema_version);
 }
 
 // Align with MySQL protocol: ObMPBase::check_and_refresh_schema. Only refresh when server (local) is behind session (last).
@@ -1329,7 +1329,7 @@ static void check_and_refresh_schema_for_embed(oceanbase::sql::ObSQLSessionInfo*
         refresh_session_schema_version(session);
         return;
     }
-    if (OB_SUCCESS != session->get_ob_last_schema_version(last_version)) {
+    if (OB_SUCCESS != session->get_last_ddl_schema_version(last_version)) {
         refresh_session_schema_version(session);
         return;
     }
@@ -1389,7 +1389,7 @@ static int do_seekdb_connect_inner(ConnectParams* params) {
         delete conn;
         params->result = SEEKDB_ERROR_CONNECTION_FAILED;
         return OB_SUCCESS;
-    } else if (OB_FAIL(GCTX.session_mgr_->create_session(sid, ObTimeUtility::current_time(), session))) {
+    } else if (OB_FAIL(GCTX.session_mgr_->create_session(sid, session))) {
         session = nullptr;
         set_error(conn, "Failed to create session");
         delete conn;
