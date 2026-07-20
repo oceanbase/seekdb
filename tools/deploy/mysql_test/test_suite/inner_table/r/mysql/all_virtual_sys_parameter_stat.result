@@ -69,7 +69,6 @@ devname
 diag_syslog_per_error_limit
 disk_io_thread_count
 dtl_buffer_size
-dump_data_dictionary_to_log_interval
 enable_adaptive_plan_cache
 enable_async_syslog
 enable_ddl
@@ -397,9 +396,6 @@ _inlist_rewrite_threshold
 _io_callback_thread_count
 _io_read_batch_size
 _io_read_redundant_limit_percentage
-_iut_enable
-_iut_max_entries
-_iut_stat_collection_type
 _lcl_op_interval
 _load_tde_encrypt_engine
 _lob_rowsets_max_rows

@@ -24,7 +24,7 @@
 #include "share/schema/ob_tenant_schema_service.h"
 #include "share/ob_ddl_sim_point.h"
 #include "observer/scheduler/ob_dag_warning_history_mgr.h"
-#include "observer/ob_server_event_history_table_operator.h"
+#include "share/ob_structured_event_logger.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase::common;

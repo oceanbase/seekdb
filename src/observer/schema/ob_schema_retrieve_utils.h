@@ -578,9 +578,6 @@ public:
   template<typename T>
   static T *find_table_schema(const uint64_t table_id,
                               common::ObArray<T *> &table_schema_array);
-  template<typename T>
-  static int fill_temp_table_schema(T &result, ObTableSchema &table_schema);
-
   template<typename TABLE_SCHEMA>
   static int cascaded_generated_column(TABLE_SCHEMA &table_schema);
   // column-level generated-column cascade(previously an ObSchemaUtils member, real user sql ObResolverUtils; was moved up to observer with the loader removes the member split)

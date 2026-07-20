@@ -463,11 +463,6 @@ private:
                                const ObTableSchema &table,
                                ObDMLSqlSplicer &dml);
 
-public:
-  int insert_temp_table_info(common::ObISQLClient &trans, const ObTableSchema &table_schema);
-  int batch_insert_temp_table_info(common::ObISQLClient &trans, const ObIArray<ObTableSchema> &tables);
-  int delete_from_all_temp_table(common::ObISQLClient &sql_client,
-                                 const uint64_t table_id);
 private:
   int log_operation_wrapper(
       ObSchemaOperation &opt,

@@ -99,7 +99,6 @@ public:
   virtual storage::ObTenantFreezeInfoMgr * tenant_freeze_info_mgr() { return nullptr; }
   virtual transaction::ObTxLoopWorker * tx_loop_worker() { return nullptr; }
   virtual storage::ObAccessService * access_service() { return nullptr; }
-  virtual datadict::ObDataDictService * data_dict_service() { return nullptr; }
   virtual concurrency_control::ObMultiVersionGarbageCollector * multi_version_garbage_collector() { return nullptr; }
   virtual ObTestModule * test_module() { return nullptr; }
   virtual storage::ObEmptyReadBucket * empty_read_bucket() { return nullptr; }
@@ -109,7 +108,6 @@ public:
   virtual table::ObHTableLockMgr * h_table_lock_mgr() { return nullptr; }
   virtual table::ObTTLService * ttl_service() { return nullptr; }
   virtual table::ObTableObjectPoolMgr * table_object_pool_mgr() { return nullptr; }
-  virtual share::ObIndexUsageInfoMgr * index_usage_info_mgr() { return nullptr; }
   virtual storage::ObTabletMemtableMgrPool * tablet_memtable_mgr_pool() { return nullptr; }
   virtual share::ObResourceLimitCalculator * resource_limit_calculator() { return nullptr; }
   virtual storage::ObGlobalIteratorPool * global_iterator_pool() { return nullptr; }

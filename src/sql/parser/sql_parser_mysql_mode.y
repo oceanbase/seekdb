@@ -395,7 +395,7 @@ END_P SET_VAR DELIMITER
 %type <node> subpartition_template_option subpartition_individual_option opt_hash_partition_list hash_partition_list hash_partition_element opt_hash_subpartition_list hash_subpartition_list hash_subpartition_element opt_subpartition_list opt_engine_option
 %type <node> date_unit date_params timestamp_params
 %type <node> drop_table_stmt table_list drop_view_stmt table_or_tables
-%type <node> explain_stmt explainable_stmt format_name kill_stmt help_stmt create_outline_stmt alter_outline_stmt drop_outline_stmt opt_outline_target
+%type <node> explain_stmt explainable_stmt format_name kill_stmt create_outline_stmt alter_outline_stmt drop_outline_stmt opt_outline_target
 %type <node> expr_list expr expr_const conf_const simple_expr simple_expr_list expr_or_default bit_expr bool_pri predicate explain_or_desc pl_expr_stmt
 %type <node> column_ref multi_delete_table
 %type <node> case_expr func_expr in_expr sub_query_flag search_expr
@@ -647,7 +647,6 @@ stmt:
   | create_index_stmt       { $$ = $1; check_question_mark($$, result); }
   | drop_index_stmt         { $$ = $1; check_question_mark($$, result); }
   | kill_stmt               { $$ = $1; question_mark_issue($$, result); }
-  | help_stmt               { $$ = $1; check_question_mark($$, result); }
   | create_view_stmt
   {
     $$ = $1;
@@ -14222,24 +14221,6 @@ STATUS
 | MUTEX
 { $$ = NULL; }
 ;
-
-/*****************************************************************************
- *
- *	help grammar
- *
- *****************************************************************************/
-help_stmt:
-HELP STRING_VALUE
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_HELP, 1, $2);
-}
-| HELP NAME_OB
-{
-  $2->type_ = T_VARCHAR;
-  malloc_non_terminal_node($$, result->malloc_pool_, T_HELP, 1, $2);
-}
-;
-
 
 /*****************************************************************************
  *

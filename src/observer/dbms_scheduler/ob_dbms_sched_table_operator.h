@@ -64,8 +64,6 @@ public:
   int update_for_start_execute(
     ObDBMSSchedJobInfo &job_info);
 
-  int update_for_missed(ObDBMSSchedJobInfo &job_info);
-  int update_for_zone_not_exist(ObDBMSSchedJobInfo &job_info);
   int update_for_enddate(ObDBMSSchedJobInfo &job_info);
   int update_for_rollback(ObDBMSSchedJobInfo &job_info);
   int update_for_timeout(ObDBMSSchedJobInfo &job_info);
@@ -95,21 +93,13 @@ public:
 
   int check_job_can_running(int64_t alive_job_count, bool &can_running);
 
-  int purge_run_detail();
-
 private:
-  int _purge(const ObString &job_class_name, int64_t log_history);
-  int _purge_fallback(int64_t log_history);
-  int _purge_old();
   int _build_job_drop_dml(int64_t now, ObDBMSSchedJobInfo &job_info, ObSqlString &sql);
   int _build_job_finished_dml(int64_t now, ObDBMSSchedJobInfo &job_info, ObSqlString &sql);
   int _build_job_rollback_start_dml(ObDBMSSchedJobInfo &job_info, ObSqlString &sql);
-  int _build_job_log_dml(int64_t now, ObDBMSSchedJobInfo &job_info, int err, const ObString &errmsg, ObSqlString &sql);
-  int _check_need_record(ObDBMSSchedJobInfo &job_info, bool &need_record, bool err_state = true);
   DISALLOW_COPY_AND_ASSIGN(ObDBMSSchedTableOperator);
 
 private:
-  static const int64_t PURGE_LOG_BATCH_COUNT = 1024;
   common::ObISQLClient *sql_proxy_;
 };
 

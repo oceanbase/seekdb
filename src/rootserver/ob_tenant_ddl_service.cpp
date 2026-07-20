@@ -30,14 +30,12 @@
 #include "share/ob_sql_client_decorator.h"
 #include "share/ob_zone_merge_info.h"
 #include "share/ob_global_merge_table_operator.h"
-#include "share/ob_zone_merge_table_operator.h"
 #include "rootserver/ob_load_inner_table_schema_executor.h"
 #include "logservice/ob_log_service.h"
 #include "logservice/replayservice/ob_log_replay_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "share/ob_tenant_role.h"
 #include "share/rc/ob_tenant_base.h"
-#include "share/ob_kv_storage.h"
 #include "share/ob_tenant_switchover_status.h"
 #include "share/scn.h"
 #include "share/ob_server_struct.h"
@@ -353,33 +351,10 @@ int ObTenantDDLService::insert_tenant_merge_info_(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-
-  // add zone merge info
-  HEAP_VARS_4((ObGlobalMergeInfo, global_info),
-              (ObZoneMergeInfoArray, merge_info_array),
-              (ObZoneArray, zone_list),
-              (ObZoneMergeInfo, tmp_merge_info)) {
-
-
-
-    if (OB_FAIL(tenant_schema.get_zone_list(zone_list))) {
-      LOG_WARN("fail to get zone list", KR(ret));
-    }
-
-    if (!zone_list.empty()) {
-      if (OB_FAIL(merge_info_array.push_back(tmp_merge_info))) {
-        LOG_WARN("fail to push_back", KR(ret));
-      }
-    }
-    // add zone merge info of current tenant(sys tenant or meta tenant)
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(ObGlobalMergeTableOperator::insert_global_merge_info(trans, global_info))) {
-        LOG_WARN("fail to insert global merge info of current tenant", KR(ret), K(global_info));
-      } else if (OB_FAIL(ObZoneMergeTableOperator::insert_zone_merge_infos(
-                 trans, merge_info_array))) {
-        LOG_WARN("fail to insert zone merge infos of current tenant", KR(ret), K(1UL),
-          K(merge_info_array));
-      }
+  UNUSED(tenant_schema);
+  HEAP_VAR(ObGlobalMergeInfo, global_info) {
+    if (OB_FAIL(ObGlobalMergeTableOperator::insert_global_merge_info(trans, global_info))) {
+      LOG_WARN("fail to insert global merge info of current tenant", KR(ret), K(global_info));
     }
   }
 

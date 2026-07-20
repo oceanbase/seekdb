@@ -24,7 +24,7 @@
 #include "storage/tx/ob_ts_mgr.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
 #include "storage/ddl/ob_direct_insert_sstable_ctx_new.h"
-#include "observer/ob_server_event_history_table_operator.h"
+#include "share/ob_structured_event_logger.h"
 #include "share/ob_ddl_sim_point.h"
 #include "storage/blocksstable/index_block/ob_macro_meta_temp_store.h"
 #include "storage/ddl/ob_ddl_merge_schedule.h"

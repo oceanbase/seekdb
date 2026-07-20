@@ -198,25 +198,6 @@
                                          "user_stats = VALUES(user_stats);"
 // TODO DAISI, add a sys_func to merge NDV by llc.
 
-#define INSERT_TASK_OPT_STAT_GATHER_SQL "INSERT INTO %s(task_id," \
-                                                        "type," \
-                                                        "ret_code," \
-                                                        "failed_count,"\
-                                                        "table_count," \
-                                                        "start_time," \
-                                                        "end_time) VALUES (%s);"
-
-#define INSERT_TABLE_OPT_STAT_GATHER_SQL "INSERT INTO %s(task_id," \
-                                                         "table_id," \
-                                                         "ret_code," \
-                                                         "start_time," \
-                                                         "end_time," \
-                                                         "memory_used," \
-                                                         "stat_refresh_failed_list," \
-                                                         "properties," \
-                                                         "spare3) VALUES (%s);"
-
-
 #define ALL_HISTOGRAM_STAT_COLUMN_NAME "table_id, "      \
                                        "partition_id, "  \
                                        "column_id, "     \
@@ -1987,76 +1968,6 @@ int ObOptStatSqlService::gen_tablet_list_str(const ObIArray<ObTabletID> &all_tab
   return ret;
 }
 
-int ObOptStatSqlService::update_opt_stat_task_stat(const ObOptStatTaskInfo &task_info)
-{
-  int ret = OB_SUCCESS;
-  ObSqlString raw_sql;
-  ObSqlString value_str;
-  int64_t affected_rows = 0;
-  
-  if (OB_FAIL(get_gather_stat_task_value(task_info, value_str))) {
-    LOG_WARN("failed to get gather stat values list", K(ret));
-  } else if (OB_FAIL(raw_sql.append_fmt(INSERT_TASK_OPT_STAT_GATHER_SQL,
-                                        share::OB_ALL_TASK_OPT_STAT_GATHER_HISTORY_TNAME,
-                                        value_str.ptr()))) {
-    LOG_WARN("failed to append fmt", K(ret), K(raw_sql));
-  } else {
-    ObMySQLTransaction trans;
-    LOG_TRACE("sql string of update opt stat task stat", K(raw_sql));
-    if (OB_FAIL(trans.start(mysql_proxy_))) {
-      LOG_WARN("fail to start transaction", K(ret));
-    } else if (OB_FAIL(trans.write(raw_sql.ptr(), affected_rows))) {
-      LOG_WARN("failed to exec sql", K(ret));
-    } else {/*do nothing*/}
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(trans.end(true))) {
-        LOG_WARN("fail to commit transaction", K(ret));
-      }
-    } else {
-      int tmp_ret = OB_SUCCESS;
-      if (OB_SUCCESS != (tmp_ret = trans.end(false))) {
-        LOG_WARN("fail to roll back transaction", K(tmp_ret));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObOptStatSqlService::update_opt_stat_gather_stat(const ObOptStatGatherStat &gather_stat)
-{
-  int ret = OB_SUCCESS;
-  ObSqlString raw_sql;
-  ObSqlString value_str;
-  int64_t affected_rows = 0;
-  
-  if (OB_FAIL(get_gather_stat_value(gather_stat, value_str))) {
-    LOG_WARN("failed to get gather stat value", K(ret));
-  } else if (OB_FAIL(raw_sql.append_fmt(INSERT_TABLE_OPT_STAT_GATHER_SQL,
-                                        share::OB_ALL_TABLE_OPT_STAT_GATHER_HISTORY_TNAME,
-                                        value_str.ptr()))) {
-    LOG_WARN("failed to append fmt", K(ret), K(raw_sql));
-  } else {
-    ObMySQLTransaction trans;
-    LOG_TRACE("sql string of update opt stat gather stat", K(raw_sql));
-    if (OB_FAIL(trans.start(mysql_proxy_))) {
-      LOG_WARN("fail to start transaction", K(ret));
-    } else if (OB_FAIL(trans.write(raw_sql.ptr(), affected_rows))) {
-      LOG_WARN("failed to exec sql", K(ret));
-    } else {/*do nothing*/}
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(trans.end(true))) {
-        LOG_WARN("fail to commit transaction", K(ret));
-      }
-    } else {
-      int tmp_ret = OB_SUCCESS;
-      if (OB_SUCCESS != (tmp_ret = trans.end(false))) {
-        LOG_WARN("fail to roll back transaction", K(tmp_ret));
-      }
-    }
-  }
-  return ret;
-}
-
 int ObOptStatSqlService::update_table_stat_failed_count(const uint64_t table_id,
     const ObIArray<int64_t> &part_ids, int64_t &affected_rows) 
 {
@@ -2118,51 +2029,6 @@ int ObOptStatSqlService::get_update_fail_count_value_list(const uint64_t table_i
   }
   return ret;
 }
-
-int ObOptStatSqlService::get_gather_stat_task_value(const ObOptStatTaskInfo &task_info,
-                                                    ObSqlString &value_str)
-{
-  int ret = OB_SUCCESS;
-  share::ObDMLSqlSplicer dml_splicer;
-  
-  if (OB_FAIL(dml_splicer.add_pk_column("task_id", task_info.task_id_)) ||
-      OB_FAIL(dml_splicer.add_column("type", task_info.type_)) ||
-      OB_FAIL(dml_splicer.add_column("ret_code", task_info.ret_code_)) ||
-      OB_FAIL(dml_splicer.add_column("failed_count", task_info.failed_count_)) ||
-      OB_FAIL(dml_splicer.add_column("table_count", task_info.task_table_count_)) ||
-      OB_FAIL(dml_splicer.add_time_column("start_time", task_info.task_start_time_)) ||
-      OB_FAIL(dml_splicer.add_time_column("end_time", task_info.task_end_time_))) {
-    LOG_WARN("failed to add dml splicer column", K(ret));
-  } else if (OB_FAIL(dml_splicer.splice_values(value_str))) {
-    LOG_WARN("failed to get sql string", K(ret));
-  } else { /*do nothing*/ }
-  return ret;
-}
-
-int ObOptStatSqlService::get_gather_stat_value(const ObOptStatGatherStat &gather_stat,
-                                               ObSqlString &values_ptr)
-{
-  int ret = OB_SUCCESS;
-  share::ObDMLSqlSplicer dml_splicer;
-  
-  uint64_t table_id = gather_stat.get_table_id();
-  uint64_t pure_table_id = ObSchemaUtils::get_extract_schema_id(table_id);
-  if (OB_FAIL(dml_splicer.add_pk_column("task_id", gather_stat.get_task_id())) ||
-      OB_FAIL(dml_splicer.add_pk_column("table_id", pure_table_id)) ||
-      OB_FAIL(dml_splicer.add_column("ret_code", gather_stat.get_ret_code())) ||
-      OB_FAIL(dml_splicer.add_time_column("start_time", gather_stat.get_start_time())) ||
-      OB_FAIL(dml_splicer.add_time_column("end_time", gather_stat.get_end_time())) ||
-      OB_FAIL(dml_splicer.add_column("memory_used", gather_stat.get_memory_used())) ||
-      OB_FAIL(dml_splicer.add_column("stat_refresh_failed_list", gather_stat.get_stat_refresh_failed_list())) ||
-      OB_FAIL(dml_splicer.add_column("properties", gather_stat.get_properties())) ||
-      OB_FAIL(dml_splicer.add_column("spare3", gather_stat.get_gather_audit()))) {
-    LOG_WARN("failed to add dml splicer column", K(ret));
-  } else if (OB_FAIL(dml_splicer.splice_values(values_ptr))) {
-    LOG_WARN("failed to get sql string", K(ret));
-  }
-  return ret;
-}
-
 
 int ObOptStatSqlService::update_system_stats(const ObOptSystemStat *system_stat)
 {

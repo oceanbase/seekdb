@@ -251,7 +251,6 @@ gn, ~ [],;
 erschaft','oeff. rechtl. Koerperschaft Sitz im Ausland','Eingetragener Verein','Eingetragener Verein Sitz im Ausland','Typ unbekannt') AS Kundentyp ,kategorie FROM t1 WHERE hdl_nr < 2000000 AND kategorie IN ('Prepaid','Mobilfunk') AND st_klasse = 'Workflow' GROUP BY kundentyp ORDER BY kategorie;
 select 100000000000000000000000000001;
 select - 500000000001436161461248952222;
-INSERT INTO __all_rootservice_event_history (gmt_create, module, event, name1, value1, name2, value2, rs_svr_ip, rs_svr_port) VALUES (usec_to_time(1597203014979140), 'root_service', 'admin_set_config', 'ret', -4014, 'arg', '{items:[{name:"all_server_list", value:"100.83.6.49:50238", comment:"", zone:"", server:"0.0.0.0", tenant_name:"", exec_tenant_id:1, tenant_ids:[]}], is_inner:true}', '100.83.6.49', 50238);
 select 1 /**! ,2 */;
 select 1 /*! ,2 **/;
 select 1 /*! 2 **/;

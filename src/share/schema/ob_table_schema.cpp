@@ -1383,8 +1383,6 @@ int ObTableSchema::assign(const ObTableSchema &src_schema)
         LOG_WARN("Fail to deep copy comment", K(ret));
       } else if (OB_FAIL(deep_copy_str(src_schema.pk_comment_, pk_comment_))) {
         LOG_WARN("Fail to deep copy primary key comment", K(ret));
-      } else if (OB_FAIL(deep_copy_str(src_schema.create_host_, create_host_))) {
-        LOG_WARN("Fail to deep copy primary key comment", K(ret));
       } else if (OB_FAIL(deep_copy_str(src_schema.expire_info_, expire_info_))) {
         LOG_WARN("Fail to deep copy expire info string", K(ret));
       } else if (OB_FAIL(deep_copy_str(src_schema.parser_name_, parser_name_))) {
@@ -2820,7 +2818,6 @@ int64_t ObTableSchema::get_convert_size() const
   convert_size += tablegroup_name_.length() + 1;
   convert_size += comment_.length() + 1;
   convert_size += pk_comment_.length() + 1;
-  convert_size += create_host_.length() + 1;
   convert_size += expire_info_.length() + 1;
   convert_size += parser_name_.length() + 1;
   convert_size += parser_properties_.length() + 1;
@@ -2907,7 +2904,6 @@ void ObTableSchema::reset()
   reset_string(tablegroup_name_);
   reset_string(comment_);
   reset_string(pk_comment_);
-  reset_string(create_host_);
   reset_string(expire_info_);
   reset_string(parser_name_);
   reset_string(parser_properties_);
@@ -5702,7 +5698,6 @@ int64_t ObTableSchema::to_string(char *buf, const int64_t buf_len) const
     K_(code_version),
     K_(comment),
     K_(pk_comment),
-    K_(create_host),
     K_(tablegroup_name),
     K_(compressor_type),
     K_(row_store_type),
@@ -5844,7 +5839,6 @@ OB_DEF_SERIALIZE(ObTableSchema)
   OB_UNIS_ENCODE(session_id_);
   OB_UNIS_ENCODE_ARRAY_POINTER(cst_array_, cst_cnt_);
   OB_UNIS_ENCODE(pk_comment_);
-  OB_UNIS_ENCODE(create_host_);
   OB_UNIS_ENCODE(row_store_type_);
   OB_UNIS_ENCODE(store_format_);
   OB_UNIS_ENCODE(duplicate_scope_);
@@ -6048,7 +6042,6 @@ OB_DEF_DESERIALIZE(ObTableSchema)
   OB_UNIS_DECODE(session_id_);
   OB_UNIS_DECODE_ARRAY_POINTER(cst_array_, cst_cnt_, add_constraint);
   OB_UNIS_DECODE_AND_FUNC(pk_comment_, deep_copy_str);
-  OB_UNIS_DECODE_AND_FUNC(create_host_, deep_copy_str);
   OB_UNIS_DECODE(row_store_type_);
   OB_UNIS_DECODE(store_format_);
   OB_UNIS_DECODE(duplicate_scope_);
@@ -6204,7 +6197,6 @@ OB_DEF_SERIALIZE_SIZE(ObTableSchema)
   OB_UNIS_ADD_LEN(session_id_);
   OB_UNIS_ADD_LEN_ARRAY_POINTER(cst_array_, cst_cnt_);
   OB_UNIS_ADD_LEN(pk_comment_);
-  OB_UNIS_ADD_LEN(create_host_);
   OB_UNIS_ADD_LEN(row_store_type_);
   OB_UNIS_ADD_LEN(store_format_);
   OB_UNIS_ADD_LEN(duplicate_scope_);
@@ -7701,7 +7693,6 @@ int64_t ObPrintableTableSchema::to_string(char *buf, const int64_t buf_len) cons
     K_(code_version),
     K_(comment),
     K_(pk_comment),
-    K_(create_host),
     K_(tablegroup_name),
     K_(expire_info),
     K_(view_schema),

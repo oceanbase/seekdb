@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "lib/stat/ob_diagnostic_info_guard.h"
-#include "rootserver/ob_rs_event_history_table_operator.h"
+#include "share/ob_structured_event_logger.h"
 #include "storage/tablet/ob_batch_create_tablet_arg.h"
 #include "storage/tx/ob_tx_result_struct.h"
 #include "storage/ob_storage_rpc_arg.h"
@@ -27,8 +27,6 @@
 #include "share/ob_global_merge_table_operator.h"
 #include "share/ob_zone_merge_info.h"
 #include "rootserver/ob_objpriv_mysql_schema_history_recycler.h"
-#include "rootserver/ob_rs_event_history_table_operator.h"
-
 namespace oceanbase
 {
 namespace rootserver

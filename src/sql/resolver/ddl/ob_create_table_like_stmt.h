@@ -57,14 +57,6 @@ public:
   share::schema::ObTableType get_table_type() const
   { return create_table_like_arg_.table_type_; }
 
-  int set_create_host(common::ObIAllocator &allocator_, const common::ObString create_host)
-  {
-    return ob_write_string(allocator_, create_host, create_table_like_arg_.create_host_);
-  }
-
-  const common::ObString &get_create_host() const
-  { return create_table_like_arg_.create_host_; }
-
   void set_if_not_exist(const bool if_not_exist);
 
   void set_define_user_id(const uint64_t user_id)

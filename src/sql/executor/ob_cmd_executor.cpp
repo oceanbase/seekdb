@@ -110,7 +110,7 @@
 #include "sql/engine/prepare/ob_prepare_executor.h"
 #include "sql/engine/prepare/ob_execute_executor.h"
 #include "sql/engine/prepare/ob_deallocate_executor.h"
-#include "observer/ob_server_event_history_table_operator.h"
+#include "share/ob_structured_event_logger.h"
 #include "observer/omt/ob_tenant.h"
 #include "sql/engine/cmd/ob_directory_executor.h"
 #include "sql/engine/cmd/ob_location_executor.h"
@@ -378,7 +378,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         break;
       }
 
-      case stmt::T_HELP:
       case stmt::T_CREATE_USER: {
         DEFINE_EXECUTE_CMD(ObCreateUserStmt, ObCreateUserExecutor);
         break;

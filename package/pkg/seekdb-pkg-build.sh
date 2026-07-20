@@ -285,12 +285,6 @@ if [[ -d "$SYS_PACK_DIR" ]]; then
   cp -R "$SYS_PACK_DIR/"* "$STAGING/opt/seekdb/share/seekdb/admin/" 2>/dev/null || true
 fi
 
-# --- share: help ---
-install -d "$STAGING/opt/seekdb/share/seekdb/help"
-if [[ -f "$TOPDIR/src/sql/fill_help_tables-ob.sql" ]]; then
-  install -m 644 "$TOPDIR/src/sql/fill_help_tables-ob.sql" "$STAGING/opt/seekdb/share/seekdb/help/"
-fi
-
 # --- share: timezone ---
 install -d "$STAGING/opt/seekdb/share/seekdb/timezone"
 for f in timezone_V1.log timezone.data timezone_name.data timezone_trans.data timezone_trans_type.data; do

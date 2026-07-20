@@ -629,7 +629,6 @@ public:
       origin_table_name_(),
       new_db_name_(),
       new_table_name_(),
-      create_host_(),
       sequence_ddl_arg_(),
       session_id_(0),
       define_user_id_(common::OB_INVALID_ID)
@@ -644,7 +643,6 @@ public:
   common::ObString origin_table_name_;
   common::ObString new_db_name_;
   common::ObString new_table_name_;
-  common::ObString create_host_; //Temporary table is valid
   // Defined for create_user_tables() identity sequence arguments.
   ObSequenceDDLArg sequence_ddl_arg_;
   int64_t session_id_;

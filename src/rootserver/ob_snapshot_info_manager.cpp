@@ -20,7 +20,7 @@
 #include "share/ob_ddl_common.h"
 #include "common/ob_timeout_ctx.h"
 #include "common/mysqlclient/ob_mysql_transaction.h"
-#include "ob_rs_event_history_table_operator.h"
+#include "share/ob_structured_event_logger.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -132,4 +132,3 @@ int ObSnapshotInfoManager::check_restore_point(common::ObMySQLProxy &proxy,
 
 } //end rootserver
 } //end oceanbase
-

@@ -195,9 +195,6 @@ public:
                          const ObIArray<ObTabletID> &all_tablet_ids,
                          ObIArray<ObOptTableStat> &tstats);
 
-  int update_opt_stat_gather_stat(const ObOptStatGatherStat &gather_stat);
-  int update_opt_stat_task_stat(const ObOptStatTaskInfo &task_info);
-
   int update_system_stats(const ObOptSystemStat *system_stat);
 
   int fetch_system_stat(const ObOptSystemStat::Key &key,
@@ -267,12 +264,6 @@ private:
   int gen_tablet_list_str(const ObIArray<ObTabletID> &all_tablet_ids,
                           ObSqlString &tablet_list_str,
                           ObSqlString &tablet_tuple_list_str);
-
-  int get_gather_stat_value(const ObOptStatGatherStat &gather_stat,
-                            ObSqlString &values_list);
-
-  int get_gather_stat_task_value(const ObOptStatTaskInfo &task_info,
-                                 ObSqlString &values_str);
 
   int get_system_stat_sql(const ObOptSystemStat &stat,
                          const int64_t current_time,

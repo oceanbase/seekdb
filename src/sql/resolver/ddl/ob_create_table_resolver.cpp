@@ -16,12 +16,12 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/ddl/ob_create_table_resolver.h"
+#include "sql/resolver/dml/ob_select_resolver.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/resolver/ddl/ob_index_builder_util.h"
 #include "observer/ob_server.h"
-#include "sql/resolver/cmd/ob_help_resolver.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "observer/vector_index/ob_vector_index_util.h"
 #include "sql/resolver/ddl/ob_vec_index_builder_util.h"
@@ -449,12 +449,6 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
             SQL_RESV_LOG(WARN, "set table name failed", K(ret));
           } else {
             create_table_stmt->set_database_id(OB_INVALID_ID);
-          }
-          // Query table creation or temporary table T creation time, record the received request obs address obs#1, used for obs backend job cleanup, to restrict T can only be dropped by the original obs#1
-          if (OB_SUCC(ret) && (is_temporary_table || is_create_as_sel)) {
-            char create_host_str[OB_MAX_HOST_NAME_LENGTH];
-            MYADDR.ip_port_to_string(create_host_str, OB_MAX_HOST_NAME_LENGTH);
-            table_schema.set_create_host(create_host_str);
           }
         }
         // put after parsing temporary table information settings, because it involves error checking for foreign key reference not supported by temporary tables

@@ -19,7 +19,6 @@
 #include "common/mysqlclient/ob_mysql_proxy.h"
 #include "ob_deadlock_detector_common_define.h"
 #include "lib/container/ob_iarray.h"
-#include "share/ob_event_history_table_operator.h"
 #include "share/storage/ob_deadlock_event_history_table_storage.h"
 
 namespace oceanbase
@@ -39,11 +38,12 @@ public:
                     int64_t current_ts);
   static int insert_all(const common::ObIArray<ObDetectorInnerReportInfo> &infos);
 
-  class ObDeadLockEventHistoryTableOperator : public share::ObEventHistoryTableOperator
+  class ObDeadLockEventHistoryTableOperator
   {
   public:
     virtual ~ObDeadLockEventHistoryTableOperator() {}
-    virtual int async_delete() override;
+    bool is_inited() const { return ObDeadLockInnerTableService::storage_.is_inited(); }
+    int async_delete();
     static ObDeadLockEventHistoryTableOperator &get_instance();
   private:
     ObDeadLockEventHistoryTableOperator() {};

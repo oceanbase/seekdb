@@ -25,7 +25,7 @@
 #include "sql/resolver/ob_resolver_utils.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
 #include "sql/engine/cmd/ob_partition_executor_utils.h"
-#include "observer/ob_server_event_history_table_operator.h"
+#include "share/ob_structured_event_logger.h"
 
 using namespace oceanbase::common;
 namespace oceanbase

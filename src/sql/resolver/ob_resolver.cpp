@@ -86,7 +86,6 @@
 #include "sql/resolver/cmd/ob_show_resolver.h"
 #include "sql/resolver/cmd/ob_diff_table_resolver.h"
 #include "sql/resolver/cmd/ob_merge_table_resolver.h"
-#include "sql/resolver/cmd/ob_help_resolver.h"
 #include "sql/resolver/cmd/ob_kill_resolver.h"
 #include "sql/resolver/cmd/ob_set_names_resolver.h"
 #include "sql/resolver/cmd/ob_set_transaction_resolver.h"
@@ -594,10 +593,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         REGISTER_STMT_RESOLVER(SetNames);
         break;
       }
-      case T_HELP: {
-        REGISTER_STMT_RESOLVER(Help);
-        break;
-      }
       case T_KILL: {
         REGISTER_STMT_RESOLVER(Kill);
         break;
@@ -927,9 +922,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         } else {
           ddl_arg.ddl_stmt_str_ = params_.query_ctx_->get_sql_stmt();
         }
-        if (OB_FAIL(ObResolverUtils::set_sync_ddl_id_str(params_.session_info_, ddl_arg.ddl_id_str_))) {
-          LOG_WARN("Failed to set_sync_ddl_id_str", K(ret));
-        } else { } // do-nothing
       }
     }
   }  // end if

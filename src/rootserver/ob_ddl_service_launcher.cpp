@@ -22,7 +22,7 @@
 #include "share/rc/ob_module_provider.h"
 #include "lib/lock/ob_spin_rwlock.h" // for SpinRWLock
 #include "ob_ddl_service_launcher.h"
-#include "observer/ob_server_event_history_table_operator.h" // for SERVER_EVENT_ADD
+#include "share/ob_structured_event_logger.h" // for SERVER_EVENT_ADD
 #include "share/ob_server_struct.h"     // for GCTX
 #include "share/rc/ob_tenant_base.h"    // for MTL_ID
 #include "rootserver/ob_root_service.h" // for ObRootService

@@ -201,7 +201,6 @@ int ObCreateTableLikeHelper::generate_table_schema_()
     if (new_table_schema.is_user_table()
         && TMP_TABLE == arg_.table_type_) {
       new_table_schema.set_table_type(arg_.table_type_);
-      new_table_schema.set_create_host(arg_.create_host_);
       new_table_schema.set_session_id(arg_.session_id_);
     }
     if (orig_table_schema->is_primary_vp_table()) {

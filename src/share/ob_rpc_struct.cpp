@@ -820,7 +820,6 @@ DEF_TO_STRING(ObCreateTableLikeArg)
        K_(new_db_name),
        K_(new_table_name),
        K_(table_type),
-       K_(create_host),
        K_(sequence_ddl_arg),
        K_(session_id),
        K_(define_user_id));
@@ -836,7 +835,6 @@ OB_SERIALIZE_MEMBER((ObCreateTableLikeArg, ObDDLArg),
                     new_db_name_,
                     new_table_name_,
                     table_type_,
-                    create_host_,
                     sequence_ddl_arg_,
                     session_id_,
                     define_user_id_);

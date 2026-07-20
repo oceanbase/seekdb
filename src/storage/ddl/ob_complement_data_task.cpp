@@ -30,7 +30,7 @@
 #include "observer/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/access/ob_multiple_scan_merge.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
-#include "observer/ob_server_event_history_table_operator.h"
+#include "share/ob_structured_event_logger.h"
 #include "share/ob_tenant_timezone_mgr.h"
 #include "observer/report/ob_tablet_table_updater.h" // for ObTabletTableUpdater
 #include "lib/charset/ob_charset.h"

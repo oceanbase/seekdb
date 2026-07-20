@@ -21,7 +21,6 @@
 #include "sql/optimizer/ob_insert_log_plan.h"
 #include "sql/optimizer/ob_update_log_plan.h"
 #include "sql/optimizer/ob_explain_log_plan.h"
-#include "sql/optimizer/ob_help_log_plan.h"
 using namespace oceanbase;
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
@@ -85,14 +84,6 @@ ObLogPlan *ObLogPlanFactory::create(ObOptimizerContext &ctx, const ObDMLStmt &st
       ret = new (ptr) ObExplainLogPlan(ctx, &stmt);
     } else {
       SQL_OPT_LOG_RET(WARN, OB_ALLOCATE_MEMORY_FAILED, "Allocate ObExplainLogPlan error");
-    }
-    break;
-  }
-  case stmt::T_HELP: {
-    void *ptr = allocator_.alloc(sizeof(ObHelpLogPlan));
-    if (NULL != ptr) {
-      ret = new (ptr) ObHelpLogPlan(ctx, &stmt);
-    } else {
     }
     break;
   }

@@ -947,21 +947,11 @@ int ObOptStatManager::add_ds_stat_cache(const ObOptDSStat::Key &key,
 }
 
 
-int ObOptStatManager::update_opt_stat_gather_stat(const ObOptStatGatherStat &gather_stat)
-{
-  return stat_service_.get_sql_service().update_opt_stat_gather_stat(gather_stat);
-}
-
 int ObOptStatManager::update_table_stat_failed_count(const uint64_t table_id,
                                                      const ObIArray<int64_t> &part_ids,
                                                      int64_t &affected_rows)
 {
   return stat_service_.get_sql_service().update_table_stat_failed_count(table_id, part_ids, affected_rows);
-}
-
-int ObOptStatManager::update_opt_stat_task_stat(const ObOptStatTaskInfo &task_info)
-{
-  return stat_service_.get_sql_service().update_opt_stat_task_stat(task_info);
 }
 
 int ObOptStatManager::get_system_stat(ObOptSystemStat &stat)

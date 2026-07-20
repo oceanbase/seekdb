@@ -27,9 +27,11 @@ class TimeZoneInfoImporter:
         self.sql_list = []
         self.tz_version_sql_list = []
         self.expect_count = [0, 0, 0, 0]
-        replace_str1 = 'TRUNCATE TABLE time_zone'
-        replace_str2 = 'INTO time_zone'
-        replace_str3 = 'ALTER TABLE time_zone_transition'
+        retained_tables = (
+            'time_zone_name',
+            'time_zone_transition',
+            'time_zone_transition_type',
+        )
         replace_count_str0 = 'time_zone count:'
         replace_count_str1 = 'time_zone_name count:'
         replace_count_str2 = 'time_zone_transition count:'
@@ -38,7 +40,22 @@ class TimeZoneInfoImporter:
             sql = ""
             for line in f_read:
                 if re.search('__all_sys_stat', line, re.IGNORECASE):
-                    self.tz_version_sql_list.append(line)
+                    if re.search(r'(?:INSERT|REPLACE)\s+INTO\s+oceanbase\.__all_sys_stat',
+                                 line, re.IGNORECASE):
+                        version_match = re.search(
+                            r"['\"]current_timezone_version['\"]\s*,\s*([0-9]+)\s*,",
+                            line, re.IGNORECASE)
+                        if version_match is None:
+                            raise ValueError(
+                                'failed to parse current_timezone_version SQL: {0}'.format(line))
+                        self.tz_version_sql_list.append(
+                            "REPLACE INTO oceanbase.__all_sys_stat"
+                            "(data_type, name, value, info) VALUES"
+                            "(5, 'current_timezone_version', {0}, "
+                            "'current time zone version');\n".format(
+                                version_match.group(1)))
+                    else:
+                        self.tz_version_sql_list.append(line)
                 elif re.search('count:', line, re.IGNORECASE):
                     if re.search(replace_count_str3, line, re.IGNORECASE):
                         self.expect_count[3] = int(line.replace(replace_count_str3, ''))
@@ -49,14 +66,28 @@ class TimeZoneInfoImporter:
                     elif re.search(replace_count_str0, line, re.IGNORECASE):
                         self.expect_count[0] = int(line.replace(replace_count_str0, ''))
                 else:
-                    if re.search(replace_str1, line, re.IGNORECASE):#replace truncate to delete from
-                        new_line = line.replace(replace_str1, 'DELETE FROM oceanbase.__all_tenant_time_zone')
-                    elif re.search(replace_str2, line, re.IGNORECASE):# replace mysql table name to ob table name
-                        new_line = line.replace(replace_str2, 'INTO  oceanbase.__all_tenant_time_zone')
-                    elif re.search(replace_str3, line, re.IGNORECASE):# delete alter table...order by
+                    # The MySQL time_zone table only stores the leap-second flag,
+                    # which SeekDB does not use.  Ignore that table while importing
+                    # the three tables that are needed for named-zone conversion.
+                    if re.search(r'(TRUNCATE\s+TABLE|(?:INSERT|REPLACE)\s+INTO)\s+time_zone\b',
+                                 line, re.IGNORECASE):
+                        new_line = ''
+                    elif re.search(r'ALTER\s+TABLE\s+time_zone_transition\b',
+                                   line, re.IGNORECASE):
                         new_line = ''
                     else:
                         new_line = line
+                        for table_name in retained_tables:
+                            new_line = re.sub(
+                                r'(TRUNCATE\s+TABLE\s+)' + table_name + r'\b',
+                                r'\1oceanbase.__all_' + table_name,
+                                new_line,
+                                flags=re.IGNORECASE)
+                            new_line = re.sub(
+                                r'(INTO\s+)' + table_name + r'\b',
+                                r'\1oceanbase.__all_' + table_name,
+                                new_line,
+                                flags=re.IGNORECASE)
                     new_line = new_line.replace('tid', "0")
                     sql += new_line
                     if ";" in new_line:
@@ -115,12 +146,10 @@ class TimeZoneInfoImporter:
 
     def check_result(self):
         self.result_count = [0, 0, 0, 0]
-        self.execute_check_sql("oceanbase.__all_tenant_time_zone", 0)
-        self.execute_check_sql("oceanbase.__all_tenant_time_zone_name", 1)
-        self.execute_check_sql("oceanbase.__all_tenant_time_zone_transition", 2)
-        self.execute_check_sql("oceanbase.__all_tenant_time_zone_transition_type", 3)
-        if self.expect_count[0] == self.result_count[0] \
-            and self.expect_count[1] == self.result_count[1] \
+        self.execute_check_sql("oceanbase.__all_time_zone_name", 1)
+        self.execute_check_sql("oceanbase.__all_time_zone_transition", 2)
+        self.execute_check_sql("oceanbase.__all_time_zone_transition_type", 3)
+        if self.expect_count[1] == self.result_count[1] \
             and self.expect_count[2] == self.result_count[2] \
             and self.expect_count[3] == self.result_count[3]:
             try:

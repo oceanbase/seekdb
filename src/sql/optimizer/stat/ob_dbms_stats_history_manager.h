@@ -37,11 +37,9 @@ enum ObOptStatsDeleteFlags
   DELETE_TAB_STAT_HISTORY    = 1,
   DELETE_COL_STAT_HISTORY    = 1 << 1,
   DELETE_HIST_STAT_HISTORY   = 1 << 2,
-  DELETE_TASK_GATHER_HISTORY = 1 << 3,
-  DELETE_TAB_GATHER_HISTORY  = 1 << 4,
-  DELETE_USELESS_COL_STAT    = 1 << 5,
-  DELETE_USELESS_HIST_STAT   = 1 << 6,
-  DELETE_ALL                 = (1 << 7) - 1
+  DELETE_USELESS_COL_STAT    = 1 << 3,
+  DELETE_USELESS_HIST_STAT   = 1 << 4,
+  DELETE_ALL                 = (1 << 5) - 1
 };
 class ObDbmsStatsHistoryManager
 {

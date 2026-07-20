@@ -539,9 +539,6 @@ public:
   
   static int update_system_stats_cache();
 
-  static void update_optimizer_gather_stat_info(const ObOptStatTaskInfo *task_info,
-                                                const ObOptStatGatherStat *gather_stat);
-
   static int convert_vaild_ident_name(common::ObIAllocator &allocator,
                                       const common::ObDataTypeCastParams &dtc_params,
                                       ObString &ident_name,

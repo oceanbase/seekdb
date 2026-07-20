@@ -94,7 +94,7 @@
 #ifndef _OB_TENANT_EVENT_DEF_H
 #define _OB_TENANT_EVENT_DEF_H 1
 #include <stdint.h>
-#include "rootserver/ob_tenant_event_history_table_operator.h" // TENANT_EVENT_ADD
+#include "share/ob_structured_event_logger.h" // TENANT_EVENT_ADD
 namespace oceanbase
 {
 namespace tenant_event

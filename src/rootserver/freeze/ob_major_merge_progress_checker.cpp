@@ -21,8 +21,7 @@
 #include "share/tablet/ob_tablet_table_iterator.h"
 #include "storage/compaction/ob_server_compaction_event_history.h"
 #include "share/ob_tablet_meta_table_compaction_operator.h"
-#include "observer/ob_server_event_history_table_operator.h"
-#include "rootserver/ob_rs_event_history_table_operator.h"
+#include "share/ob_structured_event_logger.h"
 #include "rootserver/freeze/ob_major_merge_info_manager.h"
 
 namespace oceanbase

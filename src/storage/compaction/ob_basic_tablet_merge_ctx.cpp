@@ -27,7 +27,7 @@
 #include "share/schema/ob_tenant_schema_service.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
 #include "storage/tablet/ob_mds_scan_param_helper.h"
-#include "observer/ob_server_event_history_table_operator.h"
+#include "share/ob_structured_event_logger.h"
 #include "storage/compaction/filter/ob_mds_info_compaction_filter.h"
 #include "storage/truncate_info/ob_mds_info_distinct_mgr.h"
 #include "storage/compaction/ob_sstable_merge_info_mgr.h"

@@ -118,16 +118,12 @@ int ObDBMSJobUtils::update_for_end(
 {
   int ret = OB_SUCCESS;
 
-  ObMySQLTransaction trans;
   ObDMLSqlSplicer dml1;
   ObSqlString sql1;
-  ObDMLSqlSplicer dml2;
-  ObSqlString sql2;
   int64_t affected_rows = 0;
   const int64_t now = ObTimeUtility::current_time();
-  int64_t next_date;
-  int64_t delay;
 
+  UNUSED(err);
   UNUSED(errmsg);
 
   CK (OB_NOT_NULL(sql_proxy_));
@@ -152,32 +148,7 @@ int ObDBMSJobUtils::update_for_end(
   OZ (dml1.add_column("total", job_info.total_));
   OZ (dml1.splice_update_sql(OB_ALL_JOB_TNAME, sql1));
 
-  char exec_addr[MAX_IP_PORT_LENGTH];
-  int64_t offset = 0;
-  OX (memset(exec_addr, 0, MAX_IP_PORT_LENGTH));
-  OX (offset = GCTX.self_addr().to_string(exec_addr, MAX_IP_PORT_LENGTH));
-  CK (offset < MAX_IP_PORT_LENGTH);
-  OZ (dml2.add_gmt_create(now));
-  OZ (dml2.add_gmt_modified(now));
-  OZ (dml2.add_pk_column("job", job_info.job_));
-  OZ (dml2.add_time_column("time", now));
-  OZ (dml2.add_pk_column("exec_addr", ObHexEscapeSqlStr(ObString(exec_addr))), ObString(exec_addr));
-  OZ (dml2.add_column("code", err));
-  OZ (dml2.add_column(
-    "message", ObHexEscapeSqlStr(errmsg.empty() ? ObString("SUCCESS") : errmsg)));
-  OZ (dml2.splice_insert_sql(OB_ALL_JOB_LOG_TNAME, sql2));
-
-  OZ (trans.start(sql_proxy_, true));
-
-  OZ (trans.write(sql1.ptr(), affected_rows), sql1);
-  OZ (trans.write(sql2.ptr(), affected_rows), sql2);
-
-  if (trans.is_started()) {
-    int ret = OB_SUCCESS;
-    if (OB_FAIL(trans.end(true))) {
-      LOG_WARN("failed to end transaction", K(ret));
-    }
-  }
+  OZ (sql_proxy_->write(sql1.ptr(), affected_rows), sql1);
 
   return ret;
 }
