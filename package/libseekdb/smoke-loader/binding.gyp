@@ -42,7 +42,7 @@
           "libraries": [ "-lseekdb" ],
           "link_settings": {
             "libraries": [
-              "-Wl,-rpath,$ORIGIN"
+              "-Wl,-rpath,$$ORIGIN"
             ]
           },
           "product_dir": '<(pack_dir)'

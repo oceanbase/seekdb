@@ -121,7 +121,7 @@ int create_index(obvsag::VectorIndexPtr& index_handler, int index_type,
 
 int validate_create_index(const CreateIndexParam &param, std::string &err_msg)
 {
-#ifdef OB_BUILD_CDC_DISABLE_VSAG
+#if defined(OB_BUILD_CDC_DISABLE_VSAG) && !defined(OB_BUILD_EMBED_MODE)
   INIT_SUCC(ret);
   UNUSED(param);
   err_msg.clear();

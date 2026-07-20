@@ -20,7 +20,7 @@ ob_define(BUILD_CDC_ONLY OFF)
 # Deprecated no-op retained for compatibility with existing build invocations.
 ob_define(BUILD_EMBED_MODE OFF)
 if(BUILD_EMBED_MODE)
-  message(STATUS "BUILD_EMBED_MODE is deprecated and has no effect")
+  add_definitions(-DOB_BUILD_EMBED_MODE)
 endif()
 ob_define(OB_USE_CLANG ON)
 ob_define(OB_ERRSIM OFF)

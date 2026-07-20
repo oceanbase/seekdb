@@ -1,10 +1,6 @@
 # C API for SeekDB
 # Provides C API for multi-language bindings (Node.js N-API, FFI, Rust, Go, etc.)
 
-# Note: ENABLE_INITIAL_EXEC_TLS_MODEL removal is handled in src/CMakeLists.txt
-# before observer subdirectory is added, ensuring liboceanbase.so uses local-dynamic TLS
-# TLS model is controlled by BUILD_EMBED_MODE in cmake/Env.cmake
-
 # Set source files
 set(FFI_SOURCES
   seekdb.cpp
@@ -67,9 +63,7 @@ if(APPLE)
   file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/seekdb_export.txt" "${SEEKDB_EXPORT_CONTENT}")
   set(SEEKDB_EXPORT_FILE "${CMAKE_CURRENT_BINARY_DIR}/seekdb_export.txt")
 
-  # macOS: use -force_load only for liboceanbase_static.a to avoid -all_load pulling in both
-  # oblib (with its snappy/lz4) and deps/3rd liblz4.a/libsnappy.a, which causes 68 duplicate symbols.
-  # Linking oceanbase_static without -all_load may yield undefined symbols; if so we need to revisit.
+  # macOS: use -force_load only for liboceanbase_static.a (avoid -all_load duplicate symbols).
   target_link_options(libseekdb PRIVATE "LINKER:-force_load,$<TARGET_FILE:oceanbase_static>")
   target_link_libraries(libseekdb
     PRIVATE
@@ -95,7 +89,7 @@ elseif(WIN32)
     "/WHOLEARCHIVE:$<TARGET_FILE:oceanbase_static>")
   # oceanbase_static is EXCLUDE_FROM_ALL and only referenced via LINK_OPTIONS; some generators do not
   # infer a build dependency, so ninja may link libseekdb before oceanbase_static.lib exists.
-  add_dependencies(libseekdb oceanbase_static)
+  add_dependencies(libseekdb oceanbase_static zstd_1_3_8_objs)
   get_filename_component(_seekdb_clang_bin_dir ${CMAKE_CXX_COMPILER} DIRECTORY)
   get_filename_component(_seekdb_llvm_root ${_seekdb_clang_bin_dir} DIRECTORY)
   file(GLOB _seekdb_clang_rt "${_seekdb_llvm_root}/lib/clang/*/lib/windows/clang_rt.builtins-x86_64.lib")
@@ -114,8 +108,6 @@ elseif(WIN32)
     ob_malloc
     synchronization
     ${CMAKE_BINARY_DIR}/deps/oblib/src/lib/compress/zstd_1_3_8/zstd_1_3_8_objs.lib
-    ${CMAKE_BINARY_DIR}/deps/oblib/src/lib/compress/zstd/zstd_objs.lib
-    ${CMAKE_BINARY_DIR}/deps/oblib/src/lib/compress/lz4/lz4-all.lib
   )
   # oceanbase_static PUBLIC links Hyperscan (see src/observer/CMakeLists.txt); DLL link does not inherit it.
   if(HYPERSCAN_LIB)
