@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
-#include "rootserver/ob_local_management_service.h"
+#include "rootserver/ob_root_service.h"
 #include "rootserver/parallel_ddl/ob_create_index_helper.h"
 #include "rootserver/ob_table_creator.h"
 #include "rootserver/freeze/ob_major_freeze_helper.h"
@@ -27,6 +27,7 @@
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "share/schema/ob_table_sql_service.h"
 #include "sql/resolver/ob_resolver_utils.h"
+#include "share/table/ob_ttl_util.h"
 #include "rootserver/ob_create_index_on_empty_table_helper.h"
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
@@ -233,21 +234,25 @@ int ObCreateIndexHelper::check_table_legitimacy_()
 {
   int ret = OB_SUCCESS;
   uint64_t table_id = OB_INVALID_ID;
-  bool in_runtime_space = true;
+  bool in_tenant_space = true;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_ISNULL(orig_data_table_schema_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("data table schea is null", KR(ret), KP(orig_data_table_schema_));
   } else if (FALSE_IT(table_id = orig_data_table_schema_->get_table_id())) {
-  } else if (OB_FAIL(ObSysTableChecker::is_runtime_space_table_id(table_id, in_runtime_space))) {
-    LOG_WARN("fail to check table in runtime space", KR(ret), K(table_id));
+  } else if (OB_FAIL(ObSysTableChecker::is_tenant_space_table_id(table_id, in_tenant_space))) {
+    LOG_WARN("fail to check table in tenant space", KR(ret), K(table_id));
   } else if (OB_UNLIKELY(is_inner_table(table_id))) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("create index on inner table not support", KR(ret), K(table_id));
   } else if (OB_UNLIKELY(!arg_.is_inner_ && orig_data_table_schema_->is_in_recyclebin())) {
     ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
     LOG_WARN("can not add index on table in recyclebin", KR(ret), K_(arg));
+  // There used to be check_restore_point_allow() here, but it is currently useless.
+  // Meanwhile, the frequent addition and deletion of __all_acquired_snapshot during the index creation
+  // will cause it's buffer table to bloat,
+  // resulting in performance decline during long periods of concentrated index building.
   } else if (!orig_data_table_schema_->check_can_do_ddl()) {
     ret = OB_OP_NOT_ALLOW;
     LOG_USER_ERROR(OB_OP_NOT_ALLOW, "execute ddl while table is executing offline ddl");
@@ -274,6 +279,7 @@ int ObCreateIndexHelper::is_local_generate_schema_(bool &is_local_generate)
     LOG_WARN("orig data table schema is nullptr", KR(ret));
   } else if (INDEX_TYPE_NORMAL_LOCAL == arg_.index_type_
       || INDEX_TYPE_UNIQUE_LOCAL == arg_.index_type_
+      || INDEX_TYPE_DOMAIN_CTXCAT_DEPRECATED == arg_.index_type_
       || INDEX_TYPE_SPATIAL_LOCAL == arg_.index_type_
       || is_fts_index(arg_.index_type_)
       || is_multivalue_index(arg_.index_type_)) {
@@ -486,7 +492,7 @@ int ObCreateIndexHelper::operate_schemas_()
         LOG_WARN("fail to alter table option", KR(ret));
       }
     }
-    const uint64_t data_format_version = DATA_CURRENT_VERSION;
+    uint64_t tenant_data_version = OB_INVALID_VERSION;
     if (FAILEDx(create_table_())) {
       LOG_WARN("fail to create table", KR(ret));
     } else if (index_schema.has_tablet() && OB_FAIL(create_tablets_())) {
@@ -494,6 +500,8 @@ int ObCreateIndexHelper::operate_schemas_()
     } else if (OB_ISNULL(new_arg_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("new arg is null", KR(ret));
+    } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_data_version))) {
+      LOG_WARN("fail to get data version", KR(ret));
     } else if (create_index_on_empty_table_opt_) {
       if (OB_FAIL(ObTabletBindingHelper::build_single_table_write_defensive(*new_data_table_schema_,
                                                                             index_schema.get_schema_version(),
@@ -507,7 +515,7 @@ int ObCreateIndexHelper::operate_schemas_()
                                                               nullptr/*del_data_tablet_ids*/,
                                                               &index_schema,
                                                               arg_.parallelism_,
-                                                              data_format_version,
+                                                              tenant_data_version,
                                                               allocator_,
                                                               task_record_))) {
       LOG_WARN("fail to submit build local index task", KR(ret));
@@ -549,6 +557,8 @@ int ObCreateIndexHelper::create_table_()
               index_schema, get_trans_(),
               ddl_stmt_str, true/*need_sync_schema_version*/, false/*is_truncate_table*/))) {
       LOG_WARN("fail to create table", KR(ret));
+    } else if (OB_FAIL(schema_service_impl->get_table_sql_service().insert_temp_table_info(get_trans_(), index_schema))) {
+      LOG_WARN("insert temp table info", KR(ret), K(index_schema));
     } else if (OB_FAIL(tsi_generator->get_current_version(last_schema_version))) {
       LOG_WARN("fail to get end version", KR(ret), K_(arg));
     } else if (OB_UNLIKELY(last_schema_version <= 0)) {
@@ -577,8 +587,8 @@ int ObCreateIndexHelper::create_tablets_()
     LOG_WARN("orig_data_table_schema is null", KR(ret));
   } else if(OB_FAIL(ObMajorFreezeHelper::get_frozen_scn(frozen_scn))) {
     LOG_WARN("fail to get frozen status for create tablet", KR(ret));
-  } else if (OB_FAIL(schema_service_->get_runtime_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get runtime schema guard", KR(ret));
+  } else if (OB_FAIL(schema_service_->get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get tenant schema guard", KR(ret));
   } else if (create_index_on_empty_table_opt_ 
              && OB_FAIL(ObCreateIndexOnEmptyTableHelper::get_major_frozen_scn( frozen_scn))) {
     // we will create empty major when create index on empty table, so we need to get timestamp as major version to make sure data in the index table is consistent with the data table.
@@ -586,10 +596,22 @@ int ObCreateIndexHelper::create_tablets_()
   } else {
     ObTableSchema &index_schema = index_schemas_.at(0);
     ObTableCreator table_creator(frozen_scn, get_trans_());
+    const ObTablegroupSchema *data_tablegroup_schema = NULL; // keep NULL if no tablegroup
     ObSEArray<bool, 1> need_create_empty_majors;
-    const uint64_t data_format_version = DATA_CURRENT_VERSION;
+    uint64_t tenant_data_version = 0;
     if (OB_FAIL(table_creator.init(true/*need_tablet_cnt_check*/))) {
       LOG_WARN("fail to init table craetor", KR(ret));
+    } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_data_version))) {
+      LOG_WARN("fail to get data version", KR(ret));
+    } else if (OB_INVALID_ID != orig_data_table_schema_->get_tablegroup_id()) {
+      if (OB_FAIL(schema_guard_wrapper_.get_tablegroup_schema(
+          orig_data_table_schema_->get_tablegroup_id(),
+          data_tablegroup_schema))) {
+        LOG_WARN("get tablegroup_schema failed", KR(ret), KPC(orig_data_table_schema_));
+      } else if (OB_ISNULL(data_tablegroup_schema)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("data_tablegroup_schema is null", KR(ret), KPC(orig_data_table_schema_));
+      }
     }
     if (OB_FAIL(ret)) {
     } else if (index_schema.is_index_local_storage()) {
@@ -600,13 +622,13 @@ int ObCreateIndexHelper::create_tablets_()
       } else if (OB_FAIL(table_creator.add_create_tablets_of_local_aux_tables_arg(
                                        schemas,
                                        orig_data_table_schema_,
-                                       data_format_version,
+                                       tenant_data_version,
                                        need_create_empty_majors))) {
         LOG_WARN("create table tablet failed", KR(ret), K(index_schema));
       }
     } else {
-      if (OB_FAIL(table_creator.add_create_tablets_of_table_arg(index_schema, data_format_version,
-                                       create_index_on_empty_table_opt_/*need create major sstable*/))) {
+      if (OB_FAIL(table_creator.add_create_tablets_of_table_arg(index_schema,
+                                       tenant_data_version, create_index_on_empty_table_opt_/*need create major sstable*/))) {
         LOG_WARN("create table tablet failed", KR(ret), K(index_schema));
       }
     }
@@ -615,6 +637,24 @@ int ObCreateIndexHelper::create_tablets_()
     }
   }
   RS_TRACE(create_tablets);
+  return ret;
+}
+
+int ObCreateIndexHelper::add_index_name_to_cache_()
+{
+  int ret = OB_SUCCESS;
+  ObIndexNameChecker &checker = ddl_service_->get_index_name_checker();
+  if (OB_FAIL(check_inner_stat_())) {
+    LOG_WARN("fail to check inner stat", KR(ret));
+  } else if (OB_UNLIKELY(index_schemas_.count() != 1)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("index schemas count not expected", KR(ret), K(index_schemas_.count()));
+  } else {
+    ObTableSchema &index_schema = index_schemas_.at(0);
+    if (OB_FAIL(checker.add_index_name(index_schema))) {
+      LOG_WARN("fail to add index name", KR(ret), K(index_schema));
+    }
+  }
   return ret;
 }
 
@@ -697,8 +737,18 @@ int ObCreateIndexHelper::generate_schemas_()
 int ObCreateIndexHelper::clean_on_fail_commit_()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
+  // Because index name is added to cache before trans commit,
+  // it will remain garbage in cache when trans commit failed and false alarm will occur.
+  //
+  // To solve this problem:
+  // 1. check_index_name_exist() will double check by inner_sql and erase garbage if index name conflicts.
+  // 2. (Fully unnecessary) clean up index name cache when trans commit failed.
+  int tmp_ret = OB_SUCCESS;
+  if (OB_ISNULL(ddl_service_)) {
+    tmp_ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ddl_service_ is null", KR(tmp_ret));
+  } else if (OB_TMP_FAIL(ddl_service_->get_index_name_checker().reset_cache())) {
+    LOG_ERROR("fail to reset cache", KR(ret), KR(tmp_ret));
   }
   return ret;
 }
@@ -707,6 +757,8 @@ int ObCreateIndexHelper::operation_before_commit_() {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
+  } else if (OB_FAIL(add_index_name_to_cache_())) {
+    LOG_WARN("fail to add index name to cache", KR(ret));
   }
   return ret;
 }

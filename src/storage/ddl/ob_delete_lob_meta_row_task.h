@@ -19,7 +19,7 @@
 
 #include "storage/access/ob_table_access_context.h"
 #include "storage/ob_storage_rpc_arg.h"
-#include "observer/scheduler/ob_dag_scheduler.h"
+#include "observer/scheduler/ob_tenant_dag_scheduler.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 #include "storage/compaction/ob_column_checksum_calculator.h"
 #include "storage/ddl/ob_ddl_redo_log_writer.h"
@@ -43,7 +43,7 @@ public:
     allocator_("CompleteDataPar", OB_MALLOC_NORMAL_BLOCK_SIZE)
   {}
   ~ObDeleteLobMetaRowParam() { destroy(); }
-  int init(const obcall::ObDDLLocalBuildArg &arg);
+  int init(const obcall::ObDDLBuildSingleReplicaRequestArg &arg);
   
   bool is_valid() const
   {
@@ -95,15 +95,15 @@ class ObDeleteLobMetaRowDag final: public share::ObIDag
 public:
   ObDeleteLobMetaRowDag();
   ~ObDeleteLobMetaRowDag();
-  int init(const obcall::ObDDLLocalBuildArg &arg);
+  int init(const obcall::ObDDLBuildSingleReplicaRequestArg &arg);
   virtual uint64_t hash() const override;
   bool operator==(const ObIDag& other) const override;
   bool is_inited() const { return is_inited_; }
   int fill_dag_key(char *buf, const int64_t buf_len) const override;
-  int report_local_build_status();
+  int report_replica_build_status();
   void handle_init_failed_ret_code(int ret) { param_.delete_lob_meta_ret_ = ret; }
   virtual int fill_info_param(compaction::ObIBasicInfoParam *&out_param, ObIAllocator &allocator) const override;
-  virtual bool uses_reserved_allocator() const { return false; }
+  virtual bool is_ha_dag() const { return false; }
   virtual int create_first_task() override;
   virtual bool ignore_warning() override;
 private:

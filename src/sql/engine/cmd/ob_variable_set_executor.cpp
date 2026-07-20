@@ -16,9 +16,10 @@
 
 #define USING_LOG_PREFIX  SQL_ENG
 
+#include "share/ob_sql_client_decorator.h"
 #include "sql/engine/cmd/ob_variable_set_executor.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
-#include "rootserver/ob_local_management_service.h"
+#include "rootserver/ob_rs_serial_call.h"
+#include "rootserver/ob_root_service.h"
 #include "observer/ob_server.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
@@ -170,9 +171,40 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
             const bool is_set_stmt = true;
             if (OB_FAIL(session->get_sys_variable_by_name(node.variable_name_, sys_var))) {
               if (OB_ERR_SYS_VARIABLE_UNKNOWN == ret) {
-                LOG_USER_ERROR(OB_ERR_SYS_VARIABLE_UNKNOWN,
-                               node.variable_name_.length(),
-                               node.variable_name_.ptr());
+                // session did not find a system variable with this name, possibly new version data sent over during proxy synchronization,
+                // Therefore first check in the system table __all_sys_variable
+                ret = OB_SUCCESS;
+                
+                
+                auto &sql_client_retry_weak = *sql_proxy;
+                ObObj tmp_val;
+                ObSqlString sql;
+                SMART_VAR(ObMySQLProxy::MySQLResult, res) {
+                  sqlclient::ObMySQLResult *result = NULL;
+                  if (OB_FAIL(sql.assign_fmt("select 1 from %s where name='%.*s';",
+                      OB_ALL_SYS_VARIABLE_TNAME,
+                      node.variable_name_.length(), node.variable_name_.ptr()))) {
+                    LOG_WARN("assign sql string failed", K(ret));
+                  } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
+                    LOG_WARN("execute sql failed", K(sql), K(ret));
+                  } else if (OB_ISNULL(result = res.get_result())) {
+                    ret = OB_ERR_UNEXPECTED;
+                    LOG_WARN("fail to get sql result", K(ret));
+                  } else if (OB_FAIL(result->next())) {
+                    if (OB_ITER_END == ret) {
+                      // The system variable was not found in the internal table, indicating that this is not a system variable
+                      ret = OB_ERR_SYS_VARIABLE_UNKNOWN;
+                      LOG_USER_ERROR(OB_ERR_SYS_VARIABLE_UNKNOWN, node.variable_name_.length(), node.variable_name_.ptr());
+                    } else {
+                      LOG_WARN("get result failed", K(ret));
+                    }
+                  } else {
+                    // Found in system table __all_sys_variable, indicating it is due to version compatibility,
+                    // Return value set to OB_SYS_VARS_MAYBE_DIFF_VERSION, set it to OB_SUCCESS later
+                    ret = OB_SYS_VARS_MAYBE_DIFF_VERSION;
+                    LOG_INFO("try to set sys var from new version, ignore it", K(ret), K(node.variable_name_));
+                  }
+                }
               } else {
                 LOG_WARN("fail to get system variable", K(ret), K(node.variable_name_));
               }
@@ -225,6 +257,8 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
                     if (OB_ERR_WRONG_VALUE_FOR_VAR == ret_ac) {
                       ret = ret_ac;
                     } else if (OB_OP_NOT_ALLOW == ret_ac) {
+                      ret = ret_ac;
+                    } else if (OB_TRANS_XA_ERR_COMMIT == ret_ac) {
                       ret = ret_ac;
                     } else if (OB_ERR_UNEXPECTED == ret_ac) {
                       ret = ret_ac;
@@ -289,6 +323,10 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
               }
             }
           }
+        }
+        if (OB_SYS_VARS_MAYBE_DIFF_VERSION == ret) {
+          // Version compatibility, ret changed to OB_SUCCESS to allow for loop to continue
+          ret = OB_SUCCESS;
         }
       }
       if (OB_SUCC(ret)) {
@@ -401,7 +439,8 @@ int ObVariableSetExecutor::execute_subquery_expr(ObExecContext &ctx,
     SMART_VAR(ObISQLClient::ReadResult, res) {
       common::sqlclient::ObMySQLResult *result = NULL;
       conn->set_check_priv(true);
-      if (OB_FAIL(conn->execute_read(subquery_expr.ptr(), res))) {
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(conn->execute_read(subquery_expr.ptr(), res))) {
         LOG_WARN("failed to execute sql", K(ret), K(subquery_expr));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -625,7 +664,12 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
 
     int64_t sys_var_val_length = OB_MAX_SYS_VAR_VAL_LENGTH;
     if (set_var.var_name_ == OB_SV_TCP_INVITED_NODES) {
-      sys_var_val_length = OB_MAX_TCP_INVITED_NODES_LENGTH;
+      uint64_t data_version = 0;
+      if (OB_FAIL(GET_MIN_DATA_VERSION(data_version))) {
+        LOG_WARN("fail to get tenant data version", KR(ret));
+      } else {
+        sys_var_val_length = OB_MAX_TCP_INVITED_NODES_LENGTH;
+      }
     }
     if (OB_SUCC(ret) && OB_UNLIKELY(val_str.length() > sys_var_val_length)) {
       ret = OB_SIZE_OVERFLOW;
@@ -646,7 +690,7 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
     if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
       LOG_WARN("task exec ctx is NULL", K(ret), K(task_exec_ctx));
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->modify_system_variable(arg); }))) {
+    } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->modify_system_variable(arg); }))) {
       LOG_WARN("rpc proxy alter system variable failed", K(ret));
     } else {}
   }
@@ -706,9 +750,13 @@ int ObVariableSetExecutor::check_and_convert_sys_var(ObExecContext &ctx,
 
   //check readonly
   if (is_set_stmt && sys_var.is_readonly()) {
-    ret = OB_ERR_INCORRECT_GLOBAL_LOCAL_VAR;
-    LOG_USER_ERROR(OB_ERR_INCORRECT_GLOBAL_LOCAL_VAR, set_var.var_name_.length(), set_var.var_name_.ptr(),
-                   (int)strlen("read only"), "read only");
+    if (sys_var.is_with_upgrade() && GCONF.in_upgrade_mode()) {
+      // do nothing ...
+    } else {
+      ret = OB_ERR_INCORRECT_GLOBAL_LOCAL_VAR;
+      LOG_USER_ERROR(OB_ERR_INCORRECT_GLOBAL_LOCAL_VAR, set_var.var_name_.length(), set_var.var_name_.ptr(),
+                     (int)strlen("read only"), "read only");
+    }
   }
 
   //check scope
@@ -739,6 +787,16 @@ int ObVariableSetExecutor::check_and_convert_sys_var(ObExecContext &ctx,
     }
   }
 
+  if (OB_FAIL(ret)) {
+  } else if (set_var.var_name_ == OB_SV_DEFAULT_STORAGE_ENGINE) {
+    static const common::ObString DEFAULT_VALUE_STORAGE_ENGINE("OceanBase");
+    const ObString new_value = out_val.get_string();
+    if (new_value.case_compare(DEFAULT_VALUE_STORAGE_ENGINE) != 0) {
+      ret = OB_ERR_PARAM_VALUE_INVALID;
+      LOG_USER_ERROR(OB_ERR_PARAM_VALUE_INVALID);
+    }
+  }
+
   return ret;
 }
 
@@ -756,14 +814,6 @@ int ObVariableSetExecutor::cast_value(ObExecContext &ctx,
   } else if (OB_ISNULL(ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("my session is null");
-  } else if (var_node.is_set_default_
-             && var_node.variable_name_ == OB_SV_DEFAULT_STORAGE_ENGINE) {
-    const ObObj &def_val = sys_var.get_global_default_value();
-    DEFINE_CAST_CTX();
-    if (OB_FAIL(ObObjCaster::to_type(sys_var.get_data_type(), cast_ctx, def_val, out_val))) {
-      LOG_ERROR("failed to cast fixed storage engine default", K(ret),
-                K(var_node.variable_name_), K(def_val), K(sys_var.get_data_type()));
-    }
   } else if (var_node.is_set_default_) {
     
     if (ObSetVar::SET_SCOPE_SESSION == var_node.set_scope_) {
@@ -771,11 +821,11 @@ int ObVariableSetExecutor::cast_value(ObExecContext &ctx,
       const ObSysVarSchema *var_schema = NULL;
       const ObDataTypeCastParams dtc_params =
             ObBasicSessionInfo::create_dtc_params(ctx.get_my_session());
-      if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
+      if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
                   schema_guard))) {
         LOG_WARN("get schema guard failed", K(ret));
-      } else if (OB_FAIL(schema_guard.get_system_variable(var_node.variable_name_, var_schema))) {
-        LOG_WARN("get runtime system variable failed", K(ret), K(var_node.variable_name_));
+      } else if (OB_FAIL(schema_guard.get_tenant_system_variable(var_node.variable_name_, var_schema))) {
+        LOG_WARN("get tenant system variable failed", K(ret), K(var_node.variable_name_));
       } else if (OB_FAIL(var_schema->get_value(&calc_buf, dtc_params, out_val))) {
         LOG_WARN("get value from sysvar schema failed", K(ret));
       }
@@ -830,7 +880,19 @@ int ObVariableSetExecutor::process_session_autocommit_hook(ObExecContext &exec_c
       LOG_USER_ERROR(OB_ERR_WRONG_VALUE_FOR_VAR, (int)strlen(OB_SV_AUTOCOMMIT), OB_SV_AUTOCOMMIT,
                      (int)strlen(autocommit_str), autocommit_str);
     } else {
-      if (false == orig_ac && true == in_trans && 1 == autocommit) {
+      // in xa trans
+      if (in_trans && my_session->associated_xa()) {
+        const transaction::ObXATransID xid = my_session->get_xid();
+        // not allow to set autocommit to on
+        if (false == orig_ac && 1 == autocommit) {
+          ret = OB_TRANS_XA_ERR_COMMIT;
+          LOG_WARN("not allow to set autocommit on in xa trans", K(ret), K(xid));
+        } else if (true == orig_ac && 1 == autocommit) {
+          // do nothing
+        } else {
+          LOG_INFO("set autocommit off in xa trans", K(ret), K(xid));
+        }
+      } else if (false == orig_ac &&  true == in_trans && 1 == autocommit) {
         // set autocommit = 1 won't clear next scope transaction settings:
         // `set transaction read only`
         // `set transaction isolation level`
@@ -993,7 +1055,7 @@ int ObVariableSetExecutor::ObValidatePasswordCtx::init()
     LOG_WARN("schema_service_ is null");
   } else {
     ObSchemaGetterGuard schema_guard;
-    if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
       LOG_WARN("get schema guard failed", K(ret));
     } else if (OB_FAIL(get_current_val(schema_guard,
                                        share::SYS_VAR_VALIDATE_PASSWORD_LENGTH,
@@ -1026,7 +1088,7 @@ int ObVariableSetExecutor::ObValidatePasswordCtx::get_current_val(
   int ret = OB_SUCCESS;
   const schema::ObSysVarSchema *var_schema = NULL;
   ObObj val_obj;
-  if (OB_FAIL(schema_guard.get_system_variable(var_id, var_schema))) {
+  if (OB_FAIL(schema_guard.get_tenant_system_variable(var_id, var_schema))) {
     LOG_WARN("fail to get system variable", K(ret), K(var_id));
   } else if (OB_ISNULL(var_schema)) {
     ret = OB_ERR_UNEXPECTED;

@@ -349,7 +349,7 @@ public:
   // transaction context, and carries it back after execution, for dead lock detect use
   virtual int add_conflict_trans_id(const transaction::ObTransID conflict_trans_id);
   void reset_conflict_trans_ids();
-  int get_conflict_trans_ids(common::ObIArray<transaction::ObTransIDAndAddr> &array);
+  int get_conflict_trans_ids(common::ObIArray<transaction::ObTransID> &array);
   virtual int read_lock_yield()
   {
     return ATOMIC_LOAD(&end_code_);
@@ -407,8 +407,8 @@ public:
   int log_submitted(const ObRedoLogSubmitHelper &helper);
   int sync_log_succ(const share::SCN scn, const ObCallbackScopeArray &callbacks);
   void sync_log_fail(const ObCallbackScopeArray &callbacks, const share::SCN &max_applied_scn);
-  virtual void set_trans_ctx(transaction::ObPartTransCtx *ctx);
-  virtual transaction::ObPartTransCtx *get_trans_ctx() const { return ctx_; }
+  virtual void set_trans_ctx(transaction::ObTxCtx *ctx);
+  virtual transaction::ObTxCtx *get_trans_ctx() const { return ctx_; }
   virtual void inc_truncate_cnt() override { truncate_cnt_++; }
   int get_memtable_key_arr(transaction::ObMemtableKeyArray &memtable_key_arr);
   uint64_t get_lock_for_read_retry_count() const { return lock_for_read_retry_count_; }
@@ -533,7 +533,6 @@ public:
                   const share::SCN &scn);
   int recover_from_table_lock_durable_info(const ObTableLockInfo &table_lock_info);
   int get_table_lock_store_info(ObTableLockInfo &table_lock_info);
-  int get_table_lock_for_reserved(ObTableLockInfo &table_lock_info, const ObIArray<common::ObTabletID> &tablet_list);
   // for deadlock detect.
   void set_table_lock_killed() { lock_mem_ctx_.set_killed(); }
   bool is_table_lock_killed() const { return lock_mem_ctx_.is_killed(); }
@@ -592,7 +591,7 @@ private:
   ObMemtableCtxCbAllocator ctx_cb_allocator_;
   ObRedoLogGenerator log_gen_;
   RetryInfo retry_info_;
-  transaction::ObPartTransCtx *ctx_;
+  transaction::ObTxCtx *ctx_;
   int64_t truncate_cnt_;
   // the retry count of lock for read
   uint64_t lock_for_read_retry_count_;

@@ -17,7 +17,8 @@
 #ifndef OCEANBASE_LOGSERVICE_PALF_ENV_
 #define OCEANBASE_LOGSERVICE_PALF_ENV_
 #include <stdint.h>
-#include "logservice/ob_log_allocator.h"
+#include "rpc/frame/ob_req_transport.h"
+#include "logservice/ob_tenant_mutil_allocator.h"
 #include "lib/function/ob_function.h"
 #include "palf_env_impl.h"
 namespace oceanbase
@@ -26,6 +27,14 @@ namespace commom
 {
 class ObAddr;
 class ObIOManager;
+}
+
+namespace rpc
+{
+namespace frame
+{
+class ObReqTransport;
+}
 }
 
 namespace share

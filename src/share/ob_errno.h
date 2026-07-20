@@ -38,7 +38,6 @@ constexpr int OB_PACKET_NOT_SENT = -4011;
 constexpr int OB_SCHEMA_ERROR = -4029;
 constexpr int OB_TENANT_OUT_OF_MEM = -4030;
 constexpr int OB_UNKNOWN_OBJ = -4031;
-constexpr int OB_NO_MONITOR_DATA = -4032;
 constexpr int OB_TOO_MANY_SSTABLE = -4037;
 constexpr int OB_KILLED_BY_THROTTLING = -4039;
 constexpr int OB_USER_NOT_EXIST = -4042;
@@ -272,15 +271,11 @@ constexpr int OB_ENCODING_EST_SIZE_OVERFLOW = -4397;
 constexpr int OB_INVALID_SUB_PARTITION_TYPE = -4398;
 constexpr int OB_ERR_UNEXPECTED_UNIT_STATUS = -4399;
 constexpr int OB_AUTOINC_CACHE_NOT_EQUAL = -4400;
-constexpr int OB_ERR_KILL_CLIENT_SESSION = -4401;
-constexpr int OB_ERR_KILL_CLIENT_SESSION_FAILED = -4402;
 constexpr int OB_IMPROPER_OS_PARAM = -4403;
 constexpr int OB_IO_TIMEOUT = -4404;
-constexpr int OB_LICENSE_EXPIRED = -4406;
 constexpr int OB_MIGRATE_TX_DATA_NOT_CONTINUES = -4408;
 constexpr int OB_IMPORT_NOT_IN_SERVER = -4505;
 constexpr int OB_CONVERT_ERROR = -4507;
-constexpr int OB_BYPASS_TIMEOUT = -4510;
 constexpr int OB_RS_STATE_NOT_ALLOW = -4512;
 constexpr int OB_NO_REPLICA_VALID = -4515;
 constexpr int OB_NO_NEED_UPDATE = -4517;
@@ -312,9 +307,7 @@ constexpr int OB_MERGE_ALREADY_STARTED = -4548;
 constexpr int OB_ROOTSERVICE_EXIST = -4549;
 constexpr int OB_RS_SHUTDOWN = -4550;
 constexpr int OB_SERVER_MIGRATE_IN_DENIED = -4551;
-constexpr int OB_REBALANCE_TASK_CANT_EXEC = -4552;
 constexpr int OB_PARTITION_CNT_REACH_ROOTSERVER_LIMIT = -4553;
-constexpr int OB_REBALANCE_TASK_NOT_IN_PROGRESS = -4554;
 constexpr int OB_DATA_SOURCE_NOT_EXIST = -4600;
 constexpr int OB_DATA_SOURCE_TABLE_NOT_EXIST = -4601;
 constexpr int OB_DATA_SOURCE_RANGE_NOT_EXIST = -4602;
@@ -417,9 +410,7 @@ constexpr int OB_TENANT_RESOURCE_UNIT_EXIST = -4712;
 constexpr int OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX = -4713;
 constexpr int OB_ERR_ATLER_TABLE_ILLEGAL_FK = -4714;
 constexpr int OB_LEADER_COORDINATOR_NEED_RETRY = -4716;
-constexpr int OB_REBALANCE_TASK_NEED_RETRY = -4717;
 constexpr int OB_LS_NOT_EXIST = -4719;
-constexpr int OB_TOO_MANY_TENANT_LS = -4720;
 constexpr int OB_LS_LOCATION_NOT_EXIST = -4721;
 constexpr int OB_LS_LOCATION_LEADER_NOT_EXIST = -4722;
 constexpr int OB_MAPPING_BETWEEN_TABLET_AND_LS_NOT_EXIST = -4723;
@@ -437,7 +428,6 @@ constexpr int OB_RESOURCE_UNIT_VALUE_INVALID = -4736;
 constexpr int OB_LS_EXIST = -4737;
 constexpr int OB_DEVICE_EXIST = -4738;
 constexpr int OB_DEVICE_NOT_EXIST = -4739;
-constexpr int OB_LS_REPLICA_TASK_RESULT_UNCERTAIN = -4740;
 constexpr int OB_WAIT_REPLAY_TIMEOUT = -4741;
 constexpr int OB_WAIT_TABLET_READY_TIMEOUT = -4742;
 constexpr int OB_FREEZE_SERVICE_EPOCH_MISMATCH = -4743;
@@ -638,7 +628,6 @@ constexpr int OB_ERR_NONUNIQ_TABLE = -5208;
 constexpr int OB_ERR_CANT_DROP_FIELD_OR_KEY = -5209;
 constexpr int OB_ERR_MULTIPLE_PRI_KEY = -5210;
 constexpr int OB_ERR_KEY_COLUMN_DOES_NOT_EXITS = -5211;
-constexpr int OB_ERR_AUTO_PARTITION_KEY = -5212;
 constexpr int OB_ERR_CANT_USE_OPTION_HERE = -5213;
 constexpr int OB_ERR_WRONG_OBJECT = -5214;
 constexpr int OB_ERR_ON_RENAME = -5215;
@@ -924,14 +913,11 @@ constexpr int OB_ERR_CONSTRAINT_DUPLICATE = -5562;
 constexpr int OB_ERR_CONTRAINT_NOT_FOUND = -5563;
 constexpr int OB_ERR_ALTER_TABLE_ALTER_DUPLICATED_INDEX = -5564;
 constexpr int OB_EER_INVALID_ARGUMENT_FOR_LOGARITHM = -5565;
-constexpr int OB_ERR_REORGANIZE_OUTSIDE_RANGE = -5566;
 constexpr int OB_ER_SP_RECURSION_LIMIT = -5567;
 constexpr int OB_ER_UNSUPPORTED_PS = -5568;
 constexpr int OB_ER_STMT_NOT_ALLOWED_IN_SF_OR_TRG = -5569;
 constexpr int OB_ER_SP_NO_RECURSION = -5570;
 constexpr int OB_ER_SP_CASE_NOT_FOUND = -5571;
-constexpr int OB_ERR_INVALID_SPLIT_COUNT = -5572;
-constexpr int OB_ERR_INVALID_SPLIT_GRAMMAR = -5573;
 constexpr int OB_ERR_MISS_VALUES = -5574;
 constexpr int OB_ERR_MISS_AT_VALUES = -5575;
 constexpr int OB_ER_COMMIT_NOT_ALLOWED_IN_SF_OR_TRG = -5576;
@@ -955,9 +941,7 @@ constexpr int OB_ER_SP_LILABEL_MISMATCH = -5593;
 constexpr int OB_ERR_TRUNCATE_ILLEGAL_FK = -5594;
 constexpr int OB_ERR_DUP_KEY = -5595;
 constexpr int OB_ER_INVALID_USE_OF_NULL = -5596;
-constexpr int OB_ERR_SPLIT_LIST_LESS_VALUE = -5597;
 constexpr int OB_ERR_ADD_PARTITION_TO_DEFAULT_LIST = -5598;
-constexpr int OB_ERR_SPLIT_INTO_ONE_PARTITION = -5599;
 constexpr int OB_ERR_NO_TENANT_PRIVILEGE = -5600;
 constexpr int OB_ERR_INVALID_PERCENTAGE = -5601;
 constexpr int OB_ERR_COLLECT_HISTOGRAM = -5602;
@@ -1038,7 +1022,6 @@ constexpr int OB_ERR_MODIFY_READ_ONLY_VIEW = -5723;
 constexpr int OB_ERR_INVALID_INITRANS_VALUE = -5724;
 constexpr int OB_ERR_INVALID_MAXTRANS_VALUE = -5725;
 constexpr int OB_ERR_INVALID_PCTFREE_OR_PCTUSED_VALUE = -5726;
-constexpr int OB_ERR_PROXY_REROUTE = -5727;
 constexpr int OB_ERR_ILLEGAL_ARGUMENT_FOR_FUNCTION = -5728;
 constexpr int OB_ERR_INVALID_SAMPLING_RANGE = -5730;
 constexpr int OB_ERR_SPECIFY_DATABASE_NOT_ALLOWED = -5731;
@@ -1325,7 +1308,6 @@ constexpr int OB_PARTITION_IS_STOPPED = -6228;
 constexpr int OB_PARTITION_IS_BLOCKED = -6229;
 constexpr int OB_TRANS_RPC_TIMEOUT = -6230;
 constexpr int OB_REPLICA_NOT_READABLE = -6231;
-constexpr int OB_PARTITION_IS_SPLITTING = -6232;
 constexpr int OB_TRANS_COMMITED = -6233;
 constexpr int OB_TRANS_CTX_COUNT_REACH_LIMIT = -6234;
 constexpr int OB_TRANS_CANNOT_SERIALIZE = -6235;
@@ -1375,7 +1357,6 @@ constexpr int OB_TRANS_IDLE_TIMEOUT = -6278;
 constexpr int OB_TRANS_FREE_ROUTE_NOT_SUPPORTED = -6279;
 constexpr int OB_TRANS_LIVE_TOO_MUCH_TIME = -6280;
 constexpr int OB_TRANS_COMMIT_TOO_MUCH_TIME = -6281;
-constexpr int OB_TRANS_TOO_MANY_PARTICIPANTS = -6282;
 constexpr int OB_LOG_ALREADY_SPLIT = -6283;
 constexpr int INCORRECT_ARGUMENTS_TO_URL_DECODE = -6286;
 constexpr int OB_TX_PENDING_LOG_OVERFLOW = -6288;
@@ -1404,9 +1385,6 @@ constexpr int OB_CLOG_SLIDE_TIMEOUT = -6322;
 constexpr int OB_LOG_REPLAY_ERROR = -6323;
 constexpr int OB_TRY_LOCK_CONFIG_CHANGE_CONFLICT = -6324;
 constexpr int OB_CLOG_DISK_HANG = -6325;
-constexpr int OB_TABLE_LOCK_SPLIT_TWICE = -6326;
-constexpr int OB_TABLE_LOCK_IS_SPLITTING = -6327;
-constexpr int OB_TABLE_LOCK_SPLIT_FAIL = -6328;
 constexpr int OB_SEQ_NO_REORDER_UNDER_PDML = -6329;
 constexpr int OB_USER_OUTOF_DATA_DISK_SPACE = -6330;
 constexpr int OB_ARB_DEGRADE = -6331;
@@ -1452,7 +1430,6 @@ constexpr int OB_OBSOLETE_CLOG_NEED_SKIP = -7118;
 constexpr int OB_TABLET_GC_LOCK_CONFLICT = -7120;
 constexpr int OB_SEQUENCE_NOT_MATCH = -7121;
 constexpr int OB_SEQUENCE_TOO_SMALL = -7122;
-constexpr int NEW_MV_MAJOR_VERSION_NOT_MATCH = -7125;
 constexpr int OB_ERR_DIMENSION_NUMBER_IS_OUT_OF_RANGE = -7290;
 constexpr int OB_ERR_INVALID_SRID_IN_SDO_GEOMETRY = -7292;
 constexpr int OB_ERR_INVALID_GTYPE_FOR_POINT_OBJECT = -7293;
@@ -1461,26 +1438,14 @@ constexpr int OB_INVALID_MASK = -7299;
 constexpr int OB_GEO_IN_DIFFERENT_COORDINATE = -7300;
 constexpr int OB_ERR_DOMAIN_COLUMN_DUPLICATE = -7301;
 constexpr int OB_ERR_PARSING_SPATIAL_PARAM = -7302;
-constexpr int OB_ERR_INVALID_XML_DATATYPE = -7402;
-constexpr int OB_ERR_XML_MISSING_COMMA = -7403;
 constexpr int OB_ERR_INVALID_XPATH_EXPRESSION = -7404;
 constexpr int OB_ERR_EXTRACTVALUE_MULTI_NODES = -7405;
-constexpr int OB_ERR_XML_FRAMENT_CONVERT = -7406;
-constexpr int OB_INVALID_PRINT_OPTION = -7407;
-constexpr int OB_XML_CHAR_LEN_TOO_SMALL = -7408;
 constexpr int OB_XPATH_EXPRESSION_UNSUPPORTED = -7409;
 constexpr int OB_EXTRACTVALUE_NOT_LEAF_NODE = -7410;
-constexpr int OB_XML_INSERT_FRAGMENT = -7411;
 constexpr int OB_ERR_NO_ORDER_MAP_SQL = -7412;
-constexpr int OB_ERR_XMLELEMENT_ALIASED = -7413;
-constexpr int OB_INVALID_ALTERATIONG_DATATYPE = -7414;
-constexpr int OB_INVALID_MODIFICATION_OF_COLUMNS = -7415;
-constexpr int OB_ERR_NULL_FOR_XML_CONSTRUCTOR = -7416;
-constexpr int OB_ERR_XML_INDEX = -7417;
 constexpr int OB_ERR_UPDATE_XML_WITH_INVALID_NODE = -7418;
 constexpr int OB_LOB_VALUE_NOT_EXIST = -7419;
 constexpr int OB_ERR_JSON_FUN_UNSUPPORTED_TYPE = -7420;
-constexpr int OB_ERR_XQUERY_MULTI_VALUE = -7421;
 constexpr int OB_ERR_LACK_XQUERY_LITERAL = -7423;
 constexpr int OB_ERR_XQUERY_TYPE_MISMATCH = -7425;
 constexpr int OB_ERR_XQUERY_UNSUPPORTED = -7428;
@@ -1523,7 +1488,6 @@ constexpr int OB_LOG_ARCHIVE_ALREADY_STOPPED = -9034;
 constexpr int OB_RESTORE_INDEX_FAILED = -9035;
 constexpr int OB_BACKUP_IN_PROGRESS = -9036;
 constexpr int OB_INVALID_LOG_ARCHIVE_STATUS = -9037;
-constexpr int OB_CANNOT_ADD_REPLICA_DURING_SET_MEMBER_LIST = -9038;
 constexpr int OB_LOG_ARCHIVE_LEADER_CHANGED = -9039;
 constexpr int OB_BACKUP_CAN_NOT_START = -9040;
 constexpr int OB_CANCEL_BACKUP_NOT_ALLOWED = -9041;
@@ -1571,12 +1535,8 @@ constexpr int OB_NO_SUCH_FILE_OR_DIRECTORY = -9100;
 constexpr int OB_FILE_OR_DIRECTORY_EXIST = -9101;
 constexpr int OB_FILE_OR_DIRECTORY_PERMISSION_DENIED = -9102;
 constexpr int OB_TOO_MANY_OPEN_FILES = -9103;
-constexpr int OB_DIRECT_LOAD_COMMIT_ERROR = -9104;
 constexpr int OB_STORAGE_DEST_NOT_CONNECT = -9115;
-constexpr int OB_TABLET_IS_SPLIT_SRC = -9123;
-constexpr int OB_TABLET_STATUS_NO_NEED_TO_SPLIT = -9127;
 constexpr int OB_FILE_DELETE_FAILED = -9128;
-constexpr int OB_BACKUP_MISSING_MVIEW_DEP_TABLET_SSTABLE = -9136;
 constexpr int OB_NO_LS_REPLICA_CAN_DO_BACKUP = -9138;
 constexpr int OB_RESOURCE_RELEASED = -9141;
 constexpr int OB_ERR_RESIZE_FILE_TO_SMALLER = -9200;
@@ -1833,13 +1793,6 @@ constexpr int OB_ERR_WRONG_USAGE = -9751;
 constexpr int OB_ERR_FORALL_ON_REMOTE_TABLE = -9752;
 constexpr int OB_ERR_SEQUENCE_NOT_DEFINE = -9753;
 constexpr int OB_ERR_DEBUG_ID_NOT_EXIST = -9754;
-constexpr int OB_ERR_TABLE_NO_MLOG = -9755;
-constexpr int OB_ERR_MLOG_EXIST = -9756;
-constexpr int OB_ERR_MVIEW_NOT_EXIST = -9757;
-constexpr int OB_ERR_MVIEW_EXIST = -9758;
-constexpr int OB_ERR_MLOG_IS_YOUNGER = -9759;
-constexpr int OB_ERR_MVIEW_CAN_NOT_FAST_REFRESH = -9760;
-constexpr int OB_ERR_MVIEW_NEVER_REFRESH = -9761;
 constexpr int OB_ERR_CLIENT_LOCAL_FILES_DISABLED = -9762;
 constexpr int OB_ERR_OUT_PARAM_NOT_BIND_VAR = -9763;
 constexpr int OB_ERR_TIME_EARLIER_THAN_SYSDATE = -9764;
@@ -1861,7 +1814,6 @@ constexpr int OB_ERR_EVENT_CANNOT_ALTER_IN_THE_PAST = -9779;
 constexpr int OB_ERR_EVENT_RECURSION_FORBIDDEN = -9780;
 constexpr int OB_NO_PARTITION_FOR_GIVEN_VALUE_SCHEMA_ERROR = -9781;
 constexpr int OB_ERR_INVALID_CHARACTER = -9782;
-constexpr int OB_ERR_MVIEW_CAN_NOT_ON_QUERY_COMPUTE = -9783;
 constexpr int OB_ERR_CURSOR_ATTR_APPLY = -9784;
 constexpr int OB_UTL_TCP_BUFFER_TOO_SMALL = -9785;
 constexpr int OB_UTL_TCP_END_OF_INPUT = -9786;
@@ -1886,11 +1838,7 @@ constexpr int OB_ERR_LOGON_TRIGGER = -9804;
 constexpr int OB_ERR_LOGOFF_TRIGGER = -9805;
 constexpr int OB_ERR_MALFORMED_WRAPPED_UNIT = -9806;
 constexpr int OB_ERR_INVALID_PLSQL_UNIT = -9807;
-constexpr int OB_ERR_MVIEW_INVALID_TABLE_TYPE = -9808;
-constexpr int OB_ERR_MVIEW_BASE_TABLE_ALTERED = -9809;
-constexpr int OB_ERR_MVIEW_MISSING_DEPENDENCE = -9810;
 constexpr int OB_ERR_INVALID_NESTED_CURSOR = -9811;
-constexpr int OB_ERR_MVIEW_CAN_NOT_NESTED_CONSISTENT_REFRESH = -9812;
 constexpr int OB_TTL_NOT_ENABLE = -10501;
 constexpr int OB_TTL_COLUMN_NOT_EXIST = -10502;
 constexpr int OB_TTL_COLUMN_TYPE_NOT_SUPPORTED = -10503;
@@ -1969,6 +1917,7 @@ constexpr int OB_ERR_SPECIFIED_ROW_NO_LONGER_EXISTS = -38105;
 constexpr int OB_ERR_DATA_TOO_LONG_MSG_FMT_V2 = -5167;
 constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 
+
 #define OB_SUCCESS__USER_ERROR_MSG "Success"
 #define OB_ERROR__USER_ERROR_MSG "Common error"
 #define OB_OBJ_TYPE_ERROR__USER_ERROR_MSG "Object type error"
@@ -2002,7 +1951,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_SCHEMA_ERROR__USER_ERROR_MSG "Schema error"
 #define OB_TENANT_OUT_OF_MEM__USER_ERROR_MSG "Over tenant memory limits"
 #define OB_UNKNOWN_OBJ__USER_ERROR_MSG "Unknown object"
-#define OB_NO_MONITOR_DATA__USER_ERROR_MSG "No monitor data"
 #define OB_SERIALIZE_ERROR__USER_ERROR_MSG "Serialize error"
 #define OB_DESERIALIZE_ERROR__USER_ERROR_MSG "Deserialize error"
 #define OB_AIO_TIMEOUT__USER_ERROR_MSG "Asynchronous IO error"
@@ -2328,17 +2276,11 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_INVALID_SUB_PARTITION_TYPE__USER_ERROR_MSG "It is only possible to mix RANGE/LIST partitioning with HASH/KEY partitioning for subpartitioning"
 #define OB_ERR_UNEXPECTED_UNIT_STATUS__USER_ERROR_MSG "Unit status is not expected"
 #define OB_AUTOINC_CACHE_NOT_EQUAL__USER_ERROR_MSG "Autoinc cache's autoinc version is not equal to request's autoinc version"
-#define OB_ERR_KILL_CLIENT_SESSION__USER_ERROR_MSG "Client Session need be killed"
-#define OB_ERR_KILL_CLIENT_SESSION_FAILED__USER_ERROR_MSG "Kill Client Session failed"
 #define OB_IMPROPER_OS_PARAM__USER_ERROR_MSG "OS params check failed, because the operating system has improper parameter configurations"
 #define OB_IO_TIMEOUT__USER_ERROR_MSG "IO timeout"
-#define OB_INVALID_LICENSE__USER_ERROR_MSG "license is invalid because: %s"
-#define OB_LICENSE_EXPIRED__USER_ERROR_MSG "license is expired"
-#define OB_LICENSE_SCOPE_EXCEEDED__USER_ERROR_MSG "The current license does not include this feature module: %s"
 #define OB_MIGRATE_TX_DATA_NOT_CONTINUES__USER_ERROR_MSG "migrate tx data not continues"
 #define OB_IMPORT_NOT_IN_SERVER__USER_ERROR_MSG "Import not in service"
 #define OB_CONVERT_ERROR__USER_ERROR_MSG "Convert error"
-#define OB_BYPASS_TIMEOUT__USER_ERROR_MSG "Bypass timeout"
 #define OB_RS_STATE_NOT_ALLOW__USER_ERROR_MSG "RootServer state error"
 #define OB_NO_REPLICA_VALID__USER_ERROR_MSG "No replica is valid"
 #define OB_NO_NEED_UPDATE__USER_ERROR_MSG "No need to update"
@@ -2370,9 +2312,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ROOTSERVICE_EXIST__USER_ERROR_MSG "rootservice already exist"
 #define OB_RS_SHUTDOWN__USER_ERROR_MSG "rootservice is shutdown"
 #define OB_SERVER_MIGRATE_IN_DENIED__USER_ERROR_MSG "server migrate in denied"
-#define OB_REBALANCE_TASK_CANT_EXEC__USER_ERROR_MSG "rebalance task can not executing now"
 #define OB_PARTITION_CNT_REACH_ROOTSERVER_LIMIT__USER_ERROR_MSG "rootserver can not hold more partition"
-#define OB_REBALANCE_TASK_NOT_IN_PROGRESS__USER_ERROR_MSG "rebalance task not in progress on seekdb"
 #define OB_DATA_SOURCE_NOT_EXIST__USER_ERROR_MSG "Data source not exist"
 #define OB_DATA_SOURCE_TABLE_NOT_EXIST__USER_ERROR_MSG "Data source table not exist"
 #define OB_DATA_SOURCE_RANGE_NOT_EXIST__USER_ERROR_MSG "Data source range not exist"
@@ -2475,9 +2415,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX__USER_ERROR_MSG "rebuild global index:'%.*s' failed when drop/truncate partitions"
 #define OB_ERR_ATLER_TABLE_ILLEGAL_FK__USER_ERROR_MSG "unique/primary keys in table referenced by enabled foreign keys"
 #define OB_LEADER_COORDINATOR_NEED_RETRY__USER_ERROR_MSG "leader coordinator needs retry"
-#define OB_REBALANCE_TASK_NEED_RETRY__USER_ERROR_MSG "rebalance task needs retry"
 #define OB_LS_NOT_EXIST__USER_ERROR_MSG "log stream does not exist"
-#define OB_TOO_MANY_TENANT_LS__USER_ERROR_MSG "too many log streams were defined for this tenant"
 #define OB_LS_LOCATION_NOT_EXIST__USER_ERROR_MSG "log stream location does not exist"
 #define OB_LS_LOCATION_LEADER_NOT_EXIST__USER_ERROR_MSG "log stream location leader does not exist"
 #define OB_MAPPING_BETWEEN_TABLET_AND_LS_NOT_EXIST__USER_ERROR_MSG "mapping between tablet and log stream does not exist"
@@ -2497,7 +2435,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_LS_EXIST__USER_ERROR_MSG "log stream already exist"
 #define OB_DEVICE_EXIST__USER_ERROR_MSG "Unexpected device existence"
 #define OB_DEVICE_NOT_EXIST__USER_ERROR_MSG "Device does not exist"
-#define OB_LS_REPLICA_TASK_RESULT_UNCERTAIN__USER_ERROR_MSG "log stream replica task result is uncertain"
 #define OB_WAIT_REPLAY_TIMEOUT__USER_ERROR_MSG "log stream wait log replay timeout"
 #define OB_WAIT_TABLET_READY_TIMEOUT__USER_ERROR_MSG "log stream wait tablet ready timeout"
 #define OB_FREEZE_SERVICE_EPOCH_MISMATCH__USER_ERROR_MSG "freeze service epoch is not expected"
@@ -2731,7 +2668,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_CANT_DROP_FIELD_OR_KEY__USER_ERROR_MSG "Can't DROP '%.*s'; check that column/key exists"
 #define OB_ERR_MULTIPLE_PRI_KEY__USER_ERROR_MSG "Multiple primary key defined"
 #define OB_ERR_KEY_COLUMN_DOES_NOT_EXITS__USER_ERROR_MSG "Key column '%.*s' doesn't exist in table"
-#define OB_ERR_AUTO_PARTITION_KEY__USER_ERROR_MSG "auto-increment column '%.*s' should not be part of partition key"
 #define OB_ERR_CANT_USE_OPTION_HERE__USER_ERROR_MSG "Incorrect usage/placement of '%s'"
 #define OB_ERR_WRONG_OBJECT__USER_ERROR_MSG "\'%s.%s\' is not %s"
 #define OB_ERR_ON_RENAME__USER_ERROR_MSG "Error on rename of \'%s.%s\' to \'%s.%s\'"
@@ -3059,14 +2995,11 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_CONTRAINT_NOT_FOUND__USER_ERROR_MSG "Constraint not found"
 #define OB_ERR_ALTER_TABLE_ALTER_DUPLICATED_INDEX__USER_ERROR_MSG "Duplicate alter index operations on column \'%.*s\'"
 #define OB_EER_INVALID_ARGUMENT_FOR_LOGARITHM__USER_ERROR_MSG "Invalid argument for logarithm"
-#define OB_ERR_REORGANIZE_OUTSIDE_RANGE__USER_ERROR_MSG "Reorganize of range partitions cannot change total ranges except for last partition where it can extend the range"
 #define OB_ER_SP_RECURSION_LIMIT__USER_ERROR_MSG "Recursive limit %ld (as set by the max_sp_recursion_depth variable) was exceeded for routine"
 #define OB_ER_UNSUPPORTED_PS__USER_ERROR_MSG "This command is not supported in the prepared statement protocol yet"
 #define OB_ER_STMT_NOT_ALLOWED_IN_SF_OR_TRG__USER_ERROR_MSG "%s is not allowed in stored function or trigger"
 #define OB_ER_SP_NO_RECURSION__USER_ERROR_MSG "Recursive stored functions are not allowed."
 #define OB_ER_SP_CASE_NOT_FOUND__USER_ERROR_MSG "Case not found for CASE statement"
-#define OB_ERR_INVALID_SPLIT_COUNT__USER_ERROR_MSG "a partition may be split into exactly two new partitions"
-#define OB_ERR_INVALID_SPLIT_GRAMMAR__USER_ERROR_MSG "this physical attribute may not be specified for a table partition"
 #define OB_ERR_MISS_VALUES__USER_ERROR_MSG "missing VALUES keyword"
 #define OB_ERR_MISS_AT_VALUES__USER_ERROR_MSG "missing AT or VALUES keyword"
 #define OB_ER_COMMIT_NOT_ALLOWED_IN_SF_OR_TRG__USER_ERROR_MSG "Explicit or implicit commit is not allowed in stored function or trigger."
@@ -3090,9 +3023,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_TRUNCATE_ILLEGAL_FK__USER_ERROR_MSG "Cannot truncate a table referenced in a foreign key constraint %.*s"
 #define OB_ERR_DUP_KEY__USER_ERROR_MSG "Can't write; duplicate key in table \'%.*s\'"
 #define OB_ER_INVALID_USE_OF_NULL__USER_ERROR_MSG "Invalid use of NULL value"
-#define OB_ERR_SPLIT_LIST_LESS_VALUE__USER_ERROR_MSG "last resulting partition cannot contain bounds"
 #define OB_ERR_ADD_PARTITION_TO_DEFAULT_LIST__USER_ERROR_MSG "cannot add partition when DEFAULT partition exists"
-#define OB_ERR_SPLIT_INTO_ONE_PARTITION__USER_ERROR_MSG "cannot split partition into one partition, use rename instead"
 #define OB_ERR_NO_TENANT_PRIVILEGE__USER_ERROR_MSG "can not create user %s in sys tenant, name %.*s"
 #define OB_ERR_INVALID_PERCENTAGE__USER_ERROR_MSG "Percentage should between 1 and 99"
 #define OB_ERR_COLLECT_HISTOGRAM__USER_ERROR_MSG "Should collect histogram after major freeze"
@@ -3217,7 +3148,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_INVALID_INITRANS_VALUE__USER_ERROR_MSG "invalid INITRANS option value"
 #define OB_ERR_INVALID_MAXTRANS_VALUE__USER_ERROR_MSG "invalid MAXTRANS option value"
 #define OB_ERR_INVALID_PCTFREE_OR_PCTUSED_VALUE__USER_ERROR_MSG "invalid value for PCTFREE or PCTUSED"
-#define OB_ERR_PROXY_REROUTE__USER_ERROR_MSG "SQL request should be rerouted"
 #define OB_ERR_ILLEGAL_ARGUMENT_FOR_FUNCTION__USER_ERROR_MSG "illegal argument for function"
 #define OB_ERR_OPERATOR_CANNOT_BE_USED_WITH_LIST__USER_ERROR_MSG "this operator cannot be used with lists"
 #define OB_ERR_INVALID_SAMPLING_RANGE__USER_ERROR_MSG "SAMPLE percentage must be in the range [0.000001,100)"
@@ -3518,7 +3448,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_PARTITION_IS_BLOCKED__USER_ERROR_MSG "Partition has been blocked"
 #define OB_TRANS_RPC_TIMEOUT__USER_ERROR_MSG "transaction rpc timeout"
 #define OB_REPLICA_NOT_READABLE__USER_ERROR_MSG "replica is not readable"
-#define OB_PARTITION_IS_SPLITTING__USER_ERROR_MSG "Partition is splitting"
 #define OB_TRANS_COMMITED__USER_ERROR_MSG "Transaction has been commited"
 #define OB_TRANS_CTX_COUNT_REACH_LIMIT__USER_ERROR_MSG "transaction context count reach limit"
 #define OB_TRANS_CANNOT_SERIALIZE__USER_ERROR_MSG "can't serialize access for this transaction"
@@ -3568,7 +3497,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_TRANS_FREE_ROUTE_NOT_SUPPORTED__USER_ERROR_MSG "Query is not supported to be executed on txn temporary node"
 #define OB_TRANS_LIVE_TOO_MUCH_TIME__USER_ERROR_MSG "Transaction cost too much without commit or rollback"
 #define OB_TRANS_COMMIT_TOO_MUCH_TIME__USER_ERROR_MSG "Transaction commit cost too much"
-#define OB_TRANS_TOO_MANY_PARTICIPANTS__USER_ERROR_MSG "too many transaction participants"
 #define OB_LOG_ALREADY_SPLIT__USER_ERROR_MSG "The big log entry has been split into multiple part"
 #define OB_ERR_UNSUPPROTED_REF_IN_JSON_SCHEMA__USER_ERROR_MSG "This version doesn't yet support 'references in JSON Schema."
 #define OB_ERR_TYPE_OF_JSON_SCHEMA__USER_ERROR_MSG "Invalid JSON type in argument, should be object."
@@ -3599,9 +3527,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_LOG_REPLAY_ERROR__USER_ERROR_MSG "log replay error"
 #define OB_TRY_LOCK_CONFIG_CHANGE_CONFLICT__USER_ERROR_MSG "ob trying to lock config change conflicts"
 #define OB_CLOG_DISK_HANG__USER_ERROR_MSG "ob clog disk hang"
-#define OB_TABLE_LOCK_SPLIT_TWICE__USER_ERROR_MSG "table lock has been splitted before, can not be splitted again"
-#define OB_TABLE_LOCK_IS_SPLITTING__USER_ERROR_MSG "table lock is being splitted, can not be splitted again"
-#define OB_TABLE_LOCK_SPLIT_FAIL__USER_ERROR_MSG "table lock splitting failed"
 #define OB_SEQ_NO_REORDER_UNDER_PDML__USER_ERROR_MSG "pdml sql need retry under sequence number reorder"
 #define OB_USER_OUTOF_DATA_DISK_SPACE__USER_ERROR_MSG "user data disk is almost full"
 #define OB_ARB_DEGRADE__USER_ERROR_MSG "logstream has been degraded due to error"
@@ -3648,7 +3573,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_SEQUENCE_NOT_MATCH__USER_ERROR_MSG "compare sequence not match"
 #define OB_SEQUENCE_TOO_SMALL__USER_ERROR_MSG "compare sequence too small"
 #define OB_PARTITION_ALREADY_BALANCED__USER_ERROR_MSG "partitions are already balanced, %s"
-#define NEW_MV_MAJOR_VERSION_NOT_MATCH__USER_ERROR_MSG "new mv major version is not match"
 #define OB_ERR_GIS_DIFFERENT_SRIDS__USER_ERROR_MSG "Binary geometry function %s given two geometries of different srids: %u and %u, which should have been identical."
 #define OB_ERR_GIS_UNSUPPORTED_ARGUMENT__USER_ERROR_MSG "Calling geometry function %s with unsupported types of arguments."
 #define OB_ERR_GIS_UNKNOWN_ERROR__USER_ERROR_MSG "Unknown GIS error occurred in function %s."
@@ -3750,26 +3674,14 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_GEO_IN_DIFFERENT_COORDINATE__USER_ERROR_MSG "geometry objects are in different coordinate systems"
 #define OB_ERR_DOMAIN_COLUMN_DUPLICATE__USER_ERROR_MSG "cannot create multiple domain indexes on a column list using same"
 #define OB_ERR_PARSING_SPATIAL_PARAM__USER_ERROR_MSG "internal error while parsing spatial parameters"
-#define OB_ERR_INVALID_XML_DATATYPE__USER_ERROR_MSG "inconsistent datatypes: expected %s got %s"
-#define OB_ERR_XML_MISSING_COMMA__USER_ERROR_MSG "missing comma"
 #define OB_ERR_INVALID_XPATH_EXPRESSION__USER_ERROR_MSG "XPATH syntax error: ''"
 #define OB_ERR_EXTRACTVALUE_MULTI_NODES__USER_ERROR_MSG "EXTRACTVALUE cannot extract values of multiple nodes"
-#define OB_ERR_XML_FRAMENT_CONVERT__USER_ERROR_MSG "Cannot convert XML fragment to the required datatype"
-#define OB_INVALID_PRINT_OPTION__USER_ERROR_MSG "The specified printing option is invalid"
-#define OB_XML_CHAR_LEN_TOO_SMALL__USER_ERROR_MSG "character length specified for XMLSerialize is too small."
 #define OB_XPATH_EXPRESSION_UNSUPPORTED__USER_ERROR_MSG "Only constant XPATH queries are supported"
 #define OB_EXTRACTVALUE_NOT_LEAF_NODE__USER_ERROR_MSG "EXTRACTVALUE can only retrieve value of leaf node"
-#define OB_XML_INSERT_FRAGMENT__USER_ERROR_MSG "Cannot insert XML fragments"
 #define OB_ERR_NO_ORDER_MAP_SQL__USER_ERROR_MSG "cannot ORDER objects without MAP or ORDER method"
-#define OB_ERR_XMLELEMENT_ALIASED__USER_ERROR_MSG "parameter %d of function XMLELEMENT must be aliased"
-#define OB_INVALID_ALTERATIONG_DATATYPE__USER_ERROR_MSG "invalid alteration of datatype"
-#define OB_INVALID_MODIFICATION_OF_COLUMNS__USER_ERROR_MSG "invalid modification of columns"
-#define OB_ERR_NULL_FOR_XML_CONSTRUCTOR__USER_ERROR_MSG "Expected XML tag , got no content"
-#define OB_ERR_XML_INDEX__USER_ERROR_MSG "cannot create index on expression with datatype ADT '%.*s'"
 #define OB_ERR_UPDATE_XML_WITH_INVALID_NODE__USER_ERROR_MSG "XML nodes must be updated with valid nodes and of the same type'"
 #define OB_LOB_VALUE_NOT_EXIST__USER_ERROR_MSG "LOB value does not exist"
 #define OB_ERR_JSON_FUN_UNSUPPORTED_TYPE__USER_ERROR_MSG "Input to JSON generation function has unsupported data type"
-#define OB_ERR_XQUERY_MULTI_VALUE__USER_ERROR_MSG "XPTY0004 - XQuery dynamic type mismatch: expected singleton sequence - got multi-item sequence"
 #define OB_ERR_PARSE_XQUERY_EXPR__USER_ERROR_MSG "XPST0003 - error during parsing the XQuery expression : %.*s"
 #define OB_ERR_LACK_XQUERY_LITERAL__USER_ERROR_MSG "XQuery string literal expected"
 #define OB_ERR_TOO_MANY_PREFIX_DECLARE__USER_ERROR_MSG "XPST0033 - too many declarations for namespace prefix %.*s"
@@ -3831,7 +3743,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_RESTORE_INDEX_FAILED__USER_ERROR_MSG "restore index failed"
 #define OB_BACKUP_IN_PROGRESS__USER_ERROR_MSG "Backup is in progress"
 #define OB_INVALID_LOG_ARCHIVE_STATUS__USER_ERROR_MSG "log archive status is not valid"
-#define OB_CANNOT_ADD_REPLICA_DURING_SET_MEMBER_LIST__USER_ERROR_MSG "Cannot add replica during set member list in restore"
 #define OB_LOG_ARCHIVE_LEADER_CHANGED__USER_ERROR_MSG "pg log archive leader changed"
 #define OB_BACKUP_CAN_NOT_START__USER_ERROR_MSG "backup can not start, because %s"
 #define OB_CANCEL_BACKUP_NOT_ALLOWED__USER_ERROR_MSG "cancel backup do not allow"
@@ -3893,8 +3804,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_FILE_OR_DIRECTORY_EXIST__USER_ERROR_MSG "file or directory already exist"
 #define OB_FILE_OR_DIRECTORY_PERMISSION_DENIED__USER_ERROR_MSG "file or directory permission denied"
 #define OB_TOO_MANY_OPEN_FILES__USER_ERROR_MSG "too many open files"
-#define OB_DIRECT_LOAD_COMMIT_ERROR__USER_ERROR_MSG "fail to commit direct load"
-#define OB_S3_ERROR__USER_ERROR_MSG "S3 error"
 #define OB_TENANT_SNAPSHOT_NOT_EXIST__USER_ERROR_MSG "Tenant snapshot \'%.*s\' does not exist"
 #define OB_TENANT_SNAPSHOT_EXIST__USER_ERROR_MSG "Tenant snapshot \'%.*s\' already exist"
 #define OB_TENANT_SNAPSHOT_TIMEOUT__USER_ERROR_MSG "Tenant snapshot task timeout. %.*s"
@@ -3906,17 +3815,14 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_INVALID_STORAGE_DEST__USER_ERROR_MSG "storage destination is not valid"
 #define OB_STORAGE_DEST_NOT_CONNECT__USER_ERROR_MSG "can not connect to storage destination"
 #define OB_OBJECT_STORAGE_PERMISSION_DENIED__USER_ERROR_MSG "no I/O operation permission of the object storage"
-#define OB_S3_REGION_MISMATCH__USER_ERROR_MSG "the specified s3_region does not match the endpoint"
 #define OB_INVALID_OBJECT_STORAGE_ENDPOINT__USER_ERROR_MSG "object storage endpoint is invalid"
 #define OB_RESTORE_SOURCE_NOT_ENOUGH__USER_ERROR_MSG "%s"
 #define OB_OBJECT_NOT_EXIST__USER_ERROR_MSG "cannot find object on object storage"
 #define OB_S2_REUSE_VERSION_MISMATCH__USER_ERROR_MSG "reuse_version of mem_block or phy_block is not mismatched with micro_meta in s2 micro_cache"
 #define OB_S2_ENTRY_NOT_EXIST__USER_ERROR_MSG "entry not exist in s2 micro_cache"
-#define OB_TABLET_IS_SPLIT_SRC__USER_ERROR_MSG "cannot write to split src tablet"
 #define OB_ALLOCATE_TMP_FILE_PAGE_FAILED__USER_ERROR_MSG "fail to allocate a tmp file page"
 #define OB_SS_MICRO_CACHE_DISABLED__USER_ERROR_MSG "ss_micro_cache is disabled"
 #define OB_SS_CACHE_REACH_MEM_LIMIT__USER_ERROR_MSG "ss_micro_cache has reached memory limit"
-#define OB_TABLET_STATUS_NO_NEED_TO_SPLIT__USER_ERROR_MSG "no need to split due to current tablet status"
 #define OB_FILE_DELETE_FAILED__USER_ERROR_MSG "fail to delete file"
 #define OB_OBJECT_STORAGE_IO_ERROR__USER_ERROR_MSG "object storage io error"
 #define OB_OBJECT_STORAGE_PWRITE_OFFSET_NOT_MATCH__USER_ERROR_MSG "the pwrite offset of the object storage is inconsistent"
@@ -3925,7 +3831,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_BACKUP_ZONE_IDC_REGION_INVALID__USER_ERROR_MSG "%s"
 #define OB_ERR_TMP_FILE_ALREADY_SEALED__USER_ERROR_MSG "tmp file has already sealed"
 #define OB_TMP_FILE_EXCEED_DISK_QUOTA__USER_ERROR_MSG "tmp file exceeds disk quota"
-#define OB_BACKUP_MISSING_MVIEW_DEP_TABLET_SSTABLE__USER_ERROR_MSG "Backup missing mview dependent tablet sstable, sstable maybe recycled"
 #define OB_ERR_DUPLICATE_INDEX__USER_ERROR_MSG "Duplicate index \'%s\' defined on the table \'%s.%s\'"
 #define OB_NO_LS_REPLICA_CAN_DO_BACKUP__USER_ERROR_MSG "No suitable replica found to perform backup"
 #define OB_INVALID_KMS_DEST__USER_ERROR_MSG "%s is not a valid uri"
@@ -4189,13 +4094,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_FORALL_ON_REMOTE_TABLE__USER_ERROR_MSG "FORALL INSERT/UPDATE/DELETE not support on remote tables"
 #define OB_ERR_SEQUENCE_NOT_DEFINE__USER_ERROR_MSG "sequence is not yet defined in this session"
 #define OB_ERR_DEBUG_ID_NOT_EXIST__USER_ERROR_MSG "debug_session_id = %u does not exist"
-#define OB_ERR_TABLE_NO_MLOG__USER_ERROR_MSG "table `%s`.`%s` does not have a materialized view log"
-#define OB_ERR_MLOG_EXIST__USER_ERROR_MSG "a materialized view log already exists on table `%s`"
-#define OB_ERR_MVIEW_NOT_EXIST__USER_ERROR_MSG "materialized view `%s`.`%s` does not exist"
-#define OB_ERR_MVIEW_EXIST__USER_ERROR_MSG "materialized view `%s`.`%s` already exists"
-#define OB_ERR_MLOG_IS_YOUNGER__USER_ERROR_MSG "materialized view log on `%s`.`%s` younger than last refresh"
-#define OB_ERR_MVIEW_CAN_NOT_FAST_REFRESH__USER_ERROR_MSG "cannot fast refresh materialized view %s: %s"
-#define OB_ERR_MVIEW_NEVER_REFRESH__USER_ERROR_MSG "cannot explicitly refresh a NEVER REFRESH materialized view (`%s`)"
 #define OB_ERR_CLIENT_LOCAL_FILES_DISABLED__USER_ERROR_MSG "Loading local data is disabled; this must be enabled on both the client and server sides"
 #define OB_ERR_OUT_PARAM_NOT_BIND_VAR__USER_ERROR_MSG "output parameter not a bind variable"
 #define OB_ERR_TIME_EARLIER_THAN_SYSDATE__USER_ERROR_MSG "the parameter %s must evaluate to a time in the future"
@@ -4217,7 +4115,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_EVENT_RECURSION_FORBIDDEN__USER_ERROR_MSG "Recursion of EVENT DDL statements is forbidden when body is present"
 #define OB_NO_PARTITION_FOR_GIVEN_VALUE_SCHEMA_ERROR__USER_ERROR_MSG "Table has no partition for value"
 #define OB_ERR_INVALID_CHARACTER__USER_ERROR_MSG "invalid character"
-#define OB_ERR_MVIEW_CAN_NOT_ON_QUERY_COMPUTE__USER_ERROR_MSG "cannot ENABLE ON QUERY COMPUTATION for the materialized view %s: %s"
 #define OB_ERR_CURSOR_ATTR_APPLY__USER_ERROR_MSG "cursor attribute may not be applied to non-cursor %.*s"
 #define OB_UTL_TCP_BUFFER_TOO_SMALL__USER_ERROR_MSG "buffer too small"
 #define OB_UTL_TCP_END_OF_INPUT__USER_ERROR_MSG "end-of-input reached"
@@ -4242,11 +4139,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_LOGOFF_TRIGGER__USER_ERROR_MSG "client logoff triggers cannot have AFTER type"
 #define OB_ERR_MALFORMED_WRAPPED_UNIT__USER_ERROR_MSG "malformed or corrupted wrapped unit"
 #define OB_ERR_INVALID_PLSQL_UNIT__USER_ERROR_MSG "input to DBMS_DDL.WRAP is not a legal PL/SQL unit"
-#define OB_ERR_MVIEW_INVALID_TABLE_TYPE__USER_ERROR_MSG "Table type is not valid, the definition of materialized view can only reference user tables or other materialized views"
-#define OB_ERR_MVIEW_BASE_TABLE_ALTERED__USER_ERROR_MSG "Base tables are altered during the creation or complete refresh of materialized views, please try again when base tables have no ongoing DDL operations"
-#define OB_ERR_MVIEW_MISSING_DEPENDENCE__USER_ERROR_MSG "Materialized view %s.%s has invalid dependency info, please perform a complete refresh to recover."
 #define OB_ERR_INVALID_NESTED_CURSOR__USER_ERROR_MSG "Cursor Variable in record, object, or collection is not supported by this release"
-#define OB_ERR_MVIEW_CAN_NOT_NESTED_CONSISTENT_REFRESH__USER_ERROR_MSG "materialized view can not nested consistent refresh"
 #define OB_TTL_NOT_ENABLE__USER_ERROR_MSG "TTL feature is not enabled"
 #define OB_TTL_COLUMN_NOT_EXIST__USER_ERROR_MSG "TTL column '%.*s' not exists"
 #define OB_TTL_COLUMN_TYPE_NOT_SUPPORTED__USER_ERROR_MSG "Column type of '%.*s' is not supported for TTL definition"
@@ -4364,7 +4257,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_DATA_TOO_LONG_MSG_FMT_V2__USER_ERROR_MSG "Data too long for column '%.*s' at row %ld"
 #define OB_ERR_INVALID_DATE_MSG_FMT_V2__USER_ERROR_MSG "Incorrect datetime value for column '%.*s' at row %ld"
 
-extern int g_all_ob_errnos[2408];
+extern int g_all_ob_errnos[2336];
 
   const char *ob_error_name(const int oberr);
   const char* ob_error_cause(const int oberr);
@@ -4379,6 +4272,7 @@ extern int g_all_ob_errnos[2408];
   int ob_errpkt_errno(const int oberr);
   const char *ob_errpkt_strerror(const int oberr);
   const char *ob_errpkt_str_user_error(const int oberr);
+
 
 } // end namespace common
 } // end namespace oceanbase

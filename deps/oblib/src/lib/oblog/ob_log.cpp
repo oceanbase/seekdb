@@ -554,7 +554,7 @@ ObLogger::ObLogger()
     can_print_(true),
     enable_async_log_(true), use_multi_flush_(false), stop_append_log_(false), enable_perf_mode_(false),
     last_async_flush_count_per_sec_(0), log_compressor_(nullptr), enable_log_limit_(true),
-    new_file_info_(nullptr), info_as_wdiag_(true)
+    is_arb_replica_(false), new_file_info_(nullptr), info_as_wdiag_(true)
 {
   id_level_map_.set_level(OB_LOG_LEVEL_DBA_ERROR);
 
@@ -632,6 +632,20 @@ void ObLogger::set_log_level(const int8_t level, int64_t version)
   }
   update_easy_log_level();
 }
+
+void ObLogger::set_alert_log_level(const char *level, int64_t version)
+{
+  int ret = OB_SUCCESS;
+  if (check_and_set_level_version(version)) {
+    if (NULL != level) {
+      int8_t level_int = OB_LOG_LEVEL_INFO;
+      if (OB_SUCC(level_str2int(level, level_int))) {
+        set_log_level(level_int);
+      }
+    }
+  }
+}
+
 
 void ObLogger::set_file_name(const char *filename,
                              const bool no_redirect_flag,
@@ -766,12 +780,15 @@ int ObLogger::log_head(const int64_t ts,
                              tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min,
                              tm.tm_sec, tv.tv_usec, GETTID(), GETTNAME_V2(), ObCurTraceId::get_trace_id_str());
       } else {
+        constexpr int cluster_id_buf_len = 8;
+        char cluster_id_buf[cluster_id_buf_len] = {'\0'};
+        (void)snprintf(cluster_id_buf, cluster_id_buf_len, "[C%lu]", GET_CLUSTER_ID());
         ret = logdata_printf(buf, buf_len, pos,
                              "[%04d-%02d-%02d %02d:%02d:%02d.%06ld] "
-                             "%-5s %s%s (%s:%d) [%ld][%s][%s] [lt=%ld]%s ",
+                             "%-5s %s%s (%s:%d) [%ld][%s]%s[%s] [lt=%ld]%s ",
                              tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min,
                              tm.tm_sec, tv.tv_usec, errstr_[level], mod_name, function,
-                             base_file_name, line, GETTID(), GETTNAME_V2(),
+                             base_file_name, line, GETTID(), GETTNAME_V2(), is_arb_replica_ ? cluster_id_buf : "",
                              ObCurTraceId::get_trace_id_str(),
                              last_logging_cost_time_us_, errcode_buf);
       }
@@ -1068,6 +1085,28 @@ int ObLogger::parse_check(const char *str,
       LOG_WARN("invalid argument", K(ret));
     } else {
       //do nothing
+    }
+  }
+  return ret;
+}
+
+int ObLogger::parse_check_alert(const char *str, const int32_t str_length)
+{
+  int ret = OB_SUCCESS;
+  HEAP_VAR(char[OB_MAX_CONFIG_VALUE_LEN], buffer) {
+    const int32_t MAX_LEVEL_NAME_LENGTH = 10;
+    if (NULL == str) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      str_copy_trim(buffer, OB_MAX_CONFIG_VALUE_LEN, str, str_length);
+      int8_t level_int = 0;
+      if (OB_FAIL(level_str2int(buffer, level_int, true))) {
+        OB_LOG(WARN, "failed to get level_int", KCSTRING(buffer), K(str_length), K(ret));
+      } else if (level_int >= OB_LOG_LEVEL_DBA_ERROR && level_int <= OB_LOG_LEVEL_DBA_INFO) {
+        alert_log_level_ = level_int;
+      } else {
+        ret = OB_INVALID_ARGUMENT;
+      }
     }
   }
   return ret;
@@ -1412,7 +1451,8 @@ int ObLogger::add_files_to_list(void *files,
   return ret;
 }
 
-int ObLogger::init(const ObBaseLogWriterCfg &log_cfg)
+int ObLogger::init(const ObBaseLogWriterCfg &log_cfg,
+                   const bool is_arb_replica)
 {
   int ret = OB_SUCCESS;
   LOG_DBA_INFO_V2(OB_SERVER_SYSLOG_SERVICE_INIT_BEGIN,
@@ -1431,6 +1471,7 @@ int ObLogger::init(const ObBaseLogWriterCfg &log_cfg)
       if (OB_FAIL(ObRingBufLogWriter::init(log_cfg.group_commit_max_wait_us_, thread_name))) {
         LOG_STDERR("init ringbuf writer error. ret=%d\n", ret);
       }
+      is_arb_replica_ = is_arb_replica;
     }
   }
 
@@ -1548,8 +1589,8 @@ void ObLogger::flush_logs_to_file(ObPLogItem **log_item, const int64_t count)
           (void)ATOMIC_AAF(&log_file_[i].write_size_, size);
           (void)ATOMIC_AAF(&log_file_[i].file_size_, size);
           (void)ATOMIC_AAF(&log_file_[i].write_count_, iovcnt[i]);
-          EVENT_ADD(IO_WRITE_COUNT, iovcnt[i]);
-          EVENT_ADD(IO_WRITE_BYTES, size);
+          EVENT_ADD(ObStatEventIds::IO_WRITE_COUNT, iovcnt[i]);
+          EVENT_ADD(ObStatEventIds::IO_WRITE_BYTES, size);
         }
       }
 

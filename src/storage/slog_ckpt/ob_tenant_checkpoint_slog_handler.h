@@ -32,7 +32,6 @@ namespace oceanbase
 
 namespace share
 {
-class ObLSID;
 class ObTenantSnapshotID;
 }
 namespace storage
@@ -141,9 +140,6 @@ private:
   int replay_snapshot(const ObTenantSuperBlock &super_block);
   int do_replay_single_snapshot(const blocksstable::MacroBlockId &ls_meta_entry);
   int replay_new_checkpoint(const ObTenantSuperBlock &super_block);
-  int replay_old_checkpoint(const ObTenantSuperBlock &super_block);
-  int replay_ls_meta(const ObMetaDiskAddr &addr, const char *buf, const int64_t buf_len);
-  int replay_tablet(const ObMetaDiskAddr &addr, const char *buf, const int64_t buf_len);
   int replay_snapshot_ls(
       const ObMetaDiskAddr &addr, 
       const char *buf, 
@@ -160,7 +156,6 @@ private:
   int inner_replay_create_ls_slog(const ObRedoModuleReplayParam &param);
   int inner_replay_create_ls_commit_slog(const ObRedoModuleReplayParam &param);
   int inner_replay_delete_ls(const ObRedoModuleReplayParam &param);
-  int inner_replay_put_old_tablet(const ObRedoModuleReplayParam &param);
   int inner_replay_update_tablet(const ObRedoModuleReplayParam &param);
   int inner_replay_delete_tablet(const ObRedoModuleReplayParam &param);
   int inner_replay_empty_shell_tablet(const ObRedoModuleReplayParam &param);
@@ -169,18 +164,10 @@ private:
   int inner_replay_das_record(const ObRedoModuleReplayParam &param);
   int read_from_ckpt(const ObMetaDiskAddr &phy_addr, char *buf, const int64_t buf_len, int64_t &r_len);
   int read_from_slog(const ObMetaDiskAddr &phy_addr, char *buf, const int64_t buf_len, int64_t &pos);
-  int remove_tablets_from_replay_map_(const share::ObLSID &ls_id);
-
   int inner_replay_deserialize(
       const char *buf,
       const int64_t buf_len,
       bool allow_override /* allow to overwrite the map's element or not */);
-  int inner_replay_old_deserialize(
-      const ObMetaDiskAddr &addr,
-      const char *buf,
-      const int64_t buf_len,
-      bool allow_override /* allow to overwrite the map's element or not */);
-
 private:
   const static int64_t BUCKET_NUM = 109;
 private:

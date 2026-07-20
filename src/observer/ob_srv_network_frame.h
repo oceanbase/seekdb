@@ -17,6 +17,8 @@
 #ifndef _OCEABASE_OBSERVER_OB_SRV_NETWORK_FRAME_H_
 #define _OCEABASE_OBSERVER_OB_SRV_NETWORK_FRAME_H_
 
+#include "rpc/frame/ob_net_easy.h"
+#include "rpc/frame/ob_req_handler.h"
 #include "rpc/frame/ob_req_translator.h"
 #include "observer/ob_srv_xlator.h"
 #include "observer/ob_srv_deliver.h"
@@ -36,6 +38,7 @@ namespace observer
 class ObSrvNetworkFrame
 {
 public:
+  enum { NET_IO_NORMAL_GID = 0, NET_IO_HP_GID = 64, NET_IO_BATCH_GID = 72 };
   explicit ObSrvNetworkFrame(ObGlobalContext &gctx);
 
   virtual ~ObSrvNetworkFrame();

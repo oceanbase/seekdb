@@ -38,7 +38,6 @@ namespace oceanbase
 using namespace share;
 namespace palf
 {
-typedef ObFunction<int64_t()> GetModeVersion;
 // =========== LogEntryType start =============
 enum class LogEntryType
 {
@@ -93,8 +92,7 @@ class LogIteratorImpl
 public:
   LogIteratorImpl();
   ~LogIteratorImpl();
-  int init(const GetModeVersion &mode_version,
-           IteratorStorage *log_storage);
+  int init(IteratorStorage *log_storage);
   void destroy();
   void reuse();
 
@@ -121,8 +119,7 @@ public:
   //      - iterator start lsn is not the header of LogGroupEntry.
   int next(const share::SCN &replayable_point_scn, LogIOContext &io_ctx);
 
-  // param[in] replayable point scn, iterator will ensure that no log will return when the log scn is greater than
-  //           'replayable_point_scn' and the log is raw write
+  // param[in] replayable point scn; no log newer than it will be returned.
   // param[out] the min log scn of next log, is's valid only when return value is OB_ITER_END
   // param[out] iterate_end_by_replayable_point, return OB_ITER_END whether caused by replayable_point_scn.
   //   OB_SUCCESS.
@@ -156,7 +153,7 @@ public:
   //  NB: if the last write option success, but the data has been
   //       corrupted, we also regard it as the last write option is
   //       not atomic.
-  int get_entry(ENTRY &entry, LSN &lsn, bool &is_raw_write);
+  int get_entry(ENTRY &entry, LSN &lsn);
 
   bool is_valid() const;
   bool check_is_the_last_entry(LogIOContext &io_ctx);
@@ -164,8 +161,8 @@ public:
   LSN get_curr_read_lsn() const;
 
   TO_STRING_KV(KP(buf_), K_(next_round_pread_size), K_(curr_read_pos), K_(curr_read_buf_start_pos),
-      K_(curr_read_buf_end_pos), KPC(log_storage_), K_(curr_entry_is_raw_write), K_(curr_entry_size),
-      K_(prev_entry_scn), K_(curr_entry), K_(init_mode_version), K_(accumulate_checksum),
+      K_(curr_read_buf_end_pos), KPC(log_storage_), K_(curr_entry_size),
+      K_(prev_entry_scn), K_(curr_entry), K_(accumulate_checksum),
       K_(curr_entry_is_padding), K_(padding_entry_size), K_(padding_entry_scn));
 
 private:
@@ -196,7 +193,7 @@ private:
   //   OB_ITER_END
   //      -- means log entry is iterated end by replayable_point_scn
   //   OB_PARTIAL_LOG
-    //    -- iterator start lsn is not the header of LogGroupEntry.
+  //      -- iterator start lsn is not the header of LogGroupEntry.
   int parse_one_entry_(const SCN &replayable_point_scn,
                        IterateEndInfo &info);
 
@@ -225,24 +222,16 @@ private:
       if (curr_entry_is_padding_ && OB_FAIL(construct_padding_log_entry_(pos, padding_entry_size_))) {
         PALF_LOG(WARN, "construct_padding_log_entry_ failed", KPC(this));
       } else if (OB_FAIL(curr_entry_.deserialize(buf_, curr_read_buf_end_pos_, pos))) {
-      } else if (curr_entry_is_raw_write_ && curr_entry_.get_scn() > replayable_point_scn) {
-        ret = OB_ITER_END;
-        info.log_scn_ = curr_entry_.get_scn();
-        info.reason_ = IterateEndReason::DUE_TO_REPLAYABLE_POINT_SCN_LOG_ENTRY;
-        PALF_LOG(TRACE, "iterate end by replayable_point", KPC(this), K(replayable_point_scn), K(info));
       }
     } else {
       ret = OB_PARTIAL_LOG;
-      PALF_LOG(WARN, "parse LogEntry failed, iterator start lsn may not be aligned",
+      PALF_LOG(WARN, "entry type does not match LogEntry",
                KPC(this), K(replayable_point_scn), K(info));
     }
     return ret;
   }
 
   // When entry in file is LogGroupEntry, handle it specifically.
-  // 1. for raw write LogGroupEntry, if it's controlled by replayable_point_scn, no need update
-  //    'curr_read_pos_', 'accum_checksum_', because this log may later become unreadable.
-  // 2. for append LogGroupEntry, handle it normally.
   int parse_log_group_entry_(const SCN &replayable_point_scn,
                              IterateEndInfo &info)
   {
@@ -252,7 +241,7 @@ private:
     int64_t pos = curr_read_pos_;
     if (true == matched_type) {
       if (OB_FAIL(curr_entry_.deserialize(buf_, curr_read_buf_end_pos_, pos))) {
-      } else if (OB_FAIL(handle_each_log_group_entry_(curr_entry_, replayable_point_scn, info))) {
+      } else if (OB_FAIL(handle_each_log_group_entry_(curr_entry_))) {
         if (OB_ITER_END != ret) {
           PALF_LOG(WARN, "handle_each_log_group_entry_ failed", KPC(this), K(info), K(replayable_point_scn));
         } else {
@@ -261,7 +250,7 @@ private:
       }
     } else if (OB_FAIL(actual_entry.deserialize(buf_, curr_read_buf_end_pos_, pos))) {
       PALF_LOG(TRACE, "deserialize entry failed", K(ret), KPC(this));
-    } else if (OB_FAIL(handle_each_log_group_entry_(actual_entry, replayable_point_scn, info))) {
+    } else if (OB_FAIL(handle_each_log_group_entry_(actual_entry))) {
       if (OB_ITER_END != ret) {
         PALF_LOG(WARN, "handle_each_log_group_entry_ failed", KPC(this), K(actual_entry), K(info), K(replayable_point_scn));
       } else {
@@ -285,13 +274,10 @@ private:
   int read_data_from_storage_(LogIOContext &io_ctx);
 
   void advance_read_lsn_(const offset_t step);
-  void try_clean_up_cache_();
 
   template <class T>
   // when T is not LogGroupEntry, no need do anything
-  int handle_each_log_group_entry_(const T&entry,
-                                   const SCN &replayable_point_scn,
-                                   IterateEndInfo &info)
+  int handle_each_log_group_entry_(const T&entry)
   {
     PALF_LOG(TRACE, "T is not LogGroupEntry, do no thing", K(entry));
     return OB_SUCCESS;
@@ -302,60 +288,15 @@ private:
   // 1. check accumulate checksum:
   //   - if accumulate checksum is not match, return OB_CHECKSUM_ERROR
   //   - if data checksum is not match, return OB_INVALID_DATA
-  // 2. check this entry whether need control by 'replayable_point_scn':
-  //   - if control by 'replayable_point_scn', return OB_ITER_END, and don't modify
-  //     several fields in LogIteratorImpl('curr_read_pos_', 'curr_entry_is_raw_write_')
-  //   - if not control by 'replayable_point_scn', return OB_SUCCESS.
-  int handle_each_log_group_entry_(const LogGroupEntry&entry,
-                                   const SCN &replayable_point_scn,
-                                   IterateEndInfo &info)
+  int handle_each_log_group_entry_(const LogGroupEntry&entry)
   {
     int ret = OB_SUCCESS;
-    bool curr_entry_is_raw_write = entry.get_header().is_raw_write();
     int64_t new_accumulate_checksum = -1;
     PALF_LOG(TRACE, "T is LogGroupEntry", K(entry));
     if (OB_FAIL(verify_accum_checksum_(entry, new_accumulate_checksum))) {
       PALF_LOG(WARN, "verify_accum_checksum_ failed", K(ret), KPC(this), K(entry));
-    // NB: when current entry is raw write, and the log scn of current entry is greater than
-    //     replayable_point_scn, this log may be clean up, therefore we can not update several fields of
-    //     LogIteratorImpl, return OB_ITER_END directly, otherwise, we may not parse new LogGroupEntryHeader
-    //     after the replayable boundary, this will cause one log which is append, but control by replayable_point_scn.
-    //
-    // NB: we need check the min scn of LogGroupEntry whether has been greater than
-    //     replayable_point_scn:
-    //     - if LogGroupEntry has two LogEntry, the scn of them are 10, 15 respectively,
-    //       replayable_point_scn is 12. in this case, we can read first LogEntry, and
-    //       we can update several fields like 'curr_entry_is_raw_write_', 'accum_checksum_'
-    //       and the others('curr_read_pos_'...). when the replayable boundary is 12, the LogEntry
-    //       after 10 will be truncated, the new LogGroupEntry will be generated, meanwhile,
-    //       we will advanced 'curr_read_pos_' to the end of first LogEntry and read new LogGroupEntry
-    //       correctly.
-    //     - if LogGroupEntry has one LogEntry, the scn of it is 13, the several fields are
-    //       not been updated because of it's controlled by replayable_point_scn, when the replayable
-    //       scn is 12, we don't need rollback these fields.
-    //
-    // NB: for PalfGroupBufferIterator, we should use max scn to control replay and use min scn
-    //     as the log_scn_ of info. consider that, replayable_point_scn is 12, the min scn of group log
-    //     is 7 and max scn of group 15, we should not return this log. meanwhile, we should use
-    //     scn 7 to update next_min_scn.
-    } else if (true == curr_entry_is_raw_write) {
-      SCN min_scn;
-      bool is_group_iterator = std::is_same<ENTRY, LogGroupEntry>::value;
-      if (OB_FAIL(entry.get_log_min_scn(min_scn))) {
-        PALF_LOG(ERROR, "get_log_min_scn failed", K(ret), KPC(this), K(min_scn), 
-            K(entry), K(replayable_point_scn));
-      } else if ((is_group_iterator && entry.get_scn() > replayable_point_scn)
-                 || (!is_group_iterator && min_scn > replayable_point_scn)) {
-        info.log_scn_ = min_scn;
-        info.reason_ = IterateEndReason::DUE_TO_REPLAYABLE_POINT_SCN_LOG_GROUP_ENTRY;
-        ret = OB_ITER_END;
-        PALF_LOG(TRACE, "iterate end by replayable_point", K(ret), KPC(this), K(min_scn), 
-            K(entry), K(replayable_point_scn), K(info), K(is_group_iterator));
-      } else {
-      }
     }
     if (OB_SUCC(ret)) {
-      curr_entry_is_raw_write_ = entry.get_header().is_raw_write();
       accumulate_checksum_ = new_accumulate_checksum;
       // To support get PADDING entry, need record the meta info of PADDING entry
       set_padding_info_(entry);
@@ -421,11 +362,9 @@ static constexpr int MAX_READ_TIMES_IN_EACH_NEXT = 2;
   int64_t next_round_pread_size_;
   IteratorStorage *log_storage_;
   ENTRY curr_entry_;
-  bool curr_entry_is_raw_write_;
   // this fields record the entry size of curr readable entry.
   // NB: when 'curr_entry_size_' is 0, means it's not readable.
   int64_t curr_entry_size_;
-  int64_t init_mode_version_;
   // The log scn of prev entry, only effect when 'curr_entry_' is invalid.
   //
   // Add this field is only used for interface next(replayable_point_scn, &next_min_scn)
@@ -433,7 +372,6 @@ static constexpr int MAX_READ_TIMES_IN_EACH_NEXT = 2;
   // when 'next' return OB_SUCCESS, use 'prev_entry_scn_' to record the log ts of 'curr_entry_'.
   //
   share::SCN prev_entry_scn_;
-  GetModeVersion get_mode_version_;
   int64_t accumulate_checksum_;
   // To support get PADDING ENTRY, add following fields:
   int64_t curr_entry_is_padding_;
@@ -451,9 +389,7 @@ LogIteratorImpl<ENTRY>::LogIteratorImpl()
     next_round_pread_size_(0),
     log_storage_(NULL),
     curr_entry_(),
-    curr_entry_is_raw_write_(false),
     curr_entry_size_(0),
-    init_mode_version_(0),
     prev_entry_scn_(),
     accumulate_checksum_(-1),
     curr_entry_is_padding_(false),
@@ -470,8 +406,7 @@ LogIteratorImpl<ENTRY>::~LogIteratorImpl()
 }
 
 template <class ENTRY>
-int LogIteratorImpl<ENTRY>::init(const GetModeVersion &get_mode_version,
-                                 IteratorStorage *log_storage)
+int LogIteratorImpl<ENTRY>::init(IteratorStorage *log_storage)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
@@ -483,10 +418,7 @@ int LogIteratorImpl<ENTRY>::init(const GetModeVersion &get_mode_version,
     next_round_pread_size_ = MAX_LOG_BUFFER_SIZE;
     log_storage_ = log_storage;
     curr_entry_.reset();
-    curr_entry_is_raw_write_ = false;
     curr_entry_size_ = 0;
-    init_mode_version_ = PALF_INITIAL_PROPOSAL_ID;
-    get_mode_version_ = get_mode_version;
     prev_entry_scn_.reset();
     accumulate_checksum_ = -1;
     curr_entry_is_padding_ = false;
@@ -506,9 +438,7 @@ void LogIteratorImpl<ENTRY>::reuse()
   curr_read_buf_end_pos_ = 0;
   next_round_pread_size_ = MAX_LOG_BUFFER_SIZE;
   curr_entry_.reset();
-  curr_entry_is_raw_write_ = false;
   curr_entry_size_ = 0;
-  init_mode_version_ = PALF_INITIAL_PROPOSAL_ID;
   prev_entry_scn_.reset();
   accumulate_checksum_ = -1;
   curr_entry_is_padding_ = false;
@@ -526,9 +456,7 @@ void LogIteratorImpl<ENTRY>::destroy()
     curr_entry_is_padding_ = false;
     accumulate_checksum_ = -1;
     prev_entry_scn_.reset();
-    init_mode_version_ = PALF_INITIAL_PROPOSAL_ID;
     curr_entry_size_ = 0;
-    curr_entry_is_raw_write_ = false;
     curr_entry_.reset();
     log_storage_ = NULL;
     next_round_pread_size_ = 0;
@@ -536,7 +464,6 @@ void LogIteratorImpl<ENTRY>::destroy()
     curr_read_buf_end_pos_ = 0;
     curr_read_buf_start_pos_ = 0;
     curr_read_pos_ = 0;
-    init_mode_version_ = 0;
   }
 }
 
@@ -647,17 +574,6 @@ int LogIteratorImpl<ENTRY>::next(const share::SCN &replayable_point_scn,
   iterate_end_by_replayable_point = false;
   IterateEndInfo info;
 
-  // NB: when return OB_ITER_END, we need try to clean up cache, and we should clean up cache only when
-  // the log ts of curr entry is greater than 'replayable_point_scn', otherwise, we would return some logs
-  // that should not be returned, consider following case:
-  // 1. T1, 'replayable_point_scn' is 10, the log ts of curr entry is 15.(no any bad effect)
-  // 2. T2, 'replayable_point_scn' is 10, the logs on disk after 10 are no longer readable, and
-  //    return OB_ITER_END because of 'file end lsn'.(no any bad effect)
-  // 3. T3, 'replayable_point_scn' has been advanced to 16, and write several logs on disk, however, the cache
-  //    of iterator has not been clean up, the old logs will be returned.(bad effect)
-  //
-  // Therefore, we should try_clean_up_cache_ in the beginning of each round of next.
-  (void) try_clean_up_cache_();
   if (!replayable_point_scn.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid argument", K(replayable_point_scn), KPC(this));
@@ -719,13 +635,10 @@ int LogIteratorImpl<ENTRY>::next(const share::SCN &replayable_point_scn,
           next_min_scn);
       PALF_LOG(TRACE, "update next_min_scn to max of prev_entry_scn_ and next_min_scn",
           KPC(this), K(info), K(replayable_point_scn));
-      // NB: To make 'next_min_scn' newly, advance 'prev_entry_scn_' when 'curr_entry_' need control by readable point scn.
-      //     consider follower case:
+      // Advance prev_entry_scn_ when the current entry is beyond the readable point:
       //     T1, iterate an entry successfully, and make prev_entry_scn to 5;
       //     T2, iterate control by readable point scn, scn of 'curr_entry_' is 10, and readable point scn is 8.
-      //     T3, the logs after 8 are no longer readable, and no log has been written.
-      //     if we don't advance 'prev_entry_scn_' to 8, the continuous point of replay service can not update
-      //     to 8.
+      //     If no later log is written, advance prev_entry_scn_ so replay can advance to 8.
       if (info.log_scn_ > replayable_point_scn) {
         prev_entry_scn_ = MAX(replayable_point_scn, prev_entry_scn_);
         PALF_LOG(TRACE, "update prev_entry_scn_ to replayable_point_scn", KPC(this), K(info), K(replayable_point_scn));
@@ -746,7 +659,7 @@ int LogIteratorImpl<ENTRY>::next(const share::SCN &replayable_point_scn,
 }
 
 template<class ENTRY>
-int LogIteratorImpl<ENTRY>::get_entry(ENTRY &entry, LSN &lsn, bool &is_raw_write)
+int LogIteratorImpl<ENTRY>::get_entry(ENTRY &entry, LSN &lsn)
 {
   int ret = OB_SUCCESS;
   int64_t pos = curr_read_pos_;
@@ -763,7 +676,6 @@ int LogIteratorImpl<ENTRY>::get_entry(ENTRY &entry, LSN &lsn, bool &is_raw_write
     PALF_LOG(WARN, "invalid data", K(ret), KPC(this), K(entry));
   } else {
     lsn = log_storage_->get_lsn(curr_read_pos_);
-    is_raw_write = curr_entry_is_raw_write_;
   }
   return ret;
 }
@@ -906,7 +818,6 @@ bool LogIteratorImpl<ENTRY>::check_is_the_last_entry(LogIOContext &io_ctx)
       PALF_LOG(ERROR, "read_data_from_storage_ failed", K(ret), KPC(this));
     } else if (OB_ITER_END == ret) {
       PALF_LOG(INFO, "has iterate end", K(ret), KPC(this));
-      // NB: compatibility
       // If the size of current readable data is smaller than header size, return OB_ITER_END.
     } else if (curr_read_buf_end_pos_ - curr_read_buf_start_pos_ < header.get_serialize_size()) {
       ret = OB_ITER_END;
@@ -1012,53 +923,6 @@ int LogIteratorImpl<ENTRY>::read_data_from_storage_(LogIOContext &io_ctx)
   return ret;
 }
 
-template <class ENTRY>
-void LogIteratorImpl<ENTRY>::try_clean_up_cache_()
-{
-  const bool matched_type = std::is_same<LogMetaEntry, ENTRY>::value;
-  const int64_t current_mode_version = get_mode_version_();
-  if (true == matched_type) {
-    // do nothing
-  } else if (INVALID_PROPOSAL_ID == current_mode_version || init_mode_version_ > current_mode_version) {
-    PALF_LOG_RET(WARN, OB_ERR_UNEXPECTED, "current_mode_version is unexpected", K(current_mode_version), KPC(this));
-  } else if (init_mode_version_ < current_mode_version) {
-    PALF_LOG_RET(WARN, OB_SUCCESS, "mode version has been changed, need reset cache buf", KPC(this), K(current_mode_version));
-    LSN curr_read_lsn = log_storage_->get_lsn(curr_read_pos_);
-    // reuse LogIteratorStorage firstly, only the log before 'start_lsn_' + 'curr_read_pos_'
-    // has been consumed.
-    // NB: need ensure that we can not update 'curr_read_pos_' to 'curr_read_pos_' + sizeof(LogGroupEntryHeader)
-    //     when the LogGroupEntryHeader after 'curr_read_pos_' need be controlled by replayable_point_scn.
-    log_storage_->reuse(curr_read_lsn);
-    curr_read_buf_start_pos_ = 0;
-    curr_read_pos_ = 0;
-    curr_read_buf_end_pos_ = 0;
-    curr_entry_.reset();
-
-    // NB: we can not reset curr_entry_is_raw_write_, otherwise, the log entry after replayable_point_scn may no be
-    //     controlled by replayable_point_scn.
-    //     consider that:
-    //     1. At T1 timestamp, the LogGroupEntry has three LogEntry, the first LogEntry has been seen by ReplayService,
-    //        however, the remained LogEntry can not been seen due to replayable_point_scn (current replayable_point_scn
-    //        may be lag behind others).
-    //     2. At T2 timestamp, mode version has changed, and there are several logs whose SCN is greater than
-    //        replayable_point_scn.
-    //     3. At T3 timestamp, ReplayService use next() function, iterator will try_clean_up_cache_ because mode version
-    //        has been changed. if reset curr_entry_is_raw_write_, the second LogEntry may be seen by ReplayService even
-    //        if the SCN of this LogEntry is greater than replayable_point_scn.
-    // curr_entry_is_raw_write_ = false;
-    curr_entry_size_ = 0;
-    init_mode_version_ = current_mode_version;
-
-    // we can not reset prev_entry_scn_, otherwise, if there is no logs which can be readable on disk,
-    // we can not return a valid next_min_scn.
-    // - prev_entry_.reset();
-
-    // we need reset accum_checksum_, otherwise, the accum_checksum_ is from the previous readable range, and iterate new
-    // group log will fail.
-    accumulate_checksum_ = -1;
-    reset_padding_info_();
-  }
-}
 } // end namespace palf
 } // end namespace oceanbase
 #endif

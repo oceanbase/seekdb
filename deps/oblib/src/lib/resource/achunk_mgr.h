@@ -164,6 +164,27 @@ private:
   const bool with_mutex_;
 }; // end of class AChunkList
 
+const char *const use_large_pages_confs[] =
+{
+  "true",
+  "false",
+  "only"
+};
+
+class ObLargePageHelper
+{
+public:
+  static const int INVALID_LARGE_PAGE_TYPE = -1;
+  static const int NO_LARGE_PAGE = 0;
+  static const int PREFER_LARGE_PAGE = 1;
+  static const int ONLY_LARGE_PAGE = 2;
+public:
+  static void set_param(const char *param);
+  static int get_type();
+private:
+  static int large_page_type_;
+};
+
 class AChunkMgr
 {
   friend class ProtectedStackAllocator;
@@ -232,10 +253,10 @@ private:
   bool try_inc_hold(int64_t bytes, int64_t limit, bool high_prio);
   bool try_inc_hold_hard(int64_t bytes, bool high_prio);
   bool try_inc_hold_soft(int64_t bytes);
-  void *direct_alloc(const uint64_t size);
+  void *direct_alloc(const uint64_t size, const bool can_use_huge_page, bool &huge_page_used, const bool alloc_shadow);
   void direct_free(const void *ptr, const uint64_t size);
   // wrap for mmap
-  void *low_alloc(const uint64_t size);
+  void *low_alloc(const uint64_t size, const bool can_use_huge_page, bool &huge_page_used, const bool alloc_shadow);
   void low_free(const void *ptr, const uint64_t size);
   int32_t slot_idx(const uint64_t size)
   {

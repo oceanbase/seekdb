@@ -342,19 +342,15 @@ ObTenant::ObTenant(const int64_t epoch,
       recv_mysql_cnt_(0),
       recv_task_cnt_(0),
       recv_sql_task_cnt_(0),
-      recv_large_req_cnt_(0),
       recv_retry_on_lock_rpc_cnt_(0),
       recv_retry_on_lock_mysql_cnt_(0),
-      tt_large_quries_(0),
       lock_(),
       mtl_init_ctx_(nullptr),
       workers_lock_(common::ObLatchIds::TENANT_WORKER_LOCK),
       disable_user_sched_(false),
       token_change_ts_(0),
       completion_cnt_(0),
-      ctx_(nullptr),
-      st_metrics_(),
-      sql_limiter_()
+      ctx_(nullptr)
 {
 }
 
@@ -428,13 +424,7 @@ int ObTenant::construct_mtl_init_ctx(const ObTenantMeta &meta, share::ObTenantMo
     mtl_init_ctx_->palf_options_.disk_options_.log_disk_utilization_limit_threshold_ = 95;
     mtl_init_ctx_->palf_options_.disk_options_.log_disk_throttling_percentage_ = 100;
     mtl_init_ctx_->palf_options_.disk_options_.log_disk_throttling_maximum_duration_ = 2LL * 60 * 60 * 1000 * 1000;//2h
-    mtl_init_ctx_->palf_options_.disk_options_.log_writer_parallelism_ = 3;
-    if (OB_UNLIKELY(!true)) {
-      ret = false ? OB_SUCCESS : OB_ENTRY_NOT_EXIST;
-    } else {
-      mtl_init_ctx_->palf_options_.disk_options_.log_writer_parallelism_ = GCONF._log_writer_parallelism;
-      mtl_init_ctx_->palf_options_.enable_log_cache_ = GCONF._enable_log_cache;
-    }
+    mtl_init_ctx_->palf_options_.enable_log_cache_ = GCONF._enable_log_cache;
     LOG_INFO("construct_mtl_init_ctx success", "palf_options", mtl_init_ctx_->palf_options_.disk_options_
              );
   }
@@ -496,12 +486,6 @@ void ObTenant::set_tenant_super_block(const ObTenantSuperBlock &super_block)
 {
   TCWLockGuard guard(meta_lock_);
   tenant_meta_.super_block_ = super_block;
-}
-
-Worker::CompatMode ObTenant::get_compat_mode() const
-{
-  TCRLockGuard guard(meta_lock_);
-  return tenant_meta_.unit_.mode_;
 }
 
 ObUnitInfoGetter::ObUnitStatus  ObTenant::get_unit_status()
@@ -702,7 +686,6 @@ int64_t ObTenant::max_worker_cnt() const
 }
 
 int ObTenant::get_new_request(
-    ObThWorker &w,
     int64_t timeout,
     rpc::ObRequest *&req)
 {
@@ -710,17 +693,11 @@ int ObTenant::get_new_request(
   ObLink* task = nullptr;
 
   req = nullptr;
-  w.set_large_query(false);
   ret = req_queue_.pop(task, timeout);
 
   if (OB_SUCC(ret)) {
     if (nullptr == req && nullptr != task) {
       req = static_cast<rpc::ObRequest*>(task);
-    }
-    if (nullptr != req) {
-      if (req->large_retry_flag()) {
-        w.set_large_query();
-      }
     }
   }
   return ret;
@@ -765,7 +742,7 @@ int ObTenant::recv_request(ObRequest &req)
         break;
       }
       case ObRequest::OB_TASK:
-      case ObRequest::OB_TS_TASK: {
+      {
         ATOMIC_INC(&recv_task_cnt_);
         if (OB_FAIL(req_queue_.push(&req, RQ_HIGH, true))) {
           LOG_WARN("push request to queue fail", K(ret), K(this));
@@ -795,11 +772,6 @@ int ObTenant::recv_request(ObRequest &req)
     if (idle_count() == 0) {
       try_expand_one(min_worker_cnt());
     }
-  }
-
-  if (OB_SIZE_OVERFLOW == ret || (GCONF._faststack_req_queue_size_threshold.get_value() > 0 &&
-      req_queue_.size() >= GCONF._faststack_req_queue_size_threshold.get_value())) {
-    IGNORE_RETURN faststack();
   }
 
   return ret;
@@ -857,18 +829,10 @@ void ObTenant::handle_retry_req(bool need_clear)
   while (OB_SUCC(retry_queue_.pop(task, need_clear))) {
     // if pop returns OB_SUCCESS, then the task must not be NULL.
     req = static_cast<rpc::ObRequest*>(task);
-    if (req->large_retry_flag()) {
-      if (OB_FAIL(recv_request(*req))) {
-        LOG_WARN("tenant patrol push req into large_query queue fail, "
-            "and the req well be destroyed", "req", *req, K(ret));
-        on_translate_fail(req, ret);
-      }
-    } else {
-      if (OB_FAIL(recv_request(*req))) {
-        LOG_WARN("tenant patrol push req into common queue fail, "
-            "and the req well be destroyed", "req", *req, K(ret));
-        on_translate_fail(req, ret);
-      }
+    if (OB_FAIL(recv_request(*req))) {
+      LOG_WARN("tenant patrol push req into common queue fail, "
+          "and the req well be destroyed", "req", *req, K(ret));
+      on_translate_fail(req, ret);
     }
   }
 }
@@ -889,7 +853,6 @@ void ObTenant::check_worker_count()
   }
 }
 
-// This interface is unnecessary after adding htap
 int ObTenant::acquire_more_worker(int64_t num, int64_t &succ_num, bool force)
 {
   int ret = OB_SUCCESS;

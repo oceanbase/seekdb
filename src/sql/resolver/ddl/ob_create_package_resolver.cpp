@@ -47,7 +47,6 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
   if (OB_SUCC(ret)) {
     bool resolve_success = true;
     HEAP_VAR(ObPLPackageAST, package_ast, *allocator_) {
-      int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
       ObPLPackageGuard package_guard{};
       ObCreatePackageStmt *stmt = NULL;
       ParseNode *package_block_node = NULL ;
@@ -110,7 +109,6 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
                                               db_name,
                                               package_name,
                                               share::schema::PACKAGE_TYPE,
-                                              compatible_mode,
                                               package_spec_info));
         if (OB_ERR_PACKAGE_DOSE_NOT_EXIST == ret) { // may be not old package header
           ret = OB_SUCCESS;
@@ -149,7 +147,6 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("allocate memory for create package stmt failed", K(ret));
         } else {
-          common::ObCompatibilityMode compa_mode = common::MYSQL_MODE;
           obcall::ObCreatePackageArg &create_package_arg = stmt->get_create_package_arg();
           ObPackageInfo &package_info = create_package_arg.package_info_;
           ObString package_block(static_cast<int32_t>(package_block_node->str_len_), package_block_node->str_value_);
@@ -159,7 +156,6 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
           
           package_info.set_owner_id(session_info_->get_user_id());
           package_info.set_type(share::schema::PACKAGE_TYPE);
-          package_info.set_compatibility_mode(compa_mode);
           if (is_invoker_right) {
             package_info.set_invoker_right();
           }
@@ -220,7 +216,6 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
                                                 db_name,
                                                 package_name,
                                                 share::schema::PACKAGE_BODY_TYPE,
-                                                compatible_mode,
                                                 package_body_info));
           if (OB_SUCC(ret) && OB_NOT_NULL(package_body_info) && !package_body_info->is_for_trigger()) {
             ObString source = package_body_info->get_source();
@@ -412,7 +407,7 @@ int ObCreatePackageResolver::resolve_functions_spec(const ObPackageInfo &package
       routine_info.set_overload(NO_OVERLOAD_IDX); //no overload
       for (int64_t k = routine_list.count(); OB_SUCC(ret) && k>0; k--) {
         ObRoutineInfo &tmp_routine_info = routine_list.at(k-1);
-        if (ObCharset::case_compat_mode_equal(routine_info.get_routine_name(),
+        if (ObCharset::case_insensitive_equal(routine_info.get_routine_name(),
                                               tmp_routine_info.get_routine_name())) {
           if (NO_OVERLOAD_IDX == tmp_routine_info.get_overload()) {
             tmp_routine_info.set_overload(OVERLOAD_START_IDX);
@@ -565,13 +560,11 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
                                 package_guard,
                                 *params_.sql_proxy_);
           const ObPackageInfo *package_spec_info = NULL;
-          int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
           ObString source;
           OZ (schema_checker_->get_package_info(
                                                 db_name,
                                                 package_name,
                                                 share::schema::PACKAGE_TYPE,
-                                                compatible_mode,
                                                 package_spec_info));
           if (OB_ERR_PACKAGE_DOSE_NOT_EXIST == ret) {
             ret = OB_ERR_SPEC_NOT_EXIST;
@@ -671,7 +664,6 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
 
     //set package body common info
     if (OB_SUCC(ret)) {
-      common::ObCompatibilityMode compa_mode = common::MYSQL_MODE;
       obcall::ObCreatePackageArg &create_package_arg = stmt->get_create_package_arg();
       ObPackageInfo &package_info = create_package_arg.package_info_;
       ObString package_body_block(static_cast<int32_t>(package_body_block_node->str_len_),
@@ -684,7 +676,6 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
       
       package_info.set_owner_id(session_info_->get_user_id());
       package_info.set_type(share::schema::PACKAGE_BODY_TYPE);
-      package_info.set_compatibility_mode(compa_mode);
       if (!create_package_arg.is_editionable_) {
         create_package_arg.package_info_.set_noneditionable();
       }

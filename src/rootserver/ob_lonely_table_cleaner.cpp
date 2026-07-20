@@ -25,26 +25,26 @@ namespace oceanbase
 namespace rootserver
 {
 
-static int check_runtime_not_active()
+static int check_tenant_not_active()
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
-  const ObSimpleServerRuntimeSchema *runtime_schema = nullptr;
+  const ObSimpleTenantSchema *tenant_schema = nullptr;
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
-    LOG_WARN("get runtime schema guard failed", K(ret));
-  } else if (OB_FAIL(schema_guard.get_server_runtime_info(runtime_schema))) {
-    LOG_WARN("get runtime schema failed", K(ret));
-  } else if (OB_ISNULL(runtime_schema)) {
-    ret = OB_RUNTIME_SCHEMA_NOT_READY;
-    LOG_WARN("runtime schema does not exist", K(ret));
-  } else if (runtime_schema->is_normal() || runtime_schema->is_dropping()) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("get tenant schema guard failed", K(ret));
+  } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_schema))) {
+    LOG_WARN("get tenant schema failed", K(ret));
+  } else if (OB_ISNULL(tenant_schema)) {
+    ret = OB_TENANT_NOT_EXIST;
+    LOG_WARN("tenant does not exist", K(ret));
+  } else if (tenant_schema->is_normal() || tenant_schema->is_dropping()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("runtime is still active", K(ret), KPC(runtime_schema));
+    LOG_ERROR("tenant is still active", K(ret));
   } else {
-    LOG_INFO("runtime is not active", K(ret), KPC(runtime_schema));
+    LOG_INFO("tenant is not active", K(ret));
   }
   return ret;
 }
@@ -73,10 +73,10 @@ int ObDDLService::force_drop_lonely_lob_aux_table(const obcall::ObForceDropLonel
     bool ignore_ls_not_exist_for_lob_piece = false;
 
     HEAP_VAR(ObTableSchema, tmp_lob_table_schema) {
-      if (OB_FAIL(get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
+      if (OB_FAIL(get_tenant_schema_guard_with_version_in_inner_table(schema_guard))) {
         LOG_WARN("fail to get schema guard with version in inner table", KR(ret));
       } else if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
-        LOG_WARN("fail to get runtime schema version", KR(ret));
+        LOG_WARN("fail to get tenant schema version", KR(ret));
       } else if (OB_FAIL(trans.start(sql_proxy_, refreshed_schema_version))) {
         LOG_WARN("fail to start trans", KR(ret), K(refreshed_schema_version));
 
@@ -104,8 +104,8 @@ int ObDDLService::force_drop_lonely_lob_aux_table(const obcall::ObForceDropLonel
         LOG_ERROR("fail to drop lob meta table", KR(ret), K(tmp_lob_table_schema));
         if (OB_LS_NOT_EXIST == ret || OB_LS_IS_DELETED == ret) {
           int tmp_ret = OB_SUCCESS;
-          if (OB_TMP_FAIL(check_runtime_not_active())) {
-            LOG_WARN("check runtime state failed", KR(tmp_ret));
+          if (OB_TMP_FAIL(check_tenant_not_active())) {
+            LOG_WARN("check tenant state failed", KR(tmp_ret));
           } else {
             LOG_ERROR("ls not exist, ignore this when drop lob meta aux table", KR(ret), K(tmp_lob_table_schema));
             ret = OB_SUCCESS;
@@ -124,8 +124,8 @@ int ObDDLService::force_drop_lonely_lob_aux_table(const obcall::ObForceDropLonel
         LOG_WARN("fail to drop lob piece table", KR(ret), K(tmp_lob_table_schema));
         if (OB_LS_NOT_EXIST == ret || OB_LS_IS_DELETED == ret) {
           int tmp_ret = OB_SUCCESS;
-          if (OB_TMP_FAIL(check_runtime_not_active())) {
-             LOG_WARN("check runtime state failed", KR(tmp_ret));
+          if (OB_TMP_FAIL(check_tenant_not_active())) {
+             LOG_WARN("check tenant state failed", KR(tmp_ret));
           } else {
             LOG_ERROR("ls not exist, ignore this when drop lob piece aux table", KR(ret), K(tmp_lob_table_schema));
             ret = OB_SUCCESS;

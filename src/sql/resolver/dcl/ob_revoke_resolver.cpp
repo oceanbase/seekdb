@@ -232,6 +232,7 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
           } else {
             ObString db = ObString::make_string("");
             ObString table = ObString::make_string("");
+            ObString catalog = ObString::make_string("");
             if (priv_object_node != NULL
                 && OB_FAIL(ObGrantResolver::resolve_priv_level_with_object_type(session_info_,
                                                                                 priv_object_node,
@@ -245,13 +246,14 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
                         db,
                         table,
                         grant_level,
-                        *allocator_))) {
+                        *allocator_,
+                        catalog))) {
               LOG_WARN("Resolve priv_level node error", K(ret));
             } else {
               revoke_stmt->set_grant_level(grant_level);
             }
 
-            if (OB_SUCC(ret)) {
+            if (OB_SUCC(ret) && grant_level != OB_PRIV_CATALOG_LEVEL) {
               if (OB_FAIL(check_and_convert_name(db, table))) {
                 LOG_WARN("Check and convert name error", K(db), K(table), K(ret));
               } else if (OB_FAIL(revoke_stmt->set_database_name(db))) {
@@ -266,6 +268,7 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
                                                                              params_.schema_checker_,
                                                                              db,
                                                                              table,
+                                                                             catalog,
                                                                              allocator_,
                                                                              false))) {
               LOG_WARN("failed to resolve priv object", K(ret));

@@ -56,6 +56,10 @@ int ObDefaultValueUtils::generate_insert_value(const ColumnItem *column,
       if (OB_FAIL(build_default_expr_for_generated_column(*column, expr))) {
         LOG_WARN("build default expr for generated column failed", K(ret));
       }
+    } else if (OB_IDENTITY_COLUMN_DEFAULT_OP == op) {
+      if (OB_FAIL(build_default_expr_for_identity_column(*column, expr, T_INSERT_SCOPE))) {
+        LOG_WARN("build default expr for identity column failed", K(ret));
+      }
     } else {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("default_value_op is INVALID", K(op), K(ret));
@@ -222,6 +226,10 @@ int ObDefaultValueUtils::resolve_default_expr(const ColumnItem &column_item, ObR
     if (OB_FAIL(build_default_expr_for_generated_column(column_item, expr))) {
       LOG_WARN("build default expr for generated column failed", K(ret));
     }
+  } else if (column_item.expr_->is_identity_column()) {
+    if (OB_FAIL(build_default_expr_for_identity_column(column_item, expr, scope))) {
+      LOG_WARN("build default expr for identity column failed", K(ret));
+    }
   } else {
     ObSysFunRawExpr *default_func_expr = NULL;
     ObRawExpr *c_expr = NULL;
@@ -343,6 +351,13 @@ int ObDefaultValueUtils::build_default_expr_strict(const ColumnItem *column, ObR
   } else if (NULL != column->default_value_expr_) {
     if (OB_FAIL(build_expr_default_expr(column, const_cast<ColumnItem *>(column)->default_value_expr_, expr))) {
       LOG_WARN("fail to build expr_default expr", K(ret));
+    } else {
+      ObDelUpdResolver* del_upd_resolver = dynamic_cast<ObDelUpdResolver *>(resolver_);
+      if (OB_ISNULL(del_upd_resolver)) {
+        // do nothing
+      } else if (OB_FAIL(del_upd_resolver->recursive_search_sequence_expr(expr))) {
+        LOG_WARN("fail to search sequence expr", K(ret));
+      }
     }
   } else if (column->base_cid_ == OB_HIDDEN_PK_INCREMENT_COLUMN_ID) {
     if (OB_FAIL(resolver_->build_heap_table_hidden_pk_expr(expr, column->get_expr()))) {
@@ -444,6 +459,7 @@ int ObDefaultValueUtils::build_expr_default_expr(const ColumnItem *column,
 {
   int ret = OB_SUCCESS;
   ObRawExpr *temp_expr = NULL;
+  ObRawExpr *seq_expr = nullptr;
   if (OB_ISNULL(column)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguemnt", K(column));
@@ -454,6 +470,11 @@ int ObDefaultValueUtils::build_expr_default_expr(const ColumnItem *column,
                                                 input_expr,
                                                 temp_expr))) {
     LOG_WARN("failed to copy expr", K(ret));
+  } else if (OB_FAIL(ObRawExprUtils::extract_invalid_sequence_expr(temp_expr, seq_expr))) {
+    LOG_WARN("fail to get invalid sequence expr", K(ret));
+  } else if (nullptr != seq_expr) {
+    ret = OB_ERR_SEQ_NOT_EXIST;
+    LOG_WARN("sequence not exist", K(ret));
   } else {
     const_expr = temp_expr;
   }
@@ -515,6 +536,8 @@ int ObDefaultValueUtils::get_default_type_for_insert(const ColumnItem *column, O
     LOG_WARN("invalid argument", KPC(column), K(params_), K(ret));
   } else if (column->expr_->is_generated_column()) {
     op = OB_GENERATED_COLUMN_DEFAULT_OP;
+  } else if (column->expr_->is_identity_column()) {
+    op = OB_IDENTITY_COLUMN_DEFAULT_OP;
   } else if (column->is_not_null_for_write()
              && !column->is_auto_increment()) {
     if (column->base_cid_ == OB_HIDDEN_PK_INCREMENT_COLUMN_ID) {
@@ -1094,6 +1117,46 @@ int ObDefaultValueUtils::build_default_expr_for_gc_column_ref(const ColumnItem &
     LOG_WARN("column expr is null", K_(column.expr), K_(stmt));
   } else if (OB_FAIL(ObRawExprUtils::build_null_expr(*params_->expr_factory_, expr))) {
     LOG_WARN("fail to build null expr", K(ret));
+  }
+  return ret;
+}
+
+int ObDefaultValueUtils::build_default_expr_for_identity_column(const ColumnItem &column,
+                                                                ObRawExpr *&expr,
+                                                                ObStmtScope scope)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(column.expr_) || OB_ISNULL(stmt_) || OB_ISNULL(params_) || OB_ISNULL(resolver_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("column expr is null", K(column.expr_), K(stmt_), K(params_), K(ret));
+  } else {
+    
+    const ObColumnSchemaV2 *column_schema = NULL;
+    const ObSequenceSchema *sequence_schema = NULL;
+    const ObString dummy_db_name;
+    uint64_t sequence_id;
+    if (OB_FAIL(params_->schema_checker_->get_column_schema(
+                column.base_tid_, column.base_cid_, column_schema))) {
+      LOG_WARN("get column schema fail", K(ret));
+    } else {
+      sequence_id = column_schema->get_sequence_id();
+      const ObString seq_oper("NEXTVAL");
+      if (OB_FAIL(params_->schema_checker_->get_schema_guard()->get_sequence_schema
+                      ( sequence_id, sequence_schema))) {
+        LOG_WARN("get column schema fail", K(ret));
+      } else if (OB_FAIL(ObRawExprUtils::build_seq_nextval_expr(
+                  expr, resolver_->session_info_, resolver_->params_.expr_factory_, dummy_db_name,
+                  sequence_schema->get_sequence_name(), seq_oper, sequence_id,
+                  resolver_->get_stmt()))) {
+        LOG_WARN("resolve column item fail", K(sequence_id), K(ret));
+      } else if (OB_FAIL(resolver_->add_sequence_id_to_stmt(sequence_id))) {
+        LOG_WARN("fail add sequence id to stmt", K(sequence_id), K(ret));
+      } else if ((column.get_expr()->is_table_part_key_column() || 
+                  column.get_expr()->is_table_part_key_org_column()) && scope == T_INSERT_SCOPE) {
+        ObDelUpdStmt *del_upd_stmt = static_cast<ObDelUpdStmt*>(stmt_);
+        del_upd_stmt->set_has_part_key_sequence(true);
+      }
+    }
   }
   return ret;
 }

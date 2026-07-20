@@ -25,7 +25,6 @@
 #include "storage/ddl/ob_ddl_lock.h"
 #include "storage/tablelock/ob_table_lock_service.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
-#include "rootserver/ob_split_partition_helper.h"
 #include "share/table/ob_ttl_util.h"
 #include "rootserver/ob_create_index_on_empty_table_helper.h"
 
@@ -204,14 +203,7 @@ int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIn
   ObSchemaGetterGuard schema_guard;
   bool is_db_in_recyclebin = false;
   bool ignore_for_domain_index = false;
-  bool need_rename_index = true;
-  ObTableType drop_table_type = USER_INDEX;
   ObDropIndexArg arg;
-  const bool is_mlog = (obcall::ObIndexArg::DROP_MLOG == const_arg.index_action_type_);
-  if (is_mlog) {
-    need_rename_index = false;
-    drop_table_type = MATERIALIZED_VIEW_LOG;
-  }
   if (OB_FAIL(arg.assign(const_arg))) {
     LOG_WARN("fail to assign const_arg", K(ret));
   } else if (OB_FALSE_IT(schema_guard.set_session_id(arg.session_id_))) {
@@ -264,9 +256,7 @@ int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIn
         ignore_for_domain_index = ignore_error_code_for_domain_index(OB_TABLE_NOT_EXIST, arg);
       }
     } else {
-      if (is_mlog) {
-        index_table_name = arg.index_name_;
-      } else if (OB_FAIL(ObTableSchema::build_index_table_name(
+      if (OB_FAIL(ObTableSchema::build_index_table_name(
           allocator, data_table_id, arg.index_name_, index_table_name))) {
         LOG_WARN("build_index_table_name failed", K(arg), K(data_table_id), K(ret));
       }
@@ -274,7 +264,7 @@ int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIn
         if (OB_FAIL(schema_guard.get_table_schema(
             table_schema->get_database_id(),
             index_table_name,
-            !is_mlog,/*is_index*/
+            true,/*is_index*/
             index_table_schema))) {
           LOG_WARN("fail to get table schema", K(ret), K(index_table_name), K(index_table_schema));
         }
@@ -284,18 +274,10 @@ int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIn
     const common::ObIArray<ObForeignKeyInfo> &foreign_key_infos = table_schema->get_foreign_key_infos();
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(index_table_schema)) {
-      if (is_mlog) {
-        ret = OB_ERR_TABLE_NO_MLOG;
-        LOG_WARN("table does not have a materialized view log", KR(ret),
-            K(arg.database_name_), K(arg.index_name_));
-        ObCStringHelper helper;
-        LOG_USER_ERROR(OB_ERR_TABLE_NO_MLOG, helper.convert(arg.database_name_), helper.convert(arg.index_name_));
-      } else {
-        ret = OB_ERR_CANT_DROP_FIELD_OR_KEY;
-        LOG_WARN("index table schema should not be null", K(arg.index_name_), K(index_table_name), K(ret));
-        if (!ignore_for_domain_index) {
-          LOG_USER_ERROR(OB_ERR_CANT_DROP_FIELD_OR_KEY, arg.index_name_.length(), arg.index_name_.ptr());
-        }
+      ret = OB_ERR_CANT_DROP_FIELD_OR_KEY;
+      LOG_WARN("index table schema should not be null", K(arg.index_name_), K(index_table_name), K(ret));
+      if (!ignore_for_domain_index) {
+        LOG_USER_ERROR(OB_ERR_CANT_DROP_FIELD_OR_KEY, arg.index_name_.length(), arg.index_name_.ptr());
       }
     } else if (!arg.is_inner_ && ObIndexType::INDEX_TYPE_HEAP_ORGANIZED_TABLE_PRIMARY == index_table_schema->get_index_type()) {
       ret = OB_NOT_SUPPORTED;
@@ -369,14 +351,14 @@ int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIn
         } else if (OB_FAIL(trans.start(&ddl_service_.get_sql_proxy(), refreshed_schema_version))) {
           LOG_WARN("start transaction failed", KR(ret), K(refreshed_schema_version));
         } else if (!arg.is_inner_ &&
-                   OB_FAIL(ObDDLTaskRecordOperator::check_has_index_or_mlog_task(trans, *index_table_schema, data_table_id, has_index_task))) {
+                   OB_FAIL(ObDDLTaskRecordOperator::check_has_index_task(trans, *index_table_schema, data_table_id, has_index_task))) {
           LOG_WARN("failed to check ddl conflict", K(ret));
         } else if (has_index_task) {
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("not support to drop a building or dropping index", K(ret), K(arg.is_inner_), KPC(index_table_schema));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "dropping a building or dropping index is");
         } else if (index_table_schema->is_doc_id_rowkey() || index_table_schema->is_rowkey_doc_id()) {
-          if (OB_FAIL(ObDDLTaskRecordOperator::check_has_index_or_mlog_task(trans, *index_table_schema, data_table_id,
+          if (OB_FAIL(ObDDLTaskRecordOperator::check_has_index_task(trans, *index_table_schema, data_table_id,
               has_other_domain_index))) {
             LOG_WARN("fail to check has rowkey doc or doc rowkey task", K(ret), K(arg), KPC(index_table_schema));
           } else if (has_other_domain_index) {
@@ -384,7 +366,7 @@ int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIn
             LOG_WARN("has doing other ddl task", K(ret), K(data_table_id), K(index_table_schema->get_table_id()));
           }
         } else if (index_table_schema->is_vec_rowkey_vid_type() || index_table_schema->is_vec_vid_rowkey_type()) {
-          if (OB_FAIL(ObDDLTaskRecordOperator::check_has_index_or_mlog_task(trans, *index_table_schema, data_table_id,
+          if (OB_FAIL(ObDDLTaskRecordOperator::check_has_index_task(trans, *index_table_schema, data_table_id,
               has_other_domain_index))) {
             LOG_WARN("fail to check has rowkey vid or vid rowkey task", K(ret), K(arg), KPC(index_table_schema));
           } else if (has_other_domain_index) {
@@ -429,7 +411,7 @@ int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIn
         }
 
         if (OB_FAIL(ret) || has_other_domain_index) {
-        } else if (need_rename_index && OB_FAIL(ddl_service_.rename_dropping_index_name(
+        } else if (OB_FAIL(ddl_service_.rename_dropping_index_name(
                                                       *index_table_schema,
                                                       is_inner_and_fts_or_mulvalue_or_vector_index,
                                                       arg,
@@ -438,8 +420,6 @@ int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIn
                                                       trans,
                                                       new_index_schemas))) {
           LOG_WARN("rename index name failed", K(ret));
-        } else if (!need_rename_index && OB_FAIL(new_index_schemas.push_back(*index_table_schema))) {
-          LOG_WARN("failed to assign index table schema to new index schema", KR(ret));
         } else if (is_inner_and_fts_or_mulvalue_or_vector_index && 0 == new_index_schemas.count()) {
           if (OB_FAIL(new_index_schemas.push_back(*index_table_schema))) {
             LOG_WARN("fail to push back index schema", K(ret), KPC(index_table_schema));
@@ -471,19 +451,8 @@ int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIn
         }
         if (OB_SUCC(ret) && !has_other_domain_index) {
           bool has_exist = false;
-          const ObTableSchema *data_table_schema = nullptr;
+          const ObTableSchema *data_table_schema = table_schema;
           const ObTableSchema &new_index_schema = new_index_schemas.at(new_index_schemas.count() - 1);
-          if (is_mlog && table_schema->is_materialized_view() && table_schema->get_table_id() != new_index_schema.get_data_table_id()) {
-            // drop mlog on mview
-            if (OB_FAIL(schema_guard.get_table_schema( new_index_schema.get_data_table_id(), data_table_schema))) {
-              LOG_WARN("fail to get index table schema", K(ret), K(arg.index_table_id_));
-            } else if (OB_ISNULL(data_table_schema)) {
-              ret = OB_TABLE_NOT_EXIST;
-              LOG_WARN("table not found", K(ret), K(arg));
-            }
-          } else {
-            data_table_schema = table_schema;
-          }
           if (OB_FAIL(ret)) {
           } else if (OB_FAIL(submit_drop_index_task(trans, *data_table_schema, new_index_schemas, arg, nullptr/*inc_data_tablet_ids*/,
                                              nullptr/*del_data_tablet_ids*/, allocator, has_exist, task_record))) {
@@ -537,7 +506,7 @@ int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIn
       
       
       drop_table_arg.if_exist_ = false;
-      drop_table_arg.table_type_ = drop_table_type;
+      drop_table_arg.table_type_ = USER_INDEX;
       drop_table_arg.ddl_stmt_str_ = arg.ddl_stmt_str_;
       drop_table_arg.force_drop_ = arg.is_in_recyclebin_;
       drop_table_arg.task_id_ = arg.task_id_;
@@ -1238,9 +1207,7 @@ int ObIndexBuilder::submit_drop_index_task(ObMySQLTransaction &trans,
       // this isn't drop fts and isn't vec index task.
       const int64_t parent_task_id = arg.task_id_;
       ObTableLockOwnerID owner_id;
-      const ObDDLType ddl_type = (ObIndexArg::DROP_MLOG == arg.index_action_type_) ?
-                                  ObDDLType::DDL_DROP_MLOG : ObDDLType::DDL_DROP_INDEX;
-      ObCreateDDLTaskParam param(ddl_type,
+      ObCreateDDLTaskParam param(ObDDLType::DDL_DROP_INDEX,
                                  &index_schema,
                                  nullptr,
                                  0/*object_id*/,
@@ -1686,11 +1653,8 @@ int ObIndexBuilder::do_create_index(
              || INDEX_TYPE_UNIQUE_GLOBAL == arg.index_type_
              || INDEX_TYPE_SPATIAL_GLOBAL == arg.index_type_) {
     if (!table_schema->is_partitioned_table()
-        && !arg.index_schema_.is_partitioned_table()
-        && !table_schema->is_auto_partitioned_table()) {
+        && !arg.index_schema_.is_partitioned_table()) {
       // create a global index with local storage when both the data table and index table are non-partitioned
-      // specifically, if the data table is auto-partitioned, we will create auto-partitioned global index rather
-      // than global local index.
       if (OB_FAIL(do_create_local_index(schema_guard, arg, *table_schema, res))) {
         LOG_WARN("fail to do create local index", K(ret));
       }
@@ -1818,10 +1782,6 @@ int ObIndexBuilder::generate_schema(
           ret = OB_ERR_WRONG_KEY_COLUMN;
           LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, sort_item.column_name_.length(), sort_item.column_name_.ptr());
           LOG_WARN("index created direct on large text column should only be fulltext or string", K(arg.index_type_), K(ret));
-        } else if (ob_is_roaringbitmap_tc(data_column->get_data_type())) {
-          ret = OB_ERR_WRONG_KEY_COLUMN;
-          LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, sort_item.column_name_.length(), sort_item.column_name_.ptr());
-          LOG_WARN("index created on roaringbitmap column is not supported", K(arg.index_type_), K(ret));
         } else if (data_column->get_meta_type().is_blob() && data_column->is_fulltext_column()) {
           ret = OB_ERR_WRONG_KEY_COLUMN;
           LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, sort_item.column_name_.length(), sort_item.column_name_.ptr());
@@ -1871,17 +1831,6 @@ int ObIndexBuilder::generate_schema(
         }
       }
 
-      if (OB_SUCC(ret) && data_schema.is_auto_partitioned_table()) {
-        if (arg.is_spatial_index()) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("not support to create spatial index for auto-partitioned table", KR(ret));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "creating spatial index for auto-partitioned table is");
-        } else if (INDEX_TYPE_DOMAIN_CTXCAT_DEPRECATED == arg.index_type_) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("not support to create domain index for auto-partitioned table", KR(ret));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "creating domain index for auto-partitioned table is");
-        }
-      }
     }
 
     if (OB_SUCC(ret)) {
@@ -1891,7 +1840,6 @@ int ObIndexBuilder::generate_schema(
       schema.set_table_mode(data_schema.get_table_mode_flag());
       schema.set_lob_inrow_threshold(data_schema.get_lob_inrow_threshold());
       schema.set_table_state_flag(data_schema.get_table_state_flag());
-      schema.set_mv_mode(data_schema.get_mv_mode());
       schema.set_duplicate_attribute(data_schema.get_duplicate_scope(), data_schema.get_duplicate_read_consistency());
 
       if (OB_FAIL(ret)) {
@@ -1902,9 +1850,6 @@ int ObIndexBuilder::generate_schema(
         LOG_WARN("set_index_table_columns failed", K(arg), K(data_schema), K(ret));
       } else if (OB_FAIL(set_index_table_options(arg, data_schema, schema))) {
         LOG_WARN("set_index_table_options failed", K(arg), K(data_schema), K(ret));
-      } else if (schema.is_global_index_table() &&
-                 OB_FAIL(set_global_index_auto_partition_infos(data_schema, schema))) {
-        LOG_WARN("fail to set auto partition infos", KR(ret), K(data_schema), K(schema));
       } else {
         if (!share::schema::is_built_in_vec_index(arg.index_type_) && !share::schema::is_local_vec_hnsw_index(arg.index_type_)) {
           // only ivf centroid_table set vector_index_param
@@ -2019,78 +1964,6 @@ int ObIndexBuilder::set_basic_infos(const ObCreateIndexArg &arg,
   return ret;
 }
 
-int ObIndexBuilder::set_global_index_auto_partition_infos(const share::schema::ObTableSchema &data_schema,
-                                                          share::schema::ObTableSchema &schema)
-{
-  int ret = OB_SUCCESS;
-  const ObPartitionOption& index_part_option = schema.get_part_option();
-  ObPartitionFuncType part_type = PARTITION_FUNC_TYPE_MAX;
-  
-  const int64_t data_auto_part_size = data_schema.get_part_option().get_auto_part_size();
-  bool enable_auto_split = true;
-  int64_t auto_part_size = -1;
-  if (OB_UNLIKELY(!data_schema.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(data_schema), KR(ret));
-  } else if (OB_UNLIKELY(!schema.is_global_index_table())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid index type", K(schema), KR(ret));
-  } else if (!(schema.is_global_normal_index_table() || schema.is_global_unique_index_table())) {
-    // not supported global index type
-  } else if (OB_FAIL(ObSplitPartitionHelper::check_enable_global_index_auto_split(data_schema, enable_auto_split, auto_part_size))) {
-    LOG_WARN("failed to check enable auto split global index", K(ret));
-  } else if (enable_auto_split) {
-    if (schema.get_part_level() == PARTITION_LEVEL_ZERO) {
-      if (OB_UNLIKELY(!index_part_option.get_part_func_expr_str().empty())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("not allow to use auto-partition clause to"
-                 "set presetting partition key for creating index",
-                                                KR(ret), K(schema), K(data_schema));
-      } else {
-        const ObRowkeyInfo &presetting_partition_keys = schema.get_index_info();
-        part_type = presetting_partition_keys.get_size() > 1 ?
-                          ObPartitionFuncType::PARTITION_FUNC_TYPE_RANGE_COLUMNS :
-                          ObPartitionFuncType::PARTITION_FUNC_TYPE_RANGE;
-        for (int64_t i = 0; enable_auto_split && OB_SUCC(ret) && i < presetting_partition_keys.get_size(); ++i) {
-          const ObRowkeyColumn *partition_column = presetting_partition_keys.get_column(i);
-          if (OB_ISNULL(partition_column)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("the partition column is NULL, ", KR(ret), K(i), K(presetting_partition_keys));
-          } else {
-            ObObjType type = partition_column->get_meta_type().get_type();
-            if (ObResolverUtils::is_partition_range_column_type(type)) {
-              /* case: create index idx1 on t1(c1) global, c1 is double type*/
-              part_type = ObPartitionFuncType::PARTITION_FUNC_TYPE_RANGE_COLUMNS;
-            }
-            enable_auto_split = ObResolverUtils::is_valid_partition_column_type(
-                                  partition_column->get_meta_type().get_type(), part_type, false);
-          }
-        }
-      }
-    } else if (schema.get_part_level() == PARTITION_LEVEL_ONE) {
-      if (OB_FAIL(schema.is_partition_key_match_rowkey_prefix(enable_auto_split))) {
-        LOG_WARN("fail to check whether matching", KR(ret));
-      } else if (enable_auto_split && !schema.is_valid_split_part_type()) {
-        enable_auto_split = false;
-      }
-    } else if (schema.get_part_level() == PARTITION_LEVEL_TWO) {
-      enable_auto_split = false;
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid part level", KR(ret), K(data_schema), K(schema));
-    }
-
-    if (OB_FAIL(ret)) {
-    } else if (!enable_auto_split) {
-      schema.forbid_auto_partition();
-    } else if (OB_FAIL(schema.enable_auto_partition(auto_part_size, part_type))) {
-      LOG_WARN("fail to enable auto partition", KR(ret));
-    }
-  }
-
-  return ret;
-}
-
 int ObIndexBuilder::set_index_table_columns(const ObCreateIndexArg &arg,
                                             const ObTableSchema &data_schema,
                                             ObTableSchema &schema)
@@ -2162,8 +2035,8 @@ int ObIndexBuilder::set_local_index_partition_schema(const share::schema::ObTabl
   if (!index_schema.is_index_local_storage()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(index_schema));
-  } else if ((data_schema.is_partitioned_table() || data_schema.is_auto_partitioned_table())) {
-    if (OB_FAIL(index_schema.assign_partition_schema_without_auto_part_attr(data_schema))) {
+  } else if (data_schema.is_partitioned_table()) {
+    if (OB_FAIL(index_schema.assign_partition_schema(data_schema))) {
       LOG_WARN("fail to assign basic partition schema", KR(ret), K(index_schema));
     }
   }

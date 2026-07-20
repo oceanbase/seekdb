@@ -23,6 +23,11 @@
 
 namespace oceanbase
 {
+namespace common
+{
+class ObAddr;
+}
+
 namespace share
 {
 namespace detector
@@ -133,10 +138,11 @@ public:
   // @param [in] tx_lock_part_id, which trans lock part will be removed.
   static int unregister_trans_lock_part(const ObTransLockPartID &tx_lock_part_id);
   // add a dependency of parent_trans_id -> tx_lock_part_id, and
-  // register parent_trans_id into the local deadlock detector.
+  // register parent_trans_id into deadlock detector at remote.
   // @param [in] tx_lock_part_id, specified the one who has conflict with others.
   // @param [in] parent_trans_id, the parent trans of tx_lock_part_id.
   static int add_parent(const ObTransLockPartID &tx_lock_part_id,
+                        const common::ObAddr &parent_addr,
                         const ObTransID &parent_trans_id);
   // add the block dependency of trans lock part.
   // @param [in] tx_lock_part_id, whose dependency will be registered.

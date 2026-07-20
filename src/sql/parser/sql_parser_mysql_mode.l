@@ -1009,7 +1009,6 @@ Timestamp{whitespace}?\"[^\"]*\" {
 <hint>MANUAL { return MANUAL; }
 <hint>NO_PARALLEL { return NO_PARALLEL; }
 <hint>DML_PARALLEL { return DML_PARALLEL; }
-<hint>MONITOR  { return MONITOR; }
 <hint>AUTO { return AUTO; }
 <hint>FORCE { return FORCE; }
 <hint>[(),.@]  {
@@ -1031,8 +1030,6 @@ Timestamp{whitespace}?\"[^\"]*\" {
 <hint>LEADING  { return LEADING_HINT; }
 <hint>ORDERED  { return ORDERED; }
 <hint>NO_REWRITE { return NO_REWRITE; }
-<hint>MV_REWRITE { return MV_REWRITE; }
-<hint>NO_MV_REWRITE { return NO_MV_REWRITE; }
 <hint>FULL  { return FULL_HINT; }
 <hint>USE_MERGE  { return USE_MERGE; }
 <hint>NO_USE_MERGE  { return NO_USE_MERGE; }
@@ -1052,9 +1049,6 @@ Timestamp{whitespace}?\"[^\"]*\" {
 <hint>NO_PUSH_SUBQ  { return NO_PUSH_SUBQ; }
 <hint>TRACE_LOG { return TRACE_LOG; }
 <hint>LOAD_BATCH_SIZE { return LOAD_BATCH_SIZE; }
-<hint>NO_DIRECT { return NO_DIRECT; }
-<hint>DIRECT { return DIRECT; }
-<hint>APPEND { return APPEND; }
 <hint>TRACING { return TRACING; }
 <hint>DOP { return DOP; }
 <hint>FORCE_REFRESH_LOCATION_CACHE { return FORCE_REFRESH_LOCATION_CACHE; }
@@ -1066,7 +1060,6 @@ Timestamp{whitespace}?\"[^\"]*\" {
 <hint>QB_NAME { return QB_NAME; }
 <hint>BEGIN_OUTLINE_DATA { return BEGIN_OUTLINE_DATA; }
 <hint>END_OUTLINE_DATA { return END_OUTLINE_DATA; }
-<hint>OPTIMIZER_FEATURES_ENABLE { return OPTIMIZER_FEATURES_ENABLE; }
 <hint>NO_QUERY_TRANSFORMATION { return NO_QUERY_TRANSFORMATION; }
 <hint>NO_COST_BASED_QUERY_TRANSFORMATION { return NO_COST_BASED_QUERY_TRANSFORMATION; }
 <hint>TRANS_PARAM { return TRANS_PARAM; }

@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_LOGSERVICE_PALF_OPTIONS_
 #define OCEANBASE_LOGSERVICE_PALF_OPTIONS_
 #include "lib/compress/ob_compress_util.h"
-#include "share/ob_partition_modify.h"
 #include <stdint.h>
 namespace oceanbase
 {
@@ -28,15 +27,13 @@ namespace palf
 // 2. log_disk_utilization_threshold_, log_disklog disk utilization threshold before reuse log files.
 // 3. log_disk_utilization_limit_threshold_, maximum of log disk usage percentage before stop submitting or receiving logs.
 // 4. log_disk_throttling_percentage_, the threshold of the size of the log disk when writing_limit will be triggered.
-// 5. log_writer_parallelism, the number of parallel log writer processes that can be used to write redo log entries to disk.
 struct PalfDiskOptions
 {
   PalfDiskOptions() : log_disk_usage_limit_size_(-1),
                       log_disk_utilization_threshold_(-1),
                       log_disk_utilization_limit_threshold_(-1),
                       log_disk_throttling_percentage_(-1),
-                      log_disk_throttling_maximum_duration_(-1),
-                      log_writer_parallelism_(-1)
+                      log_disk_throttling_maximum_duration_(-1)
   {}
   ~PalfDiskOptions() { reset(); }
   static constexpr int64_t MB = 1024*1024ll;
@@ -50,13 +47,11 @@ struct PalfDiskOptions
   int log_disk_utilization_limit_threshold_;
   int64_t log_disk_throttling_percentage_;
   int64_t log_disk_throttling_maximum_duration_;
-  int log_writer_parallelism_;
   TO_STRING_KV("log_disk_size(MB)", log_disk_usage_limit_size_ / MB,
                "log_disk_utilization_threshold(%)", log_disk_utilization_threshold_,
                "log_disk_utilization_limit_threshold(%)", log_disk_utilization_limit_threshold_,
                "log_disk_throttling_percentage(%)", log_disk_throttling_percentage_,
-               "log_disk_throttling_maximum_duration(s)", log_disk_throttling_maximum_duration_ / (1000 * 1000),
-               "log_writer_parallelism", log_writer_parallelism_);
+               "log_disk_throttling_maximum_duration(s)", log_disk_throttling_maximum_duration_ / (1000 * 1000));
 };
 
 
@@ -84,19 +79,12 @@ struct PalfAppendOptions
     //
     // Default value is NONBLOCK
     bool need_nonblock = true;
-    bool need_check_proposal_id = true;
-    int64_t proposal_id = 0;
-    TO_STRING_KV(K(need_nonblock), K(need_check_proposal_id), K(proposal_id));
+    TO_STRING_KV(K(need_nonblock));
 };
-// Palf supports switching between access modes
-//
 // APPEND: In this mode, PALF assigns LSN and TS to the logs to be committed
-//
-// RAW_WRITE: In this mode, PALF does not have the capability to allocate LSN and TS for pending logs
 enum class AccessMode {
   INVALID_ACCESS_MODE = 0,
   APPEND = 1,
-  RAW_WRITE = 2,
 };
 
 inline int access_mode_to_string(const AccessMode access_mode, char *str_buf_, const int64_t str_len)
@@ -104,8 +92,6 @@ inline int access_mode_to_string(const AccessMode access_mode, char *str_buf_, c
   int ret = OB_SUCCESS;
   if (AccessMode::APPEND == access_mode) {
     strncpy(str_buf_, "APPEND", str_len);
-  } else if (AccessMode::RAW_WRITE == access_mode) {
-    strncpy(str_buf_, "RAW_WRITE", str_len);
   } else {
     ret = OB_INVALID_ARGUMENT;
   }
@@ -116,59 +102,20 @@ int get_access_mode(const common::ObString &str, AccessMode &mode);
 
 inline bool is_valid_access_mode(const AccessMode &access_mode)
 {
-  return AccessMode::APPEND == access_mode
-    || AccessMode::RAW_WRITE == access_mode;
+  return AccessMode::APPEND == access_mode;
 }
-
-inline bool can_switch_access_mode_(const AccessMode &src_access_mode, const AccessMode &dst_access_mode)
-{
-  bool bool_ret = true;
-  if (false == is_valid_access_mode(dst_access_mode)) {
-    // can not switch to invalid AccessMode
-    bool_ret = false;
-  } else if (src_access_mode == dst_access_mode) {
-    // can not switch to itself
-    bool_ret = false;
-  }
-  return bool_ret;
-}
-
-struct PalfTransportCompressOptions
-{
-public:
-  PalfTransportCompressOptions() :
-    enable_transport_compress_(false),
-    transport_compress_func_(ObCompressorType::INVALID_COMPRESSOR)
-  {}
-  ~PalfTransportCompressOptions() { reset(); }
-  void reset();
-  bool is_valid() const;
-  PalfTransportCompressOptions &operator=(const PalfTransportCompressOptions &other);
-public:
-  bool enable_transport_compress_;
-  ObCompressorType transport_compress_func_;
-  TO_STRING_KV(K(enable_transport_compress_),
-               K(transport_compress_func_));
-};
 
 struct PalfOptions
 {
   PalfOptions() : disk_options_(),
-                  compress_options_(),
-                  rebuild_replica_log_lag_threshold_(0),
                   enable_log_cache_(false)
   {}
   ~PalfOptions() { reset(); }
   void reset();
   bool is_valid() const;
-  TO_STRING_KV(K(disk_options_),
-               K(compress_options_),
-               K(rebuild_replica_log_lag_threshold_),
-               K(enable_log_cache_));
+  TO_STRING_KV(K(disk_options_), K(enable_log_cache_));
 public:
   PalfDiskOptions disk_options_;
-  PalfTransportCompressOptions compress_options_;
-  int64_t rebuild_replica_log_lag_threshold_;
   bool enable_log_cache_;
 };
 

@@ -58,7 +58,6 @@ ObTableSchemaParam::ObTableSchemaParam(ObIAllocator &allocator)
     vec_index_param_(),
     vec_dim_(0),
     vec_vector_col_id_(OB_INVALID_ID),
-    mv_mode_(),
     is_delete_insert_(false),
     merge_engine_type_(ObMergeEngineType::OB_MERGE_ENGINE_MAX),
     inc_pk_doc_id_col_id_(OB_INVALID_ID),
@@ -103,7 +102,6 @@ void ObTableSchemaParam::reset()
   vec_index_param_.reset();
   vec_dim_ = 0;
   vec_vector_col_id_ = OB_INVALID_ID;
-  mv_mode_.reset();
   is_delete_insert_ = false;
   merge_engine_type_ = ObMergeEngineType::OB_MERGE_ENGINE_MAX;
   inc_pk_doc_id_col_id_ = OB_INVALID_ID;
@@ -256,19 +254,6 @@ int ObTableSchemaParam::convert(const ObTableSchema *schema)
     } else if (OB_FAIL(ob_write_string(allocator_, tmp_name, index_name_))) {
       LOG_WARN("fail to copy index name", K(ret), K(tmp_name));
     }
-  }
-
-  if (OB_SUCC(ret) && schema->is_mlog_table()) {
-    index_type_ = schema->get_index_type();
-    index_status_ = schema->get_index_status();
-    ObString tmp_name;
-    if (OB_FAIL(schema->get_mlog_name(tmp_name))) {
-      LOG_WARN("fail to get materialized view log name", KR(ret));
-    } else if (OB_FAIL(ob_write_string(allocator_, tmp_name, index_name_))) {
-      LOG_WARN("fail to copy materialized view log name", KR(ret), K(tmp_name));
-    }
-  }
-  if (OB_SUCC(ret) && FALSE_IT(mv_mode_.mode_ = schema->get_mv_mode())) {
   }
 
   bool need_truncate_filter = nullptr != schema && schema->is_global_index_table();
@@ -485,19 +470,6 @@ int ObTableSchemaParam::get_index_name(common::ObString &index_name) const
 const ObString &ObTableSchemaParam::get_pk_name() const
 {
   return pk_name_;
-}
-
-bool ObTableSchemaParam::is_depend_column(uint64_t column_id) const
-{
-  bool is_depend = false;
-  int32_t idx = 0;
-  if (is_materialized_view() &&
-      column_id > OB_MIN_MV_COLUMN_ID &&
-      column_id < OB_MIN_SHADOW_COLUMN_ID &&
-      OB_SUCCESS == col_map_.get(column_id, idx)) {
-    is_depend = true;
-  }
-  return is_depend;
 }
 
 int ObTableSchemaParam::get_typed_doc_id_col_id(uint64_t &doc_id_col_id, ObDocIDType &type) const

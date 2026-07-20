@@ -413,7 +413,7 @@ int ObVectorStore::fill_output_rows(
       if (OB_UNLIKELY(IterEndState::LIMIT_ITER_END == iter_end_flag_)) {
         ret = OB_ITER_END;
       }
-      EVENT_ADD(SSSTORE_READ_ROW_COUNT, row_capacity);
+      EVENT_ADD(ObStatEventIds::SSSTORE_READ_ROW_COUNT, row_capacity);
     }
   }
   LOG_TRACE("[Vectorized] vector store copy rows", K(ret),
@@ -464,7 +464,7 @@ int ObVectorStore::fill_group_by_rows(
     if (OB_FAIL(fill_group_idx(group_idx))) {
       LOG_WARN("Failed to fill group idx", K(ret));
     } else {
-      EVENT_ADD(SSSTORE_READ_ROW_COUNT, count_);
+      EVENT_ADD(ObStatEventIds::SSSTORE_READ_ROW_COUNT, count_);
       set_end();
       if (!group_by_cell_->is_processing()) {
         begin_index = end_index;
@@ -598,7 +598,7 @@ int ObVectorStore::fill_rows(const int64_t group_idx, const int64_t row_count)
       LOG_WARN("Failed to fill group idx", K(ret));
     } else {
       set_end();
-      EVENT_ADD(SSSTORE_READ_ROW_COUNT, row_count);
+      EVENT_ADD(ObStatEventIds::SSSTORE_READ_ROW_COUNT, row_count);
     }
   }
   return ret;

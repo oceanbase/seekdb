@@ -55,6 +55,9 @@ int ObCreateTableLikeResolver::resolve(const ParseNode &parse_tree)
       if (NULL != parse_tree.children_[0]) {
         if (T_TEMPORARY == parse_tree.children_[0]->type_) {
           is_temporary_table = true;
+        } else if (T_EXTERNAL == parse_tree.children_[0]->type_) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "create external table like");
         } else {
           ret = OB_INVALID_ARGUMENT;
           SQL_RESV_LOG(WARN, "invalid argument.",
@@ -62,7 +65,16 @@ int ObCreateTableLikeResolver::resolve(const ParseNode &parse_tree)
         }
       }
       if (OB_SUCC(ret) && is_temporary_table) {
-        create_table_like_stmt->set_table_type(share::schema::TMP_TABLE);
+        char create_host_str[OB_MAX_HOST_NAME_LENGTH];
+        MYADDR.ip_port_to_string(create_host_str, OB_MAX_HOST_NAME_LENGTH);
+        if (OB_ISNULL(allocator_)) {
+          ret = OB_INVALID_ARGUMENT;
+          SQL_RESV_LOG(WARN, "not init", K(ret));
+        } else if (OB_FAIL(create_table_like_stmt->set_create_host(*allocator_, ObString(create_host_str)))) {
+          SQL_RESV_LOG(WARN, "set create host failed", K(ret));
+        } else {
+          create_table_like_stmt->set_table_type(share::schema::TMP_TABLE);
+        }
       } else {
         create_table_like_stmt->set_table_type(share::schema::USER_TABLE);
       }

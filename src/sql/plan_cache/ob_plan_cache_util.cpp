@@ -50,6 +50,34 @@ int ObGetAllCacheIdOp::operator()(common::hash::HashMapPair<ObCacheObjID, ObILib
   return ret;
 }
 
+int ObPlanCacheCtx::is_retry(bool &v) const
+{
+  int ret = OB_SUCCESS;
+  v = 0;
+  if (OB_ISNULL(sql_ctx_.session_info_)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret));
+  } else {
+    v = sql_ctx_.session_info_->get_is_in_retry();
+  }
+
+  return ret;
+}
+
+int ObPlanCacheCtx::is_retry_for_dup_tbl(bool &v) const
+{
+  int ret = OB_SUCCESS;
+  v = 0;
+  if (OB_ISNULL(sql_ctx_.session_info_)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret));
+  } else {
+    v = sql_ctx_.session_info_->get_is_in_retry_for_dup_tbl();
+  }
+
+  return ret;
+}
+
 int ObPhyLocationGetter::get_phy_locations(const common::ObIArray<ObTablePartitionInfo *> &partition_infos,
                                            ObIArray<ObCandiTableLoc> &candi_table_locs)
 {
@@ -71,15 +99,116 @@ int ObPhyLocationGetter::get_phy_locations(const common::ObIArray<ObTablePartiti
   }
   return ret;
 }
-int ObPhyLocationGetter::get_phy_locations(const ObIArray<ObTableLocation> &table_locations,
-                                           const ObPlanCacheCtx &pc_ctx,
-                                           ObIArray<ObCandiTableLoc> &candi_table_locs)
+// Including the case of copying tables, after selecting the copy, adjust the copy selection of the copying table to be consistent with the location of non-copying tables (assuming all non-copying tables are on the same server)
+// The benefit is that it allows the plan type to change from DIST --> REMOTE; cannot be calculated in ObSqlPlanSet::calc_phy_plan_type_by_proj
+// The reason is that get_phy_locations will assign the physical location to task_exec_ctx; (implementation reference is is_partition_in_same_server_by_proj)
+int ObPhyLocationGetter::reselect_duplicate_table_best_replica(const ObIArray<ObCandiTableLoc> &phy_locations,
+                                                               bool &on_same_server)
 {
   int ret = OB_SUCCESS;
+  bool has_duplicate_tbl = false;
+  bool is_same = true;
+  ObAddr normal_table_addr;
+  ObAddr duplicate_table_addr;
+  ObSEArray<ObAddr, 4> candi_addrs;
+  int64_t proj_cnt = phy_locations.count();
+  ObLSReplicaLocation replica_location;
+  for (int64_t i = 0; OB_SUCC(ret) && is_same && i < proj_cnt; ++i) {
+    const ObCandiTableLoc &ptli = phy_locations.at(i);
+    if (ptli.get_partition_cnt() > 1) {
+      is_same = false;
+    } else if (ptli.get_partition_cnt() > 0) {
+      const ObCandiTabletLoc &part_info = ptli.get_phy_part_loc_info_list().at(0);
+      if (OB_FAIL(part_info.get_selected_replica(replica_location))) {
+        SQL_PC_LOG(WARN, "fail to get selected replica", K(ret), K(ptli));
+      } else if (!replica_location.is_valid()) {
+        SQL_PC_LOG(WARN, "replica_location is invalid", K(ret), K(replica_location));
+      } else if (!ptli.is_duplicate_table_not_in_dml()) {
+        // handle normal table
+        if (!normal_table_addr.is_valid()) {
+          normal_table_addr = replica_location.get_server();
+          SQL_PC_LOG(DEBUG, "part_location first replica", K(ret), K(replica_location));
+        } else if (normal_table_addr != replica_location.get_server()) {
+          is_same = false;
+          SQL_PC_LOG(DEBUG, "part_location replica", K(ret), K(i), K(replica_location));
+        }
+      } else {
+        // handle duplicate table
+        if (!has_duplicate_tbl) {
+          if (OB_FAIL(candi_addrs.push_back(replica_location.get_server()))) {
+            LOG_WARN("failed to store local server", K(ret));
+          }
+          duplicate_table_addr = replica_location.get_server();
+          has_duplicate_tbl = true;
+          SQL_PC_LOG(DEBUG, "has duplicate table");
+        } else if (duplicate_table_addr != replica_location.get_server()) {
+          duplicate_table_addr.reset();
+        }
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (!is_same) {
+      // normal table does not use the same server, or
+      // there is multi part table
+      candi_addrs.reset();
+      normal_table_addr.reset();
+    } else if (!normal_table_addr.is_valid()) {
+      // no normal table found
+      if (duplicate_table_addr.is_valid()) {
+        // duplicate tables use the same server
+        candi_addrs.reset();
+      }
+    } else if (normal_table_addr == duplicate_table_addr) {
+      // normal table and duplicate table already select the same server
+      candi_addrs.reset();
+    } else {
+      // normal table uses the same server
+      // duplicate table needs to reselect replica
+      candi_addrs.reset();
+      if (OB_FAIL(candi_addrs.push_back(normal_table_addr))) {
+        LOG_WARN("failed to push back normal table addr", K(ret));
+      }
+    }
+  }
+  // If there is no replication table or the non-replication table cannot guarantee to be on the same server, it is a distributed plan, so there is no need to change the replica idx of the replication table here
+  if (OB_SUCC(ret) && !candi_addrs.empty()) {
+    is_same = false;
+    for (int64_t i = 0; OB_SUCC(ret) && !is_same && i < candi_addrs.count(); ++i) {
+      bool is_valid = true;
+      const ObAddr &addr = candi_addrs.at(i);
+      //a, whether there is a replica on the same server
+      for (int64_t j = 0; OB_SUCC(ret) && is_valid && j < proj_cnt; ++j) {
+        const ObCandiTableLoc &ptli = phy_locations.at(j);
+        if (ptli.is_duplicate_table_not_in_dml()) {
+          is_valid = ptli.get_phy_part_loc_info_list().at(0).is_local_server(addr);
+        }
+      }
+      if (OB_SUCC(ret) && is_valid) {
+        is_same = true;
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    on_same_server = is_same;
+  }
+  return ret;
+}
+
+int ObPhyLocationGetter::get_phy_locations(const ObIArray<ObTableLocation> &table_locations,
+                                           const ObPlanCacheCtx &pc_ctx,
+                                           ObIArray<ObCandiTableLoc> &candi_table_locs,
+                                           bool &need_check_on_same_server)
+{
+  int ret = OB_SUCCESS;
+  bool has_duplicate_tbl_not_in_dml = false;
   ObExecContext &exec_ctx = pc_ctx.exec_ctx_;
   const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(pc_ctx.sql_ctx_.session_info_);
   ObPhysicalPlanCtx *plan_ctx = exec_ctx.get_physical_plan_ctx();
   int64_t N = table_locations.count();
+  bool is_retrying = false;
+  bool on_same_server = true;
+  need_check_on_same_server = true;
   if (OB_ISNULL(plan_ctx)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid executor ctx!", K(ret), K(plan_ctx));
@@ -101,6 +230,10 @@ int ObPhyLocationGetter::get_phy_locations(const ObIArray<ObTableLocation> &tabl
           LOG_WARN("failed to calculate partition location", K(ret));
         } else {
           NG_TRACE(calc_partition_location_end);
+          if (table_location.is_duplicate_table_not_in_dml()) {
+            has_duplicate_tbl_not_in_dml = true;
+          }
+          candi_table_loc.set_duplicate_type(table_location.get_duplicate_type());
           candi_table_loc.set_table_location_key(
               table_location.get_table_id(), table_location.get_ref_table_id());
           LOG_DEBUG("plan cache util", K(candi_table_loc));
@@ -112,22 +245,72 @@ int ObPhyLocationGetter::get_phy_locations(const ObIArray<ObTableLocation> &tabl
           } else if (OB_FAIL(phy_location_info_ptrs.push_back(&candi_table_loc))) {
             LOG_WARN("failed to push back phy location info ptrs", K(ret), K(i),
                      K(N), K(candi_table_locs.at(i)));
+          } else if (OB_FAIL(pc_ctx.is_retry_for_dup_tbl(is_retrying))) {
+            LOG_WARN("failed to test if retrying", K(ret));
+          } else if (is_retrying) {
+            LOG_INFO("Physical Location from Location Cache", K(candi_table_loc));
           }
         }
       } // for end
     }
 
+    //Only check the on_same_server when has table location in the phy_plan.
     if (OB_SUCC(ret) && N!=0 ) {
-      if (OB_FAIL(ObLogPlan::validate_local_tablets(exec_ctx,
-                                                    table_location_ptrs,
-                                                    phy_location_info_ptrs))) {
-        LOG_WARN("failed to validate local tablet locations", K(ret), K(table_locations),
-                 K(phy_location_info_ptrs));
+      if (OB_FAIL(ObLogPlan::select_replicas(exec_ctx, table_location_ptrs,
+                                             exec_ctx.get_addr(),
+                                             phy_location_info_ptrs))) {
+        LOG_WARN("failed to select replicas", K(ret), K(table_locations),
+                 K(exec_ctx.get_addr()), K(phy_location_info_ptrs));
+      } else if (is_retrying) {
+        // do nothing
+      } else if (OB_FAIL(reselect_duplicate_table_best_replica(candi_table_locs,
+                                                               on_same_server))) {
+        LOG_WARN("failed to reselect replicas", K(ret));
+      } else if (!on_same_server) {
+        need_check_on_same_server = false;
       }
-      LOG_TRACE("after validating local tablet locations", K(candi_table_locs),
-                K(table_locations), K(ret));
+      LOG_TRACE("after select_replicas", K(on_same_server), K(has_duplicate_tbl_not_in_dml),
+                K(candi_table_locs), K(table_locations), K(ret));
     }
-    LOG_TRACE("after get_phy_locations", K(candi_table_locs));
+    LOG_TRACE("after get_phy_locations", K(on_same_server), K(need_check_on_same_server));
+  }
+
+  return ret;
+}
+
+int ObPhyLocationGetter::get_phy_locations(const ObIArray<ObTableLocation> &table_locations,
+                                           const ObPlanCacheCtx &pc_ctx,
+                                           ObIArray<ObCandiTableLoc> &candi_table_locs)
+{
+  int ret = OB_SUCCESS;
+  bool has_duplicate_tbl_not_in_dml = false;
+  ObExecContext &exec_ctx = pc_ctx.exec_ctx_;
+  const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(pc_ctx.sql_ctx_.session_info_);
+  ObPhysicalPlanCtx *plan_ctx = exec_ctx.get_physical_plan_ctx();
+  const ParamStore &params = plan_ctx->get_param_store();
+  int64_t N = table_locations.count();
+  bool use_fast_leader_selection = true;
+  if (OB_ISNULL(plan_ctx)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid executor ctx!", K(ret), K(plan_ctx));
+  } else {
+    for (int64_t i = 0; use_fast_leader_selection && i < N ; i++) {
+      use_fast_leader_selection &= table_locations.at(i).get_loc_meta().select_leader_;
+    }
+    if (use_fast_leader_selection) {
+      // Directly select leader replica for each table location.
+      for (int64_t i = 0; OB_SUCC(ret) && i < N; i++) {
+        if (OB_FAIL(table_locations.at(i).calculate_final_tablet_locations(exec_ctx, params, dtc_params))) {
+          LOG_WARN("failed to calculate final tablet locations", K(ret), K(table_locations.at(i)));
+        }
+      }
+    } else {
+      // Not all tables require select leader, fallback to original path.
+      bool need_same_server = true;
+      if (OB_FAIL(get_phy_locations(table_locations, pc_ctx, candi_table_locs, need_same_server))) {
+        LOG_WARN("failed to get phy locations", K(ret), K(table_locations), K(pc_ctx));
+      }
+    }
   }
 
   return ret;
@@ -184,7 +367,8 @@ OB_SERIALIZE_MEMBER(ObTableRowCount, op_id_, row_count_);
 int ObConfigInfoInPC::load_influence_plan_config()
 {
   int ret = OB_SUCCESS;
-  // Add runtime configuration dependencies here when needed.
+  // Note: if you need to add a tenant config please
+  //        uncomment next line to retrive tenant config.
 
   // For Cluster configs
   // here to add value of configs that can influence execution plan.
@@ -195,8 +379,8 @@ int ObConfigInfoInPC::load_influence_plan_config()
   realistic_runtime_bloom_filter_size_ = !GCONF._preset_runtime_bloom_filter_size;
   ndv_runtime_bloom_filter_size_ = GCONF._ndv_runtime_bloom_filter_size;
 
-  // Runtime configuration dependencies.
-  // Use the runtime configuration to read the current settings.
+  // For Tenant configs
+  // tenant config use tenant_config to get configs
 
   pushdown_storage_level_ = GCONF._pushdown_storage_level;
   rowsets_enabled_ = GCONF._rowsets_enabled;
@@ -204,6 +388,7 @@ int ObConfigInfoInPC::load_influence_plan_config()
   bloom_filter_enabled_ = GCONF._bloom_filter_enabled;
   px_join_skew_handling_ = GCONF._px_join_skew_handling;
   px_join_skew_minfreq_ = static_cast<int8_t>(GCONF._px_join_skew_minfreq);
+  min_cluster_version_ = GET_MIN_CLUSTER_VERSION();
   enable_spf_batch_rescan_ = GCONF._enable_spf_batch_rescan;
   enable_var_assign_use_das_ = GCONF._enable_var_assign_use_das;
   enable_das_keep_order_ = GCONF._enable_das_keep_order;
@@ -259,6 +444,9 @@ int ObConfigInfoInPC::serialize_configs(char *buf, int buf_len, int64_t &pos)
     SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(px_join_skew_minfreq_));
 
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
+                               "%lu,", min_cluster_version_))) {
+    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(min_cluster_version_));
+  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                "%d,", enable_spf_batch_rescan_))) {
     SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_spf_batch_rescan_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
@@ -310,3 +498,23 @@ int ObConfigInfoInPC::serialize_configs(char *buf, int buf_len, int64_t &pos)
 
 }
 }
+
+// ===== definition moved from src/share/config/ob_config_helper.cpp =====
+namespace oceanbase
+{
+namespace common
+{
+
+bool ObConfigPlanCacheGCChecker::check(const ObConfigItem &t) const
+{
+  bool is_valid = false;
+  for (int i = 0; i < ARRAYSIZEOF(sql::plan_cache_gc_confs) && !is_valid; i++) {
+    if (0 == ObString::make_string(sql::plan_cache_gc_confs[i]).case_compare(t.str())) {
+      is_valid = true;
+    }
+  }
+  return is_valid;
+}
+
+}  // namespace common
+}  // namespace oceanbase

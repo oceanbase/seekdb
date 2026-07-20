@@ -49,6 +49,15 @@ int ObPLVar::deep_copy(const ObPLVar &var, ObIAllocator &allocator)
   return ret;
 }
 
+int ObPLVarDebugInfo::deep_copy(ObIAllocator &allocator, const ObPLVarDebugInfo &other)
+{
+  int ret = OB_SUCCESS;
+  OZ (ob_write_string(allocator, other.name_, name_));
+  OX (type_ = other.type_);
+  OX (scope_ = other.scope_);
+  return ret;
+}
+
 int ObPLSymbolTable::add_symbol(const ObString &name,
                                 const ObPLDataType &type,
                                 const int64_t default_idx,
@@ -639,6 +648,9 @@ int ObPLRoutineTable::make_routine_ast(ObIAllocator &allocator,
       NESTED_PROCEDURE == routine_info.get_type() || NESTED_FUNCTION == routine_info.get_type()
         ? routine_info.get_parent_id() : routine_info.get_id());
     routine_ast->set_subprogram_id(routine_info.get_id());
+    if (routine_info.is_pipelined()) {
+      routine_ast->set_pipelined();
+    }
     routine_ast->set_compile_flag(routine_info.get_compile_flag());
     OZ (routine_ast->set_subprogram_path(routine_info.get_subprogram_path()));
     if (OB_FAIL(ob_write_string(allocator, db_name, const_cast<ObString &>(routine_ast->get_db_name())))) {
@@ -1256,8 +1268,8 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
         } 
         
         if (OB_SUCC(ret)) {
-          // db_id == OB_INVALID_ID searches the system namespace.
-          // Otherwise search the selected database before the system namespace.
+          // db_id == OB_INVALID_ID, search in sys tenant
+          // db_id != OB_INVALID_ID, search in user tenant first, then sys tenant
           if (OB_INVALID_ID != db_id
               && OB_FAIL(schema_guard.get_package_info(
                                                        db_id,
@@ -1396,6 +1408,23 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
         } else {
           type = ObPLExternalNS::TRIGGER;
           var_idx = trigger_info->get_trigger_id();
+        }
+      }
+      // then sequence
+      if (OB_SUCC(ret) && full_schema && OB_INVALID_INDEX == var_idx) {
+        
+        uint64_t db_id = parent_id;
+        const ObSequenceSchema *sequence_schema = NULL;
+        if (OB_INVALID_ID == db_id) {
+          OZ (session_info.get_database_id(db_id));
+        }
+        OZ (schema_guard.get_sequence_schema_with_name(db_id, name, sequence_schema));
+        if (NULL == sequence_schema) {
+          ret = OB_SUCCESS;
+          type = ObPLExternalNS::INVALID_VAR;
+        } else {
+          type = ObPLExternalNS::SEQUENCE;
+          var_idx = sequence_schema->get_sequence_id();
         }
       }
       //then database name
@@ -3511,6 +3540,87 @@ int ObPLAstUnit::add_sql_exprs(common::ObIArray<sql::ObRawExpr*> &exprs)
   for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); ++i) {
     CK (OB_NOT_NULL(exprs.at(i)));
     OZ (extract_assoc_index(*exprs.at(i), obj_access_exprs_));
+  }
+  return ret;
+}
+
+int ObPLAstUnit::generate_symbol_debuginfo()
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < symbol_table_.get_count(); ++i) {
+    OZ (symbol_debuginfo_table_.add(ObPLVarDebugInfo()));
+  }
+  if (OB_NOT_NULL(body_)) {
+    OZ (body_->generate_symbol_debuginfo(symbol_debuginfo_table_));
+  }
+  return ret;
+}
+
+int ObPLStmtBlock::generate_symbol_debuginfo(
+  ObPLSymbolDebugInfoTable &symbol_debuginfo_table) const
+{
+  int ret = OB_SUCCESS;
+  int start = 0;
+  int end = 0;
+  // Current Block's Line range
+  for (int64_t i = 0; OB_SUCC(ret) && i < stmts_.count(); ++i) {
+    ObPLStmt *stmt = stmts_.at(i);
+    CK (OB_NOT_NULL(stmt));
+    if (OB_SUCC(ret) && !(0 == stmt->get_line() && 0 == stmt->get_col())) {
+      start = start > stmt->get_line() ? stmt->get_line() : start;
+      end = end < stmt->get_line() ? stmt->get_line() : end;
+    }
+  }
+  // Set the range of symbols within the current Block
+  for (int64_t i = 0; OB_SUCC(ret) && i < ns_.get_symbols().count(); ++i) {
+    int64_t idx = ns_.get_symbols().at(i);
+    const ObPLSymbolTable *symbol_table = ns_.get_symbol_table();
+    const ObPLVar *var = NULL;
+    CK (OB_NOT_NULL(symbol_table));
+    CK (OB_NOT_NULL(var = symbol_table->get_symbol(idx)));
+    OZ (symbol_debuginfo_table.add(
+      idx, var->get_name(), var->get_pl_data_type().get_type(), start, end));
+  }
+  // Recursively set the Block inside the Block
+  for (int64_t i = 0; OB_SUCC(ret) && i < stmts_.count(); ++i) {
+    ObPLStmt *stmt = stmts_.at(i);
+    if (OB_ISNULL(stmt)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("current stmt is null!", K(ret), K(stmt));
+    } else if (PL_IF == stmt->get_type()) {
+      ObPLIfStmt *if_stmt = static_cast<ObPLIfStmt *>(stmt);
+      CK (OB_NOT_NULL(if_stmt));
+      CK (OB_NOT_NULL(if_stmt->get_then()));
+      OZ (if_stmt->get_then()->generate_symbol_debuginfo(symbol_debuginfo_table));
+      if (OB_SUCC(ret) && OB_NOT_NULL(if_stmt->get_else())) {
+        OZ (if_stmt->get_else()->generate_symbol_debuginfo(symbol_debuginfo_table));
+      }
+    } else if (PL_FOR_LOOP == stmt->get_type()
+              || PL_CURSOR_FOR_LOOP == stmt->get_type()
+              || PL_LOOP == stmt->get_type()
+              || PL_WHILE == stmt->get_type()
+              || PL_REPEAT == stmt->get_type()) {
+      ObPLLoop *loop_stmt = static_cast<ObPLLoop *>(stmt);
+      CK (OB_NOT_NULL(loop_stmt));
+      CK (OB_NOT_NULL(loop_stmt->get_body()));
+      if (OB_SUCC(ret) && PL_CURSOR_FOR_LOOP == stmt->get_type()) {
+        OZ (loop_stmt->get_body()
+          ->get_block()->generate_symbol_debuginfo(symbol_debuginfo_table));
+      }
+      OZ (loop_stmt->get_body()->generate_symbol_debuginfo(symbol_debuginfo_table));
+    } else if (PL_HANDLER == stmt->get_type()) {
+      ObPLDeclareHandlerStmt *handler_stmt = static_cast<ObPLDeclareHandlerStmt *>(stmt);
+      for (int64_t i = 0; OB_SUCC(ret) && i < handler_stmt->get_handlers().count(); ++i) {
+        const ObPLDeclareHandlerStmt::DeclareHandler &handler = handler_stmt->get_handler(i);
+        CK (OB_NOT_NULL(handler.get_desc()));
+        CK (OB_NOT_NULL(handler.get_desc()->get_body()));
+        OZ (handler.get_desc()->get_body()->generate_symbol_debuginfo(symbol_debuginfo_table));
+      }
+    } else if (PL_BLOCK == stmt->get_type()) {
+      ObPLStmtBlock *block = static_cast<ObPLStmtBlock*>(stmt);
+      CK (OB_NOT_NULL(block));
+      OZ (block->generate_symbol_debuginfo(symbol_debuginfo_table));
+    }
   }
   return ret;
 }

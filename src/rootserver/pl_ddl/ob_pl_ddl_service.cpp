@@ -167,10 +167,9 @@ int ObPLDDLService::create_routine(ObRoutineInfo &routine_info,
         }
       }
     }
-    lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
     if (OB_FAIL(ret)) {
     } else if (replace) {
-    } else if (lib::Worker::CompatMode::MYSQL == compat_mode) {
+    } else {
       const ObSysVarSchema *sys_var = NULL;
       ObMalloc alloc(ObModIds::OB_TEMP_VARIABLES);
       ObObj val;
@@ -445,8 +444,6 @@ int ObPLDDLService::drop_routine(const ObRoutineInfo &routine_info,
     } else if (OB_FAIL(pl_operator.drop_routine(routine_info, trans, error_info, ddl_stmt_str))) {
       LOG_WARN("drop procedure failed", K(ret), K(routine_info));
     } else {
-      lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
-      if (lib::Worker::CompatMode::MYSQL == compat_mode) {
         const ObSysVarSchema *sys_var = NULL;
         ObMalloc alloc(ObModIds::OB_TEMP_VARIABLES);
         ObObj val;
@@ -487,7 +484,6 @@ int ObPLDDLService::drop_routine(const ObRoutineInfo &routine_info,
             }
           }
         }
-      }
     }
     if (trans.is_started()) {
       int temp_ret = OB_SUCCESS;
@@ -539,7 +535,7 @@ int ObPLDDLService::create_package(const obcall::ObCreatePackageArg &arg,
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(schema_guard.get_package_info( db_schema->get_database_id(), new_package_info.get_package_name(),
-                                                new_package_info.get_type(), new_package_info.get_compatibility_mode(),
+                                                new_package_info.get_type(),
                                                 old_package_info))) {
         LOG_WARN("failed to check package info exist", K(new_package_info), K(ret));
       } else if (OB_ISNULL(old_package_info) || arg.is_replace_) {
@@ -655,7 +651,6 @@ int ObPLDDLService::drop_package(const obcall::ObDropPackageArg &arg,
     const ObString &db_name = arg.db_name_;
     const ObString &package_name = arg.package_name_;
     ObPackageType package_type = arg.package_type_;
-    int64_t compatible_mode = arg.compatible_mode_;
     const ObDatabaseSchema *db_schema = NULL;
     if (OB_FAIL(schema_guard.get_database_schema( db_name, db_schema))) {
       LOG_WARN("get database schema failed", K(ret));
@@ -672,12 +667,12 @@ int ObPLDDLService::drop_package(const obcall::ObDropPackageArg &arg,
     if (OB_SUCC(ret)) {
       bool exist = false;
       if (OB_FAIL(schema_guard.check_package_exist(db_schema->get_database_id(),
-          package_name, package_type, compatible_mode, exist))) {
+          package_name, package_type, exist))) {
         LOG_WARN("failed to check package info exist", K(package_name), K(ret));
       } else if (exist) {
         const ObPackageInfo *package_info = NULL;
         ObErrorInfo error_info = arg.error_info_;
-        if (OB_FAIL(schema_guard.get_package_info( db_schema->get_database_id(), package_name, package_type, compatible_mode, package_info))) {
+        if (OB_FAIL(schema_guard.get_package_info(db_schema->get_database_id(), package_name, package_type, package_info))) {
           LOG_WARN("get package info failed", K(ret));
         } else if (OB_FAIL(drop_package(schema_guard,
                                         *package_info,

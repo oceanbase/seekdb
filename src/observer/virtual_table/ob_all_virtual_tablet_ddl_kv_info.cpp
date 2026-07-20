@@ -16,6 +16,7 @@
 
 #include "observer/virtual_table/ob_all_virtual_tablet_ddl_kv_info.h"
 #include "share/rc/ob_module_provider.h"
+#include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
 
@@ -28,10 +29,8 @@ namespace observer
 
 ObAllVirtualTabletDDLKVInfo::ObAllVirtualTabletDDLKVInfo()
     : ObVirtualTableScannerIterator(),
-      addr_(),
-      ls_handle_(),
-      is_ls_iter_end_(false),
-      ls_tablet_iter_(ObMDSGetTabletMode::READ_ALL_COMMITED),
+      ls_(nullptr),
+      tablet_iter_(ObMDSGetTabletMode::READ_ALL_COMMITED),
       ddl_kvs_handle_(),
       curr_tablet_id_(),
       ddl_kv_idx_(-1)
@@ -48,62 +47,27 @@ void ObAllVirtualTabletDDLKVInfo::reset()
   ddl_kv_idx_ = -1;
   ddl_kvs_handle_.reset();
   curr_tablet_id_.reset();
-  ls_tablet_iter_.reset();
-  ls_handle_.reset();
-  is_ls_iter_end_ = false;
-  addr_.reset();
+  tablet_iter_.reset();
+  ls_ = nullptr;
   ObVirtualTableScannerIterator::reset();
-}
-
-int ObAllVirtualTabletDDLKVInfo::get_next_ls(ObLS *&ls)
-{
-  int ret = OB_SUCCESS;
-  ls = nullptr;
-  if (is_ls_iter_end_) {
-    ret = OB_ITER_END;
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(share::SYS_LS, ls_handle_, ObLSGetMod::OBSERVER_MOD))) {
-    if (OB_LS_NOT_EXIST == ret) {
-      ret = OB_ITER_END;
-      is_ls_iter_end_ = true;
-    } else {
-      SERVER_LOG(WARN, "fail to get sys ls", K(ret));
-    }
-  } else if (OB_ISNULL(ls = ls_handle_.get_ls())) {
-    ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(ERROR, "ls is null", K(ret));
-  } else {
-    is_ls_iter_end_ = true;
-  }
-  return ret;
 }
 
 int ObAllVirtualTabletDDLKVInfo::get_next_ddl_kv_mgr(ObDDLKvMgrHandle &ddl_kv_mgr_handle)
 {
   int ret = OB_SUCCESS;
-  while (OB_SUCC(ret)) {
-    if (!ls_tablet_iter_.is_valid()) {
-      ObLS *ls = nullptr;
-      if (OB_FAIL(get_next_ls(ls))) {
-        if (OB_ITER_END != ret) {
-          SERVER_LOG(WARN, "fail to get next ls", K(ret));
-        }
-      } else if (OB_FAIL(ls->build_tablet_iter(ls_tablet_iter_))) {
-        SERVER_LOG(WARN, "fail to build tablet iter", K(ret));
-      }
+  if (!tablet_iter_.is_valid()) {
+    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_))) {
+      SERVER_LOG(WARN, "get log stream failed", K(ret));
+    } else if (OB_FAIL(ls_->build_tablet_iter(tablet_iter_))) {
+      SERVER_LOG(WARN, "fail to build tablet iter", K(ret));
     }
-
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ls_tablet_iter_.get_next_ddl_kv_mgr(ddl_kv_mgr_handle))) {
-      if (OB_ITER_END == ret) {
-        ls_tablet_iter_.reset();
-        ret = OB_SUCCESS;
-      } else {
-        SERVER_LOG(WARN, "fail to get next tablet", K(ret));
-      }
-    } else {
-      curr_tablet_id_ = ddl_kv_mgr_handle.get_obj()->get_tablet_id();
-      break;
+  }
+  if (OB_SUCC(ret) && OB_FAIL(tablet_iter_.get_next_ddl_kv_mgr(ddl_kv_mgr_handle))) {
+    if (OB_ITER_END != ret) {
+      SERVER_LOG(WARN, "fail to get next tablet", K(ret));
     }
+  } else if (OB_SUCC(ret)) {
+    curr_tablet_id_ = ddl_kv_mgr_handle.get_obj()->get_tablet_id();
   }
   return ret;
 }
@@ -111,7 +75,6 @@ int ObAllVirtualTabletDDLKVInfo::get_next_ddl_kv_mgr(ObDDLKvMgrHandle &ddl_kv_mg
 int ObAllVirtualTabletDDLKVInfo::get_next_ddl_kv(ObDDLKV *&ddl_kv)
 {
   int ret = OB_SUCCESS;
-  ObTabletHandle tablet_handle;
   while (OB_SUCC(ret)) {
     if (ddl_kv_idx_ < 0 || ddl_kv_idx_ >= ddl_kvs_handle_.count()) {
       ObDDLKvMgrHandle ddl_kv_mgr_handle;
@@ -145,11 +108,7 @@ int ObAllVirtualTabletDDLKVInfo::inner_get_next_row(ObNewRow *&row)
   int ret = OB_SUCCESS;
   ObDDLKV *cur_kv = nullptr;
   const int64_t col_count = output_column_ids_.count();
-  if (NULL == allocator_) {
-    ret = OB_NOT_INIT;
-    SERVER_LOG(WARN, "allocator_ shouldn't be NULL", K(allocator_), K(ret));
-  } else if (FALSE_IT(start_to_read_ = true)) {
-  } else if (OB_FAIL(get_next_ddl_kv(cur_kv))) {
+  if (OB_FAIL(get_next_ddl_kv(cur_kv))) {
     if (OB_ITER_END != ret) {
       SERVER_LOG(WARN, "fail to get next tablet with ddl kv", K(ret));
     }
@@ -160,27 +119,27 @@ int ObAllVirtualTabletDDLKVInfo::inner_get_next_row(ObNewRow *&row)
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
-        case OB_APP_MIN_COLUMN_ID + 2:
+        case OB_APP_MIN_COLUMN_ID + 0:
           // tablet_id
           cur_row_.cells_[i].set_int(curr_tablet_id_.id());
           break;
-        case OB_APP_MIN_COLUMN_ID + 3:
+        case OB_APP_MIN_COLUMN_ID + 1:
           // freeze_scn
           cur_row_.cells_[i].set_uint64(cur_kv->get_freeze_scn().get_val_for_inner_table_field());
           break;
-        case OB_APP_MIN_COLUMN_ID + 4:
+        case OB_APP_MIN_COLUMN_ID + 2:
           // start_scn
           cur_row_.cells_[i].set_uint64(cur_kv->get_ddl_start_scn().get_val_for_inner_table_field());
           break;
-        case OB_APP_MIN_COLUMN_ID + 5:
+        case OB_APP_MIN_COLUMN_ID + 3:
           // min_scn
           cur_row_.cells_[i].set_uint64(cur_kv->get_min_scn().get_val_for_inner_table_field());
           break;
-        case OB_APP_MIN_COLUMN_ID + 6:
+        case OB_APP_MIN_COLUMN_ID + 4:
           // macro_block_cnt
           cur_row_.cells_[i].set_int(cur_kv->get_macro_block_cnt());
           break;
-        case OB_APP_MIN_COLUMN_ID + 7:
+        case OB_APP_MIN_COLUMN_ID + 5:
           // ref_cnt
           cur_row_.cells_[i].set_int(cur_kv->get_ref());
           break;

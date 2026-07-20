@@ -224,10 +224,9 @@ int ObConnectResourceMgr::on_user_connect(
       ObSQLSessionInfo& session)
 {
   int ret = OB_SUCCESS;
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
   if (!session.is_user_session()) {
     // do not limit connection count for inner sesion.
-  } else if (compat_mode == lib::Worker::CompatMode::MYSQL) {
+  } else {
     if (!session.has_got_tenant_conn_res()) {
       if (OB_FAIL(apply_for_tenant_conn_resource( priv, max_tenant_connections))) {
         LOG_WARN("reach teannt max connections", K(ret));
@@ -259,14 +258,6 @@ int ObConnectResourceMgr::on_user_connect(
       if (OB_NOT_NULL(user_res)) {
         user_res_map_.revert(user_res);
         user_res = NULL;
-      }
-    }
-  } else {
-    if (!session.has_got_tenant_conn_res()) {
-      if (OB_FAIL(apply_for_tenant_conn_resource( priv, UINT64_MAX))) {
-        LOG_WARN("reach teannt max connections", K(ret));
-      } else {
-        session.set_got_tenant_conn_res(true);
       }
     }
   }

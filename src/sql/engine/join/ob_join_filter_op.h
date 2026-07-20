@@ -86,19 +86,26 @@ struct ObJoinFilterRuntimeConfig
 {
   OB_UNIS_VERSION_V(1);
 public:
-  TO_STRING_KV(K_(bloom_filter_ratio), K_(runtime_filter_wait_time_ms),
-               K_(runtime_filter_max_in_num), K_(runtime_bloom_filter_max_size));
+  TO_STRING_KV(K_(bloom_filter_ratio), K_(each_group_size), K_(bf_piece_size),
+               K_(runtime_filter_wait_time_ms), K_(runtime_filter_max_in_num),
+               K_(runtime_bloom_filter_max_size), K_(px_message_compression));
 public:
   ObJoinFilterRuntimeConfig() :
       bloom_filter_ratio_(0.0),
+      each_group_size_(OB_INVALID_ID),
+      bf_piece_size_(0),
       runtime_filter_wait_time_ms_(0),
       runtime_filter_max_in_num_(0),
       runtime_bloom_filter_max_size_(0),
+      px_message_compression_(false),
       build_send_opt_{false} {}
   double bloom_filter_ratio_;
+  int64_t each_group_size_;
+  int64_t bf_piece_size_; // how many int64_t a piece bloom filter contains
   int64_t runtime_filter_wait_time_ms_;
   int64_t runtime_filter_max_in_num_;
   int64_t runtime_bloom_filter_max_size_;
+  bool px_message_compression_;
   bool build_send_opt_;
 };
 
@@ -138,12 +145,15 @@ public:
   int init_share_info(
       const ObJoinFilterSpec &spec,
       ObExecContext &ctx,
-      int64_t task_count);
+      int64_t task_count,
+      int64_t sqc_count);
   int init_shared_msgs(const ObJoinFilterSpec &spec,
-      ObExecContext &ctx);
+      ObExecContext &ctx,
+      int64_t sqc_count);
   static int construct_msg_details(const ObJoinFilterSpec &spec,
+      ObPxSQCProxy *sqc_proxy,
       ObJoinFilterRuntimeConfig &config,
-      ObP2PDatahubMsgBase &msg, int64_t estimated_rows);
+      ObP2PDatahubMsgBase &msg, int64_t sqc_count, int64_t estimated_rows);
   void set_task_id(int64_t task_id)  { task_id_ = task_id; }
   void set_px_sequence_id(int64_t id) { px_sequence_id_ = id; }
   int64_t get_px_sequence_id() { return px_sequence_id_; }
@@ -188,7 +198,7 @@ public:
   ObJoinFilterSpec(common::ObIAllocator &alloc, const ObPhyOperatorType type);
 
   INHERIT_TO_STRING_KV("op_spec", ObOpSpec, K_(mode), K_(filter_id), K_(filter_len), K_(rf_infos),
-                       K_(bloom_filter_ratio));
+                       K_(bloom_filter_ratio), K_(send_bloom_filter_size));
 
   inline void set_mode(JoinFilterMode mode) { mode_ = mode; }
   inline JoinFilterMode get_mode() const { return mode_; }
@@ -237,6 +247,8 @@ public:
     return use_ndv_runtime_bloom_filter_size_;
   }
 
+  int update_sync_row_count_flag();
+
   JoinFilterMode mode_;
   int64_t filter_id_;
   int64_t filter_len_;
@@ -248,10 +260,12 @@ public:
   common::ObFixedArray<ObRuntimeFilterInfo, common::ObIAllocator> rf_infos_;
   common::ObFixedArray<bool, common::ObIAllocator> need_null_cmp_flags_;
   bool is_shuffle_;
+  int64_t each_group_size_;
   common::ObFixedArray<ObRFCmpInfo, common::ObIAllocator> rf_build_cmp_infos_;
   common::ObFixedArray<ObRFCmpInfo, common::ObIAllocator> rf_probe_cmp_infos_;
   ObPxQueryRangeInfo px_query_range_info_;
   int64_t bloom_filter_ratio_;
+  int64_t send_bloom_filter_size_; // how many KB a piece bloom filter has
   ObJoinFilterMaterialControlInfo jf_material_control_info_;
   ObJoinType join_type_ {UNKNOWN_JOIN};
   ExprFixedArray full_hash_join_keys_;
@@ -338,7 +352,8 @@ private:
   int do_use_filter_rescan();
   int try_send_join_filter();
   int try_merge_join_filter();
-  int update_plan_monitor_info();
+  int calc_each_bf_group_size(int64_t &);
+  int update_join_filter_monitor_info();
   int open_join_filter_create();
   int open_join_filter_use();
   int join_filter_create_get_next_batch(const int64_t max_row_cnt);
@@ -462,14 +477,16 @@ public:
   bool force_dump_{false};
   bool has_sent_runtime_filter_{false};
   const ExprFixedArray *build_rows_output_{nullptr};
+  ExprFixedArray build_rows_output_for_compat_; 
 
   // for build count opt
   bool in_filter_active_{false};
   ObJoinFilterNdv dh_ndv_;
   // build count opt end
 
-  // Each join filter uses one HLL calculator. When the filter can reuse hash
-  // join keys, it points to group_controller_.hash_join_keys_hllc_.
+  //Considering compatibility, >= 435 BP1 will use the variables below to estimate NDV.
+  //For each join filter will use this hllc
+  //If this join filter can *reuse* hash join keys, this hllc_ will point to group_controller_.hash_join_keys_hllc_
   ObHyperLogLogCalculator* hllc_{nullptr};
   int64_t worker_ndv_{0}; // ndv of each thread, used when this is a non-shared join filter
   int64_t total_ndv_{0};  // ndv of total dfo, used when this is a shared join filter
@@ -481,3 +498,4 @@ public:
 
 
 #endif /* _SQL_ENGINE_JOIN_OB_JOIN_FILTER_OP_H */
+

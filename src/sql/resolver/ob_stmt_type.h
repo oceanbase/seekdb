@@ -100,7 +100,7 @@ OB_STMT_TYPE_DEF_UNKNOWN_AT(T_REFRESH_SCHEMA, get_sys_tenant_alter_system_priv, 
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_CREATE_DATABASE, get_create_database_stmt_need_privs, 96)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_USE_DATABASE, no_priv_needed, 97)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ADMIN_SERVER, get_sys_tenant_alter_system_priv, 98)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_RECYCLE_REPLICA, get_sys_tenant_alter_system_priv, 103)
+OB_STMT_TYPE_DEF_UNKNOWN_AT(T_RESERVED_3791, get_sys_tenant_alter_system_priv, 103)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ADMIN_MERGE, get_sys_tenant_alter_system_priv, 104)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ALTER_DATABASE, get_alter_database_stmt_need_privs, 105)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_DROP_DATABASE, get_drop_database_stmt_need_privs, 106)
@@ -216,8 +216,7 @@ OB_STMT_TYPE_DEF_UNKNOWN_AT(T_DIAGNOSTICS, no_priv_needed, 233)
 // 235: T_DELETE_POLICY abandoned, id reserved
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_PROFILE, err_stmt_type_priv, 237)
 
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ENABLE_SQL_THROTTLE, no_priv_needed, 250)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_DISABLE_SQL_THROTTLE, no_priv_needed, 251)
+// 250-251: SQL throttling abandoned, ids reserved
 // 252: T_BACKUP_SET_ENCRYPTION abandoned, id reserved
 // 253: T_BACKUP_SET_DECRYPTION abandoned, id reserved
 
@@ -255,8 +254,6 @@ OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ACTIVATE_STANDBY, get_sys_tenant_alter_system_priv
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SWITCHOVER_TO_STANDBY, get_sys_tenant_alter_system_priv, 291)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SWITCHOVER_TO_PRIMARY, get_sys_tenant_alter_system_priv, 293)
 OB_STMT_TYPE_DEF(T_ALTER_SYSTEM_RESET_PARAMETER, get_sys_tenant_alter_system_priv, 292, ACTION_TYPE_ALTER_SYSTEM)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_CREATE_MLOG, get_create_mlog_stmt_need_privs, 295)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_DROP_MLOG, get_drop_mlog_stmt_need_privs, 296)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_FLUSH_PRIVILEGES, no_priv_needed, 298)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ALTER_LS_REPLICA, get_sys_tenant_alter_system_priv, 299)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_PROCEDURE_CODE, err_stmt_type_priv, 300)
@@ -309,9 +306,6 @@ OB_STMT_TYPE_DEF(T_EVENT_JOB_DROP, get_event_stmt_need_privs, 345, ACTION_TYPE_E
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_CACHE_INDEX, no_priv_needed, 358)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_LOAD_INDEX_INTO_CACHE, no_priv_needed, 359)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_CHECK_TABLE, err_stmt_type_priv, 360)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_OLAP_ASYNC_JOB_SUBMIT, no_priv_needed, 361)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_OLAP_ASYNC_JOB_CANCEL, no_priv_needed, 362)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_OLAP_ASYNC_JOB_STATUS, no_priv_needed, 363)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_FLUSH_SS_MICRO_CACHE, get_sys_tenant_alter_system_priv, 364)
 // 365 is reserved for a removed statement type.
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_MODULE_DATA, get_sys_tenant_alter_system_priv, 366)

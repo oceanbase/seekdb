@@ -38,17 +38,14 @@ enum class ObFreezeSourceFlag : int64_t
   USER_MINOR_FREEZE   = 2,
   FREEZE_TRIGGER      = 3,
   BACKUP              = 4,
-  RESERVED_5          = 5,
-  RESERVED_6          = 6,
-  MAJOR_FREEZE        = 7,
-  FAST_FREEZE         = 8,
-  DIRECT_INC_START    = 9,
-  DIRECT_INC_END      = 10,
-  DIRECT_INC_FREEZE   = 11,
-  GC_RETAIN_CTX       = 12, // deprecated
-  TEST_MODE           = 13, // used for test only
-  TABLET_SPLIT        = 14,
-  MAX_SOURCE          = 15,
+  MAJOR_FREEZE        = 5,
+  FAST_FREEZE         = 6,
+  DIRECT_INC_START    = 7,
+  DIRECT_INC_END      = 8,
+  DIRECT_INC_FREEZE   = 9,
+  GC_RETAIN_CTX       = 10, // deprecated
+  TEST_MODE           = 11, // used for test only
+  MAX_SOURCE          = 12,
 };
 
 static const int64_t MAX_FREEZE_SOURCE_TYPE_COUNT = static_cast<int64_t>(ObFreezeSourceFlag::MAX_SOURCE);
@@ -78,12 +75,6 @@ inline const char *obj_to_cstring(const ObFreezeSourceFlag type)
   case ObFreezeSourceFlag::BACKUP:
     ret = "BACKUP";
     break;
-  case ObFreezeSourceFlag::RESERVED_5:
-    ret = "RESERVED_5";
-    break;
-  case ObFreezeSourceFlag::RESERVED_6:
-    ret = "RESERVED_6";
-    break;
   case ObFreezeSourceFlag::MAJOR_FREEZE:
     ret = "MAJOR_FREEZE";
     break;
@@ -104,9 +95,6 @@ inline const char *obj_to_cstring(const ObFreezeSourceFlag type)
     break;
   case ObFreezeSourceFlag::TEST_MODE:
     ret = "TEST_MODE";
-    break;
-  case ObFreezeSourceFlag::TABLET_SPLIT:
-    ret = "TABLET_SPLIT";
     break;
   case ObFreezeSourceFlag::MAX_SOURCE:
     ret = "MAX_SOURCE";

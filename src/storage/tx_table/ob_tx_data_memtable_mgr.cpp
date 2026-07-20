@@ -65,7 +65,7 @@ void ObTxDataMemtableMgr::destroy()
 
 int ObTxDataMemtableMgr::init(const common::ObTabletID &tablet_id,
                               ObFreezer *freezer,
-                              ObStorageMetaMemMgr *t3m)
+                              ObTenantMetaMemMgr *t3m)
 {
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
@@ -323,7 +323,7 @@ int ObTxDataMemtableMgr::calc_new_memtable_buckets_cnt_(const double load_factor
                                                         int64_t &new_buckets_cnt)
 {
   // acquire the max memory which tx data memtable buckets can use
-  int64_t remain_memory = lib::get_allocator_memory_remain();
+  int64_t remain_memory = lib::get_tenant_memory_remain();
   int64_t buckets_size_limit = remain_memory >> 4; /* remain_memory * (1/16) */
 
   int64_t expect_buckets_cnt = old_buckets_cnt;

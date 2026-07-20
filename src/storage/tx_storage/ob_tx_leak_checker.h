@@ -207,9 +207,11 @@ static int64_t get_tx_debug_level()
   RLOCAL_INIT(int64_t, last_result, 0);
   int64_t current_time = ObClockGenerator::getClock();
   if (current_time - last_check_timestamp < TX_DEBUG_LEVEL_CACHE_REFRESH_INTERVAL) {
-    // Reuse the cached value until the refresh interval expires.
+    // Check once when the last memory burst or tenant does not match or the interval reaches the threshold
   } else {
-    last_result = GCONF._tx_debug_level;
+    if (OB_LIKELY(true)) {
+      last_result = GCONF._tx_debug_level;
+    }
     last_check_timestamp = current_time;
   }
 

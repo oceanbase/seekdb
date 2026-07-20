@@ -30,6 +30,7 @@
 #include "sql/ob_sql_define.h"
 #include "sql/resolver/expr/ob_expr_info_flag.h"
 #include "sql/session/ob_system_variable.h"
+#include "share/schema/ob_udf.h"
 #include "lib/worker.h"
 #include "sql/parser/parse_node.h"
 #include "sql/resolver/ob_resolver_define.h"
@@ -1144,6 +1145,7 @@ enum AccessNameType
 {
   UNKNOWN = -1,
   SYS_FUNC,
+  DLL_UDF,
   PL_UDF,
   PL_VAR,
   DB_NS,
@@ -1199,6 +1201,7 @@ public:
   inline void set_type(AccessNameType type) { type_ = type; }
   inline AccessNameType get_type() { return type_; }
   inline void set_sys_func() { type_ = SYS_FUNC; }
+  inline void set_dll_udf() { type_ = DLL_UDF; }
   inline void set_pl_udf() { type_ = PL_UDF; }
   inline void set_pl_var() { type_ = PL_VAR; }
   inline void set_db_ns() { type_ = DB_NS; }
@@ -1209,6 +1212,7 @@ public:
   inline void set_udt_ns() { type_ = UDT_NS; }
   inline bool is_unknown() const { return UNKNOWN == type_; }
   inline bool is_sys_func() const { return SYS_FUNC == type_; }
+  inline bool is_dll_udf() const { return DLL_UDF == type_; }
   inline bool is_pl_udf() const { return PL_UDF == type_; }
   inline bool is_pl_var() const { return PL_VAR == type_; }
   inline bool is_db_ns() const { return DB_NS == type_; }
@@ -1244,7 +1248,8 @@ struct ObQualifiedName
 {
 public:
   ObQualifiedName()
-      : database_name_(),
+      : catalog_name_(),
+        database_name_(),
         tbl_name_(),
         col_name_(),
         is_star_(false),
@@ -1260,6 +1265,7 @@ public:
 
   int assign(const ObQualifiedName &other)
   {
+    catalog_name_ = other.catalog_name_;
     database_name_ = other.database_name_;
     tbl_name_ = other.tbl_name_;
     col_name_ = other.col_name_;
@@ -1323,10 +1329,11 @@ public:
     }
     return bret && multi_level;
   }
+  inline bool is_dll_udf() const { return false; }
   inline bool is_pl_var() const
   {
     bool is_true = false;
-    if (!is_sys_func() && !is_pl_udf()) {
+    if (!is_sys_func() && !is_pl_udf() && !is_dll_udf()) {
       for (int64_t i = 0; !is_true && i < access_idents_.count(); ++i) {
         if (access_idents_.at(i).is_pl_var()) {
           is_true = true;
@@ -1355,8 +1362,10 @@ public:
                K_(parent_aggr_level),
                K_(access_idents),
                K_(current_resolve_level),
-               K_(is_access_root));
+               K_(is_access_root),
+               K_(catalog_name));
 public:
+  common::ObString catalog_name_;
   common::ObString database_name_;
   common::ObString tbl_name_; // When used for UDF, indicates package name
   common::ObString col_name_; // When used for UDF, indicates function name
@@ -1364,7 +1373,7 @@ public:
   ObColumnRefRawExpr *ref_expr_;
   ObExprInfo parents_expr_info_;
   int64_t parent_aggr_level_;
-  // Qualified-name components accessed via '.' are stored here, such as a, f, c in a.f(x,y).c
+  // Sequences accessed via '.' are stored here, such as a, f, c in a.f(x,y).c
   common::ObSEArray<ObObjAccessIdent, 4, common::ModulePageAllocator, true> access_idents_;
   // the depth of resolve level
   int64_t current_resolve_level_;
@@ -1736,7 +1745,7 @@ struct ObResolveContext
   ObAggResolveLink agg_resolve_link_;
   bool is_win_agg_;
   ObSchemaChecker *schema_checker_;// we use checker to get udf function name.
-  const ObSQLSessionInfo *session_info_; // Supplies session-level expression settings.
+  const ObSQLSessionInfo *session_info_;// we use to get tenant id
   pl::ObPLBlockNS *secondary_namespace_;
   ObQueryCtx *query_ctx_;
   bool is_for_dynamic_sql_;
@@ -1782,6 +1791,9 @@ struct ObRawExprExtraInfo
                          // T_FUN_SYS_ALIGN_DATE4CMP
     uint64_t autoinc_nextval_extra_; // T_FUN_SYS_AUTOINC_NEXTVAL
     uint64_t res_cs_type_; // T_FUN_SYS_SOUNDEX
+    uint64_t column_idx_; // T_PSEUDO_EXTERNAL_FILE_COL
+                          // T_PSEUDO_PARTITION_LIST_COL
+                          // T_PSEUDO_EXTERNAL_FILE_URL
     uint64_t json_partial_update_flag_; // T_FUN_SYS_JSON_REPLACE
                                         // T_FUN_SYS_JSON_SET
                                         // T_FUN_SYS_JSON_REMOVE
@@ -1935,7 +1947,8 @@ public:
                                                         || T_FUN_SYS_ICU_VERSION == type_; }
   inline bool is_pl_expr() const { return EXPR_UDF == expr_class_
                                           || T_FUN_PL_COLLECTION_CONSTRUCT == type_
-                                          || T_FUN_PL_OBJECT_CONSTRUCT == type_; }
+                                          || T_FUN_PL_OBJECT_CONSTRUCT == type_
+                                          || T_FUN_SYS_PDB_GET_RUNTIME_INFO == type_; }
   inline void set_expr_type(ObItemType v) { type_ = v; }
   inline ObItemType get_expr_type() const { return type_; }
 
@@ -2003,7 +2016,8 @@ public:
   inline bool is_generalized_column() const
   {
     return is_column_ref_expr() || is_query_ref_expr() || is_aggr_expr() || is_set_op_expr()
-          || is_win_func_expr() || has_flag(IS_PSEUDO_COLUMN) || has_flag(IS_OP_PSEUDO_COLUMN);
+          || is_win_func_expr() || has_flag(IS_PSEUDO_COLUMN)
+          || has_flag(IS_SEQ_EXPR) || has_flag(IS_OP_PSEUDO_COLUMN);
   }
 
   // The expr result is vectorized, the batch result is the same if not vectorized result e.g:
@@ -2150,6 +2164,7 @@ public:
   void set_cast_mode(const uint64_t val) { extra_.cast_mode_ = val; }
   void set_autoinc_nextval_extra(const uint64_t val) { extra_.autoinc_nextval_extra_ = val; }
   void set_res_cs_type(const uint64_t val) { extra_.res_cs_type_ = val; }
+  void set_column_idx(const uint64_t val) { extra_.column_idx_ = val; }
   void set_json_partial_update_flag(const uint64_t val) { extra_.json_partial_update_flag_ = val; }
   void set_from_unixtime_flag(const uint64_t val) { extra_.from_unixtime_flag_ = val; }
   void set_reverse_param_order(const uint64_t val) { extra_.reverse_param_order_ = val; }
@@ -2163,6 +2178,7 @@ public:
   uint64_t get_cast_mode() const { return extra_.cast_mode_; }
   uint64_t get_autoinc_nextval_extra() const { return extra_.autoinc_nextval_extra_; }
   uint64_t get_res_cs_type() const { return extra_.res_cs_type_; }
+  uint64_t get_column_idx() const { return extra_.column_idx_; }
   uint64_t get_json_partial_update_flag() const { return extra_.json_partial_update_flag_; }
   uint64_t get_from_unixtime_flag() const { return extra_.from_unixtime_flag_; }
   uint64_t get_reverse_param_order() const { return extra_.reverse_param_order_; }
@@ -3028,6 +3044,7 @@ public:
       is_rowkey_column_(false),
       is_unique_key_column_(false),
       is_mul_key_column_(false),
+      is_pseudo_column_ref_(false),
       is_strict_json_column_(0),
       srs_id_(UINT64_MAX),
       udt_set_id_(0)
@@ -3053,6 +3070,7 @@ public:
       is_rowkey_column_(false),
       is_unique_key_column_(false),
       is_mul_key_column_(false),
+      is_pseudo_column_ref_(false),
       is_strict_json_column_(0),
       srs_id_(UINT64_MAX),
       udt_set_id_(0)
@@ -3078,6 +3096,7 @@ public:
       is_rowkey_column_(false),
       is_unique_key_column_(false),
       is_mul_key_column_(false),
+      is_pseudo_column_ref_(false),
       is_strict_json_column_(0),
       srs_id_(UINT64_MAX),
       udt_set_id_(0)
@@ -3127,9 +3146,13 @@ public:
 
   virtual uint64_t hash_internal(uint64_t seed) const;
   inline bool is_generated_column() const { return share::schema::ObSchemaUtils::is_generated_column(column_flags_); }
+  inline bool is_identity_column() const { return share::schema::ObSchemaUtils::is_identity_column(column_flags_); }
   inline bool is_default_expr_v2_column() const { return share::schema::ObSchemaUtils::is_default_expr_v2_column(column_flags_); }
   inline bool is_virtual_generated_column() const { return share::schema::ObSchemaUtils::is_virtual_generated_column(column_flags_); }
   inline bool is_stored_generated_column() const { return share::schema::ObSchemaUtils::is_stored_generated_column(column_flags_); }
+  inline bool is_always_identity_column() const { return share::schema::ObSchemaUtils::is_always_identity_column(column_flags_); }
+  inline bool is_default_identity_column() const { return share::schema::ObSchemaUtils::is_default_identity_column(column_flags_); }
+  inline bool is_default_on_null_identity_column() const { return share::schema::ObSchemaUtils::is_default_on_null_identity_column(column_flags_); }
   inline bool is_fulltext_column() const { return share::schema::ObSchemaUtils::is_fulltext_column(column_flags_); }
   inline bool is_doc_id_column() const { return share::schema::ObSchemaUtils::is_doc_id_column(column_flags_); }
   inline bool is_vec_hnsw_vid_column() const { return share::schema::ObSchemaUtils::is_vec_hnsw_vid_column(column_flags_); }
@@ -3195,6 +3218,9 @@ public:
   inline uint64_t get_udt_set_id() const { return udt_set_id_; };
   inline void set_udt_set_id(uint64_t udt_set_id) { udt_set_id_ = udt_set_id; };
   bool is_geo_column() const { return get_data_type() == ObObjType::ObGeometryType; }
+  bool is_pseudo_column_ref() const { return is_pseudo_column_ref_; }
+  void set_is_pseudo_column_ref(bool value) { is_pseudo_column_ref_ = value; }
+
   inline common::ObGeoType get_geo_type() const { return static_cast<common::ObGeoType>(srs_info_.geo_type_); }
 
   VIRTUAL_TO_STRING_KVP(N_ITEM_TYPE, type_,
@@ -3238,6 +3264,7 @@ private:
   bool is_rowkey_column_;
   bool is_unique_key_column_;
   bool is_mul_key_column_;
+  bool is_pseudo_column_ref_;
   int8_t is_strict_json_column_;
   union { // for geometry column
     struct {
@@ -3780,6 +3807,7 @@ public:
     distinct_(false),
     order_items_(),
     separator_param_expr_(NULL),
+    udf_meta_(),
     expr_in_inner_stmt_(false),
     is_need_deserialize_row_(false),
     pl_agg_udf_expr_(NULL)
@@ -3793,6 +3821,7 @@ public:
     distinct_(false),
     order_items_(),
     separator_param_expr_(NULL),
+    udf_meta_(),
     expr_in_inner_stmt_(false),
     is_need_deserialize_row_(false),
     pl_agg_udf_expr_(NULL)
@@ -3807,6 +3836,7 @@ public:
     distinct_(is_distinct),
     order_items_(),
     separator_param_expr_(NULL),
+    udf_meta_(),
     expr_in_inner_stmt_(false),
     is_need_deserialize_row_(false),
     pl_agg_udf_expr_(NULL)
@@ -3871,6 +3901,10 @@ public:
     return seed;
   }
 
+  //set udf meta to this expr
+  int set_udf_meta(const share::schema::ObUDF &udf);
+  const share::schema::ObUDFMeta get_udf_meta() { return udf_meta_; }
+
   int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type) const;
   VIRTUAL_TO_STRING_KV_CHECK_STACK_OVERFLOW(N_ITEM_TYPE, type_,
                                             N_RESULT_TYPE, result_type_,
@@ -3880,6 +3914,7 @@ public:
                                             N_DISTINCT, distinct_,
                                             N_ORDER_BY, order_items_,
                                             N_SEPARATOR_PARAM_EXPR, separator_param_expr_,
+                                            K_(udf_meta),
                                             K_(expr_in_inner_stmt),
                                             K_(pl_agg_udf_expr),
                                             K_(expr_hash));
@@ -3891,6 +3926,8 @@ private:
   // used for group_concat/rank/percent rank/dense rank/cume dist
   common::ObArray<OrderItem, common::ModulePageAllocator, true> order_items_;
   ObRawExpr *separator_param_expr_;
+  //use for udf function info
+  share::schema::ObUDFMeta udf_meta_;
   bool expr_in_inner_stmt_;
   bool is_need_deserialize_row_;// for topk histogram and hybrid histogram computation
   ObRawExpr *pl_agg_udf_expr_;//for pl agg udf expr
@@ -4035,6 +4072,55 @@ inline const common::ObString &ObSysFunRawExpr::get_func_name() const
 {
   return func_name_;
 }
+
+class ObSequenceRawExpr : public ObSysFunRawExpr
+{
+public:
+  ObSequenceRawExpr(common::ObIAllocator &alloc)
+      : ObSysFunRawExpr(alloc), database_name_(), name_(), action_(), sequence_id_(0) {}
+  ObSequenceRawExpr()
+      : ObSysFunRawExpr(), database_name_(), name_(), action_(), sequence_id_(0) {}
+  virtual ~ObSequenceRawExpr() = default;
+  int assign(const ObRawExpr &other) override;
+  int inner_deep_copy(ObIRawExprCopier &copier) override;
+  int set_sequence_meta(const common::ObString &database_name,
+                        const common::ObString &name,
+                        const common::ObString &action,
+                        uint64_t sequence_id);
+  const common::ObString &get_database_name() { return database_name_; }
+  const common::ObString &get_name() { return name_; }
+  const common::ObString &get_action() const { return action_; }
+  uint64_t get_sequence_id() const { return sequence_id_; }
+  virtual bool inner_same_as(const ObRawExpr &expr,
+                             ObExprEqualCheckContext *check_context) const override;
+  virtual void inner_calc_hash() override;
+  virtual int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type) const override;
+private:
+  common::ObString database_name_; // sequence database name
+  common::ObString name_; // sequence object name
+  common::ObString action_; // NEXTVAL or CURRVAL
+  uint64_t sequence_id_; // this value is also wrapped as expr and put into the param of ObSysFunRawExpr
+};
+
+class ObNormalDllUdfRawExpr : public ObSysFunRawExpr
+{
+public:
+  ObNormalDllUdfRawExpr(common::ObIAllocator &alloc) : ObSysFunRawExpr(alloc), udf_meta_(), udf_attributes_() {}
+  ObNormalDllUdfRawExpr() : ObSysFunRawExpr(), udf_meta_(), udf_attributes_() {}
+  virtual ~ObNormalDllUdfRawExpr() {}
+  int assign(const ObRawExpr &other) override;
+  int inner_deep_copy(ObIRawExprCopier &copier) override;
+  int set_udf_meta(const share::schema::ObUDF &udf);
+  int add_udf_attribute_name(const common::ObString &name);
+  const share::schema::ObUDFMeta &get_udf_meta() const { return udf_meta_; }
+  virtual bool inner_same_as(const ObRawExpr &expr,
+                             ObExprEqualCheckContext *check_context) const override;
+  virtual void inner_calc_hash() override;
+private:
+  //for udf function info
+  share::schema::ObUDFMeta udf_meta_;
+  common::ObSEArray<common::ObString, 16> udf_attributes_;// name of input expr
+};
 
 class ObCollectionConstructRawExpr : public ObSysFunRawExpr
 {
@@ -5068,6 +5154,8 @@ public:
   uint64_t get_table_id() const { return table_id_; }
   void set_table_name(const common::ObString &table_name) { table_name_ = table_name; }
   const common::ObString & get_table_name() const { return table_name_; }
+  void set_data_access_path(const common::ObString &data_access_path) { data_access_path_ = data_access_path; }
+  const common::ObString & get_data_access_path() const { return data_access_path_; }
 
   VIRTUAL_TO_STRING_KVP(N_ITEM_TYPE, type_,
                        N_RESULT_TYPE, result_type_,
@@ -5075,10 +5163,12 @@ public:
                        N_REL_ID, rel_ids_,
                        N_TABLE_ID, table_id_,
                        N_TABLE_NAME, table_name_,
+                       K_(data_access_path),
                        K_(expr_hash));
 private:
   uint64_t table_id_;
   common::ObString table_name_;
+  common::ObString data_access_path_; //for external table column
   DISALLOW_COPY_AND_ASSIGN(ObPseudoColumnRawExpr);
 };
 

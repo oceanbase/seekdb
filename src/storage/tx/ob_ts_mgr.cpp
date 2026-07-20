@@ -15,430 +15,53 @@
  */
 
 #include "ob_ts_mgr.h"
-#include "share/ob_share_util.h"  // relocated-definition owner
+#include "ob_timestamp_access.h"
+#include "share/config/ob_server_config.h"
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
 using namespace common;
 using namespace share;
-using namespace share::schema;
 
 namespace transaction
 {
-////////////////////////ObTsMgr implementation///////////////////////////////////
 
-int ObTsMgr::init(const ObAddr &server,
-                  share::schema::ObMultiVersionSchemaService &schema_service,
-                  share::ObLocationService &location_service)
+int ObTsMgr::get_gts(SCN &scn)
 {
   int ret = OB_SUCCESS;
-
-  if (is_inited_) {
-    ret = OB_INIT_TWICE;
-    TRANS_LOG(WARN, "ObTsMgr inited twice", KR(ret));
-  } else if (!server.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(server));
-  } else if (OB_FAIL(ts_source_.init(server))) {
-    TRANS_LOG(WARN, "ts source init failed", KR(ret));
-  } else {
-    UNUSED(schema_service);
-    UNUSED(location_service);
-    server_ = server;
-    is_inited_ = true;
-    TRANS_LOG(INFO, "ObTsMgr inited success", KP(this), K(server));
-  }
-
-  return ret;
-}
-
-void ObTsMgr::reset()
-{
-  is_inited_ = false;
-  is_running_ = false;
-  ts_source_.reset();
-  server_.reset();
-}
-
-int ObTsMgr::start()
-{
-  int ret = OB_SUCCESS;
-
-  if (!is_inited_) {
-    ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "ObTsMgr is not inited", KR(ret));
-  } else if (is_running_) {
-    ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "ObTsMgr is already running", KR(ret));
-  } else if (OB_FAIL(share::ObThreadPool::start())) {
-    TRANS_LOG(ERROR, "GTS local cache manager refresh worker thread start error", KR(ret));
-  } else {
-    is_running_ = true;
-    TRANS_LOG(INFO, "ObTsMgr start success");
-  }
-  return ret;
-}
-
-void ObTsMgr::stop()
-{
-  int ret = OB_SUCCESS;
-
-  if (!is_inited_) {
-    ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "ObTsMgr is not inited", KR(ret));
-  } else {
-    (void)share::ObThreadPool::stop();
-    is_running_ = false;
-    TRANS_LOG(INFO, "ObTsMgr stop success");
-  }
-}
-
-void ObTsMgr::wait()
-{
-  int ret = OB_SUCCESS;
-
-  if (!is_inited_) {
-    ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "ObTsMgr is not inited", KR(ret));
-  } else if (is_running_) {
-    ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "ObTsMgr is running", KR(ret));
-  } else {
-    (void)share::ObThreadPool::wait();
-    TRANS_LOG(INFO, "ObTsMgr wait success");
-  }
-}
-
-void ObTsMgr::destroy()
-{
-  if (is_inited_) {
-    if (is_running_) {
-      stop();
-      wait();
-    }
-    (void)share::ObThreadPool::destroy();
-    ts_source_.destroy();
-
-    server_.reset();
-    is_running_ = false;
-    is_inited_ = false;
-    TRANS_LOG(INFO, "ObTsMgr destroyed");
-  }
-}
-// Execute gts task refresh, by a dedicated thread to be responsible
-void ObTsMgr::run1()
-{
-  int ret = OB_SUCCESS;
-  // cluster version less than 2.0 will not update gts
-  lib::set_thread_name("TsMgr");
-  while (!has_set_stop()) {
-    int tmp_ret = OB_SUCCESS;
-    // sleep 100 * 1000 us
-    ob_usleep(REFRESH_GTS_INTERVEL_US, true/*is_idle_sleep*/);
-    if (OB_SUCCESS != (tmp_ret = ts_source_.refresh_gts(false))) {
-      if (EXECUTE_COUNT_PER_SEC(1)) {
-        TRANS_LOG(WARN, "refresh gts failed", K(tmp_ret));
-      }
-    }
-    if (EXECUTE_COUNT_PER_SEC(1)) {
-      TRANS_LOG(INFO, "refresh gts", KR(ret));
-    }
-  }
-}
-
-int ObTsMgr::handle_gts_err_response(const ObGtsErrResponse &msg)
-{
-  int ret = OB_SUCCESS;
-  ObTimeGuard timeguard("handle_gts_err_response", 100000);
-
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "ObTsMgr is not inited", K(ret));
-  } else if (OB_UNLIKELY(!is_running_)) {
-    ret = OB_NOT_RUNNING;
-    TRANS_LOG(WARN, "ObTsMgr is not running", K(ret));
-  } else if (OB_UNLIKELY(!msg.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(msg));
-  } else if (OB_FAIL(ts_source_.handle_gts_err_response(msg))) {
-    TRANS_LOG(WARN, "handle gts err response error", KR(ret), K(msg));
-  } else {
-    // do nothing
-  }
-
-  return ret;
-}
-
-int ObTsMgr::refresh_gts_location()
-{
-  int ret = OB_SUCCESS;
-  ObTimeGuard timeguard("refresh_gts_location", 100000);
-
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "ObTsMgr is not inited", K(ret));
-  } else if (OB_UNLIKELY(!is_running_)) {
-    ret = OB_NOT_RUNNING;
-    TRANS_LOG(WARN, "ObTsMgr is not running", K(ret));
-  } else if (OB_FAIL(ts_source_.refresh_gts_location())) {
-    TRANS_LOG(WARN, "refresh gts location error", K(ret));
-  } else {
-    // do nothing
-  }
-
-  return ret;
-}
-
-int ObTsMgr::handle_gts_result(const int64_t queue_index, const int ts_type)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "ObTsMgr is not inited", K(ret));
-  } else if (OB_UNLIKELY(!is_running_)) {
-    ret = OB_NOT_RUNNING;
-    TRANS_LOG(WARN, "ObTsMgr is not running", K(ret));
-  } else if (OB_FAIL(ts_source_.handle_gts_result(queue_index))) {
-    TRANS_LOG(WARN, "handle gts result error", KR(ret));
-  } else {
-    // do nothing
-  }
-  return ret;
-}
-
-int ObTsMgr::update_gts(const MonotonicTs srr,
-                        const int64_t gts,
-                        const int ts_type,
-                        bool &update)
-{
-  int ret = OB_SUCCESS;
-  const MonotonicTs receive_gts_ts = MonotonicTs::current_time();
-
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "ObTsMgr is not inited", K(ret));
-  } else if (OB_UNLIKELY(!is_running_)) {
-    ret = OB_NOT_RUNNING;
-    TRANS_LOG(WARN, "ObTsMgr is not running", K(ret));
-  } else if (OB_UNLIKELY(!srr.is_valid()) || OB_UNLIKELY(0 >= gts)) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(srr), K(gts));
-  } else if (OB_FAIL(ts_source_.update_gts(srr, gts, receive_gts_ts, update))) {
-    TRANS_LOG(WARN, "update gts cache failed", KR(ret), K(srr), K(gts));
-  } else {
-    // do nothing
-  }
-
-  return ret;
-}
-
-
-int ObTsMgr::interrupt_gts_callbacks()
-{
-  int ret = OB_SUCCESS;
-  share::ObLSID ls_id;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "ObTsMgr is not inited", K(ret));
-  } else {
-    const int64_t task_count = ts_source_.get_task_count();
-    if (0 != task_count) {
-      ret = ts_source_.gts_callback_interrupted(OB_TENANT_NOT_EXIST, ls_id);
-    }
-    if (OB_SUCCESS != ret) {
-      TRANS_LOG(WARN, "interrupt gts callbacks failed", KR(ret), K(ls_id));
-    } else {
-      TRANS_LOG(INFO, "interrupt gts callbacks success", K(ls_id));
-    }
-  }
-  return ret;
-}
-
-int ObTsMgr::update_gts(const int64_t gts, bool &update)
-{
-  int ret = OB_SUCCESS;
-
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "ObTsMgr is not inited", K(ret));
-  } else if (OB_UNLIKELY(!is_running_)) {
-    ret = OB_NOT_RUNNING;
-    TRANS_LOG(WARN, "ObTsMgr is not running", K(ret));
-  } else if (OB_UNLIKELY(0 >= gts) ||
-             OB_UNLIKELY(gts > ObTimeUtility::current_time_ns() + 86400000000000L)) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(gts));
-  } else if (OB_FAIL(ts_source_.update_gts(gts, update))) {
-    TRANS_LOG(WARN, "update gts cache failed", K(ret), K(gts));
-  }
-
-  return ret;
-}
-
-int ObTsMgr::get_gts(ObTsCbTask *task, SCN &scn)
-{
-  int ret = OB_SUCCESS;
-  int64_t gts = 0;//need be invalid value for SCN
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "ObTsMgr is not inited", K(ret));
-  } else if (OB_UNLIKELY(!is_running_)) {
-    ret = OB_NOT_RUNNING;
-    TRANS_LOG(WARN, "ObTsMgr is not running", K(ret));
-  } else if (OB_FAIL(ts_source_.get_gts(task, gts))) {
+  int64_t gts = 0;
+  if (OB_FAIL(share::g_mp->timestamp_access()->get_number(gts))) {
     if (OB_EAGAIN != ret) {
-      TRANS_LOG(WARN, "get gts error", K(ret), KP(task));
+      TRANS_LOG(WARN, "get local timestamp failed", KR(ret));
     }
+  } else if (OB_FAIL(scn.convert_for_gts(gts))) {
+    TRANS_LOG(WARN, "convert local timestamp failed", KR(ret), K(gts));
   }
-
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(scn.convert_for_gts(gts))) {
-      TRANS_LOG(WARN, "failed to convert_for_gts", K(ret), K(gts));
-    }
-  }
-
   return ret;
 }
 
 int ObTsMgr::get_gts(const MonotonicTs stc,
-                     ObTsCbTask *task,
                      SCN &scn,
                      MonotonicTs &receive_gts_ts)
 {
-  int ret = OB_SUCCESS;
-  int64_t gts = 0;//need be invalid value for SCN
-
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "ObTsMgr is not inited", K(ret));
-  } else if (OB_UNLIKELY(!is_running_)) {
-    ret = OB_NOT_RUNNING;
-    TRANS_LOG(WARN, "ObTsMgr is not running", K(ret));
-  } else if (OB_UNLIKELY(!stc.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(stc), KP(task));
-  } else if (OB_FAIL(ts_source_.get_gts(stc, task, gts, receive_gts_ts))) {
-    if (OB_EAGAIN != ret) {
-      TRANS_LOG(WARN, "get gts error", K(ret), K(stc), KP(task));
-    }
-  }
-
+  int ret = get_gts(scn);
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(scn.convert_for_gts(gts))) {
-      TRANS_LOG(WARN, "failed to convert_for_gts", K(ret), K(gts));
-    }
+    receive_gts_ts = MonotonicTs::current_time();
+    TRANS_LOG(DEBUG, "get local timestamp", K(stc), K(scn), K(receive_gts_ts));
   }
   return ret;
 }
 
-int ObTsMgr::get_ts_sync(const int64_t timeout_us, share::SCN &scn)
+int ObTsMgr::get_gts_sync(const int64_t timeout_us, SCN &scn)
 {
-  bool unused_is_external_consistent = false;
-  return get_ts_sync(timeout_us, scn, unused_is_external_consistent);
-}
-
-int ObTsMgr::get_gts_sync(const MonotonicTs stc,
-                          const int64_t timeout_us,
-                          share::SCN &scn,
-                          MonotonicTs &receive_gts_ts)
-{
-  int ret = OB_SUCCESS;
-
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "ObTsMgr is not inited", K(ret));
-  } else if (OB_UNLIKELY(!is_running_)) {
-    ret = OB_NOT_RUNNING;
-    TRANS_LOG(WARN, "ObTsMgr is not running", K(ret));
-  } else if (OB_UNLIKELY(!stc.is_valid())
-             || OB_UNLIKELY(timeout_us < 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", K(ret), K(stc), K(timeout_us));
-  } else {
-    int64_t expire_ts = ObClockGenerator::getClock() + timeout_us;
-    int retry_times = 0;
-    const int64_t SLEEP_TIME_US = 500;
-    do {
-      const int64_t now = ObClockGenerator::getClock();
-      int64_t gts_result = 0;
-      if (now >= expire_ts) {
-        ret = OB_TIMEOUT;
-      } else if (OB_FAIL(ts_source_.get_gts(stc, NULL, gts_result, receive_gts_ts))) {
-        if (OB_EAGAIN == ret) {
-          ob_usleep(SLEEP_TIME_US);
-        } else {
-          TRANS_LOG(WARN, "get gts fail", K(ret), K(now));
-        }
-      } else {
-        scn.convert_for_gts(gts_result);
-      }
-    } while (OB_EAGAIN == ret);
-  }
-
-  return ret;
-}
-
-int ObTsMgr::get_ts_sync(const int64_t timeout_us,
-                         SCN &scn,
-                         bool &is_external_consistent)
-{
-  int ret = OB_SUCCESS;
-  const int64_t start = ObTimeUtility::current_time();
-  const MonotonicTs stc = MonotonicTs::current_time();
-  MonotonicTs receive_gts_ts;
-  int64_t sleep_us = 100 * 1000;
-
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "ObTsMgr is not inited", K(ret));
-  } else if (OB_UNLIKELY(!is_running_)) {
-    ret = OB_NOT_RUNNING;
-    TRANS_LOG(WARN, "ObTsMgr is not running", K(ret));
-  } else if (OB_UNLIKELY(timeout_us < 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", K(ret), K(timeout_us));
-  } else {
-    do {
-      int64_t ts = 0;
-      if (OB_FAIL(ts_source_.get_gts(stc, NULL, ts, receive_gts_ts))) {
-        if (OB_EAGAIN != ret) {
-          TRANS_LOG(WARN, "get gts error", K(ret), K(stc));
-        } else {
-          ob_usleep(sleep_us);
-          sleep_us = sleep_us * 2;
-          sleep_us = (sleep_us >= 1000000 ? 1000000 : sleep_us);
-          // rewrite ret
-          ret = OB_SUCCESS;
-        }
-      } else {
-        scn.convert_for_gts(ts);
-        is_external_consistent = true;
-        break;
-      }
-    } while (OB_SUCCESS == ret);
-  }
-
-  return ret;
-}
-
-int ObTsMgr::wait_gts_elapse(const SCN &scn,
-    ObTsCbTask *task, bool &need_wait)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "ObTsMgr is not inited", K(ret));
-  // } else if (OB_UNLIKELY(!is_running_)) {
-  //   ret = OB_NOT_RUNNING;
-  //   TRANS_LOG(WARN, "ObTsMgr not running", K(ret));
-  } else if (OB_UNLIKELY(!scn.is_valid())
-      || OB_ISNULL(task)) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(scn), KP(task));
-  } else {
-    const int64_t ts = scn.get_val_for_gts();
-    if (OB_FAIL(ts_source_.wait_gts_elapse(ts, task, need_wait))) {
-      TRANS_LOG(WARN, "wait gts elapse failed", K(ret), K(ts), KP(task));
+  int ret = OB_EAGAIN;
+  const int64_t expire_ts = ObClockGenerator::getClock() + timeout_us;
+  while (OB_EAGAIN == ret) {
+    if (ObClockGenerator::getClock() >= expire_ts) {
+      ret = OB_TIMEOUT;
+    } else if (OB_EAGAIN == (ret = get_gts(scn))) {
+      ob_usleep(500);
     }
   }
   return ret;
@@ -446,157 +69,29 @@ int ObTsMgr::wait_gts_elapse(const SCN &scn,
 
 int ObTsMgr::wait_gts_elapse(const SCN &scn)
 {
-  int ret = OB_SUCCESS;
-
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "ObTsMgr is not inited", K(ret));
-  } else if (OB_UNLIKELY(!is_running_)) {
-    ret = OB_NOT_RUNNING;
-    TRANS_LOG(WARN, "ObTsMgr not running", K(ret));
-  } else if (OB_UNLIKELY(!scn.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(scn));
-  } else {
-    const int64_t ts = scn.get_val_for_gts();
-    if (OB_FAIL(ts_source_.wait_gts_elapse(ts))) {
-      if (OB_EAGAIN != ret) {
-        TRANS_LOG(WARN, "wait gts elapse fail", K(ret), K(ts));
+  int ret = OB_EAGAIN;
+  const int64_t expire_ts = ObClockGenerator::getClock() + GCONF.rpc_timeout;
+  while (OB_EAGAIN == ret) {
+    SCN current_scn;
+    if (ObClockGenerator::getClock() >= expire_ts) {
+      ret = OB_TIMEOUT;
+    } else if (OB_FAIL(get_gts(current_scn))) {
+      if (OB_EAGAIN == ret) {
+        ob_usleep(500);
       }
+    } else if (current_scn < scn) {
+      ret = OB_EAGAIN;
+      ob_usleep(500);
     }
   }
-
   return ret;
-}
-
-ObTsMgr *&ObTsMgr::get_instance_inner()
-{
-  static ObTsMgr instance;
-  static ObTsMgr *instance2 = &instance;
-  return instance2;
 }
 
 ObTsMgr &ObTsMgr::get_instance()
 {
-  return *get_instance_inner();
+  static ObTsMgr instance;
+  return instance;
 }
 
-int ObTsMgr::interrupt_gts_callback_for_ls_offline(const share::ObLSID ls_id)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "ObTsMgr is not inited", K(ret));
-  } else if (OB_UNLIKELY(!ls_id.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", K(ret), K(ls_id));
-  } else {
-    const int64_t task_count = ts_source_.get_task_count();
-    if (0 != task_count) {
-      ret = ts_source_.gts_callback_interrupted(OB_LS_OFFLINE, ls_id);
-    }
-
-    if (OB_SUCCESS != ret) {
-      TRANS_LOG(WARN, "interrupt gts callback failed", KR(ret), K(ls_id));
-    } else {
-      TRANS_LOG(INFO, "interrupt gts callback success", K(ls_id));
-    }
-  }
-  return ret;
-}
-
-} // transaction
-} // oceanbase
-
-#define USING_LOG_PREFIX SHARE  // needed by LOG_* macros inside the relocated block; the file did not define it originally
-// ===== definition moved from share/ob_share_util.cpp =====
-// removes share→storage/tx inverted include; declaration remains in share/ob_share_util.h, resolved at link time(transitional state, final state should split the class)
-namespace oceanbase
-{
-namespace share
-{
-
-// get_tenant_gts has been demoted to storage::free function(see end of file)
-
-
-}  // namespace share
-}  // namespace oceanbase
-
-// ===== definition moved from src/share/backup/ob_backup_struct.cpp (ObBackupUtils -> ObTsMgr) =====
-namespace oceanbase
-{
-namespace transaction
-{
-
-int ObTsMgr::get_backup_scn(const uint64_t &tenant_id, share::SCN &scn)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant id is invalid", KR(ret), K(tenant_id));
-  } else {
-    ret = OB_EAGAIN;
-    const transaction::MonotonicTs stc = transaction::MonotonicTs::current_time();
-    transaction::MonotonicTs unused_ts(0);
-    const int64_t start_time = ObTimeUtility::fast_current_time();
-    const int64_t TIMEOUT = 10 * 1000 * 1000; //10s
-    while (OB_EAGAIN == ret) {
-      if (ObTimeUtility::fast_current_time() - start_time > TIMEOUT) {
-        ret = OB_TIMEOUT;
-        LOG_WARN("stmt is timeout", KR(ret), K(start_time), K(TIMEOUT));
-      } else if (OB_FAIL(OB_TS_MGR.get_gts(stc, NULL,
-                                           scn, unused_ts))) {
-        if (OB_EAGAIN != ret) {
-          LOG_WARN("failed to get gts", KR(ret), K(tenant_id));
-        } else {
-          // waiting 10ms
-          ob_usleep(10L * 1000L);
-        }
-      }
-    }
-  }
-  LOG_INFO("get tenant gts", KR(ret), K(tenant_id), K(scn));
-  return ret;
-}
-
-}  // namespace transaction
-}  // namespace oceanbase
-#undef USING_LOG_PREFIX  // prevent unity-build leakage into later TUs
-
-// from share::ObShareUtil demoted(A-setmember split)
-#define USING_LOG_PREFIX SHARE
-namespace oceanbase
-{
-namespace transaction
-{
-using namespace oceanbase::share;
-int get_tenant_gts(SCN &gts_scn)
-{
-  int ret = OB_SUCCESS;
-  {
-    ret = OB_EAGAIN;
-    const transaction::MonotonicTs stc = transaction::MonotonicTs::current_time();
-    transaction::MonotonicTs unused_ts(0);
-    const int64_t start_time = ObTimeUtility::fast_current_time();
-    const int64_t TIMEOUT = GCONF.rpc_timeout;
-    while (OB_EAGAIN == ret) {
-      if (ObTimeUtility::fast_current_time() - start_time > TIMEOUT) {
-        ret = OB_TIMEOUT;
-        LOG_WARN("stmt is timeout", KR(ret), K(start_time), K(TIMEOUT));
-      } else if (OB_FAIL(OB_TS_MGR.get_gts(stc, NULL,
-                                           gts_scn, unused_ts))) {
-        if (OB_EAGAIN != ret) {
-          LOG_WARN("failed to get gts", KR(ret));
-        } else {
-          // waiting 10ms
-          ob_usleep(10L * 1000L);
-        }
-      }
-    }
-  }
-  LOG_INFO("get tenant gts", KR(ret), K(gts_scn));
-  return ret;
-}
-}
-}
-#undef USING_LOG_PREFIX
+} // namespace transaction
+} // namespace oceanbase

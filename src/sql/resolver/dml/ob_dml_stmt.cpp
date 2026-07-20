@@ -191,9 +191,6 @@ int TableItem::deep_copy(ObIRawExprCopier &expr_copier,
   for_update_ = other.for_update_;
   for_update_wait_us_ = other.for_update_wait_us_;
   skip_locked_ = other.skip_locked_;
-  need_expand_rt_mv_ = other.need_expand_rt_mv_;
-  mview_id_ = other.mview_id_;
-  mr_mv_flags_ = other.mr_mv_flags_;
   node_ = other.node_; // should deep copy ? seems to be unnecessary
   snapshot_query_type_ = other.snapshot_query_type_;
   // ddl related
@@ -2053,8 +2050,7 @@ int ObDMLStmt::check_pseudo_column_valid()
       LOG_WARN("get null expr", K(ret));
     } else {
       switch (expr->get_expr_type()) {
-        case T_ORA_ROWSCN:
-        case T_PSEUDO_OLD_NEW_COL: {
+        case T_ORA_ROWSCN: {
           ObPseudoColumnRawExpr *pseudo_col = static_cast<ObPseudoColumnRawExpr*>(expr);
           const TableItem *table = NULL;
           if (OB_ISNULL(table = get_table_item_by_id(pseudo_col->get_table_id()))
@@ -4709,48 +4705,6 @@ int ObDMLStmt::check_has_subquery_in_function_table(bool &has_subquery_in_functi
 bool ObDMLStmt::is_set_stmt() const
 {
   return is_select_stmt() ? (static_cast<const ObSelectStmt*>(this)->is_set_stmt()) : false;
-}
-
-int ObDMLStmt::disable_writing_materialized_view() const
-{
-  int ret = OB_SUCCESS;
-  bool disable_write_table = false;
-  const TableItem *table_item = NULL;
-  if (is_dml_write_stmt()) {
-    ObSEArray<const ObDmlTableInfo*, 4> dml_table_infos;
-    if (OB_FAIL(static_cast<const ObDelUpdStmt*>(this)->get_dml_table_infos(dml_table_infos))) {
-      LOG_WARN("failed to get dml table infos");
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && !disable_write_table && i < dml_table_infos.count(); ++i) {
-      if (OB_ISNULL(dml_table_infos.at(i))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected NULL ptr", K(ret));
-      } else if (OB_ISNULL(table_item = get_table_item_by_id(dml_table_infos.at(i)->table_id_))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected NULL ptr", K(ret));
-      } else if (schema::MATERIALIZED_VIEW == table_item->table_type_
-                || schema::MATERIALIZED_VIEW_LOG == table_item->table_type_) {
-        disable_write_table = true;
-      } else if (table_item->is_view_table_ && NULL != table_item->ref_query_) {
-        OZ( SMART_CALL(table_item->ref_query_->disable_writing_materialized_view()) );
-      }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    ObSEArray<ObSelectStmt*, 4> child_stmts;
-    if (disable_write_table) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("DML operation on materialized view (log) is not supported", KR(ret));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "DML operation on materialized view (log) is");
-    } else if (OB_FAIL(get_child_stmts(child_stmts))) {
-      LOG_WARN("failed to get stmt's child_stmts", K(ret));
-    } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < child_stmts.count(); ++i) {
-        OZ( SMART_CALL(child_stmts.at(i)->disable_writing_materialized_view()) );
-      }
-    }
-  }
-  return ret;
 }
 
 int ObDMLStmt::formalize_query_ref_exprs()

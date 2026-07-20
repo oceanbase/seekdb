@@ -247,7 +247,7 @@ void ObMulSourceTxDataNotifier::ob_abort_log_cb_notify_(const NotifyType type,
   if (NotifyType::ON_REDO == type || NotifyType::ON_PREPARE == type || NotifyType::ON_COMMIT == type
       || NotifyType::ON_ABORT == type) {
     if (for_replay) {
-      if (OB_SUCCESS != err_code && OB_SERVER_RUNTIME_OUT_OF_MEM != err_code
+      if (OB_SUCCESS != err_code && OB_TENANT_OUT_OF_MEM != err_code
           && OB_ALLOCATE_MEMORY_FAILED != err_code && OB_EAGAIN != err_code) {
         need_core = true;
       }

@@ -100,12 +100,12 @@ public:
   virtual int on_interrupted(const ObInterruptCode &ic) const = 0;
 };
 
-class ObPxInitSqcArgs;
+class ObPxRpcInitSqcArgs;
 class ObSqcCtx;
 class ObPxSubCoordMsgProc : public ObIPxSubCoordMsgProc
 {
 public:
-  ObPxSubCoordMsgProc(ObPxInitSqcArgs &sqc_arg, ObSqcCtx &sqc_ctx)
+  ObPxSubCoordMsgProc(ObPxRpcInitSqcArgs &sqc_arg, ObSqcCtx &sqc_ctx)
       : sqc_ctx_(sqc_ctx) { UNUSED(sqc_arg); }
   ~ObPxSubCoordMsgProc() = default;
   virtual int on_transmit_data_ch_msg(

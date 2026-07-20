@@ -36,7 +36,6 @@ enum class LogReductionMode {NONE = 0, REFINED, COMPRESSED};
 class Worker
 {
 public:
-  enum class CompatMode {INVALID = -1, MYSQL };
   enum Status { WS_NOWAIT, WS_INVALID };
 
   Worker();
@@ -56,17 +55,18 @@ public:
   virtual void resume() {}
 
   // This function is called before worker waiting for some resources
-  // and starting to give cpu out so that the runtime scheduler can
-  // assign cpu resource to another worker if necessary.
+  // and starting to give cpu out so that Multi-Tenancy would be aware
+  // of this and assign cpu resource to another worker if necessary.
   //
   // Return:
   //   1. true    wait successfully
   //   2. false   wait fail, should cancel this invocation
   bool sched_wait();
 
-  // This function is opposite to `runtime_controller_sched_wait'. It notifies
-  // the runtime scheduler that this worker has enough resources and wants to
-  // run. The scheduler then decides whether the worker may proceed.
+  // This function is opposite to `omt_sched_wait'. It notify
+  // Multi-Tenancy that this worker has got enough resource and want to
+  // run. Then Multi-Tenancy would judge whether the worker own the
+  // right to go ahead.
   //
   // Return:
   //   1. true   the worker has right to go ahead
@@ -96,6 +96,9 @@ public:
   OB_INLINE int64_t get_ntp_offset() const { return ntp_offset_; }
   int64_t get_timeout_remain() const;
   bool is_timeout() const;
+
+  OB_INLINE void set_rpc_tenant() {  }
+  OB_INLINE void reset_rpc_tenant() {  }
 
   // check wait is disabled if f is true
   void set_disable_wait_flag(bool f) { disable_wait_ = f; }

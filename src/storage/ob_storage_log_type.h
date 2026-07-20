@@ -27,7 +27,7 @@ enum ObStorageLogType
 {
   //attention:!!!
   //you should modify storage_log_type_to_string() below at the same when adding new log type
-  //In addition, if you add new log types, please consider liboblog, archive and other consumption log applications outside
+  // Keep log readers in sync when adding a new storage log type.
   //OB as supporting support
   OB_LOG_UNKNOWN = 0,
 
@@ -66,9 +66,6 @@ enum ObStorageLogType
   OB_LOG_MINOR_FREEZE = 10004,
   OB_LOG_MAJOR_FREEZE = 10005,
 
-  OB_LOG_SPLIT_SOURCE_PARTITION = 11001,
-  OB_LOG_SPLIT_DEST_PARTITION = 11002,
-
   OB_LOG_STORAGE_SCHEMA = 11005,
 
   OB_LOG_TRANS_CHECKPOINT = 12000,
@@ -79,7 +76,6 @@ enum ObStorageLogType
   // for test
   OB_LOG_TEST = 30000,
 
-  OB_LOG_TRANS_LITE = 40006,
   OB_LOG_ADD_PARTITION_TO_PG = 40007,
   OB_LOG_REMOVE_PARTITION_FROM_PG = 40008,
   OB_PARTITION_SCHEMA_VERSION_CHANGE_LOG = 40009,
@@ -178,12 +174,6 @@ public:
       case OB_LOG_MAJOR_FREEZE:
         log_type_str = "MAJOR_FREEZE";
         break;
-      case OB_LOG_SPLIT_SOURCE_PARTITION:
-        log_type_str = "SPLIT_SOURCE_PARTITION";
-        break;
-      case OB_LOG_SPLIT_DEST_PARTITION:
-        log_type_str = "SPLIT_DEST_PARTITION";
-        break;
       case OB_LOG_STORAGE_SCHEMA:
         log_type_str = "OB_LOG_STORAGE_SCHEMA";
         break;
@@ -198,9 +188,6 @@ public:
         break;
       case OB_LOG_TEST:
         log_type_str = "TEST";
-        break;
-      case OB_LOG_TRANS_LITE:
-        log_type_str = "TRANS_LITE";
         break;
       case OB_LOG_ADD_PARTITION_TO_PG:
         log_type_str = "ADD_PARTITION_TO_PG";
@@ -305,11 +292,6 @@ public:
   {
     return OB_LOG_OFFLINE_PARTITION_V2 == log_type;
   }
-  static bool is_split_log(const int64_t log_type)
-  {
-    return (OB_LOG_SPLIT_SOURCE_PARTITION == log_type ||
-            OB_LOG_SPLIT_DEST_PARTITION == log_type);
-  }
   static bool is_checkpoint_log(const int64_t log_type)
   {
     return (OB_LOG_TRANS_CHECKPOINT == log_type);
@@ -343,7 +325,6 @@ public:
   static bool is_partition_meta_log(const int64_t log_type)
   {
     return (OB_LOG_STORAGE_SCHEMA == log_type);
-    // TODO: split log
   }
 
   static bool is_log_replica_need_replay_log(const int64_t log_type) 
@@ -356,7 +337,6 @@ public:
 
     return (OB_LOG_START_MEMBERSHIP_STORAGE == log_type
             || is_offline_partition_log(log_type)
-            || OB_LOG_SPLIT_SOURCE_PARTITION == log_type
             || is_partition_meta_log(log_type)
             || is_remove_partition_from_pg_log(log_type));
   }
@@ -374,8 +354,6 @@ public:
            || is_test_log(log_type)
            || is_freeze_log(log_type)
            || is_offline_partition_log(log_type)
-           || OB_LOG_TRANS_LITE == log_type
-           || is_split_log(log_type)
            || is_start_membership_log(log_type)
            || is_checkpoint_log(log_type)
            || is_partition_meta_log(log_type)

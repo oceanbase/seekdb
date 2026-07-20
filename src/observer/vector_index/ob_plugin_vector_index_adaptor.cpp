@@ -23,14 +23,14 @@
 #include "sql/das/ob_das_dml_vec_iter.h"
 #include "share/roaringbitmap/ob_rb_memory_mgr.h"
 #include "observer/vector_index/ob_plugin_vector_index_utils.h"
-#include "storage/allocator/ob_vector_allocator.h"
+#include "storage/allocator/ob_tenant_vector_allocator.h"
+#include "storage/tx/ob_ts_mgr.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/tablet/ob_tablet_mapping_operator.h"
 #include "share/ob_server_struct.h"
 #include "share/ob_share_util.h"
 #include "common/ob_timeout_ctx.h"
-#include "storage/tx/ob_ts_mgr.h"
 
 namespace oceanbase
 {
@@ -3020,7 +3020,7 @@ int ObPluginVectorIndexAdaptor::complete_index_mem_data_incremental(ObVectorQuer
         const uint64_t vbitmap_table_id = tablet_infos.at(0).get_table_id();
         schema::ObSchemaGetterGuard schema_guard;
         const schema::ObSimpleTableSchemaV2 *table_schema = nullptr;
-        if (OB_FAIL(schema::ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
+        if (OB_FAIL(schema::ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
                 schema_guard))) {
           LOG_WARN("fail to get schema guard", K(ret));
         } else if (OB_FAIL(schema_guard.get_simple_table_schema( vbitmap_table_id, table_schema))) {
@@ -3062,15 +3062,15 @@ int ObPluginVectorIndexAdaptor::complete_index_mem_data_incremental(ObVectorQuer
       CROARING_TRY_CATCH(dbitmap = roaring::api::roaring64_bitmap_copy(vbitmap_data_->bitmap_->delete_bitmap_));
     }
 
-    const bool can_omit_4th_table_scan =
+    const bool can_skip_scan_4th_table =
         base_scn.is_valid_and_not_min() &&
         last_dml_scn.is_valid() &&
         base_scn >= last_dml_scn;
     if (REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
-      FLOG_INFO("check_scan", K(can_omit_4th_table_scan), K(base_scn), K(last_dml_scn), K(base_scn>=last_dml_scn));
+      FLOG_INFO("check_scan", K(can_skip_scan_4th_table), K(base_scn), K(last_dml_scn), K(base_scn>=last_dml_scn));
     }
 
-    if (OB_SUCC(ret) && can_omit_4th_table_scan) {
+    if (OB_SUCC(ret) && can_skip_scan_4th_table) {
       roaring::api::roaring64_bitmap_free(ctx->bitmaps_->insert_bitmap_);
       roaring::api::roaring64_bitmap_free(ctx->bitmaps_->delete_bitmap_);
       ctx->bitmaps_->insert_bitmap_ = ibitmap;

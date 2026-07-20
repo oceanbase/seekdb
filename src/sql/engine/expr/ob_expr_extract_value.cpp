@@ -83,7 +83,7 @@ int ObExprExtractValue::eval_mysql_extract_value(const ObExpr &expr, ObEvalCtx &
   INIT_SUCC(ret);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor allocator(tmp_alloc_g.get_allocator());
+  MultimodeAlloctor allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
   ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, &res);
   ObString xml_frag;
   ObString xpath_expr;
@@ -105,6 +105,7 @@ int ObExprExtractValue::eval_mysql_extract_value(const ObExpr &expr, ObEvalCtx &
     LOG_WARN("get xml frag string failed", K(ret));
   } else if (xml_frag.empty()) {
     // do nothing
+  } else if (OB_FALSE_IT(allocator.set_baseline_size(xml_frag.length()))) {
   } else if (OB_FAIL(ObXMLExprHelper::get_str_from_expr(expr.args_[1], ctx, xpath_expr, allocator))) {
     LOG_WARN("get xpath expr failed.", K(ret));
   } else if (OB_FAIL(ObMulModeFactory::get_xml_base(xml_mem_ctx, xml_frag, xml_base, M_DOCUMENT))) {

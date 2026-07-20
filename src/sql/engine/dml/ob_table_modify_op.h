@@ -143,12 +143,13 @@ public:
       uint64_t is_pdml_index_maintain_          : 1; // indicates whether the current dml operator is the operator used for index maintenance in pdml (index maintain)
       uint64_t table_location_uncertain_        : 1; // Target access partition location uncertain, need full table scan
       uint64_t use_dist_das_                    : 1;
+      uint64_t has_instead_of_trigger_          : 1; // abandoned, don't use again
       uint64_t is_pdml_update_split_            : 1; // Mark whether delete, insert op is split from update
       uint64_t check_fk_batch_                  : 1; // mark if the foreign key constraint can be checked in batch    
       uint64_t is_pdml_                         : 1;
       uint64_t need_foreign_key_check_          : 1; // mark if need foreign key check  
       uint64_t need_trigger_fire_               : 1; // mark if need trigger fire
-      uint64_t reserved_                        : 53;
+      uint64_t reserved_                        : 52;
     };
   };
   int64_t das_dop_; // default is 0

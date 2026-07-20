@@ -26,7 +26,6 @@
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
 #include "sql/engine/cmd/ob_partition_executor_utils.h"
 #include "observer/ob_server_event_history_table_operator.h"
-#include "storage/ob_partition_pre_split.h"
 
 using namespace oceanbase::common;
 namespace oceanbase
@@ -61,7 +60,6 @@ int ObCreateIndexExecutor::execute(ObExecContext &ctx, ObCreateIndexStmt &stmt)
   int64_t ddl_task_time = 0;
   int64_t end_time = 0;
   ObSArray<ObIndexArg *> index_arg_list;
-  ObPartitionPreSplit pre_split;
   ObArenaAllocator allocator("CreateIndexExec");
 
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
@@ -86,12 +84,6 @@ int ObCreateIndexExecutor::execute(ObExecContext &ctx, ObCreateIndexStmt &stmt)
     create_index_arg.parallelism_ = stmt.get_parallelism();
     if (OB_FAIL(index_arg_list.push_back(&create_index_arg))) {
       LOG_WARN("fail to push back create index arg", KR(ret));
-    } else if (OB_FAIL(pre_split.get_global_index_pre_split_schema_if_need(
-                      create_index_arg.session_id_, create_index_arg.database_name_,
-                      create_index_arg.table_name_, index_arg_list))) {
-      LOG_WARN("fail to get global index pre split schema if need", K(ret));
-      //overwrite ret code
-      ret = OB_SUCCESS;
     }
   }
   if (FAILEDx(GET_MIN_DATA_VERSION(data_version))) {

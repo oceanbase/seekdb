@@ -17,12 +17,10 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "common/ob_timeout_ctx.h"
-#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "common/mysqlclient/ob_mysql_transaction.h"
-#include "lib/string/ob_sql_string.h"
-#include "share/config/ob_server_config.h"
-#include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/ob_tablet_checksum_operator.h"
+#include "share/ob_freeze_info_proxy.h"  // ObFreezeInfo, previously hidden behind a transitive include(free within share)
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -31,6 +29,7 @@ namespace share
 using namespace oceanbase::common;
 using namespace oceanbase::common::sqlclient;
 using namespace oceanbase::transaction;
+using namespace schema;
 
 void ObTabletChecksumItem::reset()
 {
@@ -44,9 +43,7 @@ void ObTabletChecksumItem::reset()
 
 bool ObTabletChecksumItem::is_valid() const
 {
-  return tablet_id_.is_valid()
-      && compaction_scn_.is_valid()
-      && column_meta_.is_valid();
+  return tablet_id_.is_valid();
 }
 
 ObTabletChecksumItem &ObTabletChecksumItem::operator=(const ObTabletChecksumItem &other)
@@ -62,46 +59,43 @@ ObTabletChecksumItem &ObTabletChecksumItem::operator=(const ObTabletChecksumItem
 
 
 
-int ObTabletChecksumItem::verify_tablet_column_checksum(const ObTabletLocalChecksumItem &local_item) const
+int ObTabletChecksumItem::verify_tablet_column_checksum(const ObTabletReplicaChecksumItem &replica_item) const
 {
   int ret = OB_SUCCESS;
 
-  // __all_tablet_checksum is keyed by compaction_scn and tablet_id; runtime LS
-  // placement is deliberately not part of the cross-cluster checksum identity.
-  if (tablet_id_ != local_item.tablet_id_) {
+  if (tablet_id_ != replica_item.tablet_id_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(local_item), K(*this));
+    LOG_WARN("invalid argument", KR(ret), K(replica_item), K(*this));
   } else {
-    // Only compare row_count and column_checksum in the same compaction_scn. The
-    // data checksum may differ between primary and restored copies after medium
-    // compaction, so it is deliberately excluded here.
-    if (compaction_scn_ == local_item.compaction_scn_) {
+    // Only compare row_count and column_checksum in same compaction_scn, do not compare data_checksum.
+    // Cuz data_checksum may be different in primary and restore tenants, after introducing medium compation.
+    if (compaction_scn_ == replica_item.compaction_scn_) {
       bool is_same_column_checksum = false;
-      if (OB_FAIL(column_meta_.check_equal(local_item.column_meta_, is_same_column_checksum))) {
-        LOG_WARN("fail to check column_meta equal", KR(ret), K(local_item));
-      } else if ((row_count_ != local_item.row_count_) || !is_same_column_checksum) {
+      if (OB_FAIL(column_meta_.check_equal(replica_item.column_meta_, is_same_column_checksum))) {
+        LOG_WARN("fail to check column_meta equal", KR(ret), K(replica_item));
+      } else if ((row_count_ != replica_item.row_count_) || !is_same_column_checksum) {
         ret = OB_CHECKSUM_ERROR;
-        LOG_DBA_ERROR(OB_CHECKSUM_ERROR, "msg", "fatal checksum error", KR(ret), K(is_same_column_checksum), K(local_item), K(*this));
+        LOG_DBA_ERROR(OB_CHECKSUM_ERROR, "msg", "fatal checksum error", KR(ret), K(is_same_column_checksum), K(replica_item), K(*this));
       }
     }
   }
   return ret;
 }
 
-int ObTabletChecksumItem::assign(const ObTabletLocalChecksumItem &local_item)
+int ObTabletChecksumItem::assign(const ObTabletReplicaChecksumItem &replica_item)
 {
   int ret = OB_SUCCESS;
-  if (!local_item.is_valid()) {
+  if (!replica_item.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(local_item));
+    LOG_WARN("invalid argument", KR(ret), K(replica_item));
   } else {
 
-    tablet_id_ = local_item.tablet_id_;
-    data_checksum_ = local_item.data_checksum_;
-    row_count_ = local_item.row_count_;
-    compaction_scn_ = local_item.compaction_scn_;
-    if (OB_FAIL(column_meta_.assign(local_item.column_meta_))) {
-      LOG_WARN("fail to assign column meta", KR(ret), K(local_item));
+    tablet_id_ = replica_item.tablet_id_;
+    data_checksum_ = replica_item.data_checksum_;
+    row_count_ = replica_item.row_count_;
+    compaction_scn_ = replica_item.compaction_scn_;
+    if (OB_FAIL(column_meta_.assign(replica_item.column_meta_))) {
+      LOG_WARN("fail to assign column meta", KR(ret), K(replica_item));
     }
   }
   return ret;
@@ -131,6 +125,59 @@ int ObTabletChecksumItem::assign(const ObTabletChecksumItem &other)
 
 int ObTabletChecksumOperator::load_tablet_checksum_items(
     ObISQLClient &sql_client,
+    const ObTabletID &start_tablet_id,
+    const int64_t batch_cnt,
+    const SCN &compaction_scn,
+    ObIArray<ObTabletChecksumItem> &items)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!compaction_scn.is_valid()
+      || batch_cnt < 1)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", KR(ret), K(batch_cnt), K(compaction_scn));
+  }
+  int64_t remain_cnt = batch_cnt;
+  int64_t ori_items_cnt = 0;
+  ObSqlString sql;
+  while (OB_SUCC(ret) && (remain_cnt > 0)) {
+    sql.reuse();
+    const int64_t limit_cnt = ((remain_cnt >= MAX_BATCH_COUNT) ? MAX_BATCH_COUNT : remain_cnt);
+    ori_items_cnt = items.count();
+
+    ObTabletID last_tablet_id;
+    if (remain_cnt == batch_cnt) {
+      last_tablet_id = start_tablet_id;
+    } else {
+      const int64_t items_cnt = items.count();
+      if (items_cnt > 0) {
+        const ObTabletChecksumItem &last_item = items.at(items_cnt - 1);
+        last_tablet_id = last_item.tablet_id_;
+      } else {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("err unexpected, about tablet items count", KR(ret), K(start_tablet_id),
+          K(batch_cnt), K(remain_cnt), K(items_cnt));
+      }
+    }
+
+    if (FAILEDx(construct_load_sql_str_(last_tablet_id, limit_cnt, compaction_scn, sql))) {
+      LOG_WARN("fail to construct load sql", KR(ret), K(last_tablet_id), K(limit_cnt),
+        K(compaction_scn));
+    } else if (OB_FAIL(load_tablet_checksum_items(sql_client, sql, items))) {
+      LOG_WARN("fail to load tablet checksum items", KR(ret), K(sql));
+    } else {
+      const int64_t curr_items_cnt = items.count();
+      if (curr_items_cnt - ori_items_cnt == limit_cnt) {
+        remain_cnt -= limit_cnt;
+      } else {
+        remain_cnt = 0;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTabletChecksumOperator::load_tablet_checksum_items(
+    ObISQLClient &sql_client,
     const ObIArray<ObTabletID> &tablet_ids,
     const SCN &compaction_scn,
     ObIArray<ObTabletChecksumItem> &items)
@@ -140,10 +187,6 @@ int ObTabletChecksumOperator::load_tablet_checksum_items(
   int64_t start_idx = 0;
   int64_t end_idx = min(MAX_BATCH_COUNT, tablet_cnt);
   ObSqlString sql;
-  if (OB_UNLIKELY(tablet_cnt < 1 || !compaction_scn.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", KR(ret), K(tablet_cnt), K(compaction_scn));
-  }
   while (OB_SUCC(ret) && (start_idx < end_idx)) {
     sql.reuse();
     if (OB_FAIL(construct_load_sql_str_(tablet_ids, start_idx, end_idx, compaction_scn, sql))) {
@@ -196,7 +239,7 @@ int ObTabletChecksumOperator::load_tablet_checksum_items(
             LOG_WARN("fail to convert val to SCN", KR(ret), K(compaction_scn_val));
           } else {
             item.tablet_id_ = (uint64_t)tablet_id;
-            if (OB_FAIL(item.column_meta_.set_with_str(column_meta_str))) {
+            if (OB_FAIL(item.column_meta_.set_with_str(compaction_scn_val, column_meta_str))) {
               LOG_WARN("fail to set column meta", KR(ret), K(compaction_scn_val));
             }
 #ifdef ERRSIM
@@ -204,7 +247,7 @@ int ObTabletChecksumOperator::load_tablet_checksum_items(
               ret = OB_E(EventTable::EN_MOCK_LARGE_COLUMN_META) ret;
               if (OB_FAIL(ret)) {
                 ret = OB_SUCCESS;
-                if (OB_FAIL(ObTabletLocalChecksumOperator::recover_mock_column_meta(item.column_meta_))) {
+                if (OB_FAIL(ObTabletReplicaChecksumOperator::recover_mock_column_meta(item.column_meta_))) {
                   LOG_ERROR("fail to recover mock large column meta", KR(ret));
                 } else {
                   LOG_INFO("ERRSIM EN_MOCK_LARGE_COLUMN_META", K(ret));
@@ -220,6 +263,38 @@ int ObTabletChecksumOperator::load_tablet_checksum_items(
       }
       if (OB_ITER_END == ret) {
         ret = OB_SUCCESS;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTabletChecksumOperator::construct_load_sql_str_(const ObTabletID &start_tablet_id,
+    const int64_t batch_cnt,
+    const SCN &compaction_scn,
+    ObSqlString &sql)
+{
+  int ret = OB_SUCCESS;
+
+  if ((batch_cnt < 1) || (!compaction_scn.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(batch_cnt), K(compaction_scn));
+  } else {
+    if (compaction_scn > SCN::min_scn()) {
+      if (OB_FAIL(sql.append_fmt("SELECT * FROM %s WHERE compaction_scn = %lu "
+          "and tablet_id > '%lu' ", OB_ALL_TABLET_CHECKSUM_TNAME,
+          compaction_scn.get_val_for_inner_table_field(), start_tablet_id.id()))) {
+        LOG_WARN("fail to assign sql", KR(ret), K(start_tablet_id), K(compaction_scn));
+      } else if (OB_FAIL(sql.append_fmt(" ORDER BY tablet_id limit %ld", batch_cnt))) {
+        LOG_WARN("fail to assign sql string", KR(ret), K(batch_cnt), K(compaction_scn));
+      }
+    } else { // compaction_scn == 0: get records with all compaction_scn
+      if (OB_FAIL(sql.append_fmt("SELECT * FROM %s WHERE tablet_id > '%lu' ",
+          OB_ALL_TABLET_CHECKSUM_TNAME, start_tablet_id.id()))) {
+        LOG_WARN("fail to assign sql", KR(ret), K(start_tablet_id), K(compaction_scn));
+      } else if (OB_FAIL(sql.append_fmt(" ORDER BY tablet_id, compaction_scn limit %ld",
+          batch_cnt))) {
+        LOG_WARN("fail to assign sql string", KR(ret), K(batch_cnt), K(compaction_scn));
       }
     }
   }
@@ -246,7 +321,7 @@ int ObTabletChecksumOperator::construct_load_sql_str_(const common::ObIArray<ObT
   } else {
     for (int64_t idx = start_idx; OB_SUCC(ret) && (idx < end_idx); ++idx) {
       const ObTabletID &tablet_id = tablet_ids.at(idx);
-      if (OB_UNLIKELY(!tablet_id.is_valid())) {
+      if (OB_UNLIKELY(!tablet_id.is_valid_with_tenant())) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid tablet id", KR(ret), K(tablet_id), K(idx));
       } else if (OB_FAIL(sql.append_fmt(
@@ -301,23 +376,23 @@ int ObTabletChecksumOperator::insert_or_update_tablet_checksum_items_(
         int64_t bias = item_cnt - remain_cnt;
         for (int64_t i = 0; OB_SUCC(ret) && (i < cur_batch_cnt); ++i) {
           const ObTabletChecksumItem &item = items.at(bias + i);
-          if (OB_UNLIKELY(!item.is_valid())) {
-            ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("invalid tablet checksum item", KR(ret), K(item));
-          } else {
-            const uint64_t compaction_scn_val = item.compaction_scn_.get_val_for_inner_table_field();
-            ObString b_column_meta;
-            if (OB_FAIL(sql.append_fmt("(%lu, '%lu', %ld, %ld, ",
+          const uint64_t compaction_scn_val = item.compaction_scn_.get_val_for_inner_table_field();
+          ObString b_column_meta;
+          share::ObFreezeInfo freeze_info;
+          uint64_t compaction_data_version = 0;
+          if (OB_FAIL(share::g_mp->get_lower_bound_freeze_info(compaction_scn_val, freeze_info))) {
+            LOG_WARN("failed to get freeze info", K(ret), K(compaction_scn_val));
+          } else if (FALSE_IT(compaction_data_version = freeze_info.data_version_)) {
+          } else if (OB_FAIL(sql.append_fmt("(%lu, '%lu', %ld, %ld, ",
               compaction_scn_val, item.tablet_id_.id(),
               item.data_checksum_, item.row_count_))) {
-              LOG_WARN("fail to assign sql", KR(ret), K(i), K(bias), K(item));
-            } else if (OB_FAIL(item.column_meta_.get_hex_str(allocator, b_column_meta))) {
-              LOG_WARN("fail to get column meta str", K(ret));
-            } else if (OB_FAIL(sql.append_fmt("X"))) {
-              LOG_WARN("fail to assign sql", KR(ret), K(i), K(sql), K(b_column_meta));
-            } else if (OB_FAIL(sql.append_fmt("'%.*s', ", b_column_meta.length(), b_column_meta.ptr()))) {
-              LOG_WARN("fail to assign sql", KR(ret), K(i), K(sql), K(b_column_meta));
-            }
+            LOG_WARN("fail to assign sql", KR(ret), K(i), K(bias), K(item));
+          } else if (OB_FAIL(item.column_meta_.get_hex_str(allocator, b_column_meta))) {
+            LOG_WARN("fail to get column meta str", K(ret));
+          } else if (OB_FAIL(sql.append_fmt("X"))) {
+            LOG_WARN("fail to assign sql", KR(ret), K(i), K(sql), K(b_column_meta));
+          } else if (OB_FAIL(sql.append_fmt("'%.*s', ", b_column_meta.length(), b_column_meta.ptr()))) {
+            LOG_WARN("fail to assign sql", KR(ret), K(i), K(sql), K(b_column_meta));
           }
           if (FAILEDx(sql.append_fmt("now(6), now(6))%s", ((i == cur_batch_cnt - 1) ? " " : ", ")))) {
             LOG_WARN("fail to assign sql", KR(ret), K(i), K(bias), K(item));
@@ -555,7 +630,7 @@ int ObTabletChecksumOperator::get_estimated_timeout_us(
   int ret = OB_SUCCESS;
   int64_t tablet_cnt = 0;
   if (OB_FAIL(ObTabletChecksumOperator::get_tablet_cnt(sql_client, tablet_cnt))) {
-    LOG_WARN("fail to get tablet count", KR(ret));
+    LOG_WARN("fail to get tablet replica cnt", KR(ret));
   } else {
     estimated_timeout_us = tablet_cnt * 1000L; // 1ms for each tablet
     const int64_t default_timeout_us = 9 * 1000 * 1000L;

@@ -60,7 +60,7 @@ public:
         && (nullptr == rowkey_read_info_ || rowkey_read_info_->is_valid());
   }
   int refresh_lob_column_out_status();
-  bool enable_fuse_row_cache(const ObQueryFlag &query_flag, const StorageScanType scan_type) const;
+  bool enable_fuse_row_cache(const ObQueryFlag &query_flag) const;
   int build_index_filter_for_row_store(common::ObIAllocator *allocator);
   const ObITableReadInfo *get_read_info(const bool is_get = false) const
   {
@@ -111,10 +111,6 @@ public:
   {
     return (read_info_ != nullptr && read_info_ != rowkey_read_info_) ? read_info_->get_group_idx_col_index() : common::OB_INVALID_INDEX;
   }
-  OB_INLINE int64_t get_mview_old_new_col_index() const
-  {
-    return (read_info_ != nullptr && read_info_ != rowkey_read_info_) ? read_info_->get_mview_old_new_col_index() : common::OB_INVALID_INDEX;
-  }
   OB_INLINE bool need_truncate_filter() const
   {
     return (read_info_ != nullptr && read_info_ != rowkey_read_info_) ? read_info_->need_truncate_filter() : false;
@@ -163,8 +159,6 @@ public:
   { pd_storage_flag_.set_use_stmt_iter_pool(true);}
   OB_INLINE bool has_lob_column_out() const
   { return has_lob_column_out_; }
-  OB_INLINE bool is_tablet_spliting() const
-  { return is_tablet_spliting_; }
   bool need_trans_info() const;
   OB_INLINE bool is_use_global_iter_pool() const
   { return pd_storage_flag_.is_use_global_iter_pool(); }
@@ -186,7 +180,6 @@ public:
 public:
   uint64_t table_id_;
   common::ObTabletID tablet_id_;
-  share::ObLSID ls_id_;
   const ObITableReadInfo *read_info_;
   const ObITableReadInfo *rowkey_read_info_;
   const ObTabletHandle *tablet_handle_; //for ddl merge_query
@@ -218,10 +211,6 @@ public:
   int64_t ss_rowkey_prefix_cnt_;
   sql::ObStoragePushdownFlag pd_storage_flag_;
   ObTableScanOption table_scan_opt_;
-  uint64_t auto_split_filter_type_;
-  const sql::ObExpr *auto_split_filter_;
-  sql::ExprFixedArray *auto_split_params_;
-  bool is_tablet_spliting_;
   bool is_delete_insert_;
   const bool *need_update_tablet_param_;
 };

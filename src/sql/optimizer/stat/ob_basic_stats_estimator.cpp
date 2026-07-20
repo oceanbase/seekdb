@@ -20,6 +20,7 @@
 #include "sql/optimizer/ob_storage_estimator.h"
 #include "sql/optimizer/stat/ob_topk_hist_estimator.h"
 #include "observer/ob_service.h"
+#include "common/mysqlclient/ob_isql_connection.h"
 namespace oceanbase
 {
 namespace common
@@ -376,7 +377,6 @@ int ObBasicStatsEstimator::do_estimate_block_count_and_row_count(ObExecContext &
                 
                 
                 arg_element.tablet_id_ = candi_tablet_locs.at(j).get_partition_location().get_tablet_id();
-                arg_element.ls_id_ = candi_tablet_locs.at(j).get_partition_location().get_ls_id();
                 if (OB_FAIL(arg.tablet_params_arg_.push_back(arg_element))) {
                   LOG_WARN("failed to push back", K(ret));
                 } else if (OB_FAIL(skip_idx_set.add_member(j))) {//record
@@ -456,12 +456,9 @@ int ObBasicStatsEstimator::get_tablet_locations(ObExecContext &ctx,
   int ret = OB_SUCCESS;
   ObDASLocationRouter &loc_router = ctx.get_das_ctx().get_location_router();
   ObSQLSessionInfo *session = ctx.get_my_session();
-  int64_t route_policy = 0;
   if (OB_ISNULL(session) || OB_UNLIKELY(tablet_ids.count() != partition_ids.count())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(session), K(tablet_ids.count()), K(partition_ids.count()));
-  } else if (OB_FAIL(session->get_sys_variable(SYS_VAR_OB_ROUTE_POLICY, route_policy))) {
-    LOG_WARN("get route policy failed", K(ret));
   } else {
     candi_tablet_locs.reset();
     if (OB_FAIL(candi_tablet_locs.prepare_allocate(tablet_ids.count()))) {
@@ -474,7 +471,6 @@ int ObBasicStatsEstimator::get_tablet_locations(ObExecContext &ctx,
       loc_meta.ref_table_id_ = ref_table_id;
       loc_meta.table_loc_id_ = ref_table_id;
       loc_meta.select_leader_ = 0;
-      loc_meta.route_policy_ = route_policy;
       if (OB_FAIL(loc_router.nonblock_get_candi_tablet_locations(loc_meta,
                                                                  tablet_ids,
                                                                  partition_ids,
@@ -520,7 +516,7 @@ int ObBasicStatsEstimator::estimate_modified_count(ObExecContext &ctx,
     ObCommonSqlProxy *sql_proxy = ctx.get_sql_proxy();
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy);
+      auto &sql_client_retry_weak = *sql_proxy;
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(select_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
@@ -583,7 +579,7 @@ int ObBasicStatsEstimator::estimate_stale_partition(ObExecContext &ctx,
     ObCommonSqlProxy *sql_proxy = ctx.get_sql_proxy();
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy);
+      auto &sql_client_retry_weak = *sql_proxy;
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(select_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
@@ -803,7 +799,7 @@ int ObBasicStatsEstimator::check_table_statistics_state(ObExecContext &ctx,
     ObCommonSqlProxy *sql_proxy = ctx.get_sql_proxy();
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy);
+      auto &sql_client_retry_weak = *sql_proxy;
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(select_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
@@ -1006,7 +1002,7 @@ int ObBasicStatsEstimator::get_need_stats_tables(ObExecContext &ctx,
     ObCommonSqlProxy *sql_proxy = ctx.get_sql_proxy();
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy);
+      auto &sql_client_retry_weak = *sql_proxy;
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(select_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
@@ -1244,7 +1240,7 @@ int ObBasicStatsEstimator::get_async_gather_stats_tables(ObExecContext &ctx,
     ObCommonSqlProxy *sql_proxy = ctx.get_sql_proxy();
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy);
+      auto &sql_client_retry_weak = *sql_proxy;
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(select_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {

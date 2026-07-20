@@ -100,7 +100,7 @@ int ObTabletRebuildUtil::get_clipped_storage_schema_on_demand(
 }
 
 int ObTabletRebuildUtil::check_need_fill_empty_sstable(
-    ObLSHandle &ls_handle,
+    ObLS *ls,
     const bool is_minor_sstable,
     const ObITable::TableKey &table_key,
     const common::ObTabletID &dst_tablet_id,
@@ -114,7 +114,7 @@ int ObTabletRebuildUtil::check_need_fill_empty_sstable(
   end_scn.reset();
 
   if (is_minor_sstable) {
-    if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle, dst_tablet_id, dst_tablet_handle,
+    if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls, dst_tablet_id, dst_tablet_handle,
         ObMDSGetTabletMode::READ_ALL_COMMITED))) {
       LOG_WARN("get tablet failed", K(ret), K(dst_tablet_id));
     } else if (OB_FAIL(dst_tablet_handle.get_obj()->fetch_table_store(table_store_handle))) {
@@ -144,7 +144,7 @@ int ObTabletRebuildUtil::build_create_empty_sstable_param(
   if (OB_UNLIKELY(!meta.is_valid() || !table_key.is_valid() || !dst_tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(meta), K(table_key), K(dst_tablet_id));
-  } else if (OB_FAIL(create_sstable_param.init_for_split_empty_minor_sstable(
+  } else if (OB_FAIL(create_sstable_param.init_for_empty_minor_sstable(
       dst_tablet_id,
       table_key.get_end_scn()/*start_scn*/,
       end_scn,

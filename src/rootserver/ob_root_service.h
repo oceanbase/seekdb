@@ -24,7 +24,6 @@
 #include "share/object_storage/ob_object_storage_struct.h"
 #include "share/ob_schema_version_info.h"
 #include "share/ob_unit_replica_counter.h"
-#include "share/ob_ls_id.h"
 #include "share/ob_max_id_cache.h"
 
 #include "rpc/ob_packet.h"
@@ -195,14 +194,10 @@ public:
   int finish_redef_table(const obcall::ObFinishRedefTableArg &arg);
   int abort_redef_table(const obcall::ObAbortRedefTableArg &arg);
   int update_ddl_task_active_time(const obcall::ObUpdateDDLTaskActiveTimeArg &arg);
-  int create_hidden_table(const obcall::ObCreateHiddenTableArg &arg, obcall::ObCreateHiddenTableRes &res);
-  int send_auto_split_tablet_task_request(const obcall::ObAutoSplitTabletBatchArg &arg, obcall::ObAutoSplitTabletBatchRes &res);
-  int split_global_index_tablet(const obcall::ObAlterTableArg &arg);
   int execute_ddl_task(const obcall::ObAlterTableArg &arg, common::ObSArray<uint64_t> &obj_ids);
   int cancel_ddl_task(const obcall::ObCancelDDLTaskArg &arg);
   int alter_tablegroup(const obcall::ObAlterTablegroupArg &arg);
   int maintain_obj_dependency_info(const obcall::ObDependencyObjDDLArg &arg);
-  int mview_complete_refresh(const obcall::ObMViewCompleteRefreshArg &arg, obcall::ObMViewCompleteRefreshRes &res);
   int rename_table(const obcall::ObRenameTableArg &arg);
   int fork_table(const obcall::ObForkTableArg &arg, obcall::ObDDLRes &res);
   int fork_database(const obcall::ObForkDatabaseArg &arg, obcall::ObDDLRes &res);
@@ -219,13 +214,10 @@ public:
   int drop_database(const obcall::ObDropDatabaseArg &arg, obcall::ObDropDatabaseRes &drop_database_res);
   int drop_tablegroup(const obcall::ObDropTablegroupArg &arg);
   int drop_index(const obcall::ObDropIndexArg &arg, obcall::ObDropIndexRes &res);
-  int create_mlog(const obcall::ObCreateMLogArg &arg, obcall::ObCreateMLogRes &res);
   int drop_lob(const obcall::ObDropLobArg &arg);
   int force_drop_lonely_lob_aux_table(const obcall::ObForceDropLonelyLobAuxTableArg &drop_table_arg);
   int rebuild_vec_index(const obcall::ObRebuildIndexArg &arg, obcall::ObAlterTableRes &res);
 
-  // the interface only for gc splitted source tablet
-  int clean_splitted_tablet(const obcall::ObCleanSplittedTabletArg &arg);
 
   //the interface only for switchover: execute skip check enable_ddl
   int purge_index(const obcall::ObPurgeIndexArg &arg);
@@ -233,7 +225,6 @@ public:
   int parallel_create_table_like(const obcall::ObCreateTableLikeArg &arg, obcall::ObCreateTableRes &res);
   int root_minor_freeze(const obcall::ObRootMinorFreezeArg &arg);
   int update_index_status(const obcall::ObUpdateIndexStatusArg &arg);
-  int update_mview_status(const obcall::ObUpdateMViewStatusArg &arg);
   int parallel_update_index_status(const obcall::ObUpdateIndexStatusArg &arg, obcall::ObParallelDDLRes &res);
   int purge_table(const obcall::ObPurgeTableArg &arg);
   int restore_table_from_recyclebin(const obcall::ObRecyclebinRestoreTableArg &arg);
@@ -397,9 +388,6 @@ private:
   int check_parallel_ddl_conflict(
       share::schema::ObSchemaGetterGuard &schema_guard,
       const obcall::ObDDLArg &arg);
-  int increase_rs_epoch_and_get_proposal_id_(
-      int64_t &new_rs_epoch,
-      int64_t &proposal_id_to_check);
   // create system table in mysql backend for debugging mode.
   int init_debug_database();
   int do_restart();
@@ -418,13 +406,6 @@ private:
                               share::schema::ObSchemaGetterGuard &schema_guard);
   int check_database_config(bool &db_config_ok,
                             share::schema::ObSchemaGetterGuard &schema_guard);
-  int check_table_config(bool &table_config_ok, bool &table_split_ok,
-                         share::schema::ObSchemaGetterGuard &schema_guard,
-                         const int64_t snapshot_schema_version);
-  int check_tablegroup_config(bool &tablegroup_config_ok,
-                              bool &tablegroup_split_ok,
-                              share::schema::ObSchemaGetterGuard &schema_guard,
-                              const int64_t snapshot_schema_version);
   int get_tenants_created_after_snapshot(const int64_t snapshot_schema_version,
                                          ObArray<uint64_t> &batch_ids);
   int query_ddl_table_after_major_freeze(int &row_cnt, int64_t &schema_version_cursor,

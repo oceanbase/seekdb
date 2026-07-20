@@ -96,6 +96,7 @@ int ObDASHNSWScanIter::build_rowkey_vid_range()
     ObDASScanIter *inv_idx_scan_iter = static_cast<ObDASScanIter *>(inv_idx_scan_iter_);
 
     const common::ObIArray<common::ObNewRange> &key_ranges = inv_idx_scan_iter->get_scan_param().key_ranges_;
+    const common::ObIArray<common::ObNewRange> &ss_key_ranges = inv_idx_scan_iter->get_scan_param().ss_key_ranges_;
     if (OB_ISNULL(rowkey_vid_ctdef)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("rowkey vid ctdef is null", K(ret));
@@ -105,6 +106,13 @@ int ObDASHNSWScanIter::build_rowkey_vid_range()
         key_range.table_id_ = rowkey_vid_ctdef->ref_table_id_;
         if (OB_FAIL(rowkey_vid_scan_param_.key_ranges_.push_back(key_range))) {
           LOG_WARN("fail to push back key range for rowkey vid scan param", K(ret), K(key_range));
+        }
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && i < ss_key_ranges.count(); ++i) {
+        ObNewRange ss_key_range = ss_key_ranges.at(i);
+        ss_key_range.table_id_ = rowkey_vid_ctdef->ref_table_id_;
+        if (OB_FAIL(rowkey_vid_scan_param_.ss_key_ranges_.push_back(ss_key_range))) {
+          LOG_WARN("fail to push back ss key range for rowkey vid scan param", K(ret), K(ss_key_range));
         }
       }
     }
@@ -238,14 +246,14 @@ int ObDASHNSWScanIter::inner_init(ObDASIterParam &param)
       } else {
         ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(*exec_ctx_);
         ObVecIdxAdaTryPath cur_path = ObVecIdxAdaTryPath::VEC_PATH_UNCHOSEN;
-        // A copied scan has no physical plan and keeps the path encoded in ctdef.
-        if (OB_NOT_NULL(plan_ctx->get_phy_plan())) {
-          cur_path = static_cast<ObVecIdxAdaTryPath>(plan_ctx->get_phy_plan()->stat_.vec_index_exec_ctx_.cur_path_);
-          if (cur_path != vec_idx_try_path_ &&
-              cur_path > ObVecIdxAdaTryPath::VEC_PATH_UNCHOSEN &&
-              cur_path < ObVecIdxAdaTryPath::VEC_PATH_MAX) {
-            vec_idx_try_path_ = cur_path;
-          }
+        if (OB_ISNULL(plan_ctx->get_phy_plan())) {
+          // remote scan, phy plan is null, do nothing, just use try path in ctdef
+          LOG_WARN("plan ctx is null", K(ret), KP(plan_ctx));
+        } else if (OB_FALSE_IT(cur_path = static_cast<ObVecIdxAdaTryPath>(plan_ctx->get_phy_plan()->stat_.vec_index_exec_ctx_.cur_path_))) {
+        } else if (cur_path != vec_idx_try_path_ &&
+                  cur_path > ObVecIdxAdaTryPath::VEC_PATH_UNCHOSEN &&
+                  cur_path < ObVecIdxAdaTryPath::VEC_PATH_MAX) {
+          vec_idx_try_path_ = cur_path;
         }
       }
     }
@@ -819,20 +827,20 @@ int ObDASHNSWScanIter::reset_filter_path()
   int ret = OB_SUCCESS;
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(*exec_ctx_);
   ObPlanStat* plan_stat = nullptr;
-  // A copied scan has no physical plan and keeps the path encoded in ctdef.
-  if (OB_NOT_NULL(plan_ctx->get_phy_plan())) {
-    plan_stat = const_cast<ObPlanStat*>(&(plan_ctx->get_phy_plan()->stat_));
-    if (vec_idx_try_path_ == ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER) {
-      if (is_ipivf()) {
-        vec_idx_try_path_ = ObVecIdxAdaTryPath::VEC_INDEX_POST_FILTER;
-      } else {
-        vec_idx_try_path_ = ObVecIdxAdaTryPath::VEC_INDEX_ITERATIVE_FILTER;
-      }
-    } else if (vec_idx_try_path_ == ObVecIdxAdaTryPath::VEC_INDEX_ITERATIVE_FILTER) {
-      double iter_selectivity = double(adaptive_ctx_.iter_res_row_cnt_) / double(adaptive_ctx_.iter_filter_row_cnt_);
-      adaptive_ctx_.selectivity_ = iter_selectivity;
-      vec_idx_try_path_ = ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER;
+  if (OB_ISNULL(plan_ctx->get_phy_plan())) {
+    // remote scan, phy plan is null, do nothing, just use try path in ctdef
+    LOG_WARN("plan ctx is null", K(ret), KP(plan_ctx));
+  } else if (OB_FALSE_IT(plan_stat = const_cast<ObPlanStat*>(&(plan_ctx->get_phy_plan()->stat_)))) {
+  } else if (vec_idx_try_path_ == ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER) {
+    if (is_ipivf()) {
+      vec_idx_try_path_ = ObVecIdxAdaTryPath::VEC_INDEX_POST_FILTER;
+    } else {
+      vec_idx_try_path_ = ObVecIdxAdaTryPath::VEC_INDEX_ITERATIVE_FILTER;
     }
+  } else if (vec_idx_try_path_ == ObVecIdxAdaTryPath::VEC_INDEX_ITERATIVE_FILTER) {
+    double iter_selectivity = double(adaptive_ctx_.iter_res_row_cnt_) / double(adaptive_ctx_.iter_filter_row_cnt_);
+    adaptive_ctx_.selectivity_ = iter_selectivity;
+    vec_idx_try_path_ = ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER;
   }
 
   if (OB_FAIL(ret) || OB_ISNULL(plan_stat)) {

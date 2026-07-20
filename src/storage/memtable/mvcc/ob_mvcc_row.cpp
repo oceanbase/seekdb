@@ -507,8 +507,13 @@ int ObMvccRow::unlink_trans_node(const ObMvccTransNode &node)
   return ret;
 }
 
-bool ObMvccRow::need_compact(const bool for_read, const bool for_replay)
+bool ObMvccRow::need_compact(const bool for_read, const bool for_replay, const bool is_delete_insert)
 {
+  if (is_delete_insert) {
+    // return false directly when this is a delete-insert table
+    return false;
+  }
+
   bool bool_ret = false;
   const int32_t updates = ATOMIC_LOAD(&update_since_compact_);
   const int32_t compact_trigger = (for_read || for_replay)
@@ -644,8 +649,7 @@ int ObMvccRow::insert_trans_node(ObIMvccCtx &ctx,
         }
       }
       if (OB_SUCC(ret) && OB_NOT_NULL(tmp) && tmp->tx_id_ == node.tx_id_) {
-        if (tmp->seq_no_.is_valid()
-            && OB_UNLIKELY(tmp->seq_no_ > node.seq_no_)
+        if (OB_UNLIKELY(tmp->seq_no_ > node.seq_no_)
             // exclude the concurrently update uk case, which always in branch 0
             && !(tmp->seq_no_.get_branch() == 0 && node.seq_no_.get_branch() == 0)) {
           ret = OB_ERR_UNEXPECTED;
@@ -807,8 +811,13 @@ int ObMvccRow::remove_callback(ObMvccRowCallback &cb)
     node->remove_callback();
     if (OB_ISNULL(share::g_mp->lock_wait_mgr())) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(WARN, "server LockWaitMgr is null", K(ret), KPC(this));
+      TRANS_LOG(WARN, "MTL(LockWaitMgr) is null", K(ret), KPC(this));
     } else {
+      auto tx_ctx = cb.get_trans_ctx();
+      if (OB_ISNULL(tx_ctx)) {
+        int tmp_ret = OB_ERR_UNEXPECTED;
+        TRANS_LOG(ERROR, "trans ctx is null", KR(tmp_ret), K(cb));
+      }
       share::g_mp->lock_wait_mgr()->transform_row_lock_to_tx_lock(
           cb.get_tablet_id(), *cb.get_key(), ObTransID(node->tx_id_));
       if (cb.is_non_unique_local_index_cb()) {
@@ -832,7 +841,7 @@ int ObMvccRow::wakeup_waiter(const ObTabletID &tablet_id,
   ObLockWaitMgr *lwm = NULL;
   if (OB_ISNULL(lwm = share::g_mp->lock_wait_mgr())) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "server LockWaitMgr is null", K(ret), KPC(this));
+    TRANS_LOG(WARN, "MTL(LockWaitMgr) is null", K(ret), KPC(this));
   } else {
     lwm->wakeup(tablet_id, key);
   }

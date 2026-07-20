@@ -205,14 +205,19 @@ bool ObLobAccessParam::has_single_chunk() const
 
 bool ObLobAccessParam::enable_block_cache() const
 {
-  return byte_size_ <= GCONF.lob_enable_block_cache_threshold;
+  bool res = false;
+  if (!true) {
+    res = false;
+  } else {
+    res = byte_size_ <= GCONF.lob_enable_block_cache_threshold;
+  }
+  return res;
 }
 
-// A request received from RPC cannot be forwarded again unless retry is explicitly enabled.
-bool ObLobAccessParam::is_remote() const
-{
-  return (!from_rpc_ || enable_remote_retry_) && addr_.is_valid() && MYADDR != addr_;
-}
+// 1. from rpc can not remote again
+// 2. lob from other tenant also should read by rpc
+bool ObLobAccessParam::is_remote() const  { return (! from_rpc_ || enable_remote_retry_) && addr_.is_valid() && (MYADDR != addr_ || is_across_tenant()); }
+bool ObLobAccessParam::is_across_tenant() const { return false; }
 
 int ObLobAccessParam::check_handle_size() const
 {
@@ -524,9 +529,9 @@ int ObLobAccessParam::set_tx_read_snapshot(ObLobLocatorV2 &locator)
     // for example:
     //      begin;
     //      select lob_col into lob_var from test for update;  // will return lob locator to lob_var 
-    //      partially update lob_var with new_data;
+    //      call dbms_lob.write(lob_var, new_data);
     //      commit;                                            // reset tx_desc and tx_id in tx_desc is zero
-    //      read lob_var;                                      // should return updated data
+    //      call dbms_lob.read(lob_var);                       // should return updated data 
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("it is not support for reading lob after tranaction commit", K(ret), K(locator), K(read_snapshot), KPC(this));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "it is not support for reading lob after tranaction commit, please re-select lob locator");

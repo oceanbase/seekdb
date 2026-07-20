@@ -124,7 +124,7 @@ bool ObBatchCreateTabletArg::set_binding_info_outside_create() const
   int bool_ret = false;
   uint64_t min_data_version = UINT64_MAX;
   for (int64_t i = 0; i < tablet_extra_infos_.count(); i++) {
-    min_data_version = std::min(min_data_version, tablet_extra_infos_.at(i).data_format_version_);
+    min_data_version = std::min(min_data_version, tablet_extra_infos_.at(i).tenant_data_version_);
   }
   if (UINT64_MAX != min_data_version) {
     bool_ret = true;

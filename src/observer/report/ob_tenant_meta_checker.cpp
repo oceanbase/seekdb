@@ -20,6 +20,7 @@
 #include "share/rc/ob_module_provider.h"
 #include "storage/tablet/ob_tablet_iterator.h" // ObLSTabletIterator
 #include "share/tablet/ob_tablet_table_iterator.h" // ObTenantTabletTableIterator
+#include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h" // ObLSService
 #include "share/ob_tablet_replica_checksum_operator.h" // ObTabletReplicaChecksumItem
 #include "observer/report/ob_tablet_table_updater.h" // ObTabletTableUpdater
@@ -136,26 +137,27 @@ void ObTenantMetaChecker::destroy()
 int ObTenantMetaChecker::check_tablet_table()
 {
   int ret = OB_SUCCESS;
-  int64_t dangling_count = 0;  // replica only in tablet meta table
-  int64_t report_count = 0;  // replica not in/match tablet meta table
+  int64_t stale_row_count = 0;
+  int64_t missing_or_changed_row_count = 0;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
   } else {
     const int64_t start_time = ObTimeUtility::current_time();
-    ObTabletReplicaMap replica_map;
-    if (OB_FAIL(build_replica_map_(replica_map))) {
-      LOG_WARN("build replica map from tablet table failed", KR(ret));
-    } else if (OB_FAIL(check_dangling_replicas_(replica_map, dangling_count))) {
-      LOG_WARN("check replicas exist in tablet table but not in local failed", KR(ret));
-    } else if (OB_FAIL(check_report_replicas_(replica_map, report_count))) {
-      LOG_WARN("check replicas not in/match tablet table failed", KR(ret));
-    } else if (dangling_count != 0 || report_count != 0) {
-      LOG_INFO("checker found and corrected dangling or to report replicas for tablet meta table",
-        KR(ret), K(dangling_count), K(report_count));
+    ObTabletMetaRowMap tablet_meta_row_map;
+    if (OB_FAIL(build_tablet_meta_row_map_(tablet_meta_row_map))) {
+      LOG_WARN("build tablet meta row map failed", KR(ret));
+    } else if (OB_FAIL(check_stale_tablet_meta_rows_(tablet_meta_row_map, stale_row_count))) {
+      LOG_WARN("check stale tablet meta rows failed", KR(ret));
+    } else if (OB_FAIL(check_missing_or_changed_tablet_meta_rows_(
+        tablet_meta_row_map, missing_or_changed_row_count))) {
+      LOG_WARN("check missing or changed tablet meta rows failed", KR(ret));
+    } else if (stale_row_count != 0 || missing_or_changed_row_count != 0) {
+      LOG_INFO("checker found and corrected stale or missing tablet meta rows",
+        KR(ret), K(stale_row_count), K(missing_or_changed_row_count));
     }
     LOG_TRACE("finish checking tablet table", KR(ret),
-        K(dangling_count), K(report_count),
+        K(stale_row_count), K(missing_or_changed_row_count),
         K(start_time), "cost_time", ObTimeUtility::current_time() - start_time);
   }
   return ret;
@@ -183,7 +185,7 @@ int ObTenantMetaChecker::schedule_tablet_meta_check_task()
   return ret;
 }
 
-int ObTenantMetaChecker::build_replica_map_(ObTabletReplicaMap &replica_map)
+int ObTenantMetaChecker::build_tablet_meta_row_map_(ObTabletMetaRowMap &tablet_meta_row_map)
 {
   int ret = OB_SUCCESS;
   ObTenantTabletTableIterator tt_iter;
@@ -193,11 +195,11 @@ int ObTenantMetaChecker::build_replica_map_(ObTabletReplicaMap &replica_map)
   } else if (OB_UNLIKELY(stopped_)) {
     ret = OB_CANCELED;
     LOG_WARN("ObTenantMetaChecker is stopped", KR(ret));
-  } else if (OB_FAIL(replica_map.create(
-      hash::cal_next_prime(TABLET_REPLICA_MAP_BUCKET_NUM),
+  } else if (OB_FAIL(tablet_meta_row_map.create(
+      hash::cal_next_prime(TABLET_META_ROW_MAP_BUCKET_NUM),
       "TabletCheckMap",
       ObModIds::OB_HASH_NODE))) {
-    LOG_WARN("fail to create replica_map", KR(ret));
+    LOG_WARN("fail to create tablet meta row map", KR(ret));
   } else if (OB_FAIL(tt_iter.init(*tt_operator_))) {
     LOG_WARN("fail to init tablet meta table iter", KR(ret));
   } else if (OB_FAIL(tt_iter.get_filters().set_reserved_server(GCONF.self_addr_))) {
@@ -213,18 +215,14 @@ int ObTenantMetaChecker::build_replica_map_(ObTabletReplicaMap &replica_map)
         if (OB_ITER_END != ret) {
           LOG_WARN("tablet table iterator next failed", KR(ret));
         }
-      } else if (0 == tablet_info.replica_count()) {
+      } else if (!tablet_info.has_replica()) {
         continue;
-      } else if (1 == tablet_info.replica_count()) {
-        const ObTabletReplica &replica = tablet_info.get_replicas().at(0);
-        if (OB_FAIL(replica_map.set_refactored(
-            ObTabletLSPair(replica.get_tablet_id(), replica.get_ls_id()),
-            replica))) {
-          LOG_WARN("fail to set_refactored", KR(ret), K(replica));
-        }
       } else {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("tablet_info should have one local replica at most", KR(ret), K(tablet_info));
+        const ObTabletReplica &tablet_meta_row = tablet_info.get_replica();
+        if (OB_FAIL(tablet_meta_row_map.set_refactored(
+            tablet_meta_row.get_tablet_id(), tablet_meta_row))) {
+          LOG_WARN("fail to set tablet meta row", KR(ret), K(tablet_meta_row));
+        }
       }
     } // end while
     if (OB_ITER_END == ret) {
@@ -234,12 +232,12 @@ int ObTenantMetaChecker::build_replica_map_(ObTabletReplicaMap &replica_map)
   return ret;
 }
 
-int ObTenantMetaChecker::check_dangling_replicas_(
-    ObTabletReplicaMap &replica_map,
-    int64_t &dangling_count)
+int ObTenantMetaChecker::check_stale_tablet_meta_rows_(
+    ObTabletMetaRowMap &tablet_meta_row_map,
+    int64_t &stale_row_count)
 {
   int ret = OB_SUCCESS;
-  dangling_count = 0;
+  stale_row_count = 0;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
@@ -251,22 +249,21 @@ int ObTenantMetaChecker::check_dangling_replicas_(
     LOG_WARN("ob_service is null", KR(ret));
   } else {
     bool not_exist = false;
-    FOREACH_X(it, replica_map, OB_SUCC(ret)) {
-      const ObLSID &ls_id = it->first.get_ls_id();
-      const ObTabletID &tablet_id = it->first.get_tablet_id();
+    FOREACH_X(it, tablet_meta_row_map, OB_SUCC(ret)) {
+      const ObTabletID &tablet_id = it->first;
       if (OB_UNLIKELY(stopped_)) {
         ret = OB_CANCELED;
         LOG_WARN("ObTenantMetaChecker is stopped", KR(ret));
-      } else if (OB_FAIL(check_tablet_not_exist_in_local_(ls_id, tablet_id, not_exist))) {
-        LOG_WARN("fail to check tablet whether exist in local", KR(ret), K(ls_id), K(tablet_id));
+      } else if (OB_FAIL(check_tablet_not_exist_in_local_(tablet_id, not_exist))) {
+        LOG_WARN("fail to check tablet whether exist in local", KR(ret), K(tablet_id));
       } else if (not_exist) {
-        ++dangling_count;
-        if (OB_FAIL(share::g_mp->tablet_table_updater()->submit_tablet_update_task(ls_id, tablet_id))) {
+        ++stale_row_count;
+        if (OB_FAIL(share::g_mp->tablet_table_updater()->submit_tablet_update_task(tablet_id))) {
           LOG_WARN("fail to submit tablet update task",
-              KR(ret), K(ls_id), K(tablet_id));
+              KR(ret), K(tablet_id));
         } else {
-          LOG_INFO("add async task to remove replica from tablet table",
-              "replica", it->second);
+          LOG_INFO("add async task to remove stale tablet meta row",
+              "tablet_meta_row", it->second);
         }
       }
     } // end for
@@ -275,39 +272,28 @@ int ObTenantMetaChecker::check_dangling_replicas_(
 }
 
 int ObTenantMetaChecker::check_tablet_not_exist_in_local_(
-    const ObLSID &ls_id,
     const ObTabletID &tablet_id,
     bool &not_exist)
 {
   int ret = OB_SUCCESS;
-  ObLSHandle ls_handle;
+  ObLS *ls = nullptr;
   ObTabletHandle tablet_handle;
   not_exist = false;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
-  } else if (OB_UNLIKELY(!ls_id.is_valid() || !tablet_id.is_valid())) {
+  } else if (OB_UNLIKELY(!tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", KR(ret), K(ls_id), K(tablet_id));
+    LOG_WARN("invalid tablet id", KR(ret), K(tablet_id));
   } else if (tablet_id.is_reserved_tablet()) {
     // skip reserved tablet
   } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(
-      ls_id,
-      ls_handle,
-      ObLSGetMod::OBSERVER_MOD))) {
-    if (OB_LS_NOT_EXIST == ret) {
-      ret = OB_SUCCESS;
-      not_exist = true;
-    } else {
-      LOG_WARN("fail to get sys_ls handle", KR(ret));
-    }
-  } else if (OB_ISNULL(ls_handle.get_ls())) {
+      ls))) {
+    LOG_WARN("fail to get ls", KR(ret));
+  } else if (OB_ISNULL(ls->get_tablet_svr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls handle of sys ls is null", KR(ret));
-  } else if (OB_ISNULL(ls_handle.get_ls()->get_tablet_svr())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet_svr of sys ls is null", KR(ret));
-  } else if (OB_FAIL(ls_handle.get_ls()->get_tablet_svr()->get_tablet(
+    LOG_WARN("tablet service is null", KR(ret));
+  } else if (OB_FAIL(ls->get_tablet_svr()->get_tablet(
           tablet_id,
           tablet_handle,
           ObTabletCommon::DEFAULT_GET_TABLET_DURATION_10_S,
@@ -316,20 +302,19 @@ int ObTenantMetaChecker::check_tablet_not_exist_in_local_(
       ret = OB_SUCCESS;
       not_exist = true;
     } else {
-      LOG_WARN("fail to get tablet", KR(ret), K(ls_id), K(tablet_id));
+      LOG_WARN("fail to get tablet", KR(ret), K(tablet_id));
     }
   }
   return ret;
 }
 
-int ObTenantMetaChecker::check_report_replicas_(
-    ObTabletReplicaMap &replica_map,
-    int64_t &report_count)
+int ObTenantMetaChecker::check_missing_or_changed_tablet_meta_rows_(
+    ObTabletMetaRowMap &tablet_meta_row_map,
+    int64_t &missing_or_changed_row_count)
 {
   int ret = OB_SUCCESS;
-  report_count = 0;
-  ObLSHandle ls_handle;
-  ObLS *ls = NULL;
+  missing_or_changed_row_count = 0;
+  ObLS *ls = nullptr;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
@@ -342,23 +327,16 @@ int ObTenantMetaChecker::check_report_replicas_(
   } else if (OB_UNLIKELY(GCTX.is_shared_storage_mode())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("compaction should be local mode", KR(ret));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(
-      share::SYS_LS,
-      ls_handle,
-      ObLSGetMod::OBSERVER_MOD))) {
-    if (OB_LS_NOT_EXIST == ret) {
-      ret = OB_SUCCESS;
-    } else {
-      LOG_WARN("failed to get sys ls", KR(ret));
-    }
+  } else if (OB_ISNULL(share::g_mp->ls_service())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ls service is null", KR(ret));
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+    LOG_WARN("failed to get single log stream", KR(ret));
   } else {
     ObLSTabletIterator tablet_iter(ObMDSGetTabletMode::READ_ALL_COMMITED);
     if (OB_UNLIKELY(stopped_)) {
       ret = OB_CANCELED;
       LOG_WARN("ObTenantMetaChecker is stopped", KR(ret));
-    } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to get ls", KR(ret));
     } else if (OB_ISNULL(ls->get_tablet_svr())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to get tablet svr", KR(ret));
@@ -367,11 +345,10 @@ int ObTenantMetaChecker::check_report_replicas_(
     } else {
       ObTabletHandle tablet_handle;
       ObTabletID tablet_id;
-      ObTabletReplica local_replica; // replica from local
-      ObTabletReplica table_replica; // replica from meta table
+      ObTabletReplica local_tablet_meta_row;
+      ObTabletReplica tablet_meta_row;
       share::ObTabletReplicaChecksumItem tablet_checksum; // TODO(@donglou.zl) check tablet_replica_checksum
       const bool need_checksum = false;
-      const ObLSID &ls_id = ls->get_ls_id();
       while (OB_SUCC(ret)) {
         if (OB_FAIL(tablet_iter.get_next_tablet(tablet_handle))) {
           if (OB_UNLIKELY(OB_ITER_END != ret)) {
@@ -383,42 +360,39 @@ int ObTenantMetaChecker::check_report_replicas_(
         } else if (FALSE_IT(tablet_id = tablet_handle.get_obj()->get_tablet_meta().tablet_id_)) {
         } else if (tablet_id.is_reserved_tablet()) {
           continue;
-        } else if (OB_FAIL(replica_map.get_refactored(
-            ObTabletLSPair(tablet_id, ls_id),
-            table_replica))) {
+        } else if (OB_FAIL(tablet_meta_row_map.get_refactored(tablet_id, tablet_meta_row))) {
           if (OB_HASH_NOT_EXIST == ret) { // not exist in table while exist in local
             ret = OB_SUCCESS;
-            if (OB_FAIL(share::g_mp->tablet_table_updater()->submit_tablet_update_task(ls_id, tablet_id))) {
+            if (OB_FAIL(share::g_mp->tablet_table_updater()->submit_tablet_update_task(tablet_id))) {
               LOG_WARN("fail to submit tablet update task",
-                  KR(ret), K(ls_id), K(tablet_id));
+                  KR(ret), K(tablet_id));
             } else {
-              ++report_count;
-              LOG_INFO("add missing replica to tablet meta table success",
-                  KR(ret), K(ls_id), K(tablet_id));
+              ++missing_or_changed_row_count;
+              LOG_INFO("add missing tablet meta row success",
+                  KR(ret), K(tablet_id));
             }
           } else {
-            LOG_WARN("get replica from hashmap failed",
-                KR(ret), K(ls_id), K(tablet_id));
+            LOG_WARN("get tablet meta row from hashmap failed",
+                KR(ret), K(tablet_id));
           }
-        } else if (OB_FAIL(GCTX.ob_service_->fill_tablet_report_info(ls_id,
-            tablet_id,
-            local_replica,
+        } else if (OB_FAIL(GCTX.ob_service_->fill_tablet_report_info(tablet_id,
+            local_tablet_meta_row,
             tablet_checksum,
             need_checksum))) {
           if (OB_EAGAIN == ret) {
             ret = OB_SUCCESS; // do not affect report of other tablets
           } else {
-            LOG_WARN("fail to fill tablet replica", KR(ret), K(ls_id), K(tablet_id));
+            LOG_WARN("fail to fill tablet meta row", KR(ret), K(tablet_id));
           }
-        } else if (table_replica.is_equal_for_report(local_replica)) {
+        } else if (tablet_meta_row.is_equal_for_report(local_tablet_meta_row)) {
           continue;
         } else { // not equal
-          if (OB_FAIL(share::g_mp->tablet_table_updater()->submit_tablet_update_task(ls_id, tablet_id))) {
+          if (OB_FAIL(share::g_mp->tablet_table_updater()->submit_tablet_update_task(tablet_id))) {
             LOG_WARN("fail to submit tablet update task",
-                KR(ret), K(ls_id), K(tablet_id));
+                KR(ret), K(tablet_id));
           } else {
-            ++report_count;
-            LOG_INFO("modify replica success", KR(ret), K(local_replica), K(table_replica));
+            ++missing_or_changed_row_count;
+            LOG_INFO("modify tablet meta row success", KR(ret), K(local_tablet_meta_row), K(tablet_meta_row));
           }
         }
       } // end while for tablet_iter

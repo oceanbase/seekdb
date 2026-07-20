@@ -42,6 +42,7 @@ insert into t1 values (50, 'Charlie', 35, 'charlie@example.com');
 fork table t1 to t1_fork;
 
 --echo # 验证Fork表的主键索引
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t1_fork;
 
 --echo # 验证通过主键查询
@@ -76,6 +77,7 @@ insert into t2 values (50, 'Charlie', 35, 'charlie@example.com');
 fork table t2 to t2_fork;
 
 --echo # 验证Fork表的索引
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t2_fork;
 
 --echo # 验证通过二级索引查询
@@ -136,6 +138,7 @@ connection conn1;
 
 connection default;
 --echo # 验证Fork表结构
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t2a_fork;
 
 --echo ============================================
@@ -183,6 +186,7 @@ connection conn2;
 
 connection default;
 --echo # 验证Fork表结构
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t2b_fork;
 
 --echo ============================================
@@ -231,6 +235,7 @@ connection conn3;
 
 connection default;
 --echo # 验证Fork表结构
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t2c_fork;
 
 --echo ============================================
@@ -252,10 +257,6 @@ insert into t2d values (1, 'Alice', 25, 'alice@example.com', '[0.203846,0.205289
 insert into t2d values (2, 'Bob', 30, 'bob@example.com', '[0.1,0.2,0.3]');
 
 create vector index idx_vec_race on t2d(emb) with (distance=l2, type=hnsw, lib=vsag);
-
-# The following debug sync is global.  Wait for preceding asynchronous fork
-# tasks to finish so they cannot consume the sync point and occupy DDL workers.
---source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
 
 --echo # 获取源表table_id（用于等待fork任务阶段）
 --disable_query_log
@@ -333,6 +334,7 @@ connection conn_drop;
 connection default;
 
 --echo # 验证：源表向量索引已删除；fork表仍保留向量索引定义
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t2d;
 show create table t2d_fork;
 
@@ -371,6 +373,7 @@ insert into t3 values (2, 'Bob', 'bob@example.com', '0987654321', 150);
 fork table t3 to t3_fork;
 
 --echo # 验证Fork表的唯一索引
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t3_fork;
 
 --echo # 验证唯一索引约束在Fork表中独立（局部唯一索引：dept+email组合唯一）
@@ -417,6 +420,7 @@ insert into t4 values (50, 'Charlie', 25, 'IT');
 fork table t4 to t4_fork;
 
 --echo # 验证Fork表的复合索引
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t4_fork;
 
 --echo # 验证通过复合索引查询
@@ -462,3 +466,4 @@ drop table if exists t3_fork;
 drop table if exists t4;
 drop table if exists t4_fork;
 drop database if exists db_fork_index;
+

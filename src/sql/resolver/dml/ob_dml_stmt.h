@@ -44,8 +44,7 @@ enum MulModeTableType {
   INVALID_TABLE_TYPE = 0,
   OB_ORA_JSON_TABLE_TYPE, // 1
   OB_ORA_XML_TABLE_TYPE = 2,
-  OB_RB_ITERATE_TABLE_TYPE = 3,
-  OB_UNNEST_TABLE_TYPE = 4,
+  OB_UNNEST_TABLE_TYPE = 3,
 };
 
 typedef struct ObJtColBaseInfo
@@ -144,9 +143,6 @@ struct TableItem
     for_update_ = false;
     for_update_wait_us_ = -1;
     skip_locked_ = false;
-    need_expand_rt_mv_ = false;
-    mview_id_ = common::OB_INVALID_ID;
-    mr_mv_flags_ = 0;
     node_ = NULL;
     view_base_item_ = NULL;
     snapshot_query_expr_ = nullptr;
@@ -181,7 +177,7 @@ struct TableItem
                K_(is_view_table), K_(part_ids), K_(part_names), K_(cte_type),
                KPC_(function_table_expr),
                K_(snapshot_query_type), KPC_(snapshot_query_expr), K_(table_type),
-               K_(exec_params), KPC_(sample_info), K_(mview_id), K_(need_expand_rt_mv),
+               K_(exec_params), KPC_(sample_info),
                K_(catalog_name));
 
   enum TableType
@@ -297,9 +293,6 @@ struct TableItem
   bool for_update_;
   int64_t for_update_wait_us_;//0 means nowait, -1 means infinite
   bool skip_locked_;
-  bool need_expand_rt_mv_; // for real-time materialized view
-  uint64_t mview_id_; // for materialized view, ref_id_ is mv container table id, mview_id_ is the view id
-  uint64_t mr_mv_flags_; // for major refresh mview
   const ParseNode* node_;
   // base table item for updatable view, can not access after the resolve phase
   const TableItem *view_base_item_;
@@ -1079,7 +1072,6 @@ public:
 
   int check_has_subquery_in_function_table(bool &has_subquery_in_function_table) const;
 
-  int disable_writing_materialized_view() const;
   int formalize_query_ref_exprs();
 
   int formalize_query_ref_exec_params(ObStmtExecParamFormatter &formatter,

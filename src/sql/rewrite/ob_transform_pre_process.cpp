@@ -4152,6 +4152,7 @@ int ObTransformPreProcess::expand_for_last_insert_id(ObDMLStmt &stmt, ObIArray<O
           (IS_RANGE_CMP_OP(expr->get_expr_type()) || T_OP_EQ == expr->get_expr_type()) &&
           !expr->has_flag(CNT_RAND_FUNC) &&
           !expr->has_flag(CNT_SUB_QUERY) &&
+          !expr->has_flag(CNT_SEQ_EXPR) &&
           !expr->has_flag(CNT_DYNAMIC_USER_VARIABLE)) {
       bool removable = false;
       ObRawExpr *left = expr->get_param_expr(0);

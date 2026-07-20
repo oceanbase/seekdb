@@ -152,7 +152,6 @@ ObSqlCtx::ObSqlCtx()
     cur_stmt_(NULL),
     cur_plan_(nullptr),
     is_sensitive_(false),
-    is_protocol_weak_read_(false),
     snapshot_query_expr_(nullptr),
     is_execute_call_stmt_(false),
     is_text_ps_mode_(false),
@@ -201,7 +200,6 @@ void ObSqlCtx::reset()
   all_local_session_vars_ = nullptr;
   is_ddl_from_primary_ = false;
   is_sensitive_ = false;
-  is_protocol_weak_read_ = false;
   first_plan_hash_ = 0;
   first_outline_data_.reset();
   first_equal_param_cons_cnt_ = 0;
@@ -686,7 +684,6 @@ int ObSqlSchemaGuard::get_table_schema_version(const uint64_t table_id,
 int ObSqlSchemaGuard::get_can_read_index_array(uint64_t table_id,
                                                  uint64_t *index_tid_array,
                                                  int64_t &size,
-                                                 bool with_mv,
                                                  bool with_global_index,
                                                  bool with_domain_index,
                                                  bool with_spatial_index,
@@ -699,22 +696,12 @@ int ObSqlSchemaGuard::get_can_read_index_array(uint64_t table_id,
   } else {
     OV (OB_NOT_NULL(schema_guard_));
     OZ (schema_guard_->get_can_read_index_array(table_id,
-                                                index_tid_array, size, with_mv,
+                                                index_tid_array, size,
                                                 with_global_index, with_domain_index,
                                                 with_spatial_index, with_vector_index));
   }
   return ret;
 }
-
-int ObSqlSchemaGuard::get_table_mlog_schema(const uint64_t table_id,
-                                            const ObTableSchema *&mlog_schema)
-{
-  int ret = OB_SUCCESS;
-  OV (OB_NOT_NULL(schema_guard_));
-  OZ (schema_guard_->get_table_mlog_schema( table_id, mlog_schema));
-  return ret;
-}
-
 
 common::ObIArray<const share::schema::ObDatabaseSchema *> &ObSqlSchemaGuard::get_mocked_database_schemas()
 {

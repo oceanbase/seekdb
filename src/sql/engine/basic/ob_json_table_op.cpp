@@ -2195,7 +2195,7 @@ int JsonTableFunc::eval_input(ObJsonTableOp &jt, JtScanCtx& ctx, ObEvalCtx &eval
   ObString j_str;
   bool is_null = false;
   ObIJsonBase* in = NULL;
-  MultimodeAlloctor tmp_allocator(ctx.row_alloc_);
+  MultimodeAlloctor tmp_allocator(ctx.row_alloc_, T_JSON_TABLE_EXPRESSION, ret);
 
   if (doc_type == ObNullType) {
     ret = OB_ITER_END;
@@ -2211,6 +2211,7 @@ int JsonTableFunc::eval_input(ObJsonTableOp &jt, JtScanCtx& ctx, ObEvalCtx &eval
       LOG_WARN("get real data failed", K(ret));
     } else if (is_null) {
       ret = OB_ITER_END;
+    } else if (OB_FALSE_IT(tmp_allocator.set_baseline_size(j_str.length()))) {
     } else if (ob_is_string_type(doc_type)
                 && (doc_cs_type != CS_TYPE_BINARY)
                 && (ObCharset::charset_type_by_coll(doc_cs_type) != CHARSET_UTF8MB4)) {

@@ -41,9 +41,6 @@ enum class ObDDLClogType : int64_t
   DDL_TABLET_SCHEMA_VERSION_CHANGE_LOG = 0x10,
   DDL_START_LOG = 0x20,
   DDL_COMMIT_LOG = 0x40,// rename from DDL_PREPARE_LOG
-  DDL_TABLET_SPLIT_START_LOG = 0x41,
-  DDL_TABLET_SPLIT_FINISH_LOG = 0x42,
-  DDL_TABLET_FREEZE_LOG = 0x43,
   DDL_TABLE_FORK_FREEZE_LOG = 0x44,
   DDL_TABLE_FORK_START_LOG = 0x45,
   DDL_TABLE_FORK_FINISH_LOG = 0x46,
@@ -130,8 +127,7 @@ class ObDDLMacroBlockClogCb : public logservice::AppendCb
 public:
   ObDDLMacroBlockClogCb();
   virtual ~ObDDLMacroBlockClogCb();
-  int init(const share::ObLSID &ls_id,
-           const storage::ObDDLMacroBlockRedoInfo &redo_info,
+  int init(const storage::ObDDLMacroBlockRedoInfo &redo_info,
            const blocksstable::MacroBlockId &macro_block_id,
            ObTabletHandle &tablet_handle,
            const ObDirectLoadType &direct_load_type);
@@ -146,7 +142,6 @@ public:
 private:
   bool is_inited_;
   ObDDLClogCbStatus status_;
-  share::ObLSID ls_id_;
   blocksstable::MacroBlockId macro_block_id_;
   ObSpinLock data_buffer_lock_;
   bool is_data_buffer_freed_;
@@ -164,8 +159,7 @@ class ObDDLCommitClogCb : public logservice::AppendCb
 public:
   ObDDLCommitClogCb();
   virtual ~ObDDLCommitClogCb() = default;
-  int init(const share::ObLSID &ls_id,
-           const common::ObTabletID &tablet_id,
+  int init(const common::ObTabletID &tablet_id,
            const share::SCN &start_scn,
            const uint32_t lock_tid,
            ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
@@ -178,11 +172,10 @@ public:
   int get_ret_code() const { return status_.get_ret_code(); }
   void try_release();
   const char *get_cb_name() const override { return "DDLCommitClogCb"; }
-  TO_STRING_KV(K(is_inited_), K(status_), K(ls_id_), K(tablet_id_), K(start_scn_), K_(lock_tid));
+  TO_STRING_KV(K(is_inited_), K(status_), K(tablet_id_), K(start_scn_), K_(lock_tid));
 private:
   bool is_inited_;
   ObDDLClogCbStatus status_;
-  share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
   share::SCN start_scn_;
   uint32_t lock_tid_;
@@ -286,79 +279,6 @@ private:
   common::ObTabletID tablet_id_;
   int64_t schema_version_;
 };
-
-class ObDDLBarrierLog final {
-public:
-  ObDDLBarrierLog() : ls_id_(), hidden_tablet_ids_() {}
-  ~ObDDLBarrierLog() {}
-  bool is_valid() const { return ls_id_.is_valid() && hidden_tablet_ids_.count() > 0; }
-  TO_STRING_KV(K_(ls_id), K_(hidden_tablet_ids));
-  OB_UNIS_VERSION_V(1);
-public:
-  share::ObLSID ls_id_;
-  common::ObSArray<common::ObTabletID> hidden_tablet_ids_;
-};
-
-// === Log for tablet split start ===
-class ObTabletSplitInfo final
-{
-  OB_UNIS_VERSION_V(1);
-public:
-  ObTabletSplitInfo();
-  ~ObTabletSplitInfo() = default;
-  int assign(const ObTabletSplitInfo &info);
-  bool is_valid() const;
-  TO_STRING_KV(K_(table_id), K_(lob_table_id), K_(schema_version),
-    K_(task_id), K_(source_tablet_id), K_(dest_tablets_id),
-    K_(compaction_scn), K_(data_format_version),
-    K_(can_reuse_macro_block), K_(split_sstable_type), K_(lob_col_idxs),
-    K_(parallel_datum_rowkey_list));
-public:
-  common::ObArenaAllocator rowkey_allocator_; // alloc buf for datum rowkey.
-  uint64_t table_id_; // scan rows needed, index table id or main table id.
-  uint64_t lob_table_id_; // scan rows needed, valid when split lob tablet.
-  int64_t schema_version_; // report replica build status needed.
-  int64_t task_id_; // report replica build status needed.
-  common::ObTabletID source_tablet_id_;
-  common::ObSArray<common::ObTabletID> dest_tablets_id_;
-  int64_t compaction_scn_;
-  int64_t data_format_version_;
-  bool can_reuse_macro_block_;
-  share::ObSplitSSTableType split_sstable_type_;
-  common::ObSEArray<uint64_t, 16> lob_col_idxs_;
-  common::ObSArray<blocksstable::ObDatumRowkey> parallel_datum_rowkey_list_;
-};
-
-struct ObTabletSplitStartLog final
-{
-    OB_UNIS_VERSION_V(1);
-public:
-  ObTabletSplitStartLog()
-    : basic_info_()
-  { }
-  ~ObTabletSplitStartLog() = default;
-  bool is_valid() const { return basic_info_.is_valid(); }
-  const common::ObTabletID &get_source_tablet_id() const { return basic_info_.source_tablet_id_; }
-  TO_STRING_KV(K_(basic_info));
-public:
-  ObTabletSplitInfo basic_info_;
-};
-
-struct ObTabletSplitFinishLog final
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObTabletSplitFinishLog()
-    : basic_info_()
-  { }
-  ~ObTabletSplitFinishLog() = default;
-  bool is_valid() const { return basic_info_.is_valid(); }
-  const common::ObTabletID &get_source_tablet_id() const { return basic_info_.source_tablet_id_; }
-  TO_STRING_KV(K_(basic_info));
-public:
-  ObTabletSplitInfo basic_info_;
-};
-// === Log for tablet split end ===
 
 struct ObTabletFreezeLog final
 {

@@ -152,8 +152,7 @@ public:
 
 	int get_schema_version(int64_t &schema_version) const;
 
-	/*
-   * with_mv: if index_tid_array contains ematerialized view.
+  /*
    * with_global_index: if index_tid_array contains global index.
    * with_domain_index: if index_tid_array contains domain index.
    */
@@ -161,14 +160,10 @@ public:
       const uint64_t table_id,
       uint64_t *index_tid_array,
       int64_t &size,
-      bool with_mv,
       bool with_global_index = true,
       bool with_domain_index = true,
       bool with_spatial_index = true,
       bool with_vector_index = true);
-  int get_table_mlog_schema(
-                            const uint64_t data_table_id,
-                            const ObTableSchema *&mlog_schema);
   int check_has_local_unique_index(const uint64_t table_id,
       bool &has_local_unique_index);
 	/*
@@ -206,9 +201,6 @@ public:
                                       common::ObIArray<const ObSimpleTableSchemaV2 *> &table_schemas);
   int get_primary_table_schema_in_tablegroup(const uint64_t tablegroup_id,
                                              const ObSimpleTableSchemaV2 *&primary_table_schema);
-  int get_simple_tenant_schemas(common::ObIArray<const ObSimpleTenantSchema *> &tenant_schemas) const;
-
-  int get_user_tenant_count(int64_t &count) const;
   int get_table_ids_in_tenant(common::ObIArray<uint64_t> &table_ids);
   int get_table_ids_in_database(const uint64_t dataspace_id,
                                 common::ObIArray<uint64_t> &table_id_array);
@@ -279,7 +271,6 @@ public:
                           const common::ObString &constraint_name,
                           ObSimpleConstraintInfo &constraint_info) const;
   int get_tenant_name_case_mode(common::ObNameCaseMode &mode);
-  int get_tenant_compat_mode(lib::Worker::CompatMode &compat_mode);
   int get_tenant_read_only(bool &read_only);
   /*
      get_schema
@@ -351,8 +342,7 @@ public:
   int get_can_write_index_array(const uint64_t table_id,
                                 uint64_t *index_tid_array,
                                 int64_t &size,
-                                bool only_global = false,
-                                bool with_mlog = false);
+                                bool only_global = false);
 
   // for readonly
   int verify_read_only(const ObStmtNeedPrivs &stmt_need_privs);
@@ -566,14 +556,13 @@ public:
   //package
   int check_package_exist(uint64_t database_id,
                           const common::ObString &package_name,
-                          ObPackageType package_type, int64_t compatible_mode, bool &exist) ;
+                          ObPackageType package_type, bool &exist) ;
   int get_package_id(uint64_t database_id, const common::ObString &package_name,
-                     ObPackageType package_type, int64_t compatible_mode, uint64_t &package_id) ;
+                     ObPackageType package_type, uint64_t &package_id) ;
   int get_package_info(
                        const uint64_t database_id,
                        const common::ObString &package_name,
                        ObPackageType package_type,
-                       int64_t compatible_mode,
                        const ObPackageInfo *&package_info) ;
   int get_package_info(
                        const uint64_t package_id,
@@ -756,7 +745,6 @@ public:
   bool use_schema_status() { return restore_tenant_exist(); }
 
   int check_formal_guard() const;
-  int is_lazy_mode(bool &is_lazy) const;
 
   int check_tenant_is_restore(bool &is_restore);
   int get_tenant_status(ObTenantStatus &status);

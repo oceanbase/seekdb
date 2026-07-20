@@ -1,0 +1,145 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "ob_mem_leak_checker_info.h"
+
+using namespace oceanbase::common;
+using oceanbase::common::ObMemLeakChecker;
+
+namespace oceanbase
+{
+namespace observer
+{
+ObMemLeakCheckerInfo::ObMemLeakCheckerInfo()
+  : ObVirtualTableIterator(),
+    opened_(false)
+{
+  leak_checker_ = &get_mem_leak_checker();
+  label_ = leak_checker_->get_str();
+}
+
+ObMemLeakCheckerInfo::~ObMemLeakCheckerInfo()
+{
+  reset();
+}
+
+void ObMemLeakCheckerInfo::reset()
+{
+  opened_ = false;
+  leak_checker_ = NULL;
+  label_ = nullptr;
+}
+
+int ObMemLeakCheckerInfo::sanity_check()
+{
+  int ret = OB_SUCCESS;
+  if (NULL == leak_checker_) {
+    ret = OB_ERR_UNEXPECTED;
+    SERVER_LOG(WARN, "invalid argument", K_(leak_checker));
+  }
+  return ret;
+}
+int ObMemLeakCheckerInfo::inner_get_next_row(common::ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
+
+  if (OB_FAIL(sanity_check())) {
+    // error
+  } else if (!opened_) {
+    int ret = info_map_.create(10000);
+    if (OB_FAIL(ret)) {
+      SERVER_LOG(WARN, "failed to create hashmap", K(ret));
+    } else if (OB_FAIL(leak_checker_->load_leak_info_map(info_map_))) {
+      SERVER_LOG(WARN, "failed to collection leak info", K(ret));
+    } else {
+      opened_ = true;
+      it_ = info_map_->begin();
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    if (it_ != info_map_->end()) {
+      if (OB_FAIL(fill_row(row))) {
+        SERVER_LOG(WARN, "failed to fill row", K(ret));
+      }
+      it_++;
+    } else {
+      ret = OB_ITER_END;
+    }
+  }
+
+  return ret;
+}
+
+int ObMemLeakCheckerInfo::fill_row(common::ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
+  const int64_t col_count = output_column_ids_.count();
+  ObObj *cells = NULL;
+  if (OB_FAIL(sanity_check())) {
+    // error
+  } else if (OB_ISNULL(cells = cur_row_.cells_)) {
+    ret = OB_ERR_UNEXPECTED;
+    SERVER_LOG(WARN, "cur row cell is NULL", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); i++) {
+      uint64_t col_id = output_column_ids_.at(i);
+      switch(col_id) {
+      case 16: {
+        //mod_name
+        cells[i].set_varchar(label_);
+        cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+      } break;
+      case 19: {
+        //mod_type
+        cells[i].set_varchar(ObString::make_string("user"));
+        cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+      } break;
+      case 20: {
+        // alloc_count
+        cells[i].set_int(it_->second.first);
+      } break;
+      case 21: {
+        // alloc_size
+        cells[i].set_int(it_->second.second);
+      } break;
+      case 22: {
+        // back_trace
+        cells[i].set_varchar(it_->first.bt_);
+        cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+      } break;
+
+      default: {
+        ret = OB_ERR_UNEXPECTED;
+        SERVER_LOG(WARN,
+                   "invalid column id",
+                   K(ret),
+                   K(i),
+                   K_(label));
+        break;
+      }
+      }
+    }
+
+    if (OB_SUCC(ret)) {
+      row = &cur_row_;
+    }
+  }
+
+  return ret;
+}
+}
+}

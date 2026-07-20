@@ -45,40 +45,6 @@ int ObITabletMdsCustomizedInterface::get_autoinc_seq(share::ObTabletAutoincSeq &
   return ret;
 }
 
-int ObITabletMdsCustomizedInterface::get_latest_split_data(
-    ObTabletSplitMdsUserData &data,
-    mds::MdsWriter &writer,
-    mds::TwoPhaseCommitState &trans_stat,
-    share::SCN &trans_version,
-    const int64_t read_seq) const
-{
-  #define PRINT_WRAPPER KR(ret), K(data)
-  MDS_TG(10_ms);
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!check_is_inited_())) {
-    ret = OB_NOT_INIT;
-    MDS_LOG_GET(WARN, "not inited");
-  } else {
-    ObITabletMdsInterface *src = nullptr;
-    ObTabletHandle src_tablet_handle;
-
-    if (OB_FAIL(ret)) {
-    } else if (CLICK_FAIL((cross_ls_get_latest<ObTabletSplitMdsUserData>(
-        src,
-        ReadSplitDataOp(data),
-        writer,
-        trans_stat,
-        trans_version,
-        read_seq)))) {
-      if (OB_EMPTY_RESULT != ret) {
-        MDS_LOG_GET(WARN, "fail to cross ls get latest", K(lbt()));
-      }
-    }
-  }
-  return ret;
-  #undef PRINT_WRAPPER
-}
-
 int ObITabletMdsCustomizedInterface::get_latest_autoinc_seq(
     ObTabletAutoincSeq &data,
     ObIAllocator &allocator,
@@ -93,21 +59,14 @@ int ObITabletMdsCustomizedInterface::get_latest_autoinc_seq(
   if (OB_UNLIKELY(!check_is_inited_())) {
     ret = OB_NOT_INIT;
     MDS_LOG_GET(WARN, "not inited");
-  } else {
-    ObITabletMdsInterface *src = nullptr;
-    ObTabletHandle src_tablet_handle;
-
-    if (OB_FAIL(ret)) {
-    } else if (CLICK_FAIL((cross_ls_get_latest<ObTabletAutoincSeq>(
-        src,
+  } else if (CLICK_FAIL((get_latest<ObTabletAutoincSeq>(
         ReadAutoIncSeqOp(allocator, data),
         writer,
         trans_stat,
         trans_version,
         read_seq)))) {
-      if (OB_EMPTY_RESULT != ret) {
-        MDS_LOG_GET(WARN, "fail to cross ls get latest", K(lbt()));
-      }
+    if (OB_EMPTY_RESULT != ret) {
+      MDS_LOG_GET(WARN, "fail to get latest", K(lbt()));
     }
   }
   return ret;

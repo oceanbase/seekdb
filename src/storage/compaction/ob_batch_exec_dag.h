@@ -15,7 +15,7 @@
  */
 #ifndef OB_STORAGE_COMPACTION_BATCH_EXEC_DAG_H_
 #define OB_STORAGE_COMPACTION_BATCH_EXEC_DAG_H_
-#include "observer/scheduler/ob_dag_scheduler.h"
+#include "observer/scheduler/ob_tenant_dag_scheduler.h"
 #include "observer/scheduler/ob_dag_warning_history_mgr.h"
 #include "lib/lock/ob_mutex.h"
 #include "storage/compaction/ob_sstable_merge_history.h"
@@ -320,6 +320,7 @@ int ObBatchExecDag<TASK, PARAM>::init_merge_history()
   static_history.compaction_scn_ = param_.compaction_scn_;
   static_history.merge_type_ = BATCH_EXEC;
   static_history.concurrent_cnt_ = param_.get_task_cnt();
+  static_history.exec_mode_ = EXEC_MODE_LOCAL;
   collector_.remain_task_cnt_ = static_history.concurrent_cnt_;
   STORAGE_LOG(INFO, "success to init merge history", KR(ret), K(static_history), K_(param));
   return ret;

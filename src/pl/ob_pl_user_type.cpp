@@ -64,6 +64,36 @@ int ObUserDefinedType::init_session_var(
   return OB_NOT_SUPPORTED;
 }
 
+int ObUserDefinedType::get_serialize_size(
+    const ObPLResolveCtx &resolve_ctx, char *&src, int64_t &size) const
+{
+  UNUSEDx(resolve_ctx, src, size);
+  char err_msg[number::ObNumber::MAX_PRINTABLE_SIZE] = {0};
+  (void)snprintf(err_msg, sizeof(err_msg), "%s serialize", get_name().ptr());
+  LOG_USER_ERROR(OB_NOT_SUPPORTED, err_msg);
+  LOG_WARN_RET(OB_NOT_SUPPORTED, "Call virtual func of ObUserDefinedType! May forgot implement in SubClass", K(this));
+  return OB_NOT_SUPPORTED;
+}
+
+int ObUserDefinedType::serialize(
+    const ObPLResolveCtx &resolve_ctx,
+    char *&src, char* dst, int64_t dst_len, int64_t &dst_pos) const
+{
+  UNUSEDx(resolve_ctx, src, dst, dst_len, dst_pos);
+  LOG_WARN_RET(OB_NOT_SUPPORTED, "Call virtual func of ObUserDefinedType! May forgot implement in SubClass", K(this));
+  return OB_NOT_SUPPORTED;
+}
+
+int ObUserDefinedType::deserialize(
+    const ObPLResolveCtx &resolve_ctx,
+    common::ObIAllocator &allocator,
+    const char* src, const int64_t src_len, int64_t &src_pos, char *&dst) const
+{
+  UNUSEDx(resolve_ctx, allocator, src, src_len, src_pos, dst);
+  LOG_WARN_RET(OB_NOT_SUPPORTED, "Call virtual func of ObUserDefinedType! May forgot implement in SubClass", K(this));
+  return OB_NOT_SUPPORTED;
+}
+
 int ObUserDefinedType::add_package_routine_schema_param(
   const ObPLResolveCtx &resolve_ctx, const ObPLBlockNS &block_ns,
   const common::ObString &package_name, const common::ObString &param_name,
@@ -404,7 +434,7 @@ int ObUserDefinedType::serialize_obj(const ObObj &obj, char* buf, const int64_t 
 {
   int ret = OB_SUCCESS;
   CK (obj.is_pl_extend());
-  OZ (serialization::encode(buf, len, pos, SERVER_CURRENT_VERSION));
+  OZ (serialization::encode(buf, len, pos, GET_MIN_CLUSTER_VERSION()));
   OZ (serialization::encode(buf, len, pos, obj.get_meta().get_extend_type()));
   if (OB_SUCC(ret)) {
     switch (obj.get_meta().get_extend_type()) {
@@ -455,7 +485,7 @@ int64_t ObUserDefinedType::get_serialize_obj_size(const ObObj &obj)
   int64_t size = 0;
   int ret = OB_SUCCESS;
   CK (obj.is_pl_extend());
-  OX (size += serialization::encoded_length(SERVER_CURRENT_VERSION));
+  OX (size += serialization::encoded_length(GET_MIN_CLUSTER_VERSION()));
   OX (size += serialization::encoded_length(obj.get_meta().get_extend_type()));
   if (OB_SUCC(ret)) {
     switch (obj.get_meta().get_extend_type()) {
@@ -980,6 +1010,79 @@ int ObRecordType::init_session_var(const ObPLResolveCtx &resolve_ctx,
       if (OB_FAIL(ret)) {
         ObUserDefinedType::destruct_objparam(obj_allocator, obj, &(resolve_ctx.session_info_));
       }
+    }
+  }
+  return ret;
+}
+
+// --------- for session serialize/deserialize interface ---------
+int ObRecordType::get_serialize_size(
+  const ObPLResolveCtx &resolve_ctx, char *&src, int64_t &size) const
+{
+  int ret = OB_SUCCESS;
+  ObPLRecord *record = reinterpret_cast<ObPLRecord *>(src);
+  CK (OB_NOT_NULL(record));
+  OV (record->get_count() == record_members_.count(), OB_ERR_WRONG_TYPE_FOR_VAR, KPC(record), K(record_members_));
+  OX (size += record->get_serialize_size());
+  OX (size += serialization::encoded_length(record->get_count()));
+
+  char *data = reinterpret_cast<char*>(record->get_element());
+  for (int64_t i = 0; OB_SUCC(ret) && i < record_members_.count(); ++i) {
+    const ObPLDataType *type = get_record_member_type(i);
+    CK (OB_NOT_NULL(type));
+    OZ (type->get_serialize_size(resolve_ctx, data, size));
+  }
+  return ret;
+}
+
+int ObRecordType::serialize(
+  const ObPLResolveCtx &resolve_ctx,
+  char *&src, char* dst, int64_t dst_len, int64_t &dst_pos) const
+{
+  int ret = OB_SUCCESS;
+  ObPLRecord *record = reinterpret_cast<ObPLRecord *>(src);
+  CK (OB_NOT_NULL(record));
+  CK (record->get_count() == record_members_.count());
+  OX (record->serialize(dst, dst_len, dst_pos));
+  OZ (serialization::encode(dst, dst_len, dst_pos, record->get_count()));
+
+  char *data = reinterpret_cast<char*>(record->get_element());
+  CK (OB_NOT_NULL(data));
+  for (int64_t i = 0; OB_SUCC(ret) && i < record_members_.count(); ++i) {
+    const ObPLDataType *type = get_record_member_type(i);
+    CK (OB_NOT_NULL(type));
+    OZ (type->serialize(resolve_ctx, data, dst, dst_len, dst_pos));
+  }
+  return ret;
+}
+
+int ObRecordType::deserialize(
+  const ObPLResolveCtx &resolve_ctx,
+  common::ObIAllocator &allocator,
+  const char* src, const int64_t src_len, int64_t &src_pos, char *&dst) const
+{
+  int ret = OB_SUCCESS;
+  ObPLRecord *record = reinterpret_cast<ObPLRecord *>(dst);
+  CK (OB_NOT_NULL(record));
+  int32_t count = OB_INVALID_COUNT;
+  // when record be delete , type will be PL_INVALID_TYPE
+  OX (record->deserialize(src, src_len, src_pos));
+  if (OB_SUCC(ret) && record->get_type() != PL_INVALID_TYPE) {
+    OZ (serialization::decode(src, src_len, src_pos, count));
+    CK (count == record_members_.count());
+    OX (record->set_count(count));
+
+    dst = reinterpret_cast<char*>(record->get_element());
+    CK (OB_NOT_NULL(dst));
+    CK (OB_NOT_NULL(record->get_allocator()));
+    for (int64_t i = 0; OB_SUCC(ret) && i < record_members_.count(); ++i) {
+      const ObPLDataType *type = get_record_member_type(i);
+      CK (OB_NOT_NULL(type));
+      if (OB_SUCC(ret) && type->is_obj_type()) {
+        ObObj &obj = record->get_element()[i];
+        OZ (ObUserDefinedType::destruct_objparam(*record->get_allocator(), obj, nullptr));
+      }
+      OZ (type->deserialize(resolve_ctx, *record->get_allocator(), src, src_len, src_pos, dst));
     }
   }
   return ret;

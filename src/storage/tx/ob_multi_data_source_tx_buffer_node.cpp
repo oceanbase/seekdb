@@ -27,6 +27,8 @@ namespace oceanbase
 namespace transaction
 {
 
+thread_local ObTxBufferNodeArray *TLOCAL_P_TX_BUFFER_NODE_ARRAY = nullptr;// FIXME: for compat issue, should be removed after barrier version
+
 ObTxBufferNode::ObTxBufferNode()
   : seq_no_(),
     type_(ObTxDataSourceType::UNKNOWN),
@@ -75,6 +77,7 @@ void ObTxBufferNode::reset()
   has_submitted_ = false;
   has_synced_ = false;
   mds_base_scn_.reset();
+  has_deserialized_buffer_ctx_ = false;
 }
 
 int ObTxBufferNode::set_mds_register_no(const uint64_t register_no)

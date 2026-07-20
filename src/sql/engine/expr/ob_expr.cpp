@@ -213,6 +213,11 @@ OB_DEF_DESERIALIZE(ObExpr)
               ser_eval_batch_func_,
               eval_flags_off_,
               pvt_skip_off_);
+  if (0 == eval_info_off_ && OB_SUCC(ret)) {
+    // compatible with 3.0, ObExprDatum::flag_ is ObEvalInfo
+    eval_info_off_ = datum_off_ + sizeof(ObDatum);
+  }
+
   if (OB_SUCC(ret)) {
     ObExprOperatorType type = T_INVALID;
     // Add a type before extra_info to determine whether extra_info is empty

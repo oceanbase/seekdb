@@ -898,7 +898,6 @@ int ObLogPlan::mock_base_rel_detectors(ObJoinOrder *&base_rel)
 int ObLogPlan::select_location(ObIArray<ObTablePartitionInfo *> &tbl_part_info_list)
 {
   int ret = OB_SUCCESS;
-  int64_t route_policy = 0;
   ObExecContext *exec_ctx = optimizer_context_.get_exec_ctx();
   ObSEArray<const ObTableLocation*, 1> tbl_loc_list;
   ObSEArray<ObCandiTableLoc*, 1> phy_tbl_loc_info_list;
@@ -906,8 +905,6 @@ int ObLogPlan::select_location(ObIArray<ObTablePartitionInfo *> &tbl_part_info_l
   if (OB_ISNULL(exec_ctx) || OB_ISNULL(session_info)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("exec ctx is NULL", K(ret));
-  } else if (OB_FAIL(session_info->get_sys_variable(SYS_VAR_OB_ROUTE_POLICY, route_policy))) {
-    LOG_WARN("get route policy failed", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < tbl_part_info_list.count(); ++i) {
     ObTablePartitionInfo *tbl_part_info = tbl_part_info_list.at(i);
@@ -921,8 +918,6 @@ int ObLogPlan::select_location(ObIArray<ObTablePartitionInfo *> &tbl_part_info_l
                 &tbl_part_info->get_phy_tbl_location_info_for_update()))) {
       LOG_WARN("fail to push back phy tble loc info",
                K(ret), K(tbl_part_info->get_phy_tbl_location_info_for_update()));
-    } else {
-      tbl_part_info->get_table_location().get_loc_meta().route_policy_ = route_policy;
     }
   }
   if (OB_FAIL(ret)) {
@@ -943,64 +938,16 @@ int ObLogPlan::select_replicas(ObExecContext &exec_ctx,
                                ObIArray<ObCandiTableLoc*> &phy_tbl_loc_info_list)
 {
   int ret = OB_SUCCESS;
-  bool is_weak = true;
-  for (int64_t i = 0; OB_SUCC(ret) && is_weak && i < tbl_loc_list.count(); i++) {
-    bool is_weak_read = false;
-    const ObTableLocation *table_location = tbl_loc_list.at(i);
-    if (OB_ISNULL(table_location)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("table location is NULL", K(ret), K(i), K(tbl_loc_list.count()));
-    } else if (!table_location->get_loc_meta().is_weak_read_) {
-      is_weak = false;
-    }
-  }
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(select_replicas(exec_ctx, is_weak, local_server, phy_tbl_loc_info_list))) {
-      LOG_WARN("select replicas failed", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObLogPlan::select_replicas(ObExecContext &exec_ctx,
-                               bool is_weak,
-                               const ObAddr &local_server,
-                               ObIArray<ObCandiTableLoc*> &phy_tbl_loc_info_list)
-{
-  int ret = OB_SUCCESS;
-  // Calculate if it is a weak read
-  // When all locations are weak reads, the total is a weak read; otherwise, it is strong
+  UNUSED(tbl_loc_list);
   ObSQLSessionInfo *session = exec_ctx.get_my_session();
-  ObTaskExecutorCtx &task_exec_ctx = exec_ctx.get_task_exec_ctx();
   bool is_hit_partition = false;
-  int64_t route_policy_type = 0;
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("get unexpected NULL", K(ret), K(session));
-  } else if (OB_FAIL(session->get_sys_variable(SYS_VAR_OB_ROUTE_POLICY, route_policy_type))) {
-    LOG_WARN("fail to get sys variable", K(ret));
-  }
-
-  if (OB_FAIL(ret)) {
-  } else if (is_weak) {
-    int64_t max_read_stale_time = exec_ctx.get_my_session()->get_ob_max_read_stale_time();
-    
-    if (OB_FAIL(ObLogPlan::weak_select_replicas(local_server,
-                                                static_cast<ObRoutePolicyType>(route_policy_type),
-                                                max_read_stale_time,
-                                                phy_tbl_loc_info_list,
-                                                is_hit_partition))) {
-      LOG_WARN("fail to weak select intersect replicas", K(ret), K(local_server), K(phy_tbl_loc_info_list.count()));
-    } else {
-      session->partition_hit().try_set_bool(is_hit_partition);
-    }
   } else {
     const bool sess_in_retry = session->get_is_in_retry_for_dup_tbl(); // Do not optimize replica selection for duplicate tables during retry state
-    const bool is_dup_ls_modified = session->is_dup_ls_modified();
-    if (OB_FAIL(ObLogPlan::strong_select_replicas(local_server, phy_tbl_loc_info_list, is_hit_partition, sess_in_retry, is_dup_ls_modified))) {
+    if (OB_FAIL(ObLogPlan::strong_select_replicas(local_server, phy_tbl_loc_info_list, is_hit_partition, sess_in_retry))) {
       LOG_WARN("fail to strong select replicas", K(ret), K(local_server), K(phy_tbl_loc_info_list.count()));
-    } else {
-      session->partition_hit().try_set_bool(is_hit_partition);
     }
   }
   return ret;
@@ -1009,8 +956,7 @@ int ObLogPlan::select_replicas(ObExecContext &exec_ctx,
 int ObLogPlan::strong_select_replicas(const ObAddr &local_server,
                                       ObIArray<ObCandiTableLoc*> &phy_tbl_loc_info_list,
                                       bool &is_hit_partition,
-                                      bool sess_in_retry,      // current session is in retry
-                                      bool is_dup_ls_modified)
+                                      bool sess_in_retry)      // current session is in retry
 {
   int ret = OB_SUCCESS;
   // Select all as leader
@@ -1028,7 +974,6 @@ int ObLogPlan::strong_select_replicas(const ObAddr &local_server,
       // The partition count of this table is 0, skip
     } else {
       if (!sess_in_retry
-          && !is_dup_ls_modified
           && phy_tbl_loc_info->is_duplicate_table_not_in_dml()) {
         if (OB_FAIL(phy_tbl_loc_info->all_select_local_replica_or_leader(is_on_same_server, cur_same_server, local_server))) {
           LOG_WARN("fail to all select leader", K(ret), K(*phy_tbl_loc_info));
@@ -1066,156 +1011,6 @@ int ObLogPlan::strong_select_replicas(const ObAddr &local_server,
   return ret;
 }
 
-int ObLogPlan::weak_select_replicas(const ObAddr &local_server,
-                                    ObRoutePolicyType route_type,
-                                    int64_t max_read_stale_time,
-                                    ObIArray<ObCandiTableLoc*> &phy_tbl_loc_info_list,
-                                    bool &is_hit_partition)
-{
-  int ret = OB_SUCCESS;
-  is_hit_partition = true;//Currently there is no way to determine if it can be selected on one machine, so this value is set to true
-  ObCandiTableLoc * phy_tbl_loc_info = nullptr;
-  ObArenaAllocator allocator(ObModIds::OB_SQL_OPTIMIZER_SELECT_REPLICA);
-  ObList<ObRoutePolicy::CandidateReplica, ObArenaAllocator> intersect_server_list(allocator);
-  SMART_VAR(ObRoutePolicy, route_policy, local_server) {
-    ObRoutePolicyCtx route_policy_ctx;
-    route_policy_ctx.policy_type_ = route_type;
-    route_policy_ctx.consistency_level_ = WEAK;
-    route_policy_ctx.max_read_stale_time_ = max_read_stale_time;
-    
-
-    if (OB_FAIL(route_policy.init())) {
-      LOG_WARN("fail to init route policy", K(ret));
-    }
-    for (int64_t i = 0 ; OB_SUCC(ret) && i < phy_tbl_loc_info_list.count(); ++i) {
-      if (OB_ISNULL(phy_tbl_loc_info = phy_tbl_loc_info_list.at(i))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("phy table loc info is NULL", K(phy_tbl_loc_info), K(i), K(ret));
-      } else {
-        ObCandiTabletLocIArray &phy_part_loc_info_list = phy_tbl_loc_info->get_phy_part_loc_info_list_for_update();
-        for (int64_t j = 0; OB_SUCC(ret) && j < phy_part_loc_info_list.count(); ++j) {
-          ObCandiTabletLoc &phy_part_loc_info = phy_part_loc_info_list.at(j);
-          if (phy_part_loc_info.has_selected_replica()) {//do nothing
-          } else {
-            ObIArray<ObRoutePolicy::CandidateReplica> &replica_array = phy_part_loc_info.get_partition_location().get_replica_locations();
-            if (OB_FAIL(route_policy.init_candidate_replicas(replica_array))) {
-              LOG_WARN("fail to init candidate replicas", K(replica_array), K(ret));
-            } else if (OB_FAIL(route_policy.calculate_replica_priority(local_server,
-                                                                       phy_part_loc_info.get_ls_id(),
-                                                                       replica_array,
-                                                                       route_policy_ctx,
-                                                                       is_inner_table(phy_tbl_loc_info->get_ref_table_id())))) {
-              LOG_WARN("fail to calculate replica priority", K(replica_array), K(route_policy_ctx), K(ret));
-            } else if (OB_FAIL(route_policy.select_replica_with_priority(route_policy_ctx, replica_array, phy_part_loc_info))) {
-              LOG_WARN("fail to select replica", K(replica_array), K(ret));
-            }
-          }
-        }
-      }
-    }
-
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(route_policy.select_intersect_replica(route_policy_ctx,
-                                                              phy_tbl_loc_info_list,
-                                                              intersect_server_list,
-                                                              is_hit_partition))) {
-      LOG_WARN("fail to select intersect replica", K(route_policy_ctx), K(phy_tbl_loc_info_list), K(intersect_server_list), K(ret));
-    }
-
-    if (OB_SUCC(ret)) {
-      ObArenaAllocator allocator(ObModIds::OB_SQL_OPTIMIZER_SELECT_REPLICA);
-      ObAddrList intersect_servers(allocator);
-      if (OB_FAIL(calc_hit_partition_for_compat(phy_tbl_loc_info_list, local_server, is_hit_partition, intersect_servers))) {
-        LOG_WARN("fail to calc hit partition for compat", K(ret));
-      }
-    }
-    if (REACH_TIME_INTERVAL(10 * 1000 * 1000)) {// Print once every 10 seconds}
-        LOG_INFO("selected replica ", "intersect_server_list", intersect_server_list,
-                "\n phy_tbl_loc_info_list", phy_tbl_loc_info_list,
-                "\n route_policy", route_policy,
-                "\n route_policy_ctx", route_policy_ctx,
-                "\n is_hit_partition", is_hit_partition);
-    }
-  }
-  return ret;
-}
-
-// This function is for compatibility with the hit strategy of the old version proxy. When the proxy is updated, this function can be removed.
-int ObLogPlan::calc_hit_partition_for_compat(const ObIArray<ObCandiTableLoc*> &phy_tbl_loc_info_list,
-                                             const ObAddr &local_server,
-                                             bool &is_hit_partition,
-                                             ObAddrList &intersect_servers)
-{
-  int ret = OB_SUCCESS;
-  bool can_select_local_server = false;
-  is_hit_partition = false;
-  if (OB_FAIL(calc_intersect_servers(phy_tbl_loc_info_list, intersect_servers))) {
-    LOG_WARN("fail to calc hit partition for compat", K(ret));
-  } else if (intersect_servers.empty()) {
-    is_hit_partition = true;
-  } else {
-    ObAddrList::iterator candidate_server_list_iter = intersect_servers.begin();
-    for (; OB_SUCC(ret) && !can_select_local_server && candidate_server_list_iter != intersect_servers.end();
-         candidate_server_list_iter++) {
-      const ObAddr &candidate_server = *candidate_server_list_iter;
-      if (local_server == candidate_server) {
-        is_hit_partition = true;
-        can_select_local_server = true;
-      }
-    }
-  }
-  return ret;
-}
-
-int ObLogPlan::calc_intersect_servers(const ObIArray<ObCandiTableLoc*> &phy_tbl_loc_info_list,
-                                      ObAddrList &candidate_server_list)
-{
-  int ret = OB_SUCCESS;
-  bool can_select_one_server = true;
-  ObRoutePolicy::CandidateReplica tmp_replica;
-  candidate_server_list.reset();
-  for (int64_t i = 0; OB_SUCC(ret) && can_select_one_server && i < phy_tbl_loc_info_list.count(); ++i) {
-    const ObCandiTableLoc *phy_tbl_loc_info = phy_tbl_loc_info_list.at(i);
-    if (OB_ISNULL(phy_tbl_loc_info)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("phy_tbl_loc_info is NULL", K(ret), K(i), K(phy_tbl_loc_info_list.count()));
-    } else {
-      const ObCandiTabletLocIArray &phy_part_loc_info_list = phy_tbl_loc_info->get_phy_part_loc_info_list();
-      for (int64_t j = 0; OB_SUCC(ret) && can_select_one_server && j < phy_part_loc_info_list.count(); ++j) {
-        const ObCandiTabletLoc &phy_part_loc_info = phy_part_loc_info_list.at(j);
-        const ObIArray<ObRoutePolicy::CandidateReplica> &replica_loc_list = phy_part_loc_info.get_partition_location().get_replica_locations();
-        if (0 == i && 0 == j) { // first partition
-          for (int64_t k = 0; OB_SUCC(ret) && k < replica_loc_list.count(); ++k) {
-            if (OB_FAIL(candidate_server_list.push_back(replica_loc_list.at(k).get_server()))) {
-              LOG_WARN("fail to push back candidate server", K(ret), K(k), K(replica_loc_list.at(k)));
-            }
-          }
-        } else { // not the first partition
-          ObAddrList::iterator candidate_server_list_iter = candidate_server_list.begin();
-          for (; OB_SUCC(ret) && candidate_server_list_iter != candidate_server_list.end(); candidate_server_list_iter++) {
-            const ObAddr &candidate_server = *candidate_server_list_iter;
-            bool has_replica = false;
-            for (int64_t k = 0; OB_SUCC(ret) && !has_replica && k < replica_loc_list.count(); ++k) {
-              if (replica_loc_list.at(k).get_server() == candidate_server) {
-                has_replica = true;
-              }
-            }
-            if (OB_SUCC(ret) && !has_replica) {
-              if (OB_FAIL(candidate_server_list.erase(candidate_server_list_iter))) {
-                LOG_WARN("fail to erase from list", K(ret), K(replica_loc_list), K(candidate_server));
-              }
-            }
-          }
-          if (OB_SUCC(ret) && candidate_server_list.empty()) {
-            can_select_one_server = false;
-          }
-        }
-      }
-    }
-  }
-  return ret;
-}
-
 int ObLogPlan::select_one_server(const ObAddr &selected_server,
                                  ObIArray<ObCandiTableLoc*> &phy_tbl_loc_info_list)
 {
@@ -1229,26 +1024,11 @@ int ObLogPlan::select_one_server(const ObAddr &selected_server,
       ObCandiTabletLocIArray &phy_part_loc_info_list =
           phy_tbl_loc_info->get_phy_part_loc_info_list_for_update();
       for (int64_t j = 0; OB_SUCC(ret) && j < phy_part_loc_info_list.count(); ++j) {
-        ObCandiTabletLoc &phy_part_loc_info = phy_part_loc_info_list.at(j);
-        if (phy_part_loc_info.has_selected_replica()) {
-          // Already selected, skip
-        } else {
-          const ObIArray<ObRoutePolicy::CandidateReplica> &replica_loc_list =
-              phy_part_loc_info.get_partition_location().get_replica_locations();
-          bool replica_is_selected = false;
-          for (int64_t k = 0; OB_SUCC(ret) && !replica_is_selected && k < replica_loc_list.count(); ++k) {
-            if (selected_server == replica_loc_list.at(k).get_server()) {
-              if (OB_FAIL(phy_part_loc_info.set_selected_replica_idx(k))) {
-                LOG_WARN("fail to set selected replica idx", K(ret), K(k), K(phy_part_loc_info));
-              } else {
-                replica_is_selected = true;
-              }
-            }
-          }
-          if (OB_SUCC(ret) && OB_UNLIKELY(!replica_is_selected)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_ERROR("has no selected replica", K(ret), K(selected_server), K(replica_loc_list));
-          }
+        const ObAddr &local_server = phy_part_loc_info_list.at(j)
+            .get_partition_location().get_local_replica().get_server();
+        if (selected_server != local_server) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_ERROR("selected server is not local", K(ret), K(selected_server), K(local_server));
         }
       }
     }
@@ -2974,7 +2754,6 @@ int ObLogPlan::allocate_access_path(AccessPath *ap,
     scan->set_skip_scan(OptSkipScanState::SS_DISABLE != ap->use_skip_scan_);
     scan->set_table_type(table_schema->get_table_type());
     scan->set_index_prefix(ap->index_prefix_);
-    scan->set_mr_mv_scan(table_item->mr_mv_flags_);
     if (!ap->is_inner_path_ &&
         OB_FAIL(scan->set_query_ranges(ap->get_cost_table_scan_info().ranges_,
                                        ap->get_cost_table_scan_info().ss_ranges_))) {
@@ -4942,8 +4721,6 @@ int ObLogPlan::create_three_stage_group_plan(const ObIArray<ObRawExpr*> &group_b
   ObSEArray<ObAggFunRawExpr *, 8> third_aggr_items;
   ObSEArray<ObRawExpr *, 8> third_sort_exprs;
 
-  ObRollupStatus second_rollup_status;
-  ObRollupStatus third_rollup_status;
   AggregateAlgo second_aggr_algo;
   AggregateAlgo third_aggr_algo;
   ObLogicalOperator *child = NULL;
@@ -4978,7 +4755,6 @@ int ObLogPlan::create_three_stage_group_plan(const ObIArray<ObRawExpr*> &group_b
                                               false,
                                               true,
                                               false,
-                                              ObRollupStatus::NONE_ROLLUP,
                                               false,
                                               &three_stage_info,
                                               helper.hash_rollup_info_))) {
@@ -4998,8 +4774,6 @@ int ObLogPlan::create_three_stage_group_plan(const ObIArray<ObRawExpr*> &group_b
     } else {
       second_aggr_algo = HASH_AGGREGATE;
     }
-    second_rollup_status = NONE_ROLLUP;
-
     if (OB_FAIL(append(second_group_by_exprs, group_by_exprs))) {
       LOG_WARN("append elements failed", K(ret));
     } else if (OB_FAIL(second_group_by_exprs.push_back(helper.aggr_code_expr_))) {
@@ -5048,7 +4822,6 @@ int ObLogPlan::create_three_stage_group_plan(const ObIArray<ObRawExpr*> &group_b
                                                 false,
                                                 true,
                                                 false,
-                                                second_rollup_status,
                                                 false,
                                                 &three_stage_info,
                                                 helper.hash_rollup_info_))) {
@@ -5069,9 +4842,6 @@ int ObLogPlan::create_three_stage_group_plan(const ObIArray<ObRawExpr*> &group_b
     } else {
       third_aggr_algo = second_aggr_algo;
     }
-    third_rollup_status = NONE_ROLLUP;
-    third_exch_info.is_rollup_hybrid_ = false;
-
     if (OB_FAIL(append(third_group_by_exprs, group_by_exprs))) {
       LOG_WARN("failed to append third group by expr", K(ret));
     } else if (OB_FAIL(append(third_aggr_items, helper.distinct_aggr_items_))) {
@@ -5118,7 +4888,6 @@ int ObLogPlan::create_three_stage_group_plan(const ObIArray<ObRawExpr*> &group_b
                                                 false,
                                                 false,
                                                 false,
-                                                third_rollup_status,
                                                 false,
                                                 &three_stage_info,
                                                 helper.hash_rollup_info_))) {
@@ -5547,7 +5316,6 @@ int ObLogPlan::create_scala_group_plan(const ObIArray<ObAggFunRawExpr*> &aggr_it
                                                  can_pushdown_distinct_aggr,
                                                  true,
                                                  can_pushdown_distinct_aggr,
-                                                 ObRollupStatus::NONE_ROLLUP,
                                                  true))) {
       LOG_WARN("failed to allocate scala group by as top", K(ret));
     } else if (OB_FAIL(allocate_exchange_as_top(top, exch_info))) {
@@ -5671,7 +5439,6 @@ int ObLogPlan::init_groupby_helper(const ObIArray<ObRawExpr*> &group_exprs,
   bool push_group = false;
   groupby_helper.is_scalar_group_by_ = true;
   groupby_helper.clear_ignore_hint();
-  groupby_helper.optimizer_features_enable_version_ = get_log_plan_hint().optimizer_features_enable_version_;
   bool has_rollup_opt_param = false;
   bool enable_hash_rollup = false;
   bool force_hash_rollup = false;
@@ -5742,9 +5509,6 @@ int ObLogPlan::init_groupby_helper(const ObIArray<ObRawExpr*> &group_exprs,
     LOG_WARN("fail to get aggr_pushdown_allowed", K(ret));
   } else if (!push_group && !get_log_plan_hint().pushdown_group_by()) {
     OPT_TRACE("session info disable pushdown group by");
-  } else if (OB_FAIL(check_rollup_pushdown(session_info, aggr_items,
-                                           groupby_helper.can_rollup_pushdown_))) {
-    LOG_WARN("failed to check rollup pushdown", K(ret));
   } else if (OB_FAIL(check_basic_groupby_pushdown(aggr_items, best_plan->get_output_equal_sets(),
                                                   groupby_helper.can_basic_pushdown_))) {
     LOG_WARN("failed to check whether aggr can be pushed", K(ret));
@@ -6062,7 +5826,6 @@ int ObLogPlan::init_distinct_helper(const ObIArray<ObRawExpr*> &distinct_exprs,
   bool push_distinct = false;
   distinct_helper.can_basic_pushdown_ = false;
   distinct_helper.clear_ignore_hint();
-  distinct_helper.optimizer_features_enable_version_ = get_log_plan_hint().optimizer_features_enable_version_;
   if (OB_FAIL(candidates_.get_best_plan(best_plan))) {
     LOG_WARN("failed to get best plan", K(ret));
   } else if (OB_ISNULL(best_plan) || OB_ISNULL(get_stmt())) {
@@ -6128,11 +5891,7 @@ int ObLogPlan::check_three_stage_groupby_pushdown(const ObIArray<ObRawExpr *> &r
   bool is_rollup = !rollup_exprs.empty();
   can_push = true;
   bool has_one_distinct = true;
-  ObSQLSessionInfo *session = NULL;
-  if (OB_ISNULL(session = get_optimizer_context().get_session_info())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(session), K(ret));
-  } else if (!enable_hash_rollup && is_rollup) {
+  if (!enable_hash_rollup && is_rollup) {
     // disable merge rollup pushdown
     can_push = false;
   }
@@ -6151,20 +5910,9 @@ int ObLogPlan::check_three_stage_groupby_pushdown(const ObIArray<ObRawExpr *> &r
                aggr_expr->get_expr_type() != T_FUN_SYS_BIT_AND &&
                aggr_expr->get_expr_type() != T_FUN_SYS_BIT_OR &&
                aggr_expr->get_expr_type() != T_FUN_SYS_BIT_XOR &&
-               aggr_expr->get_expr_type() != T_FUN_SYS_RB_BUILD_AGG &&
-               aggr_expr->get_expr_type() != T_FUN_SYS_RB_AND_AGG &&
-               aggr_expr->get_expr_type() != T_FUN_SYS_RB_OR_AGG &&
                aggr_expr->get_expr_type() != T_FUN_GROUPING_ID) {
       // three stage with rollup, only hash rollup is allowed
       // grouping_id can be safely pushdown
-      can_push = false;
-    } else if (aggr_expr->get_expr_type() == T_FUN_SYS_RB_BUILD_AGG &&
-              (! session->use_rich_format())) {
-      // if vector 2.0 is not enable  can not pushdown for rb_build_agg
-      can_push = false;
-    } else if ((aggr_expr->get_expr_type() == T_FUN_SYS_RB_AND_AGG || aggr_expr->get_expr_type() == T_FUN_SYS_RB_OR_AGG) &&
-               (! session->use_rich_format())) {
-      // if vector 2.0 is not enable  can not pushdown for rb_and_agg / rb_or_agg
       can_push = false;
     } else if (aggr_expr->is_param_distinct()) {
       if (OB_FAIL(distinct_aggrs.push_back(aggr_expr))) {
@@ -6214,10 +5962,6 @@ int ObLogPlan::check_basic_groupby_pushdown(const ObIArray<ObAggFunRawExpr*> &ag
 {
   int ret = OB_SUCCESS;
   can_push = true;
-  bool enable_rich_vector_format = false;
-  if (OB_FAIL(get_enable_rich_vector_format(enable_rich_vector_format))) {
-    LOG_WARN("get enable_rich_vector_format fail", K(ret));
-  }
   // check whether contain agg expr can not be pushed down
   for (int64_t i = 0; OB_SUCC(ret) && can_push && i < aggr_items.count(); ++i) {
     ObAggFunRawExpr *aggr_expr = aggr_items.at(i);
@@ -6237,55 +5981,13 @@ int ObLogPlan::check_basic_groupby_pushdown(const ObIArray<ObAggFunRawExpr*> &ag
                T_FUN_SYS_BIT_AND != aggr_expr->get_expr_type() &&
                T_FUN_SYS_BIT_OR != aggr_expr->get_expr_type() &&
                T_FUN_SYS_BIT_XOR != aggr_expr->get_expr_type() &&
-               T_FUN_SUM_OPNSIZE != aggr_expr->get_expr_type() &&
-               T_FUN_SYS_RB_BUILD_AGG != aggr_expr->get_expr_type() &&
-               T_FUN_SYS_RB_OR_AGG != aggr_expr->get_expr_type() &&
-               T_FUN_SYS_RB_AND_AGG != aggr_expr->get_expr_type()) {
-      can_push = false;
-    } else if (T_FUN_SYS_RB_BUILD_AGG == aggr_expr->get_expr_type() &&
-              (! enable_rich_vector_format)) {
-      // if vector 2.0 is not enable  can not pushdown for rb_build_agg
-      can_push = false;
-    } else if ((T_FUN_SYS_RB_OR_AGG == aggr_expr->get_expr_type() || T_FUN_SYS_RB_AND_AGG == aggr_expr->get_expr_type()) &&
-               (! enable_rich_vector_format)) {
-      // if vector 2.0 is not enable  can not pushdown for rb aggr exprs
+               T_FUN_SUM_OPNSIZE != aggr_expr->get_expr_type()) {
       can_push = false;
     } else if (aggr_expr->is_param_distinct()) {
       can_push = false;
     }
   }
 
-  return ret;
-}
-
-int ObLogPlan::check_rollup_pushdown(const ObSQLSessionInfo *info,
-                                     const ObIArray<ObAggFunRawExpr *> &aggr_items,
-                                     bool &can_push)
-{
-  int ret = OB_SUCCESS;
-  int64_t enable_rollup_pushdown = 0;
-  can_push = false;
-  if (OB_ISNULL(info)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session info is null", K(ret), K(info));
-  } else if (OB_FAIL(info->get_partial_rollup_pushdown(enable_rollup_pushdown))) {
-    LOG_WARN("failed to get partial rollup pushdown", K(ret));
-  } else {
-    can_push = (enable_rollup_pushdown > 0) && !aggr_items.empty();
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && can_push && i < aggr_items.count(); ++i) {
-    if (aggr_items.at(i)->get_expr_type() != T_FUN_MIN &&
-        aggr_items.at(i)->get_expr_type() != T_FUN_MAX &&
-        aggr_items.at(i)->get_expr_type() != T_FUN_SUM &&
-        aggr_items.at(i)->get_expr_type() != T_FUN_COUNT &&
-        aggr_items.at(i)->get_expr_type() != T_FUN_SYS_BIT_AND &&
-        aggr_items.at(i)->get_expr_type() != T_FUN_SYS_BIT_OR &&
-        aggr_items.at(i)->get_expr_type() != T_FUN_SYS_BIT_XOR) {
-      can_push = false;
-    } else if (aggr_items.at(i)->is_param_distinct()) {
-      can_push = false;
-    }
-  }
   return ret;
 }
 
@@ -7433,7 +7135,6 @@ int ObLogPlan::allocate_group_by_as_top(ObLogicalOperator *&top,
                                         const bool is_partition_wise,
                                         const bool is_push_down,
                                         const bool is_partition_gi,
-                                        const ObRollupStatus rollup_status,
                                         bool force_use_scalar /*false*/,
                                         const ObThreeStageAggrInfo *three_stage_info,
                                         ObHashRollupInfo *hash_rollup_info)
@@ -7457,7 +7158,6 @@ int ObLogPlan::allocate_group_by_as_top(ObLogicalOperator *&top,
     group_by->set_partition_gi(is_partition_gi);
     group_by->set_total_ndv(total_ndv);
     group_by->set_origin_child_card(origin_child_card);
-    group_by->set_rollup_status(rollup_status);
     group_by->set_is_partition_wise(is_partition_wise);
     group_by->set_force_push_down((FORCE_GPD & get_optimizer_context().get_aggregation_optimization_settings()) ||
                                   (!is_first_stage && has_dbms_stats));
@@ -8214,7 +7914,6 @@ int ObLogPlan::allocate_select_into_as_top(ObLogicalOperator *&old_top)
   } else {
     ObSelectIntoItem *into_item = stmt->get_select_into();
     ObSEArray<ObRawExpr*, 4> select_exprs;
-    ObExternalFileFormat external_properties;
     if (OB_ISNULL(into_item)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("into item is null", K(ret));
@@ -8222,21 +7921,6 @@ int ObLogPlan::allocate_select_into_as_top(ObLogicalOperator *&old_top)
       LOG_WARN("failed to get select exprs", K(ret));
     } else if (OB_FAIL(select_into->get_select_exprs().assign(select_exprs))) {
       LOG_WARN("failed to get select exprs", K(ret));
-    } else if (!into_item->external_properties_.empty()
-               && OB_FAIL(external_properties.load_from_string(into_item->external_properties_,
-                                                               get_allocator()))) {
-      LOG_WARN("failed to load external properties", K(ret));
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_select_item_size(); i++) {
-      if (!into_item->external_properties_.empty()
-          && (external_properties.format_type_ == ObExternalFileFormat::FormatType::PARQUET_FORMAT)
-          && is_contain(select_into->get_alias_names(), stmt->get_select_item(i).alias_name_)) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("alias names should be different", K(ret));
-        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "alias names, alias names should be different");
-      } else if (OB_FAIL(select_into->get_alias_names().push_back(stmt->get_select_item(i).alias_name_))) {
-        LOG_WARN("failed to push back alias name", K(ret));
-      }
     }
     if (OB_SUCC(ret)) {
       select_into->set_into_type(into_item->into_type_);
@@ -10664,9 +10348,6 @@ int ObLogPlan::check_enable_plan_expiration(bool &enable) const
              opt_ctx.get_phy_plan_type() != OB_PHY_PLAN_DISTRIBUTED) {
     // do nothing
   } else if (opt_ctx.get_query_ctx()->get_query_hint().has_outline_data()
-#ifdef OB_BUILD_SPM
-             && !opt_ctx.get_query_ctx()->is_spm_evolution_
-#endif
             ) {
     // do nothing
   } else {
@@ -11492,14 +11173,11 @@ int ObLogPlan::choose_duplicate_table_replica(ObLogicalOperator *op,
     ObCandiTableLoc &phy_loc =
         table_scan->get_table_partition_info()->get_phy_tbl_location_info_for_update();
     for (int64_t i = 0; OB_SUCC(ret) && i < phy_loc.get_partition_cnt(); ++i) {
-      int64_t dup_table_pos = OB_INVALID_INDEX;
       ObCandiTabletLoc &phy_part_loc =
            phy_loc.get_phy_part_loc_info_list_for_update().at(i);
-      if (!phy_part_loc.is_server_in_replica(addr, dup_table_pos)) {
+      if (!phy_part_loc.is_local_server(addr)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("no server in replica", K(addr), K(table_scan->get_table_id()), K(ret));
-      } else {
-        phy_part_loc.set_selected_replica_idx(dup_table_pos);
       }
     }
   } else if (log_op_def::LOG_EXCHANGE == op->get_type()) {
@@ -11619,10 +11297,6 @@ int ObLogPlan::gen_das_table_location_info(ObLogTableScan *table_scan,
       } else if (OB_FALSE_IT(das_location.set_use_das(true))) {
       } else if (OB_FALSE_IT(das_location.set_is_das_empty_part(table_partition_info->get_table_location().is_das_empty_part()))) {
       } else if (OB_FALSE_IT(das_location.set_broadcast_table(table_meta_info->is_broadcast_table_))) {
-      } else if (OB_FALSE_IT(das_location.set_dynamic_replica_select_table(
-        ObConsistencyLevel::WEAK == stmt->get_query_ctx()->get_global_hint().read_consistency_
-        && table_meta_info->is_broadcast_table_
-        && opt_ctx->get_session_info()->get_ddl_info().is_mview_complete_refresh()))) {
       } else if (das_location.is_all_partition() &&
                  !das_location.is_dynamic_replica_select_table()) {
         // do nothing
@@ -12138,36 +11812,8 @@ int ObLogPlan::add_explain_note()
     LOG_WARN("get unexpected null", K(ret), K(opt_ctx.get_query_ctx()));
   } else if (OB_FAIL(add_parallel_explain_note())) {
     LOG_WARN("fail to add parallel explain note", K(ret));
-  } else if (OB_FAIL(add_direct_load_explain_note())) {
-    LOG_WARN("fail to add direct load explain note", K(ret));
   } else if (OB_FAIL(add_non_standard_comparison_explain_note())) {
     LOG_WARN("fail to add non standard comparsion explain note", K(ret));
-  }
-  return ret;
-}
-
-int ObLogPlan::add_direct_load_explain_note()
-{
-  int ret = OB_SUCCESS;
-  ObInsertLogPlan *insert_plan = NULL;
-  if (NULL != (insert_plan = dynamic_cast<ObInsertLogPlan*>(this))) {
-    ObOptimizerContext &opt_ctx = get_optimizer_context();
-    const ObDirectLoadOptimizerCtx &direct_load_optimizer_ctx = opt_ctx.get_direct_load_optimizer_ctx();
-    if (direct_load_optimizer_ctx.is_insert_overwrite()) {
-      opt_ctx.add_plan_note(INSERT_OVERWRITE_TABLE);
-    } else if (direct_load_optimizer_ctx.use_direct_load()) {
-      if (direct_load_optimizer_ctx.is_full_direct_load()) {
-        opt_ctx.add_plan_note(DIRECT_MODE_INSERT_INTO_SELECT, "full");
-      } else if (direct_load_optimizer_ctx.is_inc_direct_load()) {
-        opt_ctx.add_plan_note(DIRECT_MODE_INSERT_INTO_SELECT, "inc");
-      } else if (direct_load_optimizer_ctx.is_inc_replace_direct_load()) {
-        opt_ctx.add_plan_note(DIRECT_MODE_INSERT_INTO_SELECT, "inc_replace");
-      }
-    } else {
-      if (direct_load_optimizer_ctx.can_use_direct_load()) {
-        opt_ctx.add_plan_note(DIRECT_MODE_DISABLED_BY_PDML);
-      }
-    }
   }
   return ret;
 }
@@ -12180,9 +11826,6 @@ int ObLogPlan::add_parallel_explain_note()
   ObOptimizerContext &opt_ctx = get_optimizer_context();
   bool has_valid_table_parallel_hint = false;
   switch (opt_ctx.get_parallel_rule()) {
-    case PXParallelRule::LICENSE_NOT_ALLOW_OLAP:
-      parallel_str = PARALLEL_DISABLED_BY_LICENSE;
-      break;
     case PXParallelRule::PL_UDF_DAS_FORCE_SERIALIZE:
       parallel_str = PARALLEL_DISABLED_BY_PL_UDF_DAS;
       break;
@@ -14262,10 +13905,6 @@ int ObLogPlan::check_scalar_aggr_can_storage_pushdown(const uint64_t table_id,
   ObAggFunRawExpr *cur_aggr = NULL;
   ObRawExpr *first_param = NULL;
   can_push = true;
-  bool enable_rich_vector_format = false;
-  if (OB_FAIL(get_enable_rich_vector_format(enable_rich_vector_format))) {
-    LOG_WARN("get enable_rich_vector_format fail", K(ret), K(table_id));
-  }
   for (int64_t i = 0; OB_SUCC(ret) && can_push && i < aggrs.count(); ++i) {
     if (OB_ISNULL(cur_aggr = aggrs.at(i))) {
       ret = OB_ERR_UNEXPECTED;
@@ -14275,18 +13914,7 @@ int ObLogPlan::check_scalar_aggr_can_storage_pushdown(const uint64_t table_id,
                 && T_FUN_MAX != cur_aggr->get_expr_type()
                 && T_FUN_SUM != cur_aggr->get_expr_type()
                 && T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS != cur_aggr->get_expr_type()
-                && T_FUN_SUM_OPNSIZE != cur_aggr->get_expr_type()
-                && T_FUN_SYS_RB_AND_AGG != cur_aggr->get_expr_type()
-                && T_FUN_SYS_RB_OR_AGG != cur_aggr->get_expr_type()
-                && T_FUN_SYS_RB_BUILD_AGG != cur_aggr->get_expr_type()) {
-      can_push = false;
-            } else if (T_FUN_SYS_RB_BUILD_AGG == cur_aggr->get_expr_type() &&
-              (! enable_rich_vector_format)) {
-      // if vector 2.0 is not enable  can not storage pushdown for rb_build_agg
-      can_push = false;
-    } else if ((T_FUN_SYS_RB_AND_AGG == cur_aggr->get_expr_type() || T_FUN_SYS_RB_AND_AGG == cur_aggr->get_expr_type()) &&
-                (! enable_rich_vector_format)) {
-      // if vector 2.0 is not enable  can not storage pushdown for rb agg
+                && T_FUN_SUM_OPNSIZE != cur_aggr->get_expr_type()) {
       can_push = false;
     } else if (1 < cur_aggr->get_real_param_count()) {
       can_push = false;
@@ -14411,7 +14039,6 @@ int ObLogPlan::adjust_dup_table_replica_by_cons(
     const ObCandiTableLoc &phy_tbl_info = phy_tbl_info_list.at(i);
     if (phy_tbl_info.get_partition_cnt() == 1) {
       const ObCandiTabletLoc &dup_tbl_loc = phy_tbl_info.get_phy_part_loc_info_list().at(0);
-      int64_t replica_idx = 0;
       int64_t left_tbl_pos = -1;
       // find first constraint
       for (int64_t j = 0; OB_SUCC(ret) && j < dup_table_replica_cons.count(); ++j) {
@@ -14428,16 +14055,9 @@ int ObLogPlan::adjust_dup_table_replica_by_cons(
         share::ObLSReplicaLocation replica_loc;
         if (OB_FAIL(left_tbl_part_loc_info.get_selected_replica(replica_loc))) {
           LOG_WARN("failed to set selected replica idx", K(ret), K(left_tbl_part_loc_info));
-        } else if (dup_tbl_loc.is_server_in_replica(replica_loc.get_server(), replica_idx)) {
-          LOG_DEBUG("reselect replica index according to pwj constraints will happen",
-                    K(dup_tbl_loc), K(replica_idx), K(replica_loc.get_server()), K(replica_loc));
-          ObRoutePolicy::CandidateReplica replica;
-          if (OB_FAIL(dup_tbl_loc.get_priority_replica(replica_idx, replica))) {
-            LOG_WARN("failed to get priority replica", K(ret));
-          } else if (OB_FAIL(const_cast<ObCandiTabletLoc &>(dup_tbl_loc)
-                               .set_selected_replica_idx(replica_idx))) {
-            LOG_WARN("failed to set selected replica idx", K(ret), K(replica_idx));
-          }
+        } else if (!dup_tbl_loc.is_local_server(replica_loc.get_server())) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("pwj locations are not on the local server", K(ret), K(replica_loc));
         }
       }
     }
@@ -14477,15 +14097,12 @@ int ObLogPlan::compute_duplicate_table_replicas(ObLogicalOperator *op)
       basic_addr = valid_addrs.at(0);
     }
     if (OB_SUCC(ret)) {
-      int64_t dup_table_pos = OB_INVALID_INDEX;
       ObCandiTableLoc *phy_loc =sharding->get_phy_table_location_info();
       ObCandiTabletLoc &phy_part_loc =
            phy_loc->get_phy_part_loc_info_list_for_update().at(0);
-      if (!phy_part_loc.is_server_in_replica(basic_addr, dup_table_pos)) {
+      if (!phy_part_loc.is_local_server(basic_addr)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("no server in replica", K(basic_addr), K(ret));
-      } else {
-        phy_part_loc.set_selected_replica_idx(dup_table_pos);
       }
     }
   }

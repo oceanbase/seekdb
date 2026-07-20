@@ -21,6 +21,7 @@
 
 #include "rootserver/ob_root_service.h"
 #include "logservice/ob_log_service.h"
+#include "logservice/palf_handle_guard.h"
 namespace oceanbase
 {
 using namespace common;
@@ -124,65 +125,21 @@ int ObRootServiceMonitor::monitor_root_service()
   } else {
     
     MOD_SCOPE {
-      ObRole role = FOLLOWER;
-      bool palf_exist = false;
-      int64_t proposal_id = 0;  // unused
-      palf::PalfHandleGuard palf_handle_guard;
-      logservice::ObLogService *log_service = nullptr;
-      if (OB_ISNULL(log_service = share::g_mp->log_service())) {
-        ret = OB_ERR_UNEXPECTED;
-        FLOG_WARN("MTL ObLogService is null", KR(ret));
-      } else if (OB_FAIL(log_service->check_palf_exist(SYS_LS, palf_exist))) {
-        FLOG_WARN("fail to check palf exist", KR(ret), K(SYS_LS));
-      } else if (!palf_exist) {
-        // bypass
-      } else if (OB_FAIL(log_service->open_palf(SYS_LS, palf_handle_guard))) {
-        FLOG_WARN("open palf failed", KR(ret), K(SYS_LS));
-      } else if (OB_FAIL(palf_handle_guard.get_role(role, proposal_id))) {
-        FLOG_WARN("get role failed", KR(ret));
-      }
-      if (OB_FAIL(ret)) {
-      } else if (root_service_.is_stopping()) {
+      if (root_service_.is_stopping()) {
         //need exit
         if (OB_FAIL(root_service_.stop_service())) {
           FLOG_WARN("root_service stop_service failed", KR(ret));
         }
       } else if (root_service_.is_need_stop()) {
         FLOG_INFO("root service is starting, stop_service need wait");
+      } else if (root_service_.in_service()) {
+        // already started or is starting
+      } else if (!root_service_.can_start_service()) {
+        LOG_ERROR("bug here. root service can not start service");
       } else {
-        if (is_strong_leader(role)) {
-          if (root_service_.in_service()) {
-            //already started or is starting
-            //nothing todo
-          } else if (!root_service_.can_start_service()) {
-            LOG_ERROR("bug here. root service can not start service");
-          } else {
-            DEBUG_SYNC(BEFORE_START_RS);
-            if (OB_FAIL(try_start_root_service())) {
-              FLOG_WARN("fail to start root_service", KR(ret));
-            }
-          }
-        } else {
-          // possible follower or doesn't have role yet
-          //DEBUG_SYNC(BEFORE_STOP_RS);
-          //leader does not exist.
-          if (!root_service_.is_start()) {
-            //nothing todo
-          } else {
-            if (OB_FAIL(root_service_.revoke_rs())) {
-              FLOG_WARN("fail to revoke rootservice", KR(ret));
-              if (root_service_.is_need_stop()) {
-                //nothing todo
-              } else if (root_service_.is_stopping()) {
-                if (OB_FAIL(root_service_.stop_service())) {
-                  FLOG_WARN("root_service stop_service failed", KR(ret));
-                }
-              } else {
-                ret = OB_ERR_UNEXPECTED;
-                FLOG_WARN("inalid root service status", KR(ret));
-              }
-            }
-          }
+        DEBUG_SYNC(BEFORE_START_RS);
+        if (OB_FAIL(try_start_root_service())) {
+          FLOG_WARN("fail to start root_service", KR(ret));
         }
       }
     } else {

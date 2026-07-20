@@ -24,7 +24,7 @@
 #include "storage/blocksstable/index_block/ob_sstable_sec_meta_iterator.h"
 #include "storage/compaction/ob_tablet_merge_ctx.h"
 #include "share/rc/ob_module_provider.h"
-#include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
+#include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
 
 namespace oceanbase
 {
@@ -33,21 +33,33 @@ namespace storage
 using namespace blocksstable;
 using namespace common;
 
-class ObStorageMetaMemMgr;
+class ObTenantMetaMemMgr;
 
-// Publish the locally created storage metadata manager through share::g_mp and
-// a file-local MTL(T) shim.
+// T3d single-tenant: tenant slot/MTL read mechanism removed. Publish the locally
+// created ObTenantMetaMemMgr through share::g_mp and a file-local MTL(T) shim.
 class TestSpliterProvider : public share::ObIModuleProvider
 {
 public:
+  // After the single-tenant change, register_into_tb_map dereferences the bare global
+  // share::g_mp directly (the former MTL() could return NULL). gtest constructs the fixture
+  // members (including ObTablet tablet_;) before calling SetUp(), so g_mp must be published
+  // during member construction; otherwise constructing tablet_ makes the leak-checker
+  // dereference a NULL g_mp and crash. provider_ is declared before tablet_, so publishing it
+  // in this provider's constructor is enough (at this point t3m_ is still NULL, and the
+  // OB_NOT_NULL(t3m) guard in register_into_tb_map handles that correctly).
   TestSpliterProvider() { share::g_mp = this; }
-  ObStorageMetaMemMgr *t3m_ = nullptr;
-  ObStorageMetaMemMgr *storage_meta_mem_mgr() override { return t3m_; }
+  ObTenantMetaMemMgr *t3m_ = nullptr;
+  ObTenantMetaMemMgr * tenant_meta_mem_mgr() override { return t3m_; }
 };
-#define MTL(TYPE) (static_cast<TYPE>(::oceanbase::share::g_mp->storage_meta_mem_mgr()))
+#define MTL(TYPE) (static_cast<TYPE>(::oceanbase::share::g_mp->tenant_meta_mem_mgr()))
 
 void ObCompactionBufferWriter::reset()
 {
+}
+
+int ObTenantMetaMemMgr::fetch_tenant_config()
+{
+  return OB_SUCCESS;
 }
 
 static int get_number(const char *str, const char *&endpos, int64_t &num)
@@ -627,7 +639,7 @@ class TestPartitionIncrementalRangeSliter : public ::testing::Test
   static const int64_t MAX_BUF_LENGTH = 1024;
 public:
   TestPartitionIncrementalRangeSliter()
-    : merge_ctx_(param_, allocator_), buf_(nullptr), is_inited_(false)
+    : tenant_id_(1), merge_ctx_(param_, allocator_), buf_(nullptr), is_inited_(false)
   {
     major_sstable_.meta_ = &major_sstable_meta_;
     minor_sstable_.meta_ = &minor_sstable_meta_;
@@ -676,6 +688,7 @@ private:
   void inner_test_split_ranges(const ObString &ranges_str, const ObString &split_ranges, bool full_merge = false);
 
 private:
+  const uint64_t tenant_id_;
   TestSpliterProvider provider_;
   ObArenaAllocator allocator_;
   compaction::ObTabletMergeDagParam param_;
@@ -699,11 +712,12 @@ private:
 
 void TestPartitionIncrementalRangeSliter::SetUp()
 {
+  oceanbase::ObClusterVersion::get_instance().update_data_version(DATA_CURRENT_VERSION);
   if (!is_inited_) {
     int ret = OB_SUCCESS;
     OB_STORAGE_OBJECT_MGR.super_block_.body_.macro_block_size_ = 1;
 
-    ObStorageMetaMemMgr *t3m = OB_NEW(ObStorageMetaMemMgr, ObModIds::TEST);
+    ObTenantMetaMemMgr *t3m = OB_NEW(ObTenantMetaMemMgr, ObModIds::TEST);
     ret = t3m->init();
     ASSERT_EQ(OB_SUCCESS, ret);
     provider_.t3m_ = t3m;
@@ -774,12 +788,12 @@ void TestPartitionIncrementalRangeSliter::TearDown()
   reset_major_sstable();
   reset_ranges();
 
-  ObStorageMetaMemMgr *t3m = MTL(ObStorageMetaMemMgr*);
-  OB_DELETE(ObStorageMetaMemMgr, ObModIds::TEST, t3m);
+  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  OB_DELETE(ObTenantMetaMemMgr, ObModIds::TEST, t3m);
   provider_.t3m_ = nullptr;
   // Do NOT null share::g_mp here: gtest destroys fixture members AFTER TearDown,
   // and tablet_ (declared after provider_) destructs first, calling
-  // ObTablet::reset_memtable -> share::g_mp->storage_meta_mem_mgr(). provider_
+  // ObTablet::reset_memtable -> share::g_mp->tenant_meta_mem_mgr(). provider_
   // outlives tablet_, so leaving g_mp pointing at it keeps that deref safe.
 }
 

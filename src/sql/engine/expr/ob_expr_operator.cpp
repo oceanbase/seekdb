@@ -88,37 +88,59 @@ uint64_t ObExprTRDateFormat::FORMATS_HASH[FORMAT_MAX_TYPE] = {0};
 
 OB_SERIALIZE_MEMBER(ObFuncInputType, calc_meta_, max_length_, flag_);
 
+// Serialization of ObExprResType does not contain header, then the removed `row_calc_cmp_types_`
+// should be mocked. Use int64_t to represenct an empty ObFixedArray in serialize and ignore the
+// array data in deserialize.
+// The upgrade compatibility has been verified in unittest test_res_type_serialization
 // TODO: use ObRawExprResType instead of ObExprResType in sql executor
 OB_DEF_SERIALIZE_SIMPLE(ObExprResType)
 {
   int ret = ObObjMeta::serialize(buf, buf_len, pos);
+  int64_t mock_count = 0;
   LST_DO_CODE(OB_UNIS_ENCODE,
         accuracy_,
         calc_accuracy_,
         calc_type_,
-        res_flags_);
+        res_flags_,
+        mock_count);
   return ret;
 }
 
 OB_DEF_DESERIALIZE_SIMPLE(ObExprResType)
 {
   int ret = ObObjMeta::deserialize(buf, data_len, pos);
+  int64_t mock_count = 0;
   LST_DO_CODE(OB_UNIS_DECODE,
         accuracy_,
         calc_accuracy_,
         calc_type_,
-        res_flags_);
+        res_flags_,
+        mock_count);
+  if (OB_FAIL(ret)) {
+  } else if (OB_UNLIKELY(mock_count < 0 || mock_count > UINT32_MAX)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid mock_count", K(mock_count));
+  } else {
+    // just ignore the data of row_calc_cmp_types_
+    pos += mock_count * calc_type_.get_serialize_size();
+    if (OB_UNLIKELY(pos > data_len)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid pos", K(pos), K(data_len));
+    }
+  }
   return ret;
 }
 
 OB_DEF_SERIALIZE_SIZE_SIMPLE(ObExprResType)
 {
   int64_t len = ObObjMeta::get_serialize_size();
+  int64_t mock_count = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN,
         accuracy_,
         calc_accuracy_,
         calc_type_,
-        res_flags_);
+        res_flags_,
+        mock_count);
   return len;
 }
 
@@ -214,6 +236,7 @@ int ObExprOperator::assign(const ObExprOperator &other)
       this->row_dimension_ = other.row_dimension_;
       this->real_param_num_ = other.real_param_num_;
       this->is_called_in_sql_ = other.is_called_in_sql_;
+      this->extra_serialize_ = other.extra_serialize_;
     }
   }
   return ret;
@@ -690,7 +713,7 @@ ObCollationType ObExprOperator::get_default_collation_type(
   return collation_type;
 }
 
-OB_SERIALIZE_MEMBER(ObExprOperator, row_dimension_, real_param_num_, result_type_, input_types_, id_);
+OB_SERIALIZE_MEMBER(ObExprOperator, row_dimension_, real_param_num_, result_type_, input_types_, id_, extra_serialize_);
 
 int ObExprOperator::aggregate_collations(ObObjMeta &type,
                                          const ObObjMeta *types,
@@ -5632,10 +5655,10 @@ int ObLocationExprOperator::calc_(const ObExpr &expr, const ObExpr &sub_arg,
       LOG_WARN("eval arg 2 failed", K(ret));
     } else if (!pos->is_null()) {
       // TODO: Verify that uint64 exceeds the int64 value range under MySQL, the result of implicit cast
+      // 
       pos_int = pos->get_int();
     } else {
       has_result = true;
-      // The MySQL LOCATE(..., NULL) compatibility result is zero.
       res_datum.set_int(0);
     }
   }

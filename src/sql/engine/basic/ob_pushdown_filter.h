@@ -1347,9 +1347,6 @@ public:
   ExprFixedArray ext_file_column_exprs_;
   ExprFixedArray ext_column_convert_exprs_;
   ObExpr *trans_info_expr_;
-  uint64_t auto_split_filter_type_;
-  ObExpr *auto_split_expr_;
-  ExprFixedArray auto_split_params_;
   int64_t ext_tbl_filter_pd_level_;
 };
 // Push down expression execution dependent op ctx

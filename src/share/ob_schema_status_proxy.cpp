@@ -122,7 +122,7 @@ int ObSchemaStatusProxy::load_refresh_schema_status()
     if (OB_FAIL(core_table.load())) {
       LOG_WARN("fail to load core table", K(ret));
     } else {
-      uint64_t row_id = OB_INVALID_ID;
+      uint64_t row_id = OB_INVALID_TENANT_ID;
       int64_t snapshot_timestamp = OB_INVALID_TIMESTAMP;
       int64_t readable_schema_version = OB_INVALID_VERSION;
       while(OB_SUCC(ret)) {
@@ -146,7 +146,7 @@ int ObSchemaStatusProxy::load_refresh_schema_status()
           
           schema_status.snapshot_timestamp_ = snapshot_timestamp;
           schema_status.readable_schema_version_ = readable_schema_version;
-          // The current server owns one schema-status row.
+          // single-tenant: __all_schema_status has only the sys tenant row
           (void)(row_id);
           ObSchemaStatusUpdater updater(schema_status);
           common::SpinWLockGuard guard(schema_status_cache_lock_);
@@ -167,7 +167,7 @@ int ObSchemaStatusProxy::load_refresh_schema_status()
   return ret;
 }
 
-int ObSchemaStatusProxy::set_runtime_schema_status(
+int ObSchemaStatusProxy::set_tenant_schema_status(
     const ObRefreshSchemaStatus &refresh_schema_status)
 {
   int ret = OB_SUCCESS;
@@ -177,6 +177,9 @@ int ObSchemaStatusProxy::set_runtime_schema_status(
   ObMySQLTransaction trans;
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("check inner stat failed", K(ret));
+  } else if (!refresh_schema_status.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("refresh schema status is invalid", K(ret), K(refresh_schema_status));
   } else if (OB_UNLIKELY(OB_INVALID_TIMESTAMP != refresh_schema_status.snapshot_timestamp_
                          && 0 != refresh_schema_status.snapshot_timestamp_)) {
     ret = OB_INVALID_ARGUMENT;

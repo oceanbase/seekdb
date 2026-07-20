@@ -18,7 +18,7 @@
 #include "ob_ddl_tablet_scheduler.h"
 #include "ob_index_build_task.h"
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
-#include "rootserver/ob_local_management_service.h"
+#include "rootserver/ob_root_service.h"
 #include "share/ob_ddl_checksum.h"
 #include "src/observer/ob_inner_sql_connection.h"
 #include "observer/vector_index/ob_vector_index_util.h"
@@ -35,7 +35,7 @@ using namespace oceanbase::sql;
 ObDDLTabletScheduler::ObDDLTabletScheduler()
   : is_inited_(false), table_id_(OB_INVALID_ID), ref_data_table_id_(OB_INVALID_ID),
     task_id_(OB_INVALID_ID), parallelism_(0), snapshot_version_(0), trace_id_(),
-    lock_(), local_management_service_(nullptr), all_tablets_(), running_tablets_(),
+    lock_(), root_service_(nullptr), all_tablets_(), running_tablets_(),
     running_execution_id_(-1), tablet_id_to_data_size_(), tablet_id_to_data_row_cnt_(),
     tablet_id_to_execution_id_map_()
 {
@@ -56,15 +56,16 @@ int ObDDLTabletScheduler::init(const uint64_t table_id,
 {
   int ret = OB_SUCCESS;
   ObArenaAllocator arena("tblt_sched_init");
+  common::ObAddr inner_sql_exec_addr;
   common::ObArray<ObString> running_sql_info;
   common::ObArray<ObTabletID> ref_data_table_tablets;
   common::hash::ObHashMap<uint64_t, bool> tablet_finished_map;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret), K(is_inited_));
-  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
+  } else if (OB_ISNULL(root_service_ = GCTX.root_service_)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("local_management_service is null", K(ret), KP(local_management_service_));
+    LOG_WARN("root_service is null", K(ret), KP(root_service_));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("ddl service not started", KR(ret));
@@ -101,9 +102,8 @@ int ObDDLTabletScheduler::init(const uint64_t table_id,
     *GCTX.sql_proxy_,
     tablet_finished_map))) {
     LOG_WARN("fail to get tablet checksum status", K(ret), K(table_id), K(task_id), K(tablets));
-  } else if (OB_FAIL(ObDDLTaskRecordOperator::get_running_tasks_inner_sql(
-      *GCTX.sql_proxy_, trace_id, task_id, snapshot_version, arena, running_sql_info))) {
-    LOG_WARN("get running tasks inner sql fail", K(ret), K(trace_id), K(task_id), K(snapshot_version), K(running_sql_info));
+  } else if (OB_FAIL(ObDDLTaskRecordOperator::get_running_tasks_inner_sql(*GCTX.sql_proxy_, trace_id, task_id, snapshot_version, inner_sql_exec_addr, arena, running_sql_info))) {
+    LOG_WARN("get running tasks inner sql fail", K(ret), K(trace_id), K(task_id), K(snapshot_version), K(inner_sql_exec_addr), K(running_sql_info));
   } else {
     bool is_running_status = false;
     bool is_finished_status = false;
@@ -148,12 +148,15 @@ int ObDDLTabletScheduler::init(const uint64_t table_id,
           if (!is_running_status && is_finished_status) {
             LOG_INFO("tablet has complemented data", K(ret), K(table_id), K(ref_data_table_id), K(tablets.at(i)));
           } else {
-            if (is_running_status && OB_FAIL(running_tablets_.push_back(tablets.at(i)))) {
-              LOG_WARN("fail to push running tablet", K(ret), K(table_id), K(ref_data_table_id),
-                       K(tablets.at(i)), K(is_finished_status));
+            if (is_running_status) {
+              if (OB_FAIL(running_tablets_.push_back(tablets.at(i)))) {
+                LOG_WARN("fail to push running tablet", K(ret), K(table_id), K(ref_data_table_id), K(tablets.at(i)), K(is_finished_status));
+              }
             }
-            if (OB_SUCC(ret) && OB_FAIL(all_tablets_.push_back(tablets.at(i)))) {
-              LOG_WARN("fail to push back", K(ret), K(tablets.at(i)));
+            if (OB_SUCC(ret)) {
+              if (OB_FAIL(all_tablets_.push_back(tablets.at(i)))) {
+                LOG_WARN("fail to push back", K(ret), K(tablets.at(i)));
+              }
             }
           }
         }
@@ -473,7 +476,7 @@ int ObDDLTabletScheduler::calculate_candidate_tablets(const uint64_t left_space_
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(schema_guard))) {
     LOG_WARN("fail to get schema guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( ref_data_table_id_, data_table_schema))) {
     LOG_WARN("get table schema failed", K(ret), K(ref_data_table_id_));
@@ -582,6 +585,7 @@ int ObDDLTabletScheduler::check_running_task_completion_status()
   ObArray<ObTabletID> running_tablet_queue;
   common::hash::ObHashMap<uint64_t, bool> tablet_finished_map;
   ObArenaAllocator arena("tblt_sched_get");
+  common::ObAddr inner_sql_exec_addr;
   common::ObArray<ObString> running_sql_info;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
@@ -600,8 +604,8 @@ int ObDDLTabletScheduler::check_running_task_completion_status()
     } else if (running_tablet_queue.empty()) {
       // do nothing, the running task has finished and reported
     } else if (OB_FAIL(ObDDLTaskRecordOperator::get_running_tasks_inner_sql(
-          *GCTX.sql_proxy_, trace_id_, task_id_, snapshot_version_, arena, running_sql_info))) {
-      LOG_WARN("get running tasks inner sql fail", K(ret), K(trace_id_), K(task_id_), K(snapshot_version_), K(running_sql_info));
+          *GCTX.sql_proxy_, trace_id_, task_id_, snapshot_version_, inner_sql_exec_addr, arena, running_sql_info))) {
+      LOG_WARN("get running tasks inner sql fail", K(ret), K(trace_id_), K(task_id_), K(snapshot_version_), K(inner_sql_exec_addr), K(running_sql_info));
     } else {
       ObArray<ObString> partition_names;
       bool is_running_status = false;

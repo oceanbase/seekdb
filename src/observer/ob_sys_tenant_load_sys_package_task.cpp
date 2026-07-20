@@ -116,7 +116,6 @@ int ObSysTenantLoadSysPackageTask::do_sys_tenant_load_sys_package_()
     }
   } else if (OB_FAIL(pl::ObPLPackageManager::load_all_common_sys_package(
                          *sql_proxy,
-                         ObCompatibilityMode::MYSQL_MODE,
                          false/*from_file*/))) {
     LOG_WARN("failed to load package", KR(ret));
   } else if (OB_FAIL(ERRSIM_LOAD_PACKAGE_ERROR)) {
@@ -153,8 +152,7 @@ void ObSysTenantLoadSysPackageTask::runTimerTask()
 }
 
 int ObSysTenantLoadSysPackageTask::wait_sys_package_ready(
-    const common::ObTimeoutCtx &ctx,
-    ObCompatibilityMode mode)
+    const common::ObTimeoutCtx &ctx)
 {
   int ret = OB_SUCCESS;
   const int64_t retry_interval_us = 500l * 1000l;
@@ -165,7 +163,7 @@ int ObSysTenantLoadSysPackageTask::wait_sys_package_ready(
     int tmp_ret = OB_SUCCESS;
     if (ctx.is_timeouted()) {
       ret = OB_TIMEOUT;
-      LOG_WARN("wait sys package ready failed", KR(ret), K(mode));
+      LOG_WARN("wait sys package ready failed", KR(ret));
     } else {
       inprogress_job_count = 0;
       if (OB_ENTRY_NOT_EXIST != (tmp_ret = RS_JOB_FIND(LOAD_MYSQL_SYS_PACKAGE, job_id))) {

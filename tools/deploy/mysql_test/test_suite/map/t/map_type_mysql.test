@@ -326,15 +326,19 @@ drop table t1;
 
 create table t1 as select map(1,1) as m1, map(1,1,2,2,3,3) as m2, map(1.1,1.11) as m3, map('a','b') as m4;
 desc t1;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t1;
 create table t2 as select map(1,1.11,2.2,'b') as m1, map(1,[1]) as m2, map(1,[['b']]) as m3;
 desc t2;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t1;
 create table t3 as select m1, m2, m3, m4 from t1;
 desc t3;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t1;
 create table t4 as select m1, m2, m3 from t2;
 desc t4;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t1;
 drop table t1, t2, t3, t4;
 
@@ -651,6 +655,7 @@ INSERT /*+ enable_parallel_dml parallel(2) */ INTO t2  SELECT * from t1;
 SELECT * from t2;
 ALTER TABLE t1 DROP PARTITION p0;
 ALTER TABLE t1 TRUNCATE PARTITION p1;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t1;
 select * from t1 order by id;
 insert into t1 values (1, '{1:11,2:22}', '{"a1":["hi1","hello"], "b1":["ocean1","base"]}', '{1.11:[[11],[2]], 2.21:[[1,2]]}');

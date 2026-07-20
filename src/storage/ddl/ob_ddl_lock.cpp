@@ -503,7 +503,7 @@ int ObDDLLock::lock_dst_table_and_global_indexes_for_fork(
     
     const uint64_t data_table_id = data_table_schema.get_table_id();
 
-    if (OB_INVALID_ID == data_table_id) {
+    if (false || OB_INVALID_ID == data_table_id) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid data_table_id", K(ret), K(data_table_id));
     } else if (!need_lock(data_table_schema)) {
@@ -911,7 +911,7 @@ int ObDDLLock::replace_tablet_lock(const uint64_t table_id,
   if (OB_ISNULL(iconn = static_cast<ObInnerSQLConnection *>(trans.get_connection()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid conn", K(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == table_id || tablet_ids.count() < 1)) {
+  } else if (OB_UNLIKELY(false || OB_INVALID_ID == table_id || tablet_ids.count() < 1)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(table_id), K(tablet_ids.count()));
   } else if (OB_FAIL(get_unlock_alone_tablet_request_arg(old_lock_mode, old_lock_owner, timeout_us, tablet_ids, unlock_arg))) {
@@ -937,7 +937,7 @@ int ObDDLLock::get_unlock_alone_tablet_request_arg(const transaction::tablelock:
   int ret = OB_SUCCESS;
   unlock_arg.reset();
   const ObTableLockOpType op_type = ObTableLockOpType::OUT_TRANS_UNLOCK;
-  if (OB_UNLIKELY(tablet_ids.count() < 1)) {
+  if (OB_UNLIKELY(false || tablet_ids.count() < 1)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(tablet_ids.count()));
   } else {

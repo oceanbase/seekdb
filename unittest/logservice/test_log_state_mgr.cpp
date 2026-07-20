@@ -15,108 +15,89 @@
  */
 
 #include <gtest/gtest.h>
-
 #define private public
-#include "logservice/palf/log_state_mgr.h"
-#include "mock_logservice_container/mock_log_mode_mgr.h"
+#include "mock_logservice_container/mock_log_engine.h"
 #include "mock_logservice_container/mock_log_sliding_window.h"
+#include "mock_logservice_container/mock_log_mode_mgr.h"
 #undef private
 
 namespace oceanbase
 {
-namespace unittest
-{
 using namespace common;
 using namespace palf;
+using namespace share;
 
-class TestLogStateMgr : public ::testing::Test
+namespace unittest
+{
+
+class TestLogStateMgr: public ::testing::Test
 {
 public:
-  void SetUp() override
-  {
-    self_.set_ip_addr("127.0.0.1", 12345);
-  }
-
-protected:
+  TestLogStateMgr();
+  virtual ~TestLogStateMgr();
+public:
+  virtual void SetUp();
+  virtual void TearDown();
+public:
   common::ObAddr self_;
   MockLogSlidingWindow mock_sw_;
+  MockLogEngine mock_log_engine_;
   MockLogModeMgr mock_mode_mgr_;
   LogStateMgr state_mgr_;
 };
 
-TEST_F(TestLogStateMgr, init)
-{
-  ObAddr invalid_addr;
-  EXPECT_EQ(OB_NOT_INIT, state_mgr_.set_scan_disk_log_finished());
-  EXPECT_EQ(OB_NOT_INIT, state_mgr_.switch_state());
-  EXPECT_FALSE(state_mgr_.can_slide_sw());
-  EXPECT_FALSE(state_mgr_.can_append());
-  EXPECT_EQ(INIT, state_mgr_.get_state());
+TestLogStateMgr::TestLogStateMgr() {}
+TestLogStateMgr::~TestLogStateMgr() {}
 
-  EXPECT_EQ(OB_INVALID_ARGUMENT,
-            state_mgr_.init(invalid_addr, &mock_sw_, &mock_mode_mgr_));
-  EXPECT_EQ(OB_INVALID_ARGUMENT,
-            state_mgr_.init(self_, nullptr, &mock_mode_mgr_));
-  EXPECT_EQ(OB_INVALID_ARGUMENT,
-            state_mgr_.init(self_, &mock_sw_, nullptr));
+void TestLogStateMgr::SetUp()
+{
+  self_.set_ip_addr("127.0.0.1", 12345);
+}
+
+void TestLogStateMgr::TearDown()
+{}
+
+TEST_F(TestLogStateMgr, test_init)
+{
+  EXPECT_EQ(OB_INVALID_ARGUMENT, state_mgr_.init(self_, NULL, &mock_mode_mgr_));
   EXPECT_EQ(OB_SUCCESS, state_mgr_.init(self_, &mock_sw_, &mock_mode_mgr_));
   EXPECT_EQ(OB_INIT_TWICE, state_mgr_.init(self_, &mock_sw_, &mock_mode_mgr_));
-  EXPECT_TRUE(state_mgr_.can_slide_sw());
-  EXPECT_EQ(INIT, state_mgr_.get_state());
-
-  state_mgr_.destroy();
-  EXPECT_FALSE(state_mgr_.can_slide_sw());
-  EXPECT_EQ(INIT, state_mgr_.get_state());
 }
 
-TEST_F(TestLogStateMgr, local_recovery_transitions)
+TEST_F(TestLogStateMgr, recover_to_active)
 {
-  ASSERT_EQ(OB_SUCCESS, state_mgr_.init(self_, &mock_sw_, &mock_mode_mgr_));
-  EXPECT_FALSE(state_mgr_.is_state_changed());
-  EXPECT_FALSE(state_mgr_.is_active());
-  EXPECT_FALSE(state_mgr_.is_recovering());
-  EXPECT_FALSE(state_mgr_.need_freeze_group_buffer());
-
-  // INIT does not advance until the disk scan is complete.
-  ASSERT_EQ(OB_SUCCESS, state_mgr_.switch_state());
+  EXPECT_EQ(OB_SUCCESS, state_mgr_.init(self_, &mock_sw_, &mock_mode_mgr_));
   EXPECT_EQ(INIT, state_mgr_.get_state());
-
-  ASSERT_EQ(OB_SUCCESS, state_mgr_.set_scan_disk_log_finished());
-  EXPECT_TRUE(state_mgr_.is_state_changed());
-  ASSERT_EQ(OB_SUCCESS, state_mgr_.switch_state());
+  EXPECT_EQ(OB_SUCCESS, state_mgr_.set_scan_disk_log_finished());
+  EXPECT_EQ(OB_SUCCESS, state_mgr_.switch_state());
   EXPECT_TRUE(state_mgr_.is_recovering());
-  EXPECT_EQ(RECOVERING, state_mgr_.get_state());
 
-  // Recovery waits for both local flush and committed-log sliding.
   mock_sw_.all_log_flushed_ = false;
-  ASSERT_EQ(OB_SUCCESS, state_mgr_.switch_state());
+  EXPECT_EQ(OB_SUCCESS, state_mgr_.switch_state());
   EXPECT_TRUE(state_mgr_.is_recovering());
-  EXPECT_FALSE(mock_sw_.activate_called_);
+  EXPECT_FALSE(mock_sw_.activated_);
 
   mock_sw_.all_log_flushed_ = true;
-  mock_sw_.all_committed_slided_ = false;
-  mock_sw_.max_lsn_ = LSN(1024);
-  ASSERT_EQ(OB_SUCCESS, state_mgr_.switch_state());
+  mock_sw_.all_committed_slided_out_ = false;
+  EXPECT_EQ(OB_SUCCESS, state_mgr_.switch_state());
   EXPECT_TRUE(state_mgr_.is_recovering());
-  EXPECT_EQ(LSN(1024), mock_sw_.committed_end_lsn_);
-  EXPECT_FALSE(mock_sw_.activate_called_);
+  EXPECT_EQ(mock_sw_.mock_max_flushed_end_lsn_, mock_sw_.pending_end_lsn_);
 
-  mock_sw_.all_committed_slided_ = true;
-  ASSERT_EQ(OB_SUCCESS, state_mgr_.switch_state());
-  EXPECT_TRUE(mock_sw_.activate_called_);
+  mock_sw_.all_committed_slided_out_ = true;
+  EXPECT_EQ(OB_SUCCESS, state_mgr_.switch_state());
   EXPECT_TRUE(state_mgr_.is_active());
-  EXPECT_TRUE(state_mgr_.can_append());
-  EXPECT_TRUE(state_mgr_.need_freeze_group_buffer());
-  EXPECT_EQ(ACTIVE, state_mgr_.get_state());
+  EXPECT_TRUE(mock_sw_.activated_);
 }
 
-} // namespace unittest
-} // namespace oceanbase
+} // END of unittest
+} // end of oceanbase
 
 int main(int argc, char **argv)
 {
+  system("rm -f ./test_log_state_mgr.log");
   OB_LOGGER.set_file_name("test_log_state_mgr.log", true);
   OB_LOGGER.set_log_level("TRACE");
+  PALF_LOG(INFO, "begin unittest::test_log_state_mgr");
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

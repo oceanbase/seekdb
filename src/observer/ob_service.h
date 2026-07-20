@@ -26,7 +26,7 @@
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
 #include "observer/ob_uniq_task_queue.h"
 #include "observer/report/ob_tablet_table_updater.h"
-#include "observer/ob_standby_schema_refresh_trigger.h"
+#include "lib/task/ob_timer.h"
 
 namespace oceanbase
 {
@@ -67,11 +67,8 @@ private:
 
 class TelemetryTask {
 public:
-  TelemetryTask(bool embed_mode);
+  TelemetryTask() = default;
   int report();
-  bool embed_mode_;
-private:
-  static int report_(bool embed_mode);
 };
 
 class ObService
@@ -82,7 +79,7 @@ public:
 
   int init(common::ObMySQLProxy &sql_proxy,
            bool need_bootstrap);
-  int start(bool embed_mode);
+  int start();
   void set_stop();
   void stop();
   void wait();
@@ -90,15 +87,12 @@ public:
 
   //fill_tablet_replica: to build a tablet replica locally
   // @params[in] tenant: tablet belongs to which tenant
-  // @params[in] ls_id: tablet belongs to which log stream
   // @params[in] tablet_id: the tablet to build
   // @params[out] tablet_replica: infos about this tablet replica
   // @params[out] tablet_checksum: infos about this tablet data/column checksum
   // @params[in] need_checksum: whether to fill tablet_checksum
-  // ATTENTION: If ls not exist, then OB_LS_NOT_EXIST
-  //            If tablet not exist on that ls, then OB_TABLET_NOT_EXIST
-  int fill_tablet_report_info(const share::ObLSID &ls_id,
-      const ObTabletID &tablet_id,
+  // ATTENTION: If tablet does not exist, returns OB_TABLET_NOT_EXIST.
+  int fill_tablet_report_info(const ObTabletID &tablet_id,
       share::ObTabletReplica &tablet_replica,
       share::ObTabletReplicaChecksumItem &tablet_checksum,
       const bool need_checksum = true);
@@ -114,10 +108,6 @@ public:
   // ObCallSwitchSchemaP @RS DDL
   int switch_schema(const obcall::ObSwitchSchemaArg &arg, obcall::ObSwitchSchemaResult &result);
   int calc_column_checksum_request(const obcall::ObCalcColumnChecksumRequestArg &arg, obcall::ObCalcColumnChecksumRequestRes &res);
-  int build_split_tablet_data_start_request(const obcall::ObTabletSplitStartArg &arg, obcall::ObTabletSplitStartResult &res);
-  int build_split_tablet_data_finish_request(const obcall::ObTabletSplitFinishArg &arg, obcall::ObTabletSplitFinishResult &res);
-  int freeze_split_src_tablet(const obcall::ObFreezeSplitSrcTabletArg &arg, obcall::ObFreezeSplitSrcTabletRes &res, const int64_t abs_timeout_us);
-  int fetch_split_tablet_info(const obcall::ObFetchSplitTabletInfoArg &arg, obcall::ObFetchSplitTabletInfoRes &res, const int64_t abs_timeout_us);
   int build_ddl_single_replica_request(const obcall::ObDDLBuildSingleReplicaRequestArg &arg);
   int build_ddl_single_replica_request(const obcall::ObDDLBuildSingleReplicaRequestArg &arg, obcall::ObDDLBuildSingleReplicaRequestResult &res);
   int check_and_cancel_ddl_complement_data_dag(const obcall::ObDDLBuildSingleReplicaRequestArg &arg, bool &is_dag_exist);
@@ -129,8 +119,6 @@ public:
       const obcall::ObBroadcastConsensusVersionArg &arg,
       obcall::ObBroadcastConsensusVersionRes &result);
   ////////////////////////////////////////////////////////////////
-  int force_set_ls_as_single_replica(const obcall::ObForceSetLSAsSingleReplicaArg &arg);
-  int force_set_server_list(const obcall::ObForceSetServerListArg &arg, obcall::ObForceSetServerListResult &result);
   int estimate_partition_rows(const obcall::ObEstPartArg &arg,
                               obcall::ObEstPartRes &res) const;
   int estimate_tablet_block_count(const obcall::ObEstBlockArg &arg,
@@ -147,18 +135,6 @@ public:
       const obcall::ObCheckSchemaVersionElapsedArg &arg,
       obcall::ObCheckSchemaVersionElapsedResult &result);
   // ObCallGetChecksumCalSnapshotP
-
-  // ObCallCheckMemtableCntP
-  int check_memtable_cnt(
-      const obcall::ObCheckMemtableCntArg &arg,
-      obcall::ObCheckMemtableCntResult &result);
-  // ObCallCheckMediumCompactionInfoListP
-  int check_medium_compaction_info_list_cnt(
-      const obcall::ObCheckMediumCompactionInfoListArg &arg,
-      obcall::ObCheckMediumCompactionInfoListResult &result);
-  int prepare_tablet_split_task_ranges(
-      const obcall::ObPrepareSplitRangesArg &arg,
-      obcall::ObPrepareSplitRangesRes &result);
 
   int check_modify_time_elapsed(
       const obcall::ObCheckModifyTimeElapsedArg &arg,
@@ -185,9 +161,8 @@ public:
 
   ////////////////////////////////////////////////////////////////
   int load_leader_cluster_login_info();
-  // ObDropReplicaP @RS::admin to drop replica
+  // ObCallSetDebugSyncActionP @RS::admin to set debug sync action
   int set_ds_action(const obcall::ObDebugSyncActionArg &arg);
-  int report_replica(const obcall::ObReportSingleReplicaArg &arg);
   // ObSyncPartitionTableP @RS empty_server_checker
   int sync_partition_table(const obcall::Int64 &arg);
   // ObCallSetTPP @RS::admin to set tracepoint
@@ -209,8 +184,6 @@ public:
 
 private:
   int bootstrap();
-  int create_sys_ls();
-  int init_tenant_merge_info_();
   int inner_fill_tablet_info_(
       const ObTabletID &tablet_id,
       storage::ObLS *ls,
@@ -219,10 +192,9 @@ private:
       const bool need_checksum);
   int set_server_id_(const int64_t server_id);
 
-  int handle_tenant_freeze_req_(const obcall::ObMinorFreezeArg &arg);
-  int handle_ls_freeze_req_(const obcall::ObMinorFreezeArg &arg);
+  int handle_tenant_freeze_req_();
+  int handle_tablet_freeze_req_(const common::ObTabletID &tablet_id);
   int tenant_freeze_();
-  int handle_ls_freeze_req_(const share::ObLSID &ls_id, const common::ObTabletID &tablet_id);
 private:
   bool inited_;
   volatile bool stopped_;
@@ -233,7 +205,6 @@ private:
   const ObGlobalContext &gctx_;
   ObSchemaReleaseTimeTask schema_release_task_;
   TelemetryTask telemetry_task_;
-  share::schema::ObStandbySchemaRefreshTrigger standby_schema_refresh_trigger_;
   bool need_bootstrap_;
 };
 

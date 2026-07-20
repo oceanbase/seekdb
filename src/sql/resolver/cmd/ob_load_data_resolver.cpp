@@ -18,6 +18,7 @@
 #include "sql/resolver/cmd/ob_load_data_resolver.h"
 #include "src/sql/resolver/dml/ob_del_upd_resolver.h"
 #include "lib/json/ob_json_print_utils.h"
+#include "share/io/ob_backup_io_adapter.h"
 #include "sql/engine/cmd/ob_load_data_file_reader.h"
 #ifdef _WIN32
 #include <windows.h>
@@ -63,6 +64,7 @@ static void globfree(glob_t *result) {
 #include <glob.h>
 #endif
 #include "share/schema/ob_part_mgr_util.h"
+#include "share/catalog/ob_catalog_utils.h"
 
 namespace oceanbase
 {
@@ -181,6 +183,7 @@ int ObLoadDataResolver::resolve(const ParseNode &parse_tree)
     ObLoadArgument &load_args = load_stmt->get_load_arguments();
     uint64_t database_id = session_info_->get_database_id();
     
+    ObString catalog_name;
     ObString database_name;
     ObString table_name;
     const ObTableSchema *tschema = nullptr;
@@ -190,8 +193,12 @@ int ObLoadDataResolver::resolve(const ParseNode &parse_tree)
       SQL_RESV_LOG(WARN, "invalid parse tree", K(ret));
     } else if (OB_FAIL(resolve_table_relation_node(parse_tree.children_[ENUM_TABLE_NAME],
                                                    table_name,
-                                                   database_name))) {
-      SQL_RESV_LOG(WARN, "failed to resolve table name", K(table_name), K(database_name), K(ret));
+                                                   database_name,
+                                                   catalog_name))) {
+      SQL_RESV_LOG(WARN, "failed to resolve table name", K(table_name), K(database_name), K(catalog_name), K(ret));
+    } else if (!ObCatalogUtils::is_internal_catalog_name(catalog_name)) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "load data into external catalog is");
     } else if (OB_FAIL(schema_checker_->check_table_exists(database_name,
                                                            table_name,
                                                            false/*is_index_table*/,

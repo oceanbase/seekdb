@@ -51,7 +51,7 @@ private:
   bool is_paused_;
   // @epoch, is used to solve 'multi-freeze_service' may operate inner table concurrently.
   //
-  // Keep the database major-freeze service alive while switching roles; just
+  // For solving switching-role slowly, we keep the tenant major_freeze_service, just
   // mark it as 'paused' state, not destroy it.
   // It is not a perfect way cuz it may occur that 'new freeze_service' start to work
   // while the 'old freeze_service' is still working before changing to 'paused' state.

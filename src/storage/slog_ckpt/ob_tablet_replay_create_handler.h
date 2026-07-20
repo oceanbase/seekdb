@@ -32,7 +32,7 @@ class ObStartupAccelTaskHandler;
 }
 namespace share
 {
-class ObServerRuntimeState;
+class ObTenantBase;
 class SCN;
 }
 
@@ -82,6 +82,7 @@ public:
       type_(Type::MAX),
       replay_item_range_arr_(),
       tablet_cnt_(0),
+      tenant_base_(nullptr),
       handler_(nullptr) {}
 
   virtual ~ObTabletReplayCreateTask()
@@ -89,12 +90,12 @@ public:
     destroy();
   }
   int init(const int64_t task_idx, const ObTabletReplayCreateTask::Type type,
-      ObTabletReplayCreateHandler *handler);
+      share::ObTenantBase *tenant_base, ObTabletReplayCreateHandler *handler);
 
   int execute() override;
   int add_item_range(const ObTabletReplayItemRange &range, bool &is_enough);
 
-  VIRTUAL_TO_STRING_KV(K_(idx), K_(type), KP(this),
+  VIRTUAL_TO_STRING_KV(K_(idx), K_(type), KP(this), KP_(tenant_base),
       "range_count", replay_item_range_arr_.count(), K_(tablet_cnt));
 
 
@@ -109,6 +110,7 @@ private:
   Type type_;
   common::ObSEArray<ObTabletReplayItemRange, MAX_DISCRETE_TABLET_CNT_PER_TASK> replay_item_range_arr_;
   int64_t tablet_cnt_;
+  share::ObTenantBase *tenant_base_;
   ObTabletReplayCreateHandler *handler_;
 };
 

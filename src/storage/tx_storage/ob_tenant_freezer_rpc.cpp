@@ -69,30 +69,26 @@ static int do_tx_data_table_freeze_(const ObTenantFreezeArg &arg)
 
   LOG_INFO("start tx data table self freeze task in rpc handle thread", K(arg));
 
+  ObLS *ls = nullptr;
   ObTenantTxDataFreezeGuard tenant_freeze_guard;
   ObLSService *ls_srv = share::g_mp->ls_service();
   ObTenantFreezer *freezer = share::g_mp->tenant_freezer();
-  int ls_cnt = 0;
 
   if (OB_FAIL(tenant_freeze_guard.init(freezer))) {
-    LOG_WARN("[TenantFreezer] fail to get log stream iterator", K(ret));
+    LOG_WARN("[TenantFreezer] fail to init tenant freeze guard", K(ret));
   } else if (!tenant_freeze_guard.can_freeze()) {
     // skip tx data self freeze due to another freeze task is running
+  } else if (OB_ISNULL(ls_srv)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("[TenantFreezer] ls service is null", K(ret));
+  } else if (OB_FAIL(ls_srv->get_ls(ls))) {
+    LOG_WARN("[TenantFreezer] fail to get log stream", K(ret));
   } else {
-    auto freeze_tx_data_table = [&](ObLS &ls) -> int {
-      ++ls_cnt;
-      ObTxTableGuard tx_table_guard;
-      if (OB_FAIL(ls.get_tx_table_guard(tx_table_guard))) {
-        LOG_WARN("get tx table guard failed.", KR(ret), K(arg));
-      } else if (OB_FAIL(tx_table_guard.self_freeze_task())) {
-        LOG_WARN("freeze tx data table failed.", KR(ret), K(arg));
-      }
-      return ret;
-    };
-    if (OB_FAIL(ls_srv->foreach_ls(freeze_tx_data_table))) {
-      LOG_WARN("[TenantFreezer] fail to foreach log stream", K(ret));
-    } else if (0 == ls_cnt) {
-      LOG_WARN("[TenantFreezer] no logstream", K(ret), K(ls_cnt));
+    ObTxTableGuard tx_table_guard;
+    if (OB_FAIL(ls->get_tx_table_guard(tx_table_guard))) {
+      LOG_WARN("get tx table guard failed.", KR(ret), K(arg));
+    } else if (OB_FAIL(tx_table_guard.self_freeze_task())) {
+      LOG_WARN("freeze tx data table failed.", KR(ret), K(arg));
     }
   }
 
@@ -154,26 +150,21 @@ static int do_mds_table_freeze_(const ObTenantFreezeArg &arg)
   int ret = OB_SUCCESS;
   LOG_INFO("start mds table self freeze task in rpc handle thread", K(arg));
 
+  ObLS *ls = nullptr;
   ObLSService *ls_srv = share::g_mp->ls_service();
-  int ls_cnt = 0;
 
-  auto freeze_mds_table = [&](ObLS &ls) -> int {
-      ++ls_cnt;
-      if (OB_ISNULL(ls.get_tablet_svr())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ls is unexpected nullptr", KR(ret), K(arg));
-      } else {
-        int tmp_ret = OB_SUCCESS;
-        if (OB_TMP_FAIL(ls.flush_mds_table(INT64_MAX))) {
-          LOG_WARN("flush mds table failed", KR(tmp_ret), K(ls));
-        }
-      }
-      return ret;
-  };
-  if (OB_FAIL(ls_srv->foreach_ls(freeze_mds_table))) {
-    LOG_WARN("[TenantFreezer] fail to foreach log stream", K(ret));
-  } else if (0 == ls_cnt) {
-    LOG_WARN("[TenantFreezer] no logstream", K(ret), K(ls_cnt));
+  if (OB_ISNULL(ls_srv)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("[TenantFreezer] ls service is null", K(ret));
+  } else if (OB_FAIL(ls_srv->get_ls(ls))) {
+    LOG_WARN("[TenantFreezer] fail to get log stream", K(ret));
+  } else {
+    if (OB_ISNULL(ls->get_tablet_svr())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("tablet service is null", KR(ret), K(arg));
+    } else if (OB_FAIL(ls->flush_mds_table(INT64_MAX))) {
+      LOG_WARN("flush mds table failed", KR(ret), KPC(ls));
+    }
   }
 
   LOG_INFO("finish mds table self freeze task in rpc handle thread", KR(ret), K(arg));

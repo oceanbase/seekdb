@@ -28,7 +28,7 @@
 #include "share/schema/ob_schema_getter_guard.h"
 
 #include "observer/ob_inner_sql_connection_pool.h"
-#include "sql/executor/ob_worker_session_guard.h"
+#include "sql/executor/ob_executor_rpc_processor.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/ob_sql.h"
 
@@ -66,7 +66,7 @@ int ObDBMSSchedJobExecutor::init(
 int ObDBMSSchedJobExecutor::init_session(
   sql::ObSQLSessionInfo &session,
   ObSchemaGetterGuard &schema_guard,
-  const ObString &runtime_name,
+  const ObString &tenant_name,
   const ObString &database_name, uint64_t database_id,
   const ObUserInfo* user_info,
   ObDBMSSchedJobInfo &job_info)
@@ -75,16 +75,16 @@ int ObDBMSSchedJobExecutor::init_session(
   ObPrivSet db_priv_set = OB_PRIV_SET_EMPTY;
   ObArenaAllocator *allocator = NULL;
   const bool print_info_log = true;
-  const bool use_server_defaults = true;
+  const bool is_sys_tenant = true;
   ObPCMemPctConf pc_mem_conf;
   ObObj sql_mode;
   {
     sql_mode.set_uint(ObUInt64Type, DEFAULT_MYSQL_MODE);
   }
   OX (session.set_inner_session());
-  OZ (session.load_default_sys_variable(print_info_log, use_server_defaults));
+  OZ (session.load_default_sys_variable(print_info_log, is_sys_tenant));
   OZ (session.update_max_packet_size());
-  OZ (session.init_runtime(runtime_name.ptr()));
+  OZ (session.init_tenant(tenant_name.ptr()));
   OZ (session.load_all_sys_vars(schema_guard));
   OZ (session.update_sys_variable(share::SYS_VAR_SQL_MODE, sql_mode));
   OZ (session.set_default_database(database_name));
@@ -116,16 +116,17 @@ int ObDBMSSchedJobExecutor::init_env(ObDBMSSchedJobInfo &job_info, ObSQLSessionI
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
-  const ObServerRuntimeSchema *runtime_info = NULL;
+  const ObTenantSchema *tenant_info = NULL;
   const ObSysVariableSchema *sys_variable_schema = NULL;
   ObSEArray<const ObUserInfo *, 1> user_infos;
   const ObUserInfo* user_info = NULL;
   const ObDatabaseSchema *database_schema = NULL;
+  share::schema::ObUserLoginInfo login_info;
   ObExecEnv exec_env;
   CK (OB_NOT_NULL(schema_service_));
   CK (job_info.valid());
-  OZ (schema_service_->get_runtime_schema_guard(schema_guard));
-  OZ (schema_guard.get_server_runtime_info(runtime_info));
+  OZ (schema_service_->get_tenant_schema_guard(schema_guard));
+  OZ (schema_guard.get_tenant_info(tenant_info));
   OZ (schema_guard.get_database_schema( job_info.get_cowner(), database_schema));
   if (OB_SUCC(ret)) {
     if (job_info.get_user_id() != OB_INVALID_ID) {
@@ -151,12 +152,12 @@ int ObDBMSSchedJobExecutor::init_env(ObDBMSSchedJobInfo &job_info, ObSQLSessionI
       }
     }
     CK (OB_NOT_NULL(user_info));
-    CK (OB_NOT_NULL(runtime_info));
+    CK (OB_NOT_NULL(tenant_info));
     CK (OB_NOT_NULL(database_schema));
     OZ (exec_env.init(job_info.get_exec_env()));
     OZ (init_session(session,
                     schema_guard,
-                    runtime_info->get_runtime_name(),
+                    tenant_info->get_tenant_name(),
                     database_schema->get_database_name(),
                     database_schema->get_database_id(),
                     user_info,
@@ -229,9 +230,14 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
     LOG_WARN("failed to create session", KR(ret));
   } else {
     if (job_info.get_what().length() != 0) { // action
-      //mysql mode not support anonymous block
-      OZ (what.append_fmt("CALL %.*s;",
-          job_info.get_what().length(), job_info.get_what().ptr()));
+      if (job_info.is_mysql_event_job()) { //mysql event
+        OZ (what.append_fmt("%.*s",
+              job_info.get_what().length(), job_info.get_what().ptr()));          
+      } else {
+        //mysql mode not support anonymous block
+        OZ (what.append_fmt("CALL %.*s;",
+            job_info.get_what().length(), job_info.get_what().ptr()));
+      }
     } else { // program
       ObSqlString sql;
       ObString program_action;
@@ -336,7 +342,24 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
       if (OB_NOT_NULL(conn) && OB_NOT_NULL(session_info) && !is_extended_sys_user(session_info->get_user_id()) && !is_root_user(session_info->get_user_id())) {
         conn->set_check_priv(true);
       }
-      OZ (conn->execute_write(what.string().ptr(), affected_rows));
+      if (OB_SUCC(ret) && job_info.is_mysql_event_job()) {
+        ObArenaAllocator allocator("MYSQL_EVENT_TMP");
+        ObParser parser(allocator, session_info->get_sql_mode(), session_info->get_charsets4parser());
+        ObSEArray<ObString, 1> queries;
+        ObMPParseStat parse_stat;
+        if (OB_FAIL(parser.split_multiple_stmt(what.string().ptr(), queries, parse_stat))) {
+          LOG_WARN("failed to split multiple stmt", K(ret));
+        } else if (parse_stat.parse_fail_) {
+          ret = parse_stat.fail_ret_;
+          LOG_WARN("failed to split multiple stmt", K(ret));
+        } else {
+          for (int i = 0; i < queries.count() && OB_SUCC(ret); i++) {
+            OZ (conn->execute_write(queries[i].ptr(), affected_rows));
+          }
+        }
+      } else {
+        OZ (conn->execute_write(what.string().ptr(), affected_rows));
+      }
       if (OB_NOT_NULL(conn) && OB_NOT_NULL(session_info) && !is_extended_sys_user(session_info->get_user_id()) && !is_root_user(session_info->get_user_id())) {
         conn->set_check_priv(false);
       }

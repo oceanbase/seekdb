@@ -24,7 +24,6 @@
 #include "common/ob_tablet_id.h"
 #include "share/ob_errno.h"
 #include "lib/worker.h"
-#include "share/ob_ls_id.h"
 #include "cmath"
 #ifdef __linux__
 #include <features.h>
@@ -287,11 +286,6 @@ inline bool is_data_not_readable_err(int err)
 inline bool is_has_no_readable_replica_err(int err)
 {
   return OB_NO_READABLE_REPLICA == err;
-}
-
-inline bool is_partition_splitting(const int err)
-{
-  return OB_PARTITION_IS_SPLITTING == err;
 }
 
 inline bool is_id_not_ready_err(const int err)

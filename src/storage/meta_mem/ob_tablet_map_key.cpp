@@ -21,16 +21,13 @@ namespace oceanbase
 namespace storage
 {
 ObTabletMapKey::ObTabletMapKey()
-  : ls_id_(),
-    tablet_id_()
+  : tablet_id_()
 {
 }
 
 ObTabletMapKey::ObTabletMapKey(
-    const share::ObLSID &ls_id,
     const common::ObTabletID &tablet_id)
-  : ls_id_(ls_id),
-    tablet_id_(tablet_id)
+  : tablet_id_(tablet_id)
 {
 }
 
@@ -41,7 +38,6 @@ ObTabletMapKey::~ObTabletMapKey()
 
 void ObTabletMapKey::reset()
 {
-  ls_id_.reset();
   tablet_id_.reset();
 }
 
@@ -54,7 +50,6 @@ int ObTabletMapKey::hash(uint64_t &hash_val) const
 uint64_t ObTabletMapKey::hash() const
 {
   uint64_t hash_val = 0;
-  hash_val = common::murmurhash(&ls_id_, sizeof(ls_id_), hash_val);
   hash_val = common::murmurhash(&tablet_id_, sizeof(tablet_id_), hash_val);
   return hash_val;
 }

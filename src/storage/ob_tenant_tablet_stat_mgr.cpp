@@ -47,18 +47,14 @@ void ObTransNodeDMLStat::atomic_inc(const ObTransNodeDMLStat &other)
 
 /************************************* ObTabletStatKey *************************************/
 ObTabletStatKey::ObTabletStatKey(
-  const int64_t ls_id,
   const uint64_t tablet_id)
-  : ls_id_(ls_id),
-    tablet_id_(tablet_id)
+  : tablet_id_(tablet_id)
 {
 }
 
 ObTabletStatKey::ObTabletStatKey(
-  const share::ObLSID ls_id,
   const ObTabletID tablet_id)
-  : ls_id_(ls_id),
-    tablet_id_(tablet_id)
+  : tablet_id_(tablet_id)
 {
 }
 
@@ -68,15 +64,13 @@ ObTabletStatKey::~ObTabletStatKey()
 
 void ObTabletStatKey::reset()
 {
-  ls_id_.reset();
   tablet_id_.reset();
 }
 
 uint64_t ObTabletStatKey::hash() const
 {
   uint64_t hash_val = 0;
-  hash_val += ls_id_.hash();
-  hash_val += tablet_id_.hash();
+  hash_val = tablet_id_.hash();
   return hash_val;
 }
 
@@ -88,14 +82,14 @@ int ObTabletStatKey::hash(uint64_t &hash_val) const
 
 bool ObTabletStatKey::is_valid() const
 {
-  return ls_id_.is_valid() && tablet_id_.is_valid();
+  return tablet_id_.is_valid();
 }
 
 bool ObTabletStatKey::operator==(const ObTabletStatKey &other) const
 {
   bool bret = true;
   if (this == &other) {
-  } else if (ls_id_ != other.ls_id_ || tablet_id_ != other.tablet_id_) {
+  } else if (tablet_id_ != other.tablet_id_) {
     bret = false;
   }
   return bret;
@@ -106,7 +100,7 @@ bool ObTabletStatKey::operator==(const ObTabletStatKey &other) const
 /************************************* ObTabletStat *************************************/
 bool ObTabletStat::is_valid() const
 {
-  return ls_id_ > 0 && tablet_id_ > 0;
+  return tablet_id_ > 0;
 }
 
 bool ObTabletStat::check_need_report() const
@@ -149,7 +143,6 @@ ObTabletStat& ObTabletStat::operator=(const ObTabletStat &other)
 ObTabletStat& ObTabletStat::operator+=(const ObTabletStat &other)
 {
   if (other.is_valid()) {
-    ls_id_ = other.ls_id_;
     tablet_id_ = other.tablet_id_;
     query_cnt_ += other.query_cnt_;
     merge_cnt_ += other.merge_cnt_;
@@ -341,11 +334,10 @@ void ObTabletStream::clear_stat()
 void ObTabletStream::add_stat(const ObTabletStat &stat)
 {
   if (!key_.is_valid()) {
-    key_.ls_id_ = stat.ls_id_;
     key_.tablet_id_ = stat.tablet_id_;
   }
 
-  if (key_.ls_id_.id() == stat.ls_id_ && key_.tablet_id_.id() == stat.tablet_id_) {
+  if (key_.tablet_id_.id() == stat.tablet_id_) {
     curr_buckets_.add(stat);
     total_stat_ += stat;
   }
@@ -692,7 +684,6 @@ int ObTenantTabletStatMgr::report_stat(
 }
 
 int ObTenantTabletStatMgr::get_latest_tablet_stat(
-    const share::ObLSID &ls_id,
     const common::ObTabletID &tablet_id,
     ObTabletStat &tablet_stat,
     ObTabletStat &total_tablet_stat,
@@ -700,16 +691,15 @@ int ObTenantTabletStatMgr::get_latest_tablet_stat(
 {
   int ret = OB_SUCCESS;
   tablet_stat.reset();
-  tablet_stat.ls_id_ = ls_id.id();
   tablet_stat.tablet_id_ = tablet_id.id();
-  const ObTabletStatKey key(ls_id, tablet_id);
+  const ObTabletStatKey key(tablet_id);
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTenantTabletStatMgr not inited", K(ret));
   } else if (OB_UNLIKELY(!key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid arguments", K(ret), K(ls_id), K(tablet_id));
+    LOG_WARN("get invalid arguments", K(ret), K(tablet_id));
   } else {
     ObTabletStreamNode *stream_node = nullptr;
     ObBucketHashRLockGuard lock_guard(bucket_lock_, key.hash());
@@ -727,18 +717,17 @@ int ObTenantTabletStatMgr::get_latest_tablet_stat(
 }
 
 int ObTenantTabletStatMgr::clear_tablet_stat(
-    const share::ObLSID &ls_id,
     const common::ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
-  const ObTabletStatKey key(ls_id, tablet_id);
+  const ObTabletStatKey key(tablet_id);
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTenantTabletStatMgr not inited", K(ret));
   } else if (OB_UNLIKELY(!key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid arguments", K(ret), K(ls_id), K(tablet_id));
+    LOG_WARN("get invalid arguments", K(ret), K(tablet_id));
   } else {
     ObBucketHashWLockGuard lock_guard(bucket_lock_, key.hash());
     if (OB_FAIL(inner_clear_tablet_stat(key))) {
@@ -746,7 +735,7 @@ int ObTenantTabletStatMgr::clear_tablet_stat(
     }
   }
   if (OB_SUCC(ret)) {
-    FLOG_INFO("clear tablet stat", K(ret), K(ls_id), K(tablet_id));
+    FLOG_INFO("clear tablet stat", K(ret), K(tablet_id));
   }
   return ret;
 }
@@ -779,15 +768,14 @@ int ObTenantTabletStatMgr::get_all_tablet_stats(
 
 
 int ObTenantTabletStatMgr::get_tablet_analyzer(
-    const share::ObLSID &ls_id,
     const common::ObTabletID &tablet_id,
     ObTabletStatAnalyzer &analyzer)
 {
   int ret = OB_SUCCESS;
 
-  if (OB_FAIL(get_latest_tablet_stat(ls_id, tablet_id, analyzer.tablet_stat_, analyzer.total_tablet_stat_, analyzer.mode_))) {
+  if (OB_FAIL(get_latest_tablet_stat(tablet_id, analyzer.tablet_stat_, analyzer.total_tablet_stat_, analyzer.mode_))) {
     if (OB_HASH_NOT_EXIST != ret) {
-      LOG_WARN("failed to get latest tablet stat", K(ret), K(ls_id), K(tablet_id));
+      LOG_WARN("failed to get latest tablet stat", K(ret), K(tablet_id));
     }
   } else {
     const ObTableQueuingModeCfg &queuing_cfg = ObTableQueuingModeCfg::get_basic_config(analyzer.mode_);
@@ -815,7 +803,6 @@ int ObTenantTabletStatMgr::inner_clear_tablet_stat(const ObTabletStatKey &key)
 }
 
 int ObTenantTabletStatMgr::batch_clear_tablet_stat(
-    const share::ObLSID &ls_id,
     const ObIArray<ObTabletID> &tablet_ids)
 {
   int ret = OB_SUCCESS;
@@ -829,7 +816,6 @@ int ObTenantTabletStatMgr::batch_clear_tablet_stat(
     LOG_TRACE("tablet_ids empty, no need to clear");
   } else {
     ObTabletStatKey key;
-    key.ls_id_ = ls_id;
     ObBucketWLockAllGuard lock_guard(bucket_lock_);
     for (int64_t idx = 0; idx < tablet_cnt; idx++) {
       key.tablet_id_ = tablet_ids.at(idx);
@@ -843,7 +829,7 @@ int ObTenantTabletStatMgr::batch_clear_tablet_stat(
       }
     }
     if (OB_SUCC(ret)) {
-      FLOG_INFO("batch clear tablet stat in ls", K(ret), K(ls_id), K(tablet_cnt), K(clear_cnt));
+      FLOG_INFO("batch clear tablet stat", K(ret), K(tablet_cnt), K(clear_cnt));
     }
   }
   return ret;
@@ -853,7 +839,7 @@ int ObTenantTabletStatMgr::update_tablet_stream(const ObTabletStat &report_stat)
 {
   int ret = OB_SUCCESS;
   ObTabletStreamNode *stream_node = nullptr;
-  ObTabletStatKey key(report_stat.ls_id_, report_stat.tablet_id_);
+  ObTabletStatKey key(report_stat.tablet_id_);
   {
     ObBucketHashRLockGuard lock_guard(bucket_lock_, key.hash());
     ret = stream_map_.get_refactored(key, stream_node);
@@ -1062,18 +1048,17 @@ void ObTenantTabletStatMgr::refresh_queuing_mode()
 }
 
 int ObTenantTabletStatMgr::get_queuing_cfg(
-    const share::ObLSID &ls_id,
     const common::ObTabletID &tablet_id,
     ObTableQueuingModeCfg& queuing_cfg) 
 {
   int ret = OB_SUCCESS;
-  const ObTabletStatKey key(ls_id, tablet_id);
+  const ObTabletStatKey key(tablet_id);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTenantTabletStatMgr not inited", K(ret));
   } else if (OB_UNLIKELY(!key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid arguments", K(ret), K(ls_id), K(tablet_id));
+    LOG_WARN("get invalid arguments", K(ret), K(tablet_id));
   } else {
     ObTabletStreamNode *stream_node = nullptr;
     ObBucketHashRLockGuard lock_guard(bucket_lock_, key.hash());
@@ -1085,7 +1070,7 @@ int ObTenantTabletStatMgr::get_queuing_cfg(
       }
     } else {
       queuing_cfg = ObTableQueuingModeCfg::get_basic_config(stream_node->mode_);
-      LOG_DEBUG("success get queuing cfg", K(ret), K(ls_id), K(tablet_id), K(queuing_cfg));
+      LOG_DEBUG("success get queuing cfg", K(ret), K(tablet_id), K(queuing_cfg));
     }
   }
   return ret;

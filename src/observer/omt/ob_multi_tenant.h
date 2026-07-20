@@ -146,9 +146,6 @@ public:
   // Bring the single sys tenant fully up at boot: flip hidden->real + first
   // GCONF apply + mark synced. Called once from ObServer::try_update_hidden_sys().
   int bring_up_sys_tenant();
-  // One periodic GCONF-refresh pass on the single sys tenant; used by the OMT
-  // timer (runTimerTask) and the embed boot path.
-  int refresh_sys_tenant();
   int get_server_allocated_resource(ServerResource &server_resource);
 
 protected:

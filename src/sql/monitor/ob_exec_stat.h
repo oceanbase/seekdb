@@ -274,7 +274,7 @@ struct ObAuditRecordData {
     ps_stmt_id_ = OB_INVALID_STMT_ID;
     ps_inner_stmt_id_ = OB_INVALID_STMT_ID;
     trans_id_ = 0;
-    request_type_ = 0;
+    request_type_ = EXECUTE_INVALID;
     is_batched_multi_stmt_ = false;
     plan_hash_ = 0;
     trx_lock_for_read_elapse_ = 0;
@@ -283,6 +283,8 @@ struct ObAuditRecordData {
     pl_trace_id_.reset();
     stmt_type_ = sql::stmt::T_NONE;
     sql_memory_used_ = nullptr;
+    ccl_rule_id_ = 0;
+    ccl_match_time_ = 0;
   }
 
   int64_t get_elapsed_time() const
@@ -312,7 +314,7 @@ struct ObAuditRecordData {
 
   int64_t get_extra_size() const
   {
-    return sql_len_ + user_name_len_ + db_name_len_;
+    return sql_len_ + tenant_name_len_ + user_name_len_ + db_name_len_;
   }
 
   share::SCN get_snapshot_version() const
@@ -340,6 +342,8 @@ struct ObAuditRecordData {
   common::ObAddr user_client_addr_;
   
   
+  char *tenant_name_;
+  int64_t tenant_name_len_;
   int64_t user_id_;
   char *user_name_;
   int64_t user_name_len_;
@@ -385,8 +389,6 @@ struct ObAuditRecordData {
     char const* source_;   // snapshot's acquire source
   } snapshot_; // stmt's tx snapshot
   int64_t seq_num_; // sequence num, for sequencing stmts in transaction
-  uint64_t txn_free_route_flag_; // flag contains txn free route meta
-  uint64_t txn_free_route_version_; // the version of txn's state
   bool is_perf_event_closed_;
   char flt_trace_id_[OB_MAX_UUID_STR_LENGTH + 1];
   char snapshot_source_[OB_MAX_SNAPSHOT_SOURCE_LENGTH + 1];
@@ -399,6 +401,8 @@ struct ObAuditRecordData {
   int64_t *sql_memory_used_;
   int64_t plsql_compile_time_;
   int64_t insert_update_or_replace_duplicate_row_count_;
+  int64_t ccl_rule_id_;
+  int64_t ccl_match_time_;
 };
 
 } //namespace sql

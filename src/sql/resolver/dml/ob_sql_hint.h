@@ -77,7 +77,8 @@ struct ObQueryHint {
 
   int set_outline_data_hints(const ObGlobalHint &global_hint,
                              const int64_t stmt_id,
-                             const ObIArray<ObHint*> &hints);
+                             const ObIArray<ObHint*> &hints,
+                             const bool is_user_defined);
   static int get_qb_name_source_hash_value(const ObString &src_qb_name,
                                            const ObIArray<uint32_t> &src_hash_val,
                                            uint32_t &hash_val);
@@ -385,7 +386,6 @@ struct LogLeadingHint
                                    ObIArray<LeadingInfo> &leading_infos,
                                    TableItem *table,
                                    ObRelIds &table_set);
-  int try_init_leading_info_for_major_refresh_real_time_mview(const ObDMLStmt &stmt);
 
   TO_STRING_KV(K_(leading_tables),
                K_(leading_infos),
@@ -505,14 +505,13 @@ struct ObLogPlanHint
 
   TO_STRING_KV(K_(is_outline_data), K_(join_order),
                K_(table_hints), K_(join_hints),
-               K_(normal_hints), K_(optimizer_features_enable_version));
+               K_(normal_hints));
 
   bool is_outline_data_;
   LogLeadingHint join_order_;
   common::ObSEArray<LogTableHint, 4, common::ModulePageAllocator, true> table_hints_;
   common::ObSEArray<LogJoinHint, 8, common::ModulePageAllocator, true> join_hints_;
   common::ObSEArray<const ObHint*, 8, common::ModulePageAllocator, true> normal_hints_;
-  uint64_t optimizer_features_enable_version_;
 };
 
 }

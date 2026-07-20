@@ -30,14 +30,12 @@
 #include "logservice/ob_log_base_header.h"
 #include "share/scn.h"
 #include "share/ob_cluster_version.h"
-#include "share/ob_ls_id.h"
 #include "share/allocator/ob_reserve_arena.h"
 #include "sql/ob_sql_define.h"
 #include "sql/resolver/ob_stmt_type.h"
 #include "storage/tx/ob_committer_define.h"
 #include "storage/tx/ob_trans_result.h"
 #include "storage/tx/ob_xa_define.h"
-#include "storage/tx/ob_direct_load_tx_ctx_define.h"
 #include "storage/tx/ob_multi_data_source_tx_buffer_node.h"
 #include "storage/tx/ob_tx_on_demand_print.h"
 #include "storage/tx/ob_tx_seq.h"
@@ -90,7 +88,7 @@ namespace transaction
 {
 class ObLSTxCtxMgr;
 class ObTransCtx;
-class ObPartTransCtx;
+class ObTxCtx;
 class ObMemtableKeyInfo;
 class AggreLogTask;
 class ObXACtx;
@@ -99,27 +97,6 @@ class ObTxMultiDataSourceLog;
 enum class NotifyType : int64_t;
 typedef palf::LSN LogOffSet;
 enum { MAX_CALLBACK_LIST_COUNT = 64 };
-class ObTransErrsim
-{
-public:
-  static inline bool is_memory_errsim()
-  {
-    bool ret = false;
-#ifdef TRANS_MODULE_TEST
-    int per = GCONF.module_test_trx_memory_errsim_percentage;
-    if (OB_LIKELY(0 == per)) {
-      ret = false;
-    } else {
-      int rand = common::ObRandom::rand(0, 100);
-      if (rand < per) {
-        ret = true;
-      }
-    }
-#endif
-    return ret;
-  }
-};
-
 class ObReserveAllocator : public ObIAllocator
 {
 public:
@@ -182,23 +159,11 @@ public:
   virtual ~TransModulePageAllocator() {}
   void *alloc(const int64_t sz)
   {
-    void *ret = NULL;
-    if (OB_UNLIKELY(ObTransErrsim::is_memory_errsim())) {
-      ret = NULL;
-    } else {
-      ret = inner_alloc_(sz, attr_);
-    }
-    return ret;
+    return inner_alloc_(sz, attr_);
   }
   void *alloc(const int64_t sz, const ObMemAttr &attr)
   {
-    void *ret = NULL;
-    if (OB_UNLIKELY(ObTransErrsim::is_memory_errsim())) {
-      ret = NULL;
-    } else {
-      ret = inner_alloc_(sz, attr);
-    }
-    return ret;
+    return inner_alloc_(sz, attr);
   }
   void free(void *ptr)
   {
@@ -255,81 +220,8 @@ struct ObLockForReadArg
   ObTxSEQ data_sql_sequence_;
   bool read_latest_;
   bool read_uncommitted_;
-  // Compare with the source SCN: sstable is end_scn, and memtable is ObMvccTransNode scn.
+  // SCN used for visibility checks; sstable uses end_scn, memtable uses ObMvccTransNode scn.
   share::SCN scn_;
-};
-
-class ObTransKey final
-{
-public:
-  ObTransKey() { /*reset();*/ }
-  ObTransKey(const ObTransKey &other)
-  {
-    ls_id_ = other.ls_id_;
-    trans_id_ = other.trans_id_;
-    hash_val_ = other.hash_val_;
-  }
-  explicit ObTransKey(const share::ObLSID &ls_id, const ObTransID &trans_id)
-      : ls_id_(ls_id), trans_id_(trans_id), hash_val_(0) { calc_hash_(); }
-public:
-  bool is_valid() const { return ls_id_.is_valid() && trans_id_.is_valid(); }
-  ObTransKey &operator=(const ObTransKey &other)
-  {
-    ls_id_ = other.ls_id_;
-    trans_id_ = other.trans_id_;
-    hash_val_ = other.hash_val_;
-    return *this;
-  }
-  bool operator==(const ObTransKey &other) const
-  { return hash_val_ == other.hash_val_ && ls_id_ == other.ls_id_ &&  trans_id_ == other.trans_id_; }
-  bool operator!=(const ObTransKey &other) const
-  { return hash_val_ != other.hash_val_ || ls_id_ != other.ls_id_ || trans_id_ != other.trans_id_; }
-  OB_INLINE uint64_t hash() const { return hash_val_; }
-  int compare(const ObTransKey& other) const
-  {
-    int compare_ret = 0;
-    compare_ret = ls_id_.compare(other.ls_id_);
-    if (0 == compare_ret) {
-      compare_ret = trans_id_.compare(other.trans_id_);
-    }
-    return compare_ret;
-  }
-  int compare_trans_table(const ObTransKey& other) const
-  {
-    int compare_ret = 0;
-    if (hash_val_ == other.hash_val_) {
-      compare_ret = trans_id_.compare(other.trans_id_);
-    } else if (hash_val_ > other.hash_val_) {
-      compare_ret = 1;
-    } else {
-      compare_ret = -1;
-    }
-    return compare_ret;
-  }
-  void reset()
-  {
-    ls_id_.reset();
-    trans_id_.reset();
-    hash_val_ = 0;
-  }
-  const share::ObLSID &get_ls_id() const { return ls_id_; }
-  const ObTransID get_trans_id() const { return trans_id_; }
-  DECLARE_TO_STRING_AND_YSON;
-private:
-  OB_INLINE uint64_t calc_hash_()
-  {
-    uint64_t hash_val = 0;
-    uint64_t trans_id_hash_val = 0;
-    uint64_t ls_val = 0;
-    trans_id_hash_val = trans_id_.hash();
-    ls_val = ls_id_.hash();
-    hash_val = common::murmurhash(&trans_id_hash_val, sizeof(trans_id_hash_val), ls_val);
-    return hash_val_ = hash_val;
-  }
-private:
-  share::ObLSID ls_id_;
-  ObTransID trans_id_;
-  uint64_t hash_val_;
 };
 
 class ObTransAccessMode
@@ -385,30 +277,6 @@ public:
   ~ObTransSnapshotGeneType() {}
 };
 
-enum TransType : int32_t
-{
-  UNKNOWN_TRANS = -1,
-  SP_TRANS = 0,
-  DIST_TRANS = 2
-};
-
-
-// class TransType
-// {
-// public:
-//   static const int32_t UNKNOWN = -1;
-//   static const int32_t SP_TRANS = 0;
-//   static const int32_t MINI_SP_TRANS = 1;
-//   static const int32_t DIST_TRANS = 2;
-//   static const int32_t EMPTY_TRANS = 3;
-// public:
-//   static bool is_valid(const int32_t type)
-//   { return SP_TRANS == type || MINI_SP_TRANS == type || DIST_TRANS == type || EMPTY_TRANS == type; }
-// private:
-//   TransType() {}
-//   ~TransType() {}
-// };
-//
 class ObTransType
 {
 public:
@@ -424,12 +292,6 @@ public:
 private:
   ObTransType() {}
   ~ObTransType() {}
-};
-
-enum class ObGlobalTxType : uint8_t
-{
-  PLAIN = 0,
-  XA_TRANS = 1,
 };
 
 /*
@@ -905,21 +767,17 @@ private:
   ~ObRunningState() {}
 };
 
-// sub state is volatile state of tx ctx
-class ObTxSubState
+// runtime state is volatile state of tx ctx
+class ObTxRuntimeState
 {
 public:
-  ObTxSubState() : flag_() {}
-  ~ObTxSubState() {}
+  ObTxRuntimeState() : flag_() {}
+  ~ObTxRuntimeState() {}
   void reset() { flag_.reset(); }
 
   bool is_info_log_submitted() const { return flag_.info_log_submitted_; }
   void set_info_log_submitted() { flag_.info_log_submitted_ = 1; }
   void clear_info_log_submitted() { flag_.info_log_submitted_ = 0; }
-
-  bool is_gts_waiting() const { return flag_.gts_waiting_; }
-  void set_gts_waiting() { flag_.gts_waiting_ = 1; }
-  void clear_gts_waiting() { flag_.gts_waiting_ = 0; }
 
   bool is_state_log_submitting() const { return flag_.state_log_submitting_; }
   void set_state_log_submitting() { flag_.state_log_submitting_ = 1; }
@@ -929,78 +787,53 @@ public:
   void set_state_log_submitted() { flag_.state_log_submitted_ = 1; }
   void clear_state_log_submitted() { flag_.state_log_submitted_ = 0; }
 
-  bool is_prepare_notified() const { return flag_.prepare_notify_; }
-  void set_prepare_notified() { flag_.prepare_notify_ = 1; }
-  void clear_prepare_notified() { flag_.prepare_notify_ = 0; }
-
   bool is_force_abort() const { return flag_.force_abort_; }
   void set_force_abort() { flag_.force_abort_ = 1; }
   void clear_force_abort() { flag_.force_abort_ = 0; }
 
+  bool is_gts_waiting() const { return flag_.gts_waiting_; }
+  void set_gts_waiting() { flag_.gts_waiting_ = 1; }
+  void clear_gts_waiting() { flag_.gts_waiting_ = 0; }
+
   DECLARE_ON_DEMAND_TO_STRING
   TO_STRING_KV("info_log_submitted",
                flag_.info_log_submitted_,
-               "gts_waiting",
-               flag_.gts_waiting_,
                "state_log_submitting",
                flag_.state_log_submitting_,
                "state_log_submitted",
                flag_.state_log_submitted_,
-               // "prepare_notify",
-               // flag_.prepare_notify_,
                "force_abort",
-               flag_.force_abort_);
+               flag_.force_abort_,
+               "gts_waiting",
+               flag_.gts_waiting_);
 
   bool is_valid() const { return flag_.is_valid(); }
 private:
   struct BitFlag
   {
     unsigned int info_log_submitted_ : 1;
-    unsigned int gts_waiting_ : 1;
     unsigned int state_log_submitting_ : 1;
     unsigned int state_log_submitted_ : 1;
-    unsigned int prepare_notify_ : 1;
     unsigned int force_abort_ : 1;
+    unsigned int gts_waiting_ : 1;
 
     void reset()
     {
       info_log_submitted_ = 0;
-      gts_waiting_ = 0;
       state_log_submitting_ = 0;
       state_log_submitted_ = 0;
-      prepare_notify_ = 0;
       force_abort_ = 0;
+      gts_waiting_ = 0;
     }
 
     bool is_valid() const
     {
-      return info_log_submitted_ > 0 || gts_waiting_ > 0 || state_log_submitted_ > 0
-          || state_log_submitting_ > 0 || prepare_notify_ > 0 || force_abort_ > 0;
+      return info_log_submitted_ > 0 || state_log_submitted_ > 0
+          || state_log_submitting_ > 0 || force_abort_ > 0 || gts_waiting_ > 0;
     }
 
     BitFlag() { reset(); }
   } flag_;
-};
-
-class Ob2PCPrepareState
-{
-public:
-  static const int64_t UNKNOWN = -1;
-  static const int64_t INIT = 0;
-  static const int64_t REDO_PREPARING = 11;
-  static const int64_t REDO_PREPARED = 12;
-  static const int64_t VERSION_PREPARING = 13;
-  static const int64_t VERSION_PREPARED = 14;
-public:
-  static bool is_valid(const int64_t state)
-  { return state >= INIT && state <= VERSION_PREPARED; }
-  static bool in_state(const int64_t state)
-  { return state >= REDO_PREPARING && state <= VERSION_PREPARED; }
-  static bool is_redo_prepared(const int64_t state)
-  { return state >= REDO_PREPARED; }
-private:
-  Ob2PCPrepareState() {}
-  ~Ob2PCPrepareState() {}
 };
 
 class ObTransSubmitLogState
@@ -1022,29 +855,12 @@ public:
   static const int64_t UNKNOWN = -1;
   static const int64_t END_TRANS_CB_TASK = 0;
   static const int64_t ADVANCE_LS_CKPT_TASK = 1;
-  static const int64_t STANDBY_CLEANUP_TASK = 2;
-  static const int64_t DUP_TABLE_TX_REDO_SYNC_RETRY_TASK = 3;
-  static const int64_t MAX = 4;
+  static const int64_t DUP_TABLE_TX_REDO_SYNC_RETRY_TASK = 2;
+  static const int64_t MAX = 3;
 public:
   static bool is_valid(const int64_t task_type)
   { return task_type > UNKNOWN && task_type < MAX; }
 };
-
-class ObTransCtxType
-{
-public:
-  static const int64_t UNKNOWN = -1;
-  static const int64_t SCHEDULER = 0;
-  static const int64_t COORDINATOR = 1;
-  static const int64_t PARTICIPANT = 2;
-  static const int64_t SLAVE_PARTICIPANT = 3;
-public:
-  static bool is_valid(const int64_t type)
-  { return SCHEDULER == type || COORDINATOR == type || PARTICIPANT == type
-          || SLAVE_PARTICIPANT == type; }
-};
-
-typedef common::ObSArray<int64_t> ObLeaderEpochArray;
 
 class ObMemtableKeyInfo
 {
@@ -1135,17 +951,6 @@ protected:
   int64_t retry_interval_us_;
   int64_t next_handle_ts_;
   int64_t task_type_;
-};
-
-class ObBatchCommitState
-{
-public:
-  static const int INVALID = -1;
-  static const int INIT = 0;
-  static const int ALLOC_LOG_ID_TS = 1;
-  static const int GENERATE_PREPARE_LOG = 2;
-  static const int GENERATE_REDO_PREPARE_LOG = 3;
-  static const int BATCH_COMMITTED = 4;
 };
 
 enum ObPartitionAuditOperator
@@ -1280,22 +1085,6 @@ public:
   void destroy() { reset(); }
 };
 
-// CHANGING_LEADER_STATE state machine
-//
-// Original state when no leader switch is on going:                  NO_CHANGING_LEADER
-// If stmt info is not matched during preparing change leader:        NO_CHANGING_LEADER -> STATEMENT_NOT_FINISH
-// - If stmt info matches before leader switch and submit log:        STATEMENT_NOT_FINISH -> NO_CHANGING_LEADER
-//   - if exists a on-the-fly log during submit STATE log:            STATEMENT_NOT_FINISH -> LOGGING_NOT_FINISH
-// If there exists a on-the-fly log during submit STATE log:          NO_CHANGING_LEADER -> LOGGING_NOT_FINISH
-// - If the prev log is synced before leader switch and submit log:   LOGGING_NOT_FINISH -> NO_CHANGING_LEADER
-// If the leader revokes:                                             STATEMENT_NOT_FINISH/LOGGING_NOT_FINISH -> NO_CHANGING_LEADER
-enum CHANGING_LEADER_STATE
-{
-  NO_CHANGING_LEADER = 0,
-  STATEMENT_NOT_FINISH = 1,
-  LOGGING_NOT_FINISH = 2
-};
-
 class ObAddrLogId
 {
 public:
@@ -1370,121 +1159,9 @@ public:
   ObTxSEQ undo_to_;   // exclusive
 };
 
-class ObLSLogInfo final
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObLSLogInfo() : id_(), offset_() {}
-  ObLSLogInfo(const share::ObLSID &id, const palf::LSN &offset) : id_(id), offset_(offset) {}
-  const share::ObLSID &get_ls_id() const { return id_; }
-  const palf::LSN &get_lsn() const { return offset_; }
-  bool is_valid() const
-  {
-    return id_.is_valid() && offset_.is_valid();
-  }
-
-  bool operator==(const ObLSLogInfo &log_info) const
-  {
-    return id_ == log_info.id_ && offset_ == log_info.offset_;
-  }
-
-  TO_STRING_KV(K(id_), K(offset_))
-private:
-  share::ObLSID id_;
-  palf::LSN offset_;
-};
-
-struct ObTxExecPart
-{
-  OB_UNIS_VERSION(2);
-public:
-  ObTxExecPart() : ls_id_(),
-                     exec_epoch_(-1) {}
-  ObTxExecPart(share::ObLSID ls_id, int64_t epoch)
-                   : ls_id_(ls_id),
-                     exec_epoch_(epoch) {}
-  inline bool operator==(const ObTxExecPart &other) const {
-    return other.ls_id_ == ls_id_ &&
-           other.exec_epoch_ == exec_epoch_;
-  }
-  bool is_valid() const {
-    return    ls_id_.is_valid()
-           && exec_epoch_ > 0;
-  }
-  share::ObLSID ls_id_;
-  int64_t exec_epoch_;
-
-  TO_STRING_KV(K_(ls_id), K_(exec_epoch));
-};
-
-struct ObStandbyCheckInfo
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObStandbyCheckInfo() :
-      check_info_ori_ls_id_(-1),
-      check_part_()
-  {}
-  ~ObStandbyCheckInfo() {}
-  bool operator==(const ObStandbyCheckInfo &other) const {
-    bool bool_ret =    check_info_ori_ls_id_ == other.check_info_ori_ls_id_
-                    && check_part_ == other.check_part_;
-    return bool_ret;
-  }
-  void operator=(const ObStandbyCheckInfo &other) {
-    check_info_ori_ls_id_ = other.check_info_ori_ls_id_;
-    check_part_ = other.check_part_;
-  }
-  bool is_valid() const { return check_info_ori_ls_id_.is_valid()
-                                 && check_part_.is_valid(); }
-  share::ObLSID check_info_ori_ls_id_; // those carrry check info origin ls id
-  ObTxExecPart check_part_;
-  TO_STRING_KV(K_(check_info_ori_ls_id), K_(check_part));
-};
-
-class ObStateInfo
-{
-public:
-  ObStateInfo() : state_(ObTxState::UNKNOWN), version_(), snapshot_version_(), check_info_() {}
-  ObStateInfo(const share::ObLSID &ls_id,
-              const ObTxState &state,
-              const share::SCN &version,
-              const share::SCN &snapshot_version) :
-              ls_id_(ls_id), state_(state)
-  {
-    version_ = version;
-    snapshot_version_ = snapshot_version;
-  }
-  ~ObStateInfo() {}
-  bool is_valid() const
-  {
-    return ls_id_.is_valid() && version_.is_valid() && snapshot_version_.is_valid();  }
-  void operator=(const ObStateInfo &state_info)
-  {
-    ls_id_ = state_info.ls_id_;
-    state_ = state_info.state_;
-    version_ = state_info.version_;
-    snapshot_version_ = state_info.snapshot_version_;
-    check_info_ = state_info.check_info_;
-  }
-
-  bool need_update(const ObStateInfo &state_info);
-  TO_STRING_KV(K_(ls_id), K_(state), K_(version), K_(snapshot_version), K_(check_info))
-  OB_UNIS_VERSION(1);
-public:
-  share::ObLSID ls_id_;
-  ObTxState state_;
-  share::SCN version_;
-  share::SCN snapshot_version_;
-// for epoch check
-  ObStandbyCheckInfo check_info_;
-};
-
 typedef common::ObSEArray<ObElrTransInfo, 1, TransModulePageAllocator> ObElrTransInfoArray;
 typedef common::ObSEArray<int64_t, 10, TransModulePageAllocator> ObRedoLogIdArray;
 typedef common::ObSEArray<palf::LSN, 10, ModulePageAllocator> ObRedoLSNArray;
-typedef common::ObSEArray<ObLSLogInfo, 10, ModulePageAllocator> ObLSLogInfoArray;
-typedef common::ObSEArray<ObStateInfo, 1, TransModulePageAllocator> ObStateInfoArray;
 
 struct CtxInfo final
 {
@@ -1510,48 +1187,14 @@ static const int64_t MAX_ELR_TRANS_INTERVAL = 400 * 1000;
 #endif
 
 // max scheudler context in single server
-static const int64_t MAX_PART_CTX_COUNT = 700 * 1000;
+static const int64_t MAX_TX_CTX_COUNT = 700 * 1000;
 
 static const int DUP_TABLE_LEASE_LIST_MAX_COUNT = 8;
 #define TRANS_AGGRE_LOG_TIMESTAMP OB_INVALID_TIMESTAMP
 
 
 
-typedef common::ObSEArray<ObTxExecPart, share::OB_DEFAULT_LS_COUNT> ObTxCommitParts;
-typedef common::ObSEArray<ObTxExecPart, share::OB_DEFAULT_LS_COUNT> ObTxRollbackParts;
-
-#define CONVERT_COMMIT_PARTS_TO_PARTS(commit_parts, parts)                   \
-  for (int64_t idx = 0; OB_SUCC(ret) && idx < commit_parts.count(); idx++) { \
-    if (OB_FAIL(parts.push_back(commit_parts.at(idx).ls_id_))) {             \
-      TRANS_LOG(WARN, "parts push failed", K(ret));                          \
-    }                                                                        \
-  }                                                                          \
-  if (OB_FAIL(ret)) {                                                        \
-    parts.reset();                                                           \
-  }
-#define CONVERT_PARTS_TO_COMMIT_PARTS(parts, commit_parts)                      \
-  for (int64_t idx = 0; OB_SUCC(ret) && idx < parts.count(); idx++) {           \
-    if (OB_FAIL(commit_parts.push_back(ObTxExecPart(parts.at(idx), -1)))) {     \
-      TRANS_LOG(WARN, "parts push failed", K(ret));                             \
-    }                                                                           \
-  }                                                                             \
-  if (OB_FAIL(ret)) {                                                           \
-    commit_parts.reset();                                                       \
-  }
-
-class ObEndParticipantsRes
-{
-public:
-  void reset()
-  {
-    blocked_trans_ids_.reset();
-  }
-  TO_STRING_KV(K_(blocked_trans_ids));
-private:
-  ObBlockedTransArray blocked_trans_ids_;
-};
-
-enum class PartCtxSource
+enum class TxCtxSource
 {
   UNKNOWN = 0,
   MVCC_WRITE = 1,
@@ -1560,16 +1203,16 @@ enum class PartCtxSource
   RECOVER = 4,
 };
 
-static const char * to_str_ctx_source(const PartCtxSource & ctx_src)
+static const char * to_str_ctx_source(const TxCtxSource & ctx_src)
 {
   const char * str = "INVALID";
   switch(ctx_src)
   {
-    TRX_ENUM_CASE_TO_STR(PartCtxSource, UNKNOWN);
-    TRX_ENUM_CASE_TO_STR(PartCtxSource, MVCC_WRITE);
-    TRX_ENUM_CASE_TO_STR(PartCtxSource, REGISTER_MDS);
-    TRX_ENUM_CASE_TO_STR(PartCtxSource, REPLAY);
-    TRX_ENUM_CASE_TO_STR(PartCtxSource, RECOVER);
+    TRX_ENUM_CASE_TO_STR(TxCtxSource, UNKNOWN);
+    TRX_ENUM_CASE_TO_STR(TxCtxSource, MVCC_WRITE);
+    TRX_ENUM_CASE_TO_STR(TxCtxSource, REGISTER_MDS);
+    TRX_ENUM_CASE_TO_STR(TxCtxSource, REPLAY);
+    TRX_ENUM_CASE_TO_STR(TxCtxSource, RECOVER);
   }
   return str;
 }
@@ -1586,36 +1229,16 @@ class ObTxMDSCache;
 
 static const int64_t MAX_TABLET_MODIFY_RECORD_COUNT = 16;
 // exec info need to be persisted by "trans context table"
-template<typename T>
-struct ObIArrayPrintTrait {
-  const ObIArray<T> &arr_;
-  ObIArrayPrintTrait(const ObIArray<T> &arr): arr_(arr) {}
-  DECLARE_TO_STRING
-  {
-    int64_t pos = 0;
-    J_ARRAY_START();
-    for(int i =0; i < arr_.count(); i++) {
-      BUF_PRINTO(arr_.at(i));
-      if (i != arr_.count() - 1) { J_COMMA(); }
-    }
-    J_ARRAY_END();
-    return pos;
-  }
-};
 struct ObTxExecInfo
 {
   OB_UNIS_VERSION(2);
 public:
   ObTxExecInfo() {}
   explicit ObTxExecInfo(TransModulePageAllocator &allocator)
-    : participants_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "PARTICIPANT")),
-      incremental_participants_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "INC_PART`")),
-      intermediate_participants_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "INTER_PART`")),
-      redo_lsns_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "REDO_LSNS")),
+    : redo_lsns_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "REDO_LSNS")),
       multi_data_source_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "MDS_ARRAY")),
       checksum_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "TX_CHECKSUM")),
-      checksum_scn_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "TX_CHECKSUM")),
-      prepare_log_info_arr_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "PREPARE_INFO"))
+      checksum_scn_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "TX_CHECKSUM"))
   {
     checksum_.push_back(0);
     checksum_scn_.push_back(share::SCN());
@@ -1628,11 +1251,11 @@ public:
   // can not destroy in tx_ctx_table
   void destroy(ObTxMDSCache &mds_cache);
   int assign(const ObTxExecInfo &exec_info);
+  bool has_write_state() const { return has_write_state_; }
+  void mark_write_state() { has_write_state_ = true; }
 
 private:
   ObTxExecInfo &operator=(const ObTxExecInfo &info);
-  int assign_commit_parts(const share::ObLSArray &participants,
-                          const ObTxCommitParts &commit_parts);
 
 public:
   DECLARE_ON_DEMAND_TO_STRING
@@ -1642,17 +1265,12 @@ public:
 //    const_cast<ObIArray<share::SCN>>(checksum_scn_).set_max_print_count(512);
     int64_t pos = 0;
     J_KV(K_(state),
-               K_(upstream),
-               K_(participants),
-               K_(incremental_participants),
-               K_(intermediate_participants),
+               K_(has_write_state),
                K_(prev_record_lsn),
                K_(redo_lsns),
                "redo_log_no", redo_lsns_.count(),
                K_(multi_data_source),
-               K_(scheduler),
                K_(prepare_version),
-               K_(trans_type),
                K_(next_log_entry_no),
                K_(max_applied_log_ts),
                K_(max_applying_log_ts),
@@ -1664,57 +1282,38 @@ public:
                K_(data_complete),
                K_(is_dup_tx),
                //K_(touched_pkeys),
-               K_(prepare_log_info_arr),
                K_(xid),
                K_(need_checksum),
-               K_(is_sub2pc),
-               K_(commit_parts),
-               K_(exec_epoch),
                K_(serial_final_scn),
-               K_(serial_final_seq_no),
-               K(dli_batch_set_.size()));
+               K_(serial_final_seq_no));
     return pos;
   }
   ObTxState state_;
-  share::ObLSID upstream_;
-  share::ObLSArray participants_;
-  ObTxCommitParts commit_parts_;
-  // for tree phase commit
-  share::ObLSArray incremental_participants_;
-  ObTxCommitParts intermediate_participants_;
+  bool has_write_state_;
   LogOffSet prev_record_lsn_;
   ObRedoLSNArray redo_lsns_;
   ObTxBufferNodeArray multi_data_source_;
   ObTxBufferCtxArray mds_buffer_ctx_array_;
-  common::ObAddr scheduler_;
   share::SCN prepare_version_;
-  int64_t trans_type_;
   int64_t next_log_entry_no_;
   share::SCN max_applied_log_ts_;
   share::SCN max_applying_log_ts_;
-  int64_t max_applying_part_log_no_; // start from 0 on follower and always be INT64_MAX on leader
-  ObTxSEQ max_submitted_seq_no_; // maintained on leader and sent to follower via ActiveInfoLog
+  int64_t max_applying_part_log_no_;
+  ObTxSEQ max_submitted_seq_no_;
   ObSEArray<uint64_t,1> checksum_;
   ObSEArray<share::SCN,1> checksum_scn_;
   palf::LSN max_durable_lsn_;
   bool data_complete_;
   bool is_dup_tx_;
-  // NB: Ensure where to put it the touched pkeys
-  //for liboblog
-  ObLSLogInfoArray prepare_log_info_arr_;
   // for xa
   ObXATransID xid_;
   bool need_checksum_;
-  bool is_sub2pc_;
-  int64_t exec_epoch_;
-  // if valid, this txCtx is logged by multi parallel thread
   // since this scn
   share::SCN serial_final_scn_;
   // the logic time of serial final log submitted
   // used to decide whether a branch level savepoint rollback log
   // need set pre-barrier to wait previous redo replayed
   ObTxSEQ serial_final_seq_no_;
-  ObDLIBatchSet dli_batch_set_;
 };
 
 // Undefine macOS system macro to avoid conflict

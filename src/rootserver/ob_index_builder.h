@@ -163,8 +163,6 @@ private:
   int set_basic_infos(const obcall::ObCreateIndexArg &arg,
                       const share::schema::ObTableSchema &data_schema,
                       share::schema::ObTableSchema &schema);
-  int set_global_index_auto_partition_infos(const share::schema::ObTableSchema &data_schema,
-                                            share::schema::ObTableSchema &schema);
   int set_index_table_columns(const obcall::ObCreateIndexArg &arg,
                               const share::schema::ObTableSchema &data_schema,
                               share::schema::ObTableSchema &schema);

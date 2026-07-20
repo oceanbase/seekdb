@@ -353,7 +353,7 @@ int ObTransCallbackMgr::append(ObITransCallback *node)
     node->set_epoch(write_epoch_);
   }
   const transaction::ObTxSEQ seq_no = node->get_seq_no();
-  if (seq_no.is_valid()) {
+  {
     int slot = seq_no.get_branch() % MAX_CALLBACK_LIST_COUNT;
     if (slot > 0
         && for_replay_
@@ -438,7 +438,7 @@ int ObTransCallbackMgr::append(ObITransCallback *head,
 
     // Step2: find the slot for register or replay
     const transaction::ObTxSEQ seq_no = head->get_seq_no();
-    if (OB_LIKELY(seq_no.is_valid())) {
+    {
       int slot = seq_no.get_branch() % MAX_CALLBACK_LIST_COUNT;
       if (OB_UNLIKELY(slot > 0
                       && for_replay_
@@ -548,7 +548,7 @@ int ObTransCallbackMgr::rollback_to(const ObTxSEQ to_seq_no,
   int ret = OB_SUCCESS;
   int slot = -1;
   remove_cnt = callback_remove_for_rollback_to_count_;
-  if (OB_LIKELY(to_seq_no.is_valid())) {
+  {
     // it is a global savepoint, rollback on all list
     if (to_seq_no.get_branch() == 0) {
       CALLBACK_LISTS_FOREACH(idx, list) {
@@ -1171,6 +1171,26 @@ int ObTransCallbackMgr::fill_from_all_list(ObTxFillRedoCtx &ctx, ObITxFillRedoFu
   return ret;
 }
 
+inline bool check_dup_tablet_(ObITransCallback *callback_ptr)
+{
+  bool is_dup_tablet = false;
+  int64_t tmp_ret = OB_SUCCESS;
+
+  // If id is a dup table tablet => true
+  // If id is not a dup table tablet => false
+  if (MutatorType::MUTATOR_ROW == callback_ptr->get_mutator_type()) {
+    const ObMvccRowCallback *row_iter = static_cast<const ObMvccRowCallback *>(callback_ptr);
+    const ObTabletID &target_tablet = row_iter->get_tablet_id();
+    // if (OB_TMP_FAIL(mem_ctx_->get_trans_ctx()->merge_tablet_modify_record_(target_tablet))) {
+    //   TRANS_LOG_RET(WARN, tmp_ret, "merge tablet modify record failed", K(tmp_ret),
+    //                 K(target_tablet), KPC(row_iter));
+    // }
+    // check dup table
+  }
+
+  return is_dup_tablet;
+}
+
 int ObTransCallbackMgr::log_submitted(const ObCallbackScopeArray &callbacks, share::SCN scn, int &submitted)
 {
   int ret = OB_SUCCESS;
@@ -1188,6 +1208,9 @@ int ObTransCallbackMgr::log_submitted(const ObCallbackScopeArray &callbacks, sha
 #ifdef ENABLE_DEBUG_LOG
           ob_abort();
 #endif
+        } // check dup table tx
+        else if(check_dup_tablet_(iter)) {
+          // mem_ctx_->get_trans_ctx()->set_dup_table_tx_();
         }
         ++cnt;
         ++submitted;
@@ -1704,6 +1727,23 @@ int ObMvccRowCallback::get_trans_id(ObTransID &trans_id) const
   return ret;
 }
 
+int ObMvccRowCallback::get_cluster_version(uint64_t &cluster_version) const
+{
+  int ret = OB_SUCCESS;
+  ObMemtableCtx *mem_ctx = static_cast<ObMemtableCtx*>(&ctx_);
+  ObTransCtx *trans_ctx = NULL;
+  if (OB_ISNULL(mem_ctx)) {
+    ret = OB_ERR_UNEXPECTED;
+    TRANS_LOG(ERROR, "unexpected mem ctx", K(ret));
+  } else if (OB_ISNULL(trans_ctx = mem_ctx->get_trans_ctx())) {
+    ret = OB_ERR_UNEXPECTED;
+    TRANS_LOG(ERROR, "unexpected trans ctx", K(ret), K(ctx_));
+  } else {
+    cluster_version = trans_ctx->get_cluster_version();
+  }
+  return ret;
+}
+
 ObTransCtx *ObMvccRowCallback::get_trans_ctx() const
 {
   int ret = OB_SUCCESS;
@@ -1784,6 +1824,7 @@ blocksstable::ObDmlFlag ObMvccRowCallback::get_dml_flag() const
 int ObMvccRowCallback::trans_commit()
 {
   int ret = OB_SUCCESS;
+  ObMvccTransNode *prev = NULL;
   ObMvccTransNode *next = NULL;
   const bool for_read = false;
 
@@ -1793,6 +1834,49 @@ int ObMvccRowCallback::trans_commit()
     if (OB_FAIL(link_and_get_next_node(next))) {
       TRANS_LOG(WARN, "link trans node failed", K(ret));
     } else {
+      // if (ctx_.is_for_replay()) {
+      //   // verify current node checksum by previous node
+      //   prev = tnode_->prev_;
+      //   if (not_calc_checksum_) {
+      //     // to fix the case of replay self written log
+      //     // do nothing
+      //   } else if (NULL == prev) {
+      //     // do nothing
+      //   } else if (prev->is_committed() &&
+      //       prev->version_ == tnode_->version_ &&
+      //       prev->modify_count_ + 1 == tnode_->modify_count_) {
+      //     if (OB_FAIL(tnode_->verify_acc_checksum(prev->acc_checksum_))) {
+      //       TRANS_LOG(ERROR, "current row checksum error", K(ret), K(value_), K(*prev), K(*tnode_));
+      //       if (ObServerConfig::get_instance().ignore_replay_checksum_error) {
+      //         // rewrite ret
+      //         ret = OB_SUCCESS;
+      //       }
+      //     }
+      //   } else {
+      //     // do nothing
+      //   }
+      //   if (OB_SUCC(ret)) {
+      //     // verify next node checksum by current node
+      //     if (not_calc_checksum_) {
+      //       // to fix the case of replay self log
+      //       // do thing
+      //     } else if (NULL == next) {
+      //       // do nothing
+      //     } else if (next->is_committed() &&
+      //         tnode_->version_ == next->version_ &&
+      //         tnode_->modify_count_ + 1 == next->modify_count_) {
+      //       if (OB_FAIL(next->verify_acc_checksum(tnode_->acc_checksum_))) {
+      //         TRANS_LOG(ERROR, "next row checksum error", K(ret), K(value_), K(*tnode_), K(*next));
+      //         if (ObServerConfig::get_instance().ignore_replay_checksum_error) {
+      //           // rewrite ret
+      //           ret = OB_SUCCESS;
+      //         }
+      //       }
+      //     } else {
+      //       // do nothing
+      //     }
+      //   }
+      // }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(value_.trans_commit(ctx_.get_commit_version(), *tnode_))) {
           TRANS_LOG(WARN, "mvcc trans ctx trans commit error", K(ret), K_(ctx), K_(value));
@@ -1809,7 +1893,7 @@ int ObMvccRowCallback::trans_commit()
             TRANS_LOG(INFO, "[FF] trans commit and set hotspot row success", K_(*memtable), K_(value), K_(ctx), K(*this));
           }
           (void)ATOMIC_FAA(&value_.update_since_compact_, 1);
-          if (value_.need_compact(for_read, ctx_.is_for_replay())) {
+          if (value_.need_compact(for_read, ctx_.is_for_replay(), memtable_->is_delete_insert_table())) {
             if (ctx_.is_for_replay()) {
               if (ctx_.get_replay_compact_version().is_valid_and_not_min()
                   && SCN::max_scn() != ctx_.get_replay_compact_version()) {

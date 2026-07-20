@@ -136,7 +136,7 @@ private:
 class ObTxDataOp
 {
 public:
-  ObTxDataOp(share::ObTxDataAllocator *allocator, share::ObTxDataOpAllocator *op_allocator) :
+  ObTxDataOp(share::ObTenantTxDataAllocator *allocator, share::ObTenantTxDataOpAllocator *op_allocator) :
     ref_cnt_(0),
     undo_status_list_(),
     tx_op_list_(),
@@ -159,8 +159,8 @@ private:
   int64_t ref_cnt_;
   ObUndoStatusList undo_status_list_;
   ObTxOpVector tx_op_list_;
-  share::ObTxDataAllocator *tx_data_allocator_;
-  share::ObTxDataOpAllocator *op_allocator_;
+  share::ObTenantTxDataAllocator *tx_data_allocator_;
+  share::ObTenantTxDataOpAllocator *op_allocator_;
   common::SpinRWLock lock_;
 };
 

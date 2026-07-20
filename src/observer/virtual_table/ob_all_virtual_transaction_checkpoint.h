@@ -19,12 +19,13 @@
 
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "storage/checkpoint/ob_common_checkpoint.h"
-#include "storage/tx_storage/ob_ls_map.h"
-#include "storage/tx_storage/ob_ls_handle.h"
-#include "observer/omt/ob_multi_tenant.h"
 
 namespace oceanbase
 {
+namespace storage
+{
+class ObLS;
+}
 namespace observer
 {
 static constexpr const char OB_COMMON_CHECKPOINT[] = "ob_common_checkpoint";
@@ -40,20 +41,12 @@ class ObAllVirtualTransCheckpointInfo : public common::ObVirtualTableScannerIter
  public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
-  inline void set_addr(common::ObAddr &addr)
-  {
-    addr_ = addr;
-  }
  private:
-  int get_next_ls_(ObLS *&ls);
   int prepare_to_read_();
   int get_next_(storage::checkpoint::ObCommonCheckpointVTInfo &common_checkpoint);
  private:
-  common::ObAddr addr_;
-  char ip_buf_[common::OB_IP_STR_BUFF];
   char checkpoint_type_buf_[common::MAX_CHECKPOINT_TYPE_BUF_LENGTH];
-  storage::ObLSHandle ls_handle_;
-  bool is_ls_iter_end_;
+  storage::ObLS *ls_;
   ObCommonCheckpointVTIterator ob_common_checkpoint_iter_;
   
  private:

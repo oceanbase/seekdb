@@ -134,6 +134,16 @@ private:
   int process_json_mergepatch_node(const ParseNode *node, ObRawExpr *&expr);
   static void modification_type_to_int(ParseNode &node);
   int process_fun_sys_node(const ParseNode *node, ObRawExpr *&expr, const bool is_root_expr);
+  int process_dll_udf_node(const ParseNode *node, ObRawExpr *&expr);
+  int process_agg_udf_node(const ParseNode *node,
+                           const share::schema::ObUDF &udf_info,
+                           ObAggFunRawExpr *&expr);
+  int process_normal_udf_node(const ParseNode *node,
+                              const common::ObString &udf_name,
+                              const share::schema::ObUDF &udf_info,
+                              ObSysFunRawExpr *&expr);
+  int resolve_udf_param_expr(const ParseNode *node,
+                             common::ObIArray<ObRawExpr*> &param_exprs);
   int process_match_against(const ParseNode *node, ObRawExpr *&expr);
   int process_match(const ParseNode *node, ObRawExpr *&expr);
   int process_match_score(const ParseNode *node, ObRawExpr *&expr);

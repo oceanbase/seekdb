@@ -24,6 +24,8 @@
 
 #define DEFAULT_MYSQL_VERSION_CSTR "5.7.25"
 
+extern ObString get_display_mysql_version_cfg();
+
 namespace oceanbase
 {
 namespace obmysql

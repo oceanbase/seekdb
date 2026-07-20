@@ -155,15 +155,6 @@ public:
             || stmt_type_ == stmt::T_UPDATE;
   }
 
-  bool is_allowed_reroute() const
-  {
-    return (stmt_type_ == stmt::T_SELECT
-            || stmt_type_ == stmt::T_DELETE
-            || stmt_type_ == stmt::T_UPDATE
-            || stmt_type_ == stmt::T_INSERT
-            || stmt_type_ == stmt::T_REPLACE);
-  }
-
   inline bool is_support_instead_of_trigger_stmt() const {
     return stmt::T_DELETE == stmt_type_
            || stmt::T_UPDATE == stmt_type_
@@ -287,9 +278,6 @@ public:
             // index
             || stmt_type == stmt::T_CREATE_INDEX
             || stmt_type == stmt::T_DROP_INDEX
-            // materialized view log
-            || stmt_type == stmt::T_CREATE_MLOG
-            || stmt_type == stmt::T_DROP_MLOG
             // recyclebin restore
             || stmt_type == stmt::T_RECYCLEBIN_RESTORE_DATABASE
             || stmt_type == stmt::T_RECYCLEBIN_RESTORE_TABLE
@@ -406,9 +394,6 @@ public:
         // index
         // || stmt_type == stmt::T_CREATE_INDEX
         // || stmt_type == stmt::T_DROP_INDEX
-        // materialized view log
-        // || stmt_type == stmt::T_CREATE_MLOG
-        // || stmt_type == stmt::T_DROP_MLOG
         // recyclebin restore
         // || stmt_type == stmt::T_RECYCLEBIN_RESTORE_DATABASE
         // || stmt_type == stmt::T_RECYCLEBIN_RESTORE_TABLE

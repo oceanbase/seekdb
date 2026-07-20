@@ -30,7 +30,6 @@
 #include "common/mysqlclient/ob_isql_client.h"
 #include "storage/tablelock/ob_table_lock_common.h"   //ObTableLockMode
 #include "sql/session/ob_sql_session_mgr.h"
-#include "lib/stat/ob_diagnose_info.h"
 
 namespace oceanbase
 {
@@ -151,9 +150,14 @@ public:
   int destroy(void);
   inline void reset() { destroy(); }
   virtual int execute_read(const ObString &sql,
-                           common::ObISQLClient::ReadResult &res, bool is_user_sql = false) override;
+                           common::ObISQLClient::ReadResult &res, bool is_user_sql = false,
+                           const common::ObAddr *sql_exec_addr = nullptr/* ddl inner sql execution addr */) override;
+  virtual int execute_read(const int64_t cluster_id, const ObString &sql,
+                           common::ObISQLClient::ReadResult &res, bool is_user_sql = false,
+                           const common::ObAddr *sql_exec_addr = nullptr/* ddl inner sql execution addr */) override;
   virtual int execute_write(const ObString &sql,
-                            int64_t &affected_rows, bool is_user_sql = false) override;
+                            int64_t &affected_rows, bool is_user_sql = false,
+                            const common::ObAddr *sql_exec_addr = nullptr) override;
 
   virtual int execute_proc(ObIAllocator &allocator,
                           ParamStore &params,
@@ -181,6 +185,7 @@ public:
   virtual int set_tz_info_wrap(const ObTimeZoneInfoWrap &tz_info_wrap);
   virtual void set_nls_formats(const ObString *nls_formats);
   virtual void set_is_load_data_exec(bool v);
+  virtual void set_force_remote_exec(bool v) { force_remote_execute_ = v; }
   virtual void set_use_external_session(bool v) { use_external_session_ = v; }
   virtual void set_ob_enable_pl_cache(bool v) override;
   bool is_nested_conn();
@@ -246,6 +251,10 @@ public:
 
   virtual int execute(sqlclient::ObIExecutor &executor) override;
 
+  int forward_request(const int64_t op_type,
+                      const ObString &sql,
+                      ObInnerSQLResult &res,
+                      const int32_t group_id = 0);
 
 public:
   // nested session and sql execute for foreign key.
@@ -278,6 +287,7 @@ public:
                             ObWaitEventStat &total_wait_desc,
                             sql::ObExecRecord &exec_record,
                             sql::ObExecTimestamp &exec_timestamp,
+                            bool has_tenant_resource,
                             const ObString &ps_sql,
                             bool is_from_pl = false,
                             ObString *pl_exec_params = NULL);
@@ -287,6 +297,7 @@ public:
                                   int last_ret,
                                   int64_t execution_id,
                                   int64_t ps_stmt_id,
+                                  bool has_tenant_resource,
                                   const ObString &ps_sql,
                                   bool is_from_pl = false);
   static void record_stat(sql::ObSQLSessionInfo &session,
@@ -299,6 +310,8 @@ public:
                                const bool is_ddl);
 
   int64_t get_init_timestamp() const { return init_timestamp_; }
+  int switch_tenant();
+  bool is_local_execute(const int64_t cluster_id);
 public:
   static const int64_t LOCK_RETRY_TIME = 1L * 1000 * 1000;
   static const int64_t TOO_MANY_REF_ALERT = 1024;
@@ -335,14 +348,20 @@ private:
   // set timeout to session variable
   int set_timeout(int64_t &abs_timeout_us);
 
-  int execute_read_inner(const ObString &sql,
-                         common::ObISQLClient::ReadResult &res, bool is_user_sql = false);
+  int execute_read_inner(const int64_t cluster_id, const ObString &sql,
+                         common::ObISQLClient::ReadResult &res, bool is_user_sql = false,
+                         const common::ObAddr *sql_exec_addr = nullptr);
   int execute_write_inner(const ObString &sql, int64_t &affected_rows,
-      bool is_user_sql = false);
+      bool is_user_sql = false, const common::ObAddr *sql_exec_addr = nullptr);
   int start_transaction_inner(bool with_snap_shot = false);
   template <typename T>
-  int retry_while_runtime_unavailable(T function);
+  int retry_while_no_tenant_resource(const int64_t cluster_id, T function);
 
+  int forward_request_(const int64_t op_type,
+                       const ObString &sql,
+                       ObInnerSQLResult &res,
+                       const int32_t group_id = 0);
+  int get_session_timeout_for_rpc(int64_t &query_timeout, int64_t &trx_timeout);
   int create_session_by_mgr();
   int create_default_session();
   bool is_inner_session_mgr_enable();
@@ -369,13 +388,28 @@ private:
   common::ObServerConfig *config_;
   common::ObISQLClient *associated_client_;
 
-  // The inner SQL connection always executes in the local server runtime.
+  // for using rpc to send sql to the server which has tenant resource
   bool is_in_trans_;
   bool is_resource_conn_;
   bool is_idle_; // for resource_conn_
   common::ObAddr resource_svr_; // server of destination in local rpc call
   uint64_t resource_conn_id_; // resource conn_id of dst srv
   int64_t last_query_timestamp_;
+  /*
+   This flag is used by ddl to force this inner sql bypass the local-optimized path, always execute it through rpc
+
+   Why do we need this? 
+   DDL needs to issue an "insert into select" sql to build the single replica, which will deal with user data.
+   However, in the local-optimized path, the sql will be executed using a "fake user tenant session", whose 
+   login identity is actually the sys identity. This leads to unexpected privilege check result since privilege
+   check always uses the login identity due to security. To solve this problem, we add this flag to force all
+   "insert into select" inner sqls issued by DDL to use remote execution, where observer will create a real
+   user session to execute the sql.
+
+   What do I mean by saying "fake user tenant session"?
+   a session created by sys tenant then uses tenant switch to behave like user tenant.
+  */
+  bool force_remote_execute_;
   bool force_no_reuse_;
 
   // ask the inner sql connection to use external session instead of internal one
@@ -392,11 +426,17 @@ private:
 class ObInnerSqlWaitGuard
 {
 public:
-  explicit ObInnerSqlWaitGuard(const bool is_inner_session,
-      sql::ObSQLSessionInfo *inner_session);
-  ~ObInnerSqlWaitGuard() = default;
+  explicit ObInnerSqlWaitGuard(const bool is_inner_session, common::ObDiagnosticInfo *di, sql::ObSQLSessionInfo *inner_session);
+  ~ObInnerSqlWaitGuard();
 private:
-  common::ObWaitEventGuard wait_guard_;
+  bool is_inner_session_;
+  int64_t inner_session_id_;
+  ObDiagnosticInfo *inner_sql_di_;
+  ObDiagnosticInfo *prev_di_;
+  bool need_record_;
+  bool has_finish_switch_di_;
+  int64_t prev_block_sessid_;
+  sql::ObQueryRetryAshInfo *prev_info_;
 };
 
 class ObInnerSQLSessionGuard

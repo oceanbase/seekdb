@@ -18,13 +18,13 @@
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_build_index_task.h"
 #include "share/rc/ob_module_provider.h"
-#include "rootserver/ob_local_management_service.h"
+#include "rootserver/ob_root_service.h"
 #include "share/ob_ddl_checksum.h"
 #include "share/ob_ddl_error_message_table_operator.h"
-#include "share/schema/ob_schema_runtime_service.h"
+#include "share/schema/ob_tenant_schema_service.h"
 #include "share/ob_ddl_sim_point.h"
 #include "observer/scheduler/ob_dag_warning_history_mgr.h"
-#include "share/ob_structured_event_logger.h"
+#include "observer/ob_server_event_history_table_operator.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase::common;
@@ -439,17 +439,10 @@ int ObUniqueIndexChecker::check_unique_index(ObIDag *dag, const int64_t task_id)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(dag));
   } else {
-    SERVER_MODULE_SCOPE {
+    MOD_SCOPE {
       ObLS *ls = nullptr;
-      ObLSService *ls_service = share::g_mp->ls_service();
-      if (OB_ISNULL(ls_service)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ls service is null", K(ret));
-      } else if (OB_FAIL(ls_service->get_ls(ls))) {
-        LOG_WARN("fail to get local log stream", K(ret));
-      } else if (OB_ISNULL(ls)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("local log stream is null", K(ret));
+      if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+        LOG_WARN("fail to get log stream", K(ret));
       } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls, param_->tablet_id_, tablet_handle_))) {
         LOG_WARN("fail to get tablet", K(ret), K(param_->tablet_id_), K(tablet_handle_));
       } else if (param_->index_schema_->is_fts_index() || param_->index_schema_->is_vec_index()) {
@@ -463,7 +456,7 @@ int ObUniqueIndexChecker::check_unique_index(ObIDag *dag, const int64_t task_id)
         }
       }
     } else {
-      LOG_WARN("enter server module scope failed", K(ret));
+      LOG_WARN("switch to tenant guard failed", K(ret));
     }
   }
   if (OB_SUCCESS != ret && share::ObIDDLTask::in_ddl_retry_white_list(ret)) {
@@ -521,16 +514,13 @@ int ObUniqueIndexChecker::wait_trans_end(ObIDag *dag)
     LOG_WARN("ddl sim failure", K(ret), K(param_->task_id_));
   } else if (OB_FAIL(ls_service->get_ls(ls))) {
     LOG_WARN("get ls failed", K(ret));
-  } else if (OB_ISNULL(ls)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("local ls is null", K(ret));
   } else {
     const int64_t now = ObTimeUtility::current_time();
     const int64_t timeout_us = 1000L * 1000L * 60L; // 1 min
     while (OB_SUCC(ret) && !dag->has_set_stop()) {
       transaction::ObTransID pending_tx_id;
       if (OB_FAIL(ls->check_modify_time_elapsed(param_->tablet_id_, now, pending_tx_id))) {
-        // when timeout with EAGAIN, ddl scheduler of local management service will retry
+        // when timeout with EAGAIN, ddl scheduler of root service will retry
         if (OB_EAGAIN == ret && ObTimeUtility::current_time() - now < timeout_us) {
           ret = OB_SUCCESS;
           ob_usleep(RETRY_INTERVAL);
@@ -963,7 +953,7 @@ int ObUniqueCheckingMergeTask::process()
       int64_t snapshot_version = 0;
       share::ObDDLTaskStatus unused_task_status = share::ObDDLTaskStatus::PREPARE;
       if (OB_FAIL(ObDDLUtil::get_data_information(param_->task_id_, data_format_version, snapshot_version, unused_task_status))) {
-        LOG_WARN("get ddl data format version failed", K(ret));
+        LOG_WARN("get ddl cluster version failed", K(ret));
       } else if (OB_FAIL(ObDDLChecksumOperator::update_checksum(data_format_version, checksum_items, *GCTX.sql_proxy_))) {
         LOG_WARN("fail to update checksum", K(ret));
       }
@@ -1001,12 +991,12 @@ int ObGlobalUniqueIndexCallback::operator()(const int ret_code)
   
 #ifdef ERRSIM
     if (OB_SUCC(ret)) {
-      ret = OB_E(EventTable::EN_DDL_REPORT_LOCAL_BUILD_STATUS_FAIL) OB_SUCCESS;
-      LOG_INFO("report local build status errsim", K(ret));
+      ret = OB_E(EventTable::EN_DDL_REPORT_REPLICA_BUILD_STATUS_FAIL) OB_SUCCESS;
+      LOG_INFO("report DDL build status errsim", K(ret));
     }
 #endif
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(GCTX.local_management_service_->calc_column_checksum_repsonse(arg))) {
+  } else if (OB_FAIL(GCTX.root_service_->calc_column_checksum_repsonse(arg))) {
     STORAGE_LOG(WARN, "fail to check unique index response", K(ret), K(arg));
   } else {
     STORAGE_LOG(INFO, "send column checksum response", K(arg));
@@ -1048,11 +1038,11 @@ int ObUniqueCheckingParam::init(
     STORAGE_LOG(WARN, "invalid arguments", K(ret), K(tablet_id),
         K(index_table_id), K(schema_version), K(task_id), K(execution_id), K(snapshot_version));
   } else {
-    SERVER_MODULE_SCOPE {
-      if (OB_ISNULL(schema_service = share::g_mp->schema_runtime_service()->get_schema_service())) {
+    MOD_SCOPE {
+      if (OB_ISNULL(schema_service = share::g_mp->tenant_schema_service()->get_schema_service())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get schema service failed", K(ret));
-      } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard_, schema_version))) {
+      } else if (OB_FAIL(schema_service->get_tenant_schema_guard(schema_guard_, schema_version))) {
         STORAGE_LOG(WARN, "fail to get schema guard", K(ret), K(schema_version));
       } else if (OB_FAIL(schema_guard_.check_formal_guard())) {
         LOG_WARN("schema_guard is not formal", K(ret), K(tablet_id));
@@ -1077,7 +1067,7 @@ int ObUniqueCheckingParam::init(
         user_parallelism_ = user_parallelism;
       }
     } else {
-      LOG_WARN("enter server module scope failed", K(ret), K(index_table_id));
+      LOG_WARN("switch to tenant failed", K(ret), K(index_table_id));
     }
   }
   return ret;

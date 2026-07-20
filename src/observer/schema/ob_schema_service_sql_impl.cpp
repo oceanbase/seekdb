@@ -135,15 +135,13 @@
      ORDER BY SCHEMA_VERSION DESC LIMIT 1"
 
 #define DEFINE_SQL_CLIENT_RETRY_WEAK(sql_client)    \
-  ObSQLClientRetryWeak sql_client_retry_weak(&sql_client);
+  auto &sql_client_retry_weak = sql_client;
 
 #define DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp)    \
-        bool check_sys_variable = true; \
-        DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_PARAMETER(sql_client, snapshot_timestamp, check_sys_variable)
+  auto &sql_client_retry_weak = sql_client;
 
 #define DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_PARAMETER(sql_client, snapshot_timestamp, check_sys_variable)    \
-  ObSQLClientRetryWeak sql_client_retry_weak(&sql_client, false, \
-                                             snapshot_timestamp, check_sys_variable);
+  auto &sql_client_retry_weak = sql_client;
 namespace oceanbase
 {
 namespace share
@@ -896,12 +894,6 @@ int ObSchemaServiceSQLImpl::get_full_table_schema_from_inner_table(
         tmp_table_schema->set_aux_lob_meta_tid(aux_table_meta.table_id_);
       } else if (AUX_LOB_PIECE == aux_table_meta.table_type_) {
         tmp_table_schema->set_aux_lob_piece_tid(aux_table_meta.table_id_);
-      } else if (MATERIALIZED_VIEW_LOG == aux_table_meta.table_type_) {
-        if (aux_table_meta.is_tmp_mlog_) {
-          tmp_table_schema->set_tmp_mlog_tid(aux_table_meta.table_id_);
-        } else {
-          tmp_table_schema->set_mlog_tid(aux_table_meta.table_id_);
-        }
       }
     }
     if (OB_SUCC(ret)) {
@@ -6695,7 +6687,7 @@ int ObSchemaServiceSQLImpl::sort_subpartition_array(ObPartitionSchema &partition
   return ret;
 }
 
-// for liboblog & schema history recycle
+// Used by schema history recycling and change stream checkpoint lookup.
 int ObSchemaServiceSQLImpl::get_schema_version_by_timestamp(
     ObISQLClient &sql_client,
     const ObRefreshSchemaStatus &schema_status,
@@ -6708,8 +6700,7 @@ int ObSchemaServiceSQLImpl::get_schema_version_by_timestamp(
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", K(ret));
-  } else if (false
-             || timestamp <= 0) {
+  } else if (timestamp <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(timestamp));
   } else {
@@ -7660,7 +7651,6 @@ int ObSchemaServiceSQLImpl::get_package_id(
     const uint64_t database_id,
     const ObString &package_name,
     const ObPackageType package_type,
-    const int64_t compatible_mode,
     uint64_t &package_id)
 {
   int ret = OB_SUCCESS;
@@ -7676,11 +7666,10 @@ int ObSchemaServiceSQLImpl::get_package_id(
     LOG_WARN("check inner stat fail", KR(ret));
   } else if (OB_UNLIKELY(OB_INVALID_ID == database_id
              || package_name.empty()
-             || INVALID_PACKAGE_TYPE == package_type
-             || compatible_mode < 0)) {
+             || INVALID_PACKAGE_TYPE == package_type)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret),
-             K(database_id), K(package_name), K(package_type), K(compatible_mode));
+             K(database_id), K(package_name), K(package_type));
   } else if (OB_ISNULL(pkg_name)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc pkg_name failed", KR(ret), K(package_name));
@@ -7688,9 +7677,9 @@ int ObSchemaServiceSQLImpl::get_package_id(
   } else if (OB_FAIL(sql.assign_fmt(
              "SELECT package_id, package_name FROM %s "
              "WHERE database_id = %lu AND package_name = '%s' "
-             "AND type = %d AND (comp_flag & %d) = %ld",
+             "AND type = %d",
              OB_ALL_PACKAGE_TNAME, database_id, pkg_name,
-             package_type, COMPATIBLE_MODE_BIT, compatible_mode))) {
+             package_type))) {
     LOG_WARN("fail to assign fmt", KR(ret), K(database_id),
              K(package_name), "pkg_name", pkg_name);
   } else if (OB_FAIL(retrieve_schema_id_with_name_(
@@ -7704,7 +7693,7 @@ int ObSchemaServiceSQLImpl::get_package_id(
   } else {
     LOG_TRACE("get package id by name",
               K(database_id), K(package_id),
-              K(package_type), K(compatible_mode),
+              K(package_type),
               K(package_name), "pkg_name", pkg_name);
   }
   return ret;

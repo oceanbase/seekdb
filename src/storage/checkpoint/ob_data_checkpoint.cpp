@@ -27,7 +27,7 @@ namespace storage
 namespace checkpoint
 {
 
-__thread bool ObDataCheckpoint::is_global_freeze_for_flush_ = false;
+__thread bool ObDataCheckpoint::is_tenant_freeze_for_flush_ = false;
 __thread ObFreezeSourceFlag ObDataCheckpoint::freeze_source_ = ObFreezeSourceFlag::INVALID_SOURCE;
 
 // ** ObCheckpointDList **
@@ -233,7 +233,7 @@ SCN ObDataCheckpoint::get_active_rec_scn()
 int ObDataCheckpoint::flush(SCN recycle_scn, bool need_freeze)
 {
   int ret = OB_SUCCESS;
-  if (is_global_freeze()) {
+  if (is_tenant_freeze()) {
     const bool is_sync = false;
     const bool abs_timeout_ts = 0;
     if (OB_FAIL(ls_->logstream_freeze(is_sync,
@@ -619,7 +619,7 @@ int ObDataCheckpoint::traversal_flush_()
       ObCheckpointIterator iterator;
       prepare_list_.get_iterator(iterator);
       flush_tasks.reset();
-      ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+      ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
 
       while (OB_SUCC(ret)
              && iterator.has_next()

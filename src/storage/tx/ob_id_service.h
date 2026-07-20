@@ -152,6 +152,7 @@ protected:
   mutable common::SpinRWLock rwlock_;
   storage::ObLS *ls_;
   ObPresistIDLogCb cb_;
+  common::ObAddr self_;
   common::ObTimeInterval log_interval_;
 };
 

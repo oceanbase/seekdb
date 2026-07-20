@@ -116,15 +116,8 @@ void ObMajorMergeInfoDetector::runTimerTask()
 
       bool can_work = false;
       bool skip_refresh_zone_info = false;
-      int64_t proposal_id = 0;
-      ObRole role = ObRole::INVALID_ROLE;
 
-      if (OB_FAIL(obtain_proposal_id_from_ls(is_primary_service_, proposal_id, role))) {
-        LOG_WARN("fail to obtain proposal_id from ls", KR(ret));
-      } else if (ObRole::LEADER != role) {
-        LOG_INFO("follower should not run freeze_info_detector", K(role),
-                 K_(is_primary_service));
-      } else if (OB_FAIL(can_start_work(can_work))) {
+      if (OB_FAIL(can_start_work(can_work))) {
         LOG_WARN("fail to judge can start work", KR(ret));
       } else if (can_work) {
           if (is_primary_service()) {
@@ -422,29 +415,6 @@ bool ObMajorMergeInfoDetector::need_check_snapshot_gc_scn(const int64_t start_ti
 {
   const int64_t START_CHECK_INTERVAL_US = 10 * 60 * 1000 * 1000; // 10 min
   return (ObTimeUtility::current_time() - start_time_us) > START_CHECK_INTERVAL_US;
-}
-
-int ObMajorMergeInfoDetector::obtain_proposal_id_from_ls(
-    const bool is_primary_service,
-    int64_t &proposal_id,
-    ObRole &role)
-{
-  int ret = OB_SUCCESS;
-  storage::ObLSHandle ls_handle;
-  logservice::ObLogHandler *handler = nullptr;
-  if (OB_ISNULL(share::g_mp->ls_service())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls service is null", KR(ret));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(SYS_LS, ls_handle, ObLSGetMod::RS_MOD))) {
-    LOG_WARN("fail to get ls", KR(ret));
-  } else if (OB_ISNULL(ls_handle.get_ls())
-      || OB_ISNULL(handler = ls_handle.get_ls()->get_log_handler())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("should not null", KR(ret), K(is_primary_service));
-  } else if (OB_FAIL(handler->get_role(role, proposal_id))) {
-    LOG_WARN("fail to get role", KR(ret), K(is_primary_service));
-  }
-  return ret;
 }
 
 void ObMajorMergeInfoDetector::update_last_run_timestamp_()

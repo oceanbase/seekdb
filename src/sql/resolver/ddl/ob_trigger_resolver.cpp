@@ -20,6 +20,7 @@
 #include "pl/parser/parse_stmt_item_type.h"
 #include "pl/ob_pl_package.h"
 #include "pl/ob_pl_build.h"
+#include "share/table/ob_ttl_util.h"
 #include "share/schema/ob_trigger_info.h"  // relocated-definition owner
 
 namespace oceanbase
@@ -286,7 +287,8 @@ int ObTriggerResolver::resolve_alter_trigger_stmt(const ParseNode &parse_node,
                                            old_tg_info->get_schema_version(),
                                            trigger_arg));
   OZ (new_tg_info.deep_copy(*old_tg_info));
-  OZ (resolve_alter_clause(*parse_node.children_[1], new_tg_info, trigger_arg.is_set_status_));
+  OZ (resolve_alter_clause(*parse_node.children_[1], new_tg_info, trigger_db_name,
+                           trigger_arg.is_set_status_));
   OZ (trigger_arg.trigger_infos_.push_back(new_tg_info));
   return ret;
 }
@@ -828,6 +830,7 @@ int ObTriggerResolver::resolve_schema_name(const ParseNode &parse_node,
 
 int ObTriggerResolver::resolve_alter_clause(const ParseNode &alter_clause,
                                             ObTriggerInfo &tg_info,
+                                            const ObString &db_name,
                                             bool &is_set_status)
 {
   int ret = OB_SUCCESS;
@@ -847,8 +850,9 @@ int ObTriggerResolver::resolve_alter_clause(const ParseNode &alter_clause,
       tg_info.set_disable();
     }
   } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected alter trigger option", K(ret), K(alter_clause.int16_values_[0]));
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("alter trigger compile is not supported", K(ret), K(db_name), K(tg_info.get_trigger_name()));
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "alter trigger compile");
   }
   return ret;
 }

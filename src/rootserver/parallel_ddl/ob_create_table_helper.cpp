@@ -22,10 +22,13 @@
 #include "rootserver/ob_table_creator.h"
 #include "rootserver/freeze/ob_major_freeze_helper.h"
 #include "sql/resolver/ddl/ob_index_builder_util.h"
+#include "share/sequence/ob_sequence_option_builder.h" // ObSequenceOptionBuilder
 #include "share/schema/ob_table_sql_service.h"
+#include "share/schema/ob_sequence_sql_service.h"
 #include "observer/vector_index/ob_vector_index_util.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
+#include "rootserver/ob_location_ddl_service.h"
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
@@ -65,7 +68,8 @@ ObCreateTableHelper::ObCreateTableHelper(
     arg_(arg),
     res_(res),
     replace_mock_fk_parent_table_id_(common::OB_INVALID_ID),
-    new_mock_fk_parent_table_map_()
+    new_mock_fk_parent_table_map_(),
+    has_index_(false)
 {}
 
 ObCreateTableHelper::~ObCreateTableHelper()
@@ -158,8 +162,11 @@ int ObCreateTableHelper::lock_database_by_obj_name_()
 // 2. index               (X)
 // 3. constraint          (X)
 // 4. foreign key         (X)
-// 6. parent table        (X)
-// 7. mock fk parent table(X)
+// 5. tablegroup          (S)
+// 6. sequence            (X)
+// - Operation to lock sequence name will be delayed to generate_schemas_() stage.
+// 7. parent table        (X)
+// 8. mock fk parent table(X)
 int ObCreateTableHelper::lock_objects_by_name_()
 {
   int ret = OB_SUCCESS;
@@ -195,7 +202,20 @@ int ObCreateTableHelper::lock_objects_by_name_()
       }
     } // end for
 
-    // 6. parent table/mock fk parent table
+    // 5. tablegroup
+    const ObString &tablegroup_name = arg_.schema_.get_tablegroup_name();
+    if (OB_SUCC(ret) && !tablegroup_name.empty()) {
+      ObString mock_database_name(OB_SYS_DATABASE_NAME);  // consider that tablegroup may across databases.
+      if (OB_FAIL(add_lock_object_by_name_(mock_database_name, tablegroup_name,
+          share::schema::TABLEGROUP_SCHEMA, transaction::tablelock::SHARE))) {
+        LOG_WARN("fail to lock object by tablegroup name", KR(ret), K(database_name), K(tablegroup_name));
+      }
+    }
+
+    // 6. sequence
+    // - will be delayed to generate_schemas_() stage.
+
+    // 7. parent table/mock fk parent table
     // - here we don't distinguish between table and mocked table.
     for (int64_t i = 0; OB_SUCC(ret) && i < arg_.foreign_key_arg_list_.count(); i++) {
       const obcall::ObCreateForeignKeyArg &foreign_key_arg = arg_.foreign_key_arg_list_.at(i);
@@ -219,6 +239,7 @@ int ObCreateTableHelper::lock_objects_by_name_()
 
 // lock related objects' id for create table (`X` for EXCLUSIVE, `S` for SHARE):
 // 0. database            (S)
+// 1. tablegroup          (S)
 // 4. parent table        (X)
 // 5. mock fk parent table(X)
 // 6. udt                 (S)
@@ -241,6 +262,14 @@ int ObCreateTableHelper::lock_objects_by_id_()
   if (FAILEDx(add_lock_object_by_id_(arg_.schema_.get_database_id(),
       share::schema::DATABASE_SCHEMA, transaction::tablelock::SHARE))) {
     LOG_WARN("fail to lock database id", KR(ret), K(arg_.schema_.get_database_id()));
+  }
+  // 1. tablegroup
+  const uint64_t tablegroup_id = table.get_tablegroup_id();
+  if (OB_SUCC(ret) && OB_INVALID_ID != tablegroup_id) {
+    if (OB_FAIL(add_lock_object_by_id_(tablegroup_id, // filled in set_tablegroup_id_()
+        share::schema::TABLEGROUP_SCHEMA, transaction::tablelock::SHARE))) {
+      LOG_WARN("fail to lock tablegroup_id", KR(ret), K(tablegroup_id));
+    }
   }
   // 4. parent table/mock fk parent table
   for (int64_t i = 0; OB_SUCC(ret) && i < arg_.foreign_key_arg_list_.count(); i++) {
@@ -284,11 +313,14 @@ int ObCreateTableHelper::lock_objects_by_id_()
   return ret;
 }
 
-// Mock foreign-key parent tables for replacement are locked by id first.
+// tablegroup/mock fk parent table for replacement are locked by id in lock_objects_by_id_() first.
 // 1. foreign key         (X)
 // - from mock fk parent table
 // 2. child table         (X)
 // - from mock fk parent table
+// 3. primary table       (S)
+// - in tablegroup
+//
 // TODO:(yanmu.ztl)
 // small timeout should be used here to avoid deadlock problem
 // since we have already locked some objects by id.
@@ -326,6 +358,10 @@ int ObCreateTableHelper::post_lock_objects_by_id_()
         }
       } // end for
     }
+  }
+
+  // TODO:(yanmu.ztl) lock primary table in tablegroup
+  if (OB_SUCC(ret) && OB_INVALID_ID != arg_.schema_.get_tablegroup_id()) {
   }
 
   if (FAILEDx(lock_existed_objects_by_id_())) {
@@ -418,6 +454,8 @@ int ObCreateTableHelper::prefetch_schemas_()
     LOG_WARN("fail to check and set database id", KR(ret));
   } else if (OB_FAIL(check_table_name_())) {
     LOG_WARN("fail to check table name", KR(ret));
+  } else if (OB_FAIL(set_tablegroup_id_())) {
+    LOG_WARN("fail to set tablegroup id", KR(ret));
   } else if (OB_FAIL(check_and_set_parent_table_id_())) {
     LOG_WARN("fail to check and set parent table id", KR(ret));
   }
@@ -493,6 +531,78 @@ int ObCreateTableHelper::check_table_name_()
   return ret;
 }
 
+int ObCreateTableHelper::set_tablegroup_id_()
+{
+  int ret = OB_SUCCESS;
+  const ObTableSchema &table = arg_.schema_;
+  const ObString &tablegroup_name = table.get_tablegroup_name();
+  uint64_t tablegroup_id = OB_INVALID_ID;
+  if (OB_FAIL(check_inner_stat_())) {
+    LOG_WARN("fail to check inner stat", KR(ret));
+  } else if (tablegroup_name.empty()) {
+    if (table.has_partition()) {
+      // try use default tablegroup id
+      const uint64_t database_id = table.get_database_id();
+      const ObDatabaseSchema *database_schema = NULL;
+      if (OB_FAIL(schema_guard_wrapper_.get_database_schema(database_id, database_schema))) {
+        LOG_WARN("fail to get database schema", KR(ret), K(database_id));
+      } else if (OB_ISNULL(database_schema)) {
+        ret = OB_ERR_BAD_DATABASE;
+        LOG_WARN("database not exist", KR(ret), K(database_id));
+      } else {
+        tablegroup_id = database_schema->get_default_tablegroup_id();
+      }
+
+      if (OB_SUCC(ret) && OB_INVALID_ID == tablegroup_id) {
+        const ObTenantSchema *tenant_schema = NULL;
+        if (OB_FAIL(schema_guard_wrapper_.get_tenant_schema( tenant_schema))) {
+          LOG_WARN("fail to get tenant schema", KR(ret));
+        } else if (OB_ISNULL(tenant_schema)) {
+          ret = OB_TENANT_NOT_EXIST;
+          LOG_WARN("tenant not exist", KR(ret));
+        } else {
+          tablegroup_id = tenant_schema->get_default_tablegroup_id();
+        }
+      }
+    }
+  } else {
+    if (!table.has_partition()) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("table which has no partitions with tablegroup", KR(ret), K(table));
+    } else if (OB_FAIL(schema_guard_wrapper_.get_tablegroup_id(
+               tablegroup_name, tablegroup_id))) {
+      LOG_WARN("fail to get tablegroup id", KR(ret), K(tablegroup_name));
+    } else if (OB_UNLIKELY(OB_INVALID_ID == tablegroup_id)) {
+      ret = OB_TABLEGROUP_NOT_EXIST;
+      LOG_WARN("tabelgroup not exist ", KR(ret), K(tablegroup_name));
+    } else {}
+  }
+
+  if (OB_SUCC(ret) && OB_INVALID_ID != tablegroup_id) {
+    // TODO:(yanmu.ztl) after 4.2, we can use ObSimpleTableSchema instead of ObTablegroupSchema
+    const ObTablegroupSchema *tablegroup_schema = NULL;
+    if (OB_FAIL(schema_guard_wrapper_.get_tablegroup_schema(tablegroup_id, tablegroup_schema))) {
+      LOG_WARN("fail to get tablegroup schema", KR(ret), K(tablegroup_id));
+    } else if (OB_ISNULL(tablegroup_schema)) {
+      ret = OB_TABLEGROUP_NOT_EXIST;
+      LOG_WARN("tabelgroup not exist ", KR(ret), K(tablegroup_id));
+    } else if (OB_UNLIKELY(ObDuplicateScope::DUPLICATE_SCOPE_NONE != table.get_duplicate_scope()
+               && OB_INVALID_ID != tablegroup_id)) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("duplicated table in tablegroup is not supported", KR(ret),
+               "table_id", table.get_table_id(),
+               "tablegroup_id", table.get_tablegroup_id());
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "duplicated table in tablegroup");
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    (void) const_cast<ObTableSchema&>(table).set_tablegroup_id(tablegroup_id);
+  }
+  return ret;
+}
+
+// parent table id won't change after parent table name is locked.
 int ObCreateTableHelper::check_and_set_parent_table_id_()
 {
   int ret = OB_SUCCESS;
@@ -993,6 +1103,35 @@ int ObCreateTableHelper::get_mock_fk_parent_table_info_(
 }
 
 
+int ObCreateTableHelper::generate_sequence_object_()
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(check_inner_stat_())) {
+    LOG_WARN("fail to check inner stat", KR(ret));
+  }
+  // Identity column sequence object generation is not applicable.
+  return ret;
+}
+
+int ObCreateTableHelper::add_index_name_to_cache_()
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(check_inner_stat_())) {
+    LOG_WARN("fail to check inner stat", KR(ret));
+  } else {
+    ObIndexNameChecker &checker = ddl_service_->get_index_name_checker();
+    for (int64_t i = 0; OB_SUCC(ret) && i < new_tables_.count(); i++) {
+      const ObTableSchema &table = new_tables_.at(i);
+      if (table.is_index_table()) {
+        has_index_ = true;
+        if (OB_FAIL(checker.add_index_name(table))) {
+          LOG_WARN("fail to add index name", KR(ret), K(table));
+        }
+      }
+    } // end for
+  }
+  return ret;
+}
 
 int ObCreateTableHelper::operate_schemas_() {
   int ret = OB_SUCCESS;
@@ -1008,8 +1147,19 @@ int ObCreateTableHelper::operate_schemas_() {
 int ObCreateTableHelper::clean_on_fail_commit_()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
+  if (has_index_) {
+    // Because index name is added to cache before trans commit,
+    // it will remain garbage in cache when trans commit failed and false alarm will occur.
+    //
+    // To solve this problem:
+    // 1. check_index_name_exist() will double check by inner_sql and erase garbage if index name conflicts.
+    // 2. (Fully unnecessary) clean up index name cache when trans commit failed.
+    if (OB_ISNULL(ddl_service_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("ddl_service_ is null", KR(ret));
+    } else if (OB_FAIL(ddl_service_->get_index_name_checker().reset_cache())) {
+      LOG_ERROR("fail to reset cache", KR(ret), KR(ret));
+    }
   }
   return ret;
 }
@@ -1018,6 +1168,8 @@ int ObCreateTableHelper::operation_before_commit_() {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
+  } else if (OB_FAIL(add_index_name_to_cache_())) {
+    LOG_WARN("fail to add index name to cache", KR(ret));
   }
   return ret;
 }

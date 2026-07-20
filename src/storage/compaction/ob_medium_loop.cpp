@@ -16,10 +16,10 @@
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_medium_loop.h"
 #include "share/rc/ob_module_provider.h"
-#include "storage/compaction/ob_tablet_scheduler.h"
+#include "storage/compaction/ob_tenant_tablet_scheduler.h"
 #include "storage/compaction/ob_schedule_tablet_func.h"
 #include "storage/compaction/ob_server_compaction_event_history.h"
-#include "storage/compaction/ob_compaction_progress.h"
+#include "storage/compaction/ob_tenant_compaction_progress.h"
 #include "share/ob_tablet_meta_table_compaction_operator.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -65,6 +65,7 @@ int ObMediumLoop::loop()
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
 
+  ObTenantTabletScheduler *scheduler = share::g_mp->tenant_tablet_scheduler();
   ObScheduleTabletFunc func(merge_version_, loop_cnt_);
   schedule_stats_.weak_read_ts_ready_ = true;
   if (!tablet_iter_.is_scan_finish()) {
@@ -78,7 +79,7 @@ int ObMediumLoop::loop()
       }
     }
     if (OB_SUCC(ret) && tablet_iter_.need_report_scn()) {
-      // Scan tablet metadata to publish a conservative report_scn when required.
+      // loop tablet_meta table to update smaller report_scn because of migration
       tmp_ret = update_report_scn_as_ls_leader(*ls, func);
 #ifndef ERRSIM
       LOG_INFO("try to update report scn", K(tmp_ret)); // low printing frequency
@@ -140,7 +141,7 @@ void ObMediumLoop::add_event_and_diagnose(const ObScheduleTabletFunc &func)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  if (!tablet_iter_.database_merge_finish() && merge_version_ > ObBasicMergeScheduler::INIT_COMPACTION_SCN) {
+  if (!tablet_iter_.tenant_merge_finish() && merge_version_ > ObBasicMergeScheduler::INIT_COMPACTION_SCN) {
     // not finish cur merge_version
     if (schedule_stats_.weak_read_ts_ready_) { // check schedule Timer Task
       if (schedule_stats_.add_weak_read_ts_event_flag_ && tablet_iter_.is_scan_finish()) {
@@ -169,12 +170,12 @@ void ObMediumLoop::add_event_and_diagnose(const ObScheduleTabletFunc &func)
   }
 
   const int64_t merged_version = ObBasicMergeScheduler::get_merge_scheduler()->get_merged_version();
-  if (tablet_iter_.database_merge_finish() && merge_version_ > merged_version) {
+  if (tablet_iter_.tenant_merge_finish() && merge_version_ > merged_version) {
     ObBasicMergeScheduler::get_merge_scheduler()->update_merged_version(merge_version_);
     LOG_INFO("all tablet major merge finish", K(merged_version), K_(loop_cnt));
 
     DEL_SUSPECT_INFO(MEDIUM_MERGE, UNKNOW_TABLET_ID, share::ObDiagnoseTabletType::TYPE_MEDIUM_MERGE);
-    if (OB_TMP_FAIL(share::g_mp->compaction_progress_mgr()->finish_progress(merge_version_))) {
+    if (OB_TMP_FAIL(share::g_mp->tenant_compaction_progress_mgr()->finish_progress(merge_version_))) {
       LOG_WARN("failed to finish progress", K(tmp_ret), K_(merge_version));
     }
 
@@ -188,7 +189,7 @@ void ObMediumLoop::add_event_and_diagnose(const ObScheduleTabletFunc &func)
   }
 
   LOG_INFO("finish schedule all tablet merge", K(merge_version_), K(schedule_stats_), K_(loop_cnt),
-      "database_merge_finish", tablet_iter_.database_merge_finish(),
+      "tenant_merge_finish", tablet_iter_.tenant_merge_finish(),
       "is_scan_all_tablet_finish", tablet_iter_.is_scan_finish(),
       "schedule_tablet_cnt", func.get_schedule_tablet_cnt(),
       "time_guard", func.get_time_guard());

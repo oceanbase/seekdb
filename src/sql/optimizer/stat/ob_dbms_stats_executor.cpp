@@ -1471,8 +1471,7 @@ int ObDbmsStatsExecutor::update_online_stat(ObExecContext &ctx,
                                             ObTableStatParam &param,
                                             share::schema::ObSchemaGetterGuard *schema_guard,
                                             const TabStatIndMap &online_table_stats,
-                                            const ColStatIndMap &online_column_stats,
-                                            const ObIArray<ObOptDmlStat *> *dml_stats)
+                                            const ColStatIndMap &online_column_stats)
 {
   int ret = OB_SUCCESS;
   ObArenaAllocator allocator("ObOnlineStat", OB_MALLOC_NORMAL_BLOCK_SIZE);
@@ -1509,8 +1508,6 @@ int ObDbmsStatsExecutor::update_online_stat(ObExecContext &ctx,
                                                                          need_reset_trx_lock_timeout,
                                                                          conn))) {
         LOG_WARN("failed to prepare conn and store session for online stats", K(ret));
-      } else if (nullptr != dml_stats && ObOptStatMonitorManager::update_dml_stat_info_from_direct_load(*dml_stats, conn)) {
-        LOG_WARN("fail to update dml stat info", K(ret));
       } else if (OB_FAIL(ObDbmsStatsUtils::get_current_opt_stats(allocator,
                                                                  conn,
                                                                  param,
@@ -1598,17 +1595,11 @@ int ObDbmsStatsExecutor::prepare_conn_and_store_session_for_online_stats(sql::Ob
     session->set_query_start_time(ObTimeUtility::current_time());
     session->set_inner_session();
     session->set_nested_count(-1);
-    //2.2 modify seesion compatible mode
-    ObObj mysql_mode;
-    mysql_mode.set_int(0);
-    if (OB_FAIL(session->update_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, mysql_mode))) {
-      LOG_WARN("failed to update sys variable for compatibility mode", K(ret));
-    } else {
-      //2.3.modify session database name and database id and catalog id
-      if (OB_FAIL(session->set_internal_catalog_db())) {
+    //2.2 modify session database name and database id and catalog id
+    if (OB_FAIL(session->set_internal_catalog_db())) {
         LOG_WARN("failed to set session catalog and database", K(ret));
       } else {
-        //2.4 modify session trx lock timeout
+        //2.3 modify session trx lock timeout
         old_trx_lock_timeout = session->get_trx_lock_timeout();
         ObObj trx_lock_timeout;
         trx_lock_timeout.set_int(0);
@@ -1625,7 +1616,6 @@ int ObDbmsStatsExecutor::prepare_conn_and_store_session_for_online_stats(sql::Ob
             LOG_WARN("failed to acquire conn", K(ret));
           }
         }
-      }
     }
   }
   return ret;
@@ -1767,7 +1757,7 @@ int ObDbmsStatsExecutor::fetch_gather_task_addr(ObCommonSqlProxy *sql_proxy,
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy);
+      auto &sql_client_retry_weak = *sql_proxy;
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {

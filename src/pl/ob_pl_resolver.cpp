@@ -1536,7 +1536,7 @@ int ObPLResolver::collect_dep_info_by_schema(const ObPLResolveCtx &ctx,
   CK (OB_NOT_NULL(table_schema));
 
   if (OB_SUCC(ret)) {
-    if (table_schema->is_view_table() && !table_schema->is_materialized_view()) {
+    if (table_schema->is_view_table()) {
       OZ (collect_dep_info_by_view_schema(ctx, table_schema, dependency_objects));
     } else {
       ObSchemaObjVersion version(table_schema->get_table_id(),
@@ -1573,7 +1573,7 @@ int ObPLResolver::build_record_type_by_schema(
     }
   }
   if (OB_SUCC(ret)) {
-    if (table_schema->is_view_table() && !table_schema->is_materialized_view()) {
+    if (table_schema->is_view_table()) {
       OZ (build_record_type_by_view_schema(
         resolve_ctx, table_schema, record_type));
     } else {
@@ -1679,7 +1679,7 @@ int ObPLResolver::resolve_extern_type_info(ObSchemaGetterGuard &guard,
       OZ (guard.get_table_schema( access_idxs.at(0).var_index_, table));
       CK (OB_NOT_NULL(table));
       if (OB_FAIL(ret)) {
-      } else if (ObCharset::case_compat_mode_equal(extern_type_info->type_subname_, table->get_table_name_str())) {
+      } else if (ObCharset::case_insensitive_equal(extern_type_info->type_subname_, table->get_table_name_str())) {
         OX (extern_type_info->type_owner_ = table->get_database_id());
       } else {
         OZ (resolve_ctx_.session_info_.get_database_id(extern_type_info->type_owner_));
@@ -1741,7 +1741,7 @@ int ObPLResolver::resolve_extern_type_info(ObSchemaGetterGuard &guard,
       CK (OB_NOT_NULL(table));
       OX (extern_type_info->type_owner_ = table->get_database_id());
       if (OB_FAIL(ret)) {
-      } else if (ObCharset::case_compat_mode_equal(extern_type_info->type_name_, table->get_table_name_str())) {
+      } else if (ObCharset::case_insensitive_equal(extern_type_info->type_name_, table->get_table_name_str())) {
         OX (extern_type_info->type_owner_ = table->get_database_id());
       } else {
         OZ (resolve_ctx_.session_info_.get_database_id(extern_type_info->type_owner_));
@@ -2577,11 +2577,8 @@ int ObPLResolver::set_question_mark_type( ObRawExpr *into_expr,
     OX ((const_cast<ObPLVar*>(var))->set_name(ANONYMOUS_INOUT_ARG));
   }
   if (OB_SUCC(ret) && need_set) {
-    bool use_original_type = false;
+    const bool use_original_type = true;
     ObPLDataType dest_type(*type);
-    OZ (session_info.check_feature_enable(
-                        ObCompatFeatureType::OUT_ANONYMOUS_COLLECTION_IS_ALLOW, 
-                        use_original_type));
     if (OB_FAIL(ret)) {
     } else if (use_original_type
         && !(OB_NOT_NULL(var->get_type().get_data_type())     
@@ -3055,7 +3052,7 @@ int ObPLResolver::resolve_loop_control(const ObStmtNodeTree *parse_tree, ObPLLoo
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("must have label name in iterate stme", K(resolve_ctx_.session_info_.get_compatibility_mode()), K(ret));
+    LOG_WARN("must have label name in iterate stme", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -8247,7 +8244,7 @@ int ObPLResolver::resolve_record_construct(const ObQualifiedName &q_name,
     CK (OB_NOT_NULL(member_name));
     CK (OB_NOT_NULL(member));
     for (; OB_SUCC(ret) && i < udf_info.param_names_.count(); ++i) {
-      if (ObCharset::case_compat_mode_equal(*member_name, udf_info.param_names_.at(i))) {
+      if (ObCharset::case_insensitive_equal(*member_name, udf_info.param_names_.at(i))) {
         found = true;
         total_assign_cnt++;
         break;
@@ -8379,7 +8376,6 @@ int ObPLResolver::replace_udf_param_expr(
     if (access_ident.is_pl_udf()) {
       OZ (replace_udf_param_expr(access_ident, columns, real_exprs));
     } else if (access_ident.is_sys_func()) {
-      // cases like : xmlparse(document expr).getclobval()
       ObRawExpr *expr = static_cast<ObRawExpr *>(access_ident.sys_func_expr_);
       for (int64_t i = 0; OB_SUCC(ret) && i < real_exprs.count(); ++i) {
         if (OB_FAIL(ObRawExprUtils::replace_ref_column(expr, columns.at(i).ref_expr_, real_exprs.at(i)))) {
@@ -11038,7 +11034,6 @@ int ObPLResolver::resolve_condition(const ObStmtNodeTree *parse_tree,
     } else {
       // package name is not null and not equal to current ns, search global
       uint64_t database_id = OB_INVALID_ID;
-      int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
       
       const ObPackageInfo *package_info = NULL;
       ObPLPackageManager &package_manager =
@@ -11046,14 +11041,14 @@ int ObPLResolver::resolve_condition(const ObStmtNodeTree *parse_tree,
       db_name = db_name.empty() ? resolve_ctx_.session_info_.get_database_name() : db_name;
       const ObPLCondition *condition = NULL;
       OZ (resolve_ctx_.schema_guard_.get_database_id(db_name, database_id));
-      OZ (resolve_ctx_.schema_guard_.get_package_info( database_id, package_name, share::schema::PACKAGE_TYPE, compatible_mode, package_info));
+      OZ (resolve_ctx_.schema_guard_.get_package_info(database_id, package_name, share::schema::PACKAGE_TYPE, package_info));
       if (OB_SUCC(ret)
           && OB_ISNULL(package_info)
           && 0 == db_name.case_compare(OB_SYS_DATABASE_NAME)) {
         OZ (resolve_ctx_.schema_guard_.get_package_info(
                                                 OB_SYS_DATABASE_ID,
                                                 package_name, share::schema::PACKAGE_TYPE,
-                                                compatible_mode, package_info));
+                                                package_info));
       }
       if (OB_SUCC(ret) && OB_ISNULL(package_info)) {
         ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;

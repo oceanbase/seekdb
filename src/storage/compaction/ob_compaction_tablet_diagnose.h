@@ -73,7 +73,7 @@ struct ObDiagnoseTablet {
 
 class ObDiagnoseTabletMgr {
 public:
-  static int server_module_init(ObDiagnoseTabletMgr *&diagnose_tablet_mgr);
+  static int mtl_init(ObDiagnoseTabletMgr *&diagnose_tablet_mgr);
   ObDiagnoseTabletMgr();
   virtual ~ObDiagnoseTabletMgr() { destroy(); }
 

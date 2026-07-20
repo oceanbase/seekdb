@@ -19,7 +19,7 @@
 #include "storage/access/ob_table_scan_iterator.h"
 #include "ob_lob_persistent_reader.h"
 #include "storage/ob_table_dml_param.h"
-#include "share/schema/ob_schema_runtime_service.h"
+#include "share/schema/ob_tenant_schema_service.h"
 #include "storage/ob_tablet_autoincrement_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -333,6 +333,7 @@ int ObPersistentLobApator::build_common_scan_param(
     scan_param.for_update_wait_timeout_ = scan_param.timeout_;
     scan_param.scan_allocator_ = scan_allocator;
     scan_param.frozen_version_ = -1;
+    scan_param.force_refresh_lc_ = false;
     scan_param.output_exprs_ = nullptr;
     scan_param.aggregate_exprs_ = nullptr;
     scan_param.op_ = nullptr;

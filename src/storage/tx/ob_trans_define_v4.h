@@ -20,7 +20,6 @@
 #include <cstdint>
 #include <functional>
 #include "lib/container/ob_iarray.h"
-#include "lib/container/ob_mask_set2.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/list/ob_list.h"
 #include "lib/oblog/ob_log_module.h"
@@ -29,7 +28,6 @@
 #include "lib/container/ob_tuple.h"
 #include "common/ob_role.h"
 #include "share/ob_cluster_version.h"
-#include "share/ob_ls_id.h"
 #include "share/ob_light_hashmap.h"
 #include "storage/tx/ob_trans_define.h"
 #include "common/ob_simple_iterator.h"
@@ -43,64 +41,11 @@ namespace transaction
 
 class ObTxSchedulerStat;
 
-struct ObTransIDAndAddr { // deadlock needed
-  OB_UNIS_VERSION(1);
-public:
-  ObTransIDAndAddr() = default;
-  ObTransIDAndAddr(const ObTransID id, const common::ObAddr &addr) : tx_id_(id), scheduler_addr_(addr) {}
-  TO_STRING_KV(K_(tx_id), K_(scheduler_addr));
-  bool operator==(const ObTransIDAndAddr &rhs) const { return tx_id_ == rhs.tx_id_ &&
-                                                              scheduler_addr_ == rhs.scheduler_addr_; }
-  bool is_valid() const { return tx_id_.is_valid() && scheduler_addr_.is_valid(); }
-  ObTransID tx_id_;
-  common::ObAddr scheduler_addr_;
-};
-OB_SERIALIZE_MEMBER_TEMP(inline, ObTransIDAndAddr, tx_id_, scheduler_addr_);
-
 class ObITxCallback
 {
 public:
   virtual void callback(int ret) = 0;
 };
-
-template<typename L, typename R>
-struct ObPair
-{
-  L left_; R right_;
-public:
-  ObPair() : left_(), right_() {}
-  ObPair(const L &l, const R &r): left_(l), right_(r) {}
-  ObPair& operator=(const ObPair &b)
-  { left_ = b.left_; right_ = b.right_; return *this; }
-  inline bool operator==(const ObPair &b) const {
-    return b.left_ == left_ && b.right_ == right_;
-  }
-  TO_STRING_KV(K_(left), K_(right));
-  NEED_SERIALIZE_AND_DESERIALIZE;
-};
-
-template<typename L, typename R>
-int ObPair<L, R>::serialize(char *buf, const int64_t buf_len, int64_t &pos) const
-{
-  int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_ENCODE, left_, right_);
-  return ret;
-}
-template<typename L, typename R>
-int ObPair<L, R>::deserialize(const char *buf, int64_t data_len, int64_t &pos)
-{
-  int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_DECODE, left_, right_);
-  return ret;
-}
-
-template<typename L, typename R>
-int64_t ObPair<L, R>::get_serialize_size() const
-{
-  int64_t len = 0;
-  LST_DO_CODE(OB_UNIS_ADD_LEN, left_, right_);
-  return len;
-}
 
 template<typename T, int N = 4>
 class ObRefList
@@ -126,19 +71,17 @@ public:
 
 
 #define OB_TX_ABORT_CAUSE_LIST                          \
-  _XX(PARTICIPANT_IS_CLEAN)                             \
+  _XX(WRITE_STATE_IS_CLEAN)                       \
   _XX(TX_RESULT_INCOMPLETE)                             \
   _XX(IN_CONSIST_STATE)                                 \
   _XX(SAVEPOINT_ROLLBACK_FAIL)                          \
   _XX(IMPLICIT_ROLLBACK)                                \
   _XX(SESSION_DISCONNECT)                       /*5*/   \
   _XX(STOP)                                             \
-  _XX(PARTICIPANT_STATE_INCOMPLETE)                     \
-  _XX(PARTICIPANTS_SET_INCOMPLETE)                      \
-  _XX(PARTICIPANT_KILLED_FORCEDLY)                      \
-  _XX(PARTICIPANT_KILLED_GRACEFULLY)            /*10*/  \
-  _XX(PARTICIPANT_SWITCH_FOLLOWER_FORCEDLY)             \
-  _XX(PARTICIPANT_SWITCH_LEADER_DATA_INCOMPLETE)        \
+  _XX(WRITE_STATE_STATE_INCOMPLETE)               \
+  _XX(WRITE_STATE_INCOMPLETE)                     \
+  _XX(WRITE_STATE_KILLED_FORCEDLY)                \
+  _XX(WRITE_STATE_KILLED_GRACEFULLY)      /*10*/  \
   _XX(END_STMT_FAIL)                                    \
   _XX(EXPLICIT_ROLLBACK)                                \
   _XX(CREATE_SAVEPOINT_FAIL)                            \
@@ -199,7 +142,7 @@ inline bool is_RC_isolevel(const ObTxIsolationLevel isolation)
 
 enum class ObTxAccessMode
 {
-  INVL = -1, RW = 0, RD_ONLY = 1, STANDBY_RD_ONLY = 2
+  INVL = -1, RW = 0, RD_ONLY = 1
 };
 
 struct ObTxParam
@@ -211,66 +154,48 @@ struct ObTxParam
   int64_t lock_timeout_us_;
   ObTxAccessMode access_mode_;
   ObTxIsolationLevel isolation_;
-  int64_t cluster_id_;
-  TO_STRING_KV(K_(cluster_id),
-               K_(timeout_us),
+  TO_STRING_KV(K_(timeout_us),
                K_(lock_timeout_us),
                K_(access_mode),
                K_(isolation));
   OB_UNIS_VERSION(1);
 };
 
-union ObTxPartFlag
+union ObTxWriteStateFlag
 {
   int64_t flag_val_;
   struct FlagBit
   {
-    unsigned int is_dup_ls_ : 1;
+    unsigned int reserved_ : 1;
     bool is_clean_          : 1; // no Write happended, even rollbacked
-    TO_STRING_KV(K_(is_dup_ls), K_(is_clean));
+    TO_STRING_KV(K_(is_clean));
   } flag_bit_;
 
-  ObTxPartFlag() { reset(); }
+  ObTxWriteStateFlag() { reset(); }
 
   void reset()
   {
     flag_val_ = 0;
   }
 
-  bool is_dup_ls() const { return flag_bit_.is_dup_ls_ == 1; }
-  void set_dup_ls() { flag_bit_.is_dup_ls_ = 1; }
   bool is_clean() const { return flag_bit_.is_clean_; }
   void set_clean() { flag_bit_.is_clean_ = true; }
   void set_dirty() { flag_bit_.is_clean_ = false; }
 };
 
-struct ObTxPart
+struct ObTxWriteState
 {
-  static const int64_t EPOCH_UNKNOWN = -1;
-  static const int64_t EPOCH_DEAD = -2;
-  ObTxPart();
-  ~ObTxPart();
-  share::ObLSID id_;             // identifier, the logstream
-  ObAddr addr_;           // its latest address
-  int64_t epoch_;         // used to judge a ctx not revived
+  ObTxWriteState();
+  ~ObTxWriteState();
   ObTxSEQ first_scn_;      // used to judge a ctx is clean in scheduler view
   ObTxSEQ last_scn_;       // used to get rollback savepoint set
   int64_t last_touch_ts_; // used to judge a ctx retouched after a time point
-  ObTxPartFlag flag_;     // used to describe some special attributes of a participant
-  bool operator==(const ObTxPart &rhs) const { return id_ == rhs.id_ && addr_ == rhs.addr_; }
-  bool operator!=(const ObTxPart &rhs) const { return !operator==(rhs); }
+  ObTxWriteStateFlag flag_;     // used to describe some special attributes of the single write side
   bool is_clean() const { return flag_.is_clean(); }
   bool is_without_valid_write() const { return !first_scn_.is_valid() || last_scn_ < first_scn_; }
-  bool is_without_ctx() const { return is_without_ctx(epoch_); }
-  bool is_dup_ls() const { return flag_.is_dup_ls(); }
-  static bool is_without_ctx(int64_t epoch) { return EPOCH_DEAD == epoch; }
-  TO_STRING_KV(K_(id), K_(addr), K_(epoch), K_(first_scn), K_(last_scn), K_(last_touch_ts), K(flag_.flag_bit_));
+  TO_STRING_KV(K_(first_scn), K_(last_scn), K_(last_touch_ts), K(flag_.flag_bit_));
   OB_UNIS_VERSION(1);
 };
-
-typedef ObSEArray<ObTxPart, 4> ObTxPartList;
-typedef ObRefList<ObTxPart, 4> ObTxPartRefList;
-typedef ObPair<share::ObLSID, int64_t> ObTxLSEpochPair;
 
 // internal core snapshot for read data
 class ObTxSnapshot
@@ -315,17 +240,16 @@ public:
     SPECIAL = 4,            // user specify
     NONE = 5,               // won't read, global snapshot not required
   } source_;
-  share::ObLSID snapshot_lsid_;    // for source_ = LOCAL                                  //
-  common::ObRole snapshot_ls_role_; // for source_ = LS, only can be used for dup_table with a
-                                    // max_commit_ts from the follower
-  ObAddr snapshot_acquire_addr_;    // snapshot version acquired from which server
   int64_t uncertain_bound_; // for source_ GLOBAL
-  ObSEArray<ObTxLSEpochPair, 1> parts_;
+  bool has_write_state_;
 public:
   void init_weak_read(const share::SCN snapshot);
   void init_none_read() { valid_ = true; source_ = SRC::NONE; }
-  void init_ls_read(const share::ObLSID &ls_id, const ObTxSnapshot &core);
+  void init_ls_read(const ObTxSnapshot &core);
   void specify_snapshot_scn(const share::SCN snapshot);
+  void reset_write_state();
+  void mark_write_state() { has_write_state_ = true; }
+  bool has_write_state() const { return has_write_state_; }
   const char* get_source_name() const;
   const ObTxSnapshot &snapshot() const { return core_; }
   const share::SCN &version() const { return core_.version(); }
@@ -339,45 +263,43 @@ public:
   bool is_valid() const { return valid_; }
   void invalid() { valid_ = false; }
   bool is_committed() const { return committed_; }
-  const ObAddr get_snapshot_acquire_addr() const { return snapshot_acquire_addr_; }
   void reset();
   int assign(const ObTxReadSnapshot &);
   void try_set_read_elr();
   bool read_elr() const { return core_.is_elr(); }
   /**
    * only used for lob, other situation DONOT use
-   * 
+   *
    * special serialize interface for lob to avoid lob locator too large
-   */ 
-  int serialize_for_lob(const share::ObLSID &ls_id, const share::SCN &fb_snapshot, SERIAL_PARAMS) const;
+   */
+  int serialize_for_lob(const share::SCN &fb_snapshot, SERIAL_PARAMS) const;
   int deserialize_for_lob(share::SCN &fb_snapshot, DESERIAL_PARAMS);
-  int64_t get_serialize_size_for_lob(const share::ObLSID &ls_id, const share::SCN &fb_snapshot) const;
+  int64_t get_serialize_size_for_lob(const share::SCN &fb_snapshot) const;
   /**
    * deprecated interface, DONOT use !
-   * 
+   *
    * only used for lob, other situation DONOT use
-   * 
+   *
    * offline ddl with lob can only get ObTxSnapshot
    * so provide one interface to build ObTxReadSnapshot from ObTxSnapshot
    * master no need use this
    */
-  int build_snapshot_for_lob(const ObTxSnapshot &core, const share::ObLSID &ls_id);
+  int build_snapshot_for_lob(const ObTxSnapshot &core);
   /**
    * deprecated interface, DONOT use !
-   * 
+   *
    * only used for lob, other situation DONOT use
-   * 
+   *
    * in upgarge, old lob locator will use ObMemLobTxInfo store tx info
    * so provide one interface to build ObTxReadSnapshot from ObMemLobTxInfo
    */
   int build_snapshot_for_lob(
       const int64_t snapshot_version,
       const int64_t snapshot_tx_id,
-      const int64_t snapshot_seq,
-      const share::ObLSID &ls_id);
+      const int64_t snapshot_seq);
   /**
    * only used for lob, other situation DONOT use
-   * 
+   *
    * determine whether the current snapshot is within a transaction
    *
    * Return:
@@ -401,10 +323,7 @@ public:
                K_(source),
                K_(core),
                K_(uncertain_bound),
-               K_(snapshot_lsid),
-               K_(snapshot_ls_role),
-               K_(snapshot_acquire_addr),
-               K_(parts),
+               K_(has_write_state),
                K_(committed));
   OB_UNIS_VERSION(1);
   DISABLE_COPY_ASSIGN(ObTxReadSnapshot);
@@ -461,81 +380,33 @@ class ObTxExecResult
   friend class ObTransService;
   friend class ObTxDesc;
   OB_UNIS_VERSION(1);
-  TransModulePageAllocator allocator_;
-  bool incomplete_;
-  share::ObLSArray touched_ls_list_;
-  ObTxPartList parts_;
-  ObSArray<ObTransIDAndAddr> conflict_txs_; // FARM COMPAT WHITELIST for cflict_txs_
-  ObSArray<storage::ObRowConflictInfo> conflict_info_array_;
+	  TransModulePageAllocator allocator_;
+	  bool incomplete_;
+	  bool touched_storage_;
+	  bool has_write_state_;
+	  ObTxWriteState write_state_;
+	  ObSArray<ObTransID> conflict_txs_;
+	  ObSArray<storage::ObRowConflictInfo> conflict_info_array_;
 public:
   ObTxExecResult();
   ~ObTxExecResult();
   void reset();
-  TO_STRING_KV(K_(incomplete), K_(parts), K_(touched_ls_list), K_(conflict_txs));
+	  TO_STRING_KV(K_(incomplete), K_(has_write_state), K_(write_state), K_(touched_storage), K_(conflict_txs));
   void set_incomplete() {
     TRANS_LOG(TRACE, "tx result incomplete:", KP(this));
     incomplete_ = true;
   }
-  int merge_cflict_txs(const common::ObIArray<ObTransIDAndAddr> &txs);
-  bool is_incomplete() const { return incomplete_; }
-  int add_touched_ls(const share::ObLSID ls);
-  int add_touched_ls(const ObIArray<share::ObLSID> &ls_list);
-  const share::ObLSArray &get_touched_ls() const { return touched_ls_list_; }
-  int merge_result(const ObTxExecResult &r);
-  int assign(const ObTxExecResult &r);
-  const ObSArray<ObTransIDAndAddr> &get_conflict_txs() const { return conflict_txs_; }
+	  int merge_cflict_txs(const common::ObIArray<ObTransID> &txs);
+	  bool is_incomplete() const { return incomplete_; }
+	  bool touches_storage() const { return touched_storage_; }
+	  void mark_touched_storage() { touched_storage_ = true; }
+	  int set_write_state(const ObTxWriteState &part);
+	  int merge_write_state(const ObTxWriteState &part, const bool has_write_state);
+	  bool has_write_state() const { return has_write_state_; }
+	  int merge_result(const ObTxExecResult &r);
+	  int assign(const ObTxExecResult &r);
+	  const ObSArray<ObTransID> &get_conflict_txs() const { return conflict_txs_; }
   DISABLE_COPY_ASSIGN(ObTxExecResult);
-};
-
-class RollbackMaskSet
-{
-public:
-  RollbackMaskSet() : rollback_parts_(NULL) {}
-  int init(share::ObCommonID tx_msg_id, ObTxRollbackParts &parts) {
-    ObSpinLockGuard guard(lock_);
-    tx_msg_id_ = tx_msg_id;
-    rollback_parts_ = &parts;
-    return mask_set_.init(&parts);
-  }
-  int get_not_mask(ObTxRollbackParts &remain) {
-    ObSpinLockGuard guard(lock_);
-    return mask_set_.get_not_mask(remain);
-  }
-  bool is_mask(const ObTxExecPart &part) {
-    ObSpinLockGuard guard(lock_);
-    return mask_set_.is_mask(part);
-  }
-  int mask(const ObTxExecPart &part) {
-    ObSpinLockGuard guard(lock_);
-    return mask_set_.mask(part);
-  }
-  int unmask(const ObTxExecPart &part) {
-    ObSpinLockGuard guard(lock_);
-    return mask_set_.unmask(part);
-  }
-  bool is_all_mask() {
-    ObSpinLockGuard guard(lock_);
-    return mask_set_.is_all_mask();
-  }
-  share::ObCommonID get_tx_msg_id() const {
-    return tx_msg_id_;
-  }
-  void reset() {
-    ObSpinLockGuard guard(lock_);
-    tx_msg_id_.reset();
-    rollback_parts_ = NULL;
-    mask_set_.reset();
-  }
-  int merge_part(const share::ObLSID add_ls_id,
-                 const int64_t exec_epoch);
-  int find_part(const share::ObLSID ls_id,
-                const int64_t orig_epoch,
-                ObTxExecPart &part);
-private:
-  ObSpinLock lock_;
-  share::ObCommonID tx_msg_id_;
-  ObTxRollbackParts *rollback_parts_;
-  common::ObMaskSet2<ObTxExecPart> mask_set_;
 };
 
 class ObTxDesc final : public share::ObLightHashLink<ObTxDesc>
@@ -544,17 +415,12 @@ class ObTxDesc final : public share::ObLightHashLink<ObTxDesc>
   static constexpr int64_t MAX_RESERVED_CONFLICT_TX_NUM = 30;
   friend class ObTransService;
   friend class ObTxDescMgr;
-  friend class ObPartTransCtx;
+  friend class ObTxCtx;
   friend class StopTxDescFunctor;
-  friend class ObTxStmtInfo;
   friend class IterateTxSchedulerFunctor;
   friend class ObTxnFreeRouteCtx;
   OB_UNIS_VERSION(1);
 protected:
-          // FIXME: removable
-  // Identify the ownership of data when the A database and
-  // the B database synchronize data with each other
-  int64_t cluster_id_;
   ObTraceInfo trace_info_;
   uint64_t cluster_version_;  // compatible handle when upgrade
   int64_t seq_base_;          // tx_seq's base value, use to calculate absolute value of tx_seq
@@ -573,8 +439,6 @@ protected:
   ObTxSEQ snapshot_scn_;               // the time of acquire @snapshot_version_
   uint32_t sess_id_;                   // sesssion id of txn start, for XA it is XA_START session id
   uint32_t assoc_sess_id_;             // the session which associated with
-  uint32_t client_sid_;                // client session id, which is produced by proxy
-  ObGlobalTxType global_tx_type_;      // global trans type
 
   uint64_t op_sn_;                     // Tx level operation sequence No
 
@@ -587,53 +451,29 @@ protected:
     ROLLBACK_SAVEPOINT, // rolling back to savepoint
     IN_TERMINATE,       // committing, aborting
     ABORTED,            // internal rolled back
-    ROLLED_BACK,        // rolled back
-    COMMIT_TIMEOUT,     // commit timeouted
-    COMMIT_UNKNOWN,     // commit complted but result unknown, either committed or aborted
-    COMMITTED,          // committed
-    SUB_PREPARING,      // XA prepare started
-    SUB_PREPARED,       // XA prepare response received
-    SUB_COMMITTING,     // XA commit started
-    SUB_COMMITTED,      // XA commit response received
-    SUB_ROLLBACKING,    // XA rollback started
-    SUB_ROLLBACKED,     // XA rollback response received
-  } state_;
+	    ROLLED_BACK,        // rolled back
+	    COMMIT_TIMEOUT,     // commit timeouted
+	    COMMIT_UNKNOWN,     // commit complted but result unknown, either committed or aborted
+	    COMMITTED,          // committed
+	  } state_;
 
   union FLAG                         // flags
   {
     uint64_t v_;
-    struct FOR_FIXED_SER_VAL {
-      uint64_t v_;
-      TO_STRING_KV(K_(v));
-      NEED_SERIALIZE_AND_DESERIALIZE;
-    } for_serialize_v_;
-    struct COMPAT_FOR_TX_ROUTE {
-      uint64_t v_;
-      uint64_t get_serialize_v_() const;
-      TO_STRING_KV(K_(v));
-      NEED_SERIALIZE_AND_DESERIALIZE;
-    } compat_for_tx_route_;
-    struct COMPAT_FOR_EXEC {
-      uint64_t v_;
-      uint64_t get_serialize_v_() const;
-      TO_STRING_KV(K_(v));
-      NEED_SERIALIZE_AND_DESERIALIZE;
-    } compat_for_exec_;
     struct
     {
       bool EXPLICIT_:1;              // txn is explicted start
       bool SHADOW_:1;                // this tx desc is a shadow copy, is not registered with tx_desc_mgr
-      bool REPLICA_:1;               // a replica of primary/original, its state is transient, without whole lifecyle
       bool TRACING_:1;               // tracing the Tx
       bool INTERRUPTED_: 1;          // a single for blocking operation
       bool RELEASED_: 1;             // after released, commit can give up
       bool BLOCK_: 1;                // tx is blocking within some loop
-      bool PARTS_INCOMPLETE_: 1;     // participants set incomplete (trans must abort)
-      bool PART_EPOCH_MISMATCH_: 1;  // participant's born epoch mismatched
+      bool WRITE_STATE_INCOMPLETE_: 1; // write state state incomplete (trans must abort)
       bool WITH_TEMP_TABLE_: 1;      // with txn level temporary table
       bool DEFER_ABORT_: 1;          // need do abort in txn start node
-      bool PART_ABORTED_: 1;         // some participant is aborted or in delay-abort state (trans must abort)
+      bool WRITE_STATE_ABORTED_: 1; // write state is aborted or in delay-abort state (trans must abort)
     };
+    NEED_SERIALIZE_AND_DESERIALIZE;
     void switch_to_idle_();
   } flags_;
   static_assert(sizeof(FLAG) == sizeof(int64_t), "ObTxDesc::FLAG should sizeof(int64_t)");
@@ -643,7 +483,7 @@ protected:
     struct {
       bool STATIC_CHANGED_:1;
       bool DYNAMIC_CHANGED_:1;
-      bool PARTS_CHANGED_:1;
+      bool WRITE_STATE_CHANGED_:1;
       bool EXTRA_CHANGED_:1;
     };
     void reset() { v_ = 0;}
@@ -661,20 +501,16 @@ protected:
   ObTxSEQ active_scn_;               // logical time of ACTIVE | IMPLICIT_ACTIVE
   ObTxSEQ min_implicit_savepoint_;   // mininum of implicit savepoints
   int16_t last_branch_id_;           // branch_id allocator, reset when stmt start
-  ObTxPartList parts_;               // participant list
+  bool has_write_state_;
+  ObTxWriteState write_state_;
   ObTxSavePointList savepoints_;     // savepoints established
   // conflict_txs_ is used to store conflict trans id when try acquire row lock failed(meet lock conflict)
   // this information will used to detect deadlock
-  // conflict_txs_ is valid when transaction is not executed on local
-  // on scheduler, conflict_txs_ merges all participants executed results on remote
-  // on participant, conflict_txs_ temporary stores conflict information, and will be read by upper layers, bring back to scheduler
-  ObSArray<ObTransIDAndAddr> conflict_txs_; // FARM COMPAT WHITELIST for cflict_txs_
+  ObSArray<ObTransID> conflict_txs_;
   ObSArray<storage::ObRowConflictInfo> conflict_info_array_;
 
-  // used during commit
-  share::ObLSID coord_id_;           // coordinator ID
-  int64_t commit_expire_ts_;         // commit operation deadline
-  ObTxCommitParts commit_parts_;    // participants to do commit
+	  // used during commit
+	  int64_t commit_expire_ts_;         // commit operation deadline
   share::SCN commit_version_;        // Tx commit version
   int commit_out_;                   // the commit result
   int commit_times_;                 // times of sent commit request
@@ -691,9 +527,6 @@ private:
   ObITxCallback *commit_cb_;        // async commit callback
   int64_t cb_tid_;                  // commit callback thread id
   int64_t exec_info_reap_ts_;       // the time reaping incremental tx exec info
-  RollbackMaskSet brpc_mask_set_;   // used in message driven savepoint rollback
-  ObTransCond rpc_cond_;            // used in message driven savepoint rollback
-
   ObTxTimeoutTask commit_task_;     // commit retry task
   ObTransTraceLog tlog_;
 #ifdef ENABLE_DEBUG_LOG
@@ -721,25 +554,19 @@ private:
   void reset();
   void set_tx_id(const ObTransID &tx_id);
   void reset_tx_id();
-  // udpate clean part's unknown field
-  int update_clean_part(const share::ObLSID &id,
-                        const int64_t epoch,
-                        const ObAddr &addr);
-  int add_clean_part_if_absent(const share::ObLSID &id,
-                               const int64_t epoch,
-                               const ObAddr &addr,
-                               const bool is_dup);
-  int update_part(ObTxPart &p);
-  int update_parts(const share::ObLSArray &parts);
+  int update_clean_write_state();
+  int init_clean_write_state_if_absent();
+  int merge_write_state(ObTxWriteState &p);
+  int mark_write();
   int switch_to_idle();
   int set_commit_cb(ObITxCallback *cb);
   bool execute_commit_cb();
 private:
-  int update_part_(ObTxPart &p, const bool append = true, const bool check_only_if_exist = false);
-  int add_conflict_tx_(const ObTransIDAndAddr &conflict_tx);
-  int merge_conflict_txs_(const ObIArray<ObTransIDAndAddr> &conflict_ids);
-  int update_parts_(const ObTxPartList &list);
-  void post_rb_savepoint_(ObTxPartRefList &parts, const ObTxSEQ &savepoint);
+  int merge_write_state_(ObTxWriteState &p, const bool append = true, const bool check_only_if_exist = false);
+  int add_conflict_tx_(const ObTransID &conflict_tx);
+  int merge_conflict_txs_(const ObIArray<ObTransID> &conflict_ids);
+  int merge_write_state_if_present_(const ObTxWriteState &part, const bool has_write_state);
+  void finish_write_state_rollback_(ObTxWriteState *part, const ObTxSEQ &savepoint);
   void implicit_start_tx_();
   bool acq_commit_cb_lock_if_need_();
   bool has_extra_state_() const;
@@ -755,7 +582,6 @@ public:
                K_(addr),
                "session_id", sess_id_,
                "assoc_session_id", assoc_sess_id_,
-               "client_sid", client_sid_,
                "xid", PC((!xid_.empty() ? &xid_ : (ObXATransID*)nullptr)),
                K_(access_mode),
                K_(tx_consistency_type),
@@ -771,19 +597,17 @@ public:
                K_(timeout_us),
                K_(lock_timeout_us),
                K_(expire_ts),
-               K_(coord_id),
-               K_(parts),
+	               K_(has_write_state),
+               K_(write_state),
                K_(exec_info_reap_ts),
                K_(commit_version),
                K_(commit_times),
                KP_(commit_cb),
-               K_(cluster_id),
                K_(cluster_version),
                K_(seq_base),
                K_(flags_.SHADOW),
                K_(flags_.INTERRUPTED),
                K_(flags_.BLOCK),
-               K_(flags_.REPLICA),
                K_(conflict_txs),
                K_(abort_cause),
                K_(commit_expire_ts),
@@ -791,25 +615,21 @@ public:
                K_(modified_tables),
                K_(last_rc_snapshot_version),
                K_(ref));
-  bool support_branch() const { return seq_base_ > 0; }
   // used by SQL alloc branch_id refer the min branch_id allowed
   // because branch_id bellow this is reserved for internal use
   static int branch_id_offset() { return MAX_CALLBACK_LIST_COUNT; }
   static bool is_alloced_branch_id(int branch_id) { return branch_id >= branch_id_offset(); }
   int alloc_branch_id(const int64_t count, int16_t &branch_id);
-  int fetch_conflict_txs(ObIArray<ObTransIDAndAddr> &array);
+  int fetch_conflict_txs(ObIArray<ObTransID> &array);
   void reset_conflict_txs()
   { ObSpinLockGuard guard(lock_); conflict_txs_.reset(); }
-  int add_conflict_tx(const ObTransIDAndAddr conflict_tx);
-  int merge_conflict_txs(const ObIArray<ObTransIDAndAddr> &conflict_ids);
+  int add_conflict_tx(const ObTransID conflict_tx);
+  int merge_conflict_txs(const ObIArray<ObTransID> &conflict_ids);
   bool has_conflict_txs() const { return conflict_txs_.count() > 0; }
   bool contain(const ObTransID &trans_id) const { return tx_id_ == trans_id; } /*used by TransHashMap*/
-  
-  void set_cluster_id(uint64_t cluster_id) { cluster_id_ = cluster_id; }
-  uint64_t get_cluster_id() const { return cluster_id_; }
+
   uint32_t get_session_id() const { return sess_id_; }
   uint32_t get_assoc_session_id() const { return assoc_sess_id_; }
-  uint32_t get_client_sid() const { return client_sid_; }
   ObAddr get_addr() const { return addr_; }
   uint64_t get_cluster_version() const { return cluster_version_; }
   ObTxConsistencyType get_tx_consistency_type() const { return tx_consistency_type_; }
@@ -826,8 +646,8 @@ public:
   const ObTransID &tid() const { return tx_id_; }
   bool is_valid() const { return !is_in_tx() || tx_id_.is_valid(); }
   ObTxAccessMode get_tx_access_mode() const { return access_mode_; }
-  bool is_rdonly() const { return access_mode_ == ObTxAccessMode::RD_ONLY || access_mode_ == ObTxAccessMode::STANDBY_RD_ONLY; }
-  bool is_clean() const { return parts_.empty(); }
+  bool is_rdonly() const { return access_mode_ == ObTxAccessMode::RD_ONLY; }
+  bool is_clean() const { return !has_write_state_; }
   bool is_shadow() const  { return flags_.SHADOW_; }
   bool is_explicit() const { return flags_.EXPLICIT_; }
   void set_with_temporary_table() { flags_.WITH_TEMP_TABLE_ = true; }
@@ -839,41 +659,31 @@ public:
   bool is_tx_end() {
     return is_committed() || is_rollbacked();
   }
-  bool is_committing() {
-    return state_ == State::IN_TERMINATE
-      || state_ == State::SUB_PREPARING
-      || state_ == State::SUB_COMMITTING
-      || state_ == State::SUB_ROLLBACKING;
-  }
+	  bool is_committing() {
+	    return state_ == State::IN_TERMINATE;
+	  }
   bool is_terminated() {
     return state_ == State::ABORTED || is_tx_end();
   }
-  bool is_committed() {
-    return state_ == State::COMMITTED
-      || state_ == State::COMMIT_TIMEOUT
-      || state_ == State::COMMIT_UNKNOWN
-      || state_ == State::SUB_COMMITTED;
-  }
-  bool is_rollbacked() {
-    return state_ == State::ROLLED_BACK
-      || state_ == State::SUB_ROLLBACKED;
-  }
+	  bool is_committed() {
+	    return state_ == State::COMMITTED
+	      || state_ == State::COMMIT_TIMEOUT
+	      || state_ == State::COMMIT_UNKNOWN;
+	  }
+	  bool is_rollbacked() {
+	    return state_ == State::ROLLED_BACK;
+	  }
   bool is_commit_unsucc() {
     return state_ == State::COMMIT_TIMEOUT
       || state_ == State::COMMIT_UNKNOWN
       || state_ == State::ROLLED_BACK;
   }
-  bool is_sub2pc() {
-    return state_ >= State::SUB_PREPARING
-      && state_ <= State::SUB_ROLLBACKED;
-  }
-  bool is_aborted() const { return state_ == State::ABORTED; }
+	  bool is_aborted() const { return state_ == State::ABORTED; }
   bool is_tx_timeout() { return expire_ts_ > 0 && ObClockGenerator::getClock() > expire_ts_; }
   bool is_tx_commit_timeout() { return commit_expire_ts_ > 0 && ObClockGenerator::getClock() > commit_expire_ts_;}
   void set_xid(const ObXATransID &xid) { xid_ = xid; }
   void set_sessid(const uint32_t session_id) { sess_id_ = session_id; }
   void set_assoc_sessid(const uint32_t session_id) { assoc_sess_id_ = session_id; }
-  void set_client_sid(const uint32_t client_sid) { client_sid_ = client_sid; }
   const ObXATransID &get_xid() const { return xid_; }
   void reset_xid() { xid_.reset(); }
   bool is_xa_trans() const { return false; }
@@ -881,7 +691,6 @@ public:
   int64_t get_expire_ts() const;
   int64_t get_tx_lock_timeout() const { return lock_timeout_us_; }
   bool is_in_tx() const { return state_ > State::IDLE; }
-  bool is_dup_ls_modified() const;
   bool is_tx_active() const { return state_ >= State::ACTIVE && state_ < State::IN_TERMINATE; }
   void print_trace();
   void dump_and_print_trace();
@@ -899,10 +708,6 @@ public:
   void release_all_implicit_savepoint();
   void release_implicit_savepoint(const ObTxSEQ savepoint);
   ObTransTraceLog &get_tlog() { return tlog_; }
-  bool is_xa_terminate_state_() const;
-  ObGlobalTxType get_global_tx_type(const ObXATransID &xid) const;
-  void set_global_tx_type(const ObGlobalTxType global_tx_type)
-  { global_tx_type_ = global_tx_type; }
   bool need_rollback() { return state_ == State::ABORTED; }
   int64_t get_timeout_us() const { return timeout_us_; }
   share::SCN get_tx_snapshot_version() {
@@ -913,7 +718,13 @@ public:
     }
   }
   ObITxCallback *cancel_commit_cb();
-  int get_parts_copy(ObTxPartList &copy_parts);
+  int get_write_state_copy(ObTxWriteState &write_state, bool &has_write_state) const;
+  void reset_write_state();
+  int assign_write_state(const ObTxWriteState &participant);
+  int fill_read_snapshot_write_state(ObTxReadSnapshot &snapshot) const;
+  int find_write_state_after(ObTxWriteState *&part, const ObTxSEQ scn);
+  int get_abort_write_state(const ObTxWriteState *&part) const;
+  bool has_write_state() const { return has_write_state_; }
   int get_savepoints_copy(ObTxSavePointList &copy_savepoints);
   // free route
 #define DEF_FREE_ROUTE_DECODE_(name)                                    \
@@ -931,13 +742,12 @@ LST_DO(DEF_FREE_ROUTE_DECODE, (;), static, dynamic, parts, extra);
   int64_t estimate_state_size();
   bool is_static_changed() { return state_change_flags_.STATIC_CHANGED_; }
   bool is_dynamic_changed() { return state_ > State::IDLE && state_change_flags_.DYNAMIC_CHANGED_; }
-  bool is_parts_changed() { return state_ > State::IDLE && state_change_flags_.PARTS_CHANGED_; };
+  bool is_write_state_changed() { return state_ > State::IDLE && state_change_flags_.WRITE_STATE_CHANGED_; };
   bool is_extra_changed() { return state_change_flags_.EXTRA_CHANGED_; };
   void set_explicit() { flags_.EXPLICIT_ = true; }
   void clear_interrupt() { flags_.INTERRUPTED_ = false; }
-  void mark_part_abort(const ObTransID tx_id, const int abort_cause);
-  int64_t get_coord_epoch() const;
-  int get_and_inc_tx_seq(const int16_t branch, const int N, ObTxSEQ &tx_seq) const;
+  void mark_write_state_aborted(const ObTransID tx_id, const int abort_cause);
+	  int get_and_inc_tx_seq(const int16_t branch, const int N, ObTxSEQ &tx_seq) const;
   ObTxSEQ inc_and_get_tx_seq(int16_t branch) const;
   int inc_and_get_tx_seq(const int16_t branch, const int N, ObTxSEQ &tx_seq) const;
   ObTxSEQ get_tx_seq(int64_t seq_abs = 0) const;
@@ -947,8 +757,8 @@ LST_DO(DEF_FREE_ROUTE_DECODE, (;), static, dynamic, parts, extra);
   int add_modified_tables(const ObIArray<uint64_t> &tables);
   bool has_modify_table(const uint64_t table_id) const;
   DISABLE_COPY_ASSIGN(ObTxDesc);
-  bool is_all_parts_clean() const;
-  bool is_all_parts_without_valid_write() const;
+  bool is_write_state_clean() const;
+  bool is_write_state_without_valid_write() const;
 };
 
 // Is used to store and travserse all TxScheduler's Stat information;
@@ -1058,115 +868,6 @@ public:
   ObTransService &txs_;
 };
 
-class ObTxInfo
-{
-  friend class ObTransService;
-  OB_UNIS_VERSION(1);
-protected:
-  
-  int64_t cluster_id_;
-  uint64_t cluster_version_;
-  int64_t seq_base_;
-  common::ObAddr addr_;
-  ObTransID tx_id_;
-  ObTxIsolationLevel isolation_;
-  ObTxAccessMode access_mode_;
-  share::SCN snapshot_version_;
-  int64_t snapshot_uncertain_bound_;
-  uint64_t op_sn_;
-  int64_t alloc_ts_;
-  int64_t active_ts_;
-  int64_t timeout_us_;
-  int64_t expire_ts_;
-  int64_t finish_ts_;
-  ObTxSEQ active_scn_;
-  ObTxPartList parts_;
-  uint32_t session_id_ = 0;
-  ObTxSavePointList savepoints_;
-public:
-  ObTxInfo(): seq_base_(0) {}
-  TO_STRING_KV(K_(session_id),
-               K_(tx_id),
-               K_(access_mode),
-               K_(isolation),
-               K_(snapshot_version),
-               K_(active_scn),
-               K_(op_sn),
-               K_(alloc_ts),
-               K_(active_ts),
-               K_(timeout_us),
-               K_(expire_ts),
-               K_(seq_base),
-               K_(parts),
-               K_(cluster_id),
-               K_(cluster_version),
-               K_(savepoints));
-  // TODO xa
-  bool is_valid() const { return tx_id_.is_valid(); }
-  const ObTransID &tid() const { return tx_id_; }
-};
-
-class ObTxStmtInfo
-{
-  friend class ObTransService;
-  OB_UNIS_VERSION(1);
-protected:
-  ObTransID tx_id_;
-  uint64_t op_sn_;
-  ObTxPartList parts_;
-  ObTxDesc::State state_;
-  ObTxSavePointList savepoints_;
-public:
-  TO_STRING_KV(K_(tx_id),
-               K_(op_sn),
-               K_(parts),
-               K_(state),
-               K_(savepoints));
-  // TODO xa
-  bool is_valid() const { return tx_id_.is_valid(); }
-  const ObTransID &tid() const { return tx_id_; }
-  bool need_rollback() const  { return state_ == ObTxDesc::State::ABORTED; }
-};
-
-class TxCtxRoleState
-{
-public:
-  static const int64_t INVALID = -1;
-  static const int64_t LEADER = 0;
-  static const int64_t FOLLOWER = 1;
-  static const int64_t MAX = 2;
-
-  static bool is_valid(const int64_t state)
-  { return state > INVALID && state < MAX; }
-};
-class TxCtxOps
-{
-public:
-  static const int64_t INVALID = -1;
-  static const int64_t TAKEOVER = 0;
-  static const int64_t REVOKE = 1;
-  static const int64_t RESUME = 2;
-  static const int64_t SWITCH_GRACEFUL = 3;
-  static const int64_t MAX = 4;
-
-  static bool is_valid(const int64_t ops)
-  { return ops > INVALID && ops < MAX; }
-};
-class TxCtxStateHelper
-{
-public:
-  explicit TxCtxStateHelper(int64_t &state) : state_(state),
-                                         last_state_(TxCtxRoleState::INVALID),
-                                         is_switching_(false) {}
-  ~TxCtxStateHelper() {}
-  int switch_state(const int64_t op);
-  void restore_state();
-private:
-  int64_t &state_;
-  int64_t last_state_;
-  bool is_switching_;
-};
-
 typedef lib::ObLockGuardWithTimeout<ObSpinLock> ObSpinLockGuardWithTimeout;
 
 #define REC_TRANS_TRACE(recorder_ptr, trace_event) do {   \
@@ -1190,24 +891,16 @@ typedef lib::ObLockGuardWithTimeout<ObSpinLock> ObSpinLockGuardWithTimeout;
 inline ObTxSEQ ObTxDesc::get_tx_seq(int64_t seq_abs) const
 {
   int64_t seq = seq_abs > 0 ? seq_abs : ObSequence::get_max_seq_no();
-  if (OB_LIKELY(support_branch())) {
-    if (seq < seq_base_) {
-      TRANS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "seq_abs is less seq_base_", K(seq_abs), K(tx_id_), K(seq_base_));
-      return ObTxSEQ::INVL();
-    }
-    return ObTxSEQ(seq - seq_base_, 0);
-  } else {
-    return ObTxSEQ::mk_v0(seq);
+  if (seq < seq_base_) {
+    TRANS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "seq_abs is less seq_base_", K(seq_abs), K(tx_id_), K(seq_base_));
+    return ObTxSEQ::INVL();
   }
+  return ObTxSEQ(seq - seq_base_, 0);
 }
 
 inline ObTxSEQ ObTxDesc::get_min_tx_seq() const
 {
-  if (OB_LIKELY(support_branch())) {
-    return ObTxSEQ(1, 0);
-  } else {
-    return ObTxSEQ::mk_v0(1);
-  }
+  return ObTxSEQ(1, 0);
 }
 
 inline int ObTxDesc::get_and_inc_tx_seq(const int16_t branch,
@@ -1218,10 +911,8 @@ inline int ObTxDesc::get_and_inc_tx_seq(const int16_t branch,
   int64_t seq = 0;
   if (OB_FAIL(ObSequence::get_and_inc_max_seq_no(N, seq))) {
     TRANS_LOG(ERROR, "inc max seq no failed", K(ret), K(N));
-  } else if (OB_LIKELY(support_branch())) {
-    tx_seq = ObTxSEQ(seq - seq_base_, branch);
   } else {
-    tx_seq = ObTxSEQ::mk_v0(seq);
+    tx_seq = ObTxSEQ(seq - seq_base_, branch);
   }
   return ret;
 }
@@ -1229,11 +920,7 @@ inline int ObTxDesc::get_and_inc_tx_seq(const int16_t branch,
 inline ObTxSEQ ObTxDesc::inc_and_get_tx_seq(int16_t branch) const
 {
   int64_t seq = ObSequence::inc_and_get_max_seq_no();
-  if (OB_LIKELY(support_branch())) {
-    return ObTxSEQ(seq - seq_base_, branch);
-  } else {
-    return ObTxSEQ::mk_v0(seq);
-  }
+  return ObTxSEQ(seq - seq_base_, branch);
 }
 
 inline int ObTxDesc::inc_and_get_tx_seq(const int16_t branch,
@@ -1244,10 +931,8 @@ inline int ObTxDesc::inc_and_get_tx_seq(const int16_t branch,
   int64_t seq = 0;
   if (OB_FAIL(ObSequence::inc_and_get_max_seq_no(N, seq))) {
     TRANS_LOG(ERROR, "inc max seq no failed", K(ret), K(N));
-  } else if (OB_LIKELY(support_branch())) {
-    tx_seq = ObTxSEQ(seq - seq_base_, branch);
   } else {
-    tx_seq = ObTxSEQ::mk_v0(seq);
+    tx_seq = ObTxSEQ(seq - seq_base_, branch);
   }
   return ret;
 }

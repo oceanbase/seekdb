@@ -21,6 +21,7 @@
 #include "common/ob_tablet_id.h"
 #include "sql/dtl/ob_dtl_task.h"
 #include "sql/ob_phy_table_location.h"
+#include "rpc/frame/ob_result_code.h"
 #include "sql/das/ob_das_define.h"
 #include "sql/das/ob_das_dml_ctx_define.h"
 #include "sql/das/ob_das_def_reg.h"
@@ -32,6 +33,7 @@ namespace sql
 class ObDASUtils
 {
 public:
+  static void log_user_error_and_warn(const rpc::frame::ObResultCode &rcode);
   static int get_tablet_loc_by_id(const ObTabletID &tablet_id,
                                   ObDASTableLoc &table_loc,
                                   ObDASTabletLoc *&tablet_loc);

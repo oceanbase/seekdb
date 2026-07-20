@@ -273,7 +273,6 @@ int ObPLDDLOperator::create_package(const ObPackageInfo *old_package_info,
                                                     old_package_info->get_database_id(),
                                                     old_package_info->get_package_name(),
                                                     ObPackageType::PACKAGE_BODY_TYPE,
-                                                    old_package_info->get_compatibility_mode(),
                                                     del_package_info))) {
             LOG_WARN("get package body info failed", K(ret));
           } else if (OB_NOT_NULL(del_package_info)) {
@@ -337,11 +336,10 @@ int ObPLDDLOperator::drop_package(const ObPackageInfo &package_info,
                          static_cast<uint64_t>(ObObjectType::PACKAGE),
                          trans));
       uint64_t database_id = package_info.get_database_id();
-      int64_t compatible_mode = package_info.get_compatibility_mode();
       const ObString &package_name = package_info.get_package_name();
       const ObPackageInfo *package_body_info = NULL;
       if (OB_FAIL(schema_guard.get_package_info( database_id, package_name, ObPackageType::PACKAGE_BODY_TYPE,
-                                                compatible_mode, package_body_info))) {
+                                                package_body_info))) {
         LOG_WARN("get package body info failed", K(database_id), K(package_name), K(ret));
       } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
         LOG_WARN("fail to gen new schema_version", K(ret));
@@ -891,7 +889,6 @@ int ObPLDDLOperator::update_routine_info(share::schema::ObRoutineInfo &routine_i
   uint64_t new_routine_id = routine_id;
   int64_t new_schema_version = OB_INVALID_VERSION;
   ObSchemaService *schema_service = schema_service_.get_schema_service();
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
   if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_SYS;
     LOG_ERROR("schema_service must not null", K(ret));
@@ -901,7 +898,6 @@ int ObPLDDLOperator::update_routine_info(share::schema::ObRoutineInfo &routine_i
   } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
     LOG_WARN("fail to gen new schema_version", K(ret));
   } else {
-    compat_mode = lib::Worker::CompatMode::MYSQL;
     routine_info.set_database_id(database_id);
     routine_info.set_package_id(parent_id);
     routine_info.set_routine_id(new_routine_id);

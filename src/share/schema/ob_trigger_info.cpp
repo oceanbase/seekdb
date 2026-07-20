@@ -27,6 +27,7 @@ namespace schema
 {
 
 OB_SERIALIZE_MEMBER((ObTriggerInfo, ObSimpleTriggerSchema),
+//                  tenant_,
 //                  trigger_id_,
                     owner_id_,
 //                  database_id_,

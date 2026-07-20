@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_TRANSACTION_OB_MULTI_DATA_SOURCE_
 #define OCEANBASE_TRANSACTION_OB_MULTI_DATA_SOURCE_
 
+#include "share/ob_cluster_version.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/list/ob_list.h"
 #include "lib/utility/ob_unify_serialize.h"

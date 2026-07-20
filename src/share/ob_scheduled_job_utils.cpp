@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 #include "share/ob_scheduled_job_utils.h"
 #include "lib/string/ob_sql_string.h"
-#include "share/ob_timezone_mgr.h"
+#include "share/ob_tenant_timezone_mgr.h"
 #include "lib/oblog/ob_log_module.h"
 
 namespace oceanbase
@@ -61,8 +61,8 @@ int ObScheduledJobUtils::get_time_zone_offset(const ObSysVariableSchema &sys_var
         ObTimeZoneInfoPos tz_info;
         ObTZMapWrap tz_map_wrap;
         ObTimeZoneInfoManager *tz_info_mgr = NULL;
-        if (OB_FAIL(OTTZ_MGR.get_timezone(tz_map_wrap, tz_info_mgr))) {
-          LOG_WARN("get time zone failed", K(ret));
+        if (OB_FAIL(OTTZ_MGR.get_tenant_timezone(tz_map_wrap, tz_info_mgr))) {
+          LOG_WARN("get tenant timezone failed", K(ret));
         } else if (OB_ISNULL(tz_info_mgr)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("tz info mgr is null", K(ret));

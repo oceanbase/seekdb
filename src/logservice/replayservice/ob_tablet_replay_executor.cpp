@@ -124,6 +124,25 @@ int ObTabletReplayExecutor::execute(const share::SCN &scn, const common::ObTable
       }
     } 
 
+#ifdef ERRSIM
+      if (OB_SUCC(ret)) {
+        const ObString &errsim_migration_dest_server_addr = GCONF.errsim_migration_dest_server_addr.str();
+        common::ObAddr addr;
+        const ObAddr &my_addr = GCONF.self_addr_;
+
+        if (!errsim_migration_dest_server_addr.empty() && OB_FAIL(addr.parse_from_string(errsim_migration_dest_server_addr))) {
+          CLOG_LOG(WARN, "failed to parse from string to addr", K(ret), K(errsim_migration_dest_server_addr));
+        } else {
+          if (my_addr == addr || GCONF.errsim_test_tablet_id == tablet->get_tablet_id().id()) {
+            ret = EN_REPLAY_FATAL_ERROR ? : OB_SUCCESS;
+            if (OB_FAIL(ret)) {
+              STORAGE_LOG(ERROR, "fake EN_REPLAY_FATAL_ERROR", K(ret));
+            }
+          }       
+        }
+
+      }
+#endif
   }
   return ret;
 }

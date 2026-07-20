@@ -17,7 +17,7 @@
 #ifndef __OB_RS_SYS_DDL_SCHEDULER_UTIL_H__
 #define __OB_RS_SYS_DDL_SCHEDULER_UTIL_H__
 
-#include "observer/omt/ob_server_runtime_controller.h" // for ObServerRuntimeController
+#include "observer/omt/ob_multi_tenant.h" // for ObMultiTenant
 #include "share/rc/ob_module_provider.h"
 #include "rootserver/ddl_task/ob_ddl_scheduler.h" // for ObDDLScheduler
 
@@ -29,16 +29,16 @@ namespace rootserver
 #define SYS_DDL_SCHEDULER_FUNC(func_name)                                                 \
   template <typename... Args> static int func_name(Args &&...args) {                      \
     int ret = OB_SUCCESS;                                                                 \
-    if (OB_ISNULL(GCTX.server_runtime_controller_)) {                                                           \
+    if (OB_ISNULL(GCTX.omt_)) {                                                           \
       ret = OB_INVALID_ARGUMENT;                                                          \
-      LOG_WARN("invalid argument", KR(ret), KP(GCTX.server_runtime_controller_));                               \
-    } else if (OB_UNLIKELY(!GCTX.server_runtime_controller_->has_runtime())) {                  \
-      ret = OB_RUNTIME_SCHEMA_NOT_READY;                                                          \
-      LOG_WARN("local runtime is unavailable", KR(ret));                \
-    } else if (OB_FAIL(ObDDLUtil::check_local_is_sys_leader())) {                         \
-      LOG_WARN("local runtime is not ready", KR(ret));                                \
+      LOG_WARN("invalid argument", KR(ret), KP(GCTX.omt_));                               \
+    } else if (OB_UNLIKELY(!GCTX.omt_->has_tenant())) {                   \
+      ret = OB_TENANT_NOT_EXIST;                                                          \
+      LOG_WARN("local server does not have SYS tenant resource", KR(ret));                \
+    } else if (OB_FAIL(ObDDLUtil::check_local_sys_tenant())) {                           \
+      LOG_WARN("local is not sys tenant leader", KR(ret));                                \
     } else {                                                                              \
-      SERVER_MODULE_SCOPE {                                                      \
+      MOD_SCOPE {                                                      \
         rootserver::ObDDLScheduler* sys_ddl_scheduler = share::g_mp->ddl_scheduler(); \
         if (OB_ISNULL(sys_ddl_scheduler)) {                                               \
           ret = OB_ERR_UNEXPECTED;                                                        \
@@ -75,13 +75,13 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObSysDDLSchedulerUtil);
 };// end ObSysDDLSchedulerUtil
 
-class ObSysDDLLocalBuilderUtil
+class ObSysDDLReplicaBuilderUtil
 {
 public:
   static int push_task(ObAsyncTask &task);
 private:
-  DISALLOW_COPY_AND_ASSIGN(ObSysDDLLocalBuilderUtil);
-};// end ObSysDDLLocalBuilderUtil
+  DISALLOW_COPY_AND_ASSIGN(ObSysDDLReplicaBuilderUtil);
+};// end ObSysDDLReplicaBuilderUtil
 
 }
 }

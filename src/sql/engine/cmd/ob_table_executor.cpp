@@ -37,9 +37,6 @@
 
 #include "sql/printer/ob_select_stmt_printer.h"
 #include "observer/ob_server_event_history_table_operator.h"
-#include "storage/mview/cmd/ob_mview_executor_util.h"
-#include "storage/ob_partition_pre_split.h"
-
 namespace oceanbase
 {
 using namespace common;
@@ -101,10 +98,6 @@ int ObCreateTableExecutor::ObInsSQLPrinter::inner_print(char *buf, int64_t buf_l
     char parallel_str[parallel_str_max_len] = {0};
     int64_t parallel_str_pos = 0;
     const char *osg_str = NULL;
-    const char *append_str = "";
-    const int64_t direct_str_max_len = 256;
-    char direct_str[direct_str_max_len] = {0};
-    int64_t direct_str_pos = 0;
     insert_mode = stmt_->get_insert_mode();
     if (insert_mode != 0 &&
         insert_mode != 1 &&
@@ -118,25 +111,16 @@ int ObCreateTableExecutor::ObInsSQLPrinter::inner_print(char *buf, int64_t buf_l
           OB_FAIL(databuff_printf(parallel_str, parallel_str_max_len, parallel_str_pos,
                                   "PARALLEL(%lu)", stmt_->get_parallelism()))) {
         LOG_WARN("fail to print parallel hint", K(ret), K(stmt_->get_parallelism()));
-      } else {
-        append_str = stmt_->get_has_append_hint() ? "append" : "";
-        const ObDirectLoadHint &direct_load_hint = stmt_->get_direct_load_hint();
-        if (OB_FAIL(direct_load_hint.print_direct_load_hint(direct_str, direct_str_max_len,
-                                                                   direct_str_pos))) {
-          LOG_WARN("fail to print direct load hint", K(ret), K(direct_load_hint));
-        }
       }
-    } 
+    }
     if (OB_FAIL(ret)) {
 
-    } else if (OB_FAIL(databuff_printf(buf, buf_len, pos1, 
-                                       "%s /*+ ENABLE_PARALLEL_DML %s %s %s %s */ into %c%.*s%c.%c%.*s%c", 
+    } else if (OB_FAIL(databuff_printf(buf, buf_len, pos1,
+                                       "%s /*+ ENABLE_PARALLEL_DML %s %s */ into %c%.*s%c.%c%.*s%c",
                                        insert_str,
                                        parallel_str,
-                                       osg_str, 
-                                       append_str, 
-                                       direct_str,
-                                       sep_char, 
+                                       osg_str,
+                                       sep_char,
                                        stmt_->get_database_name().length(),
                                        stmt_->get_database_name().ptr(),
                                        sep_char,
@@ -457,7 +441,6 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
         //4, refresh schema, reset table's sess id to 0
         if (OB_SUCC(ret)) {
           obcall::ObAlterTableRes res;
-          alter_table_arg.compat_mode_ = lib::Worker::CompatMode::MYSQL;
           bool finish = false;
           while (OB_SUCC(ret) && !finish) {
             if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->alter_table(alter_table_arg, res); }))) {
@@ -482,7 +465,6 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
           if (OB_LIKELY(need_clean)) {
             int tmp_ret = OB_SUCCESS;
             obcall::ObDDLRes res;
-            drop_table_arg.compat_mode_ = lib::Worker::CompatMode::MYSQL;
             if (OB_SUCCESS != (tmp_ret = rootserver::serial_call([&]{ return GCTX.root_service_->drop_table(drop_table_arg, res); }))) {
               LOG_WARN("failed to drop table", K(drop_table_arg), K(ret));
             } else {
@@ -535,7 +517,6 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
     LOG_WARN("get first statement failed", K(ret));
   } else if (table_schema.is_duplicate_table()) {
 
-  // TODO@jingyu_cr: make sure whether sys log stream have to be duplicated
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "create duplicate table under sys or meta tenant");
     LOG_WARN("create dup table not supported", KR(ret), K(table_schema));
@@ -578,23 +559,6 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
           LOG_WARN("fail to execute parallel ddl", KR(ret), K(create_table_arg), K(res));
         }
       }
-      if (OB_SUCC(ret)) {
-        if (create_table_arg.schema_.is_materialized_view()) {
-          ObSQLSessionInfo *session_info = ctx.get_my_session();
-          if (session_info == nullptr) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("session_info should not be nullptr", KR(ret));
-          } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(res.task_id_, false/*do not retry at executor*/, session_info, true))) {
-            if (storage::ObMViewExecutorUtil::is_mview_refresh_retry_ret_code(ret)) {
-              LOG_WARN("retry create mview", KR(ret), "task_id", res.task_id_);
-              ret = OB_EAGAIN;
-            } else {
-              LOG_WARN("fail to create mview", KR(ret), "task_id", res.task_id_);
-            }
-          }
-        }
-      }
-      
     } else {
       if (OB_FAIL(execute_ctas(ctx, stmt))){  // Processing of query-based table creation
         LOG_WARN("execute create table as select failed", KR(ret));
@@ -706,7 +670,6 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
   } else {
-    alter_table_arg.compat_mode_ = lib::Worker::CompatMode::MYSQL;
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < index_arg_list.size(); ++i) {
     obcall::ObIndexArg *index_arg = index_arg_list.at(i);
@@ -744,17 +707,9 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
         || obcall::ObAlterTableArg::INTERVAL_TO_RANGE == alter_table_arg.alter_part_type_) {
       alter_table_arg.is_alter_partitions_ = true;
     }
-    ObPartitionPreSplit pre_split;
     AlterTableSchema &alter_table_schema = const_cast<AlterTableSchema &>(alter_table_arg.alter_table_schema_);
     if (OB_FAIL(populate_based_schema_obj_info_(alter_table_arg))) {
       LOG_WARN("fail to populate based schema obj info", KR(ret));
-    } else if (OB_FAIL(pre_split.get_global_index_pre_split_schema_if_need(alter_table_arg.session_id_,
-                                                            alter_table_schema.get_origin_database_name(), 
-                                                            alter_table_schema.get_origin_table_name(), 
-                                                            alter_table_arg.index_arg_list_))) {
-      LOG_WARN("fail to get global index pre split schema if need", K(ret), K(alter_table_arg));
-      //overwrite ret code
-      ret = OB_SUCCESS;
     } else if (OB_FAIL(GET_MIN_DATA_VERSION(alter_table_arg.data_version_))) {
       LOG_WARN("fail to get data version", KR(ret));
     }
@@ -1007,11 +962,6 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
 
     if (OB_SUCC(ret)) {
       bool is_support_cancel = true;
-      if (obcall::ObAlterTableArg::REORGANIZE_PARTITION == alter_table_arg.alter_part_type_ ||
-                  obcall::ObAlterTableArg::SPLIT_PARTITION == alter_table_arg.alter_part_type_ ||
-                  obcall::ObAlterTableArg::AUTO_SPLIT_PARTITION == alter_table_arg.alter_part_type_) {
-        is_support_cancel = false;
-      }
       const bool need_wait_ddl_finish = is_double_table_long_running_ddl(res.ddl_type_)
                                      || is_simple_table_long_running_ddl(res.ddl_type_)
                                      || (ObDDLType::DDL_DROP_COLUMN_INSTANT == res.ddl_type_ && res.task_id_ > 0 /* with drop lob*/);
@@ -1532,62 +1482,8 @@ int ObAlterTableExecutor::check_alter_partition(ObExecContext &ctx,
   int ret = OB_SUCCESS;
   AlterTableSchema &table_schema = const_cast<AlterTableSchema &>(arg.alter_table_schema_);
 
-  if (arg.is_alter_partitions_ || arg.alter_auto_partition_attr_) {
-    if (arg.is_manual_split_partition()) {
-      // if user does not define the last partition, part_num will be partition_num - 1,
-      // which means it is unnecessary that casting the expr value to last partition.
-      // after casting partition value, we need to correct part_num
-      int64_t part_num = table_schema.get_part_option().get_part_num();
-      ObPartition **partition_array = table_schema.get_part_array();
-      if (part_num != table_schema.get_partition_num() &&
-          part_num != table_schema.get_partition_num() - 1) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid part num", K(ret), K(part_num), K(table_schema.get_partition_num()));
-      } else if (table_schema.is_valid_split_part_type()) {
-        if (OB_FAIL(ObPartitionExecutorUtils::set_range_part_high_bound(ctx,
-                                                                        stmt::T_CREATE_TABLE,
-                                                                        table_schema,
-                                                                        stmt,
-                                                                        false /*is_subpart*/))) {
-          LOG_WARN("partition_array is NULL", K(ret));
-        }
-      } else { // split partition only support range partition now
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("only support range part", K(ret), K(arg.alter_part_type_),
-                 "partition type", table_schema.get_part_option().get_part_func_type());
-      }
-
-      if (OB_FAIL(ret)) {
-      } else if (obcall::ObAlterTableArg::SPLIT_PARTITION == arg.alter_part_type_) {
-        table_schema.get_part_option().set_part_num(table_schema.get_partition_num());
-      }
-    } else if (obcall::ObAlterTableArg::PARTITIONED_TABLE == arg.alter_part_type_) {
-      ObPartition **partition_array = table_schema.get_part_array();
-      int64_t realy_part_num = table_schema.get_partition_num();
-      if (table_schema.is_range_part()) {
-        if (OB_FAIL(ObPartitionExecutorUtils::set_range_part_high_bound(ctx,
-                                                                        stmt::T_CREATE_TABLE,
-                                                                        table_schema,
-                                                                        stmt,
-                                                                        false /*is_subpart*/))) {
-          LOG_WARN("partition_array is NULL", K(ret));
-        }
-      } else if (table_schema.is_list_part()) {
-        if (OB_ISNULL(partition_array)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("NULL ptr", K(ret));
-        } else if (OB_FAIL(ObPartitionExecutorUtils::cast_list_expr_to_obj(ctx,
-                                                                           stmt::T_CREATE_TABLE,
-                                                                           false, // is_subpart
-                                                                           realy_part_num,
-                                                                           partition_array,
-                                                                           NULL,
-                                                                           stmt.get_part_fun_exprs(),
-                                                                           stmt.get_part_values_exprs()))) {
-          LOG_WARN("partition_array is NULL", K(ret));
-        }
-      }
-    } else if (obcall::ObAlterTableArg::REPARTITION_TABLE == arg.alter_part_type_) {
+  if (arg.is_alter_partitions_) {
+    if (obcall::ObAlterTableArg::REPARTITION_TABLE == arg.alter_part_type_) {
       if (table_schema.is_range_part() || table_schema.is_list_part()
          || table_schema.is_range_subpart() || table_schema.is_list_subpart()) {
         if (OB_FAIL(ObPartitionExecutorUtils::calc_values_exprs_for_alter_table(ctx,
@@ -1827,7 +1723,6 @@ int ObDropTableExecutor::execute(ObExecContext &ctx, ObDropTableStmt &stmt)
       //impossible
     } else if (FALSE_IT(my_session->get_foreign_key_checks(foreign_key_checks))) {
     } else if (FALSE_IT(tmp_arg.foreign_key_checks_ = foreign_key_checks)) {
-    } else if (FALSE_IT(tmp_arg.compat_mode_ = lib::Worker::CompatMode::MYSQL)) {
     } else {
       bool is_parallel_drop = false;
       if (!ObSchemaUtils::is_support_parallel_drop(table_type)) {
@@ -1989,7 +1884,6 @@ int ObTruncateTableExecutor::execute(ObExecContext &ctx, ObTruncateTableStmt &st
       int64_t foreign_key_checks = 0;
       my_session->get_foreign_key_checks(foreign_key_checks);
       tmp_arg.foreign_key_checks_ = foreign_key_checks;
-      tmp_arg.compat_mode_ = lib::Worker::CompatMode::MYSQL;
       int64_t affected_rows = 0;
       bool use_parallel_truncate = false;
       

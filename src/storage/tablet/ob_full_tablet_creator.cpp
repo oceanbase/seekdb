@@ -41,10 +41,10 @@ int ObFullTabletCreator::init()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObStorageMetaMemMgr has been initialized", K(ret));
+    LOG_WARN("ObTenantMetaMemMgr has been initialized", K(ret));
   } else if (OB_FAIL(tiny_allocator_.init(lib::ObMallocAllocator::get_instance(),
       OB_MALLOC_NORMAL_BLOCK_SIZE/2, ObMemAttr("TinyAllocator", ObCtxIds::DEFAULT_CTX_ID)))) {
-    LOG_WARN("fail to init tablet tiny allocator", K(ret));
+    LOG_WARN("fail to init tenant tiny allocator", K(ret));
   } else {
     lib::ContextParam param;
     param.set_mem_attr("MSTXCTX", common::ObCtxIds::DEFAULT_CTX_ID)
@@ -94,7 +94,7 @@ int ObFullTabletCreator::throttle_tablet_creation()
   int ret = OB_SUCCESS;
 
   bool need_wait = false;
-  const int64_t limit_size = get_allocator_memory_limit() / 20; // 5%
+  const int64_t limit_size = lib::get_tenant_memory_limit() / 20; // 5%
   const int64_t timeout = 5 * 1000L; // 5ms for effective replay
   const int64_t log_timeout = 1 * 1000 * 1000L; // 1s
   const int64_t start_time = ObTimeUtility::fast_current_time();
@@ -150,7 +150,7 @@ int ObFullTabletCreator::create_tablet(ObTabletHandle &tablet_handle)
     ATOMIC_INC(&created_tablets_cnt_);
   }
   if (OB_SUCC(ret)) {
-    ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+    ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
     tablet_handle.set_obj(tablet, allocator, t3m);
     tablet_handle.set_wash_priority(WashTabletPriority::WTP_LOW);
   } else {

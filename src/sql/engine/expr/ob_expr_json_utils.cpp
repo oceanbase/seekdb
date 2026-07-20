@@ -400,7 +400,7 @@ int ObJsonUtil::time_scale_check(const ObAccuracy &accuracy, int64_t &value, boo
 
 static OB_INLINE int get_cast_ret(int ret)
 {
-  // Present time-zone conversion failures as a JSON date-value error.
+  // compatibility for old ob
   if (OB_ERR_UNEXPECTED_TZ_TRANSITION == ret ||
       OB_ERR_UNKNOWN_TIME_ZONE == ret) {
     ret = OB_INVALID_DATE_VALUE;
@@ -537,7 +537,7 @@ int ObJsonUtil::set_lob_datum(common::ObIAllocator *allocator,
           }
         }
         if (OB_SUCC(ret)) {
-          // The wrapper owns the result buffer, so no additional copy is needed.
+          // old engine set same alloctor for wrapper, so we can use val without copy
           text_result.set_result();
         }
         break;
@@ -1702,6 +1702,7 @@ int ObJsonUtil::get_json_doc(ObExpr *expr,
     if (OB_FAIL(ObJsonExprHelper::get_json_or_str_data(expr, ctx, allocator, j_str, is_null))) {
       LOG_WARN("fail to get real data.", K(ret), K(j_str));
     } else if (is_null) {
+    } else if (OB_FALSE_IT(allocator.add_baseline_size(j_str.length()))) {
     } else {
       ObJsonInType j_in_type = ObJsonExprHelper::get_json_internal_type(val_type);
       ObJsonInType expect_type = j_in_type;

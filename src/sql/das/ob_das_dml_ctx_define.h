@@ -24,7 +24,7 @@
 #include "storage/ob_table_dml_param.h"
 #include "sql/engine/ob_operator.h"
 #include "sql/resolver/dml/ob_hint.h"
-#include "storage/fts/ob_fts_parser_helper.h"
+#include "storage/fts/ob_fts_plugin_helper.h"
 #include "storage/blocksstable/ob_datum_row_iterator.h"
 namespace oceanbase
 {
@@ -130,14 +130,14 @@ public:
                        K_(timeout_ts),
                        K_(sql_mode),
                        K_(prelock),
-                       K_(runtime_schema_version),
+                       K_(tenant_schema_version),
                        K_(is_for_foreign_key_check),
                        K_(affected_rows),
                        K_(is_immediate_row_conflict_check));
   int64_t timeout_ts_;
   ObSQLMode sql_mode_;
   bool prelock_;
-  int64_t runtime_schema_version_;
+  int64_t tenant_schema_version_;
   bool is_for_foreign_key_check_;
   int64_t affected_rows_;
   const DASDMLCtDefArray *related_ctdefs_;
@@ -149,7 +149,7 @@ protected:
       timeout_ts_(-1),
       sql_mode_(DEFAULT_MYSQL_MODE),
       prelock_(false),
-      runtime_schema_version_(0),
+      tenant_schema_version_(0),
       is_for_foreign_key_check_(false),
       affected_rows_(0),
       related_ctdefs_(nullptr),

@@ -19,13 +19,13 @@
 
 #include "common/row/ob_row.h"
 #include "lib/guard/ob_shared_guard.h"
-#include "observer/omt/ob_server_runtime_controller.h"
+#include "observer/omt/ob_multi_tenant.h"
 #include "sql/ob_scanner.h"
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
-#include "share/rc/ob_server_runtime.h"
-#include "observer/omt/ob_server_runtime_controller.h"
+#include "share/rc/ob_tenant_base.h"
+#include "observer/omt/ob_multi_tenant.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
-#include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
+#include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
 
 namespace oceanbase
 {

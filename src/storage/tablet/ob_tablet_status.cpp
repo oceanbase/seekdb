@@ -47,16 +47,12 @@ const char *ObTabletStatus::get_str(const ObTabletStatus &status)
 
 bool ObTabletStatus::is_deleted_for_gc() const
 {
-  return ObTabletStatus::DELETED == status_
-      || ObTabletStatus::RESERVED_6 == status_
-      || ObTabletStatus::SPLIT_SRC_DELETED == status_;
+  return ObTabletStatus::DELETED == status_;
 }
 
 bool ObTabletStatus::is_writable_for_dml() const
 {
-  return ObTabletStatus::NORMAL == status_
-      || ObTabletStatus::RESERVED_5 == status_
-      || ObTabletStatus::SPLIT_DST == status_;
+  return ObTabletStatus::NORMAL == status_;
 }
 
 int ObTabletStatus::serialize(char *buf, const int64_t len, int64_t &pos) const

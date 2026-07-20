@@ -18,6 +18,7 @@
 #include "share/rc/ob_module_provider.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "sql/resolver/ddl/ob_vec_index_builder_util.h"
+#include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase 
@@ -25,18 +26,13 @@ namespace oceanbase
 namespace share 
 {
 
-int ObPluginVectorIndexUtils::get_task_read_snapshot(ObLSID &ls_id, SCN &read_version)
+int ObPluginVectorIndexUtils::get_task_read_snapshot(SCN &read_version)
 {
   int ret = OB_SUCCESS;
-  ObLSHandle ls_handle;
   ObLS *ls = nullptr;
   // ObLSWRSHandler::get_ls_weak_read_ts
-  storage::ObLSService *ls_svr = share::g_mp->ls_service();
-  if (OB_FAIL(ls_svr->get_ls(ls_id, ls_handle, ObLSGetMod::SHARE_MOD))) {
-    LOG_WARN("failed to get log stream", K(ret), K(ls_id));
-  } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null ls", K(ret), K(ls_id));
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+    LOG_WARN("failed to get log stream", K(ret));
   } else {
     read_version = ls->get_ls_wrs_handler()->get_ls_weak_read_ts();
   }
@@ -446,7 +442,6 @@ int ObPluginVectorIndexUtils::get_data_table_out_column_id(
 
 int ObPluginVectorIndexUtils::read_vector_info(ObPluginVectorIndexAdaptor *adapter, 
                                                ObIAllocator &allocator, 
-                                               ObLSID &ls_id,
                                                SCN target_scn, 
                                                ObVectorQueryAdaptorResultContext &ada_ctx)
 {
@@ -478,8 +473,7 @@ int ObPluginVectorIndexUtils::read_vector_info(ObPluginVectorIndexAdaptor *adapt
     } else if (OB_ISNULL(output_vec_obj = static_cast<ObObj *>(allocator.alloc(sizeof(ObObj) * alloc_size)))) { // use lots of memory
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc mem.", K(ret));
-    } else if (adapter->get_is_need_vid() && OB_FAIL(read_local_tablet(ls_id,
-                                        adapter, 
+    } else if (adapter->get_is_need_vid() && OB_FAIL(read_local_tablet(adapter,
                                         target_scn, 
                                         type,
                                         allocator,
@@ -488,8 +482,7 @@ int ObPluginVectorIndexUtils::read_vector_info(ObPluginVectorIndexAdaptor *adapt
                                         vid_table_param,
                                         vid_id_iter))) {
       LOG_WARN("failed to read vid id table local tablet.", K(ret));
-    } else if (OB_FAIL(read_local_tablet(ls_id, 
-                                        adapter,
+    } else if (OB_FAIL(read_local_tablet(adapter,
                                         target_scn, 
                                         data_table_type,
                                         allocator,
@@ -672,8 +665,7 @@ int ObPluginVectorIndexUtils::read_vector_info(ObPluginVectorIndexAdaptor *adapt
 
 // debug interface, remove later
 
-int ObPluginVectorIndexUtils::try_sync_vbitmap_memdata(ObLSID &ls_id,
-                                                       ObPluginVectorIndexAdaptor *adapter,
+int ObPluginVectorIndexUtils::try_sync_vbitmap_memdata(ObPluginVectorIndexAdaptor *adapter,
                                                        SCN &target_scn,
                                                        ObIAllocator &allocator,
                                                        ObVectorQueryAdaptorResultContext &ada_ctx)
@@ -685,8 +677,7 @@ int ObPluginVectorIndexUtils::try_sync_vbitmap_memdata(ObLSID &ls_id,
   storage::ObTableScanParam vbitmap_scan_param;
   schema::ObTableParam vbitmap_table_param(allocator);
 
-  if (OB_FAIL(read_local_tablet(ls_id,
-                                adapter,
+  if (OB_FAIL(read_local_tablet(adapter,
                                 target_scn,
                                 index_type,
                                 allocator,
@@ -694,8 +685,8 @@ int ObPluginVectorIndexUtils::try_sync_vbitmap_memdata(ObLSID &ls_id,
                                 vbitmap_scan_param,
                                 vbitmap_table_param,
                                 index_id_iter))) { // read_local_tablet 4rd aux index get rowkey, backword
-    LOG_WARN("fail to read local tablet", KR(ret), K(ls_id), K(index_type), KPC(adapter));
-  } else if (OB_FAIL(adapter->check_index_id_table_readnext_status(&ada_ctx, index_id_iter, target_scn, false, ls_id))) {
+    LOG_WARN("fail to read local tablet", KR(ret), K(index_type), KPC(adapter));
+  } else if (OB_FAIL(adapter->check_index_id_table_readnext_status(&ada_ctx, index_id_iter, target_scn))) {
     LOG_WARN("fail to check and sync vbitmap.", KR(ret));
   } // ToDo: may also need to sync vector to incr memdata
 
@@ -710,8 +701,7 @@ int ObPluginVectorIndexUtils::try_sync_vbitmap_memdata(ObLSID &ls_id,
   return ret;
 }
 
-int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObLSID &ls_id,
-                                                        ObPluginVectorIndexAdaptor *&adapter,
+int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObPluginVectorIndexAdaptor *&adapter,
                                                         const bool create_new_adp,
                                                         SCN &target_scn,
                                                         ObIAllocator &allocator)
@@ -728,8 +718,7 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObLSID &ls_id,
   int64_t index_count = 0;
 
   void *adpt_buff = nullptr;
-  if (OB_FAIL(read_local_tablet(ls_id,
-                                adapter,
+  if (OB_FAIL(read_local_tablet(adapter,
                                 target_scn,
                                 index_type,
                                 allocator,
@@ -737,7 +726,7 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObLSID &ls_id,
                                 snapshot_scan_param,
                                 snapshot_table_param,
                                 snapshot_idx_iter))) { // read_local_tablet 5th aux index get rowkey
-    LOG_WARN("fail to read local tablet", KR(ret), K(ls_id), K(index_type), KPC(new_adapter));
+    LOG_WARN("fail to read local tablet", KR(ret), K(index_type), KPC(new_adapter));
   } else {
     blocksstable::ObDatumRow *row = nullptr;
     ObTableScanIterator *table_scan_iter = static_cast<ObTableScanIterator *>(snapshot_idx_iter);
@@ -757,15 +746,7 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObLSID &ls_id,
       if (OB_ISNULL(vector_index_service)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected nullptr", K(ret));
-      } else if (OB_FAIL(vector_index_service->get_ls_index_mgr_map().get_refactored(ls_id, vec_idx_mgr))) {
-        if (OB_HASH_NOT_EXIST == ret) {
-          ret = OB_SUCCESS;
-        } else {
-          LOG_WARN("fail to get vector index ls mgr", KR(ret));
-        }
-      } else if (OB_ISNULL(vec_idx_mgr)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get invalid vector index ls mgr", KR(ret));
+      } else if (FALSE_IT(vec_idx_mgr = &vector_index_service->get_index_mgr())) {
       } else {
         if (create_new_adp) {
           adpt_buff = vector_index_service->get_allocator().alloc(sizeof(ObPluginVectorIndexAdaptor));
@@ -835,10 +816,10 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObLSID &ls_id,
             //  adapter->get_allocator()->free(snap_memdata->mem_ctx_);
             //  snap_memdata->mem_ctx_ = nullptr;
             //}
-            LOG_INFO("memdata sync snapshot index complement no data", K(index_count), K(ls_id), K(index_type), KPC(new_adapter));
+            LOG_INFO("memdata sync snapshot index complement no data", K(index_count), K(index_type), KPC(new_adapter));
           } else { // index_count > 0
             new_adapter->close_snap_data_rb_flag();
-            LOG_INFO("memdata sync snapshot index complement data", K(index_count), K(ls_id), K(index_type), KPC(new_adapter));
+            LOG_INFO("memdata sync snapshot index complement data", K(index_count), K(index_type), KPC(new_adapter));
           }
         }
       }
@@ -864,7 +845,6 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObLSID &ls_id,
 }
 
 int ObPluginVectorIndexUtils::refresh_adp_from_table(
-    ObLSID &ls_id,
     ObPluginVectorIndexAdaptor *&adapter,
     const bool create_new_adapter,
     SCN target_scn,
@@ -883,10 +863,9 @@ int ObPluginVectorIndexUtils::refresh_adp_from_table(
     schema::ObTableParam inc_table_param(allocator);
     int64_t extra_info_actual_size = 0;
     schema::ObIndexType delta_type = adapter->is_hybrid_index()? INDEX_TYPE_HYBRID_INDEX_LOG_LOCAL: INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL;
-    if (OB_FAIL(try_sync_snapshot_memdata(ls_id, adapter, create_new_adapter, target_scn, allocator))) {
+    if (OB_FAIL(try_sync_snapshot_memdata(adapter, create_new_adapter, target_scn, allocator))) {
       LOG_WARN("failed to refresh mem snapshots without refresh incr", KR(ret));
-    } else if (OB_FAIL(read_local_tablet(ls_id,
-                                  adapter,
+    } else if (OB_FAIL(read_local_tablet(adapter,
                                   target_scn,
                                   delta_type,
                                   allocator,
@@ -894,7 +873,7 @@ int ObPluginVectorIndexUtils::refresh_adp_from_table(
                                   inc_scan_param,
                                   inc_table_param,
                                   delta_buf_iter))) {
-      LOG_WARN("fail to read local tablet", KR(ret), K(ls_id), K(delta_type), KP(adapter));
+      LOG_WARN("fail to read local tablet", KR(ret), K(delta_type), KP(adapter));
     } else if (OB_FAIL(adapter->get_extra_info_actual_size(extra_info_actual_size))) {
       LOG_WARN("fail to get extra info actual size", K(ret), KPC(adapter));
     } else {
@@ -906,10 +885,10 @@ int ObPluginVectorIndexUtils::refresh_adp_from_table(
       ObVectorQueryAdaptorResultContext ada_ctx(extra_info_column_count, &allocator, &tmp_allocator);
       if (OB_FAIL(adapter->check_delta_buffer_table_readnext_status(&ada_ctx, delta_buf_iter,target_scn))) {
         LOG_WARN("fail to check_delta_buffer_table_readnext_status.", K(ret));
-      } else if (OB_FAIL(try_sync_vbitmap_memdata(ls_id, adapter, target_scn, allocator, ada_ctx))) {
+      } else if (OB_FAIL(try_sync_vbitmap_memdata(adapter, target_scn, allocator, ada_ctx))) {
         LOG_WARN("failed to sync vbitmap", KR(ret));
       } else if (ada_ctx.get_status() == PVQ_COM_DATA) {
-        if (OB_FAIL(read_vector_info(adapter, allocator, ls_id, target_scn, ada_ctx))) {
+        if (OB_FAIL(read_vector_info(adapter, allocator, target_scn, ada_ctx))) {
           LOG_WARN("failed to read vector_info", KR(ret));
         }
       }
@@ -925,14 +904,14 @@ int ObPluginVectorIndexUtils::refresh_adp_from_table(
   return ret;
 }
 
-int ObPluginVectorIndexUtils::query_need_refresh_memdata(ObPluginVectorIndexAdaptor *adapter, ObLSID &ls_id)
+int ObPluginVectorIndexUtils::query_need_refresh_memdata(ObPluginVectorIndexAdaptor *adapter)
 {
   int ret = OB_SUCCESS;
   ObArenaAllocator allocator("VectorAdaptor", OB_MALLOC_NORMAL_BLOCK_SIZE);
   SCN target_scn;
   if (OB_ISNULL(adapter)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr", K(ret), KP(adapter), K(ls_id));
+    LOG_WARN("unexpected nullptr", K(ret), KP(adapter));
   } else {
     bool need_retry = false;
     common::ObSpinLockGuard ctx_guard(adapter->get_reload_lock());
@@ -940,7 +919,7 @@ int ObPluginVectorIndexUtils::query_need_refresh_memdata(ObPluginVectorIndexAdap
       need_retry = true;
     } else if (OB_FAIL(target_scn.convert_from_ts(ObTimeUtility::fast_current_time()))) {
       LOG_WARN("failed to convert ts to scn", K(ret));
-    } else if (OB_FAIL(ObPluginVectorIndexUtils::refresh_memdata(ls_id, adapter, target_scn, allocator))) {
+    } else if (OB_FAIL(ObPluginVectorIndexUtils::refresh_memdata(adapter, target_scn, allocator))) {
       LOG_WARN("fail to refresh adapter", K(ret));
     } else if (OB_FALSE_IT(adapter->set_reload_finish(true))) {
     } else {
@@ -954,28 +933,11 @@ int ObPluginVectorIndexUtils::query_need_refresh_memdata(ObPluginVectorIndexAdap
   return ret;
 }
 
-int ObPluginVectorIndexUtils::refresh_memdata(ObLSID &ls_id,
-                                              ObPluginVectorIndexAdaptor *adapter,
+int ObPluginVectorIndexUtils::refresh_memdata(ObPluginVectorIndexAdaptor *adapter,
                                               SCN target_scn,
                                               ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
-  // ToDo: remove test interface later
-#if 0
-  if (OB_FAIL(test_read_local_data(ls_id, adapter, INDEX_TYPE_VEC_ROWKEY_VID_LOCAL, target_scn, allocator))) {
-    LOG_WARN("fail to test read local data.", K(ret), K(ls_id), K(INDEX_TYPE_VEC_ROWKEY_VID_LOCAL));
-  } else if (OB_FAIL(test_read_local_data(ls_id, adapter, INDEX_TYPE_VEC_VID_ROWKEY_LOCAL, target_scn, allocator))) {
-    LOG_WARN("fail to test read local data.", K(ret), K(ls_id), K(INDEX_TYPE_VEC_VID_ROWKEY_LOCAL));
-  } else if (OB_FAIL(test_read_local_data(ls_id, adapter, INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL, target_scn, allocator))) {
-    LOG_WARN("fail to test read local data.", K(ret), K(ls_id), K(INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL));
-  } else if (OB_FAIL(test_read_local_data(ls_id, adapter, INDEX_TYPE_VEC_INDEX_ID_LOCAL, target_scn, allocator))) {
-    LOG_WARN("fail to test read local data.", K(ret), K(ls_id), K(INDEX_TYPE_VEC_INDEX_ID_LOCAL));
-  } else if (OB_FAIL(test_read_local_data(ls_id, adapter, INDEX_TYPE_VEC_INDEX_SNAPSHOT_DATA_LOCAL, target_scn, allocator))) {
-    LOG_WARN("fail to test read local data.", K(ret), K(ls_id), K(INDEX_TYPE_VEC_INDEX_SNAPSHOT_DATA_LOCAL));
-  } else if (OB_FAIL(test_read_local_data(ls_id, adapter, INDEX_TYPE_IS_NOT, target_scn, allocator))) {
-    LOG_WARN("fail to test read local data.", K(ret), K(ls_id), K(INDEX_TYPE_IS_NOT));
-  }
-#endif
   if (OB_ISNULL(adapter)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid adapter", K(ret), KPC(adapter));
@@ -987,16 +949,8 @@ int ObPluginVectorIndexUtils::refresh_memdata(ObLSID &ls_id,
       if (OB_ISNULL(vector_index_service)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected nullptr", K(ret));
-      } else if (OB_FAIL(vector_index_service->get_ls_index_mgr_map().get_refactored(ls_id, vec_idx_mgr))) {
-        if (OB_HASH_NOT_EXIST == ret) {
-          ret = OB_SUCCESS;
-        } else {
-          LOG_WARN("fail to get vector index ls mgr", KR(ret));
-        }
-      } else if (OB_ISNULL(vec_idx_mgr)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get invalid vector index ls mgr", KR(ret));
-      } else if (OB_FAIL(refresh_adp_from_table(ls_id, new_adapter, true, target_scn, allocator))) {
+      } else if (FALSE_IT(vec_idx_mgr = &vector_index_service->get_index_mgr())) {
+      } else if (OB_FAIL(refresh_adp_from_table(new_adapter, true, target_scn, allocator))) {
         LOG_WARN("failed to refresh adapter from table", K(ret), KPC(adapter));
       }
       if (adapter != new_adapter && OB_NOT_NULL(new_adapter)) {
@@ -1028,8 +982,7 @@ static bool is_non_shared_vec_index_aux_table(schema::ObIndexType type)
   return bret;
 }
 
-int ObPluginVectorIndexUtils::read_local_tablet(ObLSID &ls_id,
-                                                ObPluginVectorIndexAdaptor* adapter,
+int ObPluginVectorIndexUtils::read_local_tablet(ObPluginVectorIndexAdaptor* adapter,
                                                 SCN target_scn,
                                                 schema::ObIndexType type,
                                                 ObIAllocator &allocator,
@@ -1047,17 +1000,17 @@ int ObPluginVectorIndexUtils::read_local_tablet(ObLSID &ls_id,
   scan_iter = nullptr;
 
   // init scan param refer to ObLocalIndexLookupOp::init_scan_param()
-  // assign ls_id, tablet_id, tx_snapshot
+  // assign tablet_id and transaction snapshot
   // set need_scn_ = true if need ora_rowscn
   ObTabletID tablet_id;
   uint64_t table_id = OB_INVALID_ID;
   ObTabletHandle tablet_handle;
-  ObLSHandle ls_handle;
+  ObLS *ls = nullptr;
 
   // INDEX_TYPE_IS_NOT means data tablet
-  if (!ls_id.is_valid() || OB_ISNULL(adapter)) {
+  if (OB_ISNULL(adapter)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid ls id or adapter", KR(ret), K(ls_id), KPC(adapter));
+    LOG_WARN("invalid adapter", KR(ret), KPC(adapter));
   } else if (is_vec_delta_buffer_type(type) || is_hybrid_vec_index_log_type(type)) {
     tablet_id = adapter->get_inc_tablet_id();
     table_id = adapter->get_inc_table_id();
@@ -1088,23 +1041,19 @@ int ObPluginVectorIndexUtils::read_local_tablet(ObLSID &ls_id,
   }
 
   if (OB_SUCC(ret)) {
-    LOG_INFO("read table tablet", K(ls_id), K(tablet_id), K(table_id), K(type), K(target_scn));
+    LOG_INFO("read table tablet", K(tablet_id), K(table_id), K(type), K(target_scn));
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::SHARE_MOD))) {
-    LOG_WARN("failed to get log stream", K(ret), K(ls_id));
-  } else if (OB_ISNULL(ls_handle.get_ls())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("ls should not be null", K(ret));
-  } else if (OB_FAIL(ls_handle.get_ls()->get_tablet_with_timeout(tablet_id,
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+    LOG_WARN("failed to get log stream", K(ret));
+  } else if (OB_FAIL(ls->get_tablet_with_timeout(tablet_id,
                                                                  tablet_handle,
                                                                  0, // timeout
                                                                  ObMDSGetTabletMode::READ_READABLE_COMMITED,
                                                                  target_scn))) {
     LOG_WARN("fail to get tablet handle", KR(ret), K(tablet_id), K(type));
   } else {
-    scan_param.ls_id_ = ls_id;
     scan_param.tablet_id_ = tablet_id;
     scan_param.schema_version_ = tablet_handle.get_obj()->get_tablet_meta().max_sync_storage_schema_version_;
     if (OB_FAIL(init_common_scan_param(scan_param, adapter, target_scn, &allocator, &scan_allocator, type, table_id))) {
@@ -1905,18 +1854,18 @@ int ObPluginVectorIndexUtils::get_vector_index_name_prefix(const ObTableSchema &
   return ret;
 }
 
-int ObPluginVectorIndexUtils::erase_ivf_build_helper(ObLSID ls_id, const ObIvfHelperKey &key)
+int ObPluginVectorIndexUtils::erase_ivf_build_helper(const ObIvfHelperKey &key)
 {
   int ret = OB_SUCCESS;
   ObPluginVectorIndexService *vec_index_service = share::g_mp->plugin_vector_index_service();
   if (OB_ISNULL(vec_index_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get null ObPluginVectorIndexService ptr", K(ret));
-  } else if (OB_FAIL(vec_index_service->erase_ivf_build_helper(ls_id, key))) {
-    LOG_WARN("failed to erase ivf build helper", K(ret), K(ls_id), K(key));
+  } else if (OB_FAIL(vec_index_service->erase_ivf_build_helper(key))) {
+    LOG_WARN("failed to erase ivf build helper", K(ret), K(key));
   }
   if (ret == OB_HASH_NOT_EXIST) {
-    LOG_WARN("erase ivf build helper, key not exist", K(ret), K(ls_id), K(key));
+    LOG_WARN("erase ivf build helper, key not exist", K(ret), K(key));
     ret = OB_SUCCESS;
   }
   return ret;
@@ -1969,44 +1918,34 @@ int ObPluginVectorIndexUtils::split_snapshot_prefix(const ObString &src, const O
   return ret;
 }
 
-void ObPluginVectorIndexUtils::set_ls_leader_flag(const ObLSID &ls_id, const bool is_leader)
+void ObPluginVectorIndexUtils::set_leader_flag(const bool is_leader)
 {
   int ret = OB_SUCCESS;
   ObPluginVectorIndexService *vector_index_service = share::g_mp->plugin_vector_index_service();
-  ObPluginVectorIndexMgr *index_ls_mgr = nullptr;
-  if (!ls_id.is_valid() || OB_ISNULL(vector_index_service)) {
+  ObPluginVectorIndexMgr *index_mgr = nullptr;
+  if (OB_ISNULL(vector_index_service)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ls_id), KP(vector_index_service));
-  } else if (OB_FAIL(vector_index_service->acquire_vector_index_mgr(ls_id, index_ls_mgr))) {
-    LOG_WARN("fail to acquire vector index mgr", K(ret), K(ls_id));
-  } else if (OB_ISNULL(index_ls_mgr)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr", K(ret), KP(index_ls_mgr));
+    LOG_WARN("invalid argument", K(ret), KP(vector_index_service));
   } else {
-    index_ls_mgr->set_ls_leader(is_leader);
-    LOG_INFO("success to set ls leader", K(ls_id), K(is_leader));
+    index_mgr = &vector_index_service->get_index_mgr();
+    index_mgr->set_leader(is_leader);
+    LOG_INFO("success to set leader", K(is_leader));
   }
 }
 
-int ObPluginVectorIndexUtils::get_ls_leader_flag(const ObLSID &ls_id, bool &is_leader)
+int ObPluginVectorIndexUtils::get_leader_flag(bool &is_leader)
 {
   int ret = OB_SUCCESS;
-  ObPluginVectorIndexMgr *index_ls_mgr = nullptr;
+  ObPluginVectorIndexMgr *index_mgr = nullptr;
   ObPluginVectorIndexService *vector_index_service = share::g_mp->plugin_vector_index_service();
-  if (OB_FAIL(vector_index_service->get_ls_index_mgr_map().get_refactored(ls_id, index_ls_mgr))) {
-    LOG_WARN("fail to get vector index ls mgr", KR(ret), K(ls_id));
-  } else if (OB_ISNULL(index_ls_mgr)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr", K(ret));
-  } else {
-    is_leader = index_ls_mgr->get_ls_leader();
-    LOG_TRACE("success to set ls leader", K(ls_id), K(is_leader));
-  }
+  index_mgr = &vector_index_service->get_index_mgr();
+  is_leader = index_mgr->is_leader();
+  LOG_TRACE("success to get leader", K(is_leader));
   return ret;
 }
 
 
-int ObPluginVectorIndexUtils::fill_mem_context_detail_info(ObPluginVectorIndexService *service, ObIArray<ObLSTabletPair> &tablet_ids, char *buf, int64_t buf_len, int64_t &pos)
+int ObPluginVectorIndexUtils::fill_mem_context_detail_info(ObPluginVectorIndexService *service, ObIArray<ObTabletPair> &tablet_ids, char *buf, int64_t buf_len, int64_t &pos)
 {
   int ret = OB_SUCCESS;
   hash::ObHashSet<int64_t> adaptor_ptr_set;
@@ -2014,12 +1953,11 @@ int ObPluginVectorIndexUtils::fill_mem_context_detail_info(ObPluginVectorIndexSe
     LOG_WARN("fail to create tablet_id set", KR(ret));
   }
   for (int i = 0; OB_SUCC(ret) && i < tablet_ids.count(); i++) {
-    ObLSID ls_id = tablet_ids.at(i).ls_id_;
     ObTabletID tablet_id = tablet_ids.at(i).tablet_id_;
     ObPluginVectorIndexAdapterGuard adapter_guard;
-    if (OB_FAIL(service->get_adapter_inst_guard(ls_id, tablet_id, adapter_guard))) {
+    if (OB_FAIL(service->get_adapter_inst_guard(tablet_id, adapter_guard))) {
       if (OB_HASH_NOT_EXIST != ret) {
-        LOG_WARN("failed to get adapter inst guard", K(ls_id), K(tablet_id), KR(ret));
+        LOG_WARN("failed to get adapter inst guard", K(tablet_id), KR(ret));
       }
     } else {
       ObPluginVectorIndexAdaptor *adaptor = adapter_guard.get_adatper();
@@ -2068,9 +2006,9 @@ int ObPluginVectorIndexUtils::fill_mem_context_detail_info(ObPluginVectorIndexSe
 }
 
 int ObPluginVectorIndexUtils::get_mem_context_detail_info(ObPluginVectorIndexService *service,
-                                                          ObIArray<ObLSTabletPair> &complete_tablet_ids,
-                                                          ObIArray<ObLSTabletPair> &partial_tablet_ids,
-                                                          ObIArray<ObLSTabletPair> &cache_tablet_ids,
+                                                          ObIArray<ObTabletPair> &complete_tablet_ids,
+                                                          ObIArray<ObTabletPair> &partial_tablet_ids,
+                                                          ObIArray<ObTabletPair> &cache_tablet_ids,
                                                           char *buf, int64_t buf_len, int64_t &pos)
 {
   int ret = OB_SUCCESS;
@@ -2085,7 +2023,7 @@ int ObPluginVectorIndexUtils::get_mem_context_detail_info(ObPluginVectorIndexSer
   return ret;
 }
 
-int ObPluginVectorIndexUtils::fill_ivf_mem_context_detail_info(ObPluginVectorIndexService *service, ObIArray<ObLSTabletPair> &tablet_ids, char *buf, int64_t buf_len, int64_t &pos)
+int ObPluginVectorIndexUtils::fill_ivf_mem_context_detail_info(ObPluginVectorIndexService *service, ObIArray<ObTabletPair> &tablet_ids, char *buf, int64_t buf_len, int64_t &pos)
 {
   int ret = OB_SUCCESS;
   hash::ObHashSet<int64_t> adaptor_ptr_set;
@@ -2093,12 +2031,11 @@ int ObPluginVectorIndexUtils::fill_ivf_mem_context_detail_info(ObPluginVectorInd
     LOG_WARN("fail to create tablet_id set", KR(ret));
   }
   for (int i = 0; OB_SUCC(ret) && i < tablet_ids.count(); i++) {
-    ObLSID ls_id = tablet_ids.at(i).ls_id_;
     ObTabletID tablet_id = tablet_ids.at(i).tablet_id_;
     ObIvfCacheMgrGuard cache_mgr_guard;
-    if (OB_FAIL(service->acquire_ivf_cache_mgr_guard(ls_id, tablet_id, cache_mgr_guard))) {
+    if (OB_FAIL(service->acquire_ivf_cache_mgr_guard(tablet_id, cache_mgr_guard))) {
       if (OB_HASH_NOT_EXIST != ret) {
-        LOG_WARN("failed to get adapter inst guard", K(ls_id), K(tablet_id), KR(ret));
+        LOG_WARN("failed to get adapter inst guard", K(tablet_id), KR(ret));
       }
     } else {
       ObIvfCacheMgr *adaptor = cache_mgr_guard.get_ivf_cache_mgr();

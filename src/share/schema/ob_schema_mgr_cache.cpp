@@ -19,7 +19,7 @@
 #include "ob_schema_mgr_cache.h"
 #include "share/schema/ob_schema_service.h"
 #include "share/schema/ob_schema_mgr.h"
-#include "share/config/ob_runtime_config.h"
+#include "share/config/ob_tenant_config_mgr.h"
 
 namespace oceanbase
 {
@@ -136,7 +136,7 @@ int ObSchemaMgrCache::init(int64_t init_cached_num)
     LOG_WARN("invalid argument", K(ret), K(init_cached_num));
   } else {
     max_cached_num_ = init_cached_num;
-    const lib::ObMemAttr attr("SchemaMgrCache", ObCtxIds::SCHEMA_SERVICE);
+    auto attr = SET_USE_500("SchemaMgrCache", ObCtxIds::SCHEMA_SERVICE);
     void *ptr = ob_malloc(sizeof(ObSchemaMgrItem[MAX_SCHEMA_SLOT_NUM]), attr);
     if (NULL == ptr) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -299,6 +299,38 @@ int ObSchemaMgrCache::get_nearest(const int64_t schema_version,
   return ret;
 }
 
+// Return the least referenced schema_version; if there is no reference, return the current latest schema version
+int ObSchemaMgrCache::get_recycle_schema_version(int64_t &schema_version) const
+{
+  int ret = OB_SUCCESS;
+  schema_version = OB_INVALID_VERSION;
+  if (!check_inner_stat()) {
+    ret = OB_INNER_STAT_ERROR;
+    LOG_WARN("inner stat error", K(ret));
+  } else {
+    TCRLockGuard guard(lock_);
+    for (int64_t i = 0; i < max_cached_num_; i++) {
+      ObSchemaMgrItem &schema_mgr_item = schema_mgr_items_[i];
+      ObSchemaMgr *schema_mgr = schema_mgr_item.schema_mgr_;
+      if (OB_ISNULL(schema_mgr)) {
+        // do-nothing
+      } else if (ATOMIC_LOAD(&schema_mgr_item.ref_cnt_) > 0
+                 && (OB_INVALID_VERSION == schema_version
+                     || schema_mgr->get_schema_version() < schema_version)) {
+        schema_version = schema_mgr->get_schema_version();
+      }
+    }
+    if (OB_INVALID_VERSION == schema_version) {
+      // No reference version, take the largest schema_version that has been constructed
+      ObSchemaMgr *latest_schema_mgr = schema_mgr_items_[latest_schema_idx_].schema_mgr_;
+      if (OB_NOT_NULL(latest_schema_mgr)) {
+        schema_version = latest_schema_mgr->get_schema_version();
+      }
+    }
+  }
+  return ret;
+}
+
 static const char* ref_info_type_strs[] = {
   "STACK",
   "VTABLE_SCAN_PARAM",
@@ -409,7 +441,7 @@ int ObSchemaMgrCache::get_slot_info(common::ObIAllocator &allocator, common::ObI
             //do nothing
           } else if (OB_ISNULL(mod_ref)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("schema slot ref_cnt size > 0 but mod ref array is NULL", KR(ret),
+            LOG_WARN("tenant slot ref_cnt size > 0 but mod ref array is NULL", KR(ret),
                     K(slot_id), K(schema_version));
           } else if (OB_FAIL(build_ref_mod_infos_(mod_ref, tmp_buff, buf_len, tmp_str))) {
             LOG_WARN("fail to build mode_ref_cnt to string", KR(ret), K(schema_version));

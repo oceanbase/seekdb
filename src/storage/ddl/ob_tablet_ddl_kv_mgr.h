@@ -77,7 +77,7 @@ public:
   ~ObDDLMacroIdemChecker();
   int init();
   bool is_inited();
-  static bool need_check_block_checksum(const ObDirectLoadType direct_load_type);
+  static bool need_check_block_checksum(const ObDDLMacroBlockType block_type, const ObDirectLoadType direct_load_type);
   static int calc_block_checksum(const ObDDLMacroBlockType block_type,
                                  const ObDirectLoadType direct_load_type,
                                  const char *buf, 
@@ -115,7 +115,7 @@ public:
   int register_to_tablet(ObDDLKvMgrHandle &kv_mgr_handle);
   int init(const common::ObTabletID &tablet_id); // init before memtable mgr
   int set_max_freeze_scn(const share::SCN &checkpoint_scn);
-  int get_or_create_local_ddl_kv(
+  int get_or_create_shared_nothing_ddl_kv(
       const share::SCN &macro_redo_scn,
       const share::SCN &macro_redo_start_scn,
       ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,

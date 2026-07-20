@@ -332,7 +332,7 @@ int ObInnerTableSchemaDumper::get_all_ddl_operation_info_(const ObIArray<schema:
       OZ (dml.add_column("user_id", 0));
       OZ (dml.add_column("database_id", table->get_database_id()));
       OZ (dml.add_column("database_name", ""));
-      OZ (dml.add_column("column_id", 0));
+      OZ (dml.add_column("tablegroup_id", table->get_tablegroup_id()));
       OZ (dml.add_column("table_id", table->get_table_id()));
       OZ (dml.add_column("table_name", ""));
       OZ (dml.add_column("operation_type", op_type));
@@ -360,8 +360,8 @@ int ObInnerTableSchemaDumper::get_all_core_table_info_(const ObIArray<schema::Ob
 {
   int ret = OB_SUCCESS;
   ObDMLSqlSplicer dml;
-  ObCoreTableLoadInfoConstructor table_constructor(OB_ALL_TABLE_HISTORY_TNAME, allocator_);
-  ObCoreTableLoadInfoConstructor column_constructor(OB_ALL_COLUMN_HISTORY_TNAME, allocator_);
+  ObCoreTableLoadInfoConstructor table_constructor(OB_ALL_TABLE_TNAME, allocator_);
+  ObCoreTableLoadInfoConstructor column_constructor(OB_ALL_COLUMN_TNAME, allocator_);
   ObMergeLoadInfoConstructor constructor(OB_ALL_CORE_TABLE_TNAME, OB_ALL_CORE_TABLE_TID, allocator_);
   for (int64_t i = 0; i < schema_ptrs.count() && OB_SUCC(ret); i++) {
     ObTableSchema *table = nullptr;
@@ -371,10 +371,8 @@ int ObInnerTableSchemaDumper::get_all_core_table_info_(const ObIArray<schema::Ob
       LOG_WARN("pointer is null", KR(ret), KP(table), K(i));
     } else if (!is_core_table(table->get_table_id())) {
     } else if (OB_FAIL(ObTableSqlService::gen_table_dml_without_check(*table,
-            false, dml, true/*is_history*/))) {
+            false, dml))) {
       LOG_WARN("failed to gen_table_dml", KR(ret));
-    } else if (OB_FAIL(dml.add_column("is_deleted", 0))) {
-      LOG_WARN("failed to add is_deleted", KR(ret));
     } else if (OB_FAIL(table_constructor.add_lines(table->get_table_id(), dml))) {
       LOG_WARN("failed to add table", KR(ret), KPC(table));
     } else {
@@ -384,11 +382,8 @@ int ObInnerTableSchemaDumper::get_all_core_table_info_(const ObIArray<schema::Ob
         if (OB_ISNULL(iter) || OB_ISNULL(*iter)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("pointer is null", KR(ret), KP(iter));
-        } else if (OB_FAIL(ObTableSqlService::gen_column_dml_without_check(**iter,
-                dml, true/*is_history*/))) {
+        } else if (OB_FAIL(ObTableSqlService::gen_column_dml_without_check(**iter, dml))) {
           LOG_WARN("failed to gen_table_dml", KR(ret));
-        } else if (OB_FAIL(dml.add_column("is_deleted", 0))) {
-          LOG_WARN("failed to add is_deleted", KR(ret));
         } else if (OB_FAIL(column_constructor.add_lines(table->get_table_id(), dml))) {
           LOG_WARN("failed to add column", KR(ret), KPC(table));
         }

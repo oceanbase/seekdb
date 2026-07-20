@@ -630,8 +630,7 @@ int ObPlanCache::construct_fast_parser_result(common::ObIAllocator &allocator,
         &(pc_ctx.exec_ctx_.get_physical_plan_ctx()->get_param_store_for_update());
     if (OB_FAIL(construct_plan_cache_key(*pc_ctx.sql_ctx_.session_info_,
                                          ObLibCacheNameSpace::NS_CRSR,
-                                         fp_result.pc_key_,
-                                         pc_ctx.sql_ctx_.is_protocol_weak_read_))) {
+                                         fp_result.pc_key_))) {
       LOG_WARN("failed to construct plan cache key", K(ret));
     } else if (enable_exact_mode) {
       (void)fp_result.pc_key_.name_.assign_ptr(raw_sql.ptr(), raw_sql.length());
@@ -1526,56 +1525,6 @@ int ObPlanCache::cache_evict_by_idle()
   }
   return ret;
 }
-// int ObPlanCache::load_plan_baseline()
-// {
-//   int ret = OB_SUCCESS;
-//   ObGlobalReqTimeService::check_req_timeinfo();
-//   SMART_VAR(PlanIdArray, plan_ids) {
-//     ObGetAllPlanIdOp plan_id_op(&plan_ids);
-//     if (OB_FAIL(co_mgr_.foreach_cache_obj(plan_id_op))) {
-//       LOG_WARN("fail to traverse id2stat_map", K(ret));
-//     } else {
-//       ObPhysicalPlan *plan = NULL;
-//       for (int64_t i = 0; i < plan_ids.count(); i++) {
-//         uint64_t plan_id= plan_ids.at(i);
-//         ObCacheObjGuard guard(LOAD_BASELINE_HANDLE);
-//         int tmp_ret = ref_plan(plan_id, guard); // increment plan reference count by 1
-//         plan = static_cast<ObPhysicalPlan*>(guard.cache_obj_);
-//         if (OB_HASH_NOT_EXIST == tmp_ret) {
-//           //do nothing;
-//         } else if (OB_SUCCESS != tmp_ret || NULL == plan) {
-//           LOG_WARN("get plan failed", K(tmp_ret), KP(plan));
-//         } else if (false == plan->stat_.is_evolution_) { // not in evolution
-//           LOG_DEBUG("load plan baseline", "bl_info", plan->stat_.bl_info_, K(plan->should_add_baseline()));
-//           share::schema::ObSchemaGetterGuard schema_guard;
-//           const share::schema::ObPlanBaselineInfo *bl_info = NULL;
-//           if (OB_FAIL(ObPlanBaseline::select_bl(schema_guard,
-//                                                 plan->stat_.bl_info_.key_,
-//                                                 bl_info))) {
-//             LOG_WARN("fail to get outline data from baseline", K(ret));
-//           } else if (!OB_ISNULL(bl_info)) { // plan baseline is not null
-//             if (bl_info->outline_data_ == plan->stat_.bl_info_.outline_data_) {
-//               //do nothing
-//             } else { // outline data different, different machines may generate different plans, does not meet expectations
-//               LOG_WARN("diff plan in plan cache and plan baseline",
-//                       "baseline info in plan cache", plan->stat_.bl_info_,
-//                       "baseline info in plan baseline", *bl_info);
-//             }
-//           } else if (plan->should_add_baseline() &&
-//                     OB_SUCCESS != (tmp_ret = ObPlanBaseline::insert_bl(
-//                                               plan->stat_.bl_info_))) {
-//             LOG_WARN("fail to replace plan baseline", K(tmp_ret), K(plan->stat_.bl_info_));
-//           } else {
-//             // do nothing
-//           }
-//         } else { // plan cache is evolving
-//           // do nothing
-//         }
-//       }
-//     }
-//   }
-//   return ret;
-// }
 // Calculate the number of pcv_set to be evicted from plan_cache
 // ret = true indicates normal execution, otherwise failure
 bool ObPlanCache::calc_evict_num(int64_t &plan_cache_evict_num)
@@ -2124,8 +2073,7 @@ int ObPlanCache::construct_plan_cache_key(ObPlanCacheCtx &plan_ctx, ObLibCacheNa
     LOG_WARN("session info is null");
   } else if (OB_FAIL(construct_plan_cache_key(*session,
                                               ns,
-                                              plan_ctx.fp_result_.pc_key_,
-                                              plan_ctx.sql_ctx_.is_protocol_weak_read_))) {
+                                              plan_ctx.fp_result_.pc_key_))) {
     LOG_WARN("failed to construct plan cache key", K(ret));
   } else {
     plan_ctx.key_ = &(plan_ctx.fp_result_.pc_key_);
@@ -2135,8 +2083,7 @@ int ObPlanCache::construct_plan_cache_key(ObPlanCacheCtx &plan_ctx, ObLibCacheNa
 
 OB_INLINE int ObPlanCache::construct_plan_cache_key(ObSQLSessionInfo &session,
                                                     ObLibCacheNameSpace ns,
-                                                    ObPlanCacheKey &pc_key,
-                                                    bool is_weak)
+                                                    ObPlanCacheKey &pc_key)
 {
   int ret = OB_SUCCESS;
   uint64_t database_id = OB_INVALID_ID;
@@ -2158,7 +2105,6 @@ OB_INLINE int ObPlanCache::construct_plan_cache_key(ObSQLSessionInfo &session,
   pc_key.use_rich_vector_format_ = session.initial_use_rich_format();
   pc_key.config_use_rich_format_ = session.config_use_rich_format();
   OZ (session.get_sys_var_config_hash_val(pc_key.sys_var_config_hash_val_));
-  pc_key.is_weak_read_ = is_weak;
   pc_key.enable_mysql_compatible_dates_ = session.enable_mysql_compatible_dates();
   return ret;
 }

@@ -26,8 +26,9 @@
 #include "sql/ob_sql_trans_util.h"
 #include "sql/engine/px/ob_px_row_store.h"
 #include "sql/engine/px/ob_px_bloom_filter.h"
+#include "rpc/frame/ob_result_code.h"
 #include "common/row/ob_row.h"
-#include "lib/oblog/ob_warning_buffer.h"
+#include "lib/compress/ob_compress_util.h"
 #include "storage/tx/ob_trans_define.h"
 #include "sql/engine/ob_exec_feedback_info.h"
 #include "sql/ob_sql_define.h"
@@ -37,22 +38,7 @@ namespace oceanbase
 namespace sql
 {
 
-struct ObPxUserErrorMsg
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObPxUserErrorMsg() : rcode_(OB_SUCCESS), warnings_() { msg_[0] = '\0'; }
-  void reset()
-  {
-    rcode_ = OB_SUCCESS;
-    msg_[0] = '\0';
-    warnings_.reset();
-  }
-  TO_STRING_KV(K_(rcode), K_(msg), K_(warnings));
-  int32_t rcode_;
-  char msg_[common::OB_MAX_ERROR_MSG_LEN];
-  common::ObSEArray<common::ObWarningBuffer::WarningItem, 1> warnings_;
-};
+typedef rpc::frame::ObResultCode ObPxUserErrorMsg;
 
 struct ObPxTabletInfo
 {

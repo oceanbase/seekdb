@@ -960,7 +960,6 @@ int ObParser::parse_(const ObString &query,
   ObString stmt(len, query.ptr());
   memset(&parse_result, 0, sizeof(ParseResult));
   parse_result.is_multi_values_parser_ = (INS_MULTI_VALUES == parse_mode);
-  parse_result.is_method_opt_parser_ = (METHOD_OPT_MODE == parse_mode);
   parse_result.is_fp_ = (FP_MODE == parse_mode
                          || FP_PARAMERIZE_AND_FILTER_HINT_MODE == parse_mode
                          || FP_NO_PARAMERIZE_AND_FILTER_HINT_MODE== parse_mode);

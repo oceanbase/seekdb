@@ -22,7 +22,7 @@
 #include "common/datum/ob_datum.h"
 #include "sql/das/ob_das_dml_ctx_define.h"
 #include "storage/fts/ob_fts_doc_word_iterator.h"
-#include "storage/fts/ob_fts_parser_helper.h"
+#include "storage/fts/ob_fts_plugin_helper.h"
 
 namespace oceanbase
 {

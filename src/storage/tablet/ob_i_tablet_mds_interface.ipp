@@ -436,7 +436,7 @@ int ObITabletMdsInterface::get_latest(OP &&read_op,
     MDS_LOG(WARN, "failed to check data completion");
   } else if (!is_data_complete) {
     ret = OB_EAGAIN;
-    MDS_LOG(INFO, "mds_data is not complete, try again later", K(ret), K(get_tablet_meta_().ha_status_));
+    MDS_LOG(INFO, "mds_data is not complete, try again later", K(ret), K(get_tablet_meta_().restore_state_));
   } else if (OB_ISNULL(get_tablet_pointer_())) {
     ret = OB_BAD_NULL_ERROR;
     MDS_LOG(ERROR, "pointer on tablet should not be null");
@@ -519,7 +519,7 @@ int ObITabletMdsInterface::get_latest_committed(OP &&read_op) const
     MDS_LOG(WARN, "failed to check data completion");
   } else if (!is_data_complete) {
     ret = OB_EAGAIN;
-    MDS_LOG(INFO, "mds_data is not complete, try again later", K(ret), K(get_tablet_meta_().ha_status_));
+    MDS_LOG(INFO, "mds_data is not complete, try again later", K(ret), K(get_tablet_meta_().restore_state_));
   } else if (OB_ISNULL(get_tablet_pointer_())) {    
     ret = OB_BAD_NULL_ERROR;
     MDS_LOG(ERROR, "pointer on tablet should not be null");
@@ -606,7 +606,7 @@ int ObITabletMdsInterface::get_snapshot(const Key &key,
     MDS_LOG(WARN, "failed to check data completion");
   } else if (!is_data_complete) {
     ret = OB_EAGAIN;
-    MDS_LOG(INFO, "mds_data is not complete, try again later", K(ret), K(get_tablet_meta_().ha_status_));
+    MDS_LOG(INFO, "mds_data is not complete, try again later", K(ret), K(get_tablet_meta_().restore_state_));
   } else if (OB_ISNULL(get_tablet_pointer_())) {
     ret = OB_BAD_NULL_ERROR;
     MDS_LOG(ERROR, "pointer on tablet should not be null");
@@ -696,7 +696,6 @@ int ObITabletMdsInterface::fill_virtual_info_from_mds_sstable(ObIArray<mds::MdsN
   mds::MdsDumpKV kv;
   mds::MdsDumpKV *dump_kv = &kv;
   constexpr uint8_t mds_unit_id = mds::TupleTypeIdx<mds::NormalMdsTable, mds::MdsUnit<K, T>>::value;
-  const share::ObLSID &ls_id = get_tablet_meta_().ls_id_;
   const common::ObTabletID &tablet_id = get_tablet_meta_().tablet_id_;
   const int64_t abs_timeout = ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US/*timeout_us*/ + ObClockGenerator::getClock();
 
@@ -704,7 +703,6 @@ int ObITabletMdsInterface::fill_virtual_info_from_mds_sstable(ObIArray<mds::MdsN
     ObMdsReadInfoCollector placeholder_collector;
     if (CLICK_FAIL(ObMdsScanParamHelper::build_scan_param(
           allocator,
-          ls_id,
           tablet_id,
           ObMdsSchemaHelper::MDS_TABLE_ID,
           mds_unit_id,
@@ -716,7 +714,7 @@ int ObITabletMdsInterface::fill_virtual_info_from_mds_sstable(ObIArray<mds::MdsN
           scan_param))) {
       MDS_LOG(WARN, "fail to build scan param", K(ret));
     } else if (OB_FAIL(mds_table_scan(scan_param, store_ctx, iter))) {
-        MDS_LOG(WARN, "fail to do mds table scan", K(ret), K(ls_id), K(tablet_id), K(scan_param));
+        MDS_LOG(WARN, "fail to do mds table scan", K(ret), K(tablet_id), K(scan_param));
     } else {
       int tmp_ret = OB_SUCCESS;
       while(OB_SUCC(iter.get_next_mds_kv(allocator, kv))) {
@@ -725,12 +723,11 @@ int ObITabletMdsInterface::fill_virtual_info_from_mds_sstable(ObIArray<mds::MdsN
         } else if (FALSE_IT(cur_virtual_info = &mds_node_info_array.at(mds_node_info_array.count() - 1))) {
         } else if (CLICK_FAIL(obj_to_string_holder_(dump_kv->k_, cur_virtual_info->user_key_))) {
           MDS_LOG_GET(WARN, "fail to fill string holder");
-        } else if (CLICK_FAIL(dump_kv->v_.convert_to_user_mds_node(user_mds_node, get_tablet_meta_().ls_id_, get_tablet_meta_().tablet_id_))) {
+        } else if (CLICK_FAIL(dump_kv->v_.convert_to_user_mds_node(user_mds_node))) {
           MDS_LOG_GET(WARN, "fail to convert tablet_status_node");
         } else if (CLICK_FAIL(user_mds_node.fill_virtual_info(*cur_virtual_info))) {
           MDS_LOG_GET(WARN, "fail to fill virtual info");
         } else {
-          cur_virtual_info->ls_id_ = get_tablet_meta_().ls_id_;
           cur_virtual_info->tablet_id_ = get_tablet_meta_().tablet_id_;
           cur_virtual_info->position_ = mds::NodePosition::DISK;
           cur_virtual_info->unit_id_ = dump_kv->v_.mds_unit_id_;
@@ -778,7 +775,6 @@ int ObITabletMdsInterface::fill_virtual_info_by_obj_(const T &obj,
     if (CLICK_FAIL(obj_to_string_holder_(obj, cur_virtual_info->user_data_))) {
       MDS_LOG_GET(WARN, "fail to fill string holder");
     } else {
-      cur_virtual_info->ls_id_ = get_tablet_meta_().ls_id_;
       cur_virtual_info->tablet_id_ = get_tablet_meta_().tablet_id_;
       cur_virtual_info->position_ = position;
       cur_virtual_info->unit_id_ = mds::TupleTypeIdx<mds::NormalMdsTable, mds::MdsUnit<mds::DummyKey, T>>::value;
@@ -809,8 +805,6 @@ inline int ObITabletMdsInterface::fill_virtual_info(ObIArray<mds::MdsNodeInfoFor
     MDS_LOG_GET(WARN, "fail to fill seq from disk");
   } else if (CLICK_FAIL((fill_virtual_info_from_mds_sstable<mds::DummyKey, ObTabletBindingMdsUserData>(mds_node_info_array)))) {
     MDS_LOG_GET(WARN, "fail to fill aux_tablet_info_");
-  } else if (CLICK_FAIL((fill_virtual_info_from_mds_sstable<mds::DummyKey, ObTabletSplitMdsUserData>(mds_node_info_array)))) {
-    MDS_LOG_GET(WARN, "fail to fill tablet_split_data_");
   } else if (CLICK_FAIL((fill_virtual_info_from_mds_sstable<compaction::ObMediumCompactionInfoKey, compaction::ObMediumCompactionInfo>(mds_node_info_array)))) {
     MDS_LOG_GET(WARN, "fail to fill medium compaction info");
   } else if (CLICK_FAIL((fill_virtual_info_from_mds_sstable<ObTruncateInfoKey, ObTruncateInfo>(mds_node_info_array)))) {
@@ -867,176 +861,13 @@ int ObITabletMdsInterface::get_latest_committed_data(T &value, ObIAllocator *all
   #undef PRINT_WRAPPER
 }
 
-
-template <typename T, typename OP>
-int ObITabletMdsInterface::cross_ls_get_latest(
-    const ObITabletMdsInterface *another,
-    OP &&read_op,
-    mds::MdsWriter &writer,
-    mds::TwoPhaseCommitState &trans_stat,
-    share::SCN &trans_version,
-    const int64_t read_seq) const
-{
-  int ret = OB_SUCCESS;
-
-  if (OB_FAIL((get_latest<T, OP>(std::forward<OP>(read_op), writer, trans_stat, trans_version, read_seq)))) {
-    if (OB_EMPTY_RESULT != ret) {
-      MDS_LOG(WARN, "fail to get latest", K(ret));
-    }
-  }
-
-  if (OB_EMPTY_RESULT == ret && nullptr != another) {
-    if (OB_FAIL((another->get_latest<T, OP>(std::forward<OP>(read_op), writer, trans_stat, trans_version, read_seq)))) {
-      if (OB_EMPTY_RESULT != ret) {
-        MDS_LOG(WARN, "fail to get latest", K(ret));
-      }
-    }
-  }
-
-  return ret;
-}
-
-template <typename T>
-int ObITabletMdsInterface::cross_ls_get_latest_committed(
-    const ObITabletMdsInterface *another,
-    T &value,
-    ObIAllocator *alloc) const
-{
-  int ret = OB_SUCCESS;
-
-  if (OB_FAIL((get_latest_committed(value, alloc)))) {
-    if (OB_EMPTY_RESULT != ret) {
-      MDS_LOG(WARN, "fail to get latest", K(ret));
-    }
-  }
-
-  if (OB_EMPTY_RESULT == ret && nullptr != another) {
-    if (OB_FAIL((another->get_latest_committed(value, alloc)))) {
-      if (OB_EMPTY_RESULT != ret) {
-        MDS_LOG(WARN, "fail to get latest", K(ret));
-      }
-    }
-  }
-
-  return ret;
-}
-
-template <typename Key, typename Value, typename OP>
-int ObITabletMdsInterface::cross_ls_get_snapshot(
-    const ObITabletMdsInterface *another,
-    const Key &key,
-    OP &&read_op,
-    const share::SCN snapshot,
-    const int64_t timeout_us) const
-{
-  int ret = OB_SUCCESS;
-
-  if (OB_FAIL((get_snapshot<Key, Value>(key, read_op, snapshot, timeout_us)))) {
-    if (OB_EMPTY_RESULT != ret) {
-      MDS_LOG(WARN, "fail to get snapshot", K(ret));
-    }
-  }
-
-  if (OB_EMPTY_RESULT == ret && nullptr != another) {
-    if (OB_FAIL((another->get_snapshot<Key, Value>(key, read_op, snapshot, timeout_us)))) {
-      if (OB_EMPTY_RESULT != ret) {
-        MDS_LOG(WARN, "fail to get snapshot", K(ret));
-      }
-    }
-  }
-
-  return ret;
-}
-
 template <class T, typename std::enable_if<!OB_TRAIT_IS_SAME_CLASS(T, ObTabletCreateDeleteMdsUserData), bool>::type>
 int ObITabletMdsInterface::check_mds_data_complete_(bool &is_complete) const 
 {
   int ret = OB_SUCCESS;
-  // For multi-source data (excluding tablet_status), during the migration of LS, 
-  // reading is only permitted once the data is complete; 
-  // otherwise, the data read will be incomplete.
-  is_complete = get_tablet_meta_().ha_status_.is_data_status_complete();
+  is_complete = true;
   return ret;
 }
 
-/********************************************this is special logic*****************************************************/
-inline int ObITabletMdsInterface::check_reserved_status_redo_written(bool &written)
-{
-  #define PRINT_WRAPPER KR(ret), K(*this), K(written)
-  MDS_TG(10_ms);
-  int ret = OB_SUCCESS;
-  bool is_online = false;
-  ObTabletCreateDeleteMdsUserData tablet_status;
-  share::SCN redo_scn;
-  if (OB_ISNULL(get_tablet_pointer_())) {
-    ret = OB_BAD_NULL_ERROR;
-    MDS_LOG(ERROR, "pointer on tablet should not be null");
-  } else {
-    ObTabletMdsSharedLockGuard guard(get_tablet_pointer_()->get_mds_truncate_lock());
-    if (OB_FAIL(guard.get_ret())) {
-      MDS_LOG_SET(WARN, "failed to add mds truncate lock");
-    } else {
-      do {
-        mds::MdsTableHandle handle;
-        ObLSSwitchChecker ls_switch_checker;
-        if (CLICK_FAIL(get_mds_table_handle_(handle, false))) {
-          if (OB_ENTRY_NOT_EXIST != ret) {
-            MDS_LOG_GET(WARN, "failed to get_mds_table");
-          } else {
-            MDS_LOG_GET(TRACE, "failed to get_mds_table");
-          }
-        } else if (!handle.is_valid()) {
-          ret = OB_ERR_UNEXPECTED;
-          MDS_LOG_GET(WARN, "mds cannot be NULL");
-        } else if (MDS_FAIL(ls_switch_checker.check_ls_switch_state(get_tablet_pointer_()->get_ls(), is_online))) {
-          MDS_LOG_GET(WARN, "check ls online state failed", K(ret), KPC(this));
-        } else if (CLICK_FAIL(handle.get_tablet_status_node(GetTabletStatusNodeFromMdsTableOp(tablet_status, redo_scn)))) {
-          if (OB_SNAPSHOT_DISCARDED != ret) {
-            MDS_LOG_GET(WARN, "failed to get mds data");
-          } else {
-            MDS_LOG_GET(TRACE, "failed to get mds data");
-          }
-        } else {
-          if (tablet_status.get_tablet_status() != ObTabletStatus::RESERVED_5) {
-            ret = OB_STATE_NOT_MATCH;
-          } else if (!redo_scn.is_valid() || redo_scn.is_max()) {
-            written = false;
-            MDS_LOG_GET(TRACE, "get reserved status on mds_table, but redo scn is not valid");
-          } else {
-            written = true;
-            MDS_LOG_GET(TRACE, "get reserved status on mds_table, and redo scn is valid");
-          }
-        }
-        if (CLICK_FAIL(ret)) {
-          if (OB_ENTRY_NOT_EXIST == ret || OB_SNAPSHOT_DISCARDED == ret) {
-            if (CLICK_FAIL((get_mds_data_from_tablet<mds::DummyKey, ObTabletCreateDeleteMdsUserData>(
-                mds::DummyKey(),
-                share::SCN::max_scn()/*snapshot*/,
-                ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US/*timeout_us*/,
-                ReadTabletStatusOp(tablet_status))))) {
-              MDS_LOG_GET(WARN, "failed to get latest data from tablet");
-            } else if (tablet_status.get_tablet_status() != ObTabletStatus::RESERVED_5) {
-              ret = OB_STATE_NOT_MATCH;
-            } else {
-              written = true;
-            }
-          }
-        }
-        if (OB_SUCC(ret)) {
-          if (is_online && MDS_FAIL(ls_switch_checker.double_check_epoch(is_online))) {
-            if (!is_online) {
-              ret = OB_LS_OFFLINE;
-            }
-            MDS_LOG_GET(WARN, "failed to double check ls online");
-          } else {
-            MDS_LOG_GET(TRACE, "success to check_reserved_status_redo_written");
-          }
-        }
-      } while (ret == OB_VERSION_NOT_MATCH && is_online);
-    }
-  }
-  return ret;
-  #undef PRINT_WRAPPER
-}
 }
 }

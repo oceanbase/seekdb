@@ -26,10 +26,6 @@
 
 namespace oceanbase
 {
-namespace share
-{
-class ObLSID;
-}
 namespace blocksstable
 {
 struct ObMacroBlocksWriteCtx;

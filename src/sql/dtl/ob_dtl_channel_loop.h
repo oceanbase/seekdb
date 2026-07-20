@@ -122,6 +122,7 @@ public:
   void set_interm_result(bool flag) { use_interm_result_ = flag; }
 private:
   static const int64_t INTERRUPT_CHECK_TIMES = 16;
+  static const int64_t SERVER_ALIVE_CHECK_TIMES = 4096;
   Proc *proc_map_[MAX_PROCS];
   InterruptProc *interrupt_proc_;
   common::ObSEArray<ObDtlChannel*, 128> chans_;
@@ -133,6 +134,7 @@ private:
 
   // list hold channels that has msg
   ObSpinLock spin_lock_;
+  ObAddr mock_addr_;
   ObDtlMockChannel sentinel_node_;
   int64_t n_first_no_data_;
   ObMonitorNode default_op_monitor_info_; // used by sqc, das module

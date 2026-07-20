@@ -209,7 +209,6 @@ int ObDASCtx::extended_tablet_loc(ObDASTableLoc &table_loc,
       tablet_loc = new(tablet_buf) ObDASTabletLoc();
       tablet_loc->server_ = replica_loc.get_server();
       tablet_loc->tablet_id_ = opt_tablet_loc.get_tablet_id();
-      tablet_loc->ls_id_ = opt_tablet_loc.get_ls_id();
       tablet_loc->partition_id_ = opt_tablet_loc.get_partition_id();
       tablet_loc->first_level_part_id_ = opt_tablet_loc.get_first_level_part_id();
       tablet_loc->loc_meta_ = table_loc.loc_meta_;
@@ -266,7 +265,6 @@ OB_INLINE int ObDASCtx::build_related_tablet_loc(ObDASTabletLoc &tablet_loc)
     if (OB_SUCC(ret)) {
       related_tablet_loc = new(related_loc_buf) ObDASTabletLoc();
       related_tablet_loc->tablet_id_ = rv->tablet_id_;
-      related_tablet_loc->ls_id_ = tablet_loc.ls_id_;
       related_tablet_loc->server_ = tablet_loc.server_;
       related_tablet_loc->loc_meta_ = related_table_loc->loc_meta_;
       related_tablet_loc->next_ = tablet_loc.next_;
@@ -411,22 +409,6 @@ int ObDASCtx::build_table_loc_meta(const ObDASTableLocMeta &src,
   return ret;
 }
 
-int ObDASCtx::get_all_lsid(share::ObLSArray &ls_ids)
-{
-  int ret = OB_SUCCESS;
-  FOREACH_X(table_node, table_locs_, OB_SUCC(ret)) {
-    ObDASTableLoc *table_loc = *table_node;
-    for (DASTabletLocListIter tablet_node = table_loc->tablet_locs_begin();
-         OB_SUCC(ret) && tablet_node != table_loc->tablet_locs_end(); ++tablet_node) {
-      ObDASTabletLoc *tablet_loc = *tablet_node;
-      if (!is_contain(ls_ids, tablet_loc->ls_id_)) {
-        ret = ls_ids.push_back(tablet_loc->ls_id_);
-      }
-    }
-  }
-  return ret;
-}
-
 int64_t ObDASCtx::get_related_tablet_cnt() const
 {
   int64_t total_cnt = 0;
@@ -475,51 +457,6 @@ int ObDASCtx::rebuild_tablet_loc_reference()
   return ret;
 }
 
-// For TP queries, we would like proxy to route tasks to servers where data
-// is located. If partition_hit=false, proxy will refresh its location cache
-// and route future tasks elsewhere. If partition_hit=true, proxy will continue
-// route tasks here.
-//
-// In the following, we call an operator that starts a data flow a "driver table"
-// and an operator that accepts input from a data flow a "driven table". For instance,
-// in the query plan below, t1 is a "driver table" and t2 is a "driven table".
-//
-//    NLJ
-//   /   \
-//  t1   t2
-//
-// There are 4 cases:
-// 1. there exists a driver table, and driven tables' partitions are located
-//    on a single remote server.
-// 2. there exists a driver table, and driven tables' partitions are located
-//    across at least 2 servers or on local server.
-// 3. there doesn't exist any driver tables, and partitions are located on a
-//    single remote server.
-// 4. there doesn't exist any driver tables, and partitions are located across
-//    at least 2 servers or on local server.
-//
-// We set partition_hit and reroute as following:
-// case           1  2  3  4
-// partition_hit  F  T  F  T
-// reroute        Y  N  N  N
-bool ObDASCtx::is_partition_hit()
-{
-  bool bret = true;
-  if (same_server_) {
-    if (!table_locs_.empty() && !table_locs_.get_first()->get_tablet_locs().empty()) {
-      if (MYADDR == table_locs_.get_first()->get_first_tablet_loc()->server_) {
-        // all local partitions
-        bret = true;
-      } else {
-        // all partitions are located on a single remote server
-        bret = false;
-      }
-    }
-  }
-  return bret;
-}
-
-// For background, please see comments for ObDASCtx::is_partition_hit().
 void ObDASCtx::unmark_need_check_server()
 {
   if (!table_locs_.empty() && !table_locs_.get_first()->get_tablet_locs().empty()) {

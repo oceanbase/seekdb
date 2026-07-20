@@ -79,7 +79,6 @@ enum ObIOModule {
   SLOG_IO = SYS_MODULE_START_ID,
   CALIBRATION_IO,
   DETECT_IO,
-  DIRECT_LOAD_IO,
   SHARED_BLOCK_RW_IO,
   SSTABLE_WHOLE_SCANNER_IO,
   INSPECT_BAD_BLOCK_IO,
@@ -248,7 +247,6 @@ protected:
 
 private:
   friend class ObIOResult;
-  lib::Worker::CompatMode compat_mode_;
 };
 
 template <typename T>

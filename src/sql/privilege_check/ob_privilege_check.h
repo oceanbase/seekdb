@@ -49,6 +49,11 @@ public:
                                  const ObStmt *basic_stmt,
                                  share::schema::ObStmtNeedPrivs &stmt_need_privs);
 
+  static int can_do_operation_on_db(const share::schema::ObSessionPrivInfo &session_priv,
+                                    const common::ObString &db_name);
+  static int can_do_operation_on_db(const share::schema::ObSessionPrivInfo &session_priv,
+                                    const common::ObIArray<const ObDmlTableInfo*> &table_infos,
+                                    const common::ObString &op_literal);
   static int can_do_grant_on_db_table(const share::schema::ObSessionPrivInfo &session_priv,
                                       const ObPrivSet priv_set,
                                       const common::ObString &db_name,

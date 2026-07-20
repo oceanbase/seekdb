@@ -31,12 +31,12 @@ int deepcopy(const transaction::ObTransID &trans_id,
              BufferCtx *&new_ctx,
              ObIAllocator &allocator) {
   int ret = OB_SUCCESS;
-  ObMemstoreFreezer *memstore_freezer = share::g_mp->memstore_freezer();
+  ObTenantFreezer *tenant_freezer = share::g_mp->tenant_freezer();
   MDS_TG(1_ms);
-  if (OB_ISNULL(memstore_freezer)) {
+  if (OB_ISNULL(tenant_freezer)) {
     ret = OB_ERR_UNEXPECTED;
-    MDS_LOG(ERROR, "server modules are not initialized", KR(ret));
-  } else if (IDX == old_ctx.get_binding_type_id()) {
+    MDS_LOG(ERROR, "MTL is not inited", KR(ret));
+  } else {
     using ImplType = GET_CTX_TYPE_BY_TUPLE_IDX(IDX);
     if (BufferCtxBindingTypeId<ImplType>::value == old_ctx.get_binding_type_id()) {
       ImplType *p_impl = nullptr;

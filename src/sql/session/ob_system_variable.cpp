@@ -20,7 +20,7 @@
 #include "share/rc/ob_module_provider.h"
 #include "sql/engine/ob_exec_context.h"
 #include "share/ob_version.h"
-#include "share/ob_timezone_mgr.h"
+#include "share/ob_tenant_timezone_mgr.h"
 #include "sql/engine/expr/ob_expr_plsql_variable.h"
 #include "sql/engine/expr/ob_expr_uuid.h"
 #include "lib/locale/ob_locale_type.h"
@@ -959,6 +959,58 @@ int ObCharsetSysVar::do_check_and_convert(ObExecContext &ctx,
   return ret;
 }
 
+int ObVersionSysVar::do_check_and_convert(ObExecContext &ctx,
+                                          const ObSetVar &set_var,
+                                          const ObObj &in_val, ObObj &out_val)
+{
+  int ret = OB_SUCCESS;
+  ObSQLSessionInfo *session = ctx.get_my_session();
+  const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(session);
+  if (OB_ISNULL(session)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session is NULL", K(ret), K(*this));
+  } else if (true == set_var.is_set_default_) {
+    ret = OB_ERR_NO_DEFAULT;
+    LOG_USER_ERROR(OB_ERR_NO_DEFAULT, set_var.var_name_.length(), set_var.var_name_.ptr());
+  } else if (ObNullType == in_val.get_type()) {
+    if (0 != (flags_ & share::ObSysVarFlag::NULLABLE)) {
+      // do nothing
+    } else {
+      ret = OB_ERR_WRONG_VALUE_FOR_VAR;
+      LOG_USER_ERROR(OB_ERR_WRONG_VALUE_FOR_VAR, set_var.var_name_.length(),
+                     set_var.var_name_.ptr(), (int)strlen("NULL"), "NULL");
+    }
+  } else if (true == ob_is_string_type(in_val.get_type())) {
+    ObCastCtx cast_ctx(&ctx.get_allocator(), &dtc_params, CM_NONE, ObCharset::get_system_collation());
+    ObObj buf_obj;
+    const ObObj *res_obj_ptr = NULL;
+    if (OB_FAIL(ObObjCaster::to_type(ObVarcharType, cast_ctx, in_val, buf_obj, res_obj_ptr))) {
+      LOG_WARN("failed to cast object to ObVarcharType ", K(ret), K(in_val));
+    } else if (OB_ISNULL(res_obj_ptr)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_ERROR("succ to cast obj, but res_obj_ptr is NULL", K(ret));
+    } else {
+      out_val = *res_obj_ptr;
+    }
+  } else if (true == ob_is_integer_type(in_val.get_type())) {
+    ObCastCtx cast_ctx(&ctx.get_allocator(), &dtc_params, CM_NONE, ObCharset::get_system_collation());
+    ObObj buf_obj;
+    const ObObj *res_obj_ptr = NULL;
+    if (OB_FAIL(ObObjCaster::to_type(ObUInt64Type, cast_ctx, in_val, buf_obj, res_obj_ptr))) {
+      LOG_WARN("failed to cast object to ObUInt64Type ", K(ret), K(in_val));
+    } else if (OB_ISNULL(res_obj_ptr)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_ERROR("succ to cast obj, but res_obj_ptr is NULL", K(ret));
+    } else {
+      out_val = *res_obj_ptr;
+    }
+  } else {
+    ret = OB_ERR_WRONG_TYPE_FOR_VAR;
+    LOG_WARN("invalid type ", K(ret), K(in_val));
+  }
+  return ret;
+}
+
 int ObTinyintSysVar::check_update_type(const ObSetVar &set_var, const ObObj &val)
 {
   int ret = OB_SUCCESS;
@@ -1374,8 +1426,8 @@ int ObTimeZoneSysVar::find_pos_time_zone(ObExecContext &ctx, const ObString &str
     ObString val_no_sp(no_sp_len, str_val.ptr());
   	ObTZMapWrap tz_map_wrap;
     ObTimeZoneInfoManager *tz_info_mgr = NULL;
-    if (OB_FAIL(OTTZ_MGR.get_timezone(tz_map_wrap, tz_info_mgr))) {
-      LOG_WARN("get time zone failed", K(ret));
+    if (OB_FAIL(OTTZ_MGR.get_tenant_timezone(tz_map_wrap, tz_info_mgr))) {
+      LOG_WARN("get tenant timezone failed", K(ret));
     } else if (OB_ISNULL(tz_info_mgr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tz info mgr is null", K(ret));
@@ -1922,7 +1974,7 @@ int ObSysVarOnCheckFuncs::check_log_row_value_option_is_valid(sql::ObExecContext
       // Partial LOB row images are not supported.
       // out_val = in_val;
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("partial_lob is not supported", K(ret), K(in_val));
+      LOG_WARN("partial_lob is not support, please use _enable_dbms_lob_partial_update instead", K(ret), K(in_val));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "partial_lob");
     } else if (val.case_compare(OB_LOG_ROW_VALUE_PARTIAL_JSON) == 0
         || val.case_compare(OB_LOG_ROW_VALUE_PARTIAL_ALL) == 0) {
@@ -2179,42 +2231,6 @@ int ObSysVarOnCheckFuncs::check_and_convert_block_encryption_mode(sql::ObExecCon
   return ret;
 }
 
-int ObSysVarOnCheckFuncs::check_and_convert_default_storage_engine(
-    sql::ObExecContext &ctx,
-    const ObSetVar &set_var,
-    const ObBasicSysVar &sys_var,
-    const common::ObObj &in_val,
-    common::ObObj &out_val)
-{
-  UNUSED(ctx);
-  int ret = OB_SUCCESS;
-  ObString engine_name;
-  if (set_var.is_set_default_) {
-    out_val.set_varchar(ObString::make_string("InnoDB"));
-    out_val.set_collation_type(ObCharset::get_system_collation());
-    out_val.set_collation_level(CS_LEVEL_IMPLICIT);
-  } else if (OB_UNLIKELY(in_val.is_null()) || OB_FAIL(in_val.get_varchar(engine_name))) {
-    ret = OB_ERR_WRONG_VALUE_FOR_VAR;
-    LOG_USER_ERROR(OB_ERR_WRONG_VALUE_FOR_VAR,
-                   sys_var.get_name().length(),
-                   sys_var.get_name().ptr(),
-                   static_cast<int>(engine_name.length()),
-                   engine_name.ptr());
-  } else if (0 != engine_name.case_compare("InnoDB")) {
-    ret = OB_ERR_WRONG_VALUE_FOR_VAR;
-    LOG_USER_ERROR(OB_ERR_WRONG_VALUE_FOR_VAR,
-                   sys_var.get_name().length(),
-                   sys_var.get_name().ptr(),
-                   engine_name.length(),
-                   engine_name.ptr());
-  } else {
-    out_val.set_varchar(ObString::make_string("InnoDB"));
-    out_val.set_collation_type(ObCharset::get_system_collation());
-    out_val.set_collation_level(CS_LEVEL_IMPLICIT);
-  }
-  return ret;
-}
-
 int ObSysVarOnUpdateFuncs::update_tx_isolation(ObExecContext &ctx,
                                                const ObSetVar &set_var,
                                                const ObBasicSysVar &sys_var,
@@ -2261,7 +2277,7 @@ int ObSysVarOnUpdateFuncs::update_tx_read_only_no_scope(ObExecContext &ctx,
     if (OB_ISNULL(session)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to get session info", K(ret));
-    } else if (FALSE_IT(session->set_tx_read_only(read_only))) {
+    } else if (FALSE_IT(session->set_tx_read_only(!read_only, read_only))) {
       // nothing.
     }
     LOG_DEBUG("update tx_read only, while scope=none", K(ret), K(val.get_bool()));
@@ -2389,20 +2405,6 @@ int ObSysVarToObjFuncs::to_obj_sql_mode(ObIAllocator &allocator,
   return ret;
 }
 
-int ObSysVarToObjFuncs::to_obj_default_storage_engine(ObIAllocator &allocator,
-                                                       const ObBasicSessionInfo &session,
-                                                       const ObBasicSysVar &sys_var,
-                                                       ObObj &result_obj)
-{
-  UNUSED(allocator);
-  UNUSED(session);
-  UNUSED(sys_var);
-  result_obj.set_varchar(ObString::make_string("InnoDB"));
-  result_obj.set_collation_type(ObCharset::get_system_collation());
-  result_obj.set_collation_level(CS_LEVEL_IMPLICIT);
-  return OB_SUCCESS;
-}
-
 int ObSysVarToStrFuncs::to_str_charset(ObIAllocator &allocator,
                                        const ObBasicSessionInfo &session,
                                        const ObBasicSysVar &sys_var,
@@ -2468,18 +2470,6 @@ int ObSysVarToStrFuncs::to_str_sql_mode(ObIAllocator &allocator,
     LOG_WARN("fail to get sql mode str", K(ret), K(str_obj), K(sys_var));
   }
   return ret;
-}
-
-int ObSysVarToStrFuncs::to_str_default_storage_engine(ObIAllocator &allocator,
-                                                       const ObBasicSessionInfo &session,
-                                                       const ObBasicSysVar &sys_var,
-                                                       ObString &result_str)
-{
-  UNUSED(allocator);
-  UNUSED(session);
-  UNUSED(sys_var);
-  result_str = ObString::make_string("InnoDB");
-  return OB_SUCCESS;
 }
 
 int ObSysVarSessionSpecialUpdateFuncs::update_identity(ObExecContext &ctx,

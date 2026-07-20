@@ -29,6 +29,8 @@
 #include "ob_multiple_merge.h"
 #include "ob_multiple_multi_scan_merge.h"
 #include "ob_multiple_scan_merge.h"
+#include "ob_multiple_skip_scan_merge.h"
+#include "ob_multiple_multi_skip_scan_merge.h"
 #include "ob_single_merge.h"
 #include "storage/tx_storage/ob_access_service.h"
 #include "storage/tx/ob_trans_service.h"
@@ -107,6 +109,7 @@ private:
   ObMultipleGetMerge *get_merge_;
   ObMultipleScanMerge *scan_merge_;
   ObMultipleMultiScanMerge *multi_scan_merge_;
+  ObMultipleSkipScanMerge *skip_scan_merge_;
   ObMemtableRowSampleIterator *memtable_row_sample_iterator_;
   ObRowSampleIterator *row_sample_iterator_;
   ObBlockSampleIterator *block_sample_iterator_; // TODO: @yuanzhe refactor

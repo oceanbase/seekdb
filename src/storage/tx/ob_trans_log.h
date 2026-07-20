@@ -22,6 +22,7 @@
 #include "share/config/ob_server_config.h"
 #include "storage/ob_storage_log_type.h"
 #include "ob_trans_define.h"
+#include "share/ob_cluster_version.h"
 #include "storage/tx/ob_trans_factory.h"
 
 namespace oceanbase
@@ -43,23 +44,29 @@ class ObTransLog
 public:
   ObTransLog()
     : log_type_(storage::OB_LOG_UNKNOWN),
-      trans_id_() {}
+      trans_id_(),
+      cluster_version_(0) {}
   ObTransLog(const int64_t log_type,
-             const ObTransID &trans_id)
+             const ObTransID &trans_id,
+             const uint64_t cluster_version)
     : log_type_(log_type),
-      trans_id_(trans_id) {}
+      trans_id_(trans_id),
+      cluster_version_(cluster_version) {}
   virtual ~ObTransLog() {}
   int init(const int64_t log_type,
-      const ObTransID &trans_id);
+      const ObTransID &trans_id, const uint64_t cluster_version);
 public:
   int64_t get_log_type() const { return log_type_; }
   const ObTransID &get_trans_id() const { return trans_id_; }
-  VIRTUAL_TO_STRING_KV(K_(log_type), K_(trans_id));
+  uint64_t get_cluster_version() const { return cluster_version_; }
+  // Update tenant for physical backup and restore
+  VIRTUAL_TO_STRING_KV(K_(log_type), K_(trans_id), K_(cluster_version));
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTransLog);
 protected:
   int64_t log_type_;
   ObTransID trans_id_;
+  uint64_t cluster_version_;
 };
 
 class ObTransMutator : public common::ObDataBuffer
@@ -150,8 +157,8 @@ public:
 
   ObTransRecordLog(const int64_t log_type,
       ObTransID &trans_id,
-      const uint64_t prev_record_log_id)
-    : ObTransLog(log_type, trans_id),
+      const uint64_t cluster_version, const uint64_t prev_record_log_id)
+    : ObTransLog(log_type, trans_id, cluster_version),
       prev_record_log_id_(prev_record_log_id), 
       prev_log_ids_(ObModIds::OB_TRANS_REDO_LOG_ID_ARRAY, OB_MALLOC_NORMAL_BLOCK_SIZE) {}
   ~ObTransRecordLog() {}
@@ -359,7 +366,8 @@ public:
       log_no_(0),
       mutator_(),
       prev_trans_arr_(),
-      can_elr_(false) {}
+      can_elr_(false),
+      cluster_version_(0) {}
   ObTransMutatorLog(ObTransMutatorLogHelper &helper)
     : ObTransLog(),
       trans_expired_time_(0),
@@ -367,7 +375,8 @@ public:
       log_no_(0),
       mutator_(),
       prev_trans_arr_(),
-      can_elr_(false) {}
+      can_elr_(false),
+      cluster_version_(0) {}
   ~ObTransMutatorLog() { destroy(); }
   void destroy() {}
 public:
@@ -378,6 +387,7 @@ public:
   ObTransMutator &get_mutator() { return mutator_; }
   const ObElrTransInfoArray &get_prev_trans_arr() const { return prev_trans_arr_; }
   bool is_can_elr() const { return can_elr_; }
+  uint64_t get_cluster_version() const { return cluster_version_; }
   int init_for_deserialize(const bool use_mutator_buf = true) { return 0;}
 public:
   TO_STRING_KV(K_(log_type));
@@ -388,6 +398,7 @@ private:
   ObTransMutator mutator_;
   ObElrTransInfoArray prev_trans_arr_;
   bool can_elr_;
+  uint64_t cluster_version_;
 };
 
 class ObTransMutatorAbortLog : public ObTransLog

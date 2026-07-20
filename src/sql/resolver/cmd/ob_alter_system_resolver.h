@@ -49,8 +49,6 @@ public:
   // resolve opt_tenant_name
   static int resolve_tenant(const ParseNode *parse_tree,
                             common::ObFixedLengthString < common::OB_MAX_TENANT_NAME_LENGTH + 1 > &tenant_name);
-  static int resolve_ls_id(const ParseNode *parse_tree, int64_t &ls_id);
-
   static int resolve_replica_type(const ParseNode *parse_tree,
                                   common::ObReplicaType &replica_type);
   static int resolve_string(const ParseNode *parse_tree, common::ObString &string);
@@ -143,9 +141,9 @@ public:
 private:
   int resolve_major_freeze_(ObFreezeStmt *freeze_stmt, ParseNode *opt_tenant_list_or_tablet_id);
   int resolve_minor_freeze_(ObFreezeStmt *freeze_stmt,
-                            ParseNode *opt_tenant_list_or_ls_or_tablet_id);
+                            ParseNode *opt_tenant_list_or_tablet_id);
 
-  int resolve_tenant_ls_tablet_(ObFreezeStmt *freeze_stmt, ParseNode *opt_tenant_list_or_ls_or_tablet_id);
+  int resolve_tenant_tablet_(ObFreezeStmt *freeze_stmt, ParseNode *opt_tenant_list_or_tablet_id);
 
 };
 
@@ -164,8 +162,6 @@ public:
   virtual int resolve(const ParseNode &parse_tree);
 };
 
-DEF_SIMPLE_CMD_RESOLVER(ObEnableSqlThrottleResolver);
-DEF_SIMPLE_CMD_RESOLVER(ObDisableSqlThrottleResolver);
 DEF_SIMPLE_CMD_RESOLVER(ObTableTTLResolver);
 DEF_SIMPLE_CMD_RESOLVER(ObChangeExternalStorageDestResolver);
 

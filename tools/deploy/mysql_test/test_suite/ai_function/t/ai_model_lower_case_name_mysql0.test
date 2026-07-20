@@ -16,7 +16,7 @@ connection sys;
 
 #eval CREATE RESOURCE UNIT uint_lower_case MAX_CPU=1, MEMORY_SIZE='2G';
 #eval CREATE RESOURCE POOL pool_lower_case UNIT='uint_lower_case', UNIT_NUM=$unit_num;
-#eval CREATE TENANT tenant_lower_case PRIMARY_ZONE = $zone, RESOURCE_POOL_LIST = ('pool_lower_case') set ob_tcp_invited_nodes='%', lower_case_table_names=0;
+#eval CREATE TENANT tenant_lower_case PRIMARY_ZONE = $zone, REPLICA_NUM = 1, RESOURCE_POOL_LIST = ('pool_lower_case') set ob_tcp_invited_nodes='%', lower_case_table_names=0;
 
 let $__tenant_name__ = 'sys';
 --source mysql_test/include/get_tenant_server.inc

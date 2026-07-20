@@ -58,11 +58,8 @@ void ObDDLDagThreadPool::run1()
     lib::set_thread_name(thread_name);
     ObCurTraceId::set(ddl_dag_->get_dag_id());
     THIS_WORKER.set_session(session_info_);
-    THIS_WORKER.set_compatibility_mode(ddl_dag_->get_compat_mode());
-
     FLOG_INFO("ddl dag thread start", "thread_idx", get_thread_idx(), KPC(ddl_dag_));
     IGNORE_RETURN ddl_dag_->process();
     FLOG_INFO("ddl dag thread stop", "thread_idx", get_thread_idx(), KPC(ddl_dag_));
   }
 }
-

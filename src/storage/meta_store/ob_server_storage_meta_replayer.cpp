@@ -177,15 +177,13 @@ int ObServerStorageMetaReplayer::finish_storage_meta_replay_()
 
   if (OB_SUCC(ret)) {
     MOD_SCOPE {
-      auto finish_ls_replay = [&](ObLS &ls) -> int {
-        if (OB_FAIL(ls.finish_storage_meta_replay())) {
-          LOG_WARN("finish replay failed", K(ret), K(ls));
-        }
-        return ret;
-      };
-      if (OB_FAIL(share::g_mp->ls_service()->foreach_ls(finish_ls_replay, ObLSGetMod::STORAGE_MOD))) {
-        LOG_WARN("failed to foreach ls", K(ret));
-      } else if (OB_FAIL(share::g_mp->ls_service()->gc_ls_after_replay_slog())) {
+      ObLS *tenant_ls = nullptr;
+      if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+        LOG_WARN("failed to get log stream", K(ret));
+      } else if (OB_FAIL(tenant_ls->finish_storage_meta_replay())) {
+        LOG_WARN("finish replay failed", K(ret));
+      }
+      if (OB_SUCC(ret) && OB_FAIL(share::g_mp->ls_service()->gc_ls_after_replay_slog())) {
         LOG_WARN("fail to gc ls after replay slog", K(ret));
       }
     }

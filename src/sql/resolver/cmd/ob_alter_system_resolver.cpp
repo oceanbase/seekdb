@@ -211,21 +211,6 @@ int ObAlterSystemResolverUtil::resolve_tenant(const ParseNode *parse_tree,
   return ret;
 }
 
-int ObAlterSystemResolverUtil::resolve_ls_id(const ParseNode *parse_tree, int64_t &ls_id)
-{
-  int ret = OB_SUCCESS;
-  if (NULL == parse_tree) {
-    ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("node should not be null");
-  } else if (OB_FAIL(sanity_check(parse_tree, T_LS))) {
-    LOG_WARN("sanity check failed");
-  } else {
-    ls_id = parse_tree->children_[0]->value_;
-    FLOG_INFO("resolve ls id", K(ls_id));
-  }
-  return ret;
-}
-
 int ObAlterSystemResolverUtil::resolve_tablet_id(const ParseNode *opt_tablet_id, ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
@@ -404,9 +389,9 @@ int ObFreezeResolver::resolve(const ParseNode &parse_tree)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("wrong freeze parse tree", K(parse_tree.num_child_));
       } else {
-        ParseNode *opt_tenant_list_or_ls_or_tablet_id = parse_tree.children_[1];
-        if (OB_FAIL(resolve_minor_freeze_(freeze_stmt, opt_tenant_list_or_ls_or_tablet_id))) {
-          LOG_WARN("resolve minor freeze failed", KR(ret), KP(opt_tenant_list_or_ls_or_tablet_id));
+        ParseNode *opt_tenant_list_or_tablet_id = parse_tree.children_[1];
+        if (OB_FAIL(resolve_minor_freeze_(freeze_stmt, opt_tenant_list_or_tablet_id))) {
+          LOG_WARN("resolve minor freeze failed", KR(ret), KP(opt_tenant_list_or_tablet_id));
         }
       }
     } else {
@@ -429,11 +414,8 @@ int ObFreezeResolver::resolve_major_freeze_(ObFreezeStmt *freeze_stmt, ParseNode
   } else if (OB_UNLIKELY(nullptr == opt_tenant_list_or_tablet_id->children_ || 0 == opt_tenant_list_or_tablet_id->num_child_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("children of tenant should not be null", KR(ret), KP(opt_tenant_list_or_tablet_id));
-  } else if (OB_FAIL(resolve_tenant_ls_tablet_(freeze_stmt, opt_tenant_list_or_tablet_id))) {
+  } else if (OB_FAIL(resolve_tenant_tablet_(freeze_stmt, opt_tenant_list_or_tablet_id))) {
     LOG_WARN("fail to resolve tenant or tablet", KR(ret));
-  } else if (OB_UNLIKELY(share::ObLSID::INVALID_LS_ID != freeze_stmt->get_ls_id())) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not support to specify ls to major freeze", K(ret), "ls_id", freeze_stmt->get_ls_id());
   } else if (freeze_stmt->get_tablet_id().is_valid()) { // tablet major freeze
     if (GCTX.is_shared_storage_mode()) {
       ret = OB_NOT_SUPPORTED;
@@ -459,17 +441,16 @@ int ObFreezeResolver::resolve_major_freeze_(ObFreezeStmt *freeze_stmt, ParseNode
 }
 
 int ObFreezeResolver::resolve_minor_freeze_(ObFreezeStmt *freeze_stmt,
-                                            ParseNode *opt_tenant_list_or_ls_or_tablet_id)
+                                            ParseNode *opt_tenant_list_or_tablet_id)
 {
   int ret = OB_SUCCESS;
 
 
-  if (OB_NOT_NULL(opt_tenant_list_or_ls_or_tablet_id)) {
-    if (OB_FAIL(resolve_tenant_ls_tablet_(freeze_stmt, opt_tenant_list_or_ls_or_tablet_id))) {
-      LOG_WARN("resolve tenant ls table failed", KR(ret));
-    } else if (T_TABLET_ID == opt_tenant_list_or_ls_or_tablet_id->type_) {
+  if (OB_NOT_NULL(opt_tenant_list_or_tablet_id)) {
+    if (OB_FAIL(resolve_tenant_tablet_(freeze_stmt, opt_tenant_list_or_tablet_id))) {
+      LOG_WARN("resolve tenant or tablet failed", KR(ret));
+    } else if (T_TABLET_ID == opt_tenant_list_or_tablet_id->type_) {
       freeze_stmt->reset_tenant_count();
-      freeze_stmt->get_ls_id() = share::ObLSID::INVALID_LS_ID;
       freeze_stmt->inc_tenant_count();  // if tenant is not explicitly specified, add owned tenant
     }
   }
@@ -478,13 +459,13 @@ int ObFreezeResolver::resolve_minor_freeze_(ObFreezeStmt *freeze_stmt,
   return ret;
 }
 
-int ObFreezeResolver::resolve_tenant_ls_tablet_(ObFreezeStmt *freeze_stmt,
-                                                ParseNode *opt_tenant_list_or_ls_or_tablet_id)
+int ObFreezeResolver::resolve_tenant_tablet_(ObFreezeStmt *freeze_stmt,
+                                             ParseNode *opt_tenant_list_or_tablet_id)
 {
   int ret = OB_SUCCESS;
 
 
-  if (OB_ISNULL(opt_tenant_list_or_ls_or_tablet_id->children_)) {
+  if (OB_ISNULL(opt_tenant_list_or_tablet_id->children_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("children of tenant should not be null", KR(ret));
   } else {
@@ -493,45 +474,30 @@ int ObFreezeResolver::resolve_tenant_ls_tablet_(ObFreezeStmt *freeze_stmt,
     bool affect_all_meta = false;
     const ParseNode *tenant_list_tuple = nullptr;
     const ParseNode *opt_tablet_id = nullptr;
-    const ParseNode *ls_id = nullptr;
 
-    switch (opt_tenant_list_or_ls_or_tablet_id->type_) {
+    switch (opt_tenant_list_or_tablet_id->type_) {
       case T_TENANT_TABLET:
-        if (opt_tenant_list_or_ls_or_tablet_id->num_child_ != 2) {
+        if (opt_tenant_list_or_tablet_id->num_child_ != 2) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid child num", K(ret), K(opt_tenant_list_or_ls_or_tablet_id->num_child_));
+          LOG_WARN("invalid child num", K(ret), K(opt_tenant_list_or_tablet_id->num_child_));
         } else {
-          tenant_list_tuple = opt_tenant_list_or_ls_or_tablet_id->children_[0];
-          opt_tablet_id = opt_tenant_list_or_ls_or_tablet_id->children_[1];
+          tenant_list_tuple = opt_tenant_list_or_tablet_id->children_[0];
+          opt_tablet_id = opt_tenant_list_or_tablet_id->children_[1];
           if (OB_ISNULL(tenant_list_tuple)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("tenant list is nullptr", KR(ret), KP(tenant_list_tuple), KP(ls_id), KP(opt_tablet_id));
-          }
-        }
-        break;
-      case T_TENANT_LS_TABLET:
-        if (opt_tenant_list_or_ls_or_tablet_id->num_child_ != 3) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid child num", K(ret), K(opt_tenant_list_or_ls_or_tablet_id->num_child_));
-        } else {
-          tenant_list_tuple = opt_tenant_list_or_ls_or_tablet_id->children_[0];
-          ls_id = opt_tenant_list_or_ls_or_tablet_id->children_[1];
-          opt_tablet_id = opt_tenant_list_or_ls_or_tablet_id->children_[2];
-          if (OB_ISNULL(tenant_list_tuple) || OB_ISNULL(ls_id)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("tenant_list or ls_id is nullptr", KR(ret), KP(tenant_list_tuple), KP(ls_id), KP(opt_tablet_id));
+            LOG_WARN("tenant list is nullptr", KR(ret), KP(tenant_list_tuple), KP(opt_tablet_id));
           }
         }
         break;
       case T_TABLET_ID:
-        if (opt_tenant_list_or_ls_or_tablet_id->num_child_ != 1) {
+        if (opt_tenant_list_or_tablet_id->num_child_ != 1) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid child num", K(ret), K(opt_tenant_list_or_ls_or_tablet_id->num_child_));
+          LOG_WARN("invalid child num", K(ret), K(opt_tenant_list_or_tablet_id->num_child_));
         } else {
-          opt_tablet_id = opt_tenant_list_or_ls_or_tablet_id->children_[0];
+          opt_tablet_id = opt_tenant_list_or_tablet_id->children_[0];
           if (OB_ISNULL(opt_tablet_id)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("tenant_list or ls_id is nullptr", KR(ret), KP(opt_tablet_id));
+            LOG_WARN("tablet id is nullptr", KR(ret), KP(opt_tablet_id));
           }
         }
         break;
@@ -539,8 +505,7 @@ int ObFreezeResolver::resolve_tenant_ls_tablet_(ObFreezeStmt *freeze_stmt,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid parse node type",
                  K(T_TENANT_TABLET),
-                 K(T_TENANT_LS_TABLET),
-                 K(opt_tenant_list_or_ls_or_tablet_id->type_));
+                 K(opt_tenant_list_or_tablet_id->type_));
         break;
     }
 
@@ -550,8 +515,6 @@ int ObFreezeResolver::resolve_tenant_ls_tablet_(ObFreezeStmt *freeze_stmt,
                                             freeze_stmt->tenant_count_ref(),
                                             affect_all, affect_all_user, affect_all_meta))) {
       LOG_WARN("fail to resolve tenant", KR(ret));
-    } else if (OB_NOT_NULL(ls_id) && OB_FAIL(Util::resolve_ls_id(ls_id, freeze_stmt->get_ls_id()))) {
-      LOG_WARN("fail to resolve tablet id", KR(ret));
     } else if (OB_NOT_NULL(opt_tablet_id) &&
                OB_FAIL(Util::resolve_tablet_id(opt_tablet_id, freeze_stmt->get_tablet_id()))) {
       LOG_WARN("fail to resolve tablet id", KR(ret));
@@ -1382,11 +1345,8 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
                           }
                           for (int64_t i = 0; OB_SUCC(ret) && i < cfg_count && valid; i++) {
 
-                            lib::Worker::CompatMode compat_mode;
                             valid = valid && ObConfigDefaultTableOrganizationChecker::check(item);
-                            if (OB_FAIL(schema_guard.get_tenant_compat_mode(compat_mode))) {
-                              LOG_WARN("fail to get compat mode", K(ret));
-                            } else if (!valid) {
+                            if (!valid) {
                               ret = OB_OP_NOT_ALLOW;
                               LOG_WARN("can not set default_table_organization", "item", item, K(ret));
                             }
@@ -1690,104 +1650,6 @@ int ObUpgradeVirtualSchemaResolver::resolve(const ParseNode &parse_tree)
 
 
 
-
-//
-//                           /- T_INT(priority)
-//                          /|
-//  T_ENABLE_SQL_THROTTLE -<
-//                          \|
-//                           \- T_SQL_THROTTLE_METRICS -< [ T_RT -> (decimal)
-//                                                        | T_CPU -> (decimal)
-//                                                        | T_IO -> (int)
-//                                                        | T_NETWORK -> (decimal)
-//                                                        | T_LOGICAL_READS -> (int)
-//                                                        ]+
-//
-int ObEnableSqlThrottleResolver::resolve(const ParseNode &parse_tree)
-{
-  int ret = OB_SUCCESS;
-  ObEnableSqlThrottleStmt *stmt = nullptr;
-
-  if (OB_UNLIKELY(T_ENABLE_SQL_THROTTLE != parse_tree.type_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("type is not T_ENABLE_SQL_THROTTLE", "type", get_type_name(parse_tree.type_));
-  } else if (OB_ISNULL(parse_tree.children_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parse_tree's children is null", K(ret));
-  } else if (2 != parse_tree.num_child_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parse_tree's number of children doesn't match", K(ret));
-  } else {
-    stmt = create_stmt<ObEnableSqlThrottleStmt>();
-    if (nullptr == stmt) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_ERROR("create ObEnableSqlThrottleStmt failed");
-    }
-  }
-  if (OB_SUCC(ret)) {
-    ParseNode *priority_node = parse_tree.children_[0];
-    if (nullptr != priority_node) {
-      stmt->set_priority(priority_node->value_);
-    }
-    ParseNode *metrics_node = parse_tree.children_[1];
-    if (metrics_node != nullptr) {
-      for (int i = 0; i < metrics_node->num_child_; i++) {
-        ParseNode *node = metrics_node->children_[i];
-        ParseNode *valNode = node->children_[0];
-        switch (node->type_) {
-        case T_RT:
-          if (valNode->type_ == T_INT) {
-            stmt->set_rt(static_cast<double>(valNode->value_));
-          } else if (valNode->type_ == T_NUMBER) {
-            stmt->set_rt(atof(valNode->str_value_));
-          }
-          break;
-        case T_CPU:
-          if (valNode->type_ == T_INT) {
-            stmt->set_cpu(static_cast<double>(valNode->value_));
-          } else if (valNode->type_ == T_NUMBER) {
-            stmt->set_cpu(atof(valNode->str_value_));
-          }
-          break;
-        case T_IO:
-          stmt->set_io(valNode->value_);
-          break;
-        case T_NETWORK:
-          if (valNode->type_ == T_INT) {
-            stmt->set_network(static_cast<double>(valNode->value_));
-          } else if (valNode->type_ == T_NUMBER) {
-            stmt->set_network(atof(valNode->str_value_));
-          }
-          break;
-        case T_LOGICAL_READS:
-          stmt->set_logical_reads(valNode->value_);
-          break;
-        case T_QUEUE_TIME:
-          if (valNode->type_ == T_INT) {
-            stmt->set_queue_time(static_cast<double>(valNode->value_));
-          } else if (valNode->type_ == T_NUMBER) {
-            stmt->set_queue_time(atof(valNode->str_value_));
-          }
-          break;
-        default:
-          break;
-        }
-      }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    stmt_ = stmt;
-  }
-  return ret;
-}
-
-int ObDisableSqlThrottleResolver::resolve(const ParseNode &parse_tree)
-{
-  UNUSED(parse_tree);
-  int ret = OB_SUCCESS;
-  stmt_ = create_stmt<ObDisableSqlThrottleStmt>();
-  return ret;
-}
 
 int ObCancelTaskResolver::resolve(const ParseNode &parse_tree)
 {

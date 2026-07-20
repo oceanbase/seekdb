@@ -47,12 +47,13 @@ struct TransformTreeCtx
   const ObTimeZoneInfo *tz_info_;
   int64_t question_num_;
   ParamStore *params_;
+  ObMaxConcurrentParam::FixParamStore *fixed_param_store_;
   bool not_param_; // indicates that this node and its child nodes cannot be parameterized even when they are constants
   bool is_fast_parse_const_; // indicates whether the current node is a constant recognizable by fp
   bool enable_contain_param_;//Indicates whether the constants in this node and its sub-nodes are fp-recognizable parameters.
   SqlInfo *sql_info_;
-  int64_t paramlized_questionmask_count_;
-  bool is_transform_outline_;
+  int64_t paramlized_questionmask_count_;//indicates the number of ? that can be parameterized in this query, used for sql rate limiting
+  bool is_transform_outline_;//whether in resolve outline, used for sql rate limiting
   ObLengthSemantics default_length_semantics_;
   ObSEArray<void*, 16> project_list_; // record all T_PROJECT_STRING nodes
   const ObIArray<ObPCParam *> *raw_params_;
@@ -109,6 +110,7 @@ TransformTreeCtx::TransformTreeCtx() :
  tz_info_(NULL),
  question_num_(0),
  params_(NULL),
+ fixed_param_store_(NULL),
  not_param_(false),
  is_fast_parse_const_(false),
  enable_contain_param_(true),
@@ -135,6 +137,7 @@ int ObSqlParameterization::transform_syntax_tree(ObIAllocator &allocator,
                                                  SqlInfo &sql_info,
                                                  ParamStore &params,
                                                  SelectItemParamInfoArray *select_item_param_infos,
+                                                 ObMaxConcurrentParam::FixParamStore &fixed_param_store,
                                                  bool is_transform_outline,
                                                  SQL_EXECUTION_MODE execution_mode,
                                                  bool is_from_pl)
@@ -164,12 +167,13 @@ int ObSqlParameterization::transform_syntax_tree(ObIAllocator &allocator,
     ctx.value_father_level_ = NO_VALUES;
     ctx.question_num_ = 0;
     ctx.params_ = &params;
+    ctx.fixed_param_store_ = &fixed_param_store;
     ctx.not_param_ = false;
     ctx.is_fast_parse_const_ = false;
     ctx.enable_contain_param_ = true;
     ctx.sql_info_ = &sql_info;
-    ctx.paramlized_questionmask_count_ = 0;
-    ctx.is_transform_outline_ = is_transform_outline;
+    ctx.paramlized_questionmask_count_ = 0;//used for outline sql rate limiting,
+    ctx.is_transform_outline_ = is_transform_outline;//used for outline sql rate limiting
     ctx.raw_params_ = raw_params;
     ctx.is_project_list_scope_ = false;
     ctx.mode_ = execution_mode;
@@ -463,12 +467,14 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
   if (OB_ISNULL(ctx.top_node_)
       || OB_ISNULL(ctx.allocator_)
       || OB_ISNULL(ctx.sql_info_)
+      || OB_ISNULL(ctx.fixed_param_store_)
       || OB_ISNULL(ctx.params_)) {
     ret = OB_INVALID_ARGUMENT;
     SQL_PC_LOG(WARN, "top node is NULL",
                K(ctx.top_node_),
                K(ctx.allocator_),
                K(ctx.sql_info_),
+               K(ctx.fixed_param_store_),
                K(ctx.params_),
                K(ret));
   } else if (NULL == ctx.tree_) {
@@ -490,8 +496,10 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
     if (OB_SUCC(ret)) {
       ObObjParam value;
       ObAccuracy tmp_accuracy;
+      bool is_fixed = true;
       if (ctx.is_fast_parse_const_) { // Here we need to obtain all information identified as constants by fast parse
         if (!is_node_not_param(ctx)) { // determine whether it is a constant that can be parameterized
+          // for sql rate limiting
           ParseNode* node = NULL;
           if (OB_NOT_NULL(ctx.raw_params_) &&
               ctx.tree_->value_ < ctx.raw_params_->count() &&
@@ -503,6 +511,7 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
           }
           if (T_QUESTIONMARK == ctx.tree_->type_) {
             ctx.paramlized_questionmask_count_++;
+            is_fixed = false;
           }
           // int constants in div/mul/add/sub
           bool fmt_int_or_ch_decint =
@@ -568,6 +577,16 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
                 value.set_ignore_scale_check(true);
               }
             }
+            // Used for SQL rate limiting, record which parameters need strict comparison
+            if (OB_SUCC(ret) && is_fixed) {
+              ObFixedParam fix_param;
+              fix_param.offset_ = ctx.params_->count();
+              fix_param.value_ = value;
+              if (OB_FAIL(ctx.fixed_param_store_->push_back(fix_param))) {
+                SQL_PC_LOG(WARN, "fail to push back fix params", K(fix_param), K(ret));
+              }
+            }
+
             if (OB_SUCC(ret)) {
               if (OB_FAIL(add_varchar_charset(ctx.tree_, *ctx.sql_info_))) {
                 SQL_PC_LOG(WARN, "fail to add varchar charset", K(ret));
@@ -965,6 +984,8 @@ int ObSqlParameterization::parameterize_syntax_tree(common::ObIAllocator &alloca
   SqlInfo sql_info;
   bool need_parameterized = false;
   SQL_EXECUTION_MODE mode = get_sql_execution_mode(pc_ctx);
+  ObMaxConcurrentParam::FixParamStore fix_param_store(OB_MALLOC_NORMAL_BLOCK_SIZE,
+                                                      ObWrapperAllocator(&allocator));
   ObSQLSessionInfo *session = NULL;
   ObSEArray<ObPCParam *, OB_PC_SPECIAL_PARAM_COUNT> special_params;
   ObSEArray<ObString, 4> user_var_names;
@@ -987,7 +1008,9 @@ int ObSqlParameterization::parameterize_syntax_tree(common::ObIAllocator &alloca
 
   if (OB_FAIL(ret)) {
   } else if (is_prepare_mode(mode)
-            || is_transform_outline) {
+            || is_transform_outline
+            || (is_text_mode(mode) && pc_ctx.force_enable_plan_tracing_)
+            ) {
     // if so, faster parser is needed
     // otherwise, fast parser has been done before
     pc_ctx.fp_result_.reset();
@@ -1021,6 +1044,7 @@ int ObSqlParameterization::parameterize_syntax_tree(common::ObIAllocator &alloca
                                            sql_info,
                                            params,
                                            is_prepare_mode(mode) ? NULL : &pc_ctx.select_item_param_infos_,
+                                           fix_param_store,
                                            is_transform_outline,
                                            mode))) {
     if (OB_NOT_SUPPORTED != ret) {
@@ -1074,13 +1098,13 @@ int ObSqlParameterization::parameterize_syntax_tree(common::ObIAllocator &alloca
       } else if (!pc_ctx.is_batch_insert_opt_ &&
                  !pc_ctx.exec_ctx_.has_dynamic_values_table() &&
                  OB_FAIL(ObSqlParameterization::formalize_sql_text(allocator, pc_ctx.raw_sql_,
-                                                  pc_ctx.sql_ctx_.plan_key_.format_sql_,
+                                                  pc_ctx.sql_ctx_.bl_key_.format_sql_,
                                                   sql_info, fp_ctx))) {
         SQL_PC_LOG(WARN, "fail to formalize sql text", K(ret), K(pc_ctx.raw_sql_));
       } else if (is_prepare_mode(mode) && OB_FAIL(transform_neg_param(pc_ctx.fp_result_.raw_params_))) {
         SQL_PC_LOG(WARN, "fail to transform_neg_param", K(ret));
       } else {
-        pc_ctx.sql_ctx_.plan_key_.constructed_sql_.assign_ptr(buf, pos);
+        pc_ctx.sql_ctx_.bl_key_.constructed_sql_.assign_ptr(buf, pos);
         pc_ctx.ps_need_parameterized_ = sql_info.ps_need_parameterized_;
         pc_ctx.normal_parse_const_cnt_ = sql_info.total_;
       }
@@ -2026,6 +2050,7 @@ int ObSqlParameterization::mark_tree(ParseNode *tree ,SqlInfo &sql_info)
                   || 0 == func_name.case_compare("round")        //ROUND(X), ROUND(X,D)
                   || 0 == func_name.case_compare("left") // the length of result should be set with the value of the second param
                   || 0 == func_name.case_compare("substr")
+                  || 0 == func_name.case_compare("dbms_lob_convert_clob_charset")
                   || 0 == func_name.case_compare("truncate")) // The precision of the truncate result needs to be derived based on the second parameter, so it cannot be parameterized
                  && (2 == node[1]->num_child_)) {
         const int64_t ARGS_NUMBER_TWO = 2;
@@ -2292,6 +2317,7 @@ int ObSqlParameterization::get_select_item_param_info(const common::ObIArray<ObP
   int64_t expr_pos = tree->raw_sql_offset_;
   int64_t buf_len = SelectItemParamInfo::PARAMED_FIELD_BUF_LEN;
   ObSEArray<TraverseStackFrame, 64> stack_frames;
+  const bool enable_modify_null_name = true;
 
   if (T_PROJECT_STRING != tree->type_ || OB_ISNULL(tree->children_) || tree->num_child_ <= 0) {
     ret = OB_INVALID_ARGUMENT;
@@ -2402,7 +2428,8 @@ int ObSqlParameterization::get_select_item_param_info(const common::ObIArray<ObP
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (1 == param_info.params_idx_.count() &&
-             0 == ObString(param_info.name_len_, param_info.paramed_field_name_).compare("?")) {
+             0 == ObString(param_info.name_len_, param_info.paramed_field_name_).compare("?") &&
+             enable_modify_null_name) {
     int64_t idx = param_info.params_idx_.at(0);
     if (idx >= raw_params.count()) {
       ret = OB_INVALID_ARGUMENT;

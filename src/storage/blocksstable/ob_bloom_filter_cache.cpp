@@ -780,7 +780,6 @@ int ObBloomFilterCache::may_contain(
 
 int ObBloomFilterCache::inc_empty_read(
     const uint64_t table_id,
-    const share::ObLSID &ls_id,
     const storage::ObITable::TableKey &sstable_key,
     const MacroBlockId &macro_id,
     const int64_t empty_read_prefix,
@@ -817,7 +816,7 @@ int ObBloomFilterCache::inc_empty_read(
     } else if (cell->check_timeout()) {
       // do nothing
     } else if (cur_cnt > bf_cache_miss_count_threshold_) {
-      if (ls_id.is_valid() && sstable_key.is_valid() && (nullptr != read_handle) && read_handle->has_macro_block_bf_) {
+      if (sstable_key.is_valid() && (nullptr != read_handle) && read_handle->has_macro_block_bf_) {
         bool need_load = false;
         const ObDatumRowkey *rowkey = nullptr;
         if (OB_UNLIKELY(!read_handle->is_valid())) {
@@ -835,7 +834,7 @@ int ObBloomFilterCache::inc_empty_read(
         } else if (cell->check_waiting()) {
           // bf is on the way, do nothing
         } else if (OB_FAIL(share::g_mp->tenant_meta_mem_mgr()
-                        ->schedule_load_bloomfilter(sstable_key, ls_id, macro_id, *rowkey))) {
+                        ->schedule_load_bloomfilter(sstable_key, macro_id, *rowkey))) {
           LOG_WARN("fail to schedule load bf", K(ret), K(sstable_key), K(macro_id));
         } else {
           cell->set_waiting();

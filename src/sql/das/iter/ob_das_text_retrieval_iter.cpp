@@ -33,7 +33,6 @@ ObDASTextRetrievalIter::ObDASTextRetrievalIter()
     ir_rtdef_(nullptr),
     tx_desc_(nullptr),
     snapshot_(nullptr),
-    ls_id_(),
     inv_idx_tablet_id_(),
     fwd_idx_tablet_id_(),
     inv_idx_scan_param_(),
@@ -348,10 +347,8 @@ int ObDASTextRetrievalIter::rescan()
   int ret = OB_SUCCESS;
 
   inv_idx_scan_param_.tablet_id_ = inv_idx_tablet_id_;
-  inv_idx_scan_param_.ls_id_ = ls_id_;
   if (need_inv_idx_agg_) {
     inv_idx_agg_param_.tablet_id_ = inv_idx_tablet_id_;
-    inv_idx_agg_param_.ls_id_ = ls_id_;
   }
   if (OB_FAIL(inverted_idx_scan_iter_->rescan())) {
     LOG_WARN("failed to rescan inverted scan iter", K(ret));
@@ -461,7 +458,6 @@ int ObDASTextRetrievalIter::init_inv_idx_scan_param()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_base_idx_scan_param(
-      ls_id_,
       inv_idx_tablet_id_,
       ir_ctdef_->get_inv_idx_scan_ctdef(),
       ir_rtdef_->get_inv_idx_scan_rtdef(),
@@ -471,7 +467,6 @@ int ObDASTextRetrievalIter::init_inv_idx_scan_param()
     LOG_WARN("fail to init inverted index scan param", K(ret), KPC_(ir_ctdef));
   } else if (need_inv_idx_agg_) {
     if (OB_FAIL(init_base_idx_scan_param(
-        ls_id_,
         inv_idx_tablet_id_,
         ir_ctdef_->get_inv_idx_agg_ctdef(),
         ir_rtdef_->get_inv_idx_agg_rtdef(),
@@ -500,7 +495,6 @@ int ObDASTextRetrievalIter::init_fwd_idx_scan_param()
 
   if (!ir_ctdef_->need_calc_relevance()) {
   } else if (OB_FAIL(init_base_idx_scan_param(
-      ls_id_,
       fwd_idx_tablet_id_,
       ir_ctdef_->get_fwd_idx_agg_ctdef(),
       ir_rtdef_->get_fwd_idx_agg_rtdef(),
@@ -513,7 +507,6 @@ int ObDASTextRetrievalIter::init_fwd_idx_scan_param()
 }
 
 int ObDASTextRetrievalIter::init_base_idx_scan_param(
-    const share::ObLSID &ls_id,
     const common::ObTabletID &tablet_id,
     const sql::ObDASScanCtDef *ctdef,
     sql::ObDASScanRtDef *rtdef,
@@ -524,7 +517,7 @@ int ObDASTextRetrievalIter::init_base_idx_scan_param(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ctdef) || OB_ISNULL(rtdef)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KPC(ctdef), KPC(rtdef), K(ls_id), K(tablet_id));
+    LOG_WARN("invalid argument", K(ret), KPC(ctdef), KPC(rtdef), K(tablet_id));
   } else {
     
     
@@ -554,7 +547,6 @@ int ObDASTextRetrievalIter::init_base_idx_scan_param(
     scan_param.need_scn_ = rtdef->need_scn_;
     scan_param.pd_storage_flag_ = ctdef->pd_expr_spec_.pd_storage_flag_.pd_flag_;
     scan_param.fb_snapshot_ = rtdef->fb_snapshot_;
-    scan_param.ls_id_ = ls_id;
     scan_param.tablet_id_ = tablet_id;
     if (!ctdef->pd_expr_spec_.pushdown_filters_.empty()) {
       scan_param.op_filters_ = &ctdef->pd_expr_spec_.pushdown_filters_;
@@ -650,7 +642,6 @@ int ObDASTextRetrievalIter::do_token_cnt_agg(const ObDocIdExt &doc_id, int64_t &
   if (OB_SUCC(ret)) {
     if (not_first_fwd_agg_) {
       fwd_idx_scan_param_.tablet_id_ = fwd_idx_tablet_id_;
-      fwd_idx_scan_param_.ls_id_ = ls_id_;
       if (OB_FAIL(reuse_fwd_idx_iter())) {
         LOG_WARN("failed to reuse forward index iterator", K(ret));
       } else if (OB_FAIL(fwd_idx_scan_param_.key_ranges_.push_back(scan_range))) {

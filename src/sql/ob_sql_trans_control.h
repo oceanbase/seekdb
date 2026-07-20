@@ -48,6 +48,7 @@ class ObPhysicalPlanCtx;
 class ObSQLSessionInfo;
 class ObIEndTransCallback;
 class ObEndTransAsyncCallback;
+class ObNullEndTransCallback;
 class ObIDASTaskOp;
 
 class TransState
@@ -148,7 +149,8 @@ public:
   static int reset_session_tx_state(ObSQLSessionInfo *session, bool reuse_tx_desc = false, bool active_tx_end = true);
   static int reset_session_tx_state(ObBasicSessionInfo *session,
                                     bool reuse_tx_desc = false,
-                                    bool active_tx_end = true);
+                                    bool active_tx_end = true,
+                                    const uint64_t data_version = 0);
   static int create_stash_savepoint(ObExecContext &exec_ctx, const ObString &name);
   static int release_stash_savepoint(ObExecContext &exec_ctx, const ObString &name);
   static int explicit_start_trans(ObExecContext &exec_ctx, const bool read_only, const ObString hint = ObString());
@@ -239,6 +241,8 @@ public:
                         const ObIArray<ObObjectID> &part_ids,
                         const transaction::tablelock::ObTableLockMode lock_mode,
                         const int64_t wait_lock_seconds);
+  static void clear_xa_branch(const transaction::ObXATransID &xid, transaction::ObTxDesc *&tx_desc);
+  static uint32_t get_real_session_id(ObSQLSessionInfo &session);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSqlTransControl);
   static int get_trans_expire_ts(const ObSQLSessionInfo &session,
@@ -247,6 +251,9 @@ private:
                                            const ObSQLSessionInfo &session);
   static int inc_session_ref(const ObSQLSessionInfo *session);
   static int acquire_tx_if_need_(transaction::ObTransService *txs, ObSQLSessionInfo &session);
+  static int start_hook_if_need_(ObSQLSessionInfo &session,
+                                 transaction::ObTransService *txs,
+                                 bool &start_hook);
 public:
   /*
    * create a savepoint without name

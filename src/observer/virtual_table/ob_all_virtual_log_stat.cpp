@@ -35,17 +35,17 @@ int ObAllVirtualPalfStat::inner_get_next_row(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   if (false == start_to_read_) {
-    palf::PalfStat palf_stat;
+    logservice::ObLogStat log_stat;
     logservice::ObLogService *log_service = share::g_mp->log_service();
     if (NULL == log_service) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "log service is unavailable", K(ret));
-    } else if (OB_FAIL(log_service->stat_palf(palf_stat))) {
+      SERVER_LOG(WARN, "tenant has no ObLogService", K(ret));
+    } else if (OB_FAIL(log_service->stat_palf(log_stat.palf_stat_))) {
       SERVER_LOG(WARN, "ObLogService stat_palf failed", K(ret));
-    } else if (OB_FAIL(insert_log_stat_(palf_stat))) {
-      SERVER_LOG(WARN, "insert log stat failed", K(ret), K(palf_stat));
+    } else if (OB_FAIL(insert_log_stat_(log_stat, &cur_row_))) {
+      SERVER_LOG(WARN, "ObAllVirtualPalfStat insert_log_stat_ failed", K(ret), K(log_stat));
     } else {
-      SERVER_LOG(TRACE, "stat palf success", K(palf_stat));
+      SERVER_LOG(TRACE, "stat palf success", K(log_stat));
     }
     if (OB_FAIL(ret)) {
       SERVER_LOG(WARN, "iterate log stat failed", K(ret));
@@ -59,9 +59,10 @@ int ObAllVirtualPalfStat::inner_get_next_row(common::ObNewRow *&row)
   return ret;
 }
 
-int ObAllVirtualPalfStat::insert_log_stat_(const palf::PalfStat &palf_stat)
+int ObAllVirtualPalfStat::insert_log_stat_(const logservice::ObLogStat &log_stat, common::ObNewRow *row)
 {
   int ret = OB_SUCCESS;
+  const palf::PalfStat &palf_stat = log_stat.palf_stat_;
   const int64_t count = output_column_ids_.count();
   for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
     uint64_t col_id = output_column_ids_.at(i);
@@ -104,10 +105,6 @@ int ObAllVirtualPalfStat::insert_log_stat_(const palf::PalfStat &palf_stat)
         cur_row_.cells_[i].set_uint64(palf_stat.max_scn_.get_val_for_inner_table_field());
         break;
       }
-      default:
-        ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "unknown column", K(ret), K(col_id));
-        break;
     }
   }
   return ret;

@@ -39,21 +39,30 @@ int ObDagInfoIterator<T>::open()
   } else if (typeid(T) != typeid(share::ObDagInfo) && typeid(T) != typeid(share::ObDagSchedulerInfo)) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "invalid typeid", K(ret));
+  } else if (!true) {
+    ret = OB_INVALID_ARGUMENT;
+    STORAGE_LOG(WARN, "invalid argument", K(ret));
   }
   if (OB_SUCC(ret)) {
-    SERVER_MODULE_SCOPE {
-      if (typeid(T) == typeid(share::ObDagInfo)) {
-        if (OB_FAIL(share::g_mp->dag_scheduler()->get_all_dag_info(allocator_, dag_infos_))) {
+    { // skip virtual tenant
+      MOD_SCOPE {
+        if (typeid(T) == typeid(share::ObDagInfo)) {
+          if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->get_all_dag_info(allocator_, all_tenants_dag_infos_))) {
+            STORAGE_LOG(WARN, "failed to get all dag info", K(ret));
+          }
+        } else if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->get_all_dag_scheduler_info(allocator_, all_tenants_dag_infos_))) {
           STORAGE_LOG(WARN, "failed to get all dag info", K(ret));
         }
-      } else if (OB_FAIL(share::g_mp->dag_scheduler()->get_all_dag_scheduler_info(allocator_, dag_infos_))) {
-        STORAGE_LOG(WARN, "failed to get all dag info", K(ret));
+      } else {
+        if (OB_TENANT_NOT_IN_SERVER != ret) {
+          STORAGE_LOG(WARN, "switch tenant failed", K(ret));
+        } else {
+          ret = OB_SUCCESS;
+          continue;
+        }
       }
-    } else {
-      ret = OB_NOT_INIT;
-      STORAGE_LOG(WARN, "server module is unavailable", K(ret));
     }
-  }
+  } // end of for
   if (OB_SUCC(ret)) {
     cur_idx_ = 0;
     is_opened_ = true;
@@ -68,10 +77,10 @@ int ObDagInfoIterator<T>::get_next_info(T &info)
   if (!is_opened_) {
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "not init", K(ret));
-  } else if (cur_idx_ >= dag_infos_.count()) {
+  } else if (cur_idx_ >= all_tenants_dag_infos_.count()) {
     ret = OB_ITER_END;
   } else {
-    info = *(static_cast<T*>(dag_infos_[cur_idx_++]));
+    info = *(static_cast<T*>(all_tenants_dag_infos_[cur_idx_++]));
   }
   return ret;
 }
@@ -79,7 +88,7 @@ int ObDagInfoIterator<T>::get_next_info(T &info)
 template <typename T>
 void ObDagInfoIterator<T>::reset()
 {
-  dag_infos_.reset();
+  all_tenants_dag_infos_.reset();
   cur_idx_ = 0;
   allocator_.reset();
   is_opened_ = false;

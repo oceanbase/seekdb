@@ -80,7 +80,12 @@ int ObExprGetSysVar::calc_result_type2(ObExprResType &type,
 
             int64_t sys_var_val_length = OB_MAX_SYS_VAR_VAL_LENGTH;
             if (0 == var_name.compare(OB_SV_TCP_INVITED_NODES)) {
-              sys_var_val_length = OB_MAX_TCP_INVITED_NODES_LENGTH;
+              uint64_t data_version = 0;
+              if (OB_FAIL(GET_MIN_DATA_VERSION(data_version))) {
+                LOG_WARN("fail to get tenant data version", KR(ret));
+              } else {
+               sys_var_val_length = OB_MAX_TCP_INVITED_NODES_LENGTH;
+              }
             }
  
             if (OB_SUCC(ret)) {

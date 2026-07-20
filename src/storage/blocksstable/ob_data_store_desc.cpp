@@ -36,8 +36,7 @@ ObStaticDataStoreDesc::ObStaticDataStoreDesc()
 bool ObStaticDataStoreDesc::is_valid() const
 {
   bool is_valid = 
-         ls_id_.is_valid()
-         && tablet_id_.is_valid()
+         tablet_id_.is_valid()
          && compressor_type_ > ObCompressorType::INVALID_COMPRESSOR
          && snapshot_version_ > 0
          && schema_version_ >= 0;
@@ -56,7 +55,6 @@ int ObStaticDataStoreDesc::assign(const ObStaticDataStoreDesc &desc)
   is_ddl_ = desc.is_ddl_;
   merge_type_ = desc.merge_type_;
   compressor_type_ = desc.compressor_type_;
-  ls_id_ = desc.ls_id_;
   tablet_id_ = desc.tablet_id_;
   macro_block_size_ = desc.macro_block_size_;
   macro_store_size_ = desc.macro_store_size_;
@@ -118,7 +116,6 @@ void ObStaticDataStoreDesc::init_block_size(const ObMergeSchema &merge_schema)
 int ObStaticDataStoreDesc::init(
     const bool is_ddl,
     const ObMergeSchema &merge_schema,
-    const share::ObLSID &ls_id,
     const common::ObTabletID tablet_id,
     const compaction::ObMergeType merge_type,
     const int64_t snapshot_version,
@@ -132,7 +129,7 @@ int ObStaticDataStoreDesc::init(
 {
   int ret = OB_SUCCESS;
   const bool is_major = compaction::is_major_or_meta_merge_type(merge_type);
-  if (OB_UNLIKELY(!merge_schema.is_valid() || !ls_id.is_valid() || !tablet_id.is_valid() || snapshot_version <= 0
+  if (OB_UNLIKELY(!merge_schema.is_valid() || !tablet_id.is_valid() || snapshot_version <= 0
     || (!is_major && !end_scn.is_valid()) || !is_valid_exec_mode(exec_mode))) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "arguments is invalid", K(ret), K(merge_schema), K(snapshot_version), K(end_scn),
@@ -141,7 +138,6 @@ int ObStaticDataStoreDesc::init(
     reset();
     is_ddl_ = is_ddl;
     merge_type_ = merge_type;
-    ls_id_ = ls_id;
     tablet_id_ = tablet_id;
     exec_mode_ = exec_mode;
     encoding_granularity_ = encoding_granularity;
@@ -482,44 +478,30 @@ int ObDataStoreDesc::get_emergency_row_store_type()
       char *endptr = nullptr;
       ObTabletID emergency_tablet_id(std::strtoull(partition_key, &endptr, 0));
       
-      uint64_t emergency_ls_id = 0;
       if (OB_ISNULL(endptr)) {
         ret = OB_INVALID_ARGUMENT;
         STORAGE_LOG(WARN, "Invalid emergency tablet_id for skiping encoding", K(ret), K(partition_key));
       } else {
-        // skip space and get ls id
+        // Skip spaces before tenant id.
         while ('\0' != *endptr && isspace(*endptr)) {
           endptr++;
         }
-        if ('#' != *endptr) {
+        if ('@' != *endptr) {
           ret = OB_INVALID_ARGUMENT;
           STORAGE_LOG(WARN, "Invalid emergency partition key for skiping encoding", K(ret), K(partition_key));
         } else {
           endptr++;
-          emergency_ls_id = std::strtoull(endptr, &endptr, 0);
-
-          // skip space and get tenant id
-          while ('\0' != *endptr && isspace(*endptr)) {
-            endptr++;
-          }
-          if ('@' != *endptr) {
-            ret = OB_INVALID_ARGUMENT;
-            STORAGE_LOG(WARN, "Invalid emergency partition key for skiping encoding", K(ret), K(partition_key));
-          } else {
-            endptr++;
-            (void)(std::strtoull(endptr, &endptr, 0));
-          }
+          (void)(std::strtoull(endptr, &endptr, 0));
           if (OB_SUCC(ret)) {
             oceanbase::share::ObTaskController::get().allow_next_syslog();
-            if (get_tablet_id() == emergency_tablet_id
-                          && get_ls_id().id() == emergency_ls_id
-                          && true) {
+            if (EMERGENCY_TABLET_ID_MAGIC == emergency_tablet_id
+                || get_tablet_id() == emergency_tablet_id) {
               STORAGE_LOG(INFO, "Succ to find specified emergency partition to skip encoding",
-                  K(emergency_ls_id), K(emergency_tablet_id), K(*this));
+                  K(emergency_tablet_id), K(*this));
               row_store_type_ = FLAT_ROW_STORE;
             } else {
               STORAGE_LOG(INFO, "this partition is not the emergency partition to skip encoding",
-                  K(emergency_ls_id), K(emergency_tablet_id), K(*this));
+                  K(emergency_tablet_id), K(*this));
             }
           }
         }
@@ -741,7 +723,6 @@ int ObWholeDataStoreDesc::init(
 int ObWholeDataStoreDesc::init(
     const bool is_ddl,
     const ObMergeSchema &merge_schema,
-    const share::ObLSID &ls_id,
     const common::ObTabletID tablet_id,
     const compaction::ObMergeType merge_type,
     const int64_t snapshot_version,
@@ -763,7 +744,7 @@ int ObWholeDataStoreDesc::init(
 
   }
 
-  if (OB_FAIL(static_desc_.init(is_ddl, merge_schema, ls_id, tablet_id, merge_type,
+  if (OB_FAIL(static_desc_.init(is_ddl, merge_schema, tablet_id, merge_type,
                                 snapshot_version, end_scn, cluster_version,
                                 exec_mode, micro_index_clustered, concurrent_cnt,
                                 need_submit_io, encoding_granularity))) {

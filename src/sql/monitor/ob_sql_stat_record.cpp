@@ -272,18 +272,23 @@ int ObExecutingSqlStatRecord::record_sqlstat_end_value(ObDiagnoseSessionInfo* di
 int ObExecutingSqlStatRecord::move_to_sqlstat_cache(
   ObSQLSessionInfo &session_info,
   ObString &cur_sql,
-  const ObPhysicalPlan *plan /*= nullptr*/)
+  const ObPhysicalPlan *plan /*= nullptr*/,
+  const bool is_px_remote_exec /*= false*/)
 {
   int ret = OB_SUCCESS;
   // 1. init key
   ObSqlStatRecordKey key;
   session_info.get_cur_sql_id(key.sql_id_, sizeof(key.sql_id_));
   key.set_plan_hash(plan== nullptr? session_info.get_current_plan_hash(): plan->get_plan_hash_value());
+  if (is_px_remote_exec) {
+    key.set_source_addr(session_info.get_peer_addr());
+  }
   LOG_DEBUG("view sqlstat cache key and query_sql", K(ret), K(key), K(cur_sql));
 
   if (key.is_valid()) {
     if (OB_ISNULL(plan)) {
       ObCacheObjGuard guard;
+      guard.init(sql::CacheRefHandleID::SQL_STAT_NODE_HANDLE);
       bool is_use_cache = true;
       if (OB_FAIL(ObSqlStatRecordUtil::get_cache_obj(key, guard))) {
         if (ret == OB_SQL_PC_NOT_EXIST) {
@@ -337,6 +342,49 @@ int ObExecutingSqlStatRecord::move_to_sqlstat_cache(
     }
   } else {
     LOG_WARN("the key is not valid which at plan cache mgr", KR(ret));
+  }
+  return ret;
+}
+
+
+int ObExecutingSqlStatRecord::move_to_sqlstat_cache(ObSqlStatRecordKey& key)
+{
+  int ret = OB_SUCCESS;
+  if (key.is_valid()) {
+    ObCacheObjGuard guard;
+    guard.init(sql::CacheRefHandleID::SQL_STAT_NODE_HANDLE);
+    bool is_use_cache = true;
+    if (OB_FAIL(ObSqlStatRecordUtil::get_cache_obj(key, guard))) {
+      if (ret == OB_SQL_PC_NOT_EXIST) {
+        // not found, need create 
+        ret =OB_SUCCESS;
+        is_use_cache = false;
+        if (OB_FAIL(ObSqlStatRecordUtil::create_cache_obj(key, guard))) {
+          LOG_WARN("failed to create cache obj", K(ret));
+        }
+      } else {
+        LOG_WARN("failed to get cache obj", K(ret));
+      }
+    }
+      
+    if (OB_SUCC(ret)) {
+      if (OB_ISNULL(guard.get_cache_obj())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("cache obj is NULL", KR(ret));
+      } else {
+        ObSqlStatRecordObj *cache_obj = static_cast<ObSqlStatRecordObj *>(guard.get_cache_obj());
+        ObExecutedSqlStatRecord *sql_stat_value = cache_obj->get_record_value();
+        if (!is_use_cache) {
+          sql_stat_value->get_sql_stat_info().set_key(key);
+        }
+
+        if (OB_SUCC(ret)) {
+          if (OB_FAIL(sql_stat_value->sum_stat_value(*this))) {
+            LOG_WARN("sql_stat_value sum value failed", KR(ret));
+          }
+        }
+      }
+    }
   }
   return ret;
 }
@@ -533,9 +581,9 @@ int ObSqlStatRecordUtil::get_cache_obj(ObSqlStatRecordKey &key, ObCacheObjGuard&
   sql::ObILibCacheCtx cache_ctx;
   ObPlanCache* lib_cache = nullptr;
   observer::ObReqTimeGuard req_timeinfo_guard;
-  if (OB_ISNULL(GCTX.server_runtime_controller_)) {
+  if (OB_ISNULL(GCTX.omt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("server runtime controller is null", K(ret));
+    LOG_WARN("fail to get multi tenant from GCTX", K(ret));
   } else if (OB_ISNULL(lib_cache = share::g_mp->plan_cache())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get plan cache", K(ret));
@@ -556,9 +604,9 @@ int ObSqlStatRecordUtil::create_cache_obj(ObSqlStatRecordKey &key, ObCacheObjGua
   ObPlanCache* lib_cache = nullptr;
   ObSqlStatRecordObj *cache_obj = nullptr;
   observer::ObReqTimeGuard req_timeinfo_guard;
-  if (OB_ISNULL(GCTX.server_runtime_controller_)) {
+  if (OB_ISNULL(GCTX.omt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("server runtime controller is null", K(ret));
+    LOG_WARN("fail to get multi tenant from GCTX", K(ret));
   } else if (OB_ISNULL(lib_cache = share::g_mp->plan_cache())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get plan cache", K(ret));

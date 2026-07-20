@@ -874,10 +874,9 @@ int ObOptStatManager::flush_evals(ObIAllocator *alloc,
 
 int ObOptStatManager::get_table_rowcnt(const uint64_t table_id,
                                        const ObIArray<ObTabletID> &all_tablet_ids,
-                                       const ObIArray<ObLSID> &all_ls_ids,
                                        int64_t &table_rowcnt)
 {
-  return stat_service_.get_table_rowcnt(table_id, all_tablet_ids, all_ls_ids, table_rowcnt);
+  return stat_service_.get_table_rowcnt(table_id, all_tablet_ids, table_rowcnt);
 }
 
 //we need check the stat tables are valid, now we only check the stat table are exist. in some situation,

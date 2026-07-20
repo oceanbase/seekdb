@@ -55,7 +55,7 @@ int ObMPUtils::add_changed_session_info(OMPKOK &ok_pkt, sql::ObSQLSessionInfo &s
 
   if (session.is_sys_var_changed()) {
     const ObIArray<sql::ObBasicSessionInfo::ChangedVar> &sys_var = session.get_changed_sys_var();
-    LOG_DEBUG("sys var changed", K(session.get_runtime_name()), K(sys_var.count()));
+    LOG_DEBUG("sys var changed", K(session.get_tenant_name()), K(sys_var.count()));
     for (int64_t i = 0; OB_SUCC(ret) && i < sys_var.count(); ++i) {
       sql::ObBasicSessionInfo::ChangedVar change_var = sys_var.at(i);
       ObObj new_val;

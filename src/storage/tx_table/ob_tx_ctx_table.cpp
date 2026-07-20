@@ -105,10 +105,14 @@ int ObTxCtxTableRecoverHelper::recover_one_tx_ctx_(transaction::ObLSTxCtxMgr* ls
   int ret = OB_SUCCESS;
   transaction::ObTxCtx *tx_ctx = NULL;
   bool tx_ctx_existed = true;
+  // since 4.3 cluster_version in ctx_info
+  uint64_t cluster_version = ctx_info.cluster_version_;
   transaction::ObTxCreateArg arg(true,  /* for_replay */
                                  TxCtxSource::RECOVER,
                                  ctx_info.tx_id_,
+                                 cluster_version,
                                  0, /*session_id*/
+                                 0, /*associated_session_id*/
                                  INT64_MAX,
                                  share::g_mp->trans_service());
   if (OB_FAIL(ls_tx_ctx_mgr->create_tx_ctx(arg,
@@ -209,10 +213,12 @@ int ObTxCtxTableRecoverHelper::recover(const blocksstable::ObDatumRow &row,
     transaction::ObTxCtx *tx_ctx = NULL;
     int64_t pos = 0;
     bool tx_ctx_existed = true;
-    if (OB_FAIL(ctx_info_.deserialize(deserialize_buf, deserialize_buf_length, pos, tx_data_table))) {
+    if (FALSE_IT(TLOCAL_P_TX_BUFFER_NODE_ARRAY = &ctx_info_.exec_info_.multi_data_source_)) {// FIXME: for compat issue, should be removed after barrier version
+    } else if (OB_FAIL(ctx_info_.deserialize(deserialize_buf, deserialize_buf_length, pos, tx_data_table))) {
       STORAGE_LOG(WARN, "failed to deserialize status_info", K(ret), K_(ctx_info));
-    } else if (OB_FAIL(ctx_info_.exec_info_.merge_buffer_ctx_array_to_multi_data_source())) {
-      STORAGE_LOG(WARN, "failed to restore MDS buffer contexts", K(ret), K_(ctx_info));
+      TLOCAL_P_TX_BUFFER_NODE_ARRAY = nullptr;// FIXME: for compat issue, should be removed after barrier version
+    } else if (FALSE_IT(TLOCAL_P_TX_BUFFER_NODE_ARRAY = nullptr)) {// FIXME: for compat issue, should be removed after barrier version
+    } else if (FALSE_IT(ctx_info_.exec_info_.mrege_buffer_ctx_array_to_multi_data_source())) {
     } else if (OB_FAIL(recover_one_tx_ctx_(ls_tx_ctx_mgr, ctx_info_))) {
       // heap memory needed be freed, but can not do this in destruction, cause tx_buffer_node has no value sematics
       ctx_info_.exec_info_.clear_buffer_ctx_in_multi_data_source();

@@ -18,6 +18,7 @@
 
 #include "ob_partition_merge_fuser.h"
 #include "ob_tablet_merge_ctx.h"
+#include "storage/lob/ob_lob_manager.h"
 
 namespace oceanbase
 {

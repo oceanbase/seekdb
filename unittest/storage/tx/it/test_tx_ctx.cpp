@@ -30,7 +30,7 @@ static ObSharedMemAllocMgr MTL_MEM_ALLOC_MGR;
 static FakeModuleProvider G_TEST_MODULE_PROVIDER;
 
 namespace share {
-int ObTxDataAllocator::init(const char *label)
+int ObTenantTxDataAllocator::init(const char *label)
 {
   int ret = OB_SUCCESS;
   ObMemAttr mem_attr;
@@ -39,7 +39,7 @@ int ObTxDataAllocator::init(const char *label)
                  storage::TX_DATA_SLICE_SIZE, OB_MALLOC_NORMAL_BLOCK_SIZE, block_alloc_, mem_attr))) {
     SHARE_LOG(WARN, "init slice allocator failed", KR(ret));
   } else {
-    slice_allocator_.set_nway(ObTxDataAllocator::ALLOC_TX_DATA_MAX_CONCURRENCY);
+    slice_allocator_.set_nway(ObTenantTxDataAllocator::ALLOC_TX_DATA_MAX_CONCURRENCY);
     is_inited_ = true;
   }
   return ret;
@@ -52,6 +52,7 @@ int ObMemstoreAllocator::init()
 int ObMemstoreAllocator::AllocHandle::init()
 {
   int ret = OB_SUCCESS;
+  uint64_t tenant_id = 1;
   ObSharedMemAllocMgr *mtl_alloc_mgr = &MTL_MEM_ALLOC_MGR;
   ObMemstoreAllocator &host = mtl_alloc_mgr->memstore_allocator();
   (void)host.init_handle(*this);
@@ -79,6 +80,8 @@ class ObTestTxCtx : public ::testing::Test
 public:
   virtual void SetUp() override
   {
+    oceanbase::ObClusterVersion::get_instance().update_data_version(DATA_CURRENT_VERSION);
+    ObMallocAllocator::get_instance()->create_and_add_tenant_allocator();
     const uint64_t tv = ObTimeUtility::current_time();
     ObCurTraceId::set(&tv);
     ObClockGenerator::init();
@@ -91,13 +94,12 @@ public:
   }
   virtual void TearDown() override
   {
-    share::g_mp = &G_TEST_MODULE_PROVIDER;
-    share::g_server_runtime = &share::g_bootstrap_server_runtime;
     const testing::TestInfo *const test_info =
         testing::UnitTest::GetInstance()->current_test_info();
     auto test_name = test_info->name();
     _TRANS_LOG(INFO, ">>>> tearDown test : %s", test_name);
     ObClockGenerator::destroy();
+    ObMallocAllocator::get_instance()->recycle_tenant_allocator();
   }
   MsgBus bus_;
 };

@@ -22,9 +22,11 @@ sleep 3;
 --echo "=========================================== __all_ddl_operation ==========================================="
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 drop index idx1 on t_vec;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 select ddl_stmt_str from oceanbase.__all_ddl_operation where database_id = (select database_id from oceanbase.__all_database where database_name='yjl_vec') and ddl_stmt_str != '' order by schema_version;
@@ -35,9 +37,11 @@ select ddl_stmt_str from oceanbase.__all_ddl_operation where database_id = (sele
 --echo "=========================================== 索引名有转义字符 ================================================="
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index `idx\n1`(c2) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 drop index `idx\n1` on t_vec;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
@@ -47,9 +51,11 @@ show index from t_vec;
 --echo "=========================================== 索引名有大小写 ==================================================="
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index iDx1(c2) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 drop index idx1 on t_vec;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
@@ -68,9 +74,11 @@ create table t_vec(c1 int, c2 vector(3), c3 vector(3), primary key(c1), vector i
 --echo "========================================== 索引名有特殊字符 001 ==============================================="
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index iDx$1(c2) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 drop index iDx$1 on t_vec;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 # case 2
@@ -79,9 +87,11 @@ show index from t_vec;
 --echo "========================================== 索引名有特殊字符 002 ==============================================="
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index café(c2) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 drop index cafe on t_vec;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
@@ -102,6 +112,7 @@ use yjl_vec;
 drop table if exists t_vec;
 # create 
 create table t_vec(c1 int, c2 vector(3), c3 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw), vector index idx2(c3) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
@@ -114,6 +125,7 @@ select count(*) from oceanbase.__all_table where table_name like '%idx2%' and da
 connection conn_user;
 use yjl_vec;
 drop index idx1 on t_vec;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 select count(table_name) from oceanbase.__all_table where table_name like '%vid_rowkey%' and database_id = (select database_id from oceanbase.__all_database where database_name='yjl_vec');
@@ -127,6 +139,7 @@ use yjl_vec;
 select * from t_vec;
 # drop
 drop index idx2 on t_vec;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 select count(table_name) from oceanbase.__all_table where table_name like '%vid_rowkey%' and database_id = (select database_id from oceanbase.__all_database where database_name='yjl_vec');
@@ -164,13 +177,16 @@ call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
 drop table if exists t_vec;
 # create
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index idx1(c2) WITH (distance=L2, type=hnsw, dim=1024, model=ob_embed, sync_mode=immediate));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 drop index idx1 on t_vec;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), c3 vector(3), primary key(c1), vector index idx1(c2) WITH (distance=L2, type=hnsw, dim=1024, model=ob_embed, sync_mode=immediate), vector index idx2(c3) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 select count(table_name) from oceanbase.__all_table where table_name like '%vid_rowkey%' and database_id = (select database_id from oceanbase.__all_database where database_name='yjl_vec');
@@ -182,6 +198,7 @@ select count(*) from oceanbase.__all_table where table_name like '%idx2%' and da
 connection conn_user;
 use yjl_vec;
 drop index idx1 on t_vec;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 select count(table_name) from oceanbase.__all_table where table_name like '%vid_rowkey%' and database_id = (select database_id from oceanbase.__all_database where database_name='yjl_vec');
@@ -193,6 +210,7 @@ select count(*) from oceanbase.__all_table where table_name like '%idx2%' and da
 connection conn_user;
 use yjl_vec;
 drop index idx2 on t_vec;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 select count(table_name) from oceanbase.__all_table where table_name like '%vid_rowkey%' and database_id = (select database_id from oceanbase.__all_database where database_name='yjl_vec');
@@ -214,6 +232,7 @@ call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('ob_embed_endpoint');
 #use yjl_vec;
 #drop table if exists t_vec;
 #create table t_vec(c1 int, c2 vector(3), c3 varchar(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw), fulltext index idx2(c3));
+#--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 #show create table t_vec;
 #show index from t_vec;
 
@@ -224,6 +243,7 @@ call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('ob_embed_endpoint');
 #select * from t_vec;
 # drop
 #drop index idx1 on t_vec;
+#--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 #show create table t_vec;
 #show index from t_vec;
 #select count(table_name) from oceanbase.__all_table where table_name like '%vid_rowkey%' and database_id = (select database_id from oceanbase.__all_database where database_name='yjl_vec');

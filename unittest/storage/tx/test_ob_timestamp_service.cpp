@@ -30,21 +30,21 @@ public:
   int init_for_test()
   {
     int ret = ObTimestampService::init();
-    if (OB_SUCC(ret)) {
-      last_id_ = 0;
-      limited_id_ = ObTimeUtility::current_time_ns() + TIMESTAMP_PREALLOCATED_RANGE;
-    }
+    service_type_ = ServiceType::TimestampService;
+    pre_allocated_range_ = TIMESTAMP_PREALLOCATED_RANGE;
+    last_id_ = ObTimeUtility::current_time_ns();
+    limited_id_ = last_id_ + TIMESTAMP_PREALLOCATED_RANGE;
     return ret;
   }
 };
 
-TEST(TestObTimestampService, get_local_timestamp)
+TEST(TestObTimestampService, local_timestamp_is_monotonic)
 {
   TestTimestampService service;
+  ASSERT_EQ(OB_SUCCESS, service.init_for_test());
   int64_t first = 0;
   int64_t second = 0;
 
-  ASSERT_EQ(OB_SUCCESS, service.init_for_test());
   ASSERT_EQ(OB_SUCCESS, service.get_timestamp(first));
   ASSERT_EQ(OB_SUCCESS, service.get_timestamp(second));
   EXPECT_GT(first, 0);
@@ -53,9 +53,6 @@ TEST(TestObTimestampService, get_local_timestamp)
 
 } // namespace unittest
 } // namespace oceanbase
-
-using namespace oceanbase;
-using namespace oceanbase::common;
 
 int main(int argc, char **argv)
 {

@@ -30,6 +30,7 @@ ob_set_subtarget(ob_pl common
   ob_pl.cpp
   ob_pl_allocator.cpp
   ob_pl_build.cpp
+  ob_pl_build_utils.cpp
   ob_pl_exception_handling.cpp
   ob_pl_interface_pragma.cpp
   ob_pl_interpreter.cpp
@@ -42,6 +43,8 @@ ob_set_subtarget(ob_pl common
   ob_pl_stmt.cpp
   ob_pl_type.cpp
   ob_pl_user_type.cpp
+  ob_pl_persistent.cpp
+  ob_pl_package_encode_info.cpp
   ob_pl_dependency_util.cpp
 )
 
@@ -66,6 +69,10 @@ ob_set_subtarget(ob_pl sys_package
   sys_package/ob_dbms_hybrid_vector_mysql.cpp
   sys_package/ob_dbms_ai_service.cpp
   sys_package/ob_dbms_index_manager.cpp
+)
+
+ob_set_subtarget(ob_pl pl_recompile
+  pl_recompile/ob_pl_recompile_task_helper.cpp
 )
 
 ob_server_add_target(ob_pl)

@@ -20,7 +20,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "share/ob_ddl_common.h"
-#include "observer/scheduler/ob_dag_scheduler.h"
+#include "observer/scheduler/ob_tenant_dag_scheduler.h"
 #include "storage/access/ob_table_access_context.h"
 #include "storage/access/ob_store_row_iterator.h"
 #include "storage/access/ob_sstable_row_whole_scanner.h"
@@ -32,7 +32,7 @@
 #include "lib/oblog/ob_log_module.h"
 #include "storage/tablet/ob_tablet_create_delete_helper.h"
 #include "lib/lock/ob_mutex.h"
-#include "storage/ddl/ob_tablet_copy_util.h"
+#include "storage/ddl/ob_tablet_rebuild_util.h"
 #include "common/ob_tablet_id.h"
 #include "storage/tablet/ob_tablet_table_store_iterator.h"
 
@@ -189,6 +189,7 @@ public:
   void handle_init_failed_ret_code(int ret) { context_.complement_data_ret_ = ret; }
   int fill_info_param(compaction::ObIBasicInfoParam *&out_param, ObIAllocator &allocator) const override;
   int fill_dag_key(char *buf, const int64_t buf_len) const override;
+  virtual bool is_ha_dag() const override { return false; }
   int calc_total_row_count();
 private:
   bool is_inited_;

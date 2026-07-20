@@ -43,7 +43,6 @@ public:
                                 ObExprResType &type2,
                                 common::ObExprTypeCtx &type_ctx) const override;
   virtual common::ObCastMode get_cast_mode() const { return CM_NULL_ON_WARN;}
-  static bool has_valid_client_session(const ObExecContext &exec_ctx);
 
   class ObTimeOutCheckGuard
   {

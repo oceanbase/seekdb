@@ -103,7 +103,6 @@ int ObKVCacheIterator::init(const int64_t cache_id, ObKVCacheMap * const map)
 //TODO bucket num level map should be system parameter
 const int64_t ObKVGlobalCache::bucket_num_array_[MAX_BUCKET_NUM_LEVEL] =
     {
-#ifdef OB_BUILD_EMBED_MODE
       196613l,      // more than 2G, 1.5M kvcache meta
       393241l,      // more than 4G, 3M kvcache meta
       786433l,      // more than 8G, 6M kvcache meta
@@ -114,18 +113,6 @@ const int64_t ObKVGlobalCache::bucket_num_array_[MAX_BUCKET_NUM_LEVEL] =
       25165843l,    // more than 256G, 200M kvcache meta
       50331653l,    // more than 512G, 500M kvcache meta
       100663319l,   // more than 1024G, 1G kvcache meta
-#else
-      786433l,      // more than 2G, 6M kvcache meta
-      1572869l,     // more than 4G, 12M kvcache meta
-      3145739l,     // more than 8G, 25M kvcache meta
-      6291469l,     // more than 16G, 50M kvcache meta
-      12582917l,    // more than 32G, 100M kvcache meta
-      25165843l,    // more than 64G, 200M kvcache meta
-      50331653l,   // more than 128G, 500M kvcache meta
-      100663319l,   // more than 256G, 1G kvcache meta
-      201326611l,   // more than 512G, 2G kvcache meta
-      402653189ll   // more than 1024G, 4G kvcache meta
-#endif
     };
 
 ObKVGlobalCache::ObKVGlobalCache()

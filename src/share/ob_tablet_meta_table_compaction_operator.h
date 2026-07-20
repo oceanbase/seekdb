@@ -18,12 +18,22 @@
 #define OCEANBASE_SHARE_OB_TABLET_META_TABLE_COMPACTION_OPERATOR_
 
 #include "lib/container/ob_iarray.h"
+#include "common/mysqlclient/ob_isql_client.h"
+#include "common/ob_zone.h"
+#include "common/mysqlclient/ob_mysql_transaction.h"
 #include "share/tablet/ob_tablet_info.h"
+#include "share/ob_server_struct.h"
+#include "storage/compaction/ob_ckm_error_tablet_info.h"
 
 namespace oceanbase
 {
+namespace common
+{
+class ObMySQLTransaction;
+}
 namespace share
 {
+class ObTabletReplicaFilter;
 class SCN;
 
 // part compaction related member from __all_tablet_meta_table
@@ -34,11 +44,11 @@ public:
    : tablet_id_(0),
      compaction_scn_(0),
      report_scn_(0),
-     status_(ObTabletRuntimeInfo::SCN_STATUS_MAX)
+     status_(ObTabletReplica::SCN_STATUS_MAX)
    {}
   ObTabletCompactionScnInfo(
       const ObTabletID &tablet_id,
-      const ObTabletRuntimeInfo::ScnStatus status)
+      const ObTabletReplica::ScnStatus status)
    : tablet_id_(tablet_id.id()),
      compaction_scn_(0),
      report_scn_(0),
@@ -51,39 +61,41 @@ public:
   // only check when last compaction type is major
   bool could_schedule_next_round(const int64_t major_frozen_scn)
   {
-    return ObTabletRuntimeInfo::SCN_STATUS_IDLE == status_ && major_frozen_scn <= report_scn_;
+    return ObTabletReplica::SCN_STATUS_IDLE == status_ && major_frozen_scn <= report_scn_;
   }
   void reset()
   {
     tablet_id_ = 0;
     compaction_scn_ = 0;
     report_scn_ = 0;
-    status_ = ObTabletRuntimeInfo::SCN_STATUS_MAX;
+    status_ = ObTabletReplica::SCN_STATUS_MAX;
   }
   TO_STRING_KV(K_(tablet_id), K_(compaction_scn), K_(report_scn), K_(status));
 public:
   int64_t tablet_id_;
   int64_t compaction_scn_;
   int64_t report_scn_;
-  ObTabletRuntimeInfo::ScnStatus status_;
+  ObTabletReplica::ScnStatus status_;
 };
 
 // CRUD operation to __all_tablet_meta_table
 class ObTabletMetaTableCompactionOperator
 {
 public:
+  static int batch_set_info_status(const ObIArray<compaction::ObCkmErrorTabletInfo> &tablet_infos,
+      int64_t &affected_rows);
   static int get_status(
       const ObTabletCompactionScnInfo &input_info,
       ObTabletCompactionScnInfo &ret_info);
   // update report_scn of all tablets in @tablet_ids
   static int batch_update_report_scn(
       const uint64_t global_broadcast_scn_val,
-      const common::ObIArray<ObTabletID> &tablet_ids,
-      const ObTabletRuntimeInfo::ScnStatus &except_status);
+      const common::ObIArray<common::ObTabletID> &tablet_ids,
+      const ObTabletReplica::ScnStatus &except_status);
   // after major_freeze, update all tablets' report_scn to global_broadcast_scn_val
   static int batch_update_report_scn(
       const uint64_t global_broadcast_scn_val,
-      const ObTabletRuntimeInfo::ScnStatus &except_status,
+      const ObTabletReplica::ScnStatus &except_status,
       const volatile bool &stop);
   // designed for 'clear merge error'. it updates all tablets' status to SCN_STATUS_IDLE
   static int batch_update_status();
@@ -93,21 +105,37 @@ public:
   static int range_scan_for_compaction(const int64_t compaction_scn,
       const common::ObTabletID &start_tablet_id,
       const int64_t batch_size,
-      const bool only_unreported,
+      const bool add_report_scn_filter,
       common::ObTabletID &end_tablet_id,
-      ObIArray<ObTabletRuntimeInfo> &tablet_infos);
+      ObIArray<ObTabletInfo> &tablet_infos);
 private:
   static int inner_range_scan_for_compaction(const int64_t compaction_scn,
       const common::ObTabletID &start_tablet_id,
       const int64_t batch_size,
-      const bool only_unreported,
+      const bool add_report_scn_filter,
       common::ObTabletID &end_tablet_id,
-      ObIArray<ObTabletRuntimeInfo> &tablet_infos);
+      ObIArray<ObTabletInfo> &tablet_infos);
   static int inner_get_max_tablet_id_in_range(const common::ObTabletID &start_tablet_id,
       const int64_t batch_size,
       common::ObTabletID &max_tablet_id);
+  // is_update_finish_scn = TRUE: update finish_scn
+  // is_update_finish_scn = FALSE: delete rows
+  static int inner_batch_update_with_trans(
+      common::ObMySQLTransaction &trans,
+      const bool is_update_finish_scn,
+      const common::ObIArray<share::ObTabletReplica> &replicas);
+  static int append_tablet_id_array(const common::ObIArray<ObTabletID> &input_tablet_id_array,
+      const int64_t start_idx,
+      const int64_t end_idx,
+      ObSqlString &sql);
+  static int construct_tablet_id_array(
+      sqlclient::ObMySQLResult &result,
+      common::ObIArray<ObTabletID> &tablet_id_array);
   static int get_estimated_timeout_us(int64_t &estimated_timeout_us);
-  static int get_tablet_count(int64_t &tablet_count);
+  static int get_tablet_replica_cnt(int64_t &tablet_replica_cnt);
+  // get tablet_ids larger than @start_tablet_id, and get up to @limit_cnt records
+  static int batch_get_tablet_ids(const ObSqlString &sql,
+      common::ObIArray<ObTabletID> &tablet_ids);
   static int get_next_batch_tablet_ids(const int64_t batch_update_cnt,
       common::ObIArray<ObTabletID> &tablet_ids);
 private:

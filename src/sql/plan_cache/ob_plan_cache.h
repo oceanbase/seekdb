@@ -449,8 +449,7 @@ private:
   int construct_plan_cache_key(ObPlanCacheCtx &plan_ctx, ObLibCacheNameSpace ns);
   static int construct_plan_cache_key(ObSQLSessionInfo &session,
                                       ObLibCacheNameSpace ns,
-                                      ObPlanCacheKey &pc_key,
-                                      bool is_weak);
+                                      ObPlanCacheKey &pc_key);
   int add_stat_for_cache_obj(ObILibCacheCtx &ctx, ObILibCacheObject *cache_obj);
   int create_node_and_add_cache_obj(ObILibCacheKey *key,
                                     ObILibCacheCtx &ctx,

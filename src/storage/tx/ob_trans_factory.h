@@ -31,7 +31,7 @@ namespace obcall
 namespace transaction
 {
 class ObTransCtx;
-class ObPartTransCtx;
+class ObTxCtx;
 //class ObPartitionTransCtxMgr;
 class ObLSTxCtxMgr;
 //class TransRpcTask;
@@ -42,24 +42,20 @@ class RollbackTransTask;
 class CallbackTransTask;
 class WaitTransEndTask;
 class ObCoreLocalPartitionAuditInfo;
-class ObGtsRequestRpc;
 class ObTxCommitCallbackTask;
 
-class ObTransCtxFactory
+class ObTxCtxFactory
 {
 public:
-  static ObTransCtx *alloc(const int64_t ctx_type);
+  static ObTxCtx *alloc();
   static void release(ObTransCtx *ctx);
-  static int64_t get_alloc_count() { return ATOMIC_LOAD(&active_part_ctx_count_); }
+  static int64_t get_alloc_count() { return ATOMIC_LOAD(&active_tx_ctx_count_); }
   static int64_t get_release_count() { return 0; }
   static const char *get_mod_type() { return mod_type_; }
-  static int64_t get_active_part_ctx_cunt() { return ATOMIC_LOAD(&active_part_ctx_count_); }
 private:
   static const char *mod_type_;
-  static int64_t active_sche_ctx_count_;
-  static int64_t active_coord_ctx_count_;
-  static int64_t active_part_ctx_count_;
-  static int64_t total_release_part_ctx_count_;
+  static int64_t active_tx_ctx_count_;
+  static int64_t total_release_tx_ctx_count_;
 };
 
 template <typename T, int64_t STATISTIC_INTERVAL = TRANS_MEM_STAT_INTERVAL>
@@ -177,7 +173,6 @@ MAKE_FACTORY_CLASS_DEFINE(CallbackTransTask)
 MAKE_FACTORY_CLASS_DEFINE(ObTransTraceLog)
 MAKE_FACTORY_CLASS_DEFINE(ObPartitionAuditInfo)
 MAKE_FACTORY_CLASS_DEFINE(ObCoreLocalPartitionAuditInfo)
-MAKE_FACTORY_CLASS_DEFINE(ObGtsRequestRpc)
 MAKE_FACTORY_CLASS_DEFINE(ObTxCommitCallbackTask)
 
 class MultiTxDataFactory

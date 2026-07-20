@@ -42,6 +42,7 @@ struct ObGroupbyExpr;
 struct ObResolverUtils;
 struct ObSelectIntoItem;
 class ObDMLResolver;
+class ObSequenceNamespaceChecker;
 
 enum JsonArrayaggParserOffset
 {
@@ -290,6 +291,7 @@ public:
                                          ObRawExpr *&expr,
                                          common::ObIArray<ObQualifiedName> &columns,
                                          const ObTableSchema* new_table_schema,
+                                         const bool sequence_allowed,
                                          ObDMLResolver *dml_resolver,
                                          const ObSchemaChecker *schema_checker = NULL,
                                          const ObResolverUtils::PureFunctionCheckStatus
@@ -303,7 +305,8 @@ public:
                                          ObRawExpr *&expr,
                                          common::ObIArray<ObQualifiedName> &columns,
                                          const ObTableSchema* new_table_schema,
-                                         ObDMLResolver *dml_resolver,
+                                         const bool sequence_allowed,
+                                        ObDMLResolver *dml_resolver,
                                          const ObSchemaChecker *schema_checker = NULL,
                                          const ObResolverUtils::PureFunctionCheckStatus
                                            check_status = ObResolverUtils::DISABLE_CHECK,
@@ -316,7 +319,8 @@ public:
                                          ObRawExpr *&expr,
                                          common::ObIArray<ObQualifiedName> &columns,
                                          const ObTableSchema* new_table_schema,
-                                         ObDMLResolver *dml_resolver,
+                                         const bool sequence_allowed,
+                                        ObDMLResolver *dml_resolver,
                                          const ObSchemaChecker *schema_checker = NULL,
                                          const ObResolverUtils::PureFunctionCheckStatus
                                            check_status = ObResolverUtils::DISABLE_CHECK,
@@ -334,6 +338,28 @@ public:
   static int check_generated_column_expr_str(const common::ObString &expr_str,
                                              const ObSQLSessionInfo &session_info,
                                              const share::schema::ObTableSchema &table_schema);
+  static int build_seq_nextval_expr(ObRawExpr *&expr,
+                                    const ObSQLSessionInfo *session_info,
+                                    ObRawExprFactory *expr_factory,
+                                    const ObQualifiedName &q_name,
+                                    uint64_t seq_id,
+                                    ObDMLStmt *stmt);
+  // build sequence_object.currval and sequence_object.nextval expr
+  static int build_seq_nextval_expr(ObRawExpr *&expr,
+                                    const ObSQLSessionInfo *session_info,
+                                    ObRawExprFactory *expr_factory,
+                                    const ObString &database_name,
+                                    const ObString &tbl_name,
+                                    const ObString &col_name,
+                                    uint64_t seq_id,
+                                    ObDMLStmt *stmt);
+  static int resolve_sequence_object(const ObQualifiedName &q_name,
+                                     ObDMLResolver *dml_resolver,
+                                     const ObSQLSessionInfo *session_info,
+                                     ObRawExprFactory *expr_factory,
+                                     ObSequenceNamespaceChecker &sequence_namespace_checker,
+                                     ObRawExpr *&real_ref_expr,
+                                     bool is_generated_column);
   static int build_pad_expr_recursively(ObRawExprFactory &expr_factory,
                                         const ObSQLSessionInfo &session,
                                         const share::schema::ObTableSchema &table_schema,
@@ -410,14 +436,19 @@ public:
   static int extract_set_op_exprs(const ObIArray<ObRawExpr*> &exprs,
                                   common::ObIArray<ObRawExpr*> &set_op_exprs);
   /// extract column exprs from the raw expr
+  // can_extract_pseudo_column_ref default is true.
+  // only when extract expr in ObLogTableScan::generate_access_exprs,
+  // it will be false because pseudo_column_ref cannot be an access_expr.
   static int extract_column_exprs(const ObRawExpr *raw_expr,
                                   common::ObIArray<ObRawExpr*> &column_exprs,
-                                  bool need_pseudo_column = false);
+                                  bool need_pseudo_column = false,
+                                  bool can_extract_pseudo_column_ref = true);
   static int extract_column_exprs_and_rowscn(const ObRawExpr *raw_expr,
                                   common::ObIArray<ObRawExpr*> &column_exprs);
   static int extract_column_exprs(const common::ObIArray<ObRawExpr*> &exprs,
                                   common::ObIArray<ObRawExpr *> &column_exprs,
-                                  bool need_pseudo_column = false);
+                                  bool need_pseudo_column = false,
+                                  bool can_extract_pseudo_column_ref = true);
   static int extract_column_exprs(const ObRawExpr *raw_expr,
                                   int64_t table_id,
                                   common::ObIArray<ObRawExpr*> &column_exprs);
@@ -439,6 +470,7 @@ public:
   static int extract_contain_exprs(ObRawExpr *raw_expr,
                                    const common::ObIArray<ObRawExpr*> &src_exprs,
                                    common::ObIArray<ObRawExpr *> &contain_exprs);
+  static int extract_invalid_sequence_expr(ObRawExpr *raw_expr, ObRawExpr *&sequence_expr);
   static int extract_column_ids(const ObIArray<ObRawExpr*> &exprs, common::ObIArray<uint64_t> &column_ids);
   static int extract_column_ids(const ObRawExpr *raw_expr, common::ObIArray<uint64_t> &column_ids);
   static int extract_table_ids(const ObRawExpr *raw_expr, common::ObIArray<uint64_t> &table_ids);

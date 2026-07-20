@@ -72,6 +72,7 @@ ObMPPacketSender::ObMPPacketSender()
       sessid_(0),
       req_has_wokenup_(true),
       query_receive_ts_(0),
+      nio_protocol_(0),
       conn_(NULL)
 {
 }
@@ -151,6 +152,7 @@ int ObMPPacketSender::do_init(rpc::ObRequest *req,
     comp_context_.sessid_ = sessid_;
     comp_context_.conn_ = conn;
 
+    nio_protocol_ = req_->get_nio_protocol();
   }
   return ret;
 }
@@ -158,6 +160,7 @@ int ObMPPacketSender::do_init(rpc::ObRequest *req,
 int ObMPPacketSender::alloc_ezbuf()
 {
   int ret = OB_SUCCESS;
+  easy_request_t *ez_req =nullptr;
   char *buf = nullptr;
   if (OB_ISNULL(ez_buf_)) {
     if (OB_ISNULL(req_)) {
@@ -170,7 +173,7 @@ int ObMPPacketSender::alloc_ezbuf()
     } else {
       ez_buf_ = reinterpret_cast<easy_buf_t*>(buf);
       init_easy_buf(ez_buf_, reinterpret_cast<char*>(ez_buf_ + 1),
-                    nullptr, OB_MULTI_RESPONSE_BUF_SIZE);
+                    ez_req, OB_MULTI_RESPONSE_BUF_SIZE);
     }
   }
   return ret;
@@ -774,10 +777,30 @@ int ObMPPacketSender::flush_buffer(const bool is_last)
   } else {
     //int64_t buf_sz = ez_buf_->last - ez_buf_->pos;
     if (OB_SUCCESS != ret) {
-    } else if (comp_context_.use_compress()) {
-      ObEasyBuffer orig_send_buf(*ez_buf_);
-      if (OB_FAIL(ObMySQLRequestUtils::flush_compressed_buffer(is_last, comp_context_, orig_send_buf, *req_))) {
-        LOG_WARN("failed to flush buffer for compressed sql nio", K(ret));
+    } else if (ObRequest::TRANSPORT_PROTO_EASY == nio_protocol_) {
+      ObFlushBufferParam flush_param(*ez_buf_, *req_->get_ez_req(), comp_context_,
+                                     conn_valid_, req_has_wokenup_, is_last);
+      if (OB_FAIL(ObMySQLRequestUtils::flush_buffer(flush_param))) {
+        LOG_WARN("failed to flush_buffer", K(ret));
+      }
+    } else if (ObRequest::TRANSPORT_PROTO_POC == nio_protocol_) {
+      if (comp_context_.use_compress()) {
+        ObEasyBuffer orig_send_buf(*ez_buf_);
+        if (OB_FAIL(ObMySQLRequestUtils::flush_compressed_buffer(is_last, comp_context_, orig_send_buf, *req_))) {
+          LOG_WARN("failed to flush buffer for compressed sql nio", K(ret));
+        }
+      } else {
+        if (is_last) {
+          if (OB_FAIL(SQL_REQ_OP.async_write_response(req_, ez_buf_->pos, ez_buf_->last - ez_buf_->pos))) {
+            LOG_WARN("write response fail", K(ret));
+          }
+        } else {
+          if (OB_FAIL(SQL_REQ_OP.write_response(req_, ez_buf_->pos, ez_buf_->last - ez_buf_->pos))) {
+            LOG_WARN("write response fail", K(ret));
+          } else {
+            init_easy_buf(ez_buf_, (char*)(ez_buf_ + 1),  NULL, ez_buf_->end - ez_buf_->pos);
+          }
+        }
       }
     } else {
       if (is_last) {
@@ -848,7 +871,7 @@ int ObMPPacketSender::resize_ezbuf(const int64_t size)
     } else {
       easy_buf_t *tmp = reinterpret_cast<easy_buf_t *>(buf);
       init_easy_buf(tmp, reinterpret_cast<char *>(tmp + 1),
-                    nullptr, size - sizeof(easy_buf_t));
+                    req_->get_ez_req()/*easy_buf need this to release m->pool ref*/, size - sizeof(easy_buf_t));
       if (remain_data_size > 0) {
         //if ezbuf has leave data, we need move it
         MEMCPY(tmp->last, ez_buf_->pos, remain_data_size);

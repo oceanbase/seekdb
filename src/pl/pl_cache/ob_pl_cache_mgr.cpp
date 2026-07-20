@@ -92,6 +92,7 @@ int ObPLCacheMgr::get_pl_object(ObPlanCache *lib_cache, ObILibCacheCtx &ctx, ObC
   int ret = OB_SUCCESS;
   ObArenaAllocator tmp_alloc(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObPLCacheCtx &pc_ctx = static_cast<ObPLCacheCtx&>(ctx);
+  //guard.get_cache_obj() = NULL;
   ObGlobalReqTimeService::check_req_timeinfo();
   if (OB_ISNULL(lib_cache) || OB_ISNULL(pc_ctx.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -110,6 +111,11 @@ int ObPLCacheMgr::get_pl_object(ObPlanCache *lib_cache, ObILibCacheCtx &ctx, ObC
           ret = OB_SQL_PC_NOT_EXIST;
         }
       }
+      if (OB_FAIL(ret) && OB_NOT_NULL(guard.get_cache_obj())) {
+        ObILibCacheObject *cache_obj = guard.get_cache_obj();
+        ObCacheObjectFactory::free(lib_cache, cache_obj, guard.get_ref_handle());
+        //guard.get_cache_obj() = NULL;
+      }
     } else if (OB_ISNULL(guard.get_cache_obj()) ||
               (!guard.get_cache_obj()->is_prcr() &&
                 !guard.get_cache_obj()->is_sfc() &&
@@ -121,10 +127,10 @@ int ObPLCacheMgr::get_pl_object(ObPlanCache *lib_cache, ObILibCacheCtx &ctx, ObC
     }
 
     if (OB_FAIL(ret) && OB_NOT_NULL(guard.get_cache_obj())) {
-      int tmp_ret = guard.force_early_release(lib_cache);
-      if (OB_SUCCESS != tmp_ret) {
-        PL_CACHE_LOG(WARN, "failed to release cache object", K(tmp_ret));
-      }
+      // TODO PL pc_ctx
+      ObILibCacheObject *cache_obj = guard.get_cache_obj();
+      ObCacheObjectFactory::free(lib_cache, cache_obj, static_cast<ObPLCacheCtx &>(pc_ctx).handle_id_);
+      //guard.get_cache_obj() = NULL;
     }
     if (OB_SUCC(ret) && OB_NOT_NULL(guard.get_cache_obj())) {
       lib_cache->inc_hit_and_access_cnt();
@@ -140,6 +146,7 @@ int ObPLCacheMgr::get_pl_cache(ObPlanCache *lib_cache, ObCacheObjGuard& guard, O
 {
   int ret = OB_SUCCESS;
   ObGlobalReqTimeService::check_req_timeinfo();
+  pc_ctx.handle_id_ = guard.get_ref_handle();
   if (OB_NOT_NULL(pc_ctx.session_info_) &&
       false == pc_ctx.session_info_->get_local_ob_enable_pl_cache()) {
     // do nothing
@@ -261,25 +268,39 @@ int ObPLCacheMgr::flush_pl_cache_by_sql(
                                   share::schema::ObMultiVersionSchemaService & schema_service)
 {
   int ret = OB_SUCCESS;
-  ObSchemaGetterGuard runtime_schema_guard;
+  ObSchemaGetterGuard tenant_schema_guard;
+  const ObSimpleTenantSchema *tenant = NULL;
+  
   ObString db_name;
-  if (OB_FAIL(schema_service.get_runtime_schema_guard(runtime_schema_guard))) {
-    LOG_WARN("failed to get runtime schema guard", KR(ret));
+  ObString tenant_name;
+  //get tenant name
+  if (OB_FAIL(schema_service.get_tenant_schema_guard(tenant_schema_guard))) {
+      LOG_WARN("failed to get tenant schema guard", KR(ret));
+  } else if (OB_FAIL(tenant_schema_guard.get_tenant_info(tenant))) {
+    LOG_WARN("failed get tenant info", K(ret));
+  } else if (OB_ISNULL(tenant)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("tenant is null", K(ret));
+  } else {
+    tenant_name = tenant->get_tenant_name_str();
   }
   //get db name
   const ObSimpleDatabaseSchema *database_schema = NULL;
   if (OB_FAIL(ret)) {
     // do nothing
-  } else if (OB_FAIL(runtime_schema_guard.get_database_schema( db_id, database_schema))) {
+  } else if (OB_FAIL(tenant_schema_guard.get_database_schema( db_id, database_schema))) {
     LOG_WARN("failed get db schema", K(ret));
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("database schema is null", K(ret));
+    LOG_WARN("tenant is null", K(ret));
   } else {
      db_name = database_schema->get_database_name();
   }
 
+  share::ObTenantRole tenant_role;
   ObMySQLProxy *sql_proxy = nullptr;
+  // system tenant execute global flush
+  
   ObSqlString sql;
   int64_t affected_rows = 0;
   if (OB_FAIL(ret)) {
@@ -287,8 +308,8 @@ int ObPLCacheMgr::flush_pl_cache_by_sql(
   } else if (OB_ISNULL(sql_proxy = GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected sql proxy", K(ret));
-  } else if (OB_FAIL(sql.assign_fmt("alter system flush pl cache schema_id = %lu databases = \"%.*s\"",
-                                      key_id, db_name.length(), db_name.ptr()))) {
+  } else if (OB_FAIL(sql.assign_fmt("alter system flush pl cache schema_id = %lu databases = \"%.*s\" TENANT = \"%.*s\" global", key_id, 
+                                      db_name.length(), db_name.ptr(), tenant_name.length(), tenant_name.ptr()))) {
     LOG_WARN("alter system flush pl cache failed.", K(ret), K(key_id));
   } else {
     if (OB_FAIL(sql_proxy->write(sql.ptr(), affected_rows))) {
@@ -311,7 +332,7 @@ int ObPLCacheMgr::cache_evict_all_pl(ObPlanCache *lib_cache)
     LOG_WARN("lib cache is null");
   } else {
     LCKeyValueArray to_evict_keys;
-    ObGetPLKVEntryOp get_ids_op(&to_evict_keys);
+    ObGetPLKVEntryOp get_ids_op(&to_evict_keys, PCV_GET_PL_KEY_HANDLE);
     if (OB_FAIL(lib_cache->foreach_cache_evict(get_ids_op))) {
       PL_CACHE_LOG(WARN, "failed to foreach cache evict", K(ret));
     }
@@ -331,7 +352,7 @@ int ObPLCacheMgr::cache_evict_pl_cache_single(ObPlanCache *lib_cache, uint64_t d
     LOG_WARN("lib cache is null");
   } else {
     LCKeyValueArray to_evict_keys;
-    GETPLKVEntryOp get_ids_op(db_id, attr, &to_evict_keys);
+    GETPLKVEntryOp get_ids_op(db_id, attr, &to_evict_keys, PCV_GET_PL_KEY_HANDLE);
     if (OB_FAIL(lib_cache->foreach_cache_evict(get_ids_op))) {
       PL_CACHE_LOG(WARN, "failed to foreach cache evict", K(ret));
     }

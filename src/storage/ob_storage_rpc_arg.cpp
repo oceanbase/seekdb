@@ -22,44 +22,46 @@ namespace obcall
 using namespace oceanbase::storage;
 OB_SERIALIZE_MEMBER(ObBatchGetTabletBindingRes, binding_datas_);
 
-OB_DEF_SERIALIZE(ObDDLLocalBuildArg)
+OB_DEF_SERIALIZE(ObDDLBuildSingleReplicaRequestArg)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE, source_tablet_id_, dest_tablet_id_,
     source_table_id_, dest_schema_id_, schema_version_, snapshot_version_, ddl_type_, task_id_, execution_id_,
     parallelism_, tablet_task_id_, data_format_version_,
-    dest_schema_version_, lob_col_idxs_);
+    dest_schema_version_,
+    lob_col_idxs_, is_no_logging_);
   return ret;
 }
-OB_DEF_DESERIALIZE(ObDDLLocalBuildArg)
+OB_DEF_DESERIALIZE(ObDDLBuildSingleReplicaRequestArg)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE, source_tablet_id_, dest_tablet_id_,
       source_table_id_, dest_schema_id_, schema_version_, snapshot_version_, ddl_type_, task_id_, execution_id_,
       parallelism_, tablet_task_id_, data_format_version_,
-      dest_schema_version_, lob_col_idxs_);
+      dest_schema_version_,
+      lob_col_idxs_, is_no_logging_);
   return ret;
 }
-OB_DEF_SERIALIZE_SIZE(ObDDLLocalBuildArg)
+OB_DEF_SERIALIZE_SIZE(ObDDLBuildSingleReplicaRequestArg)
 {
   int64_t len = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN, source_tablet_id_, dest_tablet_id_,
     source_table_id_, dest_schema_id_, schema_version_, snapshot_version_, ddl_type_, task_id_, execution_id_,
     parallelism_, tablet_task_id_, data_format_version_,
-    dest_schema_version_, lob_col_idxs_);
+    dest_schema_version_,
+    lob_col_idxs_, is_no_logging_);
   return len;
 }
-bool ObDDLLocalBuildArg::is_valid() const
+bool ObDDLBuildSingleReplicaRequestArg::is_valid() const
 {
   bool is_valid = source_tablet_id_.is_valid() && dest_tablet_id_.is_valid()
                && OB_INVALID_ID != source_table_id_ && OB_INVALID_ID != dest_schema_id_
                && schema_version_ > 0 && snapshot_version_ > 0 && task_id_ > 0 && parallelism_ > 0
-               && execution_id_ >= 0
                && tablet_task_id_ > 0 && data_format_version_ > 0
                && dest_schema_version_ > 0;
   return is_valid;
 }
-int ObDDLLocalBuildArg::assign(const ObDDLLocalBuildArg &other)
+int ObDDLBuildSingleReplicaRequestArg::assign(const ObDDLBuildSingleReplicaRequestArg &other)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!other.is_valid())) {
@@ -81,9 +83,10 @@ int ObDDLLocalBuildArg::assign(const ObDDLLocalBuildArg &other)
     execution_id_ = other.execution_id_;
     tablet_task_id_ = other.tablet_task_id_;
     data_format_version_ = other.data_format_version_;
+    is_no_logging_ = other.is_no_logging_;
   }
   return ret;
 }
-OB_SERIALIZE_MEMBER(ObDDLLocalBuildResult, ret_code_, row_inserted_, row_scanned_, physical_row_count_);
+OB_SERIALIZE_MEMBER(ObDDLBuildSingleReplicaRequestResult, ret_code_, row_inserted_, row_scanned_, physical_row_count_);
 }  // namespace obcall
 }  // namespace oceanbase

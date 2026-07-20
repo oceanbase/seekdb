@@ -19,7 +19,7 @@
 #include "share/rc/ob_module_provider.h"
 #include "observer/change_stream/ob_cs_plugin_async_index.h"
 #include "share/schema/ob_schema_getter_guard.h"
-#include "share/schema/ob_schema_runtime_service.h"
+#include "share/schema/ob_tenant_schema_service.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "share/tablet/ob_tablet_mapping_operator.h"
 #include "share/schema/ob_table_schema.h"
@@ -28,7 +28,7 @@
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "observer/vector_index/ob_plugin_vector_index_utils.h"
 #include "lib/vector/ob_vector_util.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_tenant_base.h"
 #include "storage/memtable/ob_memtable_mutator.h"
 #include "storage/blocksstable/ob_row_reader.h"
 #include "storage/blocksstable/ob_storage_datum.h"
@@ -70,14 +70,14 @@ int ObCSAsyncIndexProcessor::init_schema_guard_()
 {
   int ret = common::OB_SUCCESS;
   ObMultiVersionSchemaService *schema_service =
-      share::g_mp->schema_runtime_service() != nullptr ? share::g_mp->schema_runtime_service()->get_schema_service() : nullptr;
+      share::g_mp->tenant_schema_service() != nullptr ? share::g_mp->tenant_schema_service()->get_schema_service() : nullptr;
   if (OB_ISNULL(schema_service)) {
     ret = common::OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", K(ret));
-  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(
-      schema_guard_, ctx_.schema_version_,
+  } else if (OB_FAIL(schema_service->get_tenant_schema_guard(
+      schema_guard_, ctx_.schema_version_, common::OB_INVALID_VERSION,
       ObMultiVersionSchemaService::RefreshSchemaMode::FORCE_FALLBACK))) {
-    LOG_WARN("get_runtime_schema_guard failed", K(ret), K(ctx_.schema_version_));
+    LOG_WARN("get_tenant_schema_guard failed", K(ret), K(ctx_.schema_version_));
   }
   return ret;
 }
@@ -789,7 +789,7 @@ int ObCSAsyncIndexProcessor::build_das_ins_rtdef_(common::ObArenaAllocator &allo
     const int64_t default_timeout_us = GCONF.internal_sql_execute_timeout;
     const int64_t timeout_us = MAX(default_timeout_us, CS_ASYNC_INDEX_DAS_TIMEOUT_US);
     ins_rtdef->timeout_ts_ = current_time + timeout_us;
-    ins_rtdef->runtime_schema_version_ = ctx_.schema_version_;
+    ins_rtdef->tenant_schema_version_ = ctx_.schema_version_;
     ins_rtdef->prelock_ = false;
     ins_rtdef->is_for_foreign_key_check_ = false;
     ins_rtdef->is_immediate_row_conflict_check_ = true;
@@ -1363,8 +1363,8 @@ int ObCSPluginAsyncIndex::commit()
     if (now - ATOMIC_LOAD(&last_gc_time) > GC_INTERVAL_US) {
       ATOMIC_STORE(&last_gc_time, now);
       schema::ObMultiVersionSchemaService *schema_service =
-          share::g_mp->schema_runtime_service() != nullptr
-              ? share::g_mp->schema_runtime_service()->get_schema_service()
+          share::g_mp->tenant_schema_service() != nullptr
+              ? share::g_mp->tenant_schema_service()->get_schema_service()
               : nullptr;
       if (OB_NOT_NULL(schema_service)) {
         int tmp_ret = OB_SUCCESS;

@@ -28,32 +28,32 @@ namespace share
 {
 namespace schema
 {
-struct ObPackageId
+struct ObTenantPackageId
 {
 public:
-  ObPackageId()
+  ObTenantPackageId()
       : package_id_(common::OB_INVALID_ID)
   {}
-  ObPackageId(uint64_t package_id)
+  ObTenantPackageId(uint64_t package_id)
       : package_id_(package_id)
   {}
-  ObPackageId(const ObPackageId &other)
+  ObTenantPackageId(const ObTenantPackageId &other)
       : package_id_(other.package_id_)
   {}
-  ObPackageId &operator =(const ObPackageId &other)
+  ObTenantPackageId &operator =(const ObTenantPackageId &other)
   {
     package_id_ = other.package_id_;
     return *this;
   }
-  bool operator ==(const ObPackageId &rhs) const
+  bool operator ==(const ObTenantPackageId &rhs) const
   {
     return (package_id_ == rhs.package_id_);
   }
-  bool operator !=(const ObPackageId &rhs) const
+  bool operator !=(const ObTenantPackageId &rhs) const
   {
     return !(*this == rhs);
   }
-  bool operator <(const ObPackageId &rhs) const
+  bool operator <(const ObTenantPackageId &rhs) const
   {
     return package_id_ < rhs.package_id_;
   }
@@ -120,6 +120,8 @@ public:
   inline int set_package_name(const common::ObString &package_name)
   { return deep_copy_str(package_name, package_name_); }
   inline const common::ObString &get_package_name() const { return package_name_; }
+  inline ObTenantPackageId get_tenant_package_id() const
+  { return ObTenantPackageId(package_id_); }
   ObPackageType get_type() const { return type_; }
   void set_type(ObPackageType type) { type_ = type; }
   TO_STRING_KV(
@@ -170,7 +172,7 @@ private:
 
 inline bool ObPackageNameHashWrapper::operator ==(const ObPackageNameHashWrapper &rv) const
 {
-  ObSchemaNameComparator name_cmp;
+  ObCompareNameWithTenantID name_cmp;
   return (database_id_ == rv.get_database_id())
       && (0 == name_cmp.compare(package_name_, rv.get_package_name()))
       && (type_ == rv.get_type());
@@ -243,13 +245,13 @@ public:
   int get_schema_statistics(ObSchemaStatisticsInfo &schema_info) const;
 
   int add_package(const ObSimplePackageSchema &package_schema);
-  int del_package(const ObPackageId &package_id);
+  int del_package(const ObTenantPackageId &package_id);
   int add_packages(const common::ObIArray<ObSimplePackageSchema> &package_schemas);
   int get_package_schema(uint64_t package_id, const ObSimplePackageSchema *&package_schema) const;
   int get_package_schema( uint64_t database_id,
                          const common::ObString &package_name, ObPackageType package_type,
                          const ObSimplePackageSchema *&package_schema) const;
-  int get_package_schemas_in_runtime(common::ObIArray<const ObSimplePackageSchema *> &package_schemas) const;
+  int get_package_schemas_in_tenant(common::ObIArray<const ObSimplePackageSchema *> &package_schemas) const;
   int get_package_schemas_in_database(uint64_t database_id,
                                       common::ObIArray<const ObSimplePackageSchema *> &package_schemas) const;
 private:
@@ -257,10 +259,10 @@ private:
                                        const ObSimplePackageSchema *rhs);
   inline static bool equal_package(const ObSimplePackageSchema *lhs,
                                      const ObSimplePackageSchema *rhs);
-  inline static bool compare_with_package_id(const ObSimplePackageSchema *lhs,
-                                                    const ObPackageId &package_id);
-  inline static bool equal_with_package_id(const ObSimplePackageSchema *lhs,
-                                                  const ObPackageId &package_id);
+  inline static bool compare_with_tenant_package_id(const ObSimplePackageSchema *lhs,
+                                                    const ObTenantPackageId &tenant_package_id);
+  inline static bool equal_with_tenant_package_id(const ObSimplePackageSchema *lhs,
+                                                  const ObTenantPackageId &tenant_package_id);
 private:
   common::ObArenaAllocator local_allocator_;
   common::ObIAllocator &allocator_;

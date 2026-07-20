@@ -31,7 +31,8 @@ OB_SERIALIZE_MEMBER((ObPxMSCoordOpInput, ObPxReceiveOpInput));
 OB_SERIALIZE_MEMBER((ObPxMSCoordSpec, ObPxCoordSpec),
                     all_exprs_,
                     sort_collations_,
-                    sort_cmp_funs_);
+                    sort_cmp_funs_,
+                    is_old_unblock_mode_);
 
 int ObPxMSCoordOp::ObPxMSCoordOpEventListener::on_root_data_channel_setup()
 {
@@ -394,11 +395,19 @@ int ObPxMSCoordOp::inner_get_next_row()
         // if no data, then unblock blocked data channel, if not, dtl maybe hang
         // bug#28253162
         if (0 < row_heap_.capacity() && first_row_sent_) {
-          if (OB_FAIL(msg_loop_.unblock_channel(receive_order_.get_data_channel_start_idx(),
-                                                row_heap_.writable_channel_idx()))) {
-            LOG_WARN("failed to unblock channel", K(ret));
+          if (MY_SPEC.is_old_unblock_mode_) {
+            if (OB_FAIL(msg_loop_.unblock_channels(receive_order_.get_data_channel_start_idx()))) {
+              LOG_WARN("failed to unblock channels", K(ret));
+            } else {
+              LOG_DEBUG("debug old unblock_channels", K(ret));
+            }
           } else {
-            LOG_DEBUG("unblock writable channel", K(ret));
+            if (OB_FAIL(msg_loop_.unblock_channel(receive_order_.get_data_channel_start_idx(),
+                                                  row_heap_.writable_channel_idx()))) {
+              LOG_WARN("failed to unblock channels", K(ret));
+            } else {
+              LOG_DEBUG("debug old unblock_channel", K(ret));
+            }
           }
         }
       } else if (OB_ITER_END != ret) {

@@ -74,7 +74,7 @@ public:
   virtual ~ObBaseTabletDirectLoadMgr();
   virtual bool is_valid() = 0;
   TO_STRING_KV(K_(table_key), K_(tenant_data_version), K_(direct_load_type),
-               K_(ls_id), K_(tablet_id));
+               K_(tablet_id));
 public: /* some baisc method */
   void inc_ref() { ATOMIC_INC(&ref_cnt_); };
   int64_t dec_ref() { return ATOMIC_SAF(&ref_cnt_, 1); }
@@ -124,13 +124,6 @@ public:
                                   ObInsertMonitor *insert_monitor,
                                   blocksstable::ObMacroDataSeq &next_seq)
   { return OB_NOT_SUPPORTED; }
-  /*
-   * a inteferface only used for inc direct load
-   */
-  virtual int fill_lob_meta_sstable_slice(const ObDirectLoadSliceInfo &slice_info,
-                                          const share::SCN &start_scn,
-                                          ObIStoreRowIterator *iter,
-                                          int64_t &affected_rows) { return OB_NOT_SUPPORTED; };
 public: /* --------- direct_load_mgr interface  v2 ---------*/
   virtual int init_v2(const ObTabletDirectLoadInsertParam &build_param,
                       const int64_t execution_id,
@@ -169,11 +162,6 @@ public: /* --------- direct_load_mgr interface  v2 ---------*/
                                      ObInsertMonitor *insert_monitor,
                                      bool &is_all_sliced_finished)
   { return OB_NOT_SUPPORTED; }
-  virtual int fill_lob_meta_sstable_slice(const ObDirectLoadSliceInfo &slice_info,
-                                          ObIStoreRowIterator *iter,
-                                          ObDirectLoadSliceWriter &slice_writer,
-                                          int64_t &affected_rows)
-  { return OB_NOT_SUPPORTED; };
   virtual int close() { return OB_NOT_SUPPORTED; }
 
 public:
@@ -181,7 +169,6 @@ public:
   inline  ObITable::TableKey get_table_key() const { return table_key_; }
   inline uint64_t get_tenant_data_version() const { return tenant_data_version_; }
   inline ObDirectLoadType get_direct_load_type() const { return direct_load_type_; }
-  inline share::ObLSID get_ls_id() const { return ls_id_;}
   inline ObTabletID get_tablet_id() const { return tablet_id_; }
   /* some getter method for compat
    * which should be remove
@@ -198,7 +185,6 @@ public:
 
 protected:
   /* basic info */
-  share::ObLSID ls_id_;
   ObTabletID tablet_id_;
   ObITable::TableKey table_key_;
   uint64_t tenant_data_version_;

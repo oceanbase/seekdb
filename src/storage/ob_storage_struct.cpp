@@ -407,7 +407,6 @@ ObUpdateTableStoreParam::ObUpdateTableStoreParam()
       snapshot_version_(ObVersionRange::MIN_VERSION),
       multi_version_start_(ObVersionRange::MIN_VERSION),
       storage_schema_(NULL),
-      rebuild_seq_(-1),
       sstable_(NULL),
       allow_duplicate_sstable_(false),
       upper_trans_param_()
@@ -418,7 +417,6 @@ ObUpdateTableStoreParam::ObUpdateTableStoreParam(
     const int64_t snapshot_version,
     const int64_t multi_version_start,
     const ObStorageSchema *storage_schema,
-    const int64_t rebuild_seq,
     const UpdateUpperTransParam upper_trans_param)
   : compaction_info_(),
     ddl_info_(),
@@ -426,7 +424,6 @@ ObUpdateTableStoreParam::ObUpdateTableStoreParam(
     snapshot_version_(snapshot_version),
     multi_version_start_(multi_version_start),
     storage_schema_(storage_schema),
-    rebuild_seq_(rebuild_seq),
     sstable_(NULL),
     allow_duplicate_sstable_(false),
     upper_trans_param_(upper_trans_param)
@@ -437,7 +434,6 @@ ObUpdateTableStoreParam::ObUpdateTableStoreParam(
     const int64_t snapshot_version,
     const int64_t multi_version_start,
     const ObStorageSchema *storage_schema,
-    const int64_t rebuild_seq,
     const blocksstable::ObSSTable *sstable,
     const bool allow_duplicate_sstable,
     const bool need_wait_check_flag)
@@ -447,7 +443,6 @@ ObUpdateTableStoreParam::ObUpdateTableStoreParam(
       snapshot_version_(snapshot_version),
       multi_version_start_(multi_version_start),
       storage_schema_(storage_schema),
-      rebuild_seq_(rebuild_seq),
       sstable_(sstable),
       allow_duplicate_sstable_(allow_duplicate_sstable),
       upper_trans_param_()
@@ -461,7 +456,6 @@ bool ObUpdateTableStoreParam::is_valid() const
       && snapshot_version_ >= ObVersionRange::MIN_VERSION
       && nullptr != storage_schema_
       && storage_schema_->is_valid()
-      && rebuild_seq_ >= 0
       && compaction_info_.is_valid_with_sstable(NULL != sstable_/*have_sstable*/)
       && ha_info_.is_valid();
   return bret;
@@ -506,13 +500,8 @@ ObBatchUpdateTableStoreParam::ObBatchUpdateTableStoreParam()
 #ifdef ERRSIM
     errsim_point_info_(),
 #endif
-    rebuild_seq_(OB_INVALID_VERSION),
-    start_scn_(SCN::min_scn()),
-    tablet_meta_(nullptr),
-    restore_status_(ObTabletRestoreStatus::FULL),
-    tablet_split_param_(),
+    storage_schema_(nullptr),
     tablet_fork_param_(),
-    need_replace_remote_sstable_(false),
     release_mds_scn_()
 {
 }
@@ -520,52 +509,18 @@ ObBatchUpdateTableStoreParam::ObBatchUpdateTableStoreParam()
 void ObBatchUpdateTableStoreParam::reset()
 {
   tables_handle_.reset();
-  rebuild_seq_ = OB_INVALID_VERSION;
-  start_scn_.set_min();
-  tablet_meta_ = nullptr;
-  restore_status_ = ObTabletRestoreStatus::FULL;
-  tablet_split_param_.reset();
+  storage_schema_ = nullptr;
   tablet_fork_param_.reset();
-  need_replace_remote_sstable_ = false;
   release_mds_scn_.reset();
 }
 
 bool ObBatchUpdateTableStoreParam::is_valid() const
 {
-  return rebuild_seq_ > OB_INVALID_VERSION
-      && ObTabletRestoreStatus::is_valid(restore_status_)
-      && release_mds_scn_.is_valid();
+  return release_mds_scn_.is_valid()
+      && tablet_fork_param_.is_valid();
 }
 
 
-
-ObSplitTableStoreParam::ObSplitTableStoreParam()
-  : snapshot_version_(-1),
-    multi_version_start_(-1),
-    merge_type_(INVALID_MERGE_TYPE),
-    skip_split_keys_()
-{
-}
-
-ObSplitTableStoreParam::~ObSplitTableStoreParam()
-{
-  reset();
-}
-
-bool ObSplitTableStoreParam::is_valid() const
-{
-  return snapshot_version_ > -1
-    && multi_version_start_ >= 0
-    && is_valid_merge_type(merge_type_);
-}
-
-void ObSplitTableStoreParam::reset()
-{
-  snapshot_version_ = -1;
-  multi_version_start_ = -1;
-  merge_type_ = INVALID_MERGE_TYPE;
-  skip_split_keys_.reset();
-}
 
 ObForkTableStoreParam::ObForkTableStoreParam()
   : snapshot_version_(-1),
@@ -614,44 +569,6 @@ ObPartitionReadableInfo::~ObPartitionReadableInfo()
 }
 
 
-
-
-ObTabletSplitTscInfo::ObTabletSplitTscInfo()
-  : start_partkey_(),
-    end_partkey_(),
-    is_split_dst_(),
-    split_cnt_(0),
-    split_type_(ObTabletSplitType::MAX_TYPE),
-    partkey_is_rowkey_prefix_(false)
-{
-}
-
-bool ObTabletSplitTscInfo::is_split_dst_with_partkey() const
-{
-  return start_partkey_.is_valid() 
-      && end_partkey_.is_valid()
-      && is_split_dst_
-      && split_type_ < ObTabletSplitType::MAX_TYPE;
-}
-
-// e.g., lob split dst tablet
-bool ObTabletSplitTscInfo::is_split_dst_without_partkey() const
-{
-  return !start_partkey_.is_valid()
-      && !end_partkey_.is_valid()
-      && is_split_dst_
-      && split_type_ < ObTabletSplitType::MAX_TYPE;
-}
-
-void ObTabletSplitTscInfo::reset()
-{
-  start_partkey_.reset();
-  end_partkey_.reset();
-  is_split_dst_ = false;
-  split_type_ = ObTabletSplitType::MAX_TYPE;
-  split_cnt_ = 0;
-  partkey_is_rowkey_prefix_ = false;
-}
 
 
 ObRebuildListener::ObRebuildListener(transaction::ObLSTxCtxMgr &mgr)

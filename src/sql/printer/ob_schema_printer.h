@@ -131,14 +131,6 @@ public:
                            bool agent_mode,
                            ObSQLMode sql_mode) const;
 
-  int print_materialized_view_definition(const uint64_t table_id,
-                                         char *buf,
-                                         const int64_t &buf_len,
-                                         int64_t &pos,
-                                         const ObTimeZoneInfo *tz_info,
-                                         bool agent_mode,
-                                         ObSQLMode sql_mode) const;
-                                         
   int print_database_definiton(const uint64_t database_id,
                                bool if_not_exists,
                                char *buf,
@@ -468,10 +460,6 @@ public:
                                        char* buf,
                                        const int64_t& buf_len,
                                        int64_t& pos) const;
-  int print_dynamic_partition_policy(const ObTableSchema &table_schema,
-                                     char* buf,
-                                     const int64_t& buf_len,
-                                     int64_t& pos) const;
   void set_sql_schema_guard(sql::ObSqlSchemaGuard *sql_schema_guard);
   int print_location_definiton(const uint64_t location_id,
                                char *buf,

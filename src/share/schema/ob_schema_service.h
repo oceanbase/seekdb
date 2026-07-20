@@ -96,8 +96,6 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_RENAME_INDEX,)                                      \
   ACT(OB_DDL_DROP_INDEX_TO_RECYCLEBIN,)                          \
   ACT(OB_DDL_RECOVER_INDEX_FROM_RECYCLEBIN,)                     \
-  ACT(OB_DDL_PARTITIONED_TABLE, = 35)                            \
-  ACT(OB_DDL_FINISH_SPLIT,)                                      \
   ACT(OB_DDL_ADD_CONSTRAINT,)                                    \
   ACT(OB_DDL_DROP_CONSTRAINT,)                                   \
   ACT(OB_DDL_TRUNCATE_PARTITION, = 39)                           \
@@ -106,8 +104,6 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_RENAME_GLOBAL_INDEX,)                               \
   ACT(OB_DDL_DROP_GLOBAL_INDEX,)                                 \
   ACT(OB_DDL_MODIFY_GLOBAL_INDEX_STATUS,)                        \
-  ACT(OB_DDL_FINISH_LOGICAL_SPLIT, = 45)                         \
-  ACT(OB_DDL_SPLIT_PARTITION, = 46)                              \
   ACT(OB_DDL_STANDBY_REPLAY_CREATE_TABLE, = 47)                  \
   ACT(OB_DDL_DELAY_DELETE_TABLE, = 48)                           \
   ACT(OB_DDL_DELAY_DELETE_TABLE_PARTITION, = 49)                 \
@@ -123,14 +119,11 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_TRUNCATE_TABLE, = 59)                               \
   ACT(OB_DDL_RENAME_PARTITION, = 60)                             \
   ACT(OB_DDL_RENAME_SUB_PARTITION, = 61)                         \
-  ACT(OB_DDL_MODIFY_MATERIALIZED_VIEW_STATUS, = 62)              \
   ACT(OB_DDL_EXCHANGE_PARTITION, = 65)                           \
-  ACT(OB_DDL_MODIFY_MVIEW_REFERENCE_TABLE_STATUS, = 66)          \
   ACT(OB_DDL_MODIFY_INDEX_TYPE, = 67)                            \
   ACT(OB_DDL_RECOVER_TABLE_END, = 68)                            \
   ACT(OB_DDL_ALTER_PARTITION_POLICY, = 69)                       \
   ACT(OB_DDL_ALTER_SUBPARTITION_POLICY, = 70)                    \
-  ACT(OB_DDL_MODIFY_MLOG_STATUS, = 71)                           \
   ACT(OB_DDL_TABLE_OPERATION_END, = 100)                         \
   ACT(OB_DDL_TENANT_OPERATION_BEGIN, = 101)                      \
   ACT(OB_DDL_ADD_TENANT,)                                        \
@@ -158,10 +151,6 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_RENAME_TABLEGROUP,)                                 \
   ACT(OB_DDL_ALTER_TABLEGROUP,)                                  \
   ACT(OB_DDL_ALTER_TABLEGROUP_PARTITION,)                        \
-  ACT(OB_DDL_FINISH_SPLIT_TABLEGROUP,)                           \
-  ACT(OB_DDL_FINISH_LOGICAL_SPLIT_TABLEGROUP, = 308)             \
-  ACT(OB_DDL_SPLIT_TABLEGROUP_PARTITION, = 309)                  \
-  ACT(OB_DDL_PARTITIONED_TABLEGROUP_TABLE, = 310)                \
   ACT(OB_DDL_DELAY_DELETE_TABLEGROUP, = 311)                     \
   ACT(OB_DDL_DELAY_DELETE_TABLEGROUP_PARTITION, = 312)           \
   ACT(OB_DDL_TABLEGROUP_OPERATION_END, = 400)                    \
@@ -199,12 +188,6 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_DROP_SYNONYM,)                                      \
   ACT(OB_DDL_REPLACE_SYNONYM,)                                   \
   ACT(OB_DDL_SYNONYM_OPERATION_END, = 1000)                      \
-  ACT(OB_DDL_PLAN_BASELINE_OPERATION_BEGIN, = 1001)              \
-  ACT(OB_DDL_CREATE_PLAN_BASELINE,)                              \
-  ACT(OB_DDL_REPLACE_PLAN_BASELINE,)                             \
-  ACT(OB_DDL_DROP_PLAN_BASELINE,)                                \
-  ACT(OB_DDL_ALTER_PLAN_BASELINE,)                               \
-  ACT(OB_DDL_PLAN_BASELINE_OPERATION_END, = 1100)                \
   ACT(OB_DDL_ROUTINE_OPERATION_BEGIN, = 1201)                    \
   ACT(OB_DDL_CREATE_ROUTINE,)                                    \
   ACT(OB_DDL_DROP_ROUTINE,)                                      \
@@ -570,9 +553,6 @@ public:
       origin_tablegroup_id_(common::OB_INVALID_ID),
       alter_option_bitset_(),
       sql_mode_(SMO_DEFAULT),
-      split_partition_name_(),
-      split_high_bound_val_(),
-      split_list_row_values_(),
       new_part_name_()
   {
   }
@@ -585,9 +565,6 @@ public:
       origin_tablegroup_id_(common::OB_INVALID_ID),
       alter_option_bitset_(),
       sql_mode_(SMO_DEFAULT),
-      split_partition_name_(),
-      split_high_bound_val_(),
-      split_list_row_values_(),
       new_part_name_()
   {
   }
@@ -601,13 +578,6 @@ public:
   inline void set_origin_tablegroup_id(const uint64_t origin_tablegroup_id);
   inline void set_sql_mode(ObSQLMode sql_mode) { sql_mode_ = sql_mode; }
   inline ObSQLMode get_sql_mode() const { return sql_mode_; }
-  inline int set_split_partition_name(const common::ObString &partition_name);
-  inline const common::ObString &get_split_partition_name() const { return split_partition_name_; }
-  inline int set_split_high_bound_value(const common::ObRowkey &high_value);
-  inline const common::ObRowkey &get_split_high_bound_value() const { return split_high_bound_val_; }
-  inline const common::ObRowkey& get_split_list_row_values() const {
-    return split_list_row_values_;
-  }
   inline const common::ObString &get_new_part_name() const { return new_part_name_; }
   inline int set_new_part_name(const common::ObString &new_part_name);
   int assign_subpartition_key_info(const common::ObPartitionKeyInfo& src_info);
@@ -623,13 +593,6 @@ public:
   uint64_t origin_tablegroup_id_;
   common::ObBitSet<> alter_option_bitset_;
   ObSQLMode sql_mode_;
-  // Record the split source partition_name;
-  // If it is a sub-table operation, partition_name is empty;
-  // if it is a hash partition repartition, partition_name is empty;
-  common::ObString split_partition_name_;
-  // for tablegroup
-  common::ObRowkey split_high_bound_val_;
-  common::ObRowkey split_list_row_values_;
   common::ObString new_part_name_;
   int assign(const ObTableSchema &src_schema);
   //virtual int add_partition(const ObPartition &part);
@@ -640,11 +603,6 @@ public:
 
   DECLARE_VIRTUAL_TO_STRING;
 };
-
-int AlterTableSchema::set_split_partition_name(const common::ObString &partition_name)
-{
-  return deep_copy_str(partition_name, split_partition_name_);
-}
 
 int AlterTableSchema::set_new_part_name(const common::ObString &new_part_name)
 {
@@ -671,11 +629,6 @@ void AlterTableSchema::set_origin_tablegroup_id(const uint64_t origin_tablegroup
   origin_tablegroup_id_ = origin_tablegroup_id;
 }
 
-int AlterTableSchema::set_split_high_bound_value(const common::ObRowkey &high_value)
-{
-  return high_value.deep_copy(split_high_bound_val_, *get_allocator());
-}
-
 // new cache
 struct SchemaKey;
 class ObSimpleTenantSchema;
@@ -685,7 +638,6 @@ class ObSimpleTablegroupSchema;
 class ObSimpleTableSchemaV2;
 class ObSimpleOutlineSchema;
 class ObSimpleRoutineSchema;
-class ObSimplePlanBaselineSchema;
 class ObSimplePackageSchema;
 class ObSimpleTriggerSchema;
 class ObSimpleUDFSchema;
@@ -722,8 +674,6 @@ class ObAiModelSqlService;
 class ObSchemaService
 {
 public:
-  //default false, only use for liboblog to control compatable
-  static bool g_ignore_column_retrieve_error_;
   typedef common::ObSEArrayImpl<ObSchemaOperation, 0>  ObSchemaOperationSet;
   class SchemaOperationSetWithAlloc: public ObSchemaOperationSet
   {
@@ -1090,7 +1040,7 @@ public:
     return common::OB_SUCCESS;
   }
 
-  // for liboblog used
+  // Find the latest DDL transaction boundary at or before a timestamp.
   virtual int get_schema_version_by_timestamp(
       common::ObISQLClient &sql_client,
       const ObRefreshSchemaStatus &schema_status,
@@ -1160,7 +1110,6 @@ public:
               const uint64_t database_id,
               const ObString &package_name,
               const ObPackageType package_type,
-              const int64_t compatible_mode,
               uint64_t &package_id) = 0;
 
   virtual int get_routine_id(

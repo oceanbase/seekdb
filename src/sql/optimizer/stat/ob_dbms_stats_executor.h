@@ -144,8 +144,7 @@ public:
                                 ObTableStatParam &param,
                                 share::schema::ObSchemaGetterGuard *schema_guard,
                                 const TabStatIndMap &online_table_stats,
-                                const ColStatIndMap &online_column_stats,
-                                const ObIArray<ObOptDmlStat *> *dml_stats = nullptr /*for_direct_load*/);
+                                const ColStatIndMap &online_column_stats);
 
   static int cancel_gather_stats(ObExecContext &ctx, ObString &task_id);
 

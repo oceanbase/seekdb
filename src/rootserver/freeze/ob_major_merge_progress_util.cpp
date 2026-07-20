@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX RS_COMPACTION
 #include "rootserver/freeze/ob_major_merge_progress_util.h"
+#include "src/share/ob_tablet_replica_checksum_operator.h"
 
 namespace oceanbase
 {
@@ -125,30 +126,30 @@ void ObUncompactInfo::add_skip_verify_table(const uint64_t table_id)
   }
 }
 
-void ObUncompactInfo::add_tablet(const share::ObTabletRuntimeInfo &tablet_info)
+void ObUncompactInfo::add_tablet(const share::ObTabletReplica &replica)
 {
   int ret = OB_SUCCESS;
   SpinWLockGuard w_guard(diagnose_rw_lock_);
   if (tablets_.count() < DEBUG_INFO_CNT
-      && OB_FAIL(tablets_.push_back(tablet_info))) {
-    LOG_WARN("fail to push_back", KR(ret), K(tablet_info));
+      && OB_FAIL(tablets_.push_back(replica))) {
+    LOG_WARN("fail to push_back", KR(ret), K(replica));
   }
 }
 
 void ObUncompactInfo::add_tablet(const common::ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
-  ObTabletRuntimeInfo fake_tablet_info;
-  fake_tablet_info.fake_for_diagnose(tablet_id);
+  ObTabletReplica fake_replica;
+  fake_replica.fake_for_diagnose(tablet_id);
   SpinWLockGuard w_guard(diagnose_rw_lock_);
   if (tablets_.count() < DEBUG_INFO_CNT
-      && OB_FAIL(tablets_.push_back(fake_tablet_info))) {
-    LOG_WARN("fail to push_back", KR(ret), K(fake_tablet_info));
+      && OB_FAIL(tablets_.push_back(fake_replica))) {
+    LOG_WARN("fail to push_back", KR(ret), K(fake_replica));
   }
 }
 
 int ObUncompactInfo::get_uncompact_info(
-    ObIArray<ObTabletRuntimeInfo> &input_tablets,
+    ObIArray<ObTabletReplica> &input_tablets,
     ObIArray<uint64_t> &input_table_ids) const
 {
   int ret = OB_SUCCESS;

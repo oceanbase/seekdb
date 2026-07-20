@@ -226,7 +226,7 @@ protected:
   storage::ObRowBitmap *filter_bitmap_;
 };
 
-// tablet split ddl task scan bared row without multi-merge.
+// Scan bare rows without multi-version merging.
 class ObMicroBlockRowDirectScanner final : public ObIMicroBlockRowScanner
 {
 public:

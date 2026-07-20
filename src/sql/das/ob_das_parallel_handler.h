@@ -15,7 +15,6 @@
  */
 #ifndef OBDEV_SRC_SQL_DAS_OB_DAS_PARALLEL_HANDLER_H_
 #define OBDEV_SRC_SQL_DAS_OB_DAS_PARALLEL_HANDLER_H_
-#include "rpc/frame/ob_req_processor.h"
 #include "observer/ob_srv_task.h"
 #include "sql/engine/dml/ob_dml_ctx_define.h"
 namespace oceanbase

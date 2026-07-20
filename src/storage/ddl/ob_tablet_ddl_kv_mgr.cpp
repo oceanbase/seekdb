@@ -19,7 +19,7 @@
 #include "ob_tablet_ddl_kv_mgr.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
-#include "storage/ddl/ob_direct_insert_sstable_ctx.h"
+#include "storage/ddl/ob_direct_insert_sstable_ctx_new.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/blocksstable/ob_macro_block_common_header.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
@@ -123,15 +123,15 @@ int ObTabletDDLKvMgr::get_rec_scn(SCN &rec_scn)
   ObTabletHandle tablet_handle;
   ObTabletFullDirectLoadMgr *tablet_mgr = nullptr;
   ObTabletDirectLoadMgrHandle direct_load_mgr_hdl;
-  ObDirectLoadMgr *direct_load_mgr = share::g_mp->direct_load_mgr();
+  ObTenantDirectLoadMgr *tenant_direct_load_mgr = share::g_mp->tenant_direct_load_mgr();
   bool is_major_sstable_exist = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(is_inited_));
-  } else if (OB_ISNULL(direct_load_mgr)) {
+  } else if (OB_ISNULL(tenant_direct_load_mgr)) {
     ret = OB_ERR_SYS;
     LOG_WARN("error sys", K(ret));
-  } else if (OB_FAIL(direct_load_mgr->get_tablet_mgr_and_check_major(
+  } else if (OB_FAIL(tenant_direct_load_mgr->get_tablet_mgr_and_check_major(
           tablet_id_,
           true/* is_full_direct_load */,
           direct_load_mgr_hdl,
@@ -377,7 +377,7 @@ int ObTabletDDLKvMgr::get_active_ddl_kv_impl(ObDDLKVHandle &kv_handle)
   return ret;
 }
 
-int ObTabletDDLKvMgr::get_or_create_local_ddl_kv(
+int ObTabletDDLKvMgr::get_or_create_shared_nothing_ddl_kv(
     const share::SCN &macro_redo_scn,
     const share::SCN &macro_redo_start_scn,
     ObTabletDirectLoadMgrHandle &direct_load_mgr_handle, 
@@ -424,7 +424,7 @@ int ObTabletDDLKvMgr::get_or_create_local_ddl_kv(
         // do nothing
       } else if (OB_FAIL(alloc_ddl_kv(direct_load_mgr_handle.get_obj()->get_start_scn(), 
         direct_load_mgr_handle.get_obj()->get_table_key().get_snapshot_version(),
-        direct_load_mgr_handle.get_obj()->get_data_format_version(),
+        direct_load_mgr_handle.get_obj()->get_tenant_data_version(),
         kv_handle,
         ObDDLKVType::DDL_KV_FULL))) {
         LOG_WARN("create ddl kv failed", K(ret), KPC(direct_load_mgr_handle.get_obj()));
@@ -706,7 +706,7 @@ int ObTabletDDLKvMgr::try_flush_ddl_commit_scn(
       // the min deciding(replay or apply) scn (aka left border) is max_decided_scn + 1
       if (OB_FAIL(freeze_ddl_kv(direct_load_mgr->get_start_scn(),
               direct_load_mgr->get_table_key().get_snapshot_version(),
-              direct_load_mgr->get_data_format_version(),
+              direct_load_mgr->get_tenant_data_version(),
               commit_scn))) {
         LOG_WARN("freeze ddl kv failed", K(ret));
       }
@@ -761,7 +761,7 @@ int ObTabletDDLKvMgr::alloc_ddl_kv(
 {
   int ret = OB_SUCCESS;
   kv_handle.reset();
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   ObDDLKVHandle tmp_kv_handle;
   ObDDLKV *kv = nullptr;
   ObDDLMemtable *ddl_memtable = nullptr;
@@ -917,9 +917,14 @@ bool ObDDLMacroIdemChecker::is_inited()
   return checksum_map_.created();
 }
 
-bool ObDDLMacroIdemChecker::need_check_block_checksum(const ObDirectLoadType direct_load_type)
+/* 
+ * only idem type need check idempotence
+ * but if it's empty block type,skip it
+*/
+bool ObDDLMacroIdemChecker::need_check_block_checksum(const ObDDLMacroBlockType block_type, const ObDirectLoadType direct_load_type)
 {
-  return is_idem_type(direct_load_type);
+  return is_idem_type(direct_load_type) && 
+         ObDDLMacroBlockType::DDL_MB_SS_EMPTY_DATA_TYPE != block_type;
 }
 
 int ObDDLMacroIdemChecker::calc_block_checksum(const ObDDLMacroBlockType block_type, 
@@ -930,7 +935,7 @@ int ObDDLMacroIdemChecker::calc_block_checksum(const ObDDLMacroBlockType block_t
 {
   int ret = OB_SUCCESS;
   checksum = 0;
-  if (!ObDDLMacroIdemChecker::need_check_block_checksum(direct_load_type)) {
+  if (!ObDDLMacroIdemChecker::need_check_block_checksum(block_type, direct_load_type)) {
     checksum = 0;
   } else {
     if (nullptr == buf || buf_size <= 0) {
@@ -962,7 +967,7 @@ int ObDDLMacroIdemChecker::check_block_exist(const ObDDLMacroBlockType block_typ
   int ret = OB_SUCCESS;
   ObDDLIdemKey key;
   is_marco_block_already_exist = false;
-  if (!ObDDLMacroIdemChecker::need_check_block_checksum(direct_load_type)) {
+  if (!ObDDLMacroIdemChecker::need_check_block_checksum(block_type, direct_load_type)) {
     /* skip */
   } else if (OB_FAIL(key.init(block_id, logic_id, table_type))) {
     LOG_WARN("failed to init key value", K(ret), K(block_id), K(logic_id), K(table_type));
@@ -1000,7 +1005,7 @@ int ObDDLMacroIdemChecker::set_block_checksum(const ObDDLMacroBlockType block_ty
   ObDDLIdemKey key;
   bool is_block_exist = false;
   /* check block exist */
-  if (!ObDDLMacroIdemChecker::need_check_block_checksum(direct_load_type)) {
+  if (!ObDDLMacroIdemChecker::need_check_block_checksum(block_type, direct_load_type)) {
     /* skip */
   } else if (OB_FAIL(check_block_exist(block_type, direct_load_type, block_id, logic_id, checksum, table_type, is_block_exist))) {
     LOG_WARN("failed to check block exist", K(ret), K(block_id), K(logic_id), K(checksum), K(table_type));

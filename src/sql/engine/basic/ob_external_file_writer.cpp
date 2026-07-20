@@ -28,10 +28,30 @@ namespace sql
 int ObExternalFileWriter::open_file()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(file_appender_.create(url_, true))) {
-    LOG_WARN("failed to create file", K(ret), K(url_));
-  } else {
-    is_file_opened_ = true;
+  if (IntoFileLocation::SERVER_DISK != file_location_) {//OSS,COS
+    bool is_exist = false;
+    ObBackupIoAdapter adapter;
+    ObStorageAccessType access_type = OB_STORAGE_ACCESS_APPENDER;
+    // OSS,COS can use multipart writer. need to check performance
+    if (IntoFileLocation::REMOTE_COS == file_location_) {
+      access_type = OB_STORAGE_ACCESS_BUFFERED_MULTIPART_WRITER;
+    }
+    if (OB_FAIL(adapter.is_exist(url_, &access_info_, is_exist))) {
+      LOG_WARN("fail to check file exist", KR(ret), K(url_), K(access_info_));
+    } else if (is_exist) {
+      ret = OB_FILE_ALREADY_EXIST;
+      LOG_WARN("file already exist", KR(ret), K(url_), K(access_info_));
+    } else if (OB_FAIL(storage_appender_.open(&access_info_, url_, access_type))) {
+      LOG_WARN("fail to open file", KR(ret), K(url_), K(access_info_));
+    } else {
+      is_file_opened_ = true;
+    }
+  } else {//SERVER DISK
+    if (OB_FAIL(file_appender_.create(url_, true))) {
+      LOG_WARN("failed to create file", K(ret), K(url_));
+    } else {
+      is_file_opened_ = true;
+    }
   }
   return ret;
 }
@@ -39,10 +59,14 @@ int ObExternalFileWriter::open_file()
 int ObExternalFileWriter::close_file()
 {
   int ret = OB_SUCCESS;
-  if (file_appender_.is_opened() && OB_FAIL(file_appender_.fsync())) {
-    LOG_WARN("failed to do fsync", K(ret));
-  } else {
-    file_appender_.close();
+  if (IntoFileLocation::SERVER_DISK == file_location_) {
+    if (file_appender_.is_opened() && OB_FAIL(file_appender_.fsync())) {
+      LOG_WARN("failed to do fsync", K(ret));
+    } else {
+      file_appender_.close();
+    }
+  } else if (OB_FAIL(storage_appender_.close())) {
+    LOG_WARN("fail to close storage appender", K(ret), K(url_), K(access_info_));
   }
   if (OB_SUCC(ret)) {
     is_file_opened_ = false;
@@ -86,6 +110,8 @@ int ObCsvFileWriter::init_compress_writer(ObIAllocator &allocator,
   }
   if (OB_SUCC(ret)
       && OB_FAIL(compress_stream_writer_->init(&file_appender_,
+                                               &storage_appender_,
+                                               file_location_,
                                                compression_algorithm,
                                                allocator,
                                                buffer_size))) {
@@ -163,8 +189,27 @@ int ObCsvFileWriter::flush_to_storage(const char *data, int64_t data_len)
   if (data == NULL || data_len == 0) {
   } else if (!is_file_opened_ && OB_FAIL(open_file())) {
     LOG_WARN("failed to open file", K(ret), K(url_));
-  } else if (OB_FAIL(file_appender_.append(data, data_len, false))) {
-    LOG_WARN("failed to append file", K(ret), K(data_len));
+  } else {
+    if (file_location_ == IntoFileLocation::SERVER_DISK) {
+      if (OB_FAIL(file_appender_.append(data, data_len, false))) {
+        LOG_WARN("failed to append file", K(ret), K(data_len));
+      }
+    } else {
+      int64_t write_size = 0;
+      int64_t begin_ts = ObTimeUtility::current_time();
+      if (OB_FAIL(storage_appender_.append(data, data_len, write_size))) {
+        LOG_WARN("fail to append data", KR(ret), KP(data), K(data_len), K(url_), K(access_info_));
+      } else {
+        write_offset_ += write_size;
+        int64_t end_ts = ObTimeUtility::current_time();
+        int64_t cost_time = end_ts - begin_ts;
+        long double speed = (cost_time <= 0) ? 0 :
+                        (long double) write_size * 1000.0 * 1000.0 / 1024.0 / 1024.0 / cost_time;
+        long double total_write = (long double) write_offset_ / 1024.0 / 1024.0;
+        _OB_LOG(TRACE, "write oss stat, time:%ld write_size:%ld speed:%.2Lf MB/s total_write:%.2Lf MB",
+                cost_time, write_size, speed, total_write);
+      }
+    }
   }
   return ret;
 }
@@ -206,8 +251,8 @@ int64_t ObCsvFileWriter::get_curr_bytes_exclude_curr_line()
     } else {
       // If export to compressed file, curr_bytes is estimated.
       // The compression algorithm has internal buffer,
-      // so the size of the internal buffer needs to be taken into account
-      // when enforcing the configured file size limit.
+      // so in order to avoid the estimated compressed bytes exceeding MAX_OSS_FILE_SIZE,
+      // the size of the internal buffer needs to be taken into account.
       // zstd: 128 KB, gzip: 64KB. use the maximum buffer size here.
       const int64_t COMPRESSION_INTERNAL_BUFFER_SIZE = 128 * 1024; // 128KB
       curr_bytes_exclude_curr_line = get_compress_stream_writer()->get_write_bytes();

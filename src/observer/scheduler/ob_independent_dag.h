@@ -17,7 +17,7 @@
 #ifndef SRC_SHARE_SCHEDULER_OB_INDEPENDENT_DAG_H_
 #define SRC_SHARE_SCHEDULER_OB_INDEPENDENT_DAG_H_
 
-#include "observer/scheduler/ob_dag_scheduler.h"
+#include "observer/scheduler/ob_tenant_dag_scheduler.h"
 
 namespace oceanbase
 {
@@ -35,6 +35,7 @@ public:
   virtual uint64_t hash() const override;
   virtual int fill_info_param(compaction::ObIBasicInfoParam *&out_param, ObIAllocator &allocator) const override;
   virtual int fill_dag_key(char *buf, const int64_t buf_len) const override;
+  virtual bool is_ha_dag() const override { return false; }
 public:
   virtual int basic_init(ObIAllocator &allocator) final;
   virtual int add_task(ObITask &task) final;
@@ -114,7 +115,7 @@ int ObDagExecutor::init(
   } else if (OB_ISNULL(allocator) || OB_ISNULL(param)) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid args", K(ret), KP(allocator), KP(param));
-  } else if (OB_FAIL(ObDagScheduler::alloc_dag(*allocator, false/*use_reserved_allocator*/, new_dag))) {
+  } else if (OB_FAIL(ObTenantDagScheduler::alloc_dag(*allocator, false/*is_ha_dag*/, new_dag))) {
     COMMON_LOG(WARN, "failed to alloc dag", K(ret));
   } else if (FALSE_IT(dag_ = static_cast<T *>(new_dag))) {
   } else if (OB_FAIL(dag_->init(param, dag_id))) {

@@ -55,20 +55,16 @@ struct LogIOWorkerConfig
   }
   bool is_valid() const
   {
-    return 0 < io_worker_num_ && 0 < io_queue_capcity_ && 0 <= batch_width_ && 0 <= batch_depth_;
+    return 0 < io_queue_capcity_ && 0 < batch_depth_;
   }
   void reset()
   {
-    io_worker_num_ = 0;
     io_queue_capcity_ = 0;
-    batch_width_ = 0;
     batch_depth_ = 0;
   }
-  int64_t io_worker_num_;
   int64_t io_queue_capcity_;
-  int64_t batch_width_;
   int64_t batch_depth_;
-  TO_STRING_KV(K_(io_worker_num), K_(io_queue_capcity), K_(batch_width), K_(batch_depth));
+  TO_STRING_KV(K_(io_queue_capcity), K_(batch_depth));
 };
 
 class LogIOWorker : public share::ObThreadPool
@@ -90,7 +86,7 @@ public:
 
  int notify_need_writing_throttling(const bool &need_throtting);
   static constexpr int64_t MAX_THREAD_NUM = 1;
-  TO_STRING_KV(K_(log_io_worker_num), KP_(cb_thread_pool), K_(purge_throttling_task_handled_seq), K_(purge_throttling_task_submitted_seq));
+  TO_STRING_KV(KP_(cb_thread_pool), K_(purge_throttling_task_handled_seq), K_(purge_throttling_task_submitted_seq));
 private:
   bool need_reduce_(LogIOTask *task);
   int reduce_io_task_(ObLink *task);
@@ -109,21 +105,15 @@ private:
   public:
     BatchLogIOFlushLogTaskMgr();
     ~BatchLogIOFlushLogTaskMgr();
-    int init(int64_t batch_width, int64_t batch_depth, ObIAllocator *allocator, ObMiniStat::ObStatItem *wait_cost_stat);
+    int init(int64_t batch_depth, ObIAllocator *allocator, ObMiniStat::ObStatItem *wait_cost_stat);
     void destroy();
     int insert(LogIOFlushLogTask *io_task);
     int handle(LogIOTaskCbThreadPool *cb_thread_pool, IPalfEnvImpl *palf_env_impl);
     bool empty();
-    TO_STRING_KV(K_(batch_io_task_array), K_(usable_count), K_(batch_width));
+    TO_STRING_KV(K_(batch_io_task));
   private:
-    int find_usable_batch_io_task_(const int64_t palf_id, BatchLogIOFlushLogTask *&batch_io_task);
-    int statistics_wait_cost_(int64_t first_handle_time, BatchLogIOFlushLogTask *batch_io_task);
-  private:
-    typedef ObFixedArray<BatchLogIOFlushLogTask *, common::ObIAllocator> BatchLogIOFlushLogTaskArray;
-    BatchLogIOFlushLogTaskArray batch_io_task_array_;
+    BatchLogIOFlushLogTask batch_io_task_;
     int64_t handle_count_;
-    int64_t usable_count_;
-    int64_t batch_width_;
     ObMiniStat::ObStatItem *wait_cost_stat_;
   };
   typedef common::ObSpinLock SpinLock;
@@ -133,8 +123,6 @@ private:
   //       will consume it, at nowdays, the io_task_queue is single consumer and mutil
   //       producers model.
 
-  // NB: at nowdays, the default 'log_io_worker_num_' is 1.
-  int64_t log_io_worker_num_;
   LogIOTaskCbThreadPool *cb_thread_pool_;
   IPalfEnvImpl *palf_env_impl_;
   ObTLinkQueue16 queue_;

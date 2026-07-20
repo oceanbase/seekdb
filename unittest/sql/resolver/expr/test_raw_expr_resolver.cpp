@@ -16,7 +16,7 @@
 
 #include "sql/test_sql_utils.h"
 #include "sql/ob_sql_init.h"
-#include "share/config/ob_runtime_config.h"
+#include "share/config/ob_tenant_config_mgr.h"
 #include "share/config/ob_server_config.h"
 #define private public
 #include "observer/ob_server.h"
@@ -54,6 +54,7 @@ TestRawExprResolver::~TestRawExprResolver()
 
 void TestRawExprResolver::SetUp()
 {
+  oceanbase::common::ObClusterVersion::get_instance().update_data_version(DATA_VERSION_1_0_0_0);
 }
 
 void TestRawExprResolver::TearDown()
@@ -82,13 +83,14 @@ void TestRawExprResolver::resolve(const char* expr, const char *&json_expr)
   LinkExecCtxGuard link_guard(session, exec_ctx_);
   // disable decimal_int to make json parser happy
   GCONF._enable_decimal_int_type = false;
-  session.cached_runtime_config_info_.enable_decimal_int_type_ = false;
+  session.cached_tenant_config_info_.enable_decimal_int_type_ = false;
 
   EXPECT_TRUE(OB_SUCCESS == oceanbase::ObPreProcessSysVars::init_sys_var());
   EXPECT_TRUE(OB_SUCCESS == session.test_init(0, 0, NULL));
   EXPECT_TRUE(OB_SUCCESS == session.load_default_sys_variable(false, true));
 
   ObRawExpr *raw_expr = NULL;
+  OBSERVER.init_version();
   OK(ObRawExprUtils::make_raw_expr_from_str(expr_str, strlen(expr_str), ctx, raw_expr, columns,
                                             sys_vars, &sub_query_info, aggr_exprs , win_exprs, udf_info));
   _OB_LOG(DEBUG, "================================================================");

@@ -150,7 +150,6 @@ int ObRemoteTaskExecutor::build_task(ObExecContext &query_ctx,
    */
   ObOpSpec *root_spec = NULL;
   const ObPhysicalPlan *phy_plan = NULL;
-  share::ObLSArray ls_list;
   
   if (OB_ISNULL(root_spec = job.get_root_spec())) {
     ret = OB_NOT_INIT;
@@ -160,11 +159,8 @@ int ObRemoteTaskExecutor::build_task(ObExecContext &query_ctx,
     LOG_WARN("physical plan is NULL", K(ret));
   } else if (OB_FAIL(build_task_op_input(query_ctx, task_info, *root_spec))) {
     LOG_WARN("fail build op inputs", K(ret));
-  } else if (OB_FAIL(DAS_CTX(query_ctx).get_all_lsid(ls_list))) {
-    LOG_WARN("get ls ids failed.", K(ret));
-  } else if (OB_FAIL(query_ctx.get_my_session()->get_trans_result().add_touched_ls(ls_list))) {
-    LOG_WARN("add touched ls failed.", K(ret));
   } else {
+    query_ctx.get_my_session()->get_trans_result().mark_touched_storage();
     const ObTaskInfo::ObRangeLocation &range_loc = task_info.get_range_location();
     for (int64_t i = 0; OB_SUCC(ret) && i < range_loc.part_locs_.count(); ++i) {
       if (OB_FAIL(task.assign_ranges(range_loc.part_locs_.at(i).scan_ranges_))) {
@@ -214,24 +210,11 @@ int ObRemoteTaskExecutor::handle_tx_after_rpc(ObScanner *scanner,
     if (OB_FAIL(ret)) {
       if (exec_ctx.use_remote_sql()) {
         // ignore ret
-        LOG_WARN("remote execute use sql failed, tx will rollback", K(ret));
+        LOG_WARN("remote execute use sql fail with location_error, tx will rollback", K(ret));
         session->get_trans_result().set_incomplete();
       } else {
-        ObDASCtx &das_ctx = DAS_CTX(exec_ctx);
-        share::ObLSArray ls_ids;
-        int tmp_ret = OB_SUCCESS;
-        if (OB_TMP_FAIL(das_ctx.get_all_lsid(ls_ids))) {
-          LOG_WARN("get all ls_ids failed", K(tmp_ret));
-        } else if (OB_TMP_FAIL(session->get_trans_result().add_touched_ls(ls_ids))) {
-          LOG_WARN("add touched ls to txn failed", K(tmp_ret));
-        } else {
-         LOG_INFO("add touched ls succ", K(ls_ids));
-        }
-        if (OB_TMP_FAIL(tmp_ret)) {
-          LOG_WARN("remote execute use plan failed and try add touched ls failed, tx will rollback", K(tmp_ret));
-          session->get_trans_result().set_incomplete();
-          ret = COVER_SUCC(tmp_ret);
-        }
+        session->get_trans_result().mark_touched_storage();
+        LOG_INFO("mark transaction as having touched storage");
       }
     }
   }

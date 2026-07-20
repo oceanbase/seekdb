@@ -16,9 +16,6 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 
-#ifndef OB_BUILD_EMBED_MODE
-#include <parquet/arrow/schema.h>
-#endif
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
 
 #include "sql/engine/cmd/ob_load_data_parser.h"
@@ -115,9 +112,7 @@ int ObResolverUtils::get_all_function_table_column_names(const TableItem &table_
   if (OB_SUCC(ret)
       && !coll_type->get_element_type().is_obj_type()
       && !coll_type->get_element_type().is_record_type()
-      && !coll_type->get_element_type().is_collection_type()
-      && !(coll_type->get_element_type().is_opaque_type()
-            && coll_type->get_element_type().get_user_type_id() == T_OBJ_XML)) {
+      && !coll_type->get_element_type().is_collection_type()) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not suppoert type in table function", K(ret), KPC(coll_type));
     ObString err;
@@ -126,7 +121,6 @@ int ObResolverUtils::get_all_function_table_column_names(const TableItem &table_
     LOG_USER_ERROR(OB_NOT_SUPPORTED, err.ptr());
   }
   if (OB_SUCC(ret) && (coll_type->get_element_type().is_obj_type()
-                      || coll_type->get_element_type().is_opaque_type()
                       || coll_type->get_element_type().is_collection_type())) {
     OZ (column_names.push_back(ObString("COLUMN_VALUE")));
   }
@@ -170,7 +164,7 @@ int ObResolverUtils::check_function_table_column_exist(const TableItem &table_it
   bool exist = false;
   OZ (get_all_function_table_column_names(table_item, params, column_names));
   for (int64_t i = 0; OB_SUCC(ret) && i < column_names.count(); ++i) {
-    if (ObCharset::case_compat_mode_equal(column_names.at(i), column_name)) {
+    if (ObCharset::case_insensitive_equal(column_names.at(i), column_name)) {
       exist = true;
       break;
     }
@@ -201,7 +195,7 @@ int ObResolverUtils::check_json_table_column_exists(const TableItem &table_item,
     ObJtColBaseInfo* col_info = jt_def->all_cols_.at(i);
     if (col_info->col_type_ != NESTED_COL_TYPE) {
       ObString& cur_column_name = col_info->col_name_;
-      if (ObCharset::case_compat_mode_equal(cur_column_name, column_name)) {
+      if (ObCharset::case_insensitive_equal(cur_column_name, column_name)) {
         exists = true;
         break;
       }
@@ -747,11 +741,6 @@ int ObResolverUtils::get_candidate_routines(ObSchemaChecker &schema_checker, con
   uint64_t object_db_id = OB_INVALID_ID;
   ObString object_name;
   ObString real_db_name;
-  int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
-  {
-    compatible_mode = COMPATIBLE_MYSQL_MODE;
-  }
-
   UNUSED(udt_id);
 
   OV (!routine_name.empty(), OB_INVALID_ARGUMENT, K(routine_name));
@@ -813,11 +802,11 @@ int ObResolverUtils::get_candidate_routines(ObSchemaChecker &schema_checker, con
     OX (object_name = package_name);
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(schema_checker.get_package_id( // try user package now!
-          object_db_id, object_name, compatible_mode, package_id))
+          object_db_id, object_name, package_id))
         || OB_INVALID_ID == package_id) {
       if (ObPLResolver::is_unrecoverable_error(ret)) {
         LOG_WARN("failed to get_package_id",
-                 K(ret), K(object_db_id), K(object_name), K(compatible_mode), K(package_id));
+                 K(ret), K(object_db_id), K(object_name), K(package_id));
       }
     } else { // it`s user pacakge, get package routines
       OZ (schema_checker.get_package_routine_infos(
@@ -829,7 +818,7 @@ int ObResolverUtils::get_candidate_routines(ObSchemaChecker &schema_checker, con
         // do nothing
       } else { // mysql mode only has system package
         if (OB_FAIL(schema_checker.get_package_id( // try system pacakge
-            OB_SYS_DATABASE_NAME, package_name, compatible_mode, package_id))
+            OB_SYS_DATABASE_NAME, package_name, package_id))
             || OB_INVALID_ID == package_id) {
           LOG_WARN("failed to get package id", K(ret));
         } else {
@@ -1652,7 +1641,6 @@ int ObResolverUtils::resolve_sp_access_name(ObSchemaChecker &schema_checker,
             // do nothing
           } else if (OB_SUCC(schema_checker.get_package_id(database_id,
                                                             package_or_db_name,
-                                                            COMPATIBLE_MYSQL_MODE,
                                                             package_id))) {
             package_name = package_or_db_name;
             db_name = current_database;
@@ -1664,7 +1652,7 @@ int ObResolverUtils::resolve_sp_access_name(ObSchemaChecker &schema_checker,
               int64_t old_ret = ret;
               if (OB_FAIL(schema_checker.get_package_id(
                   OB_SYS_DATABASE_ID,
-                  package_or_db_name, COMPATIBLE_MYSQL_MODE, package_id))) {
+                  package_or_db_name, package_id))) {
                 ret = old_ret;
                 LOG_WARN("get database id failed", K(package_or_db_name), K(ret));
                 LOG_USER_ERROR(OB_ERR_BAD_DATABASE, package_or_db_name.length(), package_or_db_name.ptr());
@@ -2170,7 +2158,6 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
                                    ObExprInfo *parents_expr_info,
                                    const ObSQLMode sql_mode,
                                    bool enable_decimal_int_type,
-                                   const ObCompatType compat_type,
                                    const bool enable_mysql_compatible_dates,
                                    int8_t min_const_integer_precision,
                                    bool is_from_pl /* false */,
@@ -2559,16 +2546,10 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
       break;
     };
     case T_NULL: {
-      if (OB_UNLIKELY(compat_type == COMPAT_MYSQL8 && node->value_ == 1)) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "\\N in MySQL8");
-        LOG_WARN("\\N is not supprted in MySQL8", K(ret));
-      } else {
-        val.set_null();
-        val.unset_result_flag(NOT_NULL_FLAG);
-        val.set_length(0);
-        val.set_param_meta(val.get_meta());
-      }
+      val.set_null();
+      val.unset_result_flag(NOT_NULL_FLAG);
+      val.set_length(0);
+      val.set_param_meta(val.get_meta());
       break;
     }
     default: {
@@ -4604,10 +4585,6 @@ int ObResolverUtils::build_partition_key_expr(ObResolverParams &params,
     if (!column_schema.is_original_rowkey_column() || column_schema.is_hidden()) {
       //parition by key() use primary key to create partition key not hidden auto_increment primary key
       continue;
-    } else if (column_schema.is_autoincrement()) {
-      ret = OB_ERR_AUTO_PARTITION_KEY;
-      LOG_USER_ERROR(OB_ERR_AUTO_PARTITION_KEY, column_schema.get_column_name_str().length(),
-                     column_schema.get_column_name_str().ptr());
     } else {
       ObColumnRefRawExpr *column_expr = NULL;
       if (OB_FAIL(ObRawExprUtils::build_column_expr(*params.expr_factory_, column_schema,
@@ -4667,7 +4644,7 @@ int ObResolverUtils::check_unique_index_cover_partition_column(const ObTableSche
                                                                const ObCreateIndexArg &arg)
 {
   int ret = OB_SUCCESS;
-  if (!(table_schema.is_partitioned_table() || table_schema.is_auto_partitioned_table())
+  if (!table_schema.is_partitioned_table()
       //todo@lanyi see if it can be abstracted into a unified function
       || (INDEX_TYPE_PRIMARY != arg.index_type_
           && INDEX_TYPE_UNIQUE_LOCAL != arg.index_type_
@@ -4683,10 +4660,6 @@ int ObResolverUtils::check_unique_index_cover_partition_column(const ObTableSche
     if (OB_FAIL(get_index_column_ids(table_schema, arg.index_columns_, idx_col_ids))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Failed to get index column ids", K(ret), K(table_schema), K(arg.index_columns_));
-    } else if (table_schema.is_auto_partitioned_table() && !table_schema.is_partitioned_table()) {
-      if (OB_FAIL(unique_idx_covered_presetting_partition_columns(table_schema, idx_col_ids, is_heap_table_primary_key))) {
-        LOG_WARN("Unique index covered presetting partition columns failed", KR(ret));
-      }
     } else {
       if (OB_FAIL(unique_idx_covered_partition_columns(table_schema, idx_col_ids, partition_info, is_heap_table_primary_key))) {
         LOG_WARN("Unique index covered partition columns failed", KR(ret));
@@ -4713,32 +4686,6 @@ int ObResolverUtils::get_index_column_ids(
       LOG_WARN("Failed to add column id", K(ret));
     } else { }//do nothing
   }
-  return ret;
-}
-
-int ObResolverUtils::unique_idx_covered_presetting_partition_columns(const share::schema::ObTableSchema &table_schema,
-                                                                     const common::ObIArray<uint64_t> &index_columns,
-                                                                     const bool is_heap_table_primary_key)
-{
-  int ret = OB_SUCCESS;
-  const ObColumnSchemaV2 *column_schema = NULL;
-  ObArray<uint64_t> presetting_partition_column_ids;
-
-  if (OB_FAIL(table_schema.get_presetting_partition_keys(presetting_partition_column_ids))) {
-    LOG_WARN("fail to get presetting partition key columns", KR(ret), K(table_schema), K(index_columns));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < presetting_partition_column_ids.count(); i++) {
-      uint64_t column_id = presetting_partition_column_ids.at(i);
-      if (!has_exist_in_array(index_columns, column_id)) {
-        ret = OB_EER_UNIQUE_KEY_NEED_ALL_FIELDS_IN_PF;
-        LOG_WARN("unique key does not include all presetting partition key", KR(ret),
-                                                                             K(presetting_partition_column_ids),
-                                                                             K(index_columns));
-        LOG_USER_ERROR(OB_EER_UNIQUE_KEY_NEED_ALL_FIELDS_IN_PF, is_heap_table_primary_key ? "PRIMARY KEY" : "UNIQUE INDEX");
-      }
-    } // end for
-  }
-
   return ret;
 }
 
@@ -5062,13 +5009,6 @@ int ObResolverUtils::resolve_data_type(const ParseNode &type_node,
       data_type.set_scale(default_accuracy.get_scale());
       data_type.set_charset_type(CHARSET_BINARY);
       data_type.set_collation_type(CS_TYPE_INVALID);
-      break;
-    }
-    case ObRoaringBitmapTC: {
-      data_type.set_length(length);
-      data_type.set_scale(default_accuracy.get_scale());
-      data_type.set_charset_type(CHARSET_BINARY);
-      data_type.set_collation_type(CS_TYPE_BINARY);
       break;
     }
     default:
@@ -6877,7 +6817,7 @@ int ObResolverUtils::check_duplicated_column(ObSelectStmt &select_stmt,
   if (!can_skip) {
     for (int64_t i = 1; OB_SUCC(ret) && i < select_stmt.get_select_item_size(); i++) {
       for (int64_t j = 0; OB_SUCC(ret) && j < i; ++j) {
-        if (ObCharset::case_compat_mode_equal(select_stmt.get_select_item(i).alias_name_,
+        if (ObCharset::case_insensitive_equal(select_stmt.get_select_item(i).alias_name_,
                                               select_stmt.get_select_item(j).alias_name_)) {
           ret = OB_ERR_COLUMN_DUPLICATE;
           LOG_USER_ERROR(OB_ERR_COLUMN_DUPLICATE,
@@ -6901,7 +6841,7 @@ int ObResolverUtils::check_duplicated_column(ObSelectStmt &select_stmt,
             || 0 == select_stmt.get_select_item(i).paramed_alias_name_.length()
             || select_stmt.get_select_item(j).need_check_dup_name_) {
           // do nothing
-        } else if (ObCharset::case_compat_mode_equal(
+        } else if (ObCharset::case_insensitive_equal(
                                               select_stmt.get_select_item(i).paramed_alias_name_,
                                               select_stmt.get_select_item(j).paramed_alias_name_)) {
           select_stmt.get_select_item(i).need_check_dup_name_ = true;
@@ -7334,9 +7274,7 @@ int ObResolverUtils::resolve_varchar_file_size(const ParseNode *child, int64_t &
 int ObResolverUtils::resolve_file_compression_format(const ParseNode *node, ObExternalFileFormat &format, ObResolverParams &params)
 {
   int ret = OB_SUCCESS;
-  bool find = false;
   ObString string_v = ObString(node->children_[0]->str_len_, node->children_[0]->str_value_).trim();
-  ObSqlString err_msg;
   if (OB_ISNULL(node) || node->num_child_ != 1 || OB_ISNULL(node->children_[0])
       || OB_ISNULL(params.session_info_) || OB_ISNULL(params.expr_factory_)
       || T_COMPRESSION != node->type_) {
@@ -7344,27 +7282,6 @@ int ObResolverUtils::resolve_file_compression_format(const ParseNode *node, ObEx
     LOG_WARN("invalid parse node", K(ret));
   } else {
     switch (format.format_type_) {
-      case ObExternalFileFormat::PARQUET_FORMAT: {
-#ifndef OB_BUILD_EMBED_MODE
-        for (int32_t compress_idx = 0; !find && compress_idx <= parquet::Compression::LZ4_HADOOP; compress_idx++) {
-          if (0 == string_v.case_compare(ObParquetGeneralFormat::COMPRESSION_ALGORITHMS[compress_idx])) {
-            format.parquet_format_.compress_type_index_ = compress_idx;
-            find = true;
-          }
-        }
-        if (!find || format.parquet_format_.compress_type_index_ == parquet::Compression::LZ4_FRAME
-            || format.parquet_format_.compress_type_index_ == parquet::Compression::LZO
-            || format.parquet_format_.compress_type_index_ == parquet::Compression::BZ2) {
-          err_msg.append_fmt("compression algorithm '%.*s'", string_v.length(), string_v.ptr());
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, err_msg.ptr());
-          LOG_WARN("failed. compress type for parquet file is not supported yet", K(ret), K(string_v));
-        }
-#else
-        ret = OB_NOT_SUPPORTED;
-#endif
-        break;
-      }
       case ObExternalFileFormat::ORC_FORMAT: {
         ret = OB_NOT_SUPPORTED;
         break;
@@ -7458,22 +7375,6 @@ int ObResolverUtils::resolve_column_index_type(const ParseNode* node, ObExternal
     const ObString string_v = ObString(node->children_[0]->str_len_, node->children_[0]->str_value_).trim();
 
     switch (format.format_type_) {
-      case ObExternalFileFormat::PARQUET_FORMAT: {
-        if (0 == string_v.case_compare("NAME")) {
-          format.parquet_format_.column_index_type_ = sql::ColumnIndexType::NAME;
-        } else if (0 == string_v.case_compare("POSITION")) {
-          format.parquet_format_.column_index_type_ = sql::ColumnIndexType::POSITION;
-        } else if (0 == string_v.case_compare("ID")) {
-          format.parquet_format_.column_index_type_ = sql::ColumnIndexType::ID;
-        } else {
-          ret = OB_NOT_SUPPORTED;
-          ObSqlString err_msg;
-          err_msg.append_fmt("%s -> column_index_type", string_v.ptr());
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, err_msg.ptr());
-          LOG_WARN("not support this format type", K(format.format_type_));
-        }
-        break;
-      }
       case ObExternalFileFormat::ORC_FORMAT: {
         ret = OB_NOT_SUPPORTED;
         break;
@@ -7500,7 +7401,8 @@ int ObResolverUtils::resolve_file_format(const ParseNode *node, ObExternalFileFo
       case T_EXTERNAL_FILE_FORMAT_TYPE: {
         ObString string_v = ObString(node->children_[0]->str_len_, node->children_[0]->str_value_).trim_space_only();
         for (int i = 0; i < ObExternalFileFormat::MAX_FORMAT; i++) {
-          if (0 == string_v.case_compare(ObExternalFileFormat::FORMAT_TYPE_STR[i])) {
+          if (OB_NOT_NULL(ObExternalFileFormat::FORMAT_TYPE_STR[i])
+              && 0 == string_v.case_compare(ObExternalFileFormat::FORMAT_TYPE_STR[i])) {
             format.format_type_ = static_cast<ObExternalFileFormat::FormatType>(i);
             break;
           }
@@ -7779,12 +7681,6 @@ int ObResolverUtils::resolve_file_format(const ParseNode *node, ObExternalFileFo
         }
         break;
       }
-      case T_ROW_GROUP_SIZE: {
-        if (OB_FAIL(resolve_file_size_node(node, format.parquet_format_.row_group_size_))) {
-          LOG_WARN("failed to resolve file size node", K(ret));
-        }
-        break;
-      }
       case T_FILE_EXTENSION: {
         ObString file_extension = ObString(node->children_[0]->str_len_, node->children_[0]->str_value_).trim_space_only();
         if (OB_NOT_NULL(file_extension.find('/'))) {
@@ -8046,12 +7942,9 @@ int ObResolverUtils::resolver_param(ObPlanCacheCtx &pc_ctx,
   const bool is_paramlize = false;
   int64_t server_collation = CS_TYPE_INVALID;
   obj_param.reset();
-  ObCompatType compat_type = COMPAT_MYSQL57;
   if (OB_ISNULL(pc_param) || OB_ISNULL(raw_param = pc_param->node_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
-  } else if (OB_FAIL(session.get_compatibility_control(compat_type))) {
-    LOG_WARN("failed to get compat type", K(ret));
   } else if (not_param_index.has_member(param_idx)) {
     /* do nothing */
     is_param = false;
@@ -8081,7 +7974,6 @@ int ObResolverUtils::resolver_param(ObPlanCacheCtx &pc_ctx,
                        static_cast<ObCollationType>(server_collation), NULL,
                        session.get_sql_mode(),
                        enable_decimal_int,
-                       compat_type,
                        enable_mysql_compatible_dates,
                        session.get_min_const_integer_precision(),
                        false, /* is_from_pl */
@@ -8205,170 +8097,6 @@ int ObResolverUtils::fast_get_param_type(const ParseNode &node,
   return ret;
 }
 
-int ObResolverUtils::check_allowed_alter_operations_for_mlog(
-    const obcall::ObAlterTableArg &arg,
-    const share::schema::ObTableSchema &table_schema)
-{
-  int ret = OB_SUCCESS;
-  if (table_schema.is_mlog_table()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("alter materialized view log is not supported", KR(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "alter materialized view log is");
-  } else if (table_schema.required_by_mview_refresh()) {
-    bool is_alter_pk = false;
-    ObIndexArg::IndexActionType pk_action_type;
-    for (int64_t i = 0; OB_SUCC(ret) && (i < arg.index_arg_list_.count()); ++i) {
-      const ObIndexArg *index_arg = arg.index_arg_list_.at(i);
-      if (OB_ISNULL(index_arg)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("index arg is null", KR(ret));
-      } else if ((ObIndexArg::ADD_PRIMARY_KEY == index_arg->index_action_type_)
-          || (ObIndexArg::DROP_PRIMARY_KEY == index_arg->index_action_type_)
-          || (ObIndexArg::ALTER_PRIMARY_KEY == index_arg->index_action_type_)) {
-        is_alter_pk = true;
-        pk_action_type = index_arg->index_action_type_;
-        break;
-      }
-    }
-
-    if (OB_FAIL(ret)) {
-    } else if (arg.is_alter_columns_) {
-      // add colunm is supported
-      // ObAlterTableResolver::check_action_node_for_mlog_master allow alter column
-      // ObAlterTableResolver::check_column_option_for_mlog_master allow add column
-    } else if ((arg.is_alter_indexs_ && !is_alter_pk)
-        || (arg.is_update_global_indexes_ && !arg.is_alter_partitions_)
-        || (arg.is_alter_options_ // the following allowed options change does not affect mlog
-            && (arg.alter_table_schema_.alter_option_bitset_.has_member(ObAlterTableArg::TABLE_DOP)
-                || arg.alter_table_schema_.alter_option_bitset_.has_member(ObAlterTableArg::CHARSET_TYPE)
-                || arg.alter_table_schema_.alter_option_bitset_.has_member(ObAlterTableArg::COLLATION_TYPE)
-                || arg.alter_table_schema_.alter_option_bitset_.has_member(ObAlterTableArg::COMMENT)
-                || arg.alter_table_schema_.alter_option_bitset_.has_member(ObAlterTableArg::EXPIRE_INFO)
-                || arg.alter_table_schema_.alter_option_bitset_.has_member(ObAlterTableArg::PRIMARY_ZONE)
-                || arg.alter_table_schema_.alter_option_bitset_.has_member(ObAlterTableArg::REPLICA_NUM)
-                || arg.alter_table_schema_.alter_option_bitset_.has_member(ObAlterTableArg::SEQUENCE_COLUMN_ID)
-                || arg.alter_table_schema_.alter_option_bitset_.has_member(ObAlterTableArg::USE_BLOOM_FILTER)
-                || arg.alter_table_schema_.alter_option_bitset_.has_member(ObAlterTableArg::LOCALITY)
-                || arg.alter_table_schema_.alter_option_bitset_.has_member(ObAlterTableArg::SESSION_ID)
-                || arg.alter_table_schema_.alter_option_bitset_.has_member(ObAlterTableArg::SESSION_ACTIVE_TIME)
-                || arg.alter_table_schema_.alter_option_bitset_.has_member(ObAlterTableArg::ENABLE_ROW_MOVEMENT)
-                || arg.alter_table_schema_.alter_option_bitset_.has_member(ObAlterTableArg::FORCE_LOCALITY)
-                || arg.alter_table_schema_.alter_option_bitset_.has_member(ObAlterTableArg::TTL_DEFINITION)))) {
-      // supported operations
-    } else if (!arg.is_alter_columns_
-        && ((ObAlterTableArg::ADD_CONSTRAINT == arg.alter_constraint_type_)
-        || (ObAlterTableArg::DROP_CONSTRAINT == arg.alter_constraint_type_)
-        || (ObAlterTableArg::ALTER_CONSTRAINT_STATE == arg.alter_constraint_type_))) {
-      // add/drop constraint is supported
-    } else {
-      // unsupported operations
-      ret = OB_NOT_SUPPORTED;
-
-      // generate more specific error messages
-      if (is_alter_pk) {
-        if (ObIndexArg::ADD_PRIMARY_KEY == pk_action_type) {
-          if (table_schema.has_mlog_table()) {
-            LOG_WARN("add primary key to table with materialized view log is not supported",
-                     KR(ret), K(table_schema.get_table_name()));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED,
-                           "add primary key to table with materialized view log is");
-          } else {
-            LOG_WARN(
-                "add primary key to table required by materialized view is not supported",
-                KR(ret), K(table_schema.get_table_name()));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED,
-                           "add primary key to table required by materialized view is");
-          }
-        } else if (ObIndexArg::DROP_PRIMARY_KEY == pk_action_type) {
-          if (table_schema.has_mlog_table()) {
-            LOG_WARN("drop the primary key of table with materialized view log is not supported",
-                     KR(ret), K(table_schema.get_table_name()));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED,
-                           "drop the primary key of table with materialized view log is");
-          } else {
-            LOG_WARN("drop the primary key of table required by materialized view is not supported",
-                     KR(ret), K(table_schema.get_table_name()));
-            LOG_USER_ERROR(
-                OB_NOT_SUPPORTED,
-                "drop the primary key of table required by materialized view is");
-          }
-        } else {
-          if (table_schema.has_mlog_table()) {
-            LOG_WARN("alter the primary key of table with materialized view log is not supported",
-                     KR(ret), K(table_schema.get_table_name()));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED,
-                           "alter the primary key of table with materialized view log is");
-          } else {
-            LOG_WARN("alter the primary key of table required by materialized view is not supported",
-                     KR(ret), K(table_schema.get_table_name()));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED,
-                           "alter the primary key of table required by materialized view is");
-          }
-        }
-      } else if (arg.is_alter_columns_) {
-        if (table_schema.has_mlog_table()) {
-          LOG_WARN("alter column of table with materialized view log is not supported",
-                   KR(ret), K(table_schema.get_table_name()));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED,
-                         "alter column of table with materialized view log is");
-        } else {
-          LOG_WARN("alter column of table required by materialized view is not supported",
-                   KR(ret), K(table_schema.get_table_name()));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED,
-                         "alter column of table required by materialized view is");
-        }
-      } else if (arg.is_alter_partitions_) {
-        if (table_schema.has_mlog_table()) {
-          LOG_WARN("alter partition of table with materialized view log is not supported",
-                   KR(ret), K(table_schema.get_table_name()));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED,
-                         "alter partition of table with materialized view log is");
-        } else {
-          LOG_WARN("alter partition of table required by materialized view is not supported",
-                   KR(ret), K(table_schema.get_table_name()));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED,
-                         "alter partition of table required by materialized view is");
-        }
-      } else if (arg.is_alter_options_) {
-        if (arg.alter_table_schema_.alter_option_bitset_.has_member(ObAlterTableArg::TABLE_NAME)) {
-          if (table_schema.has_mlog_table()) {
-            LOG_WARN("alter name of table with materialized view log is not supported",
-                     KR(ret), K(table_schema.get_table_name()));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "alter name of table with materialized view log is");
-          } else {
-            LOG_WARN("alter name of table required by materialized view is not supported",
-                     KR(ret), K(table_schema.get_table_name()));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED,
-                           "alter name of table required by materialized view is");
-          }
-        } else {
-          if (table_schema.has_mlog_table()) {
-            LOG_WARN("alter option of table with materialized view log is not supported",
-                     KR(ret), K(table_schema.get_table_name()), K(arg));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "alter option of table with materialized view log is");
-          } else {
-            LOG_WARN("alter option of table required by materialized view is not supported",
-                     KR(ret), K(table_schema.get_table_name()), K(arg));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED,
-                           "alter option of table required by materialized view is");
-          }
-        }
-      } else {
-        if (table_schema.has_mlog_table()) {
-          LOG_WARN("alter table with materialized view log is not supported", KR(ret),
-                   K(table_schema.get_table_name()), K(arg));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "alter table with materialized view log is");
-        } else {
-          LOG_WARN("alter table required by materialized view is not supported", KR(ret),
-                   K(table_schema.get_table_name()), K(arg));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "alter table required by materialized view is");
-        }
-      }
-    }
-  }
-  return ret;
-}
-
 int ObResolverUtils::create_values_table_query(ObSQLSessionInfo *session_info,
                                                ObIAllocator *allocator,
                                                ObRawExprFactory *expr_factory,
@@ -8466,19 +8194,6 @@ int64_t ObResolverUtils::get_mysql_max_partition_num()
   max_partition_num = GCONF.max_partition_num;
 
   return max_partition_num;
-}
-
-int ObResolverUtils::check_schema_valid_for_mview(const ObTableSchema &table_schema)
-{
-  int ret = OB_SUCCESS;
-  for (int64_t i = 0; OB_SUCC(ret) && (i < table_schema.get_column_count()); ++i) {
-    const ObColumnSchemaV2 *column_schema = nullptr;
-    if (OB_ISNULL(column_schema = table_schema.get_column_schema_by_idx(i))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("column schema is null", KR(ret));
-    }
-  }
-  return ret;
 }
 
 bool ObResolverUtils::is_pseudo_partition_column_name(const ObString name)

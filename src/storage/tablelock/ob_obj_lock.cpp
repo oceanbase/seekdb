@@ -157,7 +157,12 @@ int ObOBJLock::slow_lock(
   const int64_t trans_id_value = lock_op.create_trans_id_;
   bool enable_lock_priority = false;
   const ObTableLockPriority priority = param.lock_priority_;
-  enable_lock_priority = GCONF.enable_lock_priority;
+  if (!true) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("tenant config is invalid", K(ret), K(lock_op));
+  } else {
+    enable_lock_priority = GCONF.enable_lock_priority;
+  }
   // case 1, if it is two phase lock, must check first
   // case 2, if enable_lock_priority is true, must check first (for dml)
   // NOTE that we set enable_lock_priority to false to avoid unexpected cases
@@ -502,7 +507,12 @@ int ObOBJLock::check_enable_lock_priority_(bool &enable_lock_priority)
   bool tmp_enable_lock_priority = false;
   if (current_time - last_check_timestamp < CACHE_REFRESH_INTERVAL) {
   } else {
-    tmp_enable_lock_priority = GCONF.enable_lock_priority;
+    if (!true) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("tenant config is invalid", K(ret));
+    } else {
+      tmp_enable_lock_priority = GCONF.enable_lock_priority;
+    }
     last_result = tmp_enable_lock_priority;
     last_check_timestamp = current_time;
   }
@@ -2181,7 +2191,7 @@ ObOBJLock *ObOBJLockFactory::alloc(const ObLockID &lock_id)
   void *ptr = NULL;
   ObOBJLock* obj_lock = NULL;
   ObMemAttr attr(OB_TABLE_LOCK_NODE);
-  if (!lock_id.is_valid()) {
+  if (!true || !lock_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(lock_id));
   } else if (NULL != (ptr = ob_malloc(sizeof(ObOBJLock), attr))) {

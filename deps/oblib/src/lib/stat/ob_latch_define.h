@@ -115,14 +115,7 @@ LATCH_DEF(SESSION_QUERY_LOCK, 149, "session query lock", LATCH_FIFO, 2000, 0, tr
 LATCH_DEF(SESSION_THREAD_DATA_LOCK, 150, "session thread data lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(SEQUENCE_VALUE_ALLOC_LOCK, 152, "sequence value alloc lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(SEQUENCE_CACHE_LOCK, 153, "sequence cache lock", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(OBCDC_PROGRESS_RECYCLE_LOCK, 154, "obcdc progress recycle lock", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(OBCDC_METAINFO_LOCK, 155, "obcdc metainfo lock", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(OBCDC_TRANS_CTX_LOCK, 156, "obcdc trans ctx lock", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(OBCDC_SVR_BLACKLIST_LOCK, 157, "obcdc svr blacklist lock", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(OBCDC_SQLSERVER_LOCK, 158, "obcdc sqlserver lock", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(OBCDC_TIMEZONE_GETTER_LOCK, 159, "obcdc timezone getter lock", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(OBCDC_FETCHLOG_ARPC_LOCK, 160, "obcdc fetchlog arpc lock", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(OBCDC_FETCHSREAM_CONTAINER_LOCK, 161, "obcdc fetchstream container lock", LATCH_FIFO, 2000, 0, true)
+// 154-161 were used by the removed external OBCDC connector. Do not reuse.
 LATCH_DEF(INNER_CONN_POOL_LOCK, 162, "inner connection pool lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(TENANT_RES_MGR_LIST_LOCK, 163, "tenant resource mgr list lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(TC_FREE_LIST_LOCK, 165, "tc free list lock", LATCH_FIFO, 2000, 0, true)
@@ -138,7 +131,6 @@ LATCH_DEF(FIXED_SIZE_ALLOCATOR_LOCK, 177, "fixed size allocator lock", LATCH_FIF
 LATCH_DEF(DBMS_SCHEDULER_TASK_LOCK, 178, "dbms_scheduler task lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(DBMS_SCHEDULER_MASTER_LOCK, 179, "dbms_scheuler master lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(TENANT_WORKER_LOCK, 180, "tenant worker lock", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(SERVER_LOCALITY_CACHE_LOCK, 181, "server locality cache lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(MASTER_RS_CACHE_LOCK, 182, "master rs cache lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(SCHEMA_REFRESH_INFO_LOCK, 183, "schema refresh info lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(REFRESH_SCHEMA_LOCK, 184, "refresh schema lock", LATCH_FIFO, 2000, 0, true)
@@ -240,7 +232,7 @@ LATCH_DEF(DDL_EXECUTE_LOCK, 294, "ddl execute lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(TENANT_IO_CONFIG_LOCK, 295, "tenant io config lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(SQL_WF_PARTICIPATOR_COND_LOCK, 296, "window function participator lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(ARB_SERVER_CONFIG_LOCK, 297, "arbserver config lock", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(CDC_SERVICE_LS_CTX_LOCK, 298, "cdcservice clientlsctx lock", LATCH_FIFO, 2000, 0, true)
+// 298 was used by the removed external CDC service. Do not reuse.
 LATCH_DEF(MAJOR_FREEZE_DIAGNOSE_LOCK, 299, "major freeze diagnose lock", LATCH_READ_PREFER, 2000, 0, true)
 LATCH_DEF(HB_RESPONSES_LOCK, 300, "hb responses lock", LATCH_READ_PREFER, 2000, 0, true)
 LATCH_DEF(ALL_SERVERS_INFO_IN_TABLE_LOCK, 301, "all servers info in table lock", LATCH_READ_PREFER, 2000, 0, true)
@@ -248,9 +240,6 @@ LATCH_DEF(OPT_STAT_GATHER_STAT_LOCK, 302, "optimizer stat gather stat lock", LAT
 LATCH_DEF(TENANT_IO_CALLBACK_LOCK, 304, "support IO callback thread num managemen", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(DISPLAY_TASKS_LOCK, 305, "display tasks lock", LATCH_READ_PREFER, 2000, 0, true)
 LATCH_DEF(TMP_FILE_MEM_BLOCK_LOCK, 306, "tmp file mem block lock", LATCH_FIFO, INT64_MAX, 0, true)
-
-LATCH_DEF(LOG_EXTERNAL_STORAGE_HANDLER_RW_LOCK, 308, "log external storage handler rw lock", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(LOG_EXTERNAL_STORAGE_HANDLER_LOCK, 309, "log external storage handler spin lock", LATCH_FIFO, 2000, 0, true)
 
 LATCH_DEF(PL_DEBUG_RUNTIMEINFO_LOCK, 310, "PL DEBUG RuntimeInfo lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(MDS_TABLE_HANDLER_LOCK, 311, "mds table handler lock", LATCH_READ_PREFER, 2000, 0, true)
@@ -275,9 +264,6 @@ LATCH_DEF(TRANS_FLUSH_REDO_LOCK, 329, "trans flush redo log latch", LATCH_FIFO, 
 
 LATCH_DEF(TENANT_DIRECT_LOAD_MGR_LOCK, 330, "tenant direct load manager lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(TABLET_DIRECT_LOAD_MGR_LOCK, 331, "tablet direct load manager lock", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(DIRECT_LOAD_SLICE_WRITER_LOCK, 332, "direct load slice writer lock", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(DIRECT_LOAD_RESCAN_LOCK, 333, "direct load rescan lock", LATCH_FIFO, INT64_MAX, 0, true)
-LATCH_DEF(TABLET_DIRECT_LOAD_MGR_SCHEMA_LOCK, 334, "tablet direct load manager schema lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(SQL_AUDIT, 335, "sql audit release second level queue lock", LATCH_FIFO, 2000, 0, true)
 
 LATCH_DEF(SEQUENCE_VALUE_FETCH_LOCK, 339, "sequence value fetch lock", LATCH_FIFO, 2000, 0, true)
@@ -297,9 +283,8 @@ LATCH_DEF(DAG_EXECUTOR_LOCK, 351, "dag executor lock", LATCH_FIFO, 2000, 0, true
 LATCH_DEF(STORAGE_CACHE_POLICY_MGR_LOCK, 353, "storage cache policy lock", LATCH_READ_PREFER, 2000, 0, true)
 LATCH_DEF(STORAGE_CACHE_POLICY_TASK_LOCK, 354, "storage cache policy task lock", LATCH_READ_PREFER, 2000, 0, true)
 LATCH_DEF(UNIQUE_CHECKING_CONTEXT_LOCK, 355, "unique checking context lock", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(TABLET_SPLIT_CONTEXT_LOCK, 356, "tablet split context lock", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(MAX_ID_CACHE_LOCK, 357, "max id cache", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(LATCH_END, 358, "latch end", LATCH_FIFO, 2000, 0, true)
+LATCH_DEF(MAX_ID_CACHE_LOCK, 356, "max id cache", LATCH_FIFO, 2000, 0, true)
+LATCH_DEF(LATCH_END, 357, "latch end", LATCH_FIFO, 2000, 0, true)
 
 #endif
 

@@ -25,8 +25,7 @@ using namespace share;
 namespace palf
 {
 LogHotCache::LogHotCache()
-  : palf_id_(INVALID_PALF_ID),
-    palf_handle_impl_(NULL),
+  : palf_handle_impl_(NULL),
     read_size_(0),
     hit_count_(0),
     read_count_(0),
@@ -48,21 +47,19 @@ void LogHotCache::reset()
 {
   is_inited_ = false;
   palf_handle_impl_ = NULL;
-  palf_id_ = INVALID_PALF_ID;
 }
 
-int LogHotCache::init(const int64_t palf_id, IPalfHandleImpl *palf_handle_impl)
+int LogHotCache::init(IPalfHandleImpl *palf_handle_impl)
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-  } else if (false == is_valid_palf_id(palf_id) || OB_ISNULL(palf_handle_impl)) {
+  } else if (OB_ISNULL(palf_handle_impl)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    palf_id_ = palf_id;
     palf_handle_impl_ = palf_handle_impl;
     is_inited_ = true;
-    PALF_LOG(TRACE, "init hot cache successfully", K(palf_id_));
+    PALF_LOG(TRACE, "init hot cache successfully");
   }
   return ret;
 }
@@ -78,15 +75,15 @@ int LogHotCache::read(const LSN &read_begin_lsn,
   int64_t start_ts = ObTimeUtility::fast_current_time();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    PALF_LOG(WARN, "hot cache is not inited", K(ret), K(palf_id_));
+    PALF_LOG(WARN, "hot cache is not inited", K(ret));
   } else if (!read_begin_lsn.is_valid() || in_read_size <= 0 || OB_ISNULL(buf)) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid arguments", K(ret), K_(palf_id), K(read_begin_lsn), K(in_read_size),
+    PALF_LOG(WARN, "invalid arguments", K(ret), K(read_begin_lsn), K(in_read_size),
         KP(buf));
   } else if (OB_FAIL(palf_handle_impl_->read_data_from_buffer(read_begin_lsn, in_read_size, \
           buf, out_read_size))) {
     if (OB_ERR_OUT_OF_LOWER_BOUND != ret) {
-      PALF_LOG(WARN, "read_data_from_buffer failed", K(ret), K_(palf_id), K(read_begin_lsn),
+      PALF_LOG(WARN, "read_data_from_buffer failed", K(ret), K(read_begin_lsn),
           K(in_read_size));
     }
   } else {
@@ -96,13 +93,13 @@ int LogHotCache::read(const LSN &read_begin_lsn,
     EVENT_TENANT_INC(ObStatEventIds::PALF_READ_COUNT_FROM_HOT_CACHE);
     EVENT_ADD(ObStatEventIds::PALF_READ_SIZE_FROM_HOT_CACHE, out_read_size);
     EVENT_ADD(ObStatEventIds::PALF_READ_TIME_FROM_HOT_CACHE, cost_ts);
-    PALF_LOG(TRACE, "read_data_from_buffer success", K(ret), K_(palf_id), K(read_begin_lsn),
+    PALF_LOG(TRACE, "read_data_from_buffer success", K(ret), K(read_begin_lsn),
         K(in_read_size), K(out_read_size));
   }
   read_cnt = ATOMIC_AAF(&read_count_, 1);
   if (palf_reach_time_interval(PALF_STAT_PRINT_INTERVAL_US, last_print_time_)) {
     read_cnt = read_cnt == 0 ? 1 : read_cnt;
-    PALF_LOG(INFO, "[PALF STAT HOT CACHE HIT RATE]", K_(palf_id), K(read_size), K(hit_cnt), K(read_cnt), "hit rate", hit_cnt * 1.0 / read_cnt);
+    PALF_LOG(INFO, "[PALF STAT HOT CACHE HIT RATE]", K(read_size), K(hit_cnt), K(read_cnt), "hit rate", hit_cnt * 1.0 / read_cnt);
     hit_count_ = 0;
     read_size_ = 0;
     read_count_ = 0;
@@ -120,24 +117,21 @@ LogCache::~LogCache()
 
 void LogCache::destroy()
 {
-  palf_id_ = INVALID_PALF_ID;
   hot_cache_.destroy();
   is_inited_ = false;
 }
 
-int LogCache::init(const int64_t palf_id,
-                   IPalfHandleImpl *palf_handle_impl)
+int LogCache::init(IPalfHandleImpl *palf_handle_impl)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     PALF_LOG(WARN, "LogCache init failed", K(ret));
-  } else if (OB_FAIL(hot_cache_.init(palf_id, palf_handle_impl))){
-    PALF_LOG(WARN, "hot cache init failed", K(ret), K(palf_id));
+  } else if (OB_FAIL(hot_cache_.init(palf_handle_impl))){
+    PALF_LOG(WARN, "hot cache init failed", K(ret));
   } else {
-    palf_id_ = palf_id;
     is_inited_ = true;
-    PALF_LOG(INFO, "LogCache init successfully", K(palf_id));
+    PALF_LOG(INFO, "LogCache init successfully");
   }
 
   return ret;

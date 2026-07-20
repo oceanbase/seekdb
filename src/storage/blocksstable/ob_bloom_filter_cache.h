@@ -191,7 +191,6 @@ public:
    */
   int inc_empty_read(
       const uint64_t table_id,
-      const share::ObLSID &ls_id,
       const storage::ObITable::TableKey &sstable_key,
       const MacroBlockId &macro_id,
       const int64_t empty_read_prefix,

@@ -20,6 +20,7 @@
 
 #include "sql/engine/ob_operator.h"
 #include "lib/file/ob_file.h"
+#include "share/io/ob_backup_storage_info.h"
 #include "sql/engine/cmd/ob_load_data_parser.h"
 #include "ob_select_into_basic.h"
 #include "sql/resolver/dml/ob_select_stmt.h"
@@ -31,15 +32,22 @@ namespace sql
 class ObExternalFileWriter
 {
 public:
-  ObExternalFileWriter():
+  ObExternalFileWriter(const share::ObBackupStorageInfo &access_info,
+                       const IntoFileLocation &file_location):
     write_bytes_(0),
     is_file_opened_(false),
     file_appender_(),
+    storage_appender_(),
     split_file_id_(0),
-    url_()
+    url_(),
+    access_info_(access_info),
+    file_location_(file_location)
   {}
 
-  virtual ~ObExternalFileWriter() = default;
+  virtual ~ObExternalFileWriter() {
+    file_appender_.~ObFileAppender();
+    storage_appender_.reset();
+  }
 
   int open_file();
   virtual int close_file();
@@ -53,17 +61,23 @@ protected:
 public:
   bool is_file_opened_;
   ObFileAppender file_appender_;
+  ObStorageAppender storage_appender_;
   int64_t split_file_id_;
   ObString url_;
+  const share::ObBackupStorageInfo &access_info_;
+  const IntoFileLocation &file_location_;
 };
 
 class ObCsvFileWriter : public ObExternalFileWriter
 {
 public:
-  ObCsvFileWriter(bool &use_shared_buf,
+  ObCsvFileWriter(const share::ObBackupStorageInfo &access_info,
+                  const IntoFileLocation &file_location,
+                  bool &use_shared_buf,
                   const bool &has_compress,
-                  const bool &has_lob):
-    ObExternalFileWriter(),
+                  const bool &has_lob,
+                  int64_t &write_offset):
+    ObExternalFileWriter(access_info, file_location),
     buf_(NULL),
     buf_len_(0),
     curr_pos_(0),
@@ -72,7 +86,8 @@ public:
     compress_stream_writer_(NULL),
     use_shared_buf_(use_shared_buf),
     has_compress_(has_compress),
-    has_lob_(has_lob)
+    has_lob_(has_lob),
+    write_offset_(write_offset)
   {}
 
   virtual ~ObCsvFileWriter()
@@ -115,6 +130,7 @@ private:
   bool &use_shared_buf_;
   const bool &has_compress_;
   const bool &has_lob_;
+  int64_t &write_offset_;
 };
 
 }

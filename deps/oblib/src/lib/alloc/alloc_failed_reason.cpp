@@ -109,10 +109,10 @@ char *alloc_failed_msg()
                common::get_global_ctx_info().get_ctx_name(afc.ctx_id_), afc.ctx_hold_, afc.ctx_limit_, afc.alloc_size_);
       break;
     }
-  case MEMORY_HOLD_REACH_LIMIT: {
+  case TENANT_HOLD_REACH_LIMIT: {
       snprintf(msg, len,
-               "allocator memory has reached the upper limit(memory_hold: %ld, memory_limit: %ld, alloc_size: %ld)",
-               afc.memory_hold_, afc.memory_limit_, afc.alloc_size_);
+               "tenant memory has reached the upper limit(tenant_hold: %ld, tenant_limit: %ld, alloc_size: %ld)",
+               afc.tenant_hold_, afc.tenant_limit_, afc.alloc_size_);
       break;
     }
   case SERVER_HOLD_REACH_LIMIT: {
@@ -150,7 +150,7 @@ char *alloc_failed_msg()
 
 void print_alloc_failed_msg(uint64_t ctx_id,
                             int64_t ctx_hold, int64_t ctx_limit,
-                            int64_t allocator_hold, int64_t allocator_limit)
+                            int64_t tenant_hold, int64_t tenant_limit)
 {
   if (TC_REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
     if (REACH_TIME_INTERVAL(60 * 1000 * 1000)) {
@@ -165,9 +165,9 @@ void print_alloc_failed_msg(uint64_t ctx_id,
     LOG_DBA_WARN_V2(OB_LIB_ALLOCATE_MEMORY_FAIL, OB_ALLOCATE_MEMORY_FAILED, "[oops]: alloc failed reason is that ", msg);
     _OB_LOG_RET(WARN, OB_ALLOCATE_MEMORY_FAILED, "[OOPS]: alloc failed reason is that %s. "
                 "detailed info: ctx_id=%lu, ctx_name=%s, ctx_hold=%ld, "
-                "ctx_limit=%ld, allocator_hold=%ld, allocator_limit=%ld, backtrace=%s",
+                "ctx_limit=%ld, tenant_hold=%ld, tenant_limit=%ld, backtrace=%s",
                 msg, ctx_id, get_global_ctx_info().get_ctx_name(ctx_id),
-                ctx_hold, ctx_limit, allocator_hold, allocator_limit, lbt());
+                ctx_hold, ctx_limit, tenant_hold, tenant_limit, lbt());
     // 49 is the user defined signal to dump memory
 #ifndef _WIN32
     raise(49);

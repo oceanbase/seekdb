@@ -18,11 +18,16 @@
 #define OCEANBASE_SHARE_OB_AUTOINCREMENT_SERVICE_H_
 
 
+#include <functional>
 #include "lib/hash/ob_hashmap.h"
 #include "lib/hash/ob_link_hashmap.h"
 #include "lib/allocator/ob_small_allocator.h"
 #include "common/mysqlclient/ob_mysql_proxy.h"
+#include "common/ob_timeout_ctx.h"
 #include "share/ob_autoincrement_param.h"
+#include "share/ob_i_global_autoincrement_service.h"
+#include "share/ob_rpc_struct.h"
+#include "share/schema/ob_multi_version_schema_service.h"
 
 namespace oceanbase
 {
@@ -32,6 +37,8 @@ namespace schema
 {
 class ObTableSchema;
 }
+static const int64_t  PRE_OP_TIMEOUT = 500 * 1000;            // 500ms, for prefetch or presync
+static const int      PRE_OP_THRESHOLD = 4;                   // for prefetch or presync
 static const int64_t  FETCH_SEQ_NUM_ONCE = 1000;
 static const uint64_t AUTO_INC_DEFAULT_NB_MAX_BITS = 16;                                  // from MySQL
 static const uint64_t AUTO_INC_DEFAULT_NB_MAX = (1 << AUTO_INC_DEFAULT_NB_MAX_BITS) - 1;  // from MySQL
@@ -99,11 +106,12 @@ struct CacheHandle
 struct TableNode: public common::LinkHashValue<AutoincKey>
 {
   TableNode()
-    : alloc_mutex_(common::ObLatchIds::AUTO_INCREMENT_ALLOC_LOCK),
+    : sync_mutex_(common::ObLatchIds::AUTO_INCREMENT_SYNC_LOCK),
+      alloc_mutex_(common::ObLatchIds::AUTO_INCREMENT_ALLOC_LOCK),
       table_id_(0),
       next_value_(0),
       local_sync_(0),
-      max_value_(0),
+      last_refresh_ts_(common::ObTimeUtility::current_time()),
       prefetching_(false),
       curr_node_state_is_pending_(false),
       autoinc_version_(OB_INVALID_VERSION)
@@ -117,7 +125,7 @@ struct TableNode: public common::LinkHashValue<AutoincKey>
   TO_STRING_KV(KT_(table_id),
                K_(next_value),
                K_(local_sync),
-               K_(max_value),
+               K_(last_refresh_ts),
                K_(curr_node),
                K_(prefetch_node),
                K_(prefetching),
@@ -133,19 +141,25 @@ struct TableNode: public common::LinkHashValue<AutoincKey>
 
   bool prefetch_condition()
   {
+    //return 0 == prefetch_node_.cache_start_ &&
+    //    (next_value_ - curr_node_.cache_start_) * PRE_OP_THRESHOLD > curr_node_.cache_end_ - curr_node_.cache_start_;
     return false;
   }
   void destroy()
   {
   }
+  lib::ObMutex sync_mutex_;
   lib::ObMutex alloc_mutex_;
   uint64_t table_id_;
   uint64_t next_value_;
-  // The persisted high watermark already observed by this process. Values less
-  // than or equal to local_sync_ do not need to be persisted again.
+  // local_sync_ semantics：we can make sure that other observer has seen a
+  //                        sync value larger than or equal to local_sync.
+  // purpose:
+  //  If observer has synced with global, we can predicate:
+  //  a newly inserted value less than local sync don't need to push to global.
+  //  as we can make a good guess that a larger value had already pushed to global by someone else
   uint64_t local_sync_;
-  // Type-specific upper bound used when exposing the logical next value.
-  uint64_t max_value_;
+  int64_t  last_refresh_ts_;
   CacheNode curr_node_;
   CacheNode prefetch_node_;
   bool prefetching_;
@@ -224,18 +238,18 @@ private:
   common::ObMySQLProxy *mysql_proxy_;
 };
 
-class ObInnerTableAutoincrementStore
+class ObInnerTableGlobalAutoIncrementService : public ObIGlobalAutoIncrementService
 {
 public:
-  ObInnerTableAutoincrementStore() {}
-  ~ObInnerTableAutoincrementStore() = default;
+  ObInnerTableGlobalAutoIncrementService() {}
+  virtual ~ObInnerTableGlobalAutoIncrementService() = default;
 
   int init(common::ObMySQLProxy *mysql_proxy)
   {
     return inner_table_proxy_.init(mysql_proxy);
   }
 
-  int get_value(
+  virtual int get_value(
       const AutoincKey &key,
       const uint64_t offset,
       const uint64_t increment,
@@ -246,27 +260,82 @@ public:
       const int64_t &autoinc_version,
       uint64_t &sync_value,
       uint64_t &start_inclusive,
-      uint64_t &end_inclusive);
+      uint64_t &end_inclusive) override final;
 
-  int get_sequence_value(const AutoincKey &key,
-                         const int64_t &autoinc_version,
-                         uint64_t &sequence_value);
+  virtual int get_sequence_value(const AutoincKey &key,
+                                 const int64_t &autoinc_version,
+                                 uint64_t &sequence_value) override final;
 
-  int get_auto_increment_values(
+  virtual int get_auto_increment_values(
       const common::ObIArray<AutoincKey> &autoinc_keys,
       const common::ObIArray<int64_t> &autoinc_versions,
-      common::hash::ObHashMap<AutoincKey, uint64_t> &seq_values);
+      common::hash::ObHashMap<AutoincKey, uint64_t> &seq_values) override final;
 
-  int sync_value(
+  // when we push local value to global, we may find in global end that the local value
+  // is obsolete. we will piggy back the larger global value to caller via global_sync_value,
+  // which will be used to push up sync_value by local
+  virtual int local_push_to_global_value(
       const AutoincKey &key,
       const uint64_t max_value,
       const uint64_t value,
       const int64_t &autoinc_version,
       const int64_t cache_size,
-      uint64_t &stored_sync_value);
+      uint64_t &global_sync_value) override final;
 
+  virtual int local_sync_with_global_value(const AutoincKey &key,
+                                           const int64_t &autoinc_version,
+                                           uint64_t &value) override final;
 private:
   ObAutoIncInnerTableProxy inner_table_proxy_;
+};
+
+class ObCallGlobalAutoIncrementService : public ObIGlobalAutoIncrementService
+{
+public:
+  ObCallGlobalAutoIncrementService() = default;
+  virtual ~ObCallGlobalAutoIncrementService() = default;
+
+  virtual int get_value(
+      const AutoincKey &key,
+      const uint64_t offset,
+      const uint64_t increment,
+      const uint64_t max_value,
+      const uint64_t table_auto_increment,
+      const uint64_t desired_count,
+      const uint64_t cache_size,
+      const int64_t &autoinc_version,
+      uint64_t &sync_value,
+      uint64_t &start_inclusive,
+      uint64_t &end_inclusive) override final;
+
+  virtual int get_sequence_value(const AutoincKey &key,
+                                 const int64_t &autoinc_version,
+                                 uint64_t &sequence_value) override final;
+
+  virtual int get_auto_increment_values(
+      const common::ObIArray<AutoincKey> &autoinc_keys,
+      const common::ObIArray<int64_t> &autoinc_versions,
+      common::hash::ObHashMap<AutoincKey, uint64_t> &seq_values) override final;
+
+  // when we push local value to global, we may find in global end that the local value
+  // is obsolete. we will piggy back the larger global value to caller via global_sync_value,
+  // which will be used to push up sync_value by local
+  virtual int local_push_to_global_value(
+      const AutoincKey &key,
+      const uint64_t max_value,
+      const uint64_t value,
+      const int64_t &autoinc_version,
+      const int64_t cache_size,
+      uint64_t &global_sync_value) override final;
+
+  virtual int local_sync_with_global_value(const AutoincKey &key,
+                                           const int64_t &autoinc_version,
+                                           uint64_t &value) override final;
+
+  int clear_global_autoinc_cache(const AutoincKey &key);
+
+  int get_sequence_next_value(const schema::ObSequenceSchema &schema, ObSequenceValue &nextval);
+
 };
 
 class ObAutoincrementService
@@ -279,26 +348,32 @@ public:
   ObAutoincrementService();
   ~ObAutoincrementService();
   static ObAutoincrementService &get_instance();
-  int init(common::ObMySQLProxy *mysql_proxy);
+  int init(common::ObMySQLProxy *mysql_proxy,
+           share::schema::ObMultiVersionSchemaService *schema_service);
   int get_handle(AutoincParam &param, CacheHandle *&handle);
+  int get_handle(const schema::ObSequenceSchema &schema, ObSequenceValue &nextval);
   void release_handle(CacheHandle *&handle);
 
-  int sync_insert_value(AutoincParam &param);
+  int sync_insert_value_global(AutoincParam &param);
 
   int sync_insert_value_local(AutoincParam &param);
 
-  int sync_auto_increment(const schema::ObTableSchema &table_schema,
-                          const uint64_t sync_value);
+  int refresh_auto_increment_cache(const uint64_t table_id,
+                                   const uint64_t column_id,
+                                   const uint64_t sync_value);
   int clear_autoinc_cache(const uint64_t table_id,
                           const uint64_t column_id);
 
   int get_sequence_value(const uint64_t table_id,
                          const uint64_t column_id,
+                         const bool is_order,
                          const int64_t autoinc_version,
                          uint64_t &seq_value);
 
-  int get_sequence_values(const common::ObIArray<AutoincKey> &autoinc_keys,
-                          const common::ObIArray<int64_t> &autoinc_versions,
+  int get_sequence_values(const common::ObIArray<AutoincKey> &order_autokeys,
+                          const common::ObIArray<AutoincKey> &noorder_autokeys,
+                          const common::ObIArray<int64_t> &order_autoinc_versions,
+                          const common::ObIArray<int64_t> &noorder_autoinc_versions,
                           common::hash::ObHashMap<AutoincKey, uint64_t> &seq_values);
   int reinit_autoinc_row(const uint64_t &table_id,
                          const uint64_t &column_id,
@@ -335,28 +410,47 @@ public:
   static uint64_t get_max_value(const common::ObObjType type);
 
 private:
-  int sync_insert_value_to_store(AutoincParam &param, CacheHandle *&cache_handle,
-                                 const uint64_t value_to_sync);
+  int get_handle_order(AutoincParam &param, CacheHandle *&handle);
+  int get_handle_noorder(AutoincParam &param, CacheHandle *&handle);
+  int sync_insert_value_order(AutoincParam &param, CacheHandle *&cache_handle,
+                              const uint64_t value_to_sync);
+  int sync_insert_value_noorder(AutoincParam &param, CacheHandle *&cache_handle,
+                               const uint64_t value_to_sync);
 
 private:
-  int get_local_sequence_value_(const AutoincKey &key,
-                                const int64_t autoinc_version,
-                                uint64_t &seq_value,
-                                bool &found);
   int get_table_node(const AutoincParam &param, TableNode *&table_node);
   int fetch_table_node(const AutoincParam &param,
                        TableNode *table_node,
                        const bool fetch_prefetch = false);
-  int refresh_local_sync_value(const uint64_t table_id,
-                               const uint64_t column_id,
-                               const uint64_t sync_value);
+  int fetch_global_sync(const uint64_t table_id,
+                        const uint64_t column_id,
+                        TableNode &table_node,
+                        const bool sync_presync = false);
+  int refresh_sync_value_(const uint64_t table_id,
+                          const uint64_t column_id,
+                          const uint64_t sync_value);
 
+  int try_periodic_refresh_global_sync_value(
+      uint64_t table_id,
+      uint64_t column_id,
+      TableNode &table_node);
+
+  // align insert value to next cache boundary (end)
+  uint64_t calc_next_cache_boundary(
+      uint64_t insert_value,
+      uint64_t cache_size,
+      uint64_t max_value);
+  // for prefetch or presync
+  int set_pre_op_timeout(common::ObTimeoutCtx &ctx);
   int alloc_autoinc_try_lock(lib::ObMutex &alloc_mutex);
 
 private:
   common::ObSmallAllocator node_allocator_;
   common::ObSmallAllocator handle_allocator_;
-  ObInnerTableAutoincrementStore autoinc_store_;
+  common::ObMySQLProxy     *mysql_proxy_;
+  share::schema::ObMultiVersionSchemaService *schema_service_;
+  ObCallGlobalAutoIncrementService global_autoinc_service_;             // for order increment mode
+  ObInnerTableGlobalAutoIncrementService distributed_autoinc_service_; // for noorder increment mode
   lib::ObMutex             map_mutex_;
   //common::hash::ObHashMap<AutoincKey, TableNode*> node_map_;
   NodeMap node_map_;

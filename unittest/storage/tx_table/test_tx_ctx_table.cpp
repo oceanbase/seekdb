@@ -22,7 +22,7 @@
 
 #include "storage/ls/ob_freezer.h"
 #include "storage/ls/ob_ls.h"
-#include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
+#include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
 #include "storage/tx/ob_tx_ctx.h"
 #include "storage/tx_table/ob_tx_ctx_memtable_mgr.h"
 #include "storage/tx_table/ob_tx_ctx_table.h"
@@ -38,7 +38,7 @@ using namespace share;
 
 namespace share
 {
-int ObTxDataAllocator::init(const char* label)
+int ObTenantTxDataAllocator::init(const char* label)
 {
   int ret = OB_SUCCESS;
   ObMemAttr mem_attr;
@@ -52,12 +52,17 @@ int ObTxDataAllocator::init(const char* label)
   return ret;
 }
 
-void *ObTxDataAllocator::alloc(const bool enable_throttle, const int64_t abs_expire_time)
+void *ObTenantTxDataAllocator::alloc(const bool enable_throttle, const int64_t abs_expire_time)
 {
   void *res = slice_allocator_.alloc();
   return res;
 }
 };
+
+int storage::ObTenantMetaMemMgr::fetch_tenant_config()
+{
+  return OB_SUCCESS;
+}
 
 namespace unittest
 {
@@ -96,14 +101,12 @@ public:
   TestTxCtxTable():
       ls_(),
       tablet_id_(LS_TX_DATA_TABLET),
-      ls_id_(1),
+      tenant_id_(1),
       freezer_(&ls_),
       t3m_(),
       mt_mgr_(nullptr),
       ctx_mt_mgr_(nullptr),
-      runtime_state_(),
-      old_server_runtime_(nullptr),
-      old_mp_(nullptr)
+      tenant_base_(tenant_id_)
   {
     ObLSTabletService *tablet_svr = ls_.get_tablet_svr();
     tablet_svr->init(&ls_);
@@ -117,9 +120,7 @@ public:
 protected:
   virtual void SetUp() override
   {
-    old_server_runtime_ = share::g_server_runtime;
-    old_mp_ = share::g_mp;
-
+    oceanbase::ObClusterVersion::get_instance().update_data_version(DATA_CURRENT_VERSION);
     ObTxPalfParam palf_param((logservice::ObLogHandler *)(0x01));
     freezer_.init(&ls_);
     EXPECT_EQ(OB_SUCCESS, t3m_.init());
@@ -146,12 +147,10 @@ protected:
                                             &t3m_));
     mt_mgr_ = ctx_mt_mgr_;
 
-    const int runtime_init_ret = runtime_state_.init();
-    if (OB_SUCCESS == runtime_init_ret) {
-      share::g_server_runtime = &runtime_state_;
-    }
-    ASSERT_EQ(OB_SUCCESS, runtime_init_ret);
-    // g_mp defaults null in unittests; the TestBody's memtable
+    // tenant_base_.set(t3m_);
+    ObTenantEnv::set_tenant(&tenant_base_);
+    ASSERT_EQ(OB_SUCCESS, tenant_base_.init());
+    // single-tenant: g_mp defaults null in unittests; the TestBody's memtable
     // dec_ref() dereferences share::g_mp. Provide a stub provider (its getters
     // return nullptr, which the hit path tolerates).
     static share::ObIModuleProvider tx_ctx_table_module_provider;
@@ -159,43 +158,33 @@ protected:
   }
   virtual void TearDown() override
   {
-    if (nullptr != ctx_mt_mgr_) {
-      ctx_mt_mgr_->destroy();
-    }
+    ctx_mt_mgr_->destroy();
     ls_tx_ctx_mgr_.reset();
-    ls_tx_ctx_mgr2_.reset();
     delete mt_mgr_;
     mt_mgr_ = NULL;
     ctx_mt_mgr_ = NULL;
 
-    bool all_table_cleaned = false;
-    const int gc_ret = t3m_.gc_tables_in_queue(all_table_cleaned);
+    bool all_table_cleaned = false; // no use
+    ASSERT_EQ(OB_SUCCESS, t3m_.gc_tables_in_queue(all_table_cleaned));
     t3m_.destroy();
 
-    const int64_t remaining_ref_count = ref_count_;
+    ASSERT_EQ(0, ref_count_);
 
-    share::g_mp = old_mp_;
-    share::g_server_runtime = old_server_runtime_;
-    runtime_state_.destroy();
-    old_mp_ = nullptr;
-    old_server_runtime_ = nullptr;
-
-    EXPECT_EQ(OB_SUCCESS, gc_ret);
-    EXPECT_EQ(0, remaining_ref_count);
+    tenant_base_.destroy();
+    ObTenantEnv::set_tenant(nullptr);
+    share::g_mp = nullptr;
   }
 public:
   ObTabletID tablet_id_;
-  ObLSID ls_id_;
+  int64_t tenant_id_;
   ObFreezer freezer_;
-  ObStorageMetaMemMgr t3m_;
+  ObTenantMetaMemMgr t3m_;
   ObIMemtableMgr *mt_mgr_;
   ObTxCtxMemtableMgr *ctx_mt_mgr_;
-  ObTxDataAllocator tx_data_allocator_;
-  ObTxDataOpAllocator tx_data_op_allocator_;
+  ObTenantTxDataAllocator tx_data_allocator_;
+  ObTenantTxDataOpAllocator tx_data_op_allocator_;
 
-  ObServerRuntimeState runtime_state_;
-  ObServerRuntimeState *old_server_runtime_;
-  ObIModuleProvider *old_mp_;
+  ObTenantBase tenant_base_;
 };
 
 ObLSTxCtxMgr TestTxCtxTable::ls_tx_ctx_mgr_;

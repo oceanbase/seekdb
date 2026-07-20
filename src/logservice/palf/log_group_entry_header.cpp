@@ -16,6 +16,8 @@
 
 #include "log_group_entry_header.h"       // LogGroupEntryHeader
 #include "lib/checksum/ob_crc64.h"         // ob_crc64
+#include "share/ob_cluster_version.h"     // GET_MIN_DATA_VERSION
+#include "share/rc/ob_tenant_base.h"      // MTL_ID
 #include "log_writer_utils.h"             // LogWriteBuf
 #include "log_entry.h"                    // LogEntry
 

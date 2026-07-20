@@ -907,7 +907,7 @@ int ObSchemaRetrieveUtils::fill_temp_table_schema(T &result, ObTableSchema &tabl
   ObString create_host;
   ObString default_create_host("");
   EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "create_host", create_host,
-                      true, ObSchemaService::g_ignore_column_retrieve_error_, default_create_host);
+                      true, false, default_create_host);
   if (0 >= create_host.length()) {
     ret = OB_ERR_UNEXPECTED;
     SHARE_SCHEMA_LOG(WARN, "get unexpected create_host. ", K(ret), K(create_host));
@@ -954,7 +954,7 @@ int ObSchemaRetrieveUtils::fill_table_schema(const bool check_deleted,
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, index_column_num, table_schema, int64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, autoinc_column_id, table_schema, uint64_t);
     uint64_t auto_increment_default = 1;
-    EXTRACT_UINT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, auto_increment, table_schema, uint64_t, true, ObSchemaService::g_ignore_column_retrieve_error_, auto_increment_default);
+    EXTRACT_UINT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, auto_increment, table_schema, uint64_t, true, false, auto_increment_default);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, read_only, table_schema, int64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, rowkey_split_pos, table_schema, int64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, max_used_column_id, table_schema, int64_t);
@@ -976,29 +976,28 @@ int ObSchemaRetrieveUtils::fill_table_schema(const bool check_deleted,
     table_schema.set_charset_type(ObCharset::charset_type_by_coll(table_schema.get_collation_type()));
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, data_table_id, table_schema, int64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, index_status, table_schema, ObIndexStatus);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, partition_status, table_schema, ObPartitionStatus, true, ObSchemaService::g_ignore_column_retrieve_error_, 0);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, partition_schema_version, table_schema, int64_t, true, ObSchemaService::g_ignore_column_retrieve_error_, 0);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, partition_status, table_schema, ObPartitionStatus, true, false, 0);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, partition_schema_version, table_schema, int64_t, true, false, 0);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, comment, table_schema);
     ObString parser_name_default_val;
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
-      result, parser_name, table_schema, true, ObSchemaService::g_ignore_column_retrieve_error_, parser_name_default_val);
+      result, parser_name, table_schema, true, false, parser_name_default_val);
     ObString parser_properties_default_val;
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
         result, parser_properties, table_schema,  true/*skip null error*/, true/*ignore_column_error*/, parser_properties_default_val);
     int64_t tablet_size_default = OB_DEFAULT_TABLET_SIZE;
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, tablet_size, table_schema, int64_t, true, ObSchemaService::g_ignore_column_retrieve_error_, tablet_size_default);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, tablet_size, table_schema, int64_t, true, false, tablet_size_default);
     int64_t pctfree_default = OB_DEFAULT_PCTFREE;
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, pctfree, table_schema, int64_t, true, ObSchemaService::g_ignore_column_retrieve_error_, pctfree_default);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, pctfree, table_schema, int64_t, true, false, pctfree_default);
     //view schema
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, view_definition, table_schema.get_view_schema());
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, view_check_option, table_schema.get_view_schema(), ViewCheckOption);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, view_is_updatable, table_schema.get_view_schema(), bool);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, index_attributes_set, table_schema, uint64_t, true, ObSchemaService::g_ignore_column_retrieve_error_, 0);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, session_id, table_schema, uint64_t, true, ObSchemaService::g_ignore_column_retrieve_error_, 0);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, index_attributes_set, table_schema, uint64_t, true, false, 0);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, session_id, table_schema, uint64_t, true, false, 0);
     ObString pk_comment("");
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
-        result, pk_comment, table_schema, true, ObSchemaService::g_ignore_column_retrieve_error_, pk_comment);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, sess_active_time, table_schema, int64_t, true, ObSchemaService::g_ignore_column_retrieve_error_, 0);
+        result, pk_comment, table_schema, true, false, pk_comment);
     /*
      * Here comes a compatibility problem:
      * row_store_type's default value is defined as flat_row_store when cluster is upgraded from ver 1.4.x
@@ -1016,14 +1015,13 @@ int ObSchemaRetrieveUtils::fill_table_schema(const bool check_deleted,
      */
     ObString row_store_type("encoding_row_store");
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
-      result, row_store_type, table_schema, true, ObSchemaService::g_ignore_column_retrieve_error_, row_store_type);
+      result, row_store_type, table_schema, true, false, row_store_type);
     ObString store_format("");
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
-      result, store_format, table_schema, true, ObSchemaService::g_ignore_column_retrieve_error_, store_format);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, progressive_merge_round, table_schema, int64_t, true, ObSchemaService::g_ignore_column_retrieve_error_, 0);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, storage_format_version, table_schema, int64_t, true, ObSchemaService::g_ignore_column_retrieve_error_, 0);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, table_mode, table_schema, int32_t, true, ObSchemaService::g_ignore_column_retrieve_error_, 0);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, mv_mode, table_schema, int64_t, true, true, 0);
+      result, store_format, table_schema, true, false, store_format);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, progressive_merge_round, table_schema, int64_t, true, false, 0);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, storage_format_version, table_schema, int64_t, true, false, 0);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, table_mode, table_schema, int32_t, true, false, 0);
     if (OB_SUCC(ret)) {
       if (OB_FAIL(table_schema.set_expire_info(expire_info))) {
         SHARE_SCHEMA_LOG(WARN, "set expire info failed", K(ret));
@@ -1062,7 +1060,7 @@ int ObSchemaRetrieveUtils::fill_table_schema(const bool check_deleted,
     ObDuplicateScope duplicate_scope = duplicate_scope_default;
     ObDuplicateReadConsistency duplicate_read_consistency = duplicate_read_consistency_default;
     EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "duplicate_scope", duplicate_scope, ObDuplicateScope, true /* skip null error*/,
-                                                ObSchemaService::g_ignore_column_retrieve_error_, duplicate_scope_default);
+                                                false, duplicate_scope_default);
     EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "duplicate_read_consistency", duplicate_read_consistency, ObDuplicateReadConsistency, true /* skip null error*/,
                                                true, duplicate_read_consistency_default);
     if (OB_SUCC(ret)) {
@@ -1092,9 +1090,6 @@ int ObSchemaRetrieveUtils::fill_table_schema(const bool check_deleted,
                 ObCollationType, true /* skip null error*/,
                 ignore_column_error,
                 CS_TYPE_INVALID);
-    EXTRACT_BOOL_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, auto_part, partition_option, true, ignore_column_error, false);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, auto_part_size, partition_option, int64_t, true, ignore_column_error, -1);
-
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_AND_DEFAULT_VALUE(result, association_table_id,
     table_schema, true, ignore_column_error, common::OB_INVALID_ID);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_AND_DEFAULT_VALUE(result, define_user_id,
@@ -1159,30 +1154,12 @@ int ObSchemaRetrieveUtils::fill_table_schema(const bool check_deleted,
       result, external_properties, table_schema, true/*skip null*/, true/*ignore column error*/, empty_str);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
       result, index_params, table_schema, true, ignore_column_error, "");
-    if (OB_SUCC(ret) && table_schema.is_materialized_view()) {
-      bool skip_null_error = true;
-      bool skip_column_error = true;
-      ObString local_session_var;
-      ObString default_session_var(""); //default value is empty string
-      EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "local_session_vars", local_session_var,
-                                                    skip_null_error, skip_column_error, default_session_var);
-      if (OB_SUCC(ret) && !local_session_var.empty()
-          && OB_FAIL(table_schema.get_local_session_var().fill_local_session_var_from_str(local_session_var))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to deserialize mview_session_var", K(ret));
-      }
-    }
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, semistruct_encoding_type, table_schema,
         int64_t, true/*skip null error*/, ignore_column_error, 0);
-    EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
-      result, dynamic_partition_policy, table_schema, true/*skip_null_error*/, true/*skip_column_error*/, "");
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, external_location_id, table_schema,
                                                         uint64_t, true, true, common::OB_INVALID_ID);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
       result, external_sub_path, table_schema, true/*skip null*/, true/*ignore column error*/, empty_str);
-    if (OB_SUCC(ret)) {
-      bool with_dynamic_partition_policy = !table_schema.get_dynamic_partition_policy().empty();
-      table_schema.set_with_dynamic_partition_policy(with_dynamic_partition_policy);
-    }
   }
   if (OB_SUCC(ret) && OB_FAIL(fill_sys_table_lob_tid(table_schema))) {
     SHARE_SCHEMA_LOG(WARN, "fail to fill lob table id for inner table", K(ret), K(table_schema.get_table_id()));
@@ -1246,8 +1223,8 @@ int ObSchemaRetrieveUtils::fill_column_schema(const bool check_deleted, T &resul
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, schema_version, column, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, column_name, column);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, comment, column);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, column_flags, column, int64_t, true, ObSchemaService::g_ignore_column_retrieve_error_, 0);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, prev_column_id, column, uint64_t, true, ObSchemaService::g_ignore_column_retrieve_error_, UINT64_MAX);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, column_flags, column, int64_t, true, false, 0);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, prev_column_id, column, uint64_t, true, false, UINT64_MAX);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, srs_id, column, uint64_t, true, true, OB_DEFAULT_COLUMN_SRS_ID);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, udt_set_id, column, int64_t, true, true, 0);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, sub_data_type, column, int64_t, true, true, 0);
@@ -1325,10 +1302,10 @@ int ObSchemaRetrieveUtils::fill_constraint(const bool check_deleted, T &result,
     const bool default_rely_flag = false;
     const bool default_enable_flag = true;
     const ObCstFkValidateFlag default_validate_flag = CST_FK_VALIDATED;
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, constraint_type, constraint, ObConstraintType, true, ObSchemaService::g_ignore_column_retrieve_error_, 0);
-    EXTRACT_BOOL_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, rely_flag, constraint, true, ObSchemaService::g_ignore_column_retrieve_error_, default_rely_flag);
-    EXTRACT_BOOL_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, enable_flag, constraint, true, ObSchemaService::g_ignore_column_retrieve_error_, default_enable_flag);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, validate_flag, constraint, ObCstFkValidateFlag, true, ObSchemaService::g_ignore_column_retrieve_error_, default_validate_flag);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, constraint_type, constraint, ObConstraintType, true, false, 0);
+    EXTRACT_BOOL_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, rely_flag, constraint, true, false, default_rely_flag);
+    EXTRACT_BOOL_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, enable_flag, constraint, true, false, default_enable_flag);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, validate_flag, constraint, ObCstFkValidateFlag, true, false, default_validate_flag);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, schema_version, constraint, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, constraint_name, constraint);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, check_expr, constraint);
@@ -1389,32 +1366,32 @@ int ObSchemaRetrieveUtils::fill_tablegroup_schema(T &result,
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, tablegroup_name, tg_schema);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, comment, tg_schema);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, tg_schema, int64_t);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, partition_status, tg_schema, ObPartitionStatus, true, ObSchemaService::g_ignore_column_retrieve_error_, 0);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, partition_schema_version, tg_schema, int64_t, true, ObSchemaService::g_ignore_column_retrieve_error_, 0);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, partition_status, tg_schema, ObPartitionStatus, true, false, 0);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, partition_schema_version, tg_schema, int64_t, true, false, 0);
 
     const bool skip_null_error = true;
     const enum ObPartitionLevel default_part_level = PARTITION_LEVEL_ZERO;
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, part_level, tg_schema, ObPartitionLevel, skip_null_error, ObSchemaService::g_ignore_column_retrieve_error_, default_part_level);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, part_level, tg_schema, ObPartitionLevel, skip_null_error, false, default_part_level);
 
     const int64_t default_part_num = 0;
     enum ObPartitionFuncType default_part_func_type = PARTITION_FUNC_TYPE_HASH;
     const int64_t default_func_expr_num = 0;
     int64_t def_sub_part_num = 0;
 
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, part_num, tg_schema, int64_t, skip_null_error, ObSchemaService::g_ignore_column_retrieve_error_, default_part_num);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, part_num, tg_schema, int64_t, skip_null_error, false, default_part_num);
     ObPartitionOption &partition_option = tg_schema.get_part_option();
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, part_func_type, partition_option, ObPartitionFuncType, skip_null_error, ObSchemaService::g_ignore_column_retrieve_error_, default_part_func_type);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, part_func_expr_num, tg_schema, int64_t, skip_null_error, ObSchemaService::g_ignore_column_retrieve_error_, default_func_expr_num);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, part_func_type, partition_option, ObPartitionFuncType, skip_null_error, false, default_part_func_type);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, part_func_expr_num, tg_schema, int64_t, skip_null_error, false, default_func_expr_num);
 
     ObSubPartitionOption &sub_part_option = tg_schema.get_sub_part_option();
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, sub_part_func_type, sub_part_option, ObPartitionFuncType, skip_null_error, ObSchemaService::g_ignore_column_retrieve_error_, default_part_func_type);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, sub_part_func_expr_num, tg_schema, int64_t, skip_null_error, ObSchemaService::g_ignore_column_retrieve_error_, default_func_expr_num);
-    EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "sub_part_num", def_sub_part_num, int64_t, skip_null_error, ObSchemaService::g_ignore_column_retrieve_error_, default_part_num);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, sub_part_func_type, sub_part_option, ObPartitionFuncType, skip_null_error, false, default_part_func_type);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, sub_part_func_expr_num, tg_schema, int64_t, skip_null_error, false, default_func_expr_num);
+    EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "sub_part_num", def_sub_part_num, int64_t, skip_null_error, false, default_part_num);
     tg_schema.set_def_sub_part_num(def_sub_part_num);
     sub_part_option.set_part_num(def_sub_part_num);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
       result, sub_part_template_flags, tg_schema, int64_t, true /* skip null error*/,
-      ObSchemaService::g_ignore_column_retrieve_error_, true);
+      false, true);
     if (OB_SUCC(ret) && !tg_schema.has_sub_part_template_def()) {
       tg_schema.get_sub_part_option().set_part_num(0);
       tg_schema.set_def_sub_part_num(0);
@@ -1440,7 +1417,7 @@ int ObSchemaRetrieveUtils::fill_user_schema(T &result,
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, user_name, user_info);
     ObString default_host_value(OB_DEFAULT_HOST_NAME);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
-      result, host, user_info, false, ObSchemaService::g_ignore_column_retrieve_error_, default_host_value);
+      result, host, user_info, false, false, default_host_value);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, passwd, user_info);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, info, user_info);
     EXTRACT_PRIV_FROM_MYSQL_RESULT(result, priv_alter, user_info, PRIV_ALTER);
@@ -1458,13 +1435,13 @@ int ObSchemaRetrieveUtils::fill_user_schema(T &result,
     EXTRACT_PRIV_FROM_MYSQL_RESULT(result, priv_show_db, user_info, PRIV_SHOW_DB);
     EXTRACT_PRIV_FROM_MYSQL_RESULT(result, priv_super, user_info, PRIV_SUPER);
     EXTRACT_PRIV_FROM_MYSQL_RESULT(result, priv_process, user_info, PRIV_PROCESS);
-    EXTRACT_PRIV_FROM_MYSQL_RESULT_IGNORE(result, priv_file, user_info, PRIV_FILE, ObSchemaService::g_ignore_column_retrieve_error_);
-    EXTRACT_PRIV_FROM_MYSQL_RESULT_IGNORE(result, priv_alter_tenant, user_info, PRIV_ALTER_TENANT, ObSchemaService::g_ignore_column_retrieve_error_);
-    EXTRACT_PRIV_FROM_MYSQL_RESULT_IGNORE(result, priv_alter_system, user_info, PRIV_ALTER_SYSTEM, ObSchemaService::g_ignore_column_retrieve_error_);
-    EXTRACT_PRIV_FROM_MYSQL_RESULT_IGNORE(result, priv_create_resource_pool, user_info, PRIV_CREATE_RESOURCE_POOL, ObSchemaService::g_ignore_column_retrieve_error_);
-    EXTRACT_PRIV_FROM_MYSQL_RESULT_IGNORE(result, priv_create_resource_unit, user_info, PRIV_CREATE_RESOURCE_UNIT, ObSchemaService::g_ignore_column_retrieve_error_);
-    EXTRACT_PRIV_FROM_MYSQL_RESULT_IGNORE(result, priv_repl_slave, user_info, PRIV_REPL_SLAVE, ObSchemaService::g_ignore_column_retrieve_error_);
-    EXTRACT_PRIV_FROM_MYSQL_RESULT_IGNORE(result, priv_repl_client, user_info, PRIV_REPL_CLIENT, ObSchemaService::g_ignore_column_retrieve_error_);
+    EXTRACT_PRIV_FROM_MYSQL_RESULT_IGNORE(result, priv_file, user_info, PRIV_FILE, false);
+    EXTRACT_PRIV_FROM_MYSQL_RESULT_IGNORE(result, priv_alter_tenant, user_info, PRIV_ALTER_TENANT, false);
+    EXTRACT_PRIV_FROM_MYSQL_RESULT_IGNORE(result, priv_alter_system, user_info, PRIV_ALTER_SYSTEM, false);
+    EXTRACT_PRIV_FROM_MYSQL_RESULT_IGNORE(result, priv_create_resource_pool, user_info, PRIV_CREATE_RESOURCE_POOL, false);
+    EXTRACT_PRIV_FROM_MYSQL_RESULT_IGNORE(result, priv_create_resource_unit, user_info, PRIV_CREATE_RESOURCE_UNIT, false);
+    EXTRACT_PRIV_FROM_MYSQL_RESULT_IGNORE(result, priv_repl_slave, user_info, PRIV_REPL_SLAVE, false);
+    EXTRACT_PRIV_FROM_MYSQL_RESULT_IGNORE(result, priv_repl_client, user_info, PRIV_REPL_CLIENT, false);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, is_locked, user_info, bool);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, user_info, int64_t);
 
@@ -1474,17 +1451,17 @@ int ObSchemaRetrieveUtils::fill_user_schema(T &result,
                                         user_info,
                                         ObSSLType,
                                         false,
-                                        ObSchemaService::g_ignore_column_retrieve_error_,
+                                        false,
                                         default_ssl_type);
     ObString default_ssl_specified("");
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
-      result, ssl_cipher, user_info, false, ObSchemaService::g_ignore_column_retrieve_error_, default_ssl_specified);
+      result, ssl_cipher, user_info, false, false, default_ssl_specified);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
-      result, x509_issuer, user_info, false, ObSchemaService::g_ignore_column_retrieve_error_, default_ssl_specified);
+      result, x509_issuer, user_info, false, false, default_ssl_specified);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
-      result, x509_subject, user_info, false, ObSchemaService::g_ignore_column_retrieve_error_, default_ssl_specified);
+      result, x509_subject, user_info, false, false, default_ssl_specified);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result,
-        type, user_info, int32_t, true, ObSchemaService::g_ignore_column_retrieve_error_, 0);
+        type, user_info, int32_t, true, false, 0);
     int64_t default_last_changed = -1;
     int64_t password_last_changed = -1;
     common::ObTimeZoneInfoWrap tz_info_wrap;
@@ -1498,10 +1475,6 @@ int ObSchemaRetrieveUtils::fill_user_schema(T &result,
        if (OB_SUCCESS == (ret = result.get_int("priv_create_synonym", int_value))) {
        } else if (OB_ERR_NULL_VALUE == ret) {
          ret = OB_SUCCESS;
-       } else if (OB_ERR_COLUMN_NOT_FOUND == ret
-         && ObSchemaService::g_ignore_column_retrieve_error_) {
-         int_value = 1;//default value
-         ret = OB_SUCCESS;
        }
        if (OB_SUCC(ret)) {
          if (int_value) {
@@ -1514,10 +1487,10 @@ int ObSchemaRetrieveUtils::fill_user_schema(T &result,
     }
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
         result, max_connections, user_info, uint64_t, true,
-        ObSchemaService::g_ignore_column_retrieve_error_, 0);
+        false, 0);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
         result, max_user_connections, user_info, uint64_t, true,
-        ObSchemaService::g_ignore_column_retrieve_error_, 0);
+        false, 0);
     EXTRACT_PRIV_FROM_MYSQL_RESULT_IGNORE_NULL_AND_IGNORE_COLUMN_ERROR(result, priv_drop_database_link, user_info, PRIV_DROP_DATABASE_LINK);
     EXTRACT_PRIV_FROM_MYSQL_RESULT_IGNORE_NULL_AND_IGNORE_COLUMN_ERROR(result, priv_create_database_link, user_info, PRIV_CREATE_DATABASE_LINK);
 
@@ -1573,10 +1546,10 @@ int ObSchemaRetrieveUtils::retrieve_role_grantee_map_schema(T &result,
     EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
     EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(
        result, "admin_option", admin_option, uint64_t, true /* skip null error*/,
-       ObSchemaService::g_ignore_column_retrieve_error_, 0);
+       false, 0);
     EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(
        result, "disable_flag", disable_flag, uint64_t, true /* skip null error*/,
-       ObSchemaService::g_ignore_column_retrieve_error_, 0);
+       false, 0);
 
     ObUserInfo *user_info = NULL;
     if (OB_FAIL(ret)) {
@@ -1905,7 +1878,7 @@ int ObSchemaRetrieveUtils::fill_outline_schema(T &result,
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, name, outline_info);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, signature, outline_info);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
-      result, sql_id, outline_info, true, ObSchemaService::g_ignore_column_retrieve_error_, ObString::make_string(""));
+      result, sql_id, outline_info, true, false, ObString::make_string(""));
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, outline_content, outline_info);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, outline_info, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, sql_text, outline_info);
@@ -1989,7 +1962,6 @@ int ObSchemaRetrieveUtils::fill_routine_schema(T &result, ObRoutineInfo &routine
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, flag, routine_info, int64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, owner_id, routine_info, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, priv_user, routine_info);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, comp_flag, routine_info, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, exec_env, routine_info);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, routine_body, routine_info);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, comment, routine_info);
@@ -2015,7 +1987,7 @@ int ObSchemaRetrieveUtils::fill_routine_param_schema(T &result, ObRoutineParam &
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, param_position, schema, uint64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, param_level, schema, uint64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
-      result, param_name, schema, true, ObSchemaService::g_ignore_column_retrieve_error_, default_val);
+      result, param_name, schema, true, false, default_val);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, schema, int64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, param_type, schema, common::ObObjType);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, param_length, schema, common::ObLength);
@@ -2026,12 +1998,12 @@ int ObSchemaRetrieveUtils::fill_routine_param_schema(T &result, ObRoutineParam &
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, param_coll_type, schema, common::ObCollationType);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, flag, schema, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
-      result, default_value, schema, true, ObSchemaService::g_ignore_column_retrieve_error_, default_val);
+      result, default_value, schema, true, false, default_val);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, type_owner, schema, uint64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
-      result, type_name, schema, true, ObSchemaService::g_ignore_column_retrieve_error_, default_val);
+      result, type_name, schema, true, false, default_val);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
-      result, type_subname, schema, true, ObSchemaService::g_ignore_column_retrieve_error_, default_val);
+      result, type_subname, schema, true, false, default_val);
     if (OB_SUCC(ret) && ob_is_enum_or_set_type(schema.get_param_type().get_obj_type())) {
       ObString extended_type_info;
       EXTRACT_VARCHAR_FIELD_MYSQL(result, "extended_type_info", extended_type_info);
@@ -2063,7 +2035,6 @@ int ObSchemaRetrieveUtils::fill_package_schema(T &result, ObPackageInfo &package
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, type, package_info, ObPackageType);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, flag, package_info, int64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, owner_id, package_info, int64_t);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, comp_flag, package_info, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, exec_env, package_info);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, source, package_info);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, comment, package_info);
@@ -2125,7 +2096,6 @@ int ObSchemaRetrieveUtils::fill_trigger_schema(T &result, ObTriggerInfo &trigger
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, package_body_source, trigger_info,
       true, false, default_value);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, package_flag, trigger_info, int64_t);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, package_comp_flag, trigger_info, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, package_exec_env, trigger_info);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, sql_mode, trigger_info, uint64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, trigger_priv_user, trigger_info,
@@ -3036,9 +3006,9 @@ int ObSchemaRetrieveUtils::fill_user_schema(T &result,
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, user_name, user_schema);
     ObString default_host_value(OB_DEFAULT_HOST_NAME);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
-      result, host, user_schema, false, ObSchemaService::g_ignore_column_retrieve_error_, default_host_value);
+      result, host, user_schema, false, false, default_host_value);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result,
-        type, user_schema, uint64_t, true, ObSchemaService::g_ignore_column_retrieve_error_, 0);
+        type, user_schema, uint64_t, true, false, 0);
   }
   return ret;
 }
@@ -3079,11 +3049,11 @@ int ObSchemaRetrieveUtils::fill_table_schema(const bool check_deleted,
     table_schema.set_def_sub_part_num(def_sub_part_num);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, part_level, table_schema, ObPartitionLevel);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, index_status, table_schema, ObIndexStatus);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, partition_status, table_schema, ObPartitionStatus, true, ObSchemaService::g_ignore_column_retrieve_error_, 0);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, partition_schema_version, table_schema, int64_t, true, ObSchemaService::g_ignore_column_retrieve_error_, 0);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, partition_status, table_schema, ObPartitionStatus, true, false, 0);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, partition_schema_version, table_schema, int64_t, true, false, 0);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, index_type, table_schema, ObIndexType);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, session_id, table_schema, uint64_t, true, ObSchemaService::g_ignore_column_retrieve_error_, 0);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, table_mode, table_schema, int32_t, true, ObSchemaService::g_ignore_column_retrieve_error_, 0);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, session_id, table_schema, uint64_t, true, false, 0);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, table_mode, table_schema, int32_t, true, false, 0);
     ObPartitionOption &partition_option = table_schema.get_part_option();
     if (OB_SUCC(ret)) {
       ObString part_func_expr;
@@ -3123,7 +3093,7 @@ int ObSchemaRetrieveUtils::fill_table_schema(const bool check_deleted,
       ObDuplicateScope duplicate_scope = duplicate_scope_default;
       ObDuplicateReadConsistency duplicate_read_consistency = duplicate_read_consistency_default;
       EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "duplicate_scope", duplicate_scope, ObDuplicateScope, true /* skip null error*/,
-                                                 ObSchemaService::g_ignore_column_retrieve_error_, duplicate_scope_default);
+                                                 false, duplicate_scope_default);
       EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "duplicate_read_consistency", duplicate_read_consistency, ObDuplicateReadConsistency, true /* skip null error*/,
                                                  true, duplicate_read_consistency_default);
       if (OB_SUCC(ret)) {
@@ -3137,8 +3107,6 @@ int ObSchemaRetrieveUtils::fill_table_schema(const bool check_deleted,
         table_schema.get_sub_part_option().set_part_num(0);
         table_schema.set_def_sub_part_num(0);
       }
-      EXTRACT_BOOL_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, auto_part, partition_option, true, ignore_column_error, false);
-      EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, auto_part_size, partition_option, int64_t, true, ignore_column_error, -1);
       EXTRACT_INT_FIELD_TO_CLASS_MYSQL_AND_DEFAULT_VALUE(result, association_table_id,
       table_schema, true, ignore_column_error, common::OB_INVALID_ID);
 
@@ -3180,14 +3148,6 @@ int ObSchemaRetrieveUtils::fill_table_schema(const bool check_deleted,
       }
     }
 
-    ObString dynamic_partition_policy;
-    EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(
-      result, "dynamic_partition_policy", dynamic_partition_policy, true/*skip_null_error*/, true/*skip_column_error*/, "");
-    if (OB_SUCC(ret)) {
-      bool with_dynamic_partition_policy = !dynamic_partition_policy.empty();
-      table_schema.set_with_dynamic_partition_policy(with_dynamic_partition_policy);
-    }
-
   }
   return ret;
 }
@@ -3227,8 +3187,8 @@ int ObSchemaRetrieveUtils::fill_tablegroup_schema(T &result,
   if (!is_deleted) {
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, tablegroup_schema, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, tablegroup_name, tablegroup_schema);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, partition_status, tablegroup_schema, ObPartitionStatus, true, ObSchemaService::g_ignore_column_retrieve_error_, 0);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, partition_schema_version, tablegroup_schema, int64_t, true, ObSchemaService::g_ignore_column_retrieve_error_, 0);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, partition_status, tablegroup_schema, ObPartitionStatus, true, false, 0);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, partition_schema_version, tablegroup_schema, int64_t, true, false, 0);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, sharding, tablegroup_schema, true, true, sharding_default);
   }
   return ret;
@@ -3253,7 +3213,7 @@ int ObSchemaRetrieveUtils::fill_outline_schema(T &result,
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, name, outline_schema);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, signature, outline_schema);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
-      result, sql_id, outline_schema, true, ObSchemaService::g_ignore_column_retrieve_error_, ObString::make_string(""));
+      result, sql_id, outline_schema, true, false, ObString::make_string(""));
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
       result, format_sql_id, outline_schema, true, ignore_column_error, ObString::make_string(""));
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
@@ -3301,7 +3261,6 @@ int ObSchemaRetrieveUtils::fill_package_schema(T &result,
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, package_schema, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, package_name, package_schema);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, type, package_schema, ObPackageType);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, comp_flag, package_schema, int64_t);
   }
   return ret;
 }
@@ -3398,12 +3357,12 @@ int ObSchemaRetrieveUtils::fill_part_info(const bool check_deleted, T &result,
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, part_name, partition);
     const int64_t default_part_idx = -1;
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, part_idx, partition, int64_t,
-        true, ObSchemaService::g_ignore_column_retrieve_error_, default_part_idx);
+        true, false, default_part_idx);
 
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, sub_part_num, partition, int64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
         result, partition_type, partition, PartitionType, true /* skip null error*/,
-        ObSchemaService::g_ignore_column_retrieve_error_,
+        false,
         share::schema::PartitionType::PARTITION_TYPE_NORMAL);
   }
   if (OB_SUCC(ret)) {
@@ -3427,7 +3386,7 @@ int ObSchemaRetrieveUtils::fill_def_subpart_info(const bool check_deleted,
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, sub_part_id, partition, int64_t);
     const int64_t default_sub_part_idx = -1;
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, sub_part_idx, partition, int64_t,
-        true, ObSchemaService::g_ignore_column_retrieve_error_, default_sub_part_idx);
+        true, false, default_sub_part_idx);
     ObString sub_part_name;
     EXTRACT_VARCHAR_FIELD_MYSQL(result, "sub_part_name", sub_part_name);
     if (OB_SUCC(ret)) {
@@ -3458,7 +3417,7 @@ int ObSchemaRetrieveUtils::fill_subpart_info(const bool check_deleted,
   if (OB_SUCC(ret) && !is_deleted) {
     const int64_t default_sub_part_idx = -1;
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, sub_part_idx, partition, int64_t,
-        true, ObSchemaService::g_ignore_column_retrieve_error_, default_sub_part_idx);
+        true, false, default_sub_part_idx);
     ObString sub_part_name;
     EXTRACT_VARCHAR_FIELD_MYSQL(result, "sub_part_name", sub_part_name);
     if (OB_SUCC(ret)) {
@@ -3468,7 +3427,7 @@ int ObSchemaRetrieveUtils::fill_subpart_info(const bool check_deleted,
     }
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
         result, partition_type, partition, PartitionType, true /* skip null error*/,
-        ObSchemaService::g_ignore_column_retrieve_error_,
+        false,
         share::schema::PartitionType::PARTITION_TYPE_NORMAL);
   } else { }//do nothing
   if (OB_SUCC(ret)) {
@@ -3515,9 +3474,6 @@ int ObSchemaRetrieveUtils::fill_base_part_info(const bool check_deleted,
       if (OB_ERR_NULL_VALUE == ret) {
         ret = OB_SUCCESS;
         //do nothing
-      } else if (OB_ERR_COLUMN_NOT_FOUND == ret && ObSchemaService::g_ignore_column_retrieve_error_) {
-        // ignore error that column is not exist when schema service runs in liboblog
-        ret = OB_SUCCESS;
       } else if (OB_SUCCESS != ret) {
         SQL_LOG(WARN, "fail to get varchar. ", K(ret));
       } else if (OB_FAIL(partition.set_high_bound_val_with_hex_str(bhigh_bound_val))) {
@@ -3530,9 +3486,6 @@ int ObSchemaRetrieveUtils::fill_base_part_info(const bool check_deleted,
       if (OB_ERR_NULL_VALUE == ret) {
         ret = OB_SUCCESS;
         //do nothing
-      } else if (OB_ERR_COLUMN_NOT_FOUND == ret && ObSchemaService::g_ignore_column_retrieve_error_) {
-        // ignore error that column is not exist when schema service runs in liboblog
-        ret = OB_SUCCESS;
       } else if (OB_SUCCESS != ret) {
         SQL_LOG(WARN, "fail to get varchar column 'b_list_val' of base_part_info.", K(ret));
       } else {
@@ -3544,7 +3497,7 @@ int ObSchemaRetrieveUtils::fill_base_part_info(const bool check_deleted,
         }
       }
     }
-    bool ignore_column_error = ObSchemaService::g_ignore_column_retrieve_error_;
+    const bool ignore_column_error = false;
     if (OB_SUCC(ret) && !(is_subpart_def && is_subpart_template)) {
       EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, tablet_id, partition, uint64_t, true, ignore_column_error, 0);
     }
@@ -3581,22 +3534,16 @@ int ObSchemaRetrieveUtils::retrieve_aux_tables(T &result,
     uint64_t table_id = OB_INVALID_ID;
     ObTableType table_type = MAX_TABLE_TYPE;
     ObIndexType index_type = INDEX_TYPE_MAX;
-    ObString table_name;
-
     EXTRACT_INT_FIELD_MYSQL(result, "table_type", table_type, ObTableType);
 
     if (USER_INDEX == table_type
         || AUX_VERTIAL_PARTITION_TABLE == table_type
         || AUX_LOB_META == table_type
-        || AUX_LOB_PIECE == table_type
-        || MATERIALIZED_VIEW_LOG == table_type) {
+        || AUX_LOB_PIECE == table_type) {
 
       EXTRACT_INT_FIELD_MYSQL(result, "table_id", table_id, int64_t);
       EXTRACT_INT_FIELD_MYSQL(result, "index_type", index_type, ObIndexType);
-      EXTRACT_VARCHAR_FIELD_MYSQL(result, "table_name", table_name);
-      const bool is_tmp_mlog = ObSimpleTableSchemaV2::is_tmp_mlog_table(table_type, table_name);
-
-      ObAuxTableMetaInfo aux_table_meta(table_id, table_type, index_type, is_tmp_mlog);
+      ObAuxTableMetaInfo aux_table_meta(table_id, table_type, index_type);
       if (FAILEDx(aux_tables.push_back(aux_table_meta))) {
         SHARE_SCHEMA_LOG(WARN, "fail to push back aux table", KR(ret), K(aux_table_meta));
       }
@@ -3780,12 +3727,12 @@ int ObSchemaRetrieveUtils::fill_foreign_key_info(uint64_t table_id,
       EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, update_action, foreign_key_info, ObReferenceAction);
       EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, delete_action, foreign_key_info, ObReferenceAction);
       EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, foreign_key_name, foreign_key_info);
-      EXTRACT_BOOL_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, rely_flag, foreign_key_info, true, ObSchemaService::g_ignore_column_retrieve_error_, default_rely_flag);
-      EXTRACT_BOOL_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, enable_flag, foreign_key_info, true, ObSchemaService::g_ignore_column_retrieve_error_, default_enable_flag);
-      EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, validate_flag, foreign_key_info, ObCstFkValidateFlag, true, ObSchemaService::g_ignore_column_retrieve_error_, default_validate_flag);
-      EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "ref_cst_type", foreign_key_info.fk_ref_type_, ObForeignKeyRefType, true, ObSchemaService::g_ignore_column_retrieve_error_, 0);
-      EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, ref_cst_id, foreign_key_info, uint64_t, true, ObSchemaService::g_ignore_column_retrieve_error_, -1);
-      EXTRACT_BOOL_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, is_parent_table_mock, foreign_key_info, true, ObSchemaService::g_ignore_column_retrieve_error_, default_is_parent_table_mock);
+      EXTRACT_BOOL_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, rely_flag, foreign_key_info, true, false, default_rely_flag);
+      EXTRACT_BOOL_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, enable_flag, foreign_key_info, true, false, default_enable_flag);
+      EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, validate_flag, foreign_key_info, ObCstFkValidateFlag, true, false, default_validate_flag);
+      EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "ref_cst_type", foreign_key_info.fk_ref_type_, ObForeignKeyRefType, true, false, 0);
+      EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, ref_cst_id, foreign_key_info, uint64_t, true, false, -1);
+      EXTRACT_BOOL_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, is_parent_table_mock, foreign_key_info, true, false, default_is_parent_table_mock);
       EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, name_generated_type, foreign_key_info, ObNameGeneratedType, true/*skip null*/, true/*ignore column error*/, GENERATED_TYPE_UNKNOWN);
     }
   }
@@ -4228,11 +4175,11 @@ int ObSchemaRetrieveUtils::fill_ccl_rule_schema(T &result,
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, affect_host, ccl_rule_schema);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, affect_for_all_databases, ccl_rule_schema, bool);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, affect_for_all_tables, ccl_rule_schema, bool);
-    EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, affect_database, ccl_rule_schema, true, ObSchemaService::g_ignore_column_retrieve_error_, "");
-    EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, affect_table, ccl_rule_schema, true, ObSchemaService::g_ignore_column_retrieve_error_, "");
+    EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, affect_database, ccl_rule_schema, true, false, "");
+    EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, affect_table, ccl_rule_schema, true, false, "");
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, affect_dml, ccl_rule_schema, oceanbase::share::schema::ObCCLAffectDMLType);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, affect_scope, ccl_rule_schema, oceanbase::share::schema::ObCCLAffectScope);
-    EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, ccl_keywords, ccl_rule_schema, true, ObSchemaService::g_ignore_column_retrieve_error_, "");
+    EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, ccl_keywords, ccl_rule_schema, true, false, "");
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, max_concurrency, ccl_rule_schema, uint64_t);
   }
   return ret;

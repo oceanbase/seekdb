@@ -32,6 +32,7 @@
 #include "sql/engine/ob_des_exec_context.h"
 #include "sql/engine/cmd/ob_load_data_parser.h"
 #include "sql/engine/cmd/ob_load_data_file_reader.h"
+#include "lib/restore/ob_io_device.h"
 
 namespace oceanbase
 {
@@ -582,7 +583,7 @@ public:
   virtual ~ObLoadDataBase() {}
   //utils
   static constexpr double MEMORY_LIMIT_THRESHOLD = 1.02;
-  static const char *SERVER_MEMORY_EXAMINE_SQL;
+  static const char *SERVER_TENANT_MEMORY_EXAMINE_SQL;
 
   static void set_one_field_objparam(common::ObObjParam &dest_param,
                                      const common::ObString &field_str);
@@ -592,7 +593,7 @@ public:
                                     ParamStore &param_store,
                                     ObInsertStmt *&insert_stmt);
 
-  static int memory_check_worker(bool &need_wait_minor_freeze);
+  static int memory_check_remote(bool &need_wait_minor_freeze);
   static int memory_wait_local(ObExecContext &ctx,
                                const ObTabletID &tablet_id,
                                ObAddr &server_addr,
@@ -697,7 +698,7 @@ public:
     common::ObSEArray<ObLoadServerInfo*, 16> server_infos;
 
     //exec params
-    int64_t max_cpus; // Available CPU count in the server runtime.
+    int64_t max_cpus; //real cpu num of a tenant
     int64_t num_of_file_column;
     int64_t num_of_table_column;
     int64_t parallel;

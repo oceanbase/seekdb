@@ -18,7 +18,6 @@
 #include "ob_sql_hint.h"
 #include "sql/optimizer/ob_log_plan.h"
 #include "sql/rewrite/ob_transform_utils.h"
-#include "sql/resolver/mv/ob_major_refresh_mjv_printer.h"
 
 namespace oceanbase
 {
@@ -97,7 +96,8 @@ int ObQueryHint::get_qb_name_source_hash_value(const ObString &src_qb_name,
 
 int ObQueryHint::set_outline_data_hints(const ObGlobalHint &global_hint,
                                         const int64_t stmt_id,
-                                        const ObIArray<ObHint*> &hints)
+                                        const ObIArray<ObHint*> &hints,
+                                        const bool is_user_defined)
 {
   int ret = OB_SUCCESS;
   qb_hints_.reuse();
@@ -107,13 +107,13 @@ int ObQueryHint::set_outline_data_hints(const ObGlobalHint &global_hint,
     LOG_WARN("failed to assign global hint.", K(ret));
   } else if (OB_FAIL(append_hints(stmt_id, hints))) {
     LOG_WARN("failed to assign global hint.", K(ret));
+  } else if (is_user_defined) {
+    user_def_outline_ = true;
   } else {
-    if (global_hint_.has_valid_opt_features_version()) {
-      is_valid_outline_ = true;
-      outline_stmt_id_ = stmt_id;
-    } else {
-      user_def_outline_ = true;
-    }
+    is_valid_outline_ = true;
+    outline_stmt_id_ = stmt_id;
+  }
+  if (OB_SUCC(ret)) {
     ObHint *cur_hint = NULL;
     for (int64_t i = 0; OB_SUCC(ret) && i < hints.count(); ++i) {
       if (OB_ISNULL(cur_hint = hints.at(i))) {
@@ -257,11 +257,6 @@ int ObQueryHint::check_and_set_params_from_hint(const ObResolverParams &params, 
   } else {
     if (global_hint_.query_timeout_ > 0) {
       THIS_WORKER.set_timeout_ts(session_info->get_query_start_time() + global_hint_.query_timeout_);
-    }
-    if (global_hint_.has_valid_opt_features_version()) {
-      query_ctx->optimizer_features_enable_version_ = global_hint_.opt_features_version_;
-    } else if (OB_FAIL(session_info->get_optimizer_features_enable_version(query_ctx->optimizer_features_enable_version_))) {
-      LOG_WARN("failed to check ddl schema version", K(ret));
     }
   }
   return ret;
@@ -793,7 +788,7 @@ int ObQueryHint::print_qb_name_hint(PlanText &plan_text, int64_t stmt_id) const
 {
   int ret = OB_SUCCESS;
   if (OB_INVALID_STMT_ID == stmt_id) {
-    /* do nothing, this stmt is create for print stmt for mv */
+    /* do nothing */
   } else if (OB_UNLIKELY(stmt_id < 0 || stmt_id >= stmt_id_map_.count())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected stmt id", K(ret), K(stmt_id), K(stmt_id_map_.count()));
@@ -1358,7 +1353,6 @@ void ObLogPlanHint::reset()
   table_hints_.reuse();
   join_hints_.reuse();
   normal_hints_.reuse();
-  optimizer_features_enable_version_ = LASTED_COMPAT_VERSION;
 }
 
 int ObLogPlanHint::init_log_plan_hint(ObSqlSchemaGuard &schema_guard,
@@ -1368,7 +1362,6 @@ int ObLogPlanHint::init_log_plan_hint(ObSqlSchemaGuard &schema_guard,
   int ret = OB_SUCCESS;
   reset();
   is_outline_data_ = query_hint.has_outline_data();
-  optimizer_features_enable_version_ = stmt.get_query_ctx()->optimizer_features_enable_version_;
   const ObStmtHint &stmt_hint = stmt.get_stmt_hint();
   if (OB_FAIL(join_order_.init_leading_info(stmt, query_hint, stmt_hint.get_normal_hint(T_LEADING)))) {
     LOG_WARN("failed to get leading hint info", K(ret));
@@ -2086,9 +2079,6 @@ int LogLeadingHint::init_leading_info(const ObDMLStmt &stmt,
   reset();
   if (NULL == hint) {
     /* do nothing */
-    if (OB_FAIL(try_init_leading_info_for_major_refresh_real_time_mview(stmt))) {
-      LOG_WARN("failed to try init leading info for major refresh real time mview.", K(ret));
-    }
   } else if (OB_UNLIKELY(!hint->is_join_order_hint())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpect hint type", K(ret), K(*hint));
@@ -2107,42 +2097,6 @@ int LogLeadingHint::init_leading_info(const ObDMLStmt &stmt,
     } else {
       LOG_TRACE("succeed to get leading infos", K(*this));
     }
-  }
-  return ret;
-}
-
-int LogLeadingHint::try_init_leading_info_for_major_refresh_real_time_mview(const ObDMLStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-  leading_infos_.reuse();
-  leading_tables_.reuse();
-  const SemiInfo *semi_info = NULL;
-  const TableItem *table_item = NULL;
-  LeadingInfo *leading_info = NULL;
-  if (!stmt.get_table_items().count() || 1 != stmt.get_semi_info_size()) {
-    /* do nothing */
-  } else if (OB_ISNULL(semi_info = stmt.get_semi_infos().at(0))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected NULL", K(ret));
-  } else if (!semi_info->is_anti_join() || 1 != semi_info->left_table_ids_.count()) {
-    /* do nothing */
-  } else if (OB_ISNULL(table_item = stmt.get_table_item_by_id(semi_info->left_table_ids_.at(0)))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected NULL", K(ret), K(table_item));
-  } else if (ObMajorRefreshMJVPrinter::MR_MV_RT_QUERY_LEADING_TABLE_FLAG != table_item->mr_mv_flags_) {
-    /* do nothing */
-  } else if (OB_ISNULL(leading_info = leading_infos_.alloc_place_holder())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("alloc LeadingInfo failed", K(ret));
-  } else if (OB_FAIL(leading_info->left_table_set_.add_member(stmt.get_table_bit_index(table_item->table_id_)))) {
-    LOG_WARN("failed to add member", K(ret));
-  } else if (OB_FAIL(leading_info->right_table_set_.add_member(stmt.get_table_bit_index(semi_info->right_table_id_)))) {
-    LOG_WARN("failed to add member", K(ret));
-  } else if (OB_FAIL(leading_tables_.add_members(leading_info->left_table_set_))
-              || OB_FAIL(leading_tables_.add_members(leading_info->right_table_set_))) {
-    LOG_WARN("failed to get table ids", K(ret));
-  } else if (OB_FAIL(leading_info->table_set_.add_members(leading_tables_))) {
-    LOG_WARN("failed to add table ids", K(ret));
   }
   return ret;
 }
@@ -2419,7 +2373,6 @@ int LogTableHint::init_index_hints(const ObDMLStmt &stmt, ObSqlSchemaGuard &sche
   } else if (OB_FAIL(schema_guard.get_can_read_index_array(table_->ref_id_,
                                                            tids,
                                                            table_index_aux_count,
-                                                           false,
                                                            table_->access_all_part(),
                                                            true /*domain index*/,
                                                            false /*spatial index*/))) {

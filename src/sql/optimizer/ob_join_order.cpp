@@ -488,8 +488,7 @@ int ObJoinOrder::compute_sharding_info_with_part_info(ObTableLocationType locati
     bool can_reselect_replica = (phy_tbl_info.is_duplicate_table_not_in_dml() &&
         (1 == phy_tbl_info.get_phy_part_loc_info_list().count())
         && !session_info->get_is_in_retry_for_dup_tbl()
-        && !is_modified
-        && !session_info->is_dup_ls_modified());
+        && !is_modified);
     sharding_info = new(sharding_info) ObShardingInfo();
     sharding_info->set_location_type(location_type);
     if (OB_FAIL(sharding_info->init_partition_info(
@@ -4253,7 +4252,6 @@ int ObJoinOrder::get_valid_index_ids(const uint64_t table_id,
   } else if (OB_FAIL(schema_guard->get_can_read_index_array(ref_table_id,
                                                             tids,
                                                             index_count,
-                                                            false,
                                                             can_use_global_index,
                                                             false /*domain index*/,
                                                             false /*spatial index*/,
@@ -4517,7 +4515,6 @@ int ObJoinOrder::fill_opt_info_index_name(const uint64_t table_id,
   } else if (OB_FAIL(schema_guard->get_can_read_index_array(base_table_id,
                                                             index_ids,
                                                             index_count,
-                                                            false,
                                                             true /*global index*/,
                                                             true /*domain index*/))) {
     LOG_WARN("failed to get can read index", K(base_table_id), K(ret));
@@ -6025,8 +6022,7 @@ int ObJoinOrder::generate_const_predicates_from_view(const ObDMLStmt *stmt,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected expr", K(ret), K(idx), K(sel_expr));
     } else if (!sel_expr->is_const_expr() || sel_expr->get_result_type().is_lob()
-                || ob_is_geometry(sel_expr->get_result_type().get_type())
-                || ob_is_roaringbitmap(sel_expr->get_result_type().get_type())) {
+                || ob_is_geometry(sel_expr->get_result_type().get_type())) {
       //do nothing
     } else if (OB_FAIL(ObTransformUtils::is_expr_not_null(not_null_ctx,
                                                           sel_expr,
@@ -7190,17 +7186,13 @@ int AccessPath::check_and_prepare_estimate_parallel_params(const int64_t cur_min
   server_cnt = 0;
   cur_parallel_degree_limit = ObGlobalHint::UNSET_PARALLEL;
   ObOptimizerContext *opt_ctx = NULL;
-  ObSQLSessionInfo *session_info = NULL;
   ObSEArray<ObAddr, 8> server_list;
   int64_t dop_limit = ObGlobalHint::UNSET_PARALLEL;
   if (OB_ISNULL(table_partition_info_) ||
       OB_ISNULL(parent_) || OB_ISNULL(parent_->get_plan()) ||
-      OB_ISNULL(opt_ctx = &parent_->get_plan()->get_optimizer_context()) ||
-      OB_ISNULL(session_info = opt_ctx->get_session_info())) {
+      OB_ISNULL(opt_ctx = &parent_->get_plan()->get_optimizer_context())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected params", K(ret), K(table_partition_info_), K(parent_), K(session_info));
-  } else if (OB_FAIL(session_info->get_sys_variable(share::SYS_VAR__PX_MIN_GRANULES_PER_SLAVE, px_part_gi_min_part_per_dop))) {
-    LOG_WARN("failed to get sys variable px min granule per slave", K(ret));
+    LOG_WARN("get unexpected params", K(ret), K(table_partition_info_), K(parent_));
   } else if (OB_FAIL(table_partition_info_->get_all_servers(server_list))) {
     LOG_WARN("failed to get all servers", K(ret));
   } else if (OB_FAIL(get_candidate_server_cnt(*opt_ctx, server_list, server_cnt))) {
@@ -7208,7 +7200,7 @@ int AccessPath::check_and_prepare_estimate_parallel_params(const int64_t cur_min
   } else if (OB_FAIL(get_dop_limit_by_pushdown_limit(dop_limit))) {
     LOG_WARN("failed to get dop limit by pushdown limit", K(ret));
   } else {
-    px_part_gi_min_part_per_dop = std::max(static_cast<int64_t>(1), px_part_gi_min_part_per_dop);
+    px_part_gi_min_part_per_dop = 13;
     cost_threshold_us = 1000.0 * std::max(static_cast<int64_t>(10), opt_ctx->get_parallel_min_scan_time_threshold());
     cur_parallel_degree_limit = opt_ctx->get_parallel_degree_limit(server_cnt);
     const int64_t row_parallel_limit = std::floor(get_phy_query_range_row_count() / ROW_COUNT_THRESHOLD_PER_DOP);
@@ -13854,20 +13846,10 @@ int ObJoinOrder::extract_hashjoin_conditions(const ObIArray<ObRawExpr*> &join_qu
 {
   int ret = OB_SUCCESS;
   ObRawExpr *cur_expr = NULL;
-  ObSQLSessionInfo *session = NULL;
-  bool naaj_enabled = false;
   if ((LEFT_ANTI_JOIN == join_type || RIGHT_ANTI_JOIN == join_type)) {
-    if (OB_ISNULL(get_plan())
-      || OB_ISNULL(session = get_plan()->get_optimizer_context().get_session_info())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to get session info", K(ret), K(get_plan()));
-    } else if (OB_FAIL(session->get_enable_optimizer_null_aware_antijoin(naaj_enabled))) {
-      LOG_WARN("failed to get sys var naaj enabled", K(ret));
-    } else if (naaj_enabled) {
-      if (OB_FAIL(extract_naaj_join_conditions(join_quals, left_tables, right_tables,
-                                               equal_join_conditions, naaj_info))) {
-        LOG_WARN("failed to extract naaj join conditions", K(ret));
-      }
+    if (OB_FAIL(extract_naaj_join_conditions(join_quals, left_tables, right_tables,
+                                             equal_join_conditions, naaj_info))) {
+      LOG_WARN("failed to extract naaj join conditions", K(ret));
     }
   }
   for (int64_t i = 0 ; !naaj_info.is_naaj_ && OB_SUCC(ret) && i < join_quals.count(); ++i) {
@@ -16748,7 +16730,6 @@ int ObJoinOrder::compute_fd_item_set_for_table_scan(const uint64_t table_id,
   } else if (OB_FAIL(schema_guard->get_can_read_index_array(table_ref_id,
                                                             index_tids,
                                                             index_count,
-                                                            false,
                                                             true  /*global index*/,
                                                             false /*domain index*/))) {
     LOG_WARN("failed to get can read index", K(ret), K(table_ref_id));

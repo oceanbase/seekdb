@@ -43,7 +43,6 @@ int PCVSchemaObj::init(const ObTableSchema *schema)
     schema_type_ = TABLE_SCHEMA;
     table_type_ = schema->get_table_type();
     is_tmp_table_ = schema->is_tmp_table();
-    is_mv_container_table_ = schema->mv_container_table();
     // copy table name
     char *buf = nullptr;
     const ObString &tname = schema->get_table_name_str();
@@ -593,7 +592,6 @@ int ObPlanCacheValue::resolver_params(ObPlanCacheCtx &pc_ctx,
                           enable_mysql_compatible_dates))) {
     LOG_WARN("fail to check enable mysql compatible dates", K(ret));
   } else {
-    CHECK_COMPATIBILITY_MODE(session);
     ObCollationType collation_connection = static_cast<ObCollationType>(session->get_local_collation_connection());
     (void)obj_params->reserve(raw_param_cnt);
     for (int64_t i = 0; OB_SUCC(ret) && i < raw_param_cnt; i++) {
@@ -1330,16 +1328,12 @@ int ObPlanCacheValue::check_dep_schema_version(const ObIArray<PCVSchemaObj> &sch
   int ret = OB_SUCCESS;
   is_old_version = false;
   int64_t table_count = schema_array.count();
-  ObSEArray<PCVSchemaObj*, 4> check_stored_schema;
-
-  if (OB_FAIL(remove_mv_schema(schema_array, check_stored_schema))) {
-    LOG_WARN("failed to remove mv schema", K(ret));
-  } else if (schema_array.count() != check_stored_schema.count()) {
+  if (schema_array.count() != stored_schema_objs_.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table count do not match", K(ret), K(schema_array.count()), K(check_stored_schema.count()));
+    LOG_WARN("table count do not match", K(ret), K(schema_array.count()), K(stored_schema_objs_.count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && !is_old_version && i < table_count; ++i) {
-      const PCVSchemaObj *schema_obj1 = check_stored_schema.at(i);
+      const PCVSchemaObj *schema_obj1 = stored_schema_objs_.at(i);
       const PCVSchemaObj &schema_obj2 = schema_array.at(i);
       if (nullptr == schema_obj1) {
         ret = OB_ERR_UNEXPECTED;
@@ -1774,40 +1768,6 @@ int ObPlanCacheValue::get_all_dep_schema(ObPlanCacheCtx &pc_ctx,
   }
   return ret;
 }
-// Targeting
-// Materialized view rewrite makes different plans for the same SQL depend on different tables, leading to plan cache entering different pcv set
-// In checking pcv set, skip tables related to materialized views, so that rewritten and non-rewritten SQL enter the same pcv set
-int ObPlanCacheValue::remove_mv_schema(const common::ObIArray<PCVSchemaObj> &schema_array,
-                                       common::ObIArray<PCVSchemaObj*> &check_stored_schema)
-{
-  int ret = OB_SUCCESS;
-  bool need_remove = true;
-  int64_t j = 0;
-  for (int64_t i = 0; OB_SUCC(ret) && i < stored_schema_objs_.count(); ++i) {
-    if (OB_ISNULL(stored_schema_objs_.at(i))) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid null table schema", K(ret), K(i), K(stored_schema_objs_.at(i)));
-    } else if (MATERIALIZED_VIEW == stored_schema_objs_.at(i)->table_type_
-        || MATERIALIZED_VIEW_LOG == stored_schema_objs_.at(i)->table_type_
-        || stored_schema_objs_.at(i)->is_mv_container_table_) {
-      if (j < schema_array.count()
-          && stored_schema_objs_.at(i)->schema_id_ == schema_array.at(j).schema_id_) {
-        if (OB_FAIL(check_stored_schema.push_back(stored_schema_objs_.at(i)))) {
-          LOG_WARN("failed to push back schema", K(ret));
-        } else {
-          ++j;
-        }
-      } else {
-        // do nothing, only materialized views existing in pcv set are rewritten, discard
-      }
-    } else if (OB_FAIL(check_stored_schema.push_back(stored_schema_objs_.at(i)))) {
-      LOG_WARN("failed to push back schema", K(ret));
-    } else {
-      ++j;
-    }
-  }
-  return ret;
-}
 // For comparing the schema that the plan depends on, note that the version information of the table schema is not compared here
 // table schema version information is used to phase out pcv set, during check_value_version comparison
 int ObPlanCacheValue::match_dep_schema(const ObPlanCacheCtx &pc_ctx,
@@ -1817,23 +1777,20 @@ int ObPlanCacheValue::match_dep_schema(const ObPlanCacheCtx &pc_ctx,
   int ret = OB_SUCCESS;
   is_same = true;
   ObSQLSessionInfo *session_info = pc_ctx.sql_ctx_.session_info_;
-  common::ObSEArray<PCVSchemaObj*, 4> check_stored_schema;
   if (OB_ISNULL(session_info)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(session_info));
-  } else if (OB_FAIL(remove_mv_schema(schema_array, check_stored_schema))) {
-    LOG_WARN("failed to remove mv schema", K(ret));
-  } else if (schema_array.count() != check_stored_schema.count()) {
+  } else if (schema_array.count() != stored_schema_objs_.count()) {
     // schema objs count mismatch, may be the following cases:
     // select * from all_sequences;  // system view, the dependency_table of the system view has multiple entries
     // select * from all_sequences;  // ordinary table
     is_same = false;
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && is_same && i < schema_array.count(); i++) {
-      if (OB_ISNULL(check_stored_schema.at(i))) {
+      if (OB_ISNULL(stored_schema_objs_.at(i))) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid null table schema",
-                 K(ret), K(i), K(schema_array.at(i)), K(check_stored_schema.at(i)));
+                 K(ret), K(i), K(schema_array.at(i)), K(stored_schema_objs_.at(i)));
       } else if (TMP_TABLE == schema_array.at(i).table_type_
                  && schema_array.at(i).is_tmp_table_) { // check for mysql tmp table
         // If it contains a temporary table

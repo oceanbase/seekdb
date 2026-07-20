@@ -133,6 +133,7 @@ public:
 
   struct StmtFunc {
     StmtFunc () :
+      contain_sequence_(false),
       contain_for_update_(false),
       update_global_index_(false),
       contain_enum_set_values_(false),
@@ -144,7 +145,8 @@ public:
     {}
 
     bool all_found() const {
-      return contain_for_update_ &&
+      return contain_sequence_ &&
+          contain_for_update_ &&
           update_global_index_ &&
           contain_enum_set_values_ &&
           contain_geometry_values_ &&
@@ -154,6 +156,7 @@ public:
           contain_vec_index_approx_;
     }
 
+    bool contain_sequence_;
     bool contain_for_update_;
     bool update_global_index_;
     bool contain_enum_set_values_;

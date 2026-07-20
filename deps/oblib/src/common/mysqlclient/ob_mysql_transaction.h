@@ -68,7 +68,7 @@ public:
                     bool with_snapshot = false,
                     const int32_t group_id = 0);
   virtual int start(ObISQLClient *proxy,
-                    const int64_t &runtime_refreshed_schema_version,
+                    const int64_t &refreshed_schema_version,
                     bool with_snapshot = false);
   // end the transaction
   virtual int end(const bool commit);

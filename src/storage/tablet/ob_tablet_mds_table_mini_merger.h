@@ -125,6 +125,17 @@ private:
   bool is_inited_;
 };
 
+class ObMdsDataCompatHelper
+{
+public:
+  static int generate_mds_mini_sstable(
+      const ObTablet &tablet,
+      common::ObArenaAllocator &allocator,
+      ObTableHandleV2 &table_handle,
+      bool &has_tablet_status);
+};
+
+
 } // namespace storage
 } // namespace oceanbase
 

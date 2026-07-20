@@ -41,7 +41,10 @@ int ObInsertLogPlan::generate_normal_raw_plan()
     if (!insert_stmt->value_from_select()) {
       // insert into values xxxx
       ObLogicalOperator *top = NULL;
-      if (OB_FAIL(allocate_insert_values_as_top(top))) {
+      if (insert_stmt->has_sequence() &&
+          OB_FAIL(allocate_sequence_as_top(top))) {
+        LOG_WARN("failed to allocate sequence as top", K(ret));
+      } else if (OB_FAIL(allocate_insert_values_as_top(top))) {
         LOG_WARN("failed to allocate expr values as top", K(ret));
       } else if (OB_FAIL(make_candidate_plans(top))) {
         LOG_WARN("failed to make candidate plans", K(ret));
@@ -50,6 +53,9 @@ int ObInsertLogPlan::generate_normal_raw_plan()
       // insert into select xxx
       if (OB_FAIL(generate_plan_tree())) {
         LOG_WARN("failed to generate plan tree", K(ret));
+      } else if (insert_stmt->has_sequence() &&
+                 OB_FAIL(candi_allocate_sequence())) {
+        LOG_WARN("failed to allocate sequence", K(ret));
       } else { /*do nothing*/}
     }
 
@@ -529,6 +535,7 @@ int ObInsertLogPlan::build_lock_row_flag_expr(ObConstRawExpr *&lock_row_flag_exp
 }
 
 int ObInsertLogPlan::get_osg_type(bool is_multi_part_dml,
+                                  ObShardingInfo *insert_table_sharding,
                                   int64_t distributed_method,
                                   OSG_TYPE &type)
 {
@@ -541,6 +548,12 @@ int ObInsertLogPlan::get_osg_type(bool is_multi_part_dml,
   } else if (DIST_BASIC_METHOD == distributed_method) {
     if (is_multi_part_dml) {
       type = OSG_TYPE::NORMAL_OSG;
+    } else if (OB_ISNULL(insert_table_sharding)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpect null sharding", K(ret));
+    } else if (insert_table_sharding->is_remote()) {
+      //need merge stats
+      type = OSG_TYPE::GATHER_OSG;
     }
   }
   return ret;
@@ -584,6 +597,7 @@ int ObInsertLogPlan::create_insert_plans(ObIArray<CandidatePlan> &candi_plans,
       /*do nothing*/
     } else if (osg_info != NULL &&
                OB_FAIL(get_osg_type(is_multi_part_dml,
+                                    insert_table_sharding,
                                     distributed_methods,
                                     osg_type))) {
       LOG_WARN("failed to get osg type", K(ret));
@@ -591,7 +605,7 @@ int ObInsertLogPlan::create_insert_plans(ObIArray<CandidatePlan> &candi_plans,
                OB_FAIL(allocate_optimizer_stats_gathering_as_top(candi_plan.plan_tree_,
                                                                  *osg_info,
                                                                  osg_type))) {
-      LOG_WARN("failed to allocate optimizer stats gathering as top", K(ret));
+      LOG_WARN("failed to allocate sequence as top", K(ret));
     } else if (DIST_PULL_TO_LOCAL == distributed_methods) {
       if (OB_FAIL(allocate_exchange_as_top(candi_plan.plan_tree_, exch_info))) {
         LOG_WARN("failed to allocate exchange as top", K(ret));
@@ -772,7 +786,7 @@ int ObInsertLogPlan::get_best_insert_dist_method(ObLogicalOperator &top,
     OPT_TRACE("insert plan will use basic method");
   } else if (!insert_table_sharding->is_local() &&
              OB_FALSE_IT(is_multi_part_dml=true)) {
-    // A distributed target requires multi-part DML.
+    //insert into remote table, force use multi part dml
   } else if (is_multi_part_dml &&
              OB_FAIL(check_basic_sharding_for_dml_stmt(*local_sharding,
                                                        top,
@@ -863,6 +877,11 @@ int ObInsertLogPlan::check_insert_plan_need_multi_partition_dml(ObTablePartition
   } else if (part_key_update && !is_one_part_table) {
     is_multi_part_dml = true;
     OPT_TRACE("insert partition table with update part key, force use multi part dml");
+  } else if (insert_stmt->has_part_key_sequence() &&
+              share::schema::PARTITION_LEVEL_ZERO != table_schema->get_part_level()) {
+    // sequence as the value of the partition key is inserted into the partition table or insert...update updated the partition key, both need to use multi table dml
+    is_multi_part_dml = true;
+    OPT_TRACE("insert partition table with sequence, force use multi part dml");
   } else if (OB_FAIL(insert_stmt->part_key_has_rand_value(has_rand_part_key))) {
     LOG_WARN("check part key has rand value failed", K(ret));
   } else if (OB_FAIL(insert_stmt->part_key_has_subquery(has_subquery_part_key))) {
@@ -1280,7 +1299,7 @@ int ObInsertLogPlan::prepare_unique_constraint_info(const ObTableSchema &index_s
     LOG_WARN("failed to generate index rowkey exprs", K(ret));
   } else if (!index_schema.is_index_table() && index_schema.is_table_without_pk()) {
     // If it is a heap table, then we also need to append the partition key to constraint_info.constraint_columns_
-    // Heap table partitioning plus hidden_pk requires the partition key to guarantee uniqueness.
+    // Because version 4.0 heap table partitioning + hidden_pk can only guarantee uniqueness
     const ColumnItem *col_item = NULL;
     const ObRowkeyColumn *key_column = NULL;
     ObSEArray<uint64_t, 5> partkey_ids;
@@ -1680,7 +1699,7 @@ int ObInsertLogPlan::candi_allocate_optimizer_stats_merge(OSGShareInfo *osg_info
                                                                 best_candidates.at(i).plan_tree_,
                                                                 *osg_info,
                                                                 OSG_TYPE::MERGE_OSG))) {
-          LOG_WARN("failed to allocate optimizer stats gathering as top", K(ret));
+          LOG_WARN("failed to allocate sequence as top", K(ret));
         }
       }
       if (OB_SUCC(ret) && OB_FAIL(stats_gathering_plan.push_back(best_candidates.at(i)))) {

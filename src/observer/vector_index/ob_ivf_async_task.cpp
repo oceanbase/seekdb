@@ -55,7 +55,7 @@ int ObIvfAsyncTask::write_cache(ObPluginVectorIndexService &vector_index_service
   } else if (OB_ISNULL(aux_table_info = reinterpret_cast<ObIvfAuxTableInfo *>(ctx_->extra_data_))) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("invalid null aux_table_info", K(ret), KP(ctx_->extra_data_));
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
+  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
                  schema_guard))) {
     LOG_WARN("fail to get schema guard", KR(ret));
   } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_param_with_dim(

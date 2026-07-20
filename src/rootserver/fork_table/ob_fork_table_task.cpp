@@ -18,7 +18,7 @@
 
 #include "rootserver/fork_table/ob_fork_table_task.h"
 #include "rootserver/ob_ddl_service.h"
-#include "rootserver/ob_local_management_service.h"
+#include "rootserver/ob_root_service.h"
 #include "rootserver/ob_ddl_operator.h"
 #include "share/ob_ddl_common.h"
 #include "share/schema/ob_schema_getter_guard.h"
@@ -46,7 +46,7 @@
 #include "storage/ddl/ob_ddl_redo_log_writer.h"
 #include "storage/ddl/ob_ddl_clog.h"
 #include "lib/allocator/ob_allocator.h"
-#include "storage/tx_storage/ob_memstore_freezer.h"
+#include "storage/tx_storage/ob_tenant_freezer.h"
 #include "share/ob_debug_sync.h"
 
 namespace oceanbase
@@ -62,7 +62,7 @@ namespace rootserver
 
 ObForkTableTask::ObForkTableTask()
   : ObDDLTask(),
-    local_management_service_(nullptr),
+    root_service_(nullptr),
     fork_table_arg_(),
     is_data_complement_(false)
 {
@@ -83,7 +83,7 @@ int ObForkTableTask::init(
     const int64_t parent_task_id)
 {
   int ret = OB_SUCCESS;
-  const uint64_t data_format_version = DATA_CURRENT_VERSION;
+  uint64_t tenant_data_version = 0;
   if (OB_UNLIKELY(task_id <= 0
                   || schema_version <= 0
                   || snapshot_version <= 0
@@ -93,9 +93,14 @@ int ObForkTableTask::init(
     LOG_WARN("invalid argument", K(ret), K(task_id), K(schema_version),
              K(snapshot_version),
              KP(src_table_schema), KP(dst_table_schema));
-  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
+  } else if (OB_ISNULL(root_service_ = GCTX.root_service_)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("local_management_service is null", K(ret), KP(local_management_service_));
+    LOG_WARN("root_service is null", K(ret), KP(root_service_));
+  } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_data_version))) {
+    LOG_WARN("get min data version failed", K(ret));
+  } else if (OB_UNLIKELY(tenant_data_version <= 0)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected tenant_data_version", K(ret), K(tenant_data_version));
   } else {
     set_gmt_create(ObTimeUtility::current_time());
     task_type_ = ddl_type;
@@ -111,7 +116,8 @@ int ObForkTableTask::init(
     
     dst_schema_version_ = schema_version_;
     snapshot_version_ = snapshot_version;
-    data_format_version_ = data_format_version;
+    data_format_version_ = tenant_data_version;
+
     if (OB_FAIL(deep_copy_fork_table_arg(fork_table_arg))) {
       LOG_WARN("deep copy fork table arg failed", K(ret));
     } else {
@@ -129,9 +135,9 @@ int ObForkTableTask::init(const ObDDLTaskRecord &task_record)
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObForkTableTask has already been inited", K(ret));
-  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
+  } else if (OB_ISNULL(root_service_ = GCTX.root_service_)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("local_management_service is null", K(ret), KP(local_management_service_));
+    LOG_WARN("root_service is null", K(ret), KP(root_service_));
   } else if (!task_record.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_record));
@@ -590,8 +596,8 @@ int ObForkTableTask::cleanup_impl()
       ObMySQLTransaction trans;
       ObTimeoutCtx ctx;
       
-      if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
-        LOG_WARN("get runtime schema guard failed", K(ret));
+      if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+        LOG_WARN("get tenant schema guard failed", K(ret));
       } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, src_table_schema))) {
         LOG_WARN("fail to get table schema", K(ret), K(object_id_));
       } else if (OB_ISNULL(src_table_schema)) {
@@ -611,14 +617,14 @@ int ObForkTableTask::cleanup_impl()
         LOG_WARN("conn_ is NULL", KR(ret));
       } else {
         ObLockObjRequest lock_arg;
-        lock_arg.obj_type_ = ObLockOBJType::OBJ_TYPE_RUNTIME;
+        lock_arg.obj_type_ = ObLockOBJType::OBJ_TYPE_TENANT;
         lock_arg.obj_id_ = 1;
         lock_arg.owner_id_.set_default();
         lock_arg.lock_mode_ = EXCLUSIVE;  // Use EXCLUSIVE lock for cleanup operation
         lock_arg.op_type_ = ObTableLockOpType::IN_TRANS_COMMON_LOCK;
         lock_arg.timeout_us_ = ctx.get_timeout();
         if (OB_FAIL(ObInnerConnectionLockUtil::lock_obj(lock_arg, conn))) {
-          LOG_WARN("lock runtime failed", KR(ret));
+          LOG_WARN("lock tenant failed", KR(ret));
         }
       }
 
@@ -669,12 +675,12 @@ int ObForkTableTask::cleanup_impl()
 int ObForkTableTask::get_schema_guard(share::schema::ObSchemaGetterGuard &schema_guard)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(local_management_service_)) {
+  if (OB_ISNULL(root_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("local management service is null", K(ret));
-  } else if (OB_FAIL(local_management_service_->get_ddl_service().get_runtime_schema_guard_with_version_in_inner_table(
+    LOG_WARN("root service is null", K(ret));
+  } else if (OB_FAIL(root_service_->get_ddl_service().get_tenant_schema_guard_with_version_in_inner_table(
       schema_guard))) {
-    LOG_WARN("fail to get runtime schema guard", K(ret));
+    LOG_WARN("fail to get tenant schema guard", K(ret));
   }
   return ret;
 }

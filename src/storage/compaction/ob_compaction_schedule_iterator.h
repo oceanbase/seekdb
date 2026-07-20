@@ -73,7 +73,7 @@ public:
   storage::ObLS *get_ls() const { return ls_; }
   int get_next_tablet(storage::ObTabletHandle &tablet_handle);
   bool is_scan_finish() const { return scan_finish_; }
-  bool database_merge_finish() const { return merge_finish_ & scan_finish_; }
+  bool tenant_merge_finish() const { return merge_finish_ & scan_finish_; }
   void update_merge_finish(const bool merge_finish) {
     merge_finish_ &= merge_finish;
   }

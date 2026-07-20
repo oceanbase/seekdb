@@ -29,7 +29,6 @@
 #include "rootserver/ddl_task/ob_index_build_task.h"
 #include "rootserver/ddl_task/ob_modify_autoinc_task.h"
 #include "rootserver/ddl_task/ob_table_redefinition_task.h"
-#include "rootserver/ddl_task//ob_partition_split_task.h"
 #include "rootserver/ob_tenant_thread_helper.h" // for DEFINE_MTL_FUNC
 #include "rootserver/ob_thread_idling.h"
 #include "lib/container/ob_se_array.h"
@@ -89,7 +88,6 @@ public:
   int update_task_ret_code(const ObDDLTaskID &task_id, const int ret_code);
   int abort_task(const ObDDLTaskID &task_id);
   int64_t get_task_cnt() const { return task_list_.get_size(); }
-  int get_split_task_cnt(int64_t &task_cnt); 
   void destroy();
 private:
   typedef common::ObDList<ObDDLTask> TaskList;
@@ -281,10 +279,8 @@ public:
     return OB_SUCCESS;
   }
   // for role change
-  virtual void switch_to_follower_forcedly() override;
-  virtual int switch_to_leader() override;
-  virtual int switch_to_follower_gracefully() override;
-  virtual int resume_leader() override;
+  void deactivate() override;
+  int activate() override;
 
   // mtl_functions
   static int mtl_init(ObDDLScheduler *&ddl_scheduler);
@@ -323,11 +319,6 @@ public:
       const int ret_code,
       const ObCurTraceId::TraceId &parent_task_trace_id);
 
-  int on_ddl_task_prepare(
-    const ObDDLTaskID &parent_task_id,
-    const int64_t task_id,
-    const ObCurTraceId::TraceId &parent_task_trace_id);
-
   int notify_update_autoinc_end(
       const ObDDLTaskKey &task_key,
       const uint64_t autoinc_val,
@@ -351,9 +342,6 @@ public:
   int prepare_alter_table_arg(const ObPrepareAlterTableArgParam &param,
                               const ObTableSchema *target_table_schema,
                               obcall::ObAlterTableArg &alter_table_arg);
-  int cache_auto_split_task(const obcall::ObAutoSplitTabletBatchArg &arg,  
-                            obcall::ObAutoSplitTabletBatchRes &res);
-  int schedule_auto_split_task();
   inline share::ObDDLReplicaBuilder &get_ddl_builder() { return ddl_builder_; }
 private:
   class DDLIdling : public ObThreadIdling
@@ -476,14 +464,6 @@ private:
       const obcall::ObAlterTableArg *arg,
       const int64_t parent_task_id,
       const int32_t sub_task_trace_id,
-      ObIAllocator &allocator,
-      ObDDLTaskRecord &task_record);
-  int create_build_mview_task(
-      common::ObISQLClient &proxy,
-      const share::schema::ObTableSchema *mlog_schema,
-      const int64_t parallelism,
-      const int64_t parent_task_id,
-      const obcall::ObMViewCompleteRefreshArg *mview_complete_refresh_arg,
       ObIAllocator &allocator,
       ObDDLTaskRecord &task_record);
   int create_table_redefinition_task(
@@ -609,17 +589,6 @@ private:
       ObDDLTaskRecord &task_record);
 
 
-int create_partition_split_task(
-    common::ObISQLClient &proxy,
-    const share::schema::ObTableSchema *table_schema,
-    const int64_t parallelism,
-    const int64_t parent_task_id,
-    const int64_t task_id,
-    const obcall::ObPartitionSplitArg *partition_split_arg,
-    const uint64_t tenant_data_version,
-    ObIAllocator &allocator,
-    ObDDLTaskRecord &task_record);
-  
   int create_fork_table_task(
       common::ObISQLClient &proxy,
       const share::schema::ObTableSchema *src_table_schema,
@@ -639,7 +608,6 @@ int create_partition_split_task(
       const ObDDLTaskRecord &task_record);
   int schedule_build_index_task(
       const ObDDLTaskRecord &task_record);
-  int schedule_build_mview_task(const ObDDLTaskRecord &task_record);
   int schedule_drop_primary_key_task(const ObDDLTaskRecord &task_record);
   int schedule_table_redefinition_task(const ObDDLTaskRecord &task_record);
   int schedule_constraint_task(const ObDDLTaskRecord &task_record);
@@ -652,7 +620,6 @@ int create_partition_split_task(
   int schedule_drop_fts_index_task(const ObDDLTaskRecord &task_record);
   int schedule_drop_lob_task(const ObDDLTaskRecord &task_record);
   int schedule_ddl_retry_task(const ObDDLTaskRecord &task_record);
-  int schedule_partition_split_task(const ObDDLTaskRecord &task_record);
   int schedule_fork_table_task(const ObDDLTaskRecord &task_record);
   int add_sys_task(ObDDLTask *task);
   int remove_sys_task(ObDDLTask *task);

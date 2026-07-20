@@ -64,16 +64,13 @@ public:
 public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
-  inline void set_addr(common::ObAddr &addr) { addr_ = addr; }
 private:
   int get_next_tablet();
   int get_next_table(storage::ObITable *&table);
 private:
-  common::ObAddr addr_;
   storage::ObTenantTabletIterator *tablet_iter_;
   common::ObArenaAllocator tablet_allocator_;
   ObTabletHandle tablet_handle_;
-  char ip_buf_[common::OB_IP_STR_BUFF];
   storage::ObTableStoreIterator table_store_iter_;
   void *iter_buf_;
 private:

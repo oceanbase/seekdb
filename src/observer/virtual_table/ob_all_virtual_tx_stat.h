@@ -23,7 +23,6 @@
 #include "lib/container/ob_se_array.h"
 #include "common/ob_simple_iterator.h"
 #include "storage/tx/ob_trans_ctx.h"
-#include "storage/tx/ob_tx_ls_log_writer.h"
 #include "storage/tx/ob_trans_ctx_mgr_v4.h"
 #include "lib/time/ob_clock_generator.h"
 #include "storage/tx/ob_tx_stat.h"
@@ -46,27 +45,21 @@ namespace observer
 class ObGVTxStat: public common::ObVirtualTableScannerIterator
 {
 public:
-  explicit ObGVTxStat() { reset(); }
-  virtual ~ObGVTxStat() { destroy(); }
+  ObGVTxStat();
+  ~ObGVTxStat() override = default;
 public:
-  int init();
-  virtual int inner_get_next_row(common::ObNewRow *&row);
-  virtual void reset();
-  virtual void destroy();
+  int inner_get_next_row(common::ObNewRow *&row) override;
+  void reset() override;
 private:
   int prepare_start_to_read_();
-  int fill_ids_();
-  int get_next_tx_info_(transaction::ObTxStat &tx_stat);
   bool is_valid_timestamp_(const int64_t timestamp) const;
 private:
   enum
   {
-    TX_TYPE = OB_APP_MIN_COLUMN_ID,
-    TX_ID,
+    TX_ID = OB_APP_MIN_COLUMN_ID,
     SESSION_ID,
-    SCHEDULER_ADDR,
     IS_DECIDED,
-    PARTICIPANTS,
+    WRITE_STATE,
     TX_CTX_CREATE_TIME,
     TX_EXPIRED_TIME,
     REF_CNT,
@@ -75,12 +68,9 @@ private:
     STATE,
     PART_TX_ACTION,
     TX_CTX_ADDR,
-    MEM_CTX_ID,
     PENDING_LOG_SIZE,
     FLUSHED_LOG_SIZE,
-    ROLE_STATE,
     IS_EXITING,
-    COORD,
     LAST_REQUEST_TS,
     GTRID,
     BQUAL,
@@ -94,14 +84,9 @@ private:
     CALLBACK_LIST_STATS
   };
 
-  static const int64_t OB_MAX_BUFFER_SIZE = 1024;
-  static const int64_t OB_MIN_BUFFER_SIZE = 128;
   static const int64_t CTX_ADDR_BUFFER_SIZE = 20;
-  char participants_buffer_[OB_MAX_BUFFER_SIZE];
-  char scheduler_buffer_[common::MAX_IP_PORT_LENGTH + 8];
-  char ctx_addr_buffer_[20];
+  char ctx_addr_buffer_[CTX_ADDR_BUFFER_SIZE];
 private:
-  bool init_;
   transaction::ObTxStatIterator tx_stat_iter_;
   transaction::ObXATransID xid_;
   ObCStringHelper cstring_helper_;

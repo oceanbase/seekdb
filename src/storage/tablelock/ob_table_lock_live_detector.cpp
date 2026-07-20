@@ -265,7 +265,7 @@ int ObTableLockDetector::remove_detect_info_from_inner_table(sql::ObSQLSessionIn
              K(lock_req));
   } else if (cnt <= 1) {
     if (cnt <= 0) {
-      LOG_WARN("the reocrd in __all_detect_lock_info_v2 didn't remove before", K(lock_req));
+      LOG_WARN("the reocrd in __all_detect_lock_info didn't remove before", K(lock_req));
     } else if (OB_FAIL(delete_record_(full_table_name, inner_conn, dml))) {
       LOG_WARN("delete record failed", KR(ret), K(full_table_name), K(task_type), K(lock_req), K(cnt));
     } else {
@@ -675,7 +675,7 @@ int ObTableLockDetector::record_detect_info_to_inner_table_(observer::ObInnerSQL
     LOG_WARN("execute insert sql failed", K(ret), K(insert_sql));
   } else if (affected_rows == 2) {
     need_record_to_lock_table = false;
-    LOG_INFO("there's the same lock in __all_detect_lock_info_v2 table, no need to record it to the lock table",
+    LOG_INFO("there's the same lock in __all_detect_lock_info table, no need to record it to the lock table",
              K(lock_req));
   } else if (affected_rows != 1) {
     ret = OB_ERR_UNEXPECTED;

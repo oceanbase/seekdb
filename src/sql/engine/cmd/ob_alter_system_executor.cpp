@@ -56,13 +56,7 @@ int ObFreezeExecutor::execute(ObExecContext &ctx, ObFreezeStmt &stmt)
   } else {
     if (!stmt.is_major_freeze()) {
       ObRootMinorFreezeArg arg;
-      if (OB_FAIL(arg.server_list_.assign(stmt.get_server_list()))) {
-        LOG_WARN("failed to assign server_list", K(ret));
-      } else {
-        arg.zone_ = stmt.get_zone();
-        arg.tablet_id_ = stmt.get_tablet_id();
-        arg.ls_id_ = stmt.get_ls_id();
-      }
+      arg.tablet_id_ = stmt.get_tablet_id();
       // access check:
       // not allow user_tenant to freeze other tenants
       if (OB_SUCC(ret)) {
@@ -555,72 +549,6 @@ int ObUpgradeVirtualSchemaExecutor ::execute(
 
 
 
-
-int ObEnableSqlThrottleExecutor::execute(ObExecContext &ctx, ObEnableSqlThrottleStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-  ObMySQLProxy *sql_proxy = ctx.get_sql_proxy();
-  ObSqlString sql;
-  if (OB_ISNULL(sql_proxy)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get sql proxy from ctx fail", K(ret));
-  } else if (OB_FAIL(sql.assign_fmt(
-                         "SET "
-                         "GLOBAL sql_throttle_priority=%ld,"
-                         "GLOBAL sql_throttle_rt=%.6lf,"
-                         "GLOBAL sql_throttle_cpu=%.6lf,"
-                         "GLOBAL sql_throttle_io=%ld,"
-                         "GLOBAL sql_throttle_network=%.6lf,"
-                         "GLOBAL sql_throttle_logical_reads=%ld",
-                         stmt.get_priority(),
-                         stmt.get_rt(),
-                         stmt.get_cpu(),
-                         stmt.get_io(),
-                         stmt.get_queue_time(),
-                         stmt.get_logical_reads()))) {
-    LOG_WARN("assign_fmt failed", K(stmt), K(ret));
-  } else {
-    int64_t affected_rows = 0;
-    if (OB_FAIL(sql_proxy->write(sql.ptr(),
-                    affected_rows))) {
-      LOG_WARN("execute sql fail", K(sql), K(stmt), K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObDisableSqlThrottleExecutor::execute(ObExecContext &ctx, ObDisableSqlThrottleStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-  ObMySQLProxy *sql_proxy = ctx.get_sql_proxy();
-  ObSqlString sql;
-  if (OB_ISNULL(sql_proxy)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get sql proxy from ctx fail", K(ret));
-  } else if (OB_FAIL(sql.assign_fmt(
-                         "SET "
-                         "GLOBAL sql_throttle_priority=%ld,"
-                         "GLOBAL sql_throttle_rt=%.6lf,"
-                         "GLOBAL sql_throttle_cpu=%.6lf,"
-                         "GLOBAL sql_throttle_io=%ld,"
-                         "GLOBAL sql_throttle_network=%.6lf,"
-                         "GLOBAL sql_throttle_logical_reads=%ld",
-                         -1L,
-                         -1.0,
-                         -1.0,
-                         -1L,
-                         -1.0,
-                         -1L))) {
-    LOG_WARN("assign_fmt failed", K(stmt), K(ret));
-  } else {
-    int64_t affected_rows = 0;
-    if (OB_FAIL(sql_proxy->write(sql.ptr(),
-                    affected_rows))) {
-      LOG_WARN("execute sql fail", K(sql), K(stmt), K(ret));
-    }
-  }
-  return ret;
-}
 
 int ObCancelTaskExecutor::execute(ObExecContext &ctx, ObCancelTaskStmt &stmt)
 {

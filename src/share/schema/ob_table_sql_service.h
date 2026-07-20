@@ -53,7 +53,6 @@ public:
       share::ObDMLSqlSplicer &dml);
   static int gen_column_dml_without_check(
       const ObColumnSchemaV2 &column,
-      const lib::Worker::CompatMode compat_mode,
       share::ObDMLSqlSplicer &dml);
   virtual int batch_create_table(ObIArray<ObTableSchema> &tables,
                            common::ObISQLClient &sql_client,
@@ -93,8 +92,6 @@ public:
   int update_all_part_for_subpart(ObISQLClient &sql_client,
                                   const ObTableSchema &table,
                                   const ObIArray<ObPartition*> &update_part_array);
-  int update_splitting_partition_option(common::ObISQLClient &sql_client,
-                                        const ObTableSchema &table);
 
   virtual int drop_table(const ObTableSchema &table_schema,
                          const int64_t new_schema_version,
@@ -166,16 +163,6 @@ public:
                         const int64_t new_schema_version,
                         const common::ObString *ddl_stmt_str,
                         common::ObISQLClient &sql_client);
-  int update_mlog_status(const ObTableSchema &data_table_schema,
-                         const uint64_t mlog_table_id,
-                         const char *new_name,
-                         const int64_t new_schema_version,
-                         common::ObISQLClient &sql_client);
-
-  virtual int update_mview_status(const ObTableSchema &mview_table_schema,
-                                 common::ObISQLClient &sql_client);
-  virtual int update_mview_reference_table_status(const ObTableSchema &table_schema,
-                                                  common::ObISQLClient &sql_client);
   // TODO: merge these two API
   int sync_aux_schema_version_for_history(common::ObISQLClient &sql_client,
                                           const ObTableSchema &index_schema1,
@@ -193,10 +180,6 @@ public:
                         const ObTableSchema &inc_table,
                         const int64_t schema_version,
                         bool ignore_log_operation);
-  int add_split_inc_part_info(common::ObISQLClient &sql_client,
-                              const ObTableSchema &ori_table,
-                              const ObTableSchema &inc_table,
-                              const int64_t schema_version);
   int add_inc_subpart_info(common::ObISQLClient &sql_client,
                            const ObTableSchema &ori_table,
                            const ObTableSchema &inc_table,
@@ -425,10 +408,6 @@ private:
                             share::ObDMLSqlSplicer &dml);
   static int gen_column_dml(const ObColumnSchemaV2 &column,
       share::ObDMLSqlSplicer &dml);
-  static int check_tenant_in_gen_column_dml(
-      const ObColumnSchemaV2 &column,
-      uint64_t &data_version,
-      lib::Worker::CompatMode &compat_mode);
   int gen_constraint_dml(const ObConstraint &constraint, share::ObDMLSqlSplicer &dml);
   int gen_constraint_column_dml(
       const ObConstraint &constraint,

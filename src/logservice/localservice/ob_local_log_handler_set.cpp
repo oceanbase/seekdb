@@ -15,6 +15,7 @@
  */
 
 #include "ob_local_log_handler_set.h"
+#include "share/rc/ob_tenant_base.h"
 namespace oceanbase
 {
 using namespace common;

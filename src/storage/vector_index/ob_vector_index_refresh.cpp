@@ -19,7 +19,7 @@
 #include "storage/vector_index/ob_vector_index_refresh.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/rc/ob_module_provider.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
+#include "rootserver/ob_rs_serial_call.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
 #include "observer/vector_index/ob_vector_index_async_task.h"
@@ -102,7 +102,7 @@ int ObVectorIndexRefresher::lock_domain_tb(
     const uint64_t domain_tb_id, const bool try_lock) {
   int ret = OB_SUCCESS;
   ObTableLockOwnerID owner_id;
-  if (OB_UNLIKELY(!trans.is_started() ||
+  if (OB_UNLIKELY(!trans.is_started() || false ||
                   OB_INVALID_ID == domain_tb_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(trans.is_started()),
@@ -325,9 +325,9 @@ int ObVectorIndexRefresher::do_refresh() {
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_SYS;
     LOG_WARN("schema service is null", KR(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
                  schema_guard))) {
-    LOG_WARN("fail to get runtime schema guard", KR(ret));
+    LOG_WARN("fail to get tenant schema guard", KR(ret));
   } else if (OB_FAIL(
                  ObVectorIndexRefresher::get_current_scn(refresh_ctx_->scn_))) {
     LOG_WARN("fail to get current scn", KR(ret));
@@ -474,7 +474,7 @@ int ObVectorIndexRefresher::do_refresh() {
         } else if (OB_FAIL(refresh_ctx_->trans_->read(
                        res, select_sql.ptr()))) {
           LOG_WARN("fail to execute select sql", KR(ret),
-                   K(select_sql));
+                   K(select_sql));  // typo fix: original delete_sql did not exist (not covered by previous compilation); master removed tenant_id
         } else if (OB_ISNULL(result = res.get_result())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("result is NULL", K(ret));
@@ -566,8 +566,8 @@ int ObVectorIndexRefresher::do_rebuild() {
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_SYS;
     LOG_WARN("schema service is null", KR(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get runtime schema guard", KR(ret));
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get tenant schema guard", KR(ret));
   } else if (OB_FAIL(ObVectorIndexRefresher::get_current_scn(refresh_ctx_->scn_))) {
     LOG_WARN("fail to get current scn", KR(ret));
   }
@@ -705,7 +705,7 @@ int ObVectorIndexRefresher::do_rebuild() {
       }
 
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->rebuild_vec_index(rebuild_index_arg, rebuild_index_res); }))) {
+      } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->rebuild_vec_index(rebuild_index_arg, rebuild_index_res); }))) {
         LOG_WARN("failed to post backup ls data res", K(ret), K(ddl_rpc_timeout), K(rebuild_index_arg));
       } else {
         LOG_INFO("succ to send rebuild vector index rpc", K(rs_addr), K(refresh_ctx_));

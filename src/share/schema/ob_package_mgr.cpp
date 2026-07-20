@@ -60,21 +60,21 @@ int64_t ObSimplePackageSchema::get_convert_size() const
 }
 
 ObPackageMgr::ObPackageMgr()
-    : local_allocator_(lib::ObMemAttr(ObModIds::OB_SCHEMA_GETTER_GUARD, ObCtxIds::SCHEMA_SERVICE)),
+    : local_allocator_(SET_USE_500(ObModIds::OB_SCHEMA_GETTER_GUARD, ObCtxIds::SCHEMA_SERVICE)),
       allocator_(local_allocator_),
-      package_infos_(0, NULL, lib::ObMemAttr(ObModIds::OB_SCHEMA_PACKAGE_INFO_VECTOR, ObCtxIds::SCHEMA_SERVICE)),
-      package_id_map_(lib::ObMemAttr(ObModIds::OB_SCHEMA_PACKAGE_ID_MAP, ObCtxIds::SCHEMA_SERVICE)),
-      package_name_map_(lib::ObMemAttr(ObModIds::OB_SCHEMA_PACKAGE_NAME_MAP, ObCtxIds::SCHEMA_SERVICE)),
+      package_infos_(0, NULL, SET_USE_500(ObModIds::OB_SCHEMA_PACKAGE_INFO_VECTOR, ObCtxIds::SCHEMA_SERVICE)),
+      package_id_map_(SET_USE_500(ObModIds::OB_SCHEMA_PACKAGE_ID_MAP, ObCtxIds::SCHEMA_SERVICE)),
+      package_name_map_(SET_USE_500(ObModIds::OB_SCHEMA_PACKAGE_NAME_MAP, ObCtxIds::SCHEMA_SERVICE)),
       is_inited_(false)
 {
 }
 
 ObPackageMgr::ObPackageMgr(ObIAllocator &allocator)
-    : local_allocator_(lib::ObMemAttr(ObModIds::OB_SCHEMA_GETTER_GUARD, ObCtxIds::SCHEMA_SERVICE)),
+    : local_allocator_(SET_USE_500(ObModIds::OB_SCHEMA_GETTER_GUARD, ObCtxIds::SCHEMA_SERVICE)),
       allocator_(allocator),
-      package_infos_(0, NULL, lib::ObMemAttr(ObModIds::OB_SCHEMA_PACKAGE_INFO_VECTOR, ObCtxIds::SCHEMA_SERVICE)),
-      package_id_map_(lib::ObMemAttr(ObModIds::OB_SCHEMA_PACKAGE_ID_MAP, ObCtxIds::SCHEMA_SERVICE)),
-      package_name_map_(lib::ObMemAttr(ObModIds::OB_SCHEMA_PACKAGE_NAME_MAP, ObCtxIds::SCHEMA_SERVICE)),
+      package_infos_(0, NULL, SET_USE_500(ObModIds::OB_SCHEMA_PACKAGE_INFO_VECTOR, ObCtxIds::SCHEMA_SERVICE)),
+      package_id_map_(SET_USE_500(ObModIds::OB_SCHEMA_PACKAGE_ID_MAP, ObCtxIds::SCHEMA_SERVICE)),
+      package_name_map_(SET_USE_500(ObModIds::OB_SCHEMA_PACKAGE_NAME_MAP, ObCtxIds::SCHEMA_SERVICE)),
       is_inited_(false)
 {
 }
@@ -160,24 +160,24 @@ int ObPackageMgr::deep_copy(const ObPackageMgr &other)
 
 bool ObPackageMgr::compare_package(const ObSimplePackageSchema *lhs, const ObSimplePackageSchema *rhs)
 {
-  return lhs->get_package_id() < rhs->get_package_id();
+  return lhs->get_tenant_package_id() < rhs->get_tenant_package_id();
 }
 
 bool ObPackageMgr::equal_package(const ObSimplePackageSchema *lhs, const ObSimplePackageSchema *rhs)
 {
-  return lhs->get_package_id() == rhs->get_package_id();
+  return lhs->get_tenant_package_id() == rhs->get_tenant_package_id();
 }
 
-bool ObPackageMgr::compare_with_package_id(const ObSimplePackageSchema *lhs,
-                                                 const ObPackageId &package_id)
+bool ObPackageMgr::compare_with_tenant_package_id(const ObSimplePackageSchema *lhs,
+                                                 const ObTenantPackageId &tenant_package_id)
 {
-  return NULL != lhs ? (lhs->get_package_id() < package_id.get_package_id()) : false;
+  return NULL != lhs ? (lhs->get_tenant_package_id() < tenant_package_id) : false;
 }
 
-bool ObPackageMgr::equal_with_package_id(const ObSimplePackageSchema *lhs,
-                                                    const ObPackageId &package_id)
+bool ObPackageMgr::equal_with_tenant_package_id(const ObSimplePackageSchema *lhs,
+                                                    const ObTenantPackageId &tenant_package_id)
 {
-  return NULL != lhs ? (lhs->get_package_id() == package_id.get_package_id()) : false;
+  return NULL != lhs ? (lhs->get_tenant_package_id() == tenant_package_id) : false;
 }
 
 int ObPackageMgr::add_packages(const ObIArray<ObSimplePackageSchema> &package_schemas)
@@ -250,7 +250,7 @@ int ObPackageMgr::add_package(const ObSimplePackageSchema &package_schema)
   return ret;
 }
 
-int ObPackageMgr::del_package(const ObPackageId &package_id)
+int ObPackageMgr::del_package(const ObTenantPackageId &package_id)
 {
   int ret = OB_SUCCESS;
 
@@ -261,8 +261,8 @@ int ObPackageMgr::del_package(const ObPackageId &package_id)
   } else if (!package_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(package_id));
-  } else if (OB_FAIL(package_infos_.remove_if(package_id, compare_with_package_id,
-                                                equal_with_package_id,
+  } else if (OB_FAIL(package_infos_.remove_if(package_id, compare_with_tenant_package_id,
+                                                equal_with_tenant_package_id,
                                                 schema_to_del))) {
     LOG_WARN("failed to remove package schema, ", K(package_id), K(ret));
   } else if (OB_ISNULL(schema_to_del)) {
@@ -351,15 +351,15 @@ int ObPackageMgr::get_package_schema( uint64_t database_id,
   return ret;
 }
 
-int ObPackageMgr::get_package_schemas_in_runtime(ObIArray<const ObSimplePackageSchema *> &package_schemas) const
+int ObPackageMgr::get_package_schemas_in_tenant(ObIArray<const ObSimplePackageSchema *> &package_schemas) const
 {
   int ret = OB_SUCCESS;
   package_schemas.reset();
 
-  ObPackageId package_id_lower(OB_MIN_ID);
-  ConstPackageIter package_begin =
-      package_infos_.lower_bound(package_id_lower, compare_with_package_id);
-  for (ConstPackageIter iter = package_begin; OB_SUCC(ret) && iter != package_infos_.end(); ++iter) {
+  ObTenantPackageId tenant_package_id_lower(OB_MIN_ID);
+  ConstPackageIter tenant_package_begin =
+      package_infos_.lower_bound(tenant_package_id_lower, compare_with_tenant_package_id);
+  for (ConstPackageIter iter = tenant_package_begin; OB_SUCC(ret) && iter != package_infos_.end(); ++iter) {
     const ObSimplePackageSchema *package = NULL;
     if (OB_ISNULL(package = *iter)) {
       ret = OB_ERR_UNEXPECTED;
@@ -378,10 +378,10 @@ int ObPackageMgr::get_package_schemas_in_database(uint64_t database_id,
   int ret = OB_SUCCESS;
   package_schemas.reset();
 
-  ObPackageId package_id_lower(OB_MIN_ID);
-  ConstPackageIter package_begin =
-      package_infos_.lower_bound(package_id_lower, compare_with_package_id);
-  for (ConstPackageIter iter = package_begin; OB_SUCC(ret) && iter != package_infos_.end(); ++iter) {
+  ObTenantPackageId tenant_package_id_lower(OB_MIN_ID);
+  ConstPackageIter tenant_package_begin =
+      package_infos_.lower_bound(tenant_package_id_lower, compare_with_tenant_package_id);
+  for (ConstPackageIter iter = tenant_package_begin; OB_SUCC(ret) && iter != package_infos_.end(); ++iter) {
     const ObSimplePackageSchema *package = NULL;
     if (OB_ISNULL(package = *iter)) {
       ret = OB_ERR_UNEXPECTED;
@@ -433,3 +433,5 @@ int ObPackageMgr::get_schema_statistics(ObSchemaStatisticsInfo &schema_info) con
 }  // namespace schema
 }  // namespace share
 }  // namespace oceanbase
+
+

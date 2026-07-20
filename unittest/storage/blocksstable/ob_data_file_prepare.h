@@ -32,7 +32,8 @@
 #include "share/redolog/ob_log_file_handler.h"
 #include "storage/ob_file_system_router.h"
 #include "share/ob_force_print_log.h"
-#include "storage/compaction/ob_freeze_info_mgr.h"
+#include "../mockcontainer/mock_ob_partition_service.h"
+#include "storage/compaction/ob_tenant_freeze_info_mgr.h"
 #include "share/ob_simple_mem_limit_getter.h"
 #include "storage/blocksstable/ob_storage_cache_suite.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
@@ -50,7 +51,7 @@ class TestDataFilePrepareUtil
 public:
   TestDataFilePrepareUtil();
   virtual ~TestDataFilePrepareUtil() { destory(); }
-  int init(ObIServerMemLimitGetter *getter,
+  int init(ObITenantMemLimitGetter *getter,
            const char *test_name,
            const int64_t macro_block_size = 64 * 1024,
            const int64_t macro_block_count = 100,
@@ -71,19 +72,13 @@ private:
   ObArenaAllocator allocator_;
   int64_t disk_num_;
   ObLogFileHandler clog_file_handler_;
-  ObIServerMemLimitGetter *getter_;
-  ObServerRuntimeState runtime_state_;
-  ObServerRuntimeState *old_server_runtime_;
-  int64_t old_micro_block_merge_verify_level_;
-  ObAddr old_self_addr_;
-  bool server_runtime_overridden_;
-  bool config_overridden_;
+  ObITenantMemLimitGetter *getter_;
 };
 
 class TestDataFilePrepare : public ::testing::Test
 {
 public:
-  TestDataFilePrepare(ObIServerMemLimitGetter *getter,
+  TestDataFilePrepare(ObITenantMemLimitGetter *getter,
                       const char *test_name,
                       const int64_t macro_block_size = OB_DEFAULT_MACRO_BLOCK_SIZE,
                       const int64_t macro_block_count = 100);
@@ -92,19 +87,19 @@ public:
   virtual void TearDown();
   const ObStorageEnv &get_storage_env() { return util_.get_storage_env(); }
 protected:
+  static const int64_t TENANT_ID = 1;
   static const int64_t TABLE_ID = 50001;
   TestDataFilePrepareUtil util_;
   ObArenaAllocator allocator_;
   const char *test_name_;
   const int64_t macro_block_size_;
   const int64_t macro_block_count_;
-  ObIServerMemLimitGetter *getter_;
+  ObITenantMemLimitGetter *getter_;
   oceanbase::share::ObIModuleProvider mock_module_provider_;
   oceanbase::share::ObIModuleProvider *old_g_mp_ = nullptr;
-  bool module_provider_overridden_ = false;
 };
 
-TestDataFilePrepare::TestDataFilePrepare(ObIServerMemLimitGetter *getter,
+TestDataFilePrepare::TestDataFilePrepare(ObITenantMemLimitGetter *getter,
                                          const char *test_name,
                                          const int64_t macro_block_size,
                                          const int64_t macro_block_count)
@@ -124,39 +119,16 @@ TestDataFilePrepare::~TestDataFilePrepare()
 
 void TestDataFilePrepare::SetUp()
 {
-  if (!module_provider_overridden_) {
-    old_g_mp_ = oceanbase::share::g_mp;
-    oceanbase::share::g_mp = &mock_module_provider_;
-    module_provider_overridden_ = true;
-  }
-
-  const int init_ret = util_.init(getter_, test_name_, macro_block_size_, macro_block_count_);
-  if (OB_SUCCESS != init_ret) {
-    util_.destory();
-    oceanbase::share::g_mp = old_g_mp_;
-    old_g_mp_ = nullptr;
-    module_provider_overridden_ = false;
-  }
-  ASSERT_EQ(OB_SUCCESS, init_ret);
-
-  const int open_ret = util_.open();
-  if (OB_SUCCESS != open_ret) {
-    util_.destory();
-    oceanbase::share::g_mp = old_g_mp_;
-    old_g_mp_ = nullptr;
-    module_provider_overridden_ = false;
-  }
-  ASSERT_EQ(OB_SUCCESS, open_ret);
+  old_g_mp_ = oceanbase::share::g_mp;
+  oceanbase::share::g_mp = &mock_module_provider_;
+  ASSERT_EQ(OB_SUCCESS, util_.init(getter_, test_name_, macro_block_size_, macro_block_count_));
+  ASSERT_EQ(OB_SUCCESS, util_.open());
 }
 
 void TestDataFilePrepare::TearDown()
 {
   util_.destory();
-  if (module_provider_overridden_) {
-    oceanbase::share::g_mp = old_g_mp_;
-    old_g_mp_ = nullptr;
-    module_provider_overridden_ = false;
-  }
+  oceanbase::share::g_mp = old_g_mp_;
 }
 
 
@@ -166,18 +138,12 @@ TestDataFilePrepareUtil::TestDataFilePrepareUtil()
     allocator_(ObModIds::TEST),
     disk_num_(0),
     clog_file_handler_(),
-    getter_(nullptr),
-    runtime_state_(),
-    old_server_runtime_(nullptr),
-    old_micro_block_merge_verify_level_(0),
-    old_self_addr_(),
-    server_runtime_overridden_(false),
-    config_overridden_(false)
+    getter_(nullptr)
 {
 }
 
 int TestDataFilePrepareUtil::init(
-    ObIServerMemLimitGetter *getter,
+    ObITenantMemLimitGetter *getter,
     const char *test_name,
     const int64_t macro_block_size,
     const int64_t macro_block_count,
@@ -219,6 +185,7 @@ int TestDataFilePrepareUtil::init(
 
     storage_env_.bf_cache_miss_count_threshold_ = 10000;
     storage_env_.ethernet_speed_ = 1000000;
+    storage_env_.redundancy_level_ = ObStorageEnv::NORMAL_REDUNDANCY;
 
     storage_env_.clog_file_spec_.retry_write_policy_ = "normal";
     storage_env_.clog_file_spec_.log_create_policy_ = "normal";
@@ -229,13 +196,10 @@ int TestDataFilePrepareUtil::init(
     storage_env_.slog_file_spec_.log_write_policy_ = "truncate";
 
     storage_env_.data_disk_size_ = macro_block_count * macro_block_size;
-    old_micro_block_merge_verify_level_ = GCONF.micro_block_merge_verify_level;
-    old_self_addr_ = GCONF.self_addr_;
-    config_overridden_ = true;
     GCONF.micro_block_merge_verify_level = 0;
-    ObAddr tmp_addr = GCONF.self_addr_;
+    ObAddr tmp_addr = GCTX.self_addr();
     tmp_addr.set_ip_addr("100.1.2.3", 456);
-    GCONF.self_addr_ = tmp_addr;
+    GCTX.self_addr_seq_.set_addr(tmp_addr);
     disk_num_ = disk_num;
     getter_ = getter;
     is_inited_ = true;
@@ -306,20 +270,15 @@ int TestDataFilePrepareUtil::open()
   }
 
   if (OB_SUCC(ret)) {
-    ObIOServiceConfig io_config = ObIOServiceConfig::default_instance();
+    ObTenantIOConfig io_config = ObTenantIOConfig::default_instance();
     const int64_t async_io_thread_count = 8;
     const int64_t sync_io_thread_count = 2;
     const int64_t max_io_depth = 256;
 
-    bool need_format = false;
-    if (OB_FAIL(runtime_state_.init())) {
-      STORAGE_LOG(WARN, "failed to init server runtime state", K(ret));
-    } else {
-      old_server_runtime_ = share::g_server_runtime;
-      share::g_server_runtime = &runtime_state_;
-      server_runtime_overridden_ = true;
-    }
+    static ObTenantBase tenant_ctx(OB_SERVER_TENANT_ID);
+    ObTenantEnv::set_tenant(&tenant_ctx);
 
+    bool need_format = false;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObDeviceManager::get_instance().init_devices_env())) {
       STORAGE_LOG(WARN, "init device manager failed", KR(ret));
@@ -361,6 +320,8 @@ int TestDataFilePrepareUtil::open()
         }
       }
       if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(ObClusterVersion::get_instance().init(CLUSTER_VERSION_1_0_0_0))) {
+        STORAGE_LOG(WARN, "Fail to init cluster version", K(ret));
       } else if (OB_FAIL(clog_file_handler_.init(storage_env_.clog_dir_, storage_env_.log_spec_.max_log_file_size_))) {
         STORAGE_LOG(WARN, "failed to create clog file handler", K(ret));
       }
@@ -377,6 +338,7 @@ void TestDataFilePrepareUtil::destory()
   OB_STORE_CACHE.destroy();
   ObIOManager::get_instance().destroy();
   ObKVGlobalCache::get_instance().destroy();
+  ObClusterVersion::get_instance().destroy();
   ObIODeviceWrapper::get_instance().destroy();
   ObDeviceManager::get_instance().destroy();
   allocator_.reuse();
@@ -391,18 +353,6 @@ void TestDataFilePrepareUtil::destory()
   ObTimerService::get_instance().stop();
   ObTimerService::get_instance().wait();
   ObTimerService::get_instance().destroy();
-
-  if (server_runtime_overridden_) {
-    share::g_server_runtime = old_server_runtime_;
-    old_server_runtime_ = nullptr;
-    server_runtime_overridden_ = false;
-    runtime_state_.destroy();
-  }
-  if (config_overridden_) {
-    GCONF.micro_block_merge_verify_level = old_micro_block_merge_verify_level_;
-    GCONF.self_addr_ = old_self_addr_;
-    config_overridden_ = false;
-  }
   getter_ = nullptr;
   is_inited_ = false;
 }

@@ -29,12 +29,12 @@ using namespace share;
 namespace transaction
 {
 
-OB_SERIALIZE_MEMBER(ObKeepAliveLogBody, min_start_scn_, min_start_status_);
+OB_SERIALIZE_MEMBER(ObKeepAliveLogBody, compat_bit_, min_start_scn_, min_start_status_);
 
 int64_t ObKeepAliveLogBody::get_max_serialize_size()
 {
   SCN scn = SCN::max_scn();
-  ObKeepAliveLogBody max_log_body(scn, MinStartScnStatus::MAX);
+  ObKeepAliveLogBody max_log_body(INT64_MAX, scn, MinStartScnStatus::MAX);
   return max_log_body.get_serialize_size();
 }
 
@@ -260,7 +260,7 @@ int ObKeepAliveLSHandler::serialize_keep_alive_log_(const SCN &min_start_scn, Mi
   const int64_t replay_hint = 0;
   logservice::ObLogBaseHeader base_header(ObLogBaseType::KEEP_ALIVE_LOG_BASE_TYPE,
                                           ObReplayBarrierType::NO_NEED_BARRIER, replay_hint);
-  ObKeepAliveLogBody log_body(min_start_scn, status);
+  ObKeepAliveLogBody log_body(1, min_start_scn, status);
 
   if (OB_ISNULL(submit_buf_)) {
     ret = OB_INVALID_ARGUMENT;

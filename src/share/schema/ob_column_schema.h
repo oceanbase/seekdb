@@ -198,7 +198,6 @@ int assign(const ObColumnSchemaV2 &src_schema);
   inline bool is_string_type() const { return meta_type_.is_string_type(); }
   inline bool is_json() const { return meta_type_.is_json(); }
   inline bool is_geometry() const { return meta_type_.is_geometry(); }
-  inline bool is_roaringbitmap() const { return meta_type_.is_roaringbitmap(); }
   inline bool is_decimal_int() const { return meta_type_.is_decimal_int(); }
   inline bool is_string_lob() const { return column_flags_ & STRING_LOB_COLUMN_FLAG; }
   inline bool is_key_forbid_lob() const { return ob_is_text_tc(meta_type_.get_type()) && !is_string_lob(); }
@@ -333,8 +332,7 @@ int assign(const ObColumnSchemaV2 &src_schema);
   inline void add_column_flag(int64_t flag) { column_flags_ |= flag; }
   inline void del_column_flag(int64_t flag) { column_flags_ &= ~flag; }
   inline void add_or_del_column_flag(int64_t flag, bool is_add);
-  inline bool is_shadow_column() const { return (column_id_ > common::OB_MIN_SHADOW_COLUMN_ID)
-                                                && !is_mlog_special_column(column_id_); }
+  inline bool is_shadow_column() const { return column_id_ > common::OB_MIN_SHADOW_COLUMN_ID; }
   inline bool is_on_update_current_timestamp() const { return on_update_current_timestamp_; }
   inline bool is_enum_or_set() const { return meta_type_.is_enum_or_set(); }
 

@@ -482,15 +482,15 @@ int ObUnLockExecutor::execute(const ObTableLockOwnerID &owner_id)
     SMART_VAR(sql::ObExecContext, exec_ctx, allocator) {
       ObSqlCtx sql_ctx;
       
-      const ObServerRuntimeSchema *runtime_schema = NULL;
+      const ObTenantSchema *tenant_schema = NULL;
       ObSchemaGetterGuard guard;
       LinkExecCtxGuard link_guard(session, exec_ctx);
       sql::ObPhysicalPlanCtx phy_plan_ctx(allocator);
       OZ (session.init(0 /*default session id*/, &allocator));
       OX (session.set_inner_session());
-      OZ (GCTX.schema_service_->get_runtime_schema_guard(guard));
-      OZ (guard.get_server_runtime_info(runtime_schema));
-      OZ (session.init_runtime(runtime_schema->get_runtime_name_str()));
+      OZ (GCTX.schema_service_->get_tenant_schema_guard(guard));
+      OZ (guard.get_tenant_info(tenant_schema));
+      OZ (session.init_tenant(tenant_schema->get_tenant_name_str()));
       OZ (session.load_all_sys_vars(guard));
       OZ (session.load_default_configs_in_pc());
       OX (sql_ctx.schema_guard_ = &guard);

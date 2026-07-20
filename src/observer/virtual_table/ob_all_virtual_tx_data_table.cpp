@@ -16,6 +16,7 @@
 
 #include "observer/virtual_table/ob_all_virtual_tx_data_table.h"
 #include "share/rc/ob_module_provider.h"
+#include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase::common;
@@ -26,11 +27,10 @@ namespace observer {
 
 ObAllVirtualTxDataTable::ObAllVirtualTxDataTable()
     : ObVirtualTableScannerIterator(),
-      addr_(),
       memtable_array_pos_(-1),
       sstable_array_pos_(-1),
-      ls_handle_(),
-      is_ls_iter_end_(false),
+      ls_(nullptr),
+      tables_loaded_(false),
       tablet_handle_(),
       table_store_wrapper_(),
       mgr_handle_(),
@@ -46,9 +46,10 @@ ObAllVirtualTxDataTable::~ObAllVirtualTxDataTable()
 void ObAllVirtualTxDataTable::reset()
 {
   mgr_handle_.reset();
-  ls_handle_.reset();
-  is_ls_iter_end_ = false;
-  addr_.reset();
+  ls_ = nullptr;
+  tables_loaded_ = false;
+  memtable_array_pos_ = -1;
+  sstable_array_pos_ = -1;
   ObVirtualTableScannerIterator::reset();
 }
 
@@ -118,11 +119,7 @@ int ObAllVirtualTxDataTable::get_next_tx_data_table_(ObITable *&tx_data_table)
 {
   int ret = OB_SUCCESS;
 
-  // memtable_array_pos_ < 0 && sstable_array_pos_ < 0 means all the tx data memtables of this logstream have been
-  // disposed or the first time get_next_tx_data_memtable() is invoked,  when get_next_tx_data_table_ is invoked the
-  // first time, memtable_array_pos_ and memtable_array_.count() are both -1
-  while (OB_SUCC(ret) && memtable_array_pos_ < 0 && sstable_array_pos_ < 0) {
-    ObLS *ls = nullptr;
+  if (!tables_loaded_) {
     ObTablet *tablet = nullptr;
     ObIMemtableMgr *memtable_mgr = nullptr;
     memtable_handles_.reset();
@@ -131,24 +128,21 @@ int ObAllVirtualTxDataTable::get_next_tx_data_table_(ObITable *&tx_data_table)
     mgr_handle_.reset();
     table_store_wrapper_.reset();
 
-    if (is_ls_iter_end_) {
-      ret = OB_ITER_END;
-    } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(share::SYS_LS, ls_handle_, ObLSGetMod::OBSERVER_MOD))) {
-      if (OB_LS_NOT_EXIST == ret) {
-        ret = OB_ITER_END;
-        is_ls_iter_end_ = true;
-      } else {
-        SERVER_LOG(WARN, "fail to get sys ls", KR(ret));
-      }
-    } else if (OB_ISNULL(ls = ls_handle_.get_ls())) {
+    auto *ls_service = share::g_mp->ls_service();
+    if (OB_ISNULL(ls_service)) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "sys ls is null", KR(ret));
-    } else if (OB_FAIL(ls->get_tablet_svr()->get_tx_data_memtable_mgr(mgr_handle_))) {
+      SERVER_LOG(WARN, "ls service is null", KR(ret));
+    } else if (OB_FAIL(ls_service->get_ls(ls_))) {
+      SERVER_LOG(WARN, "get log stream failed", KR(ret));
+    }
+
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(ls_->get_tablet_svr()->get_tx_data_memtable_mgr(mgr_handle_))) {
       SERVER_LOG(WARN, "fail to get tx data memtable mgr.", KR(ret));
     } else if (FALSE_IT(memtable_mgr = mgr_handle_.get_memtable_mgr())) {
     } else if (OB_FAIL(memtable_mgr->get_all_memtables(memtable_handles_))) {
       SERVER_LOG(WARN, "fail to get all memtables for log stream", KR(ret));
-    } else if (OB_FAIL(ls->get_tablet_svr()->get_tablet(LS_TX_DATA_TABLET, tablet_handle_))) {
+    } else if (OB_FAIL(ls_->get_tablet_svr()->get_tablet(LS_TX_DATA_TABLET, tablet_handle_))) {
       SERVER_LOG(WARN, "fail to get tx data tablet", KR(ret));
     } else if (FALSE_IT(tablet = tablet_handle_.get_obj())) {
     } else if (OB_FAIL(tablet->fetch_table_store(table_store_wrapper_))) {
@@ -170,16 +164,19 @@ int ObAllVirtualTxDataTable::get_next_tx_data_table_(ObITable *&tx_data_table)
       memtable_array_pos_ = memtable_handles_.count() - 1;
       // iterate from the newest sstable in sstable handles
       sstable_array_pos_ = sstable_handles_.count() - 1;
-      is_ls_iter_end_ = true;
+      tables_loaded_ = true;
       if (memtable_array_pos_ < 0 && sstable_array_pos_ < 0) {
         SERVER_LOG(INFO,
-                   "empty logstream. may be offlined",
+                   "transaction data tables are empty",
                    KR(ret),
-                   K(addr_),
                    K(memtable_array_pos_),
                    K(sstable_array_pos_));
       }
     }
+  }
+
+  if (OB_SUCC(ret) && memtable_array_pos_ < 0 && sstable_array_pos_ < 0) {
+    ret = OB_ITER_END;
   }
 
   if (OB_FAIL(ret)) {

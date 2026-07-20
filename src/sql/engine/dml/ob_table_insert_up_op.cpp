@@ -193,11 +193,13 @@ int ObTableInsertUpOp::inner_open_with_das()
     LOG_WARN("init conflict_checker fail", K(ret));
   } else {
      // init update das_ref
+     ObSQLSessionInfo *session = GET_MY_SESSION(ctx_);
      ObMemAttr mem_attr;
      
      mem_attr.label_ = "SqlInsUpUpd";
      upd_rtctx_.das_ref_.set_expr_frame_info(expr_frame_info);
      upd_rtctx_.das_ref_.set_mem_attr(mem_attr);
+     upd_rtctx_.das_ref_.set_execute_directly(!MY_SPEC.use_dist_das_);
      ObDasParallelType type = ObTableModifyOp::check_das_parallel_type();
      if (DAS_SERIALIZATION != type) {
        type = DAS_BLOCKING_PARALLEL;
@@ -323,7 +325,7 @@ int ObTableInsertUpOp::inner_get_next_row()
       plan_ctx->add_row_matched_count(found_rows_);
     }
     int sync_ret = OB_SUCCESS;
-    if (OB_SUCCESS != (sync_ret = plan_ctx->sync_last_value_to_store())) {
+    if (OB_SUCCESS != (sync_ret = plan_ctx->sync_last_value_global())) {
       // sync last user specified value after iter ends(compatible with MySQL)
       LOG_WARN("failed to sync last value", K(sync_ret));
     }
@@ -1467,6 +1469,62 @@ int ObTableInsertUpOp::calc_auto_increment(const ObUpdCtDef &upd_ctdef)
         const uint64_t idx = info->projector_index_;
         OZ(update_auto_increment(*upd_ctdef.new_row_.at(idx), upd_ctdef.column_ids_.at(idx)));
       }
+
+      // !!!ATTENTION: OB_HIDDEN_PK_INCREMENT_COLUMN_ID is changed to tablet seq hidden pk,
+      // you should be careful if you want to restore the following logic
+      // For insert on duplicate scenario, do not need to support MySQL's behavior.
+      // Assume we support MySQL's behavior, then it means we strive to make the table's auto-increment value globally increasing,
+      // rather than just maintaining increment within the partition. For the goal of global increment, we theoretically cannot achieve it, and there is no
+      // Go for it.
+      // So, decide to abandon the compatibility behavior in the insert on duplicate scenario.
+      // However, still maintain the behavior of increasing the global auto-increment value when inserting a fixed value. Because this has some
+      // The application scenario: for example, the user wants to increase the auto-increment value of all partitions to a certain value at a certain point in time
+      // After.
+      //
+      // Based on this decision, delete all the code below. For traceability purposes, only comment out the code, keeping it for a certain period.
+      //if (OB_SUCC(ret)) {
+      //  // to be compatible with MySQL
+      //  // some value for auto-increment column may come from update stmt; we should sync it
+      //  // for example
+      //  //   create table t1(c1 int unique, c2 int auto_increment primary key, c3 int);
+      //  //   insert into t1 values (1, 1, 1);
+      //  //   update t1 set c2 = 10 where c1 = 1;
+      //  //   insert into t1 values (1, 100, 100) on duplicate key update c2 = 10, c1=2;
+      //  //   insert into t1 values (3, null, 100);
+      //  // the last insert should generate 11 for c2
+      //  //If the auto-increment column value c1=10 is not inserted via an insert statement, then this auto-increment value 10 will not be synced out.
+      //  //but, if this line is also insert on
+      //  //duplicate, and, if the update is not to an auto-increment value, the old value 10 of this auto-increment column will be synced out;
+      //  LOG_INFO("check autoincrement", K(is_auto_col_changed), K(is_row_changed));
+      //  if (!is_auto_col_changed && is_row_changed) {
+      //    ObPhysicalPlanCtx *plan_ctx = ctx.get_physical_plan_ctx();
+      //    if (OB_ISNULL(plan_ctx)) {
+      //      ret = OB_ERR_UNEXPECTED;
+      //      LOG_WARN("fail to get physical plan ctx", K(plan_ctx));
+      //    } else {
+      //      ObIArray<AutoincParam> &autoinc_params = plan_ctx->get_autoinc_params();
+      //      for (int64_t z = 0; z < autoinc_params.count() && OB_SUCC(ret); ++z) {
+      //        SQL_ENG_LOG(DEBUG, "print autoinc", K(autoinc_params.at(z)), K(z));
+      //        // Non-hidden column scenario, sync value out, so that the next value on all servers is greater than value
+      //        if (OB_HIDDEN_PK_INCREMENT_COLUMN_ID != autoinc_params.at(z).autoinc_col_id_) {
+      //          AutoincParam &autoinc_param = autoinc_params.at(z);
+      //          const ObObj &val = scan_result_row.get_cell(autoinc_param.autoinc_old_value_index_);
+      //          LOG_INFO("check autoinc val", K(autoinc_param), K(scan_result_row), K(val));
+      //          uint64_t casted_value = 0;
+      //          EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
+      //          EXPR_GET_UINT64_V2(val, casted_value);
+      //          if (OB_FAIL(ret)) {
+      //            LOG_WARN("failed to cast value; still go on", K(ret));
+      //            ret = OB_SUCCESS;
+      //          } else {
+      //            autoinc_param.value_to_sync_ = casted_value;
+      //            autoinc_param.sync_flag_ = true;
+      //          }
+      //        }
+      //      }
+      //    }
+      //  }
+      //}
     }
   }
   return ret;

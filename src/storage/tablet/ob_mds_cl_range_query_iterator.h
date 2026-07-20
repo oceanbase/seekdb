@@ -125,16 +125,14 @@ int ObMdsRangeQueryIterator<K, T>::init(
     
     ObTableScanParam *src_scan_param = nullptr;
     char *buf = nullptr;
-    ObLSID ls_id;
     ObTabletID tablet_id;
     if (OB_ISNULL(buf = static_cast<char*>(scan_param.allocator_->alloc(sizeof(ObTableScanParam))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       MDS_LOG(WARN, "allocate mem failed", K(ret), KP(buf));
     } else if (FALSE_IT(src_scan_param = new(buf) ObTableScanParam())) {
-    } else if (OB_FAIL(ObMdsRangeQueryIteratorHelper::get_tablet_ls_id_and_tablet_id(src_tablet_handle, ls_id, tablet_id))) {
-      MDS_LOG(WARN, "failed to get ls_id and tablet_id", K(ret), KPC(src_tablet_handle.get_obj()));
+    } else if (OB_FAIL(ObMdsRangeQueryIteratorHelper::get_tablet_id(src_tablet_handle, tablet_id))) {
+      MDS_LOG(WARN, "failed to get tablet_id", K(ret), KPC(src_tablet_handle.get_obj()));
     } else if (OB_FAIL((ObMdsScanParamHelper::build_customized_scan_param<K, T>(*scan_param.allocator_,
-                                                                               ls_id,
                                                                                tablet_id,
                                                                                scan_param.read_version_range_,
                                                                                *scan_param.mds_collector_,

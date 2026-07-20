@@ -124,7 +124,6 @@ public:
         calc_upper_trans_is_disabled_(false),
         epoch_(INVALID_READ_EPOCH),
         state_(OFFLINE),
-        ls_id_(),
         ls_(nullptr),
         tx_data_table_(default_tx_data_table_),
         mini_cache_hit_cnt_(0),
@@ -138,7 +137,6 @@ public:
         calc_upper_trans_is_disabled_(false),
         epoch_(INVALID_READ_EPOCH),
         state_(OFFLINE),
-        ls_id_(),
         ls_(nullptr),
         tx_data_table_(tx_data_table),
         mini_cache_hit_cnt_(0),
@@ -151,7 +149,7 @@ public:
   int init(ObLS *ls);
   void stop();
   void destroy();
-  int create_tablet(const lib::Worker::CompatMode compat_mode, const share::SCN &create_scn);
+  int create_tablet(const share::SCN &create_scn);
   int remove_tablet();
   int prepare_offline();
   int offline();
@@ -341,12 +339,10 @@ public:
   const char* get_state_string(const int64_t state) const;
 
   void disable_upper_trans_calculation();
-  void enable_upper_trans_calculation(const share::SCN latest_reserved_scn);
 
   int get_tx_data_sstable_recycle_scn(share::SCN &recycle_scn);
 
   TO_STRING_KV(KP(this),
-               K_(ls_id),
                K_(is_inited),
                K_(calc_upper_trans_is_disabled),
                K_(epoch),
@@ -364,17 +360,11 @@ public: // getter & setter
   int get_tx_table_guard(ObTxTableGuard &guard);
   int64_t get_epoch() const { return ATOMIC_LOAD(&epoch_); }
   TxTableState get_state() const { return ATOMIC_LOAD(&state_); }
-  share::ObLSID get_ls_id() const { return ls_id_; }
-
   static int64_t get_filter_col_idx();
 
 private:
-  int create_data_tablet_(const share::ObLSID ls_id,
-      const lib::Worker::CompatMode compat_mode,
-      const share::SCN &create_scn);
-  int create_ctx_tablet_(const share::ObLSID ls_id,
-      const lib::Worker::CompatMode compat_mode,
-      const share::SCN &create_scn);
+  int create_data_tablet_(const share::SCN &create_scn);
+  int create_ctx_tablet_(const share::SCN &create_scn);
   int remove_tablet_(const common::ObTabletID &tablet_id);
   int get_data_table_schema_(share::schema::ObTableSchema &schema);
   int get_ctx_table_schema_(share::schema::ObTableSchema &schema);
@@ -402,7 +392,6 @@ private:
   bool calc_upper_trans_is_disabled_;
   int64_t epoch_ CACHE_ALIGNED;
   TxTableState state_ CACHE_ALIGNED;
-  share::ObLSID ls_id_;
   ObLS *ls_;
   ObTxCtxTable tx_ctx_table_;
   // The Tx Data will be inserted into tx_data_table_ after transaction commit or abort

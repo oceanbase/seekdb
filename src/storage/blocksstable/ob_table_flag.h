@@ -71,7 +71,7 @@ public:
   bool has_local() const { return ObTableHasLocalFlag::HAS_LOCAL == has_local_flag_; }
   void set_has_local() { has_local_flag_ = ObTableHasLocalFlag::HAS_LOCAL; }
   void set_no_local() { has_local_flag_ = ObTableHasLocalFlag::NO_LOCAL; }
-  bool is_backup_only() const { return has_backup() && !has_local(); }
+  bool is_shared_sstable() const { return has_backup() && !has_local(); }
   int32_t get_flag() const { return flag_; }
 
 private:
@@ -104,6 +104,62 @@ bool ObTableBackupFlag::operator!=(const ObTableBackupFlag &other) const
 {
   return !(this->operator==(other));
 }
+
+struct ObTableSharedFlag final
+{
+  OB_UNIS_VERSION(1);
+public:
+  enum FLAG : uint8_t
+  {
+    PRIVATE = 0,                     //share nothing
+    SHARED_SSTABLE = 1,              //sstable is public data, including meta tree and data
+    SHARED_MACRO_BLOCKS = 2,         //only macro block is public data, meta tree is private
+    MAX
+  };
+public:
+  ObTableSharedFlag();
+  ~ObTableSharedFlag();
+  void reset();
+  bool is_valid() const;
+  OB_INLINE bool operator==(const ObTableSharedFlag &other) const;
+  OB_INLINE bool operator!=(const ObTableSharedFlag &other) const;
+  void clear();
+
+  void set_private() { shared_flag_ = PRIVATE; }
+  void set_shared_sstable() { shared_flag_ = SHARED_SSTABLE; }
+  void set_share_macro_blocks() { shared_flag_ = SHARED_MACRO_BLOCKS; }
+  bool is_shared_macro_blocks() const {
+    return SHARED_SSTABLE == shared_flag_
+        || SHARED_MACRO_BLOCKS == shared_flag_; }
+  bool is_shared_sstable() const { return SHARED_SSTABLE == shared_flag_; }
+  bool is_only_shared_macro_blocks() const {
+    return SHARED_SSTABLE != shared_flag_
+        && SHARED_MACRO_BLOCKS == shared_flag_; }
+  int32_t get_flag() const { return flag_; }
+  TO_STRING_KV(K_(shared_flag), K_(reserved));
+
+private:
+  static const uint64_t SF_BIT_IS_SHARED = 8;
+  static const uint64_t SF_BIT_RESERVED = 24;
+  union {
+    int32_t flag_;
+    struct {;
+      FLAG shared_flag_ : SF_BIT_IS_SHARED;
+      uint32_t reserved_        : SF_BIT_RESERVED;
+    };
+  };
+};
+
+bool ObTableSharedFlag::operator==(const ObTableSharedFlag &other) const
+{
+  return flag_ == other.flag_;
+}
+
+bool ObTableSharedFlag::operator!=(const ObTableSharedFlag &other) const
+{
+  return !(this->operator==(other));
+}
+
 
 }
 }

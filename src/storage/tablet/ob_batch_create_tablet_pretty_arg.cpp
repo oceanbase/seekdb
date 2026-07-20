@@ -35,8 +35,7 @@ int64_t ObBatchCreateTabletPrettyArg::to_string(char *buf, const int64_t buf_len
     // do nothing
   } else {
     J_OBJ_START();
-    J_KV("ls_id", arg_.id_,
-         "major_frozen_scn", arg_.major_frozen_scn_,
+    J_KV("major_frozen_scn", arg_.major_frozen_scn_,
          "total_tablet_cnt", arg_.get_tablet_count());
     J_COMMA();
 
@@ -52,7 +51,6 @@ int64_t ObBatchCreateTabletPrettyArg::to_string(char *buf, const int64_t buf_len
       BUF_PRINTF("] ");
       J_KV("data_tablet_id", info.data_tablet_id_,
            "tablet_ids", info.tablet_ids_,
-           "compat_mode", info.compat_mode_,
            "is_create_bind_hidden_tablets", info.is_create_bind_hidden_tablets_);
     }
     J_NEWLINE();

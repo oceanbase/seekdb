@@ -25,9 +25,10 @@
 #include "common/row/ob_row_iterator.h"
 #include "observer/vector_index/ob_plugin_vector_index_util.h"
 #include "storage/ob_i_store.h"
+#include "share/rc/ob_tenant_base.h"
 #include "lib/oblog/ob_log_module.h"
 #include "observer/vector_index/ob_plugin_vector_index_serialize.h"
-#include "storage/allocator/ob_vector_allocator.h"
+#include "storage/allocator/ob_tenant_vector_allocator.h"
 #include "ob_vector_index_util.h"
 #include "sql/engine/expr/ob_expr_vector.h"
 

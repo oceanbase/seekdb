@@ -498,6 +498,7 @@ public:
   uint32_t get_freeze_clock() const override;
   transaction::ObTxSEQ get_seq_no() const { return seq_no_; }
   int get_trans_id(transaction::ObTransID &trans_id) const;
+  int get_cluster_version(uint64_t &cluster_version) const override;
   transaction::ObTransCtx *get_trans_ctx() const;
   int64_t to_string(char *buf, const int64_t buf_len) const;
   virtual int before_append(const bool is_replay) override;
@@ -557,3 +558,4 @@ private:
 }; // end namespace oceanbase
 
 #endif /* OCEANBASE_MVCC_OB_MVCC_TRANS_CTX_ */
+

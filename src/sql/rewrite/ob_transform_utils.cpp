@@ -6363,7 +6363,7 @@ int ObTransformUtils::pushdown_group_by(ObSelectStmt *parent_stmt,
  * let the view_stmt process some subqueries
  * push_group_by: move aggregate functions into the view for computation
  * what is more: 
- *   it needs to follow the basic select evaluation order; when push_group_by is true,
+ *   it need follow a basic 'select computing sequence' which when push_group_by is true,
  * then push_conditions need be true
  */
 int ObTransformUtils::create_simple_view(ObTransformerCtx *ctx,
@@ -6536,6 +6536,12 @@ int ObTransformUtils::check_need_pushdown_pseudo_column(const ObRawExpr &expr,
   need_pushdown = false;
   switch (expr.get_expr_type()) {
     case T_ORA_ROWSCN: {
+      need_pushdown = true;
+      break;
+    }
+    case T_PSEUDO_PARTITION_LIST_COL:
+    case T_PSEUDO_EXTERNAL_FILE_URL:
+    case T_PSEUDO_EXTERNAL_FILE_COL: {
       need_pushdown = true;
       break;
     }
@@ -7238,6 +7244,7 @@ int ObTransformUtils::can_push_down_filter_to_table(TableItem &table, bool &can_
   } else {
     can_push = !(ref_query->is_set_stmt() ||
                  ref_query->has_limit() ||
+                 ref_query->has_sequence() ||
                  ref_query->is_contains_assignment() ||
                  ref_query->has_window_function() ||
                  ref_query->has_group_by() ||
@@ -7682,9 +7689,9 @@ int ObTransformUtils::check_error_free_expr(ObRawExpr *expr, bool &is_error_free
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null expr", K(ret));
-  } else if (expr->has_flag(CNT_PL_UDF) || expr->has_flag(CNT_SUB_QUERY)
+  } else if (expr->has_flag(CNT_SO_UDF) || expr->has_flag(CNT_PL_UDF) || expr->has_flag(CNT_SUB_QUERY)
              || expr->has_flag(CNT_VALUES) || expr->has_flag(CNT_ONETIME) || expr->has_flag(CNT_STATE_FUNC)
-             || expr->has_flag(CNT_ENUM_OR_SET) || expr->has_flag(CNT_VOLATILE_CONST)
+             || expr->has_flag(CNT_ENUM_OR_SET) || expr->has_flag(CNT_SEQ_EXPR) || expr->has_flag(CNT_VOLATILE_CONST)
              || expr->has_flag(CNT_DYNAMIC_USER_VARIABLE) || expr->has_flag(CNT_CUR_TIME)) {
     // disable by flag
     is_error_free = false;
@@ -11912,7 +11919,9 @@ int ObTransformUtils::check_expr_valid_for_stmt_merge(ObIArray<ObRawExpr*> &sele
                expr->has_flag(CNT_DYNAMIC_USER_VARIABLE) ||
                expr->has_flag(CNT_ALIAS) ||
                expr->has_flag(CNT_VALUES) ||
+               expr->has_flag(CNT_SEQ_EXPR) ||
                expr->has_flag(CNT_RAND_FUNC) ||
+               expr->has_flag(CNT_SO_UDF) ||
                expr->has_flag(CNT_VOLATILE_CONST) ||
                expr->has_flag(CNT_ASSIGN_EXPR)) {
       // the list is aligned with ObRawExpr::cnt_not_calculable_expr
@@ -15212,7 +15221,8 @@ int ObTransformUtils::get_extra_condition_from_parent(ObDMLStmt *parent_stmt,
   } else if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (stmt->has_limit()) {
+  } else if (stmt->has_limit() ||
+             stmt->has_sequence()) {
     // do nothing
   } else if (stmt->is_select_stmt() &&
              !static_cast<const ObSelectStmt*>(stmt)->get_window_func_exprs().empty()) {
@@ -15725,7 +15735,7 @@ int ObTransformUtils::can_push_dynamic_filter_to_cols(const ObSelectStmt *stmt,
   } else if (OB_FAIL(ObOptimizerUtil::is_table_on_null_side(stmt, table_id, on_null_side))) {
     LOG_WARN("failed to check table on null side", K(ret));
   } else if (on_null_side || stmt->has_limit() ||
-             stmt->is_contains_assignment() || stmt->is_scala_group_by()) {
+             stmt->has_sequence() || stmt->is_contains_assignment() || stmt->is_scala_group_by()) {
     can_filter_pushdown = false;
   } else if (OB_FAIL(append(tmp_col_exprs, col_exprs))) {
     LOG_WARN("failed to assign column exprs", K(ret));

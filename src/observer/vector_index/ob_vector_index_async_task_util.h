@@ -22,7 +22,6 @@
 #include "lib/container/ob_array.h"
 #include "common/ob_tablet_id.h"
 #include "share/scn.h"
-#include "share/ob_ls_id.h"
 #include "lib/thread/ob_simple_thread_pool.h"
 #include "storage/access/ob_dml_param.h"
 #include "storage/tx/ob_trans_define_v4.h"
@@ -203,21 +202,21 @@ public:
   ObVecIndexAsyncTaskOption() : 
     mem_attr_("VecIdxATaskCtx"),
     allocator_(mem_attr_), 
-    ls_task_cnt_(0),
+    processing_task_cnt_(0),
     stop_(false)
   {
   }
 
   ~ObVecIndexAsyncTaskOption();
 
-  int init(const int64_t capacity, ObLSID &ls_id);
+  int init(const int64_t capacity);
   void destroy();
   int add_task_ctx(ObTabletID &tablet_id, ObVecIndexAsyncTaskCtx *task, bool &inc_new_task);
   int del_task_ctx(ObTabletID &tablet_id);
   int is_task_ctx_exist(ObTabletID &tablet_id, bool &is_exist);
-  void inc_ls_task_cnt() { ATOMIC_INC(&ls_task_cnt_); }
-  void dec_ls_task_cnt() { ATOMIC_DEC(&ls_task_cnt_); }
-  int64_t get_ls_processing_task_cnt() const { return ATOMIC_LOAD(&ls_task_cnt_); }
+  void inc_processing_task_cnt() { ATOMIC_INC(&processing_task_cnt_); }
+  void dec_processing_task_cnt() { ATOMIC_DEC(&processing_task_cnt_); }
+  int64_t get_processing_task_cnt() const { return ATOMIC_LOAD(&processing_task_cnt_); }
   void set_stop() { stop_ = true; }
   bool is_stop() { return stop_; }
   VecIndexAsyncTaskMap &get_async_task_map() { return task_ctx_map_; }
@@ -228,7 +227,7 @@ private:
   ObMemAttr mem_attr_;
   VecIndexAsyncTaskMap task_ctx_map_;
   ObArenaAllocator allocator_;
-  volatile int64_t ls_task_cnt_;
+  volatile int64_t processing_task_cnt_;
   bool stop_;
 };
 
@@ -242,14 +241,14 @@ public:
   int start();
   void stop();
   void destroy();
-  int push_task(const ObLSID &ls_id, ObVecIndexAsyncTaskCtx *ctx, ObIAllocator *allocator);
-  int get_allocator_by_ls(const ObLSID &ls_id, ObIAllocator *&allocator);
+  int push_task(ObVecIndexAsyncTaskCtx *ctx, ObIAllocator *allocator);
+  int get_allocator(ObIAllocator *&allocator);
   bool is_inited() const { return is_inited_; }
 
   void inc_async_task_ref() { ATOMIC_INC(&async_task_ref_cnt_); }
   void dec_async_task_ref() { ATOMIC_DEC(&async_task_ref_cnt_); }
   int64_t get_async_task_ref() const { return ATOMIC_LOAD(&async_task_ref_cnt_); }
-  void handle_ls_process_task_cnt(const ObLSID &ls_id, const bool is_inc);
+  void update_processing_task_count(const bool is_inc);
   bool is_stopped() { return stopped_; }
   void set_stop() { stopped_ = true; }
 
@@ -275,7 +274,6 @@ public:
   ObVecIndexIAsyncTask(const ObMemAttr &mem_attr)
       : is_inited_(false),
         task_type_(ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_TASK_TYPE_INVALID),
-        ls_id_(ObLSID::INVALID_LS_ID),
         ctx_(nullptr),
         vec_idx_mgr_(nullptr),
         old_adapter_(nullptr),
@@ -285,23 +283,20 @@ public:
         all_finished_(false)
   {}
   virtual ~ObVecIndexIAsyncTask() {}
-  int init(const ObLSID &ls_id, const int task_type,
-           ObVecIndexAsyncTaskCtx *ctx);
+  int init(const int task_type, ObVecIndexAsyncTaskCtx *ctx);
   int get_task_type() { return task_type_; }
-  ObLSID &get_ls_id() { return ls_id_; }
   ObVecIndexAsyncTaskCtx *get_task_ctx() { return ctx_; }
   void set_old_adapter(ObPluginVectorIndexAdaptor* adapter) { old_adapter_ = adapter; }
   bool all_finished() { return all_finished_; }
   virtual void check_task_free() {}
   virtual int do_work() = 0;
 
-  VIRTUAL_TO_STRING_KV(K_(is_inited), K_(task_type), K_(ls_id), KPC(ctx_));
+  VIRTUAL_TO_STRING_KV(K_(is_inited), K_(task_type), KPC(ctx_));
 
 protected:
   bool is_inited_;
   int task_type_;  // 0. built; 1. opt; 2. ivf load; 3. ivf clean
   
-  ObLSID ls_id_;
   ObVecIndexAsyncTaskCtx *ctx_;
   ObPluginVectorIndexMgr *vec_idx_mgr_;
   ObPluginVectorIndexAdaptor* old_adapter_;

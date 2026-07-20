@@ -16,7 +16,6 @@
 #ifndef OB_STORAGE_COMPACTION_SSTABLE_MERGE_INFO_H_
 #define OB_STORAGE_COMPACTION_SSTABLE_MERGE_INFO_H_
 #include "common/ob_tablet_id.h"
-#include "share/ob_ls_id.h"
 #include "storage/compaction/ob_compaction_util.h"
 #include "storage/compaction/ob_tenant_freeze_info_mgr.h"
 #include "storage/compaction/ob_compaction_diagnose.h"
@@ -114,7 +113,7 @@ struct ObMergeStaticInfo
   void reset();
   bool is_valid() const;
   void shallow_copy(const ObMergeStaticInfo &other);
-  TO_STRING_KV(K_(ls_id), K_(tablet_id), "merge_type", merge_type_to_str(merge_type_),
+  TO_STRING_KV(K_(tablet_id), "merge_type", merge_type_to_str(merge_type_),
     K_(compaction_scn), K_(is_full_merge), K_(concurrent_cnt),
     "merge_level", merge_level_to_str(merge_level_),
     "exec_mode", exec_mode_to_str(exec_mode_), 
@@ -122,7 +121,6 @@ struct ObMergeStaticInfo
     K_(kept_snapshot_info), K_(participant_table_info), K_(mds_filter_info_str),
     K_(progressive_merge_round), K_(progressive_merge_num), K_(is_fake));
   static const int64_t MDS_FILTER_INFO_LENGTH = 256;
-  share::ObLSID ls_id_;
   ObTabletID tablet_id_;
   ObMergeType merge_type_;
   int64_t compaction_scn_; // major_scn OR minor end_log_ts

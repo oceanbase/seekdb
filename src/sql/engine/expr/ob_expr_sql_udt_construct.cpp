@@ -177,7 +177,7 @@ int ObExprUdtConstruct::eval_udt_construct(const ObExpr &expr, ObEvalCtx &ctx, O
   bool is_null = false;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_SQL_UDT_CONSTRUCT);
   ObSqlUdtNullBitMap sub_nested_bitmap;
   const ObExprUdtConstructInfo *info
                   = static_cast<ObExprUdtConstructInfo *>(expr.extra_info_);
@@ -196,6 +196,7 @@ int ObExprUdtConstruct::eval_udt_construct(const ObExpr &expr, ObEvalCtx &ctx, O
                                                                  CS_TYPE_BINARY, true,
                                                                  raw_data))) {
       LOG_WARN("failed to get udt raw data", K(ret), K(info->udt_id_));
+    } else if (FALSE_IT(temp_allocator.set_baseline_size(raw_data.length()))) {
     } else if (OB_FAIL(eval_sdo_geom_udt_access(temp_allocator, expr, ctx, raw_data, info->udt_id_, res))) {
       LOG_WARN("failed to eval sdo_geom udt access", K(ret), K(info->udt_id_));
     }

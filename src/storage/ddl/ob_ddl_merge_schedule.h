@@ -22,7 +22,7 @@
 
 #include "share/scn.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
-#include "observer/scheduler/ob_dag_scheduler.h"
+#include "observer/scheduler/ob_tenant_dag_scheduler.h"
 #include "storage/blocksstable/index_block/ob_index_block_builder.h"
 #include "storage/blocksstable/ob_macro_block_struct.h"
 #include "storage/ddl/ob_ddl_struct.h"
@@ -45,7 +45,8 @@ public:
 private:
   /* check need merge */
   static int check_tablet_need_merge(ObTablet &tablet, ObDDLKvMgrHandle &ddl_kv_mgr_handle, bool &need_schedule_merge, ObDDLKVType &ddl_kv_type);
-  static int check_need_merge_for_idempotent(ObTablet &tablet, ObArray<ObDDLKVHandle> &ddl_kvs, bool &need_schedule_merge, ObDDLKVType &ddl_kv_type);
+  static int check_need_merge_for_nidem_sn(ObTablet &tablet, ObArray<ObDDLKVHandle> &ddl_kvs, bool &need_schedule_merge, ObDDLKVType &ddl_kv_type);
+  static int check_need_merge_for_idem_sn(ObTablet &tablet, ObArray<ObDDLKVHandle> &ddl_kvs, bool &need_schedule_merge, ObDDLKVType &ddl_kv_type);
 
 private:
   static const int64_t PRINT_LOG_INTERVAL = 2 * 60 * 1000 * 1000L; // 2m

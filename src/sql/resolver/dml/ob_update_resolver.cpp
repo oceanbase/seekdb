@@ -40,6 +40,7 @@ int ObUpdateResolver::resolve(const ParseNode &parse_tree)
   ObUpdateStmt *update_stmt = NULL;
   ObSEArray<ObTableAssignment, 2> tables_assign;
   bool has_tg = false;
+  const bool disable_limit_offset = true;
   if (T_UPDATE != parse_tree.type_
       || 3 > parse_tree.num_child_
       || OB_ISNULL(parse_tree.children_)
@@ -155,7 +156,7 @@ int ObUpdateResolver::resolve(const ParseNode &parse_tree)
       LOG_WARN("failed to generate batched stmt info", K(ret));
     } else if (OB_FAIL(resolve_order_clause(parse_tree.children_[ORDER_BY]))) {
       LOG_WARN("resolve order clause failed", K(ret));
-    } else if (OB_FAIL(resolve_limit_clause(parse_tree.children_[LIMIT], true))) {
+    } else if (OB_FAIL(resolve_limit_clause(parse_tree.children_[LIMIT], disable_limit_offset))) {
       LOG_WARN("resolve limit clause failed", K(ret));
     } else if (OB_FAIL(try_expand_returning_exprs())) {
       LOG_WARN("failed to try expand returning exprs", K(ret));
@@ -195,7 +196,9 @@ int ObUpdateResolver::try_expand_returning_exprs()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
   } else if (!update_stmt->get_returning_exprs().empty() && need_expand) {
-    // Replace each RETURNING column with its assigned value.
+    // The old engine pass the updated row to the returning expression to
+    // get the updated value. We can not do this in static engine, we need to
+    // replace the column with the assigned value.
     ObIArray<ObUpdateTableInfo*> &tables_info = update_stmt->get_update_table_info();
     if (OB_UNLIKELY(1 != tables_info.count())) {
       ret = OB_ERR_UNEXPECTED;

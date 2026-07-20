@@ -75,8 +75,6 @@ public:
                                   const ObColumnResolveStat &stat);
   int check_alter_geo_column_allowed(const share::schema::AlterColumnSchema &alter_column_schema,
                                      const share::schema::ObColumnSchemaV2 &origin_col_schema);
-  int check_alter_rb_column_allowed(const share::schema::AlterColumnSchema &alter_column_schema,
-                                    const share::schema::ObColumnSchemaV2 &origin_col_schema);
   int resolve_modify_column(const ParseNode &node,
                             bool &is_modify_column_visibility,
                             ObReducedVisibleColSet &reduced_visible_col_set);
@@ -99,7 +97,6 @@ public:
   int resolve_set_interval(ObAlterTableStmt *stmt, const ParseNode &node);
 
 private:
-  int fill_high_bound_val_for_split_partition(const AlterTableSchema &alter_table_schema, ObPartition& split_part);
   int check_dup_foreign_keys_exist(
       share::schema::ObSchemaGetterGuard *schema_guard,
       const obcall::ObCreateForeignKeyArg &foreign_key_arg);
@@ -192,13 +189,6 @@ private:
                                         share::schema::AlterColumnSchema &alter_column_schema);
   int resolve_partitioned_partition(const ParseNode *node,
                                     const share::schema::ObTableSchema &origin_table_schema);
-  int resolve_reorganize_partition(const ParseNode *node,
-                                   const share::schema::ObTableSchema &origin_table_schema);
-  int resolve_split_partition(const ParseNode *node,
-                              const share::schema::ObTableSchema &origin_table_schema);
-  int fill_split_source_tablet_id(const ObString& source_part_name,
-                                  const share::schema::ObTableSchema &origin_table_schema,
-                                  share::schema::AlterTableSchema &alter_table_schema);
   virtual int get_table_schema_for_check(const share::schema::ObTableSchema *&table_schema) override;
   //int generate_new_schema(const share::schema::ObTableSchema &origin_table_schema,
   //                        share::schema::AlterTableSchema &new_table_schema);

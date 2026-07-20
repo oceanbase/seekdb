@@ -18,6 +18,7 @@
 
 #ifdef __HIGH_LEVEL_SPAN
 FLT_DEF_SPAN(ObServer, "server")
+FLT_DEF_SPAN(ObProxy, "proxy")
 FLT_DEF_SPAN(ObSql, "sql")
 FLT_DEF_SPAN(ObTrans, "transaction")
 FLT_DEF_SPAN(ObStorage, "storage")
@@ -43,6 +44,8 @@ FLT_DEF_SPAN(com_query_process, "com_query process")
       FLT_DEF_SPAN(close, "close plan")
     FLT_DEF_SPAN(cmd_execute, "command execute")
       FLT_DEF_SPAN(cmd_open, "command open")
+    FLT_DEF_SPAN(remote_execute, "remote execute")
+    FLT_DEF_SPAN(remote_compile, "compile for remote sql")
   // **** for sql end ****
 
   // **** for pl ****
@@ -72,6 +75,14 @@ FLT_DEF_SPAN(com_query_process, "com_query process")
   FLT_DEF_SPAN(end_transaction, "end of transaction")
   // for transaction end
 
+  // for xa transaction
+  FLT_DEF_SPAN(xa_start, "xa start")
+  FLT_DEF_SPAN(xa_end, "xa end")
+  FLT_DEF_SPAN(xa_prepare, "xa prepare")
+  FLT_DEF_SPAN(xa_commit, "xa commit")
+  FLT_DEF_SPAN(xa_rollback, "xa rollback")
+  // for xa transaction end
+
   // for ps
   FLT_DEF_SPAN(ps_prepare, "prepare phase of ps protocol")
   FLT_DEF_SPAN(ps_execute, "execute phase of ps protocol")
@@ -80,8 +91,10 @@ FLT_DEF_SPAN(com_query_process, "com_query process")
 
   // for das
   FLT_DEF_SPAN(do_local_das_task, "execute local das task")
-  FLT_DEF_SPAN(das_async_rpc_process, "das task async process")
-  FLT_DEF_SPAN(das_sync_rpc_process, "das task sync process")
+  FLT_DEF_SPAN(do_async_remote_das_task, "execute async remote das task")
+    FLT_DEF_SPAN(das_async_rpc_process, "das task async rpc process")
+  FLT_DEF_SPAN(do_sync_remote_das_task, "execute sync remote das task")
+    FLT_DEF_SPAN(das_sync_rpc_process, "das task sync rpc process")
   FLT_DEF_SPAN(close_das_task, "close das task")
   FLT_DEF_SPAN(fetch_das_extra_result, "fetch das extra result")
     FLT_DEF_SPAN(fetch_das_result_process, "fetch das result process")
@@ -246,12 +259,14 @@ FLT_DEF_TAG(pl_spi_cursor_routine_id, "PL spi cursor routine id")
 FLT_DEF_TAG(pl_spi_cursor_index, "PL spi cursor index")
 FLT_DEF_TAG(pl_spi_cursor_declare_loc, "PL spi cursor declare local")
 FLT_DEF_TAG(pl_spi_streaming_cursor, "PL spi cursor type (streaming or non-streaming)")
+FLT_DEF_TAG(pl_compile_is_persist, "PL Compile whether to persistent to disk")
 FLT_DEF_TAG(pl_handle_sql_execute_time, "PL handle sql execute time")
 FLT_DEF_TAG(pl_handle_sql_execute_sql, "PL handle sql execute SQL text")
 #endif // __HIGH_LEVEL_TAG
 
 #ifdef __MIDDLE_LEVEL_TAG
 // PL
+FLT_DEF_TAG(pl_is_forbid_anony_parameter, "PL check whether the current anonymous block is forbid to parameterization")
 FLT_DEF_TAG(pl_anony_parameter_sql_text, "PL anonymous block parameterized sql text")
 #endif // __MIDDLE_LEVEL_TAG
 

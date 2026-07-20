@@ -37,9 +37,7 @@
 #include "sql/resolver/ddl/ob_alter_table_resolver.h"
 #include "sql/resolver/ddl/ob_drop_table_resolver.h"
 #include "sql/resolver/ddl/ob_create_index_resolver.h"
-#include "sql/resolver/ddl/ob_create_mlog_resolver.h"
 #include "sql/resolver/ddl/ob_drop_index_resolver.h"
-#include "sql/resolver/ddl/ob_drop_mlog_resolver.h"
 #include "sql/resolver/ddl/ob_create_database_resolver.h"
 #include "sql/resolver/ddl/ob_alter_database_resolver.h"
 #include "sql/resolver/ddl/ob_use_database_resolver.h"
@@ -117,7 +115,6 @@
 #include "sql/resolver/ddl/ob_drop_directory_resolver.h"
 #include "pl/ob_pl_package.h"
 #include "sql/resolver/ddl/ob_drop_context_resolver.h"
-#include "sql/resolver/cmd/ob_olap_async_job_resolver.h"
 #include "sql/resolver/ddl/ob_create_ccl_rule_resolver.h"
 #include "sql/resolver/ddl/ob_drop_ccl_rule_resolver.h"
 #include "sql/resolver/ddl/ob_catalog_resolver.h"
@@ -226,14 +223,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       }
       case T_CREATE_INDEX: {
         REGISTER_STMT_RESOLVER(CreateIndex);
-        break;
-      }
-      case T_CREATE_MLOG: {
-        REGISTER_STMT_RESOLVER(CreateMLog);
-        break;
-      }
-      case T_DROP_MLOG: {
-        REGISTER_STMT_RESOLVER(DropMLog);
         break;
       }
       case T_CREATE_VIEW: {
@@ -533,7 +522,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       case T_SHOW_ENGINE:
       case T_SHOW_OPEN_TABLES:
       case T_SHOW_SEQUENCES:
-      case T_SHOW_OLAP_ASYNC_JOB_STATUS:
       case T_XA_RECOVER:
       case T_SHOW_CHECK_TABLE:
       case T_SHOW_CREATE_USER:
@@ -675,14 +663,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       }
       case T_PACKAGE_DROP: {
         REGISTER_STMT_RESOLVER(DropPackage);
-        break;
-      }
-      case T_ENABLE_SQL_THROTTLE: {
-        REGISTER_STMT_RESOLVER(EnableSqlThrottle);
-        break;
-      }
-      case T_DISABLE_SQL_THROTTLE: {
-        REGISTER_STMT_RESOLVER(DisableSqlThrottle);
         break;
       }
       case T_ANALYZE:
@@ -840,14 +820,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         REGISTER_STMT_RESOLVER(Event);
         break;
       }
-      case T_OLAP_ASYNC_JOB_SUBMIT: {
-        REGISTER_STMT_RESOLVER(OLAPAsyncJob);
-        break;
-      }
-      case T_OLAP_ASYNC_JOB_CANCEL: {
-        REGISTER_STMT_RESOLVER(OLAPAsyncJob);
-        break;
-      }
       case T_GRANT_PROXY:
       case T_REVOKE_PROXY: {
         REGISTER_STMT_RESOLVER(Mock);
@@ -885,13 +857,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         break;
       }
     }  // end switch
-    if (OB_SUCC(ret) && !params_.session_info_->is_inner()
-        && stmt->is_dml_stmt() && !stmt->is_explain_stmt() && 0 == stmt->get_stmt_id()) {
-      // allowed explain for dml write mv, allowed refresh mv sql write mv
-      OZ( (static_cast<ObDMLStmt*>(stmt)->disable_writing_materialized_view()) );
-    }
-
-    
     if (OB_SUCC(ret) && stmt->is_dml_write_stmt()) {
       // todo yanli:check leader-follower database
     }

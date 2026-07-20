@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "sql/engine/ob_des_exec_context.h"
 
 using namespace oceanbase::common;
@@ -54,6 +55,7 @@ void ObDesExecContext::cleanup_session()
       my_session_ = NULL;
     }
   }
+  OB_ASSERT(ObQueryRetryAshGuard::get_info_ptr() == nullptr);
 }
 
 void ObDesExecContext::show_session()
@@ -91,7 +93,8 @@ int ObDesExecContext::create_my_session()
       free_session_ctx_.sessid_ = sid;
     }
     if (OB_FAIL(ret)) {
-      // Fall back to allocator-owned session state if the session manager is full.
+      // fail back to local session allocating, avoid remote/distribute executing fail
+      // if server session overflow.
       ret = OB_SUCCESS;
       if (OB_UNLIKELY(NULL == (local_session = static_cast<ObSQLSessionInfo*>(
           allocator_.alloc(sizeof(ObSQLSessionInfo)))))) {
@@ -147,13 +150,14 @@ DEFINE_DESERIALIZE(ObDesExecContext)
       ObSQLSessionInfo::LockGuard query_guard(my_session_->get_query_lock());
       ObSQLSessionInfo::LockGuard data_guard(my_session_->get_thread_data_lock());
       OB_UNIS_DECODE(*my_session_);
+      my_session_->set_is_remote(true);
       my_session_->set_session_type_with_flag();
       if (OB_FAIL(ret)) {
         LOG_WARN("session deserialize failed", K(ret));
       } else if (OB_FAIL(my_session_->set_session_active(
-          ObString::make_string("DISTRIBUTED PLAN EXECUTING"),
+          ObString::make_string("REMOTE/DISTRIBUTE PLAN EXECUTING"),
           obmysql::COM_QUERY))) {
-        LOG_WARN("set distributed session active failed", K(ret));
+        LOG_WARN("set remote session active failed", K(ret));
       }
       // alloc from session manager, increase active session number
       if (OB_SUCC(ret) && free_session_ctx_.sessid_ != ObSQLSessionInfo::INVALID_SESSID) {

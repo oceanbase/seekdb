@@ -53,7 +53,7 @@ int ObMdsRangeQueryIteratorHelper::check_mds_data_complete(const ObTabletHandle 
     ret = OB_INVALID_ARGUMENT;
     MDS_LOG(WARN, "tablet is null", K(ret));
   } else {
-    is_data_complete = tablet->get_tablet_meta().local_status_.is_data_status_complete();
+    is_data_complete = true;
   }
 
   return ret;

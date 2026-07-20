@@ -138,22 +138,11 @@ int ObAlterTableStmt::set_exchange_partition_arg(const obcall::ObExchangePartiti
   return ret;
 }
 
-int ObAlterTableStmt::set_lock_priority(sql::ObSQLSessionInfo *session)
+void ObAlterTableStmt::set_lock_priority()
 {
-  int ret = OB_SUCCESS;
-  
-  if (!true) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "tenant config invalid, can not do rename", K(ret));
-  } else if (GCONF.enable_lock_priority) {
-    if (!ObLockExecutor::proxy_is_support(session)) {
-      ret = OB_NOT_SUPPORTED;
-      SQL_RESV_LOG(WARN, "is in proxy_mode and not support rename", K(ret), KPC(session));
-    } else {
-      alter_table_arg_.lock_priority_ = ObTableLockPriority::HIGH1;
-    }
+  if (GCONF.enable_lock_priority) {
+    alter_table_arg_.lock_priority_ = ObTableLockPriority::HIGH1;
   }
-  return ret;
 }
 
 } //namespace sql

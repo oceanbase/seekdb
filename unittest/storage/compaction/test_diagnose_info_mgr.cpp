@@ -18,7 +18,7 @@
 #define private public
 #define protected public
 #include "src/storage/ob_i_store.h"
-#include "mtlenv/mock_server_runtime_env.h"
+#include "mtlenv/mock_tenant_module_env.h"
 namespace oceanbase
 {
 using namespace common;
@@ -33,7 +33,8 @@ class TestDiagnoseInfoMgr : public ::testing::Test
 public:
   TestDiagnoseInfoMgr()
   : suspect_info_mgr_(NULL),
-    diagnose_tablet_mgr_(NULL)
+    diagnose_tablet_mgr_(NULL),
+    is_inited_(false)
   {}
   ~TestDiagnoseInfoMgr() = default;
   void SetUp();
@@ -43,13 +44,19 @@ public:
     const ObMergeType &merge_type,
     const ObTabletID &tablet_id,
     ObScheduleSuspectInfo &info);
+  static constexpr int64_t TEST_TENANT_ID = 1001;
   ObScheduleSuspectInfoMgr *suspect_info_mgr_;
   ObDiagnoseTabletMgr *diagnose_tablet_mgr_;
   ObDiagnoseInfoParam<2, 0> param_;
+  bool is_inited_;
 };
 
 void TestDiagnoseInfoMgr::SetUp()
 {
+  if (!is_inited_) {
+    ObMallocAllocator::get_instance()->create_and_add_tenant_allocator();
+    is_inited_ = true;
+  }
   if (OB_ISNULL(suspect_info_mgr_)) {
     suspect_info_mgr_ = OB_NEW(ObScheduleSuspectInfoMgr, ObModIds::TEST);
   }
@@ -59,7 +66,7 @@ void TestDiagnoseInfoMgr::SetUp()
   }
 
   ObMallocAllocator *ma = ObMallocAllocator::get_instance();
-  ASSERT_EQ(OB_SUCCESS, ma->set_allocator_limit(1LL << 30));
+  ASSERT_EQ(OB_SUCCESS, ma->set_tenant_limit(1LL << 30));
 }
 
 void TestDiagnoseInfoMgr::TearDown()
@@ -100,7 +107,7 @@ TEST_F(TestDiagnoseInfoMgr, test_add_del_suspect_info)
   int ret = OB_SUCCESS;
   ObArenaAllocator allocator;
   const ObTabletID tablet_id(1);
-  ASSERT_EQ(OB_SUCCESS, ObScheduleSuspectInfoMgr::server_module_init(suspect_info_mgr_));
+  ASSERT_EQ(OB_SUCCESS, ObScheduleSuspectInfoMgr::mtl_init(suspect_info_mgr_));
 
   ObScheduleSuspectInfo info;
   ObScheduleSuspectInfo ret_info;
@@ -133,7 +140,7 @@ TEST_F(TestDiagnoseInfoMgr, test_diagnose_tablet_mgr)
 {
   int ret = OB_SUCCESS;
   const ObTabletID tablet_id(1);
-  ASSERT_EQ(OB_SUCCESS, ObDiagnoseTabletMgr::server_module_init(diagnose_tablet_mgr_));
+  ASSERT_EQ(OB_SUCCESS, ObDiagnoseTabletMgr::mtl_init(diagnose_tablet_mgr_));
 
   ret = diagnose_tablet_mgr_->add_diagnose_tablet(tablet_id, TYPE_DIAGNOSE_TABLET_MAX);
   ASSERT_EQ(OB_INVALID_ARGUMENT, ret);

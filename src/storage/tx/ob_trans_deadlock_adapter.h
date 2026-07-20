@@ -123,7 +123,7 @@ class ObTransDeadlockDetectorAdapter
                                                                   const ObTransID &conflict_trans_id,
                                                                   const ObTransID &self_trans_id,
                                                                   const uint32_t sess_id);
-  // for statement retry, call from sql trans control
+  // for remote execution, call from sql trans control
   static int maintain_deadlock_info_when_end_stmt(sql::ObExecContext &exec_ctx, const bool is_rollback);
   // for autonomous trans
   static int autonomous_register_to_deadlock(const ObTransID last_trans_id,
@@ -154,9 +154,9 @@ private:
   static int replace_conflict_trans_ids_(const ObTransID self_tx_id,
                                          const ObIArray<ObTransID> &conflict_tx_ids,
                                          SessionGuard &session_guard);
-  static int create_detector_node_(CollectCallBack &on_collect_op,
-                                   const ObTransID &self_trans_id,
-                                   const uint32_t sess_id);
+  static int create_detector_node_and_set_parent_if_needed_(CollectCallBack &on_collect_op,
+                                                            const ObTransID &self_trans_id,
+                                                            const uint32_t sess_id);
   static int get_session_related_info_(const uint32_t sess_id, int64_t &query_timeout);
   static int gen_dependency_resource_array_(const ObIArray<ObTransID> &blocked_trans_ids,
                                             ObIArray<share::detector::ObDependencyResource> &dependency_resources);

@@ -24,7 +24,6 @@
 #include "lib/string/ob_sql_string.h"
 #include "share/schema/ob_ddl_sql_service.h"
 #include "share/config/ob_server_config.h"
-#include "share/ob_partition_modify.h"
 #include "share/ob_rpc_struct.h"
 
 namespace oceanbase
@@ -32,7 +31,6 @@ namespace oceanbase
 namespace obcall
 {
 class ObAccountArg;
-class ObSplitPartitionArg;
 class ObAlterTablegroupArg;
 class ObSetPasswdArg;
 class ObAlterIndexParallelArg;
@@ -58,7 +56,6 @@ class ObSchemaChecker;
 
 namespace share
 {
-class ObSplitInfo;
 namespace schema
 {
 class ObMultiVersionSchemaService;
@@ -191,14 +188,6 @@ public:
                               share::schema::ObTableSchema &inc_table_schema,
                               share::schema::ObTableSchema &new_table_schema,
                               common::ObMySQLTransaction &trans);
-  int split_table_partitions(const share::schema::ObTableSchema &orig_table_schema,
-                             share::schema::ObTableSchema &inc_table_schema,
-                             share::schema::ObTableSchema &new_table_schema,
-                             share::schema::ObTableSchema &upd_table_schema,
-                             common::ObMySQLTransaction &trans);
-  int drop_table_splitted_partitions(const share::schema::ObTableSchema &orig_table_schema,
-                                     share::schema::ObTableSchema &inc_table_schema,
-                                     common::ObMySQLTransaction &trans);
   int drop_table_partitions(const share::schema::ObTableSchema &orig_table_schema,
                             share::schema::ObTableSchema &inc_table_schema,
                             share::schema::ObTableSchema &new_table_schema,
@@ -474,12 +463,6 @@ public:
                                  const ObIArray<share::schema::ObIndexType> &index_types,
                                  const common::ObString *ddl_stmt_str,
                                  common::ObMySQLTransaction &trans);
-  virtual int switch_mlog_status(const share::schema::ObTableSchema &data_table_schema,
-                                 const uint64_t old_mlog_id,
-                                 const uint64_t new_mlog_id,
-                                 share::schema::ObSchemaGetterGuard &schema_guard,
-                                 common::ObMySQLTransaction &trans);
-
   //----Functions for managing privileges----
   virtual int create_user(const share::schema::ObUserInfo &user_info,
                           const common::ObString *ddl_stmt_str,
@@ -905,9 +888,6 @@ private:
 
   int init_tenant_recompile_pl_obj(const share::schema::ObSysVariableSchema &sys_variable,
                                        ObMySQLTransaction &trans);
-  int init_tenant_scheduled_job(
-      const share::schema::ObSysVariableSchema &sys_variable,
-      common::ObMySQLTransaction &trans);
 private:
   static const int64_t ENCRYPT_KEY_LENGTH = 15;
 protected:
@@ -927,8 +907,6 @@ int ObDDLOperator::construct_new_name_for_recyclebin(const T &schema,
     RS_LOG(WARN, "Failed to get TSIDDLVar", K(ret));
   } else {
     const common::ObString *ddl_id_str = tsi_value->ddl_id_str_;
-    lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
-    UNUSED(compat_mode);
     if (OB_SUCC(ret)) {
       if (OB_ISNULL(ddl_id_str)) {
         ret = new_object_name.append_fmt("__recycle_$_%lu_%ld",

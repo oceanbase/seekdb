@@ -105,7 +105,6 @@ public:
   virtual int64_t get_schema_rowkey_count() const = 0;
   virtual int64_t get_rowkey_count() const = 0;
   virtual int64_t get_group_idx_col_index() const = 0;
-  virtual int64_t get_mview_old_new_col_index() const = 0;
   virtual int64_t get_trans_col_index() const = 0;
   virtual const common::ObIArray<ObColDesc> &get_columns_desc() const = 0;
   virtual const ObColumnIndexArray &get_columns_index() const = 0;
@@ -163,10 +162,6 @@ public:
   { return memtable_cols_index_; }
   OB_INLINE virtual const blocksstable::ObStorageDatumUtils &get_datum_utils() const override { return datum_utils_; }
   OB_INLINE virtual int64_t get_group_idx_col_index() const override
-  {
-    return OB_INVALID_INDEX;
-  }
-  OB_INLINE virtual int64_t get_mview_old_new_col_index() const override
   {
     return OB_INVALID_INDEX;
   }
@@ -271,8 +266,6 @@ public:
   { return trans_col_index_; }
   OB_INLINE int64_t get_group_idx_col_index() const
   { return group_idx_col_index_; }
-  OB_INLINE int64_t get_mview_old_new_col_index() const
-  { return mview_old_new_col_index_; }
   OB_INLINE int64_t get_seq_read_column_count() const
   { return seq_read_column_count_; }
   virtual const common::ObIArray<ObColumnParam *> *get_columns() const
@@ -323,7 +316,6 @@ private:
   // distinguish schema changed by schema column count
   int64_t trans_col_index_;
   int64_t group_idx_col_index_;
-  int64_t mview_old_new_col_index_;
   // the count of common prefix between request columns and store columns
   int64_t seq_read_column_count_;
   int64_t max_col_index_;

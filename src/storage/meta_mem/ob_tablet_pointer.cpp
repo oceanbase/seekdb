@@ -13,11 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #include "ob_tablet_pointer.h"
 #include "share/rc/ob_module_provider.h"
-#include "src/storage/tx_storage/ob_ls_map.h"
-
+#include "storage/ls/ob_ls.h"
 #define USING_LOG_PREFIX STORAGE
 
 using namespace oceanbase::common;
@@ -34,7 +32,7 @@ ERRSIM_POINT_DEF(EN_RELEASE_MDS_NODE_FAILED);
 ObTabletPointer::ObTabletPointer()
   : phy_addr_(),
     obj_(),
-    ls_handle_(),
+    ls_(nullptr),
     ddl_kv_mgr_handle_(),
     protected_memtable_mgr_handle_(),
     ddl_info_(),
@@ -44,20 +42,19 @@ ObTabletPointer::ObTabletPointer()
     mds_lock_(),
     mds_table_handler_(),
     old_version_chain_(nullptr),
-    attr_(),
-    auto_part_size_(OB_INVALID_SIZE)
+    attr_()
 {
-#if defined(__x86_64__) && !defined(ENABLE_OBJ_LEAK_CHECK)
-  static_assert(sizeof(ObTabletPointer) == 360, "The size of ObTabletPointer will affect the meta memory manager, and the necessity of adding new fields needs to be considered.");
+#if defined(__x86_64__)
+  static_assert(sizeof(ObTabletPointer) == 344, "The size of ObTabletPointer will affect the meta memory manager, and the necessity of adding new fields needs to be considered.");
 #endif
 }
 
 ObTabletPointer::ObTabletPointer(
-    const ObLSHandle &ls_handle,
+    ObLS *tenant_ls,
     const ObMemtableMgrHandle &memtable_mgr_handle)
   : phy_addr_(),
     obj_(),
-    ls_handle_(ls_handle),
+    ls_(tenant_ls),
     protected_memtable_mgr_handle_(memtable_mgr_handle),
     ddl_info_(),
     initial_state_(true),
@@ -65,8 +62,7 @@ ObTabletPointer::ObTabletPointer(
     ddl_kv_mgr_lock_(),
     mds_table_handler_(),
     old_version_chain_(nullptr),
-    attr_(),
-    auto_part_size_(OB_INVALID_SIZE)
+    attr_()
 {
 }
 
@@ -88,8 +84,7 @@ void ObTabletPointer::reset()
   old_version_chain_ = nullptr;
   reset_obj();
   phy_addr_.reset();
-  ls_handle_.reset();
-  auto_part_size_ = OB_INVALID_SIZE;
+  ls_ = nullptr;
   flying_ = false;
 }
 
@@ -271,10 +266,10 @@ int ObTabletPointer::get_attr_for_obj(ObTablet *tablet)
   if (OB_ISNULL(tablet)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tablet is null", K(ret), KP(tablet));
-  } else if (OB_UNLIKELY(!ls_handle_.is_valid())) {
+  } else if (OB_UNLIKELY(OB_ISNULL(ls_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls handle is invalid", K(ret), K_(ls_handle));
-  } else if (OB_ISNULL(log_handler = ls_handle_.get_ls()->get_log_handler())) {
+    LOG_WARN("ls is invalid", K(ret), KP_(ls));
+  } else if (OB_ISNULL(log_handler = ls_->get_log_handler())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("log handler is null", K(ret), KP(log_handler));
   } else {
@@ -304,11 +299,10 @@ int ObTabletPointer::dump_meta_obj(ObMetaObjGuard<ObTablet> &guard, void *&free_
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("obj is still being used", K(ret), K(*this));
   } else {
-    const ObLSID ls_id = obj_.ptr_->tablet_meta_.ls_id_;
     const ObTabletID tablet_id = obj_.ptr_->tablet_meta_.tablet_id_;
     const int64_t wash_score = obj_.ptr_->get_wash_score();
     guard.get_obj(meta_obj);
-    const ObTabletPersisterParam param(ls_id, ls_handle_.get_ls()->get_ls_epoch(), tablet_id);
+    const ObTabletPersisterParam param(ls_->get_ls_epoch(), tablet_id);
     ObTablet *tmp_obj = obj_.ptr_;
     if (OB_NOT_NULL(meta_obj.ptr_) && obj_.ptr_->get_try_cache_size() <= ObTenantMetaMemMgr::NORMAL_TABLET_POOL_SIZE) {
       char *buf = reinterpret_cast<char*>(meta_obj.ptr_);
@@ -334,7 +328,7 @@ int ObTabletPointer::dump_meta_obj(ObMetaObjGuard<ObTablet> &guard, void *&free_
     } else {
       ObMetaObjBufferHelper::del_meta_obj(tmp_obj);
       free_obj = ObMetaObjBufferHelper::get_meta_obj_buffer_ptr(reinterpret_cast<char*>(tmp_obj));
-      FLOG_INFO("wash one tablet",K(ret), KP(free_obj), K(ls_id), K(tablet_id), K(wash_score), K(obj_), K(meta_obj), K(phy_addr_));
+      FLOG_INFO("wash one tablet", K(ret), KP(free_obj), K(tablet_id), K(wash_score), K(obj_), K(meta_obj), K(phy_addr_));
     }
   }
   return ret;
@@ -369,7 +363,7 @@ int ObTabletPointer::deep_copy(char *buf, const int64_t buf_len, ObTabletPointer
     }
 
     if (OB_SUCC(ret)) {
-      pvalue->ls_handle_ = ls_handle_;
+      pvalue->ls_ = ls_;
       pvalue->ddl_kv_mgr_handle_ = ddl_kv_mgr_handle_;
       pvalue->protected_memtable_mgr_handle_ = protected_memtable_mgr_handle_;
       pvalue->ddl_info_ = ddl_info_;
@@ -387,7 +381,7 @@ int ObTabletPointer::deep_copy(char *buf, const int64_t buf_len, ObTabletPointer
 
 ObTabletResidentInfo ObTabletPointer::get_tablet_resident_info(const ObTabletMapKey &key) const
 {
-  return ObTabletResidentInfo(attr_, phy_addr_, key.ls_id_, key.tablet_id_);
+  return ObTabletResidentInfo(attr_, phy_addr_, key.tablet_id_);
 }
 
 bool ObTabletPointer::get_initial_state() const
@@ -401,16 +395,15 @@ void ObTabletPointer::set_initial_state(const bool initial_state)
 }
 
 int ObTabletPointer::create_ddl_kv_mgr(
-    const share::ObLSID &ls_id, 
     const ObTabletID &tablet_id,
     ObDDLKvMgrHandle &ddl_kv_mgr_handle,
     bool &is_created)
 {
   int ret = OB_SUCCESS;
   ddl_kv_mgr_handle.reset();
-  if (OB_UNLIKELY(!ls_id.is_valid() || !tablet_id.is_valid())) {
+  if (OB_UNLIKELY(!tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ls_id), K(tablet_id));
+    LOG_WARN("invalid argument", K(ret), K(tablet_id));
   } else {
     ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
     ObByteLockGuard guard(ddl_kv_mgr_lock_);
@@ -421,8 +414,8 @@ int ObTabletPointer::create_ddl_kv_mgr(
       ObDDLKvMgrHandle tmp_handle;
       if (OB_FAIL(t3m->acquire_tablet_ddl_kv_mgr(tmp_handle))) {
         LOG_WARN("fail to acquire tablet ddl kv mgr", K(ret));
-      } else if (OB_FAIL(tmp_handle.get_obj()->init(ls_id, tablet_id))) {
-        LOG_WARN("init ddl kv mgr failed", K(ret), K(ls_id),K(tablet_id));
+      } else if (OB_FAIL(tmp_handle.get_obj()->init(tablet_id))) {
+        LOG_WARN("init ddl kv mgr failed", K(ret), K(tablet_id));
       } else {
         ddl_kv_mgr_handle_ = tmp_handle;
         is_created = true;
@@ -478,25 +471,23 @@ int ObTabletPointer::get_mds_table(const ObTabletID &tablet_id,
     bool not_exist_create)
 {
   int ret = OB_SUCCESS;
-  ObLSID ls_id = ls_handle_.get_ls()->get_ls_id();
   share::SCN mds_ckpt_scn = share::SCN::min_scn();
   if (not_exist_create) {
     ScanAllVersionTabletsOp::GetMaxMdsCkptScnOp op(mds_ckpt_scn);
     if (OB_UNLIKELY(phy_addr_.is_none())) {// first time create, without phy addr, use min scn to init mds table
-    } else if (OB_FAIL(share::g_mp->tenant_meta_mem_mgr()->scan_all_version_tablets({ls_id, tablet_id}, op))) {
+    } else if (OB_FAIL(share::g_mp->tenant_meta_mem_mgr()->scan_all_version_tablets(ObTabletMapKey(tablet_id), op))) {
       LOG_WARN("failed to get mds_ckpt_scn", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
-  } else if (!ls_handle_.is_valid()) {
+  } else if (OB_ISNULL(ls_)) {
     ret = OB_NOT_INIT;
-    LOG_ERROR("invalid ls_handle_, maybe not init yet", K(ret));
+    LOG_ERROR("invalid ls_, maybe not init yet", K(ret));
   } else if (!tablet_id.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "tablet_id is invalid", K(ret));
   } else if (OB_FAIL(mds_table_handler_.get_mds_table_handle(handle,
                                                              tablet_id,
-                                                             ls_handle_.get_ls()->get_ls_id(),
                                                              mds_ckpt_scn,
                                                              not_exist_create,
                                                              this))) {
@@ -665,7 +656,7 @@ int ObTabletPointer::scan_all_tablets_on_chain(const ObFunction<int(ObTablet &)>
 
 ObLS *ObTabletPointer::get_ls() const
 {
-  return ls_handle_.get_ls();
+  return ls_;
 }
 
 int ObTabletPointer::acquire_obj(ObTablet *&t)
@@ -710,16 +701,6 @@ int ObTabletPointer::set_tablet_attr(const ObTabletAttr &attr)
     attr_ = attr;
   }
   return ret;
-}
-
-int64_t ObTabletPointer::get_auto_part_size() const
-{
-  return ATOMIC_LOAD(&auto_part_size_);
-}
-
-void ObTabletPointer::set_auto_part_size(const int64_t auto_part_size)
-{
-  ATOMIC_STORE(&auto_part_size_, auto_part_size);
 }
 
 int64_t ObITabletFilterOp::total_skip_cnt_ = 0;
@@ -770,14 +751,11 @@ ScanAllVersionTabletsOp::GetMaxMdsCkptScnOp::GetMaxMdsCkptScnOp(share::SCN &max_
 {
   max_mds_ckpt_scn_.set_min();
 }
-
 int ScanAllVersionTabletsOp::GetMaxMdsCkptScnOp::operator()(ObTablet &tablet)
 {
   int ret = OB_SUCCESS;
   max_mds_ckpt_scn_ = MAX(max_mds_ckpt_scn_, tablet.get_mds_checkpoint_scn());
   return ret;
 }
-
 } // namespace storage
 } // namespace oceanbase
-

@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_STORAGE_OB_BUILD_INDEX_TASK_H_
 #define OCEANBASE_STORAGE_OB_BUILD_INDEX_TASK_H_
 
-#include "observer/scheduler/ob_dag_scheduler.h"
+#include "observer/scheduler/ob_tenant_dag_scheduler.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 #include "storage/ob_store_row_comparer.h"
 #include "storage/ob_parallel_external_sort.h"
@@ -143,7 +143,7 @@ struct ObUniqueCheckingParam final
 public:
   ObUniqueCheckingParam():
     is_inited_(false), tablet_id_(),
-    is_scan_index_(false), schema_service_(nullptr), schema_guard_(share::schema::ObSchemaMgrItem::MOD_UNIQ_CHECK),
+    is_scan_index_(false), schema_service_(nullptr), schema_guard_(share::schema::ObSchemaMgrItem::MOD_UNIQ_CHECK), 
     index_schema_(nullptr), data_table_schema_(nullptr), callback_(nullptr), execution_id_(0),
     snapshot_version_(0), task_id_(0), user_parallelism_(0),
     concurrent_cnt_(0), ranges_(), allocator_("UniqueChecking", OB_MALLOC_NORMAL_BLOCK_SIZE)
@@ -205,7 +205,7 @@ public:
   int64_t snapshot_version_;
   int64_t task_id_;
   int64_t user_parallelism_;
-  int64_t concurrent_cnt_;
+  int64_t concurrent_cnt_;							
   ObArray<blocksstable::ObDatumRange> ranges_;
   common::ObArenaAllocator allocator_;
 };
@@ -272,6 +272,7 @@ public:
   virtual int fill_info_param(compaction::ObIBasicInfoParam *&out_param, ObIAllocator &allocator) const override;
   virtual bool ignore_warning() override;
   virtual int fill_dag_key(char *buf, const int64_t buf_len) const override;
+  virtual bool is_ha_dag() const override { return false; }
   ObUniqueCheckingParam &get_param() { return param_; }
   ObUniqueCheckingContext &get_context() { return context_; }
   int prepare_context();

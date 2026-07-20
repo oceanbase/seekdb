@@ -29,6 +29,7 @@
 #include "share/ob_define.h"
 #include "lib/net/ob_addr.h"
 #include "share/ob_errno.h"
+#include "share/rc/ob_tenant_base.h"
 #include "share/ob_server_struct.h"
 #include <cstdio>
 #include <cstring>

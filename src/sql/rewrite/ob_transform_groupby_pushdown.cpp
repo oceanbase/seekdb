@@ -864,8 +864,8 @@ int ObTransformGroupByPushdown::get_new_select_expr_of_basic_child(
       LOG_WARN("child expr is null", K(ret));
     } else if (T_NULL == param.aggr_func_type_) {
       new_expr = child_expr;
-    } else if (OB_FAIL(ObTransformUtils::create_aggr_expr(ctx_, param.aggr_func_type_,
-                                                          agg_expr, child_expr))) {
+    } else if (OB_FAIL(create_aggr_expr(ctx_, param.aggr_func_type_,
+                                        agg_expr, child_expr))) {
       LOG_WARN("failed to build aggr expr", K(ret));
     } else if (OB_ISNULL(agg_expr)) {
       ret = OB_ERR_UNEXPECTED;
@@ -1005,8 +1005,8 @@ int ObTransformGroupByPushdown::get_new_aggr_expr(
     } else if (OB_ISNULL(new_column_expr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null", K(ret));
-    } else if (OB_FAIL(ObTransformUtils::create_aggr_expr(ctx_, new_aggr_type, new_aggr_expr,
-                                                          new_column_expr))) {
+    } else if (OB_FAIL(create_aggr_expr(ctx_, new_aggr_type, new_aggr_expr,
+                                        new_column_expr))) {
       LOG_WARN("failed to build common aggr exp", K(ret));
     }
   }
@@ -3381,6 +3381,7 @@ int ObTransformGroupByPushdown::check_cut_ratio(ObLogicalOperator *op,
                                                 bool &is_valid)
 {
   int ret = OB_SUCCESS;
+  uint64_t version = 0;
   ObSEArray<bool, 2> invalid_stmts;
   if (OB_ISNULL(op) || OB_ISNULL(op->get_stmt()) || OB_ISNULL(op->get_stmt()->get_query_ctx()) ||
       OB_ISNULL(push_down_ctx)) {
@@ -3519,6 +3520,31 @@ int ObTransformGroupByPushdown::check_hint_valid(ObDMLStmt &stmt,
     }
   }
   LOG_TRACE("succeed to check group by hint valid", K(is_valid), K(trans_tables), K(params), K(hint));
+  return ret;
+}
+
+int ObTransformGroupByPushdown::create_aggr_expr(ObTransformerCtx *ctx,
+                                                 ObItemType type,
+                                                 ObAggFunRawExpr *&agg_expr,
+                                                 ObRawExpr *child_expr) {
+  int ret = OB_SUCCESS;
+  ObRawExprFactory *expr_factory = NULL;
+  if (OB_ISNULL(ctx) || OB_ISNULL(expr_factory = ctx->expr_factory_) ||
+      OB_ISNULL(ctx->session_info_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid argument", K(ret), K(ctx), K(expr_factory), K(agg_expr));
+  } else if (OB_FAIL(expr_factory->create_raw_expr(type, agg_expr))) {
+    LOG_WARN("create raw expr failed", K(ret));
+  } else if (OB_ISNULL(agg_expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid argument", K(ret), K(agg_expr));
+  } else if (OB_FAIL(agg_expr->add_real_param_expr(child_expr))) {
+    LOG_WARN("failed to set partition exprs", K(ret));
+  } else if (OB_FAIL(agg_expr->formalize(ctx->session_info_))) {
+    LOG_WARN("failed to formalize windown function", K(ret));
+  } else if (OB_FAIL(agg_expr->pull_relation_id())) {
+    LOG_WARN("failed to pull relation id and levels", K(ret));
+  }
   return ret;
 }
 

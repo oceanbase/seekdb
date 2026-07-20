@@ -21,7 +21,7 @@
 
 #include "src/storage/compaction/ob_compaction_schedule_iterator.h"
 #include "src/storage/ob_i_store.h"
-#include "mtlenv/mock_server_runtime_env.h"
+
 namespace oceanbase
 {
 using namespace share;

@@ -159,6 +159,13 @@ public:
                                         ObLoadDataStmt &load_stmt,
                                         bool &need_opt_stat_gather);
 
+  static int append_values_in_remote_process(int64_t table_column_count,
+                                             int64_t append_values_count,
+                                             const ObExprValueBitSet &expr_bitset,
+                                             const common::ObIArray<common::ObString> &insert_values,
+                                             common::ObSqlString &insertsql,
+                                             common::ObDataBuffer &data_buffer,
+                                             int64_t skipped_row_count = 0);
   static int append_values_for_one_row(const int64_t table_column_count,
                                        const ObExprValueBitSet &expr_value_bitset,
                                        const common::ObIArray<common::ObString> &insert_values,
@@ -186,6 +193,7 @@ public:
     NEED_WAIT_MINOR_FREEZE,
     TIMEOUT,
     RPC_CALLBACK_PROCESS_ERROR,
+    RPC_REMOTE_PROCESS_ERROR,
     INVALID_MAX_FLAG
    };
   static_assert(static_cast<int64_t>(ResFlag::INVALID_MAX_FLAG) < 64,

@@ -34,14 +34,17 @@ public:
 
   void reset();
   int assign(const ObOptTabletLoc &partition_location);
-  int assign_local_location(const ObObjectID &partition_id,
-                            const ObObjectID &first_level_part_id,
-                            const common::ObTabletID &tablet_id,
-                            const share::ObLSLocation &ls_location,
-                            const common::ObAddr &local_server);
+  int assign_local_replica(const ObObjectID &partition_id,
+                           const ObObjectID &first_level_part_id,
+                           const common::ObTabletID &tablet_id,
+                           const share::ObLSReplicaLocation &replica);
 
   bool is_valid() const;
   bool operator==(const ObOptTabletLoc &other) const;
+
+  // return OB_LS_LOCATION_LEADER_NOT_EXIST for leader not exist.
+  int get_strong_leader(share::ObLSReplicaLocation &replica_location, int64_t &replica_idx) const;
+  int get_strong_leader(share::ObLSReplicaLocation &replica_location) const;
 
   void set_tablet_info(common::ObTabletID tablet_id,
                        common::ObPartID part_id,
@@ -57,22 +60,19 @@ public:
 
   inline common::ObTabletID get_tablet_id() const { return tablet_id_; }
 
-  inline const share::ObLSID &get_ls_id() const { return ls_id_; }
-
-  inline const common::ObAddr &get_server() const { return server_; }
+  inline const share::ObLSReplicaLocation &get_local_replica() const { return local_replica_; }
+  inline share::ObLSReplicaLocation &get_local_replica() { return local_replica_; }
 
   TO_STRING_KV(K_(partition_id),
                K_(tablet_id),
-               K_(ls_id),
-               K_(server));
+               K_(local_replica));
 
 private:
   int64_t partition_id_;
   // first level part id, only valid for subpartitioned table
   int64_t first_level_part_id_;
   common::ObTabletID tablet_id_;
-  share::ObLSID ls_id_;
-  common::ObAddr server_;
+  share::ObLSReplicaLocation local_replica_;
 };
 
 class ObCandiTabletLoc
@@ -82,14 +82,15 @@ public:
   ~ObCandiTabletLoc();
 
   int assign(const ObCandiTabletLoc &other);
-  const share::ObLSID &get_ls_id() const { return opt_tablet_loc_.get_ls_id(); }
-  int set_local_location(const ObObjectID &partition_id,
-                         const ObObjectID &first_level_part_id,
-                         const common::ObTabletID &tablet_id,
-                         const share::ObLSLocation &ls_location,
-                         const common::ObAddr &local_server);
+
+  int get_selected_replica(share::ObLSReplicaLocation &replica_loc) const;
+  int set_local_tablet_loc(const ObObjectID &partition_id,
+                           const ObObjectID &first_level_part_id,
+                           const common::ObTabletID &tablet_id,
+                           const share::ObLSReplicaLocation &replica);
   const ObOptTabletLoc &get_partition_location() const { return opt_tablet_loc_; }
   ObOptTabletLoc &get_partition_location() { return opt_tablet_loc_; }
+  bool is_local_server(const common::ObAddr &server) const;
   TO_STRING_KV(K_(opt_tablet_loc));
 
 private:
@@ -124,8 +125,18 @@ public:
   }
   int64_t get_partition_cnt() const { return candi_tablet_locs_.count(); }
 
+  int all_select_leader(bool &is_on_same_server,
+                        common::ObAddr &same_server);
+  int all_select_local_replica_or_leader(bool &is_on_same_server,
+                                         common::ObAddr &same_server,
+                                         const common::ObAddr &local_server);
   int get_all_servers(common::ObIArray<common::ObAddr> &servers) const;
-  TO_STRING_KV(K_(table_location_key), K_(ref_table_id), K_(candi_tablet_locs));
+  bool is_duplicate_table() const { return ObDuplicateType::NOT_DUPLICATE != duplicate_type_; }
+  bool is_duplicate_table_not_in_dml() const { return ObDuplicateType::DUPLICATE == duplicate_type_; }
+  void set_duplicate_type(ObDuplicateType v) { duplicate_type_ = v; }
+  ObDuplicateType get_duplicate_type() const { return duplicate_type_; }
+  TO_STRING_KV(K_(table_location_key), K_(ref_table_id), K_(candi_tablet_locs),
+               K_(duplicate_type));
 
 private:
   /* Used for addressing location by table ID (possibly generated alias id) */
@@ -134,6 +145,8 @@ private:
   uint64_t ref_table_id_;
   /* locations */
   ObCandiTabletLocSEArray candi_tablet_locs_;
+  // Copy table type, if it is a copy table and has not been modified, then a more suitable copy can be selected when allocating exg operator
+  ObDuplicateType duplicate_type_;
 private:
   /* functions */
   /* variables */

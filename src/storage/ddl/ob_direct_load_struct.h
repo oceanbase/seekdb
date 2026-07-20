@@ -22,6 +22,7 @@
 #include "common/ob_tablet_id.h"
 #include "common/row/ob_row_iterator.h"
 #include "share/scn.h"
+#include "share/tablet/ob_tablet_info.h"
 #include "share/ob_tablet_autoincrement_param.h"
 #include "observer/scheduler/ob_tenant_dag_scheduler.h"
 #include "observer/vector_index/ob_vector_index_util.h"
@@ -38,8 +39,6 @@
 #include "storage/blocksstable/ob_macro_block_struct.h"
 #include "storage/blocksstable/ob_imacro_block_flush_callback.h"
 #include "storage/ddl/ob_ddl_redo_log_writer.h"
-#include "storage/ddl/ob_ddl_inc_redo_log_writer.h"
-#include "storage/ddl/ob_ddl_inc_clog_callback.h"
 #include "storage/lob/ob_lob_meta.h"
 #include "storage/ddl/ob_ddl_seq_generator.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
@@ -69,36 +68,22 @@ struct ObBatchSliceWriteInfo final
 public:
   ObBatchSliceWriteInfo()
     : data_tablet_id_(), // tablet id of the data table.
-      ls_id_(),
       trans_version_(0),
-      direct_load_type_(),
-      trans_id_(),
-      seq_no_(0),
-      tx_desc_(nullptr)
+      direct_load_type_()
   { }
-  ObBatchSliceWriteInfo(const common::ObTabletID &tablet_id, const share::ObLSID &ls_id, const int64_t &trans_version,
-      const ObDirectLoadType &direct_load_type, const transaction::ObTransID &trans_id, const int64_t &seq_no,
-      transaction::ObTxDesc* tx_desc)
+  ObBatchSliceWriteInfo(const common::ObTabletID &tablet_id, const int64_t &trans_version,
+      const ObDirectLoadType &direct_load_type)
     : data_tablet_id_(tablet_id),
-      ls_id_(ls_id),
       trans_version_(trans_version),
-      direct_load_type_(direct_load_type),
-      trans_id_(trans_id),
-      seq_no_(seq_no),
-      tx_desc_(tx_desc)
+      direct_load_type_(direct_load_type)
 
   { }
   ~ObBatchSliceWriteInfo() = default;
-  TO_STRING_KV(K(ls_id_), K(data_tablet_id_), K(trans_version_), K(direct_load_type_), K(1UL), KPC(tx_desc_));
+  TO_STRING_KV(K(data_tablet_id_), K(trans_version_), K(direct_load_type_));
 public:
   common::ObTabletID data_tablet_id_;
-  share::ObLSID ls_id_;
   int64_t trans_version_;
   ObDirectLoadType direct_load_type_;
-  transaction::ObTransID trans_id_; 
-  int64_t seq_no_; // 
-  
-  transaction::ObTxDesc* tx_desc_;
 };
 
 struct ObTabletDirectLoadMgrKey final
@@ -114,24 +99,14 @@ public:
     if (is_shared_storage_dempotent_mode(type)) {
       direct_load_type_ = DIRECT_LOAD_DDL_V2;
       context_id_ = ctx_id;
-    } else if (is_full_direct_load(type)) {
+    } else {
       direct_load_type_ = DIRECT_LOAD_DDL;
       context_id_ = 0;
-    } else if (is_incremental_minor_direct_load(type)) {
-      direct_load_type_ = DIRECT_LOAD_INCREMENTAL;
-      context_id_ = ctx_id;
-    } else {
-      direct_load_type_ = DIRECT_LOAD_INCREMENTAL_MAJOR;
-      context_id_ = ctx_id;
     }
   }
   ObTabletDirectLoadMgrKey(const common::ObTabletID &tablet_id, const ObDirectLoadType &type) // constructor for shared nothing only.
-    : tablet_id_(tablet_id), context_id_(0)
-  {
-    direct_load_type_ = is_full_direct_load(type) ? DIRECT_LOAD_DDL
-                            : (is_incremental_minor_direct_load(type) ? DIRECT_LOAD_INCREMENTAL
-                                                              : DIRECT_LOAD_INCREMENTAL_MAJOR);
-  }
+    : tablet_id_(tablet_id), direct_load_type_(DIRECT_LOAD_DDL), context_id_(0)
+  {}
   ObTabletDirectLoadMgrKey(const common::ObTabletID &tablet_id, const int64_t ctx_id) // constructor for shared storage only.
     : tablet_id_(tablet_id), direct_load_type_(DIRECT_LOAD_DDL_V2), context_id_(ctx_id)
   {
@@ -144,7 +119,7 @@ public:
   int hash(uint64_t &hash_val) const {hash_val = hash(); return OB_SUCCESS;}
   bool is_valid() const { 
     return tablet_id_.is_valid() && is_valid_direct_load(direct_load_type_) && 
-      (((is_shared_storage_dempotent_mode(direct_load_type_) || is_incremental_direct_load(direct_load_type_)) ? context_id_ > 0 : context_id_ == 0)); }
+      (is_shared_storage_dempotent_mode(direct_load_type_) ? context_id_ > 0 : context_id_ == 0); }
   bool operator == (const ObTabletDirectLoadMgrKey &other) const {
         return tablet_id_ == other.tablet_id_ && direct_load_type_ == other.direct_load_type_
             && context_id_ == other.context_id_; }
@@ -159,16 +134,15 @@ struct ObDirectLoadSliceInfo final
 {
 public:
   ObDirectLoadSliceInfo()
-    : is_full_direct_load_(false), is_lob_slice_(false), ls_id_(), data_tablet_id_(), slice_id_(-1),
+    : is_full_direct_load_(false), is_lob_slice_(false), data_tablet_id_(), slice_id_(-1),
       context_id_(0), is_task_finish_(false), total_slice_cnt_(-1), slice_idx_(0), merge_slice_idx_(0)
     { }
   ~ObDirectLoadSliceInfo() = default;
-  bool is_valid() const { return ls_id_.is_valid() && data_tablet_id_.is_valid() && slice_id_ >= 0 && context_id_ >= 0; }
-  TO_STRING_KV(K_(is_full_direct_load), K_(is_lob_slice), K_(ls_id), K_(data_tablet_id), K_(slice_id), K_(context_id), K_(is_task_finish), K_(total_slice_cnt), K_(slice_idx), K_(merge_slice_idx));
+  bool is_valid() const { return data_tablet_id_.is_valid() && slice_id_ >= 0 && context_id_ >= 0; }
+  TO_STRING_KV(K_(is_full_direct_load), K_(is_lob_slice), K_(data_tablet_id), K_(slice_id), K_(context_id), K_(is_task_finish), K_(total_slice_cnt), K_(slice_idx), K_(merge_slice_idx));
 public:
   bool is_full_direct_load_;
   bool is_lob_slice_;
-  share::ObLSID ls_id_;
   common::ObTabletID data_tablet_id_;
   int64_t slice_id_;
   int64_t context_id_;
@@ -186,16 +160,15 @@ struct ObDirectInsertCommonParam final
 {
 public:
   ObDirectInsertCommonParam()
-    : ls_id_(), tablet_id_(), direct_load_type_(DIRECT_LOAD_INVALID), data_format_version_(0), read_snapshot_(0), is_no_logging_(false)
+    : tablet_id_(), direct_load_type_(DIRECT_LOAD_INVALID), data_format_version_(0), read_snapshot_(0), is_no_logging_(false)
 
   {}
   ~ObDirectInsertCommonParam() = default;
-  bool is_valid() const { return ls_id_.is_valid() && tablet_id_.is_valid()
-      && data_format_version_ >= 0 && read_snapshot_ >= 0 && DIRECT_LOAD_INVALID <= direct_load_type_ && direct_load_type_ <= DIRECT_LOAD_MAX;
+  bool is_valid() const { return tablet_id_.is_valid()
+      && data_format_version_ >= 0 && read_snapshot_ >= 0 && is_valid_direct_load(direct_load_type_);
   }
-  TO_STRING_KV(K_(ls_id), K_(tablet_id), K_(direct_load_type), K_(data_format_version), K_(read_snapshot), K_(is_no_logging));
+  TO_STRING_KV(K_(tablet_id), K_(direct_load_type), K_(data_format_version), K_(read_snapshot), K_(is_no_logging));
 public:
-  share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
   ObDirectLoadType direct_load_type_;
   uint64_t data_format_version_;
@@ -216,9 +189,6 @@ public:
       schema_version_(0),
       task_cnt_(0),
       need_online_opt_stat_gather_(false),
-      tx_desc_(nullptr),
-      trans_id_(),
-      seq_no_(0),
       parallel_(1),
       max_batch_size_(0)
   {
@@ -231,9 +201,6 @@ public:
                K_(schema_version),
                K_(task_cnt),
                K_(need_online_opt_stat_gather),
-               KP_(tx_desc),
-               K_(trans_id),
-               K_(seq_no),
                K_(parallel),
                K_(max_batch_size));
 public:
@@ -243,15 +210,6 @@ public:
   int64_t schema_version_;
   int64_t task_cnt_;
   bool need_online_opt_stat_gather_;
-  transaction::ObTxDesc *tx_desc_;
-  // default value is invalid tx_id, 
-  // participant tx_id for the incremental direct load, 
-  // and invalid tx_id for the full_direct_load.
-  transaction::ObTransID trans_id_; 
-  // default value is 0,
-  // sequence number for the incremental direct load,
-  // fixed 0 for the full direct load.
-  int64_t seq_no_; // 
   int64_t parallel_; // used to decide wehter need to use compress temp data in rescan task.
   int64_t max_batch_size_;
 };
@@ -276,91 +234,25 @@ public:
   bool is_replay_;
 };
 
-// for ddl insert row.
-class ObDirectLoadMgrAgent;
-class ObDDLInsertRowIterator : public ObIDirectLoadRowIterator
-{
-public:
-  ObDDLInsertRowIterator();
-  virtual ~ObDDLInsertRowIterator();
-  int init(
-      ObDirectLoadMgrAgent &agent,
-      ObIStoreRowIterator *slice_row_iter,
-      const share::ObLSID &ls_id,
-      const common::ObTabletID &tablet_id,
-      const int64_t context_id,
-      const ObTabletSliceParam &tablet_slice_param,
-      const int64_t lob_cols_cnt,
-      const int64_t total_slice_cnt,
-      const bool is_skip_lob = false);
-  virtual int get_next_row(const blocksstable::ObDatumRow *&row) override
-  {
-    // const bool skip_lob = false;
-    return get_next_row(is_skip_lob_, row);
-  }
-  int get_next_row(const bool skip_lob, const blocksstable::ObDatumRow *&row) override;
-  TO_STRING_KV(K_(is_inited), K_(ls_id), K_(current_tablet_id), K_(context_id), K_(macro_seq),
-      K_(lob_id_generator), K_(lob_id_cache), K_(lob_slice_id), K_(lob_cols_cnt), K_(is_skip_lob), K_(total_slice_cnt));
-public:
-  int switch_to_new_lob_slice();
-  int close_lob_sstable_slice();
-  inline int64_t get_lob_slice_id() { return lob_slice_id_; }
-  inline share::ObTabletCacheInterval &get_lob_id_cache() { return lob_id_cache_; }
-private:
-  int update_lob_tablet_cache_interval(const ObDirectLoadType &direct_load_type, const ObTabletID &lob_talbet_id,
-                                       ObDDLSeqGenerator *lob_id_generator, ObTabletCacheInterval &cache_interval);
-
-private:
-  static const int64_t AUTO_INC_CACHE_SIZE = 5000000; // 500w.
-  bool is_inited_;
-   // recover table ddl task needs it to scan rows.
-  ObDirectLoadMgrAgent *ddl_agent_;
-  ObIStoreRowIterator *slice_row_iter_;
-  share::ObLSID ls_id_;
-  common::ObTabletID current_tablet_id_; // data_tablet_id rather than lob_meta_tablet_id.
-  int64_t context_id_;
-  blocksstable::ObMacroDataSeq macro_seq_;
-  ObArenaAllocator lob_allocator_;
-  ObDDLSeqGenerator lob_id_generator_;
-  share::ObTabletCacheInterval lob_id_cache_;
-  int64_t lob_slice_id_;
-  int64_t lob_cols_cnt_;
-  bool is_skip_lob_;
-  int64_t total_slice_cnt_;
-};
-
 class ObLobMetaRowIterator : public ObIStoreRowIterator
 {
 public:
   ObLobMetaRowIterator();
   virtual ~ObLobMetaRowIterator();
   int init(ObLobMetaWriteIter *iter,
-            const transaction::ObTransID &trans_id,
-            const int64_t trans_version,
-            const int64_t sql_no,
-            const ObDirectLoadType direct_load_type);
+            const int64_t trans_version);
   void reset();
   void reuse();
   virtual int get_next_row(const blocksstable::ObDatumRow *&row) override;
 
-private:
-  int64_t get_seq_no() const;
-
 public:
   bool is_inited_;
   ObLobMetaWriteIter *iter_;
-  transaction::ObTransID trans_id_;
   int64_t trans_version_;
-  int64_t sql_no_;
   blocksstable::ObDatumRow tmp_row_;
   ObLobMetaWriteResult lob_meta_write_result_;
-  ObDirectLoadType direct_load_type_;
 };
 
-/* TODO @zhuoran.zzr 
- * full & inc load type need different param 
- * add differnt init param later
- */
 struct ObTabletDDLParam final
 {
 public:
@@ -368,24 +260,18 @@ public:
   ~ObTabletDDLParam();
   bool is_valid() const;
   TO_STRING_KV(K_(direct_load_type),
-               K_(ls_id),
                K_(start_scn),
                K_(commit_scn),
                K_(data_format_version),
                K_(table_key),
-               K_(snapshot_version),
-               K_(trans_id),
-               K_(seq_no));
+               K_(snapshot_version));
 public:
   ObDirectLoadType direct_load_type_;
-  share::ObLSID ls_id_;
   share::SCN start_scn_;
   share::SCN commit_scn_;
   uint64_t data_format_version_;
   ObITable::TableKey table_key_;
-  int64_t snapshot_version_; // used for full direct load only.
-  transaction::ObTransID trans_id_; // used for incremental direct load only
-  transaction::ObTxSEQ seq_no_; // for incremental direct load
+  int64_t snapshot_version_;
 };
 
 struct ObDDLTableMergeDagParam : public share::ObIDagInitParam 
@@ -393,7 +279,6 @@ struct ObDDLTableMergeDagParam : public share::ObIDagInitParam
 public:
   ObDDLTableMergeDagParam()
     : direct_load_type_(ObDirectLoadType::DIRECT_LOAD_INVALID),
-      ls_id_(),
       tablet_id_(),
       rec_scn_(share::SCN::min_scn()),
       is_commit_(false),
@@ -402,28 +287,20 @@ public:
       snapshot_version_(0),
       table_key_(),
       arena_(ObMemAttr("DDL_Mrg_Par")),
-      user_data_(),
-      trans_id_(),
-      seq_no_(),
-      table_type_(ObITable::MAX_TABLE_TYPE)
+      user_data_()
   { }
   bool is_valid() const
   {
-    bool is_valid = data_format_version_ > 0 && snapshot_version_ > 0;
-    if (is_full_direct_load(direct_load_type_)) {
-      is_valid = ls_id_.is_valid() && tablet_id_.is_valid() && start_scn_.is_valid_and_not_min();
-    } else if (is_incremental_direct_load(direct_load_type_)) {
-      is_valid = ls_id_.is_valid() && tablet_id_.is_valid();
-    }
-    return is_valid;
+    return data_format_version_ > 0 && snapshot_version_ > 0
+        && is_full_direct_load(direct_load_type_)
+        && tablet_id_.is_valid() && start_scn_.is_valid_and_not_min();
   }
   int assign(const ObDDLTableMergeDagParam &merge_param);
   virtual ~ObDDLTableMergeDagParam() = default;
-  VIRTUAL_TO_STRING_KV(K_(direct_load_type), K_(ls_id), K_(tablet_id), K_(rec_scn), K_(is_commit), K_(start_scn), K_(data_format_version),
-                       K_(snapshot_version), K_(table_key), K_(user_data), K_(trans_id), K_(seq_no), K_(table_type));
+  VIRTUAL_TO_STRING_KV(K_(direct_load_type), K_(tablet_id), K_(rec_scn), K_(is_commit), K_(start_scn), K_(data_format_version),
+                       K_(snapshot_version), K_(table_key), K_(user_data));
 public:
   ObDirectLoadType direct_load_type_;
-  share::ObLSID ls_id_;
   ObTabletID tablet_id_;
   share::SCN rec_scn_;
   bool is_commit_;
@@ -435,9 +312,6 @@ public:
   /* optional val */
   ObArenaAllocator arena_; // for user_data_
   ObTabletDDLCompleteMdsUserData user_data_;
-  transaction::ObTransID trans_id_; // for inc-major direct load only
-  transaction::ObTxSEQ seq_no_; // for inc-major direct load only
-  ObITable::TableType table_type_; // only valid in inc-major direct load
 };
 
 
@@ -454,14 +328,12 @@ public:
            const share::SCN start_scn,
            const ObDirectLoadType &direct_load_type,
            const ObDDLTaskParam &task_param,
-           ObDDLTabletContext *tablet_ctx_,
-           const transaction::ObTransID &trans_id = transaction::ObTransID(),
-           const transaction::ObTxSEQ &seq_no = transaction::ObTxSEQ());
+           ObDDLTabletContext *tablet_ctx_);
   bool is_valid() const;
   int assign(const ObDDLTabletMergeDagParamV2 &merge_param);
   int init_slice_sstable_array(hash::ObHashSet<int64_t> &slice_idxes);
   int set_slice_sstable(const int64_t slice_idx, const ObTableHandleV2 &sstable_handle);
-  int get_tablet_param(share::ObLSID &ls_id, ObTabletID &tablet_id, ObWriteTabletParam *&tablet_param) const;
+  int get_tablet_param(ObTabletID &tablet_id, ObWriteTabletParam *&tablet_param) const;
   int get_merge_ctx(ObDDLTabletContext::MergeCtx *&merge_ctx);
   int get_storage_schema(ObStorageSchema *stroage_schema);
   void set_merge_all_slice() { merge_all_slice_ = true; }
@@ -469,7 +341,7 @@ public:
   ObDDLTabletContext *get_tablet_ctx() { return tablet_ctx_; }
   ObDDLTabletContext *get_tablet_ctx() const { return tablet_ctx_; }
   int get_merge_helper(ObIDDLMergeHelper *&merge_helper);
-  VIRTUAL_TO_STRING_KV(K(for_major_), K(for_replay_), K(for_lob_), K(merge_all_slice_), K(direct_load_type_), K(start_scn_), K(rec_scn_), K(table_key_), K(ddl_task_param_), K_(trans_id), K_(seq_no), KPC(tablet_ctx_));
+  VIRTUAL_TO_STRING_KV(K(for_major_), K(for_replay_), K(for_lob_), K(merge_all_slice_), K(direct_load_type_), K(start_scn_), K(rec_scn_), K(table_key_), K(ddl_task_param_), KPC(tablet_ctx_));
 public:
   bool for_major_;
   bool for_lob_;
@@ -479,8 +351,6 @@ public:
   share::SCN start_scn_;
   share::SCN rec_scn_;
   ObDDLTaskParam ddl_task_param_;
-  transaction::ObTransID trans_id_; // for inc-major direct load only
-  transaction::ObTxSEQ seq_no_; // for inc-major direct load only
   ObITable::TableKey table_key_;
 private:
   ObDDLTabletContext *tablet_ctx_;
@@ -966,13 +836,6 @@ public:
       const ObTableSchemaItem &schema_item,
       blocksstable::ObBatchDatumRows &datum_rows);
   int close();
-  // fill lob meta row into macro block
-  int fill_lob_meta_sstable_slice(
-      const share::SCN &start_scn,
-      const uint64_t table_id,
-      const ObTabletID &curr_tablet_id,
-      ObIStoreRowIterator *row_iter,
-      int64_t &affected_rows);
   int fill_vector_index_data(
     const int64_t snapshot_version,
     const ObStorageSchema *storage_schema,
@@ -1042,17 +905,12 @@ private:
       ObIAllocator &allocator,
       ObIAllocator &iter_allocator,
       blocksstable::ObStorageDatum &datum,
-      const share::ObLSID &ls_id,
       const ObTabletID &tablet_id,
       const int64_t trans_version,
       const ObObjType &obj_type,
       const ObCollationType &cs_type,
-      const transaction::ObTransID trans_id,
-      const int64_t seq_no,
       const int64_t timeout_ts,
       const ObLobStorageParam &lob_storage_param,
-      const ObDirectLoadType direct_load_type,
-      transaction::ObTxDesc* tx_desc,
       share::ObTabletCacheInterval &pk_interval,
       ObLobMetaRowIterator *&row_iter);
   int mock_chunk_store(const int64_t row_cnt);

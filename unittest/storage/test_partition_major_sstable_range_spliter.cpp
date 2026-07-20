@@ -260,6 +260,7 @@ private:
 
 void TestPartitionMajorSSTableRangeSliter::SetUp()
 {
+  oceanbase::ObClusterVersion::get_instance().update_data_version(DATA_CURRENT_VERSION);
   if (!is_inited_) {
     OB_STORAGE_OBJECT_MGR.super_block_.body_.macro_block_size_ = 1;
 

@@ -541,7 +541,7 @@ struct ObLobDataOutRowCtx
   enum OpType
   {
     SQL = 0, // all sql op
-    APPEND,
+    APPEND, // dbms lob op
     INSERT,
     WRITE,
     ERASE,
@@ -1291,7 +1291,8 @@ struct ObObjPrintParams
       uint32_t refine_range_max_value_:1;
       uint32_t character_hex_safe_represent_:1;
       uint32_t binary_string_print_base64_:1;
-      uint32_t reserved_:21;
+      uint32_t not_print_internal_catalog_:1;
+      uint32_t reserved_:20;
     };
   };
 

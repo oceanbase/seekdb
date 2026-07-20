@@ -568,7 +568,6 @@ ObTableParam::ObTableParam(ObIAllocator &allocator)
     is_multivalue_index_(false),
     is_vec_index_(false),
     is_partition_table_(false),
-    is_mlog_table_(false),
     is_enable_semistruct_encoding_(false),
     is_safe_filter_with_di_(true),
     access_virtual_col_cnt_(0)
@@ -599,7 +598,6 @@ void ObTableParam::reset()
   is_multivalue_index_ = false;
   is_vec_index_ = false;
   is_partition_table_ = false;
-  is_mlog_table_ = false;
   is_enable_semistruct_encoding_ = false;
   is_safe_filter_with_di_ = true;
   access_virtual_col_cnt_ = 0;
@@ -639,7 +637,6 @@ OB_DEF_SERIALIZE(ObTableParam)
   }
   if (OB_SUCC(ret)) {
     LST_DO_CODE(OB_UNIS_ENCODE,
-                is_mlog_table_,
                 is_enable_semistruct_encoding_,
                 is_safe_filter_with_di_,
                 access_virtual_col_cnt_);
@@ -710,7 +707,6 @@ OB_DEF_DESERIALIZE(ObTableParam)
   }
   if (OB_SUCC(ret)) {
     LST_DO_CODE(OB_UNIS_DECODE,
-                is_mlog_table_,
                 is_enable_semistruct_encoding_,
                 is_safe_filter_with_di_,
                 access_virtual_col_cnt_);
@@ -758,7 +754,6 @@ OB_DEF_SERIALIZE_SIZE(ObTableParam)
   }
   if (OB_SUCC(ret)) {
     LST_DO_CODE(OB_UNIS_ADD_LEN,
-                is_mlog_table_,
                 is_enable_semistruct_encoding_,
                 is_safe_filter_with_di_,
                 access_virtual_col_cnt_);
@@ -957,15 +952,9 @@ int ObTableParam::construct_columns_and_projector(
         LOG_WARN("alloc column failed", K(ret), K(i));
       } else if (OB_UNLIKELY(common::OB_HIDDEN_TRANS_VERSION_COLUMN_ID == column_id) ||
                  common::OB_HIDDEN_SQL_SEQUENCE_COLUMN_ID == column_id ||
-                  common::OB_MAJOR_REFRESH_MVIEW_OLD_NEW_COLUMN_ID == column_id ||
                  common::OB_HIDDEN_GROUP_IDX_COLUMN_ID == column_id) {
         ObObjMeta meta_type;
-        if (common::OB_MAJOR_REFRESH_MVIEW_OLD_NEW_COLUMN_ID == column_id) {
-          meta_type.set_varchar();
-          meta_type.set_collation_type(ObCollationType::CS_TYPE_UTF8MB4_GENERAL_CI);
-        } else {
-          meta_type.set_int();
-        }
+        meta_type.set_int();
         column->set_column_id(column_id);
         column->set_meta_type(meta_type);
         col_index = -1;
@@ -1435,7 +1424,6 @@ int64_t ObTableParam::to_string(char *buf, const int64_t buf_len) const
        K_(parser_name),
        K_(parser_properties),
        K_(is_vec_index),
-       K_(is_mlog_table),
        K_(is_enable_semistruct_encoding),
        K_(is_safe_filter_with_di),
        K_(access_virtual_col_cnt));

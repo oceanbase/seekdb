@@ -21,6 +21,7 @@
 #include "rpc/obmysql/ob_mysql_field.h"
 #include "sql/engine/px/ob_px_admission.h"
 #include "src/sql/plan_cache/ob_plan_cache.h"
+#include "src/sql/ob_sql_ccl_rule_manager.h"
 #include "sql/resolver/dml/ob_select_stmt.h"
 #include "sql/monitor/show_trace/ob_show_trace.h"
 
@@ -33,6 +34,29 @@ using namespace oceanbase::transaction;
 
 ObResultSet::~ObResultSet()
 {
+  bool is_remote_sql = false;
+  if (OB_NOT_NULL(get_exec_context().get_sql_ctx())) {
+    is_remote_sql = get_exec_context().get_sql_ctx()->is_remote_sql_;
+  }
+  ObPhysicalPlan* physical_plan = get_physical_plan();
+  if (OB_NOT_NULL(physical_plan) && !is_remote_sql
+      && OB_UNLIKELY(physical_plan->is_limited_concurrent_num())) {
+    physical_plan->dec_concurrent_num();
+  }
+
+  if (my_session_.is_enable_sql_ccl_rule() && my_session_.has_ccl_rule()) {
+    sql::ObSQLCCLRuleManager *sql_ccl_rule_mgr = share::g_mp->sqlccl_rule_manager();
+    if (!is_inner_result_set_ && sql_ccl_rule_mgr->is_inited() && OB_NOT_NULL(sql_ccl_rule_mgr) && OB_NOT_NULL(get_exec_context().get_sql_ctx())) {
+      FOREACH(p_value_wrapper, get_exec_context().get_sql_ctx()->matched_ccl_rule_level_values_) {
+        sql_ccl_rule_mgr->dec_rule_level_concurrency(*p_value_wrapper);
+      }
+      FOREACH(p_value_wrapper,
+              get_exec_context().get_sql_ctx()->matched_ccl_format_sqlid_level_values_) {
+        sql_ccl_rule_mgr->dec_format_sqlid_level_concurrency(*p_value_wrapper);
+      }
+    }
+  }
+
   // when ObExecContext is destroyed, it also depends on the physical plan, so need to ensure
   // that inner_exec_ctx_ is destroyed before cache_obj_guard_
   if (NULL != inner_exec_ctx_) {
@@ -42,6 +66,9 @@ ObResultSet::~ObResultSet()
   ObPlanCache *pc = my_session_.get_plan_cache_directly();
   if (OB_NOT_NULL(pc)) {
     cache_obj_guard_.force_early_release(pc);
+  }
+  if (OB_NOT_NULL(pc)) {
+    temp_cache_obj_guard_.force_early_release(pc);
   }
   // Always called at the end of the ObResultSet destructor
   update_end_time();
@@ -219,10 +246,17 @@ int ObResultSet::implicit_commit_before_cmd_execute(ObSQLSessionInfo &session_in
                                                     const int cmd_type)
 {
   int ret = OB_SUCCESS;
-  ret = ObSqlTransControl::end_trans_before_cmd_execute(session_info,
-                                                        exec_ctx.get_need_disconnect_for_update(),
-                                                        exec_ctx.get_trans_state(),
-                                                        cmd_type);
+  if (session_info.is_in_transaction() && session_info.associated_xa()) {
+    const transaction::ObXATransID xid = session_info.get_xid();
+    ret = OB_TRANS_XA_ERR_COMMIT;
+    LOG_WARN("COMMIT is not allowed in a xa trans", K(ret), K(xid));
+    exec_ctx.set_need_disconnect(false);
+  } else {
+    ret = ObSqlTransControl::end_trans_before_cmd_execute(session_info,
+                                                          exec_ctx.get_need_disconnect_for_update(),
+                                                          exec_ctx.get_trans_state(),
+                                                          cmd_type);
+  }
   return ret;
 }
 
@@ -243,8 +277,12 @@ int ObResultSet::start_stmt()
   } else if (OB_FAIL(my_session_.get_autocommit(ac))) {
     LOG_WARN("fail to get autocommit", K(ret));
   } else {
+    bool in_trans = my_session_.get_in_transaction();
     if (OB_FAIL(ret)) {
       // do nothing
+    } else if (ObSqlTransUtil::is_remote_trans(
+                ac, in_trans, phy_plan->get_plan_type())) {
+      // pass
     } else if (OB_LIKELY(phy_plan->is_need_trans())) {
       if (get_trans_state().is_start_stmt_executed()) {
         ret = OB_ERR_UNEXPECTED;
@@ -433,7 +471,7 @@ OB_INLINE int ObResultSet::do_open_plan(ObExecContext &ctx)
   } else {
     /* Set exec_result_ to the executor's runtime environment for returning data */
     /* execute plan,
-     * For local and distributed plans, all jobs except RootJob finish before execute_plan returns.
+     * whether it is a local, remote, or distributed plan, all except RootJob will be completed before the execute_plan function returns
      * exec_result_ is responsible for executing the last Job: RootJob
      **/
     // Admit PX here after open-phase work, just before execute_plan,
@@ -714,7 +752,10 @@ OB_INLINE int ObResultSet::do_close_plan(int errcode, ObExecContext &ctx)
     get_exec_context().set_errcode(errcode);
     sret = end_stmt(rollback || OB_SUCCESS != pret);
     // SQL_LOG(INFO, "end_stmt err code", K_(errcode), K(ret), K(pret), K(sret));
-    if (OB_FAIL(ret)) {
+    // if branch fail is returned from end_stmt, then return it first
+    if (OB_TRANS_XA_BRANCH_FAIL == sret) {
+      ret = OB_TRANS_XA_BRANCH_FAIL;
+    } else if (OB_FAIL(ret)) {
       // nop
     } else if (OB_SUCCESS != pret) {
       ret = pret;
@@ -746,7 +787,12 @@ int ObResultSet::do_close(int *client_ret)
   int do_close_plan_ret = OB_SUCCESS;
   ObPhysicalPlan* physical_plan_ = static_cast<ObPhysicalPlan*>(cache_obj_guard_.get_cache_obj());
   if (OB_LIKELY(NULL != physical_plan_)) {
-    my_session_.set_last_plan_id(physical_plan_->get_plan_id());
+    if (OB_FAIL(my_session_.reset_tx_variable_if_remote_trans(
+                physical_plan_->get_plan_type()))) {
+      LOG_WARN("fail to reset tx_read_only if it is remote trans", K(ret));
+    } else {
+      my_session_.set_last_plan_id(physical_plan_->get_plan_id());
+    }
     // Regardless of how, do_close_plan must be executed
     if (OB_UNLIKELY(OB_SUCCESS != (do_close_plan_ret = do_close_plan(errcode_,
                                                                      get_exec_context())))) {
@@ -802,7 +848,16 @@ int ObResultSet::do_close(int *client_ret)
 
   int prev_ret = ret;
   bool async = false; // for debug purpose
-  if (OB_NOT_NULL(physical_plan_)) {
+  if (OB_TRANS_XA_BRANCH_FAIL == ret) {
+    if (my_session_.associated_xa()) {
+      // ignore ret
+      // Reset session state after the XA branch failure.
+      LOG_WARN("branch fail in global transaction", KPC(my_session_.get_tx_desc()));
+      ObSqlTransControl::clear_xa_branch(my_session_.get_xid(), my_session_.get_tx_desc());
+      my_session_.reset_tx_variable();
+      my_session_.disassociate_xa();
+    }
+  } else if (OB_NOT_NULL(physical_plan_)) {
     if (is_end_trans_async()) {
       ObCurTraceId::TraceId *cur_trace_id = NULL;
       if (OB_ISNULL(cur_trace_id = ObCurTraceId::get_trace_id())) {
@@ -825,7 +880,7 @@ int ObResultSet::do_close(int *client_ret)
 
   if (is_user_sql_ && my_session_.need_reset_package()) {
     // need_reset_package is set, it must be reset package, wether exec succ or not.
-    int tmp_ret = my_session_.reset_all_package_state_by_dbms_session();
+    int tmp_ret = my_session_.reset_all_package_state_by_dbms_session(true);
     if (OB_SUCCESS != tmp_ret) {
       LOG_WARN("reset all package fail. ", K(tmp_ret), K(ret));
       ret = OB_SUCCESS == ret ? tmp_ret : ret;
@@ -1102,7 +1157,8 @@ bool ObResultSet::need_end_trans_callback() const
     } else {}
     if (OB_LIKELY(NULL != physical_plan_) && 
                OB_LIKELY(physical_plan_->is_need_trans())) {
-      need = ObSqlTransUtil::plan_can_end_trans(ac, explicit_start_trans);
+      need = (true == ObSqlTransUtil::plan_can_end_trans(ac, explicit_start_trans)) &&
+          (false == ObSqlTransUtil::is_remote_trans(ac, explicit_start_trans, physical_plan_->get_plan_type()));
     }
   }
   return need;
@@ -1255,7 +1311,7 @@ int ObResultSet::drive_dml_query()
   // Call get_next_row to drive the entire framework execution
   int ret = OB_SUCCESS;
   if (get_physical_plan()->is_returning()
-      || (get_physical_plan()->is_local_plan() && !get_physical_plan()->need_drive_dml_query_)) {
+      || (get_physical_plan()->is_local_or_remote_plan() && !get_physical_plan()->need_drive_dml_query_)) {
     //1. dml returning will drive dml write through result.get_next_row()
     //2. partial dml query will drive dml write through operator open
     //3. partial dml query need to drive dml write through result.drive_dml_query,
@@ -1352,6 +1408,7 @@ int ObResultSet::construct_display_field_name(common::ObField &field,
   int32_t buf_len = MAX_COLUMN_CHAR_LENGTH * 2;
   int32_t pos = 0;
   int32_t name_pos = 0;
+  const bool enable_modify_null_name = true;
   if (!field.is_paramed_select_item_ || NULL == field.paramed_ctx_) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(field.is_paramed_select_item_), K(field.paramed_ctx_));
@@ -1429,7 +1486,8 @@ int ObResultSet::construct_display_field_name(common::ObField &field,
           }
         } else if (0 == field.paramed_ctx_->paramed_cname_.compare("?") &&
                    1 == PARAM_CTX->param_idxs_.count() &&
-                   T_NULL == raw_params.at(idx)->node_->type_) {
+                   T_NULL == raw_params.at(idx)->node_->type_ &&
+                   enable_modify_null_name) {
           // MySQL sets the alias of standalone null value("\N","null"...) to "NULL" during projection.
           copy_str_len = strlen("NULL");
           copy_str = "NULL";

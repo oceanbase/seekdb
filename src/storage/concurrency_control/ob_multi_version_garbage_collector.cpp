@@ -20,7 +20,6 @@
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "storage/tx/ob_weak_read_util.h"
-#include "rootserver/mview/ob_mview_maintenance_service.h"
 #include "share/ob_server_struct.h"
 #include "lib/container/ob_array.h"
 #include "share/ob_io_device_helper.h"
@@ -405,34 +404,17 @@ int ObMultiVersionGarbageCollector::study_min_unallocated_GTS(share::SCN &min_un
 {
   int ret = OB_SUCCESS;
 
-  const transaction::MonotonicTs stc_ahead = transaction::MonotonicTs::current_time() ;
-  transaction::MonotonicTs unused_receive_gts_ts(0);
   const int64_t timeout_us = 1 * 1000 * 1000; // 1s
-  const int64_t expire_time_us = common::ObTimeUtility::current_time() + timeout_us;
   share::SCN gts_scn;
 
-  do {
-    // We get the gts each 10ms in order not to report too much error during reboot
-    // and continue to fetch under the failure among 1s.
-    ret = OB_TS_MGR.get_gts(stc_ahead,
-                            NULL, // gts task
-                            gts_scn,
-                            unused_receive_gts_ts);
-    if (ret == OB_EAGAIN) {
-      if (common::ObTimeUtility::current_time() > expire_time_us) {
-        ret = OB_TIMEOUT;
-      } else {
-        ob_usleep(10 * 1000/*10ms*/);
-      }
-    } else if (OB_FAIL(ret)) {
-      MVCC_LOG(WARN, "get gts fail", KR(ret));
-    } else if (!gts_scn.is_valid()) {
-      ret = OB_ERR_UNEXPECTED;
-      MVCC_LOG(ERROR, "get gts fail", K(gts_scn), K(ret));
-    } else {
-      min_unallocated_GTS = gts_scn;
-    }
-  } while (ret == OB_EAGAIN);
+  if (OB_FAIL(OB_TS_MGR.get_gts_sync(timeout_us, gts_scn))) {
+    MVCC_LOG(WARN, "get gts fail", KR(ret));
+  } else if (!gts_scn.is_valid()) {
+    ret = OB_ERR_UNEXPECTED;
+    MVCC_LOG(ERROR, "get gts fail", K(gts_scn), K(ret));
+  } else {
+    min_unallocated_GTS = gts_scn;
+  }
 
   return ret;
 }
@@ -450,7 +432,6 @@ int ObMultiVersionGarbageCollector::study_min_unallocated_WRS(
 
   if (OB_FAIL(share::g_mp->trans_service()->get_weak_read_snapshot_version(
                 -1, // system variable : max read stale time for user
-                false,
                 min_unallocated_WRS))) {
     MVCC_LOG(WARN, "fail to get weak read snapshot", K(ret));
     if (OB_REPLICA_NOT_READABLE == ret) {
@@ -466,8 +447,7 @@ int ObMultiVersionGarbageCollector::study_min_unallocated_WRS(
   return ret;
 }
 
-// The read snapshot version may base on max committed txn version for the
-// single ls txn, so we need study it on each machine.
+// The read snapshot version may be based on the maximum committed transaction version.
 int ObMultiVersionGarbageCollector::study_max_committed_txn_version(
   share::SCN &max_committed_txn_version)
 {
@@ -510,13 +490,6 @@ int ObMultiVersionGarbageCollector::study_min_active_txn_version(
     MVCC_LOG(WARN, "get min active snaphot version failed", K(ret));
   }
 
-  share::SCN min_mview_mds_snapshot;
-  if (FAILEDx(share::g_mp->m_view_maintenance_service()->get_min_mview_mds_snapshot(min_mview_mds_snapshot))) {
-    MVCC_LOG(WARN, "get min mview active snaphot version failed", K(ret));
-  } else if (min_mview_mds_snapshot.is_valid() && min_mview_mds_snapshot < min_active_txn_version) {
-    MVCC_LOG(INFO, "study_min_active_txn_version", K(min_active_txn_version), K(min_mview_mds_snapshot));
-    min_active_txn_version = min_mview_mds_snapshot;
-  }
   return ret;
 }
 
@@ -807,14 +780,14 @@ int ObMultiVersionGarbageCollector::update_status(const ObMultiVersionGCStatus s
 // value cannot be advanced and a large number of versions cannot be recycled.
 // So we need to handle snapshot processing in abnormal situations.
 //
-// Firstly, we rely on the sys ls's ability to manage the ls. We hope that if
-// the node cannot contact to the inner table due to abnormalities, then
+// Firstly, we rely on the log stream lifecycle. If the node cannot contact
+// the inner table due to abnormalities, then
 // eventually the entries of this node will be removed from the innner table, so
 // that we no longer rely on this Timestamps provided by the node as recycling
 // snapshots.(implemented in the reclaim)
 //
 // Secondly, we rely on the each node's ability to ignore faulty timestamps. We
-// hope that if the sys ls cannot contact to the inner table and remove the
+// hope that if the node cannot contact the inner table and remove the
 // entries in time, each node will ignore the timestamps that has not been
 // updated for a long time.(implemented in the ObMultiVersionGCSnapshotCalculator).
 //
@@ -830,42 +803,34 @@ int ObMultiVersionGarbageCollector::update_status(const ObMultiVersionGCStatus s
 int ObMultiVersionGarbageCollector::reclaim()
 {
   int ret = OB_SUCCESS;
-  ObLS *ls = NULL;
-  storage::ObLSHandle ls_handle;
-  logservice::ObLogHandler *handler = nullptr;
-  int64_t old_proposal_id = 0;
   ObArray<ObAddr> reclaimable_servers;
   ObArray<ObAddr> snapshot_servers;
   bool is_this_server_disabled = false;
-  common::ObRole role;
+  bool has_ls = true;
+  storage::ObLS *ls = nullptr;
 
   ObTimeGuard timeguard(__func__, 1 * 1000 * 1000);
 
-  if (OB_FAIL(share::g_mp->ls_service()->
-              get_ls(share::SYS_LS, ls_handle, ObLSGetMod::MULTI_VERSION_GARBAGE_COLLOECTOR_MOD))) {
-    MVCC_LOG(WARN, "get sys ls failed", K(ret));
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+    MVCC_LOG(WARN, "get ls failed", K(ret));
     ret = OB_SUCCESS;
-  } else if (OB_ISNULL(ls = ls_handle.get_ls())
-             || OB_ISNULL(handler = ls_handle.get_ls()->get_log_handler())) {
-    ret = OB_ERR_UNEXPECTED;
-    MVCC_LOG(ERROR, "log stream is NULL", K(ret), K(ls));
-  } else if (OB_FAIL(handler->get_role(role, old_proposal_id))) {
-    MVCC_LOG(WARN, "fail to get role", KR(ret));
-  } else if (common::is_leader_like(role)) {
+    has_ls = false;
+  } else {
     timeguard.click("get_leader");
+  }
 
-    // TODO(handora.qc): use nicer timer
-    const int64_t current_timestamp = ObClockGenerator::getRealClock();
+  // TODO(handora.qc): use nicer timer
+  const int64_t current_timestamp = ObClockGenerator::getRealClock();
 
-    ObMultiVersionGCSnapshotOperator collector(
-      [current_timestamp,
-       &reclaimable_servers,
-       &snapshot_servers,
-       &is_this_server_disabled](const share::SCN snapshot_version,
-                                 const ObMultiVersionSnapshotType snapshot_type,
-                                 const ObMultiVersionGCStatus status,
-                                 const int64_t create_time,
-                                 const ObAddr addr) -> int {
+  ObMultiVersionGCSnapshotOperator collector(
+    [current_timestamp,
+     &reclaimable_servers,
+     &snapshot_servers,
+     &is_this_server_disabled](const share::SCN snapshot_version,
+                               const ObMultiVersionSnapshotType snapshot_type,
+                               const ObMultiVersionGCStatus status,
+                               const int64_t create_time,
+                               const ObAddr addr) -> int {
         int ret = OB_SUCCESS;
         int tmp_ret = OB_SUCCESS;
         bool need_reclaim = false;
@@ -899,47 +864,48 @@ int ObMultiVersionGarbageCollector::reclaim()
         }
 
         return ret;
-      });
+    });
 
-    // collect all info for reclaimable servers and all reported servers
-    if (OB_FAIL(collect(collector))) {
-      MVCC_LOG(WARN, "collect snapshot info failed", K(ret));
-    } else {
-      int tmp_ret = OB_SUCCESS;
-      timeguard.click("collect");
+  // collect all info for reclaimable servers and all reported servers
+  if (!has_ls) {
+    // Skip this round until the tenant LS has been created.
+  } else if (OB_FAIL(collect(collector))) {
+    MVCC_LOG(WARN, "collect snapshot info failed", K(ret));
+  } else {
+    int tmp_ret = OB_SUCCESS;
+    timeguard.click("collect");
 
-      if (0 == reclaimable_servers.count()) {
-        // all snapshot info is not reclaimable
-        MVCC_LOG(INFO, "skip all alivavle snapshots info");
-        // reclaim all uncessary servers
-      } else if (OB_TMP_FAIL((reclaim_(reclaimable_servers)))) {
-        MVCC_LOG(WARN, "reclaim snapshot info failed", K(tmp_ret),
-                 K(reclaimable_servers));
-        if (OB_SUCC(ret)) {
-          ret = tmp_ret;
-        }
+    if (0 == reclaimable_servers.count()) {
+      // all snapshot info is not reclaimable
+      MVCC_LOG(INFO, "skip all alivavle snapshots info");
+      // reclaim all uncessary servers
+    } else if (OB_TMP_FAIL((reclaim_(reclaimable_servers)))) {
+      MVCC_LOG(WARN, "reclaim snapshot info failed", K(tmp_ret),
+               K(reclaimable_servers));
+      if (OB_SUCC(ret)) {
+        ret = tmp_ret;
       }
-
-      timeguard.click("reclaim_");
-
-      if (0 == snapshot_servers.count()) {
-        MVCC_LOG(WARN, "no alive servers now, please check it clearly",
-                 KPC(this), K(snapshot_servers), K(reclaimable_servers));
-        // monitor all servers
-      } else if (OB_TMP_FAIL(monitor_(snapshot_servers))) {
-        MVCC_LOG(WARN, "snapshots servers are mintor failed",
-                 KPC(this), K(snapshot_servers), K(tmp_ret));
-        if (OB_SUCC(ret)) {
-          ret = tmp_ret;
-        }
-      }
-
-      timeguard.click("monitor_");
     }
+
+    timeguard.click("reclaim_");
+
+    if (0 == snapshot_servers.count()) {
+      MVCC_LOG(WARN, "no alive servers now, please check it clearly",
+               KPC(this), K(snapshot_servers), K(reclaimable_servers));
+      // monitor all servers
+    } else if (OB_TMP_FAIL(monitor_(snapshot_servers))) {
+      MVCC_LOG(WARN, "snapshots servers are mintor failed",
+               KPC(this), K(snapshot_servers), K(tmp_ret));
+      if (OB_SUCC(ret)) {
+        ret = tmp_ret;
+      }
+    }
+
+    timeguard.click("monitor_");
   }
 
   MVCC_LOG(INFO, "reclaim multi version garabage collector end", KPC(this),
-           K(ret), K(role), K(reclaimable_servers), K(snapshot_servers),
+           K(ret), K(reclaimable_servers), K(snapshot_servers),
            K(is_this_server_disabled));
 
   return ret;

@@ -18,8 +18,7 @@
 #include "common/ob_tablet_id.h"
 #include "share/ob_freeze_info_proxy.h"  // ObFreezeInfo, previously hidden behind a transitive include, make the dependency explicit
 #include "share/schema/ob_table_schema.h"
-#include "share/ob_column_checksum_error_operator.h"
-#include "share/ob_tablet_local_checksum_operator.h"
+#include "share/ob_tablet_replica_checksum_operator.h"
 #include "share/compaction/ob_array_with_map.h"
 namespace oceanbase
 {
@@ -95,7 +94,7 @@ private:
   static int32_t get_func_from_map(ObSortColumnIdArray &sort_array, const int64_t column_id, int64_t &input_array_idx);
   typedef int32_t (*GET_FUNC)(ObSortColumnIdArray&, const int64_t, int64_t&);
   typedef hash::ObHashMap<int64_t, int64_t> ColIdToIdxMap;
-  typedef common::ObSEArray<ObColumnIdToIdx, share::ObTabletColumnChecksumMeta::DEFAULT_COLUMN_CNT> ColIdToIdxArray;
+  typedef common::ObSEArray<ObColumnIdToIdx, share::ObTabletReplicaReportColumnMeta::DEFAULT_COLUMN_CNT> ColIdToIdxArray;
 
   static const int64_t BUILD_HASH_MAP_TABLET_CNT_THRESHOLD = 2048;
   bool is_inited_;
@@ -116,16 +115,17 @@ public:
   void reset();
   int64_t get_table_id() const { return table_id_; }
   const share::schema::ObTableSchema * get_table_schema() const { return table_schema_; }
+  const common::ObIArray<share::ObTabletReplicaChecksumItem> &get_ckm_items() const { return ckm_items_.get_array(); }
   const common::ObIArray<common::ObTabletID> &get_tablet_ids() const { return tablet_ids_; }
-  const common::ObIArray<share::ObTabletLocalChecksumItem> &get_ckm_items() const { return ckm_items_.get_array(); }
   int build(
     share::schema::ObSchemaGetterGuard &schema_guard,
     const share::schema::ObSimpleTableSchemaV2 &simple_schema,
     const common::ObIArray<common::ObTabletID> &input_tablet_ids,
-    const share::ObLocalTabletChecksumArray &input_ckm_items);
+    const share::ObReplicaCkmArray &input_ckm_items);
   int build(
     const uint64_t table_id,
     const share::SCN &compaction_scn,
+    common::ObMySQLProxy &sql_proxy,
     share::schema::ObSchemaGetterGuard &schema_guard);
   int build_column_ckm_sum_array(
     const share::SCN &compaction_scn,
@@ -158,8 +158,8 @@ private:
     ObTableCkmItems &index_ckm,
     const share::schema::ObTableSchema &data_table_schema,
     const share::schema::ObTableSchema &index_table_schema,
-    const ObIArray<int64_t> &data_local_ckm_array,
-    const ObIArray<int64_t> &index_local_ckm_array,
+    const ObIArray<int64_t> &data_replica_ckm_array,
+    const ObIArray<int64_t> &index_replica_ckm_array,
     share::ObColumnChecksumErrorInfo &ckm_error_info);
   int prepare_build(
     const uint64_t table_id,
@@ -177,7 +177,7 @@ private:
   int64_t row_count_;
   const share::schema::ObTableSchema *table_schema_;
   common::ObSEArray<common::ObTabletID, DEFAULT_TABLET_CNT> tablet_ids_;
-  share::ObLocalTabletChecksumArray ckm_items_;
+  share::ObReplicaCkmArray ckm_items_;
   ObSortColumnIdArray sort_col_id_array_; // column_id -> array_idx
   common::ObSEArray<int64_t, DEFAULT_COLUMN_CNT> ckm_sum_array_; // order by TableSchema::tablet_ids
 };

@@ -18,7 +18,7 @@
 #include "ob_index_block_row_scanner.h"
 #include "storage/access/ob_rows_info.h"
 #include "storage/access/ob_index_skip_scanner.h"
-#include "src/storage/tx_storage/ob_ls_map.h"
+#include "storage/tablet/ob_tablet.h"
 
 namespace oceanbase
 {

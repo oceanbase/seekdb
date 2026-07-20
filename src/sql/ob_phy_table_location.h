@@ -26,6 +26,19 @@ namespace sql
 class ObCandiTableLoc;
 class ObCandiTabletLoc;
 
+#ifdef _WIN32
+// nb30.h defines DUPLICATE=0x06 (NetBIOS constant). Permanently undef to avoid conflicts.
+// OceanBase does not use NetBIOS APIs.
+#pragma push_macro("DUPLICATE")
+#undef DUPLICATE
+#endif
+enum class ObDuplicateType : int64_t
+{
+  NOT_DUPLICATE = 0, // non-duplicate table
+  DUPLICATE,         //copy table, can choose any replica
+  DUPLICATE_IN_DML,  // replicated table changed by DML, can only select leader replica
+};
+// Do NOT restore DUPLICATE macro - it stays undefined for all subsequent includes
 
 class ObPhyTableLocation final
 {
@@ -49,12 +62,20 @@ public:
   inline uint64_t get_table_location_key() const { return table_location_key_; }
   inline uint64_t get_ref_table_id() const { return ref_table_id_; }
 
-  TO_STRING_KV(K_(table_location_key), K_(ref_table_id));
+  TO_STRING_KV(K_(table_location_key),
+               K_(ref_table_id),
+               K_(duplicate_type));
+  bool is_duplicate_table() const { return ObDuplicateType::NOT_DUPLICATE != duplicate_type_; }
+  bool is_duplicate_table_not_in_dml() const { return ObDuplicateType::DUPLICATE == duplicate_type_; }
+  void set_duplicate_type(ObDuplicateType v) { duplicate_type_ = v; }
+  ObDuplicateType get_duplicate_type() const { return duplicate_type_; }
 private:
   /* Used for addressing location by table ID (possibly generated alias id) */
   uint64_t table_location_key_;
   /* Used to get the actual physical table ID */
   uint64_t ref_table_id_;
+
+  ObDuplicateType duplicate_type_;
 };
 
 class ObPhyTableLocationGuard

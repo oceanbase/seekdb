@@ -24,7 +24,7 @@
 #include "common/object/ob_obj_type.h"
 #include "sql/engine/ob_bit_vector.h"
 #include "sql/engine/vector/ob_vector_define.h"
-#include "share/ob_version_parser.h"
+#include "share/ob_cluster_version.h"
 
 #define EXTRACT_MEM_ADDR(ptr) (reinterpret_cast<char *>(*reinterpret_cast<int64_t *>((ptr))))
 #define STORE_MEM_ADDR(addr, dst)                                                                  \

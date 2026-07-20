@@ -100,10 +100,9 @@ WAIT_EVENT_DEF(PX_LOOP_COND_WAIT, 15160, "px loop condition wait", "address", ""
 WAIT_EVENT_DEF(SQL_SHARED_HJ_COND_WAIT, 15165, "shared hash join cond wait", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(RESOURCE_SERVICE_LOCK_WAIT, 15263, "latch: resource_service lock wait", "address", "number", "tries", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(DIRECT_LOAD_RESCAN_LOCK_WAIT, 15265, "latch: direct load rescan lock wait", "address", "number", "tries", CONCURRENCY, true, true)
-WAIT_EVENT_DEF(TABLET_DIRECT_LOAD_MGR_SCHEMA_WAIT, 15266, "latch: tablet direct load mgr schema wait", "address", "number", "tries", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(TENANT_SNAPSHOT_SERVICE_COND_WAIT, 15267, "tenant snapshot service condition wait", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(ASYNC_COMMITTING_WAIT, 16018, "tx commiting wait", "", "", "", COMMIT, false, true)
-WAIT_EVENT_DEF(OBCDC_PART_MGR_SCHEMA_VERSION_WAIT, 18000, "oblog part mgr schema version wait", "", "", "", CONCURRENCY, true, true)
+// 18000 was used by the removed external OBCDC connector. Do not reuse.
 WAIT_EVENT_DEF(BACKUP_TMP_FILE_WAIT, 18001, "backup tmp file wait", "", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(BACKUP_TMP_FILE_QUEUE_WAIT, 18002, "backup tmp file queue wait", "", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(SYNC_GET_GTS_WAIT, 18101, "sync get gts timestamp wait", "address", "", "", NETWORK, true, true)
@@ -127,7 +126,7 @@ WAIT_EVENT_DEF(STORAGE_AUTOINC_FETCH_CONFLICT_SLEEP, 20005, "sleep: tablet autoi
 WAIT_EVENT_DEF(STORAGE_HA_FINISH_TRANSFER, 20006, "sleep: finish transfer sleep wait", "sleep_interval", "", "", CONCURRENCY, true, true)
 
 // logsergice
-WAIT_EVENT_DEF(LOG_EXTERNAL_STORAGE_IO_TASK_WAIT, 20007, "latch: log external storage io task wait", "", "", "", SYSTEM_IO, true, true)
+// 20007 was used by the removed log external storage I/O task. Do not reuse.
 WAIT_EVENT_DEF(DH_LOCAL_SYNC_COND_WAIT, 20010, "datahub local sync conditional wait", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(TRANSFER_HANDLER_COND_WAIT, 20011, "transfer handler condition wait", "address", "", "", CONCURRENCY, true, true)
 

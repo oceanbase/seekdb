@@ -19,7 +19,7 @@
 
 #include "storage/ddl/ob_ddl_struct.h"
 #include "share/ob_tablet_autoincrement_param.h"
-#include "storage/direct_load/ob_direct_load_batch_rows.h"
+#include "storage/ddl/ob_ddl_batch_rows.h"
 #include "share/ob_batch_selector.h"
 #include "storage/ddl/ob_ddl_row_tmp_file.h"
 
@@ -109,27 +109,6 @@ protected:
   int64_t row_count_;
   ObDDLRowFileGenerator row_file_generator_;
 };
-class ObTabletSliceIncWriter final : public ObITabletSliceWriter
-{
-public:
-  ObTabletSliceIncWriter();
-  virtual ~ObTabletSliceIncWriter();
-  void reset() override;
-  int init(const ObWriteMacroParam &param) override;
-  int append_row(const blocksstable::ObDatumRow &row) override;
-  int append_batch(const blocksstable::ObBatchDatumRows &batch_rows) override;
-  int close() override;
-  int64_t get_row_count() const override { return row_count_; }
-  TO_STRING_KV(K_(is_inited), K_(storage_column_count), KP_(macro_block_writer), K_(row_count));
-
-private:
-  bool is_inited_;
-  ObArenaAllocator allocator_;
-  int64_t storage_column_count_;
-  ObDDLMacroBlockWriter *macro_block_writer_;
-  int64_t row_count_;
-};
-
 // write sql rows
 class ObISliceWriter
 {
@@ -249,7 +228,7 @@ public:
 
   private:
     bool is_inited_;
-    ObDirectLoadBatchRows buffer_;
+    ObDDLBatchRows buffer_;
     blocksstable::ObBatchDatumRows bdrs_;
   };
 
@@ -295,7 +274,7 @@ protected:
   bool need_convert_storage_value_;
   bool direct_write_macro_block_;
   int64_t row_buffer_size_;
-  ObDirectLoadBatchRows row_buffer_;
+  ObDDLBatchRows row_buffer_;
   blocksstable::ObBatchDatumRows buffer_batch_rows_;
   bool need_check_rowkey_order_;
   ObArenaAllocator rowkey_arena_;

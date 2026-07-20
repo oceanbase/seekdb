@@ -25,7 +25,7 @@ namespace oceanbase
 namespace unittest
 {
 
-TEST(ObDMLSqlSplicer, batch) {
+TEST(ObPTSqlSplicer, batch) {
   int ret = OB_SUCCESS;
   share::ObDMLSqlSplicer splicer;
   ObSqlString sql;

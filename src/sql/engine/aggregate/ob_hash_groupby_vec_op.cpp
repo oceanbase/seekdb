@@ -2512,21 +2512,22 @@ int ObHashGroupByVecOp::check_llc_ndv()
   int64_t global_bound_size = 0;
   bool ndv_ratio_is_small_enough = false;
   bool has_enough_mem_for_deduplication = false;
-  ObSqlMemoryManager *runtime_sql_mem_manager = share::g_mp->sql_memory_manager();
+  ObTenantSqlMemoryManager * tenant_sql_mem_manager = NULL;
+  tenant_sql_mem_manager = share::g_mp->tenant_sql_memory_manager();
   ObExprEstimateNdv::llc_estimate_ndv(ndv, llc_est_.llc_map_);
   if (0 == llc_est_.est_cnt_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpect zero cnt", K(llc_est_.est_cnt_), K(ret));
   } else if (FALSE_IT(ndv_ratio_is_small_enough = (ndv * 1.0 / llc_est_.est_cnt_) < LlcEstimate::LLC_NDV_RATIO_)) {
   } else if (FALSE_IT(llc_est_.last_est_cnt_ = llc_est_.est_cnt_)) {
-  } else if (OB_ISNULL(runtime_sql_mem_manager)) {
+  } else if (OB_ISNULL(tenant_sql_mem_manager)) {
      
      if (ndv_ratio_is_small_enough) {
        bypass_ctrl_.bypass_rebackto_insert(ndv);
        llc_est_.enabled_  = false;
      }
   } else {
-    global_bound_size = runtime_sql_mem_manager->get_global_bound_size();
+    global_bound_size = tenant_sql_mem_manager->get_global_bound_size();
     has_enough_mem_for_deduplication = (global_bound_size * LlcEstimate::GLOBAL_BOUND_RATIO_) > (llc_est_.avg_group_mem_ * ndv);
     LOG_TRACE("check llc ndv", K(ndv_ratio_is_small_enough), K(ndv), K(llc_est_.est_cnt_), K(has_enough_mem_for_deduplication), K(llc_est_.avg_group_mem_), K(global_bound_size), K(get_actual_mem_used_size()));
     if (!has_enough_mem_for_deduplication) {

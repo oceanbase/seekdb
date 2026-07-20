@@ -25,7 +25,6 @@
 #include "sql/executor/ob_task_executor_ctx.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
 #include "sql/plan_cache/ob_dist_plans.h"
-#include "sql/session/ob_session_val_map.h"
 #include "share/schema/ob_schema_struct.h"
 #include "lib/hash/ob_hashset.h"
 
@@ -168,6 +167,7 @@ public:
         stmt_type_(stmt::T_NONE),
         fetch_cur_time_(false),
         is_ignore_stmt_(false),
+        outline_param_idx_(common::OB_INVALID_INDEX),
         related_user_var_names_(alloc_),
         related_user_sess_var_metas_(alloc_),
         all_possible_const_param_constraints_(alloc_),
@@ -184,10 +184,12 @@ public:
 public:
   int match_params_info(const ParamStore *params,
                         ObPlanCacheCtx &pc_ctx,
+                        int64_t outline_param_idx,
                         bool &is_same);
   int match_params_info(const common::Ob2DArray<ObParamInfo,
                         common::OB_MALLOC_BIG_BLOCK_SIZE,
                         common::ObWrapperAllocator, false> &infos,
+                        int64_t outline_param_idx,
                         const ObPlanCacheCtx &pc_ctx,
                         bool &is_same);
   bool can_skip_params_match();
@@ -211,6 +213,7 @@ public:
   ObPlanCache *get_plan_cache() const;
   virtual int add_cache_obj(ObPlanCacheObject &cache_object,
                             ObPlanCacheCtx &pc_ctx,
+                            int64_t ol_param_idx,
                             int &add_ret) = 0;
   virtual int select_plan(ObPlanCacheCtx &pc_ctx,
                           ObPlanCacheObject *&plan) = 0;
@@ -219,6 +222,7 @@ public:
   virtual void reset();
   virtual int init_new_set(const ObPlanCacheCtx &pc_ctx,
                            const ObPlanCacheObject &cache_obj,
+                           int64_t outline_param_idx,
                            common::ObIAllocator* pc_alloc_);
   virtual bool is_sql_planset() = 0;
 /*  static int check_array_bind_same_bool_param(*/
@@ -234,6 +238,11 @@ public:
   bool get_can_delay_init_datum_store() { return can_delay_init_datum_store_; }
 
 private:
+  bool is_match_outline_param(int64_t param_idx)
+  {
+    return outline_param_idx_ == param_idx;
+  }
+
   /**
    * @brief set const param constraints
    *
@@ -276,6 +285,7 @@ protected:
   stmt::StmtType stmt_type_;
   bool fetch_cur_time_;
   bool is_ignore_stmt_;
+  int64_t outline_param_idx_;
   // related user session var names
   common::ObFixedArray<common::ObString, common::ObIAllocator> related_user_var_names_;
   UserSessionVarMetaArray related_user_sess_var_metas_;
@@ -303,9 +313,11 @@ public:
       table_locations_(alloc_),
       array_binding_plan_(),
       local_plans_(),
+      remote_plan_(NULL),
       direct_local_plan_(NULL),
       dist_plans_(),
       need_try_plan_(0),
+      has_duplicate_table_(false),
       //has_array_binding_(false),
       is_contain_virtual_table_(false),
       enable_inner_part_parallel_exec_(false),
@@ -318,6 +330,7 @@ public:
 public:
   virtual int add_cache_obj(ObPlanCacheObject &cache_object,
                             ObPlanCacheCtx &pc_ctx,
+                            int64_t ol_param_idx,
                             int &add_ret) override;
   virtual int select_plan(ObPlanCacheCtx &pc_ctx,
                           ObPlanCacheObject *&cache_obj) override;
@@ -327,9 +340,15 @@ public:
   virtual bool is_sql_planset() override;
   virtual int init_new_set(const ObPlanCacheCtx &pc_ctx,
                            const ObPlanCacheObject &cache_obj,
+                           int64_t outline_param_idx,
                            common::ObIAllocator* pc_alloc_) override;
-  static int calc_phy_plan_type_v2(const ObPlanCacheCtx &pc_ctx,
+  // calculate phy_plan type:
+  // @param [in]  phy_locations
+  // @param [out] plan_type
+  static int calc_phy_plan_type_v2(const common::ObIArray<ObCandiTableLoc> &candi_table_locs,
+                                   const ObPlanCacheCtx &pc_ctx,
                                    ObPhyPlanType &plan_type);
+  inline bool has_duplicate_table() const { return has_duplicate_table_; }
   //inline bool has_array_binding() const { return has_array_binding_; }
   inline bool enable_inner_part_parallel() const { return enable_inner_part_parallel_exec_; }
 private:
@@ -343,8 +362,13 @@ private:
   int get_plan_normal(ObPlanCacheCtx &pc_ctx,
                       ObPhysicalPlan *&plan);
 
+  int get_local_plan_direct(ObPlanCacheCtx &pc_ctx,
+                            bool &is_direct_local_plan,
+                            ObPhysicalPlan *&plan);
+
   int add_plan(ObPhysicalPlan &plan,
-               ObPlanCacheCtx &pc_ctx);
+               ObPlanCacheCtx &pc_ctx,
+               int64_t outline_param_idx);
 
   int add_physical_plan(const ObPhyPlanType plan_type,
                          ObPlanCacheCtx &pc_ctx,
@@ -356,6 +380,9 @@ private:
   int try_get_local_plan(ObPlanCacheCtx &pc_ctx,
                          ObPhysicalPlan *&plan,
                          bool &get_next);
+  int try_get_remote_plan(ObPlanCacheCtx &pc_ctx,
+                          ObPhysicalPlan *&plan,
+                          bool &get_next);
   int try_get_dist_plan(ObPlanCacheCtx &pc_ctx,
                         ObPhysicalPlan *&plan);
   int get_phy_locations(const ObIArray<ObTableLocation> &table_locations,
@@ -365,14 +392,22 @@ private:
   int get_phy_locations(const ObTablePartitionInfoArray &partition_infos,
                         ObIArray<ObCandiTableLoc> &candi_table_locs);
 
+  int set_concurrent_degree(int64_t outline_param_idx,
+                            ObPhysicalPlan &plan);
+
   int get_plan_type(const ObIArray<ObTableLocation> &table_locations,
                     const bool is_contain_uncertain_op,
                     ObPlanCacheCtx &pc_ctx,
                     ObIArray<ObCandiTableLoc> &candi_table_locs,
                     ObPhyPlanType &plan_type);
-  ObPhysicalPlan* get_local_plan();
-  int add_local_plan(ObPhysicalPlan &plan);
+  ObPhysicalPlan* get_local_plan(ObPlanCacheCtx &pc_ctx);
+  int add_local_plan(ObPlanCacheCtx &pc_ctx, ObPhysicalPlan &plan);
   int64_t get_local_plan_mem_size();
+
+  static int is_partition_in_same_server(const ObIArray<ObCandiTableLoc> &candi_table_locs,
+                                         bool &is_same,
+                                         ObAddr &first_addr);
+
 
 private:
   bool is_all_non_partition_; // Determine whether all tables corresponding to this plan are non-partitioned tables
@@ -380,6 +415,7 @@ private:
   //used for array binding, only local plan
   ObPhysicalPlan *array_binding_plan_;
   common::ObSEArray<ObPhysicalPlan *, 4> local_plans_; 
+  ObPhysicalPlan *remote_plan_;
   // for directly get plan
   ObPhysicalPlan *direct_local_plan_;
   ObDistPlans dist_plans_;
@@ -387,6 +423,8 @@ private:
   // The common characteristic of the above special scenarios is that the table location in the plan_set cache is inconsistent with the table location within the plan,
   // Must get table location from the plan to calculate physical partition address
   int64_t need_try_plan_;
+  // Does the plan contain table replication
+  bool has_duplicate_table_;
   ObSEArray<int64_t, 4> part_param_idxs_;
   // Whether it contains a virtual table, if it contains a virtual table, do not perform the optimization of directly obtaining the local plan
   bool is_contain_virtual_table_;

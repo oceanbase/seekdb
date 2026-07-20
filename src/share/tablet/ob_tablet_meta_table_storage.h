@@ -26,10 +26,11 @@ namespace oceanbase
 namespace share
 {
 
-class ObTabletRuntimeInfoConstructor
+// Constructor for ObTabletReplica from SQLite result
+class ObTabletReplicaConstructor
 {
 public:
-  int operator()(share::ObSQLiteRowReader &reader, ObTabletRuntimeInfo &info);
+  int operator()(share::ObSQLiteRowReader &reader, ObTabletReplica &replica);
 };
 
 class ObTabletMetaTableStorage
@@ -46,45 +47,57 @@ public:
   // Batch get tablet infos
   int batch_get(
       const ObIArray<common::ObTabletID> &tablet_ids,
-      ObIArray<ObTabletRuntimeInfo> &tablet_infos);
+      ObIArray<ObTabletInfo> &tablet_infos);
 
-  // Batch update local tablet runtime metadata.
+  // Range get tablet infos
+  int range_get(const common::ObTabletID &start_tablet_id,
+      const int64_t range_size,
+      ObIArray<ObTabletInfo> &tablet_infos);
+
+  // Batch update replicas
   int batch_update(
-      const ObIArray<ObTabletRuntimeInfo> &tablet_infos);
+      const ObIArray<ObTabletReplica> &replicas);
 
-  // Batch update local tablet runtime metadata within an external transaction.
+  // Batch update tablet meta rows within an external transaction
   int batch_update(
       ObSQLiteConnection *conn,
-      const ObIArray<ObTabletRuntimeInfo> &tablet_infos);
+      const ObIArray<ObTabletReplica> &replicas);
 
-  // Batch remove local tablet runtime metadata.
+  // Batch remove tablet meta rows
   int batch_remove(
-      const ObIArray<ObTabletRuntimeInfo> &tablet_infos);
+      const ObIArray<ObTabletReplica> &replicas);
 
-  // Batch remove local tablet runtime metadata within an external transaction.
+  // Batch remove tablet meta rows within an external transaction
   int batch_remove(
       ObSQLiteConnection *conn,
-      const ObIArray<ObTabletRuntimeInfo> &tablet_infos);
+      const ObIArray<ObTabletReplica> &replicas);
 
-  // Get data_size for a local tablet.
-  int get_data_size(const common::ObTabletID &tablet_id,
+  // Remove residual tablets for a server
+  int remove_residual_tablet(
+      const common::ObAddr &server,
+      const int64_t limit,
+      int64_t &affected_rows);
+
+  // Get max data_size for a tablet
+  int get_max_data_size(const common::ObTabletID &tablet_id,
       int64_t &data_size);
 
-  // Get report_scn and status for a local tablet.
-  int get_report_scn_and_status(const common::ObTabletID &tablet_id,
-      int64_t &report_scn,
-      int64_t &status);
+  // Get max report_scn and max status for a tablet
   int get_max_report_scn_and_status(const common::ObTabletID &tablet_id,
       int64_t &report_scn,
-      int64_t &status)
-  {
-    return get_report_scn_and_status(tablet_id, report_scn, status);
-  }
+      int64_t &status);
 
-  // Get the runtime's minimum compaction SCN.
+  // Get min compaction_scn for a tenant
   int get_min_compaction_scn(uint64_t &min_compaction_scn);
 
-  int get_tablet_count(int64_t &tablet_count);
+  // Get tablet replica count for a tenant
+  int get_tablet_replica_cnt(int64_t &tablet_replica_cnt);
+
+  // Batch update status for specific tablets with compaction_scn
+  int batch_update_status(const ObIArray<common::ObTabletID> &tablet_ids,
+      const ObIArray<int64_t> &compaction_scns,
+      const int64_t status,
+      int64_t &affected_rows);
 
   // Batch update report_scn for tablets
   int batch_update_report_scn(
@@ -109,28 +122,28 @@ public:
       const int64_t to_status,
       int64_t &affected_rows);
 
-  // Get local tablet IDs after a starting tablet ID.
-  int get_tablet_ids(const common::ObTabletID &start_tablet_id,
+  // Get distinct tablet_ids for a tenant, starting from a tablet_id
+  int get_distinct_tablet_ids(const common::ObTabletID &start_tablet_id,
       const int64_t limit,
       ObIArray<common::ObTabletID> &tablet_ids);
 
-  // Get tablet_ids whose local report_scn is behind the target.
-  int get_tablet_ids_with_report_scn_before(
+  // Get distinct tablet_ids with conditions
+  int get_distinct_tablet_ids_with_conditions(
       const ObIArray<common::ObTabletID> &tablet_ids,
       const uint64_t report_scn_max,
       ObIArray<common::ObTabletID> &result_tablet_ids);
 
   // Get max tablet_id in a range
   int get_max_tablet_id_in_range(const common::ObTabletID &start_tablet_id,
-      const int64_t batch_size,
+      const int64_t offset,
       common::ObTabletID &max_tablet_id);
 
-  // Range scan local compaction metadata, optionally skipping already reported rows.
+  // Range scan for compaction with filters
   int range_scan_for_compaction(const common::ObTabletID &start_tablet_id,
       const common::ObTabletID &end_tablet_id,
       const int64_t compaction_scn,
-      const bool only_unreported,
-      ObIArray<ObTabletRuntimeInfo> &tablet_infos);
+      const bool add_report_scn_filter,
+      ObIArray<ObTabletInfo> &tablet_infos);
 
   // Batch update report_scn for tablets with conditions (for unequal report_scn update)
   int batch_update_report_scn_unequal(
@@ -141,6 +154,11 @@ public:
 private:
   // Create table if not exists
   int create_table_if_not_exists();
+
+  // Helper to construct tablet infos from local tablet meta rows.
+  int build_tablet_infos_from_rows(
+      const ObIArray<ObTabletReplica> &tablet_meta_rows,
+      ObIArray<ObTabletInfo> &tablet_infos);
 
   ObSQLiteConnectionPool *pool_;
 };

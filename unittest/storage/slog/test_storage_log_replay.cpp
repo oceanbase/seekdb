@@ -28,11 +28,21 @@ static ObSimpleMemLimitGetter getter;
 namespace storage
 {
 
-class TestStorageLogReplay : public blocksstable::TestDataFilePrepare
+// Single-tenant seekdb: ObTenantBase module slots are gone; modules route
+// through share::g_mp (ObIModuleProvider). Inject the test's ObTenantIOManager
+// by overriding tenant_io_manager() and pointing g_mp at this provider.
+class FakeModuleProvider : public share::ObIModuleProvider
+{
+public:
+  common::ObTenantIOManager *tenant_io_manager() override { return io_manager_; }
+  common::ObTenantIOManager *io_manager_ = nullptr;
+};
+
+class TestStorageLogReplay : public TestDataFilePrepare
 {
 public:
   TestStorageLogReplay()
-    : blocksstable::TestDataFilePrepare(&getter, "TestStorageLogReplay")
+    : TestDataFilePrepare(&getter, "TestStorageLogReplay")
   {
   }
   virtual ~TestStorageLogReplay() = default;
@@ -44,6 +54,7 @@ public:
   void build_storage(int64_t cnt);
 
 public:
+  static const uint64_t TEST_TENANT_ID = 1;
 
 public:
   ObStorageLogReplayer replayer_;
@@ -51,7 +62,9 @@ public:
   ObLogCursor replay_start_cursor_;
   ObLogCursor replay_finish_cursor_;
   blocksstable::ObLogFileSpec log_file_spec_;
-  SimpleObStorageModule runtime_storage_;
+  SimpleObStorageModule tenant_storage_;
+  FakeModuleProvider provider_;
+  share::ObIModuleProvider *old_mp_ = nullptr;
 };
 
 void TestStorageLogReplay::SetUp()
@@ -63,12 +76,20 @@ void TestStorageLogReplay::SetUp()
   log_file_spec_.log_create_policy_ = "normal";
   log_file_spec_.log_write_policy_ = "truncate";
  
-  blocksstable::TestDataFilePrepare::SetUp();
+  TestDataFilePrepare::SetUp();
+  ObTenantIOManager *io_service = nullptr;
+  EXPECT_EQ(OB_SUCCESS, ObTenantIOManager::mtl_new(io_service));
+  EXPECT_EQ(OB_SUCCESS, ObTenantIOManager::mtl_init(io_service));
+  EXPECT_EQ(OB_SUCCESS, io_service->start());
+  provider_.io_manager_ = io_service;
+  old_mp_ = share::g_mp;
+  share::g_mp = &provider_;
 }
 
 void TestStorageLogReplay::TearDown()
 {
-  blocksstable::TestDataFilePrepare::TearDown();
+  share::g_mp = old_mp_;
+  TestDataFilePrepare::TearDown();
 }
 
 void TestStorageLogReplay::SetUpTestCase()
@@ -85,11 +106,11 @@ void TestStorageLogReplay::TearDownTestCase()
 
 void TestStorageLogReplay::build_storage(int64_t cnt)
 {
-  runtime_storage_.slog_cnt_ = cnt;
+  tenant_storage_.slog_cnt_ = cnt;
   for (int i = 0; i < cnt; i++) {
-    runtime_storage_.slogs_[i].block_cnt_ = ObRandom::rand(1, 1024);
-    for (int j = 0; j < runtime_storage_.slogs_[i].block_cnt_; j++) {
-      runtime_storage_.slogs_[i].blocks_[j] = ObRandom::rand(0, 10<<20);
+    tenant_storage_.slogs_[i].block_cnt_ = ObRandom::rand(1, 1024);
+    for (int j = 0; j < tenant_storage_.slogs_[i].block_cnt_; j++) {
+      tenant_storage_.slogs_[i].blocks_[j] = ObRandom::rand(0, 10<<20);
     }
   }
 }
@@ -103,10 +124,10 @@ TEST_F(TestStorageLogReplay, test_basic)
   ret = replayer_.init(nullptr, log_file_spec_);
   ASSERT_NE(OB_SUCCESS, ret);
   // test invalid unregister
-  ret = replayer_.unregister_redo_module(ObRedoLogMainType::OB_REDO_LOG_LOCAL_STORAGE);
+  ret = replayer_.unregister_redo_module(ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE);
   ASSERT_NE(OB_SUCCESS, ret);
   // test invalid register
-  ret = replayer_.register_redo_module(ObRedoLogMainType::OB_REDO_LOG_LOCAL_STORAGE, &redo_module);
+  ret = replayer_.register_redo_module(ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE, &redo_module);
 
   // test normal initialization
   ret = replayer_.init(OB_FILE_SYSTEM_ROUTER.get_slog_dir(), log_file_spec_);
@@ -133,10 +154,10 @@ TEST_F(TestStorageLogReplay, test_basic)
   slogger->start_log(replay_start_cursor_);
 
   ObStorageLogParam log_param;
-  log_param.cmd_ = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_LOCAL_STORAGE,
+  log_param.cmd_ = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE,
       ObRedoLogSubType::OB_REDO_LOG_UPDATE_TABLET);
-  for (int i = 0; i < runtime_storage_.slog_cnt_; i++) {
-    log_param.data_ = &runtime_storage_.slogs_[i];
+  for (int i = 0; i < tenant_storage_.slog_cnt_; i++) {
+    log_param.data_ = &tenant_storage_.slogs_[i];
     ret = slogger->write_log(log_param);
     ASSERT_EQ(OB_SUCCESS, ret);
   }
@@ -144,12 +165,12 @@ TEST_F(TestStorageLogReplay, test_basic)
   ret = replayer_.init(slogger->get_dir(), log_file_spec_);
   ASSERT_EQ(OB_SUCCESS, ret);
 
-  ret = replayer_.register_redo_module(ObRedoLogMainType::OB_REDO_LOG_LOCAL_STORAGE, &redo_module);
+  ret = replayer_.register_redo_module(ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE, &redo_module);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = replayer_.replay(replay_start_cursor_, replay_finish_cursor_);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ASSERT_TRUE(runtime_storage_ == redo_module);
-  ret = replayer_.unregister_redo_module(ObRedoLogMainType::OB_REDO_LOG_LOCAL_STORAGE);
+  ASSERT_TRUE(tenant_storage_ == redo_module);
+  ret = replayer_.unregister_redo_module(ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE);
   ASSERT_EQ(OB_SUCCESS, ret);
   replayer_.destroy();
   redo_module.reset();
@@ -158,7 +179,7 @@ TEST_F(TestStorageLogReplay, test_basic)
   // test normal replay (batch write)
   build_storage(ObRandom::rand(1, 127));
 
-  // mock module removal
+  // mock drop tenant
   slogger->~ObStorageLogger();
   OB_DELETE(ObStorageLogger, ObModIds::TEST, slogger);
 
@@ -174,10 +195,10 @@ TEST_F(TestStorageLogReplay, test_basic)
   slogger->start_log(replay_finish_cursor_);
 
   ObSEArray<ObStorageLogParam, 10> param_arr;
-  log_param.cmd_ = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_LOCAL_STORAGE,
+  log_param.cmd_ = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE,
       ObRedoLogSubType::OB_REDO_LOG_UPDATE_TABLET);
-  for (int i = 0; i < runtime_storage_.slog_cnt_; i++) {
-    log_param.data_ = &(runtime_storage_.slogs_[i]);
+  for (int i = 0; i < tenant_storage_.slog_cnt_; i++) {
+    log_param.data_ = &(tenant_storage_.slogs_[i]);
     param_arr.push_back(log_param);
   }
   ret = slogger->get_active_cursor(replay_start_cursor_);
@@ -187,12 +208,12 @@ TEST_F(TestStorageLogReplay, test_basic)
 
   ret = replayer_.init(slogger->get_dir(), log_file_spec_);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ret = replayer_.register_redo_module(ObRedoLogMainType::OB_REDO_LOG_LOCAL_STORAGE, &redo_module);
+  ret = replayer_.register_redo_module(ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE, &redo_module);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = replayer_.replay(replay_start_cursor_, replay_finish_cursor_);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ASSERT_TRUE(runtime_storage_ == redo_module);
-  ret = replayer_.unregister_redo_module(ObRedoLogMainType::OB_REDO_LOG_LOCAL_STORAGE);
+  ASSERT_TRUE(tenant_storage_ == redo_module);
+  ret = replayer_.unregister_redo_module(ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE);
   ASSERT_EQ(OB_SUCCESS, ret);
   replayer_.destroy();
   redo_module.reset();
@@ -202,34 +223,34 @@ TEST_F(TestStorageLogReplay, test_basic)
   build_storage(ObRandom::rand(1, 127));
   slogger->get_active_cursor(replay_start_cursor_);
 
-  for (int i = 0; i < runtime_storage_.slog_cnt_; i++) {
-    log_param.data_ = &runtime_storage_.slogs_[i];
+  for (int i = 0; i < tenant_storage_.slog_cnt_; i++) {
+    log_param.data_ = &tenant_storage_.slogs_[i];
     ret = slogger->write_log(log_param);
     ASSERT_EQ(OB_SUCCESS, ret);
   }
 
-  runtime_storage_.slog_cnt_++;
-  int tmp_cnt = runtime_storage_.slog_cnt_ - 1;
-  runtime_storage_.slogs_[tmp_cnt].blocks_[0] = 3214;
-  runtime_storage_.slogs_[tmp_cnt].block_cnt_ = 1;
-  log_param.data_ = &(runtime_storage_.slogs_[tmp_cnt]);
-  log_param.cmd_ = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_LOCAL_STORAGE,
+  tenant_storage_.slog_cnt_++;
+  int tmp_cnt = tenant_storage_.slog_cnt_ - 1;
+  tenant_storage_.slogs_[tmp_cnt].blocks_[0] = 3214;
+  tenant_storage_.slogs_[tmp_cnt].block_cnt_ = 1;
+  log_param.data_ = &(tenant_storage_.slogs_[tmp_cnt]);
+  log_param.cmd_ = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE,
       ObRedoLogSubType::OB_REDO_LOG_DELETE_TABLET);
   ret = slogger->write_log(log_param);
   ASSERT_EQ(OB_SUCCESS, ret);
 
   ret = replayer_.init(slogger->get_dir(), log_file_spec_);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ret = replayer_.register_redo_module(ObRedoLogMainType::OB_REDO_LOG_LOCAL_STORAGE, &redo_module);
+  ret = replayer_.register_redo_module(ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE, &redo_module);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = replayer_.replay(replay_start_cursor_, replay_finish_cursor_);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ASSERT_FALSE(runtime_storage_ == redo_module);
+  ASSERT_FALSE(tenant_storage_ == redo_module);
 
   for (int i = 0; i < tmp_cnt; i++) {
-    ASSERT_TRUE(runtime_storage_.slogs_[i] == redo_module.slogs_[i]);
+    ASSERT_TRUE(tenant_storage_.slogs_[i] == redo_module.slogs_[i]);
   }
-  ASSERT_TRUE(runtime_storage_.slogs_[tmp_cnt] != redo_module.slogs_[tmp_cnt]);
+  ASSERT_TRUE(tenant_storage_.slogs_[tmp_cnt] != redo_module.slogs_[tmp_cnt]);
   OB_DELETE(ObStorageLogger, ObModIds::TEST, slogger);
 }
 
@@ -254,12 +275,12 @@ TEST_F(TestStorageLogReplay, test_switch_file_replay)
   slogger->start_log(write_start_cursor);
 
   ObStorageLogParam log_param;
-  log_param.cmd_ = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_LOCAL_STORAGE,
+  log_param.cmd_ = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE,
       ObRedoLogSubType::OB_REDO_LOG_UPDATE_TABLET);
 
   build_storage(ObRandom::rand(1, 127));
-  for (int i = 0; i < runtime_storage_.slog_cnt_; i++) {
-    log_param.data_ = &runtime_storage_.slogs_[i];
+  for (int i = 0; i < tenant_storage_.slog_cnt_; i++) {
+    log_param.data_ = &tenant_storage_.slogs_[i];
     ret = slogger->write_log(log_param);
     ASSERT_EQ(OB_SUCCESS, ret);
   }
@@ -270,7 +291,7 @@ TEST_F(TestStorageLogReplay, test_switch_file_replay)
   write_start_cursor.log_id_ = replay_start_cursor_.log_id_;
   write_start_cursor.offset_ = 0;
 
-  // mock module removal
+  // mock drop tenant
   slogger->~ObStorageLogger();
   OB_DELETE(ObStorageLogger, ObModIds::TEST, slogger);
 
@@ -285,18 +306,18 @@ TEST_F(TestStorageLogReplay, test_switch_file_replay)
   slogger->is_start_ = false;
   slogger->start_log(write_start_cursor);
 
-  for (int i = 0; i < runtime_storage_.slog_cnt_; i++) {
-    log_param.data_ = &runtime_storage_.slogs_[i];
+  for (int i = 0; i < tenant_storage_.slog_cnt_; i++) {
+    log_param.data_ = &tenant_storage_.slogs_[i];
     ret = slogger->write_log(log_param);
     ASSERT_EQ(OB_SUCCESS, ret);
   }
   ret = replayer_.init(slogger->get_dir(), log_file_spec_);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ret = replayer_.register_redo_module(ObRedoLogMainType::OB_REDO_LOG_LOCAL_STORAGE, &redo_module);
+  ret = replayer_.register_redo_module(ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE, &redo_module);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = replayer_.replay(replay_start_cursor_, replay_finish_cursor_);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ASSERT_TRUE(runtime_storage_ == redo_module);
+  ASSERT_TRUE(tenant_storage_ == redo_module);
   OB_DELETE(ObStorageLogger, ObModIds::TEST, slogger);
 }
 
@@ -320,18 +341,18 @@ TEST_F(TestStorageLogReplay, test_mock_restart)
   slogger->start_log(write_start_cursor);
 
   ObStorageLogParam log_param;
-  log_param.cmd_ = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_LOCAL_STORAGE,
+  log_param.cmd_ = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE,
       ObRedoLogSubType::OB_REDO_LOG_UPDATE_TABLET);
 
   build_storage(40);
   // first time to write slog
-  for (int i = 0; i < runtime_storage_.slog_cnt_; i++) {
-    log_param.data_ = &runtime_storage_.slogs_[i];
+  for (int i = 0; i < tenant_storage_.slog_cnt_; i++) {
+    log_param.data_ = &tenant_storage_.slogs_[i];
     ASSERT_EQ(OB_SUCCESS, slogger->write_log(log_param));
   }
   // replay first slog file
   ASSERT_EQ(OB_SUCCESS, replayer_.init(slogger->get_dir(), log_file_spec_));
-  ASSERT_EQ(OB_SUCCESS, replayer_.register_redo_module(ObRedoLogMainType::OB_REDO_LOG_LOCAL_STORAGE, &redo_module));
+  ASSERT_EQ(OB_SUCCESS, replayer_.register_redo_module(ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE, &redo_module));
   ASSERT_EQ(OB_SUCCESS, replayer_.replay(replay_start_cursor_, replay_finish_cursor_));
   replayer_.destroy();
   redo_module.reset();
@@ -349,13 +370,13 @@ TEST_F(TestStorageLogReplay, test_mock_restart)
 
   build_storage(30);
   // second time to write slog
-  for (int i = 0; i < runtime_storage_.slog_cnt_; i++) {
-    log_param.data_ = &runtime_storage_.slogs_[i];
+  for (int i = 0; i < tenant_storage_.slog_cnt_; i++) {
+    log_param.data_ = &tenant_storage_.slogs_[i];
     ASSERT_EQ(OB_SUCCESS, slogger->write_log(log_param));
   }
   // replay first and second slog files
   ASSERT_EQ(OB_SUCCESS, replayer_.init(slogger->get_dir(), log_file_spec_));
-  ASSERT_EQ(OB_SUCCESS, replayer_.register_redo_module(ObRedoLogMainType::OB_REDO_LOG_LOCAL_STORAGE, &redo_module));
+  ASSERT_EQ(OB_SUCCESS, replayer_.register_redo_module(ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE, &redo_module));
   ASSERT_EQ(OB_SUCCESS, replayer_.replay(replay_start_cursor_, replay_finish_cursor_));
   OB_DELETE(ObStorageLogger, ObModIds::TEST, slogger);
 }

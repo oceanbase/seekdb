@@ -41,15 +41,14 @@ class ObAllVirtualSchemaMemory: public common::ObVirtualTableScannerIterator
   };
 public:
   explicit ObAllVirtualSchemaMemory(share::schema::ObMultiVersionSchemaService &schema_service)
-             : loaded_(false), mem_idx_(0),
+             : mem_idx_(OB_INVALID_INDEX),
                schema_service_(schema_service) {}
   virtual ~ObAllVirtualSchemaMemory() {}
 public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
 private:
-  int get_next_mem_info(ObSchemaMemory &schema_mem);
+  int get_next_mem_info_(ObSchemaMemory &schema_mem);
 
-  bool loaded_;
   int64_t mem_idx_;
   const static int64_t DEFAULT_ALLOCATOR_COUNT = 2;
   share::schema::ObMultiVersionSchemaService &schema_service_;

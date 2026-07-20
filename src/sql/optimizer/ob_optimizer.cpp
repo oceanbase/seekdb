@@ -264,7 +264,7 @@ int ObOptimizer::get_session_parallel_info(int64_t &force_parallel_dop,
   if (OB_ISNULL(session_info = ctx_.get_session_info())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(session_info), K(ret));
-  } else if (!session_info->is_user_session() && !session_info->get_ddl_info().is_refreshing_mview()) {
+  } else if (!session_info->is_user_session()) {
     // sys var is implemented in a schema-dependent manner, obtaining the latest sys var requires through inner SQL, which will result in circular dependency
     // Therefore in inner SQL case do not consider the value of system variable `SYS_VAR__ENABLE_PARALLEL_QUERY`
   } else if (OB_FAIL(session_info->get_parallel_degree_policy_enable_auto_dop(enable_auto_dop))) {
@@ -457,8 +457,7 @@ int ObOptimizer::check_pdml_enabled(const ObDMLStmt &stmt,
   } else if (OB_FAIL(check_pdml_supported_feature(static_cast<const ObDelUpdStmt&>(stmt),
                                                   session, can_use_pdml))) {
     LOG_WARN("failed to check pdml supported feature", K(ret));
-  } else if (!can_use_pdml || ctx_.is_online_ddl() ||
-             (stmt::T_INSERT == stmt.get_stmt_type() && static_cast< const ObInsertStmt &>(stmt).is_normal_table_overwrite())) {
+  } else if (!can_use_pdml || ctx_.is_online_ddl()) {
     // do nothing
   } else if (!is_strict_mode(session.get_sql_mode())) {
     can_use_pdml = false;
@@ -475,7 +474,7 @@ int ObOptimizer::check_pdml_enabled(const ObDMLStmt &stmt,
     LOG_WARN("failed to get sys variable for parallel degree policy", K(ret));
   } else if (enable_auto_dop && !ctx_.get_global_hint().has_parallel_hint()) {
     // 2.2 enable parallel dml by auto dop
-  } else if (!session.is_user_session() && !session.get_ddl_info().is_refreshing_mview()) {
+  } else if (!session.is_user_session()) {
     can_use_pdml = false;
   } else if (OB_FAIL(session.get_enable_parallel_dml(session_enable_pdml))
              || OB_FAIL(session.get_force_parallel_dml_dop(session_pdml_dop))) {
@@ -491,21 +490,6 @@ int ObOptimizer::check_pdml_enabled(const ObDMLStmt &stmt,
   } else {
     ctx_.set_can_use_pdml(can_use_pdml);
     LOG_TRACE("check use all pdml feature", K(ret), K(can_use_pdml), K(ctx_.is_online_ddl()), K(session_enable_pdml));
-  }
-  return ret;
-}
-
-int ObOptimizer::check_direct_load_enabled(const ObDMLStmt &stmt, const ObSQLSessionInfo &session)
-{
-  int ret = OB_SUCCESS;
-  if (stmt::T_INSERT == stmt.get_stmt_type()) {
-    const ObInsertStmt &insert_stmt = static_cast<const ObInsertStmt &>(stmt);
-    if (insert_stmt.value_from_select() && !insert_stmt.is_ignore() && !insert_stmt.is_insert_up()) {
-      ObDirectLoadOptimizerCtx &direct_load_optimize_ctx = ctx_.get_direct_load_optimizer_ctx();
-      if (OB_FAIL(direct_load_optimize_ctx.init_direct_load_ctx(insert_stmt, ctx_))) {
-        LOG_WARN("fail to init direct load ctx", K(ret));
-      } 
-    } 
   }
   return ret;
 }
@@ -634,7 +618,7 @@ int ObOptimizer::check_pdml_insert_up_enabled(const ObDelUpdStmt &pdml_stmt,
         // 1. insert into heap table.
         is_use_pdml = false;
       } else {
-        // 2. exist gis/lob/json/array/roaringbitmap/generated column.
+        // 2. exist gis/lob/json/array/generated column.
         for (ObTableSchema::const_column_iterator col_iter = table_schema->column_begin();
              NULL != col_iter && col_iter != table_schema->column_end();
              col_iter++) {
@@ -643,7 +627,6 @@ int ObOptimizer::check_pdml_insert_up_enabled(const ObDelUpdStmt &pdml_stmt,
               || ob_is_text_tc(data_type)
               || ob_is_json(data_type)
               || ob_is_collection_sql_type(data_type)
-              || ob_is_roaringbitmap(data_type)
               || (*col_iter)->is_generated_column()) {
             is_use_pdml = false;
             break;
@@ -722,22 +705,12 @@ int ObOptimizer::check_is_heap_table(const ObDMLStmt &stmt)
   return ret;
 }
 
-ERRSIM_POINT_DEF(FORCE_INC_DIRECT_WRITE);
 int ObOptimizer::init_env_info(ObDMLStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session_info = NULL;
   int64_t rowgoal_type = -1;
   const ObOptParamHint &opt_params = ctx_.get_global_hint().opt_params_;
-  if (OB_UNLIKELY(FORCE_INC_DIRECT_WRITE)) {
-    if (stmt::T_INSERT == stmt.get_stmt_type()) {
-      ObGlobalHint *global_hint_for_update = const_cast<ObGlobalHint *>(&(ctx_.get_global_hint()));
-      global_hint_for_update->pdml_option_ = ObPDMLOption::ENABLE;
-      global_hint_for_update->parallel_ =
-        global_hint_for_update->parallel_ == 0 ? 2 : global_hint_for_update->parallel_;
-      ctx_.get_exec_ctx()->get_table_direct_insert_ctx().set_force_inc_direct_write(true);
-    }
-  }
   if (OB_ISNULL(session_info = ctx_.get_session_info())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(session_info), K(ret));
@@ -747,8 +720,6 @@ int ObOptimizer::init_env_info(ObDMLStmt &stmt)
     LOG_WARN("fail to extract opt ctx basic flags", K(ret));
   } else if (OB_FAIL(check_pdml_enabled(stmt, *session_info))) {
     LOG_WARN("fail to check enable pdml", K(ret));
-  } else if (OB_FAIL(check_direct_load_enabled(stmt, *session_info))) {
-    LOG_WARN("fail to check enable direct load", K(ret));
   } else if (OB_FAIL(check_parallel_das_dml_enabled(stmt, *session_info))) {
     LOG_WARN("fail to check enable parallel das dml", K(ret));
   } else if (OB_FAIL(check_dml_parallel_mode())) {
@@ -859,7 +830,7 @@ int ObOptimizer::extract_opt_ctx_basic_flags(const ObDMLStmt &stmt, ObSQLSession
     LOG_WARN("failed to get das batch rescan flag", K(ret));
   } else {
     ctx_.init_batch_rescan_flags(enable_use_batch_nlj, enable_spf_batch_rescan,
-      query_ctx->optimizer_features_enable_version_, das_batch_rescan_flag);
+      das_batch_rescan_flag);
     ctx_.set_storage_estimation_enabled(storage_estimation_enabled);
     ctx_.set_serial_set_order(force_serial_set_order);
     ctx_.set_has_var_assign(has_var_assign);

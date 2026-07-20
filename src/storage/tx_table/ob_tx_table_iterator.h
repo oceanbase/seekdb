@@ -178,7 +178,7 @@ class ObTxDataSingleRowGetter
 public:
   ObTxDataSingleRowGetter(const ObTableIterParam &iter_param,
                           const ObSSTableArray &sstables,
-                          share::ObTxDataAllocator &tx_data_allocator,
+                          share::ObTenantTxDataAllocator &tx_data_allocator,
                           share::SCN &recycled_scn)
       : iter_param_(iter_param),
         sstables_(sstables),
@@ -208,7 +208,7 @@ private:
 private:
   const ObTableIterParam &iter_param_;
   const ObSSTableArray &sstables_;
-  share::ObTxDataAllocator &tx_data_allocator_;
+  share::ObTenantTxDataAllocator &tx_data_allocator_;
   share::SCN &recycled_scn_;
   transaction::ObTransID tx_id_;
   ObArenaAllocator arena_allocator_;

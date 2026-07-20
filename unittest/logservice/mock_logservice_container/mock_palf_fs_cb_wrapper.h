@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_UNITTEST_LOGSERVICE_MOCK_CONTAINER_PALF_FS_CB_WRAPPER_
-#define OCEANBASE_UNITTEST_LOGSERVICE_MOCK_CONTAINER_PALF_FS_CB_WRAPPER_
+#ifndef OCEANBASE_UNITTEST_LOGSERVICE_MOCK_CONTAINER_ROLE_CHANGE_CB_WRAPPER_
+#define OCEANBASE_UNITTEST_LOGSERVICE_MOCK_CONTAINER_ROLE_CHANGE_CB_WRAPPER_
 
 #include "logservice/palf/palf_callback_wrapper.h"
 
@@ -29,18 +29,17 @@ public:
   MockPalfFSCbWrapper() {}
   ~MockPalfFSCbWrapper() {}
 
-  int add_cb_impl(PalfFSCbNode *cb_impl) override
+  int add_cb_impl(PalfFSCbNode *cb_impl)
   {
     int ret = OB_SUCCESS;
     UNUSED(cb_impl);
     return ret;
   }
-  void del_cb_impl(PalfFSCbNode *cb_impl) override
+  void del_cb_impl(PalfFSCbNode *cb_impl)
   {
     UNUSED(cb_impl);
   }
-  int update_end_lsn(const LSN &end_lsn,
-                     const share::SCN &end_scn) override
+  int update_end_lsn(const LSN &end_lsn, const share::SCN &end_scn)
   {
     int ret = OB_SUCCESS;
     UNUSED(end_lsn);

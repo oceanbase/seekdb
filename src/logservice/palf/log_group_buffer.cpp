@@ -15,7 +15,7 @@
  */
 
 #include "log_group_buffer.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_tenant_base.h"
 #include "log_writer_utils.h"
 
 namespace oceanbase
@@ -60,7 +60,7 @@ int LogGroupBuffer::init(const LSN &start_lsn)
     //  // group_buffer_size = tenant_config->_log_groupgation_buffer_size;
     //}
     ObMemAttr mem_attr("LogGroupBuffer");
-    if (NULL == (data_buf_ = static_cast<char *>(server_malloc(group_buffer_size, mem_attr)))) {
+    if (NULL == (data_buf_ = static_cast<char *>(mtl_malloc(group_buffer_size, mem_attr)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       PALF_LOG(ERROR, "alloc memory failed", K(ret));
     } else {
@@ -73,7 +73,7 @@ int LogGroupBuffer::init(const LSN &start_lsn)
       is_inited_ = true;
     }
     if (OB_FAIL(ret) && NULL != data_buf_) {
-      server_free(data_buf_);
+      mtl_free(data_buf_);
       data_buf_ = NULL;
     }
     PALF_LOG(INFO, "LogGroupBuffer init finished", K(ret), K_(start_lsn), KP(data_buf_),
@@ -90,7 +90,7 @@ void LogGroupBuffer::destroy()
   readable_begin_lsn_.reset();
   reuse_lsn_.reset();
   if (NULL != data_buf_) {
-    server_free(data_buf_);
+    mtl_free(data_buf_);
     data_buf_ = NULL;
   }
   ATOMIC_STORE(&reserved_buffer_size_, 0);

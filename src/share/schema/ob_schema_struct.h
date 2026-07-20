@@ -71,10 +71,6 @@ namespace rootserver
 class ObRandomZoneSelector;
 struct ObReplicaAddr;
 }
-namespace obcall
-{
-struct ObMVAdditionalInfo;
-}
 namespace share
 {
 namespace schema
@@ -295,13 +291,11 @@ enum ObTableType
   USER_INDEX     = 5,      // urgly, compatible with uniform process in ddl_service
                            // will add index for sys table???
   TMP_TABLE      = 6,      // Temporary table in mysql compatibility mode
-  MATERIALIZED_VIEW  = 7,  // Must be put behind, otherwise compatibility will fail
   TMP_TABLE_ALL      = 10, // All types of temporary tables, only used for alter system statements
   AUX_VERTIAL_PARTITION_TABLE = 11,
   AUX_LOB_PIECE  = 12,
   AUX_LOB_META   = 13,
   EXTERNAL_TABLE = 14,
-  MATERIALIZED_VIEW_LOG = 15,
   MAX_TABLE_TYPE
 };
 
@@ -317,9 +311,6 @@ bool is_index_table(const ObTableType table_type);
 bool is_aux_lob_meta_table(const ObTableType table_type);
 bool is_aux_lob_piece_table(const ObTableType table_type);
 bool is_aux_lob_table(const ObTableType table_type);
-bool is_mlog_table(const ObTableType table_type);
-
-const int64_t OB_MLOG_TABLE_CNT = 1;
 const int64_t OB_AUX_LOB_TABLE_CNT = 2; // aux lob meta + aux lob piece
 // The max count of aux tables that can be created for each index.
 // Some special indexes such as full-text index(FTS), multi-value index, vector index, etc., have multiple aux tables.
@@ -332,10 +323,10 @@ const int64_t OB_MAX_SHARED_TABLE_CNT_PER_INDEX_TYPE = 2;
 const int64_t OB_MAX_TABLE_CNT_PER_INDEX = 4;
 // The max count of aux tables with physical tablets per user data table.
 const int64_t OB_MAX_AUX_TABLE_PER_MAIN_TABLE = OB_MAX_INDEX_PER_TABLE * OB_MAX_TABLE_CNT_PER_INDEX +
-                                           OB_MAX_SHARED_TABLE_CNT_PER_INDEX_TYPE + OB_AUX_LOB_TABLE_CNT + OB_MLOG_TABLE_CNT; // 517
+                                           OB_MAX_SHARED_TABLE_CNT_PER_INDEX_TYPE + OB_AUX_LOB_TABLE_CNT;
 
 //       If the new index has multiple aux tables, you need to make sure that OB_MAX_AUX_TABLE_PER_MAIN_TABLE is correct and
-//       max aux tables can be created.
+//       verify that a partition with max aux tables can be processed.
 enum ObIndexType
 {
   INDEX_TYPE_IS_NOT = 0,//is not index table
@@ -405,8 +396,6 @@ enum ObIndexType
   INDEX_TYPE_MAX = 45,
 };
 
-bool is_support_split_index_type(const ObIndexType index_type);
-
 // using type for index
 enum ObIndexUsingType
 {
@@ -441,10 +430,8 @@ enum ObIndexStatus
 enum PartitionType
 {
   PARTITION_TYPE_NORMAL = 0,              // normal partition
-  PARTITION_TYPE_SPLIT_SOURCE = 1,        // hidden partition, source partition for partition split
-  PARTITION_TYPE_SPLIT_DESTINATION = 2,   // hidden partition, destination partition for partition split
-  PARTITION_TYPE_MERGE_SOURCE = 3,        // hidden partition, source partition for partition merge
-  PARTITION_TYPE_MERGE_DESTINATION = 4,   // hidden partition, destination partition for partition merge
+  PARTITION_TYPE_MERGE_SOURCE = 1,        // hidden partition, source partition for partition merge
+  PARTITION_TYPE_MERGE_DESTINATION = 2,   // hidden partition, destination partition for partition merge
   PARTITION_TYPE_MAX,
 };
 
@@ -468,10 +455,7 @@ enum ObPartitionStatus
 {
   PARTITION_STATUS_INVALID = -1,
   PARTITION_STATUS_ACTIVE = 0,
-  PARTITION_STATUS_LOGICAL_SPLITTING = 1,   // deprecated
-  PARTITION_STATUS_MERGE = 2,
-  PARTITION_STATUS_PHYSICAL_SPLITTING = 3,  // deprecated
-  PARTITION_STATUS_SPLIT = 4,
+  PARTITION_STATUS_MERGE = 1,
   PARTITION_STATUS_MAX,
 };
 
@@ -482,8 +466,6 @@ enum ObAlterColumnMode
   ALTER_COLUMN_MODE_FORBIDDEN_WHEN_MAJOR = 2,
 };
 
-
-lib::Worker::CompatMode get_worker_compat_mode(const ObCompatibilityMode &mode);
 
 struct ObRefreshSchemaStatus
 {
@@ -1108,8 +1090,7 @@ inline bool is_related_table(
     const ObIndexType &index_type)
 {
   return is_index_local_storage(index_type)
-      || is_aux_lob_table(table_type)
-      || is_mlog_table(table_type);
+      || is_aux_lob_table(table_type);
 }
 
 inline bool index_has_tablet(const ObIndexType &index_type)
@@ -1248,13 +1229,12 @@ typedef enum {
   TABLE_PRIV = 7,
   ROUTINE_SCHEMA = 8,
   SYNONYM_SCHEMA = 9,
-  // PLAN_BASELINE_SCHEMA = 10, unused anymore
   PACKAGE_SCHEMA = 12,
   UDF_SCHEMA = 13,
   SEQUENCE_SCHEMA = 14,
   SYS_VARIABLE_SCHEMA = 15,
   UDT_SCHEMA = 16,
-  // At present, only liboblog constructs simple table schema in real time in lazy mode, ob does not use it temporarily
+  // Lightweight table representation used when a caller requests a simple schema.
   TABLE_SIMPLE_SCHEMA = 17,
   TRIGGER_SCHEMA = 19,
   SYS_PRIV = 27,
@@ -2191,28 +2171,11 @@ public:
   { return share::schema::is_key_part(part_func_type_); }
   inline bool is_list_part() const
   { return share::schema::is_list_part(part_func_type_); }
-  inline bool is_valid_split_part_type() const
-  {
-    return is_range_part() && !is_interval_part();
-  }
-  inline bool is_valid_split_part_type(const ObPartitionFuncType part_func_type) const
-  {
-    return share::schema::is_range_part(part_func_type) &&
-           !share::schema::is_interval_part(part_func_type);
-  }
-
   //set methods
   int set_part_expr(const common::ObString &expr) { return deep_copy_str(expr, part_func_expr_); }
   inline void set_part_num(const int64_t part_num) { part_num_ = part_num; }
   inline void set_part_func_type(const ObPartitionFuncType func_type) { part_func_type_ = func_type; }
   inline void set_sub_part_func_type(const ObPartitionFuncType func_type) { part_func_type_ = func_type; }
-  inline void set_auto_part(const bool auto_part) {
-    auto_part_ = auto_part;
-  }
-  inline void set_auto_part_size(const int64_t auto_part_size) {
-    auto_part_size_ = auto_part_size;
-  }
-
   //get methods
   inline const common::ObString &get_part_func_expr_str() const { return part_func_expr_; }
   inline const char *get_part_func_expr() const { return extract_str(part_func_expr_); }
@@ -2221,34 +2184,13 @@ public:
   inline ObPartitionFuncType get_sub_part_func_type() const { return part_func_type_; }
   const common::ObString &get_intervel_start_str() const { return interval_start_; }
   const common::ObString &get_part_intervel_str() const { return part_interval_; }
-  inline bool get_auto_part() const {
-    return auto_part_;
-  }
-  inline int64_t get_auto_part_size() const {
-    return auto_part_size_;
-  }
-
   //other methods
   virtual void reset();
   void reuse();
   int64_t assign(const ObPartitionOption & src_part);
   int64_t get_convert_size() const ;
   virtual bool is_valid() const;
-  inline bool is_valid_auto_part_size() const {
-    return auto_part_size_ >= MIN_AUTO_PART_SIZE;
-  }
-  void assign_auto_partition_attr(const ObPartitionOption & src);
-  int enable_auto_partition(const int64_t auto_part_size);
-  int enable_auto_partition(const int64_t auto_part_size, const ObPartitionFuncType part_func_type);
-  void forbid_auto_partition(const bool is_partitioned_table);
-  bool is_enable_auto_part() const { return auto_part_ &&  auto_part_size_ >= MIN_AUTO_PART_SIZE; }
-  TO_STRING_KV(K_(part_func_type), K_(part_func_expr), K_(part_num),
-               K_(auto_part), K_(auto_part_size));
-private:
-  int enable_auto_partition_(const int64_t auto_part_size);
-
-public:
-  static const int64_t MIN_AUTO_PART_SIZE = 1LL * 1024 * 1024; // 1M
+  TO_STRING_KV(K_(part_func_type), K_(part_func_expr), K_(part_num));
 
 private:
   ObPartitionFuncType part_func_type_;
@@ -2257,8 +2199,6 @@ private:
   int64_t part_num_;
   common::ObString interval_start_; //interval start value
   common::ObString part_interval_; // interval partition step
-  bool auto_part_;// Whether it is auto-partitioned table
-  int64_t auto_part_size_;// Automatic partition size
 };
 
 class ObSubPartitionOption : public ObPartitionOption
@@ -2427,13 +2367,6 @@ public:
   int64_t get_tablespace_id() const
   { return common::OB_INVALID_ID; }
 
-  void set_split_source_tablet_id(const ObTabletID split_source_tablet_id)
-  { split_source_tablet_id_ = split_source_tablet_id; }
-  void set_split_source_tablet_id(const uint64_t split_source_tablet_id)
-  { split_source_tablet_id_ = split_source_tablet_id; }
-  ObTabletID get_split_source_tablet_id() const
-  { return split_source_tablet_id_; }
-
   int assign(const ObBasePartition & src_part);
 
   // This interface is not strictly semantically less than, please note
@@ -2480,7 +2413,6 @@ public:
   virtual bool is_normal_partition() const = 0;
   virtual bool is_hidden_partition() const { return share::schema::is_hidden_partition(partition_type_); }
 
-  bool is_in_splitting() const { return partition_type_ == PARTITION_TYPE_SPLIT_SOURCE; }
   int get_part_column_schema(const ObTableSchema &table_schema, int64_t idx, const common::ObRowkeyInfo &info,  const ObColumnSchemaV2 *&part_column_schema);
 
   // convert character set.
@@ -2494,7 +2426,7 @@ public:
   VIRTUAL_TO_STRING_KV(K_(table_id), K_(part_id), K_(name), K_(low_bound_val),
                        K_(high_bound_val), K_(list_row_values), K_(part_idx),
                        K_(is_empty_partition_name), K_(tablet_id), K_(external_location),
-                       K_(split_source_tablet_id), K_(part_storage_cache_policy_type));
+                       K_(part_storage_cache_policy_type));
 protected:
   
   uint64_t table_id_;
@@ -2523,10 +2455,6 @@ protected:
   ObTabletID tablet_id_;
 
   common::ObString external_location_;
-  // Attention:
-  // split_source_tablet_id_ will not be persisted in inner_table.
-  // it is only used when attempting to split partition.
-  ObTabletID split_source_tablet_id_;
   storage::ObStorageCachePolicyType part_storage_cache_policy_type_;
 };
 
@@ -2762,14 +2690,10 @@ public:
   inline bool is_list_part() const { return part_option_.is_list_part(); }
   inline bool is_list_subpart() const { return sub_part_option_.is_list_part(); }
 
-  inline bool is_valid_split_part_type() const { return part_option_.is_valid_split_part_type();}
-  inline bool is_auto_partitioned_table() const { return part_option_.get_auto_part() &&
-                                                         part_option_.is_valid_auto_part_size(); }
   inline const ObPartitionOption &get_part_option() const { return part_option_; }
   inline ObPartitionOption &get_part_option() { return part_option_; }
   inline const ObSubPartitionOption &get_sub_part_option() const { return sub_part_option_; }
   inline ObSubPartitionOption &get_sub_part_option() { return sub_part_option_; }
-  inline int64_t get_auto_part_size() const { return part_option_.get_auto_part_size(); }
 
   // deal with partition schema from ddl resolver
   int try_generate_hash_part();
@@ -2873,11 +2797,6 @@ public:
 
   inline void set_partition_status(const ObPartitionStatus partition_status) { partition_status_ = partition_status; }
   inline ObPartitionStatus get_partition_status() const { return partition_status_; }
-  bool is_in_splitting() const;
-  // deprecated
-  bool is_in_logical_split () const { return partition_status_ == PARTITION_STATUS_LOGICAL_SPLITTING; }
-  // deprecated
-  bool is_in_physical_split() const { return partition_status_ == PARTITION_STATUS_PHYSICAL_SPLITTING; }
   //other methods
   virtual void reset();
   virtual bool is_valid() const;
@@ -2985,7 +2904,7 @@ protected:
   int64_t def_subpartition_array_capacity_;
   int64_t def_subpartition_num_; // equal subpart_num
   /* template subpartition define end*/
-  // Record the split schema, initialized to 0, not cleared after splitting, the bottom layer needs to be used
+  // Schema version of the current partition definition.
   int64_t partition_schema_version_;
   ObPartitionStatus partition_status_;  // deprecated
   /*
@@ -3036,12 +2955,6 @@ public:
   inline int set_comment(const common::ObString &comment) { return deep_copy_str(comment, comment_); }
   inline int set_sharding(const common::ObString &sharding) { return deep_copy_str(sharding, sharding_); }
 
-  inline int set_split_partition(const common::ObString &split_partition) { return deep_copy_str(split_partition, split_partition_name_); }
-  inline int set_split_rowkey(const common::ObRowkey &rowkey)
-  { return rowkey.deep_copy(split_high_bound_val_, *get_allocator()); }
-  inline int set_split_list_value(common::ObRowkey &list_values) {
-    return list_values.deep_copy(split_list_row_values_, *get_allocator());
-  }
   //get methods
   
   virtual inline int64_t get_schema_version() const override { return schema_version_; }
@@ -3053,11 +2966,6 @@ public:
   inline const common::ObString &get_table_name() const { return tablegroup_name_; }
   virtual const char *get_entity_name() const override { return extract_str(tablegroup_name_); }
   inline const common::ObString &get_comment_str() const { return comment_; }
-  inline const common::ObString &get_split_partition_name() const { return split_partition_name_; }
-  inline const common::ObRowkey &get_split_rowkey() const { return split_high_bound_val_; }
-  inline const common::ObRowkey& get_split_list_row_values() const {
-    return split_list_row_values_;
-  }
   virtual inline bool is_external_table() const override { return false; }
 
   // In the current implementation, if the locality of the zone_list of the tablegroup is empty,
@@ -3112,9 +3020,6 @@ private:
   //2.0 add
   int64_t part_func_expr_num_;
   int64_t sub_part_func_expr_num_;
-  common::ObString split_partition_name_;
-  common::ObRowkey split_high_bound_val_;
-  common::ObRowkey split_list_row_values_;
 };
 
 class ObPartitionUtils
@@ -3653,65 +3558,6 @@ enum class ObVetcorIndexDistanceMetric : int64_t
   HAMMING = 5,
 };
 
-enum class ObMLogPurgeMode : int64_t
-{
-  IMMEDIATE_SYNC = 0,
-  IMMEDIATE_ASYNC = 1,
-  DEFERRED = 2,
-  MAX
-};
-
-enum class ObMViewBuildMode : int64_t
-{
-  IMMEDIATE = 0,
-  DEFERRED = 1,
-  PERBUILT = 2,
-  MAX
-};
-
-
-enum struct ObMVRefreshMethod : int64_t
-{
-  NEVER = 0,
-  COMPLETE = 1,
-  FAST = 2,
-  FORCE = 3,
-  MAX
-};
-
-enum struct ObMVRefreshMode : int64_t
-{
-  NEVER = 0,
-  DEMAND = 1,
-  COMMIT = 2,
-  STATEMENT = 3,
-  MAJOR_COMPACTION = 4,
-  MAX
-};
-
-enum struct ObMVRefreshType : int64_t
-{
-  COMPLETE = 0,
-  FAST = 1,
-  MAX
-};
-
-enum class ObMVRefreshStatsCollectionLevel : int64_t
-{
-  NONE = 0,
-  TYPICAL = 1,
-  ADVANCED = 2,
-  MAX
-};
-
-enum class ObMVNestedRefreshMode : int64_t
-{
-  INDIVIDUAL = 0,
-  INCONSISTENT = 1,
-  CONSISTENT = 2,
-  MAX
-};
-
 struct ObVectorIndexRefreshInfo
 {
   OB_UNIS_VERSION(1);
@@ -3735,62 +3581,6 @@ public:
   TO_STRING_KV(K_(exec_env), K_(index_params));
 };
 
-struct ObMVRefreshInfo
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObMVRefreshMethod refresh_method_;
-  ObMVRefreshMode refresh_mode_;
-  common::ObObj start_time_;
-  ObString next_time_expr_;
-  ObString exec_env_;
-  int64_t parallel_;
-  int64_t refresh_dop_;
-  ObMVNestedRefreshMode nested_refresh_mode_;
-
-  ObMVRefreshInfo() :
-  refresh_method_(ObMVRefreshMethod::NEVER),
-  refresh_mode_(ObMVRefreshMode::DEMAND),
-  start_time_(),
-  next_time_expr_(),
-  exec_env_(),
-  parallel_(OB_INVALID_COUNT),
-  refresh_dop_(0),
-  nested_refresh_mode_(ObMVNestedRefreshMode::INDIVIDUAL) {}
-
-  void reset() {
-    refresh_method_ = ObMVRefreshMethod::NEVER;
-    refresh_mode_ = ObMVRefreshMode::DEMAND;
-    start_time_.reset();
-    next_time_expr_.reset();
-    exec_env_.reset();
-    parallel_ = OB_INVALID_COUNT;
-    refresh_dop_ = 0;
-    nested_refresh_mode_ = ObMVNestedRefreshMode::INDIVIDUAL;
-  }
-
-  bool operator == (const ObMVRefreshInfo &other) const {
-    return refresh_method_ == other.refresh_method_
-      && refresh_mode_ == other.refresh_mode_
-      && start_time_ == other.start_time_
-      && next_time_expr_ == other.next_time_expr_
-      && exec_env_ == other.exec_env_
-      && parallel_ == other.parallel_
-      && refresh_dop_ == other.refresh_dop_
-      && nested_refresh_mode_ == other.nested_refresh_mode_;
-  }
-
-
-  TO_STRING_KV(K_(refresh_mode),
-      K_(refresh_method),
-      K_(start_time),
-      K_(next_time_expr),
-      K_(exec_env),
-      K_(parallel),
-      K_(refresh_dop),
-      K_(nested_refresh_mode));
-};
-
 class ObViewSchema : public ObSchema
 {
   OB_UNIS_VERSION(1);
@@ -3808,7 +3598,6 @@ public:
   inline int set_view_definition(const common::ObString &view_definition) { return deep_copy_str(view_definition, view_definition_); }
   inline void set_view_check_option(const ViewCheckOption option) { view_check_option_ = option; }
   inline void set_view_is_updatable(const bool is_updatable) { view_is_updatable_ = is_updatable; }
-  inline void set_materialized(const bool materialized) { materialized_ = materialized; }
   inline void set_character_set_client(const common::ObCharsetType character_set_client) {
     character_set_client_ = character_set_client;
   }
@@ -3822,13 +3611,8 @@ public:
   inline const char *get_view_definition() const { return extract_str(view_definition_); }
   inline ViewCheckOption get_view_check_option() const { return view_check_option_; }
   inline bool get_view_is_updatable() const { return view_is_updatable_; }
-  inline bool get_materialized() const { return materialized_; }
   inline common::ObCharsetType get_character_set_client() const { return character_set_client_; }
   inline common::ObCollationType get_collation_connection() const { return collation_connection_; }
-  inline const ObMVRefreshInfo *get_mv_refresh_info() const { return mv_refresh_info_; }
-  inline void set_mv_refresh_info(const ObMVRefreshInfo *mv_refresh_info) { mv_refresh_info_ = mv_refresh_info; }
-  inline void set_container_table_id(uint64_t container_table_id) { container_table_id_ = container_table_id; }
-  inline uint64_t get_container_table_id() const { return container_table_id_; }
 
   int64_t get_convert_size() const;
   virtual bool is_valid() const;
@@ -3837,17 +3621,13 @@ public:
   TO_STRING_KV(N_VIEW_DEFINITION, view_definition_,
                N_CHECK_OPTION, ob_view_check_option_str(view_check_option_),
                N_IS_UPDATABLE, STR_BOOL(view_is_updatable_),
-               N_IS_MATERIALIZED, STR_BOOL(materialized_),
                K_(character_set_client), K_(collation_connection));
 private:
   common::ObString view_definition_;
   ViewCheckOption view_check_option_;
   bool view_is_updatable_;
-  bool materialized_;
   common::ObCharsetType character_set_client_;
   common::ObCollationType collation_connection_;
-  uint64_t container_table_id_;
-  const ObMVRefreshInfo *mv_refresh_info_; //only for pass write param, don't need serialize and memory is hold by caller
 };
 
 class ObColumnSchemaHashWrapper
@@ -5632,8 +5412,7 @@ struct ObSessionPrivInfo
       host_name_(),
       db_(),
       user_priv_set_(0),
-      db_priv_set_(0),
-      security_version_(0)
+      db_priv_set_(0)
   {}
   ObSessionPrivInfo(const uint64_t user_id,
                     const common::ObString &db,
@@ -5645,8 +5424,7 @@ struct ObSessionPrivInfo
         host_name_(),
         db_(db),
         user_priv_set_(user_priv_set),
-        db_priv_set_(db_priv_set),
-        security_version_(0)
+        db_priv_set_(db_priv_set)
   {}
 
   virtual ~ObSessionPrivInfo() {}
@@ -5667,12 +5445,11 @@ struct ObSessionPrivInfo
     db_.reset();
     user_priv_set_ = 0;
     db_priv_set_ = 0;
-    security_version_ = 0;
   }
   
   
   virtual TO_STRING_KV(K_(user_id), K_(user_name), K_(host_name),
-                       K_(db), K_(user_priv_set), K_(db_priv_set), K_(security_version));
+                       K_(db), K_(user_priv_set), K_(db_priv_set));
 
    //for privilege.Current login tenant. if normal tenant access
                        //sys tenant's object should use other method for priv checking.
@@ -5682,9 +5459,6 @@ struct ObSessionPrivInfo
   common::ObString db_;              //db name in current session
   ObPrivSet user_priv_set_;
   ObPrivSet db_priv_set_;    //user's db_priv_set of db
-  // Only used for privilege check to determine whether there are currently tenants, otherwise the value is illegal
-  
-  uint64_t security_version_;
 };
 
 struct ObUserLoginInfo
@@ -6438,35 +6212,30 @@ public:
   ObAuxTableMetaInfo()
     : table_id_(common::OB_INVALID_ID),
       table_type_(MAX_TABLE_TYPE),
-      index_type_(INDEX_TYPE_MAX),
-      is_tmp_mlog_(false)
+      index_type_(INDEX_TYPE_MAX)
   {}
   ObAuxTableMetaInfo(
       const uint64_t table_id,
       const ObTableType table_type,
-      const ObIndexType index_type,
-      const bool is_tmp_mlog = false)
+      const ObIndexType index_type)
       : table_id_(table_id),
         table_type_(table_type),
-        index_type_(index_type),
-        is_tmp_mlog_(is_tmp_mlog)
+        index_type_(index_type)
   {}
   bool operator ==(const ObAuxTableMetaInfo &other) const {
     return (table_id_ == other.table_id_
             && table_type_ == other.table_type_
-            && index_type_ == other.index_type_
-            && is_tmp_mlog_ == other.is_tmp_mlog_);
+            && index_type_ == other.index_type_);
   }
   int64_t get_convert_size() const
   {
     int64_t convert_size = sizeof(*this);
     return convert_size;
   }
-  TO_STRING_KV(K_(table_id), K_(table_type), K_(index_type), K_(is_tmp_mlog));
+  TO_STRING_KV(K_(table_id), K_(table_type), K_(index_type));
   uint64_t table_id_;
   ObTableType table_type_;
   ObIndexType index_type_;
-  bool is_tmp_mlog_;
 };
 
 enum ObConstraintType

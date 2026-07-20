@@ -23,7 +23,6 @@ using namespace oceanbase::common;
 using namespace oceanbase::sql;
 using namespace oceanbase::sql::dtl;
 
-OB_SERIALIZE_MEMBER(ObPxUserErrorMsg, rcode_, msg_, warnings_);
 OB_SERIALIZE_MEMBER(ObPxTabletInfo,
                     tablet_id_,
                     logical_row_count_,

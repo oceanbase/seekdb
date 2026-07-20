@@ -250,9 +250,9 @@ public:
   void set_throttle_is_skipping() { throttle_is_skipping_ = true; }
   void unset_throttle_is_skipping() { throttle_is_skipping_ = false; }
   bool throttle_is_skipping() { return throttle_is_skipping_; }
-  void set_replay_is_pending() { replay_is_pending_ = true; }
-  void unset_replay_is_pending() { replay_is_pending_ = false; }
-  bool replay_is_pending() const { return replay_is_pending_; }
+  void set_tenant_replay_is_pending() { tenant_replay_is_pending_ = true; }
+  void unset_tenant_replay_is_pending() { tenant_replay_is_pending_ = false; }
+  bool tenant_replay_is_pending() const { return tenant_replay_is_pending_; }
   // get consequent callbacked log_ts right boundary
   virtual int get_max_consequent_callbacked_scn(share::SCN &max_consequent_callbacked_scn);
   // to set snapshot version when memtables meet ready_for_flush
@@ -311,6 +311,10 @@ private:
   int handle_no_active_memtable_(const ObTabletID &tablet_id,
                                  const ObTablet *tablet,
                                  share::SCN freeze_snapshot_version);
+  int decide_real_snapshot_version_(const ObTabletID &tablet_id,
+                                    const ObTablet *tablet,
+                                    const SCN freeze_snapshot_version,
+                                    SCN &real_snapshot_version);
   void handle_set_tablet_freeze_failed(const bool need_rewrite_meta,
                                        const ObTabletID &tablet_id,
                                        const ObTablet *tablet,
@@ -366,7 +370,7 @@ private:
   bool is_async_tablet_freeze_task_existing_;
   bool is_async_ls_freeze_task_existing_;
   bool throttle_is_skipping_;
-  bool replay_is_pending_;
+  bool tenant_replay_is_pending_;
   common::hash::ObHashSet<AsyncFreezeTabletInfo> async_freeze_tablets_; 
 };
 

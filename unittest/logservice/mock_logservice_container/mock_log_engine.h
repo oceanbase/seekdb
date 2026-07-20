@@ -17,45 +17,200 @@
 #ifndef OCEANBASE_UNITTEST_LOGSERVICE_MOCK_CONTAINER_LOG_ENGINE_
 #define OCEANBASE_UNITTEST_LOGSERVICE_MOCK_CONTAINER_LOG_ENGINE_
 
+#define private public
 #include "logservice/palf/log_engine.h"
+#undef private
 
 namespace oceanbase
 {
+using namespace common;
+using namespace palf;
+using namespace share;
+
 namespace palf
 {
 
 class MockLogEngine : public LogEngine
 {
 public:
-  MockLogEngine()
-    : flush_log_ret_(OB_SUCCESS),
-      handle_submit_ret_(OB_SUCCESS)
-  {}
-  ~MockLogEngine() override = default;
+  MockLogEngine() = default;
+  virtual ~MockLogEngine() {}
 
-  int submit_flush_log_task(const FlushLogCbCtx &flush_log_cb_ctx,
-                            const LogWriteBuf &write_buf) override
+  void destroy() {}
+
+  int submit_flush_log_task(
+      const FlushLogCbCtx &flush_log_cb_ctx,
+      const char *buf,
+      const int64_t buf_len)
   {
-    UNUSEDx(flush_log_cb_ctx, write_buf);
-    return flush_log_ret_;
+    int ret = OB_SUCCESS;
+    UNUSED(flush_log_cb_ctx);
+    UNUSED(buf);
+    UNUSED(buf_len);
+    return ret;
   }
 
-  int submit_handle_submit_task() override
+  int submit_flush_log_task(
+      const FlushLogCbCtx &flush_log_cb_ctx,
+      const LogWriteBuf &write_buf) override
   {
-    return handle_submit_ret_;
+    int ret = OB_SUCCESS;
+    UNUSED(flush_log_cb_ctx);
+    UNUSED(write_buf);
+    return ret;
   }
 
-  int64_t get_palf_epoch() const override
+
+  int submit_flush_snapshot_meta_task(
+      const FlushMetaCbCtx &flush_meta_cb_ctx,
+      const LogSnapshotMeta &log_snapshot_meta)
   {
-    return 1;
+    int ret = OB_SUCCESS;
+    UNUSED(flush_meta_cb_ctx);
+    UNUSED(log_snapshot_meta);
+    return ret;
   }
 
-public:
-  int flush_log_ret_;
-  int handle_submit_ret_;
+
+  int submit_truncate_prefix_blocks_task(
+      const TruncatePrefixBlocksCbCtx &truncate_prefix_blocks_ctx)
+  {
+    int ret = OB_SUCCESS;
+    UNUSED(truncate_prefix_blocks_ctx);
+    return ret;
+  }
+
+  int after_flush_log(
+      LogIOFlushLogTask *log_io_task)
+  {
+    int ret = OB_SUCCESS;
+    UNUSED(log_io_task);
+    return ret;
+  }
+
+  int after_flush_meta(
+      LogIOFlushMetaTask *log_io_task)
+  {
+    int ret = OB_SUCCESS;
+    UNUSED(log_io_task);
+    return ret;
+  }
+
+
+  int after_truncate_prefix_blocks(
+      LogIOTruncatePrefixBlocksTask *log_io_task)
+  {
+    int ret = OB_SUCCESS;
+    UNUSED(log_io_task);
+    return ret;
+  }
+  int append_log(const LSN &lsn,
+                 const LogWriteBuf &write_buf,
+                 const int64_t log_ts)
+  {
+    int ret = OB_SUCCESS;
+    UNUSED(lsn);
+    UNUSED(write_buf);
+    UNUSED(log_ts);
+    return ret;
+  }
+  int read_log(const LSN &lsn,
+               const int64_t in_read_size,
+               ReadBuf &read_buf,
+               int64_t &out_read_size)
+  {
+    int ret = OB_SUCCESS;
+    UNUSED(lsn);
+    UNUSED(in_read_size);
+    UNUSED(read_buf);
+    UNUSED(out_read_size);
+    return ret;
+  }
+  int read_group_entry_header(const LSN &lsn,
+                              LogGroupEntryHeader &log_group_entry_header)
+  {
+    int ret = OB_SUCCESS;
+    UNUSED(lsn);
+    UNUSED(log_group_entry_header);
+    return ret;
+  }
+  int truncate(const LSN &prev_lsn, const LSN &lsn)
+  {
+    int ret = OB_SUCCESS;
+    UNUSED(prev_lsn);
+    UNUSED(lsn);
+    return ret;
+  }
+  int truncate_prefix_blocks(const LSN &lsn)
+  {
+    int ret = OB_SUCCESS;
+    UNUSED(lsn);
+    return ret;
+  }
+  int delete_block(const block_id_t &block_id)
+  {
+    int ret = OB_SUCCESS;
+    UNUSED(block_id);
+    return ret;
+  }
+
+  const LSN get_begin_lsn() const
+  {
+    LSN lsn(0);
+    return lsn;
+  }
+  int get_block_id_range(block_id_t &min_block_id, block_id_t &max_block_id) const
+  {
+    int ret = OB_SUCCESS;
+    UNUSED(min_block_id);
+    UNUSED(max_block_id);
+    return ret;
+  }
+  int get_block_min_ts_ns(const block_id_t &block_id, int64_t &ts_ns)
+  {
+    int ret = OB_SUCCESS;
+    UNUSED(block_id);
+    UNUSED(ts_ns);
+    return ret;
+  }
+  int update_base_lsn_used_for_gc(const LSN &lsn)
+  {
+    int ret = OB_SUCCESS;
+    UNUSED(lsn);
+    return ret;
+  }
+  int append_meta(const char *buf,
+                  const int64_t buf_len)
+  {
+    int ret = OB_SUCCESS;
+    UNUSED(buf);
+    UNUSED(buf_len);
+    return ret;
+  }
+
+
+  LogMeta get_log_meta() const
+  {
+    LogMeta meta;
+    return meta;
+  }
+  const LSN &get_base_lsn_used_for_block_gc() const
+  {
+    return base_lsn_for_block_gc_;
+  }
+  int get_min_block_info_for_gc(block_id_t &block_id, int64_t &ts_ns)
+  {
+    int ret = OB_SUCCESS;
+    UNUSED(block_id);
+    UNUSED(ts_ns);
+    return ret;
+  }
+  LogStorage *get_log_storage() { return &log_storage_; }
+  LogStorage *get_log_meta_storage() { return &log_meta_storage_; }
+
+
 };
 
-} // namespace palf
-} // namespace oceanbase
-
+} // end of palf
+} // end of oceanbase
 #endif

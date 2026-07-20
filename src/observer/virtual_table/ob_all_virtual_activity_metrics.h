@@ -18,7 +18,7 @@
 #define OB_ALL_VIRTUAL_ACTIVITY_METRICS_H_
 
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
-#include "storage/tx_storage/ob_memstore_freezer.h"
+#include "storage/tx_storage/ob_tenant_freezer.h"
 #include "sql/ob_scanner.h"
 #include "sql/ob_scanner.h"
 #include "common/row/ob_row.h"
@@ -48,7 +48,7 @@ public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
 private:
-  int get_next_freezer_stat_(storage::ObMemstoreFreezerStat& stat);
+  int get_next_freezer_stat_(storage::ObTenantFreezerStat& stat);
   int prepare_start_to_read_();
 
 private:

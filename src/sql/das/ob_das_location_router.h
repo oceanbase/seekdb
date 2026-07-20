@@ -34,22 +34,24 @@ struct ObDASTabletLoc;
 class ObQueryRetryInfo;
 class ObDASCtx;
 struct ValueItemExpr;
+typedef common::ObFixedArray<common::ObAddr, common::ObIAllocator> AddrArray;
 typedef common::hash::ObHashMap<common::ObObjectID, common::ObObjectID, common::hash::NoPthreadDefendMode> ObPartitionIdMap;
 
 class VirtualSvrPair
 {
 public:
   // for Virtual Table
-  static const uint64_t LOCAL_VIRTUAL_TABLE_TABLET_ID = 1;
   static const uint64_t EMPTY_VIRTUAL_TABLE_TABLET_ID  = ((uint64_t)1 << 55);
 public:
   VirtualSvrPair()
     : table_id_(common::OB_INVALID_ID),
-      local_server_()
+      all_server_()
   { }
   TO_STRING_KV(K_(table_id),
-               K_(local_server));
-  int init(common::ObTableID vt_id, const common::ObAddr &server);
+               K_(all_server));
+  int init(common::ObIAllocator &allocator,
+           common::ObTableID vt_id,
+           common::ObIArray<common::ObAddr> &part_locations);
   common::ObTableID get_table_id() const { return table_id_; }
   int get_server_by_tablet_id(const common::ObTabletID &tablet_id, common::ObAddr &addr) const;
   int get_all_part_and_tablet_id(common::ObIArray<common::ObObjectID> &part_ids,
@@ -61,7 +63,7 @@ public:
                                     common::ObObjectID &part_id) const;
 private:
   uint64_t table_id_;
-  common::ObAddr local_server_;
+  AddrArray all_server_;
 };
 
 class DASRelatedTabletMap : public share::schema::IRelatedTabletMap
@@ -362,8 +364,8 @@ public:
   int get_tablet_loc(const ObDASTableLocMeta &loc_meta,
                      const common::ObTabletID &tablet_id,
                      ObDASTabletLoc &tablet_loc);
-  int nonblock_get_local(const ObTabletID &tablet_id,
-                         ObDASTabletLoc &tablet_loc);
+  int nonblock_get_leader(const ObTabletID &tablet_id,
+                          ObDASTabletLoc &tablet_loc);
   void refresh_location_cache_by_errno(bool is_nonblock, int err_no);
   void force_refresh_location_cache(bool is_nonblock, int err_no);
   int save_touched_tablet_id(const common::ObTabletID &tablet_id) { return all_tablet_list_.push_back(tablet_id); }
@@ -398,7 +400,7 @@ private:
   int cur_errno_;
   int64_t history_retry_cnt_; //Total number of retries before the current retry round.
   int64_t cur_retry_cnt_; // the counter of continuous retry
-  // Only all_tablet_list_ participates in location-router serialization.
+  // NOTE: Only all_tablet_list_ needs to be serialized and send to other server to perform das remote execution;
   // And other members will be collected by execution server self, No need to perform serialization;
   ObList<common::ObTabletID, common::ObIAllocator> all_tablet_list_;
   ObList<common::ObTabletID, common::ObIAllocator> succ_tablet_list_;

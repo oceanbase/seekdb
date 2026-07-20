@@ -33,7 +33,6 @@ class ObISQLClient;
 namespace share
 {
 
-// Simplified ObAllTenantInfo for single tenant/single LS scenario
 // tenant_role is persisted via config parameter (tenant_role), not in KV storage
 struct ObAllTenantInfo
 {
@@ -79,7 +78,6 @@ struct ObAllTenantInfo
   OB_UNIS_VERSION(1);
 };
 
-// Simplified ObAllTenantInfoProxy for single tenant/single LS scenario
 // Uses KV storage instead of database table
 class ObAllTenantInfoProxy
 {

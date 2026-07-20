@@ -192,11 +192,13 @@ OB_INLINE int ObTableReplaceOp::inner_open_with_das()
     LOG_WARN("init conflict_checker fail", K(ret), K(use_response_snapshot));
   } else {
     // init update das_ref
+    ObSQLSessionInfo *session = GET_MY_SESSION(ctx_);
     ObMemAttr mem_attr;
     
     mem_attr.label_ = "SqlReplaceInto";
     replace_rtctx_.das_ref_.set_expr_frame_info(expr_frame_info);
     replace_rtctx_.das_ref_.set_mem_attr(mem_attr);
+    replace_rtctx_.das_ref_.set_execute_directly(!MY_SPEC.use_dist_das_);
     ObDasParallelType type = ObTableModifyOp::check_das_parallel_type();
     if (DAS_SERIALIZATION != type) {
       type = DAS_BLOCKING_PARALLEL;
@@ -300,7 +302,7 @@ int ObTableReplaceOp::inner_get_next_row()
       plan_ctx->set_row_duplicated_count(delete_rows_);
     }
     int sync_ret = OB_SUCCESS;
-    if (OB_SUCCESS != (sync_ret = plan_ctx->sync_last_value_to_store())) {
+    if (OB_SUCCESS != (sync_ret = plan_ctx->sync_last_value_global())) {
       // sync last user specified value after iter ends(compatible with MySQL)
       LOG_WARN("failed to sync last value", K(sync_ret));
     }
@@ -916,7 +918,12 @@ int ObTableReplaceOp::check_replace_ctdefs_valid() const
 
 const ObIArray<ObExpr *> &ObTableReplaceOp::get_all_saved_exprs()
 {
-  return MY_SPEC.all_saved_exprs_;
+  // During the upgrade, all_saved_exprs_ in the previous version is empty.
+  // When this node is used as a remote execution node of the plan,
+  // all_saved_exprs_ is also empty after the partition_wise plan is deserialized.
+  return MY_SPEC.all_saved_exprs_.empty() ?
+      MY_SPEC.replace_ctdefs_.at(0)->ins_ctdef_->new_row_ :
+      MY_SPEC.all_saved_exprs_;
 }
 
 const ObIArray<ObExpr *> &ObTableReplaceOp::get_primary_table_new_row()

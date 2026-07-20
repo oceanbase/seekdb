@@ -204,22 +204,12 @@ int ObIMemtableMgr::release_memtables()
 int ObIMemtableMgr::init(const ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
-  ObLS *ls = nullptr;
-  ObLSService *ls_service = nullptr;
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
-  if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
-    ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "failed to get ObLSService from server module provider", KR(ret), KPC(ls_service));
-  } else if (OB_ISNULL(t3m)) {
-    ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "failed to get storage meta memory manager", KR(ret));
-  } else if (OB_FAIL(ls_service->get_ls(ls))) {
-    STORAGE_LOG(WARN, "failed to get local ls", KR(ret));
-  } else if (OB_ISNULL(ls)) {
-    ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "ls should not be NULL", KR(ret), KP(ls));
+  ObLS *tenant_ls = nullptr;
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+    STORAGE_LOG(WARN, "failed to get ls", KR(ret));
   } else if (OB_FAIL(init(tablet_id, 0, 0,
-          ls->get_log_handler(), ls->get_freezer(), t3m))) {
+          tenant_ls->get_log_handler(), tenant_ls->get_freezer(), t3m))) {
     STORAGE_LOG(WARN, "failed to init memtable mgr", KR(ret), K(tablet_id));
   }
   return ret;
@@ -231,7 +221,7 @@ int ObIMemtableMgr::init(
     const int64_t max_saved_medium_scn,
     logservice::ObLogHandler *log_handler,
     ObFreezer *freezer,
-    ObStorageMetaMemMgr *t3m)
+    ObTenantMetaMemMgr *t3m)
 {
   int ret = OB_SUCCESS;
   if (!tablet_id.is_special_merge_tablet()

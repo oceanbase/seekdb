@@ -25,12 +25,12 @@ namespace common
 namespace serialization
 {
 template <>
-struct EnumEncoder<false, const sql::ObDASLockCtDef *> : sql::DASCtRefEncoder<sql::ObDASLockCtDef>
+struct EnumEncoder<false, const sql::ObDASLockCtDef *> : sql::DASCtEncoder<sql::ObDASLockCtDef>
 {
 };
 
 template <>
-struct EnumEncoder<false, sql::ObDASLockRtDef *> : sql::DASRtRefEncoder<sql::ObDASLockRtDef>
+struct EnumEncoder<false, sql::ObDASLockRtDef *> : sql::DASRtEncoder<sql::ObDASLockRtDef>
 {
 };
 } // end namespace serialization
@@ -118,6 +118,35 @@ int ObDASLockOp::assign_task_result(ObIDASTaskOp *other)
   return ret;
 }
 
+int ObDASLockOp::decode_task_result(ObIDASTaskResult *task_result)
+{
+  int ret = OB_SUCCESS;
+#if !defined(NDEBUG)
+  CK(typeid(*task_result) == typeid(ObDASLockResult));
+  CK(task_id_ == task_result->get_task_id());
+#endif
+  if (OB_SUCC(ret)) {
+    ObDASLockResult *lock_result = static_cast<ObDASLockResult*>(task_result);
+    affected_rows_ = lock_result->get_affected_rows();
+  }
+  return ret;
+}
+
+int ObDASLockOp::fill_task_result(ObIDASTaskResult &task_result, bool &has_more, int64_t &memory_limit)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(memory_limit);
+#if !defined(NDEBUG)
+  CK(typeid(task_result) == typeid(ObDASLockResult));
+#endif
+  if (OB_SUCC(ret)) {
+    ObDASLockResult &lock_result = static_cast<ObDASLockResult&>(task_result);
+    lock_result.set_affected_rows(affected_rows_);
+    has_more = false;
+  }
+  return ret;
+}
+
 int ObDASLockOp::init_task_info(uint32_t row_extend_size)
 {
   int ret = OB_SUCCESS;
@@ -126,6 +155,18 @@ int ObDASLockOp::init_task_info(uint32_t row_extend_size)
                                    row_extend_size,
                                    "DASLockBuffer"))) {
     LOG_WARN("init lock buffer failed", K(ret));
+  }
+  return ret;
+}
+
+int ObDASLockOp::swizzling_remote_task(ObDASRemoteInfo *remote_info)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(ObIDASTaskOp::swizzling_remote_task(remote_info))) {
+    LOG_WARN("fail to swizzling remote task", K(ret));
+  } else if (remote_info != nullptr) {
+    //DAS lock is executed remotely
+    trans_desc_ = remote_info->trans_desc_;
   }
   return ret;
 }
@@ -149,5 +190,31 @@ OB_SERIALIZE_MEMBER((ObDASLockOp, ObIDASTaskOp),
                     lock_rtdef_,
                     lock_buffer_);
 
+ObDASLockResult::ObDASLockResult()
+  : ObIDASTaskResult(),
+    affected_rows_(0)
+{
+}
+
+ObDASLockResult::~ObDASLockResult()
+{
+}
+
+int ObDASLockResult::init(const ObIDASTaskOp &op, common::ObIAllocator &alloc)
+{
+  UNUSED(op);
+  UNUSED(alloc);
+  return OB_SUCCESS;
+}
+
+int ObDASLockResult::reuse()
+{
+  int ret = OB_SUCCESS;
+  affected_rows_ = 0;
+  return ret;
+}
+
+OB_SERIALIZE_MEMBER((ObDASLockResult, ObIDASTaskResult),
+                    affected_rows_);
 }  // namespace sql
 }  // namespace oceanbase

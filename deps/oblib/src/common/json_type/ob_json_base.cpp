@@ -3794,7 +3794,6 @@ static const obmysql::EMySQLFieldType opaque_ob_type_to_mysql_type[ObMaxType] =
   obmysql::EMySQLFieldType::MYSQL_TYPE_COMPLEX,                           /* ObCollectionSQLType */
   obmysql::EMySQLFieldType::MYSQL_TYPE_NOT_DEFINED,                       /* reserved for ObMySQLDateType */
   obmysql::EMySQLFieldType::MYSQL_TYPE_NOT_DEFINED,                       /* reserved for ObMySQLDateTimeType */
-  obmysql::EMySQLFieldType::MYSQL_TYPE_BLOB,                              /* ObRoaringBitmapType */
   /* ObMaxType */
 };
 

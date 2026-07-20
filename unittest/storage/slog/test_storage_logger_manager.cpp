@@ -30,11 +30,11 @@ static ObSimpleMemLimitGetter getter;
 namespace storage
 {
 
-class TestStorageLoggerManager : public blocksstable::TestDataFilePrepare
+class TestStorageLoggerManager : public TestDataFilePrepare
 {
 public:
   TestStorageLoggerManager()
-    : blocksstable::TestDataFilePrepare(&getter, "TestStorageLoggerManager")
+    : TestDataFilePrepare(&getter, "TestStorageLoggerManager")
   {
   }
   virtual ~TestStorageLoggerManager() {}
@@ -70,13 +70,13 @@ void TestStorageLoggerManager::SetUp()
   log_file_spec_.retry_write_policy_ = "normal";
   log_file_spec_.log_create_policy_ = "normal";
   log_file_spec_.log_write_policy_ = "truncate";
-  blocksstable::TestDataFilePrepare::TearDown();
-  blocksstable::TestDataFilePrepare::SetUp();
+  TestDataFilePrepare::TearDown();
+  TestDataFilePrepare::SetUp();
 }
 
 void TestStorageLoggerManager::TearDown()
 {
-  blocksstable::TestDataFilePrepare::TearDown();
+  TestDataFilePrepare::TearDown();
 }
 
 TEST_F(TestStorageLoggerManager, test_manager_basic)

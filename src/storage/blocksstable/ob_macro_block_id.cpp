@@ -101,11 +101,9 @@ bool MacroBlockId::is_valid() const
     if (is_private_data_or_meta()) {
       if (static_cast<uint64_t>(ObStorageObjectType::PRIVATE_DATA_MACRO) == storage_object_type_
           || static_cast<uint64_t>(ObStorageObjectType::PRIVATE_META_MACRO) == storage_object_type_) {
-        is_valid &= macro_path_id() != -1
-            && tenant_seq() != ObStorageObjectOpt::INVALID_TABLET_VERSION;
+        is_valid &= tenant_seq() != ObStorageObjectOpt::INVALID_TABLET_VERSION;
       } else {
-        is_valid &= meta_path_id() != -1
-            && meta_version_id() != ObStorageObjectOpt::INVALID_TABLET_VERSION;
+        is_valid &= meta_version_id() != ObStorageObjectOpt::INVALID_TABLET_VERSION;
       }
     } else if (is_shared_data_or_meta()) {
       is_valid &= third_id_ != -1; // macro_seq != -1
@@ -131,11 +129,10 @@ int64_t MacroBlockId::to_string(char *buf, const int64_t buf_len) const
     databuff_printf(buf, buf_len, pos,
         "[2nd=%lu]"
         "[3rd=%lu]"
-        "[4th=(path_id=%lu,sec_id=%lu)]}",
+        "[4th=%lu]}",
         (uint64_t) second_id_,
         (uint64_t) third_id_,
-        (int64_t) macro_path_id_,
-        (uint64_t) tenant_seq_);
+        (uint64_t) fourth_id_);
     break;
   default:
     databuff_printf(buf, buf_len, pos,
@@ -231,8 +228,7 @@ bool MacroBlockId::is_private_data_or_meta() const
   return is_id_mode_share() && 
   (
     static_cast<uint64_t>(ObStorageObjectType::PRIVATE_DATA_MACRO) == storage_object_type_ ||
-    static_cast<uint64_t>(ObStorageObjectType::PRIVATE_META_MACRO) == storage_object_type_ ||
-    static_cast<uint64_t>(ObStorageObjectType::PRIVATE_TABLET_META) == storage_object_type_
+    static_cast<uint64_t>(ObStorageObjectType::PRIVATE_META_MACRO) == storage_object_type_
   );
 }
 
@@ -365,7 +361,7 @@ int MacroBlockId::memcpy_deserialize(const char* buf, const int64_t data_len, in
 }
 
 /* read through the following object types:
- * SHARED_MAJOR_TABLET_META, COMPACTION_SERVER, SVR_COMPACTION_STATUS, COMPACTION_REPORT,
+ * SHARED_MAJOR_TABLET_META, COMPACTION_REPORT,
  * SHARED_MAJOR_GC_INFO, SHARED_MAJOR_META_LIST, MAJOR_PREWARM_DATA, MAJOR_PREWARM_DATA_INDEX,
  * MAJOR_PREWARM_META, MAJOR_PREWARM_META_INDEX
  */
@@ -398,8 +394,6 @@ bool is_object_type_only_store_remote(const ObStorageObjectType type)
 }
 
 /* files with the following object types are pin:
- * LS_META, PRIVATE_TABLET_META, PRIVATE_TABLET_CURRENT_VERSION,
- * LS_ACTIVE_TABLET_ARRAY, LS_PENDING_FREE_TABLET_ARRAY, LS_DUP_TABLE_META,
  * SERVER_META, TENANT_SUPER_BLOCK and TENANT_UNIT_META
  */
 bool is_pin_storage_object_type(const ObStorageObjectType type)

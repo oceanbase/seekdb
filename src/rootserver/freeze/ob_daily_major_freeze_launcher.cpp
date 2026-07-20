@@ -248,7 +248,7 @@ int ObDailyMajorFreezeLauncher::try_gc_freeze_info()
 int ObDailyMajorFreezeLauncher::try_gc_tablet_checksum()
 {
   int ret = OB_SUCCESS;
-  // keep 30 days for tablet_checksum whose (tablet_id, ls_id) is (1, 1)
+  // Keep 30 days of tablet checksums.
   const int64_t MAX_KEEP_INTERVAL_NS =  30LL * 24 * 60 * 60 * 1000 * 1000 * 1000; // 30 day
   const int64_t MIN_RESERVED_COUNT = 8;
   SCN cur_gts_scn;

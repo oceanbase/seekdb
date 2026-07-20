@@ -107,7 +107,7 @@ public:
       return false;
     }
 
-    bool need_re_freeze(const share::ObLSID ls_id);
+    bool need_re_freeze();
 
     void rollback_freeze_ts(const int64_t expected_val, const int64_t rollback_val)
     {
@@ -137,10 +137,8 @@ public:
 
 public:  // ObTxDataTable
   ObTxDataTable()
-    : is_inited_(false),
+      : is_inited_(false),
       is_started_(false),
-      latest_reserved_scn_(),
-      ls_id_(),
       tablet_id_(0),
       arena_allocator_(),
       tx_data_allocator_(nullptr),
@@ -159,7 +157,7 @@ public:  // ObTxDataTable
   virtual void stop();
   virtual void reset();
   virtual void destroy();
-  bool need_re_freeze() { return freeze_freq_controller_.need_re_freeze(ls_id_); }
+  bool need_re_freeze() { return freeze_freq_controller_.need_re_freeze(); }
   int offline();
   int online();
 
@@ -249,7 +247,6 @@ public:  // ObTxDataTable
   TO_STRING_KV(KP(this),
                K_(is_inited),
                K_(is_started),
-               K_(ls_id),
                K_(tablet_id),
                K_(memtables_cache),
                KP_(ls),
@@ -262,9 +259,7 @@ public: // getter and setter
   share::ObTenantTxDataAllocator *get_tx_data_allocator() { return tx_data_allocator_; }
   TxDataReadSchema &get_read_schema() { return read_schema_; };
 
-  share::ObLSID get_ls_id();
   void disable_upper_trans_calculation();
-  void enable_upper_trans_calculation(const share::SCN latest_reserved_scn);
 
 private:
   virtual ObTxDataMemtableMgr *get_memtable_mgr_() { return memtable_mgr_; }
@@ -347,8 +342,6 @@ private:
   static const int64_t LS_TX_DATA_SCHEMA_COLUMN_CNT = 5;
   bool is_inited_;
   bool is_started_;
-  share::SCN latest_reserved_scn_;
-  share::ObLSID ls_id_;
   ObTabletID tablet_id_;
   // Allocator to allocate ObTxData and ObUndoStatus
   ObArenaAllocator arena_allocator_;

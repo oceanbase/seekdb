@@ -26,19 +26,18 @@ using namespace share;
 namespace transaction
 {
 
-int ObGtiSource::init(const ObAddr &server)
+const int64_t ObGtiSource::TRANS_ID_RANGE_SIZE;
+
+int ObGtiSource::init()
 {
   int ret = OB_SUCCESS;
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     TRANS_LOG(WARN, "init twice", KR(ret));
-  } else if (OB_UNLIKELY(!server.is_valid())) {
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(server));
-    ret = OB_INVALID_ARGUMENT;
   } else {
     is_inited_ = true;
-    TRANS_LOG(INFO, "gti source init success", K(server), KP(this));
+    TRANS_LOG(INFO, "gti source init success", KP(this));
   }
 
   return ret;

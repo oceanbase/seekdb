@@ -38,7 +38,7 @@ public:
       const int64_t parent_task_id,
       const int32_t sub_task_trace_id,
       const int64_t parallelism,
-      const uint64_t data_format_version,
+      const uint64_t tenant_data_version,
       const ObTableSchema &index_schema,
       const obcall::ObRebuildIndexArg &rebuild_index_arg);
   int init(const ObDDLTaskRecord &task_record);
@@ -53,7 +53,7 @@ public:
   void set_new_index_id(const int64_t id) { new_index_id_ = id; }
   int update_task_message(common::ObISQLClient &proxy);
 
-  INHERIT_TO_STRING_KV("ObDDLTask", ObDDLTask, KP_(local_management_service));
+  INHERIT_TO_STRING_KV("ObDDLTask", ObDDLTask, KP_(root_service));
   virtual int on_child_task_finish(const uint64_t child_task_key,
                                    const int ret_code) override
   {
@@ -100,7 +100,7 @@ private:
   }
 private:
   static const int64_t OB_REBUILD_INDEX_TASK_VERSION = 1;
-  ObLocalManagementService *local_management_service_;
+  ObRootService *root_service_;
   obcall::ObRebuildIndexArg rebuild_index_arg_;
   int64_t index_build_task_id_;
   int64_t index_drop_task_id_;

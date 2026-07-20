@@ -3,6 +3,8 @@ function(rs_unittest case)
   target_sources(${case} PRIVATE 
   ob_rs_test_utils.h 
   ob_rs_test_utils.cpp 
+  fake_freeze_info_manager.cpp
+  fake_zone_merge_manager.cpp
   )
   target_link_libraries(${case} PRIVATE mockcontainer)
 endfunction()
@@ -10,6 +12,7 @@ endfunction()
 
 #rs_unittest(test_bootstrap)
 rs_unittest(test_rs_reentrant_thread)
+rs_unittest(test_tenant_all_zone_merge_strategy)
 #rs_unittest(test_multi_cluster_manager)
 #rs_unittest(test_ob_backup_task_scheduler)
 rs_unittest(test_ddl_task_struct)

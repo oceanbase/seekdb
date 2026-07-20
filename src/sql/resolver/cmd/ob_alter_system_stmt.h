@@ -41,16 +41,14 @@ public:
       freeze_all_flag_(0),
       opt_server_list_(),
       opt_tenant_count_(0),
-      opt_tablet_id_(),
-      opt_ls_id_(share::ObLSID::INVALID_LS_ID) {}
+      opt_tablet_id_() {}
   ObFreezeStmt(common::ObIAllocator *name_pool)
     : ObSystemCmdStmt(name_pool, stmt::T_FREEZE),
       major_freeze_(false),
       freeze_all_flag_(0),
       opt_server_list_(),
       opt_tenant_count_(0),
-      opt_tablet_id_(),
-      opt_ls_id_(share::ObLSID::INVALID_LS_ID) {}
+      opt_tablet_id_() {}
   virtual ~ObFreezeStmt() {}
 
   bool is_major_freeze() const { return major_freeze_; }
@@ -69,13 +67,12 @@ public:
   inline void reset_tenant_count() { opt_tenant_count_ = 0; }
   inline common::ObZone &get_zone() { return opt_zone_; }
   inline common::ObTabletID &get_tablet_id() { return opt_tablet_id_; }
-  inline int64_t &get_ls_id() { return opt_ls_id_; }
   inline int push_server(const common::ObAddr& server) {
     return opt_server_list_.push_back(server);
   }
 
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(major_freeze), K(freeze_all_flag_), 
-               K(opt_server_list_), K(opt_tenant_count_), K(opt_tablet_id_), K(opt_ls_id_));
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(major_freeze), K(freeze_all_flag_),
+               K(opt_server_list_), K(opt_tenant_count_), K(opt_tablet_id_));
 private:
   bool major_freeze_;
   // for major_freeze, it is ignore server list
@@ -90,7 +87,6 @@ private:
   
   // for minor_freeze only
   common::ObTabletID opt_tablet_id_;
-  int64_t opt_ls_id_;
 };
 
 class ObFlushCacheStmt : public ObSystemCmdStmt
@@ -275,65 +271,6 @@ public:
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(arg));
 
   obcall::ObAdminDropDiskArg arg_;
-};
-
-class ObEnableSqlThrottleStmt
-    : public ObSystemCmdStmt
-{
-public:
-  ObEnableSqlThrottleStmt()
-      : ObSystemCmdStmt(stmt::T_ENABLE_SQL_THROTTLE),
-        priority_(99),
-        rt_(-1.),
-        io_(-1),
-        network_(-1.),
-        cpu_(-1.),
-        logical_reads_(-1),
-        queue_time_(-1.)
-  {}
-  void set_priority(int64_t priority) { priority_ = priority; }
-  void set_rt(double rt) { rt_ = rt; }
-  void set_io(int64_t io) { io_ = io; }
-  void set_network(double network) { network_ = network; }
-  void set_cpu(double cpu) { cpu_ = cpu; }
-  void set_logical_reads(int64_t logical_reads) { logical_reads_ = logical_reads; }
-  void set_queue_time(double queue_time) { queue_time_ = queue_time; }
-
-  int64_t get_priority() const { return priority_; }
-  double get_rt() const { return rt_; }
-  int64_t get_io() const { return io_; }
-  double get_network() const { return network_; }
-  double get_cpu() const { return cpu_; }
-  int64_t get_logical_reads() const { return logical_reads_; }
-  double get_queue_time() const { return queue_time_; }
-
-  TO_STRING_KV(
-      N_STMT_TYPE, ((int)stmt_type_),
-      K_(priority),
-      K_(rt),
-      K_(io),
-      K_(network),
-      K_(cpu),
-      K_(logical_reads),
-      K_(queue_time));
-
-private:
-  int64_t priority_;
-  double rt_;
-  int64_t io_;
-  double network_;
-  double cpu_;
-  int64_t logical_reads_;
-  double queue_time_;
-};
-
-class ObDisableSqlThrottleStmt
-  : public ObSystemCmdStmt
-{
-public:
-  ObDisableSqlThrottleStmt()
-    : ObSystemCmdStmt(stmt::T_DISABLE_SQL_THROTTLE)
-    {}
 };
 
 class ObResetConfigStmt : public ObSystemCmdStmt

@@ -248,9 +248,16 @@ public:
     UNUSED(palf_base_info);
     return OB_SUCCESS;
   }
-  int advance_base_info(const palf::PalfBaseInfo &palf_base_info)
+  int is_in_sync(bool &is_log_sync, bool &is_need_rebuild) const
+  {
+    UNUSED(is_log_sync);
+    UNUSED(is_need_rebuild);
+    return OB_SUCCESS;
+  }
+  int advance_base_info(const palf::PalfBaseInfo &palf_base_info, const bool is_rebuild)
   {
     UNUSED(palf_base_info);
+    UNUSED(is_rebuild);
     return OB_SUCCESS;
   }
   bool is_replay_enabled() const
@@ -260,6 +267,118 @@ public:
   int get_leader_config_version(palf::LogConfigVersion &config_version) const
   {
     UNUSED(config_version);
+    return OB_SUCCESS;
+  }
+  int change_replica_num(const common::ObMemberList &member_list,
+                         const int64_t curr_replica_num,
+                         const int64_t new_replica_num,
+                         const int64_t timeout_us)
+  {
+    UNUSEDx(member_list, curr_replica_num, new_replica_num, timeout_us);
+    return OB_SUCCESS;
+  }
+  int force_set_as_single_replica()
+  {
+    return OB_SUCCESS;
+  }
+  int force_set_member_list(const common::ObMemberList &new_member_list, const int64_t new_replica_num)
+  {
+    return OB_SUCCESS;
+  }
+  int add_member(const common::ObMember &member,
+                 const int64_t paxos_replica_num,
+                 const palf::LogConfigVersion &config_version,
+                 const int64_t timeout_ns)
+  {
+    UNUSEDx(member, paxos_replica_num, config_version, timeout_ns);
+    return OB_SUCCESS;
+  }
+  int remove_member(const common::ObMember &member,
+                    const int64_t paxos_replica_num,
+                    const int64_t timeout_ns)
+  {
+    UNUSED(member);
+    UNUSED(paxos_replica_num);
+    UNUSED(timeout_ns);
+    return OB_SUCCESS;
+  }
+  int replace_member(const common::ObMember &added_member,
+                     const common::ObMember &removed_member,
+                     const palf::LogConfigVersion &config_version,
+                     const int64_t timeout_ns)
+  {
+    UNUSED(added_member);
+    UNUSED(removed_member);
+    UNUSED(config_version);
+    UNUSED(timeout_ns);
+    return OB_SUCCESS;
+  }
+  int add_learner(const common::ObMember &added_learner,
+                                const int64_t timeout_us)
+  {
+    int ret = OB_SUCCESS;
+    UNUSED(added_learner);
+    UNUSED(timeout_us);
+    return ret;
+  }
+
+  int remove_learner(const common::ObMember &removed_learner,
+                                  const int64_t timeout_us)
+  {
+    int ret = OB_SUCCESS;
+    UNUSED(removed_learner);
+    UNUSED(timeout_us);
+    return ret;
+  }
+
+  int replace_learners(const common::ObMemberList &added_learners,
+                       const common::ObMemberList &removed_learners,
+                       const int64_t timeout_us)
+  {
+    int ret = OB_SUCCESS;
+    UNUSEDx(added_learners, removed_learners, timeout_us);
+    return ret;
+  }
+
+  int replace_member_with_learner(const common::ObMember &added_member,
+                                  const common::ObMember &removed_member,
+                                  const palf::LogConfigVersion &config_version,
+                                  const int64_t timeout_us)
+  {
+    int ret = OB_SUCCESS;
+    UNUSEDx(added_member, removed_member, timeout_us);
+    return ret;
+  }
+
+
+  int switch_learner_to_acceptor(const common::ObMember &learner,
+                                 const int64_t new_replica_num,
+                                 const palf::LogConfigVersion &config_version,
+                                 const int64_t timeout_us)
+  {
+    int ret = OB_SUCCESS;
+    UNUSED(config_version);
+    UNUSEDx(learner, new_replica_num, timeout_us);
+    return ret;
+  }
+  int switch_acceptor_to_learner(const common::ObMember &member,
+                                 const int64_t new_replica_num,
+                                 const int64_t timeout_us)
+  {
+    int ret = OB_SUCCESS;
+    UNUSEDx(member, new_replica_num, timeout_us);
+    return ret;
+  }
+  int degrade_acceptor_to_learner(const palf::LogMemberAckInfoList &degrade_servers,
+                                  const int64_t timeout_us)
+  {
+    UNUSEDx(degrade_servers, timeout_us);
+    return OB_SUCCESS;
+  }
+  int upgrade_learner_to_acceptor(const palf::LogMemberAckInfoList &upgrade_servers,
+                                  const int64_t timeout_us)
+  {
+    UNUSEDx(upgrade_servers, timeout_us);
     return OB_SUCCESS;
   }
   int get_member_gc_stat(const common::ObAddr &addr, bool &is_valid_member, obcall::LogMemberGCStat &stat) const
@@ -316,6 +435,12 @@ public:
   int get_max_decided_log_ts_ns(int64_t &log_ts)
   {
     log_ts = INT64_MAX;
+    return OB_SUCCESS;
+  }
+  int enable_vote() { return OB_SUCCESS; }
+  int disable_vote(const bool need_check_log_missing)
+  {
+    UNUSED(need_check_log_missing);
     return OB_SUCCESS;
   }
   int get_election_leader(common::ObAddr &addr) const

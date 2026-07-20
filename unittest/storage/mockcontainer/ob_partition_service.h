@@ -39,10 +39,16 @@ namespace election
 class ObIElectionMgr;
 }
 
+namespace transaction
+{
+class ObXAService;
+}
+
 namespace storage
 {
 class ObPartitionService;
 class ObAddPartitionToPGLog;
+struct ObChangePGLogArchiveMetaLogEntry;
 struct ObSSTableInsertTabletParam;
 class ObStoreCtx;
 
@@ -72,9 +78,9 @@ public:
   MOCK_METHOD1(push_callback_task,
                int(const ObCbTask &task));
   MOCK_METHOD1(activate_tenant,
-               int(const uint64_t runtime_id));
+               int(const uint64_t tenant_id));
   MOCK_METHOD1(inactivate_tenant,
-               int(const uint64_t runtime_id));
+               int(const uint64_t tenant_id));
 
   MOCK_METHOD0(start,
                int());
@@ -98,7 +104,7 @@ public:
                      int64_t());
   MOCK_METHOD2(kill_query_session, int(const transaction::ObTransDesc &trans_desc, const int status));
   MOCK_METHOD6(start_trans,
-               int(const uint64_t runtime_id, const uint64_t thread_id, const transaction::ObStartTransParam &req,
+               int(const uint64_t tenant_id, const uint64_t thread_id, const transaction::ObStartTransParam &req,
                    const int64_t expired_time, const uint32_t session_id, transaction::ObTransDesc &trans_desc));
   MOCK_METHOD4(end_trans,
                int(bool is_rollback, transaction::ObTransDesc &trans_desc, sql::ObIEndTransCallback &cb,

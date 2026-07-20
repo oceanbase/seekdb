@@ -207,7 +207,7 @@ struct ObTxLogBigSegmentInfo
     submit_base_scn_.min_scn();
     submit_barrier_type_ = logservice::ObReplayBarrierType::NO_NEED_BARRIER;
     if (OB_NOT_NULL(submit_log_cb_template_)) {
-      share::server_free(submit_log_cb_template_);
+      share::mtl_free(submit_log_cb_template_);
     }
     submit_log_cb_template_ = nullptr;
 

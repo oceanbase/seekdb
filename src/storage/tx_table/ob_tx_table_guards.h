@@ -137,8 +137,6 @@ public:
     const transaction::ObTransID &data_tx_id,
     ObITxDataCheckFunctor &functor);
 
-  bool check_ls_offline();
-
   TO_STRING_KV(K_(tx_table_guard));
 
   DISABLE_COPY_ASSIGN(ObTxTableGuards);

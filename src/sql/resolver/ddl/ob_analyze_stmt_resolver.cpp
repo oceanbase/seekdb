@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/ddl/ob_analyze_stmt_resolver.h"
 #include "sql/resolver/ddl/ob_analyze_stmt.h"
+#include "share/catalog/ob_catalog_utils.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 
 using namespace oceanbase::common;
@@ -52,6 +53,13 @@ int ObAnalyzeStmtResolver::resolve(const ParseNode &parse_tree)
     /*do nothing*/
   } else if (OB_FAIL(session_info_->get_force_parallel_query_dop(parallel_degree))) {
     LOG_WARN("failed to get force parallel query dop", K(ret));
+  } else if (T_ANALYZE == parse_tree.type_) {
+    if (!session_info_->is_enable_sql_extension()) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "The extended analyze syntax is used while sql extension is disabled");
+    } else if (OB_FAIL(resolve_analyze_table(parse_tree, *analyze_stmt))) {
+      LOG_WARN("failed to resolve analyze stmt", K(ret));
+    } else { /*do nothing*/ }
   } else if (T_MYSQL_ANALYZE == parse_tree.type_) {
     if (OB_FAIL(resolve_analyze_table(parse_tree, *analyze_stmt))) {
       LOG_WARN("failed to resolve analyze stmt", K(ret));
@@ -106,15 +114,15 @@ int ObAnalyzeStmtResolver::resolve_analyze_table(const ParseNode &parse_node,
     ParseNode *table_node = parse_node.children_[0];
     ParseNode *part_node = parse_node.children_[1];
     ParseNode *statistic_node = parse_node.children_[2];
-    if (OB_ISNULL(table_node) || OB_NOT_NULL(statistic_node)) {
+    if (OB_ISNULL(table_node) || OB_ISNULL(statistic_node)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null parse node", K(table_node), K(statistic_node), K(ret));
     } else if (OB_FAIL(recursive_resolve_table_info(table_node, analyze_stmt))) {
       LOG_WARN("failed to resolve table info", K(ret));
     } else if (OB_FAIL(resolve_partition_info(part_node, analyze_stmt))) {
       LOG_WARN("failed to resolve partition info", K(ret));
-    } else if (OB_FAIL(resolve_default_column_info(analyze_stmt))) {
-      LOG_WARN("failed to resolve default column info", K(ret));
+    } else if (OB_FAIL(resolve_statistic_info(statistic_node, analyze_stmt))) {
+      LOG_WARN("failed to resolve statistic info", K(ret));
     } else { /*do nothing*/ }
   }
   return ret;
@@ -252,6 +260,7 @@ int ObAnalyzeStmtResolver::resolve_table_info(const ParseNode *table_node,
   int ret = OB_SUCCESS;
   ObString table_name;
   ObString database_name;
+  ObString catalog_name;
   ObNameCaseMode case_mode = ObNameCaseMode::OB_NAME_CASE_INVALID;
   const ObTableSchema *table_schema = NULL;
   
@@ -259,8 +268,12 @@ int ObAnalyzeStmtResolver::resolve_table_info(const ParseNode *table_node,
   if (OB_ISNULL(table_node) || OB_ISNULL(schema_checker_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("null point", K(table_node), K(schema_checker_), K(ret));
-  } else if (OB_FAIL(resolve_table_relation_node(table_node, table_name, database_name))) {
+  } else if (OB_FAIL(resolve_table_relation_node(table_node, table_name, database_name, catalog_name))) {
     LOG_WARN("failed to resolve table relation node", K(ret));
+  } else if (!ObCatalogUtils::is_internal_catalog_name(catalog_name)) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("analyze table is not supported in catalog", K(ret), K(catalog_name));
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "analyze table in catalog is");
   } else if (OB_FAIL(schema_checker_->get_database_id(database_name, database_id))) {
     LOG_WARN("failed to get database id", K(ret));
   } else if (OB_FAIL(schema_checker_->get_table_schema( database_name,
@@ -376,30 +389,152 @@ int ObAnalyzeStmtResolver::inner_resolve_partition_info(const ParseNode *part_no
   return ret;
 }
 
-int ObAnalyzeStmtResolver::resolve_default_column_info(ObAnalyzeStmt &analyze_stmt)
+int ObAnalyzeStmtResolver::resolve_statistic_info(const ParseNode *statistic_node,
+                                                  ObAnalyzeStmt &analyze_stmt)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(statistic_node)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("null point", K(statistic_node), K(ret));
+  } else if (T_ANALYZE_STATISTICS != statistic_node->type_ ||
+             2 != statistic_node->num_child_) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("not valid statistic node", K(statistic_node->type_),
+        K(statistic_node->num_child_), K(ret));
+  } else {
+    const ParseNode *for_clause_node = statistic_node->children_[0];
+    const ParseNode *sample_clause_node = statistic_node->children_[1];
+    if (OB_FAIL(resolve_for_clause_info(for_clause_node, analyze_stmt))) {
+      LOG_WARN("failed to resolve for clause info", K(ret));
+    } else if (OB_FAIL(resolve_sample_clause_info(sample_clause_node, analyze_stmt))) {
+      LOG_WARN("failed to resolve sample clause info", K(ret));
+    } else { /*do nothing*/ }
+  }
+  return ret;
+}
+
+int ObAnalyzeStmtResolver::resolve_for_clause_info(const ParseNode *for_clause_node,
+                                                   ObAnalyzeStmt &analyze_stmt)
 {
   int ret = OB_SUCCESS;
   const ObTableSchema *table_schema = NULL;
   ObIArray<ObAnalyzeTableInfo> &tables = analyze_stmt.get_tables();
+  bool is_hist_subpart = false;
   if (OB_ISNULL(schema_checker_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null schema checker", K(schema_checker_), K(ret));
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && i < tables.count(); ++i) {
-    bool is_hist_subpart = false;
-    if (OB_FAIL(schema_checker_->get_table_schema(tables.at(i).get_table_id(), table_schema))) {
-      LOG_WARN("failed to get table schema", K(tables.at(i).get_table_id()), K(ret));
-    } else if (OB_ISNULL(table_schema)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("null table schema", K(ret));
-    } else if (OB_FAIL(pl::ObDbmsStats::set_default_column_params(tables.at(i).get_column_params()))) {
-      LOG_WARN("failed to set default column params", K(ret));
-    } else {
-      if (share::schema::ObPartitionLevel::PARTITION_LEVEL_TWO == table_schema->get_part_level()) {
-        is_hist_subpart = is_range_part(table_schema->get_sub_part_option().get_part_func_type()) ||
-                           is_list_part(table_schema->get_sub_part_option().get_part_func_type());
+  } else if (NULL == for_clause_node) {
+    //there can be multi tables in mysql mode without for clause
+    for (int64_t i = 0; OB_SUCC(ret) && i < tables.count(); ++i) {
+      if (OB_FAIL(schema_checker_->get_table_schema( tables.at(i).get_table_id(), table_schema))) {
+        LOG_WARN("failed to get table schema", K(tables.at(i).get_table_id()), K(ret));
+      } else if (OB_ISNULL(table_schema)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("null table schema", K(ret));
+      } else if (OB_FAIL(pl::ObDbmsStats::set_default_column_params(tables.at(i).get_column_params()))) {
+        LOG_WARN("failed to set default column params", K(ret));
+      } else {
+        if (share::schema::ObPartitionLevel::PARTITION_LEVEL_TWO == table_schema->get_part_level()) {
+          is_hist_subpart = (is_range_part(table_schema->get_sub_part_option().get_part_func_type()) ||
+                            is_list_part(table_schema->get_sub_part_option().get_part_func_type()));
+        }
+        tables.at(i).set_gather_subpart_hist(is_hist_subpart);
       }
-      tables.at(i).set_gather_subpart_hist(is_hist_subpart);
+    }
+  } else if (OB_FAIL(schema_checker_->get_table_schema( tables.at(0).get_table_id(), table_schema))) {
+    LOG_WARN("failed to get table schema", K(tables.at(0).get_table_id()), K(ret));
+  } else if (OB_ISNULL(table_schema)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("null table schema", K(ret));
+  } else {
+    if (share::schema::ObPartitionLevel::PARTITION_LEVEL_TWO == table_schema->get_part_level()) {
+      is_hist_subpart = (is_range_part(table_schema->get_sub_part_option().get_part_func_type()) ||
+                        is_list_part(table_schema->get_sub_part_option().get_part_func_type()));
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < for_clause_node->num_child_; i++) {
+      if (OB_FAIL(resolve_for_clause_element(for_clause_node->children_[i],
+                                             is_hist_subpart,
+                                             analyze_stmt))) {
+        LOG_WARN("failed to resolve for clause element", K(ret));
+      } else { /*do nothing*/ }
+    }
+  }
+  return ret;
+}
+
+int ObAnalyzeStmtResolver::resolve_for_clause_element(const ParseNode *for_clause_node,
+                                                      const bool is_hist_subpart,
+                                                      ObAnalyzeStmt &analyze_stmt)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<ObString, 4> all_for_col;
+  ObAnalyzeTableInfo &table_info = analyze_stmt.get_tables().at(0);
+  bool is_async_gather = false;
+  if (OB_ISNULL(for_clause_node)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("null parse node", K(ret));
+  } else if (T_ANALYZE_TABLE == for_clause_node->type_) {
+    analyze_stmt.set_statistic_scope(StatisticType::TableStatistics);
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("analyze table not supported yet", K(ret));
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "analyze table");
+  } else if (T_FOR_ALL == for_clause_node->type_) {
+    bool use_size_auto = false;
+    if (OB_FAIL(pl::ObDbmsStats::parser_for_all_clause(for_clause_node,
+                                                       table_info.get_column_params(),
+                                                       is_async_gather,
+                                                       use_size_auto))) {
+      LOG_WARN("failed to resolve for all clause", K(ret));
+    } else {
+      table_info.set_gather_subpart_hist(!use_size_auto || (use_size_auto && is_hist_subpart));
+    }
+  } else if (T_FOR_COLUMNS == for_clause_node->type_) {
+    if (OB_FAIL(pl::ObDbmsStats::parser_for_columns_clause(for_clause_node,
+                                                           table_info.get_column_params(),
+                                                           all_for_col))) {
+      LOG_WARN("failed to parser for columns clause", K(ret));
+    } else {
+      table_info.set_gather_subpart_hist(true);
+    }
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected node type", K(for_clause_node->type_), K(ret));
+  }
+  return ret;
+}
+
+int ObAnalyzeStmtResolver::resolve_sample_clause_info(const ParseNode *sample_clause_node,
+                                                      ObAnalyzeStmt &analyze_stmt)
+{
+  int ret = OB_SUCCESS;
+  if (NULL == sample_clause_node) {
+    /*do nothing*/
+  } else if (T_ANALYZE_SAMPLE_INFO != sample_clause_node->type_ ||
+             2 != sample_clause_node->num_child_){
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid sample clause node", K(sample_clause_node->type_),
+        K(sample_clause_node->num_child_), K(ret));
+  } else {
+    ObAnalyzeSampleInfo sample_info;
+    sample_info.is_sample_ = true;
+    const ParseNode *row_node = sample_clause_node->children_[0];
+    const ParseNode *sample_option_node = sample_clause_node->children_[1];
+    if (OB_ISNULL(row_node) || OB_ISNULL(sample_option_node)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("null parse node", K(row_node), K(sample_option_node), K(ret));
+    } else if (sample_info.sample_type_ == SampleType::PercentSample &&
+               (sample_info.sample_value_ < 1 || sample_info.sample_value_ > 99)) {
+      ret = OB_ERR_INVALID_PERCENTAGE;
+      LOG_WARN("invalid percenate", K(ret), K(sample_info.sample_value_));
+    } else {
+      sample_info.set_is_block_sample(false);
+      if (0 == sample_option_node->value_) {
+        // TODO link.zt should I use block sampling?
+        sample_info.set_rows(row_node->value_);
+      } else {
+        sample_info.set_percent(row_node->value_);
+      }
+      analyze_stmt.set_sample_info(sample_info);
     }
   }
   return ret;

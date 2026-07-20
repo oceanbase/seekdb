@@ -88,7 +88,7 @@ int ObIDDLPipeline::process()
 }
 
 ObVectorIndexTabletContext::ObVectorIndexTabletContext()
-    : row_cnt_(0), vec_dim_(0), ls_id_(), tablet_id_(), vec_idx_param_(), ctx_(),
+    : row_cnt_(0), vec_dim_(0), tablet_id_(), vec_idx_param_(), ctx_(),
       vector_vid_col_idx_(-1), vector_col_idx_(-1), vector_key_col_idx_(-1), vector_data_col_idx_(-1), center_id_col_idx_(-1), center_vector_col_idx_(-1),
       meta_id_col_idx_(-1), meta_vector_col_idx_(-1), pq_center_id_col_idx_(-1), pq_center_vector_col_idx_(-1), extra_column_idx_types_(),
       lob_inrow_threshold_(0), rowkey_cnt_(0), column_cnt_(0), snapshot_version_(0), index_type_(share::VIAT_MAX), helper_(nullptr),
@@ -100,23 +100,20 @@ ObVectorIndexTabletContext::ObVectorIndexTabletContext()
 }
 
 int ObVectorIndexTabletContext::init(
-    const ObLSID &ls_id,
     const ObTabletID &tablet_id,
     const ObIndexType &index_type,
     const int64_t snapshot_version,
     const ObDDLTableSchema &ddl_table_schema)
 {
   int ret = OB_SUCCESS;
-  if (!ls_id.is_valid() || !tablet_id.is_valid() || snapshot_version <= 0 || !(ddl_table_schema.table_item_.vec_dim_ > 0)) {
+  if (!tablet_id.is_valid() || snapshot_version <= 0 || !(ddl_table_schema.table_item_.vec_dim_ > 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(ls_id), K(tablet_id), K(ddl_table_schema), K(snapshot_version));
+    LOG_WARN("invalid arguments", K(ret), K(tablet_id), K(ddl_table_schema), K(snapshot_version));
   } else {
     row_cnt_ = 0;
     vec_dim_ = ddl_table_schema.table_item_.vec_dim_;
-    ls_id_ = ls_id;
     tablet_id_ = tablet_id;
     vec_idx_param_ = ddl_table_schema.table_item_.vec_idx_param_;
-    ctx_.ls_id_ = ls_id_;
     lob_inrow_threshold_ = ddl_table_schema.table_item_.lob_inrow_threshold_;
     rowkey_cnt_ = ddl_table_schema.table_item_.rowkey_column_num_;
     column_cnt_ = ddl_table_schema.column_items_.count();
@@ -153,7 +150,7 @@ int ObVectorIndexTabletContext::init_hnsw_index(const ObDDLTableSchema &ddl_tabl
 {
   int ret = OB_SUCCESS;
   // get data tablet id and lob tablet id
-  ObLSHandle ls_handle;
+  ObLS *ls = nullptr;
   ObTabletHandle five_tablet_handle;
   ObTabletHandle data_tablet_handle;
   ObTabletBindingMdsUserData ddl_data;
@@ -166,15 +163,12 @@ int ObVectorIndexTabletContext::init_hnsw_index(const ObDDLTableSchema &ddl_tabl
   vector_data_col_idx_ = -1;
   int64_t pk_increment_col_idx = -1;
 
-  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, ls_handle, ObLSGetMod::STORAGE_MOD))) {
-    LOG_WARN("failed to get log stream", K(ret), K(ls_id_));
-  } else if (OB_ISNULL(ls_handle.get_ls())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("ls should not be null", K(ret));
-  } else if (OB_FAIL(ls_handle.get_ls()->get_tablet(tablet_id_, five_tablet_handle))) {
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+    LOG_WARN("failed to get log stream", K(ret));
+  } else if (OB_FAIL(ls->get_tablet(tablet_id_, five_tablet_handle))) {
     LOG_WARN("fail to get tablet handle", K(ret), K(tablet_id_));
   } else if (FALSE_IT(ctx_.data_tablet_id_ = five_tablet_handle.get_obj()->get_data_tablet_id())) {
-  } else if (OB_FAIL(ls_handle.get_ls()->get_tablet(ctx_.data_tablet_id_, data_tablet_handle))) {
+  } else if (OB_FAIL(ls->get_tablet(ctx_.data_tablet_id_, data_tablet_handle))) {
     LOG_WARN("fail to get tablet handle", K(ret), K(ctx_.data_tablet_id_));
   } else if (OB_FAIL(data_tablet_handle.get_obj()->get_ddl_data(ddl_data))) {
     LOG_WARN("failed to get ddl data from tablet", K(ret), K(data_tablet_handle));
@@ -952,12 +946,10 @@ int ObHNSWIndexAppendBufferOperator::append_row(
     if (OB_ISNULL(vec_index_service)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("error unexpected, vector index service is nullptr", K(ret));
-    } else if (OB_FAIL(vec_index_service->acquire_adapter_guard(
-                   tablet_context->vector_index_ctx_->ls_id_, tablet_id_,
+    } else if (OB_FAIL(vec_index_service->acquire_adapter_guard(tablet_id_,
                    ObIndexType::INDEX_TYPE_VEC_INDEX_SNAPSHOT_DATA_LOCAL, adaptor_guard,
                    &tablet_context->vector_index_ctx_->vec_idx_param_, tablet_context->vector_index_ctx_->vec_dim_))) {
-      LOG_WARN("fail to get ObMockPluginVectorIndexAdapter", K(ret), K(tablet_context->vector_index_ctx_->ls_id_),
-               K(tablet_id_));
+      LOG_WARN("fail to get ObMockPluginVectorIndexAdapter", K(ret), K(tablet_id_));
     } else if (OB_NOT_NULL(adaptor_guard.get_adatper()) &&
                OB_FAIL(adaptor_guard.get_adatper()->get_extra_info_actual_size(extra_info_actual_size))) {
       LOG_WARN("failed to get extra info actual size.", K(ret));
@@ -1091,13 +1083,12 @@ int ObHNSWIndexBuildOperator::serialize_vector_index(
   if (OB_ISNULL(vec_index_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get null ObPluginVectorIndexService ptr", K(ret));
-  } else if (OB_FAIL(vec_index_service->acquire_adapter_guard(ctx.ls_id_,
-                                                              tablet_id_,
+  } else if (OB_FAIL(vec_index_service->acquire_adapter_guard(tablet_id_,
                                                               ObIndexType::INDEX_TYPE_VEC_INDEX_SNAPSHOT_DATA_LOCAL,
                                                               adaptor_guard,
                                                               &ctx.vec_idx_param_,
                                                               ctx.vec_dim_))) {
-    LOG_WARN("fail to get ObMockPluginVectorIndexAdapter", K(ret), K(ctx.ls_id_), K(tablet_id_));
+    LOG_WARN("fail to get ObMockPluginVectorIndexAdapter", K(ret), K(tablet_id_));
   } else {
     ObHNSWSerializeCallback callback;
     ObOStreamBuf::Callback cb = callback;
@@ -1114,7 +1105,7 @@ int ObHNSWIndexBuildOperator::serialize_vector_index(
     if (OB_ISNULL(tx_desc)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to get tx desc, get nullptr", K(ret));
-    } else if (OB_FAIL(txs->get_ls_read_snapshot(*tx_desc, transaction::ObTxIsolationLevel::RC, ctx.ls_id_, timeout, snapshot))) {
+    } else if (OB_FAIL(txs->get_read_snapshot(*tx_desc, transaction::ObTxIsolationLevel::RC, timeout, snapshot))) {
       LOG_WARN("fail to get snapshot", K(ret));
     } else {
       param.timeout_ = timeout;
@@ -1173,7 +1164,7 @@ int ObHNSWIndexBuildOperator::execute(
     ObVectorIndexAlgorithmType index_type = VIAT_MAX;
     const uint64_t timeout_us = ObTimeUtility::current_time() + storage::ObInsertLobColumnHelper::LOB_TX_TIMEOUT;
     transaction::ObTxDesc *tx_desc = nullptr;
-    if (OB_FAIL(ObInsertLobColumnHelper::start_trans(tablet_context->ls_id_, false/*is_for_read*/, timeout_us, tx_desc))) {
+    if (OB_FAIL(ObInsertLobColumnHelper::start_trans(false/*is_for_read*/, timeout_us, tx_desc))) {
       LOG_WARN("fail to get tx_desc", K(ret));
     } else if (OB_FAIL(serialize_vector_index(&op_allocator_, tx_desc, tablet_context->vector_index_ctx_->lob_inrow_threshold_, index_type, *tablet_context->vector_index_ctx_))) {
       LOG_WARN("serialize vector index failed", K(ret));

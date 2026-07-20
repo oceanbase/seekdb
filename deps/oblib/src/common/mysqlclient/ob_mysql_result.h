@@ -563,7 +563,7 @@
   }
 
 // TODO
-// Use stack memory first when the numeric value fits in int64_t.
+// Now the ObNumber type interface is not perfect, the upper layer is ObSequenceSchema, the value of ObNumber type does not exceed int64_t, so the stack memory is used first
 // ObNumber type is fully supported (by Yan Hua), which requires a lot of scene combing and allocator configuration, which will be replaced later
 #define EXTRACT_NUMBER_FIELD_TO_CLASS_MYSQL(result, column_name, obj) \
   if (OB_SUCC(ret)) \
@@ -1086,7 +1086,7 @@
         res_obj.meta_.set_collation_level(CS_LEVEL_IMPLICIT); \
         ret = (class_obj).set_##column_name(res_obj); \
       } \
-      else if (ob_is_string_type(data_type) || ob_is_geometry(data_type) || ob_is_collection_sql_type(data_type)) \
+      else if (column.is_identity_column() || ob_is_string_type(data_type) || ob_is_geometry(data_type) || ob_is_collection_sql_type(data_type)) \
       { \
         res_obj.set_string(data_type, str_value); \
         res_obj.meta_.set_collation_type(column.get_collation_type());  \
@@ -1146,9 +1146,9 @@
             cast_ctx.res_accuracy_ = &res_acc;\
           }\
           def_obj.set_varchar(str_value); \
-          if (OB_FAIL(OTTZ_MGR.get_timezone_map(tz_info.get_tz_map_wrap())))  \
+          if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tz_info.get_tz_map_wrap())))  \
           {         \
-            SQL_LOG(WARN, "get timezone map failed", K(ret));    \
+            SQL_LOG(WARN, "get tenant timezone map failed", K(ret));    \
           }         \
           else if (OB_FAIL(ObObjCaster::to_type(data_type, cast_ctx, def_obj, res_obj))) \
           { \
@@ -1225,7 +1225,7 @@
         res_obj.meta_.set_collation_level(CS_LEVEL_IMPLICIT);                                    \
         ret = (class_obj).set_cur_default_value(res_obj, column.is_default_expr_v2_column());    \
       }                                                                                          \
-      else if (ob_is_string_type(data_type) || ob_is_geometry(data_type) || ob_is_collection_sql_type(data_type)) \
+      else if (column.is_identity_column() || ob_is_string_type(data_type) || ob_is_geometry(data_type) || ob_is_collection_sql_type(data_type)) \
       {                                                                                          \
         res_obj.set_string(data_type, str_value);                                                \
         res_obj.meta_.set_collation_type(column.get_collation_type());                           \
@@ -1280,9 +1280,9 @@
         else                                                                                     \
         {                                                                                        \
           def_obj.set_varchar(str_value);                                                        \
-          if (OB_FAIL(OTTZ_MGR.get_timezone_map(tz_info.get_tz_map_wrap())))             \
+          if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tz_info.get_tz_map_wrap())))             \
           {                                                                                      \
-            SQL_LOG(WARN, "get timezone map failed", K(ret));                             \
+            SQL_LOG(WARN, "get tenant timezone map failed", K(ret));                             \
           }                                                                                      \
           else if (OB_FAIL(ObObjCaster::to_type(data_type, cast_ctx, def_obj, res_obj)))         \
           {                                                                                      \
@@ -1373,7 +1373,9 @@
     ret;                                                                              \
   })
 
-// Extract an integer field and apply a caller-supplied default value.
+// Used to construct the ID encoded with tenant
+// Used to construct the ID encoded with tenant
+// Macro with default value, used to construct ID with tenant encoded
 // 1. skip_null_error: indicates whether to ignore NULL values
 // 2. skip_column_error: indicates whether to ignore missing-column errors
 // 3. default_value: indicates the default value passed in
@@ -1457,7 +1459,7 @@
     }\
   }
 
-// Extract a timestamp field.
+// Macro with default value, used to construct ID with tenant encoded
 #define EXTRACT_TIMESTAMP_FIELD_TO_CLASS_MYSQL(result, column_name, obj, tz_info) \
   if (OB_SUCC(ret)) \
   { \

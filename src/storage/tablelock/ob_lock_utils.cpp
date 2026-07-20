@@ -39,7 +39,8 @@ int ObInnerTableLockUtil::lock_inner_table_in_trans(
   ObInnerSQLConnection *conn = NULL;
   ObTimeoutCtx ctx;
   const int64_t DEFAULT_TIMEOUT = GCONF.internal_sql_execute_timeout;
-  if (OB_UNLIKELY(!is_inner_table(inner_table_id)
+  if (OB_UNLIKELY(!true
+      || !is_inner_table(inner_table_id)
       || !is_lock_mode_valid(lock_mode))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(inner_table_id), K(lock_mode));

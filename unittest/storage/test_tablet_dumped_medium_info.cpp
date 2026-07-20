@@ -30,8 +30,8 @@ using namespace oceanbase::compaction;
 
 #define USING_LOG_PREFIX STORAGE
 
-#define APPEND_MEDIUM_INFO(dumped_medium_info, allocator, medium_snapshot, last_medium_snapshot, info) \
-    ret = create_medium_info(allocator, medium_snapshot, last_medium_snapshot, info); \
+#define APPEND_MEDIUM_INFO(dumped_medium_info, allocator, medium_snapshot, last_medium_snapshot, from_cur_cluster, info) \
+    ret = create_medium_info(allocator, medium_snapshot, last_medium_snapshot, from_cur_cluster, info); \
     ASSERT_EQ(OB_SUCCESS, ret); \
     ret = dumped_medium_info.append(*info); \
     ASSERT_EQ(OB_SUCCESS, ret);
@@ -50,6 +50,7 @@ public:
       common::ObIAllocator &allocator,
       const int64_t medium_snapshot,
       const int64_t last_medium_snapshot,
+      const bool from_cur_cluster,
       compaction::ObMediumCompactionInfo *&info);
 };
 
@@ -57,6 +58,7 @@ int TestTabletDumpedMediumInfo::create_medium_info(
     common::ObIAllocator &allocator,
     const int64_t medium_snapshot,
     const int64_t last_medium_snapshot,
+    const bool from_cur_cluster,
     compaction::ObMediumCompactionInfo *&info)
 {
   int ret = OB_SUCCESS;
@@ -72,6 +74,7 @@ int TestTabletDumpedMediumInfo::create_medium_info(
     info->medium_snapshot_ = medium_snapshot;
     info->last_medium_snapshot_ = last_medium_snapshot;
     info->data_version_ = 100;
+    info->cluster_id_ = from_cur_cluster ? GCONF.cluster_id : 9527;
 
     // storage schema
     const uint64_t table_id = 1234567;
@@ -93,19 +96,19 @@ TEST_F(TestTabletDumpedMediumInfo, overlap)
   ret = input_medium_info1.init_for_first_creation(allocator);
   ASSERT_EQ(OB_SUCCESS, ret);
 
-  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 5, 4, info);
-  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 6, 5, info);
-  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 7, 6, info);
+  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 5, 4, true, info);
+  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 6, 5, true, info);
+  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 7, 6, true, info);
 
   ObTabletDumpedMediumInfo input_medium_info2;
   ret = input_medium_info2.init_for_first_creation(allocator);
   ASSERT_EQ(OB_SUCCESS, ret);
 
-  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 2, 1, info);
-  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 3, 2, info);
-  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 4, 3, info);
-  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 5, 4, info);
-  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 6, 5, info);
+  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 2, 1, true, info);
+  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 3, 2, true, info);
+  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 4, 3, true, info);
+  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 5, 4, true, info);
+  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 6, 5, true, info);
 
   ObTabletDumpedMediumInfo result;
   ret = result.init_for_first_creation(allocator);
@@ -135,16 +138,16 @@ TEST_F(TestTabletDumpedMediumInfo, no_overlap)
   ret = input_medium_info1.init_for_first_creation(allocator);
   ASSERT_EQ(OB_SUCCESS, ret);
 
-  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 5, 4, info);
-  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 6, 5, info);
-  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 7, 6, info);
+  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 5, 4, true, info);
+  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 6, 5, true, info);
+  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 7, 6, true, info);
 
   ObTabletDumpedMediumInfo input_medium_info2;
   ret = input_medium_info2.init_for_first_creation(allocator);
   ASSERT_EQ(OB_SUCCESS, ret);
 
-  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 2, 1, info);
-  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 3, 2, info);
+  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 2, 1, true, info);
+  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 3, 2, true, info);
 
   {
     ObTabletDumpedMediumInfo result;
@@ -165,7 +168,7 @@ TEST_F(TestTabletDumpedMediumInfo, no_overlap)
     ASSERT_EQ(OB_ERR_UNEXPECTED, ret);
   }
 
-  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 4, 3, info);
+  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 4, 3, true, info);
   {
     ObTabletDumpedMediumInfo result;
     ret = result.init_for_first_creation(allocator);
@@ -197,19 +200,19 @@ TEST_F(TestTabletDumpedMediumInfo, overlap_and_filter)
   ret = input_medium_info1.init_for_first_creation(allocator);
   ASSERT_EQ(OB_SUCCESS, ret);
 
-  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 5, 4, info);
-  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 6, 5, info);
-  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 7, 6, info);
+  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 5, 4, true, info);
+  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 6, 5, true, info);
+  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 7, 6, true, info);
 
   ObTabletDumpedMediumInfo input_medium_info2;
   ret = input_medium_info2.init_for_first_creation(allocator);
   ASSERT_EQ(OB_SUCCESS, ret);
 
-  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 2, 1, info);
-  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 3, 2, info);
-  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 4, 3, info);
-  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 5, 4, info);
-  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 6, 5, info);
+  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 2, 1, true, info);
+  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 3, 2, true, info);
+  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 4, 3, true, info);
+  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 5, 4, true, info);
+  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 6, 5, true, info);
 
   ObTabletDumpedMediumInfo result;
   ret = result.init_for_first_creation(allocator);
@@ -235,17 +238,17 @@ TEST_F(TestTabletDumpedMediumInfo, no_overlap_and_filter)
   ret = input_medium_info1.init_for_first_creation(allocator);
   ASSERT_EQ(OB_SUCCESS, ret);
 
-  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 5, 4, info);
-  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 6, 5, info);
-  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 7, 6, info);
+  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 5, 4, true, info);
+  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 6, 5, true, info);
+  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 7, 6, true, info);
 
   ObTabletDumpedMediumInfo input_medium_info2;
   ret = input_medium_info2.init_for_first_creation(allocator);
   ASSERT_EQ(OB_SUCCESS, ret);
 
-  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 2, 1, info);
-  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 3, 2, info);
-  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 4, 3, info);
+  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 2, 1, true, info);
+  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 3, 2, true, info);
+  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 4, 3, true, info);
 
   ObTabletDumpedMediumInfo result;
   ret = result.init_for_first_creation(allocator);
@@ -260,7 +263,7 @@ TEST_F(TestTabletDumpedMediumInfo, no_overlap_and_filter)
   ASSERT_EQ(OB_SUCCESS, ret);
 }
 
-TEST_F(TestTabletDumpedMediumInfo, discontinuous_inputs)
+TEST_F(TestTabletDumpedMediumInfo, standby_cluster)
 {
   int ret = OB_SUCCESS;
   ObArenaAllocator allocator;
@@ -270,15 +273,15 @@ TEST_F(TestTabletDumpedMediumInfo, discontinuous_inputs)
   ret = input_medium_info1.init_for_first_creation(allocator);
   ASSERT_EQ(OB_SUCCESS, ret);
 
-  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 7, 5, info);
-  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 9, 8, info);
+  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 7, 5, false, info);
+  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 9, 8, false, info);
 
   ObTabletDumpedMediumInfo input_medium_info2;
   ret = input_medium_info2.init_for_first_creation(allocator);
   ASSERT_EQ(OB_SUCCESS, ret);
 
-  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 2, 1, info);
-  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 4, 2, info);
+  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 2, 1, false, info);
+  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 4, 2, false, info);
 
   ObTabletDumpedMediumInfo result;
   ret = result.init_for_first_creation(allocator);
@@ -293,7 +296,7 @@ TEST_F(TestTabletDumpedMediumInfo, discontinuous_inputs)
   ASSERT_EQ(9, result.medium_info_list_.at(2)->medium_snapshot_);
 
   ret = ObMediumListChecker::check_continue(result.medium_info_list_);
-  ASSERT_EQ(OB_ERR_UNEXPECTED, ret);
+  ASSERT_EQ(OB_SUCCESS, ret);
 }
 
 TEST_F(TestTabletDumpedMediumInfo, mds_table_dump)
@@ -308,8 +311,8 @@ TEST_F(TestTabletDumpedMediumInfo, mds_table_dump)
   ObTabletComplexAddr<ObTabletDumpedMediumInfo> mds_table_data;
   mds_table_data.ptr_ = &input_medium_info1;
 
-  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 7, 6, info);
-  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 9, 7, info);
+  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 7, 6, false, info);
+  APPEND_MEDIUM_INFO(input_medium_info1, allocator, 9, 7, false, info);
 
   ObTabletDumpedMediumInfo input_medium_info2;
   ret = input_medium_info2.init_for_first_creation(allocator);
@@ -317,10 +320,10 @@ TEST_F(TestTabletDumpedMediumInfo, mds_table_dump)
   ObTabletComplexAddr<ObTabletDumpedMediumInfo> base_data;
   base_data.ptr_ = &input_medium_info2;
 
-  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 2, 1, info);
-  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 4, 2, info);
-  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 6, 4, info);
-  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 7, 6, info);
+  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 2, 1, false, info);
+  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 4, 2, false, info);
+  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 6, 4, false, info);
+  APPEND_MEDIUM_INFO(input_medium_info2, allocator, 7, 6, false, info);
 
   ASSERT_EQ(OB_SUCCESS, ret);
   ObTabletComplexAddr<ObTabletDumpedMediumInfo> result_data;

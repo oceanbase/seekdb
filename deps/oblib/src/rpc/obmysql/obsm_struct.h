@@ -31,7 +31,7 @@ class ObSQLSessionInfo;
 }
 namespace omt
 {
-class ObServerRuntime;
+class ObTenant;
 }
 namespace observer
 {
@@ -45,15 +45,19 @@ public:
   ObSMConnection()
   {
     cap_flags_.capability_ = 0;
-    autocommit_snapshot_ = 0;
     is_sess_alloc_ = false;
     is_sess_free_ = false;
     has_inc_active_num_ = false;
     is_need_clear_sessid_ = true;
-    is_runtime_locked_ = false;
+    is_tenant_locked_ = false;
     connection_phase_ = rpc::ConnectionPhaseEnum::CPE_CONNECTED;
     sessid_ = INITIAL_SESSID;
-    runtime_ = NULL;
+    tenant_ = NULL;
+    MEMSET(tenant_name_buf_, 0, sizeof(tenant_name_buf_));
+    MEMSET(user_name_buf_, 0, sizeof(user_name_buf_));
+    vid_ = OB_INVALID_ID;
+    MEMSET(vip_buf_, 0, sizeof(vip_buf_));
+    vport_ = 0;
     connect_in_bytes_ = 0;
     ret_ = common::OB_SUCCESS;
     scramble_buf_[SCRAMBLE_BUF_SIZE] = '\0';
@@ -61,6 +65,7 @@ public:
     client_cs_type_ = 0;
     pkt_rec_wrapper_.init();
     client_version_ = 0;
+    has_service_name_ = false;
     logined_ = false;
   }
 
@@ -105,12 +110,11 @@ public:
   inline void set_logined(bool logined) { logined_ = logined; }
 public:
   obmysql::ObMySQLCapabilityFlags cap_flags_;
-  int64_t autocommit_snapshot_; // global value advertised by the initial handshake
   bool is_sess_alloc_;
   bool is_sess_free_;
   bool has_inc_active_num_;
   bool is_need_clear_sessid_;
-  bool is_runtime_locked_;
+  bool is_tenant_locked_;
 
   rpc::ConnectionPhaseEnum connection_phase_;
   uint32_t sessid_;
@@ -119,7 +123,12 @@ public:
   // Errors may occur during the ObSMHandler::on_connect stage, and these error messages need to be returned to the client;
   // And in on_connect, accurate error information cannot be returned to the client, therefore it is recorded here, and processed in ObMPConnect::Process
   int ret_;
-  omt::ObServerRuntime *runtime_;
+  omt::ObTenant *tenant_;
+  char tenant_name_buf_[OB_MAX_TENANT_NAME_LENGTH + 1];
+  char user_name_buf_[OB_MAX_USER_NAME_LENGTH + 1];
+  int64_t vid_;
+  char vip_buf_[MAX_IP_ADDR_LENGTH];
+  int32_t vport_;
   int64_t connect_in_bytes_;
   obmysql::ObMysqlPktContext mysql_pkt_context_;
   obmysql::ObCompressedPktContext compressed_pkt_context_;
@@ -128,6 +137,7 @@ public:
   int32_t client_cs_type_;
   obmysql::ObPacketRecordWrapper pkt_rec_wrapper_;
   uint64_t client_version_;
+  bool has_service_name_;
 private:
   bool logined_;
 };

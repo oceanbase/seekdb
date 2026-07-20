@@ -42,15 +42,17 @@ namespace share
 {
 namespace schema
 {
-class ObServerRuntimeSchema;
+class ObTenantSchema;
 class ObUserInfo;
 class ObDatabaseSchema;
+class ObTablegroupSchema;
 class ObTableSchema;
 class ObSimpleTableSchemaV2;
 class ObColumnSchemaV2;
 struct ObSessionPrivInfo;
 struct ObStmtNeedPrivs;
 class ObSchemaGetterGuard;
+class ObUDF;
 }
 }
 namespace sql
@@ -83,9 +85,14 @@ public:
   int check_db_access(share::schema::ObSessionPrivInfo &s_priv,
                       const common::ObIArray<uint64_t> &enable_role_id_array,
                       const common::ObString &database_name) const;
+  int check_db_access(share::schema::ObSessionPrivInfo &s_priv,
+                      const common::ObIArray<uint64_t> &enable_role_id_array,
+                      const uint64_t catalog_id,
+                      const common::ObString &database_name) const;
 
   int check_table_show(const share::schema::ObSessionPrivInfo &s_priv,
                        const common::ObIArray<uint64_t> &enable_role_id_array,
+                       const uint64_t catalog_id,
                        const common:: ObString &db,
                        const common::ObString &table,
                        bool &allow_show) const;
@@ -103,12 +110,14 @@ public:
                           const common::ObString &column_name,
                           bool &is_exist,
                           bool is_link = false);
-  int check_table_or_index_exists(const uint64_t database_id,
+  int check_table_or_index_exists(const uint64_t catalog_id,
+                                  const uint64_t database_id,
                                   const common::ObString &table_name,
                                   const bool with_hidden_flag,
                                   const bool is_built_in_index,
                                   bool &is_exist);
-  int check_table_exists(const uint64_t database_id,
+  int check_table_exists(const uint64_t catalog_id,
+                         const uint64_t database_id,
                          const common::ObString &table_name,
                          const bool is_index,
                          const bool with_hidden_flag,
@@ -120,7 +129,8 @@ public:
                          const bool is_index_table,
                          const bool with_hidden_flag,
                          bool &is_exist,
-                         const bool is_built_in_index = false);
+                         const bool is_built_in_index = false,
+                         const uint64_t catalog_id = OB_INTERNAL_CATALOG_ID); // to many place used this function, assign default catalog_id
 
   // mock_fk_parent_table begin
   int get_mock_fk_parent_table_with_name(const uint64_t database_id,
@@ -132,7 +142,22 @@ public:
                    const common::ObString &table_name,
                    const bool is_index_table,
                    uint64_t &table_id);
+  //int get_database_name(const uint64_t tenant,
+  //                      const uint64_t database_id,
+  //                      common::ObString &database_name) const;
+
   int get_database_id(const common::ObString &database_name, uint64_t &database_id) const;
+  int get_database_id(const uint64_t catalog_id,
+                      const common::ObString &database_name,
+                      uint64_t &database_id) const;
+  int get_catalog_id_name(common::ObString &catalog_name,
+                          uint64_t &catalog_id,
+                          ObIAllocator *allocator = NULL,
+                          bool allow_not_exist = false) const;
+  //int get_local_table_id(const uint64_t tenant,
+  //                       const uint64_t database_id,
+  //                       const common::ObString &table_name,
+  //                       uint64_t &table_id) const;
   int get_user_id(const common::ObString &user_name,
                   const common::ObString &host_name,
                   uint64_t &user_id);
@@ -158,6 +183,15 @@ public:
                        const bool with_hidden_flag = false,
                        const bool is_built_in_index = false);
   int get_table_schema(
+                       const uint64_t catalog_id,
+                       const uint64_t database_id,
+                       const common::ObString &table_name,
+                       const bool is_index_table,
+                       const bool cte_table_fisrt,
+                       const bool with_hidden_flag,
+                       const share::schema::ObTableSchema *&table_schema,
+                       const bool is_built_in_index = false);
+  int get_table_schema(
                        const uint64_t database_id,
                        const common::ObString &table_name,
                        const bool is_index_table,
@@ -178,16 +212,31 @@ public:
                         const share::schema::ObColumnSchemaV2 *&column_schema,
                         const bool get_hidden = false,
                         bool is_link = false);
+  //int check_is_rowkey_column(const uint64_t tenant,
+  //                      const uint64_t database_id,
+  //                      const common::ObString &table_name,
+  //                      const common::ObString &column_name,
+  //                      const bool is_index_table,
+  //                      bool &is_rowkey_column) const;
   //int check_is_index_table(uint64_t table_id, bool &is_index_table) const;
   int get_can_read_index_array(uint64_t table_id, uint64_t *index_tid_array, int64_t &size) const;
   int get_can_write_index_array(uint64_t table_id, uint64_t *index_tid_array, int64_t &size, bool only_global = false) const;
-  int get_server_runtime_info(const share::schema::ObServerRuntimeSchema *&runtime_schema);
+  // tenant
+  int get_tenant_info(const share::schema::ObTenantSchema *&tenant_schema);
   int get_database_schema(
                           const uint64_t database_id,
                           const share::schema::ObDatabaseSchema *&database_schema);
   //check if there is an index on this column
   int check_column_has_index(uint64_t table_id, uint64_t column_id, bool &has_index, bool is_link = false);
   int check_if_partition_key(uint64_t table_id, uint64_t column_id, bool &is_part_key, bool is_link = false) const;
+  //int get_collation_info_from_database(const uint64_t tenant,
+  //                                     const uint64_t database_id,
+  //                                     common::ObCharsetType &char_type,
+  //                                     common::ObCollationType &coll_type);
+  //int get_collation_info_from_tenant(const uint64_t tenant,
+  //                                   common::ObCharsetType &char_type,
+  //                                   common::ObCollationType &coll_type);
+
   int get_routine_info(
                        const uint64_t routine_id,
                        const share::schema::ObRoutineInfo *&routine_info);
@@ -232,10 +281,23 @@ public:
                      const ObString &routine_name,
                      uint64_t &routine_id,
                      bool &is_proc);
+  int get_udf_info(
+                   const common::ObString &udf_name,
+                   const share::schema::ObUDF *&udf_info,
+                   bool &exist);
+  int check_sequence_exist_with_name(const uint64_t database_id,
+                                     const common::ObString &sequence_name,
+                                     bool &exists,
+                                     uint64_t &sequence_id) const;
+  int get_sequence_id(const common::ObString &database_name,
+                      const common::ObString &sequence_name,
+                      uint64_t &sequence_id) const;
   int add_fake_cte_schema(share::schema::ObTableSchema* tbl_schema);
   int find_fake_cte_schema(common::ObString tblname, ObNameCaseMode mode, bool& exist);
   int get_schema_version(uint64_t table_id, share::schema::ObSchemaType schema_type, int64_t &schema_version);
   share::schema::ObSchemaGetterGuard *get_schema_mgr() { return schema_mgr_; }
+  int get_tablegroup_schema( const common::ObString &tablegroup_name,
+                            const share::schema::ObTablegroupSchema *&tablegroup_schema);
   int get_idx_schema_by_origin_idx_name(const uint64_t database_id,
                                         const common::ObString &index_name,
                                         const share::schema::ObTableSchema *&table_schema);
@@ -247,8 +309,14 @@ public:
                                   const common::ObIArray<uint64_t> &granting_role_ids);
   int check_set_default_role_priv(const ObSqlCtx &sql_ctx);
 
+  // directory
+  int get_directory_id(const common::ObString &directory_name,
+                       uint64_t &directory_id);
 
   int remove_tmp_cte_schemas(const ObString& cte_table_name);
+  // location
+  int get_location_id(const common::ObString &location_name,
+                      uint64_t &location_id);
 private:
 
   int get_table_schema_inner(uint64_t table_id,

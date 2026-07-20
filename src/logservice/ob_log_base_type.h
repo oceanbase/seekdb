@@ -57,18 +57,40 @@ enum ObLogBaseType
   //for recovery_ls_service
   RECOVERY_LS_SERVICE_LOG_BASE_TYPE = 12,
 
+  //for standby timestamp service
+  STANDBY_TIMESTAMP_LOG_BASE_TYPE = 13,
+
+  //for recovery_ls_service
+  RESTORE_SERVICE_LOG_BASE_TYPE = 16,
+
   RESERVED_SNAPSHOT_LOG_BASE_TYPE = 17,
 
   MEDIUM_COMPACTION_LOG_BASE_TYPE = 18,
 
+  // for arb garbage collect service, has not been used for now
+  ARB_GARBAGE_COLLECT_SERVICE_LOG_BASE_TYPE = 19,
+  // 20 was used by the removed data dictionary service. Do not reuse.
+
+  // for arbitration service
+  ARBITRATION_SERVICE_LOG_BASE_TYPE = 21,
+
+  // for NET_STANDBY_TNT_SERVICE
+  NET_STANDBY_TNT_SERVICE_LOG_BASE_TYPE = 22,
+
+  // 23 was used by the removed endpoint ingress bandwidth service. Do not reuse.
 
   HEARTBEAT_SERVICE_LOG_BASE_TYPE = 24,
 
   // for padding log entry
   PADDING_LOG_BASE_TYPE = 25,
 
+  // for dup table trans
+  DUP_TABLE_LOG_BASE_TYPE = 26,
+
   // for obj lock garbage collect service
   OBJ_LOCK_GARBAGE_COLLECT_SERVICE_LOG_BASE_TYPE = 27,
+
+  // 31 - 34 were used by removed backup/archive services. Do not reuse.
 
   COMMON_LS_SERVICE_LOG_BASE_TYPE = 36,
 
@@ -76,8 +98,18 @@ enum ObLogBaseType
   LS_BLOCK_TX_SERVICE_LOG_BASE_TYPE = 37,
 
 
+  TTL_LOG_BASE_TYPE = 39,
+
+  // for tenant snapshot
+  SNAPSHOT_SCHEDULER_LOG_BASE_TYPE = 41,
+  //for tenant clone
+  CLONE_SCHEDULER_LOG_BASE_TYPE = 42,
+
   // for DBMS_SCHEDULER
   DBMS_SCHEDULER_LOG_BASE_TYPE = 45,
+
+  // for shared storage pre warm
+  SHARED_STORAGE_PRE_WARM_LOG_BASE_TYPE = 46,
 
   // for vector index
   VEC_INDEX_LOG_BASE_TYPE = 48,
@@ -88,12 +120,15 @@ enum ObLogBaseType
   // for new DDL scheduler
   SYS_DDL_SCHEDULER_LOG_BASE_TYPE = 52,
 
+  // for tenant disaster recovery (abandoned)
+  // DISASTER_RECOVERY_SERVICE_LOG_BASE_TYPE = 53,
+
   // for new DDL service
   DDL_SERVICE_LAUNCHER_LOG_BASE_TYPE = 54,
   // for vector index scheduler
   VEC_INDEX_SERVICE_LOG_BASE_TYPE  = 60,
-  // for system package load service on sys ls leader
-  SYSTEM_PACKAGE_LOAD_SERVICE_LOG_BASE_TYPE = 61,
+  // for the local sys tenant package service
+  SYS_TENANT_LOAD_SYS_PACKAGE_SERVICE_LOG_BASE_TYPE = 61,
   // for internal table change notifier (timezone, SRS, etc.)
   INTERNAL_TABLE_NOTIFIER_LOG_BASE_TYPE = 62,
   // pay attention!!!
@@ -136,14 +171,26 @@ int log_base_type_to_string(const ObLogBaseType log_type,
     strncpy(str ,"PRIMARY_LS_SERVICE", str_len);
   } else if (log_type == RECOVERY_LS_SERVICE_LOG_BASE_TYPE) {
     strncpy(str ,"RECOVERY_LS_SERVICE", str_len);
+  } else if (log_type == STANDBY_TIMESTAMP_LOG_BASE_TYPE) {
+    strncpy(str ,"STANDBY_TIMESTAMP", str_len);
+  } else if (log_type == RESTORE_SERVICE_LOG_BASE_TYPE) {
+    strncpy(str ,"RESTORE_SERVICE", str_len);
   } else if (log_type == RESERVED_SNAPSHOT_LOG_BASE_TYPE) {
     strncpy(str ,"RESERVED_SNAPSHOT", str_len);
   } else if (log_type == MEDIUM_COMPACTION_LOG_BASE_TYPE) {
     strncpy(str ,"MEDIUM_COMPACTION", str_len);
+  } else if (log_type == ARB_GARBAGE_COLLECT_SERVICE_LOG_BASE_TYPE) {
+    strncpy(str ,"ARB_GARBAGE_COLLECTE_SERVICE", str_len);
+  } else if (log_type == ARBITRATION_SERVICE_LOG_BASE_TYPE) {
+    strncpy(str ,"ARBITRATION_SERVICE", str_len);
+  } else if (log_type == NET_STANDBY_TNT_SERVICE_LOG_BASE_TYPE) {
+    strncpy(str ,"NET_STANDBY_TNT_SERVICE", str_len);
   } else if (log_type == HEARTBEAT_SERVICE_LOG_BASE_TYPE) {
     strncpy(str ,"HEARTBEAT_SERVICE", str_len);
   } else if (log_type == PADDING_LOG_BASE_TYPE) {
     strncpy(str ,"PADDING_LOG_ENTRY", str_len);
+  } else if (log_type == DUP_TABLE_LOG_BASE_TYPE) {
+    strncpy(str ,"DUP_TABLE", str_len);
   } else if (log_type == OBJ_LOCK_GARBAGE_COLLECT_SERVICE_LOG_BASE_TYPE) {
     strncpy(str ,"OBJ_LOCK_GARBAGE_COLLECT_SERVICE", str_len);
   } else if (log_type == COMMON_LS_SERVICE_LOG_BASE_TYPE) {
@@ -152,6 +199,14 @@ int log_base_type_to_string(const ObLogBaseType log_type,
     strncpy(str ,"BLOCK_TX_SERVICE", str_len);
   } else if (log_type == DBMS_SCHEDULER_LOG_BASE_TYPE) {
     strncpy(str ,"DBMS_SCHEDULER", str_len);
+  } else if (log_type == TTL_LOG_BASE_TYPE) {
+    strncpy(str ,"TTL_SERVICE", str_len);
+  } else if (log_type == SNAPSHOT_SCHEDULER_LOG_BASE_TYPE) {
+    strncpy(str ,"SNAPSHOT_SCHEDULER", str_len);
+  } else if (log_type == CLONE_SCHEDULER_LOG_BASE_TYPE) {
+    strncpy(str ,"CLONE_SCHEDULER", str_len);
+  } else if (log_type == SHARED_STORAGE_PRE_WARM_LOG_BASE_TYPE) {
+    strncpy(str ,"SHARED_STORAGE_PRE_WARM_LOG_BASE_TYPE", str_len);
   } else if (log_type == VEC_INDEX_LOG_BASE_TYPE) {
     strncpy(str ,"VEC_INDEX_SERVICE", str_len);
   } else if (log_type == DBMS_SCHEDULER_LOG_BASE_TYPE) {
@@ -162,8 +217,8 @@ int log_base_type_to_string(const ObLogBaseType log_type,
     strncpy(str ,"SYS_DDL_SCHEDULER", str_len);
   } else if (log_type == DDL_SERVICE_LAUNCHER_LOG_BASE_TYPE) {
     strncpy(str ,"DDL_SERVICE_LAUNCHER", str_len);
-  } else if (log_type == SYSTEM_PACKAGE_LOAD_SERVICE_LOG_BASE_TYPE) {
-    strncpy(str ,"SYSTEM_PACKAGE_LOAD_SERVICE", str_len);
+  } else if (log_type == SYS_TENANT_LOAD_SYS_PACKAGE_SERVICE_LOG_BASE_TYPE) {
+    strncpy(str ,"SYS_TENANT_LOAD_SYS_PACKAGE_SERVICE", str_len);
   } else if (log_type == VEC_INDEX_SERVICE_LOG_BASE_TYPE ) {
     strncpy(str, "VEC_INDEX_SERVICE", str_len);
   } else if (log_type == INTERNAL_TABLE_NOTIFIER_LOG_BASE_TYPE) {
@@ -242,6 +297,18 @@ public:
   (void)replay_handler_.unregister_handler(type);                                            \
   (void)checkpoint_executor_.unregister_handler(type);                                       \
 
+#define REGISTER_TO_RESTORESERVICE(type, subhandler)                                        \
+  if (OB_SUCC(ret)) {                                                                       \
+    if (OB_FAIL(restore_local_log_handler_set_.register_handler(type, subhandler))) {         \
+      LOG_WARN("restore_local_log_handler_set_ register failed",                              \
+          K(ret), K(type));                                                                 \
+    } else {                                                                                \
+      LOG_INFO("register to restoreservice success", K(type));                             \
+    }                                                                                       \
+  }
+
+#define UNREGISTER_FROM_RESTORESERVICE(type, subhandler)                                     \
+  (void)restore_local_log_handler_set_.unregister_handler(type);
 } // namespace logservice
 } // namespace oceanbase
 

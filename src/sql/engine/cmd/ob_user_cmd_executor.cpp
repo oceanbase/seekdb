@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_user_cmd_executor.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
-#include "rootserver/ob_local_management_service.h"
+#include "rootserver/ob_rs_serial_call.h"
+#include "rootserver/ob_root_service.h"
 
 #include "lib/encrypt/ob_encrypted_helper.h"
 #include "sql/resolver/dcl/ob_create_user_stmt.h"
@@ -188,8 +188,8 @@ int ObCreateUserExecutor::execute(ObExecContext &ctx, ObCreateUserStmt &stmt)
 
         if (OB_SUCC(ret)) {
           ObSchemaGetterGuard schema_guard;
-          if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
-            LOG_WARN("get runtime schema guard failed", K(ret));
+          if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+            LOG_WARN("get tenant schema guard failed", K(ret));
           } else if (OB_FAIL(ObCreateUserExecutor::check_user_valid(schema_guard, ctx.get_my_session()->get_user_priv_set(),
                                                                     user_name, host_name, "CREATE USER"))) {
             LOG_WARN("check user valid failed", K(ret));
@@ -239,7 +239,7 @@ int ObCreateUserExecutor::create_user(const obcall::ObCreateUserArg& arg) const
   ObSArray<int64_t> failed_index;
   ObSqlString fail_msg;
   obcall::ObCreateUserArg user_arg = arg;
-  if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_user(user_arg, failed_index); }))) {
+  if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->create_user(user_arg, failed_index); }))) {
     LOG_WARN("Create user error", K(ret));
   } else if (0 != failed_index.count()) {
     ObSArray<ObString> failed_users;
@@ -346,7 +346,7 @@ int ObDropUserExecutor::execute(ObExecContext &ctx, ObDropUserStmt &stmt)
     
     {
       ObSchemaGetterGuard schema_guard;
-      if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+      if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
         LOG_WARN("get schema guard failed", K(ret));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < user_names->count(); i += 2) {
@@ -388,7 +388,7 @@ int ObDropUserExecutor::drop_user(const obcall::ObDropUserArg &arg,
   } else {
     ObSArray<int64_t> failed_index;
     ObSqlString fail_msg;
-    if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_user(arg, failed_index); }))) {
+    if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_user(arg, failed_index); }))) {
       LOG_WARN("Lock user failed", K(ret));
     }
     if (0 != failed_index.count()) {
@@ -483,7 +483,7 @@ int ObLockUserExecutor::lock_user(const obcall::ObLockUserArg &arg)
   } else {
     ObSArray<int64_t> failed_index;
     ObSqlString fail_msg;
-    if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->lock_user(arg, failed_index); }))) {
+    if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->lock_user(arg, failed_index); }))) {
       LOG_WARN("Lock user failed", K(ret));
       if (OB_FAIL(ObDropUserExecutor::build_fail_msg(arg.users_, arg.hosts_, fail_msg))) {
         LOG_WARN("Build fail msg error", K(arg), K(ret));
@@ -528,7 +528,7 @@ int ObAlterUserProfileExecutor::set_role_exec(ObExecContext &ctx, ObAlterUserPro
     ObSchemaGetterGuard schema_guard;
 
     obcall::ObAlterUserProfileArg &arg = static_cast<obcall::ObAlterUserProfileArg &>(stmt.get_ddl_arg());
-    OZ (GCTX.schema_service_->get_runtime_schema_guard(
+    OZ (GCTX.schema_service_->get_tenant_schema_guard(
                   schema_guard));
     OZ (schema_guard.get_user_info(user_id, user_info));
     if (OB_SUCC(ret) && NULL == user_info) {
@@ -624,7 +624,7 @@ int ObRenameUserExecutor::execute(ObExecContext &ctx, ObRenameUserStmt &stmt)
     
     {
       ObSchemaGetterGuard schema_guard;
-      if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+      if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
         LOG_WARN("get schema guard failed", K(ret));
       }
       //rename_infos arr contains old names and new names in pairs, so step is 2
@@ -675,7 +675,7 @@ int ObRenameUserExecutor::rename_user(const obcall::ObRenameUserArg &arg)
   } else {
     ObSArray<int64_t> failed_index;
     ObSqlString fail_msg;
-    if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->rename_user(arg, failed_index); }))) {
+    if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->rename_user(arg, failed_index); }))) {
       LOG_WARN("Rename user failed", K(ret));
       if (OB_FAIL(ObDropUserExecutor::build_fail_msg(arg.old_users_, arg.old_hosts_, fail_msg))) {
         LOG_WARN("Build fail msg error", K(arg), K(ret));

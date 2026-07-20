@@ -35,6 +35,7 @@ public:
   virtual int escape(const char *from, const int64_t from_size,
       char *to, const int64_t to_size, int64_t &out_size) override;
   virtual int read(ReadResult &res, const char *sql, const int32_t group_id) override;
+  virtual int read(ReadResult &res, const int64_t cluster_id, const char *sql) override;
   virtual int write(const char *sql, const int32_t group_id, int64_t &affected_rows) override;
 
   virtual sqlclient::ObISQLConnectionPool *get_pool() override;

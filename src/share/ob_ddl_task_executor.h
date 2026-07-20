@@ -63,8 +63,7 @@ public:
       || is_stop_state(ret_code)
       || is_not_exist(ret_code)
       || is_retry(ret_code)
-      || is_timeout(ret_code)
-      || is_location_service_renew_error(ret_code);
+      || is_timeout(ret_code);
   }
   static bool in_ddl_retry_black_list(const int ret_code)
   {

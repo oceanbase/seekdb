@@ -85,7 +85,7 @@ int ObLSTabletIterator::get_next_ddl_kv_mgr(ObDDLKvMgrHandle &ddl_kv_mgr_handle)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ls tablet service is nullptr", K(ret), KP(ls_tablet_service_));
   } else {
-    ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+    ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
     do {
       ObTabletMapKey key;
       if (OB_UNLIKELY(tablet_ids_.count() == idx_)) {

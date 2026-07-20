@@ -1,0 +1,153 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_TRANSACTION_OB_TX_RETAIN_CTX_MGR_
+#define OCEANBASE_TRANSACTION_OB_TX_RETAIN_CTX_MGR_
+
+#include "lib/list/ob_dlink_node.h"
+#include "lib/list/ob_list.h"
+#include "lib/lock/ob_spin_rwlock.h"
+#include "storage/tx/ob_trans_define.h"
+
+namespace oceanbase
+{
+
+namespace storage
+{
+class ObLS;
+}
+
+namespace transaction
+{
+
+class ObTxCtx;
+class ObTxRetainCtxMgr;
+
+class ObAdvanceLSCkptTask : public ObTransTask
+{
+public:
+  explicit ObAdvanceLSCkptTask(share::SCN target_ts);
+  ~ObAdvanceLSCkptTask() { reset(); }
+  void reset();
+
+  int try_advance_ls_ckpt_ts();
+
+private:
+  share::SCN target_ckpt_ts_;
+};
+
+/**
+ * OB_SUCCESS : can be removed
+ * OB_EGAIN: need wait
+ * **/
+class ObIRetainCtxCheckFunctor : public common::ObDLinkBase<ObIRetainCtxCheckFunctor>
+// : public common::ObDLinkBase<ObIRetainCtxCheckFunctor>
+{
+public:
+  ObIRetainCtxCheckFunctor();
+  ~ObIRetainCtxCheckFunctor();
+  int init(ObTxCtx *ctx, RetainCause cause);
+  // invoke before removed from retain ctx mgr
+  // virtual int gc_retain_ctx() = 0;
+  virtual int operator()(storage::ObLS *ls, ObTxRetainCtxMgr *retain_mgr) = 0;
+  RetainCause get_retain_cause() { return cause_; }
+  virtual bool is_valid() { return OB_NOT_NULL(tx_ctx_) && cause_ != RetainCause::UNKOWN; }
+  int del_retain_ctx();
+
+  TO_STRING_KV(K(cause_), K(tx_id_), KP(tx_ctx_));
+
+protected:
+  RetainCause cause_;
+  ObTxCtx *tx_ctx_;
+  ObTransID tx_id_;
+};
+
+class ObMDSRetainCtxFunctor : public ObIRetainCtxCheckFunctor
+{
+public:
+  ObMDSRetainCtxFunctor() : ObIRetainCtxCheckFunctor()
+  {
+    final_log_ts_.reset();
+  }
+  int init(ObTxCtx *ctx,
+           RetainCause cause,
+           const share::SCN &final_log_ts);
+
+  virtual int operator()(storage::ObLS *ls, ObTxRetainCtxMgr *retain_mgr) override;
+  virtual bool is_valid() override;
+
+private:
+  share::SCN final_log_ts_;
+};
+
+typedef common::ObDList<ObIRetainCtxCheckFunctor> RetainCtxList;
+
+class ObTxRetainCtxMgr
+{
+public:
+  // const int64_t PRINT_INFO_INTERVAL = 5 * 1000 * 1000; // 5s
+  const int64_t TRIGGER_RETAIN_CTX_GC_LIMIT = 50 * 1000;
+
+  typedef int (ObTxRetainCtxMgr::*RetainFuncHandler)(ObIRetainCtxCheckFunctor *func_ptr,
+                                                     bool &need_remove,
+                                                     storage::ObLS *ls);
+
+public:
+  ObTxRetainCtxMgr() : retain_ctx_list_() { reset(); }
+  void reset();
+
+  static void *alloc_object(const int64_t size);
+  static void free_object(void *ptr);
+
+  int push_retain_ctx(ObIRetainCtxCheckFunctor *retain_func, int64_t timeout_us);
+  int try_gc_retain_ctx(storage::ObLS *ls);
+  int print_retain_ctx_info();
+  int force_gc_retain_ctx();
+
+  void set_max_ckpt_ts(share::SCN ckpt_ts) { max_wait_ckpt_ts_.inc_update(ckpt_ts); }
+  // share::SCN get_max_ckpt_ts() { return ATOMIC_LOAD(&max_wait_ckpt_ts_); }
+  int64_t get_retain_ctx_cnt() { return retain_ctx_list_.get_size(); }
+
+  void try_advance_retain_ctx_gc();
+
+  TO_STRING_KV(K(retain_ctx_list_.get_size()),
+               K(max_wait_ckpt_ts_),
+               K(last_push_gc_task_ts_),
+               K(skip_remove_cnt_));
+
+private:
+  int remove_ctx_func_(ObIRetainCtxCheckFunctor *remove_iter);
+  int for_each_remove_(RetainFuncHandler remove_handler,
+                       storage::ObLS *ls,
+                       const int64_t max_run_us);
+  int try_gc_(ObIRetainCtxCheckFunctor *func_ptr, bool &need_remove, storage::ObLS *ls);
+  int force_gc_(ObIRetainCtxCheckFunctor *func_ptr, bool &need_remove, storage::ObLS *ls);
+
+private:
+  common::SpinRWLock retain_ctx_lock_;
+  RetainCtxList retain_ctx_list_;
+
+  share::SCN max_wait_ckpt_ts_;
+  int64_t last_push_gc_task_ts_;
+
+  int64_t skip_remove_cnt_;
+
+  TransModulePageAllocator reserve_allocator_;
+};
+
+} // namespace transaction
+} // namespace oceanbase
+#endif

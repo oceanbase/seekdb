@@ -389,7 +389,8 @@ private:
 public:
   ObLogger();
   ~ObLogger();
-  int init(const ObBaseLogWriterCfg &log_cfg);
+  int init(const ObBaseLogWriterCfg &log_cfg,
+           const bool is_arb_replica);
   void stop();
   void wait();
   void destroy();
@@ -679,6 +680,7 @@ public:
   void set_log_level(const int32_t level, int64_t version = 0)
   {set_log_level(static_cast<int8_t>(level), version);}
   void set_log_level(const int8_t level, int64_t version = 0);
+  void set_alert_log_level(const char *level, int64_t version = 0);
   int set_mod_log_levels(const char* level_str, int64_t version = 0);
 
   void down_log_level(int64_t version = 0) {set_log_level(id_level_map_.get_level() + 1, version);}
@@ -698,6 +700,7 @@ public:
   int level_str2int(const char *level_name, int8_t &level_int, bool is_alert_log = false);
 
   int parse_check(const char *str, const int32_t str_length);
+  int parse_check_alert(const char *str, const int32_t str_length);
   //@brief Parse the string like "ALL.*:INFO, SQL.ENG:DEBUG, COMMON.*:ERROR",
   //and set the global level map.
   int parse_set(const char *str, const int32_t str_length, int64_t version = 0);
@@ -908,6 +911,8 @@ private:
     int line_;
   } probes_[8];
   int probe_cnt_ = 0;
+  bool is_arb_replica_;
+
   // This info will be logged when log file created.
   const char *new_file_info_;
   bool info_as_wdiag_;

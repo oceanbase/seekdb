@@ -54,8 +54,6 @@ int ObRenameTableStmt::add_rename_table_item(const obcall::ObRenameTableItem &re
 
 void ObRenameTableStmt::set_lock_priority()
 {
-  int ret = OB_SUCCESS;
-
   if (GCONF.enable_lock_priority) {
     rename_table_arg_.lock_priority_ = ObTableLockPriority::HIGH1;
   }

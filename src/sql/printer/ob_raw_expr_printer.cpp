@@ -2879,6 +2879,28 @@ int ObRawExprPrinter::print(ObSysFunRawExpr *expr)
         }
         break;
       }
+      case T_FUN_SYS_PL_SEQ_NEXT_VALUE:
+      case T_FUN_SYS_SEQ_NEXTVAL: {
+        ObSequenceRawExpr *seq_expr= static_cast<ObSequenceRawExpr*>(expr);
+        if (1 != seq_expr->get_param_count()) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("param count should be equal 1", K(ret), K(seq_expr->get_param_count()));
+        } else {
+          if (!seq_expr->get_database_name().empty()) {
+            PRINT_IDENT_WITH_QUOT(seq_expr->get_database_name());
+            DATA_PRINTF(".");
+          }
+          if (!seq_expr->get_name().empty() && !seq_expr->get_action().empty()) {
+            PRINT_IDENT_WITH_QUOT(seq_expr->get_name());
+            DATA_PRINTF(".");
+            PRINT_IDENT_WITH_QUOT(seq_expr->get_action());
+          } else {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("sequence should specify format as seqname.action", K(ret));
+          }
+        }
+        break;
+      }
       case T_FUN_PL_SQLCODE_SQLERRM: {
         ObPLSQLCodeSQLErrmRawExpr *sql_expr = static_cast<ObPLSQLCodeSQLErrmRawExpr*>(expr);
         if (sql_expr->get_is_sqlcode()) {
@@ -3203,10 +3225,33 @@ int ObRawExprPrinter::print(ObUDFRawExpr *expr)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("stmt_ is NULL of buf_ is NULL or pos_ is NULL or expr is NULL", K(ret));
   } else {
-    if (!expr->get_database_name().empty()
-        && expr->get_database_name().case_compare("oceanbase") != 0) {
-      PRINT_IDENT_WITH_QUOT(expr->get_database_name());
-      DATA_PRINTF(".");
+    {
+      if (!expr->get_database_name().empty()) {
+        if (expr->get_database_name().case_compare("oceanbase") != 0) {
+          PRINT_IDENT_WITH_QUOT(expr->get_database_name());
+          DATA_PRINTF(".");
+        }
+      } else if (OB_ISNULL(schema_guard_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("schema_guard for print raw expr is null", K(ret));
+      } else {
+
+// Implicit database-name resolution is gated on the sys
+// tenant and becomes an unconditional no-op (schema-lookup else chain unreachable).
+#define PRINT_IMPLICIT_DATABASE_NAME(OBJECT, object_id, get_object_info_func, get_name_func) \
+do { \
+} while (0)
+
+        if (expr->get_pkg_id() != OB_INVALID_ID) { // package or udt udf
+          if (!expr->is_pkg_body_udf()) {
+            PRINT_IMPLICIT_DATABASE_NAME(ObPackageInfo, expr->get_pkg_id(), get_package_info, get_package_name);
+          }
+        } else if (expr->get_udf_id() != OB_INVALID_ID && 0 == expr->get_subprogram_path().count()) { // standalone udf
+          PRINT_IMPLICIT_DATABASE_NAME(ObRoutineInfo, expr->get_udf_id(), get_routine_info, get_routine_name);
+        }
+      }
+
+#undef PRINT_IMPLICIT_DATABASE_NAME
     }
 
     if (!expr->get_package_name().empty() &&
@@ -3698,6 +3743,17 @@ int ObRawExprPrinter::print(ObPseudoColumnRawExpr *expr)
     ObString symbol("");
     ObItemType type = expr->get_expr_type();
     switch (type) {
+      case T_PSEUDO_PARTITION_LIST_COL:
+      case T_PSEUDO_EXTERNAL_FILE_URL:
+      case T_PSEUDO_EXTERNAL_FILE_ROW:
+      case T_PSEUDO_EXTERNAL_FILE_COL: {
+        if (!expr->get_table_name().empty()) {
+          PRINT_IDENT(expr->get_table_name());
+          DATA_PRINTF(".");
+        }
+        PRINT_IDENT(expr->get_expr_name());
+        break;
+      }
       case T_ORA_ROWSCN: {
         if (!expr->get_table_name().empty()) {
           PRINT_IDENT(expr->get_table_name());

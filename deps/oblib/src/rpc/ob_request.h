@@ -17,6 +17,10 @@
 #ifndef _OCEABASE_RPC_OB_REQUEST_H_
 #define _OCEABASE_RPC_OB_REQUEST_H_
 
+#ifndef _WIN32
+#include <arpa/inet.h>
+#endif
+#include "io/easy_io.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/net/ob_addr.h"
 #include "lib/utility/ob_print_utils.h"
@@ -30,30 +34,51 @@
 
 namespace oceanbase
 {
+namespace obmysql
+{
+  int get_fd_from_sess(void *sess);
+}
+
 namespace rpc
 {
 
 using common::ObAddr;
 typedef common::ObCurTraceId::TraceId TraceId;
-extern common::ObAddr g_server_self_addr;
 class ObSqlRequestOperator;
 class ObRequest: public common::ObLink
 {
 public:
   friend class ObSqlRequestOperator;
-  enum Type { OB_MYSQL, OB_TASK, OB_SQL_TASK, OB_DAS_PARALLEL_TASK };
+  enum Type { OB_RPC, OB_MYSQL, OB_TASK, OB_SQL_TASK, OB_SQL_SOCK_TASK, OB_DAS_PARALLEL_TASK };
+  enum TransportProto {
+    TRANSPORT_PROTO_EASY = 0,
+    TRANSPORT_PROTO_POC = 1,
+    TRANSPORT_PROTO_LOCAL_SYNC = 2,
+    TRANSPORT_PROTO_LOCAL_ASYNC = 3
+  };
   enum Stat {
-      OB_REQUEST_MYSQL_DELIVER            = 0,
-      OB_REQUEST_RUNTIME_RECEIVED         = 1,
-      OB_REQUEST_WORKER_PROCESSOR_RUN     = 2,
-      OB_REQUEST_QHANDLER_PROCESSOR_RUN   = 3,
-      OB_REQUEST_SQL_PROCESSOR_RUN        = 4,
-      OB_REQUEST_MPQUERY_PROCESS          = 5,
-      OB_REQUEST_FINISH_SQL               = 6,
+      OB_EASY_REQUEST_EZ_RECV                 = 0,
+      OB_EASY_REQUEST_RPC_DELIVER             = 1,
+      OB_EASY_REQUEST_MYSQL_DELIVER           = 2,
+      OB_EASY_REQUEST_TENANT_RECEIVED         = 3,
+      OB_EASY_REQUEST_TENANT_DISPATCHED       = 4,
+      OB_EASY_REQUEST_WORKER_PROCESSOR_RUN    = 5,
+      OB_EASY_REQUEST_QHANDLER_PROCESSOR_RUN  = 6,
+      OB_EASY_REQUEST_RPC_PROCESSOR_RUN       = 7,
+      OB_EASY_REQUEST_SQL_PROCESSOR_HANDLE    = 8,
+      OB_EASY_REQUEST_SQL_SOCK_PROCESSOR_RUN  = 9,
+      OB_EASY_REQUEST_SQL_PROCESSOR_RUN       = 10,
+      OB_EASY_REQUEST_MPQUERY_PROCESS         = 11,
+      OB_EASY_REQUEST_MPQUERY_PROCESS_DONE    = 12,
+      OB_EASY_REQUEST_RPC_PROCESSOR_RUN_DONE  = 13,
+      OB_EASY_REQUEST_RPC_ASYNC_RSP           = 14,
+      // 15 and 16 are reserved for removed request states.
+      OB_EASY_REQUEST_WAKEUP                  = 255,
+      OB_FINISH_SQL_REQUEST                   = 256,
   };
 public:
-  explicit ObRequest(Type type)
-      : handling_state_(-1), type_(type), handle_ctx_(NULL), group_id_(0), pkt_(NULL),
+  explicit ObRequest(Type type, int nio_protocol=0)
+      : ez_req_(NULL), handling_state_(-1), nio_protocol_(nio_protocol), type_(type), handle_ctx_(NULL), group_id_(0), pkt_(NULL),
         connection_phase_(ConnectionPhaseEnum::CPE_CONNECTED),
         recv_timestamp_(0), enqueue_timestamp_(0),
         request_arrival_time_(0), traverse_index_(0), recv_mts_(), arrival_push_diff_(0),
@@ -64,6 +89,7 @@ public:
   }
   virtual ~ObRequest() {}  // not guaranteed to call
 
+  int get_nio_protocol() const { return nio_protocol_; }
   void set_server_handle_context(void* ctx) { handle_ctx_ = ctx; }
   void* get_server_handle_context() const { return handle_ctx_; }
   Type get_type() const { return type_; }
@@ -73,6 +99,11 @@ public:
   void set_group_id(const int32_t &group_id) { group_id_ = group_id; }
   void set_packet(const ObPacket *pkt);
   const ObPacket &get_packet() const;
+  void set_ez_req(easy_request_t *r);
+  void enable_request_ratelimit();
+  void set_request_background_flow();
+  void set_request_opacket_size(int64_t size);
+  int64_t get_send_timestamp() const;
   int64_t get_receive_timestamp() const;
   common::ObMonotonicTs get_receive_mts() const;
   void set_receive_timestamp(const int64_t recv_timestamp);
@@ -95,8 +126,13 @@ public:
   int64_t get_traverse_index() const { return traverse_index_; }
   bool get_discard_flag() const;
   int32_t get_retry_times() const;
+  int get_connfd();
+  int get_pcode();
   void set_connection_phase(ConnectionPhaseEnum connection_phase) { connection_phase_ = connection_phase; }
   bool is_in_connected_phase() const { return ConnectionPhaseEnum:: CPE_CONNECTED == connection_phase_; }
+  bool is_from_unix_domain() const;
+
+  easy_request_t *get_ez_req() const;
   void on_process_begin() { reusable_mem_.reuse(); }
 
   TraceId generate_trace_id(const ObAddr &addr);
@@ -112,12 +148,14 @@ public:
   ObLockWaitNode lock_wait_node_;
   mutable ObReusableMem reusable_mem_;
 public:
-  int32_t handling_state_;
+  easy_request_t *ez_req_; // set in ObRequest new
+  int32_t handling_state_; //for sql nio or other frame work
 protected:
+  int nio_protocol_;
   Type type_;
   void* handle_ctx_;
   int32_t group_id_;
-  const ObPacket *pkt_;
+  const ObPacket *pkt_; // set in rpc handler
   ConnectionPhaseEnum connection_phase_;
   int64_t recv_timestamp_;
   int64_t enqueue_timestamp_;
@@ -146,6 +184,39 @@ inline void ObRequest::set_packet(const ObPacket *pkt)
 inline const ObPacket &ObRequest::get_packet() const
 {
   return *pkt_;
+}
+
+inline void ObRequest::set_ez_req(easy_request_t *r)
+{
+  ez_req_ = r;
+}
+
+inline void ObRequest::enable_request_ratelimit()
+{
+  if (OB_ISNULL(ez_req_)) {
+    RPC_LOG_RET(ERROR, common::OB_INVALID_ARGUMENT, "invalid argument", K(ez_req_));
+  } else {
+    ez_req_->ratelimit_enabled = 1;
+    ez_req_->redispatched = 0;
+  }
+}
+
+inline void ObRequest::set_request_background_flow()
+{
+  if (OB_ISNULL(ez_req_)) {
+    RPC_LOG_RET(ERROR, common::OB_INVALID_ARGUMENT, "invalid argument", K(ez_req_));
+  } else {
+    ez_req_->is_bg_flow = 1;
+  }
+}
+
+inline void ObRequest::set_request_opacket_size(int64_t size)
+{
+  if (OB_ISNULL(ez_req_)) {
+    RPC_LOG_RET(ERROR, common::OB_INVALID_ARGUMENT, "invalid argument", K(ez_req_));
+  } else {
+    ez_req_->opacket_size = size;
+  }
 }
 
 inline int64_t ObRequest::get_receive_timestamp() const
@@ -252,21 +323,64 @@ inline int32_t ObRequest::get_retry_times() const
   return retry_times_;
 }
 
+inline int ObRequest::get_connfd()
+{
+  int connfd = -1;
+  if (TRANSPORT_PROTO_EASY == nio_protocol_) {
+    if (OB_ISNULL(ez_req_)) {
+      RPC_LOG_RET(ERROR, common::OB_INVALID_ARGUMENT, "invalid argument", K(ez_req_));
+    } else {
+      connfd = ez_req_->ms->c->fd;
+    }
+  } else if (TRANSPORT_PROTO_POC == nio_protocol_) {
+    connfd = obmysql::get_fd_from_sess(handle_ctx_);
+  }
+  return connfd;
+}
+
 inline void ObRequest::set_retry_times(const int32_t retry_times)
 {
   retry_times_ = retry_times;
 }
+inline int64_t ObRequest::get_send_timestamp() const
+{
+  // RPC transport removed; OB_RPC send-timestamp unavailable
+  int64_t ts = 0;
+  return ts;
+}
+
+inline easy_request_t *ObRequest::get_ez_req() const
+{
+  return ez_req_;
+}
+
 inline TraceId ObRequest::generate_trace_id(const ObAddr &addr)
 {
   if (trace_id_.is_invalid()) {
-    trace_id_.init(addr);
+    // RPC transport removed; no OB_RPC trace-id extraction
+    if (trace_id_.is_invalid()) {
+      trace_id_.init(addr);
+    }
   }
   return trace_id_;
+}
+
+inline  bool ObRequest::is_from_unix_domain() const
+{
+    bool ret = false;
+    if (ez_req_ != NULL && ez_req_->ms != NULL) {
+      easy_connection_t *c = ez_req_->ms->c;
+      if (c != NULL) {
+        ret = (c->addr.family == AF_UNIX);
+      }
+    }
+    return ret;
 }
 
 void on_translate_fail(ObRequest* req, int ret);
 } // end of namespace rp
 } // end of namespace oceanbase
 #include "ob_sql_request_operator.h"
+#include "ob_req_operator.h"
 
 #endif /* _OCEABASE_RPC_OB_REQUEST_H_ */

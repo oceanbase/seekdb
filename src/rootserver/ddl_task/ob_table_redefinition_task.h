@@ -22,10 +22,6 @@
 
 namespace oceanbase
 {
-namespace sql
-{
-  class ObLoadDataStat;
-}
 namespace rootserver
 {
 class ObRootService;
@@ -101,14 +97,11 @@ private:
   int replica_end_check(const int ret_code);
   int check_modify_autoinc(bool &modify_autoinc);
   int check_use_heap_table_ddl_plan(const share::schema::ObTableSchema *target_table_schema);
-  int get_direct_load_job_stat(common::ObArenaAllocator &allocator, sql::ObLoadDataStat &job_stat);
   int check_ddl_can_retry(const bool ddl_need_retry_at_executor, const share::schema::ObTableSchema *table_schema);
   int check_take_effect_succ(bool &has_took_effect_succ);
   virtual bool is_error_need_retry(const int ret_code) override
   {
-    //we should always retry when the redefinition task is split recovery redefinition
-    return is_partition_split_recovery_table_redefinition(task_type_) ? (task_status_ <= share::ObDDLTaskStatus::TAKE_EFFECT) 
-        : ObDDLTask::is_error_need_retry(ret_code);
+    return ObDDLTask::is_error_need_retry(ret_code);
   }
 private:
   static const int64_t OB_TABLE_REDEFINITION_TASK_VERSION = 1L;

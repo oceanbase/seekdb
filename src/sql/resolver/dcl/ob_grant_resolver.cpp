@@ -349,6 +349,7 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
         if (OB_SUCC(ret)) {
           ObString db = ObString::make_string("");
           ObString table = ObString::make_string("");
+          ObString catalog = ObString::make_string("");
           if (priv_object_node != NULL
               && OB_FAIL(resolve_priv_level_with_object_type(session_info_,
                                                              priv_object_node,
@@ -361,13 +362,14 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
                                                 db,
                                                 table,
                                                 grant_level,
-                                                *allocator_))) {
+                                                *allocator_,
+                                                catalog))) {
             LOG_WARN("Resolve priv_level node error", K(ret));
           } else {
             grant_stmt->set_grant_level(grant_level);
           }
 
-          if (OB_SUCC(ret)) {
+          if (OB_SUCC(ret) && grant_level != OB_PRIV_CATALOG_LEVEL) {
             if (OB_FAIL(check_and_convert_name(db, table))) {
               LOG_WARN("Check and convert name error", K(db), K(table), K(ret));
             } else if (OB_FAIL(grant_stmt->set_database_name(db))) {
@@ -382,6 +384,7 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
                                                           params_.schema_checker_,
                                                           db,
                                                           table,
+                                                          catalog,
                                                           allocator_))) {
             LOG_WARN("failed to resolve priv object", K(ret));
           }
@@ -560,6 +563,8 @@ int ObGrantResolver::resolve_priv_level_with_object_type(const ObSQLSessionInfo 
       // do nothing, compat with mysql
     } else if (priv_object_node->value_ == 2 || priv_object_node->value_ == 3) {
       grant_level = OB_PRIV_ROUTINE_LEVEL;
+    } else if (priv_object_node->value_ == 4) {
+      grant_level = OB_PRIV_CATALOG_LEVEL;
     } else if (priv_object_node->value_ == 5) {
         grant_level = OB_PRIV_OBJECT_LEVEL;
     } else {
@@ -581,7 +586,8 @@ int ObGrantResolver::resolve_priv_level(
     ObString &db,
     ObString &table,
     ObPrivLevel &grant_level,
-    ObIAllocator &allocator)
+    ObIAllocator &allocator,
+    ObString &catalog)
 {
   int ret = OB_SUCCESS;
   bool is_grant_routine = (grant_level == OB_PRIV_ROUTINE_LEVEL);
@@ -589,6 +595,13 @@ int ObGrantResolver::resolve_priv_level(
   if (OB_ISNULL(node)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(node), K(ret));
+  } else if (grant_level == OB_PRIV_CATALOG_LEVEL) {
+    if (0 != node->num_child_ || T_IDENT != node->type_) {
+      ret = OB_ERR_PARSE_SQL;
+      LOG_WARN("sql_parser error", K(ret));
+    } else {
+      catalog.assign_ptr(node->str_value_, static_cast<const int32_t>(node->str_len_));
+    }
   } else {
     CK (guard != NULL);
     db = ObString::make_string("");

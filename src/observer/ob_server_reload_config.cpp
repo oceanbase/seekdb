@@ -17,14 +17,19 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "ob_server_reload_config.h"
-#include "storage/tx_storage/ob_memstore_freezer.h"  // previously hidden behind the allocator_mgr.h include chain, make the dependency explicit
+#include "storage/tx_storage/ob_tenant_freezer.h"  // previously hidden behind the allocator_mgr.h include chain, make the dependency explicit
+#include "share/ob_encryption_util.h"  // ObTdeEncryptEngineLoader(moved from config_manager)
 #include "share/rc/ob_module_provider.h"
 #include "lib/alloc/ob_malloc_sample_struct.h"
+#include "lib/allocator/ob_mem_leak_checker.h"
+#include "share/ob_resource_limit.h"
 #include "observer/ob_server.h"
 #include "observer/ob_server_utils.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
-#include "storage/compaction/ob_tablet_scheduler.h"
+#include "storage/compaction/ob_tenant_tablet_scheduler.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
+#include "rpc/frame/ob_net_consts.h"
+#include "rpc/frame/ob_req_packet_code.h"  // rpc::frame::ObReqCheckSumCheckLevel (relocated)
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
@@ -32,6 +37,42 @@ using namespace oceanbase::observer;
 using namespace oceanbase::storage;
 using namespace oceanbase::share;
 
+namespace oceanbase
+{
+namespace observer
+{
+
+int set_cluster_name_hash(const ObString &cluster_name)
+{
+  int ret = OB_SUCCESS;
+  uint64_t cluster_name_hash = 0/*INVALID_CLUSTER_NAME_HASH*/;
+
+  if (OB_FAIL(calc_cluster_name_hash(cluster_name, cluster_name_hash))) {
+    LOG_WARN("failed to calc_cluster_name_hash", KR(ret), K(cluster_name));
+  } else {
+    rpc::frame::ObNetConsts::CLUSTER_NAME_HASH = cluster_name_hash;
+    LOG_INFO("set cluster_name_hash", KR(ret), K(cluster_name), K(cluster_name_hash));
+  }
+  return ret;
+}
+
+int calc_cluster_name_hash(const ObString &cluster_name, uint64_t &cluster_name_hash)
+{
+  int ret = OB_SUCCESS;
+  cluster_name_hash = 0/*INVALID_CLUSTER_NAME_HASH*/;
+
+  if (0 == cluster_name.length()) {
+    cluster_name_hash = 0/*INVALID_CLUSTER_NAME_HASH*/;
+    LOG_INFO("set cluster_name_hash to invalid", K(cluster_name));
+  } else {
+    cluster_name_hash = common::murmurhash(cluster_name.ptr(), cluster_name.length(), 0);
+    LOG_INFO("calc cluster_name_hash for rpc", K(cluster_name), K(cluster_name_hash));
+  }
+
+  return ret;
+}
+}
+}
 ObServerReloadConfig::ObServerReloadConfig(ObServerConfig &config, ObGlobalContext &gctx)
   : ObReloadConfig(&config),
     gctx_(gctx)
@@ -55,6 +96,10 @@ int ObServerReloadConfig::operator()()
     if (OB_TMP_FAIL(ObReloadConfig::operator()())) {
       LOG_WARN("ObReloadConfig operator() failed", K(tmp_ret));
     }
+    if (OB_TMP_FAIL(ObClusterVersion::get_instance().reload_config())) {
+      LOG_WARN("cluster version reload config failed", K(tmp_ret));
+    }
+
     if (OB_TMP_FAIL(OBSERVER.reload_config())) {
       LOG_WARN("reload configuration for ob service fail", K(tmp_ret));
     }
@@ -65,8 +110,16 @@ int ObServerReloadConfig::operator()()
       LOG_WARN("reload ssl config for net frame fail", K(tmp_ret));
     }
 
+    if (OB_TMP_FAIL(ObTdeEncryptEngineLoader::get_instance().reload_config())) {
+      LOG_WARN("reload config for tde encrypt engine fail", K(tmp_ret));
+    }
+    if (OB_TMP_FAIL(ObSrvNetworkFrame::reload_rpc_auth_method())) {
+      LOG_WARN("reload config for rpc auth method fail", K(tmp_ret));
+    }
+
   }
   {
+    enable_malloc_v2(GCONF._enable_malloc_v2);
     GMEMCONF.reload_config(GCONF);
     OB_LOGGER.set_info_as_wdiag(false);
     // reload log config again after get MIN_CLUSTER_VERSION
@@ -98,10 +151,10 @@ int ObServerReloadConfig::operator()()
       (void)reload_trace_log_config(GCONF.enable_record_trace_log);
 
 
-      reload_memstore_freezer_config_();
-      reload_scheduler_config_();
-      if (OB_NOT_NULL(GCTX.server_runtime_controller_)) {
-        GCTX.server_runtime_controller_->reload_request_queue_size();
+      reload_tenant_freezer_config_();
+      reload_tenant_scheduler_config_();
+      if (OB_NOT_NULL(GCTX.omt_)) {
+        GCTX.omt_->reload_tenant_task_queue_size();
       }
   }
 
@@ -114,6 +167,73 @@ int ObServerReloadConfig::operator()()
     }
   }
   lib::AChunkMgr::instance().set_max_chunk_cache_size(cache_size, use_large_chunk_cache);
+
+    // Refresh cluster_name_hash for non arbitration mode
+    if (FAILEDx(set_cluster_name_hash(GCONF.cluster.str()))) {
+      LOG_WARN("failed to set_cluster_name_hash", KR(ret), "cluster_name", GCONF.cluster.str(),
+                                                "cluster_name_len", strlen(GCONF.cluster.str()));
+    }
+
+  // reset mem leak
+  {
+    static common::ObMemLeakChecker::TCharArray last_value;
+    static bool do_once __attribute__((unused)) = [&]() {
+                            STRNCPY(&last_value[0], GCONF.leak_mod_to_check.str(), sizeof(last_value));
+                            return false;
+                          }();
+    if (0 == STRNCMP(last_value, GCONF.leak_mod_to_check.str(), sizeof(last_value))) {
+      // At the end of the observer startup, the config will be reloaded once. If the status is not judged, the trace caught during the startup process will be flushed.
+      // do-nothing
+    } else {
+      reset_mem_leak_checker_label(GCONF.leak_mod_to_check.str());
+
+      STRNCPY(last_value, GCONF.leak_mod_to_check.str(), sizeof(last_value));
+      last_value[sizeof(last_value) - 1] = '\0';
+    }
+  }
+
+#ifndef ENABLE_SANITY
+  {
+    ObMallocAllocator::get_instance()->force_explict_500_malloc_ =
+      GCONF._force_explict_500_malloc;
+  }
+#else
+  {
+    sanity_set_whitelist(GCONF.sanity_whitelist.str());
+    ObMallocAllocator::get_instance()->enable_tenant_leak_memory_protection_ =
+      GCONF._enable_tenant_leak_memory_protection;
+  }
+#endif
+  {
+    ObResourceLimit rl;
+    int tmp_ret = rl.load_config(GCONF._resource_limit_spec.str());
+    if (OB_SUCCESS != tmp_ret) {
+      LOG_WARN("load _resource_limit_spec failed", K(tmp_ret), K(GCONF._resource_limit_spec.str()));
+    } else {
+      LOG_INFO("load _resource_limit_spec succeed", "origin", RL_CONF, "current", rl,
+               K(GCONF._resource_limit_spec.str()));
+      RL_CONF.assign(rl);
+    }
+    ObResourceLimit::IS_ENABLED = GCONF._enable_resource_limit_spec;
+  }
+
+  {
+    auto new_level = rpc::frame::get_rpc_checksum_check_level_from_string(GCONF._rpc_checksum.str());
+    auto orig_level = rpc::frame::get_rpc_checksum_check_level();
+    if (new_level != orig_level) {
+      LOG_INFO("rpc_checksum_check_level changed",
+               "orig", orig_level,
+               "new", new_level);
+    }
+    rpc::frame::set_rpc_checksum_check_level(new_level);
+  }
+
+    auto new_upgrade_stage = obcall::get_upgrade_stage(GCONF._upgrade_stage.str());
+    auto orig_upgrade_stage = GCTX.get_upgrade_stage();
+    if (new_upgrade_stage != orig_upgrade_stage) {
+      LOG_INFO("_upgrade_stage changed", K(new_upgrade_stage), K(orig_upgrade_stage));
+    }
+    (void)GCTX.set_upgrade_stage(new_upgrade_stage);
 
   // syslog bandwidth limitation
   share::ObTaskController::get().set_log_rate_limit(
@@ -148,6 +268,10 @@ int ObServerReloadConfig::operator()()
     common::g_enable_backtrace = GCONF._enable_backtrace_function;
   }
 
+  {
+    ObMallocAllocator::get_instance()->force_malloc_for_absent_tenant_ = GCONF._force_malloc_for_absent_tenant;
+  }
+
   // moved from share ObConfigManager::reload_config(share base must not touch observer components;
   // this function is the original reload_config_func_ call site,order and fail-fast semantics are preserved)
   if (OB_FAIL(ret)) {
@@ -155,22 +279,24 @@ int ObServerReloadConfig::operator()()
     LOG_WARN("reload ssl config for net frame fail", K(ret));
   } else if (OB_FAIL(OBSERVER.get_net_frame().reload_sql_thread_config())) {
     LOG_WARN("reload config for mysql login thread count failed", K(ret));
-  } else if (OB_FAIL(GCTX.server_runtime_controller_->refresh_runtime_resources())) {
-    LOG_WARN("refresh server runtime resources failed", K(ret));
+  } else if (OB_FAIL(ObTdeEncryptEngineLoader::get_instance().reload_config())) {
+    LOG_WARN("reload config for tde encrypt engine fail", K(ret));
+  } else if (OB_FAIL(GCTX.omt_->update_hidden_sys_tenant())) {
+    LOG_WARN("update hidden sys tenant failed", K(ret));
   }
   return ret;
 }
 
-void ObServerReloadConfig::reload_scheduler_config_()
+void ObServerReloadConfig::reload_tenant_scheduler_config_()
 {
-  (void) share::g_mp->dag_scheduler()->reload_config();
-  (void) share::g_mp->tablet_scheduler()->reload_runtime_config();
+  (void) share::g_mp->tenant_dag_scheduler()->reload_config();
+  (void) share::g_mp->tenant_tablet_scheduler()->reload_tenant_config();
 }
 
 
-void ObServerReloadConfig::reload_memstore_freezer_config_()
+void ObServerReloadConfig::reload_tenant_freezer_config_()
 {
-  // The memstore freezer must be updated before ObSharedMemAllocMgr.
-  share::g_mp->memstore_freezer()->reload_config();
+  // NOTICE: tenant freezer should update before ObSharedMemAllocMgr.
+  share::g_mp->tenant_freezer()->reload_config();
   share::g_mp->shared_mem_alloc_mgr()->update_throttle_config();
 }

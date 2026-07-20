@@ -235,9 +235,9 @@ public:
   virtual void SetUp();
   virtual void TearDown() {}
 
-  TestRawDecoder() : runtime_state_()
+  TestRawDecoder() : tenant_ctx_(OB_SERVER_TENANT_ID)
   {
-    share::g_server_runtime = &runtime_state_;
+    share::ObTenantEnv::set_tenant(&tenant_ctx_);
   }
   virtual ~TestRawDecoder() {}
 
@@ -282,17 +282,19 @@ protected:
   common::ObArray<share::schema::ObColDesc> col_descs_;
   ObMicroBlockRawEncoder encoder_;
   MockObTableReadInfo read_info_;
-  share::ObServerRuntimeState runtime_state_;
+  share::ObTenantBase tenant_ctx_;
   int64_t full_column_cnt_;
   ObArenaAllocator allocator_;
 };
 
 void TestRawDecoder::SetUp()
 {
+  oceanbase::ObClusterVersion::get_instance().update_data_version(DATA_CURRENT_VERSION);
   const int64_t tid = 200001;
   ObTableSchema table;
   ObColumnSchemaV2 col;
   table.reset();
+  table.set_tablegroup_id(1);
   table.set_database_id(1);
   table.set_table_id(tid);
   table.set_table_name("test_raw_decoder_schema");
@@ -301,6 +303,7 @@ void TestRawDecoder::SetUp()
   table.set_block_size(2 * 1024);
   table.set_compress_func_name("none");
   table.set_row_store_type(ENCODING_ROW_STORE);
+  table.set_storage_format_version(OB_STORAGE_FORMAT_VERSION_V4);
 
   ObSqlString str;
   for (int64_t i = 0; i < COLUMN_CNT; ++i) {

@@ -447,6 +447,8 @@ public:
   OB_INLINE bool is_wps() const { return is_wps_; }
   OB_INLINE void set_rps(bool v) { is_rps_ = v; }
   OB_INLINE bool is_rps() const { return is_rps_; }
+  OB_INLINE void set_has_sequence(bool v) { is_has_sequence_ = v; }
+  OB_INLINE bool is_has_sequence() const { return is_has_sequence_; }
   OB_INLINE void set_has_out_param(bool v) { is_has_out_param_ = v; }
   OB_INLINE bool is_has_out_param() const { return is_has_out_param_; }
   OB_INLINE void set_external_state(bool v) { is_external_state_ = v; }
@@ -660,10 +662,11 @@ protected:
       uint64_t is_contains_sql_ : 1;
       uint64_t is_wps_ : 1;
       uint64_t is_rps_ : 1;
+      uint64_t is_has_sequence_ : 1;
       uint64_t is_has_out_param_ : 1;
       uint64_t is_external_state_ : 1;
       uint64_t is_has_auto_trans_ : 1; // only for system trigger, has PRAGMA_AUTONOMOUS_TRANSACTION
-      uint64_t reserved_:54;
+      uint64_t reserved_:53;
     };
   };
 };

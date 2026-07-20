@@ -18,6 +18,9 @@
 #define SRC_SQL_ENGINE_BASIC_OB_SELECT_INTO_BASIC_H_
 
 
+#include "lib/restore/ob_io_device.h"
+#include "share/io/ob_backup_storage_info.h"
+#include "share/io/ob_backup_io_adapter.h"
 #include "sql/engine/cmd/ob_load_data_parser.h"
 #include "lib/file/ob_file.h"
 
@@ -26,6 +29,32 @@ namespace oceanbase
 namespace sql
 {
 using CsvCompressType = ObCSVGeneralFormat::ObCSVCompression;
+enum class IntoFileLocation {
+  SERVER_DISK,
+  REMOTE_OSS,
+  REMOTE_COS,
+  REMOTE_HDFS,
+  REMOTE_UNKNOWN,
+  REMOTE_AZBLOB
+};
+struct ObStorageAppender
+{
+  ObStorageAppender();
+  virtual ~ObStorageAppender();
+  void reset();
+
+  int open(const share::ObBackupStorageInfo *storage_info,
+           const common::ObString &uri,
+           const common::ObStorageAccessType &access_type);
+  int append(const char *buf, const int64_t size, int64_t &write_size);
+  int close();
+
+  bool is_opened_;
+  int64_t offset_;
+  ObIOFd fd_;
+  ObIODevice *device_handle_;
+  ObStorageAccessType access_type_;
+};
 
 class ObOutfileStreamCompressor
 {
@@ -84,6 +113,8 @@ class ObCompressStreamWriter
 public:
   ObCompressStreamWriter()
   : file_appender_(NULL),
+    storage_appender_(NULL),
+    file_location_(IntoFileLocation::SERVER_DISK),
     compress_type_(CsvCompressType::NONE),
     buf_(NULL),
     buf_len_(0),
@@ -95,6 +126,8 @@ public:
   {}
 
   int init(ObFileAppender *file_appender,
+           ObStorageAppender *storage_appender,
+           IntoFileLocation file_location,
            CsvCompressType compress_type,
            ObIAllocator &allocator,
            int64_t buffer_size);
@@ -118,6 +151,8 @@ private:
 
 private:
   ObFileAppender *file_appender_;
+  ObStorageAppender *storage_appender_;
+  IntoFileLocation file_location_;
   CsvCompressType compress_type_;
   char *buf_;
   int64_t buf_len_;

@@ -20,6 +20,7 @@
 #define protected public
 
 #include "observer/scheduler/ob_dag_warning_history_mgr.h"
+#include "share/ob_unit_getter.h"
 #include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
@@ -32,8 +33,8 @@ using namespace compaction;
 
 namespace unittest
 {
-// Publish the locally-created manager through share::g_mp and a file-local
-// MTL(T) shim.
+// T3d single-tenant: tenant slot/MTL read mechanism removed. This test publishes
+// its locally-created manager through share::g_mp and a file-local MTL(T) shim.
 class TestDagWarnProvider : public share::ObIModuleProvider
 {
 public:
@@ -120,15 +121,13 @@ public:
     int ret = OB_SUCCESS;
     if (!is_inited_) {
       ret = OB_NOT_INIT;
-    } else if (OB_FAIL(ADD_DAG_WARN_INFO_PARAM(out_param, allocator, get_type(),
-                                              1 /* ls_id */, 2 /* tablet_id */,
-                                              "table_id", 10))) {
+    } else if (OB_FAIL(ADD_DAG_WARN_INFO_PARAM(out_param, allocator, get_type(), 2, "table_id", 10))) {
       COMMON_LOG(WARN, "fail to add dag warning info param", K(ret));
     }
     return ret;
   }
   virtual int fill_dag_key(char *buf,const int64_t size) const override { UNUSEDx(buf, size); return OB_SUCCESS; }
-  virtual bool uses_reserved_allocator() const override { return false; }
+  virtual bool is_ha_dag() const override { return false; }
   INHERIT_TO_STRING_KV("ObIDag", ObIDag, K_(is_inited), K_(type), K(task_list_.get_size()), K_(dag_ret));
 
 private:

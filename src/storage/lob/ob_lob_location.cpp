@@ -29,7 +29,7 @@ int ObLobLocationUtil::is_remote(ObLobAccessParam& param, bool& is_remote, commo
 {
   int ret = OB_SUCCESS;
   ObLobLocatorV2 *lob_locator = param.lob_locator_;
-
+  
   const ObAddr &self_addr = MYADDR;
   if (lob_locator == nullptr) {
     is_remote = false;
@@ -54,7 +54,7 @@ int ObLobLocationUtil::is_remote(ObLobAccessParam& param, bool& is_remote, commo
       dst_addr = self_addr;
     }
     if (OB_SUCC(ret)) {
-      // A locator that points at another address uses the retry path.
+      // lob from other tenant also should read by rpc
       is_remote = (dst_addr != self_addr) || (false);
       if (param.from_rpc_ == true && is_remote) {
         ret = OB_NOT_MASTER;
@@ -75,9 +75,9 @@ int ObLobLocationUtil::lob_check_tablet_not_exist(ObLobAccessParam &param, uint6
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid schema service", KR(ret), K(GCTX.schema_service_));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
-    // Runtime schema may not be ready during startup or shutdown.
-    LOG_WARN("get runtime schema guard fail", KR(ret));
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    // tenant could be deleted
+    LOG_WARN("get tenant schema guard fail", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
     LOG_WARN("failed to get table schema", KR(ret));
   } else if (OB_ISNULL(table_schema)) {
@@ -97,13 +97,14 @@ int ObLobLocationUtil::lob_refresh_location(ObLobAccessParam &param, int last_er
 {
   int ret = OB_SUCCESS;
   ObLobLocatorV2 *lob_locator = param.lob_locator_;
+  const ObAddr &self_addr = MYADDR;
   ObMemLobExternHeader *extern_header = NULL;
   bool has_retry_info = false;
   if (OB_NOT_NULL(lob_locator) && OB_SUCC(lob_locator->get_extern_header(extern_header))) {
     has_retry_info = extern_header->flags_.has_retry_info_;
   }
 
-
+  
 
   if (!has_retry_info) {
     // do check remote
@@ -120,11 +121,16 @@ int ObLobLocationUtil::lob_refresh_location(ObLobAccessParam &param, int last_er
     sql::ObDASTableLocMeta loc_meta(tmp_allocator);
     loc_meta.ref_table_id_ = extern_header->table_id_;
     sql::ObDASTabletLoc tablet_loc;
+    ObMemLobRetryInfo *retry_info = nullptr;
     ObMemLobLocationInfo *location_info = nullptr;
     if (last_err == OB_TABLET_NOT_EXIST && OB_FAIL(ObLobLocationUtil::lob_check_tablet_not_exist(param, extern_header->table_id_))) {
       LOG_WARN("fail to check tablet not exist", K(ret), K(extern_header->table_id_), K(last_err), K(retry_cnt));
+    } else if (OB_FAIL(lob_locator->get_retry_info(retry_info))) {
+      LOG_WARN("fail to get retry info", K(ret), KPC(lob_locator), K(last_err), K(retry_cnt));
     } else if (OB_FAIL(lob_locator->get_location_info(location_info))) {
       LOG_WARN("failed to get location info", K(ret), KPC(lob_locator), K(last_err), K(retry_cnt));
+    } else if (OB_FALSE_IT(loc_meta.select_leader_ = retry_info->is_select_leader_)) {
+       // use main tablet id to get location, for lob meta tablet is same location as main tablet
     } else if (OB_FAIL(router.get_tablet_loc(loc_meta, param.tablet_id_, tablet_loc))) {
       LOG_WARN("fail to refresh location", K(ret), K(last_err), K(retry_cnt));
     } else if (param.tablet_id_ != tablet_loc.tablet_id_ || location_info->tablet_id_ != tablet_loc.tablet_id_.id()) {

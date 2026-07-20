@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_rb_memory_mgr.h"
-#include "share/rc/ob_server_runtime.h"  // Explicit server runtime dependency for allocation.
+#include "share/rc/ob_tenant_base.h"  // MTL/MTL_ID, previously hidden behind the log_service include chain, make the dependency explicit(free within share)
 
 namespace oceanbase
 {

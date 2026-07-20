@@ -101,7 +101,8 @@ int ObCreateTableLikeHelper::check_schema_valid_(const ObTableSchema *&orig_tabl
                                         helper.convert(arg_.origin_table_name_),
                    "BASE TABLE");
   } else if (is_inner_table(orig_table_schema->get_table_id())) {
-    // Creating user tables from system tables may cause unexpected problems.
+    // tablegroup of system table is oceanbase,
+    // Including the user table in it may cause some unexpected problems, please ban it here
     // https://work.aone.alibaba-inc.com/issue/22213436
     ret = OB_ERR_WRONG_OBJECT;
     ObCStringHelper helper;
@@ -200,6 +201,7 @@ int ObCreateTableLikeHelper::generate_table_schema_()
     if (new_table_schema.is_user_table()
         && TMP_TABLE == arg_.table_type_) {
       new_table_schema.set_table_type(arg_.table_type_);
+      new_table_schema.set_create_host(arg_.create_host_);
       new_table_schema.set_session_id(arg_.session_id_);
     }
     if (orig_table_schema->is_primary_vp_table()) {

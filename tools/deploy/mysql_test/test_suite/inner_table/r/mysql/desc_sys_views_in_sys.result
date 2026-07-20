@@ -95,8 +95,6 @@ TABLE_COLLATION	varchar(32)	NO
 CHECKSUM	bigint(0) unsigned	NO			
 CREATE_OPTIONS	varchar(255)	NO			
 TABLE_COMMENT	text	NO			
-AUTO_SPLIT	varchar(16)	NO			
-AUTO_SPLIT_TABLET_SIZE	bigint(20) unsigned	NO			
 ORGANIZATION	varchar(12)	NO			
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from information_schema.TABLES limit 1);
 cnt
@@ -329,8 +327,6 @@ USER_IO_WAIT_TIME	bigint(20) unsigned	NO		NULL
 ROWS_PROCESSED	bigint(20)	NO		NULL	
 ELAPSED_TIME	bigint(20) unsigned	NO		NULL	
 CPU_TIME	bigint(20) unsigned	NO		NULL	
-LARGE_QUERYS	bigint(20)	NO		NULL	
-DELAYED_LARGE_QUERYS	bigint(20)	NO		NULL	
 DELAYED_PX_QUERYS	bigint(20)	NO		NULL	
 OUTLINE_VERSION	bigint(20)	NO		NULL	
 OUTLINE_ID	bigint(20)	NO		NULL	
@@ -355,95 +351,6 @@ ADAPTIVE_FEEDBACK_TIMES	bigint(20)	NO		NULL
 FIRST_GET_PLAN_TIME	bigint(20)	NO		NULL	
 FIRST_EXE_USEC	bigint(20)	NO		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT limit 1);
-cnt
-1
-desc oceanbase.V$SQL_PLAN_MONITOR;
-Field	Type	Null	Key	Default	Extra
-CON_ID	bigint(1)	NO			
-REQUEST_ID	bigint(20)	NO		NULL	
-KEY	bigint(0) unsigned	NO			
-STATUS	varchar(19)	NO			
-TRACE_ID	varchar(64)	NO		NULL	
-DB_TIME	bigint(20)	NO		NULL	
-USER_IO_WAIT_TIME	bigint(20)	NO		NULL	
-OTHER_WAIT_TIME	bigint(0) unsigned	NO			
-FIRST_REFRESH_TIME	timestamp(6)	YES		NULL	
-LAST_REFRESH_TIME	timestamp(6)	YES		NULL	
-FIRST_CHANGE_TIME	timestamp(6)	YES		NULL	
-LAST_CHANGE_TIME	timestamp(6)	YES		NULL	
-REFRESH_COUNT	bigint(0) unsigned	NO			
-SID	bigint(0) unsigned	NO			
-PROCESS_NAME	bigint(20)	NO		NULL	
-SQL_ID	varchar(32)	NO		NULL	
-SQL_EXEC_START	bigint(0) unsigned	NO			
-SQL_EXEC_ID	bigint(0) unsigned	NO			
-SQL_PLAN_HASH_VALUE	bigint(20) unsigned	NO		NULL	
-SQL_CHILD_ADDRESS	varbinary(8)	NO			
-PLAN_PARENT_ID	bigint(0) unsigned	NO			
-PLAN_LINE_ID	bigint(20)	NO		NULL	
-PLAN_OPERATION	varchar(128)	NO		NULL	
-PLAN_OPTIONS	varchar(30)	NO			
-PLAN_OBJECT_OWNER	varchar(128)	NO			
-PLAN_OBJECT_NAME	varchar(128)	NO			
-PLAN_OBJECT_TYPE	varchar(80)	NO			
-PLAN_DEPTH	bigint(20)	NO		NULL	
-PLAN_POSITION	bigint(0) unsigned	NO			
-PLAN_COST	bigint(0) unsigned	NO			
-PLAN_CARDINALITY	bigint(0) unsigned	NO			
-PLAN_BYTES	bigint(0) unsigned	NO			
-PLAN_TIME	bigint(0) unsigned	NO			
-PLAN_PARTITION_START	bigint(0) unsigned	NO			
-PLAN_PARTITION_STOP	bigint(0) unsigned	NO			
-PLAN_CPU_COST	bigint(0) unsigned	NO			
-PLAN_IO_COST	bigint(0) unsigned	NO			
-PLAN_TEMP_SPACE	bigint(0) unsigned	NO			
-STARTS	bigint(20)	NO		NULL	
-OUTPUT_ROWS	bigint(20)	NO		NULL	
-IO_INTERCONNECT_BYTES	bigint(0) unsigned	NO			
-PHYSICAL_READ_REQUESTS	bigint(0) unsigned	NO			
-PHYSICAL_READ_BYTES	bigint(0) unsigned	NO			
-PHYSICAL_WRITE_REQUESTS	bigint(0) unsigned	NO			
-PHYSICAL_WRITE_BYTES	bigint(0) unsigned	NO			
-WORKAREA_MEM	bigint(20) unsigned	NO		NULL	
-WORKAREA_MAX_MEM	bigint(20) unsigned	NO		NULL	
-WORKAREA_TEMPSEG	bigint(20) unsigned	NO		NULL	
-WORKAREA_MAX_TEMPSEG	bigint(20) unsigned	NO		NULL	
-OTHERSTAT_GROUP_ID	bigint(0) unsigned	NO			
-OTHERSTAT_1_ID	bigint(20)	NO		NULL	
-OTHERSTAT_1_TYPE	bigint(0) unsigned	NO			
-OTHERSTAT_1_VALUE	bigint(20)	NO		NULL	
-OTHERSTAT_2_ID	bigint(20)	NO		NULL	
-OTHERSTAT_2_TYPE	bigint(0) unsigned	NO			
-OTHERSTAT_2_VALUE	bigint(20)	NO		NULL	
-OTHERSTAT_3_ID	bigint(20)	NO		NULL	
-OTHERSTAT_3_TYPE	bigint(0) unsigned	NO			
-OTHERSTAT_3_VALUE	bigint(20)	NO		NULL	
-OTHERSTAT_4_ID	bigint(20)	NO		NULL	
-OTHERSTAT_4_TYPE	bigint(0) unsigned	NO			
-OTHERSTAT_4_VALUE	bigint(20)	NO		NULL	
-OTHERSTAT_5_ID	bigint(20)	NO		NULL	
-OTHERSTAT_5_TYPE	bigint(0) unsigned	NO			
-OTHERSTAT_5_VALUE	bigint(20)	NO		NULL	
-OTHERSTAT_6_ID	bigint(20)	NO		NULL	
-OTHERSTAT_6_TYPE	bigint(0) unsigned	NO			
-OTHERSTAT_6_VALUE	bigint(20)	NO		NULL	
-OTHERSTAT_7_ID	bigint(20)	NO		NULL	
-OTHERSTAT_7_TYPE	bigint(0) unsigned	NO			
-OTHERSTAT_7_VALUE	bigint(20)	NO		NULL	
-OTHERSTAT_8_ID	bigint(20)	NO		NULL	
-OTHERSTAT_8_TYPE	bigint(0) unsigned	NO			
-OTHERSTAT_8_VALUE	bigint(20)	NO		NULL	
-OTHERSTAT_9_ID	bigint(20)	NO		NULL	
-OTHERSTAT_9_TYPE	bigint(0) unsigned	NO			
-OTHERSTAT_9_VALUE	bigint(20)	NO		NULL	
-OTHERSTAT_10_ID	bigint(20)	NO		NULL	
-OTHERSTAT_10_TYPE	bigint(0) unsigned	NO			
-OTHERSTAT_10_VALUE	bigint(20)	NO		NULL	
-OTHER_XML	varchar(255)	NO			
-PLAN_OPERATION_INACTIVE	bigint(0) unsigned	NO			
-OUTPUT_BATCHES	bigint(20)	NO		NULL	
-SKIPPED_ROWS_COUNT	bigint(20)	NO		NULL	
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.V$SQL_PLAN_MONITOR limit 1);
 cnt
 1
 desc oceanbase.DBA_RECYCLEBIN;
@@ -639,18 +546,6 @@ CONTAIN_UNCOMMITTED_ROW	varchar(3)	NO		NULL
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.V$OB_SSTABLES limit 1);
 cnt
 1
-desc oceanbase.V$SQL_MONITOR_STATNAME;
-Field	Type	Null	Key	Default	Extra
-CON_ID	bigint(0) unsigned	NO			
-ID	bigint(20)	NO		NULL	
-GROUP_ID	bigint(20)	NO		NULL	
-NAME	varchar(40)	NO		NULL	
-DESCRIPTION	varchar(200)	NO		NULL	
-TYPE	bigint(20)	NO		NULL	
-FLAGS	bigint(1)	NO			
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.V$SQL_MONITOR_STATNAME limit 1);
-cnt
-1
 desc oceanbase.V$OB_MERGE_INFO;
 Field	Type	Null	Key	Default	Extra
 TABLET_ID	bigint(20)	NO		NULL	
@@ -769,12 +664,6 @@ NAME6	varchar(256)	YES		NULL
 VALUE6	varchar(256)	YES		NULL	
 EXTRA_INFO	varchar(256)	YES		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_OB_ROOTSERVICE_EVENT_HISTORY limit 1);
-cnt
-1
-desc oceanbase.DBA_OB_TABLET_TO_LS;
-Field	Type	Null	Key	Default	Extra
-TABLET_ID	bigint(20)	NO		NULL	
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_OB_TABLET_TO_LS limit 1);
 cnt
 1
 desc oceanbase.DBA_OB_TABLET_REPLICAS;
@@ -926,12 +815,12 @@ DEF_FREELISTS	bigint(0)	NO
 DEF_FREELIST_GROUPS	bigint(0)	NO			
 DEF_LOGGING	varchar(7)	NO			
 DEF_COMPRESSION	varchar(8)	NO			
-DEF_COMPRESS_FOR	varchar(12)	NO			
+DEF_COMPRESS_FOR	varchar(12)	NO		NULL	
 DEF_BUFFER_POOL	varchar(7)	NO			
 DEF_FLASH_CACHE	varchar(7)	NO			
 DEF_CELL_FLASH_CACHE	varchar(7)	NO			
 REF_PTN_CONSTRAINT_NAME	varchar(30)	NO			
-INTERVAL	text	NO			
+INTERVAL	text	YES		NULL	
 AUTOLIST	varchar(3)	NO			
 INTERVAL_SUBPARTITION	text	NO			
 AUTOLIST_SUBPARTITION	varchar(3)	NO			
@@ -1341,26 +1230,22 @@ MEMORY_USAGE	bigint(20)	YES		NULL
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.V$OB_PROCESSLIST limit 1);
 cnt
 1
-desc oceanbase.V$OB_TRANSACTION_PARTICIPANTS;
+desc oceanbase.V$OB_TRANSACTION_WRITE_STATE;
 Field	Type	Null	Key	Default	Extra
 SESSION_ID	bigint(20)	NO		NULL	
-SCHEDULER_ADDR	varchar(64)	NO		NULL	
-TX_TYPE	varchar(11)	NO			
 TX_ID	bigint(20)	NO		NULL	
-PARTICIPANTS	varchar(1024)	NO		NULL	
+WRITE_STATE	varchar(1024)	NO		NULL	
 CTX_CREATE_TIME	timestamp(6)	YES		NULL	
 TX_EXPIRED_TIME	timestamp(6)	YES		NULL	
 STATE	varchar(13)	NO			
 ACTION	varchar(10)	NO			
 PENDING_LOG_SIZE	bigint(20)	NO		NULL	
 FLUSHED_LOG_SIZE	bigint(20)	NO		NULL	
-ROLE	varchar(8)	NO			
-COORD	bigint(20)	NO		NULL	
 LAST_REQUEST_TIME	timestamp(6)	YES		NULL	
 FORMATID	bigint(20)	NO			
 GLOBALID	varchar(257)	NO		NULL	
 BRANCHID	varchar(257)	NO		NULL	
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.V$OB_TRANSACTION_PARTICIPANTS limit 1);
+select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.V$OB_TRANSACTION_WRITE_STATE limit 1);
 cnt
 1
 desc oceanbase.V$OB_TABLET_COMPACTION_HISTORY;
@@ -1766,13 +1651,7 @@ cnt
 1
 desc oceanbase.V$OB_LOG_STAT;
 Field	Type	Null	Key	Default	Extra
-ROLE	varchar(32)	NO		NULL	
-PROPOSAL_ID	bigint(20)	NO		NULL	
-CONFIG_VERSION	varchar(128)	NO		NULL	
 ACCESS_MODE	varchar(32)	NO		NULL	
-PAXOS_MEMBER_LIST	varchar(1024)	NO		NULL	
-PAXOS_REPLICA_NUM	bigint(20)	NO		NULL	
-IN_SYNC	varchar(3)	NO		NULL	
 BASE_LSN	bigint(20) unsigned	NO		NULL	
 BEGIN_LSN	bigint(20) unsigned	NO		NULL	
 BEGIN_SCN	bigint(20) unsigned	NO		NULL	
@@ -1780,9 +1659,6 @@ END_LSN	bigint(20) unsigned	NO		NULL
 END_SCN	bigint(20) unsigned	NO		NULL	
 MAX_LSN	bigint(20) unsigned	NO		NULL	
 MAX_SCN	bigint(20) unsigned	NO		NULL	
-ARBITRATION_MEMBER	varchar(128)	NO		NULL	
-DEGRADED_LIST	varchar(1024)	NO		NULL	
-LEARNER_LIST	longtext	NO		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.V$OB_LOG_STAT limit 1);
 cnt
 1
@@ -2111,9 +1987,7 @@ Field	Type	Null	Key	Default	Extra
 SESSION_ID	bigint(20)	NO		NULL	
 TX_ID	bigint(20)	NO		NULL	
 STATE	varchar(18)	NO			
-CLUSTER_ID	bigint(20)	NO		NULL	
-COORDINATOR	bigint(20)	NO		NULL	
-PARTICIPANTS	varchar(1024)	YES		NULL	
+WRITE_STATE	varchar(1024)	YES		NULL	
 ISOLATION_LEVEL	varchar(16)	NO			
 SNAPSHOT_VERSION	bigint(20) unsigned	YES		NULL	
 ACCESS_MODE	varchar(10)	NO			
@@ -2183,15 +2057,6 @@ PARTITION_COMMENT	text	NO
 NODEGROUP	varchar(256)	NO			
 TABLESPACE_NAME	varchar(268)	NO			
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from information_schema.PARTITIONS limit 1);
-cnt
-1
-desc oceanbase.DBA_OB_DATA_DICTIONARY_IN_LOG;
-Field	Type	Null	Key	Default	Extra
-SNAPSHOT_SCN	bigint(20) unsigned	NO		NULL	
-REPORT_TIME	timestamp(6)	YES			
-START_LSN	bigint(20) unsigned	NO		NULL	
-END_LSN	bigint(20) unsigned	NO		NULL	
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_OB_DATA_DICTIONARY_IN_LOG limit 1);
 cnt
 1
 desc oceanbase.V$OB_OPT_STAT_GATHER_MONITOR;
@@ -2268,21 +2133,6 @@ HOLD_SIZE	bigint(20)	NO		NULL
 TIMEOUT_TS	datetime	NO		NULL	
 START_TIME	datetime	NO		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.V$OB_PX_P2P_DATAHUB limit 1);
-cnt
-1
-desc oceanbase.V$SQL_JOIN_FILTER;
-Field	Type	Null	Key	Default	Extra
-QC_SESSION_ID	bigint(0)	NO			
-QC_INSTANCE_ID	bigint(0)	NO			
-SQL_PLAN_HASH_VALUE	bigint(20) unsigned	NO		NULL	
-FILTER_ID	bigint(20)	NO		NULL	
-BITS_SET	bigint(0)	NO			
-FILTERED	bigint(20)	NO		NULL	
-PROBED	bigint(20)	NO		NULL	
-ACTIVE	bigint(0)	NO			
-CON_ID	bigint(1)	NO			
-TRACE_ID	varchar(64)	NO		NULL	
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.V$SQL_JOIN_FILTER limit 1);
 cnt
 1
 desc oceanbase.DBA_OB_TABLE_STAT_STALE_INFO;
@@ -2488,179 +2338,6 @@ Column_name	varchar(128)	NO		NULL
 Column_priv	varchar(31)	NO			
 Timestamp	datetime	YES			
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from mysql.columns_priv limit 1);
-cnt
-1
-desc oceanbase.DBA_MVIEW_LOGS;
-Field	Type	Null	Key	Default	Extra
-LOG_OWNER	varchar(128)	NO			
-MASTER	varchar(128)	NO			
-LOG_TABLE	varchar(128)	NO			
-LOG_TRIGGER	varchar(128)	NO			
-ROWIDS	varchar(3)	NO			
-PRIMARY_KEY	varchar(3)	NO			
-OBJECT_ID	varchar(3)	NO			
-FILTER_COLUMNS	varchar(3)	NO			
-SEQUENCE	varchar(3)	NO			
-INCLUDE_NEW_VALUES	varchar(3)	NO			
-PURGE_ASYNCHRONOUS	varchar(3)	NO			
-PURGE_DEFERRED	varchar(3)	NO			
-PURGE_START	datetime	YES		NULL	
-PURGE_INTERVAL	varchar(200)	YES		NULL	
-LAST_PURGE_DATE	datetime	YES		NULL	
-LAST_PURGE_STATUS	bigint(1)	NO			
-NUM_ROWS_PURGED	bigint(20)	YES		NULL	
-COMMIT_SCN_BASED	varchar(3)	NO			
-STAGING_LOG	varchar(3)	NO			
-PURGE_DOP	bigint(20)	NO			
-LAST_PURGE_TIME	bigint(20)	YES		NULL	
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_MVIEW_LOGS limit 1);
-cnt
-1
-desc oceanbase.DBA_MVIEWS;
-Field	Type	Null	Key	Default	Extra
-OWNER	varchar(128)	NO			
-MVIEW_NAME	varchar(128)	NO			
-CONTAINER_NAME	varchar(128)	NO			
-QUERY	longtext	NO		NULL	
-QUERY_LEN	bigint(20)	NO			
-UPDATABLE	varchar(1)	NO			
-UPDATE_LOG	varchar(128)	NO			
-MASTER_ROLLBACK_SEG	varchar(128)	NO			
-MASTER_LINK	varchar(128)	NO			
-REWRITE_ENABLED	varchar(1)	NO			
-REWRITE_CAPABILITY	varchar(9)	NO			
-REFRESH_MODE	varchar(32)	NO			
-REFRESH_METHOD	varchar(8)	NO			
-BUILD_MODE	varchar(9)	NO			
-FAST_REFRESHABLE	varchar(18)	NO			
-LAST_REFRESH_TYPE	varchar(8)	NO			
-LAST_REFRESH_DATE	datetime	YES		NULL	
-LAST_REFRESH_END_TIME	datetime	NO			
-STALENESS	varchar(19)	NO			
-AFTER_FAST_REFRESH	varchar(19)	NO			
-UNKNOWN_PREBUILT	varchar(1)	NO			
-UNKNOWN_PLSQL_FUNC	varchar(1)	NO			
-UNKNOWN_EXTERNAL_TABLE	varchar(1)	NO			
-UNKNOWN_CONSIDER_FRESH	varchar(1)	NO			
-UNKNOWN_IMPORT	varchar(1)	NO			
-UNKNOWN_TRUSTED_FD	varchar(1)	NO			
-COMPILE_STATE	varchar(19)	NO			
-USE_NO_INDEX	varchar(1)	NO			
-STALE_SINCE	datetime	NO			
-NUM_PCT_TABLES	bigint(0)	NO			
-NUM_FRESH_PCT_REGIONS	bigint(0)	NO			
-NUM_STALE_PCT_REGIONS	bigint(0)	NO			
-SEGMENT_CREATED	varchar(3)	NO			
-EVALUATION_EDITION	varchar(128)	NO			
-UNUSABLE_BEFORE	varchar(128)	NO			
-UNUSABLE_BEGINNING	varchar(128)	NO			
-DEFAULT_COLLATION	varchar(100)	NO			
-ON_QUERY_COMPUTATION	varchar(1)	NO			
-REFRESH_DOP	bigint(20)	NO			
-DATA_SYNC_SCN	bigint(20) unsigned	NO			
-DATA_SYNC_DELAY	varchar(128)	NO			
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_MVIEWS limit 1);
-cnt
-1
-desc oceanbase.DBA_MVREF_STATS_SYS_DEFAULTS;
-Field	Type	Null	Key	Default	Extra
-PARAMETER_NAME	varchar(16)	NO			
-VALUE	varchar(40)	NO			
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_MVREF_STATS_SYS_DEFAULTS limit 1);
-cnt
-1
-desc oceanbase.DBA_MVREF_STATS_PARAMS;
-Field	Type	Null	Key	Default	Extra
-MV_OWNER	varchar(128)	NO			
-MV_NAME	varchar(128)	NO			
-COLLECTION_LEVEL	varchar(8)	NO			
-RETENTION_PERIOD	bigint(20)	NO			
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_MVREF_STATS_PARAMS limit 1);
-cnt
-1
-desc oceanbase.DBA_MVREF_RUN_STATS;
-Field	Type	Null	Key	Default	Extra
-RUN_OWNER	varchar(128)	NO		NULL	
-REFRESH_ID	bigint(20)	NO		NULL	
-NUM_MVS	bigint(20)	NO		NULL	
-MVIEWS	text	NO		NULL	
-BASE_TABLES	text	YES		NULL	
-METHOD	text	YES		NULL	
-ROLLBACK_SEG	text	YES		NULL	
-PUSH_DEFERRED_RPC	varchar(1)	NO			
-REFRESH_AFTER_ERRORS	varchar(1)	NO			
-PURGE_OPTION	bigint(20)	NO		NULL	
-PARALLELISM	bigint(20)	NO		NULL	
-HEAP_SIZE	bigint(20)	NO		NULL	
-ATOMIC_REFRESH	varchar(1)	NO			
-NESTED	varchar(1)	NO			
-OUT_OF_PLACE	varchar(1)	NO			
-NUMBER_OF_FAILURES	bigint(20)	NO		NULL	
-START_TIME	datetime	NO		NULL	
-END_TIME	datetime	NO		NULL	
-ELAPSED_TIME	bigint(20)	NO		NULL	
-LOG_SETUP_TIME	bigint(1)	NO			
-LOG_PURGE_TIME	bigint(20)	NO		NULL	
-COMPLETE_STATS_AVAILABLE	varchar(1)	NO			
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_MVREF_RUN_STATS limit 1);
-cnt
-1
-desc oceanbase.DBA_MVREF_STATS;
-Field	Type	Null	Key	Default	Extra
-MV_OWNER	varchar(128)	NO			
-MV_NAME	varchar(128)	NO			
-REFRESH_ID	bigint(20)	NO		NULL	
-REFRESH_METHOD	varchar(30)	NO			
-REFRESH_OPTIMIZATIONS	text	NO			
-ADDITIONAL_EXECUTIONS	text	NO			
-START_TIME	datetime	NO		NULL	
-END_TIME	datetime	NO		NULL	
-ELAPSED_TIME	bigint(20)	NO		NULL	
-LOG_SETUP_TIME	bigint(1)	NO			
-LOG_PURGE_TIME	bigint(20)	NO		NULL	
-INITIAL_NUM_ROWS	bigint(20)	NO		NULL	
-FINAL_NUM_ROWS	bigint(20)	NO		NULL	
-RESULT	bigint(20)	NO		NULL	
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_MVREF_STATS limit 1);
-cnt
-1
-desc oceanbase.DBA_MVREF_CHANGE_STATS;
-Field	Type	Null	Key	Default	Extra
-TBL_OWNER	varchar(128)	NO			
-TBL_NAME	varchar(128)	NO			
-MV_OWNER	varchar(128)	NO			
-MV_NAME	varchar(128)	NO			
-REFRESH_ID	bigint(20)	NO		NULL	
-NUM_ROWS_INS	bigint(20)	YES		NULL	
-NUM_ROWS_UPD	bigint(20)	YES		NULL	
-NUM_ROWS_DEL	bigint(20)	YES		NULL	
-NUM_ROWS_DL_INS	bigint(1)	NO			
-PMOPS_OCCURRED	varchar(1)	NO			
-PMOP_DETAILS	text	NO			
-NUM_ROWS	bigint(20)	YES		NULL	
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_MVREF_CHANGE_STATS limit 1);
-cnt
-1
-desc oceanbase.DBA_MVREF_STMT_STATS;
-Field	Type	Null	Key	Default	Extra
-MV_OWNER	varchar(128)	NO			
-MV_NAME	varchar(128)	NO			
-REFRESH_ID	bigint(20)	NO		NULL	
-STEP	bigint(20)	NO		NULL	
-SQLID	varchar(32)	YES		NULL	
-STMT	longtext	NO		NULL	
-EXECUTION_TIME	bigint(20)	NO		NULL	
-EXECUTION_PLAN	longtext	YES		NULL	
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_MVREF_STMT_STATS limit 1);
-cnt
-1
-desc oceanbase.V$OB_COMPATIBILITY_CONTROL;
-Field	Type	Null	Key	Default	Extra
-NAME	varchar(128)	NO		NULL	
-DESCRIPTION	varchar(4096)	NO		NULL	
-IS_ENABLE	varchar(5)	NO		NULL	
-ENABLE_VERSIONS	longtext	NO		NULL	
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.V$OB_COMPATIBILITY_CONTROL limit 1);
 cnt
 1
 desc information_schema.INNODB_LOCK_WAITS;
@@ -3148,26 +2825,6 @@ REQUIRED_SIZE	decimal(42,0)	NO
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_OB_TABLE_SPACE_USAGE limit 1);
 cnt
 1
-desc oceanbase.V$OB_LOG_TRANSPORT_DEST_STAT;
-Field	Type	Null	Key	Default	Extra
-CLIENT_IP	varchar(46)	NO		NULL	
-CLIENT_PID	bigint(20)	NO		NULL	
-CLIENT_TYPE	varchar(7)	NO		NULL	
-START_SERVE_TIME	timestamp(6)	NO		NULL	
-LAST_SERVE_TIME	timestamp(6)	NO		NULL	
-LAST_READ_SOURCE	varchar(7)	NO		NULL	
-LAST_REQUEST_TYPE	varchar(24)	NO		NULL	
-LAST_REQUEST_LOG_LSN	bigint(20) unsigned	NO		NULL	
-LAST_REQUEST_LOG_SCN	bigint(20) unsigned	NO		NULL	
-LAST_FAILED_REQUEST	longtext	NO		NULL	
-AVG_REQUEST_PROCESS_TIME	bigint(20)	NO		NULL	
-AVG_REQUEST_QUEUE_TIME	bigint(20)	NO		NULL	
-AVG_REQUEST_READ_LOG_TIME	bigint(20)	NO		NULL	
-AVG_REQUEST_READ_LOG_SIZE	bigint(20)	NO		NULL	
-AVG_LOG_TRANSPORT_BANDWIDTH	varchar(29)	NO			
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.V$OB_LOG_TRANSPORT_DEST_STAT limit 1);
-cnt
-1
 desc information_schema.INNODB_SYS_FIELDS;
 Field	Type	Null	Key	Default	Extra
 INDEX_ID	bigint(0) unsigned	NO			
@@ -3295,58 +2952,6 @@ FORMAT_SQLID	varchar(32)	NO		NULL
 CURRENT_CONCURRENCY	bigint(20)	NO		NULL	
 MAX_CONCURRENCY	bigint(20)	NO		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.V$OB_SQL_CCL_STATUS limit 1);
-cnt
-1
-desc oceanbase.DBA_MVIEW_RUNNING_JOBS;
-Field	Type	Null	Key	Default	Extra
-TABLE_NAME	varchar(256)	NO			
-JOB_TYPE	varchar(64)	NO			
-SESSION_ID	bigint(20) unsigned	NO		NULL	
-READ_SNAPSHOT	bigint(20)	NO		NULL	
-PARALLEL	bigint(20)	NO		NULL	
-JOB_START_TIME	timestamp(6)	NO		NULL	
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_MVIEW_RUNNING_JOBS limit 1);
-cnt
-1
-desc oceanbase.DBA_MVIEW_DEPS;
-Field	Type	Null	Key	Default	Extra
-MVIEW_OWNER	varchar(128)	NO			
-MVIEW_NAME	varchar(256)	NO			
-DEP_OWNER	varchar(128)	NO			
-DEP_NAME	varchar(256)	NO			
-DEP_TYPE	varchar(64)	NO			
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_MVIEW_DEPS limit 1);
-cnt
-1
-desc oceanbase.DBA_OB_DYNAMIC_PARTITION_TABLES;
-Field	Type	Null	Key	Default	Extra
-DATABASE_NAME	varchar(128)	NO			
-TABLE_NAME	varchar(256)	NO			
-TABLE_ID	bigint(20)	NO		NULL	
-MAX_HIGH_BOUND_VAL	varchar(4096)	YES		NULL	
-ENABLE	varchar(4096)	NO			
-TIME_UNIT	varchar(4096)	NO			
-PRECREATE_TIME	varchar(4096)	NO			
-EXPIRE_TIME	varchar(4096)	NO			
-TIME_ZONE	varchar(4096)	NO			
-BIGINT_PRECISION	varchar(4096)	NO			
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_OB_DYNAMIC_PARTITION_TABLES limit 1);
-cnt
-1
-desc oceanbase.V$OB_DYNAMIC_PARTITION_TABLES;
-Field	Type	Null	Key	Default	Extra
-TENANT_SCHEMA_VERSION	bigint(20)	NO		NULL	
-DATABASE_NAME	varchar(128)	NO		NULL	
-TABLE_NAME	varchar(256)	NO		NULL	
-TABLE_ID	bigint(20)	NO		NULL	
-MAX_HIGH_BOUND_VAL	varchar(4096)	NO		NULL	
-ENABLE	varchar(1024)	NO		NULL	
-TIME_UNIT	varchar(1024)	NO		NULL	
-PRECREATE_TIME	varchar(1024)	NO		NULL	
-EXPIRE_TIME	varchar(1024)	NO		NULL	
-TIME_ZONE	varchar(1024)	NO		NULL	
-BIGINT_PRECISION	varchar(1024)	NO		NULL	
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.V$OB_DYNAMIC_PARTITION_TABLES limit 1);
 cnt
 1
 desc oceanbase.V$OB_VECTOR_MEMORY;

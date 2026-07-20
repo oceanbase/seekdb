@@ -245,6 +245,7 @@ int ObConflictChecker::init_conflict_checker(const ObExprFrameInfo *expr_frame_i
                                              bool use_response_snapshot)
 {
   int ret = OB_SUCCESS;
+  ObSQLSessionInfo *session = eval_ctx_.exec_ctx_.get_my_session();
   int64_t constraint_cnt = checker_ctdef_.cst_ctdefs_.count();
   table_loc_ = table_loc;
   OZ(conflict_map_array_.allocate_array(allocator_, constraint_cnt), constraint_cnt);
@@ -254,6 +255,7 @@ int ObConflictChecker::init_conflict_checker(const ObExprFrameInfo *expr_frame_i
     mem_attr.label_ = "SqlConflictCkr";
     das_ref_.set_expr_frame_info(expr_frame_info);
     // Here attention is needed
+    das_ref_.set_execute_directly(!checker_ctdef_.use_dist_das_);
     das_ref_.set_mem_attr(mem_attr);
     das_ref_.set_use_snapshot_opt(use_response_snapshot);
   }
@@ -290,11 +292,7 @@ int ObConflictChecker::build_rowkey(ObRowkey *&rowkey,
   ObIAllocator &alloc = das_ref_.get_das_alloc();
   ObIAllocator *tmp_string_buffer = nullptr;
 
-  if (OB_UNLIKELY(rowkey_info->rowkey_accuracys_.count() != rowkey_cnt)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("rowkey accuracy count does not match rowkey expression count", K(ret), K(rowkey_cnt),
-             "accuracy_count", rowkey_info->rowkey_accuracys_.count());
-  } else if (NULL == (rowkey = static_cast<ObRowkey*>(alloc.alloc(sizeof(ObRowkey))))) {
+  if (NULL == (rowkey = static_cast<ObRowkey*>(alloc.alloc(sizeof(ObRowkey))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc memory", K(ret));
   } else if (NULL ==
@@ -312,7 +310,13 @@ int ObConflictChecker::build_rowkey(ObRowkey *&rowkey,
     ObObj tmp_obj;
     const ObObjMeta &col_obj_meta = rowkey_info->rowkey_expr_.at(i)->obj_meta_;
     ObExpr *expr = rowkey_info->rowkey_expr_.at(i);
-    const ObAccuracy &col_accuracy = rowkey_info->rowkey_accuracys_.at(i);
+    const ObAccuracy *col_accuracy = nullptr;
+
+    if (rowkey_info->rowkey_accuracys_.count() == rowkey_cnt) {
+      //To maintain compatibility with older versions,
+      //reshape_storage_value is only performed when rowkey_accuracys is not empty.
+      col_accuracy = &rowkey_info->rowkey_accuracys_.at(i);
+    }
 
     if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
@@ -324,8 +328,9 @@ int ObConflictChecker::build_rowkey(ObRowkey *&rowkey,
     // Read subsequent lines will overwrite the previous data, so a deep copy must be done here
     else if (OB_FAIL(datum->to_obj(tmp_obj, col_obj_meta))) {
       LOG_WARN("datum to obj fail", K(ret), K(i), KPC(expr), KPC(datum));
-    } else if (OB_FAIL(ObDASUtils::reshape_storage_value(col_obj_meta,
-                                                  col_accuracy,
+    } else if (col_accuracy != nullptr &&
+        OB_FAIL(ObDASUtils::reshape_storage_value(col_obj_meta,
+                                                  *col_accuracy,
                                                   *tmp_string_buffer,
                                                   tmp_obj))) {
       LOG_WARN("reshape storage value failed", K(ret));
@@ -351,11 +356,6 @@ int ObConflictChecker::build_tmp_rowkey(ObRowkey *rowkey, ObRowkeyCstCtdef *rowk
   } else if (OB_ISNULL(rowkey_info)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("rowkey_info is null", K(ret));
-  } else if (OB_UNLIKELY(rowkey_info->rowkey_accuracys_.count() != rowkey_info->rowkey_expr_.count())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("rowkey accuracy count does not match rowkey expression count", K(ret),
-             "rowkey_count", rowkey_info->rowkey_expr_.count(),
-             "accuracy_count", rowkey_info->rowkey_accuracys_.count());
   }
 
   if (OB_SUCC(ret)) {
@@ -374,7 +374,13 @@ int ObConflictChecker::build_tmp_rowkey(ObRowkey *rowkey, ObRowkeyCstCtdef *rowk
       ObDatum *datum = NULL;
       const ObObjMeta &col_obj_meta = rowkey_info->rowkey_expr_.at(i)->obj_meta_;
       ObExpr *expr = rowkey_info->rowkey_expr_.at(i);
-      const ObAccuracy &col_accuracy = rowkey_info->rowkey_accuracys_.at(i);
+      const ObAccuracy *col_accuracy = nullptr;
+
+      if (rowkey_info->rowkey_accuracys_.count() == rowkey_info->rowkey_expr_.count()) {
+        //To maintain compatibility with older versions,
+        //reshape_storage_value is only performed when rowkey_accuracys is not empty.
+        col_accuracy = &rowkey_info->rowkey_accuracys_.at(i);
+      }
       if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("expr is null", K(ret), K(i));
@@ -382,8 +388,9 @@ int ObConflictChecker::build_tmp_rowkey(ObRowkey *rowkey, ObRowkeyCstCtdef *rowk
         LOG_WARN("expr eval fail", K(ret), K(i), KPC(expr));
       } else if (OB_FAIL(datum->to_obj(obj_ptr[i], col_obj_meta))) {
         LOG_WARN("datum to obj fail", K(ret), K(i), KPC(expr), KPC(datum));
-      } else if (OB_FAIL(ObDASUtils::reshape_storage_value(col_obj_meta,
-                                                    col_accuracy,
+      } else if (col_accuracy != nullptr &&
+          OB_FAIL(ObDASUtils::reshape_storage_value(col_obj_meta,
+                                                    *col_accuracy,
                                                     *tmp_string_buffer,
                                                     obj_ptr[i]))) {
         LOG_WARN("reshape storage value failed", K(ret));
@@ -1044,8 +1051,8 @@ int ObConflictChecker::init_das_scan_rtdef()
                          true // read_latest
                         );
   das_scan_rtdef_.scan_flag_.flag_ = query_flag.flag_;
-  int64_t schema_version = task_exec_ctx.get_query_begin_schema_version();
-  das_scan_rtdef_.runtime_schema_version_ = schema_version;
+  int64_t schema_version = task_exec_ctx.get_query_tenant_begin_schema_version();
+  das_scan_rtdef_.tenant_schema_version_ = schema_version;
   das_scan_rtdef_.eval_ctx_ = &eval_ctx_;
   das_scan_rtdef_.ctdef_ = &checker_ctdef_.das_scan_ctdef_;
   das_scan_rtdef_.table_loc_ = table_loc_;
@@ -1113,7 +1120,7 @@ int ObConflictChecker::init_attach_scan_rtdef(const ObDASBaseCtDef *attach_ctdef
                             false/*sys scan*/, false/*full_row*/, false/*index_back*/, false/*query_stat*/,
                             ObQueryFlag::MysqlMode/*sql_mode*/, true/*read_latest*/);
       attach_scan_rtdef->scan_flag_.flag_ = query_flag.flag_;
-      attach_scan_rtdef->runtime_schema_version_ = task_exec_ctx.get_query_begin_schema_version();
+      attach_scan_rtdef->tenant_schema_version_ = task_exec_ctx.get_query_tenant_begin_schema_version();
       attach_scan_rtdef->eval_ctx_ = &eval_ctx_;
       attach_scan_rtdef->ctdef_ = attach_ctdef;
       attach_scan_rtdef->table_loc_ = DAS_CTX(ctx).get_table_loc_by_id(table_loc_->get_table_location_key(),
@@ -1131,7 +1138,7 @@ int ObConflictChecker::init_attach_scan_rtdef(const ObDASBaseCtDef *attach_ctdef
       }
       if (OB_SUCC(ret) && OB_NOT_NULL(attach_scan_rtdef->table_loc_)
           && OB_NOT_NULL(attach_scan_rtdef->table_loc_->loc_meta_)) {
-        if (attach_scan_rtdef->table_loc_->loc_meta_->is_weak_read_) {
+        if (attach_scan_rtdef->table_loc_->loc_meta_->select_leader_ == 0) {
           attach_scan_rtdef->scan_flag_.set_is_select_follower();
         }
       }

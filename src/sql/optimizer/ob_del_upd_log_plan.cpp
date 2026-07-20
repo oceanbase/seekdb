@@ -433,9 +433,9 @@ int ObDelUpdLogPlan::calculate_table_location(const ObDelUpdStmt &stmt,
                                                                dtc_params,
                                                                true))) {
     LOG_WARN("Failed to initialize table location", K(ret));
-  } else if (OB_FAIL(table_partition_info.calculate_local_tablet_locations(*exec_ctx,
-                                                                           *params,
-                                                                           dtc_params))) {
+  } else if (OB_FAIL(table_partition_info.calc_phy_table_loc_and_select_leader(*exec_ctx,
+                                                                                *params,
+                                                                                dtc_params))) {
     // For insert, the calculated partition order should match the value row correspondence, and should not be reordered
     LOG_WARN("failed to calculate table location", K(ret));
   } else {
@@ -1074,7 +1074,7 @@ int ObDelUpdLogPlan::allocate_optimizer_stats_gathering_as_top(ObLogicalOperator
   } else if (OB_ISNULL(osg = static_cast<ObLogOptimizerStatsGathering *>(get_log_op_factory().
                                         allocate(*this, LOG_OPTIMIZER_STATS_GATHERING)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate optimizer stats gathering operator", K(ret));
+    LOG_WARN("failed to allocate sequence operator", K(ret));
   } else {
     osg->set_child(ObLogicalOperator::first_child, old_top);
     osg->set_osg_type(type);
@@ -1718,6 +1718,7 @@ int ObDelUpdLogPlan::prepare_table_dml_info_basic(const ObDmlTableInfo& table_in
         // 1: Is strict defensive check mode
         // 2: Not inner_sql
         // 3: Now only support delete and update statement
+        // 4: disable it when upgrade
         // Only when the three conditions are met can the defensive_check information be added
         TableItem *table_item = nullptr;
         ObOpPseudoColumnRawExpr *trans_info_expr = nullptr;
@@ -2386,6 +2387,7 @@ int ObDelUpdLogPlan::check_basic_sharding_for_dml_stmt(ObShardingInfo &target_sh
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObShardingInfo*, 4> input_sharding;
+  ObAddr &local_addr = get_optimizer_context().get_local_server_addr();
   is_basic = false;
   if (OB_ISNULL(child.get_sharding())) {
     ret = OB_ERR_UNEXPECTED;
@@ -2393,7 +2395,8 @@ int ObDelUpdLogPlan::check_basic_sharding_for_dml_stmt(ObShardingInfo &target_sh
   } else if (OB_FAIL(input_sharding.push_back(&target_sharding)) ||
              OB_FAIL(input_sharding.push_back(child.get_sharding()))) {
     LOG_WARN("failed to push back sharding info", K(ret));
-  } else if (OB_FAIL(ObOptimizerUtil::check_basic_sharding_info(input_sharding,
+  } else if (OB_FAIL(ObOptimizerUtil::check_basic_sharding_info(local_addr,
+                                                                input_sharding,
                                                                 is_basic))) {
     LOG_WARN("failed to check if it is basic sharding info", K(ret));
   } else { /*do nothing*/ }

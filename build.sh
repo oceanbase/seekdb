@@ -281,6 +281,9 @@ function build
         # automatic determination of packaging type 
         build_package "$@"
         ;;
+      xsanity)
+        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DENABLE_SANITY=ON -DOB_ENABLE_MCMODEL=ON
+        ;;
       *)
         BUILD_ARGS=(debug "${BUILD_ARGS[@]}")
         build

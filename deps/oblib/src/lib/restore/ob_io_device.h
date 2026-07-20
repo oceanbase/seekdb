@@ -40,29 +40,38 @@ class ObIODevice;
 struct ObIOFd
 {
   ObIOFd(ObIODevice *device_handle = nullptr, const int64_t first_id = -1,
-      const int64_t second_id = -1, const int64_t third_id = -1);
+      const int64_t second_id = -1, const int64_t third_id = -1,
+      const int64_t fd_id_ = -1, const int64_t slot_version= -1);
   bool is_super_block() const { return 0 == first_id_ && 0 == second_id_; }
   bool is_tiered_super_block() const { return 0 == first_id_ && 2 == second_id_; }
   bool is_normal_file() const { return NORMAL_FILE_ID == first_id_ && second_id_ > 0; }
   bool is_block_file() const { return first_id_ != NORMAL_FILE_ID; }
+  bool is_backup_block_file() const;
   void reset();
   bool operator == (const ObIOFd& other) const
   {
-    return other.first_id_ == this->first_id_ && other.second_id_ == this->second_id_
-        && other.third_id_ == this->third_id_ && other.device_handle_ == this->device_handle_;
+    return other.first_id_ == this->first_id_ && other.second_id_ == this->second_id_ && other.third_id_ == this->third_id_
+        && other.fd_id_ == this->fd_id_ && other.slot_version_ == this->slot_version_
+        && other.device_handle_ == this->device_handle_;
   }
   bool operator != (const ObIOFd& other) const
   {
-    return other.first_id_ != this->first_id_ || other.second_id_ != this->second_id_
-        || other.third_id_ != this->third_id_ || other.device_handle_ != this->device_handle_;
+    return other.first_id_ != this->first_id_ || other.second_id_ != this->second_id_ || other.third_id_ != this->third_id_
+        || other.fd_id_ != this->fd_id_ || other.slot_version_ != this->slot_version_
+        || other.device_handle_ != this->device_handle_;
   }
   bool is_valid() const;
   NEED_SERIALIZE_AND_DESERIALIZE;
-  TO_STRING_KV(K_(first_id), K_(second_id), K_(third_id), KP_(device_handle));
+  TO_STRING_KV(K_(first_id), K_(second_id), K_(third_id), K_(fd_id), K_(slot_version), KP_(device_handle));
   static const int64_t NORMAL_FILE_ID = 0xFFFFFFFFFFFFFFFF;// all of bit is one.
+  static const int64_t BACKUP_BLOCK_ID_MODE_FIELD_MASK = 0xFF;
+  static const int64_t BACKUP_BLOCK_ID_MODE_SHIFT_SIZE= 52LL;
+  static const int64_t BACKUP_BLOCK_ID_MODE = 1LL;
   int64_t first_id_;
   int64_t second_id_;
   int64_t third_id_;
+  int64_t fd_id_; // used for fd simulator
+  int64_t slot_version_;  // used for fd simulator
   ObIODevice *device_handle_; // no need to serialize
 };
 
@@ -318,13 +327,19 @@ public:
   //file/dir interfaces
   virtual int open(const char *pathname, const int flags, const mode_t mode,
                     ObIOFd &fd, ObIODOpts *opts= NULL) = 0;
+  virtual int complete(const ObIOFd &fd) = 0;
+  virtual int abort(const ObIOFd &fd) = 0;
   virtual int close(const ObIOFd &fd) = 0;
   virtual int mkdir(const char *pathname, mode_t mode) = 0;
   virtual int rmdir(const char *pathname) = 0;
   virtual int unlink(const char *pathname) = 0;
+  virtual int batch_del_files(
+      const ObIArray<ObString> &files_to_delete, ObIArray<int64_t> &failed_files_idx) = 0;
   virtual int rename(const char *oldpath, const char *newpath) = 0;
+  virtual int seal_file(const ObIOFd &fd) = 0;
   virtual int scan_dir(const char *dir_name, int (*func)(const dirent *entry)) = 0;
   virtual int scan_dir(const char *dir_name, ObBaseDirEntryOperator &op) = 0;
+  virtual int is_tagging(const char *pathname, bool &is_tagging) = 0;
   virtual int fsync(const ObIOFd &fd) = 0;
   virtual int fdatasync(const ObIOFd &fd) = 0;
   virtual int fallocate(const ObIOFd &fd, mode_t mode, const int64_t offset, const int64_t len) = 0;
@@ -333,6 +348,11 @@ public:
   virtual int exist(const char *pathname, bool &is_exist) = 0;
   virtual int stat(const char *pathname, ObIODFileStat &statbuf) = 0;
   virtual int fstat(const ObIOFd &fd, ObIODFileStat &statbuf) = 0;
+  virtual int del_unmerged_parts(const char *pathname) = 0;
+  virtual int adaptive_exist(const char *pathname, bool &is_exist) = 0;
+  virtual int adaptive_stat(const char *pathname, ObIODFileStat &statbuf) = 0;
+  virtual int adaptive_unlink(const char *pathname) = 0;
+  virtual int adaptive_scan_dir(const char *dir_name, ObBaseDirEntryOperator &op) = 0;
 
   //block interfaces
   virtual int mark_blocks(ObIBlockIterator &block_iter) = 0;
@@ -370,6 +390,20 @@ public:
     const void *buf,
     const int64_t size,
     int64_t &write_size) = 0;
+
+  virtual int upload_part(
+    const ObIOFd &fd,
+    const char *buf,
+    const int64_t size,
+    const int64_t part_id,
+    int64_t &write_size) = 0;
+  virtual int buf_append_part(
+    const ObIOFd &fd,
+    const char *buf,
+    const int64_t size,
+    bool &is_full) = 0;
+  virtual int get_part_id(const ObIOFd &fd, bool &is_exist, int64_t &part_id) = 0;
+  virtual int get_part_size(const ObIOFd &fd, const int64_t part_id, int64_t &part_size) = 0;
 
   //async io interfaces
   virtual int io_setup(
@@ -422,10 +456,15 @@ public:
   virtual void dec_ref();
   virtual int64_t get_ref_cnt();
 
+  OB_INLINE bool is_object_device() const
+  {
+    return (ObStorageType::OB_STORAGE_FILE == device_type_)
+           || (ObStorageType::OB_STORAGE_AZBLOB == device_type_);
+  }
+
   OB_INLINE bool is_local_device() const
   {
-    return ObStorageType::OB_STORAGE_LOCAL == device_type_
-        || ObStorageType::OB_STORAGE_LOCAL_CACHE == device_type_;
+    return (ObStorageType::OB_STORAGE_LOCAL == device_type_);
   }
 
   int get_io_aligned_size(int64_t &aligned_size) const;

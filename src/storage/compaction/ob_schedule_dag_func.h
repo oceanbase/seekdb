@@ -22,10 +22,6 @@
 
 namespace oceanbase
 {
-namespace share
-{
-class ObLSID;
-}
 namespace storage
 {
 namespace mds
@@ -33,11 +29,7 @@ namespace mds
 class ObMdsTableMergeDagParam;
 }
 struct ObDDLTableMergeDagParam;
-struct ObTabletSplitParam;
-struct ObLobSplitParam;
 struct ObTabletForkParam;
-class ObTabletSplitDag;
-class ObTabletLobSplitDag;
 class ObComplementDataDag;
 class ObTablet;
 }
@@ -64,20 +56,6 @@ public:
   static int schedule_ddl_table_merge_dag(
       storage::ObDDLTableMergeDagParam &param,
       const bool is_emergency = false);
-  static int schedule_tablet_split_dag(
-      storage::ObTabletSplitParam &param,
-      const bool is_emergency = false);
-  static int schedule_and_get_tablet_split_dag(
-      storage::ObTabletSplitParam &param,
-      storage::ObTabletSplitDag *&dag,
-      const bool is_emergency = false);
-  static int schedule_lob_tablet_split_dag(
-      storage::ObLobSplitParam &param,
-      const bool is_emergency = false);
-  static int schedule_and_get_lob_tablet_split_dag(
-      storage::ObLobSplitParam &param,
-      storage::ObTabletLobSplitDag *&dag,
-      const bool is_emergency = false);
   static int schedule_tablet_fork_dag(
       storage::ObTabletForkParam &param,
       const bool is_emergency = false);
@@ -92,7 +70,6 @@ class ObDagParamFunc final
 {
 public:
   static int fill_param(
-    const share::ObLSID &ls_id,
     const storage::ObTablet &tablet,
     const ObMergeType merge_type,
     const int64_t &merge_snapshot_version,

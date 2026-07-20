@@ -33,7 +33,7 @@ using namespace oceanbase::lib;
 
 const char *ObSnapshotInfo::ObSnapShotTypeStr[] = {
     "SNAPSHOT_FOR_MAJOR",
-    "SNAPSHOT_FOR_DDL",
+    "SNAPSHOT_FOR_CREATE_INDEX",
     "SNAPSHOT_FOR_MULTI_VERSION",
     "SNAPSHOT_FOR_RESTORE_POINT",
     "SNAPSHOT_FOR_BACKUP_POINT" };
@@ -497,6 +497,56 @@ int ObSnapshotTableProxy::get_max_snapshot_info(
 
 int ObSnapshotTableProxy::get_snapshot(
     ObISQLClient &proxy,
+    ObSnapShotType snapshot_type,
+    const char *extra_info,
+    ObSnapshotInfo &snapshot_info)
+{
+  int ret = OB_SUCCESS;
+  ObSqlString sql;
+  if ((SNAPSHOT_FOR_RESTORE_POINT != snapshot_type) ||
+      (NULL == extra_info)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(snapshot_type));
+  } else {
+    SMART_VAR(ObMySQLProxy::MySQLResult, res) {
+      sqlclient::ObMySQLResult *result = NULL;
+      ObTimeoutCtx ctx;
+      if (OB_FAIL(share::ObShareUtil::get_rs_default_timeout_ctx(ctx))) {
+        LOG_WARN("fail to get timeout ctx", KR(ret), K(ctx));
+      } else if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE snapshot_type = %d "
+          "AND extra_info = '%s'", OB_ALL_ACQUIRED_SNAPSHOT_TNAME, snapshot_type, 
+          extra_info))) {
+        LOG_WARN("fail to assign sql", KR(ret), K(snapshot_type));
+      } else if (OB_FAIL(proxy.read(res, sql.ptr()))) {
+        LOG_WARN("fail to read", KR(ret), K(sql));
+      } else if (OB_ISNULL(result = res.get_result())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("fail to get result", KR(ret), K(sql));
+      } else if (OB_FAIL(result->next())) {
+        if (OB_ITER_END == ret) {
+        } else {
+          LOG_WARN("fail to get next", KR(ret), K(snapshot_type));
+        }
+      } else if (OB_FAIL(extract_snapshot(*result, snapshot_info))) {
+        LOG_WARN("fail to extract snapshot", KR(ret));
+      } else if (!snapshot_info.is_valid()) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("snapshot info is invalid", K(ret), K(snapshot_info));
+      } else if (OB_ITER_END != result->next()) {
+        if (OB_SUCC(ret)) {
+          ret = OB_ERR_UNEXPECTED;
+        }
+        LOG_WARN("get invalid next result", KR(ret));
+      } else {
+        ret = OB_SUCCESS;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObSnapshotTableProxy::get_snapshot(
+    ObISQLClient &proxy,
     const ObSnapShotType snapshot_type,
     const SCN &snapshot_scn,
     ObSnapshotInfo &snapshot_info)
@@ -541,6 +591,79 @@ int ObSnapshotTableProxy::get_snapshot(
   return ret;
 }
 
+int ObSnapshotTableProxy::check_snapshot_exist(
+    ObISQLClient &proxy,
+    const int64_t table_id,
+    ObSnapShotType snapshot_type,
+    bool &is_exist)
+{
+  int ret = OB_SUCCESS;
+  ObSqlString sql;
+  int64_t latest_restore_point_value = 0;
+  sqlclient::ObMySQLResult *result = NULL;
+  is_exist = false;
+
+  ObTimeoutCtx ctx;
+  if (OB_FAIL(share::ObShareUtil::get_rs_default_timeout_ctx(ctx))) {
+    LOG_WARN("fail to get timeout ctx", KR(ret), K(ctx));
+  } else {
+    SMART_VAR(ObMySQLProxy::MySQLResult, res) {
+      if (OB_FAIL(sql.assign_fmt("SELECT time_to_usec(gmt_create) FROM %s WHERE snapshot_type = %d "
+                  "ORDER BY gmt_create DESC LIMIT 1", OB_ALL_ACQUIRED_SNAPSHOT_TNAME, 
+                  snapshot_type))) {
+        LOG_WARN("fail to assign sql", KR(ret), K(snapshot_type));
+      } else if (OB_FAIL(proxy.read(res, sql.ptr()))) {
+        LOG_WARN("fail to read", KR(ret), K(sql));
+      } else if (OB_ISNULL(result = res.get_result())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("fail to get result", KR(ret));
+      } else if (OB_FAIL(result->next())) {
+        if (OB_ITER_END == ret) {
+          is_exist = false;
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("fail to get next", KR(ret), K(snapshot_type));
+        }
+      } else if (OB_FAIL(result->get_int(static_cast<int64_t>(0), latest_restore_point_value))) {
+        LOG_WARN("fail to get lastest restore point create time", KR(ret), 
+          K(latest_restore_point_value));
+      } else {
+        is_exist = true;
+      }
+    }
+    if (OB_SUCC(ret) && is_exist) {
+      SMART_VAR(ObMySQLProxy::MySQLResult, res) {
+        const char *table_name = NULL;
+        
+        if (OB_FAIL(schema::ObSchemaUtils::get_all_table_name(table_name))) {
+          LOG_WARN("fail to get all table name", K(ret));
+        } else if (OB_FAIL(sql.assign_fmt("SELECT table_id FROM %s WHERE "
+                   "table_id = %ld AND gmt_create <= usec_to_time(%ld) limit 1", table_name,
+                   schema::ObSchemaUtils::get_extract_schema_id(table_id),
+                   latest_restore_point_value))) {
+          LOG_WARN("fail to assign sql", KR(ret), K(snapshot_type));
+        } else if (OB_FAIL(proxy.read(res, sql.ptr()))) {
+          LOG_WARN("fail to read", KR(ret), K(sql));
+        } else if (OB_ISNULL(result = res.get_result())) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("fail to get result", KR(ret), K(sql));
+        } else if (OB_FAIL(result->next())) {
+          if (OB_ITER_END == ret) {
+            is_exist = false;
+            ret = OB_SUCCESS;
+          } else {
+            LOG_WARN("fail to get next", KR(ret), K(snapshot_type));
+          }
+        } else {
+          is_exist = true;
+        }
+      }
+    }
+  }
+  return ret;
+
+}
+
 /*
  * @description:
  * check snapshot exist
@@ -580,6 +703,40 @@ int ObSnapshotTableProxy::check_snapshot_exist(
         }
       } else {
         is_exist = true;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObSnapshotTableProxy::get_snapshot_count(
+    ObISQLClient &proxy,
+    ObSnapShotType snapshot_type,
+    int64_t &count)
+{
+  int ret = OB_SUCCESS;
+  ObSqlString sql;
+  if (snapshot_type != SNAPSHOT_FOR_RESTORE_POINT) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(snapshot_type));
+  } else {
+    SMART_VAR(ObMySQLProxy::MySQLResult, res) {
+      sqlclient::ObMySQLResult *result = NULL;
+      ObTimeoutCtx ctx;
+      if (OB_FAIL(share::ObShareUtil::get_rs_default_timeout_ctx(ctx))) {
+        LOG_WARN("fail to get timeout ctx", KR(ret), K(ctx));
+      } else if (OB_FAIL(sql.assign_fmt("SELECT count(*) as cnt FROM %s WHERE snapshot_type = %d "
+                 , OB_ALL_ACQUIRED_SNAPSHOT_TNAME, snapshot_type))) {
+        LOG_WARN("fail to assign sql", KR(ret), K(snapshot_type));
+      } else if (OB_FAIL(proxy.read(res, sql.ptr()))) {
+        LOG_WARN("fail to read", KR(ret), K(sql));
+      } else if (OB_ISNULL(result = res.get_result())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("fail to get result", KR(ret), K(sql));
+      } else if (OB_FAIL(result->next())) {
+        LOG_WARN("fail to get next", KR(ret), K(sql));
+      } else {
+        EXTRACT_INT_FIELD_MYSQL(*result, "cnt", count, int64_t);
       }
     }
   }

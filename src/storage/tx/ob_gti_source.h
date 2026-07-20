@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_TRANSACTION_OB_GTI_SOURCE_
 #define OCEANBASE_TRANSACTION_OB_GTI_SOURCE_
 
-#include "lib/net/ob_addr.h"
 #include "lib/lock/ob_latch.h"
 
 namespace oceanbase
@@ -42,7 +41,7 @@ class ObGtiSource : public ObIGtiSource
 public:
   ObGtiSource() { reset(); }
   ~ObGtiSource() { destroy(); }
-  int init(const common::ObAddr &server);
+  int init();
   virtual int start();
   virtual void stop();
   virtual void wait();

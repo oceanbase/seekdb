@@ -27,6 +27,7 @@ create vector index idx1 on t_vec(c2) with (distance=l2, type=hnsw);
 create fulltext index idx2 on t_vec(c3);
 create vector index idx3 on t_vec(c4) with (distance=l2, type=hnsw);
 create index idx4 on t_vec(c1);
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 drop table t_vec;
@@ -79,6 +80,7 @@ create table t_vec(c1 int, c2 vector(3), c3 vector(3), c4 int, primary key(c1), 
 create index idx1 on t_vec(c4);
 --error 1061
 create vector index idx1 on t_vec(c3) with (distance=l2, type=hnsw);
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
@@ -129,6 +131,7 @@ create table t_vec(c1 int, c2 vector(3), c3 int, primary key(c1), vector index i
 
 # cosine距离算法 & hnsw_sq 模式
 #create table t_vec(c1 int, c2 vector(3), c3 int, primary key(c1), vector index idx1(c2) with (distance=cosine, type=hnsw_sq));
+#--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 #show create table t_vec;
 #show index from t_vec;
 #drop table t_vec;
@@ -141,36 +144,43 @@ alter system set ob_vector_memory_limit_percentage = 20;
 sleep 3;
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=L2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=inner_product, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
 #drop table if exists t_vec;
 #create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=cosine, type=hnsw));
+#--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 #show create table t_vec;
 #show index from t_vec;
 
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 vector(3), c3 vector(3), primary key(c1), vector index idx1(c2) with (distance=L2, type=hnsw), vector index idx2(c3) with (distance=L2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
@@ -178,6 +188,7 @@ show index from t_vec;
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 vector(3), c3 int, primary key(c1), vector index idx1(c2) with(distance=l2, type=hnsw));
 create index idx2 on t_vec(c3);
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
@@ -188,11 +199,13 @@ create index vid_rowkey_table on t_vec(c3);
 create index rowkey_vid_table on t_vec(c4);
 create index idx1_index_id_table on t_vec(c5);
 create index idx1_index_snapshot_data_table on t_vec(c6);
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 
 drop table if exists t_vec;
 create table t_vec(c1 int primary key, c2 vector(3), c3 vector(3), c4 vector(3), vector index vector_idx(c3) with (distance=l2, type=hnsw));
 insert into t_vec(c1,c2,c3,c4) values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 
 # 不支持在普通视图上创建向量索引
@@ -203,6 +216,7 @@ create view v1 as select * from t_vec;
 insert into v1(c1,c2,c3,c4) values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
 --error 1235
 create vector index vector_idx_c2 on v1(c2) with (distance=l2, type=hnsw);
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 drop view if exists v1;
 
@@ -210,6 +224,7 @@ drop view if exists v1;
 drop table if exists t_vec;
 create table t_vec(c1 int primary key, c2 vector(3), c3 vector(3), c4 vector(3), vector index vector_idx(c3) with (distance=l2, type=hnsw));
 insert into t_vec(c1,c2,c3,c4) values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 
 #bugfix : 不支持创建向量函数索引
@@ -224,6 +239,7 @@ create vector index idx_1 on t_vec((c1 + c2)) with (distance=l2, type=hnsw);
 drop table t_vec;
 
 create table t_vec(c1 int, c2 vector(3), vector index idx1(c2) with (distance=L2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 
 drop table if exists t_vec;

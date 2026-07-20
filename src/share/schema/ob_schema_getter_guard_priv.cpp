@@ -50,6 +50,23 @@ int collect_user_level_priv_in_roles(const ObPrivMgr &priv_mgr,
   return ret;
 }
 
+int collect_catalog_level_priv_in_roles(const ObPrivMgr &priv_mgr,
+                                        const ObUserInfo &role_info,
+                                        const ObNeedPriv &need_priv,
+                                        ObNeedPriv &collected_priv)
+{
+  int ret = OB_SUCCESS;
+  ObPrivSet role_priv_set = OB_PRIV_SET_EMPTY;
+  ObCatalogPrivSortKey catalog_priv_key(role_info.get_user_id(),
+                                        need_priv.catalog_);
+  if (OB_FAIL(priv_mgr.get_catalog_priv_set(catalog_priv_key, role_priv_set))) {
+    LOG_WARN("get catalog priv set failed", KR(ret), K(role_priv_set));
+  } else {
+    collected_priv.priv_set_ |= role_priv_set;
+  }
+  return ret;
+}
+
 int collect_db_level_priv_in_roles(const ObPrivMgr &priv_mgr,
                                    const ObUserInfo &role_info,
                                    const ObNeedPriv &need_priv,
@@ -151,6 +168,21 @@ int collect_column_level_all_priv_in_roles(const ObPrivMgr &priv_mgr,
     } else if (priv_set != OB_PRIV_SET_EMPTY) {
       collected_priv.priv_set_ |= priv_set;
     }
+  }
+  return ret;
+}
+
+int collect_user_catalog_level_priv_in_roles(const ObPrivMgr &priv_mgr,
+                                             const ObUserInfo &role_info,
+                                             const ObNeedPriv &need_priv,
+                                             ObNeedPriv &collected_priv)
+{
+  int ret = OB_SUCCESS;
+  ObPrivSet role_priv_set = role_info.get_priv_set();
+  if (OB_FAIL(collect_catalog_level_priv_in_roles(priv_mgr, role_info, need_priv, collected_priv))) {
+    LOG_WARN("get db priv set failed", KR(ret), K(role_priv_set));
+  } else {
+    collected_priv.priv_set_ |= role_priv_set;
   }
   return ret;
 }
@@ -262,6 +294,125 @@ int collect_priv_in_roles(const ObPrivMgr &priv_mgr,
   return ret;
 }
 
+int ObSchemaGetterGuard::check_catalog_access(const ObSessionPrivInfo &session_priv,
+                                              const common::ObIArray<uint64_t> &enable_role_id_array,
+                                              const ObString &catalog_name)
+{
+  int ret = OB_SUCCESS;
+  const ObSchemaMgr *mgr = NULL;
+  ObCatalogPrivSortKey catalog_priv_key(session_priv.user_id_,
+                                        catalog_name);
+  ObPrivSet catalog_priv_set = OB_PRIV_SET_EMPTY;
+  const ObCatalogSchema *catalog_schema = NULL;
+  bool is_grant_role = false;
+  const ObUserInfo *role_info = NULL;
+  ObNeedPriv need_priv("", "", OB_PRIV_CATALOG_LEVEL, OB_PRIV_USE_CATALOG, false,
+                      false, OB_PRIV_CHECK_ALL, catalog_name);
+  ObNeedPriv collected_privs("", "", OB_PRIV_CATALOG_LEVEL, OB_PRIV_SET_EMPTY, false,
+                             false, OB_PRIV_CHECK_ALL, catalog_name);
+  bool check_succ = false;
+  if (!session_priv.is_valid() || 0 == catalog_name.length()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid arguments", K(session_priv), K(ret));
+  } else if (OB_FAIL(check_tenant_schema_guard())) {
+    LOG_WARN("fail to check tenant schema guard", K(ret));
+  } else if (OB_FAIL(check_lazy_guard( mgr))) {
+    LOG_WARN("fail to check lazy guard", K(ret));
+  } 
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(mgr->priv_mgr_.get_catalog_priv_set(catalog_priv_key, catalog_priv_set))) {
+      LOG_WARN("get catalog priv set failed", K(ret));
+    } else if ((session_priv.user_priv_set_ | catalog_priv_set) & OB_PRIV_USE_CATALOG) {
+      // can access
+    } else if (OB_FAIL(collect_priv_in_roles(mgr->priv_mgr_, session_priv, enable_role_id_array,
+                                             *this, need_priv, collect_user_catalog_level_priv_in_roles, 
+                                             collected_privs, check_succ))) {
+      LOG_WARN("fail to collect privs in roles", K(ret));
+    } else if (!(collected_privs.priv_set_ & OB_PRIV_USE_CATALOG)) {
+      ret = OB_ERR_NO_CATALOG_PRIVILEGE;
+      LOG_WARN("No privilege to access catalog", K(session_priv), K(catalog_name), K(ret));
+      LOG_USER_ERROR(OB_ERR_NO_CATALOG_PRIVILEGE, session_priv.user_name_.length(), session_priv.user_name_.ptr(),
+                      session_priv.host_name_.length(), session_priv.host_name_.ptr(),
+                      catalog_name.length(), catalog_name.ptr());
+    }
+  }
+  return ret;
+}
+
+int ObSchemaGetterGuard::check_catalog_access(const ObSessionPrivInfo &session_priv,
+                                              const common::ObIArray<uint64_t> &enable_role_id_array,
+                                              const uint64_t catalog_id)
+{
+  int ret = OB_SUCCESS;
+  const ObCatalogSchema *catalog_schema = NULL;
+  if (OB_FAIL(get_catalog_schema_by_id( catalog_id, catalog_schema))) {
+    LOG_WARN("failed to get catalog schema", K(ret), K(catalog_id));
+  } else if (OB_ISNULL(catalog_schema)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(ret));
+  } else if (OB_FAIL(check_catalog_access(session_priv, enable_role_id_array, catalog_schema->get_catalog_name_str()))){
+    LOG_WARN("failed to check catalog access", K(ret), K(catalog_id));
+  }
+  return ret;
+}
+
+int ObSchemaGetterGuard::check_catalog_show(const ObSessionPrivInfo &session_priv,
+                                            const common::ObIArray<uint64_t> &enable_role_id_array,
+                                            const common::ObString &catalog_name,
+                                            bool &allow_show)
+{
+  int ret = OB_SUCCESS;
+  int tmp_ret = check_catalog_access(session_priv, enable_role_id_array, catalog_name);
+  allow_show = (tmp_ret == OB_ERR_NO_CATALOG_PRIVILEGE) ? false : true;
+  ret = (tmp_ret == OB_ERR_NO_CATALOG_PRIVILEGE || tmp_ret == OB_SUCCESS) ? OB_SUCCESS : tmp_ret;
+  return ret;
+}
+
+int ObSchemaGetterGuard::check_catalog_db_access(const ObSessionPrivInfo &session_priv,
+                                                 const common::ObIArray<uint64_t> &enable_role_id_array,
+                                                 const common::ObString &catalog_name,
+                                                 const common::ObString &database_name)
+{
+  // do not to support to check database's privilege now, support in the future
+  UNUSED(database_name);
+  return check_catalog_access(session_priv, enable_role_id_array, catalog_name);
+}
+
+int ObSchemaGetterGuard::check_catalog_db_access(const ObSessionPrivInfo &session_priv,
+                                                 const common::ObIArray<uint64_t> &enable_role_id_array,
+                                                 const uint64_t catalog_id,
+                                                 const common::ObString &database_name)
+{
+  int ret = OB_SUCCESS;
+  const ObCatalogSchema *catalog_schema = NULL;
+  if (OB_FAIL(get_catalog_schema_by_id( catalog_id, catalog_schema))) {
+    LOG_WARN("failed to get catalog schema", K(ret), K(catalog_id));
+  } else if (OB_ISNULL(catalog_schema)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(ret));
+  } else if (OB_FAIL(check_catalog_db_access(session_priv, enable_role_id_array, catalog_schema->get_catalog_name_str(), database_name))) {
+    LOG_WARN("check catalog db access failed", K(ret), K(catalog_id), K(database_name));
+  }
+  return ret;
+}
+
+int ObSchemaGetterGuard::check_db_access(ObSessionPrivInfo &s_priv,
+                                         const common::ObIArray<uint64_t> &enable_role_id_array,
+                                         const uint64_t catalog_id,
+                                         const ObString &database_name)
+{
+  int ret = OB_SUCCESS;
+  if (is_internal_catalog_id(catalog_id)) {
+    ret = check_db_access(s_priv, enable_role_id_array, database_name);
+  } else if (is_external_catalog_id(catalog_id)) {
+    ret = check_catalog_db_access(s_priv, enable_role_id_array, catalog_id, database_name);
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected", K(ret));
+  }
+  return ret;
+}
+
 // TODO: check arguments
 int ObSchemaGetterGuard::check_db_show(const ObSessionPrivInfo &session_priv,
                                        const common::ObIArray<uint64_t> &enable_role_id_array,
@@ -274,7 +425,9 @@ int ObSchemaGetterGuard::check_db_show(const ObSessionPrivInfo &session_priv,
   allow_show = true;
   ObPrivSet db_priv_set = 0;
   ObPrivSet need_priv = OB_PRIV_SHOW_DB;
-  if (!session_priv.is_valid()) {
+  if (OB_FAIL(check_tenant_schema_guard())) {
+    LOG_WARN("fail to check tenant schema guard", KR(ret));
+  } else if (!session_priv.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid arguments", K(session_priv), KR(ret));
   } else if (OB_TEST_PRIVS(session_priv.user_priv_set_, need_priv)) {
@@ -282,6 +435,29 @@ int ObSchemaGetterGuard::check_db_show(const ObSessionPrivInfo &session_priv,
   } else if (0 == db.length() // only check user-level privilege if 0 == db.length()
              || OB_SUCCESS != (can_show = check_db_access(session_priv, enable_role_id_array, db, db_priv_set, false))) {
     allow_show = false;
+  }
+  return ret;
+}
+
+int ObSchemaGetterGuard::check_table_show(const ObSessionPrivInfo &session_priv,
+                                          const common::ObIArray<uint64_t> &enable_role_id_array,
+                                          const uint64_t catalog_id,
+                                          const ObString &db,
+                                          const ObString &table,
+                                          bool &allow_show)
+{
+  int ret = OB_SUCCESS;
+  if (is_internal_catalog_id(catalog_id)) {
+    ret = check_table_show(session_priv, enable_role_id_array, db, table, allow_show);
+  } else if (is_external_catalog_id(catalog_id)) {
+    allow_show = true;
+    if (OB_FAIL(check_catalog_db_access(session_priv, enable_role_id_array, catalog_id, db))) {
+      allow_show = false;
+      LOG_WARN("check catalog table show priv failed", K(ret));
+    }
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected", K(ret));
   }
   return ret;
 }
@@ -296,7 +472,9 @@ int ObSchemaGetterGuard::check_table_show(const ObSessionPrivInfo &session_priv,
   
   const ObSchemaMgr *mgr = NULL;
   allow_show = true;
-  if (OB_FAIL(check_lazy_guard( mgr))) {
+  if (OB_FAIL(check_tenant_schema_guard())) {
+    LOG_WARN("fail to check tenant schema guard", KR(ret));
+  } else if (OB_FAIL(check_lazy_guard( mgr))) {
     LOG_WARN("fail to check lazy guard", KR(ret));
   } else if (OB_PRIV_HAS_ANY(session_priv.user_priv_set_, OB_PRIV_TABLE_ACC)) {
     //allow
@@ -359,7 +537,9 @@ int ObSchemaGetterGuard::check_routine_show(const ObSessionPrivInfo &session_pri
   
   const ObSchemaMgr *mgr = NULL;
   allow_show = true;
-  if (OB_FAIL(check_lazy_guard( mgr))) {
+  if (OB_FAIL(check_tenant_schema_guard())) {
+    LOG_WARN("fail to check tenant schema guard", KR(ret));
+  } else if (OB_FAIL(check_lazy_guard( mgr))) {
     LOG_WARN("fail to check lazy guard", KR(ret));
   } else if (OB_PRIV_HAS_ANY(session_priv.user_priv_set_, OB_PRIV_ROUTINE_ACC | OB_PRIV_CREATE_ROUTINE)) {
     //allow
@@ -421,11 +601,16 @@ int ObSchemaGetterGuard::check_user_priv(const ObSessionPrivInfo &session_priv,
   const ObSchemaMgr *mgr = NULL;
   ObPrivSet user_priv_set = session_priv.user_priv_set_;
 
-  if (OB_FAIL(check_lazy_guard( mgr))) {
+  if (OB_FAIL(check_tenant_schema_guard())) {
+    LOG_WARN("fail to check tenant schema guard", KR(ret));
+  } else if (OB_FAIL(check_lazy_guard( mgr))) {
     LOG_WARN("fail to check lazy guard", KR(ret));
   } else if ((!OB_TEST_PRIVS(user_priv_set, priv_set) && check_all)
              || (!OB_PRIV_HAS_ANY(user_priv_set, priv_set) && !check_all)) {
-    if (priv_set == OB_PRIV_ALTER_SYSTEM
+    if ((priv_set == OB_PRIV_ALTER_TENANT
+        || priv_set == OB_PRIV_ALTER_SYSTEM
+        || priv_set == OB_PRIV_CREATE_RESOURCE_POOL
+        || priv_set == OB_PRIV_CREATE_RESOURCE_UNIT)
         && (OB_TEST_PRIVS(user_priv_set, OB_PRIV_SUPER))) {
     } else {
       ObNeedPriv need_priv("", "", OB_PRIV_USER_LEVEL, priv_set, false);
@@ -450,7 +635,10 @@ int ObSchemaGetterGuard::check_user_priv(const ObSessionPrivInfo &session_priv,
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("Invalid priv type", "priv_set", lack_priv_set);
     } else {
-      if (priv_set == OB_PRIV_ALTER_SYSTEM) {
+      if (priv_set == OB_PRIV_ALTER_TENANT
+          || priv_set == OB_PRIV_ALTER_SYSTEM
+          || priv_set == OB_PRIV_CREATE_RESOURCE_POOL
+          || priv_set == OB_PRIV_CREATE_RESOURCE_UNIT) {
         ObSqlString priv_name_with_prefix;
         int tmp_ret = OB_SUCCESS;
         if (OB_TMP_FAIL(priv_name_with_prefix.assign_fmt("SUPER or %s", priv_name))) {
@@ -483,6 +671,8 @@ int ObSchemaGetterGuard::check_single_table_priv_or(const ObSessionPrivInfo &ses
   if (OB_INVALID_ID == user_id) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid arguments",  "user_id", user_id, KR(ret));
+  } else if (OB_FAIL(check_tenant_schema_guard())) {
+    LOG_WARN("fail to check tenant schema guard", KR(ret));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
     LOG_WARN("fail to check lazy guard", KR(ret));
   } else if (OB_PRIV_HAS_ANY(session_priv.user_priv_set_, table_need_priv.priv_set_)) {
@@ -522,6 +712,8 @@ int ObSchemaGetterGuard::check_single_table_priv(const ObSessionPrivInfo &sessio
     LOG_WARN("Invalid arguments", 
         "user_id", session_priv.user_id_,
         KR(ret));
+  } else if (OB_FAIL(check_tenant_schema_guard())) {
+    LOG_WARN("fail to check tenant schema guard", KR(ret));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
     LOG_WARN("fail to check lazy guard", KR(ret));
   } else {
@@ -766,6 +958,8 @@ int ObSchemaGetterGuard::check_routine_priv(const ObSessionPrivInfo &session_pri
     LOG_WARN("Invalid arguments", 
         "user_id", session_priv.user_id_,
         KR(ret));
+  } else if (OB_FAIL(check_tenant_schema_guard())) {
+    LOG_WARN("fail to check tenant schema guard", KR(ret));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
     LOG_WARN("fail to check lazy guard", KR(ret));
   } else {
@@ -863,6 +1057,75 @@ int ObSchemaGetterGuard::check_routine_priv(const ObSessionPrivInfo &session_pri
   return ret;
 }
 
+int ObSchemaGetterGuard::check_catalog_priv(const ObSessionPrivInfo &session_priv,
+                                            const common::ObIArray<uint64_t> &enable_role_id_array,
+                                            const ObNeedPriv &need_priv,
+                                            ObPrivSet &user_catalog_priv_set)
+{
+  int ret = OB_SUCCESS;
+  
+  const ObSchemaMgr *mgr = NULL;
+  ObPrivSet catalog_priv_set = OB_PRIV_SET_EMPTY;
+  ObPrivSet total_catalog_priv_set_role = OB_PRIV_SET_EMPTY;
+  if (OB_INVALID_ID == session_priv.user_id_) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid arguments", 
+             "user_id", session_priv.user_id_, K(ret));
+  } else if (OB_FAIL(check_tenant_schema_guard())) {
+    LOG_WARN("fail to check tenant schema guard", K(ret));
+  } else if (OB_FAIL(check_lazy_guard( mgr))) {
+    LOG_WARN("fail to check lazy guard", K(ret));
+  } else {
+    const ObPrivMgr &priv_mgr = mgr->priv_mgr_;
+    ObCatalogPrivSortKey catalog_priv_key(session_priv.user_id_, need_priv.catalog_);
+    if (OB_FAIL(priv_mgr.get_catalog_priv_set(catalog_priv_key, catalog_priv_set))) {
+      LOG_WARN("get catalog priv set failed", K(catalog_priv_key), K(ret));
+    }
+    /* load role privs */
+    if (OB_SUCC(ret)) {
+      ObNeedPriv collected_privs("", "", OB_PRIV_CATALOG_LEVEL, OB_PRIV_SET_EMPTY, false,
+                                  false, OB_PRIV_CHECK_ALL, need_priv.catalog_);
+      bool check_succ = false;
+      if (OB_FAIL(collect_priv_in_roles(mgr->priv_mgr_, session_priv, enable_role_id_array, *this, need_priv,
+                                        collect_user_catalog_level_priv_in_roles, collected_privs,
+                                        check_succ))) {
+        LOG_WARN("fail to collect privs in roles", K(ret));
+      } else {
+        total_catalog_priv_set_role |= collected_privs.priv_set_;
+      }
+    }
+    if (OB_SUCC(ret)) {
+      user_catalog_priv_set = session_priv.user_priv_set_ | catalog_priv_set | total_catalog_priv_set_role;
+      if (!OB_TEST_PRIVS(user_catalog_priv_set, need_priv.priv_set_)) {
+        ret = OB_ERR_NO_CATALOG_PRIVILEGE;
+        LOG_USER_ERROR(OB_ERR_NO_CATALOG_PRIVILEGE,
+                       session_priv.user_name_.length(), session_priv.user_name_.ptr(),
+                       session_priv.host_name_.length(), session_priv.host_name_.ptr(),
+                       need_priv.catalog_.length(), need_priv.catalog_.ptr());
+      }
+    }
+  }
+  return ret;
+}
+
+int ObSchemaGetterGuard::check_catalog_priv(const ObSessionPrivInfo &session_priv,
+                                            const common::ObIArray<uint64_t> &enable_role_id_array,
+                                            const ObNeedPriv &need_priv)
+{
+  int ret = OB_SUCCESS;
+  
+  if (OB_FAIL(check_tenant_schema_guard())) {
+    LOG_WARN("failed to check tenant schema guard", K(ret));
+  } else if (!OB_TEST_PRIVS(session_priv.user_priv_set_, need_priv.priv_set_)) {
+    ObPrivSet user_catalog_priv_set = 0;
+    if (OB_FAIL(check_catalog_priv(session_priv, enable_role_id_array, need_priv, user_catalog_priv_set))) {
+      LOG_WARN("No catalog priv", 
+                "user_id", session_priv.user_id_, K(ret));
+    }
+  }
+  return ret;
+}
+
 int ObSchemaGetterGuard::check_db_priv(const ObSessionPrivInfo &session_priv,
                                        const common::ObIArray<uint64_t> &enable_role_id_array,
                                        const ObString &db,
@@ -878,6 +1141,8 @@ int ObSchemaGetterGuard::check_db_priv(const ObSessionPrivInfo &session_priv,
     LOG_WARN("Invalid arguments", 
                                   "user_id", session_priv.user_id_,
                                   KR(ret));
+  } else if (OB_FAIL(check_tenant_schema_guard())) {
+    LOG_WARN("fail to check tenant schema guard", KR(ret));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
     LOG_WARN("fail to check lazy guard", KR(ret));
   } else {
@@ -920,7 +1185,9 @@ int ObSchemaGetterGuard::check_db_priv(const ObSessionPrivInfo &session_priv,
 {
   int ret = OB_SUCCESS;
   
-  if (!OB_TEST_PRIVS(session_priv.user_priv_set_, need_priv_set)) {
+  if (OB_FAIL(check_tenant_schema_guard())) {
+    LOG_WARN("fail to check tenant schema guard", KR(ret));
+  } else if (!OB_TEST_PRIVS(session_priv.user_priv_set_, need_priv_set)) {
     ObPrivSet user_db_priv_set = 0;
     if (OB_FAIL(check_db_priv(session_priv, enable_role_id_array, db, need_priv_set, user_db_priv_set))) {
       LOG_WARN("No db priv", 
@@ -1045,7 +1312,9 @@ int ObSchemaGetterGuard::collect_all_priv_for_column(const ObSessionPrivInfo &se
     ObNeedPriv need_priv(db_name, table_name, OB_PRIV_TABLE_LEVEL, OB_PRIV_COLUMN_ACC, false);
     ObNeedPriv collected_privs(db_name, table_name, OB_PRIV_TABLE_LEVEL, OB_PRIV_SET_EMPTY, false);
     const ObSchemaMgr *mgr = NULL;
-    if (OB_FAIL(check_lazy_guard( mgr))) {
+    if (OB_FAIL(check_tenant_schema_guard())) {
+      LOG_WARN("fail to check tenant schema guard", KR(ret));
+    } else if (OB_FAIL(check_lazy_guard( mgr))) {
       LOG_WARN("fail to check lazy guard", KR(ret));
     } else if (OB_ISNULL(mgr)) {
       ret = OB_ERR_UNEXPECTED;
@@ -1084,7 +1353,9 @@ int ObSchemaGetterGuard::check_priv_any_column_priv(const ObSessionPrivInfo &ses
     ObNeedPriv collected_privs(db_name, table_name, OB_PRIV_TABLE_LEVEL, OB_PRIV_SET_EMPTY, false);
     need_priv.check_any_column_priv_ = true;
     const ObSchemaMgr *mgr = NULL;
-    if (OB_FAIL(check_lazy_guard( mgr))) {
+    if (OB_FAIL(check_tenant_schema_guard())) {
+      LOG_WARN("fail to check tenant schema guard", KR(ret));
+    } else if (OB_FAIL(check_lazy_guard( mgr))) {
       LOG_WARN("fail to check lazy guard", KR(ret));
     } else if (OB_ISNULL(mgr)) {
       ret = OB_ERR_UNEXPECTED;
@@ -1111,7 +1382,9 @@ int ObSchemaGetterGuard::check_priv_or(const ObSessionPrivInfo &session_priv,
   
   uint64_t user_id = session_priv.user_id_;
   const ObSchemaMgr *mgr = NULL;
-  if (OB_FAIL(check_lazy_guard( mgr))) {
+  if (OB_FAIL(check_tenant_schema_guard())) {
+    LOG_WARN("fail to check tenant schema guard", KR(ret));
+  } else if (OB_FAIL(check_lazy_guard( mgr))) {
     LOG_WARN("fail to check lazy guard", KR(ret));
   } else if (OB_ISNULL(mgr)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1213,6 +1486,8 @@ int ObSchemaGetterGuard::check_obj_mysql_priv(const ObSessionPrivInfo &session_p
     LOG_WARN("Invalid arguments", 
         "user_id", session_priv.user_id_,
         KR(ret));
+  } else if (OB_FAIL(check_tenant_schema_guard())) {
+    LOG_WARN("fail to check tenant schema guard", KR(ret));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
     LOG_WARN("fail to check lazy guard", KR(ret));
   } else if (!is_root_user(session_priv.user_id_)) {
@@ -1268,10 +1543,16 @@ int ObSchemaGetterGuard::check_obj_mysql_priv(const ObSessionPrivInfo &session_p
     //3. check privs
     if (OB_SUCC(ret)) {
       if (is_obj_mysql_priv_empty) {
-        LOG_WARN("No object privilege info",
+        if (obj_mysql_need_priv.obj_type_ == ObObjectType::LOCATION) {
+          ret = OB_ERR_LOCATION_ACCESS_DENIED;
+        }
+        LOG_WARN("No privilege, cannot find location priv info",
                  "user_id", session_priv.user_id_, K(obj_mysql_need_priv));
       } else if (!OB_TEST_PRIVS(obj_mysql_priv_set, obj_mysql_need_priv.priv_set_)) {
-        LOG_WARN("No object privilege",
+        if (obj_mysql_need_priv.obj_type_ == ObObjectType::LOCATION) {
+          ret = OB_ERR_LOCATION_ACCESS_DENIED;
+        }
+        LOG_WARN("No privilege", 
             "user_id", session_priv.user_id_,
             K(obj_mysql_need_priv),
             K(obj_mysql_priv_set));
@@ -1280,6 +1561,52 @@ int ObSchemaGetterGuard::check_obj_mysql_priv(const ObSessionPrivInfo &session_p
   }
   return ret;
 }
+
+int ObSchemaGetterGuard::check_location_access(const ObSessionPrivInfo &session_priv,
+                                               const common::ObIArray<uint64_t> &enable_role_id_array,
+                                               const ObString &location_name,
+                                               bool is_write)
+{
+  int ret = OB_SUCCESS;
+  ObNeedPriv tmp_need_priv;
+  tmp_need_priv.db_ = session_priv.db_;
+  tmp_need_priv.table_ = location_name;
+  tmp_need_priv.priv_level_ = OB_PRIV_OBJECT_LEVEL;
+  tmp_need_priv.priv_set_ = is_write ? OB_PRIV_WRITE : OB_PRIV_READ;
+  tmp_need_priv.obj_type_ = ObObjectType::LOCATION;
+
+  const ObSchemaMgr *mgr = NULL;
+  const ObLocationSchema *location_schema = NULL;
+
+  if (!session_priv.is_valid() || 0 == location_name.length()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid arguments", K(session_priv), K(ret));
+  } else if (OB_FAIL(check_tenant_schema_guard())) {
+    LOG_WARN("fail to check tenant schema guard", K(ret));
+  } else if (OB_FAIL(check_lazy_guard( mgr))) {
+    LOG_WARN("fail to check lazy guard", K(ret));
+  } 
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(check_obj_mysql_priv(session_priv, enable_role_id_array, tmp_need_priv))) {
+      LOG_WARN("No privilege to access location", K(session_priv), K(location_name), K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObSchemaGetterGuard::check_location_show(const ObSessionPrivInfo &session_priv,
+                                             const common::ObIArray<uint64_t> &enable_role_id_array,
+                                             const common::ObString &location_name,
+                                             bool &allow_show)
+{
+  int ret = OB_SUCCESS;
+  int tmp_ret = check_location_access(session_priv, enable_role_id_array, location_name);
+  allow_show = (tmp_ret == OB_ERR_LOCATION_ACCESS_DENIED) ? false : true;
+  ret = (tmp_ret == OB_ERR_LOCATION_ACCESS_DENIED || tmp_ret == OB_SUCCESS) ? OB_SUCCESS : tmp_ret;
+  return ret;
+}
+
 
 } //end of namespace schema
 } //end of namespace share

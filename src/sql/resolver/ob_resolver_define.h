@@ -53,6 +53,7 @@ enum ObStmtScope
   T_VARIABLE_SCOPE,
   T_WHEN_SCOPE,
   T_ORDER_SCOPE,
+  T_EXPIRE_SCOPE,
   T_PARTITION_SCOPE,
   T_FROM_SCOPE,
   T_LIMIT_SCOPE,
@@ -103,6 +104,9 @@ inline const char *get_scope_name(const ObStmtScope &scope)
     break;
   case T_ORDER_SCOPE:
     str = "order clause";
+    break;
+  case T_EXPIRE_SCOPE:
+    str = "expire expression";
     break;
   case T_PARTITION_SCOPE:
     str = "partition function";
@@ -216,6 +220,9 @@ inline const char *get_stmt_scope_str(const sql::ObStmtScope &scope)
     case sql::T_ORDER_SCOPE:
       str = "ORDER";
       break;
+    case sql::T_EXPIRE_SCOPE:
+      str = "EXPIRE";
+      break;
     case sql::T_PARTITION_SCOPE:
       str = "PARTITION";
       break;
@@ -325,6 +332,7 @@ struct ObResolverParams
        force_trace_log_(false),
        expr_factory_(NULL),
        stmt_factory_(NULL),
+       show_seed_(false),
        is_from_show_resolver_(false),
        is_restore_(false),
        is_from_create_view_(false),
@@ -388,6 +396,7 @@ public:
   ObRawExprFactory *expr_factory_;
   ObStmtFactory *stmt_factory_;
   
+  bool show_seed_;
   bool is_from_show_resolver_;
   bool is_restore_;
   // Query table creation, creating views cannot include temporary tables;

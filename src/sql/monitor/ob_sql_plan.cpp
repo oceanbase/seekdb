@@ -2514,7 +2514,7 @@ int ObSqlPlan::restore_session(ObSQLSessionInfo *session,
       auto txs = share::g_mp->trans_service();
       if (OB_ISNULL(txs)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_ERROR("can not acquire server TransService", KR(ret));
+        LOG_ERROR("can not acquire MTL TransService", KR(ret));
         new_tx_desc->dump_and_print_trace();
       } else if (OB_FAIL(txs->release_tx(*new_tx_desc))) {
         LOG_WARN("failed to release tx desc", K(ret));

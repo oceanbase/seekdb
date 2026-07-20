@@ -323,16 +323,27 @@ int ObPxDistTransmitOp::do_bc2host_dist()
   int ret = OB_SUCCESS;
   ObBc2HostSliceIdCalc::ChannelIdxArray channel_idx;
   ObBc2HostSliceIdCalc::HostIdxArray host_idx;
+  auto &channels = task_channels_;
   for (int64_t i = 0; i < task_channels_.count() && OB_SUCC(ret); i++) {
     if (OB_FAIL(channel_idx.push_back(i))) {
       LOG_WARN("array push back failed", K(ret));
     }
   }
-  if (OB_SUCC(ret) && !channel_idx.empty()) {
-    ObBc2HostSliceIdCalc::HostIndex local_host;
-    local_host.begin_ = 0;
-    local_host.end_ = channel_idx.count();
-    if (OB_FAIL(host_idx.push_back(local_host))) {
+  if (OB_SUCC(ret)) {
+    lib::ob_sort(channel_idx.begin(), channel_idx.end(), [&channels](int64_t l, int64_t r) {
+        return channels.at(l)->get_peer() < channels.at(r)->get_peer(); });
+  }
+  ObBc2HostSliceIdCalc::HostIndex hi;
+  uint64_t idx = 0;
+  while (OB_SUCC(ret) && idx < channel_idx.count()) {
+    hi.begin_ = idx;
+    while (idx < channel_idx.count()
+        && task_channels_.at(channel_idx.at(hi.begin_))->get_peer()
+        == task_channels_.at(channel_idx.at(idx))->get_peer()) {
+      idx++;
+    }
+    hi.end_ = idx;
+    if (OB_FAIL(host_idx.push_back(hi))) {
       LOG_WARN("array push back failed", K(ret));
     }
   }
@@ -457,7 +468,7 @@ int ObPxDistTransmitOp::do_sm_broadcast_dist()
   if (OB_ISNULL(trans_input = static_cast<ObPxDistTransmitOpInput *>(get_input()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("input is null", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
       schema_guard))) {
     LOG_WARN("faile to get schema guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( repart_ref_table_id, table_schema))) {
@@ -498,7 +509,7 @@ int ObPxDistTransmitOp::do_sm_pkey_hash_dist()
   if (OB_ISNULL(trans_input = static_cast<ObPxDistTransmitOpInput *>(get_input()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("input is null", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
       schema_guard))) {
     LOG_WARN("faile to get schema guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema(

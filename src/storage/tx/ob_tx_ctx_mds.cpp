@@ -92,7 +92,8 @@ int ObTxMDSCache::alloc_mds_node(const ObTxCtx *tx_ctx,
   }
 
   void *ptr = nullptr;
-  if (OB_ISNULL(ptr = MultiTxDataFactory::alloc(buf_len))) {
+  if (OB_ISNULL(ptr =
+                    MultiTxDataFactory::alloc(buf_len, tx_ctx->get_trans_id(), (uint64_t)tx_ctx))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     TRANS_LOG(WARN, "allocate memory failed", KR(ret), K(buf_len));
   } else {

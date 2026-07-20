@@ -20,8 +20,6 @@
 #include "../optimizer/test_optimizer_utils.h"
 #include "sql/code_generator/ob_code_generator.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
-#include "share/rc/ob_module_provider.h"
-#include "share/rc/ob_server_runtime.h"
 namespace test
 {
 class TestOpEngine : public TestOptimizerUtils
@@ -31,7 +29,7 @@ public:
   virtual ~TestOpEngine();
   virtual void SetUp();
   virtual void TearDown();
-  virtual void destroy() override;
+  virtual void destory();
 
   int basic_random_test(const std::string &line);
   int basic_random_test_output_to_file(const std::string &test_file, bool vector_2);
@@ -70,12 +68,7 @@ protected:
   // data members
   std::vector<std::vector<std::string>> temp_cmp_data_;
 
-  share::ObServerRuntimeState runtime_state_;
-  share::ObServerRuntimeState *old_server_runtime_;
-  share::ObIModuleProvider *old_mp_;
-  share::ObIModuleProvider *test_mp_;
-  common::ObIOService *io_service_;
-  bool destroyed_;
+  ObTenantBase tbase_;
   //
   std::string test_config_file_;
   std::string env_dir_;

@@ -20,7 +20,6 @@
 #include "share/schema/ob_column_schema.h"  // previously hidden behind a transitive include, make the dependency explicit
 #include "share/schema/ob_multi_version_schema_service.h"  // previously hidden behind a transitive include
 #include "share/ob_force_print_log.h"  // FLOG_*, previously hidden behind a transitive include
-#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "rootserver/freeze/ob_major_merge_progress_util.h"
 #ifdef ERRSIM
 #endif
@@ -36,7 +35,7 @@ int ObSortColumnIdArray::build(
   const ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
-  ObSEArray<ObColDesc, ObTabletColumnChecksumMeta::DEFAULT_COLUMN_CNT> column_descs;
+  ObSEArray<ObColDesc, ObTabletReplicaReportColumnMeta::DEFAULT_COLUMN_CNT> column_descs;
   int64_t col_cnt = 0;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
@@ -176,7 +175,7 @@ int ObTableCkmItems::build(
     share::schema::ObSchemaGetterGuard &schema_guard,
     const schema::ObSimpleTableSchemaV2 &simple_schema,
     const ObIArray<ObTabletID> &input_tablet_ids,
-    const ObLocalTabletChecksumArray &input_ckm_items)
+    const ObReplicaCkmArray &input_ckm_items)
 {
   int ret = OB_SUCCESS;
   const int64_t table_id = simple_schema.get_table_id();
@@ -184,12 +183,10 @@ int ObTableCkmItems::build(
     ret = OB_INIT_TWICE;
     LOG_WARN("is inited before", KR(ret), KPC(this));
   } else if (OB_FAIL(tablet_ids_.assign(input_tablet_ids))) {
-    LOG_WARN("failed to assign tablet ids", KR(ret), K(input_tablet_ids));
-  }
-  if (OB_FAIL(ret)) {
+    LOG_WARN("failed to assign tablet id array", KR(ret), K(input_tablet_ids));
   } else if (OB_FAIL(ckm_items_.init(input_ckm_items))) {
-    LOG_WARN("failed to assign local tablet checksum array", KR(ret), K(input_ckm_items));
-  } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema_))) {
+    LOG_WARN("failed to assign tablet replica ckm array", KR(ret), K(input_ckm_items));
+  } else if (OB_FAIL(schema_guard.get_table_schema(table_id, table_schema_))) {
     LOG_WARN("fail to get table schema", KR(ret), K(table_id));
   } else if ((!simple_schema.is_index_table() || simple_schema.is_fts_or_multivalue_index())
       && OB_FAIL(sort_col_id_array_.build(*table_schema_))) {
@@ -232,6 +229,7 @@ int ObTableCkmItems::prepare_build(
 int ObTableCkmItems::build(
     const uint64_t table_id,
     const share::SCN &compaction_scn,
+    common::ObMySQLProxy &sql_proxy,
     schema::ObSchemaGetterGuard &schema_guard)
 {
   int ret = OB_SUCCESS;
@@ -241,7 +239,7 @@ int ObTableCkmItems::build(
     LOG_WARN("failed to prepare build ckm items", K(ret));
   } else if (OB_FAIL(ckm_items_.init(tablet_ids_.count()))) {
     STORAGE_LOG(WARN, "failed to init ckm array", K(ret), K(tablet_ids_.count()));
-  } else if (OB_FAIL(ObTabletLocalChecksumOperator::get_local_tablet_checksum_items(
+  } else if (OB_FAIL(ObTabletReplicaChecksumOperator::get_tablet_replica_checksum_items(sql_proxy,
                              compaction_scn, tablet_ids_,
                              ckm_items_))) {
     LOG_WARN("failed to get table column checksum items", KR(ret));
@@ -289,17 +287,17 @@ int ObTableCkmItems::build_column_ckm_sum_array(
       LOG_WARN("failed to reserve tablet column checksum array", KR(ret));
     }
     // items are order by tablet_id
-    for (int64_t tablet_idx = 0; OB_SUCC(ret) && (tablet_idx < tablet_ids_.count()); ++tablet_idx) {
-      const ObTabletID &tablet_id = tablet_ids_.at(tablet_idx);
-      const ObTabletLocalChecksumItem *cur_item = nullptr;
+    for (int64_t pair_idx = 0; OB_SUCC(ret) && (pair_idx < tablet_ids_.count()); ++pair_idx) {
+      const ObTabletID &tablet_id = tablet_ids_.at(pair_idx);
+      const ObTabletReplicaChecksumItem *cur_item = nullptr;
       if (OB_FAIL(ckm_items_.get(tablet_id, cur_item))) {
-        LOG_WARN("failed to get ckm item", KR(ret), K(tablet_id), K(tablet_idx), K(tablet_ids_));
+        LOG_WARN("failed to get ckm item", KR(ret), K(tablet_id), K(pair_idx), K(tablet_ids_));
       } else if (OB_UNLIKELY(cur_item->column_meta_.column_checksums_.count() != column_checksums_cnt)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("column checksum count mismatch", K(ret), K(column_checksums_cnt), K(cur_item),
             "base_item", ckm_items_.at(0));
       } else if (cur_item->compaction_scn_ == compaction_scn) {
-        const ObTabletColumnChecksumMeta &cur_column_meta = cur_item->column_meta_;
+        const ObTabletReplicaReportColumnMeta &cur_column_meta = cur_item->column_meta_;
         if (pre_tablet_id == OB_INVALID_ID) { // first ckm item
           for (int64_t j = 0; OB_SUCC(ret) && (j < column_checksums_cnt); ++j) {
             if (OB_FAIL(ckm_sum_array_.push_back(cur_column_meta.column_checksums_.at(j)))) {
@@ -320,7 +318,7 @@ int ObTableCkmItems::build_column_ckm_sum_array(
         ret = OB_ITEM_NOT_MATCH;
         LOG_WARN("compaction scn mismtach", KR(ret), K(cur_item), K(compaction_scn));
       }
-      LOG_TRACE("build_column_ckm_sum_array", KR(ret), K(tablet_idx), KPC(cur_item), K(compaction_scn), K(row_cnt));
+      LOG_TRACE("build_column_ckm_sum_array", KR(ret), K(pair_idx), KPC(cur_item), K(compaction_scn), K(row_cnt));
     } // end of for
   }
   if (OB_SUCC(ret)) {
@@ -426,57 +424,57 @@ int ObTableCkmItems::validate_tablet_column_ckm(
     LOG_WARN("tablet id count are not equal", KR(ret), K(data_ckm), K(index_ckm),
       K(data_ckm.tablet_ids_), K(index_ckm.tablet_ids_));
   } else {
-    const ObTabletLocalChecksumItem *data_local_ckm = NULL;
-    const ObTabletLocalChecksumItem *index_local_ckm = NULL;
+    const ObTabletReplicaChecksumItem *data_replica_ckm = NULL;
+    const ObTabletReplicaChecksumItem *index_replica_ckm = NULL;
     for (int64_t idx = 0; OB_SUCC(ret) && idx < index_ckm.tablet_ids_.count(); ++idx) {
       if (OB_FAIL(data_ckm.ckm_items_.get(
-        data_ckm.tablet_ids_.at(idx), data_local_ckm))) {
+        data_ckm.tablet_ids_.at(idx), data_replica_ckm))) {
         if (OB_ENTRY_NOT_EXIST == ret) {
           ret = OB_SUCCESS;
-          LOG_INFO("failed to find local checksum for data tablet, skip verify", KR(ret), K(idx),
+          LOG_INFO("failed to find replica_checksum idx of data tablet, skip verify", KR(ret), K(idx),
             "tablet_id", data_ckm.tablet_ids_.at(idx));
         } else {
-          LOG_ERROR("failed to find local checksum for data tablet", KR(ret), K(data_ckm), K(idx),
+          LOG_ERROR("failed to find replica_checksum idx of data tablet", KR(ret), K(data_ckm), K(idx),
             "tablet_id", data_ckm.tablet_ids_.at(idx));
         }
       } else if (OB_FAIL(index_ckm.ckm_items_.get(
-        index_ckm.tablet_ids_.at(idx), index_local_ckm))) {
+        index_ckm.tablet_ids_.at(idx), index_replica_ckm))) {
         if (OB_ENTRY_NOT_EXIST == ret) {
           ret = OB_SUCCESS;
-          LOG_INFO("failed to find local checksum for index tablet, skip verify", KR(ret), K(idx),
+          LOG_INFO("failed to find replica_checksum idx of index tablet, skip verify", KR(ret), K(idx),
             "tablet_id", index_ckm.tablet_ids_.at(idx));
         } else {
-          LOG_ERROR("failed to find local checksum for index tablet", KR(ret), KPC(data_local_ckm), K(idx),
+          LOG_ERROR("failed to find replica_checksum idx of index tablet", KR(ret), KPC(data_replica_ckm), K(idx),
             "tablet_id", index_ckm.tablet_ids_.at(idx), K(index_ckm.tablet_ids_));
         }
       } else {
-        if (OB_UNLIKELY(data_ckm.tablet_ids_.at(idx) != data_local_ckm->tablet_id_
-          || index_ckm.tablet_ids_.at(idx) != index_local_ckm->tablet_id_)) {
+        if (OB_UNLIKELY(data_ckm.tablet_ids_.at(idx) != data_replica_ckm->tablet_id_
+          || index_ckm.tablet_ids_.at(idx) != index_replica_ckm->tablet_id_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("tablet id and local checksum do not match", KR(ret), K(idx),
-              "data_tablet", data_ckm.tablet_ids_.at(idx), K(data_local_ckm),
-              "index_tablet", index_ckm.tablet_ids_.at(idx), K(index_local_ckm));
-        } else if (OB_UNLIKELY(data_local_ckm->compaction_scn_ != compaction_scn
-          || index_local_ckm->compaction_scn_ != compaction_scn)) {
+          LOG_WARN("tablet id & replica checksum is not match", KR(ret), K(idx),
+              "data_tablet", data_ckm.tablet_ids_.at(idx), K(data_replica_ckm),
+              "index_tablet", index_ckm.tablet_ids_.at(idx), K(index_replica_ckm));
+        } else if (OB_UNLIKELY(data_replica_ckm->compaction_scn_ != compaction_scn
+          || index_replica_ckm->compaction_scn_ != compaction_scn)) {
           ret = OB_ITEM_NOT_MATCH;
-          LOG_WARN("compaction scn does not match, no need to validate", KR(ret), K(compaction_scn), KPC(data_local_ckm), KPC(index_local_ckm));
-        } else if (OB_UNLIKELY(data_local_ckm->row_count_ != index_local_ckm->row_count_)) {
+          LOG_WARN("compaction scan is not match, no need to validate", KR(ret), K(compaction_scn), KPC(data_replica_ckm), KPC(index_replica_ckm));
+        } else if (OB_UNLIKELY(data_replica_ckm->row_count_ != index_replica_ckm->row_count_)) {
           ret = OB_CHECKSUM_ERROR;
           LOG_ERROR("tablet row count in data & local index is not equal", KR(ret),
-            "data_row_cnt", data_local_ckm->row_count_,
-            "index_row_cnt", index_local_ckm->row_count_);
+            "data_row_cnt", data_replica_ckm->row_count_,
+            "index_row_cnt", index_replica_ckm->row_count_);
         } else if (OB_FAIL(compare_ckm_by_column_ids(
             data_ckm,
             index_ckm,
             *data_table_schema,
             *index_table_schema,
-            data_local_ckm->column_meta_.column_checksums_,
-            index_local_ckm->column_meta_.column_checksums_,
+            data_replica_ckm->column_meta_.column_checksums_,
+            index_replica_ckm->column_meta_.column_checksums_,
             ckm_error_info))) {
           if (OB_CHECKSUM_ERROR != ret) {
             LOG_ERROR("failed to compare column checksum", KR(ret),
-              "data_tablet", data_ckm.tablet_ids_.at(idx), KPC(data_local_ckm),
-              "index_tablet", index_ckm.tablet_ids_.at(idx), KPC(index_local_ckm),
+              "data_tablet", data_ckm.tablet_ids_.at(idx), KPC(data_replica_ckm),
+              "index_tablet", index_ckm.tablet_ids_.at(idx), KPC(index_replica_ckm),
               K(data_ckm.ckm_items_), K(index_ckm.ckm_items_));
           }
         }
@@ -492,8 +490,8 @@ int ObTableCkmItems::validate_tablet_column_ckm(
         if (OB_CHECKSUM_ERROR == ret) {
           RECORD_CKM_ERROR_INFO(idx, false/*is_global_index*/);
           LOG_ERROR("failed to compare column checksum", KR(ret), K(ckm_error_info),
-            "data_tablet", data_ckm.tablet_ids_.at(idx), "data_row_cnt", data_local_ckm->row_count_, KPC(data_local_ckm),
-            "index_tablet", index_ckm.tablet_ids_.at(idx), "index_row_cnt", index_local_ckm->row_count_, KPC(index_local_ckm),
+            "data_tablet", data_ckm.tablet_ids_.at(idx), "data_row_cnt", data_replica_ckm->row_count_, KPC(data_replica_ckm),
+            "index_tablet", index_ckm.tablet_ids_.at(idx), "index_row_cnt", index_replica_ckm->row_count_, KPC(index_replica_ckm),
             K(data_ckm.ckm_items_), K(index_ckm.ckm_items_));
           if (OB_TMP_FAIL(ObColumnChecksumErrorOperator::insert_column_checksum_err_info(sql_proxy,
             ckm_error_info))) {
@@ -511,8 +509,8 @@ int ObTableCkmItems::compare_ckm_by_column_ids(
     ObTableCkmItems &index_ckm,
     const schema::ObTableSchema &data_table_schema,
     const schema::ObTableSchema &index_table_schema,
-    const ObIArray<int64_t> &data_local_col_ckm_array,
-    const ObIArray<int64_t> &index_local_col_ckm_array,
+    const ObIArray<int64_t> &data_replica_col_ckm_array,
+    const ObIArray<int64_t> &index_replica_col_ckm_array,
     ObColumnChecksumErrorInfo &ckm_error_info)
 {
   int ret = OB_SUCCESS;
@@ -553,17 +551,17 @@ int ObTableCkmItems::compare_ckm_by_column_ids(
         LOG_WARN("sort col id is unexpected invalid", KR(ret), K(data_ckm));
       } else if (OB_FAIL(ObSortColumnIdArray::get_array_idx_by_column_id(data_ckm.sort_col_id_array_, column_id, data_array_idx))) {
         LOG_WARN("failed to get array idx from data ckm", KR(ret), K(idx), K(column_id));
-      } else if (OB_UNLIKELY(data_array_idx < 0 || data_array_idx >= data_local_col_ckm_array.count())) {
+      } else if (OB_UNLIKELY(data_array_idx < 0 || data_array_idx >= data_replica_col_ckm_array.count())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("array idx is invalid", KR(ret), K(data_array_idx), K(data_ckm));
-      } else if (data_local_col_ckm_array.at(data_array_idx) != index_local_col_ckm_array.at(idx)) {
+      } else if (data_replica_col_ckm_array.at(data_array_idx) != index_replica_col_ckm_array.at(idx)) {
         ret = OB_CHECKSUM_ERROR;
         ckm_error_info.column_id_ = column_id;
-        ckm_error_info.data_column_checksum_ = data_local_col_ckm_array.at(data_array_idx);
-        ckm_error_info.index_column_checksum_ = index_local_col_ckm_array.at(idx);
+        ckm_error_info.data_column_checksum_ = data_replica_col_ckm_array.at(data_array_idx);
+        ckm_error_info.index_column_checksum_ = index_replica_col_ckm_array.at(idx);
         LOG_ERROR("failed to compare column checksum", KR(ret), K(column_id),
-          K(data_array_idx), "data_column_checksum", data_local_col_ckm_array.at(data_array_idx), K(data_local_col_ckm_array),
-          "index_array_idx", idx, "index_column_checksum", index_local_col_ckm_array.at(idx), K(index_local_col_ckm_array));
+          K(data_array_idx), "data_column_checksum", data_replica_col_ckm_array.at(data_array_idx), K(data_replica_col_ckm_array),
+          "index_array_idx", idx, "index_column_checksum", index_replica_col_ckm_array.at(idx), K(index_replica_col_ckm_array));
       }
     }
   } // end of for
@@ -600,8 +598,8 @@ int ObTableCkmItems::check_schema_change_after_major_freeze(
   
   const ObTableSchema *old_table_schema = nullptr;
   const ObTableSchema *old_index_schema = nullptr;
-  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
-          schema_guard, freeze_info.schema_version_,
+  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
+          schema_guard, freeze_info.schema_version_, OB_INVALID_VERSION,
           ObMultiVersionSchemaService::RefreshSchemaMode::FORCE_LAZY))) {
     LOG_WARN("fail to get schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( data_ckm.table_id_, old_table_schema))) {

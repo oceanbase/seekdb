@@ -173,6 +173,7 @@ enum ObCommandOption {
   COMMAND_OPTION_VARIABLE,
   COMMAND_OPTION_NODAEMON,
   COMMAND_OPTION_EMBEDDED,
+  COMMAND_OPTION_DEVNAME,
   COMMAND_OPTION_BASE_DIR,
   COMMAND_OPTION_DATA_DIR,
   COMMAND_OPTION_REDO_DIR,
@@ -193,6 +194,7 @@ static struct option long_options[] = {
   {"port",       required_argument, 0, 'P'},
   {"nodaemon",   no_argument,       0, COMMAND_OPTION_NODAEMON},
   {"use-ipv6",   no_argument,       0, '6'},
+  {"devname",    required_argument, 0, COMMAND_OPTION_DEVNAME},
   {"base-dir",   required_argument, 0, COMMAND_OPTION_BASE_DIR},
   {"data-dir",   required_argument, 0, COMMAND_OPTION_DATA_DIR},
   {"redo-dir",   required_argument, 0, COMMAND_OPTION_REDO_DIR},
@@ -319,6 +321,10 @@ int ObCommandLineParser::handle_option(int option, const char* value, ObServerOp
     }
     case '6': { // use-ipv6
       opts.use_ipv6_ = true;
+      break;
+    }
+    case COMMAND_OPTION_DEVNAME: { // devname
+      MPRINT("devname is deprecated, igored."); // TODO wangyunlai.wyl remove me before 2025-12-01
       break;
     }
     case COMMAND_OPTION_BASE_DIR: { // base-dir
@@ -534,13 +540,18 @@ void ObCommandLineParser::print_help() const
 
 void ObCommandLineParser::print_version()
 {
+#ifndef ENABLE_SANITY
+  const char *extra_flags = "";
+#else
+  const char *extra_flags = "|Sanity";
+#endif
   ObSqlString exe_name;
   (void) get_executable_name(exe_name);
   MPRINT("%s (%s %s %s)\n", exe_name.ptr(), OB_OCEANBASE_NAME, OB_SEEKDB_NAME, PACKAGE_VERSION);
   MPRINT("REVISION: %s", build_version());
   MPRINT("BUILD_BRANCH: %s", build_branch());
   MPRINT("BUILD_TIME: %s %s", build_date(), build_time());
-  MPRINT("BUILD_FLAGS: %s", build_flags());
+  MPRINT("BUILD_FLAGS: %s%s", build_flags(), extra_flags);
   MPRINT("BUILD_INFO: %s\n", build_info());
   MPRINT("%s", COPYRIGHT);
   MPRINT();

@@ -24,7 +24,7 @@
 #include "ob_tablet_id.h"
 #include "src/share/ob_errno.h"
 #include "common/meta_programming/ob_type_traits.h"
-#include "mds_service.h"
+#include "mds_tenant_service.h"
 #include "common_define.h"
 
 namespace oceanbase
@@ -64,11 +64,11 @@ struct MdsFactory
   static int deep_copy_buffer_ctx(const transaction::ObTransID &trans_id,
                                   const BufferCtx &old_ctx,
                                   BufferCtx *&new_ctx,
-                                  ObIAllocator &allocator = share::g_mp->mds_service()->get_buffer_ctx_allocator());
+                                  ObIAllocator &allocator = share::g_mp->tenant_mds_service()->get_buffer_ctx_allocator());
   static int create_buffer_ctx(const transaction::ObTxDataSourceType &data_source_type,
                                const transaction::ObTransID &trans_id,
                                BufferCtx *&buffer_ctx,
-                               ObIAllocator &allocator = share::g_mp->mds_service()->get_buffer_ctx_allocator());
+                               ObIAllocator &allocator = share::g_mp->tenant_mds_service()->get_buffer_ctx_allocator());
 private:
   // If type T has an init function, then first construct it using the default constructor, and then call its init function
   template <typename T, typename ...Args, ENABLE_IF_HAS(T, init, int(Args...))>

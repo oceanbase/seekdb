@@ -56,7 +56,6 @@ public:
   ~ObMediumCompactionScheduleFunc() {}
 
 
-  static int is_election_leader(const share::ObLSID &ls_id, bool &ls_election_leader);
   static int get_max_sync_medium_scn(
     const ObTablet &tablet,
     const ObMediumCompactionInfoList &medium_list,
@@ -70,13 +69,13 @@ public:
     storage::ObStorageSchema &storage_schema,
     bool &is_skip_merge_index);
   static int batch_check_medium_finish(
-    ObIArray<ObTabletCheckInfo> &finish_tablet_ls_infos,
-    const ObIArray<ObTabletCheckInfo> &tablet_ls_infos,
+    ObIArray<ObTabletCheckInfo> &finish_tablet_infos,
+    const ObIArray<ObTabletCheckInfo> &tablet_check_infos,
     ObCompactionTimeGuard &time_guard);
   static int check_replica_checksum_items(
       const ObReplicaCkmArray &checksum_items,
       const bool is_medium_checker);
-  int schedule_next_medium_for_leader(
+  int schedule_next_medium(
     const int64_t major_snapshot,
     bool &medium_clog_submitted);
   static int get_table_id(
@@ -93,7 +92,6 @@ public:
 protected:
   int decide_medium_snapshot(bool &medium_clog_submitted);
   static int get_status_from_inner_table(
-      const ObLSID &ls_id,
       const ObTabletID &tablet_id,
       share::ObTabletCompactionScnInfo &ret_info);
   int prepare_medium_info(
@@ -110,8 +108,8 @@ protected:
       ObTableStoreIterator &table_iter);
   int submit_medium_clog(ObMediumCompactionInfo &medium_info);
   static int batch_check_medium_meta_table(
-      const ObIArray<ObTabletCheckInfo> &tablet_ls_infos,
-      ObIArray<ObTabletCheckInfo> &finish_tablet_ls,
+      const ObIArray<ObTabletCheckInfo> &tablet_check_infos,
+      ObIArray<ObTabletCheckInfo> &finish_tablet_infos,
       ObCompactionTimeGuard &time_guard);
   static int check_medium_meta_table(
       const int64_t medium_snapshot,
@@ -124,7 +122,7 @@ protected:
       const int64_t end_idx,
       const bool is_medium_checker,
       ObTabletDataChecksumChecker &data_checksum_checker,
-      ObIArray<ObCkmErrorTabletLSInfo> &error_pairs,
+      ObIArray<ObCkmErrorTabletInfo> &error_pairs,
       int &check_ret);
   int choose_medium_snapshot(
       const int64_t max_sync_medium_scn,

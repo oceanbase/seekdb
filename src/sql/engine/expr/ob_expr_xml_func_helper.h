@@ -38,24 +38,7 @@ class ObXMLExprHelper final
 {
 public:
   static int set_string_result(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res, ObString &res_str);
-  // get xmltype str from input expr
-  static int get_xmltype_from_expr(const ObExpr *expr,
-                                   ObEvalCtx &ctx,
-                                   ObDatum *&xml_datum);
-  static int get_str_from_expr(const ObExpr *expr,
-                               ObEvalCtx &ctx,
-                               ObString &res,
-                               ObIAllocator &allocator);
-  static int get_xml_base_from_expr(const ObExpr *expr,
-                                    ObMulModeMemCtx *mem_ctx,
-                                    ObEvalCtx &ctx,
-                                    ObIMulModeBase *&node);
-  static int binary_agg_xpath_result(ObPathExprIter &xpath_iter,
-                                     ObMulModeNodeType &node_type,
-                                     ObMulModeMemCtx* mem_ctx,
-                                     ObStringBuffer &res,
-                                     int64_t &append_node_num,
-                                     bool add_ns);
+  static int get_str_from_expr(const ObExpr *expr, ObEvalCtx &ctx, ObString &res, ObIAllocator &allocator);
 
   static bool is_xml_leaf_node(ObMulModeNodeType node_type);
   static bool is_xml_text_node(ObMulModeNodeType node_type);

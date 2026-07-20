@@ -49,6 +49,5 @@ int ObTransIDService::alloc_trans_id_range(const int64_t range, int64_t &start_i
   }
   return ret;
 }
-
 }
 }

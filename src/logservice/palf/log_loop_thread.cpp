@@ -46,7 +46,7 @@ int LogLoopThread::init(IPalfEnvImpl *palf_env_impl)
     PALF_LOG(WARN, "invalid argument", K(ret), KP(palf_env_impl));
   } else {
     palf_env_impl_ = palf_env_impl;
-    share::ObThreadPool::set_run_wrapper(share::server_runtime());
+    share::ObThreadPool::set_run_wrapper(MTL_CTX());
     run_interval_ = DEFAULT_LOG_LOOP_INTERVAL_US;
     is_inited_ = true;
   }

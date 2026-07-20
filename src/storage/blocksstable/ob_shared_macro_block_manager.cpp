@@ -529,10 +529,9 @@ int ObSharedMacroBlockMgr::update_tablet(
   ObTableStoreIterator table_store_iter;
   uint64_t data_version = 0;
   const ObTabletMeta &tablet_meta = tablet_handle.get_obj()->get_tablet_meta();
-  const share::ObLSID &ls_id = tablet_meta.ls_id_;
   ObTabletHandle updated_tablet_handle;
   ObMetaDiskAddr cur_addr;
-  const ObTabletMapKey key(ls_id, tablet_meta.tablet_id_);
+  const ObTabletMapKey key(tablet_meta.tablet_id_);
 
   if (OB_FAIL(tablet_handle.get_obj()->get_all_sstables(table_store_iter))) {
     LOG_WARN("fail to get sstables of this tablet", K(ret));
@@ -620,21 +619,16 @@ int ObSharedMacroBlockMgr::update_tablet(
 
   if (OB_SUCC(ret) && !new_sstables.empty()) {
     ObLSService *ls_svr = share::g_mp->ls_service();
-    ObLSHandle ls_handle;
+    ObLS *tenant_ls = nullptr;
 
-    if (OB_FAIL(ls_svr->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
-      LOG_WARN("fail to get ls handle", K(ret), K(ls_id), KPC(tablet_handle.get_obj()));
+    if (OB_FAIL(ls_svr->get_ls(tenant_ls))) {
+      LOG_WARN("fail to get ls", K(ret), KPC(tablet_handle.get_obj()));
+    } else if (OB_FAIL(tenant_ls->update_tablet_table_store(
+          updated_tablet_handle, new_sstables))) {
+      LOG_WARN("fail to replace small sstables in the tablet",
+          K(ret), K(updated_tablet_handle), K(new_sstables));
     } else {
-      const int64_t rebuild_seq = ls_handle.get_ls()->get_rebuild_seq();
-      if (OB_UNLIKELY(!ls_handle.is_valid())) {
-        LOG_WARN("la handle is invalid", K(ret), K(ls_handle));
-      } else if (OB_FAIL(ls_handle.get_ls()->update_tablet_table_store(
-          rebuild_seq, updated_tablet_handle, new_sstables))) {
-        LOG_WARN("fail to replace small sstables in the tablet",
-            K(ret), K(rebuild_seq), K(updated_tablet_handle), K(new_sstables));
-      } else {
-        rewrite_cnt += new_sstables.count();
-      }
+      rewrite_cnt += new_sstables.count();
     }
   }
 
@@ -771,7 +765,6 @@ int ObSharedMacroBlockMgr::prepare_data_desc(
     } else if (OB_FAIL(data_desc.init(
           false/*is_ddl*/,
           *storage_schema,
-          tablet.get_tablet_meta().ls_id_,
           tablet.get_tablet_meta().tablet_id_,
           merge_type,
           snapshot_version,
@@ -792,7 +785,6 @@ int ObSharedMacroBlockMgr::prepare_data_desc(
     if (FAILEDx(data_desc.init(
           false/*is_ddl*/,
           *storage_schema,
-          tablet.get_tablet_meta().ls_id_,
           tablet.get_tablet_meta().tablet_id_,
           merge_type,
           snapshot_version,

@@ -99,7 +99,9 @@ int ObPxMsgProc::startup_msg_loop(ObExecContext &ctx)
   LOG_TRACE("TIMERECORD ",
             "reserve:=-1 name:=QC dfoid:=-1 sqcid:=-1 taskid:=-1 start:",
             ObTimeUtility::current_time());
-  if (OB_FAIL(scheduler_->init_all_dfo_channel(ctx))) {
+  if (OB_FAIL(scheduler_->prepare_schedule_info(ctx))) {
+    LOG_WARN("fail to prepare schedule info", K(ret));
+  } else if (OB_FAIL(scheduler_->init_all_dfo_channel(ctx))) {
     LOG_WARN("fail to init all dfo channel", K(ret));
   } else if (OB_FAIL(scheduler_->try_schedule_next_dfo(ctx))) {
     LOG_WARN("fail to sched next one dfo", K(ret));
@@ -149,8 +151,9 @@ int ObPxMsgProc::on_sqc_init_msg(ObExecContext &ctx, const ObPxInitSqcResultMsg 
     if (OB_SUCCESS != pkt.rc_) {
       ret = pkt.rc_;
       ObPxErrorUtil::update_qc_error_code(coord_info_.first_error_code_,
-          pkt.rc_, pkt.err_msg_);
-      LOG_WARN("failed to initialize local sqc", K(pkt), KP(ret));
+          pkt.rc_, pkt.err_msg_, sqc->get_exec_addr());
+      LOG_WARN("fail init sqc, please check remote server log for details",
+               "remote_server", sqc->get_exec_addr(), K(pkt), KP(ret));
     } else if (pkt.task_count_ <= 0) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("task count returned by sqc invalid. expect 1 or more", K(pkt), K(ret));
@@ -266,7 +269,7 @@ int ObPxMsgProc::on_sqc_finish_msg(ObExecContext &ctx,
 void ObPxMsgProc::log_warn_sqc_fail(int ret, const ObPxFinishSqcResultMsg &pkt, ObPxSqcMeta *sqc)
 {
   // Do not change the follow log about px_obdiag_sqc_addr, becacue it will use in obdiag tool
-  LOG_WARN("local sqc failed, abort qc", K(pkt), K(ret), KPC(sqc));
+  LOG_WARN("sqc fail, abort qc", K(pkt), K(ret), "px_obdiag_sqc_addr", sqc->get_exec_addr());
 }
 
 int ObPxMsgProc::process_sqc_finish_msg_once(ObExecContext &ctx, const ObPxFinishSqcResultMsg &pkt,
@@ -302,7 +305,7 @@ int ObPxMsgProc::process_sqc_finish_msg_once(ObExecContext &ctx, const ObPxFinis
   if (OB_FAIL(ret)) {
   } else if (common::OB_INVALID_ID != pkt.temp_table_id_) {
     if (OB_FAIL(ctx.add_temp_table_interm_result_ids(pkt.temp_table_id_,
-                                                     GCTX.self_addr(),
+                                                     sqc->get_exec_addr(),
                                                      pkt.interm_result_ids_))) {
       LOG_WARN("failed to add temp table interm result ids.", K(ret));
     }
@@ -316,10 +319,11 @@ int ObPxMsgProc::process_sqc_finish_msg_once(ObExecContext &ctx, const ObPxFinis
         && ObVirtualTableErrorWhitelist::should_ignore_vtable_error(pkt.rc_)) {
        // If a sqc finish message is received, if the sqc involves a virtual table, all error codes need to be ignored
        // If this dfo is a child_dfo of root_dfo, to allow px to exit the message loop of the data channel
-       // Attach a synthetic EOF DTL buffer so the local PX loop can exit.
+       // Need to mock an eof dtl buffer local send to px (actual not via rpc, attach only)
       const_cast<ObPxFinishSqcResultMsg &>(pkt).rc_ = OB_SUCCESS;
-      OZ(root_dfo_action_.notify_tasks_mock_eof(
-          edge, phy_plan_ctx->get_timeout_timestamp()));
+      OZ(root_dfo_action_.notify_peers_mock_eof(edge,
+          phy_plan_ctx->get_timeout_timestamp(),
+          sqc->get_exec_addr()));
     }
     NG_TRACE_EXT(sqc_finish,
                  OB_ID(dfo_id), sqc->get_dfo_id(),
@@ -357,7 +361,7 @@ int ObPxMsgProc::process_sqc_finish_msg_once(ObExecContext &ctx, const ObPxFinis
    * However, because an error occurred, the subsequent scheduling process does not need to continue, and the later process will handle the error.
    */
   ObPxErrorUtil::update_qc_error_code(coord_info_.first_error_code_,
-      pkt.rc_, pkt.err_msg_);
+      pkt.rc_, pkt.err_msg_, sqc->get_exec_addr());
   if (OB_SUCC(ret)) {
     if (OB_FAIL(pkt.rc_)) {
       DAS_CTX(ctx).get_location_router().save_cur_exec_status(pkt.rc_);
@@ -560,7 +564,7 @@ int ObPxTerminateMsgProc::on_sqc_init_msg(ObExecContext &ctx, const ObPxInitSqcR
       LOG_DEBUG("receive error code from sqc init msg", K(coord_info_.first_error_code_), K(pkt.rc_));
     }
     ObPxErrorUtil::update_qc_error_code(coord_info_.first_error_code_,
-        pkt.rc_, pkt.err_msg_);
+        pkt.rc_, pkt.err_msg_, sqc->get_exec_addr());
   }
 
   if (OB_SUCC(ret)) {
@@ -626,7 +630,7 @@ int ObPxTerminateMsgProc::on_sqc_finish_msg(ObExecContext &ctx, const ObPxFinish
       LOG_DEBUG("receive error code from sqc finish msg", K(coord_info_.first_error_code_), K(pkt.rc_));
     }
     ObPxErrorUtil::update_qc_error_code(coord_info_.first_error_code_,
-        pkt.rc_, pkt.err_msg_);
+        pkt.rc_, pkt.err_msg_, sqc->get_exec_addr());
 
     NG_TRACE_EXT(sqc_finish,
                  OB_ID(dfo_id), sqc->get_dfo_id(),

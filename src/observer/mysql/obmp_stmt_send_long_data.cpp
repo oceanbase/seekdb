@@ -20,7 +20,7 @@
 #include "observer/mysql/obmp_stmt_send_long_data.h"
 
 #include "sql/ob_sql.h"
-#include "observer/omt/ob_server_runtime.h"
+#include "observer/omt/ob_tenant.h"
 #include "observer/mysql/obmp_stmt_send_piece_data.h"
 #include "sql/plan_cache/ob_ps_cache.h"
 
@@ -107,9 +107,9 @@ int ObMPStmtSendLongData::process()
   } else if (OB_UNLIKELY(!conn->is_in_authed_phase())) {
     ret = OB_ERR_NO_PRIVILEGE;
     LOG_WARN("receive sql without session", K_(stmt_id), K_(param_id), K(ret));
-  } else if (OB_ISNULL(conn->runtime_)) {
+  } else if (OB_ISNULL(conn->tenant_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid runtime", K_(stmt_id), K_(param_id), K(conn->runtime_), K(ret));
+    LOG_ERROR("invalid tenant", K_(stmt_id), K_(param_id), K(conn->tenant_), K(ret));
   } else if (OB_FAIL(get_session(sess))) {
     LOG_WARN("get session fail", K_(stmt_id), K_(param_id), K(ret));
   } else if (OB_ISNULL(sess)) {
@@ -125,7 +125,8 @@ int ObMPStmtSendLongData::process()
     observer::ObProcessMallocCallback pmcb(0,
           session.get_raw_audit_record().request_memory_used_);
     lib::ObMallocCallbackGuard guard(pmcb);
-    int64_t runtime_version = 0;
+    int64_t tenant_version = 0;
+    int64_t sys_version = 0;
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
     int64_t packet_len = pkt.get_clen();
     if (OB_UNLIKELY(!session.is_valid())) {
@@ -140,9 +141,12 @@ int ObMPStmtSendLongData::process()
       LOG_WARN("packet too large than allowd for the session", K_(stmt_id), K_(param_id), K(ret));
     } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
       LOG_WARN("fail to get query timeout", K_(stmt_id), K_(param_id), K(ret));
-    } else if (OB_FAIL(gctx_.schema_service_->get_runtime_received_broadcast_version(
-                runtime_version))) {
-      LOG_WARN("fail to get runtime broadcast version", K(ret));
+    } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
+                tenant_version))) {
+      LOG_WARN("fail get tenant broadcast version", K(ret));
+    } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
+                sys_version))) {
+      LOG_WARN("fail get tenant broadcast version", K(ret));
     } else {
       THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
       if (OB_FAIL(process_send_long_data_stmt(session))) {
@@ -150,6 +154,11 @@ int ObMPStmtSendLongData::process()
       }
     }
 
+    if (!GCONF._enable_new_sql_nio) {
+      // if not open sql nio , replace all ret code to 4007
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("send long data need open SQL NIO. ", K(ret), K(stmt_id_), K(param_id_), K(need_disconnect_));
+    }
     if (OB_FAIL(ret)) {
       // send long data fail will not response packet, just print log
       LOG_WARN("send long data error happend ", K(ret), K(stmt_id_), K(param_id_), K(need_disconnect_));
@@ -186,6 +195,8 @@ int ObMPStmtSendLongData::process_send_long_data_stmt(ObSQLSessionInfo &session)
 {
   int ret = OB_SUCCESS;
   bool need_response_error = true;
+  int64_t tenant_version = 0;
+  int64_t sys_version = 0;
   setup_wb(session);
 
   ObVirtualTableIteratorFactory vt_iter_factory(*gctx_.vt_iter_creator_);

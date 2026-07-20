@@ -32,6 +32,13 @@ int ObSQLClientRetry::escape(const char *from, const int64_t from_size,
 }
 
 
+int ObSQLClientRetry::read(ReadResult &res, const int64_t cluster_id, const char *sql)
+{
+  //TODO if need across cluster
+  UNUSEDx(res, cluster_id, sql);
+  return OB_NOT_SUPPORTED;
+}
+
 int ObSQLClientRetry::read(ReadResult &res, const char *sql, const int32_t group_id)
 {
   int ret = OB_SUCCESS;

@@ -78,10 +78,6 @@ public:
   OB_INLINE const ColumnMap &get_col_map() const { return col_map_; }
   OB_INLINE bool is_index_table() const { return share::schema::is_index_table(table_type_); }
   OB_INLINE bool is_lob_meta_table() const { return share::schema::is_aux_lob_meta_table(table_type_); }
-  OB_INLINE bool is_materialized_view() const
-  { return ObTableSchema::is_materialized_view(table_type_); }
-  OB_INLINE bool is_mlog_table() const
-  { return ObTableSchema::is_mlog_table(table_type_); }
   OB_INLINE bool is_storage_index_table() const
   { return is_index_table(); }
   OB_INLINE bool can_read_index() const { return ObTableSchema::can_read_index(index_status_); }
@@ -116,7 +112,6 @@ public:
   }
   int is_rowkey_column(const uint64_t column_id, bool &is_rowkey) const;
   int is_column_nullable_for_write(const uint64_t column_id, bool &is_nullable_for_write) const;
-  OB_INLINE ObMvMode get_mv_mode() const { return mv_mode_; }
   OB_INLINE bool is_delete_insert() const { return is_delete_insert_; }
   OB_INLINE const common::ObString &get_index_name() const { return index_name_; }
 
@@ -128,7 +123,6 @@ public:
   int get_rowkey_column_ids(common::ObIArray<uint64_t> &column_ids) const;
   int get_index_name(common::ObString &index_name) const;
   const common::ObString &get_pk_name() const;
-  bool is_depend_column(uint64_t column_id) const;
   const storage::ObTableReadInfo &get_read_info() const
   { return read_info_; }
   int has_udf_column(bool &has_udf) const;
@@ -169,7 +163,6 @@ private:
   ObString vec_index_param_;
   int64_t vec_dim_;
   uint64_t vec_vector_col_id_;
-  ObMvMode mv_mode_;
   bool is_delete_insert_;
   ObMergeEngineType merge_engine_type_;
   uint64_t inc_pk_doc_id_col_id_;

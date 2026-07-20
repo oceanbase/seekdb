@@ -1436,6 +1436,7 @@
   },
   "ob_interm_result_mem_limit": {
     "id": 10001,
+    "placeholder": true,
     "name": "ob_interm_result_mem_limit",
     "default_value": "2147483648",
     "base_value": "2147483648",
@@ -1449,6 +1450,7 @@
   },
   "ob_proxy_partition_hit": {
     "id": 10002,
+    "placeholder": true,
     "name": "ob_proxy_partition_hit",
     "default_value": "1",
     "base_value": "1",
@@ -1561,6 +1563,7 @@
   },
   "ob_proxy_set_trx_executed": {
     "id": 10011,
+    "placeholder": true,
     "name": "ob_proxy_set_trx_executed",
     "default_value": "0",
     "base_value": "0",
@@ -1587,6 +1590,7 @@
   },
   "ob_last_schema_version": {
     "id": 10013,
+    "placeholder": true,
     "name": "ob_last_schema_version",
     "default_value": "0",
     "base_value": "0",
@@ -1613,6 +1617,7 @@
   },
   "ob_proxy_global_variables_version": {
     "id": 10015,
+    "placeholder": true,
     "name": "ob_proxy_global_variables_version",
     "default_value": "0",
     "base_value": "0",
@@ -1639,6 +1644,7 @@
   },
   "ob_bnl_join_cache_size": {
     "id": 10019,
+    "placeholder": true,
     "name": "ob_bnl_join_cache_size",
     "default_value": "10485760",
     "base_value": "10485760",
@@ -1654,6 +1660,7 @@
   },
   "ob_proxy_user_privilege": {
     "id": 10020,
+    "placeholder": true,
     "name": "ob_proxy_user_privilege",
     "default_value": "0",
     "base_value": "0",
@@ -1669,6 +1676,7 @@
   },
   "ob_org_cluster_id": {
     "id": 10021,
+    "placeholder": true,
     "name": "ob_org_cluster_id",
     "default_value": "0",
     "base_value": "0",
@@ -1744,6 +1752,7 @@
   },
   "ob_capability_flag": {
     "id": 10026,
+    "placeholder": true,
     "name": "ob_capability_flag",
     "default_value": "0",
     "base_value": "0",
@@ -1783,22 +1792,6 @@
     "background_cn": "",
     "ref_url": ""
   },
-  "ob_compatibility_mode": {
-    "id": 10030,
-    "name": "ob_compatibility_mode",
-    "default_value": "0",
-    "base_value": "0",
-    "data_type": "enum",
-    "info": "What DBMS is OceanBase compatible with? MYSQL means it behaves like MySQL.",
-    "flags": "GLOBAL | SESSION | READONLY | WITH_UPGRADE | NEED_SERIALIZE",
-    "enum_names": [
-      "MYSQL"
-    ],
-    "publish_version": "",
-    "info_cn": "",
-    "background_cn": "",
-    "ref_url": ""
-  },
   "ob_sql_work_area_percentage": {
     "id": 10032,
     "name": "ob_sql_work_area_percentage",
@@ -1816,6 +1809,7 @@
   },
   "ob_safe_weak_read_snapshot": {
     "id": 10033,
+    "placeholder": true,
     "name": "ob_safe_weak_read_snapshot",
     "default_value": "1",
     "base_value": "1",
@@ -1832,6 +1826,7 @@
   },
   "ob_route_policy": {
     "id": 10034,
+    "placeholder": true,
     "name": "ob_route_policy",
     "default_value": "1",
     "base_value": "1",
@@ -1853,6 +1848,7 @@
   },
   "ob_enable_transmission_checksum": {
     "id": 10035,
+    "placeholder": true,
     "name": "ob_enable_transmission_checksum",
     "default_value": "1",
     "base_value": "1",
@@ -1879,6 +1875,7 @@
   },
   "ob_statement_trace_id": {
     "id": 10037,
+    "placeholder": true,
     "name": "ob_statement_trace_id",
     "default_value": "Y0-0",
     "base_value": "Y0-0",
@@ -1905,6 +1902,7 @@
   },
   "sql_throttle_current_priority": {
     "id": 10040,
+    "placeholder": true,
     "name": "sql_throttle_current_priority",
     "default_value": "100",
     "base_value": "100",
@@ -1918,6 +1916,7 @@
   },
   "sql_throttle_priority": {
     "id": 10041,
+    "placeholder": true,
     "name": "sql_throttle_priority",
     "default_value": "-1",
     "base_value": "-1",
@@ -1931,6 +1930,7 @@
   },
   "sql_throttle_rt": {
     "id": 10042,
+    "placeholder": true,
     "name": "sql_throttle_rt",
     "default_value": "-1",
     "base_value": "-1",
@@ -1944,6 +1944,7 @@
   },
   "sql_throttle_cpu": {
     "id": 10043,
+    "placeholder": true,
     "name": "sql_throttle_cpu",
     "default_value": "-1",
     "base_value": "-1",
@@ -1957,6 +1958,7 @@
   },
   "sql_throttle_io": {
     "id": 10044,
+    "placeholder": true,
     "name": "sql_throttle_io",
     "default_value": "-1",
     "base_value": "-1",
@@ -1970,6 +1972,7 @@
   },
   "sql_throttle_network": {
     "id": 10045,
+    "placeholder": true,
     "name": "sql_throttle_network",
     "default_value": "-1",
     "base_value": "-1",
@@ -1984,6 +1987,7 @@
   },
   "sql_throttle_logical_reads": {
     "id": 10046,
+    "placeholder": true,
     "name": "sql_throttle_logical_reads",
     "default_value": "-1",
     "base_value": "-1",
@@ -2012,6 +2016,7 @@
   },
   "ob_temp_tablespace_size_percentage": {
     "id": 10049,
+    "placeholder": true,
     "name": "ob_temp_tablespace_size_percentage",
     "default_value": "0",
     "base_value": "0",
@@ -2038,6 +2043,7 @@
   },
   "optimizer_use_sql_plan_baselines": {
     "id": 10057,
+    "placeholder": true,
     "name": "optimizer_use_sql_plan_baselines",
     "default_value": "0",
     "base_value": "0",
@@ -2051,6 +2057,7 @@
   },
   "optimizer_capture_sql_plan_baselines": {
     "id": 10058,
+    "placeholder": true,
     "name": "optimizer_capture_sql_plan_baselines",
     "default_value": "0",
     "base_value": "0",
@@ -2079,6 +2086,7 @@
   },
   "ob_early_lock_release": {
     "id": 10061,
+    "placeholder": true,
     "name": "ob_early_lock_release",
     "default_value": "0",
     "base_value": "0",
@@ -2143,6 +2151,7 @@
   },
   "ob_reserved_meta_memory_percentage": {
     "id": 10067,
+    "placeholder": true,
     "name": "ob_reserved_meta_memory_percentage",
     "default_value": "10",
     "base_value": "10",
@@ -2158,6 +2167,7 @@
   },
   "ob_check_sys_variable": {
     "id": 10068,
+    "placeholder": true,
     "name": "ob_check_sys_variable",
     "default_value": "1",
     "base_value": "1",
@@ -2184,6 +2194,7 @@
   },
   "tracefile_identifier": {
     "id": 10081,
+    "placeholder": true,
     "name": "tracefile_identifier",
     "default_value": "",
     "base_value": "",
@@ -2197,6 +2208,7 @@
   },
   "_groupby_nopushdown_cut_ratio": {
     "id": 10082,
+    "placeholder": true,
     "name": "_groupby_nopushdown_cut_ratio",
     "default_value": "3",
     "base_value": "3",
@@ -2210,6 +2222,7 @@
   },
   "_px_broadcast_fudge_factor": {
     "id": 10083,
+    "placeholder": true,
     "name": "_px_broadcast_fudge_factor",
     "default_value": "100",
     "base_value": "100",
@@ -2364,6 +2377,7 @@
   },
   "_ob_ols_policy_session_labels": {
     "id": 10094,
+    "placeholder": true,
     "name": "_ob_ols_policy_session_labels",
     "default_value": "",
     "base_value": "",
@@ -2377,6 +2391,7 @@
   },
   "ob_trace_info": {
     "id": 10095,
+    "placeholder": true,
     "name": "ob_trace_info",
     "default_value": "",
     "base_value": "",
@@ -2390,6 +2405,7 @@
   },
   "_px_partition_scan_threshold": {
     "id": 10097,
+    "placeholder": true,
     "name": "_px_partition_scan_threshold",
     "default_value": "64",
     "base_value": "64",
@@ -2405,6 +2421,7 @@
   },
   "_ob_px_bcast_optimization": {
     "id": 10098,
+    "placeholder": true,
     "name": "_ob_px_bcast_optimization",
     "default_value": "1",
     "base_value": "1",
@@ -2422,6 +2439,7 @@
   },
   "_ob_px_slave_mapping_threshold": {
     "id": 10099,
+    "placeholder": true,
     "name": "_ob_px_slave_mapping_threshold",
     "default_value": "200",
     "base_value": "200",
@@ -2450,6 +2468,7 @@
   },
   "_px_min_granules_per_slave": {
     "id": 10101,
+    "placeholder": true,
     "name": "_px_min_granules_per_slave",
     "default_value": "13",
     "base_value": "13",
@@ -2563,6 +2582,7 @@
   },
   "_ob_proxy_session_temporary_table_used": {
     "id": 10116,
+    "placeholder": true,
     "name": "_ob_proxy_session_temporary_table_used",
     "default_value": "0",
     "base_value": "0",
@@ -2619,6 +2639,7 @@
   },
   "_optimizer_null_aware_antijoin": {
     "id": 10120,
+    "placeholder": true,
     "name": "_optimizer_null_aware_antijoin",
     "default_value": "1",
     "base_value": "1",
@@ -2632,6 +2653,7 @@
   },
   "_px_partial_rollup_pushdown": {
     "id": 10121,
+    "placeholder": true,
     "name": "_px_partial_rollup_pushdown",
     "default_value": "1",
     "base_value": "1",
@@ -2649,6 +2671,7 @@
   },
   "_px_dist_agg_partial_rollup_pushdown": {
     "id": 10122,
+    "placeholder": true,
     "name": "_px_dist_agg_partial_rollup_pushdown",
     "default_value": "1",
     "base_value": "1",
@@ -2666,6 +2689,7 @@
   },
   "_create_audit_purge_job": {
     "id": 10123,
+    "placeholder": true,
     "name": "_create_audit_purge_job",
     "default_value": "",
     "base_value": "",
@@ -2679,6 +2703,7 @@
   },
   "_drop_audit_purge_job": {
     "id": 10124,
+    "placeholder": true,
     "name": "_drop_audit_purge_job",
     "default_value": "",
     "base_value": "",
@@ -2692,6 +2717,7 @@
   },
   "_set_purge_job_interval": {
     "id": 10125,
+    "placeholder": true,
     "name": "_set_purge_job_interval",
     "default_value": "",
     "base_value": "",
@@ -2705,6 +2731,7 @@
   },
   "_set_purge_job_status": {
     "id": 10126,
+    "placeholder": true,
     "name": "_set_purge_job_status",
     "default_value": "",
     "base_value": "",
@@ -2718,6 +2745,7 @@
   },
   "_set_last_archive_timestamp": {
     "id": 10127,
+    "placeholder": true,
     "name": "_set_last_archive_timestamp",
     "default_value": "",
     "base_value": "",
@@ -2731,6 +2759,7 @@
   },
   "_clear_last_archive_timestamp": {
     "id": 10128,
+    "placeholder": true,
     "name": "_clear_last_archive_timestamp",
     "default_value": "",
     "base_value": "",
@@ -2811,6 +2840,7 @@
   },
   "ob_enable_rich_error_msg": {
     "id": 10134,
+    "placeholder": true,
     "name": "ob_enable_rich_error_msg",
     "default_value": "0",
     "base_value": "0",
@@ -2995,6 +3025,7 @@
   },
   "optimizer_features_enable": {
     "id": 10150,
+    "placeholder": true,
     "name": "optimizer_features_enable",
     "default_value": "1.0.0.0",
     "base_value": "",
@@ -3008,6 +3039,7 @@
   },
   "_ob_proxy_weakread_feedback": {
     "id": 10151,
+    "placeholder": true,
     "name": "_ob_proxy_weakread_feedback",
     "default_value": "0",
     "base_value": "0",
@@ -3021,6 +3053,7 @@
   },
   "ncharacter_set_connection": {
     "id": 10152,
+    "placeholder": true,
     "name": "ncharacter_set_connection",
     "default_value": "0",
     "base_value": "0",
@@ -3052,6 +3085,7 @@
   },
   "privilege_features_enable": {
     "id": 10154,
+    "placeholder": true,
     "name": "privilege_features_enable",
     "default_value": "",
     "base_value": "",
@@ -3065,6 +3099,7 @@
   },
   "_priv_control": {
     "id": 10155,
+    "placeholder": true,
     "name": "_priv_control",
     "default_value": "",
     "base_value": "",
@@ -3078,6 +3113,7 @@
   },
   "_enable_mysql_pl_priv_check": {
     "id": 10156,
+    "placeholder": true,
     "name": "_enable_mysql_pl_priv_check",
     "default_value": "0",
     "base_value": "0",
@@ -3351,6 +3387,7 @@
   },
   "ob_compatibility_control": {
     "id": 10175,
+    "placeholder": true,
     "name": "ob_compatibility_control",
     "default_value": "0",
     "base_value": "0",
@@ -3368,6 +3405,7 @@
   },
   "ob_compatibility_version": {
     "id": 10176,
+    "placeholder": true,
     "name": "ob_compatibility_version",
     "default_value": "17180000512",
     "base_value": "17180000512",
@@ -3386,6 +3424,7 @@
   },
   "ob_security_version": {
     "id": 10177,
+    "placeholder": true,
     "name": "ob_security_version",
     "default_value": "17180000512",
     "base_value": "17180000512",
@@ -3416,41 +3455,6 @@
     "info": "Specifies the correlation model when the optimizer estimates cardinality",
     "flags": "GLOBAL | SESSION | INFLUENCE_PLAN",
     "publish_version": "423",
-    "info_cn": "",
-    "background_cn": "",
-    "ref_url": ""
-  },
-  "query_rewrite_enabled": {
-    "id": 10179,
-    "name": "query_rewrite_enabled",
-    "default_value": "0",
-    "base_value": "0",
-    "data_type": "enum",
-    "info": "Whether to enable the materialized view rewriting",
-    "flags": "GLOBAL | SESSION | NEED_SERIALIZE | INFLUENCE_PLAN",
-    "enum_names": [
-      "FALSE",
-      "TRUE",
-      "FORCE"
-    ],
-    "publish_version": "431",
-    "info_cn": "",
-    "background_cn": "",
-    "ref_url": ""
-  },
-  "query_rewrite_integrity": {
-    "id": 10180,
-    "name": "query_rewrite_integrity",
-    "default_value": "0",
-    "base_value": "0",
-    "data_type": "enum",
-    "info": "Control the data integrity of materialized view rewriting",
-    "flags": "GLOBAL | SESSION | NEED_SERIALIZE | INFLUENCE_PLAN",
-    "enum_names": [
-      "ENFORCED",
-      "STALE_TOLERATED"
-    ],
-    "publish_version": "431",
     "info_cn": "",
     "background_cn": "",
     "ref_url": ""
@@ -5645,6 +5649,7 @@
   },
   "_enable_old_charset_aggregation": {
     "id": 10326,
+    "placeholder": true,
     "name": "_enable_old_charset_aggregation",
     "default_value": "0",
     "base_value": "0",
@@ -5653,19 +5658,6 @@
     "flags": "GLOBAL | SESSION | INFLUENCE_PLAN | NEED_SERIALIZE | MYSQL_ONLY | INVISIBLE | INFLUENCE_PL",
     "publish_version": "424",
     "info_cn": "用于控制是否使用旧版字符集推导规则",
-    "background_cn": "",
-    "ref_url": ""
-  },
-  "enable_sql_plan_monitor": {
-    "id": 10327,
-    "name": "enable_sql_plan_monitor",
-    "default_value": "0",
-    "base_value": "0",
-    "data_type": "bool",
-    "info": "To set whether the SQL for the current session is logged into the SQL plan monitor.",
-    "flags": "SESSION | INFLUENCE_PLAN",
-    "publish_version": "",
-    "info_cn": "",
     "background_cn": "",
     "ref_url": ""
   },
@@ -9860,6 +9852,7 @@
   },
   "__ob_client_capability_flag": {
     "id": 10643,
+    "placeholder": true,
     "name": "__ob_client_capability_flag",
     "default_value": "0",
     "base_value": "0",
@@ -9875,6 +9868,7 @@
   },
   "ob_enable_parameter_anonymous_block": {
     "id": 10644,
+    "placeholder": true,
     "name": "ob_enable_parameter_anonymous_block",
     "default_value": "1",
     "base_value": "1",
@@ -9976,32 +9970,6 @@
     "info_cn": "",
     "background_cn": "",
     "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_have_dynamic_loading"
-  },
-  "keyring_aws_conf_file": {
-    "id": 10652,
-    "name": "keyring_aws_conf_file",
-    "default_value": "",
-    "base_value": "",
-    "data_type": "varchar",
-    "info": "The location of the configuration file for the keyring_aws plugin. This variable is unavailable unless that plugin is installed",
-    "flags": "GLOBAL | MYSQL_ONLY | READONLY",
-    "publish_version": "",
-    "info_cn": "",
-    "background_cn": "",
-    "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/keyring-system-variables.html#sysvar_keyring_aws_conf_file"
-  },
-  "keyring_aws_data_file": {
-    "id": 10653,
-    "name": "keyring_aws_data_file",
-    "default_value": "",
-    "base_value": "",
-    "data_type": "varchar",
-    "info": "The location of the storage file for the keyring_aws plugin. This variable is unavailable unless that plugin is installed",
-    "flags": "GLOBAL | MYSQL_ONLY | READONLY",
-    "publish_version": "",
-    "info_cn": "",
-    "background_cn": "",
-    "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/keyring-system-variables.html#sysvar_keyring_aws_data_file"
   },
   "language": {
     "id": 10654,
@@ -10619,61 +10587,6 @@
     "background_cn": "",
     "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/innodb-parameters.html#sysvar_innodb_stats_transient_sample_pagess"
   },
-  "keyring_aws_cmk_id": {
-    "id": 10699,
-    "name": "keyring_aws_cmk_id",
-    "default_value": "",
-    "base_value": "",
-    "data_type": "varchar",
-    "info": "The customer master key (CMK) ID obtained from the AWS KMS server and used by the keyring_aws plugin",
-    "flags": "GLOBAL | MYSQL_ONLY",
-    "publish_version": "",
-    "info_cn": "",
-    "background_cn": "",
-    "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/keyring-system-variables.html#sysvar_keyring_aws_cmk_id"
-  },
-  "keyring_aws_region": {
-    "id": 10700,
-    "name": "keyring_aws_region",
-    "default_value": "19",
-    "base_value": "19",
-    "data_type": "enum",
-    "info": "The AWS region for the keyring_aws plugin. This variable is unavailable unless that plugin is installed",
-    "flags": "GLOBAL | MYSQL_ONLY",
-    "publish_version": "",
-    "enum_names": [
-      "af-south-1",
-      "ap-east-1",
-      "ap-northeast-1",
-      "ap-northeast-2",
-      "ap-northeast-3",
-      "ap-south-1",
-      "ap-southeast-1",
-      "ap-southeast-2",
-      "ca-central-1",
-      "cn-north-1",
-      "cn-northwest-1",
-      "eu-central-1",
-      "eu-north-1",
-      "eu-south-1",
-      "eu-west-1",
-      "eu-west-2",
-      "eu-west-3",
-      "me-south-1",
-      "sa-east-1",
-      "us-east-1",
-      "us-east-2",
-      "us-gov-east-1",
-      "us-iso-east-1",
-      "us-iso-west-1",
-      "us-isob-east-1",
-      "us-west-1",
-      "us-west-2"
-    ],
-    "info_cn": "",
-    "background_cn": "",
-    "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/keyring-system-variables.html#sysvar_keyring_aws_region"
-  },
   "keyring_encrypted_file_data": {
     "id": 10701,
     "name": "keyring_encrypted_file_data",
@@ -11283,20 +11196,6 @@
     "background_cn": "",
     "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html"
   },
-  "mview_refresh_dop": {
-    "id": 10746,
-    "name": "mview_refresh_dop",
-    "default_value": "4",
-    "base_value": "4",
-    "data_type": "uint",
-    "info": "The default refresh parallelism of materialized view",
-    "flags": "GLOBAL | SESSION ",
-    "publish_version": "435",
-    "info_cn": "",
-    "background_cn": "",
-    "ref_url": "",
-    "placeholder": false
-  },
   "enable_optimizer_rowgoal": {
     "id": 10747,
     "name": "enable_optimizer_rowgoal",
@@ -11347,6 +11246,7 @@
   },
   "ob_enable_ps_parameter_anonymous_block": {
     "id": 10750,
+    "placeholder": true,
     "name": "ob_enable_ps_parameter_anonymous_block",
     "default_value": "1",
     "base_value": "1",

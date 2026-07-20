@@ -280,7 +280,7 @@ int ObCreateRoutineResolver::set_routine_param(const ObIArray<ObObjAccessIdx> &a
       OZ (params_.schema_checker_->get_table_schema(
               access_idxs.at(0).var_index_, table));
       CK (OB_NOT_NULL(table));
-      if (OB_SUCC(ret) && ObCharset::case_compat_mode_equal(table->get_table_name_str(), routine_param.get_type_subname())) {
+      if (OB_SUCC(ret) && ObCharset::case_insensitive_equal(table->get_table_name_str(), routine_param.get_type_subname())) {
         routine_param.set_type_owner(table->get_database_id());
       }
     }
@@ -332,7 +332,7 @@ int ObCreateRoutineResolver::set_routine_param(const ObIArray<ObObjAccessIdx> &a
       OZ (params_.schema_checker_->get_table_schema(
               access_idxs.at(0).var_index_, table));
       CK (OB_NOT_NULL(table));
-      if (OB_SUCC(ret) && ObCharset::case_compat_mode_equal(table->get_table_name_str(), routine_param.get_type_name())) {
+      if (OB_SUCC(ret) && ObCharset::case_insensitive_equal(table->get_table_name_str(), routine_param.get_type_name())) {
         routine_param.set_type_owner(table->get_database_id());
       }
     }
@@ -745,7 +745,6 @@ int ObCreateRoutineResolver::resolve_ret_type(const ParseNode *ret_type_node,
   ObRoutineParam ret_type_param;
   CK (OB_NOT_NULL(session_info_));
   CK (OB_NOT_NULL(ret_type_node));
-  CHECK_COMPATIBILITY_MODE(session_info_);
   OX (ret_type_param.set_sequence(ROUTINE_RET_TYPE_SEQUENCE));
   OX (ret_type_param.set_param_position(ROUTINE_RET_TYPE_POSITION));
   OX (ret_type_param.set_subprogram_id(func_info.get_subprogram_id()));
@@ -772,7 +771,6 @@ int ObCreateRoutineResolver::resolve_impl(ObRoutineType routine_type,
   uint64_t old_database_id = OB_INVALID_ID;
   ObSqlString old_database_name;
   CK(OB_NOT_NULL(session_info_), OB_NOT_NULL(allocator_), OB_NOT_NULL(schema_checker_));
-  CHECK_COMPATIBILITY_MODE(session_info_);
   CK (INVALID_ROUTINE_TYPE != routine_type);
 
   OZ(resolve_sp_definer(sp_definer_node, crt_routine_arg->routine_info_));
@@ -842,7 +840,6 @@ int ObCreateRoutineResolver::resolve(const ParseNode &parse_tree,
   CK (OB_NOT_NULL(allocator_));
   CK (OB_NOT_NULL(schema_checker_));
 
-  CHECK_COMPATIBILITY_MODE(session_info_);
   if (OB_SUCC(ret)) {
     ObRoutineType type = T_SF_CREATE == parse_tree.type_ ? ROUTINE_FUNCTION_TYPE :
                  T_SP_CREATE == parse_tree.type_ ? ROUTINE_PROCEDURE_TYPE : INVALID_ROUTINE_TYPE;

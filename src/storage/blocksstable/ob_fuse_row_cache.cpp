@@ -255,7 +255,7 @@ int ObFuseRowCache::get_row(const ObFuseRowCacheKey &key, ObFuseRowValueHandle &
     if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
       LOG_WARN("fail to get key from row cache", K(ret));
     }
-    EVENT_INC(FUSE_ROW_CACHE_MISS);
+    EVENT_INC(ObStatEventIds::FUSE_ROW_CACHE_MISS);
   } else {
     if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;

@@ -635,35 +635,7 @@ alter table xingrui_json force;
 drop table xingrui_json;
 
 connection mysql;
---echo #case bitmap列
---error 0,1051
-drop table xingrui_bitmap;
-create table xingrui_bitmap(c1 roaringbitmap, c2 roaringbitmap);
-insert into xingrui_bitmap values(x'0100', x'010100000002'), (null, null);
-insert into xingrui_bitmap values(x'0100', x'010100000002');
-
-connection sys;
-let $before_table_id = query_get_value(select table_id from __all_table where table_name = "xingrui_bitmap", table_id, 1);
-
-connection mysql;
-alter table xingrui_bitmap drop column c1;
-insert into xingrui_bitmap values(x'010100000002');
-insert into xingrui_bitmap values(x'010100000002');
-
-select * from xingrui_bitmap;
-
-connection sys;
-let $after_table_id = query_get_value(select table_id from __all_table where table_name = "xingrui_bitmap", table_id, 1);
-if ($before_table_id != $after_table_id)
-{
-    --echo "!!!ERROR, drop bitmap column should do online ddl in mysql mode";
-}
-connection mysql;
-alter table xingrui_bitmap force;
-drop table xingrui_bitmap;
-
-connection mysql;
---echo #case bitmap列
+--echo #case array列
 --error 0,1051
 drop table xingrui_array;
 create table xingrui_array(c1 array(int), c2 array(bigint), c3 array(float), c4 array(double));

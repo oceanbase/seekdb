@@ -26,7 +26,6 @@ using namespace observer;
 
 ObAllVirtualTableMgr::ObAllVirtualTableMgr()
     : ObVirtualTableScannerIterator(),
-      addr_(),
       tablet_iter_(nullptr),
       tablet_allocator_("VTTable"),
       tablet_handle_(),
@@ -49,7 +48,6 @@ void ObAllVirtualTableMgr::reset()
     tablet_iter_ = nullptr;
   }
   tablet_allocator_.reset();
-  addr_.reset();
 
   if (OB_NOT_NULL(iter_buf_)) {
     allocator_->free(iter_buf_);

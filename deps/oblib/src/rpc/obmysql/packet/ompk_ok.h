@@ -100,9 +100,8 @@ private:
   common::ObSEArray<ObStringKV, 8> user_vars_;
   ObMySQLCapabilityFlags capability_;
 
-  // use to track database changed;
-  // changed_schema_ may be empty for operations such as DROP DATABASE, but the
-  // schema-change marker still needs to be sent to clients.
+  // Used to track database changes. changed_schema_ may be empty, for example
+  // after dropping the current database.
   bool is_schema_changed_;
 
   //current serialize is not compat with mysql, proxy is also uncompat.

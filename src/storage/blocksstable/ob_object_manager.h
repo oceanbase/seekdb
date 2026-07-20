@@ -77,29 +77,6 @@ public:
     
     ss_tenant_level_opt_.tenant_epoch_id_ = tenant_epoch_id;
   };
-  void set_ss_ls_level_meta_object_opt(
-      const ObStorageObjectType object_type, const int64_t ls_id)
-  {
-    object_type_ = object_type;
-    ss_ls_level_opt_.ls_id_ = ls_id;
-  };
-
-  void set_ss_private_tablet_meta_object_opt(
-      const int64_t ls_id, const uint64_t tablet_id, const uint64_t version)
-  {
-    object_type_ = ObStorageObjectType::PRIVATE_TABLET_META;
-    ss_private_tablet_opt_.ls_id_ = ls_id;
-    ss_private_tablet_opt_.tablet_id_ = tablet_id;
-    ss_private_tablet_opt_.version_ = version;
-  }
-  void set_ss_private_tablet_meta_current_verison_object_opt(
-      const int64_t ls_id, const uint64_t tablet_id)
-  {
-    object_type_ = ObStorageObjectType::PRIVATE_TABLET_CURRENT_VERSION;
-    ss_private_tablet_current_version_opt_.ls_id_ = ls_id;
-    ss_private_tablet_current_version_opt_.tablet_id_ = tablet_id;
-  }
-
   void set_ss_share_tablet_meta_object_opt(
       const uint64_t tablet_id,
       const int64_t version)
@@ -127,23 +104,15 @@ public:
     
   }
   void set_ss_compaction_scheduler_object_opt(
-      const ObStorageObjectType object_type, const int64_t ls_id)
+      const ObStorageObjectType object_type)
   {
     object_type_ = object_type;
-    ss_compaction_scheduler_opt_.ls_id_ = ls_id;
   };
   void set_ss_compactor_svr_object_opt(
       const ObStorageObjectType object_type, const int64_t server_id)
   {
     object_type_ = object_type;
     ss_svr_compactor_opt_.server_id_ = server_id;
-  };
-  void set_ss_compactor_ls_svr_object_opt(
-    const ObStorageObjectType object_type,  const int64_t ls_id, const int64_t server_id)
-  {
-    object_type_ = object_type;
-    ss_ls_svr_compactor_opt_.ls_id_ = ls_id;
-    ss_ls_svr_compactor_opt_.server_id_ = server_id;
   };
   void set_ss_gc_info_object_opt(
     const uint64_t tablet_id)
@@ -177,9 +146,7 @@ public:
   int64_t to_string(char *buf, const int64_t buf_len) const;
 
 public:
-  // Must match MacroBlockId::meta_version_id_ (SF_BIT_META_VERSION_ID-bit unsigned field).
-  static constexpr uint64_t INVALID_TABLET_VERSION =
-      (1llu << (MacroBlockId::SF_BIT_META_VERSION_ID)) - 1;
+  static constexpr uint64_t INVALID_TABLET_VERSION = static_cast<uint64_t>(-1);
   static bool is_inaccurate_tablet_addr(const storage::ObMetaDiskAddr &tablet_meta_addr)
   {
     return tablet_meta_addr.is_block() && tablet_meta_addr.block_id().meta_version_id() == INVALID_TABLET_VERSION;
@@ -209,25 +176,6 @@ private:
     
     int64_t tenant_epoch_id_;
   };
-  // ls level meta include:
-  // ls_meta/dup_table_meta/active_tablet_array/pending_free_tablet_array
-  struct SSLSLevelMetaObjectOpt
-  {
-    uint64_t ls_id_;
-  };
-
-  struct SSPrivateTabletMetaObjectOpt
-  {
-    uint64_t ls_id_;
-    uint64_t tablet_id_;
-    int64_t version_;
-  };
-  struct SSPrivateTabletCurrentVersionObjectOpt
-  {
-    uint64_t ls_id_;
-    uint64_t tablet_id_;
-  };
-
   struct SSShareTabletMetaObjectOpt
   {
     uint64_t tablet_id_;
@@ -236,15 +184,9 @@ private:
 
   struct SSCompactionSchedulerObjectOpt
   {
-    uint64_t ls_id_;
   };
   struct SSCompactorSvrObjectOpt
   {
-    int64_t server_id_;
-  };
-  struct SSCompactorLSSvrObjectOpt
-  {
-    uint64_t ls_id_;
     int64_t server_id_;
   };
   struct SSGCInfoObjectOpt
@@ -279,13 +221,9 @@ public:
     SSTmpFileObjectOpt ss_tmp_file_opt_;
     SSServerLevelMetaObjectOpt ss_server_level_opt_;
     SSTenantLevelMetaObjectOpt ss_tenant_level_opt_;
-    SSLSLevelMetaObjectOpt ss_ls_level_opt_;
-    SSPrivateTabletMetaObjectOpt ss_private_tablet_opt_;
-    SSPrivateTabletCurrentVersionObjectOpt ss_private_tablet_current_version_opt_;
     SSShareTabletMetaObjectOpt ss_share_tablet_opt_;
     SSCompactionSchedulerObjectOpt ss_compaction_scheduler_opt_;
     SSCompactorSvrObjectOpt ss_svr_compactor_opt_;
-    SSCompactorLSSvrObjectOpt ss_ls_svr_compactor_opt_;
     SSGCInfoObjectOpt ss_gc_info_opt_;
     SSGCMetaListObjectOpt ss_meta_list_opt_;
     SSTabletCompactionStatusObjectOpt ss_tablet_compaction_status_opt_;

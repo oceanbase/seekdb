@@ -21,7 +21,7 @@
 #include "lib/utility/ob_print_utils.h"
 #include "lib/literals/ob_literals.h"
 #include "share/compaction/ob_compaction_time_guard.h"
-#include "storage/compaction/ob_runtime_status_cache.h"
+#include "storage/compaction/ob_tenant_status_cache.h"
 
 namespace oceanbase
 {
@@ -95,12 +95,14 @@ public:
   int64_t get_inner_table_merged_scn() const { return ATOMIC_LOAD(&inner_table_merged_scn_); }
   int64_t get_frozen_version() const;
   bool is_compacting() const;
-  int during_restore(bool &during_restore) { return runtime_status_.during_restore(during_restore); }
+  int get_min_data_version(uint64_t &min_data_version) { return tenant_status_.get_min_data_version(min_data_version); }
+  int during_restore(bool &during_restore) { return tenant_status_.during_restore(during_restore); }
   virtual int schedule_merge(const int64_t broadcast_version) = 0;
   void update_merged_version(const int64_t merged_version);
   int64_t get_merged_version() const { return merged_version_; }
-  bool enable_adaptive_compaction() const { return runtime_status_.enable_adaptive_compaction(); }
-  const ObRuntimeStatusCache &get_runtime_status() const { return runtime_status_; }
+  bool enable_adaptive_compaction() const { return tenant_status_.enable_adaptive_compaction(); }
+  bool enable_adaptive_merge_schedule() const { return tenant_status_.enable_adaptive_merge_schedule(); }
+  const ObTenantStatusCache &get_tenant_status() const { return tenant_status_; }
   static const int64_t INIT_COMPACTION_SCN = 1;
 protected:
   void update_frozen_version_and_merge_progress(const int64_t broadcast_version);
@@ -111,7 +113,7 @@ protected:
   int64_t frozen_version_;
   int64_t inner_table_merged_scn_;
   int64_t merged_version_; // the merged major version of the local server, may be not accurate after reboot
-  ObRuntimeStatusCache runtime_status_;
+  ObTenantStatusCache tenant_status_;
   bool major_merge_status_;
   bool is_stop_;
 };

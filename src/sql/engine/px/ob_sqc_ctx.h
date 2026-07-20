@@ -48,7 +48,7 @@ namespace sql
 class ObSqcCtx
 {
 public:
-  ObSqcCtx(ObPxInitSqcArgs &sqc_arg);
+  ObSqcCtx(ObPxRpcInitSqcArgs &sqc_arg);
   ~ObSqcCtx() {  reset(); }
   common::ObIArray<ObPxTask> &get_tasks() { return tasks_; }
   // To ensure that add_task does not fail due to memory issues. Because once it fails, it may result in the launched task not being recorded

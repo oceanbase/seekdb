@@ -24,7 +24,6 @@
 #include "storage/ddl/ob_tablet_slice_writer.h"
 #include "storage/ddl/ob_ddl_struct.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
-#include "storage/direct_load/ob_direct_load_vector_utils.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -490,11 +489,9 @@ int ObPxMultiPartSSTableInsertOp::check_need_idempotence()
                                         || (is_vec_gen_vid_ && ddl_dag_->get_ddl_task_param().is_offline_index_rebuild_); // generate vid for vector index in offline mode
       need_idempotent_table_autoinc_ = ddl_table_schema->get_autoinc_column_id() > 0
                                        && ddl_table_schema->get_autoinc_column_id() != OB_INVALID_ID
-                                       && !is_incremental_direct_load(ddl_dag_->get_direct_load_type())
                                        && !MY_SPEC.regenerate_heap_table_pk_;
       if (ddl_table_schema->is_rowkey_doc_id()
-          && ddl_dag_->get_ddl_task_param().is_offline_index_rebuild_
-          && !is_incremental_direct_load(ddl_dag_->get_direct_load_type())) {
+          && ddl_dag_->get_ddl_task_param().is_offline_index_rebuild_) {
         if (OB_FAIL(sql_ctx->schema_guard_->get_table_schema( ddl_table_schema->get_data_table_id(), data_table_schema))) {
           LOG_WARN("get table schema failed", K(ret), K(ddl_table_schema->get_data_table_id()));
         } else if (OB_ISNULL(data_table_schema)) {
@@ -1039,7 +1036,7 @@ int ObPxMultiPartSSTableInsertOp::sync_tablet_doc_id(ObISliceWriter *slice_write
                                                                             slice_writer->get_row_count());
       if (OB_FAIL(get_data_tablet_id(tablet_id, data_tablet_id))) {
         LOG_WARN("fail to get data tablet id", K(ret), K(tablet_id));
-      } else if (OB_FAIL(ObDDLUtil::set_tablet_autoinc_seq(tablet_context->ls_id_, data_tablet_id, last_autoinc_val))) {
+      } else if (OB_FAIL(ObDDLUtil::set_tablet_autoinc_seq(data_tablet_id, last_autoinc_val))) {
         LOG_WARN("set tablet autoinc seq failed", K(ret), KPC(slice_writer));
       }
     }

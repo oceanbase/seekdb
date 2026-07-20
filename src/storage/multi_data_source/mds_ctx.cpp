@@ -79,6 +79,18 @@ void MdsCtx::set_seq_no(const transaction::ObTxSEQ seq_no)
   seq_no_ = seq_no;
 }
 
+int MdsCtx::inc_seq_no()
+{
+  int ret = OB_SUCCESS;
+  int64_t seq = 0;
+  if (OB_FAIL(ObSequence::get_and_inc_max_seq_no(0, seq))) {
+    MDS_LOG(WARN, "fail to get and inc max seq no", K(ret), KPC(this));
+  } else {
+    seq_no_ = transaction::ObTxSEQ(seq, 0);
+  }
+  return ret;
+}
+
 transaction::ObTxSEQ MdsCtx::get_seq_no() const
 {
   return seq_no_;

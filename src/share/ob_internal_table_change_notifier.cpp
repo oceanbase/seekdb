@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 #include "share/ob_internal_table_change_notifier.h"
 #include "lib/oblog/ob_log_module.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_tenant_base.h"
 
 namespace oceanbase
 {

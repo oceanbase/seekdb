@@ -432,18 +432,44 @@ int ObInnerConnectionLockUtil::replace_lock(
   int ret = OB_SUCCESS;
   observer::ObReqTimeGuard req_timeinfo_guard;
 
-  SMART_VAR(ObInnerSQLResult, res, conn->get_session(), conn->is_inner_session())
+  const bool local_execute = conn->is_local_execute(GCONF.cluster_id);
+
+  SMART_VAR(ObInnerSQLResult, res, conn->get_session(), conn->is_inner_session(), nullptr)
   {
+    if (local_execute) {
+      if (OB_FAIL(conn->switch_tenant())) {
+        LOG_WARN("set system tenant id failed", K(ret));
+      }
+    } else {
+      LOG_DEBUG("tenant not in server", K(ret));
+    }
 
     if (OB_SUCC(ret)) {
       if (!conn->is_in_trans()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("inner conn must be already in trans", K(ret));
-      } else if (OB_FAIL(res.init())) {
-        LOG_WARN("init result set", K(ret));
-      } else {
+      } else if (OB_FAIL(res.init(local_execute))) {
+        LOG_WARN("init result set", K(ret), K(local_execute));
+      } else if (local_execute) {
         if (OB_FAIL(replace_lock_(req, conn, res))) {
           LOG_WARN("replace lock failed", KR(ret), K(req));
+        }
+      } else {
+        char *tmp_str = nullptr;
+        int64_t pos = 0;
+        ObString sql;
+        if (OB_ISNULL(tmp_str = static_cast<char *>(ob_malloc(req.get_serialize_size(), "InnerLock")))) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("alloc memory for sql_str failed", K(ret), K(req.get_serialize_size()));
+        } else if (OB_FAIL(req.serialize(tmp_str, req.get_serialize_size(), pos))) {
+          LOG_WARN("serialize replace lock table arg failed", K(ret), K(req));
+        } else {
+          sql.assign_ptr(tmp_str, pos);
+          ret = conn->forward_request(obcall::ObInnerSQLTransmitArg::OPERATION_TYPE_REPLACE_LOCK, sql, res);
+        }
+
+        if (OB_NOT_NULL(tmp_str)) {
+          ob_free(tmp_str);
         }
       }
     }
@@ -458,18 +484,44 @@ int ObInnerConnectionLockUtil::replace_lock(const ObReplaceAllLocksRequest &req,
   int ret = OB_SUCCESS;
   observer::ObReqTimeGuard req_timeinfo_guard;
 
-  SMART_VAR(ObInnerSQLResult, res, conn->get_session(), conn->is_inner_session())
+  const bool local_execute = conn->is_local_execute(GCONF.cluster_id);
+
+  SMART_VAR(ObInnerSQLResult, res, conn->get_session(), conn->is_inner_session(), nullptr)
   {
+    if (local_execute) {
+      if (OB_FAIL(conn->switch_tenant())) {
+        LOG_WARN("set system tenant id failed", K(ret));
+      }
+    } else {
+      LOG_DEBUG("tenant not in server", K(ret));
+    }
 
     if (OB_SUCC(ret)) {
       if (!conn->is_in_trans()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("inner conn must be already in trans", K(ret));
-      } else if (OB_FAIL(res.init())) {
-        LOG_WARN("init result set", K(ret));
-      } else {
+      } else if (OB_FAIL(res.init(local_execute))) {
+        LOG_WARN("init result set", K(ret), K(local_execute));
+      } else if (local_execute) {
         if (OB_FAIL(replace_lock_(req, conn, res))) {
           LOG_WARN("replace lock failed", KR(ret), K(req));
+        }
+      } else {
+        char *tmp_str = nullptr;
+        int64_t pos = 0;
+        ObString sql;
+        if (OB_ISNULL(tmp_str = static_cast<char *>(ob_malloc(req.get_serialize_size(), "InnerLock")))) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("alloc memory for sql_str failed", K(ret), K(req.get_serialize_size()));
+        } else if (OB_FAIL(req.serialize(tmp_str, req.get_serialize_size(), pos))) {
+          LOG_WARN("serialize replace lock table arg failed", K(ret), K(req));
+        } else {
+          sql.assign_ptr(tmp_str, pos);
+          ret = conn->forward_request(obcall::ObInnerSQLTransmitArg::OPERATION_TYPE_REPLACE_LOCKS, sql, res);
+        }
+
+        if (OB_NOT_NULL(tmp_str)) {
+          ob_free(tmp_str);
         }
       }
     }
@@ -497,7 +549,7 @@ int ObInnerConnectionLockUtil::replace_lock_(const ObReplaceLockRequest &req,
     conn->get_session().get_tx_timeout(tx_param.timeout_us_);
     tx_param.lock_timeout_us_ = conn->get_session().get_trx_lock_timeout();
 
-    SERVER_MODULE_SCOPE {
+    MOD_SCOPE {
       if (OB_FAIL(share::g_mp->table_lock_service()->replace_lock(*tx_desc, tx_param, req))) {
         LOG_WARN("replace lock failed", K(ret), K(req));
       } else if (OB_FAIL(res.close())) {
@@ -528,7 +580,7 @@ int ObInnerConnectionLockUtil::replace_lock_(const ObReplaceAllLocksRequest &req
     conn->get_session().get_tx_timeout(tx_param.timeout_us_);
     tx_param.lock_timeout_us_ = conn->get_session().get_trx_lock_timeout();
 
-    SERVER_MODULE_SCOPE {
+    MOD_SCOPE {
       if (OB_FAIL(share::g_mp->table_lock_service()->replace_lock(*tx_desc, tx_param, req))) {
         LOG_WARN("replace lock failed", K(ret), K(req));
       } else if (OB_FAIL(res.close())) {
@@ -636,14 +688,14 @@ int ObInnerConnectionLockUtil::do_obj_lock_(const ObLockRequest &arg,
     conn->get_session().get_tx_timeout(tx_param.timeout_us_);
     tx_param.lock_timeout_us_ = conn->get_session().get_trx_lock_timeout();
 
-    SERVER_MODULE_SCOPE {
+    MOD_SCOPE {
       if (OB_FAIL(handle_request_by_operation_type_(*tx_desc, tx_param, arg, operation_type))) {
         LOG_WARN("handle request by operation_type failed", K(tx_param), K(arg), K(operation_type));
       }
       if (OB_SUCC(ret) && OB_FAIL(res.close())) {
         LOG_WARN("close result set failed", K(ret));
       }
-    }
+    } // MTL_SWITCH
   } // else
   return ret;
 }
@@ -655,18 +707,45 @@ int ObInnerConnectionLockUtil::request_lock_(const ObLockRequest &arg,
   int ret = OB_SUCCESS;
   observer::ObReqTimeGuard req_timeinfo_guard;
 
-  SMART_VAR(ObInnerSQLResult, res, conn->get_session(), conn->is_inner_session())
+  const bool local_execute = conn->is_local_execute(GCONF.cluster_id);
+
+  SMART_VAR(ObInnerSQLResult, res, conn->get_session(), conn->is_inner_session(), nullptr)
   {
+    if (local_execute) {
+      if (OB_FAIL(conn->switch_tenant())) {
+        LOG_WARN("set system tenant id failed", K(ret));
+      }
+    } else {
+      LOG_DEBUG("tenant not in server", K(ret));
+    }
 
     if (OB_SUCC(ret)) {
       if (!conn->is_in_trans()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("inner conn must be already in trans", K(ret));
-      } else if (OB_FAIL(res.init())) {
-        LOG_WARN("init result set", K(ret));
-      } else {
+      } else if (OB_FAIL(res.init(local_execute))) {
+        LOG_WARN("init result set", K(ret), K(local_execute));
+      } else if (local_execute) {
         if (OB_FAIL(do_obj_lock_(arg, operation_type, conn, res))) {
           LOG_WARN("do obj lock failed", KR(ret), K(operation_type), K(arg));
+        }
+      } else {
+        char *tmp_str = nullptr;
+        int64_t pos = 0;
+        ObString sql;
+        if (OB_ISNULL(tmp_str = static_cast<char *>(ob_malloc(arg.get_serialize_size(), "InnerLock")))) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("alloc memory for sql_str failed", K(ret), K(arg.get_serialize_size()));
+        } else if (OB_FAIL(arg.serialize(tmp_str, arg.get_serialize_size(), pos))) {
+          LOG_WARN("serialize lock table arg failed", K(ret), K(arg));
+        } else {
+          int32_t group_id = 0;
+          sql.assign_ptr(tmp_str, arg.get_serialize_size());
+          ret = conn->forward_request(operation_type, sql, res, group_id);
+        }
+
+        if (OB_NOT_NULL(tmp_str)) {
+          ob_free(tmp_str);
         }
       }
     }
@@ -686,16 +765,25 @@ int ObInnerConnectionLockUtil::request_lock_(const uint64_t table_id, // as obj_
   int ret = OB_SUCCESS;
   observer::ObReqTimeGuard req_timeinfo_guard;
 
-  SMART_VAR(ObInnerSQLResult, res, conn->get_session(), conn->is_inner_session())
+  const bool local_execute = conn->is_local_execute(GCONF.cluster_id);
+
+  SMART_VAR(ObInnerSQLResult, res, conn->get_session(), conn->is_inner_session(), nullptr)
   {
+    if (local_execute) {
+      if (OB_FAIL(conn->switch_tenant())) {
+        LOG_WARN("set system tenant id failed", K(ret));
+      }
+    } else {
+      LOG_DEBUG("tenant not in server", K(ret));
+    }
 
     if (OB_SUCC(ret)) {
       if (!conn->is_in_trans()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("inner conn must be already in trans", K(ret));
-      } else if (OB_FAIL(res.init())) {
-        LOG_WARN("init result set", K(ret));
-      } else {
+      } else if (OB_FAIL(res.init(local_execute))) {
+        LOG_WARN("init result set", K(ret), K(local_execute));
+      } else if (local_execute) {
         // we can safely rewrite the argument here, because it is only used local.
         ObLockRequest *lock_arg = nullptr;
         ObLockTableRequest lock_table_arg;
@@ -726,6 +814,53 @@ int ObInnerConnectionLockUtil::request_lock_(const uint64_t table_id, // as obj_
         }
         if (OB_SUCC(ret) && OB_FAIL(do_obj_lock_(*lock_arg, operation_type, conn, res))) {
           LOG_WARN("close result set failed", K(ret));
+        }
+      } else {
+        char *tmp_str = nullptr;
+        int64_t pos = 0;
+        ObString sql;
+        switch (operation_type) {
+        case ObInnerSQLTransmitArg::OPERATION_TYPE_LOCK_TABLE: {
+          ObInTransLockTableRequest arg;
+          arg.table_id_ = table_id;
+          arg.lock_mode_ = lock_mode;
+          arg.timeout_us_ = timeout_us;
+
+          if (OB_ISNULL(tmp_str = static_cast<char *>(ob_malloc(arg.get_serialize_size(), "InnerLock")))) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+            LOG_WARN("alloc memory for sql_str failed", K(ret), K(arg.get_serialize_size()));
+          } else if (OB_FAIL(arg.serialize(tmp_str, arg.get_serialize_size(), pos))) {
+            LOG_WARN("serialize lock table arg failed", K(ret), K(arg));
+          } else {
+            sql.assign_ptr(tmp_str, arg.get_serialize_size());
+          }
+          break;
+        }
+        case ObInnerSQLTransmitArg::OPERATION_TYPE_LOCK_TABLET: {
+          ObInTransLockTabletRequest arg;
+          arg.table_id_ = table_id;
+          arg.tablet_id_ = tablet_id;
+          arg.lock_mode_ = lock_mode;
+          arg.timeout_us_ = timeout_us;
+
+          if (OB_ISNULL(tmp_str = static_cast<char *>(ob_malloc(arg.get_serialize_size(), "InnerLock")))) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+            LOG_WARN("alloc memory for sql_str failed", K(ret), K(arg.get_serialize_size()));
+          } else if (OB_FAIL(arg.serialize(tmp_str, arg.get_serialize_size(), pos))) {
+            LOG_WARN("serialize lock table arg failed", K(ret), K(arg));
+          } else {
+            sql.assign_ptr(tmp_str, arg.get_serialize_size());
+          }
+          break;
+        }
+        default: {
+          LOG_WARN("operation_type is not expected", K(operation_type));
+          ret = OB_ERR_UNEXPECTED;
+        } // default
+        } // switch
+        ret = conn->forward_request(operation_type, sql, res);
+        if (OB_NOT_NULL(tmp_str)) {
+          ob_free(tmp_str);
         }
       }
     }

@@ -55,10 +55,8 @@ public:
   transaction::ObTransID tx_id_;
   share::SCN tx_scn_;
   ObTabletStatus tablet_status_;
-  share::ObLSID reserved_ls_id_;
-  share::SCN reserved_scn_;
 private:
-  static const int32_t TX_DATA_VERSION = 1;
+  static const int32_t TX_DATA_VERSION = 2;
 };
 
 inline memtable::MultiSourceDataUnitType ObTabletTxMultiSourceDataUnit::type() const

@@ -16,7 +16,6 @@
 
 #ifndef OCEANBASE_OBSERVER_OB_PLUGIN_VECTOR_INDEX_SCHEDULER_DEFINE_H_
 #define OCEANBASE_OBSERVER_OB_PLUGIN_VECTOR_INDEX_SCHEDULER_DEFINE_H_
-#include "share/ob_ls_id.h"
 #include "share/scn.h"
 #include "lib/lock/ob_recursive_mutex.h"
 #include "share/rc/ob_tenant_base.h"
@@ -157,8 +156,8 @@ public:
   ObVectorIndexTaskStatus state_;
 };
 
-// task context of a ls
-struct ObPluginVectorIndexLSTaskCtx
+// Scheduling state shared by the tenant's vector-index tablet tasks.
+struct ObPluginVectorIndexScheduleCtx
 {
   void reuse()
   {
@@ -208,7 +207,7 @@ typedef hash::ObHashMap<ObTabletID, ObVectorIndexSharedTableInfo> ObVecIdxShared
 class ObPluginVectorIndexLoadScheduler : public common::ObTimerTask,
                                          public logservice::ObIReplaySubHandler,
                                          public logservice::ObICheckpointSubHandler,
-                                         public logservice::ObIRoleChangeSubHandler
+                                         public logservice::ObILocalLogHandler
 {
 public: 
   ObPluginVectorIndexLoadScheduler() 
@@ -271,7 +270,7 @@ public:
   int log_tablets_need_memdata_sync(ObPluginVectorIndexMgr *mgr);
   int execute_all_memdata_sync_task(ObPluginVectorIndexMgr *mgr);
   int execute_one_memdata_sync_task(ObPluginVectorIndexMgr *mgr, ObPluginVectorIndexTaskCtx *ctx);
-  int check_ls_task_state(ObPluginVectorIndexMgr *mgr);
+  int check_task_state(ObPluginVectorIndexMgr *mgr);
   int check_has_vector_index(bool &has_ivf_index, ObIArray<uint64_t> &vec_table_id_array);
 
   // task generation interfaces
@@ -280,9 +279,8 @@ public:
   int try_schedule_task(ObPluginVectorIndexMgr *mgr, ObPluginVectorIndexTaskCtx *task_ctx);
   int try_schedule_remaining_tasks(ObPluginVectorIndexMgr *mgr, ObPluginVectorIndexTaskCtx *current_ctx);
   int generate_vec_idx_memdata_dag(ObPluginVectorIndexMgr *mgr, ObPluginVectorIndexTaskCtx *task_ctx);
-  int get_ls_mgr(ObPluginVectorIndexMgr *&mgr);
+  int get_index_mgr(ObPluginVectorIndexMgr *&mgr);
   void refresh_adapter_rb_flag();
-  void set_ls_leader_flag(const bool is_leader);
 
   // logger interfaces
   int handle_submit_callback(const bool success);
@@ -294,10 +292,8 @@ public:
   share::SCN get_rec_scn();
 
   // role change interfaces
-  int switch_to_follower_gracefully();
-  void switch_to_follower_forcedly();
-  int resume_leader() { return OB_SUCCESS; }
-  int switch_to_leader();
+  void deactivate() override;
+  int activate() override;
 
   // task save destory
   void stop();
@@ -307,8 +303,6 @@ public:
   void dec_dag_ref() { ATOMIC_DEC(&dag_ref_cnt_); }
   int64_t get_dag_ref() const { return ATOMIC_LOAD(&dag_ref_cnt_); }
 
-  int safe_to_destroy(bool &is_safe);
-  
   TO_STRING_KV(K_(is_inited), K_(is_leader), K_(need_do_for_switch), K_(is_stopped), K_(is_logging),
                K_(need_refresh), K_(interval_factor),
                K_(basic_period), K_(current_memory_config), K_(dag_ref_cnt), 
@@ -385,7 +379,6 @@ public:
   ObVectorIndexTask()
     : ObITask(ObITaskType::TASK_TYPE_VECTOR_INDEX_MEMDATA_SYNC),
       is_inited_(false),
-      ls_id_(share::ObLSID::INVALID_LS_ID),
       vec_idx_scheduler_(nullptr),
       vec_idx_mgr_(nullptr),
       task_ctx_(nullptr),
@@ -398,13 +391,12 @@ public:
            ObPluginVectorIndexTaskCtx *task_ctx);
   common::ObIAllocator &get_allocator() { return allocator_; }
   virtual int process() override;
-  TO_STRING_KV(K_(is_inited), K_(ls_id), K_(read_snapshot), KPC_(task_ctx));
+  TO_STRING_KV(K_(is_inited), K_(read_snapshot), KPC_(task_ctx));
 private:
   int process_one();
 
 private:
   bool is_inited_;
-  share::ObLSID ls_id_;
   ObPluginVectorIndexLoadScheduler *vec_idx_scheduler_;
   ObPluginVectorIndexMgr *vec_idx_mgr_;
   ObPluginVectorIndexTaskCtx *task_ctx_;
@@ -418,8 +410,7 @@ class ObVectorIndexTaskParam final
 {
 public:
   ObVectorIndexTaskParam()
-    : ls_id_(share::ObLSID::INVALID_LS_ID),
-      table_id_(OB_INVALID_ID),
+    : table_id_(OB_INVALID_ID),
       tablet_id_(common::OB_INVALID_ID),
       task_ctx_(nullptr)
   {}
@@ -427,21 +418,17 @@ public:
   bool is_valid() const 
   {
     return true
-           && ls_id_.is_valid()
            && table_id_ != OB_INVALID_ID
            && tablet_id_.is_valid();
   }
   bool operator==(const ObVectorIndexTaskParam& param) const
   {
     return true
-           && ls_id_ == param.ls_id_
            && table_id_ == param.table_id_
            && tablet_id_ == param.tablet_id_;
   }
-  TO_STRING_KV(K_(ls_id), K_(tablet_id), KP_(task_ctx));
+  TO_STRING_KV(K_(tablet_id), KP_(task_ctx));
 public:
-  
-  share::ObLSID ls_id_;
   uint64_t table_id_;
   common::ObTabletID tablet_id_;
   ObPluginVectorIndexTaskCtx *task_ctx_;
@@ -452,21 +439,18 @@ class ObVectorIndexDag final: public share::ObIDag
 public:
   ObVectorIndexDag()
     : ObIDag(ObDagType::DAG_TYPE_VECTOR_INDEX), is_inited_(false),
-      param_(),
-      compat_mode_(lib::Worker::CompatMode::INVALID)
+      param_()
   {}
   virtual ~ObVectorIndexDag() {}
   virtual bool operator==(const ObIDag& other) const override;
   virtual uint64_t hash() const override;
   int init(ObPluginVectorIndexMgr *mgr, ObPluginVectorIndexTaskCtx *task_ctx);
-  virtual lib::Worker::CompatMode get_compat_mode() const override { return compat_mode_; }
   virtual int fill_dag_key(char *buf, const int64_t buf_len) const override;
   virtual int fill_info_param(compaction::ObIBasicInfoParam *&out_param, ObIAllocator &allocator) const override;
   virtual bool is_ha_dag() const { return false; }
 private:
   bool is_inited_;
   ObVectorIndexTaskParam param_;
-  lib::Worker::CompatMode compat_mode_;
   DISALLOW_COPY_AND_ASSIGN(ObVectorIndexDag);
 };
 
@@ -485,7 +469,7 @@ public:
 
   ~ObVectorIndexMemSyncInfo(){}
 
-  int init(int64_t hash_capacity, ObLSID &ls_id);
+  int init(int64_t hash_capacity);
   void destroy();
 
   int add_task_to_waiting_map(ObVectorIndexSyncLog &ls_log);

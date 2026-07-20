@@ -444,7 +444,8 @@ struct ObExchangeInfo
     ObRawExpr *expr_;
   };
   ObExchangeInfo()
-  : is_task_order_(false),
+  : is_remote_(false),
+    is_task_order_(false),
     is_merge_sort_(false),
     is_sort_local_order_(false),
     sort_keys_(),
@@ -493,6 +494,7 @@ struct ObExchangeInfo
   int append_hash_dist_expr(const common::ObIArray<ObRawExpr *> &exprs);
   int assign(const ObExchangeInfo &other);
 
+  bool is_remote_;
   bool is_task_order_;
   bool is_merge_sort_;
   bool is_sort_local_order_;
@@ -535,7 +537,8 @@ struct ObExchangeInfo
   int64_t server_cnt_;
   common::ObSEArray<common::ObAddr, 4> server_list_;
 
-  TO_STRING_KV(K_(is_task_order),
+  TO_STRING_KV(K_(is_remote),
+               K_(is_task_order),
                K_(is_merge_sort),
                K_(is_sort_local_order),
                K_(sort_keys),
@@ -1375,6 +1378,8 @@ public:
    * Generate a table's location constraint for table scan op
    */
   int get_tbl_loc_cons_for_scan(LocationConstraint &loc_cons);
+  // generate a table location constraint for duplicate table's replica selection
+  int get_dup_replica_cons_for_scan(ObDupTabConstraint &dup_rep_cons, bool &found_dup_con);
   /**
    * @brief Generate a table's location constraint for insert op
    */
@@ -1573,6 +1578,10 @@ public:
   {
     return (NULL != strong_sharding_ && strong_sharding_->is_local());
   }
+  inline bool is_remote() const
+  {
+    return (NULL != strong_sharding_ && strong_sharding_->is_remote());
+  }
   inline bool is_match_all() const
   {
     return (NULL != strong_sharding_ && strong_sharding_->is_match_all());
@@ -1584,11 +1593,11 @@ public:
   }
   inline bool is_sharding() const
   {
-    return is_distributed();
+    return is_remote() || is_distributed();
   }
   inline bool is_single() const
   {
-    return is_local() || is_match_all();
+    return is_local() || is_remote() || is_match_all();
   }
   inline ObShardingInfo* get_sharding() const
   {

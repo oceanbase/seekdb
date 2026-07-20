@@ -2101,7 +2101,6 @@ int ObTableScanOp::local_iter_reuse()
                                   MY_INPUT.tablet_loc_ != nullptr);
       if (MY_INPUT.tablet_loc_ != nullptr) {
         scan_op->set_tablet_id(MY_INPUT.tablet_loc_->tablet_id_);
-        scan_op->set_ls_id(MY_INPUT.tablet_loc_->ls_id_);
         scan_op->set_tablet_loc(MY_INPUT.tablet_loc_);
       }
       if (MY_SPEC.gi_above_) {
@@ -4278,7 +4277,6 @@ DEF_TO_STRING(ObVTableScanParam)
   int64_t pos = 0;
   J_OBJ_START();
   J_KV(K_(tablet_id),
-       K_(ls_id),
        N_COLUMN_IDS, column_ids_,
        N_INDEX_ID, index_id_,
        N_KEY_RANGES, key_ranges_,
@@ -4297,10 +4295,7 @@ DEF_TO_STRING(ObVTableScanParam)
        K_(pd_storage_flag),
        KPC_(output_exprs),
        KPC_(op_filters),
-       K_(table_scan_opt),
-       K_(auto_split_filter),
-       K_(auto_split_params),
-       K_(is_tablet_spliting));
+       K_(table_scan_opt));
   J_OBJ_END();
   return pos;
 }

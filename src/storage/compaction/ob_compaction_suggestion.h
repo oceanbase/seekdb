@@ -211,7 +211,7 @@ public:
     DAG_COST_LONGTIME,
     MAX_REASON
   };
-  static int server_module_init(ObCompactionSuggestionMgr *&compaction_suggestion_mgr);
+  static int mtl_init(ObCompactionSuggestionMgr *&compaction_suggestion_mgr);
   ObCompactionSuggestionMgr()
     : is_inited_(false),
       click_time_(ObTimeUtility::fast_current_time()),

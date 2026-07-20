@@ -19,8 +19,9 @@
 
 #include "lib/container/ob_iarray.h"
 #include "common/mysqlclient/ob_isql_client.h"
+#include "common/ob_zone.h"
 #include "common/ob_tablet_id.h"
-#include "share/ob_tablet_local_checksum_operator.h"
+#include "share/ob_tablet_replica_checksum_operator.h"
 
 namespace oceanbase
 {
@@ -29,7 +30,7 @@ namespace share
 // Memory item for __all_tablet_checksum table
 //
 // The data in __all_tablet_checksum table, is sync from
-// __all_tablet_local_checksum table. This table will be
+// __all_tablet_replica_checksum table. This table will be
 // sync to standby cluster from primary cluster, for these
 // two cluster checksum verifying.
 struct ObTabletChecksumItem
@@ -37,31 +38,43 @@ struct ObTabletChecksumItem
 public:
   ObTabletChecksumItem() 
     : tablet_id_(), data_checksum_(-1),
-      row_count_(0), compaction_scn_(), column_meta_() {}
+      row_count_(0), compaction_scn_(), replica_type_(0), column_meta_() {}
   virtual ~ObTabletChecksumItem() = default;
 
   void reset();
   bool is_valid() const;
-  int verify_tablet_column_checksum(const ObTabletLocalChecksumItem &local_item) const;
-  int assign(const ObTabletLocalChecksumItem &local_item);
+  int verify_tablet_column_checksum(const ObTabletReplicaChecksumItem &replica_item) const;
+  int assign(const ObTabletReplicaChecksumItem &replica_item);
   int assign(const ObTabletChecksumItem &other);
   ObTabletChecksumItem &operator =(const ObTabletChecksumItem &other);
   common::ObTabletID get_tablet_id() const { return tablet_id_; }
   TO_STRING_KV(K_(tablet_id), K_(data_checksum), K_(row_count),
-    K_(compaction_scn), K_(column_meta));
+    K_(compaction_scn), K_(replica_type), K_(column_meta));
   
   
   common::ObTabletID tablet_id_;
   int64_t data_checksum_;
   int64_t row_count_;
   SCN compaction_scn_;
-  ObTabletColumnChecksumMeta column_meta_;
+  int replica_type_;
+  ObTabletReplicaReportColumnMeta column_meta_;
 };
 
 // CRUD operation to __all_tablet_checksum table
 class ObTabletChecksumOperator
 {
 public:
+  // range get tablet checksum
+  // @compaction_scn:
+  //   if equals to min_scn, means get all records
+  //   if greater than min_scn, means get record with this compaction_scn.
+  //   else, invalid argument
+  static int load_tablet_checksum_items(
+      common::ObISQLClient &sql_client,
+      const common::ObTabletID &start_tablet_id,
+      const int64_t batch_cnt,
+      const SCN &compaction_scn,
+      common::ObIArray<ObTabletChecksumItem> &items);
   // multi get tablet checksum
   static int load_tablet_checksum_items(
       common::ObISQLClient &sql_client,
@@ -75,12 +88,12 @@ public:
   static int update_tablet_checksum_items(
       common::ObISQLClient &sql_client,
       common::ObIArray<ObTabletChecksumItem> &items);
-  // delete records whose compaction_scn <= @gc_compaction_scn and tablet_id is 1
+  // delete records whose compaction_scn <= @gc_compaction_scn for the special tablet
   static int delete_special_tablet_checksum_items(
       common::ObISQLClient &sql_client,
       const SCN &gc_compaction_scn);
   // delete limited records whose compaction_scn <= @gc_compaction_scn
-  // , while the record whose tablet_id is 1 can't be deleted.
+  // while the special tablet record can't be deleted.
   static int delete_tablet_checksum_items(
       common::ObISQLClient &sql_client,
       const SCN &gc_compaction_scn,
@@ -95,6 +108,10 @@ public:
       bool &is_exist);
 
 private:
+  static int construct_load_sql_str_(const common::ObTabletID &start_tablet_id,
+      const int64_t batch_cnt,
+      const SCN &compaction_scn,
+      common::ObSqlString &sql);
   static int construct_load_sql_str_(const common::ObIArray<common::ObTabletID> &tablet_ids,
       const int64_t start_idx,
       const int64_t end_idx,

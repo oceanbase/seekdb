@@ -67,7 +67,7 @@ private:
   int64_t snapshot_version_;
   common::ObCurTraceId::TraceId trace_id_;
   common::TCRWLock lock_; // protects pending/running tablet queues against ddl builder and scheduler races.
-  ObLocalManagementService *local_management_service_;
+  ObRootService *root_service_;
   ObArray<ObTabletID> all_tablets_;
   ObArray<ObTabletID> running_tablets_;
   int64_t running_execution_id_;

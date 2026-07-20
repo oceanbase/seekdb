@@ -21,11 +21,29 @@
 #include "lib/allocator/ob_fifo_allocator.h"
 #include "lib/hash/ob_hashmap.h"
 #include "lib/lock/ob_qsync_lock.h"
+#include "lib/restore/ob_storage_info.h"
+#include "share/config/ob_tenant_config_mgr.h"
+#include "share/config/ob_server_config.h"
 
 namespace oceanbase
 {
 namespace common
 {
+
+class ObObjectStorageInfo;
+class ObClusterVersionMgr: public ObClusterVersionBaseMgr
+{
+public:
+  ObClusterVersionMgr() {}
+  virtual ~ObClusterVersionMgr() {}
+  virtual int is_supported_enable_worm_version() const override;
+  virtual int is_supported_azblob_version() const override;
+  static ObClusterVersionMgr &get_instance()
+  {
+    static ObClusterVersionMgr mgr;
+    return mgr;
+  }
+};
 
 class ObDeviceManager
 {
@@ -35,6 +53,22 @@ public:
   void destroy();
   static ObDeviceManager &get_instance();
 
+  int get_device_key(const common::ObString &storage_info,
+                     const common::ObString &storage_type_prefix,
+                     char *device_key,
+                     const int64_t device_key_len) const;
+  /*for object device, will return a new object to caller*/
+  /*ofs/local will share in upper logical*/
+  // 1. ObObjectStorageInfo is a member of ObObjectDevice, which is used for accessing object storage.
+  //    Hence, different ObObjectStorageInfo should use different ObObjectDevice.
+  // 2. ObStorageIdMod is a member of ObObjectDevice, which is used for ObIOManager QoS.
+  //    Hence, different ObStorageIdMod should use different ObObjectDevice.
+  // 3. In summary, ObDeviceManager::get_device should be based on both ObObjectStorageInfo and ObStorageIdMod.
+  int get_device(const ObString &storage_type_prefix,
+                 const ObObjectStorageInfo &storage_info,
+                 const ObStorageIdMod &storage_id_mod,
+                 ObIODevice *&device_handle);
+  // get ObLocalDevice or ObLocalCacheDevice.
   // @storage_type_prefix only allows OB_LOCAL_PREFIX and OB_LOCAL_CACHE_PREFIX.
   static int get_local_device(const ObString &storage_type_prefix,
                               const ObStorageIdMod &storage_id_mod,
@@ -52,8 +86,12 @@ private:
     char *device_key_; // dynamically alloc memory
   };
 
-  // Hash map keys reference externally allocated strings, so the manager owns their memory.
-  typedef common::hash::ObHashMap<ObString, ObDeviceInsInfo*> DeviceKeyInfoMap;
+  /*notice:
+  int the implement of hashtable, use the assign fun of class to copy key/value
+  but for string, assign fun just copy the pointer, so in device manager, should manager
+  key mem space, in case upper lever release the pointer.
+  */
+  typedef common::hash::ObHashMap<ObString, ObDeviceInsInfo*> StoragInfoDeviceInfoMap;
   typedef common::hash::ObHashMap<int64_t, ObDeviceInsInfo*> DeviceHandleDeviceInfoMap;
 
   int alloc_device_(const ObString &storage_type_prefix,
@@ -61,15 +99,14 @@ private:
                     ObDeviceInsInfo *&device_info);
   int get_device_key_(ObIAllocator &allcator,
                       const ObString &storage_type_prefix,
+                      const ObObjectStorageInfo &storage_info,
                       const ObStorageIdMod &storage_id_mod,
                       char *&device_key);
-  int get_device_(const ObString &storage_type_prefix,
-                  const ObStorageIdMod &storage_id_mod,
-                  ObIODevice *&device_handle);
   int inc_device_ref_nolock_(ObDeviceInsInfo *dev_info);
   int get_deivce_(const ObString &device_key, ObIODevice *&device_handle);
   int alloc_device_and_init_(const ObString &storage_type_prefix,
                              const ObString &device_key,
+                             const ObStorageIdMod &storage_id_mod,
                              ObIODevice *&device_handle);
 
   common::ObFIFOAllocator allocator_; /*alloc/free dynamic device mem*/
@@ -77,7 +114,7 @@ private:
   common::ObQSyncLock lock_;  /*the manager is global used, so need lock to guarante thread safe*/
   bool is_init_;
   ObDeviceInsInfo device_ins_[MAX_DEVICE_INSTANCE];
-  DeviceKeyInfoMap device_map_;
+  StoragInfoDeviceInfoMap device_map_;
   DeviceHandleDeviceInfoMap handle_map_; /*the key is a ObIODevice pointer, need cast when used*/
 };
 

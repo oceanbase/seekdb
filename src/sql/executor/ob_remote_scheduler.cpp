@@ -148,7 +148,6 @@ int ObRemoteScheduler::build_remote_task(ObExecContext &ctx,
   ObPhysicalPlanCtx *plan_ctx = ctx.get_physical_plan_ctx();
   ObTaskExecutorCtx &task_exec_ctx = ctx.get_task_exec_ctx();
   ObSQLSessionInfo *session = nullptr;
-  share::ObLSArray task_ls_list;
   if (OB_FAIL(remote_task.assign_dependency_tables(dependency_tables))) {
     LOG_WARN("fail to assign dependency_tables", K(ret));
   }
@@ -160,21 +159,16 @@ int ObRemoteScheduler::build_remote_task(ObExecContext &ctx,
       K(task_exec_ctx.get_query_sys_begin_schema_version()));
   remote_task.set_remote_sql_info(&plan_ctx->get_remote_sql_info());
   ObDASTabletLoc *first_tablet_loc = nullptr;
-  if (OB_FAIL(ret)){
+  if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(session = ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", K(ret));
-  } else if (OB_FAIL(DAS_CTX(ctx).get_all_lsid(task_ls_list))) {
-    LOG_WARN("get ls ids failed", K(ret));
-  } else if(OB_FAIL(remote_task.assign_ls_list(task_ls_list))) {
-    LOG_WARN("fail to assign ls list", K(ret));
-  } else if (OB_FAIL(session->get_trans_result().add_touched_ls(task_ls_list))) {
-    LOG_WARN("add touched ls failed", K(ret));
   } else if (OB_ISNULL(DAS_CTX(ctx).get_table_loc_list().get_first()) ||
              OB_ISNULL(first_tablet_loc = DAS_CTX(ctx).get_table_loc_list().get_first()->get_first_tablet_loc())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected empty table loc list", K(ret), K(DAS_CTX(ctx).get_table_loc_list()));
   } else {
+    session->get_trans_result().mark_touched_storage();
     remote_task.set_runner_svr(first_tablet_loc->server_);
     ObTaskID task_id;
     task_id.set_execution_id(session->get_current_execution_id());

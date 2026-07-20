@@ -97,7 +97,8 @@ int ObDynamicParamSetter::set_dynamic_param_vec2(ObEvalCtx &eval_ctx, const sql:
       clear_parent_evaluated_flag(eval_ctx, *dst_);
       dst_->get_eval_info(eval_ctx).evaluated_ = true;
       if (0 == dst_->res_buf_off_) {
-        // Fixed-width datums do not reserve an external result buffer.
+        // for compat, old server don't have ref buf for dynamic expr,
+        // so keep shallow copy
         param_datum.set_datum(res);
       } else {
         if (OB_FAIL(dst_->deep_copy_datum(eval_ctx, res))) {
@@ -139,7 +140,8 @@ int ObDynamicParamSetter::update_dynamic_param(ObEvalCtx &eval_ctx, ObDatum &dat
     ObDatum &param_datum = dst_->locate_expr_datum(eval_ctx);
     dst_->get_eval_info(eval_ctx).evaluated_ = true;
     if (0 == dst_->res_buf_off_) {
-      // Fixed-width datums do not reserve an external result buffer.
+      // for compat, old server don't have ref buf for dynamic expr,
+      // so keep shallow copy
       param_datum.set_datum(datum);
     } else {
       if (OB_FAIL(dst_->deep_copy_datum(eval_ctx, datum))) {
@@ -647,6 +649,113 @@ int ObOperator::check_stack_once()
   return ret;
 }
 
+int ObOperator::output_expr_sanity_check()
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < spec_.output_.count(); ++i) {
+    ObDatum *datum = NULL;
+    const ObExpr *expr = spec_.output_[i];
+    if (OB_ISNULL(expr)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("error unexpected, expr is nullptr", K(ret));
+    } else if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
+      LOG_WARN("evaluate expression failed", K(ret));
+    } else {
+      SANITY_CHECK_RANGE(datum->ptr_, datum->len_);
+    }
+  }
+  return ret;
+}
+
+int ObOperator::output_nested_expr_sanity_check_batch(const ObExpr &expr)
+{
+  int ret = OB_SUCCESS;
+  for (uint32_t i = 0; OB_SUCC(ret) && i < expr.attrs_cnt_; ++i) {
+    if (OB_FAIL(output_expr_sanity_check_batch_inner(*expr.attrs_[i]))) {
+      LOG_WARN("check nested expr sanity failed", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObOperator::output_expr_sanity_check_batch_inner(const ObExpr &expr)
+{
+  int ret = OB_SUCCESS;
+  VectorFormat vec_fmt = expr.get_format(eval_ctx_);
+  ObIVector *ivec = expr.get_vector(eval_ctx_);
+  if (vec_fmt == VEC_UNIFORM || vec_fmt == VEC_UNIFORM_CONST) {
+    ObUniformBase *uni_data = static_cast<ObUniformBase *>(ivec);
+    if (vec_fmt == VEC_UNIFORM_CONST) {
+      if (brs_.skip_->accumulate_bit_cnt(brs_.size_) < brs_.size_) {
+        ObDatum &datum = uni_data->get_datums()[0];
+        SANITY_CHECK_RANGE(datum.ptr_, datum.len_);
+      }
+    } else {
+      ObDatum *datums = uni_data->get_datums();
+      for (int j = 0; j < brs_.size_; j++) {
+        if (!brs_.skip_->at(j)) {
+          SANITY_CHECK_RANGE(datums[j].ptr_, datums[j].len_);
+        }
+      }
+    }
+  } else if (vec_fmt == VEC_FIXED) {
+    ObFixedLengthBase *fixed_data = static_cast<ObFixedLengthBase *>(ivec);
+    ObBitmapNullVectorBase *nulls = static_cast<ObBitmapNullVectorBase *>(ivec);
+    int32_t len = fixed_data->get_length();
+    for (int j = 0; j < brs_.size_; j++) {
+      if (!brs_.skip_->at(j) && !nulls->is_null(j)) {
+        SANITY_CHECK_RANGE(fixed_data->get_data() + j * len, len);
+      }
+    }
+  } else if (vec_fmt == VEC_DISCRETE) {
+    ObDiscreteBase *dis_data = static_cast<ObDiscreteBase *>(ivec);
+    ObBitmapNullVectorBase *nulls = static_cast<ObBitmapNullVectorBase *>(ivec);
+    char **ptrs = dis_data->get_ptrs();
+    ObLength *lens = dis_data->get_lens();        
+    for (int j = 0; j < brs_.size_; j++) {
+      if (!brs_.skip_->at(j) && !nulls->is_null(j)) {
+        SANITY_CHECK_RANGE(ptrs[j], lens[j]);
+      }
+    }
+  } else if (vec_fmt == VEC_CONTINUOUS) {
+    ObContinuousBase *cont_base = static_cast<ObContinuousBase *>(ivec);
+    ObBitmapNullVectorBase *nulls = static_cast<ObBitmapNullVectorBase *>(ivec);
+    uint32_t *offsets = cont_base->get_offsets();
+    char *data = cont_base->get_data();
+    for (int j = 0; j < brs_.size_; j++) {
+      if (!brs_.skip_->at(j) && !nulls->is_null(j)) {
+        SANITY_CHECK_RANGE(data + offsets[j], offsets[j + 1] - offsets[j]);
+      }
+    }
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected format", K(ret), K(vec_fmt));
+  }
+
+  return ret;
+}
+
+int ObOperator::output_expr_sanity_check_batch()
+{
+  int ret = OB_SUCCESS;
+
+  for (int64_t i = 0; OB_SUCC(ret) && i < spec_.output_.count(); ++i) {
+    const ObExpr *expr = spec_.output_[i];
+    if (OB_ISNULL(expr)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("error unexpected, expr is nullptr", K(ret));
+    } else if (OB_FAIL(expr->eval_vector(eval_ctx_, brs_))) {
+      LOG_WARN("eval vector failed", K(ret));
+    } else if (GET_MY_SESSION(eval_ctx_.exec_ctx_)->is_diagnosis_enabled() &&
+              OB_FAIL(do_diagnosis(eval_ctx_.exec_ctx_, *brs_.skip_))) {
+      LOG_WARN("fail to do diagnosis", K(ret));
+    } else if (OB_FAIL(output_expr_sanity_check_batch_inner(*expr))) {
+      LOG_WARN("expr sanity check batch failed", K(ret));
+    }
+  }
+  return ret;
+}
+
 int ObOperator::output_expr_decint_datum_len_check()
 {
   int ret = OB_SUCCESS;
@@ -1066,6 +1175,13 @@ int ObOperator::get_next_row()
   if (OB_FAIL(check_stack_once())) {
     LOG_WARN("too deep recursive", K(ret));
   }
+#ifdef ENABLE_SANITY
+  if (OB_FAIL(ret)) {
+  } else if (OB_UNLIKELY(!enable_get_next_row())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get next row is disabled", K(ret), K(spec_));
+  }
+#endif
   if (OB_FAIL(ret)) {
   } else {
     if (row_reach_end_) {
@@ -1109,6 +1225,13 @@ int ObOperator::get_next_row()
               }
             }
           }
+#ifdef ENABLE_SANITY
+          if (OB_SUCC(ret) && !filtered) {
+            if (OB_FAIL(output_expr_sanity_check())) {
+              LOG_WARN("output expr sanity check failed", K(ret));
+            }
+          }
+#endif
 #ifndef NDEBUG
           if (OB_SUCC(ret) && !filtered) {
             if (OB_FAIL(output_expr_decint_datum_len_check())) {
@@ -1290,6 +1413,13 @@ int ObOperator::get_next_batch(const int64_t max_row_cnt, const ObBatchRows *&ba
             }
           }
         }
+#ifdef ENABLE_SANITY
+        if (OB_SUCC(ret) && spec_.use_rich_format_ && !all_filtered) {
+          if (OB_FAIL(output_expr_sanity_check_batch())) {
+            LOG_WARN("output expr sanity check batch failed", K(ret));
+          }
+        }
+#endif
 #ifndef NDEBUG
         if (OB_SUCC(ret) && !all_filtered) {
           if (OB_FAIL(output_expr_decint_datum_len_check_batch())) {
@@ -1711,6 +1841,53 @@ inline int ObOperator::init_dummy_mem_context()
   return ret;
 }
 #endif
+
+bool ObOperator::enable_get_next_row() const
+{
+  int ret = false;
+  if (OB_ISNULL(spec_.plan_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid null plan", K(ret));
+  } else if (!spec_.plan_->is_vectorized()
+             || !ObOperatorFactory::is_vectorized(spec_.type_)
+             || (spec_.get_parent() != NULL && !ObOperatorFactory::is_vectorized(spec_.get_parent()->type_))) { // parent is not vectorized, get_next_row is used
+    ret = true;
+  } else if (spec_.get_parent() != NULL && spec_.get_parent()->type_ == PHY_SUBPLAN_FILTER) {
+    // subquery uses get_next_row for iteration
+    ret = true;
+  } else if ((spec_.type_ == PHY_VEC_SORT
+              || spec_.type_ == PHY_SORT
+              || spec_.type_ == PHY_PX_MERGE_SORT_COORD
+              || spec_.type_ == PHY_VEC_PX_MERGE_SORT_COORD
+              || spec_.type_ == PHY_VEC_PX_MERGE_SORT_RECEIVE
+              || spec_.type_ == PHY_PX_MERGE_SORT_RECEIVE)
+             && spec_.get_parent() != NULL
+             && (spec_.get_parent()->type_ == PHY_MERGE_GROUP_BY
+                 || spec_.get_parent()->type_ == PHY_VEC_MERGE_GROUP_BY)
+             && !spec_.get_parent()->is_vectorized()) { // if merge group by with listagg/group_concat, sort is called with `get_next_row`
+    ret = true;
+  } else {
+    // if new operator is registered, please update this check and phy operator lists below
+    static_assert(PHY_END == PHY_VEC_PX_MULTI_PART_SSTABLE_INSERT + 1, "");
+    switch (spec_.type_) {
+    case PHY_TABLE_SCAN: // table scan with multi value index/geometry type
+    case PHY_BLOCK_SAMPLE_SCAN: // sample scan with geometry type
+    case PHY_ROW_SAMPLE_SCAN:
+    case PHY_DDL_BLOCK_SAMPLE_SCAN:
+    case PHY_SUBPLAN_FILTER: // subplan filter with update set
+    case PHY_MERGE_GROUP_BY: // groupby with listagg/group_concat & rollup
+    case PHY_VEC_MERGE_GROUP_BY:
+    {
+      ret = true;
+      break;
+    };
+    default: {
+      break;
+    }
+    }
+  }
+  return ret;
+}
 
 int ObBatchRowIter::get_next_row()
 {

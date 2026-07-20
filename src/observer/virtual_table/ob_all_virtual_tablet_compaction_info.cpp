@@ -46,6 +46,7 @@ void ObAllVirtualTabletCompactionInfo::reset()
 
 int ObAllVirtualTabletCompactionInfo::inner_get_next_row(common::ObNewRow *&row)
 {
+  // each get_next_row will switch to required tenant, and released guard later
   int ret = OB_SUCCESS;
   ObTablet *tablet = nullptr;
   ObITable *table = nullptr;
@@ -107,16 +108,25 @@ int ObAllVirtualTabletCompactionInfo::inner_get_next_row(common::ObNewRow *&row)
           break;
         case SERIALIZE_SCN_LIST:
           if (medium_info_list->size() > 0
-            || compaction::ObMediumCompactionInfo::MAJOR_COMPACTION == medium_info_list->get_last_compaction_type()) {
+            || compaction::ObMediumCompactionInfo::MAJOR_COMPACTION == medium_info_list->get_last_compaction_type()
+            || !table_store->get_major_ckm_info().is_empty()) {
             int64_t pos = 0;
             MEMSET(medium_info_buf_, '\0', OB_MAX_VARCHAR_LENGTH);
             medium_info_list->gene_info(medium_info_buf_, OB_MAX_VARCHAR_LENGTH, pos);
+            table_store->get_major_ckm_info().gene_info(medium_info_buf_, OB_MAX_VARCHAR_LENGTH, pos);
             cur_row_.cells_[i].set_varchar(medium_info_buf_);
             SERVER_LOG(DEBUG, "get medium info mgr", KPC(medium_info_list), K(medium_info_buf_));
           } else {
             cur_row_.cells_[i].set_varchar("");
           }
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+          break;
+        case VALIDATED_SCN:
+          if (table_store->get_major_ckm_info().is_empty()) {
+            cur_row_.cells_[i].set_int(0);
+          } else {
+            cur_row_.cells_[i].set_int(table_store->get_major_ckm_info().get_compaction_scn());
+          }
           break;
         default:
           ret = OB_ERR_UNEXPECTED;

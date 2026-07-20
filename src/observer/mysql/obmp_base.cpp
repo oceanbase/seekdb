@@ -23,7 +23,7 @@
 #include "observer/mysql/obsm_row.h"
 #include "observer/mysql/obmp_utils.h"
 #include "observer/mysql/ob_query_driver.h"
-#include "sql/engine/expr/ob_expr_xml_func_helper.h"
+#include "sql/engine/expr/ob_expr_sql_udt_utils.h"
 namespace oceanbase
 {
 using namespace share;
@@ -342,6 +342,7 @@ int ObMPBase::do_after_process(sql::ObSQLSessionInfo &session,
   ob_setup_tsi_warning_buffer(NULL);
   session.reset_plsql_exec_time();
   session.reset_plsql_compile_time();
+  ObQueryRetryAshGuard::reset_info();
   return ret;
 }
 
@@ -368,9 +369,10 @@ int ObMPBase::check_and_refresh_schema(ObSQLSessionInfo *session_info)
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(gctx_.schema_service_->get_runtime_refreshed_schema_version(local_version))) {
-        LOG_WARN("fail to get runtime refreshed schema version", K(ret));
-      } else if (FALSE_IT(last_version = session_info->get_last_ddl_schema_version())) {
+      if (OB_FAIL(gctx_.schema_service_->get_tenant_refreshed_schema_version(local_version))) {
+        LOG_WARN("fail to get tenant refreshed schema version", K(ret));
+      } else if (OB_FAIL(session_info->get_last_ddl_schema_version(last_version))) {
+        LOG_WARN("failed to get session DDL schema fence", K(ret));
       } else if (local_version >= last_version) {
         // skip
       } else if (OB_FAIL(gctx_.schema_service_->async_refresh_schema(last_version))) {
@@ -497,7 +499,7 @@ int ObMPBase::load_privilege_info_for_change_user(sql::ObSQLSessionInfo *session
   } else if (OB_ISNULL(conn = get_conn())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("null conn", K(ret));
-  } else if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(
+  } else if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(
                                   schema_guard))) {
     OB_LOG(WARN,"fail get schema guard", K(ret));
   } else {
@@ -524,8 +526,8 @@ int ObMPBase::load_privilege_info_for_change_user(sql::ObSQLSessionInfo *session
       session->set_user_priv_set(session_priv.user_priv_set_);
       session->set_db_priv_set(session_priv.db_priv_set_);
       session->set_enable_role_array(enable_role_id_array);
-      if (OB_FAIL(session->set_runtime(login_info.runtime_name_))) {
-        OB_LOG(WARN, "fail to set runtime", "runtime name", login_info.runtime_name_, K(ret));
+      if (OB_FAIL(session->set_tenant(login_info.tenant_name_))) {
+        OB_LOG(WARN, "fail to set tenant", "tenant name", login_info.tenant_name_, K(ret));
       } else if (OB_FAIL(session->set_real_client_ip_and_port(login_info.client_ip_, session->get_client_addr_port()))) {
           LOG_WARN("failed to set_real_client_ip", K(ret));
       } else if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_variable_schema))) {

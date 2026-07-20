@@ -42,10 +42,10 @@ void ObAllVirtualActivityMetric::reset()
   ObVirtualTableScannerIterator::reset();
 }
 
-int ObAllVirtualActivityMetric::get_next_freezer_stat_(ObMemstoreFreezerStat& stat)
+int ObAllVirtualActivityMetric::get_next_freezer_stat_(ObTenantFreezerStat& stat)
 {
   int ret = OB_SUCCESS;
-  storage::ObMemstoreFreezer *freezer = share::g_mp->memstore_freezer();
+  storage::ObTenantFreezer *freezer = share::g_mp->tenant_freezer();
 
   if (current_pos_ < length_) {
     (void)freezer->get_freezer_stat_from_history(current_pos_, stat);
@@ -60,7 +60,7 @@ int ObAllVirtualActivityMetric::get_next_freezer_stat_(ObMemstoreFreezerStat& st
 int ObAllVirtualActivityMetric::prepare_start_to_read_()
 {
   int ret = OB_SUCCESS;
-  storage::ObMemstoreFreezer *freezer = share::g_mp->memstore_freezer();
+  storage::ObTenantFreezer *freezer = share::g_mp->tenant_freezer();
 
   (void)freezer->get_freezer_stat_history_snapshot(length_);
   current_pos_ = 0;
@@ -72,7 +72,7 @@ int ObAllVirtualActivityMetric::prepare_start_to_read_()
 int ObAllVirtualActivityMetric::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  ObMemstoreFreezerStat stat;
+  ObTenantFreezerStat stat;
 
   if (NULL == allocator_) {
     ret = OB_NOT_INIT;
@@ -103,22 +103,22 @@ int ObAllVirtualActivityMetric::inner_get_next_row(ObNewRow *&row)
           cells[i].set_int(stat.captured_freeze_times_);
           break;
         case MINI_MERGE_COST:
-          cells[i].set_int(stat.captured_merge_time_cost_[storage::ObMemstoreFreezerStat::ObFreezerMergeType::MINI_MERGE]);
+          cells[i].set_int(stat.captured_merge_time_cost_[storage::ObTenantFreezerStat::ObFreezerMergeType::MINI_MERGE]);
           break;
         case MINI_MERGE_TIMES:
-          cells[i].set_int(stat.captured_merge_times_[storage::ObMemstoreFreezerStat::ObFreezerMergeType::MINI_MERGE]);
+          cells[i].set_int(stat.captured_merge_times_[storage::ObTenantFreezerStat::ObFreezerMergeType::MINI_MERGE]);
           break;
         case MINOR_MERGE_COST:
-          cells[i].set_int(stat.captured_merge_time_cost_[storage::ObMemstoreFreezerStat::ObFreezerMergeType::MINOR_MERGE]);
+          cells[i].set_int(stat.captured_merge_time_cost_[storage::ObTenantFreezerStat::ObFreezerMergeType::MINOR_MERGE]);
           break;
         case MINOR_MERGE_TIMES:
-          cells[i].set_int(stat.captured_merge_times_[storage::ObMemstoreFreezerStat::ObFreezerMergeType::MINOR_MERGE]);
+          cells[i].set_int(stat.captured_merge_times_[storage::ObTenantFreezerStat::ObFreezerMergeType::MINOR_MERGE]);
           break;
         case MAJOR_MERGE_COST:
-          cells[i].set_int(stat.captured_merge_time_cost_[storage::ObMemstoreFreezerStat::ObFreezerMergeType::MAJOR_MERGE]);
+          cells[i].set_int(stat.captured_merge_time_cost_[storage::ObTenantFreezerStat::ObFreezerMergeType::MAJOR_MERGE]);
           break;
         case MAJOR_MERGE_TIMES:
-          cells[i].set_int(stat.captured_merge_times_[storage::ObMemstoreFreezerStat::ObFreezerMergeType::MAJOR_MERGE]);
+          cells[i].set_int(stat.captured_merge_times_[storage::ObTenantFreezerStat::ObFreezerMergeType::MAJOR_MERGE]);
           break;
         default:
           // abnormal column id

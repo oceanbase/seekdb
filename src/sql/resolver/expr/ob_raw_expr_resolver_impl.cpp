@@ -1055,22 +1055,26 @@ int ObRawExprResolverImpl::do_recursive_resolve(const ParseNode *node,
         if (OB_FAIL(process_fun_sys_node(node, expr, is_root_expr))) {
           if (ret != OB_ERR_FUNCTION_UNKNOWN) {
             LOG_WARN("fail to process system function node", K(ret), K(node));
-          } else {
-            ParseNode *obj_access = NULL;
-            if (OB_FAIL(ObResolverUtils::transform_sys_func_to_objaccess(&ctx_.expr_factory_.get_allocator(), node, obj_access))) {
-              LOG_WARN("failed to transform to obj access node", K(ret));
-            } else if (OB_ISNULL(obj_access)) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("obj access node is null", K(ret));
-            } else if (OB_FAIL(process_obj_access_node(*obj_access, expr))) {
-              LOG_WARN("failed to process obj access node", K(ret));
-              if (get_udf_param_syntax_err()) {
-                // do nothing ....
-              } else {
-                ObString func_name(node->children_[0]->str_len_, node->children_[0]->str_value_);
-                ret = OB_ERR_WRONG_PARAMETERS_TO_NATIVE_FCT;
-                LOG_USER_ERROR(OB_ERR_WRONG_PARAMETERS_TO_NATIVE_FCT,
-                               func_name.length(), func_name.ptr());
+          } else if (OB_FAIL(process_dll_udf_node(node, expr))) {
+            if (ret != OB_ERR_FUNCTION_UNKNOWN) {
+              LOG_WARN("fail to process dll user function node", K(ret), K(node));
+            } else {
+              ParseNode *obj_access = NULL;
+              if (OB_FAIL(ObResolverUtils::transform_sys_func_to_objaccess(&ctx_.expr_factory_.get_allocator(), node, obj_access))) {
+                LOG_WARN("failed to transform to obj access node", K(ret));
+              } else if (OB_ISNULL(obj_access)) {
+                ret = OB_ERR_UNEXPECTED;
+                LOG_WARN("obj access node is null", K(ret));
+              } else if (OB_FAIL(process_obj_access_node(*obj_access, expr))) {
+                LOG_WARN("failed to process obj access node", K(ret));
+                if (get_udf_param_syntax_err()) {
+                  // do nothing ....
+                } else {
+                  ObString func_name(node->children_[0]->str_len_, node->children_[0]->str_value_);
+                  ret = OB_ERR_WRONG_PARAMETERS_TO_NATIVE_FCT;
+                  LOG_USER_ERROR(OB_ERR_WRONG_PARAMETERS_TO_NATIVE_FCT,
+                                func_name.length(), func_name.ptr());
+                }
               }
             }
           }
@@ -1665,8 +1669,6 @@ int ObRawExprResolverImpl::check_sys_func(ObQualifiedName &q_name, bool &is_sys_
       && (IS_FUN_SYS_TYPE(ObExprOperatorFactory::get_type_by_name(q_name.access_idents_.at(0).access_name_))
           || 0 == q_name.access_idents_.at(0).access_name_.case_compare("sqlerrm")
           || 0 == q_name.access_idents_.at(0).access_name_.case_compare("sqlcode"))
-      // AUTOINC NEXTVAL is generated internally. A user-written NEXTVAL/CURRVAL call
-      // must still be resolved as a stored function after SQL Sequence is removed.
       && q_name.access_idents_.at(0).access_name_.case_compare("nextval") != 0
       && q_name.access_idents_.at(0).access_name_.case_compare("currval") != 0;
 
@@ -2076,6 +2078,7 @@ int ObRawExprResolverImpl::process_datatype_or_questionmark(const ParseNode &nod
   const ObSQLSessionInfo *session_info = ctx_.session_info_;
   int64_t server_collation = CS_TYPE_INVALID;
   ObCollationType nation_collation = OB_NOT_NULL(ctx_.session_info_) ? ctx_.session_info_->get_nls_collation_nation() : CS_TYPE_INVALID;
+  uint64_t tenant_data_ver = 0;
   bool enable_decimal_int = false;
   bool enable_mysql_compatible_dates = false;
   if (OB_ISNULL(session_info)) {
@@ -6049,8 +6052,6 @@ int ObRawExprResolverImpl::process_fun_sys_node(const ParseNode *node,
     }
     if (OB_SUCC(ret)) {
       // deal with exceptions
-      // AUTOINC NEXTVAL is never written directly in SQL. Return FUNCTION_UNKNOWN
-      // here so the outer resolver can retry a user-written NEXTVAL as a stored UDF.
       if (0 == name.case_compare("nextval")) {
         ret = OB_ERR_FUNCTION_UNKNOWN;
         LOG_USER_ERROR(OB_ERR_FUNCTION_UNKNOWN, "FUNCTION", name.length(), name.ptr());
@@ -7534,6 +7535,209 @@ int ObRawExprResolverImpl::transform_ratio_afun_to_arg_div_sum(const ParseNode *
       div_node->children_[1] = divisor_node;
     }
   }
+  return ret;
+}
+
+int ObRawExprResolverImpl::process_dll_udf_node(const ParseNode *node, ObRawExpr *&expr)
+{
+  int ret = OB_SUCCESS;
+
+  const share::schema::ObUDF *udf_info = nullptr;
+  bool exist = false;
+  ObString udf_name;
+  ObCollationType cs_type;
+  if (OB_ISNULL(ctx_.session_info_) || OB_ISNULL(ctx_.schema_checker_)) {
+    //PL resolver don't have schema checker and session info
+    ret = OB_ERR_FUNCTION_UNKNOWN;
+  } else if (OB_ISNULL(node)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(node));
+  } else if (OB_UNLIKELY(1 > node->num_child_) || OB_ISNULL(node->children_) || OB_ISNULL(node->children_[0])) {
+    ret = OB_ERR_PARSER_SYNTAX;
+    LOG_WARN("invalid node children for fun_sys node", K(ret), K(node->num_child_), "node", SJ(ObParserResultPrintWrapper(*node)));
+  } else if (OB_FAIL(ctx_.session_info_->get_collation_connection(cs_type))) {
+    LOG_WARN("failed to get collation", K(ret));
+  } else {
+    ObString name(node->children_[0]->str_len_, node->children_[0]->str_value_);
+    if (OB_FAIL(ob_write_string(ctx_.expr_factory_.get_allocator(), name, udf_name))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("Malloc function name failed", K(ret));
+    } else if (FALSE_IT(IGNORE_RETURN ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, udf_name))) {
+    } else if (OB_FAIL(ctx_.schema_checker_->get_udf_info(
+                                                          udf_name,
+                                                          udf_info,
+                                                          exist))) {
+      LOG_WARN("failed to resolve udf", K(ret));
+    } else if (!exist) {
+      //we can not find this function in udf
+      ret = OB_ERR_FUNCTION_UNKNOWN;
+      //do not throw this error to user, just let it go.
+      //the pl function will deal with it.
+    } else if (OB_ISNULL(udf_info)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("the udf info is null", K(ret));
+    } else if (!(udf_info->is_normal_udf() || udf_info->is_agg_udf())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("the udf schema is error", K(ret), K(udf_info->get_type()));
+    } else if (udf_info->is_normal_udf()) {
+      ObSysFunRawExpr *func_expr = NULL;
+      ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, udf_name);
+      if (OB_FAIL(process_normal_udf_node(node, udf_name, *udf_info, func_expr))) {
+        LOG_WARN("failed to process normal user define function", K(ret));
+      } else {
+        expr = func_expr;
+      }
+    } else if (udf_info->is_agg_udf()) {
+      ObAggFunRawExpr *func_expr = NULL;
+      ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, udf_name);
+      if (OB_FAIL(process_agg_udf_node(node, *udf_info, func_expr))) {
+        LOG_WARN("failed to process agg user define function", K(ret));
+      } else {
+        expr = func_expr;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObRawExprResolverImpl::process_normal_udf_node(const ParseNode *node,
+                                                   const ObString &udf_name,
+                                                   const share::schema::ObUDF &udf_info,
+                                                   ObSysFunRawExpr *&expr)
+{
+  int ret = OB_SUCCESS;
+  ObNormalDllUdfRawExpr *func_expr = nullptr;
+  if (OB_ISNULL(node)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("normal udf is null", K(ret), K(node));
+  } else if (node->num_child_ < 1) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("normal udf is null", K(ret), K(node->num_child_));
+  } else if (node->num_child_ > 1
+             &&(OB_ISNULL(node->children_)
+                || OB_ISNULL(node->children_[1])
+                || OB_UNLIKELY(T_EXPR_LIST != node->children_[1]->type_))) {
+    ret = OB_ERR_PARSER_SYNTAX;
+    LOG_WARN("invalid node children", K(ret), K(node->children_));
+  } else if (OB_FAIL(ctx_.expr_factory_.create_raw_expr(T_FUN_NORMAL_UDF, func_expr))) {
+    LOG_WARN("fail to create raw expr", K(ret));
+  } else if (OB_FAIL(func_expr->set_udf_meta(udf_info))) {
+    LOG_WARN("set udf info failed", K(ret));
+  } else {
+    func_expr->set_func_name(udf_name);
+    ObSEArray<ObRawExpr*, 16> param_exprs;
+    if (OB_FAIL(resolve_udf_param_expr(node, func_expr->get_param_exprs()))) {
+      set_udf_param_syntax_err(true);
+      LOG_WARN("failed to resolve udf param exprs", K(ret));
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    ObSysFunRawExpr *tmp_expr = func_expr;
+    if (OB_FAIL(ObRawExprUtils::function_alias(ctx_.expr_factory_, tmp_expr))) {
+      LOG_WARN("failed to do funcion alias", K(ret), K(func_expr));
+    } else {
+      expr = tmp_expr;
+    }
+  }
+
+  return ret;
+}
+
+int ObRawExprResolverImpl::process_agg_udf_node(const ParseNode *node,
+                                                const share::schema::ObUDF &udf_info,
+                                                ObAggFunRawExpr *&expr)
+{
+  int ret = OB_SUCCESS;
+  ObAggFunRawExpr *agg_expr = nullptr;
+  bool need_add_flag = !ctx_.parents_expr_info_.has_member(IS_AGG);
+  if (need_add_flag && OB_FAIL(ctx_.parents_expr_info_.add_member(IS_AGG))) {
+    LOG_WARN("failed to add member", K(ret));
+  } else if (OB_ISNULL(ctx_.aggr_exprs_) || OB_ISNULL(node)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("aggr exprs or node is null", K(ret), K(node));
+  } else if (node->num_child_ < 1) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("aggr exprs or node is null", K(ret), K(node->num_child_));
+  } else if (node->num_child_ > 1
+             && (OB_ISNULL(node->children_)
+                 || OB_ISNULL(node->children_[1])
+                 || OB_UNLIKELY(T_EXPR_LIST != node->children_[1]->type_))) {
+      ret = OB_ERR_PARSER_SYNTAX;
+      LOG_WARN("invalid node children", K(ret), K(node->children_));
+  } else if (OB_FAIL(ctx_.expr_factory_.create_raw_expr(T_FUN_AGG_UDF, agg_expr))) {
+    LOG_WARN("fail to create raw expr", K(ret));
+  } else if (OB_FAIL(ctx_.aggr_exprs_->push_back(agg_expr))) {
+    LOG_WARN("store aggr expr failed", K(ret));
+  } else if (OB_FAIL(agg_expr->set_udf_meta(udf_info))) {
+    LOG_WARN("set udf info failed", K(ret));
+  } else {
+    ObSEArray<ObRawExpr*, 16> param_exprs;
+    if (OB_FAIL(resolve_udf_param_expr(node, agg_expr->get_real_param_exprs_for_update()))) {
+      LOG_WARN("failed to resolve udf param exprs", K(ret));
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    // add invalid table bit index, avoid aggregate function expressions are used as filters
+    if (OB_FAIL(agg_expr->get_relation_ids().add_member(0))) {
+      LOG_WARN("failed to add member", K(ret));
+    } else if (need_add_flag && (ctx_.parents_expr_info_.del_member(IS_AGG))) {
+        LOG_WARN("failed to del member", K(ret));
+    } else {
+      expr = agg_expr;
+    }
+  }
+  return ret;
+}
+
+int ObRawExprResolverImpl::resolve_udf_param_expr(const ParseNode *node,
+                                                  common::ObIArray<ObRawExpr*> &param_exprs)
+{
+  int ret = OB_SUCCESS;
+  ObRawExpr *param_expr = nullptr;
+  // if the func do not have any param, without_param will be set to true.
+  const bool without_param = node->num_child_ == 1;
+  int32_t num = without_param ? 0 : node->children_[1]->num_child_;
+  const ParseNode *child_node = without_param ? nullptr : node->children_[1];
+  for (int32_t i = 0; OB_SUCC(ret) && i < num; i++) {
+    bool has_alias = false;
+    const ParseNode *expr_parse_node = child_node->children_[i];
+    const ParseNode *expr_alias_node = nullptr;
+    if (OB_ISNULL(expr_parse_node)) {
+      ret = OB_ERR_PARSER_SYNTAX;
+      LOG_WARN("parser error", K(ret));
+    } else if (expr_parse_node->type_ == T_EXPR_WITH_ALIAS) {
+      if (expr_parse_node->num_child_ != 1
+          || OB_ISNULL(expr_parse_node->children_[0])
+          || expr_parse_node->children_[0]->type_ != T_ALIAS
+          || expr_parse_node->children_[0]->num_child_ != 2
+          || OB_ISNULL(expr_parse_node->children_[0]->children_[0])
+          || OB_ISNULL(expr_parse_node->children_[0]->children_[1])) {
+        ret = OB_ERR_PARSER_SYNTAX;
+        LOG_WARN("parser error", K(ret));
+      } else {
+        expr_alias_node = expr_parse_node->children_[0]->children_[1];
+        expr_parse_node = expr_parse_node->children_[0]->children_[0];
+        has_alias = true;
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(SMART_CALL(recursive_resolve(expr_parse_node, param_expr)))) {
+      LOG_WARN("fail to recursive resolve", K(ret), K(expr_parse_node));
+    } else if (OB_FAIL(param_exprs.push_back(param_expr))) {
+      LOG_WARN("fail to add param expr", K(ret), K(param_expr));
+    } else if (has_alias) {
+      ObString alias_name(expr_alias_node->str_len_, expr_alias_node->str_value_);
+      param_expr->set_alias_column_name(alias_name);
+    }
+    if (OB_SUCC(ret)) {
+      ObString expr_name(expr_parse_node->str_len_, expr_parse_node->str_value_);
+      if(OB_FAIL(param_expr->set_expr_name(expr_name))) {
+        LOG_WARN("set expr name failed", K(ret));
+      }
+    }
+  } //end for
   return ret;
 }
 

@@ -409,7 +409,7 @@ int ObOptStatService::get_table_rowcnt(const uint64_t table_id,
           LOG_WARN("failed to push back", K(ret));
         } else {/*do nothing*/}
       } else {
-        storage::ObTabletStatMgr *stat_mgr = share::g_mp->tablet_stat_mgr();
+        storage::ObTenantTabletStatMgr *stat_mgr = share::g_mp->tenant_tablet_stat_mgr();
         storage::ObTabletStat tablet_stat;
         //try check the latest tablet stat from stroage
         if (stat_mgr != NULL) {

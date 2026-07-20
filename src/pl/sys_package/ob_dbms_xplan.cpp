@@ -563,6 +563,8 @@ int ObDbmsXplan::get_plan_info_by_id(sql::ObExecContext &ctx,
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
+  const bool use_wr = true;
+
   if (OB_FAIL(sql.assign_fmt("SELECT \
                     OPERATOR,\
                     OPTIONS,\
@@ -619,6 +621,85 @@ int ObDbmsXplan::get_plan_info_by_id(sql::ObExecContext &ctx,
     LOG_WARN("failed to append string", K(ret));
   } else if (OB_FAIL(inner_get_plan_info(ctx, sql, plan_infos))) {
     LOG_WARN("failed to get plan info", K(ret));
+  } else if (plan_infos.count() == 0) {
+    sql.reuse();
+    char plan_id_char[40] = " ";
+    if (plan_id != 0) {
+      sprintf(plan_id_char, "AND PLAN_ID=%lu ", plan_id);
+    }
+    if (OB_FAIL(sql.assign_fmt(
+        "WITH plan_index AS ( \
+            SELECT * FROM \
+              (SELECT \
+                sql_id,  \
+                plan_hash, \
+                id, \
+                plan_id, \
+                snap_id, \
+                cluster_id, \
+                DENSE_RANK() OVER(ORDER BY SNAP_ID DESC) AS RANK \
+              FROM OCEANBASE.__ALL_VIRTUAL_WR_SQL_PLAN_AUX_KEY2SNAPSHOT \
+              WHERE PLAN_HASH=%lu \
+              AND SQL_ID='%.*s' \
+              %s )\
+            WHERE RANK=1 ) ",
+            plan_hash, 
+            sql_handle.length(), 
+            sql_handle.ptr(),
+            plan_id_char))) {
+        LOG_WARN("failed to assign string", K(ret));
+    } else if OB_FAIL(sql.append_fmt("SELECT \
+                      /*+ USE_NL(plan_index, sp) LEADING (plan_index, sp)*/ \
+                      sp.OPERATOR, \
+                      sp.OPTIONS, \
+                      sp.OBJECT_NODE, \
+                      sp.OBJECT_ID, \
+                      sp.OBJECT_OWNER, \
+                      sp.OBJECT_NAME, \
+                      sp.OBJECT_ALIAS, \
+                      sp.OBJECT_TYPE, \
+                      sp.OPTIMIZER, \
+                      sp.ID, \
+                      sp.PARENT_ID, \
+                      sp.DEPTH, \
+                      sp.POSITION, \
+                      0 AS SEARCH_COLUMNS, \
+                      sp.IS_LAST_CHILD, \
+                      sp.COST, \
+                      sp.REAL_COST, \
+                      sp.CARDINALITY, \
+                      sp.REAL_CARDINALITY, \
+                      sp.BYTES, \
+                      sp.ROWSET, \
+                      sp.OTHER_TAG, \
+                      sp.PARTITION_START, \
+                      NULL AS PARTITION_STOP, \
+                      0 AS PARTITION_ID, \
+                      sp.OTHER, \
+                      NULL AS DISTRIBUTION, \
+                      sp.CPU_COST, \
+                      sp.IO_COST, \
+                      0 AS TEMP_SPACE, \
+                      sp.ACCESS_PREDICATES, \
+                      sp.FILTER_PREDICATES, \
+                      sp.STARTUP_PREDICATES, \
+                      sp.PROJECTION, \
+                      sp.SPECIAL_PREDICATES, \
+                      0 AS TIME, \
+                      sp.QBLOCK_NAME, \
+                      sp.REMARKS, \
+                      sp.OTHER_XML \
+                    FROM plan_index \
+                    JOIN OCEANBASE.__ALL_VIRTUAL_WR_SQL_PLAN sp \
+                    ON sp.CLUSTER_ID = plan_index.CLUSTER_ID \
+                    AND sp.SNAP_ID=plan_index.SNAP_ID \
+                    AND sp.PLAN_HASH=plan_index.PLAN_HASH \
+                    AND sp.SQL_ID=plan_index.SQL_ID \
+                    ORDER BY ID")) {
+      LOG_WARN("failed to assign string", K(ret));
+    } else if (OB_FAIL(inner_get_plan_info(ctx, sql, plan_infos, use_wr))) {
+      LOG_WARN("failed to get plan info", K(ret));
+    }
   }
   return ret;
 }
@@ -631,7 +712,15 @@ int ObDbmsXplan::get_plan_info_by_session_id(sql::ObExecContext &ctx,
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
-  if (OB_FAIL(sql.assign_fmt("SELECT \
+  ObSqlString tenant_filter;
+  {
+    if (OB_FAIL(tenant_filter.assign_fmt("1 = 1"))) {
+      LOG_WARN("failed to assign string", K(ret));
+    }
+  }
+  if (OB_FAIL(ret)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(sql.assign_fmt("SELECT \
                       OPERATOR,\
                       OPTIONS,\
                       OBJECT_NODE,\
@@ -672,14 +761,17 @@ int ObDbmsXplan::get_plan_info_by_session_id(sql::ObExecContext &ctx,
                       REMARKS,\
                       OTHER_XML\
                     FROM OCEANBASE.__ALL_VIRTUAL_SQL_PLAN A INNER JOIN\
-                      (SELECT PLAN_ID \
+                      (SELECT EFFECTIVE_TENANT_ID TENANT_ID,\
+                                PLAN_ID \
                         FROM OCEANBASE.__ALL_VIRTUAL_PROCESSLIST \
                         WHERE ID=%ld \
                         LIMIT 1) E\
                       ON A.PLAN_ID = E.PLAN_ID\
-                    WHERE 1 = 1\
+                    WHERE %.*s\
                     ORDER BY A.ID",
-                    session_id))) {
+                    session_id,
+                    (int)tenant_filter.length(),
+                    tenant_filter.ptr()))) {
     LOG_WARN("failed to assign string", K(ret));
   } else if (OB_FAIL(inner_get_plan_info(ctx, sql, plan_infos))) {
     LOG_WARN("failed to get plan info", K(ret));
@@ -689,7 +781,8 @@ int ObDbmsXplan::get_plan_info_by_session_id(sql::ObExecContext &ctx,
 
 int ObDbmsXplan::inner_get_plan_info(sql::ObExecContext &ctx, 
                                     const ObSqlString& sql, 
-                                    ObIArray<ObSqlPlanItem*> &plan_infos)
+                                    ObIArray<ObSqlPlanItem*> &plan_infos,
+                                    const bool is_from_wr)
 {
   int ret = OB_SUCCESS;
   common::ObISQLClient *sql_proxy = GCTX.sql_proxy_;
@@ -717,7 +810,7 @@ int ObDbmsXplan::inner_get_plan_info(sql::ObExecContext &ctx,
           LOG_WARN("failed to allocate memory", K(ret));
         } else {
           plan_info = new(buf)ObSqlPlanItem();
-          if (OB_FAIL(read_plan_info_from_result(ctx, *mysql_result, *plan_info))) {
+          if (OB_FAIL(read_plan_info_from_result(ctx, *mysql_result, *plan_info, is_from_wr))) {
             LOG_WARN("failed to read plan info", K(ret));
           } else if (OB_FAIL(plan_infos.push_back(plan_info))) {
             LOG_WARN("failed to push back info", K(ret));
@@ -787,10 +880,12 @@ int ObDbmsXplan::inner_get_plan_info_use_current_session(sql::ObExecContext &ctx
 
 int ObDbmsXplan::read_plan_info_from_result(sql::ObExecContext &ctx,
                                             sqlclient::ObMySQLResult& mysql_result, 
-                                            ObSqlPlanItem &plan_info)
+                                            ObSqlPlanItem &plan_info,
+                                            bool is_from_wr)
 {
   int ret = OB_SUCCESS;
   int64_t int_value;
+  uint64_t uint_value;
   ObString varchar_val;
   number::ObNumber num_val;
 
@@ -832,6 +927,20 @@ int ObDbmsXplan::read_plan_info_from_result(sql::ObExecContext &ctx,
     }                                                                                   \
   } while(0);
 
+  #define GET_UINT_VALUE(IDX, value)                                                    \
+  do {                                                                                  \
+    if (OB_FAIL(ret)) {                                                                 \
+    } else if (OB_FAIL(mysql_result.get_uint(IDX, uint_value))) {                       \
+      if (OB_ERR_NULL_VALUE == ret ||                                                   \
+          OB_ERR_MIN_VALUE == ret ||                                                    \
+          OB_ERR_MAX_VALUE == ret) {                                                    \
+        plan_info.value = 0;                                                            \
+        ret = OB_SUCCESS;                                                               \
+      }                                                                                 \
+    } else {                                                                            \
+      plan_info.value = uint_value;                                                     \
+    }                                                                                   \
+  } while(0);
   #define GET_VARCHAR_VALUE(IDX, value)                                                 \
   do {                                                                                  \
     if (OB_FAIL(ret)) {                                                                 \
@@ -868,7 +977,11 @@ int ObDbmsXplan::read_plan_info_from_result(sql::ObExecContext &ctx,
   GET_VARCHAR_VALUE(OBJECT_ALIAS, object_alias_);
   GET_VARCHAR_VALUE(OBJECT_TYPE, object_type_);
   GET_VARCHAR_VALUE(OPTIMIZER, optimizer_);
-  GET_INT_VALUE(ID, id_);
+  if (!is_from_wr) {
+    GET_INT_VALUE(ID, id_);
+  } else {
+    GET_UINT_VALUE(ID, id_);
+  }
   GET_INT_VALUE(PARENT_ID, parent_id_);
   GET_INT_VALUE(DEPTH, depth_);
   GET_INT_VALUE(POSITION, position_);

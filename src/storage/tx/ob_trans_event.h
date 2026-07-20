@@ -133,7 +133,9 @@ public:
   // count the time of filling redo log
   // count the number of submitting trans log
   // count the time of submitting trans log
-  // count the number of multiple-partition update statements
+  // count the number of multiple-partition update statements of non-system tenant
+  // count the number of total requests processed by gts mgr
+  void add_gts_request_total_count(const int64_t value);
   // count the total time spent on acquiring gts
   void add_gts_acquire_total_time(const int64_t value);
   // count the total count of gts acqusition
@@ -143,6 +145,7 @@ public:
   void add_gts_wait_elapse_total_time(const int64_t value);
   // count the number of waitting gts
   void add_gts_wait_elapse_total_wait_count(const int64_t value);
+  // Count the number of rpc requests initiated by the gts client
   // Count the total number of obtaining gts synchronously
   // count the total number of synchronously waitting gts
   // count the number of batch commit trans
@@ -167,10 +170,10 @@ private:
       slave_read_retry_count_stat_("slave_read_retry_count"), fill_redo_log_count_stat_("fill_redo_log_count"),
       fill_redo_log_time_stat_("fill_redo_log_time"), submit_trans_log_count_stat_("submit_trans_log_count"),
       submit_trans_log_time_stat_("submit_trans_log_time"), trans_multi_partition_update_stmt_count_stat_("trans_multi_partition_update_stmt_count"),
-      gts_acquire_total_time_stat_("gts_acquire_total_time"),
+      gts_request_total_count_stat_("gts_req_total_count"), gts_acquire_total_time_stat_("gts_acquire_total_time"),
       gts_acquire_total_count_stat_("gts_acquire_total_count"), gts_acquire_total_wait_count_stat_("gts_acquire_total_wait_count"),
       gts_wait_elapse_total_time_stat_("gts_wait_elapse_total_time"), gts_wait_elapse_total_count_stat_("gts_wait_elapse_total_count"),
-      gts_wait_elapse_total_wait_count_stat_("gts_wait_elapse_total_wait_count"),
+      gts_wait_elapse_total_wait_count_stat_("gts_wait_elapse_total_wait_count"), gts_rpc_count_stat_("gts_rpc_count"),
       gts_try_acquire_total_count_stat_("gts_try_acquire_total_count"), gts_try_wait_elapse_total_count_stat_("gts_try_wait_elapse_total_count"),
       batch_commit_trans_count_stat_("btach_commit_trans_count") {}
   DISALLOW_COPY_AND_ASSIGN(ObTransStatistic);
@@ -211,12 +214,15 @@ private:
   // According to the following indicators, we can get,
   // 1. reuse rate of gts: 1 - (gts_wait_total_count / gts_acquire_total_count)
   // 2. average time cost of acquiring gts:  gts_acquire_total_time / gts_acquire_total_count)
+  // 3. the number of requests processed by gts mgr: gts_request_total_count
+  ObTransStatItem gts_request_total_count_stat_;
   ObTransStatItem gts_acquire_total_time_stat_;
   ObTransStatItem gts_acquire_total_count_stat_;
   ObTransStatItem gts_acquire_total_wait_count_stat_;
   ObTransStatItem gts_wait_elapse_total_time_stat_;
   ObTransStatItem gts_wait_elapse_total_count_stat_;
   ObTransStatItem gts_wait_elapse_total_wait_count_stat_;
+  ObTransStatItem gts_rpc_count_stat_;
   ObTransStatItem gts_try_acquire_total_count_stat_;
   ObTransStatItem gts_try_wait_elapse_total_count_stat_;
   ObTransStatItem batch_commit_trans_count_stat_;
