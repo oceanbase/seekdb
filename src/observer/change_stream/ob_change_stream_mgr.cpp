@@ -30,7 +30,6 @@
 #ifdef OB_BUILD_EMBED_MODE
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
-#include "storage/tx_storage/ob_ls_handle.h"
 #include "logservice/ob_log_handler.h"
 #endif
 
@@ -49,14 +48,9 @@ static int embed_fetcher_tail_caught_up(ObCSFetcher &fetcher, bool &caught_up)
     // still draining
   } else {
     palf::LSN max_lsn;
-    storage::ObLSHandle tmp_handle;
     storage::ObLS *ls = nullptr;
-    logservice::ObLogHandler *log_handler = nullptr;
-    const share::ObLSID ls_id(share::ObLSID::SYS_LS_ID);
-    if (OB_FAIL(MTL(storage::ObLSService*)->get_ls(ls_id, tmp_handle, storage::ObLSGetMod::LOG_MOD))
-        || OB_ISNULL(ls = tmp_handle.get_ls())
-        || OB_ISNULL(log_handler = ls->get_log_handler())
-        || OB_FAIL(log_handler->get_max_lsn(max_lsn))) {
+    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))
+        || OB_FAIL(ls->get_log_handler()->get_max_lsn(max_lsn))) {
       LOG_WARN("embed_fetcher_tail_caught_up: get_max_lsn failed", KR(ret));
     } else {
       const palf::LSN cur_lsn = fetcher.get_current_lsn();

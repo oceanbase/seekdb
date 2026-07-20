@@ -106,15 +106,11 @@ int ObCSFetcher::init_consumption_position_()
 #ifdef OB_BUILD_EMBED_MODE
     if (0 == persisted_min_dep_lsn) {
       // Fresh embed tenant: start at log tail — do not replay full history into tx_info_.
-      storage::ObLSHandle tmp_handle;
       storage::ObLS *ls = nullptr;
-      logservice::ObLogHandler *log_handler = nullptr;
       palf::LSN end_lsn;
-      if (OB_FAIL(MTL(storage::ObLSService*)->get_ls(ls_id_, tmp_handle, storage::ObLSGetMod::LOG_MOD))
-          || OB_ISNULL(ls = tmp_handle.get_ls())
-          || OB_ISNULL(log_handler = ls->get_log_handler())
-          || OB_FAIL(log_handler->get_end_lsn(end_lsn))) {
-        LOG_WARN("CSFetcher embed: fail to get_end_lsn", KR(ret), K(ls_id_));
+      if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))
+          || OB_FAIL(ls->get_log_handler()->get_end_lsn(end_lsn))) {
+        LOG_WARN("CSFetcher embed: fail to get_end_lsn", KR(ret));
       } else if (OB_UNLIKELY(!end_lsn.is_valid())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("CSFetcher embed: end_lsn invalid", KR(ret));
