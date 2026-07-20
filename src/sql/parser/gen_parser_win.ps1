@@ -219,7 +219,7 @@ function Generate-Parser {
     # Strip C-style /* ... */ block comments and // line comments so commented-out enums are not generated
     $obItemContent = [regex]::Replace($obItemContent, '(?s)/\*.*?\*/', '')
     $obItemContent = [regex]::Replace($obItemContent, '(?m)//[^\r\n]*', '')
-    $caseLines = [regex]::Matches($obItemContent, '(?m)^\s*(T_[_A-Z1-9]+)[ \t=0-9]*,') | ForEach-Object { "`tcase " + $_.Groups[1].Value + " : return `"" + $_.Groups[1].Value + "`";" }
+    $caseLines = [regex]::Matches($obItemContent, '(?m)^\s*(T_[_A-Z0-9]+)[ \t=0-9]*,') | ForEach-Object { "`tcase " + $_.Groups[1].Value + " : return `"" + $_.Groups[1].Value + "`";" }
     $lines += $caseLines
     $lines += "`tdefault:return `"Unknown`";", "`t}", "}"
     $lines | Set-Content $typeNameC -Encoding UTF8
