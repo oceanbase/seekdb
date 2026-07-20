@@ -376,11 +376,6 @@ int ObSchemaServiceSQLImpl::get_new_schema_version(int64_t &schema_version)
   return ret;
 }
 
-bool ObSchemaServiceSQLImpl::in_parallel_ddl_thread_()
-{
-  return 0 == STRCASECMP(PARALLEL_DDL_THREAD_NAME, ob_get_origin_thread_name());
-}
-
 int ObSchemaServiceSQLImpl::gen_new_schema_version(
     const int64_t refreshed_schema_version,
     int64_t &schema_version)
@@ -388,8 +383,7 @@ int ObSchemaServiceSQLImpl::gen_new_schema_version(
   int ret = OB_SUCCESS;
   schema_version = OB_INVALID_VERSION;
   const int64_t version_cnt = 1;
-  // create tenant now need in_parallel_ddl_thread_()
-  if (ob_batch_generate_schema_version() || in_parallel_ddl_thread_()) {
+  if (ob_batch_generate_schema_version()) {
     auto *tsi_generator = GET_TSI(TSISchemaVersionGenerator);
     if (OB_ISNULL(tsi_generator)) {
       ret = OB_ERR_UNEXPECTED;
@@ -417,7 +411,7 @@ int ObSchemaServiceSQLImpl::gen_batch_new_schema_versions(const int64_t refreshe
   if (OB_UNLIKELY(version_cnt < 1)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret), K(version_cnt));
-  } else if (OB_UNLIKELY(!ob_batch_generate_schema_version() && !in_parallel_ddl_thread_())) {
+  } else if (OB_UNLIKELY(!ob_batch_generate_schema_version())) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("this interface only works for parallel-enable ddl",
              KR(ret), "thread_name", ob_get_origin_thread_name(),
@@ -2618,6 +2612,68 @@ int ObSchemaServiceSQLImpl::fetch_all_table_info(const ObRefreshSchemaStatus &sc
     }
   }
 
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(fetch_temp_table_schemas(schema_status, sql_client_retry_weak, table_schema_array))) {
+      LOG_WARN("failed to fill temp table schemas", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObSchemaServiceSQLImpl::fetch_temp_table_schemas(
+    const ObRefreshSchemaStatus &schema_status,
+    ObISQLClient &sql_client,
+    ObIArray<ObTableSchema*> &table_schema_array)
+{
+  int ret = OB_SUCCESS;
+  FOREACH_CNT_X(table_schema, table_schema_array, OB_SUCC(ret)) {
+    if (OB_ISNULL(table_schema)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("NULL ptr", K(table_schema), K(ret));
+    } else if (OB_ISNULL(*table_schema)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("NULL ptr", K(*table_schema), K(ret));
+    } else if (OB_FAIL(fetch_temp_table_schema(schema_status, sql_client, **table_schema))) {
+      LOG_WARN("fill temp table failed", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObSchemaServiceSQLImpl::fetch_temp_table_schema(
+    const ObRefreshSchemaStatus &schema_status,
+    ObISQLClient &sql_client,
+    ObTableSchema &table_schema)
+{
+  int ret = OB_SUCCESS;
+  ObSqlString sql;
+  ObString create_host;
+  SMART_VAR(ObMySQLProxy::MySQLResult, res) {
+    common::sqlclient::ObMySQLResult *result = NULL;
+    const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
+    DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
+    
+    if (table_schema.is_tmp_table() || table_schema.is_ctas_tmp_table()) {
+      if (OB_FAIL(sql.assign_fmt("SELECT create_host FROM %s where 0 = %lu %% 1 and table_id = %lu",
+                              OB_ALL_TEMP_TABLE_TNAME,
+                              fill_extract_compat_id(schema_status),
+                              fill_extract_schema_id(schema_status, table_schema.get_table_id())))) {
+        LOG_WARN("append sql failed", K(table_schema), K(ret));
+      } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
+        LOG_WARN("execute sql failed", K(sql), K(ret));
+      } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to get result.", K(table_schema), K(ret));
+      } else if (OB_FAIL(result->next())) {
+        LOG_WARN("failed to get temp table info", K(table_schema), K(ret));
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+        }
+      } else if (OB_FAIL(ObSchemaRetrieveUtils::fill_temp_table_schema(*result, table_schema))) {
+        LOG_WARN("fail to fill temp table schema", K(ret));
+      }
+    }
+  }
   return ret;
 }
 
@@ -4902,6 +4958,11 @@ int ObSchemaServiceSQLImpl::fetch_table_info(
     }
   }
 
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(fetch_temp_table_schema(schema_status, sql_client, *table_schema))) {
+      LOG_WARN("failed to fill temp table schema:", K(ret));
+    }
+  }
   return ret;
 }
 
@@ -5920,6 +5981,52 @@ int ObSchemaServiceSQLImpl::get_ori_schema_version(
           ret = OB_SUCCESS == tmp_ret ? OB_ERR_UNEXPECTED : tmp_ret;
           LOG_WARN("should be only one row", K(ret), K(table_id), K(schema_status));
         }
+      }
+    }
+  }
+  return ret;
+}
+
+// for ddl, strong read
+int ObSchemaServiceSQLImpl::check_ddl_id_exist(
+    common::ObISQLClient &sql_client,
+    const ObString &ddl_id_str,
+    bool &is_exists)
+{
+  int ret = OB_SUCCESS;
+  is_exists = false;
+
+  SMART_VAR(ObMySQLProxy::MySQLResult, res) {
+    sqlclient::ObMySQLResult *result = NULL;
+    ObSqlString sql;
+    ObSqlString ddl_id_str_sql;
+    ObString ddl_id_str_hex;
+    DEFINE_SQL_CLIENT_RETRY_WEAK(sql_client);
+    
+    if (ddl_id_str.empty()) {
+      // do-nothing
+    } else if (OB_FAIL(sql_append_hex_escape_str(ddl_id_str, ddl_id_str_sql))) {
+      LOG_WARN("sql_append_hex_escape_str failed", K(ddl_id_str));
+    } else {
+      ddl_id_str_hex = ddl_id_str_sql.string();
+      if (OB_SUCCESS !=
+          (ret = sql.append_fmt("SELECT 1 FROM %s WHERE 0 = %lu %% 1 and ddl_id_str = %.*s LIMIT 1",
+              OB_ALL_DDL_ID_TNAME, 1UL, ddl_id_str_hex.length(), ddl_id_str_hex.ptr()))) {
+        LOG_WARN("append sql failed", K(ret));
+      } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
+        LOG_WARN("execute sql failed", K(sql), K(ret));
+      } else if (NULL == (result = res.get_result())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("fail to get result. ", K(ret));
+      } else if (OB_FAIL(result->next())) {
+        if (OB_ITER_END == ret) { //no record
+          is_exists = false;
+          ret = common::OB_SUCCESS;
+        } else {
+          LOG_WARN("fail to do query from __all_ddl_id. iter quit.", K(ret));
+        }
+      } else {
+        is_exists = true;
       }
     }
   }

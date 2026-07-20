@@ -11,7 +11,6 @@ ob_set_subtarget(oblib_rpc common
 ob_set_subtarget(oblib_rpc frame
   frame/ob_net_consts.cpp
   frame/ob_result_code.cpp
-  frame/ob_req_session_handler.cpp
   frame/ob_net_easy.cpp
   frame/ob_req_deliver.cpp
   frame/ob_req_handler.cpp

@@ -1746,6 +1746,8 @@ int ObDDLService::create_tables_in_trans(const bool if_not_exist,
                                                      0 == i ? &tmp_ddl_stmt_str : NULL,
                                                      i == table_schemas.count() - 1))) {
           LOG_WARN("failed to create table schema, ", K(ret));
+        } else if (OB_FAIL(ddl_operator.insert_temp_table_info(trans, table_schema))) {
+          LOG_WARN("failed to insert_temp_table_info!", K(ret));
         } else if (table_schema.is_view_table() && dep_infos != nullptr && 0 == i) {
           for (int64_t i = 0 ; OB_SUCC(ret) && i < dep_infos->count(); ++i) {
             ObDependencyInfo dep;
@@ -1841,6 +1843,8 @@ int ObDDLService::create_index_table_in_trans(
                                                  trans,
                                                  ddl_stmt_str))) {
       LOG_WARN("failed to create table schema, ", KR(ret));
+		} else if (OB_FAIL(ddl_operator.insert_temp_table_info(trans, table_schema))) {
+			LOG_WARN("failed to insert temp table info!", KR(ret));
     } else {
       LOG_INFO("succeed to insert table schema in schema tables",
           K(table_schema.get_database_id()),
@@ -12734,6 +12738,12 @@ int ObDDLService::alter_table_in_trans(obcall::ObAlterTableArg &alter_table_arg,
             }
           }
 
+          if (OB_FAIL(ret)) {
+          } else if (alter_table_schema.alter_option_bitset_.has_member(ObAlterTableArg::SESSION_ID) &&
+                       0 == new_table_schema.get_session_id() && !new_table_schema.is_tmp_table() &&
+                       OB_FAIL(ddl_operator.delete_temp_table_info(trans, new_table_schema))) {
+              LOG_WARN("failed to delete temp table info", K(ret));
+          }
         }
         // scence : alter table rename to a mock fk parent table existed, will replace mock fk parent table with real table
         if (OB_SUCC(ret) && alter_table_schema.alter_option_bitset_.has_member(obcall::ObAlterTableArg::TABLE_NAME)) {
@@ -15850,6 +15860,8 @@ int ObDDLService::truncate_table_in_trans(const obcall::ObTruncateTableArg &arg,
                                true, /*need_sync_schema_version*/
                                is_truncate_table))) {
               LOG_WARN("failed to create table schema, ", K(ret));
+            } else if (OB_FAIL(ddl_operator.insert_temp_table_info(trans, tmp_schema))) {
+              LOG_WARN("failed to insert_temp_table_info!", K(ret));
             }
           } else {
             if (OB_FAIL(ddl_operator.create_index_in_recyclebin(
@@ -16393,6 +16405,7 @@ int ObDDLService::clear_ctas_hidden_table_session_id_(share::schema::ObTableSche
     LOG_WARN("hidden table is not a CTAS tmp table", K(ret), K(hidden_table_schema));
   } else {
     hidden_table_schema.set_session_id(0);
+    hidden_table_schema.set_create_host("");
     LOG_INFO("clear session_id of hidden table copied from CTAS table", K(hidden_table_schema));
   }
 
@@ -16403,7 +16416,9 @@ int ObDDLService::swap_ctas_hidden_table_session_id_(
     const share::schema::ObTableSchema &orig_table_schema,
     const share::schema::ObTableSchema &hidden_table_schema,
     share::schema::ObTableSchema &new_orig_table_schema,
-    share::schema::ObTableSchema &new_hidden_table_schema)
+    share::schema::ObTableSchema &new_hidden_table_schema,
+    ObDDLOperator &ddl_operator,
+    common::ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
 
@@ -16414,6 +16429,14 @@ int ObDDLService::swap_ctas_hidden_table_session_id_(
   } else {
     new_orig_table_schema.set_session_id(hidden_table_schema.get_session_id());
     new_hidden_table_schema.set_session_id(orig_table_schema.get_session_id());
+    new_orig_table_schema.set_create_host(hidden_table_schema.get_create_host());
+    new_hidden_table_schema.set_create_host(orig_table_schema.get_create_host());
+    // since the session id is cleared when we create the hidden table, the temp table info
+    // won't be added at the creation time, so we should add it here
+    new_hidden_table_schema.set_in_offline_ddl_white_list(true);
+    if (OB_FAIL(ddl_operator.insert_temp_table_info(trans, new_hidden_table_schema))) {
+      LOG_WARN("failed to insert temp table info", K(ret), K(new_hidden_table_schema));
+    }
     LOG_INFO("restore session_id of hidden table copied from CTAS table",
              K(new_hidden_table_schema), K(new_orig_table_schema));
   }
@@ -16565,6 +16588,8 @@ int ObDDLService::create_user_hidden_table(const ObTableSchema &orig_table_schem
       if (OB_FAIL(ddl_operator.create_table(*table_schema, trans, NULL,
           i == schemas.count() - 1/*need_sync_schema_version, to update data table schema version*/))) {
         LOG_WARN("failed to create table schema", K(ret));
+      } else if (OB_FAIL(ddl_operator.insert_temp_table_info(trans, *table_schema))) {
+        LOG_WARN("failed to insert temp table info", K(ret), KPC(table_schema));
       }
     }
 
@@ -18596,13 +18621,13 @@ int ObDDLService::swap_orig_and_hidden_table_state(obcall::ObAlterTableArg &alte
           }
           // in prepare_hidden_table_schema, we clear the session id for hidden table of
           // CTAS tmp table. now, data loading stage is finished, we are ready to swap hidden table
-          // with CTAS tmp table. we should exchange the session id property to
+          // with CTAS tmp table. we should exchange the session id(and create_host) property to
           // ensure the new CTAS tmp table has correct state.
           if (OB_FAIL(ret)) {
           } else if (orig_table_schema->is_ctas_tmp_table() &&
               OB_FAIL(swap_ctas_hidden_table_session_id_(
                   *orig_table_schema, *hidden_table_schema, new_orig_table_schema,
-                  new_hidden_table_schema))) {
+                  new_hidden_table_schema, ddl_operator, trans))) {
             LOG_WARN("failed to swap ctas hidden table session id", K(ret));
           } else if (OB_FAIL(table_schemas.push_back(new_orig_table_schema)) ||
                      OB_FAIL(table_schemas.push_back(new_hidden_table_schema))) {
@@ -20546,6 +20571,7 @@ int ObDDLService::fill_truncate_table_fk_err_msg_without_schema_guard(const ObFo
 int ObDDLService::rebuild_table_schema_with_new_id(const ObTableSchema &orig_table_schema,
                                                    const ObDatabaseSchema &new_database_schema,
                                                    const ObString &new_table_name,
+                                                   const ObString &create_host,
                                                    const int64_t session_id,
                                                    const share::schema::ObTableType table_type_,
                                                    ObSchemaService &schema_service,
@@ -20616,6 +20642,7 @@ int ObDDLService::rebuild_table_schema_with_new_id(const ObTableSchema &orig_tab
     }
     if (new_table_schema.is_user_table() && TMP_TABLE == table_type_) {
       new_table_schema.set_table_type(table_type_);
+      new_table_schema.set_create_host(create_host);
       new_table_schema.set_session_id(session_id);
     }
     if (orig_table_schema.is_primary_vp_table()) {
@@ -27502,8 +27529,8 @@ int ObDDLSQLTransaction::end(const bool commit)
 {
   int ret = OB_SUCCESS;
 
-  // always reset index_name_checker_ before non parallell ddl commits.
-  if (commit && !ObSchemaService::in_parallel_ddl_thread()) {
+  // Always reset index_name_checker_ before DDL commits.
+  if (commit) {
     if (OB_ISNULL(GCTX.root_service_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("root_service is null", KR(ret));
@@ -27551,7 +27578,7 @@ int ObDDLSQLTransaction::end(const bool commit)
     }
   }
 
-  if (OB_SUCC(ret) && !ObSchemaService::in_parallel_ddl_thread() && commit) {
+  if (OB_SUCC(ret) && commit) {
     if (FAILEDx(register_ddl_trans())) {
       LOG_WARN("fail to register DDL transaction", KR(ret));
     }

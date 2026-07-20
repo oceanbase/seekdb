@@ -31,7 +31,7 @@ ObSrvNetworkFrame::ObSrvNetworkFrame(ObGlobalContext &gctx)
     : gctx_(gctx),
       xlator_(gctx),
       request_qhandler_(xlator_),
-      deliver_(request_qhandler_, xlator_.get_session_handler(), gctx),
+      deliver_(request_qhandler_),
       last_ssl_info_hash_(UINT64_MAX),
       lock_()
 {
@@ -98,8 +98,6 @@ int ObSrvNetworkFrame::init()
   }
   LOG_INFO("io thread connection negotiation enabled!");
   negotiation_enable = 1;
-
-  deliver_.set_host(gctx_.self_addr());
 
   if (OB_FAIL(request_qhandler_.init())) {
     LOG_ERROR("init rpc request qhandler fail", K(ret));
