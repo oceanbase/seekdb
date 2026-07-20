@@ -771,7 +771,6 @@ int ObTriggerResolver::resolve_trigger_body(const ParseNode &parse_node,
     ObString procedure_source;
     pl::ObPLParser parser(*allocator_, session_info_->get_charsets4parser(), session_info_->get_sql_mode());
     ObStmtNodeTree *parse_tree = NULL;
-    CHECK_COMPATIBILITY_MODE(session_info_);
     OZ (trigger_info.gen_procedure_source(trigger_arg.base_object_database_,
                                           trigger_arg.base_object_name_,
                                           parse_node,
@@ -869,7 +868,6 @@ int ObTriggerResolver::fill_package_info(ObTriggerInfo &trigger_info)
   OZ (ObExecEnv::gen_exec_env(*session_info_, buf, OB_MAX_PROC_ENV_LENGTH, pos));
   OX (pl_exec_env.assign_ptr(buf, static_cast<int32_t>(pos)));
   OX (trigger_info.set_package_flag(0));
-  OX (trigger_info.set_package_comp_flag(0));
   OZ (trigger_info.set_package_exec_env(pl_exec_env));
   OX (trigger_info.set_sql_mode(session_info_->get_sql_mode()));
   return ret;

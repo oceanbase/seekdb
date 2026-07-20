@@ -188,7 +188,6 @@ int ObMPStmtFetch::do_process(ObSQLSessionInfo &session,
       }
       sqlstat_record.move_to_sqlstat_cache(session, sql);
     }
-    session.partition_hit().freeze();
     session.set_show_warnings_buf(ret); // TODO: Move this to a better place, reduce some wb copy
 
     clear_wb_content(session);
@@ -470,10 +469,6 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
         } else {
           flags.status_flags_.OB_SERVER_STATUS_LAST_ROW_SENT = 0;
         }
-        {
-          // in java client or others, use slow query bit to indicate partition hit or not
-          flags.status_flags_.OB_SERVER_QUERY_WAS_SLOW = !session.partition_hit().get_bool();
-        }
         eofp.set_server_status(flags);
         if (OB_SUCC(ret)) {
           if (OB_FAIL(packet_sender_.alloc_ezbuf())) {
@@ -492,8 +487,7 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
       !process_ok &&
       !admission_fail_and_need_retry) {
     int sret = OB_SUCCESS;
-    bool is_partition_hit = session.partition_hit().get_bool();
-    if (OB_SUCCESS != (sret = send_error_packet(ret, NULL, is_partition_hit))) {
+    if (OB_SUCCESS != (sret = send_error_packet(ret, NULL))) {
       LOG_WARN("send error packet fail", K(sret), K(ret));
     }
   }
@@ -508,18 +502,11 @@ int ObMPStmtFetch::process_fetch_stmt(ObSQLSessionInfo &session,
   setup_wb(session);
   //set session log_level.Must use ObThreadLogLevelUtils::clear() in pair
   ObThreadLogLevelUtils::init(session.get_log_id_level_map());
-  // obproxy may use 'SET @@last_schema_version = xxxx' to set newest schema,
-  // observer will force refresh schema if local_schema_version < last_schema_version;
+  // Refresh the local schema cache up to the session's DDL fence.
   if (OB_FAIL(check_and_refresh_schema())) {
     LOG_WARN("failed to check_and_refresh_schema", K(ret));
   } else {
-    //Each execution of different SQL requires an update
-    if (OB_FAIL(update_transmission_checksum_flag(session))) {
-      LOG_WARN("update transmisson checksum flag failed", K(ret));
-    } else {
-      // do the real work
-      ret = do_process(session, need_response_error);
-    }
+    ret = do_process(session, need_response_error);
   }
   ObThreadLogLevelUtils::clear();
   const int64_t debug_sync_timeout = GCONF.debug_sync_timeout;
@@ -567,8 +554,6 @@ int ObMPStmtFetch::process()
   } else if (OB_ISNULL(sess)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL or invalid", K_(cursor_id), K(sess), K(ret));
-  } else if (OB_FAIL(update_transmission_checksum_flag(*sess))) {
-    LOG_WARN("update transmisson checksum flag failed", K(ret));
   } else {
     ObSQLSessionInfo &session = *sess;
     int64_t tenant_version = 0;
@@ -585,8 +570,6 @@ int ObMPStmtFetch::process()
     if (OB_UNLIKELY(!session.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("invalid session", K_(cursor_id), K(ret));
-    } else if (OB_FAIL(process_kill_client_session(session))) {
-      LOG_WARN("client session has been killed", K(ret));
     } else if (OB_UNLIKELY(session.is_zombie())) {
       //session has been killed some moment ago
       ret = OB_ERR_SESSION_INTERRUPTED;
@@ -604,14 +587,10 @@ int ObMPStmtFetch::process()
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
                 sys_version))) {
       LOG_WARN("fail get tenant broadcast version", K(ret));
-    } else if (OB_FAIL(session.check_tenant_status())) {
-      need_disconnect = false;
-      LOG_INFO("unit has been migrated, need deny new request", K(ret));
     } else {
       need_disconnect = false;
       ObPLCursorInfo *cursor = NULL;
       THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
-      session.partition_hit().reset();
       ret = process_fetch_stmt(session, need_response_error);
       // set cursor fetched info. if cursor has be fetched, we need to disconnect
       cursor = session.get_cursor(cursor_id_);
@@ -674,7 +653,6 @@ int ObMPStmtFetch::response_row(ObSQLSessionInfo &session,
   int ret = OB_SUCCESS;
   common::ObNewRow row;
   ObCharsetType charset_type = CHARSET_INVALID;
-  ObCharsetType ncharset_type = CHARSET_INVALID;
   ObPieceCache *piece_cache = session.get_piece_cache(true);
   ObArenaAllocator arena_allocator;
 
@@ -694,8 +672,6 @@ int ObMPStmtFetch::response_row(ObSQLSessionInfo &session,
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(session.get_character_set_results(charset_type))) {
-    LOG_WARN("fail to get result charset", K(ret));
-  } else if (OB_FAIL(session.get_ncharacter_set_connection(ncharset_type))) {
     LOG_WARN("fail to get result charset", K(ret));
   }
 

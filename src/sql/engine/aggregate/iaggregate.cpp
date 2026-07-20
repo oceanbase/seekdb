@@ -54,12 +54,6 @@ extern int init_sysbit_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_
 
 extern int init_grouping_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
                                    ObIAllocator &allocator, IAggregate *&agg);
-extern int init_rb_build_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
-                                  ObIAllocator &allocator, IAggregate *&agg);
-extern int init_rb_and_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
-                                 ObIAllocator &allocator, IAggregate *&agg);
-extern int init_rb_or_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
-                                ObIAllocator &allocator, IAggregate *&agg);
 extern int init_sum_opnsize_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
                                       ObIAllocator &allocator, IAggregate *&agg);
 
@@ -112,9 +106,6 @@ int init_aggregates(RuntimeContext &agg_ctx, ObIAllocator &allocator,
         INIT_AGGREGATE_CASE(T_FUN_SYS_BIT_XOR, sysbit, i);
         INIT_AGGREGATE_CASE(T_FUN_GROUPING, grouping, i);
         INIT_AGGREGATE_CASE(T_FUN_GROUPING_ID, grouping, i);
-        INIT_AGGREGATE_CASE(T_FUN_SYS_RB_BUILD_AGG, rb_build, i);
-        INIT_AGGREGATE_CASE(T_FUN_SYS_RB_AND_AGG, rb_and, i);
-        INIT_AGGREGATE_CASE(T_FUN_SYS_RB_OR_AGG, rb_or, i);
         INIT_AGGREGATE_CASE(T_FUN_SUM_OPNSIZE, sum_opnsize, i);
         INIT_AGGREGATE_CASE(T_FUN_GROUP_CONCAT, group_concat, i);
         INIT_AGGREGATE_CASE(T_FUN_TOP_FRE_HIST, top_fre_hist, i);
@@ -230,7 +221,6 @@ static int32_t reserved_agg_col_size(RuntimeContext &agg_ctx, int64_t agg_col_id
     RTSIZE(VEC_TC_DEC_INT256),            // dec_int256
     RTSIZE(VEC_TC_DEC_INT512),            // dec_int512
     string_reserved_size,                 // collection
-    string_reserved_size,                 // roaringbitmap
     RTSIZE(VEC_TC_MYSQL_DATE),            // mysql date
     RTSIZE(VEC_TC_MYSQL_DATETIME),        // mysql datetime
   };

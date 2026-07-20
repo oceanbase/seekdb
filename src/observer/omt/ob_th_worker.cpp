@@ -86,7 +86,7 @@ ObThWorker::ObThWorker()
     : procor_(ObServer::get_instance().get_net_frame().get_xlator(), ObServer::get_instance().get_self()),
       is_inited_(false), tenant_(nullptr),
       run_cond_(),
-      pause_flag_(false), large_query_(false),
+      pause_flag_(false),
       query_start_time_(0), query_enqueue_time_(0), last_check_time_(0),
       can_retry_(true), need_retry_(false),
       idle_us_(0), is_doing_ddl_(nullptr)
@@ -134,64 +134,6 @@ void ObThWorker::resume()
 
 thread_local bool ObThWorker::thread_name_set_ = false;
 
-// Check only before user request starts
-ObThWorker::Status ObThWorker::check_qtime_throttle()
-{
-  Status st = WS_NOWAIT;
-  if (!OB_ISNULL(tenant_)) {
-    auto &st_metrics = tenant_->get_sql_throttle_metrics();
-    if (st_current_priority_ != -1 && st_current_priority_ <= st_metrics.priority_) {
-      if ((st_metrics.queue_time_ >= .0) &&
-          (get_query_start_time() - get_query_enqueue_time() >=
-           static_cast<int64_t>(st_metrics.queue_time_ * 1000000L))) {
-        st = WS_OUT_OF_THROTTLE;
-        LOG_WARN_RET(OB_ERROR, "query is throttled",
-                 "queue_time_threshold(s)", st_metrics.queue_time_,
-                 "query_enqueue_time", get_query_enqueue_time(),
-                 "query_start_time", get_query_start_time());
-      }
-    }
-  }
-  return st;
-}
-
-// Periodic inspection
-ObThWorker::Status ObThWorker::check_throttle()
-{
-  Status st = WS_NOWAIT;
-  if (!OB_ISNULL(tenant_) && !OB_ISNULL(session_) &&
-      !static_cast<sql::ObSQLSessionInfo*>(session_)->is_inner()) {
-    const int64_t curr_time = common::ObClockGenerator::getClock();
-    auto &st_metrics = tenant_->get_sql_throttle_metrics();
-    if (st_current_priority_ != -1 && st_current_priority_ <= st_metrics.priority_) {
-      if ((st_metrics.rt_ >= .0) &&
-         (curr_time - get_query_start_time() >=
-          static_cast<int64_t>(st_metrics.rt_ * 1000000L))) {
-        st = WS_OUT_OF_THROTTLE;
-        LOG_WARN_RET(OB_ERR_UNEXPECTED, "query is throttled",
-                 "rt_threshold(s)", st_metrics.rt_,
-                 "query_start_time", get_query_start_time(),
-                 "current_time", curr_time);
-      }
-    }
-  }
-  return st;
-}
-
-ObThWorker::Status ObThWorker::check_rate_limiter()
-{
-  Status st = WS_NOWAIT;
-  if (!OB_ISNULL(tenant_)) {
-    auto &st_rate_limiter = tenant_->get_sql_rate_limiter();
-    if (st_rate_limiter.rate() <= 0)  {
-      // do nothing
-    } else if (OB_EAGAIN == st_rate_limiter.try_acquire()) {
-      st = WS_OUT_OF_THROTTLE;
-    }
-  }
-  return st;
-}
-
 // by self thread
 ObThWorker::Status ObThWorker::check_wait()
 {
@@ -201,9 +143,6 @@ ObThWorker::Status ObThWorker::check_wait()
     st = WS_INVALID;
   } else if (OB_UNLIKELY(!tenant_->user_sched_enabled())) {
   } else if (OB_UNLIKELY(true == get_disable_wait_flag())) {
-  } else if (curr_time > last_check_time_ + WORKER_CHECK_PERIOD) {
-    st = check_throttle();
-    last_check_time_ = curr_time;
   }
   return st;
 }
@@ -214,10 +153,8 @@ inline void ObThWorker::process_request(rpc::ObRequest &req)
   can_retry_ = true;
   need_retry_ = false;
 
-  req.set_large_retry_flag(false);
   bool need_wait_lock = false;
   int ret = OB_SUCCESS;
-  reset_sql_throttle_current_priority();
   set_req_flag(&req);
 
   share::g_mp->lock_wait_mgr()->setup(req.get_lock_wait_node(), req.get_receive_timestamp());
@@ -251,16 +188,9 @@ inline void ObThWorker::process_request(rpc::ObRequest &req)
       }
     } else {
       // first retry, do not put the req to retry_queue
-      if (req.large_retry_flag()) {
-        if (OB_FAIL(tenant_->recv_request(req))) {
-          LOG_WARN("tenant receive large request fail, "
-              "retry with current worker", "tenant", tenant_->id(), K(ret));
-        }
-      } else {
-        if (OB_FAIL(tenant_->recv_request(req))) {
-          LOG_WARN("tenant receive request fail, "
-              "retry with current worker", "tenant", tenant_->id(), K(ret));
-        }
+      if (OB_FAIL(tenant_->recv_request(req))) {
+        LOG_WARN("tenant receive request fail, "
+            "retry with current worker", "tenant", tenant_->id(), K(ret));
       }
     }
 
@@ -344,11 +274,10 @@ void ObThWorker::worker(int64_t &tid, int64_t &req_recv_timestamp, int32_t &work
             rpc::ObRequest *req = NULL;
             bool expand = false;
             {
-              set_compatibility_mode(tenant_->get_compat_mode());
               // get request from queue and process it
               wait_start_time = ObTimeUtility::current_time();
               ret = tenant_->pop_with_idle([&]() {
-                return tenant_->get_new_request(*this, POLL_INTERVAL, req);
+                return tenant_->get_new_request(POLL_INTERVAL, req);
               }, expand);
               wait_end_time = ObTimeUtility::current_time();
             }
@@ -406,39 +335,6 @@ void ObThWorker::run(int64_t idx)
   this->worker(tid, req_recv_timestamp, worker_level);
 }
 
-int ObThWorker::check_large_query_quota()
-{
-  // We just always return fail that the task will retry after current
-  // process is done.
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(tenant_)) {
-    // Back ground thread may also check large query quota, whereas we
-    // always return success
-  } else if (tenant_->id() >= OB_SERVER_TENANT_ID
-             && tenant_->id() <= OB_MAX_RESERVED_TENANT_ID) {
-    // do nothing, these tenants don't support large query schedule.
-  } else if (this->get_curr_request_level() > 1) {
-    // do nothing, level request not support large query retry
-  } else if (
-      tenant_->user_sched_enabled() &&
-      can_retry_ &&
-      !large_query()) {
-    // evict it back to large query queue
-    if (has_req_flag()) {
-      rpc::ObRequest *req = const_cast<rpc::ObRequest *>(get_cur_request());
-      req->set_large_retry_flag(true);
-      need_retry_ = true;
-      ret = OB_EAGAIN;
-    } else {
-      // large query retry is not supported when req is NULL (i.e. ret = OB_SUCCESS)
-      // but, this situation is unexpected, so log it as ERROR
-      LOG_ERROR("want to set large_retry_flag on request, but the req is NULL",
-          K(ret));
-    }
-  }
-  return ret;
-}
-
 int ObThWorker::check_status()
 {
   int ret = OB_SUCCESS;
@@ -454,10 +350,6 @@ int ObThWorker::check_status()
       ObInterruptCode &ic = GET_INTERRUPT_CODE();
       ret = ic.code_;
       LOG_WARN("received a interrupt", K(ic), K(ret));
-    } else {
-      if (WS_OUT_OF_THROTTLE == check_wait()) {
-        ret = OB_KILLED_BY_THROTTLING;
-      }
     }
   }
   return ret;

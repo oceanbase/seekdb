@@ -62,7 +62,7 @@ int ObMdsSchemaHelper::init()
     } else if (OB_UNLIKELY(!table_schema_.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid table schema", K(ret), K_(table_schema));
-    } else if (OB_FAIL(storage_schema_.init(allocator_, table_schema_, lib::Worker::CompatMode::MYSQL))) {
+    } else if (OB_FAIL(storage_schema_.init(allocator_, table_schema_))) {
       LOG_WARN("fail to init storage schema", K(ret));
     } else if (OB_UNLIKELY(!storage_schema_.is_valid())) {
       ret = OB_ERR_UNEXPECTED;

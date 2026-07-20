@@ -250,7 +250,6 @@ struct ObDMLBaseParam
         spec_seq_no_(),
         snapshot_(),
         branch_id_(0),
-        direct_insert_task_id_(0),
         write_flag_(),
         check_schema_version_(true),
         ddl_task_id_(0),
@@ -283,7 +282,6 @@ struct ObDMLBaseParam
   transaction::ObTxReadSnapshot snapshot_;
   // parallel dml write branch id
   int16_t branch_id_;
-  int64_t direct_insert_task_id_; // 0 means no direct insert
   // write flag for inner write processing
   concurrent_control::ObWriteFlag write_flag_;
   bool check_schema_version_;

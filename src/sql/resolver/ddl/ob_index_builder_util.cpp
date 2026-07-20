@@ -305,10 +305,6 @@ int ObIndexBuilderUtil::add_shadow_partition_keys(
           ret = OB_ERR_WRONG_KEY_COLUMN;
           LOG_WARN("Unexpected lob column in shadow partition key", "table_id", data_schema.get_table_id(),
               K(column_id), K(ret));
-        } else if (ob_is_roaringbitmap_tc(const_data_column->get_data_type())) {
-          ret = OB_ERR_WRONG_KEY_COLUMN;
-          LOG_WARN("Unexpected roaringbitmap column in shadow partition key", "table_id", data_schema.get_table_id(),
-              K(column_id), K(ret));
         } else if (ob_is_extend(const_data_column->get_data_type())) {
           ret = OB_ERR_WRONG_KEY_COLUMN;
           LOG_WARN("Unexpected udt column in shadow partition key", "table_id", data_schema.get_table_id(),
@@ -452,14 +448,6 @@ int ObIndexBuilderUtil::set_index_table_columns(
                     "column name", sort_item.column_name_,
                     "column length", sort_item.prefix_len_, K(ret));
           }
-        } else if (ob_is_roaringbitmap_tc(data_column->get_data_type())) {
-          ret = OB_ERR_WRONG_KEY_COLUMN;
-          LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, sort_item.column_name_.length(), sort_item.column_name_.ptr());
-          LOG_WARN("roaringbitmap column cannot be used in key specification", 
-                  "database_id", data_schema.get_database_id(),
-                  "table_name", data_schema.get_table_name(),
-                  "column name", sort_item.column_name_,
-                  "column length", sort_item.prefix_len_, K(ret));
         } else if (ob_is_extend(data_column->get_data_type())) {
           ret = OB_ERR_WRONG_KEY_COLUMN;
           LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, sort_item.column_name_.length(), sort_item.column_name_.ptr());
@@ -525,11 +513,6 @@ int ObIndexBuilderUtil::set_index_table_columns(
             LOG_WARN("Lob column should not appear in rowkey position", "data_column", *data_column, K(is_index_column),
                 K(is_rowkey), "order_in_rowkey", data_column->get_order_in_rowkey(),
                 K(row_desc), K(ret));
-          } else if (ob_is_roaringbitmap_tc(data_column->get_data_type())) {
-            ret = OB_ERR_WRONG_KEY_COLUMN;
-            LOG_WARN("roaringbitmap column should not appear in rowkey position", "data_column", *data_column, K(is_index_column),
-                K(is_rowkey), "order_in_rowkey", data_column->get_order_in_rowkey(),
-                K(row_desc), K(ret));
           } else if (ob_is_extend(data_column->get_data_type())) {
             ret = OB_ERR_WRONG_KEY_COLUMN;
             LOG_WARN("udt column should not appear in rowkey position", "data_column", *data_column, K(is_index_column),
@@ -577,12 +560,6 @@ int ObIndexBuilderUtil::set_index_table_columns(
             ret = OB_ERR_WRONG_KEY_COLUMN;
             LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, arg.store_columns_.at(i).length(), arg.store_columns_.at(i).ptr());
             LOG_WARN("Index storing column should not be lob type", 
-                "database_id", data_schema.get_database_id(), "table_name",
-                data_schema.get_table_name(), "column name", arg.store_columns_.at(i), K(ret));
-          } else if (ob_is_roaringbitmap_tc(data_column->get_data_type())) {
-            ret = OB_ERR_WRONG_KEY_COLUMN;
-            LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, arg.store_columns_.at(i).length(), arg.store_columns_.at(i).ptr());
-            LOG_WARN("Index storing column should not be roaringbitmap type", 
                 "database_id", data_schema.get_database_id(), "table_name",
                 data_schema.get_table_name(), "column name", arg.store_columns_.at(i), K(ret));
           } else if (ob_is_extend(data_column->get_data_type())) {
@@ -634,13 +611,6 @@ int ObIndexBuilderUtil::set_index_table_columns(
             LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, arg.hidden_store_columns_.at(i).length(),
                                                     arg.hidden_store_columns_.at(i).ptr());
             LOG_WARN("Index storing column should not be lob type",
-                "database_id", data_schema.get_database_id(), "table_name",
-                data_schema.get_table_name(), "column name", arg.hidden_store_columns_.at(i), K(ret));
-          } else if (ob_is_roaringbitmap_tc(data_column->get_data_type())) {
-            ret = OB_ERR_WRONG_KEY_COLUMN;
-            LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, arg.hidden_store_columns_.at(i).length(),
-                                                    arg.hidden_store_columns_.at(i).ptr());
-            LOG_WARN("Index storing column should not be roaringbitmap type",
                 "database_id", data_schema.get_database_id(), "table_name",
                 data_schema.get_table_name(), "column name", arg.hidden_store_columns_.at(i), K(ret));
           } else if (ob_is_extend(data_column->get_data_type())) {
@@ -737,7 +707,6 @@ int ObIndexBuilderUtil::adjust_ordinary_index_column_args(
   int ret = OB_SUCCESS;
   ObIArray<ObColumnSortItem> &sort_items = arg.index_columns_;
   ObArray<ObColumnSortItem> new_sort_items;
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
   for (int64_t i = 0; OB_SUCC(ret) && i < sort_items.count(); ++i) {
     int64_t old_cnt = data_schema.get_column_count();
     ObColumnSortItem new_sort_item = sort_items.at(i);
@@ -813,20 +782,18 @@ int ObIndexBuilderUtil::adjust_ordinary_index_column_args(
             LOG_WARN("build generated column expr failed", K(ret));
           } else if (!expr->is_column_ref_expr()) {
             //real index expr, so generate hidden generated column in data table schema
-            if (lib::Worker::CompatMode::MYSQL == compat_mode) {
-              if (ob_is_geometry(expr->get_result_type().get_type())) {
-                ret = OB_ERR_SPATIAL_FUNCTIONAL_INDEX;
-                LOG_WARN("Spatial functional index is not supported.", K(ret));
-              } else if (ob_is_json_tc(expr->get_result_type().get_type())) {
-                ret = OB_ERR_FUNCTIONAL_INDEX_ON_JSON_OR_GEOMETRY_FUNCTION;
-                LOG_WARN("Cannot create a functional index on an expression that returns a JSON or GEOMETRY.",K(ret));
-              } else if (ob_is_collection_sql_type(expr->get_result_type().get_type())) {
-                ret = OB_ERR_FUNCTIONAL_INDEX_ON_FIELD;
-                LOG_WARN("Cannot create a functional index on an expression that returns a ARRAY.",K(ret));
-              } else if (ob_is_text_tc(expr->get_result_type().get_type())) {
-                ret = OB_ERR_FUNCTIONAL_INDEX_ON_LOB;
-                LOG_WARN("Cannot create a functional index on an expression that returns a BLOB or TEXT.", K(ret));
-              }
+            if (ob_is_geometry(expr->get_result_type().get_type())) {
+              ret = OB_ERR_SPATIAL_FUNCTIONAL_INDEX;
+              LOG_WARN("Spatial functional index is not supported.", K(ret));
+            } else if (ob_is_json_tc(expr->get_result_type().get_type())) {
+              ret = OB_ERR_FUNCTIONAL_INDEX_ON_JSON_OR_GEOMETRY_FUNCTION;
+              LOG_WARN("Cannot create a functional index on an expression that returns a JSON or GEOMETRY.",K(ret));
+            } else if (ob_is_collection_sql_type(expr->get_result_type().get_type())) {
+              ret = OB_ERR_FUNCTIONAL_INDEX_ON_FIELD;
+              LOG_WARN("Cannot create a functional index on an expression that returns a ARRAY.",K(ret));
+            } else if (ob_is_text_tc(expr->get_result_type().get_type())) {
+              ret = OB_ERR_FUNCTIONAL_INDEX_ON_LOB;
+              LOG_WARN("Cannot create a functional index on an expression that returns a BLOB or TEXT.", K(ret));
             }
             if (OB_FAIL(ret)) {
             } else if (OB_ISNULL(GCTX.schema_service_)) {
@@ -844,7 +811,7 @@ int ObIndexBuilderUtil::adjust_ordinary_index_column_args(
               new_sort_item.column_name_ = gen_col->get_column_name_str();
               new_sort_item.is_func_index_ = false;
             }
-            if (OB_SUCC(ret) && lib::Worker::CompatMode::MYSQL == compat_mode) {
+            if (OB_SUCC(ret)) {
               ObSEArray<ObRawExpr*, 4> dep_columns;
               if (OB_FAIL(ObRawExprUtils::extract_column_exprs(expr, dep_columns))) {
                 LOG_WARN("extract column exprs failed", K(ret), K(expr));

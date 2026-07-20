@@ -478,7 +478,6 @@ TEST_F(TestObObj, test_to_collation_free_obj)
 TEST_F(TestObObj, test_compare_collation_free_mysqlmode)
 {
   // mysql mode
-  set_compat_mode(oceanbase::lib::Worker::CompatMode::MYSQL);
   ObObj obj1;
   ObObj obj2;
   char aa[10];

@@ -28,7 +28,6 @@ namespace common
 class ObIAllocator;
 class ObMySQLProxy;
 class ObMySQLTransaction;
-class ObSQLClientRetryWeak;
 class ObTimeoutCtx;
 namespace number
 {
@@ -77,7 +76,7 @@ private:
   int set_pre_op_timeout(common::ObTimeoutCtx &ctx);
   static int init_sequence_value_table(
       common::ObMySQLTransaction &trans,
-      common::ObSQLClientRetryWeak &sql_client_retry_weak,
+      common::ObISQLClient &sql_client_retry_weak,
       common::ObIAllocator &allocator,
       uint64_t sequence_id,
       const ObSequenceOption &option,
@@ -93,4 +92,3 @@ private:
 }
 #endif /* __OB_SHARE_SEQUENCE_SEQUENCE_DML_PROXY_H__ */
 //// end of header file
-

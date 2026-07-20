@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "ob_tablet_autoincrement_service.h"
-#include "storage/ob_storage_rpc.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/ob_tablet_autoinc_seq_rpc_handler.h"
 

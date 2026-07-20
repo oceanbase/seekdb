@@ -147,9 +147,9 @@ public:
   // at last we get much more codes which are very, very, very ugly.
   // so I think this is a better way: expose this 3 static const arrays directly.
   static const ObAccuracy DDL_DEFAULT_ACCURACY[ObMaxType];
-  static const ObAccuracy DDL_DEFAULT_ACCURACY2[MYSQL_MODE + 1][ObMaxType];
+  static const ObAccuracy DDL_DEFAULT_ACCURACY2[1][ObMaxType];
   static const ObAccuracy MAX_ACCURACY[ObMaxType];
-  static const ObAccuracy MAX_ACCURACY2[MYSQL_MODE + 1][ObMaxType];
+  static const ObAccuracy MAX_ACCURACY2[1][ObMaxType];
   static const ObAccuracy DML_DEFAULT_ACCURACY[ObMaxType];
   static const ObAccuracy MAX_ACCURACY_OLD[ObMaxType];
 public:

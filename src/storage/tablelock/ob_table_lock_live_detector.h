@@ -63,14 +63,6 @@ public:
   static int do_session_alive_detect();
 
 private:
-  static int do_session_alive_detect_for_a_client_session_(const int64_t &client_session_id, bool &all_alive);
-  static int do_session_alive_detect_for_a_server_session_(const ObAddr &addr,
-                                                           const int64_t &server_session_id,
-                                                           bool &is_alive);
-  static int get_active_server_session_list_(const int64_t &client_session_id,
-                                             ObIArray<ObTuple<ObAddr, int64_t>> &server_session_list,
-                                             bool &all_alive);
-  static int check_server_is_online_(const ObString &svr_ip, const int64_t svr_port, bool &is_online);
   static int get_owner_id_list_from_table_(ObIAllocator &allocator, ObArray<ObTableLockOwnerID *> &owner_ids);
 };
 
@@ -122,8 +114,8 @@ public:
                                                 const ObLockOBJType &obj_type,
                                                 bool &exist);
   static int check_lock_owner_exist_in_inner_table(sql::ObSQLSessionInfo *session_info,
-                                                   const uint32_t client_session_id,
-                                                   const uint64_t client_session_create_ts,
+                                                   const uint32_t session_id,
+                                                   const uint64_t session_create_ts,
                                                    bool &exist);
   static int check_lock_exist_in_inner_table(sql::ObSQLSessionInfo *session_info,
                                              const ObTableLockTaskType &task_type,

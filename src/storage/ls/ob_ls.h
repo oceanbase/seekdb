@@ -210,8 +210,7 @@ public:
   // remove the durable info of myself from disk.
   int remove_ls();
   // create all the inner tablet.
-  int create_ls_inner_tablet(const lib::Worker::CompatMode compat_mode,
-                             const share::SCN &create_scn);
+  int create_ls_inner_tablet(const share::SCN &create_scn);
   int remove_ls_inner_tablet();
 
   // get only the meta of ls.

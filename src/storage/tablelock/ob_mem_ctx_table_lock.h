@@ -89,7 +89,7 @@ public:
   ~ObLockMemCtx() { reset(); }
   int init(ObLSTxCtxMgr *ls_tx_ctx_mgr);
   // for mintest
-  int init(ObTableHandleV2 &handle);
+  int init(storage::ObTableHandleV2 &handle);
   int get_lock_memtable(ObLockMemtable *&memtable);
   void reset();
   int add_lock_record(

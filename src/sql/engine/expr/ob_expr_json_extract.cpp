@@ -199,7 +199,7 @@ int ObExprJsonExtract::eval_json_extract(const ObExpr &expr, ObEvalCtx &ctx, ObD
           LOG_WARN("fail to pack json result", K(ret));
         }
       } else {
-        ObBinAggSerializer bin_agg(&allocator, AGG_JSON, static_cast<uint8_t>(ObJsonNodeType::J_ARRAY));
+        ObJsonBinAggSerializer bin_agg(&allocator, static_cast<uint8_t>(ObJsonNodeType::J_ARRAY));
         ObJsonBin *j_node = NULL;
         ObIJsonBase *jb_node = NULL;
         for (int32_t i = 0; OB_SUCC(ret) && i < hit_size; i++) {

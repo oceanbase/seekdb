@@ -537,7 +537,7 @@ TEST_F(ObTestRedoSubmitter, submit_by_switch_leader_or_on_commit_serial_logging)
     ObTxRedoSubmitter submitter(tx_ctx, mt_ctx);
     ObTxLogBlock log_block;
     ObTransID tx_id(101);
-    log_block.get_header().init(1, DATA_CURRENT_VERSION, 101, tx_id);
+    log_block.get_header().init(DATA_CURRENT_VERSION, 101, tx_id);
     log_block.init_for_fill();
     memtable::ObRedoLogSubmitHelper helper;
     EXPECT_EQ(OB_BLOCK_FROZEN, submitter.fill(log_block, helper));
@@ -582,7 +582,7 @@ TEST_F(ObTestRedoSubmitter, submit_by_switch_leader_or_on_commit_parallel_loggin
     ObTxRedoSubmitter submitter(tx_ctx, mt_ctx);
     ObTxLogBlock log_block;
     ObTransID tx_id(101);
-    log_block.get_header().init(1, DATA_CURRENT_VERSION, 101, tx_id);
+    log_block.get_header().init(DATA_CURRENT_VERSION, 101, tx_id);
     log_block.init_for_fill();
     memtable::ObRedoLogSubmitHelper helper;
     EXPECT_EQ(OB_SUCCESS, submitter.fill(log_block, helper));
@@ -625,7 +625,7 @@ TEST_F(ObTestRedoSubmitter, submit_by_switch_leader_or_on_commit_parallel_loggin
     ObTxRedoSubmitter submitter(tx_ctx, mt_ctx);
     ObTxLogBlock log_block;
     ObTransID tx_id(101);
-    log_block.get_header().init(1, DATA_CURRENT_VERSION, 101, tx_id);
+    log_block.get_header().init(DATA_CURRENT_VERSION, 101, tx_id);
     log_block.init_for_fill();
     memtable::ObRedoLogSubmitHelper helper;
     EXPECT_EQ(OB_BLOCK_FROZEN, submitter.fill(log_block, helper));
@@ -661,7 +661,7 @@ TEST_F(ObTestRedoSubmitter, submit_ROW_SIZE_TOO_LARGE)
       ObTxRedoSubmitter submitter(tx_ctx, mt_ctx);
       ObTxLogBlock log_block;
       ObTransID tx_id(101);
-      log_block.get_header().init(1, DATA_CURRENT_VERSION, 101, tx_id);
+      log_block.get_header().init(DATA_CURRENT_VERSION, 101, tx_id);
       log_block.init_for_fill();
       memtable::ObRedoLogSubmitHelper helper;
       EXPECT_EQ(OB_ERR_TOO_BIG_ROWSIZE, submitter.fill(log_block, helper));

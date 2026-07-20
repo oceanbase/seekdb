@@ -124,9 +124,6 @@ int ObExprUDF::calc_result_typeN(ObExprResType &type,
     if (OB_SUCC(ret)) {
       type.set_accuracy(result_type_.get_accuracy());
       type.set_meta(result_type_.get_obj_meta());
-      if (type.is_string_or_lob_locator_type() && udf_package_id_ == T_OBJ_XML) {
-        type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
-      }
       if (!type.is_ext()) {
         type.set_length(result_type_.get_length());
       }

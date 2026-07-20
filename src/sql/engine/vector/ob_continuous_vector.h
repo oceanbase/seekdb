@@ -62,7 +62,6 @@ extern template class ObContinuousVector<VectorBasicOp<VEC_TC_JSON>>;
 extern template class ObContinuousVector<VectorBasicOp<VEC_TC_GEO>>;
 extern template class ObContinuousVector<VectorBasicOp<VEC_TC_UDT>>;
 extern template class ObContinuousVector<VectorBasicOp<VEC_TC_COLLECTION>>;
-extern template class ObContinuousVector<VectorBasicOp<VEC_TC_ROARINGBITMAP>>;
 
 }
 }

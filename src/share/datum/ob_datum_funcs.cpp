@@ -92,8 +92,6 @@ ObDatumCmpFuncType NULLSAFE_GEO_CMP_FUNCS[2][2];
 
 ObDatumCmpFuncType NULLSAFE_COLLECTION_CMP_FUNCS[2][2];
 
-ObDatumCmpFuncType NULLSAFE_ROARINGBITMAP_CMP_FUNCS[2][2];
-
 ObDatumCmpFuncType FIXED_DOUBLE_CMP_FUNCS[OB_NOT_FIXED_SCALE][2];
 
 ObDatumCmpFuncType DECINT_CMP_FUNCS[DECIMAL_INT_MAX][DECIMAL_INT_MAX][2];
@@ -130,8 +128,6 @@ ObDatumCmpFuncType ObDatumFuncs::get_nullsafe_cmp_func(
     func_ptr = NULLSAFE_GEO_CMP_FUNCS[null_pos_idx][has_lob_header];
   } else if (is_collection(type1) && is_collection(type2)) {
     func_ptr = NULLSAFE_COLLECTION_CMP_FUNCS[null_pos_idx][has_lob_header];
-  } else if (is_roaringbitmap(type1) && is_roaringbitmap(type2)) {
-    func_ptr = NULLSAFE_ROARINGBITMAP_CMP_FUNCS[null_pos_idx][has_lob_header];
   } else if (ob_is_decimal_int(type1) && ob_is_decimal_int(type2) && prec1 != PRECISION_UNKNOWN_YET
              && prec2 != PRECISION_UNKNOWN_YET) {
     ObDecimalIntWideType lw = get_decimalint_type(prec1);
@@ -161,8 +157,6 @@ ObExprBasicFuncs EXPR_BASIC_JSON_FUNCS[2];
 
 ObExprBasicFuncs EXPR_BASIC_GEO_FUNCS[2];
 ObExprBasicFuncs EXPR_BASIC_COLLECTION_FUNCS[2];
-ObExprBasicFuncs EXPR_BASIC_ROARINGBITMAP_FUNCS[2];
-
 ObExprBasicFuncs FIXED_DOUBLE_BASIC_FUNCS[OB_NOT_FIXED_SCALE];
 ObExprBasicFuncs EXPR_BASIC_UDT_FUNCS[1];
 
@@ -209,8 +203,6 @@ ObExprBasicFuncs* ObDatumFuncs::get_basic_func(const ObObjType type,
       res = &EXPR_BASIC_GEO_FUNCS[has_lob_locator];
     } else if (ob_is_collection_sql_type(type)) {
       res = &EXPR_BASIC_COLLECTION_FUNCS[has_lob_locator];
-    } else if (ob_is_roaringbitmap(type)) {
-      res = &EXPR_BASIC_ROARINGBITMAP_FUNCS[has_lob_locator];
     } else if (ob_is_double_type(type) &&
                 scale > SCALE_UNKNOWN_YET && scale < OB_NOT_FIXED_SCALE) {
       res = &FIXED_DOUBLE_BASIC_FUNCS[scale];
@@ -252,12 +244,6 @@ bool ObDatumFuncs::is_geometry(const ObObjType type)
   return (tc == ObGeometryTC);
 }
 
-bool ObDatumFuncs::is_roaringbitmap(const ObObjType type)
-{
-  const ObObjTypeClass tc = OBJ_TYPE_TO_CLASS[type];
-  return (tc == ObRoaringBitmapTC);
-}
-
 /**
  * This function is primarily responsible for handling inconsistent hash computations
  * for null types and the null values of those types, such as string, float, double, etc.
@@ -267,7 +253,7 @@ bool ObDatumFuncs::is_roaringbitmap(const ObObjType type)
 bool ObDatumFuncs::is_null_aware_hash_type(const ObObjType type)
 {
   const ObObjTypeClass tc = OBJ_TYPE_TO_CLASS[type];
-  return is_string_type(type) || is_json(type) || is_geometry(type) || is_roaringbitmap(type) ||
+  return is_string_type(type) || is_json(type) || is_geometry(type) ||
             (tc == ObUserDefinedSQLTC) || (tc == ObFloatTC) || (tc == ObDoubleTC);
 }
 

@@ -47,7 +47,6 @@ namespace oceanbase
 
 namespace share
 {
-class ObServerLocality;
 namespace schema
 {
 class ObSchemaGetterGuard;
@@ -168,14 +167,8 @@ public:
   static const int64_t JOINPATH_SET_HASHBUCKET_SIZE = 3000;
   friend class ::test::ObLogPlanTest_ob_explain_test_Test;
 
-  typedef common::ObList<common::ObAddr, common::ObArenaAllocator> ObAddrList;
-
   static int select_replicas(ObExecContext &exec_ctx,
                              const common::ObIArray<const ObTableLocation*> &tbl_loc_list,
-                             const common::ObAddr &local_server,
-                             common::ObIArray<ObCandiTableLoc*> &phy_tbl_loc_info_list);
-  static int select_replicas(ObExecContext &exec_ctx,
-                             bool is_weak,
                              const common::ObAddr &local_server,
                              common::ObIArray<ObCandiTableLoc*> &phy_tbl_loc_info_list);
 
@@ -254,7 +247,6 @@ public:
 
   int add_explain_note();
   int add_parallel_explain_note();
-  int add_direct_load_explain_note();
   int add_non_standard_comparison_explain_note();
 
   int adjust_final_plan_info(ObLogicalOperator *&op);
@@ -453,7 +445,6 @@ public:
       can_storage_pushdown_(false),
       can_basic_pushdown_(false),
       can_three_stage_pushdown_(false),
-      can_rollup_pushdown_(false),
       force_use_hash_(false),
       force_use_merge_(false),
       force_part_sort_(false),
@@ -469,7 +460,6 @@ public:
       non_distinct_aggr_items_(),
       distinct_aggr_items_(),
       distinct_params_(),
-      rollup_id_expr_(NULL),
       group_ndv_(-1.0),
       group_distinct_ndv_(-1.0),
       enable_hash_rollup_(true),
@@ -516,7 +506,6 @@ public:
     bool can_storage_pushdown_;
     bool can_basic_pushdown_;
     bool can_three_stage_pushdown_;
-    bool can_rollup_pushdown_;
     bool force_use_hash_; // has use_hash_aggregation/use_hash_distinct hint
     bool force_use_merge_; // has no_use_hash_aggregation/no_use_hash_distinct hint
     bool force_part_sort_;  // force use partition sort for merge group by
@@ -528,7 +517,6 @@ public:
     bool force_hash_local_;
     bool is_scalar_group_by_;
     bool ignore_hint_;
-    uint64_t optimizer_features_enable_version_;
     ObSEArray<ObRawExpr*, 8> distinct_exprs_;
 
     // context for three stage group by push down
@@ -538,9 +526,6 @@ public:
     ObArray<ObRawExpr *> distinct_params_;
     ObArray<ObDistinctAggrBatch> distinct_aggr_batch_;
 
-    // for rollup distributor and collector
-    ObRawExpr *rollup_id_expr_;
-    
     ObArray<ObRawExpr*> pushdown_groupby_columns_;
     // distinct of group expr
     double group_ndv_;
@@ -555,7 +540,6 @@ public:
     TO_STRING_KV(K_(can_storage_pushdown),
                  K_(can_basic_pushdown),
                  K_(can_three_stage_pushdown),
-                 K_(can_rollup_pushdown),
                  K_(force_use_hash),
                  K_(force_use_merge),
                  K_(force_part_sort),
@@ -567,7 +551,6 @@ public:
                  K_(force_hash_local),
                  K_(is_scalar_group_by),
                  K_(ignore_hint),
-                 K_(optimizer_features_enable_version),
                  K_(distinct_exprs),
                  K_(pushdown_groupby_columns),
                  K_(group_ndv),
@@ -884,10 +867,6 @@ public:
                                          const bool enable_hash_rollup,
                                          bool &can_push);
 
-  int check_rollup_pushdown(const ObSQLSessionInfo *info,
-                            const ObIArray<ObAggFunRawExpr *> &aggr_items,
-                            bool &can_push);
-
   int adjust_sort_expr_ordering(ObIArray<ObRawExpr*> &sort_exprs,
                                 ObIArray<ObOrderDirection> &sort_directions,
                                 const ObLogicalOperator &child_op,
@@ -1006,7 +985,6 @@ public:
                                const bool is_partition_wise = false,
                                const bool is_push_down = false,
                                const bool is_partition_gi = false,
-                               const ObRollupStatus rollup_status = ObRollupStatus::NONE_ROLLUP,
                                bool force_use_scalar = false,
                                const ObThreeStageAggrInfo *three_stage_info = NULL,
                                ObHashRollupInfo *hash_rollup_info = NULL);
@@ -1797,17 +1775,6 @@ private: // member functions
                                     common::ObIArray<ObCandiTableLoc*> &phy_tbl_loc_info_list,
                                     bool &is_hit_partition,
                                     bool sess_in_retry);
-  static int weak_select_replicas(const common::ObAddr &local_server,
-                                  ObRoutePolicyType route_type,
-                                  int64_t max_read_stale_time,
-                                  common::ObIArray<ObCandiTableLoc*> &phy_tbl_loc_info_list,
-                                  bool &is_hit_partition);
-  static int calc_hit_partition_for_compat(const common::ObIArray<ObCandiTableLoc*> &phy_tbl_loc_info_list,
-                                           const common::ObAddr &local_server,
-                                           bool &is_hit_partition,
-                                           ObAddrList &intersect_servers);
-  static int calc_intersect_servers(const ObIArray<ObCandiTableLoc*> &phy_tbl_loc_info_list,
-                                    ObList<ObAddr, ObArenaAllocator> &candidate_server_list);
   int calc_and_set_exec_pwj_map(ObLocationConstraintContext &location_constraint) const;
 
   int check_pwj_cons(const ObPwjConstraint &pwj_cons,

@@ -85,7 +85,6 @@ enum ObObjType
   ObCollectionSQLType  = 40, // collection(varray and nested table) in SQL
   ObMySQLDateType      = 41, // date type which is compatible with MySQL.
   ObMySQLDateTimeType  = 42, // datetime type which is compatible with MySQL.
-  ObRoaringBitmapType  = 43, // Roaring Bitmap Type
   ObMaxType,                 // invalid type, or count of obj type
                             //
   ObTimestampLTZType  = 47, // timestamp with local time zone
@@ -123,7 +122,6 @@ enum ObObjOType
   ObOGeometryType     = 25,
   ObOUDTSqlType       = 26,
   ObOCollectionSqlType  = 27,
-  ObORoaringBitmapType  = 28,
   ObOMaxType          //invalid type, or count of ObObjOType
 };
 
@@ -202,7 +200,6 @@ static ObObjOType OBJ_TYPE_TO_O_TYPE[ObMaxType+1] = {
   ObOCollectionSqlType,      //ObCollectionSQLType = 40,
   ObONotSupport,             //ObMySQLDateType = 41,
   ObONotSupport,             //ObMySQLDateTimeType = 42,
-  ObORoaringBitmapType,      //Roaring Bitmap Type = 43,
   ObONotSupport              //ObMaxType,
 };
 
@@ -238,7 +235,6 @@ enum ObObjTypeClass
   ObCollectionSQLTC = 26, // collection type class in SQL
   ObMySQLDateTC     = 27, // mysql date type class
   ObMySQLDateTimeTC = 28, // mysql date time type class
-  ObRoaringBitmapTC = 29, // Roaringbitmap type class
   ObMaxTC,
   // invalid type classes are below, only used as the result of XXXX_type_promotion()
   // to indicate that the two obj can't be promoted to the same type.
@@ -292,8 +288,7 @@ enum ObObjTypeClass
     (ObDecimalIntType, ObDecimalIntTC),        \
     (ObCollectionSQLType, ObCollectionSQLTC),  \
     (ObMySQLDateType, ObMySQLDateTC),          \
-    (ObMySQLDateTimeType, ObMySQLDateTimeTC),  \
-    (ObRoaringBitmapType, ObRoaringBitmapTC)
+    (ObMySQLDateTimeType, ObMySQLDateTimeTC)
 
 #define SELECT_SECOND(x, y) y
 #define SELECT_TC(arg) SELECT_SECOND arg
@@ -337,7 +332,6 @@ const ObObjType OBJ_DEFAULT_TYPE[ObActualMaxTC] =
   ObCollectionSQLType,  // collection type in sql
   ObMySQLDateType,     // mysql date
   ObMySQLDateTimeType, // mysql datetime
-  ObRoaringBitmapType,  // roaringbitmap
   ObMaxType,        // maxtype
   ObUInt64Type,     // int&uint
   ObMaxType,        // lefttype
@@ -375,7 +369,6 @@ static ObObjTypeClass OBJ_O_TYPE_TO_CLASS[ObOMaxType + 1] =
   ObGeometryTC,   // ObOGeometryType
   ObUserDefinedSQLTC, // ObOUDTSqlType
   ObCollectionSQLTC, // ObCollectionSqlType
-  ObRoaringBitmapTC, // ObRoaringBitmapType
   ObMaxTC
 };
 
@@ -1080,7 +1073,6 @@ enum ObExtObjType
 enum ObUDTType
 {
   T_OBJ_NOT_SUPPORTED = 0,
-  T_OBJ_XML = 300001,
   T_OBJ_SDO_POINT = 300027,
   T_OBJ_SDO_GEOMETRY = 300028,
   T_OBJ_SDO_ELEMINFO_ARRAY = 300029,
@@ -1090,7 +1082,6 @@ enum ObUDTType
 // reserved sub schema id for system defined types
 enum ObSystemUDTSqlType
 {
-  ObXMLSqlType = 0,
   ObMaxSystemUDTSqlType = 16, // used not supported cases;
   ObInvalidSqlType = 17 // only used when subschema id not set, like the creation of col ref rawexpr
 };
@@ -1175,7 +1166,6 @@ enum VecValueTypeClass: uint16_t {
   VEC_TC_DEC_INT256,
   VEC_TC_DEC_INT512,
   VEC_TC_COLLECTION,
-  VEC_TC_ROARINGBITMAP,
   VEC_TC_MYSQL_DATE,
   VEC_TC_MYSQL_DATETIME,
   MAX_VEC_TC
@@ -1231,8 +1221,7 @@ OB_INLINE VecValueTypeClass get_vec_value_tc(const ObObjType type, const int16_t
     MAX_VEC_TC,               // invalid for ObDecimalIntType
     VEC_TC_COLLECTION,        // ObCollectionSQLType
     VEC_TC_MYSQL_DATE,        // reserved for ObMySQLDateType
-    VEC_TC_MYSQL_DATETIME,    // reserved for ObMySQLDateTimeType
-    VEC_TC_ROARINGBITMAP      // ObRoaringBitmapType
+    VEC_TC_MYSQL_DATETIME     // reserved for ObMySQLDateTimeType
   };
   VecValueTypeClass t = MAX_VEC_TC;
   if (type < 0 || type >= ObMaxType) {
@@ -1273,7 +1262,7 @@ OB_INLINE bool ob_is_castable_type_class(ObObjTypeClass tc)
       || ObBitTC == tc || ObEnumSetTC == tc || ObEnumSetInnerTC == tc || ObTextTC == tc
       || ObOTimestampTC == tc || ObRawTC == tc || ObJsonTC == tc || ObGeometryTC == tc
       || ObUserDefinedSQLTC == tc || ObDecimalIntTC == tc || ObCollectionSQLTC == tc
-      || ObMySQLDateTimeTC == tc || ObMySQLDateTC == tc || ObRoaringBitmapTC == tc;
+      || ObMySQLDateTimeTC == tc || ObMySQLDateTC == tc;
 }
 
 //used for arithmetic
@@ -1380,8 +1369,6 @@ inline bool ob_is_interval_tc(ObObjType type) { return ObIntervalTC == ob_obj_ty
 inline bool ob_is_json_tc(ObObjType type) { return ObJsonTC == ob_obj_type_class(type); }
 inline bool ob_is_geometry_tc(ObObjType type) { return ObGeometryTC == ob_obj_type_class(type); }
 inline bool ob_is_decimal_int_tc(ObObjType type) { return ObDecimalIntTC == ob_obj_type_class(type); }
-inline bool ob_is_roaringbitmap_tc(ObObjType type) { return ObRoaringBitmapTC == ob_obj_type_class(type); }
-
 inline bool is_lob(ObObjType type) { return ob_is_text_tc(type); }
 
 // test type catalog
@@ -1518,8 +1505,7 @@ inline bool ob_is_extend(const ObObjType type) { return ObExtendType == type; }
 inline bool ob_is_accuracy_length_valid_tc(ObObjType type) { return ob_is_string_type(type) ||
                                                              ob_is_enumset_tc(type) ||
                                                              ob_is_json_tc(type) ||
-                                                             ob_is_geometry_tc(type) ||
-                                                             ob_is_roaringbitmap_tc(type); }
+                                                             ob_is_geometry_tc(type); }
 inline bool ob_is_string_or_enumset_tc(ObObjType type) { return ObStringTC == ob_obj_type_class(type) || ob_is_enumset_tc(type); }
 inline bool ob_is_large_text(ObObjType type) { return ObTextType <= type && ObLongTextType >= type; }
 inline bool ob_is_datetime(const ObObjType type) { return ObDateTimeType == type; }
@@ -1531,10 +1517,8 @@ inline bool ob_is_collection_sql_type(const ObObjType type) { return ObCollectio
 inline bool is_lob_storage(const ObObjType type) { return ob_is_large_text(type)
                                                           || ob_is_json_tc(type)
                                                           || ob_is_geometry_tc(type)
-                                                          || ob_is_collection_sql_type(type)
-                                                          || ob_is_roaringbitmap_tc(type); }
+                                                          || ob_is_collection_sql_type(type); }
 inline bool ob_is_geometry(const ObObjType type) { return ObGeometryType == type; }
-inline bool ob_is_roaringbitmap(const ObObjType type) { return ObRoaringBitmapType == type; }
 
 inline bool ob_is_decimal_int(const ObObjType type) { return ObDecimalIntType == type; }
 inline bool is_decimal_int_accuracy_valid(const int16_t precision, const int16_t scale)
@@ -1544,13 +1528,6 @@ inline bool is_decimal_int_accuracy_valid(const int16_t precision, const int16_t
 inline bool ob_is_user_defined_pl_type(const ObObjType type) { return ObExtendType == type; }
 inline bool ob_is_user_defined_type(const ObObjType type) {
   return ob_is_user_defined_pl_type(type);
-}
-// xml type without schema
-inline bool ob_is_xml_sql_type(const ObObjType type, const uint16_t sub_schema_id) {
-  return (ObUserDefinedSQLType == type) && (sub_schema_id == ObXMLSqlType);
-}
-inline bool ob_is_xml_pl_type(const ObObjType type, const uint64_t udt_id) {
-  return (ObExtendType == type) && (udt_id == static_cast<uint64_t>(T_OBJ_XML));
 }
 inline bool ob_is_datetime_or_mysql_datetime(const ObObjType type)
 {

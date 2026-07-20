@@ -18,7 +18,6 @@
 #include "storage/ddl/ob_ddl_tablet_context.h"
 #include "storage/ob_storage_schema.h"
 #include "storage/ddl/ob_ddl_independent_dag.h"
-#include "storage/ddl/ob_ddl_inc_redo_log_writer.h"
 #include "storage/blocksstable/ob_logic_macro_id.h" // for ObMacroDataSeq
 #include "storage/blocksstable/index_block/ob_macro_meta_temp_store.h"
 #include "storage/ddl/ob_ddl_write_stat_util.h"
@@ -72,88 +71,7 @@ int ObDDLMacroBlockWriter::init(
   } else if (OB_ISNULL(tablet_param.storage_schema_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("storage schema is null", K(ret), K(table_key), K(param));
-  } else if (is_incremental_direct_load(param.direct_load_type_)) { // incremental
-    const int64_t parallel_idx = ObDDLStorageUtil::get_parallel_idx(start_sequence);
-    const ObTxSEQ seq_no = ObTxSEQ::cast_from_int(param.tx_info_.seq_no_);
-
-    share::SCN mock_start_scn;
-    ObMacroSeqParam macro_seq_param;
-    ObPreWarmerParam pre_warm_param;
-    ObSSTablePrivateObjectCleaner *object_cleaner = nullptr;
-    ObDDLIncRedoLogWriterCallback *inc_redo_callback = nullptr;
-
-    IGNORE_RETURN mock_start_scn.convert_for_tx(SS_DDL_START_SCN_VAL);
-    macro_seq_param.seq_type_ = ObMacroSeqParam::SEQ_TYPE_INC;
-    macro_seq_param.start_ = start_sequence.macro_data_seq_;
-    compaction::ObExecMode exec_mode = compaction::ObExecMode::EXEC_MODE_LOCAL;
-    blocksstable::ObMacroMetaTempStore *macro_meta_store = nullptr;
-
-    if (OB_FAIL(pre_warm_param.init(table_key.tablet_id_))) {
-      LOG_WARN("fail to init pre warm param", KR(ret), K(table_key.tablet_id_));
-    } else if (OB_FAIL(data_desc_.init(true/*is ddl*/,
-                                       *tablet_param.storage_schema_,
-                                       table_key.get_tablet_id(),
-                                       compaction::ObMergeType::MINOR_MERGE,
-                                       1L,
-                                       param.tenant_data_version_,
-                                       tablet_param.is_micro_index_clustered_,
-                                       0/*concurrent_cnt*/,
-                                       table_key.get_end_scn(),
-                                       exec_mode,
-                                       true/*need_submit_io*/))) {
-      LOG_WARN("fail to init data store desc", KR(ret), K(param.direct_load_type_));
-    } else if (FALSE_IT(data_desc_.get_static_desc().schema_version_ = param.schema_version_)) {
-      /* set as a fixed schema version */
-    } else if (OB_FAIL(index_builder_.init(data_desc_.get_desc(),
-                                           ObSSTableIndexBuilder::DISABLE /*small sstable op*/))) {
-      LOG_WARN("fail to init index builder", KR(ret), K(param), K(table_key), K(data_desc_));
-    } else {
-      // for build the tail index block in macro block
-      data_desc_.get_desc().sstable_index_builder_ = &index_builder_;
-    }
-
-    if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(ddl_redo_callback_ = inc_redo_callback = OB_NEW(
-                           ObDDLIncRedoLogWriterCallback, ObMemAttr("ddl_redo_cb")))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to new ObDDLIncRedoLogWriterCallback", KR(ret));
-    } else {
-      ObDDLRedoLogWriterCallbackInitParam init_param;
-      init_param.tablet_id_ = table_key.tablet_id_;
-      init_param.direct_load_type_ = param.direct_load_type_;
-      init_param.block_type_ = DDL_MB_DATA_TYPE;
-      init_param.table_key_ = table_key;
-      init_param.start_scn_ = mock_start_scn;
-      init_param.task_id_ = param.task_id_;
-      init_param.data_format_version_ = param.tenant_data_version_;
-      init_param.parallel_cnt_ = param.get_logic_parallel_count();
-      init_param.tx_desc_ = param.tx_info_.tx_desc_;
-      init_param.trans_id_ = param.tx_info_.trans_id_;
-      init_param.seq_no_ = seq_no;
-      init_param.macro_meta_store_ = macro_meta_store;
-      if (OB_FAIL(inc_redo_callback->init(init_param))) {
-        LOG_WARN("fail to init inc redo callback", KR(ret));
-      }
-    }
-
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObSSTablePrivateObjectCleaner::get_cleaner_from_data_store_desc(
-                 data_desc_.get_desc(), object_cleaner))) {
-      LOG_WARN("fail to get cleaner from data store desc", KR(ret));
-    } else if (OB_ISNULL(object_cleaner)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("object cleaner is nullptr", KR(ret));
-    }
-    else if (OB_FAIL(macro_block_writer_.open(data_desc_.get_desc(),
-                                                parallel_idx,
-                                                macro_seq_param,
-                                                pre_warm_param,
-                                                *object_cleaner,
-                                                ddl_redo_callback_))) {
-      LOG_WARN("fail to open macro block writer", KR(ret), K(param), K(table_key), K(data_desc_),
-               K(start_sequence), KPC(object_cleaner));
-    }
-  } else { // full
+  } else {
     share::SCN mock_start_scn;
     IGNORE_RETURN mock_start_scn.convert_for_tx(SS_DDL_START_SCN_VAL);
     const uint64_t tenant_data_version = param.tenant_data_version_;

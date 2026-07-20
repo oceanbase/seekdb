@@ -54,7 +54,6 @@ namespace sql {
   class ObTenantSQLSessionMgr;
   class ObTenantSqlMemoryManager;
   class ObPlanMonitorNodeList;
-  class ObPlanBaselineMgr;
   class ObDataAccessService;
   class ObPlanCache;
   class ObPsCache;
@@ -155,8 +154,6 @@ namespace rootserver
 namespace observer
 {
   class ObTenantMetaChecker;
-  class ObTableLoadService;
-  class ObTableLoadResourceService;
   class ObStartupAccelTaskHandler;
   class ObTabletTableUpdater;
   class ObTenantQueryRespTimeCollector;
@@ -265,15 +262,12 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       transaction::ObTimestampAccess*,               \
       transaction::ObTransIDService*,                \
       transaction::ObUniqueIDService*,               \
-      sql::ObPlanBaselineMgr*,                       \
       sql::ObPsCache*,                               \
       sql::ObPlanCache*,                             \
       sql::dtl::ObTenantDfc*,                        \
       omt::ObPxPools*,                               \
-      lib::Worker::CompatMode,                       \
       sql::ObTenantSqlMemoryManager*,                \
       sql::dtl::ObDTLIntermResultManager*,           \
-      sql::ObPlanMonitorNodeList*,                   \
       sql::ObDataAccessService*,                     \
       share::schema::ObTenantSchemaService*,         \
       storage::ObTenantFreezer*,                     \
@@ -291,8 +285,6 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       transaction::ObTxLoopWorker *,                 \
       storage::ObAccessService*,                     \
       datadict::ObDataDictService*,                  \
-      observer::ObTableLoadService*,                 \
-      observer::ObTableLoadResourceService*,         \
       concurrency_control::ObMultiVersionGarbageCollector*, \
       ObTestModule*,                                 \
       storage::ObEmptyReadBucket*,                  \

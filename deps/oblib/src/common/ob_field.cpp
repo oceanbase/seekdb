@@ -292,7 +292,6 @@ int ObField::get_field_mb_length(const ObObjType type,
     case ObLobTC:
     case ObJsonTC:
     case ObGeometryTC:
-    case ObRoaringBitmapTC:
     case ObStringTC: {
       // This if branch is a patch because the generation process of Operators such as CAST and CONV is not standardized.
       // As a result, length, collation, etc. are not set correctly

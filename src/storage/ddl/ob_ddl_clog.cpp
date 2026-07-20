@@ -179,8 +179,8 @@ int ObDDLMacroBlockClogCb::init(const storage::ObDDLMacroBlockRedoInfo &redo_inf
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_UNLIKELY(!redo_info.is_valid() || !macro_block_id.is_valid() ||
-                        (direct_load_type <= ObDirectLoadType::DIRECT_LOAD_INVALID|| ObDirectLoadType::DIRECT_LOAD_MAX <= direct_load_type))) {
+  } else if (OB_UNLIKELY(!redo_info.is_valid() || !macro_block_id.is_valid()
+                         || !is_valid_direct_load(direct_load_type))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(redo_info), K(macro_block_id));
   } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.inc_ref(macro_block_id))) {

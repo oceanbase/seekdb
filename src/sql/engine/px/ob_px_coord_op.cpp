@@ -681,7 +681,6 @@ int ObPxCoordOp::wait_all_running_dfos_exit()
     dtl::ObDtlPacketEmptyProc<ObBarrierPieceMsg>  barrier_piece_msg_proc;
     dtl::ObDtlPacketEmptyProc<ObWinbufPieceMsg> winbuf_piece_msg_proc;
     dtl::ObDtlPacketEmptyProc<ObDynamicSamplePieceMsg> sample_piece_msg_proc;
-    dtl::ObDtlPacketEmptyProc<ObRollupKeyPieceMsg> rollup_key_piece_msg_proc;
     dtl::ObDtlPacketEmptyProc<ObRDWFPieceMsg> rd_wf_piece_msg_proc;
     dtl::ObDtlPacketEmptyProc<ObInitChannelPieceMsg> init_channel_piece_msg_proc;
     dtl::ObDtlPacketEmptyProc<ObReportingWFPieceMsg> reporting_wf_piece_msg_proc;
@@ -699,7 +698,6 @@ int ObPxCoordOp::wait_all_running_dfos_exit()
       .register_processor(barrier_piece_msg_proc)
       .register_processor(winbuf_piece_msg_proc)
       .register_processor(sample_piece_msg_proc)
-      .register_processor(rollup_key_piece_msg_proc)
       .register_processor(rd_wf_piece_msg_proc)
       .register_processor(init_channel_piece_msg_proc)
       .register_processor(reporting_wf_piece_msg_proc)
@@ -762,7 +760,6 @@ int ObPxCoordOp::wait_all_running_dfos_exit()
           case ObDtlMsgType::DH_BARRIER_PIECE_MSG:
           case ObDtlMsgType::DH_WINBUF_PIECE_MSG:
           case ObDtlMsgType::DH_DYNAMIC_SAMPLE_PIECE_MSG:
-          case ObDtlMsgType::DH_ROLLUP_KEY_PIECE_MSG:
           case ObDtlMsgType::DH_RANGE_DIST_WF_PIECE_MSG:
           case ObDtlMsgType::DH_INIT_CHANNEL_PIECE_MSG:
           case ObDtlMsgType::DH_SECOND_STAGE_REPORTING_WF_PIECE_MSG:

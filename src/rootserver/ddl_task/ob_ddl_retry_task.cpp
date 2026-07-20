@@ -130,30 +130,6 @@ int ObDDLRetryTask::deep_copy_ddl_arg(
   return ret;
 }
 
-int ObDDLRetryTask::init_compat_mode(const share::ObDDLType &ddl_type,
-                                     const obcall::ObDDLArg *source_arg)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(source_arg) || !is_drop_schema_block_concurrent_trans(ddl_type)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), KP(source_arg), K(ddl_type));
-  } else if (ObDDLType::DDL_DROP_DATABASE == ddl_type) {
-    compat_mode_ = static_cast<const obcall::ObDropDatabaseArg *>(source_arg)->compat_mode_;
-  } else if (ObDDLType::DDL_DROP_TABLE == ddl_type) {
-    compat_mode_ = static_cast<const obcall::ObDropTableArg *>(source_arg)->compat_mode_;
-  } else if (ObDDLType::DDL_TRUNCATE_TABLE == ddl_type) {
-    compat_mode_ = static_cast<const obcall::ObTruncateTableArg *>(source_arg)->compat_mode_;
-  } else if (ObDDLType::DDL_DROP_PARTITION == ddl_type
-          || ObDDLType::DDL_DROP_SUB_PARTITION == ddl_type
-          || ObDDLType::DDL_TRUNCATE_PARTITION == ddl_type
-          || ObDDLType::DDL_TRUNCATE_SUB_PARTITION == ddl_type
-          || ObDDLType::DDL_RENAME_PARTITION == ddl_type
-          || ObDDLType::DDL_RENAME_SUB_PARTITION == ddl_type) {
-    compat_mode_ = static_cast<const obcall::ObAlterTableArg *>(source_arg)->compat_mode_;
-  }
-  return ret;
-}
-
 int ObDDLRetryTask::init(const int64_t task_id,
                          const uint64_t object_id,
                          const int64_t schema_version,
@@ -178,8 +154,6 @@ int ObDDLRetryTask::init(const int64_t task_id,
     LOG_WARN("fail to init task table operator", K(ret));
   } else if (OB_FAIL(deep_copy_ddl_arg(allocator_, ddl_type, ddl_arg))) {
     LOG_WARN("deep copy ddl arg failed", K(ret));
-  } else if (OB_FAIL(init_compat_mode(ddl_type, ddl_arg))) {
-    LOG_WARN("init compat mode failed", K(ret));
   } else {
     set_gmt_create(ObTimeUtility::current_time());
     object_id_ = object_id;
@@ -232,8 +206,6 @@ int ObDDLRetryTask::init(const ObDDLTaskRecord &task_record)
     }
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(init_compat_mode(task_type_, ddl_arg_))) {
-    LOG_WARN("init compat mode failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -347,9 +319,9 @@ int ObDDLRetryTask::drop_schema(const ObDDLTaskStatus next_task_status)
     ret = OB_NOT_INIT;
     LOG_WARN("ObDDLRetryTask has not been inited", K(ret));
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(ddl_arg_) || lib::Worker::CompatMode::INVALID == compat_mode_) {
+  } else if (OB_ISNULL(ddl_arg_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret), KP(ddl_arg_), K(compat_mode_));
+    LOG_WARN("unexpected error", K(ret), KP(ddl_arg_));
   } else if (OB_FAIL(DDL_SIM(task_id_, RETRY_TASK_DROP_SCHEMA_FAILED))) {
     LOG_WARN("ddl sim failure", K(ret), K(task_id_));
   } else if (OB_FAIL(check_schema_change_done())) {
@@ -443,9 +415,9 @@ int ObDDLRetryTask::wait_alter_table(const ObDDLTaskStatus new_status)
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObDDLRetryTask has not been inited", K(ret));
-  } else if (OB_ISNULL(ddl_arg_) || lib::Worker::CompatMode::INVALID == compat_mode_) {
+  } else if (OB_ISNULL(ddl_arg_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret), KP(ddl_arg_), K(compat_mode_));
+    LOG_WARN("unexpected error", K(ret), KP(ddl_arg_));
   } else if (OB_FAIL(DDL_SIM(task_id_, RETRY_TASK_WAIT_ALTER_TABLE_FAILED))) {
     LOG_WARN("ddl sim failure", K(ret), K(task_id_));
   } else {

@@ -109,8 +109,7 @@ OB_INLINE int ObRawEncoder::store_data(
       case ObStringSC:
       case ObTextSC: 
       case ObJsonSC:
-      case ObGeometrySC:
-      case ObRoaringBitmapSC: {
+      case ObGeometrySC: {
         MEMCPY(buf, datum.ptr_, datum.len_);
         break;
       }

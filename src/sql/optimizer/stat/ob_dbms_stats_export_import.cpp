@@ -481,7 +481,7 @@ int ObDbmsStatsExportImport::do_import_stats(ObExecContext &ctx,
   if (OB_SUCC(ret)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy);
+      auto &sql_client_retry_weak = *sql_proxy;
       if (OB_UNLIKELY(raw_sql.empty()) || OB_ISNULL(param.allocator_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected empty", K(ret), K(raw_sql), K(param));

@@ -697,7 +697,7 @@ int ObExprJsonQuery::append_binary_node_into_res(ObIJsonBase*& jb_res,
   ObJsonBin *j_node = NULL;
   ObIJsonBase *jb_node = NULL;
   ObStringBuffer value(allocator);
-  ObBinAggSerializer bin_agg(allocator, AGG_JSON, static_cast<uint8_t>(ObJsonNodeType::J_ARRAY));
+  ObJsonBinAggSerializer bin_agg(allocator, static_cast<uint8_t>(ObJsonNodeType::J_ARRAY));
   for (size_t i = 0; OB_SUCC(ret) && i < hit_size; i++) {
     bool is_null_res = false;
     if (OB_FAIL(deal_item_method_special_case(j_path, hits, is_null_res, i, true))) {

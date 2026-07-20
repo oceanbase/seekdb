@@ -27,12 +27,6 @@ namespace sql
 {
 class ObExecContext;
 class ObXaStartStmt;
-class ObXaExecutorUtil
-{
-public:
-  static int get_org_cluster_id(ObSQLSessionInfo *session, int64_t &org_cluster_id);
-};
-
 class ObXaStartExecutor
 {
 public:

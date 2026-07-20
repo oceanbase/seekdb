@@ -1346,11 +1346,8 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
                           }
                           for (int64_t i = 0; OB_SUCC(ret) && i < cfg_count && valid; i++) {
 
-                            lib::Worker::CompatMode compat_mode;
                             valid = valid && ObConfigDefaultTableOrganizationChecker::check(item);
-                            if (OB_FAIL(schema_guard.get_tenant_compat_mode(compat_mode))) {
-                              LOG_WARN("fail to get compat mode", K(ret));
-                            } else if (!valid) {
+                            if (!valid) {
                               ret = OB_OP_NOT_ALLOW;
                               LOG_WARN("can not set default_table_organization", "item", item, K(ret));
                             }
@@ -1654,104 +1651,6 @@ int ObUpgradeVirtualSchemaResolver::resolve(const ParseNode &parse_tree)
 
 
 
-
-//
-//                           /- T_INT(priority)
-//                          /|
-//  T_ENABLE_SQL_THROTTLE -<
-//                          \|
-//                           \- T_SQL_THROTTLE_METRICS -< [ T_RT -> (decimal)
-//                                                        | T_CPU -> (decimal)
-//                                                        | T_IO -> (int)
-//                                                        | T_NETWORK -> (decimal)
-//                                                        | T_LOGICAL_READS -> (int)
-//                                                        ]+
-//
-int ObEnableSqlThrottleResolver::resolve(const ParseNode &parse_tree)
-{
-  int ret = OB_SUCCESS;
-  ObEnableSqlThrottleStmt *stmt = nullptr;
-
-  if (OB_UNLIKELY(T_ENABLE_SQL_THROTTLE != parse_tree.type_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("type is not T_ENABLE_SQL_THROTTLE", "type", get_type_name(parse_tree.type_));
-  } else if (OB_ISNULL(parse_tree.children_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parse_tree's children is null", K(ret));
-  } else if (2 != parse_tree.num_child_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parse_tree's number of children doesn't match", K(ret));
-  } else {
-    stmt = create_stmt<ObEnableSqlThrottleStmt>();
-    if (nullptr == stmt) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_ERROR("create ObEnableSqlThrottleStmt failed");
-    }
-  }
-  if (OB_SUCC(ret)) {
-    ParseNode *priority_node = parse_tree.children_[0];
-    if (nullptr != priority_node) {
-      stmt->set_priority(priority_node->value_);
-    }
-    ParseNode *metrics_node = parse_tree.children_[1];
-    if (metrics_node != nullptr) {
-      for (int i = 0; i < metrics_node->num_child_; i++) {
-        ParseNode *node = metrics_node->children_[i];
-        ParseNode *valNode = node->children_[0];
-        switch (node->type_) {
-        case T_RT:
-          if (valNode->type_ == T_INT) {
-            stmt->set_rt(static_cast<double>(valNode->value_));
-          } else if (valNode->type_ == T_NUMBER) {
-            stmt->set_rt(atof(valNode->str_value_));
-          }
-          break;
-        case T_CPU:
-          if (valNode->type_ == T_INT) {
-            stmt->set_cpu(static_cast<double>(valNode->value_));
-          } else if (valNode->type_ == T_NUMBER) {
-            stmt->set_cpu(atof(valNode->str_value_));
-          }
-          break;
-        case T_IO:
-          stmt->set_io(valNode->value_);
-          break;
-        case T_NETWORK:
-          if (valNode->type_ == T_INT) {
-            stmt->set_network(static_cast<double>(valNode->value_));
-          } else if (valNode->type_ == T_NUMBER) {
-            stmt->set_network(atof(valNode->str_value_));
-          }
-          break;
-        case T_LOGICAL_READS:
-          stmt->set_logical_reads(valNode->value_);
-          break;
-        case T_QUEUE_TIME:
-          if (valNode->type_ == T_INT) {
-            stmt->set_queue_time(static_cast<double>(valNode->value_));
-          } else if (valNode->type_ == T_NUMBER) {
-            stmt->set_queue_time(atof(valNode->str_value_));
-          }
-          break;
-        default:
-          break;
-        }
-      }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    stmt_ = stmt;
-  }
-  return ret;
-}
-
-int ObDisableSqlThrottleResolver::resolve(const ParseNode &parse_tree)
-{
-  UNUSED(parse_tree);
-  int ret = OB_SUCCESS;
-  stmt_ = create_stmt<ObDisableSqlThrottleStmt>();
-  return ret;
-}
 
 int ObCancelTaskResolver::resolve(const ParseNode &parse_tree)
 {

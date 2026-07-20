@@ -4828,11 +4828,6 @@ int ObSchemaPrinter::print_location_definiton(const uint64_t location_id,
         if (OB_FAIL(databuff_printf(buf, buf_len, pos, "\n  APPID = "))) {
           SHARE_SCHEMA_LOG(WARN, "fail to print appid", K(ret), K(*location_schema));
         }
-      } else if (0 == strncmp(REGION, token, strlen(REGION))) {
-        length = strlen(REGION);
-        if (OB_FAIL(databuff_printf(buf, buf_len, pos, "\n  S3_REGION = "))) {
-          SHARE_SCHEMA_LOG(WARN, "fail to print s3_region", K(ret), K(*location_schema));
-        }
       }
 
       if (length < strlen(token) && OB_FAIL(databuff_printf(buf, buf_len, pos, "'%s'", token+length))) {

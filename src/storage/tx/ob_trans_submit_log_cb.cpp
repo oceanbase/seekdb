@@ -125,11 +125,6 @@ void ObTxLogCb::reset()
   cb_arg_array_.reset();
   mds_range_.reset();
 
-  if (OB_NOT_NULL(extra_cb_) && need_free_extra_cb_) {
-    mtl_free(extra_cb_);
-  }
-  need_free_extra_cb_ = false;
-
   // is_callbacking_ = false;
   first_part_scn_.invalid_scn();
   reset_tx_op_array();
@@ -145,11 +140,6 @@ void ObTxLogCb::reuse()
   is_busy_ = false;
   cb_arg_array_.reset();
   mds_range_.reset();
-
-  if (OB_NOT_NULL(extra_cb_) && need_free_extra_cb_) {
-    mtl_free(extra_cb_);
-  }
-  need_free_extra_cb_ = false;
 
   first_part_scn_.invalid_scn();
   reset_tx_op_array();

@@ -326,8 +326,7 @@ int ObEncryptionUtil::init_ssl_malloc()
 {
   int ret = OB_SUCCESS;
 #ifdef _WIN32
-  // CRYPTO_set_mem_functions fails if OpenSSL has already allocated memory
-  // (e.g. via AWS SDK DLLs loaded at startup). Not critical on Windows.
+  // CRYPTO_set_mem_functions fails if OpenSSL has already allocated memory.
 #else
   int tmp_ret = CRYPTO_set_mem_functions(ob_malloc_openssl, ob_realloc_openssl, ob_free_openssl);
   if (OB_UNLIKELY(tmp_ret != 1)) {

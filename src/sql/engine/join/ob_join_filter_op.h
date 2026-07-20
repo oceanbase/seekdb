@@ -353,7 +353,7 @@ private:
   int try_send_join_filter();
   int try_merge_join_filter();
   int calc_each_bf_group_size(int64_t &);
-  int update_plan_monitor_info();
+  int update_join_filter_monitor_info();
   int open_join_filter_create();
   int open_join_filter_use();
   int join_filter_create_get_next_batch(const int64_t max_row_cnt);
@@ -498,5 +498,4 @@ public:
 
 
 #endif /* _SQL_ENGINE_JOIN_OB_JOIN_FILTER_OP_H */
-
 

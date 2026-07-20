@@ -127,15 +127,10 @@ public:
   static constexpr int64_t LOCK_NOT_OWN_RELEASE_CNT = 0;
 
 public:
-  static bool proxy_is_support(sql::ObExecContext &exec_ctx);
-  static bool proxy_is_support(sql::ObSQLSessionInfo *session);
   int remove_expired_lock_id();
-  int check_client_ssid(ObLockContext &ctx,
-                        const uint32_t client_session_id,
-                        const uint64_t client_session_create_ts);
-  int remove_session_record(ObLockContext &ctx,
-                            const uint32_t client_session_id,
-                            const uint64_t client_session_create_ts);
+  int clear_lock_session_if_no_lock_(ObLockContext &ctx,
+                                     const uint32_t session_id,
+                                     const uint64_t session_create_ts);
 
 protected:
   int unlock_obj_(transaction::ObTxDesc *tx_desc,
@@ -153,21 +148,6 @@ protected:
                        uint64_t &lock_id);
   void mark_lock_session_(sql::ObSQLSessionInfo *session,
                           const bool is_lock_session);
-  int get_lock_session_(ObLockContext &ctx,
-                        const uint32_t client_session_id,
-                        const uint64_t client_session_create_ts,
-                        ObAddr &lock_session_addr,
-                        uint32_t &lock_session_id);
-  int get_first_session_info_(common::sqlclient::ObMySQLResult &res,
-                              ObAddr &session_addr,
-                              uint32_t &server_session_id);
-  int update_session_table_(ObLockContext &ctx,
-                            const uint32_t client_session_id,
-                            const uint64_t client_session_create_ts,
-                            const uint32_t server_session_id);
-  int get_sql_port_(ObLockContext &ctx,
-                    const ObAddr &svr_addr,
-                    int32_t &sql_port);
 };
 
 class ObUnLockExecutor : public ObLockExecutor
@@ -190,8 +170,8 @@ private:
                const ObTableLockOwnerID &owner_id,
                int64_t &release_cnt);
   int execute_(sql::ObExecContext &ctx,
-               const uint32_t client_session_id,
-               const uint64_t client_session_create_ts,
+               const uint32_t session_id,
+               const uint64_t session_create_ts,
                const ReleaseType release_type,
                int64_t &release_cnt);
   int release_all_locks_(ObLockContext &ctx,

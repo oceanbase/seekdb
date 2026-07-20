@@ -129,9 +129,6 @@ public:
   // The current job contains light granule iterator operator
   bool has_lgi_;
 
-  // for rollup distributor and collector
-  bool is_rollup_hybrid_;
-
   // for window function adaptive pushdown
   bool is_wf_hybrid_;
 };

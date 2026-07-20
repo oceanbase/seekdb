@@ -23,6 +23,7 @@
 #include "lib/thread/ob_simple_thread_pool.h"
 #include "lib/allocator/ob_allocator.h"
 #include "share/io/ob_io_define.h"
+#include <curl/curl.h>
 
 
 namespace oceanbase

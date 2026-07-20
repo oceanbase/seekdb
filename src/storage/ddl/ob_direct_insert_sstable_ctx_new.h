@@ -61,7 +61,6 @@ class ObLobMetaRowIterator;
 class ObTabletDirectLoadMgrHandle;
 class ObTabletDirectLoadMgr;
 class ObTabletFullDirectLoadMgr;
-class ObTabletIncDirectLoadMgr;
 struct ObInsertMonitor;
 
 class ObTenantDirectLoadMgr final
@@ -157,7 +156,6 @@ public:
 private:
   int check_and_process_finished_tablet(
       const ObTabletID &tablet_id,
-      ObIStoreRowIterator *row_iter = nullptr,
       const int64_t task_id = 0,
       const int64_t table_id = common::OB_INVALID_ID,
       const int64_t execution_id = -1);
@@ -309,12 +307,6 @@ public:
       const share::SCN &start_scn,
       share::ObTabletCacheInterval &pk_interval,
       blocksstable::ObBatchDatumRows &datum_rows) override;
-  // for delete lob in incremental direct load only
-  int fill_lob_meta_sstable_slice(
-      const ObDirectLoadSliceInfo &slice_info /*contains data_tablet_id, lob_slice_id, start_seq*/,
-      const share::SCN &start_scn,
-      ObIStoreRowIterator *iter,
-      int64_t &affected_rows) override;
   int close_sstable_slice(
       const bool is_data_tablet_process_for_lob,
       const ObDirectLoadSliceInfo &slice_info,
@@ -447,37 +439,6 @@ private:
   share::SCN commit_scn_;
   int64_t execution_id_;
 DISALLOW_COPY_AND_ASSIGN(ObTabletFullDirectLoadMgr);
-};
-
-class ObTabletIncDirectLoadMgr final : public ObTabletDirectLoadMgr
-{
-public:
-  ObTabletIncDirectLoadMgr();
-  ~ObTabletIncDirectLoadMgr();
-
-  // called by creator only
-  int update(ObBaseTabletDirectLoadMgr *lob_tablet_mgr,
-             const ObTabletDirectLoadInsertParam &build_param) override final;
-  int open(const int64_t current_execution_id, share::SCN &start_scn) override final;
-  int close(const int64_t current_execution_id, const share::SCN &start_scn) override final;
-  int prepare_index_builder_if_need(const ObTableSchema &table_schema) override;
-
-  share::SCN get_start_scn() override { return start_scn_.atomic_load(); }
-  // unused, for full direct load only
-  share::SCN get_commit_scn(const ObTabletMeta &tablet_meta) override
-  {
-    UNUSED(tablet_meta);
-    return share::SCN::invalid_scn();
-  }
-
-private:
-  int start(const int64_t execution_id, const share::SCN &start_scn);
-  int commit(const int64_t execution_id, const share::SCN &commit_scn);
-
-private:
-  share::SCN start_scn_;
-  bool is_closed_;
-DISALLOW_COPY_AND_ASSIGN(ObTabletIncDirectLoadMgr);
 };
 
 }// namespace storage

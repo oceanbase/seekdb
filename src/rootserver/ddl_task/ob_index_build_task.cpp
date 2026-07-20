@@ -189,7 +189,7 @@ int ObIndexSSTableBuildTask::process()
         } else if (OB_FAIL(DDL_SIM(task_id_, CREATE_INDEX_BUILD_SSTABLE_FAILED))) {
           LOG_WARN("ddl sim failure: create index build sstable failed", K(ret), K(task_id_));
         } else if (OB_FAIL(user_sql_proxy->write(sql_string.ptr(), affected_rows,
-                    ObCompatibilityMode::MYSQL_MODE, &session_param, nullptr))) {
+                    &session_param, nullptr))) {
           LOG_WARN("fail to execute build replica sql", K(ret));
         }
 
@@ -1246,8 +1246,6 @@ int ObIndexBuildTask::check_need_verify_checksum(bool &need_verify)
     ObArenaAllocator allocator("uk_checksum");
     if (parent_task_id_ != 0 && OB_FAIL(ObDDLTaskRecordOperator::get_ddl_task_record( parent_task_id_, *GCTX.sql_proxy_, allocator, task_record))) {
       LOG_WARN("fail to get ddl task record", K(ret), K(parent_task_id_));
-    } else if (share::is_direct_load_task(task_record.ddl_type_)) {
-      need_verify = false;
     } else {
       need_verify = true;
     }
@@ -1788,22 +1786,11 @@ int ObIndexBuildTask::collect_longops_stat(ObLongopsValue &value)
       break;
     }
     case ObDDLTaskStatus::REDEFINITION: {
-      SMART_VARS_3((share::ObSqlMonitorStatsCollector, sql_monitor_stats_collector),
-                   (share::ObDDLDiagnoseInfo, diagnose_info),
-                   (share::ObSqlMonitorStats, sql_monitor_stats)) {
-        if (OB_FAIL(sql_monitor_stats_collector.scan_task_id_.push_back(task_id_))) {
-          LOG_WARN("failed to push back", K(ret));
-        } else if (OB_FAIL(sql_monitor_stats_collector.init(GCTX.sql_proxy_))) {
-          LOG_WARN("failed to init ObSqlMonitorStatsCollector", K(ret));
-        } else if (OB_FAIL(diagnose_info.init(task_id_, task_type_, execution_id_))) {
-          LOG_WARN("failed to init ObDDLDiagnoseInfo", K(ret), K(task_id_), K(task_type_));
-        } else if (OB_FAIL(sql_monitor_stats.init(task_id_, task_type_))) {
-          LOG_WARN("failed to init ObSqlMonitorStats", K(ret), K(task_id_), K(task_type_));
-        } else if (OB_FAIL(sql_monitor_stats_collector.get_next_sql_plan_monitor_stat(sql_monitor_stats))) {
-          LOG_WARN("failed to get next sql plan monitor stats", K(ret));
-        } else if (OB_FAIL(diagnose_info.process_sql_monitor_and_generate_longops_message(sql_monitor_stats, stat_info_, pos))) {
-          LOG_WARN("failed to process sql monitor and generate longops message", K(ret), K(sql_monitor_stats), K(stat_info_), K(pos));
-        }
+      if (OB_FAIL(databuff_printf(stat_info_.message_,
+                                  MAX_LONG_OPS_MESSAGE_LENGTH,
+                                  pos,
+                                  "STATUS: REDEFINITION"))) {
+        LOG_WARN("failed to print", K(ret));
       }
       break;
     }

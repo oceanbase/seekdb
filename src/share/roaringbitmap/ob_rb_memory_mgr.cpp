@@ -182,7 +182,7 @@ int ObRbMemMgr::init()
 
 void ObRbMemMgr::destroy()
 {
-  FLOG_INFO("destroy Roaring bitmap manager");
+  LOG_INFO("destroy CRoaring memory manager");
   allocator_.destroy();
   is_inited_ = false;
 }

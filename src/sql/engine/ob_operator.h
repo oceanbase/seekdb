@@ -28,7 +28,7 @@
 #include "sql/engine/ob_io_event_observer.h"
 #include "sql/ob_sql_define.h"
 #include "sql/engine/ob_batch_rows.h"
-#include "sql/monitor/ob_sql_plan_monitor_node_list.h"
+#include "sql/monitor/ob_monitor_node.h"
 #include "share/schema/ob_schema_struct.h"
 #include "share/schema/ob_trigger_info.h"
 #include "lib/utility/ob_common_utility.h"
@@ -368,9 +368,6 @@ class ObOperator
 public:
   const static uint64_t CHECK_STATUS_TRY_TIMES = 1024;
   const static uint64_t CHECK_STATUS_ROWS = 8192;
-  const static int64_t MONITOR_RUNNING_TIME_THRESHOLD = 5000000; //5s
-  const static int64_t REAL_TIME_MONITOR_THRESHOLD = 1000000; //1s
-  const static uint64_t REAL_TIME_MONITOR_TRY_TIMES = 256;
   const static uint64_t SMART_CALL_CLOSE_RETRY_TIMES = 10;
 
 public:
@@ -591,11 +588,6 @@ private:
                          bool &all_filtered,
                          bool &all_active);
   int convert_vector_format();
-  // for sql plan monitor
-  int try_register_rt_monitor_node(int64_t rows);
-  int try_deregister_rt_monitor_node();
-  int submit_op_monitor_node();
-  bool match_rt_monitor_condition(int64_t rows);
   int check_stack_once();
   int output_expr_sanity_check();
   int output_expr_sanity_check_batch();
@@ -629,8 +621,6 @@ protected:
 
   uint64_t try_check_tick_; //for check status
 
-  uint64_t try_monitor_tick_; // for real time sql plan monitor
-
   bool opened_;
   // pass the startup filter (not filtered)
   bool startup_passed_;
@@ -640,7 +630,7 @@ protected:
   bool got_first_row_;
   // do some init in inner_get_next_row
   bool need_init_before_get_row_;
-  // gv$sql_plan_monitor
+  // local execution statistics used by operators and execution feedback
   ObMonitorNode op_monitor_info_;
   // exec feedback info
   int64_t fb_node_idx_;

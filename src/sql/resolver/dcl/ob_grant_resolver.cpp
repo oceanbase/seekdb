@@ -306,7 +306,6 @@ int ObGrantResolver::resolve_grant_role_mysql(
 int ObGrantResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
-  CHECK_COMPATIBILITY_MODE(session_info_);
   ret = resolve_mysql(parse_tree);
   return ret;
 }
@@ -438,7 +437,6 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
         if (OB_SUCC(ret)) {
           // Resolve whether GRANT should auto-create missing users; fix #17900015.
           bool need_create_user = false;
-          CHECK_COMPATIBILITY_MODE(session_info_);
           need_create_user = !is_no_auto_create_user(params_.session_info_->get_sql_mode());
           grant_stmt->set_need_create_user(need_create_user);
           if (users_node->num_child_ > 0) {

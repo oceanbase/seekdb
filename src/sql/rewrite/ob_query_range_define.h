@@ -311,7 +311,6 @@ struct ObQueryRangeCtx
       geo_column_id_map_(nullptr),
       max_mem_size_(128*1024*1024),
       enable_not_in_range_(true),
-      optimizer_features_enable_version_(0),
       index_prefix_(-1),
       is_geo_range_(false),
       can_range_get_(true),
@@ -352,7 +351,6 @@ struct ObQueryRangeCtx
   const ColumnIdInfoMap *geo_column_id_map_;
   int64_t max_mem_size_;
   bool enable_not_in_range_;
-  uint64_t optimizer_features_enable_version_;
   int64_t index_prefix_;
   bool is_geo_range_;
   bool can_range_get_;

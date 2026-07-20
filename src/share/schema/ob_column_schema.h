@@ -198,7 +198,6 @@ int assign(const ObColumnSchemaV2 &src_schema);
   inline bool is_string_type() const { return meta_type_.is_string_type(); }
   inline bool is_json() const { return meta_type_.is_json(); }
   inline bool is_geometry() const { return meta_type_.is_geometry(); }
-  inline bool is_roaringbitmap() const { return meta_type_.is_roaringbitmap(); }
   inline bool is_decimal_int() const { return meta_type_.is_decimal_int(); }
   inline bool is_string_lob() const { return column_flags_ & STRING_LOB_COLUMN_FLAG; }
   inline bool is_key_forbid_lob() const { return ob_is_text_tc(meta_type_.get_type()) && !is_string_lob(); }

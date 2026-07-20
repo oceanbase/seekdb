@@ -51,7 +51,6 @@ public:
   int init(
       const ObTabletID &tablet_id,
       const int64_t saved_schema_version,
-      const lib::Worker::CompatMode compat_mode,
       logservice::ObLogHandler *log_handler);
   void destroy();
   bool is_inited() const { return is_inited_; }
@@ -104,7 +103,6 @@ private:
 
   bool is_inited_;
   bool ignore_storage_schema_;
-  lib::Worker::CompatMode compat_mode_;
   char *clog_buf_;
 
   ObTabletHandle *tablet_handle_ptr_;

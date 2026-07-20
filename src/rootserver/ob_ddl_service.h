@@ -173,8 +173,6 @@ public:
                          const share::schema::ObTableType expected_table_type,
                          share::schema::ObSchemaGetterGuard &guard,
                          const share::schema::ObTableSchema **table_schema);
-  int create_hidden_table(const obcall::ObCreateHiddenTableArg &create_hidden_table_arg,
-                                      obcall::ObCreateHiddenTableRes &res);
   /**
    * For recover restore table ddl task, it is a cross-tenant task, including,
    * 1. Create a hidden table under different tenant but associated with the source table;
@@ -457,7 +455,6 @@ public:
    *    step5: rename hidden table name to orig table name and modify the state to non-hidden
    */
   int swap_orig_and_hidden_table_state(obcall::ObAlterTableArg &alter_table_arg);
-  int swap_orig_and_hidden_table_partitions(obcall::ObAlterTableArg &alter_table_arg);
   
   /**
    * The function is designed for the recover restore table ddl, which is to check whether the object 
@@ -982,8 +979,8 @@ private:
                                common::ObIArray<share::schema::ObTableSchema> *table_schemas);
   int retry_to_get_schema_version_(const ObRefreshSchemaStatus &schema_status, int64_t &broadcast_schema_version);
   int get_lock_argument_for_rename_(
-      const uint32_t client_session_id,
-      const int64_t client_session_create_ts,
+      const uint32_t session_id,
+      const int64_t session_create_ts,
       const transaction::tablelock::ObTableLockPriority lock_priority,
       int64_t &timeout_us,
       transaction::tablelock::ObTableLockOwnerID &owner_id);
@@ -1524,9 +1521,6 @@ int check_will_be_having_domain_index_operation(
       share::schema::ObTableSchema &index_schema,
       const ObIArray<obcall::ObColumnSortItem> &vec_index_columns,
       const ObIArray<ObString> &vec_store_columns);
-  int alter_table_sess_active_time_in_trans(obcall::ObAlterTableArg &alter_table_arg,
-                                            obcall::ObAlterTableRes &res,
-                                            const uint64_t tenant_data_version);
   int truncate_table_in_trans(const obcall::ObTruncateTableArg &arg,
                               const share::schema::ObTableSchema &orig_table_schema,
                               common::ObIArray<share::schema::ObTableSchema> &table_schemas,
@@ -1606,8 +1600,7 @@ int check_will_be_having_domain_index_operation(
   int modify_depend_column_type(sql::ObRawExpr *expr,
                                 const ObString &column_name,
                                 const AlterColumnSchema &alter_column_schema,
-                                sql::ObSQLSessionInfo &session,
-                                lib::Worker::CompatMode compat_mode);
+                                sql::ObSQLSessionInfo &session);
 
   int modify_part_func_expr(const share::schema::ObTableSchema &orig_table_schema,
                             const share::schema::ObColumnSchemaV2 &orig_column_schema,
@@ -2302,9 +2295,8 @@ private:
   // generate inc schema_metas and regist multi_data_source data
   // all schemas should contains basic info(id/name/schema_version/charset_type/collation_type)
   // @param [in] allocator          allocator used to generate meta and serialization.
-  // @param [in] tenant_schemas     tenant_schema_array, tenant_schema should contains
-  //                                compatibility_mode, and should record drop_tenant_time and
-  //                                is_in_recyclebin if tenant is dropped.
+  // @param [in] tenant_schemas     tenant_schema_array; tenant_schema should record
+  //                                drop_tenant_time and is_in_recyclebin if tenant is dropped.
   // @param [in] database_schemas   database_schema_array, database_schema should contains
   //                                tenant, and should record is_in_recyclebin if database is deleted
   // @param [in] table_schemas      table_schema_array, table_schema should contains table basic info including

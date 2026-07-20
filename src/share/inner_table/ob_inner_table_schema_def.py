@@ -508,7 +508,6 @@ all_table_def = dict(
       ('partition_schema_version', 'int', 'true', '0'),
       ('session_id', 'int', 'true', '0'),
       ('pk_comment', 'varchar:MAX_TABLE_COMMENT_LENGTH', 'false', ''),
-      ('sess_active_time', 'int', 'true', '0'),
       ('row_store_type', 'varchar:OB_MAX_STORE_FORMAT_NAME_LENGTH', 'true', 'encoding_row_store'),
       ('store_format', 'varchar:OB_MAX_STORE_FORMAT_NAME_LENGTH', 'true', ''),
       ('duplicate_scope', 'int', 'true', '0'),
@@ -1405,7 +1404,6 @@ all_routine_def = dict(
       ('flag', 'int', 'false'),
       ('owner_id', 'int', 'false'),
       ('priv_user', 'varchar:OB_MAX_USER_NAME_LENGTH_STORE', 'true'),
-      ('comp_flag', 'int', 'true'),
       ('exec_env', 'varchar:OB_MAX_PROC_ENV_LENGTH', 'true'),
       ('routine_body', 'longtext', 'true'),
       ('comment', 'varchar:MAX_TENANT_COMMENT_LENGTH', 'true'),
@@ -1473,7 +1471,6 @@ all_package_def = dict(
       ('type', 'int', 'false'),
       ('flag', 'int', 'false'),
       ('owner_id', 'int', 'false'),
-      ('comp_flag', 'int', 'true'),
       ('exec_env', 'varchar:OB_MAX_PROC_ENV_LENGTH', 'true'),
       ('source', 'longtext', 'true'),
       ('comment', 'varchar:MAX_TENANT_COMMENT_LENGTH', 'true'),
@@ -1754,7 +1751,6 @@ all_trigger_def = dict(
     ('package_spec_source', 'varchar:OB_MAX_TRIGGER_BODY_LENGTH', 'true'),
     ('package_body_source', 'varchar:OB_MAX_TRIGGER_BODY_LENGTH', 'true'),
     ('package_flag', 'int', 'false'),
-    ('package_comp_flag', 'int', 'false'),
     ('package_exec_env', 'varchar:OB_MAX_PROC_ENV_LENGTH', 'true'),
     ('sql_mode', 'int', 'false'),
     ('trigger_priv_user', 'varchar:OB_MAX_USER_NAME_LENGTH_STORE', 'true'),
@@ -3180,23 +3176,7 @@ def_table_schema(
   ]
   )
 
-def_table_schema(
-  owner = 'yangyifei.yyf',
-  table_name = '__all_client_to_server_session_info',
-  table_id = '497',
-  table_type = 'SYSTEM_TABLE',
-  gm_columns = ['gmt_create', 'gmt_modified'],
-  rowkey_columns = [
-    ('server_session_id', 'int')
-  ],
-  in_tenant_space = True,
-  is_cluster_private = False,
-  meta_record_in_sys = False,
-  normal_columns = [
-    ('client_session_id', 'int'),
-    ('client_session_create_ts', 'timestamp')
-  ]
-  )
+# 497: __all_client_to_server_session_info (removed)
 
 # 500: __all_tenant_snapshot_job (abandoned)
 
@@ -3523,8 +3503,6 @@ def_table_schema(**all_catalog_privilege_def)
 def_table_schema(**gen_history_table_def(540, all_catalog_privilege_def))
 
 # 542: __sslog_table
-# 543: __all_license (abandoned)
-
 def_table_schema(
   owner = 'jiabokai.jbk',
   table_name = '__all_pl_recompile_objinfo',
@@ -4192,8 +4170,6 @@ def_table_schema(
       ('rows_processed', 'int'),
       ('elapsed_time', 'uint'),
       ('cpu_time', 'uint'),
-      ('large_querys', 'int'),
-      ('delayed_large_querys', 'int'),
       ('outline_version', 'int'),
       ('outline_id', 'int'),
       ('outline_data', 'longtext', 'false'),
@@ -4493,10 +4469,9 @@ def_table_schema(
 
   normal_columns = [
   ('session_id', 'int'),
-	  ('trans_id', 'int'),
-	  ('state', 'int'),
-	  ('cluster_id', 'int'),
-	  ('write_state', 'varchar:1024', 'true'),
+  ('trans_id', 'int'),
+  ('state', 'int'),
+  ('write_state', 'varchar:1024', 'true'),
   ('isolation_level', 'int'),
   ('snapshot_version', 'uint', 'true'),
   ('access_mode', 'int'),
@@ -4634,7 +4609,6 @@ def_table_schema(
 
 # 11049: __all_virtual_obrpc_stat (abandoned)
 # 11051: abandoned
-# 11052: __all_virtual_sql_monitor # abandoned in 4.0
 
 def_table_schema(
   owner = 'xiaoyi.xy',
@@ -4983,15 +4957,12 @@ def_table_schema(
   ],
 
   normal_columns = [
-    ('compat_mode', 'bigint:20'),
     ('unit_min_cpu', 'double'),
     ('unit_max_cpu', 'double'),
     ('slice', 'double'),
     ('remain_slice', 'double'),
     ('token_cnt', 'bigint:20'),
     ('ass_token_cnt', 'bigint:20'),
-    ('lq_tokens', 'bigint:20'),
-    ('used_lq_tokens', 'bigint:20'),
     ('stopped', 'bigint:20'),
     ('idle_us', 'bigint:20'),
     ('recv_hp_rpc_cnt', 'bigint:20'),
@@ -4999,19 +4970,15 @@ def_table_schema(
     ('recv_lp_rpc_cnt', 'bigint:20'),
     ('recv_mysql_cnt', 'bigint:20'),
     ('recv_task_cnt', 'bigint:20'),
-    ('recv_large_req_cnt', 'bigint:20'),
-    ('recv_large_queries', 'bigint:20'),
     ('actives', 'bigint:20'),
     ('workers', 'bigint:20'),
-    ('lq_waiting_workers', 'bigint:20'),
     ('req_queue_total_size', 'bigint:20'),
     ('queue_0', 'bigint:20'),
     ('queue_1', 'bigint:20'),
     ('queue_2', 'bigint:20'),
     ('queue_3', 'bigint:20'),
     ('queue_4', 'bigint:20'),
-    ('queue_5', 'bigint:20'),
-    ('large_queued', 'bigint:20')
+    ('queue_5', 'bigint:20')
   ],  vtable_route_policy = 'local'
   )
 
@@ -5365,7 +5332,6 @@ def_table_schema(
 
 # 11120: __all_virtual_res_mgr_sysstat # removed
 
-# 11121: abandoned # __all_virtual_ddl_diagnose_info, which is moved to 12514
 
 # 11122: __all_virtual_ss_tablet_upload_stat
 # 11123: __all_virtual_ss_tablet_compact_stat
@@ -6196,84 +6162,6 @@ def_table_schema(
 # 12184: __all_virtual_pg_log_archive_stat # abandoned in 4.0
 
 def_table_schema(
-  owner = 'xiaochu.yh',
-  tablegroup_id = 'OB_INVALID_ID',
-  table_name    = '__all_virtual_sql_plan_monitor',
-  table_id      = '12185',
-  table_type = 'VIRTUAL_TABLE',
-  in_tenant_space = True,
-  index_using_type = 'USING_BTREE',
-  gm_columns    = [],
-  rowkey_columns = [
-    ('REQUEST_ID', 'int')
-  ],
-  normal_columns = [
-    ('TRACE_ID', 'varchar:OB_MAX_TRACE_ID_BUFFER_SIZE'),
-    ('FIRST_REFRESH_TIME', 'timestamp', 'true'),
-    ('LAST_REFRESH_TIME' ,'timestamp', 'true'),
-    ('FIRST_CHANGE_TIME','timestamp', 'true'),
-    ('LAST_CHANGE_TIME','timestamp', 'true'),
-    ('OTHERSTAT_1_ID', 'int'),
-    ('OTHERSTAT_1_VALUE', 'int'),
-    ('OTHERSTAT_2_ID', 'int'),
-    ('OTHERSTAT_2_VALUE', 'int'),
-    ('OTHERSTAT_3_ID', 'int'),
-    ('OTHERSTAT_3_VALUE', 'int'),
-    ('OTHERSTAT_4_ID', 'int'),
-    ('OTHERSTAT_4_VALUE', 'int'),
-    ('OTHERSTAT_5_ID', 'int'),
-    ('OTHERSTAT_5_VALUE', 'int'),
-    ('OTHERSTAT_6_ID', 'int'),
-    ('OTHERSTAT_6_VALUE', 'int'),
-    ('OTHERSTAT_7_ID', 'int'),
-    ('OTHERSTAT_7_VALUE', 'int'),
-    ('OTHERSTAT_8_ID', 'int'),
-    ('OTHERSTAT_8_VALUE', 'int'),
-    ('OTHERSTAT_9_ID', 'int'),
-    ('OTHERSTAT_9_VALUE', 'int'),
-    ('OTHERSTAT_10_ID', 'int'),
-    ('OTHERSTAT_10_VALUE', 'int'),
-    ('THREAD_ID', 'int'),
-    ('PLAN_OPERATION', 'varchar:OB_MAX_OPERATOR_NAME_LENGTH'),
-    ('STARTS', 'int'),
-    ('OUTPUT_ROWS', 'int'),
-    ('PLAN_LINE_ID', 'int'),
-    ('PLAN_DEPTH', 'int'),
-    ('OUTPUT_BATCHES', 'int'),
-    ('SKIPPED_ROWS_COUNT', 'int'),
-    ('DB_TIME', 'int'),
-    ('USER_IO_WAIT_TIME', 'int'),
-    ('WORKAREA_MEM', 'int'),
-    ('WORKAREA_MAX_MEM', 'int'),
-    ('WORKAREA_TEMPSEG', 'int'),
-    ('WORKAREA_MAX_TEMPSEG', 'int'),
-    ('SQL_ID', 'varchar:OB_MAX_SQL_ID_LENGTH'),
-    ('PLAN_HASH_VALUE', 'uint')
-  ],  vtable_route_policy = 'local',
-  index = {'all_virtual_sql_plan_monitor_i1' :  { 'index_columns' : ['REQUEST_ID'],
-                     'index_using_type' : 'USING_BTREE'}}
-  )
-
-
-def_table_schema(
-  owner = 'xiaochu.yh',
-  table_name    = '__all_virtual_sql_monitor_statname',
-  table_id      = '12186',
-  table_type = 'VIRTUAL_TABLE',
-  in_tenant_space = True,
-  gm_columns    = [],
-  rowkey_columns = [
-  ],
-  normal_columns = [
-    ('ID', 'int'),
-    ('GROUP_ID', 'int'),
-    ('NAME', 'varchar:40'),
-    ('DESCRIPTION', 'varchar:200'),
-    ('TYPE', 'int')
-  ]
-)
-
-def_table_schema(
   owner = 'adou.ly',
   table_name    = '__all_virtual_open_cursor',
   table_id      = '12187',
@@ -6539,7 +6427,6 @@ def_table_schema(
 
   normal_columns = [
     ('job_id', 'int'),
-    ('job_type', 'varchar:OB_MAX_PARAMETERS_NAME_LENGTH'),
     ('table_name', 'varchar:OB_MAX_TABLE_NAME_LENGTH'),
     ('file_path', 'varchar:MAX_PATH_SIZE'),
     ('table_column', 'int'),
@@ -6557,18 +6444,7 @@ def_table_schema(
     ('total_insert_task', 'int'),
     ('shuffle_rt_sum', 'int'),
     ('insert_rt_sum', 'int'),
-    ('total_wait_secs', 'int'),
-    ('max_allowed_error_rows', 'int'),
-    ('detected_error_rows', 'int'),
-    ('coordinator_received_rows', 'int'),
-    ('coordinator_last_commit_segment_id', 'int'),
-    ('coordinator_status', 'varchar:OB_MAX_PARAMETERS_NAME_LENGTH'),
-    ('coordinator_trans_status', 'varchar:OB_MAX_PARAMETERS_NAME_LENGTH'),
-    ('store_processed_rows', 'int'),
-    ('store_last_commit_segment_id', 'int'),
-    ('store_status', 'varchar:OB_MAX_PARAMETERS_NAME_LENGTH'),
-    ('store_trans_status', 'varchar:OB_MAX_PARAMETERS_NAME_LENGTH'),
-    ('message', 'varchar:MAX_LOAD_DATA_MESSAGE_LENGTH')
+    ('total_wait_secs', 'int')
   ],  vtable_route_policy = 'local'
   )
 # 12245: __all_virtual_backup_task # abandoned
@@ -7713,8 +7589,6 @@ def_table_schema(
     ('NESTED_SQL_DELTA', 'bigint', 'false',  '0'),
     ('SOURCE_IP', 'varchar:MAX_IP_ADDR_LENGTH'),
     ('SOURCE_PORT', 'int'),
-    ('ROUTE_MISS_TOTAL', 'bigint', 'false',  '0'),
-    ('ROUTE_MISS_DELTA', 'bigint', 'false',  '0'),
     ('FIRST_LOAD_TIME', 'timestamp', 'true'),
     ('PLAN_CACHE_HIT_TOTAL', 'bigint', 'false', '0'),
     ('PLAN_CACHE_HIT_DELTA', 'bigint', 'false', '0')
@@ -7791,7 +7665,6 @@ def_table_schema(
   enable_column_def_enum = True,
   in_tenant_space = True,
   normal_columns = [
-    ('proxy_session_id', 'uint'),
     ('session_id', 'uint'),
     ('ps_client_stmt_id', 'int'),
     ('ps_inner_stmt_id', 'int'),
@@ -7827,22 +7700,7 @@ def_table_schema(
 # 12470: __all_virtual_ls_compaction_status
 # 12471: __all_virtual_tablet_compaction_status
 # 12472: __all_virtual_tablet_checksum_error_info (abandoned)
-
-def_table_schema(
-  owner = 'sean.yyj',
-  table_name = '__all_virtual_compatibility_control',
-  table_id = '12473',
-  table_type = 'VIRTUAL_TABLE',
-  in_tenant_space = True,
-  gm_columns = [],
-  rowkey_columns = [],
-  normal_columns = [
-    ('name', 'varchar:OB_MAX_CONFIG_NAME_LEN'),
-    ('description', 'varchar:OB_MAX_CONFIG_INFO_LEN'),
-    ('is_enable', 'bool'),
-    ('enable_versions', 'longtext')
-  ]
-  )
+# 12473: __all_virtual_compatibility_control (removed)
 
 
 # 12479: __all_virtual_res_mgr_directive # removed (single-tenant: iterate VT mechanism deleted)
@@ -8046,28 +7904,6 @@ def_table_schema(
 # 12511: __all_virtual_wr_sql_plan_aux_key2snapshot # removed
 # 12512: __all_virtual_tablet_mds_info
 # 12513: removed
-
-# 12514: __all_virtual_ddl_diagnose_info
-def_table_schema(
-  owner = 'buming.lj',
-  table_name    = '__all_virtual_ddl_diagnose_info',
-  table_id      = '12514',
-  table_type = 'VIRTUAL_TABLE',
-  in_tenant_space = True,
-  gm_columns    = [],
-  rowkey_columns = [],
-  normal_columns = [
-    ('ddl_task_id','int'),
-    ('object_table_id','int'),
-    ('opname', 'varchar:OB_MAX_DDL_ID_STR_LENGTH'),
-    ('create_time', 'timestamp'),
-    ('finish_time', 'timestamp'),
-    ('diagnose_info', 'varchar:OB_DIAGNOSE_INFO_LENGTH')
-  ],
-  vtable_route_policy = 'only_rs',
-  index = {'all_virtual_ddl_diagnose_info_i1' : { 'index_columns' : ['ddl_task_id'],
-                    'index_using_type' : 'USING_HASH'}}
-  )
 
 # 12515: __all_virtual_plugin_info
 def_table_schema(
@@ -9383,8 +9219,8 @@ def_table_schema(
     DB_ID,STATEMENT,QUERY_SQL,SPECIAL_PARAMS,PARAM_INFOS, SYS_VARS, CONFIGS, PLAN_HASH,
     FIRST_LOAD_TIME,SCHEMA_VERSION,LAST_ACTIVE_TIME,AVG_EXE_USEC,SLOWEST_EXE_TIME,SLOWEST_EXE_USEC,
     SLOW_COUNT,HIT_COUNT,PLAN_SIZE,EXECUTIONS,DISK_READS,DIRECT_WRITES,BUFFER_GETS,APPLICATION_WAIT_TIME,
-    CONCURRENCY_WAIT_TIME,USER_IO_WAIT_TIME,ROWS_PROCESSED,ELAPSED_TIME,CPU_TIME,LARGE_QUERYS,
-    DELAYED_LARGE_QUERYS,DELAYED_PX_QUERYS,OUTLINE_VERSION,OUTLINE_ID,OUTLINE_DATA,ACS_SEL_INFO,
+    CONCURRENCY_WAIT_TIME,USER_IO_WAIT_TIME,ROWS_PROCESSED,ELAPSED_TIME,CPU_TIME,
+    DELAYED_PX_QUERYS,OUTLINE_VERSION,OUTLINE_ID,OUTLINE_DATA,ACS_SEL_INFO,
     TABLE_SCAN,EVOLUTION, EVO_EXECUTIONS, EVO_CPU_TIME, TIMEOUT_COUNT, PS_STMT_ID, SESSID,
     TEMP_TABLES, OBJECT_TYPE,HINTS_INFO,HINTS_ALL_WORKED, PL_SCHEMA_ID,
     IS_BATCHED_MULTI_STMT, RULE_NAME,
@@ -9413,111 +9249,6 @@ def_table_schema(
 
 # 21032: GV$SQL # abandoned in 4.0
 # 21033: V$SQL # abandoned in 4.0
-# 21034: GV$SQL_MONITOR # abandoned in 4.0
-# 21035: V$SQL_MONITOR # abandoned in 4.0
-
-# 21036: GV$SQL_PLAN_MONITOR # removed (single-tenant GV/V collapse; folded into V$SQL_PLAN_MONITOR)
-
-def_table_schema(
-    owner = 'xiaochu.yh',
-    table_name     = 'V$SQL_PLAN_MONITOR',
-    table_id       = '21037',
-    table_type = 'SYSTEM_VIEW',
-    gm_columns = [],
-    in_tenant_space = True,
-    rowkey_columns = [],
-    view_definition = """
-          SELECT
-          1 as CON_ID,
-          REQUEST_ID,
-          CAST(NULL as UNSIGNED) AS `KEY`,
-          CAST(NULL AS CHAR(19)) as STATUS,
-          TRACE_ID,
-          DB_TIME,
-          USER_IO_WAIT_TIME,
-          CAST(NULL AS UNSIGNED) AS OTHER_WAIT_TIME,
-          FIRST_REFRESH_TIME,
-          LAST_REFRESH_TIME,
-          FIRST_CHANGE_TIME,
-          LAST_CHANGE_TIME,
-          CAST(NULL AS UNSIGNED) AS REFRESH_COUNT,
-          CAST(NULL AS UNSIGNED) AS SID,
-          THREAD_ID  PROCESS_NAME,
-          SQL_ID,
-          CAST(NULL AS UNSIGNED) AS SQL_EXEC_START,
-          CAST(NULL AS UNSIGNED) AS SQL_EXEC_ID,
-          PLAN_HASH_VALUE AS SQL_PLAN_HASH_VALUE,
-          CAST(NULL AS BINARY(8)) AS SQL_CHILD_ADDRESS,
-          CAST(NULL AS UNSIGNED) AS PLAN_PARENT_ID,
-          PLAN_LINE_ID,
-          PLAN_OPERATION,
-          CAST(NULL AS CHAR(30)) PLAN_OPTIONS,
-          CAST(NULL AS CHAR(128)) PLAN_OBJECT_OWNER,
-          CAST(NULL AS CHAR(128)) PLAN_OBJECT_NAME,
-          CAST(NULL AS CHAR(80)) PLAN_OBJECT_TYPE,
-          PLAN_DEPTH,
-          CAST( NULL AS UNSIGNED) AS PLAN_POSITION,
-          CAST( NULL AS UNSIGNED) AS PLAN_COST,
-          CAST( NULL AS UNSIGNED) AS PLAN_CARDINALITY,
-          CAST( NULL AS UNSIGNED) AS PLAN_BYTES,
-          CAST( NULL AS UNSIGNED) AS PLAN_TIME,
-          CAST( NULL AS UNSIGNED) AS PLAN_PARTITION_START,
-          CAST( NULL AS UNSIGNED) AS PLAN_PARTITION_STOP,
-          CAST( NULL AS UNSIGNED) AS PLAN_CPU_COST,
-          CAST( NULL AS UNSIGNED) AS PLAN_IO_COST,
-          CAST( NULL AS UNSIGNED) AS PLAN_TEMP_SPACE,
-          STARTS,
-          OUTPUT_ROWS,
-          CAST( NULL AS UNSIGNED) AS IO_INTERCONNECT_BYTES,
-          CAST( NULL AS UNSIGNED) AS PHYSICAL_READ_REQUESTS,
-          CAST( NULL AS UNSIGNED) AS PHYSICAL_READ_BYTES,
-          CAST( NULL AS UNSIGNED) AS PHYSICAL_WRITE_REQUESTS,
-          CAST( NULL AS UNSIGNED) AS PHYSICAL_WRITE_BYTES,
-          CAST( WORKAREA_MEM AS UNSIGNED) AS WORKAREA_MEM,
-          CAST( WORKAREA_MAX_MEM AS UNSIGNED) AS WORKAREA_MAX_MEM,
-          CAST( WORKAREA_TEMPSEG AS UNSIGNED) AS WORKAREA_TEMPSEG,
-          CAST( WORKAREA_MAX_TEMPSEG AS UNSIGNED) AS WORKAREA_MAX_TEMPSEG,
-          CAST( NULL AS UNSIGNED) AS OTHERSTAT_GROUP_ID,
-          OTHERSTAT_1_ID,
-          CAST(NULL AS UNSIGNED) AS OTHERSTAT_1_TYPE,
-          OTHERSTAT_1_VALUE,
-          OTHERSTAT_2_ID,
-          CAST(NULL AS UNSIGNED) OTHERSTAT_2_TYPE,
-          OTHERSTAT_2_VALUE,
-          OTHERSTAT_3_ID,
-          CAST(NULL AS UNSIGNED) OTHERSTAT_3_TYPE,
-          OTHERSTAT_3_VALUE,
-          OTHERSTAT_4_ID,
-          CAST(NULL AS UNSIGNED) OTHERSTAT_4_TYPE,
-          OTHERSTAT_4_VALUE,
-          OTHERSTAT_5_ID,
-          CAST(NULL AS UNSIGNED) OTHERSTAT_5_TYPE,
-          OTHERSTAT_5_VALUE,
-          OTHERSTAT_6_ID,
-          CAST(NULL AS UNSIGNED) OTHERSTAT_6_TYPE,
-          OTHERSTAT_6_VALUE,
-          OTHERSTAT_7_ID,
-          CAST(NULL AS UNSIGNED) OTHERSTAT_7_TYPE,
-          OTHERSTAT_7_VALUE,
-          OTHERSTAT_8_ID,
-          CAST(NULL AS UNSIGNED) OTHERSTAT_8_TYPE,
-          OTHERSTAT_8_VALUE,
-          OTHERSTAT_9_ID,
-          CAST(NULL AS UNSIGNED) OTHERSTAT_9_TYPE,
-          OTHERSTAT_9_VALUE,
-          OTHERSTAT_10_ID,
-          CAST(NULL AS UNSIGNED) OTHERSTAT_10_TYPE,
-          OTHERSTAT_10_VALUE,
-          CAST(NULL AS CHAR(255)) AS OTHER_XML,
-          CAST(NULL AS UNSIGNED) AS PLAN_OPERATION_INACTIVE,
-          OUTPUT_BATCHES,
-          SKIPPED_ROWS_COUNT
-        FROM oceanbase.__all_virtual_sql_plan_monitor
-""".replace("\n", " "),
-
-    normal_columns = [
-    ]
-  ),
 
 # rename to DBA_RECYCLEBIN
 def_table_schema(
@@ -10027,7 +9758,7 @@ view_definition = """
 SELECT
  (case M.TABLE_TYPE
     when 0 then 'MEMTABLE' when 1 then 'TX_DATA_MEMTABLE' when 2 then 'TX_CTX_MEMTABLE'
-    when 3 then 'LOCK_MEMTABLE' when 4 then 'DIRECT_LOAD_MEMTABLE' when 10 then 'MAJOR' when 11 then 'MINOR'
+    when 3 then 'LOCK_MEMTABLE' when 10 then 'MAJOR' when 11 then 'MINOR'
     when 12 then 'MINI' when 13 then 'META'
     when 14 then 'DDL_DUMP' when 15 then 'REMOTE_LOGICAL_MINOR' when 16 then 'DDL_MEM'
     when 17 then 'DDL_MEM_MINI_SSTABLE' when 18 then 'MDS_MINI' when 19 then 'MDS_MINOR'
@@ -10067,28 +9798,6 @@ FROM
 # 21114: CDB_CKPT_HISTORY # abandoned in 4.0
 # 21115: gv$ob_trans_table_status # abandoned in 4.0
 # 21116: v$ob_trans_table_status # abandoned in 4.0
-
-def_table_schema(
-    owner = 'xiaochu.yh',
-    table_name     = 'V$SQL_MONITOR_STATNAME',
-    table_id       = '21117',
-    table_type = 'SYSTEM_VIEW',
-    gm_columns = [],
-    in_tenant_space = True,
-    rowkey_columns = [],
-    normal_columns = [],
-    view_definition = """
-    SELECT
-      CAST(NULL AS UNSIGNED) AS CON_ID,
-      ID,
-      GROUP_ID,
-      NAME,
-      DESCRIPTION,
-      TYPE,
-      0 FLAGS
-    FROM oceanbase.__all_virtual_sql_monitor_statname
-""".replace("\n", " ")
-  )
 
 # 21118: GV$OB_MERGE_INFO # removed (single-tenant GV/V collapse; folded into V$OB_MERGE_INFO)
 
@@ -14506,13 +14215,12 @@ def_table_schema(
       WHEN state = 5 THEN 'IN_TERMINATE'
       WHEN state = 6 THEN 'ABORTED'
       WHEN state = 7 THEN 'ROLLED_BACK'
-	      WHEN state = 8 THEN 'COMMIT_TIMEOUT'
-	      WHEN state = 9 THEN 'COMMIT_UNKNOWN'
-	      WHEN state = 10 THEN 'COMMITTED'
-	      ELSE 'UNKNOWN'
-	      END AS STATE,
-	    cluster_id AS CLUSTER_ID,
-	    write_state AS WRITE_STATE,
+      WHEN state = 8 THEN 'COMMIT_TIMEOUT'
+      WHEN state = 9 THEN 'COMMIT_UNKNOWN'
+      WHEN state = 10 THEN 'COMMITTED'
+      ELSE 'UNKNOWN'
+      END AS STATE,
+    write_state AS WRITE_STATE,
     CASE
       WHEN isolation_level = -1 THEN 'INVALID'
       WHEN isolation_level = 0 THEN 'READ UNCOMMITTED'
@@ -15075,37 +14783,6 @@ def_table_schema(
           CAST(TIMEOUT_TS AS DATETIME) as TIMEOUT_TS,
           CAST(START_TIME AS DATETIME) as START_TIME
         FROM oceanbase.__all_virtual_px_p2p_datahub
-
-""".replace("\n", " "),
-
-    normal_columns = [
-    ]
-  )
-
-# 21421: GV$SQL_JOIN_FILTER # removed (single-tenant GV/V collapse; folded into V$SQL_JOIN_FILTER)
-
-def_table_schema(
-    owner = 'mingdou.tmd',
-    table_name     = 'V$SQL_JOIN_FILTER',
-    table_id       = '21422',
-    table_type = 'SYSTEM_VIEW',
-    gm_columns = [],
-    in_tenant_space = True,
-    rowkey_columns = [],
-    view_definition = """
-        SELECT
-          CAST(NULL AS SIGNED) AS QC_SESSION_ID,
-          CAST(NULL AS SIGNED) AS QC_INSTANCE_ID,
-          PLAN_HASH_VALUE AS SQL_PLAN_HASH_VALUE,
-          CAST(OTHERSTAT_5_VALUE AS SIGNED) as FILTER_ID,
-          CAST(NULL AS SIGNED) as BITS_SET,
-          CAST(OTHERSTAT_1_VALUE AS SIGNED) as FILTERED,
-          CAST(OTHERSTAT_3_VALUE AS SIGNED) as PROBED,
-          CAST(NULL AS SIGNED) as ACTIVE,
-          CAST(1 AS SIGNED) as CON_ID,
-          CAST(TRACE_ID AS CHAR(64)) as TRACE_ID
-        FROM oceanbase.__all_virtual_sql_plan_monitor
-        WHERE plan_operation = 'PHY_JOIN_FILTER'
 
 """.replace("\n", " "),
 
@@ -15680,25 +15357,7 @@ def_table_schema(
 # 21543: GV$OB_TRACEPOINT_INFO # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_tracepoint_info)
 
 # 21544: V$OB_TRACEPOINT_INFO # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_tracepoint_info)
-
-def_table_schema(
-  owner = 'sean.yyj',
-  tablegroup_id   = 'OB_INVALID_ID',
-  table_name      = 'V$OB_COMPATIBILITY_CONTROL',
-  table_id        = '21545',
-  gm_columns      = [],
-  rowkey_columns  = [],
-  table_type      = 'SYSTEM_VIEW',
-  in_tenant_space = True,
-  view_definition = """SELECT
-      name as NAME,
-      description as DESCRIPTION,
-      CASE is_enable WHEN 1 THEN 'TRUE' ELSE 'FALSE' END AS IS_ENABLE,
-      enable_versions as ENABLE_VERSIONS
-    FROM oceanbase.__all_virtual_compatibility_control
-""".replace("\n", " "),
-  normal_columns  = []
-  )
+# 21545: V$OB_COMPATIBILITY_CONTROL (removed)
 
 # 21546: removed (legacy resource manager deleted)
 
@@ -16943,8 +16602,6 @@ def_table_schema(
 # 21635: GV$OB_PLUGINS # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_plugin_info)
 # 21636: V$OB_PLUGINS # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_plugin_info)
 
-# 21639: DBA_OB_LICENSE (abandoned)
-
 def_table_schema(
   owner           = 'yangjiali.yjl',
   table_name      = 'DBA_OB_VECTOR_INDEX_TASKS',
@@ -17751,13 +17408,12 @@ def_sys_index_table(
 # 101093: idx_kv_ttl_task_table_id (abandoned)
 # 101094: idx_kv_ttl_task_history_upd_time (abandoned)
 
-def_sys_index_table(
-  index_name = 'idx_client_to_server_session_info_client_session_id',
-  index_table_id = 101099,
-  index_columns = ['client_session_id'],
-  index_using_type = 'USING_BTREE',
-  index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_client_to_server_session_info'])
+# 101095: idx_mview_refresh_run_stats_num_mvs_current (removed)
+
+# 101096: idx_mview_refresh_stats_end_time (removed)
+# 101097: idx_mview_refresh_stats_mview_end_time (removed)
+
+# 101099: idx_client_to_server_session_info_client_session_id (removed)
 
 def_sys_index_table(
   index_name = 'idx_column_privilege_name',

@@ -1012,19 +1012,15 @@ int ObTableLocation::init_table_location(ObExecContext &exec_ctx,
   }
   if (OB_SUCC(ret)) {
     bool is_weak_read = false;
-    int64_t route_policy = 0;
     if (OB_FAIL(get_is_weak_read(stmt,
                                  exec_ctx.get_my_session(),
                                  exec_ctx.get_sql_ctx(),
                                  is_weak_read))) {
       LOG_WARN("get is weak read failed", K(ret));
-    } else if (OB_FAIL(exec_ctx.get_my_session()->get_sys_variable(SYS_VAR_OB_ROUTE_POLICY, route_policy))) {
-      LOG_WARN("get route policy failed", K(ret));
     } else if (table_schema->is_duplicate_table()) {
       loc_meta_.is_dup_table_ = 1;
     }
     if (OB_SUCC(ret)) {
-      loc_meta_.route_policy_ = route_policy;
       if (is_dml_table) {
         loc_meta_.select_leader_ = 1;
       } else if (!is_weak_read) {
@@ -1259,7 +1255,6 @@ int ObTableLocation::init(
   loc_meta_.ref_table_id_ = ref_table_id;
   stmt_type_ = stmt.get_stmt_type();
   is_partitioned_ = true;
-  int64_t route_policy = 0;
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
     LOG_ERROR("table location init twice", K(ret));
@@ -1270,11 +1265,8 @@ int ObTableLocation::init(
              || OB_ISNULL(session_info = exec_ctx->get_my_session())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Input arguments error", K(table_id), K(ref_table_id), K(session_info), K(ret));
-  } else if (OB_FAIL(session_info->get_sys_variable(SYS_VAR_OB_ROUTE_POLICY, route_policy))) {
-    LOG_WARN("fail to get sys variable", K(ret));
   } else {
     table_type_ = table_schema->get_table_type();
-    loc_meta_.route_policy_ = route_policy;
   }
 
   if (OB_FAIL(ret)) {
@@ -1348,16 +1340,6 @@ int ObTableLocation::init(
       loc_meta_.select_leader_ = 0;
       loc_meta_.is_weak_read_ = 1;
     }
-    if (OB_FAIL(ret)) {
-    } else if (!(session_info->is_inner() ||
-          (stmt.get_query_ctx()->is_contain_inner_table_ &&
-           !stmt.get_query_ctx()->has_dml_write_stmt_ &&
-           !stmt.get_query_ctx()->is_contain_select_for_update_)) &&
-        loc_meta_.select_leader_ &&
-        static_cast<ObRoutePolicyType>(loc_meta_.route_policy_) == FORCE_READONLY_ZONE) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "when route policy is FORCE_READONLY_ZONE, strong read request");
-    }
   }
   return ret;
 }
@@ -1382,9 +1364,7 @@ int ObTableLocation::get_is_weak_read(const ObDMLStmt &dml_stmt,
     ObConsistencyLevel consistency_level = INVALID_CONSISTENCY;
     ObTxConsistencyType trans_consistency_type = ObTxConsistencyType::INVALID;
     if (stmt::T_SELECT == dml_stmt.get_stmt_type()) {
-      if (sql_ctx->is_protocol_weak_read_) {
-        consistency_level = WEAK;
-      } else if (OB_UNLIKELY(INVALID_CONSISTENCY
+      if (OB_UNLIKELY(INVALID_CONSISTENCY
              != dml_stmt.get_query_ctx()->get_global_hint().read_consistency_)) {
         consistency_level = dml_stmt.get_query_ctx()->get_global_hint().read_consistency_;
       } else {
@@ -3979,7 +3959,7 @@ int ObTableLocation::send_add_interval_partition_rpc(
                               ));
       OX (sql_proxy = GCTX.sql_proxy_);
       CK (OB_NOT_NULL(sql_proxy));
-      OZ (sql_proxy->write(sql.ptr(), affected_rows, MYSQL_MODE));
+      OZ (sql_proxy->write(sql.ptr(), affected_rows));
     }
   }
   return ret;
@@ -4060,7 +4040,7 @@ int ObTableLocation::send_add_interval_partition_rpc_new_engine(
                               ));
       OX (sql_proxy = GCTX.sql_proxy_);
       CK (OB_NOT_NULL(sql_proxy));
-      OZ (sql_proxy->write(sql.ptr(), affected_rows, MYSQL_MODE));
+      OZ (sql_proxy->write(sql.ptr(), affected_rows));
     }
   }
   return ret;

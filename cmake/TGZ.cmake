@@ -48,22 +48,8 @@ set(CPACK_SYSTEM_NAME "macos${MACOS_VERSION_MAJOR}")
 include(cmake/Pack.cmake)
 
 set(CPACK_PACKAGE_RELEASE ${OB_RELEASEID})
-if (BUILD_CDC_ONLY)
-  message(STATUS "seekdb build cdc only")
-  set(CPACK_COMPONENTS_ALL cdc)
-  set(CPACK_PACKAGE_NAME "seekdb-cdc")
-else()
-  add_custom_target(bitcode_to_elf ALL
-    DEPENDS ${BITCODE_TO_ELF_LIST})
-endif()
-
-if (OB_BUILD_STANDALONE)
-  message(STATUS "seekdb standalone build")
-  set(CPACK_PACKAGE_NAME "oceanbase-standalone")
-  set(CPACK_COMPONENTS_ALL server libs)
-  set(CPACK_ARCHIVE_LIBS_FILE_NAME
-    "${CPACK_PACKAGE_NAME}-libs-${CPACK_PACKAGE_VERSION}-${CPACK_PACKAGE_RELEASE}-${CPACK_SYSTEM_NAME}-${MACOS_ARCH}")
-endif()
+add_custom_target(bitcode_to_elf ALL
+  DEPENDS ${BITCODE_TO_ELF_LIST})
 
 # Per-component archive filenames (no extension).
 # - server: drop the "-server" suffix

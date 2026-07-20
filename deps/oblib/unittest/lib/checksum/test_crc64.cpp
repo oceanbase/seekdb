@@ -47,10 +47,13 @@ TEST(TestCrc64, common)
     uint64_t manually_hash = crc64_sse42_manually(intermediate_hash, str, i);
     uint64_t fast_manually_hash = fast_crc64_sse42_manually(intermediate_hash, str, i);
     uint64_t sse42_hash = crc64_sse42(intermediate_hash, str, i);
-    uint64_t isal_hash = ob_crc64_isal(intermediate_hash, str, i);
+    uint64_t dispatch_hash = ob_crc64_sse42(intermediate_hash, str, i);
+    uint64_t incremental_hash = ob_crc64_sse42(
+        ob_crc64_sse42(intermediate_hash, str, i / 2), str + i / 2, i - i / 2);
     ASSERT_EQ(manually_hash, fast_manually_hash);
     ASSERT_EQ(manually_hash, sse42_hash);
-    ASSERT_EQ(manually_hash, isal_hash);
+    ASSERT_EQ(manually_hash, dispatch_hash);
+    ASSERT_EQ(manually_hash, incremental_hash);
     //cout << "st = "<< tmp_str << endl;
     //cout << "crc64c = "<< manually_hash << endl;
   }
@@ -84,14 +87,6 @@ TEST(TestCrc64, test_speed)
     }
     end = get_current_time_us();
     cout << "          ob_crc64(sse42), execut_count = "<< COUNT << ", cost_us = " << end - start << " len = " << i << endl;  
-
-    start = get_current_time_us();
-    for (int64_t j = 0; j < COUNT; ++j) {
-      ob_crc64_isal(0, tmp_str, i);
-    }
-    end = get_current_time_us();
-    cout << "          ob_crc64(ob_crc64_isal), execut_count = " << COUNT << ", cost_us = " << end - start << " len = " << i
-         << endl;    
 
     cout << endl;
     cout << endl;

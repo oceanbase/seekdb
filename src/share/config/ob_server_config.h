@@ -19,6 +19,7 @@
 
 #include "share/config/ob_common_config.h"
 #include "share/config/ob_system_config.h"
+#include "lib/lock/ob_drw_lock.h"
 
 namespace oceanbase
 {

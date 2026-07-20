@@ -135,37 +135,10 @@ int ObCatalogDDLOperator::grant_or_revoke_after_ddl(ObCatalogSchema &schema,
                                                     uint64_t user_id)
 {
   int ret = OB_SUCCESS;
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
-  ObSchemaService *schema_sql_service = NULL;
-  ObDDLOperator ddl_operator(schema_service_, sql_proxy_);
-  if (OB_ISNULL(schema_sql_service = schema_service_.get_schema_service())) {
-    ret = OB_ERR_SYS;
-    LOG_ERROR("schema_sql_service must not null", K(ret));
-  }
-  if (OB_SUCC(ret) && ddl_type == OB_DDL_CREATE_CATALOG) {
-    if (lib::Worker::CompatMode::MYSQL == compat_mode) {
-      ObCatalogPrivSortKey catalog_priv_key(user_id, schema.get_catalog_name_str());
-      ObPrivSet priv_set = OB_PRIV_USE_CATALOG;
-      OZ(grant_revoke_catalog(catalog_priv_key, priv_set, true, ObString(), trans));
-    } else {
-      ObObjPrivSortKey obj_priv_key(schema.get_catalog_id(),
-                                    static_cast<uint64_t>(ObObjectType::CATALOG),
-                                    OBJ_LEVEL_FOR_TAB_PRIV,
-                                    OB_EXTENDED_SYS_USER_ID,
-                                    user_id);
-      share::ObRawObjPrivArray new_obj_priv_array;
-      share::ObRawObjPrivArray obj_priv_array;
-      obj_priv_array.push_back(OBJ_PRIV_ID_USE_CATALOG);
-      int64_t new_schema_version_ora = OB_INVALID_VERSION;
-      OZ(ddl_operator.set_need_flush_ora(schema_guard, obj_priv_key, 0, obj_priv_array,
-                                         new_obj_priv_array));
-      if (new_obj_priv_array.count() > 0) {
-        OZ(schema_service_.gen_new_schema_version(new_schema_version_ora));
-        OZ(schema_sql_service->get_priv_sql_service().grant_table_ora_only(
-            NULL, trans, new_obj_priv_array, 0, obj_priv_key,
-            new_schema_version_ora, false, false));
-      }
-    }
+  if (ddl_type == OB_DDL_CREATE_CATALOG) {
+    ObCatalogPrivSortKey catalog_priv_key(user_id, schema.get_catalog_name_str());
+    ObPrivSet priv_set = OB_PRIV_USE_CATALOG;
+    OZ(grant_revoke_catalog(catalog_priv_key, priv_set, true, ObString(), trans));
   }
   if (OB_SUCC(ret) && ddl_type == OB_DDL_DROP_CATALOG) {
   }

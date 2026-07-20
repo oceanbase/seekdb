@@ -341,7 +341,6 @@ int ObLatestSchemaGuard::get_package_id(
     const uint64_t database_id,
     const ObString &package_name,
     const ObPackageType package_type,
-    const int64_t compatible_mode,
     uint64_t &package_id)
 {
   int ret = OB_SUCCESS;
@@ -352,20 +351,19 @@ int ObLatestSchemaGuard::get_package_id(
     LOG_WARN("fail to check and get service", KR(ret));
   } else if (OB_UNLIKELY(OB_INVALID_ID == database_id
              || package_name.empty()
-             || INVALID_PACKAGE_TYPE == package_type
-             || compatible_mode < 0)) {
+             || INVALID_PACKAGE_TYPE == package_type)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("database_id/package_name/package_type/compatible_mode is invalid",
+    LOG_WARN("database_id/package_name/package_type is invalid",
              KR(ret), K(database_id), K(package_name),
-             K(package_type), K(compatible_mode));
+             K(package_type));
   } else if (OB_FAIL(schema_service_impl->get_package_id(
              *sql_client, database_id, package_name,
-             package_type, compatible_mode, package_id))) {
+             package_type, package_id))) {
     LOG_WARN("fail to get package id", KR(ret),
-             K(database_id), K(package_name), K(compatible_mode));
+             K(database_id), K(package_name));
   } else if (OB_UNLIKELY(OB_INVALID_ID == package_id)) {
     LOG_INFO("package not exist", KR(ret), K(database_id),
-             K(package_name), K(package_type), K(compatible_mode));
+             K(package_name), K(package_type));
   }
 
   return ret;

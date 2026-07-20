@@ -190,18 +190,6 @@ int ObTxReplayExecutor::replay_tx_log_(const ObTxLogType log_type)
     }
     break;
   }
-  case ObTxLogType::TX_DIRECT_LOAD_INC_LOG: {
-    ObTxDirectLoadIncLog::ReplayArg replay_arg;
-    replay_arg.part_log_no_ = tx_part_log_no_;
-    replay_arg.ddl_log_handler_ptr_ = ls_->get_ddl_log_handler(); 
-    ObTxDirectLoadIncLog::TempRef temp_ref;
-    ObTxDirectLoadIncLog::ConstructArg  construct_arg(temp_ref);
-    ObTxCtxLogOperator<ObTxDirectLoadIncLog> dli_log_op(ctx_, &log_block_, &construct_arg, replay_arg, log_ts_ns_, lsn_);
-    if (OB_FAIL(dli_log_op(ObTxLogOpType::REPLAY))) {
-      TRANS_LOG(WARN, "[Replay Tx] replay direct load inc log error", KR(ret));
-    }
-    break;
-  }
   case ObTxLogType::TX_RECORD_LOG: {
     if (OB_FAIL(replay_record_())) {
       TRANS_LOG(WARN, "[Replay Tx] replay record log error", KR(ret));
@@ -255,10 +243,8 @@ int ObTxReplayExecutor::try_get_tx_ctx_()
       ObTxCreateArg arg(true, /* for_replay */
                         TxCtxSource::REPLAY,
                         tx_id,
-                        log_block_.get_header().get_org_cluster_id(),
                         cluster_version,
                         0, /*session_id*/
-                        0, /*client_sid*/
                         0, /*associated_session_id*/
                         INT64_MAX,         /*trans_expired_time_*/
                         ls_tx_srv_->get_trans_service());

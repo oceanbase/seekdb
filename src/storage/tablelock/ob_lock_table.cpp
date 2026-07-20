@@ -337,7 +337,7 @@ int ObLockTable::online()
   return ret;
 }
 
-int ObLockTable::create_tablet(const lib::Worker::CompatMode compat_mode, const SCN &create_scn)
+int ObLockTable::create_tablet(const SCN &create_scn)
 {
   int ret = OB_SUCCESS;
   
@@ -351,7 +351,7 @@ int ObLockTable::create_tablet(const lib::Worker::CompatMode compat_mode, const 
     LOG_WARN("ObLockTable not inited", K(ret));
   } else if (OB_FAIL(get_table_schema_(table_schema))) {
     LOG_WARN("get lock table schema failed", K(ret));
-  } else if (OB_FAIL(create_tablet_schema.init(arena_allocator, table_schema, compat_mode,
+  } else if (OB_FAIL(create_tablet_schema.init(arena_allocator, table_schema,
         false/*skip_column_info*/, DATA_CURRENT_VERSION))) {
     LOG_WARN("failed to init storage schema", KR(ret), K(table_schema));
   } else if (OB_FAIL(parent_->create_ls_inner_tablet(LS_LOCK_TABLET,
@@ -359,7 +359,7 @@ int ObLockTable::create_tablet(const lib::Worker::CompatMode compat_mode, const 
                                                      create_tablet_schema,
                                                      create_scn))) {
     LOG_WARN("failed to create lock tablet", K(ret), K(LS_LOCK_TABLET),
-             K(table_schema), K(compat_mode), K(create_scn));
+             K(table_schema), K(create_scn));
   } else if (OB_FAIL(parent_->get_tablet_svr()->
                      get_lock_memtable_mgr(memtable_mgr_handle))) {
     LOG_WARN("get_lock_memtable_mgr failed", K(ret));

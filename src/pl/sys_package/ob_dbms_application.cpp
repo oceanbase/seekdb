@@ -66,7 +66,7 @@ int ObDBMSAppInfo::set_action(sql::ObExecContext &ctx, sql::ParamStore &params, 
     CK (OB_LIKELY(1 == params.count()));
     OV (params.at(0).is_varchar(), OB_INVALID_ARGUMENT);
     OZ (params.at(0).get_string(action_name));
-    OZ (sess->get_app_info_encoder().set_action_name(sess, action_name));
+    OZ (sess->set_action_name(action_name));
   }
   return ret;
 }
@@ -88,7 +88,7 @@ int ObDBMSAppInfo::set_client_info(sql::ObExecContext &ctx, sql::ParamStore &par
     } else {
       OZ (params.at(0).get_string(client_info));
     }
-    OZ (sess->get_app_info_encoder().set_client_info(sess, client_info));
+    OZ (sess->set_client_info(client_info));
   }
   return ret;
 }
@@ -117,8 +117,8 @@ int ObDBMSAppInfo::set_module(sql::ObExecContext &ctx, sql::ParamStore &params, 
     } else {   
       OZ (params.at(1).get_string(action_name));
     }
-    OZ (sess->get_app_info_encoder().set_module_name(sess, module_name));
-    OZ (sess->get_app_info_encoder().set_action_name(sess, action_name));
+    OZ (sess->set_module_name(module_name));
+    OZ (sess->set_action_name(action_name));
   }
   return ret;
 }

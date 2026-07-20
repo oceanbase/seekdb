@@ -678,13 +678,6 @@ inline bool supported_aggregate_function(const ObItemType agg_op, bool use_hash_
   case T_FUN_GROUPING_ID: {
     return use_hash_rollup;
   }
-  case T_FUN_SYS_RB_BUILD_AGG: {
-    return true;
-  }
-  case T_FUN_SYS_RB_AND_AGG:
-  case T_FUN_SYS_RB_OR_AGG: {
-    return true;
-  }
   case T_FUN_SUM_OPNSIZE: {
     return true;
   }
@@ -777,8 +770,7 @@ inline bool agg_res_not_null(const ObItemType agg_op)
   VEC_TC_DEC_INT512,          \
   VEC_TC_COLLECTION,          \
   VEC_TC_MYSQL_DATETIME,      \
-  VEC_TC_MYSQL_DATE,          \
-  VEC_TC_ROARINGBITMAP
+  VEC_TC_MYSQL_DATE
 
 } // end namespace aggregate
 } // end namespace share

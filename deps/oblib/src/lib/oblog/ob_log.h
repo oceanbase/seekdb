@@ -74,7 +74,6 @@
 #include "lib/oblog/ob_ringbuf_log_writer.h"
 #include "lib/utility/ob_defer.h"
 #include "lib/oblog/ob_syslog_rate_limiter.h"
-#include "lib/signal/ob_signal_handlers.h"
 #include "lib/utility/ob_common_utility.h"
 #include "lib/oblog/ob_log_dba_event.h"
 
@@ -300,7 +299,6 @@ enum class ProbeAction
  PROBE_BT,
  PROBE_ABORT,
  PROBE_DISABLE,
- PROBE_STACK,
 };
 
 //@class ObLogger
@@ -989,7 +987,6 @@ inline int ObLogger::check_log_end(ObPLogItem &log_item, int64_t pos)
   int ret = OB_SUCCESS;
   const int64_t buf_size = log_item.get_buf_size();
   if (buf_size > 0) {
-    DEBUG_ASSERT(pos >=0 && pos <= buf_size);
     if (pos > buf_size - 2) {
       pos = buf_size - 2;
       ret = OB_SIZE_OVERFLOW;
@@ -1228,10 +1225,6 @@ inline void ObLogger::check_probe(
           }
           case ProbeAction::PROBE_DISABLE: {
             disable = true;
-            break;
-          }
-          case ProbeAction::PROBE_STACK: {
-            IGNORE_RETURN faststack();
             break;
           }
           default: {

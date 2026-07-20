@@ -153,7 +153,6 @@ int ObTriggerInfo::deep_copy(const ObTriggerInfo &other)
   OZ (set_package_spec_source(other.get_package_spec_source()));
   OZ (set_package_body_source(other.get_package_body_source()));
   OX (set_package_flag(other.get_package_flag()));
-  OX (set_package_comp_flag(other.get_package_comp_flag()));
   OZ (set_package_exec_env(other.get_package_exec_env()));
   OX (set_sql_mode(other.get_sql_mode()));
   OZ (set_trigger_priv_user(other.get_trigger_priv_user()));

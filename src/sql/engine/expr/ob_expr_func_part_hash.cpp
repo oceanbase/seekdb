@@ -167,7 +167,6 @@ int ObExprFuncPartHash::calc_value(
   //DO not change this function's result.
   //This will influence data.
   //If you need to do, remember ObTableLocation has the same code!!!
-  CHECK_COMPATIBILITY_MODE(expr_ctx.my_session_);
   // mysql mode only allows one parameter, syntax already restricts
   if (OB_ISNULL(objs_stack) || 1 != param_num) {
     ret = OB_ERR_UNEXPECTED;

@@ -46,8 +46,6 @@ int ObDeleteLobMetaRowParam::init(const ObDDLBuildSingleReplicaRequestArg &arg)
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(arg));
-  } else {
-    compat_mode_ = lib::Worker::CompatMode::MYSQL;
   }
 
   if (OB_SUCC(ret)) {

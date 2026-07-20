@@ -3033,7 +3033,6 @@ int ObTransformOrExpansion::check_select_expr_has_lob(ObDMLStmt &stmt, bool &has
         LOG_WARN("unexpected null expr", K(ret), K(select_items.at(i)));
       } else {
 	has_lob = ObLongTextType == select_expr->get_data_type() ||
-                  ObRoaringBitmapType == select_expr->get_data_type() ||
                   ObCollectionSQLType == select_expr->get_data_type();
       }
     }
@@ -3049,7 +3048,6 @@ int ObTransformOrExpansion::check_select_expr_has_lob(ObDMLStmt &stmt, bool &has
         LOG_WARN("unexpected null expr", K(ret), K(column_items.at(i)));
       } else {
 	has_lob = ObLongTextType == column_expr->get_data_type() ||
-                  ObRoaringBitmapType == column_expr->get_data_type() ||
                   ObCollectionSQLType == column_expr->get_data_type();
       }
     }

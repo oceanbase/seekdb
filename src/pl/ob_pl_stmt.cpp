@@ -78,7 +78,7 @@ int ObPLSymbolTable::add_symbol(const ObString &name,
   var.set_default_construct(default_construct);
   var.set_is_formal_param(is_formal_param);
   var.set_dup_declare(is_dup_declare);
-  var.set_is_default_expr_has_reroute_factor(has_access_external_state);
+  var.set_is_default_expr_access_external_state(has_access_external_state);
   OZ (variables_.push_back(var), var, variables_.count());
   return ret;
 }
@@ -1259,7 +1259,6 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
       //then package name
       if (OB_SUCC(ret) && OB_INVALID_INDEX == var_idx) {
         
-        int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
         uint64_t db_id = OB_INVALID_ID;
         const ObPackageInfo *package_info = nullptr;
         if (parent_id != OB_INVALID_INDEX) {
@@ -1276,7 +1275,6 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
                                                        db_id,
                                                        name,
                                                        share::schema::PACKAGE_TYPE,
-                                                       compatible_mode,
                                                        package_info))) {
             LOG_WARN("get package info failed", K(ret));
           } else if (OB_INVALID_ID == db_id
@@ -1288,7 +1286,6 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
                                                       OB_SYS_DATABASE_ID,
                                                       name,
                                                       share::schema::PACKAGE_TYPE,
-                                                      compatible_mode,
                                                       package_info))) {
               LOG_WARN("get package info failed", K(ret));
             }
@@ -1445,17 +1442,16 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
   }
     break;
   case PKG_NS: {
-    int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
     
     uint64_t package_id = OB_INVALID_ID;
 
     if (OB_FAIL(schema_guard.get_package_id(parent_id, name, share::schema::PACKAGE_TYPE,
-                                            compatible_mode, package_id))) {
+                                            package_id))) {
       LOG_WARN("get package id failed", K(ret));
     } else if (OB_INVALID_ID == package_id) {
       if (is_oceanbase_sys_database_id(parent_id)) {
         if (OB_FAIL(schema_guard.get_package_id(OB_SYS_DATABASE_ID,
-            name, share::schema::PACKAGE_TYPE, compatible_mode, package_id))) {
+            name, share::schema::PACKAGE_TYPE, package_id))) {
           LOG_WARN("get package id failed", K(ret));
         }
       }
@@ -1487,7 +1483,7 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
       } else {
         if (OB_NOT_NULL(parent_ns_)
             && parent_ns_->get_database_id() == package_info_resolve->get_database_id()
-            && ObCharset::case_compat_mode_equal(parent_ns_->get_package_name(), package_info_resolve->get_package_name())) {
+            && ObCharset::case_insensitive_equal(parent_ns_->get_package_name(), package_info_resolve->get_package_name())) {
           if (OB_FAIL(
               SMART_CALL(parent_ns_->resolve_symbol(name, type, data_type, parent_id, var_idx)))) {
             LOG_WARN("resolve package symbol failed", K(ret));
@@ -1609,7 +1605,6 @@ int ObPLExternalNS::resolve_external_type_by_name(const ObString &db_name, const
   }
   if (OB_SUCC(ret) && OB_ISNULL(user_type)) {
     
-    int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
     uint64_t db_id = OB_INVALID_ID;
     ObString package_name = org_package_name;
     ObString type_name = org_type_name;
@@ -1631,7 +1626,7 @@ int ObPLExternalNS::resolve_external_type_by_name(const ObString &db_name, const
     if (OB_SUCC(ret) && !package_name.empty()) {
       // search package
       if (OB_FAIL(resolve_ctx_.schema_guard_.get_package_info( db_id, package_name,
-                                                              share::schema::PACKAGE_TYPE, compatible_mode,
+                                                              share::schema::PACKAGE_TYPE,
                                                               package_info))) {
          LOG_WARN("get package id failed", K(ret));
       }
@@ -1646,7 +1641,7 @@ int ObPLExternalNS::resolve_external_type_by_name(const ObString &db_name, const
         // try system package
         if (db_name.empty() || 0 == db_name.case_compare(OB_SYS_DATABASE_NAME)) {
           if (OB_FAIL(resolve_ctx_.schema_guard_.get_package_info( OB_SYS_DATABASE_ID,
-              package_name, share::schema::PACKAGE_TYPE, compatible_mode, package_info))) {
+              package_name, share::schema::PACKAGE_TYPE, package_info))) {
             LOG_WARN("get package id failed", K(ret));
           }
         }
@@ -1893,7 +1888,7 @@ int ObPLBlockNS::resolve_local_symbol(const ObString &name,
     if (OB_ISNULL(local_var)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("current local var is NULL", K(ret), K(local_var), K(i), K(get_symbols().at(i)));
-    } else if (ObCharset::case_compat_mode_equal(local_var->get_name(), name)) {
+    } else if (ObCharset::case_insensitive_equal(local_var->get_name(), name)) {
       data_type = local_var->get_type();
       var_idx = get_symbols().at(i);
       type = get_block_type() != ObPLBlockNS::BlockType::BLOCK_ROUTINE
@@ -1906,7 +1901,7 @@ int ObPLBlockNS::resolve_local_symbol(const ObString &name,
       const ObUserDefinedType* user_type = type_table_->get_type(get_types().at(i));
       CK (OB_NOT_NULL(user_type));
       if (OB_FAIL(ret)) {
-      } else if (ObCharset::case_compat_mode_equal(name, user_type->get_name())) {
+      } else if (ObCharset::case_insensitive_equal(name, user_type->get_name())) {
         if (var_idx != OB_INVALID_INDEX) {
           ret = OB_ERR_DECL_MORE_THAN_ONCE;
           LOG_USER_ERROR(OB_ERR_DECL_MORE_THAN_ONCE, name.length(), name.ptr());
@@ -1933,7 +1928,7 @@ int ObPLBlockNS::resolve_local_label(const ObString &name,
     if (OB_ISNULL(label)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("current label is NULL", K(ret), K(label), K(i), K(get_labels().at(i)));
-    } else if (ObCharset::case_compat_mode_equal(*label, name)) {
+    } else if (ObCharset::case_insensitive_equal(*label, name)) {
       var_idx = reinterpret_cast<int64_t>(this);
       type = ObPLExternalNS::LABEL_NS;
     }
@@ -2113,7 +2108,7 @@ int ObPLBlockNS::resolve_symbol(const ObString &var_name,
       if (OB_ISNULL(pl_var)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("PL var ns is null", K(i), K(get_symbols().at(i)), K(ret));
-      } else if (ObCharset::case_compat_mode_equal(var_name, pl_var->get_name())) {
+      } else if (ObCharset::case_insensitive_equal(var_name, pl_var->get_name())) {
         bool is_referenced = true;
         pl_var->set_is_referenced(is_referenced);
         if (pl_var->is_dup_declare()) {
@@ -2134,7 +2129,7 @@ int ObPLBlockNS::resolve_symbol(const ObString &var_name,
         const ObUserDefinedType* user_type = type_table_->get_type(get_types().at(i));
         CK (OB_NOT_NULL(user_type));
         if (OB_FAIL(ret)) {
-        } else if (ObCharset::case_compat_mode_equal(var_name, user_type->get_name())) {
+        } else if (ObCharset::case_insensitive_equal(var_name, user_type->get_name())) {
           if (var_idx != OB_INVALID_INDEX) {
             ret = OB_ERR_DECL_MORE_THAN_ONCE;
             LOG_USER_ERROR(OB_ERR_DECL_MORE_THAN_ONCE, var_name.length(), var_name.ptr());
@@ -2150,7 +2145,7 @@ int ObPLBlockNS::resolve_symbol(const ObString &var_name,
           && OB_INVALID_INDEX == var_idx
           && OB_INVALID_INDEX == parent_id
           && BLOCK_OBJECT_SPEC == get_block_type()
-          && ObCharset::case_compat_mode_equal(var_name, get_package_name())) {
+          && ObCharset::case_insensitive_equal(var_name, get_package_name())) {
         parent_id = get_database_id();
       }
     }
@@ -2164,7 +2159,7 @@ int ObPLBlockNS::resolve_symbol(const ObString &var_name,
       if (OB_ISNULL(label)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("PL Label is NULL", K(ret), K(i), K(get_labels().at(i)));
-      } else if (ObCharset::case_compat_mode_equal(var_name, *label)) {
+      } else if (ObCharset::case_insensitive_equal(var_name, *label)) {
         var_idx = reinterpret_cast<int64_t>(this);
         type = ObPLExternalNS::LABEL_NS;
       }
@@ -2176,7 +2171,7 @@ int ObPLBlockNS::resolve_symbol(const ObString &var_name,
         const ObPLRoutineInfo *routine = NULL;
         OZ (get_routine_info(routines.at(i), routine));
         CK (OB_NOT_NULL(routine));
-        if (OB_SUCC(ret) && ObCharset::case_compat_mode_equal(routine->get_routine_name(), var_name)) {
+        if (OB_SUCC(ret) && ObCharset::case_insensitive_equal(routine->get_routine_name(), var_name)) {
           if (get_block_type() != BLOCK_ROUTINE) { // subprogram is not member function, distingish with block type
             if (routine->is_udt_routine() && !routine->is_udt_cons() && !routine->is_udt_static_routine()) {
               // only care about member routine without prefix.
@@ -2225,7 +2220,7 @@ int ObPLBlockNS::resolve_symbol(const ObString &var_name,
           if (OB_ISNULL(record_type->get_record_member_name(i))) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpected record member name", K(ret), K(i), KPC(record_type));
-          } else if (ObCharset::case_compat_mode_equal(var_name, *record_type->get_record_member_name(i))) {
+          } else if (ObCharset::case_insensitive_equal(var_name, *record_type->get_record_member_name(i))) {
             type = ObPLExternalNS::SELF_ATTRIBUTE;
             var_idx = i;
             parent_id = user_type->get_user_type_id();
@@ -2334,13 +2329,13 @@ bool ObPLBlockNS::search_routine_local(const ObString &db_name,
   if (db_name.empty() && package_name.empty()) {
     search_local = true;
   } else if (!db_name.empty() && !package_name.empty()) {
-    if (ObCharset::case_compat_mode_equal(db_name_, db_name)
-        && ObCharset::case_compat_mode_equal(package_name_, package_name)
+    if (ObCharset::case_insensitive_equal(db_name_, db_name)
+        && ObCharset::case_insensitive_equal(package_name_, package_name)
         && type_ != ObPLBlockNS::BLOCK_ROUTINE) {
       search_local = true;
     }
   } else if (db_name.empty() && !package_name.empty()) {
-    if (ObCharset::case_compat_mode_equal(package_name_, package_name)
+    if (ObCharset::case_insensitive_equal(package_name_, package_name)
         && type_ != ObPLBlockNS::BLOCK_ROUTINE) {
       search_local = true;
     }
@@ -2404,7 +2399,7 @@ int ObPLBlockNS::resolve_routine(const ObPLResolveCtx &resolve_ctx,
         OZ (routine_table->get_routine_info(get_routines().at(i), info));
         if (OB_SUCC(ret)
             && OB_NOT_NULL(info)
-            && ObCharset::case_compat_mode_equal(routine_name, info->get_name())
+            && ObCharset::case_insensitive_equal(routine_name, info->get_name())
             && is_procedure(routine_type) == is_procedure(info->get_type())) {
           LOG_DEBUG("fit routine info ",
                     K(routine_name), K(db_name), K(package_name), K(ret), KPC(info));
@@ -2422,7 +2417,7 @@ int ObPLBlockNS::resolve_routine(const ObPLResolveCtx &resolve_ctx,
           OZ (routine_table->get_routine_info(i, info));
           if (OB_SUCC(ret)
               && OB_NOT_NULL(info)
-              && ObCharset::case_compat_mode_equal(routine_name, info->get_name())
+              && ObCharset::case_insensitive_equal(routine_name, info->get_name())
               && is_procedure(routine_type) == is_procedure(info->get_type())) {
             LOG_DEBUG("fit routine info ",
                       K(routine_name), K(db_name), K(package_name), K(ret), KPC(info));
@@ -2517,7 +2512,7 @@ int ObPLBlockNS::check_routine_exists(const ObString &db_name,
         if (OB_FAIL(routine_table->get_routine_info(routine_idx, pl_routine_info))) {
           LOG_WARN("get package routine failed", K(ret));
         } else if (OB_NOT_NULL(pl_routine_info)) {
-          if (ObCharset::case_compat_mode_equal(routine_name, pl_routine_info->get_name())
+          if (ObCharset::case_insensitive_equal(routine_name, pl_routine_info->get_name())
               && search_routine_type == pl_routine_info->get_type()) {
             exists = true;
             proc_type = search_routine_type;
@@ -2567,7 +2562,7 @@ int ObPLBlockNS::get_pl_data_type_by_name(const ObPLResolveCtx &resolve_ctx,
         if (OB_ISNULL(type)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("user type is null", K(i), K(get_types().at(i)), K(ret));
-        } else if (ObCharset::case_compat_mode_equal(type_name, type->get_name())) {
+        } else if (ObCharset::case_insensitive_equal(type_name, type->get_name())) {
           user_type = type;
           break;
         } else { /*do nothing*/ }
@@ -2790,7 +2785,6 @@ int ObPLBlockNS::get_cursor_by_name(const ObExprResolveContext &ctx,
       const pl::ObPLResolveCtx &resolve_ctx = ctx.secondary_namespace_->get_external_ns()
                                                 ->get_resolve_ctx();
       
-      int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
       const ObPackageInfo *package_info = NULL;
       ObPLPackageManager &package_manager =
         ctx.session_info_->get_pl_engine()->get_package_manager();
@@ -2802,11 +2796,11 @@ int ObPLBlockNS::get_cursor_by_name(const ObExprResolveContext &ctx,
       CK (!cursor_name.empty());
       OX (cursor = NULL);
       OZ (resolve_ctx.schema_guard_.get_database_id(db_name, database_id));
-      OZ (resolve_ctx.schema_guard_.get_package_info( database_id, package_name, share::schema::PACKAGE_TYPE, compatible_mode, package_info));
+      OZ (resolve_ctx.schema_guard_.get_package_info(database_id, package_name, share::schema::PACKAGE_TYPE, package_info));
       if (OB_SUCC(ret)
           && OB_ISNULL(package_info) && db_name.case_compare(OB_SYS_DATABASE_NAME)) {
         OZ (resolve_ctx.schema_guard_.get_package_info( OB_SYS_DATABASE_ID,
-          package_name, share::schema::PACKAGE_TYPE, compatible_mode, package_info));
+          package_name, share::schema::PACKAGE_TYPE, package_info));
       }
       if (OB_SUCC(ret) && OB_ISNULL(package_info)) {
         ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;

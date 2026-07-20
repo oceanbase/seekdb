@@ -66,26 +66,5 @@ int ObXaRollbackExecutor::execute(ObExecContext &ctx, ObXaRollBackStmt &stmt)
   return ret;
 }
 
-int ObXaExecutorUtil::get_org_cluster_id(ObSQLSessionInfo *session, int64_t &org_cluster_id) {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(session->get_ob_org_cluster_id(org_cluster_id))) {
-    LOG_WARN("fail to get ob_org_cluster_id", K(ret));
-  } else if (OB_INVALID_ORG_CLUSTER_ID == org_cluster_id ||
-             OB_INVALID_CLUSTER_ID == org_cluster_id) {
-    org_cluster_id = ObServerConfig::get_instance().cluster_id;
-    // If ob_org_cluster_id is not set (0 is an invalid value, considered as not set), then set it to the cluster_id of the current cluster.
-    // If the configuration item does not set cluster_id, then ObServerConfig::get_instance().cluster_id will get the default value -1.
-    // If cluster_id is not set in the configuration, observer will not start, therefore org_cluster_id will not be -1.
-    // For safety, here we set org_cluster_id to 0 or -1 as ObServerConfig::get_instance().cluster_id.
-    if (org_cluster_id < OB_MIN_CLUSTER_ID
-        || org_cluster_id > OB_MAX_CLUSTER_ID) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("org_cluster_id is set to cluster_id, but it is out of range",
-                K(ret), K(org_cluster_id), K(OB_MIN_CLUSTER_ID), K(OB_MAX_CLUSTER_ID));
-    }
-  }
-  return ret;
-}
-
 } // end namespace sql
 } // end namespace oceanbase

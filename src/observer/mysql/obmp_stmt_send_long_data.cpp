@@ -115,8 +115,6 @@ int ObMPStmtSendLongData::process()
   } else if (OB_ISNULL(sess)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL or invalid", K_(stmt_id), K_(param_id), K(sess), K(ret));
-  } else if (OB_FAIL(update_transmission_checksum_flag(*sess))) {
-    LOG_WARN("update transmisson checksum flag failed", K(ret));
   } else {
     ObSQLSessionInfo &session = *sess;
     THIS_WORKER.set_session(sess);
@@ -134,8 +132,6 @@ int ObMPStmtSendLongData::process()
     if (OB_UNLIKELY(!session.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("invalid session", K_(stmt_id), K_(param_id), K(ret));
-    } else if (OB_FAIL(process_kill_client_session(session))) {
-      LOG_WARN("client session has been killed", K(ret));
     } else if (OB_UNLIKELY(session.is_zombie())) {
       ret = OB_ERR_SESSION_INTERRUPTED;
       LOG_WARN("session has been killed", K(session.get_session_state()), K_(stmt_id), K_(param_id),
@@ -151,12 +147,8 @@ int ObMPStmtSendLongData::process()
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
                 sys_version))) {
       LOG_WARN("fail get tenant broadcast version", K(ret));
-    } else if (OB_FAIL(session.check_tenant_status())) {
-      need_disconnect_ = false;
-      LOG_INFO("unit has been migrated, need deny new request", K(ret));
     } else {
       THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
-      session.partition_hit().reset();
       if (OB_FAIL(process_send_long_data_stmt(session))) {
         LOG_WARN("execute sql failed", K_(stmt_id), K_(param_id), K(ret));
       }

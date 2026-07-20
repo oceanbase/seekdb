@@ -33,10 +33,8 @@ public:
   ObLogInsert(ObDelUpdLogPlan &plan)
       : ObLogDelUpd(plan),
         is_replace_(false),
-        is_overwrite_(false),
         insert_up_(false),
         is_insert_select_(false),
-        append_table_id_(0),
         constraint_infos_(NULL)
   {
   }
@@ -53,14 +51,6 @@ public:
   bool is_replace() const
   {
     return is_replace_;
-  }
-  void set_overwrite(bool overwrite)
-  {
-    is_overwrite_ = overwrite;
-  }
-  bool is_overwrite() const
-  {
-    return is_overwrite_;
   }
   virtual int get_op_exprs(ObIArray<ObRawExpr*> &all_exprs) override;
   virtual int is_my_fixed_expr(const ObRawExpr *expr, bool &is_fixed) override;
@@ -114,11 +104,6 @@ public:
                             const ObIArray<IndexDMLInfo*> &insert_up_index_infos,
                             const double child_card,
                             double &op_cost);
-  inline void set_append_table_id(const uint64_t append_table_id)
-  {
-    append_table_id_ = append_table_id;
-  }
-  inline uint64_t get_append_table_id() const { return append_table_id_; }
   void set_constraint_infos(const common::ObIArray<ObUniqueConstraintInfo> *constraint_infos)
   {
     constraint_infos_ = constraint_infos;
@@ -139,14 +124,12 @@ protected:
   virtual int generate_multi_part_partition_id_expr() override;
 protected:
   bool is_replace_;
-  bool is_overwrite_;
   common::ObArray<IndexDMLInfo *, common::ModulePageAllocator, true> index_replace_infos_;
   // for insert_up update caluse
   common::ObArray<IndexDMLInfo *, common::ModulePageAllocator, true> index_upd_infos_;
   bool insert_up_; // insert on duplicate update statement
   //for SPM Pruning
   bool is_insert_select_;
-  uint64_t append_table_id_;
   const common::ObIArray<ObUniqueConstraintInfo> *constraint_infos_;
 };
 

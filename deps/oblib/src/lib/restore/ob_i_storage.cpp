@@ -148,9 +148,7 @@ int handle_listed_directory(ObBaseDirEntryOperator &op,
 int get_storage_prefix_from_path(const common::ObString &uri, const char *&prefix)
 {
   int ret = OB_SUCCESS;
-  if (uri.prefix_match(OB_S3_PREFIX)) {
-    ret = reject_s3_storage("get storage prefix", uri);
-  } else if (uri.prefix_match(OB_FILE_PREFIX)) {
+  if (uri.prefix_match(OB_FILE_PREFIX)) {
     prefix = OB_FILE_PREFIX;
   } else if (uri.prefix_match(OB_AZBLOB_PREFIX)) {
     prefix = OB_AZBLOB_PREFIX;
@@ -372,21 +370,6 @@ int ob_set_field(const char *value, char *field, const uint32_t field_length)
   return ret;
 }
 
-int reject_s3_storage(const char *op_name)
-{
-  int ret = OB_NOT_SUPPORTED;
-  LOG_USER_ERROR(OB_NOT_SUPPORTED, "S3 storage");
-  STORAGE_LOG(WARN, "S3 storage is not supported", KR(ret), KCSTRING(op_name));
-  return ret;
-}
-
-int reject_s3_storage(const char *op_name, const common::ObString &uri)
-{
-  int ret = OB_NOT_SUPPORTED;
-  LOG_USER_ERROR(OB_NOT_SUPPORTED, "S3 storage");
-  STORAGE_LOG(WARN, "S3 storage is not supported", KR(ret), KCSTRING(op_name), K(uri));
-  return ret;
-}
 /*--------------------------------ObAppendableFragmentMeta--------------------------------*/
 OB_SERIALIZE_MEMBER(ObAppendableFragmentMeta, start_, end_);
 
@@ -819,7 +802,6 @@ int ObStoragePartInfoHandler::add_part_info(
     ret = OB_NOT_INIT;
     OB_LOG(WARN, "ObStoragePartInfoHandler not inited", K(ret));
   // checksum is allowed to be null
-  // e.g. S3 use md5 | OBS 
   } else if (OB_UNLIKELY(part_id < 1) || OB_ISNULL(etag)) {
     ret = OB_INVALID_ARGUMENT;
     OB_LOG(WARN, "invalid args", K(ret), K(part_id), KP(etag));
@@ -877,26 +859,6 @@ ObObjectStorageGuard::ObObjectStorageGuard(
 }
 
 
-// when accessing the object storage, if the error code returned is OB_BACKUP_PERMISSION_DENIED,
-// it may be due to expired temporary ak/sk
-// attempt to refresh the temporary ak/sk, and if the refresh fails,
-// only log the error message to avoid overriding the original error code.
-static void try_refresh_device_credential(
-    const int ob_errcode, const ObObjectStorageInfo *storage_info)
-{
-  int ret = OB_SUCCESS;
-  if (ob_errcode != OB_OBJECT_STORAGE_PERMISSION_DENIED) {
-    // do nothing
-  } else if (OB_ISNULL(storage_info) || OB_UNLIKELY(!storage_info->is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "invalid argument", K(ret), K(ob_errcode), KPC(storage_info));
-  } else if (storage_info->is_assume_role_mode()
-      && OB_FAIL(ObDeviceCredentialMgr::get_instance().curl_credential(
-          *storage_info, true /*update_access_time*/))) {
-    OB_LOG(WARN, "failed to refresh credential", K(ret), K(ob_errcode), KPC(storage_info));
-  }
-}
-
 void ObObjectStorageGuard::print_access_storage_log_() const
 {
   const int64_t cost_time_us = ObTimeUtility::current_time() - start_time_us_;
@@ -931,7 +893,6 @@ bool ObObjectStorageGuard::is_slow_io_(const int64_t cost_time_us) const
 ObObjectStorageGuard::~ObObjectStorageGuard()
 {
   print_access_storage_log_();
-  try_refresh_device_credential(ob_errcode_, storage_info_);
   lib::ObMallocHookAttrGuard::~ObMallocHookAttrGuard();
 }
 

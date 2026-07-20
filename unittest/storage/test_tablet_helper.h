@@ -123,14 +123,13 @@ inline int TestTabletHelper::create_tablet(
   int ret = OB_SUCCESS;
   ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   ObLSTabletService *ls_tablet_svr = ls->get_tablet_svr();
-  const lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
   ObArenaAllocator schema_allocator;
   ObCreateTabletSchema create_tablet_schema;
 
   ObTabletCreateSSTableParam param;
   prepare_sstable_param(tablet_id, table_schema, param);
   void *buff = nullptr;
-  if (OB_FAIL(create_tablet_schema.init(schema_allocator, table_schema, compat_mode,
+  if (OB_FAIL(create_tablet_schema.init(schema_allocator, table_schema,
       false/*skip_column_info*/, DATA_VERSION_1_0_0_0))) {
     STORAGE_LOG(WARN, "failed to init storage schema", KR(ret), K(table_schema));
   } else if (OB_FAIL(ObSSTableMergeRes::fill_column_checksum_for_empty_major(param.column_cnt_, param.column_checksums_))) {

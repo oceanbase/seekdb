@@ -555,10 +555,6 @@ public:
   int get_memtables(
       common::ObIArray<ObTableHandleV2> &memtables) const;
 
-  int set_macro_block(
-      const ObDDLMacroBlock &macro_block,
-      const int64_t snapshot_version,
-      const uint64_t data_format_version);
   int get_fork_info(share::ObForkTabletInfo &fork_info) const;
 protected:// for MDS use
   virtual bool check_is_inited_() const override final { return is_inited_; }
@@ -633,9 +629,7 @@ private:
   static int check_snapshot_readable(const ObDDLInfoCache& ddl_info_cache, const int64_t snapshot_version, const int64_t schema_version);
   logservice::ObLogHandler *get_log_handler() const { return log_handler_; } // TODO(gaishun.gs): get log handler from tablet pointer handle
 
-  int init_shared_params(
-      const common::ObTabletID &tablet_id,
-      const lib::Worker::CompatMode compat_mode);
+  int init_shared_params(const common::ObTabletID &tablet_id);
   int build_read_info(
       common::ObArenaAllocator &allocator,
       const ObTablet *tablet);

@@ -61,13 +61,11 @@ int ObDropPackageResolver::resolve(const ParseNode &parse_tree)
     } else {
       package_arg.package_type_ = share::schema::PACKAGE_TYPE;
     }
-    package_arg.compatible_mode_ = COMPATIBLE_MYSQL_MODE;
   }
   return ret;
 }
 } //namespace sql
 } //namespace oceanbase
-
 
 
 

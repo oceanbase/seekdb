@@ -108,7 +108,6 @@ public:
   int init(
       common::ObIAllocator &allocator,
       const share::schema::ObTableSchema &input_schema,
-      const lib::Worker::CompatMode compat_mode,
       const bool skip_column_info = false,
       const uint64_t tenant_data_version = DATA_CURRENT_VERSION);
   int init(
@@ -135,8 +134,6 @@ public:
   // for new mds
   int assign(common::ObIAllocator &allocator, const ObStorageSchema &other);
 
-  //TODO @lixia use compact mode in storage schema to compaction
-  inline lib::Worker::CompatMode get_compat_mode() const { return static_cast<lib::Worker::CompatMode>(compat_mode_);}
   /* merge related function*/
   virtual inline int64_t get_tablet_size() const override { return tablet_size_; }
   virtual inline int64_t get_rowkey_column_num() const override { return rowkey_array_.count(); }
@@ -209,7 +206,7 @@ public:
   int set_storage_schema_version(const uint64_t tenant_data_version);
 
   VIRTUAL_TO_STRING_KV(KP(this), K_(storage_schema_version), K_(version),
-      K_(is_use_bloomfilter), K_(column_info_simplified), K_(compat_mode), K_(table_type), K_(index_type),
+      K_(is_use_bloomfilter), K_(column_info_simplified), K_(table_type), K_(index_type),
       K_(row_store_type), K_(schema_version), K_(enable_macro_block_bloom_filter),
       K_(column_cnt), K_(store_column_cnt), K_(tablet_size), K_(pctfree), K_(block_size), K_(progressive_merge_round),
       K_(master_key_id), K_(compressor_type), K_(encryption), K_(encrypt_key),
@@ -250,7 +247,7 @@ public:
   static const int32_t SS_ONE_BIT = 1;
   static const int32_t SS_HALF_BYTE = 4;
   static const int32_t SS_ONE_BYTE = 8;
-  static const int32_t SS_RESERVED_BITS = 17;
+  static const int32_t SS_RESERVED_BITS = 21;
 
   // Storage schema uses a custom serializer because deserialization needs an allocator.
   static const int64_t STORAGE_SCHEMA_VERSION = 1;
@@ -263,7 +260,6 @@ public:
     struct
     {
       uint32_t version_                          : SS_ONE_BYTE;
-      uint32_t compat_mode_                      : SS_HALF_BYTE;
       uint32_t is_use_bloomfilter_               : SS_ONE_BIT;
       uint32_t column_info_simplified_           : SS_ONE_BIT;
       uint32_t enable_macro_block_bloom_filter_  : SS_ONE_BIT;
@@ -322,7 +318,6 @@ public:
   }
   int init(common::ObIAllocator &allocator,
       const share::schema::ObTableSchema &input_schema,
-      const lib::Worker::CompatMode compat_mode,
       const bool skip_column_info,
       const uint64_t tenant_data_version);
   int init(common::ObIAllocator &allocator,

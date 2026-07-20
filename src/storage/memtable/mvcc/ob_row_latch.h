@@ -23,8 +23,6 @@ namespace oceanbase
 {
 namespace memtable
 {
-#define USE_SIMPLE_ROW_LATCH 1
-#if USE_SIMPLE_ROW_LATCH
 struct ObRowLatch
 {
   ObRowLatch(): locked_(false) {}
@@ -44,28 +42,6 @@ struct ObRowLatch
   void unlock() { ATOMIC_STORE(&locked_, false); }
   bool locked_;
 };
-#else
-struct ObRowLatch
-{
-ObRowLatch(): latch_() {}
-~ObRowLatch() {}
-  struct Guard
-  {
-  Guard(ObRowLatch& host): host_(host) { host.lock();}
-   ~Guard() { host_.unlock(); }
-    ObRowLatch& host_;
-  };
-  bool is_locked() const { return latch_.is_locked(); }
-  bool try_lock()
-  {
-    // try_wrlock succeeds and returns OB_SUCCESS;
-    return (common::OB_SUCCESS == latch_.try_wrlock(common::ObLatchIds::ROW_CALLBACK_LOCK));
-  }
-  void lock() { (void)latch_.wrlock(common::ObLatchIds::ROW_CALLBACK_LOCK); }
-  void unlock() { (void)latch_.unlock(); }
-  common::ObLatch latch_;
-};
-#endif
 typedef ObRowLatch::Guard ObRowLatchGuard;
 }; // end namespace mvcc
 }; // end namespace oceanbase

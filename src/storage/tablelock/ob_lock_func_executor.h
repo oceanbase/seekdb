@@ -51,8 +51,8 @@ private:
                         uint64_t &lock_id);
   int lock_obj_(sql::ObSQLSessionInfo *session,
                 const transaction::ObTxParam &tx_param,
-                const uint32_t client_session_id,
-                const uint64_t client_session_create_ts,
+                const uint32_t session_id,
+                const uint64_t session_create_ts,
                 const int64_t obj_id,
                 const int64_t timeout_us);
   int generate_lock_id_(const ObString &lock_name,

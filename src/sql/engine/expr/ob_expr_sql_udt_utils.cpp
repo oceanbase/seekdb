@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
+#include "sql/ob_spi.h"
 #include "src/pl/ob_pl_resolver.h"
 
 using namespace oceanbase::common;
@@ -26,6 +27,103 @@ namespace oceanbase
 {
 namespace sql
 {
+
+int ObSqlUdtUtils::convert_result_for_client(ObObj &value, ObResultSet &result)
+{
+  int ret = OB_SUCCESS;
+  ObArenaAllocator *allocator = NULL;
+  if (OB_FAIL(result.get_exec_context().get_convert_charset_allocator(allocator))) {
+    LOG_WARN("fail to get convert charset allocator", K(ret));
+  } else if (OB_ISNULL(allocator)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("lob fake allocator is null", K(ret), K(value));
+  } else if (OB_FAIL(convert_result_for_client(value,
+                                               allocator,
+                                               &result.get_session(),
+                                               &result.get_exec_context(),
+                                               result.is_ps_protocol()))) {
+    LOG_WARN("convert udt to client format failed", K(ret), K(value));
+  }
+  return ret;
+}
+
+int ObSqlUdtUtils::convert_result_for_client(ObObj &value,
+                                             ObIAllocator *allocator,
+                                             ObSQLSessionInfo *session_info,
+                                             ObExecContext *exec_context,
+                                             bool is_ps_protocol,
+                                             const ColumnsFieldIArray *fields,
+                                             share::schema::ObSchemaGetterGuard *schema_guard)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(session_info) || OB_ISNULL(allocator)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get session info null", K(ret));
+  } else if (!value.is_collection_sql_type() && !value.is_geometry()) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("not supported udt type", K(ret), K(value.get_type()), K(value.get_udt_subschema_id()));
+  } else if (value.is_geometry()) {
+    // MySQL mode: no-op.
+  } else {
+    if (OB_ISNULL(exec_context)) {
+      ret = OB_BAD_NULL_ERROR;
+    } else if (OB_ISNULL(exec_context->get_physical_plan_ctx())
+               || !exec_context->get_physical_plan_ctx()->is_subschema_ctx_inited()) {
+      if (OB_ISNULL(fields)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("no fields to rebuild udt meta", K(ret), K(lbt()));
+      } else if (OB_ISNULL(exec_context->get_physical_plan_ctx())
+                 && OB_FAIL(exec_context->create_physical_plan_ctx())) {
+        LOG_WARN("failed to create physical plan ctx of subschema id", K(ret), K(lbt()));
+      } else if (OB_FAIL(exec_context->get_physical_plan_ctx()->build_subschema_by_fields(fields, schema_guard))) {
+        LOG_WARN("failed to rebuild subschema by fields", K(ret), K(*fields), K(lbt()));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      const uint16_t subschema_id = value.get_meta().get_subschema_id();
+      ObSubSchemaValue sub_meta;
+      if (OB_NOT_NULL(exec_context->get_physical_plan_ctx())
+          && OB_FAIL(exec_context->get_sqludt_meta_by_subschema_id(subschema_id, sub_meta))) {
+        LOG_WARN("failed to get udt meta", K(ret), K(subschema_id));
+      }
+      if (OB_FAIL(ret)) {
+      } else if (sub_meta.type_ == ObSubSchemaType::OB_SUBSCHEMA_COLLECTION_TYPE) {
+        ObSqlCollectionInfo *coll_meta = reinterpret_cast<ObSqlCollectionInfo *>(sub_meta.value_);
+        ObString res_str;
+        if (OB_FAIL(convert_collection_to_string(value, *coll_meta, allocator, res_str))) {
+          LOG_WARN("failed to convert udt to string", K(ret), K(subschema_id));
+        } else {
+          value.set_udt_value(res_str.ptr(), res_str.length());
+        }
+      } else {
+        ObSqlUDTMeta udt_meta = *(reinterpret_cast<ObSqlUDTMeta *>(sub_meta.value_));
+        if (!ObObjUDTUtil::ob_is_supported_sql_udt(udt_meta.udt_id_)) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_WARN("not supported to get udt meta", K(ret), K(udt_meta.udt_id_));
+        } else if (!is_ps_protocol) {
+          ObSqlUDT sql_udt;
+          sql_udt.set_udt_meta(udt_meta);
+          ObString res_str;
+          if (OB_FAIL(convert_sql_udt_to_string(value, allocator, exec_context, sql_udt, res_str))) {
+            LOG_WARN("failed to convert udt to string", K(ret), K(subschema_id));
+          } else {
+            value.set_udt_value(res_str.ptr(), res_str.length());
+          }
+        } else {
+          ObString udt_data = value.get_string();
+          ObObj result;
+          if (OB_FAIL(cast_sql_record_to_pl_record(exec_context, result, udt_data, udt_meta))) {
+            LOG_WARN("failed to cast sql collection to pl collection", K(ret), K(udt_meta.udt_id_));
+          } else {
+            value = result;
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 bool ObSqlUdtNullBitMap::is_valid()
 {
   return (OB_NOT_NULL(bitmap_) && bitmap_len_ > 0);

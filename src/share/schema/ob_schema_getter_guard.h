@@ -274,7 +274,6 @@ public:
                           const common::ObString &constraint_name,
                           ObSimpleConstraintInfo &constraint_info) const;
   int get_tenant_name_case_mode(common::ObNameCaseMode &mode);
-  int get_tenant_compat_mode(lib::Worker::CompatMode &compat_mode);
   int get_tenant_read_only(bool &read_only);
   /*
      get_schema
@@ -560,14 +559,13 @@ public:
   //package
   int check_package_exist(uint64_t database_id,
                           const common::ObString &package_name,
-                          ObPackageType package_type, int64_t compatible_mode, bool &exist) ;
+                          ObPackageType package_type, bool &exist) ;
   int get_package_id(uint64_t database_id, const common::ObString &package_name,
-                     ObPackageType package_type, int64_t compatible_mode, uint64_t &package_id) ;
+                     ObPackageType package_type, uint64_t &package_id) ;
   int get_package_info(
                        const uint64_t database_id,
                        const common::ObString &package_name,
                        ObPackageType package_type,
-                       int64_t compatible_mode,
                        const ObPackageInfo *&package_info) ;
   int get_package_info(
                        const uint64_t package_id,

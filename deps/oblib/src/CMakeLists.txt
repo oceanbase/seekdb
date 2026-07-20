@@ -37,24 +37,15 @@ target_include_directories(
   $<$<PLATFORM_ID:Windows>:${VCPKG_INCLUDE_DIR}>
   $<$<PLATFORM_ID:Windows>:${VCPKG_INCLUDE_DIR}/libxml2>
   $<$<PLATFORM_ID:Windows>:${CURL_INCLUDE_DIR}>
-  $<$<PLATFORM_ID:Windows>:${VCPKG_INCLUDE_DIR}/mysql>
-  $<$<PLATFORM_ID:Windows>:${VCPKG_INCLUDE_DIR}/mysql/mariadb>
-  $<$<PLATFORM_ID:Windows>:${VCPKG_INCLUDE_DIR}/mysql/mysql>
   $<$<PLATFORM_ID:Windows>:${SQLITE_COMPAT_DIR}>
   $<$<PLATFORM_ID:Windows>:${OB_VSAG_DIR}/include>
   ${DEVTOOLS_DIR}
   ${DEVTOOLS_DIR}/include
-  ${DEP_DIR}/include/apr-1/
   ${DEP_DIR}/include/icu
   ${DEP_DIR}/include/icu/common
   ${DEP_DIR}/include/fast_float
   ${USSL_INCLUDE_DIRS}
 )
-
-target_include_directories(
-  oblib_base_without_pass INTERFACE
-  ${DEP_DIR}/include/mariadb
-  )
 
 # -Wno-vla-cxx-extension is Clang 18+ only; GCC and older Clang use -Wno-vla-extension
 include(CheckCXXCompilerFlag)
@@ -245,16 +236,6 @@ set(OBLIB_ABSEIL_LIST
     ${_LIB_PATH}/libabsl_time.a
     ${_LIB_PATH}/libabsl_time_zone.a)
 
-set(LGPL_DEPS "-L${DEP_DIR}/lib/mariadb -lmariadb")
-if (OB_STATIC_LINK_LGPL_DEPS)
-  if(APPLE)
-    # macOS doesn't support -l:libmariadbclient.a format, use direct path
-    set(LGPL_DEPS "-L${DEP_DIR}/lib/mariadb ${DEP_DIR}/lib/mariadb/libmariadbclient.a")
-  else()
-    set(LGPL_DEPS "-L${DEP_DIR}/lib/mariadb -l:libmariadbclient.a")
-  endif()
-endif()
-
 # Check if system is Ubuntu >= 24 for dynamic linking libaio.so.1t64
 if(OB_AIO AND OB_AIO STREQUAL "libaio1t64" AND NOT APPLE)
   set(AIO_SEARCH_PATHS)
@@ -299,7 +280,6 @@ if(WIN32)
     ${VCPKG_LIB_DIR}/absl_flags_commandlineflag.lib
     ${VCPKG_LIB_DIR}/absl_flags_commandlineflag_internal.lib
     ${VCPKG_LIB_DIR}/roaring.lib
-    ${VCPKG_LIB_DIR}/libmariadb.lib
     ${VCPKG_LIB_DIR}/zlib.lib
     ${VCPKG_LIB_DIR}/icuin.lib
     ${VCPKG_LIB_DIR}/icudt.lib
@@ -320,7 +300,6 @@ else()
     ${_LIB_PATH_EXTRA}/libs2.a
     ${OBLIB_ABSEIL_LIST}
     ${DEP_DIR}/lib/libroaring.a
-    ${LGPL_DEPS}
     $<$<STREQUAL:"${ARCHITECTURE}","x86_64">:${DEP_DIR}/lib/libunwind.a>
     ${DEP_DIR}/lib/sqlite/libsqlite3.a
     ${DEP_DIR}/lib/libz.a
@@ -334,7 +313,6 @@ else()
     $<$<PLATFORM_ID:Linux>:-lrt>
     $<$<PLATFORM_ID:Darwin>:-Wl,-framework,Security -Wl,-framework,CoreFoundation -Wl,-framework,SystemConfiguration -liconv>
     ${ARCH_LDFLAGS}
-    $<$<PLATFORM_ID:Linux>:${DEP_DIR}/lib/libisal.a>
   )
 endif()
 target_link_libraries(oblib_base INTERFACE oblib_base_without_pass oblib_pass)

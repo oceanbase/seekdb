@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX COMMON_MYSQLP
+#include "common/mysqlclient/ob_isql_connection.h"
 #include "common/mysqlclient/ob_isql_connection_pool.h"
 #include "common/mysqlclient/ob_mysql_proxy.h"
 #include "common/sql_mode/ob_sql_mode_utils.h"
@@ -164,7 +165,7 @@ int ObCommonSqlProxy::write(const char *sql, const int32_t group_id, int64_t &af
 }
 
 int ObCommonSqlProxy::write(const ObString sql,
-                        int64_t &affected_rows, int64_t compatibility_mode, 
+                        int64_t &affected_rows,
                         const ObSessionParam *param /* = nullptr*/,
                         const common::ObAddr *sql_exec_addr)
 {
@@ -183,19 +184,6 @@ int ObCommonSqlProxy::write(const ObString sql,
   } else if (!is_active()) { // check client active after connection acquired
     ret = OB_INACTIVE_SQL_CLIENT;
     LOG_WARN("in active sql client", K(ret), K(sql));
-  }
-  int64_t old_compatibility_mode;
-  int64_t old_sql_mode = 0;
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(conn->get_session_variable("ob_compatibility_mode", old_compatibility_mode))) {
-      LOG_WARN("fail to get inner connection compatibility mode", K(ret));
-    } else if (old_compatibility_mode != compatibility_mode
-               && OB_FAIL(conn->set_session_variable("ob_compatibility_mode", compatibility_mode))) {
-      LOG_WARN("fail to set inner connection compatibility mode", K(ret), K(compatibility_mode));
-    } else {
-      LOG_TRACE("compatibility mode switch successfully!",
-                K(old_compatibility_mode), K(compatibility_mode));
-    }
   }
   if (OB_SUCC(ret) && nullptr != param) {
     conn->set_is_load_data_exec(param->is_load_data_exec_);
@@ -216,10 +204,7 @@ int ObCommonSqlProxy::write(const ObString sql,
     }
   }
   if (OB_SUCC(ret) && nullptr != param && nullptr != param->sql_mode_) {
-    // TODO(cangdi): fix get_session_variable not working
-    /*if (OB_FAIL(conn->get_session_variable("sql_mode", old_sql_mode))) {
-      LOG_WARN("get inner connection sql mode", K(ret));
-    } else*/ if (OB_FAIL(conn->set_session_variable("sql_mode", *param->sql_mode_))) {
+    if (OB_FAIL(conn->set_session_variable("sql_mode", *param->sql_mode_))) {
       LOG_WARN("set inner connection sql mode failed", K(ret));
     }
   }
@@ -231,18 +216,12 @@ int ObCommonSqlProxy::write(const ObString sql,
   if (OB_SUCC(ret)) {
     if (OB_FAIL(conn->execute_write(sql, affected_rows, is_user_sql, sql_exec_addr))) {
       LOG_WARN("execute sql failed", K(ret), K(conn), K(start), K(sql));
-    } else if (old_compatibility_mode != compatibility_mode
-               && OB_FAIL(conn->set_session_variable("ob_compatibility_mode", old_compatibility_mode))) {
-      LOG_WARN("fail to recover inner connection sql mode", K(ret));
-    /*} else if (nullptr != sql_mode && old_sql_mode != *sql_mode && OB_FAIL(conn->set_session_variable("sql_mode", old_sql_mode))) {
-      LOG_WARN("set inner connection sql mode failed", K(ret));*/
     } else {
-      LOG_TRACE("compatibility mode switch successfully!",
-                K(compatibility_mode), K(old_compatibility_mode));
+      LOG_TRACE("execute sql successfully", K(sql));
     }
   }
   close(conn, ret);
-  LOG_TRACE("execute sql with sql mode", K(sql), K(compatibility_mode), K(ret));
+  LOG_TRACE("execute sql", K(sql), K(ret));
   return ret;
 }
 

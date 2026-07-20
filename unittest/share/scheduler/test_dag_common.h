@@ -326,8 +326,6 @@ public:
     UNUSEDx(buf, buf_len);
     return OB_SUCCESS;
   }
-  virtual lib::Worker::CompatMode get_compat_mode() const override
-  { return lib::Worker::CompatMode::MYSQL; }
   virtual bool is_ha_dag() const override { return false; }
   INHERIT_TO_STRING_KV("ObIDag", ObIDag, K_(is_inited), K_(type), K_(id), K(task_list_.get_size()));
 protected:

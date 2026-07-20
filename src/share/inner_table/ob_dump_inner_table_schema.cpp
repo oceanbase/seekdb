@@ -271,8 +271,7 @@ int ObInnerTableSchemaDumper::get_column_info_(const ObIArray<schema::ObTableSch
         if (OB_ISNULL(iter) || OB_ISNULL(*iter)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("pointer is null", KR(ret), KP(iter));
-        } else if (OB_FAIL(ObTableSqlService::gen_column_dml_without_check(**iter,
-                lib::Worker::CompatMode::MYSQL, dml))) {
+        } else if (OB_FAIL(ObTableSqlService::gen_column_dml_without_check(**iter, dml))) {
           LOG_WARN("failed to gen_table_dml", KR(ret));
         } else if (is_core_table(table->get_table_id()) ) {
         } else if (OB_FAIL(constructor.add_lines(table->get_table_id(), dml))) {
@@ -383,8 +382,7 @@ int ObInnerTableSchemaDumper::get_all_core_table_info_(const ObIArray<schema::Ob
         if (OB_ISNULL(iter) || OB_ISNULL(*iter)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("pointer is null", KR(ret), KP(iter));
-        } else if (OB_FAIL(ObTableSqlService::gen_column_dml_without_check(**iter,
-                lib::Worker::CompatMode::MYSQL, dml))) {
+        } else if (OB_FAIL(ObTableSqlService::gen_column_dml_without_check(**iter, dml))) {
           LOG_WARN("failed to gen_table_dml", KR(ret));
         } else if (OB_FAIL(column_constructor.add_lines(table->get_table_id(), dml))) {
           LOG_WARN("failed to add column", KR(ret), KPC(table));

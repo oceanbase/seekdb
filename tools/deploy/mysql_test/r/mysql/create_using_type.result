@@ -15,5 +15,4 @@ on index_table.data_table_id = data_table.table_id
 where index_table.index_using_type = 1
 order by 1;
 index_name	data_table_name	index_using_type
-__idx_12514_all_virtual_ddl_diagnose_info_i1	__all_virtual_ddl_diagnose_info	1
 drop database hualong;

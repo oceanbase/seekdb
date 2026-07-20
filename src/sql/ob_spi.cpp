@@ -1635,7 +1635,6 @@ int ObSPIService::spi_inner_execute(ObPLExecCtx *ctx,
   if (OB_SUCC(ret)) {
     HEAP_VAR(ObSPIResultSet, spi_result) {
       
-      ObPLPartitionHitGuard ph_guard(*ctx);
       ObSQLSessionInfo *session = ctx->exec_ctx_->get_my_session();
       stmt::StmtType stmt_type = static_cast<stmt::StmtType>(type);
 
@@ -1753,14 +1752,6 @@ int ObSPIService::spi_inner_execute(ObPLExecCtx *ctx,
           recreate_implicit_savapoint_if_need(ctx, ret);
         }
       }
-      // Record the PartitionHit information of the first SQL execution, and Freeze PartitionHit to prevent subsequent SQLs from overwriting
-      // Nested sql won't freeze `partition_hit_`, because need set `partition_hit_` when the top sql close.
-      if (OB_SUCC(ret) && ph_guard.can_freeze_) {
-        if (OB_NOT_NULL(spi_result.get_result_set()->get_physical_plan())) {
-          session->partition_hit().freeze();
-        }
-      }
-
       if (OB_FAIL(ret) && !ObStmt::is_diagnostic_stmt(stmt_type)) {
         // support `SHOW WARNINGS` in mysql PL
         session->set_show_warnings_buf(ret);
@@ -2001,7 +1992,6 @@ int ObSPIService::spi_prepare(common::ObIAllocator &allocator,
 {
   int ret = OB_SUCCESS;
   ObPLPrepareEnvGuard prepareEnvGuard(session, func, ret);
-  CHECK_COMPATIBILITY_MODE(&session);
   if (OB_SUCC(ret)) {
     ret = spi_parse_prepare(allocator,
                             session,
@@ -2021,11 +2011,7 @@ ObPLPrepareEnvGuard::ObPLPrepareEnvGuard(ObSQLSessionInfo &session_info,
   : ret_(ret), session_info_(session_info)
 {
   ret = OB_SUCCESS;
-  bool invoker_set_db = false;
-  uint64_t compat_version = 0;
   need_reset_default_database_ = false;
-  OZ (session_info.get_compatibility_version(compat_version));
-  OZ (ObCompatControl::check_feature_enable(compat_version, ObCompatFeatureType::INVOKER_RIGHT_COMPILE, invoker_set_db));
 }
 
 ObPLPrepareEnvGuard::~ObPLPrepareEnvGuard()
@@ -4601,8 +4587,7 @@ int ObSPIService::spi_convert_anonymous_array(pl::ObPLExecCtx *ctx,
   common::ObMySQLProxy *sql_proxy = NULL;
   ObPLPackageGuard *package_guard = NULL;
   const ObUserDefinedType *pl_user_type = NULL;
-  bool use_original_type = false;
-  uint64_t compat_version = 0;
+  const bool use_original_type = true;
   ObArenaAllocator tmp_alloc(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE);
   CK (OB_NOT_NULL(param));
   CK (OB_NOT_NULL(ctx));
@@ -4613,7 +4598,6 @@ int ObSPIService::spi_convert_anonymous_array(pl::ObPLExecCtx *ctx,
   // here must be dealing with the inout parameter type of the anonymous array
   CK (is_mocked_anonymous_array_id(user_type_id));
   CK (param->is_ext());
-  OZ (session->check_feature_enable(ObCompatFeatureType::OUT_ANONYMOUS_COLLECTION_IS_ALLOW, use_original_type));
   // For inout anonymous array parameters, if the original type is not empty,
   // the result is returned according to the original type.
   if (use_original_type) {
@@ -5265,17 +5249,11 @@ int ObSPIService::inner_open(ObPLExecCtx *ctx,
       LOG_WARN("Argument in pl context is NULL", K(session), K(ret));
     } else {
       ObPLASHGuard guard(ObPLASHGuard::ObPLASHStatus::IS_SQL_EXECUTION);
-      bool old_client_return_rowid = session->is_client_return_rowid();
-      bool old_is_client_use_lob_locator = session->is_client_use_lob_locator();
-      bool old_is_client_support_lob_locatorv2 = session->is_client_support_lob_locatorv2();
       bool is_inner_session = session->is_inner();
       ObSQLSessionInfo::SessionType old_session_type = session->get_session_type();
       ObInnerSQLConnection *spi_conn = NULL;
       !is_inner_session ? session->set_inner_session() : (void)NULL;
       session->set_session_type(ObSQLSessionInfo::USER_SESSION);
-      if (NULL != ctx->pl_ctx_) {
-        session->set_client_return_rowid(false);
-      }
       if (OB_SUCC(ret)) {
         WITH_CONTEXT(spi_result.get_memory_ctx()) {
           if (exec_params.count() <= 0 && !sql.empty()) {
@@ -5309,9 +5287,6 @@ int ObSPIService::inner_open(ObPLExecCtx *ctx,
 
       !is_inner_session ? session->set_user_session() : (void)NULL;
       session->set_session_type(old_session_type);
-      session->set_client_return_rowid(old_client_return_rowid);
-      session->set_client_use_lob_locator(old_is_client_use_lob_locator);
-      session->set_client_support_lob_locatorv2(old_is_client_support_lob_locatorv2);
     }
   }
   return ret;
@@ -6236,8 +6211,6 @@ int ObSPIService::convert_obj(ObPLExecCtx *ctx,
                && !obj.is_geometry()
                && !obj.is_null()
                && result_types[i].get_meta_type().is_ext()) {
-      // sql udt or geometry can cast to pl extend, null from sql udt type can cast to pl extend(xmltype)
-      // support: select extract(xmlparse(document '<a>a</a>'), '/b') into xml_data from dual;
       ret = OB_ERR_INTO_EXPR_ILLEGAL;
       LOG_WARN("expression 'string' in the INTO list is of wrong type", K(ret), K(obj), K(i), K(current_type.at(i)), K(result_types[i]));
     } else {
@@ -6377,13 +6350,13 @@ int ObSPIService::store_result(ObPLExecCtx *ctx,
                            1 == obj_array.count() &&
                            ((obj_array.at(0).is_pl_extend() &&
                            obj_array.at(0).get_meta().get_extend_type() != PL_CURSOR_TYPE &&
-                           obj_array.at(0).get_meta().get_extend_type() != PL_OPAQUE_TYPE) || // xmltypes may need to do cast
+                           obj_array.at(0).get_meta().get_extend_type() != PL_OPAQUE_TYPE) ||
                            (obj_array.at(0).is_null() &&
                            row_desc.at(0).get_meta_type().is_ext() &&
                            row_desc.at(0).get_meta_type().get_extend_type() > 0 &&
                            row_desc.at(0).get_meta_type().get_extend_type() < T_EXT_SQL_ARRAY &&
                            row_desc.at(0).get_meta_type().get_extend_type() != PL_CURSOR_TYPE &&
-                           row_desc.at(0).get_meta_type().get_extend_type() != PL_OPAQUE_TYPE))); // xmltypes may need to do cast
+                           row_desc.at(0).get_meta_type().get_extend_type() != PL_OPAQUE_TYPE)));
   if (!is_schema_object) {
     if (OB_SUCC(ret) && type_count != obj_array.count()) {
       ret = OB_ERR_SP_INVALID_FETCH_ARG;
@@ -7745,28 +7718,6 @@ ObSPIExecEnvGuard::~ObSPIExecEnvGuard()
   session_info_.get_retry_info_for_update().clear();
   if (!is_ps_cursor_) {
     session_info_.set_query_start_time(query_start_time_bk_);
-  }
-}
-
-ObPLPartitionHitGuard::ObPLPartitionHitGuard(ObPLExecCtx &pl_exec_ctx) : pl_exec_ctx_(pl_exec_ctx)
-{
-  old_partition_hit_ = true;
-  can_freeze_ = true;
-  if (OB_NOT_NULL(pl_exec_ctx_.exec_ctx_->get_pl_stack_ctx())
-      && OB_NOT_NULL(pl_exec_ctx_.exec_ctx_->get_my_session())
-      && pl_exec_ctx_.exec_ctx_->get_pl_stack_ctx()->in_nested_sql_ctrl()) {
-    old_partition_hit_ = pl_exec_ctx_.exec_ctx_->get_my_session()->partition_hit().get_bool();
-    can_freeze_ = false;
-  }
-}
-
-ObPLPartitionHitGuard::~ObPLPartitionHitGuard()
-{
-  if (!can_freeze_
-      && OB_NOT_NULL(pl_exec_ctx_.exec_ctx_->get_pl_stack_ctx())
-      && OB_NOT_NULL(pl_exec_ctx_.exec_ctx_->get_my_session())
-      && pl_exec_ctx_.exec_ctx_->get_pl_stack_ctx()->in_nested_sql_ctrl()) {
-    pl_exec_ctx_.exec_ctx_->get_my_session()->partition_hit().try_set_bool(old_partition_hit_);
   }
 }
 

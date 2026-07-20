@@ -43,26 +43,6 @@ void free_itid(int64_t itid);
 void defer_free_itid(int64_t &itid);
 int64_t detect_max_itid();
 
-#ifdef COMPILE_DLL_MODE
-class Itid 
-{
-public:
-  inline static int64_t get_tid()
-  {
-    if (OB_UNLIKELY(tid_ < 0)) {
-      tid_ = alloc_itid();
-      defer_free_itid(tid_);
-    }
-    return tid_;
-  }
-private:
-  static TLOCAL(int64_t, tid_);
-};
-inline int64_t get_itid()		
-{		
-  return Itid::get_tid();		
-}
-#else
 inline int64_t get_itid()
 {
   // NOTE: Thread ID
@@ -73,7 +53,6 @@ inline int64_t get_itid()
   }
   return tid;
 }
-#endif
 
 inline int64_t get_max_itid()
 {

@@ -93,17 +93,15 @@ public:
   void reset()
   {
     tx_id_.reset();
-    cluster_id_ = OB_INVALID_CLUSTER_ID;
     cluster_version_ = 0;
     tx_data_guard_.reset();
     exec_info_.reset();
     table_lock_info_.reset();
   }
   void destroy() { reset(); }
-  TO_STRING_KV(K_(tx_id), K_(cluster_id), K_(tx_data_guard),
+  TO_STRING_KV(K_(tx_id), K_(tx_data_guard),
                K_(exec_info), K_(table_lock_info), K_(cluster_version));
   transaction::ObTransID tx_id_;
-  int64_t cluster_id_;
   uint64_t cluster_version_;
   ObTxDataGuard tx_data_guard_;
   transaction::ObTxExecInfo exec_info_;

@@ -52,24 +52,12 @@ int ObRenameTableStmt::add_rename_table_item(const obcall::ObRenameTableItem &re
 }
 
 
-int ObRenameTableStmt::set_lock_priority(sql::ObSQLSessionInfo *session)
+void ObRenameTableStmt::set_lock_priority()
 {
-  int ret = OB_SUCCESS;
-  
-  if (!true) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "tenant config invalid, can not do rename", K(ret));
-  } else if (GCONF.enable_lock_priority) {
-    if (!ObLockExecutor::proxy_is_support(session)) {
-      ret = OB_NOT_SUPPORTED;
-      SQL_RESV_LOG(WARN, "is in proxy_mode and not support rename", K(ret), KPC(session));
-    } else {
-      rename_table_arg_.lock_priority_ = ObTableLockPriority::HIGH1;
-    }
+  if (GCONF.enable_lock_priority) {
+    rename_table_arg_.lock_priority_ = ObTableLockPriority::HIGH1;
   }
-  return ret;
 }
 
 } //namespace sql
 }
-

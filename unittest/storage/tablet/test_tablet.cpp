@@ -96,7 +96,7 @@ void TestTablet::SetUp()
 {
   OB_LOG(INFO, "ObTabletMeta", K(sizeof(ObTabletMeta)),
         K(sizeof(ObTabletRestoreState)), K(sizeof(ObTabletReportStatus)), K(sizeof(ObTabletTableStoreFlag)),
-        K(sizeof(ObTabletSpaceUsage)), K(sizeof(lib::Worker::CompatMode)));
+        K(sizeof(ObTabletSpaceUsage)));
 
   const int64_t tablet_size = sizeof(ObTablet);
   const int64_t rowkey_size = sizeof(ObRowkeyReadInfo);

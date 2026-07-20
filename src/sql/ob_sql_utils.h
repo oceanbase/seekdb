@@ -22,7 +22,6 @@
 #include "common/object/ob_object.h"
 #include "lib/container/ob_vector.h"
 #include "lib/container/ob_2d_array.h"
-#include "common/mysqlclient/ob_mysql_connection.h"
 #include "share/geo/ob_s2adapter.h"
 #include "share/ob_i_sql_expression.h"          // ObISqlExpression,ObExprCtx
 #include "storage/access/ob_table_param.h"        // ObColDesc
@@ -35,7 +34,6 @@
 #include "sql/optimizer/ob_phy_table_location_info.h"
 #include "sql/engine/expr/ob_expr_frame_info.h"
 #include "sql/session/ob_local_session_var.h"
-#include "share/ob_compatibility_control.h"
 #include "sql/engine/cmd/ob_load_data_parser.h"
 
 namespace oceanbase
@@ -63,6 +61,7 @@ class ObRawExprResType;
 class ObStmtHint;
 struct ObTransformerCtx;
 struct ObPreCalcExprFrameInfo;
+struct ObSqlCtx;
 typedef common::ObSEArray<common::ObNewRange *, 1> ObQueryRangeArray;
 struct ObExprConstraint;
 typedef common::ObSEArray<common::ObSpatialMBR, 1> ObMbrFilterArray;
@@ -494,8 +493,6 @@ public:
                                                   ObCollationType &cs_type);
   static int merge_solidified_var_into_max_allowed_packet(const ObLocalSessionVar *local_vars,
                                                           int64_t &max_allowed_packet);
-  static int merge_solidified_var_into_compat_version(const ObLocalSessionVar *local_vars,
-                                                      uint64_t &compat_version);
 
   static int make_whole_range(ObIAllocator &allocator,
                               const uint64_t ref_table_id,
@@ -1014,13 +1011,6 @@ enum ObThreeStageAggrStage {
   FIRST_STAGE,
   SECOND_STAGE,
   THIRD_STAGE,
-};
-
-enum ObRollupStatus {
-  NONE_ROLLUP,          // no rollup
-  ROLLUP_NORMAL,        // normal rollup
-  ROLLUP_DISTRIBUTOR,   // rollup distributor
-  ROLLUP_COLLECTOR,     // rollup collector
 };
 
 class ObVirtualTableResultConverter

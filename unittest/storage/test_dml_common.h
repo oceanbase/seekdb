@@ -346,7 +346,6 @@ void TestDmlCommon::build_tx_param(ObTxParam &tx_param)
 {
   tx_param.access_mode_ = transaction::ObTxAccessMode::RW;
   tx_param.isolation_ = transaction::ObTxIsolationLevel::RC;
-  tx_param.cluster_id_ = 1221;
   tx_param.timeout_us_ = TX_EXPIRE_TIME_US;
   STORAGE_LOG(INFO, "build tx param", K(tx_param));
 }

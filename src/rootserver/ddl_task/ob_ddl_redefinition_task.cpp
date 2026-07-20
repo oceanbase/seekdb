@@ -157,11 +157,10 @@ int ObDDLRedefinitionSSTableBuildTask::process()
       } else if (OB_FAIL(timeout_ctx.set_timeout(DDL_INNER_SQL_EXECUTE_TIMEOUT))) {
         LOG_WARN("set timeout failed", K(ret));
       } else {
-        ObCompatibilityMode compat_mode = ObCompatibilityMode::MYSQL_MODE;
         if (OB_FAIL(DDL_SIM(task_id_, REDEF_SSTABLE_BULD_TASK_PROCESS_FAILED))) {
           LOG_WARN("ddl sim failure", K(ret), K(task_id_));
         } else if (OB_FAIL(user_sql_proxy->write(sql_string.ptr(), affected_rows,
-                                                 compat_mode, &session_param, sql_exec_addr))) {
+                                                 &session_param, sql_exec_addr))) {
           LOG_WARN("fail to execute build replica sql", K(ret));
         } else if (OB_FAIL(ObCheckTabletDataComplementOp::check_finish_report_checksum(dest_table_id_, execution_id_, task_id_))) {
           LOG_WARN("fail to check sstable checksum_report_finish",
@@ -1337,10 +1336,7 @@ bool ObDDLRedefinitionTask::check_need_sync_stats_history() {
 }
 
 bool ObDDLRedefinitionTask::check_need_sync_stats() {
-  // bugfix:
-  // shouldn't sync stats if the ddl task is from load data's direct_load
-  return ObDDLType::DDL_DIRECT_LOAD != task_type_
-      && ObDDLType::DDL_DIRECT_LOAD_INSERT != task_type_;
+  return true;
 }
 
 int ObDDLRedefinitionTask::sync_stats_info()

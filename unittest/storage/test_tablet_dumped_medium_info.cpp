@@ -80,7 +80,7 @@ int TestTabletDumpedMediumInfo::create_medium_info(
     const uint64_t table_id = 1234567;
     share::schema::ObTableSchema table_schema;
     build_test_schema(table_schema, table_id);
-    ret = info->storage_schema_.init(allocator, table_schema, lib::Worker::CompatMode::MYSQL);
+    ret = info->storage_schema_.init(allocator, table_schema);
   }
 
   return ret;

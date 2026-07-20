@@ -1,0 +1,95 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#pragma once
+
+#include "common/datum/ob_datum.h"
+#include "sql/engine/vector/ob_i_vector.h"
+#include "common/object/ob_object.h"
+
+namespace oceanbase
+{
+namespace share
+{
+namespace schema
+{
+class ObColDesc;
+} // namespace schema
+} // namespace share
+namespace storage
+{
+class ObDDLVector
+{
+public:
+  ObDDLVector() = default;
+  virtual ~ObDDLVector() = default;
+
+  virtual ObIVector *get_vector() const = 0;
+  virtual int64_t memory_usage() const = 0;
+  virtual int64_t bytes_usage(const int64_t batch_size) const = 0;
+  // for check rowkey length
+  virtual void sum_bytes_usage(int64_t *sum_bytes, const int64_t batch_size) const = 0;
+  // for check rowkey length with LOB columns
+  virtual int sum_lob_length(int64_t *sum_bytes, const int64_t batch_size) const = 0;
+
+  virtual void reuse(const int64_t batch_size) = 0;
+
+  // --------- append interface --------- //
+  virtual int append_default(const int64_t batch_idx) = 0;
+  virtual int append_default(const int64_t batch_idx, const int64_t size) = 0;
+  virtual int append_datum(const int64_t batch_idx, const ObDatum &datum) = 0;
+  virtual int append_batch(const int64_t batch_idx, const ObDDLVector &src,
+                           const int64_t offset, const int64_t size) = 0;
+  virtual int append_batch(const int64_t batch_idx, ObIVector *src, const int64_t offset,
+                           const int64_t size) = 0;
+  virtual int append_batch(const int64_t batch_idx, const ObDatumVector &datum_vec,
+                           const int64_t offset, const int64_t size) = 0;
+  virtual int append_selective(const int64_t batch_idx, const ObDDLVector &src,
+                               const uint16_t *selector, const int64_t size) = 0;
+  virtual int append_selective(const int64_t batch_idx, ObIVector *src, const uint16_t *selector,
+                               const int64_t size) = 0;
+  virtual int append_selective(const int64_t batch_idx, const ObDatumVector &datum_vec,
+                               const uint16_t *selector, const int64_t size) = 0;
+
+  // --------- set interface --------- //
+  virtual int set_all_null(const int64_t batch_size) { return OB_ERR_UNEXPECTED; }
+  virtual int set_default(const int64_t batch_idx) = 0;
+  virtual int set_datum(const int64_t batch_idx, const ObDatum &datum) = 0;
+
+  // --------- shallow copy interface --------- //
+  virtual int shallow_copy(ObIVector *src, const int64_t batch_size) = 0;
+  virtual int shallow_copy(const ObDatumVector &datum_vec, const int64_t batch_size) = 0;
+
+  // --------- get interface --------- //
+  virtual int get_datum(const int64_t batch_idx, ObDatum &datum) = 0;
+
+  DECLARE_PURE_VIRTUAL_TO_STRING;
+
+public:
+  static int create_vector(VectorFormat format, VecValueTypeClass value_tc, bool is_nullable,
+                           const int64_t max_batch_size, ObIAllocator &allocator,
+                           ObDDLVector *&vector);
+  // Fixed length type:VEC_FIXED, variable length type:VEC_DISCRETE
+  static int create_vector(const share::schema::ObColDesc &col_desc, bool is_nullable,
+                           const int64_t max_batch_size, ObIAllocator &allocator,
+                           ObDDLVector *&vector);
+  static int create_vector(const common::ObObjMeta &col_type, bool is_nullable,
+                           const int64_t max_batch_size, ObIAllocator &allocator,
+                           ObDDLVector *&vector);
+};
+
+} // namespace storage
+} // namespace oceanbase

@@ -27,7 +27,6 @@
 #include "storage/lob/ob_lob_iterator.h"
 #include "storage/lob/ob_lob_meta_manager.h"
 #include "share/ob_i_lob_read_service.h"  // implements the lob-read domain port(dependency inversion)
-#include "storage/ob_storage_rpc.h"
 
 namespace oceanbase
 {

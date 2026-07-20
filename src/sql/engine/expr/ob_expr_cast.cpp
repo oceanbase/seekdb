@@ -382,15 +382,13 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
       LOG_USER_ERROR(OB_ERR_TOO_BIG_PRECISION, scale, "CAST", OB_MAX_DATETIME_PRECISION);
     }
     if (OB_SUCC(ret)) {
-      ObCompatibilityMode compatibility_mode = get_compatibility_mode();
       ObCollationType collation_connection = type_ctx.get_coll_type();
       ObCollationType collation_nation = session->get_nls_collation_nation();
       type1.set_calc_type(get_calc_cast_type(type1.get_type(), dst_type.get_type()));
       int32_t length = 0;
       if (ob_is_string_or_lob_type(dst_type.get_type())
           || ob_is_json(dst_type.get_type())
-          || ob_is_geometry(dst_type.get_type())
-          || ob_is_roaringbitmap(dst_type.get_type())) {
+          || ob_is_geometry(dst_type.get_type())) {
         type.set_collation_level(dst_type.get_collation_level());
         int32_t len = dst_type.get_length();
         int16_t length_semantics = ((dst_type.is_string_or_lob_locator_type() || dst_type.is_json())
@@ -423,7 +421,7 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
             && 0 == dst_type.get_precision()) {
           // MySql:cast (1 as decimal(0)) = cast(1 as decimal)
           // Use the compatibility-mode default precision for number casts.
-          type.set_precision(ObAccuracy::DDL_DEFAULT_ACCURACY2[compatibility_mode][ObNumberType].get_precision());
+          type.set_precision(ObAccuracy::DDL_DEFAULT_ACCURACY2[0][ObNumberType].get_precision());
         } else if ((ObIntTC == dst_type.get_type_class() || ObUIntTC == dst_type.get_type_class())
                    && dst_type.get_precision() <= 0) {
           // for int or uint , the precision = len
@@ -437,7 +435,7 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
             type.set_precision(static_cast<int16_t>(len));
           }
         } else if (ObYearType == dst_type.get_type()) {
-          ObAccuracy acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[compatibility_mode][dst_type.get_type()];
+          ObAccuracy acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[0][dst_type.get_type()];
           type.set_accuracy(acc);
           if (type1.is_decimal_int() && acc.precision_ < type1.get_precision()) {
             acc.precision_ = type1.get_precision();
@@ -592,7 +590,7 @@ int ObExprCast::get_cast_type(const bool enable_decimal_int,
       }
     } else if (ob_is_json(obj_type)) {
       dst_type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
-    } else if (ob_is_geometry(obj_type) || ob_is_roaringbitmap(obj_type)) {
+    } else if (ob_is_geometry(obj_type)) {
       dst_type.set_collation_type(CS_TYPE_BINARY);
       dst_type.set_collation_level(CS_LEVEL_IMPLICIT);
     } else if (ObNumberType == obj_type) {
@@ -678,7 +676,7 @@ int ObExprCast::cg_expr(ObExprCGCtx &op_cg_ctx,
   ObScale in_scale = rt_expr.args_[0]->datum_meta_.scale_;
   if (ob_is_integer_type(in_type)) {
     in_scale = 0;
-    in_prec = ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][in_type].get_precision();
+    in_prec = ObAccuracy::MAX_ACCURACY2[0][in_type].get_precision();
   }
   // suppose we have (P1, S1) -> (P2, S2)
   // if S2 > S1 && P1 + S2 - S1 <= P2, sizeof(result_type) is wide enough to store result value

@@ -23,8 +23,17 @@
 
 namespace oceanbase
 {
+namespace share
+{
+namespace schema
+{
+class ObSchemaGetterGuard;
+}
+}
 namespace sql
 {
+
+class ObResultSet;
 
 class ObSqlUdtNullBitMap final
 {
@@ -70,6 +79,15 @@ private:
 class ObSqlUdtUtils final
 {
 public:
+  static int convert_result_for_client(common::ObObj &value, ObResultSet &result);
+  static int convert_result_for_client(common::ObObj &value,
+                                       common::ObIAllocator *allocator,
+                                       ObSQLSessionInfo *session_info,
+                                       ObExecContext *exec_context,
+                                       bool is_ps_protocol,
+                                       const ColumnsFieldIArray *fields = NULL,
+                                       share::schema::ObSchemaGetterGuard *schema_guard = NULL);
+
   // functions to flattern nested udt to a single object array
   static int ob_udt_flattern_pl_extend(const ObObj **flattern_objs,
                                        const int32_t &flattern_object_count,

@@ -354,11 +354,6 @@ public:
     package_spec_info_.set_flag(flag);
     package_body_info_.set_flag(flag);
   }
-  OB_INLINE void set_package_comp_flag(int64_t comp_flag)
-  {
-    package_spec_info_.set_comp_flag(comp_flag);
-    package_body_info_.set_comp_flag(comp_flag);
-  }
   OB_INLINE int set_package_exec_env(const common::ObString &exec_env)
   {
     int ret = common::OB_SUCCESS;
@@ -426,7 +421,6 @@ public:
   OB_INLINE const common::ObString &get_package_body_source() const { return package_body_info_.get_source(); }
   OB_INLINE const ObPackageInfo &get_package_body_info() const { return package_body_info_; }
   OB_INLINE int64_t get_package_flag() const { return package_spec_info_.get_flag(); }
-  OB_INLINE int64_t get_package_comp_flag() const { return package_spec_info_.get_comp_flag(); }
   OB_INLINE const common::ObString &get_package_exec_env() const { return package_spec_info_.get_exec_env(); }
   OB_INLINE uint64_t get_sql_mode() const { return sql_mode_; }
   OB_INLINE OrderType get_order_type() const { return order_type_; }

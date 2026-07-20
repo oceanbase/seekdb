@@ -177,8 +177,7 @@ public:
         multi_stmt_rowkey_pos_(alloc_),
         pre_cal_expr_handler_(NULL),
         can_skip_params_match_(false),
-        can_delay_init_datum_store_(false),
-        is_cli_return_rowid_(false)
+        can_delay_init_datum_store_(false)
   {}
   virtual ~ObPlanSet();
 
@@ -303,8 +302,6 @@ protected:
   bool can_skip_params_match_;
   bool can_delay_init_datum_store_;
 
-public:
-  bool is_cli_return_rowid_;
 };
 
 class ObSqlPlanSet : public ObPlanSet

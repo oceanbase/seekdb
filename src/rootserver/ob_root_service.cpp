@@ -846,7 +846,7 @@ int ObRootService::execute_bootstrap()
       if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, GCONF._ob_ddl_timeout))) {
         LOG_WARN("failed to set default timeout", KR(ret));
       } else if (!GCONF._enable_async_load_sys_package &&
-          OB_FAIL(ObSysTenantLoadSysPackageTask::wait_sys_package_ready(ctx, ObCompatibilityMode::MYSQL_MODE))) {
+          OB_FAIL(ObSysTenantLoadSysPackageTask::wait_sys_package_ready(ctx))) {
         LOG_WARN("failed to wait mysql sys package ready", KR(ret), K(ctx));
       } else {
         LOG_DBA_INFO_V2(OB_BOOTSTRAP_WAIT_SYS_PACKAGE_SUCCESS,
@@ -1338,12 +1338,7 @@ int ObRootService::execute_ddl_task(const obcall::ObAlterTableArg &arg,
         break;
       }
       case share::MAKE_DDL_TAKE_EFFECT_TASK: {
-        if (arg.is_direct_load_partition_) {
-          if (OB_FAIL(ddl_service_.swap_orig_and_hidden_table_partitions(
-              const_cast<obcall::ObAlterTableArg &>(arg)))) {
-            LOG_WARN("failed to swap orig and hidden table partitions", K(ret));
-          }
-        } else if (OB_FAIL(ddl_service_.swap_orig_and_hidden_table_state(
+        if (OB_FAIL(ddl_service_.swap_orig_and_hidden_table_state(
             const_cast<obcall::ObAlterTableArg &>(arg)))) {
           LOG_WARN("failed to swap orig and hidden table state", K(ret));
         }
@@ -1518,34 +1513,6 @@ int ObRootService::precheck_interval_part(const obcall::ObAlterTableArg &arg)
       ret = OB_ERR_INTERVAL_PARTITION_EXIST;
     }
   }
-  return ret;
-}
-
-int ObRootService::create_hidden_table(const obcall::ObCreateHiddenTableArg &arg,
-                                       obcall::ObCreateHiddenTableRes &res)
-{
-  LOG_DEBUG("receive create hidden table arg", K(arg));
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (OB_UNLIKELY(!arg.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(arg));
-  } else if (OB_FAIL(DDL_SIM(arg.task_id_, CREATE_HIDDEN_TABLE_RPC_FAILED))) {
-    LOG_WARN("ddl sim failure", K(ret), K(arg));
-  } else if (OB_FAIL(DDL_SIM(arg.task_id_, CREATE_HIDDEN_TABLE_RPC_SLOW))) {
-    LOG_WARN("ddl sim failure", K(ret), K(arg));
-  } else if (OB_FAIL(ddl_service_.create_hidden_table(arg, res))) {
-    LOG_WARN("do create hidden table in trans failed", K(ret), K(arg));
-  }
-  ROOTSERVICE_EVENT_ADD("ddl scheduler", "create hidden table",
-                        "ret", ret,
-                        "trace_id", *ObCurTraceId::get_trace_id(),
-                        "task_id", res.task_id_,
-                        "table_id", arg.get_table_id(),
-                        "schema_version", res.schema_version_);
-  LOG_INFO("finish create hidden table ddl", K(ret), K(arg), K(res), "ddl_event_info", ObDDLEventInfo());
   return ret;
 }
 
@@ -2499,7 +2466,6 @@ int ObRootService::optimize_table(const ObOptimizeTableArg &arg)
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
   LOG_INFO("receive optimize table request", K(arg));
-  lib::Worker::CompatMode mode;
   if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(arg));
@@ -2507,7 +2473,6 @@ int ObRootService::optimize_table(const ObOptimizeTableArg &arg)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("error unexpected, schema service must not be NULL", K(ret));
   } else {
-    mode = lib::Worker::CompatMode::MYSQL;
     const int64_t all_core_table_id = OB_ALL_CORE_TABLE_TID;
     for (int64_t i = 0; OB_SUCC(ret) && i < arg.tables_.count(); ++i) {
       SMART_VAR(obcall::ObAlterTableArg, alter_table_arg) {
@@ -2527,14 +2492,9 @@ int ObRootService::optimize_table(const ObOptimizeTableArg &arg)
         } else if (all_core_table_id == table_schema->get_table_id()) {
           // do nothing
         } else {
-          if (lib::Worker::CompatMode::MYSQL == mode) {
-            if (OB_FAIL(sql.append_fmt("OPTIMIZE TABLE `%.*s`",
-                table_item.table_name_.length(), table_item.table_name_.ptr()))) {
-              LOG_WARN("fail to assign sql stmt", K(ret));
-            }
-          } else {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("error unexpected, unknown mode", K(ret), K(mode));
+          if (OB_FAIL(sql.append_fmt("OPTIMIZE TABLE `%.*s`",
+              table_item.table_name_.length(), table_item.table_name_.ptr()))) {
+            LOG_WARN("fail to assign sql stmt", K(ret));
           }
           if (OB_SUCC(ret)) {
             alter_table_arg.ddl_stmt_str_ = sql.string();
@@ -3137,21 +3097,16 @@ int ObRootService::revoke_database(const ObRevokeDBArg &arg)
 int ObRootService::revoke_table(const ObRevokeTableArg &arg)
 {
   int ret = OB_SUCCESS;
-  lib::Worker::CompatMode mode;
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(arg), K(ret));
-  } else if (FALSE_IT(mode = lib::Worker::CompatMode::MYSQL)) {
-  } else if (lib::Worker::CompatMode::MYSQL == mode) {
+  } else {
     if (OB_FAIL(ddl_service_.revoke_table_and_column_mysql(arg))) {
       LOG_WARN("revoke table and col failed", K(ret));
     }
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected feature action", K(ret));
   }
   return ret;
 }
@@ -3867,9 +3822,7 @@ int ObRootService::table_allow_ddl_operation(const obcall::ObAlterTableArg &arg)
   const ObString &origin_table_name = alter_table_schema.get_origin_table_name();
   schema_guard.set_session_id(arg.session_id_);
   bool is_index = arg.alter_table_schema_.is_index_table();
-  if (arg.is_refresh_sess_active_time()) {
-    //do nothing
-  } else if (!arg.is_valid()) {
+  if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invali argument", K(ret), K(arg));
   } else if (OB_FAIL(ddl_service_.get_tenant_schema_guard_with_version_in_inner_table(schema_guard))) {

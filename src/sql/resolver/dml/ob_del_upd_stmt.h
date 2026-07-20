@@ -192,7 +192,6 @@ public:
   ObInsertTableInfo() :
       ObDmlTableInfo(ObDmlTableType::INSERT_TABLE),
       is_replace_(false),
-      is_overwrite_(false),
       values_desc_(),
       values_vector_(),
       column_conv_exprs_(),
@@ -203,7 +202,6 @@ public:
   ObInsertTableInfo(ObDmlTableType dml_type) :
       ObDmlTableInfo(dml_type),
       is_replace_(false),
-      is_overwrite_(false),
       values_desc_(),
       values_vector_(),
       column_conv_exprs_(),
@@ -231,7 +229,6 @@ public:
                K_(check_constraint_exprs),
                K_(view_check_exprs),
                K_(is_replace),
-               K_(is_overwrite),
                K_(values_desc),
                K_(values_vector),
                K_(column_conv_exprs),
@@ -239,7 +236,6 @@ public:
                K_(assignments),
                K_(column_in_values_vector));
   bool is_replace_;  // replace semantic for mysql
-  bool is_overwrite_;
   // The following two variables together describe the VALUES structure of INSERT
   // For example: INSERT INTO T1 (i, j, k) VALUES (1,2,3),(4,5,6)
   //  - values_desc_ size is 3, inside it saves the column reference expr of columns i, j, k

@@ -68,11 +68,6 @@ int ObHashDistinctVecOp::inner_open()
     LOG_WARN("unexpected status: left is null", K(ret));
   } else if (OB_FAIL(ObOperator::inner_open())) {
     LOG_WARN("failed to inner open", K(ret));
-  } else if (MY_SPEC.is_push_down_
-            && OB_FAIL(ctx_.get_my_session()
-                            ->get_sys_variable(share::SYS_VAR__GROUPBY_NOPUSHDOWN_CUT_RATIO,
-                                                                            bypass_ctrl_.cut_ratio_))) {
-    LOG_WARN("failed to get no pushdown cut ratio", K(ret));
   } else if (OB_FAIL(init_mem_context())) {
     LOG_WARN("failed to init mem context", K(ret));
   } else {
@@ -86,8 +81,7 @@ int ObHashDistinctVecOp::inner_open()
     if (MY_SPEC.by_pass_enabled_) {
       CK (!MY_SPEC.is_block_mode_);
       // to avoid performance decrease, at least deduplicate 2/3
-      bypass_ctrl_.cut_ratio_ = (bypass_ctrl_.cut_ratio_ <= ObAdaptiveByPassCtrl::INIT_CUT_RATIO
-                                  ? ObAdaptiveByPassCtrl::INIT_CUT_RATIO : bypass_ctrl_.cut_ratio_);
+      bypass_ctrl_.cut_ratio_ = ObAdaptiveByPassCtrl::INIT_CUT_RATIO;
       build_distinct_data_batch_func_ = &ObHashDistinctVecOp::build_distinct_data_for_batch_by_pass;
     }
     LOG_TRACE("trace block mode", K(MY_SPEC.is_block_mode_),

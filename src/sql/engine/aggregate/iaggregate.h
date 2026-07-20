@@ -84,9 +84,7 @@ inline bool has_extra_info(ObAggrInfo &info)
   case T_FUNC_SYS_ARRAY_AGG:
   case T_FUN_HYBRID_HIST:
   case T_FUN_TOP_FRE_HIST:
-  case T_FUN_AGG_UDF: 
-  case T_FUN_SYS_RB_OR_CARDINALITY_AGG:
-  case T_FUN_SYS_RB_AND_CARDINALITY_AGG: {
+  case T_FUN_AGG_UDF: {
     has = true;
     break;
   }
@@ -723,16 +721,9 @@ public:
     } else if (OB_FAIL(ad_result->brs_holder_.save(ctx.max_batch_size_))) {
       SQL_LOG(WARN, "backup datum failed", K(ret));
     } else if (agg_ctx.has_rollup_ && group_id > 0) {
-      if (group_id > agg_ctx.rollup_context_->start_partial_rollup_idx_
-          && group_id <= agg_ctx.rollup_context_->end_partial_rollup_idx_) {
-        // Group id greater than zero in sort based group by must be rollup,
-        // distinct set is sorted and iterated in rollup_process(), rewind here.
-        if (OB_FAIL(ad_result->rewind())) {
-          SQL_LOG(WARN, "rewind iterator failed", K(ret));
-        }
-        SQL_LOG(DEBUG, "debug process distinct batch", K(group_id),
-                K(agg_ctx.rollup_context_->start_partial_rollup_idx_),
-                K(agg_ctx.rollup_context_->end_partial_rollup_idx_));
+      // The distinct set was iterated while producing the rollup row.
+      if (OB_FAIL(ad_result->rewind())) {
+        SQL_LOG(WARN, "rewind iterator failed", K(ret));
       }
     }
     char *skip_mem = nullptr;
@@ -1077,7 +1068,6 @@ inline constexpr bool is_var_len_agg_cell(VecValueTypeClass vec_tc)
          || vec_tc == VEC_TC_GEO
          || vec_tc == VEC_TC_UDT
          || vec_tc == VEC_TC_COLLECTION
-         || vec_tc == VEC_TC_ROARINGBITMAP
          || vec_tc == VEC_TC_EXTEND;
 }
 

@@ -119,7 +119,6 @@ public:
                                     const uint32_t type,
                                     sql::ObSQLSessionInfo *session,
                                     const ObCharsetType charset,
-                                    const ObCharsetType ncharset,
                                     const ObCollationType cs_type,
                                     const char *& data,
                                     const common::ObTimeZoneInfo *tz_info,
@@ -296,18 +295,15 @@ private:
                            bool &async_resp_used);
 
   //
-  // %charset is current charset of data, %cs_type and %ncs_type is destination collation.
+  // %charset is current charset of data and %cs_type is destination collation.
   //
   // %charset: connection charset
   // %cs_type: collation for char/varchar type
-  // %ncs_type: collation for nchar/nvarcahr type
-  //
-  // In MySQL mode, %charset is the charset of %cs_type and %ncs_type is not used.
+  // In MySQL mode, %charset is the charset of %cs_type.
   // Some callers may still pass a destination collation whose charset differs from %charset.
   int parse_param_value(ObIAllocator& allocator,
                         const uint32_t type,
                         const ObCharsetType charset,
-                        const ObCharsetType ncharset,
                         const ObCollationType cs_type,
                         const char *&data,
                         const common::ObTimeZoneInfo *tz_info,

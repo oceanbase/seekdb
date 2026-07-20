@@ -9,17 +9,14 @@ devdeps-dirent-20260506.tar.gz
 devdeps-libxml2-20260506.tar.gz
 devdeps-pthreads-20260506.tar.gz
 devdeps-curl-20260506.tar.gz
-devdeps-aws-sdk-cpp-20260506.tar.gz
 devdeps-fast-float-20260506.tar.gz
 devdeps-rapidjson-20260506.tar.gz
-devdeps-libmariadb-20260506.tar.gz
 devdeps-s2geometry-20260506.tar.gz
 devdeps-abseil-20260506.tar.gz
 devdeps-boost-geometry-20260506.tar.gz
 devdeps-protobuf-c-20260506.tar.gz
 devdeps-roaring-20260506.tar.gz
 devdeps-icu-20260506.tar.gz
-devdeps-hyperscan-20260506.tar.gz
 devdeps-grpc-20260506.tar.gz
 devdeps-sqlite3-20260506.tar.gz
 devdeps-openssl-20260414.tar.gz

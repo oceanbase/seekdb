@@ -36,7 +36,6 @@ ObDropRoleResolver::~ObDropRoleResolver()
 int ObDropRoleResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
-  CHECK_COMPATIBILITY_MODE(session_info_);
   ObDropRoleStmt *drop_role_stmt = NULL;
   if (2 != parse_tree.num_child_ || T_DROP_ROLE != parse_tree.type_) {
     ret = OB_INVALID_ARGUMENT;

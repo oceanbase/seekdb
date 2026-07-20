@@ -458,8 +458,7 @@ public:
 
   OB_INLINE bool is_object_device() const
   {
-    return (ObStorageType::OB_STORAGE_S3 == device_type_)
-           || (ObStorageType::OB_STORAGE_FILE == device_type_)
+    return (ObStorageType::OB_STORAGE_FILE == device_type_)
            || (ObStorageType::OB_STORAGE_AZBLOB == device_type_);
   }
 

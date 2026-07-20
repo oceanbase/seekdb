@@ -342,23 +342,6 @@ int ObDMLStmtPrinter::print_table(const TableItem *table_item,
           DATA_PRINTF(" %.*s", LEN_AND_PTR(table_item->alias_name_));
           break;
         }
-        case MulModeTableType::OB_RB_ITERATE_TABLE_TYPE : {
-          if (table_item->json_table_def_->doc_exprs_.count() > 1 ) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "print rb_iterate table with more than 1 params");
-          } else {
-            DATA_PRINTF("RB_ITERATE(");
-            if (OB_FAIL(expr_printer_.do_print(table_item->json_table_def_->doc_exprs_.at(0), T_FROM_SCOPE))) {
-              LOG_WARN("failed to print expr", K(ret));
-            }
-            DATA_PRINTF(")");
-            DATA_PRINTF(" %.*s", LEN_AND_PTR(table_item->alias_name_));
-            DATA_PRINTF("(");
-            DATA_PRINTF("%.*s", LEN_AND_PTR(table_item->json_table_def_->all_cols_.at(1)->col_name_));
-            DATA_PRINTF(")");
-          }
-          break;
-        }
         case MulModeTableType::OB_UNNEST_TABLE_TYPE : {
           DATA_PRINTF("UNNEST(");
           for (int64_t i = 0; OB_SUCC(ret) && i < table_item->json_table_def_->doc_exprs_.count(); ++i) {
@@ -849,10 +832,6 @@ int ObDMLStmtPrinter::print_mysql_json_return_type(int64_t value, ObDataType dat
       }
       break;
     }
-    case T_ROARINGBITMAP: {
-      DATA_PRINTF("roaringbitmap ");
-      break;
-    }
     default: {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unknown cast type", K(ret), K(cast_type));
@@ -1148,8 +1127,6 @@ int ObDMLStmtPrinter::print_json_table_nested_column(const TableItem *table_item
         } else if (col_info.on_mismatch_type_ == 2) {
           DATA_PRINTF(" (type error)");
         }
-      } else if (col_info.col_type_ == static_cast<int32_t>(COL_TYPE_RB_ITERATE)) {
-        DATA_PRINTF(" RB_ITERATE");
       }
     }    
   }
@@ -1862,4 +1839,3 @@ bool ObDMLStmtPrinter::need_print_catalog_name(const ObString& catalog_name)
 
 } //end of namespace sql
 } //end of namespace oceanbase
-

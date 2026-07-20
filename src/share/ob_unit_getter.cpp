@@ -32,7 +32,6 @@ OB_SERIALIZE_MEMBER(ObUnitInfoGetter::ObTenantConfig,
                     unit_id_,
                     unit_status_,
                     config_,
-                    mode_,
                     create_timestamp_,
                     has_memstore_,
                     is_removed_,
@@ -53,7 +52,6 @@ ObUnitInfoGetter::ObTenantConfig::ObTenantConfig()
   : unit_id_(common::OB_INVALID_ID),
     unit_status_(UNIT_ERROR_STAT),
     config_(),
-    mode_(lib::Worker::CompatMode::INVALID),
     create_timestamp_(0),
     has_memstore_(true),
     is_removed_(false),
@@ -65,7 +63,6 @@ int ObUnitInfoGetter::ObTenantConfig::init(
     const uint64_t unit_id,
     const ObUnitStatus unit_status,
     const ObUnitConfig &config,
-    lib::Worker::CompatMode compat_mode,
     const int64_t create_timestamp,
     const bool has_memstore,
     const bool is_remove,
@@ -79,7 +76,6 @@ int ObUnitInfoGetter::ObTenantConfig::init(
     
     unit_id_ = unit_id;
     unit_status_ = unit_status;
-    mode_ = compat_mode;
     create_timestamp_ = create_timestamp;
     has_memstore_ = has_memstore;
     is_removed_ = is_remove;
@@ -111,7 +107,6 @@ int ObUnitInfoGetter::ObTenantConfig::divide_meta_tenant(ObTenantConfig& meta_te
       unit_id_,
       unit_status_,
       meta_config,
-      lib::Worker::CompatMode::MYSQL,       // always MYSQL mode
       create_timestamp_,
       has_memstore_,
       is_removed_,
@@ -135,7 +130,6 @@ void ObUnitInfoGetter::ObTenantConfig::reset()
   
   unit_id_ = common::OB_INVALID_ID;
   config_.reset();
-  mode_ = lib::Worker::CompatMode::INVALID;
   create_timestamp_ = 0;
   is_removed_ = false;
   hidden_sys_data_disk_config_size_ = 0;
@@ -148,7 +142,6 @@ bool ObUnitInfoGetter::ObTenantConfig::operator==(const ObTenantConfig &other) c
           unit_id_ == other.unit_id_ &&
           unit_status_ == other.unit_status_ &&
           config_ == other.config_ &&
-          mode_ == other.mode_ &&
           create_timestamp_ == other.create_timestamp_ &&
           has_memstore_ == other.has_memstore_ &&
           is_removed_ == other.is_removed_ &&
@@ -167,7 +160,6 @@ int ObUnitInfoGetter::ObTenantConfig::assign(const ObUnitInfoGetter::ObTenantCon
     
     unit_id_ = other.unit_id_;
     unit_status_ = other.unit_status_;
-    mode_ = other.mode_;
     create_timestamp_ = other.create_timestamp_;
     has_memstore_ = other.has_memstore_;
     is_removed_ = other.is_removed_;
@@ -234,7 +226,6 @@ int ObUnitInfoGetter::get_server_tenant_configs(const common::ObAddr &server,
     // Hardcode sys tenant config, no table query needed
     ObTenantConfig tenant_config;
     ObUnitConfig unit_config;
-    lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
     
     const uint64_t unit_id = 1;  // Single unit with ID 1
     const int64_t create_timestamp = 0;
@@ -254,7 +245,6 @@ int ObUnitInfoGetter::get_server_tenant_configs(const common::ObAddr &server,
       } else if (OB_FAIL(tenant_config.init(unit_id,
                                              ObUnitInfoGetter::ObUnitStatus::UNIT_NORMAL,
                                              unit_config,
-                                             compat_mode,
                                              create_timestamp,
                                              has_memstore,
                                              false /*is_removed*/,
@@ -664,15 +654,6 @@ void ObUnitInfoGetter::build_unit_stat(const ObAddr &server,
   } else if (ObUnit::UNIT_STATUS_DELETING == unit.status_) {
     unit_stat = UNIT_MARK_DELETING;
   }
-}
-
-int ObUnitInfoGetter::get_compat_mode(lib::Worker::CompatMode &compat_mode) const
-{
-  int ret = OB_SUCCESS;
-  {
-    compat_mode = lib::Worker::CompatMode::MYSQL;
-  }
-  return ret;
 }
 
 }//end namespace share

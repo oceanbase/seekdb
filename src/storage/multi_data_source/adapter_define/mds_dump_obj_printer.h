@@ -77,7 +77,7 @@ struct MdsDumpObjComparer
   {
     MDS_TG(1_ms);
     int ret = OB_SUCCESS;
-    if (IDX == lhs.mds_table_id_) {
+    if (IDX + MDS_TABLE_ID_OFFSET == lhs.mds_table_id_) {
       using MdsTableType = typename std::decay<
                         decltype(std::declval<MdsTableTypeTuple>().element<IDX>())>::type;
       InnerMdsDumpObjComparer<MdsTableType> inner_helper;
@@ -189,7 +189,7 @@ struct MdsDumpObjPrinter
   {
     MDS_TG(1_ms);
     int ret = OB_SUCCESS;
-    if (IDX == mds_table_id) {
+    if (IDX + MDS_TABLE_ID_OFFSET == mds_table_id) {
       using MdsTableType = typename std::decay<
                         decltype(std::declval<MdsTableTypeTuple>().element<IDX>())>::type;
       InnerMdsDumpObjPrinter<MdsTableType> inner_helper;

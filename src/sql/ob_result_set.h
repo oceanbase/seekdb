@@ -326,9 +326,7 @@ public:
   void set_wildcard_string(common::ObString string) { wild_str_ = string; }
   common::ObString &get_wildcard_string() { return wild_str_;}
   common::ParamStore &get_ps_params() { return ps_params_; }
-  static void replace_lob_type(const ObSQLSessionInfo &session,
-                               const ObField &field,
-                               obmysql::ObMySQLField &mfield);
+  static void replace_lob_type(obmysql::ObMySQLField &mfield);
   void set_close_fail_callback(ObFunction<void(const int, int&)> func) { close_fail_cb_ = func; }
   void set_will_retry() { will_retry_ = true; }
   static int implicit_commit_before_cmd_execute(ObSQLSessionInfo &session_info,

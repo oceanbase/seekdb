@@ -150,7 +150,7 @@ public:
   inline bool is_dup_declare() const { return is_dup_declare_; }
   inline void set_is_referenced(bool is_referenced) { is_referenced_ = is_referenced; }
   inline bool is_referenced() const { return is_referenced_; }
-  inline void set_is_default_expr_has_reroute_factor(bool val) { is_default_expr_access_external_state_ = val; }
+  inline void set_is_default_expr_access_external_state(bool val) { is_default_expr_access_external_state_ = val; }
   inline bool is_default_expr_access_external_state() const { return is_default_expr_access_external_state_; }
 
   TO_STRING_KV(K_(name),

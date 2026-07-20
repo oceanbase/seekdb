@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-int acquire_tx(ObTxDesc *&tx, const uint32_t session_id = 0, const uint32_t client_sid = 0, const uint64_t data_version = 0);
+int acquire_tx(ObTxDesc *&tx, const uint32_t session_id = 0, const uint64_t data_version = 0);
 
 /**
  * start_tx - explicit start transaction

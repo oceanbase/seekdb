@@ -335,12 +335,6 @@ int ObDDLTask::get_ddl_type_str(const int64_t ddl_type, const char *&ddl_type_st
     case DDL_TABLE_REDEFINITION:
       ddl_type_str = "table redefinition";
       break;
-    case DDL_DIRECT_LOAD:
-      ddl_type_str = "direct load";
-      break;
-    case DDL_DIRECT_LOAD_INSERT:
-      ddl_type_str = "direct load insert";
-      break;
     case DDL_MODIFY_AUTO_INCREMENT:
       ddl_type_str = "modify auto increment";
       break;
@@ -1159,11 +1153,6 @@ void ObDDLTask::check_ddl_task_execute_too_long()
       LOG_DBA_ERROR(OB_DDL_TASK_EXECUTE_TOO_MUCH_TIME, "msg","ddl task executes too much time", K(ret), K(task_id_), K(execute_time));
     }
   }
-}
-
-bool ObDDLTask::check_is_load_data(ObDDLType ddl_type)
-{
-  return (ddl_type == ObDDLType::DDL_DIRECT_LOAD || ddl_type == ObDDLType::DDL_DIRECT_LOAD_INSERT);
 }
 
 #ifdef ERRSIM
@@ -3078,8 +3067,6 @@ int ObDDLTaskRecordOperator::check_has_conflict_ddl(
               case ObDDLType::DDL_ADD_COLUMN_OFFLINE:
               case ObDDLType::DDL_COLUMN_REDEFINITION:
               case ObDDLType::DDL_TABLE_REDEFINITION:
-              case ObDDLType::DDL_DIRECT_LOAD:
-              case ObDDLType::DDL_DIRECT_LOAD_INSERT:
                 has_conflict_ddl = true;
                 break;
               default:

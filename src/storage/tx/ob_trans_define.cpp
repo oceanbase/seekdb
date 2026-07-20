@@ -351,7 +351,6 @@ void ObTxExecInfo::reset()
   need_checksum_ = true;
   serial_final_scn_.reset();
   serial_final_seq_no_.reset();
-  dli_batch_set_.destroy();
 }
 
 void ObTxExecInfo::destroy(ObTxMDSCache &mds_cache)
@@ -439,8 +438,6 @@ int ObTxExecInfo::assign(const ObTxExecInfo &exec_info)
     TRANS_LOG(WARN, "multi_data_source assign error", KR(ret), K(exec_info));
   } else if (OB_FAIL(mds_buffer_ctx_array_.assign(exec_info.mds_buffer_ctx_array_))) {
     TRANS_LOG(WARN, "mds_buffer_ctx_array assign error", KR(ret), K(exec_info));
-  } else if (OB_FAIL(dli_batch_set_.assign(exec_info.dli_batch_set_))) {
-    TRANS_LOG(WARN, "direct load inc batch set assign error", K(ret), K(exec_info.dli_batch_set_));
   } else {
     // Prepare version should be initialized before state_
     // for ObTransPartCtx::get_prepare_version_if_preapred();
@@ -493,8 +490,7 @@ OB_SERIALIZE_MEMBER(ObTxExecInfo,
                     checksum_,
                     checksum_scn_,
                     serial_final_scn_,
-                    serial_final_seq_no_,
-                    dli_batch_set_  // FARM COMPAT WHITELIST
+                    serial_final_seq_no_
                     );
 
 void ObMulSourceDataNotifyArg::reset()

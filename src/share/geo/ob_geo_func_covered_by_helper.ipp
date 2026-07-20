@@ -34,35 +34,13 @@ static bool ob_apply_bg_covered_by(const ObGeometry *g1, const ObGeometry *g2)
 }
 
 template<typename GeoType1, typename GeoType2>
-static bool ob_apply_bg_covered_by_with_pl_strategy(const ObGeometry *g1, const ObGeometry *g2,
-                                                    const ObGeoEvalCtx &context)
+static bool ob_apply_bg_covered_by_geog(const ObGeometry *g1, const ObGeometry *g2,
+                                        const ObGeoEvalCtx &context)
 {
+  UNUSED(context);
   const GeoType1 *geo1 = reinterpret_cast<const GeoType1 *>(g1->val());
   const GeoType2 *geo2 = reinterpret_cast<const GeoType2 *>(g2->val());
-  const ObSrsItem *srs = context.get_srs();
-  boost::geometry::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
-  ObPlPaStrategy point_strategy(geog_sphere);
-#ifdef USE_SPHERE_GEO
-  return boost::geometry::covered_by(*geo1, *geo2, point_strategy);
-#else
   return boost::geometry::covered_by(*geo1, *geo2);
-#endif
-}
-
-template<typename GeoType1, typename GeoType2>
-static bool ob_apply_bg_covered_by_with_ll_strategy(const ObGeometry *g1, const ObGeometry *g2,
-                                                    const ObGeoEvalCtx &context)
-{
-  const GeoType1 *geo1 = reinterpret_cast<const GeoType1 *>(g1->val());
-  const GeoType2 *geo2 = reinterpret_cast<const GeoType2 *>(g2->val());
-  const ObSrsItem *srs = context.get_srs();
-  boost::geometry::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
-  ObLlLaAaStrategy line_strategy(geog_sphere);
-#ifdef USE_SPHERE_GEO
-  return boost::geometry::covered_by(*geo1, *geo2, line_strategy);
-#else
-  return boost::geometry::covered_by(*geo1, *geo2);
-#endif
 }
 
 // ----- ObGeoFuncCoveredByImpl -----

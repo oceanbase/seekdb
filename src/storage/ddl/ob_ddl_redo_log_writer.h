@@ -63,16 +63,6 @@ public:
   ObDDLKvMgrHandle &ddl_kv_mgr_handle_;
 };
 
-class ObDDLIncNeedStopWriteChecker : public ObDDLNeedStopWriteChecker
-{
-public:
-  ObDDLIncNeedStopWriteChecker(ObTablet &tablet) : tablet_(tablet) {}
-  virtual ~ObDDLIncNeedStopWriteChecker() {}
-  virtual bool check_need_stop_write() override;
-public:
-  ObTablet &tablet_;
-};
-
 // control the write speed of ddl clog for 4.0 . More detailly,
 // a. set write speed to the log archive speed if archive is on;
 // b. set write speed to the out bandwidth throttle rate if archive is off.
@@ -291,7 +281,7 @@ struct ObDDLRedoLogWriterCallbackInitParam
                K_(table_key), K_(start_scn), K_(task_id), K_(data_format_version),
                K_(parallel_cnt), K_(need_delay),
                K_(need_submit_io), K_(merge_slice_idx),
-               KP_(macro_meta_store), KP_(write_stat), KP_(tx_desc), K_(trans_id), K_(seq_no));
+               KP_(macro_meta_store), KP_(write_stat));
   common::ObTabletID tablet_id_;
   storage::ObDirectLoadType direct_load_type_;
   storage::ObDDLMacroBlockType block_type_;
@@ -305,10 +295,6 @@ struct ObDDLRedoLogWriterCallbackInitParam
   int64_t merge_slice_idx_;
   blocksstable::ObMacroMetaTempStore *macro_meta_store_;
   ObDDLWriteStat *write_stat_;
-  transaction::ObTxDesc *tx_desc_;
-  transaction::ObTransID trans_id_;
-  transaction::ObTxSEQ seq_no_;
-  bool is_inc_major_log_;
 };
 // write macro redo for data block, need to set lsn on ObDDLRedoLogWriter when commit.
 class ObDDLRedoLogWriterCallback : public blocksstable::ObIMacroBlockFlushCallback

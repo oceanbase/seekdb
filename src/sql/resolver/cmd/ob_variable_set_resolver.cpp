@@ -60,7 +60,7 @@ int ObVariableSetResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
   ObVariableSetStmt *variable_set_stmt = NULL;
-  bool check_var_name_length = false;
+  const bool check_var_name_length = true;
   if (OB_UNLIKELY(T_VARIABLE_SET != parse_tree.type_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("parse_tree.type_ must be T_VARIABLE_SET", K(ret), K(parse_tree.type_));
@@ -72,9 +72,6 @@ int ObVariableSetResolver::resolve(const ParseNode &parse_tree)
   } else if (OB_ISNULL(variable_set_stmt = create_stmt<ObVariableSetStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("create variable set stmt failed", K(ret));
-  } else if (OB_FAIL(session_info_->check_feature_enable(ObCompatFeatureType::VAR_NAME_LENGTH,
-                                                         check_var_name_length))) {
-    LOG_WARN("failed to check feature enable", K(ret));
   } else {
     stmt_ = variable_set_stmt;
     ParseNode *set_node = NULL;
@@ -183,17 +180,6 @@ int ObVariableSetResolver::resolve(const ParseNode &parse_tree)
               }
             } else {
               MEMCPY(&value_node, set_node->children_[1], sizeof(ParseNode));
-            }
-            if (OB_SUCC(ret)) {
-              if (0 == var_node.variable_name_.case_compare("_enable_mysql_pl_priv_check")) {
-                if (0 == ObString(value_node.str_len_, value_node.str_value_).case_compare("on") ||
-                    0 == ObString(value_node.str_len_, value_node.str_value_).case_compare("1")) {
-                  //do nothing
-                } else {
-                  ret = OB_NOT_SUPPORTED;
-                  LOG_USER_ERROR(OB_NOT_SUPPORTED, "turn _enable_mysql_pl_priv_check without on");
-                }
-              }
             }
             if (OB_SUCC(ret)) {
               if (OB_FAIL(resolve_value_expr(value_node, var_node.value_expr_))) {

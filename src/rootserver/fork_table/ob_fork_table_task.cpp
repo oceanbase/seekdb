@@ -117,7 +117,6 @@ int ObForkTableTask::init(
     dst_schema_version_ = schema_version_;
     snapshot_version_ = snapshot_version;
     data_format_version_ = tenant_data_version;
-    compat_mode_ = lib::Worker::CompatMode::MYSQL;
 
     if (OB_FAIL(deep_copy_fork_table_arg(fork_table_arg))) {
       LOG_WARN("deep copy fork table arg failed", K(ret));
@@ -162,7 +161,6 @@ int ObForkTableTask::init(const ObDDLTaskRecord &task_record)
     start_time_ = ObTimeUtility::current_time();
     
     dst_schema_version_ = schema_version_;
-    compat_mode_ = lib::Worker::CompatMode::MYSQL;
 
     if (OB_FAIL(init_ddl_task_monitor_info(target_object_id_))) {
       LOG_WARN("init ddl task monitor info failed", K(ret));
@@ -702,7 +700,6 @@ int ObForkTableTask::build_fork_info(
         schema_version_,
         task_id_,
         snapshot_version_,
-        compat_mode_,
         data_format_version_,
         src_tablet_ids,
         dst_tablet_ids);

@@ -48,8 +48,6 @@ int ObSubPlanScanOp::inner_open()
   } else if (OB_UNLIKELY(MY_SPEC.projector_.count() % 2 != 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("projector array size should be multiples of 2", K(ret));
-  } else if (OB_FAIL(init_monitor_info())) {
-    LOG_WARN("init monitor info failed", K(ret));
   }
   return ret;
 }
@@ -197,26 +195,6 @@ int ObSubPlanScanOp::next_vector(const int64_t max_row_cnt)
     } // for end
   }
 
-  return ret;
-}
-
-int ObSubPlanScanOp::init_monitor_info()
-{
-  int ret = OB_SUCCESS;
-  if (spec_.plan_->get_phy_plan_hint().monitor_) {
-    ObPhysicalPlanCtx *plan_ctx = NULL;
-    const ObPhysicalPlan *phy_plan = nullptr;
-    if (OB_ISNULL(plan_ctx = GET_PHY_PLAN_CTX(ctx_))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("deserialized exec ctx without phy plan ctx set. Unexpected", K(ret));
-    } else if (OB_ISNULL(phy_plan = plan_ctx->get_phy_plan())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("error unexpected, phy plan must not be nullptr", K(ret));
-    } else if (phy_plan->get_ddl_task_id() > 0) {
-      op_monitor_info_.otherstat_5_id_ = ObSqlMonitorStatIds::DDL_TASK_ID;
-      op_monitor_info_.otherstat_5_value_ = phy_plan->get_ddl_task_id();
-    }
-  }
   return ret;
 }
 

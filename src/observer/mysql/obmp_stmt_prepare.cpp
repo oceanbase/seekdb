@@ -163,8 +163,6 @@ int ObMPStmtPrepare::process()
   } else if (OB_ISNULL(sess)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL or invalid", K_(sql), K(sess), K(ret));
-  } else if (OB_FAIL(update_transmission_checksum_flag(*sess))) {
-    LOG_WARN("update transmisson checksum flag failed", K(ret));
   } else {
     ObSQLSessionInfo &session = *sess;
     THIS_WORKER.set_session(sess);
@@ -183,8 +181,6 @@ int ObMPStmtPrepare::process()
     if (OB_UNLIKELY(!session.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("invalid session", K_(sql), K(ret));
-    } else if (OB_FAIL(process_kill_client_session(session))) {
-      LOG_WARN("client session has been killed", K(ret));
     } else if (OB_UNLIKELY(session.is_zombie())) {
       ret = OB_ERR_SESSION_INTERRUPTED;
       LOG_WARN("session has been killed", K(session.get_session_state()), K_(sql),
@@ -201,14 +197,10 @@ int ObMPStmtPrepare::process()
       ret = OB_ERR_NET_PACKET_TOO_LARGE;
       need_disconnect = false;
       LOG_WARN("packet too large than allowd for the session", K_(sql), K(ret));
-    } else if (OB_FAIL(session.check_tenant_status())) {
-      need_disconnect = false;
-      LOG_INFO("unit has been migrated, need deny new request", K(ret));
     } else {
       THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
       retry_ctrl_.set_tenant_global_schema_version(tenant_version);
       retry_ctrl_.set_sys_global_schema_version(sys_version);
-      session.partition_hit().reset();
       session.set_pl_can_retry(true);
 
       bool has_more = false;
@@ -223,9 +215,7 @@ int ObMPStmtPrepare::process()
       }
 
       if (OB_FAIL(ret)) {
-        //if (OB_EAGAIN == ret) {
-          //large query, do nothing
-        //} else
+        // Log the current attempt; retryable errors are handled by the upper scheduler.
         if (is_conn_valid()) {//The memory of sql sting is invalid if conn_valid_ has ben set false.
           LOG_WARN("execute sql failed", "sql_id", ctx_.sql_id_, K_(sql), K(ret));
         } else {
@@ -345,8 +335,8 @@ int ObMPStmtPrepare::check_and_refresh_schema()
       LOG_WARN("invalid session info", K(ret), K(ctx_.session_info_));
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_refreshed_schema_version(local_version))) {
       LOG_WARN("fail to get tenant refreshed schema version", K(ret));
-    } else if (OB_FAIL(ctx_.session_info_->get_ob_last_schema_version(last_version))) {
-      LOG_WARN("failed to get_sys_variable", K(OB_SV_LAST_SCHEMA_VERSION));
+    } else if (OB_FAIL(ctx_.session_info_->get_last_ddl_schema_version(last_version))) {
+      LOG_WARN("failed to get session DDL schema fence", K(ret));
     } else if (local_version >= last_version) {
       // skip
     } else if (OB_FAIL(gctx_.schema_service_->async_refresh_schema(last_version))) {
@@ -469,7 +459,6 @@ int ObMPStmtPrepare::do_process(ObSQLSessionInfo &session,
       sqlstat_record.record_sqlstat_end_value();
       sqlstat_record.set_rows_processed(result.get_affected_rows() + result.get_return_rows());
       sqlstat_record.set_partition_cnt(result.get_exec_context().get_das_ctx().get_related_tablet_cnt());
-      sqlstat_record.set_is_route_miss(result.get_session().partition_hit().get_bool()? 0 : 1);
       sqlstat_record.set_is_plan_cache_hit(ctx_.plan_cache_hit_);
       sqlstat_record.move_to_sqlstat_cache(result.get_session(),
                                                  ctx_.cur_sql_,
@@ -488,11 +477,6 @@ int ObMPStmtPrepare::do_process(ObSQLSessionInfo &session,
               "timeout_remain", THIS_WORKER.get_timeout_remain());
     } else {
       // Immediately freeze partition hit after the first plan execution completes
-      // partition_hit once frozen, subsequent try_set_bool operations are ineffective
-      if (OB_LIKELY(NULL != result.get_physical_plan())) {
-        session.partition_hit().freeze();
-      }
-
       // store the warning message from the most recent statement in the current session
       if (OB_SUCC(ret) && is_diagnostics_stmt) {
         // if diagnostic stmt execute successfully, it dosen't clear the warning message
@@ -507,8 +491,7 @@ int ObMPStmtPrepare::do_process(ObSQLSessionInfo &session,
         // However, it can be determined: this request has errored, and is not yet complete. If it has not already been handed over to asynchronous EndTrans for finalization,
         // then it is necessary to reply with an error_packet below as a conclusion. Otherwise, no one will help send the error packet to the client afterwards,
         // May cause the client to hang waiting for a response.
-        bool is_partition_hit = session.get_err_final_partition_hit(ret);
-        int err = send_error_packet(ret, NULL, is_partition_hit);
+        int err = send_error_packet(ret, NULL);
         if (OB_SUCCESS != err) {  // send error packet
           LOG_WARN("send error packet failed", K(ret), K(err));
         }

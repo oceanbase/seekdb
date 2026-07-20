@@ -257,7 +257,7 @@ int ObSequenceSqlService::clean_and_write_back_cache(common::ObISQLClient *sql_c
 
   ObNumber inner_next_value; // default to zero
   ObSeqCleanCacheRes cache_res;
-  ObSQLClientRetryWeak sql_client_retry_weak(sql_client, false, OB_ALL_SEQUENCE_VALUE_TID);
+  auto &sql_client_retry_weak = *sql_client;
   if (OB_SUCC(ret)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, res)
     {

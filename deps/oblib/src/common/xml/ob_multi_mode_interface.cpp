@@ -175,21 +175,11 @@ int64_t ObIMulModeBase::get_serialize_size()
   return 0;
 }
 
-int ObIMulModeBase::get_bin_size(uint64_t &size)
+int ObIMulModeBase::get_print_buffer_size(uint64_t &size)
 {
-  INIT_SUCC(ret);
-  if (is_binary() && meta_.data_type_ == OB_XML_TYPE) {
-    ObXmlBin *bin = nullptr;
-    if (OB_ISNULL(bin = static_cast<ObXmlBin*>(this))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to cast to bin.", K(ret));
-    } else if (bin->meta_.len_ != 0) {
-      size = bin->meta_.len_;
-    } else if (OB_NOT_NULL(bin->buffer_.get_allocator())) {
-      size = bin->buffer_.length();
-    }
-  }
-  return ret;
+  const int64_t serialize_size = get_serialize_size();
+  size = serialize_size > 0 ? static_cast<uint64_t>(serialize_size) : 0;
+  return OB_SUCCESS;
 }
 
 int ObIMulModeBase::print(ObStringBuffer& x_buf, uint32_t format_flag, uint64_t depth, uint64_t size, ObCollationType charset)
@@ -197,17 +187,7 @@ int ObIMulModeBase::print(ObStringBuffer& x_buf, uint32_t format_flag, uint64_t 
   INIT_SUCC(ret);
 
   if (meta_.data_type_ == OB_XML_TYPE) {
-    if (!check_extend()) {
-      ret = print_xml(x_buf, format_flag, depth, size, nullptr, charset);
-    } else {
-      ObNsSortedVector ns_vec;
-      if (OB_FAIL(ObXmlUtil::init_extend_ns_vec(allocator_, this, ns_vec))) {
-        LOG_WARN("fail to init ns vector by extend area", K(ret));
-      } else if (OB_FAIL(print_xml(x_buf, format_flag, depth, size, &ns_vec, charset))) {
-        LOG_WARN("fail to print xml", K(ret));
-      }
-      ns_vec.clear();
-    }
+    ret = print_xml(x_buf, format_flag, depth, size, nullptr, charset);
   } else {
     ret = OB_NOT_SUPPORTED;
   }
@@ -411,7 +391,7 @@ int ObIMulModeBase::print_unparsed(ObStringBuffer& x_buf, ObCollationType charse
   ObString encoding = get_encoding();
   uint16_t standalone = get_standalone();
   uint64_t reserve_size = 0;
-  if (OB_FAIL(get_bin_size(reserve_size))) {
+  if (OB_FAIL(get_print_buffer_size(reserve_size))) {
     LOG_WARN("failed to get binary size.", K(ret));
   } else if (reserve_size > 0 && OB_FAIL(x_buf.reserve(reserve_size))) {
     LOG_WARN("failed to reserve x_buf.", K(ret), K(reserve_size));
@@ -451,10 +431,9 @@ int ObIMulModeBase::print_unparsed(ObStringBuffer& x_buf, ObCollationType charse
   }
 
   int64_t num_children = count();
-  ObXmlBin tmp_bin;
 
   for (int64_t i = 0; OB_SUCC(ret) && i < num_children; i ++) {
-    ObIMulModeBase* cur = at(i, &tmp_bin);
+    ObIMulModeBase* cur = at(i);
     if (OB_ISNULL(cur)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get child from element", K(ret), K(i));
@@ -483,7 +462,7 @@ int ObIMulModeBase::print_document(ObStringBuffer& x_buf, ObCollationType charse
   uint16_t standalone = get_standalone();
   bool need_newline_end = true;
   uint64_t reserve_size = 0;
-  if (OB_FAIL(get_bin_size(reserve_size))) {
+  if (OB_FAIL(get_print_buffer_size(reserve_size))) {
     LOG_WARN("failed to get binary size.", K(ret));
   } else if (reserve_size > 0 && OB_FAIL(x_buf.reserve(reserve_size))) {
     LOG_WARN("failed to reserve x_buf.", K(ret), K(reserve_size));
@@ -525,10 +504,9 @@ int ObIMulModeBase::print_document(ObStringBuffer& x_buf, ObCollationType charse
 
    if (OB_SUCC(ret)) {
     int64_t num_children = attribute_count();
-    ObXmlBin tmp_bin;
     
     for (int64_t i = 0; OB_SUCC(ret) && i < num_children; i++) {
-      ObIMulModeBase* cur = attribute_at(i, &tmp_bin);
+      ObIMulModeBase* cur = attribute_at(i);
       if (OB_ISNULL(cur)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to get child from element", K(ret), K(i));
@@ -543,10 +521,9 @@ int ObIMulModeBase::print_document(ObStringBuffer& x_buf, ObCollationType charse
 
   if (OB_SUCC(ret)) {
     int64_t num_children = count();
-    ObXmlBin tmp_bin;
 
     for (int64_t i = 0; OB_SUCC(ret) && i < num_children; i++) {
-      ObIMulModeBase* cur = at(i, &tmp_bin);
+      ObIMulModeBase* cur = at(i);
       if (OB_ISNULL(cur)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to get child from element", K(ret), K(i));
@@ -578,7 +555,7 @@ int ObIMulModeBase::print_content(ObStringBuffer& x_buf, bool with_encoding, boo
   bool need_newline_end = true;
   uint64_t reserve_size = 0;
 
-  if (OB_FAIL(get_bin_size(reserve_size))) {
+  if (OB_FAIL(get_print_buffer_size(reserve_size))) {
     LOG_WARN("failed to get binary size.", K(ret));
   } else if (reserve_size > 0 && OB_FAIL(x_buf.reserve(reserve_size))) {
     LOG_WARN("failed to reserve x_buf.", K(ret), K(reserve_size));
@@ -619,10 +596,9 @@ int ObIMulModeBase::print_content(ObStringBuffer& x_buf, bool with_encoding, boo
 
   if (OB_SUCC(ret)) {
     int64_t num_children = attribute_count();
-    ObXmlBin tmp_bin;
     
     for (int64_t i = 0; OB_SUCC(ret) && i < num_children; i++) {
-      ObIMulModeBase* cur = attribute_at(i, &tmp_bin);
+      ObIMulModeBase* cur = attribute_at(i);
       if (OB_ISNULL(cur)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to get child from element", K(ret), K(i));
@@ -638,10 +614,9 @@ int ObIMulModeBase::print_content(ObStringBuffer& x_buf, bool with_encoding, boo
   if (OB_SUCC(ret)) {
     ObIMulModeBase* cur = nullptr;
     int64_t num_children = count();
-    ObXmlBin tmp_bin;
     
     for (int64_t i = 0; OB_SUCC(ret) && i < num_children; i ++) {
-      cur = at(i, &tmp_bin);
+      cur = at(i);
       if (OB_ISNULL(cur)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to get child from element", K(ret), K(i));
@@ -725,7 +700,6 @@ int ObIMulModeBase::print_element(ObStringBuffer& x_buf, uint64_t depth, uint32_
   int64_t num_children = this->size();
   ObIMulModeBase* cur = nullptr;
   ObString key;
-  ObXmlBin tmp_bin;
   int attributes_count = 0;
   format_flag = is_unparse ? (format_flag | NO_ENTITY_ESCAPE) : (format_flag & ~NO_ENTITY_ESCAPE);
   // duplicate ns that defined in this element should be delete
@@ -740,7 +714,7 @@ int ObIMulModeBase::print_element(ObStringBuffer& x_buf, uint64_t depth, uint32_
   } else if (is_unparse && key.empty() && attributes_count == 0) {
     
     for (int64_t i = 0; OB_SUCC(ret) && i < num_children; i++) {
-      cur = at(i, &tmp_bin);
+      cur = at(i);
       if (OB_ISNULL(cur)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to get child from element", K(ret), K(i));
@@ -767,7 +741,7 @@ int ObIMulModeBase::print_element(ObStringBuffer& x_buf, uint64_t depth, uint32_
       int64_t num_children = attribute_size();
       
       for (int64_t i = 0; OB_SUCC(ret) && i < num_children; i ++) {
-        cur = attribute_at(i, &tmp_bin);
+        cur = attribute_at(i);
         if (OB_ISNULL(cur)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("failed to get child from element", K(ret), K(i));
@@ -796,7 +770,7 @@ int ObIMulModeBase::print_element(ObStringBuffer& x_buf, uint64_t depth, uint32_
       ObMulModeNodeType prev_node_type, cur_node_type;
 
       for (int64_t i = 0; OB_SUCC(ret) && i < num_children; i++) {
-        cur = at(i, &tmp_bin);
+        cur = at(i);
         if (OB_ISNULL(cur)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("failed to get child from element", K(ret), K(i));

@@ -303,8 +303,6 @@ ObDBMSSchedFuncType ObDBMSSchedJobInfo::get_func_type() const
       func_type = ObDBMSSchedFuncType::STAT_MAINTENANCE_JOB;
     } else if (0 == job_class_.case_compare("MYSQL_EVENT_JOB_CLASS")) {
       func_type = ObDBMSSchedFuncType::MYSQL_EVENT_JOB;
-    } else if (0 == job_class_.case_compare("OLAP_ASYNC_JOB_CLASS")) {
-      func_type = ObDBMSSchedFuncType::OLAP_ASYNC_JOB;
     }
     if (func_type != ObDBMSSchedFuncType::USER_JOB) {
       ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;

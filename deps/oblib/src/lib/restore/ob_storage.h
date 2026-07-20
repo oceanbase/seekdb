@@ -106,7 +106,7 @@ enum ObAppendStrategy
   // pythysical subobject. A number will be given for each write to format the name of
   // the subobject combined with the logical object name.
   OB_APPEND_USE_SLICE_PUT = 2,
-  // In this case, we will use multi-part upload provided by object storage, eg S3, to write
+  // In this case, we will use multi-part upload provided by object storage to write
   // for the object. Note that the object is invisible before all parts are written.
   OB_APPEND_USE_MULTI_PART_UPLOAD = 3,
   OB_APPEND_STRATEGY_TYPE
@@ -258,8 +258,8 @@ public:
    * Due to the absence of a batch tagging interface, if delete mode 'tagging' is set 
    * when initiating the utility, it will switch to a looped tagging operation.
    *
-   * As NFS does not offer a batch deleting interface, and GCS's batch delete interface
-   * is not compatible with the S3 protocol, GCS and NFS will revert to looped delete operations.
+   * As NFS does not offer a batch deleting interface, GCS and NFS will revert to
+   * looped delete operations.
    *
    * If it switches to looped operations, upon the failure of any deletion request,
    * the function attempts to record that object along with all remaining unprocessed objects
@@ -272,15 +272,14 @@ public:
       const ObIArray<ObString> &files_to_delete, ObIArray<int64_t> &failed_files_idx);
   int del_unmerged_parts(const common::ObString &uri);
 
-  // For one object, if given us the uri(no matter in s3), we can't tell the type of this object.
-  // It may be a 'single、normal' object. Or it may be a 's3-appendable-object'(like a dir), containing several 
-  // 'single、normal' objects.
+  // For one object, the URI alone does not identify whether it is a normal object or
+  // an appendable logical object containing several normal objects.
   // So, this function is for checking the object meta, to get its meta info
   // 
   // @uri, the object full path in object storage.
   // @is_adaptive, if FALSE, means it is a normal object absolutely.
   //               if TRUE, means we don't know it type. We need to check its real type.
-  // @need_fragment_meta, if TRUE and the type is a 's3-appendable-object', we need to get its child objects meta. 
+  // @need_fragment_meta, if TRUE and the type is an appendable object, get its child object metadata.
   //                      for example, when using adaptive reader, this param will set as TRUE; when using is_exist(), 
   //                      this param will set as FALSE
   // @obj_meta the result, which saves the meta info of this object. If the target object not exists, we can check 

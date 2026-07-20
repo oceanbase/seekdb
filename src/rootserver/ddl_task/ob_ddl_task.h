@@ -585,7 +585,7 @@ public:
       task_type_(task_type), trace_id_(), sub_task_trace_id_(0), object_id_(0), schema_version_(0), dst_schema_version_(0),
       target_object_id_(0), task_status_(share::ObDDLTaskStatus::PREPARE), snapshot_version_(0), ret_code_(OB_SUCCESS), task_id_(0),
       parent_task_id_(0), parent_task_key_(), task_version_(0), parallelism_(0),
-      allocator_(lib::ObLabel("DdlTask")), compat_mode_(lib::Worker::CompatMode::INVALID), err_code_occurence_cnt_(0),
+      allocator_(lib::ObLabel("DdlTask")), err_code_occurence_cnt_(0),
       longops_stat_(nullptr), gmt_create_(0), stat_info_(), delay_schedule_time_(0), next_schedule_ts_(0),
       execution_id_(-1), start_time_(0), data_format_version_(0), wait_trans_ctx_(), is_unique_index_(false),
       is_global_index_(false), consensus_schema_version_(OB_INVALID_VERSION), is_no_logging_(false)
@@ -656,7 +656,6 @@ public:
   int wait_trans_end(
       ObDDLWaitTransEndCtx &wait_trans_ctx,
       const share::ObDDLTaskStatus next_task_status);
-  lib::Worker::CompatMode get_compat_mode() { return compat_mode_; }
   int batch_release_snapshot(
       const int64_t snapshot_version, 
       const common::ObIArray<common::ObTabletID> &tablet_ids);
@@ -682,7 +681,6 @@ public:
       const bool ddl_can_retry,
       int64_t &new_execution_id);
   void check_ddl_task_execute_too_long();
-  static bool check_is_load_data(share::ObDDLType task_type);
   virtual bool support_longops_monitoring() const { return false; }
   int cleanup();
   int update_task_record_status_and_msg(common::ObISQLClient &proxy, const share::ObDDLTaskStatus real_new_status);
@@ -697,7 +695,7 @@ public:
       K(is_inited_), K(need_retry_), K(is_abort_), K(task_type_), K(trace_id_), K(sub_task_trace_id_), K(object_id_), K(schema_version_),
       K(target_object_id_), K(task_status_), K(snapshot_version_),
       K_(ret_code), K_(task_id), K_(parent_task_id), K_(parent_task_key),
-      K_(task_version), K_(parallelism), K_(ddl_stmt_str), K_(compat_mode),
+      K_(task_version), K_(parallelism), K_(ddl_stmt_str),
       K_(sys_task_id), K_(err_code_occurence_cnt), K_(stat_info),
       K_(next_schedule_ts), K_(delay_schedule_time), K(execution_id_), K(sql_exec_addrs_), K_(data_format_version),
       K_(dst_schema_version), K_(is_unique_index), K_(is_global_index), K_(consensus_schema_version), K(is_no_logging_));  static const int64_t MAX_ERR_TOLERANCE_CNT = 3L; // Max torlerance count for error code.
@@ -745,7 +743,6 @@ protected:
   int64_t parallelism_;
   ObString ddl_stmt_str_;
   common::ObArenaAllocator allocator_;
-  lib::Worker::CompatMode compat_mode_;
   TraceId sys_task_id_;
   int64_t err_code_occurence_cnt_; // occurence count for all error return codes not in white list.
   share::ObDDLLongopsStat *longops_stat_;

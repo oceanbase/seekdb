@@ -77,10 +77,8 @@ int ObDBMSSchedJobExecutor::init_session(
   const bool print_info_log = true;
   const bool is_sys_tenant = true;
   ObPCMemPctConf pc_mem_conf;
-  ObObj compatibility_mode;
   ObObj sql_mode;
   {
-    compatibility_mode.set_int(0);
     sql_mode.set_uint(ObUInt64Type, DEFAULT_MYSQL_MODE);
   }
   OX (session.set_inner_session());
@@ -89,7 +87,6 @@ int ObDBMSSchedJobExecutor::init_session(
   OZ (session.init_tenant(tenant_name.ptr()));
   OZ (session.load_all_sys_vars(schema_guard));
   OZ (session.update_sys_variable(share::SYS_VAR_SQL_MODE, sql_mode));
-  OZ (session.update_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, compatibility_mode));
   OZ (session.set_default_database(database_name));
   OZ (session.get_pc_mem_conf(pc_mem_conf));
   CK (OB_NOT_NULL(GCTX.sql_engine_));
@@ -112,19 +109,6 @@ int ObDBMSSchedJobExecutor::init_session(
   } else {
     OX (session.set_shadow(false));
   }
-  if (OB_SUCC(ret)) {
-    if (job_info.is_olap_async_job()) {
-      const int64_t QUERY_TIMEOUT_US = ((job_info.get_max_run_duration() - OLAP_ASYNC_JOB_DEVIATION_SECOND) * 1000000L);
-      const int64_t TRX_TIMEOUT_US = ((job_info.get_max_run_duration() - OLAP_ASYNC_JOB_DEVIATION_SECOND) * 1000000L);
-      ObObj query_timeout_obj;
-      ObObj trx_timeout_obj;
-      query_timeout_obj.set_int(QUERY_TIMEOUT_US);
-      trx_timeout_obj.set_int(TRX_TIMEOUT_US);
-      OZ (session.update_sys_variable(SYS_VAR_OB_QUERY_TIMEOUT, query_timeout_obj));
-      OZ (session.update_sys_variable(SYS_VAR_OB_TRX_TIMEOUT, trx_timeout_obj));
-    }
-  }
-
   return ret;
 }
 
@@ -194,8 +178,7 @@ int ObDBMSSchedJobExecutor::create_session(
     LOG_WARN("session_mgr_ is null", KR(ret));
   } else if (OB_FAIL(GCTX.session_mgr_->create_sessid(sid))) {
     LOG_WARN("alloc session id failed", KR(ret));
-  } else if (OB_FAIL(GCTX.session_mgr_->create_session(
-                sid, ObTimeUtility::current_time(), session_info))) {
+  } else if (OB_FAIL(GCTX.session_mgr_->create_session(sid, session_info))) {
     LOG_WARN("create session failed", K(ret), K(sid));
     session_info = NULL;
   } else if (OB_ISNULL(session_info)) {
@@ -247,10 +230,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
     LOG_WARN("failed to create session", KR(ret));
   } else {
     if (job_info.get_what().length() != 0) { // action
-      if (job_info.is_olap_async_job()){
-        OZ (what.append_fmt("%.*s",
-            job_info.get_what().length(), job_info.get_what().ptr()));        
-      } else if (job_info.is_mysql_event_job()) { //mysql event
+      if (job_info.is_mysql_event_job()) { //mysql event
         OZ (what.append_fmt("%.*s",
               job_info.get_what().length(), job_info.get_what().ptr()));          
       } else {

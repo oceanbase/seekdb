@@ -41,92 +41,71 @@ int ObAllVirtualDumpTenantInfo::inner_get_next_row(common::ObNewRow *&row)
     for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
       const uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
-      case OB_APP_MIN_COLUMN_ID:
-        cells[i].set_int(static_cast<int64_t>(tenant.get_compat_mode()));
-        break;
-      case OB_APP_MIN_COLUMN_ID + 1:
+      case OB_APP_MIN_COLUMN_ID + 0:
         cells[i].set_double(tenant.unit_min_cpu_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 2:
+      case OB_APP_MIN_COLUMN_ID + 1:
         cells[i].set_double(tenant.unit_max_cpu_);
+        break;
+      case OB_APP_MIN_COLUMN_ID + 2:
+        cells[i].set_double(0);
         break;
       case OB_APP_MIN_COLUMN_ID + 3:
         cells[i].set_double(0);
         break;
       case OB_APP_MIN_COLUMN_ID + 4:
-        cells[i].set_double(0);
+        cells[i].set_int(tenant.worker_count());
         break;
       case OB_APP_MIN_COLUMN_ID + 5:
         cells[i].set_int(tenant.worker_count());
         break;
       case OB_APP_MIN_COLUMN_ID + 6:
-        cells[i].set_int(tenant.worker_count());
+        cells[i].set_int(tenant.stopped_);
         break;
       case OB_APP_MIN_COLUMN_ID + 7:
         cells[i].set_int(0);
         break;
       case OB_APP_MIN_COLUMN_ID + 8:
-        cells[i].set_int(0);
-        break;
-      case OB_APP_MIN_COLUMN_ID + 9:
-        cells[i].set_int(tenant.stopped_);
-        break;
-      case OB_APP_MIN_COLUMN_ID + 10:
-        cells[i].set_int(0);
-        break;
-      case OB_APP_MIN_COLUMN_ID + 11:
         cells[i].set_int(tenant.recv_hp_rpc_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 12:
+      case OB_APP_MIN_COLUMN_ID + 9:
         cells[i].set_int(tenant.recv_np_rpc_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 13:
+      case OB_APP_MIN_COLUMN_ID + 10:
         cells[i].set_int(tenant.recv_lp_rpc_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 14:
+      case OB_APP_MIN_COLUMN_ID + 11:
         cells[i].set_int(tenant.recv_mysql_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 15:
+      case OB_APP_MIN_COLUMN_ID + 12:
         cells[i].set_int(tenant.recv_task_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 16:
-        cells[i].set_int(tenant.recv_large_req_cnt_);
-        break;
-      case OB_APP_MIN_COLUMN_ID + 17:
-        cells[i].set_int(tenant.tt_large_quries_);
-        break;
-      case OB_APP_MIN_COLUMN_ID + 18:
+      case OB_APP_MIN_COLUMN_ID + 13:
         cells[i].set_int(tenant.workers_.get_size());
         break;
-      case OB_APP_MIN_COLUMN_ID + 19:
+      case OB_APP_MIN_COLUMN_ID + 14:
         cells[i].set_int(tenant.workers_.get_size());
         break;
-      case OB_APP_MIN_COLUMN_ID + 20:
-        cells[i].set_int(0);
-        break;
-      case OB_APP_MIN_COLUMN_ID + 21:
+      case OB_APP_MIN_COLUMN_ID + 15:
         cells[i].set_int(tenant.req_queue_.size());
         break;
-      case OB_APP_MIN_COLUMN_ID + 22:
+      case OB_APP_MIN_COLUMN_ID + 16:
         cells[i].set_int(tenant.req_queue_.queue_size(0));
         break;
-      case OB_APP_MIN_COLUMN_ID + 23:
+      case OB_APP_MIN_COLUMN_ID + 17:
         cells[i].set_int(tenant.req_queue_.queue_size(1));
         break;
-      case OB_APP_MIN_COLUMN_ID + 24:
+      case OB_APP_MIN_COLUMN_ID + 18:
         cells[i].set_int(tenant.req_queue_.queue_size(2));
         break;
-      case OB_APP_MIN_COLUMN_ID + 25:
+      case OB_APP_MIN_COLUMN_ID + 19:
         cells[i].set_int(tenant.req_queue_.queue_size(3));
         break;
-      case OB_APP_MIN_COLUMN_ID + 26:
+      case OB_APP_MIN_COLUMN_ID + 20:
         cells[i].set_int(tenant.req_queue_.queue_size(4));
         break;
-      case OB_APP_MIN_COLUMN_ID + 27:
+      case OB_APP_MIN_COLUMN_ID + 21:
         cells[i].set_int(tenant.req_queue_.queue_size(5));
-        break;
-      case OB_APP_MIN_COLUMN_ID + 28:
-        cells[i].set_int(tenant.lq_retry_queue_size());
         break;
       default:
         ret = OB_ERR_UNEXPECTED;

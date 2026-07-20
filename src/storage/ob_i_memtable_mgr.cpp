@@ -201,16 +201,14 @@ int ObIMemtableMgr::release_memtables()
   return ret;
 }
 
-int ObIMemtableMgr::init(
-    const ObTabletID &tablet_id,
-    lib::Worker::CompatMode compat_mode)
+int ObIMemtableMgr::init(const ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
   ObLS *tenant_ls = nullptr;
   ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
     STORAGE_LOG(WARN, "failed to get ls", KR(ret));
-  } else if (OB_FAIL(init(tablet_id, 0, 0, compat_mode,
+  } else if (OB_FAIL(init(tablet_id, 0, 0,
           tenant_ls->get_log_handler(), tenant_ls->get_freezer(), t3m))) {
     STORAGE_LOG(WARN, "failed to init memtable mgr", KR(ret), K(tablet_id));
   }
@@ -221,15 +219,14 @@ int ObIMemtableMgr::init(
     const ObTabletID &tablet_id,
     const int64_t max_saved_schema_version,
     const int64_t max_saved_medium_scn,
-    const lib::Worker::CompatMode compat_mode,
     logservice::ObLogHandler *log_handler,
     ObFreezer *freezer,
     ObTenantMetaMemMgr *t3m)
 {
   int ret = OB_SUCCESS;
   if (!tablet_id.is_special_merge_tablet()
-      && OB_FAIL(init_storage_recorder(tablet_id, max_saved_schema_version, max_saved_medium_scn, compat_mode, log_handler))) {
-    TRANS_LOG(WARN, "failed to init schema recorder", K(ret), K(max_saved_schema_version), K(max_saved_medium_scn), K(compat_mode), KP(log_handler));
+      && OB_FAIL(init_storage_recorder(tablet_id, max_saved_schema_version, max_saved_medium_scn, log_handler))) {
+    TRANS_LOG(WARN, "failed to init schema recorder", K(ret), K(max_saved_schema_version), K(max_saved_medium_scn), KP(log_handler));
   } else {
     ret = init(tablet_id, freezer, t3m);
   }

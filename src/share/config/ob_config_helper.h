@@ -306,18 +306,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigSyslogFileUncompressedCountChecker);
 };
 
-// Used to check the format of STS credential
-class ObConfigSTScredentialChecker
-  : public ObConfigChecker
-{
-public:
-  ObConfigSTScredentialChecker() {}
-  virtual ~ObConfigSTScredentialChecker() {}
-  bool check(const ObConfigItem &t) const;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObConfigSTScredentialChecker);
-};
-
 class ObConfigStorageCachePolicyChecker : public ObConfigChecker
 {
 public:
@@ -533,21 +521,6 @@ public:
 private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigPlanCacheGCChecker);
 };
-
-class ObConfigQueryRateLimitChecker
-  : public ObConfigChecker
-{
-public:
-  ObConfigQueryRateLimitChecker() {}
-  virtual ~ObConfigQueryRateLimitChecker() {};
-  bool check(const ObConfigItem &t) const;
-
-  static constexpr int64_t MAX_QUERY_RATE_LIMIT = 200000;
-  static constexpr int64_t MIN_QUERY_RATE_LIMIT = 10;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObConfigQueryRateLimitChecker);
-};
-
 
 class ObConfigAuditModeChecker
   : public ObConfigChecker
@@ -828,17 +801,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigSQLSpillCompressionCodecChecker);
 };
 
-class ObDefaultLoadModeChecker
-  : public ObConfigChecker
-{
-public:
-  ObDefaultLoadModeChecker() {}
-  virtual ~ObDefaultLoadModeChecker() {}
-  bool check(const ObConfigItem &t) const;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObDefaultLoadModeChecker);
-};
-
 class ObModeConfigParserUitl
 {
 public:
@@ -898,16 +860,6 @@ public:
   bool check(const ObConfigItem &t) const;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigRegexpEngineChecker);
-};
-
-class ObConfigS3URLEncodeTypeChecker : public ObConfigChecker
-{
-public:
-  ObConfigS3URLEncodeTypeChecker() {}
-  virtual ~ObConfigS3URLEncodeTypeChecker() {}
-  virtual bool check(const ObConfigItem &t) const override;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObConfigS3URLEncodeTypeChecker);
 };
 
 class ObConfigReplicaParallelMigrationChecker : public ObConfigChecker

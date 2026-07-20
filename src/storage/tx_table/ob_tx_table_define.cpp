@@ -106,8 +106,6 @@ int ObTxCtxTableInfo::serialize_(char *buf,
 
   if (OB_FAIL(tx_id_.serialize(buf, buf_len, pos))) {
     TRANS_LOG(WARN, "serialize tx_id fail.", KR(ret), K(pos), K(buf_len));
-  } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, cluster_id_))) {
-    TRANS_LOG(WARN, "encode cluster id failed", K(cluster_id_), K(buf_len), K(pos), K(ret));
   } else if (OB_FAIL(tx_data_guard_.tx_data()->serialize(buf, buf_len, pos))) {
     TRANS_LOG(WARN, "serialize state_info fail.", KR(ret), K(pos), K(buf_len));
   } else if (OB_FAIL(exec_info_.serialize(buf, buf_len, pos))) {
@@ -148,8 +146,6 @@ int ObTxCtxTableInfo::deserialize_(const char *buf,
 
   if (OB_FAIL(tx_id_.deserialize(buf, buf_len, pos))) {
     TRANS_LOG(WARN, "deserialize tx_id fail.", KR(ret), K(pos), K(buf_len));
-  } else if (OB_FAIL(serialization::decode_vi64(buf, buf_len, pos, &cluster_id_))) {
-    TRANS_LOG(WARN, "encode cluster_id fail", K(cluster_id_), K(buf_len), K(pos), K(ret));
   } else if (OB_FAIL(tx_data_guard_.tx_data()->deserialize(buf, buf_len, pos, *tx_data_table.get_tx_data_allocator()))) {
     TRANS_LOG(WARN, "deserialize state_info fail.", KR(ret), K(pos), K(buf_len));
   } else if (OB_FAIL(exec_info_.deserialize(buf, buf_len, pos))) {
@@ -179,7 +175,6 @@ int64_t ObTxCtxTableInfo::get_serialize_size_(void) const
 {
   int64_t len = 0;
   len += tx_id_.get_serialize_size();
-  len += serialization::encoded_length_vi64(cluster_id_);
   len += serialization::encoded_length_vi64((int64_t)cluster_version_);
   len += (OB_NOT_NULL(tx_data_guard_.tx_data()) ? tx_data_guard_.tx_data()->get_serialize_size() : 0);
   len += exec_info_.get_serialize_size();

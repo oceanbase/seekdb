@@ -108,9 +108,9 @@ int ObExprExtractValue::eval_mysql_extract_value(const ObExpr &expr, ObEvalCtx &
   } else if (OB_FALSE_IT(allocator.set_baseline_size(xml_frag.length()))) {
   } else if (OB_FAIL(ObXMLExprHelper::get_str_from_expr(expr.args_[1], ctx, xpath_expr, allocator))) {
     LOG_WARN("get xpath expr failed.", K(ret));
-  } else if (OB_FAIL(ObMulModeFactory::get_xml_base(xml_mem_ctx, xml_frag, ObNodeMemType::TREE_TYPE, ObNodeMemType::BINARY_TYPE, xml_base, M_DOCUMENT))) {
+  } else if (OB_FAIL(ObMulModeFactory::get_xml_base(xml_mem_ctx, xml_frag, xml_base, M_DOCUMENT))) {
     ret = OB_SUCCESS;
-    if (OB_FAIL(ObMulModeFactory::get_xml_base(xml_mem_ctx, xml_frag, ObNodeMemType::TREE_TYPE, ObNodeMemType::BINARY_TYPE, xml_base, M_CONTENT))) {
+    if (OB_FAIL(ObMulModeFactory::get_xml_base(xml_mem_ctx, xml_frag, xml_base, M_CONTENT))) {
       LOG_USER_WARN(OB_ERR_XML_PARSE);
       ret = OB_SUCCESS;
       LOG_WARN("parse xml_frag failed.", K(xml_frag));

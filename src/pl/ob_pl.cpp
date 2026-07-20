@@ -709,8 +709,6 @@ void ObPLContext::destory(
           // First COMMIT, then modify AutoCommit
           int tmp_ret = OB_SUCCESS;
           if (OB_SUCCESS == ret
-              //Asynchronous submission cannot provide proxy with unhit information (ObPartitionHitInfo default value is Hit), if unhit, use synchronous submission
-              && session_info_->partition_hit().get_bool()
               // If the top-level call has out parameters, it does not go through asynchronous submission, because data needs to be returned to the client
               && !has_output_arguments()) {
             if (OB_SUCCESS !=
@@ -1229,8 +1227,7 @@ int ObPL::execute(ObExecContext &ctx,
     // phy_plan_ctx_ is left dangling at this frame's destroyed local
     // ObPhysicalPlanCtx and frames_/frame_cnt_/expr_op_ctx_store_ stay zeroed,
     // which crashes the caller's next SPI call (e.g. CONTINUE HANDLER + IF
-    // evaluating a scalar expression — see ObPLPartitionHitGuard ctor reading
-    // pl_exec_ctx_.exec_ctx_->get_pl_stack_ctx() at ob_spi.cpp:7799). Mirror
+    // evaluating a scalar expression). Mirror
     // the catch(...){...; throw;} pattern already used in ObPL::execute_proc
     // for schema_guard restoration so that final() always runs.
     try {
@@ -1264,14 +1261,8 @@ int ObPL::execute(ObExecContext &ctx,
               OX (cursor = reinterpret_cast<ObPLCursorInfo *>(cursor_param.get_ext()));
               OX (params->at(i) = cursor_param);
               if (pl.is_top_call() && OB_NOT_NULL(cursor)) {
-                uint64_t compat_version = 0;
-                bool null_value_for_closed_cursor = false;
                 CK (OB_NOT_NULL(ctx.get_my_session()));
-                OZ (ctx.get_my_session()->get_compatibility_version(compat_version));
-                OZ (ObCompatControl::check_feature_enable(compat_version,
-                                                          ObCompatFeatureType::NULL_VALUE_FOR_CLOSED_CURSOR,
-                                                          null_value_for_closed_cursor));
-                if (null_value_for_closed_cursor && cursor->is_session_cursor() && !cursor->isopen()) {
+                if (cursor->is_session_cursor() && !cursor->isopen()) {
                   OZ (ObSPIService::spi_add_ref_cursor_refcount(&pl.get_exec_ctx(), &cursor_param, -1));
                   OX (params->at(i).set_obj_value(static_cast<uint64_t>(0)));  // return closed refcursor as null
                 }
@@ -1378,356 +1369,40 @@ int ObPL::execute(ObExecContext &ctx,
   return ret;
 }
 
-int ObPL::trans_sql(PlTransformTreeCtx &trans_ctx, ParseNode *root, ObExecContext &ctx)
+struct ObPLExecTraceIdGuard
 {
-  int ret = OB_SUCCESS;
-  int64_t param_unit_idx = 0;
-  int64_t param_num = trans_ctx.raw_param_num_;
-  ObPlanCacheCtx pc_ctx(trans_ctx.raw_sql_or_expr_,
-                      PC_PL_MODE, // PL_MODE
-                      ctx.get_allocator(),
-                      *(ctx.get_sql_ctx()),
-                      ctx);
-  pc_ctx.fp_result_.pc_key_.namespace_ = ObLibCacheNameSpace::NS_ANON;
-  pc_ctx.fp_result_.pc_key_.name_ = trans_ctx.no_param_sql_;
-  ObSEArray<ObPCParam *, OB_PC_SPECIAL_PARAM_COUNT> special_params;
-  ParamStore params((ObWrapperAllocator(trans_ctx.allocator_)));
-  ObMaxConcurrentParam::FixParamStore fix_param_store(OB_MALLOC_NORMAL_BLOCK_SIZE,
-                                                  ObWrapperAllocator(trans_ctx.allocator_));
-  if (param_num > 0) {
-    SqlInfo sql_info;
-    sql_info.need_check_fp_ = false;
-    ObPCParam *pc_param = NULL;
-    char *ptr = (char *)trans_ctx.allocator_->alloc(param_num * sizeof(ObPCParam));
-    if (OB_ISNULL(ptr)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc memory for pc param", K(ret), K(ptr));
-    }
-    for (int64_t i = 0;
-        OB_SUCC(ret) && i < param_num && NULL != trans_ctx.p_list_;//p_list contains all expressions and sql raw params
-        ++i) {
-      pc_param = new(ptr)ObPCParam();
-      ptr += sizeof(ObPCParam);
-      pc_param->node_ = trans_ctx.p_list_->node_;
-      if (OB_FAIL(pc_ctx.fp_result_.raw_params_.push_back(pc_param))) {
-        LOG_WARN("fail to push into params", K(ret));
-      } else {
-        trans_ctx.p_list_ = trans_ctx.p_list_->next_;
-      }
-    } // for end
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObSqlParameterization::transform_syntax_tree(*trans_ctx.allocator_,
-                                                                *ctx.get_my_session(),
-                                                                &pc_ctx.fp_result_.raw_params_,
-                                                                root,
-                                                                sql_info,
-                                                                params,
-                                                                NULL,
-                                                                fix_param_store,
-                                                                false,
-                                                                trans_ctx.is_ps_mode_ ? PS_PREPARE_MODE : SQL_EXECUTION_MODE::INVALID_MODE,
-                                                                true))) {
-      LOG_WARN("fail to exec transform_syntax_tree", K(ret));
-    } else if (OB_FAIL(ObSqlParameterization::check_and_generate_param_info(pc_ctx.fp_result_.raw_params_,
-                                              sql_info,
-                                              special_params))) {
-      LOG_WARN("fail to check and generate param info", K(ret));
-    } else if (trans_ctx.is_ps_mode_ && OB_NOT_NULL(trans_ctx.ps_pc_ctx_)) {
-      trans_ctx.ps_pc_ctx_->ps_need_parameterized_ &= sql_info.ps_need_parameterized_;
-    }
-    if (OB_SUCC(ret)) {
-      char *buf = NULL;
-      int32_t pos = 0;
-      buf = (char *)trans_ctx.allocator_->alloc(pc_ctx.raw_sql_.length());
-      if (NULL == buf) {
-        LOG_WARN("fail to alloc buf", K(pc_ctx.raw_sql_.length()));
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else if (OB_FAIL(ObSqlParameterization::construct_sql_for_pl(pc_ctx.fp_result_.pc_key_.name_, special_params, buf, pc_ctx.raw_sql_.length(), pos))) {
-        LOG_WARN("fail to construct_sql", K(ret));
-      } else {
-        if (trans_ctx.buf_size_ < trans_ctx.buf_len_ + pos) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected error about trans_ctx.buf", K(ret));
-        } else {
-          MEMCPY(trans_ctx.buf_ + trans_ctx.buf_len_, buf, pos);
-          trans_ctx.buf_len_ += pos;
-        }
-        CK (OB_NOT_NULL(trans_ctx.params_));
-        for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); ++i) {
-          ObObjParam obj = params.at(i);
-          OZ (deep_copy_obj(ctx.get_allocator(), params.at(i), obj));
-          OZ (trans_ctx.params_->push_back(obj));
-        }
-        if (OB_SUCC(ret) && trans_ctx.is_ps_mode_ && OB_NOT_NULL(trans_ctx.ps_pc_ctx_) && trans_ctx.ps_pc_ctx_->ps_need_parameterized_) {
-          if (OB_FAIL(ObSqlParameterization::transform_neg_param(pc_ctx.fp_result_.raw_params_))) {
-            LOG_WARN("fail to transfor neg param", K(ret));
-          } else if (param_num != pc_ctx.fp_result_.raw_params_.count()) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected param num", K(ret), K(param_num), K(pc_ctx.fp_result_.raw_params_.count()));
-          } else {
-            int cur_raw_params_cnt = trans_ctx.ps_pc_ctx_->fp_result_.raw_params_.count();
-            for (int64_t i = 0; OB_SUCC(ret) && i < param_num; ++i) {
-              if (OB_FAIL(trans_ctx.ps_pc_ctx_->fp_result_.raw_params_.push_back(pc_ctx.fp_result_.raw_params_.at(i)))) {
-                LOG_WARN("fail to push back raw params", K(ret));
-              }
-            }
-            for (int64_t i = 0; OB_SUCC(ret) && i < sql_info.fixed_param_idx_.count(); ++i) {
-              int64_t idx = sql_info.fixed_param_idx_.at(i);
-              if (idx >= param_num) {
-                ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("invalid idx", K(ret), K(idx));
-              } else if (OB_FAIL(trans_ctx.ps_pc_ctx_->fixed_param_idx_.push_back(cur_raw_params_cnt + idx))) {
-                LOG_WARN("fail to push back fixed param idx", K(ret));
-              }
-            }
-          }
-        }
-      }
-    }
-  } else {
-    if (trans_ctx.buf_size_ < trans_ctx.buf_len_ + trans_ctx.no_param_sql_.length()) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error about trans_ctx.buf", K(ret));
-    } else {
-      MEMCPY(trans_ctx.buf_ + trans_ctx.buf_len_, trans_ctx.no_param_sql_.ptr(), trans_ctx.no_param_sql_.length());
-      trans_ctx.buf_len_ += trans_ctx.no_param_sql_.length();
-    }
-  }
-  return ret;
-}
-
-int ObPL::transform_tree(PlTransformTreeCtx &trans_ctx, ParseNode *root, ParseNode *no_param_root, ObExecContext &ctx, ParseResult &parse_result)
-{
-  int ret = OB_SUCCESS;
-  if (trans_ctx.is_ps_mode_ && OB_ISNULL(trans_ctx.ps_pc_ctx_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("arg is null", K(ret));
-  } else if (OB_NOT_NULL(root) && OB_NOT_NULL(no_param_root) && (!trans_ctx.is_ps_mode_ || trans_ctx.ps_pc_ctx_->ps_need_parameterized_)) {
-    if (T_QUESTIONMARK == no_param_root->type_ && trans_ctx.is_ps_mode_) {
-      // ps mode, need to count the parsed by pl side into raw params
-      ObPCParam *pc_param = nullptr;
-      char *ptr = (char *)trans_ctx.allocator_->alloc(sizeof(ObPCParam));
-      if (OB_ISNULL(ptr)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc memory for pc param", K(ret), K(ptr));
-      } else {
-        pc_param = new(ptr)ObPCParam();
-        pc_param->node_ = no_param_root;
-        if (OB_FAIL(trans_ctx.ps_pc_ctx_->fp_result_.raw_params_.push_back(pc_param))) {
-          LOG_WARN("fail to push into params", K(ret));
-        }
-      }
-    } else if (T_EXPR == no_param_root->type_) {
-      ParseNode *expr_node = NULL;
-      /* Adjust the syntax tree structure, to avoid errors during syntax tree analysis due to different structures */
-      if (OB_ISNULL(expr_node = new_non_terminal_node(trans_ctx.allocator_, T_EXPR, 1, root))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to alloc memory", K(ret));
-      } else {
-        /* Syntax tree analysis will modify some attributes of the node, so we record them in advance */
-        int64_t raw_pos = expr_node->children_[0]->pos_ - trans_ctx.raw_anonymous_off_;
-        int64_t raw_str_off = expr_node->children_[0]->text_len_;
-        trans_ctx.raw_sql_or_expr_.assign_ptr(expr_node->children_[0]->raw_text_, expr_node->children_[0]->text_len_);
-        trans_ctx.raw_param_num_ = no_param_root->children_[0]->param_num_;
-        trans_ctx.no_param_sql_.assign_ptr(parse_result.no_param_sql_ + no_param_root->children_[0]->pos_, no_param_root->children_[0]->str_len_);
-        if (trans_ctx.buf_size_ < trans_ctx.buf_len_ + raw_pos - trans_ctx.copied_idx_ ||
-            raw_pos < trans_ctx.copied_idx_) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected error about trans_ctx.buf", K(ret), K(raw_pos), K(trans_ctx.copied_idx_));
-        } else {
-          MEMCPY(trans_ctx.buf_ + trans_ctx.buf_len_, trans_ctx.raw_sql_.ptr() + trans_ctx.copied_idx_, raw_pos - trans_ctx.copied_idx_);
-          trans_ctx.buf_len_ += raw_pos - trans_ctx.copied_idx_;
-          OZ (trans_sql(trans_ctx, expr_node, ctx));
-          trans_ctx.copied_idx_ = raw_pos + raw_str_off;
-        }
-      }
-    } else if (T_SQL_STMT == no_param_root->type_) {
-      int64_t raw_pos = root->children_[0]->pos_ - trans_ctx.raw_anonymous_off_;
-      int64_t raw_str_off = root->children_[0]->text_len_;
-      trans_ctx.raw_sql_or_expr_.assign_ptr(root->children_[0]->raw_text_, root->children_[0]->text_len_);
-      trans_ctx.raw_param_num_ = no_param_root->children_[0]->param_num_;
-      trans_ctx.no_param_sql_.assign_ptr(parse_result.no_param_sql_ + no_param_root->children_[0]->pos_, no_param_root->children_[0]->str_len_);
-      if (trans_ctx.buf_size_ < trans_ctx.buf_len_ + raw_pos - trans_ctx.copied_idx_ ||
-          raw_pos < trans_ctx.copied_idx_) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error about trans_ctx.buf", K(ret));
-      } else {
-        MEMCPY(trans_ctx.buf_ + trans_ctx.buf_len_, trans_ctx.raw_sql_.ptr() + trans_ctx.copied_idx_, raw_pos - trans_ctx.copied_idx_);
-        trans_ctx.buf_len_ += raw_pos - trans_ctx.copied_idx_;
-        OZ (trans_sql(trans_ctx, root, ctx));
-        trans_ctx.copied_idx_ = raw_pos + raw_str_off;
-      }
-    } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < root->num_child_ && i < no_param_root->num_child_; ++i) {
-        OZ (SMART_CALL(transform_tree(trans_ctx, root->children_[i], no_param_root->children_[i], ctx, parse_result)));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObPL::parameter_anonymous_block(ObExecContext &ctx,
-                              const ObStmtNodeTree *block,
-                              ParamStore &params,
-                              ObIAllocator &allocator,
-                              bool is_ps_mode,
-                              ObString &parameter_sql,
-                              ObPlanCacheCtx *pc_ctx)
-{
-  int ret = OB_SUCCESS;
-  CK (OB_NOT_NULL(ctx.get_my_session()));
-  CK (OB_NOT_NULL(block));
-  CK (!is_ps_mode || OB_NOT_NULL(pc_ctx));
-  if (OB_SUCC(ret)) {
-    ObString sql(static_cast<int64_t>(block->str_len_), block->str_value_);
-    ParseResult parse_result;
-    ObPLParser pl_parser(allocator,
-                      ctx.get_my_session()->get_charsets4parser(),
-                      ctx.get_my_session()->get_sql_mode());
-    OZ (pl_parser.fast_parse(sql, parse_result));
-    if (OB_SUCC(ret)) {
-      PlTransformTreeCtx trans_ctx;
-      ParseNode *block_node = NULL;
-      memset(&trans_ctx, 0, sizeof(PlTransformTreeCtx));
-      trans_ctx.allocator_ = &allocator;
-      trans_ctx.raw_sql_ = sql;
-      trans_ctx.raw_anonymous_off_ = block->pl_str_off_;
-      trans_ctx.params_ = &params;
-      trans_ctx.is_ps_mode_ = is_ps_mode;
-      trans_ctx.total_param_nums_ = parse_result.param_node_num_;
-      trans_ctx.ps_pc_ctx_ = pc_ctx;
-      trans_ctx.buf_ = (char *)trans_ctx.allocator_->alloc(sql.length());
-      if (OB_ISNULL(trans_ctx.buf_)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate failed", K(sql), K(ret));
-      } else if (is_ps_mode &&
-                  !FALSE_IT(trans_ctx.ps_pc_ctx_->ps_need_parameterized_ = true) &&
-                 (OB_FAIL(trans_ctx.ps_pc_ctx_->fp_result_.raw_params_.reserve(trans_ctx.total_param_nums_)) ||
-                  OB_FAIL(trans_ctx.ps_pc_ctx_->fixed_param_idx_.reserve(trans_ctx.total_param_nums_)))) {
-        LOG_WARN("failed to reserve array", K(ret));
-      } else {
-        trans_ctx.buf_size_ = sql.length();
-        trans_ctx.p_list_ = parse_result.param_nodes_;
-        CK (OB_NOT_NULL(parse_result.result_tree_));
-        CK (T_STMT_LIST == parse_result.result_tree_->type_ && 1 == parse_result.result_tree_->num_child_);
-        CK (OB_NOT_NULL(block_node = parse_result.result_tree_->children_[0]));
-        CK (T_SP_ANONYMOUS_BLOCK == block_node->type_);
-        CK (OB_NOT_NULL(block_node = block_node->children_[0]));
-        CK (T_SP_BLOCK_CONTENT == block_node->type_ || T_SP_LABELED_BLOCK == block_node->type_);
-        OZ (transform_tree(trans_ctx, const_cast<ParseNode *>(block), block_node, ctx, parse_result));
-        if (OB_SUCC(ret)) {
-          if (trans_ctx.buf_size_ < trans_ctx.buf_len_ + trans_ctx.raw_sql_.length() - trans_ctx.copied_idx_ ||
-              trans_ctx.raw_sql_.length() < trans_ctx.copied_idx_) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected error about trans_ctx.buf", K(ret));
-          } else {
-            MEMCPY(trans_ctx.buf_ + trans_ctx.buf_len_,
-                    trans_ctx.raw_sql_.ptr() + trans_ctx.copied_idx_,
-                    trans_ctx.raw_sql_.length() - trans_ctx.copied_idx_);
-            trans_ctx.buf_len_ += trans_ctx.raw_sql_.length() - trans_ctx.copied_idx_;
-          }
-        }
-        //pc_key.assign_ptr(trans_ctx.buf_, trans_ctx.buf_len_);
-        OZ (ob_write_string(ctx.get_allocator(), ObString(trans_ctx.buf_len_, trans_ctx.buf_), parameter_sql));
-      }
-    }
-  }
-  return ret;
-}
-
-struct ObPLExecTraceIdGuard {
   ObPLExecTraceIdGuard(const ObCurTraceId::TraceId &trace_id,
-                       uint64_t package_id, uint64_t routine_id)
-      : package_id_(package_id), routine_id_(routine_id) {
-    int ret = OB_SUCCESS;
+                       uint64_t package_id,
+                       uint64_t routine_id)
+      : package_id_(package_id), routine_id_(routine_id)
+  {
     if (trace_id.is_valid()
-          && OB_NOT_NULL(ObCurTraceId::get_trace_id())
-          && !(trace_id == *ObCurTraceId::get_trace_id())) {
+        && OB_NOT_NULL(ObCurTraceId::get_trace_id())
+        && !(trace_id == *ObCurTraceId::get_trace_id())) {
       origin_trace_id_.set(*ObCurTraceId::get_trace_id());
-
-      // log with SQL trace_id
       LOG_TRACE("executing pl, restore trace_id to pl trace_id",
-               K(package_id_), K(routine_id_),
-               "from", origin_trace_id_, "to", trace_id);
-
+                K(package_id_), K(routine_id_),
+                "from", origin_trace_id_, "to", trace_id);
       ObCurTraceId::get_trace_id()->set(trace_id);
     }
   }
 
-  ~ObPLExecTraceIdGuard() {
-    int ret = OB_SUCCESS;
+  ~ObPLExecTraceIdGuard()
+  {
     if (origin_trace_id_.is_valid() && OB_NOT_NULL(ObCurTraceId::get_trace_id())) {
       ObCurTraceId::TraceId curr_trace_id = *ObCurTraceId::get_trace_id();
       ObCurTraceId::get_trace_id()->set(origin_trace_id_);
       LOG_TRACE("pl execution finished, trace id restored from pl trace_id to sql trace_id",
-               K(package_id_), K(routine_id_),
-               "from", curr_trace_id, "to", origin_trace_id_);
+                K(package_id_), K(routine_id_),
+                "from", curr_trace_id, "to", origin_trace_id_);
     }
   }
+
   ObCurTraceId::TraceId origin_trace_id_;
   uint64_t package_id_;
   uint64_t routine_id_;
 };
 
-bool ObPL::forbid_anony_parameter(ObSQLSessionInfo &session, bool is_ps_mode, bool forbid)
-{
-  bool ret = true;  // seekdb is MySQL-only: anony parameter is always forbidden
-  UNUSED(forbid);
-  if (!is_ps_mode) {
-    ret |= !session.get_local_ob_enable_parameter_anonymous_block();
-  } else {
-    ret |= !session.get_local_ob_enable_ps_parameter_anonymous_block();
-  }
-  return ret;
-}
-
-bool ObPL::parameter_ps_anonymous_block(ObExecContext &ctx,
-                                        ObIAllocator &allocator,
-                                        ParseResult &parse_result,
-                                        ObString &no_param_sql,
-                                        ObPlanCacheCtx &pc_ctx)
-{
-  int ret = OB_SUCCESS;
-  ParamStore exec_params((ObWrapperAllocator(&allocator)));
-  const ObStmtNodeTree *block = nullptr;
-  if (OB_ISNULL(parse_result.result_tree_) ||
-      parse_result.result_tree_->num_child_ < 1 ||
-      OB_ISNULL(ctx.get_my_session())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected parser tree", K(ret));
-  } else if (OB_ISNULL(block = parse_result.result_tree_->children_[0])) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected block", K(ret));
-  } else if (ObPL::forbid_anony_parameter(*ctx.get_my_session(), true,
-                                          block->children_[0]->is_forbid_anony_parameter_)) {
-    // forbid parameter, do nothing
-    pc_ctx.ps_need_parameterized_ = false;
-    pc_ctx.fixed_param_idx_.reset();
-    pc_ctx.fp_result_.raw_params_.reset();
-    no_param_sql.reset();
-  } else if (OB_FAIL(parameter_anonymous_block(ctx,
-                                              block->children_[0],
-                                              exec_params,
-                                              allocator,
-                                              true,
-                                              no_param_sql,
-                                              &pc_ctx))) {
-    LOG_WARN("parameterize anonymous syntax tree failed", K(ret));
-    pc_ctx.ps_need_parameterized_ = false;
-    pc_ctx.fixed_param_idx_.reset();
-    pc_ctx.fp_result_.raw_params_.reset();
-    no_param_sql.reset();
-    ret = OB_SUCCESS;
-  } else if (!pc_ctx.ps_need_parameterized_) {
-    pc_ctx.fixed_param_idx_.reset();
-    pc_ctx.fp_result_.raw_params_.reset();
-    no_param_sql.reset();
-  }
-
-  return ret;
-}
-
-// for execute anonymous
 int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *block)
 {
   int ret = OB_SUCCESS;
@@ -1735,9 +1410,6 @@ int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *
   lib::MemoryContext mem_context = NULL;
   lib::ContextParam param;
   ObPLFunction *routine = NULL;
-  ObCacheObjGuard cacheobj_guard(PL_ANON_HANDLE);
-  bool is_forbid_anony_parameter = false;
-  OX (is_forbid_anony_parameter = true);
 
   int64_t old_worker_timeout_ts = 0;
   ObPLASHGuard guard(ObPLResolver::ANONYMOUS_VIRTUAL_OBJECT_ID, OB_INVALID_ID);
@@ -1746,11 +1418,8 @@ int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *
    * !!!
    */
   observer::ObReqTimeGuard req_timeinfo_guard;
-  CHECK_COMPATIBILITY_MODE(ctx.get_my_session());
 
   OZ (ObPLContext::valid_execute_context(ctx));
-
-  OX (is_forbid_anony_parameter = ObPL::forbid_anony_parameter(*ctx.get_my_session(), false, is_forbid_anony_parameter));
 
   OX (param.set_mem_attr(ObModIds::OB_PL_TEMP,
                          ObCtxIds::DEFAULT_CTX_ID));
@@ -1758,7 +1427,6 @@ int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *
   CK (OB_NOT_NULL(mem_context));
 
   if (OB_SUCC(ret)) {
-    ParamStore exec_params((ObWrapperAllocator(mem_context->get_arena_allocator())));
     if (OB_ISNULL(ctx.get_my_session()->get_pl_context())) {
       // set work timeout for compile it only top level store routine
       int64_t pl_block_timeout = 0;
@@ -1771,41 +1439,26 @@ int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *
       OX (THIS_WORKER.set_timeout_ts(query_start_time + pl_block_timeout));
     }
 
-    if (OB_FAIL(ret)) {
-    } else if (!is_forbid_anony_parameter) {
-      ObString pc_key;
-      OZ (parameter_anonymous_block(ctx, block, exec_params, mem_context->get_arena_allocator(), false, pc_key));
-      // generate sql_id using paramiterized sql, and overwrite privious sql_id
-      OZ (ObSQLUtils::md5(pc_key, ctx.get_sql_ctx()->sql_id_,
-                          (int32_t)sizeof(ctx.get_sql_ctx()->sql_id_)));
-      OX (ctx.get_my_session()->set_cur_sql_id(ctx.get_sql_ctx()->sql_id_));
-      OZ (get_pl_function(ctx, exec_params, OB_INVALID_ID, pc_key, cacheobj_guard));
-      OX (routine = static_cast<ObPLFunction*>(cacheobj_guard.get_cache_obj()));
-      CK (OB_NOT_NULL(routine));
-      OX (routine->set_debug_priv());
-    } else {
-      // build it.
-      if (OB_SUCC(ret) && NULL == routine) {
-        ObPLBuilder builder(mem_context->get_arena_allocator(),
-                              *(ctx.get_my_session()),
-                              *(ctx.get_sql_ctx()->schema_guard_),
-                              *(ctx.get_package_guard()),
-                              *(ctx.get_sql_proxy()));
-        if (OB_ISNULL(routine = static_cast<ObPLFunction*>(
-              mem_context->get_arena_allocator().alloc(sizeof(ObPLFunction))))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to allocate memory for anonymous pl function",
-                  K(ret), K(sizeof(ObPLFunction)));
-        }
-        OX (routine = new(routine)ObPLFunction(mem_context));
+    if (OB_SUCC(ret) && NULL == routine) {
+      ObPLBuilder builder(mem_context->get_arena_allocator(),
+                          *(ctx.get_my_session()),
+                          *(ctx.get_sql_ctx()->schema_guard_),
+                          *(ctx.get_package_guard()),
+                          *(ctx.get_sql_proxy()));
+      if (OB_ISNULL(routine = static_cast<ObPLFunction*>(
+            mem_context->get_arena_allocator().alloc(sizeof(ObPLFunction))))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to allocate memory for anonymous pl function",
+                 K(ret), K(sizeof(ObPLFunction)));
+      }
+      OX (routine = new(routine)ObPLFunction(mem_context));
 
-        // stmt_id is OB_INVALID_ID for anonymous block from text protocol
-        OZ (builder.compile(block, OB_INVALID_ID, *routine, &params, false));
-        OX (routine->set_debug_priv());
-        if (OB_SUCC(ret) && params.count() != routine->get_params_info().count()) {
-          ret = OB_ERR_BIND_VARIABLE_NOT_EXIST;
-          LOG_WARN("text anonymous can not contain bind variable", K(ret));
-        }
+      // stmt_id is OB_INVALID_ID for anonymous block from text protocol
+      OZ (builder.compile(block, OB_INVALID_ID, *routine, &params, false));
+      OX (routine->set_debug_priv());
+      if (OB_SUCC(ret) && params.count() != routine->get_params_info().count()) {
+        ret = OB_ERR_BIND_VARIABLE_NOT_EXIST;
+        LOG_WARN("text anonymous can not contain bind variable", K(ret));
       }
     }
     // restore work timeout
@@ -1832,7 +1485,7 @@ int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *
                       ctx.get_allocator(),
                       *(ctx.get_package_guard()),
                       *routine,
-                      is_forbid_anony_parameter ? &params : &exec_params, // params
+                      &params,
                       NULL, // nocopy params
                       NULL, // result
                       NULL, // status
@@ -1850,7 +1503,7 @@ int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *
           if (stack_ctx.is_inited()) {
             stack_ctx.destory(*(ctx.get_my_session()), ctx, ret);
           }
-          if (is_forbid_anony_parameter && NULL != routine) {
+          if (NULL != routine) {
             routine->~ObPLFunction();
           }
           if (NULL != mem_context) {
@@ -1872,7 +1525,7 @@ int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *
   }
 #endif
 
-  if (is_forbid_anony_parameter && NULL != routine) {
+  if (NULL != routine) {
     routine->~ObPLFunction();
   }
   if (NULL != mem_context) {
@@ -1900,7 +1553,6 @@ int ObPL::execute(ObExecContext &ctx,
    * !!!
    */
   observer::ObReqTimeGuard req_timeinfo_guard;
-  CHECK_COMPATIBILITY_MODE(ctx.get_my_session());
   if (OB_ISNULL(ctx.get_my_session()->get_pl_context())) {
     // set work timeout for compile it only top level store routine
     int64_t pl_block_timeout = 0;
@@ -2019,7 +1671,6 @@ int ObPL::execute(ObExecContext &ctx,
     observer::ObReqTimeGuard req_timeinfo_guard;
 
     LinkPLStackGuard link_stack_guard(ctx, stack_ctx);
-    CHECK_COMPATIBILITY_MODE(ctx.get_my_session());
 
     CK (!inner_call || (inner_call && OB_NOT_NULL(status)));
 
@@ -3829,8 +3480,6 @@ int ObPL::check_exec_priv(
   uint64_t func_id = OB_INVALID_ID;
   uint64_t db_id = OB_INVALID_ID;
   
-  bool need_check = false;
-
   CK (OB_NOT_NULL(routine));
   OX (pkg_id = routine->get_package_id());
   OX (func_id = routine->get_routine_id());
@@ -3845,17 +3494,13 @@ int ObPL::check_exec_priv(
     CK (exec_ctx.get_my_session() != NULL);
   }
   if (OB_SUCC(ret) && pkg_id == OB_INVALID_ID) {
-    if (ObSchemaChecker::enable_mysql_pl_priv_check(*guard)) {
-      share::schema::ObSessionPrivInfo session_priv;
-      EnableRoleIdArray enable_role_id_array;
+    share::schema::ObSessionPrivInfo session_priv;
+    EnableRoleIdArray enable_role_id_array;
       if (OB_FAIL(guard->get_session_priv_info(
                                       exec_ctx.get_my_session()->get_priv_user_id(),
                                       exec_ctx.get_my_session()->get_database_name(),
                                       session_priv))) {
           LOG_WARN("fail to get_session_priv_info", K(ret));
-      } else if (OB_FAIL(exec_ctx.get_my_session()->get_security_version(
-                                                          session_priv.security_version_))) {
-        LOG_WARN("fail to get security version", K(ret));
       } else if (OB_UNLIKELY(!session_priv.is_valid())) {
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("Session priv is invalid", 
@@ -3875,14 +3520,9 @@ int ObPL::check_exec_priv(
         OX (need_priv.obj_type_ = routine_info->is_procedure() ? ObObjectType::PROCEDURE : ObObjectType::FUNCTION);
         OZ (guard->check_routine_priv(session_priv, enable_role_id_array, need_priv));
       }
-    }
   }
   // add check trigger priv
-  if (OB_SUCC(ret) && ObTriggerInfo::is_trigger_package_id(pkg_id) &&
-      OB_FAIL(exec_ctx.get_my_session()->check_feature_enable(
-      ObCompatFeatureType::MYSQL_TRIGGER_PRIV_CHECK, need_check))) {
-    LOG_WARN("failed to check feature enable", K(ret));
-  } else if (OB_SUCC(ret) && need_check) {
+  if (OB_SUCC(ret) && ObTriggerInfo::is_trigger_package_id(pkg_id)) {
     share::schema::ObSessionPrivInfo session_priv;
     EnableRoleIdArray enable_role_id_array;
     const ObTableSchema *table = NULL;

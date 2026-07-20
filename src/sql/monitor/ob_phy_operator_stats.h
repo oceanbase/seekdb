@@ -27,7 +27,6 @@ class ObIAllocator;
 }
 namespace sql
 {
-class ObPhyOperatorMonitorInfo;
 struct ObOperatorStat;
 class ObPhysicalPlan;
 namespace StatId
@@ -43,14 +42,11 @@ class ObPhyOperatorStats
 {
 public:
   friend class TestPhyOperatorStats_init_Test;
-  friend class TestPhyOperatorStats_test_add_Test;
-  friend class TestPhyOperatorStats_test_accumulation_Test;
   ObPhyOperatorStats() : op_stats_array_(NULL),
     op_count_(0), array_size_(0), execution_times_(0)
   {}
   ~ObPhyOperatorStats() {}
   int init(common::ObIAllocator *alloc, int64_t op_count);
-  int add_op_stat(ObPhyOperatorMonitorInfo &info);
   int get_op_stat_accumulation(ObPhysicalPlan *plan, int64_t op_id, ObOperatorStat &stat);
   static const int64_t COPY_COUNT = 10;
   int64_t count() { return op_count_; }

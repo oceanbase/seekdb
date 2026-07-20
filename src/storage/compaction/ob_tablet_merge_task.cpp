@@ -221,7 +221,6 @@ ObTabletMergeDag::ObTabletMergeDag(
   : ObIDag(type),
     ObMergeDagHash(),
     is_inited_(false),
-    compat_mode_(lib::Worker::CompatMode::INVALID),
     ctx_(nullptr),
     param_(),
     allocator_("MergeDag", OB_MALLOC_NORMAL_BLOCK_SIZE, ObCtxIds::MERGE_NORMAL_CTX_ID),
@@ -243,7 +242,7 @@ ObTabletMergeDag::~ObTabletMergeDag()
   min_sstable_end_scn_ = -1;
 }
 
-int ObTabletMergeDag::get_tablet_and_compat_mode()
+int ObTabletMergeDag::get_tablet_and_check()
 {
   int ret = OB_SUCCESS;
   // can't get tablet_handle now! because this func is called in create dag,
@@ -259,7 +258,6 @@ int ObTabletMergeDag::get_tablet_and_compat_mode()
     if (OB_NO_NEED_MERGE != ret) {
       LOG_WARN("failed to check need merge", K(ret));
     }
-  } else if (FALSE_IT(compat_mode_ = tmp_tablet_handle.get_obj()->get_tablet_meta().compat_mode_)) {
   } else if (is_mini_merge(merge_type_)) {
     int64_t inc_sstable_cnt = 0;
     bool is_exist = false;
@@ -294,7 +292,6 @@ int64_t ObTabletMergeDag::to_string(char* buf, const int64_t buf_len) const
     pos += ObIDag::to_string(buf + pos, buf_len - pos);
 
     databuff_print_json_kv_comma(buf, buf_len, pos, "param", param_);
-    databuff_print_json_kv_comma(buf, buf_len, pos, "compat_mode", compat_mode_);
     databuff_print_json_kv_comma(buf, buf_len, pos, "min_sstable_end_scn", min_sstable_end_scn_);
     if (nullptr == ctx_) {
       databuff_print_json_kv_comma(buf, buf_len, pos, "ctx", ctx_);
@@ -325,8 +322,8 @@ int ObTabletMergeDag::inner_init(const ObTabletMergeDagParam *param)
     merge_type_ = param->merge_type_;
     tablet_id_ = param->tablet_id_;
     if (param->skip_get_tablet_) {
-    } else if (OB_FAIL(get_tablet_and_compat_mode())) {
-      LOG_WARN("failed to get tablet and compat mode", K(ret));
+    } else if (OB_FAIL(get_tablet_and_check())) {
+      LOG_WARN("failed to get and check tablet", K(ret));
     }
     if (OB_SUCC(ret)) {
       is_inited_ = true;
@@ -591,7 +588,6 @@ int ObTabletMergeExecuteDag::init_by_param(const share::ObIDagInitParam *param)
 
 int ObTabletMergeExecuteDag::prepare_init(
     const ObTabletMergeDagParam &param,
-    const lib::Worker::CompatMode compat_mode,
     const ObGetMergeTablesResult &result,
     ObLS *ls)
 {
@@ -606,7 +602,6 @@ int ObTabletMergeExecuteDag::prepare_init(
     param_ = param;
     merge_type_ = param.merge_type_;
     tablet_id_ = param.tablet_id_;
-    compat_mode_ = compat_mode;
     if (OB_FAIL(result_.assign(result))) {
       LOG_WARN("failed to assgin result", K(ret), K(result));
     } else {
@@ -926,7 +921,7 @@ int ObTabletMergeFinishTask::process()
     ObITable *sstable = ctx_ptr->merged_table_handle_.get_table();
     // ATTENTION! Critical diagnostic log, DO NOT CHANGE!!!
     FLOG_INFO("sstable merge finish", K(ret), "merge_info", ctx_ptr->get_merge_info(),
-        KPC(sstable), "mem_peak", ctx_ptr->mem_ctx_.get_total_mem_peak(), "compat_mode", merge_dag_->get_compat_mode(),
+        KPC(sstable), "mem_peak", ctx_ptr->mem_ctx_.get_total_mem_peak(),
         "time_guard", ctx_ptr->info_collector_.time_guard_);
   }
 

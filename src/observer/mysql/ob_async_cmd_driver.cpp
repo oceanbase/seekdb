@@ -76,8 +76,7 @@ int ObAsyncCmdDriver::response_result(ObMySQLResultSet &result)
     //send error packet in sql thread
     if (!OB_SUCC(ret) && !retry_ctrl_.need_retry() && (!result.is_async_end_trans_submitted())) {
       int sret = OB_SUCCESS;
-      bool is_partition_hit = session_.partition_hit().get_bool();
-      if (OB_SUCCESS != (sret = sender_.send_error_packet(ret, NULL, is_partition_hit))) {
+      if (OB_SUCCESS != (sret = sender_.send_error_packet(ret, NULL))) {
         LOG_WARN("send error packet fail", K(sret), K(ret));
       }
     }
@@ -91,7 +90,6 @@ int ObAsyncCmdDriver::response_result(ObMySQLResultSet &result)
       ObOKPParam ok_param;
       ok_param.affected_rows_ = 0;
       session_.set_affected_rows(ok_param.affected_rows_);
-      ok_param.is_partition_hit_ = session_.partition_hit().get_bool();
       ok_param.has_more_result_ = result.has_more_result();
       if (OB_FAIL(sender_.send_ok_packet(session_, ok_param))) {
         LOG_WARN("fail to send ok packt", K(ok_param), K(ret));

@@ -23,16 +23,10 @@ namespace oceanbase
 {
 namespace pl
 {
-/*INFLUENCE_PL sys var:
- *div_precision_increment only mysql mode
- *ob_compatibility_version
- *_enable_old_charset_aggregation
-*/
-static constexpr int64_t PL_CACHE_SYS_VAR_COUNT = 3;
+/* INFLUENCE_PL system variables that still affect current MySQL behavior. */
+static constexpr int64_t PL_CACHE_SYS_VAR_COUNT = 1;
 static constexpr share::ObSysVarClassType InfluencePLMap[PL_CACHE_SYS_VAR_COUNT + 1] = {
   share::SYS_VAR_DIV_PRECISION_INCREMENT,
-  share::SYS_VAR_OB_COMPATIBILITY_VERSION,
-  share::SYS_VAR__ENABLE_OLD_CHARSET_AGGREGATION,
   share::SYS_VAR_INVALID
 };
 

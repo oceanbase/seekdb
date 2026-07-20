@@ -71,7 +71,6 @@ OB_INLINE int64_t *get_type_encoding_sortkey_size_map()
     -1, //ObCollectionSQLType
     -1, // ObMySQLDateType
     -1, // ObMySQLDateTimeType
-    -1, //RoaringBitmap
     -1 // ObMaxType
   };
   STATIC_ASSERT(ARRAYSIZEOF(type_size_map) == common::ObMaxType + 1,

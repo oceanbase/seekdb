@@ -63,8 +63,6 @@ int ObMPInitDB::process()
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("null pointer");
-  } else if (OB_FAIL(process_kill_client_session(*session))) {
-    LOG_WARN("client session has been killed", K(ret));
   } else if (OB_FAIL(session->get_query_timeout(query_timeout))) {
     LOG_WARN("fail to get query timeout", K(ret));
   } else if (OB_ISNULL(gctx_.schema_service_)) {
@@ -97,8 +95,6 @@ int ObMPInitDB::process()
       LOG_WARN("fail to get collation_connection", K(ret));
     } else if (OB_FAIL(session->get_name_case_mode(mode))) {
       LOG_WARN("fail to get name case mode", K(mode), K(ret));
-    } else if (OB_FAIL(update_transmission_checksum_flag(*session))) {
-      LOG_WARN("update transmisson checksum flag failed", K(ret));
     } else {
       need_disconnect = false;
       bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);

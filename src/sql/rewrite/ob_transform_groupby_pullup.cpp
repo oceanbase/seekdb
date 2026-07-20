@@ -23,6 +23,11 @@
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
 
+namespace
+{
+static constexpr double GROUP_BY_PULLUP_EXPANSION_THRESHOLD = 3.0;
+}
+
 int ObTransformGroupByPullup::transform_one_stmt(common::ObIArray<ObParentDMLStmt> &parent_stmts,
                                                            ObDMLStmt *&stmt,
                                                            bool &trans_happened)
@@ -1201,7 +1206,6 @@ int ObTransformGroupByPullup::check_original_plan_validity(ObLogicalOperator* ro
   ObSEArray<ObRawExpr*, 4> column_exprs;
   ObSEArray<ObRawExpr*, 4> select_exprs;
   ObSEArray<ObRawExpr*, 4> group_exprs;
-  uint64_t groupby_nopushdown_cut_ratio = 1;
   double group_ndv = 1.0;
   double card = 1.0;
   bool has_stats = true;
@@ -1249,14 +1253,11 @@ int ObTransformGroupByPullup::check_original_plan_validity(ObLogicalOperator* ro
                                          child_stmt->get_group_exprs(),
                                          group_exprs))) {
     LOG_WARN("failed to get group by subset", K(ret));
-  } else if (OB_FAIL(ctx_->session_info_->get_sys_variable(share::SYS_VAR__GROUPBY_NOPUSHDOWN_CUT_RATIO,
-                                                           groupby_nopushdown_cut_ratio))) {
-    LOG_WARN("failed to get session variable", K(ret));
   } else if (OB_FAIL(calc_group_exprs_ndv(group_exprs, subplan, group_ndv, card))) {
       LOG_WARN("failed to check group exprs", K(ret));
   } else {
     double expansion_rate = card / group_ndv;
-    is_valid = expansion_rate < groupby_nopushdown_cut_ratio;
+    is_valid = expansion_rate < GROUP_BY_PULLUP_EXPANSION_THRESHOLD;
     LOG_TRACE("check original plan", K(is_valid), K(group_exprs), K(group_ndv), K(expansion_rate));
     OPT_TRACE("check original plan group by exprs:", group_exprs);
     OPT_TRACE("check original plan group by ndv:", group_ndv);

@@ -907,8 +907,6 @@ int ObDDLOperator::construct_new_name_for_recyclebin(const T &schema,
     RS_LOG(WARN, "Failed to get TSIDDLVar", K(ret));
   } else {
     const common::ObString *ddl_id_str = tsi_value->ddl_id_str_;
-    lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
-    UNUSED(compat_mode);
     if (OB_SUCC(ret)) {
       if (OB_ISNULL(ddl_id_str)) {
         ret = new_object_name.append_fmt("__recycle_$_%lu_%ld",

@@ -101,7 +101,6 @@ DEFINE_ERROR_DEP(OB_DISCONTINUOUS_LOG, -4028, -1, "HY000", "Log entry not contin
 DEFINE_ERROR(OB_SCHEMA_ERROR, -4029, -1, "HY000", "Schema error");
 DEFINE_ERROR(OB_TENANT_OUT_OF_MEM, -4030, -1, "HY000", "Over tenant memory limits");
 DEFINE_ERROR(OB_UNKNOWN_OBJ, -4031, -1, "HY004", "Unknown object");
-DEFINE_ERROR(OB_NO_MONITOR_DATA, -4032, -1, "02000", "No monitor data");
 DEFINE_ERROR_DEP(OB_SERIALIZE_ERROR, -4033, -1, "HY000", "Serialize error");
 DEFINE_ERROR_DEP(OB_DESERIALIZE_ERROR, -4034, -1, "HY000", "Deserialize error");
 DEFINE_ERROR_DEP(OB_AIO_TIMEOUT, -4035, -1, "HY000", "Asynchronous IO error");
@@ -430,13 +429,8 @@ DEFINE_ERROR(OB_ENCODING_EST_SIZE_OVERFLOW, -4397, -1, "HY000", "Encoding estima
 DEFINE_ERROR(OB_INVALID_SUB_PARTITION_TYPE, -4398, 1500, "HY000", "It is only possible to mix RANGE/LIST partitioning with HASH/KEY partitioning for subpartitioning");
 DEFINE_ERROR(OB_ERR_UNEXPECTED_UNIT_STATUS, -4399, -1, "HY000", "Unit status is not expected");
 DEFINE_ERROR(OB_AUTOINC_CACHE_NOT_EQUAL, -4400, -1, "HY000", "Autoinc cache's autoinc version is not equal to request's autoinc version");
-DEFINE_ERROR(OB_ERR_KILL_CLIENT_SESSION, -4401, 4401, "HY000", "Client Session need be killed");
-DEFINE_ERROR(OB_ERR_KILL_CLIENT_SESSION_FAILED, -4402, -1, "HY000", "Kill Client Session failed");
 DEFINE_ERROR(OB_IMPROPER_OS_PARAM, -4403, -1, "HY000", "OS params check failed, because the operating system has improper parameter configurations");
 DEFINE_ERROR(OB_IO_TIMEOUT, -4404, 4012, "HY000", "IO timeout");
-DEFINE_ERROR_EXT_DEP(OB_INVALID_LICENSE, -4405, -1, "HY000", "license is invalid", "license is invalid because: %s");
-DEFINE_ERROR(OB_LICENSE_EXPIRED, -4406, -1, "HY000", "license is expired");
-DEFINE_ERROR_EXT_DEP(OB_LICENSE_SCOPE_EXCEEDED, -4407, -1, "HY000", "The current license does not include this feature module", "The current license does not include this feature module: %s");
 DEFINE_ERROR(OB_MIGRATE_TX_DATA_NOT_CONTINUES, -4408, -1, "HY000", "migrate tx data not continues");
 // 余留位置
 ////////////////////////////////////////////////////////////////
@@ -457,7 +451,6 @@ DEFINE_ERROR(OB_MIGRATE_TX_DATA_NOT_CONTINUES, -4408, -1, "HY000", "migrate tx d
 ////////////////////////////////////////////////////////////////
 DEFINE_ERROR(OB_IMPORT_NOT_IN_SERVER, -4505, -1, "HY000", "Import not in service");
 DEFINE_ERROR(OB_CONVERT_ERROR, -4507, -1, "42000", "Convert error");
-DEFINE_ERROR(OB_BYPASS_TIMEOUT, -4510, -1, "HY000", "Bypass timeout");
 DEFINE_ERROR(OB_RS_STATE_NOT_ALLOW, -4512, -1, "HY000", "RootServer state error");
 DEFINE_ERROR(OB_NO_REPLICA_VALID, -4515, -1, "HY000", "No replica is valid");
 DEFINE_ERROR(OB_NO_NEED_UPDATE, -4517, -1, "HY000", "No need to update");
@@ -1367,7 +1360,6 @@ DEFINE_ERROR(OB_ERR_MODIFY_READ_ONLY_VIEW, -5723, -1, "HY000", "cannot perform a
 DEFINE_ERROR(OB_ERR_INVALID_INITRANS_VALUE, -5724, -1, "HY000", "invalid INITRANS option value");
 DEFINE_ERROR(OB_ERR_INVALID_MAXTRANS_VALUE, -5725, -1, "HY000", "invalid MAXTRANS option value");
 DEFINE_ERROR(OB_ERR_INVALID_PCTFREE_OR_PCTUSED_VALUE, -5726, -1, "HY000", "invalid value for PCTFREE or PCTUSED");
-DEFINE_ERROR(OB_ERR_PROXY_REROUTE, -5727, -1, "HY000", "SQL request should be rerouted");
 DEFINE_ERROR(OB_ERR_ILLEGAL_ARGUMENT_FOR_FUNCTION, -5728, -1, "HY000", "illegal argument for function");
 DEFINE_ERROR_DEP(OB_ERR_OPERATOR_CANNOT_BE_USED_WITH_LIST, -5729, -1, "HY000", "this operator cannot be used with lists");
 DEFINE_ERROR(OB_ERR_INVALID_SAMPLING_RANGE, -5730, -1, "HY000", "SAMPLE percentage must be in the range [0.000001,100)");
@@ -2023,26 +2015,14 @@ DEFINE_ERROR(OB_ERR_PARSING_SPATIAL_PARAM, -7302, -1, "42000", "internal error w
 // XML错误码值域  [-7400, -7600)
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-DEFINE_ERROR_EXT(OB_ERR_INVALID_XML_DATATYPE, -7402, -1, "22000", "Invalid data type for the operation", "inconsistent datatypes: expected %s got %s");
-DEFINE_ERROR(OB_ERR_XML_MISSING_COMMA, -7403, -1, "42000", "missing comma");
 DEFINE_ERROR(OB_ERR_INVALID_XPATH_EXPRESSION, -7404, ER_UNKNOWN_ERROR, "42000", "XPATH syntax error: ''");
 DEFINE_ERROR(OB_ERR_EXTRACTVALUE_MULTI_NODES, -7405, -1, "42000", "EXTRACTVALUE cannot extract values of multiple nodes");
-DEFINE_ERROR(OB_ERR_XML_FRAMENT_CONVERT, -7406, -1, "42000", "Cannot convert XML fragment to the required datatype");
-DEFINE_ERROR(OB_INVALID_PRINT_OPTION, -7407, -1, "42000", "The specified printing option is invalid");
-DEFINE_ERROR(OB_XML_CHAR_LEN_TOO_SMALL, -7408, -1, "42000", "character length specified for XMLSerialize is too small.");
 DEFINE_ERROR(OB_XPATH_EXPRESSION_UNSUPPORTED, -7409, ER_UNKNOWN_ERROR, "42000", "Only constant XPATH queries are supported");
 DEFINE_ERROR(OB_EXTRACTVALUE_NOT_LEAF_NODE, -7410, -1, "42000", "EXTRACTVALUE can only retrieve value of leaf node");
-DEFINE_ERROR(OB_XML_INSERT_FRAGMENT, -7411, -1, "42000", "Cannot insert XML fragments");
 DEFINE_ERROR(OB_ERR_NO_ORDER_MAP_SQL, -7412, -1, "42000", "cannot ORDER objects without MAP or ORDER method");
-DEFINE_ERROR(OB_ERR_XMLELEMENT_ALIASED, -7413, -1, "42000", "parameter %d of function XMLELEMENT must be aliased");
-DEFINE_ERROR(OB_INVALID_ALTERATIONG_DATATYPE, -7414, -1, "42000", "invalid alteration of datatype");
-DEFINE_ERROR(OB_INVALID_MODIFICATION_OF_COLUMNS, -7415, -1, "42000", "invalid modification of columns");
-DEFINE_ERROR(OB_ERR_NULL_FOR_XML_CONSTRUCTOR, -7416, -1, "42000", "Expected XML tag , got no content");
-DEFINE_ERROR(OB_ERR_XML_INDEX, -7417, -1, "42000", "cannot create index on expression with datatype ADT '%.*s'");
 DEFINE_ERROR(OB_ERR_UPDATE_XML_WITH_INVALID_NODE, -7418, -1, "42000", "XML nodes must be updated with valid nodes and of the same type'");
 DEFINE_ERROR(OB_LOB_VALUE_NOT_EXIST, -7419, -1, "42000", "LOB value does not exist");
 DEFINE_ERROR(OB_ERR_JSON_FUN_UNSUPPORTED_TYPE, -7420, -1, "HY000", "Input to JSON generation function has unsupported data type");
-DEFINE_ERROR(OB_ERR_XQUERY_MULTI_VALUE, -7421, -1, "42000", "XPTY0004 - XQuery dynamic type mismatch: expected singleton sequence - got multi-item sequence");
 DEFINE_ERROR_EXT_DEP(OB_ERR_PARSE_XQUERY_EXPR, -7422, -1, "42000", "XPST0003 - error during parsing the XQuery expression", "XPST0003 - error during parsing the XQuery expression : %.*s");
 DEFINE_ERROR(OB_ERR_LACK_XQUERY_LITERAL, -7423, -1, "42000", "XQuery string literal expected");
 DEFINE_ERROR_EXT_DEP(OB_ERR_TOO_MANY_PREFIX_DECLARE, -7424, -1, "42000", "XPST0033 - too many declarations for namespace prefix", "XPST0033 - too many declarations for namespace prefix %.*s");
@@ -2232,10 +2212,6 @@ DEFINE_ERROR(OB_NO_SUCH_FILE_OR_DIRECTORY, -9100, -1, "HY000", "no such file or 
 DEFINE_ERROR(OB_FILE_OR_DIRECTORY_EXIST, -9101, -1, "HY000", "file or directory already exist");
 DEFINE_ERROR(OB_FILE_OR_DIRECTORY_PERMISSION_DENIED, -9102, -1, "HY000", "file or directory permission denied");
 DEFINE_ERROR(OB_TOO_MANY_OPEN_FILES, -9103, -1, "HY000", "too many open files");
-DEFINE_ERROR(OB_DIRECT_LOAD_COMMIT_ERROR, -9104, -1, "HY000", "fail to commit direct load");
-// do not use OB_S3_ERROR, use OB_OBJECT_STORAGE_IO_ERROR instead
-DEFINE_ERROR_DEP(OB_S3_ERROR, -9105, -1, "HY000", "S3 error");
-
 // For tenant snapshot
 DEFINE_ERROR_EXT_DEP(OB_TENANT_SNAPSHOT_NOT_EXIST, -9106, -1, "HY000", "Tenant snapshot does not exist", "Tenant snapshot \'%.*s\' does not exist");
 DEFINE_ERROR_EXT_DEP(OB_TENANT_SNAPSHOT_EXIST, -9107, -1, "HY000", "Tenant snapshot already exist", "Tenant snapshot \'%.*s\' already exist");
@@ -2249,7 +2225,6 @@ DEFINE_ERROR_EXT_DEP(OB_CHECKSUM_TYPE_NOT_SUPPORTED, -9113, -1, "HY000", "checks
 DEFINE_ERROR_DEP(OB_INVALID_STORAGE_DEST, -9114, -1, "HY000", "storage destination is not valid");
 DEFINE_ERROR(OB_STORAGE_DEST_NOT_CONNECT, -9115, -1, "HY000", "can not connect to storage destination");
 DEFINE_ERROR_DEP(OB_OBJECT_STORAGE_PERMISSION_DENIED, -9116, -1, "HY000", "no I/O operation permission of the object storage");
-DEFINE_ERROR_DEP(OB_S3_REGION_MISMATCH, -9117, -1, "HY000", "the specified s3_region does not match the endpoint");
 DEFINE_ERROR_DEP(OB_INVALID_OBJECT_STORAGE_ENDPOINT, -9118, -1, "HY000", "object storage endpoint is invalid");
 DEFINE_ERROR_EXT_DEP(OB_RESTORE_SOURCE_NOT_ENOUGH, -9119, -1, "HY000", "do not have enough restore source", "%s");
 

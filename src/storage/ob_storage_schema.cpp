@@ -212,7 +212,6 @@ int ObStorageSchema::set_storage_schema_version(const uint64_t tenant_data_versi
 int ObStorageSchema::init(
     common::ObIAllocator &allocator,
     const ObTableSchema &input_schema,
-    const lib::Worker::CompatMode compat_mode,
     const bool skip_column_info/* = false*/,
     const uint64_t tenant_data_version/* = DATA_CURRENT_VERSION */)
 {
@@ -235,7 +234,6 @@ int ObStorageSchema::init(
     if (OB_FAIL(set_storage_schema_version(tenant_data_version))) {
       STORAGE_LOG(WARN, "cal storage schema version failed, not suppert this tenant data version", K(ret), K(tenant_data_version));
     }
-    compat_mode_ = static_cast<uint32_t>(compat_mode);
   }
 
   if (OB_FAIL(ret)) {
@@ -292,7 +290,6 @@ int ObStorageSchema::init(
     skip_idx_attr_array_.set_allocator(&allocator);
 
     storage_schema_version_ = old_schema.storage_schema_version_;
-    compat_mode_ = old_schema.compat_mode_;
     compressor_type_ = old_schema.compressor_type_;
     column_cnt_ = old_schema.column_cnt_;
     store_column_cnt_ = old_schema.store_column_cnt_;
@@ -1340,12 +1337,11 @@ int64_t ObCreateTabletSchema::get_serialize_size() const
 int ObCreateTabletSchema::init(
     common::ObIAllocator &allocator,
     const share::schema::ObTableSchema &input_schema,
-    const lib::Worker::CompatMode compat_mode,
     const bool skip_column_info,
     const uint64_t tenant_data_version)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObStorageSchema::init(allocator, input_schema, compat_mode, skip_column_info, tenant_data_version))) {
+  if (OB_FAIL(ObStorageSchema::init(allocator, input_schema, skip_column_info, tenant_data_version))) {
     STORAGE_LOG(WARN, "failed to init", K(ret), KPC(this));
   } else {
     table_id_ = input_schema.get_table_id();

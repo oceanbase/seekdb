@@ -3,11 +3,7 @@ set(CPACK_GENERATOR "RPM")
 set(CPACK_COMPONENTS_IGNORE_GROUPS 1)
 set(CPACK_RPM_COMPONENT_INSTALL ON)
 # use "server" as main component so its RPM filename won't have "server"
-if (BUILD_CDC_ONLY)
-  set(CPACK_RPM_MAIN_COMPONENT "cdc")
-else()
-  set(CPACK_RPM_MAIN_COMPONENT "server")
-endif()
+set(CPACK_RPM_MAIN_COMPONENT "server")
 # let rpmbuild determine rpm filename
 set(CPACK_RPM_FILE_NAME "RPM-DEFAULT")
 set(CMAKE_INSTALL_LIBDIR "lib64")
@@ -37,11 +33,7 @@ list(APPEND CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION "/usr")
 set(CPACK_RPM_PACKAGE_GROUP "Applications/Databases")
 set(CPACK_RPM_PACKAGE_DESCRIPTION ${CPACK_PACKAGE_DESCRIPTION})
 set(CPACK_RPM_PACKAGE_LICENSE "Apache 2.0")
-if (NOT BUILD_CDC_ONLY OR OB_BUILD_STANDALONE)
-  set(DEBUG_INSTALL_POST "mv $RPM_BUILD_ROOT/../server/usr/bin/obshell %{_builddir}/obshell; %{_rpmconfigdir}/find-debuginfo.sh %{?_find_debuginfo_opts} %{_builddir}/%{?buildsubdir}; mv %{_builddir}/obshell $RPM_BUILD_ROOT/../server/usr/bin/obshell; %{nil}")
-else()
-  set(DEBUG_INSTALL_POST "%{_rpmconfigdir}/find-debuginfo.sh %{?_find_debuginfo_opts} %{_builddir}/%{?buildsubdir};%{nil}")
-endif()
+set(DEBUG_INSTALL_POST "mv $RPM_BUILD_ROOT/../server/usr/bin/obshell %{_builddir}/obshell; %{_rpmconfigdir}/find-debuginfo.sh %{?_find_debuginfo_opts} %{_builddir}/%{?buildsubdir}; mv %{_builddir}/obshell $RPM_BUILD_ROOT/../server/usr/bin/obshell; %{nil}")
 set(CPACK_RPM_SPEC_MORE_DEFINE
   "%global _missing_build_ids_terminate_build 0
 %global _find_debuginfo_opts -g
@@ -85,22 +77,8 @@ install(FILES
   DESTINATION usr/libexec/seekdb/scripts
   COMPONENT server)
 
-if (BUILD_CDC_ONLY)
-  message(STATUS "oceanbase build cdc only") 
-  set(CPACK_COMPONENTS_ALL cdc)
-  set(CPACK_PACKAGE_NAME "seekdb-cdc")
-else()
-  add_custom_target(bitcode_to_elf ALL
-    DEPENDS ${BITCODE_TO_ELF_LIST})
-endif()
-
-if (OB_BUILD_STANDALONE)
-  message(STATUS "oceanbase standalone build")
-  set(CPACK_PACKAGE_NAME "oceanbase-standalone")
-  set(CPACK_COMPONENTS_ALL server libs)
-  # specify relocatable paths
-  set(CPACK_RPM_RELOCATION_PATHS "/usr/bin")
-endif()
+add_custom_target(bitcode_to_elf ALL
+  DEPENDS ${BITCODE_TO_ELF_LIST})
 
 # add software package info
 set(RPM_DIST "")

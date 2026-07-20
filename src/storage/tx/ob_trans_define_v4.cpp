@@ -252,8 +252,7 @@ DEFINE_GET_SERIALIZE_SIZE(ObTxDesc::FLAG)
 }
 
 OB_SERIALIZE_MEMBER(ObTxDesc,
-                    
-                    cluster_id_,
+
                     cluster_version_,
                     sess_id_,
                     addr_,
@@ -271,14 +270,12 @@ OB_SERIALIZE_MEMBER(ObTxDesc,
                     has_write_state_,
                     write_state_,
                     xid_,
-                    seq_base_,
-                    client_sid_);
+                    seq_base_);
 OB_SERIALIZE_MEMBER(ObTxParam,
                     timeout_us_,
                     lock_timeout_us_,
                     access_mode_,
-                    isolation_,
-                    cluster_id_);
+                    isolation_);
 OB_SERIALIZE_MEMBER(ObTxSavePoint,
                     type_,
                     scn_,
@@ -287,8 +284,7 @@ OB_SERIALIZE_MEMBER(ObTxSavePoint,
                     name_);
 
 ObTxDesc::ObTxDesc()
-  : cluster_id_(-1),
-    trace_info_(),
+  : trace_info_(),
     cluster_version_(0),
     seq_base_(0),
     tx_consistency_type_(ObTxConsistencyType::INVALID),
@@ -303,7 +299,6 @@ ObTxDesc::ObTxDesc()
     snapshot_scn_(),
     sess_id_(0),
     assoc_sess_id_(0),
-    client_sid_(0),
     op_sn_(0),                          // default is from 0
     state_(State::INVL),
     flags_({ 0 }),
@@ -408,8 +403,7 @@ void ObTxDesc::reset()
     FORCE_PRINT_TRACE(&tlog_, "[tx desc trace]");
   }
 #endif
-  
-  cluster_id_ = -1;
+
   trace_info_.reset();
   cluster_version_ = 0;
   seq_base_ = 0;
@@ -845,7 +839,7 @@ bool ObTxDesc::execute_commit_cb()
 #ifdef ENABLE_DEBUG_LOG
           ob_abort();
 #endif
-          TRANS_LOG(ERROR, "unexpected error happen, cb_tid_ should smaller than 0", 
+          TRANS_LOG(ERROR, "unexpected error happen, cb_tid_ should smaller than 0",
                     KP(this), K(tx_id), KP(cb_tid_));
         }
         ATOMIC_STORE_REL(&cb_tid_, GETTID());
@@ -1040,16 +1034,14 @@ ObTxParam::ObTxParam()
   : timeout_us_(0),
     lock_timeout_us_(-1),
     access_mode_(ObTxAccessMode::RW),
-    isolation_(ObTxIsolationLevel::RC),
-    cluster_id_(0)
+    isolation_(ObTxIsolationLevel::RC)
 {}
 bool ObTxParam::is_valid() const
 {
   return timeout_us_ > 0
     && lock_timeout_us_ >= -1
     && access_mode_ != ObTxAccessMode::INVL
-    && isolation_ != ObTxIsolationLevel::INVALID
-    && cluster_id_ > 0;
+    && isolation_ != ObTxIsolationLevel::INVALID;
 }
 ObTxParam::~ObTxParam()
 {
@@ -1057,7 +1049,6 @@ ObTxParam::~ObTxParam()
   lock_timeout_us_ = -1;
   access_mode_ = ObTxAccessMode::INVL;
   isolation_ = ObTxIsolationLevel::INVALID;
-  cluster_id_ = -1;
 }
 
 ObTxSnapshot::ObTxSnapshot()

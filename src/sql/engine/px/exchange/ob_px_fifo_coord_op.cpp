@@ -41,7 +41,6 @@ ObPxFifoCoordOp::ObPxFifoCoordOp(ObExecContext &exec_ctx, const ObOpSpec &spec, 
     winbuf_piece_msg_proc_(exec_ctx, msg_proc_),
     interrupt_proc_(exec_ctx, msg_proc_),
     sample_piece_msg_proc_(exec_ctx, msg_proc_),
-    rollup_key_piece_msg_proc_(exec_ctx, msg_proc_),
     rd_wf_piece_msg_proc_(exec_ctx, msg_proc_),
     init_channel_piece_msg_proc_(exec_ctx, msg_proc_),
     reporting_wf_piece_msg_proc_(exec_ctx, msg_proc_),
@@ -94,7 +93,6 @@ int ObPxFifoCoordOp::setup_loop_proc()
       .register_processor(barrier_piece_msg_proc_)
       .register_processor(winbuf_piece_msg_proc_)
       .register_processor(sample_piece_msg_proc_)
-      .register_processor(rollup_key_piece_msg_proc_)
       .register_processor(rd_wf_piece_msg_proc_)
       .register_processor(init_channel_piece_msg_proc_)
       .register_processor(reporting_wf_piece_msg_proc_)
@@ -227,7 +225,6 @@ int ObPxFifoCoordOp::fetch_rows(const int64_t row_cnt)
         case ObDtlMsgType::DH_BARRIER_PIECE_MSG:
         case ObDtlMsgType::DH_WINBUF_PIECE_MSG:
         case ObDtlMsgType::DH_DYNAMIC_SAMPLE_PIECE_MSG:
-        case ObDtlMsgType::DH_ROLLUP_KEY_PIECE_MSG:
         case ObDtlMsgType::DH_RANGE_DIST_WF_PIECE_MSG:
         case ObDtlMsgType::DH_INIT_CHANNEL_PIECE_MSG:
         case ObDtlMsgType::DH_SECOND_STAGE_REPORTING_WF_PIECE_MSG:

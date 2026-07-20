@@ -347,8 +347,6 @@ int ObInnerSQLConnection::init_session_info(
     const bool is_sys_tenant = true;
     ObPCMemPctConf pc_mem_conf;
     session->set_inner_session();
-    ObObj mysql_mode;
-    mysql_mode.set_int(0);
     ObObj mysql_sql_mode;
     mysql_sql_mode.set_uint(ObUInt64Type, DEFAULT_MYSQL_MODE);
     if (!NOT_SPEED_UP_INIT_SESSION_INFO && OB_FAIL(session->load_essential_sys_vars_only(print_info_log, is_sys_tenant))) {
@@ -376,9 +374,6 @@ int ObInnerSQLConnection::init_session_info(
       if (OB_SUCC(ret)) {
         if (OB_FAIL(session->update_sys_variable(
             SYS_VAR_SQL_MODE, mysql_sql_mode))) {
-          LOG_WARN("update sys variables failed", K(ret));
-        } else if (OB_FAIL(session->update_sys_variable(
-            SYS_VAR_OB_COMPATIBILITY_MODE, mysql_mode))) {
           LOG_WARN("update sys variables failed", K(ret));
         } else {
           ObString database_name(OB_SYS_DATABASE_NAME);
@@ -633,7 +628,6 @@ int ObInnerSQLConnection::process_audit_record(sql::ObResultSet &result_set,
       audit_record.table_scan_ = result_set.get_physical_plan()->contain_table_scan();
       audit_record.plan_id_ = result_set.get_physical_plan()->get_plan_id();
       audit_record.plan_hash_ = result_set.get_physical_plan()->get_plan_hash_value();
-      audit_record.partition_hit_ = session.partition_hit().get_bool();
     }
 
     audit_record.is_executor_rpc_ = false;
@@ -893,7 +887,6 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
             sqlstat_record.record_sqlstat_end_value();
             sqlstat_record.set_rows_processed(res.result_set().get_affected_rows() + res.result_set().get_return_rows());
             sqlstat_record.set_partition_cnt(res.result_set().get_exec_context().get_das_ctx().get_related_tablet_cnt());
-            sqlstat_record.set_is_route_miss(get_session().partition_hit().get_bool()? 0 : 1);
             sqlstat_record.set_is_plan_cache_hit(res.sql_ctx().plan_cache_hit_);
             sqlstat_record.move_to_sqlstat_cache(get_session(),
                                                 res.sql_ctx().cur_sql_,
@@ -1798,11 +1791,6 @@ int ObInnerSQLConnection::set_session_variable(const ObString &name, int64_t val
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (0 == name.case_compare("ob_check_sys_variable")) { // fake system variable
-    if (0 == val) {
-      LOG_TRACE("disable inner sql check sys variable");
-    }
-    (void)get_session().set_check_sys_variable(0 != val);
   } else if (0 == name.case_compare("tx_isolation")) {
     // Isolation level is a string
     ObObj obj;
@@ -1829,11 +1817,6 @@ int ObInnerSQLConnection::set_session_variable(const ObString &name, const ObStr
     LOG_WARN("failed to update sys variable", K(ret), K(name), K(val));
   }
   return ret;
-}
-
-lib::Worker::CompatMode ObInnerSQLConnection::get_compat_mode() const
-{
-  return lib::Worker::CompatMode::MYSQL;
 }
 
 // nested session and sql execute for foreign key.
@@ -1883,9 +1866,7 @@ int ObInnerSQLConnection::create_session_by_mgr()
     LOG_WARN("session_mgr_ or omt_ is NULL", K(ret));
   } else if (OB_FAIL(GCTX.session_mgr_->create_sessid(sid))) {
     LOG_WARN("alloc session id failed", K(ret));
-  } else if (OB_FAIL(GCTX.session_mgr_->create_session(sid,
-                                                      ObTimeUtility::current_time(),
-                                                      inner_session_))) {
+  } else if (OB_FAIL(GCTX.session_mgr_->create_session(sid, inner_session_))) {
     inner_session_ = NULL;
     LOG_WARN("create session failed", K(ret), K(sid));
   } else {

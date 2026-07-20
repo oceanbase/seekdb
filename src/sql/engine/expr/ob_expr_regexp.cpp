@@ -83,12 +83,13 @@ int ObExprRegexp::calc_result_type2(ObExprResType &type,
     ret = OB_ERR_MYSQL_CHARACTER_SET_MISMATCH;
     LOG_USER_ERROR(OB_ERR_MYSQL_CHARACTER_SET_MISMATCH, collation1.length(), collation1.ptr(), collation2.length(), collation2.ptr());
     LOG_WARN("If one of the params is binary string, all of the params should be implicitly castable to binary charset.", K(ret), K(type1), K(type2));
-  } else if (OB_FAIL(ObCharset::aggregate_collation_old(type1.get_collation_level(),
+  } else if (OB_FAIL(ObCharset::aggregate_collation_new(type1.get_collation_level(),
                                               type1.get_collation_type(),
                                               type2.get_collation_level(),
                                               type2.get_collation_type(),
                                               res_cs_level,
-                                              res_cs_type))) {
+                                              res_cs_type,
+                                              OB_COLL_ALLOW_CONV))) {
       LOG_WARN("fail to aggregate collation", K(ret), K(type1), K(type2));
   } else {
     type.set_int32();

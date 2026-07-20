@@ -15,8 +15,8 @@
  */
 
 #include "lib/utility/ob_hang_fatal_error.h"
+#include <cstdlib>
 #include "lib/profile/ob_trace_id.h"
-#include "lib/time/ob_clock_generator.h"
 #include "lib/utility/utility.h"
 
 extern "C" {
@@ -30,7 +30,6 @@ namespace oceanbase
 {
 namespace common
 {
-_RLOCAL(bool, in_try_stmt);
 int64_t g_fatal_error_thread_id = -1;
 
 int64_t get_fatal_error_thread_id()
@@ -42,22 +41,15 @@ void set_fatal_error_thread_id(int64_t thread_id)
   g_fatal_error_thread_id = thread_id;
 }
 
-// To die or to live, it's a problem.
 void right_to_die_or_duty_to_live()
 {
   const ObFatalErrExtraInfoGuard *extra_info = ObFatalErrExtraInfoGuard::get_thd_local_val_ptr();
   set_fatal_error_thread_id(GETTID());
-  while (true) {
-    ObCStringHelper helper;
-    const char *info = (NULL == extra_info) ? NULL : helper.convert(*extra_info);
-    LOG_DBA_ERROR_V2(OB_SERVER_THREAD_PANIC, OB_ERR_THREAD_PANIC, "Trying so hard to die, info= ", info, ", lbt= ", lbt());
-  #ifndef FATAL_ERROR_HANG
-    if (in_try_stmt) {
-      throw OB_EXCEPTION<OB_ERR_UNEXPECTED>();
-    }
-  #endif
-    ob_usleep(60 * 1000 * 1000); // sleep 60s
-  }
+  ObCStringHelper helper;
+  const char *info = (NULL == extra_info) ? NULL : helper.convert(*extra_info);
+  LOG_DBA_ERROR_V2(OB_SERVER_THREAD_PANIC, OB_ERR_THREAD_PANIC,
+                   "Fatal invariant failed, info= ", info, ", lbt= ", lbt());
+  std::abort();
 }
 
 } //common

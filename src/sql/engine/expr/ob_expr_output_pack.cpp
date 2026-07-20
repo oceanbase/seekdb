@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX  SQL_ENG
 #include "sql/engine/expr/ob_expr_output_pack.h"
 #include "sql/engine/ob_exec_context.h"
-#include "sql/engine/expr/ob_expr_xml_func_helper.h"
+#include "sql/engine/expr/ob_expr_sql_udt_utils.h"
 namespace oceanbase{
 
 using namespace common;
@@ -240,10 +240,7 @@ int ObExprOutputPack::convert_string_value_charset(common::ObObj &value,
 {
   int ret = OB_SUCCESS;
   ObCharsetType charset_type = CHARSET_INVALID;
-  ObCharsetType ncharset_type = CHARSET_INVALID;
   if (OB_FAIL(my_session.get_character_set_results(charset_type))) {
-    LOG_WARN("fail to get result charset", K(ret));
-  } else if (OB_FAIL(my_session.get_ncharacter_set_connection(ncharset_type))) {
     LOG_WARN("fail to get result charset", K(ret));
   } else {
     OZ (value.convert_string_value_charset(charset_type, alloc));
@@ -259,14 +256,11 @@ int ObExprOutputPack::convert_text_value_charset(common::ObObj& value,
 {
   int ret = OB_SUCCESS;
   ObCharsetType charset_type = CHARSET_INVALID;
-  ObCharsetType ncharset_type = CHARSET_INVALID;
   ObString raw_str = value.get_string();
   if (OB_ISNULL(raw_str.ptr()) || raw_str.length() == 0) {
     // may need return error?
     LOG_DEBUG("get null lob locator v2", K(ret));
   } else if (OB_FAIL(my_session.get_character_set_results(charset_type))) {
-    LOG_WARN("fail to get result charset", K(ret));
-    } else if (OB_FAIL(my_session.get_ncharacter_set_connection(ncharset_type))) {
     LOG_WARN("fail to get result charset", K(ret));
   }
   if (OB_FAIL(ret)) {
@@ -337,13 +331,7 @@ int ObExprOutputPack::process_lob_locator_results(common::ObObj& value,
                                                   sql::ObExecContext &exec_ctx)
 {
   int ret = OB_SUCCESS;
-  // 1. if client is_use_lob_locator, return lob locator
-  // 2. if client is_use_lob_locator, but not support outrow lob, return lob locator with inrow data
-  //    refer to sz/aibo1m
-  // 3. if client does not support use_lob_locator ,,return full lob data without locator header
-  bool is_use_lob_locator = my_session.is_client_use_lob_locator();
-  bool is_support_outrow_locator_v2 = my_session.is_client_support_lob_locatorv2();
-  if (!(value.is_lob() || value.is_json() || value.is_geometry() || value.is_roaringbitmap())) {
+  if (!(value.is_lob() || value.is_json() || value.is_geometry())) {
     // not lob types, do nothing
   } else {
     ObString raw_str = value.get_string();
@@ -362,8 +350,6 @@ int ObExprOutputPack::process_lob_locator_results(common::ObObj& value,
         dst_type = ObJsonType;
       } else if (value.is_geometry()) {
         dst_type = ObGeometryType;
-      } else if (value.is_roaringbitmap()) {
-        dst_type = ObRoaringBitmapType;
       }
       // remove has lob header flag
       value.set_lob_value(dst_type, data.ptr(), static_cast<int32_t>(data.length()));
@@ -450,11 +436,11 @@ int ObExprOutputPack::try_encode_row(const ObExpr &expr, ObEvalCtx &ctx,
           LOG_WARN("convert text obj charset failed", K(ret));
         }
         if (OB_FAIL(ret)) {
-        } else if ((obj.is_lob() || obj.is_json() || obj.is_geometry() || obj.is_roaringbitmap())
+        } else if ((obj.is_lob() || obj.is_json() || obj.is_geometry())
                    && OB_FAIL(process_lob_locator_results(obj, alloc, *session, ctx.exec_ctx_))) {
           LOG_WARN("convert lob locator to longtext failed", K(ret));
         } else if ((obj.is_collection_sql_type() || obj.is_geometry())
-                   && OB_FAIL(ObXMLExprHelper::process_sql_udt_results(obj, &alloc, session,
+                   && OB_FAIL(ObSqlUdtUtils::convert_result_for_client(obj, &alloc, session,
                                                                        &ctx.exec_ctx_,
                                                                        session->is_ps_protocol()))) {
           LOG_WARN("convert udt to client format failed", K(ret), K(obj.get_udt_subschema_id()));
@@ -530,4 +516,3 @@ int ObExprOutputPack::process_oneline(const ObExpr &expr, ObEvalCtx &ctx, ObSQLS
 
 }//namespace sql
 }//namespace oceambase
-

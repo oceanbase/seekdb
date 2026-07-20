@@ -318,13 +318,11 @@ int ObLSTxCtxMgr::create_tx_ctx_(const ObTxCreateArg &arg,
     CtxLockGuard ctx_lock_guard;
     ObTxCtx *tmp = static_cast<ObTxCtx *>(tmp_ctx);
     if (OB_FAIL(tmp->init(arg.session_id_,
-                          arg.client_sid_,
                           arg.associated_session_id_,
                           arg.tx_id_,
                           arg.trans_expired_time_,
                           arg.cluster_version_,
                           arg.trans_service_,
-                          arg.cluster_id_,
                           this,
                           arg.for_replay_,
                           arg.ctx_source_,

@@ -28,8 +28,6 @@ using namespace share::schema;
 namespace sql
 {
 
-#define USE_MULTI_GET_ARRAY_BINDING 1
-
 ObTempTableAccessOpInput::ObTempTableAccessOpInput(ObExecContext &ctx, const ObOpSpec &spec)
   : ObOpInput(ctx, spec),
     deserialize_allocator_(NULL),
@@ -443,4 +441,3 @@ int ObTempTableAccessOp::get_local_interm_result_id(int64_t &result_id)
 
 } // end namespace sql
 } // end namespace oceanbase
-

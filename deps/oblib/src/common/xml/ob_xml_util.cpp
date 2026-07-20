@@ -65,39 +65,46 @@ const char *ObXmlUtil::get_charset_name(ObCharsetType charset_type)
   return ret_name;
 }
 
-
 bool ObXmlUtil::is_container_tc(ObMulModeNodeType type)
 {
-  return (type == ObMulModeNodeType::M_DOCUMENT ||
-          type == ObMulModeNodeType::M_CONTENT ||
-          type == ObMulModeNodeType::M_UNPARSED ||
-          type == ObMulModeNodeType::M_UNPARESED_DOC ||
-          type == ObMulModeNodeType::M_ELEMENT);
+  return type == M_DOCUMENT || type == M_CONTENT || type == M_UNPARSED
+      || type == M_UNPARESED_DOC || type == M_ELEMENT;
 }
 
 bool ObXmlUtil::is_node(ObMulModeNodeType type)
 {
-  return type == ObMulModeNodeType::M_INSTRUCT 
-          || type == ObMulModeNodeType::M_ELEMENT
-          || type == ObMulModeNodeType::M_TEXT
-          || type == ObMulModeNodeType::M_CDATA
-          || type == ObMulModeNodeType::M_COMMENT;
+  return type == M_INSTRUCT || type == M_ELEMENT || type == M_TEXT
+      || type == M_CDATA || type == M_COMMENT;
 }
 
 bool ObXmlUtil::is_text(ObMulModeNodeType type)
 {
-  return type == ObMulModeNodeType::M_TEXT
-        || type == ObMulModeNodeType::M_CDATA;
+  return type == M_TEXT || type == M_CDATA;
+}
+
+bool ObXmlUtil::is_comment(ObMulModeNodeType type)
+{
+  return type == M_COMMENT;
 }
 
 bool ObXmlUtil::is_element(ObMulModeNodeType type)
 {
-  return type == ObMulModeNodeType::M_ELEMENT;
+  return type == M_ELEMENT;
 }
 
 bool ObXmlUtil::is_pi(ObMulModeNodeType type)
 {
-  return type == ObMulModeNodeType::M_INSTRUCT;
+  return type == M_INSTRUCT;
+}
+
+bool ObXmlUtil::use_text_serializer(ObMulModeNodeType type)
+{
+  return type == M_TEXT || type == M_COMMENT || type == M_CDATA;
+}
+
+bool ObXmlUtil::use_attribute_serializer(ObMulModeNodeType type)
+{
+  return type == M_ATTRIBUTE || type == M_NAMESPACE || type == M_INSTRUCT;
 }
 
 bool ObXmlUtil::use_element_serializer(ObMulModeNodeType type)
@@ -105,24 +112,6 @@ bool ObXmlUtil::use_element_serializer(ObMulModeNodeType type)
   return is_container_tc(type);
 }
 
-bool ObXmlUtil::use_attribute_serializer(ObMulModeNodeType type)
-{
-  return (type == ObMulModeNodeType::M_ATTRIBUTE
-      ||  type == ObMulModeNodeType::M_NAMESPACE
-      ||  type == ObMulModeNodeType::M_INSTRUCT);
-}
-
-bool ObXmlUtil::use_text_serializer(ObMulModeNodeType type)
-{
-  return (type == ObMulModeNodeType::M_TEXT
-      ||  type == ObMulModeNodeType::M_COMMENT
-      ||  type == ObMulModeNodeType::M_CDATA);
-}
-
-bool ObXmlUtil::is_comment(ObMulModeNodeType type)
-{
-  return type == ObMulModeNodeType::M_COMMENT;
-}
 
 int ObXmlUtil::append_newline_and_indent(ObStringBuffer &j_buf, uint64_t level, uint64_t size)
 {
@@ -184,270 +173,43 @@ int ObXmlUtil::create_mulmode_tree_context(ObIAllocator *allocator, ObMulModeMem
   return ret;
 }
 
-int ObXmlUtil::xml_bin_type(const ObString& data, ObMulModeNodeType& type)
+int ObMulModeFactory::get_xml_base(ObMulModeMemCtx *ctx,
+                                   const ObString &buf,
+                                   ObIMulModeBase *&out,
+                                   ObMulModeNodeType parse_type)
 {
-  INIT_SUCC(ret);
-  ObMulBinHeaderSerializer desserializer(data.ptr(), data.length());
-  if (OB_FAIL(desserializer.deserialize())) {
-    LOG_WARN("deserialize failed", K(ret), K(data));
-  } else {
-    type = desserializer.type();
-  }
-  return ret;
+  return get_xml_base(ctx, buf.ptr(), buf.length(), out, parse_type);
 }
 
-
-int ObMulModeFactory::get_xml_base(ObMulModeMemCtx* ctx, const ObString &buf,
-                  ObNodeMemType in_type, ObNodeMemType expect_type,
-                  ObIMulModeBase *&out, ObMulModeNodeType node_type,
-                  bool is_for_text, bool should_check)
-{
-  return get_xml_base(ctx, buf.ptr(), buf.length(), in_type, expect_type, out, node_type, is_for_text, should_check);
-}
-
-
-int ObMulModeFactory::add_unparsed_text_into_doc(ObMulModeMemCtx* ctx, ObString text, ObXmlDocument *&doc) // TODO ObXmlDocument -> ObXmlNode
+int ObMulModeFactory::get_xml_base(ObMulModeMemCtx *ctx,
+                                   const char *ptr,
+                                   uint64_t length,
+                                   ObIMulModeBase *&out,
+                                   ObMulModeNodeType parse_type)
 {
   INIT_SUCC(ret);
-  if (OB_ISNULL(doc = OB_NEWx(ObXmlDocument, ctx->allocator_, ObMulModeNodeType::M_UNPARSED, ctx))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create document", K(ret));
-  } else if(OB_FAIL(doc->append_unparse_text(text))) {
-    LOG_WARN("fail to add unparse text to doc", K(ret));
-  }
-  return ret;
-}
-
-/*
-  * get_xml_base special for text
-  * in_type=binary_type, expect_type=binary_type
-*/
-int ObMulModeFactory::get_xml_base(ObMulModeMemCtx* ctx, const char *ptr, uint64_t length,
-                  ObNodeMemType in_type, ObNodeMemType expect_type,
-                  ObIMulModeBase *&out, ObMulModeNodeType parse_type,
-                  bool is_for_text, bool should_check)
-{
-  INIT_SUCC(ret);
-  void *buf = NULL;
-  const ObString str(length, ptr);
-
-  if (OB_ISNULL(ctx) || OB_ISNULL(ctx->allocator_)) { // check allocator
+  ObXmlDocument *document = nullptr;
+  const ObString xml(length, ptr);
+  if (OB_ISNULL(ctx) || OB_ISNULL(ctx->allocator_)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("param allocator is NULL", K(ret), KP(ctx), KP(ptr));
+    LOG_WARN("xml allocator is null", K(ret), KP(ctx));
   } else if (OB_ISNULL(ptr) || length == 0) {
     ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
-    LOG_WARN("param is NULL", K(ret), KP(ptr), K(length));
-  } else if (in_type != ObNodeMemType::TREE_TYPE && in_type != ObNodeMemType::BINARY_TYPE) { // check in_type
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param in_type is invalid", K(ret), K(in_type));
-  } else if (expect_type != ObNodeMemType::TREE_TYPE && expect_type != ObNodeMemType::BINARY_TYPE) { // check expect_type
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param expect_type is invalid", K(ret), K(expect_type));
-  } else if (in_type == ObNodeMemType::TREE_TYPE) {
-    ObXmlDocument *xnode = NULL;
-    if (parse_type == ObMulModeNodeType::M_UNPARSED && OB_FAIL(add_unparsed_text_into_doc(ctx, str, xnode))) {
-      LOG_WARN("failed to get unparse tree", K(ret), K(length), K(in_type), K(expect_type));
-    } else if (parse_type == ObMulModeNodeType::M_CONTENT && OB_FAIL(ObXmlParserUtils::parse_content_text(ctx, str, xnode))) {
-      LOG_WARN("fail to get xml content tree", K(ret), K(length), K(in_type), K(expect_type));
-    } else if (parse_type == ObMulModeNodeType::M_DOCUMENT && OB_FAIL(ObXmlParserUtils::parse_document_text(ctx, str, xnode))) {
-      LOG_WARN("fail to get xml tree", K(ret), K(length), K(in_type), K(expect_type));
-    } else if (expect_type == ObNodeMemType::TREE_TYPE) {
-      out = xnode;
-    } else { // expect bin
-      ObXmlBin *bin = nullptr;
-      if (OB_ISNULL(bin = OB_NEWx(ObXmlBin, ctx->allocator_, (ctx)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc memory", K(ret), K(in_type), K(expect_type), K(sizeof(ObXmlBin)));
-      } else if (OB_FAIL(bin->parse_tree(xnode))) {
-        LOG_WARN("fail to parse tree", K(ret), K(in_type), K(expect_type));
-      } else {
-        out = bin;
-      }
+    LOG_WARN("xml input is empty", K(ret), KP(ptr), K(length));
+  } else if (parse_type == ObMulModeNodeType::M_CONTENT) {
+    if (OB_FAIL(ObXmlParserUtils::parse_content_text(ctx, xml, document))) {
+      LOG_WARN("failed to parse xml content", K(ret), K(length));
     }
-  } else if (in_type == ObNodeMemType::BINARY_TYPE) {
-    ObXmlBin bin(ctx);
-    ObXmlBin *bin_new = nullptr;
-    if (OB_FAIL(bin.parse(ptr, length))) {
-      LOG_WARN("fail to reset iter", K(ret), K(in_type), K(expect_type));
-    } else if (bin.type() == M_UNPARESED_DOC) {
-      ObStringBuffer* buffer = nullptr;
-      ObXmlDocument *x_doc = nullptr;
-      ObString unparsed_text;
-      if (OB_ISNULL(buffer = OB_NEWx(ObStringBuffer, ctx->allocator_, (ctx->allocator_)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to allocate buffer", K(ret), K(in_type), K(expect_type));
-      } else if (OB_FAIL(bin.print(*buffer, ObXmlFormatType::NO_FORMAT, 0, 0))) {
-        LOG_WARN("fail to print xml", K(ret), K(in_type), K(expect_type));
-      } else if (OB_FALSE_IT(unparsed_text.assign_ptr(buffer->ptr(), buffer->length()))) {
-      } else if (is_for_text && bin.type() == M_UNPARESED_DOC) {
-        // special for text
-        if (OB_FAIL(bin.construct(bin_new, ctx->allocator_))) {
-          LOG_WARN("fail to dup res", K(ret), K(in_type), K(expect_type));
-        } else {
-          out = bin_new;
-        }
-      } else if (OB_FAIL(ObXmlParserUtils::parse_document_text(ctx, unparsed_text, x_doc))) {
-        if (ret == OB_ERR_PARSER_SYNTAX) {
-          ret = OB_ERR_XML_PARSE;
-          LOG_WARN("parse xml plain text as document failed.", K(ret), K(unparsed_text));
-        } else {
-          LOG_WARN("document unparsed unexpected err", K(ret), K(unparsed_text));
-        }
-      } else if (expect_type == ObNodeMemType::BINARY_TYPE) {
-        ObIMulModeBase* tree = x_doc;
-        if (OB_ISNULL(bin_new = OB_NEWx(ObXmlBin, ctx->allocator_, (ctx)))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to alloc memory", K(ret), K(in_type), K(expect_type), K(sizeof(ObXmlBin)));
-        } else if (OB_FAIL(bin_new->parse_tree(tree))) {
-          LOG_WARN("fail to reset iter", K(ret), K(in_type), K(expect_type));
-        } else {
-          out = bin_new;
-        }
-      } else {
-        out = x_doc;
-      }
-    } else if (bin.type() == M_UNPARSED) {
-      ObStringBuffer* buffer = nullptr;
-      ObXmlDocument *x_doc = nullptr;
-      ObString unparsed_text;
-      if (OB_ISNULL(buffer = OB_NEWx(ObStringBuffer, ctx->allocator_, (ctx->allocator_)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to allocate buffer", K(ret), K(in_type), K(expect_type));
-      } else if (OB_FAIL(bin.print(*buffer, ObXmlFormatType::NO_FORMAT, 0, 0))) {
-        LOG_WARN("fail to print xml", K(ret), K(in_type), K(expect_type));
-      } else if (OB_FALSE_IT(unparsed_text.assign_ptr(buffer->ptr(), buffer->length()))) {
-      } else if (OB_FAIL(ObXmlParserUtils::parse_content_text(ctx, unparsed_text, x_doc))) {
-        LOG_DEBUG("fail to parse unparse", K(ret), K(in_type), K(expect_type));
-        if (should_check && ret == OB_ERR_PARSER_SYNTAX) {
-          ret = OB_ERR_XML_PARSE;
-          LOG_WARN("unparsed xml parse content failed.", K(ret), K(unparsed_text));
-        } else {
-          ret = OB_SUCCESS;
-          if (expect_type == BINARY_TYPE) {
-            if (OB_FAIL(bin.construct(bin_new, ctx->allocator_))) {
-              LOG_WARN("fail to dup res", K(ret), K(in_type), K(expect_type));
-            } else {
-              out = bin_new;
-            }
-          } else if (OB_FAIL(bin.to_tree(out))) {
-            LOG_WARN("fail to tree", K(ret), K(in_type), K(expect_type));
-          }
-        }
-      } else if (expect_type == BINARY_TYPE) {
-        if (OB_FAIL(bin.construct(bin_new, ctx->allocator_))) {
-          LOG_WARN("fail to dup res", K(ret), K(in_type), K(expect_type));
-        } else {
-          out = bin_new;
-        }
-      } else {
-        out = x_doc;
-      }
-    } else {
-      if (expect_type == TREE_TYPE) {
-        if (OB_FAIL(bin.to_tree(out))) {
-          LOG_WARN("fail to tree", K(ret), K(in_type), K(expect_type));
-        }
-      } else {
-        if (OB_FAIL(bin.construct(bin_new, ctx->allocator_))) {
-          LOG_WARN("fail to dup res", K(ret), K(in_type), K(expect_type));
-        } else {
-          out = bin_new;
-        }
-      }
+  } else if (parse_type == ObMulModeNodeType::M_DOCUMENT) {
+    if (OB_FAIL(ObXmlParserUtils::parse_document_text(ctx, xml, document))) {
+      LOG_WARN("failed to parse xml document", K(ret), K(length));
     }
   } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect xml type",K(in_type), K(expect_type));
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("unsupported xml parse type", K(ret), K(parse_type));
   }
-
-  if (OB_SUCC(ret) && OB_ISNULL(out->get_allocator())) {
-    out->set_allocator(ctx->allocator_);
-  }
-  return ret;
-}
-
-
-int ObMulModeFactory::transform(ObMulModeMemCtx* ctx, ObIMulModeBase *src,
-                         ObNodeMemType expect_type, ObIMulModeBase *&out)
-{
-  INIT_SUCC(ret);
-  void *buf = NULL;
-  ObNodeMemType src_type = src->get_internal_type();
-
-
-  if (OB_ISNULL(ctx) || OB_ISNULL(ctx->allocator_) ||OB_ISNULL(src)) { // check allocator
-    ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("param allocator is NULL", K(ret), KP(ctx), KP(src));
-  } else if (src_type != ObNodeMemType::TREE_TYPE && src_type != ObNodeMemType::BINARY_TYPE) { // check in_type
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("param src_type is invalid", K(ret), K(src_type));
-  } else if (expect_type != ObNodeMemType::TREE_TYPE && expect_type != ObNodeMemType::BINARY_TYPE) { // check expect_type
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("param expect_type is invali", K(ret), K(expect_type));
-  } else if (src_type == ObNodeMemType::TREE_TYPE) { // input:tree
-    if (expect_type == ObNodeMemType::BINARY_TYPE) { // to bin
-      if (OB_ISNULL(buf = ctx->allocator_->alloc(sizeof(ObXmlBin)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc memory", K(ret), K(src_type), K(expect_type), K(sizeof(ObXmlBin)));
-      } else {
-        ObXmlBin *bin = new (buf) ObXmlBin(ctx);
-        if (OB_FAIL(bin->parse_tree(src, false))) {
-          LOG_WARN("fail to parse tree", K(ret), K(src_type), K(expect_type));
-        } else {
-          out = bin;
-        }
-      }
-    } else { // to tree, itself
-      out = src;
-    }
-  } else if (src_type == ObNodeMemType::BINARY_TYPE) { // input:bin
-    if (expect_type == ObNodeMemType::TREE_TYPE) { // to tree
-      ObXmlBin *bin = static_cast<ObXmlBin*>(src);
-      if (OB_FAIL(bin->to_tree(out))) {
-        LOG_WARN("fail to change bin to tree", K(ret), K(src_type), K(expect_type));
-      }
-    } else { // to bin, itself
-      out = src;
-    }
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect xml type",K(src_type), K(expect_type));
-  }
-
-  return ret;  
-}
-
-// don use just for cdc
-int ObXmlUtil::xml_bin_to_text(
-    ObIAllocator &allocator,
-    const ObString &bin,
-    ObString &text) {
-  INIT_SUCC(ret);
-  // oblib can not dep src/share/rc/ob_tenant_base.h,
-  // so use default allocator context.
-  // and this function is used for obcdc, not observer, is fine.
-  ObArenaAllocator tmp_alloc(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
-  ObStringBuffer *buffer = nullptr;
-  ObMulModeMemCtx *xml_mem_ctx = nullptr;
-  ObIMulModeBase *base = nullptr;
-  ObXmlDocument *doc = nullptr;
-
-  if (bin.empty()) {
-  } else if (OB_ISNULL(buffer = OB_NEWx(ObStringBuffer, &tmp_alloc, (&tmp_alloc)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to string buffer", K(ret));
-  } else if (OB_FAIL(ObXmlUtil::create_mulmode_tree_context(&tmp_alloc, xml_mem_ctx))) {
-    LOG_WARN("fail to create tree memory context", K(ret));
-  } else if (OB_FAIL(ObMulModeFactory::get_xml_base(xml_mem_ctx,
-                                                    bin, 
-                                                    ObNodeMemType::BINARY_TYPE,
-                                                    ObNodeMemType::BINARY_TYPE, 
-                                                    base))) {
-    LOG_WARN("fail to get xml base", K(ret), K(bin));
-  } else if (OB_FAIL(base->print(*buffer, 0, 0, 0, CS_TYPE_UTF8MB4_GENERAL_CI))) {
-    LOG_WARN("print_document failed", K(ret));
-  } else if (OB_FAIL(ob_write_string(allocator, buffer->string(), text))) {
-    LOG_WARN("ob_write_string failed", K(ret), K(*buffer));
+  if (OB_SUCC(ret)) {
+    out = document;
   }
   return ret;
 }
@@ -804,22 +566,6 @@ int ObXmlUtil::compare(bool left, bool right, ObFilterType op, bool &res)
 	return ret;
 }
 
-int ObXmlUtil::init_print_ns(ObIAllocator *allocator, ObIMulModeBase *src, ObNsSortedVector& ns_vec, ObNsSortedVector*& ns_vec_point)
-{
-  INIT_SUCC(ret);
-  if (OB_NOT_NULL(src) && src->check_extend()) {
-    if (OB_FAIL(ObXmlUtil::init_extend_ns_vec(allocator, src, ns_vec))) {
-      LOG_WARN("fail to init ns vector by extend area", K(ret));
-    } else {
-      ns_vec_point = &ns_vec;
-    }
-  } else {
-    ns_vec_point = nullptr;
-  }
-  return ret;
-}
-
-
 int ObXmlUtil::logic_compare(bool left, bool right, ObFilterType op, bool &res) 
 {
 	INIT_SUCC(ret);
@@ -943,35 +689,6 @@ int ObXmlUtil::alloc_filter_node(ObIAllocator *allocator, ObXmlPathFilter*& node
   return ret;
 }
 
-int ObXmlUtil::cast_to_string(const ObString &val, ObIAllocator &allocator, ObStringBuffer& result, ObCollationType cs_type)
-{
-  INIT_SUCC(ret);
-  ObMulModeNodeType node_type = M_MAX_TYPE;
-  ParamPrint param_list;
-  ObIMulModeBase *node = NULL;
-  ObMulModeMemCtx* mem_ctx = NULL;
-  ObNsSortedVector* ns_vec_point = nullptr;
-  ObNsSortedVector ns_vec;
-  
-  if (OB_FAIL(ObXmlUtil::create_mulmode_tree_context(&allocator, mem_ctx))) {
-    LOG_WARN("fail to create tree memory context", K(ret));
-  } else if (OB_FAIL(ObXmlUtil::xml_bin_type(val, node_type))) {
-    LOG_WARN("xml bin type failed", K(val));
-  } else if (OB_FAIL(ObMulModeFactory::get_xml_base(mem_ctx, val,
-                                                    ObNodeMemType::BINARY_TYPE, 
-                                                    ObNodeMemType::BINARY_TYPE, 
-                                                    node, M_DOCUMENT, true))) {
-    LOG_WARN("fail to get xml base", K(ret), K(val));
-  } else if (OB_FAIL(ObXmlUtil::init_print_ns(&allocator, node, ns_vec, ns_vec_point))) {
-    LOG_WARN("fail to init ns vector by extend area", K(ret));
-  // default size value of print_document is 2
-  } else if (OB_FAIL(node->print_document(result, cs_type, node_type == M_UNPARESED_DOC ? ObXmlFormatType::NO_FORMAT : ObXmlFormatType::WITH_FORMAT, 2, ns_vec_point))) {
-    LOG_WARN("print document failed", K(ret));
-  }
-
-  return ret;
-}
-
 bool ObXmlUtil::is_xml_doc_over_depth(uint64_t depth)
 {
   return depth > OB_XML_PARSER_MAX_DEPTH_;
@@ -1010,60 +727,6 @@ int ObXmlUtil::revert_escape_character(ObIAllocator &allocator, ObString &input_
   return ret;
 }
 
-int ObXmlUtil::init_extend_ns_vec(ObIAllocator *allocator, ObIMulModeBase *src, ObNsSortedVector& ns_vec)
-{
-  INIT_SUCC(ret);
-  if (OB_ISNULL(src) || OB_ISNULL(allocator)) {
-    ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("should not be null", K(ret));
-  } else {
-    ObXmlBin* bin = static_cast<ObXmlBin*>(src);
-    ObXmlBin extend_bin;
-    ns_vec.reset();
-    if (OB_FAIL(bin->get_extend(extend_bin))) {
-      LOG_WARN("fail to get extend bin", K(ret));
-    } else {
-      ObNsPairCmp cmp;
-      ObNsPairUnique unique;
-      ObXmlBin bin_buffer;
-      ObNsSortedVector::iterator pos = ns_vec.end();
-      ObIMulModeBase* cur = nullptr;
-      int64_t num_children = extend_bin.attribute_size();
-      
-      for (int64_t i = 0; OB_SUCC(ret) && i < num_children; i ++) {
-        cur = extend_bin.attribute_at(i, &bin_buffer);
-        if (OB_ISNULL(cur)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("failed to get child from extend", K(ret), K(i));
-        } else if (cur->type() != M_NAMESPACE) { 
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("should be all ns", K(ret), K(i));
-        } else {
-          ObNsPair* tmp_ns = static_cast<ObNsPair*> (allocator->alloc(sizeof(ObNsPair)));
-          if (OB_ISNULL(tmp_ns)) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("allocate row buffer failed at seek result", K(ret));
-          } else {
-            tmp_ns = new (tmp_ns) ObNsPair();
-            ObString tmp_key;
-            if (OB_FAIL(cur->get_key(tmp_key))) {
-              LOG_WARN("failed to get ns", K(ret), K(i));
-            } else {
-              tmp_ns->set_xml_key(tmp_key);
-            }
-            if (OB_FAIL(ret)) {
-            } else if (OB_FAIL(cur->get_value(tmp_ns->value_))) {
-              LOG_WARN("failed to get ns", K(ret), K(i));
-            } else if (OB_FAIL(ns_vec.insert_unique(tmp_ns, pos, cmp, unique))) {
-              LOG_WARN("should notduplicated nodes", K(ret), K(i));
-            } 
-          }
-        } 
-      } // end for
-    } 
-  }
-  return ret;
-}
 int ObXmlUtil::delete_dup_ns_definition(ObIMulModeBase *data, ObNsSortedVector& origin_vec, ObVector<ObNsPair*>& delete_vec)
 {
   INIT_SUCC(ret);
@@ -1074,13 +737,12 @@ int ObXmlUtil::delete_dup_ns_definition(ObIMulModeBase *data, ObNsSortedVector& 
     ObNsPairCmp cmp;
     ObNsPairUnique unique;
     ObNsPair tmp_pair;
-    ObXmlBin bin_buffer;
     ObIMulModeBase* cur = nullptr;
     int64_t num_children = data->attribute_size();
     
     for (int64_t i = 0; OB_SUCC(ret) && i < num_children; i++) {
       ObNsSortedVector::iterator pos = origin_vec.end();
-      cur = data->attribute_at(i, &bin_buffer);
+      cur = data->attribute_at(i);
       if (OB_ISNULL(cur)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to get child from element", K(ret), K(i));
@@ -1095,145 +757,6 @@ int ObXmlUtil::delete_dup_ns_definition(ObIMulModeBase *data, ObNsSortedVector& 
         LOG_WARN("failed to record", K(ret), K(i));
       } else if (OB_FAIL(origin_vec.remove(pos))) { // remove duplicate ns
         LOG_WARN("failed to remove duplicate", K(ret), K(i));
-      }
-    }
-  }
-  return ret;
-}
-int ObXmlUtil::check_ns_conflict(ObIMulModeBase* cur_parent, 
-                                ObIMulModeBase* &last_parent, 
-                                ObXmlBin *cur, 
-                                common::hash::ObHashMap<ObString, ObString>& ns_map,
-                                bool& conflict) 
-{
-  INIT_SUCC(ret);
-  conflict = false;
-  if (OB_ISNULL(cur)) {
-    ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("should not be null", K(ret));
-  } else if (OB_ISNULL(last_parent) && ns_map.size() == 0) {
-    // add directly
-    int ns_num = cur->attribute_size();
-    bool end_check = false;
-    for (int pos = 0; OB_SUCC(ret) && !end_check &&pos < ns_num; ++pos) {
-      ObXmlBin buff(*cur);
-      ObXmlBin* tmp = &buff;
-      if (OB_FAIL(cur->construct(tmp, nullptr))) {
-        LOG_WARN("failed to dup bin.", K(ret));
-      } else if (OB_FAIL(tmp->set_at(pos))) {
-        LOG_WARN("failed to set at child.", K(ret));
-      } else if (tmp->type() == M_NAMESPACE) {
-        ObString key;
-        ObString value;
-        // init ns node
-        if (OB_FAIL(tmp->get_key(key))) {
-          LOG_WARN("failed to eval key.", K(ret));
-        } else if (OB_FAIL(tmp->get_value(value))) {
-          LOG_WARN("failed to eval value.", K(ret));
-        } else if (OB_FAIL(ns_map.set_refactored(key, value))) {
-          LOG_WARN("fail to add ns from map", K(ret), K(key));
-        }
-      } else if (tmp->type() == M_ATTRIBUTE) {
-      } else {
-        end_check = true;  // neither ns nor attribute, stop searching
-      }
-    }
-  } else if (last_parent == cur_parent) {
-    // do nothing, same parent means same ancestor, don't need to check/add ns
-  } else {
-    // check conflicts, record new ns definition idx
-    int ns_num = cur->attribute_size();
-    ObArray<int> new_ns_idx;
-    bool end_check = false;
-    for (int pos = 0; OB_SUCC(ret) && !end_check && pos < ns_num && !conflict; ++pos) {
-      ObXmlBin buff(*cur);
-      ObXmlBin* tmp = &buff;
-      if (OB_FAIL(cur->construct(tmp, nullptr))) {
-        LOG_WARN("failed to dup bin.", K(ret));
-      } else if (OB_FAIL(tmp->set_at(pos))) {
-        LOG_WARN("failed to set at child.", K(ret));
-      } else if (tmp->type() == M_NAMESPACE) {
-        ObString key;
-        ObString value;
-        ObString* find_val;
-        // init ns node
-        if (OB_FAIL(tmp->get_key(key))) {
-          LOG_WARN("failed to eval key.", K(ret));
-        } else if (OB_FAIL(tmp->get_value(value))) {
-          LOG_WARN("failed to eval value.", K(ret));
-        } 
-        if (OB_FAIL(ret)) {
-        } else if (OB_NOT_NULL(find_val = ns_map.get(key))) {
-          if (find_val->compare(value) != 0) {
-            conflict = true;
-          }
-        } else if (OB_FAIL(new_ns_idx.push_back(pos))){
-          LOG_WARN("failed to record idx.", K(ret));
-        }
-      } else if (tmp->type() == M_ATTRIBUTE) {
-      } else {
-        end_check = true;  // neither ns nor attribute, stop searching
-      }
-    }
-    for (int pos = 0; OB_SUCC(ret) && pos < new_ns_idx.size() && !conflict; ++pos) {
-      ObXmlBin buff(*cur);
-      ObXmlBin* tmp = &buff;
-      if (OB_FAIL(cur->construct(tmp, nullptr))) {
-        LOG_WARN("failed to dup bin.", K(ret));
-      } else if (OB_FAIL(tmp->set_at(new_ns_idx[pos]))) {
-        LOG_WARN("failed to set at child.", K(ret));
-      } else if (tmp->type() == M_NAMESPACE) {
-        ObString key;
-        ObString value;
-        // init ns node
-        if (OB_FAIL(tmp->get_key(key))) {
-          LOG_WARN("failed to eval key.", K(ret));
-        } else if (OB_FAIL(tmp->get_value(value))) {
-          LOG_WARN("failed to eval value.", K(ret));
-        } else if (OB_FAIL(ns_map.set_refactored(key, value))) {
-          LOG_WARN("fail to add ns from map", K(ret), K(key));
-        }
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("must be ns.", K(ret));
-      }
-    }
-  }
-  // update parent anyways
-  last_parent = cur_parent;
-  return ret;
-}
-int ObXmlUtil::ns_to_extend(ObMulModeMemCtx* mem_ctx, 
-                            common::hash::ObHashMap<ObString, ObString>& ns_map, 
-                            ObStringBuffer *buffer)
-{
-  INIT_SUCC(ret);
-  if (OB_ISNULL(buffer)) {
-    ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("should not be null", K(ret));
-  } else {
-    ObXmlElement element_ns(ObMulModeNodeType::M_ELEMENT, mem_ctx);
-    ret = element_ns.init();
-    ObArray<ObXmlAttribute> ns_vec;
-    common::hash::ObHashMap<ObString, ObString>::iterator ns_map_iter;
-    for (ns_map_iter = ns_map.begin(); OB_SUCC(ret) && ns_map_iter != ns_map.end(); ns_map_iter++) {
-      ObXmlAttribute ns_node(ObMulModeNodeType::M_NAMESPACE, mem_ctx);
-      ObString key;
-      ObString value;
-      // init ns node
-      if (OB_SUCC(ns_vec.push_back(ns_node))) {
-        ns_vec[ns_vec.size() - 1].set_xml_key(ns_map_iter->first);
-        ns_vec[ns_vec.size() - 1].set_value(ns_map_iter->second);
-        if (OB_FAIL(element_ns.add_attribute(&ns_vec[ns_vec.size() - 1]))) {
-          LOG_WARN("fail to add ns", K(ret));
-        }
-      }
-    }
-    // serialize element node as extend area
-    if (OB_SUCC(ret)) {
-      ObXmlElementSerializer serializer_element(&element_ns, buffer);
-      if (OB_FAIL(serializer_element.serialize(0))) {
-        LOG_WARN("failed to serialize.", K(ret));
       }
     }
   }
@@ -1305,29 +828,22 @@ int ObXmlUtil::add_attr_ns_def(ObIMulModeBase *cur, uint32_t format_flag, ObStri
                               ObNsSortedVector* element_ns_vec, ObVector<ObNsPair*>& delete_ns_vec)
 {
   INIT_SUCC(ret);
-  ObXmlBin* bin = nullptr;
-  if (OB_ISNULL(element_ns_vec) || OB_ISNULL(cur) || OB_ISNULL(bin = static_cast<ObXmlBin*>(cur))) {
+  if (OB_ISNULL(element_ns_vec) || OB_ISNULL(cur)) {
     ret = OB_BAD_NULL_ERROR;
     LOG_WARN("should not be null", K(ret));
   } else {
-    int attr_num = bin->attribute_size();
-    bool end_check = false;
-    for (int pos = 0; OB_SUCC(ret) && !end_check && pos < attr_num; ++pos) {
-      ObXmlBin buff(*bin);
-      ObXmlBin* tmp = &buff;
-      if (OB_FAIL(bin->construct(tmp, nullptr))) {
-        LOG_WARN("failed to dup bin.", K(ret));
-      } else if (OB_FAIL(tmp->set_at(pos))) {
-        LOG_WARN("failed to set at child.", K(ret));
-      } else if (tmp->type() == M_NAMESPACE) {
-      } else if (tmp->type() == M_ATTRIBUTE) {
-        ObString prefix = tmp->get_prefix();
+    const int64_t attr_num = cur->attribute_size();
+    for (int64_t pos = 0; OB_SUCC(ret) && pos < attr_num; ++pos) {
+      ObIMulModeBase *attribute = cur->attribute_at(pos);
+      if (OB_ISNULL(attribute)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to get xml attribute", K(ret), K(pos));
+      } else if (attribute->type() == M_ATTRIBUTE) {
+        ObString prefix = attribute->get_prefix();
         if (prefix.empty()) {
         } else if (OB_FAIL(ObXmlUtil::add_ns_def_if_necessary(format_flag, buf, prefix, element_ns_vec, delete_ns_vec))) {
           LOG_WARN("failed to add attribute ns.", K(ret));
         }
-      } else {
-        end_check = true;  // neither ns nor attribute, stop searching
       }
     }
   }

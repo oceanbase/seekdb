@@ -186,7 +186,6 @@ int ObExchangeInfo::assign(const ObExchangeInfo &other)
     slave_mapping_type_ = other.slave_mapping_type_;
     strong_sharding_ = other.strong_sharding_;
     need_null_aware_shuffle_ = other.need_null_aware_shuffle_;
-    is_rollup_hybrid_ = other.is_rollup_hybrid_;
     is_wf_hybrid_ = other.is_wf_hybrid_;
     wf_hybrid_aggr_status_expr_ = other.wf_hybrid_aggr_status_expr_;
     may_add_interval_part_ = other.may_add_interval_part_;

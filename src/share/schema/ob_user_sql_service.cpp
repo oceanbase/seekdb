@@ -317,20 +317,15 @@ int ObUserSqlService::drop_user(
   //    1). role: update related grantees' schema version
   //    2). grantee: update related roles' schema version
   const ObUserInfo *user = NULL;
-  lib::Worker::CompatMode cmp_mode = lib::Worker::CompatMode::INVALID;
   if (FAILEDx(schema_guard.get_user_info(user_id, user))) {
     LOG_WARN("failed to get user info", K(ret), K(user_id));
   } else if (NULL == user) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("user info is null", K(ret), K(user_id));
-  } else if (OB_FAIL(schema_guard.get_tenant_compat_mode(cmp_mode))) {
-    LOG_WARN("fail to get compat mode", K(ret));
   } else {
-    const bool is_role = user->is_role() || (lib::Worker::CompatMode::MYSQL == cmp_mode);
-
-    OZ (drop_user_delete_role_grantee_map(is_role, new_schema_version,
+    OZ (drop_user_delete_role_grantee_map(true, new_schema_version,
                                           user, ddl_stmt_str, sql_client, schema_guard));
-    if (OB_SUCC(ret) && is_role) {
+    if (OB_SUCC(ret)) {
       OZ (drop_user_delete_role_grantee_map(false, new_schema_version,
                                             user, ddl_stmt_str, sql_client, schema_guard));
     }

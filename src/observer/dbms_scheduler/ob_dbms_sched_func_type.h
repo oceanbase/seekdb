@@ -15,7 +15,6 @@
  */
 
 FUNCTION_TYPE(STAT_MAINTENANCE_JOB, SHADOW) //Statistics information
-FUNCTION_TYPE(OLAP_ASYNC_JOB) //olap asynchronous job
 FUNCTION_TYPE(MYSQL_EVENT_JOB) //mysql_event
 FUNCTION_TYPE(NODE_BALANCE_JOB, SHADOW) //load balancing
 FUNCTION_TYPE(EXT_FILE_REFRESH_JOB, SHADOW) //external table refresh

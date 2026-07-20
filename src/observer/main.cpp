@@ -663,9 +663,7 @@ int inner_main(int argc, char *argv[])
 
   // Fake routines for current thread.
 
-#ifndef OB_USE_ASAN
   get_mem_leak_checker().init();
-#endif
 
   ObCurTraceId::SeqGenerator::seq_generator_  = ObTimeUtility::current_time();
   static const int  LOG_FILE_SIZE             = DEFAULT_LOG_FILE_SIZE_MB * 1024 * 1024;
@@ -824,13 +822,6 @@ int inner_main(int argc, char *argv[])
   LOG_INFO("seekdb exits", "seekdb_version", PACKAGE_STRING);
   return ret;
 }
-
-#ifdef OB_USE_ASAN
-const char* __asan_default_options()
-{
-  return "abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:log_path=./log/asan.log";
-}
-#endif
 
 #ifdef _WIN32
 static bool has_arg(int argc, char *argv[], const char *name)

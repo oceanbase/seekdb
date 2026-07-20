@@ -467,7 +467,6 @@ struct ObExchangeInfo
     strong_sharding_(NULL),
     weak_sharding_(),
     need_null_aware_shuffle_(false),
-    is_rollup_hybrid_(false),
     is_wf_hybrid_(false),
     wf_hybrid_aggr_status_expr_(NULL),
     wf_hybrid_pby_exprs_cnt_array_(),
@@ -527,7 +526,6 @@ struct ObExchangeInfo
   ObSEArray<ObShardingInfo*, 4> weak_sharding_;
   // for null aware anti join
   bool need_null_aware_shuffle_;
-  bool is_rollup_hybrid_;
   bool is_wf_hybrid_;
   ObRawExpr *wf_hybrid_aggr_status_expr_;
   // pby exprs cnt of every wf for wf hybrid dist
@@ -557,7 +555,6 @@ struct ObExchangeInfo
                K_(repart_all_tablet_ids),
                K_(slave_mapping_type),
                K_(need_null_aware_shuffle),
-               K_(is_rollup_hybrid),
                K_(is_wf_hybrid),
                K_(wf_hybrid_pby_exprs_cnt_array),
                K_(may_add_interval_part),

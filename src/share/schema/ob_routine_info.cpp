@@ -259,7 +259,6 @@ ObRoutineInfo &ObRoutineInfo::operator =(const ObRoutineInfo &src_schema)
     schema_version_ = src_schema.schema_version_;
     routine_type_ = src_schema.routine_type_;
     flag_ = src_schema.flag_;
-    comp_flag_ = src_schema.comp_flag_;
     type_id_ = src_schema.type_id_;
     tg_timing_event_ = src_schema.tg_timing_event_;
     if (OB_FAIL(deep_copy_str(src_schema.routine_name_, routine_name_))) {
@@ -339,7 +338,6 @@ void ObRoutineInfo::reset()
   routine_type_ = INVALID_ROUTINE_TYPE;
   flag_ = 0;
   reset_string(priv_user_);
-  comp_flag_ = COMPATIBLE_MYSQL_MODE;
   reset_string(exec_env_);
   reset_string(routine_body_);
   reset_string(comment_);
@@ -505,7 +503,6 @@ OB_DEF_SERIALIZE(ObRoutineInfo)
               routine_type_,
               flag_,
               priv_user_,
-              comp_flag_,
               exec_env_,
               routine_body_,
               comment_,
@@ -541,7 +538,6 @@ OB_DEF_DESERIALIZE(ObRoutineInfo)
               routine_type_,
               flag_,
               priv_user_,
-              comp_flag_,
               exec_env_,
               routine_body_,
               comment_,
@@ -575,7 +571,6 @@ OB_DEF_SERIALIZE_SIZE(ObRoutineInfo)
               routine_type_,
               flag_,
               priv_user_,
-              comp_flag_,
               exec_env_,
               routine_body_,
               comment_,

@@ -1054,8 +1054,6 @@ class TestTabletMergeDag : public compaction::ObTabletMergeDag
 public:
   TestTabletMergeDag()
     : compaction::ObTabletMergeDag(ObDagType::DAG_TYPE_MERGE_EXECUTE){}
-  virtual lib::Worker::CompatMode get_compat_mode() const override
-  { return lib::Worker::CompatMode::MYSQL; }
 private:
   DISALLOW_COPY_AND_ASSIGN(TestTabletMergeDag);
 };

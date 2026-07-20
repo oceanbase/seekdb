@@ -59,6 +59,5 @@ template class ObUniformVector<true, VectorBasicOp<VEC_TC_DEC_INT512>>;
 template class ObUniformVector<true, VectorBasicOp<VEC_TC_COLLECTION>>;
 template class ObUniformVector<true, VectorBasicOp<VEC_TC_MYSQL_DATETIME>>;
 template class ObUniformVector<true, VectorBasicOp<VEC_TC_MYSQL_DATE>>;
-template class ObUniformVector<true, VectorBasicOp<VEC_TC_ROARINGBITMAP>>;
 } // end namespace common
 } // end namespace oceanbase

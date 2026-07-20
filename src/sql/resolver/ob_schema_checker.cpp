@@ -244,22 +244,16 @@ int ObSchemaChecker::check_trigger_show(const share::schema::ObSessionPrivInfo &
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(s_priv), K(db), K(trigger), K(ret));
   } else {
-    bool need_check = false;
-    if(OB_FAIL(ObCompatControl::check_feature_enable(s_priv.security_version_,
-                                      ObCompatFeatureType::MYSQL_TRIGGER_PRIV_CHECK, need_check))) {
-      LOG_WARN("failed to check feature enable", K(ret));
-    } else if(need_check) {
-      ObNeedPriv need_priv;
-      need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
-      need_priv.db_ = db;
-      need_priv.priv_set_ = OB_PRIV_TRIGGER;
-      need_priv.table_ = table;
-      OZ (schema_mgr_->check_single_table_priv(s_priv, enable_role_id_array, need_priv));
-      if(OB_FAIL(ret)) {
-        allow_show = false;
-        ret = OB_SUCCESS;
-        LOG_WARN("show create trigger not has trigger priv", K(s_priv), K(enable_role_id_array), K(db), K(trigger), K(table), K(ret));
-      }
+    ObNeedPriv need_priv;
+    need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
+    need_priv.db_ = db;
+    need_priv.priv_set_ = OB_PRIV_TRIGGER;
+    need_priv.table_ = table;
+    OZ (schema_mgr_->check_single_table_priv(s_priv, enable_role_id_array, need_priv));
+    if(OB_FAIL(ret)) {
+      allow_show = false;
+      ret = OB_SUCCESS;
+      LOG_WARN("show create trigger not has trigger priv", K(s_priv), K(enable_role_id_array), K(db), K(trigger), K(table), K(ret));
     }
   }
   return ret;
@@ -1127,7 +1121,6 @@ int ObSchemaChecker::get_package_info(
                                       const ObString &database_name,
                                       const ObString &package_name,
                                       const share::schema::ObPackageType type,
-                                      const int64_t compatible_mode,
                                       const ObPackageInfo *&package_info)
 {
   int ret = OB_SUCCESS;
@@ -1137,8 +1130,8 @@ int ObSchemaChecker::get_package_info(
     LOG_WARN("schema checker is not inited", K_(is_inited));
   } else if (OB_FAIL(get_database_id(database_name, db_id))) {
     LOG_WARN("get database id failed", K(ret));
-  } else if (OB_FAIL(schema_mgr_->get_package_info( db_id, package_name,
-                                              type, compatible_mode, package_info))) {
+  } else if (OB_FAIL(schema_mgr_->get_package_info(db_id, package_name,
+                                              type, package_info))) {
     LOG_WARN("get package id failed", K(ret));
   } else if (OB_ISNULL(package_info)) {
     ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;
@@ -1167,7 +1160,6 @@ int ObSchemaChecker::get_trigger_info(
 
 int ObSchemaChecker::get_package_id(const uint64_t database_id,
                                     const ObString &package_name,
-                                    const int64_t compatible_mode,
                                     uint64_t &package_id)
 {
   int ret = OB_SUCCESS;
@@ -1175,7 +1167,7 @@ int ObSchemaChecker::get_package_id(const uint64_t database_id,
     ret = OB_NOT_INIT;
     LOG_WARN("schema checker is not inited", K_(is_inited));
   } else if (OB_FAIL(schema_mgr_->get_package_id(
-                      database_id, package_name, share::schema::PACKAGE_TYPE, compatible_mode, package_id))) {
+                      database_id, package_name, share::schema::PACKAGE_TYPE, package_id))) {
     LOG_WARN("get package id failed", K(ret));
   } else if (OB_INVALID_ID == package_id) {
     ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;
@@ -1186,7 +1178,6 @@ int ObSchemaChecker::get_package_id(const uint64_t database_id,
 
 int ObSchemaChecker::get_package_id(const ObString &database_name,
                                     const ObString &package_name,
-                                    const int64_t compatible_mode,
                                     uint64_t &package_id)
 {
   int ret = OB_SUCCESS;
@@ -1196,7 +1187,7 @@ int ObSchemaChecker::get_package_id(const ObString &database_name,
     LOG_WARN("schema checker is not inited", K_(is_inited));
   } else if (OB_FAIL(get_database_id(database_name, db_id))) {
     LOG_WARN("get database id failed", K(ret));
-  } else if (OB_FAIL(schema_mgr_->get_package_id(db_id, package_name, share::schema::PACKAGE_TYPE, compatible_mode, package_id))) {
+  } else if (OB_FAIL(schema_mgr_->get_package_id(db_id, package_name, share::schema::PACKAGE_TYPE, package_id))) {
     LOG_WARN("get package id failed", K(ret));
   } else if (OB_INVALID_ID == package_id) {
     ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;
@@ -1559,13 +1550,11 @@ int ObSchemaChecker::check_exist_same_name_object_with_synonym(uint64_t database
     //check package
     if (OB_TABLE_NOT_EXIST == ret) {
       uint64_t package_id = 0;
-      int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
       if (OB_FAIL(get_package_id(database_name, object_name,
-                                  compatible_mode, package_id))) {
+                                  package_id))) {
         if (OB_ERR_PACKAGE_DOSE_NOT_EXIST == ret) {
           if (OB_FAIL(get_package_id(OB_SYS_DATABASE_ID,
                                       object_name,
-                                      compatible_mode,
                                       package_id))) {
             if (OB_ERR_PACKAGE_DOSE_NOT_EXIST == ret) {
               ret = OB_TABLE_NOT_EXIST;
@@ -1587,32 +1576,6 @@ int ObSchemaChecker::check_exist_same_name_object_with_synonym(uint64_t database
   return ret;
 }
 
-
-bool ObSchemaChecker::enable_mysql_pl_priv_check(ObSchemaGetterGuard &schema_guard)
-{
-  bool enable = false;
-  uint64_t compat_version = 0;
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(GET_MIN_DATA_VERSION(compat_version))) {
-    LOG_WARN("fail to get data version");
-  } else {
-    const ObSysVarSchema *sys_var = NULL;
-    ObMalloc alloc(ObModIds::OB_TEMP_VARIABLES);
-    ObObj val;
-    if (OB_FAIL(schema_guard.get_tenant_system_variable(share::SYS_VAR__ENABLE_MYSQL_PL_PRIV_CHECK, sys_var))) {
-      LOG_WARN("fail to get tenant var schema", K(ret));
-    } else if (OB_ISNULL(sys_var)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("sys variable schema is null", KR(ret));
-    } else if (OB_FAIL(sys_var->get_value(&alloc, NULL, val))) {
-      LOG_WARN("fail to get charset var value", K(ret));
-    } else {
-      enable = val.get_bool();
-    }
-  }
-  LOG_DEBUG("show enabale mysql routine priv enable", K(enable));
-  return enable;
-}
 
 int ObSchemaChecker::remove_tmp_cte_schemas(const ObString& cte_table_name)
 {
@@ -1772,8 +1735,6 @@ int ObSchemaGetterGuard::check_priv(const ObSessionPrivInfo &session_priv,
           if (OB_ISNULL(this)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("schema guard is null", K(ret));
-          } else if (!sql::ObSchemaChecker::enable_mysql_pl_priv_check(*this)) {
-            //do nothing
           } else if (OB_FAIL(check_routine_priv(session_priv, enable_role_id_array, need_priv))) {
             LOG_WARN("No privilege",
                 "user_id", session_priv.user_id_,
@@ -1794,8 +1755,6 @@ int ObSchemaGetterGuard::check_priv(const ObSessionPrivInfo &session_priv,
           if (OB_ISNULL(this)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("schema guard is null", K(ret));
-          } else if (!sql::ObSchemaChecker::enable_mysql_pl_priv_check(*this)) {
-            //do nothing
           } else if (OB_FAIL(check_obj_mysql_priv(session_priv, enable_role_id_array, need_priv))) {
             LOG_WARN("No privilege",
                 "user_id", session_priv.user_id_,

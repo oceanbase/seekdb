@@ -674,14 +674,14 @@ int ObJoinFilterOp::inner_rescan()
   return ret;
 }
 
-// for use mode, update_plan_monitor_info cause get_next_batch may not get iter end
+// for use mode, update_join_filter_monitor_info cause get_next_batch may not get iter end
 int ObJoinFilterOp::inner_drain_exch()
 {
   int ret = OB_SUCCESS;
   if (row_reach_end_ || batch_reach_end_) {
-    // update_plan_monitor_info already done in get_next_row/batch iter end
+    // update_join_filter_monitor_info already done in get_next_row/batch iter end
   } else if (MY_SPEC.is_use_mode()) {
-    ret = update_plan_monitor_info();
+    ret = update_join_filter_monitor_info();
   }
   return ret;
 }
@@ -767,8 +767,8 @@ int ObJoinFilterOp::inner_get_next_row()
     }
   }
   if (MY_SPEC.is_use_mode() && ret == OB_ITER_END) {
-    if (OB_FAIL(update_plan_monitor_info())) {
-      LOG_WARN("fail to update plan monitor info", K(ret));
+    if (OB_FAIL(update_join_filter_monitor_info())) {
+      LOG_WARN("fail to update join filter monitor info", K(ret));
     } else {
       ret = OB_ITER_END;
     }
@@ -944,8 +944,8 @@ int ObJoinFilterOp::join_filter_use_get_next_batch(const int64_t max_row_cnt)
     LOG_WARN("failed to get next batch for use op", K(ret));
   } else if (FALSE_IT(brs_.copy(child_brs))) {
   } else if (brs_.end_ && 0 == brs_.size_) {
-    if (OB_FAIL(update_plan_monitor_info())) {
-      LOG_WARN("fail to update plan monitor info", K(ret));
+    if (OB_FAIL(update_join_filter_monitor_info())) {
+      LOG_WARN("fail to update join filter monitor info", K(ret));
     }
   }
   return ret;
@@ -1124,7 +1124,7 @@ int ObJoinFilterOp::calc_each_bf_group_size(int64_t &each_group_size)
   return ret;
 }
 
-int ObJoinFilterOp::update_plan_monitor_info()
+int ObJoinFilterOp::update_join_filter_monitor_info()
 {
   int ret = OB_SUCCESS;
   op_monitor_info_.otherstat_1_value_ = 0;
@@ -2215,6 +2215,5 @@ int ObJoinFilterOp::close_join_filter_use()
   /*do nothing*/
   return ret;
 }
-
 
 

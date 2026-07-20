@@ -552,7 +552,6 @@ int ObTabletCreateMdsHelper::convert_schemas(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(arg));
   } else {
-    lib::Worker::CompatMode compat_mode = arg.tablets_.at(0).compat_mode_;
     for (int64_t i = 0; OB_SUCC(ret) && i < arg.table_schemas_.count(); ++i) {
       ObTableSchema &table_schema = arg.table_schemas_[i];
       ObCreateTabletSchema *create_tablet_schema = NULL;
@@ -561,7 +560,7 @@ int ObTabletCreateMdsHelper::convert_schemas(
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to allocate storage schema", KR(ret), K(table_schema));
       } else if (FALSE_IT(create_tablet_schema = new (create_tablet_schema_ptr)ObCreateTabletSchema())) {
-      } else if (OB_FAIL(create_tablet_schema->init(arg.allocator_, table_schema, compat_mode,
+      } else if (OB_FAIL(create_tablet_schema->init(arg.allocator_, table_schema,
            false/*skip_column_info*/, DATA_CURRENT_VERSION))) {
         LOG_WARN("failed to init storage schema", KR(ret), K(table_schema));
       } else if (OB_FAIL(arg.create_tablet_schemas_.push_back(create_tablet_schema))) {
@@ -627,7 +626,6 @@ int ObTabletCreateMdsHelper::build_pure_data_tablet(
                                                                              : info.create_commit_versions_.at(0);
   const ObSArray<ObCreateTabletSchema*> &create_tablet_schemas = arg.create_tablet_schemas_;
   const ObSArray<obcall::ObCreateTabletExtraInfo> &create_tablet_extra_infos = arg.tablet_extra_infos_;
-  const lib::Worker::CompatMode &compat_mode = info.compat_mode_;
   const int64_t snapshot_version = arg.major_frozen_scn_.get_val_for_tx();
   const share::SCN &clog_checkpoint_scn = arg.clog_checkpoint_scn_;
   const share::SCN &mds_checkpoint_scn = arg.mds_checkpoint_scn_;
@@ -674,7 +672,7 @@ int ObTabletCreateMdsHelper::build_pure_data_tablet(
   } else if (OB_FAIL(info.get_fork_tablet_info(index, fork_tablet_info))) {
     LOG_WARN("failed to get fork tablet info", K(ret), K(index));
   } else if (CLICK_FAIL(tenant_ls->get_tablet_svr()->create_tablet(data_tablet_id, data_tablet_id,
-      scn, snapshot_version, *create_tablet_schema, compat_mode,
+      scn, snapshot_version, *create_tablet_schema,
       need_create_empty_major_sstable, clog_checkpoint_scn, mds_checkpoint_scn, arg.create_type_,
       micro_index_clustered, data_format_version, tablet_handle,
       fork_tablet_info))) {
@@ -704,7 +702,6 @@ int ObTabletCreateMdsHelper::build_mixed_tablets(
   const ObSArray<ObTabletID> &tablet_ids = info.tablet_ids_;
   const ObIArray<int64_t> &create_commit_versions = info.create_commit_versions_;
   const ObSArray<ObCreateTabletSchema*> &create_tablet_schemas = arg.create_tablet_schemas_;
-  const lib::Worker::CompatMode &compat_mode = info.compat_mode_;
   const ObSArray<obcall::ObCreateTabletExtraInfo> &create_tablet_extra_infos = arg.tablet_extra_infos_;
   const int64_t snapshot_version = arg.major_frozen_scn_.get_val_for_tx();
   const share::SCN &clog_checkpoint_scn = arg.clog_checkpoint_scn_;
@@ -766,7 +763,7 @@ int ObTabletCreateMdsHelper::build_mixed_tablets(
     } else if (OB_FAIL(info.get_fork_tablet_info(i, fork_tablet_info))) {
       LOG_WARN("failed to get fork tablet info", K(ret), K(i));
     } else if (CLICK_FAIL(tenant_ls->get_tablet_svr()->create_tablet(tablet_id, data_tablet_id,
-        scn, snapshot_version, *create_tablet_schema, compat_mode,
+        scn, snapshot_version, *create_tablet_schema,
         need_create_empty_major_sstable, clog_checkpoint_scn, mds_checkpoint_scn, arg.create_type_,
         micro_index_clustered, data_format_version, tablet_handle,
         fork_tablet_info))) {
@@ -814,7 +811,6 @@ int ObTabletCreateMdsHelper::build_pure_aux_tablets(
   const ObSArray<ObTabletID> &tablet_ids = info.tablet_ids_;
   const ObIArray<int64_t> &create_commit_versions = info.create_commit_versions_;
   const ObSArray<ObCreateTabletSchema*> &create_tablet_schemas = arg.create_tablet_schemas_;
-  const lib::Worker::CompatMode &compat_mode = info.compat_mode_;
   const ObSArray<obcall::ObCreateTabletExtraInfo> &create_tablet_extra_infos = arg.tablet_extra_infos_;
   const int64_t snapshot_version = arg.major_frozen_scn_.get_val_for_tx();
   const share::SCN &clog_checkpoint_scn = arg.clog_checkpoint_scn_;
@@ -866,7 +862,7 @@ int ObTabletCreateMdsHelper::build_pure_aux_tablets(
     } else if (OB_FAIL(info.get_fork_tablet_info(i, fork_tablet_info))) {
       LOG_WARN("failed to get fork tablet info", K(ret), K(i));
     } else if (CLICK_FAIL(tenant_ls->get_tablet_svr()->create_tablet(tablet_id, data_tablet_id,
-        scn, snapshot_version, *create_tablet_schema, compat_mode,
+        scn, snapshot_version, *create_tablet_schema,
         need_create_empty_major_sstable, clog_checkpoint_scn, mds_checkpoint_scn, arg.create_type_,
         micro_index_clustered, data_format_version, tablet_handle,
         fork_tablet_info))) {
@@ -899,7 +895,6 @@ int ObTabletCreateMdsHelper::build_bind_hidden_tablets(
   const ObSArray<ObTabletID> &tablet_ids = info.tablet_ids_;
   const ObIArray<int64_t> &create_commit_versions = info.create_commit_versions_;
   const ObSArray<ObCreateTabletSchema*> &create_tablet_schemas = arg.create_tablet_schemas_;
-  const lib::Worker::CompatMode &compat_mode = info.compat_mode_;
   const ObSArray<obcall::ObCreateTabletExtraInfo> &create_tablet_extra_infos = arg.tablet_extra_infos_;
   const int64_t snapshot_version = arg.major_frozen_scn_.get_val_for_tx();
   const share::SCN &clog_checkpoint_scn = arg.clog_checkpoint_scn_;
@@ -974,7 +969,7 @@ int ObTabletCreateMdsHelper::build_bind_hidden_tablets(
     } else if (OB_FAIL(info.get_fork_tablet_info(i, fork_tablet_info))) {
       LOG_WARN("failed to get fork tablet info", K(ret), K(i));
     } else if (CLICK_FAIL(tenant_ls->get_tablet_svr()->create_tablet(tablet_id, tablet_id,
-        scn, snapshot_version, *create_tablet_schema, compat_mode,
+        scn, snapshot_version, *create_tablet_schema,
         need_create_empty_major_sstable, clog_checkpoint_scn, mds_checkpoint_scn, arg.create_type_,
         micro_index_clustered, data_format_version, tablet_handle,
         fork_tablet_info))) {

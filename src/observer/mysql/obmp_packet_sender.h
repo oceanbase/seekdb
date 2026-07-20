@@ -43,7 +43,6 @@ struct ObOKPParam
       message_(NULL),
       is_on_connect_(false),
       is_on_change_user_(false),
-      is_partition_hit_(true),
       has_more_result_(false),
       take_trace_id_to_client_(false),
       warnings_count_(0),
@@ -58,7 +57,6 @@ struct ObOKPParam
   char *message_;
   bool is_on_connect_;
   bool is_on_change_user_;
-  bool is_partition_hit_;
   bool has_more_result_;
   // current, when return error packet or query fly time >= trace_log_slow_query_watermark(100ms default),
   // will take trace id to client for easy debugging;
@@ -102,7 +100,6 @@ public:
   virtual int response_packet(obmysql::ObMySQLPacket &pkt, sql::ObSQLSessionInfo* session) = 0;
   virtual int send_error_packet(int err,
                                 const char* errmsg,
-                                bool is_partition_hit = true,
                                 void *extra_err_info = NULL) = 0;
   virtual int send_ok_packet(sql::ObSQLSessionInfo &session, ObOKPParam &ok_param, obmysql::ObMySQLPacket* pkt=NULL) = 0;
   virtual int send_eof_packet(const sql::ObSQLSessionInfo &session,
@@ -126,7 +123,6 @@ public:
   virtual int response_packet(obmysql::ObMySQLPacket &pkt, sql::ObSQLSessionInfo* session) override;
   virtual int send_error_packet(int err,
                                 const char* errmsg,
-                                bool is_partition_hit = true,
                                 void *extra_err_info = NULL) override;
   virtual int send_ok_packet(sql::ObSQLSessionInfo &session, ObOKPParam &ok_param, obmysql::ObMySQLPacket* pkt=NULL) override;
   virtual int send_eof_packet(const sql::ObSQLSessionInfo &session,
@@ -142,7 +138,6 @@ public:
            bool req_has_wokenup,
            int64_t query_receive_ts);
   bool is_conn_valid() const { return conn_valid_; }
-  int update_transmission_checksum_flag(const sql::ObSQLSessionInfo &session);
   void finish_sql_request();
   int get_conn_id(uint32_t &sessid) const;
   ObSMConnection* get_conn() const;

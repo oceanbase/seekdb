@@ -20,8 +20,6 @@
 #include "common/mysqlclient/ob_isql_client.h"
 #include "common/timezone/ob_time_convert.h"  // ObNLSFormatEnum (self-contained include)
 #include "common/mysqlclient/ob_mysql_result.h"
-#include "common/mysqlclient/ob_mysql_statement.h"
-#include "common/mysqlclient/ob_mysql_connection_pool.h"
 
 namespace oceanbase
 {
@@ -189,7 +187,7 @@ public:
   using ObISQLClient::read;
   // execute update sql
   virtual int write(const char *sql, const int32_t group_id, int64_t &affected_rows) override;
-  int write(const ObString sql, int64_t &affected_rows, int64_t compatibility_mode,
+  int write(const ObString sql, int64_t &affected_rows,
         const ObSessionParam *session_param = nullptr,
         const common::ObAddr *sql_exec_addr = nullptr);
   using ObISQLClient::write;

@@ -27,7 +27,6 @@
 #include "ob_partition_service.h"
 
 #include "share/ob_rpc_struct.h"
-#include "share/ob_server_locality_cache.h"
 #include "common/storage/ob_freeze_define.h"
 #include "storage/tx/ob_trans_define.h"
 #include "storage/tx/ob_trans_service.h"
@@ -56,9 +55,6 @@ public:
   MOCK_METHOD1(inactivate_tenant,
                int(const uint64_t tenant_id));
 
-  MOCK_METHOD0(force_refresh_locality_info, int());
-
-
   MOCK_METHOD4(init,
                int(const blocksstable::ObStorageEnv &env, const common::ObAddr &self_addr,
                    share::schema::ObMultiVersionSchemaService *schema_service,
@@ -85,9 +81,9 @@ public:
   MOCK_CONST_METHOD0(get_min_using_file_id,
                      int64_t());
   MOCK_METHOD2(kill_query_session, int(const transaction::ObTransDesc &trans_desc, const int status));
-  MOCK_METHOD7(start_trans,
+  MOCK_METHOD6(start_trans,
                int(const uint64_t tenant_id, const uint64_t thread_id, const transaction::ObStartTransParam &req,
-                   const int64_t expired_time, const uint32_t session_id, uint64_t proxy_session_id, transaction::ObTransDesc &trans_desc));
+                   const int64_t expired_time, const uint32_t session_id, transaction::ObTransDesc &trans_desc));
   MOCK_METHOD4(end_trans,
                int(bool is_rollback, transaction::ObTransDesc &trans_desc, sql::ObIEndTransCallback &cb,
                    const int64_t stmt_expired_time));

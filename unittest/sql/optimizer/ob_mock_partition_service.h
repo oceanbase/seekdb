@@ -23,7 +23,6 @@
 #define protected public
 #include "../../storage/mockcontainer/ob_partition_service.h"
 #include "storage/access/ob_dml_param.h"
-#include "share/ob_server_locality_cache.h"
 #include "common/row/ob_row_iterator.h"
 
 using namespace oceanbase;

@@ -38,7 +38,6 @@ int ObDropUserResolver::resolve(const ParseNode &parse_tree)
   ParseNode * user_list_node = nullptr;
   ObDropUserStmt *drop_user_stmt = NULL;
   bool if_exists = false;
-  CHECK_COMPATIBILITY_MODE(params_.session_info_);
   if (OB_ISNULL(params_.session_info_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("Session info is not inited", K(ret));

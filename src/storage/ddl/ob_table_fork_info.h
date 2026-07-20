@@ -39,7 +39,6 @@ public:
       const int64_t schema_version,
       const int64_t task_id,
       const int64_t fork_snapshot_version,
-      const lib::Worker::CompatMode compat_mode,
       const int64_t data_format_version,
       const common::ObIArray<common::ObTabletID> &source_tablet_ids,
       const common::ObIArray<common::ObTabletID> &dest_tablet_ids);
@@ -50,7 +49,7 @@ public:
   int get_tablet_fork_param(const common::ObTabletID &tablet_id, ObTabletForkParam &tablet_fork_param) const;
   TO_STRING_KV(K_(table_id), K_(schema_version), K_(task_id),
                K_(source_tablet_ids), K_(dest_tablet_ids),
-               K_(fork_snapshot_version), K_(compat_mode),
+               K_(fork_snapshot_version),
                K_(data_format_version));
 public:
   uint64_t table_id_;
@@ -59,7 +58,6 @@ public:
   common::ObSEArray<common::ObTabletID, 4> source_tablet_ids_; // Source tablet IDs array
   common::ObSEArray<common::ObTabletID, 4> dest_tablet_ids_;   // Destination tablet IDs array
   int64_t fork_snapshot_version_;
-  lib::Worker::CompatMode compat_mode_;
   int64_t data_format_version_;
 };
 

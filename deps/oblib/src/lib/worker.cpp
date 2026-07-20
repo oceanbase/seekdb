@@ -41,9 +41,9 @@ OB_DEF_SERIALIZE_SIZE(ObExtraRpcHeader)
 }
 
 #ifdef ERRSIM
-  OB_SERIALIZE_MEMBER(ObRuntimeContext, compat_mode_, module_type_, log_reduction_mode_, extra_rpc_header_);
+  OB_SERIALIZE_MEMBER(ObRuntimeContext, module_type_, log_reduction_mode_, extra_rpc_header_);
 #else
-  OB_SERIALIZE_MEMBER(ObRuntimeContext, compat_mode_, log_reduction_mode_, extra_rpc_header_);
+  OB_SERIALIZE_MEMBER(ObRuntimeContext, log_reduction_mode_, extra_rpc_header_);
 #endif
 
 
@@ -69,7 +69,6 @@ __thread Worker *Worker::self_;
 Worker::Worker()
     : group_(nullptr),
       allocator_(nullptr),
-      st_current_priority_(0),
       session_(nullptr),
       cur_request_(nullptr),
       worker_level_(INT32_MAX),

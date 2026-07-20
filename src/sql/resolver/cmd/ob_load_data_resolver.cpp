@@ -441,10 +441,8 @@ int ObLoadDataResolver::resolve(const ParseNode &parse_tree)
 
   if (OB_SUCC(ret)) {
     ObLoadArgument &load_args = load_stmt->get_load_arguments();
-    const ObDirectLoadHint &direct_load_hint = load_stmt->get_hints().get_direct_load_hint();
     if (ObLoadDupActionType::LOAD_STOP_ON_DUP == load_args.dupl_action_ &&
-        ObLoadFileLocation::CLIENT_DISK == load_args.load_file_storage_ &&
-        (!direct_load_hint.is_enable() || !direct_load_hint.is_inc_replace_load_method())) {
+        ObLoadFileLocation::CLIENT_DISK == load_args.load_file_storage_) {
       // https://dev.mysql.com/doc/refman/8.0/en/load-data.html
       // In MySQL, LOCAL modifier has the same effect as the IGNORE modifier.
       load_args.dupl_action_ = ObLoadDupActionType::LOAD_IGNORE;
@@ -498,15 +496,6 @@ int ObLoadDataResolver::resolve_hints(const ParseNode &node)
       LOG_DEBUG("LOAD DATA resolve hint node", "type", hint_node->type_);
 
       switch (hint_node->type_) {
-      case T_DIRECT: {
-        ObDirectLoadHint direct_load_hint;
-        if (OB_FAIL(ObDMLResolver::resolve_direct_load_hint(*hint_node, direct_load_hint))) {
-          LOG_WARN("fail to resolve direct load hint", KR(ret));
-        } else {
-          stmt_hints.get_direct_load_hint().merge(direct_load_hint);
-        }
-        break;
-      }
       case T_QUERY_TIMEOUT: {
         int64_t timeout_value = hint_node->children_[0]->value_;
         if (timeout_value > OB_MAX_USER_SPECIFIED_TIMEOUT) {
@@ -568,12 +557,6 @@ int ObLoadDataResolver::resolve_hints(const ParseNode &node)
         }
         break;
       }
-      case T_APPEND: {
-        if (OB_FAIL(stmt_hints.set_value(ObLoadDataHint::APPEND, 1))) {
-          LOG_WARN("fail to set append", K(ret));
-        }
-        break;
-      }
       case T_GATHER_OPTIMIZER_STATISTICS: {
         if (OB_FAIL(stmt_hints.set_value(ObLoadDataHint::GATHER_OPTIMIZER_STATISTICS, 1))) {
           LOG_WARN("fail to set gather optimizer statistics", K(ret));
@@ -584,10 +567,6 @@ int ObLoadDataResolver::resolve_hints(const ParseNode &node)
         if (OB_FAIL(stmt_hints.set_value(ObLoadDataHint::NO_GATHER_OPTIMIZER_STATISTICS, 1))) {
           LOG_WARN("fail to set gather optimizer statistics", K(ret));
         }
-        break;
-      }
-      case T_NO_DIRECT: {
-        stmt_hints.get_direct_load_hint().has_no_direct_ = true;
         break;
       }
       default:

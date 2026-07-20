@@ -243,8 +243,6 @@ OB_SERIALIZE_MEMBER(ObTxRollbackToLog, /* 1 */ from_, /* 2 */ to_);
 
 OB_SERIALIZE_MEMBER(ObTxMultiDataSourceLog, /* 1 */ data_);
 
-OB_SERIALIZE_MEMBER(ObTxDirectLoadIncLog, /* 1 */ ddl_log_type_, /* 2 */ log_buf_, /* 3 */ batch_key_);
-
 ObTxCommitInfoLog::ObTxCommitInfoLog(bool is_dup_tx,
                                      bool is_elr,
                                      common::ObString &app_trace_id,
@@ -283,7 +281,6 @@ const ObTxLogType ObTxRecordLog::LOG_TYPE = ObTxLogType::TX_RECORD_LOG;
 // const ObTxLogType ObTxKeepAliveLog::LOG_TYPE = ObTxLogType::TX_KEEP_ALIVE_LOG;
 const ObTxLogType ObTxRollbackToLog::LOG_TYPE = ObTxLogType::TX_ROLLBACK_TO_LOG;
 const ObTxLogType ObTxMultiDataSourceLog::LOG_TYPE = ObTxLogType::TX_MULTI_DATA_SOURCE_LOG;
-const ObTxLogType ObTxDirectLoadIncLog::LOG_TYPE = ObTxLogType::TX_DIRECT_LOAD_INC_LOG;
 
 int ObTxRedoLog::set_mutator_buf(char *buf)
 {
@@ -584,67 +581,6 @@ int ObTxMultiDataSourceLog::fill_MDS_data(const ObTxBufferNode &node)
   return ret;
 }
 
-int64_t ObTxDLIncLogBuf::get_serialize_size() const
-{
-  return serialization::encoded_length(dli_buf_size_) + dli_buf_size_;
-}
-
-int ObTxDLIncLogBuf::serialize(char *buf, const int64_t buf_len, int64_t &pos) const
-{
-  int ret = OB_SUCCESS;
-  int64_t tmp_pos = pos;
-  if (OB_ISNULL(submit_buf_) || dli_buf_size_ <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KP(submit_buf_), K(dli_buf_size_));
-  } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, tmp_pos, dli_buf_size_))) {
-    TRANS_LOG(WARN, "encode buf size failed", K(ret), KP(buf), K(buf_len), K(tmp_pos), KPC(this));
-  } else if (tmp_pos + dli_buf_size_ > buf_len) {
-    ret = OB_SIZE_OVERFLOW;
-    TRANS_LOG(WARN, "the log buf is not enough", K(ret), KP(buf), K(buf_len), K(tmp_pos),
-              KPC(this));
-  } else {
-    memcpy(buf + tmp_pos, submit_buf_, dli_buf_size_);
-#ifdef  ENABLE_DEBUG_LOG
-    // TRANS_LOG(INFO, "<ObTxDirectLoadIncLog>after serialize buf_size", K(ret), KP(buf),
-    //           KP(submit_buf_), K(tmp_pos), K(pos), K(dli_buf_size_),KPHEX(submit_buf_,dli_buf_size_),KPHEX(buf+tmp_pos,dli_buf_size_ ));
-#endif
-    tmp_pos = tmp_pos + dli_buf_size_;
-  }
-
-  if (OB_SUCC(ret)) {
-    pos = tmp_pos;
-  }
-
-  return ret;
-}
-
-int ObTxDLIncLogBuf::deserialize(const char *buf, const int64_t data_len, int64_t &pos)
-{
-  int ret = OB_SUCCESS;
-  int64_t tmp_pos = pos;
-  if (OB_FAIL(serialization::decode_vi64(buf, data_len, tmp_pos, &dli_buf_size_))) {
-    TRANS_LOG(WARN, "deserialize direct_load_inc buf_size failed", K(ret), KP(buf), K(data_len),
-              K(tmp_pos), KPC(this));
-  } else if (tmp_pos + dli_buf_size_ > data_len) {
-    ret = OB_SIZE_OVERFLOW;
-    TRANS_LOG(WARN, "the log buf is not enough", K(ret), KP(buf), K(data_len), K(tmp_pos),
-              KPC(this));
-  } else {
-    replay_buf_ = buf + tmp_pos;
-#ifdef  ENABLE_DEBUG_LOG
-    // TRANS_LOG(INFO, "<ObTxDirectLoadIncLog>after deserialize buf_size", K(ret), KP(buf),
-    //           KP(replay_buf_), K(tmp_pos), K(pos), K(dli_buf_size_), KPHEX(replay_buf_,dli_buf_size_));
-#endif
-    tmp_pos = tmp_pos + dli_buf_size_;
-  }
-
-  if (OB_SUCC(ret)) {
-    pos = tmp_pos;
-  }
-
-  return ret;
-}
-
 OB_SERIALIZE_MEMBER(ObTxDataBackup, start_log_ts_);
 
 int ObTxCommitInfoLog::ob_admin_dump(ObAdminMutatorStringArg &arg)
@@ -753,29 +689,6 @@ int ObTxRollbackToLog::ob_admin_dump(ObAdminMutatorStringArg &arg)
   return ret;
 }
 
-int  ObTxDirectLoadIncLog::ob_admin_dump(share::ObAdminMutatorStringArg &arg)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(arg.writer_ptr_)) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid arg writer is NULL", K(arg), K(ret));
-  } else {
-    ObCStringHelper helper;
-    arg.writer_ptr_->dump_key("<TxDirectLoadIncLog>");
-    arg.writer_ptr_->start_object();
-    arg.writer_ptr_->dump_key("dli_log_type");
-    arg.writer_ptr_->dump_int64(static_cast<int64_t>(ddl_log_type_));
-    arg.writer_ptr_->dump_key("dli_buf_size");
-    arg.writer_ptr_->dump_int64(log_buf_.get_buf_size());
-    arg.writer_ptr_->dump_key("dli_batch_key");
-    arg.writer_ptr_->dump_string(helper.convert(batch_key_));
-    //TODO direct_load_inc
-    //dump direct_load_inc log_buf as a string in ob_admin log_tool
-    arg.writer_ptr_->end_object();
-  }
-  return ret;
-}
-
 int ObTxMultiDataSourceLog::ob_admin_dump(ObAdminMutatorStringArg &arg)
 {
   int ret = OB_SUCCESS;
@@ -849,7 +762,6 @@ int ObTxAbortLog::init_tx_data_backup(const share::SCN &start_scn)
 
 // ============================== Tx Log Block =============================
 OB_SERIALIZE_MEMBER(ObTxLogBlockHeader,
-                    org_cluster_id_,
                     cluster_version_,
                     __log_entry_no_,
                     tx_id_,
@@ -878,19 +790,14 @@ void ObTxLogBlock::reset()
 int ObTxLogBlock::reuse_for_fill()
 {
   int ret = OB_SUCCESS;
-  if (!header_.is_valid()) {
-    ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "must init header before reuse", K(ret));
-  } else {
-    log_base_header_.reset();
-    cur_log_type_ = ObTxLogType::UNKNOWN;
-    cb_arg_array_.reset();
-    big_segment_buf_ = nullptr;
-    pos_ = 0;
-    // reserve place for headers, header will be filled back
-    pos_ += log_base_header_.get_serialize_size(); // assume FIXED size
-    pos_ += header_.get_serialize_size();
-  }
+  log_base_header_.reset();
+  cur_log_type_ = ObTxLogType::UNKNOWN;
+  cb_arg_array_.reset();
+  big_segment_buf_ = nullptr;
+  pos_ = 0;
+  // reserve place for headers, header will be filled back
+  pos_ += log_base_header_.get_serialize_size(); // assume FIXED size
+  pos_ += header_.get_serialize_size();
   return ret;
 }
 
@@ -907,7 +814,7 @@ int ObTxLogBlock::init_for_fill(const int64_t suggested_buf_size)
   int ret = OB_SUCCESS;
   // accept the suggested buffer size
   const int64_t buf_size = suggested_buf_size;
-  if (OB_NOT_NULL(replay_buf_) || !header_.is_valid()) {
+  if (OB_NOT_NULL(replay_buf_)) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(ERROR, "invalid argument", K(*this), K_(header));
   } else if (OB_FAIL(fill_buf_.init(buf_size))) {

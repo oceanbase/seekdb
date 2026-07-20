@@ -162,8 +162,6 @@ public:
   virtual int resolve(const ParseNode &parse_tree);
 };
 
-DEF_SIMPLE_CMD_RESOLVER(ObEnableSqlThrottleResolver);
-DEF_SIMPLE_CMD_RESOLVER(ObDisableSqlThrottleResolver);
 DEF_SIMPLE_CMD_RESOLVER(ObTableTTLResolver);
 DEF_SIMPLE_CMD_RESOLVER(ObChangeExternalStorageDestResolver);
 

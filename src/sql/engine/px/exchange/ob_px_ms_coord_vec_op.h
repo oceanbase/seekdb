@@ -28,7 +28,6 @@
 #include "sql/engine/px/ob_dfo_scheduler.h"
 #include "sql/engine/px/datahub/components/ob_dh_barrier.h"
 #include "sql/engine/px/datahub/components/ob_dh_winbuf.h"
-#include "sql/engine/px/datahub/components/ob_dh_rollup_key.h"
 #include "sql/engine/px/datahub/components/ob_dh_sample.h"
 #include "lib/container/ob_iarray.h"
 #include "sql/engine/px/datahub/components/ob_dh_init_channel.h"
@@ -168,7 +167,6 @@ private:
   ObWinbufPieceMsgP winbuf_piece_msg_proc_;
   ObPxQcInterruptedP interrupt_proc_;
   ObDynamicSamplePieceMsgP sample_piece_msg_proc_;
-  ObRollupKeyPieceMsgP rollup_key_piece_msg_proc_;
   ObRDWFPieceMsgP rd_wf_piece_msg_proc_;
   ObInitChannelPieceMsgP init_channel_piece_msg_proc_;
   ObReportingWFPieceMsgP reporting_wf_piece_msg_proc_;

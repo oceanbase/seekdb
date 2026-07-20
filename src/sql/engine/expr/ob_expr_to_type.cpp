@@ -169,7 +169,7 @@ int ObExprToType::calc_result_type_for_column(ObExprResType &type,
       type.set_collation_level(CS_LEVEL_NUMERIC);
     }
 
-    type.set_accuracy(ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][expect_type_]);
+    type.set_accuracy(ObAccuracy::MAX_ACCURACY2[0][expect_type_]);
 
     if (ob_is_enumset_tc(type1.get_type())) {
       // There is no need to check whether it is enumset with subschema

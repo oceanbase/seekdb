@@ -53,7 +53,6 @@ int ObExprCanAccessTrigger::can_access_trigger(const ObExpr &expr,
                                            ObDatum &res_datum)
 {
   int ret = OB_SUCCESS;
-  bool need_check = false;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
     LOG_WARN("eval arg failed", K(ret));
   } else {
@@ -65,10 +64,7 @@ int ObExprCanAccessTrigger::can_access_trigger(const ObExpr &expr,
     if (OB_ISNULL(session)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("session is NULL", K(ret));
-    } else if (OB_FAIL(session->check_feature_enable(
-              ObCompatFeatureType::MYSQL_TRIGGER_PRIV_CHECK, need_check))) {
-      LOG_WARN("failed to check feature enable", K(ret));
-    } else if (need_check) {
+    } else {
       if (OB_FAIL(session->get_session_priv_info(session_priv))) {
         LOG_WARN("faile to get session priv info", K(ret));
       } else {

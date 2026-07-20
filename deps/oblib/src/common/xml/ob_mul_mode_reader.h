@@ -21,7 +21,6 @@
 #include "ob_tree_base.h"
 #include "common/xml/ob_xml_tree.h"
 #include "ob_multi_mode_bin.h"
-#include "common/xml/ob_xml_bin.h"
 #include "lib/container/ob_array_iterator.h"
 #include "common/number/ob_number_v2.h" // for number::ObNumber
 
@@ -170,10 +169,7 @@ protected:
   bool is_eval_cur_;
   bool is_filtered_;
   ObPathSeekInfo seek_info_;
-  union {
-    ObXmlBin::iterator bin_iter_;
-    ObXmlNode::iterator tree_iter_;
-  };
+  ObXmlNode::iterator tree_iter_;
 };
 
 

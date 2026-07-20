@@ -39,7 +39,7 @@ public:
     tablet_id_(ObTabletID::INVALID_TABLET_ID), dest_tablet_id_(ObTabletID::INVALID_TABLET_ID), 
     row_store_type_(common::ENCODING_ROW_STORE), schema_version_(0), 
     snapshot_version_(0), task_id_(0), execution_id_(-1), tablet_task_id_(0), delete_lob_meta_ret_(common::OB_SUCCESS),
-    compat_mode_(lib::Worker::CompatMode::INVALID), data_format_version_(0),
+    data_format_version_(0),
     allocator_("CompleteDataPar", OB_MALLOC_NORMAL_BLOCK_SIZE)
   {}
   ~ObDeleteLobMetaRowParam() { destroy(); }
@@ -49,7 +49,7 @@ public:
   {
     return common::OB_INVALID_ID != schema_id_
            && common::OB_INVALID_ID != table_id_ && tablet_id_.is_valid() && dest_tablet_id_.is_valid()
-           && snapshot_version_ > 0 && compat_mode_ != lib::Worker::CompatMode::INVALID 
+           && snapshot_version_ > 0
            && execution_id_ >= 0 && tablet_task_id_ > 0 && data_format_version_ > 0;
   }
   
@@ -68,12 +68,11 @@ public:
     task_id_ = 0;
     execution_id_ = -1;
     tablet_task_id_ = 0;
-    compat_mode_ = lib::Worker::CompatMode::INVALID;
     data_format_version_ = 0;
   }
   TO_STRING_KV(K_(is_inited), K_(table_id), K_(tablet_id),
       K_(tablet_task_id), K_(schema_version), K_(snapshot_version), K_(task_id), 
-      K_(execution_id), K_(compat_mode), K_(data_format_version));
+      K_(execution_id), K_(data_format_version));
 public:
   bool is_inited_;
   uint64_t table_id_;
@@ -87,7 +86,6 @@ public:
   int64_t execution_id_;
   int64_t tablet_task_id_;
   int delete_lob_meta_ret_;
-  lib::Worker::CompatMode compat_mode_;
   uint64_t data_format_version_;
   common::ObArenaAllocator allocator_;
 };
@@ -103,8 +101,6 @@ public:
   bool is_inited() const { return is_inited_; }
   int fill_dag_key(char *buf, const int64_t buf_len) const override;
   int report_replica_build_status();
-  virtual lib::Worker::CompatMode get_compat_mode() const override
-  { return param_.compat_mode_; }
   void handle_init_failed_ret_code(int ret) { param_.delete_lob_meta_ret_ = ret; }
   virtual int fill_info_param(compaction::ObIBasicInfoParam *&out_param, ObIAllocator &allocator) const override;
   virtual bool is_ha_dag() const { return false; }

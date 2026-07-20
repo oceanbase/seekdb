@@ -22,9 +22,6 @@ namespace oceanbase
 {
 namespace common
 {
-#ifdef COMPILE_DLL_MODE
-TLOCAL(int64_t, Itid::tid_) = INVALID_ITID;
-#endif
 volatile int64_t max_itid = INVALID_ITID;
 volatile int64_t max_used_itid = INVALID_ITID;
 

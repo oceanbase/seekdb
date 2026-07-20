@@ -426,8 +426,7 @@ int ObTenantDDLService::init_system_variables(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", KR(ret), K(sys_params), K(params_capacity), K(var_amount));
   } else {
-    HEAP_VARS_2((char[OB_MAX_SYS_PARAM_VALUE_LENGTH], val_buf),
-                (char[OB_MAX_SYS_PARAM_VALUE_LENGTH], version_buf)) {
+    HEAP_VAR(char[OB_MAX_SYS_PARAM_VALUE_LENGTH], val_buf) {
       // name_case_mode
       if (OB_NAME_CASE_INVALID == arg.name_case_mode_) {
         sys_variable_schema.set_name_case_mode(OB_LOWERCASE_AND_INSENSITIVE);
@@ -450,8 +449,6 @@ int ObTenantDDLService::init_system_variables(
 
       int64_t set_sys_var_count = arg.sys_var_list_.count();
       bool use_default_parallel_servers_target = true;
-      bool explicit_set_compatibility_version = false;
-      bool explicit_set_security_version = false;
       bool read_only = false;
       for (int64_t j = 0; OB_SUCC(ret) && j < set_sys_var_count; ++j) {
         ObSysVarIdValue sys_var;
@@ -465,10 +462,6 @@ int ObTenantDDLService::init_system_variables(
 
           } else if (SYS_VAR_PARALLEL_SERVERS_TARGET == sys_var.sys_id_) {
             use_default_parallel_servers_target = false;
-          } else if (SYS_VAR_OB_COMPATIBILITY_VERSION == sys_var.sys_id_) {
-            explicit_set_compatibility_version = true;
-          } else if (SYS_VAR_OB_SECURITY_VERSION == sys_var.sys_id_) {
-            explicit_set_security_version = true;
           }
         }
       } // end for
@@ -477,24 +470,6 @@ int ObTenantDDLService::init_system_variables(
       if (OB_SUCC(ret)) {
         ObString read_only_value = read_only ? "1" : "0";
         SET_TENANT_VARIABLE(SYS_VAR_READ_ONLY, read_only_value);
-      }
-
-      // seekdb is MySQL-only: compatibility mode is always MYSQL.
-      if (OB_SUCC(ret)) {
-        ObString compat_mode_value = "0";
-        SET_TENANT_VARIABLE(SYS_VAR_OB_COMPATIBILITY_MODE, compat_mode_value);
-      }
-
-      if (OB_SUCC(ret)) {
-        char version[common::OB_CLUSTER_VERSION_LENGTH] = {0};
-        int64_t len = ObClusterVersion::print_version_str(
-                  version, common::OB_CLUSTER_VERSION_LENGTH, DATA_CURRENT_VERSION);
-        SET_TENANT_VARIABLE(SYS_VAR_PRIVILEGE_FEATURES_ENABLE, ObString(len, version));
-      }
-
-      if (OB_SUCC(ret)) {
-        ObString enable = "1";
-        SET_TENANT_VARIABLE(SYS_VAR__ENABLE_MYSQL_PL_PRIV_CHECK, enable);
       }
 
       // If the user does not specify parallel_servers_target when creating tenant,
@@ -521,15 +496,6 @@ int ObTenantDDLService::init_system_variables(
         int64_t default_px_servers_target = std::max(static_cast<int64_t>(3), static_cast<int64_t>(default_px_thread_count));
         VAR_INT_TO_STRING(val_buf, default_px_servers_target);
         SET_TENANT_VARIABLE(SYS_VAR_PARALLEL_SERVERS_TARGET, val_buf);
-      }
-
-      VAR_UINT_TO_STRING(version_buf, CLUSTER_CURRENT_VERSION);
-      if (OB_SUCC(ret)) {
-        SET_TENANT_VARIABLE(SYS_VAR_OB_COMPATIBILITY_VERSION, version_buf);
-      }
-
-      if (OB_SUCC(ret)) {
-        SET_TENANT_VARIABLE(SYS_VAR_OB_SECURITY_VERSION, version_buf);
       }
 
       if (FAILEDx(update_mysql_tenant_sys_var(

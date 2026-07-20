@@ -285,7 +285,6 @@ int ObSqlPlan::construct_outline_global_hint(ObLogPlan &plan, ObGlobalHint &outl
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected NULL", K(ret), K(query_ctx));
   } else {
-    outline_global_hint.opt_features_version_ = query_ctx->optimizer_features_enable_version_;
     if (NULL != (del_upd_plan = dynamic_cast<ObDelUpdLogPlan*>(&plan))) {
       if (del_upd_plan->use_pdml()) {
         outline_global_hint.pdml_option_ = ObPDMLOption::ENABLE;

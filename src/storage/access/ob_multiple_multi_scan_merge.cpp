@@ -19,7 +19,6 @@
 #include "storage/access/ob_multiple_multi_scan_merge.h"
 #include "sql/engine/px/ob_granule_iterator_op.h"
 
-#if !USE_NEW_MULTIPLE_MULTI_SCAN_MERGE
 namespace oceanbase
 {
 using namespace common;
@@ -331,4 +330,3 @@ int ObMultipleMultiScanMerge::get_current_range(ObDatumRange& current_range) con
 
 }
 }
-#endif

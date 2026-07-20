@@ -47,11 +47,6 @@ bool check_hidden_partition(const ObCheckPartitionMode check_partition_mode)
   return (CHECK_PARTITION_HIDDEN_FLAG & check_partition_mode) > 0;
 }
 
-lib::Worker::CompatMode get_worker_compat_mode(const ObCompatibilityMode &mode)
-{
-  return lib::Worker::CompatMode::MYSQL;
-}
-
 int ObIndexSchemaInfo::init(
     const ObString &index_name,
     const uint64_t index_id,
@@ -439,7 +434,6 @@ int ObSysTableChecker::check_inner_table_exist(
   int ret = OB_SUCCESS;
   exist = false;
   bool is_tenant_table = false;
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
   const int64_t table_id = table.get_table_id();
   const int64_t database_id = table.get_database_id();
   if (!is_inited_) {

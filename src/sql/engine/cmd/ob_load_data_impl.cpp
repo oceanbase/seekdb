@@ -16,9 +16,6 @@
 
 #define USING_LOG_PREFIX  SQL_ENG
 
-//#define TEST_MODE
-
-
 #include "sql/engine/cmd/ob_load_data_impl.h"
 #include "share/rc/ob_module_provider.h"
 
@@ -46,15 +43,6 @@ namespace oceanbase
 {
 namespace sql
 {
-
-#ifdef TEST_MODE
-static const int64_t INSERT_TASK_DROP_RATE = 1;
-static void delay_process_by_probability(int64_t percentage) {
-  if (OB_UNLIKELY(ObRandom::rand(1, 100) <= percentage)) {
-    ob_usleep(RPC_BATCH_INSERT_TIMEOUT_US);
-  }
-}
-#endif
 
 #define OW(statement) \
   do {\
@@ -1023,10 +1011,6 @@ int ObLoadDataSPImpl::exec_insert(ObInsertTask &task, ObInsertResult& result)
   ObSEArray<ObString, 1> single_row_values;
   sql_str.set_attr(attr);
 
-#ifdef TEST_MODE
-  delay_process_by_probability(INSERT_TASK_DROP_RATE);
-#endif
-
   if (OB_ISNULL(field_buff = static_cast<char*>(ob_malloc(field_buf_len, attr)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to ob malloc", K(ret), K(field_buf_len));
@@ -1099,16 +1083,11 @@ int ObLoadDataSPImpl::exec_insert(ObInsertTask &task, ObInsertResult& result)
 
   if (OB_SUCC(ret) && OB_FAIL(GCTX.sql_proxy_->write(sql_str.string(),
                                                      affected_rows,
-                                                     get_compatibility_mode(),
                                                      &param))) {
     LOG_WARN("fail to exec insert remote", K(ret), "task_id", task.task_id_);
   }
 
   LOG_DEBUG("LOAD DATA remote process", K(affected_rows), K(task.task_id_), K(ret));
-
-#ifdef TEST_MODE
-  delay_process_by_probability(INSERT_TASK_DROP_RATE);
-#endif
 
   if (OB_NOT_NULL(field_buff)) {
     ob_free(field_buff);

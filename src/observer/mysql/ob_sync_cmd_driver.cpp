@@ -22,7 +22,7 @@
 #include "sql/resolver/cmd/ob_variable_set_stmt.h"
 #include "observer/mysql/obmp_query.h"
 #include "rpc/obmysql/packet/ompk_row.h"
-#include "sql/engine/expr/ob_expr_xml_func_helper.h"
+#include "sql/engine/expr/ob_expr_sql_udt_utils.h"
 
 namespace oceanbase
 {
@@ -77,9 +77,6 @@ int ObSyncCmdDriver::seal_eof_packet(bool has_more_result, OMPKEOF& eofp)
   flags.status_flags_.OB_SERVER_STATUS_AUTOCOMMIT = (session_.get_local_autocommit() ? 1 : 0);
   flags.status_flags_.OB_SERVER_MORE_RESULTS_EXISTS = has_more_result;
   // flags.status_flags_.OB_SERVER_PS_OUT_PARAMS = 1;
-  // in java client or others, use slow query bit to indicate partition hit or not
-  flags.status_flags_.OB_SERVER_QUERY_WAS_SLOW = !session_.partition_hit().get_bool();
-
   eofp.set_server_status(flags);
 
   return ret;
@@ -179,7 +176,6 @@ int ObSyncCmdDriver::response_result(ObMySQLResultSet &result)
         ok_param.warnings_count_ =
             static_cast<uint16_t>(warnings_buf->get_readable_warning_count());
       }
-      ok_param.is_partition_hit_ = session_.partition_hit().get_bool();
       ok_param.has_more_result_ = result.has_more_result();
       if (need_send_eof) {
         if (OB_FAIL(sender_.send_ok_packet(session_, ok_param, &eofp))) {
@@ -199,8 +195,7 @@ int ObSyncCmdDriver::response_result(ObMySQLResultSet &result)
 
   if (!OB_SUCC(ret) && !process_ok && !retry_ctrl_.need_retry()) {
     int sret = OB_SUCCESS;
-    bool is_partition_hit = session_.partition_hit().get_bool();
-    if (OB_SUCCESS != (sret = sender_.send_error_packet(ret, NULL, is_partition_hit))) {
+    if (OB_SUCCESS != (sret = sender_.send_error_packet(ret, NULL))) {
       LOG_WARN("send error packet fail", K(sret), K(ret));
     }
   }
@@ -208,9 +203,7 @@ int ObSyncCmdDriver::response_result(ObMySQLResultSet &result)
 }
 
 // must be called before result.close()
-// two aspects:
-// - set session last_schema_version to proxy for part DDL
-// - promote local schema up to target version if last_schema_version is set
+// Keep a session-local schema fence after DDL so the next statement observes it.
 int ObSyncCmdDriver::process_schema_version_changes(
     const ObMySQLResultSet &result)
 {
@@ -221,68 +214,15 @@ int ObSyncCmdDriver::process_schema_version_changes(
     LOG_ERROR("invalid schema service", K(ret));
   } else {
     
-    // - set session last_schema_version to proxy for DDL
     if (ObStmt::is_ddl_stmt(result.get_stmt_type(), result.has_global_variable())) {
       if (OB_FAIL(ObSQLUtils::update_session_last_schema_version(*gctx_.schema_service_,
                                                                  session_))) {
         LOG_WARN("fail to update session last schema_version", K(ret));
       }
     }
-    // TODO: (xiaochu.yh) Communicate with xiyu conclusion: This logic can be moved down
-    //  > It should be that we didn't think it through at the time, it could be placed in the lower layer's result set
-    if (OB_SUCC(ret)) {
-      // - promote local schema up to target version if last_schema_version is set
-      if (result.get_stmt_type() == stmt::T_VARIABLE_SET) {
-        const ObVariableSetStmt *set_stmt = static_cast<const ObVariableSetStmt*>(result.get_cmd());
-        if (NULL != set_stmt) {
-          ObVariableSetStmt::VariableSetNode tmp_node;//just for init node
-          for (int64_t i = 0; OB_SUCC(ret) && i < set_stmt->get_variables_size(); ++i) {
-            ObVariableSetStmt::VariableSetNode &var_node = tmp_node;
-            ObString set_var_name(OB_SV_LAST_SCHEMA_VERSION);
-            if (OB_FAIL(set_stmt->get_variable_node(i, var_node))) {
-              LOG_WARN("fail to get_variable_node", K(i), K(ret));
-            } else {
-              if (ObCharset::case_insensitive_equal(var_node.variable_name_,
-                                                    set_var_name)) {
-                if (OB_FAIL(check_and_refresh_schema())) {
-                  LOG_WARN("failed to check_and_refresh_schema", K(ret));
-                }
-                break;
-              }
-            }
-          }
-        }
-      }
-    }
   }
   return ret;
 }
-// FIXME: Execute set @@ob_last_schema_version = 123456; on the target tenant;
-//        Should schema brushing be triggered afterwards?
-//        The current behavior is, as long as it is actively set through SQL, it will follow the setting.
-int ObSyncCmdDriver::check_and_refresh_schema()
-{
-  int ret = OB_SUCCESS;
-  int64_t local_version = 0;
-  int64_t last_version = 0;
-
-  if (OB_ISNULL(gctx_.schema_service_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("null schema service", K(ret), K(gctx_));
-  } else {
-    if (OB_FAIL(gctx_.schema_service_->get_tenant_refreshed_schema_version(local_version))) {
-      LOG_WARN("fail to get tenant refreshed schema version", K(ret));
-    } else if (OB_FAIL(session_.get_ob_last_schema_version(last_version))) {
-      LOG_WARN("failed to get_sys_variable", K(OB_SV_LAST_SCHEMA_VERSION));
-    } else if (local_version >= last_version) {
-      // skip
-    } else if (OB_FAIL(gctx_.schema_service_->async_refresh_schema(last_version))) {
-      LOG_WARN("failed to refresh schema", K(ret), K(last_version));
-    }
-  }
-  return ret;
-}
-
 int ObSyncCmdDriver::response_query_result(ObMySQLResultSet &result)
 {
   int ret = OB_SUCCESS;
@@ -296,13 +236,10 @@ int ObSyncCmdDriver::response_query_result(ObMySQLResultSet &result)
     LOG_WARN("session info is null", K(ret));
   } else {
     ObCharsetType charset_type = CHARSET_INVALID;
-    ObCharsetType nchar = CHARSET_INVALID;
     
     if (OB_SUCC(ret)) {
       const ObSQLSessionInfo &my_session = result.get_session();
-      if (OB_FAIL(my_session.get_ncharacter_set_connection(nchar))) {
-        LOG_WARN("get ncharacter set connection failed", K(ret));
-      } else if (OB_FAIL(my_session.get_character_set_results(charset_type))) {
+      if (OB_FAIL(my_session.get_character_set_results(charset_type))) {
         LOG_WARN("fail to get result charset", K(ret));
       } 
     }
@@ -311,17 +248,17 @@ int ObSyncCmdDriver::response_query_result(ObMySQLResultSet &result)
     for (int64_t i = 0; OB_SUCC(ret) && i < tmp_row->get_count(); i++) {
       ObObj& value = tmp_row->get_cell(i);
       if (ob_is_string_tc(value.get_type()) && CS_TYPE_INVALID != value.get_collation_type()) {
-        OZ(convert_string_value_charset(value, result, charset_type, nchar));
+        OZ(convert_string_value_charset(value, result, charset_type));
       } else if (ob_is_text_tc(value.get_type())
-                && OB_FAIL(convert_text_value_charset(value, result, charset_type, nchar))) {
+                && OB_FAIL(convert_text_value_charset(value, result, charset_type))) {
         LOG_WARN("convert text value charset failed", K(ret));
       }
       if (OB_FAIL(ret)) {
-      } else if ((value.is_lob() || value.is_json() || value.is_geometry() || value.is_roaringbitmap())
+      } else if ((value.is_lob() || value.is_json() || value.is_geometry())
                   && OB_FAIL(process_lob_locator_results(value, result))) {
         LOG_WARN("convert lob locator to longtext failed", K(ret));
       } else if ((value.is_collection_sql_type() || value.is_geometry()) &&
-                 OB_FAIL(ObXMLExprHelper::process_sql_udt_results(value, result))) {
+                 OB_FAIL(ObSqlUdtUtils::convert_result_for_client(value, result))) {
         LOG_WARN("convert udt to client format failed", K(ret), K(value.get_udt_subschema_id()));
       }
     }

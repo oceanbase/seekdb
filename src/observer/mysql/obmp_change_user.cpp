@@ -163,8 +163,6 @@ int ObMPChangeUser::process()
   } else if (OB_FAIL(session->get_query_timeout(query_timeout))) {
     LOG_WARN("fail to get query timeout", K(ret));
   } else if (FALSE_IT(THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout))) {
-  } else if (OB_FAIL(process_kill_client_session(*session))) {
-    LOG_WARN("client session has been killed", K(ret));
   } else {
     need_disconnect = false;
     get_conn()->client_cs_type_ = charset_;

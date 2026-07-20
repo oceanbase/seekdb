@@ -227,9 +227,9 @@ void obpl_mysql_wrap_get_user_var_into_subquery(ObParseCtx *parse_ctx, ParseNode
       DATA DAY DEFINER DISABLE ENABLE ENDS END_KEY EVENT EVERY EXTEND FOLLOWS FOUND FUNCTION HANDLER HOUR INTERFACE INTERVAL INVOKER JSON LANGUAGE
       MESSAGE_TEXT MINUTE MONTH MYSQL_ERRNO NATIONAL NEXT NO OF OPEN PACKAGE PRAGMA PRECEDES PRESERVE RECORD RETURNS ROW ROWTYPE
       SCHEDULE SCHEMA_NAME SECOND SECURITY SUBCLASS_ORIGIN TABLE_NAME TO USER TYPE VALUE DATETIME TIMESTAMP TIME DATE YEAR
-      TEXT NCHAR NVARCHAR BOOL BOOLEAN ENUM BIT FIXED SIGNED STARTS ROLE SUBMIT CANCEL JOB XA RECOVER COMPILE REUSE SETTINGS
+      TEXT NCHAR NVARCHAR BOOL BOOLEAN ENUM BIT FIXED SIGNED STARTS ROLE CANCEL JOB XA RECOVER COMPILE REUSE SETTINGS
       GEOMETRY POINT LINESTRING POLYGON MULTIPOINT MULTILINESTRING MULTIPOLYGON GEOMETRYCOLLECTION GEOMCOLLECTION
-      ROARINGBITMAP SERIAL
+      SERIAL
 //-----------------------------non_reserved keyword end---------------------------------------------
 %right END_KEY
 %left ELSE IF ELSEIF
@@ -282,7 +282,6 @@ void obpl_mysql_wrap_get_user_var_into_subquery(ObParseCtx *parse_ctx, ParseNode
 %type <node> create_trigger_stmt drop_trigger_stmt plsql_trigger_source
 %type <node> trigger_definition trigger_event trigger_body pl_obj_access_ref
 %type <ival> trigger_time
-%type <node> submit_job_stmt cancel_job_stmt
 %type <node> create_event_stmt event_schedule event_time_expr opt_event_time_range event_start_time event_end_time event_on_completion opt_event_on_completion opt_event_status opt_event_comment event_body_stmts event_body
 %type <node> alter_event_stmt opt_event_alter_on_schedule_completion opt_event_rename opt_event_body
 %type <node> drop_event_stmt
@@ -370,8 +369,6 @@ outer_stmt:
   | create_package_stmt { $$ = $1; }
   | create_package_body_stmt { $$ = $1; }
   | drop_package_stmt { $$ = $1; }
-  | submit_job_stmt { $$ = $1; }
-  | cancel_job_stmt { $$ = $1; }
   | create_event_stmt { $$ = $1; }  
   | alter_event_stmt { $$ = $1; }
   | drop_event_stmt { $$ = $1; }
@@ -840,7 +837,6 @@ unreserved_keyword:
   | SECURITY
   | STARTS
   | SUBCLASS_ORIGIN
-  | SUBMIT
   | TABLE_NAME
   | TO
   | TYPE
@@ -874,7 +870,6 @@ unreserved_keyword:
   | MULTIPOLYGON
   | GEOMETRYCOLLECTION
   | GEOMCOLLECTION
-  | ROARINGBITMAP
   | COMPILE
   | REUSE
   | SETTINGS
@@ -2702,11 +2697,6 @@ scalar_data_type:
     $$->int32_values_[0] = 0; /* length */
     $$->int32_values_[1] = 7; /* geometrycollection, geometry uses collation type value convey sub geometry type. */
   }
-  | ROARINGBITMAP
-  {
-    malloc_terminal_node($$, parse_ctx->mem_pool_, T_ROARINGBITMAP);
-    $$->int32_values_[0] = 0; /* length */
-  }
   | SERIAL
     {
       malloc_terminal_node($$, parse_ctx->mem_pool_, T_UINT64);
@@ -3133,30 +3123,6 @@ scond_info_item_name:
   | CURSOR_NAME { $$ = DIAG_CURSOR_NAME; }
   | MESSAGE_TEXT { $$ = DIAG_MESSAGE_TEXT; }
   | MYSQL_ERRNO { $$ = DIAG_MYSQL_ERRNO; }
-;
-
-/*****************************************************************************
- *
- *	OLAP ASYNC JOB grammar
- *
- *****************************************************************************/
-submit_job_stmt:
-    SUBMIT JOB sql_stmt
-    {
-      malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_OLAP_ASYNC_JOB_SUBMIT, 1, $3);  
-      const char *stmt_str = parse_ctx->stmt_str_ + @3.first_column;
-      int32_t str_len = @3.last_column - @3.first_column + 1;
-      $$->str_value_ = parse_strndup(stmt_str, str_len, parse_ctx->mem_pool_);
-      check_ptr($$->str_value_);
-      $$->str_len_ = str_len;
-    }
-;
-
-cancel_job_stmt:
-    CANCEL JOB STRING
-    {
-      malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_OLAP_ASYNC_JOB_CANCEL, 1, $3); 
-    }
 ;
 
 date_unit:

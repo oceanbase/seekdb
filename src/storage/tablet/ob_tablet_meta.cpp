@@ -61,7 +61,6 @@ ObTabletMeta::ObTabletMeta()
     last_persisted_committed_tablet_status_(),
     space_usage_(),
     create_schema_version_(0),
-    compat_mode_(lib::Worker::CompatMode::INVALID),
     has_next_tablet_(false),
     is_empty_shell_(false),
     micro_index_clustered_(false),
@@ -106,7 +105,6 @@ int ObTabletMeta::init(
     ddl_start_scn_ = SCN::max(ddl_info.ddl_start_scn_, old_tablet_meta.ddl_start_scn_);
     ddl_commit_scn_ = SCN::max(ddl_info.ddl_commit_scn_, old_tablet_meta.ddl_commit_scn_);
     clog_checkpoint_scn_ = SCN::max(clog_checkpoint_scn, old_tablet_meta.clog_checkpoint_scn_);
-    compat_mode_ = old_tablet_meta.compat_mode_;
     restore_state_ = old_tablet_meta.restore_state_;
     report_status_ = old_tablet_meta.report_status_;
     snapshot_version_ = MAX(snapshot_version, old_tablet_meta.snapshot_version_);
@@ -143,7 +141,6 @@ int ObTabletMeta::init(
     const common::ObTabletID &data_tablet_id,
     const share::SCN create_scn,
     const int64_t snapshot_version,
-    const lib::Worker::CompatMode compat_mode,
     const ObTabletTableStoreFlag &table_store_flag,
     const int64_t create_schema_version,
     const share::SCN &clog_checkpoint_scn,
@@ -160,11 +157,10 @@ int ObTabletMeta::init(
   } else if (OB_UNLIKELY(!tablet_id.is_valid())
       || OB_UNLIKELY(!data_tablet_id.is_valid())
       //|| OB_UNLIKELY(create_scn <= OB_INVALID_TIMESTAMP)
-      || OB_UNLIKELY(OB_INVALID_VERSION == snapshot_version)
-      || OB_UNLIKELY(lib::Worker::CompatMode::INVALID == compat_mode)) {
+      || OB_UNLIKELY(OB_INVALID_VERSION == snapshot_version)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(tablet_id), K(data_tablet_id),
-        K(create_scn), K(snapshot_version), K(clog_checkpoint_scn), K(compat_mode));
+        K(create_scn), K(snapshot_version), K(clog_checkpoint_scn));
   } else if (OB_FAIL(restore_state_.init_status())) {
     LOG_WARN("failed to init ha status", K(ret));
   } else {
@@ -179,7 +175,6 @@ int ObTabletMeta::init(
     mds_checkpoint_scn_ = mds_checkpoint_scn.is_valid() ? mds_checkpoint_scn : INIT_CLOG_CHECKPOINT_SCN;
 
     ddl_checkpoint_scn_ = INIT_CLOG_CHECKPOINT_SCN;
-    compat_mode_ = compat_mode;
     snapshot_version_ = snapshot_version;
     multi_version_start_ = snapshot_version;
     table_store_flag_ = table_store_flag;
@@ -270,7 +265,6 @@ int ObTabletMeta::init(
     ddl_start_scn_ = old_tablet_meta.ddl_start_scn_;
     ddl_commit_scn_ = old_tablet_meta.ddl_commit_scn_;
     clog_checkpoint_scn_ = SCN::max(clog_checkpoint_scn, old_tablet_meta.clog_checkpoint_scn_);
-    compat_mode_ = old_tablet_meta.compat_mode_;
     restore_state_ = old_tablet_meta.restore_state_;
     report_status_ = old_tablet_meta.report_status_;
 
@@ -330,7 +324,6 @@ int ObTabletMeta::init(
     ddl_checkpoint_scn_ = old_tablet_meta.ddl_checkpoint_scn_;
     snapshot_version_ = old_tablet_meta.snapshot_version_;
     multi_version_start_ = old_tablet_meta.multi_version_start_;
-    compat_mode_ = old_tablet_meta.compat_mode_;
     restore_state_ = old_tablet_meta.restore_state_;
     report_status_ = old_tablet_meta.report_status_;
     table_store_flag_ = old_tablet_meta.table_store_flag_;
@@ -399,7 +392,6 @@ int ObTabletMeta::assign(const ObTabletMeta &other)
     extra_medium_info_ = other.extra_medium_info_;
     space_usage_ = other.space_usage_;
     create_schema_version_ = other.create_schema_version_;
-    compat_mode_ = other.compat_mode_;
     has_next_tablet_ = other.has_next_tablet_;
     is_empty_shell_ = other.is_empty_shell_;
     micro_index_clustered_ = other.micro_index_clustered_;
@@ -436,7 +428,6 @@ void ObTabletMeta::reset()
   ddl_checkpoint_scn_.set_min();
   snapshot_version_ = OB_INVALID_TIMESTAMP;
   multi_version_start_ = OB_INVALID_TIMESTAMP;
-  compat_mode_ = lib::Worker::CompatMode::INVALID;
   restore_state_.reset();
   report_status_.reset();
   table_store_flag_.reset();
@@ -467,7 +458,6 @@ bool ObTabletMeta::is_valid() const
       && multi_version_start_ <= snapshot_version_
       && snapshot_version_ >= 0
       && snapshot_version_ != INT64_MAX
-      && compat_mode_ != lib::Worker::CompatMode::INVALID
       && max_sync_storage_schema_version_ >= 0
       && max_serialized_medium_scn_ >= 0
       && restore_state_.is_valid()
@@ -528,8 +518,6 @@ int ObTabletMeta::serialize(char *buf, const int64_t len, int64_t &pos) const
     LOG_WARN("failed to serialize snapshot version", K(ret), K(len), K(new_pos), K_(snapshot_version));
   } else if (new_pos - pos < length && OB_FAIL(serialization::encode_i64(buf, len, new_pos, multi_version_start_))) {
     LOG_WARN("failed to serialize multi version start", K(ret), K(len), K(new_pos), K_(multi_version_start));
-  } else if (new_pos - pos < length && OB_FAIL(serialization::encode_i8(buf, len, new_pos, static_cast<int8_t>(compat_mode_)))) {
-    LOG_WARN("failed to serialize compat mode", K(ret), K(len), K(new_pos));
   } else if (new_pos - pos < length && OB_FAIL(restore_state_.serialize(buf, len, new_pos))) {
     LOG_WARN("failed to serialize ha status", K(ret), K(len), K(new_pos));
   } else if (new_pos - pos < length && OB_FAIL(report_status_.serialize(buf, len, new_pos))) {
@@ -601,7 +589,6 @@ int ObTabletMeta::deserialize(
   } else if (OB_FAIL(serialization::decode_i32(buf, len, new_pos, &length_))) {
     LOG_WARN("failed to deserialize tablet meta's length", K(ret), K(len), K(new_pos));
   } else if (TABLET_META_VERSION == version_) {
-    int8_t compat_mode = -1;
     ddl_execution_id_ = 0;
     if (OB_UNLIKELY(length_ > len - pos)) {
       ret = OB_ERR_UNEXPECTED;
@@ -626,8 +613,6 @@ int ObTabletMeta::deserialize(
       LOG_WARN("failed to deserialize snapshot version", K(ret), K(len));
     } else if (new_pos - pos < length_ && OB_FAIL(serialization::decode_i64(buf, len, new_pos, &multi_version_start_))) {
       LOG_WARN("failed to deserialize multi version start", K(ret), K(len));
-    } else if (new_pos - pos < length_ && OB_FAIL(serialization::decode_i8(buf, len, new_pos, &compat_mode))) {
-      LOG_WARN("failed to deserialize compat mode", K(ret), K(len), K(new_pos));
     } else if (new_pos - pos < length_ && OB_FAIL(restore_state_.deserialize(buf, len, new_pos))) {
       LOG_ERROR("failed to deserialize restore status", K(ret), K(len), K(new_pos));
     } else if (new_pos - pos < length_ && OB_FAIL(report_status_.deserialize(buf, len, new_pos))) {
@@ -671,7 +656,6 @@ int ObTabletMeta::deserialize(
       LOG_WARN("tablet's length doesn't match standard length", K(ret), K(new_pos), K(pos), K_(length));
     } else {
       pos = new_pos;
-      compat_mode_ = static_cast<lib::Worker::CompatMode>(compat_mode);
       is_inited_ = true;
     }
     LOG_DEBUG("succeed to deserialize tablet meta", KPC(this));
@@ -698,7 +682,6 @@ int64_t ObTabletMeta::get_serialize_size() const
   size += ddl_checkpoint_scn_.get_fixed_serialize_size();
   size += serialization::encoded_length_i64(snapshot_version_);
   size += serialization::encoded_length_i64(multi_version_start_);
-  size += serialization::encoded_length_i8(static_cast<int8_t>(compat_mode_));
   size += restore_state_.get_serialize_size();
   size += report_status_.get_serialize_size();
   size += table_store_flag_.get_serialize_size();
@@ -822,7 +805,6 @@ int ObTabletMeta::update_meta_last_persisted_committed_tablet_status(
     user_data.tablet_status_ = tx_data.tablet_status_;
     user_data.create_commit_scn_ = create_commit_scn;
     user_data.create_commit_version_ = tx_data.tx_scn_.get_val_for_tx();
-    user_data.reserved_scn_ = tx_data.reserved_scn_;
     if (ObTabletStatus::DELETED == tx_data.tablet_status_) {
       //TODO(bizhu) check deleted trans scn
       user_data.delete_commit_scn_ = tx_data.tx_scn_;

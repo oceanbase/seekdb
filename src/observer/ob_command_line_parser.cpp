@@ -360,6 +360,9 @@ int ObCommandLineParser::handle_option(int option, const char* value, ObServerOp
       if (nullptr == value) {
         ret = OB_INVALID_ARGUMENT;
         MPRINT("Invalid argument, the value should not be empty of 'role'");
+      } else if (0 != ObString(value).case_compare("PRIMARY")) {
+        ret = OB_NOT_SUPPORTED;
+        MPRINT("Unsupported role '%s': seekdb supports PRIMARY only", value);
       } else {
         opts.role_.assign(value);
       }
@@ -515,7 +518,7 @@ void ObCommandLineParser::print_help() const
   MPRINT("  --log-level <level>             The server log level. Can be one of [ERROR, WARN, INFO, EDIAG, WDIAG, TRACE, DEBUG]");
   MPRINT("  --variable <key=value>          system variables, format: key=value. Note: This takes effect only during the initial startup. Can be specified multiple times.");
   MPRINT("  --parameter <key=value>         system parameters, format: key=value. Can be specified multiple times.");
-  MPRINT("  --role <role>                   server role: PRIMARY (default) or STANDBY");
+  MPRINT("  --role <role>                   server role: PRIMARY only");
   MPRINT("  --embedded                      run seekdb in embedded mode (default: off)");
   MPRINT("  --version, -V                   show version message and exit");
   MPRINT("  --help, -h                      show this message and exit");

@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/aggregate/ob_merge_groupby_vec_op.h"
-#include "sql/engine/px/ob_px_sqc_handler.h"
+#include "sql/engine/px/ob_px_util.h"
 
 namespace oceanbase
 {
@@ -31,13 +31,6 @@ OB_SERIALIZE_MEMBER((ObMergeGroupByVecSpec, ObGroupBySpec),
                     is_duplicate_rollup_expr_,
                     has_rollup_,
                     distinct_exprs_,
-                    is_parallel_,
-                    rollup_status_,
-                    rollup_id_expr_,
-                    sort_exprs_,
-                    sort_collations_,
-                    sort_cmp_funcs_,
-                    enable_encode_sort_,
                     est_rows_per_group_,
                     enable_hash_base_distinct_
 );
@@ -56,31 +49,6 @@ DEF_TO_STRING(ObMergeGroupByVecSpec)
 }
 
 
-
-int ObMergeGroupByVecSpec::register_to_datahub(ObExecContext &ctx) const
-{
-  int ret = OB_SUCCESS;
-  if (is_parallel_) {
-    if (OB_ISNULL(ctx.get_sqc_handler())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("null unexpected", K(ret));
-    } else {
-      void *buf = ctx.get_allocator().alloc(sizeof(ObRollupKeyWholeMsg::WholeMsgProvider));
-      if (OB_ISNULL(buf)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        ObRollupKeyWholeMsg::WholeMsgProvider *provider =
-          new (buf) ObRollupKeyWholeMsg::WholeMsgProvider();
-        ObSqcCtx &sqc_ctx = ctx.get_sqc_handler()->get_sqc_ctx();
-        if (OB_FAIL(
-              sqc_ctx.add_whole_msg_provider(get_id(), dtl::DH_ROLLUP_KEY_WHOLE_MSG, *provider))) {
-          LOG_WARN("fail add whole msg provider", K(ret));
-        }
-      }
-    }
-  }
-  return ret;
-}
 
 #define IS_VALID_DIFF_ROWID(id) (diff_row_idx_list_[id] != UINT32_MAX)
 
@@ -267,104 +235,11 @@ void ObMergeGroupByVecOp::reset()
   cur_group_store_row_ = nullptr;
   is_group_first_calc_ = true;
   cur_group_last_row_idx_ = -1;
-  first_batch_from_sort_ = false;
-  partial_rollup_idx_ = INT64_MAX;
-  cur_grouping_id_ = INT64_MAX;
-  use_sort_data_ = false;
-  inner_sort_.reset();
-  inner_sort_exprs_.reset();
-  global_rollup_key_.reset();
   group_processor_.reuse();
   group_rows_.reuse();
-  rollup_context_.reset();
   if (OB_NOT_NULL(arena_alloc_)) {
     arena_alloc_->reset();
   }
-}
-
-int ObMergeGroupByVecOp::init_rollup_distributor()
-{
-  int ret = OB_SUCCESS;
-  if (ObRollupStatus::ROLLUP_DISTRIBUTOR == MY_SPEC.rollup_status_) {
-    // init hyperloglog calculator to calculate ndv
-    char *buf = (char *)ctx_.get_allocator().alloc(sizeof(ObHyperLogLogCalculator)
-                                                   * (MY_SPEC.rollup_exprs_.count() + 1));
-    if (OB_ISNULL(buf)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate memory", K(ret));
-    } else if (OB_ISNULL(output_rollup_ids_ =
-                           static_cast<void **>(mem_context_->get_malloc_allocator().alloc(
-                             sizeof(void *) * MY_SPEC.max_batch_size_)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      SQL_ENG_LOG(WARN, "allocate memory failed", K(ret));
-    } else {
-      // init ndv calculator
-      ndv_calculator_ = reinterpret_cast<ObHyperLogLogCalculator *>(buf);
-      for (int64_t i = 0; i < MY_SPEC.rollup_exprs_.count() + 1 && OB_SUCC(ret); ++i) {
-        new (&ndv_calculator_[i]) ObHyperLogLogCalculator();
-        if (OB_FAIL(ndv_calculator_[i].init(&ctx_.get_allocator(), N_HYPERLOGLOG_BIT))) {
-          LOG_WARN("failed to initialize ndv calculator", K(ret));
-        }
-      }
-
-      // init sort
-      if (OB_FAIL(ret)) {
-      } else if (0 == all_groupby_exprs_.count()) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected status: all_groupby_exprs is empty", K(ret));
-      } else if (OB_FAIL((append(inner_sort_exprs_, MY_SPEC.sort_exprs_)))) {
-        LOG_WARN("failed to append exprs", K(ret));
-      } else {
-        for (int64_t i = 0; i < child_->get_spec().output_.count() && OB_SUCC(ret); ++i) {
-          ObExpr *expr = child_->get_spec().output_.at(i);
-          if (!is_contain(inner_sort_exprs_, expr)) {
-            if (OB_FAIL(inner_sort_exprs_.push_back(expr))) {
-              LOG_WARN("failed to push back expr", K(ret));
-            }
-          }
-        }
-      }
-      int64_t row_count = child_->get_spec().rows_;
-      ObSortVecOpContext context;
-      
-      context.sk_exprs_ = &inner_sort_exprs_;
-      context.sk_collations_ = &MY_SPEC.sort_collations_;
-      context.enable_encode_sortkey_ = MY_SPEC.enable_encode_sort_;
-      context.eval_ctx_ = &eval_ctx_;
-      context.exec_ctx_ = &ctx_;
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(inner_sort_.init(context))) {
-        LOG_WARN("failed to init sort", K(ret));
-      } else if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(&ctx_, MY_SPEC.px_est_size_factor_,
-                                                           row_count, row_count))) {
-        LOG_WARN("failed to get px size", K(ret));
-      } else {
-        inner_sort_.set_input_rows(row_count);
-        inner_sort_.set_input_width(MY_SPEC.width_);
-        inner_sort_.set_operator_type(MY_SPEC.type_);
-        inner_sort_.set_operator_id(MY_SPEC.id_);
-        inner_sort_.set_io_event_observer(&io_event_observer_);
-      }
-
-      // init hash values
-      if (OB_SUCC(ret)) {
-        int64_t max_size = MY_SPEC.max_batch_size_;
-        int64_t rollup_hash_vals_pos = 0;
-        int64_t sort_batch_skip_pos = rollup_hash_vals_pos + sizeof(uint64_t) * max_size;
-        int64_t max_mem_size = sort_batch_skip_pos + ObBitVector::memory_size(max_size);
-        char *buf = (char *)ctx_.get_allocator().alloc(max_mem_size);
-        if (OB_ISNULL(buf)) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to allocate memory", K(ret), K(max_size));
-        } else {
-          MEMSET(buf, 0, max_mem_size);
-          rollup_hash_vals_ = reinterpret_cast<uint64_t *>(buf);
-          sort_batch_rows_.skip_ = to_bit_vector(buf + sort_batch_skip_pos);
-        }
-      }
-    }
-  }
-  return ret;
 }
 
 int ObMergeGroupByVecOp::init_one_group(const int64_t group_id, bool fill_pos /* false */)
@@ -422,9 +297,7 @@ int ObMergeGroupByVecOp::init_group_row_meta()
 {
   int ret = OB_SUCCESS;
   group_row_meta_.reset();
-  if (OB_FAIL(group_row_meta_.init(
-        all_groupby_exprs_,
-        ROLLUP_DISTRIBUTOR == MY_SPEC.rollup_status_ ? ROLLUP_BASE_ROW_EXTRA_SIZE : 0))) {
+  if (OB_FAIL(group_row_meta_.init(all_groupby_exprs_, 0))) {
     LOG_WARN("failed to init row meta", K(ret));
   }
   return ret;
@@ -471,18 +344,13 @@ int ObMergeGroupByVecOp::rollup_init()
       LOG_WARN("failed to append group exprs", K(ret));
     } else if (OB_FAIL(append(all_groupby_exprs_, MY_SPEC.rollup_exprs_))) {
       LOG_WARN("failed to append group exprs", K(ret));
-    } else if (OB_FAIL(init_rollup_distributor())) {
-      LOG_WARN("failed to init rollup distributor", K(ret));
     } else {
       // prepare initial group
       for (int64_t i = 0; !has_dup_group_expr_ && i < MY_SPEC.is_duplicate_rollup_expr_.count(); ++i) {
         has_dup_group_expr_ = MY_SPEC.is_duplicate_rollup_expr_.at(i);
       }
       aggr_processor_.set_op_eval_infos(&eval_infos_);
-      rollup_context_.set_partial_rollup_idx(MY_SPEC.group_exprs_.count(),
-                                             all_groupby_exprs_.count());
       aggr_processor_.set_has_rollup();
-      aggr_processor_.set_rollup_ctx(&rollup_context_);
     }
   }
   return ret;
@@ -570,7 +438,6 @@ void ObMergeGroupByVecOp::destroy()
   sql_mem_processor_.unregister_profile_if_necessary();
   all_groupby_exprs_.reset();
   distinct_col_idx_in_output_.reset();
-  inner_sort_exprs_.reset();
   reset();
   arena_alloc_ = nullptr;
   group_rows_.reset();
@@ -583,10 +450,6 @@ void ObMergeGroupByVecOp::destroy()
     if (nullptr != output_stored_rows_) {
       mem_context_->get_malloc_allocator().free(output_stored_rows_);
       output_stored_rows_ = nullptr;
-    }
-    if (nullptr != output_rollup_ids_) {
-      mem_context_->get_malloc_allocator().free(output_rollup_ids_);
-      output_rollup_ids_ = nullptr;
     }
     DESTROY_CONTEXT(mem_context_);
     mem_context_ = nullptr;
@@ -621,222 +484,16 @@ int ObMergeGroupByVecOp::inner_rescan()
   return ret;
 }
 
-int ObMergeGroupByVecOp::find_candidate_key(ObRollupNDVInfo &ndv_info)
-{
-  int ret = OB_SUCCESS;
-  int64_t n_group = MY_SPEC.group_exprs_.count();
-  uint64_t candidate_ndv = 0;
-  ObPxSqcHandler *sqc_handle = ctx_.get_sqc_handler();
-  ndv_info.dop_ = 1;
-  // ndv_info.max_keys_ = 0;
-  // TODO: Three stage can't process rollup level
-  ndv_info.max_keys_ =
-    ObThreeStageAggrStage::SECOND_STAGE == MY_SPEC.aggr_stage_ ? all_groupby_exprs_.count() : 0;
-  if (OB_NOT_NULL(sqc_handle)) {
-    ObPxRpcInitSqcArgs &sqc_args = sqc_handle->get_sqc_init_arg();
-    ndv_info.dop_ = sqc_args.sqc_.get_total_task_count();
-  }
-  for (int64_t i = 0; i < MY_SPEC.rollup_exprs_.count() + 1 && OB_SUCC(ret); ++i) {
-    if (0 == n_group && i == MY_SPEC.rollup_exprs_.count()) {
-      break;
-    }
-    candidate_ndv = ndv_calculator_[i].estimate();
-    if (candidate_ndv >= ObRollupKeyPieceMsgCtx::FAR_GREATER_THAN_RATIO * ndv_info.dop_) {
-      ndv_info.ndv_ = candidate_ndv;
-      ndv_info.n_keys_ = 0 == n_group ? i + 1 : i + n_group;
-      break;
-    }
-  }
-  if (0 == ndv_info.n_keys_) {
-    // can't found, use all groupby keys
-    ndv_info.ndv_ = candidate_ndv;
-    ndv_info.n_keys_ = all_groupby_exprs_.count();
-  }
-  return ret;
-}
-
-int ObMergeGroupByVecOp::process_parallel_rollup_key(ObRollupNDVInfo &ndv_info)
-{
-  int ret = OB_SUCCESS;
-  ObRollupKeyWholeMsg whole_msg;
-  const ObRollupKeyWholeMsg *temp_whole_msg = NULL;
-  ObPxSqcHandler *handler = ctx_.get_sqc_handler();
-  if (OB_ISNULL(handler)) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("parallel merge groupby only supported in parallel execution mode",
-             K(MY_SPEC.is_parallel_));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "parallel winbuf in non-px mode");
-  } else {
-    ObPxSQCProxy &proxy = handler->get_sqc_proxy();
-    ObRollupKeyPieceMsg piece;
-    piece.op_id_ = MY_SPEC.id_;
-    piece.thread_id_ = GETTID();
-    piece.source_dfo_id_ = proxy.get_dfo_id();
-    piece.target_dfo_id_ = proxy.get_dfo_id();
-    piece.rollup_ndv_ = ndv_info;
-    if (OB_FAIL(proxy.get_dh_msg_sync(MY_SPEC.id_, dtl::DH_ROLLUP_KEY_WHOLE_MSG, piece,
-                                      temp_whole_msg,
-                                      ctx_.get_physical_plan_ctx()->get_timeout_timestamp()))) {
-      LOG_WARN("fail get rollup key msg", K(ret));
-    } else if (OB_ISNULL(temp_whole_msg)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("whole msg is unexpected", K(ret));
-    } else if (OB_FAIL(whole_msg.assign(*temp_whole_msg))) {
-      LOG_WARN("fail to assign msg", K(ret));
-    } else {
-      global_rollup_key_ = whole_msg.rollup_ndv_;
-      if (global_rollup_key_.n_keys_ > MY_SPEC.group_exprs_.count()) {
-        partial_rollup_idx_ = global_rollup_key_.n_keys_;
-        if (global_rollup_key_.n_keys_ > all_groupby_exprs_.count()) {
-          LOG_ERROR("unexpected number of partial rollup keys", K(global_rollup_key_.n_keys_));
-          global_rollup_key_.n_keys_ = all_groupby_exprs_.count();
-          partial_rollup_idx_ = all_groupby_exprs_.count();
-        }
-      } else {
-        partial_rollup_idx_ = MY_SPEC.group_exprs_.count();
-      }
-      rollup_context_.set_partial_rollup_idx(MY_SPEC.group_exprs_.count(), partial_rollup_idx_);
-    }
-    LOG_DEBUG("debug partial rollup keys", K(partial_rollup_idx_));
-  }
-  return ret;
-}
-
 int ObMergeGroupByVecOp::get_child_next_batch_row(const int64_t max_row_cnt,
                                                   const ObBatchRows *&batch_rows)
 {
   int ret = OB_SUCCESS;
   clear_evaluated_flag();
-  if (use_sort_data_) {
-    int64_t read_rows = 0;
-    batch_rows = &sort_batch_rows_;
-    if (OB_FAIL(inner_sort_.get_next_batch(max_row_cnt, read_rows))) {
-      if (OB_ITER_END == ret) {
-        ret = OB_SUCCESS;
-        const_cast<ObBatchRows *>(batch_rows)->size_ = 0;
-        const_cast<ObBatchRows *>(batch_rows)->end_ = true;
-        LOG_DEBUG("debug to get sorted row", K(ret), K(max_row_cnt),
-                  K(const_cast<ObBatchRows *>(batch_rows)->size_), K(ret));
-      } else {
-        LOG_WARN("failed to get sorted row", K(ret));
-      }
-    } else if (aggr_processor_.get_need_advance_collect()
-               && OB_FAIL(brs_holder_.save(MY_SPEC.max_batch_size_))) {
-      LOG_WARN("failed to backup child exprs", K(ret));
-    } else {
-      const_cast<ObBatchRows *>(batch_rows)->size_ = read_rows;
-      const_cast<ObBatchRows *>(batch_rows)->end_ = false;
-      if (first_batch_from_sort_) {
-        int64_t max_size = MY_SPEC.max_batch_size_;
-        const_cast<ObBatchRows *>(batch_rows)->skip_->reset(max_size);
-        first_batch_from_sort_ = false;
-      } else {
-        // if has rollup, then don't duplicate data in get_next_batch/row
-        // use unique_sort_op_ to duplicate data
-        // so skip_ don'e reset [ batch_rows->skip_->reset(max_row_cnt); ]
-      }
-      LOG_DEBUG("debug to get sorted row", K(ret), K(max_row_cnt),
-                K(const_cast<ObBatchRows *>(batch_rows)->size_));
-    }
-  } else {
-    if (OB_FAIL(child_->get_next_batch(max_row_cnt, batch_rows))) {
-      LOG_WARN("failed to get child row", K(ret));
-    } else if (aggr_processor_.get_need_advance_collect()
-               && OB_FAIL(brs_holder_.save(MY_SPEC.max_batch_size_))) {
-      LOG_WARN("failed to backup child exprs", K(ret));
-    }
-  }
-  return ret;
-}
-
-void ObMergeGroupByVecOp::sets(ObHyperLogLogCalculator &ndv_calculator, uint64_t *hash_vals,
-                               ObBitVector *skip, int64_t count)
-{
-  int ret = OB_SUCCESS;
-  for (int64_t i = 0; i < count; i++) {
-    if (OB_NOT_NULL(skip) && skip->at(i)) {
-      continue;
-    }
-    ndv_calculator.set(hash_vals[i]);
-  }
-}
-
-int ObMergeGroupByVecOp::batch_collect_local_ndvs(const ObBatchRows *child_brs)
-{
-  int ret = OB_SUCCESS;
-  int64_t n_group = MY_SPEC.group_exprs_.count();
-  // same as hash groupby
-  uint64_t hash_value_seed = 99194853094755497L;
-  ObDatum *datum = nullptr;
-  for (int64_t i = 0; i < all_groupby_exprs_.count() && OB_SUCC(ret); ++i) {
-    ObExpr *expr = all_groupby_exprs_.at(i);
-    if (OB_FAIL(expr->eval_vector(eval_ctx_, *child_brs))) {
-      LOG_WARN("failed to eval expr", K(ret));
-    } else {
-      bool is_batch_seed = (0 != i);
-      ObIVector *vec = expr->get_vector(eval_ctx_);
-      if (OB_FAIL(vec->murmur_hash_v3(*expr, rollup_hash_vals_, *child_brs->skip_,
-                                      EvalBound(child_brs->size_, child_brs->all_rows_active_),
-                                      is_batch_seed ? rollup_hash_vals_ : &hash_value_seed,
-                                      is_batch_seed))) {
-        SQL_ENG_LOG(WARN, "failed to calc hash value", K(ret));
-      }
-      if (OB_FAIL(ret)) {
-      } else if ((0 < n_group && i == n_group - 1) || i >= n_group) {
-        if (0 < n_group) {
-          sets(ndv_calculator_[i - n_group + 1], rollup_hash_vals_, child_brs->skip_,
-               child_brs->size_);
-        } else {
-          sets(ndv_calculator_[i - n_group], rollup_hash_vals_, child_brs->skip_, child_brs->size_);
-        }
-      }
-    }
-  }
-  LOG_DEBUG("debug batch collect local ndvs", K(ret));
-  return ret;
-}
-
-int ObMergeGroupByVecOp::batch_process_rollup_distributor(const int64_t max_row_cnt)
-{
-  int ret = OB_SUCCESS;
-  if (!use_sort_data_ && MY_SPEC.is_parallel_) {
-    bool need_dump = false;
-    int64_t child_batch_cnt = common::max(max_row_cnt, MY_SPEC.max_batch_size_);
-    const ObBatchRows *child_brs = nullptr;
-    // 1. get all data and calculate ndv and sort
-    while (OB_SUCC(ret)) {
-      clear_evaluated_flag();
-      if (OB_FAIL(child_->get_next_batch(child_batch_cnt, child_brs))) {
-        if (OB_ITER_END == ret) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected status: return error code iter_end", K(ret));
-        }
-        LOG_WARN("failed to get child batch", K(ret));
-      } else if (child_brs->end_ && child_brs->size_ == 0) {
-        LOG_DEBUG("reach iterating end with empty result, do nothing");
-        break;
-      } else if (OB_FAIL(try_check_status())) {
-        LOG_WARN("check status failed", K(ret));
-      } else if (OB_FAIL(batch_collect_local_ndvs(child_brs))) {
-        LOG_WARN("failed to calculate ndvs", K(ret));
-      } else if (OB_FAIL(inner_sort_.add_batch(*child_brs, need_dump))) {
-        LOG_WARN("failed to add row", K(ret));
-      }
-    }
-    // set true and get data from inner_sort_
-    // 2. wait QC to get the distribution keys
-    use_sort_data_ = true;
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(inner_sort_.sort())) {
-      LOG_WARN("failed to sort rows", K(ret));
-    } else if (OB_FAIL(find_candidate_key(global_rollup_key_))) {
-      LOG_WARN("failed to find candidate key", K(ret));
-    } else if (OB_FAIL(process_parallel_rollup_key(global_rollup_key_))) {
-      LOG_WARN("failed to process parallel", K(ret));
-    } else {
-      clear_evaluated_flag();
-      LOG_DEBUG("debug batch process distributor", K(ret));
-    }
+  if (OB_FAIL(child_->get_next_batch(max_row_cnt, batch_rows))) {
+    LOG_WARN("failed to get child row", K(ret));
+  } else if (aggr_processor_.get_need_advance_collect()
+             && OB_FAIL(brs_holder_.save(MY_SPEC.max_batch_size_))) {
+    LOG_WARN("failed to backup child exprs", K(ret));
   }
   return ret;
 }
@@ -864,9 +521,6 @@ int ObMergeGroupByVecOp::before_process_next_batch(const int64_t max_row_cnt)
   set_output_queue_cnt(0);
   if (cur_group_rowid_ > common::OB_INVALID_INDEX && OB_FAIL(brs_holder_.restore())) {
     LOG_ERROR("failed to restore previous exprs", K(ret));
-  } else if (ObRollupStatus::ROLLUP_DISTRIBUTOR == MY_SPEC.rollup_status_
-             && OB_FAIL(batch_process_rollup_distributor(max_row_cnt))) {
-    LOG_WARN("failed to process rollup distributor", K(ret));
   }
   return ret;
 }
@@ -994,9 +648,6 @@ int ObMergeGroupByVecOp::get_rollup_row(int64_t prev_group_row_id, int64_t group
       } else if (OB_FAIL(cur_gby_store_row->deep_copy_last_compact_row(*prev_gby_store_row))) {
         LOG_WARN("failed to store group row", K(ret));
       } else {
-        if (ROLLUP_DISTRIBUTOR == MY_SPEC.rollup_status_) {
-          *reinterpret_cast<int64_t *>(cur_gby_store_row->get_extra_payload()) = group_row_id;
-        }
         need_set_null = true;
         if (0 <= idx) {
           // if the expr in rollup in group by or the expr exists more than one tiem,
@@ -1012,9 +663,6 @@ int ObMergeGroupByVecOp::get_rollup_row(int64_t prev_group_row_id, int64_t group
     if (OB_FAIL(cur_gby_store_row->deep_copy_last_compact_row(*prev_gby_store_row))) {
       LOG_WARN("failed to store group row", K(ret));
     } else {
-      if (ROLLUP_DISTRIBUTOR == MY_SPEC.rollup_status_) {
-        *reinterpret_cast<int64_t *>(cur_gby_store_row->get_extra_payload()) = group_row_id;
-      }
       need_set_null = true;
       if (0 <= idx) {
         OZ(set_null(idx, cur_gby_store_row));
@@ -1054,22 +702,6 @@ int ObMergeGroupByVecOp::get_empty_rollup_row(int64_t group_row_id,
     } else if (output_groupby_rows_.count() != get_group_rows_count()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected status: store row is null", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObMergeGroupByVecOp::get_grouping_id(const ObBatchRows &brs)
-{
-  int ret = OB_SUCCESS;
-  if (ROLLUP_COLLECTOR == MY_SPEC.rollup_status_) {
-    if (OB_FAIL(MY_SPEC.rollup_id_expr_->eval_vector(eval_ctx_, brs))) {
-      LOG_WARN("Failed to calculate expression", K(ret));
-    } else if (MY_SPEC.rollup_id_expr_->get_vector(eval_ctx_)->is_null(eval_ctx_.get_batch_idx())) {
-      cur_grouping_id_ = 0;
-    } else {
-      cur_grouping_id_ =
-        MY_SPEC.rollup_id_expr_->get_vector(eval_ctx_)->get_int(eval_ctx_.get_batch_idx());
     }
   }
   return ret;
@@ -1156,13 +788,10 @@ inline int ObMergeGroupByVecOp::get_groupby_store_row(int i, LastCompactRow *&st
   return ret;
 }
 
-// In batch mode, extra_size save the grouping_id for Rollup Distributor
-// others extra_size is 0
 int ObMergeGroupByVecOp::prepare_and_save_curr_groupby_datums(const ObBatchRows &brs,
                                                               int64_t curr_group_rowid,
                                                               ObIArray<ObExpr *> &group_exprs,
-                                                              LastCompactRow *&gby_store_row,
-                                                              int64_t extra_size)
+                                                              LastCompactRow *&gby_store_row)
 {
   int ret = OB_SUCCESS;
   gby_store_row = nullptr;
@@ -1171,8 +800,6 @@ int ObMergeGroupByVecOp::prepare_and_save_curr_groupby_datums(const ObBatchRows 
   } else if (OB_FAIL(gby_store_row->save_store_row(group_exprs, brs, eval_ctx_,
                                                    group_row_meta_))) {
     LOG_WARN("failed to store group row", K(ret));
-  } else if (0 < extra_size) {
-    *reinterpret_cast<int64_t *>(gby_store_row->get_extra_payload()) = -partial_rollup_idx_;
   }
   LOG_DEBUG("finish prepare and save groupby store row", K(group_exprs), K(ret),
             K(ROWEXPR2STR(eval_ctx_, group_exprs)));
@@ -1194,11 +821,8 @@ int ObMergeGroupByVecOp::get_cur_group_row(const ObBatchRows &brs, int64_t group
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get group row", K(ret), K(group_row_id));
     } else if (OB_FAIL(prepare_and_save_curr_groupby_datums(
-                 brs, cur_group_rowid_, group_exprs, cur_gby_store_row,
-                 ROLLUP_DISTRIBUTOR == MY_SPEC.rollup_status_ ? ROLLUP_BASE_ROW_EXTRA_SIZE : 0))) {
+                 brs, cur_group_rowid_, group_exprs, cur_gby_store_row))) {
       LOG_WARN("failed to prepare group datums", K(ret));
-    } else if (OB_FAIL(get_grouping_id(brs))) {
-      LOG_WARN("failed to get grouping id", K(ret));
     }
   } else {
     if (OB_FAIL(init_one_group(group_row_id))) {
@@ -1207,48 +831,13 @@ int ObMergeGroupByVecOp::get_cur_group_row(const ObBatchRows &brs, int64_t group
       LOG_WARN("failed to get_aggr_row", K(ret));
       // performance critical: use curr_aggr_row directly, no defensive check
     } else if (OB_FAIL(prepare_and_save_curr_groupby_datums(
-                 brs, cur_group_rowid_, group_exprs, cur_gby_store_row,
-                 ROLLUP_DISTRIBUTOR == MY_SPEC.rollup_status_ ? ROLLUP_BASE_ROW_EXTRA_SIZE : 0))) {
+                 brs, cur_group_rowid_, group_exprs, cur_gby_store_row))) {
       LOG_WARN("failed to eval_aggr_param_batch");
-    } else if (OB_FAIL(get_grouping_id(brs))) {
-      LOG_WARN("failed to get grouping id", K(ret));
     }
   }
   return ret;
 }
 
-int ObMergeGroupByVecOp::set_all_null(int64_t start,
-  int64_t end,
-  int64_t max_group_idx,
-  LastCompactRow *rollup_store_row)
-{
-  int ret = OB_SUCCESS;
-  for (int64_t i = end - 1; i >= start && OB_SUCC(ret); --i) {
-    if (!MY_SPEC.is_duplicate_rollup_expr_.at(i - MY_SPEC.group_exprs_.count())) {
-      if (OB_FAIL(set_null(i, rollup_store_row))) {
-        LOG_WARN("failed to set null", K(ret), K(i));
-      }
-    }
-  }
-  return ret;
-}
-
-/*
- * generate rollup group row by start_diff_group_idx and cur_rollup_idx
- * eg: count(*)   group by c1, rollup(c2,c3,c4)
- *       c1   c2    c3    c4  count(*) rollup_group_row       output
- *        1    1     1    1
- *        1    1     1    2    ->      (1,1,1,null, 1)          N
- *        1    1     3    2    ->      (1,1,1,null, 2)          Y
- *                                     (1,1,null,null, 2)       N
- *        2    2     3    2    ->      (1,1,3,null, 1)          Y
- *                                     (1,1,null,null, 3)       Y
- *                                     (1,null,null,null, 3)    Y
- *       iter end
- *                                     (2,2,3,null, 1)          Y
- *                                     (2,2,null,null, 1)       Y
- *                                     (2,null,null,null, 1)    Y
- */
 int ObMergeGroupByVecOp::gen_rollup_group_rows(int64_t start_diff_group_idx, int64_t end_group_idx,
                                                int64_t max_group_idx, int64_t cur_group_row_id)
 {
@@ -1272,11 +861,6 @@ int ObMergeGroupByVecOp::gen_rollup_group_rows(int64_t start_diff_group_idx, int
                  prev_group_row, prev_group_store_row, need_set_null,
                  MY_SPEC.is_duplicate_rollup_expr_.at(idx - group_exprs_cnt) ? -1 : idx))) {
       LOG_WARN("failed to get one new group row", K(ret));
-    } else if (idx == end_group_idx && need_set_null
-               && end_group_idx < all_groupby_exprs_.count() - 1
-               && OB_FAIL(set_all_null(end_group_idx + 1, all_groupby_exprs_.count(), max_group_idx,
-                                       curr_group_store_row))) {
-      LOG_WARN("failed to set all null", K(ret));
     } else if (OB_FAIL(aggr_processor_.rollup_batch_process(
                  prev_group_row, curr_group_row,
                  MY_SPEC.is_duplicate_rollup_expr_.at(idx - group_exprs_cnt) ? null_idx : idx,
@@ -1311,46 +895,12 @@ int ObMergeGroupByVecOp::gen_rollup_group_rows(int64_t start_diff_group_idx, int
   return ret;
 }
 
-int ObMergeGroupByVecOp::rollup_batch_process(aggregate::AggrRowPtr aggr_row,
-                                             aggregate::AggrRowPtr rollup_row,
-                                             int64_t diff_group_idx /* -1 */,
-                                             const int64_t max_group_cnt /* INT64_MIN */)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(aggr_row) || OB_ISNULL(rollup_row)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("aggr_row is null", K(aggr_row), K(rollup_row), K(ret));
-  } else if (OB_FAIL(rollup_batch_process(aggr_row, rollup_row, diff_group_idx, max_group_cnt))) {
-    LOG_WARN("failed to batch process rollup", K(ret));
-  }
-  return ret;
-}
-
 int ObMergeGroupByVecOp::process_rollup(const int64_t diff_group_idx, bool is_end)
 {
   int ret = OB_SUCCESS;
   int64_t start_rollup_id = diff_group_idx;
   int64_t end_rollup_id = all_groupby_exprs_.count() - 1;
   int64_t max_group_idx = MY_SPEC.group_exprs_.count() - 1;
-  if (ROLLUP_DISTRIBUTOR == MY_SPEC.rollup_status_) {
-    start_rollup_id = min(partial_rollup_idx_ - 1, start_rollup_id);
-    end_rollup_id = partial_rollup_idx_ - 1;
-  } else if (ROLLUP_COLLECTOR == MY_SPEC.rollup_status_) {
-    if (0 <= cur_grouping_id_) {
-      // if grouping_id is not greater than 0, then it's not base row, don't rollup row
-      start_rollup_id = all_groupby_exprs_.count();
-    } else {
-      // if grouping_id is less than 0, then it's base row for rollup collector
-      // +1 is added for grouping_id that is added to group_exprs_
-      if (ObThreeStageAggrStage::THIRD_STAGE == MY_SPEC.aggr_stage_) {
-        partial_rollup_idx_ = -cur_grouping_id_ - 1;
-      } else {
-        partial_rollup_idx_ = -cur_grouping_id_;
-      }
-      start_rollup_id = max(start_rollup_id, partial_rollup_idx_);
-      max_group_idx = max(start_rollup_id - 1, partial_rollup_idx_);
-    }
-  }
   LOG_DEBUG("debug grouping_id", K(end_rollup_id), K(start_rollup_id), K(max_group_idx));
   if (end_rollup_id >= start_rollup_id
       && OB_FAIL(gen_rollup_group_rows(start_rollup_id, end_rollup_id, max_group_idx,
@@ -1663,8 +1213,6 @@ int ObMergeGroupByVecOp::collect_group_results(const RowMeta &row_meta,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("is null", K(group_id), K(output_groupby_rows_.count()));
       } else if (FALSE_IT(output_stored_rows_[i] = aggr_row->compact_row_)) {
-      } else if (ObRollupStatus::ROLLUP_DISTRIBUTOR == MY_SPEC.rollup_status_) {
-        output_rollup_ids_[i] = aggr_row->get_extra_payload();
       }
     }
     for (int col_id = 0; OB_SUCC(ret) && col_id < groupby_exprs.count(); col_id++) {
@@ -1684,26 +1232,6 @@ int ObMergeGroupByVecOp::collect_group_results(const RowMeta &row_meta,
     for (int i = 0; OB_SUCC(ret) && i < groupby_exprs.count(); i++) {
       if (!groupby_exprs.at(i)->is_const_expr()) {
         groupby_exprs.at(i)->set_evaluated_projected(eval_ctx_);
-      }
-    }
-    if (OB_SUCC(ret) && ObRollupStatus::ROLLUP_DISTRIBUTOR == MY_SPEC.rollup_status_) {
-      if (OB_FAIL(MY_SPEC.rollup_id_expr_->init_vector_default(eval_ctx_, output_batch_size))) {
-        LOG_WARN("failed to init vector", K(ret));
-      } else {
-        ObIVector *vec = MY_SPEC.rollup_id_expr_->get_vector(eval_ctx_);
-        VectorFormat fmt = MY_SPEC.rollup_id_expr_->get_format(eval_ctx_);
-        VecValueTypeClass vec_tc = MY_SPEC.rollup_id_expr_->get_vec_value_tc();
-        if (VEC_FIXED == fmt && VEC_TC_INTEGER == vec_tc) {
-          for (int i = 0; i < output_size; i++) {
-            static_cast<ObFixedLengthFormat<RTCType<VEC_TC_INTEGER>> *>(vec)->set_payload(
-              i, output_rollup_ids_[i], sizeof(int64_t));
-          }
-        } else {
-          for (int i = 0; i < output_size; i++) {
-            vec->set_payload(i, output_rollup_ids_[i], sizeof(int64_t));
-          }
-        }
-        MY_SPEC.rollup_id_expr_->set_evaluated_projected(eval_ctx_);  
       }
     }
   }
@@ -1781,32 +1309,6 @@ int ObMergeGroupByVecOp::reuse_group(const int64_t group_id)
     LOG_WARN("failed to get group by store row", K(ret), K(group_id));
   } else {
     store_row->reuse();
-  }
-  return ret;
-}
-
-int ObMergeGroupByVecOp::get_n_shuffle_keys_for_exchange(int64_t &shuffle_n_keys)
-{
-  int ret = OB_SUCCESS;
-  shuffle_n_keys = 0;
-  if (INT64_MAX == partial_rollup_idx_ || 0 >= partial_rollup_idx_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: invalid partial rollup idx", K(ret), K(partial_rollup_idx_));
-  } else {
-    // the keys of exchange contains group_exprs, [aggr_code], grouping_id and rollup_exprs
-    // grouping_id is append shuffle expr
-    if (MY_SPEC.group_exprs_.count() >= partial_rollup_idx_) {
-      shuffle_n_keys = partial_rollup_idx_;
-    } else {
-      if (ObThreeStageAggrStage::SECOND_STAGE == MY_SPEC.aggr_stage_) {
-        // aggr_code is groupby exprs in second stage,
-        // but it's not groupby exprs in third stage
-        shuffle_n_keys = partial_rollup_idx_;
-      } else {
-        shuffle_n_keys = partial_rollup_idx_ + 1;
-      }
-      LOG_TRACE("debug merge groupby shuffle keys", K(shuffle_n_keys));
-    }
   }
   return ret;
 }

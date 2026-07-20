@@ -24,7 +24,6 @@
 #include "sql/resolver/prepare/ob_execute_stmt.h"
 #include "sql/resolver/prepare/ob_deallocate_stmt.h"
 #include "sql/plan_cache/ob_plan_cache.h"
-#include "sql/monitor/ob_monitor_info_manager.h"
 #include "sql/optimizer/ob_optimizer.h"
 #include "sql/rewrite/ob_transform_rule.h"
 #include "sql/executor/ob_maintain_dependency_info_task.h"
@@ -372,10 +371,6 @@ private:
                        ObOutlineState &outline_state,
                        ObString &outline_content);
 
-  int handle_large_query(int tmp_ret,
-                         ObResultSet &result,
-                         bool &need_disconnect,
-                         ObExecContext &exec_ctx);
   int pc_get_plan_and_fill_result(ObPlanCacheCtx &pc_ctx,
                                   ObResultSet &result_set,
                                   int &get_plan_err,

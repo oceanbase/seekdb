@@ -3217,8 +3217,6 @@ public:
 
   inline uint64_t get_udt_set_id() const { return udt_set_id_; };
   inline void set_udt_set_id(uint64_t udt_set_id) { udt_set_id_ = udt_set_id; };
-  bool is_xml_column() const { return ob_is_xml_pl_type(get_data_type(), get_udt_id())
-                                      || ob_is_xml_sql_type(get_data_type(), get_subschema_id()); }
   bool is_geo_column() const { return get_data_type() == ObObjType::ObGeometryType; }
   bool is_pseudo_column_ref() const { return is_pseudo_column_ref_; }
   void set_is_pseudo_column_ref(bool value) { is_pseudo_column_ref_ = value; }
@@ -5180,7 +5178,6 @@ private:
 //   T_PDML_PARTITION_ID: carry partition id of row to above PDML operators.
 //   T_PSEUDO_GROUP_ID: carry the batch group id for DAS batch rescan.
 //   T_INNER_AGGR_CODE: carry aggregate code for 3-stage aggregation.
-//   T_PSEUDO_ROLLUP_ID: carry aggregate code for rollup distributor and collector.
 class ObOpPseudoColumnRawExpr : public ObTerminalRawExpr
 {
 public:

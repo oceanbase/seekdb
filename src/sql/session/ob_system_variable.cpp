@@ -2131,60 +2131,6 @@ int ObSysVarOnCheckFuncs::check_and_convert_max_min_timestamp(ObExecContext &ctx
   return ret;
 }
 
-int ObSysVarOnCheckFuncs::check_and_convert_ob_org_cluster_id(ObExecContext &ctx,
-                                                              const ObSetVar &set_var,
-                                                              const ObBasicSysVar &sys_var,
-                                                              const ObObj &in_val,
-                                                              ObObj &out_val)
-{
-  UNUSED(sys_var);
-  UNUSED(ctx);
-  int ret = OB_SUCCESS;
-  if (true == set_var.is_set_default_) { // Prohibit set ob_org_cluster_id = default
-    ret = OB_ERR_NO_DEFAULT;
-    LOG_USER_ERROR(OB_ERR_NO_DEFAULT, set_var.var_name_.length(), set_var.var_name_.ptr());
-  } else if (true == in_val.is_null()) {
-    ret = OB_ERR_WRONG_VALUE_FOR_VAR;
-    LOG_USER_ERROR(OB_ERR_WRONG_VALUE_FOR_VAR, sys_var.get_name().length(), sys_var.get_name().ptr(),
-                   (int)strlen("NULL"), "NULL");
-  } else {
-    out_val = in_val;
-  }
-  return ret;
-}
-
-int ObSysVarOnCheckFuncs::check_and_convert_sql_throttle_queue_time(ObExecContext &ctx,
-                                                                    const ObSetVar &set_var,
-                                                                    const ObBasicSysVar &sys_var,
-                                                                    const ObObj &in_val,
-                                                                    ObObj &out_val)
-{
-  UNUSED(ctx);
-  UNUSED(set_var);
-  UNUSED(sys_var);
-
-  int ret = OB_SUCCESS;
-  number::ObNumber num;
-  char buf[32] = {};
-  int64_t pos = 0;
-  double lower = .0;
-  if (true == set_var.is_set_default_) {
-    // do nothing
-  } else if (OB_FAIL(in_val.get_number(num))) {
-  } else if (OB_FAIL(num.format(buf, sizeof (buf), pos, 6))) {
-  } else if (pos >= sizeof (buf)) {
-    ret = OB_SIZE_OVERFLOW;
-  } else if (FALSE_IT(lower = atof(buf))) {
-  } else if (lower < 0.001 && num != static_cast<int64_t>(-1)) {
-    ret = OB_ERR_WRONG_VALUE_FOR_VAR;
-    LOG_USER_ERROR(OB_ERR_WRONG_VALUE_FOR_VAR, sys_var.get_name().length(), sys_var.get_name().ptr(),
-                   static_cast<int>(strlen("NULL")), "NULL");
-  } else {
-    out_val = in_val;
-  }
-  return ret;
-}
-
 int ObSysVarOnCheckFuncs::check_session_readonly(ObExecContext &ctx,
                                                  const ObSetVar &set_var,
                                                  const ObBasicSysVar &sys_var,
@@ -2246,90 +2192,6 @@ int ObSysVarOnCheckFuncs::check_locale_type_is_valid(
                                                locale_val.length(), locale_val.ptr());
   } else {
     OX(out_val.set_string(in_val.get_type(), valid_locale));
-  }
-  return ret;
-}
-
-int ObSysVarOnCheckFuncs::check_and_convert_compat_version(sql::ObExecContext &ctx,
-                                                           const ObSetVar &set_var,
-                                                           const ObBasicSysVar &sys_var,
-                                                           const common::ObObj &in_val,
-                                                           common::ObObj &out_val)
-{
-  int ret = OB_SUCCESS;
-  uint64_t compat_version = 0;
-  if (true == set_var.is_set_default_) {
-    // do nothing
-  } else if (OB_FAIL(check_and_convert_version(ctx, sys_var, in_val, compat_version))) {
-    LOG_WARN("failed to check and convert version", K(ret));
-  } else {
-    out_val.set_uint64(compat_version);
-  }
-  return ret;
-}
-
-int ObSysVarOnCheckFuncs::check_and_convert_security_version(sql::ObExecContext &ctx,
-                                                            const ObSetVar &set_var,
-                                                            const ObBasicSysVar &sys_var,
-                                                            const common::ObObj &in_val,
-                                                            common::ObObj &out_val)
-{
-  int ret = OB_SUCCESS;
-  uint64_t security_version = 0;
-  uint64_t old_version = 0;
-  ObSQLSessionInfo *session = GET_MY_SESSION(ctx);
-  if (OB_ISNULL(session)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to get session info", K(ret));
-  } else if (true == set_var.is_set_default_) {
-    // do nothing
-  } else if (OB_FAIL(check_and_convert_version(ctx, sys_var, in_val, security_version))) {
-    LOG_WARN("failed to check and convert version", K(ret));
-  } else if (OB_FAIL(session->get_security_version(old_version))) {
-    LOG_WARN("failed to get security version", K(ret));
-  } else if (OB_UNLIKELY(1UL != OB_INVALID_ID &&
-                         security_version < old_version)) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "decrease security version");
-  } else {
-    out_val.set_uint64(security_version);
-  }
-  return ret;
-}
-
-int ObSysVarOnCheckFuncs::check_and_convert_version(sql::ObExecContext &ctx,
-                                                    const ObBasicSysVar &sys_var,
-                                                    const common::ObObj &in_val,
-                                                    uint64_t &version)
-{
-  int ret = OB_SUCCESS;
-  version = 0;
-  if (ObVarcharType == in_val.get_type()) {
-    const ObString &val = in_val.get_string();
-    if (OB_FAIL(ObCompatControl::get_compat_version(val, version))) {
-      if (OB_INVALID_ARGUMENT == ret) {
-        ret = OB_ERR_WRONG_VALUE_FOR_VAR;
-        LOG_USER_ERROR(OB_ERR_WRONG_VALUE_FOR_VAR, sys_var.get_name().length(),
-                                                    sys_var.get_name().ptr(),
-                                                    val.length(), val.ptr());
-      } else {
-        LOG_WARN("failed to get compat version", K(ret), K(val));
-      }
-    }
-  } else if (ObUInt64Type == in_val.get_type()) {
-    version = in_val.get_uint64();
-  } else {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid type", K(ret), K(in_val));
-  }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(ObCompatControl::check_compat_version( version))) {
-    if (OB_INVALID_ARGUMENT == ret) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "target version");
-    } else {
-      LOG_WARN("failed to check version", K(ret), K(version));
-    }
   }
   return ret;
 }
@@ -2488,18 +2350,6 @@ int ObSysVarOnUpdateFuncs::update_sql_mode(ObExecContext &ctx,
 }
 
 
-int ObSysVarOnUpdateFuncs::update_safe_weak_read_snapshot(ObExecContext &ctx,
-    const ObSetVar &set_var,
-    const ObBasicSysVar &sys_var,
-    const common::ObObj &val)
-{
-  UNUSED(ctx);
-  UNUSED(set_var);
-  UNUSED(sys_var);
-  UNUSED(val);
-  return OB_SUCCESS;
-}
-
 int ObSysVarToObjFuncs::to_obj_charset(ObIAllocator &allocator,
                                        const ObBasicSessionInfo &session,
                                        const ObBasicSysVar &sys_var,
@@ -2549,23 +2399,6 @@ int ObSysVarToObjFuncs::to_obj_sql_mode(ObIAllocator &allocator,
   if (OB_FAIL(ob_sql_mode_to_str(sys_var.get_value(), result_obj, &allocator))) {
     LOG_WARN("fail to convert sql mode to str", K(ret), K(sys_var));
   } else {
-    result_obj.set_collation_type(ObCharset::get_system_collation());
-    result_obj.set_collation_level(sys_var.get_value().get_collation_level());
-  }
-  return ret;
-}
-
-int ObSysVarToObjFuncs::to_obj_version(ObIAllocator &allocator,
-                                       const ObBasicSessionInfo &session,
-                                       const ObBasicSysVar &sys_var,
-                                       ObObj &result_obj)
-{
-  int ret = OB_SUCCESS;
-  ObString result_str;
-  if (OB_FAIL(ObSysVarToStrFuncs::to_str_version(allocator, session, sys_var, result_str))) {
-    LOG_WARN("fail to convert to str version", K(ret), K(sys_var));
-  } else {
-    result_obj.set_varchar(result_str);
     result_obj.set_collation_type(ObCharset::get_system_collation());
     result_obj.set_collation_level(sys_var.get_value().get_collation_level());
   }
@@ -2635,24 +2468,6 @@ int ObSysVarToStrFuncs::to_str_sql_mode(ObIAllocator &allocator,
     LOG_WARN("fail to convert sql mode to str", K(ret), K(sys_var));
   } else if (OB_FAIL(str_obj.get_varchar(result_str))) {
     LOG_WARN("fail to get sql mode str", K(ret), K(str_obj), K(sys_var));
-  }
-  return ret;
-}
-
-int ObSysVarToStrFuncs::to_str_version(ObIAllocator &allocator,
-                                       const ObBasicSessionInfo &session,
-                                       const ObBasicSysVar &sys_var,
-                                       ObString &result_str)
-{
-  UNUSED(allocator);
-  UNUSED(session);
-  int ret = OB_SUCCESS;
-  uint64_t version = 0;
-  if (OB_FAIL(sys_var.get_value().get_uint64(version))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid value", K(ret), K(sys_var), K(sys_var.get_value()));
-  } else if (OB_FAIL(ObCompatControl::get_version_str(version, result_str, allocator))) {
-    LOG_WARN("fail to get version str", K(ret), K(version));
   }
   return ret;
 }

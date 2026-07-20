@@ -18,8 +18,6 @@
 #define OB_UNIQUE_INDEX_ROW_TRANSFORMER_H_
 
 #include "common/row/ob_row.h"
-#include "common/sql_mode/ob_sql_mode_utils.h"
-#include "lib/worker.h"
 
 namespace oceanbase
 {
@@ -32,13 +30,11 @@ class ObUniqueIndexRowTransformer
 public:
   static int check_need_shadow_columns(
       const common::ObNewRow &row,
-      const common::ObCompatibilityMode sql_mode,
       const int64_t unique_key_cnt,
       const common::ObIArray<int64_t> *projector,
       bool &need_shadow_columns);
   static int convert_to_unique_index_row(
       const common::ObNewRow &row,
-      const common::ObCompatibilityMode sql_mode,
       const int64_t unique_key_cnt,
       const int64_t shadow_column_cnt,
       const common::ObIArray<int64_t> *projector,
@@ -59,12 +55,10 @@ class ObUniqueIndexRowTransformerV2
 public:
   static int check_need_shadow_columns(
       const T &row,
-      const common::ObCompatibilityMode sql_mode,
       const int64_t unique_key_cnt,
       const common::ObIArray<int64_t> *projector,
       bool &need_shadow_columns);
   static int convert_to_unique_index_row(
-      const common::ObCompatibilityMode sql_mode,
       const int64_t unique_key_cnt,
       const int64_t shadow_column_cnt,
       const common::ObIArray<int64_t> *projector,
@@ -81,7 +75,6 @@ private:
 template<typename T>
 int ObUniqueIndexRowTransformerV2<T>::check_need_shadow_columns(
     const T &row,
-    const common::ObCompatibilityMode sql_mode,
     const int64_t unique_key_cnt,
     const common::ObIArray<int64_t> *projector,
     bool &need_shadow_columns)
@@ -89,10 +82,9 @@ int ObUniqueIndexRowTransformerV2<T>::check_need_shadow_columns(
   int ret = common::OB_SUCCESS;
   const int64_t cell_cnt = row.get_count();
   need_shadow_columns = false;
-  if (OB_UNLIKELY(!row.is_valid() || !common::is_mysql_compatible(sql_mode)
-      || unique_key_cnt <= 0 || unique_key_cnt > cell_cnt)) {
+  if (OB_UNLIKELY(!row.is_valid() || unique_key_cnt <= 0 || unique_key_cnt > cell_cnt)) {
     ret = common::OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "invalid arguments", K(ret), K(row), K(sql_mode), K(unique_key_cnt));
+    SHARE_LOG(WARN, "invalid arguments", K(ret), K(row), K(unique_key_cnt));
   } else if (OB_FAIL(check_mysql_need_shadow_columns(row, unique_key_cnt, projector, need_shadow_columns))) {
     SHARE_LOG(WARN, "fail to check mysql need shadow columns", K(ret));
   }
@@ -131,7 +123,6 @@ int ObUniqueIndexRowTransformerV2<T>::check_mysql_need_shadow_columns(
 
 template <typename T>
 int ObUniqueIndexRowTransformerV2<T>::convert_to_unique_index_row(
-    const common::ObCompatibilityMode sql_mode,
     const int64_t unique_key_cnt,
     const int64_t shadow_column_cnt,
     const common::ObIArray<int64_t> *projector,
@@ -140,11 +131,10 @@ int ObUniqueIndexRowTransformerV2<T>::convert_to_unique_index_row(
 {
   int ret = common::OB_SUCCESS;
   need_shadow_columns = false;
-  if (OB_UNLIKELY(!row.is_valid() || !common::is_mysql_compatible(sql_mode) || unique_key_cnt <= 0
-      || shadow_column_cnt <= 0)) {
+  if (OB_UNLIKELY(!row.is_valid() || unique_key_cnt <= 0 || shadow_column_cnt <= 0)) {
     ret = common::OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "invalid arguments", K(ret), K(row), K(sql_mode), K(unique_key_cnt), K(shadow_column_cnt));
-  } else if (OB_FAIL(check_need_shadow_columns(row, sql_mode, unique_key_cnt, projector, need_shadow_columns))) {
+    SHARE_LOG(WARN, "invalid arguments", K(ret), K(row), K(unique_key_cnt), K(shadow_column_cnt));
+  } else if (OB_FAIL(check_need_shadow_columns(row, unique_key_cnt, projector, need_shadow_columns))) {
     SHARE_LOG(WARN, "fail to check need shadow columns", K(ret));
   } else {
     const int64_t cell_cnt = row.get_count();

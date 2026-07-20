@@ -281,7 +281,6 @@ public:
   int get_sql_mode(ObSQLMode &sql_mode);
   int get_local_nls_date_format(ObString &format);
   int get_max_allowed_packet(int64_t &max_size);
-  int get_compat_version(uint64_t &compat_version);
   //get the specified solidified var
   int get_local_var(share::ObSysVarClassType var_type, ObSessionSysVar *&sys_var);
 private:

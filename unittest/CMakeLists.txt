@@ -55,7 +55,6 @@ if(APPLE)
 endif()
 
 add_subdirectory(sql)
-# add_subdirectory(libobcdc)
 add_subdirectory(backup)
 # add_subdirectory(archive)
 add_subdirectory(logservice)

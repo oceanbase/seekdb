@@ -58,7 +58,6 @@ DEF_TO_STRING(ObGlobalContext)
        KP_(config),
        KP_(config_mgr),
        KP_(tablet_operator),
-       KP_(storage_rpc_proxy),
        KP_(executor_rpc),
        KP_(sql_proxy),
        KP_(bandwidth_throttle),

@@ -168,7 +168,6 @@ int ObRevokeResolver::resolve_revoke_role_inner(
 int ObRevokeResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
-  CHECK_COMPATIBILITY_MODE(session_info_);
   ret = resolve_mysql(parse_tree);
   return ret;
 }

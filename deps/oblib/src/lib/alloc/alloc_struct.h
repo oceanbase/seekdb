@@ -631,7 +631,6 @@ bool AObject::is_last(uint32_t cells_per_block) const
 ABlock *AObject::block() const
 {
   AChunk *chunk = AChunk::ptr2chunk(this);
-  DEBUG_ASSERT(chunk->is_valid());
   ABlock *block = chunk->ptr2blk(this);
   return block;
 }

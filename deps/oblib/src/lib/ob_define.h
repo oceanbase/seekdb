@@ -179,7 +179,6 @@ const int64_t OB_INVALID_PARTITION_ID = 0;
 const int64_t OB_MIN_CLUSTER_ID = 1;
 const int64_t OB_MAX_CLUSTER_ID = 4294901759;
 const int64_t OB_INVALID_CLUSTER_ID = -1;
-const int64_t OB_INVALID_ORG_CLUSTER_ID = 0;
 const int64_t OB_MAX_ITERATOR = 16;
 const int64_t MAX_IP_ADDR_LENGTH = 46; //Adapting for Windows 
 const int64_t MAX_IP_PORT_LENGTH = MAX_IP_ADDR_LENGTH + 6;
@@ -195,7 +194,6 @@ const int64_t OB_MAX_UUID_STR_LENGTH = 36;
 const int64_t OB_MAX_CON_INFO_STR_LENGTH = 512;
 const int64_t MAX_LOAD_DATA_MESSAGE_LENGTH = 4096;
 const int64_t MAX_ZONE_LENGTH = 128;
-const int64_t MAX_GTS_NAME_LENGTH = 128;
 const int32_t MAX_ZONE_NUM = 64;
 const int32_t DEFAULT_ZONE_COUNT = 5;
 const int64_t MAX_OPERATOR_NAME_LENGTH = 32;
@@ -344,7 +342,6 @@ const int64_t OB_MAX_SET_STMT_SIZE = 256;
 const int64_t OB_MAX_NAMED_WINDOW_FUNCTION_NUM = 127;
 const uint64_t OB_DEFAULT_GROUP_CONCAT_MAX_LEN = 1024;
 const uint64_t OB_DEFAULT_EXTENDED_GROUP_CONCAT_MAX_LEN = 32767;
-const int64_t OB_DEFAULT_OB_INTERM_RESULT_MEM_LIMIT = 2LL * 1024LL * 1024LL * 1024LL;
 // The maximum table name length that the user can specify
 const int64_t OB_MAX_USER_TABLE_NAME_LENGTH_MYSQL = 64;  // Compatible with mysql, the OB code logic is greater than the time error
 const int64_t OB_MAX_EXTENDED_USER_TABLE_NAME_LENGTH = 128; // Error is reported when the logic is greater than
@@ -816,7 +813,6 @@ const char *const OB_LOCAL_CACHE_PREFIX = "localcache://";
 const char *const OB_OSS_PREFIX = "oss://";
 const char *const OB_FILE_PREFIX = "file://";
 const char *const OB_COS_PREFIX = "cos://";
-const char *const OB_S3_PREFIX = "s3://";
 const char *const OB_HDFS_PREFIX= "hdfs://";
 const char *const OB_AZBLOB_PREFIX = "azblob://";
 const char *const OB_ADAPTIVELY_APPENDABLE_FORMAT_META = "FORMAT_META";
@@ -1538,23 +1534,8 @@ const char *const OB_MYSQL_FAILOVER_MODE_OFF = "off";
 const char *const OB_MYSQL_FAILOVER_MODE_ON = "on";
 const char *const OB_MYSQL_SERVICE_NAME = "__proxy_service_name";
 
-const char *const OB_MYSQL_CLIENT_ATTRIBUTE_CAPABILITY_FLAG = "__ob_client_attribute_capability_flag";
-
-// for obproxy debug
-#define OBPROXY_DEBUG 0
 const char *const OB_SYS_TENANT_LOCALITY_STRATEGY = "sys_tenant_locality_strategy";
 const char *const OB_AUTO_LOCALITY_STRATEGY = "auto_locality_strategy";
-
-#if OBPROXY_DEBUG
-const char* const OB_MYSQL_PROXY_SESSION_ID = "session_id";
-const char* const OB_MYSQL_PROXY_TIMESTAMP = "proxy_time_stamp";
-const char* const OB_MYSQL_PROXY_SYNC_VERSION = "proxy_sync_version";
-
-const char* const OB_MYSQL_SERVER_SESSION_ID = "server_session_id";
-const char* const OB_MYSQL_SERVER_SQL = "sql";
-const char* const OB_MYSQL_SERVER_HANDLE_TIMESTAMP = "server_handle_time_stamp";
-const char* const OB_MYSQL_SERVER_RECEIVED_TIMESTAMP = "server_receive_time_stamp";
-#endif
 
 //TODO: rootservice's sequence_id for schema refresh will be removed later.
 #define OB_ROOTSERVICE_EPOCH_SHIFT 40
@@ -2204,11 +2185,6 @@ enum ObConsistencyLevel
   STRONG,
 };
 
-enum ObCompatibilityMode
-{
-  MYSQL_MODE = 0,
-};
-
 enum ObOrderType
 {
   ASC = 0,
@@ -2325,10 +2301,6 @@ inline bool is_multi_overflow64(int64_t a, int64_t b)
 #define IS_ADD_OVERFLOW64(a, b, ret) \
   ((0 == ((static_cast<uint64_t>(a) >> 63) ^ (static_cast<uint64_t>(b) >> 63))) \
    && (1 == ((static_cast<uint64_t>(a) >> 63) ^ (static_cast<uint64_t>(ret) >> 63))))
-
-#ifdef __ENABLE_PRELOAD__
-#include "lib/utility/ob_preload.h"
-#endif
 
 struct ObNumberDesc
 {

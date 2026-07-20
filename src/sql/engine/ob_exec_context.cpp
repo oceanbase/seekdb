@@ -193,9 +193,7 @@ ObExecContext::ObExecContext(ObIAllocator &allocator)
     parent_ctx_(nullptr),
     nested_level_(0),
     is_ps_prepare_stage_(false),
-    register_op_id_(OB_INVALID_ID),
     tmp_alloc_used_(false),
-    table_direct_insert_ctx_(),
     errcode_(OB_SUCCESS),
     user_logging_ctx_(),
     is_online_stats_gathering_(false),
@@ -586,8 +584,6 @@ int ObExecContext::check_status()
     ObInterruptCode &ic = GET_INTERRUPT_CODE();
     ret = ic.code_;
     LOG_WARN("px execution was interrupted", K(ic), K(ret));
-  } else if (lib::Worker::WS_OUT_OF_THROTTLE == THIS_WORKER.check_wait()) {
-    ret = OB_KILLED_BY_THROTTLING;
   } else if (OB_UNLIKELY((OB_SUCCESS != (ret = CHECK_MEM_STATUS())))) {
     LOG_WARN("Exceeded memory usage limit", K(ret));
   }
@@ -624,8 +620,6 @@ int ObExecContext::check_status_ignore_interrupt()
     LOG_WARN("session info is null", K(ret));
   } else if (my_session_->is_terminate(ret)){
     LOG_WARN("execution was terminated", K(ret));
-  } else if (lib::Worker::WS_OUT_OF_THROTTLE == THIS_WORKER.check_wait()) {
-    ret = OB_KILLED_BY_THROTTLING;
   }
   int tmp_ret = OB_SUCCESS;
   if (OB_SUCCESS != (tmp_ret = check_extra_status())) {
@@ -844,9 +838,7 @@ int ObExecContext::init_physical_plan_ctx(const ObPhysicalPlan &plan)
     }
     if (OB_SUCC(ret)) {
       if (stmt::T_SELECT == plan.get_stmt_type()) { // select has weak
-        if (sql_ctx_->is_protocol_weak_read_) {
-          consistency = WEAK;
-        } else if (OB_UNLIKELY(phy_plan_hint.read_consistency_ != INVALID_CONSISTENCY)) {
+        if (OB_UNLIKELY(phy_plan_hint.read_consistency_ != INVALID_CONSISTENCY)) {
           consistency = phy_plan_hint.read_consistency_;
         } else {
           consistency = my_session_->get_consistency_level();
@@ -854,7 +846,6 @@ int ObExecContext::init_physical_plan_ctx(const ObPhysicalPlan &plan)
       } else {
         consistency = STRONG;
       }
-      phy_plan_ctx_->set_is_direct_insert_plan(plan.get_enable_append());
       phy_plan_ctx_->set_consistency_level(consistency);
       phy_plan_ctx_->set_timeout_timestamp(start_time + plan_timeout);
       phy_plan_ctx_->set_rich_format(my_session_->use_rich_format());

@@ -450,10 +450,8 @@ static inline unsigned int ob_ismbchar(const ObCharsetInfo *cs, const unsigned c
 #define OB_COLL_ALLOW_COERCIBLE_CONV 2
 #define OB_COLL_DISALLOW_NONE 4
 #define OB_COLL_ALLOW_NUMERIC_CONV 8
-#define OB_COLL_ALLOW_NEW_CONV 16 //allow new rule set for charset aggregation
-
 #define OB_COLL_ALLOW_CONV \
-  (OB_COLL_ALLOW_SUPERSET_CONV | OB_COLL_ALLOW_COERCIBLE_CONV | OB_COLL_ALLOW_NEW_CONV)
+  (OB_COLL_ALLOW_SUPERSET_CONV | OB_COLL_ALLOW_COERCIBLE_CONV)
 #define OB_COLL_CMP_CONV (OB_COLL_ALLOW_CONV | OB_COLL_DISALLOW_NONE)
 
 typedef struct ob_uni_ctype

@@ -152,8 +152,7 @@ int ObColumnEqualEncoder::traverse(bool &suitable)
           case ObStringSC:
           case ObTextSC:
           case ObJsonSC:
-          case ObGeometrySC:
-          case ObRoaringBitmapSC: {
+          case ObGeometrySC: {
             ObStringBitMapMetaWriter *meta_writer =
                 static_cast<ObStringBitMapMetaWriter *>(&base_meta_writer_);
             if (OB_FAIL(meta_writer->init(&exc_row_ids_, ctx_->col_datums_, column_type_))) {
@@ -255,8 +254,7 @@ int ObColumnEqualEncoder::store_meta(ObBufferWriter &writer)
           case ObStringSC:
           case ObTextSC:
           case ObJsonSC:
-          case ObGeometrySC:
-          case ObRoaringBitmapSC: {
+          case ObGeometrySC: {
             ObStringBitMapMetaWriter *meta_writer =
                 static_cast<ObStringBitMapMetaWriter *>(&base_meta_writer_);
             if (OB_FAIL(meta_writer->write(buf))) {
@@ -290,4 +288,3 @@ int ObColumnEqualEncoder::store_meta(ObBufferWriter &writer)
 
 }//end namespace blocksstable
 }//end namespace oceanbase
-

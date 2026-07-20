@@ -133,7 +133,6 @@ public:
 public:
   virtual uint64_t hash() const override { return 0; }
   virtual bool operator == (const ObIDag &other) const { return get_type() == other.get_type(); }
-  virtual lib::Worker::CompatMode get_compat_mode() const override { return lib::Worker::CompatMode::MYSQL; }
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTestIndependentBaseDag);
 };

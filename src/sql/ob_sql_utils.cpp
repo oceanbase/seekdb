@@ -668,9 +668,6 @@ int ObSQLUtils::se_calc_const_expr(ObSQLSessionInfo *session,
                   LOG_WARN("failed to deep copy pl extend obj", K(ret), K(tmp_result));
                 }
               } else if (OB_NOT_NULL(out_ctx)) {
-                // fix bug:
-                // create table xml_test(id varchar2(200) primary key not null,mm xmltype constraint xmltype not null ,ls clob ,tag varchar2(2200),tt clob);
-                // insert into xml_test(id,mm) select 1,xmltype('<c>123</c>') from dual;
                 if (OB_FAIL(pl::ObUserDefinedType::deep_copy_obj(out_ctx->get_allocator(), tmp_result, result))) {
                   LOG_WARN("failed to deep copy pl extend obj", K(ret), K(tmp_result));
                 } else if (OB_ISNULL(out_ctx->get_pl_ctx())) {
@@ -2667,26 +2664,6 @@ int ObSQLUtils::merge_solidified_var_into_max_allowed_packet(const ObLocalSessio
   return ret;
 }
 
-int ObSQLUtils::merge_solidified_var_into_compat_version(const ObLocalSessionVar *local_vars,
-                                                         uint64_t &compat_version)
-{
-  int ret = OB_SUCCESS;
-  ObSessionSysVar *local_var = NULL;
-  if (NULL == local_vars) {
-    //do nothing
-  } else if (OB_FAIL(local_vars->get_local_var(SYS_VAR_OB_COMPATIBILITY_VERSION, local_var))) {
-    LOG_WARN("get local session var failed", K(ret));
-  } else if (NULL != local_var) {
-    if (ObUInt64Type == local_var->val_.get_type()) {
-      compat_version = local_var->val_.get_uint64();
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid compat version val type", K(ret), K(local_var->val_));
-    }
-  }
-  return ret;
-}
-
 void ObSQLUtils::init_type_ctx(const ObSQLSessionInfo *session, ObExprTypeCtx &type_ctx)
 {
   if (NULL != session) {
@@ -2712,7 +2689,6 @@ void ObSQLUtils::init_type_ctx(const ObSQLSessionInfo *session, ObExprTypeCtx &t
     if (OB_SUCCESS == (OTTZ_MGR.get_tenant_tz(tz_map_wrap))) {
       type_ctx.set_tz_info_map(tz_map_wrap.get_tz_map());;
     }
-    CHECK_COMPATIBILITY_MODE(session);
     bool enable_mysql_compatible_dates = false;
     if (OB_SUCCESS == check_enable_mysql_compatible_dates(session, false, /*is_ddl*/
                                                           enable_mysql_compatible_dates)) {
@@ -2832,9 +2808,8 @@ int ObSQLUtils::update_session_last_schema_version(ObMultiVersionSchemaService &
   
   if (OB_FAIL(schema_service.get_tenant_received_broadcast_version(received_schema_version))) {
     LOG_WARN("fail to get tenant received broadcast version", K(ret));
-  } else if (OB_FAIL(session_info.update_sys_variable(SYS_VAR_OB_LAST_SCHEMA_VERSION,
-                                                      received_schema_version))) {
-    LOG_WARN("fail to set session variable for last_schema_version", K(ret));
+  } else {
+    session_info.set_last_ddl_schema_version(received_schema_version);
   }
   return ret;
 }

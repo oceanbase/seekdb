@@ -50,15 +50,6 @@ class MdsDumpNode;
 class MdsTableHandle;
 
 typedef DropFirstElemtTuple<char
-#define GENERATE_TEST_MDS_TABLE
-#define _GENERATE_MDS_UNIT_(KEY_TYPE, VALUE_TYPE, NEED_MULTI_VERSION) \
-        ,MdsUnit<KEY_TYPE, VALUE_TYPE>
-#include "compile_utility/mds_register.h"
-#undef _GENERATE_MDS_UNIT_
-#undef GENERATE_TEST_MDS_TABLE
->::type UnitTestMdsTable;
-
-typedef DropFirstElemtTuple<char
 #define GENERATE_NORMAL_MDS_TABLE
 #define _GENERATE_MDS_UNIT_(KEY_TYPE, VALUE_TYPE, NEED_MULTI_VERSION) \
         ,MdsUnit<KEY_TYPE, VALUE_TYPE>
@@ -67,20 +58,17 @@ typedef DropFirstElemtTuple<char
 #undef GENERATE_NORMAL_MDS_TABLE
 >::type NormalMdsTable;
 
-typedef DropFirstElemtTuple<char
-#define GENERATE_LS_INNER_MDS_TABLE
-#define _GENERATE_MDS_UNIT_(KEY_TYPE, VALUE_TYPE, NEED_MULTI_VERSION) \
-        ,MdsUnit<KEY_TYPE, VALUE_TYPE>
-#include "compile_utility/mds_register.h"
-#undef _GENERATE_MDS_UNIT_
-#undef GENERATE_LS_INNER_MDS_TABLE
->::type LsInnerMdsTable;
+typedef ObTuple<NormalMdsTable> MdsTableTypeTuple;
 
-typedef ObTuple<UnitTestMdsTable, NormalMdsTable, LsInnerMdsTable> MdsTableTypeTuple;
+// Table ID 0 belonged to the removed unit-test table. Persistent MDS keys use
+// explicit IDs, so keep the production table at its established ID without a
+// placeholder type in the tuple.
+static constexpr uint8_t MDS_TABLE_ID_OFFSET = 1;
 
 template <typename MdsTableType>
 struct GET_MDS_TABLE_ID {
-  static constexpr uint8_t value = MdsTableTypeTuple::get_element_index<MdsTableType>();
+  static constexpr uint8_t value = MDS_TABLE_ID_OFFSET
+                                 + MdsTableTypeTuple::get_element_index<MdsTableType>();
 };
 
 template <typename MdsTableType, typename K, typename V>

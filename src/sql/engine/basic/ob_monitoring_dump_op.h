@@ -58,7 +58,6 @@ public:
 
 private:
   common::ObDatum op_name_;
-  common::ObDatum tracefile_identifier_;
   uint64_t open_time_;
   uint64_t rows_;
   uint64_t first_row_time_;
@@ -71,4 +70,3 @@ private:
 }
 
 #endif /* SRC_SQL_ENGINE_BASIC_OB_MONITORING_DUMP_OP_H_ */
-

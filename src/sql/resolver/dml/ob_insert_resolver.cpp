@@ -71,12 +71,6 @@ int ObInsertResolver::resolve(const ParseNode &parse_tree)
     insert_stmt->set_ignore(NULL != parse_tree.children_[IGNORE_NODE] ? true : false);
   }
 
-  if (OB_SUCC(ret) && 5 <= parse_tree.num_child_) {
-    if (OB_NOT_NULL(parse_tree.children_[OVERWRITE_NODE]) && 1 == parse_tree.children_[OVERWRITE_NODE]->value_) {
-      insert_stmt->set_overwrite(true);
-    }
-  }
-
   // resolve outline data hints first
   if (OB_SUCC(ret)) {
     if (OB_FAIL(resolve_outline_data_hints())) {
@@ -104,17 +98,6 @@ int ObInsertResolver::resolve(const ParseNode &parse_tree)
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "ignore with global index");
     } else { /*do nothing*/ }
-  }
-
-  if (OB_SUCC(ret) && insert_stmt->is_overwrite()) {
-    TableItem *tmp_table_item = insert_stmt->get_table_item_by_id(insert_stmt->get_insert_table_info().table_id_);
-    if (OB_ISNULL(tmp_table_item)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(tmp_table_item), K(ret));
-    } else if (!insert_stmt->value_from_select()) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "insert overwrite with values");
-    }
   }
 
   if (OB_SUCC(ret)) {

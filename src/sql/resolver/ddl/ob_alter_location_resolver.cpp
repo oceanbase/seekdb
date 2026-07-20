@@ -38,8 +38,6 @@ int get_alter_credential_field_name(ObSqlString &str, int64_t opt)
     OZ (str.append(common::HOST));
   } else if (opt == 4) {
     OZ (str.append(common::APPID));
-  } else if (opt == 5) {
-    OZ (str.append(common::REGION));
   } else {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid opt", K(ret), K(opt));
@@ -226,4 +224,3 @@ int ObAlterLocationResolver::resolve(const ParseNode &parse_tree)
 }
 } // end namespace sql
 } // end namespace oceanbase
-

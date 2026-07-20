@@ -153,7 +153,6 @@ void print_alloc_failed_msg(uint64_t ctx_id,
                             int64_t tenant_hold, int64_t tenant_limit)
 {
   if (TC_REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
-#ifdef FATAL_ERROR_HANG
     if (REACH_TIME_INTERVAL(60 * 1000 * 1000)) {
       ObMemoryDump::get_instance().generate_mod_stat_task();
 #ifdef _WIN32
@@ -162,7 +161,6 @@ void print_alloc_failed_msg(uint64_t ctx_id,
       sleep(1);     // POSIX sleep takes seconds
 #endif
     }
-#endif
     const char *msg = alloc_failed_msg();
     LOG_DBA_WARN_V2(OB_LIB_ALLOCATE_MEMORY_FAIL, OB_ALLOCATE_MEMORY_FAILED, "[oops]: alloc failed reason is that ", msg);
     _OB_LOG_RET(WARN, OB_ALLOCATE_MEMORY_FAILED, "[OOPS]: alloc failed reason is that %s. "

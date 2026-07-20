@@ -215,9 +215,6 @@ uint64_t MultimodeAlloctor::get_expected_multiple(uint64_t type)
     case T_FUN_ORA_JSON_OBJECTAGG:
       expected_multiple = ObMultiModeDefaultMagnification;
       break;
-    case T_FUN_SYS_MAKEXML:
-      expected_multiple = ObMultiModeDefaultMagnification;
-      break;
     case T_FUN_SYS_XML_EXTRACTVALUE:
       expected_multiple = ObMultiModeDefaultMagnification;
       break;
@@ -237,15 +234,6 @@ uint64_t MultimodeAlloctor::get_expected_multiple(uint64_t type)
       expected_multiple = ObMultiModeDefaultMagnification;
       break;
     case T_FUN_SYS_JSON_APPEND:
-      expected_multiple = ObMultiModeDefaultMagnification;
-      break;
-    case T_FUN_SYS_INSERTCHILDXML:
-      expected_multiple = ObMultiModeDefaultMagnification;
-      break;
-    case T_FUN_SYS_DELETEXML:
-      expected_multiple = ObMultiModeDefaultMagnification;
-      break;
-    case T_FUN_SYS_XMLSEQUENCE:
       expected_multiple = ObMultiModeDefaultMagnification;
       break;
     case T_FUN_SYS_ST_ASTEXT:

@@ -39,7 +39,6 @@ public:
       is_task_order_(false),
       is_merge_sort_(false),
       is_sort_local_order_(false),
-      is_rollup_hybrid_(false),
       is_wf_hybrid_(false),
       wf_hybrid_aggr_status_expr_(NULL),
       sort_keys_(),
@@ -153,9 +152,6 @@ public:
   void set_px_batch_op_type(log_op_def::ObLogOpType px_batch_op_type)
   { px_batch_op_type_ = px_batch_op_type; }
 
-  void set_rollup_hybrid(bool is_rollup_hybrid) { is_rollup_hybrid_ = is_rollup_hybrid; }
-  bool is_rollup_hybrid() { return is_rollup_hybrid_; }
-
   void set_wf_hybrid(bool is_wf_hybrid) { is_wf_hybrid_ = is_wf_hybrid; }
   bool is_wf_hybrid() { return is_wf_hybrid_; }
   void set_wf_hybrid_aggr_status_expr(ObRawExpr *wf_hybrid_aggr_status_expr)
@@ -238,7 +234,6 @@ private:
   bool is_task_order_; // true if the input data is task order
   bool is_merge_sort_; // true if need merge sort for partition data
   bool is_sort_local_order_; // true if need local order sort
-  bool is_rollup_hybrid_;  // for adaptive rollup pushdown
   bool is_wf_hybrid_;  // for adaptive window function pushdown
   ObRawExpr *wf_hybrid_aggr_status_expr_;
   common::ObSEArray<int64_t, 4, common::ModulePageAllocator, true> wf_hybrid_pby_exprs_cnt_array_;

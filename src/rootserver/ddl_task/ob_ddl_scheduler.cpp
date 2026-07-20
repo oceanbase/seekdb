@@ -1340,8 +1340,6 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
       case DDL_ALTER_PARTITION_BY:
       case DDL_CONVERT_TO_CHARACTER:
       case DDL_TABLE_REDEFINITION:
-      case DDL_DIRECT_LOAD:
-      case DDL_DIRECT_LOAD_INSERT:
       case DDL_MODIFY_AUTO_INCREMENT_WITH_REDEFINITION:
         if (OB_FAIL(create_table_redefinition_task(proxy,
                                                    param.type_,
@@ -2862,8 +2860,6 @@ int ObDDLScheduler::schedule_ddl_task(const ObDDLTaskRecord &record)
       case DDL_ALTER_PARTITION_BY:
       case DDL_CONVERT_TO_CHARACTER:
       case DDL_TABLE_REDEFINITION:
-      case DDL_DIRECT_LOAD:
-      case DDL_DIRECT_LOAD_INSERT:
       case DDL_MODIFY_AUTO_INCREMENT_WITH_REDEFINITION:
         ret = schedule_table_redefinition_task(record);
         break;
@@ -3120,9 +3116,6 @@ int ObDDLScheduler::schedule_table_redefinition_task(const ObDDLTaskRecord &task
     if (OB_ENTRY_EXIST != ret) {
       LOG_WARN("inner schedule task failed", K(ret), K(*redefinition_task));
     }
-  } else if (ObDDLTask::check_is_load_data(task_record.ddl_type_)
-            && OB_FAIL(manager_reg_heart_beat_task_.update_task_active_time(ObDDLTaskID(task_record.task_id_)))) {
-    LOG_WARN("register_task_time recover fail", K(ret));
   }
   LOG_INFO("ddl_scheduler schedule table redefinition task", K(ret), "ddl_event_info", ObDDLEventInfo(), K(task_record));
   if (OB_FAIL(ret) && nullptr != redefinition_task) {
@@ -3599,29 +3592,15 @@ int ObDDLScheduler::on_sstable_complement_job_reply(
     const int64_t snapshot_version,
     const int64_t execution_id,
     const int ret_code,
-    const ObDDLTaskInfo &addition_info)
+  const ObDDLTaskInfo &addition_info)
 {
   int ret = OB_SUCCESS;
-  ObDDLType ddl_type = DDL_INVALID;
-  ObDDLTaskID task_id;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!(task_key.is_valid() && snapshot_version > 0 && execution_id >= 0))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(task_key), K(snapshot_version), K(execution_id), K(ret_code));
-  } else if (OB_FAIL(task_queue_.get_task(task_key, [&ddl_type, &task_id](ObDDLTask &task) -> int {
-      ddl_type = task.get_task_type();
-      task_id = task.get_ddl_task_id();
-      return OB_SUCCESS;
-      }))) {
-    LOG_WARN("get task failed", K(ret), K(task_key));
-  } else if (is_direct_load_task(ddl_type)) {
-    ObUpdateSSTableCompleteStatusCallback callback;
-    callback.set_ret_code(ret_code);
-    if (OB_FAIL(ObSysDDLSchedulerUtil::modify_redef_task(task_id, callback))) {
-      LOG_WARN("fail to modify redef task", K(ret), K(task_id));
-    }
   } else if (OB_FAIL(task_queue_.modify_task(task_key, [&tablet_id, &svr, &snapshot_version, &execution_id, &ret_code, &addition_info](ObDDLTask &task) -> int {
         int ret = OB_SUCCESS;
         const int64_t task_type = task.get_task_type();
@@ -3728,8 +3707,6 @@ int ObDDLScheduler::notify_update_autoinc_end(const ObDDLTaskKey &task_key,
           case ObDDLType::DDL_MODIFY_COLUMN:
           case ObDDLType::DDL_ALTER_PARTITION_BY:
           case ObDDLType::DDL_TABLE_REDEFINITION:
-          case ObDDLType::DDL_DIRECT_LOAD:
-          case ObDDLType::DDL_DIRECT_LOAD_INSERT:
           case ObDDLType::DDL_MODIFY_AUTO_INCREMENT_WITH_REDEFINITION:
             if (OB_FAIL(static_cast<ObTableRedefinitionTask *>(&task)->notify_update_autoinc_finish(autoinc_val, ret_code))) {
               LOG_WARN("update complete sstable job status", K(ret));

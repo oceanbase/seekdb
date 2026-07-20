@@ -618,7 +618,6 @@ int ObTempColumnStore::init_vectors(const ObIArray<ObColumnSchemaItem> &col_arra
           CONTINUOUS_VECTOR_INIT_SWITCH(VEC_TC_GEO);
           CONTINUOUS_VECTOR_INIT_SWITCH(VEC_TC_UDT);
           CONTINUOUS_VECTOR_INIT_SWITCH(VEC_TC_COLLECTION);
-          CONTINUOUS_VECTOR_INIT_SWITCH(VEC_TC_ROARINGBITMAP);
         #undef CONTINUOUS_VECTOR_INIT_SWITCH
           default:
             ret = OB_INVALID_ARGUMENT;

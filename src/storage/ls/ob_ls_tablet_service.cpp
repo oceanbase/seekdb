@@ -38,10 +38,6 @@
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "storage/tablet/ob_tablet_service_clog_replay_executor.h"
 #include "observer/report/ob_tablet_table_updater.h" // for ObTabletTableUpdater
-#include "observer/table_load/ob_table_load_table_ctx.h"
-#include "observer/table_load/ob_table_load_coordinator.h"
-#include "observer/table_load/ob_table_load_store.h"
-#include "observer/table_load/ob_table_load_store_trans_px_writer.h"
 #include "storage/concurrency_control/ob_data_validation_service.h"
 #include "storage/concurrency_control/ob_data_validation_service.h"
 #include "storage/slog_ckpt/ob_tablet_replay_create_handler.h"
@@ -1328,7 +1324,7 @@ int ObLSTabletService::replay_create_inner_tablet(
     LOG_WARN("fail to read tablet buf from disk", K(ret), K(disk_addr));
   } else if (OB_FAIL(tablet->deserialize_for_replay(allocator, buf, buf_len, pos))) {
     LOG_WARN("fail to deserialize tablet", K(ret), KP(buf), K(buf_len));
-  } else if (OB_FAIL(tablet->init_shared_params(key.tablet_id_, tablet->get_tablet_meta().compat_mode_))) {
+  } else if (OB_FAIL(tablet->init_shared_params(key.tablet_id_))) {
     LOG_WARN("fail to init shared params", K(ret), K(key));
   }
   return ret;
@@ -1374,8 +1370,7 @@ int ObLSTabletService::replay_create_tablet(
     } else if (OB_FAIL(tablet->deserialize_for_replay(allocator, buf, buf_len, pos))) {
       LOG_WARN("fail to deserialize tablet", K(ret), KP(buf), K(buf_len), K(pos));
     } else if (FALSE_IT(time_guard.click("Deserialize"))) {
-    } else if (OB_FAIL(tablet->init_shared_params(tablet_id,
-                                                  tablet->get_tablet_meta().compat_mode_))) {
+    } else if (OB_FAIL(tablet->init_shared_params(tablet_id))) {
       LOG_WARN("failed to init shared params", K(ret), K(tablet_id));
     } else if (OB_FAIL(tablet_id_set_.set(tablet_id))) {
       LOG_WARN("fail to set tablet id set", K(ret), K(tablet_id));
@@ -1543,7 +1538,6 @@ int ObLSTabletService::create_tablet(
     const share::SCN &create_scn,
     const int64_t snapshot_version,
     const ObCreateTabletSchema &create_tablet_schema,
-    const lib::Worker::CompatMode &compat_mode,
     const bool need_create_empty_major_sstable,
     const share::SCN &clog_checkpoint_scn,
     const share::SCN &mds_checkpoint_scn,
@@ -5129,9 +5123,6 @@ void ObLSTabletService::dump_diag_info_for_old_row_loss(
       } else if (table->is_data_memtable()) {
         FLOG_INFO("Found rowkey in the memtable",
             KPC(row), KPC(static_cast<memtable::ObMemtable*>(table)));
-      } else if (table->is_direct_load_memtable()) {
-        FLOG_INFO("Found rowkey in the direct load memtable",
-            KPC(row), KPC(static_cast<ObITabletMemtable*>(table)));
       }
       if (OB_SUCC(ret) && table->is_sstable()) {
         FLOG_INFO("Dump rowkey from sstable without row cache", KPC(row), KPC(reinterpret_cast<ObSSTable*>(table)));
@@ -5450,20 +5441,6 @@ int ObLSTabletService::inner_estimate_block_count_and_row_count(
     } else if (OB_ISNULL(table)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null table", K(ret), K(tablet_iter.table_iter()));
-    } else if (table->is_direct_load_memtable()) {
-      ObDDLKV *ddl_kv = static_cast<ObDDLKV *>(table);
-      int64_t macro_block_count_in_ddl_kv = 0;
-      int64_t micro_block_count_in_ddl_kv = 0;
-      int64_t row_count_in_ddl_kv = 0;
-      if (OB_FAIL(ddl_kv->get_block_count_and_row_count(macro_block_count_in_ddl_kv,
-                                                        micro_block_count_in_ddl_kv,
-                                                        row_count_in_ddl_kv))) {
-        LOG_WARN("fail to get block count and row count", K(ret));
-      } else {
-        macro_block_count += macro_block_count_in_ddl_kv;
-        micro_block_count += micro_block_count_in_ddl_kv;
-        sstable_row_count += row_count_in_ddl_kv;
-      }
     } else if (table->is_data_memtable()) {
       memtable_row_count += static_cast<memtable::ObMemtable *>(table)->get_physical_row_cnt();
     } else if (table->is_sstable()) {
@@ -5566,7 +5543,6 @@ int ObLSTabletService::create_ls_inner_tablet(
   } else if (OB_UNLIKELY(!tablet_id.is_valid())
       || OB_UNLIKELY(!major_frozen_scn.is_valid())
       || OB_UNLIKELY(!create_tablet_schema.is_valid())
-      || OB_UNLIKELY(lib::Worker::CompatMode::INVALID == create_tablet_schema.get_compat_mode())
       || OB_UNLIKELY(!create_scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(tablet_id), K(major_frozen_scn),

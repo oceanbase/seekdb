@@ -94,28 +94,27 @@ int ObTableLockDetectFuncList::do_session_alive_detect()
 {
   int ret = OB_SUCCESS;
   ObArray<ObTableLockOwnerID *> owner_ids;
-  bool client_session_alive = true;
+  bool session_alive = true;
   ObTableLockOwnerID owner_id;
-  uint32_t client_session_id = sql::ObSQLSessionInfo::INVALID_SESSID;
+  uint32_t session_id = sql::ObSQLSessionInfo::INVALID_SESSID;
   ObArenaAllocator allocator;
 
   if (OB_FAIL(get_owner_id_list_from_table_(allocator, owner_ids))) {
     LOG_WARN("get owner_id_list from table failed", K(ret));
   } else {
     for (int64_t i = 0; i < owner_ids.count() && OB_SUCC(ret); i++) {
-      client_session_alive = true;
+      session_alive = true;
       owner_id = *owner_ids.at(i);
       if (!owner_id.is_valid()) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("owner_id is invalid", K(ret), K(owner_id));
-      } else if (OB_FAIL(owner_id.convert_to_sessid(client_session_id))) {
+      } else if (OB_FAIL(owner_id.convert_to_sessid(session_id))) {
         LOG_WARN("get client_sesion_id failed", K(ret), K(owner_id));
-      } else if (OB_FAIL(do_session_alive_detect_for_a_client_session_(client_session_id,
-                                                                       client_session_alive))) {
-        LOG_WARN("do session alive detect for a client_session failed", K(client_session_id));
-      } else if (!client_session_alive) {
+      } else if (OB_FAIL(detect_session_alive(session_id, session_alive))) {
+        LOG_WARN("detect session alive failed", K(session_id));
+      } else if (!session_alive) {
         LOG_INFO(
-          "find client session is not alive, we will clean all recodrs of it later", K(ret), K(client_session_id), K(owner_id));
+          "find session is not alive, we will clean all recodrs of it later", K(ret), K(session_id), K(owner_id));
         ObTableLockDetector::remove_lock_by_owner_id(owner_id);
       }
     }
@@ -129,93 +128,6 @@ int ObTableLockDetectFuncList::do_session_alive_detect()
       allocator.free(ptr);
     }
   }
-  return ret;
-}
-
-int ObTableLockDetectFuncList::do_session_alive_detect_for_a_client_session_(const int64_t &client_session_id,
-                                                                             bool &all_alive)
-{
-  int ret = OB_SUCCESS;
-  ObArray<ObTuple<ObAddr, int64_t>> server_session_list;
-  all_alive = true;
-  if (OB_FAIL(get_active_server_session_list_(client_session_id, server_session_list, all_alive))) {
-    LOG_WARN("get server address list failed", K(client_session_id));
-  } else if (all_alive) {
-    for (int64_t i = 0; i < server_session_list.count() && OB_SUCC(ret) && all_alive; i++) {
-      bool server_session_is_alive = true;
-      if (OB_FAIL(do_session_alive_detect_for_a_server_session_(
-            server_session_list[i].element<0>(), server_session_list[i].element<1>(), server_session_is_alive))) {
-        if (server_session_is_alive) {
-          LOG_WARN("retry sending rpc until reaching the maximumn retry times, still getting error",
-                   K(server_session_list[i]));
-        }
-      }
-      if (!server_session_is_alive) {
-        all_alive = false;
-      }
-    }
-  }
-  return ret;
-}
-
-int ObTableLockDetectFuncList::do_session_alive_detect_for_a_server_session_(const ObAddr &addr,
-                                                                             const int64_t &server_session_id,
-                                                                             bool &is_alive)
-{
-  int ret = OB_SUCCESS;
-  is_alive = true;
-  // seekdb single-node: all sessions are local, no RPC needed.
-  ret = detect_session_alive(static_cast<uint32_t>(server_session_id), is_alive);
-  return ret;
-}
-
-int ObTableLockDetectFuncList::get_active_server_session_list_(const int64_t &client_session_id,
-                                                               ObIArray<ObTuple<ObAddr, int64_t>> &server_session_list,
-                                                               bool &all_alive)
-{
-  int ret = OB_SUCCESS;
-  char where_cond[128] = {'\0'};
-  ObArray<ObTuple<int64_t>> server_session_id_list;
-  char full_table_name[OB_MAX_TABLE_NAME_BUF_LENGTH];
-  all_alive = true;
-
-  if (OB_FAIL(databuff_printf(full_table_name,
-                              OB_MAX_TABLE_NAME_BUF_LENGTH,
-                              "%s.%s",
-                              OB_SYS_DATABASE_NAME,
-                              OB_ALL_CLIENT_TO_SERVER_SESSION_INFO_TNAME))) {
-    LOG_WARN("generate full table_name failed", K(OB_SYS_DATABASE_NAME), K(OB_ALL_CLIENT_TO_SERVER_SESSION_INFO_TNAME));
-  } else if (OB_FAIL(databuff_printf(where_cond, 128, "WHERE client_session_id = %ld", client_session_id))) {
-    LOG_WARN("generate where condition failed", K(client_session_id));
-  } else if (OB_FAIL(ObTableAccessHelper::read_multi_row(
-                                                         {"server_session_id"},
-                                                         full_table_name,
-                                                         where_cond,
-                                                         server_session_id_list))) {
-    if (OB_ITER_END == ret) {
-      ret = OB_SUCCESS;
-    } else {
-      LOG_WARN("read from inner table __all_client_to_server_session_info failed", K(ret));
-    }
-  } else {
-    const ObAddr &self_addr = GCTX.self_addr();
-    for (int64_t i = 0; i < server_session_id_list.count() && OB_SUCC(ret); i++) {
-      const int64_t session_id = server_session_id_list[i].element<0>();
-      // Note: svr_ip/svr_port columns have been removed from __all_client_to_server_session_info.
-      // This branch treats all records as local sessions and checks liveness via local session_mgr.
-      // (In this repo, location service for vtable/ls is simplified to local-only.)
-      if (OB_FAIL(server_session_list.push_back(ObTuple<ObAddr, int64_t>(self_addr, session_id)))) {
-        LOG_WARN("add server_session_id into list failed", K(ret), K(self_addr), K(session_id));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObTableLockDetectFuncList::check_server_is_online_(const ObString &svr_ip, const int64_t svr_port, bool &is_online)
-{
-  int ret = OB_SUCCESS;
-  is_online = true;
   return ret;
 }
 
@@ -499,8 +411,8 @@ int ObTableLockDetector::check_lock_id_exist_in_inner_table(sql::ObSQLSessionInf
 }
 
 int ObTableLockDetector::check_lock_owner_exist_in_inner_table(sql::ObSQLSessionInfo *session_info,
-                                                               const uint32_t client_session_id,
-                                                               const uint64_t client_session_create_ts,
+                                                               const uint32_t session_id,
+                                                               const uint64_t session_create_ts,
                                                                bool &exist)
 {
   int ret = OB_SUCCESS;
@@ -517,15 +429,15 @@ int ObTableLockDetector::check_lock_owner_exist_in_inner_table(sql::ObSQLSession
     }
   }
 
-  if (client_session_create_ts <= 0) {
-    // if client_session_create_ts <= 0, means there's no accurate client_session_create_ts
-    // (from lock live detector), so we only judge client_session_id in this situation
+  if (session_create_ts <= 0) {
+    // if session_create_ts <= 0, means there's no accurate session_create_ts
+    // (from lock live detector), so we only judge session_id in this situation
     OZ (where_cond.assign_fmt(
-        "(owner_id & %" PRId64 ") = %" PRIu32, ObTableLockOwnerID::CLIENT_SESS_ID_MASK, client_session_id));
+        "(owner_id & %" PRId64 ") = %" PRIu32, ObTableLockOwnerID::SESS_ID_MASK, session_id));
     OZ (check_lock_exist_(inner_conn, where_cond, exist));
   } else {
     ObTableLockOwnerID lock_owner;
-    OZ (lock_owner.convert_from_client_sessid(client_session_id, client_session_create_ts));
+    OZ (lock_owner.convert_from_session_id(session_id, session_create_ts));
     OZ (check_lock_exist_(inner_conn, where_cond, lock_owner, exist));
   }
 

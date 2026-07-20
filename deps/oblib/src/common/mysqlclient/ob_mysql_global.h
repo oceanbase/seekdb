@@ -261,7 +261,6 @@ enum EMySQLFieldType
   MYSQL_TYPE_OB_UROWID = 209,
   MYSQL_TYPE_ORA_BLOB = 210,
   MYSQL_TYPE_ORA_CLOB = 211,
-  MYSQL_TYPE_ROARINGBITMAP = 215,
   MYSQL_TYPE_OB_VECTOR = 216, // used in cdc/oms not used in client
   MYSQL_TYPE_OB_ARRAY = 217, // used in cdc/oms not used in client
   MYSQL_TYPE_OB_MAP = 218, // used in cdc/oms not used in client
@@ -360,9 +359,6 @@ inline const char *get_emysql_field_type_str(const obmysql::EMySQLFieldType &typ
       break;
     case obmysql::MYSQL_TYPE_OB_RAW:
       str = "MYSQL_TYPE_OB_RAW";
-      break;
-    case obmysql::MYSQL_TYPE_ROARINGBITMAP:
-      str = "MYSQL_TYPE_ROARINGBITMAP";
       break;
     case obmysql::MYSQL_TYPE_OB_VECTOR:
       str = "MYSQL_TYPE_OB_VECTOR";

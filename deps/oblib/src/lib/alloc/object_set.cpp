@@ -794,7 +794,6 @@ AObject *ObjectSetV2::alloc_object(const uint64_t size, const ObMemAttr &attr)
     }
   } else {
     const int sc_idx = calc_sc_idx(all_size);
-    DEBUG_ASSERT(sc_idx < NORMAL_SC_CNT);
     const int bin_size = BIN_SIZE_MAP(sc_idx);
     SizeClass &sc = scs[sc_idx];
     if (!sc.lock_.lock(ALLOC_LOCK_TIMEOUT_US)) {
@@ -879,7 +878,6 @@ void ObjectSetV2::do_free_object(AObject *obj, ABlock *block)
       return;
     }
     const int sc_idx = block->sc_idx_;
-    DEBUG_ASSERT(sc_idx < NORMAL_SC_CNT);
     bool need_free = false;
     {
       SizeClass &sc = scs[sc_idx];

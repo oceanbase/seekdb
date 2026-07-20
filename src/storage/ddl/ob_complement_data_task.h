@@ -67,7 +67,7 @@ public:
     orig_table_id_(common::OB_INVALID_ID),
     dest_table_id_(common::OB_INVALID_ID), orig_tablet_id_(ObTabletID::INVALID_TABLET_ID), dest_tablet_id_(ObTabletID::INVALID_TABLET_ID), 
     row_store_type_(common::ENCODING_ROW_STORE), orig_schema_version_(0), dest_schema_version_(0),
-    snapshot_version_(0), task_id_(0), execution_id_(-1), tablet_task_id_(0), compat_mode_(lib::Worker::CompatMode::INVALID), data_format_version_(0),
+    snapshot_version_(0), task_id_(0), execution_id_(-1), tablet_task_id_(0), data_format_version_(0),
     orig_schema_tablet_size_(0), user_parallelism_(0), concurrent_cnt_(0), ranges_(),
     is_no_logging_(false), dest_lob_meta_tablet_id_(), allocator_("CompleteDataPar", OB_MALLOC_NORMAL_BLOCK_SIZE)
   {}
@@ -83,7 +83,7 @@ public:
   {
     return common::OB_INVALID_ID != orig_table_id_
            && common::OB_INVALID_ID != dest_table_id_ && orig_tablet_id_.is_valid() && dest_tablet_id_.is_valid()
-           && snapshot_version_ > 0 && compat_mode_ != lib::Worker::CompatMode::INVALID && execution_id_ >= 0 && tablet_task_id_ > 0 
+           && snapshot_version_ > 0 && execution_id_ >= 0 && tablet_task_id_ > 0
            && data_format_version_ > 0 && orig_schema_tablet_size_ > 0 && user_parallelism_ > 0;
   }
 
@@ -106,7 +106,6 @@ public:
     task_id_ = 0;
     execution_id_ = -1;
     tablet_task_id_ = 0;
-    compat_mode_ = lib::Worker::CompatMode::INVALID;
     data_format_version_ = 0;
     orig_schema_tablet_size_ = 0;
     user_parallelism_ = 0;
@@ -129,16 +128,10 @@ public:
   TO_STRING_KV(K_(is_inited),
       K_(orig_table_id), K_(dest_table_id), K_(orig_tablet_id), K_(dest_tablet_id), K_(orig_schema_version), 
       K_(tablet_task_id), K_(dest_schema_version), K_(snapshot_version), K_(task_id),
-      K_(execution_id), K_(compat_mode), K_(data_format_version), K_(orig_schema_tablet_size),K_(user_parallelism),
+      K_(execution_id), K_(data_format_version), K_(orig_schema_tablet_size),K_(user_parallelism),
       K_(concurrent_cnt), K_(ranges), K_(is_no_logging), K_(direct_load_type), K_(tablet_param), K_(lob_meta_tablet_param));
 private:
   int fill_tablet_param();
-  int get_complement_parallel_mode(
-      const uint64_t table_id,
-      const int64_t schema_version,
-      const lib::Worker::CompatMode compat_mode,
-      const bool is_recover_table,
-      bool &is_allow_parallel);
 public:
   bool is_inited_;
   uint64_t orig_table_id_;
@@ -152,7 +145,6 @@ public:
   int64_t task_id_;
   int64_t execution_id_;
   int64_t tablet_task_id_;
-  lib::Worker::CompatMode compat_mode_;
   int64_t data_format_version_;
   int64_t orig_schema_tablet_size_;
   int64_t user_parallelism_;  /* user input parallelism */
@@ -230,8 +222,6 @@ public:
   int fill_info_param(compaction::ObIBasicInfoParam *&out_param, ObIAllocator &allocator) const override;
 
   int fill_dag_key(char *buf, const int64_t buf_len) const override;
-  virtual lib::Worker::CompatMode get_compat_mode() const override
-  { return param_.compat_mode_; }
   virtual int create_first_task() override;
   virtual bool ignore_warning() override;
   virtual bool is_ha_dag() const override { return false; }

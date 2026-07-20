@@ -38,11 +38,6 @@ class ObITabletScan;
 class ObMysqlRandom;
 } // end of namespace common
 
-namespace obcall
-{
-class ObStorageRpcProxy;
-} // end of namespace rpc
-
 namespace rootserver
 {
 class ObRootService;
@@ -127,7 +122,6 @@ struct ObGlobalContext
   common::ObConfigManager *config_mgr_;
   share::ObTabletTableOperator *tablet_operator_;
   share::ObSQLiteConnectionPool *meta_db_pool_;
-  obcall::ObStorageRpcProxy *storage_rpc_proxy_;
   sql::ObExecutorRpcImpl *executor_rpc_;
   common::ObMySQLProxy *sql_proxy_;
   common::ObMySQLProxy *ddl_sql_proxy_;

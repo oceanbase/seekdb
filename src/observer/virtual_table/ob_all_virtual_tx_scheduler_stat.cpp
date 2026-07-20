@@ -97,16 +97,13 @@ int ObGVTxSchedulerStat::inner_get_next_row(common::ObNewRow *&row)
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
         case SESSION_ID:
-          cur_row_.cells_[i].set_int(tx_scheduler_stat.client_sid_);
+          cur_row_.cells_[i].set_int(tx_scheduler_stat.sess_id_);
           break;
         case TX_ID:
           cur_row_.cells_[i].set_int(tx_scheduler_stat.tx_id_.get_id());
           break;
         case STATE:
           cur_row_.cells_[i].set_int(tx_scheduler_stat.state_);
-          break;
-        case CLUSTER_ID:
-          cur_row_.cells_[i].set_int(tx_scheduler_stat.cluster_id_);
           break;
         case WRITE_STATE:
           if (tx_scheduler_stat.has_write_state_) {

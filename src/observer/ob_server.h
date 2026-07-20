@@ -63,7 +63,6 @@
 #include "storage/ddl/ob_ddl_heart_beat_task.h"
 
 #include "storage/ob_disk_usage_reporter.h"
-#include "storage/ob_storage_rpc.h"
 #include "logservice/ob_server_log_block_mgr.h"
 
 
@@ -126,19 +125,6 @@ public:
     bool is_inited_;
   };
 
-  class ObRefreshTimeTask: public common::ObTimerTask
-  {
-  public:
-    ObRefreshTimeTask();
-    virtual ~ObRefreshTimeTask() {}
-    int init(ObServer *observer, common::ObTimer &timer);
-    virtual void runTimerTask() override;
-  private:
-    const static int64_t REFRESH_INTERVAL = 60LL * 60 * 1000 * 1000;//1hr
-    ObServer *obs_;
-    bool is_inited_;
-  };
-
   class ObRefreshCpuFreqTimeTask: public common::ObTimerTask
   {
   public:
@@ -150,16 +136,6 @@ public:
     const static int64_t REFRESH_INTERVAL = 10 * 1000L * 1000L;//10s
     ObServer *obs_;
     bool is_inited_;
-  };
-
-  class ObRefreshTime {
-  public:
-    explicit ObRefreshTime(ObServer *obs): obs_(obs){}
-    virtual ~ObRefreshTime(){}
-    bool operator()(sql::ObSQLSessionMgr::Key key, sql::ObSQLSessionInfo *sess_info);
-  private:
-    ObServer *obs_;
-    DISALLOW_COPY_AND_ASSIGN(ObRefreshTime);
   };
 
   class ObCTASCleanUp
@@ -180,8 +156,7 @@ public:
     enum CLEANUP_RULE
     {
       CTAS_RULE,          //Query cleanup rules for table creation
-      TEMP_TAB_RULE,      //Cleanup rules for temporary tables (direct connection)
-      TEMP_TAB_PROXY_RULE //Temporary table cleanup rules (PROXY)
+      TEMP_TAB_RULE       //Cleanup rules for temporary tables
     };
   private:
     ObServer *obs_;
@@ -258,8 +233,6 @@ private:
   int init_ctas_clean_up_task(); //Regularly clean up the residuals related to querying and building tables and temporary tables
   int init_redef_heart_beat_task();
   int init_ddl_heart_beat_task_container();
-  int refresh_temp_table_sess_active_time();
-  int init_refresh_active_time_task(); //Regularly update the sess_active_time of the temporary table created by the proxy connection sess
   int init_refresh_cpu_frequency();
   int set_running_mode();
   void check_user_tenant_schema_refreshed(const common::ObIArray<uint64_t> &batch_ids, const int64_t expire_time);
@@ -302,10 +275,6 @@ private:
   ObInnerSQLConnectionPool ddl_conn_pool_;
   ObResourceInnerSQLConnectionPool res_inner_conn_pool_;
 
-
-  // The proxy by which local OceanBase server has ability to
-  // communicate with other server.
-  obcall::ObStorageRpcProxy storage_rpc_proxy_;
   common::ObMySQLProxy sql_proxy_;
   common::ObMySQLProxy ddl_sql_proxy_;
   sql::ObExecutorRpcImpl executor_rpc_;
@@ -371,7 +340,6 @@ private:
   ObTenantSqlMemoryTimerTask sql_mem_task_;
   ObCTASCleanUpTask ctas_clean_up_task_;     // repeat & no retry
   ObRedefTableHeartBeatTask redef_table_heart_beat_task_;
-  ObRefreshTimeTask refresh_active_time_task_; // repeat & no retry
   ObRefreshCpuFreqTimeTask refresh_cpu_frequency_task_;
   blocksstable::ObStorageEnv storage_env_;
   share::ObSchemaStatusProxy schema_status_proxy_;
@@ -429,15 +397,12 @@ public:
   transaction::ObTimestampAccess * timestamp_access() override { return mods_timestamp_access_; }
   transaction::ObTransIDService * trans_id_service() override { return mods_trans_id_service_; }
   transaction::ObUniqueIDService * unique_id_service() override { return mods_unique_id_service_; }
-  sql::ObPlanBaselineMgr * plan_baseline_mgr() override { return mods_plan_baseline_mgr_; }
   sql::ObPsCache * ps_cache() override { return mods_ps_cache_; }
   sql::ObPlanCache * plan_cache() override { return mods_plan_cache_; }
   sql::dtl::ObTenantDfc * tenant_dfc() override { return mods_tenant_dfc_; }
   omt::ObPxPools * px_pools() override { return mods_px_pools_; }
-  lib::Worker::CompatMode compat_mode() override { return mods_compat_mode_; }
   sql::ObTenantSqlMemoryManager * tenant_sql_memory_manager() override { return mods_tenant_sql_memory_manager_; }
   sql::dtl::ObDTLIntermResultManager * dtl_interm_result_manager() override { return mods_dtl_interm_result_manager_; }
-  sql::ObPlanMonitorNodeList * plan_monitor_node_list() override { return mods_plan_monitor_node_list_; }
   sql::ObDataAccessService * data_access_service() override { return mods_data_access_service_; }
   share::schema::ObTenantSchemaService * tenant_schema_service() override { return mods_tenant_schema_service_; }
   storage::ObTenantFreezer * tenant_freezer() override { return mods_tenant_freezer_; }
@@ -454,8 +419,6 @@ public:
   transaction::ObTxLoopWorker * tx_loop_worker() override { return mods_tx_loop_worker_; }
   storage::ObAccessService * access_service() override { return mods_access_service_; }
   datadict::ObDataDictService * data_dict_service() override { return mods_data_dict_service_; }
-  observer::ObTableLoadService * table_load_service() override { return mods_table_load_service_; }
-  observer::ObTableLoadResourceService * table_load_resource_service() override { return mods_table_load_resource_service_; }
   concurrency_control::ObMultiVersionGarbageCollector * multi_version_garbage_collector() override { return mods_multi_version_garbage_collector_; }
   ObTestModule * test_module() override { return mods_test_module_; }
   storage::ObEmptyReadBucket * empty_read_bucket() override { return mods_empty_read_bucket_; }
@@ -530,15 +493,12 @@ private:
   transaction::ObTimestampAccess * mods_timestamp_access_ = nullptr;
   transaction::ObTransIDService * mods_trans_id_service_ = nullptr;
   transaction::ObUniqueIDService * mods_unique_id_service_ = nullptr;
-  sql::ObPlanBaselineMgr * mods_plan_baseline_mgr_ = nullptr;
   sql::ObPsCache * mods_ps_cache_ = nullptr;
   sql::ObPlanCache * mods_plan_cache_ = nullptr;
   sql::dtl::ObTenantDfc * mods_tenant_dfc_ = nullptr;
   omt::ObPxPools * mods_px_pools_ = nullptr;
-  lib::Worker::CompatMode mods_compat_mode_;
   sql::ObTenantSqlMemoryManager * mods_tenant_sql_memory_manager_ = nullptr;
   sql::dtl::ObDTLIntermResultManager * mods_dtl_interm_result_manager_ = nullptr;
-  sql::ObPlanMonitorNodeList * mods_plan_monitor_node_list_ = nullptr;
   sql::ObDataAccessService * mods_data_access_service_ = nullptr;
   share::schema::ObTenantSchemaService * mods_tenant_schema_service_ = nullptr;
   storage::ObTenantFreezer * mods_tenant_freezer_ = nullptr;
@@ -555,8 +515,6 @@ private:
   transaction::ObTxLoopWorker * mods_tx_loop_worker_ = nullptr;
   storage::ObAccessService * mods_access_service_ = nullptr;
   datadict::ObDataDictService * mods_data_dict_service_ = nullptr;
-  observer::ObTableLoadService * mods_table_load_service_ = nullptr;
-  observer::ObTableLoadResourceService * mods_table_load_resource_service_ = nullptr;
   concurrency_control::ObMultiVersionGarbageCollector * mods_multi_version_garbage_collector_ = nullptr;
   ObTestModule * mods_test_module_ = nullptr;
   storage::ObEmptyReadBucket * mods_empty_read_bucket_ = nullptr;

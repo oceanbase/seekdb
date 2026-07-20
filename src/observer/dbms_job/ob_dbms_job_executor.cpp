@@ -66,8 +66,6 @@ int ObDBMSJobExecutor::init_session(
   const bool print_info_log = true;
   const bool is_sys_tenant = true;
   ObPCMemPctConf pc_mem_conf;
-  ObObj mysql_mode;
-  mysql_mode.set_int(0);
   mysql_sql_mode.set_uint(ObUInt64Type, DEFAULT_MYSQL_MODE);
   OZ (session.init(1, allocator));
   OX (session.set_inner_session());
@@ -76,7 +74,6 @@ int ObDBMSJobExecutor::init_session(
   OZ (session.init_tenant(tenant_name.ptr()));
   OZ (session.load_all_sys_vars(schema_guard));
   OZ (session.update_sys_variable(share::SYS_VAR_SQL_MODE, mysql_sql_mode));
-  OZ (session.update_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, mysql_mode));
   OZ (session.set_default_database(database_name));
   OZ (session.get_pc_mem_conf(pc_mem_conf));
   CK (OB_NOT_NULL(GCTX.sql_engine_));

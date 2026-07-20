@@ -79,8 +79,8 @@ public:
    * Due to the absence of a batch tagging interface, if delete mode 'tagging' is set 
    * when initiating the utility, it will switch to a looped tagging operation.
    *
-   * As NFS does not offer a batch deleting interface, and GCS's batch delete interface
-   * is not compatible with the S3 protocol, GCS and NFS will revert to looped delete operations.
+   * As NFS does not offer a batch deleting interface, GCS and NFS will revert to
+   * looped delete operations.
    *
    * If it switches to looped operations, upon the failure of any deletion request,
    * the function attempts to record that object along with all remaining unprocessed objects

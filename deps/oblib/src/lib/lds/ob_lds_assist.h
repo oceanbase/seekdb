@@ -48,13 +48,8 @@
      static LDS_VAR(mydata, int, i);
      extern LDS_VAR(mydata, int, i);
 */
-#ifndef OB_USE_ASAN
 #define LDS_VAR(section_name, type, name) \
   type name LDS_ATTRIBUTE(CONCAT(section_name, __COUNTER__))
-#else
-#define LDS_VAR(section_name, type, name) \
-  type name
-#endif
 
 #define LDS_VAR_BEGIN_END(section_name, type)                   \
   static type section_name##_begin LDS_ATTRIBUTE(section_name); \

@@ -129,9 +129,6 @@ int ObServerReloadConfig::operator()()
     const int64_t reserved_memory = GCONF.cache_wash_threshold;
     LOG_INFO("set reserved memory", K(reserved_memory));
     ob_set_reserved_memory(reserved_memory);
-#ifdef OB_USE_ASAN
-    __MemoryContext__::set_enable_asan_allocator(GCONF.enable_asan_for_memory_context);
-#endif
     ObMallocSampleLimiter::set_interval(GCONF._max_malloc_sample_interval,
                                      GCONF._min_malloc_sample_interval);
     enable_memleak_light_backtrace(GCONF._enable_memleak_light_backtrace);
@@ -275,9 +272,6 @@ int ObServerReloadConfig::operator()()
     ObMallocAllocator::get_instance()->force_malloc_for_absent_tenant_ = GCONF._force_malloc_for_absent_tenant;
   }
 
-  {
-    ObSigFaststack::get_instance().set_min_interval(GCONF._faststack_min_interval.get_value());
-  }
   // moved from share ObConfigManager::reload_config(share base must not touch observer components;
   // this function is the original reload_config_func_ call site,order and fail-fast semantics are preserved)
   if (OB_FAIL(ret)) {

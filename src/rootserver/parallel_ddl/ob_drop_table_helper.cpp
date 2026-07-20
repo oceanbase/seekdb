@@ -293,7 +293,6 @@ int ObDropTableHelper::calc_schema_version_cnt_()
 int ObDropTableHelper::generate_schemas_()
 {
   int ret = OB_SUCCESS;
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
   } else {
@@ -354,7 +353,7 @@ int ObDropTableHelper::generate_schemas_()
               LOG_WARN("idx is invalid", KR(ret), K(violated_fk_index), K(fk_infos.count()));
             } else {
               const ObForeignKeyInfo &violated_fk_info = fk_infos.at(violated_fk_index);
-              if (lib::Worker::CompatMode::MYSQL == compat_mode && !arg_.foreign_key_checks_) {
+              if (!arg_.foreign_key_checks_) {
                 // gen mock fk parent table, overwrite ret
                 if (OB_FAIL(gen_mock_fk_parent_table_for_drop_table_(fk_infos,
                                                                     violated_fk_info,
@@ -373,12 +372,10 @@ int ObDropTableHelper::generate_schemas_()
                   LOG_WARN("child table schema is null", KR(ret));
                 } else {
                   ret = OB_ERR_TABLE_IS_REFERENCED;
-                  if (lib::Worker::CompatMode::MYSQL == compat_mode) {
-                    LOG_USER_ERROR(OB_ERR_TABLE_IS_REFERENCED,
-                                   table_schema->get_table_name_str().length(), table_schema->get_table_name_str().ptr(),
-                                   violated_fk_info.foreign_key_name_.length(), violated_fk_info.foreign_key_name_.ptr(),
-                                   child_table_schema->get_table_name_str().length(), child_table_schema->get_table_name_str().ptr());
-                  }
+                  LOG_USER_ERROR(OB_ERR_TABLE_IS_REFERENCED,
+                                 table_schema->get_table_name_str().length(), table_schema->get_table_name_str().ptr(),
+                                 violated_fk_info.foreign_key_name_.length(), violated_fk_info.foreign_key_name_.ptr(),
+                                 child_table_schema->get_table_name_str().length(), child_table_schema->get_table_name_str().ptr());
                 }
               }
             }
@@ -1336,7 +1333,6 @@ int ObDropTableHelper::construct_drop_table_sql_(const ObTableSchema &table_sche
   int ret = OB_SUCCESS;
 
   ddl_stmt_str_.reset();
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
   } else {

@@ -139,8 +139,6 @@ public:
   void set_rows_processed(int64_t rows_processed) { rows_processed_end_ = rows_processed; } 
   void inc_fetch_cnt() { fetches_end_ ++; }
   void set_partition_cnt(int64_t partition_cnt) { partition_end_ = partition_cnt; } 
-  bool is_route_miss() const { return is_route_miss_; }
-  void set_is_route_miss(const bool is_route_miss) { is_route_miss_ = is_route_miss; }
   bool is_plan_cache_hit() const { return is_plan_cache_hit_;}
   void set_is_plan_cache_hit(const bool is_plan_cache_hit) { is_plan_cache_hit_ = is_plan_cache_hit; }
 #define DEF_SQL_STAT_ITEM_DELTA_FUNC(def_name)                 \
@@ -169,7 +167,6 @@ public:
 #undef DEF_SQL_STAT_ITEM_DELTA_FUNC
 public:
   bool is_in_retry_;
-  bool is_route_miss_;
   bool is_plan_cache_hit_;
 #define DEF_SQL_STAT_ITEM(def_name)           \
   int64_t def_name##_start_;                  \
@@ -223,7 +220,6 @@ public:
     DEF_SQL_STAT_ITEM_CONSTRUCT(retry);
     DEF_SQL_STAT_ITEM_CONSTRUCT(partition);
     DEF_SQL_STAT_ITEM_CONSTRUCT(nested_sql);
-    DEF_SQL_STAT_ITEM_CONSTRUCT(route_miss);
     DEF_SQL_STAT_ITEM_CONSTRUCT(plan_cache_hit);
 #undef DEF_SQL_STAT_ITEM_CONSTRUCT
   }
@@ -265,7 +261,6 @@ public:
     DEF_SQL_STAT_ITEM_DELTA_FUNC(retry);
     DEF_SQL_STAT_ITEM_DELTA_FUNC(partition);
     DEF_SQL_STAT_ITEM_DELTA_FUNC(nested_sql);
-    DEF_SQL_STAT_ITEM_DELTA_FUNC(route_miss);
     DEF_SQL_STAT_ITEM_DELTA_FUNC(plan_cache_hit);
   #undef DEF_SQL_STAT_ITEM_DELTA_FUNC
   
@@ -295,7 +290,6 @@ private:
     DEF_SQL_STAT_ITEM(retry);
     DEF_SQL_STAT_ITEM(partition);
     DEF_SQL_STAT_ITEM(nested_sql);
-    DEF_SQL_STAT_ITEM(route_miss);
     DEF_SQL_STAT_ITEM(plan_cache_hit);
   #undef DEF_SQL_STAT_ITEM
 };

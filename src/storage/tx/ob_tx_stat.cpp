@@ -58,7 +58,7 @@ int ObTxStat::init(const common::ObAddr &addr, const ObTransID &tx_id,  const bo
                    const int64_t part_tx_action,
                    const void* const tx_ctx_addr,
                    const int64_t pending_log_size, const int64_t flushed_log_size,
-                   const int64_t session_id, const uint32_t client_sid,
+                   const int64_t session_id,
                    const bool is_exiting, const ObXATransID &xid,
                    const int64_t last_request_ts,
                    SCN start_scn, SCN end_scn, SCN rec_scn,
@@ -87,7 +87,6 @@ int ObTxStat::init(const common::ObAddr &addr, const ObTransID &tx_id,  const bo
     pending_log_size_ = pending_log_size;
     flushed_log_size_ = flushed_log_size;
     session_id_ = session_id;
-    client_sid_ = client_sid;
     is_exiting_ = is_exiting;
     xid_ = xid;
     last_request_ts_ = last_request_ts;
@@ -104,8 +103,6 @@ int ObTxStat::init(const common::ObAddr &addr, const ObTransID &tx_id,  const bo
 int ObTxLockStat::init(const common::ObAddr &addr,
                       const ObMemtableKeyInfo &memtable_key_info,
                       uint32_t session_id,
-                      uint32_t client_sid,
-                      uint64_t proxy_session_id,
                       const ObTransID &tx_id,
                       int64_t tx_ctx_create_time,
                       int64_t tx_expired_time)
@@ -120,8 +117,6 @@ int ObTxLockStat::init(const common::ObAddr &addr,
     addr_ = addr;
     memtable_key_info_ = memtable_key_info;
     session_id_ = session_id;
-    proxy_session_id_ = proxy_session_id;
-    client_sid_ = client_sid;
     tx_id_ = tx_id;
     tx_ctx_create_time_ = tx_ctx_create_time;
     tx_expired_time_ = tx_expired_time;
@@ -136,7 +131,6 @@ void ObTxLockStat::reset()
   addr_.reset();
   memtable_key_info_.reset();
   session_id_ = 0;
-  proxy_session_id_ = 0;
   tx_id_.reset();
   tx_ctx_create_time_ = 0;
   tx_expired_time_ = 0;
@@ -144,10 +138,8 @@ void ObTxLockStat::reset()
 
 int ObTxSchedulerStat::init(const common::ObAddr &addr,
                             const uint32_t sess_id,
-                            const uint32_t client_sid,
                             const ObTransID &tx_id,
                             const int64_t state,
-                            const int64_t cluster_id,
                             const ObXATransID &xid,
                             const bool has_write_state,
                             const ObTxWriteState &write_state,
@@ -175,10 +167,8 @@ int ObTxSchedulerStat::init(const common::ObAddr &addr,
     is_inited_ = true;
     addr_ = addr;
     sess_id_ = sess_id;
-    client_sid_ = client_sid;
     tx_id_ = tx_id;
     state_ = state;
-    cluster_id_ = cluster_id;
     xid_ = xid;
     has_write_state_ = has_write_state;
     if (has_write_state_) {
@@ -207,7 +197,6 @@ void ObTxSchedulerStat::reset()
   sess_id_ = 0;
   tx_id_.reset();
   state_ = 0;
-  cluster_id_ = -1;
   xid_.reset();
   has_write_state_ = false;
   write_state_ = ObTxWriteState();

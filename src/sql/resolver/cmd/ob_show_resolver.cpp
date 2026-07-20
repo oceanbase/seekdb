@@ -163,7 +163,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_OPEN_TABLES)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_CREATE_USER)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_CHECK_TABLE)
-            && OB_UNLIKELY(parse_tree.type_ != T_SHOW_OLAP_ASYNC_JOB_STATUS)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_CATALOGS)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_CREATE_CATALOG)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_LOCATIONS)
@@ -1580,49 +1579,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         }
         break;
       }
-      case T_SHOW_OLAP_ASYNC_JOB_STATUS: {
-        [&] {
-          const int WHERE_JOB_NAME_LENGTH = 128 + 20;
-          const int LIMIT_LENGTH = 40;
-          char where_job_name[WHERE_JOB_NAME_LENGTH] = {};
-          char limit_count [LIMIT_LENGTH] = {};
-
-          if (parse_tree.num_child_ == 1 && OB_NOT_NULL(parse_tree.children_)) {
-            snprintf(where_job_name, WHERE_JOB_NAME_LENGTH, " AND JOB_NAME = '%.*s' ", (int)parse_tree.children_[0]->str_len_, parse_tree.children_[0]->str_value_);     
-            snprintf(limit_count, LIMIT_LENGTH, "order by update_time desc limit 1");     
-          } else if (parse_tree.num_child_ == 0) {
-            //nothing to do
-          } else {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_),
-                    K(parse_tree.children_));
-          }
-          if (OB_SUCC(ret)) {
-            const int WHERE_USR_NAME_LENGTH = OB_MAX_USER_NAME_LENGTH + OB_MAX_HOST_NAME_LENGTH + 20;
-            char where_user_from_jobs[WHERE_USR_NAME_LENGTH] = {};
-            char where_user_from_logs[WHERE_USR_NAME_LENGTH] = {};
-            if (0 != session_info_->get_user_name().case_compare("root")) {
-              snprintf(where_user_from_jobs, WHERE_USR_NAME_LENGTH, " AND T.POWNER = '%.*s@%.*s' ", session_info_->get_user_name().length(), session_info_->get_user_name().ptr(),
-                                                                                                   session_info_->get_host_name().length(), session_info_->get_host_name().ptr()); 
-              snprintf(where_user_from_logs, WHERE_USR_NAME_LENGTH, " AND R.OWNER = '%.*s@%.*s' ", session_info_->get_user_name().length(), session_info_->get_user_name().ptr(),
-                                                                                                  session_info_->get_host_name().length(), session_info_->get_host_name().ptr()); 
-            }
-            show_resv_ctx.stmt_type_ = stmt::T_SHOW_OLAP_ASYNC_JOB_STATUS;
-            GEN_SQL_STEP_1(ObShowSqlSet::SHOW_OLAP_ASYNC_JOB_STATUS);
-            GEN_SQL_STEP_2(ObShowSqlSet::SHOW_OLAP_ASYNC_JOB_STATUS,
-                          OB_SYS_DATABASE_NAME,
-                          OB_ALL_SCHEDULER_JOB_RUN_DETAIL_V2_TNAME,
-                          where_job_name,
-                          where_user_from_logs,
-                          OB_SYS_DATABASE_NAME,
-                          OB_ALL_SCHEDULER_JOB_TNAME,
-                          where_job_name,
-                          where_user_from_jobs,
-                          limit_count);  
-          }
-        }();
-        break;
-      }
       case T_XA_RECOVER: {
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("xa recover is not supported in lite version", KR(ret));
@@ -2707,7 +2663,6 @@ int ObShowResolver::replace_where_clause(ParseNode* node, const ObShowResolverCo
       case T_RAW:
       case T_JSON:
       case T_GEOMETRY:
-      case T_ROARINGBITMAP:
       case T_IEEE754_NAN:
       case T_IEEE754_INFINITE: {
         break;//do nothing
@@ -3543,13 +3498,6 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_SEQUENCES_LIKE,
                        "SELECT sequence_name FROM %s.%s WHERE database_id = %ld ORDER BY sequence_name COLLATE utf8mb4_bin ASC",
                        NULL,
                        "sequence_name");
-DEFINE_SHOW_CLAUSE_SET(SHOW_OLAP_ASYNC_JOB_STATUS,
-                       NULL,
-                       "(SELECT R.job_name AS 'job_id', R.database_name AS 'schema_name', CASE WHEN R.status = 'COMPLETED' AND R.message = 'SUCCESS' THEN 'FINISH' WHEN R.status = 'COMPLETED' AND R.message <> 'SUCCESS' THEN 'FAILED' WHEN R.status = 'KILLED' THEN 'CANCELLED' ELSE R.status END as 'status', R.message as 'fail_msg', R.req_start_date as 'create_time', R.time as 'update_time', R.operation AS 'definition' FROM %s.%s R WHERE R.JOB_CLASS = 'OLAP_ASYNC_JOB_CLASS' %s %s\
-                        UNION ALL\
-                        SELECT T.job_name AS 'job_id', T.cowner AS 'schema_name', CASE WHEN T.state IS NULL THEN 'SUBMITTED' WHEN T.state = 'SCHEDULED' THEN 'RUNNING' WHEN T.state = 'KILLED' THEN 'CANCELLED' ELSE T.state END as 'status', NULL as fail_msg, T.start_date as 'create_time', T.gmt_modified as 'update_time', T.job_action as 'definition'  FROM %s.%s T WHERE T.JOB_CLASS = 'OLAP_ASYNC_JOB_CLASS' AND T.JOB > 0 %s %s) %s",
-                       NULL,
-                       NULL);
 DEFINE_SHOW_CLAUSE_SET(XA_RECOVER,
                        NULL,
                        "SELECT format_id as formatID, length(gtrid) as gtrid_length, length(bqual) as bqual_length, concat(gtrid,bqual) as data from %s.%s where state =  %ld",

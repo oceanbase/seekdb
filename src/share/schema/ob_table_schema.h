@@ -1120,7 +1120,6 @@ public:
   int get_view_column_comment(ObIArray<ObString> &column_comments);
   //set methods
   inline void set_max_used_column_id(const uint64_t id)  { max_used_column_id_ = id; }
-  inline void set_sess_active_time(const int64_t t)  { sess_active_time_ = t; }
   inline void set_index_attributes_set(const uint64_t id)  { index_attributes_set_ = id; }
   inline void set_index_visibility(const uint64_t index_visibility)
   {
@@ -1266,9 +1265,6 @@ public:
   virtual inline bool is_primary_aux_vp_table() const override { return aux_vp_tid_array_.count() > 0 && is_primary_vp_table(); }
   inline int64_t get_index_column_number() const { return index_column_num_; }
   inline uint64_t get_max_used_column_id() const { return max_used_column_id_; }
-  inline int64_t get_sess_active_time() const { return sess_active_time_; }
-  // Whether it is a temporary table created by ob proxy 64bit > uint max
-  inline bool is_obproxy_create_tmp_tab() const { return is_tmp_table() && get_session_id() > 0xFFFFFFFFL;}
   inline int64_t get_rowkey_split_pos() const { return rowkey_split_pos_; }
   inline int64_t get_block_size() const { return block_size_;}
   virtual inline bool is_use_bloomfilter() const override { return is_use_bloomfilter_; }
@@ -1765,9 +1761,6 @@ private:
 
 protected:
   uint64_t max_used_column_id_;
-  // Only temporary table settings, according to the last active time of the session
-  // to determine whether the table needs to be cleaned up;
-  int64_t sess_active_time_;
   int64_t rowkey_column_num_;
   int64_t index_column_num_;
   int64_t rowkey_split_pos_;//not used so far;reserved

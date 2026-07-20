@@ -305,8 +305,7 @@ int ObTruncatePartKeyInfo::create_tmp_session(
   const ObDatabaseSchema *database_schema = nullptr;
   if (OB_FAIL(GCTX.session_mgr_->create_sessid(sid))) {
     LOG_WARN("Failed to create sess id", K(ret));
-  } else if (OB_FAIL(GCTX.session_mgr_->create_session(
-             sid, ObTimeUtility::current_time(), session))) {
+  } else if (OB_FAIL(GCTX.session_mgr_->create_session(sid, session))) {
     session = nullptr;
     LOG_WARN("Failed to create session", K(ret), K(sid));
   } else {
@@ -325,7 +324,6 @@ int ObTruncatePartKeyInfo::create_tmp_session(
      LOG_WARN("Failed to init tenant in session", K(ret));
   } else {
     session->set_inner_session();
-    session->set_compatibility_mode(ObCompatibilityMode::MYSQL_MODE);
   }
   if (OB_FAIL(ret)) {
     release_tmp_session(free_session_ctx, session);

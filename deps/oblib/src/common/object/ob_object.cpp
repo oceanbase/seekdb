@@ -1173,13 +1173,6 @@ int ObObj::build_not_strict_default_value(
         meta_.set_inrow();
       }
       break;
-    case ObRoaringBitmapType:{
-        // empty string is illegal in roaringbitmap, 0x01000 corresponding to an empty roaringbitmap
-        ObString empty_str = ObString(2, "\x01\x00");
-        set_string(data_type, empty_str);
-        meta_.set_inrow();
-      }
-      break;
     case ObJsonType: {
         set_json_value(data_type, OB_JSON_NULL, 2);
       }
@@ -1225,7 +1218,7 @@ int ObObj::build_not_strict_default_value(
 int ObObj::deep_copy(const ObObj &src, char *buf, const int64_t size, int64_t &pos)
 {
   int ret = OB_SUCCESS;
-  if (ob_is_string_type(src.get_type()) || ob_is_json(src.get_type()) || ob_is_geometry(src.get_type()) || ob_is_roaringbitmap(src.get_type())) {
+  if (ob_is_string_type(src.get_type()) || ob_is_json(src.get_type()) || ob_is_geometry(src.get_type())) {
     ObString src_str = src.get_string();
     if (OB_UNLIKELY(size < (pos + src_str.length()))) {
       ret = OB_BUF_NOT_ENOUGH;
@@ -1281,7 +1274,6 @@ void* ObObj::get_deep_copy_obj_ptr()
   if (ob_is_string_type(this->get_type())
       || ob_is_json(this->get_type())
       || ob_is_geometry(this->get_type())
-      || ob_is_roaringbitmap(this->get_type())
       || ob_is_collection_sql_type(this->get_type())) {
     // val_len_ == 0 is empty string, and it may point to unexpected address
     // Therefore, reset it to NULL
@@ -1647,8 +1639,6 @@ ObObjTypeFuncs OBJ_FUNCS[ObMaxType] =
   DEF_FUNC_ENTRY(ObCollectionSQLType), // 51, collection
   DEF_FUNC_ENTRY(ObMySQLDateType),     // 52, mysql date
   DEF_FUNC_ENTRY(ObMySQLDateTimeType), // 53, mysql datetime
-  DEF_FUNC_ENTRY(ObRoaringBitmapType), // 54, roaringbitmap
-
 };
 
 
@@ -1749,7 +1739,7 @@ int ObObj::print_smart(char *buf, int64_t buf_len, int64_t &pos) const
     if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len <=0)) {
       ret = OB_INVALID_ARGUMENT;
     } else if (!(meta_.is_string_or_lob_locator_type() && ObHexStringType != meta_.get_type())
-               && (!meta_.is_json()) && (!meta_.is_geometry()) && (!meta_.is_roaringbitmap())) {
+               && (!meta_.is_json()) && (!meta_.is_geometry())) {
       ret = OBJ_FUNCS[meta_.get_type()].print_json(*this, buf, buf_len, pos, params);
     } else if (OB_FAIL(is_printable(get_string_ptr(), get_string_len(), can_print))) {
     } else if (can_print) {

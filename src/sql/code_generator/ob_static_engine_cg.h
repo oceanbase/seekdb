@@ -149,7 +149,6 @@ class HashRollupRTInfo;
 
 class ObMergeGroupByVecSpec;
 class ObNestedLoopJoinVecSpec;
-class ObTableDirectInsertSpec;
 
 typedef common::ObList<uint64_t, common::ObIAllocator> DASTableIdList;
 typedef common::ObSEArray<common::ObSEArray<int64_t, 8, common::ModulePageAllocator, true>,
@@ -210,7 +209,6 @@ public:
                                        ObLogicalOperator *op,
                                        bool is_root_job = true);
   inline static void exprs_not_support_vectorize(const ObIArray<ObRawExpr *> &exprs,
-                                                 const bool need_return_lob_locator,
                                                  bool &found);
   inline uint64_t get_cur_cluster_version() { return cur_cluster_version_; }
 
@@ -338,7 +336,6 @@ private:
   int generate_spec(ObLogTempTableTransformation &op, ObTempTableTransformationOpSpec &spec, const bool in_root_job);
 
   int set_3stage_info(ObLogGroupBy &op, ObGroupBySpec &spec);
-  int set_rollup_adaptive_info(ObLogGroupBy &op, ObMergeGroupBySpec &spec);
   int generate_spec(ObLogGroupBy &op, ObScalarAggregateSpec &spec, const bool in_root_job);
   int generate_spec(ObLogGroupBy &op, ObScalarAggregateVecSpec &spec, const bool in_root_job);
   int generate_spec(ObLogGroupBy &op, ObMergeGroupBySpec &spec, const bool in_root_job);
@@ -424,7 +421,6 @@ private:
   int generate_spec(ObLogExchange &op, ObPxOrderedCoordSpec &spec, const bool in_root_job);
   int generate_spec(ObLogExchange &op, ObPxMSCoordSpec &spec, const bool in_root_job);
   int generate_spec(ObLogExchange &op, ObPxMSCoordVecSpec &spec, const bool in_root_job);
-  int check_rollup_distributor(ObPxTransmitSpec *spec);
 
   // for remote execute
   int generate_spec(ObLogExchange &op, ObDirectTransmitSpec &spec, const bool in_root_job);
@@ -460,8 +456,6 @@ private:
   template<typename MergeDistinctSpecType>
   int generate_merge_distinct_spec(ObLogDistinct &op, MergeDistinctSpecType &spec, const bool in_root_job);
 
-  // direct load
-  int generate_spec(ObLogInsert &op, ObTableDirectInsertSpec &spec, const bool in_root_job);
 private:
   int check_has_update_part_key(const ObIArray<IndexDMLInfo *> &update_index_dml_infos, bool &update_part_key);
   int disable_use_rich_format(const ObLogicalOperator &op, ObOpSpec &spec);
@@ -597,7 +591,6 @@ private:
   int generate_sort_exprs(const bool is_store_sortkey_separately, ObLogSort &op, ObSortVecSpec &spec,
                           ObIArray<OrderItem> &sk_keys);
 
-  int check_is_insert_overwrite_stmt(const ObLogPlan *plan, bool &is_insert_overwrite);
 private:
   struct BatchExecParamCache {
     BatchExecParamCache(ObExecParamRawExpr* expr, ObOpSpec* spec, bool is_left)

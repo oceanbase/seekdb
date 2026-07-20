@@ -36,38 +36,40 @@ int deepcopy(const transaction::ObTransID &trans_id,
   if (OB_ISNULL(tenant_freezer)) {
     ret = OB_ERR_UNEXPECTED;
     MDS_LOG(ERROR, "MTL is not inited", KR(ret));
-  } else if (IDX == old_ctx.get_binding_type_id()) {
-    using ImplType = GET_CTX_TYPE_BY_TUPLE_IDX(IDX);
-    ImplType *p_impl = nullptr;
-    const ImplType *p_old_impl_ctx = static_cast<const ImplType *>(&old_ctx);
-    MDS_ASSERT(OB_NOT_NULL(p_old_impl_ctx));
-    const ImplType &old_impl_ctx = *p_old_impl_ctx;
-    // if pre_alloc buffer_ctx use it
-    if (OB_NOT_NULL(new_ctx)) {
-      ImplType *new_ctx_impl = dynamic_cast<ImplType *>(new_ctx);
-      if (MDS_FAIL(common::meta::copy_or_assign(old_impl_ctx, *new_ctx_impl))) {
-        MDS_LOG(WARN, "fail to assign old ctx to new", KR(ret), K(IDX));
-      }
-    } else if (CLICK() &&
-        OB_ISNULL(p_impl = (ImplType *)allocator.alloc(sizeof(ImplType),
-                                                       ObMemAttr("MDS_CTX_COPY",
-                                                       ObCtxIds::MDS_CTX_ID)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      MDS_LOG(WARN, "alloc memory failed", KR(ret), K(IDX));
-    } else {
-      CLICK();
-      new (p_impl)ImplType();
-      if (MDS_FAIL(common::meta::copy_or_assign(old_impl_ctx, *p_impl))) {
-        p_impl->~ImplType();
-        allocator.free(p_impl);
-        MDS_LOG(WARN, "fail to assign old ctx to new", KR(ret), K(IDX));
-      } else {
-        new_ctx = p_impl;
-        new_ctx->set_binding_type_id(old_ctx.get_binding_type_id());
-      }
-    }
   } else {
-    ret = deepcopy<IDX + 1>(trans_id, old_ctx, new_ctx, allocator);
+    using ImplType = GET_CTX_TYPE_BY_TUPLE_IDX(IDX);
+    if (BufferCtxBindingTypeId<ImplType>::value == old_ctx.get_binding_type_id()) {
+      ImplType *p_impl = nullptr;
+      const ImplType *p_old_impl_ctx = static_cast<const ImplType *>(&old_ctx);
+      MDS_ASSERT(OB_NOT_NULL(p_old_impl_ctx));
+      const ImplType &old_impl_ctx = *p_old_impl_ctx;
+      // if pre_alloc buffer_ctx use it
+      if (OB_NOT_NULL(new_ctx)) {
+        ImplType *new_ctx_impl = dynamic_cast<ImplType *>(new_ctx);
+        if (MDS_FAIL(common::meta::copy_or_assign(old_impl_ctx, *new_ctx_impl))) {
+          MDS_LOG(WARN, "fail to assign old ctx to new", KR(ret), K(IDX));
+        }
+      } else if (CLICK() &&
+          OB_ISNULL(p_impl = (ImplType *)allocator.alloc(sizeof(ImplType),
+                                                         ObMemAttr("MDS_CTX_COPY",
+                                                         ObCtxIds::MDS_CTX_ID)))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        MDS_LOG(WARN, "alloc memory failed", KR(ret), K(IDX));
+      } else {
+        CLICK();
+        new (p_impl)ImplType();
+        if (MDS_FAIL(common::meta::copy_or_assign(old_impl_ctx, *p_impl))) {
+          p_impl->~ImplType();
+          allocator.free(p_impl);
+          MDS_LOG(WARN, "fail to assign old ctx to new", KR(ret), K(IDX));
+        } else {
+          new_ctx = p_impl;
+          new_ctx->set_binding_type_id(old_ctx.get_binding_type_id());
+        }
+      }
+    } else {
+      ret = deepcopy<IDX + 1>(trans_id, old_ctx, new_ctx, allocator);
+    }
   }
   return ret;
 }
@@ -120,7 +122,7 @@ int MdsFactory::create_buffer_ctx(const transaction::ObTxDataSourceType &data_so
     #define _GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION_(HELPER_CLASS, BUFFER_CTX_TYPE, ID, ENUM_NAME) \
     case transaction::ObTxDataSourceType::ENUM_NAME:\
     {\
-      int64_t type_id = TupleTypeIdx<BufferCtxTupleHelper, BUFFER_CTX_TYPE>::value;\
+      int64_t type_id = BufferCtxBindingTypeId<BUFFER_CTX_TYPE>::value;\
       BUFFER_CTX_TYPE *ctx_impl = (BUFFER_CTX_TYPE *)\
                                    allocator.alloc(sizeof(BUFFER_CTX_TYPE),\
                                                    ObMemAttr(\

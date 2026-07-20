@@ -96,7 +96,6 @@ private:
   int generate_create_tablet_arg_(
       const common::ObIArray<const share::schema::ObTableSchema*> &schemas,
       const ObTableSchema &data_table_schema,
-      const lib::Worker::CompatMode &mode,
       common::ObIArray<share::ObTabletTablePair> &pairs,
       const int64_t part_idx,
       const int64_t subpart_idx,

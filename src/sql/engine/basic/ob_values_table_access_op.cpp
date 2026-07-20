@@ -259,7 +259,7 @@ int ObValuesTableAccessOp::calc_datum_from_param(const ObObj &src_obj, ObExpr *d
   if (ob_is_decimal_int_tc(src_type) && (ob_is_number_tc(dst_type) || need_adjust_decimal_int)) {
     ObObj dst_obj;
     const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(GET_MY_SESSION(ctx_));
-    ObAccuracy dst_accuracy = ObAccuracy::DDL_DEFAULT_ACCURACY2[MYSQL_MODE][dst_type];
+    ObAccuracy dst_accuracy = ObAccuracy::DDL_DEFAULT_ACCURACY2[0][dst_type];
     if (ob_is_decimal_int_tc(dst_type)) {
       dst_accuracy.set_scale(dst_expr->datum_meta_.scale_);
       dst_accuracy.set_precision(dst_expr->datum_meta_.precision_);

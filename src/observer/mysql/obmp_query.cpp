@@ -101,25 +101,6 @@ int ObMPQuery::process()
     ObSQLSessionInfo::LockGuard lock_guard(session.get_query_lock());
     session.set_current_trace_id(ObCurTraceId::get_trace_id());
     session.init_use_rich_format();
-    int64_t val = 0;
-    const bool check_throttle = !is_root_user(sess->get_user_id());
-    if (check_throttle && !sess->is_inner() && sess->get_raw_audit_record().try_cnt_ == 0
-               && lib::Worker::WS_OUT_OF_THROTTLE == THIS_THWORKER.check_rate_limiter()) {
-      ret = OB_KILLED_BY_THROTTLING;
-      LOG_WARN("query is throttled", K(ret), K(sess->get_user_id()));
-      need_disconnect = false;
-    } else if (OB_SUCC(sess->get_sql_throttle_current_priority(val))) {
-      THIS_WORKER.set_sql_throttle_current_priority(check_throttle ? val : -1);
-      if (lib::Worker::WS_OUT_OF_THROTTLE == THIS_THWORKER.check_qtime_throttle()) {
-        ret = OB_KILLED_BY_THROTTLING;
-        LOG_WARN("query is throttled", K(ret));
-        need_disconnect = false;
-      }
-    } else {
-      LOG_WARN("get system variable sql_throttle_current_priority fail", K(ret));
-      // reset ret for compatibility.
-      ret = OB_SUCCESS;
-    }
     if (OB_SUCC(ret)) {
       int64_t tenant_version = 0;
       int64_t sys_version = 0;
@@ -130,8 +111,6 @@ int ObMPQuery::process()
       if (OB_UNLIKELY(!session.is_valid())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("invalid session", K_(sql), K(ret));
-      } else if (OB_FAIL(process_kill_client_session(session))) {
-        LOG_WARN("client session has been killed", K(ret));
       } else if (OB_UNLIKELY(session.is_zombie())) {
         //session has been killed some moment ago
         ret = OB_ERR_SESSION_INTERRUPTED;
@@ -153,9 +132,6 @@ int ObMPQuery::process()
         need_disconnect = false;
         ret = OB_ERR_NET_PACKET_TOO_LARGE;
         LOG_WARN("packet too large than allowed for the session", K_(sql), K(ret));
-      } else if (OB_FAIL(session.check_tenant_status())) {
-        need_disconnect = false;
-        LOG_INFO("unit has been migrated, need deny new request", K(ret), K(sql_));
       } else if (OB_FAIL(session.gen_configs_in_pc_str())) {
         LOG_WARN("fail to generate configuration strings that can influence execution plan",
                  K(ret));
@@ -163,7 +139,6 @@ int ObMPQuery::process()
         THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
         retry_ctrl_.set_tenant_global_schema_version(tenant_version);
         retry_ctrl_.set_sys_global_schema_version(sys_version);
-        session.partition_hit().reset();
         session.set_pl_can_retry(true);
         session.set_enable_mysql_compatible_dates(
           session.get_enable_mysql_compatible_dates_from_config());
@@ -302,7 +277,7 @@ int ObMPQuery::process()
         }
       }
     }
-    // THIS_WORKER.need_retry() means whether to put it back in the queue for retry, including the case of large queries being put back in the queue.
+    // THIS_WORKER.need_retry() means whether to put the request back in the queue for scheduler retry.
     session.check_and_reset_retry_info(*cur_trace_id, THIS_WORKER.need_retry());
     session.set_last_trace_id(ObCurTraceId::get_trace_id());
     // clear thread-local variables used for queue waiting
@@ -381,7 +356,7 @@ int ObMPQuery::try_batched_multi_stmt_optimization(sql::ObSQLSessionInfo &sessio
                                          need_disconnect))) {
     int tmp_ret = ret;
     if (THIS_WORKER.need_retry()) {
-      // fail optimize, is a large query, just go back to large query queue and retry
+      // Keep the retry decision for the upper scheduler.
     } else {
       ret = OB_SUCCESS;
     }
@@ -437,8 +412,7 @@ int ObMPQuery::process_single_stmt(const ObMultiStmtItem &multi_stmt_item,
       }
     }
 
-    // obproxy may use 'SET @@last_schema_version = xxxx' to set newest schema,
-    // observer will force refresh schema if local_schema_version < last_schema_version;
+    // Refresh the local schema cache up to the session's DDL fence.
     if (!do_trans_ctrl_opt && OB_FAIL(check_and_refresh_schema(&session))) {
       LOG_WARN("failed to check_and_refresh_schema", K(ret));
     } else if (!do_trans_ctrl_opt && OB_FAIL(session.update_timezone_info())) {
@@ -676,12 +650,8 @@ OB_INLINE int ObMPQuery::do_process_trans_ctrl(ObSQLSessionInfo &session,
   SQL_INFO_GUARD(sql, session.get_cur_sql_id());
   need_disconnect = false;
 
-  if (OB_FAIL(update_transmission_checksum_flag(session))) {
-    LOG_WARN("update transmisson checksum flag failed", K(ret));
-  } else {
-    session.reset_plsql_exec_time();
-    session.set_stmt_type(stmt_type);
-  }
+  session.reset_plsql_exec_time();
+  session.set_stmt_type(stmt_type);
 
   if (OB_SUCC(ret)) {
     {
@@ -719,7 +689,6 @@ OB_INLINE int ObMPQuery::do_process_trans_ctrl(ObSQLSessionInfo &session,
       if (!async_resp_used && OB_SUCC(ret)) {
         ObOKPParam ok_param;
         ok_param.affected_rows_ = 0;
-        ok_param.is_partition_hit_ = session.partition_hit().get_bool();
         ok_param.has_more_result_ = has_more_result;
         if (OB_FAIL(send_ok_packet(session, ok_param))) {
           LOG_WARN("fail to send ok packt", KR(ret), K(ok_param));
@@ -766,8 +735,7 @@ OB_INLINE int ObMPQuery::do_process_trans_ctrl(ObSQLSessionInfo &session,
       // This request has errored, it hasn't been processed yet. If it hasn't already been handed over to async EndTrans for cleanup,
       // then it is necessary to reply with an error_packet as a footer.
       // Otherwise, no one will help send the error packet to the client, which may cause the client to hang waiting for a response.
-      bool is_partition_hit = session.get_err_final_partition_hit(ret);
-      int err = send_error_packet(ret, NULL, is_partition_hit);
+      int err = send_error_packet(ret, NULL);
       if (OB_SUCCESS != err) {  // send error packet
         LOG_WARN("send error packet failed", K(ret), K(err));
       }
@@ -784,7 +752,6 @@ OB_INLINE int ObMPQuery::do_process_trans_ctrl(ObSQLSessionInfo &session,
     sqlstat_record.record_sqlstat_end_value();
     sqlstat_record.set_rows_processed(0);
     sqlstat_record.set_partition_cnt(0);
-    sqlstat_record.set_is_route_miss(session.partition_hit().get_bool()? 0 : 1);
     sqlstat_record.set_is_plan_cache_hit(ctx_.plan_cache_hit_);
   }
 
@@ -856,7 +823,6 @@ int ObMPQuery::process_trans_ctrl_cmd(ObSQLSessionInfo &session,
       } else if (OB_FAIL(sql_end_cb.set_packet_param(pkt_param.fill("\0", // message
                                                                     0,  // affected_rows
                                                                     0,  // last_insert_id_to_client
-                                                                    session.partition_hit().get_bool(),
                                                                     *cur_trace_id)))) {
         LOG_WARN("fail to set packet param", K(ret));
       } else {
@@ -917,8 +883,6 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
       LOG_WARN("get tenant schema info error", K(ret), K(session));
     } else if (OB_FAIL(session.update_query_sensitive_system_variable(*schema_guard))) {
       LOG_WARN("update query sensitive system vairable in session failed", K(ret));
-    } else if (OB_FAIL(update_transmission_checksum_flag(session))) {
-      LOG_WARN("update transmisson checksum flag failed", K(ret));
     } else if (OB_ISNULL(gctx_.sql_engine_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("invalid sql engine", K(ret), K(gctx_));
@@ -963,21 +927,11 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
         if (!THIS_WORKER.need_retry()) {
           int cli_ret = OB_SUCCESS;
           retry_ctrl_.test_and_save_retry_state(gctx_, ctx_, result, ret, cli_ret);
-          if (OB_ERR_PROXY_REROUTE == ret) {
-            LOG_DEBUG("run stmt_query failed, check if need retry",
-                      K(ret), K(cli_ret), K(retry_ctrl_.need_retry()), K(sql));
-          } else {
-            LOG_WARN("run stmt_query failed, check if need retry",
-                     K(ret), K(cli_ret), K(retry_ctrl_.need_retry()),
-                     "sql", ctx_.is_sensitive_ ? ObString(OB_MASKED_STR) : sql);
-          }
+          LOG_WARN("run stmt_query failed, check if need retry",
+                   K(ret), K(cli_ret), K(retry_ctrl_.need_retry()),
+                   "sql", ctx_.is_sensitive_ ? ObString(OB_MASKED_STR) : sql);
           ret = cli_ret;
-          if (OB_ERR_PROXY_REROUTE == ret) {
-            // This error code is set by the compiler at the compilation stage, the async_resp_used flag must be false
-            // So at this point, we can sync the response packet and set need_response_error
-            // Return an error packet to the client indicating a secondary routing is required
-            need_response_error = true;
-          } else if (ctx_.multi_stmt_item_.is_batched_multi_stmt()) {
+          if (ctx_.multi_stmt_item_.is_batched_multi_stmt()) {
             // batch execute with error,should not response error packet
             need_response_error = false;
           } else if (OB_BATCHED_MULTI_STMT_ROLLBACK == ret) {
@@ -1070,11 +1024,6 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
         }
       } else {
         // Immediately freeze partition hit after the first plan execution completes
-        // partition_hit once frozen, subsequent try_set_bool operations are ineffective
-        if (OB_LIKELY(NULL != result.get_physical_plan())) {
-          session.partition_hit().freeze();
-        }
-
         // store the warning message from the most recent statement in the current session
         if ((OB_SUCC(ret) && is_diagnostics_stmt) || async_resp_used) {
           // If diagnostic stmt execute successfully, it dosen't clear the warning message.
@@ -1087,19 +1036,14 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
 
         if (OB_FAIL(ret) && !async_resp_used && need_response_error && is_conn_valid() && !THIS_WORKER.need_retry() &&
               !ctx_.multi_stmt_item_.is_batched_multi_stmt()) {
-          if (OB_ERR_PROXY_REROUTE == ret) {
-            LOG_DEBUG("query should be rerouted", K(ret), K(async_resp_used));
-          } else {
-            LOG_WARN("query failed", K(ret), K(session),
-                     "sql", ctx_.is_sensitive_ ? ObString(OB_MASKED_STR) : sql,
-                     K(retry_ctrl_.need_retry()));
-          }
+          LOG_WARN("query failed", K(ret), K(session),
+                   "sql", ctx_.is_sensitive_ ? ObString(OB_MASKED_STR) : sql,
+                   K(retry_ctrl_.need_retry()));
           // When need_retry=false, a packet may have been sent to the client, or no packets may have been sent at all.
           // However, it can be determined: this request has errored, and is not yet complete. If it has not already been handed over to asynchronous EndTrans for finalization,
           // then it is necessary to reply with an error_packet below as a conclusion. Otherwise, no one will help send the error packet to the client afterwards,
           // May cause the client to hang waiting for a response.
-          bool is_partition_hit = session.get_err_final_partition_hit(ret);
-          int err = send_error_packet(ret, NULL, is_partition_hit);
+          int err = send_error_packet(ret, NULL);
           if (OB_SUCCESS != err) {  // send error packet
             LOG_WARN("send error packet failed", K(ret), K(err));
           }
@@ -1117,7 +1061,6 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
       sqlstat_record.record_sqlstat_end_value();
       sqlstat_record.set_rows_processed(result.get_affected_rows() + result.get_return_rows());
       sqlstat_record.set_partition_cnt(result.get_exec_context().get_das_ctx().get_related_tablet_cnt());
-      sqlstat_record.set_is_route_miss(result.get_session().partition_hit().get_bool()? 0 : 1);
       sqlstat_record.set_is_plan_cache_hit(ctx_.plan_cache_hit_);
       sqlstat_record.move_to_sqlstat_cache(result.get_session(),
                                                  ctx_.cur_sql_,
@@ -1362,7 +1305,6 @@ OB_INLINE int ObMPQuery::response_result(ObMySQLResultSet &result,
   // table data can deadlock with the clog callback, so use a synchronous method.
   ObSQLSessionInfo &session = result.get_session();
   sql::ObTraceSpanGuard exec_span(&session, sql::TRACE_SQL_EXECUTE);
-  CHECK_COMPATIBILITY_MODE(&session);
 
   bool need_trans_cb  = result.need_end_trans_callback() && (!force_sync_resp);
   // Determine whether it is plan or cmd by checking if plan is null

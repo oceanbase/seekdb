@@ -118,7 +118,6 @@ public:
       compaction::ObIBasicInfoParam *&out_param,
       ObIAllocator &allocator) const override;
   virtual int fill_dag_key(char *buf, const int64_t buf_len) const override;
-  virtual lib::Worker::CompatMode get_compat_mode() const override { return lib::Worker::CompatMode::MYSQL; }
   const PARAM &get_param() const { return param_; }
   void add_collect_cnt(const ObBatchExecInfo &cnt) { collector_.add(cnt, *this); }
   int init_merge_history();

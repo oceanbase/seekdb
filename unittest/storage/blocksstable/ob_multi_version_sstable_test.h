@@ -399,7 +399,7 @@ void ObMultiVersionSSTableTest::init_tablet()
   ASSERT_EQ(OB_SUCCESS, ls->get_tablet(tablet_id, tablet_handle));
   ObTablet *tablet = tablet_handle.get_obj();
   ASSERT_EQ(OB_SUCCESS, ObStorageSchemaUtil::alloc_storage_schema(allocator_, tablet->storage_schema_addr_.ptr_));
-  tablet->storage_schema_addr_.get_ptr()->init(allocator_, table_schema_, lib::Worker::CompatMode::MYSQL);
+  tablet->storage_schema_addr_.get_ptr()->init(allocator_, table_schema_);
   ASSERT_NE(nullptr, ptr = allocator_.alloc(sizeof(ObRowkeyReadInfo)));
   tablet->rowkey_read_info_ = new (ptr) ObRowkeyReadInfo();
   tablet->build_read_info(allocator_, nullptr /*tablet*/);

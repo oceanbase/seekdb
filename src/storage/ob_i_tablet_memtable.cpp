@@ -291,10 +291,6 @@ int ObITabletMemtable::set_max_end_scn(const SCN scn, bool allow_backoff)
 // max_end_scn of this memtable, finally, the memtable will has a correct right
 // boundary value, keep the safety:
 //   future data's log_scn > max_end_scn of this memtable
-//
-// CASE 2 : For Direct Load Memtable
-// call this function after write_ref_cnt == 0
-//
 int ObITabletMemtable::resolve_right_boundary()
 {
   int ret = OB_SUCCESS;

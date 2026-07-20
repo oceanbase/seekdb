@@ -50,23 +50,11 @@ int ObLogGroupBy::get_explain_name_internal(char *buf,
   } else if (HASH_AGGREGATE == algo_) {
     ret = BUF_PRINTF("HASH ");
   } else {
-    if (ObRollupStatus::ROLLUP_DISTRIBUTOR != rollup_adaptive_info_.rollup_status_) {
-      ret = BUF_PRINTF("MERGE ");
-    } else {
-      // inner sort in groupby
-      ret = BUF_PRINTF("SORT ");
-    }
+    ret = BUF_PRINTF("MERGE ");
   }
   if (OB_SUCC(ret)) {
     ret = BUF_PRINTF("%s", get_name());
   }
-  if (OB_FAIL(ret)) {
-  } else if (ObRollupStatus::ROLLUP_DISTRIBUTOR == rollup_adaptive_info_.rollup_status_) {
-    ret = BUF_PRINTF(" ROLLUP DISTRIBUTOR");
-  } else if (ObRollupStatus::ROLLUP_COLLECTOR == rollup_adaptive_info_.rollup_status_) {
-    ret = BUF_PRINTF(" ROLLUP COLLECTOR");
-  }
-
   if (OB_FAIL(ret)) {
     LOG_WARN("BUF_PRINTF fails", K(ret));
   }
@@ -121,9 +109,6 @@ int ObLogGroupBy::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
     LOG_WARN("failed to append exprs", K(ret));
   } else if (is_three_stage_aggr() && all_exprs.push_back(three_stage_info_.aggr_code_expr_)) {
     LOG_WARN("failed to push back exprs", K(ret));
-  } else if (NULL != rollup_adaptive_info_.rollup_id_expr_ &&
-             OB_FAIL(all_exprs.push_back(rollup_adaptive_info_.rollup_id_expr_))) {
-    LOG_WARN("failed to add rollup id expr", K(ret));
   } else if (OB_FAIL(ObLogicalOperator::get_op_exprs(all_exprs))) {
     LOG_WARN("failed to get op exprs", K(ret));
   } else { /*do nothing*/ }
@@ -135,18 +120,6 @@ int ObLogGroupBy::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
         if (OB_FAIL(all_exprs.push_back(distinct_batch.mocked_params_.at(j).first))) {
           LOG_WARN("failed to push back distinct expr", K(ret));
         }
-      }
-    }
-  }
-  if (OB_SUCC(ret) && rollup_adaptive_info_.enable_encode_sort_) {
-    for (int64_t i = 0; i < rollup_adaptive_info_.sort_keys_.count() && OB_SUCC(ret); ++i) {
-      if (OB_FAIL(all_exprs.push_back(rollup_adaptive_info_.sort_keys_.at(i).expr_))) {
-        LOG_WARN("failed to push back distinct expr", K(ret));
-      }
-    }
-    for (int64_t i = 0; i < rollup_adaptive_info_.ecd_sort_keys_.count() && OB_SUCC(ret); ++i) {
-      if (OB_FAIL(all_exprs.push_back(rollup_adaptive_info_.ecd_sort_keys_.at(i).expr_))) {
-        LOG_WARN("failed to push back distinct expr", K(ret));
       }
     }
   }
@@ -448,19 +421,6 @@ int ObLogGroupBy::inner_replace_op_exprs(ObRawExprReplacer &replacer)
     LOG_WARN("failed to extract subplan params in log rollup exprs", K(ret));
   } else if (OB_FAIL(replace_exprs_action(replacer, get_aggr_funcs()))) {
     LOG_WARN("failed to extract subplan params in log agg funcs", K(ret));
-  } else {
-    for(int64_t i = 0; OB_SUCC(ret) && i < rollup_adaptive_info_.sort_keys_.count(); ++i) {
-      OrderItem &cur_order_item = rollup_adaptive_info_.sort_keys_.at(i);
-      if (OB_FAIL(replace_expr_action(replacer, cur_order_item.expr_))) {
-        LOG_WARN("failed to resolve ref params in sort key ", K(cur_order_item), K(ret));
-      } else { /* Do nothing */ }
-    }
-    for(int64_t i = 0; OB_SUCC(ret) && i < rollup_adaptive_info_.ecd_sort_keys_.count(); ++i) {
-      OrderItem &cur_order_item = rollup_adaptive_info_.ecd_sort_keys_.at(i);
-      if (OB_FAIL(replace_expr_action(replacer, cur_order_item.expr_))) {
-        LOG_WARN("failed to resolve ref params in sort key ", K(cur_order_item), K(ret));
-      } else { /* Do nothing */ }
-    }
   }
   if (OB_SUCC(ret) && is_three_stage_aggr()) {
     if (OB_FAIL(replace_exprs_action(replacer, three_stage_info_.distinct_exprs_))) {
@@ -697,18 +657,15 @@ int ObLogGroupBy::compute_op_ordering()
     LOG_WARN("child is null", K(ret));
   } else if (has_rollup()) {
     ObSEArray<OrderItem, 4> ordering;
-    // for rollup distributor, sort key is inner
-    if (ObRollupStatus::ROLLUP_DISTRIBUTOR != rollup_adaptive_info_.rollup_status_) {
-      bool has_ordering = true;
-      for (int64_t i = 0; OB_SUCC(ret) && has_ordering && i < group_exprs_.count(); i++) {
-        if (i < child->get_op_ordering().count() &&
-            child->get_op_ordering().at(i).expr_ == group_exprs_.at(i)) {
-            if (OB_FAIL(ordering.push_back(child->get_op_ordering().at(i)))) {
-              LOG_WARN("failed to push back into ordering.", K(ret));
-            }
-        } else {
-          has_ordering = false;
+    bool has_ordering = true;
+    for (int64_t i = 0; OB_SUCC(ret) && has_ordering && i < group_exprs_.count(); i++) {
+      if (i < child->get_op_ordering().count() &&
+          child->get_op_ordering().at(i).expr_ == group_exprs_.at(i)) {
+        if (OB_FAIL(ordering.push_back(child->get_op_ordering().at(i)))) {
+          LOG_WARN("failed to push back into ordering.", K(ret));
         }
+      } else {
+        has_ordering = false;
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(set_op_ordering(ordering))) {
@@ -852,7 +809,6 @@ int ObLogGroupBy::is_my_fixed_expr(const ObRawExpr *expr, bool &is_fixed)
     is_fixed = ObOptimizerUtil::find_item(aggr_exprs_, expr) ||
                ObOptimizerUtil::find_item(rollup_exprs_, expr) ||
                expr == three_stage_info_.aggr_code_expr_ ||
-               expr == rollup_adaptive_info_.rollup_id_expr_ ||
                (is_first_stage() && T_PSEUDO_DUP_EXPR == expr->get_expr_type());
   }
   return ret;
@@ -861,23 +817,7 @@ int ObLogGroupBy::is_my_fixed_expr(const ObRawExpr *expr, bool &is_fixed)
 int ObLogGroupBy::compute_sharding_info()
 {
   int ret = OB_SUCCESS;
-  if (ObRollupStatus::ROLLUP_COLLECTOR == rollup_adaptive_info_.rollup_status_) {
-    ObLogicalOperator *child = NULL;
-    if (get_num_of_child() == 0) {
-      /*do nothing*/
-    } else if (OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
-    } else if (child->get_strong_sharding() != NULL &&
-               OB_FAIL(weak_sharding_.push_back(child->get_strong_sharding()))) {
-      LOG_WARN("failed to push back weak sharding");
-    } else if (OB_FAIL(append(weak_sharding_, child->get_weak_sharding()))) {
-      LOG_WARN("failed to assign sharding info", K(ret));
-    } else {
-      inherit_sharding_index_ = ObLogicalOperator::first_child;
-      strong_sharding_ = NULL;
-    }
-  } else if (OB_FAIL(ObLogicalOperator::compute_sharding_info())) {
+  if (OB_FAIL(ObLogicalOperator::compute_sharding_info())) {
     LOG_WARN("failed to compute sharding info", K(ret));
   }
   return ret;

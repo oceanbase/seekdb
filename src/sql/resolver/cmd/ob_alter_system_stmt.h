@@ -273,65 +273,6 @@ public:
   obcall::ObAdminDropDiskArg arg_;
 };
 
-class ObEnableSqlThrottleStmt
-    : public ObSystemCmdStmt
-{
-public:
-  ObEnableSqlThrottleStmt()
-      : ObSystemCmdStmt(stmt::T_ENABLE_SQL_THROTTLE),
-        priority_(99),
-        rt_(-1.),
-        io_(-1),
-        network_(-1.),
-        cpu_(-1.),
-        logical_reads_(-1),
-        queue_time_(-1.)
-  {}
-  void set_priority(int64_t priority) { priority_ = priority; }
-  void set_rt(double rt) { rt_ = rt; }
-  void set_io(int64_t io) { io_ = io; }
-  void set_network(double network) { network_ = network; }
-  void set_cpu(double cpu) { cpu_ = cpu; }
-  void set_logical_reads(int64_t logical_reads) { logical_reads_ = logical_reads; }
-  void set_queue_time(double queue_time) { queue_time_ = queue_time; }
-
-  int64_t get_priority() const { return priority_; }
-  double get_rt() const { return rt_; }
-  int64_t get_io() const { return io_; }
-  double get_network() const { return network_; }
-  double get_cpu() const { return cpu_; }
-  int64_t get_logical_reads() const { return logical_reads_; }
-  double get_queue_time() const { return queue_time_; }
-
-  TO_STRING_KV(
-      N_STMT_TYPE, ((int)stmt_type_),
-      K_(priority),
-      K_(rt),
-      K_(io),
-      K_(network),
-      K_(cpu),
-      K_(logical_reads),
-      K_(queue_time));
-
-private:
-  int64_t priority_;
-  double rt_;
-  int64_t io_;
-  double network_;
-  double cpu_;
-  int64_t logical_reads_;
-  double queue_time_;
-};
-
-class ObDisableSqlThrottleStmt
-  : public ObSystemCmdStmt
-{
-public:
-  ObDisableSqlThrottleStmt()
-    : ObSystemCmdStmt(stmt::T_DISABLE_SQL_THROTTLE)
-    {}
-};
-
 class ObResetConfigStmt : public ObSystemCmdStmt
 {
 public:

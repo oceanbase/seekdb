@@ -419,7 +419,7 @@ int ObPCVSet::set_raw_param_info_if_needed(ObPlanCacheObject *cache_obj)
             LOG_WARN("Invalid argument", K(ret), K(next_field.is_paramed_select_item_), K(next_field.paramed_ctx_));
           } else if (visited_idx.has_member(j) || !next_field.paramed_ctx_->need_check_dup_name_) {
             // do nothing
-          } else if (ObCharset::case_compat_mode_equal(cur_field.paramed_ctx_->paramed_cname_,
+          } else if (ObCharset::case_insensitive_equal(cur_field.paramed_ctx_->paramed_cname_,
                                                        next_field.paramed_ctx_->paramed_cname_)) {
             if (OB_FAIL(visited_idx.add_member(j))) {
               LOG_WARN("failed to add member", K(ret));

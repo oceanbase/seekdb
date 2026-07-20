@@ -1086,7 +1086,7 @@
         res_obj.meta_.set_collation_level(CS_LEVEL_IMPLICIT); \
         ret = (class_obj).set_##column_name(res_obj); \
       } \
-      else if (column.is_identity_column() || ob_is_string_type(data_type) || ob_is_geometry(data_type)|| ob_is_roaringbitmap(data_type) || ob_is_collection_sql_type(data_type)) \
+      else if (column.is_identity_column() || ob_is_string_type(data_type) || ob_is_geometry(data_type) || ob_is_collection_sql_type(data_type)) \
       { \
         res_obj.set_string(data_type, str_value); \
         res_obj.meta_.set_collation_type(column.get_collation_type());  \
@@ -1098,7 +1098,7 @@
           SQL_LOG(WARN, "outrow lob unsupported", "column_name", #column_name); \
         } \
         else { \
-          if (ob_is_text_tc(data_type) || ob_is_geometry(data_type) || ob_is_roaringbitmap(data_type) || ob_is_collection_sql_type(data_type)) { res_obj.set_inrow(); } \
+          if (ob_is_text_tc(data_type) || ob_is_geometry(data_type) || ob_is_collection_sql_type(data_type)) { res_obj.set_inrow(); } \
           ret = (class_obj).set_##column_name(res_obj); \
         } \
       }                                               \
@@ -1327,7 +1327,7 @@
 
 // for partition table use
 // If the value of the column is NULL, or the column does not exist, take the default value default_value
-// Inner_sql_result, core_proxy, ob_mysql_result_impl check out the error code that does not exist
+// SQL result implementations check out the error code that does not exist
 // They are OB_SIZE_OVERFLOW, OB_ERR_NULL_VALUE and OB_INVALID_ARGUMENT
 #define GET_COL_IGNORE_NULL_WITH_DEFAULT_VALUE(func, idx, obj, default_value) \
   ({                                                                                  \
@@ -1351,7 +1351,7 @@
 
 // for partition table use
 // If the value of the column is NULL, or the column does not exist, take the default value default_value
-// Inner_sql_result, core_proxy, ob_mysql_result_impl check out the error code that does not exist
+// SQL result implementations check out the error code that does not exist
 // They are OB_SIZE_OVERFLOW, OB_ERR_NULL_VALUE and OB_INVALID_ARGUMENT
 #define GET_TIMESTAMP_COL_BY_NAME_IGNORE_NULL_WITH_DEFAULT_VALUE(func, col_name, obj, default_value, tz_info) \
   ({                                                                                  \

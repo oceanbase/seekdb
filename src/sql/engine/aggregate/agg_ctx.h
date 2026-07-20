@@ -19,7 +19,6 @@
 
 #include "sql/engine/aggregate/aggr_extra.h"
 #include "sql/engine/aggregate/util.h"
-#include "share/roaringbitmap/ob_rb_utils.h"
 
 namespace oceanbase
 {
@@ -202,25 +201,6 @@ struct RemovalInfo
   }
 };
 
-struct RollupContext
-{
-  RollupContext() : start_partial_rollup_idx_(0), end_partial_rollup_idx_(0)
-  {}
-  void reset()
-  {
-    start_partial_rollup_idx_ = 0;
-    end_partial_rollup_idx_ = 0;
-  }
-  inline void set_partial_rollup_idx(int64_t start, int64_t end)
-  {
-    start_partial_rollup_idx_ = start;
-    end_partial_rollup_idx_ = end;
-  }
-
-  int64_t start_partial_rollup_idx_; // rollup partial idx
-  int64_t end_partial_rollup_idx_;   // rollup partial idx
-};
-
 struct RuntimeContext
 {
   RuntimeContext(sql::ObEvalCtx &eval_ctx, ObIArray<ObAggrInfo> &aggr_infos,
@@ -231,8 +211,8 @@ struct RuntimeContext
     op_monitor_info_(nullptr), io_event_observer_(nullptr), agg_row_meta_(),
     agg_rows_(ModulePageAllocator(label, ObCtxIds::WORK_AREA)),
     agg_extras_(ModulePageAllocator(label, ObCtxIds::WORK_AREA)), removal_info_(),
-    win_func_agg_(false), hp_infras_mgr_(nullptr), rollup_context_(nullptr), distinct_count_(0),
-    flag_(0), rb_allocator_(nullptr)
+    win_func_agg_(false), hp_infras_mgr_(nullptr), distinct_count_(0),
+    flag_(0)
   {}
 
   inline const AggrRowMeta &row_meta() const
@@ -364,9 +344,6 @@ struct RuntimeContext
         } // end for
       }
     } // end for
-    // rb_allocator is alloced by allocator_
-    // can not reuse, so just free here
-    free_rb_allocator();
     distinct_count_ = 0;
     agg_extras_.reuse();
     allocator_.reset_remain_one_page();
@@ -383,7 +360,6 @@ struct RuntimeContext
         } // end for
       }
     } // end for
-    free_rb_allocator();
     agg_rows_.reset();
     agg_extras_.reset();
     allocator_.reset();
@@ -392,23 +368,6 @@ struct RuntimeContext
     agg_row_meta_.reset();
     removal_info_.reset();
     win_func_agg_ = false;
-  }
-
-  void free_rb_allocator()
-  {
-    if (OB_NOT_NULL(rb_allocator_)) {
-      rb_allocator_->reset();
-      allocator_.free(rb_allocator_);
-      rb_allocator_ = nullptr;
-    }
-  }
-
-  ObRbAggAllocator* get_rb_allocator()
-  {
-    if (OB_ISNULL(rb_allocator_)) {
-      rb_allocator_ = OB_NEWx(ObRbAggAllocator, &allocator_);
-    }
-    return rb_allocator_;
   }
 
   inline void enable_removal_opt()
@@ -444,7 +403,6 @@ struct RuntimeContext
   RemovalInfo removal_info_;
   bool win_func_agg_;
   ObHashPartInfrasVecMgr *hp_infras_mgr_;
-  RollupContext *rollup_context_;
   uint32_t distinct_count_;
   union {
     uint16_t flag_;
@@ -456,7 +414,6 @@ struct RuntimeContext
       uint16_t reserved_ : 12;
     };
   };
-  ObRbAggAllocator *rb_allocator_;
 };
 
 /*

@@ -124,13 +124,6 @@ public:
                                   ObInsertMonitor *insert_monitor,
                                   blocksstable::ObMacroDataSeq &next_seq)
   { return OB_NOT_SUPPORTED; }
-  /*
-   * a inteferface only used for inc direct load
-   */
-  virtual int fill_lob_meta_sstable_slice(const ObDirectLoadSliceInfo &slice_info,
-                                          const share::SCN &start_scn,
-                                          ObIStoreRowIterator *iter,
-                                          int64_t &affected_rows) { return OB_NOT_SUPPORTED; };
 public: /* --------- direct_load_mgr interface  v2 ---------*/
   virtual int init_v2(const ObTabletDirectLoadInsertParam &build_param,
                       const int64_t execution_id,
@@ -169,11 +162,6 @@ public: /* --------- direct_load_mgr interface  v2 ---------*/
                                      ObInsertMonitor *insert_monitor,
                                      bool &is_all_sliced_finished)
   { return OB_NOT_SUPPORTED; }
-  virtual int fill_lob_meta_sstable_slice(const ObDirectLoadSliceInfo &slice_info,
-                                          ObIStoreRowIterator *iter,
-                                          ObDirectLoadSliceWriter &slice_writer,
-                                          int64_t &affected_rows)
-  { return OB_NOT_SUPPORTED; };
   virtual int close() { return OB_NOT_SUPPORTED; }
 
 public:

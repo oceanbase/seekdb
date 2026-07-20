@@ -11,23 +11,17 @@ repo=http://mirrors.oceanbase.com/oceanbase/community/stable/el/7/aarch64/
 
 [deps]
 devdeps-gtest-1.8.0-312026021311.el7.aarch64.rpm
-devdeps-isa-l-static-2.22.0-22022092915.el7.aarch64.rpm
 devdeps-libcurl-static-8.12.1-132025040210.el7.aarch64.rpm
-devdeps-mariadb-connector-c-3.1.12-12022100422.el7.aarch64.rpm
 devdeps-libaio-0.3.112-12022092915.el7.aarch64.rpm
 devdeps-relaxed-rapidjson-1.0.0-52023011719.el7.aarch64.rpm
 devdeps-openssl-static-1.1.1u-22023100710.el7.aarch64.rpm
 devdeps-libxml2-2.13.6-22025032016.el7.aarch64.rpm
-devdeps-mxml-2.12.0-12022090616.el7.aarch64.rpm
-devdeps-apr-1.6.5-32022090616.el7.aarch64.rpm
 devdeps-xz-5.2.2-42022090615.el7.aarch64.rpm
 devdeps-zlib-static-1.2.13-82024102414.el7.aarch64.rpm
-devdeps-ncurses-static-6.5-62025040314.el7.aarch64.rpm
 devdeps-boost-1.74.0-22022110914.el7.aarch64.rpm
 devdeps-abseil-cpp-20211102.0-82026020911.el7.aarch64.rpm
 devdeps-s2geometry-0.10.0-222026021017.el7.aarch64.rpm
 devdeps-icu-69.1-362026020911.el7.aarch64.rpm
-devdeps-s3-cpp-sdk-1.11.156-262026021209.el7.aarch64.rpm
 devdeps-protobuf-c-abiv1-1.4.1-100000202026031815.el7.aarch64.rpm
 devdeps-grpc-abiv1-1.46.7-572026031815.el7.aarch64.rpm
 devdeps-roaringbitmap-croaring-3.0.0-42024042816.el7.aarch64.rpm
@@ -45,9 +39,6 @@ obdevtools-gcc-12.3.0-32024122017.el7.aarch64.rpm
 obdevtools-llvm-17.0.6-202026032415.el7.aarch64.rpm
 
 [tools-deps]
-devdeps-oblogmsg-1.1-52024052811.el7.aarch64.rpm
-devdeps-rocksdb-6.22.1-32024123015.el7.aarch64.rpm
-obstack-2.0.4-172024070513.el7.aarch64.rpm
 obshell-4.4.1.1-32026031914.el7.aarch64.rpm target=community
 #obshell-4.5.0.0-12026050816.el7.aarch64.rpm target=community
 

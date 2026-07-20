@@ -49,8 +49,6 @@ int ObMPAuthResponse::process()
   } else if (OB_FAIL(session->get_query_timeout(query_timeout))) {
     LOG_WARN("fail to get query timeout", K(ret));
   } else if (FALSE_IT(THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout))) {
-  } else if (OB_FAIL(update_transmission_checksum_flag(*session))) {
-    LOG_WARN("update transmisson checksum flag failed", K(ret));
   } else if (OB_FAIL(session->set_login_auth_data(auth_data_))) {
     LOG_WARN("failed to set login auth data", K(ret));
   } else if (OB_FAIL(load_privilege_info_for_change_user(session))) {

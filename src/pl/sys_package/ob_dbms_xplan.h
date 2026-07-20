@@ -59,10 +59,6 @@ public:
                             sql::ParamStore &params,
                             common::ObObj &result);
 
-  static int display_sql_plan_baseline(sql::ObExecContext &ctx,
-                                      sql::ParamStore &params,
-                                      common::ObObj &result);
-
   static int display_active_session_plan(sql::ObExecContext &ctx,
                                         sql::ParamStore &params,
                                         common::ObObj &result);
@@ -98,29 +94,6 @@ private:
                                   const ObString &sql_handle,
                                   uint64_t plan_hash, 
                                   ObIArray<ObSqlPlanItem*> &plan_infos);
-
-  static int get_baseline_plan_info(sql::ObExecContext &ctx,
-                                    const ObString &svr_ip,
-                                    int64_t svr_port,
-                                    const ObString &sql_handle,
-                                    uint64_t plan_hash, 
-                                    ObIArray<ObSqlPlanItem*> &plan_infos);
-
-  static int get_baseline_plan_detail(sql::ObExecContext &ctx,
-                                      const ObString& sql_handle, 
-                                      const ObString& plan_name,
-                                      PlanText &plan_text,
-                                      bool from_plan_cache);
-
-  static int inner_get_baseline_plan_detail(sql::ObExecContext &ctx,
-                                            const ObSqlString& sql,
-                                            PlanText &plan_text,
-                                            bool from_plan_cache);
-
-  static int format_baseline_plan_detail(sql::ObExecContext &ctx,
-                                        sqlclient::ObMySQLResult& mysql_result, 
-                                        PlanText &plan_text,
-                                        bool from_plan_cache);
 
   static int get_plan_info_by_session_id(sql::ObExecContext &ctx,
                                         int64_t session_id,

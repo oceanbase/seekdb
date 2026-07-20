@@ -91,10 +91,7 @@ int ObAllVirtualLockWaitStat::inner_get_next_row(ObNewRow *&row)
           }
         case SESSION_ID:
           {
-            cur_row_.cells_[i].set_int(sql::ObSQLSessionInfo::INVALID_SESSID ==
-                                               node_iter_->client_sid_
-                                           ? node_iter_->sessid_
-                                           : node_iter_->client_sid_);
+            cur_row_.cells_[i].set_int(node_iter_->sessid_);
             break;
           }
         case BLOCK_SESSION_ID:

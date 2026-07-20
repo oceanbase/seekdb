@@ -611,7 +611,7 @@ int ObDASTabletMapper::get_default_tablet_and_object_id(const ObPartitionLevel p
                  !related_info_.related_tids_->empty()) {
         //calculate related partition id and tablet id
         ObSchemaGetterGuard guard;
-        
+
         if (OB_ISNULL(GCTX.schema_service_)) {
           ret = OB_INVALID_ARGUMENT;
           LOG_ERROR("invalid schema service", KR(ret));
@@ -1188,7 +1188,7 @@ int ObDASTabletMapper::get_tablet_and_subpart_id_for_list_part(const ObTableSche
     const bool fill_tablet_id = true;
     if (FAILEDx(ObPartitionUtils::fill_tablet_and_object_ids(fill_tablet_id,
                                                              part_idx,
-                                                             partition_indexes, 
+                                                             partition_indexes,
                                                              table_schema,
                                                              related_table,
                                                              tablet_ids,

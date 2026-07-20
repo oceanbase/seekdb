@@ -998,7 +998,6 @@ int ObSchemaRetrieveUtils::fill_table_schema(const bool check_deleted,
     ObString pk_comment("");
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
         result, pk_comment, table_schema, true, ObSchemaService::g_ignore_column_retrieve_error_, pk_comment);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, sess_active_time, table_schema, int64_t, true, ObSchemaService::g_ignore_column_retrieve_error_, 0);
     /*
      * Here comes a compatibility problem:
      * row_store_type's default value is defined as flat_row_store when cluster is upgraded from ver 1.4.x
@@ -1967,7 +1966,6 @@ int ObSchemaRetrieveUtils::fill_routine_schema(T &result, ObRoutineInfo &routine
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, flag, routine_info, int64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, owner_id, routine_info, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, priv_user, routine_info);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, comp_flag, routine_info, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, exec_env, routine_info);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, routine_body, routine_info);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, comment, routine_info);
@@ -2041,7 +2039,6 @@ int ObSchemaRetrieveUtils::fill_package_schema(T &result, ObPackageInfo &package
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, type, package_info, ObPackageType);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, flag, package_info, int64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, owner_id, package_info, int64_t);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, comp_flag, package_info, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, exec_env, package_info);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, source, package_info);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, comment, package_info);
@@ -2103,7 +2100,6 @@ int ObSchemaRetrieveUtils::fill_trigger_schema(T &result, ObTriggerInfo &trigger
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, package_body_source, trigger_info,
       true, false, default_value);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, package_flag, trigger_info, int64_t);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, package_comp_flag, trigger_info, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, package_exec_env, trigger_info);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, sql_mode, trigger_info, uint64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, trigger_priv_user, trigger_info,
@@ -3269,7 +3265,6 @@ int ObSchemaRetrieveUtils::fill_package_schema(T &result,
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, package_schema, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, package_name, package_schema);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, type, package_schema, ObPackageType);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, comp_flag, package_schema, int64_t);
   }
   return ret;
 }

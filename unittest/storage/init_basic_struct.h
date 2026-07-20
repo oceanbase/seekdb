@@ -95,7 +95,6 @@ int __attribute__((weak)) gen_create_tablet_arg(const ObTabletID &tablet_id,
   if (FAILEDx(tablet_info.init(index_tablet_ids,
           tablet_id,
           index_tablet_schema_idxs,
-          lib::Worker::CompatMode::MYSQL,
           false,
           create_commit_versions
           ))) {

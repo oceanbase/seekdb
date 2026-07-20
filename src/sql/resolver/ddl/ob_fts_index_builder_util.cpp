@@ -2219,9 +2219,7 @@ int ObFtsIndexBuilderUtil::try_load_dictionary_for_all_tenants()
   } else {
     { // ignore ret to delete other tenant's dic loader
       {
-        lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
         // overwrite ret
-        if (compat_mode == lib::Worker::CompatMode::MYSQL) {
           ObTenantDicLoaderHandle dic_loader_handle;
           if (OB_FAIL(ObGenDicLoader::get_instance().get_dic_loader(
                                                                     ObFTSLiteral::PARSER_NAME_IK,
@@ -2235,7 +2233,6 @@ int ObFtsIndexBuilderUtil::try_load_dictionary_for_all_tenants()
                          dic_loader_handle.get_loader()->try_load_dictionary_in_trans())) {
             LOG_WARN("fail to try load dictionary", K(ret), K(1UL), K(dic_loader_handle));
           }
-        }
       }
     }
   }

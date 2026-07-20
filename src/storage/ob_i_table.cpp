@@ -54,7 +54,7 @@ const char* ObITable::table_type_name_[] =
   "TX_DATA_MEMTABLE",
   "TX_CTX_MEMTABLE",
   "LOCK_MEMTABLE",
-  "DIRECT_LOAD_MEMTABLE",
+  "",
   "",
   "",
   "",
@@ -361,23 +361,6 @@ int ObTableHandleV2::get_lock_memtable(ObLockMemtable *&memtable)
   return ret;
 }
 
-
-int ObTableHandleV2::get_direct_load_memtable(ObDDLKV *&memtable)
-{
-  int ret = OB_SUCCESS;
-  memtable = nullptr;
-
-  if (OB_ISNULL(table_)) {
-    ret = OB_NOT_INIT;
-    STORAGE_LOG(WARN, "not inited", K(ret));
-  } else if (!table_->is_direct_load_memtable()) {
-    ret = OB_ENTRY_NOT_EXIST;
-    STORAGE_LOG(WARN, "not direct load memtable", K(ret), K(table_->get_key()));
-  } else {
-    memtable = static_cast<ObDDLKV*>(table_);
-  }
-  return ret;
-}
 
 
 ObTableHandleV2::ObTableHandleV2(const ObTableHandleV2 &other)

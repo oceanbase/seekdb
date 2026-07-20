@@ -110,10 +110,8 @@ int ObTxCtxTableRecoverHelper::recover_one_tx_ctx_(transaction::ObLSTxCtxMgr* ls
   transaction::ObTxCreateArg arg(true,  /* for_replay */
                                  TxCtxSource::RECOVER,
                                  ctx_info.tx_id_,
-                                 ctx_info.cluster_id_,     /* cluster_id */
                                  cluster_version,
                                  0, /*session_id*/
-                                 0, /*client_sid*/
                                  0, /*associated_session_id*/
                                  INT64_MAX,
                                  share::g_mp->trans_service());

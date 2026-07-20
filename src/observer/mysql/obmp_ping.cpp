@@ -51,10 +51,6 @@ int ObMPPing::process()
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql session info is null", K(ret));
-  } else if (OB_FAIL(process_kill_client_session(*session))) {
-    LOG_WARN("client session has been killed", K(ret));
-  } else if (OB_FAIL(update_transmission_checksum_flag(*session))) {
-    LOG_WARN("update transmisson checksum flag failed", K(ret));
   } else if (FALSE_IT(session->update_last_active_time())) {
     // COM_PING used for keepping connection alive
   } else {

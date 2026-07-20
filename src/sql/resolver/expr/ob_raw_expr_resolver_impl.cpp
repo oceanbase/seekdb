@@ -816,12 +816,8 @@ int ObRawExprResolverImpl::do_recursive_resolve(const ParseNode *node,
       case T_FUN_ORA_JSON_OBJECTAGG:
       case T_FUN_SUM_OPNSIZE:
       case T_FUN_SYS_ST_ASMVT:
-      case T_FUN_SYS_RB_BUILD_AGG:
-      case T_FUN_SYS_RB_OR_AGG:
-      case T_FUN_SYS_RB_AND_AGG:
       case T_FUNC_SYS_ARRAY_AGG:
-      case T_FUN_SYS_RB_OR_CARDINALITY_AGG:
-      case T_FUN_SYS_RB_AND_CARDINALITY_AGG: {
+      {
         if (OB_FAIL(process_agg_node(node, expr))) {
           LOG_WARN("fail to process agg node", K(ret), K(node));
         }
@@ -1242,30 +1238,6 @@ int ObRawExprResolverImpl::do_recursive_resolve(const ParseNode *node,
         }
         break;
       }
-      case T_RB_ITERATE_EXPRESSION: {
-        if (!is_root_expr) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "use rb_iterate as parameter of other expr");
-        } else {
-          ObSysFunRawExpr *func_expr = NULL;
-          ObRawExpr *para_expr = NULL;
-          if (OB_FAIL(ctx_.expr_factory_.create_raw_expr(T_RB_ITERATE_EXPRESSION, func_expr))) {
-            LOG_WARN("fail to create raw expr", K(ret));
-          } else if (OB_ISNULL(func_expr)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("column ref expr is null");
-          } else if (OB_FAIL(SMART_CALL(recursive_resolve(node->children_[0], para_expr)))) {
-            LOG_WARN("fail to recursive resolve", K(ret), K(node->children_[0]));
-          } else if (ctx_.aggr_exprs_->count() > 0) {
-            ret = OB_ERR_INVALID_GROUP_FUNC_USE;
-            LOG_WARN("no resolver can produce aggregate function", K(ret));
-          } else if (OB_FAIL(func_expr->set_param_expr(para_expr))) {
-            LOG_WARN("fail to add param expr", K(ret), K(para_expr));
-          }
-          expr = func_expr;
-        }
-        break;
-      }
       default:
         ret = OB_ERR_PARSER_SYNTAX;
         LOG_WARN("Wrong type in expression", K(get_type_name(node->type_)));
@@ -1455,198 +1427,6 @@ int ObRawExprResolverImpl::process_array_contains_node(const ParseNode *node, Ob
     func_expr->set_reverse_param_order(1); // param order is reversed, so set extra to 1
     expr = func_expr;
   }
-  return ret;
-}
-
-int ObRawExprResolverImpl::process_xml_element_node(const ParseNode *node, ObRawExpr *&expr)
-{
-  INIT_SUCC(ret);
-  CK(OB_NOT_NULL(node));
-  if(OB_SUCC(ret) && T_FUN_SYS_XML_ELEMENT != node->type_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("node->type_ error", K(node->type_));
-  } else if (OB_SUCC(ret) && (1 > node->num_child_ || 4 < node->num_child_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("num_child_ error", K(node->num_child_));
-  }
-  ObSysFunRawExpr *func_expr = NULL;
-  ObSEArray<ObRawExpr*, 4> param_exprs;
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(ctx_.expr_factory_.create_raw_expr(T_FUN_SYS_XML_ELEMENT, func_expr))) {
-      LOG_WARN("create raw expr failed", K(node->num_child_), K(ret));
-    } else if (OB_ISNULL(func_expr)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("func expr is null", K(node->num_child_));
-    } else {
-      func_expr->set_func_name(ObString::make_string("xmlelement"));
-    }
-  }
-  for (int32_t i = 0; OB_SUCC(ret) && i < node->num_child_; i++) {
-    const ParseNode *expr_node = node->children_[i];
-    CK (OB_NOT_NULL(expr_node));
-    if (expr_node->num_child_ > 1 && T_FUN_SYS_XML_ATTRIBUTES != expr_node->type_) {
-      for (int j = 0; OB_SUCC(ret) && j < expr_node->num_child_; j++) {
-        ObRawExpr *para_expr = NULL;
-        CK(OB_NOT_NULL(expr_node->children_[j]));
-        OZ(recursive_resolve(expr_node->children_[j], para_expr));
-        CK(OB_NOT_NULL(para_expr));
-        OZ(param_exprs.push_back(para_expr));
-      }
-    } else {
-      ObRawExpr *para_expr = NULL;
-      OZ(recursive_resolve(expr_node, para_expr));
-      CK(OB_NOT_NULL(para_expr));
-      OZ(param_exprs.push_back(para_expr));
-    }
-  }
-  OZ(func_expr->set_param_exprs(param_exprs));
-  OX(expr = func_expr);
-  return ret;
-}
-
-int ObRawExprResolverImpl::process_xml_attributes_values_node(const ParseNode *node, ObRawExpr *&expr)
-{
-  INIT_SUCC(ret);
-  int cur_col_size = ctx_.columns_->count();
-  ParseNode key_node;
-  CK(OB_NOT_NULL(node));
-  if(OB_SUCC(ret) && T_FUN_SYS_XML_ATTRIBUTES_VALUES != node->type_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("node->type_ error", K(node->type_));
-  } else if (OB_SUCC(ret) && (2 != node->num_child_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("num_child_ error", K(node->num_child_));
-  }
-  ObSysFunRawExpr *func_expr = NULL;
-  if (OB_FAIL(ret)) {
-    LOG_WARN("ret failed", K(ret));
-  } else if (OB_FAIL(ctx_.expr_factory_.create_raw_expr(T_FUN_SYS_XML_ATTRIBUTES_VALUES, func_expr))) {
-    LOG_WARN("create raw expr failed", K(node->num_child_), K(ret));
-  } else if (OB_ISNULL(func_expr)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("func expr is null", K(node->num_child_));
-  } else if (OB_FAIL(func_expr->init_param_exprs(2))) {
-    LOG_WARN("failed to init param exprs", K(ret));
-  } else if (OB_FALSE_IT(func_expr->set_func_name(ObString::make_string("xmlattributes_values")))) {
-  } else {
-    const ParseNode *expr_value_node = node->children_[0];
-    CK (OB_NOT_NULL(expr_value_node));
-    ObRawExpr *para_expr = NULL;
-    OZ(recursive_resolve(expr_value_node, para_expr));
-    CK(OB_NOT_NULL(para_expr));
-    OZ(func_expr->add_param_expr(para_expr));
-    if (OB_FAIL(ret)) {
-      LOG_WARN("ret failed", K(ret));
-    } else if (OB_ISNULL(node->children_[1])) {
-      ObRawExpr *para_key_expr = NULL;
-      ObString col_name;
-      para_expr = NULL;
-      if (expr_value_node->type_ != T_COLUMN_REF && expr_value_node->type_ != T_OBJ_ACCESS_REF) {
-        ret = OB_ERR_XMLELEMENT_ALIASED;
-        LOG_WARN("get column raw text failed", K(ret));
-      } else if (OB_FAIL(get_column_raw_text_from_node(expr_value_node, col_name))) {
-        // bugfix: 49298642
-        // parameter 1 of function xmlelement without aliased
-        ret = OB_ERR_XMLELEMENT_ALIASED;
-        LOG_WARN("get column raw text failed", K(ret));
-      } else if (!col_name.empty() && OB_FAIL(ObRawExprResolverImpl::malloc_new_specified_type_node(ctx_.expr_factory_.get_allocator(),
-                                                                                ObString(col_name.length(), easy_string_toupper(col_name.ptr())),
-                                                                                &key_node, T_CHAR))) {
-        LOG_WARN("create key node failed", K(ret));
-      } else {
-        OZ(recursive_resolve(&key_node, para_expr));
-        CK(OB_NOT_NULL(para_expr));
-        OZ(func_expr->add_param_expr(para_expr));
-      }
-    } else {
-      const ParseNode *expr_key_node = node->children_[1];
-      CK (OB_NOT_NULL(expr_key_node));
-      ObRawExpr *para_expr = NULL;
-      OZ(recursive_resolve(expr_key_node, para_expr));
-      CK(OB_NOT_NULL(para_expr));
-      OZ(func_expr->add_param_expr(para_expr));
-    }
-  }
-  OX(expr = func_expr);
-  return ret;
-}
-
-int ObRawExprResolverImpl::process_xml_attributes_node(const ParseNode *node, ObRawExpr *&expr) {
-  INIT_SUCC(ret);
-  CK(OB_NOT_NULL(node));
-  if(OB_SUCC(ret) && T_FUN_SYS_XML_ATTRIBUTES != node->type_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("node->type_ error", K(node->type_));
-  } else if (OB_SUCC(ret) && (3 != node->num_child_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("num_child_ error", K(node->num_child_));
-  }
-  ObSysFunRawExpr *func_expr = NULL;
-  ObSEArray<ObRawExpr*, 4> param_exprs;
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(ctx_.expr_factory_.create_raw_expr(T_FUN_SYS_XML_ATTRIBUTES, func_expr))) {
-      LOG_WARN("create raw expr failed", K(node->num_child_), K(ret));
-    } else if (OB_ISNULL(func_expr)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("func expr is null", K(node->num_child_));
-    } else {
-      func_expr->set_func_name(ObString::make_string("xmlattributes"));
-    }
-  }
-  for (int32_t i = 0; OB_SUCC(ret) && i < 2; i++) {
-    const ParseNode *expr_node = node->children_[i];
-    CK (OB_NOT_NULL(expr_node));
-    ObRawExpr *para_expr = NULL;
-    OZ(recursive_resolve(expr_node, para_expr));
-    CK(OB_NOT_NULL(para_expr));
-    OZ(param_exprs.push_back(para_expr));
-  }
-  ParseNode *node_ptr = node->children_[2];
-  if (OB_ISNULL(node_ptr)) {
-    ret = OB_ERR_PARAM_INVALID;
-    LOG_WARN("node children_[2] invalid", K(ret));
-  } else if (2 != node_ptr->num_child_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("num child invalid", K(ret), K(node_ptr->num_child_));
-  } else {
-    int attributes_count = 0;
-    do {
-      ObRawExpr *para_expr = NULL;
-      if (T_LINK_NODE != node_ptr->type_) {
-        ++attributes_count;
-        const ParseNode *expr_node = node_ptr;
-        CK (OB_NOT_NULL(expr_node));
-        OZ(recursive_resolve(expr_node, para_expr));
-        if (OB_ERR_XMLELEMENT_ALIASED == ret) {
-          LOG_USER_ERROR(OB_ERR_XMLELEMENT_ALIASED, attributes_count);
-        }
-        CK(OB_NOT_NULL(para_expr));
-        for (int i = 0; OB_SUCC(ret) && i < para_expr->get_param_count(); i++) {
-          OZ(param_exprs.push_back(para_expr->get_param_expr(i)));
-        }
-        break;
-      } else if (T_LINK_NODE == node_ptr->type_ &&
-                  node_ptr->children_[0]->num_child_ == 2) {
-        ++attributes_count;
-        const ParseNode *expr_node = node_ptr->children_[0];
-        CK (OB_NOT_NULL(expr_node));
-        OZ(recursive_resolve(expr_node, para_expr));
-        if (OB_ERR_XMLELEMENT_ALIASED == ret) {
-          LOG_USER_ERROR(OB_ERR_XMLELEMENT_ALIASED, attributes_count);
-        }
-        CK(OB_NOT_NULL(para_expr));
-        node_ptr = node_ptr->children_[1];
-        for (int i = 0; OB_SUCC(ret) && i < para_expr->get_param_count(); i++) {
-          OZ(param_exprs.push_back(para_expr->get_param_expr(i)));
-        }
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("resolver attributes failed", K(ret), K(node_ptr->num_child_), K(node_ptr->children_[0]->num_child_));
-      }
-    } while (OB_SUCC(ret));
-  }
-  OZ(func_expr->set_param_exprs(param_exprs));
-  OX(expr = func_expr);
   return ret;
 }
 
@@ -1985,20 +1765,6 @@ int ObRawExprResolverImpl::check_name_type(
   return ret;
 }
 
-void ObRawExprResolverImpl::get_special_func_ident_name(ObString &ident_name, const ObItemType func_type)
-{
-  // get ident name of spacial exprs not using first child as function name
-  if (func_type == T_FUN_SYS_XML_ELEMENT) {
-    ident_name = ObString::make_string("xmlelement");
-  } else if (func_type == T_FUN_SYS_XML_FOREST) {
-    ident_name = ObString::make_string("xmlforest");
-  } else if (func_type == T_FUN_SYS_XMLPARSE) {
-    ident_name = ObString::make_string("xmlparse");
-  } else if (func_type == T_FUN_ORA_XMLAGG) {
-    ident_name = ObString::make_string("xmlagg");
-  } else { /* do nothing */}
-}
-
 int ObRawExprResolverImpl::resolve_func_node_of_obj_access_idents(const ParseNode &left_node, ObQualifiedName &q_name)
 {
   int ret = OB_SUCCESS;
@@ -2009,7 +1775,6 @@ int ObRawExprResolverImpl::resolve_func_node_of_obj_access_idents(const ParseNod
   } else {
     ObString ident_name(static_cast<int32_t>(
       func_node.children_[0]->str_len_), func_node.children_[0]->str_value_);
-    get_special_func_ident_name(ident_name, func_node.type_);
     // first bit in value_ of T_FUN_SYS node is used to mark NEW keyword,
     // value_ & 0x1 == 1: not used,
     // value_ & 0x1 == 0: used,
@@ -2065,14 +1830,6 @@ int ObRawExprResolverImpl::resolve_func_node_of_obj_access_idents(const ParseNod
           } else if (0 == q_name.access_idents_.at(0).access_name_.case_compare("json_equal")) {
             ret = OB_ERR_JSON_EQUAL_OUTSIDE_PREDICATE;
             LOG_WARN("JSON_EQUAL used outside predicate", K(ret));
-          } else if (func_node.type_ == T_FUN_SYS_XMLPARSE) {
-            OZ (process_xmlparse_node(&func_node, func_expr));
-          } else if (func_node.type_ == T_FUN_SYS_XML_ELEMENT) {
-            OZ (process_xml_element_node(&func_node, func_expr));
-          } else if (func_node.type_ == T_FUN_SYS_XML_FOREST) {
-            OZ (process_xml_forest_node(&func_node, func_expr));
-          } else if (func_node.type_ == T_FUN_ORA_XMLAGG) {
-            OZ (process_agg_node(&func_node, func_expr));
           }else {
             OZ (process_fun_sys_node(&func_node, func_expr, false));
           }
@@ -2323,13 +2080,10 @@ int ObRawExprResolverImpl::process_datatype_or_questionmark(const ParseNode &nod
   ObCollationType nation_collation = OB_NOT_NULL(ctx_.session_info_) ? ctx_.session_info_->get_nls_collation_nation() : CS_TYPE_INVALID;
   uint64_t tenant_data_ver = 0;
   bool enable_decimal_int = false;
-  ObCompatType compat_type = COMPAT_MYSQL57;
   bool enable_mysql_compatible_dates = false;
   if (OB_ISNULL(session_info)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session info is null", K(ret));
-  } else if (OB_FAIL(session_info->get_compatibility_control(compat_type))) {
-    LOG_WARN("failed to get compat type", K(ret));
   } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session_info, enable_decimal_int))) {
     LOG_WARN("fail to check enable decimal int", K(ret));
   } else if (OB_FAIL(ObSQLUtils::check_enable_mysql_compatible_dates(session_info, false,
@@ -2349,7 +2103,6 @@ int ObRawExprResolverImpl::process_datatype_or_questionmark(const ParseNode &nod
                                              &(ctx_.parents_expr_info_),
                                              session_info->get_sql_mode(),
                                              enable_decimal_int, // FIXME: enable decimal int
-                                             compat_type,
                                              enable_mysql_compatible_dates,
                                              session_info->get_min_const_integer_precision(),
                                              nullptr != ctx_.secondary_namespace_,
@@ -4480,59 +4233,6 @@ int ObRawExprResolverImpl::process_agg_node(const ParseNode *node, ObRawExpr *&e
           LOG_WARN("fail to add param expr to agg expr", K(ret));
         }
       } // end for
-    } else if (T_FUN_SYS_RB_BUILD_AGG == node->type_
-                || T_FUN_SYS_RB_OR_AGG == node->type_
-                || T_FUN_SYS_RB_AND_AGG == node->type_
-                || T_FUN_SYS_RB_AND_CARDINALITY_AGG == node->type_
-                || T_FUN_SYS_RB_OR_CARDINALITY_AGG == node->type_) {
-      for (int64_t i = 0; OB_SUCC(ret) && i < node->num_child_; ++i) {
-        sub_expr = NULL;
-        if (OB_ISNULL(node->children_[i])) {
-          // do nothing
-        } else if (OB_FAIL(SMART_CALL(recursive_resolve(node->children_[i], sub_expr)))) {
-          LOG_WARN("fail to recursive resolve expr list item", K(ret));
-        } else if (OB_FAIL(agg_expr->add_real_param_expr(sub_expr))) {
-          LOG_WARN("fail to add param expr to agg expr", K(ret));
-        }
-      } // end for
-    } else if (T_FUN_ORA_XMLAGG == node->type_) {
-      sub_expr = NULL;
-      for (int64_t i = 0; OB_SUCC(ret) && i < node->num_child_; ++i) {
-        if (OB_ISNULL(node->children_[i])) {
-          // do nothing
-        } else if (i == 0) {
-          // TODO Subsequent Interception Aggregation Function
-          if (OB_FAIL(SMART_CALL(recursive_resolve(node->children_[i], sub_expr)))) {
-            LOG_WARN("fail to resursive resolve expr list item", K(ret));
-          } else if (OB_FAIL(agg_expr->add_real_param_expr(sub_expr))) {
-            LOG_WARN("fail to add param expr to agg expr", K(ret));
-          }
-        } else if (i == 1) {
-          const ParseNode *sort_list = NULL;
-          if (OB_UNLIKELY(node->children_[1]->type_ != T_ORDER_BY)
-              || OB_UNLIKELY(node->children_[1]->num_child_ != 1)
-              || OB_ISNULL(node->children_[1]->children_)
-              || OB_ISNULL(sort_list = node->children_[1]->children_[0])) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("invalid parameter", K(node->children_[1]));
-          } else {
-            for (int32_t i = 0; OB_SUCC(ret) && i < sort_list->num_child_; i++) {
-              ParseNode *sort_node = sort_list->children_[i];
-              OrderItem order_item;
-              if (OB_FAIL(SMART_CALL(recursive_resolve(sort_node->children_[0], sub_expr)))) {
-                LOG_WARN("fail to recursive_resolve expr list item", K(ret));
-              } else if (OB_FAIL(ObResolverUtils::set_direction_by_mode(*sort_node, order_item))) {
-                LOG_WARN("failed to set direction by mode", K(ret));
-              } else {
-                order_item.expr_ = sub_expr;
-                if (OB_FAIL(agg_expr->add_order_item(order_item))) {
-                  LOG_WARN("Add order expression error", K(ret));
-                }
-              }
-            }
-          }
-        }
-      }
     } else if (T_FUNC_SYS_ARRAY_AGG == node->type_) {
       sub_expr = NULL;
       if (NULL != node->children_[0] && T_DISTINCT == node->children_[0]->type_) {
@@ -4997,53 +4697,6 @@ int ObRawExprResolverImpl::reset_keep_aggr_sort_direction(ObIArray<OrderItem> &a
       break;
     }
   }
-  return ret;
-}
-
-int ObRawExprResolverImpl::process_xmlparse_node(const ParseNode *node, ObRawExpr *&expr)
-{
-  INIT_SUCC(ret);
-  // check type and num_child
-  CK(OB_NOT_NULL(node));
-  if (OB_SUCC(ret) && T_FUN_SYS_XMLPARSE != node->type_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("node->type_ error");
-  } else if (OB_SUCC(ret) && node->num_child_ != 4) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("num_child_ error");
-  }
-  // declare func_expr
-  int32_t child_num = 0;
-  ObSysFunRawExpr *func_expr = NULL;
-  if (OB_SUCC(ret)) {
-    child_num = node->num_child_;
-    ctx_.expr_factory_.create_raw_expr(T_FUN_SYS_XMLPARSE, func_expr);
-    CK(OB_NOT_NULL(func_expr));
-    OZ(func_expr->init_param_exprs(child_num));
-    OX(func_expr->set_func_name(ObString::make_string("xmlparse")));
-  }
-
-  // add param
-  for (int32_t i = 0; OB_SUCC(ret) && i < child_num; i++) {
-    ObRawExpr *para_expr = NULL;
-    CK(OB_NOT_NULL(node->children_[i]));
-    OZ(SMART_CALL(recursive_resolve(node->children_[i], para_expr)));
-    CK(OB_NOT_NULL(para_expr));
-    if (i == 3) {
-      int flag = node->reserved_;
-      if (OB_NOT_NULL(ctx_.stmt_) && ctx_.stmt_->is_select_stmt()){
-        flag |= 0x08;
-      }
-      ObConstRawExpr *const_expr = static_cast<ObConstRawExpr *>(para_expr);
-      ObObj val;
-      val.set_int(flag);
-      const_expr->set_value(val);
-    }
-
-    //para_expr->clear_flag(IS_CALCULABLE_EXPR);
-    OZ(func_expr->add_param_expr(para_expr));
-  }
-  OX(expr = func_expr);
   return ret;
 }
 
@@ -6323,75 +5976,6 @@ int ObRawExprResolverImpl::process_json_mergepatch_node(const ParseNode *node, O
       LOG_USER_ERROR(OB_ERR_UNSUPPORT_TRUNCATE_TYPE);
     }
   }
-  return ret;
-}
-
-int ObRawExprResolverImpl::process_xml_forest_node(const ParseNode *node, ObRawExpr *&expr)
-{
-  INIT_SUCC(ret);
-  CK(OB_NOT_NULL(node));
-  CK(node->type_ == T_FUN_SYS_XML_FOREST);
-
-  ObSysFunRawExpr *func_expr = NULL;
-  OZ(ctx_.expr_factory_.create_raw_expr(T_FUN_SYS_XML_FOREST, func_expr));
-  CK(OB_NOT_NULL(func_expr));
-  OZ(func_expr->init_param_exprs(node->num_child_ * 3));
-  OX(func_expr->set_func_name(ObString::make_string("xmlforest")));
-
-  for (int i = 0; i < node->num_child_ && OB_SUCC(ret); i++) {
-    ParseNode *param_node = node->children_[i];
-    ParseNode *value_node = NULL;
-    ParseNode *tag_node = NULL;
-    ObRawExpr *value_expr = NULL;
-    ObRawExpr *tag_expr = NULL;
-    ObRawExpr *lable_expr = NULL;
-    if (param_node->type_ != T_EXPR_LIST) {
-      LOG_WARN("empty/invalid param_node", K(param_node->type_));
-    } else {
-      if (param_node->num_child_ != 3) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid param_node", K(param_node->num_child_));
-      } else {
-        value_node = param_node->children_[0];
-        tag_node = param_node->children_[1];
-      }
-      // fill tag
-      if (OB_FAIL(ret)) {
-      } else if (tag_node->type_ == T_VARCHAR && tag_node->str_value_ == NULL) {
-        if (value_node->type_ == T_OBJ_ACCESS_REF && OB_NOT_NULL(value_node->children_[0])) {
-          // fill tag with column name
-          if (value_node->children_[0]->str_value_ != NULL && value_node->children_[0]->str_len_ > 0) {
-            tag_node->str_value_ = value_node->children_[0]->str_value_;
-            tag_node->str_len_ = value_node->children_[0]->str_len_;
-          } else {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("failed to fill the empty tag", K(value_node->children_[0]->str_value_));
-          }
-        } else {
-          // not the case that can fill the tag name with column name
-          ret = OB_ERR_XMLELEMENT_ALIASED;
-          LOG_USER_ERROR(OB_ERR_XMLELEMENT_ALIASED, i + 1);
-        }
-      }
-      if (OB_FAIL(ret)) {
-      } else if (OB_NOT_NULL(value_node->raw_text_) && STRCMP(value_node->raw_text_, "NULL") == 0) { // NULL input
-        LOG_WARN("NULL value, skip", K(value_node->num_child_));
-      } else {
-        OZ(recursive_resolve(value_node, value_expr));
-        CK(OB_NOT_NULL(value_expr));
-        OZ(func_expr->add_param_expr(value_expr));
-        OZ(recursive_resolve(tag_node, tag_expr));
-        CK(OB_NOT_NULL(tag_expr));
-        OZ(func_expr->add_param_expr(tag_expr));
-        CK(param_node->children_[2]->type_ == T_INT);
-        OZ(recursive_resolve(param_node->children_[2], lable_expr));
-        CK(OB_NOT_NULL(lable_expr));
-        OZ(func_expr->add_param_expr(lable_expr));
-      }
-    }
-  }
-
-  OX(expr = func_expr);
   return ret;
 }
 

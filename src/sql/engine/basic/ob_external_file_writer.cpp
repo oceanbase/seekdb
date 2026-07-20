@@ -28,14 +28,12 @@ namespace sql
 int ObExternalFileWriter::open_file()
 {
   int ret = OB_SUCCESS;
-  if (IntoFileLocation::SERVER_DISK != file_location_) {//OSS,COS,S3
+  if (IntoFileLocation::SERVER_DISK != file_location_) {//OSS,COS
     bool is_exist = false;
     ObBackupIoAdapter adapter;
     ObStorageAccessType access_type = OB_STORAGE_ACCESS_APPENDER;
-    // for S3, should use OB_STORAGE_ACCESS_BUFFERED_MULTIPART_WRITER
-    // OSS,COS can also use multipart writer. need to check performance
-    if (IntoFileLocation::REMOTE_S3 == file_location_
-        || IntoFileLocation::REMOTE_COS == file_location_) {
+    // OSS,COS can use multipart writer. need to check performance
+    if (IntoFileLocation::REMOTE_COS == file_location_) {
       access_type = OB_STORAGE_ACCESS_BUFFERED_MULTIPART_WRITER;
     }
     if (OB_FAIL(adapter.is_exist(url_, &access_info_, is_exist))) {

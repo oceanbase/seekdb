@@ -353,7 +353,7 @@ int ObJsonUtil::get_accuracy_internal(ObAccuracy &accuracy,
         ObAccuracy::DDL_DEFAULT_ACCURACY[dest_type].get_length() : node.int32_values_[1]);
   } else {
     const ObAccuracy &def_acc =
-      ObAccuracy::DDL_DEFAULT_ACCURACY2[MYSQL_MODE][dest_type];
+      ObAccuracy::DDL_DEFAULT_ACCURACY2[0][dest_type];
     if (ObNumberType == dest_type && 0 == node.int16_values_[2]) {
       accuracy.set_precision(def_acc.get_precision());
     } else {

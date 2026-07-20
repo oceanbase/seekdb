@@ -2977,7 +2977,6 @@ int ObSchemaMgr::get_index_schema(
     LOG_WARN("invalid argument", K(ret), K(database_id), K(table_name));
   } else {
     ObSimpleTableSchemaV2 *tmp_schema = NULL;
-    lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
     const IndexNameMap &index_name_map = get_index_name_map_(is_built_in);
     if (is_recyclebin_database_id(database_id)) { // in recyclebin
       const ObIndexSchemaHashWrapper index_name_wrapper(

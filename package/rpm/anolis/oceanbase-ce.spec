@@ -91,8 +91,7 @@ pip3 install PyYAML
 cd $SRC_DIR
 chmod u+x build.sh
 bash build.sh clean
-python3 tools/upgrade/gen_obcdc_compatiable_info.py
-bash build.sh release -DOB_BUILD_PACKAGE=ON -DENABLE_FATAL_ERROR_HANG=OFF -DENABLE_AUTO_FDO=ON -DENABLE_THIN_LTO=ON \
+bash build.sh release -DOB_BUILD_PACKAGE=ON -DENABLE_AUTO_FDO=ON -DENABLE_THIN_LTO=ON \
    -DOB_STATIC_LINK_LGPL_DEPS=OFF -DCMAKE_INSTALL_PREFIX=%{_prefix} -DLTO_JOBS=%{lto_jobs} --init
 cd build_release
 make observer ob_sql_proxy_parser_static ob_admin ob_error %{_smp_mflags};

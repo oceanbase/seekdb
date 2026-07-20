@@ -35,7 +35,6 @@ public:
   virtual uint64_t hash() const override;
   virtual int fill_info_param(compaction::ObIBasicInfoParam *&out_param, ObIAllocator &allocator) const override;
   virtual int fill_dag_key(char *buf, const int64_t buf_len) const override;
-  virtual lib::Worker::CompatMode get_compat_mode() const override { return compat_mode_; }
   virtual bool is_ha_dag() const override { return false; }
 public:
   virtual int basic_init(ObIAllocator &allocator) final;
@@ -46,11 +45,10 @@ public:
   int process();
   void dump_dag_status(const char *log_info = "Print the status of independent dag");
   void post_signal();
-  OB_INLINE void set_compat_mode(lib::Worker::CompatMode mode) { compat_mode_ = mode; }
   VIRTUAL_TO_STRING_KV(KP(this), K_(id), "type", get_dag_type_str(type_),
       K_(is_inited), K_(is_stop), K_(dag_status), K_(start_time), K_(dag_ret),
       "ready_task_count", task_list_.get_size(), "waiting_task_count", waiting_task_list_.get_size(),
-      K_(running_task_cnt), K_(compat_mode));
+      K_(running_task_cnt));
 protected:
   virtual int64_t inner_get_total_task_list_count() const override final { return task_list_.get_size() + waiting_task_list_.get_size(); }
   virtual bool inner_add_task_into_list(ObITask *task) override final;
@@ -72,7 +70,6 @@ private:
   static const int64_t DAG_SCHEDULE_ONE_PRINT_INTERVAL = 60 * 1000L * 1000L /*60s*/;
   static const int64_t READY_TASK_BATCH_MOVE_SIZE = 50L;
 private:
-  lib::Worker::CompatMode compat_mode_;
   common::ObThreadCond cond_;
   TaskList waiting_task_list_; // for independent dag, task added into waiting task list firstly
 };

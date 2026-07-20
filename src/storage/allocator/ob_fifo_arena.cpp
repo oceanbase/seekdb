@@ -15,10 +15,7 @@
  */
 
 #define USING_LOG_PREFIX COMMON
-#if defined(OB_USE_ASAN) || defined(_WIN32)
 #include "ob_fifo_arena.h"
-#include <malloc.h>
-#endif
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 
 using namespace oceanbase::lib;
@@ -33,11 +30,7 @@ int64_t ObFifoArena::total_hold_ = 0;
 
 int64_t ObFifoArena::Page::get_actual_hold_size()
 {
-#ifdef OB_USE_ASAN
-  return malloc_usable_size(this);
-#else
   return ObTenantCtxAllocator::get_obj_hold(this);
-#endif
 }
 
 int ObFifoArena::init()

@@ -53,42 +53,20 @@ int ObMySQLLockTableExecutor::execute(ObExecContext &ctx,
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
   ObSQLSessionInfo *sess = ctx.get_my_session();
-  uint32_t client_session_id = sess->get_client_sid();
-  uint32_t server_session_id = sess->get_server_sid();
-  uint64_t client_session_create_ts = sess->get_client_create_time();
+  uint32_t session_id = sess->get_server_sid();
+  uint64_t session_create_ts = sess->get_sess_create_time();
   bool is_rollback = false;
   ObTxParam tx_param;
   int64_t timeout_us = THIS_WORKER.get_timeout_ts() - ObTimeUtility::current_time();
   OZ (ObLockContext::valid_execute_context(ctx));
-  // 1. check client_session_id is valid
-  // 2. modify inner table
-  // 2.1 add session into CLIENT_TO_SERVER_SESSION_INFO table
-  // 2.2 add lock_table into DETECT_LOCK_INFO table
-  // 3. lock table
-  OV (ObLockExecutor::proxy_is_support(ctx), OB_NOT_SUPPORTED);
-
   if (OB_SUCC(ret)) {
     SMART_VAR(ObLockContext, stack_ctx) {
       OZ (stack_ctx.init(ctx, timeout_us));
-      // only when connect by proxy should check client_session
-      if (sess->is_obproxy_mode()) {
-        OZ (check_client_ssid(stack_ctx, client_session_id, client_session_create_ts));
-        if (OB_EMPTY_RESULT == ret) {
-          ret = OB_SUCCESS;  // there're no same client_session_id records, continue
-        } else {
-          // TODO(yangyifei.yyf): some SQL can not redo, reroute may cause errors, so skip this step temporarily
-          // OZ (check_need_reroute_(stack_ctx1, sess, client_session_id, client_session_create_ts));
-        }
-      }
-      OZ (update_session_table_(stack_ctx,
-                                client_session_id,
-                                client_session_create_ts,
-                                server_session_id));
       OZ (ObInnerConnectionLockUtil::build_tx_param(sess, tx_param));
       OZ (lock_tables_(sess,
                       tx_param,
-                      client_session_id,
-                      client_session_create_ts,
+                      session_id,
+                      session_create_ts,
                       lock_node_list,
                       timeout_us));
       OX (mark_lock_session_(sess, true));
@@ -105,8 +83,8 @@ int ObMySQLLockTableExecutor::execute(ObExecContext &ctx,
 
 int ObMySQLLockTableExecutor::lock_tables_(sql::ObSQLSessionInfo *session,
                                            const ObTxParam &tx_param,
-                                           const uint32_t client_session_id,
-                                           const uint64_t client_session_create_ts,
+                                           const uint32_t session_id,
+                                           const uint64_t session_create_ts,
                                            const ObIArray<ObMySQLLockNode> &lock_node_list,
                                            const int64_t timeout_us)
 {
@@ -121,8 +99,8 @@ int ObMySQLLockTableExecutor::lock_tables_(sql::ObSQLSessionInfo *session,
       int64_t lock_mode = lock_node.lock_mode_;
       if (OB_FAIL(lock_table_(session,
                               tx_param,
-                              client_session_id,
-                              client_session_create_ts,
+                              session_id,
+                              session_create_ts,
                               table_id,
                               lock_mode,
                               timeout_us))) {
@@ -135,8 +113,8 @@ int ObMySQLLockTableExecutor::lock_tables_(sql::ObSQLSessionInfo *session,
 
 int ObMySQLLockTableExecutor::lock_table_(sql::ObSQLSessionInfo *session,
                                           const ObTxParam &tx_param,
-                                          const uint32_t client_session_id,
-                                          const uint64_t client_session_create_ts,
+                                          const uint32_t session_id,
+                                          const uint64_t session_create_ts,
                                           const uint64_t table_id,
                                           const int64_t lock_mode,
                                           const int64_t timeout_us)
@@ -154,9 +132,9 @@ int ObMySQLLockTableExecutor::lock_table_(sql::ObSQLSessionInfo *session,
   arg.is_from_sql_ = true;
   arg.detect_func_no_ = ObTableLockDetectType::DETECT_SESSION_ALIVE;
 
-  if (OB_FAIL(arg.owner_id_.convert_from_client_sessid(client_session_id,
-                                                       client_session_create_ts))) {
-    LOG_WARN("convert client_session_id to owner_id failed", K(ret), K(client_session_id));
+  if (OB_FAIL(arg.owner_id_.convert_from_session_id(session_id,
+                                                    session_create_ts))) {
+    LOG_WARN("convert session_id to owner_id failed", K(ret), K(session_id));
   } else if (OB_FAIL(ObTableLockDetector::record_detect_info_to_inner_table(session,
                                                                             LOCK_TABLE,
                                                                             arg,
@@ -178,7 +156,6 @@ int ObMySQLUnlockTableExecutor::execute(sql::ObExecContext &ctx)
 {
   int ret = OB_SUCCESS;
   int64_t release_cnt = 0;
-  OV (ObLockExecutor::proxy_is_support(ctx), OB_NOT_SUPPORTED);
   OZ (ObUnLockExecutor::execute(ctx, RELEASE_TABLE_LOCK, release_cnt));
   return ret;
 }

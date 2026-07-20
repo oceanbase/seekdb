@@ -38,7 +38,6 @@ int ObPackageInfo::assign(const ObPackageInfo &package_info)
     schema_version_ = package_info.schema_version_;
     type_ = package_info.type_;
     flag_ = package_info.flag_;
-    comp_flag_ = package_info.comp_flag_;
 
     if (OB_FAIL(deep_copy_str(package_info.get_package_name(), package_name_))) {
       LOG_WARN("deep copy package name failed", "package_name", package_info.package_name_, K(ret));
@@ -80,7 +79,6 @@ void ObPackageInfo::reset()
   schema_version_ = common::OB_INVALID_VERSION;
   type_ = INVALID_PACKAGE_TYPE;
   flag_ = 0;
-  comp_flag_ = COMPATIBLE_MYSQL_MODE;
   reset_string(exec_env_);
   reset_string(source_);
   reset_string(comment_);
@@ -117,7 +115,6 @@ OB_DEF_SERIALIZE(ObPackageInfo)
               package_name_,
               type_,
               flag_,
-              comp_flag_,
               exec_env_,
               source_,
               comment_,
@@ -135,7 +132,6 @@ OB_DEF_DESERIALIZE(ObPackageInfo)
               package_name_,
               type_,
               flag_,
-              comp_flag_,
               exec_env_,
               source_,
               comment_,
@@ -153,7 +149,6 @@ OB_DEF_SERIALIZE_SIZE(ObPackageInfo)
               package_name_,
               type_,
               flag_,
-              comp_flag_,
               exec_env_,
               source_,
               comment_,
@@ -163,6 +158,5 @@ OB_DEF_SERIALIZE_SIZE(ObPackageInfo)
 }  // namespace schema
 }  // namespace share
 }  // namespace oceanbase
-
 
 

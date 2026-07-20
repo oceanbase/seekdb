@@ -96,7 +96,6 @@ enum ObStorageType : uint8_t
 {
   OB_STORAGE_FILE = 0,
   OB_STORAGE_LOCAL = 1,
-  OB_STORAGE_S3 = 2,
   OB_STORAGE_LOCAL_CACHE = 3,
   OB_STORAGE_AZBLOB = 4,
   OB_STORAGE_MAX_TYPE
@@ -108,12 +107,7 @@ enum ObStorageAccessType
   OB_STORAGE_ACCESS_NOHEAD_READER = 1,
   OB_STORAGE_ACCESS_ADAPTIVE_READER = 2,
   OB_STORAGE_ACCESS_OVERWRITER = 3,
-  // OB_STORAGE_ACCESS_APPENDER correspond to ObStorageAppender.
-  // In cases where the destination is S3, a special format is utilized to emulate the append interface.
-  // Upon completion of data writing,
-  // it is recommended to invoke the seal_file interface to write a seal meta file.
-  // This step is designed to enhance subsequent access performance to the object.
-  // Skipping this step does not compromise data integrity but may impact performance.
+  // OB_STORAGE_ACCESS_APPENDER corresponds to ObStorageAppender.
   OB_STORAGE_ACCESS_APPENDER = 4,
   // When utilizing the multipart writer interface,
   // it is crucial to invoke the complete interface upon successful data upload to ensure object visibility.

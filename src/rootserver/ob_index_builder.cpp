@@ -1782,10 +1782,6 @@ int ObIndexBuilder::generate_schema(
           ret = OB_ERR_WRONG_KEY_COLUMN;
           LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, sort_item.column_name_.length(), sort_item.column_name_.ptr());
           LOG_WARN("index created direct on large text column should only be fulltext or string", K(arg.index_type_), K(ret));
-        } else if (ob_is_roaringbitmap_tc(data_column->get_data_type())) {
-          ret = OB_ERR_WRONG_KEY_COLUMN;
-          LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, sort_item.column_name_.length(), sort_item.column_name_.ptr());
-          LOG_WARN("index created on roaringbitmap column is not supported", K(arg.index_type_), K(ret));
         } else if (data_column->get_meta_type().is_blob() && data_column->is_fulltext_column()) {
           ret = OB_ERR_WRONG_KEY_COLUMN;
           LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, sort_item.column_name_.length(), sort_item.column_name_.ptr());

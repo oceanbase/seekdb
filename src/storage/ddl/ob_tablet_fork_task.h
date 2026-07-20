@@ -116,7 +116,7 @@ public:
   int init(const ObTabletForkParam &param);
   TO_STRING_KV(K_(is_inited), K_(table_id), K_(schema_version),
                K_(task_id), K_(source_tablet_id), K_(dest_tablet_id), K_(fork_snapshot_version),
-               K_(compat_mode), K_(data_format_version));
+               K_(data_format_version));
 public:
   bool is_inited_;
   uint64_t table_id_;
@@ -125,7 +125,6 @@ public:
   common::ObTabletID source_tablet_id_;
   common::ObTabletID dest_tablet_id_;
   int64_t fork_snapshot_version_;
-  lib::Worker::CompatMode compat_mode_;
   int64_t data_format_version_;
 };
 
@@ -190,8 +189,6 @@ public:
   void handle_init_failed_ret_code(int ret) { context_.complement_data_ret_ = ret; }
   int fill_info_param(compaction::ObIBasicInfoParam *&out_param, ObIAllocator &allocator) const override;
   int fill_dag_key(char *buf, const int64_t buf_len) const override;
-  virtual lib::Worker::CompatMode get_compat_mode() const override
-  { return param_.compat_mode_; }
   virtual bool is_ha_dag() const override { return false; }
   int calc_total_row_count();
 private:

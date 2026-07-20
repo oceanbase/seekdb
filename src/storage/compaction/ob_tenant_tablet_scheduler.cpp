@@ -901,7 +901,6 @@ int ObTenantTabletScheduler::schedule_merge_execute_dag(
   } else if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->alloc_dag(merge_exe_dag))) {
     LOG_WARN("failed to alloc dag", K(ret), K(param));
   } else if (OB_FAIL(merge_exe_dag->prepare_init(param,
-                                                 tablet_handle.get_obj()->get_tablet_meta().compat_mode_,
                                                  result,
                                                  ls))) {
     LOG_WARN("failed to init dag", K(ret), K(result));

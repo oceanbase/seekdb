@@ -137,9 +137,6 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
         = (session_.is_server_status_in_transaction() ? 1 : 0);
       flags.status_flags_.OB_SERVER_STATUS_AUTOCOMMIT = (ac ? 1 : 0);
       flags.status_flags_.OB_SERVER_MORE_RESULTS_EXISTS = result.has_more_result();
-      // in java client or others, use slow query bit to indicate partition hit or not
-      flags.status_flags_.OB_SERVER_QUERY_WAS_SLOW = !session_.partition_hit().get_bool();
-
       eofp.set_server_status(flags);
 
       if (OB_SUCC(ret) && !result.get_is_com_filed_list()) {
@@ -174,7 +171,6 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
           ok_param.warnings_count_ =
               static_cast<uint16_t>(warnings_buf->get_readable_warning_count());
         }
-        ok_param.is_partition_hit_ = session_.partition_hit().get_bool();
         ok_param.has_more_result_ = result.has_more_result();
         process_ok = true;
         if (OB_FAIL(sender_.send_ok_packet(session_, ok_param))) {
@@ -188,7 +184,6 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
           ObOKPParam ok_param;
           ok_param.message_ = const_cast<char*>(result.get_message());
           ok_param.affected_rows_ = curr_affected_row;
-          ok_param.is_partition_hit_ = session_.partition_hit().get_bool();
           ok_param.has_more_result_ = !result.is_cursor_end();
           ok_param.lii_ = result.get_last_insert_id_to_client();
           process_ok = true;
@@ -221,8 +216,7 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
       // because the upper layer will force a fallback to a single line execution retry
     } else {
       int sret = OB_SUCCESS;
-      bool is_partition_hit = session_.get_err_final_partition_hit(ret);
-      if (OB_SUCCESS != (sret = sender_.send_error_packet(ret, NULL, is_partition_hit))) {
+      if (OB_SUCCESS != (sret = sender_.send_error_packet(ret, NULL))) {
         LOG_WARN("send error packet fail", K(sret), K(ret));
       }
     }

@@ -26,7 +26,6 @@
 #include "sql/dtl/ob_dtl_channel_loop.h"
 #include "sql/engine/px/ob_px_util.h"
 #include "sql/engine/px/datahub/ob_dh_msg_ctx.h"
-#include "sql/engine/px/datahub/components/ob_dh_rollup_key.h"
 #include "sql/engine/px/datahub/components/ob_dh_barrier.h"
 #include "sql/engine/px/datahub/components/ob_dh_range_dist_wf.h"
 #include "sql/engine/px/datahub/components/ob_dh_second_stage_reporting_wf.h"
@@ -196,7 +195,6 @@ public:
   int on_piece_msg(ObExecContext &ctx, const ObBarrierPieceMsg &pkt) { UNUSED(ctx); UNUSED(pkt); return common::OB_NOT_SUPPORTED; }
   int on_piece_msg(ObExecContext &ctx, const ObWinbufPieceMsg &pkt) { UNUSED(ctx); UNUSED(pkt); return common::OB_NOT_SUPPORTED; }
   int on_piece_msg(ObExecContext &ctx, const ObDynamicSamplePieceMsg &pkt) { UNUSED(ctx); UNUSED(pkt); return common::OB_NOT_SUPPORTED; }
-  int on_piece_msg(ObExecContext &ctx, const ObRollupKeyPieceMsg &pkt) { UNUSED(ctx); UNUSED(pkt); return common::OB_NOT_SUPPORTED; }
   int on_piece_msg(ObExecContext &ctx, const ObRDWFPieceMsg &pkt) { UNUSED(ctx); UNUSED(pkt); return common::OB_NOT_SUPPORTED; }
   int on_piece_msg(ObExecContext &ctx, const ObInitChannelPieceMsg &pkt) { UNUSED(ctx); UNUSED(pkt); return common::OB_NOT_SUPPORTED; }
   int on_piece_msg(ObExecContext &ctx, const ObReportingWFPieceMsg &pkt) { UNUSED(ctx); UNUSED(pkt); return common::OB_NOT_SUPPORTED; }
@@ -233,7 +231,6 @@ public:
   int on_piece_msg(ObExecContext &ctx, const ObBarrierPieceMsg &pkt);
   int on_piece_msg(ObExecContext &ctx, const ObWinbufPieceMsg &pkt);
   int on_piece_msg(ObExecContext &ctx, const ObDynamicSamplePieceMsg &pkt);
-  int on_piece_msg(ObExecContext &ctx, const ObRollupKeyPieceMsg &pkt);
   int on_piece_msg(ObExecContext &ctx, const ObRDWFPieceMsg &pkt);
   int on_piece_msg(ObExecContext &ctx, const ObInitChannelPieceMsg &pkt);
   int on_piece_msg(ObExecContext &ctx, const ObReportingWFPieceMsg &pkt);

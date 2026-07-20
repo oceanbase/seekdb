@@ -92,8 +92,8 @@ int ObSortVecOp::inner_close()
   sort_op_provider_.collect_memory_dump_info(op_monitor_info_);
   sort_op_provider_.unregister_profile();
   if (MY_SPEC.enable_pd_topn_filter()) {
-    // TODO XUNSI: update plan monitor info of pushdown topn filter
-    // but all the others_values of the plan_monitor_node is used,
+    // TODO XUNSI: update operator diagnostics of pushdown topn filter
+    // but all the others_values of the operator monitor node is used,
     // add an extra string in json format is a considered way
   }
   return OB_SUCCESS;

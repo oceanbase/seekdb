@@ -38,24 +38,14 @@ namespace share
 int ObTenantSpace::guard_init_cb(const ObTenantSpace &tenant_space, char *buf, bool &is_inited)
 {
   int ret = OB_SUCCESS;
+  UNUSEDx(tenant_space, buf);
   is_inited = false;
-  if (&tenant_space == &ObTenantSpace::root()) {
-    // do-nothing
-  } else {
-    lib::Worker::CompatMode mode = THIS_WORKER.get_compatibility_mode();
-    *reinterpret_cast<lib::Worker::CompatMode*>(buf) = mode;
-    mode = ::oceanbase::share::g_mp->compat_mode();
-    THIS_WORKER.set_compatibility_mode(mode);
-    is_inited = true;
-  }
   return ret;
 }
 
 void ObTenantSpace::guard_deinit_cb(const ObTenantSpace &tenant_space, char *buf)
 {
-  UNUSEDx(tenant_space);
-  lib::Worker::CompatMode mode = *reinterpret_cast<lib::Worker::CompatMode*>(buf);
-  THIS_WORKER.set_compatibility_mode(mode);
+  UNUSEDx(tenant_space, buf);
 }
 
 ObTenantSpace &ObTenantSpace::root()

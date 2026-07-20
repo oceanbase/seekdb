@@ -58,9 +58,9 @@ int ObExprGetUserVar::calc_result_type1(ObExprResType &type,
           && (type.get_precision() == PRECISION_UNKNOWN_YET
               || type.get_scale() == NUMBER_SCALE_UNKNOWN_YET)) {
         ObPrecision default_prec =
-          ObAccuracy::DDL_DEFAULT_ACCURACY2[MYSQL_MODE][type.get_type()].get_precision();
+          ObAccuracy::DDL_DEFAULT_ACCURACY2[0][type.get_type()].get_precision();
         ObScale default_scale =
-          ObAccuracy::DDL_DEFAULT_ACCURACY2[MYSQL_MODE][type.get_type()].get_scale();
+          ObAccuracy::DDL_DEFAULT_ACCURACY2[0][type.get_type()].get_scale();
         if (type.get_precision() == PRECISION_UNKNOWN_YET) {
           type.set_precision(default_prec);
         }

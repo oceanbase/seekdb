@@ -645,7 +645,6 @@ public:
   static bool need_column_conv(const ObRawExprResType &expected_type, 
                                const ObRawExpr &expr, 
                                bool strict_type_check);
-  static bool check_exprs_type_collation_accuracy_equal(const ObRawExpr *expr1, const ObRawExpr *expr2);
   // This method should be used with caution, it will lose enum type enum_set_values
   static int build_column_conv_expr(ObRawExprFactory &expr_factory,
                                     const share::schema::ObColumnSchemaV2 *column_schema,

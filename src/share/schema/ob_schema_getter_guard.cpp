@@ -1811,12 +1811,9 @@ int ObSchemaGetterGuard::check_activate_all_role_var(bool &activate_all_role) {
 
 int ObSchemaGetterGuard::is_user_empty_passwd(const ObUserLoginInfo &login_info, bool &is_empty_passwd_account) {
   int ret = OB_SUCCESS;
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
   is_empty_passwd_account = false;
   if (OB_FAIL(check_tenant_schema_guard())) {
     LOG_WARN("fail to check tenant schema guard", KR(ret));
-  } else if (OB_FAIL(get_tenant_compat_mode(compat_mode))) {
-    LOG_WARN("fail to get tenant compat mode", K(ret));
   } else {
     const int64_t DEFAULT_SAME_USERNAME_COUNT = 4;
     ObSEArray<const ObUserInfo *, DEFAULT_SAME_USERNAME_COUNT> users_info;
@@ -1857,12 +1854,9 @@ int ObSchemaGetterGuard::check_user_access(
     const ObUserInfo *&sel_user_info)
 {
   int ret = OB_SUCCESS;
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
   sel_user_info = NULL;
   if (OB_FAIL(check_tenant_schema_guard())) {
     LOG_WARN("fail to check tenant schema guard", KR(ret), K(s_priv));
-  } else if (OB_FAIL(get_tenant_compat_mode(compat_mode))) {
-    LOG_WARN("fail to get tenant compat mode", K(ret));
   } else {
     const int64_t DEFAULT_SAME_USERNAME_COUNT = 4;
     ObSEArray<const ObUserInfo *, DEFAULT_SAME_USERNAME_COUNT> users_info;
@@ -1965,10 +1959,8 @@ int ObSchemaGetterGuard::check_user_access(
           CK (user_info->get_role_id_array().count() ==
               user_info->get_role_id_option_array().count());
 
-          if (OB_SUCC(ret) && lib::Worker::CompatMode::MYSQL == compat_mode) {
-            if (OB_FAIL(check_activate_all_role_var(activate_all_role))) {
-              LOG_WARN("fail to check activate all role", K(ret));
-            }
+          if (OB_SUCC(ret) && OB_FAIL(check_activate_all_role_var(activate_all_role))) {
+            LOG_WARN("fail to check activate all role", K(ret));
           }
           
           for (int i = 0; OB_SUCC(ret) && i < role_id_array.count(); ++i) {
@@ -2230,7 +2222,6 @@ int ObSchemaGetterGuard::check_db_access(
   int ret = OB_SUCCESS;
   
   const ObSchemaMgr *mgr = NULL;
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
 
   if (!session_priv.is_valid() || 0 == db.length()) {
     ret = OB_INVALID_ARGUMENT;
@@ -2239,8 +2230,6 @@ int ObSchemaGetterGuard::check_db_access(
     LOG_WARN("fail to check tenant schema guard", KR(ret), K(1UL));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
     LOG_WARN("fail to check lazy guard", KR(ret));
-  } else if (OB_FAIL(get_tenant_compat_mode(compat_mode))) {
-    LOG_WARN("fail to get compat mode", K(ret));
   } else {
     const ObPrivMgr &priv_mgr = mgr->priv_mgr_;
     ObOriginalDBKey db_priv_key(session_priv.user_id_,
@@ -4136,7 +4125,7 @@ int ObSchemaGetterGuard::check_routine_exist(uint64_t database_id, uint64_t pack
 int ObSchemaGetterGuard::check_package_exist(uint64_t database_id,
                                              const common::ObString &package_name,
                                              ObPackageType package_type,
-                                             int64_t compatible_mode, bool &exist) {
+                                             bool &exist) {
   int ret = OB_SUCCESS;
   const ObSchemaMgr *mgr = NULL;
   exist = false;
@@ -4152,7 +4141,7 @@ int ObSchemaGetterGuard::check_package_exist(uint64_t database_id,
     LOG_WARN("fail to check lazy guard", KR(ret));
   } else {
     const ObSimplePackageSchema *schema = NULL;
-    if (OB_FAIL(mgr->package_mgr_.get_package_schema( database_id, package_name, package_type, compatible_mode, schema))) {
+    if (OB_FAIL(mgr->package_mgr_.get_package_schema(database_id, package_name, package_type, schema))) {
       LOG_WARN("get package schema failed", KR(ret), K(database_id), K(package_name), K(package_type));
     } else if (NULL != schema) {
       exist = true;
@@ -4163,7 +4152,7 @@ int ObSchemaGetterGuard::check_package_exist(uint64_t database_id,
 
 int ObSchemaGetterGuard::get_package_id(uint64_t database_id,
                                         const ObString &package_name, ObPackageType type,
-                                        int64_t compatible_mode, uint64_t &package_id)
+                                        uint64_t &package_id)
 {
   int ret = OB_SUCCESS;
   const ObSchemaMgr *mgr = NULL;
@@ -4179,7 +4168,7 @@ int ObSchemaGetterGuard::get_package_id(uint64_t database_id,
     LOG_WARN("fail to check tenant schema guard", KR(ret));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
     LOG_WARN("fail to check lazy guard", KR(ret));
-  } else if (OB_FAIL(mgr->package_mgr_.get_package_schema( database_id, package_name, type, compatible_mode, schema))) {
+  } else if (OB_FAIL(mgr->package_mgr_.get_package_schema(database_id, package_name, type, schema))) {
     LOG_WARN("get package schema failed", KR(ret), K(database_id), K(package_name));
   } else if (NULL != schema) {
     package_id = schema->get_package_id();
@@ -4631,7 +4620,6 @@ int ObSchemaGetterGuard::get_package_info(
     const uint64_t database_id,
     const ObString &package_name,
     ObPackageType package_type,
-    int64_t compatible_mode,
     const ObPackageInfo *&package_info)
 {
   int ret = OB_SUCCESS;
@@ -4650,7 +4638,7 @@ int ObSchemaGetterGuard::get_package_info(
     LOG_WARN("fail to check tenant schema guard", KR(ret));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
     LOG_WARN("fail to check lazy guard", KR(ret));
-  } else if (OB_FAIL(mgr->package_mgr_.get_package_schema( database_id, package_name, package_type, compatible_mode, simple_package))) {
+  } else if (OB_FAIL(mgr->package_mgr_.get_package_schema(database_id, package_name, package_type, simple_package))) {
     LOG_WARN("get simple package schema failed", KR(ret), K(database_id), K(package_name), K(package_type));
   } else if (NULL == simple_package) {
     LOG_DEBUG("package not exist", K(database_id), K(package_name));
@@ -5393,12 +5381,6 @@ int ObSchemaGetterGuard::get_idx_schema_by_origin_idx_name(uint64_t database_id,
     LOG_WARN("NULL ptr", KR(ret), KP(table_schema));
   }
   return ret;
-}
-
-int ObSchemaGetterGuard::get_tenant_compat_mode(lib::Worker::CompatMode &compat_mode)
-{
-  compat_mode = lib::Worker::CompatMode::MYSQL;
-  return OB_SUCCESS;
 }
 
 int ObSchemaGetterGuard::get_schema_mgr(const ObSchemaMgr *&schema_mgr) const

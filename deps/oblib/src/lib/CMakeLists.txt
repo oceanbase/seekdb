@@ -142,7 +142,6 @@ ob_set_subtarget(oblib_lib common_mixed
   wait_event/ob_wait_event.cpp
   locale/ob_locale_type.cc
   locale/ob_locale.cpp
-  other/recursion.cpp
 )
 
 ob_set_subtarget(oblib_lib lock
@@ -206,7 +205,6 @@ ob_set_subtarget(oblib_lib utility
   utility/ob_utility.cpp
   utility/utility.cpp
   utility/ob_backtrace.cpp
-  utility/ob_unify_serialize.cpp
   utility/ob_hyperloglog.cpp
 )
 
@@ -282,9 +280,6 @@ if(NOT APPLE AND NOT WIN32 AND NOT ANDROID)
       alloc/malloc_hook.cpp
       alloc/malloc_hook.h
       alloc/malloc_hook_extended.cpp)
-  if (BUILD_CDC_ONLY)
-    set_target_properties(malloc_hook PROPERTIES EXCLUDE_FROM_ALL TRUE)
-  endif()
   target_link_libraries(malloc_hook oblib_base)
 endif()
 
@@ -302,7 +297,6 @@ else()
   )
 endif()
 
-if (NOT BUILD_CDC_ONLY)
 if (ANDROID)
 # vsag vector library -- Android: all libs installed to DEP_DIR/lib by ob-deps
 target_link_directories(
@@ -404,8 +398,6 @@ else()
 endif()
 
 endif()
-endif()
-
 # ATTENTION: add this cpp file as library only if compiled target doesn't need diagnose. like unittest or cdc.
 add_library(mock_di stat/mock_diagnostic_info.cpp)
 target_include_directories(mock_di PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/deps/oblib/src)

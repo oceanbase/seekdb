@@ -29,8 +29,6 @@ class ObBarrierWholeMsg;
 class ObBarrierPieceMsg;
 class ObWinbufWholeMsg;
 class ObWinbufPieceMsg;
-class ObRollupKeyWholeMsg;
-class ObRollupKeyPieceMsg;
 class ObDynamicSamplePieceMsg;
 class ObDynamicSampleWholeMsg;
 class ObRDWFPieceMsg;
@@ -60,7 +58,6 @@ public:
   virtual int on_piece_msg(ObExecContext &ctx, const ObBarrierPieceMsg &pkt) = 0;
   virtual int on_piece_msg(ObExecContext &ctx, const ObWinbufPieceMsg &pkt) = 0;
   virtual int on_piece_msg(ObExecContext &ctx, const ObDynamicSamplePieceMsg &pkt) = 0;
-  virtual int on_piece_msg(ObExecContext &ctx, const ObRollupKeyPieceMsg &pkt) = 0;
   virtual int on_piece_msg(ObExecContext &ctx, const ObRDWFPieceMsg &pkt) = 0;
   virtual int on_piece_msg(ObExecContext &ctx, const ObInitChannelPieceMsg &pkt) = 0;
   virtual int on_piece_msg(ObExecContext &ctx, const ObReportingWFPieceMsg &pkt) = 0;
@@ -85,8 +82,6 @@ public:
       const ObWinbufWholeMsg &pkt) const = 0;
   virtual int on_whole_msg(
       const ObDynamicSampleWholeMsg &pkt) const = 0;
-  virtual int on_whole_msg(
-      const ObRollupKeyWholeMsg &pkt) const = 0;
   virtual int on_whole_msg(
       const ObRDWFWholeMsg &pkt) const = 0;
   virtual int on_whole_msg(
@@ -125,8 +120,6 @@ public:
       const ObWinbufWholeMsg &pkt) const;
   virtual int on_whole_msg(
       const ObDynamicSampleWholeMsg &pkt) const;
-  virtual int on_whole_msg(
-      const ObRollupKeyWholeMsg &pkt) const;
   virtual int on_whole_msg(
       const ObRDWFWholeMsg &pkt) const;
   virtual int on_whole_msg(

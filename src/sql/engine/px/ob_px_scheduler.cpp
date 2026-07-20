@@ -427,14 +427,6 @@ int ObPxMsgProc::on_piece_msg(
 
 int ObPxMsgProc::on_piece_msg(
     ObExecContext &ctx,
-    const ObRollupKeyPieceMsg &pkt)
-{
-  ObDhPieceMsgProc<ObRollupKeyPieceMsg> proc;
-  return proc.on_piece_msg(coord_info_, ctx, pkt);
-}
-
-int ObPxMsgProc::on_piece_msg(
-    ObExecContext &ctx,
     const ObRDWFPieceMsg &pkt)
 {
   ObDhPieceMsgProc<ObRDWFPieceMsg> proc;

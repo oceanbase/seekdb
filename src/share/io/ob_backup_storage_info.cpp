@@ -75,22 +75,11 @@ int ObBackupStorageInfo::get_authorization_info(char *authorization, const int64
     LOG_WARN("invalid args", K(ret), KP(authorization), K(length));
   } else if (OB_STORAGE_FILE == device_type_) {
     // do nothing
-  } else if (!is_assume_role_mode_) {
-    // access by ak/sk mode
+  } else {
     if (OB_FAIL(get_access_key_(access_key_buf, sizeof(access_key_buf)))) {
       LOG_WARN("failed to get access key", K(ret));
     } else if (OB_FAIL(databuff_printf(authorization, length, "%s&%s", access_id_, access_key_buf))) {
       LOG_WARN("failed to set authorization", K(ret), K(length), K_(access_id), K(strlen(access_key_buf)));
-    }
-  } else {
-    // access by assume role mode
-    int64_t pos = 0;
-    if (OB_FAIL(databuff_printf(authorization, length, pos, "%s", role_arn_))) {
-      LOG_WARN("failed to set authorization", K(ret), K(length), KP_(role_arn));
-    } else if (external_id_[0] != '\0') {
-      if (OB_FAIL(databuff_printf(authorization, length, pos, "&%s", external_id_))) {
-        LOG_WARN("failed to set authorization", K(ret), K(length), KP_(external_id));
-      }
     }
   }
 

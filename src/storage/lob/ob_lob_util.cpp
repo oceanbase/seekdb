@@ -55,7 +55,6 @@ int ObInsertLobColumnHelper::start_trans(const bool is_for_read,
   int ret = OB_SUCCESS;
   ObTxParam tx_param;
   tx_param.access_mode_ = is_for_read ? ObTxAccessMode::RD_ONLY : ObTxAccessMode::RW; 
-  tx_param.cluster_id_ = ObServerConfig::get_instance().cluster_id;
   tx_param.isolation_ = transaction::ObTxIsolationLevel::RC;
   tx_param.timeout_us_ = std::max(static_cast<int64_t>(0), timeout_ts - ObTimeUtility::current_time());
 

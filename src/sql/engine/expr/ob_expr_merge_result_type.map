@@ -44,7 +44,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObCollectionSQLType, /* NullType=>ObCollectionSQLType*/
         ObMySQLDateType,     /*NullType=>ObMySQLDateType  */
         ObMySQLDateTimeType, /*NullType=>ObMySQLDateTimeType  */
-        ObRoaringBitmapType, /* NullType=>ObRoaringBitmapType*/
     },
 
     /*TinyIntType*/
@@ -92,7 +91,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /* TinyInt=>ObCollectionSQLType*/
         ObVarcharType,    /*TinyIntType=>ObMySQLDateType  */
         ObVarcharType,    /*TinyIntType=>ObMySQLDateTimeType  */
-        ObMaxType,        /*TinyInt=>ObRoaringBitmapType*/
     },
 
     /*SmallIntType*/
@@ -140,7 +138,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /*SmallInt=>ObCollectionSQLType*/
         ObVarcharType,    /*SmallInt=>ObMySQLDateType  */
         ObVarcharType,    /*SmallInt=>ObMySQLDateTimeType  */
-        ObMaxType,        /*SmallInt=>ObRoaringBitmapType*/
     },
 
     /*MediumIntType*/
@@ -188,7 +185,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /*MediumInt=>ObCollectionSQLType*/
         ObVarcharType,    /*MediumInt=>ObMySQLDateType  */
         ObVarcharType,    /*MediumInt=>ObMySQLDateTimeType  */
-        ObMaxType,        /*MediumInt=>ObRoaringBitmapType*/
     },
 
     /*Int32Type*/
@@ -236,7 +232,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /*Int32Type=>ObCollectionSQLType*/
         ObVarcharType,    /*Int32Type=>ObMySQLDateType  */
         ObVarcharType,    /*Int32Type=>ObMySQLDateTimeType  */
-        ObMaxType,        /*Int32Type=>ObRoaringBitmapType*/
     },
 
     /*IntType*/
@@ -284,7 +279,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /*IntType=>ObCollectionSQLType*/
         ObVarcharType,    /*IntType=>ObMySQLDateType  */
         ObVarcharType,    /*IntType=>ObMySQLDateTimeType  */
-        ObMaxType,        /*IntType=>ObRoaringBitmapType*/
     },
 
     /*UTinyIntType*/
@@ -332,7 +326,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /*UTinyIntType=>ObCollectionSQLType*/
         ObVarcharType,    /*UTinyIntType=>ObMySQLDateType  */
         ObVarcharType,    /*UTinyIntType=>ObMySQLDateTimeType  */
-        ObMaxType,        /*UTinyIntType=>ObRoaringBitmapType*/
     },
 
     /*USmallIntType*/
@@ -380,7 +373,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /*USmallIntType=>ObCollectionSQLType*/
         ObVarcharType,    /*USmallIntType=>ObMySQLDateType  */
         ObVarcharType,    /*USmallIntType=>ObMySQLDateTimeType  */
-        ObMaxType,        /*USmallIntType=>ObRoaringBitmapType*/
     },
 
     /*UMediumIntType*/
@@ -428,7 +420,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /*UMediumIntType=>ObCollectionSQLType*/
         ObVarcharType,    /*UMediumIntType=>ObMySQLDateType  */
         ObVarcharType,    /*UMediumIntType=>ObMySQLDateTimeType  */
-        ObMaxType,        /*UMediumIntType=>ObRoaringBitmapType*/
     },
 
     /*UInt32Type*/
@@ -476,7 +467,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /*UInt32Type=>ObCollectionSQLType*/
         ObVarcharType,    /*UInt32Type=>ObMySQLDateType  */
         ObVarcharType,    /*UInt32Type=>ObMySQLDateTimeType  */
-        ObMaxType,        /*UInt32Type=>ObRoaringBitmapType*/
     },
 
     /*UIntType*/
@@ -524,7 +514,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /*UIntType=>ObCollectionSQLType*/
         ObVarcharType,    /*UIntType=>ObMySQLDateType  */
         ObVarcharType,    /*UIntType=>ObMySQLDateTimeType  */
-        ObMaxType,        /*UIntType=>ObRoaringBitmapType*/
     },
 
     /*FloatType*/
@@ -572,7 +561,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /*FloatType=>ObCollectionSQLType*/
         ObVarcharType,    /*FloatType=>ObMySQLDateType  */
         ObVarcharType,    /*FloatType=>ObMySQLDateTimeType  */
-        ObMaxType,        /*FloatType=>ObRoaringBitmapType*/
     },
 
     /*DoubleType*/
@@ -620,7 +608,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /*DoubleTYpe=>ObCollectionSQLType*/
         ObVarcharType,    /*DoubleType=>ObMySQLDateType  */
         ObVarcharType,    /*DoubleType=>ObMySQLDateTimeType  */
-        ObMaxType,        /*DoubleTYpe=>ObRoaringBitmapType*/
     },
 
     /*UFloatType*/
@@ -668,7 +655,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /*UFloatTYpe=>ObCollectionSQLType*/
         ObVarcharType,    /*UFloatType=>ObMySQLDateType  */
         ObVarcharType,    /*UFloatType=>ObMySQLDateTimeType  */
-        ObMaxType,        /*UFloatTYpe=>ObRoaringBitmapType*/
     },
 
     /*UDoubleType*/
@@ -716,7 +702,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /*UDoubleTYpe=>ObCollectionSQLType*/
         ObVarcharType,    /*UDoubleType=>ObMySQLDateType  */
         ObVarcharType,    /*UDoubleType=>ObMySQLDateTimeType  */
-        ObMaxType,        /*UDoubleTYpe=>ObRoaringBitmapType*/
     },
 
     /*NumberType*/
@@ -764,7 +749,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /*NumberTYpe=>ObCollectionSQLType*/
         ObVarcharType,    /*NumberType=>ObMySQLDateType  */
         ObVarcharType,    /*NumberType=>ObMySQLDateTimeType  */
-        ObMaxType,        /*NumberTYpe=>ObRoaringBitmapType*/
     },
 
     /*UNumberType*/
@@ -812,7 +796,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /*UNumberTYpe=>ObCollectionSQLType*/
         ObVarcharType,    /*UNumberType=>ObMySQLDateType  */
         ObVarcharType,    /*UNumberType=>ObMySQLDateTimeType  */
-        ObMaxType,        /*UNumberTYpe=>ObRoaringBitmapType*/
     },
 
     /*DateTimeType*/
@@ -860,7 +843,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,           /*DateTimeTYpe=>ObCollectionSQLType*/
         ObMySQLDateTimeType, /*DateTimeType=>ObMySQLDateType  */
         ObMySQLDateTimeType, /*DateTimeType=>ObMySQLDateTimeType  */
-        ObMaxType,           /*DateTimeTYpe=>ObRoaringBitmapType*/
     },
 
     /*TimestampType*/
@@ -908,7 +890,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,           /*TimestampTYpe=>ObCollectionSQLType*/
         ObMySQLDateTimeType, /*TimestampType=>ObMySQLDateType  */
         ObMySQLDateTimeType, /*TimestampType=>ObMySQLDateTimeType  */
-        ObMaxType,           /*TimestampTYpe=>ObRoaringBitmapType*/
     },
 
     /*DateType*/
@@ -956,7 +937,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,           /*DateTYpe=>ObCollectionSQLType*/
         ObMySQLDateType,     /*DateType=>ObMySQLDateType  */
         ObMySQLDateTimeType, /*DateType=>ObMySQLDateTimeType  */
-        ObMaxType,           /*DateTYpe=>ObRoaringBitmapType*/
     },
 
     /*TimeType*/
@@ -1004,7 +984,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,           /*TimeTYpe=>ObCollectionSQLType*/
         ObMySQLDateTimeType, /*TimeType=>ObMySQLDateType  */
         ObMySQLDateTimeType, /*TimeType=>ObMySQLDateTimeType  */
-        ObMaxType,           /*TimeTYpe=>ObRoaringBitmapType*/
     },
 
     /*YearType*/
@@ -1052,7 +1031,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /*YearTYpe=>ObCollectionSQLType*/
         ObVarcharType,    /*YearType=>ObMySQLDateType  */
         ObVarcharType,    /*YearType=>ObMySQLDateTimeType  */
-        ObMaxType,        /*YearTYpe=>ObRoaringBitmapType*/
     },
 
     /*VarcharType*/
@@ -1100,7 +1078,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /*VarcharTYpe=>ObCollectionSQLType*/
         ObVarcharType,    /*VarcharType=>ObMySQLDateType  */
         ObVarcharType,    /*VarcharType=>ObMySQLDateTimeType  */
-        ObMaxType,        /*VarcharTYpe=>ObRoaringBitmapType*/
     },
 
     /*CharType*/
@@ -1148,7 +1125,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /*CharType=>ObCollectionSQLType*/
         ObCharType,    /*CharType=>ObMySQLDateType  */
         ObCharType,    /*CharType=>ObMySQLDateTimeType  */
-        ObMaxType,        /*CharType=>ObRoaringBitmapType*/
     },
 
     /*HexStringType*/
@@ -1196,7 +1172,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /*HexStringType=>ObCollectionSQLType*/
         ObVarcharType,    /*HexStringType=>ObMySQLDateType  */
         ObVarcharType,    /*HexStringType=>ObMySQLDateTimeType  */
-        ObRoaringBitmapType, /*HexStringType=>ObRoaringBitmapType*/
     },
 
     /*ExtendType*/
@@ -1244,7 +1219,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObCollectionSQLType,  /*ExtendType=>ObCollectionSQLType*/
         ObMaxType,    /*ExtendType=>ObMySQLDateType  */
         ObMaxType,    /*ExtendType=>ObMySQLDateTimeType  */
-        ObMaxType,       /*ExtendType=>ObRoaringBitmapType*/
     },
 
     /*UnknownType*/
@@ -1292,7 +1266,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /*UnknownType=>ObCollectionSQLType*/
         ObVarcharType,    /*UnknownType=>ObMySQLDateType  */
         ObVarcharType,    /*UnknownType=>ObMySQLDateTimeType  */
-        ObMaxType,        /*UnknownType=>ObRoaringBitmapType*/
     },
     /*ObTinyTextType*/
     {
@@ -1339,7 +1312,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /*ObTinyTextType=>ObCollectionSQLType*/
         ObTinyTextType,    /*ObTinyTextType=>ObMySQLDateType  */
         ObTinyTextType,    /*ObTinyTextType=>ObMySQLDateTimeType  */
-        ObMaxType,        /*ObTinyTextType=>ObRoaringBitmapType*/
     },
     /*ObTextType*/
     {
@@ -1386,7 +1358,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /*ObTextType=>ObCollectionSQLType*/
         ObTextType,    /*ObTextType=>ObMySQLDateType  */
         ObTextType,    /*ObTextType=>ObMySQLDateTimeType  */
-        ObMaxType,        /*ObTextType=>ObRoaringBitmapType*/
     },
 
     /*ObMediumTextType*/
@@ -1434,7 +1405,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /*ObMediumTextType=>ObCollectionSQLType*/
         ObMediumTextType,    /*ObMediumTextType=>ObMySQLDateType  */
         ObMediumTextType,    /*ObMediumTextType=>ObMySQLDateTimeType  */
-        ObMaxType,        /*ObMediumTextType=>ObRoaringBitmapType*/
     },
 
     /*ObLongTextType*/
@@ -1482,7 +1452,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,       /*ObLongTextType=>ObCollectionSQLType*/
         ObLongTextType,    /*ObLongTextType=>ObMySQLDateType  */
         ObLongTextType,    /*ObLongTextType=>ObMySQLDateTimeType  */
-        ObMaxType,       /*ObLongTextType=>ObRoaringBitmapType*/
     },
     /*ObBitType*/
     {
@@ -1529,7 +1498,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /*ObBitType=>ObCollectionSQLType*/
         ObVarcharType,    /*ObBitType=>ObMySQLDateType  */
         ObVarcharType,    /*ObBitType=>ObMySQLDateTimeType  */
-        ObMaxType,        /*ObBitType=>ObRoaringBitmapType*/
     },
     /*ObEnumType*/
     {
@@ -1576,7 +1544,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /*ObEnumType=>ObCollectionSQLType*/
         ObVarcharType,    /*ObEnumType=>ObMySQLDateType  */
         ObVarcharType,    /*ObEnumType=>ObMySQLDateTimeType  */
-        ObMaxType,        /*ObEnumType=>ObRoaringBitmapType*/
     },
     /*ObSetType*/
     {
@@ -1623,7 +1590,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /*ObSetType=>ObCollectionSQLType*/
         ObVarcharType,    /*ObSetType=>ObMySQLDateType  */
         ObVarcharType,    /*ObSetType=>ObMySQLDateTimeType  */
-        ObMaxType,        /*ObSetType=>ObRoaringBitmapType*/
     },
     /*ObEnumInnerType*/
     {
@@ -1670,7 +1636,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /*ObEnumInnerType=>ObCollectionSQLType*/
         ObVarcharType,    /*ObEnumInnerType=>ObMySQLDateType  */
         ObVarcharType,    /*ObEnumInnerType=>ObMySQLDateTimeType  */
-        ObMaxType,        /*ObEnumInnerType=>ObRoaringBitmapType*/
     },
     /*ObSetInnerType*/
     {
@@ -1717,7 +1682,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /*ObSetInnerType=>ObCollectionSQLType*/
         ObVarcharType,    /*ObSetInnerType=>ObMySQLDateType  */
         ObVarcharType,    /*ObSetInnerType=>ObMySQLDateTimeType  */
-        ObMaxType,        /*ObSetInnerType=>ObRoaringBitmapType*/
     },
     /*ObJsonType*/
     {
@@ -1764,7 +1728,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,      /*ObJsonType=>ObCollectionSQLType*/
         ObJsonType,     /*ObJsonType=>ObMySQLDateType  */
         ObJsonType,     /*ObJsonType=>ObMySQLDateTimeType  */
-        ObMaxType,      /*ObJsonType=>ObRoaringBitmapType*/
     },
     /*ObGeometryType*/
     {
@@ -1811,7 +1774,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,          /* ObGeometryType=>ObCollectionSQLType*/
         ObGeometryType,     /*ObGeometryType=>ObMySQLDateType  */
         ObGeometryType,     /*ObGeometryType=>ObMySQLDateTimeType  */
-        ObMaxType,          /* ObGeometryType=>ObRoaringBitmapType*/
     },
     /*ObUserDefinedSQLType*/
     {
@@ -1858,7 +1820,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,     /* ObUserDefinedSQLType=>ObCollectionSQLType*/
         ObMaxType,     /*ObUserDefinedSQLType=>ObMySQLDateType  */
         ObMaxType,     /*ObUserDefinedSQLType=>ObMySQLDateTimeType  */
-        ObMaxType,     /* ObUserDefinedSQLType=>ObRoaringBitmapType*/
     },
     /*ObDecimalIntType*/
     {
@@ -1905,7 +1866,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,        /* ObDecimalIntType=>ObCollectionSQLType */
         ObVarcharType,     /*ObUserDefinedSQLType=>ObMySQLDateType  */
         ObVarcharType,     /*ObUserDefinedSQLType=>ObMySQLDateTimeType  */
-        ObMaxType,        /*ObDecimalIntType=>ObRoaringBitmapType*/
     },
     /*ObCollectionSQLType*/
     {
@@ -1952,7 +1912,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObCollectionSQLType, /* ObCollectionSQLType */
         ObMaxType,     /* ObCollectionSQLType=>ObMySQLDateType  */
         ObMaxType,     /* ObCollectionSQLType=>ObMySQLDateTimeType  */
-        ObMaxType,     /* ObCollectionSQLType=>ObRoaringBitmapType*/
     },
     /*MySQLDateType*/
     {
@@ -1999,7 +1958,6 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,           /*ObMySQLDateType=>ObCollectionSQLType*/
         ObMySQLDateType,     /*ObMySQLDateType=>ObMySQLDateType  */
         ObMySQLDateTimeType, /*ObMySQLDateType=>ObMySQLDateTimeType  */
-        ObMaxType,     /* ObCollectionSQLType=>ObRoaringBitmapType*/
     },
     /*MySQLDateTimeType*/
     {
@@ -2046,55 +2004,8 @@ static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
         ObMaxType,           /*ObMySQLDateTimeType=>ObCollectionSQLType*/
         ObMySQLDateTimeType, /*ObMySQLDateTimeType=>ObMySQLDateType  */
         ObMySQLDateTimeType, /*ObMySQLDateTimeType=>ObMySQLDateTimeType  */
-        ObMaxType,     /* ObCollectionSQLType=>ObRoaringBitmapType*/
     },
-    /*ObRoaringBitmapType*/
-    {
-        ObRoaringBitmapType,  /* ObRoaringBitmapType=>NullType */
-        ObMaxType,            /* ObRoaringBitmapType=>TinyIntType */
-        ObMaxType,            /* ObRoaringBitmapType=>SmallIntType */
-        ObMaxType,            /* ObRoaringBitmapType=>MediumIntType */
-        ObMaxType,            /* ObRoaringBitmapType=>Int32Type */
-        ObMaxType,            /* ObRoaringBitmapType=>IntType */
-        ObMaxType,            /* ObRoaringBitmapType=>UTinyIntType */
-        ObMaxType,            /* ObRoaringBitmapType=>USmallIntType */
-        ObMaxType,            /* ObRoaringBitmapType=>UMediumIntType */
-        ObMaxType,            /* ObRoaringBitmapType=>UInt32Type */
-        ObMaxType,            /* ObRoaringBitmapType=>UIntType */
-        ObMaxType,            /* ObRoaringBitmapType=>FloatType */
-        ObMaxType,            /* ObRoaringBitmapType=>DoubleType */
-        ObMaxType,            /* ObRoaringBitmapType=>UFloatType */
-        ObMaxType,            /* ObRoaringBitmapType=>UDoubleType */
-        ObMaxType,            /* ObRoaringBitmapType=>NumberType */
-        ObMaxType,            /* ObRoaringBitmapType=>UNumberType */
-        ObMaxType,            /* ObRoaringBitmapType=>DateTimeType */
-        ObMaxType,            /* ObRoaringBitmapType=>TimestampType */
-        ObMaxType,            /* ObRoaringBitmapType=>DateType */
-        ObMaxType,            /* ObRoaringBitmapType=>TimeType */
-        ObMaxType,            /* ObRoaringBitmapType=>YearType */
-        ObMaxType,            /* ObRoaringBitmapType=>VarcharType */
-        ObMaxType,            /* ObRoaringBitmapType=>CharType */
-        ObRoaringBitmapType,  /* ObRoaringBitmapType=>HexStringType */
-        ObMaxType,            /* ObRoaringBitmapType=>ExtendType */
-        ObMaxType,            /* ObRoaringBitmapType=>UnknownType */
-        ObMaxType,            /* ObRoaringBitmapType=>ObTinyTextType */
-        ObMaxType,            /* ObRoaringBitmapType=>ObTextType */
-        ObMaxType,            /* ObRoaringBitmapType=>ObMediumTextType */
-        ObMaxType,            /* ObRoaringBitmapType=>ObLongTextType */
-        ObMaxType,            /* ObRoaringBitmapType=>ObBitType */
-        ObMaxType,            /* ObRoaringBitmapType=>ObEnumType */
-        ObMaxType,            /* ObRoaringBitmapType=>ObSetType */
-        ObMaxType,            /* ObRoaringBitmapType=>ObEnumInnerType */
-        ObMaxType,            /* ObRoaringBitmapType=>ObSetInnerType */
-        ObMaxType,            /* ObRoaringBitmapType=>ObJsonType */
-        ObMaxType,            /* ObRoaringBitmapType=>ObGeometryType */
-        ObMaxType,            /* ObRoaringBitmapType=>ObUserDefinedSQLType */
-        ObMaxType,            /* ObRoaringBitmapType=>ObDecimalIntType */
-        ObMaxType,            /* ObRoaringBitmapType=>ObCollectionSQLType */
-        ObMaxType,            /* ObRoaringBitmapType=>ObMySQLDateType */
-        ObMaxType,            /* ObRoaringBitmapType=>ObMySQLDateTimeType */
-        ObRoaringBitmapType,  /* ObRoaringBitmapType=>ObRoaringBitmapType */
-    },
+
 };
 
 static_assert(is_array_fully_initialized(MERGE_RESULT_TYPE, ObMaxType), "MERGE_RESULT_TYPE is partially initlized");

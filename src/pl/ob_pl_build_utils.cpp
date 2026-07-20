@@ -174,10 +174,9 @@ int ObPLBuildUtils::build_package(ObExecContext &ctx,
   int ret = OB_SUCCESS;
   ObSchemaChecker schema_checker;
   const ObPackageInfo *package_info = nullptr;
-  int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
   CK (OB_NOT_NULL(ctx.get_sql_ctx()->schema_guard_));
   OZ (schema_checker.init(*ctx.get_sql_ctx()->schema_guard_, ctx.get_my_session()->get_server_sid()));
-  OZ (ctx.get_sql_ctx()->schema_guard_->get_package_info( database_id, package_name, package_type, compatible_mode, package_info));
+  OZ (ctx.get_sql_ctx()->schema_guard_->get_package_info(database_id, package_name, package_type, package_info));
   CK (OB_NOT_NULL(package_info));
   CK (OB_NOT_NULL(ctx.get_sql_proxy()));
   CK (OB_NOT_NULL(ctx.get_pl_engine()));

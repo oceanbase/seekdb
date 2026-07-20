@@ -108,13 +108,13 @@ public:
   ObTableSchema &get_alter_table_schema() { return alter_table_arg_.alter_table_schema_; }
   obcall::ObExchangePartitionArg &get_exchange_partition_arg() { return exchange_partition_arg_;}
   int set_exchange_partition_arg(const obcall::ObExchangePartitionArg &exchange_partition_arg);
-  inline void set_client_session_info(const uint32_t client_sessid,
-                                      const int64_t create_ts)
+  inline void set_lock_session_info(const uint32_t session_id,
+                                    const int64_t create_ts)
   {
-    alter_table_arg_.client_session_id_ = client_sessid;
-    alter_table_arg_.client_session_create_ts_ = create_ts;
+    alter_table_arg_.lock_session_id_ = session_id;
+    alter_table_arg_.lock_session_create_ts_ = create_ts;
   }
-  int set_lock_priority(sql::ObSQLSessionInfo *session);
+  void set_lock_priority();
 private:
   obcall::ObAlterTableArg alter_table_arg_;
   bool is_comment_table_;

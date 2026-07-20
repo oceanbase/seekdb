@@ -25,7 +25,7 @@
 // The accessor declarations mirror the former MTL_MEMBERS module set.
 //
 // Include ob_tenant_base.h for the module forward declarations, the
-// ObjPool `using` aliases, ObTestModule and lib::Worker::CompatMode.
+// ObjPool `using` aliases and ObTestModule.
 #include "share/rc/ob_tenant_base.h"
 
 namespace oceanbase
@@ -78,15 +78,12 @@ public:
   virtual transaction::ObTimestampAccess * timestamp_access() { return nullptr; }
   virtual transaction::ObTransIDService * trans_id_service() { return nullptr; }
   virtual transaction::ObUniqueIDService * unique_id_service() { return nullptr; }
-  virtual sql::ObPlanBaselineMgr * plan_baseline_mgr() { return nullptr; }
   virtual sql::ObPsCache * ps_cache() { return nullptr; }
   virtual sql::ObPlanCache * plan_cache() { return nullptr; }
   virtual sql::dtl::ObTenantDfc * tenant_dfc() { return nullptr; }
   virtual omt::ObPxPools * px_pools() { return nullptr; }
-  virtual lib::Worker::CompatMode compat_mode() { return lib::Worker::CompatMode::MYSQL; }
   virtual sql::ObTenantSqlMemoryManager * tenant_sql_memory_manager() { return nullptr; }
   virtual sql::dtl::ObDTLIntermResultManager * dtl_interm_result_manager() { return nullptr; }
-  virtual sql::ObPlanMonitorNodeList * plan_monitor_node_list() { return nullptr; }
   virtual sql::ObDataAccessService * data_access_service() { return nullptr; }
   virtual share::schema::ObTenantSchemaService * tenant_schema_service() { return nullptr; }
   virtual storage::ObTenantFreezer * tenant_freezer() { return nullptr; }
@@ -103,8 +100,6 @@ public:
   virtual transaction::ObTxLoopWorker * tx_loop_worker() { return nullptr; }
   virtual storage::ObAccessService * access_service() { return nullptr; }
   virtual datadict::ObDataDictService * data_dict_service() { return nullptr; }
-  virtual observer::ObTableLoadService * table_load_service() { return nullptr; }
-  virtual observer::ObTableLoadResourceService * table_load_resource_service() { return nullptr; }
   virtual concurrency_control::ObMultiVersionGarbageCollector * multi_version_garbage_collector() { return nullptr; }
   virtual ObTestModule * test_module() { return nullptr; }
   virtual storage::ObEmptyReadBucket * empty_read_bucket() { return nullptr; }

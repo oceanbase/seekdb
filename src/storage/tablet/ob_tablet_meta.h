@@ -68,7 +68,6 @@ public:
       const common::ObTabletID &data_tablet_id,
       const share::SCN create_scn,
       const int64_t snapshot_version,
-      const lib::Worker::CompatMode compat_mode,
       const ObTabletTableStoreFlag &table_store_flag,
       const int64_t create_schema_version,
       const share::SCN &clog_checkpoint_scn,
@@ -136,7 +135,6 @@ public:
                K_(ddl_checkpoint_scn),
                K_(snapshot_version),
                K_(multi_version_start),
-               K_(compat_mode),
                K_(restore_state),
                K_(report_status),
                K_(table_store_flag),
@@ -189,7 +187,6 @@ public:
   ObTabletSpaceUsage space_usage_;
                                    // alignment: 8B, size: 48B
   int64_t create_schema_version_; // add after 4.2, record schema_version when first create tablet. NEED COMPAT
-  lib::Worker::CompatMode compat_mode_; // alignment: 1B, size: 4B
   bool has_next_tablet_; // alignment: 1B, size: 2B
   bool is_empty_shell_; // alignment: 1B, size: 2B
   bool micro_index_clustered_; // alignment: 1B, size: 2B

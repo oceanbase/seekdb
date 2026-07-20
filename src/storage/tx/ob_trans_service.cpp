@@ -16,7 +16,6 @@
 
 
 #include "ob_trans_service.h"
-#include "storage/ob_storage_rpc.h"
 #include "storage/ob_storage_rpc_arg.h"
 #include "share/rc/ob_module_provider.h"
 #include "ob_trans_functor.h"
@@ -423,7 +422,6 @@ int ObTransService::register_mds_into_tx(ObTxDesc &tx_desc,
   int tmp_ret = OB_SUCCESS;
   ObTxExecResult tx_result;
   ObTxParam tx_param;
-  tx_param.cluster_id_ = tx_desc.cluster_id_;
   tx_param.access_mode_ = tx_desc.access_mode_;
   tx_param.isolation_ = tx_desc.isolation_;
   tx_param.timeout_us_ = tx_desc.timeout_us_;

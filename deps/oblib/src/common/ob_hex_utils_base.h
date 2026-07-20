@@ -28,7 +28,7 @@ namespace common
 
 /*
  * move unhex and hex function from ObHexUtils here, because we need them in
- * deps/oblib/src/lib/mysqlclient/ob_mysql_result_impl.cpp for raw type.
+ * SQL result conversion for raw type.
  */
 class ObHexUtilsBase
 {

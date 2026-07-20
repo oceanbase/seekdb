@@ -138,7 +138,6 @@ LATCH_DEF(FIXED_SIZE_ALLOCATOR_LOCK, 177, "fixed size allocator lock", LATCH_FIF
 LATCH_DEF(DBMS_SCHEDULER_TASK_LOCK, 178, "dbms_scheduler task lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(DBMS_SCHEDULER_MASTER_LOCK, 179, "dbms_scheuler master lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(TENANT_WORKER_LOCK, 180, "tenant worker lock", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(SERVER_LOCALITY_CACHE_LOCK, 181, "server locality cache lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(MASTER_RS_CACHE_LOCK, 182, "master rs cache lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(SCHEMA_REFRESH_INFO_LOCK, 183, "schema refresh info lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(REFRESH_SCHEMA_LOCK, 184, "refresh schema lock", LATCH_FIFO, 2000, 0, true)
@@ -249,9 +248,6 @@ LATCH_DEF(TENANT_IO_CALLBACK_LOCK, 304, "support IO callback thread num manageme
 LATCH_DEF(DISPLAY_TASKS_LOCK, 305, "display tasks lock", LATCH_READ_PREFER, 2000, 0, true)
 LATCH_DEF(TMP_FILE_MEM_BLOCK_LOCK, 306, "tmp file mem block lock", LATCH_FIFO, INT64_MAX, 0, true)
 
-LATCH_DEF(LOG_EXTERNAL_STORAGE_HANDLER_RW_LOCK, 308, "log external storage handler rw lock", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(LOG_EXTERNAL_STORAGE_HANDLER_LOCK, 309, "log external storage handler spin lock", LATCH_FIFO, 2000, 0, true)
-
 LATCH_DEF(PL_DEBUG_RUNTIMEINFO_LOCK, 310, "PL DEBUG RuntimeInfo lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(MDS_TABLE_HANDLER_LOCK, 311, "mds table handler lock", LATCH_READ_PREFER, 2000, 0, true)
 LATCH_DEF(IND_NAME_CACHE_LOCK, 312, "index name cache lock", LATCH_FIFO, 2000, 0, true)
@@ -275,9 +271,6 @@ LATCH_DEF(TRANS_FLUSH_REDO_LOCK, 329, "trans flush redo log latch", LATCH_FIFO, 
 
 LATCH_DEF(TENANT_DIRECT_LOAD_MGR_LOCK, 330, "tenant direct load manager lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(TABLET_DIRECT_LOAD_MGR_LOCK, 331, "tablet direct load manager lock", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(DIRECT_LOAD_SLICE_WRITER_LOCK, 332, "direct load slice writer lock", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(DIRECT_LOAD_RESCAN_LOCK, 333, "direct load rescan lock", LATCH_FIFO, INT64_MAX, 0, true)
-LATCH_DEF(TABLET_DIRECT_LOAD_MGR_SCHEMA_LOCK, 334, "tablet direct load manager schema lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(SQL_AUDIT, 335, "sql audit release second level queue lock", LATCH_FIFO, 2000, 0, true)
 
 LATCH_DEF(SEQUENCE_VALUE_FETCH_LOCK, 339, "sequence value fetch lock", LATCH_FIFO, 2000, 0, true)

@@ -73,12 +73,9 @@ static inline int get_lock_service(tablelock::ObTableLockService *&lock_service)
   return ret;
 }
 
-static int get_org_cluster_id_(ObSQLSessionInfo*, int64_t &);
 static inline int build_tx_param_(ObSQLSessionInfo *session, ObTxParam &p, const bool *readonly = nullptr)
 {
   int ret = OB_SUCCESS;
-  int64_t org_cluster_id = OB_INVALID_ORG_CLUSTER_ID;
-  OZ (get_org_cluster_id_(session, org_cluster_id));
   int64_t tx_timeout_us = 0;
   session->get_tx_timeout(tx_timeout_us);
 
@@ -87,7 +84,6 @@ static inline int build_tx_param_(ObSQLSessionInfo *session, ObTxParam &p, const
   bool ro = OB_NOT_NULL(readonly) ? *readonly : session->get_tx_read_only();
   p.access_mode_ = ro ? ObTxAccessMode::RD_ONLY : ObTxAccessMode::RW;
   p.isolation_ = session->get_tx_isolation();
-  p.cluster_id_ = org_cluster_id;
 
   return ret;
 }
@@ -153,7 +149,7 @@ int ObSqlTransControl::explicit_start_trans(ObSQLSessionInfo *session,
   }
 
   OZ (build_tx_param_(session, tx_param, &read_only));
-  OZ (txs->acquire_tx(session->get_tx_desc(), session->get_server_sid(), session->get_sid(), session->get_data_version()));
+  OZ (txs->acquire_tx(session->get_tx_desc(), session->get_server_sid(), session->get_data_version()));
   OZ (txs->start_tx(*session->get_tx_desc(), tx_param), tx_param);
   OX (tx_id = session->get_tx_desc()->get_tx_id());
 
@@ -434,7 +430,6 @@ int ObSqlTransControl::do_end_trans_(ObSQLSessionInfo *session,
      */
     ObTransService *txs = NULL;
     
-    const common::ObString &trace_info = session->get_ob_trace_info();
     if (OB_FAIL(get_tx_service(session, txs))) {
       LOG_ERROR("fail to get trans service", K(ret));
     } else if (is_rollback) {
@@ -444,14 +439,14 @@ int ObSqlTransControl::do_end_trans_(ObSQLSessionInfo *session,
         LOG_WARN("fail to inc session ref", K(ret));
       } else {
         callback->handout();
-        if(OB_FAIL(txs->submit_commit_tx(*tx_ptr, expire_ts, *callback, &trace_info))) {
+        if(OB_FAIL(txs->submit_commit_tx(*tx_ptr, expire_ts, *callback))) {
           LOG_WARN("submit commit tx fail", K(ret), KP(callback), K(expire_ts), KPC(tx_ptr));
           GCTX.session_mgr_->revert_session(session);
           callback->handin();
         }
       }
     } else {
-      if (OB_FAIL(txs->commit_tx(*tx_ptr, expire_ts, &trace_info))) {
+      if (OB_FAIL(txs->commit_tx(*tx_ptr, expire_ts))) {
         LOG_WARN("sync commit tx fail", K(ret), K(expire_ts), KPC(tx_ptr));
       }
     }
@@ -990,16 +985,6 @@ int ObSqlTransControl::end_stmt(ObExecContext &exec_ctx, const bool rollback, co
       // overwrite ret
       ret = OB_TRANS_NEED_ROLLBACK;
       LOG_WARN("trans result incomplete, trans aborted", K(ret));
-    } else if (plan->get_enable_append()
-               && plan->get_enable_inc_direct_load()
-               && OB_UNLIKELY(OB_SUCCESS != exec_errcode)) {
-      if (!rollback) {
-        LOG_ERROR("direct load failed, but rollback not issued");
-      }
-      (void) txs->abort_tx(*tx_desc, ObTxAbortCause::TX_RESULT_INCOMPLETE);
-      // overwrite ret
-      ret = OB_TRANS_NEED_ROLLBACK;
-      LOG_ERROR("direct load failed, trans aborted", KR(ret));
     } else {
       int save_ret = OB_SUCCESS;
       if (OB_FAIL(ret)) {
@@ -1214,33 +1199,11 @@ int ObSqlTransControl::reset_session_tx_state(ObSQLSessionInfo *session, bool re
   return COVER_SUCC(temp_ret);
 }
 
-static int get_org_cluster_id_(ObSQLSessionInfo *session, int64_t &org_cluster_id) {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(session->get_ob_org_cluster_id(org_cluster_id))) {
-    LOG_WARN("fail to get ob_org_cluster_id", K(ret));
-  } else if (OB_INVALID_ORG_CLUSTER_ID == org_cluster_id ||
-             OB_INVALID_CLUSTER_ID == org_cluster_id) {
-    org_cluster_id = ObServerConfig::get_instance().cluster_id;
-    // If ob_org_cluster_id is not set (0 is an invalid value, considered as not set), then set it to the cluster_id of the current cluster.
-    // If the configuration item does not set cluster_id, then ObServerConfig::get_instance().cluster_id will get the default value -1.
-    // If cluster_id is not set in the configuration, observer cannot start, therefore org_cluster_id will not be -1.
-    // For safety, here we set org_cluster_id to ObServerConfig::get_instance().cluster_id if it is 0 or -1.
-    if (org_cluster_id < OB_MIN_CLUSTER_ID
-        || org_cluster_id > OB_MAX_CLUSTER_ID) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("org_cluster_id is set to cluster_id, but it is out of range",
-                K(ret), K(org_cluster_id), K(OB_MIN_CLUSTER_ID), K(OB_MAX_CLUSTER_ID));
-    }
-  }
-  return ret;
-}
-
 int ObSqlTransControl::acquire_tx_if_need_(ObTransService *txs, ObSQLSessionInfo &session)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(session.get_tx_desc())) {
-    OZ(txs->acquire_tx(session.get_tx_desc(), session.get_server_sid(),
-                       session.get_sid(), session.get_data_version()),
+    OZ(txs->acquire_tx(session.get_tx_desc(), session.get_server_sid(), session.get_data_version()),
        session);
   }
   return ret;
@@ -1263,8 +1226,7 @@ int ObSqlTransControl::lock_table(ObExecContext &exec_ctx,
   OZ (get_tx_service(session, txs));
   OZ (get_lock_service(lock_service));
   if (OB_SUCC(ret) && OB_ISNULL(session->get_tx_desc())) {
-    OZ(txs->acquire_tx(session->get_tx_desc(), session->get_server_sid(),
-                       session->get_sid(), session->get_data_version()),
+    OZ(txs->acquire_tx(session->get_tx_desc(), session->get_server_sid(), session->get_data_version()),
        *session);
   }
   ObTxParam tx_param;

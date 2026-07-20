@@ -75,15 +75,6 @@ int ObMySQLResultSet::to_mysql_field(const ObField &field, ObMySQLField &mfield)
   return ret;
 }
 
-int ObMySQLResultSet::to_new_result_field(const ObField &field, ObMySQLField &mfield)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(to_mysql_field(field, mfield))) {
-    LOG_WARN("fail to mysql field", K(ret), K(mfield), K(field));
-  }
-  return ret;
-}
-
 int ObMySQLResultSet::next_field(ObMySQLField &obmf)
 {
   int ret = OB_SUCCESS;
@@ -100,7 +91,7 @@ int ObMySQLResultSet::next_field(ObMySQLField &obmf)
       if (OB_FAIL(to_mysql_field(field, obmf))) {
         // do nothing
       } else {
-        replace_lob_type(get_session(), field, obmf);
+        replace_lob_type(obmf);
       }
     }
   }
@@ -126,7 +117,7 @@ int ObMySQLResultSet::next_param(ObMySQLField &obmf)
         if (OB_FAIL(to_mysql_field(field, obmf))) {
           // do nothing
         } else {
-          replace_lob_type(get_session(), field, obmf);
+          replace_lob_type(obmf);
         }
       }
     }

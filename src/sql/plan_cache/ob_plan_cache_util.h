@@ -594,8 +594,6 @@ struct ObPlanStat
   int64_t elapsed_time_;          // execution time rt
   int64_t total_process_time_;    // Total process time
   int64_t cpu_time_;              // CPU time, which can currently be obtained by subtracting the total wait time of all wait events from the execution time
-  int64_t large_querys_;     // Number of times judged as large queries
-  int64_t delayed_large_querys_;
   int64_t delayed_px_querys_;    // px query retries after being put back in the queue
   int64_t expected_worker_count_;  // px expected worker count
   int64_t minimal_worker_count_;  // minimal threads required for query
@@ -698,8 +696,6 @@ struct ObPlanStat
       elapsed_time_(0),
       total_process_time_(0),
       cpu_time_(0),
-      large_querys_(0),
-      delayed_large_querys_(0),
       delayed_px_querys_(0),
       expected_worker_count_(-1),
       minimal_worker_count_(-1),
@@ -777,8 +773,6 @@ struct ObPlanStat
       elapsed_time_(rhs.elapsed_time_),
       total_process_time_(rhs.total_process_time_),
       cpu_time_(rhs.cpu_time_),
-      large_querys_(rhs.large_querys_),
-      delayed_large_querys_(rhs.delayed_large_querys_),
       delayed_px_querys_(rhs.delayed_px_querys_),
       expected_worker_count_(rhs.expected_worker_count_),
       minimal_worker_count_(rhs.minimal_worker_count_),
@@ -951,8 +945,6 @@ struct ObPlanStat
                K_(rows_processed),
                K_(elapsed_time),
                K_(cpu_time),
-               K_(large_querys),
-               K_(delayed_large_querys),
                K_(outline_version),
                K_(outline_id),
                K_(is_last_exec_succ),
@@ -1086,8 +1078,6 @@ public:
     bloom_filter_ratio_(0),
     realistic_runtime_bloom_filter_size_(false),
     enable_parallel_das_dml_(false),
-    direct_load_allow_fallback_(false),
-    default_load_mode_(0),
     hash_rollup_policy_(0),
     ndv_runtime_bloom_filter_size_(false),
     enable_topn_runtime_filter_(false),
@@ -1142,8 +1132,6 @@ public:
   int bloom_filter_ratio_;
   bool realistic_runtime_bloom_filter_size_;
   bool enable_parallel_das_dml_;
-  bool direct_load_allow_fallback_;
-  int default_load_mode_;
   int hash_rollup_policy_;
   bool ndv_runtime_bloom_filter_size_;
   bool enable_topn_runtime_filter_;

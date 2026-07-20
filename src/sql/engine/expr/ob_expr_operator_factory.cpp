@@ -367,17 +367,6 @@
 #include "sql/engine/expr/ob_expr_vec_chunk.h"
 #include "sql/engine/expr/ob_expr_embedded_vec.h"
 #include "sql/engine/expr/ob_expr_inner_table_option_printer.h"
-#include "sql/engine/expr/ob_expr_rb_build_empty.h"
-#include "sql/engine/expr/ob_expr_rb_is_empty.h"
-#include "sql/engine/expr/ob_expr_rb_build_varbinary.h"
-#include "sql/engine/expr/ob_expr_rb_to_varbinary.h"
-#include "sql/engine/expr/ob_expr_rb_cardinality.h"
-#include "sql/engine/expr/ob_expr_rb_calc_cardinality.h"
-#include "sql/engine/expr/ob_expr_rb_calc.h"
-#include "sql/engine/expr/ob_expr_rb_to_string.h"
-#include "sql/engine/expr/ob_expr_rb_from_string.h"
-#include "sql/engine/expr/ob_expr_rb_select.h"
-#include "sql/engine/expr/ob_expr_rb_build.h"
 #include "sql/engine/expr/ob_expr_array_contains.h"
 #include "sql/engine/expr/ob_expr_array_to_string.h"
 #include "sql/engine/expr/ob_expr_string_to_array.h"
@@ -427,8 +416,6 @@
 #include "sql/engine/expr/ob_expr_array_intersect.h"
 #include "sql/engine/expr/ob_expr_array_union.h"
 #include "sql/engine/expr/ob_expr_map.h"
-#include "sql/engine/expr/ob_expr_rb_to_array.h"
-#include "sql/engine/expr/ob_expr_rb_contains.h"
 #include "sql/engine/expr/ob_expr_map_keys.h"
 #include "sql/engine/expr/ob_expr_current_catalog.h"
 #include "sql/engine/expr/ob_expr_check_catalog_access.h"
@@ -1007,31 +994,6 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprVectorSimilarity);
     REG_OP(ObExprInnerTableOptionPrinter);
     REG_OP(ObExprInnerTableSequenceGetter);
-    REG_OP(ObExprRbBuildEmpty);
-    REG_OP(ObExprRbIsEmpty);
-    REG_OP(ObExprRbBuildVarbinary);
-    REG_OP(ObExprRbToVarbinary);
-    REG_OP(ObExprRbCardinality);
-    REG_OP(ObExprRbAndCardinality);
-    REG_OP(ObExprRbOrCardinality);
-    REG_OP(ObExprRbXorCardinality);
-    REG_OP(ObExprRbAndnotCardinality);
-    REG_OP(ObExprRbAndNull2emptyCardinality);
-    REG_OP(ObExprRbOrNull2emptyCardinality);
-    REG_OP(ObExprRbAndnotNull2emptyCardinality);
-    REG_OP(ObExprRbAnd);
-    REG_OP(ObExprRbOr);
-    REG_OP(ObExprRbXor);
-    REG_OP(ObExprRbAndnot);
-    REG_OP(ObExprRbAndNull2empty);
-    REG_OP(ObExprRbOrNull2empty);
-    REG_OP(ObExprRbAndnotNull2empty);
-    REG_OP(ObExprRbToString);
-    REG_OP(ObExprRbFromString);
-    REG_OP(ObExprRbSelect);
-    REG_OP(ObExprRbBuild);
-    REG_OP(ObExprRbToArray);
-    REG_OP(ObExprRbContains);
     REG_OP(ObExprGetPath);
     REG_OP(ObExprGTIDSubset);
     REG_OP(ObExprGTIDSubtract);

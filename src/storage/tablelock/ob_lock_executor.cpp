@@ -319,116 +319,18 @@ int ObLockContext::execute_read(const ObSqlString &sql,
   return ret;
 }
 
-bool ObLockExecutor::proxy_is_support(sql::ObExecContext &exec_ctx)
-{
-  return proxy_is_support(exec_ctx.get_my_session());
-}
-
-bool ObLockExecutor::proxy_is_support(sql::ObSQLSessionInfo *session)
-{
-  bool is_support = false;
-  if (OB_ISNULL(session)) {
-    LOG_ERROR_RET(OB_INVALID_ARGUMENT, "session is null!");
-  } else {
-    // obproxy support removed: only the client session id requirement remains
-    is_support = session->get_client_sid() != INVALID_SESSID;
-    if (!is_support) {
-      LOG_WARN_RET(OB_NOT_SUPPORTED,
-                   "this feature is not supported without a valid client session id",
-                   K(session->get_server_sid()),
-                   K(session->is_client_sessid_support()));
-    }
-  }
-  return is_support;
-}
-
-int ObLockExecutor::check_client_ssid(ObLockContext &ctx,
-                                      const uint32_t client_session_id,
-                                      const uint64_t client_session_create_ts)
-{
-  int ret = OB_SUCCESS;
-  char table_name[MAX_FULL_TABLE_NAME_LENGTH] = {0};
-  int64_t record_client_session_create_ts = 0;
-  ObSqlString sql;
-  ObTableLockOwnerID owner_id;
-  common::sqlclient::ObMySQLResult *result = nullptr;
-
-  OZ (owner_id.convert_from_client_sessid(client_session_id, client_session_create_ts));
-  OZ (databuff_printf(
-    table_name, MAX_FULL_TABLE_NAME_LENGTH, "%s.%s", OB_SYS_DATABASE_NAME, OB_ALL_CLIENT_TO_SERVER_SESSION_INFO_TNAME));
-  OZ (sql.assign_fmt("SELECT time_to_usec(client_session_create_ts)"
-                     " FROM %s WHERE client_session_id = %" PRIu32,
-                     table_name,
-                     client_session_id));
-  SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-    OZ (ctx.execute_read(sql, res));
-    OV (OB_NOT_NULL(result = res.get_result()), OB_ERR_UNEXPECTED, client_session_id);
-    OZ (result->next());
-    // there's no record, means the client_sessid is not used before, or has been cleaned
-    if (OB_ITER_END == ret) {
-      ret = OB_EMPTY_RESULT;
-    }
-    OX (GET_COL_IGNORE_NULL(result->get_int,
-                            "time_to_usec(client_session_create_ts)",
-                            record_client_session_create_ts));
-  }
-  OX(
-    if (OB_UNLIKELY(record_client_session_create_ts != client_session_create_ts)) {
-      ObTableLockOwnerID rec_owner_id;
-      ObTableLockOwnerID cur_owner_id;
-      OZ (rec_owner_id.convert_from_client_sessid(client_session_id, record_client_session_create_ts));
-      OZ (cur_owner_id.convert_from_client_sessid(client_session_id, client_session_create_ts));
-      if (rec_owner_id == cur_owner_id) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_ERROR("meet client_session_id reuse, and has the same owner_id", K(rec_owner_id), K(cur_owner_id));
-      } else if (record_client_session_create_ts > client_session_create_ts) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("there's a client_session with larger create_ts",
-                K(client_session_id),
-                K(record_client_session_create_ts),
-                K(client_session_create_ts));
-      } else if (record_client_session_create_ts < client_session_create_ts) {
-        int tmp_ret = OB_SUCCESS;
-        LOG_INFO("meet reuse client_session_id, will recycle the eariler one",
-                K(client_session_id),
-                K(record_client_session_create_ts),
-                K(client_session_create_ts));
-        // Although the client_session_id is consistent, there is a high probability that the owner_id will not be
-        // consistent. Therefore, the failure to recycle here will not affect the subsequent locking process
-        if (OB_TMP_FAIL(ObTableLockDetector::remove_lock_by_owner_id(rec_owner_id))) {
-          LOG_WARN("recycle old lock with the same client_session_id failed, keep locking process",
-                   K(tmp_ret),
-                   K(client_session_id),
-                   K(record_client_session_create_ts),
-                   K(client_session_create_ts));
-        }
-      }
-    });
-  return ret;
-}
-
-int ObLockExecutor::remove_session_record(ObLockContext &ctx,
-                                          const uint32_t client_session_id,
-                                          const uint64_t client_session_create_ts)
+int ObLockExecutor::clear_lock_session_if_no_lock_(ObLockContext &ctx,
+                                                   const uint32_t session_id,
+                                                   const uint64_t session_create_ts)
 {
   int ret = OB_SUCCESS;
   bool owner_exist = false;
-  char table_name[MAX_FULL_TABLE_NAME_LENGTH] = {0};
-  ObTableLockOwnerID lock_owner;
-  ObSqlString delete_sql;
-  int64_t affected_rows = 0;
   ObSQLSessionInfo *session = nullptr;
 
   OV (OB_NOT_NULL(ctx.my_exec_ctx_), OB_INVALID_ARGUMENT);
   OV (OB_NOT_NULL(session = ctx.my_exec_ctx_->get_my_session()), OB_INVALID_ARGUMENT);
-  OZ (ObTableLockDetector::check_lock_owner_exist_in_inner_table(session, client_session_id, client_session_create_ts, owner_exist));
+  OZ (ObTableLockDetector::check_lock_owner_exist_in_inner_table(session, session_id, session_create_ts, owner_exist));
   if (OB_SUCC(ret) && !owner_exist) {
-    OZ (databuff_printf(table_name, MAX_FULL_TABLE_NAME_LENGTH,
-                        "%s.%s", OB_SYS_DATABASE_NAME, OB_ALL_CLIENT_TO_SERVER_SESSION_INFO_TNAME));
-    OZ (delete_sql.assign_fmt("DELETE FROM %s WHERE client_session_id = %" PRIu32,
-                              table_name,
-                              client_session_id));
-    OZ (ctx.execute_write(delete_sql, affected_rows));
     OX (mark_lock_session_(session, false));
   }
   return ret;
@@ -551,110 +453,21 @@ void ObLockExecutor::mark_lock_session_(sql::ObSQLSessionInfo *session,
   }
 }
 
-int ObLockExecutor::get_lock_session_(ObLockContext &ctx,
-                                      const uint32_t client_session_id,
-                                      const uint64_t client_session_create_ts,
-                                      ObAddr &lock_session_addr,
-                                      uint32_t &lock_session_id)
-{
-  int ret = OB_SUCCESS;
-  char table_name[MAX_FULL_TABLE_NAME_LENGTH] = {'\0'};
-  OZ (databuff_printf(
-     table_name, MAX_FULL_TABLE_NAME_LENGTH, "%s.%s", OB_SYS_DATABASE_NAME, OB_ALL_CLIENT_TO_SERVER_SESSION_INFO_TNAME));
-  OX (
-    SMART_VAR(ObMySQLProxy::MySQLResult, res)
-    {
-      ObSqlString sql;
-      common::sqlclient::ObMySQLResult *result = nullptr;
-      OZ (sql.assign_fmt("SELECT server_session_id"
-                         " FROM %s WHERE client_session_id = %" PRIu32 " AND client_session_create_ts = %" PRIu64,
-                         table_name,
-                         client_session_id,
-                         client_session_create_ts));
-      OZ (ctx.execute_read(sql, res));
-      OV (OB_NOT_NULL(result = res.get_result()), OB_ERR_UNEXPECTED, client_session_id);
-      OZ (get_first_session_info_(*result, lock_session_addr, lock_session_id));
-    }  // end SMART_VAR
-  )
-  return ret;
-}
-
-int ObLockExecutor::get_first_session_info_(common::sqlclient::ObMySQLResult &res,
-                                            ObAddr &session_addr,
-                                            uint32_t &server_session_id)
-{
-  int ret = OB_SUCCESS;
-  uint64_t tmp_session_id = 0;
-
-  OZ (res.next());
-  if (OB_ITER_END == ret) {
-    ret = OB_EMPTY_RESULT;
-  }
-  OX (GET_COL_IGNORE_NULL(res.get_uint, "server_session_id", tmp_session_id));
-  OX (server_session_id = static_cast<uint32_t>(tmp_session_id));
-  // session_addr is no longer stored in table, reset to invalid
-  OX (session_addr.reset());
-
-  return ret;
-}
-
-int ObLockExecutor::update_session_table_(ObLockContext &ctx,
-                                          const uint32_t client_session_id,
-                                          const uint64_t client_session_create_ts,
-                                          const uint32_t server_session_id)
-{
-  int ret = OB_SUCCESS;
-  ObDMLSqlSplicer insert_dml;
-  ObSqlString insert_sql;
-
-  int64_t affected_rows = 0;
-  const int64_t now = ObTimeUtility::current_time();
-  char table_name[MAX_FULL_TABLE_NAME_LENGTH] = {0};
-  OZ (databuff_printf(table_name, MAX_FULL_TABLE_NAME_LENGTH,
-                      "%s.%s", OB_SYS_DATABASE_NAME, OB_ALL_CLIENT_TO_SERVER_SESSION_INFO_TNAME));
-  OZ (insert_dml.add_gmt_create(now));
-  OZ (insert_dml.add_gmt_modified(now));
-  OZ (insert_dml.add_pk_column("server_session_id", server_session_id));
-  OZ (insert_dml.add_column("client_session_id", client_session_id));
-  OZ (insert_dml.add_time_column("client_session_create_ts", client_session_create_ts));
-  OZ (insert_dml.splice_insert_update_sql(table_name,
-                                          insert_sql));
-  OZ (ctx.execute_write(insert_sql, affected_rows));
-  CK (OB_LIKELY(1 == affected_rows || 2 == affected_rows));
-
-  return ret;
-}
-
-int ObLockExecutor::get_sql_port_(ObLockContext &ctx,
-                                  const ObAddr &svr_addr,
-                                  int32_t &sql_port)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(GCTX.config_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.config_));
-  } else {
-    sql_port = GCTX.config_->mysql_port/*sql_port*/;
-  }
-  return ret;
-}
-
-
 int ObUnLockExecutor::execute(ObExecContext &ctx,
                               const ReleaseType release_type,
                               int64_t &release_cnt)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  uint32_t client_session_id = 0;
-  uint64_t client_session_create_ts = 0;
+  uint32_t session_id = 0;
+  uint64_t session_create_ts = 0;
   bool is_rollback = false;
   OZ (ObLockContext::valid_execute_context(ctx));
-  OX (client_session_id = ctx.get_my_session()->get_client_sid());
-  OX (client_session_create_ts = ctx.get_my_session()->get_client_create_time());
+  OX (session_id = ctx.get_my_session()->get_server_sid());
+  OX (session_create_ts = ctx.get_my_session()->get_sess_create_time());
   OZ (execute_(ctx,
-               client_session_id,
-               client_session_create_ts,
+               session_id,
+               session_create_ts,
                release_type,
                release_cnt));
   return ret;
@@ -695,8 +508,8 @@ int ObUnLockExecutor::execute(const ObTableLockOwnerID &owner_id)
 }
 
 int ObUnLockExecutor::execute_(ObExecContext &ctx,
-                               const uint32_t client_session_id,
-                               const uint64_t client_session_create_ts,
+                               const uint32_t session_id,
+                               const uint64_t session_create_ts,
                                const ReleaseType release_type,
                                int64_t &release_cnt)
 {
@@ -713,21 +526,16 @@ int ObUnLockExecutor::execute_(ObExecContext &ctx,
         ObSQLSessionInfo *session = GET_MY_SESSION(ctx);
         ObTxDesc *tx_desc = session->get_tx_desc();
         ObTxParam tx_param;
-        if (ctx.get_my_session()->is_obproxy_mode()) {
-          OZ (check_client_ssid(stack_ctx, client_session_id, client_session_create_ts));
-          if (OB_EMPTY_RESULT == ret) {
-            release_cnt = LOCK_NOT_OWN_RELEASE_CNT;
-          }
-        }
         OZ (ObInnerConnectionLockUtil::build_tx_param(session, tx_param));
-        OZ (owner_id.convert_from_client_sessid(client_session_id, client_session_create_ts));
+        OZ (owner_id.convert_from_session_id(session_id, session_create_ts));
         OZ (release_all_locks_(stack_ctx,
                                session,
                                tx_param,
                                owner_id,
                                release_type,
                                release_cnt));
-        OZ (remove_session_record(stack_ctx, client_session_id, client_session_create_ts));
+        OZ (clear_lock_session_if_no_lock_(stack_ctx, session_id,
+                                           session_create_ts));
       }
       is_rollback = (OB_SUCCESS != ret);
       if (OB_TMP_FAIL(stack_ctx.destroy(ctx, is_rollback))) {
@@ -751,10 +559,8 @@ int ObUnLockExecutor::execute_(ObExecContext &ctx,
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
   bool is_rollback = false;
-  uint32_t client_session_id = 0;
   ReleaseType release_type = RELEASE_ALL_LOCKS;
 
-  OZ (owner_id.convert_to_sessid(client_session_id));
   OZ (ObLockContext::valid_execute_context(ctx));
   if (OB_SUCC(ret)) {
     SMART_VAR(ObLockContext, stack_ctx) {
@@ -769,7 +575,6 @@ int ObUnLockExecutor::execute_(ObExecContext &ctx,
                                owner_id,
                                release_type,
                                release_cnt));
-        OZ (remove_session_record(stack_ctx, client_session_id, 0));
       }
       is_rollback = (OB_SUCCESS != ret);
       if (OB_TMP_FAIL(stack_ctx.destroy(ctx, is_rollback))) {

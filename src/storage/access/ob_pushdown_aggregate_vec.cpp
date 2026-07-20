@@ -41,14 +41,8 @@ int init_approx_count_distinct_synopsis_aggregate(RuntimeContext &agg_ctx, const
 // TODO@fengshang, need to support sum_opnsize vec 2.0
 int init_sum_opnsize_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
                                ObIAllocator &allocator, IAggregate *&agg);
-int init_rb_build_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id, 
-                            ObIAllocator &allocator, IAggregate *&agg);
 int init_string_prefix_max_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
                                      ObIAllocator &allocator, IAggregate *&agg);
-int init_rb_or_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id, 
-                         ObIAllocator &allocator, IAggregate *&agg);
-int init_rb_and_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id, 
-                          ObIAllocator &allocator, IAggregate *&agg);
 }
 }
 }
@@ -118,27 +112,9 @@ int ObAggCellVec::init()
         }
         break;
       }
-      case PD_RB_BUILD: {
-        if (OB_FAIL(helper::init_rb_build_aggregate(basic_info_.agg_ctx_, agg_idx_, allocator_, aggregate_))) {
-          LOG_WARN("Failed to init rb build aggregate", K(ret), K_(agg_idx));
-        }
-        break;
-      }
       case PD_STR_PREFIX_MAX: {
         if (OB_FAIL(helper::init_string_prefix_max_aggregate(basic_info_.agg_ctx_, agg_idx_, allocator_, aggregate_))) {
           LOG_WARN("Failed to init str prefix max aggregate", K(ret), K_(agg_idx));
-        }
-        break;
-      }
-      case PD_RB_AND: {
-        if (OB_FAIL(helper::init_rb_and_aggregate(basic_info_.agg_ctx_, agg_idx_, allocator_, aggregate_))) {
-          LOG_WARN("Failed to init rb and aggregate", K(ret), K_(agg_idx));
-        }
-        break;
-      }
-      case PD_RB_OR: {
-        if (OB_FAIL(helper::init_rb_or_aggregate(basic_info_.agg_ctx_, agg_idx_, allocator_, aggregate_))) {
-          LOG_WARN("Failed to init rb or aggregate", K(ret), K_(agg_idx));
         }
         break;
       }
@@ -1141,16 +1117,6 @@ int ObSumOpNSizeAggCellVec::can_use_index_info(
   return ret;
 }
 
-ObRbAggCellVec::ObRbAggCellVec(
-    const int64_t agg_idx,
-    const ObAggCellVecBasicInfo &basic_info,
-    common::ObIAllocator &allocator,
-    ObPDAggType agg_type)
-      : ObAggCellVec(agg_idx, basic_info, allocator)
-{
-  agg_type_ = agg_type;
-}
-
 ObStrPrefixMinAggCellVec::ObStrPrefixMinAggCellVec(
   const int64_t agg_idx,
   const ObAggCellVecBasicInfo &basic_info,
@@ -1271,20 +1237,6 @@ int ObPDAggVecFactory::alloc_cell(
           OB_ISNULL(agg_cell = new (buf) ObSumOpNSizeAggCellVec(agg_idx, basic_info, allocator_, exclude_null))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("Failed to alloc memory for SumOpNSize agg cell", K(ret));
-      }
-      break;
-    }
-    case T_FUN_SYS_RB_BUILD_AGG:
-    case T_FUN_SYS_RB_AND_AGG:
-    case T_FUN_SYS_RB_OR_AGG: {
-      ObPDAggType pd_type = to_pd_agg_type(type);
-      if (pd_type == PD_MAX_TYPE) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid ObPDAggType", K(ret), K(type));
-      } else if (OB_ISNULL(buf = allocator_.alloc(sizeof(ObRbAggCellVec))) ||
-                 OB_ISNULL(agg_cell = new (buf) ObRbAggCellVec(agg_idx, basic_info, allocator_, pd_type))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("Failed to alloc memory for rb agg cell", K(ret), K(pd_type));
       }
       break;
     }

@@ -62,7 +62,7 @@ int ObDeleteResolver::resolve(const ParseNode &parse_tree)
   // create the delete stmt
   ObDeleteStmt *delete_stmt = NULL;
   bool is_multi_table_delete = false;
-  bool disable_limit_offset = false;
+  const bool disable_limit_offset = true;
   if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
@@ -75,9 +75,6 @@ int ObDeleteResolver::resolve(const ParseNode &parse_tree)
   } else if (OB_ISNULL(parse_tree.children_[TABLE])) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table_node is null", K(ret));
-  } else if (OB_FAIL(session_info_->check_feature_enable(ObCompatFeatureType::UPD_LIMIT_OFFSET, 
-                                                         disable_limit_offset))) {
-    LOG_WARN("failed to check feature enable", K(ret));
   } else {
     stmt_ = delete_stmt;
     // Only support the syntax of delete ignore, and there is no semantic support.

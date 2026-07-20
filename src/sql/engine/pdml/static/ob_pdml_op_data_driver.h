@@ -80,8 +80,7 @@ private:
   int next_row_from_cache_for_returning(const ObExprPtrIArray &row);
   int write_partitions(ObExecContext &ctx);
   int set_heap_table_hidden_pk(const ObExprPtrIArray *&row,
-                               common::ObTabletID &tablet_id,
-                               const bool is_direct_load = false);
+                               common::ObTabletID &tablet_id);
   int set_heap_table_hidden_pk_value(const ObExprPtrIArray *&row,
                                      common::ObTabletID &tablet_id,
                                      const uint64_t pk_value);
@@ -167,4 +166,3 @@ private:
 }
 #endif /* _OB_SQL_ENGINE_PDML_PDML_DATA_DRIVER_H_ */
 //// end of header file
-

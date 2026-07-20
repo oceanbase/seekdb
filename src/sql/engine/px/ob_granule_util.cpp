@@ -52,32 +52,17 @@ int ObGranuleUtil::use_partition_granule(ObGranulePumpArgs &args, bool &partitio
   const ObGranuleIteratorSpec *gi_op = args.op_info_.gi_op_;
   const ObIArray<const ObTableScanSpec *> &scan_ops = args.op_info_.get_scan_ops();
   int64_t partition_count = args.tablet_arrays_.at(0).count();
-  const ObExecContext *exec_ctx = args.ctx_;
-  ObSQLSessionInfo *session_info = nullptr;
-  int64_t partition_scan_hold = 0;
-  int64_t hash_partition_scan_hold = 0;
   bool hash_part = false;
   if (OB_UNLIKELY(scan_ops.count() != 1 || args.tablet_arrays_.count() != 1)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected count", K(scan_ops.count()), K(args.tablet_arrays_.count()));
-  } else if (OB_ISNULL(session_info = exec_ctx->get_my_session())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Get unexpected null");
   } else {
     hash_part = gi_op->hash_part_;
   }
 
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(session_info->get_sys_variable(share::SYS_VAR__PX_PARTITION_SCAN_THRESHOLD,
-                                                    partition_scan_hold))) {
-    LOG_WARN("failed to get sys variable px partition scan threshold", K(ret));
-  } else if (OB_FAIL(session_info->get_sys_variable(share::SYS_VAR__PX_MIN_GRANULES_PER_SLAVE,
-                                                    hash_partition_scan_hold))) {
-    LOG_WARN("failed to get sys variable px min granule per slave", K(ret));
-  } else {
+  if (OB_SUCC(ret)) {
     partition_granule = ObGranuleUtil::use_partition_granule(args.tablet_arrays_.at(0).count(),
-                                                             args.parallelism_, partition_scan_hold,
-                                                             hash_partition_scan_hold, hash_part);
+                                                             args.parallelism_, 64, 13, hash_part);
   }
   return ret;
 }
@@ -549,4 +534,3 @@ ObGranuleSplitterType ObGranuleUtil::calc_split_type(uint64_t gi_attr_flag)
 
 }
 }
-

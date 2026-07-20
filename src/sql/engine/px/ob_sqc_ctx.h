@@ -28,7 +28,6 @@
 #include "sql/engine/px/datahub/ob_dh_msg_provider.h"
 #include "sql/engine/px/datahub/components/ob_dh_barrier.h"
 #include "sql/engine/px/datahub/components/ob_dh_winbuf.h"
-#include "sql/engine/px/datahub/components/ob_dh_rollup_key.h"
 #include "sql/engine/px/datahub/components/ob_dh_sample.h"
 #include "sql/engine/px/datahub/components/ob_dh_range_dist_wf.h"
 #include "sql/engine/px/datahub/components/ob_dh_init_channel.h"
@@ -108,7 +107,6 @@ public:
   ObBarrierWholeMsgP barrier_whole_msg_proc_;
   ObWinbufWholeMsgP winbuf_whole_msg_proc_;
   ObDynamicSampleWholeMsgP sample_whole_msg_proc_;
-  ObRollupKeyWholeMsgP rollup_key_whole_msg_proc_;
   ObRDWFWholeMsgP rd_wf_whole_msg_proc_;
   ObInitChannelWholeMsgP init_channel_whole_msg_proc_;
   ObReportingWFWholeMsgP reporting_wf_piece_msg_proc_;
@@ -139,5 +137,4 @@ private:
 }
 #endif /* __OB_SQL_PX_SQC_CTX_H__ */
 //// end of header file
-
 

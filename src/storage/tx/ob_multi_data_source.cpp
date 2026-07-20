@@ -176,16 +176,14 @@ int ObMulSourceTxDataNotifier::notify(const ObTxBufferNodeArray &array,
               buffer_ctx.on_redo(arg.scn_);\
               break;\
               case NotifyType::TX_END:\
-              if (node.type_ == ObTxDataSourceType::TEST1) {\
-                can_do_tx_end = common::meta::MdsCheckCanDoTxEndWrapper<HELPER_CLASS>::\
-                                check_can_do_tx_end(arg.willing_to_commit_,\
-                                                    arg.for_replay_,\
-                                                    arg.scn_,\
-                                                    buf,\
-                                                    len,\
-                                                    *const_cast<mds::BufferCtx*>(node.get_buffer_ctx_node().get_ctx()),\
-                                                    can_not_do_tx_end_reason);\
-              }\
+              can_do_tx_end = common::meta::MdsCheckCanDoTxEndWrapper<HELPER_CLASS>::\
+                              check_can_do_tx_end(arg.willing_to_commit_,\
+                                                  arg.for_replay_,\
+                                                  arg.scn_,\
+                                                  buf,\
+                                                  len,\
+                                                  *const_cast<mds::BufferCtx*>(node.get_buffer_ctx_node().get_ctx()),\
+                                                  can_not_do_tx_end_reason);\
               if (!can_do_tx_end) {\
                 ret = OB_EAGAIN;\
                 MDS_ASSERT(OB_NOT_NULL(can_not_do_tx_end_reason));\

@@ -1509,52 +1509,6 @@ int ObCharset::result_collation(
   return ret;
 }
 
-int ObCharset::aggregate_collation_old(
-    const ObCollationLevel collation_level1,
-    const ObCollationType collation_type1,
-    const ObCollationLevel collation_level2,
-    const ObCollationType collation_type2,
-    ObCollationLevel &res_level,
-    ObCollationType &res_type)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(
-      CS_LEVEL_INVALID == collation_level1
-      || CS_LEVEL_INVALID == collation_level2
-      || !is_valid_collation(collation_type1)
-      || !is_valid_collation(collation_type2))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN ("invalid collation level or type",
-              K(ret), K(collation_level1), K(collation_type1), K(collation_level2), K(collation_type2));
-  } else if (collation_level1 < collation_level2) {
-    res_type = collation_type1;
-    res_level = collation_level1;
-  } else if (collation_level2 < collation_level1) {
-    res_type = collation_type2;
-    res_level = collation_level2;
-  } else if (collation_type1 == collation_type2) {
-    res_type = collation_type1;
-    res_level = collation_level1;
-  } else if (CS_LEVEL_EXPLICIT == collation_level1) {
-    ret = OB_CANT_AGGREGATE_2COLLATIONS;
-  } else if (CS_TYPE_BINARY == collation_type1 || CS_TYPE_BINARY == collation_type2) {
-    res_type = CS_TYPE_BINARY;
-    res_level = (CS_TYPE_BINARY == collation_type1) ? collation_level1 : collation_level2;
-  } else {
-    res_type = CS_TYPE_UTF8MB4_BIN;
-    res_level = (CS_TYPE_UTF8MB4_BIN == collation_type1) ? collation_level1 : collation_level2;
-  }
-
-  if (OB_FAIL(ret)) {
-    LOG_WARN("Illegal mix of collations", K(ret),
-            "type1", ObCharset::collation_name(collation_type1),
-            "level1", ObCharset::collation_level(collation_level1),
-            "type2", ObCharset::collation_name(collation_type2),
-            "level2", ObCharset::collation_level(collation_level2));
-  }
-  return ret;
-}
-
 int ObCharset::aggregate_collation_new(
     const ObCollationLevel collation_level1,
     const ObCollationType collation_type1,
@@ -2066,11 +2020,6 @@ bool ObCharset::case_insensitive_equal(const ObString &one,
 bool ObCharset::case_sensitive_equal(const ObString &one, const ObString &another)
 {
   return 0 == strcmp(CS_TYPE_UTF8MB4_BIN, one, another);
-}
-// seekdb is MySQL-only, so compatible name matching is case insensitive.
-bool ObCharset::case_compat_mode_equal(const ObString &one, const ObString &another)
-{
-  return case_insensitive_equal(one, another);
 }
 /* For db object names, such as column names and table names.
  * if you want to use this hash fun in other places, please contact @maoli */

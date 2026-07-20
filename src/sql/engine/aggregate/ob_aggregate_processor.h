@@ -33,7 +33,6 @@
 #include "sql/engine/expr/ob_expr_dll_udf.h"
 #include "sql/engine/expr/ob_rt_datum_arith.h"
 #include "share/geo/ob_geo_mvt.h"
-#include "share/roaringbitmap/ob_rb_utils.h"
 #include "sql/engine/basic/ob_hp_infrastructure_manager.h"
 #include "sql/engine/expand/ob_expand_vec_op.h"
 
@@ -799,11 +798,6 @@ public:
   // used by ScalarAggregate operator when there's no input rows
   int collect_for_empty_set();
 
-  inline void set_partial_rollup_idx(int64_t start, int64_t end)
-  {
-    start_partial_rollup_idx_ = start;
-    end_partial_rollup_idx_ = end;
-  }
   inline void set_in_window_func() { in_window_func_ = true; }
   inline bool has_distinct() const { return has_distinct_; }
   inline bool has_extra() const { return has_extra_; }
@@ -864,13 +858,6 @@ public:
   typedef int (ObAggregateProcessor::*process_fun)(GroupRow &group_row);
   typedef int (ObAggregateProcessor::*collect_fun)(const int64_t group_id, const ObExpr *diff_expr);
 
-  void set_rollup_info(
-    ObRollupStatus rollup_status,
-    ObExpr *rollup_id_expr)
-  {
-    rollup_status_ = rollup_status;
-    rollup_id_expr_ = rollup_id_expr;
-  }
   void set_3stage_info(
     const ObThreeStageAggrStage aggr_stage,
     const int64_t aggr_code_idx,
@@ -1118,14 +1105,6 @@ private:
                         const ObObj *tmp_obj,
                         uint32_t obj_cnt,
                         mvt_agg_result &mvt_res);
-  int get_rb_build_agg_result(const ObAggrInfo &aggr_info,
-                              GroupConcatExtraResult *&extra,
-                              ObDatum &concat_result);
-  int get_rb_calc_agg_result(const ObAggrInfo &aggr_info,
-                             GroupConcatExtraResult *&extra,
-                             ObDatum &concat_result,
-                             ObRbOperation calc_op,
-                             bool is_cardinality = false);
   int get_array_agg_result(const ObAggrInfo &aggr_info,
                            GroupConcatExtraResult *&extra,
                            ObDatum &concat_result);
@@ -1249,12 +1228,7 @@ public:
       case T_FUN_JSON_OBJECTAGG:
       case T_FUN_ORA_JSON_OBJECTAGG: 
       case T_FUN_SYS_ST_ASMVT: 
-      case T_FUN_SYS_RB_BUILD_AGG:
-      case T_FUN_SYS_RB_OR_AGG:
-      case T_FUN_SYS_RB_AND_AGG:
       case T_FUNC_SYS_ARRAY_AGG:
-      case T_FUN_SYS_RB_OR_CARDINALITY_AGG:
-      case T_FUN_SYS_RB_AND_CARDINALITY_AGG:
       {
         need_id = true;
         break;
@@ -1347,12 +1321,6 @@ private:
   ObExpr *aggr_code_expr_;
   ObThreeStageAggrStage aggr_stage_;
 
-  // for Rollup Distributor and Rollup Collector
-  ObRollupStatus rollup_status_;
-  ObExpr *rollup_id_expr_;
-  int64_t start_partial_rollup_idx_; // rollup partial idx
-  int64_t end_partial_rollup_idx_; // rollup partial idx
-
   int64_t dir_id_;
   ObChunkDatumStore::ShadowStoredRow *tmp_store_row_;
   ObIOEventObserver *io_event_observer_;
@@ -1407,12 +1375,7 @@ OB_INLINE bool ObAggregateProcessor::need_extra_info(const ObExprOperatorType ex
     case T_FUN_JSON_OBJECTAGG:
     case T_FUN_ORA_JSON_OBJECTAGG:
     case T_FUN_SYS_ST_ASMVT:
-    case T_FUN_SYS_RB_BUILD_AGG:
-    case T_FUN_SYS_RB_OR_AGG:
-    case T_FUN_SYS_RB_AND_AGG:
     case T_FUNC_SYS_ARRAY_AGG:
-    case T_FUN_SYS_RB_OR_CARDINALITY_AGG:
-    case T_FUN_SYS_RB_AND_CARDINALITY_AGG:
     {
       need_extra = true;
       break;

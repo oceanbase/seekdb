@@ -90,7 +90,6 @@ public:
     TX_DATA_MEMTABLE = 1,
     TX_CTX_MEMTABLE = 2,
     LOCK_MEMTABLE = 3,
-    DIRECT_LOAD_MEMTABLE = 4,
     MAX_MEMTABLE_TYPE,
     // < add new memtable here
 
@@ -264,7 +263,6 @@ public:
   virtual bool is_memtable() const { return is_memtable(key_.table_type_); }
   virtual bool is_resident_memtable() const { return is_resident_memtable(key_.table_type_); }
   virtual bool is_tablet_memtable() const { return is_tablet_memtable(key_.table_type_); }
-  virtual bool is_direct_load_memtable() const { return is_direct_load_memtable(key_.table_type_); }
   virtual bool is_data_memtable() const { return is_data_memtable(key_.table_type_); }
   virtual bool is_tx_data_memtable() const { return is_tx_data_memtable(key_.table_type_); }
   virtual bool is_tx_ctx_memtable() const { return is_tx_ctx_memtable(key_.table_type_); }
@@ -340,12 +338,7 @@ public:
   }
   static bool is_tablet_memtable(const TableType table_type)
   {
-    return (ObITable::TableType::DATA_MEMTABLE == table_type ||
-            ObITable::TableType::DIRECT_LOAD_MEMTABLE == table_type);
-  }
-  static bool is_direct_load_memtable(const TableType table_type)
-  {
-    return ObITable::TableType::DIRECT_LOAD_MEMTABLE == table_type;
+    return ObITable::TableType::DATA_MEMTABLE == table_type;
   }
   static bool is_data_memtable(const TableType table_type)
   {
@@ -460,7 +453,6 @@ public:
   int get_tx_data_memtable(ObTxDataMemtable *&memtable);
   int get_tx_ctx_memtable(ObTxCtxMemtable *&memtable);
   int get_lock_memtable(transaction::tablelock::ObLockMemtable *&memtable);
-  int get_direct_load_memtable(ObDDLKV *&memtable);
 
   ObTableHandleV2(const ObTableHandleV2 &other);
   ObTableHandleV2 &operator= (const ObTableHandleV2 &other);

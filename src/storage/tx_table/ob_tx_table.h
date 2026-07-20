@@ -149,7 +149,7 @@ public:
   int init(ObLS *ls);
   void stop();
   void destroy();
-  int create_tablet(const lib::Worker::CompatMode compat_mode, const share::SCN &create_scn);
+  int create_tablet(const share::SCN &create_scn);
   int remove_tablet();
   int prepare_offline();
   int offline();
@@ -363,10 +363,8 @@ public: // getter & setter
   static int64_t get_filter_col_idx();
 
 private:
-  int create_data_tablet_(const lib::Worker::CompatMode compat_mode,
-                          const share::SCN &create_scn);
-  int create_ctx_tablet_(const lib::Worker::CompatMode compat_mode,
-                         const share::SCN &create_scn);
+  int create_data_tablet_(const share::SCN &create_scn);
+  int create_ctx_tablet_(const share::SCN &create_scn);
   int remove_tablet_(const common::ObTabletID &tablet_id);
   int get_data_table_schema_(share::schema::ObTableSchema &schema);
   int get_ctx_table_schema_(share::schema::ObTableSchema &schema);

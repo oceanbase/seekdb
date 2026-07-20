@@ -3453,10 +3453,6 @@ int ObRawExprUtils::try_add_cast_expr_above(ObRawExprFactory *expr_factory,
                   && (dst_type.is_character_type() || dst_type.is_null()))
             || (src_type.is_character_type() && dst_type.is_character_type())))
       {
-      // cases like: select xmltype(var)||xmltype(var) as "res1" from t1 t;
-      // xmltype is a lp constructor, an implicit cast is added to cast PL xmltype to SQL xmltype
-      // when deduce concat, another cast is needed to cast SQL xmltype to string
-      // it is a unary cast (cast from string to xmltype is not allowed)
       ret = OB_ERR_UNEXPECTED;
 #ifdef DEBUG
       LOG_ERROR("try to add implicit cast again, check if type deduction is correct",
@@ -4318,20 +4314,6 @@ bool ObRawExprUtils::need_column_conv(const ObRawExprResType &expected_type,
   return bret;
 }
 
-bool ObRawExprUtils::check_exprs_type_collation_accuracy_equal(const ObRawExpr *expr1, const ObRawExpr *expr2)
-{
-  int equal = false;
-  if (expr1->get_data_type() == expr2->get_data_type()
-      && expr1->get_collation_type() == expr2->get_collation_type()
-      && expr1->get_accuracy() == expr2->get_accuracy()) {
-    equal = true;
-    if (ob_is_collection_sql_type(expr1->get_data_type())
-        && expr1->get_subschema_id() != expr2->get_subschema_id()) {
-      equal = false;
-    }
-  }
-  return equal;
-}
 // This method should be used with caution, it will lose enum type enum_set_values
 int ObRawExprUtils::build_column_conv_expr(ObRawExprFactory &expr_factory,
                                            const share::schema::ObColumnSchemaV2 *column_schema,
@@ -7238,8 +7220,6 @@ int ObRawExprUtils::build_inner_wf_aggr_status_expr(ObRawExprFactory &factory,
   }
   return ret;
 }
-
-// only for rollup distributor and collector
 
 int ObRawExprUtils::build_pseudo_ddl_slice_id(ObRawExprFactory &factory,
                                                 const ObSQLSessionInfo &session_info,

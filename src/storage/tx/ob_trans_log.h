@@ -45,32 +45,27 @@ public:
   ObTransLog()
     : log_type_(storage::OB_LOG_UNKNOWN),
       trans_id_(),
-      cluster_id_(0),
       cluster_version_(0) {}
   ObTransLog(const int64_t log_type,
              const ObTransID &trans_id,
-             const uint64_t cluster_id,
              const uint64_t cluster_version)
     : log_type_(log_type),
       trans_id_(trans_id),
-      cluster_id_(cluster_id),
       cluster_version_(cluster_version) {}
   virtual ~ObTransLog() {}
   int init(const int64_t log_type,
-      const ObTransID &trans_id, const uint64_t cluster_id, const uint64_t cluster_version);
+      const ObTransID &trans_id, const uint64_t cluster_version);
 public:
   int64_t get_log_type() const { return log_type_; }
   const ObTransID &get_trans_id() const { return trans_id_; }
-  uint64_t get_cluster_id() const { return cluster_id_; }
   uint64_t get_cluster_version() const { return cluster_version_; }
   // Update tenant for physical backup and restore
-  VIRTUAL_TO_STRING_KV(K_(log_type),  K_(trans_id), K_(cluster_id), K_(cluster_version));
+  VIRTUAL_TO_STRING_KV(K_(log_type), K_(trans_id), K_(cluster_version));
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTransLog);
 protected:
   int64_t log_type_;
   ObTransID trans_id_;
-  uint64_t cluster_id_;
   uint64_t cluster_version_;
 };
 
@@ -161,9 +156,9 @@ public:
       prev_log_ids_(ObModIds::OB_TRANS_REDO_LOG_ID_ARRAY, OB_MALLOC_NORMAL_BLOCK_SIZE) {}
 
   ObTransRecordLog(const int64_t log_type,
-      ObTransID &trans_id, const uint64_t cluster_id, 
+      ObTransID &trans_id,
       const uint64_t cluster_version, const uint64_t prev_record_log_id)
-    : ObTransLog(log_type, trans_id, cluster_id, cluster_version),
+    : ObTransLog(log_type, trans_id, cluster_version),
       prev_record_log_id_(prev_record_log_id), 
       prev_log_ids_(ObModIds::OB_TRANS_REDO_LOG_ID_ARRAY, OB_MALLOC_NORMAL_BLOCK_SIZE) {}
   ~ObTransRecordLog() {}

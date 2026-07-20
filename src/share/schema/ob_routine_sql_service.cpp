@@ -419,7 +419,6 @@ int ObRoutineSqlService::gen_package_dml(
       || OB_FAIL(dml.add_column("flag", package_info.get_flag()))
       || OB_FAIL(dml.add_column("owner_id", ObSchemaUtils::get_extract_schema_id(
                                             package_info.get_owner_id())))
-      || OB_FAIL(dml.add_column("comp_flag", package_info.get_comp_flag()))
       || OB_FAIL(dml.add_column("exec_env", ObHexEscapeSqlStr(package_info.get_exec_env())))
       || OB_FAIL(dml.add_column("source", ObHexEscapeSqlStr(package_info.get_source())))
       || OB_FAIL(dml.add_column("comment", ObHexEscapeSqlStr(package_info.get_comment())))
@@ -452,7 +451,6 @@ int ObRoutineSqlService::gen_routine_dml(
       || OB_FAIL(dml.add_column("owner_id", ObSchemaUtils::get_extract_schema_id(
                                             routine_info.get_owner_id())))
       || OB_FAIL(dml.add_column("priv_user", ObHexEscapeSqlStr(routine_info.get_priv_user())))
-      || OB_FAIL(dml.add_column("comp_flag", routine_info.get_comp_flag()))
       || OB_FAIL(dml.add_column("exec_env", ObHexEscapeSqlStr(routine_info.get_exec_env())))
       || OB_FAIL(dml.add_column("routine_body", ObHexEscapeSqlStr(routine_info.get_routine_body())))
       || OB_FAIL(dml.add_column("comment", ObHexEscapeSqlStr(routine_info.get_comment())))

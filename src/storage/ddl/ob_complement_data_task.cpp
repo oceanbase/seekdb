@@ -175,7 +175,6 @@ int ObComplementDataParam::init(const ObDDLBuildSingleReplicaRequestArg &arg)
       } else if (OB_ISNULL(dest_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("table not exist", K(ret), K(dest_table_id), K(dest_schema_version));
-      } else if (FALSE_IT(compat_mode_ = lib::Worker::CompatMode::MYSQL)) {
       } else if (true
         && OB_UNLIKELY(dest_table_schema->get_association_table_id() != arg.source_table_id_)) {
         ret = OB_ERR_UNEXPECTED;
@@ -1010,7 +1009,6 @@ int ObComplementWriteTask::fill_writer_param(ObWriteMacroParam &param)
   param.lob_meta_tablet_param_ = param_->lob_meta_tablet_param_;
   param.lob_meta_tablet_id_ = param_->dest_lob_meta_tablet_id_;
   param.tablet_context_ = context_->tablet_ctx_;
-  // do not need to set param.tx_info_;
   if (OB_FAIL(param.ddl_table_schema_.assign(param_->ddl_table_schema_))) {
     LOG_WARN("get ddl table schema failed", K(ret));
   } else {

@@ -611,7 +611,6 @@ public:
               const uint64_t database_id,
               const ObString &package_name,
               const ObPackageType package_type,
-              const int64_t compatible_mode,
               uint64_t &package_id) override;
 
   virtual int get_routine_id(

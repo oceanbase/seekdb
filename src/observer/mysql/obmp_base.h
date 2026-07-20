@@ -70,7 +70,6 @@ protected:
   /// send a error packet to client
   int send_error_packet(int err,
                         const char* errmsg,
-                        bool is_partition_hit = true,
                         void *extra_err_info = NULL);
 
   // send a ok packet to client
@@ -105,8 +104,6 @@ protected:
   }
   int check_and_refresh_schema(sql::ObSQLSessionInfo *session = NULL);
   bool need_flush_buffer() const;
-  int update_transmission_checksum_flag(const sql::ObSQLSessionInfo &session);
-  int update_proxy_and_client_sys_vars(sql::ObSQLSessionInfo &session);
   int update_charset_sys_vars(ObSMConnection &conn, sql::ObSQLSessionInfo &sess_info);
 
   int response_row(sql::ObSQLSessionInfo &session,
@@ -116,7 +113,6 @@ protected:
                    sql::ObExecContext *exec_ctx = NULL,
                    bool is_ps_protocol = true,
                    ObSchemaGetterGuard *schema_guard = NULL);
-  int process_kill_client_session(sql::ObSQLSessionInfo &session, bool is_connect = false);
   int load_privilege_info_for_change_user(sql::ObSQLSessionInfo *session);
 protected:
   static const int64_t MAX_TRY_STEPS = 5;

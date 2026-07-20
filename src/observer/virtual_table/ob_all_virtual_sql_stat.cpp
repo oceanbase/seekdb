@@ -583,14 +583,6 @@ int ObAllVirtualSqlStat::fill_row(
         }
         break;
       }
-      case ROUTE_MISS_TOTAL: {
-        cells[cell_idx].set_int(sql_stat_record->get_route_miss_total());
-        break;
-      }
-      case ROUTE_MISS_DELTA: {
-        cells[cell_idx].set_int(sql_stat_record->get_route_miss_delta());
-        break;
-      }
       case FIRST_LOAD_TIME: {
         int64_t first_load_timestamp = sql_stat_record->get_sql_stat_info().get_first_load_time();
         if (first_load_timestamp == 0) {

@@ -37,17 +37,13 @@ struct ObDDLKVQueryParam
 {
 public:
   ObDDLKVQueryParam()
-    : ddl_kv_type_(ObDDLKVType::DDL_KV_INVALID),
-      trans_id_(),
-      seq_no_() {}
+    : ddl_kv_type_(ObDDLKVType::DDL_KV_INVALID) {}
   ~ObDDLKVQueryParam() {}
   bool match_ddl_kv(const ObDDLKV &ddl_kv) const;
-  TO_STRING_KV(K_(ddl_kv_type), K_(trans_id), K_(seq_no));
+  TO_STRING_KV(K_(ddl_kv_type));
 
 public:
   ObDDLKVType ddl_kv_type_;
-  transaction::ObTransID trans_id_;
-  transaction::ObTxSEQ seq_no_;
 };
 
 
@@ -140,9 +136,7 @@ public:
       const int64_t snapshot_version,
       const uint64_t data_format_version,
       const share::SCN &freeze_scn = share::SCN::min_scn(), // freeze the active ddl kv, when memtable freeze or ddl commit
-      const ObDDLKVType ddl_kv_type = ObDDLKVType::DDL_KV_FULL,
-      const transaction::ObTransID &trans_id = transaction::ObTransID(),
-      const transaction::ObTxSEQ &seq_no = transaction::ObTxSEQ());
+      const ObDDLKVType ddl_kv_type = ObDDLKVType::DDL_KV_FULL);
   int release_ddl_kvs(const ObDDLKVType ddl_kv_type, const share::SCN &rec_scn); // release persistent ddl kv, used in ddl merge task for free ddl kv
   int check_has_effective_ddl_kv(bool &has_ddl_kv); // used in ddl log handler for checkpoint
   int try_flush_ddl_commit_scn(
@@ -192,9 +186,7 @@ private:
     const int64_t snapshot_version,
     const uint64_t data_format_version,
     ObDDLKVHandle &kv_handle,
-    const ObDDLKVType ddl_kv_type,
-    const transaction::ObTransID &trans_id = transaction::ObTransID(),
-    const transaction::ObTxSEQ &seq_no = transaction::ObTxSEQ());
+    const ObDDLKVType ddl_kv_type);
   void free_ddl_kv(const int64_t idx);
   int get_active_ddl_kv_impl(ObDDLKVHandle &kv_handle);
   void try_get_ddl_kv_unlock(const share::SCN &scn, ObDDLKVHandle &kv_handle);

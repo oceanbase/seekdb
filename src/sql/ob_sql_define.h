@@ -124,11 +124,7 @@ enum JtColType {
   COL_TYPE_VALUE, // 4
   NESTED_COL_TYPE, // 5
   COL_TYPE_QUERY_JSON_COL, // 6
-  COL_TYPE_VAL_EXTRACT_XML, // 7
-  COL_TYPE_XMLTYPE_XML, // 8
-  COL_TYPE_ORDINALITY_XML = 9,
-  COL_TYPE_RB_ITERATE = 10,
-  COL_TYPE_UNNEST = 11,
+  COL_TYPE_UNNEST, // 7
 };
 
 enum ObNameTypeClass
@@ -548,7 +544,6 @@ enum PXParallelRule
   AUTO_DOP, // /*+ parallel(auto) */ or alter session set parallel_degree_policy = 'auto';
   // force disable parallel below
   PL_UDF_DAS_FORCE_SERIALIZE, //stmt has_pl_udf will use das, force serialize;
-  LICENSE_NOT_ALLOW_OLAP, // current license does not support olap
   MAX_OPTION
 };
 
@@ -563,7 +558,6 @@ inline const char *ob_px_parallel_rule_str(PXParallelRule px_parallel_ruel)
     "MANUAL_TABLE_DOP",
     "AUTO_DOP",
     "PL_UDF_DAS_FORCE_SERIALIZE",
-    "LICENSE_NOT_ALLOW_OLAP",
     "MAX_OPTION",
   };
   if (OB_LIKELY(px_parallel_ruel >= USE_PX_DEFAULT)
@@ -742,8 +736,7 @@ static bool is_fixed_length_storage(ObObjType type) {
       || ObJsonTC == tc
       || ObGeometryTC == tc
       || ObUserDefinedSQLTC == tc
-      || ObDecimalIntTC == tc
-      || ObRoaringBitmapTC == tc) {
+      || ObDecimalIntTC == tc) {
     is_fixed = false;
   }
   return is_fixed;
@@ -765,7 +758,6 @@ static bool is_fixed_length(ObObjType type) {
       || ObGeometryTC == tc
       || ObUserDefinedSQLTC == tc
       || ObDecimalIntTC == tc
-      || ObRoaringBitmapTC == tc
       || ObCollectionSQLTC == tc) {
     is_fixed = false;
   }

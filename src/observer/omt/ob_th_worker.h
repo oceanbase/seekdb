@@ -53,7 +53,6 @@ public:
 
   virtual ObThWorker::Status check_wait() override;
   virtual int check_status() override;
-  virtual int check_large_query_quota() override;
   // retry relating
   virtual bool can_retry() const override { return can_retry_; }
   // Note: you CAN NOT call set_need_retry when can_retry_ == false
@@ -80,15 +79,9 @@ public:
 
   OB_INLINE void pause() { pause_flag_ = true; }
 
-  Status check_qtime_throttle();
-  Status check_throttle();
-  Status check_rate_limiter();
-
   OB_INLINE int64_t get_query_start_time() const { return query_start_time_; }
   OB_INLINE int64_t get_query_enqueue_time() const { return query_enqueue_time_; }
   OB_INLINE ObTenant* get_tenant() { return tenant_; }
-  OB_INLINE bool large_query() const { return large_query_; }
-  OB_INLINE void set_large_query(bool v = true) { large_query_ = v; }
   OB_INLINE const char *get_module_name() const { return module_name_; }
   OB_INLINE bool is_doing_ddl() const { return OB_NOT_NULL(is_doing_ddl_) ? (*is_doing_ddl_) : false; }
 
@@ -106,8 +99,6 @@ private:
   common::ObThreadCond run_cond_;
 
   bool pause_flag_;
-  bool large_query_;
-
   int64_t query_start_time_;
   int64_t query_enqueue_time_;
   int64_t last_check_time_;

@@ -376,6 +376,53 @@ void TestSSTableMeta::prepare_create_sstable_param()
   ASSERT_EQ(OB_SUCCESS, ObSSTableMergeRes::fill_column_checksum_for_empty_major(param_.column_cnt_, param_.column_checksums_));
 }
 
+class TestMigrationSSTableParam : public TestSSTableMeta
+{
+public:
+  TestMigrationSSTableParam();
+  virtual ~TestMigrationSSTableParam() = default;
+  virtual void SetUp() override;
+  virtual void TearDown() override;
+private:
+  storage::ObStorageSchema storage_schema_;
+  ObSSTableMeta sstable_meta_;
+  storage::ObITable::TableKey table_key_;
+};
+
+TestMigrationSSTableParam::TestMigrationSSTableParam()
+  : storage_schema_(),
+    sstable_meta_(),
+    table_key_()
+{
+}
+
+void TestMigrationSSTableParam::SetUp()
+{
+  TestSSTableMeta::SetUp();
+  ASSERT_EQ(OB_SUCCESS, storage_schema_.init(allocator_, table_schema_));
+  ASSERT_TRUE(!sstable_meta_.is_valid());
+  sstable_meta_.reset();
+  ASSERT_TRUE(!sstable_meta_.is_valid());
+  ASSERT_EQ(OB_SUCCESS, sstable_meta_.init(param_, allocator_));
+  ASSERT_TRUE(sstable_meta_.is_valid());
+  ASSERT_TRUE(sstable_meta_.data_root_info_.is_valid());
+  ASSERT_TRUE(sstable_meta_.macro_info_.is_valid());
+  ASSERT_TRUE(sstable_meta_.get_col_checksum_cnt() > 0);
+  table_key_.table_type_ = ObITable::TableType::MAJOR_SSTABLE;
+  table_key_.tablet_id_ = 1101;
+  table_key_.version_range_.base_version_ = 0;
+  table_key_.version_range_.snapshot_version_ = 11;
+  ASSERT_TRUE(table_key_.is_valid());
+}
+
+void TestMigrationSSTableParam::TearDown()
+{
+  table_key_.reset();
+  sstable_meta_.reset();
+  storage_schema_.reset();
+  TestSSTableMeta::TearDown();
+}
+
 TEST_F(TestRootBlockInfo, test_load_and_transform_root_block)
 {
   ASSERT_TRUE(root_info_.get_addr().is_block());

@@ -8997,20 +8997,9 @@ int ObTransformUtils::get_base_column(const ObDMLStmt *stmt,
     if (OB_ISNULL(view) || OB_ISNULL(view = view->get_real_stmt()) ||
         OB_UNLIKELY(sid < 0 || sid >= view->get_select_item_size()) ||
         OB_ISNULL(sel_expr = view->get_select_item(sid).expr_) ||
-        OB_UNLIKELY(!sel_expr->is_column_ref_expr() &&
-                    sel_expr->get_expr_type() != T_FUN_SYS_MAKEXML)) {
+        OB_UNLIKELY(!sel_expr->is_column_ref_expr())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid generated table column", K(ret), K(view), K(sid), K(sel_expr));
-    } else if (sel_expr->get_expr_type() == T_FUN_SYS_MAKEXML) {
-      if (sel_expr->get_param_count() != 2) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid xml generated table column", K(ret), K(sel_expr));
-      } else if (!sel_expr->get_param_expr(1)->is_column_ref_expr()) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid xml generated table column", K(ret), K(sel_expr->get_param_expr(1)->is_column_ref_expr()));
-      } else {
-        col = static_cast<ObColumnRefRawExpr*>(sel_expr->get_param_expr(1));
-      }
     } else if (FALSE_IT(col = static_cast<ObColumnRefRawExpr*>(sel_expr))) {
       /*do nothing*/
     }
@@ -12422,7 +12411,7 @@ int ObTransformUtils::check_is_json_constraint(ObTransformerCtx *ctx,
           const ObJtColBaseInfo& info = *table->json_table_def_->all_cols_.at(i);
           const ObString& cur_column_name = info.col_name_;
           if (info.col_type_ == static_cast<int32_t>(COL_TYPE_QUERY)) {
-            if (ObCharset::case_compat_mode_equal(cur_column_name, col_item.column_name_)) {
+            if (ObCharset::case_insensitive_equal(cur_column_name, col_item.column_name_)) {
               is_json = true;
               break;
             }

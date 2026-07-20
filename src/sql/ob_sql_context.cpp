@@ -152,7 +152,6 @@ ObSqlCtx::ObSqlCtx()
     cur_stmt_(NULL),
     cur_plan_(nullptr),
     is_sensitive_(false),
-    is_protocol_weak_read_(false),
     snapshot_query_expr_(nullptr),
     is_execute_call_stmt_(false),
     is_text_ps_mode_(false),
@@ -201,7 +200,6 @@ void ObSqlCtx::reset()
   all_local_session_vars_ = nullptr;
   is_ddl_from_primary_ = false;
   is_sensitive_ = false;
-  is_protocol_weak_read_ = false;
   first_plan_hash_ = 0;
   first_outline_data_.reset();
   first_equal_param_cons_cnt_ = 0;

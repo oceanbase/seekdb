@@ -35,14 +35,6 @@ CREATE OR REPLACE PACKAGE dbms_xplan  AUTHID CURRENT_USER
                         )
     return text;
 
-    function display_sql_plan_baseline(sql_handle   VARCHAR(32)  default  NULL,
-                                        plan_name    VARCHAR(32)  default  NULL,
-                                        format       VARCHAR(32)  default  'TYPICAL',
-                                        svr_ip       VARCHAR(64) default null,
-                                        svr_port     DECIMAL default 0
-                                    )
-    return text;
-
     function display_active_session_plan(
                 session_id   DECIMAL default 0,
                 format       VARCHAR(32)  default  'TYPICAL',

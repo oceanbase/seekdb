@@ -154,9 +154,7 @@ struct ObTxParam
   int64_t lock_timeout_us_;
   ObTxAccessMode access_mode_;
   ObTxIsolationLevel isolation_;
-  int64_t cluster_id_;
-  TO_STRING_KV(K_(cluster_id),
-               K_(timeout_us),
+  TO_STRING_KV(K_(timeout_us),
                K_(lock_timeout_us),
                K_(access_mode),
                K_(isolation));
@@ -271,17 +269,17 @@ public:
   bool read_elr() const { return core_.is_elr(); }
   /**
    * only used for lob, other situation DONOT use
-   * 
+   *
    * special serialize interface for lob to avoid lob locator too large
-   */ 
+   */
   int serialize_for_lob(const share::SCN &fb_snapshot, SERIAL_PARAMS) const;
   int deserialize_for_lob(share::SCN &fb_snapshot, DESERIAL_PARAMS);
   int64_t get_serialize_size_for_lob(const share::SCN &fb_snapshot) const;
   /**
    * deprecated interface, DONOT use !
-   * 
+   *
    * only used for lob, other situation DONOT use
-   * 
+   *
    * offline ddl with lob can only get ObTxSnapshot
    * so provide one interface to build ObTxReadSnapshot from ObTxSnapshot
    * master no need use this
@@ -289,9 +287,9 @@ public:
   int build_snapshot_for_lob(const ObTxSnapshot &core);
   /**
    * deprecated interface, DONOT use !
-   * 
+   *
    * only used for lob, other situation DONOT use
-   * 
+   *
    * in upgarge, old lob locator will use ObMemLobTxInfo store tx info
    * so provide one interface to build ObTxReadSnapshot from ObMemLobTxInfo
    */
@@ -301,7 +299,7 @@ public:
       const int64_t snapshot_seq);
   /**
    * only used for lob, other situation DONOT use
-   * 
+   *
    * determine whether the current snapshot is within a transaction
    *
    * Return:
@@ -423,10 +421,6 @@ class ObTxDesc final : public share::ObLightHashLink<ObTxDesc>
   friend class ObTxnFreeRouteCtx;
   OB_UNIS_VERSION(1);
 protected:
-          // FIXME: removable
-  // Identify the ownership of data when the A database and
-  // the B database synchronize data with each other
-  int64_t cluster_id_;
   ObTraceInfo trace_info_;
   uint64_t cluster_version_;  // compatible handle when upgrade
   int64_t seq_base_;          // tx_seq's base value, use to calculate absolute value of tx_seq
@@ -445,7 +439,6 @@ protected:
   ObTxSEQ snapshot_scn_;               // the time of acquire @snapshot_version_
   uint32_t sess_id_;                   // sesssion id of txn start, for XA it is XA_START session id
   uint32_t assoc_sess_id_;             // the session which associated with
-  uint32_t client_sid_;                // client session id, which is produced by proxy
 
   uint64_t op_sn_;                     // Tx level operation sequence No
 
@@ -589,7 +582,6 @@ public:
                K_(addr),
                "session_id", sess_id_,
                "assoc_session_id", assoc_sess_id_,
-               "client_sid", client_sid_,
                "xid", PC((!xid_.empty() ? &xid_ : (ObXATransID*)nullptr)),
                K_(access_mode),
                K_(tx_consistency_type),
@@ -611,7 +603,6 @@ public:
                K_(commit_version),
                K_(commit_times),
                KP_(commit_cb),
-               K_(cluster_id),
                K_(cluster_version),
                K_(seq_base),
                K_(flags_.SHADOW),
@@ -636,12 +627,9 @@ public:
   int merge_conflict_txs(const ObIArray<ObTransID> &conflict_ids);
   bool has_conflict_txs() const { return conflict_txs_.count() > 0; }
   bool contain(const ObTransID &trans_id) const { return tx_id_ == trans_id; } /*used by TransHashMap*/
-  
-  void set_cluster_id(uint64_t cluster_id) { cluster_id_ = cluster_id; }
-  uint64_t get_cluster_id() const { return cluster_id_; }
+
   uint32_t get_session_id() const { return sess_id_; }
   uint32_t get_assoc_session_id() const { return assoc_sess_id_; }
-  uint32_t get_client_sid() const { return client_sid_; }
   ObAddr get_addr() const { return addr_; }
   uint64_t get_cluster_version() const { return cluster_version_; }
   ObTxConsistencyType get_tx_consistency_type() const { return tx_consistency_type_; }
@@ -696,7 +684,6 @@ public:
   void set_xid(const ObXATransID &xid) { xid_ = xid; }
   void set_sessid(const uint32_t session_id) { sess_id_ = session_id; }
   void set_assoc_sessid(const uint32_t session_id) { assoc_sess_id_ = session_id; }
-  void set_client_sid(const uint32_t client_sid) { client_sid_ = client_sid; }
   const ObXATransID &get_xid() const { return xid_; }
   void reset_xid() { xid_.reset(); }
   bool is_xa_trans() const { return false; }

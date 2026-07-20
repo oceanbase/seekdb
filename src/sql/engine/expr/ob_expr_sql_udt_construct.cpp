@@ -74,7 +74,7 @@ int ObExprUdtConstruct::calc_result_typeN(ObExprResType &type,
   if (OB_SUCC(ret)) {
     type.set_udt_id(udt_id_);
     uint16_t subschema_id;
-    if (OB_ISNULL(exec_ctx) && udt_id_ != T_OBJ_XML) {
+    if (OB_ISNULL(exec_ctx)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("need context to search subschema mapping", K(ret), K(udt_id_));
     } else if (OB_FAIL(exec_ctx->get_subschema_id_by_udt_id(udt_id_, subschema_id))) {

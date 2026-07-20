@@ -23,8 +23,7 @@
 #include "observer/mysql/obsm_row.h"
 #include "observer/mysql/obmp_utils.h"
 #include "observer/mysql/ob_query_driver.h"
-#include "sql/session/ob_sess_info_verify.h"
-#include "sql/engine/expr/ob_expr_xml_func_helper.h"
+#include "sql/engine/expr/ob_expr_sql_udt_utils.h"
 namespace oceanbase
 {
 using namespace share;
@@ -82,26 +81,6 @@ int ObMPBase::before_process()
 {
   int ret = OB_SUCCESS;
   process_timestamp_ = common::ObTimeUtility::current_time();
-  return ret;
-}
-
-int ObMPBase::update_transmission_checksum_flag(const ObSQLSessionInfo &session)
-{
-  return packet_sender_.update_transmission_checksum_flag(session);
-}
-
-int ObMPBase::update_proxy_and_client_sys_vars(ObSQLSessionInfo &session)
-{
-  int ret = OB_SUCCESS;
-  ObSMConnection* conn = get_conn();
-  if (OB_UNLIKELY(NULL == conn)) {
-    ret = OB_CONNECT_ERROR;
-    LOG_WARN("connection in error, maybe has disconnected", K(ret));
-  } else if (OB_FAIL(session.set_proxy_user_privilege(session.get_user_priv_set()))) {
-    LOG_WARN("fail to set proxy user privilege system variables", K(ret));
-  } else if (OB_FAIL(session.set_client_capability())) {
-    LOG_WARN("fail to set client capability", K(ret));
-  }
   return ret;
 }
 
@@ -187,10 +166,9 @@ int ObMPBase::release_packet(obmysql::ObMySQLPacket* pkt)
  }
 int ObMPBase::send_error_packet(int err,
                                 const char* errmsg,
-                                bool is_partition_hit /* = true */,
                                 void *extra_err_info /* = NULL */)
 {
-  return packet_sender_.send_error_packet(err, errmsg, is_partition_hit, extra_err_info);
+  return packet_sender_.send_error_packet(err, errmsg, extra_err_info);
 }
 
 int ObMPBase::send_switch_packet(ObString &auth_name, ObString& auth_data)
@@ -331,10 +309,8 @@ int ObMPBase::init_process_var(sql::ObSqlCtx &ctx,
     ctx.session_info_ = &session;
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
 
-    ctx.is_protocol_weak_read_ = false; // never use weak read in lite-mode
     ctx.set_enable_strict_defensive_check(GCONF.enable_strict_defensive_check());
-    LOG_DEBUG("protocol flag info", K(ctx.is_protocol_weak_read_),
-        K(ctx.get_enable_strict_defensive_check()));
+    LOG_DEBUG("protocol flag info", K(ctx.get_enable_strict_defensive_check()));
   }
   return ret;
 }
@@ -395,8 +371,8 @@ int ObMPBase::check_and_refresh_schema(ObSQLSessionInfo *session_info)
     if (OB_SUCC(ret)) {
       if (OB_FAIL(gctx_.schema_service_->get_tenant_refreshed_schema_version(local_version))) {
         LOG_WARN("fail to get tenant refreshed schema version", K(ret));
-      } else if (OB_FAIL(session_info->get_ob_last_schema_version(last_version))) {
-        LOG_WARN("failed to get_sys_variable", K(OB_SV_LAST_SCHEMA_VERSION));
+      } else if (OB_FAIL(session_info->get_last_ddl_schema_version(last_version))) {
+        LOG_WARN("failed to get session DDL schema fence", K(ret));
       } else if (local_version >= last_version) {
         // skip
       } else if (OB_FAIL(gctx_.schema_service_->async_refresh_schema(last_version))) {
@@ -431,7 +407,6 @@ int ObMPBase::response_row(ObSQLSessionInfo &session,
     for (int64_t i = 0; OB_SUCC(ret) && i < tmp_row.get_count(); ++i) {
       ObObj &value = tmp_row.get_cell(i); 
       ObCharsetType charset_type = CHARSET_INVALID;
-      ObCharsetType ncharset_type = CHARSET_INVALID;
       // need at ps mode
       if (!is_packed && value.get_type() != fields->at(i).type_.get_type()) {
         ObCastCtx cast_ctx(&allocator, NULL, CM_WARN_ON_FAIL, fields->at(i).type_.get_collation_type());
@@ -451,8 +426,6 @@ int ObMPBase::response_row(ObSQLSessionInfo &session,
         // do nothing
       } else if (OB_FAIL(session.get_character_set_results(charset_type))) {
         LOG_WARN("fail to get result charset", K(ret));
-      } else if (OB_FAIL(session.get_ncharacter_set_connection(ncharset_type))) {
-        LOG_WARN("fail to get result charset", K(ret));
       } else {
         if (ob_is_string_tc(value.get_type())
             && CS_TYPE_INVALID != value.get_collation_type()
@@ -464,14 +437,12 @@ int ObMPBase::response_row(ObSQLSessionInfo &session,
         }
         if (OB_FAIL(ret)) {
         } else if(OB_FAIL(ObQueryDriver::process_lob_locator_results(value,
-                                    session.is_client_use_lob_locator(),
-                                    session.is_client_support_lob_locatorv2(),
                                     &allocator,
                                     &session,
                                     exec_ctx))) {
           LOG_WARN("convert lob locator to longtext failed", K(ret));
         } else if ((value.is_collection_sql_type() || value.is_geometry())
-                   && OB_FAIL(ObXMLExprHelper::process_sql_udt_results(value, 
+                   && OB_FAIL(ObSqlUdtUtils::convert_result_for_client(value,
                                     &allocator,
                                     &session,
                                     exec_ctx,
@@ -494,39 +465,6 @@ int ObMPBase::response_row(ObSQLSessionInfo &session,
         LOG_WARN("response packet fail", K(ret));
       }
     }
-  }
-  return ret;
-}
-
-// The obmp layer handles the kill client session logic.
-int ObMPBase::process_kill_client_session(sql::ObSQLSessionInfo &session, bool is_connect)
-{
-  int ret = OB_SUCCESS;
-  uint64_t create_time = 0;
-  if (OB_ISNULL(gctx_.session_mgr_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid session mgr", K(ret), K(gctx_));
-  } else if (OB_UNLIKELY(session.is_mark_killed())) {
-    ret = OB_ERR_KILL_CLIENT_SESSION;
-    LOG_WARN("client session need be killed", K(session.get_session_state()),
-            K(session.get_server_sid()),
-            K(session.get_client_sid()), K(ret));
-  } else if (is_connect) {
-    if (OB_UNLIKELY(OB_HASH_NOT_EXIST != (gctx_.session_mgr_->get_kill_client_sess_map().
-              get_refactored(session.get_client_sid(), create_time)))) {
-      if (session.get_client_create_time() == create_time) {
-        ret = OB_ERR_KILL_CLIENT_SESSION;
-        LOG_WARN("client session need be killed", K(session.get_session_state()),
-                K(session.get_server_sid()),
-                K(session.get_client_sid()), K(ret),K(create_time));
-      } else {
-        LOG_DEBUG("client session is created later", K(create_time),
-                K(session.get_client_create_time()),
-                K(session.get_server_sid()),
-                K(session.get_client_sid()));
-      }
-    }
-  } else {
   }
   return ret;
 }
@@ -605,10 +543,6 @@ int ObMPBase::load_privilege_info_for_change_user(sql::ObSQLSessionInfo *session
                   OB_FAIL(schema_guard.get_database_id(session->get_database_name(),
                                                       db_id))) {
         OB_LOG(WARN, "failed to get database id", K(ret));
-      } else if (OB_FAIL(update_transmission_checksum_flag(*session))) {
-        LOG_WARN("update transmisson checksum flag failed", K(ret));
-      } else if (OB_FAIL(update_proxy_and_client_sys_vars(*session))) {
-        LOG_WARN("update_proxy_and_client_sys_vars failed", K(ret));
       } else if (OB_FAIL(update_charset_sys_vars(*conn, *session))) {
         LOG_WARN("fail to update charset sys vars", K(ret));
       } else {

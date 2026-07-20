@@ -102,9 +102,6 @@ const char *oceanbase::common::get_io_sys_group_name(ObIOModule module)
     case ObIOModule::DETECT_IO:
       ret_name = "DETECT_IO";
       break;
-    case ObIOModule::DIRECT_LOAD_IO:
-      ret_name = "DIRECT_LOAD_IO";
-      break;
     case ObIOModule::SHARED_BLOCK_RW_IO:
       ret_name = "SHARED_BLOCK_ReaderWriter_IO";
       break;
@@ -350,7 +347,7 @@ bool ObIOFlag::is_need_close_dev_and_fd() const
 
 /******************             IOCallback              **********************/
 ObIOCallback::ObIOCallback(const ObIOCallbackType type)
-  : type_(type), compat_mode_(static_cast<lib::Worker::CompatMode>(lib::get_compat_mode()))
+  : type_(type)
 {
 
 }
@@ -362,7 +359,6 @@ ObIOCallback::~ObIOCallback()
 
 int ObIOCallback::process(const char *data_buffer, const int64_t size)
 {
-  lib::set_compat_mode(compat_mode_);
   return inner_process(data_buffer, size);
 }
 

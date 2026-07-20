@@ -364,24 +364,7 @@ insert into xingrui_json (id) values (4);
 insert into xingrui_json (id) values (5);
 alter table xingrui_json force;
 drop table xingrui_json;
-#case bitmap列
-drop table xingrui_bitmap;
-create table xingrui_bitmap(c1 roaringbitmap, c2 roaringbitmap);
-insert into xingrui_bitmap values(x'0100', x'010100000002'), (null, null);
-insert into xingrui_bitmap values(x'0100', x'010100000002');
-alter table xingrui_bitmap drop column c1;
-insert into xingrui_bitmap values(x'010100000002');
-insert into xingrui_bitmap values(x'010100000002');
-select * from xingrui_bitmap;
-c2
-   
-NULL
-   
-   
-   
-alter table xingrui_bitmap force;
-drop table xingrui_bitmap;
-#case bitmap列
+#case array列
 drop table xingrui_array;
 create table xingrui_array(c1 array(int), c2 array(bigint), c3 array(float), c4 array(double));
 insert into xingrui_array values(array(1, 2, 3, 4, 5),

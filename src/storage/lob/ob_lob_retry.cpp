@@ -41,10 +41,6 @@ int ObLobRetryUtil::check_need_retry(ObLobAccessParam &param, const int error_co
   } else if (IS_INTERRUPTED()) {
     need_retry = false;
     LOG_INFO("[LOB RETRY] Retry is interrupted by worker interrupt signal", KR(ret), K(error_code), KR(error_code), K(retry_cnt), K(need_retry));
-  } else if (lib::Worker::WS_OUT_OF_THROTTLE == THIS_WORKER.check_wait()) {
-    need_retry = false;
-    ret = OB_KILLED_BY_THROTTLING;
-    LOG_INFO("[LOB RETRY] Retry is interrupted by worker check wait", K(ret), KR(ret), K(error_code), KR(error_code), K(retry_cnt), K(need_retry));
   } else {
     need_retry = true;
     switch (error_code) {

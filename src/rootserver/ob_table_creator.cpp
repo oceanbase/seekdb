@@ -273,7 +273,6 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
 
     if (OB_SUCC(ret)) {
       ObPartitionLevel part_level = table_schema.get_part_level();
-      lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
       if (part_level >= PARTITION_LEVEL_MAX) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("part level is unexpected", K(table_schema), KR(ret));
@@ -281,7 +280,6 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
         if (OB_FAIL(generate_create_tablet_arg_(
                     schemas,
                     *data_table_schema,
-                    compat_mode,
                     pairs,
                     OB_INVALID_INDEX,
                     OB_INVALID_INDEX,
@@ -307,7 +305,6 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
               if (OB_FAIL(generate_create_tablet_arg_(
                           schemas,
                           *data_table_schema,
-                          compat_mode,
                           pairs,
                           i,
                           OB_INVALID_INDEX,
@@ -333,7 +330,6 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
                     if (OB_FAIL(generate_create_tablet_arg_(
                                 schemas,
                                 *data_table_schema,
-                                compat_mode,
                                 pairs,
                                 i,
                                 j,
@@ -374,7 +370,6 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
 int ObTableCreator::generate_create_tablet_arg_(
                     const common::ObIArray<const share::schema::ObTableSchema*> &schemas,
                     const ObTableSchema &data_table_schema,
-                    const lib::Worker::CompatMode &mode,
                     common::ObIArray<share::ObTabletTablePair> &pairs,
                     const int64_t part_idx,
                     const int64_t subpart_idx,
@@ -458,7 +453,6 @@ int ObTableCreator::generate_create_tablet_arg_(
                         tablet_id_array,
                         data_tablet_id,
                         schemas,
-                        mode,
                         is_create_bind_hidden_tablets,
                         tenant_data_version,
                         need_create_empty_majors,

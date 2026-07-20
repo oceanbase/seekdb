@@ -34,9 +34,9 @@ public:
   obcall::ObRenameTableArg& get_rename_table_arg(){ return rename_table_arg_; }
   const obcall::ObRenameTableArg& get_rename_table_arg() const { return rename_table_arg_; }
   int add_rename_table_item(const obcall::ObRenameTableItem &rename_table_item);
-  inline void set_client_session_info(const uint32_t client_sessid,
-                                      const int64_t create_ts);
-  int set_lock_priority(sql::ObSQLSessionInfo *session);
+  inline void set_lock_session_info(const uint32_t session_id,
+                                    const int64_t create_ts);
+  void set_lock_priority();
   
   virtual obcall::ObDDLArg &get_ddl_arg() { return rename_table_arg_; }
   TO_STRING_KV(K_(stmt_type), K_(rename_table_arg));
@@ -47,11 +47,11 @@ private:
 
 
 
-inline void ObRenameTableStmt::set_client_session_info(const uint32_t client_sessid,
-                                                       const int64_t create_ts)
+inline void ObRenameTableStmt::set_lock_session_info(const uint32_t session_id,
+                                                     const int64_t create_ts)
 {
-  rename_table_arg_.client_session_id_ = client_sessid;
-  rename_table_arg_.client_session_create_ts_ = create_ts;
+  rename_table_arg_.lock_session_id_ = session_id;
+  rename_table_arg_.lock_session_create_ts_ = create_ts;
 }
 
 } // namespace sql
@@ -59,4 +59,3 @@ inline void ObRenameTableStmt::set_client_session_info(const uint32_t client_ses
 
 
 #endif //OCEANBASE_SQL_OB_RENAME_TABLE_STMT_
-

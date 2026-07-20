@@ -65,18 +65,12 @@ int ObMPStmtClose::process()
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL or invalid", K(ret), K(session));
-  } else if (OB_FAIL(update_transmission_checksum_flag(*session))) {
-    LOG_WARN("update transmisson checksum flag failed", K(ret));
   } else {
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
     ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
     session->init_use_rich_format();
     LOG_TRACE("close ps stmt or cursor", K_(stmt_id), K(session->get_server_sid()));
-    if (OB_FAIL(session->check_tenant_status())) {
-      LOG_INFO("unit has been migrated, need deny new request", K(ret));
-    }
-    if (OB_FAIL(ret)) {
-    } else if (is_cursor_close()) {
+    if (is_cursor_close()) {
       if (OB_FAIL(session->close_cursor(stmt_id_))) {
         LOG_WARN("fail to close cursor", K(ret), K_(stmt_id), K(session->get_server_sid()));
       }

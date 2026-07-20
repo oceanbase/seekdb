@@ -261,7 +261,7 @@ int ObDbmsStatsHistoryManager::calssify_table_stat_part_ids(ObExecContext &ctx,
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      ObSQLClientRetryWeak sql_client_retry_weak(mysql_proxy);
+      auto &sql_client_retry_weak = *mysql_proxy;
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
@@ -496,7 +496,7 @@ int ObDbmsStatsHistoryManager::generate_having_stat_part_col_map(ObExecContext &
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      ObSQLClientRetryWeak sql_client_retry_weak(mysql_proxy);
+      auto &sql_client_retry_weak = *mysql_proxy;
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
@@ -1003,7 +1003,7 @@ int ObDbmsStatsHistoryManager::get_stats_history_retention_and_availability(ObEx
     
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      ObSQLClientRetryWeak sql_client_retry_weak(mysql_proxy);
+      auto &sql_client_retry_weak = *mysql_proxy;
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
@@ -1109,7 +1109,7 @@ int ObDbmsStatsHistoryManager::fetch_table_stat_histrory(ObExecContext &ctx,
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      ObSQLClientRetryWeak sql_client_retry_weak(mysql_proxy);
+      auto &sql_client_retry_weak = *mysql_proxy;
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
@@ -1211,7 +1211,7 @@ int ObDbmsStatsHistoryManager::fetch_column_stat_history(ObExecContext &ctx,
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      ObSQLClientRetryWeak sql_client_retry_weak(mysql_proxy);
+      auto &sql_client_retry_weak = *mysql_proxy;
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
@@ -1398,8 +1398,7 @@ int ObDbmsStatsHistoryManager::fetch_histogram_stat_histroy(ObExecContext &ctx,
     } else {
       SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
         sqlclient::ObMySQLResult *client_result = NULL;
-        const bool did_retry_weak = false;
-        ObSQLClientRetryWeak sql_client_retry_weak(mysql_proxy, did_retry_weak);
+        auto &sql_client_retry_weak = *mysql_proxy;
         if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
           LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
         } else if (OB_ISNULL(client_result = proxy_result.get_result())) {

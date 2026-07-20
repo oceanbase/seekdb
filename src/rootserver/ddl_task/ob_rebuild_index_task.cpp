@@ -460,7 +460,6 @@ int ObRebuildIndexTask::switch_index_name(const ObDDLTaskStatus next_task_status
       alter_table_arg.nls_formats_[ObNLSFormatEnum::NLS_TIMESTAMP] = ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_FORMAT;
       alter_table_arg.nls_formats_[ObNLSFormatEnum::NLS_TIMESTAMP_TZ] = ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_TZ_FORMAT;
       
-      alter_table_arg.compat_mode_ = lib::Worker::CompatMode::MYSQL;
       if (OB_FAIL(DDL_SIM(task_id_, DDL_TASK_SWITCH_INDEX_NAME_FAILED))) {
         LOG_WARN("ddl sim failure", K(ret), K(task_id_));
       } else if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tz_map_wrap))) {

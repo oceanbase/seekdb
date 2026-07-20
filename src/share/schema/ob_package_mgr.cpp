@@ -37,7 +37,6 @@ ObSimplePackageSchema &ObSimplePackageSchema::operator =(const ObSimplePackageSc
     schema_version_ = other.get_schema_version();
     database_id_ = other.get_database_id();
     type_ = other.get_type();
-    comp_flag_ = other.get_comp_flag();
     if (OB_FAIL(deep_copy_str(other.package_name_, package_name_))) {
       LOG_WARN("Fail to deep copy package name", K(ret));
     }
@@ -236,16 +235,14 @@ int ObPackageMgr::add_package(const ObSimplePackageSchema &package_schema)
     if (OB_SUCC(ret)) {
       ObPackageNameHashWrapper name_wrapper(new_package_schema->get_database_id(),
                                             new_package_schema->get_package_name(),
-                                            new_package_schema->get_type(),
-                                            new_package_schema->get_comp_flag() & COMPATIBLE_MODE_BIT);
+                                            new_package_schema->get_type());
       hash_ret = package_name_map_.set_refactored(name_wrapper, new_package_schema, over_write);
       if (OB_SUCCESS != hash_ret && OB_HASH_EXIST != hash_ret) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("build package name hashmap failed", K(ret), K(hash_ret),
                  "package_id", new_package_schema->get_package_id(),
                  "package_name", new_package_schema->get_package_name(),
-                 "package_type", new_package_schema->get_type(),
-                 "comp_flag", new_package_schema->get_comp_flag());
+                 "package_type", new_package_schema->get_type());
       }
     }
   }
@@ -281,8 +278,7 @@ int ObPackageMgr::del_package(const ObTenantPackageId &package_id)
     if (OB_SUCC(ret)) {
       ObPackageNameHashWrapper name_wrapper(schema_to_del->get_database_id(),
                                             schema_to_del->get_package_name(),
-                                            schema_to_del->get_type(),
-                                            schema_to_del->get_comp_flag() & COMPATIBLE_MODE_BIT);
+                                            schema_to_del->get_type());
       hash_ret = package_name_map_.erase_refactored(name_wrapper);
       if (OB_SUCCESS != hash_ret) {
         ret = OB_ERR_UNEXPECTED;
@@ -290,8 +286,7 @@ int ObPackageMgr::del_package(const ObTenantPackageId &package_id)
                  K(ret), K(hash_ret),
                  "database_id", schema_to_del->get_database_id(),
                  "package_name", schema_to_del->get_package_name(),
-                 "package_type", schema_to_del->get_type(),
-                 "comp_flag", schema_to_del->get_comp_flag());
+                 "package_type", schema_to_del->get_type());
       }
     }
   }
@@ -328,7 +323,6 @@ int ObPackageMgr::get_package_schema(uint64_t package_id, const ObSimplePackageS
 
 int ObPackageMgr::get_package_schema( uint64_t database_id,
                                      const ObString &package_name, ObPackageType package_type,
-                                     int64_t compat_mode,
                                      const ObSimplePackageSchema *&package_schema) const
 {
   int ret = OB_SUCCESS;
@@ -342,7 +336,7 @@ int ObPackageMgr::get_package_schema( uint64_t database_id,
     LOG_WARN("invalid argument", K(ret), K(database_id), K(package_name));
   } else {
     ObSimplePackageSchema *tmp_schema = NULL;
-    ObPackageNameHashWrapper name_wrapper(database_id, package_name, package_type, compat_mode);
+    ObPackageNameHashWrapper name_wrapper(database_id, package_name, package_type);
     int hash_ret = package_name_map_.get_refactored(name_wrapper, tmp_schema);
     if (OB_SUCCESS == hash_ret) {
       if (OB_ISNULL(tmp_schema)) {
@@ -439,6 +433,5 @@ int ObPackageMgr::get_schema_statistics(ObSchemaStatisticsInfo &schema_info) con
 }  // namespace schema
 }  // namespace share
 }  // namespace oceanbase
-
 
 

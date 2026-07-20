@@ -765,7 +765,6 @@ int ObGetObjectDefinition::get_package_definition(ObString &ddl_str,
   uint64_t package_id = OB_INVALID_ID;
   uint64_t database_id = OB_INVALID_ID;
   const ObPackageInfo *package_info = NULL;
-  int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
   if (OB_ISNULL(schema_guard_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "schema guard is NULL", K(ret), K(schema_guard_));
@@ -779,7 +778,6 @@ int ObGetObjectDefinition::get_package_definition(ObString &ddl_str,
                                                       database_id,
                                                       package_name,
                                                       package_type,
-                                                      compatible_mode,
                                                       package_info))){
     LOG_WARN("get package info failed", K(ret), K(database_id), K(package_name));
   } else if (OB_ISNULL(package_info) && 0 == db_name.case_compare(OB_EXTENDED_SYS_SCHEMA_NAME) &&
@@ -787,7 +785,6 @@ int ObGetObjectDefinition::get_package_definition(ObString &ddl_str,
                                                      OB_SYS_DATABASE_ID,
                                                      package_name,
                                                      package_type,
-                                                     compatible_mode,
                                                      package_info))) {
     LOG_WARN("get package info failed in system tenant", K(ret), K(database_id), K(package_name));
   } else if (OB_ISNULL(package_info)

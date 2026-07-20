@@ -28,8 +28,6 @@ using namespace share::schema;
 using namespace obcall;
 namespace sql
 {
-#define USE_MULTI_GET_ARRAY_BINDING 1
-
 DEF_TO_STRING(ObTempTableTransformationOpSpec)
 {
   int64_t pos = 0;
@@ -227,4 +225,3 @@ void ObTempTableTransformationOp::destroy()
 
 } // end namespace sql
 } // end namespace oceanbase
-

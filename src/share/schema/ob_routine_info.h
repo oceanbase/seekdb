@@ -397,7 +397,6 @@ public:
   OB_INLINE ObRoutineType get_routine_type() const { return routine_type_; }
   OB_INLINE int64_t get_flag() const { return flag_; }
   OB_INLINE const common::ObString &get_priv_user() const { return priv_user_; }
-  OB_INLINE int64_t get_comp_flag() const { return comp_flag_; }
   OB_INLINE const common::ObString &get_exec_env() const { return exec_env_; }
   OB_INLINE const common::ObString &get_routine_body() const { return routine_body_; }
   OB_INLINE const common::ObString &get_comment() const { return comment_; }
@@ -419,7 +418,6 @@ public:
   OB_INLINE void set_routine_type(ObRoutineType routine_type) { routine_type_ = routine_type; }
   OB_INLINE void set_flag(int64_t flag) { flag_ = flag; }
   OB_INLINE int set_priv_user(const common::ObString &priv_user_name) { return deep_copy_str(priv_user_name, priv_user_); }
-  OB_INLINE void set_comp_flag(int64_t comp_flag) { comp_flag_ = comp_flag; }
   OB_INLINE int set_exec_env(const common::ObString &exec_env) { return deep_copy_str(exec_env, exec_env_); }
   OB_INLINE int set_routine_body(const common::ObString &routine_body) { return deep_copy_str(routine_body, routine_body_); }
   OB_INLINE int set_comment(const common::ObString &comment) { return deep_copy_str(comment, comment_); }
@@ -556,7 +554,6 @@ public:
                K_(routine_type),
                K_(flag),
                K_(priv_user),
-               K_(comp_flag),
                K_(exec_env),
                K_(routine_body),
                K_(comment),
@@ -576,7 +573,6 @@ private:
   ObRoutineType routine_type_;    //set by user
   int64_t flag_;                  //set by user
   common::ObString priv_user_;    //set by user
-  int64_t comp_flag_;             //set by user
   common::ObString exec_env_;     //set by user
   common::ObString routine_body_; //set by user
   common::ObString comment_;      //set by user

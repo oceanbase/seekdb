@@ -577,12 +577,10 @@ int ObPLDataType::serialize(share::schema::ObSchemaGetterGuard &schema_guard,
       } else if (obj.is_lob() || obj.is_json() || obj.is_geometry()) {
         ObArenaAllocator local_allocator(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE);
         if (OB_FAIL(ObQueryDriver::process_lob_locator_results(obj, 
-                                                               session.is_client_use_lob_locator(),
-                                                               session.is_client_support_lob_locatorv2(),
                                                                &local_allocator,
                                                                &session,
                                                                NULL))) {
-          LOG_WARN("failed to process lob locator_results", K(ret), K(obj), K(session.is_client_use_lob_locator()), K(session.is_client_support_lob_locatorv2()));
+          LOG_WARN("failed to process lob locator_results", K(ret), K(obj));
         } else if (OB_FAIL(ObSMUtils::cell_str(dst, dst_len, obj, type, dst_pos, OB_INVALID_ID, NULL, tz_info, &field, session, NULL))) {
           LOG_WARN("failed to cell str", K(ret), K(obj), K(dst_len), K(dst_pos));
         }
@@ -630,8 +628,7 @@ int ObPLDataType::deserialize(ObSchemaGetterGuard &schema_guard,
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObMPStmtExecute::parse_basic_param_value(
-        local_allocator, (uint8_t)mysql_type, session, charset, ObCharsetType::CHARSET_INVALID,
-        cs_type, src, tz_info, param, true, NULL,
+        local_allocator, (uint8_t)mysql_type, session, charset, cs_type, src, tz_info, param, true, NULL,
         NULL == get_data_type() ? false : get_data_type()->get_meta_type().is_unsigned_integer()))) {
         // get_data_type() is null, its a extend type, unsigned need false.
         LOG_WARN("failed to parse basic param value", K(ret));

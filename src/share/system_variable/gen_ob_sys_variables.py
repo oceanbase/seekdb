@@ -1141,14 +1141,11 @@ def gen_sys_vars_dict_script_for_upgrade(filename, list_sorted_by_id):
 
 def generate_essential_sys_vars_in_init_cpp(cpp_filename, list_sorted_by_id):
   essential_core_vars = [
-    "ob_compatibility_mode",
     "sql_mode",
     "ob_read_consistency",
     "lower_case_table_names",
     "collation_connection",
     "character_set_connection",
-    "ob_check_sys_variable",
-    "ob_compatibility_version",
     "ob_log_level",
     "debug_sync",
     "ob_global_debug_sync",

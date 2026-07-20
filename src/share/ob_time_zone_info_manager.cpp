@@ -61,7 +61,6 @@ const char *ObTimeZoneInfoManager::FETCH_TENANT_TZ_INFO_SQL =
     "  FULL(@\"SEL$0208448F\" \"t3\"@\"SEL$2\") "
     "  PRED_DEDUCE(@\"SEL$2\") "
     "  QUERY_TIMEOUT(100000000) "
-    "  OPTIMIZER_FEATURES_ENABLE('1.0.0.0') "
     "  END_OUTLINE_DATA  */ * "
     "FROM ("
     "SELECT t1.time_zone_id, t1.inner_tz_id, t1.name, t3.transition_time, t2.offset, t2.is_dst, "
@@ -154,7 +153,7 @@ int ObTimeZoneInfoManager::fetch_time_zone_info()
     LOG_WARN("init failed", K(ret));
   } else {
     int64_t current_tz_version = -1;
-    ObSQLClientRetryWeak sql_client_retry_weak(&sql_proxy_, false, OB_ALL_SYS_STAT_TID);
+    auto &sql_client_retry_weak = sql_proxy_;
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       sqlclient::ObMySQLResult *result = NULL;
       if (OB_FAIL(sql_client_retry_weak.read(res, FETCH_LATEST_TZ_VERSION_SQL))) {
@@ -199,7 +198,7 @@ int ObTimeZoneInfoManager::fetch_time_zone_info_from_tenant_table(const int64_t 
     LOG_ERROR("current timezone version lower than local tz map version, wierd",
       K(current_tz_version), K(last_version_));
   } else {
-    ObSQLClientRetryWeak sql_client_retry_weak(&sql_proxy_, false, OB_ALL_TIME_ZONE_NAME_TID);
+    auto &sql_client_retry_weak = sql_proxy_;
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       sqlclient::ObMySQLResult *result = NULL;
       if (OB_FAIL(sql_client_retry_weak.read(res, FETCH_TENANT_TZ_INFO_SQL))){

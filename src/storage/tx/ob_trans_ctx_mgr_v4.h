@@ -86,10 +86,8 @@ struct ObTxCreateArg
   ObTxCreateArg(const bool for_replay,
                 const TxCtxSource ctx_source,
                 const ObTransID &trans_id,
-                const uint64_t cluster_id,
                 const uint64_t cluster_version,
                 const uint32_t session_id,
-                const uint32_t client_sid,
                 const uint32_t associated_session_id,
                 const int64_t trans_expired_time,
                 ObTransService *trans_service,
@@ -97,10 +95,8 @@ struct ObTxCreateArg
       : for_replay_(for_replay),
         ctx_source_(ctx_source),
         tx_id_(trans_id),
-        cluster_id_(cluster_id),
         cluster_version_(cluster_version),
         session_id_(session_id),
-        client_sid_(client_sid),
         associated_session_id_(associated_session_id),
         trans_expired_time_(trans_expired_time),
         trans_service_(trans_service),
@@ -112,17 +108,15 @@ struct ObTxCreateArg
         && NULL != trans_service_;
   }
   TO_STRING_KV(K_(for_replay), "ctx_source", to_str_ctx_source(ctx_source_), K_(tx_id),
-                 K_(cluster_id), K_(cluster_version),
-                 K_(session_id),K_(client_sid), K_(associated_session_id),
+                 K_(cluster_version),
+                 K_(session_id), K_(associated_session_id),
                  K_(trans_expired_time), KP_(trans_service),
                  K_(xid));
   bool for_replay_;
   TxCtxSource ctx_source_;
   ObTransID tx_id_;
-  uint64_t cluster_id_;
   uint64_t cluster_version_;
   uint32_t session_id_;
-  uint32_t client_sid_;
   uint32_t associated_session_id_;
   int64_t trans_expired_time_;
   ObTransService *trans_service_;

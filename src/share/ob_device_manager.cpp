@@ -25,68 +25,6 @@ namespace oceanbase
 {
 namespace common
 {
-int ObTenantStsCredentialMgr::get_sts_credential(
-    char *sts_credential, const int64_t sts_credential_buf_len)
-{
-  int ret = OB_SUCCESS;
-  
-  if (OB_ISNULL(sts_credential) || OB_UNLIKELY(sts_credential_buf_len <= 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "invalid args", K(ret),
-        KP(sts_credential), K(sts_credential_buf_len));
-  }
-  if (OB_SUCC(ret)) {
-    const char *tmp_credential = nullptr;
-
-    common::ObServerConfig *tenant_config = &GCONF;
-    int tmp_ret = OB_SUCCESS;
-    // If the tenant does not have sts_credential, return OB_EAGAIN to wait for the next try.
-    if (OB_TMP_FAIL(check_sts_credential(tenant_config))) {
-      ret = OB_EAGAIN;
-      OB_LOG(WARN, "fail to check sts credential, should try again", K(ret), K(tmp_ret));
-    } else {
-      tmp_credential = tenant_config->sts_credential;
-    }
-
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(databuff_printf(sts_credential, sts_credential_buf_len,
-                                       "%s", tmp_credential))) {
-        OB_LOG(WARN, "fail to deep copy sts_credential", K(ret), KP(tmp_credential));
-      } else if (OB_UNLIKELY(sts_credential[0] == '\0')) {
-        ret = OB_ERR_UNEXPECTED;
-        OB_LOG(WARN, "sts_credential is null", K(ret), KP(tmp_credential));
-      }
-      OB_LOG(INFO, "get sts credential successfully");
-    }
-    if (OB_FAIL(ret) && REACH_TIME_INTERVAL(LOG_INTERVAL_US)) {
-      OB_LOG(WARN, "try to get sts credential", K(ret), KP(tmp_credential));
-    }
-  }
-  return ret;
-}
-
-int ObTenantStsCredentialMgr::check_sts_credential(common::ObServerConfig *tenant_config) const
-{
-  int ret = OB_SUCCESS;
-  const char *sts_credential = nullptr;
-  if (OB_UNLIKELY(nullptr == tenant_config)) {
-    ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "tenant config is invalid", K(ret));
-  } else if (OB_ISNULL(sts_credential = tenant_config->sts_credential)) {
-    ret = OB_ERR_UNEXPECTED;
-    OB_LOG(WARN, "tenant config is invalid", K(ret), KP(sts_credential));
-  } else if (OB_UNLIKELY(sts_credential[0] == '\0')) {
-    ret = OB_ERR_UNEXPECTED;
-    OB_LOG(WARN, "sts_credential is null", K(ret), KP(sts_credential));
-  }
-  return ret;
-}
-
-int ObClusterVersionMgr::is_supported_assume_version() const
-{
-  return OB_SUCCESS;
-}
-
 int ObClusterVersionMgr::is_supported_enable_worm_version() const
 {
   return OB_SUCCESS;
@@ -126,11 +64,6 @@ int ObDeviceManager::init_devices_env()
     } else if (OB_FAIL(ObObjectStorageInfo::register_cluster_version_mgr(
         &ObClusterVersionMgr::get_instance()))) {
       OB_LOG(WARN, "fail to register cluster version mgr", K(ret));
-    } else if (OB_FAIL(ObStsCredential::register_sts_credential_mgr(
-        &ObTenantStsCredentialMgr::get_instance()))) {
-      OB_LOG(WARN, "fail to register sts crendential", K(ret));
-    } else if (OB_FAIL(ObDeviceCredentialMgr::get_instance().init())) {
-      OB_LOG(WARN, "fail to init device credential mgr", K(ret));
     }
   }
 
@@ -175,7 +108,6 @@ void ObDeviceManager::destroy()
     }
     allocator_.reset();
     lock_.destroy();
-    ObDeviceCredentialMgr::get_instance().destroy();
     is_init_ = false;
     device_count_ = 0;
     OB_LOG_RET(WARN, ret_dev, "release the init resource", K(ret_dev), K(ret_handle));
@@ -204,8 +136,6 @@ int parse_storage_info(common::ObString storage_type_prefix, ObIODevice*& device
     device_type = OB_STORAGE_FILE;
     mem = allocator.alloc(sizeof(ObObjectDevice));
     if (NULL != mem) {new(mem)ObObjectDevice;}
-  } else if (storage_type_prefix.prefix_match(OB_S3_PREFIX)) {
-    ret = reject_s3_storage("parse storage");
   } else if (storage_type_prefix.prefix_match(OB_AZBLOB_PREFIX)) {
     device_type = OB_STORAGE_AZBLOB;
     mem = allocator.alloc(sizeof(ObObjectDevice));
@@ -590,7 +520,6 @@ int ObDeviceManager::get_device_key_(
       OB_LOG(WARN, "fail to construct device map key", K(ret), K(storage_id_mod));
     }
   } else if (storage_type_prefix.prefix_match(OB_COS_PREFIX)
-             || storage_type_prefix.prefix_match(OB_S3_PREFIX)
              || storage_type_prefix.prefix_match(OB_AZBLOB_PREFIX)) {
     const int64_t storage_info_key_len = storage_info.get_device_map_key_len();
     char storage_info_key_str[storage_info_key_len];

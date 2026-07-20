@@ -594,7 +594,7 @@ int ObInfixExpression::uk_fast_project(common::ObExprCtx &expr_ctx, const common
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ObUniqueIndexRowTransformer::check_need_shadow_columns(row, static_cast<ObCompatibilityMode>(THIS_WORKER.get_compatibility_mode()), unique_key_cnt,
+      if (OB_FAIL(ObUniqueIndexRowTransformer::check_need_shadow_columns(row, unique_key_cnt,
           &projector, expr_ctx.row_ctx_.is_uk_cnt_null_))) {
         LOG_WARN("fail to check need shadow columns", K(ret));
       }

@@ -434,7 +434,6 @@ int ObDbmsStatsMaintenanceWindow::check_date_validate(const ObString &job_name,
 int ObDbmsStatsMaintenanceWindow::get_async_gather_stats_job_for_upgrade(common::ObMySQLProxy *sql_proxy)
 {
   int ret = OB_SUCCESS;
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
   int64_t job_id = 0;
   ObString exec_env;
   ObSqlString values_list;
@@ -452,7 +451,6 @@ int ObDbmsStatsMaintenanceWindow::get_async_gather_stats_job_for_upgrade(common:
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(job_id), K(exec_env));
   } else {
-    compat_mode = lib::Worker::CompatMode::MYSQL;
     HEAP_VAR(dbms_scheduler::ObDBMSSchedJobInfo, job_info) {
       if (OB_FAIL(get_async_gather_stats_job_info(job_id, exec_env, job_info))) {
         LOG_WARN("failed to get async gather stats job info", K(ret), K(job_info));
@@ -484,7 +482,7 @@ int ObDbmsStatsMaintenanceWindow::get_next_job_id_and_exec_env(common::ObMySQLPr
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy);
+      auto &sql_client_retry_weak = *sql_proxy;
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(select_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {

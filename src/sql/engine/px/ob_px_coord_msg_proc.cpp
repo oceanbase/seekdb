@@ -103,13 +103,6 @@ int ObPxSubCoordMsgProc::on_whole_msg(
 }
 
 int ObPxSubCoordMsgProc::on_whole_msg(
-    const ObRollupKeyWholeMsg &pkt) const
-{
-  ObDhWholeeMsgProc<ObRollupKeyWholeMsg> proc;
-  return proc.on_whole_msg(sqc_ctx_, dtl::DH_ROLLUP_KEY_WHOLE_MSG, pkt);
-}
-
-int ObPxSubCoordMsgProc::on_whole_msg(
     const ObRDWFWholeMsg &pkt) const
 {
   ObDhWholeeMsgProc<ObRDWFWholeMsg> proc;

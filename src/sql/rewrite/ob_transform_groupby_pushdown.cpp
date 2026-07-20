@@ -21,6 +21,11 @@
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
 
+namespace
+{
+static constexpr double GROUP_BY_PUSHDOWN_CUT_THRESHOLD = 3.0;
+}
+
 /**
  * @brief ObTransformGroupByPushdown::transform_one_stmt
  *  select sum(r.value) from r, t, p where r.c1 = t.c1 and t.c2 = p.c2 and p.c3 > 0 group by p.c4;
@@ -3442,19 +3447,16 @@ int ObTransformGroupByPushdown::check_single_cut_ratio(ObLogicalOperator *op,
 {
   int ret = OB_SUCCESS;
   double cut_ratio = 1.0;
-  uint64_t nopushdown_cut_ratio = 1;
   if (OB_ISNULL(op)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
   } else if (OB_FAIL(compute_group_by_cut_ratio(op, cut_ratio))) {
     LOG_WARN("failed to compute group by cut ratio", K(ret));
-  } else if (OB_FAIL(ctx_->session_info_->get_sys_variable(
-                share::SYS_VAR__GROUPBY_NOPUSHDOWN_CUT_RATIO, nopushdown_cut_ratio))) {
-    LOG_WARN("failed to get session variable", K(ret));
   } else {
     ObLogicalOperator *child_op = op->get_child(0);
-    is_valid = cut_ratio > nopushdown_cut_ratio;
-    LOG_TRACE("check trans plan cut ratio", K(is_valid), K(cut_ratio), K(nopushdown_cut_ratio));
+    is_valid = cut_ratio > GROUP_BY_PUSHDOWN_CUT_THRESHOLD;
+    LOG_TRACE("check trans plan cut ratio", K(is_valid), K(cut_ratio),
+              K(GROUP_BY_PUSHDOWN_CUT_THRESHOLD));
     OPT_TRACE("check trans plan group by cut ratio", cut_ratio);
   }
   return ret;

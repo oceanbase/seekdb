@@ -96,9 +96,6 @@ int ObResourceInnerSQLConnectionPool::acquire(
     ret = OB_NOT_INIT;
     LOG_WARN("ObResourceInnerSQLConnectionPool has not been inited", K(ret));
   } else if (OB_INVALID_ID == conn_id) {
-    if (NULL != session_info) {
-      session_info->set_compatibility_mode(ObCompatibilityMode::MYSQL_MODE);
-    }
     if (OB_FAIL(inner_sql_conn_pool_.acquire(session_info, conn))) {
       LOG_WARN("failed to acquire inner connection", K(ret));
     } else if (FALSE_IT(inner_conn = static_cast<ObInnerSQLConnection *>(conn))) {

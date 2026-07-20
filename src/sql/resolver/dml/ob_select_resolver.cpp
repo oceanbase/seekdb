@@ -1465,7 +1465,7 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
   ParseNode *alias_node = NULL;
   bool is_bald_star = false;
   ObSelectStmt *select_stmt = NULL;
-  bool enable_modify_null_name = false;
+  const bool enable_modify_null_name = true;
   ObExecContext *exec_ctx = NULL;
   //LOG_INFO("resolve_select_1", "usec", ObSQLUtils::get_usec());
   current_scope_ = T_FIELD_LIST_SCOPE;
@@ -1473,9 +1473,6 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(session_info_),
         K(select_stmt), K(ret));
-  } else if (OB_FAIL(session_info_->check_feature_enable(ObCompatFeatureType::PROJECT_NULL,
-                                                         enable_modify_null_name))) {
-    LOG_WARN("failed to check feature enable", K(ret));
   } else {
     exec_ctx = session_info_->get_cur_exec_ctx();
   }
@@ -1762,8 +1759,6 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
           } else {
             //invalid name, do nothing
           }
-        } else if (T_RB_ITERATE_EXPRESSION == sel_expr->get_expr_type()) {
-          select_item.alias_name_ = ObString("rb_iterate");
         } else if (T_FUN_SYS_JSON_QUERY == sel_expr->get_expr_type()
                    && OB_FAIL(add_alias_from_dot_notation(sel_expr, select_item))) {  // deal dot notation without alias
           LOG_WARN("fail to resolve alias in dot notation", K(ret));
@@ -1836,66 +1831,8 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
     }
   } // end for
 
-  if (OB_SUCC(ret) && OB_FAIL(transfer_rb_iterate_items())) {
-    LOG_WARN("failed to transfer rb_iterate items", K(ret));
-  }
   return ret;
 }
-
-int ObSelectResolver::transfer_rb_iterate_items()
-{
-  INIT_SUCC(ret);
-  TableItem *table_item = NULL;
-  ObSelectStmt *select_stmt = NULL;
-  int64_t rb_iterate_col_id = 0;
-  if (OB_ISNULL(session_info_) || OB_ISNULL(select_stmt = get_select_stmt())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(session_info_), K(select_stmt), K(ret));
-  }
-
-  for (int64_t i = 0; OB_SUCC(ret) && i < select_stmt->get_select_item_size(); i++) {
-    SelectItem &select_item = select_stmt->get_select_item(i);
-    if (OB_ISNULL(select_item.expr_) || select_item.expr_->get_expr_type() != T_RB_ITERATE_EXPRESSION) {
-      // do noting
-    } else {
-      ColumnItem *col_item = NULL;
-      ObRawExpr *rb_iterate_expr = select_item.expr_;
-      ObRawExpr *rb_expr = NULL;
-      rb_iterate_col_id++;
-      if (OB_ISNULL(table_item) && OB_FAIL(create_rb_iterate_table_item(table_item))) {
-        LOG_WARN("failed to create rb_iterate table item", K(ret));
-      } else if (rb_iterate_expr->get_param_count() == 0 || OB_ISNULL(rb_iterate_expr->get_param_expr(0))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("param_expr of rb_iterate_expr is null or empty", K(ret));
-      } else {
-        // get and push_back rb_expr
-        rb_expr = rb_iterate_expr->get_param_expr(0);
-        if (OB_FAIL(rb_expr->deduce_type(session_info_))) {
-          LOG_WARN("failed to deduce type", K(ret));
-        } else if (OB_FAIL(table_item->json_table_def_->doc_exprs_.push_back(rb_expr))) {
-          LOG_WARN("failed to push back rb expr", K(ret));
-        }
-      }
-      // add value column to rb_iterate table item
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(rb_iterate_table_add_column(table_item, col_item, rb_iterate_col_id))) {
-        LOG_WARN("failed to add rb iterate table column", K(ret));
-      } else {
-        // replace expr in select item
-        select_item.expr_ = col_item->get_expr();
-      }
-    }
-  } // end for
-
-  if (OB_NOT_NULL(table_item)) {
-    // add table_item to select_stmt
-    OZ( column_namespace_checker_.add_reference_table(table_item), table_item );
-    OZ( select_stmt->add_from_item(table_item->table_id_, table_item->is_joined_table()) );
-  }
-
-  return ret;
-}
-
 
 int ObSelectResolver::add_alias_from_dot_notation(ObRawExpr *sel_expr, SelectItem& select_item)
 {
@@ -3518,7 +3455,7 @@ int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node, Ob
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("select into only supports csv format type", K(ret), K(external_format.format_type_));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "this format type");
-    } else if (ObExternalFileFormat::CSV_FORMAT == external_format.format_type_) {
+    } else {
       ObCollationType file_cs_type = has_cs_type
                                      ? ObCharset::get_default_collation(external_format.csv_format_.cs_type_)
                                      : ObCharset::get_system_collation();
@@ -5208,13 +5145,10 @@ int ObSelectResolver::check_union_to_values_table_valid(const ParseNode &parse_n
   int64_t top = 0;
   bool is_type_same = false;
   is_valid = true;
-  uint64_t optimizer_version = 0;
   const ParseNode *set_node = parse_node.children_[PARSE_SELECT_SET];
   if (OB_ISNULL(session_info_) || OB_ISNULL(set_node)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("got unexpected ptr", K(ret));
-  } else if (OB_FAIL(session_info_->get_optimizer_features_enable_version(optimizer_version))) {
-    LOG_WARN("failed to get optimizer feature enable version", K(ret));
   } else if ((T_SET_UNION != set_node->type_ && T_SET_UNION_ALL != set_node->type_) ||
              params_.is_from_create_view_ || params_.is_from_create_table_ ||
              in_pl_ || is_prepare_stage_) {

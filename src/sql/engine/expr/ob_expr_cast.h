@@ -76,7 +76,6 @@ static const int32_t CAST_STRING_DEFUALT_LENGTH[ObMaxType + 1] = {
   1,//collection
   10,//mysql date
   19,//mysql datetime
-  1,//roaringbitmap
   0//max, invalid type, or count of obj type
 };
 

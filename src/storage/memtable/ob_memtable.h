@@ -516,7 +516,6 @@ private:
   share::SCN recommend_snapshot_version_;
 
   int64_t state_;
-  lib::Worker::CompatMode mode_;
   int64_t minor_merged_time_;
   int64_t max_column_cnt_; // record max column count of row
 };

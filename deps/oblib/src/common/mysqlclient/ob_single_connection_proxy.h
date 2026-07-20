@@ -17,7 +17,6 @@
 #ifndef _OB_SINGLE_CONNECTION_PROXY_H
 #define _OB_SINGLE_CONNECTION_PROXY_H 1
 #include "common/mysqlclient/ob_isql_client.h"
-#include "common/mysqlclient/ob_mysql_connection.h"
 
 namespace oceanbase
 {

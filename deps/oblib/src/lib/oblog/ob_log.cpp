@@ -435,8 +435,6 @@ ProbeAction probe_str2action(const char *str)
     action = ProbeAction::PROBE_ABORT;
   } else if (0 == strcmp(str, "disable")) {
     action = ProbeAction::PROBE_DISABLE;
-  } else if (0 == strcmp(str, "stack")) {
-    action = ProbeAction::PROBE_STACK;
   }
   return action;
 }
@@ -455,10 +453,6 @@ const char *probe_action2str(ProbeAction action)
     }
   case ProbeAction::PROBE_DISABLE: {
     str = "disable";
-    break;
-    }
-  case ProbeAction::PROBE_STACK: {
-    str = "stack";
     break;
     }
   default: {

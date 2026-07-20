@@ -52,7 +52,6 @@ ObInnerSQLResult::ObInnerSQLResult(ObSQLSessionInfo &session, bool is_inner_sess
       opened_(false), session_(session),
       result_set_(nullptr), row_(NULL),
       execute_start_ts_(0), execute_end_ts_(0),
-      compat_mode_(lib::Worker::CompatMode::MYSQL),
       is_inited_(false),
       store_first_row_(false),
       iter_end_(false),
@@ -206,7 +205,6 @@ int ObInnerSQLResult::inner_close()
   SQL_INFO_GUARD(session_.get_current_query_string(), session_.get_cur_sql_id());
   ObInnerSQLSessionGuard sess_guard(&session_);
   ObInterruptCheckerGuard interrupt_guard(interrupt_checker_);
-  LOG_DEBUG("compat_mode_", K(ret), K(compat_mode_), K(lbt()));
 
   MAKE_TENANT_SWITCH_SCOPE_GUARD(tenant_guard);
   ObInnerSqlWaitGuard guard(is_inner_session(), inner_sql_di_, &session_);
@@ -234,7 +232,6 @@ int ObInnerSQLResult::next()
   ObInnerSqlWaitGuard guard(is_inner_session(), inner_sql_di_, &session_);
   ACTIVE_SESSION_FLAG_SETTER_GUARD(in_sql_execution);
   ObInterruptCheckerGuard interrupt_guard(interrupt_checker_);
-  LOG_DEBUG("compat_mode_", K(ret), K(compat_mode_), K(lbt()));
   if (!opened_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not opened", K(ret));

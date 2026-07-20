@@ -424,7 +424,7 @@ struct __decint_cast_impl
           if (in_prec > MAX_PRECISION_DECIMAL_INT_64) { in_prec = MAX_PRECISION_DECIMAL_INT_64; }
         } else { // uint tc
           in_prec =
-            ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][expr.args_[0]->datum_meta_.type_].get_precision();
+            ObAccuracy::MAX_ACCURACY2[0][expr.args_[0]->datum_meta_.type_].get_precision();
         }
       }
       bool is_scale_up = (out_scale >= in_scale);

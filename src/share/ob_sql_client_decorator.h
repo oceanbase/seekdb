@@ -53,62 +53,6 @@ private:
   int32_t retry_limit_;
 };
 
-class ObMySQLProxy;
-class ObSQLClientRetryWeak: public ObISQLClient
-{
-public:
-  // only check_sys_variable is still useful
-  ObSQLClientRetryWeak(ObISQLClient *sql_client,
-                       bool did_use_retry = false,
-                       int64_t snapshot_timestamp = OB_INVALID_TIMESTAMP,
-                       bool check_sys_variable = true)
-      :sql_client_(sql_client),
-       snapshot_timestamp_(snapshot_timestamp),
-       check_sys_variable_(check_sys_variable),
-       table_id_(OB_INVALID_ID)
-  {
-    UNUSED(did_use_retry);
-  }
-  // not useful, it just use sql_client directly
-  ObSQLClientRetryWeak(ObISQLClient *sql_client,
-                       bool did_use_retry,
-                       const uint64_t table_id)
-      : sql_client_(sql_client),
-        snapshot_timestamp_(OB_INVALID_TIMESTAMP),
-        check_sys_variable_(true),
-        table_id_(table_id)
-  {
-    UNUSED(did_use_retry);
-  }
-  virtual ~ObSQLClientRetryWeak() {}
-
-  virtual int escape(const char *from, const int64_t from_size,
-      char *to, const int64_t to_size, int64_t &out_size) override;
-  virtual int read(ReadResult &res, const char *sql, const int32_t group_id) override;
-  virtual int read(ReadResult &res, const int64_t cluster_id, const char *sql) override;
-  virtual int write(const char *sql, const int32_t group_id, int64_t &affected_rows) override;
-  using ObISQLClient::read;
-  using ObISQLClient::write;
-
-  virtual sqlclient::ObISQLConnectionPool *get_pool() override;
-  virtual sqlclient::ObISQLConnection *get_connection() override;
-
-private:
-  // disallow copy
-  DISALLOW_COPY_AND_ASSIGN(ObSQLClientRetryWeak);
-  // functions
-  int read_without_check_sys_variable(
-      sqlclient::ObISQLConnection *conn,
-      ReadResult &res,
-      const char *sql);
-private:
-  ObISQLClient *sql_client_;
-  int64_t snapshot_timestamp_;  // deprecated
-  bool check_sys_variable_;
-// deprecated
-  uint64_t table_id_;           // deprecated
-};
-
 } // end namespace common
 } // end namespace oceanbase
 

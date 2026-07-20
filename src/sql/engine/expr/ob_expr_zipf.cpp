@@ -97,7 +97,7 @@ int ObExprZipf::calc_result_type3(ObExprResType &result_type,
   size.set_calc_type(ObIntType);
   rand_expr.set_calc_type(ObIntType);
   result_type.set_int();
-  ObAccuracy default_acc = ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][ObIntType];
+  ObAccuracy default_acc = ObAccuracy::MAX_ACCURACY2[0][ObIntType];
   result_type.set_accuracy(default_acc);
 	return ret;
 }

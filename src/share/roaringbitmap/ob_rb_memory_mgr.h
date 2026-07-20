@@ -17,7 +17,7 @@
 #ifndef OCEABASE_LIB_OB_RB_MEMORY_MGR_
 #define OCEABASE_LIB_OB_RB_MEMORY_MGR_
 
-#include "ob_roaringbitmap.h"
+#include "roaring/roaring.h"
 #include "lib/allocator/ob_vslice_alloc.h"
 #include "lib/allocator/ob_block_alloc_mgr.h"
 
@@ -26,6 +26,16 @@ namespace oceanbase
 namespace common
 {
 static roaring_memory_t roaring_memory_mgr;
+
+#define CROARING_TRY_CATCH(statement)                              \
+  try {                                                           \
+    if (OB_SUCC(ret)) {                                           \
+      statement;                                                  \
+    }                                                             \
+  } catch (const std::bad_alloc &) {                              \
+    ret = OB_ALLOCATE_MEMORY_FAILED;                              \
+    LOG_WARN("failed to allocate memory in CRoaring", K(ret));   \
+  }
 
 class ObRbMemMgr;
 // Lib-bridge to ObServer-owned ObRbMemMgr (defined in share/rc/ob_tenant_base.cpp).

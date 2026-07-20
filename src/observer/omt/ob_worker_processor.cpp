@@ -138,15 +138,8 @@ int ObWorkerProcessor::process(rpc::ObRequest &req)
   // int64_t st = ::oceanbase::common::ObTimeUtility::current_time();
   // PROFILE_LOG(DEBUG, HANDLE_PACKET_START_TIME PCODE, st, packet->get_pcode());
   // go!
-  try {
-    in_try_stmt = true;
-    if (OB_FAIL(process_one(req))) {
-      LOG_WARN("process request fail", K(ret));
-    }
-    in_try_stmt = false;
-  } catch (OB_BASE_EXCEPTION &except) {
-    _LOG_ERROR("Exception caught!!! errno = %d, exception info = %s", except.get_errno(), except.what());
-    in_try_stmt = false;
+  if (OB_FAIL(process_one(req))) {
+    LOG_WARN("process request fail", K(ret));
   }
 
   // cleanup

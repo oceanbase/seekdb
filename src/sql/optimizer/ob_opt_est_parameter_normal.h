@@ -128,7 +128,6 @@ const static double comparison_params_normal[ObMaxTC+1] = {
   NORMAL_CMP_LOB_COST,           // collection sql type
   NORMAL_CMP_INT_COST,            // mysql date
   NORMAL_CMP_INT_COST,            // mysql datetime
-  NORMAL_CMP_CHAR_COST,           // roaringbitmap
 };
 
 const static double hash_params_normal[ObMaxTC+1] = {
@@ -161,7 +160,6 @@ const static double hash_params_normal[ObMaxTC+1] = {
   NORMAL_HASH_CHAR_COST,           // collection sql type
   NORMAL_HASH_INT_COST,            // mysql date
   NORMAL_HASH_INT_COST,            // mysql datetime
-  NORMAL_HASH_CHAR_COST,           // roaringbitmap
 };
 
 const static double project_params_normal[2][ObMaxTC+1] = {

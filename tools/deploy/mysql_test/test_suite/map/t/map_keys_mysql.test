@@ -184,8 +184,8 @@ create view vtt3 as select * from tt3;
 create table tt4(id int ,m1 map(int,int),m2 map(bigint unsigned,varchar(100)),m3 map(varchar(100),array(varchar(100))),m4 map(double ,float unsigned),
 m5 map(bigint,array(array(int unsigned))),m6 map(bigint,vector(2)));
 
-insert  /*+ direct(true,100,'inc') enable_parallel_dml parallel(2)*/  into tt4 select id1, map(id1,id6),map(id9,c),map(c,[c]),map(d,f),map(id8,[a]),map(id8,v) from tt3;
-insert  /*+ direct(true,100) enable_parallel_dml parallel(2) append*/  into tt4 select id1, map(id1,id6),map(id9,c),map(c,[c]),map(d,f),map(id8,[a]),map(id8,v) from tt3;
+insert  /*+ enable_parallel_dml parallel(2)*/  into tt4 select id1, map(id1,id6),map(id9,c),map(c,[c]),map(d,f),map(id8,[a]),map(id8,v) from tt3;
+insert  /*+ enable_parallel_dml parallel(2) */  into tt4 select id1, map(id1,id6),map(id9,c),map(c,[c]),map(d,f),map(id8,[a]),map(id8,v) from tt3;
 insert   into tt4 select id1, map(id1,id6),map(id9,c),map(c,[c]),map(d,f),map(id8,[a]),map(id8,v) from tt3;
 
 --sorted_result

@@ -188,12 +188,6 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_DROP_SYNONYM,)                                      \
   ACT(OB_DDL_REPLACE_SYNONYM,)                                   \
   ACT(OB_DDL_SYNONYM_OPERATION_END, = 1000)                      \
-  ACT(OB_DDL_PLAN_BASELINE_OPERATION_BEGIN, = 1001)              \
-  ACT(OB_DDL_CREATE_PLAN_BASELINE,)                              \
-  ACT(OB_DDL_REPLACE_PLAN_BASELINE,)                             \
-  ACT(OB_DDL_DROP_PLAN_BASELINE,)                                \
-  ACT(OB_DDL_ALTER_PLAN_BASELINE,)                               \
-  ACT(OB_DDL_PLAN_BASELINE_OPERATION_END, = 1100)                \
   ACT(OB_DDL_ROUTINE_OPERATION_BEGIN, = 1201)                    \
   ACT(OB_DDL_CREATE_ROUTINE,)                                    \
   ACT(OB_DDL_DROP_ROUTINE,)                                      \
@@ -644,7 +638,6 @@ class ObSimpleTablegroupSchema;
 class ObSimpleTableSchemaV2;
 class ObSimpleOutlineSchema;
 class ObSimpleRoutineSchema;
-class ObSimplePlanBaselineSchema;
 class ObSimplePackageSchema;
 class ObSimpleTriggerSchema;
 class ObSimpleUDFSchema;
@@ -1119,7 +1112,6 @@ public:
               const uint64_t database_id,
               const ObString &package_name,
               const ObPackageType package_type,
-              const int64_t compatible_mode,
               uint64_t &package_id) = 0;
 
   virtual int get_routine_id(

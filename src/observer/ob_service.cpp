@@ -166,7 +166,6 @@ ObService::ObService(const ObGlobalContext &gctx)
     gctx_(gctx),
     schema_release_task_(),
     telemetry_task_(),
-    standby_schema_refresh_trigger_(),
     need_bootstrap_(false)
 {
 }
@@ -218,8 +217,6 @@ int ObService::init(common::ObMySQLProxy &sql_proxy,
     FLOG_WARN("init tsc timestamp failed", KR(ret));
   } else if (OB_FAIL(schema_release_task_.init(schema_updater_))) {
     FLOG_WARN("init schema release task failed", KR(ret));
-  } else if (OB_FAIL(standby_schema_refresh_trigger_.init())) {
-    FLOG_WARN("init standby schema refresh trigger failed", KR(ret));
   } else {
     need_bootstrap_ = need_bootstrap;
     inited_ = true;
@@ -239,18 +236,15 @@ int ObService::start()
     ret = OB_NOT_INIT;
     FLOG_WARN("ob_service is not inited", KR(ret), K_(inited));
   } else if (need_bootstrap_) {
-    // Initialize tenant info from server role before bootstrap
-    // This ensures tenant info is always initialized for both primary and standby clusters
-    if (OB_FAIL(share::ObAllTenantInfoProxy::init_tenant_info_from_server_role(
+    // SeekDB supports only a local primary database.
+    if (GCTX.is_standby_cluster()) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_ERROR("STANDBY role is not supported in seekdb", KR(ret));
+    } else if (OB_FAIL(share::ObAllTenantInfoProxy::init_tenant_info_from_server_role(
         GCTX.server_role_))) {
       LOG_ERROR("failed to init tenant info from server role before bootstrap", KR(ret), K(GCTX.server_role_));
-    } else if (GCTX.is_standby_cluster()) {
-      // Standby cluster
-    } else {
-      // Primary cluster
-      if (OB_FAIL(bootstrap())) {
-        LOG_ERROR("bootstrap failed", KR(ret));
-      }
+    } else if (OB_FAIL(bootstrap())) {
+      LOG_ERROR("bootstrap failed", KR(ret));
     }
     if (OB_SUCC(ret)) {
       int tmp_ret = OB_SUCCESS;
@@ -269,14 +263,20 @@ int ObService::start()
       LOG_ERROR("failed to load tenant info from KV storage on restart, KV must have data from bootstrap",
                KR(ret));
     } else {
-      // Successfully loaded tenant info, update GCTX.server_role_ to match
+      // Reject old data directories persisted as standby instead of starting
+      // without the removed standby schema refresh path.
       if (tenant_info.is_primary()) {
         GCTX.server_role_ = common::PRIMARY_CLUSTER;
       } else if (tenant_info.is_standby()) {
-        GCTX.server_role_ = common::STANDBY_CLUSTER;
+        ret = OB_NOT_SUPPORTED;
+        LOG_ERROR("persisted STANDBY role is not supported in seekdb", KR(ret), K(tenant_info));
+      } else {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_ERROR("invalid persisted database role", KR(ret), K(tenant_info));
       }
-      LOG_INFO("loaded tenant info from KV storage and updated GCTX.server_role_ on restart",
-               K(tenant_info), K(GCTX.server_role_));
+      if (OB_SUCC(ret)) {
+        LOG_INFO("loaded tenant info from KV storage on restart", K(tenant_info), K(GCTX.server_role_));
+      }
     }
   }
   // set server id if needed
@@ -341,8 +341,6 @@ void ObService::stop()
     FLOG_INFO("begin to stop tenant event instance");
     TENANT_EVENT_INSTANCE.stop();
     FLOG_INFO("tenant event instance stopped");
-
-    standby_schema_refresh_trigger_.stop();
   }
   FLOG_INFO("[OBSERVICE_NOTICE] observice finish stop", K_(stopped));
 }
@@ -375,8 +373,6 @@ void ObService::wait()
     FLOG_INFO("begin to wait tenant event instance");
     TENANT_EVENT_INSTANCE.wait();
     FLOG_INFO("wait tenant event instance success");
-
-    (void) standby_schema_refresh_trigger_.wait();
   }
   FLOG_INFO("[OBSERVICE_NOTICE] wait ob_service end");
 }
@@ -411,8 +407,6 @@ int ObService::destroy()
     FLOG_INFO("begin to destroy deadlock event service");
     DEALOCK_EVENT_INSTANCE.destroy();
     FLOG_INFO("deadlock event service destroyed");
-
-    standby_schema_refresh_trigger_.destroy();
     // restore_net_driver_ is now managed by ObLogRestoreService, no need to destroy here
   }
   FLOG_INFO("[OBSERVICE_NOTICE] destroy ob_service end", KR(ret));

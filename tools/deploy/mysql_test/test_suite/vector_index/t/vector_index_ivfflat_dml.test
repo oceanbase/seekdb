@@ -249,10 +249,8 @@ create table t2 (c1 int primary key, c2 int, c3 int, c4 varchar(10), c5 vector(3
 insert into t2 values(50, 50, 50, 'row99', '[21, 2, 10]', '[5,6,7]');
 insert into t2 values(99, 99, 99, 'row99', '[21, 2, 10]', '[5,6,7]');
 insert into t2 values(100, 100, 100, 'row100', '[20, 20, 20]', null);
-# 这里没有走旁路导入
-let $before_fallback = query_get_value(select value from oceanbase.__all_virtual_parameter_stat where name = 'direct_load_allow_fallback', value, 1);
-alter system set direct_load_allow_fallback=TRUE;
-insert /*+ direct(true, 0) enable_parallel_dml parallel(2) */ into t1 select * from t2;
+# 这里没有走普通导入
+insert /*+ enable_parallel_dml parallel(2) */ into t1 select * from t2;
 
 insert into t2 values(500, 500, 500, '111', '[1, 2, 3]', '[2, 3, 4]');
 insert into t2 values(501, 500, 1, '111', '[2, 3, 6]', '[4, 4, 8]');
@@ -263,8 +261,6 @@ insert into t2 values(505, 6, 6, '111', '[7, 6, 3]', '[10, 12, 13]');
 insert into t2 values(506, 6, 6, '111', '[1, 15, 13]', '[16, 22, 3]');
 insert into t2 values(507, 6, 6, '111', '[8, 5, 3]', '[6, 24, 23]');
 insert into t2 values(508, 6, 6, '111', '[11, 25, 3]', '[16, 2, 3]');
---error 1062
-insert /*+ direct(true, 100, 'inc_replace') enable_parallel_dml parallel(2) */ into t1 select * from t2;
 
 create table t3 (c1 int primary key, c2 int, c3 int, c4 varchar(10), c5 vector(3), c6 vector(3));
 insert into t3 values(500, 500, 500, '111', '[1, 2, 3]', '[2, 3, 4]');
@@ -432,5 +428,4 @@ drop table vec_xly;
 --echo ===clean====
 alter system set ob_vector_memory_limit_percentage = 0;
 --disable_query_log
-eval alter system set direct_load_allow_fallback = $before_fallback; 
 --enable_query_log

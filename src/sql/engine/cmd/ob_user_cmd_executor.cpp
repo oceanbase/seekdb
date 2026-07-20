@@ -64,8 +64,7 @@ int ObCreateUserExecutor::check_user_valid(ObSchemaGetterGuard& schema_guard,
   int ret = OB_SUCCESS;
   ObSqlString full_user_name;
   bool existed = false;
-  if (!ObSchemaChecker::enable_mysql_pl_priv_check(schema_guard)) {
-  } else if (OB_FAIL(full_user_name.append_fmt("%.*s@%.*s", user_name.length(), user_name.ptr(), 
+  if (OB_FAIL(full_user_name.append_fmt("%.*s@%.*s", user_name.length(), user_name.ptr(),
                                                 host_name.length(), host_name.ptr()))) {
     LOG_WARN("append fmt failed", K(ret));
   } else if (OB_FAIL(schema_guard.check_routine_definer_existed(full_user_name.string(), existed))) {

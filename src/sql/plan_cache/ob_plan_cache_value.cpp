@@ -591,7 +591,6 @@ int ObPlanCacheValue::resolver_params(ObPlanCacheCtx &pc_ctx,
                           enable_mysql_compatible_dates))) {
     LOG_WARN("fail to check enable mysql compatible dates", K(ret));
   } else {
-    CHECK_COMPATIBILITY_MODE(session);
     ObCollationType collation_connection = static_cast<ObCollationType>(session->get_local_collation_connection());
     (void)obj_params->reserve(raw_param_cnt);
     for (int64_t i = 0; OB_SUCC(ret) && i < raw_param_cnt; i++) {

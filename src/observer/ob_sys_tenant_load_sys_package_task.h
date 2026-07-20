@@ -39,7 +39,7 @@ public:
 
   virtual void runTimerTask() override;
 
-  static int wait_sys_package_ready(const common::ObTimeoutCtx &ctx, ObCompatibilityMode mode);
+  static int wait_sys_package_ready(const common::ObTimeoutCtx &ctx);
 
 private:
   int do_sys_tenant_load_sys_package_();

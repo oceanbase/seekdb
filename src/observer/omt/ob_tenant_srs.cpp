@@ -247,7 +247,7 @@ int ObTenantSrs::fetch_all_srs(ObSrsCacheSnapShot *&srs_snapshot)
     ret = OB_ERR_EMPTY_QUERY;
   } else {
     ObSqlString sql;
-    ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy_, true, OB_ALL_SPATIAL_REFERENCE_SYSTEMS_TID);
+    auto &sql_client_retry_weak = *sql_proxy_;
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       ObASHSetInnerSqlWaitGuard ash_inner_sql_guard(ObInnerSqlWaitTypeId::OMT_FETCH_ALL_SRS);
       ObMySQLResult *result = NULL;

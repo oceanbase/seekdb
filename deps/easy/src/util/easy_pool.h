@@ -10,14 +10,6 @@
 
 EASY_CPP_START
 
-#ifdef EASY_DEBUG_MAGIC
-#define EASY_DEBUG_MAGIC_POOL     0x4c4f4f5059534145
-#define EASY_DEBUG_MAGIC_MESSAGE  0x4753454d59534145
-#define EASY_DEBUG_MAGIC_SESSION  0x5353455359534145
-#define EASY_DEBUG_MAGIC_CONNECT  0x4e4e4f4359534145
-#define EASY_DEBUG_MAGIC_REQUEST  0x5551455259534145
-#endif
-
 #define EASY_POOL_ALIGNMENT         512
 #define EASY_POOL_PAGE_SIZE         4096
 #define easy_pool_alloc(pool, size)  easy_pool_alloc_ex(pool, size, sizeof(long))
@@ -57,9 +49,6 @@ struct easy_pool_t {
     easy_atomic_t           tlock;
     easy_pool_cleanup_t     *cleanup;
     struct mod_stat_t* mod_stat;
-#ifdef EASY_DEBUG_MAGIC
-    uint64_t                magic;
-#endif
 };
 
 extern easy_pool_realloc_pt easy_pool_realloc;

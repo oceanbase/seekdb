@@ -497,7 +497,6 @@ TEST_F(TestJsonBin, test_bin_lookup)
 
 TEST_F(TestJsonBin, test_wrapper_to_string_object)
 {
-  set_compat_mode(lib::Worker::CompatMode::MYSQL);
   // json text to json tree
   common::ObString json_text("{ \"greeting\" : \"Hello!\", \"farewell\" : \"bye-bye!\", \"json_text\" : \"test!\" }");
   common::ObArenaAllocator allocator(ObModIds::TEST);

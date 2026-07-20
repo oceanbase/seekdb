@@ -16,7 +16,6 @@
 
 #include "storage/ddl/ob_ddl_tablet_context.h"
 #include "share/rc/ob_module_provider.h"
-#include "storage/direct_load/ob_direct_load_batch_datum_rows.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ddl/ob_ddl_pipeline.h"
 #include "storage/ob_storage_schema_util.h"
@@ -178,9 +177,7 @@ int init_tablet_param(ObTablet *tablet, ObStorageSchema *storage_schema, const O
     const ObTabletMeta &tablet_meta = tablet->get_tablet_meta();
     tablet_param.is_micro_index_clustered_ = tablet_meta.micro_index_clustered_;
     tablet_param.storage_schema_ = storage_schema;
-    if (is_incremental_minor_direct_load(direct_load_type)) {
-      // do nothing
-    } else if (OB_FAIL(tablet->get_ddl_kv_mgr(ddl_kv_mgr_handle, true /*try_create]*/))) {
+    if (OB_FAIL(tablet->get_ddl_kv_mgr(ddl_kv_mgr_handle, true /*try_create]*/))) {
       LOG_WARN("failed to create ddl kv mgr", K(ret));
     }
   }

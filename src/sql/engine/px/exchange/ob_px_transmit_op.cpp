@@ -136,7 +136,6 @@ ObPxTransmitOp::ObPxTransmitOp(ObExecContext &exec_ctx, const ObOpSpec &spec, Ob
   sample_done_(false),
   sample_stores_(),
   cur_transmit_sampled_rows_(NULL),
-  has_set_hybrid_key_(false),
   batch_param_remain_(false),
   receive_channel_ready_(false),
   data_msg_type_(dtl::ObDtlMsgType::PX_DATUM_ROW),
@@ -156,7 +155,6 @@ void ObPxTransmitOp::destroy()
   loop_.reset();
   chs_agent_.~ObDtlChanAgent();
   part_ch_info_.~ObPxPartChInfo();
-  has_set_hybrid_key_ = false;
   receive_channel_ready_ = false;
   for (int i = 0; i < sample_stores_.count(); ++i) {
     if (OB_NOT_NULL(sample_stores_.at(i))) {
@@ -602,47 +600,6 @@ void ObPxTransmitOp::set_wf_hybrid_exprs(ObSliceIdxCalc &slice_calc)
     wf_hybrid_slice_calc.set_wf_hybrid_pby_exprs_cnt_array(&spec.wf_hybrid_pby_exprs_cnt_array_);
   }
 }
-
-int ObPxTransmitOp::set_rollup_hybrid_keys(ObSliceIdxCalc &slice_calc)
-{
-  int ret = OB_SUCCESS;
-  const ObPxTransmitSpec &spec = static_cast<const ObPxTransmitSpec &>(get_spec());
-  if (spec.is_rollup_hybrid_ && !has_set_hybrid_key_) {
-    ObOperator *child = get_child(0);
-    // codegen has already check
-    while (OB_NOT_NULL(child) && OB_SUCC(ret)) {
-      if (ObPhyOperatorType::PHY_MERGE_GROUP_BY == child->get_spec().type_) {
-        ObMergeGroupByOp *merge_groupby = static_cast<ObMergeGroupByOp *>(child);
-        int64_t n_keys = 0;
-        if (OB_FAIL(merge_groupby->get_n_shuffle_keys_for_exchange(n_keys))) {
-          LOG_WARN("failed to get shuffle keys for exchange", K(ret));
-        } else {
-          slice_calc.set_calc_hash_keys(n_keys);
-        }
-        break;
-      } else if (ObPhyOperatorType::PHY_VEC_MERGE_GROUP_BY == child->get_spec().type_) {
-        ObMergeGroupByVecOp *merge_groupby = static_cast<ObMergeGroupByVecOp *>(child);
-        int64_t n_keys = 0;
-        if (OB_FAIL(merge_groupby->get_n_shuffle_keys_for_exchange(n_keys))) {
-          LOG_WARN("failed to get shuffle keys for exchange", K(ret));
-        } else {
-          slice_calc.set_calc_hash_keys(n_keys);
-        }
-        break;
-      } else {
-        child = child->get_child(0);
-      }
-    }
-    if (OB_SUCC(ret) && OB_ISNULL(child)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected status: child is null", K(ret));
-    }
-    has_set_hybrid_key_ = true;
-  }
-  return ret;
-}
-
-
 
 void ObPxTransmitOp::fill_batch_ptrs_fixed(ObSliceIdxCalc::SliceIdxFlattenArray &slice_idx_flatten_array,
                              ObSliceIdxCalc::EndIdxArray &end_idx_array)
@@ -1205,7 +1162,7 @@ int ObPxTransmitOp::send_eof_row()
       op_monitor_info_.otherstat_2_id_ = ObSqlMonitorStatIds::EXCHANGE_EOF_TIMESTAMP;
       op_monitor_info_.otherstat_2_value_ = oceanbase::common::ObClockGenerator::getClock();
       // It's the end time of sending all data
-      // if not, the sql plan monitor can't show the end of eof
+      // if not, operator diagnostics can't show the end of eof
       op_monitor_info_.last_row_time_ = oceanbase::common::ObClockGenerator::getClock();
     }
   }
@@ -1367,7 +1324,7 @@ int ObPxTransmitOp::broadcast_eof_row()
     op_monitor_info_.otherstat_2_id_ = ObSqlMonitorStatIds::EXCHANGE_EOF_TIMESTAMP;
     op_monitor_info_.otherstat_2_value_ = oceanbase::common::ObClockGenerator::getClock();
     // It's the end time of sending all data
-    // if not, the sql plan monitor can't show the end of eof
+    // if not, operator diagnostics can't show the end of eof
     op_monitor_info_.last_row_time_ = oceanbase::common::ObClockGenerator::getClock();
   }
   return ret;
@@ -1527,7 +1484,6 @@ int ObPxTransmitOp::inner_rescan()
   int ret = OB_SUCCESS;
   iter_end_ = false;
   transmited_ = false;
-  has_set_hybrid_key_ = false;
   dtl::ObDtlChannel *ch = NULL;
   common::ObIArray<dtl::ObDtlChannel*> &channels = task_channels_;
   for (int i = 0; i < channels.count(); ++i) {

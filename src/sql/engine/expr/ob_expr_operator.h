@@ -526,7 +526,6 @@ public:
     - convert to @@character_set_connection if all arguments are numbers
     - allow DERIVATION_NONE
   */
-  static int enable_old_charset_aggregation(const ObBasicSessionInfo *session, uint32_t &flags);
   static int aggregate_charsets_for_string_result(
     common::ObObjMeta &type,
     const common::ObObjMeta *types,
@@ -1019,7 +1018,7 @@ inline bool ObExprOperator::is_type_valid(const common::ObObjType &type)
 
 inline bool ObExprOperator::is_type_valid_regexp(const common::ObObjType &type)
 {
-  return (is_type_valid(type) && type != ObRoaringBitmapType);
+  return is_type_valid(type);
 }
 
 inline void ObExprOperator::calc_result_flag1(ObExprResType &type,

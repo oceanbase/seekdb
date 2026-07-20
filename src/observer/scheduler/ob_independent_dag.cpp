@@ -27,8 +27,7 @@ namespace share
 #define KTASK_PTR(task) KP(task), "type", task->get_type(), "status", task->get_status(), "dag", task->get_dag()
 
 ObIndependentDag::ObIndependentDag(const ObDagType::ObDagTypeEnum type)
-  : ObIDag(type),
-    compat_mode_(THIS_WORKER.get_compatibility_mode())
+  : ObIDag(type)
 {
   is_independent_ = true;
 }

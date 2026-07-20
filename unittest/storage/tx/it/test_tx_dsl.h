@@ -39,8 +39,7 @@
     ObTxParam tx_param;                                 \
     tx_param.timeout_us_ = 1000000;                     \
     tx_param.access_mode_ = ObTxAccessMode::RW;         \
-    tx_param.isolation_ = ObTxIsolationLevel::RC;       \
-    tx_param.cluster_id_ = 100;
+    tx_param.isolation_ = ObTxIsolationLevel::RC;
 #define GET_READ_SNAPSHOT(n1, tx, tx_param, snapshot)                   \
     ObTxReadSnapshot snapshot;                                          \
     ASSERT_EQ(OB_SUCCESS, n1->get_read_snapshot(tx, tx_param.isolation_, n1->ts_after_ms(100), snapshot));

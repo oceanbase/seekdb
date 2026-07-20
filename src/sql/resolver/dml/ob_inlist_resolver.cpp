@@ -302,7 +302,6 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
   int ret = OB_SUCCESS;
   is_enable = false;
   int64_t threshold = INT64_MAX;
-  uint64_t optimizer_features_enable_version = 0;
   bool is_prepare_stmt = false;
   // 1. check basic requests
   if (OB_ISNULL(session_info)) {
@@ -318,11 +317,7 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
               K(is_root_condition), K(scope), K(in_list.type_), K(op_type), K(is_need_print));
   } else {
     if (NULL == stmt) {
-      if (OB_FAIL(session_info->get_optimizer_features_enable_version(optimizer_features_enable_version))) {
-        LOG_WARN("failed to check ddl schema version", K(ret));
-      } else {
-        threshold = session_info->get_inlist_rewrite_threshold();
-      }
+      threshold = session_info->get_inlist_rewrite_threshold();
     } else {
       if (OB_ISNULL(stmt->get_query_ctx())) {
         ret = OB_ERR_UNEXPECTED;
@@ -334,10 +329,6 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         if (OB_FAIL(global_hint.opt_params_.get_integer_opt_param(
                                               ObOptParamHint::INLIST_REWRITE_THRESHOLD, threshold))) {
           LOG_WARN("failed to get integer opt param", K(ret));
-        } else if (global_hint.has_valid_opt_features_version()) {
-          optimizer_features_enable_version = global_hint.opt_features_version_;
-        } else if (OB_FAIL(session_info->get_optimizer_features_enable_version(optimizer_features_enable_version))) {
-          LOG_WARN("failed to check ddl schema version", K(ret));
         }
       }
     }
@@ -374,8 +365,7 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
                                      nchar_collation, 
                                      static_cast<ObCollationType>(server_collation), 
                                      enable_decimal_int,
-                                     is_prepare_stmt,
-                                     optimizer_features_enable_version);
+                                     is_prepare_stmt);
       InListRewriteInfo rewrite_info;
       for (int64_t j = 0; OB_SUCC(ret) && is_enable && j < column_cnt; ++j) {
         if (OB_FAIL(get_inlist_rewrite_info(in_list, column_cnt, j, helper, rewrite_info))) {
@@ -486,13 +476,10 @@ int ObInListResolver::resolve_access_obj_values_table(const ParseNode &in_list,
   ObCollationType nchar_collation = CS_TYPE_INVALID;
   const ParseNode *row_node = NULL;
   bool enable_decimal_int = false;
-  ObCompatType compat_type = COMPAT_MYSQL57;
   bool enable_mysql_compatible_dates = false;
   if (OB_ISNULL(allocator) || OB_ISNULL(session_info)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("got unexpected NULL ptr", K(ret));
-  } else if (OB_FAIL(session_info->get_compatibility_control(compat_type))) {
-    LOG_WARN("failed to get compat type", K(ret));
   } else if (OB_FAIL(session_info->get_collation_connection(coll_type))) {
     LOG_WARN("fail to get collation_connection", K(ret));
   } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session_info, enable_decimal_int))) {
@@ -524,7 +511,6 @@ int ObInListResolver::resolve_access_obj_values_table(const ParseNode &in_list,
                                                  &parents_expr_info,
                                                  session_info->get_sql_mode(),
                                                  enable_decimal_int,
-                                                 compat_type,
                                                  enable_mysql_compatible_dates,
                                                  session_info->get_min_const_integer_precision(),
                                                  is_from_pl))) {
@@ -844,7 +830,6 @@ int ObInListResolver::try_merge_inlists(ObExprResolveContext &resolve_ctx,
   bool enable_decimal_int = false;
   bool is_prepare_stmt = false;
   int64_t server_collation = CS_TYPE_INVALID;
-  uint64_t optimizer_features_enable_version = 0;
   bool is_enable = false;
   ret_node = root_node;
   if (OB_ISNULL(session_info) || OB_ISNULL(root_node)) {
@@ -861,20 +846,11 @@ int ObInListResolver::try_merge_inlists(ObExprResolveContext &resolve_ctx,
               K(is_root_condition));
   } else {
     if (NULL == stmt) {
-      if (OB_FAIL(session_info->get_optimizer_features_enable_version(optimizer_features_enable_version))) {
-        LOG_WARN("failed to check ddl schema version", K(ret));
-      } else { /*do nothing*/ }
     } else if (OB_ISNULL(stmt->get_query_ctx())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret));
     } else {
       is_prepare_stmt = stmt->get_query_ctx()->is_prepare_stmt();
-      const ObGlobalHint &global_hint = stmt->get_query_ctx()->get_global_hint();
-      if (global_hint.has_valid_opt_features_version()) {
-        optimizer_features_enable_version = global_hint.opt_features_version_;
-      } else if (OB_FAIL(session_info->get_optimizer_features_enable_version(optimizer_features_enable_version))) {
-        LOG_WARN("failed to check ddl schema version", K(ret));
-      } else { /*do nothing*/ }
     }
     if (OB_FAIL(ret)) {
     } else {
@@ -894,8 +870,7 @@ int ObInListResolver::try_merge_inlists(ObExprResolveContext &resolve_ctx,
                                    nchar_collation, 
                                    static_cast<ObCollationType>(server_collation), 
                                    enable_decimal_int,
-                                   is_prepare_stmt,
-                                   optimizer_features_enable_version);
+                                   is_prepare_stmt);
     if (OB_FAIL(do_merge_inlists(alloc, helper, root_node, ret_node))) {
       LOG_WARN("fail to merge inlist", K(ret));
     }

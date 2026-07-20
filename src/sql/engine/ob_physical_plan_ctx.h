@@ -537,11 +537,6 @@ public:
   ObIArray<ObArrayParamGroup> &get_array_param_groups() { return array_param_groups_; }
   int set_all_local_session_vars(ObIArray<ObLocalSessionVar> &all_local_session_vars);
   int get_local_session_vars(int64_t idx, const ObSolidifiedVarsContext *&local_vars);
-  inline void set_is_direct_insert_plan(const bool is_direct_insert_plan)
-  {
-    is_direct_insert_plan_ = is_direct_insert_plan;
-  }
-  inline bool get_is_direct_insert_plan() const { return is_direct_insert_plan_; }
   inline void set_enable_adaptive_pc(bool v) { enable_adaptive_pc_ = v; }
   inline bool enable_adaptive_pc() const { return enable_adaptive_pc_; }
   bool is_param_datum_frame_inited() const { return param_frame_ptrs_.count() > 0; }
@@ -690,7 +685,6 @@ private:
   common::ObFixedArray<ObSolidifiedVarsContext, common::ObIAllocator> all_local_session_vars_;
   int64_t total_memstore_read_row_count_;
   int64_t total_ssstore_read_row_count_;
-  bool is_direct_insert_plan_; // for direct load: insert into/overwrite select
   bool check_pdml_affected_rows_; // now only worked for pdml checking affected_rows
   bool enable_adaptive_pc_;
 };

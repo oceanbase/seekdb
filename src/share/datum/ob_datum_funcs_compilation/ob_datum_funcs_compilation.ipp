@@ -52,11 +52,9 @@ static const int COMPILATION_UNIT = 8;
       ObArrayConstIniter<1, InitJsonCmpArray>::init();                                             \
       ObArrayConstIniter<1, InitGeoCmpArray>::init();                                              \
       ObArrayConstIniter<1, InitCollectionCmpArray>::init();                                       \
-      ObArrayConstIniter<1, InitRoaringbitmapCmpArray>::init();                                    \
       ObArrayConstIniter<1, InitBasicJsonFuncArray>::init();                                       \
       ObArrayConstIniter<1, InitBasicGeoFuncArray>::init();                                        \
       ObArrayConstIniter<1, InitCollectionBasicFuncArray>::init();                                 \
-      ObArrayConstIniter<1, InitBasicRoaringbitmapFuncArray>::init();                              \
       ObArrayConstIniter<1, InitUDTBasicFuncArray>::init();                                        \
     }                                                                                              \
     if constexpr (unit_idx == 1) {                                                                 \

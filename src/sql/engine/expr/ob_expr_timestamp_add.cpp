@@ -45,12 +45,11 @@ inline int ObExprTimeStampAdd::calc_result_type3(ObExprResType &type,
 {
   int ret = OB_SUCCESS;
 
-  ObCompatibilityMode compat_mode = get_compatibility_mode();
   //not timestamp. compatible with mysql.
   type.set_varchar();
   //timestamp.set_calc_type(common::ObDateTimeType);
-  type.set_length(common::ObAccuracy::MAX_ACCURACY2[compat_mode][common::ObDateTimeType].precision_
-    + common::ObAccuracy::MAX_ACCURACY2[compat_mode][common::ObDateTimeType].scale_ + 1);
+  type.set_length(common::ObAccuracy::MAX_ACCURACY2[0][common::ObDateTimeType].precision_
+    + common::ObAccuracy::MAX_ACCURACY2[0][common::ObDateTimeType].scale_ + 1);
   type.set_collation_level(common::CS_LEVEL_IMPLICIT);
   //not connection collation. compatible with mysql.
   type.set_collation_type(common::ObCharset::get_default_collation(common::ObCharset::get_default_charset()));

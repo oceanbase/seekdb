@@ -295,8 +295,7 @@ int ObPLPackageManager::read_package_sql(ObCharStream &stream, char* buf, int64_
 }
 
 int ObPLPackageManager::read_and_exec_package_sql(ObMySQLProxy &sql_proxy,
-                                                  ObCharStream &stream,
-                                                  ObCompatibilityMode compa_mode)
+                                                  ObCharStream &stream)
 {
   int ret = OB_SUCCESS;
   if (!sql_proxy.is_inited() || !sql_proxy.is_active()) {
@@ -318,10 +317,7 @@ int ObPLPackageManager::read_and_exec_package_sql(ObMySQLProxy &sql_proxy,
           if (FAILEDx(read_package_sql(stream, sql_buf, OB_MAX_SQL_LENGTH, eof))) {
             LOG_WARN("fail to read package sql data", K(ret));
           } else if (strlen(sql_buf) != 0
-                     && OB_FAIL(sql_proxy.write(sql_buf,
-                                                affected_rows,
-                                                static_cast<int64_t>(compa_mode),
-                                                &param))) {
+                     && OB_FAIL(sql_proxy.write(sql_buf, affected_rows, &param))) {
             LOG_WARN("fail to exec package sql", K(sql_buf), K(ret));
           } else if (affected_rows != 0) {
             ret = OB_ERR_UNEXPECTED;
@@ -370,7 +366,6 @@ int ObPLPackageManager::get_syspack_source_file_content(const char *file_name, c
 
 int ObPLPackageManager::load_sys_package(ObMySQLProxy &sql_proxy,
                                          const ObSysPackageFile &pack_file_info,
-                                         ObCompatibilityMode compa_mode,
                                          bool from_file)
 {
   int ret = OB_SUCCESS;
@@ -388,12 +383,12 @@ int ObPLPackageManager::load_sys_package(ObMySQLProxy &sql_proxy,
     if (OB_SUCC(ret) && OB_NOT_NULL(spec_file)) {
       OZ (databuff_printf(spec_file_path, MAX_PATH_SIZE, "%s/%s", sys_package_dir, spec_file));
       ObFileStream spec_stream{package_name, spec_file_path};
-      OZ (read_and_exec_package_sql(sql_proxy, spec_stream, compa_mode), spec_stream);
+      OZ (read_and_exec_package_sql(sql_proxy, spec_stream), spec_stream);
     }
     if (OB_SUCC(ret) && OB_NOT_NULL(body_file)) {
       OZ (databuff_printf(body_file_path, MAX_PATH_SIZE, "%s/%s", sys_package_dir, body_file));
       ObFileStream body_stream{package_name, body_file_path};
-      OZ (read_and_exec_package_sql(sql_proxy, body_stream, compa_mode), body_stream);
+      OZ (read_and_exec_package_sql(sql_proxy, body_stream), body_stream);
     }
   } else {
     const char *spec_content = nullptr;
@@ -401,12 +396,12 @@ int ObPLPackageManager::load_sys_package(ObMySQLProxy &sql_proxy,
     OZ (get_syspack_source_file_content(spec_file, spec_content));
     if (OB_SUCC(ret) && OB_NOT_NULL(spec_content)) {
       ObCStringStream spec_stream{package_name, spec_content};
-      OZ (read_and_exec_package_sql(sql_proxy, spec_stream, compa_mode), spec_stream);
+      OZ (read_and_exec_package_sql(sql_proxy, spec_stream), spec_stream);
     }
     OZ (get_syspack_source_file_content(body_file, body_content));
     if (OB_SUCC(ret) && OB_NOT_NULL(body_content)) {
       ObCStringStream body_stream{package_name, body_content};
-      OZ (read_and_exec_package_sql(sql_proxy, body_stream, compa_mode), body_stream);
+      OZ (read_and_exec_package_sql(sql_proxy, body_stream), body_stream);
     }
   }
 
@@ -417,7 +412,6 @@ int ObPLPackageManager::load_sys_package(ObMySQLProxy &sql_proxy,
 
 int ObPLPackageManager::load_sys_package(ObMySQLProxy &sql_proxy,
                                          ObString &package_name,
-                                         ObCompatibilityMode compa_mode,
                                          bool from_file)
 {
   int ret = OB_SUCCESS;
@@ -445,13 +439,13 @@ int ObPLPackageManager::load_sys_package(ObMySQLProxy &sql_proxy,
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(pack_file_info)) {
     ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;
-    LOG_WARN("package not exists", K(ret), K(package_name), K(compa_mode));
+    LOG_WARN("package not exists", K(ret), K(package_name));
     LOG_USER_ERROR(OB_ERR_PACKAGE_DOSE_NOT_EXIST,
                    "PACKAGE",
                    ObString("oceanbase").length(), ObString("oceanbase").ptr(),
                    package_name.length(), package_name.ptr());
   } else {
-    OZ (load_sys_package(sql_proxy, *pack_file_info, compa_mode, from_file));
+    OZ (load_sys_package(sql_proxy, *pack_file_info, from_file));
   }
   return ret;
 }
@@ -459,30 +453,27 @@ int ObPLPackageManager::load_sys_package(ObMySQLProxy &sql_proxy,
 int ObPLPackageManager::load_sys_package_list(ObMySQLProxy &sql_proxy,
                                               const ObSysPackageFile *sys_package_list,
                                               int sys_package_count,
-                                              ObCompatibilityMode compa_mode,
                                               bool from_file)
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(sys_package_list));
   LOG_INFO("load sys package list begin", "sys package total count", sys_package_count);
   for (int i = 0; OB_SUCC(ret) && i < sys_package_count; ++i) {
-    OZ (load_sys_package(sql_proxy, sys_package_list[i], compa_mode, from_file));
+    OZ (load_sys_package(sql_proxy, sys_package_list[i], from_file));
   }
   if (OB_FAIL(ret)) {
-    LOG_WARN("load sys package list failed", K(ret), K(compa_mode));
+    LOG_WARN("load sys package list failed", K(ret));
   } else {
-    LOG_INFO("load sys package list success", K(ret), K(compa_mode));
+    LOG_INFO("load sys package list success", K(ret));
   }
   return ret;
 }
 
 int ObPLPackageManager::load_all_common_sys_package(
-    ObMySQLProxy &sql_proxy, ObCompatibilityMode compa_mode, bool from_file) {
+    ObMySQLProxy &sql_proxy, bool from_file) {
   int ret = OB_SUCCESS;
-  UNUSED(compa_mode);
   OZ (load_sys_package_list(sql_proxy, mysql_syspack_file_list,
                             SIZE_OF_SYSPACK_LST(mysql_syspack_file_list),
-                            ObCompatibilityMode::MYSQL_MODE,
                             from_file));
 
   if (OB_SUCC(ret)) {
@@ -498,7 +489,6 @@ int ObPLPackageManager::load_all_special_sys_package(ObMySQLProxy &sql_proxy)
   int ret = OB_SUCCESS;
   OZ (load_sys_package_list(sql_proxy, mysql_special_syspack_file_list,
                             SIZE_OF_SYSPACK_LST(mysql_special_syspack_file_list),
-                            ObCompatibilityMode::MYSQL_MODE,
                             false /* from_file */));
   return ret;
 }
@@ -1251,7 +1241,6 @@ int ObPLPackageManager::get_package_schema_info(ObSchemaGetterGuard &schema_guar
   int ret = OB_SUCCESS;
   package_spec_info = NULL;
   package_body_info = NULL;
-  int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
   if (!ObTriggerInfo::is_trigger_package_id(package_id)) {
     
     const ObPackageInfo *tmp_package_info = NULL;
@@ -1267,7 +1256,6 @@ int ObPLPackageManager::get_package_schema_info(ObSchemaGetterGuard &schema_guar
                                                   tmp_package_info->get_database_id(),
                                                   tmp_package_info->get_package_name(),
                                                   share::schema::PACKAGE_BODY_TYPE,
-                                                  compatible_mode,
                                                   package_body_info))) {
           LOG_WARN("failed to get package body info", "package name", package_spec_info->get_package_name(), K(ret));
         }
@@ -1277,7 +1265,6 @@ int ObPLPackageManager::get_package_schema_info(ObSchemaGetterGuard &schema_guar
                                                   tmp_package_info->get_database_id(),
                                                   tmp_package_info->get_package_name(),
                                                   share::schema::PACKAGE_TYPE,
-                                                  compatible_mode,
                                                   package_spec_info))) {
           LOG_WARN("failed to get package info", "package name", package_body_info->get_package_name(), K(ret));
         } else if (OB_ISNULL(package_spec_info)) {

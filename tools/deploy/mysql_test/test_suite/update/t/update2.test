@@ -16,7 +16,6 @@
 #
 # test of updating of keys
 #
---source mysql_test/include/backup_spm_var.inc
 --disable_query_log
 set @@session.explicit_defaults_for_timestamp=off;
 connect (conn_admin, $OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
@@ -884,4 +883,3 @@ WHERE  a.seller_code = (SELECT /*+unnest*/Max(b.seller_code)
                             WHERE  a.prd_code = b.prd_code);
 
 drop table if exists TBFUNDSALESTAT;
---source mysql_test/include/recover_spm_var.inc

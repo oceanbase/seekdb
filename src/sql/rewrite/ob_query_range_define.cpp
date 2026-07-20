@@ -366,9 +366,6 @@ int ObQueryRangeCtx::init(ObPreRangeGraph *pre_range_graph,
     LOG_WARN("failed to check not in range enabled", K(ret));
   } else if (OB_FAIL(query_ctx->get_global_hint().opt_params_.get_bool_opt_param(ObOptParamHint::ENABLE_RANGE_EXTRACTION_FOR_NOT_IN, enable_not_in_range_))) {
     LOG_WARN("fail to check opt param not in range enabled", K(ret));
-  } else if (OB_FAIL(exec_ctx_->get_my_session()->
-             get_optimizer_features_enable_version(optimizer_features_enable_version_))) {
-    LOG_WARN("failed to get optimizer features enable version", K(ret));
   } else {
     column_cnt_ = range_columns.count();
     expr_constraints_ = expr_constraints;

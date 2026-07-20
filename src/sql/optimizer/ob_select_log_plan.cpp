@@ -524,7 +524,6 @@ int ObSelectLogPlan::inner_create_merge_rollup_plan(const ObIArray<ObRawExpr*> &
                                                 is_partition_wise,
                                                 false,/*is_push_down*/
                                                 false,/*is_partition_gi*/
-                                                ObRollupStatus::NONE_ROLLUP,
                                                 false,/*force_use_scalar*/
                                                 nullptr,/*three_stage_info*/
                                                 nullptr))) {
@@ -579,7 +578,6 @@ int ObSelectLogPlan::inner_create_merge_rollup_plan(const ObIArray<ObRawExpr*> &
                                                   should_pullup_gi,
                                                   true,
                                                   is_partition_gi,
-                                                  ObRollupStatus::NONE_ROLLUP,
                                                   false,/*force_use_scalar*/
                                                   nullptr, /*three_stage_info*/
                                                   nullptr))) {
@@ -618,7 +616,6 @@ int ObSelectLogPlan::inner_create_merge_rollup_plan(const ObIArray<ObRawExpr*> &
                                                   false,/*is_partition_wise*/
                                                   false,/*is_push_down*/
                                                   false,/*is_partition_gi*/
-                                                  NONE_ROLLUP,
                                                   false,/*force_use_scalar*/
                                                   nullptr,/*three_stage_info*/
                                                   nullptr))) {
@@ -1035,7 +1032,6 @@ int ObSelectLogPlan::create_hash_group_plan(const ObIArray<ObRawExpr*> &reduce_e
                                          is_partition_wise,
                                          false, /*is_pushdown*/
                                          false, /*is_partition_gi*/
-                                         ObRollupStatus::NONE_ROLLUP,
                                          false, /*force_use_scalar*/
                                          nullptr, /*three_stage_info*/
                                          groupby_helper.hash_rollup_info_))) {
@@ -1066,7 +1062,6 @@ int ObSelectLogPlan::create_hash_group_plan(const ObIArray<ObRawExpr*> &reduce_e
                                           is_partition_wise,
                                           true,
                                           true,
-                                          ObRollupStatus::NONE_ROLLUP,
                                           false, /*force_use_scalar*/
                                           nullptr, /*three_stage_info*/
                                           groupby_helper.hash_rollup_info_))) {
@@ -1099,7 +1094,6 @@ int ObSelectLogPlan::create_hash_group_plan(const ObIArray<ObRawExpr*> &reduce_e
                                           false,/*is_partition_wise*/
                                           false,/*is_pushdown*/
                                           false,/*is_partition_gi*/
-                                          ObRollupStatus::NONE_ROLLUP,
                                           false, /*force_use_scalar*/
                                           nullptr, /*three_stage_info*/
                                           groupby_helper.hash_rollup_info_))) {
@@ -1398,7 +1392,6 @@ int ObSelectLogPlan::inner_create_merge_group_plan(const ObIArray<ObRawExpr*> &r
                                                 is_partition_wise,
                                                 false,/*is_push_down*/
                                                 false,/*is_partition_gi*/
-                                                ObRollupStatus::NONE_ROLLUP,
                                                 false,/*force_use_scalar*/
                                                 nullptr,/*three_stage_info*/
                                                 groupby_helper.hash_rollup_info_))) {
@@ -1454,7 +1447,6 @@ int ObSelectLogPlan::inner_create_merge_group_plan(const ObIArray<ObRawExpr*> &r
                                                   should_pullup_gi,
                                                   true,
                                                   is_partition_gi,
-                                                  ObRollupStatus::NONE_ROLLUP,
                                                   false,/*force_use_scalar*/
                                                   nullptr, /*three_stage_info*/
                                                   groupby_helper.hash_rollup_info_))) {
@@ -1493,7 +1485,6 @@ int ObSelectLogPlan::inner_create_merge_group_plan(const ObIArray<ObRawExpr*> &r
                                                   false,/*is_partition_wise*/
                                                   false,/*is_push_down*/
                                                   false,/*is_partition_gi*/
-                                                  NONE_ROLLUP,
                                                   false,/*force_use_scalar*/
                                                   nullptr,/*three_stage_info*/
                                                   groupby_helper.hash_rollup_info_))) {

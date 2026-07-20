@@ -329,7 +329,7 @@ CREATE TABLE t1(c1 TINYINT[], c2 SMALLINT[], c3 INT[]);
 INSERT INTO t1 VALUES([-10,15,39,-12,110,62,113,-31,29,-72], [-10,15,39,-12,110,62,113,-31,29,-72], [-10,15,39,-12,110,62,113,-31,29,-72]);
 
 CREATE TABLE t2(c1 INT[], c2 TINYINT[], c3 SMALLINT[]);
-INSERT /*+ direct(true,100) enable_parallel_dml parallel(2) append*/ INTO t2  SELECT * from t1;
+INSERT /*+ enable_parallel_dml parallel(2) */ INTO t2  SELECT * from t1;
 SELECT * from t2;
 
 drop table t1;
@@ -551,7 +551,7 @@ insert into test(c3) values ('[[[[]]]]');
 drop table test;
 
 # bugfix: 2025072500110139170
-create table test(arr ARRAY(FLOAT), c1 int, c2 float, c3 decimal(3,3), c4 bit(20), c5 geometry, c6 roaringbitmap, c7 json);
+create table test(arr ARRAY(FLOAT), c1 int, c2 float, c3 decimal(3,3), c4 bit(20), c5 geometry, c6 json);
 --error 5083
 select * from test where arr = c1;
 --error 5083
@@ -564,8 +564,6 @@ select * from test where arr = c4;
 select * from test where arr = c5;
 --error 5083
 select * from test where arr = c6;
---error 5083
-select * from test where arr = c7;
 drop table test;
 
 --disable_warnings

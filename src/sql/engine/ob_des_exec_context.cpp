@@ -86,9 +86,7 @@ int ObDesExecContext::create_my_session()
     uint32_t sid = ObSQLSessionInfo::INVALID_SESSID;
     if (OB_FAIL(GCTX.session_mgr_->create_sessid(sid))) {
       LOG_WARN("alloc session id failed", K(ret));
-    } else if (OB_FAIL(GCTX.session_mgr_->create_session(sid,
-                                                    ObTimeUtility::current_time(),
-                                                    my_session_))) {
+    } else if (OB_FAIL(GCTX.session_mgr_->create_session(sid, my_session_))) {
       LOG_WARN("create session failed", K(ret), K(sid));
       my_session_ = NULL;
     } else {

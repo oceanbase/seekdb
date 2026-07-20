@@ -16,12 +16,10 @@
 
 #define USING_LOG_PREFIX COMMON
 #define _GNU_SOURCE 1
-#include "ob_signal_handlers.h"
 #include "lib/profile/ob_trace_id.h"
 #include "lib/signal/ob_signal_struct.h"
 #ifndef _WIN32
 #include <dirent.h>
-#include <sys/wait.h>
 #include "lib/utility/ob_platform_utils.h"  // Platform compatibility layer
 #include "lib/utility/utility.h"
 #include "lib/signal/ob_libunwind.h"
@@ -35,7 +33,6 @@
 #endif
 #include <io.h>
 #include <process.h>
-#include "lib/time/ob_time_utility.h"
 #endif
 
 namespace oceanbase
@@ -43,42 +40,14 @@ namespace oceanbase
 namespace common
 {
 
-ObSigFaststack::ObSigFaststack()
-    : min_interval_(30 * 60 * 1000 * 1000UL) // 30min
-{
-}
-
-ObSigFaststack::~ObSigFaststack()
-{
-}
-
-ObSigFaststack &ObSigFaststack::get_instance()
-{
-  static ObSigFaststack sig_faststack;
-  return sig_faststack;
-}
-
 #ifndef _WIN32
 
 static const int SIG_SET[] = {SIGABRT, SIGBUS, SIGFPE, SIGSEGV, SIGURG, SIGILL};
 static constexpr char MINICORE_SHELL_PATH[] = "tools/minicore.sh";
-static constexpr char FASTSTACK_SHELL_PATH[] = "tools/callstack.sh";
 static constexpr char MINICORE_SCRIPT[] = "if [ -e bin/minicore.py ]; then\n"
 "  python bin/minicore.py `cat $(pwd)/run/observer.pid` -c -o core.`cat $(pwd)/run/observer.pid`.mini\n"
 "fi\n"
 "[ $(ls -1 core.*.mini 2>/dev/null | wc -l) -gt 5 ] && ls -1 core.*.mini -t | tail -n 1 | xargs rm -f";
-
-static constexpr char FASTSTACK_SCRIPT[] =
-"path_to_obstack=\"bin/obstack\"\n"
-"if [ ! -x \"$path_to_obstack\" ]; then\n"
-"  path_to_obstack=$(command -v obstack)\n"
-"fi\n"
-"if [ -x \"$path_to_obstack\" ]; then\n"
-"  $path_to_obstack `cat $(pwd)/run/observer.pid` > stack.`cat $(pwd)/run/observer.pid`.`date +%Y%m%d%H%M%S`\n"
-"fi\n"
-"[ $(ls -1 stack.* 2>/dev/null | wc -l) -gt 100 ] && ls -1 stack.* -t | tail -n 1 | xargs rm -f";
-const char *const FASTSTACK_SCRIPT_ARGV[] = {"/bin/sh", "-c", FASTSTACK_SCRIPT, NULL};
-const char *const FASTSTACK_SHELL_ARGV[] = {"/bin/sh", FASTSTACK_SHELL_PATH, NULL};
 
 signal_handler_t &get_signal_handler()
 {
@@ -263,57 +232,7 @@ void coredump_cb(volatile int sig, volatile int sig_code, void* volatile sig_add
   raise(sig);
 }
 
-int faststack()
-{
-  static int64_t last_ts = 0;
-  int64_t now = ObTimeUtility::fast_current_time();
-  int64_t last = ATOMIC_LOAD(&last_ts);
-  int ret = OB_SUCCESS;
-  pid_t pid;
-  if (now - last < ObSigFaststack::get_instance().get_min_interval()) {
-    ret = OB_EAGAIN;
-  } else if (!ATOMIC_BCAS(&last_ts, last, now)) {
-    ret = OB_EAGAIN;
-  } else if (-1 == access(FASTSTACK_SHELL_PATH, R_OK)) {
-    if ((pid = vfork()) < 0) {
-      LOG_WARN("fork first child failed");
-    } else if (pid == 0) { /* first child */
-      if ((pid = vfork()) < 0) {
-        LOG_WARN("fork second child failed");
-      } else if (pid > 0) {
-        _exit(EXIT_SUCCESS); /* parent from second fork == first child */
-      } else {
-        IGNORE_RETURN syscall(SYS_execve, "/bin/sh", FASTSTACK_SCRIPT_ARGV, nullptr);
-        _exit(EXIT_FAILURE);
-      }
-    }
-    if (waitpid(pid, NULL, 0) != pid) {
-      LOG_WARN("wait child process:FASTSTACK_SCRIPT failed");
-    }
-  } else if (-1 != access(FASTSTACK_SHELL_PATH, X_OK)) {
-    if ((pid = vfork()) < 0) {
-      LOG_WARN("fork first child failed");
-    } else if (pid == 0) { /* first child */
-      if ((pid = vfork()) < 0) {
-        LOG_WARN("fork second child failed");
-      } else if (pid > 0) {
-        _exit(EXIT_SUCCESS); /* parent from second vfork == first child */
-      } else {
-        IGNORE_RETURN syscall(SYS_execve, "/bin/sh", FASTSTACK_SHELL_ARGV, nullptr);
-        _exit(EXIT_FAILURE);
-      }
-    }
-    if (waitpid(pid, NULL, 0) != pid) {
-      LOG_WARN("wait child process:FASTSTACK_SHELL failed");
-    }
-  }
-  LOG_WARN("faststack", K(now), K(ret));
-  return ret;
-}
-
 #else // _WIN32
-
-static constexpr char FASTSTACK_SHELL_PATH[] = "tools\\callstack.bat";
 
 signal_handler_t &get_signal_handler()
 {
@@ -366,62 +285,6 @@ void ob_signal_handler(int sig, siginfo_t *si, void *context)
     signal(sig, SIG_DFL);
     raise(sig);
   }
-}
-
-static int win32_run_process(char *cmd, DWORD timeout_ms)
-{
-  STARTUPINFOA si;
-  PROCESS_INFORMATION pi;
-  memset(&si, 0, sizeof(si));
-  si.cb = sizeof(si);
-  memset(&pi, 0, sizeof(pi));
-  if (!CreateProcessA(NULL, cmd, NULL, NULL, FALSE,
-                      CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
-    return OB_ERR_SYS;
-  }
-  DWORD wait_ret = WaitForSingleObject(pi.hProcess, timeout_ms);
-  CloseHandle(pi.hProcess);
-  CloseHandle(pi.hThread);
-  if (wait_ret == WAIT_TIMEOUT) {
-    return OB_TIMEOUT;
-  }
-  return OB_SUCCESS;
-}
-
-int faststack()
-{
-  static int64_t last_ts = 0;
-  int64_t now = ObTimeUtility::fast_current_time();
-  int64_t last = ATOMIC_LOAD(&last_ts);
-  int ret = OB_SUCCESS;
-
-  if (now - last < ObSigFaststack::get_instance().get_min_interval()) {
-    ret = OB_EAGAIN;
-  } else if (!ATOMIC_BCAS(&last_ts, last, now)) {
-    ret = OB_EAGAIN;
-  } else {
-    int pid = _getpid();
-    time_t now_t = ::time(NULL);
-    struct tm tm_buf;
-    localtime_s(&tm_buf, &now_t);
-    char timestamp[32];
-    strftime(timestamp, sizeof(timestamp), "%Y%m%d%H%M%S", &tm_buf);
-
-    char cmd[512];
-    if (_access(FASTSTACK_SHELL_PATH, 0) != -1) {
-      snprintf(cmd, sizeof(cmd), "cmd.exe /c \"%s\"", FASTSTACK_SHELL_PATH);
-      ret = win32_run_process(cmd, 30000);
-    } else if (_access("bin\\obstack.exe", 0) != -1) {
-      snprintf(cmd, sizeof(cmd),
-               "cmd.exe /c \"bin\\obstack.exe %d > stack.%d.%s\"",
-               pid, pid, timestamp);
-      ret = win32_run_process(cmd, 30000);
-    } else {
-      ret = OB_FILE_NOT_EXIST;
-    }
-  }
-  LOG_WARN("faststack", K(now), K(ret));
-  return ret;
 }
 
 #endif // _WIN32

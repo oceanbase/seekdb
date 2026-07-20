@@ -29,10 +29,6 @@ namespace memtable
 
 void ObIMvccCtx::before_prepare(const SCN version)
 {
-#ifdef TRANS_ERROR
-  const int random = (int)ObRandom::rand(1, 1000);
-  ob_usleep(random);
-#endif
   set_trans_version(version);
 }
 

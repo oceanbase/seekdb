@@ -120,8 +120,7 @@ private:
     LC_NODE,
     LC_NODE_RD,
     LC_NODE_WR,
-    LC_REF_CACHE_OBJ_STAT,
-    PLAN_BASELINE
+    LC_REF_CACHE_OBJ_STAT
   };
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllPlanCacheStat);

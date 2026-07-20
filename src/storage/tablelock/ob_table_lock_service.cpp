@@ -1279,11 +1279,8 @@ int ObTableLockService::deal_with_deadlock_(ObTableLockCtx &ctx)
   } else if (!session_guard.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session guard invalid", K(ret), K(sess_id));
-  } else if (ObCompatibilityMode::MYSQL_MODE == session_guard->get_compatibility_mode()) {
-    ret = ObTransDeadlockDetectorAdapter::kill_tx(sess_id);
   } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("unknown mode", K(ret), K(session_guard->get_compatibility_mode()));
+    ret = ObTransDeadlockDetectorAdapter::kill_tx(sess_id);
   }
   if (!OB_SUCC(ret)) {
     LOG_WARN("kill trans or stmt failed", K(ret), K(sess_id));
@@ -1968,7 +1965,6 @@ int ObTableLockService::start_tx_(ObTableLockCtx &ctx)
   tx_param.isolation_ = ObTxIsolationLevel::RC;
   tx_param.timeout_us_ = common::max(static_cast<int64_t>(0), ctx.abs_timeout_ts_ - ObTimeUtility::current_time());
   tx_param.lock_timeout_us_ = -1; // use abs_timeout_ts as lock wait timeout
-  tx_param.cluster_id_ = GCONF.cluster_id;
   // no session id here
 
   ObTransService *txs = share::g_mp->trans_service();

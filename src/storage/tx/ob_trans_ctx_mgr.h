@@ -27,8 +27,6 @@
 #include "share/ob_light_hashmap.h"
 #include "storage/memtable/ob_memtable_context.h"
 #include "ob_trans_ctx.h"
-#include "ob_trans_stat.h"
-
 #include "storage/tx_table/ob_tx_table_define.h"
 #include "storage/tx/ob_tx_log_adapter.h"
 #include "ob_trans_ctx_mgr_v4.h"

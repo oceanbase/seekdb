@@ -74,7 +74,6 @@ public:
     int init(const uint64_t unit_id,
              const ObUnitStatus unit_status,
              const ObUnitConfig &config,
-             lib::Worker::CompatMode compat_mode,
              const int64_t create_timestamp,
              const bool has_memstore,
              const bool is_remove,
@@ -89,7 +88,7 @@ public:
 
     TO_STRING_KV(K_(unit_id), K_(has_memstore),
                  "unit_status", get_unit_status_str(unit_status_),
-                 K_(config), K_(mode), K_(create_timestamp), K_(is_removed),
+                 K_(config), K_(create_timestamp), K_(is_removed),
                  K_(hidden_sys_data_disk_config_size),
                  K_(actual_data_disk_size));
 
@@ -98,7 +97,7 @@ public:
       return true &&
           unit_id_ != common::OB_INVALID_ID && 
           unit_status_ != UNIT_ERROR_STAT &&
-          config_.is_valid() && mode_ != lib::Worker::CompatMode::INVALID &&
+          config_.is_valid() &&
           hidden_sys_data_disk_config_size_ >= 0 &&
           actual_data_disk_size_ >= 0;
     }
@@ -114,7 +113,6 @@ public:
     uint64_t unit_id_;
     ObUnitStatus unit_status_;
     ObUnitConfig config_;
-    lib::Worker::CompatMode mode_;
     int64_t create_timestamp_;
     bool has_memstore_;  // make if the unit contains replicas have memstore(Logonly replicas have no memstore)
     bool is_removed_;
@@ -178,8 +176,6 @@ private:
   int find_server_config_idx(const common::ObIArray<ObServerConfig> &server_configs,
                              const common::ObAddr &server, int64_t &index) const;
   void build_unit_stat(const common::ObAddr &server, const ObUnit &unit, ObUnitStatus &unit_stat) const;
-
-  int get_compat_mode(lib::Worker::CompatMode &compat_mode) const;
 
 private:
   bool inited_;

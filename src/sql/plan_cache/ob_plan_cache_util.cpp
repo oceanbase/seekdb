@@ -18,7 +18,6 @@
 
 #include "ob_plan_cache_util.h"
 #include "sql/optimizer/ob_log_plan.h"
-#include "sql/optimizer/ob_direct_load_optimizer_ctx.h"
 #include "share/config/ob_config_helper.h"  // relocated-definition owner
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
@@ -395,8 +394,6 @@ int ObConfigInfoInPC::load_influence_plan_config()
   enable_das_keep_order_ = GCONF._enable_das_keep_order;
   enable_index_merge_ = GCONF._enable_index_merge;
   enable_parallel_das_dml_ = GCONF._enable_parallel_das_dml;
-  direct_load_allow_fallback_ = GCONF.direct_load_allow_fallback;
-  default_load_mode_ = ObDefaultLoadMode::get_type_value(GCONF.default_load_mode.get_value_string());
   hash_rollup_policy_ = GCONF._use_hash_rollup.case_compare("auto") == 0 ?
                           0 :
                           (GCONF._use_hash_rollup.case_compare("forced") == 0 ? 1 : 2);
@@ -467,12 +464,6 @@ int ObConfigInfoInPC::serialize_configs(char *buf, int buf_len, int64_t &pos)
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                "%d,", enable_parallel_das_dml_))) {
     SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_parallel_das_dml_));
-  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-                               "%d,", direct_load_allow_fallback_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(direct_load_allow_fallback_));
-  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-                               "%d,", default_load_mode_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(default_load_mode_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%d,", hash_rollup_policy_))) {
     SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(hash_rollup_policy_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,

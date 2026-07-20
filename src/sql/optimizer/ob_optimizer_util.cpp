@@ -5388,7 +5388,7 @@ bool ObOptimizerUtil::is_lossless_type_conv(const ObRawExprResType &child_type, 
        }
     } else if (ObYearTC == child_tc) {
       if (ObNumberTC == dst_tc) {
-        ObAccuracy lossless_acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[ObCompatibilityMode::MYSQL_MODE][child_type.get_type()];
+        ObAccuracy lossless_acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[0][child_type.get_type()];
         if (dst_acc.get_precision() - dst_acc.get_scale() >= lossless_acc.get_precision() - lossless_acc.get_scale()) {
           is_lossless = true;
          }
@@ -5460,7 +5460,7 @@ int ObOptimizerUtil::is_lossless_column_cast(const ObRawExpr *expr,
       // mysql mode allows lossless type conversion, which can be referred to
       if (ObIntTC == child_tc || ObUIntTC == child_tc) {
         if (ObNumberTC == dst_tc || ObDecimalIntTC == dst_tc) {
-          // ObAccuracy lossless_acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[ObCompatibilityMode::MYSQL_MODE][child_type.get_type()];
+          // ObAccuracy lossless_acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[0][child_type.get_type()];
           ObAccuracy lossless_acc = child_type.get_accuracy();
           if ((dst_acc.get_scale() >= 0 &&
                dst_acc.get_precision() - dst_acc.get_scale() >= lossless_acc.get_precision()) ||
@@ -5845,12 +5845,6 @@ int ObOptimizerUtil::check_set_child_res_types(const ObRawExprResType &left_type
         LOG_WARN("expression must have same datatype as corresponding expression", K(ret),
                  K(left_type), K(right_type));
       }
-    }
-  } else {
-    if (OB_SUCC(ret) &&
-        is_distinct && (left_type.is_roaringbitmap() || right_type.is_roaringbitmap())) {
-      ret = OB_ERR_INVALID_TYPE_FOR_OP;
-      LOG_WARN("column type incompatible", K(ret), K(left_type), K(right_type));
     }
   }
   return ret;
@@ -7614,18 +7608,13 @@ int ObOptimizerUtil::generate_pullup_aggr_expr(ObRawExprFactory &expr_factory,
              T_FUN_SYS_BIT_AND == aggr_type ||
              T_FUN_SYS_BIT_OR == aggr_type ||
              T_FUN_SYS_BIT_XOR == aggr_type ||
-             T_FUN_SUM_OPNSIZE == aggr_type ||
-             T_FUN_SYS_RB_OR_AGG == aggr_type ||
-             T_FUN_SYS_RB_AND_AGG == aggr_type ||
-             T_FUN_SYS_RB_BUILD_AGG == aggr_type) {
+             T_FUN_SUM_OPNSIZE == aggr_type) {
     /* MAX(a) -> MAX(MAX(a)), MIN(a) -> MIN(MIN(a)) SUM(a) -> SUM(SUM(a)) */
     ObItemType pullup_aggr_type = aggr_type;
     if (T_FUN_COUNT == pullup_aggr_type || T_FUN_SUM_OPNSIZE == pullup_aggr_type) {
       pullup_aggr_type = T_FUN_COUNT_SUM;
     } else if (T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS == pullup_aggr_type) {
       pullup_aggr_type = T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS_MERGE;
-    } else if (T_FUN_SYS_RB_BUILD_AGG == pullup_aggr_type) {
-      pullup_aggr_type = T_FUN_SYS_RB_OR_AGG;
     }
 
     if (OB_FAIL(ObRawExprUtils::build_common_aggr_expr(expr_factory,

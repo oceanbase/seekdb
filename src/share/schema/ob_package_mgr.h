@@ -99,7 +99,6 @@ public:
     reset_string(package_name_);
     schema_version_ = common::OB_INVALID_VERSION;
     type_ = INVALID_PACKAGE_TYPE;
-    comp_flag_ = COMPATIBLE_MYSQL_MODE;
     ObSchema::reset();
   }
   int64_t get_convert_size() const;
@@ -125,15 +124,12 @@ public:
   { return ObTenantPackageId(package_id_); }
   ObPackageType get_type() const { return type_; }
   void set_type(ObPackageType type) { type_ = type; }
-  inline void set_comp_flag(int64_t comp_flag) { comp_flag_ = comp_flag; }
-  inline int64_t get_comp_flag() const { return comp_flag_; }
   TO_STRING_KV(
                K_(database_id),
                K_(package_id),
                K_(package_name),
                K_(type),
-               K_(schema_version),
-               K_(comp_flag));
+               K_(schema_version));
 private:
   
   uint64_t database_id_;
@@ -141,7 +137,6 @@ private:
   common::ObString package_name_;
   ObPackageType type_;
   int64_t schema_version_;
-  int64_t comp_flag_;
 };
 
 class ObPackageNameHashWrapper
@@ -150,15 +145,13 @@ public:
   ObPackageNameHashWrapper()
       : database_id_(common::OB_INVALID_ID),
         package_name_(),
-        type_(INVALID_PACKAGE_TYPE),
-        comp_mode_(COMPATIBLE_MYSQL_MODE) {}
+        type_(INVALID_PACKAGE_TYPE) {}
   ObPackageNameHashWrapper(uint64_t database_id,
                              const common::ObString &package_name,
-                             ObPackageType type, int64_t comp_mode)
+                             ObPackageType type)
       : database_id_(database_id),
         package_name_(package_name),
-        type_(type),
-        comp_mode_(comp_mode) {}
+        type_(type) {}
   ~ObPackageNameHashWrapper() {}
   inline uint64_t hash() const;
   inline bool operator ==(const ObPackageNameHashWrapper &rv) const;
@@ -166,18 +159,15 @@ public:
   inline void set_database_id(uint64_t database_id) { database_id_ = database_id; }
   inline void set_package_name(const common::ObString &package_name) { package_name_ = package_name;}
   inline void set_type(ObPackageType type) { type_ = type; }
-  inline void set_comp_mode(int64_t comp_mode) { comp_mode_ = comp_mode; }
   
   inline uint64_t get_database_id() const { return database_id_; }
   inline const common::ObString &get_package_name() const { return package_name_; }
   inline ObPackageType get_type() const { return type_; }
-  inline int64_t get_comp_mode() const { return comp_mode_; }
-  TO_STRING_KV(K_(database_id), K_(package_name), K_(type), K_(comp_mode));
+  TO_STRING_KV(K_(database_id), K_(package_name), K_(type));
 private:
   uint64_t database_id_;
   common::ObString package_name_;
   ObPackageType type_;
-  int64_t comp_mode_;
 };
 
 inline bool ObPackageNameHashWrapper::operator ==(const ObPackageNameHashWrapper &rv) const
@@ -185,8 +175,7 @@ inline bool ObPackageNameHashWrapper::operator ==(const ObPackageNameHashWrapper
   ObCompareNameWithTenantID name_cmp;
   return (database_id_ == rv.get_database_id())
       && (0 == name_cmp.compare(package_name_, rv.get_package_name()))
-      && (type_ == rv.get_type())
-      && (comp_mode_ == rv.get_comp_mode());
+      && (type_ == rv.get_type());
 }
 
 inline uint64_t ObPackageNameHashWrapper::hash() const
@@ -196,7 +185,6 @@ inline uint64_t ObPackageNameHashWrapper::hash() const
   hash_ret = common::murmurhash(&database_id_, sizeof(uint64_t), 0);
   hash_ret = common::ObCharset::hash(cs_type, package_name_, hash_ret);
   hash_ret = common::murmurhash(&type_, sizeof(ObPackageType), hash_ret);
-  hash_ret = common::murmurhash(&comp_mode_, sizeof(int64_t), hash_ret);
   return hash_ret;
 }
 
@@ -230,7 +218,6 @@ struct ObGetPackageKey<ObPackageNameHashWrapper, ObSimplePackageSchema *>
       name_wrap.set_database_id(package_schema->get_database_id());
       name_wrap.set_package_name(package_schema->get_package_name());
       name_wrap.set_type(package_schema->get_type());
-      name_wrap.set_comp_mode(package_schema->get_comp_flag() & COMPATIBLE_MODE_BIT);
     }
     return name_wrap;
   }
@@ -263,7 +250,6 @@ public:
   int get_package_schema(uint64_t package_id, const ObSimplePackageSchema *&package_schema) const;
   int get_package_schema( uint64_t database_id,
                          const common::ObString &package_name, ObPackageType package_type,
-                         int64_t compat_mode,
                          const ObSimplePackageSchema *&package_schema) const;
   int get_package_schemas_in_tenant(common::ObIArray<const ObSimplePackageSchema *> &package_schemas) const;
   int get_package_schemas_in_database(uint64_t database_id,

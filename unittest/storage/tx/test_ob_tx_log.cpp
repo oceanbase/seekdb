@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#define OB_TX_LOG_TEST
 #include <gtest/gtest.h>
 #define private public
 #include "storage/tx/ob_tx_log.h"
@@ -42,7 +41,6 @@ int64_t TEST_CLUSTER_VERSION = DATA_VERSION_1_0_0_0;
 common::ObString TEST_TRACE_ID_STR("trace_id_test");
 bool TEST_CAN_ELR =  false;
 bool TEST_IS_DUP = true;
-uint64_t TEST_ORG_CLUSTER_ID = 1208;
 common::ObString TEST_TRCE_INFO("trace_info_test");
 LogOffSet TEST_LOG_OFFSET(10);
 int64_t TEST_COMMIT_VERSION = 190878;
@@ -62,7 +60,7 @@ TEST_F(TestObTxLog, tx_log_block_header)
   ObTxLogBlock fill_block, replay_block;
 
   ObTxLogBlockHeader &fill_block_header =  fill_block.get_header();
-  fill_block_header.init(TEST_ORG_CLUSTER_ID, TEST_CLUSTER_VERSION, TEST_LOG_ENTRY_NO, ObTransID(TEST_TX_ID));
+  fill_block_header.init(TEST_CLUSTER_VERSION, TEST_LOG_ENTRY_NO, ObTransID(TEST_TX_ID));
   fill_block_header.set_serial_final();
   ASSERT_TRUE(fill_block_header.is_serial_final());
   ASSERT_EQ(OB_SUCCESS, fill_block.init_for_fill());
@@ -79,8 +77,6 @@ TEST_F(TestObTxLog, tx_log_block_header)
 
   ObTxLogBlockHeader &replay_block_header = replay_block.get_header();
   ASSERT_EQ(OB_SUCCESS, replay_block.init_for_replay(buf, fill_block.get_size()));
-  uint64_t tmp_cluster_id = replay_block_header.get_org_cluster_id();
-  EXPECT_EQ(TEST_ORG_CLUSTER_ID, tmp_cluster_id);
   EXPECT_EQ(replay_block.get_log_base_header().get_replay_hint(), TEST_TX_ID);
   EXPECT_EQ(TEST_CLUSTER_VERSION, replay_block_header.get_cluster_version());
   EXPECT_EQ(TEST_LOG_ENTRY_NO, replay_block_header.get_log_entry_no());
@@ -88,8 +84,8 @@ TEST_F(TestObTxLog, tx_log_block_header)
   EXPECT_TRUE(replay_block_header.is_serial_final());
 
   // reuse
-  fill_block.get_header().init(TEST_ORG_CLUSTER_ID + 1, TEST_CLUSTER_VERSION + 1,
-                               TEST_LOG_ENTRY_NO + 1, ObTransID(TEST_TX_ID + 1));
+  fill_block.get_header().init(TEST_CLUSTER_VERSION + 1, TEST_LOG_ENTRY_NO + 1,
+                               ObTransID(TEST_TX_ID + 1));
   fill_block.reuse_for_fill();
   fill_block.seal(TEST_TX_ID + 1);
   buf = fill_block.get_buf();
@@ -102,7 +98,6 @@ TEST_F(TestObTxLog, tx_log_block_header)
   ObTxLogBlock replay_block2;
   ObTxLogBlockHeader &replay_block_header2 = replay_block2.get_header();
   ASSERT_EQ(OB_SUCCESS, replay_block2.init_for_replay(buf, fill_block.get_size(), pos));
-  EXPECT_EQ(TEST_ORG_CLUSTER_ID + 1, replay_block_header2.get_org_cluster_id());
   EXPECT_EQ(TEST_CLUSTER_VERSION + 1, replay_block_header2.get_cluster_version());
   EXPECT_EQ(TEST_LOG_ENTRY_NO + 1, replay_block_header2.get_log_entry_no());
   EXPECT_EQ(fill_block_header.flags(), replay_block_header2.flags());
@@ -141,7 +136,7 @@ TEST_F(TestObTxLog, tx_log_body_except_redo)
   ObTxRecordLog fill_record(TEST_LOG_OFFSET, TEST_LOG_OFFSET_ARRY);
 
   ObTxLogBlockHeader &header = fill_block.get_header();
-  header.init(TEST_ORG_CLUSTER_ID, TEST_CLUSTER_VERSION, TEST_LOG_ENTRY_NO, ObTransID(TEST_TX_ID));
+  header.init(TEST_CLUSTER_VERSION, TEST_LOG_ENTRY_NO, ObTransID(TEST_TX_ID));
   ASSERT_EQ(OB_SUCCESS, fill_block.init_for_fill());
   ASSERT_EQ(OB_SUCCESS, fill_block.add_new_log(fill_commit_state));
   ASSERT_EQ(OB_SUCCESS, fill_block.add_new_log(fill_commit));
@@ -151,9 +146,6 @@ TEST_F(TestObTxLog, tx_log_body_except_redo)
   fill_block.seal(TEST_TX_ID);
   ObTxLogHeader tx_log_header;
   ASSERT_EQ(OB_SUCCESS, replay_block.init_for_replay(fill_block.get_buf(), fill_block.get_size()));
-
-  uint64_t tmp_cluster_id = replay_block.get_header().get_org_cluster_id();
-  EXPECT_EQ(TEST_ORG_CLUSTER_ID, tmp_cluster_id);
 
   ObTxCommitInfoLogTempRef commit_state_temp_ref;
   ObTxCommitInfoLog replay_commit_state(commit_state_temp_ref);
@@ -213,7 +205,7 @@ TEST_F(TestObTxLog, tx_log_body_redo)
                             TEST_PREV_LOG_TYPE);
 
   ObTxLogBlockHeader &fill_block_header = fill_block.get_header();
-  fill_block_header.init(TEST_ORG_CLUSTER_ID, TEST_CLUSTER_VERSION, TEST_LOG_ENTRY_NO, ObTransID(TEST_TX_ID));
+  fill_block_header.init(TEST_CLUSTER_VERSION, TEST_LOG_ENTRY_NO, ObTransID(TEST_TX_ID));
   ASSERT_EQ(OB_SUCCESS, fill_block.init_for_fill());
 
   ObString TEST_MUTATOR_BUF("FFF");
@@ -238,8 +230,6 @@ TEST_F(TestObTxLog, tx_log_body_redo)
   ObTxLogBlockHeader &replay_block_header = replay_block.get_header();
   ASSERT_EQ(OB_SUCCESS, replay_block.init_for_replay(fill_block.get_buf(), fill_block.get_size()));
 
-  uint64_t tmp_cluster_id = replay_block_header.get_org_cluster_id();
-  EXPECT_EQ(TEST_ORG_CLUSTER_ID, tmp_cluster_id);
   EXPECT_EQ(TEST_CLUSTER_VERSION, replay_block_header.get_cluster_version());
 
   ASSERT_EQ(OB_SUCCESS, replay_block.get_next_log(log_header));
@@ -267,9 +257,6 @@ TEST_F(TestObTxLog, tx_log_body_redo)
   ObTxLogBlockHeader &replay_block_header_2 = replay_block_2.get_header();
   ASSERT_EQ(OB_SUCCESS, replay_block_2.init_for_replay(fill_block.get_buf(), fill_block.get_size()));
 
-  tmp_cluster_id = replay_block_header_2.get_org_cluster_id();
-  EXPECT_EQ(TEST_ORG_CLUSTER_ID, tmp_cluster_id);
-
   ASSERT_EQ(OB_SUCCESS, replay_block_2.get_next_log(log_header));
   EXPECT_EQ(ObTxLogType::TX_REDO_LOG, log_header.get_tx_log_type());
   // ASSERT_EQ(OB_SUCCESS, replay_block.deserialize_log_body(replay_redo));
@@ -289,103 +276,6 @@ TEST_F(TestObTxLog, tx_log_body_redo)
   ASSERT_EQ(OB_SUCCESS, replay_block_2.deserialize_log_body(replay_commit));
   EXPECT_EQ(share::SCN::base_scn(), replay_commit.get_commit_version());
 
-}
-
-void test_big_commit_info_log(int64_t log_size)
-{
-
-  ObTxLogBlock fill_block;
-  ObTxLogBlock replay_block;
-  ObTxBigSegmentBuf fill_big_segment;
-  ObTxBigSegmentBuf replay_big_segment;
-
-  ObRedoLSNArray TEST_BIG_REDO_LSN_ARRAY;
-  for (int i = 0; i < log_size / sizeof(palf::LSN); i++) {
-    TEST_BIG_REDO_LSN_ARRAY.push_back(palf::LSN(i));
-  }
-
-  EXPECT_EQ(TEST_BIG_REDO_LSN_ARRAY.count(), log_size / sizeof(palf::LSN));
-  ObTxCommitInfoLog fill_commit_state(TEST_IS_DUP, TEST_CAN_ELR, TEST_TRACE_ID_STR, TEST_TRCE_INFO,
-                                      TEST_LOG_OFFSET, TEST_BIG_REDO_LSN_ARRAY, TEST_XID);
-  ObTxLogBlockHeader &fill_block_header = fill_block.get_header();
-  fill_block_header.init(TEST_ORG_CLUSTER_ID, TEST_CLUSTER_VERSION, TEST_LOG_ENTRY_NO, ObTransID(TEST_TX_ID));
-  ASSERT_EQ(OB_SUCCESS, fill_block.init_for_fill());
-  ASSERT_EQ(OB_LOG_TOO_LARGE, fill_block.add_new_log(fill_commit_state, &fill_big_segment));
-
-  const char *submit_buf = nullptr;
-  int64_t submit_buf_len = 0;
-  uint64_t part_count = 0;
-  ObTxLogHeader log_type_header;
-  int ret = OB_SUCCESS;
-  while (OB_SUCC(ret)
-         && OB_EAGAIN
-                == (ret = (fill_block.acquire_segment_log_buf(ObTxLogType::TX_COMMIT_INFO_LOG)))) {
-    share::SCN tmp_scn;
-    EXPECT_EQ(OB_SUCCESS, tmp_scn.convert_for_inner_table_field(part_count));
-    if (OB_FAIL(fill_block.set_prev_big_segment_scn(tmp_scn))) {
-      TRANS_LOG(WARN, "set prev big segment scn failed", K(ret), K(part_count));
-    } else if (OB_FAIL(fill_block.seal(TEST_TX_ID))) {
-      TRANS_LOG(WARN, "seal block fail", K(ret));
-    } else {
-      replay_block.reset();
-      ObTxLogBlockHeader &replay_block_header = replay_block.get_header();
-      ASSERT_EQ(OB_SUCCESS, replay_block.init_for_replay(fill_block.get_buf(), fill_block.get_size()));
-      if (OB_FAIL(replay_block.get_next_log(log_type_header, &replay_big_segment))) {
-        TRANS_LOG(WARN, "get next log failed", K(ret), K(part_count));
-        EXPECT_EQ(OB_LOG_TOO_LARGE, ret);
-        EXPECT_EQ(ObTxLogType::TX_BIG_SEGMENT_LOG, log_type_header.get_tx_log_type());
-        ret = OB_SUCCESS;
-      }
-      TRANS_LOG(INFO, "collect one part from fill_big_segment", K(ret), K(part_count),
-                K(log_type_header), K(replay_big_segment));
-    }
-    part_count++;
-  }
-  // EXPECT_EQ(ObTxLogType::TX_COMMIT_INFO_LOG, log_type_header.get_tx_log_type());
-  if (OB_ITER_END == ret) {
-    fill_block.seal(TEST_TX_ID);
-    replay_block.reset();
-    ObTxLogBlockHeader &replay_block_header = replay_block.get_header();
-    ASSERT_EQ(OB_SUCCESS, replay_block.init_for_replay(fill_block.get_buf(), fill_block.get_size()));
-    if (OB_FAIL(replay_block.get_next_log(log_type_header, &replay_big_segment))) {
-      TRANS_LOG(WARN, "get next log failed", K(ret), K(part_count));
-    }
-    EXPECT_EQ(OB_SUCCESS, ret);
-    EXPECT_EQ(ObTxLogType::TX_COMMIT_INFO_LOG, log_type_header.get_tx_log_type());
-
-    TRANS_LOG(INFO, "collect one part from fill_big_segment", K(ret), K(part_count),
-              K(log_type_header), K(replay_big_segment));
-    part_count++;
-  }
-
-  int64_t TOTAL_PART_COUNT =
-      fill_commit_state.get_serialize_size() / ObTxLogBlock::BIG_SEGMENT_SPILT_SIZE;
-  if (fill_commit_state.get_serialize_size() % ObTxLogBlock::BIG_SEGMENT_SPILT_SIZE > 0) {
-    TOTAL_PART_COUNT++;
-  }
-  TRANS_LOG(INFO, "TOTAL PART COUNT", K(TOTAL_PART_COUNT), K(part_count));
-  EXPECT_EQ(TOTAL_PART_COUNT, part_count);
-
-  ObTxCommitInfoLogTempRef commit_state_temp_ref;
-  ObTxCommitInfoLog replay_commit_state(commit_state_temp_ref);
-  EXPECT_EQ(OB_SUCCESS, replay_block.deserialize_log_body(replay_commit_state));
-
-  EXPECT_EQ(fill_commit_state.is_dup_tx(), replay_commit_state.is_dup_tx());
-  EXPECT_EQ(fill_commit_state.is_elr(), replay_commit_state.is_elr());
-  EXPECT_EQ(fill_commit_state.get_app_trace_id().length(),
-            replay_commit_state.get_app_trace_id().length());
-  EXPECT_EQ(fill_commit_state.get_app_trace_info().length(),
-            replay_commit_state.get_app_trace_info().length());
-  EXPECT_EQ(fill_commit_state.get_prev_record_lsn(), replay_commit_state.get_prev_record_lsn());
-  EXPECT_EQ(fill_commit_state.get_redo_lsns().count(), replay_commit_state.get_redo_lsns().count());
-  EXPECT_EQ(fill_commit_state.get_xid(), replay_commit_state.get_xid());
-}
-
-TEST_F(TestObTxLog, test_big_segment_log)
-{
-  test_big_commit_info_log(2*1024*1024);
-
-  test_big_commit_info_log(10*1024*1024);
 }
 
 TEST_F(TestObTxLog, test_commit_log_with_checksum_signature)
@@ -430,7 +320,7 @@ TEST_F(TestObTxLog, test_commit_log_with_checksum_signature)
 TEST_F(TestObTxLog, test_tx_block_header_serialize)
 {
   ObTransID tx_id(1024);
-  ObTxLogBlockHeader header(101, 102, 103, tx_id);
+  ObTxLogBlockHeader header(102, 103, tx_id);
   const int64_t ser_size = header.get_serialize_size();
   EXPECT_GT(ser_size, 0);
   char buf[256];
@@ -445,7 +335,6 @@ TEST_F(TestObTxLog, test_tx_block_header_serialize)
   EXPECT_EQ(OB_SUCCESS, header2.deserialize(buf, pos, pos0));
   EXPECT_EQ(pos0, pos);
   EXPECT_EQ(header2.tx_id_, tx_id);
-  EXPECT_EQ(header2.org_cluster_id_, 101);
   EXPECT_EQ(header2.cluster_version_, 102);
   EXPECT_EQ(header2.log_entry_no_, 103);
 

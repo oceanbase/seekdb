@@ -67,9 +67,7 @@ public:
   virtual int mkdir(const char *pathname, mode_t mode) override;
   virtual int rmdir(const char *pathname) override;
   // When attempting to delete a non-existent file, NFS will return an OB_OBJECT_NOT_EXIST error.
-  // OSS/COS/S3/OBS will not report any error, while GCS will return a 'file not found' error.
-  // Since GCS is accessed using the S3 SDK, to maintain consistency across different object storage services
-  // that are accessed via the S3 SDK, no error code is returned when attempting to delete a non-existent object.
+  // Object storage devices do not report an error for deleting a non-existent object.
   virtual int unlink(const char *pathname) override;
   virtual int batch_del_files(
       const ObIArray<ObString> &files_to_delete, ObIArray<int64_t> &failed_files_idx) override;

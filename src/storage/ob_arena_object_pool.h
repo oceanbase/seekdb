@@ -27,8 +27,6 @@ namespace oceanbase
 namespace transaction
 {
 
-// #define OB_ENABLE_MEMTABLE_CTX_OBJ_CACHE_DEBUG
-
 template <typename T, int64_t OBJ_NUM>
 class ObArenaObjPool
 {
@@ -49,10 +47,6 @@ private:
   // only used one time.
   char obj_pool_[sizeof(T) * OBJ_NUM];
 
-#ifdef OB_ENABLE_MEMTABLE_CTX_OBJ_CACHE_DEBUG
-public:
-  void *alloc(bool &hit_cache);
-#endif
 };
 
 template <typename T, int64_t OBJ_NUM>
@@ -111,33 +105,6 @@ void ObArenaObjPool<T, OBJ_NUM>::reset()
   alloc_count_ = 0;
   free_count_ = 0;
 }
-
-#ifdef OB_ENABLE_MEMTABLE_CTX_OBJ_CACHE_DEBUG
-template <typename T, int64_t OBJ_NUM>
-void *ObArenaObjPool<T, OBJ_NUM>::alloc(bool &hit_cache)
-{
-  void *ptr = nullptr;
-  int64_t allocated_count = ATOMIC_FAA(&alloc_count_, 1);
-  if (allocated_count < OBJ_NUM) {
-    int64_t pos = sizeof(T) * allocated_count;
-    ptr = &obj_pool_[pos];
-    hit_cache = true;
-  } else {
-    const int64_t size = sizeof(T);
-    ptr = allocator_.alloc(size);
-    hit_cache = false;
-  }
-
-  if (OB_ISNULL(ptr)) {
-    ATOMIC_DEC(&alloc_count_);
-    STORAGE_LOG_RET(ERROR, common::OB_ALLOCATE_MEMORY_FAILED, "obj alloc error, no memory", K(*this), K(lbt()));
-  } else {
-    STORAGE_LOG(DEBUG, "obj alloc succ", K(*this), KP(ptr), K(lbt()));
-  }
-
-  return ptr;
-}
-#endif
 
 }  // namespace transaction
 }  // namespace oceanbase

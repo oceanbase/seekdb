@@ -234,7 +234,6 @@ int main(int argc, char **argv)
   UNUSED(argv);
   OB_LOGGER.set_log_level("ERROR");
   OB_LOGGER.set_file_name("test_fast_parser.log", false);
-  set_compat_mode(lib::Worker::CompatMode::MYSQL);
   ::test::run();
   return 0;
 }

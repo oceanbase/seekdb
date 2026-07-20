@@ -404,8 +404,7 @@ int ObDefaultValueUtils::build_default_expr_strict(const ColumnItem *column, ObR
     }
     if (OB_SUCC(ret)) {
       if (!ob_is_numeric_type(column->get_column_type()->get_type())) {
-        // For non-numeric types, such as xml, use `_make_xml_binary` instead of the cast function,
-        // and does not add extra cast for the default value here.
+        // Non-numeric defaults retain their resolved representation.
         expr = c_expr;
       } else {
         ObRawExpr *cast_expr = NULL;

@@ -19,7 +19,6 @@
 #include "share/tablet/ob_tablet_mapping_operator.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/ob_dml_sql_splicer.h" // ObDMLSqlSplicer
-#include "share/ob_sql_client_decorator.h" // ObSQLClientRetryWeak
 
 namespace oceanbase
 {
@@ -70,10 +69,6 @@ namespace share
         LOG_WARN("invalid args", KR(ret), K(tablet_ids), K(start_idx), K(end_idx)); \
       } else { \
         SMART_VAR(ObISQLClient::ReadResult, result) { \
-          ObSQLClientRetryWeak sql_client_retry_weak( \
-              &sql_proxy, \
-              false,/*did_use_retry*/ \
-              OB_ALL_TABLET_TO_TABLE_TID); \
           ObSqlString sql; \
           ObSqlString tablet_list; \
           for (int64_t idx = start_idx; OB_SUCC(ret) && (idx < end_idx); ++idx) { \
@@ -105,7 +100,7 @@ namespace share
           } \
           if (FAILEDx(sql.append_fmt(")"))) { \
             LOG_WARN("fail to assign sql", KR(ret), K(sql)); \
-          } else if (OB_FAIL(sql_client_retry_weak.read(result, sql.ptr()))) { \
+          } else if (OB_FAIL(sql_proxy.read(result, sql.ptr()))) { \
             LOG_WARN("execute sql failed", KR(ret), K(sql)); \
           } else if (OB_ISNULL(result.get_result())) { \
             ret = OB_ERR_UNEXPECTED; \

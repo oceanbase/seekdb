@@ -150,7 +150,6 @@ public:
   ObDASTaskFactory &get_das_factory() { return das_factory_; }
   void set_sql_ctx(ObSqlCtx *sql_ctx) { sql_ctx_ = sql_ctx; }
   DASRelatedTabletMap &get_related_tablet_map() { return related_tablet_map_; }
-  bool is_partition_hit();
   void unmark_need_check_server();
 
   int build_related_tablet_map(const ObDASTableLocMeta &loc_meta);

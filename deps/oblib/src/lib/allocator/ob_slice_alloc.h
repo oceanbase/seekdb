@@ -350,9 +350,6 @@ public:
   int64_t limit() { return blk_alloc_.limit(); }
   int64_t hold() { return blk_alloc_.hold(); }
   void* alloc() {
-#ifdef OB_USE_ASAN
-    return ::malloc(isize_);
-#else
     Block::Item* ret = NULL;
     int tmp_ret = OB_SUCCESS;
     if (isize_ > slice_limit_) {
@@ -400,12 +397,8 @@ public:
 
     GEN_RECORD_ALL_LBT_IN_THIS_ALLOCATOR_CODE
     return NULL == ret? NULL: (void*)(ret + 1);
-#endif
   }
   void free(void* p) {
-#ifdef OB_USE_ASAN
-    ::free(p);
-#else
     if (NULL != p) {
       Block::Item* item = (Block::Item*)p - 1;
       abort_unless(Block::ITEM_MAGIC_CODE == item->MAGIC_CODE_);
@@ -428,7 +421,6 @@ public:
         add_to_blist(blk);
       }
     }
-#endif
   }
   void purge_extra_cached_block(int keep) {
     for(int i = MAX_ARENA_NUM - 1; i >= keep; i--) {

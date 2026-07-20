@@ -149,18 +149,12 @@ int ObCreateTableResolver::set_temp_table_info(ObTableSchema &table_schema, Pars
   int ret = OB_SUCCESS;
   session_info_->set_has_temp_table_flag();
   if (OB_FAIL(set_table_name(table_name_))) {
-      LOG_WARN("failed to set table name", K(ret), K(table_name_));
-  } else if (session_info_->is_obproxy_mode() && 0 == session_info_->get_sess_create_time()) {
-    ret = OB_NOT_SUPPORTED;
-    SQL_RESV_LOG(WARN, "can't create temporary table via obproxy, upgrade obproxy first", K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "obproxy version is too old, create temporary table");
+    LOG_WARN("failed to set table name", K(ret), K(table_name_));
   } else {
     table_schema.set_table_type(TMP_TABLE);
     table_schema.set_session_id(session_info_->get_sessid_for_table()); // Set session_id for cleanup judgment.
-
-    table_schema.set_sess_active_time(ObTimeUtility::current_time());
   }
-  LOG_DEBUG("resolve create temp table", K(session_info_->is_obproxy_mode()), K(*session_info_), K(table_schema));
+  LOG_DEBUG("resolve create temp table", K(*session_info_), K(table_schema));
   return ret;
 }
 
@@ -205,7 +199,6 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
   bool is_temporary_table = false;
   const bool is_mysql_mode = true;
   ParseNode *create_table_node = const_cast<ParseNode*>(&parse_tree);
-  CHECK_COMPATIBILITY_MODE(session_info_);
   if (OB_ISNULL(create_table_node)
       || T_CREATE_TABLE != create_table_node->type_
       || (CREATE_TABLE_NUM_CHILD != create_table_node->num_child_ &&
@@ -462,9 +455,6 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
             char create_host_str[OB_MAX_HOST_NAME_LENGTH];
             MYADDR.ip_port_to_string(create_host_str, OB_MAX_HOST_NAME_LENGTH);
             table_schema.set_create_host(create_host_str);
-            if (is_temporary_table) {
-              table_schema.set_sess_active_time(ObTimeUtility::current_time());
-            }
           }
         }
         // put after parsing temporary table information settings, because it involves error checking for foreign key reference not supported by temporary tables
@@ -1288,7 +1278,7 @@ int ObCreateTableResolver::resolve_table_elements_from_select(const ParseNode &p
           } else {
             prev_name = &pre_item.expr_name_;
           }
-          if (ObCharset::case_compat_mode_equal(*prev_name, *cur_name)) {
+          if (ObCharset::case_insensitive_equal(*prev_name, *cur_name)) {
             ret = OB_ERR_COLUMN_DUPLICATE;
             LOG_USER_ERROR(OB_ERR_COLUMN_DUPLICATE, cur_name->length(), cur_name->ptr());
           }
@@ -2374,16 +2364,14 @@ int ObCreateTableResolver::check_max_row_data_length(const ObTableSchema &table_
       LOG_USER_ERROR(OB_ERR_TOO_LONG_COLUMN_LENGTH, column->get_column_name(), static_cast<int32_t>(OB_MAX_VARCHAR_LENGTH));
     } else if (is_lob_storage(column->get_data_type())) {
       ObLength max_length = 0;
-      max_length = ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][column->get_data_type()].get_length();
+      max_length = ObAccuracy::MAX_ACCURACY2[0][column->get_data_type()].get_length();
       if (length > max_length) {
         ret = OB_ERR_TOO_LONG_COLUMN_LENGTH;
         LOG_USER_ERROR(OB_ERR_TOO_LONG_COLUMN_LENGTH, column->get_column_name(),
-            ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][column->get_data_type()].get_length());
+            ObAccuracy::MAX_ACCURACY2[0][column->get_data_type()].get_length());
       } else {
-        if (length <= 0) {  // Temporary workaround only for array/vector/roaringbitmap types.
-          if (column->is_roaringbitmap()) {
-            length = ObAccuracy::DDL_DEFAULT_ACCURACY[ObRoaringBitmapType].get_length();
-          } else if (column->is_collection()) {
+        if (length <= 0) {  // Temporary workaround for collection types.
+          if (column->is_collection()) {
             length = ObAccuracy::DDL_DEFAULT_ACCURACY[ObCollectionSQLType].get_length();
           }
         }

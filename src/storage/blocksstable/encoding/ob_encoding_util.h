@@ -75,24 +75,23 @@ enum ObObjTypeStoreClass
   ObLobSC,  //lob
   ObJsonSC, // json
   ObGeometrySC, // geometry
-  ObRoaringBitmapSC, // roaringbitmap
   ObMaxSC,
 };
 
 OB_INLINE bool is_string_encoding_valid(const ObObjTypeStoreClass sc)
 {
-  return (sc == ObStringSC || sc == ObTextSC || sc == ObJsonSC || sc == ObGeometrySC || sc == ObRoaringBitmapSC);
+  return sc == ObStringSC || sc == ObTextSC || sc == ObJsonSC || sc == ObGeometrySC;
 }
 
 OB_INLINE bool store_class_might_contain_lob_locator(const ObObjTypeStoreClass sc)
 {
-  return (sc == ObTextSC || sc == ObLobSC || sc == ObJsonSC || sc == ObGeometrySC || sc == ObRoaringBitmapSC);
+  return sc == ObTextSC || sc == ObLobSC || sc == ObJsonSC || sc == ObGeometrySC;
 }
 
 OB_INLINE bool is_var_length_type(const ObObjTypeStoreClass sc)
 {
-  return (sc == ObNumberSC || sc == ObDecimalIntSC || sc == ObStringSC || sc == ObTextSC
-      || sc == ObLobSC || sc == ObJsonSC || sc == ObGeometrySC || sc == ObRoaringBitmapSC);
+  return sc == ObNumberSC || sc == ObDecimalIntSC || sc == ObStringSC || sc == ObTextSC
+      || sc == ObLobSC || sc == ObJsonSC || sc == ObGeometrySC;
 }
 
 OB_INLINE ObObjTypeStoreClass *get_store_class_map()
@@ -127,7 +126,6 @@ OB_INLINE ObObjTypeStoreClass *get_store_class_map()
     ObTextSC, // ObCollectionSQLTC
     ObIntSC,  // ObMySQLDateTC
     ObIntSC,  // ObMySQLDateTimeTc
-    ObRoaringBitmapSC, // ObRoaringBitmapTC
     ObMaxSC // ObMaxTC
   };
   STATIC_ASSERT(ARRAYSIZEOF(store_class_map) == common::ObMaxTC + 1,
@@ -181,7 +179,6 @@ OB_INLINE int64_t *get_type_size_map()
     -1, //ObCollectionSQLType
     4, // ObMySQLDateType
     8, // ObMySQLDateTimeType
-    -1, //RoaringBitmap
     -1 // ObMaxType
   };
   STATIC_ASSERT(ARRAYSIZEOF(type_size_map) == common::ObMaxType + 1,
@@ -236,7 +233,6 @@ OB_INLINE int64_t *get_estimate_base_store_size_map()
     8, // ObCollectionSQLType
     8, // ObMySQLDateType
     8, // ObMySQLDateTimeType
-    9, // ObRoaringBitmapType
     -1 // ObMaxType
   };
   STATIC_ASSERT(ARRAYSIZEOF(estimate_base_store_size_map) == common::ObMaxType + 1,
@@ -440,8 +436,7 @@ inline static int batch_load_data_to_datum(
   case ObStringSC:
   case ObTextSC:
   case ObJsonSC:
-  case ObGeometrySC:
-  case ObRoaringBitmapSC: {
+  case ObGeometrySC: {
     for (int64_t i = 0; i < row_cap; ++i) {
       if (!datums[i].is_null()) {
         datums[i].ptr_ = cell_datas[i];
@@ -513,7 +508,6 @@ inline static int load_data_to_datum(
       case ObTextSC:
       case ObJsonSC:
       case ObGeometrySC:
-      case ObRoaringBitmapSC:
       {
         datum.pack_= static_cast<uint32_t>(cell_len);
         datum.ptr_ = cell_data;

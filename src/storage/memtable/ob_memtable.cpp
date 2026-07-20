@@ -91,41 +91,6 @@ private:
 };
 
 
-class ObDirectLoadMemtableRowsLockedChecker
-{
-public:
-  ObDirectLoadMemtableRowsLockedChecker(ObMemtable &memtable,
-                                        const bool check_exist,
-                                        const storage::ObTableIterParam &param,
-                                        storage::ObTableAccessContext &context,
-                                        ObRowsInfo &rows_info)
-    : memtable_(memtable),
-      check_exist_(check_exist),
-      param_(param),
-      context_(context),
-      rows_info_(rows_info)
-  {
-  }
-  int operator()(ObDDLMemtable *ddl_memtable)
-  {
-    int ret = OB_SUCCESS;
-    if (OB_ISNULL(ddl_memtable)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected ddl memtable is null", K(ret));
-    } else if (OB_FAIL(memtable_.check_rows_locked_on_ddl_merge_sstable(
-                  ddl_memtable, check_exist_, param_, context_, rows_info_))) {
-      TRANS_LOG(WARN, "Failed to check rows locked for sstable", K(ret), KPC(ddl_memtable));
-    }
-    return ret;
-  }
-private:
-  ObMemtable &memtable_;
-  const bool check_exist_;
-  const storage::ObTableIterParam &param_;
-  storage::ObTableAccessContext &context_;
-  ObRowsInfo &rows_info_;
-};
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Public Functions
 
@@ -142,7 +107,6 @@ ObMemtable::ObMemtable()
       max_data_schema_version_(0),
       recommend_snapshot_version_(share::SCN::invalid_scn()),
       state_(ObMemtableState::INVALID),
-      mode_(lib::Worker::CompatMode::INVALID),
       minor_merged_time_(0),
       max_column_cnt_(0) {}
 
@@ -190,11 +154,6 @@ int ObMemtable::init(const ObITable::TableKey &table_key,
     TRANS_LOG(WARN, "failed to set_table_key", K(ret), K(table_key));
   } else {
     ls_ = tenant_ls;
-    if (table_key.get_tablet_id().is_sys_tablet()) {
-      mode_ = lib::Worker::CompatMode::MYSQL;
-    } else {
-      mode_ = share::g_mp->compat_mode();
-    }
     state_ = ObMemtableState::ACTIVE;
     init_timestamp_ = ObTimeUtility::current_time();
     contain_hotspot_row_ = false;
@@ -1143,22 +1102,6 @@ int ObMemtable::check_row_locked_on_frozen_stores_(
           }
           TRANS_LOG(DEBUG, "check_row_locked meet sstable", K(ret),
                     KPC(memtable_key), K(ctx), KPC(sstable), K(lock_state));
-        } else if (stores->at(i)->is_direct_load_memtable()) {
-          ObDDLKV *ddl_kv = static_cast<ObDDLKV *>(iter_tables.at(i));
-          blocksstable::ObDatumRowkeyHelper rowkey_converter;
-          blocksstable::ObDatumRowkey datum_rowkey;
-          if (OB_FAIL(rowkey_converter.convert_datum_rowkey(
-                        memtable_key->get_rowkey()->get_rowkey(),
-                        datum_rowkey))) {
-            STORAGE_LOG(WARN, "Failed to convert datum rowkey", K(ret), KPC(memtable_key));
-          } else if (OB_FAIL(ddl_kv->check_row_locked(param,
-                                                      datum_rowkey,
-                                                      context,
-                                                      lock_state,
-                                                      check_exist))) {
-            TRANS_LOG(WARN, "direct load memtable check row lock fail", K(ret),
-                      KPC(memtable_key), K(check_exist), K(datum_rowkey), K(lock_state));
-          }
         } else {
           ret = OB_ERR_UNEXPECTED;
           TRANS_LOG(ERROR, "unknown store type", K(ret), KPC(stores), K(i));
@@ -1397,16 +1340,6 @@ int ObMemtable::check_rows_locked_on_frozen_stores_(
           }
           TRANS_LOG(DEBUG, "check_rows_locked meet sstable", K(ret),
                     K(ctx), K(rows_info), KPC(sstable));
-        } else if (stores->at(i)->is_direct_load_memtable()) {
-          ObDDLKV *ddl_kv = static_cast<ObDDLKV *>(stores->at(i));
-          ObDirectLoadMemtableRowsLockedChecker checker(*this, check_exist, param, context, rows_info);
-          if (OB_FAIL(ddl_kv->access_first_ddl_memtable(checker))) {
-            if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
-              STORAGE_LOG(WARN, "fail to access first ddl memtable", K(ret), K(i), K(iter_tables));
-            } else {
-              ret = OB_SUCCESS;
-            }
-          }
         } else {
           ret = OB_ERR_UNEXPECTED;
           TRANS_LOG(ERROR, "Unknown store type", K(ret), K(stores->at(i)), K(i));

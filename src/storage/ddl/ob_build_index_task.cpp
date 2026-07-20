@@ -1057,7 +1057,6 @@ int ObUniqueCheckingParam::init(
         ret = OB_TABLE_NOT_EXIST;
         STORAGE_LOG(WARN, "data table not exist", K(ret));
       } else {
-        compat_mode_ = lib::Worker::CompatMode::MYSQL;
         is_inited_ = true;
         tablet_id_ = tablet_id;
         is_scan_index_ = is_scan_index;

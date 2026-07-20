@@ -33,7 +33,6 @@ ObTableForkInfo::ObTableForkInfo()
     schema_version_(0), task_id_(0),
     source_tablet_ids_(), dest_tablet_ids_(),
     fork_snapshot_version_(0),
-    compat_mode_(lib::Worker::CompatMode::INVALID),
     data_format_version_(0)
 {
 }
@@ -43,7 +42,6 @@ ObTableForkInfo::ObTableForkInfo(
     const int64_t schema_version,
     const int64_t task_id,
     const int64_t fork_snapshot_version,
-    const lib::Worker::CompatMode compat_mode,
     const int64_t data_format_version,
     const common::ObIArray<common::ObTabletID> &source_tablet_ids,
     const common::ObIArray<common::ObTabletID> &dest_tablet_ids)
@@ -53,7 +51,6 @@ ObTableForkInfo::ObTableForkInfo(
     source_tablet_ids_(),
     dest_tablet_ids_(),
     fork_snapshot_version_(fork_snapshot_version),
-    compat_mode_(compat_mode),
     data_format_version_(data_format_version)
 {
   (void)source_tablet_ids_.assign(source_tablet_ids);
@@ -75,7 +72,6 @@ int ObTableForkInfo::assign(const ObTableForkInfo &info)
     schema_version_ = info.schema_version_;
     task_id_ = info.task_id_;
     fork_snapshot_version_ = info.fork_snapshot_version_;
-    compat_mode_ = info.compat_mode_;
     data_format_version_ = info.data_format_version_;
   }
   return ret;
@@ -90,7 +86,6 @@ bool ObTableForkInfo::is_valid() const
       && dest_tablet_ids_.count() > 0
       && source_tablet_ids_.count() == dest_tablet_ids_.count()
       && fork_snapshot_version_ > 0
-      && compat_mode_ != lib::Worker::CompatMode::INVALID
       && data_format_version_ > 0;
 }
 
@@ -113,7 +108,6 @@ int ObTableForkInfo::generate_fork_params(common::ObIArray<ObTabletForkParam> &p
       fork_param.source_tablet_id_ = source_tablet_ids_.at(i);
       fork_param.dest_tablet_id_ = dest_tablet_ids_.at(i);
       fork_param.fork_snapshot_version_ = fork_snapshot_version_;
-      fork_param.compat_mode_ = compat_mode_;
       fork_param.data_format_version_ = data_format_version_;
       fork_param.is_inited_ = true;
       if (OB_FAIL(params.push_back(fork_param))) {
@@ -155,7 +149,6 @@ int ObTableForkInfo::get_tablet_fork_param(
       tablet_fork_param.source_tablet_id_ = source_tablet_ids_.at(found_idx);
       tablet_fork_param.dest_tablet_id_ = dest_tablet_ids_.at(found_idx);
       tablet_fork_param.fork_snapshot_version_ = fork_snapshot_version_;
-      tablet_fork_param.compat_mode_ = compat_mode_;
       tablet_fork_param.data_format_version_ = data_format_version_;
       tablet_fork_param.is_inited_ = true;
     }
@@ -168,7 +161,7 @@ OB_DEF_SERIALIZE(ObTableForkInfo)
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE, table_id_, schema_version_, task_id_,
               source_tablet_ids_, dest_tablet_ids_, fork_snapshot_version_,
-              compat_mode_, data_format_version_);
+              data_format_version_);
   return ret;
 }
 
@@ -177,7 +170,7 @@ OB_DEF_DESERIALIZE(ObTableForkInfo)
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE, table_id_, schema_version_, task_id_,
               source_tablet_ids_, dest_tablet_ids_, fork_snapshot_version_,
-              compat_mode_, data_format_version_);
+              data_format_version_);
   return ret;
 }
 
@@ -186,7 +179,7 @@ OB_DEF_SERIALIZE_SIZE(ObTableForkInfo)
   int64_t len = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN, table_id_, schema_version_, task_id_,
               source_tablet_ids_, dest_tablet_ids_, fork_snapshot_version_,
-              compat_mode_, data_format_version_);
+              data_format_version_);
   return len;
 }
 

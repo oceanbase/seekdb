@@ -205,20 +205,6 @@ int Processor::advance_collect_result(const int64_t cur_group_id, const RowMeta 
           extra->set_is_evaluated();
           extra->reuse();
         }
-      } else if (T_FUN_SYS_RB_BUILD_AGG == aggr_info.get_expr_type()) {
-        // rb_build_agg does not have extra, but need advance collect to save memory
-        int32_t cur_batch_size = 0;
-        if (OB_UNLIKELY(agg_col_idx >= aggregates_.count())) {
-          ret = OB_ERR_UNEXPECTED;
-          SQL_LOG(WARN, "unexpected agg_col_idx", K(agg_col_idx), K(aggregates_));
-        } else if (OB_ISNULL(aggr_info.expr_)) {
-          ret = OB_ERR_UNEXPECTED;
-          SQL_LOG(WARN, "invalid null aggregate expr", K(ret));
-        } else if (OB_FAIL(aggregates_.at(agg_col_idx)
-                             ->eval_group_extra_result(agg_ctx_, agg_col_idx,
-                                                       static_cast<int32_t>(cur_group_id)))) {
-          SQL_LOG(WARN, "collect group results failed", K(ret));
-        }
       }
     }
   }
@@ -486,10 +472,6 @@ int Processor::setup_rt_info(AggrRowPtr row,
       *reinterpret_cast<double *>(cell) = double();
     }
 
-    if (T_FUN_SYS_RB_BUILD_AGG == agg_ctx.aggr_infos_.at(col_id).get_expr_type()) {
-      // rb_build_agg does not have extra, but need advance collect to save memory
-      agg_ctx.need_advance_collect_ = true;
-    }
   }
   int extra_size = agg_ctx.row_meta().extra_cnt_ * sizeof(char *);
   if (agg_ctx.row_meta().extra_cnt_ > 0) {
@@ -685,9 +667,7 @@ int Processor::init_aggr_row_extra_info(RuntimeContext &agg_ctx, char *extra_arr
     case T_FUN_JSON_OBJECTAGG:
     case T_FUN_ORA_JSON_OBJECTAGG:
     case T_FUN_AGG_UDF:
-    case T_FUNC_SYS_ARRAY_AGG: 
-    case T_FUN_SYS_RB_OR_CARDINALITY_AGG: 
-    case T_FUN_SYS_RB_AND_CARDINALITY_AGG: {
+    case T_FUNC_SYS_ARRAY_AGG: {
       agg_ctx.need_advance_collect_ = true;
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("unsupported aggregate type", K(ret), K(aggr_info.get_expr_type()));

@@ -19,7 +19,6 @@
 
 #include "observer/virtual_table/ob_virtual_table_iterator_factory.h"
 #include "observer/ob_server_struct.h"
-#include "sql/monitor/ob_phy_plan_monitor_info.h"
 #include "sql/engine/ob_physical_plan.h"
 #include "sql/engine/ob_des_exec_context.h"
 #include "sql/ob_sql_trans_control.h"

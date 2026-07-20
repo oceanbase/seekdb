@@ -37,15 +37,6 @@ CREATE OR REPLACE PACKAGE BODY dbms_xplan
     return text;
     PRAGMA INTERFACE(C, DISPLAY_CURSOR);
 
-    function display_sql_plan_baseline(sql_handle   VARCHAR(32)  default  NULL,
-                                        plan_name    VARCHAR(32)  default  NULL,
-                                        format       VARCHAR(32)  default  'TYPICAL',
-                                        svr_ip       VARCHAR(64) default null,
-                                        svr_port     DECIMAL default 0
-                                    )
-    return text;
-    PRAGMA INTERFACE(C, DISPLAY_SQL_PLAN_BASELINE);
-
     function display_active_session_plan(
                 session_id   DECIMAL default 0,
                 format       VARCHAR(32)  default  'TYPICAL',

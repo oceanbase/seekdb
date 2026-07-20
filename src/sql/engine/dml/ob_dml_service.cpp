@@ -122,10 +122,6 @@ int ObDMLService::check_column_null(
           ret = OB_BAD_NULL_ERROR;
           LOG_WARN("dml with ignore not supported in geometry type");
           LOG_USER_ERROR(OB_BAD_NULL_ERROR, column_info.column_name_.length(), column_info.column_name_.ptr());
-      } else if (ob_is_roaringbitmap(expr->obj_meta_.get_type())) {
-          ret = OB_BAD_NULL_ERROR;
-          LOG_WARN("dml with ignore not supported in roaringbitmap type");
-          LOG_USER_ERROR(OB_BAD_NULL_ERROR, column_info.column_name_.length(), column_info.column_name_.ptr());
       } else if (ob_is_collection_sql_type(expr->obj_meta_.get_type())) {
           ret = OB_BAD_NULL_ERROR;
           LOG_WARN("dml with ignore not supported in collection type");

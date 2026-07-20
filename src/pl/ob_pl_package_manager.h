@@ -154,10 +154,8 @@ public:
 
   static int load_sys_package(common::ObMySQLProxy &sql_proxy,
                               common::ObString &package_name,
-                              ObCompatibilityMode compa_mode,
                               bool from_file);
   static int load_all_common_sys_package(common::ObMySQLProxy &sql_proxy,
-                                         ObCompatibilityMode compa_mode,
                                          bool from_file);
   static int load_all_special_sys_package(common::ObMySQLProxy &sql_proxy);
 
@@ -183,17 +181,14 @@ private:
 
   static int read_package_sql(ObCharStream &stream, char* buf, int64_t buf_len, bool &eos);
   static int read_and_exec_package_sql(common::ObMySQLProxy &sql_proxy,
-                                       ObCharStream &stream,
-                                       ObCompatibilityMode compa_mode);
+                                       ObCharStream &stream);
   static int get_syspack_source_file_content(const char *file_name, const char *&content);
   static int load_sys_package(ObMySQLProxy &sql_proxy,
                               const ObSysPackageFile &pack_file_info,
-                              ObCompatibilityMode compa_mode,
                               bool from_file);
   static int load_sys_package_list(common::ObMySQLProxy &sql_proxy,
                                    const ObSysPackageFile *sys_package_list,
                                    int sys_package_count,
-                                   ObCompatibilityMode compa_mode,
                                    bool from_file);
 
   int get_cached_package_spec(const ObPLResolveCtx &resolve_ctx, uint64_t package_id,

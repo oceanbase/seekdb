@@ -70,7 +70,7 @@ int ObLogExchange::get_explain_name_internal(char *buf,
     if (OB_SUCC(ret)) {
       if (is_slave_mapping()) {
         ret = BUF_PRINTF(" LOCAL");
-      } else if (is_rollup_hybrid_ || is_wf_hybrid_
+      } else if (is_wf_hybrid_
                 || ObPQDistributeMethod::HYBRID_HASH_RANDOM == dist_method_
                 || ObPQDistributeMethod::HYBRID_HASH_BROADCAST == dist_method_) {
         ret = BUF_PRINTF(" HYBRID");
@@ -287,7 +287,7 @@ int ObLogExchange::get_plan_distribution(PlanText &plan_text,
       if (is_slave_mapping()) {
         ret = BUF_PRINTF(" LOCAL)");
       } else {
-        if (is_rollup_hybrid_ || is_wf_hybrid_) {
+        if (is_wf_hybrid_) {
           ret = BUF_PRINTF(" HYBRID");
         }
       }
@@ -597,7 +597,6 @@ int ObLogExchange::set_exchange_info(const ObExchangeInfo &exch_info)
                 OB_FAIL(sort_keys_.assign(exch_info.sort_keys_))) {
       LOG_WARN("failed to assign sort keys", K(ret));
     } else {
-      is_rollup_hybrid_ = exch_info.is_rollup_hybrid_;
       need_null_aware_shuffle_ = exch_info.need_null_aware_shuffle_;
       calc_part_id_expr_ = exch_info.calc_part_id_expr_;
       is_wf_hybrid_ = exch_info.is_wf_hybrid_;

@@ -20,8 +20,6 @@
 #include "common/ob_simple_iterator.h"
 #include "ob_trans_ctx.h"
 #include "ob_tx_ctx.h"
-#include "ob_trans_stat.h"
-
 #include "ob_trans_version_mgr.h"
 #include "storage/blocksstable/ob_macro_block_writer.h"
 #include "share/ob_force_print_log.h"
@@ -461,7 +459,6 @@ public:
                                  tx_ctx->get_pending_log_size(),
                                  tx_ctx->get_flushed_log_size(),
                                  tx_ctx->session_id_,
-                                 tx_ctx->client_sid_,
                                  tx_ctx->is_exiting_,
                                  tx_ctx->exec_info_.xid_,
                                  tx_ctx->last_request_ts_,
@@ -617,8 +614,6 @@ public:
           if (OB_FAIL(tx_lock_stat.init(tx_ctx->get_addr(),
                                         memtable_key_info_arr.at(i),
                                         tx_ctx->get_session_id(),
-                                        tx_ctx->get_client_sid(),
-                                        0,
                                         tx_id,
                                         tx_ctx->get_ctx_create_time(),
                                         tx_ctx->get_trans_expired_time()))) {
@@ -916,10 +911,8 @@ public:
         TRANS_LOG_RET(WARN, tmp_ret, "ObTxSchedulerStat get savepoints copy error", K(tmp_ret));
       } else if (OB_TMP_FAIL(tx_scheduler_stat.init(tx_desc->addr_,
                                                     tx_desc->sess_id_,
-                                                    tx_desc->client_sid_,
                                                     tx_desc->tx_id_,
                                                     (int64_t)tx_desc->state_,
-                                                    tx_desc->cluster_id_,
                                                     tx_desc->xid_,
                                                     has_write_state,
                                                     write_state,

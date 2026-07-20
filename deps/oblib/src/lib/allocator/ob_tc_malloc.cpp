@@ -36,45 +36,6 @@
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
 
-
-
-#define __DM_MALLOC 1
-#define __DM_MMAP 2
-#define __DM_MMAP_ALIGNED 3
-#define __DIRECT_MALLOC__ __DM_MMAP_ALIGNED
-
-#if __DIRECT_MALLOC__ == __DM_MALLOC
-void *direct_malloc(int64_t size)
-{
-  return ::malloc(size);
-}
-void direct_free(void *p, int64_t size)
-{
-  UNUSED(size);
-  ::free(p);
-}
-#elif __DIRECT_MALLOC__ == __DM_MMAP
-void *direct_malloc(int64_t size)
-{
-  void *p = NULL;
-  if (MAP_FAILED == (p = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1,
-                              0))) {
-    p = NULL;
-  }
-  return p;
-}
-void direct_free(void *p, int64_t size)
-{
-  if (NULL != p) {
-    munmap(p, size);
-  }
-}
-#elif __DIRECT_MALLOC__ == __DM_MMAP_ALIGNED
-const static uint64_t MMAP_BLOCK_ALIGN = 1ULL << 21;
-
-
-#endif // __DIRECT_MALLOC__
-
 namespace oceanbase
 {
 namespace common

@@ -25,7 +25,6 @@
 #include "lib/hash/ob_linear_hash_map.h"
 #include "storage/access/ob_dml_param.h"
 #include "sql/ob_end_trans_callback.h"
-#include "share/ob_server_locality_cache.h"
 
 namespace oceanbase
 {
@@ -33,11 +32,6 @@ namespace oceanbase
 namespace blocksstable
 {
 struct ObStorageEnv;
-}
-
-namespace share
-{
-class ObServerLocality;
 }
 
 namespace election
@@ -88,8 +82,6 @@ public:
   MOCK_METHOD1(inactivate_tenant,
                int(const uint64_t tenant_id));
 
-  MOCK_METHOD0(force_refresh_locality_info, int());
-
   MOCK_METHOD0(start,
                int());
   MOCK_METHOD0(stop,
@@ -111,9 +103,9 @@ public:
   MOCK_CONST_METHOD0(get_min_using_file_id,
                      int64_t());
   MOCK_METHOD2(kill_query_session, int(const transaction::ObTransDesc &trans_desc, const int status));
-  MOCK_METHOD7(start_trans,
+  MOCK_METHOD6(start_trans,
                int(const uint64_t tenant_id, const uint64_t thread_id, const transaction::ObStartTransParam &req,
-                   const int64_t expired_time, const uint32_t session_id, uint64_t proxy_session_id, transaction::ObTransDesc &trans_desc));
+                   const int64_t expired_time, const uint32_t session_id, transaction::ObTransDesc &trans_desc));
   MOCK_METHOD4(end_trans,
                int(bool is_rollback, transaction::ObTransDesc &trans_desc, sql::ObIEndTransCallback &cb,
                    const int64_t stmt_expired_time));

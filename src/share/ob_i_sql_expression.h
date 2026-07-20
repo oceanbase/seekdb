@@ -243,7 +243,7 @@ private:
    ObDataTypeCastParams dtc_params_;
    ObSQLMode sql_mode_;
    int64_t div_precision_increment_;
-   int64_t ob_max_allowed_packet_; // Carefull!!! mysql.h defined a macro call "max_allowed_packet"
+   int64_t ob_max_allowed_packet_;
    const sql::ObSQLSessionInfo *session_;
    const share::schema::ObUDFMeta *udf_meta_; /* for udf */
    // In the type inference, the expression can set cast_mode to control the behavior of each parameter for type conversion
@@ -290,4 +290,3 @@ public:
 }
 }
 #endif /* OCEANBASE_COMMON_EXPRESSION_OB_I_SQL_EXPRESSION_ */
-

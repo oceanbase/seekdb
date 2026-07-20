@@ -60,68 +60,8 @@
     }
   },
   {
-    "scenario": "olap",
-    "comment": "for real-time data warehouse analytics scenarios.",
-    "parameters": {
-      "cluster": [
-        {
-          "name": "syslog_level",
-          "value": "WARN",
-          "comment": "set the log level as WARN to only print logs that DBAs care about"
-        },
-        {
-          "name": "enable_syslog_recycle",
-          "value": 1,
-          "comment": "enable syslog auto recycle can prevent log files from filling up disk space"
-        },
-        {
-          "name": "max_syslog_file_count",
-          "value": 80,
-          "comment": "when enable_syslog_recycle is enabled, should set this value to a proper value. 80 is an empirical value."
-        },
-        {
-          "name": "__min_full_resource_pool_memory",
-          "value": 2147483648,
-          "comment": "the min memory value which is specified for a full resource pool."
-        }
-      ],
-      "tenant": [
-      ]
-    }
-  },
-  {
     "scenario": "kv",
     "comment": "for key-value workloads with very high throughput and latency sensitivity",
-    "parameters": {
-      "cluster": [
-        {
-          "name": "syslog_level",
-          "value": "WARN",
-          "comment": "set the log level as WARN to only print logs that DBAs care about"
-        },
-        {
-          "name": "enable_syslog_recycle",
-          "value": 1,
-          "comment": "enable syslog auto recycle can prevent log files from filling up disk space"
-        },
-        {
-          "name": "max_syslog_file_count",
-          "value": 80,
-          "comment": "when enable_syslog_recycle is enabled, should set this value to a proper value. 80 is an empirical value."
-        },
-        {
-          "name": "__min_full_resource_pool_memory",
-          "value": 2147483648,
-          "comment": "the min memory value which is specified for a full resource pool."
-        }
-      ],
-      "tenant": [
-      ]
-    }
-  },
-  {
-    "scenario": "htap",
-    "comment": "for mixed OLAP and OLTP workload. Typically utilized for obtaining instant insights from active operational data, fraud detection, and personalized recommendations",
     "parameters": {
       "cluster": [
         {

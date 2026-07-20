@@ -91,9 +91,6 @@ int ObGetSampleIterHelper::can_retire_to_memtable_row_sample_(bool &retire, ObIA
         } else {
           memtable_row_count += memtable->get_physical_row_cnt();
         }
-      } else if (table->is_direct_load_memtable()) {
-        ObDDLKV *ddl_kv = static_cast<ObDDLKV *>(table);
-        sstable_row_count += ddl_kv->get_row_count();
       } else if (table->is_sstable()) {
         sstable_row_count += static_cast<ObSSTable *>(table)->get_row_count();
       }

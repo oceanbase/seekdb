@@ -44,7 +44,6 @@ data_type	data_type_str	data_type_class
 40	ARRAY	26
 41	MYSQL_DATE	27
 42	MYSQL_DATETIME	28
-43	ROARINGBITMAP	29
 select data_type, data_type_str, data_type_class from __all_virtual_data_type order by data_type;
 data_type	data_type_str	data_type_class
 0	NULL	0
@@ -90,7 +89,6 @@ data_type	data_type_str	data_type_class
 40	ARRAY	26
 41	MYSQL_DATE	27
 42	MYSQL_DATETIME	28
-43	ROARINGBITMAP	29
 select * from __all_virtual_data_type where data_type = 22;
 data_type	data_type_str	data_type_class
 22	VARCHAR	10
@@ -137,7 +135,6 @@ DECIMAL_INT	DECIMAL_INT
 ARRAY	COLLECTION
 MYSQL_DATE	MYSQL_DATE
 MYSQL_DATETIME	MYSQL_DATETIME
-ROARINGBITMAP	ROARINGBITMAP
 show create table __all_virtual_data_type;
 Table	Create Table
 __all_virtual_data_type	CREATE TABLE `__all_virtual_data_type` (

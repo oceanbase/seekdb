@@ -2392,8 +2392,6 @@ int ObHashGroupByVecOp::init_by_pass_op()
   int err_sim = 0;
   aggr_processor_.set_support_fast_single_row_agg(MY_SPEC.support_fast_single_row_agg_);
   bypass_ctrl_.open_by_pass_ctrl();
-  uint64_t cut_ratio = 0;
-  uint64_t default_cut_ratio = ObAdaptiveByPassCtrl::INIT_CUT_RATIO;
   err_sim = OB_E(EventTable::EN_ADAPTIVE_GROUP_BY_SMALL_CACHE) 0;
   if (0 != err_sim) {
     if (INT32_MAX == std::abs(err_sim)) {
@@ -2412,10 +2410,6 @@ int ObHashGroupByVecOp::init_by_pass_op()
   } else if (OB_ISNULL(mem_context_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("failed to get mem context", K(ret));
-  } else if (OB_FAIL(ctx_.get_my_session()
-                            ->get_sys_variable(share::SYS_VAR__GROUPBY_NOPUSHDOWN_CUT_RATIO,
-                                                                    cut_ratio))) {
-    LOG_WARN("failed to get no pushdown cut ratio", K(ret));
   } else if (OB_FAIL(init_by_pass_group_batch_item())) {
     LOG_WARN("failed to init by pass group batch item", K(ret));
   } else if (MY_SPEC.max_batch_size_ > 0
@@ -2425,7 +2419,7 @@ int ObHashGroupByVecOp::init_by_pass_op()
     LOG_TRACE("check by pass", K(MY_SPEC.id_), K(MY_SPEC.by_pass_enabled_), K(bypass_ctrl_.get_small_row_cnt()),
                                K(get_actual_mem_used_size()), K(INIT_L2_CACHE_SIZE), K(INIT_L3_CACHE_SIZE));
     // to avoid performance decrease, at least deduplicate 2/3
-    bypass_ctrl_.set_cut_ratio(std::max(cut_ratio, default_cut_ratio));
+    bypass_ctrl_.set_cut_ratio(ObAdaptiveByPassCtrl::INIT_CUT_RATIO);
     bypass_ctrl_.set_op_id(MY_SPEC.id_);
   }
   return ret;

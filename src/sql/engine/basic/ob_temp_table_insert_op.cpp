@@ -28,8 +28,6 @@ using namespace share::schema;
 namespace sql
 {
 
-#define USE_MULTI_GET_ARRAY_BINDING 1
-
 using dtl::ObDTLIntermResultInfo;
 static const uint64_t TEMP_TABLE_PAGE_SIZE = 100000;
 
@@ -448,4 +446,3 @@ int ObTempTableInsertOp::process_dump(dtl::ObDTLIntermResultInfo &chunk_row_stor
 
 } // end namespace sql
 } // end namespace oceanbase
-

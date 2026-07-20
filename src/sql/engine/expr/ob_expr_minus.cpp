@@ -110,8 +110,8 @@ int ObExprMinus::calc_result_type2(ObExprResType &type,
     type.set_precision(PRECISION_UNKNOWN_YET);
   } else if (type1.get_type_class() == ObIntervalTC
              || type2.get_type_class() == ObIntervalTC) {
-    type.set_scale(ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][type.get_type()].get_scale());
-    type.set_precision(ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][type.get_type()].get_precision());
+    type.set_scale(ObAccuracy::MAX_ACCURACY2[0][type.get_type()].get_scale());
+    type.set_precision(ObAccuracy::MAX_ACCURACY2[0][type.get_type()].get_precision());
   } else {
     ObScale scale1 = static_cast<ObScale>(MAX(type1.get_scale(), 0));
     ObScale scale2 = static_cast<ObScale>(MAX(type2.get_scale(), 0));

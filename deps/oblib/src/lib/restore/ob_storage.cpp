@@ -26,7 +26,7 @@ namespace oceanbase
 namespace common
 {
 
-const char *OB_STORAGE_TYPES_STR[] = {"FILE", "LOCAL", "S3", "LOCAL_CACHE", "AZBLOB"};
+const char *OB_STORAGE_TYPES_STR[] = {"FILE", "LOCAL", nullptr, "LOCAL_CACHE", "AZBLOB"};
 
 void print_access_storage_log(
     const char *msg,
@@ -56,9 +56,7 @@ void print_access_storage_log(
 int validate_uri_type(const common::ObString &uri)
 {
   int ret = OB_SUCCESS;
-  if (uri.prefix_match(OB_S3_PREFIX)) {
-    ret = reject_s3_storage("validate uri type", uri);
-  } else if (uri.prefix_match(OB_OSS_PREFIX)) {
+  if (uri.prefix_match(OB_OSS_PREFIX)) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "OSS storage");
     STORAGE_LOG(WARN, "OSS storage is not supported", KR(ret), KS(uri));
@@ -70,8 +68,7 @@ int validate_uri_type(const common::ObString &uri)
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "HDFS storage");
     STORAGE_LOG(WARN, "HDFS storage is not supported", KR(ret), KS(uri));
-  } else if (!uri.prefix_match(OB_S3_PREFIX) &&
-      !uri.prefix_match(OB_FILE_PREFIX) &&
+  } else if (!uri.prefix_match(OB_FILE_PREFIX) &&
       !uri.prefix_match(OB_AZBLOB_PREFIX)) {
     ret = OB_INVALID_BACKUP_DEST;
     STORAGE_LOG(ERROR, "invalid backup uri", KR(ret), KS(uri));
@@ -84,9 +81,7 @@ int get_storage_type_from_path(const common::ObString &uri, ObStorageType &type)
   int ret = OB_SUCCESS;
   type = OB_STORAGE_MAX_TYPE;
 
-  if (uri.prefix_match(OB_S3_PREFIX)) {
-    ret = reject_s3_storage("get storage type", uri);
-  } else if (uri.prefix_match(OB_FILE_PREFIX)) {
+  if (uri.prefix_match(OB_FILE_PREFIX)) {
     type = OB_STORAGE_FILE;
   } else if (uri.prefix_match(OB_AZBLOB_PREFIX)) {
     type = OB_STORAGE_AZBLOB;
@@ -118,22 +113,22 @@ const char *get_storage_type_str(const ObStorageType &type)
 #else
   if (type >= 0 && type < OB_STORAGE_MAX_TYPE) {
 #endif
-    str = OB_STORAGE_TYPES_STR[type];
+    if (nullptr != OB_STORAGE_TYPES_STR[type]) {
+      str = OB_STORAGE_TYPES_STR[type];
+    }
   }
   return str;
 }
 
 bool is_storage_type_match(const common::ObString &uri, const ObStorageType &type)
 {
-  return (OB_STORAGE_S3 == type && uri.prefix_match(OB_S3_PREFIX))
-      || (OB_STORAGE_FILE == type && uri.prefix_match(OB_FILE_PREFIX))
+  return (OB_STORAGE_FILE == type && uri.prefix_match(OB_FILE_PREFIX))
       || (OB_STORAGE_AZBLOB == type && uri.prefix_match(OB_AZBLOB_PREFIX));
 }
 
 bool is_object_storage_type(const ObStorageType &type)
 { 
-  return ObStorageType::OB_STORAGE_FILE != type 
-      && ObStorageType::OB_STORAGE_MAX_TYPE != type;
+  return ObStorageType::OB_STORAGE_AZBLOB == type;
 }
 
 bool is_adaptive_append_mode(const ObObjectStorageInfo &storage_info)
@@ -155,7 +150,7 @@ int get_storage_type_from_name(const char *type_str, ObStorageType &type)
   const int64_t count = ARRAYSIZEOF(OB_STORAGE_TYPES_STR);
   STATIC_ASSERT(static_cast<int64_t>(ObStorageType::OB_STORAGE_MAX_TYPE) == count, "status count mismatch");
   for (int64_t i = 0; i < count; ++i) {
-    if (0 == strcmp(type_str, OB_STORAGE_TYPES_STR[i])) {
+    if (nullptr != OB_STORAGE_TYPES_STR[i] && 0 == strcmp(type_str, OB_STORAGE_TYPES_STR[i])) {
       type = static_cast<ObStorageType>(i);
       break;
     }
@@ -542,8 +537,6 @@ int ObStorageUtil::open(common::ObObjectStorageInfo *storage_info)
   } else if (OB_FALSE_IT(device_type_ = storage_info->get_type())) {
   } else if (OB_STORAGE_FILE == device_type_) {
     util_ = &file_util_;
-  } else if (OB_STORAGE_S3 == device_type_) {
-    ret = reject_s3_storage("open storage util");
   } else {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid device type", K(ret), K_(device_type));
@@ -1912,8 +1905,6 @@ int ObStorageReader::open(const common::ObString &uri,
   } else if (FALSE_IT(storage_info_ = storage_info)) {
   } else if (OB_STORAGE_FILE == type) {
     reader_ = &file_reader_;
-  } else if (OB_STORAGE_S3 == type) {
-    ret = reject_s3_storage("open storage reader", uri);
   } else {
     ret = OB_ERR_SYS;
     STORAGE_LOG(ERROR, "unkown storage type", K(ret), K(uri));
@@ -2048,8 +2039,6 @@ static int alloc_reader(ObIAllocator &allocator, const ObStorageType &type, ObIS
   reader = nullptr;
   if (OB_STORAGE_FILE == type) {
     ret = alloc_reader_type<ObStorageFileReader>(allocator, reader);
-  } else if (OB_STORAGE_S3 == type) {
-    ret = reject_s3_storage("allocate adaptive reader");
   }
 
   if (OB_FAIL(ret)) {
@@ -2091,8 +2080,6 @@ int ObStorageAdaptiveReader::open(const common::ObString &uri,
   } else if (FALSE_IT(storage_info_ = storage_info)) {
   } else if (OB_STORAGE_FILE == type) {
     reader_ = &file_reader_;
-  } else if (OB_STORAGE_S3 == type) {
-    ret = reject_s3_storage("open adaptive reader", uri);
   } else {
     ret = OB_ERR_SYS;
     STORAGE_LOG(ERROR, "unkown storage type", K(ret), K(uri));
@@ -2307,8 +2294,6 @@ int ObStorageWriter::open(const common::ObString &uri, common::ObObjectStorageIn
   } else if (FALSE_IT(storage_info_ = storage_info)) {
   } else if (OB_STORAGE_FILE == type) {
     writer_ = &file_writer_;
-  } else if (OB_STORAGE_S3 == type) {
-    ret = reject_s3_storage("open storage writer", uri);
   } else {
     ret = OB_ERR_SYS;
     STORAGE_LOG(ERROR, "unkown storage type", K(ret), K(uri));
@@ -2444,8 +2429,6 @@ int ObStorageAppender::open(
   } else if (FALSE_IT(storage_info_ = storage_info)) {
   } else if (OB_STORAGE_FILE == type_) {
     appender_ = &file_appender_;
-  } else if (OB_STORAGE_S3 == type_) {
-    ret = reject_s3_storage("open storage appender", uri);
   } else {
     ret = OB_ERR_SYS;
     STORAGE_LOG(ERROR, "unkown storage type", K(ret), K(uri));
@@ -2726,8 +2709,6 @@ int ObStorageMultiPartWriter::open(
   } else if (FALSE_IT(storage_info_ = storage_info)) {
   } else if (OB_STORAGE_FILE == type) {
     multipart_writer_ = &file_multipart_writer_;
-  } else if (OB_STORAGE_S3 == type) {
-    ret = reject_s3_storage("open multipart writer", uri);
   } else {
     ret = OB_ERR_SYS;
     STORAGE_LOG(ERROR, "unkown storage type", K(ret), K(uri));
@@ -2946,8 +2927,6 @@ int ObStorageParallelMultiPartWriterBase::open(
     STORAGE_LOG(WARN, "failed to fill uri", K(ret), K(uri));
   } else if (OB_STORAGE_FILE == type) {
     multipart_writer_ = &file_multipart_writer_;
-  } else if (OB_STORAGE_S3 == type) {
-    ret = reject_s3_storage("open parallel multipart writer", uri);
   } else {
     ret = OB_ERR_SYS;
     STORAGE_LOG(ERROR, "unkown storage type", K(ret), K(uri), K(type));

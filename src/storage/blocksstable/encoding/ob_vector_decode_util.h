@@ -1291,8 +1291,7 @@ int ObLoadVarByteAlignedVecDataDispatcher<VectorType, ValueType, DataLocator>::l
   case ObStringSC:
   case ObTextSC:
   case ObJsonSC:
-  case ObGeometrySC:
-  case ObRoaringBitmapSC: {
+  case ObGeometrySC: {
     decode_method_type = D_SHALLOW_COPY;
     break;
   }

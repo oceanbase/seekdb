@@ -35,7 +35,6 @@ public:
   virtual ~ObAllVirtualDiagIndexScan() { index_ids_.reset(); }
   int set_index_ids(const common::ObIArray<common::ObNewRange> &ranges);
   // get server sid if sid is client sid
-  int get_server_sid_by_client_sid(sql::ObSQLSessionMgr* mgr, uint64_t &sid);
   inline ObIndexArray &get_index_ids() { return index_ids_; }
 private:
   ObIndexArray index_ids_;

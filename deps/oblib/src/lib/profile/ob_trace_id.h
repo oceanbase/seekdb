@@ -315,12 +315,8 @@ struct ObCurTraceId
 
   inline static TraceId *get_trace_id()
   {
-    #ifdef COMPILE_DLL_MODE
-    return &trace_id_;
-    #else
     static thread_local TraceId TRACE_ID;
     return &TRACE_ID;
-    #endif
   }
 
   inline static void mark_user_request()
@@ -340,10 +336,6 @@ struct ObCurTraceId
       trace_id->set(buf);
     }
   }
-#ifdef COMPILE_DLL_MODE
-private:
-  static TLOCAL(TraceId, trace_id_);
-#endif
 };
 
 class ObTraceIdGuard final

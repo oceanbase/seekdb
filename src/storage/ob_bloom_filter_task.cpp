@@ -129,10 +129,6 @@ int ObBloomFilterBuildTask::build_bloom_filter()
     ObMacroBlockRowBareIterator *macro_bare_iter = nullptr;
     ObSSTableMacroBlockHeader macro_header;
     const ObDatumRow *row = nullptr;
-    lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
-    {
-      THIS_WORKER.set_compatibility_mode(compat_mode);
-    }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(OB_STORE_CACHE.get_bf_cache().check_need_build(ObBloomFilterCacheKey(
         macro_id_, prefix_len_), need_build))) {

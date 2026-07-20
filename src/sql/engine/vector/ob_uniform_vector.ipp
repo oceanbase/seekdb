@@ -57,7 +57,6 @@ namespace common
   M(VEC_TC_DEC_INT256)                                                                             \
   M(VEC_TC_DEC_INT512)                                                                             \
   M(VEC_TC_COLLECTION)                                                                             \
-  M(VEC_TC_ROARINGBITMAP)                                                                          \
   M(VEC_TC_MYSQL_DATE)                                                                             \
   M(VEC_TC_MYSQL_DATETIME)
 

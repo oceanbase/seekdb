@@ -94,7 +94,7 @@ int ObGVTxStat::inner_get_next_row(ObNewRow *&row)
           cur_row_.cells_[i].set_int(tx_stat.tx_id_.get_id());
           break;
         case SESSION_ID:
-          cur_row_.cells_[i].set_int(tx_stat.client_sid_);
+          cur_row_.cells_[i].set_int(tx_stat.session_id_);
           break;
         case IS_DECIDED:
           cur_row_.cells_[i].set_bool(tx_stat.has_decided_);

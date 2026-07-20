@@ -2126,7 +2126,6 @@ TEST_F(TestJsonTree, json_ext_sub_type)
 
 TEST_F(TestJsonTree, test_sort)
 {
-  set_compat_mode(lib::Worker::CompatMode::MYSQL);
   // correct json text
   common::ObString json_text("{ \"a\" : \"value1\", \"a\" : \"value2\", \
       \"b\" : \"value3\",  \"b\" : \"value4\" }");

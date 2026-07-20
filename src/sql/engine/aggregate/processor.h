@@ -250,10 +250,6 @@ public:
   {
     agg_ctx_.has_rollup_ = true;
   }
-  void set_rollup_ctx(RollupContext *ctx)
-  {
-    agg_ctx_.rollup_context_ = ctx;
-  }
   uint32_t get_distinct_count() const
   {
     return agg_ctx_.distinct_count_;

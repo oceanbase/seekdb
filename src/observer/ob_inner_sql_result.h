@@ -104,7 +104,6 @@ public:
   int get_obj(const int64_t col_idx, const common::ObObj *&obj) const;
   const ObNewRow *get_row() const { return row_; };
 
-  void set_compat_mode(lib::Worker::CompatMode mode);
   bool is_inited() const { return is_inited_; }
   void set_is_read(const bool is_read) { is_read_ = is_read; }
   bool is_inner_session() const { return is_inner_session_; }
@@ -160,7 +159,6 @@ private:
   const common::ObNewRow *row_;
   int64_t execute_start_ts_;
   int64_t execute_end_ts_;
-  lib::Worker::CompatMode compat_mode_;
   bool is_inited_;
   bool store_first_row_; // whether got 1 row
   bool iter_end_;

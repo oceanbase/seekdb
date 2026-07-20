@@ -131,9 +131,7 @@ int ObSequenceDMLProxy::next_batch(
   // note: res is placed in block to be destructed as soon as possible, otherwise it will interfere with the subsequent update
   // Will throw an error: connection still be referred by previous sql result
   ObISQLClient *sql_client = &trans;
-  ObSQLClientRetryWeak sql_client_retry_weak(sql_client,
-                                             false,
-                                             OB_ALL_SEQUENCE_VALUE_TID);
+  auto &sql_client_retry_weak = *sql_client;
   if (OB_SUCC(ret)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       common::sqlclient::ObMySQLResult *result = NULL;
@@ -358,7 +356,7 @@ int ObSequenceDMLProxy::prefetch_next_batch(const uint64_t sequence_id,
 
 int ObSequenceDMLProxy::init_sequence_value_table(
     common::ObMySQLTransaction &trans,
-    ObSQLClientRetryWeak &sql_client_retry_weak,
+    ObISQLClient &sql_client_retry_weak,
     ObIAllocator &allocator,
     uint64_t sequence_id,
     const ObSequenceOption &option,
@@ -449,5 +447,4 @@ int ObSequenceDMLProxy::init_sequence_value_table(
 
   return ret;
 }
-
 

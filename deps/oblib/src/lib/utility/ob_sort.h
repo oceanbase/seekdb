@@ -24,138 +24,6 @@ namespace oceanbase
 {
 namespace lib
 {
-#ifdef FATAL_ERROR_HANG
-template <class Iterator>
-class IteratorWrapper
-{
-public:
-  using value_type = typename std::iterator_traits<Iterator>::value_type;
-  using difference_type = typename std::iterator_traits<Iterator>::difference_type;
-  using pointer = value_type*;
-  using reference = value_type&;
-  using iterator_category = std::random_access_iterator_tag;
-  
-  IteratorWrapper(Iterator iter, int64_t index, int64_t end)
-    : iter_(iter), index_(index), end_(end)
-  {}
-  bool abort_maybe_bad_compare() const
-  {
-    abort();
-  }
-  inline reference operator*()
-  {
-    return *iter_;
-  }
-  inline reference operator*() const
-  {
-    // For random access iterators, even const iterators should return non-const references
-    // to allow standard library algorithms to modify values
-    return *iter_;
-  }
-  inline pointer operator->()
-  {
-    return &(*iter_);
-  }
-  inline pointer operator->() const
-  {
-    return &(*iter_);
-  }
-  inline reference operator[](difference_type n)
-  {
-    return iter_[n];
-  }
-  inline reference operator[](difference_type n) const
-  {
-    return iter_[n];
-  }
-  inline IteratorWrapper operator++(int)
-  {
-    if (OB_UNLIKELY(index_ >= end_)) abort_maybe_bad_compare();
-    return IteratorWrapper(iter_++, index_++, end_);
-  }
-  inline IteratorWrapper operator++()
-  {
-    if (OB_UNLIKELY(index_ >= end_)) abort_maybe_bad_compare();
-    ++iter_;
-    ++index_;
-    return *this;
-  }
-  inline IteratorWrapper operator--(int)
-  {
-    if (OB_UNLIKELY(index_ < 0)) abort_maybe_bad_compare();
-    return IteratorWrapper(iter_--, index_--, end_);
-  }
-  inline IteratorWrapper operator--()
-  {
-    if (OB_UNLIKELY(index_ < 0)) abort_maybe_bad_compare();
-    --iter_;
-    --index_;
-    return *this;
-  }
-  inline IteratorWrapper operator+(int64_t off) const
-  {
-    if (OB_UNLIKELY(index_ >= end_)) abort_maybe_bad_compare();
-    Iterator new_iter = iter_;
-    new_iter += off;
-    return IteratorWrapper(new_iter, index_ + off, end_);
-  }
-  inline IteratorWrapper &operator+=(int64_t off)
-  {
-    if (OB_UNLIKELY(index_ >= end_)) abort_maybe_bad_compare();
-    iter_ += off;
-    index_ += off;
-    return *this;
-  }
-  inline IteratorWrapper &operator-=(int64_t off)
-  {
-    if (OB_UNLIKELY(index_ < 0)) abort_maybe_bad_compare();
-    iter_ -= off;
-    index_ -= off;
-    return *this;
-  }
-  inline IteratorWrapper operator-(int64_t off) const
-  {
-    if (OB_UNLIKELY(index_ < 0)) abort_maybe_bad_compare();
-    Iterator new_iter = iter_;
-    new_iter -= off;
-    return IteratorWrapper(new_iter, index_ - off, end_);
-  }
-  inline difference_type operator-(const IteratorWrapper &rhs) const
-  {
-    return index_ - rhs.index_;
-  }
-  inline bool operator==(const IteratorWrapper &rhs) const
-  {
-    return (index_ == rhs.index_);
-  }
-  inline bool operator!=(const IteratorWrapper &rhs) const
-  {
-    return (index_ != rhs.index_);
-  }
-  inline bool operator<(const IteratorWrapper &rhs) const
-  {
-    return (index_ < rhs.index_);
-  }
-
-  inline bool operator<=(const IteratorWrapper &rhs) const
-  {
-    return (index_ <= rhs.index_);
-  }
-  inline bool operator>(const IteratorWrapper &rhs) const
-  {
-    return (index_ > rhs.index_);
-  }
-  inline bool operator>=(const IteratorWrapper &rhs) const
-  {
-    return (index_ >= rhs.index_);
-  }
-  
-private:
-  Iterator iter_;
-  int64_t index_;
-  int64_t end_;
-};
-#endif
 template <class Iterator, class Compare>
 void ob_sort(Iterator first, Iterator last, Compare comp)
 {
@@ -169,15 +37,7 @@ void ob_sort(Iterator first, Iterator last, Compare comp)
       }
     }
   }
-#ifdef FATAL_ERROR_HANG
-  int64_t end = last - first;
-  typedef IteratorWrapper<Iterator>  Wrapper;
-  Wrapper first_wrapper = Wrapper(first, 0, end);
-  Wrapper last_wrapper = Wrapper(last, end, end);
-  std::sort(first_wrapper, last_wrapper, comp);
-#else
   std::sort(first, last, comp);
-#endif
 }
 
 template <class Iterator>
@@ -196,4 +56,3 @@ void ob_sort(Iterator first, Iterator last)
 } // end of namespace lib
 } // end of namespace oceanbase
 #endif
-

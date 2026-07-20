@@ -348,8 +348,6 @@ private:
   // set timeout to session variable
   int set_timeout(int64_t &abs_timeout_us);
 
-  lib::Worker::CompatMode get_compat_mode() const;
-
   int execute_read_inner(const int64_t cluster_id, const ObString &sql,
                          common::ObISQLClient::ReadResult &res, bool is_user_sql = false,
                          const common::ObAddr *sql_exec_addr = nullptr);

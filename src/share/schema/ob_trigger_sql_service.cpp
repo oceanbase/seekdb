@@ -217,7 +217,6 @@ int ObTriggerSqlService::fill_dml_sql(const ObTriggerInfo &trigger_info,
   OZ (dml.add_column("ref_parent_name", ObHexEscapeSqlStr(trigger_info.get_ref_parent_name())));
   OZ (dml.add_column("when_condition", ObHexEscapeSqlStr(trigger_info.get_when_condition())));
   OZ (dml.add_column("package_flag", trigger_info.get_package_flag()));
-  OZ (dml.add_column("package_comp_flag", trigger_info.get_package_comp_flag()));
   OZ (dml.add_column("package_exec_env", ObHexEscapeSqlStr(trigger_info.get_package_exec_env())));
   OZ (dml.add_column("sql_mode", trigger_info.get_sql_mode()));
   OZ (dml.add_column("trigger_priv_user", ObHexEscapeSqlStr(trigger_info.get_trigger_priv_user())));

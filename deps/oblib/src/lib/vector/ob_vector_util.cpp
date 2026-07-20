@@ -263,7 +263,6 @@ INIT_SUCC(ret);
 #else
     return obvsag::get_extra_info_by_ids(index_handler, ids, count, extra_infos);
 #endif
-return ret;
 }
 
 int knn_search(obvsag::VectorIndexPtr index_handler, float* query_vector,int dim, int64_t topk,

@@ -15,7 +15,6 @@
  */
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_mul_mode_reader.h"
-#include "common/xml/ob_xml_util.h"
 
 namespace oceanbase {
 namespace common {
@@ -41,50 +40,23 @@ void ObMulModeReader::init()
     }
 
     if (is_simple_scan) {
-      if (cur_->is_binary()) {
-        ObXmlBin* tmp = static_cast<ObXmlBin*>(cur_);
-        new (&bin_iter_) ObXmlBinIterator(tmp);
-        bin_iter_.set_range(tmp->get_child_start(), tmp->get_child_start() + tmp->count());
-      } else {
-        new (&tree_iter_) ObXmlNode::iterator(((ObXmlNode*)cur_)->begin());
-      }
+      new (&tree_iter_) ObXmlNode::iterator(static_cast<ObXmlNode*>(cur_)->begin());
     } else if (is_ordered_scan) {
-      if (cur_->is_binary()) {
-        ObXmlBin* bin = static_cast<ObXmlBin*>(cur_);
-
-        if (!ObXmlUtil::is_container_tc(cur_->type())) {
-          bin_iter_.set_range(0, 0);
-        } else {
-          int64_t low = bin->low_bound(seek_info_.key_);
-          int64_t upper = bin->up_bound(seek_info_.key_);
-
-          new (&bin_iter_) ObXmlBinIterator(static_cast<ObXmlBin*>(cur_), true);
-          bin_iter_.set_range(low, upper);
-        }
-      } else {
-        IterRange range;
-        ObXmlNode* node = static_cast<ObXmlNode*>(cur_);
-        node->ObLibContainerNode::get_children(seek_info_.key_, range);
-        new (&tree_iter_) ObXmlNode::iterator(node->sorted_begin());
-        
-        tree_iter_.set_range(range.first - tree_iter_, range.second - tree_iter_ + 1);
-      }
+      IterRange range;
+      ObXmlNode* node = static_cast<ObXmlNode*>(cur_);
+      node->ObLibContainerNode::get_children(seek_info_.key_, range);
+      new (&tree_iter_) ObXmlNode::iterator(node->sorted_begin());
+      tree_iter_.set_range(range.first - tree_iter_, range.second - tree_iter_ + 1);
     } else if (is_attr_scan) {
-      if (cur_->is_binary()) {
-        new (&bin_iter_) ObXmlBinIterator(static_cast<ObXmlBin*>(cur_));
-        ObXmlBin* bin = static_cast<ObXmlBin*>(cur_);
-        bin_iter_.set_range(0, bin->get_child_start());
+      ObXmlNode* handle = nullptr;
+      if (!(cur_->type() == M_ELEMENT || cur_->type() == M_DOCUMENT)) {
+        new (&tree_iter_) ObXmlNode::iterator(static_cast<ObXmlNode*>(cur_)->sorted_begin());
+        tree_iter_.set_range(0, 0);
+      } else if (OB_ISNULL(handle = static_cast<ObXmlNode*>(cur_->get_attribute_handle()))) {
+        new (&tree_iter_) ObXmlNode::iterator(static_cast<ObXmlNode*>(cur_)->sorted_begin());
+        tree_iter_.set_range(0, 0);
       } else {
-        ObXmlNode* handle = nullptr;
-        if (!(cur_->type() == M_ELEMENT || cur_->type() == M_DOCUMENT)) {
-          new (&tree_iter_) ObXmlNode::iterator((static_cast<ObXmlNode*>(cur_))->sorted_begin());
-          tree_iter_.set_range(0, 0);
-        } else if (OB_ISNULL(handle = static_cast<ObXmlNode*>(cur_->get_attribute_handle()))) {
-          new (&tree_iter_) ObXmlNode::iterator((static_cast<ObXmlNode*>(cur_))->sorted_begin());
-          tree_iter_.set_range(0, 0);
-        } else {
-          new (&tree_iter_) ObXmlNode::iterator(handle->begin());
-        }
+        new (&tree_iter_) ObXmlNode::iterator(handle->begin());
       }
     }
   }
@@ -109,23 +81,11 @@ int ObMulModeReader::attr_next(ObIMulModeBase*& node, ObMulModeNodeType filter_t
     bool is_found = false;
 
     for (; OB_SUCC(ret) && !is_found; ) {
-      if (cur_->is_binary()) {
-        if (!bin_iter_.is_valid()) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("bin iter is invalid.", K(ret), KP(cur_));
-        } else if (bin_iter_.end()) {
-          ret = OB_ITER_END;
-        } else {
-          node = *bin_iter_;
-          ++bin_iter_;
-        }
+      if (tree_iter_.end()) {
+        ret = OB_ITER_END;
       } else {
-        if (tree_iter_.end()) {
-          ret = OB_ITER_END;
-        } else {
-          node = *tree_iter_;
-          ++tree_iter_;
-        }
+        node = *tree_iter_;
+        ++tree_iter_;
       }
 
       is_found = false;
@@ -145,29 +105,13 @@ int ObMulModeReader::scan_next(ObIMulModeBase*& node)
 {
   INIT_SUCC(ret);
   bool is_found = false;
-  ObXmlNode::iterator save_iterator;
-  ObXmlBin::iterator save_bin;
 
   while (OB_SUCC(ret) && !is_found) {
-    if (cur_->is_binary()) {
-      if (!bin_iter_.is_valid()) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("bin iter is invalid.", K(ret), KP(cur_));
-      } else if (bin_iter_.end()) {
-        ret = OB_ITER_END;
-      } else {
-        save_bin = bin_iter_;
-        node = *bin_iter_;
-        ++bin_iter_;
-      }
+    if (tree_iter_.end()) {
+      ret = OB_ITER_END;
     } else {
-      if (tree_iter_.end()) {
-        ret = OB_ITER_END;
-      } else {
-        save_iterator = tree_iter_;
-        node = *tree_iter_;
-        ++tree_iter_;
-      }
+      node = *tree_iter_;
+      ++tree_iter_;
     }
 
     if (OB_SUCC(ret)) {

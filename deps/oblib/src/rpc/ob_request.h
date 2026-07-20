@@ -84,7 +84,7 @@ public:
         request_arrival_time_(0), traverse_index_(0), recv_mts_(), arrival_push_diff_(0),
         push_pop_diff_(0), pop_process_start_diff_(0),
         process_start_end_diff_(0), process_end_response_diff_(0),
-        trace_id_(), discard_flag_(false), large_retry_flag_(false), retry_times_(0)
+        trace_id_(), discard_flag_(false), retry_times_(0)
   {
   }
   virtual ~ObRequest() {}  // not guaranteed to call
@@ -97,9 +97,6 @@ public:
 
   int32_t get_group_id() const { return group_id_; }
   void set_group_id(const int32_t &group_id) { group_id_ = group_id; }
-  bool large_retry_flag() const { return large_retry_flag_; }
-  void set_large_retry_flag(bool large_retry_flag) { large_retry_flag_ = large_retry_flag; }
-
   void set_packet(const ObPacket *pkt);
   const ObPacket &get_packet() const;
   void set_ez_req(easy_request_t *r);
@@ -174,7 +171,6 @@ protected:
 
   mutable TraceId trace_id_;
   bool discard_flag_;
-  bool large_retry_flag_;
   int32_t retry_times_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObRequest);

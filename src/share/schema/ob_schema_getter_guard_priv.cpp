@@ -303,7 +303,6 @@ int ObSchemaGetterGuard::check_catalog_access(const ObSessionPrivInfo &session_p
   ObCatalogPrivSortKey catalog_priv_key(session_priv.user_id_,
                                         catalog_name);
   ObPrivSet catalog_priv_set = OB_PRIV_SET_EMPTY;
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
   const ObCatalogSchema *catalog_schema = NULL;
   bool is_grant_role = false;
   const ObUserInfo *role_info = NULL;
@@ -315,14 +314,12 @@ int ObSchemaGetterGuard::check_catalog_access(const ObSessionPrivInfo &session_p
   if (!session_priv.is_valid() || 0 == catalog_name.length()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid arguments", K(session_priv), K(ret));
-  } else if (OB_FAIL(get_tenant_compat_mode(compat_mode))) {
-    LOG_WARN("fail to get compat mode", K(ret));
   } else if (OB_FAIL(check_tenant_schema_guard())) {
     LOG_WARN("fail to check tenant schema guard", K(ret));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
     LOG_WARN("fail to check lazy guard", K(ret));
   } 
-  if (OB_SUCC(ret) && compat_mode == lib::Worker::CompatMode::MYSQL) {
+  if (OB_SUCC(ret)) {
     if (OB_FAIL(mgr->priv_mgr_.get_catalog_priv_set(catalog_priv_key, catalog_priv_set))) {
       LOG_WARN("get catalog priv set failed", K(ret));
     } else if ((session_priv.user_priv_set_ | catalog_priv_set) & OB_PRIV_USE_CATALOG) {
@@ -1580,20 +1577,17 @@ int ObSchemaGetterGuard::check_location_access(const ObSessionPrivInfo &session_
 
   const ObSchemaMgr *mgr = NULL;
   const ObLocationSchema *location_schema = NULL;
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
 
   if (!session_priv.is_valid() || 0 == location_name.length()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid arguments", K(session_priv), K(ret));
-  } else if (OB_FAIL(get_tenant_compat_mode(compat_mode))) {
-    LOG_WARN("fail to get compat mode", K(ret));
   } else if (OB_FAIL(check_tenant_schema_guard())) {
     LOG_WARN("fail to check tenant schema guard", K(ret));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
     LOG_WARN("fail to check lazy guard", K(ret));
   } 
 
-  if (OB_SUCC(ret) && compat_mode == lib::Worker::CompatMode::MYSQL) {
+  if (OB_SUCC(ret)) {
     if (OB_FAIL(check_obj_mysql_priv(session_priv, enable_role_id_array, tmp_need_priv))) {
       LOG_WARN("No privilege to access location", K(session_priv), K(location_name), K(ret));
     }

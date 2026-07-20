@@ -271,8 +271,7 @@ int ObDbmsStatsLockUnlock::get_stat_locked_partition_ids(ObExecContext &ctx,
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      const bool did_retry_weak = false;
-      ObSQLClientRetryWeak sql_client_retry_weak(mysql_proxy, did_retry_weak);
+      auto &sql_client_retry_weak = *mysql_proxy;
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {

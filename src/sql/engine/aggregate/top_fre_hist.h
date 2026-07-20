@@ -31,7 +31,6 @@ inline constexpr bool is_top_fre_hist_lob_vec_tc(const VecValueTypeClass vec_tc)
   return vec_tc == VEC_TC_LOB ||
          vec_tc == VEC_TC_JSON ||
          vec_tc == VEC_TC_GEO ||
-         vec_tc == VEC_TC_ROARINGBITMAP ||
          vec_tc == VEC_TC_COLLECTION;
 }
 

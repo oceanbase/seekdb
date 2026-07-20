@@ -103,7 +103,6 @@ ob_set_subtarget(oblib_common reloc_xml
   xml/ob_xml_util.cpp
   xml/ob_xpath.cpp
   xml/ob_multi_mode_bin.cpp
-  xml/ob_xml_bin.cpp
   xml/ob_multi_mode_interface.cpp
   xml/ob_path_parser.cpp
   xml/ob_binary_aggregate.cpp
@@ -125,20 +124,11 @@ ob_set_subtarget(oblib_common ALONE
 
 ob_set_subtarget(oblib_common reloc_mysqlclient
   mysqlclient/ob_isql_client.cpp
-  mysqlclient/ob_mysql_connection.cpp
-  mysqlclient/ob_mysql_connection_pool.cpp
-  mysqlclient/ob_mysql_prepared_param.cpp
-  mysqlclient/ob_mysql_prepared_result.cpp
-  mysqlclient/ob_mysql_prepared_statement.cpp
   mysqlclient/ob_mysql_proxy.cpp
   mysqlclient/ob_mysql_proxy_util.cpp
   mysqlclient/ob_mysql_result.cpp
-  mysqlclient/ob_mysql_result_impl.cpp
-  mysqlclient/ob_mysql_statement.cpp
   mysqlclient/ob_mysql_transaction.cpp
-  mysqlclient/ob_server_connection_pool.cpp
   mysqlclient/ob_single_connection_proxy.cpp
-  mysqlclient/ob_single_mysql_connection_pool.cpp
 )
 
 ob_set_subtarget(oblib_common reloc_geo

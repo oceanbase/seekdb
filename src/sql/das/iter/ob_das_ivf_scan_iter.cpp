@@ -3386,7 +3386,7 @@ int ObIvfPreFilter::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
   } else {
-    ROARING_TRY_CATCH(roaring_bitmap_ = roaring::api::roaring64_bitmap_create());
+    CROARING_TRY_CATCH(roaring_bitmap_ = roaring::api::roaring64_bitmap_create());
     if (OB_SUCC(ret)) {
       type_ = FilterType::ROARING_BITMAP;
     }
@@ -3415,7 +3415,7 @@ int ObIvfPreFilter::add(int64_t id)
 {
   int ret = OB_SUCCESS;
   if (type_ == FilterType::ROARING_BITMAP) {
-    ROARING_TRY_CATCH(roaring::api::roaring64_bitmap_add(roaring_bitmap_, id));
+    CROARING_TRY_CATCH(roaring::api::roaring64_bitmap_add(roaring_bitmap_, id));
   } else if (type_ == FilterType::SIMPLE_RANGE) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("simple range not support add", K(ret));

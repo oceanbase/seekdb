@@ -295,7 +295,6 @@ int ObCreateIndexResolver::resolve_index_column_node(
     }
 
     // Check whether the new index is on the same columns as old indexes.
-    CHECK_COMPATIBILITY_MODE(session_info_);
   }
   return ret;
 }

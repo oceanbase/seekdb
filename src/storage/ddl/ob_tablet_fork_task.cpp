@@ -295,7 +295,6 @@ ObTabletForkParam::ObTabletForkParam()
     source_tablet_id_(),
     dest_tablet_id_(),
     fork_snapshot_version_(0),
-    compat_mode_(lib::Worker::CompatMode::MYSQL),
     data_format_version_(0)
 {
 }
@@ -308,7 +307,6 @@ ObTabletForkParam::ObTabletForkParam(const ObTabletForkParam &other)
     source_tablet_id_(other.source_tablet_id_),
     dest_tablet_id_(other.dest_tablet_id_),
     fork_snapshot_version_(other.fork_snapshot_version_),
-    compat_mode_(other.compat_mode_),
     data_format_version_(other.data_format_version_)
 {
 }
@@ -323,7 +321,6 @@ ObTabletForkParam &ObTabletForkParam::operator=(const ObTabletForkParam &other)
     source_tablet_id_ = other.source_tablet_id_;
     dest_tablet_id_ = other.dest_tablet_id_;
     fork_snapshot_version_ = other.fork_snapshot_version_;
-    compat_mode_ = other.compat_mode_;
     data_format_version_ = other.data_format_version_;
   }
   return *this;
@@ -343,7 +340,6 @@ void ObTabletForkParam::reset()
   source_tablet_id_.reset();
   dest_tablet_id_.reset();
   fork_snapshot_version_ = 0;
-  compat_mode_ = lib::Worker::CompatMode::MYSQL;
   data_format_version_ = 0;
 }
 
@@ -355,7 +351,6 @@ bool ObTabletForkParam::is_valid() const
       && source_tablet_id_.is_valid()
       && dest_tablet_id_.is_valid()
       && fork_snapshot_version_ > 0
-      && compat_mode_ != lib::Worker::CompatMode::INVALID
       && data_format_version_ > 0;
 }
 
@@ -375,7 +370,6 @@ int ObTabletForkParam::init(const ObTabletForkParam &param)
     source_tablet_id_ = param.source_tablet_id_;
     dest_tablet_id_ = param.dest_tablet_id_;
     fork_snapshot_version_ = param.fork_snapshot_version_;
-    compat_mode_ = param.compat_mode_;
     data_format_version_ = param.data_format_version_;
     is_inited_ = true;
   }

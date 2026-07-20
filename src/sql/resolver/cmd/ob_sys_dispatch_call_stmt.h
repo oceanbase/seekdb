@@ -43,20 +43,14 @@ public:
     designated_tenant_name_ = tenant_name;
   }
   const ObString &get_designated_tenant_name() const { return designated_tenant_name_; }
-  void set_tenant_compat_mode(const ObCompatibilityMode mode) { tenant_compat_mode_ = mode; }
-  ObCompatibilityMode get_tenant_compat_mode() const { return tenant_compat_mode_; }
-
   TO_STRING_KV(N_STMT_TYPE,
                ((int)stmt_type_),
-               
-               K_(tenant_compat_mode),
                K_(call_stmt));
 
 private:
   ObString call_stmt_;
   
   ObString designated_tenant_name_;
-  ObCompatibilityMode tenant_compat_mode_;
 };
 
 }  // namespace sql

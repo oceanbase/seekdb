@@ -24,6 +24,8 @@ namespace oceanbase
 namespace obmysql
 {
 
+static constexpr uint8_t CURSOR_TYPE_READ_ONLY = 1;
+
 #define INTERNAL_MYSQL_CMD_START 64
 
 static const int64_t OB_MYSQL_MAX_PACKET_LENGTH = (1L << 24); //3bytes , 16M
@@ -170,10 +172,7 @@ union ObMySQLCapabilityFlags
     uint32_t OB_CLIENT_CAN_HANDLE_EXPIRED_PASSWORDS:    1;
     uint32_t OB_CLIENT_SESSION_TRACK:                   1;
     uint32_t OB_CLIENT_DEPRECATE_EOF:                   1;
-    uint32_t OB_CLIENT_RESERVED_NOT_USE:                2;
-    uint32_t OB_CLIENT_RESERVED_27:                     1;
-    uint32_t OB_CLIENT_RETURN_HIDDEN_ROWID:             1;
-    uint32_t OB_CLIENT_USE_LOB_LOCATOR:                 1;
+    uint32_t OB_CLIENT_RESERVED_NOT_USE:                5;
     uint32_t OB_CLIENT_SSL_VERIFY_SERVER_CERT:          1;
     uint32_t OB_CLIENT_REMEMBER_OPTIONS:                1;
   } cap_flags_;
@@ -206,10 +205,7 @@ enum ObClientCapabilityPos
   OB_CLIENT_CAN_HANDLE_EXPIRED_PASSWORDS_POS,
   OB_CLIENT_SESSION_TRACK_POS,
   OB_CLIENT_DEPRECATE_EOF_POS,
-  //RESERVED 2
-  OB_CLIENT_RESERVED_27_POS = 27,
-  OB_CLIENT_RETURN_ROWID_POS = 28,
-  OB_CLIENT_USE_LOB_LOCATOR_POS = 29,
+  // positions 25-29 are reserved
   OB_CLIENT_SSL_VERIFY_SERVER_CERT_POS = 30,
   OB_CLIENT_REMEMBER_OPTIONS_POS = 31,
 };
@@ -389,18 +385,11 @@ class ObMySQLRawPacket
     : public ObMySQLPacket
 {
 public:
-  ObMySQLRawPacket() : ObMySQLPacket(), cmd_(COM_MAX_NUM),
-                       is_weak_read_(false),
-                       txn_free_route_(false),
-                       proxy_switch_route_(false)
+  ObMySQLRawPacket() : ObMySQLPacket(), cmd_(COM_MAX_NUM)
   {}
 
   explicit ObMySQLRawPacket(obmysql::ObMySQLCmd cmd)
-    : ObMySQLPacket(), cmd_(cmd),
-      is_weak_read_(false),
-      txn_free_route_(false),
-      proxy_switch_route_(false),
-      consume_size_(0)
+    : ObMySQLPacket(), cmd_(cmd), consume_size_(0)
   {}
 
   virtual ~ObMySQLRawPacket() {}
@@ -411,15 +400,6 @@ public:
   inline const char *get_cdata() const;
   inline uint32_t get_clen() const;
 
-  inline void set_is_weak_read(const bool v) { is_weak_read_ = v; }
-  inline bool is_weak_read() const { return is_weak_read_; }
-
-  inline void set_proxy_switch_route(const bool v) { proxy_switch_route_ = v; }
-  inline bool is_proxy_switch_route() const { return proxy_switch_route_; }
-
-  inline void set_txn_free_route(const bool txn_free_route);
-  inline bool txn_free_route() const;
-
   virtual int64_t get_serialize_size() const;
 
   void set_consume_size(int64_t consume_size) { consume_size_ = consume_size; }
@@ -428,9 +408,6 @@ public:
   virtual void reset() {
     ObMySQLPacket::reset();
     cmd_ = COM_MAX_NUM;
-    is_weak_read_ = false;
-    txn_free_route_ = false;
-    proxy_switch_route_ = false;
     consume_size_ = 0;
   }
 
@@ -438,15 +415,10 @@ public:
   {
     ObMySQLPacket::assign(other);
     cmd_ = other.cmd_;
-    is_weak_read_ = other.is_weak_read_;
-    txn_free_route_ = other.txn_free_route_;
-    proxy_switch_route_ = other.proxy_switch_route_;
     consume_size_ = other.consume_size_;
   }
 
-  TO_STRING_KV("header", hdr_, "weak_read", is_weak_read_,
-            "txn_free_route_", txn_free_route_, "proxy_switch_route", proxy_switch_route_,
-            "consume_size", consume_size_);
+  TO_STRING_KV("header", hdr_, "consume_size", consume_size_);
 protected:
   virtual int serialize(char*, const int64_t, int64_t&) const;
 
@@ -454,9 +426,6 @@ private:
   void set_len(uint32_t len);
 private:
   ObMySQLCmd cmd_;
-  bool is_weak_read_;
-  bool txn_free_route_;
-  bool proxy_switch_route_;
 
   // In load local scenario, we should tell the NIO to consume specific size data.
   // The size is a packet size in usually. But the mysql packet size if not equal
@@ -536,34 +505,6 @@ inline const char *ObMySQLRawPacket::get_cdata() const
 inline uint32_t ObMySQLRawPacket::get_clen() const
 {
   return hdr_.len_;
-}
-
-union ObClientAttributeCapabilityFlags
-{
-  ObClientAttributeCapabilityFlags() : capability_(0) {}
-  explicit ObClientAttributeCapabilityFlags(uint64_t cap) : capability_(cap) {}
-  bool is_support_lob_locatorv2() const { return 1 == cap_flags_.OB_CLIENT_CAP_OB_LOB_LOCATOR_V2; }
-  bool is_support_new_result_meta_data() const { return 1 == cap_flags_.OB_CLIENT_CAP_NEW_RESULT_META_DATA; }
-  bool is_support_jdbc_binary_double() const { return  1 == cap_flags_.OB_CLIENT_SUPPORT_JDBC_BINARY_DOUBLE; }
-
-  uint64_t capability_;
-  struct CapabilityFlags
-  {
-    uint64_t OB_CLIENT_CAP_OB_LOB_LOCATOR_V2:       1;
-    uint64_t OB_CLIENT_CAP_NEW_RESULT_META_DATA:       1;
-    uint64_t OB_CLIENT_SUPPORT_JDBC_BINARY_DOUBLE:     1;
-    uint64_t OB_CLIENT_CAP_RESERVED_NOT_USE:       61;
-  } cap_flags_;
-};
-
-inline void ObMySQLRawPacket::set_txn_free_route(const bool txn_free_route)
-{
-  txn_free_route_ = txn_free_route;
-}
-
-inline bool ObMySQLRawPacket::txn_free_route() const
-{
-  return txn_free_route_;
 }
 
 } // end of namespace obmysql

@@ -35,8 +35,8 @@
     SpinWLockGuard guard(memtable_mgr_handle_lock_); \
     if (!memtable_mgr_handle_.is_valid()) { \
       STORAGE_LOG(INFO, "memtable_mgr_handle_ is not exist, need create", K(tablet_meta.tablet_id_)); \
-      if (OB_FAIL(create_tablet_memtable_mgr_(tablet_meta.tablet_id_, tablet_meta.compat_mode_))) { \
-        STORAGE_LOG(WARN, "failed to create_tablet_memtable_mgr", K(tablet_meta.tablet_id_), K(tablet_meta.compat_mode_)); \
+      if (OB_FAIL(create_tablet_memtable_mgr_(tablet_meta.tablet_id_))) { \
+        STORAGE_LOG(WARN, "failed to create_tablet_memtable_mgr", K(tablet_meta.tablet_id_)); \
       } \
     } \
   } while (OB_SUCC(ret));
@@ -167,7 +167,6 @@ public:
   DELEGATE_FOR_MEMTABLE_MGR(set_is_tablet_freeze_for_active_memtable, false);
   DELEGATE_FOR_MEMTABLE_MGR(get_last_frozen_memtable, false);
   DELEGATE_FOR_MEMTABLE_MGR(get_memtable_for_replay, false);
-  DELEGATE_FOR_MEMTABLE_MGR(get_direct_load_memtables_for_write, true);
 
   DELEGATE_FOR_MEMTABLE_MGR_WITH_CREATE(create_memtable);
 
@@ -176,8 +175,7 @@ private:
   int try_reset_memtable_mgr_handle_();
   bool need_reset_without_lock_();
   bool need_reset_();
-  int create_tablet_memtable_mgr_(const ObTabletID &tablet_id,
-      lib::Worker::CompatMode compat_mode);
+  int create_tablet_memtable_mgr_(const ObTabletID &tablet_id);
   ObMemtableMgrHandle memtable_mgr_handle_;
   mutable common::SpinRWLock memtable_mgr_handle_lock_;
 };

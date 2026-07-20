@@ -22,7 +22,7 @@
 #include "storage/ddl/ob_direct_load_struct.h"
 #include "storage/ddl/ob_ddl_macro_block_writer.h"
 #include "storage/ddl/ob_lob_macro_block_writer.h"
-#include "storage/direct_load/ob_direct_load_vector_utils.h"
+#include "storage/ddl/ob_ddl_vector_utils.h"
 #include "sql/engine/ob_batch_rows.h"
 #include "storage/ob_tablet_autoincrement_service.h"
 
@@ -156,100 +156,6 @@ int ObTabletSliceWriter::close()
     LOG_WARN("fail to close macro block writer", K(ret), KPC(macro_block_writer_));
   }
   FLOG_INFO("tablet slice writer close finished", K(ret), KPC(this));
-  return ret;
-}
-
-/**
- ********************************************    ObTabletSliceIncWriter    *******************************************
- */
-
-ObTabletSliceIncWriter::ObTabletSliceIncWriter()
-  : is_inited_(false),
-    allocator_(ObMemAttr("slice_mb_writer")),
-    storage_column_count_(0),
-    macro_block_writer_(nullptr),
-    row_count_(0)
-{
-}
-
-ObTabletSliceIncWriter::~ObTabletSliceIncWriter()
-{
-  reset();
-}
-
-void ObTabletSliceIncWriter::reset()
-{
-  is_inited_ = false;
-  storage_column_count_ = 0;
-  OB_DELETEx(ObDDLMacroBlockWriter, &allocator_, macro_block_writer_);
-  row_count_ = 0;
-  allocator_.reset();
-}
-
-int ObTabletSliceIncWriter::init(const ObWriteMacroParam &param)
-{
-  int ret = OB_SUCCESS;
-  if (IS_INIT) {
-    ret = OB_INIT_TWICE;
-    LOG_WARN("ObTabletSliceIncWriter init twice", KR(ret), KP(this));
-  } else if (OB_UNLIKELY(!param.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(param));
-  } else {
-    storage_column_count_ = param.ddl_table_schema_.column_items_.count();
-    if (OB_FAIL(ObDDLUtil::init_inc_macro_block_writer(param, allocator_, macro_block_writer_))) {
-      LOG_WARN("fail to init inc macro block writer", KR(ret));
-    } else {
-      is_inited_ = true;
-    }
-  }
-  return ret;
-}
-
-int ObTabletSliceIncWriter::append_row(const ObDatumRow &row)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObTabletSliceIncWriter not init", KR(ret), KP(this));
-  } else if (OB_UNLIKELY(!row.is_valid() || row.get_column_count() != storage_column_count_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(storage_column_count_), K(row));
-  } else if (OB_FAIL(macro_block_writer_->append_row(row))) {
-    LOG_WARN("fail to append row", KR(ret));
-  } else {
-    ++row_count_;
-  }
-  return ret;
-}
-
-int ObTabletSliceIncWriter::append_batch(const ObBatchDatumRows &batch_rows)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObTabletSliceIncWriter not init", KR(ret), KP(this));
-  } else if (OB_UNLIKELY(batch_rows.get_column_count() != storage_column_count_ ||
-                         batch_rows.row_count_ <= 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(storage_column_count_), K(batch_rows));
-  } else if (OB_FAIL(macro_block_writer_->append_batch(batch_rows))) {
-    LOG_WARN("fail to append batch", KR(ret));
-  } else {
-    row_count_ += batch_rows.row_count_;
-  }
-  return ret;
-}
-
-int ObTabletSliceIncWriter::close()
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObTabletSliceIncWriter not init", KR(ret), KP(this));
-  } else if (OB_FAIL(macro_block_writer_->close())) {
-    LOG_WARN("fail to close macro block writer", KR(ret));
-  }
   return ret;
 }
 
@@ -506,7 +412,7 @@ int ObTabletSliceBufferTempFileWriter::ObDDLRowBuffer::init(
     const int64_t max_batch_size)
 {
   int ret = OB_SUCCESS;
-  ObDirectLoadRowFlag row_flag;
+  ObDDLRowFlag row_flag;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("the ObDDLRowBuffer has been initialized", K(ret));
@@ -517,7 +423,7 @@ int ObTabletSliceBufferTempFileWriter::ObDDLRowBuffer::init(
     LOG_WARN("fail to initialize ddl row buffer",
         K(ret), K(column_schemas), K(max_batch_size), K(row_flag));
   } else {
-    const ObIArray<ObDirectLoadVector *> &vectors = buffer_.get_vectors();
+    const ObIArray<ObDDLVector *> &vectors = buffer_.get_vectors();
     for (int64_t i = 0; OB_SUCC(ret) && i < vectors.count(); ++i) {
       if (OB_FAIL(bdrs_.vectors_.push_back(vectors.at(i)->get_vector()))) {
         LOG_WARN("fail to push back vector", K(ret));
@@ -1048,9 +954,9 @@ int ObBatchSliceWriter::init_storage_batch_rows()
     const int64_t storage_column_count = writer_param_.ddl_table_schema_.column_items_.count();
     ObIVector *snapshot_version_vector;
     ObIVector *sql_seq_vector;
-    if (OB_FAIL(ObDirectLoadVectorUtils::make_const_multi_version_vector(-snapshot_version, arena_, snapshot_version_vector))) {
+    if (OB_FAIL(ObDDLVectorUtils::make_const_multi_version_vector(-snapshot_version, arena_, snapshot_version_vector))) {
       LOG_WARN("init const vector for snapshot version failed", K(ret), K(snapshot_version));
-    } else if (OB_FAIL(ObDirectLoadVectorUtils::make_const_multi_version_vector(0, arena_, sql_seq_vector))) {
+    } else if (OB_FAIL(ObDDLVectorUtils::make_const_multi_version_vector(0, arena_, sql_seq_vector))) {
       LOG_WARN("init const vector for sql sequence failed", K(ret));
     } else {
       buffer_batch_rows_.row_flag_ = ObDmlFlag::DF_INSERT;
@@ -1091,7 +997,7 @@ int ObBatchSliceWriter::init_row_buffer(const int64_t buffer_row_count)
     } else if (buffer_batch_rows_.vectors_.empty() && OB_FAIL(init_storage_batch_rows())) {
       LOG_WARN("init storage batch rows failed", K(ret));
     } else {
-      const ObIArray<ObDirectLoadVector *> &vectors = row_buffer_.get_vectors();
+      const ObIArray<ObDDLVector *> &vectors = row_buffer_.get_vectors();
       for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_column_count_; ++i) {
         buffer_batch_rows_.vectors_.at(i) = vectors.at(i)->get_vector();
       }

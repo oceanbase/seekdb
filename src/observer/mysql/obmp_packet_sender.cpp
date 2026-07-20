@@ -19,9 +19,9 @@
 #include "obmp_packet_sender.h"
 #include "rpc/obmysql/packet/ompk_error.h"
 #include "rpc/obmysql/packet/ompk_eof.h"
+#include "rpc/obmysql/packet/ompk_ok.h"
 #include "observer/mysql/obmp_utils.h"
 #include "observer/mysql/ob_mysql_result_set.h"
-#include "sql/session/ob_sess_info_verify.h"
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -45,7 +45,6 @@ void ObOKPParam::reset()
   message_ = NULL;
   is_on_connect_ = false;
   is_on_change_user_ = false;
-  is_partition_hit_ = true;
   has_more_result_ = false;
   take_trace_id_to_client_ = false;
   warnings_count_ = 0;
@@ -57,7 +56,6 @@ int64_t ObOKPParam::to_string(char *buf, const int64_t buf_len) const
   int64_t pos = 0;
   J_KV(KT_(affected_rows),
        K_(is_on_connect),
-       K_(is_partition_hit),
        K_(take_trace_id_to_client),
        K_(has_more_result),
        K_(lii));
@@ -227,11 +225,6 @@ int ObMPPacketSender::response_packet(obmysql::ObMySQLPacket &pkt, sql::ObSQLSes
   }
 
   if (OB_FAIL(ret)) {
-  } else if (FALSE_IT(ObSessInfoVerify::sess_veri_control(pkt, session))) {
-    // do nothing.
-  }
-
-  if (OB_FAIL(ret)) {
   } else if (OB_FAIL(alloc_ezbuf())) {
     LOG_ERROR("easy buffer alloc failed", K(ret));
   } else {
@@ -261,7 +254,6 @@ int ObMPPacketSender::response_packet(obmysql::ObMySQLPacket &pkt, sql::ObSQLSes
 
 int ObMPPacketSender::send_error_packet(int err,
                                         const char* errmsg,
-                                        bool is_partition_hit /* = true */,
                                         void *extra_err_info /* = NULL */)
 {
   int ret = OB_SUCCESS;
@@ -375,10 +367,11 @@ int ObMPPacketSender::send_error_packet(int err,
                            message.length(), tmp_msg_buf,
                            tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
                            tm.tm_hour, tm.tm_min, tm.tm_sec, tv.tv_usec,
-                              ObCurTraceId::get_trace_id_str(trace_id_buf, sizeof(trace_id_buf)));
+                           ObCurTraceId::get_trace_id_str(trace_id_buf, sizeof(trace_id_buf)));
       (void) msg_buf_size; // make compiler happy
       message = ObString::make_string(msg_buf); // default error message
     }
+
     // TODO Negotiate a err for rerouting sql
     if (OB_SP_RAISE_APPLICATION_ERROR == err) {
       epacket.set_errcode(static_cast<uint16_t>(wb->get_err_code()));
@@ -506,11 +499,6 @@ int ObMPPacketSender::send_ok_packet(ObSQLSessionInfo &session, ObOKPParam &ok_p
     okp.set_last_insert_id(ok_param.lii_);
     okp.set_warnings(ok_param.warnings_count_);
 
-    // set is_partition_hit
-    if (!ok_param.is_partition_hit_) {
-      ret = session.set_partition_hit(false);
-    }
-
     if (OB_SUCC(ret)) {
       if (!ok_param.take_trace_id_to_client_) {
         const int64_t elapsed_time = ObClockGenerator::getClock() - query_receive_ts_;
@@ -520,18 +508,10 @@ int ObMPPacketSender::send_ok_packet(ObSQLSessionInfo &session, ObOKPParam &ok_p
       if (ok_param.take_trace_id_to_client_) {
         ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();
         if (NULL != trace_id) {
-          if (OB_FAIL(session.update_last_trace_id(*trace_id))) {
-            LOG_WARN("fail to update last trace id", KPC(trace_id), K(ret));
-            ret = OB_SUCCESS; // ignore ret
-          }
+          session.set_last_trace_id(trace_id);
         }
       }
     }
-  }
-
-  // set is_trans_specfied
-  if (OB_SUCC(ret)) {
-    ret = session.save_trans_status();
   }
 
   bool need_track_session_info = false;
@@ -574,8 +554,6 @@ int ObMPPacketSender::send_ok_packet(ObSQLSessionInfo &session, ObOKPParam &ok_p
       flags.status_flags_.OB_SERVER_STATUS_AUTOCOMMIT = (ac ? 1 : 0);
       flags.status_flags_.OB_SERVER_MORE_RESULTS_EXISTS = ok_param.has_more_result_;
       flags.status_flags_.OB_SERVER_STATUS_NO_BACKSLASH_ESCAPES = is_no_backslash_escapes;
-      // in java client or others, use slow query bit to indicate partition hit or not
-      flags.status_flags_.OB_SERVER_QUERY_WAS_SLOW = !ok_param.is_partition_hit_;
       flags.status_flags_.OB_SERVER_STATUS_CURSOR_EXISTS = ok_param.cursor_exist_ ? 1 : 0;
       flags.status_flags_.OB_SERVER_STATUS_LAST_ROW_SENT = ok_param.send_last_row_ ? 1 : 0;
       flags.status_flags_.OB_SERVER_PS_OUT_PARAMS = ok_param.has_pl_out_ ? 1 : 0;
@@ -903,17 +881,6 @@ int ObMPPacketSender::resize_ezbuf(const int64_t size)
       ez_buf_ = tmp;
     }
   }
-  return ret;
-}
-
-int ObMPPacketSender::update_transmission_checksum_flag(const ObSQLSessionInfo &session)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!conn_valid_)) {
-    ret = OB_CONNECT_ERROR;
-    LOG_WARN("connection in error, maybe has disconnected", K(ret));
-  }
-  // obproxy support removed: OB_CAP_CHECKSUM_SWITCH was proxy-only
   return ret;
 }
 

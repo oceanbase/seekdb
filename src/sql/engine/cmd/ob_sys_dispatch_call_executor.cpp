@@ -50,8 +50,7 @@ int ObSysDispatchCallExecutor::execute(ObExecContext &ctx, ObSysDispatchCallStmt
   OZ (create_session(free_session_ctx, session));
   CK (OB_NOT_NULL(session));
   OZ (init_session(*session,
-                   stmt.get_designated_tenant_name(),
-                   stmt.get_tenant_compat_mode()));
+                   stmt.get_designated_tenant_name()));
   CK (OB_NOT_NULL(pool = static_cast<ObInnerSQLConnectionPool *>(ctx.get_sql_proxy()->get_pool())));
   OZ (pool->acquire_spi_conn(session, conn));
   OZ (conn->execute_write(stmt.get_call_stmt(), affected_rows),
@@ -82,8 +81,7 @@ int ObSysDispatchCallExecutor::create_session(ObFreeSessionCtx &free_session_ctx
     LOG_WARN("session_mgr_ is null");
   } else if (OB_FAIL(GCTX.session_mgr_->create_sessid(sid))) {
     LOG_WARN("alloc session id failed");
-  } else if (OB_FAIL(GCTX.session_mgr_->create_session(
-                 sid, ObTimeUtility::current_time(), session_info))) {
+  } else if (OB_FAIL(GCTX.session_mgr_->create_session(sid, session_info))) {
     LOG_WARN("create session failed", K(ret), K(sid));
     session_info = nullptr;
   } else if (OB_ISNULL(session_info)) {
@@ -96,8 +94,7 @@ int ObSysDispatchCallExecutor::create_session(ObFreeSessionCtx &free_session_ctx
 }
 
 int ObSysDispatchCallExecutor::init_session(sql::ObSQLSessionInfo &session,
-                                            const ObString &tenant_name,
-                                            const ObCompatibilityMode compat_mode)
+                                            const ObString &tenant_name)
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
@@ -105,7 +102,6 @@ int ObSysDispatchCallExecutor::init_session(sql::ObSQLSessionInfo &session,
   const bool print_info_log = true;
   const bool is_sys_tenant = true;
   ObPCMemPctConf pc_mem_conf;
-  ObObj compatibility_mode;
   ObObj sql_mode;
   ObSEArray<const ObUserInfo *, 1> user_infos;
   const ObUserInfo *user_info = nullptr;
@@ -113,7 +109,6 @@ int ObSysDispatchCallExecutor::init_session(sql::ObSQLSessionInfo &session,
   CK (OB_NOT_NULL(GCTX.schema_service_));
   OZ (GCTX.schema_service_->get_tenant_schema_guard(schema_guard));
   {
-    compatibility_mode.set_int(0);
     sql_mode.set_uint(ObUInt64Type, DEFAULT_MYSQL_MODE);
   }
   OX (session.set_inner_session());
@@ -122,7 +117,6 @@ int ObSysDispatchCallExecutor::init_session(sql::ObSQLSessionInfo &session,
   OZ (session.init_tenant(tenant_name.ptr()));
   OZ (session.load_all_sys_vars(schema_guard));
   OZ (session.update_sys_variable(share::SYS_VAR_SQL_MODE, sql_mode));
-  OZ (session.update_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, compatibility_mode));
   OZ (session.get_pc_mem_conf(pc_mem_conf));
   CK (OB_NOT_NULL(GCTX.sql_engine_));
 

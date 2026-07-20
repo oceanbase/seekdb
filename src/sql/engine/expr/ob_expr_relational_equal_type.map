@@ -46,7 +46,6 @@ static constexpr ObObjType RELATIONAL_EQUAL_TYPE[ObMaxType] =
   ObMaxType,            /* ObCollectionSQLType  */
   ObMySQLDateType,      /* ObMySQLDateType      */
   ObMySQLDateTimeType,  /* ObMySQLDateTimeType  */
-  ObMaxType,            /* ObRoaringBitmapType  */
 };
 
 static_assert(is_array_fully_initialized(RELATIONAL_EQUAL_TYPE), "RELATIONAL_EQUAL_TYPE is partially initlized");

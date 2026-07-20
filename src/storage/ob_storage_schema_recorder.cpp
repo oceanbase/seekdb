@@ -36,7 +36,6 @@ ObStorageSchemaRecorder::ObStorageSchemaRecorder()
   : ObIStorageClogRecorder(),
     is_inited_(false),
     ignore_storage_schema_(false),
-    compat_mode_(lib::Worker::CompatMode::INVALID),
     clog_buf_(nullptr),
     tablet_handle_ptr_(nullptr),
     schema_guard_(nullptr),
@@ -60,7 +59,6 @@ void ObStorageSchemaRecorder::destroy()
 {
   is_inited_ = false;
   ignore_storage_schema_ = false;
-  compat_mode_ = lib::Worker::CompatMode::INVALID;
   ObIStorageClogRecorder::destroy();
   free_allocated_info();
   log_handler_ = NULL;
@@ -72,7 +70,6 @@ void ObStorageSchemaRecorder::destroy()
 int ObStorageSchemaRecorder::init(
     const ObTabletID &tablet_id,
     const int64_t saved_schema_version,
-    const lib::Worker::CompatMode compat_mode,
     logservice::ObLogHandler *log_handler)
 {
   int ret = OB_SUCCESS;
@@ -87,7 +84,6 @@ int ObStorageSchemaRecorder::init(
   } else {
     ignore_storage_schema_ = tablet_id.is_special_merge_tablet();
     tablet_id_ = tablet_id;
-    compat_mode_ = compat_mode;
     is_inited_ = true;
   }
   if (OB_FAIL(ret)) {
@@ -293,7 +289,7 @@ int ObStorageSchemaRecorder::get_schema(
     }
   } else {
     table_version = t_schema->get_schema_version();
-    if (OB_FAIL(storage_schema_->init(*allocator_, *t_schema, compat_mode_, false/*skip_column_info*/, ObStorageSchema::STORAGE_SCHEMA_VERSION))) {
+    if (OB_FAIL(storage_schema_->init(*allocator_, *t_schema, false/*skip_column_info*/, ObStorageSchema::STORAGE_SCHEMA_VERSION))) {
       LOG_WARN("failed to init storage schema", K(ret), K(t_schema));
     }
   }

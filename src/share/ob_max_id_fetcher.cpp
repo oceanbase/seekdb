@@ -415,9 +415,7 @@ int ObMaxIdFetcher::fetch_max_id(ObISQLClient &sql_client,
       "FOR UPDATE", OB_ALL_SYS_STAT_TNAME, id_name))) {
     LOG_WARN("sql append format string failed", K(ret));
   } else {
-    ObSQLClientRetryWeak sql_client_retry_weak(&sql_client,
-                                               false /*did_use_retry*/,
-                                               OB_ALL_SYS_STAT_TID);
+    auto &sql_client_retry_weak = sql_client;
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       ObMySQLResult *result = NULL;
       ObString id_str;

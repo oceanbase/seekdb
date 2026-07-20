@@ -109,8 +109,7 @@ int ObAsyncPlanDriver::response_result(ObMySQLResultSet &result)
   // Error handling, responsible for returning error packets when not going asynchronous
   if (!OB_SUCC(ret) && !async_resp_used && !retry_ctrl_.need_retry()) {
     int sret = OB_SUCCESS;
-    bool is_partition_hit = session_.get_err_final_partition_hit(ret);
-    if (OB_SUCCESS != (sret = sender_.send_error_packet(ret, NULL, is_partition_hit))) {
+    if (OB_SUCCESS != (sret = sender_.send_error_packet(ret, NULL))) {
       LOG_WARN("send error packet fail", K(sret), K(ret));
     }
     //According to the agreement with the transaction layer, regardless of whether end_stmt succeeds or not,
@@ -124,4 +123,3 @@ int ObAsyncPlanDriver::response_result(ObMySQLResultSet &result)
 
 }/* ns observer*/
 }/* ns oceanbase */
-

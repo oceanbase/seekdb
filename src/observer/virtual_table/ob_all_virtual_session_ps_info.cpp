@@ -134,11 +134,6 @@ int ObAllVirtualSessionPsInfo::fill_cells(ObPsStmtId ps_client_stmt_id,
       for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
         uint64_t col_id = output_column_ids_.at(i);
         switch (col_id) {
-        case share::ALL_VIRTUAL_SESSION_PS_INFO_CDE::PROXY_SESSION_ID: {
-          // obproxy support removed; schema-positional diagnostic column stays as 0
-          cells[i].set_uint64(0);
-          break;
-        }
         case share::ALL_VIRTUAL_SESSION_PS_INFO_CDE::SESSION_ID: {
           cells[i].set_uint64(cur_session_info_->get_sid());
           break;

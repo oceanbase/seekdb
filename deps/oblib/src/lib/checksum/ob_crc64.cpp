@@ -15,12 +15,6 @@
  */
 
 #include "lib/checksum/ob_crc64.h"
-#if defined(__APPLE__) || defined(__ANDROID__)
-// ISA-L not available on macOS/Android
-#elif defined(__linux__)
-#include "isa-l/crc64.h"
-#include "isa-l/crc.h"
-#endif
 
 namespace oceanbase
 {
@@ -1056,19 +1050,6 @@ uint64_t fast_crc64_sse42_manually(uint64_t crc, const char *buf, int64_t len)
   return crc;
 }
 
-//If the CPU is intel, ISA-L library for CRC can be used
-uint64_t ob_crc64_isal(uint64_t uCRC64, const char* buf, int64_t cb)
-{
-  if (buf == NULL || cb <= 0) {
-    return uCRC64;
-  }
-#if defined(__APPLE__) || defined(__ANDROID__) || defined(_WIN32)
-  return crc64_sse42(uCRC64, buf, cb);
-#elif defined(__linux__)
-  return crc32_iscsi((unsigned char*)(buf), cb, uCRC64);
-#endif
-}
-
 uint64_t crc64_sse42_dispatch(uint64_t crc, const char *buf, int64_t len)
 {
   #if defined (__x86_64__)
@@ -1077,34 +1058,13 @@ uint64_t crc64_sse42_dispatch(uint64_t crc, const char *buf, int64_t len)
   uint32_t c = 0;
   uint32_t d = 0;
 
-  uint32_t vendor_info[4];
-  uint32_t leaf = 0;
-  asm("cpuid" : "+a"(leaf), "=b"(vendor_info[0]), "=d"(vendor_info[1]), "=c"(vendor_info[2]));
-  vendor_info[3]='\0';
-
-  if (strcmp((char*)vendor_info, "GenuineIntel") == 0) {
-#if defined(__APPLE__) || defined(__ANDROID__) || defined(_WIN32)
-    asm("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "0"(1));
-    if ((c & (1 << 20)) != 0) {
-      ob_crc64_sse42_func = &crc64_sse42;
-      _OB_LOG_RET(WARN, OB_SUCCESS, "Use CPU crc32 instructs for crc64 calculate");
-    } else {
-      ob_crc64_sse42_func = &fast_crc64_sse42_manually;
-      _OB_LOG_RET(WARN, OB_SUCCESS, "Use manual crc32 table lookup for crc64 calculate");
-    }
-#elif defined(__linux__)
-    ob_crc64_sse42_func = &ob_crc64_isal;
-    _OB_LOG_RET(WARN, OB_SUCCESS, "Use ISAL for crc64 calculate");
-#endif
-  } else{
-    asm("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "0"(1));
-    if ((c & (1 << 20)) != 0) {
-      ob_crc64_sse42_func = &crc64_sse42;
-      _OB_LOG_RET(WARN, OB_SUCCESS, "Use CPU crc32 instructs for crc64 calculate");
-    } else {
-      ob_crc64_sse42_func = &fast_crc64_sse42_manually;
-      _OB_LOG_RET(WARN, OB_SUCCESS, "Use manual crc32 table lookup for crc64 calculate");
-    }
+  asm("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "0"(1));
+  if ((c & (1 << 20)) != 0) {
+    ob_crc64_sse42_func = &crc64_sse42;
+    _OB_LOG_RET(WARN, OB_SUCCESS, "Use CPU crc32 instructions for crc64 calculate");
+  } else {
+    ob_crc64_sse42_func = &fast_crc64_sse42_manually;
+    _OB_LOG_RET(WARN, OB_SUCCESS, "Use manual crc32 table lookup for crc64 calculate");
   }
 
   #elif defined(__aarch64__)
@@ -1178,4 +1138,3 @@ OB_DEF_SERIALIZE_SIZE(ObBatchChecksum)
 
 }
 }
-

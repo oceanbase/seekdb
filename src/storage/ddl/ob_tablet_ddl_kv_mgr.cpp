@@ -30,15 +30,11 @@ using namespace oceanbase::share;
 using namespace oceanbase::storage;
 using namespace oceanbase::transaction;
 
-// invalid ddl_kv_type, trans_id, seq_no means all
+// Invalid ddl_kv_type means all.
 bool ObDDLKVQueryParam::match_ddl_kv(const ObDDLKV &ddl_kv) const
 {
   return (!is_valid_ddl_kv(ddl_kv_type_)
-           || (ddl_kv_type_ == ddl_kv.get_ddl_kv_type()))
-         && (!trans_id_.is_valid()
-           || (trans_id_ == ddl_kv.get_trans_id()))
-         && (!seq_no_.is_valid()
-           || (seq_no_ == ddl_kv.get_seq_no()));
+           || (ddl_kv_type_ == ddl_kv.get_ddl_kv_type()));
 }
 
 ObTabletDDLKvMgr::ObTabletDDLKvMgr()
@@ -516,9 +512,7 @@ int ObTabletDDLKvMgr::freeze_ddl_kv(
     const int64_t snapshot_version,
     const uint64_t data_format_version,
     const SCN &freeze_scn,
-    const ObDDLKVType ddl_kv_type,
-    const transaction::ObTransID &trans_id,
-    const transaction::ObTxSEQ &seq_no)
+    const ObDDLKVType ddl_kv_type)
 {
   int ret = OB_SUCCESS;
   ObDDLKVHandle kv_handle;
@@ -526,12 +520,9 @@ int ObTabletDDLKvMgr::freeze_ddl_kv(
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTabletDDLKvMgr is not inited", K(ret));
-  } else if (is_inc_major_ddl_kv(ddl_kv_type)) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("inc major ddl kv is not supported", K(ret), K(ddl_kv_type));
   } else if (OB_UNLIKELY(!is_full_ddl_kv(ddl_kv_type))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("only support full and inc_major ddl kv", K(ret), K(ddl_kv_type));
+    LOG_WARN("only support full ddl kv", K(ret), K(ddl_kv_type));
   } else if (0 == get_count_nolock()) {
     // do nothing
   } else if (OB_FAIL(get_active_ddl_kv_impl(kv_handle))) {
@@ -540,9 +531,9 @@ int ObTabletDDLKvMgr::freeze_ddl_kv(
   if (OB_SUCC(ret) && !kv_handle.is_valid() && freeze_scn > max_freeze_scn_) {
     // freeze_scn > 0 only occured when ddl commit
     // assure there is an alive ddl kv, for waiting pre-logs
-    if (OB_FAIL(alloc_ddl_kv(start_scn, snapshot_version, data_format_version, kv_handle, ddl_kv_type, trans_id, seq_no))) {
+    if (OB_FAIL(alloc_ddl_kv(start_scn, snapshot_version, data_format_version, kv_handle, ddl_kv_type))) {
       LOG_WARN("create ddl kv failed", K(ret), K(start_scn), K(snapshot_version),
-          K(data_format_version), K(ddl_kv_type), K(trans_id), K(seq_no));
+          K(data_format_version), K(ddl_kv_type));
     }
   }
   if (OB_SUCC(ret) && kv_handle.is_valid()) {
@@ -766,9 +757,7 @@ int ObTabletDDLKvMgr::alloc_ddl_kv(
     const int64_t snapshot_version,
     const uint64_t data_format_version,
     ObDDLKVHandle &kv_handle,
-    const ObDDLKVType ddl_kv_type,
-    const transaction::ObTransID &trans_id,
-    const transaction::ObTxSEQ &seq_no)
+    const ObDDLKVType ddl_kv_type)
 {
   int ret = OB_SUCCESS;
   kv_handle.reset();
@@ -779,12 +768,9 @@ int ObTabletDDLKvMgr::alloc_ddl_kv(
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ddl kv manager not init", K(ret));
-  } else if (storage::is_inc_major_ddl_kv(ddl_kv_type)) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("inc major ddl kv is not supported", K(ret), K(ddl_kv_type));
   } else if (OB_UNLIKELY(!(storage::is_full_ddl_kv(ddl_kv_type)))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("only support full or inc_major ddl kv", KR(ret), K(ddl_kv_type));
+    LOG_WARN("only support full ddl kv", KR(ret), K(ddl_kv_type));
   } else if (OB_FAIL(handle_ddl_kv_queue_overflow(ddl_kv_type))) {
     if (OB_EAGAIN == ret) {
       if (REACH_TIME_INTERVAL(10 * 1000 * 1000L)) { // 10s
@@ -803,10 +789,8 @@ int ObTabletDDLKvMgr::alloc_ddl_kv(
                               snapshot_version,
                               max_freeze_scn_,
                               data_format_version,
-                              ddl_kv_type,
-                              trans_id,
-                              seq_no))) {
-    LOG_WARN("fail to init ddl kv", K(ret), K(tablet_id_), K(ddl_kv_type), K(trans_id), K(seq_no));
+                              ddl_kv_type))) {
+    LOG_WARN("fail to init ddl kv", K(ret), K(tablet_id_), K(ddl_kv_type));
   } else {
     const int64_t idx = get_idx(tail_);
     tail_++;
@@ -843,12 +827,7 @@ int ObTabletDDLKvMgr::handle_ddl_kv_queue_overflow(const ObDDLKVType ddl_kv_type
 {
   int ret = OB_SUCCESS;
   if (get_count_nolock() == MAX_DDL_KV_CNT_IN_STORAGE) {
-    if (is_inc_major_ddl_kv(ddl_kv_type)) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("inc major ddl kv is not supported", K(ret), K(ddl_kv_type));
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-    }
+    ret = OB_ERR_UNEXPECTED;
   }
   return ret;
 }

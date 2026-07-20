@@ -47,8 +47,7 @@ private:
   int create_session(ObFreeSessionCtx &free_session_ctx,
                      ObSQLSessionInfo *&session_info);
   int init_session(ObSQLSessionInfo &session,
-                   const ObString &tenant_name,
-                   const ObCompatibilityMode compat_mode);
+                   const ObString &tenant_name);
   int destroy_session(ObFreeSessionCtx &free_session_ctx, ObSQLSessionInfo *session_info);
 };
 

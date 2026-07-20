@@ -193,7 +193,6 @@ int ObPxDistTransmitOp::do_transmit()
 {
   int ret = OB_SUCCESS;
   ObPhysicalPlanCtx *phy_plan_ctx = GET_PHY_PLAN_CTX(ctx_);
-  int64_t use_shared_bcast_msg = ObBcastOptimization::BC_TO_WORKER;
   if (OB_ISNULL(ctx_.get_physical_plan_ctx())
       || OB_ISNULL(ctx_.get_physical_plan_ctx()->get_phy_plan())) {
     ret = OB_ERR_UNEXPECTED;
@@ -201,11 +200,9 @@ int ObPxDistTransmitOp::do_transmit()
   } else if (ObPQDistributeMethod::LOCAL == MY_SPEC.dist_method_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid PX distribution method",  K(ret), K(MY_SPEC.dist_method_));
-  } else if (OB_FAIL(ctx_.get_my_session()->get_sys_variable(share::SYS_VAR__OB_PX_BCAST_OPTIMIZATION, use_shared_bcast_msg))) {
-    LOG_WARN("failed to get system variable", K(ret));
   } else if (ObPQDistributeMethod::BROADCAST == MY_SPEC.dist_method_) {
-    use_bcast_opt_ = (ObBcastOptimization::BC_TO_SERVER == use_shared_bcast_msg);
-    if (use_shared_bcast_msg && OB_FAIL(chs_agent_.init(
+    use_bcast_opt_ = true;
+    if (OB_FAIL(chs_agent_.init(
         dfc_,
         task_ch_set_,
         task_channels_,
@@ -292,10 +289,10 @@ int ObPxDistTransmitOp::do_hash_dist()
                                              &MY_SPEC.dist_exprs_,
                                              &MY_SPEC.dist_hash_funcs_,
                                              true);
-    if (MY_SPEC.is_rollup_hybrid_ || MY_SPEC.is_wf_hybrid_) {
+    if (MY_SPEC.is_wf_hybrid_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected status: is_rollup_hybrid or MY_SPEC.is_wf_hybrid_ is true",
-               K(ret), K(MY_SPEC.is_rollup_hybrid_), K(MY_SPEC.is_wf_hybrid_));
+      LOG_WARN("unexpected status: MY_SPEC.is_wf_hybrid_ is true",
+               K(ret), K(MY_SPEC.is_wf_hybrid_));
     } else if (OB_FAIL(send_rows<ObSliceIdxCalc::NULL_AWARE_HASH>(slice_id_calc))) {
       LOG_WARN("row distribution failed", K(ret));
     }

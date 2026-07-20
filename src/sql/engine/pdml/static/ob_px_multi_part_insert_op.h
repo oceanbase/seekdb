@@ -23,10 +23,6 @@
 
 namespace oceanbase
 {
-namespace observer
-{
-class ObTableLoadTableCtx;
-}
 namespace sql
 {
 class ObPxMultiPartInsertOpInput : public ObPxMultiPartModifyOpInput
@@ -89,8 +85,7 @@ public:
                         ObOpInput *input)
   : ObTableModifyOp(exec_ctx, spec, input),
     data_driver_(&ObOperator::get_eval_ctx(), exec_ctx.get_allocator(), op_monitor_info_),
-    ins_rtdef_(),
-    table_ctx_(nullptr)
+    ins_rtdef_()
   {
   }
 
@@ -117,7 +112,6 @@ public:
 protected:
   ObPDMLOpDataDriver data_driver_;
   ObInsRtDef ins_rtdef_;
-  observer::ObTableLoadTableCtx *table_ctx_; // deprecated
   DISALLOW_COPY_AND_ASSIGN(ObPxMultiPartInsertOp);
 };
 

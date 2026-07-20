@@ -270,10 +270,6 @@ int ObAllPlanCacheStat::fill_cells(ObPlanCache &plan_cache)
       SET_REF_HANDLE_COL(LC_REF_CACHE_OBJ_STAT_HANDLE);
       break;
     }
-    case PLAN_BASELINE: {
-       SET_REF_HANDLE_COL(PLAN_BASELINE_HANDLE);
-       break;
-    }
     default: {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN,

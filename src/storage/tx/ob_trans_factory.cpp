@@ -68,7 +68,7 @@ const char *ObLSTxCtxMgrFactory::mod_type_ = "OB_PARTITION_TRANS_CTX_MGR";
                 "label", #LABEL,                   \
                 K_(alloc_count), K_(release_count), "used", alloc_count_ - release_count_);  \
     }  \
-    if (!ObTransErrsim::is_memory_errsim() && NULL != (object = allocator_type##_ALLOC(object_name, LABEL))) { \
+    if (NULL != (object = allocator_type##_ALLOC(object_name, LABEL))) { \
       (void)ATOMIC_FAA(&alloc_count_, 1);  \
     }  \
     return object;  \
@@ -105,19 +105,17 @@ ObTxCtx *ObTxCtxFactory::alloc()
   int tmp_ret = OB_SUCCESS;
   ObTxCtx *ctx = NULL;
 
-  if (OB_LIKELY(!ObTransErrsim::is_memory_errsim())) {
-    // During restart, the number of transaction contexts is relatively large
-    // and cannot be limited, otherwise there will be circular dependencies.
-    if (ATOMIC_LOAD(&active_tx_ctx_count_) > MAX_TX_CTX_COUNT && GCTX.status_ == ObServiceStatus::SS_SERVING) {
-      TRANS_LOG_RET(ERROR, tmp_ret, "transaction context memory alloc failed", K_(active_tx_ctx_count));
-      tmp_ret = OB_TRANS_CTX_COUNT_REACH_LIMIT;
-    } else if (NULL != (ctx = mtl_sop_borrow(ObTxCtx))) {
-      (void)ATOMIC_FAA(&active_tx_ctx_count_, 1);
-      TRANS_LOG(DEBUG, "alloc tx ctx success", KP(ctx), K(active_tx_ctx_count_),
-                K(total_release_tx_ctx_count_));
-    } else {
-      // do nothing
-    }
+  // During restart, the number of transaction contexts is relatively large
+  // and cannot be limited, otherwise there will be circular dependencies.
+  if (ATOMIC_LOAD(&active_tx_ctx_count_) > MAX_TX_CTX_COUNT && GCTX.status_ == ObServiceStatus::SS_SERVING) {
+    TRANS_LOG_RET(ERROR, tmp_ret, "transaction context memory alloc failed", K_(active_tx_ctx_count));
+    tmp_ret = OB_TRANS_CTX_COUNT_REACH_LIMIT;
+  } else if (NULL != (ctx = mtl_sop_borrow(ObTxCtx))) {
+    (void)ATOMIC_FAA(&active_tx_ctx_count_, 1);
+    TRANS_LOG(DEBUG, "alloc tx ctx success", KP(ctx), K(active_tx_ctx_count_),
+              K(total_release_tx_ctx_count_));
+  } else {
+    // do nothing
   }
   if (REACH_TIME_INTERVAL(TRANS_MEM_STAT_INTERVAL)) {
     TRANS_LOG(INFO, "ObTxCtx statistics", K_(active_tx_ctx_count), K_(total_release_tx_ctx_count));

@@ -221,7 +221,6 @@ public:
   virtual int get_attribute(ObIArray<ObIMulModeBase*>& res, ObMulModeNodeType filter_type, int32_t flags = 0) { return OB_NOT_SUPPORTED; }
 
   virtual int get_attribute(ObIMulModeBase*& res, ObMulModeNodeType filter_type, const ObString& key1, const ObString &key2 = ObString()) { return OB_NOT_SUPPORTED; }
-  int get_raw_binary(common::ObString &out, ObIAllocator *allocator);
   bool is_xml_doc_over_depth(uint64_t depth);
   
   void set_delta_serialize_size(int64_t size) { serialize_size_ += size; }
@@ -240,8 +239,6 @@ public:
   virtual void set_standalone(uint16_t standalone) {}
   virtual bool is_equal_node(const ObIMulModeBase* other);
   virtual bool is_node_before(const ObIMulModeBase* other);
-  virtual bool check_extend() { return false; }
-  virtual bool check_if_defined_ns() { return false; }
 protected:
 
   ObMulModeNodeType xml_type_;
@@ -339,7 +336,6 @@ public:
 
   virtual int get_attribute(ObIArray<ObIMulModeBase*>& res, ObMulModeNodeType filter_type, int32_t flags = 0);
   virtual int get_attribute(ObIMulModeBase*& res, ObMulModeNodeType filter_type, const ObString& key1, const ObString &key2 = ObString());
-  virtual bool check_if_defined_ns();
   int clone(ObMulModeMemCtx *ctx, ObXmlNode *&node) override;
 private:
   // namespace prefix

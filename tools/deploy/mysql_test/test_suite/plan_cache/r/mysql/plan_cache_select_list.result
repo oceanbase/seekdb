@@ -359,4 +359,3 @@ commit;
 
 drop table if exists test_t;
 drop view if exists test_view;
-alter system set large_query_threshold = '100ms';

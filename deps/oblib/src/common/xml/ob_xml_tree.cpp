@@ -552,24 +552,6 @@ int64_t ObXmlElement::get_serialize_size()
   return res;
 }
 
-int ObXmlNode::get_raw_binary(common::ObString &out, ObIAllocator *allocator)
-{
-  INIT_SUCC(ret);
-  ObXmlBin bin(ctx_);
-
-  ObIAllocator* used_allocator = allocator == nullptr ? ObIMulModeBase::allocator_ : allocator;
-
-  if (OB_ISNULL(used_allocator)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid allocator null param", K(ret));
-  } else if (OB_FAIL(bin.parse_tree(this))) {
-    LOG_WARN("failed to serialize to bin", K(ret));
-  } else if (OB_FAIL(bin.get_raw_binary(out, used_allocator))) {
-    LOG_WARN("failed to get bin", K(ret));
-  }
-  return ret;
-}
-
 int ObXmlElement::get_key(ObString& res, int64_t index)
 {
   INIT_SUCC(ret);
@@ -1166,22 +1148,6 @@ int ObXmlElement::get_attribute(ObIMulModeBase*& res, ObMulModeNodeType filter_t
   }
  
   return ret;
-}
-
-bool ObXmlElement::check_if_defined_ns()
-{
-  bool ret_bool = false;
-  ObArray<ObIMulModeBase*> t_value;
-  if (!is_init_) {
-  } else {
-    static_cast<ObXmlNode*>(attributes_)->get_children(t_value);
-    for (int64_t i = 0; i < t_value.size() && !ret_bool; i++) {
-      if (dynamic_cast<ObXmlNode*>(t_value.at(i))->type() == ObMulModeNodeType::M_NAMESPACE) {
-        ret_bool = true;
-      }
-    }
-  }
-  return ret_bool;
 }
 
 int ObXmlElement::add_attr_by_str(const ObString& name, 

@@ -53,8 +53,7 @@ namespace sql
 #define IS_PX_MODIFY(type) \
   ((type) == PHY_PX_MULTI_PART_UPDATE || \
    (type) == PHY_PX_MULTI_PART_DELETE || \
-   (type) == PHY_PX_MULTI_PART_INSERT || \
-   (type) == PHY_TABLE_DIRECT_INSERT)
+   (type) == PHY_PX_MULTI_PART_INSERT)
 // Determine if an operator is a subclass of Transmit, used for splitting Job
 #define IS_TRANSMIT(type) \
     ((type) == PHY_DIRECT_TRANSMIT || \
@@ -92,8 +91,7 @@ namespace sql
    (type) == PHY_PX_MULTI_PART_UPDATE || \
    (type) == PHY_PX_MULTI_PART_SSTABLE_INSERT || \
    (type) == PHY_VEC_PX_MULTI_PART_SSTABLE_INSERT || \
-   (type) == PHY_LOCK || \
-   (type) == PHY_TABLE_DIRECT_INSERT)
+   (type) == PHY_LOCK)
 
 #define IS_SAMPLE_SCAN(type) \
       ((type) == PHY_BLOCK_SAMPLE_SCAN || \

@@ -1055,7 +1055,7 @@ int ObMediumCompactionScheduleFunc::get_table_schema_to_merge(
   }
 #endif
   // for old version medium info, need generate old version schema
-  if (FAILEDx(storage_schema.init(allocator, *table_schema, tablet.get_tablet_meta().compat_mode_, false/*skip_column_info*/, data_version))) {
+  if (FAILEDx(storage_schema.init(allocator, *table_schema, false/*skip_column_info*/, data_version))) {
     LOG_WARN("failed to init storage schema", K(ret), K(schema_version), K(tablet), KPC(table_schema));
   } else {
     LOG_INFO("get schema to merge", K(tablet_id), K(table_id), K(schema_version), K(save_schema_version),

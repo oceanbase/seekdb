@@ -343,7 +343,6 @@ GLOBAL_ERRSIM_POINT_DEF(513, EN_DDL_COMPACT_FAIL, "");
 GLOBAL_ERRSIM_POINT_DEF(514, EN_DDL_RELEASE_DDL_KV_FAIL, "");
 GLOBAL_ERRSIM_POINT_DEF(515, EN_DDL_REPORT_CHECKSUM_FAIL, "");
 GLOBAL_ERRSIM_POINT_DEF(516, EN_DDL_REPORT_REPLICA_BUILD_STATUS_FAIL, "");
-GLOBAL_ERRSIM_POINT_DEF(517, EN_DDL_DIRECT_LOAD_WAIT_TABLE_LOCK_FAIL, "");
 GLOBAL_ERRSIM_POINT_DEF(518, EN_DDL_LOBID_CACHE_SIZE_INJECTED, "");
 GLOBAL_ERRSIM_POINT_DEF(519, EN_DDL_EXECUTE_FAILED, "");
 GLOBAL_ERRSIM_POINT_DEF(520, EN_DDL_RETRY_WRITE_SLICE_AFTER_SUCC, "");
@@ -536,12 +535,6 @@ GLOBAL_ERRSIM_POINT_DEF(1172, EN_PC_NOT_SWALLOW_ERROR, "");
 
 // session info verification
 // The types are used for error verification
-GLOBAL_ERRSIM_POINT_DEF(1180, EN_SESS_INFO_VERI_SYS_VAR_ERROR, "Used for session self-verification");
-GLOBAL_ERRSIM_POINT_DEF(1181, EN_SESS_INFO_VERI_APP_INFO_ERROR, "Used for session self-verification");
-GLOBAL_ERRSIM_POINT_DEF(1182, EN_SESS_INFO_VERI_APP_CTX_ERROR, "Used for session self-verification");
-GLOBAL_ERRSIM_POINT_DEF(1183, EN_SESS_INFO_VERI_CLIENT_ID_ERROR, "Used for session self-verification");
-GLOBAL_ERRSIM_POINT_DEF(1184, EN_SESS_INFO_VERI_CONTROL_INFO_ERROR, "Used for session self-verification");
-GLOBAL_ERRSIM_POINT_DEF(1185, EN_SESS_INFO_VERI_TXN_EXTRA_INFO_ERROR, "");
 GLOBAL_ERRSIM_POINT_DEF(1186, EN_SESS_POOL_MGR_CTRL, "Used for session pool use");
 // session info diagnosis control
 GLOBAL_ERRSIM_POINT_DEF(1187, EN_SESS_INFO_DIAGNOSIS_CONTROL, "");
@@ -589,7 +582,6 @@ GLOBAL_ERRSIM_POINT_DEF(2208, EN_DISABLE_SORTKEY_SEPARATELY, "Used to control wh
 GLOBAL_ERRSIM_POINT_DEF(2209, EN_ENABLE_VECTOR_IN, "Used to control whether the capability for in-expr vectorization 2.0 is enabled.");
 GLOBAL_ERRSIM_POINT_DEF(2210, EN_SQL_MEMORY_MRG_OPTION, "Control automatic memory management global bound size");
 GLOBAL_ERRSIM_POINT_DEF(2211, EN_ENABLE_RANDOM_TSC, "wether to randomize batch_size & skips of table scan's output ");
-GLOBAL_ERRSIM_POINT_DEF(2212, EN_LOCK_CONFLICT_RETRY_THEN_REROUTE, "force reroute sql when lock conflict and retry a few times");
 GLOBAL_ERRSIM_POINT_DEF(2213, EN_DISABLE_VEC_MERGE_GBY, "Used to control whether to turn off the vectorization 2.0 merge group by operator. It is turned on by default.");
 GLOBAL_ERRSIM_POINT_DEF(2214, EN_DISABLE_VEC_MERGE_JOIN, "Used to control whether to turn off the vectorization 2.0 when use Merge Join Operator");
 // WR && ASH

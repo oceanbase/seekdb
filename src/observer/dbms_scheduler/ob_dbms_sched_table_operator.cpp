@@ -943,10 +943,6 @@ int ObDBMSSchedTableOperator::purge_run_detail()
     if (OB_TMP_FAIL(_purge(ObString("DEFAULT_JOB_CLASS"), DEFAULT_LOG_HISTORY))) {
       LOG_WARN("purge default class run detail failed", K(tmp_ret));
     }
-    // for compatible, purge old olap async job run detail
-    if (OB_TMP_FAIL(_purge(ObString("OLAP_ASYNC_JOB_CLASS"), DEFAULT_LOG_HISTORY))) {
-      LOG_WARN("purge olap async job class run detail failed", K(tmp_ret));
-    }
     // for compatible, purge old mysql event job run detail
     if (OB_TMP_FAIL(_purge(ObString("MYSQL_EVENT_JOB_CLASS"), DEFAULT_LOG_HISTORY))) {
       LOG_WARN("purge mysql event job class run detail failed", K(tmp_ret));

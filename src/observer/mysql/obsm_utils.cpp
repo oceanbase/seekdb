@@ -80,7 +80,6 @@ static const ObMySQLTypeMap type_maps_[ObMaxType] =
   {EMySQLFieldType::MYSQL_TYPE_STRING,     0, 0},   /* ObCollectionSQLType, will cast to string */
   {EMySQLFieldType::MYSQL_TYPE_DATE,      BINARY_FLAG, 0}, /* ObMySQLDateType */
   {EMySQLFieldType::MYSQL_TYPE_DATETIME,  BINARY_FLAG, 0}, /* ObMySQLDateTimeType */
-  {EMySQLFieldType::MYSQL_TYPE_BLOB,       BLOB_FLAG, 0},                         /* ObRoaringBitmapType */
   /* ObMaxType */
 };
 
@@ -180,8 +179,7 @@ int ObSMUtils::cell_str(
       case ObStringTC:
       // lob locator will also be encoded in a varchar manner, client sends data to the server,
       // Also transmit the lob locator as varchar, first encode the LobLocator length, then encode the entire lob Locator
-      case ObLobTC:
-      case ObRoaringBitmapTC: {
+      case ObLobTC: {
         ret = ObMySQLUtil::varchar_cell_str(buf, len, obj.get_string(), pos);
         break;
       }

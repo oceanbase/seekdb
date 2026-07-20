@@ -47,28 +47,13 @@ static constexpr int CMP_ARG_TYPE_NUM = static_cast<int>(ObXpathArgType::XC_TYPE
 static constexpr int XC_TYPE_NUM = static_cast<int>(ObXpathCompareType::XC_MAX);
 
 
-enum ObXmlBinaryType {
-  DocumentType = 0,
-  ContentType,
-  UnparsedType,
-  MaxType
-};
-
 struct ObIMulModeBaseCmp {
   bool operator()(const ObIMulModeBase* a, const ObIMulModeBase* b) {
     bool is_smaller = false;
     if (OB_ISNULL(a) && OB_ISNULL(b)) {
       is_smaller = true;
-    } else if (OB_NOT_NULL(a) && OB_NOT_NULL(b)) { // is tree node
-      ObNodeMemType a_type = a->get_internal_type();
-      ObNodeMemType b_type = b->get_internal_type();
-      if (a_type == ObNodeMemType::TREE_TYPE && b_type == ObNodeMemType::TREE_TYPE) {
-        is_smaller = (a < b);
-      } else {
-        ObIMulModeBase* ref_a = const_cast<ObIMulModeBase*>(a);
-        ObIMulModeBase* ref_b = const_cast<ObIMulModeBase*>(b);
-        is_smaller = (ref_a->is_node_before(ref_b));
-      }
+    } else if (OB_NOT_NULL(a) && OB_NOT_NULL(b)) {
+      is_smaller = (a < b);
     } else {
       is_smaller =  false;
     }
@@ -81,20 +66,8 @@ struct ObIMulModeBaseUnique {
     bool is_eq = false;
     if (OB_ISNULL(a) && OB_ISNULL(b)) {
       is_eq = true;
-    } else if (OB_NOT_NULL(a) && OB_NOT_NULL(b)) { // is tree node
-      ObNodeMemType a_type = a->get_internal_type();
-      ObNodeMemType b_type = b->get_internal_type();
-      if (a_type == ObNodeMemType::TREE_TYPE && b_type == ObNodeMemType::TREE_TYPE) {
-        is_eq = (a == b);
-      } else {
-        if (a->type() == b->type()) {
-          ObIMulModeBase* ref_a = const_cast<ObIMulModeBase*>(a);
-          ObIMulModeBase* ref_b = const_cast<ObIMulModeBase*>(b);
-          is_eq = (ref_a->is_equal_node(ref_b));
-        } else {
-          is_eq = false;
-        }
-      }
+    } else if (OB_NOT_NULL(a) && OB_NOT_NULL(b)) {
+      is_eq = (a == b);
     } else {
       is_eq =  false;
     }
@@ -190,13 +163,9 @@ public:
 
   static bool is_container_tc(ObMulModeNodeType type);
   static bool is_node(ObMulModeNodeType type);
-  // test type
   static bool is_text(ObMulModeNodeType type);
-  // comment type
   static bool is_comment(ObMulModeNodeType type);
-  // element type
   static bool is_element(ObMulModeNodeType type);
-  // pi type
   static bool is_pi(ObMulModeNodeType type);
   static bool use_text_serializer(ObMulModeNodeType type);
   static bool use_attribute_serializer(ObMulModeNodeType type);
@@ -210,23 +179,10 @@ public:
   static int add_attr_ns_def(ObIMulModeBase *cur, uint32_t format_flag, ObStringBuffer &buf, 
                              ObNsSortedVector* element_ns_vec, ObVector<ObNsPair*>& delete_ns_vec);
   static int restore_ns_vec(ObNsSortedVector* element_ns_vec, ObVector<ObNsPair*>& delete_ns_vec);
-  static int init_extend_ns_vec(ObIAllocator *allocator, 
-                                ObIMulModeBase *src, 
-                                ObNsSortedVector& ns_vec);
   static int delete_dup_ns_definition(ObIMulModeBase *src, 
                                       ObNsSortedVector& origin_vec, 
                                       ObVector<ObNsPair*>& delete_vec);
-  static int check_ns_conflict(ObIMulModeBase* cur_parent, 
-                              ObIMulModeBase* &last_parent, 
-                              ObXmlBin *cur, 
-                              common::hash::ObHashMap<ObString, ObString>& ns_map,
-                              bool& conflict);
-  static int ns_to_extend(ObMulModeMemCtx* mem_ctx, 
-                          common::hash::ObHashMap<ObString, ObString>& ns_map, 
-                          ObStringBuffer *buffer);
   static int create_mulmode_tree_context(ObIAllocator *allocator, ObMulModeMemCtx*& ctx);
-  static int xml_bin_type(const ObString& data, ObMulModeNodeType& type);
-  static int cast_to_string(const ObString &val, ObIAllocator &allocator, ObStringBuffer& result, ObCollationType cs_type);
 
   // safe cast 
   // if cast type not match, return null;
@@ -266,7 +222,6 @@ public:
 	static int compare(double left, double right, ObFilterType op, bool &res);
 	static int compare(ObString left, ObString right, ObFilterType op, bool &res);
 	static int compare(bool left, bool right, ObFilterType op, bool &res);
-	static int init_print_ns(ObIAllocator *allocator, ObIMulModeBase *src, ObNsSortedVector& ns_vec, ObNsSortedVector*& vec_point);
 	// Call with special handling for OB_OP_NOT_ALLOW
 	//	calculate: + - * div %
 
@@ -521,12 +476,6 @@ public:
 		}
 	};
 
-  // don't use, this is just for obcdc
-  static int xml_bin_to_text(
-      ObIAllocator &allocator,
-      const ObString &bin,
-      ObString &text);
-
   static bool is_xml_doc_over_depth(uint64_t depth);
   static int revert_escape_character(ObIAllocator &allocator, ObString &input_str, ObString &output_str);
   template <typename T, typename... Args>
@@ -541,29 +490,15 @@ public:
 
   static int get_xml_base(ObMulModeMemCtx* ctx, 
                           const ObString &buf,
-                          ObNodeMemType in_type, 
-                          ObNodeMemType expect_type,
                           ObIMulModeBase *&out, 
-                          ObMulModeNodeType parse_type = ObMulModeNodeType::M_DOCUMENT,
-                          bool is_for_text = false,
-                          bool should_check = false);
+                          ObMulModeNodeType parse_type = ObMulModeNodeType::M_DOCUMENT);
 
 
   static int get_xml_base(ObMulModeMemCtx* ctx, 
                           const char *ptr, 
                           uint64_t length,
-                          ObNodeMemType in_type, 
-                          ObNodeMemType expect_type,
                           ObIMulModeBase *&out,
-                          ObMulModeNodeType parse_type = ObMulModeNodeType::M_DOCUMENT,
-                          bool is_for_text = false,
-                          bool should_check = false);
-
-  static int transform(ObMulModeMemCtx* ctx, ObIMulModeBase *src,
-                       ObNodeMemType expect_type, ObIMulModeBase *&out);
-  static int add_unparsed_text_into_doc(ObMulModeMemCtx* ctx, 
-                                        ObString text, 
-                                        ObXmlDocument *&doc);
+                          ObMulModeNodeType parse_type = ObMulModeNodeType::M_DOCUMENT);
 };
 
 } // namespace common

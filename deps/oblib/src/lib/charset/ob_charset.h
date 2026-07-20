@@ -608,12 +608,6 @@ public:
                               const ObCollationType type2,
                               ObCollationLevel &res_level,
                               ObCollationType &res_type);
-  static int aggregate_collation_old(const ObCollationLevel level1,
-                                 const ObCollationType type1,
-                                 const ObCollationLevel level2,
-                                 const ObCollationType type2,
-                                 ObCollationLevel &res_level,
-                                 ObCollationType &res_type);
   static int aggregate_collation_new(
                                 const ObCollationLevel collation_level1,
                                 const ObCollationType collation_type1,
@@ -683,7 +677,6 @@ public:
                                      const ObString &another,
                                      const ObCollationType &collation_type = CS_TYPE_UTF8MB4_GENERAL_CI);
   static bool case_sensitive_equal(const ObString &one, const ObString &another);
-  static bool case_compat_mode_equal(const ObString &one, const ObString &another);
   static uint64_t hash(const ObCollationType collation_type, const ObString &str,
                        uint64_t seed = 0, hash_algo hash_algo = NULL);
   static uint64_t hash(

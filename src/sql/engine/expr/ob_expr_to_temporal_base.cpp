@@ -214,7 +214,7 @@ int ObExprToTemporalBase::calc_result_typeN(ObExprResType &type,
     //result scale
     if (OB_SUCC(ret)) {
       ObScale max_scale =
-          ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][get_my_target_obj_type()].get_scale();
+          ObAccuracy::MAX_ACCURACY2[0][get_my_target_obj_type()].get_scale();
       ObScale result_scale = 0;
       if (input_char.is_null()) {
         //do nothing

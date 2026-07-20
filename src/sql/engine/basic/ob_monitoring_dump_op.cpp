@@ -37,7 +37,6 @@ OB_SERIALIZE_MEMBER((ObMonitoringDumpSpec, ObOpSpec), flags_, dst_op_id_);
 ObMonitoringDumpOp::ObMonitoringDumpOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOpInput *input)
   : ObOperator(exec_ctx, spec, input),
     op_name_(),
-    tracefile_identifier_(),
     open_time_(0),
     rows_(0),
     first_row_time_(0),
@@ -55,14 +54,9 @@ int ObMonitoringDumpOp::inner_open()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected status: child is null", K(ret));
   } else {
-    ObObj val;
     const char* name = get_phy_op_name(spec_.get_left()->type_, spec_.use_rich_format_);
     op_name_.set_string(name, strlen(name));
-    if (OB_FAIL(ctx_.get_my_session()->get_sys_variable(SYS_VAR_TRACEFILE_IDENTIFIER, val))) {
-      LOG_WARN("Get sys variable error", K(ret));
-    } else if (OB_FAIL(tracefile_identifier_.from_obj(val))) {
-      LOG_WARN("failed to convert datum from obj", K(ret));
-    } else if (OB_FAIL(output_hash_.init(output.count()))) {
+    if (OB_FAIL(output_hash_.init(output.count()))) {
       LOG_WARN("init output hash array failed", K(ret));
     } else {
       for (int64_t i = 0; i < output.count() && OB_SUCC(ret); i++) {
@@ -81,13 +75,8 @@ int ObMonitoringDumpOp::inner_close()
   int ret = OB_SUCCESS;
   if (MY_SPEC.flags_ & ObAllocOpHint::OB_MONITOR_STAT) {
     uint64_t CLOSE_TIME = ObTimeUtility::current_time();
-    if (!tracefile_identifier_.null_ && tracefile_identifier_.len_ > 0) {
-      LOG_INFO("", K(tracefile_identifier_), K(op_name_), K(rows_), K(open_time_),
-        K(CLOSE_TIME), K(first_row_time_), K(last_row_time_), K(MY_SPEC.dst_op_id_));
-    } else {
-      LOG_INFO("", K(op_name_), K(rows_), K(open_time_), K(CLOSE_TIME),
-        K(first_row_time_), K(last_row_time_), K(MY_SPEC.dst_op_id_));
-    }
+    LOG_INFO("", K(op_name_), K(rows_), K(open_time_), K(CLOSE_TIME),
+      K(first_row_time_), K(last_row_time_), K(MY_SPEC.dst_op_id_));
   }
   uint64_t id = MY_SPEC.id_;
   uint64_t sum_hash = 0;
@@ -110,9 +99,7 @@ int ObMonitoringDumpOp::inner_rescan()
   // Here, after each rescan, the time is recorded again, this was not done before
   // Other variables do not need to be reset, these variables are all assigned once
   first_row_fetched_ = false;
-  LOG_INFO("do rescan",
-           K(tracefile_identifier_.get_string()),
-           K(op_name_.get_string()),
+  LOG_INFO("do rescan", K(op_name_.get_string()),
            K(MY_SPEC.dst_op_id_));
   if (OB_FAIL(ObOperator::inner_rescan())) {
     LOG_WARN("failed to rescan", K(ret));
@@ -137,13 +124,8 @@ int ObMonitoringDumpOp::inner_get_next_row()
       LOG_WARN("calc hash value failed", K(ret));
     } else  {
       if (MY_SPEC.flags_ & ObAllocOpHint::OB_MONITOR_TRACING) {
-        if (!tracefile_identifier_.null_ && tracefile_identifier_.len_ > 0) {
-          LOG_INFO("", K(tracefile_identifier_.get_string()), K(op_name_.get_string()),
-            K(ObToStringExprRow(eval_ctx_, MY_SPEC.output_)), K(MY_SPEC.dst_op_id_));
-        } else {
-          LOG_INFO("", K(op_name_.get_string()), K(ObToStringExprRow(eval_ctx_, MY_SPEC.output_)),
-            K(MY_SPEC.dst_op_id_));
-        }
+        LOG_INFO("", K(op_name_.get_string()), K(ObToStringExprRow(eval_ctx_, MY_SPEC.output_)),
+          K(MY_SPEC.dst_op_id_));
       }
       if (!first_row_fetched_) {
         first_row_fetched_ = true;
@@ -200,13 +182,8 @@ int ObMonitoringDumpOp::inner_get_next_batch(const int64_t max_row_cnt)
           LOG_WARN("calc hash value failed", K(ret));
         } else {
           if (MY_SPEC.flags_ & ObAllocOpHint::OB_MONITOR_TRACING) {
-            if (!tracefile_identifier_.null_ && tracefile_identifier_.len_ > 0) {
-              LOG_INFO("", K(tracefile_identifier_.get_string()), K(op_name_.get_string()),
-                K(ObToStringExprRow(eval_ctx_, MY_SPEC.output_)), K(MY_SPEC.dst_op_id_));
-            } else {
-              LOG_INFO("", K(op_name_.get_string()), K(ObToStringExprRow(eval_ctx_, MY_SPEC.output_)),
-                K(MY_SPEC.dst_op_id_));
-            }
+            LOG_INFO("", K(op_name_.get_string()), K(ObToStringExprRow(eval_ctx_, MY_SPEC.output_)),
+              K(MY_SPEC.dst_op_id_));
           }
           if (!first_row_fetched_) {
             first_row_fetched_ = true;

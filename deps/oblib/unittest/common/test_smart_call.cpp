@@ -16,7 +16,6 @@
 
 #include <gtest/gtest.h>
 #include "lib/utility/ob_smart_call.h"
-#include "lib/utility/ob_hang_fatal_error.h"
 
 using namespace std;
 
@@ -29,15 +28,7 @@ namespace common
   ({                                                                        \
     int ret = OB_SUCCESS;                                                   \
       std::function<int()> f = [&]() {                                      \
-        int ret = OB_SUCCESS;                                               \
-        try {                                                               \
-          in_try_stmt = true;                                               \
-          ret = func;                                                       \
-          in_try_stmt = false;                                              \
-        } catch (OB_BASE_EXCEPTION &except) {                               \
-          ret = except.get_errno();                                         \
-          in_try_stmt = false;                                              \
-        }                                                                   \
+        int ret = func;                                                     \
         return ret;                                                         \
       };                                                                    \
       int(*func_) (void*) = [](void *arg) { return (*(decltype(f)*)(arg))(); };\

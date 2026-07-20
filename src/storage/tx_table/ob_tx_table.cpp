@@ -176,7 +176,7 @@ int ObTxTable::prepare_for_safe_destroy()
   return ret;
 }
 
-int ObTxTable::create_tablet(const lib::Worker::CompatMode compat_mode, const SCN &create_scn)
+int ObTxTable::create_tablet(const SCN &create_scn)
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
@@ -184,9 +184,9 @@ int ObTxTable::create_tablet(const lib::Worker::CompatMode compat_mode, const SC
     LOG_WARN("not inited", K(ret));
   } else {
     
-    if (OB_FAIL(create_data_tablet_(compat_mode, create_scn))) {
+    if (OB_FAIL(create_data_tablet_(create_scn))) {
       LOG_WARN("create data tablet failed", K(ret));
-    } else if (OB_FAIL(create_ctx_tablet_(compat_mode, create_scn))) {
+    } else if (OB_FAIL(create_ctx_tablet_(create_scn))) {
       LOG_WARN("create ctx tablet failed", K(ret));
     }
     if (OB_FAIL(ret)) {
@@ -265,8 +265,7 @@ int ObTxTable::get_ctx_table_schema_(share::schema::ObTableSchema &schema)
   return ret;
 }
 
-int ObTxTable::create_ctx_tablet_(const lib::Worker::CompatMode compat_mode,
-                                  const share::SCN &create_scn)
+int ObTxTable::create_ctx_tablet_(const share::SCN &create_scn)
 {
   int ret = OB_SUCCESS;
   share::schema::ObTableSchema table_schema;
@@ -274,7 +273,7 @@ int ObTxTable::create_ctx_tablet_(const lib::Worker::CompatMode compat_mode,
   ObCreateTabletSchema create_tablet_schema;
   if (OB_FAIL(get_ctx_table_schema_( table_schema))) {
     LOG_WARN("get ctx table schema failed", K(ret));
-  } else if (OB_FAIL(create_tablet_schema.init(arena_allocator, table_schema, compat_mode,
+  } else if (OB_FAIL(create_tablet_schema.init(arena_allocator, table_schema,
         false/*skip_column_info*/, DATA_CURRENT_VERSION))) {
     LOG_WARN("failed to init storage schema", KR(ret), K(table_schema));
   } else if (OB_FAIL(ls_->create_ls_inner_tablet(LS_TX_CTX_TABLET,
@@ -283,7 +282,7 @@ int ObTxTable::create_ctx_tablet_(const lib::Worker::CompatMode compat_mode,
                                                  create_scn))) {
     LOG_WARN("create tx ctx tablet failed", K(ret),
              K(LS_TX_CTX_TABLET), K(ObLS::LS_INNER_TABLET_FROZEN_SCN),
-             K(table_schema), K(compat_mode), K(create_scn));
+             K(table_schema), K(create_scn));
   }
   return ret;
 }
@@ -389,8 +388,7 @@ int ObTxTable::get_data_table_schema_(share::schema::ObTableSchema &schema)
   return ret;
 }
 
-int ObTxTable::create_data_tablet_(const lib::Worker::CompatMode compat_mode,
-                                   const share::SCN &create_scn)
+int ObTxTable::create_data_tablet_(const share::SCN &create_scn)
 {
   int ret = OB_SUCCESS;
   share::schema::ObTableSchema table_schema;
@@ -398,7 +396,7 @@ int ObTxTable::create_data_tablet_(const lib::Worker::CompatMode compat_mode,
   ObCreateTabletSchema create_tablet_schema;
   if (OB_FAIL(get_data_table_schema_( table_schema))) {
     LOG_WARN("get data table schema failed", K(ret));
-  } else if (OB_FAIL(create_tablet_schema.init(arena_allocator, table_schema, compat_mode,
+  } else if (OB_FAIL(create_tablet_schema.init(arena_allocator, table_schema,
         false/*skip_column_info*/, DATA_CURRENT_VERSION))) {
     LOG_WARN("failed to init storage schema", KR(ret), K(table_schema));
   } else if (OB_FAIL(ls_->create_ls_inner_tablet(LS_TX_DATA_TABLET,
@@ -407,7 +405,7 @@ int ObTxTable::create_data_tablet_(const lib::Worker::CompatMode compat_mode,
                                                  create_scn))) {
     LOG_WARN("create tx data tablet failed", K(ret),
              K(LS_TX_DATA_TABLET), K(ObLS::LS_INNER_TABLET_FROZEN_SCN),
-             K(table_schema), K(compat_mode), K(create_scn));
+             K(table_schema), K(create_scn));
   }
   return ret;
 }

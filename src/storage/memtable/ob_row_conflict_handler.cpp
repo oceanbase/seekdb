@@ -122,12 +122,6 @@ int ObRowConflictHandler::check_row_locked(const storage::ObTableIterParam &para
           } else if (max_trans_version < lock_state.trans_version_) {
             max_trans_version = lock_state.trans_version_;
           }
-        } else if (stores->at(i)->is_direct_load_memtable()) {
-          ObDDLKV *ddl_kv = static_cast<ObDDLKV *>(stores->at(i));
-          if (OB_FAIL(ddl_kv->check_row_locked(param, rowkey, context, lock_state))) {
-            TRANS_LOG(WARN, "sstable check row lock fail", K(ret), K(rowkey));
-          }
-          TRANS_LOG(DEBUG, "check_row_locked meet direct load memtable", K(ret), K(rowkey), K(lock_state), K(*ddl_kv));
         } else if (stores->at(i)->is_sstable()) {
           blocksstable::ObSSTable *sstable = static_cast<blocksstable::ObSSTable *>(stores->at(i));
           if (OB_FAIL(sstable->check_row_locked(param, rowkey, context, lock_state, false/*check_exist*/))) {

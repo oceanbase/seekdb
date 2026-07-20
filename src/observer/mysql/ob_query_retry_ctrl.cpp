@@ -22,7 +22,6 @@
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "observer/mysql/obmp_query.h"
 #include "observer/ob_server_event_history_table_operator.h"
-#include "sql/resolver/cmd/ob_load_data_stmt.h"
 
 namespace oceanbase
 {
@@ -203,14 +202,7 @@ public:
     if (v.session_.is_terminate(ret)) {
       v.no_more_test_ = true;
       v.retry_type_ = RETRY_TYPE_NONE;
-      // In the kill client session scenario, the server session will be marked
-      // with the SESSION_KILLED mark. In the retry scenario, there will be an error
-      // code covering 5066, so the judgment logic is added here.
-      if (ret == OB_ERR_SESSION_INTERRUPTED && v.err_ == OB_ERR_KILL_CLIENT_SESSION) {
-        v.client_ret_ = v.err_;
-      } else{
-        v.client_ret_ = ret; // session terminated
-      }
+      v.client_ret_ = ret; // session terminated
       LOG_WARN("execution was terminated", K(ret), K(v.client_ret_), K(v.err_));
     } else if (THIS_WORKER.is_timeout()) {
       v.no_more_test_ = true;
@@ -246,23 +238,6 @@ public:
   ObStmtTypeRetryPolicy() = default;
   ~ObStmtTypeRetryPolicy() = default;
 
-  bool is_direct_load(ObRetryParam &v) const
-  {
-    ObExecContext &exec_ctx = v.result_.get_exec_context();
-    return exec_ctx.get_table_direct_insert_ctx().get_is_direct();
-  }
-
-  bool is_load_local(ObRetryParam &v) const
-  {
-    bool bret = false;
-    const ObICmd *cmd = v.result_.get_cmd();
-    if (OB_NOT_NULL(cmd) && cmd->get_cmd_type() == stmt::T_LOAD_DATA) {
-      const ObLoadDataStmt *load_data_stmt = static_cast<const ObLoadDataStmt *>(cmd);
-      bret = load_data_stmt->get_load_arguments().load_file_storage_ == ObLoadFileLocation::CLIENT_DISK;
-    }
-    return bret;
-  }
-
   virtual void test(ObRetryParam &v) const override
   {
     int err = v.err_;
@@ -284,18 +259,6 @@ public:
           SERVER_EVENT_SYNC_ADD("ddl_errsim", "ddl_retry", KR(err));
         }
 #endif
-      } else {
-        v.client_ret_ = err;
-        v.retry_type_ = RETRY_TYPE_NONE;
-      }
-      v.no_more_test_ = true;
-    } else if (is_direct_load(v) && !is_load_local(v)) {
-      if (is_direct_load_retry_err(err)) {
-        if (OB_SQL_RETRY_SPM == err) {
-          v.retry_type_ = RETRY_TYPE_LOCAL;
-        } else {
-          try_packet_retry(v);
-        }
       } else {
         v.client_ret_ = err;
         v.retry_type_ = RETRY_TYPE_NONE;
@@ -644,8 +607,7 @@ public:
     }
     // nested transaction already supported In 32x and can only rollback nested sql.
     // for forigen key, we keep old logic and do not retry. for pl will retry current nested sql.
-    else if (is_nested_conn(v) && !is_static_engine_retry(v.err_) && !v.is_from_pl_
-             && !is_direct(v)) {
+    else if (is_nested_conn(v) && !is_static_engine_retry(v.err_) && !v.is_from_pl_) {
       // right now, top session will retry, bug we can do something here like refresh XXX cache.
       // in future, nested session can retry if nested transaction is supported.
       v.no_more_test_ = true;
@@ -654,14 +616,7 @@ public:
     } else if (v.session_.is_terminate(ret)) {
       v.no_more_test_ = true;
       v.retry_type_ = RETRY_TYPE_NONE;
-      // In the kill client session scenario, the server session will be marked
-      // with the SESSION_KILLED mark. In the retry scenario, there will be an error
-      // code covering 5066, so the judgment logic is added here.
-      if (ret == OB_ERR_SESSION_INTERRUPTED && v.err_ == OB_ERR_KILL_CLIENT_SESSION) {
-        v.client_ret_ = v.err_;
-      } else{
-        v.client_ret_ = ret; // session terminated
-      }
+      v.client_ret_ = ret; // session terminated
       LOG_WARN("execution was terminated", K(ret), K(v.client_ret_), K(v.err_));
     } else if (THIS_WORKER.is_timeout()) {
       v.no_more_test_ = true;
@@ -692,11 +647,6 @@ private:
     return is_pl_nested || is_fk_nested || is_online_stat_gathering_nested;
   }
 
-  bool is_direct(ObRetryParam &v) const
-  {
-    ObExecContext *parent_ctx = v.session_.get_cur_exec_ctx();
-    return nullptr == parent_ctx ? false : parent_ctx->get_table_direct_insert_ctx().get_is_direct();
-  }
 };
 
 class ObAutoincCacheNotEqualRetryPolicy: public ObRetryPolicy
@@ -955,11 +905,9 @@ void ObQueryRetryCtrl::empty_proc(ObRetryParam &v)
   // This is the case where err is not in the retry error code list, and client_ret needs to be set to the corresponding value
   v.client_ret_ = v.err_;
   v.retry_type_ = RETRY_TYPE_NONE;
-  if (OB_ERR_PROXY_REROUTE != v.client_ret_) {
-    LOG_DEBUG("no retry handler for this err code, no need retry", K(v),
-             K(THIS_WORKER.get_timeout_ts()), K(v.result_.get_stmt_type()),
-             K(v.session_.get_retry_info().get_last_query_retry_err()));
-  }
+  LOG_DEBUG("no retry handler for this err code, no need retry", K(v),
+            K(THIS_WORKER.get_timeout_ts()), K(v.result_.get_stmt_type()),
+            K(v.session_.get_retry_info().get_last_query_retry_err()));
 }
 
 void ObQueryRetryCtrl::before_func(ObRetryParam &v)
@@ -979,10 +927,8 @@ void ObQueryRetryCtrl::before_func(ObRetryParam &v)
 void ObQueryRetryCtrl::after_func(ObRetryParam &v)
 {
   if (OB_TRY_LOCK_ROW_CONFLICT == v.client_ret_
-        || OB_ERR_PROXY_REROUTE == v.client_ret_
         || (v.is_from_pl_ && OB_READ_NOTHING == v.client_ret_)) {
     //Lock conflict will not be printed to avoid log flooding
-    // Secondary routing does not print
     // PL inside the OB_READ_NOTHING does not print logs
   } else {
     LOG_WARN_RET(v.client_ret_, "[RETRY] check if need retry", K(v), "need_retry", RETRY_TYPE_NONE != v.retry_type_);

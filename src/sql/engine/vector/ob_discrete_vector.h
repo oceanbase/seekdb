@@ -246,7 +246,6 @@ extern template class ObDiscreteVector<VectorBasicOp<VEC_TC_JSON>>;
 extern template class ObDiscreteVector<VectorBasicOp<VEC_TC_GEO>>;
 extern template class ObDiscreteVector<VectorBasicOp<VEC_TC_UDT>>;
 extern template class ObDiscreteVector<VectorBasicOp<VEC_TC_COLLECTION>>;
-extern template class ObDiscreteVector<VectorBasicOp<VEC_TC_ROARINGBITMAP>>;
 #endif
 
 } // end namespace common

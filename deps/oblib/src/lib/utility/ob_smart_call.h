@@ -19,7 +19,6 @@
 
 #include "lib/utility/ob_common_utility.h"
 #include "lib/utility/utility.h"
-#include "lib/other/recursion.h"
 #include "lib/thread/protected_stack_allocator.h"
 
 namespace oceanbase
@@ -97,20 +96,11 @@ inline void dealloc_stack(void *stack_addr, size_t stack_size)
 }
 
 
-#ifndef OB_USE_ASAN
 #define CALL_WITH_NEW_STACK(func, stack_addr, stack_size)                 \
   ({                                                                      \
     int ret = OB_SUCCESS;                                                 \
     std::function<int()> f = [&]() {                                      \
-      int ret = OB_SUCCESS;                                               \
-      try {                                                               \
-        in_try_stmt = true;                                               \
-        ret = func;                                                       \
-        in_try_stmt = false;                                              \
-      } catch (OB_BASE_EXCEPTION &except) {                               \
-        ret = except.get_errno();                                         \
-        in_try_stmt = false;                                              \
-      }                                                                   \
+      int ret = func;                                                     \
       return ret;                                                         \
     };                                                                    \
     int(*func_) (void*) = [](void *arg) { return (*(decltype(f)*)(arg))(); };\
@@ -123,7 +113,6 @@ inline void dealloc_stack(void *stack_addr, size_t stack_size)
   ({                                                                        \
     int ret = OB_SUCCESS;                                                   \
     bool is_overflow = false;                                               \
-    RECURSION_CHECKER_GUARD;                                                \
     if (OB_FAIL(check_stack_overflow(is_overflow, reserved_size))) {        \
     } else if (!is_overflow) {                                              \
       ret = func;                                                           \
@@ -148,29 +137,6 @@ inline void dealloc_stack(void *stack_addr, size_t stack_size)
 // stack is too tight for those call chains.
 #define SMART_CALL_LARGE(func) __SMART_CALL_IMPL(STACK_RESERVED_SIZE_LARGE, func)
 
-#else
-#define CALL_WITH_NEW_STACK(func, stack_addr, stack_size)   \
-  ({                                                        \
-    int ret = OB_SUCCESS;                                   \
-    ret = func;                                             \
-    ret;                                                    \
-  })
-
-#define SMART_CALL(func)                                                    \
-  ({                                                                        \
-    int ret = OB_SUCCESS;                                                   \
-    bool is_overflow = false;                                               \
-    if (OB_FAIL(check_stack_overflow(is_overflow, STACK_RESERVED_SIZE))) {  \
-    } else if (!is_overflow) {                                              \
-      ret = func;                                                           \
-    } else {                                                                \
-      ret = OB_SIZE_OVERFLOW;                                               \
-   }                                                                        \
-    ret;                                                                    \
-  })
-
-#define SMART_CALL_LARGE SMART_CALL
-#endif
 } // end of namespace common
 } // end of namespace oceanbase
 

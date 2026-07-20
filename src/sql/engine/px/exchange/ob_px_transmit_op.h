@@ -172,8 +172,6 @@ protected:
       has_set_tablet_id_vector_ = false;
       batch_info_guard.set_batch_size(brs_.size_);
       if (OB_FAIL(ret) || brs_.size_ == 0) {
-      } else if (OB_FAIL(set_rollup_hybrid_keys(slice_calc))) {
-        LOG_WARN("failed to set rollup hybrid keys", K(ret));
       } else if (!slice_calc.support_vectorized_calc() && !slice_calc.is_multi_slice_calc_type()) {
         for (int64_t i = 0; i < spec_.output_.count() && OB_SUCC(ret); i++) {
           ObExpr *expr = spec_.output_.at(i);
@@ -406,8 +404,6 @@ private:
   int broadcast_eof_row();
   int next_row();
   //template<bool USE_VEC>
-  int set_rollup_hybrid_keys(ObSliceIdxCalc &slice_calc);
-  //template<bool USE_VEC>
   int set_wf_hybrid_slice_id_calc_type(ObSliceIdxCalc &slice_calc);
   int fetch_first_row();
   int set_expect_range_count();
@@ -475,7 +471,6 @@ protected:
   std::pair<int64_t, int64_t> *cur_transmit_sampled_rows_;
   // row store iteration age control to iterate multiple rows in vectorized execution.
   ObRADatumStore::IterationAge sampled_input_rows_it_age_;
-  bool has_set_hybrid_key_;
   // px batch rescan is used and this is not the last parameter, so do not force flush dtl buffer.
   bool batch_param_remain_;
 
@@ -609,10 +604,8 @@ int ObPxTransmitOp::send_rows_one_by_one(ObSliceIdxCalc &slice_calc)
     metric_.count();
     if (OB_FAIL(ret)) {
       LOG_WARN("fail to get next row", K(ret));
-    } else if (OB_FAIL(set_rollup_hybrid_keys(slice_calc))) {
-      LOG_WARN("failed to set rollup hybrid keys", K(ret));
     } else if (OB_FAIL(set_wf_hybrid_slice_id_calc_type(slice_calc))) {
-      LOG_WARN("failed to set rollup hybrid keys", K(ret));
+      LOG_WARN("failed to set window function hybrid distribution", K(ret));
     } else if (OB_FAIL((slice_calc.get_slice_indexes<CALC_TYPE, false>(
                        get_spec().output_, eval_ctx_, slice_idx_array)))) {
       LOG_WARN("fail get slice idx", K(ret));
@@ -668,8 +661,6 @@ int ObPxTransmitOp::send_rows_in_batch(ObSliceIdxCalc &slice_calc)
     const ObPxTransmitSpec &spec = static_cast<const ObPxTransmitSpec &>(get_spec());
     batch_info_guard.set_batch_size(brs_.size_);
     if (OB_FAIL(ret) || brs_.size_ <= 0) {
-    } else if (OB_FAIL(set_rollup_hybrid_keys(slice_calc))) {
-      LOG_WARN("failed to set rollup hybrid keys", K(ret));
     } else if ((!slice_calc.support_vectorized_calc() || slice_calc.is_multi_slice_calc_type() || NULL != spec.tablet_id_expr_)) {
       for (int64_t i = 0; OB_SUCC(ret) && i < brs_.size_; i++) {
         if (brs_.skip_->at(i)) {

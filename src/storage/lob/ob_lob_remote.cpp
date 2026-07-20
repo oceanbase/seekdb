@@ -29,7 +29,7 @@ namespace storage
 
 // cross-tenant LOB obcall RPC removed.
 // Previously the cross-tenant LOB read (is_across_tenant()) was issued as the OB_LOB_QUERY
-// streaming obcall RPC (obcall::ObStorageRpcProxy::lob_query) which looped back to this same
+// streaming obcall RPC which looped back to this same
 // machine and was served by ObLobQueryP::process under MOD_SCOPE. We now run
 // the exact same local LOB query in-process: MTL_SWITCH to the lob's tenant, build the same
 // ObLobAccessParam (from_rpc_ = true), and drive the same ObLobQueryIter (READ) /

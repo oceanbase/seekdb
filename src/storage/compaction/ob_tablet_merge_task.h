@@ -206,10 +206,9 @@ public:
         || OB_TABLET_NOT_EXIST == dag_ret
         || OB_CANCELED == dag_ret;
   }
-  int get_tablet_and_compat_mode();
+  int get_tablet_and_check();
   int prepare_merge_ctx(bool &finish_flag); // should be called when the first task of dag starts running
   virtual int64_t to_string(char* buf, const int64_t buf_len) const override;
-  virtual lib::Worker::CompatMode get_compat_mode() const override { return compat_mode_; }
   virtual int gene_compaction_info(compaction::ObTabletCompactionProgress &progress) override;
   virtual int diagnose_compaction_info(compaction::ObDiagnoseTabletCompProgress &progress) override;
   virtual void set_dag_error_location() override;
@@ -229,7 +228,6 @@ protected:
       ObBasicTabletMergeCtx *ctx,
       compaction::ObPartitionMergeProgress *input_progress);
   bool is_inited_;
-  lib::Worker::CompatMode compat_mode_;
   ObBasicTabletMergeCtx *ctx_;
   ObTabletMergeDagParam param_;
   common::ObArenaAllocator allocator_;
@@ -247,7 +245,6 @@ public:
   virtual int init_by_param(const share::ObIDagInitParam *param) override; // for diagnose
   int prepare_init(
       const ObTabletMergeDagParam &param,
-      const lib::Worker::CompatMode compat_mode,
       const ObGetMergeTablesResult &result,
       storage::ObLS *ls);
   virtual bool operator == (const ObIDag &other) const override;

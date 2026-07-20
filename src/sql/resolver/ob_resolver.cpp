@@ -115,7 +115,6 @@
 #include "sql/resolver/ddl/ob_drop_directory_resolver.h"
 #include "pl/ob_pl_package.h"
 #include "sql/resolver/ddl/ob_drop_context_resolver.h"
-#include "sql/resolver/cmd/ob_olap_async_job_resolver.h"
 #include "sql/resolver/ddl/ob_create_ccl_rule_resolver.h"
 #include "sql/resolver/ddl/ob_drop_ccl_rule_resolver.h"
 #include "sql/resolver/ddl/ob_catalog_resolver.h"
@@ -524,7 +523,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       case T_SHOW_ENGINE:
       case T_SHOW_OPEN_TABLES:
       case T_SHOW_SEQUENCES:
-      case T_SHOW_OLAP_ASYNC_JOB_STATUS:
       case T_XA_RECOVER:
       case T_SHOW_CHECK_TABLE:
       case T_SHOW_CREATE_USER:
@@ -666,14 +664,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       }
       case T_PACKAGE_DROP: {
         REGISTER_STMT_RESOLVER(DropPackage);
-        break;
-      }
-      case T_ENABLE_SQL_THROTTLE: {
-        REGISTER_STMT_RESOLVER(EnableSqlThrottle);
-        break;
-      }
-      case T_DISABLE_SQL_THROTTLE: {
-        REGISTER_STMT_RESOLVER(DisableSqlThrottle);
         break;
       }
       case T_ANALYZE:
@@ -829,14 +819,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       }
       case T_EVENT_JOB_DROP: {
         REGISTER_STMT_RESOLVER(Event);
-        break;
-      }
-      case T_OLAP_ASYNC_JOB_SUBMIT: {
-        REGISTER_STMT_RESOLVER(OLAPAsyncJob);
-        break;
-      }
-      case T_OLAP_ASYNC_JOB_CANCEL: {
-        REGISTER_STMT_RESOLVER(OLAPAsyncJob);
         break;
       }
       case T_GRANT_PROXY:

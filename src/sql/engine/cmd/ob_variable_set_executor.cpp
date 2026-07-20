@@ -176,9 +176,7 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
                 ret = OB_SUCCESS;
                 
                 
-                ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy,
-                                                           false,
-                                                           OB_ALL_SYS_VARIABLE_TID);
+                auto &sql_client_retry_weak = *sql_proxy;
                 ObObj tmp_val;
                 ObSqlString sql;
                 SMART_VAR(ObMySQLProxy::MySQLResult, res) {
@@ -277,23 +275,6 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
                   LOG_WARN("Can't execute the given command because "
                            "you have active locked tables or an active transaction", K(ret));
                 } else {}
-              } else {}
-
-              if (OB_FAIL(ret)) {
-              } else if (set_var.var_name_ == OB_SV_COMPATIBILITY_MODE) {
-                if (!GCONF.in_upgrade_mode()) {
-                  ret = OB_OP_NOT_ALLOW;
-                  LOG_WARN("Compatibility mode can be changed only under upgrade mode and system tenant",
-                           K(ret));
-                  LOG_USER_ERROR(OB_OP_NOT_ALLOW,
-                          "Compatibility mode be changed not under upgrade mode and system tenant");
-                } else if (ObSetVar::SET_SCOPE_SESSION != set_var.set_scope_) {
-                  ret = OB_OP_NOT_ALLOW;
-                  LOG_WARN("Compatibility mode can be changed only under session scope",
-                           K(ret));
-                  LOG_USER_ERROR(OB_OP_NOT_ALLOW,
-                          "Compatibility mode be changed not in session scope");
-                }
               } else {}
 
               if (OB_SUCC(ret) && 0 == set_var.var_name_.case_compare(OB_SV_SECURE_FILE_PRIV)) {
@@ -457,12 +438,7 @@ int ObVariableSetExecutor::execute_subquery_expr(ObExecContext &ctx,
     ObObj tmp_value;
     SMART_VAR(ObISQLClient::ReadResult, res) {
       common::sqlclient::ObMySQLResult *result = NULL;
-      bool need_check = false;
-      if (OB_FAIL(session_info->check_feature_enable(ObCompatFeatureType::MYSQL_SET_VAR_PRIV_ENHANCE, need_check))) {
-        LOG_WARN("failed to check feature enable", K(ret));
-      } else if (need_check) {
-        conn->set_check_priv(true);
-      }
+      conn->set_check_priv(true);
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(conn->execute_read(subquery_expr.ptr(), res))) {
         LOG_WARN("failed to execute sql", K(ret), K(subquery_expr));
@@ -660,14 +636,6 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
         ret = OB_INVALID_ARGUMENT;
         LOG_USER_ERROR(OB_INVALID_ARGUMENT,
                        "max_read_stale_time is smaller than weak_read_version_refresh_interval");
-      }
-    } else if (set_var.var_name_ ==  OB_SV_OPTIMIZER_FEATURES_ENABLE) {
-      if (OB_FAIL(ObBasicSessionInfo::check_optimizer_features_enable_valid(val))) {
-        LOG_WARN("fail check optimizer_features_enable valid", K(val), K(ret));
-      }
-    } else if (set_var.var_name_ ==  OB_SV_PRIVILEGE_FEATURES_ENABLE) {
-      if (OB_FAIL(ObBasicSessionInfo::check_optimizer_features_enable_valid(val))) {
-        LOG_WARN("fail check privilege_features_enable valid", K(val), K(ret));
       }
     }
 

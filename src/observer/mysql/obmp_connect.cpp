@@ -274,12 +274,6 @@ int ObMPConnect::process()
       LOG_ERROR("null session", K(ret), K(session));
     } else if (OB_FAIL(verify_identify(*conn, *session))) {
       LOG_WARN("fail to verify_identify", K(ret));
-    } else if (OB_FAIL(process_kill_client_session(*session, true))) {
-      LOG_WARN("client session has been killed", K(ret));
-    } else if (OB_FAIL(update_transmission_checksum_flag(*session))) {
-      LOG_WARN("update transmisson checksum flag failed", K(ret));
-    } else if (OB_FAIL(update_proxy_and_client_sys_vars(*session))) {
-      LOG_WARN("update_proxy_and_client_sys_vars failed", K(ret));
     } else if (OB_FAIL(update_charset_sys_vars(*conn, *session))) {
       LOG_WARN("fail to update charset sys vars", K(ret));
     } else {
@@ -405,7 +399,6 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
     LOG_WARN("get schema guard failed", K(ret));
   } else {
     ObString host_name;
-    uint64_t client_attr_cap_flags = 0;
 
     // TODO, checker ret
     if (tenant_name_.empty()) {
@@ -675,12 +668,6 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
         LOG_WARN("failed to update database variables", K(ret));
       } else if (OB_FAIL(session.update_max_packet_size())) {
         LOG_WARN("failed to update max packet size", K(ret));
-      } else if (OB_FAIL(get_client_attribute_capability(client_attr_cap_flags))) {
-        LOG_WARN("failed to get client attribute capability", K(ret));
-      } else if (OB_FAIL(check_update_client_capability(client_attr_cap_flags))) {
-        LOG_WARN("failed to get client attribute capability", K(ret));
-      } else {
-        session.set_client_attrbuite_capability(client_attr_cap_flags);
       }
 
       if (OB_SUCC(ret) && !session.get_database_name().empty()) {
@@ -720,9 +707,7 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
 
     LOG_DEBUG("obmp connect info:", K(ret), K_(tenant_name), K_(user_name),
               K(host_name), K_(client_ip), "database", hsr_.get_database(),
-              K(hsr_.get_capability_flags().capability_),
-              K(session.is_client_use_lob_locator()),
-              K(session.is_client_support_lob_locatorv2()));
+              K(hsr_.get_capability_flags().capability_));
   }
   return ret;
 }
@@ -730,13 +715,13 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
 int ObMPConnect::switch_lock_status_for_current_login_user(bool do_lock)
 {
   int ret = OB_SUCCESS;
-  OZ(switch_lock_status_for_user(ObString::make_string("%"), MYSQL_MODE, do_lock),
+  OZ(switch_lock_status_for_user(ObString::make_string("%"), do_lock),
       1UL, do_lock);
   return ret;
 }
 
 int ObMPConnect::switch_lock_status_for_user(const ObString &host_name,
-                                             ObCompatibilityMode compat_mode, bool do_lock)
+                                             bool do_lock)
 {
   int ret = OB_SUCCESS;
 
@@ -748,7 +733,7 @@ int ObMPConnect::switch_lock_status_for_user(const ObString &host_name,
   if (OB_FAIL(lock_user_sql.append_fmt("ALTER USER %s%.*s%s", name_quote,
                                               user_name_.length(), user_name_.ptr(), name_quote))) {
     LOG_WARN("append string failed", K(ret));
-  } else if (MYSQL_MODE == compat_mode && OB_FAIL(lock_user_sql.append_fmt("@%s%.*s%s",
+  } else if (OB_FAIL(lock_user_sql.append_fmt("@%s%.*s%s",
       name_quote, host_name.length(), host_name.ptr(), name_quote))) {
     LOG_WARN("append string failed", K(ret));
   } else if (OB_FAIL(lock_user_sql.append_fmt(" ACCOUNT %s", do_lock ? "LOCK" : "UNLOCK"))) {
@@ -756,7 +741,7 @@ int ObMPConnect::switch_lock_status_for_user(const ObString &host_name,
   } else if (OB_ISNULL(sql_proxy = gctx_.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null", K(ret));
-  } else if (OB_FAIL(sql_proxy->write(lock_user_sql.ptr(), affected_rows, compat_mode))) {
+  } else if (OB_FAIL(sql_proxy->write(lock_user_sql.ptr(), affected_rows))) {
     LOG_WARN("fail to execute lock user", K(ret));
   }
   LOG_INFO("user ddl has been sent, change user lock status to ", K(user_name_),
@@ -801,8 +786,7 @@ int ObMPConnect::unlock_user_if_time_is_up_mysql(const uint64_t user_id,
   } else if (!is_locked_now) { // time's up
     if (OB_FAIL(clear_current_user_failed_login_num(user_id, trans))) {
       LOG_WARN("fail to clear failed login num", K(ret));
-    } else if (OB_FAIL(switch_lock_status_for_user( user_info->get_host_name_str(),
-                                                   MYSQL_MODE, false))) {
+  } else if (OB_FAIL(switch_lock_status_for_user(user_info->get_host_name_str(), false))) {
       LOG_WARN("fail to check lock status", K(ret));
     } else {
       is_unlock = true;
@@ -887,8 +871,7 @@ int ObMPConnect::update_login_stat_in_trans_mysql(const ObUserInfo &user_info,
     }
   }
   if (OB_SUCC(ret) && need_lock && !user_info.get_is_locked()) {
-    if (OB_FAIL(switch_lock_status_for_user( user_info.get_host_name(),
-                                            MYSQL_MODE, true))) {
+    if (OB_FAIL(switch_lock_status_for_user(user_info.get_host_name(), true))) {
       LOG_WARN("fail to lock user", K(ret));
     }
   }
@@ -1143,48 +1126,6 @@ int ObMPConnect::get_conn_id(uint32_t &conn_id) const
   return ret;
 }
 
-int ObMPConnect::get_client_attribute_capability(uint64_t &cap) const
-{
-  int ret = OB_SUCCESS;
-  cap = 0;
-  bool is_capability_flag_found = false;
-  ObStringKV kv;
-  for (int64_t i = 0; !is_capability_flag_found && i < hsr_.get_connect_attrs().count(); ++i) {
-    kv = hsr_.get_connect_attrs().at(i);
-    if (kv.key_ == OB_MYSQL_CLIENT_ATTRIBUTE_CAPABILITY_FLAG) {
-      is_capability_flag_found = true;
-    }
-  }
-
-  if (is_capability_flag_found) {
-    ObObj value;
-    value.set_varchar(kv.value_);
-    ObArenaAllocator allocator(ObModIds::OB_SQL_EXPR);
-    ObCastCtx cast_ctx(&allocator, NULL, CM_NONE, ObCharset::get_system_collation());
-    EXPR_GET_UINT64_V2(value, cap);
-    if (OB_FAIL(ret)) {
-      LOG_WARN("fail to cast client attribute capability flag to uint64", K_(kv.value), K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObMPConnect::check_update_client_capability(uint64_t &cap) const
-{
-  int ret = OB_SUCCESS;
-
-  // set client_capability_ to tell client which features observer supports
-  ObClientAttributeCapabilityFlags server_client_cap_flag;
-  // version control need change 425
-  server_client_cap_flag.cap_flags_.OB_CLIENT_SUPPORT_JDBC_BINARY_DOUBLE = 1;
-  server_client_cap_flag.cap_flags_.OB_CLIENT_CAP_NEW_RESULT_META_DATA = 1;
-
-  cap = (server_client_cap_flag.capability_ & cap);//if old java client, set it 0
-
-  LOG_DEBUG("debug client capability", K(cap));
-  return ret;
-}
-
 int ObMPConnect::check_client_property(ObSMConnection &conn)
 {
   int ret = OB_SUCCESS;
@@ -1229,7 +1170,6 @@ int ObMPConnect::verify_connection() const
       // sys tenant or root(SYS) user is considered as vip
       bool check_max_sess = false;
       if (check_max_sess) {
-        lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
         check_max_sess = user_name_.compare(OB_SYS_USER_NAME) != 0;
       }
       if (OB_SUCC(ret) && check_max_sess) {

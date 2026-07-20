@@ -26,8 +26,7 @@ namespace oceanbase
 namespace storage
 {
 
-int ObProtectedMemtableMgrHandle::create_tablet_memtable_mgr_(const ObTabletID &tablet_id,
-    lib::Worker::CompatMode compat_mode)
+int ObProtectedMemtableMgrHandle::create_tablet_memtable_mgr_(const ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
   ObTabletMemtableMgr *mgr = NULL;
@@ -36,7 +35,7 @@ int ObProtectedMemtableMgrHandle::create_tablet_memtable_mgr_(const ObTabletID &
   } else if (OB_ISNULL(mgr = pool->acquire())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     STORAGE_LOG(WARN, "failed to memtable manager alloc", KR(ret), K(tablet_id));
-  } else if (OB_FAIL(mgr->ObIMemtableMgr::init(tablet_id, compat_mode))) {
+  } else if (OB_FAIL(mgr->ObIMemtableMgr::init(tablet_id))) {
     pool->release(mgr);
     STORAGE_LOG(WARN, "failed to init memtable mgr", KR(ret), K(tablet_id));
   } else {

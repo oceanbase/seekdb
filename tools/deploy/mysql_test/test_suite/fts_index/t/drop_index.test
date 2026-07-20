@@ -296,7 +296,6 @@ CREATE TABLE array_ol_ddl_col_mysql(
     j JSON,
     p POINT NOT NULL,
     g GEOMETRY,
-    rb ROARINGBITMAP default x'0100',
     PRIMARY KEY(id),
     FULLTEXT idx_full(content),
     INDEX idx_j ( (CAST(j AS CHAR(50) ARRAY)) )

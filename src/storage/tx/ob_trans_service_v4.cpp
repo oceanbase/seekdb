@@ -878,10 +878,8 @@ int ObTransService::create_tx_ctx_(ObLS *ls,
   ObTxCreateArg arg(false,  /* for_replay */
                     ctx_source,
                     tx.tx_id_,
-                    tx.cluster_id_,
                     tx.cluster_version_,
                     tx.sess_id_, /*session_id*/
-                    tx.client_sid_,
                     tx.assoc_sess_id_, /*associated_session_id*/
                     tx.get_expire_ts(),
                     this,
@@ -1345,7 +1343,6 @@ int ObTransService::create_in_txn_implicit_savepoint(ObTxDesc &tx, ObTxSEQ &save
   tx_param.lock_timeout_us_ = tx.lock_timeout_us_;
   tx_param.access_mode_ = tx.access_mode_;
   tx_param.isolation_ = tx.isolation_;
-  tx_param.cluster_id_ = tx.cluster_id_;
   if (tx_param.is_valid()) {
     ret = create_implicit_savepoint(tx, tx_param, savepoint);
   } else {

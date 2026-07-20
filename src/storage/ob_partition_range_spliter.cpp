@@ -983,8 +983,6 @@ int ObPartitionMultiRangeSpliter::get_tables(ObTableStoreIterator &table_iter,
       } else if (OB_FAIL(tables.push_back(table))) {
         LOG_WARN("Fail to add minor sstable", KR(ret), KPC(table));
       }
-    } else if (table->is_direct_load_memtable()) {
-      // TODO : @suzhi.yt may cause uneven range partitioning, to be implemented later
     }
   }
 

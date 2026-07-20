@@ -20,7 +20,6 @@
 #include "lib/string/ob_sql_string.h"
 #include "lib/oblog/ob_log_module.h"
 #include "common/mysqlclient/ob_isql_client.h"
-#include "common/mysqlclient/ob_mysql_connection.h"
 #include "common/mysqlclient/ob_single_connection_proxy.h"
 
 namespace oceanbase

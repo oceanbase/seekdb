@@ -49,9 +49,7 @@ ObLSService::ObLSService()
     is_stopped_(false),
     ls_(nullptr),
     ls_allocator_(),
-    change_lock_(common::ObLatchIds::LS_CHANGE_LOCK),
-    storage_svr_rpc_proxy_(),
-    storage_rpc_()
+    change_lock_(common::ObLatchIds::LS_CHANGE_LOCK)
 {}
 
 ObLSService::~ObLSService()
@@ -78,8 +76,6 @@ void ObLSService::destroy()
     return;
   }
   ls_allocator_.destroy();
-  storage_svr_rpc_proxy_.destroy();
-  storage_rpc_.destroy();
   is_inited_ = false;
 }
 
@@ -228,17 +224,11 @@ int ObLSService::init()
                                         OB_LS_SERVICE,
                                         LS_ALLOC_TOTAL_LIMIT))) {
     LOG_WARN("fail to init ls allocator, ", K(ret));
-  } else if (OB_FAIL(storage_svr_rpc_proxy_.init(GCTX.self_addr()))) {
-    LOG_WARN("failed to init storage svr rpc proxy", K(ret));
-  } else if (OB_FAIL(storage_rpc_.init(&storage_svr_rpc_proxy_, GCTX.self_addr()))) {
-    STORAGE_LOG(WARN, "fail to init partition service rpc", K(ret));
   } else {
     is_inited_ = true;
   }
   if (OB_FAIL(ret)) {
     ls_allocator_.destroy();
-    storage_svr_rpc_proxy_.destroy();
-    storage_rpc_.destroy();
   }
   return ret;
 }
@@ -653,7 +643,6 @@ int ObLSService::create_ls_()
   palf_base_info.generate_by_default();
   palf_base_info.prev_log_info_.scn_ = create_scn;
 
-  const lib::Worker::CompatMode compat_mode(lib::Worker::CompatMode::MYSQL);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("the ls service has not been inited", K(ret));
@@ -693,7 +682,7 @@ int ObLSService::create_ls_()
       } else if (OB_BREAK_FAIL(ls->create_ls(palf_base_info))) {
         LOG_WARN("enable ls palf failed", K(ret), K(ls_meta));
       } else if (FALSE_IT(state = ObLSCreateState::CREATE_STATE_PALF_ENABLED)) {
-      } else if (OB_FAIL(ls->create_ls_inner_tablet(compat_mode, create_scn))) {
+      } else if (OB_FAIL(ls->create_ls_inner_tablet(create_scn))) {
         LOG_WARN("create ls inner tablet failed", K(ret), K(ls_meta));
       } else if (FALSE_IT(state = ObLSCreateState::CREATE_STATE_INNER_TABLET_CREATED)) {
       } else if (OB_BREAK_FAIL(TENANT_STORAGE_META_PERSISTER.commit_create_ls())) {

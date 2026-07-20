@@ -20,7 +20,6 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/string/ob_string.h"
 #include "lib/trace/ob_trace_event.h"
-#include "sql/monitor/ob_phy_operator_monitor_info.h"
 #include "sql/monitor/ob_exec_stat.h"
 #include "lib/net/ob_addr.h"
 namespace oceanbase
@@ -32,8 +31,6 @@ class ObInnerSQLResult;
 namespace sql
 {
 class ObExecContext;
-class ObPhyPlanMonitorInfo;
-class ObPhyOperatorMonitorInfo;
 class ObSql;
 class ObPhysicalPlan;
 class ObSQLSessionInfo;
@@ -43,42 +40,13 @@ public:
   ObExecStatCollector() : length_(0) {}
   ~ObExecStatCollector() {}
 
-  int collect_plan_monitor_info(uint64_t job_id,
-                           uint64_t task_id,
-                           ObPhyPlanMonitorInfo *monitor_info);
   int add_raw_stat(const common::ObString &str);
   int get_extend_info(common::ObIAllocator &allocator, common::ObString &str);
 private:
-  template<class T>
-      int add_stat(const T *value);
-
-  /* functions */
   DISALLOW_COPY_AND_ASSIGN(ObExecStatCollector);
   static const int64_t MAX_STAT_BUF_COUNT = 10240;
   char extend_buf_[MAX_STAT_BUF_COUNT];
   int64_t length_;
-};
-
-class ObExecStatDispatch
-{
-public:
-  ObExecStatDispatch() : stat_str_(), pos_(0){};
-  ~ObExecStatDispatch() {};
-  int set_extend_info(const common::ObString &str);
-  // Responsible for parsing the string into a normal data structure;
-  int dispatch(bool need_add_monitor,
-               ObPhyPlanMonitorInfo *monitor_info,
-               bool need_update_plan,
-               ObPhysicalPlan *plan);
-private:
-  int get_next_type(StatType &type);
-  template<class T>
-  int get_value(T *value);
-
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObExecStatDispatch);
-  common::ObString stat_str_;
-  int64_t pos_;
 };
 
 class ObExecStatUtils

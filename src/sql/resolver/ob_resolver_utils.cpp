@@ -112,9 +112,7 @@ int ObResolverUtils::get_all_function_table_column_names(const TableItem &table_
   if (OB_SUCC(ret)
       && !coll_type->get_element_type().is_obj_type()
       && !coll_type->get_element_type().is_record_type()
-      && !coll_type->get_element_type().is_collection_type()
-      && !(coll_type->get_element_type().is_opaque_type()
-            && coll_type->get_element_type().get_user_type_id() == T_OBJ_XML)) {
+      && !coll_type->get_element_type().is_collection_type()) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not suppoert type in table function", K(ret), KPC(coll_type));
     ObString err;
@@ -123,7 +121,6 @@ int ObResolverUtils::get_all_function_table_column_names(const TableItem &table_
     LOG_USER_ERROR(OB_NOT_SUPPORTED, err.ptr());
   }
   if (OB_SUCC(ret) && (coll_type->get_element_type().is_obj_type()
-                      || coll_type->get_element_type().is_opaque_type()
                       || coll_type->get_element_type().is_collection_type())) {
     OZ (column_names.push_back(ObString("COLUMN_VALUE")));
   }
@@ -167,7 +164,7 @@ int ObResolverUtils::check_function_table_column_exist(const TableItem &table_it
   bool exist = false;
   OZ (get_all_function_table_column_names(table_item, params, column_names));
   for (int64_t i = 0; OB_SUCC(ret) && i < column_names.count(); ++i) {
-    if (ObCharset::case_compat_mode_equal(column_names.at(i), column_name)) {
+    if (ObCharset::case_insensitive_equal(column_names.at(i), column_name)) {
       exist = true;
       break;
     }
@@ -198,7 +195,7 @@ int ObResolverUtils::check_json_table_column_exists(const TableItem &table_item,
     ObJtColBaseInfo* col_info = jt_def->all_cols_.at(i);
     if (col_info->col_type_ != NESTED_COL_TYPE) {
       ObString& cur_column_name = col_info->col_name_;
-      if (ObCharset::case_compat_mode_equal(cur_column_name, column_name)) {
+      if (ObCharset::case_insensitive_equal(cur_column_name, column_name)) {
         exists = true;
         break;
       }
@@ -744,11 +741,6 @@ int ObResolverUtils::get_candidate_routines(ObSchemaChecker &schema_checker, con
   uint64_t object_db_id = OB_INVALID_ID;
   ObString object_name;
   ObString real_db_name;
-  int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
-  {
-    compatible_mode = COMPATIBLE_MYSQL_MODE;
-  }
-
   UNUSED(udt_id);
 
   OV (!routine_name.empty(), OB_INVALID_ARGUMENT, K(routine_name));
@@ -810,11 +802,11 @@ int ObResolverUtils::get_candidate_routines(ObSchemaChecker &schema_checker, con
     OX (object_name = package_name);
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(schema_checker.get_package_id( // try user package now!
-          object_db_id, object_name, compatible_mode, package_id))
+          object_db_id, object_name, package_id))
         || OB_INVALID_ID == package_id) {
       if (ObPLResolver::is_unrecoverable_error(ret)) {
         LOG_WARN("failed to get_package_id",
-                 K(ret), K(object_db_id), K(object_name), K(compatible_mode), K(package_id));
+                 K(ret), K(object_db_id), K(object_name), K(package_id));
       }
     } else { // it`s user pacakge, get package routines
       OZ (schema_checker.get_package_routine_infos(
@@ -826,7 +818,7 @@ int ObResolverUtils::get_candidate_routines(ObSchemaChecker &schema_checker, con
         // do nothing
       } else { // mysql mode only has system package
         if (OB_FAIL(schema_checker.get_package_id( // try system pacakge
-            OB_SYS_DATABASE_NAME, package_name, compatible_mode, package_id))
+            OB_SYS_DATABASE_NAME, package_name, package_id))
             || OB_INVALID_ID == package_id) {
           LOG_WARN("failed to get package id", K(ret));
         } else {
@@ -1649,7 +1641,6 @@ int ObResolverUtils::resolve_sp_access_name(ObSchemaChecker &schema_checker,
             // do nothing
           } else if (OB_SUCC(schema_checker.get_package_id(database_id,
                                                             package_or_db_name,
-                                                            COMPATIBLE_MYSQL_MODE,
                                                             package_id))) {
             package_name = package_or_db_name;
             db_name = current_database;
@@ -1661,7 +1652,7 @@ int ObResolverUtils::resolve_sp_access_name(ObSchemaChecker &schema_checker,
               int64_t old_ret = ret;
               if (OB_FAIL(schema_checker.get_package_id(
                   OB_SYS_DATABASE_ID,
-                  package_or_db_name, COMPATIBLE_MYSQL_MODE, package_id))) {
+                  package_or_db_name, package_id))) {
                 ret = old_ret;
                 LOG_WARN("get database id failed", K(package_or_db_name), K(ret));
                 LOG_USER_ERROR(OB_ERR_BAD_DATABASE, package_or_db_name.length(), package_or_db_name.ptr());
@@ -2168,7 +2159,6 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
                                    ObExprInfo *parents_expr_info,
                                    const ObSQLMode sql_mode,
                                    bool enable_decimal_int_type,
-                                   const ObCompatType compat_type,
                                    const bool enable_mysql_compatible_dates,
                                    int8_t min_const_integer_precision,
                                    bool is_from_pl /* false */,
@@ -2557,16 +2547,10 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
       break;
     };
     case T_NULL: {
-      if (OB_UNLIKELY(compat_type == COMPAT_MYSQL8 && node->value_ == 1)) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "\\N in MySQL8");
-        LOG_WARN("\\N is not supprted in MySQL8", K(ret));
-      } else {
-        val.set_null();
-        val.unset_result_flag(NOT_NULL_FLAG);
-        val.set_length(0);
-        val.set_param_meta(val.get_meta());
-      }
+      val.set_null();
+      val.unset_result_flag(NOT_NULL_FLAG);
+      val.set_length(0);
+      val.set_param_meta(val.get_meta());
       break;
     }
     default: {
@@ -5028,13 +5012,6 @@ int ObResolverUtils::resolve_data_type(const ParseNode &type_node,
       data_type.set_collation_type(CS_TYPE_INVALID);
       break;
     }
-    case ObRoaringBitmapTC: {
-      data_type.set_length(length);
-      data_type.set_scale(default_accuracy.get_scale());
-      data_type.set_charset_type(CHARSET_BINARY);
-      data_type.set_collation_type(CS_TYPE_BINARY);
-      break;
-    }
     default:
       ret = OB_ERR_ILLEGAL_TYPE;
       SQL_RESV_LOG(WARN, "Unsupport data type of column definiton", K(ident_name), K(data_type), K(ret));
@@ -6841,7 +6818,7 @@ int ObResolverUtils::check_duplicated_column(ObSelectStmt &select_stmt,
   if (!can_skip) {
     for (int64_t i = 1; OB_SUCC(ret) && i < select_stmt.get_select_item_size(); i++) {
       for (int64_t j = 0; OB_SUCC(ret) && j < i; ++j) {
-        if (ObCharset::case_compat_mode_equal(select_stmt.get_select_item(i).alias_name_,
+        if (ObCharset::case_insensitive_equal(select_stmt.get_select_item(i).alias_name_,
                                               select_stmt.get_select_item(j).alias_name_)) {
           ret = OB_ERR_COLUMN_DUPLICATE;
           LOG_USER_ERROR(OB_ERR_COLUMN_DUPLICATE,
@@ -6865,7 +6842,7 @@ int ObResolverUtils::check_duplicated_column(ObSelectStmt &select_stmt,
             || 0 == select_stmt.get_select_item(i).paramed_alias_name_.length()
             || select_stmt.get_select_item(j).need_check_dup_name_) {
           // do nothing
-        } else if (ObCharset::case_compat_mode_equal(
+        } else if (ObCharset::case_insensitive_equal(
                                               select_stmt.get_select_item(i).paramed_alias_name_,
                                               select_stmt.get_select_item(j).paramed_alias_name_)) {
           select_stmt.get_select_item(i).need_check_dup_name_ = true;
@@ -7966,12 +7943,9 @@ int ObResolverUtils::resolver_param(ObPlanCacheCtx &pc_ctx,
   const bool is_paramlize = false;
   int64_t server_collation = CS_TYPE_INVALID;
   obj_param.reset();
-  ObCompatType compat_type = COMPAT_MYSQL57;
   if (OB_ISNULL(pc_param) || OB_ISNULL(raw_param = pc_param->node_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
-  } else if (OB_FAIL(session.get_compatibility_control(compat_type))) {
-    LOG_WARN("failed to get compat type", K(ret));
   } else if (not_param_index.has_member(param_idx)) {
     /* do nothing */
     is_param = false;
@@ -8001,7 +7975,6 @@ int ObResolverUtils::resolver_param(ObPlanCacheCtx &pc_ctx,
                        static_cast<ObCollationType>(server_collation), NULL,
                        session.get_sql_mode(),
                        enable_decimal_int,
-                       compat_type,
                        enable_mysql_compatible_dates,
                        session.get_min_const_integer_precision(),
                        false, /* is_from_pl */

@@ -34,11 +34,6 @@ public:
   int end(const bool commit);
   bool is_started() const { return in_trans_; }
   sql::ObSQLSessionInfo *get_session_info() const { return session_info_; }
-  ObCompatibilityMode get_compatibility_mode() const {
-    return nullptr != session_info_ ? session_info_->get_compatibility_mode()
-                                    : ObCompatibilityMode::MYSQL_MODE;
-  }
-
 protected:
   int connect(sql::ObSQLSessionInfo *session_info, ObISQLClient *sql_client);
   int start_transaction();

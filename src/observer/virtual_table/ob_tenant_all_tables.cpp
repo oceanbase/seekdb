@@ -226,7 +226,6 @@ int ObTenantAllTables::get_table_stats()
       SERVER_LOG(WARN, "table schema is NULL", K(ret), K(i), K(database_id_));
     } else {
       TableStatistics tab_stat;
-      ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy_, false, OB_INVALID_TIMESTAMP, false);
       ObSqlString sql;
       if (OB_ISNULL(session_) || OB_ISNULL(sql_proxy_) || OB_ISNULL(sql_proxy_->get_pool())) {
         ret = OB_ERR_UNEXPECTED;
@@ -236,7 +235,7 @@ int ObTenantAllTables::get_table_stats()
       } else {
         SMART_VAR(ObMySQLProxy::MySQLResult, res) {
           sqlclient::ObMySQLResult *result = NULL;
-          if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
+          if (OB_FAIL(sql_proxy_->read(res, sql.ptr()))) {
             LOG_WARN("execute sql failed", "sql", sql.ptr(), K(ret));
           } else if (OB_ISNULL(result = res.get_result())) {
             ret = OB_ERR_UNEXPECTED;

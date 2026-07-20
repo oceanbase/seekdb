@@ -81,12 +81,10 @@ public:
                K_(ddl_start_scn),
                K_(scn),
                K_(table_key),
-               K_(trans_id),
                KPC_(data_macro_meta),
                KP_(buf),
                K_(size),
-               K_(merge_slice_idx),
-               K_(seq_no));
+               K_(merge_slice_idx));
 public:
   ObArenaAllocator allocator_; // used to hold data_macro_meta_
   ObDDLMacroHandle block_handle_;
@@ -95,34 +93,27 @@ public:
   share::SCN ddl_start_scn_;
   share::SCN scn_;
   ObITable::TableKey table_key_;
-  transaction::ObTransID trans_id_; // for incremental direct load only
   blocksstable::ObDataMacroBlockMeta *data_macro_meta_;
   const char* buf_; // only used for warm up
   int64_t size_;
   int64_t merge_slice_idx_;
-  transaction::ObTxSEQ seq_no_; // for incremental direct load only
 };
 
 class ObDDLKV;
 class ObDDLKVHandle final
 {
 public:
-  ObDDLKVHandle() : ddl_kv_(nullptr), t3m_(nullptr), allocator_(nullptr) {}
-  ObDDLKVHandle(const ObDDLKVHandle &other) : ddl_kv_(nullptr), t3m_(nullptr), allocator_(nullptr) { *this = other; }
+  ObDDLKVHandle() : ddl_kv_(nullptr) {}
+  ObDDLKVHandle(const ObDDLKVHandle &other) : ddl_kv_(nullptr) { *this = other; }
   ObDDLKVHandle &operator =(const ObDDLKVHandle &other);
   ~ObDDLKVHandle() { reset(); }
   ObDDLKV* get_obj() const { return ddl_kv_; }
   bool is_valid() const;
-  // for full direct load
   int set_obj(ObDDLKV *ddl_kv);
-  // for incremental direct load
-  int set_obj(ObTableHandleV2 &table_handle);
   void reset();
   DECLARE_TO_STRING;
 private:
   ObDDLKV *ddl_kv_;
-  ObTenantMetaMemMgr *t3m_;
-  common::ObIAllocator *allocator_;
 };
 
 class ObTablet;
@@ -145,9 +136,7 @@ public:
     const int64_t snapshot_version, // used for shared-storage mode.
     const uint64_t data_format_version, // used for shared-storage mode.
     ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
-    const ObDirectLoadType direct_load_type,
-    const transaction::ObTransID &trans_id = transaction::ObTransID(),
-    const transaction::ObTxSEQ &seq_no = transaction::ObTxSEQ());
+    const ObDirectLoadType direct_load_type);
   ~ObDDLKVPendingGuard();
   int get_ret() const { return ret_; }
   int get_ddl_kv(ObDDLKV *&kv);
@@ -176,11 +165,9 @@ public:
                K_(start_scn),
                K_(data_format_version),
                K_(type),
-               K_(trans_id),
                K_(macro_block_id),
                K_(parallel_cnt),
-               K_(merge_slice_idx),
-               K_(seq_no));
+               K_(merge_slice_idx));
 public:
   storage::ObITable::TableKey table_key_;
   ObString data_buffer_;
@@ -188,20 +175,16 @@ public:
   blocksstable::ObLogicMacroBlockId logic_id_;
   share::SCN start_scn_;
   uint64_t data_format_version_;
-  /* type is not a relialbe val, only inc major may be write !!!!*/
   storage::ObDirectLoadType type_;
-  transaction::ObTransID trans_id_; // for incremental direct load only
   blocksstable::MacroBlockId macro_block_id_; // for shared storage mode
   // for shared storage gc occupy info
   int64_t parallel_cnt_;
   int64_t merge_slice_idx_;
-  transaction::ObTxSEQ seq_no_; // for incremental direct load only
 };
 
 class ObBaseTabletDirectLoadMgr;
 class ObTabletDirectLoadMgr;
 class ObTabletFullDirectLoadMgr;
-class ObTabletIncDirectLoadMgr;
 class ObTabletDirectLoadMgrV3;
 class ObTabletDirectLoadMgrHandle final
 {
@@ -216,7 +199,6 @@ public:
   ObTabletDirectLoadMgr *get_obj();
   const ObTabletDirectLoadMgr *get_obj() const;
   ObTabletFullDirectLoadMgr *get_full_obj() const;
-  ObTabletIncDirectLoadMgr *get_inc_obj() const;
   void reset();
   bool is_valid() const;
   /*
@@ -242,8 +224,6 @@ public:
 enum ObDDLKVType {
   DDL_KV_INVALID = 0,
   DDL_KV_FULL = 1,
-  DDL_KV_INC_MINOR = 2,
-  DDL_KV_INC_MAJOR = 3,
   DDL_KV_MAX
 };
 
@@ -258,31 +238,10 @@ static inline bool is_full_ddl_kv(const ObDDLKVType &type)
   return (ObDDLKVType::DDL_KV_FULL == type);
 }
 
-static inline bool is_inc_minor_ddl_kv(const ObDDLKVType &type)
-{
-  return (ObDDLKVType::DDL_KV_INC_MINOR == type);
-}
-
-static inline bool is_inc_major_ddl_kv(const ObDDLKVType &type)
-{
-  return (ObDDLKVType::DDL_KV_INC_MAJOR == type);
-}
-
 static ObDDLKVType convert_direct_load_type_to_ddl_kv_type(const ObDirectLoadType &direct_load_type)
 {
-  ObDDLKVType ddl_kv_type = ObDDLKVType::DDL_KV_INVALID;
-  switch (direct_load_type) {
-    case ObDirectLoadType::DIRECT_LOAD_INCREMENTAL:
-      ddl_kv_type = ObDDLKVType::DDL_KV_INC_MINOR;
-      break;
-    case ObDirectLoadType::DIRECT_LOAD_INCREMENTAL_MAJOR:
-      ddl_kv_type = ObDDLKVType::DDL_KV_INC_MAJOR;
-      break;
-    default:
-      ddl_kv_type = ObDDLKVType::DDL_KV_FULL; 
-      break;
-  }
-  return ddl_kv_type;
+  return is_valid_direct_load(direct_load_type) ? ObDDLKVType::DDL_KV_FULL
+                                                : ObDDLKVType::DDL_KV_INVALID;
 }
 
 struct ObInsertMonitor final {
@@ -490,25 +449,6 @@ public:
   ObArray<share::schema::ObColDesc> column_descs_;
 };
 
-// transaction info for inc direct load
-struct ObDirectLoadTxInfo
-{
-public:
-  ObDirectLoadTxInfo() : tx_desc_(nullptr), trans_id_(), seq_no_(0) {}
-  void reset()
-  {
-    tx_desc_ = nullptr;
-    trans_id_.reset();
-    seq_no_ = 0;
-  }
-  bool is_valid() const { return nullptr != tx_desc_ && trans_id_.is_valid() && seq_no_ > 0; }
-  TO_STRING_KV(K_(trans_id), K_(seq_no), K_(tx_desc));
-public:
-  transaction::ObTxDesc *tx_desc_;
-  transaction::ObTransID trans_id_; 
-  int64_t seq_no_;
-};
-
 struct ObWriteTabletParam
 {
 public:
@@ -532,24 +472,20 @@ public:
   ObWriteMacroParam()
     : tablet_id_(), tenant_data_version_(0), is_no_logging_(false),
       schema_version_(0), slice_idx_(0), slice_count_(0), ddl_thread_count_(0), snapshot_version_(0), direct_load_type_(DIRECT_LOAD_INVALID),
-      task_id_(0), is_index_table_(false), tx_info_(), ddl_table_schema_(), tablet_param_(), lob_meta_tablet_param_(),
-      ddl_dag_(nullptr), tablet_context_(nullptr), max_batch_size_(0), start_sequence_(), row_offset_(0),
-      is_sorted_table_load_(false)
+      task_id_(0), is_index_table_(false), ddl_table_schema_(), tablet_param_(), lob_meta_tablet_param_(),
+      ddl_dag_(nullptr), tablet_context_(nullptr), max_batch_size_(0), start_sequence_(), row_offset_(0)
   {}
   ~ObWriteMacroParam() = default;
   bool is_valid() const
   {
     return tablet_id_.is_valid() && tenant_data_version_ > 0 && schema_version_ > 0
-        && slice_idx_ >= 0 && snapshot_version_ > 0 && direct_load_type_ > DIRECT_LOAD_INVALID
-        && direct_load_type_ < DIRECT_LOAD_MAX && task_id_ > 0
-        && (!is_incremental_major_direct_load(direct_load_type_)
-            || (is_incremental_major_direct_load(direct_load_type_) && tx_info_.is_valid()));
+        && slice_idx_ >= 0 && snapshot_version_ > 0 && is_valid_direct_load(direct_load_type_)
+        && task_id_ > 0;
   }
   int64_t get_logic_parallel_count() const { return slice_count_ > 0 ? slice_count_ : ddl_thread_count_; }
   TO_STRING_KV(K_(tablet_id), K_(lob_meta_tablet_id), K_(tenant_data_version), K_(is_no_logging),
       K_(schema_version), K_(slice_idx), K_(slice_count), K_(ddl_thread_count), K_(snapshot_version), K_(direct_load_type),
-      K_(task_id), K_(is_index_table), K_(ddl_table_schema), K_(tablet_param), K_(lob_meta_tablet_param), KP_(tablet_context),
-      K_(is_sorted_table_load));
+      K_(task_id), K_(is_index_table), K_(ddl_table_schema), K_(tablet_param), K_(lob_meta_tablet_param), KP_(tablet_context));
 public:
   ObTabletID tablet_id_;
   ObTabletID lob_meta_tablet_id_;
@@ -563,7 +499,6 @@ public:
   ObDirectLoadType direct_load_type_;
   int64_t task_id_;
   bool is_index_table_;
-  ObDirectLoadTxInfo tx_info_;
   ObDDLTableSchema ddl_table_schema_;
   ObWriteTabletParam tablet_param_;
   ObWriteTabletParam lob_meta_tablet_param_;
@@ -572,7 +507,6 @@ public:
   int64_t max_batch_size_;
   blocksstable::ObMacroDataSeq start_sequence_;
   int64_t row_offset_;
-  bool is_sorted_table_load_;
 };
 
 }  // end namespace storage

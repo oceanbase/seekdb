@@ -303,7 +303,6 @@ bool TestParser::pretreat_cmd(std::string line, int64_t &expect_error)
     if (strncmp(p, "mysql", strlen("mysql")) == 0) {
       OB_LOG(INFO, "switch parser sql_mode to mysql");
       test::clp.sql_mode = DEFAULT_MYSQL_MODE;
-      set_compat_mode(oceanbase::lib::Worker::CompatMode::MYSQL);
     }
     skip_cmd = true;
     UNUSED(w);

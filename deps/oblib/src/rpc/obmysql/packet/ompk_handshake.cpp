@@ -64,8 +64,6 @@ OMPKHandshake::OMPKHandshake()
   server_capabilities_upper_.capability_flag_.OB_SERVER_SESSION_VARIABLE_TRACK = 1;
   server_capabilities_upper_.capability_flag_.OB_SERVER_PLUGIN_AUTH = 1;
   server_capabilities_upper_.capability_flag_.OB_SERVER_CONNECT_ATTRS = 1;
-  server_capabilities_upper_.capability_flag_.OB_SERVER_USE_LOB_LOCATOR = 1;
-  server_capabilities_upper_.capability_flag_.OB_SERVER_RETURN_HIDDEN_ROWID = 1;
   server_capabilities_upper_.capability_flag_.OB_SERVER_PS_MULTIPLE_RESULTS = 1;
 
   if (server_capabilities_upper_.capability_flag_.OB_SERVER_PLUGIN_AUTH != 0) {

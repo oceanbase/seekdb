@@ -382,7 +382,6 @@ int ObMPStmtExecute::send_eof_packet_for_arraybinding(ObSQLSessionInfo &session_
     = (session_info.is_server_status_in_transaction() ? 1 : 0);
   flags.status_flags_.OB_SERVER_STATUS_AUTOCOMMIT = (session_info.get_local_autocommit() ? 1 : 0);
   flags.status_flags_.OB_SERVER_MORE_RESULTS_EXISTS = true;
-  flags.status_flags_.OB_SERVER_QUERY_WAS_SLOW = !session_info.partition_hit().get_bool();
   eofp.set_server_status(flags);
   OZ (response_packet(eofp, &session_info));
 
@@ -403,7 +402,7 @@ int ObMPStmtExecute::response_result_for_arraybinding(
       for (int64_t i = 0; OB_SUCC(ret) && i < arraybinding_columns_->count(); ++i) {
         ObMySQLField field;
         OZ (ObMySQLResultSet::to_mysql_field(arraybinding_columns_->at(i), field));
-        ObMySQLResultSet::replace_lob_type(session_info, arraybinding_columns_->at(i), field);
+        ObMySQLResultSet::replace_lob_type(field);
         OMPKField fp(field);
         OZ (response_packet(fp, &session_info));
       }
@@ -435,7 +434,6 @@ int ObMPStmtExecute::response_result_for_arraybinding(
                     && arraybinding_columns_->count() > 3) ? true : false;
     ObOKPParam ok_param;
     ok_param.affected_rows_ = arraybinding_rowcnt_;
-    ok_param.is_partition_hit_ = session_info.partition_hit().get_bool();
     ok_param.has_pl_out_ = ps_out;
     OZ (send_ok_packet(session_info, ok_param));
   }
@@ -749,7 +747,6 @@ int ObMPStmtExecute::parse_request_param_value(ObIAllocator &alloc,
 {
   int ret = OB_SUCCESS;
   ObCharsetType charset = CHARSET_INVALID;
-  ObCharsetType ncharset = CHARSET_INVALID;
   ObCollationType cs_conn = CS_TYPE_INVALID;
   ObCollationType cs_server = CS_TYPE_INVALID;
   if (OB_ISNULL(session)) {
@@ -760,8 +757,6 @@ int ObMPStmtExecute::parse_request_param_value(ObIAllocator &alloc,
   } else if (OB_FAIL(session->get_collation_connection(cs_conn))) {
     LOG_WARN("get charset for client failed", K(ret));
   } else if (OB_FAIL(session->get_collation_server(cs_server))) {
-    LOG_WARN("get charset for client failed", K(ret));
-  } else if (OB_FAIL(session->get_ncharacter_set_connection(ncharset))) {
     LOG_WARN("get charset for client failed", K(ret));
   }
   // Step5: decode value
@@ -776,7 +771,6 @@ int ObMPStmtExecute::parse_request_param_value(ObIAllocator &alloc,
     if (OB_FAIL(parse_param_value(alloc,
                                          param_type,
                                          charset,
-                                         ncharset,
                                          cs_conn,
                                          pos,
                                          session->get_timezone_info(),
@@ -1150,17 +1144,9 @@ int ObMPStmtExecute::execute_response(ObSQLSessionInfo &session,
           int cli_ret = OB_SUCCESS;
           retry_ctrl_.test_and_save_retry_state(
             gctx_, ctx_, result, ret, cli_ret, is_arraybinding_ /*ararybinding only local retry*/);
-          if (OB_ERR_PROXY_REROUTE == ret) {
-            LOG_DEBUG("run stmt_query failed, check if need retry",
-                      K(ret), K(cli_ret), K(retry_ctrl_.need_retry()), K_(stmt_id));
-          } else {
-            LOG_WARN("run stmt_query failed, check if need retry",
-                      K(ret), K(cli_ret), K(retry_ctrl_.need_retry()), K_(stmt_id));
-          }
+          LOG_WARN("run stmt_query failed, check if need retry",
+                   K(ret), K(cli_ret), K(retry_ctrl_.need_retry()), K_(stmt_id));
           ret = cli_ret;
-        }
-        if (OB_ERR_PROXY_REROUTE == ret && !is_arraybinding_) {
-          need_response_error = true;
         }
       }
     }
@@ -1188,17 +1174,9 @@ int ObMPStmtExecute::execute_response(ObSQLSessionInfo &session,
       int cli_ret = OB_SUCCESS;
       retry_ctrl_.test_and_save_retry_state(
         gctx_, ctx_, result, ret, cli_ret, is_arraybinding_ /*ararybinding only local retry*/);
-      if (OB_ERR_PROXY_REROUTE == ret) {
-        LOG_DEBUG("run stmt_query failed, check if need retry",
-                  K(ret), K(cli_ret), K(retry_ctrl_.need_retry()), K_(stmt_id));
-      } else {
-        LOG_WARN("run stmt_query failed, check if need retry",
-                  K(ret), K(cli_ret), K(retry_ctrl_.need_retry()), K_(stmt_id));
-      }
+      LOG_WARN("run stmt_query failed, check if need retry",
+               K(ret), K(cli_ret), K(retry_ctrl_.need_retry()), K_(stmt_id));
       ret = cli_ret;
-    }
-    if (OB_ERR_PROXY_REROUTE == ret && !is_arraybinding_) {
-      need_response_error = true;
     }
   } else {
     //Monitoring item statistics start
@@ -1340,8 +1318,7 @@ int ObMPStmtExecute::do_process(ObSQLSessionInfo &session,
         // However, it can be determined: this request has errored, and is not yet complete. If it has not already been handed over to asynchronous EndTrans for finalization,
         // then it is necessary to reply with an error_packet below as a conclusion. Otherwise, no one will help send the error packet to the client afterwards,
         // May cause the client to hang waiting for a response.
-        bool is_partition_hit = session.get_err_final_partition_hit(ret);
-        int err = send_error_packet(ret, NULL, is_partition_hit);
+        int err = send_error_packet(ret, NULL);
         if (OB_SUCCESS != err) {  // send error packet
           LOG_WARN("send error packet failed", K(ret), K(err));
         }
@@ -1358,7 +1335,6 @@ int ObMPStmtExecute::do_process(ObSQLSessionInfo &session,
       sqlstat_record.record_sqlstat_end_value();
       sqlstat_record.set_rows_processed(result.get_affected_rows() + result.get_return_rows());
       sqlstat_record.set_partition_cnt(result.get_exec_context().get_das_ctx().get_related_tablet_cnt());
-      sqlstat_record.set_is_route_miss(result.get_session().partition_hit().get_bool()? 0 : 1);
       sqlstat_record.set_is_plan_cache_hit(ctx_.plan_cache_hit_);
       ObString sql_id = ObString::make_string(ctx_.sql_id_);
       sqlstat_record.move_to_sqlstat_cache(result.get_session(),
@@ -1582,8 +1558,7 @@ int ObMPStmtExecute::process_execute_stmt(const ObMultiStmtItem &multi_stmt_item
   } else {
     //set session log_level.Must use ObThreadLogLevelUtils::clear() in pair
     ObThreadLogLevelUtils::init(session.get_log_id_level_map());
-    // obproxy may use 'SET @@last_schema_version = xxxx' to set newest schema,
-    // observer will force refresh schema if local_schema_version < last_schema_version;
+    // Refresh the local schema cache up to the session's DDL fence.
     if (OB_FAIL(check_and_refresh_schema())) {
       LOG_WARN("failed to check_and_refresh_schema", K(ret));
     } else if (OB_FAIL(session.update_timezone_info())) {
@@ -1677,8 +1652,6 @@ int ObMPStmtExecute::process()
   } else if (OB_ISNULL(sess)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL or invalid", K_(stmt_id), K(sess), K(ret));
-  } else if (OB_FAIL(update_transmission_checksum_flag(*sess))) {
-    LOG_WARN("update transmisson checksum flag failed", K(ret));
   } else {
     ObSQLSessionInfo &session = *sess;
     int64_t tenant_version = 0;
@@ -1698,8 +1671,6 @@ int ObMPStmtExecute::process()
     if (OB_UNLIKELY(!session.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("invalid session", K_(stmt_id), K(ret));
-    } else if (OB_FAIL(process_kill_client_session(session))) {
-      LOG_WARN("client session has been killed", K(ret));
     } else if (OB_UNLIKELY(session.is_zombie())) {
       //session has been killed some moment ago
       ret = OB_ERR_SESSION_INTERRUPTED;
@@ -1719,9 +1690,6 @@ int ObMPStmtExecute::process()
       //packet size check with session variable max_allowd_packet or net_buffer_length
       ret = OB_ERR_NET_PACKET_TOO_LARGE;
       LOG_WARN("packet too large than allowed for the session", K_(stmt_id), K(ret));
-    } else if (OB_FAIL(session.check_tenant_status())) {
-      need_disconnect = false;
-      LOG_INFO("unit has been migrated, need deny new request", K(ret));
     } else if (OB_FAIL(session.gen_configs_in_pc_str())) {
       LOG_WARN("fail to generate configuration string that can influence execution plan", K(ret));
     } else if (is_arraybinding_ && OB_FAIL(check_precondition_for_arraybinding(session))) {
@@ -1730,7 +1698,6 @@ int ObMPStmtExecute::process()
       THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
       retry_ctrl_.set_tenant_global_schema_version(tenant_version);
       retry_ctrl_.set_sys_global_schema_version(sys_version);
-      session.partition_hit().reset();
       session.set_pl_can_retry(true);
       session.set_enable_mysql_compatible_dates(
         session.get_enable_mysql_compatible_dates_from_config());
@@ -1745,7 +1712,7 @@ int ObMPStmtExecute::process()
       // Print out the SQL statement before exiting, for easy problem location
       if (OB_FAIL(ret)) {
         if (OB_EAGAIN == ret) {
-          //large query, do nothing
+          // Retryable request is handled by the upper scheduler.
         } else if (is_conn_valid()) {// The memory of sql string is invalid if conn_valid_ has been set false.
           LOG_WARN("fail execute sql", "sql_id", ctx_.sql_id_, K_(stmt_id), K(ret));
         } else {
@@ -1822,7 +1789,6 @@ int ObMPStmtExecute::get_package_type_by_name(ObIAllocator &allocator,
 {
   int ret = OB_SUCCESS;
   const share::schema::ObPackageInfo *package_info = NULL;
-  int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
   ObSchemaChecker schema_checker;
   CK (OB_NOT_NULL(type_info));
   CK (OB_NOT_NULL(ctx_.schema_guard_));
@@ -1834,7 +1800,6 @@ int ObMPStmtExecute::get_package_type_by_name(ObIAllocator &allocator,
                                       type_info->relation_name_,
                                       type_info->package_name_,
                                       share::schema::PACKAGE_TYPE,
-                                      compatible_mode,
                                       package_info));
   CK (OB_NOT_NULL(package_info));
   if (OB_SUCC(ret)) {
@@ -1894,7 +1859,6 @@ int ObMPStmtExecute::parse_basic_param_value(ObIAllocator &allocator,
                                              const uint32_t type,
                                              sql::ObSQLSessionInfo *session,
                                              const ObCharsetType charset,
-                                             const ObCharsetType ncharset,
                                              const ObCollationType cs_type,
                                              const char *& data,
                                              const common::ObTimeZoneInfo *tz_info,
@@ -2006,12 +1970,6 @@ int ObMPStmtExecute::parse_basic_param_value(ObIAllocator &allocator,
       ObString dst;
       uint64_t length = 0;
       ObCollationType cur_cs_type = ObCharset::get_default_collation(charset);
-      ObCollationType cur_ncs_type = ObCollationType::CS_TYPE_INVALID;
-      if (ncharset == ObCharsetType::CHARSET_INVALID || ncharset == ObCharsetType::CHARSET_BINARY) {
-        cur_ncs_type = ObCharset::get_default_collation(charset);
-      } else {
-        cur_ncs_type = ObCharset::get_default_collation(ncharset);
-      }
       PS_STATIC_DEFENSE_CHECK(checker, 1)
       {
         // check first byte of `length` field and trust the encoder reguarding the remaining bytes.
@@ -2143,7 +2101,6 @@ int ObMPStmtExecute::parse_basic_param_value(ObIAllocator &allocator,
 int ObMPStmtExecute::parse_param_value(ObIAllocator &allocator,
                                        const uint32_t type,
                                        const ObCharsetType charset,
-                                       const ObCharsetType ncharset,
                                        const ObCollationType cs_type,
                                        const char *&data,
                                        const common::ObTimeZoneInfo *tz_info,
@@ -2192,7 +2149,7 @@ int ObMPStmtExecute::parse_param_value(ObIAllocator &allocator,
       }
     } else {
       bool is_unsigned = NULL == type_info || !type_info->elem_type_.get_meta_type().is_unsigned_integer() ? false : true; 
-      if (OB_FAIL(parse_basic_param_value(allocator, type, session, charset, ncharset, cs_type,
+      if (OB_FAIL(parse_basic_param_value(allocator, type, session, charset, cs_type,
                                           data, tz_info, param, false, &analysis_checker_, is_unsigned))) {
         LOG_WARN("failed to parse basic param value", K(ret));
       } else {
@@ -2299,7 +2256,7 @@ int ObMPStmtExecute::parse_param_value(ObIAllocator &allocator,
         } else {
           const char* src = tmp;
           bool is_unsigned = NULL == type_info || !type_info->elem_type_.get_meta_type().is_unsigned_integer() ? false : true;
-          if (OB_FAIL(parse_basic_param_value(allocator, type, session, charset, ncharset, cs_type,
+          if (OB_FAIL(parse_basic_param_value(allocator, type, session, charset, cs_type,
                                               src, tz_info, param, false, NULL ,is_unsigned))) {
             LOG_WARN("failed to parse basic param value", K(ret));
           } else {
@@ -2703,7 +2660,6 @@ int ObMPStmtExecute::response_query_header(ObSQLSessionInfo &session, pl::ObDbms
     // SELECT * INTO OUTFILE return null field, and only response ok packet
     ObOKPParam ok_param;
     ok_param.affected_rows_ = 0;
-    ok_param.is_partition_hit_ = session.partition_hit().get_bool();
     ok_param.has_more_result_ = false;
     if (OB_FAIL(send_ok_packet(session, ok_param))) {
       LOG_WARN("fail to send ok packt", K(ok_param), K(ret));

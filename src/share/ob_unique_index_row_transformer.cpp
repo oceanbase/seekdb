@@ -23,17 +23,15 @@ using namespace oceanbase::common;
 
 int ObUniqueIndexRowTransformer::check_need_shadow_columns(
     const common::ObNewRow &row,
-    const common::ObCompatibilityMode sql_mode,
     const int64_t unique_key_cnt,
     const common::ObIArray<int64_t> *projector,
     bool &need_shadow_columns)
 {
   int ret = OB_SUCCESS;
   need_shadow_columns = false;
-  if (OB_UNLIKELY(!row.is_valid() || !is_mysql_compatible(sql_mode)
-      || unique_key_cnt <= 0 || unique_key_cnt > row.count_)) {
+  if (OB_UNLIKELY(!row.is_valid() || unique_key_cnt <= 0 || unique_key_cnt > row.count_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(row), K(sql_mode), K(unique_key_cnt));
+    LOG_WARN("invalid arguments", K(ret), K(row), K(unique_key_cnt));
   } else if (OB_FAIL(check_mysql_need_shadow_columns(row, unique_key_cnt, projector, need_shadow_columns))) {
     LOG_WARN("fail to check mysql need shadow columns", K(ret));
   }
@@ -70,7 +68,6 @@ int ObUniqueIndexRowTransformer::check_mysql_need_shadow_columns(
 
 int ObUniqueIndexRowTransformer::convert_to_unique_index_row(
     const common::ObNewRow &row,
-    const common::ObCompatibilityMode sql_mode,
     const int64_t unique_key_cnt,
     const int64_t shadow_column_cnt,
     const ObIArray<int64_t> *projector,
@@ -80,11 +77,10 @@ int ObUniqueIndexRowTransformer::convert_to_unique_index_row(
 {
   int ret = OB_SUCCESS;
   need_shadow_columns = false;
-  if (OB_UNLIKELY(!row.is_valid() || !is_mysql_compatible(sql_mode) || unique_key_cnt <= 0
-        || shadow_column_cnt <= 0)) {
+  if (OB_UNLIKELY(!row.is_valid() || unique_key_cnt <= 0 || shadow_column_cnt <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(row), K(sql_mode), K(unique_key_cnt), K(shadow_column_cnt));
-  } else if (OB_FAIL(check_need_shadow_columns(row, sql_mode, unique_key_cnt, projector, need_shadow_columns))) {
+    LOG_WARN("invalid arguments", K(ret), K(row), K(unique_key_cnt), K(shadow_column_cnt));
+  } else if (OB_FAIL(check_need_shadow_columns(row, unique_key_cnt, projector, need_shadow_columns))) {
     LOG_WARN("fail to check need shadow columns", K(ret));
   } else {
     // 1. fill the unique key columns

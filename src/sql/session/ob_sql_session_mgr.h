@@ -48,23 +48,14 @@ class ObSQLSessionMgr : public common::ObTimerTask
 {
 public:
   static const int64_t SCHEDULE_PERIOD = 1000*1000*5; //5s
-  static const uint32_t NON_DURABLE_VALUE = 0;
   static const uint32_t MAX_VERSION = UINT8_MAX;//255
   static const int64_t BUCKET_COUNT = 1024;
-  static const uint32_t TRAVERSE_MAX_TIMES = 6; // 6 * 5s
-  static const uint64_t CLEAN_KILL_CLIENT_SESSION_TIME = 28800000000; // 8h
   typedef SessionInfoKey Key;
   typedef common::hash::ObHashMap<uint64_t, ObSQLSessionInfo*> SessionMap;
-  // client session id -> server session id
-  typedef common::hash::ObHashMap<uint32_t, uint32_t> ClientSessionMap;
-  // client session id -> timestamp
-  typedef common::hash::ObHashMap<uint32_t, uint64_t> KillClientSessMap;
   explicit ObSQLSessionMgr():
       //null_callback_(),
       sessinfo_map_(),
-      next_sessid_(1),
-      traverse_times_(NON_DURABLE_VALUE)
-      // CLEAN_KILL_CLIENT_SESSION_TIME(28800000000)
+      next_sessid_(1)
   {
   }
   virtual ~ObSQLSessionMgr(){}
@@ -80,10 +71,7 @@ public:
   int create_session(observer::ObSMConnection *conn, ObSQLSessionInfo *&sess_info);
   // create session by session id.
   // need call revert_session if return success.
-  int create_session(const uint32_t sessid,
-    const int64_t create_time, ObSQLSessionInfo *&session_info,
-    const uint32_t client_sessid = INVALID_SESSID,
-    const int64_t client_create_time = 0);
+  int create_session(const uint32_t sessid, ObSQLSessionInfo *&session_info);
 
   /**
    * @brief get the ObSQLSessioninfo
@@ -114,9 +102,6 @@ public:
   template <typename Function>
   int for_each_hold_session(Function &fn);
 
-  template <typename Function>
-  int for_each_kill_client_session(Function &fn);
-
   int kill_query(ObSQLSessionInfo &session);
   int set_query_deadlocked(ObSQLSessionInfo &session);
   static int kill_query(ObSQLSessionInfo &session,
@@ -127,7 +112,7 @@ public:
   int disconnect_session(ObSQLSessionInfo &session);
 
   // kill all sessions from this tenant.
-  int kill_tenant(bool force_kill);
+  int kill_tenant();
 
   /**
    * @brief timing clean time out session
@@ -142,8 +127,6 @@ public:
   int create_sessid(uint32_t &sessid);
   //inline ObNullEndTransCallback &get_null_callback() { return null_callback_; }
   SessionMap &get_sess_hold_map() { return sess_hold_map_; }
-  ClientSessionMap &get_client_sess_map() { return client_sess_map_; }
-  KillClientSessMap &get_kill_client_sess_map() { return kill_client_sess_map_; }
 private:
   int check_session_leak();
 
@@ -177,11 +160,7 @@ private:
     static const int64_t MAX_SYS_VAR_MEM = 256 * 1024;
   };
 
-#ifdef OB_USE_ASAN
-  typedef common::ObTenantLinkHashMap<Key, ObSQLSessionInfo, ValueAlloc, ZeroRefHandle> HashMap;
-#else
   typedef common::ObTenantLinkHashMap<Key, ObSQLSessionInfo, ValueAlloc> HashMap;
-#endif
 
   struct DumpHoldSession
   {
@@ -200,49 +179,11 @@ private:
     ObSQLSessionMgr *sess_mgr_;
   };
 
-  class RecordCleanKillClientSession
-  {
-  public:
-    RecordCleanKillClientSession() : sess_mgr_(NULL), clean_kill_time_(CLEAN_KILL_CLIENT_SESSION_TIME)
-    {
-      clean_kill_array_.reset();
-    }
-    explicit RecordCleanKillClientSession(ObSQLSessionMgr *sess_mgr): sess_mgr_(sess_mgr) {}
-    virtual ~RecordCleanKillClientSession() {}
-    void reset()
-    {
-      clean_kill_array_.reset();
-      clean_kill_time_ = CLEAN_KILL_CLIENT_SESSION_TIME;
-    }
-    int operator()(common::hash::HashMapPair<uint32_t, uint64_t> &entry);
-  private:
-    ObSQLSessionMgr *sess_mgr_;
-  public:
-    uint64_t clean_kill_time_;
-    common::ObSEArray<std::pair<uint32_t, uint64_t>,16> clean_kill_array_;
-  };
-
-  class CleanKillClientSessionFin
-  {
-  public:
-    CleanKillClientSessionFin() : sess_mgr_(NULL), cs_id_(0), cs_connect_time_(0)
-    {
-    }
-    explicit CleanKillClientSessionFin(ObSQLSessionMgr *sess_mgr, uint32_t cs_id, uint64_t cs_connect_time):
-      sess_mgr_(sess_mgr), cs_id_(cs_id), cs_connect_time_(cs_connect_time) {}
-    virtual ~CleanKillClientSessionFin() {}
-    bool operator()(common::hash::HashMapPair<uint32_t, uint64_t> &entry);
-  private:
-    ObSQLSessionMgr *sess_mgr_;
-    uint32_t cs_id_;
-    uint64_t cs_connect_time_;
-  };
-
   class KillTenant
   {
   public:
-    KillTenant(ObSQLSessionMgr *mgr, bool force_kill) :
-      ret_(common::OB_SUCCESS), mgr_(mgr), force_kill_(force_kill)
+    explicit KillTenant(ObSQLSessionMgr *mgr) :
+      ret_(common::OB_SUCCESS), mgr_(mgr)
     {}
     bool operator()(sql::ObSQLSessionMgr::Key key, ObSQLSessionInfo *sess_info);
     int get_ret_code()
@@ -253,18 +194,6 @@ private:
   private:
     int ret_;
     ObSQLSessionMgr *mgr_;
-    const bool force_kill_;
-  };
-
-  class ObClientSessMapErase
-  {
-  public:
-    ObClientSessMapErase(const uint32_t sess_id)
-        :sess_id_(sess_id)
-    {}
-    bool operator()(common::hash::HashMapPair<uint32_t, uint32_t> &entry);
-  private:
-    uint32_t sess_id_;
   };
 
 private:
@@ -275,12 +204,6 @@ private:
   // Monotonically increasing session id allocator. Wraps around at UINT32_MAX, skips 0.
   uint32_t next_sessid_ CACHE_ALIGNED;
   SessionMap sess_hold_map_;
-  // client session id -> session
-  ClientSessionMap client_sess_map_;
-  // client session id -> create client session time, used for kill client session.
-  KillClientSessMap kill_client_sess_map_;
-  // The number of traversals is used to regularly clean up kill_client_sess_map
-  uint32_t traverse_times_;
   DISALLOW_COPY_AND_ASSIGN(ObSQLSessionMgr);
 }; // end of class ObSQLSessionMgr
 
@@ -294,12 +217,6 @@ template <typename Function>
 int ObSQLSessionMgr::for_each_hold_session(Function &fn)
 {
   return get_sess_hold_map().foreach_refactored(fn);
-}
-
-template <typename Function>
-int ObSQLSessionMgr::for_each_kill_client_session(Function &fn)
-{
-  return get_kill_client_sess_map().foreach_refactored(fn);
 }
 
 inline int ObSQLSessionMgr::get_session(uint32_t sessid, ObSQLSessionInfo *&sess_info)

@@ -19,7 +19,7 @@
 #include "storage/ddl/ob_tablet_slice_row_iterator.h"
 #include "src/storage/ddl/ob_ddl_insert_dag.h"
 #include "storage/blocksstable/ob_logic_macro_id.h" // for ObMacroDataSeq
-#include "storage/direct_load/ob_direct_load_batch_datum_rows.h"
+#include "storage/ddl/ob_ddl_batch_datum_rows.h"
 #include "src/storage/ddl/ob_tablet_ddl_kv_mgr.h"
 
 #define USING_LOG_PREFIX STORAGE
@@ -118,14 +118,14 @@ int ObDDLWriteMacroBlockOperator::execute(
     ret = OB_NOT_INIT;
     LOG_WARN("the ObDDLWriteMacroBlockOperator has been not initialized", K(ret));
   } else if (OB_UNLIKELY(!input_chunk.is_valid() ||
-                         (!input_chunk.is_end_chunk() && !input_chunk.is_direct_load_batch_datum_rows_type()))) {
+                         (!input_chunk.is_end_chunk() && !input_chunk.is_ddl_batch_datum_rows_type()))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("there are invalid arguments", K(ret), K(input_chunk));
   } else if (input_chunk.is_end_chunk()) {
     if (OB_FAIL(slice_writer_.close())) {
       LOG_WARN("fail to close slice writer", K(ret));
     }
-  } else if (OB_FAIL(slice_writer_.append_batch(input_chunk.direct_load_batch_rows_->datum_rows_))) {
+  } else if (OB_FAIL(slice_writer_.append_batch(input_chunk.ddl_batch_rows_->datum_rows_))) {
     LOG_WARN("fail to append batch into slice writer", K(ret), K(input_chunk));
   }
   return ret;
@@ -308,7 +308,7 @@ int ObBatchDatumRowsWriteOp::init(const ObTabletID &tablet_id, const int64_t sli
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("the dag is null or dag type is not ddl dag", K(ret), KP(get_dag()));
   } else {
-    ObDirectLoadRowFlag row_flag;
+    ObDDLRowFlag row_flag;
     ObDDLIndependentDag *ddl_dag = dynamic_cast<ObDDLIndependentDag *>(get_dag());
     tablet_id_ = tablet_id;
     slice_idx_ = slice_idx;
@@ -320,7 +320,7 @@ int ObBatchDatumRowsWriteOp::init(const ObTabletID &tablet_id, const int64_t sli
                                     row_flag))) {
       LOG_WARN("fail to initialize buffer", K(ret));
     } else {
-      const ObIArray<ObDirectLoadVector *> &vectors = buffer_.get_vectors();
+      const ObIArray<ObDDLVector *> &vectors = buffer_.get_vectors();
       for (int64_t i = 0; OB_SUCC(ret) && i < vectors.count(); ++i) {
         if (OB_FAIL(bdrs_.vectors_.push_back(vectors.at(i)->get_vector()))) {
           LOG_WARN("fail to push back vector", K(ret));

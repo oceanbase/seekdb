@@ -23,7 +23,8 @@
 #include "rpc/obmysql/packet/ompk_resheader.h"
 #include "rpc/obmysql/packet/ompk_field.h"
 #include "rpc/obmysql/packet/ompk_eof.h"
-#include "sql/engine/expr/ob_expr_xml_func_helper.h"
+#include "sql/engine/expr/ob_expr_lob_utils.h"
+#include "sql/engine/expr/ob_expr_sql_udt_utils.h"
 #include "sql/monitor/show_trace/ob_show_trace.h"
 
 namespace oceanbase
@@ -64,7 +65,6 @@ int ObQueryDriver::response_query_header(const ColumnsFieldIArray &fields,
 {
   int ret = OB_SUCCESS;
   bool ac = true;
-  int tmp_ret = OB_E(EventTable::EN_DISABLE_HASH_BASE_DISTINCT) OB_SUCCESS;
   // result == null means ps cursor in execute or fetch .
   if (NULL != result && (&fields != result->get_field_columns())) {
     ret = OB_ERR_UNEXPECTED;
@@ -100,21 +100,13 @@ int ObQueryDriver::response_query_header(const ColumnsFieldIArray &fields,
       } else if (is_not_match) {
         /*do nothing*/
       } else {
-        if (session_.is_support_new_result_meta_data() || tmp_ret != OB_SUCCESS) {
-          if (OB_FAIL(ObMySQLResultSet::to_new_result_field(ob_field, field))) {
-            LOG_WARN("fail to new result field", K(ret), K(ob_field), K(field));
-          } else {
-            LOG_DEBUG("debug succ to new result field", K(ob_field), K(field));
-          }
+        if (OB_FAIL(ObMySQLResultSet::to_mysql_field(ob_field, field))) {
+          LOG_WARN("fail to convert result field", K(ret), K(ob_field), K(field));
         } else {
-          if (OB_FAIL(ObMySQLResultSet::to_mysql_field(ob_field, field))) {
-            LOG_WARN("fail to old result field", K(ret), K(ob_field), K(field));
-          } else {
-            LOG_DEBUG("debug succ to old result field", K(ob_field), K(field));
-          }
+          LOG_DEBUG("success to convert result field", K(ob_field), K(field));
         }
         if (OB_SUCC(ret)) {
-          ObMySQLResultSet::replace_lob_type(session_, ob_field, field);
+          ObMySQLResultSet::replace_lob_type(field);
           if (NULL != result && result->get_is_com_filed_list()) {
             field.default_value_ = static_cast<EMySQLFieldType>(ob_field.default_value_.get_ext());
           }
@@ -138,8 +130,6 @@ int ObQueryDriver::response_query_header(const ColumnsFieldIArray &fields,
     flags.status_flags_.OB_SERVER_PS_OUT_PARAMS = need_set_ps_out_flag ? 1 : 0;
     // NULL == result indicates it is an old protocol ps cursor execute response, or fetch protocol response, cursor_exit = true
     flags.status_flags_.OB_SERVER_STATUS_CURSOR_EXISTS = NULL == result ? 1 : 0; 
-    // in java client or others, use slow query bit to indicate partition hit or not
-    flags.status_flags_.OB_SERVER_QUERY_WAS_SLOW = !session_.partition_hit().get_bool();
     eofp.set_server_status(flags);
 
     if (OB_FAIL(sender_.response_packet(eofp, &session_))) {
@@ -186,13 +176,10 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
   }
   
   ObCharsetType charset_type = CHARSET_INVALID;
-  ObCharsetType nchar = CHARSET_INVALID;
   
   if (OB_SUCC(ret)) {
     const ObSQLSessionInfo &my_session = result.get_session();
-    if (OB_FAIL(my_session.get_ncharacter_set_connection(nchar))) {
-      LOG_WARN("get ncharacter set connection failed", K(ret));
-    } else if (OB_FAIL(my_session.get_character_set_results(charset_type))) {
+    if (OB_FAIL(my_session.get_character_set_results(charset_type))) {
       LOG_WARN("fail to get result charset", K(ret));
     } 
   }
@@ -232,17 +219,17 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
         //    remove locator
         if (ob_is_string_tc(value.get_type())
             && CS_TYPE_INVALID != value.get_collation_type()) {
-          OZ(convert_string_value_charset(value, result, charset_type, nchar));
+          OZ(convert_string_value_charset(value, result, charset_type));
         } else if (ob_is_text_tc(value.get_type())
-                    && OB_FAIL(convert_text_value_charset(value, result, charset_type, nchar))) {
+                    && OB_FAIL(convert_text_value_charset(value, result, charset_type))) {
           LOG_WARN("convert text value charset failed", K(ret));
         }
         if (OB_FAIL(ret)){
-        } else if ((value.is_lob() || value.is_json() || value.is_geometry() || value.is_roaringbitmap())
+        } else if ((value.is_lob() || value.is_json() || value.is_geometry())
                   && OB_FAIL(process_lob_locator_results(value, result))) {
           LOG_WARN("convert lob locator to longtext failed", K(ret));
         } else if ((value.is_collection_sql_type() || value.is_geometry()) &&
-                   OB_FAIL(ObXMLExprHelper::process_sql_udt_results(value, result))) {
+                   OB_FAIL(ObSqlUdtUtils::convert_result_for_client(value, result))) {
           LOG_WARN("convert udt to client format failed", K(ret), K(value.get_udt_subschema_id()));
         }
       }
@@ -326,7 +313,7 @@ int ObQueryDriver::convert_field_charset(ObIAllocator& allocator,
 }
 
 int ObQueryDriver::convert_string_value_charset(ObObj& value, ObResultSet &result,
-                                                ObCharsetType charset_type, ObCharsetType nchar)
+                                                ObCharsetType charset_type)
 {
   int ret = OB_SUCCESS;
   ObCollationType to_collation_type = ObCharset::get_default_collation(charset_type);
@@ -354,7 +341,7 @@ int ObQueryDriver::convert_string_value_charset(ObObj& value, ObResultSet &resul
 }
 
 int ObQueryDriver::convert_text_value_charset(common::ObObj& value, sql::ObResultSet &result,
-                                              ObCharsetType charset_type, ObCharsetType nchar)
+                                              ObCharsetType charset_type)
 {
   int ret = OB_SUCCESS;
 
@@ -432,16 +419,6 @@ int ObQueryDriver::like_match(const char* str, int64_t length_str, int64_t i,
 }
 
 
-int ObQueryDriver::convert_lob_locator_to_longtext(ObObj& value,
-                                                   bool is_use_lob_locator,
-                                                   ObIAllocator *allocator)
-{
-  int ret = OB_SUCCESS;
-  // If the client uses the new lob locator, then return the lob locator data
-  // If the client uses the old lob (without locator header, only data), then return the old lob
-  return ret;
-}
-
 int ObQueryDriver::process_lob_locator_results(ObObj& value, sql::ObResultSet &result)
 {
   int ret = OB_SUCCESS;
@@ -452,8 +429,6 @@ int ObQueryDriver::process_lob_locator_results(ObObj& value, sql::ObResultSet &r
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("lob fake allocator is null.", K(ret), K(value));
   } else if (OB_FAIL(process_lob_locator_results(value, 
-                                                 session_.is_client_use_lob_locator(),
-                                                 session_.is_client_support_lob_locatorv2(),
                                                  allocator,
                                                  &result.get_session(),
                                                  &result.get_exec_context()))) {
@@ -463,20 +438,13 @@ int ObQueryDriver::process_lob_locator_results(ObObj& value, sql::ObResultSet &r
 }
 
 int ObQueryDriver::process_lob_locator_results(ObObj& value,
-                                               bool is_use_lob_locator,
-                                               bool is_support_outrow_locator_v2,
                                                ObIAllocator *allocator,
                                                const sql::ObSQLSessionInfo *session_info,
                                                sql::ObExecContext *exec_ctx)
 {
   int ret = OB_SUCCESS;
-  // 1. if client is_use_lob_locator, return lob locator
-  // 2. if client is_use_lob_locator, but not support outrow lob, return lob locator with inrow data
-  //    refer to sz/aibo1m
-  // 3. if client does not support use_lob_locator ,,return full lob data without locator header
   bool is_lob_type = value.is_lob()
-                     || value.is_json() || value.is_geometry() || value.is_roaringbitmap() ;
-  UNUSED(is_use_lob_locator);
+                     || value.is_json() || value.is_geometry();
   if (!is_lob_type) {
     // not lob types, do nothing
   } else if (value.is_null() || value.is_nop_value()) {
@@ -499,8 +467,6 @@ int ObQueryDriver::process_lob_locator_results(ObObj& value,
           dst_type = ObJsonType;
         } else if (value.is_geometry()) {
           dst_type = ObGeometryType;
-        } else if (value.is_roaringbitmap()) {
-          dst_type = ObRoaringBitmapType;
         }
         // remove has lob header flag
         value.set_lob_value(dst_type, data.ptr(), static_cast<int32_t>(data.length()));

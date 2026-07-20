@@ -28,7 +28,6 @@
 #include "sql/engine/expr/ob_expr_sys_op_opnsize.h"
 #include "common/xml/ob_binary_aggregate.h"
 #include "sql/engine/expr/ob_expr_xml_func_helper.h"
-#include "sql/engine/expr/ob_expr_rb_func_helper.h"
 #include "pl/ob_pl.h"
 
 namespace oceanbase
@@ -1338,10 +1337,6 @@ ObAggregateProcessor::ObAggregateProcessor(ObEvalCtx &eval_ctx,
       distinct_aggr_count_(0),
       aggr_code_expr_(nullptr),
       aggr_stage_(ObThreeStageAggrStage::NONE_STAGE),
-      rollup_status_(ObRollupStatus::NONE_ROLLUP),
-      rollup_id_expr_(nullptr),
-      start_partial_rollup_idx_(0),
-      end_partial_rollup_idx_(0),
       dir_id_(-1),
       tmp_store_row_(nullptr),
       io_event_observer_(nullptr),
@@ -1364,8 +1359,6 @@ int ObAggregateProcessor::init()
   has_order_by_ = false;
   has_group_concat_ = false;
   distinct_count_ = 0;
-  start_partial_rollup_idx_ = 0;
-  end_partial_rollup_idx_ = 0;
   removal_info_.reset();
   (void)0;
   
@@ -1774,12 +1767,9 @@ int ObAggregateProcessor::collect_group_row(GroupRow *group_row,
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("distinct set is NULL", K(ret));
         } else {
-          if (group_id > 0 && group_id > start_partial_rollup_idx_ &&
-              group_id <= end_partial_rollup_idx_) {
+          if (group_id > 0) {
             // Group id greater than zero in sort based group by must be rollup,
             // distinct set is sorted and iterated in rollup_process(), rewind here.
-            // if partial rollup, then group_id > 0 may not sort
-            //    the first partial_rolup_idx_ group need sort
             if (OB_FAIL(ad_result->rewind())) {
               LOG_WARN("rewind iterator failed", K(ret));
             }
@@ -2111,16 +2101,6 @@ int ObAggregateProcessor::collect_result_batch(const ObIArray<ObExpr *> &group_e
     if (OB_NOT_NULL(group_row->groupby_store_row_) &&
         OB_FAIL(group_row->groupby_store_row_->to_expr(group_exprs, eval_ctx_))) {
       LOG_WARN("failed to convert store row to expr", K(ret));
-    } else if (ROLLUP_DISTRIBUTOR == rollup_status_) {
-      if (OB_ISNULL(rollup_id_expr_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected status: rollup_id_expr_ is null", K(ret));
-      } else {
-        ObDatum &datum = rollup_id_expr_->locate_datum_for_write(eval_ctx_);
-        datum.set_int(*reinterpret_cast<int64_t *>(group_row->groupby_store_row_->get_extra_payload()));
-        rollup_id_expr_->set_evaluated_projected(eval_ctx_);
-        LOG_DEBUG("debug grouping_id expr", K(ret));
-      }
     } else {
       LOG_DEBUG("debug group by exprs", K(ret), K(ROWEXPR2STR(eval_ctx_, group_exprs)),
         K(start_group_idx + loop_idx), K(output_brs.size_ + loop_idx));
@@ -2151,23 +2131,18 @@ int ObAggregateProcessor::process_distinct_batch(
     LOG_WARN("distinct set is NULL", K(ret));
   } else {
     // In non-rollup group_id must be 0
-    if (group_id > 0 && group_id > start_partial_rollup_idx_ &&
-              group_id <= end_partial_rollup_idx_) {
+    if (group_id > 0) {
       // Group id greater than zero in sort based group by must be rollup,
       // distinct set is sorted and iterated in rollup_process(), rewind here.
       if (OB_FAIL(extra_info->rewind())) {
         LOG_WARN("rewind iterator failed", K(ret));
       }
-      LOG_DEBUG("debug process distinct batch", K(group_id),
-        K(start_partial_rollup_idx_), K(end_partial_rollup_idx_));
     } else {
       if (!enable_hash_distinct_) {
         if (OB_FAIL(extra_info->unique_sort_op_->sort())) {
           LOG_WARN("sort failed", K(ret));
         }
       }
-      LOG_DEBUG("debug process distinct batch", K(group_id),
-        K(start_partial_rollup_idx_), K(end_partial_rollup_idx_));
     }
   }
   if (OB_SUCC(ret)) {
@@ -2499,12 +2474,7 @@ int ObAggregateProcessor::generate_group_row(GroupRow *&new_group_row,
         case T_FUN_JSON_OBJECTAGG:
         case T_FUN_ORA_JSON_OBJECTAGG: 
         case T_FUN_SYS_ST_ASMVT: 
-        case T_FUN_SYS_RB_BUILD_AGG:
-        case T_FUN_SYS_RB_OR_AGG:
-        case T_FUN_SYS_RB_AND_AGG:
         case T_FUNC_SYS_ARRAY_AGG:
-        case T_FUN_SYS_RB_OR_CARDINALITY_AGG:
-        case T_FUN_SYS_RB_AND_CARDINALITY_AGG:
         {
           void *tmp_buf = NULL;
           set_need_advance_collect();
@@ -2713,12 +2683,7 @@ int ObAggregateProcessor::fill_group_row(GroupRow *new_group_row,
         case T_FUN_JSON_OBJECTAGG:
         case T_FUN_ORA_JSON_OBJECTAGG: 
         case T_FUN_SYS_ST_ASMVT:
-        case T_FUN_SYS_RB_BUILD_AGG:
-        case T_FUN_SYS_RB_OR_AGG:
-        case T_FUN_SYS_RB_AND_AGG:
         case T_FUNC_SYS_ARRAY_AGG:
-        case T_FUN_SYS_RB_OR_CARDINALITY_AGG:
-        case T_FUN_SYS_RB_AND_CARDINALITY_AGG:
         {
           void *tmp_buf = NULL;
           set_need_advance_collect();
@@ -3147,12 +3112,7 @@ int ObAggregateProcessor::rollup_aggregation(AggrCell &aggr_cell, AggrCell &roll
     case T_FUN_JSON_OBJECTAGG:
     case T_FUN_ORA_JSON_OBJECTAGG: 
     case T_FUN_SYS_ST_ASMVT:
-    case T_FUN_SYS_RB_BUILD_AGG:
-    case T_FUN_SYS_RB_OR_AGG:
-    case T_FUN_SYS_RB_AND_AGG:
     case T_FUNC_SYS_ARRAY_AGG:
-    case T_FUN_SYS_RB_OR_CARDINALITY_AGG:
-    case T_FUN_SYS_RB_AND_CARDINALITY_AGG:
     {
       GroupConcatExtraResult *aggr_extra = NULL;
       GroupConcatExtraResult *rollup_extra = NULL;
@@ -3488,12 +3448,7 @@ int ObAggregateProcessor::prepare_aggr_result(const ObChunkDatumStore::StoredRow
     case T_FUN_JSON_OBJECTAGG:
     case T_FUN_ORA_JSON_OBJECTAGG: 
     case T_FUN_SYS_ST_ASMVT:
-    case T_FUN_SYS_RB_BUILD_AGG:
-    case T_FUN_SYS_RB_OR_AGG:
-    case T_FUN_SYS_RB_AND_AGG:
     case T_FUNC_SYS_ARRAY_AGG:
-    case T_FUN_SYS_RB_OR_CARDINALITY_AGG:
-    case T_FUN_SYS_RB_AND_CARDINALITY_AGG:
     {
       GroupConcatExtraResult *extra = NULL;
       if (OB_ISNULL(extra = static_cast<GroupConcatExtraResult *>(aggr_cell.get_extra()))) {
@@ -3815,12 +3770,7 @@ int ObAggregateProcessor::process_aggr_batch_result(
     case T_FUN_JSON_OBJECTAGG:
     case T_FUN_ORA_JSON_OBJECTAGG: 
     case T_FUN_SYS_ST_ASMVT:
-    case T_FUN_SYS_RB_BUILD_AGG:
-    case T_FUN_SYS_RB_OR_AGG:
-    case T_FUN_SYS_RB_AND_AGG:
     case T_FUNC_SYS_ARRAY_AGG:
-    case T_FUN_SYS_RB_OR_CARDINALITY_AGG:
-    case T_FUN_SYS_RB_AND_CARDINALITY_AGG:
     {
       GroupConcatExtraResult *extra_info = NULL;
       if (OB_ISNULL(extra_info = static_cast<GroupConcatExtraResult *>(aggr_cell.get_extra()))) {
@@ -4075,12 +4025,7 @@ int ObAggregateProcessor::process_aggr_result(const ObChunkDatumStore::StoredRow
     case T_FUN_JSON_OBJECTAGG:
     case T_FUN_ORA_JSON_OBJECTAGG: 
     case T_FUN_SYS_ST_ASMVT:
-    case T_FUN_SYS_RB_BUILD_AGG:
-    case T_FUN_SYS_RB_OR_AGG:
-    case T_FUN_SYS_RB_AND_AGG:
     case T_FUNC_SYS_ARRAY_AGG:
-    case T_FUN_SYS_RB_OR_CARDINALITY_AGG:
-    case T_FUN_SYS_RB_AND_CARDINALITY_AGG:
     {
       GroupConcatExtraResult *extra = NULL;
       if (OB_ISNULL(extra = static_cast<GroupConcatExtraResult *>(aggr_cell.get_extra()))) {
@@ -4428,46 +4373,6 @@ int ObAggregateProcessor::collect_aggr_result(
       GroupConcatExtraResult *extra = static_cast<GroupConcatExtraResult *>(aggr_cell.get_extra());
       if (OB_FAIL(get_asmvt_result(aggr_info, extra, result))) {
         LOG_WARN("failed to get asmvt result", K(ret));
-      } else {
-      }
-      break;      
-    }
-    case T_FUN_SYS_RB_BUILD_AGG: {
-      GroupConcatExtraResult *extra = static_cast<GroupConcatExtraResult *>(aggr_cell.get_extra());
-      if (OB_FAIL(get_rb_build_agg_result(aggr_info, extra, result))) {
-        LOG_WARN("failed to get rb_build_agg result", K(ret));
-      } else {
-      }
-      break;      
-    } 
-    case T_FUN_SYS_RB_OR_AGG: {
-      GroupConcatExtraResult *extra = static_cast<GroupConcatExtraResult *>(aggr_cell.get_extra());
-      if (OB_FAIL(get_rb_calc_agg_result(aggr_info, extra, result, ObRbOperation::OR))) {
-        LOG_WARN("failed to get roaringbitmap calculate or result", K(ret));
-      } else {
-      }
-      break;      
-    }
-    case T_FUN_SYS_RB_AND_AGG: {
-      GroupConcatExtraResult *extra = static_cast<GroupConcatExtraResult *>(aggr_cell.get_extra());
-      if (OB_FAIL(get_rb_calc_agg_result(aggr_info, extra, result, ObRbOperation::AND))) {
-        LOG_WARN("failed to get roaringbitmap calculate and result", K(ret));
-      } else {
-      }
-      break;      
-    }
-    case T_FUN_SYS_RB_OR_CARDINALITY_AGG: {
-      GroupConcatExtraResult *extra = static_cast<GroupConcatExtraResult *>(aggr_cell.get_extra());
-      if (OB_FAIL(get_rb_calc_agg_result(aggr_info, extra, result, ObRbOperation::OR, true))) {
-        LOG_WARN("failed to get rb aggregate calculate or result", K(ret));
-      } else {
-      }
-      break;      
-    }
-    case T_FUN_SYS_RB_AND_CARDINALITY_AGG:{
-      GroupConcatExtraResult *extra = static_cast<GroupConcatExtraResult *>(aggr_cell.get_extra());
-      if (OB_FAIL(get_rb_calc_agg_result(aggr_info, extra, result, ObRbOperation::AND, true))) {
-        LOG_WARN("failed to get rb aggregate calculate and result", K(ret));
       } else {
       }
       break;      
@@ -5112,11 +5017,10 @@ int ObAggregateProcessor::linear_inter_calc(const ObAggrInfo &aggr_info,
         ObDatumMeta factor_meta;
         factor_meta.type_ = ObNumberType;
         factor_meta.cs_type_ = CS_TYPE_BINARY;
-        ObCompatibilityMode compat_mode = MYSQL_MODE;
         factor_meta.scale_
-            = ObAccuracy::DDL_DEFAULT_ACCURACY2[compat_mode][ObNumberType].get_scale();
+            = ObAccuracy::DDL_DEFAULT_ACCURACY2[0][ObNumberType].get_scale();
         factor_meta.precision_
-            = ObAccuracy::DDL_DEFAULT_ACCURACY2[compat_mode][ObNumberType].get_precision();
+            = ObAccuracy::DDL_DEFAULT_ACCURACY2[0][ObNumberType].get_precision();
         if (OB_FAIL(arith->setup_datum_metas(factor_meta /* factor meta */,
                                              order_expr->datum_meta_ /* prev meta */,
                                              order_expr->datum_meta_ /* cur meta */))) {
@@ -7621,7 +7525,7 @@ int ObAggregateProcessor::get_json_arrayagg_result(const ObAggrInfo &aggr_info,
     }
     
     // get type
-    ObBinAggSerializer bin_agg(&res_alloc, AGG_JSON, static_cast<uint8_t>(ObJsonNodeType::J_ARRAY), false, &res_alloc_back, &res_alloc_arr);
+    ObJsonBinAggSerializer bin_agg(&res_alloc, static_cast<uint8_t>(ObJsonNodeType::J_ARRAY), &res_alloc_back, &res_alloc_arr);
     while (OB_SUCC(ret) && OB_SUCC(extra->get_next_row(storted_row))) {
       ObObj *tmp_obj = NULL;
       if (OB_ISNULL(storted_row)) {
@@ -7762,7 +7666,7 @@ int ObAggregateProcessor::get_ora_json_arrayagg_result(const ObAggrInfo &aggr_in
     bool is_format_json = aggr_info.format_json_;
     bool is_absent_on_null = !aggr_info.absent_on_null_;
     bool is_strict = aggr_info.strict_json_;
-    ObBinAggSerializer bin_agg(&res_alloc, AGG_JSON, static_cast<uint8_t>(ObJsonNodeType::J_ARRAY), false, &res_alloc_back, &res_alloc_arr);
+    ObJsonBinAggSerializer bin_agg(&res_alloc, static_cast<uint8_t>(ObJsonNodeType::J_ARRAY), &res_alloc_back, &res_alloc_arr);
 
     while (OB_SUCC(ret) && OB_SUCC(extra->get_next_row(storted_row))) {
       if (OB_ISNULL(storted_row) || storted_row->cnt_ < 1) {
@@ -7881,7 +7785,7 @@ int ObAggregateProcessor::get_json_objectagg_result(const ObAggrInfo &aggr_info,
     if (OB_FAIL(extra->get_bool_mark(1, is_bool))) {
       LOG_WARN("get_bool info failed, may not distinguish between bool and int", K(ret));
     }
-    ObBinAggSerializer bin_agg(&res_alloc, AGG_JSON, static_cast<uint8_t>(ObJsonNodeType::J_OBJECT), false, &res_alloc_back, &res_alloc_arr);
+    ObJsonBinAggSerializer bin_agg(&res_alloc, static_cast<uint8_t>(ObJsonNodeType::J_OBJECT), &res_alloc_back, &res_alloc_arr);
     while (OB_SUCC(ret) && OB_SUCC(extra->get_next_row(storted_row))) {
       if (OB_ISNULL(storted_row)) {
         ret = OB_ERR_UNEXPECTED;
@@ -8065,7 +7969,7 @@ int ObAggregateProcessor::get_ora_json_objectagg_result(const ObAggrInfo &aggr_i
     bool is_strict = aggr_info.strict_json_;
     bool is_with_unique_keys = aggr_info.with_unique_keys_;
 
-    ObBinAggSerializer bin_agg(&res_alloc, AGG_JSON, static_cast<uint8_t>(ObJsonNodeType::J_OBJECT), false, &res_alloc_back, &res_alloc_arr);
+    ObJsonBinAggSerializer bin_agg(&res_alloc, static_cast<uint8_t>(ObJsonNodeType::J_OBJECT), &res_alloc_back, &res_alloc_arr);
 
     while (OB_SUCC(ret) && OB_SUCC(extra->get_next_row(storted_row))) {
       if (OB_ISNULL(storted_row) || storted_row->cnt_ < 2) {
@@ -8714,216 +8618,6 @@ int ObAggregateProcessor::init_asmvt_result(ObIAllocator &allocator,
         LOG_WARN("failed to init layer", K(ret));
       }
     }
-  }
-  return ret;
-}
-
-int ObAggregateProcessor::get_rb_build_agg_result(const ObAggrInfo &aggr_info,
-                                           GroupConcatExtraResult *&extra,
-                                           ObDatum &concat_result)
-{
-  int ret = OB_SUCCESS;
-  common::ObArenaAllocator tmp_alloc(ObModIds::OB_SQL_AGGR_FUNC, OB_MALLOC_NORMAL_BLOCK_SIZE);
-  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("ROARINGBITMAP"));
-  if (OB_ISNULL(extra) || OB_UNLIKELY(extra->empty())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unpexcted null", K(ret), K(extra));
-  } else if (extra->is_iterated() && OB_FAIL(extra->rewind())) {
-    // Group concat row may be iterated in rollup_process(), rewind here.
-    LOG_WARN("rewind failed", KPC(extra), K(ret));
-  } else if (!extra->is_iterated() && OB_FAIL(extra->finish_add_row())) {
-    LOG_WARN("finish_add_row failed", KPC(extra), K(ret));
-  } else {
-    const ObChunkDatumStore::StoredRow *storted_row = NULL;
-    bool inited_tmp_obj = false;
-    ObObj *tmp_obj = NULL;
-    ObRoaringBitmap *rb = NULL;
-
-    while (OB_SUCC(ret) && OB_SUCC(extra->get_next_row(storted_row))) {
-      if (OB_ISNULL(storted_row)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(storted_row));
-      } else {
-        // get obj
-        uint64_t val = 0;
-        bool is_null_val = false;
-        if (!inited_tmp_obj
-            && OB_ISNULL(tmp_obj = static_cast<ObObj*>(tmp_alloc.alloc(sizeof(ObObj) * (storted_row->cnt_))))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to allocate memory", K(ret), K(tmp_obj));
-        } else if (!inited_tmp_obj && FALSE_IT(inited_tmp_obj = true)) {
-        } else if (OB_FAIL(convert_datum_to_obj(aggr_info, *storted_row, tmp_obj, storted_row->cnt_))) {
-          LOG_WARN("failed to convert datum to obj", K(ret));
-        } else if (tmp_obj->is_null()) {
-          is_null_val = true;
-        } else if (tmp_obj->is_unsigned_integer()) {
-          val = tmp_obj->get_uint64();
-        } else if (tmp_obj->is_signed_integer())  {
-          int64_t val_64 = tmp_obj->get_int();
-          if (val_64 < INT32_MIN) {
-            ret = OB_SIZE_OVERFLOW;
-            LOG_WARN("negative integer not in the range of int32", K(ret), K(val_64));
-          } else if (val_64 < 0) {
-            // convert negative integer to uint32
-            uint32_t val_u32 = static_cast<uint32_t>(val_64);
-            val = static_cast<uint64_t>(val_u32);
-          } else {
-            val = static_cast<uint64_t>(val_64);
-          }
-        } else {
-          ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-          LOG_WARN("invalid data type for roaringbitmap build agg");
-        }
-        if (OB_FAIL(ret) || is_null_val) {
-        } else if (OB_ISNULL(rb) && OB_ISNULL(rb = OB_NEWx(ObRoaringBitmap, &tmp_alloc, (&tmp_alloc)))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to create alloc memory to roaringbitmap", K(ret));
-        } else if (OB_FAIL(rb->value_add(val))) {
-          LOG_WARN("failed to add value to roaringbitmap", K(ret), K(tmp_obj->get_uint64()));
-        }
-      }
-    }//end of while
-
-    if (ret != OB_ITER_END && ret != OB_SUCCESS) {
-      LOG_WARN("fail to get next row", K(ret));
-    } else if (OB_ISNULL(rb)) {
-      ret = OB_SUCCESS;
-      concat_result.set_null();
-    } else {
-      ret = OB_SUCCESS;
-      ObString rb_bin;
-      if (OB_FAIL(ObRbUtils::rb_serialize(tmp_alloc, rb_bin, rb))) {
-        LOG_WARN("failed to serialize roaringbitmap", K(ret));
-      } else {
-        ObString blob_locator;
-        ObExprStrResAlloc expr_res_alloc(*aggr_info.expr_, eval_ctx_);
-        ObTextStringResult blob_res(ObLongTextType, true, &expr_res_alloc);
-        int64_t total_length = rb_bin.length();
-        if (OB_FAIL(ret)) { 
-        } else if (OB_FAIL(blob_res.init(total_length))) {
-          LOG_WARN("failed to init blob res", K(ret), K(rb_bin), K(total_length));
-        } else if (OB_FAIL(blob_res.append(rb_bin))) {
-          LOG_WARN("failed to append roaringbitmap binary data", K(ret), K(rb_bin));
-        } else {
-          blob_res.get_result_buffer(blob_locator);
-          concat_result.set_string(blob_locator);
-        }
-      }
-    }
-    ObRbUtils::rb_destroy(rb);
-  }
-  return ret;
-}
-
-int ObAggregateProcessor::get_rb_calc_agg_result(const ObAggrInfo &aggr_info,
-                                                 GroupConcatExtraResult *&extra,
-                                                 ObDatum &concat_result,
-                                                 ObRbOperation calc_op,
-                                                 bool is_cardinality)
-{
-  int ret = OB_SUCCESS;
-  common::ObArenaAllocator tmp_alloc(ObModIds::OB_SQL_AGGR_FUNC, OB_MALLOC_NORMAL_BLOCK_SIZE);
-  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("ROARINGBITMAP"));
-  if (OB_ISNULL(extra)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unpexcted null", K(ret), K(extra));
-  } else if (OB_UNLIKELY(extra->empty())) {
-    LOG_TRACE("is empty", K(ret), KPC(extra), K(lbt()));
-  } else if (extra->is_iterated() && OB_FAIL(extra->rewind())) {
-    // Group concat row may be iterated in rollup_process(), rewind here.
-    LOG_WARN("rewind failed", KPC(extra), K(ret));
-  } else if (!extra->is_iterated() && OB_FAIL(extra->finish_add_row())) {
-    LOG_WARN("finish_add_row failed", KPC(extra), K(ret));
-  } else {
-    const ObChunkDatumStore::StoredRow *storted_row = NULL;
-    bool inited_tmp_obj = false;
-    ObObj *tmp_obj = NULL;
-    ObRoaringBitmap *rb = NULL;
-    bool calc_finished = false;
-
-    while (OB_SUCC(ret) && !calc_finished && OB_SUCC(extra->get_next_row(storted_row))) {
-      if (OB_ISNULL(storted_row)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(storted_row));
-      } else {
-        ObString tmp_bin;
-        ObString tmp_rb_bin;
-        bool is_null_obj = false;
-        // get obj
-        if (!inited_tmp_obj
-            && OB_ISNULL(tmp_obj = static_cast<ObObj*>(tmp_alloc.alloc(sizeof(ObObj) * (storted_row->cnt_))))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to allocate memory", K(ret), K(tmp_obj));
-        } else if (!inited_tmp_obj && FALSE_IT(inited_tmp_obj = true)) {
-        } else if (OB_FAIL(convert_datum_to_obj(aggr_info, *storted_row, tmp_obj, storted_row->cnt_))) {
-          LOG_WARN("failed to convert datum to obj", K(ret));
-        } else if (tmp_obj->is_null()) {
-          is_null_obj = true;
-        } else if (!(tmp_obj->is_roaringbitmap() || tmp_obj->is_hex_string())) {
-          ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-          LOG_WARN("invalid data type for roaringbitmap agg");
-        } else if (OB_FALSE_IT(tmp_bin = tmp_obj->get_string())) {
-        } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(&tmp_alloc, *tmp_obj, tmp_bin))) {
-          LOG_WARN("failed to get real data.", K(ret), K(tmp_bin));
-        } else if (!tmp_obj->is_roaringbitmap()) {
-          if (OB_FAIL(ObRbUtils::build_binary(tmp_alloc, tmp_bin, tmp_rb_bin))) {
-            LOG_WARN("failed to build roaringbitmap from binary", K(ret), K(tmp_bin));
-          }
-        } else {
-          tmp_rb_bin = tmp_bin;
-        }
-
-        if (OB_FAIL(ret) || is_null_obj) {
-        } else if (OB_ISNULL(rb)) {
-          if (OB_FAIL(ObRbUtils::rb_deserialize(tmp_alloc, tmp_rb_bin, rb))) {
-            LOG_WARN("failed to deserialize roaringbitmap", K(ret));
-          } else if (calc_op == ObRbOperation::AND && rb->get_cardinality() == 0) {
-            calc_finished = true;
-          }
-        } else {
-          ObRoaringBitmap *tmp_rb = NULL;
-          if (OB_FAIL(ObRbUtils::rb_deserialize(tmp_alloc, tmp_rb_bin, tmp_rb))){
-            LOG_WARN("failed to deserialize roaringbitmap", K(ret));
-          } else if (OB_FAIL(ObRbUtils::calc_inplace(rb, tmp_rb, calc_op))) {
-            LOG_WARN("failed to calculate roaringbitmap", K(ret));
-          } else if (calc_op == ObRbOperation::AND && rb->get_cardinality() == 0) {
-            calc_finished = true;
-          }
-          ObRbUtils::rb_destroy(tmp_rb);
-        }
-      }
-    }//end of while
-
-    if (ret != OB_ITER_END && ret != OB_SUCCESS) {
-      LOG_WARN("fail to get next row", K(ret));
-    } else if (OB_ISNULL(rb)) {
-      ret = OB_SUCCESS;
-      concat_result.set_null();
-    } else {
-      ret = OB_SUCCESS;
-      ObString rb_bin;
-      if (is_cardinality) {
-        uint64_t cardinality = rb->get_cardinality();
-        concat_result.set_uint(cardinality);
-      } else if (OB_FAIL(ObRbUtils::rb_serialize(tmp_alloc, rb_bin, rb))) {
-        LOG_WARN("failed to serialize roaringbitmap", K(ret));
-      } else {
-        ObString blob_locator;
-        ObExprStrResAlloc expr_res_alloc(*aggr_info.expr_, eval_ctx_);
-        ObTextStringResult blob_res(ObLongTextType, true, &expr_res_alloc);
-        int64_t total_length = rb_bin.length();
-        if (OB_FAIL(ret)) { 
-        } else if (OB_FAIL(blob_res.init(total_length))) {
-          LOG_WARN("failed to init blob res", K(ret), K(rb_bin), K(total_length));
-        } else if (OB_FAIL(blob_res.append(rb_bin))) {
-          LOG_WARN("failed to append roaringbitmap binary data", K(ret), K(rb_bin));
-        } else {
-          blob_res.get_result_buffer(blob_locator);
-          concat_result.set_string(blob_locator);
-        }
-      }
-    }
-    ObRbUtils::rb_destroy(rb);
   }
   return ret;
 }

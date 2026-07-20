@@ -752,7 +752,6 @@ int ObPLBuilder::analyze_package(const ObString &source,
   if (OB_SUCC(ret)) {
     ObPLParser parser(allocator_, session_info_.get_charsets4parser(), session_info_.get_sql_mode());
     ObStmtNodeTree *parse_tree = NULL;
-    CHECK_COMPATIBILITY_MODE(&session_info_);
     ObPLResolver resolver(allocator_,
                           session_info_,
                           schema_guard_,
@@ -1457,8 +1456,6 @@ void ObPLBuilderEnvGuard::init(const Info &info,
 {
   ObExecEnv env;
   bool need_set_db = true;
-  bool invoker_set_db = false;
-  uint64_t compat_version = 0;
   bool is_invoker_right = OB_NOT_NULL(parent_ns) ? parent_ns->get_compile_flag().compile_with_invoker_right()
                                                  : info.is_invoker_right();
   OX (need_reset_exec_env_ = false);
@@ -1469,19 +1466,6 @@ void ObPLBuilderEnvGuard::init(const Info &info,
   if (OB_SUCC(ret) && old_exec_env_ != env) {
     OZ (env.store(session_info_));
     OX (need_reset_exec_env_ = true);
-  }
-
-  OZ (session_info_.get_compatibility_version(compat_version));
-  OZ (ObCompatControl::check_feature_enable(compat_version, ObCompatFeatureType::INVOKER_RIGHT_COMPILE, invoker_set_db));
-  
-  if (OB_SUCC(ret)) {
-    if (invoker_set_db) {
-      // alway set db in compile phase when version greater or equal than 4.3.5.2
-      need_set_db = true;
-    } else {
-      // Definer-right routines need the database set during compile.
-      need_set_db = !is_invoker_right;
-    }
   }
 
   if (OB_SUCC(ret) && is_invoker_right) {

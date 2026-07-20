@@ -53,7 +53,6 @@ public:
       share::ObDMLSqlSplicer &dml);
   static int gen_column_dml_without_check(
       const ObColumnSchemaV2 &column,
-      const lib::Worker::CompatMode compat_mode,
       share::ObDMLSqlSplicer &dml);
   virtual int batch_create_table(ObIArray<ObTableSchema> &tables,
                            common::ObISQLClient &sql_client,
@@ -409,10 +408,6 @@ private:
                             share::ObDMLSqlSplicer &dml);
   static int gen_column_dml(const ObColumnSchemaV2 &column,
       share::ObDMLSqlSplicer &dml);
-  static int check_tenant_in_gen_column_dml(
-      const ObColumnSchemaV2 &column,
-      uint64_t &data_version,
-      lib::Worker::CompatMode &compat_mode);
   int gen_constraint_dml(const ObConstraint &constraint, share::ObDMLSqlSplicer &dml);
   int gen_constraint_column_dml(
       const ObConstraint &constraint,

@@ -90,7 +90,7 @@ protected:
   int64_t delay_us_;
 };
 
-// interface class, used for OSS & S3,
+// interface class for object storage retry handling
 template<typename OutcomeType_>
 class ObStorageIORetryStrategy : public ObStorageIORetryStrategyBase<OutcomeType_>
 {

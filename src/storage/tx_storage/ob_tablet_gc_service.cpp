@@ -635,8 +635,7 @@ int ObTabletGCHandler::gc_tablets(const common::ObIArray<ObTabletHandle> &delete
       } else {
 #ifdef ERRSIM
         SERVER_EVENT_SYNC_ADD("tablet_gc", "gc_tablet_finish",
-                              "tablet_id", tablet_handle.get_obj()->get_tablet_meta().tablet_id_.id(),
-                              "path_id", 0);
+                              "tablet_id", tablet_handle.get_obj()->get_tablet_meta().tablet_id_.id());
 #endif
         STORAGE_LOG(INFO, "gc tablet finish", K(ret),
                           "tablet_id", tablet_handle.get_obj()->get_tablet_meta().tablet_id_);

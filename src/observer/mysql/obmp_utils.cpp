@@ -56,8 +56,6 @@ int ObMPUtils::add_changed_session_info(OMPKOK &ok_pkt, sql::ObSQLSessionInfo &s
   if (session.is_sys_var_changed()) {
     const ObIArray<sql::ObBasicSessionInfo::ChangedVar> &sys_var = session.get_changed_sys_var();
     LOG_DEBUG("sys var changed", K(session.get_tenant_name()), K(sys_var.count()));
-    // record sys var need sync in error scene.
-    bool is_exist_error_sync_var = false;
     for (int64_t i = 0; OB_SUCC(ret) && i < sys_var.count(); ++i) {
       sql::ObBasicSessionInfo::ChangedVar change_var = sys_var.at(i);
       ObObj new_val;
@@ -81,18 +79,7 @@ int ObMPUtils::add_changed_session_info(OMPKOK &ok_pkt, sql::ObSQLSessionInfo &s
           LOG_WARN("failed to get sys variable new value string", K(ret), K(new_val), K(change_var.id_));
         } else if (OB_FAIL(ok_pkt.add_system_var(str_kv))) {
           LOG_WARN("failed to add system variable", K(str_kv), K(ret));
-        } else if (session.is_exist_error_sync_var(change_var.id_) && FALSE_IT(is_exist_error_sync_var = true)) {
-          // do nothing.
         } else {
-          if (is_exist_error_sync_var) {
-            ObSessInfoEncoder* encoder = NULL;
-            if (OB_FAIL(session.get_sess_encoder(SESSION_SYNC_ERROR_SYS_VAR, encoder))) {
-              LOG_WARN("failed to get session encoder", K(ret));
-            } else {
-              encoder->is_changed_ = true;
-              is_exist_error_sync_var = false;
-            }
-          }
           if (OB_FAIL(ret)) {
           } else {
 #ifndef NDEBUG
@@ -202,7 +189,7 @@ int ObMPUtils::get_literal_print_length(const ObObj &obj, bool is_plain, int64_t
   int ret = OB_SUCCESS;
   len = 0;
   int32_t len_of_string = 0;
-  if (!obj.is_string_or_lob_locator_type() && !obj.is_json() && !obj.is_geometry() && !obj.is_roaringbitmap()) {
+  if (!obj.is_string_or_lob_locator_type() && !obj.is_json() && !obj.is_geometry()) {
     len = OB_MAX_SYS_VAR_NON_STRING_VAL_LENGTH;
   } else if (OB_UNLIKELY((len_of_string = obj.get_string_len()) < 0)) {
     ret = OB_ERR_UNEXPECTED;
@@ -210,8 +197,7 @@ int ObMPUtils::get_literal_print_length(const ObObj &obj, bool is_plain, int64_t
   } else if (obj.is_char() || obj.is_varchar()
              || obj.is_text()
              || obj.is_json()
-             || obj.is_geometry()
-             || obj.is_roaringbitmap()) {
+             || obj.is_geometry()) {
     //if is_plain is false, 'j' will be print as "j\0" (with Quotation Marks here)
     //otherwise. as j\0 (withOUT Quotation Marks here)
     ObHexEscapeSqlStr sql_str(obj.get_string());

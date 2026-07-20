@@ -457,51 +457,6 @@ int ObDASCtx::rebuild_tablet_loc_reference()
   return ret;
 }
 
-// For TP queries, we would like proxy to route tasks to servers where data
-// is located. If partition_hit=false, proxy will refresh its location cache
-// and route future tasks elsewhere. If partition_hit=true, proxy will continue
-// route tasks here.
-//
-// In the following, we call an operator that starts a data flow a "driver table"
-// and an operator that accepts input from a data flow a "driven table". For instance,
-// in the query plan below, t1 is a "driver table" and t2 is a "driven table".
-//
-//    NLJ
-//   /   \
-//  t1   t2
-//
-// There are 4 cases:
-// 1. there exists a driver table, and driven tables' partitions are located
-//    on a single remote server.
-// 2. there exists a driver table, and driven tables' partitions are located
-//    across at least 2 servers or on local server.
-// 3. there doesn't exist any driver tables, and partitions are located on a
-//    single remote server.
-// 4. there doesn't exist any driver tables, and partitions are located across
-//    at least 2 servers or on local server.
-//
-// We set partition_hit and reroute as following:
-// case           1  2  3  4
-// partition_hit  F  T  F  T
-// reroute        Y  N  N  N
-bool ObDASCtx::is_partition_hit()
-{
-  bool bret = true;
-  if (same_server_) {
-    if (!table_locs_.empty() && !table_locs_.get_first()->get_tablet_locs().empty()) {
-      if (MYADDR == table_locs_.get_first()->get_first_tablet_loc()->server_) {
-        // all local partitions
-        bret = true;
-      } else {
-        // all partitions are located on a single remote server
-        bret = false;
-      }
-    }
-  }
-  return bret;
-}
-
-// For background, please see comments for ObDASCtx::is_partition_hit().
 void ObDASCtx::unmark_need_check_server()
 {
   if (!table_locs_.empty() && !table_locs_.get_first()->get_tablet_locs().empty()) {

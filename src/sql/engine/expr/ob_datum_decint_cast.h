@@ -753,7 +753,7 @@ DEF_BATCH_CAST_FUNC(ObIntTC, ObDecimalIntTC)
     } else {
       ObScale in_scale = 0;
       ObScale in_prec =
-        ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][expr.args_[0]->datum_meta_.type_]
+        ObAccuracy::MAX_ACCURACY2[0][expr.args_[0]->datum_meta_.type_]
           .get_precision();
       if (in_prec > MAX_PRECISION_DECIMAL_INT_64) { in_prec = MAX_PRECISION_DECIMAL_INT_64; }
       ObScale out_scale = expr.datum_meta_.scale_;
@@ -809,7 +809,7 @@ DEF_BATCH_CAST_FUNC(ObUIntTC, ObDecimalIntTC)
     } else {
       ObScale in_scale = 0;
       ObScale in_prec =
-        ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][expr.args_[0]->datum_meta_.type_]
+        ObAccuracy::MAX_ACCURACY2[0][expr.args_[0]->datum_meta_.type_]
           .get_precision();
       ObScale out_scale = expr.datum_meta_.scale_;
       ObPrecision out_prec = expr.datum_meta_.precision_;

@@ -217,25 +217,7 @@ int ObExprReplace::eval_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &exp
     if (OB_FAIL(ret)){
     } else if (is_mysql && !from->is_null() && 0 == from_len) {
       ObSolidifiedVarsGetter helper(expr, ctx, ctx.exec_ctx_.get_my_session());
-      const ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
-      uint64_t compat_version = 0;
-      ObCompatType compat_type = COMPAT_MYSQL57;
-      bool is_enable = false;
-      if (OB_ISNULL(session)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("session info is null", K(ret));
-      } else if (OB_FAIL(helper.get_compat_version(compat_version))) {
-        LOG_WARN("failed to get compat version", K(ret));
-      } else if (OB_FAIL(ObCompatControl::check_feature_enable(compat_version,
-                                              ObCompatFeatureType::FUNC_REPLACE_NULL, is_enable))) {
-        LOG_WARN("failed to check feature enable", K(ret));
-      } else if (OB_FAIL(session->get_compatibility_control(compat_type))) {
-        LOG_WARN("failed to get compat type", K(ret));
-      } else if (is_enable && COMPAT_MYSQL57 == compat_type) {
-        expr_datum.set_datum(*text);
-      } else {
-        expr_datum.set_null();
-      }
+      expr_datum.set_datum(*text);
     } else {
       expr_datum.set_null();
     }
@@ -292,9 +274,8 @@ int ObExprReplace::eval_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &exp
 
 DEF_SET_LOCAL_SESSION_VARS(ObExprReplace, raw_expr) {
   int ret = OB_SUCCESS;
-  SET_LOCAL_SYSVAR_CAPACITY(2);
+  SET_LOCAL_SYSVAR_CAPACITY(1);
   EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
-  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_OB_COMPATIBILITY_VERSION);
   return ret;
 }
 

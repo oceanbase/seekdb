@@ -1072,42 +1072,6 @@ private:
   bool is_system_trigger_;
 };
 
-struct PlTransformTreeCtx
-{
-  ObIAllocator *allocator_;
-  ParamStore *params_;
-  char *buf_; // parameterized string after reverse concatenation
-  int64_t buf_len_;
-  int64_t buf_size_;
-  ObString raw_sql_; // original anonymous block string
-  int64_t raw_anonymous_off_; // The offset of the original anonymous block relative to the first character of user input, solving the scenario where multiple SQL statements exist within a single delimiter
-  ObString raw_sql_or_expr_; // Raw string of a single expr or sql inside an anonymous block
-  ObString no_param_sql_; // fast parser string corresponding to a single expr or sql inside the anonymous block
-  int64_t copied_idx_;
-  ParamList *p_list_; // Store all expr and sql statement raw param nodes obtained after fast parsing inside the anonymous block
-  int64_t raw_param_num_; // The number of raw param nodes for a single expr or SQL after fast parsing within an anonymous block, the param num will be stored in the node after each expr and SQL fast parsing
-  bool is_ps_mode_;
-  int64_t total_param_nums_;
-  ObPlanCacheCtx *ps_pc_ctx_;
-  PlTransformTreeCtx() :
-    allocator_(NULL),
-    params_(NULL),
-    buf_(NULL),
-    buf_len_(0),
-    buf_size_(0),
-    raw_sql_(),
-    raw_anonymous_off_(0),
-    raw_sql_or_expr_(),
-    no_param_sql_(),
-    copied_idx_(0),
-    p_list_(NULL),
-    raw_param_num_(0),
-    is_ps_mode_(false),
-    total_param_nums_(0),
-    ps_pc_ctx_(nullptr)
-  {}
-};
-
 class ObPL
 {
   friend class sql::ObAlterRoutineResolver;
@@ -1128,15 +1092,6 @@ public:
               uint64_t stmt_id,
               const common::ObString &sql,
               ObBitSet<OB_DEFAULT_BITSET_SIZE> &out_args);
-  int parameter_anonymous_block(ObExecContext &ctx,
-                              const ObStmtNodeTree *block,
-                              ParamStore &params,
-                              ObIAllocator &allocator,
-                              bool is_ps_mode,
-                              ObString &parameter_sql,
-                              ObPlanCacheCtx *pc_ctx = nullptr);
-  int transform_tree(PlTransformTreeCtx &trans_ctx, ParseNode *block, ParseNode *no_param_root, ObExecContext &ctx, ParseResult &parse_result);
-  int trans_sql(PlTransformTreeCtx &trans_ctx, ParseNode *root, ObExecContext &ctx);
   // for anonymous
   int execute(sql::ObExecContext &ctx,
               ParamStore &params,
@@ -1240,13 +1195,6 @@ public:
   std::pair<common::ObBucketLock, common::ObBucketLock>& get_build_lock() { return build_lock_; }
 
   static int check_session_alive(const ObBasicSessionInfo &session);
-
-  bool forbid_anony_parameter(ObSQLSessionInfo &session, bool is_ps_mode, bool forbid);
-  bool parameter_ps_anonymous_block(ObExecContext &ctx,
-                                            ObIAllocator &allocator,
-                                            ParseResult &parse_result,
-                                            ObString &no_param_sql,
-                                            ObPlanCacheCtx &pc_ctx);
 
 private:
   common::ObMySQLProxy *sql_proxy_;

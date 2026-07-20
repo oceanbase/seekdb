@@ -38,7 +38,6 @@ ObCreateRoleResolver::~ObCreateRoleResolver()
 int ObCreateRoleResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
-  CHECK_COMPATIBILITY_MODE(session_info_);
   ObCreateRoleStmt *create_role_stmt = NULL;
   if (T_CREATE_ROLE != parse_tree.type_
       || (2 != parse_tree.num_child_ && 3 != parse_tree.num_child_)) {

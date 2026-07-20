@@ -36,15 +36,13 @@ enum class LogReductionMode {NONE = 0, REFINED, COMPRESSED};
 class Worker
 {
 public:
-  enum class CompatMode {INVALID = -1, MYSQL };
-  enum Status { WS_NOWAIT, WS_INVALID, WS_OUT_OF_THROTTLE };
+  enum Status { WS_NOWAIT, WS_INVALID };
 
   Worker();
   virtual ~Worker();
 
   virtual Status check_wait();
   virtual int check_status() { check_wait(); return common::OB_SUCCESS; }
-  virtual int check_large_query_quota() { return common::OB_SUCCESS; }
   // check if retry disabled for the query
   virtual bool can_retry() const { return false; }
   // Set retry flag so that scheduler will reprocess this request then
@@ -106,17 +104,10 @@ public:
   void set_disable_wait_flag(bool f) { disable_wait_ = f; }
   bool get_disable_wait_flag() const { return disable_wait_; }
 
-  void set_sql_throttle_current_priority(int64_t st_current_priority)
-  { st_current_priority_ = st_current_priority; }
-  void reset_sql_throttle_current_priority()
-  { set_sql_throttle_current_priority(100); }
-
   OB_INLINE void set_session(sql::ObSQLSessionInfo* session) { session_ = session; }
   OB_INLINE sql::ObSQLSessionInfo *get_session() { return session_; }
 
 public:
-  static void set_compatibility_mode(CompatMode mode);
-  static CompatMode get_compatibility_mode();
   static LogReductionMode get_log_reduction_mode();
   static void set_log_reduction_mode(const LogReductionMode log_reduction_mode);
   static Worker& self();
@@ -139,7 +130,6 @@ protected:
   // Initial allocator memory state, updated while processing a request
   // You can specify ctx_id individually, this ctx_id remains unchanged
   ObIAllocator *allocator_;
-  int64_t st_current_priority_;
   sql::ObSQLSessionInfo *session_;
 private:
   const rpc::ObRequest *cur_request_;
@@ -254,16 +244,13 @@ public:
   TO_STRING_KV(K(src_addr_));
 };
 
-// used to check compatibility mode and save extra rpc packet header.
 class ObRuntimeContext
 {
   OB_UNIS_VERSION(1);
 public:
   ObRuntimeContext()
-      : compat_mode_(Worker::CompatMode::MYSQL),
-        log_reduction_mode_(LogReductionMode::NONE)
+      : log_reduction_mode_(LogReductionMode::NONE)
   {}
-  Worker::CompatMode compat_mode_;
 #ifdef ERRSIM
   ObErrsimModuleType module_type_;
 #endif
@@ -275,26 +262,6 @@ inline ObRuntimeContext &get_ob_runtime_context()
 {
   RLOCAL_INLINE(ObRuntimeContext, default_rtctx);
   return default_rtctx;
-}
-
-inline Worker::CompatMode get_compat_mode()
-{
-  return get_ob_runtime_context().compat_mode_;
-}
-
-inline void set_compat_mode(Worker::CompatMode mode)
-{
-  get_ob_runtime_context().compat_mode_ = mode;
-}
-
-OB_INLINE void Worker::set_compatibility_mode(Worker::CompatMode mode)
-{
-  set_compat_mode(mode);
-}
-
-OB_INLINE Worker::CompatMode Worker::get_compatibility_mode()
-{
-  return get_compat_mode();
 }
 
 OB_INLINE bool is_log_reduction() { return get_ob_runtime_context().log_reduction_mode_ != LogReductionMode::NONE; }

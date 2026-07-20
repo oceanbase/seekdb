@@ -54,9 +54,8 @@ protected:
   virtual int process();
   virtual int send_error_packet(int err,
                                 const char* errmsg,
-                                bool is_partition_hit = true,
                                 void *extra_err_info = NULL)
-  { return ObMPBase::send_error_packet(err, errmsg, is_partition_hit, extra_err_info); }
+  { return ObMPBase::send_error_packet(err, errmsg, extra_err_info); }
   virtual int send_ok_packet(sql::ObSQLSessionInfo &session, ObOKPParam &ok_param)
   { return ObMPBase::send_ok_packet(session, ok_param); }
   virtual int send_eof_packet(const sql::ObSQLSessionInfo &session, const ObMySQLResultSet &result)

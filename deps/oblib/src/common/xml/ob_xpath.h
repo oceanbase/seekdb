@@ -572,18 +572,16 @@ public:
     ctx_(ctx), alloc_(ctx->allocator_), doc_root_(nullptr), cur_doc_(nullptr), cur_doc_position_(-1), 
     ancestor_record_(ctx->allocator_), is_inited_(0), is_auto_wrap_(0), 
     check_duplicate_(1), need_boolean_(0), need_record_(0), reserved_(0) {} 
-  ~ObPathCtx() {bin_pool_.reset();}
+  ~ObPathCtx() = default;
   int init(ObMulModeMemCtx* ctx, ObIMulModeBase *doc_root, ObIMulModeBase *cur_doc, 
-           ObIAllocator *tmp_alloc, bool is_auto_wrap, bool need_record, bool add_ns);
-  int init_extend();
+           ObIAllocator *tmp_alloc, bool is_auto_wrap, bool need_record);
   int push_ancestor(ObIMulModeBase*& base_node);
-  int alloc_new_bin(ObIMulModeBase*& base_node);
   ObIMulModeBase* top_ancestor();
   int pop_ancestor();
   OB_INLINE void set_cur_doc_to_root() {cur_doc_ = doc_root_;}
   bool is_inited() const;
   int record_if_need();
-  void reset() {ancestor_record_.reset(); bin_pool_.reset();}
+  void reset() { ancestor_record_.reset(); }
   int reinit(ObIMulModeBase* doc, ObIAllocator *tmp_alloc);
   common::ObIAllocator* get_tmp_alloc() { return tmp_alloc_; }
   ObMulModeMemCtx* ctx_;
@@ -592,10 +590,8 @@ public:
   ObIMulModeBase *doc_root_;
   ObIMulModeBase *cur_doc_;
   ObIMulModeBase* extend_;
-  ObPathPool bin_pool_;
   int cur_doc_position_;
   ObStack<ObIMulModeBase*> ancestor_record_;
-  int defined_ns_;
   union {
     struct {
       uint16_t is_inited_ : 1;
@@ -603,8 +599,7 @@ public:
       uint16_t check_duplicate_ : 1;
       uint16_t need_boolean_ : 1;
       uint16_t need_record_ : 1;
-      uint16_t add_ns_ : 1;
-      uint16_t reserved_ : 10;
+      uint16_t reserved_ : 11;
     };
 
     uint16_t flags_;
@@ -820,7 +815,6 @@ public:
   static int get_filter_node_result(ObPathCtx &ctx, ObLibTreeNodeBase* filter_node_base, ObPathNode* &res);
   static int seek_res_to_boolean(ObSeekResult& filter, bool &res);
   static int get_seek_iterator(common::ObIAllocator *allocator, ObPathLocationNode* loc, ObSeekIterator*& ada);
-  static int alloc_binary(common::ObIAllocator *allocator, ObXmlBin*& ada);
   static int alloc_iterator(common::ObIAllocator *allocator, ObSeekIterator*& ada);
   static int alloc_complex_iterator(common::ObIAllocator *allocator, ObSeekComplexIterator*& ada);
   static int alloc_ancestor_iterator(common::ObIAllocator *allocator, ObSeekAncestorIterator*& ada);
@@ -829,8 +823,6 @@ public:
   static int alloc_node_set_vector(ObPathCtx &ctx, ObPathNode *path_node, ObArgType& arg_type, ObNodeSetVector &node_vec);
   static int get_arg_type(ObArgType& arg_type, ObPathNode *path_node);
   static int release_seek_vector(ObPathCtx &ctx, ObSeekVector& seek_vector);
-  static int add_ns_if_need(ObPathCtx &ctx, ObIMulModeBase*& res);
-  static int collect_ancestor_ns(ObIMulModeBase* extend, ObStack<ObIMulModeBase*> &ancestor_record, ObXmlElement::NsMap &ns_map, ObArray<ObXmlAttribute*> &ns_vec, common::ObIAllocator* tmp_alloc);
 };
 
 class ObXmlPathFilter : public ObMulModeFilter

@@ -35,7 +35,7 @@ SELECT * FROM dst_articles;
 | The Evolution of Technology           | Technology has advanced rapidly over the past century                       |
 | Understanding Artificial Intelligence | Artificial Intelligence is one of the most exciting frontiers in technology |
 +---------------------------------------+-----------------------------------------------------------------------------+
-INSERT /*+ append enable_parallel_dml parallel(16) */ INTO dst_articles SELECT * FROM src_articles;
+INSERT /*+ enable_parallel_dml parallel(16) */ INTO dst_articles SELECT * FROM src_articles;
 SELECT count(*) FROM dst_articles;
 +----------+
 | count(*) |

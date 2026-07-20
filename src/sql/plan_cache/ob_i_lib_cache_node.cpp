@@ -25,6 +25,8 @@ namespace oceanbase
 {
 namespace sql
 {
+static constexpr int64_t PLAN_CACHE_LOCK_TIMEOUT_US = 100L;
+
 
 ObILibCacheNode::~ObILibCacheNode()
 {
@@ -141,16 +143,17 @@ int ObILibCacheNode::add_cache_obj(ObILibCacheCtx &ctx,
 int ObILibCacheNode::lock(bool is_rdlock)
 {
   int ret = OB_SUCCESS;
-  // if the lock fails, keep retrying the lock until the lock_timeout_ts_ is exceeded
+  // Keep plan-cache lock contention off the query's long-running path. A lock
+  // conflict is handled as a cache miss by the caller.
   if (is_rdlock) {
     if (!rwlock_.try_rdlock()) {
-      const int64_t lock_timeout_ts = ObTimeUtility::current_time() + lock_timeout_ts_;
+      const int64_t lock_timeout_ts = ObTimeUtility::current_time() + PLAN_CACHE_LOCK_TIMEOUT_US;
       if (OB_FAIL(rwlock_.rdlock(lock_timeout_ts))) {
         ret = OB_PC_LOCK_CONFLICT;
       }
     }
   } else {
-    const int64_t lock_timeout_ts = ObTimeUtility::current_time() + lock_timeout_ts_;
+    const int64_t lock_timeout_ts = ObTimeUtility::current_time() + PLAN_CACHE_LOCK_TIMEOUT_US;
     if (OB_FAIL(rwlock_.wrlock(lock_timeout_ts))) {
       ret = OB_PC_LOCK_CONFLICT;
     }

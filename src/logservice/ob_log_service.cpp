@@ -310,8 +310,7 @@ int ObLogService::add_ls(ObLogHandler &log_handler)
     CLOG_LOG(WARN, "failed to create apply status", K(ret));
   } else if (OB_FAIL(replay_service_.create_status())) {
     CLOG_LOG(WARN, "failed to create replay status", K(ret));
-  } else if (OB_FAIL(log_handler.init(self_, &apply_service_, &replay_service_,
-          palf_env_, alloc_mgr_))) {
+  } else if (OB_FAIL(log_handler.init(self_, &apply_service_, &replay_service_, palf_env_))) {
     CLOG_LOG(WARN, "ObLogHandler init failed", K(ret), KP(palf_env_));
   } else {
     FLOG_INFO("add_ls success", K(ret), KP(this));
@@ -501,8 +500,7 @@ int ObLogService::create_ls_(const palf::PalfBaseInfo &palf_base_info,
       CLOG_LOG(WARN, "failed to create apply status", K(ret));
     } else if (OB_FAIL(replay_service_.create_status())) {
       CLOG_LOG(WARN, "failed to create replay status", K(ret));
-    } else if (OB_FAIL(log_handler.init(self_, &apply_service_, &replay_service_,
-          palf_env_, alloc_mgr_))) {
+    } else if (OB_FAIL(log_handler.init(self_, &apply_service_, &replay_service_, palf_env_))) {
       CLOG_LOG(WARN, "ObLogHandler init failed", K(ret), KP(palf_env_), K(palf_handle));
     } else {
       CLOG_LOG(INFO, "ObLogService create_ls success", K(ret), K(log_handler));

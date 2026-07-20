@@ -43,7 +43,6 @@ public:
    : tablet_ids_(),
      data_tablet_id_(),
      table_schemas_(),
-     compat_mode_(lib::Worker::CompatMode::INVALID),
      is_create_bind_hidden_tablets_(false),
      tenant_data_version_(0),
      need_create_empty_majors_(),
@@ -53,7 +52,6 @@ public:
   int init(const ObIArray<common::ObTabletID> &tablet_ids,
            const common::ObTabletID data_tablet_id,
            const ObIArray<const share::schema::ObTableSchema*> &table_schemas,
-           const lib::Worker::CompatMode &mode,
            const bool is_create_bind_hidden_tablets,
            const uint64_t tenant_data_version,
            const ObIArray<bool> &need_create_empty_majors,
@@ -62,7 +60,6 @@ public:
   int init(const ObIArray<common::ObTabletID> &tablet_ids,
            const common::ObTabletID data_tablet_id,
            const ObIArray<const share::schema::ObTableSchema*> &table_schemas,
-           const lib::Worker::CompatMode &mode,
            const bool is_create_bind_hidden_tablets,
            const uint64_t tenant_data_version,
            const ObIArray<bool> &need_create_empty_majors,
@@ -72,7 +69,6 @@ public:
   common::ObArray<common::ObTabletID> tablet_ids_;
   common::ObTabletID data_tablet_id_;
   common::ObArray<const share::schema::ObTableSchema*> table_schemas_;
-  lib::Worker::CompatMode compat_mode_;
   bool is_create_bind_hidden_tablets_;
   uint64_t tenant_data_version_;
   common::ObArray<bool> need_create_empty_majors_;
@@ -96,8 +92,7 @@ public:
   int try_add_table_schema(const share::schema::ObTableSchema *table_schema, 
       const uint64_t tenant_data_version,
       const bool need_create_empty_major_sstable,
-      int64_t &index,
-      const lib::Worker::CompatMode compat_mode);
+      int64_t &index);
   int add_arg_to_batch_arg(const ObTabletCreatorArg &arg);
   void reset()
   {
@@ -114,7 +109,6 @@ public:
   ObBatchCreateTabletHelper *next_;
 private:
   int add_table_schema_(const share::schema::ObTableSchema &table_schema,
-      const lib::Worker::CompatMode compat_mode,
       const uint64_t tenant_data_version,
       const bool need_create_empty_major,
       int64_t &index);

@@ -173,7 +173,6 @@ template <>
       case ObGeometryType:
       case ObUserDefinedSQLType:
       case ObCollectionSQLType:
-      case ObRoaringBitmapType:
       default:
         break;
     }
@@ -2418,7 +2417,7 @@ inline uint64_t obj_crc64_v3<ObDecimalIntType>(const ObObj &obj, const uint64_t 
 // UDTs does not have hash functions
 // subschema id or flags are not used in checksum functions, because the same subschema id may has different meanings.
 // subschema id or flags are used in serialize functions, because serialization are used in a same physic plan.
-// about print functions, UDTs are printed as HexStrings, except system defined types like xmltype.
+// About print functions, UDTs are printed as HexStrings.
 
 #define DEF_UDT_CS_FUNCS(OBJTYPE)                                       \
   template <>                                                           \
@@ -2673,11 +2672,6 @@ inline int64_t obj_val_get_serialize_size<ObCollectionSQLType>(const ObObj &obj)
 
 DEF_UDT_CS_FUNCS(ObCollectionSQLType);
 
-#define DEF_ROARINGBITMAP_FUNCS(OBJTYPE, TYPE, VTYPE) \
-  DEF_HEX_STRING_PRINT_FUNCS(OBJTYPE);               \
-  DEF_STRING_CS_FUNCS(OBJTYPE);                      \
-  DEF_TEXT_SERIALIZE_FUNCS(OBJTYPE, TYPE, VTYPE)
-
 // ObMySQLDateType=52
 DEF_CS_FUNCS(ObMySQLDateType, date, int32_t, int64_t); // reuse get_date for mysql_date type
 DEF_DATE_YEAR_PRINT_FUNCS(ObMySQLDateType, mysql_date, mdate);
@@ -2687,8 +2681,6 @@ DEF_SERIALIZE_FUNCS(ObMySQLDateType, date, int32_t); // reuse get_date for mysql
 DEF_CS_FUNCS(ObMySQLDateTimeType, datetime, int64_t, int64_t); // reuse get_datetime for mysql_datetime type
 DEF_DATETIME_PRINT_FUNCS(ObMySQLDateTimeType, mysql_datetime, mdatetime);
 DEF_SERIALIZE_FUNCS(ObMySQLDateTimeType, datetime, int64_t); // reuse get_date for mysql_date type
-
-DEF_ROARINGBITMAP_FUNCS(ObRoaringBitmapType, string, ObString);
 
 }
 }

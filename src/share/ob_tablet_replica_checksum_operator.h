@@ -185,10 +185,8 @@ public:
   static int get_min_compaction_scn(SCN &min_compaction_scn);
 
 private:
-  // ObSimpleCkmInfo and ObTabletSimpleCkmInfoMap removed - only used in OB_BUILD_SHARED_STORAGE
   // range_get_ removed - no longer used
   // inner_batch_insert_or_update_by_sql_ removed - no longer used
-  // OB_BUILD_SHARED_STORAGE related functions removed
   // inner_batch_get_by_sql_ removed - no longer used, replaced by SQLite storage
   // construct_batch_get_sql_str_ removed - no longer used, replaced by SQLite storage
 

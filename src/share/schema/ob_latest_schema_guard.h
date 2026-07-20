@@ -167,13 +167,11 @@ public:
   // - database_id
   // - package_name
   // - package_type
-  // - compatible_mode
   // @param[out]:
   // - package_id : OB_INVALID_ID means package not exist
   int get_package_id(const uint64_t database_id,
                      const ObString &package_name,
                      const ObPackageType package_type,
-                     const int64_t compatible_mode,
                      uint64_t &package_id);
 
   // 1. routine name comparison is case insensitive.

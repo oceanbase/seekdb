@@ -77,8 +77,6 @@ int check_files_map_validity(const hash::ObHashMap<ObString, int64_t> &files_to_
 int record_failed_files_idx(const hash::ObHashMap<ObString, int64_t> &files_to_delete,
                             ObIArray<int64_t> &failed_files_idx);
 int ob_set_field(const char *value, char *field, const uint32_t field_length);
-int reject_s3_storage(const char *op_name);
-int reject_s3_storage(const char *op_name, const common::ObString &uri);
 
 struct ObStorageObjectMetaBase
 {
@@ -97,9 +95,9 @@ public:
 };
 
 // Each fragment meta corresponds to a normal object in a 'dir'.
-// The 'dir' name is the S3 appendable object name.
+// The 'dir' name is the appendable object name.
 // Fragment name format: /xxx/xxx/appendable_obj_name/prefix-start-end[-suffix]
-// 'prefix' is a special string which represents this object is a S3 appendable object fragment.
+// 'prefix' is a special string which identifies an appendable object fragment.
 // 'start-end' means the data range covered by this file. [start, end), include start、not include end.
 // 'suffix' may exist, mainly used by deleting file situation.
 struct ObAppendableFragmentMeta

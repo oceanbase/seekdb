@@ -156,10 +156,6 @@ HashFuncTypeForTc get_hashfunc_by_tc(VecValueTypeClass tc)
     res_func = VecTCHashCalc<VEC_TC_MYSQL_DATE, ObMurmurHash, true>::hash;
     break;
   }
-  case (VEC_TC_ROARINGBITMAP) : {
-    res_func = VecTCHashCalc<VEC_TC_ROARINGBITMAP, ObMurmurHash, true>::hash;
-    break;
-  }
   case (MAX_VEC_TC) :
   default: {
     res_func = VecTCHashCalc<MAX_VEC_TC, ObMurmurHash, true>::hash;
@@ -303,10 +299,6 @@ NullHashFuncTypeForTc get_null_hashfunc_by_tc(VecValueTypeClass tc)
   }
   case (VEC_TC_MYSQL_DATE) : {
     res_func = VectorBasicOp<VEC_TC_MYSQL_DATE>::null_hash<ObMurmurHash, true>;
-    break;
-  }
-  case (VEC_TC_ROARINGBITMAP) : {
-    res_func = VectorBasicOp<VEC_TC_ROARINGBITMAP>::null_hash<ObMurmurHash, true>;
     break;
   }
   case (MAX_VEC_TC) :

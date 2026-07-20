@@ -163,7 +163,6 @@ int ObSqlStatInfo::assign(const ObSqlStatInfo& other)
 ObExecutingSqlStatRecord::ObExecutingSqlStatRecord()
 {
   is_in_retry_ = false;
-  is_route_miss_ = false;
   is_plan_cache_hit_ = false;
 #define DEF_SQL_STAT_ITEM_INIT(def_name)           \
   def_name##_start_ = 0;                           \
@@ -197,7 +196,6 @@ ObExecutingSqlStatRecord::ObExecutingSqlStatRecord()
 void ObExecutingSqlStatRecord::reset()
 {
   is_in_retry_ = false;
-  is_route_miss_ = false;
   is_plan_cache_hit_ = false;
 #define DEF_SQL_STAT_ITEM_INIT(def_name)           \
   def_name##_start_ = 0;                             \
@@ -226,7 +224,6 @@ void ObExecutingSqlStatRecord::reset()
 int ObExecutingSqlStatRecord::assign(const ObExecutingSqlStatRecord& other)
 {
   is_in_retry_ = other.get_is_in_retry();
-  is_route_miss_ = other.is_route_miss();
   is_plan_cache_hit_ = other.is_plan_cache_hit();
 #define DEF_SQL_STAT_ITEM_COPY(def_name)           \
   def_name##_start_ = other.def_name##_start_;     \
@@ -417,7 +414,6 @@ int ObExecutedSqlStatRecord::sum_stat_value(ObExecutingSqlStatRecord& executing_
   (void)ATOMIC_AAF(&fetches_total_, executing_record.get_fetches_delta());
   (void)ATOMIC_AAF(&partition_total_, executing_record.get_partition_delta());
   (void)ATOMIC_AAF(&nested_sql_total_, executing_record.get_nested_sql_delta());
-  (void)ATOMIC_AAF(&route_miss_total_, executing_record.is_route_miss()? 1:0);
   (void)ATOMIC_AAF(&plan_cache_hit_total_, executing_record.is_plan_cache_hit());
   return OB_SUCCESS;
 }
@@ -446,7 +442,6 @@ int ObExecutedSqlStatRecord::sum_stat_value(ObExecutedSqlStatRecord& executed_re
   (void)ATOMIC_AAF(&fetches_total_, executed_record.get_fetches_total());
   (void)ATOMIC_AAF(&partition_total_, executed_record.get_partition_total());
   (void)ATOMIC_AAF(&nested_sql_total_, executed_record.get_nested_sql_total());
-  (void)ATOMIC_AAF(&route_miss_total_, executed_record.get_route_miss_total());
   return OB_SUCCESS;
 }
 int ObExecutedSqlStatRecord::assign(const ObExecutedSqlStatRecord& other)
@@ -478,7 +473,6 @@ int ObExecutedSqlStatRecord::assign(const ObExecutedSqlStatRecord& other)
     DEF_ASSIGN_FUNC(retry);
     DEF_ASSIGN_FUNC(partition);
     DEF_ASSIGN_FUNC(nested_sql);
-    DEF_ASSIGN_FUNC(route_miss);
     DEF_ASSIGN_FUNC(plan_cache_hit);
 #undef DEF_ASSIGN_FUNC
   }
@@ -512,7 +506,6 @@ int ObExecutedSqlStatRecord::reset()
     DEF_RESET_FUNC(retry);
     DEF_RESET_FUNC(partition);
     DEF_RESET_FUNC(nested_sql);
-    DEF_RESET_FUNC(route_miss);
     DEF_RESET_FUNC(plan_cache_hit);
 #undef DEF_RESET_FUNC
 
@@ -544,7 +537,6 @@ int ObExecutedSqlStatRecord::update_last_snap_record_value()
     DEF_UPDATE_LAST_SNAP_FUNC(retry);
     DEF_UPDATE_LAST_SNAP_FUNC(partition);
     DEF_UPDATE_LAST_SNAP_FUNC(nested_sql);
-    DEF_UPDATE_LAST_SNAP_FUNC(route_miss);
     DEF_UPDATE_LAST_SNAP_FUNC(plan_cache_hit);
   #undef DEF_UPDATE_LAST_SNAP_FUNC
   return ret;

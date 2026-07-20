@@ -42,14 +42,14 @@ public:
 private:
   int lock_tables_(sql::ObSQLSessionInfo *session,
                    const transaction::ObTxParam &tx_param,
-                   const uint32_t client_session_id,
-                   const uint64_t client_session_create_ts,
+                   const uint32_t session_id,
+                   const uint64_t session_create_ts,
                    const ObIArray<sql::ObMySQLLockNode> &lock_node_list,
                    const int64_t timeout_us);
   int lock_table_(sql::ObSQLSessionInfo *session,
                   const transaction::ObTxParam &tx_param,
-                  const uint32_t client_session_id,
-                  const uint64_t client_session_create_ts,
+                  const uint32_t session_id,
+                  const uint64_t session_create_ts,
                   const uint64_t table_id,
                   const int64_t lock_mode,
                   const int64_t timeout_us);

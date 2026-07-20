@@ -73,7 +73,6 @@ int ObCreateTableLikeResolver::resolve(const ParseNode &parse_tree)
         } else if (OB_FAIL(create_table_like_stmt->set_create_host(*allocator_, ObString(create_host_str)))) {
           SQL_RESV_LOG(WARN, "set create host failed", K(ret));
         } else {
-          CHECK_COMPATIBILITY_MODE(session_info_);
           create_table_like_stmt->set_table_type(share::schema::TMP_TABLE);
         }
       } else {

@@ -466,7 +466,6 @@ public:
 
   virtual int get_attribute(ObIMulModeBase*& res, ObMulModeNodeType filter_type, const ObString& key1, const ObString &key2 = ObString()) = 0;
 
-  virtual int get_raw_binary(common::ObString &out, ObIAllocator *allocator) = 0;
   /**
    * just append new member children under current node
    * the same as insert at last
@@ -548,8 +547,6 @@ public:
   virtual bool get_unparse() = 0;
   virtual bool is_equal_node(const ObIMulModeBase* other) = 0;
   virtual bool is_node_before(const ObIMulModeBase* other) = 0;
-  virtual bool check_extend() = 0;
-  virtual bool check_if_defined_ns() = 0;
 
   virtual int64_t get_serialize_size();
   // eval interface
@@ -608,7 +605,7 @@ public:
   *  virtual int to_bit(uint64_t &value) const = 0;
   **/
 private:
-  int get_bin_size(uint64_t &size);
+  int get_print_buffer_size(uint64_t &size);
 
 protected:
   ObNodeMetaData meta_;

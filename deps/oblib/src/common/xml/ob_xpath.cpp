@@ -23,7 +23,7 @@
 namespace oceanbase {
 namespace common {
 int ObPathCtx::init(ObMulModeMemCtx* ctx, ObIMulModeBase *doc_root, ObIMulModeBase *cur_doc, 
-                    ObIAllocator *tmp_alloc, bool is_auto_wrap, bool need_record, bool add_ns)
+                    ObIAllocator *tmp_alloc, bool is_auto_wrap, bool need_record)
 {
   INIT_SUCC(ret);
   if (OB_ISNULL(ctx) || OB_ISNULL(doc_root)) {
@@ -37,44 +37,15 @@ int ObPathCtx::init(ObMulModeMemCtx* ctx, ObIMulModeBase *doc_root, ObIMulModeBa
     cur_doc_ = cur_doc;
     is_auto_wrap_ = is_auto_wrap ? 1 : 0;
     need_record_ = need_record ? 1 : 0;
-    add_ns_ = add_ns ? 1 : 0;
     is_inited_ = 1;
-    defined_ns_ = 0;
-    if (doc_root->data_type() == OB_XML_TYPE) {
-      ret = bin_pool_.init(sizeof(ObXmlBin), tmp_alloc_);
-      if (OB_FAIL(bin_pool_.init(sizeof(ObXmlBin), tmp_alloc_))) {
-        LOG_WARN("fail to init binary pool", K(ret));
-      } else if (OB_FAIL(init_extend())) {
-        LOG_WARN("fail to init extend", K(ret));
-      }
-    } else if (doc_root->data_type() == OB_JSON_TYPE) {
-      // ret = bin_pool_.init(sizeof(ObJsonBin), tmp_alloc_);
+    extend_ = nullptr;
+    if (doc_root->data_type() == OB_JSON_TYPE) {
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("not supported yet", K(ret));
-    } else {
+    } else if (doc_root->data_type() != OB_XML_TYPE) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("can't be path node", K(ret));
     }
-  }
-  return ret;
-}
-
-int ObPathCtx::init_extend()
-{
-  INIT_SUCC(ret);
-  if (doc_root_->check_extend()) {
-    ObXmlBin* bin = static_cast<ObXmlBin*>(doc_root_);
-    ObXmlBin extend(doc_root_->get_mem_ctx());
-    extend_ = &extend;
-    if (OB_FAIL(bin->get_extend(extend))) {
-      LOG_WARN("fail to get extend", K(ret));
-    } else if (OB_FAIL(bin->remove_extend())) { 
-      LOG_WARN("fail to remove extend", K(ret));
-    } else if (OB_FAIL(alloc_new_bin(extend_))){
-      LOG_WARN("fail init extend", K(ret));
-    }
-  } else {
-    extend_ = nullptr; // without extend area
   }
   return ret;
 }
@@ -86,19 +57,11 @@ int ObPathCtx::reinit(ObIMulModeBase* doc, ObIAllocator *tmp_alloc)
   doc_root_ = doc; 
   tmp_alloc_ = tmp_alloc;
   ancestor_record_.reset(); 
-  bin_pool_.reset();
-  defined_ns_ = 0;
-  if (doc->data_type() == OB_XML_TYPE) {
-    if (OB_FAIL(bin_pool_.init(sizeof(ObXmlBin), tmp_alloc_))) {
-      LOG_WARN("fail to init binary pool", K(ret));
-    } else if (OB_FAIL(init_extend())) {
-      LOG_WARN("fail to init extend", K(ret));
-    }
-  } else if (doc->data_type() == OB_JSON_TYPE) {
-    // ret = bin_pool_.init(sizeof(ObJsonBin), tmp_alloc_);
+  extend_ = nullptr;
+  if (doc->data_type() == OB_JSON_TYPE) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not supported yet", K(ret));
-  } else {
+  } else if (doc->data_type() != OB_XML_TYPE) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("can't be path node", K(ret));
   }
@@ -111,37 +74,8 @@ int ObPathCtx::push_ancestor(ObIMulModeBase*& base_node)
   if (OB_ISNULL(base_node)) {
     ret = OB_BAD_NULL_ERROR;
     LOG_WARN("should not be null", K(ret));
-  } else if (base_node->is_tree()) { 
-    if (OB_FAIL(ancestor_record_.push(base_node))) {
-      LOG_WARN("should be inited", K(ret));
-    }
-  } else {
-    if (add_ns_ && base_node->check_if_defined_ns()) {
-      ++defined_ns_;
-    }
-    if (OB_FAIL(alloc_new_bin(base_node))) {
-      LOG_WARN("allocate xmlbin failed", K(ret));
-    } else if (OB_FAIL(ancestor_record_.push(base_node))) {
-      LOG_WARN("should be inited", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObPathCtx::alloc_new_bin(ObIMulModeBase*& base_node)
-{
-  INIT_SUCC(ret);
-  if (base_node->is_binary()) {
-    // is binary
-    ObXmlBin* bin_node = static_cast<ObXmlBin*>(base_node);
-    ObXmlBin* new_bin = static_cast<ObXmlBin*>(bin_pool_.alloc());
-    if (OB_ISNULL(new_bin)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate xmlbin failed", K(ret));
-    } else {
-      new_bin = new (new_bin) ObXmlBin(*bin_node, base_node->get_mem_ctx());
-      base_node = new_bin;
-    }
+  } else if (OB_FAIL(ancestor_record_.push(base_node))) {
+    LOG_WARN("should be inited", K(ret));
   }
   return ret;
 }
@@ -158,15 +92,8 @@ int ObPathCtx::pop_ancestor()
     if (OB_ISNULL(top)) {
       ret = OB_BAD_NULL_ERROR;
       LOG_WARN("should not be null", K(ret));
-    } else if (top->is_tree()) {
-      ancestor_record_.pop();
     } else {
-      if (add_ns_ && top->check_if_defined_ns()) {
-        --defined_ns_;
-      }
-      ObXmlBin* bin_top = static_cast<ObXmlBin*>(top);
       ancestor_record_.pop();
-      bin_pool_.free(bin_top);
     }
   }
   return ret;
@@ -1200,32 +1127,15 @@ bool ObPathUtil::check_need_cache(ObPathNode* path)
 int ObPathUtil::add_dup_if_missing(ObIAllocator* allocator, ObIMulModeBase*& path_res, ObIBaseSortedVector &dup, bool& end_seek)
 {
   INIT_SUCC(ret);
+  UNUSED(allocator);
   ObIMulModeBaseCmp cmp;
   ObIMulModeBaseUnique unique;
   ObIBaseSortedVector::iterator pos = dup.end();
   if (OB_ISNULL(path_res)) {
-  } else if (path_res->is_tree()) {
-    if ((OB_SUCC(dup.insert_unique(path_res, pos, cmp, unique)))) {
+  } else if (OB_SUCC(dup.insert_unique(path_res, pos, cmp, unique))) {
       end_seek = true;
-    } else if (ret == OB_CONFLICT_VALUE) {
-      ret = OB_SUCCESS; // confilict means found duplicated nodes, it is not an error.
-    }
-  } else if (OB_FAIL(dup.find(path_res, pos, cmp))) {
-    if (ret == OB_ENTRY_NOT_EXIST) { 
-      ObXmlBin* old_bin = static_cast<ObXmlBin*>(path_res);
-      ObXmlBin* new_ans = nullptr;
-      if (OB_FAIL(ObPathUtil::alloc_binary(allocator, new_ans))) {
-        LOG_WARN("fail to alloc", K(ret));
-      } else {
-        new_ans = new (new_ans) ObXmlBin(*old_bin);
-        pos = dup.end();
-        if (OB_FAIL(dup.insert(new_ans, pos, cmp))) {
-        } else if (OB_NOT_NULL(new_ans)) {
-          path_res = new_ans;
-          end_seek = true;
-        }
-      } // alloc binary
-    } // duplicate bin, do nothing
+  } else if (ret == OB_CONFLICT_VALUE) {
+    ret = OB_SUCCESS;
   }
   return ret;
 }
@@ -1564,17 +1474,7 @@ int ObSeekIterator::next_parent(ObPathCtx &ctx, ObIMulModeBase*& res)
     } else if (OB_FAIL(filter_ans(top, filtered))) {
       LOG_WARN("fail to filter", K(ret));
     } else if (filtered) {
-      if (top->is_tree()) {
-        ret = ctx.pop_ancestor();
-      } else {
-        // record parent 
-        ada_root_ = top;
-        if (OB_FAIL(ctx.alloc_new_bin(ada_root_))) {
-          LOG_WARN("fail to record parent", K(ret));
-        } else if (OB_FAIL(ctx.pop_ancestor())) {
-          LOG_WARN("fail to pop parent", K(ret));
-        }
-      }
+      ret = ctx.pop_ancestor();
       if (OB_FAIL(ret)) {
       } else {
         res = ada_root_;
@@ -1735,15 +1635,10 @@ int ObSeekAncestorIterator::next_ancestor(ObPathCtx &ctx, bool include_self, ObI
 int ObSeekAncestorIterator::anc_stack_push(ObPathCtx &ctx, ObIMulModeBase* push_node)
 {
   INIT_SUCC(ret);
+  UNUSED(ctx);
   if (OB_ISNULL(push_node)) {
     ret = OB_BAD_NULL_ERROR;
     LOG_WARN("should not be null", K(ret));
-  } else if (push_node->is_tree()) { 
-    if (OB_FAIL(anc_stack_.push(push_node))) {
-      LOG_WARN("should be inited", K(ret));
-    }
-  } else if (OB_FAIL(ctx.alloc_new_bin(push_node))) {
-    LOG_WARN("allocate xmlbin failed", K(ret));
   } else if (OB_FAIL(anc_stack_.push(push_node))) {
     LOG_WARN("should be inited", K(ret));
   }
@@ -1752,14 +1647,11 @@ int ObSeekAncestorIterator::anc_stack_push(ObPathCtx &ctx, ObIMulModeBase* push_
 
 void ObSeekAncestorIterator::anc_stack_pop(ObPathCtx &ctx)
 {
+  UNUSED(ctx);
   ObIMulModeBase* top = anc_stack_.top();
   if (OB_ISNULL(top)) {
-  } else if (top->is_tree()) {
-    anc_stack_.pop();
   } else {
-    ObXmlBin* bin_top = static_cast<ObXmlBin*>(top);
     anc_stack_.pop();
-    ctx.bin_pool_.free(bin_top);
   }
 }
 
@@ -1946,7 +1838,7 @@ int ObPathExprIter::open()
         LOG_WARN("fail to parse", K(ret));
       } else {
         path_node_ = parser.get_root();
-        ret = path_ctx_.init(ctx_, doc_, doc_, tmp_allocator_, true, need_record_, add_ns_);
+        ret = path_ctx_.init(ctx_, doc_, doc_, tmp_allocator_, true, need_record_);
         is_open_ = true;
       }
     }
@@ -2045,11 +1937,6 @@ int ObPathExprIter::get_next_node(ObIMulModeBase*& res)
         LOG_WARN("res is NULL", K(ret));
       } else if (OB_FAIL(ObPathUtil::add_dup_if_missing(tmp_allocator_, path_res.result_.base_, dup_, end_seek))) {
         LOG_WARN("fail to trans", K(ret));
-      } else if (add_ns_ && ((path_res.result_.base_->type() == M_ELEMENT && path_ctx_.defined_ns_ > 0)
-                 || ((path_res.result_.base_->type() == M_ELEMENT || path_res.result_.base_->type() == M_DOCUMENT
-                 || path_res.result_.base_->type() == M_CONTENT) && OB_NOT_NULL(path_ctx_.extend_)))
-                && OB_FAIL(ObPathUtil::add_ns_if_need(path_ctx_, path_res.result_.base_))) {
-        LOG_WARN("fail to add_ns", K(ret));
       } else if (end_seek) {
         res = path_res.result_.base_;
       }
@@ -2087,9 +1974,6 @@ int ObPathExprIter::reset(ObIMulModeBase* doc, ObIAllocator *tmp_allocator)
 
 void ObPathExprIter::set_add_ns(bool add_ns) { 
   add_ns_ = add_ns;
-  if (path_ctx_.is_inited()) {
-    path_ctx_.add_ns_ = add_ns;
-  }
 }
 
 
@@ -2832,12 +2716,6 @@ int ObPathUtil::get_seek_vec(ObPathCtx &ctx, ObPathNode *from_node, ObSeekVector
         if (OB_FAIL(res.push_back(path_res))) {
           LOG_WARN("fail to push", K(ret));
         }
-      } else if (path_res.result_.base_->is_tree()) {
-        if (OB_FAIL(res.push_back(path_res))) {
-          LOG_WARN("fail to push_back value into result", K(ret), K(res.size()));
-        }
-      } else if (OB_FAIL(ctx.alloc_new_bin(path_res.result_.base_))) {
-        LOG_WARN("fail to alloc", K(ret));
       } else if (OB_FAIL(res.push_back(path_res))) {
         LOG_WARN("fail to push_back value into result", K(ret), K(res.size()));
       }
@@ -2883,143 +2761,9 @@ int ObPathUtil::get_arg_type(ObArgType& arg_type, ObPathNode *path_node)
 
 int ObPathUtil::release_seek_vector(ObPathCtx &ctx, ObSeekVector& seek_vector)
 {
-  INIT_SUCC(ret);
-  bool need_release = true;
-  for (int i = 0; OB_SUCC(ret) && need_release &&  i < seek_vector.size(); ++i) {
-    ObSeekResult result = seek_vector[i];
-    if (!result.is_scalar_ && OB_NOT_NULL(result.result_.base_) && result.result_.base_->is_binary()) {
-      ObXmlBin* bin = static_cast<ObXmlBin*> (result.result_.base_);
-      ctx.bin_pool_.free(bin);
-    } else {
-      need_release = false;
-    }
-  }
-  return ret;
-}
-
-int ObPathUtil::collect_ancestor_ns(ObIMulModeBase* extend, 
-                                    ObStack<ObIMulModeBase*> &ancestor_record, 
-                                    ObXmlElement::NsMap &ns_map, 
-                                    ObArray<ObXmlAttribute*> &ns_vec,
-                                    common::ObIAllocator* tmp_alloc)
-{
-  INIT_SUCC(ret);
-  if (OB_ISNULL(tmp_alloc)) {
-  } else {
-    int size = ancestor_record.size();
-    for (int64_t pos = -1; OB_SUCC(ret) && pos < size; ++pos) {
-      // get parent node
-      ObXmlBin* current = nullptr;
-      int64_t attribute_num = 0;
-      if (pos == -1) {
-        if (OB_ISNULL(extend)) { // normal, means without extend
-        } else {
-          current = static_cast<ObXmlBin*>(extend);
-          attribute_num = current->attribute_size();
-        }
-      } else {
-        current = static_cast<ObXmlBin*>(ancestor_record.at(pos));
-        attribute_num = current->attribute_size();
-      }
-      bool not_att_or_ns = false;
-      for (int pos = 0; OB_SUCC(ret) && pos < attribute_num && !not_att_or_ns; ++pos) {
-        ObXmlBin buff(*current);
-        ObXmlBin* tmp = &buff;
-        if (OB_FAIL(current->construct(tmp, nullptr))) {
-          LOG_WARN("failed to dup bin.", K(ret));
-        } else if (OB_FAIL(tmp->set_at(pos))) {
-          LOG_WARN("failed to set at child.", K(ret));
-        } else if (tmp->type() == M_NAMESPACE) {
-          // get ns info
-          ObXmlAttribute* ns_node = nullptr;
-          ObString key;
-          ObString value;
-          // init ns node
-          if (OB_FAIL(tmp->get_key(key))) {
-            LOG_WARN("failed to eval key.", K(ret));
-          } else if (OB_FAIL(tmp->get_value(value))) {
-            LOG_WARN("failed to eval value.", K(ret));
-          } else if (OB_ISNULL(ns_node = static_cast<ObXmlAttribute*>(tmp_alloc->alloc(sizeof(ObXmlAttribute))))) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("failed to allocate attribute node.", K(ret));
-          } else {
-            ns_node = new(ns_node) ObXmlAttribute(ObMulModeNodeType::M_NAMESPACE, current->ctx_);
-            ns_node->set_xml_key(key);
-            ns_node->set_value(value);
-            ret = ns_vec.push_back(ns_node);
-          }
-          
-          // if found duplicate key, overwrite
-          if (OB_FAIL(ret)) {
-          } else if (OB_NOT_NULL(ns_map.get(key)) && OB_FAIL(ns_map.erase_refactored(key))) {
-            LOG_WARN("fail to delete ns from map", K(ret), K(key));
-          } else if (OB_FAIL(ns_map.set_refactored(key, ns_vec[ns_vec.size() - 1]))) {
-            LOG_WARN("fail to add ns from map", K(ret), K(key));
-          }
-        } else if (tmp->type() == M_ATTRIBUTE) {
-        } else {
-          not_att_or_ns = true;  // neither ns nor attribute, stop searching
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObPathUtil::add_ns_if_need(ObPathCtx &ctx, ObIMulModeBase*& res)
-{
-  INIT_SUCC(ret);
-  if (!ctx.is_inited()) {
-    ret = OB_INIT_FAIL;
-    LOG_WARN("should be inited", K(ret));
-  } else if (ctx.doc_root_->is_tree()) { // do not need add ns
-  } else if (ctx.defined_ns_ > 0 || (OB_NOT_NULL(ctx.extend_) && ctx.extend_->attribute_size() > 0)) {
-    ObXmlBin* bin = static_cast<ObXmlBin*>(res);
-    ObXmlElement::NsMap ns_map;
-    ObXmlElement::NsMap::iterator ns_map_iter;
-    // be used as ns node buffer pool
-    ObArray<ObXmlAttribute*> ns_vec;
-    ns_vec.set_block_size(PATH_DEFAULT_PAGE_SIZE);
-    int map_size = (ctx.ancestor_record_.size() > 0 ) ? 4 * ctx.ancestor_record_.size() : ctx.extend_->attribute_size();
-    if (OB_FAIL(ns_map.create(map_size, "PATH_PARENT_NS"))) {
-      LOG_WARN("ns map create failed", K(ret));
-    } else if (OB_FAIL(collect_ancestor_ns(ctx.extend_, ctx.ancestor_record_, ns_map, ns_vec, ctx.get_tmp_alloc()))) {
-      LOG_WARN("ns map init failed", K(ret));
-    } else {
-      ObXmlElement element_ns(ObMulModeNodeType::M_ELEMENT, ctx.doc_root_->get_mem_ctx());
-      ret = element_ns.init();
-      for (ns_map_iter = ns_map.begin(); OB_SUCC(ret) && ns_map_iter != ns_map.end(); ns_map_iter++) {
-        if (OB_FAIL(element_ns.add_attribute(ns_map_iter->second))) {
-          LOG_WARN("fail to add ns", K(ret));
-        }
-      }
-      // serialize element node as extend area
-      if (OB_SUCC(ret) && (OB_FAIL(bin->append_extend(&element_ns)))) {
-        LOG_WARN("fail to append extend", K(ret));
-      }
-    }
-    ns_map.clear();
-    ns_vec.destroy();
-  } // need to add ns
-  return ret;
-}
-
-int ObPathUtil::alloc_binary(common::ObIAllocator *allocator, ObXmlBin*& bin)
-{
-  INIT_SUCC(ret);
-  if (OB_ISNULL(allocator)) {
-    ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("should not be null", K(ret));
-  } else {
-    ObXmlBin* bin_node = static_cast<ObXmlBin*> (allocator->alloc(sizeof(ObXmlBin)));
-    if (OB_ISNULL(bin_node)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate row buffer failed at path_node", K(ret));
-    } else {
-      bin = bin_node;
-    }
-  }
-  return ret;
+  UNUSED(ctx);
+  UNUSED(seek_vector);
+  return OB_SUCCESS;
 }
 
 int ObPathUtil::alloc_iterator(common::ObIAllocator *allocator, ObSeekIterator*& ada)

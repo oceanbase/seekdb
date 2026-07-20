@@ -20,6 +20,7 @@
 #define private public
 #define protected public
 
+#include "storage/multi_data_source/common_define.h"
 #include "storage/multi_data_source/mds_row.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
 namespace oceanbase {

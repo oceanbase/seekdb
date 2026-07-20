@@ -155,15 +155,6 @@ public:
             || stmt_type_ == stmt::T_UPDATE;
   }
 
-  bool is_allowed_reroute() const
-  {
-    return (stmt_type_ == stmt::T_SELECT
-            || stmt_type_ == stmt::T_DELETE
-            || stmt_type_ == stmt::T_UPDATE
-            || stmt_type_ == stmt::T_INSERT
-            || stmt_type_ == stmt::T_REPLACE);
-  }
-
   inline bool is_support_instead_of_trigger_stmt() const {
     return stmt::T_DELETE == stmt_type_
            || stmt::T_UPDATE == stmt_type_

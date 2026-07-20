@@ -200,12 +200,6 @@ private:
                                  ObRawExpr *&expr);
   int process_sql_udt_construct_node(const ParseNode *node, ObRawExpr *&expr);
   int process_array_contains_node(const ParseNode *node, ObRawExpr *&expr);
-  void get_special_func_ident_name(ObString &ident_name, ObItemType func_type);
-  int process_xml_element_node(const ParseNode *node, ObRawExpr *&expr);
-  int process_xml_attributes_values_node(const ParseNode *node, ObRawExpr *&expr);
-  int process_xml_attributes_node(const ParseNode *node, ObRawExpr *&expr);
-  int process_xmlparse_node(const ParseNode *node, ObRawExpr *&expr);
-  int process_xml_forest_node(const ParseNode *node, ObRawExpr *&expr);
   int remove_format_json_opt_in_pl(ParseNode *node, int8_t expr_flag);
   int remove_strict_opt_in_pl(ParseNode *node, int8_t expr_flag);
   int process_lambda_func_node(const ParseNode *node, ObRawExpr *&expr);

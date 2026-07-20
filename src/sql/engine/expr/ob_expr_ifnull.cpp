@@ -60,9 +60,6 @@ int ObExprIfNull::calc_result_type2(ObExprResType &type,
     } else if (OB_FAIL(aggregate_charsets_for_string_result(type, &res_types.at(0), 2, type_ctx))) {
       LOG_WARN("failed to aggregate_charsets_for_comparison", K(ret));
     }
-  } else if (ob_is_roaringbitmap_tc(type.get_type())) {
-    type.set_collation_level(CS_LEVEL_IMPLICIT);
-    type.set_collation_type(CS_TYPE_BINARY);
   }
 
   if (OB_FAIL(ret)) {

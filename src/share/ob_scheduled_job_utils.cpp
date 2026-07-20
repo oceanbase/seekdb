@@ -92,7 +92,7 @@ int ObScheduledJobUtils::check_job_exists(common::ObMySQLProxy *sql_proxy,
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy);
+      auto &sql_client_retry_weak = *sql_proxy;
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(select_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {

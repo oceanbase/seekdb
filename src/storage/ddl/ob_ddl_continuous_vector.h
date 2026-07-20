@@ -1,0 +1,170 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#pragma once
+
+#include "sql/engine/vector/ob_continuous_base.h"
+#include "storage/ddl/ob_ddl_vector.h"
+#include "common/object/ob_object.h"
+
+namespace oceanbase
+{
+namespace storage
+{
+class ObDDLContinuousVector final : public ObDDLVector
+{
+  static const int64_t ALLOC_PAGE_SIZE = 8LL << 10; // 8K
+public:
+  ObDDLContinuousVector(ObContinuousBase *continuous_vector);
+  ~ObDDLContinuousVector() override;
+
+  ObIVector *get_vector() const override { return continuous_vector_; }
+  int64_t memory_usage() const override { return capacity_; }
+  int64_t bytes_usage(const int64_t batch_size) const override { return size_; }
+  void sum_bytes_usage(int64_t *sum_bytes, const int64_t batch_size) const override
+  {
+    for (int64_t i = 0; i < batch_size; ++i) {
+      sum_bytes[i] += (offsets_[i + 1] - offsets_[i]);
+    }
+  }
+
+  int sum_lob_length(int64_t *sum_bytes, const int64_t batch_size) const override
+  {
+    int ret = OB_SUCCESS;
+
+    for (int64_t i = 0; OB_SUCC(ret) && i < batch_size; ++i) {
+      const uint32_t offset1 = offsets_[i];
+      const uint32_t offset2 = offsets_[i + 1];
+      const int32_t len = offset2 - offset1;
+      if (len > 0) {
+        const char *row_data = data_ + offset1;
+        ObLobLocatorV2 locator(ObString(len, row_data), true);
+        int64_t lob_length = 0;
+        if (OB_FAIL(locator.get_lob_data_byte_len(lob_length))) {
+          STORAGE_LOG(WARN, "fail to get lob data byte len", KR(ret), K(locator));
+        } else {
+          sum_bytes[i] += lob_length + sizeof(ObLobCommon);
+        }
+      }
+    }
+    return ret;
+  }
+
+  void reuse(const int64_t batch_size) override;
+
+  // --------- append interface --------- //
+  int append_default(const int64_t batch_idx) override
+  {
+    offsets_[batch_idx + 1] = size_;
+    return OB_SUCCESS;
+  }
+  int append_default(const int64_t batch_idx, const int64_t size) override
+  {
+    for (int64_t i = 0; i < size; ++i) {
+      offsets_[batch_idx + i + 1] = size_;
+    }
+    return OB_SUCCESS;
+  }
+  int append_datum(const int64_t batch_idx, const ObDatum &datum) override;
+  int append_batch(const int64_t batch_idx, const ObDDLVector &src, const int64_t offset,
+                   const int64_t size) override;
+  int append_batch(const int64_t batch_idx, ObIVector *src, const int64_t offset,
+                   const int64_t size) override;
+  int append_batch(const int64_t batch_idx, const ObDatumVector &datum_vec, const int64_t offset,
+                   const int64_t size) override;
+  int append_selective(const int64_t batch_idx, const ObDDLVector &src,
+                       const uint16_t *selector, const int64_t size) override;
+  int append_selective(const int64_t batch_idx, ObIVector *src, const uint16_t *selector,
+                       const int64_t size) override;
+  int append_selective(const int64_t batch_idx, const ObDatumVector &datum_vec,
+                       const uint16_t *selector, const int64_t size) override;
+
+  // --------- set interface --------- //
+  int set_default(const int64_t batch_idx) override { return OB_NOT_SUPPORTED; }
+  int set_datum(const int64_t batch_idx, const ObDatum &datum) override { return OB_NOT_SUPPORTED; }
+
+  // --------- shallow copy interface --------- //
+  int shallow_copy(ObIVector *src, const int64_t batch_size) override;
+  int shallow_copy(const ObDatumVector &datum_vec, const int64_t batch_size) override;
+
+  // --------- get interface --------- //
+  int get_datum(const int64_t batch_idx, ObDatum &datum) override
+  {
+    datum.set_none();
+    datum.ptr_ = data_ + offsets_[batch_idx];
+    datum.len_ = offsets_[batch_idx + 1] - offsets_[batch_idx];
+    return OB_SUCCESS;
+  }
+
+  VIRTUAL_TO_STRING_KV(KPC_(continuous_vector), KP_(offsets), KP_(data), K_(capacity), K_(size));
+
+protected:
+  int expand(const int64_t need_size);
+
+protected:
+  template <typename VEC>
+  inline int _append_batch(const int64_t batch_idx, VEC *vec, const int64_t offset,
+                           const int64_t size)
+  {
+    return OB_ERR_UNEXPECTED;
+  }
+  template <bool IS_CONST>
+  inline int _append_batch(const int64_t batch_idx, const ObDatum *datums, const int64_t offset,
+                           const int64_t size);
+  template <typename VEC>
+  inline int _append_selective(const int64_t batch_idx, VEC *vec, const uint16_t *selector,
+                               const int64_t size)
+  {
+    return OB_ERR_UNEXPECTED;
+  }
+  template <bool IS_CONST>
+  inline int _append_selective(const int64_t batch_idx, const ObDatum *datums,
+                               const uint16_t *selector, const int64_t size);
+
+  template <typename VEC>
+  inline int _shallow_copy(VEC *vec, const int64_t batch_size)
+  {
+    return OB_ERR_UNEXPECTED;
+  }
+  template <bool IS_CONST>
+  inline int _shallow_copy(const ObDatum *datums, const int64_t batch_size);
+
+protected:
+  inline void set_vector(uint32_t *offsets, char *data)
+  {
+    offsets_ = offsets;
+    data_ = data;
+    continuous_vector_->set_offsets(offsets);
+    continuous_vector_->set_data(data);
+  }
+  inline void set_data(char *data)
+  {
+    data_ = data;
+    continuous_vector_->set_data(data);
+  }
+
+protected:
+  ObContinuousBase *const continuous_vector_;
+  uint32_t *vec_offsets_;
+  uint32_t *offsets_;
+  char *data_;
+  char *buf_;
+  int64_t capacity_;
+  int64_t size_;
+};
+
+} // namespace storage
+} // namespace oceanbase

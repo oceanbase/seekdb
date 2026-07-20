@@ -24,7 +24,6 @@
 #include "sql/session/ob_sql_session_info.h"
 #include "lib/compress/zstd_1_3_8/ob_zstd_wrapper.h"
 #include "lib/compress/ob_compress_util.h"
-#include "share/table/ob_table_load_define.h"
 #include "sql/engine/ob_exec_context.h"
 
 namespace oceanbase
@@ -33,6 +32,7 @@ namespace sql
 {
 
 const ObLabel MEMORY_LABEL = ObLabel("LoadDataReader");
+static constexpr uint64_t OB_STORAGE_ID_LOAD_DATA = 2000;
 
 #define MEMORY_ATTR ObMemAttr(MEMORY_LABEL)
 
@@ -273,7 +273,9 @@ int ObRandomOSSReader::open(const share::ObBackupStorageInfo &storage_info, cons
     ret = OB_INIT_TWICE;
     LOG_WARN("ObRandomOSSReader init twice", KR(ret), KP(this));
   } else if (OB_FAIL(
-        util.get_and_init_device(device_handle_, &storage_info, filename, ObStorageIdMod(table::OB_STORAGE_ID_DDL, ObStorageUsedMod::STORAGE_USED_DDL)))) {
+        util.get_and_init_device(device_handle_, &storage_info, filename,
+                                 ObStorageIdMod(OB_STORAGE_ID_LOAD_DATA,
+                                                ObStorageUsedMod::STORAGE_USED_DDL)))) {
     LOG_WARN("fail to get device manager", KR(ret), K(filename));
   } else if (OB_FAIL(util.set_access_type(&iod_opts, false, 1))) {
     LOG_WARN("fail to set access type", KR(ret));

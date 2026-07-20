@@ -490,13 +490,11 @@ int ObTransformAggrSubquery::check_aggr_first_validity(ObDMLStmt &stmt,
   any_all_to_aggr = false;
   exists_to_aggr = false;
   limit_value = -1;
-  uint64_t opt_version = 0;
   bool check_match_index = true;
   bool hint_allowed_transform = false;
   if (OB_ISNULL(subquery = query_ref.get_ref_stmt()) || OB_ISNULL(stmt.get_query_ctx()) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("subquery is null", K(ret));
-  } else if (OB_FALSE_IT(opt_version = stmt.get_query_ctx()->optimizer_features_enable_version_)) {
   } else if (OB_FAIL(check_nested_subquery(query_ref, is_valid))) {
     LOG_WARN("failed to check nested subquery", K(ret));
   } else if (!is_valid) {

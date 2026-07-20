@@ -66,11 +66,7 @@ int ObMPStmtReset::process()
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL or invalid", K(ret), K(session));
-  } else if (OB_FAIL(process_kill_client_session(*session))) {
-    LOG_WARN("client session has been killed", K(ret));
   } else if (FALSE_IT(need_disconnect = false)) {
-  } else if (OB_FAIL(update_transmission_checksum_flag(*session))) {
-    LOG_WARN("update transmisson checksum flag failed", K(ret));
   } else {
     ObPieceCache *piece_cache = session->get_piece_cache();
     int64_t param_num = 0;
@@ -123,7 +119,6 @@ int ObMPStmtReset::process()
   if (OB_SUCC(ret)) {
     ObOKPParam ok_param;
     ok_param.affected_rows_ = 0;
-    ok_param.is_partition_hit_ = session->partition_hit().get_bool();
     ok_param.has_more_result_ = false;
     if (OB_FAIL(send_ok_packet(*session, ok_param))) {
       LOG_WARN("send ok packet fail.", K(ret), K(stmt_id_));

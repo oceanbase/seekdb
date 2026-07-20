@@ -156,7 +156,7 @@ int ObGVTxLockStat::inner_get_next_row(ObNewRow *&row)
         break;
       case OB_APP_MIN_COLUMN_ID + 3:
         // session_id
-        cur_row_.cells_[i].set_int(tx_lock_stat.get_client_sid());
+        cur_row_.cells_[i].set_int(tx_lock_stat.get_session_id());
         break;
       case OB_APP_MIN_COLUMN_ID + 4:
         // tx_ctx_create_time

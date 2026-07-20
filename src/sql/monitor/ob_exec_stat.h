@@ -279,7 +279,6 @@ struct ObAuditRecordData {
     plan_hash_ = 0;
     trx_lock_for_read_elapse_ = 0;
     params_value_len_ = 0;
-    partition_hit_ = true;
     is_perf_event_closed_ = false;
     pl_trace_id_.reset();
     stmt_type_ = sql::stmt::T_NONE;
@@ -332,9 +331,8 @@ struct ObAuditRecordData {
   int status_; //error code
   common::ObCurTraceId::TraceId trace_id_;
   int64_t request_id_; //set by request_manager automatic when add record
-  int64_t execution_id_;  //used to jion v$sql_plan_monitor
+  int64_t execution_id_;
   uint64_t session_id_;
-  uint64_t proxy_session_id_;
   uint64_t qc_id_;  //px framework id
   int64_t dfo_id_;
   int64_t sqc_id_;
@@ -391,9 +389,6 @@ struct ObAuditRecordData {
     char const* source_;   // snapshot's acquire source
   } snapshot_; // stmt's tx snapshot
   int64_t seq_num_; // sequence num, for sequencing stmts in transaction
-  uint64_t txn_free_route_flag_; // flag contains txn free route meta
-  uint64_t txn_free_route_version_; // the version of txn's state
-  bool partition_hit_;// flag for need das partition route or not
   bool is_perf_event_closed_;
   char flt_trace_id_[OB_MAX_UUID_STR_LENGTH + 1];
   char snapshot_source_[OB_MAX_SNAPSHOT_SOURCE_LENGTH + 1];
@@ -413,4 +408,3 @@ struct ObAuditRecordData {
 } //namespace sql
 } //namespace oceanbase
 #endif
-

@@ -31,27 +31,11 @@ namespace common
 {
 
 class ObObjectStorageInfo;
-class ObTenantStsCredentialMgr : public ObTenantStsCredentialBaseMgr
-{
-public:
-  ObTenantStsCredentialMgr() {}
-  virtual ~ObTenantStsCredentialMgr() {}
-  virtual int get_sts_credential(char *sts_credential, const int64_t sts_credential_buf_len) override;
-  virtual int check_sts_credential(common::ObServerConfig *tenant_config) const;
-  static ObTenantStsCredentialBaseMgr &get_instance()
-  {
-    static ObTenantStsCredentialMgr mgr;
-    return mgr;
-  }
-  const static int64_t LOG_INTERVAL_US = 5 * 1000 * 1000; // 5s
-};
-
 class ObClusterVersionMgr: public ObClusterVersionBaseMgr
 {
 public:
   ObClusterVersionMgr() {}
   virtual ~ObClusterVersionMgr() {}
-  virtual int is_supported_assume_version() const override;
   virtual int is_supported_enable_worm_version() const override;
   virtual int is_supported_azblob_version() const override;
   static ObClusterVersionMgr &get_instance()

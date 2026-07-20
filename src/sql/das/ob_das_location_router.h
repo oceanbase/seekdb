@@ -20,7 +20,6 @@
 #include "share/schema/ob_schema_struct.h"
 #include "lib/container/ob_fixed_array.h"
 #include "sql/das/ob_das_define.h"
-#include "sql/optimizer/ob_route_policy.h"
 namespace oceanbase
 {
 namespace common

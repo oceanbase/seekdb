@@ -1621,7 +1621,6 @@ int ObJsonExprHelper::set_dest_type(ObExprResType &type1,
       LOG_USER_ERROR(OB_ERR_TOO_BIG_PRECISION, scale, "CAST", OB_MAX_DATETIME_PRECISION);
     }
     if (OB_SUCC(ret)) {
-      ObCompatibilityMode compatibility_mode = get_compatibility_mode();
       ObCollationType collation_connection = type_ctx.get_coll_type();
       ObCollationType collation_nation = session->get_nls_collation_nation();
       int32_t length = 0;
@@ -1653,7 +1652,7 @@ int ObJsonExprHelper::set_dest_type(ObExprResType &type1,
         if (ObNumberTC == dst_type.get_type_class() && 0 == dst_type.get_precision()) {
           // A zero precision number uses the default accuracy for the current
           // compatibility mode.
-          type.set_precision(ObAccuracy::DDL_DEFAULT_ACCURACY2[compatibility_mode][ObNumberType].get_precision());
+          type.set_precision(ObAccuracy::DDL_DEFAULT_ACCURACY2[0][ObNumberType].get_precision());
         } else if (ObDecimalIntTC == dst_type.get_type_class() && 0 == dst_type.get_precision()) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("dst type is decimal int, but precision is zero", K(ret), K(dst_type));

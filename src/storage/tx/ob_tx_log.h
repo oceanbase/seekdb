@@ -81,7 +81,6 @@ enum class ObTxLogType : int64_t
   TX_REDO_LOG = 0x1,
   TX_ROLLBACK_TO_LOG = 0x2,
   TX_MULTI_DATA_SOURCE_LOG = 0x4,
-  TX_DIRECT_LOAD_INC_LOG = 0x8,
   TX_RECORD_LOG = 0x20,
   TX_COMMIT_INFO_LOG = 0x40,
   TX_COMMIT_LOG = 0x100,
@@ -137,7 +136,6 @@ static inline ObTxLogType operator|(const ObTxLogType left, const ObTxLogType ri
 static const ObTxLogType TX_LOG_TYPE_MASK = (ObTxLogType::TX_REDO_LOG |
                                              ObTxLogType::TX_ROLLBACK_TO_LOG |
                                              ObTxLogType::TX_MULTI_DATA_SOURCE_LOG |
-                                             ObTxLogType::TX_DIRECT_LOAD_INC_LOG |
                                              ObTxLogType::TX_RECORD_LOG |
                                              ObTxLogType::TX_COMMIT_INFO_LOG |
                                              ObTxLogType::TX_COMMIT_LOG |
@@ -150,8 +148,7 @@ public:
   {
     return ObTxLogType::TX_REDO_LOG == log_type || ObTxLogType::TX_RECORD_LOG == log_type
            || ObTxLogType::TX_ROLLBACK_TO_LOG == log_type
-           || ObTxLogType::TX_MULTI_DATA_SOURCE_LOG == log_type
-           || ObTxLogType::TX_DIRECT_LOAD_INC_LOG == log_type;
+           || ObTxLogType::TX_MULTI_DATA_SOURCE_LOG == log_type;
   }
   static bool is_state_log(const ObTxLogType log_type)
   {
@@ -169,11 +166,7 @@ public:
   }
   static bool can_be_spilt(const ObTxLogType log_type)
   {
-    return ObTxLogType::TX_MULTI_DATA_SOURCE_LOG == log_type
-  #ifdef OB_TX_LOG_TEST
-           || ObTxLogType::TX_COMMIT_INFO_LOG == log_type
-  #endif
-        ;
+    return ObTxLogType::TX_MULTI_DATA_SOURCE_LOG == log_type;
   }
 
   static logservice::ObReplayBarrierType
@@ -337,98 +330,6 @@ private:
   ObTxBufferNodeArray data_;
 };
 
-class ObTxDLIncLogBuf
-{
-public:
-  NEED_SERIALIZE_AND_DESERIALIZE;
-
-  ObTxDLIncLogBuf() : submit_buf_(nullptr), replay_buf_(nullptr), dli_buf_size_(0), is_alloc_(false)
-  {}
-  // ObTxDLIncLogBuf(void *buf, const int64_t buf_size)
-  //     : dli_buf_(buf), dli_buf_size_(buf_size), is_alloc_(false)
-  // {}
-
-  template <typename DDL_LOG>
-  int serialize_log_object(const DDL_LOG *ddl_log)
-  {
-    int ret = OB_SUCCESS;
-    if (OB_NOT_NULL(submit_buf_) || dli_buf_size_ > 0 || is_alloc_ || OB_ISNULL(ddl_log)) {
-      ret = OB_INVALID_ARGUMENT;
-      TRANS_LOG(WARN, "invalid arguments", K(ret), KPC(this), KPC(ddl_log));
-    } else {
-      is_alloc_ = true;
-      dli_buf_size_ = ddl_log->get_serialize_size();
-      submit_buf_ = static_cast<char *>(share::mtl_malloc(dli_buf_size_, "DLI_TMP_BUF")); 
-      int64_t pos = 0;
-      if (OB_ISNULL(submit_buf_)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        TRANS_LOG(WARN, "alloc memory failed", K(ret), KPC(this), KPC(ddl_log));
-      } else if (OB_FALSE_IT(memset(submit_buf_, 0, dli_buf_size_))) {
-        // do nothing
-      } else if (OB_FAIL(ddl_log->serialize(static_cast<char *>(submit_buf_), dli_buf_size_, pos))) {
-        TRANS_LOG(WARN, "serialize ddl log buf failed", K(ret), KPC(this), KPC(ddl_log));
-      }
-
-      // TRANS_LOG(INFO, "serialize ddl log object", K(ret), KPC(ddl_log), K(pos),
-      // K(dli_buf_size_)); int tmp_ret = OB_SUCCESS; int64_t tmp_pos = 0; DDL_LOG tmp_ddl_log; if
-      // (OB_TMP_FAIL(tmp_ddl_log.deserialize(submit_buf_, dli_buf_size_, tmp_pos))) {
-      //   TRANS_LOG(WARN, "deserialize ddl log buf failed", K(ret), K(tmp_ret), KPC(this),
-      //             K(tmp_ddl_log), KPC(ddl_log));
-      // }
-
-#ifdef ENABLE_DEBUG_LOG
-      TRANS_LOG(INFO, "<ObTxDirectLoadIncLog> serialize ddl log object", K(ret), KP(submit_buf_),
-                K(pos), K(dli_buf_size_), KPC(ddl_log));
-#endif
-    }
-    return ret;
-  }
-
-  template <typename DDL_LOG>
-  int deserialize_log_object(DDL_LOG *ddl_log) const
-  {
-    int ret = OB_SUCCESS;
-    int64_t pos = 0;
-    if (OB_ISNULL(replay_buf_) || dli_buf_size_ <= 0 || OB_ISNULL(ddl_log)) {
-      ret = OB_INVALID_ARGUMENT;
-      TRANS_LOG(WARN, "invalid arguments", K(ret), KPC(this), KPC(ddl_log));
-    } else if (OB_FAIL(ddl_log->deserialize(replay_buf_, dli_buf_size_, pos))) {
-      TRANS_LOG(WARN, "deserialize ddl log buf failed", K(ret), KPC(this), KPC(ddl_log));
-    }
-
-#ifdef ENABLE_DEBUG_LOG
-    TRANS_LOG(INFO, "<ObTxDirectLoadIncLog> deserialize ddl log object", K(ret), KP(replay_buf_),
-              K(pos), K(dli_buf_size_), KPC(ddl_log));
-#endif
-    return ret;
-  }
-
-  const char *get_buf() { return replay_buf_; }
-  int64_t get_buf_size() { return dli_buf_size_; }
-
-  void reset()
-  {
-    if (is_alloc_) {
-      if (OB_NOT_NULL(submit_buf_)) {
-        share::mtl_free(submit_buf_);
-      }
-      is_alloc_ = false;
-    }
-    submit_buf_ = nullptr;
-    dli_buf_size_ = 0;
-  }
-
-  ~ObTxDLIncLogBuf() { reset(); }
-  TO_STRING_KV(KP(submit_buf_), KP(replay_buf_), K(dli_buf_size_), K(is_alloc_));
-
-private:
-  char *submit_buf_;
-  const char *replay_buf_;
-  int64_t dli_buf_size_;
-
-  bool is_alloc_;
-};
-
 class TxSubmitBaseArg
 {
 public:
@@ -473,114 +374,6 @@ public:
   void reset() { part_log_no_ = -1; }
   bool is_valid() { return part_log_no_ > 0; }
   TO_STRING_KV(K(part_log_no_));
-};
-
-class ObTxDirectLoadIncLog
-{
-  OB_UNIS_VERSION(1);
-
-public:
-  enum class DirectLoadIncLogType
-  {
-    UNKNOWN = 0,
-    DLI_REDO = 1,
-    DLI_START = 2,
-    DLI_END = 3
-  };
-
-  class TempRef
-  {
-  public:
-    // empty class, only for template
-    ObTxDLIncLogBuf dli_log_buf_;
-  };
-  class ConstructArg
-  {
-  public:
-    DirectLoadIncLogType ddl_log_type_;
-    ObDDLIncLogBasic batch_key_;
-    ObTxDLIncLogBuf &dli_buf_;
-
-    TO_STRING_KV(K(ddl_log_type_), K(batch_key_), K(dli_buf_));
-
-    ConstructArg(DirectLoadIncLogType ddl_log_type,
-                 const ObDDLIncLogBasic &batch_key,
-                 ObTxDLIncLogBuf &dli_buf_ref)
-        : ddl_log_type_(ddl_log_type), batch_key_(batch_key), dli_buf_(dli_buf_ref)
-    {}
-    ConstructArg(ObTxDirectLoadIncLog::TempRef &temp_ref)
-        : ddl_log_type_(DirectLoadIncLogType::UNKNOWN), batch_key_(),
-          dli_buf_(temp_ref.dli_log_buf_)
-    {}
-  };
-  class ReplayArg : public oceanbase::transaction::TxReplayBaseArg
-  {
-  public:
-    ObLSDDLLogHandler *ddl_log_handler_ptr_;
-    DirectLoadIncLogType ddl_log_type_;
-    ObDDLIncLogBasic batch_key_;
-
-    ReplayArg() { reset(); }
-    void reset()
-    {
-      oceanbase::transaction::TxReplayBaseArg::reset();
-      ddl_log_handler_ptr_ = nullptr;
-      ddl_log_type_ = DirectLoadIncLogType::UNKNOWN;
-      batch_key_.reset();
-    }
-    INHERIT_TO_STRING_KV("base_replay_arg_",
-                         oceanbase::transaction::TxReplayBaseArg,
-                         KP(ddl_log_handler_ptr_),
-                         K(ddl_log_type_),
-                         K(batch_key_));
-  };
-  class SubmitArg : public oceanbase::transaction::TxSubmitBaseArg
-  {
-  public:
-    logservice::AppendCb *extra_cb_;
-    bool need_free_extra_cb_;
-
-    SubmitArg() { reset(); }
-    void reset()
-    {
-      oceanbase::transaction::TxSubmitBaseArg::reset();
-      extra_cb_ = nullptr;
-      need_free_extra_cb_ = false;
-    }
-    INHERIT_TO_STRING_KV("base_submit_arg_",
-                         oceanbase::transaction::TxSubmitBaseArg,
-                         KPC(extra_cb_), K(need_free_extra_cb_));
-  };
-
-  ObTxDirectLoadIncLog(const ObTxDirectLoadIncLog::ConstructArg &arg)
-      : ddl_log_type_(arg.ddl_log_type_), log_buf_(arg.dli_buf_)
-  {}
-
-  // const ObDDLRedoLog &get_ddl_redo_log() { return ddl_redo_log_; }
-
-  DirectLoadIncLogType get_ddl_log_type() { return ddl_log_type_; }
-  const ObTxDLIncLogBuf &get_dli_buf() { return log_buf_; }
-
-  int ob_admin_dump(share::ObAdminMutatorStringArg &arg);
-
-  static const ObTxLogType LOG_TYPE;
-  TO_STRING_KV(K(LOG_TYPE), K(ddl_log_type_), K(log_buf_));
-
-#ifdef ENABLE_DEBUG_LOG
-  // only for unittest
-  static int64_t direct_load_inc_submit_log_cnt_;
-  static int64_t direct_load_inc_apply_log_cnt_;
-  static int64_t direct_load_inc_submit_log_size_;
-  static int64_t direct_load_inc_apply_log_size_;
-
-#endif
-
-private:
-  DirectLoadIncLogType ddl_log_type_;
-
-  ObTxDLIncLogBuf &log_buf_;
-  // ObDDLRedoLog &ddl_redo_log_;
-  ObDDLIncLogBasic batch_key_;
 };
 
 class ObTxCommitInfoLogTempRef
@@ -870,7 +663,6 @@ public:
 public:
   void reset()
   {
-    org_cluster_id_ = 0;
     cluster_version_ = 0;
     log_entry_no_ = 0;
     tx_id_ = 0;
@@ -880,37 +672,32 @@ public:
   {
     reset();
   };
-  ObTxLogBlockHeader(const uint64_t org_cluster_id,
-                     const int64_t cluster_version,
+  ObTxLogBlockHeader(const int64_t cluster_version,
                      const int64_t log_entry_no,
                      const ObTransID &tx_id)
     : __log_entry_no_(log_entry_no_), flags_(0)
   {
-    init(org_cluster_id, cluster_version, log_entry_no, tx_id);
+    init(cluster_version, log_entry_no, tx_id);
   }
-  void init(const uint64_t org_cluster_id,
-            const int64_t cluster_version,
+  void init(const int64_t cluster_version,
             const int64_t log_entry_no,
             const ObTransID &tx_id) {
-    org_cluster_id_ = org_cluster_id;
     cluster_version_ = cluster_version;
     log_entry_no_ = log_entry_no;
     tx_id_ = tx_id;
     flags_ = 0;
   }
-  uint64_t get_org_cluster_id() const { return org_cluster_id_; }
   int64_t get_cluster_version() const { return cluster_version_; }
   int64_t get_log_entry_no() const { return log_entry_no_; }
   void set_log_entry_no(int64_t entry_no) { log_entry_no_ = entry_no; }
   const ObTransID &get_tx_id() const { return tx_id_; }
 
-  bool is_valid() const { return org_cluster_id_ >= 0; }
   void set_serial_final() { flags_ |= SERIAL_FINAL; }
   bool is_serial_final() const { return (flags_ & SERIAL_FINAL) == SERIAL_FINAL; }
   void set_has_async_index() { flags_ |= HAS_ASYNC_INDEX; }
   bool has_async_index() const { return (flags_ & HAS_ASYNC_INDEX) == HAS_ASYNC_INDEX; }
   uint8_t flags() const { return flags_; }
-  TO_STRING_KV(K_(org_cluster_id), K_(cluster_version), K_(log_entry_no), K_(tx_id), K_(flags));
+  TO_STRING_KV(K_(cluster_version), K_(log_entry_no), K_(tx_id), K_(flags));
 
 public:
   // the last serial log
@@ -918,7 +705,6 @@ public:
   // tx contains redo that involves tables with async indexes (for Change Stream fast filtering)
   static const uint8_t HAS_ASYNC_INDEX = ((uint8_t)1) << 1;
 private:
-  uint64_t org_cluster_id_;
   int64_t cluster_version_;
   int64_t log_entry_no_;
   FixSizeTrait_int64_t __log_entry_no_; // serialize helper member, hiden for others

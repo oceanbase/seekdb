@@ -467,8 +467,6 @@ enum ObAlterColumnMode
 };
 
 
-lib::Worker::CompatMode get_worker_compat_mode(const ObCompatibilityMode &mode);
-
 struct ObRefreshSchemaStatus
 {
 public:
@@ -1231,7 +1229,6 @@ typedef enum {
   TABLE_PRIV = 7,
   ROUTINE_SCHEMA = 8,
   SYNONYM_SCHEMA = 9,
-  // PLAN_BASELINE_SCHEMA = 10, unused anymore
   PACKAGE_SCHEMA = 12,
   UDF_SCHEMA = 13,
   SEQUENCE_SCHEMA = 14,
@@ -5415,8 +5412,7 @@ struct ObSessionPrivInfo
       host_name_(),
       db_(),
       user_priv_set_(0),
-      db_priv_set_(0),
-      security_version_(0)
+      db_priv_set_(0)
   {}
   ObSessionPrivInfo(const uint64_t user_id,
                     const common::ObString &db,
@@ -5428,8 +5424,7 @@ struct ObSessionPrivInfo
         host_name_(),
         db_(db),
         user_priv_set_(user_priv_set),
-        db_priv_set_(db_priv_set),
-        security_version_(0)
+        db_priv_set_(db_priv_set)
   {}
 
   virtual ~ObSessionPrivInfo() {}
@@ -5450,12 +5445,11 @@ struct ObSessionPrivInfo
     db_.reset();
     user_priv_set_ = 0;
     db_priv_set_ = 0;
-    security_version_ = 0;
   }
   
   
   virtual TO_STRING_KV(K_(user_id), K_(user_name), K_(host_name),
-                       K_(db), K_(user_priv_set), K_(db_priv_set), K_(security_version));
+                       K_(db), K_(user_priv_set), K_(db_priv_set));
 
    //for privilege.Current login tenant. if normal tenant access
                        //sys tenant's object should use other method for priv checking.
@@ -5465,9 +5459,6 @@ struct ObSessionPrivInfo
   common::ObString db_;              //db name in current session
   ObPrivSet user_priv_set_;
   ObPrivSet db_priv_set_;    //user's db_priv_set of db
-  // Only used for privilege check to determine whether there are currently tenants, otherwise the value is illegal
-  
-  uint64_t security_version_;
 };
 
 struct ObUserLoginInfo

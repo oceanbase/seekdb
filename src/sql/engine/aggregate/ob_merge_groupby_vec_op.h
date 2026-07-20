@@ -20,9 +20,6 @@
 #include "common/row/ob_row_store.h"
 #include "sql/engine/aggregate/ob_groupby_op.h"
 #include "sql/engine/aggregate/ob_groupby_vec_op.h"
-#include "lib/utility/ob_hyperloglog.h"
-#include "sql/engine/px/datahub/components/ob_dh_rollup_key.h"
-#include "sql/engine/sort/ob_sort_vec_op_provider.h"
 
 namespace oceanbase
 {
@@ -35,9 +32,7 @@ class ObMergeGroupByVecSpec : public ObGroupBySpec
 public:
   ObMergeGroupByVecSpec(common::ObIAllocator &alloc, const ObPhyOperatorType type) :
     ObGroupBySpec(alloc, type), group_exprs_(alloc), rollup_exprs_(alloc), distinct_exprs_(alloc),
-    is_duplicate_rollup_expr_(alloc), has_rollup_(false), is_parallel_(false),
-    rollup_status_(ObRollupStatus::NONE_ROLLUP), rollup_id_expr_(nullptr), sort_exprs_(alloc),
-    sort_collations_(alloc), sort_cmp_funcs_(alloc), enable_encode_sort_(false),
+    is_duplicate_rollup_expr_(alloc), has_rollup_(false),
     est_rows_per_group_(0), enable_hash_base_distinct_(false)
   {}
 
@@ -59,8 +54,6 @@ public:
     return is_duplicate_rollup_expr_.init(count);
   }
 
-  int register_to_datahub(ObExecContext &ctx) const;
-
 private:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObMergeGroupByVecSpec);
@@ -71,13 +64,6 @@ public:
   ExprFixedArray distinct_exprs_; // the distinct arguments of aggregate function
   common::ObFixedArray<bool, common::ObIAllocator> is_duplicate_rollup_expr_;
   bool has_rollup_;
-  bool is_parallel_;
-  ObRollupStatus rollup_status_;
-  ObExpr *rollup_id_expr_;
-  ExprFixedArray sort_exprs_;
-  ObSortCollations sort_collations_;
-  ObSortFuncs sort_cmp_funcs_;
-  bool enable_encode_sort_;
   int64_t est_rows_per_group_;
   bool enable_hash_base_distinct_;
 };
@@ -122,11 +108,9 @@ public:
     cur_group_store_row_(nullptr), all_groupby_exprs_(),
     group_row_meta_(&exec_ctx.get_allocator()), distinct_col_idx_in_output_(),
     has_dup_group_expr_(false), is_group_first_calc_(true), cur_group_last_row_idx_(-1),
-    use_sort_data_(false), inner_sort_(op_monitor_info_), rollup_hash_vals_(nullptr),
-    ndv_calculator_(nullptr), global_rollup_key_(), partial_rollup_idx_(INT64_MAX),
-    cur_grouping_id_(INT64_MAX), sort_batch_rows_(), first_batch_from_sort_(true), dir_id_(-1),
-    group_batch_factor_(8), rollup_context_(), agg_row_meta_(&exec_ctx.get_allocator()),
-    group_rows_(), output_stored_rows_(nullptr), output_rollup_ids_(nullptr),
+    dir_id_(-1),
+    group_batch_factor_(8), agg_row_meta_(&exec_ctx.get_allocator()),
+    group_rows_(), output_stored_rows_(nullptr),
     profile_(ObSqlWorkAreaType::HASH_WORK_AREA), sql_mem_processor_(profile_, op_monitor_info_),
     hp_infras_mgr_{}, group_processor_()
   {}
@@ -157,18 +141,12 @@ public:
   int process_batch(const ObBatchRows &brs);
   int prepare_and_save_curr_groupby_datums(const ObBatchRows &brs, int64_t curr_group_rowid,
                                            ObIArray<ObExpr *> &group_exprs,
-                                           LastCompactRow *&cur_gby_store_row, int64_t extra_size);
+                                           LastCompactRow *&cur_gby_store_row);
   int process_unique_distinct_columns_for_batch(const LastCompactRow &cur_gby_store_row,
                                                 const LastCompactRow &last_child_output,
                                                 const uint32_t group_start_idx,
                                                 const uint32_t group_end_idx, ObBatchRows &brs);
   int calc_batch_results(const bool is_iter_end, const int64_t max_output_size);
-  int64_t get_partial_rollup_key_idx()
-  {
-    return partial_rollup_idx_;
-  }
-  int get_n_shuffle_keys_for_exchange(int64_t &shuffle_n_keys);
-
 private:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObMergeGroupByVecOp);
@@ -219,19 +197,7 @@ private:
                            LastCompactRow *&curr_gby_store_row);
   int set_null(int64_t idx, LastCompactRow *rollup_store_row);
 
-  // for rollup distributor and rollup collector
-  int init_rollup_distributor();
-  int get_grouping_id(const ObBatchRows &brs);
-  int process_parallel_rollup_key(ObRollupNDVInfo &ndv_info);
-  int find_candidate_key(ObRollupNDVInfo &ndv_info);
-
-  int batch_process_rollup_distributor(const int64_t max_row_cnt);
-  int batch_collect_local_ndvs(const ObBatchRows *child_brs);
   int get_child_next_batch_row(const int64_t max_row_cnt, const ObBatchRows *&batch_rows);
-  int set_all_null(int64_t start, int64_t end, int64_t max_group_idx,
-                   LastCompactRow *rollup_store_row);
-  void sets(ObHyperLogLogCalculator &ndv_calculator, uint64_t *hash_vals, ObBitVector *skip,
-            int64_t count);
   int advance_collect_result(int64_t group_id);
   int init_hsp_infras_group_mgr();
   inline int64_t get_group_rows_count() const
@@ -243,23 +209,18 @@ private:
   int get_aggr_and_group_row(const int64_t group_id, aggregate::AggrRowPtrRef aggr_row,
                              LastCompactRow *&store_row);
   int process_rollup(const int64_t diff_group_idx, bool is_end = false);
-  int rollup_batch_process(aggregate::AggrRowPtr aggr_row, aggregate::AggrRowPtr rollup_row,
-                           int64_t diff_group_idx = -1, const int64_t max_group_cnt = INT64_MIN);
   int collect_group_results(const RowMeta &row_meta, const ObIArray<ObExpr *> &group_exprs,
                             const int32_t output_batch_size, ObBatchRows &output_brs,
                             int64_t &cur_group_id);
   int init_hp_infras_group_mgr();
 
 private:
-  static const int64_t ROLLUP_BASE_ROW_EXTRA_SIZE = 8;
-  static const int64_t N_HYPERLOGLOG_BIT = 14;
   lib::MemoryContext mem_context_;
   common::ObArenaAllocator *arena_alloc_;
   bool is_end_;
   int64_t init_group_cnt_;
   int64_t cur_output_group_id_;
   int64_t first_output_group_id_;
-  int64_t max_output_group_id_;
   LastCompactRow last_child_output_;
   int64_t cur_group_rowid_;
   int64_t output_queue_cnt_;
@@ -273,36 +234,13 @@ private:
   bool has_dup_group_expr_;
   bool is_group_first_calc_;
   int64_t cur_group_last_row_idx_;
-  // for rollup distributor and rollup collector
-  // For rollup distributor
-  //    1. add row to sort for sort data in gropuby operator instead of separate sort operator
-  //    2. calculate the NDV of group_exprs and rollup(exprs)
-  //    3. send to QC and get the optimal rollup exprs
-  //    4. rollup data
-  // For rollup collector
-  //    1. compute group and aggregate function and rollup data for base-row
-  //    2. only calculate group and aggregate function for grouping row that has rollup
-  bool use_sort_data_;
-  ObSEArray<ObExpr *, 4> inner_sort_exprs_;
-  ObSortVecOpProvider inner_sort_;
-  uint64_t *rollup_hash_vals_; // hash_values for compute NDV
-  ObHyperLogLogCalculator *ndv_calculator_;
-  ObRollupNDVInfo global_rollup_key_;
-  // for partial rollup, RD(Rollup Distributor) and RC(Rollup Collector)
-  int64_t partial_rollup_idx_;
-  int64_t cur_grouping_id_;
-  ObBatchRows sort_batch_rows_;
-  bool first_batch_from_sort_;
-
   int64_t dir_id_;
   // default is a magic number 8, may use a sophisticated way
   int64_t group_batch_factor_;
-  share::aggregate::RollupContext rollup_context_;
   RowMeta agg_row_meta_;
   common::ObSegmentArray<ObCompactRow *, OB_MALLOC_MIDDLE_BLOCK_SIZE, common::ModulePageAllocator>
     group_rows_;
   const ObCompactRow **output_stored_rows_;
-  void **output_rollup_ids_;
   ObSqlWorkAreaProfile profile_;
   ObSqlMemMgrProcessor sql_mem_processor_;
   ObHashPartInfrasVecMgr hp_infras_mgr_;

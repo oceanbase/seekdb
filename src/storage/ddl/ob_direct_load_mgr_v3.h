@@ -64,10 +64,6 @@ public:
                                     ObTabletDirectLoadMgrHandle &data_direct_load_handle,
                                     blocksstable::ObBatchDatumRows &datum_rows) override;
                                   
-  int fill_lob_meta_sstable_slice(const ObDirectLoadSliceInfo &slice_info,
-                                  ObIStoreRowIterator *iter,
-                                  ObDirectLoadSliceWriter &slice_writer,
-                                  int64_t &affected_rows) override;
   int cancel() override { return OB_NOT_SUPPORTED; }
   bool is_valid() override { return is_inited_; }
   int close() override;
@@ -98,10 +94,6 @@ protected:
   static int get_target_table_type(const ObStorageSchema &storage_schema,
                                    const ObDirectLoadType &direct_load_type,
                                   ObITable::TableType &table_type_);
-  static inline bool is_incremental_direct_load(const ObDirectLoadType &type)
-  {
-    return ObDirectLoadType::DIRECT_LOAD_INCREMENTAL == type;
-  }
 public:
   inline int64_t get_execution_id() {return execution_id_;}
   inline share::SCN get_start_scn() {return start_scn_;}

@@ -63,7 +63,6 @@ const char* ObCacheRefHandleMgr::handle_name(const CacheRefHandleID handle_id)
     "lc_node_rd_handle",
     "lc_node_wr_handle",
     "lc_ref_cache_obj_stat_handle",
-    "plan_baseline_handle",
     "sql_plan_handle",
     "callstmt_handle",
     "pc_diag_handle",

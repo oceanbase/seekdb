@@ -154,7 +154,6 @@ int ObLocationDDLOperator::drop_location(const ObString &ddl_str,
 
   ObDDLOperator ddl_operator(schema_service_, sql_proxy_);
   ObObjPrivMysqlDDLOperator mysql_ddl_operator(schema_service_, sql_proxy_);
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
   if (OB_FAIL(ret)) {
     LOG_WARN("location in use", K(ret));
   } else if (OB_FAIL(mysql_ddl_operator.drop_obj_mysql_privs(schema.get_location_name(), location_type,
@@ -174,4 +173,3 @@ int ObLocationDDLOperator::drop_location(const ObString &ddl_str,
 
 }
 }
-
