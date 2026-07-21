@@ -71,13 +71,14 @@ public:
   virtual int adjust_global_merge_info();
 
 private:
-  int check_valid(const common::ObZone &zone, int64_t &idx) const;
+  int check_valid(const common::ObZone &zone) const;
   inline int check_inner_stat() const;
 
   int suspend_or_resume_zone_merge(const bool suspend);
 
-  int get_tenant_zone_list(common::ObIArray<ObZone> &zone_list);
   int inner_adjust_global_merge_info(const share::SCN &frozen_scn);
+  int restore_local_merge_info(const share::ObGlobalMergeInfo &global_info,
+                               share::ObZoneMergeInfo &zone_info) const;
 protected:
   common::SpinRWLock lock_;
   static int copy_infos(ObZoneMergeManagerBase &dest, const ObZoneMergeManagerBase &src);
@@ -85,8 +86,7 @@ protected:
 private:
   bool is_inited_;
   bool is_loaded_;
-  int64_t zone_count_;
-  share::ObZoneMergeInfo zone_merge_infos_[common::MAX_ZONE_NUM];
+  share::ObZoneMergeInfo zone_merge_info_;
   share::ObGlobalMergeInfo global_merge_info_;
   common::ObMySQLProxy *proxy_;
 

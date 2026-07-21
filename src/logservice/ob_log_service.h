@@ -20,7 +20,6 @@
 #include "common/ob_role.h"
 #include "lib/ob_define.h"
 #include "applyservice/ob_log_apply_service.h"
-#include "logrpc/ob_log_service_rpc_shell.h"
 #include "palf/log_block_pool_interface.h"             // ILogBlockPool
 #include "palf/log_define.h"
 #include "localservice/ob_local_log_handler_set.h"
@@ -36,14 +35,6 @@ namespace common
 {
 class ObAddr;
 class ObILogAllocator;
-}
-
-namespace rpc
-{
-namespace frame
-{
-class ObReqTransport;
-}
 }
 
 namespace share
@@ -149,12 +140,10 @@ public:
   palf::PalfEnv *get_palf_env() { return palf_env_; }
   ObLogReplayService *get_log_replay_service()  { return &replay_service_; }
   ObLogApplyService *get_log_apply_service()  { return &apply_service_; }
-  obcall::ObLogServiceRpcProxy *get_rpc_proxy() { return &rpc_proxy_; }
   // Get restore net driver for standby log sync
   // Returns the net driver from restore service if available
   class ObLogRestoreNetDriver;
   ObLogRestoreNetDriver *get_restore_net_driver();
-  // Get CDC service for log fetcher (standby log sync server side)
   int check_need_do_checkpoint(bool &need_do_checkpoint);
 
 private:
@@ -174,11 +163,9 @@ private:
   ObLogApplyService apply_service_;
   ObLogReplayService replay_service_;
   ObLSAdapter ls_adapter_;
-  obcall::ObLogServiceRpcProxy rpc_proxy_;
   ObLogMonitor monitor_;
   ObSpinLock update_palf_opts_lock_;
   // Restore service for standby log sync
-  // CDC service for log fetcher (standby log sync server side)
 private:
   DISALLOW_COPY_AND_ASSIGN(ObLogService);
 };

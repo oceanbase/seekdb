@@ -1487,11 +1487,6 @@ DEF_PARAM(_display_non_session_cursor, BOOL, OB_CLUSTER_PARAMETER, "True",
          "whether the content of non session cursors is displayed.",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
-DEF_PARAM(dump_data_dictionary_to_log_interval, TIME, OB_CLUSTER_PARAMETER, "24h", "(0s,]",
-         "data dictionary dump to log interval"
-        "Range: (0s,+∞)",
-         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-
 DEF_PARAM(enable_user_defined_rewrite_rules, BOOL, OB_CLUSTER_PARAMETER, "False",
          "specify whether the user defined rewrite rules are enabled. "
          "Value: True: enable  False: disable",
@@ -1704,20 +1699,6 @@ DEF_PARAM(_ha_diagnose_history_recycle_interval, TIME, OB_CLUSTER_PARAMETER, "7d
          "The recycle interval time of diagnostic history data. Range: [2m, 180d]",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
-
-// index usage
-DEF_PARAM(_iut_enable, BOOL, OB_CLUSTER_PARAMETER, "True",
-        "specifies whether allow the index table usage start monitoring.",
-        ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-
-DEF_PARAM(_iut_max_entries, INT, OB_CLUSTER_PARAMETER, "30000", "[0,]",
-        "maximum of index entries to be monitoring.",
-        ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE))
-
-DEF_PARAM(_iut_stat_collection_type, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "SAMPLED", common::ObConfigIndexStatsModeChecker,
-    "specify index table usage stat collection type, values: SAMPLED, ALL",
-    ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE),
-    "SAMPLED, ALL");
 
 DEF_PARAM(optimizer_index_cost_adj, INT, OB_CLUSTER_PARAMETER, "0", "[0,100]",
         "adjust costing of index scan",

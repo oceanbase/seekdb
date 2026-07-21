@@ -35,25 +35,14 @@ int ObDDLSqlService::log_operation(
   ObSqlString tmp_sql_string;
   ObSqlString *sql_string = (NULL != public_sql_string ? public_sql_string : &tmp_sql_string);
   ObDMLSqlSplicer ddl_operation_dml;
-  ObDMLSqlSplicer ddl_id_dml;
   int64_t affected_rows = 0;
   if (OB_ISNULL(sql_string)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("pointer is null", KR(ret), KP(sql_string));
   } else if (FALSE_IT(sql_string->reuse())) {
-  } else if (OB_FAIL(log_operation_dml(schema_operation, ddl_operation_dml, ddl_id_dml))) {
+  } else if (OB_FAIL(log_operation_dml(schema_operation, ddl_operation_dml))) {
     LOG_WARN("failed to get log_operation_dml", KR(ret), K(schema_operation));
   } else if (OB_FAIL(ddl_operation_dml.splice_insert_sql(OB_ALL_DDL_OPERATION_TNAME, *sql_string))) {
-    LOG_WARN("failed to splice insert sql", KR(ret));
-  } else if (OB_FAIL(sql_client.write(sql_string->ptr(), affected_rows))) {
-    LOG_WARN("failed to write sql", KR(ret), K(*sql_string));
-  } else if (affected_rows != 1) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("affected_rows expect to 1, ", KR(ret), K(affected_rows));
-  } else if (ddl_id_dml.empty()) {
-    // __all_ddl_id insert check is done in log_operation_dml
-  } else if (FALSE_IT(sql_string->reset())) {
-  } else if (OB_FAIL(ddl_id_dml.splice_insert_sql(OB_ALL_DDL_ID_TNAME, *sql_string))) {
     LOG_WARN("failed to splice insert sql", KR(ret));
   } else if (OB_FAIL(sql_client.write(sql_string->ptr(), affected_rows))) {
     LOG_WARN("failed to write sql", KR(ret), K(*sql_string));
@@ -66,40 +55,22 @@ int ObDDLSqlService::log_operation(
 
 int ObDDLSqlService::log_operation_dml(
     const ObSchemaOperation &schema_operation,
-    share::ObDMLSqlSplicer &ddl_operation_dml,
-    share::ObDMLSqlSplicer &ddl_id_dml)
+    share::ObDMLSqlSplicer &ddl_operation_dml)
 {
   int ret = OB_SUCCESS;
-  auto *tsi_value = GET_TSI(TSIDDLVar);
   auto *tsi_oper = GET_TSI(TSILastOper);
-  ObString *ddl_id_str = NULL;
-  
-  
   if (OB_UNLIKELY(!schema_operation.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("schema_operation is invalid", K(schema_operation), K(ret));
   } else if (OB_ISNULL(tsi_oper)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Failed to get TSILatOper", KR(ret), K(schema_operation)); 
-  } else if (OB_ISNULL(tsi_value)) {
-    int tmp_ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Failed to get TSIDDLVar", K(tmp_ret), K(schema_operation));
   } else {
-    ddl_id_str = tsi_value->ddl_id_str_;
-    
     tsi_oper->last_operation_schema_version_ = schema_operation.schema_version_;
   }
-  // __all_ddl_operation
-  // __all_ddl_id
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(gen_ddl_operation_dml(schema_operation, ddl_operation_dml))) {
     LOG_WARN("failed to gen ddl operation dml", KR(ret), K(schema_operation));
-  } else if (OB_ISNULL(ddl_id_str) || schema_operation.ddl_stmt_str_.empty()) {
-      // do-nothing, only record ddl_id into __all_ddl_id if ddl_stmt is not empty
-  } else if (OB_FAIL(gen_ddl_id_dml(schema_operation, ddl_id_str, ddl_id_dml))) {
-    LOG_WARN("failed to gen ddl id dml", KR(ret), K(schema_operation), K(ddl_id_str));
-  } else {
-    tsi_value->ddl_id_str_ = NULL;
   }
   return ret;
 }
@@ -146,31 +117,6 @@ int ObDDLSqlService::gen_ddl_operation_dml(
   } else if (OB_FAIL(ddl_operation_dml.add_gmt_modified())) {
     LOG_WARN("failed to add column gmt_modified", KR(ret), K(schema_operation));
   } else if (OB_FAIL(ddl_operation_dml.finish_row())) {
-    LOG_WARN("failed to finish ddl_operation_dml", KR(ret));
-  }
-  return ret;
-}
-
-int ObDDLSqlService::gen_ddl_id_dml(
-    const ObSchemaOperation &schema_operation,
-    const ObString *ddl_id_str,
-    share::ObDMLSqlSplicer &ddl_id_dml)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!schema_operation.is_valid()) || OB_ISNULL(ddl_id_str)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("schema_operation is invalid", K(ret), K(schema_operation), KP(ddl_id_str));
-  } else if (OB_FAIL(ddl_id_dml.add_column("ddl_id_str", ObHexEscapeSqlStr(*ddl_id_str)))) {
-    LOG_WARN("failed to add column ddl_id_str", KR(ret), K(*ddl_id_str));
-#ifdef __ANDROID__
-  } else if (OB_FAIL(ddl_id_dml.add_column("ddl_stmt_str", ObHexEscapeSqlStr(ObString::make_empty_string())))) {
-#else
-  } else if (OB_FAIL(ddl_id_dml.add_column("ddl_stmt_str", ObHexEscapeSqlStr(schema_operation.ddl_stmt_str_)))) {
-#endif
-    LOG_WARN("failed to add column ddl_stmt_str", KR(ret), K(schema_operation));
-  } else if (OB_FAIL(ddl_id_dml.add_gmt_modified())) {
-    LOG_WARN("failed to add column gmt_modified", KR(ret), K(schema_operation));
-  } else if (OB_FAIL(ddl_id_dml.finish_row())) {
     LOG_WARN("failed to finish ddl_operation_dml", KR(ret));
   }
   return ret;

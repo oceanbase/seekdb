@@ -18,8 +18,7 @@
 
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_zone_merge_manager.h"
-#include "rootserver/ob_rs_event_history_table_operator.h" // for ROOTSERVICE_EVENT_ADD
-#include "share/ob_zone_merge_table_operator.h"
+#include "share/ob_structured_event_logger.h" // for ROOTSERVICE_EVENT_ADD
 #include "share/ob_global_merge_table_operator.h"
 #include "share/ob_tablet_meta_table_compaction_operator.h"
 #include "rootserver/freeze/ob_major_freeze_util.h"
@@ -35,8 +34,8 @@ using namespace oceanbase::palf;
 
 ObZoneMergeManagerBase::ObZoneMergeManagerBase()
   : lock_(ObLatchIds::ZONE_MERGE_MANAGER_READ_LOCK),
-    is_inited_(false), is_loaded_(false), zone_count_(0),
-    zone_merge_infos_(), global_merge_info_(), proxy_(NULL)
+    is_inited_(false), is_loaded_(false), zone_merge_info_(),
+    global_merge_info_(), proxy_(NULL)
 {}
 
 int ObZoneMergeManagerBase::init(ObMySQLProxy &proxy)
@@ -58,63 +57,61 @@ int ObZoneMergeManagerBase::reload()
   int ret = OB_SUCCESS;
 
   LOG_INFO("start to reload zone_merge_mgr", K_(is_loaded), K_(global_merge_info),
-            "zone_merge_infos", ObArrayWrap<ObZoneMergeInfo>(zone_merge_infos_, zone_count_));
-  ObSEArray<ObZone, DEFAULT_ZONE_COUNT> zone_list;
+           K_(zone_merge_info));
   HEAP_VAR(ObGlobalMergeInfo, global_merge_info) {
-    ObMalloc alloc(ObModIds::OB_TEMP_VARIABLES);
-    ObPtrGuard<ObZoneMergeInfo, common::MAX_ZONE_NUM> tmp_merge_infos(alloc);
-    
-
     if (IS_NOT_INIT) {
       ret = OB_NOT_INIT;
       LOG_WARN("not init", KR(ret));
-    } else if (OB_FAIL(tmp_merge_infos.init())) {
-      LOG_WARN("fail to alloc temp zone merge infos", KR(ret));
     } else if (OB_FAIL(ObGlobalMergeTableOperator::load_global_merge_info(*proxy_,
                           global_merge_info, true/*print_sql*/))) {
       LOG_WARN("fail to get global merge info", KR(ret));
-    } else if (OB_FAIL(ObZoneMergeTableOperator::get_zone_list(*proxy_, zone_list))) {
-      LOG_WARN("fail to get zone list", KR(ret));
-    } else if (zone_list.count() > common::MAX_ZONE_NUM) {
-      ret = OB_ERR_SYS;
-      LOG_ERROR("the count of zone is more than limit, cannot reload",
-                KR(ret), "zone count", zone_list.count(),
-                "zone count limit", common::MAX_ZONE_NUM);
-    } else if (zone_list.empty()) {
-      ret = OB_ERR_SYS;
-      LOG_WARN("zone_list is empty", KR(ret));
     } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < zone_list.count(); ++i) {
-        ObZoneMergeInfo &info = tmp_merge_infos.ptr()[i];
-        
-        if (OB_FAIL(ObZoneMergeTableOperator::load_zone_merge_info(*proxy_, info,
-                                                                   true/*print_sql*/))) {
-          LOG_WARN("fail to reload zone merge info", KR(ret), "zone", zone_list[i]);
-        }
-      }
-    }
-
-    if (OB_SUCC(ret)) {
       reset_merge_info_without_lock();
       if (OB_FAIL(global_merge_info_.assign(global_merge_info))) {
         LOG_WARN("fail to assign", KR(ret), K(global_merge_info));
-      }
-
-      for (int64_t i = 0; OB_SUCC(ret) && (i < zone_list.count()); ++i) {
-        if (OB_FAIL(zone_merge_infos_[zone_count_].assign(tmp_merge_infos.ptr()[i]))) {
-          LOG_WARN("fail to assign", KR(ret));
-        }
-        ++zone_count_;
+      } else if (OB_FAIL(restore_local_merge_info(global_merge_info, zone_merge_info_))) {
+        LOG_WARN("fail to restore local merge info", KR(ret), K(global_merge_info));
       }
     }
 
     if (OB_SUCC(ret)) {
       is_loaded_ = true;
-      LOG_INFO("succ to reload zone merge manager", K(zone_list), K_(global_merge_info),
-               "zone_merge_infos", ObArrayWrap<ObZoneMergeInfo>(zone_merge_infos_, zone_count_));
+      LOG_INFO("succ to reload zone merge manager", K_(global_merge_info),
+               K_(zone_merge_info));
     } else {
       LOG_WARN("fail to reload zone merge manager", KR(ret));
     }
+  }
+  return ret;
+}
+
+int ObZoneMergeManagerBase::restore_local_merge_info(
+    const ObGlobalMergeInfo &global_info,
+    ObZoneMergeInfo &zone_info) const
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!global_info.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid global merge info", KR(ret), K(global_info));
+  } else {
+    // Local zone progress is deliberately transient in seekdb.  A VERIFYING
+    // round has finished compaction and only waits for global checksum work;
+    // an unfinished MERGING round is restored from the last durable global
+    // completion point so the idempotent local compaction can be rescheduled.
+    const bool local_round_complete = global_info.is_last_merge_complete()
+                                      || global_info.is_in_verifying_status();
+    const SCN &recovered_scn = local_round_complete
+                               ? global_info.global_broadcast_scn()
+                               : global_info.last_merged_scn();
+    zone_info.reset();
+    zone_info.is_merging_.set_val(0, false);
+    zone_info.broadcast_scn_.set_scn(recovered_scn, false);
+    zone_info.last_merged_scn_.set_scn(recovered_scn, false);
+    zone_info.all_merged_scn_.set_scn(recovered_scn, false);
+    zone_info.frozen_scn_.set_scn(recovered_scn, false);
+    zone_info.last_merged_time_.set_val(global_info.last_merged_time_.get_value(), false);
+    zone_info.merge_start_time_.set_val(global_info.merge_start_time_.get_value(), false);
+    zone_info.merge_status_.set_val(ObZoneMergeInfo::MERGE_STATUS_IDLE, false);
   }
   return ret;
 }
@@ -128,7 +125,7 @@ int ObZoneMergeManagerBase::try_reload()
   } else if (is_loaded_) {
     if (TC_REACH_TIME_INTERVAL(5 * 60 * 1000 * 1000)) { // 5min
       FLOG_INFO("zone_merge_mgr is already loaded", K_(global_merge_info),
-                "zone_merge_infos", ObArrayWrap<ObZoneMergeInfo>(zone_merge_infos_, zone_count_));
+                K_(zone_merge_info));
     }
   } else if (OB_FAIL(reload())) {
     LOG_WARN("fail to reload", KR(ret));
@@ -138,14 +135,14 @@ int ObZoneMergeManagerBase::try_reload()
 
 void ObZoneMergeManagerBase::reset_merge_info_without_lock()
 {
-  zone_count_ = 0;
+  zone_merge_info_.reset();
   global_merge_info_.reset();
   is_loaded_ = false;
 }
 
 void ObZoneMergeManagerBase::reset_merge_info()
 {
-  SpinRLockGuard guard(lock_);
+  SpinWLockGuard guard(lock_);
   reset_merge_info_without_lock();
 }
 
@@ -175,11 +172,10 @@ int ObZoneMergeManagerBase::get_zone_merge_info(const ObZone &zone, ObZoneMergeI
 {
   int ret = OB_SUCCESS;
   SpinRLockGuard guard(lock_);
-  int64_t idx = OB_INVALID_INDEX;
-  if (OB_FAIL(check_valid(zone, idx))) {
+  if (OB_FAIL(check_valid(zone))) {
     LOG_WARN("fail to check valid", KR(ret), K(zone));
-  } else if (OB_FAIL(info.assign(zone_merge_infos_[idx]))) {
-    LOG_WARN("fail to assign", KR(ret), "info", zone_merge_infos_[idx]);
+  } else if (OB_FAIL(info.assign(zone_merge_info_))) {
+    LOG_WARN("fail to assign", KR(ret), K_(zone_merge_info));
   }
 
   return ret;
@@ -195,12 +191,8 @@ int ObZoneMergeManagerBase::get_zone(ObIArray<ObZone> &zone_list) const
   } else if (OB_ISNULL(GCTX.config_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.config_));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < zone_count_; ++i) {
-      if (OB_FAIL(zone_list.push_back(GCTX.config_->zone.str()))) {
-        LOG_WARN("fail to push back zone", KR(ret));
-      }
-    }
+  } else if (OB_FAIL(zone_list.push_back(GCTX.config_->zone.str()))) {
+    LOG_WARN("fail to push back zone", KR(ret));
   }
   return ret;
 }
@@ -217,12 +209,8 @@ int ObZoneMergeManagerBase::get_snapshot(
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(global_merge_info.assign(global_merge_info_))) {
     LOG_WARN("fail to assign", KR(ret), K_(global_merge_info));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && (i < zone_count_); ++i) {
-      if (OB_FAIL(info_array.push_back(zone_merge_infos_[i]))) {
-        LOG_WARN("fail to push zone_merge_info", KR(ret), "index", i);
-      }
-    }
+  } else if (OB_FAIL(info_array.push_back(zone_merge_info_))) {
+    LOG_WARN("fail to push zone_merge_info", KR(ret), K_(zone_merge_info));
   }
   return ret;
 }
@@ -245,32 +233,31 @@ int ObZoneMergeManagerBase::start_zone_merge(
     const ObZone &zone)
 {
   int ret = OB_SUCCESS;
-  int64_t idx = OB_INVALID_INDEX;
   const int64_t cur_time = ObTimeUtility::current_time();
   FREEZE_TIME_GUARD;
 
-  if (OB_FAIL(check_valid(zone, idx))) {
+  if (OB_FAIL(check_valid(zone))) {
     LOG_WARN("fail to check valid", KR(ret), K(zone));
-  } else if (zone_merge_infos_[idx].broadcast_scn() >=
+  } else if (zone_merge_info_.broadcast_scn() >=
              global_merge_info_.global_broadcast_scn()) {
     ret = OB_ERR_SYS;
     LOG_ERROR("broadcast_scn must not larger than global_broadcast_scn",
-              "zone broadcast_scn", zone_merge_infos_[idx].broadcast_scn(),
+              "zone broadcast_scn", zone_merge_info_.broadcast_scn(),
               "global_broadcast_scn", global_merge_info_.global_broadcast_scn(),
               KR(ret), K(zone));
-  } else if (zone_merge_infos_[idx].frozen_scn() >=
+  } else if (zone_merge_info_.frozen_scn() >=
              global_merge_info_.frozen_scn()) {
     ret = OB_ERR_SYS;
     LOG_ERROR("frozen_scn must not larger than global_frozen_scn",
-              "zone frozen_scn", zone_merge_infos_[idx].frozen_scn(),
+              "zone frozen_scn", zone_merge_info_.frozen_scn(),
               "global_frozen_scn", global_merge_info_.frozen_scn(),
               KR(ret), K(zone));
   } else {
     const int64_t is_merging = 1;
     const bool need_update = true;
     ObZoneMergeInfo tmp_info;
-    if (OB_FAIL(tmp_info.assign_value(zone_merge_infos_[idx]))) {
-      LOG_WARN("fail to assign zone merge info", KR(ret), K(idx), "merge_info", zone_merge_infos_[idx]);
+    if (OB_FAIL(tmp_info.assign_value(zone_merge_info_))) {
+      LOG_WARN("fail to assign zone merge info", KR(ret), K_(zone_merge_info));
     } else {
       tmp_info.is_merging_.set_val(is_merging, need_update);
       tmp_info.merge_start_time_.set_val(cur_time, need_update);
@@ -278,11 +265,8 @@ int ObZoneMergeManagerBase::start_zone_merge(
       tmp_info.broadcast_scn_.set_scn(global_merge_info_.global_broadcast_scn(), need_update);
       tmp_info.frozen_scn_.set_scn(global_merge_info_.frozen_scn(), need_update);
 
-      FREEZE_TIME_GUARD;
-      if (OB_FAIL(ObZoneMergeTableOperator::update_partial_zone_merge_info(*proxy_, tmp_info))) {
-        LOG_WARN("fail to update partial zone merge info", KR(ret), K(tmp_info));
-      } else if (OB_FAIL(zone_merge_infos_[idx].assign_value(tmp_info))) {
-        LOG_WARN("fail to assign zone merge info", KR(ret), K(idx), K(tmp_info));
+      if (OB_FAIL(zone_merge_info_.assign_value(tmp_info))) {
+        LOG_WARN("fail to assign zone merge info", KR(ret), K(tmp_info));
       } else {
         LOG_INFO("succ to update zone merge info", "latest zone merge_info", tmp_info);
       }
@@ -299,30 +283,31 @@ int ObZoneMergeManagerBase::finish_zone_merge(
     const SCN &new_all_merged_scn)
 {
   int ret = OB_SUCCESS;
-  int64_t idx = OB_INVALID_INDEX;
   const int64_t cur_time = ObTimeUtility::current_time();
   FREEZE_TIME_GUARD;
 
-  if (OB_FAIL(check_valid(zone, idx))) {
+  if (OB_FAIL(check_valid(zone))) {
     LOG_WARN("fail to check valid", KR(ret), K(zone));
   } else if ((!new_last_merged_scn.is_valid()) || (!new_all_merged_scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(zone),
              K(new_last_merged_scn), K(new_all_merged_scn));
-  } else if (new_last_merged_scn > zone_merge_infos_[idx].broadcast_scn()) {
+  } else if (new_last_merged_scn > zone_merge_info_.broadcast_scn()) {
     // do nothing, this zone may not execute current round major
-  } else if (new_last_merged_scn <= zone_merge_infos_[idx].last_merged_scn()) {
+  } else if (new_last_merged_scn < zone_merge_info_.last_merged_scn()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("invalid merged_scn", KR(ret), K(zone),
               K(new_last_merged_scn), K(new_all_merged_scn),
-              "zone_merge_info", zone_merge_infos_[idx]);
+              K_(zone_merge_info));
+  } else if (new_last_merged_scn == zone_merge_info_.last_merged_scn()) {
+    LOG_INFO("zone merge already finished", K(zone), K(new_last_merged_scn));
   } else {
     ObZoneMergeInfo tmp_info;
-    if (OB_FAIL(tmp_info.assign_value(zone_merge_infos_[idx]))) {
-      LOG_WARN("fail to assign zone merge info", KR(ret), K(idx), "merge_info", zone_merge_infos_[idx]);
+    if (OB_FAIL(tmp_info.assign_value(zone_merge_info_))) {
+      LOG_WARN("fail to assign zone merge info", KR(ret), K_(zone_merge_info));
     } else {
       ObZoneMergeInfo::MergeStatus status = static_cast<ObZoneMergeInfo::MergeStatus>(
-        zone_merge_infos_[idx].merge_status_.value_);
+        zone_merge_info_.merge_status_.value_);
       const int64_t is_merging = 0;
       tmp_info.is_merging_.set_val(is_merging, true);
       tmp_info.last_merged_scn_.set_scn(new_last_merged_scn, true);
@@ -330,15 +315,12 @@ int ObZoneMergeManagerBase::finish_zone_merge(
       status = ObZoneMergeInfo::MERGE_STATUS_IDLE;
       tmp_info.merge_status_.set_val(status, true);
 
-      if (new_all_merged_scn > zone_merge_infos_[idx].all_merged_scn()) {
+      if (new_all_merged_scn > zone_merge_info_.all_merged_scn()) {
         tmp_info.all_merged_scn_.set_scn(new_all_merged_scn, true);
       }
 
-      FREEZE_TIME_GUARD;
-      if (OB_FAIL(ObZoneMergeTableOperator::update_partial_zone_merge_info(*proxy_, tmp_info))) {
-        LOG_WARN("fail to update partial zone merge info", KR(ret), K(tmp_info));
-      } else if (OB_FAIL(zone_merge_infos_[idx].assign_value(tmp_info))) {
-        LOG_WARN("fail to assign zone merge info", KR(ret), K(idx), K(tmp_info));
+      if (OB_FAIL(zone_merge_info_.assign_value(tmp_info))) {
+        LOG_WARN("fail to assign zone merge info", KR(ret), K(tmp_info));
       } else {
         LOG_INFO("succ to update zone merge info", "latest zone merge_info", tmp_info);
       }
@@ -346,7 +328,7 @@ int ObZoneMergeManagerBase::finish_zone_merge(
   }
 
   LOG_INFO("finish zone merge", KR(ret), K(zone), K(new_last_merged_scn), K(new_all_merged_scn),
-    "zone_merge_info", zone_merge_infos_[idx]);
+    K_(zone_merge_info));
   return ret;
 }
 
@@ -354,9 +336,7 @@ int ObZoneMergeManagerBase::finish_all_zone_merge(
     const uint64_t &merged_scn_val)
 {
   int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
   share::SCN merged_scn;
-  SpinRLockGuard guard(lock_);
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(merged_scn.convert_for_inner_table_field(merged_scn_val))) {
@@ -364,13 +344,8 @@ int ObZoneMergeManagerBase::finish_all_zone_merge(
   } else if (OB_ISNULL(GCTX.config_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.config_));
-  } else {
-    for (int64_t i = 0; i < zone_count_; ++i) {
-      if (OB_TMP_FAIL(finish_zone_merge(GCTX.config_->zone.str(), merged_scn, merged_scn))) {
-        ret = (OB_SUCCESS == ret ? tmp_ret : ret); // record first errno
-        LOG_WARN("failed to finish zone merge", K(tmp_ret));
-      }
-    } // end of for
+  } else if (OB_FAIL(finish_zone_merge(GCTX.config_->zone.str(), merged_scn, merged_scn))) {
+    LOG_WARN("failed to finish zone merge", KR(ret));
   }
   return ret;
 }
@@ -450,23 +425,19 @@ int ObZoneMergeManagerBase::set_zone_merging(
     const ObZone &zone)
 {
   int ret = OB_SUCCESS;
-  int64_t idx = OB_INVALID_INDEX;
   FREEZE_TIME_GUARD;
-  if (OB_FAIL(check_valid(zone, idx))) {
+  if (OB_FAIL(check_valid(zone))) {
     LOG_WARN("fail to check valid", KR(ret), K(zone));
   } else {
     const int64_t is_merging = 1;
     ObZoneMergeInfo tmp_info;
-    if (OB_FAIL(tmp_info.assign_value(zone_merge_infos_[idx]))) {
-      LOG_WARN("fail to assign zone merge info", KR(ret), K(idx), "merge_info", zone_merge_infos_[idx]);
-    } else if (is_merging != zone_merge_infos_[idx].is_merging_.get_value()) {
+    if (OB_FAIL(tmp_info.assign_value(zone_merge_info_))) {
+      LOG_WARN("fail to assign zone merge info", KR(ret), K_(zone_merge_info));
+    } else if (is_merging != zone_merge_info_.is_merging_.get_value()) {
       tmp_info.is_merging_.set_val(is_merging, true);
 
-      FREEZE_TIME_GUARD;
-      if (OB_FAIL(ObZoneMergeTableOperator::update_partial_zone_merge_info(*proxy_, tmp_info))) {
-        LOG_WARN("fail to update partial zone merge info", KR(ret), K(tmp_info));
-      } else if (OB_FAIL(zone_merge_infos_[idx].assign_value(tmp_info))) {
-        LOG_WARN("fail to assign zone merge info", KR(ret), K(idx), K(tmp_info));
+      if (OB_FAIL(zone_merge_info_.assign_value(tmp_info))) {
+        LOG_WARN("fail to assign zone merge info", KR(ret), K(tmp_info));
       } else {
         LOG_INFO("succ to update zone merge info", "latest zone merge_info", tmp_info);
       }
@@ -754,7 +725,7 @@ int ObZoneMergeManagerBase::adjust_global_merge_info()
   return ret;
 }
 
-int ObZoneMergeManagerBase::check_valid(const ObZone &zone, int64_t &idx) const
+int ObZoneMergeManagerBase::check_valid(const ObZone &zone) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat())) {
@@ -762,11 +733,6 @@ int ObZoneMergeManagerBase::check_valid(const ObZone &zone, int64_t &idx) const
   } else if (zone.is_empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(zone));
-  } else if (0 == zone_count_) {
-    ret = OB_ENTRY_NOT_EXIST;
-    LOG_WARN("zone merge info not exist", KR(ret), K(zone_count_));
-  } else {
-    idx = 0;
   }
   return ret;
 }
@@ -790,18 +756,6 @@ int ObZoneMergeManagerBase::suspend_or_resume_zone_merge(
     }
   }
 
-  return ret;
-}
-
-int ObZoneMergeManagerBase::get_tenant_zone_list(common::ObIArray<ObZone> &zone_list)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(GCTX.config_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.config_));
-  } else if (OB_FAIL(zone_list.push_back(GCTX.config_->zone.str()))) {
-    LOG_WARN("fail to push back", KR(ret));
-  }
   return ret;
 }
 
@@ -844,26 +798,13 @@ int ObZoneMergeManagerBase::copy_infos(
     const ObZoneMergeManagerBase &src)
 {
   int ret = OB_SUCCESS;
-  const int64_t count = src.zone_count_;
-  if ((0 > count) || (common::MAX_ZONE_NUM < count)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid zone count", K(count), KR(ret));
+  if (OB_FAIL(dest.zone_merge_info_.assign(src.zone_merge_info_))) {
+    LOG_WARN("fail to assign local merge info", KR(ret), K_(src.zone_merge_info));
+  } else if (OB_FAIL(dest.global_merge_info_.assign(src.global_merge_info_))) {
+    LOG_WARN("fail to assign global merge info", KR(ret), K_(src.global_merge_info));
   } else {
-    for (int64_t idx = 0; (idx < count) && OB_SUCC(ret); ++idx) {
-      if (OB_FAIL(dest.zone_merge_infos_[idx].assign(src.zone_merge_infos_[idx]))) {
-        LOG_WARN("fail to assign", KR(ret), "info", src.zone_merge_infos_[idx]);
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(dest.global_merge_info_.assign(src.global_merge_info_))) {
-        LOG_WARN("fail to assign", KR(ret), "info", src.global_merge_info_);
-      }
-    }
-    if (OB_SUCC(ret)) {
-      dest.zone_count_ = count;
-      dest.is_inited_ = src.is_inited_;
-      dest.is_loaded_ = src.is_loaded_;
-    }
+    dest.is_inited_ = src.is_inited_;
+    dest.is_loaded_ = src.is_loaded_;
   }
   return ret;
 }

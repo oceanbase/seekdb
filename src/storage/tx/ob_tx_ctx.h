@@ -735,7 +735,7 @@ private:
   // set true when submitting redo log for freezing and reset after freezing
   bool is_submitting_redo_log_for_freeze_;
   share::SCN create_ctx_scn_; // replay or recover debug
-  TxCtxSource ctx_source_; // For CDC - prev_lsn
+  TxCtxSource ctx_source_; // transaction context creation source
 
   int16_t retain_cause_;
 

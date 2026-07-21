@@ -137,14 +137,12 @@ int ObAnalyzeExecutor::execute(ObExecContext &ctx, ObAnalyzeStmt &stmt)
               }
             }
             running_monitor.set_monitor_result(ret, ObTimeUtility::current_time(), param.allocator_->used());
-            pl::ObDbmsStats::update_optimizer_gather_stat_info(NULL, &gather_stat);
             ObOptStatGatherStatList::instance().remove(gather_stat);
             task_info.completed_table_count_ ++;
           }
           task_info.task_end_time_ = ObTimeUtility::current_time();
           task_info.ret_code_ = ret;
           task_info.failed_count_ = ret == OB_SUCCESS ? 0 : params.count() - i + 1;
-          pl::ObDbmsStats::update_optimizer_gather_stat_info(&task_info, NULL);
         }
       }
     }

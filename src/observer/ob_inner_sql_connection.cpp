@@ -21,7 +21,7 @@
 #include "share/rc/ob_module_provider.h"
 #include "share/ob_time_utility2.h"
 #include "observer/ob_server.h"
-#include "observer/ob_server_event_history_table_operator.h"
+#include "share/ob_structured_event_logger.h"
 #include "observer/mysql/obmp_base.h"
 #include "ob_inner_sql_read_context.h"
 

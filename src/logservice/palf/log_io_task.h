@@ -188,7 +188,6 @@ public:
   void reuse();
   void destroy();
   int push_back(LogIOFlushLogTask *task);
-  void get_io_task_array(BatchIOTaskArray& io_task_array) { io_task_array = io_task_array_; }
   int do_task(LogIOTaskCbThreadPool *cb_thread_pool, IPalfEnvImpl *palf_env_impl);
   void reset_accum_in_queue_time() { accum_in_queue_time_ = 0; }
   int64_t get_count() const { return io_task_array_.count(); }

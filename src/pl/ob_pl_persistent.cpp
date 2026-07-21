@@ -202,7 +202,7 @@ int ObRoutinePersistentInfo::delete_dll_from_disk(common::ObISQLClient &trans,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected key id.", K(ret));
     } else if (OB_FAIL(sql.assign_fmt("delete FROM %s where database_id = %ld and key_id = %ld", OB_ALL_NCOMP_DLL_V2_TNAME, database_id, key_id))) {
-      LOG_WARN("delete from __all_ncomp_dll table failed.", K(ret), K(key_id));
+      LOG_WARN("delete from __all_ncomp_dll_v2 table failed.", K(ret), K(key_id));
     } else {
       if (OB_FAIL(trans.write(sql.ptr(), affected_rows))) {
         LOG_WARN("execute query failed", K(ret), K(sql));

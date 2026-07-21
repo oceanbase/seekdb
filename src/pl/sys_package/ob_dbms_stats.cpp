@@ -147,7 +147,6 @@ int ObDbmsStats::gather_table_stats(ObExecContext &ctx, ParamStore &params, ObOb
     task_info.task_end_time_ = ObTimeUtility::current_time();
     task_info.ret_code_ = ret;
     task_info.failed_count_ = ret == OB_SUCCESS ? 0 : 1;
-    update_optimizer_gather_stat_info(&task_info, &gather_stat);
     ObOptStatGatherStatList::instance().remove(gather_stat);
   }
   return ret;
@@ -282,7 +281,6 @@ int ObDbmsStats::gather_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
         }
       }
       running_monitor.set_monitor_result(ret, ObTimeUtility::current_time(), stat_param.allocator_->used());
-      update_optimizer_gather_stat_info(NULL, &gather_stat);
       ObOptStatGatherStatList::instance().remove(gather_stat);
       task_info.completed_table_count_ ++;
       ret = ret == OB_TABLE_NOT_EXIST ? OB_SUCCESS : ret;//skip table not exist in schema stats op.
@@ -290,7 +288,6 @@ int ObDbmsStats::gather_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
     task_info.task_end_time_ = ObTimeUtility::current_time();
     task_info.ret_code_ = ret;
     task_info.failed_count_ = ret == OB_SUCCESS ? 0 : table_ids.count() - i + 1;
-    update_optimizer_gather_stat_info(&task_info, NULL);
   }
   }
   return ret;
@@ -3253,7 +3250,6 @@ int ObDbmsStats::async_gather_stats_job_proc(sql::ObExecContext &ctx,
     ret = ret == OB_TIMEOUT ? OB_SUCCESS : ret;
     task_info.task_end_time_ = ObTimeUtility::current_time();
     task_info.ret_code_ = is_can_async_gather ? ret : OB_ERR_QUERY_INTERRUPTED;
-    update_optimizer_gather_stat_info(&task_info, NULL);
   }
   return ret;
 }
@@ -5629,7 +5625,6 @@ int ObDbmsStats::gather_database_stats_job_proc(sql::ObExecContext &ctx,
     ret = ret == OB_TIMEOUT ? OB_SUCCESS : ret;
     task_info.task_end_time_ = ObTimeUtility::current_time();
     task_info.ret_code_ = ret;
-    update_optimizer_gather_stat_info(&task_info, NULL);
   }
   return ret;
 }
@@ -6042,9 +6037,6 @@ int ObDbmsStats::gather_table_stats_with_default_param(ObExecContext &ctx,
     }
   }
   running_monitor.set_monitor_result(ret, ObTimeUtility::current_time(), stat_param.allocator_->used());
-  if (stat_param.need_gather_stats()) {
-    update_optimizer_gather_stat_info(NULL, &gather_stat);
-  }
   ObOptStatGatherStatList::instance().remove(gather_stat);
   task_info.completed_table_count_ ++;
   return ret;
@@ -7023,31 +7015,6 @@ bool ObDbmsStats::is_partition_no_regather(int64_t part_id,
     }
   }
   return is_true;
-}
-
-void ObDbmsStats::update_optimizer_gather_stat_info(const ObOptStatTaskInfo *task_info,
-                                                    const ObOptStatGatherStat *gather_stat)
-{
-  int ret = OB_SUCCESS;
-  sql::ObSQLSessionInfo *origin_session = THIS_WORKER.get_session();
-  int64_t origin_timeout = THIS_WORKER.get_timeout_ts();
-  THIS_WORKER.set_session(NULL);
-  const int64_t MAX_UPDATE_OPT_GATHER_STAT_TIMEOUT = 10000000;//default 10 seconds
-  THIS_WORKER.set_timeout_ts(MAX_UPDATE_OPT_GATHER_STAT_TIMEOUT + ObTimeUtility::current_time());
-  if (task_info != NULL && task_info->task_table_count_ > 0) {
-    if (OB_FAIL(ObOptStatManager::get_instance().update_opt_stat_task_stat(*task_info))) {
-      LOG_WARN("failed to update opt stat task stat", K(ret));
-      LOG_USER_WARN(OB_ERR_DBMS_STATS_PL, "failed to update opt stat task stat");
-    }
-  }
-  if (gather_stat != NULL) {
-    if (OB_FAIL(ObOptStatManager::get_instance().update_opt_stat_gather_stat(*gather_stat))) {
-      LOG_WARN("failed to update opt stat gather stat", K(ret));
-      LOG_USER_WARN(OB_ERR_DBMS_STATS_PL, "failed to update opt stat gather stat");
-    }
-  }
-  THIS_WORKER.set_session(origin_session);
-  THIS_WORKER.set_timeout_ts(origin_timeout);
 }
 
 int ObDbmsStats::async_gather_table_stats(sql::ObExecContext &ctx,

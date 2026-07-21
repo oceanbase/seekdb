@@ -824,10 +824,6 @@ public:
 
     int create(int64_t bucket_size);
 
-    bool need_fetch_schemas_for_data_dict() const {
-      return new_table_keys_.size() > 0
-             || new_database_keys_.size() > 0;
-    }
   };
 
   struct AllSimpleIncrementSchema
@@ -891,17 +887,6 @@ public:
                                        VersionHisVal &val);
 
   int get_refresh_schema_info(ObRefreshSchemaInfo &schema_info);
-
-  // Fetch increments schemas in DDL trans. This interface won't return the following increment schemas:
-  // 1. schema which is dropped in DDL trans.
-  // 2. changed inner tables.
-  int get_increment_schemas_for_data_dict(
-      common::ObMySQLTransaction &trans,
-      const int64_t start_version,
-      common::ObIAllocator &allocator,
-      common::ObIArray<const ObTenantSchema *> &tenant_schemas,
-      common::ObIArray<const ObDatabaseSchema *> &database_schemas,
-      common::ObIArray<const ObTableSchema *> &table_schemas);
 
 protected:
   bool check_inner_stat() const;
@@ -1178,27 +1163,6 @@ protected:
   int del_tenant_operation(AllSchemaKeys &schema_keys,
                            const bool new_flag);
 
-  /*-- data dict related --*/
-  int get_increment_schema_keys_for_data_dict_(
-      const ObSchemaService::SchemaOperationSetWithAlloc &schema_operations,
-      AllSchemaKeys &schema_keys);
-  int fetch_increment_schemas_for_data_dict_(
-      common::ObMySQLTransaction &trans,
-      common::ObIAllocator &allocator,
-      const AllSchemaKeys &schema_keys,
-      common::ObIArray<const ObTenantSchema *> &tenant_schemas,
-      common::ObIArray<const ObDatabaseSchema *> &database_schemas,
-      common::ObIArray<const ObTableSchema *> &table_schemas);
-  int fetch_increment_database_schemas_for_data_dict_(
-      common::ObMySQLTransaction &trans,
-      common::ObIAllocator &allocator,
-      const AllSchemaKeys &schema_keys,
-      common::ObIArray<const ObDatabaseSchema *> &database_schemas);
-  int fetch_increment_table_schemas_for_data_dict_(
-      common::ObMySQLTransaction &trans,
-      common::ObIAllocator &allocator,
-      const AllSchemaKeys &schema_keys,
-      common::ObIArray<const ObTableSchema *> &table_schemas);
 protected:
   // core table count
   const static int64_t MIN_TABLE_COUNT = 1;

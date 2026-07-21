@@ -24,7 +24,6 @@
 
 #include "share/ob_global_stat_proxy.h"
 #include "sql/resolver/ddl/ob_index_builder_util.h"
-#include "observer/ob_server_event_history_table_operator.h"
 #include "storage/deadlock/ob_deadlock_inner_table_service.h"
 
 #include "sql/engine/cmd/ob_user_cmd_executor.h"
@@ -45,7 +44,6 @@
 
 #include "rootserver/freeze/ob_major_freeze_helper.h"
 #include "share/ob_ddl_common.h" // for ObDDLUtil
-#include "share/ob_cluster_event_history_table_operator.h"//CLUSTER_EVENT_INSTANCE
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
 #include "observer/ob_sys_tenant_load_sys_package_task.h"
@@ -326,13 +324,11 @@ ObRootService::ObRootService()
     bootstrap_lock_(),
     restart_task_timer_(),
     load_ddl_task_timer_(),
-    event_table_clear_task_timer_(),
+    deadlock_event_clear_task_timer_(),
     purge_recyclebin_task_timer_(),
     restart_task_(*this),
     load_ddl_task_(*this),
-    event_table_clear_task_(ROOTSERVICE_EVENT_INSTANCE,
-                            SERVER_EVENT_INSTANCE,
-                            DEALOCK_EVENT_INSTANCE),
+    deadlock_event_clear_task_(),
     purge_recyclebin_task_(*this),
     snapshot_manager_(),
     core_meta_table_version_(0),
@@ -385,8 +381,8 @@ int ObRootService::init(ObServerConfig &config,
     FLOG_WARN("init rs restart task timer failed", KR(ret));
   } else if (OB_FAIL(load_ddl_task_timer_.init("RSLoadDDL", ObMemAttr("RSLoadDDL")))) {
     FLOG_WARN("init rs load ddl task timer failed", KR(ret));
-  } else if (OB_FAIL(event_table_clear_task_timer_.init("RSEvtClear", ObMemAttr("RSEvtClear")))) {
-    FLOG_WARN("init rs event table clear task timer failed", KR(ret));
+  } else if (OB_FAIL(deadlock_event_clear_task_timer_.init("RSDeadlockClear", ObMemAttr("RSDeadlockClear")))) {
+    FLOG_WARN("init deadlock event clear task timer failed", KR(ret));
   } else if (OB_FAIL(purge_recyclebin_task_timer_.init("RSPurgeRecycle", ObMemAttr("RSPurgeRecycle")))) {
     FLOG_WARN("init rs purge recyclebin task timer failed", KR(ret));
   } else if (OB_FAIL(root_minor_freeze_.init())) {
@@ -402,11 +398,6 @@ int ObRootService::init(ObServerConfig &config,
     FLOG_WARN("init tenant_ddl_service_ failed", KR(ret));
   } else if (OB_FAIL(snapshot_manager_.init(self_addr_))) {
     FLOG_WARN("init snapshot manager failed", KR(ret));
-  } else if (OB_ISNULL(GCTX.meta_db_pool_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("meta_db_pool_ is not initialized", K(ret));
-  } else if (OB_FAIL(ROOTSERVICE_EVENT_INSTANCE.init(GCTX.meta_db_pool_, self_addr_))) {
-    FLOG_WARN("init rootservice event history failed", KR(ret));
   } else if (OB_FAIL(THE_RS_JOB_TABLE.init())) {
     FLOG_WARN("init THE_RS_JOB_TABLE failed", KR(ret));
   } else if (OB_FAIL(schema_history_recycler_.init(*schema_service_,
@@ -450,12 +441,9 @@ void ObRootService::destroy()
 
   restart_task_timer_.destroy();
   load_ddl_task_timer_.destroy();
-  event_table_clear_task_timer_.destroy();
+  deadlock_event_clear_task_timer_.destroy();
   purge_recyclebin_task_timer_.destroy();
   FLOG_INFO("task timer destroy");
-
-  ROOTSERVICE_EVENT_INSTANCE.destroy();
-  FLOG_INFO("event table operator destroy");
 
   dbms_job::ObDBMSJobMaster::get_instance().destroy();
   FLOG_INFO("ObDBMSJobMaster destroy");
@@ -495,7 +483,7 @@ int ObRootService::start_service()
       FLOG_WARN("restart task timer start failed", KR(ret));
     } else if (OB_FAIL(load_ddl_task_timer_.start())) {
       FLOG_WARN("load ddl task timer start failed", KR(ret));
-    } else if (OB_FAIL(event_table_clear_task_timer_.start())) {
+    } else if (OB_FAIL(deadlock_event_clear_task_timer_.start())) {
       FLOG_WARN("event table clear task timer start failed", KR(ret));
     } else if (OB_FAIL(purge_recyclebin_task_timer_.start())) {
       FLOG_WARN("purge recyclebin task timer start failed", KR(ret));
@@ -594,7 +582,7 @@ int ObRootService::stop()
     if (OB_SUCC(ret)) {
       restart_task_timer_.stop();
       load_ddl_task_timer_.stop();
-      event_table_clear_task_timer_.stop();
+      deadlock_event_clear_task_timer_.stop();
       purge_recyclebin_task_timer_.stop();
       FLOG_INFO("task timer stop");
       schema_history_recycler_.stop();
@@ -623,7 +611,7 @@ void ObRootService::wait()
   FLOG_INFO("schema_history_recycler exit success");
   if (restart_task_timer_.inited()) { restart_task_timer_.wait(); }
   if (load_ddl_task_timer_.inited()) { load_ddl_task_timer_.wait(); }
-  if (event_table_clear_task_timer_.inited()) { event_table_clear_task_timer_.wait(); }
+  if (deadlock_event_clear_task_timer_.inited()) { deadlock_event_clear_task_timer_.wait(); }
   if (purge_recyclebin_task_timer_.inited()) { purge_recyclebin_task_timer_.wait(); }
   FLOG_INFO("task timer exit success");
   THE_RS_JOB_TABLE.reset_max_job_id();
@@ -2822,7 +2810,18 @@ int ObRootService::check_parallel_ddl_conflict(
   return ddl_service_.check_parallel_ddl_conflict(schema_guard, arg);
 }
 
-ERRSIM_POINT_DEF(ERROR_EVENT_TABLE_CLEAR_INTERVAL);
+ERRSIM_POINT_DEF(ERROR_DEADLOCK_EVENT_CLEAR_INTERVAL);
+void ObRootService::ObDeadlockEventClearTask::runTimerTask()
+{
+  int ret = OB_SUCCESS;
+  if (!DEALOCK_EVENT_INSTANCE.is_inited()) {
+    ret = OB_INNER_STAT_ERROR;
+    LOG_WARN("deadlock event history operator not initialized", K(ret));
+  } else if (OB_FAIL(DEALOCK_EVENT_INSTANCE.async_delete())) {
+    LOG_WARN("failed to clear expired deadlock events", K(ret));
+  }
+}
+
 int ObRootService::start_timer_tasks()
 {
   int ret = OB_SUCCESS;
@@ -2833,15 +2832,15 @@ int ObRootService::start_timer_tasks()
   }
 
   if (OB_SUCCESS == ret) {
-    task_exist = event_table_clear_task_timer_.task_exist(event_table_clear_task_);
+    task_exist = deadlock_event_clear_task_timer_.task_exist(deadlock_event_clear_task_);
   }
   if (OB_SUCCESS == ret && !task_exist) {
-    const int64_t delay = ERROR_EVENT_TABLE_CLEAR_INTERVAL ? 10 * 1000 * 1000 :
-      ObEventHistoryTableOperator::EVENT_TABLE_CLEAR_INTERVAL;
-    if (OB_FAIL(event_table_clear_task_timer_.schedule(event_table_clear_task_, delay, true, true))) {
-      LOG_WARN("start event table clear task failed", K(delay), K(ret));
+    const int64_t delay = ERROR_DEADLOCK_EVENT_CLEAR_INTERVAL ? 10 * 1000 * 1000 :
+      2LL * 3600LL * 1000LL * 1000LL;
+    if (OB_FAIL(deadlock_event_clear_task_timer_.schedule(deadlock_event_clear_task_, delay, true, true))) {
+      LOG_WARN("start deadlock event clear task failed", K(delay), K(ret));
     } else {
-      LOG_INFO("added event_table_clear_task", K(delay));
+      LOG_INFO("added deadlock event clear task", K(delay));
     }
   }
 
@@ -2864,7 +2863,7 @@ int ObRootService::stop_timer_tasks()
   } else {
     restart_task_timer_.cancel_task(restart_task_);
     load_ddl_task_timer_.cancel_task(load_ddl_task_);
-    event_table_clear_task_timer_.cancel_task(event_table_clear_task_);
+    deadlock_event_clear_task_timer_.cancel_task(deadlock_event_clear_task_);
     purge_recyclebin_task_timer_.cancel_task(purge_recyclebin_task_);
   }
 

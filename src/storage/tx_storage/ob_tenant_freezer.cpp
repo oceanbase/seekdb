@@ -27,7 +27,7 @@
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/multi_data_source/runtime_utility/mds_tenant_service.h"
-#include "observer/ob_server_event_history_table_operator.h"
+#include "share/ob_structured_event_logger.h"
 #include "storage/allocator/ob_memstore_allocator.h"  // relocated-definition owner
 #include "storage/memtable/ob_memtable.h"  // needed by relocated functions
 

@@ -252,7 +252,7 @@ int ObLobTabletDmlHelper::insert_lob_col(
   } else if (OB_FAIL(build_common_lob_param_for_dml(run_ctx, data_row, col_idx, disk_locator_data, lob_param))) {
     LOG_WARN("build_common_lob_param_for_dml fail", K(ret), K(col_idx), K(column));
   } else {
-    if (OB_NOT_NULL(del_param)) { // for obcdc lob
+    if (OB_NOT_NULL(del_param)) { // preserve LOB sequence metadata for the change stream
       lob_param.total_seq_cnt_ = del_param->total_seq_cnt_;
       lob_param.used_seq_cnt_ = del_param->used_seq_cnt_;
       lob_param.seq_no_st_ = del_param->seq_no_st_;

@@ -575,7 +575,6 @@ public:
   static int check_sync_ddl_user(ObSQLSessionInfo *session_info, bool &is_sync_ddl_user);
   static bool is_restore_user(ObSQLSessionInfo &session_info);
   static bool is_drc_user(ObSQLSessionInfo &session_info);
-  static int set_sync_ddl_id_str(ObSQLSessionInfo *session_info, common::ObString &ddl_id_str);
   static int resolve_udf_name_by_parse_node(
     const ParseNode *node, const common::ObNameCaseMode case_mode, ObUDFInfo& udf_info);
   // Check duplicate foreign keys for CREATE TABLE and ALTER TABLE ADD FOREIGN KEY.

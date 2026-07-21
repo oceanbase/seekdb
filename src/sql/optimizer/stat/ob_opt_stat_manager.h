@@ -188,12 +188,9 @@ public:
   int add_ds_stat_cache(const ObOptDSStat::Key &key,
                         const ObOptDSStat &value,
                         ObOptDSStatHandle &ds_stat_handle);
-  int update_opt_stat_gather_stat(const ObOptStatGatherStat &gather_stat);
-
   int update_table_stat_failed_count(const uint64_t table_id,
                                      const ObIArray<int64_t> &part_ids,
                                      int64_t &affected_rows);
-  int update_opt_stat_task_stat(const ObOptStatTaskInfo &task_info);
   ObOptStatService &get_stat_service() { return stat_service_; }
 
   int get_system_stat(ObOptSystemStat &stat);

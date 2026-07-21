@@ -28,9 +28,6 @@
 #include "share/ob_sql_client_decorator.h"
 #include "rootserver/ob_root_service.h"
 #include "rootserver/ob_tablet_drop.h"
-#include "share/ob_global_merge_table_operator.h"
-#include "share/ob_zone_merge_table_operator.h"
-#include "share/ob_zone_merge_info.h"
 #include "sql/optimizer/stat/ob_dbms_stats_maintenance_window.h"
 #include "pl/ob_pl_persistent.h"
 #include "pl/pl_cache/ob_pl_cache_mgr.h"
@@ -75,8 +72,7 @@ ObSysStat::ObSysStat()
     ob_max_used_normal_rowid_table_tablet_id_(item_list_, MAX_ID_NAME_INFO(OB_MAX_USED_NORMAL_ROWID_TABLE_TABLET_ID_TYPE)),
     ob_max_used_extended_rowid_table_tablet_id_(item_list_, MAX_ID_NAME_INFO(OB_MAX_USED_EXTENDED_ROWID_TABLE_TABLET_ID_TYPE)),
     ob_max_used_sys_pl_object_id_(item_list_, MAX_ID_NAME_INFO(OB_MAX_USED_SYS_PL_OBJECT_ID_TYPE)),
-    ob_max_used_object_id_(item_list_, MAX_ID_NAME_INFO(OB_MAX_USED_OBJECT_ID_TYPE)),
-    ob_max_used_rewrite_rule_version_(item_list_, MAX_ID_NAME_INFO(OB_MAX_USED_REWRITE_RULE_VERSION_TYPE))
+    ob_max_used_object_id_(item_list_, MAX_ID_NAME_INFO(OB_MAX_USED_OBJECT_ID_TYPE))
 {
 }
 
@@ -99,7 +95,6 @@ int ObSysStat::set_initial_values()
     ob_max_used_sys_pl_object_id_.value_.set_int(OB_MIN_SYS_PL_OBJECT_ID);
     // Use OB_INITIAL_TEST_DATABASE_ID to avoid confict when create tenant with initial user schema objects.
     ob_max_used_object_id_.value_.set_int(OB_INITIAL_TEST_DATABASE_ID);
-    ob_max_used_rewrite_rule_version_.value_.set_int(OB_INIT_REWRITE_RULE_VERSION);
   }
   return ret;
 }
@@ -4048,7 +4043,7 @@ bool ObDDLOperator::is_global_index_object(const ObDatabaseSchema &schema)
 
 bool ObDDLOperator::is_global_index_object(const ObTableSchema &schema)
 {
-  // For global local storage, local indexes are still seen, liboblog does not need to be synchronized
+  // A local-storage index does not participate in global-index schema propagation.
   return schema.is_global_index_table() && (!schema.is_index_local_storage());
 }
 
@@ -7119,41 +7114,6 @@ int ObDDLOperator::insert_ori_schema_version(
   } else if (OB_FAIL(schema_service->get_table_sql_service().insert_ori_schema_version(
              trans, table_id, ori_schema_version))) {
     LOG_WARN("insert_ori_schema_version failed", K(ret), K(table_id), K(ori_schema_version));
-  }
-  return ret;
-}
-
-int ObDDLOperator::insert_temp_table_info(ObMySQLTransaction &trans, const ObTableSchema &table_schema)
-{
-  int ret = OB_SUCCESS;
-  ObSchemaService *schema_service = schema_service_.get_schema_service();
-  if (OB_ISNULL(schema_service)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get invalid schema service", K(ret));
-  } else if (table_schema.is_ctas_tmp_table() || table_schema.is_tmp_table()) {
-    if (is_inner_table(table_schema.get_table_id())) {
-      ret = OB_OP_NOT_ALLOW;
-      LOG_WARN("create tmp sys table not allowed", K(ret), "table_id", table_schema.get_table_id());
-    } else if (OB_FAIL(schema_service->get_table_sql_service().insert_temp_table_info(trans, table_schema))) {
-      LOG_WARN("insert_temp_table_info failed", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObDDLOperator::delete_temp_table_info(ObMySQLTransaction &trans, const ObTableSchema &table_schema)
-{
-  int ret = OB_SUCCESS;
-  ObSchemaService *schema_service = schema_service_.get_schema_service();
-  if (OB_ISNULL(schema_service)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get invalid schema service", K(ret));
-  } else if (is_inner_table(table_schema.get_table_id())) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("create tmp sys table not allowed", K(ret), "table_id", table_schema.get_table_id());
-  } else if (OB_FAIL(schema_service->get_table_sql_service().delete_from_all_temp_table(
-              trans, table_schema.get_table_id()))) {
-    LOG_WARN("insert_temp_table_info failed", K(ret));
   }
   return ret;
 }

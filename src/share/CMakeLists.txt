@@ -97,9 +97,7 @@ ob_set_subtarget(ob_share common
   ob_dml_sql_splicer.cpp
   ob_encryption_util.cpp
   ob_errno.cpp
-  ob_kv_storage.cpp
   ob_all_tenant_info.cpp
-  ob_event_history_table_operator.cpp
   ob_schema_version_info.cpp
   ob_freeze_info_proxy.cpp
   ob_gais_msg.cpp
@@ -143,12 +141,10 @@ ob_set_subtarget(ob_share common
   ob_unit_getter.cpp
   ob_freeze_info_manager.cpp
   ob_zone_merge_info.cpp
-  ob_zone_merge_table_operator.cpp
   ob_admin_dump_helper.cpp
   ob_inner_kv_table_operator.cpp
   ob_inner_table_operator.cpp
   ob_common_id.cpp
-  ob_cluster_event_history_table_operator.cpp
   scn.cpp
   ob_throttling_utils.cpp
   ob_batch_selector.cpp
@@ -188,8 +184,6 @@ ob_set_subtarget(ob_share common_mixed
   ob_json_access_utils.cpp
   tenant_snapshot/ob_tenant_snapshot_id.cpp
   table/ob_ttl_util.cpp
-  index_usage/ob_index_usage_info_mgr.cpp
-  index_usage/ob_index_usage_report_task.cpp
   table/ob_table_util.cpp
   compaction/ob_compaction_time_guard.cpp
   compaction/ob_schedule_batch_size_mgr.cpp
@@ -197,12 +191,8 @@ ob_set_subtarget(ob_share common_mixed
   compaction/ob_new_micro_info.cpp
   storage/ob_sqlite_connection.cpp
   storage/ob_sqlite_connection_pool.cpp
-  storage/ob_reserved_snapshot_table_storage.cpp
   storage/ob_deadlock_event_history_table_storage.cpp
-  storage/ob_server_event_history_table_storage.cpp
-  storage/ob_tenant_event_history_table_storage.cpp
   storage/ob_tablet_replica_checksum_table_storage.cpp
-  storage/ob_zone_merge_info_table_storage.cpp
   storage/ob_merge_info_table_storage.cpp
   storage/ob_column_checksum_error_info_table_storage.cpp
   storage/ob_rootservice_job_table_storage.cpp

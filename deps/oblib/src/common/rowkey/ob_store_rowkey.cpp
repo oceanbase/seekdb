@@ -31,7 +31,7 @@ ObStoreRowkey ObStoreRowkey::MAX_STORE_ROWKEY(&ObStoreRowkey::MAX_OBJECT, 1);
 //FIXME-yangsuli: this method need to be removed later
 //we should NOT allow ObStoreRowkey to be converted to ObRowkey,
 //as conceptually it will lose column order info
-//now it is used in liboblog,which is OK as liboblog only tests equality
+// Keep the conversion local to equality-compatible rowkey paths.
 
 void ObStoreRowkey::destroy(ObIAllocator &allocator)
 {

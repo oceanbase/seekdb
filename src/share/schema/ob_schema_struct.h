@@ -1234,7 +1234,7 @@ typedef enum {
   SEQUENCE_SCHEMA = 14,
   SYS_VARIABLE_SCHEMA = 15,
   UDT_SCHEMA = 16,
-  // At present, only liboblog constructs simple table schema in real time in lazy mode, ob does not use it temporarily
+  // Lightweight table representation used when a caller requests a simple schema.
   TABLE_SIMPLE_SCHEMA = 17,
   TRIGGER_SCHEMA = 19,
   SYS_PRIV = 27,

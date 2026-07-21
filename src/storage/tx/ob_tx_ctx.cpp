@@ -1859,48 +1859,22 @@ int ObTxCtx::insert_mds_to_tx_table_(ObTxLogCb &log_cb)
 {
   int ret = OB_SUCCESS;
   const ObTxBufferNodeArray &node_array = log_cb.get_mds_range().get_range_array();
-  bool all_big_segment = true;
-  int64_t need_process_mds_count = 0;
-  for (int64_t idx = 0; OB_SUCC(ret) && idx < node_array.count(); idx++) {
-    if (!node_array.at(idx).allow_to_use_mds_big_segment()) {
-      all_big_segment = false;
-      need_process_mds_count++;
-    }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (all_big_segment) {
-    TRANS_LOG(INFO, "MDS big_segment not support tx_op just skip", K(trans_id_), KP(this));
-    // big segment not support tx_op
-    if (OB_NOT_NULL(log_cb.get_tx_op_array()) && log_cb.get_tx_op_array()->count() > 0) {
-      TRANS_LOG(WARN, "MDS big_segment log_cb pre_alloc is not null", KPC(this), K(log_cb));
-    }
-  } else if (OB_ISNULL(log_cb.get_tx_op_array())) {
+  if (OB_ISNULL(log_cb.get_tx_op_array())) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(WARN, "log_cb tx_op is null", KR(ret), KPC(this), K(log_cb));
-  } else if (need_process_mds_count != log_cb.get_tx_op_array()->count()) {
+  } else if (node_array.count() != log_cb.get_tx_op_array()->count()) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "log_cb mds size is not match", KR(ret), KPC(this), K(log_cb), K(need_process_mds_count));
+    TRANS_LOG(WARN, "log_cb mds size is not match", KR(ret), KPC(this), K(log_cb), K(node_array.count()));
   } else {
     SCN op_scn = log_cb.get_log_ts();
     ObTxOpArray &tx_op_array = *log_cb.get_tx_op_array();
     ObTxDataGuard tx_data_guard;
     // assign mds for pre_alloc node
-    int64_t mds_idx = 0;
     for (int64_t idx = 0; OB_SUCC(ret) && idx < tx_op_array.count(); idx++) {
       tx_op_array.at(idx).set_op_scn(op_scn);
       ObTxBufferNodeWrapper &wrapper = *(ObTxBufferNodeWrapper*)(tx_op_array.at(idx).get_op_val());
-      // just for skip mds big_segment
-      while (mds_idx < node_array.count()) {
-        if (!node_array.at(mds_idx).allow_to_use_mds_big_segment()) {
-          break;
-        } else {
-          mds_idx++;
-        }
-      }
-      const ObTxBufferNode &mds_node = node_array.at(mds_idx);
-      mds_idx++;
-      if (mds_idx < idx ||
-          wrapper.get_node().get_register_no() != mds_node.get_register_no() ||
+      const ObTxBufferNode &mds_node = node_array.at(idx);
+      if (wrapper.get_node().get_register_no() != mds_node.get_register_no() ||
           wrapper.get_node().get_data_source_type() != mds_node.get_data_source_type()) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "mds not match", KR(ret), KPC(this));
@@ -2680,7 +2654,7 @@ int ObTxCtx::submit_redo_commit_info_log_(ObTxLogBlock &log_block,
   return ret;
 }
 
-// For liboblog, the log_ts of commit log must be larger than commit_version_
+// The commit log timestamp must be greater than commit_version_.
 int ObTxCtx::submit_commit_log_()
 {
   int ret = OB_SUCCESS;
@@ -5019,17 +4993,13 @@ int ObTxCtx::prepare_mds_tx_op_(const ObTxBufferNodeArray &mds_array,
                                        bool is_replay)
 {
   int ret = OB_SUCCESS;
-  int64_t dest_max_register_no = 0;
 
   for (int64_t i = 0; OB_SUCC(ret) && i < mds_array.count(); i++) {
     const ObTxBufferNode &node = mds_array.at(i);
     ObTxBufferNodeWrapper *new_node_wrapper = nullptr;
-    mds::BufferCtx *new_ctx = nullptr;
     ObTxOp tx_op;
     tx_op_allocator.reset_local_alloc_size();
-    if (node.allow_to_use_mds_big_segment()) {
-      // do nothing
-    } else if (OB_ISNULL(new_node_wrapper = (ObTxBufferNodeWrapper*)(tx_op_allocator.alloc(sizeof(ObTxBufferNodeWrapper))))) {
+    if (OB_ISNULL(new_node_wrapper = (ObTxBufferNodeWrapper*)(tx_op_allocator.alloc(sizeof(ObTxBufferNodeWrapper))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       TRANS_LOG(WARN, "allocate memory failed", KR(ret));
     } else if (FALSE_IT(new(new_node_wrapper) ObTxBufferNodeWrapper())) {
@@ -5460,12 +5430,9 @@ int ObTxCtx::register_multi_data_source(const ObTxDataSourceType data_source_typ
         TRANS_LOG(WARN, "init tx buffer node failed", KR(ret), K(data_source_type), K(*this));
       } else if (OB_FAIL(tmp_array.push_back(node))) {
         TRANS_LOG(WARN, "push back notify node  failed", KR(ret));
-//#ifndef OB_TX_MDS_LOG_USE_BIT_SEGMENT_BUF
-      } else if (tmp_array.get_serialize_size() > ObTxMultiDataSourceLog::MAX_MDS_LOG_SIZE
-                 && !node.allow_to_use_mds_big_segment()) {
+      } else if (tmp_array.get_serialize_size() > ObTxMultiDataSourceLog::MAX_MDS_LOG_SIZE) {
         ret = OB_LOG_TOO_LARGE;
         TRANS_LOG(WARN, "too large mds buf node", K(ret), K(tmp_array.get_serialize_size()));
-//#endif
       } else if (OB_FAIL(mds_cache_.insert_mds_node(node))) {
         TRANS_LOG(WARN, "register multi source data failed", KR(ret), K(data_source_type),
                   K(*this));

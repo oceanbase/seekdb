@@ -19,7 +19,7 @@
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "rootserver/freeze/ob_major_merge_scheduler.h"
 #include "share/config/ob_tenant_config_mgr.h"  // TENANT_CONF, previously hidden behind a transitive include
-#include "rootserver/ob_rs_event_history_table_operator.h" // for ROOTSERVICE_EVENT_ADD
+#include "share/ob_structured_event_logger.h" // for ROOTSERVICE_EVENT_ADD
 #include "share/ob_tablet_meta_table_compaction_operator.h"
 #include "share/ob_global_merge_table_operator.h"
 #include "rootserver/freeze/ob_major_merge_info_manager.h"

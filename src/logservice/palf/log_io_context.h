@@ -30,7 +30,7 @@ enum class LogIOUser {
   FETCHLOG = 2,
   ARCHIVE = 3,
   RESTORE = 4,
-  CDC = 5,
+  CHANGE_STREAM = 5,
   STANDBY = 6,
   SHARED_UPLOAD = 7,
   META_INFO = 8,
@@ -48,7 +48,7 @@ inline const char *log_io_user_str(const LogIOUser user_type)
     USER_TYPE_STR(FETCHLOG);
     USER_TYPE_STR(ARCHIVE);
     USER_TYPE_STR(RESTORE);
-    USER_TYPE_STR(CDC);
+    USER_TYPE_STR(CHANGE_STREAM);
     USER_TYPE_STR(STANDBY);
     USER_TYPE_STR(SHARED_UPLOAD);
     USER_TYPE_STR(META_INFO);

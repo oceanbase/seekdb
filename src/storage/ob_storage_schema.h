@@ -324,7 +324,7 @@ public:
       const ObCreateTabletSchema &old_schema);
   INHERIT_TO_STRING_KV("ObStorageSchema", ObStorageSchema, K_(table_id), K_(index_status), K_(truncate_version));
 private:
-  // for cdc
+  // Persisted table identity for tablet creation.
   uint64_t table_id_;
   // for create index
   share::schema::ObIndexStatus index_status_;

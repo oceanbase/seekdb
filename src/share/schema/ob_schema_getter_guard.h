@@ -201,9 +201,6 @@ public:
                                       common::ObIArray<const ObSimpleTableSchemaV2 *> &table_schemas);
   int get_primary_table_schema_in_tablegroup(const uint64_t tablegroup_id,
                                              const ObSimpleTableSchemaV2 *&primary_table_schema);
-  int get_simple_tenant_schemas(common::ObIArray<const ObSimpleTenantSchema *> &tenant_schemas) const;
-
-  int get_user_tenant_count(int64_t &count) const;
   int get_table_ids_in_tenant(common::ObIArray<uint64_t> &table_ids);
   int get_table_ids_in_database(const uint64_t dataspace_id,
                                 common::ObIArray<uint64_t> &table_id_array);
@@ -748,7 +745,6 @@ public:
   bool use_schema_status() { return restore_tenant_exist(); }
 
   int check_formal_guard() const;
-  int is_lazy_mode(bool &is_lazy) const;
 
   int check_tenant_is_restore(bool &is_restore);
   int get_tenant_status(ObTenantStatus &status);

@@ -55,7 +55,6 @@ int ObDDLService::fork_single_table_in_trans_(const ObTableSchema &src_table_sch
     // Rebuild table schema with new id for fork table.
     if (OB_FAIL(rebuild_table_schema_with_new_id(
             src_table_schema, dst_db_schema, dst_table_name,
-            ObString(), // create_host
             session_id, USER_TABLE, *schema_service, table_schemas,
             inner_allocator,
             OB_INVALID_ID, // define_user_id
@@ -236,9 +235,6 @@ int ObDDLService::create_tables_for_fork_(
                        table_schema, trans, 0 == i ? &ddl_stmt_str : NULL,
                        i == table_schemas.count() - 1))) {
           LOG_WARN("failed to create table schema, ", K(ret));
-        } else if (OB_FAIL(ddl_operator.insert_temp_table_info(trans,
-                                                               table_schema))) {
-          LOG_WARN("failed to insert_temp_table_info!", K(ret));
         }
       }
 

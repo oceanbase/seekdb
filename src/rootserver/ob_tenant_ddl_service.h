@@ -77,7 +77,6 @@ struct ObSysStat
   Item ob_max_used_extended_rowid_table_tablet_id_;
   Item ob_max_used_sys_pl_object_id_;
   Item ob_max_used_object_id_;
-  Item ob_max_used_rewrite_rule_version_;
 };
 class ObTenantDDLService
 {

@@ -673,7 +673,7 @@ enum ObServerRole
   OB_PROXYSERVER = 5,
   OB_SERVER = 6,
   OB_PROXY = 7,
-  OB_OBLOG = 8, // liboblog
+  // 8 was the removed external liboblog role. Do not reuse.
 };
 
 const int OB_FAKE_MS_PORT = 2828;
@@ -957,6 +957,7 @@ const char *const OB_LBACSYS_SCHEMA_NAME = "LBACSYS";
 const char *const OB_AUDITOR_SCHEMA_NAME = "ORAAUDITOR";
 const char *const OB_RESTORE_USER_NAME = "__oceanbase_inner_restore_user";
 const char *const OB_DRC_USER_NAME = "__oceanbase_inner_drc_user";
+const int64_t OB_MAX_DDL_OPNAME_LENGTH = 64;
 const char *const OB_SYS_TENANT_NAME = "sys";
 const char *const OB_FAKE_TENANT_NAME = "fake_tenant";
 const char *const OB_SYS_HOST_NAME = "%";
@@ -964,8 +965,6 @@ const char *const OB_DEFAULT_HOST_NAME = "%";
 // const char *const OB_MONITOR_TENANT_NAME = "monitor";
 const char *const OB_DIAG_TENANT_NAME = "diag";
 //for sync ddl (ClusterID_TenantID_SchemaVersion)
-const char *const OB_DDL_ID_VAR_NAME = "__oceanbase_ddl_id";
-const int64_t OB_MAX_DDL_ID_STR_LENGTH = 64;
 #ifdef ERRSIM
 const int64_t OB_MAX_DDL_SINGLE_REPLICA_BUILD_TIMEOUT = 30L * 60L * 1000L * 1000L; // 30 minutes
 #else
@@ -1006,7 +1005,6 @@ const uint64_t OB_SYS_UNIT_ID = 1;
 const uint64_t OB_INIT_SERVER_ID = 1;
 const uint64_t OB_INIT_DDL_TASK_ID = 1;
 const uint64_t OB_SYS_UNIT_GROUP_ID = 1;
-const uint64_t OB_INIT_REWRITE_RULE_VERSION = 1;
 const uint64_t OB_USER_UNIT_CONFIG_ID = 1000;
 const uint64_t OB_USER_RESOURCE_POOL_ID = 1000;
 const uint64_t OB_USER_UNIT_ID = 1000;

@@ -23,7 +23,7 @@
 #include "rootserver/ob_ddl_service.h"
 #include "share/ob_global_stat_proxy.h"
 #include "storage/tx/ob_ts_mgr.h"
-#include "rootserver/ob_rs_event_history_table_operator.h"
+#include "share/ob_structured_event_logger.h"
 
 namespace oceanbase
 {

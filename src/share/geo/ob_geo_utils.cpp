@@ -1558,7 +1558,7 @@ int ObGeoTypeUtil::tree_to_bin(ObIAllocator &allocator,
 // (s)wkb to ewkt
 // 1. axis-order in ob_storage/ewkt/ewkb always long-lat.
 // 2. uint of geographic srs should be degree
-// 3. should not srs in this function, because srs will not implement in liboblog
+// 3. this formatting path does not perform an SRS lookup
 int ObGeoTypeUtil::geo_to_ewkt(const ObString &swkb,
                                ObString &ewkt,
                                ObIAllocator &allocator,

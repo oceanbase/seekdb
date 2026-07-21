@@ -57,7 +57,7 @@ int ObArrayUtil::get_type_name(ObNestedType coll_type, const ObDataType &elem_ty
 }
 
 
-// convert collection bin to string (for liboblog)
+// Convert a binary collection value to text.
 
 // determine a collection type is vector, array or map
 

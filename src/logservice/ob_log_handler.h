@@ -500,13 +500,6 @@ int seek_log_iterator(const StartPoint &start_point,
   return init_log_iterator_(start_point, suggested_read_buf_size, iterator);
 }
 
-template<typename StartPoint, typename IteratorType>
-int seek_log_iterator_for_cdc(const StartPoint &start_point,
-                              const int64_t suggested_read_buf_size,
-                              palf::PalfIterator<IteratorType> &iterator)
-{
-  return init_log_iterator_(start_point, suggested_read_buf_size, iterator);
-}
 // =============================== Iterator end===========================
 } // end namespace logservice
 } // end namespace oceanbase

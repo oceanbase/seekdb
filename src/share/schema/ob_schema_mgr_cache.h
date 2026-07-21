@@ -116,14 +116,9 @@ private:
 class ObSchemaMgrCache
 {
 public:
-  enum Mode {
-    REFRESH = 0,
-    FALLBACK = 1
-  };
-public:
   ObSchemaMgrCache();
   virtual ~ObSchemaMgrCache();
-  int init(int64_t init_cached_num, Mode mode);
+  int init(int64_t init_cached_num);
   int check_schema_mgr_exist(const int64_t schema_version, bool &is_exist);
   int get(const int64_t schema_version,
           const ObSchemaMgr *&schema_mgr,
@@ -137,7 +132,6 @@ public:
   int put(ObSchemaMgr *schema_mgr,
           ObSchemaMgr *&eli_schema_mgr,
           ObSchemaMgrHandle *handle = NULL);
-  int try_gc_tenant_schema_mgr(ObSchemaMgr *&eli_schema_mgr);
   int try_eliminate_schema_mgr(ObSchemaMgr *&eli_schema_mgr);
   void dump() const;
 public:
@@ -157,7 +151,6 @@ private:
   int64_t max_cached_num_;
   int64_t last_get_schema_idx_;
   int64_t cur_cached_num_;
-  Mode mode_;
   int64_t latest_schema_idx_;
 };
 

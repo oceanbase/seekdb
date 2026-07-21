@@ -112,8 +112,6 @@ private:
     bool empty();
     TO_STRING_KV(K_(batch_io_task));
   private:
-    int statistics_wait_cost_(int64_t first_handle_time, BatchLogIOFlushLogTask *batch_io_task);
-  private:
     BatchLogIOFlushLogTask batch_io_task_;
     int64_t handle_count_;
     ObMiniStat::ObStatItem *wait_cost_stat_;

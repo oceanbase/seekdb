@@ -31,7 +31,7 @@
 #include "storage/tx/ob_multi_data_source.h"
 #include "storage/tablet/ob_tablet_ddl_complete_replay_executor.h"
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
-#include "observer/ob_server_event_history_table_operator.h"
+#include "share/ob_structured_event_logger.h"
 #include "observer/ob_inner_sql_connection.h"
 #define USING_LOG_PREFIX MDS
 

@@ -19,8 +19,8 @@
 
 // Self-contained packet-code tags. The obcall RPC transport (packet /
 // packet-list / packet-set) has been deleted; nothing dispatches on these codes
-// any more. They survive only as compile-time tags for the dead Table-API / CDC
-// type bindings and for diagnostics that still record a pcode. Values mirror the
+// any more. The remaining values serve in-process type bindings and diagnostics
+// that still record a pcode. Values mirror the
 // historical obcall packet-list ids so any persisted logs/diagnostics stay
 // numerically stable.
 
@@ -52,11 +52,8 @@ enum ObReqPacketCode : int32_t
 
   // 0x002, 0x225, 0x276-0x27A, and 0x27C are reserved for removed packet codes.
 
-  // CDC / logfetcher type-binding tags
-  OB_LS_FETCH_MISSING_LOG  = 0x851,
-  OB_LS_FETCH_LOG2         = 0x853,
-  OB_LOG_REQ_START_LSN_BY_TS = 0x855,
-  OB_CDC_FETCH_RAW_LOG     = 0x863,
+  // 0x851, 0x853, 0x855, and 0x863 were used by removed external CDC/log-fetch RPC tags.
+  // Do not reuse.
 
   // 0x1101-0x1128 are reserved for removed packet codes.
 };

@@ -97,12 +97,6 @@ int ObTxBufferNode::set_mds_register_no(const uint64_t register_no)
   return ret;
 }
 
-bool ObTxBufferNode::allow_to_use_mds_big_segment() const
-{
-  return type_ == ObTxDataSourceType::DDL_TRANS;
-}
-
-
 bool ObTxBufferNode::operator==(const ObTxBufferNode &buffer_node) const
 {
   bool is_same = false;

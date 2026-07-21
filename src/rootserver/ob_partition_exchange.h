@@ -244,9 +244,6 @@ protected:
   int build_single_table_rw_defensive_(const ObIArray<common::ObTabletID> &tablet_ids,
                                        const int64_t schema_version,
                                        ObDDLSQLTransaction &trans);
-  int adapting_cdc_changes_in_exchange_partition_(const uint64_t partitioned_table_id,
-                                                  const uint64_t non_partitioned_table_id,
-                                                  ObDDLSQLTransaction &trans);
   int sync_exchange_partition_stats_info_(const uint64_t new_table_id,
                                           const uint64_t new_stat_level,
                                           const int64_t old_partition_id,
@@ -348,21 +345,6 @@ private:
   bool is_inited_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPartitionExchange);
-};
-
-struct ObChangeTabletToTableArg final
-{
-  OB_UNIS_VERSION_V(1);
-public:
-  ObChangeTabletToTableArg() : base_table_id_(OB_INVALID_ID), inc_table_id_(OB_INVALID_ID), tablet_ids_(), table_ids_() {}
-  ~ObChangeTabletToTableArg() {}
-  uint64_t base_table_id_; // PT table, always with the large amount of data.
-  uint64_t inc_table_id_; // NT table, with the incremental data.
-   // tablet ids of data table, index table, lob meta/piece table.
-  common::ObSArray<ObTabletID> tablet_ids_; 
-  // the table ids corresponding to the tablet ids.
-  common::ObSArray<uint64_t> table_ids_;
-  TO_STRING_KV(K_(base_table_id), K_(inc_table_id), K_(tablet_ids), K_(table_ids));
 };
 
 }//end namespace rootserver

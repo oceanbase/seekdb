@@ -16,7 +16,7 @@
 
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_log_monitor.h"
-#include "observer/ob_server_event_history_table_operator.h"   // SERVER_EVENT_ADD_WITH_RETRY
+#include "share/ob_structured_event_logger.h"   // SERVER_EVENT_ADD
 
 namespace oceanbase
 {
@@ -29,7 +29,7 @@ int ObLogMonitor::record_set_base_lsn_event(const palf::LSN &new_base_lsn)
 {
   int ret = OB_SUCCESS;
   const EventType event = EventType::SET_BASE_LSN;
-  SERVER_EVENT_ADD_WITH_RETRY(LOG_MONITOR_EVENT_FMT_PREFIX,
+  SERVER_EVENT_ADD(LOG_MONITOR_EVENT_FMT_PREFIX,
       "NEW_BASE_LSN", new_base_lsn);
   return ret;
 }
@@ -38,7 +38,7 @@ int ObLogMonitor::record_advance_base_info_event(const palf::PalfBaseInfo &palf_
 {
   int ret = OB_SUCCESS;
   const EventType event = EventType::ADVANCE_BASE_INFO;
-  SERVER_EVENT_ADD_WITH_RETRY(LOG_MONITOR_EVENT_FMT_PREFIX,
+  SERVER_EVENT_ADD(LOG_MONITOR_EVENT_FMT_PREFIX,
       "PALF_BASE_INFO", palf_base_info);
   return ret;
 }
@@ -50,7 +50,7 @@ int ObLogMonitor::record_truncate_event(const palf::LSN &lsn,
 {
   int ret = OB_SUCCESS;
   const EventType event = EventType::TRUNCATE;
-  SERVER_EVENT_ADD_WITH_RETRY(LOG_MONITOR_EVENT_FMT_PREFIX,
+  SERVER_EVENT_ADD(LOG_MONITOR_EVENT_FMT_PREFIX,
       "LSN", lsn,
       "MIN_BLOCK_ID", min_block_id,
       "MAX_BLOCK_ID", max_block_id,

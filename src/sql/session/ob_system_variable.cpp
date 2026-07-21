@@ -1971,7 +1971,7 @@ int ObSysVarOnCheckFuncs::check_log_row_value_option_is_valid(sql::ObExecContext
   ObString val = in_val.get_string();
   if (!val.empty()) {
     if (val.case_compare(OB_LOG_ROW_VALUE_PARTIAL_LOB) == 0) {
-      // because not adapat obcdc, currently partial_lob is disabled
+      // Partial LOB row images are not supported.
       // out_val = in_val;
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("partial_lob is not support, please use _enable_dbms_lob_partial_update instead", K(ret), K(in_val));

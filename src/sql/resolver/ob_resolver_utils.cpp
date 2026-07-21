@@ -1940,7 +1940,6 @@ stmt::StmtType ObResolverUtils::get_stmt_type_by_item_type(const ObItemType item
       SET_STMT_TYPE(T_SHOW_PROCESSLIST);
       SET_STMT_TYPE(T_SHOW_TABLEGROUPS);
       SET_STMT_TYPE(T_SHOW_TRIGGERS);
-      SET_STMT_TYPE(T_HELP);
       SET_STMT_TYPE(T_SHOW_RECYCLEBIN);
       SET_STMT_TYPE(T_SHOW_PROFILE);
       SET_STMT_TYPE(T_SHOW_SEQUENCES);
@@ -5118,39 +5117,6 @@ bool ObResolverUtils::is_drc_user(ObSQLSessionInfo &session_info)
     bret = false;
   }
   return bret;
-}
-
-int ObResolverUtils::set_sync_ddl_id_str(ObSQLSessionInfo *session_info, ObString &ddl_id_str)
-{
-  int ret = OB_SUCCESS;
-  ddl_id_str.reset();
-
-  bool is_sync_ddl_user = false;
-  if (OB_FAIL(ObResolverUtils::check_sync_ddl_user(session_info, is_sync_ddl_user))) {
-    LOG_WARN("Failed to check_sync_ddl_user", K(ret));
-  } else if (session_info->is_inner()) {
-    // do-nothing
-  } else if (is_sync_ddl_user) {
-    const ObString var_name(common::OB_DDL_ID_VAR_NAME);
-    common::ObObj var_obj;
-    if (OB_FAIL(session_info->get_user_variable_value(var_name, var_obj))) {
-      if (OB_ERR_USER_VARIABLE_UNKNOWN == ret) {
-        LOG_DEBUG("no __oceanbase_ddl_id user variable: ", K(ddl_id_str));
-        ret = OB_SUCCESS; // No session variable is set, need to return normally
-      } else {
-        LOG_WARN("failed to get value of __oceanbase_ddl_id user variable", K(ret), K(var_name));
-      }
-    } else {
-      if (ob_is_string_type(var_obj.get_type())) {
-        ddl_id_str = var_obj.get_string();
-        LOG_DEBUG("__oceanbase_ddl_id user variable: ", K(ddl_id_str));
-      } else {
-        ret = OB_ERR_WRONG_TYPE_FOR_VAR;
-        LOG_WARN("data type of __oceanbase_ddl_id user variable is not string", K(ret), K(var_obj));
-      }
-    }
-  }
-  return ret;
 }
 
 int ObResolverUtils::resolve_udf_name_by_parse_node(

@@ -21,7 +21,6 @@
 #include "pl/ob_pl.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "observer/mysql/obmp_query.h"
-#include "observer/ob_server_event_history_table_operator.h"
 
 namespace oceanbase
 {

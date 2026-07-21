@@ -685,10 +685,6 @@ public:
                      common::ObMySQLTransaction &trans);
   //----End of functions for directory object----
 
-  virtual int insert_temp_table_info(common::ObMySQLTransaction &trans,
-                                     const share::schema::ObTableSchema &table_schema);
-  virtual int delete_temp_table_info(common::ObMySQLTransaction &trans,
-                                     const share::schema::ObTableSchema &table_schema);
   virtual int alter_table_drop_aux_column(
       share::schema::ObTableSchema &new_table_schema,
       const share::schema::ObColumnSchemaV2 &new_column_schema,
@@ -901,45 +897,10 @@ int ObDDLOperator::construct_new_name_for_recyclebin(const T &schema,
 {
   int ret = common::OB_SUCCESS;
   new_object_name.reset();
-  auto *tsi_value = GET_TSI(share::schema::TSIDDLVar);
-  if (OB_ISNULL(tsi_value)) {
-    ret = OB_ERR_UNEXPECTED;
-    RS_LOG(WARN, "Failed to get TSIDDLVar", K(ret));
-  } else {
-    const common::ObString *ddl_id_str = tsi_value->ddl_id_str_;
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(ddl_id_str)) {
-        ret = new_object_name.append_fmt("__recycle_$_%lu_%ld",
-            GCONF.cluster_id.get_value(),
-            schema.get_schema_version());
-      } else if (is_aux_object(schema)) {
-        // Requires special handling of global indexes
-        if (is_global_index_object(schema)) {
-          common::ObString index_name;
-          if (OB_FAIL(dynamic_cast<const share::schema::ObTableSchema &>(schema).get_index_name(index_name))) {
-            RS_LOG(WARN, "failed to get index_name", K(ret));
-          } else {
-            // Specify ddl id, use ddl id
-            ret = new_object_name.append_fmt("__recycle_$_%.*s_%.*s",
-                ddl_id_str->length(), ddl_id_str->ptr(),
-                index_name.length(), index_name.ptr());
-          }
-        } else {
-          // indexes or VP tables only need the current schema version
-          ret = new_object_name.append_fmt("__recycle_$_%lu_%ld",
-              GCONF.cluster_id.get_value(),
-              schema.get_schema_version());
-        }
-      } else {
-        // Specify ddl id, then use ddl id to generate object name.
-        ret = new_object_name.append_fmt("__recycle_$_%.*s",
-            ddl_id_str->length(),
-            ddl_id_str->ptr());
-      }
-    }
-    if (OB_SUCCESS != ret) {
-      RS_LOG(WARN, "append new object name failed", K(ret));
-    }
+  if (OB_FAIL(new_object_name.append_fmt("__recycle_$_%lu_%ld",
+      GCONF.cluster_id.get_value(),
+      schema.get_schema_version()))) {
+    RS_LOG(WARN, "append new object name failed", K(ret));
   }
   return ret;
 }

@@ -523,10 +523,6 @@ public:
       const int64_t schema_version,
       common::ObISQLClient &sql_client,
       common::ObIArray<ObAuxTableMetaInfo> &aux_tables);
-  static int check_ddl_id_exist(
-      common::ObISQLClient &sql_client,
-      const common::ObString &ddl_id_str,
-      bool &is_exists);
   virtual int construct_schema_version_history(
       const ObRefreshSchemaStatus &schema_status,
       common::ObISQLClient &sql_client,
@@ -908,16 +904,6 @@ private:
 
   template<typename SCHEMA>
   int try_mock_partition_array(SCHEMA &table_schema);
-  int fetch_temp_table_schemas(
-      const ObRefreshSchemaStatus &schema_status,
-      common::ObISQLClient &sql_client,
-      common::ObIArray<ObTableSchema*> &table_schema_array);
-
-  int fetch_temp_table_schema(
-      const ObRefreshSchemaStatus &schema_status,
-      common::ObISQLClient &sql_client,
-      ObTableSchema &table_schema);
-
   int fetch_sys_variable(
       common::ObISQLClient &client,
       const ObRefreshSchemaStatus &schema_status,

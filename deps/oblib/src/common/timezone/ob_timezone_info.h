@@ -272,7 +272,7 @@ public:
   {}
   virtual ~ObTimeZoneInfo() {}
   int assign(const ObTimeZoneInfo &src);
-  int set_timezone(const ObString &str);//only used for liboblog
+  int set_timezone(const ObString &str);
   void set_offset(int32_t offset) { offset_= offset; }
   int32_t get_offset() const { return offset_; }
   void set_error_on_overlap_time(bool is_error) { error_on_overlap_time_ = is_error; }

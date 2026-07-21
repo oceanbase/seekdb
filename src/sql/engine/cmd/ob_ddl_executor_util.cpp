@@ -20,7 +20,7 @@
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_ddl_executor_util.h"
 #include "share/ob_ex_rpc.h"
-#include "observer/ob_server_event_history_table_operator.h"
+#include "share/ob_structured_event_logger.h"
 #include "share/schema/ob_schema_utils.h"  // relocated-definition owner
 
 namespace oceanbase

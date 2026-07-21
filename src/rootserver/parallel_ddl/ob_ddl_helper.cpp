@@ -375,23 +375,15 @@ int ObDDLHelper::gen_task_id_and_schema_versions_()
   return ret;
 }
 
-int ObDDLHelper::serialize_inc_schema_dict_()
+int ObDDLHelper::register_ddl_trans_()
 {
   int ret = OB_SUCCESS;
-  auto *tsi_generator = GET_TSI(TSISchemaVersionGenerator);
-  int64_t start_schema_version = OB_INVALID_VERSION;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_ISNULL(tsi_generator)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tsi schema version generator is null", KR(ret));
-  } else if (OB_FAIL(tsi_generator->get_start_version(start_schema_version))) {
-    LOG_WARN("fail to get start schema version", KR(ret));
-  } else if (OB_FAIL(get_trans_().serialize_inc_schemas(start_schema_version  - 1))) {
-    LOG_WARN("fail to serialize inc schemas", KR(ret),
-             "start_schema_version", start_schema_version - 1);
+  } else if (OB_FAIL(get_trans_().register_ddl_trans())) {
+    LOG_WARN("fail to register DDL transaction", KR(ret));
   }
-  RS_TRACE(inc_schema_dict);
+  RS_TRACE(register_ddl_trans);
   return ret;
 }
 
@@ -474,11 +466,10 @@ int ObDDLHelper::execute()
     LOG_WARN("fail to create schemas", KR(ret));
   }
   /* ----------------------------------------------
-   * 6. [optional] serialize increment data dictionary:
-   * - if table/database/tenant schema changed, records changed schemas in log and commits with DDL trans.
+   * 6. Mark the transaction as DDL for the local Change Stream consumer.
    */
-  if (FAILEDx(serialize_inc_schema_dict_())) {
-    LOG_WARN("fail to serialize inc schema dict", KR(ret));
+  if (FAILEDx(register_ddl_trans_())) {
+    LOG_WARN("fail to register DDL transaction", KR(ret));
   }
   
   /* ----------------------------------------------

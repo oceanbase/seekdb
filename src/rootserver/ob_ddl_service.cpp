@@ -1746,8 +1746,6 @@ int ObDDLService::create_tables_in_trans(const bool if_not_exist,
                                                      0 == i ? &tmp_ddl_stmt_str : NULL,
                                                      i == table_schemas.count() - 1))) {
           LOG_WARN("failed to create table schema, ", K(ret));
-        } else if (OB_FAIL(ddl_operator.insert_temp_table_info(trans, table_schema))) {
-          LOG_WARN("failed to insert_temp_table_info!", K(ret));
         } else if (table_schema.is_view_table() && dep_infos != nullptr && 0 == i) {
           for (int64_t i = 0 ; OB_SUCC(ret) && i < dep_infos->count(); ++i) {
             ObDependencyInfo dep;
@@ -1843,8 +1841,6 @@ int ObDDLService::create_index_table_in_trans(
                                                  trans,
                                                  ddl_stmt_str))) {
       LOG_WARN("failed to create table schema, ", KR(ret));
-		} else if (OB_FAIL(ddl_operator.insert_temp_table_info(trans, table_schema))) {
-			LOG_WARN("failed to insert temp table info!", KR(ret));
     } else {
       LOG_INFO("succeed to insert table schema in schema tables",
           K(table_schema.get_database_id()),
@@ -12738,12 +12734,6 @@ int ObDDLService::alter_table_in_trans(obcall::ObAlterTableArg &alter_table_arg,
             }
           }
 
-          if (OB_FAIL(ret)) {
-          } else if (alter_table_schema.alter_option_bitset_.has_member(ObAlterTableArg::SESSION_ID) &&
-                       0 == new_table_schema.get_session_id() && !new_table_schema.is_tmp_table() &&
-                       OB_FAIL(ddl_operator.delete_temp_table_info(trans, new_table_schema))) {
-              LOG_WARN("failed to delete temp table info", K(ret));
-          }
         }
         // scence : alter table rename to a mock fk parent table existed, will replace mock fk parent table with real table
         if (OB_SUCC(ret) && alter_table_schema.alter_option_bitset_.has_member(obcall::ObAlterTableArg::TABLE_NAME)) {
@@ -15860,8 +15850,6 @@ int ObDDLService::truncate_table_in_trans(const obcall::ObTruncateTableArg &arg,
                                true, /*need_sync_schema_version*/
                                is_truncate_table))) {
               LOG_WARN("failed to create table schema, ", K(ret));
-            } else if (OB_FAIL(ddl_operator.insert_temp_table_info(trans, tmp_schema))) {
-              LOG_WARN("failed to insert_temp_table_info!", K(ret));
             }
           } else {
             if (OB_FAIL(ddl_operator.create_index_in_recyclebin(
@@ -16405,7 +16393,6 @@ int ObDDLService::clear_ctas_hidden_table_session_id_(share::schema::ObTableSche
     LOG_WARN("hidden table is not a CTAS tmp table", K(ret), K(hidden_table_schema));
   } else {
     hidden_table_schema.set_session_id(0);
-    hidden_table_schema.set_create_host("");
     LOG_INFO("clear session_id of hidden table copied from CTAS table", K(hidden_table_schema));
   }
 
@@ -16416,9 +16403,7 @@ int ObDDLService::swap_ctas_hidden_table_session_id_(
     const share::schema::ObTableSchema &orig_table_schema,
     const share::schema::ObTableSchema &hidden_table_schema,
     share::schema::ObTableSchema &new_orig_table_schema,
-    share::schema::ObTableSchema &new_hidden_table_schema,
-    ObDDLOperator &ddl_operator,
-    common::ObMySQLTransaction &trans)
+    share::schema::ObTableSchema &new_hidden_table_schema)
 {
   int ret = OB_SUCCESS;
 
@@ -16429,14 +16414,6 @@ int ObDDLService::swap_ctas_hidden_table_session_id_(
   } else {
     new_orig_table_schema.set_session_id(hidden_table_schema.get_session_id());
     new_hidden_table_schema.set_session_id(orig_table_schema.get_session_id());
-    new_orig_table_schema.set_create_host(hidden_table_schema.get_create_host());
-    new_hidden_table_schema.set_create_host(orig_table_schema.get_create_host());
-    // since the session id is cleared when we create the hidden table, the temp table info
-    // won't be added at the creation time, so we should add it here
-    new_hidden_table_schema.set_in_offline_ddl_white_list(true);
-    if (OB_FAIL(ddl_operator.insert_temp_table_info(trans, new_hidden_table_schema))) {
-      LOG_WARN("failed to insert temp table info", K(ret), K(new_hidden_table_schema));
-    }
     LOG_INFO("restore session_id of hidden table copied from CTAS table",
              K(new_hidden_table_schema), K(new_orig_table_schema));
   }
@@ -16588,8 +16565,6 @@ int ObDDLService::create_user_hidden_table(const ObTableSchema &orig_table_schem
       if (OB_FAIL(ddl_operator.create_table(*table_schema, trans, NULL,
           i == schemas.count() - 1/*need_sync_schema_version, to update data table schema version*/))) {
         LOG_WARN("failed to create table schema", K(ret));
-      } else if (OB_FAIL(ddl_operator.insert_temp_table_info(trans, *table_schema))) {
-        LOG_WARN("failed to insert temp table info", K(ret), KPC(table_schema));
       }
     }
 
@@ -18450,46 +18425,6 @@ int ObDDLService::unbind_hidden_tablets(
   return ret;
 }
 
-int ObDDLService::write_ddl_barrier(
-    const ObTableSchema &hidden_table_schema,
-    ObDDLSQLTransaction &trans)
-{
-  int ret = OB_SUCCESS;
-  
-  ObArray<ObTabletID> tablet_ids;
-  ObArray<ObTabletID> hidden_tablets;
-  if (OB_FAIL(hidden_table_schema.get_tablet_ids(tablet_ids))) {
-    LOG_WARN("failed to get tablets", K(ret));
-  } else if (OB_FAIL(get_tablets(tablet_ids, hidden_tablets, trans))) {
-    LOG_WARN("failed to get tablet", K(ret));
-  } else {
-    ObArenaAllocator allocator("DDLSrvBarrier");
-    ObDDLBarrierLog log;
-    for (int64_t i = 0; OB_SUCC(ret) && i < hidden_tablets.count(); i++) {
-      if (OB_FAIL(log.hidden_tablet_ids_.push_back(hidden_tablets.at(i)))) {
-        LOG_WARN("failed to push back hidden tablet", K(ret));
-      }
-    }
-    if (OB_SUCC(ret) && !hidden_tablets.empty()) {
-      int64_t pos = 0;
-      int64_t size = log.get_serialize_size();
-      char *buf = nullptr;
-      if (OB_UNLIKELY(!log.is_valid())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid ddl barrier log", K(ret), K(log));
-      } else if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(size)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate", K(ret));
-      } else if (OB_FAIL(log.serialize(buf, size, pos))) {
-        LOG_WARN("failed to serialize arg", K(ret));
-      } else if (OB_FAIL(trans.register_tx_data(transaction::ObTxDataSourceType::DDL_BARRIER, buf, pos))) {
-        LOG_WARN("failed to register tx data", K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
 int ObDDLSQLTransaction::register_tx_data(const transaction::ObTxDataSourceType &type,
     const char *buf,
     const int64_t buf_len)
@@ -18661,13 +18596,13 @@ int ObDDLService::swap_orig_and_hidden_table_state(obcall::ObAlterTableArg &alte
           }
           // in prepare_hidden_table_schema, we clear the session id for hidden table of
           // CTAS tmp table. now, data loading stage is finished, we are ready to swap hidden table
-          // with CTAS tmp table. we should exchange the session id(and create_host) property to
+          // with CTAS tmp table. we should exchange the session id property to
           // ensure the new CTAS tmp table has correct state.
           if (OB_FAIL(ret)) {
           } else if (orig_table_schema->is_ctas_tmp_table() &&
               OB_FAIL(swap_ctas_hidden_table_session_id_(
                   *orig_table_schema, *hidden_table_schema, new_orig_table_schema,
-                  new_hidden_table_schema, ddl_operator, trans))) {
+                  new_hidden_table_schema))) {
             LOG_WARN("failed to swap ctas hidden table session id", K(ret));
           } else if (OB_FAIL(table_schemas.push_back(new_orig_table_schema)) ||
                      OB_FAIL(table_schemas.push_back(new_hidden_table_schema))) {
@@ -18694,11 +18629,6 @@ int ObDDLService::swap_orig_and_hidden_table_state(obcall::ObAlterTableArg &alte
           if (OB_FAIL(unbind_hidden_tablets(*orig_table_schema, *hidden_table_schema,
               schema_version, trans))) {
             LOG_WARN("failed to unbind hidden tablets", K(ret));
-          }
-        }
-        if (OB_SUCC(ret)) {
-          if (OB_FAIL(write_ddl_barrier(*hidden_table_schema, trans))) {
-            LOG_WARN("failed to write ddl barrier", K(ret));
           }
         }
         if (OB_SUCC(ret)) {
@@ -18951,7 +18881,6 @@ int ObDDLService::make_recover_restore_tables_visible(obcall::ObAlterTableArg &a
           tmp_schema.set_association_table_id(OB_INVALID_ID);
           tmp_schema.set_table_state_flag(ObTableStateFlag::TABLE_STATE_NORMAL);
           tmp_schema.set_in_offline_ddl_white_list(true);
-          tmp_schema.set_ddl_ignore_sync_cdc_flag(ObDDLIgnoreSyncCdcFlag::DO_SYNC_LOG_FOR_CDC); // reset.
           bool is_data_table_name_exist = false;
           if (OB_FAIL(dst_tenant_schema_guard->check_table_exist(
               tmp_schema.get_database_id(),
@@ -18973,11 +18902,6 @@ int ObDDLService::make_recover_restore_tables_visible(obcall::ObAlterTableArg &a
             // TODO yiren, rebuild trigger and foreign key, and check object duplicated too.
           }
         }
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(write_ddl_barrier(*hidden_table_schema, trans))) {
-        LOG_WARN("failed to write ddl barrier", K(ret));
       }
     }
     if (trans.is_started()) {
@@ -19783,9 +19707,8 @@ int ObDDLService::new_truncate_table_in_trans(const ObIArray<const ObTableSchema
     before_fetch_schema  = ObTimeUtility::current_time();
     LOG_INFO("truncate cost after truncate part and update attribute", KR(ret), "cost_ts", before_fetch_schema - tablet_cost);
 
-    // serialize increment table schemas
-    if (FAILEDx(trans.serialize_inc_schemas(first_schema_version - 1))) {
-      LOG_WARN("fail to serialize inc schemas", KR(ret), "start_schema_version", first_schema_version - 1);
+    if (FAILEDx(trans.register_ddl_trans())) {
+      LOG_WARN("fail to register DDL transaction", KR(ret));
     }
 
     if (OB_SUCC(ret)) {
@@ -20623,7 +20546,6 @@ int ObDDLService::fill_truncate_table_fk_err_msg_without_schema_guard(const ObFo
 int ObDDLService::rebuild_table_schema_with_new_id(const ObTableSchema &orig_table_schema,
                                                    const ObDatabaseSchema &new_database_schema,
                                                    const ObString &new_table_name,
-                                                   const ObString &create_host,
                                                    const int64_t session_id,
                                                    const share::schema::ObTableType table_type_,
                                                    ObSchemaService &schema_service,
@@ -20694,7 +20616,6 @@ int ObDDLService::rebuild_table_schema_with_new_id(const ObTableSchema &orig_tab
     }
     if (new_table_schema.is_user_table() && TMP_TABLE == table_type_) {
       new_table_schema.set_table_type(table_type_);
-      new_table_schema.set_create_host(create_host);
       new_table_schema.set_session_id(session_id);
     }
     if (orig_table_schema.is_primary_vp_table()) {
@@ -27548,8 +27469,6 @@ int ObDDLSQLTransaction::start(ObISQLClient *proxy,
         ret = OB_EAGAIN;
         LOG_WARN("RS not refresh the newest schema version, try again", KR(ret),
                  K(tenant_refreshed_schema_version), K(version_in_inner_table));
-      } else {
-        trans_start_schema_version_ = tenant_refreshed_schema_version;
       }
     }
   }
@@ -27632,28 +27551,9 @@ int ObDDLSQLTransaction::end(const bool commit)
     }
   }
 
-  // new truncate table implement will pass an unusable start schema version,
-  // it needs record increment table schemas alone.
   if (OB_SUCC(ret) && !ObSchemaService::in_parallel_ddl_thread() && commit) {
-    ObArenaAllocator allocator;
-    ObSEArray<const ObTenantSchema*, 2> tenant_schemas;
-    ObSEArray<const ObDatabaseSchema*, 2> database_schemas;
-    ObSEArray<const ObTableSchema*, 8> table_schemas;
-    if (trans_start_schema_version_ > 0) {
-      if (OB_FAIL(schema_service_->get_increment_schemas_for_data_dict(
-          *this, trans_start_schema_version_,
-          allocator, tenant_schemas, database_schemas, table_schemas))) {
-        LOG_WARN("fail to get increment schemas for data dict",
-                 KR(ret), K_(trans_start_schema_version));
-      }
-    } else {
-      // won't record increment schemas in the following cases:
-      // 1. bootstrap/create tenant.
-      // 2. schema dropped.
-      // 3. inner tables changed.
-    }
-    if (FAILEDx(serialize_inc_schemas_(allocator, tenant_schemas, database_schemas, table_schemas))) {
-      LOG_WARN("serialize_inc_schemas_ fail", KR(ret));
+    if (FAILEDx(register_ddl_trans())) {
+      LOG_WARN("fail to register DDL transaction", KR(ret));
     }
   }
 
@@ -27667,50 +27567,20 @@ int ObDDLSQLTransaction::end(const bool commit)
   return ret;
 }
 
-int ObDDLSQLTransaction::serialize_inc_schemas(const int64_t start_schema_version)
+int ObDDLSQLTransaction::register_ddl_trans()
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator allocator;
-  ObSEArray<const ObTenantSchema*, 2> tenant_schemas;
-  ObSEArray<const ObDatabaseSchema*, 2> database_schemas;
-  ObSEArray<const ObTableSchema*, 8> table_schemas;
-  if (OB_ISNULL(schema_service_)) {
+  if (OB_UNLIKELY(!is_started())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("schema service is null", K(ret));
-  } else if (OB_UNLIKELY(!is_started()
-             || start_schema_version <= 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), K_(in_trans), K(start_schema_version));
-  } else if (OB_FAIL(schema_service_->get_increment_schemas_for_data_dict(
-             *this, start_schema_version, allocator,
-             tenant_schemas, database_schemas, table_schemas))) {
-    LOG_WARN("fail to get increment schemas for data dict",
-             KR(ret), K(start_schema_version));
-  } else if (OB_FAIL(serialize_inc_schemas_(allocator, tenant_schemas, database_schemas, table_schemas))) {
-    LOG_WARN("serialize_inc_schemas_ fail", KR(ret), K(start_schema_version));
-  }
-  return ret;
-}
-
-int ObDDLSQLTransaction::serialize_inc_schemas_(
-    ObIAllocator &allocator,
-    const ObIArray<const ObTenantSchema*> &tenant_schemas,
-    const ObIArray<const ObDatabaseSchema*> &database_schemas,
-    const ObIArray<const ObTableSchema*> &table_schemas)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(allocator);
-  UNUSED(tenant_schemas);
-  UNUSED(database_schemas);
-  UNUSED(table_schemas);
-  // Register DDL_TRANS MDS so that Change Stream Fetcher can detect DDL transactions.
-  // Upstream serializes full incremental schema dict here (via ObDataDictStorage),
-  // but SeekDB only needs the MDS type signal, not the data content.
-  char dummy = '\0';
-  if (OB_FAIL(register_tx_data(transaction::ObTxDataSourceType::DDL_TRANS,
-      &dummy,
-      sizeof(dummy)))) {
-    LOG_WARN("register DDL_TRANS MDS failed", KR(ret));
+    LOG_WARN("transaction is not started", KR(ret), K_(in_trans));
+  } else {
+    // The local Change Stream only needs the MDS type marker, not a schema payload.
+    const char marker = '\0';
+    if (OB_FAIL(register_tx_data(transaction::ObTxDataSourceType::DDL_TRANS,
+        &marker,
+        sizeof(marker)))) {
+      LOG_WARN("register DDL_TRANS MDS failed", KR(ret));
+    }
   }
   return ret;
 }

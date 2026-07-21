@@ -8,7 +8,6 @@
 rootservice has indenpendent threads
 
 3. ObLeaderCoordinator: Leader coordinating
-6. ObEventHistoryTableOperator::ObDedupQueue: event_history asynchronous update task queue
 7. ObRootService::task_queue.task_queue: Asynchronous task queue, the number of threads can be configured, the default is 4
 8. ObRootService::task_queue.timer_: timer thread
 9. ObMajorFreezeLauncher: Major freeze
@@ -25,7 +24,6 @@ All timed tasks are AsyncTimerTask. When triggered, an asynchronous task is gene
 
 
 1. ObRestartTask : async task after restart
-2. ObEventTableClearTask : regular cleaning event_table
 3. ObInnerTableMonitorTask : regular cleaning schema_table
 
 

@@ -130,7 +130,6 @@ public:
   int schedule_due_jobs();
   int64_t calc_next_date(ObDBMSSchedJobInfo &job_info);
   int64_t run_job(ObDBMSSchedJobInfo &job_info, ObDBMSSchedJobKey *job_key, int64_t next_date);
-  int purge_run_detail();
   bool mysql_event_scheduler_is_off(ObDBMSSchedJobInfo &job_info);
   bool mysql_event_check_databse_exist(ObDBMSSchedJobInfo &job_info);
 
@@ -140,11 +139,6 @@ private:
   const static int CHECK_NEW_INTERVAL = 20 * 1000 * 1000;
   const static int FILTER_ZONE_SIZE = 1;
   const static int DEFALUT_SERVER_SIZE = 16;
-#ifdef _WIN32
-  static constexpr uint64_t PURGE_RUN_DETAIL_INTERVAL = 3600000000ULL; // 1h
-#else
-  const static uint64_t PURGE_RUN_DETAIL_INTERVAL = 60 * 60 * 1000 * 1000L; // 1h
-#endif
   const static int CHECK_JOB_LOST_THRESHOLD = 60 * 1000 * 1000;
 
   bool inited_;

@@ -27,7 +27,7 @@
 #include "share/ob_ex_rpc.h"
 #include "lib/worker.h"
 #include "rootserver/ob_root_utils.h"
-#include "observer/ob_server_event_history_table_operator.h"
+#include "share/ob_structured_event_logger.h"
 #include "share/schema/ob_ccl_rule_mgr.h"
 #include "sql/engine/expr/ob_expr_like.h"
 

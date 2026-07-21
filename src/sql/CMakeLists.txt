@@ -1146,7 +1146,6 @@ ob_set_subtarget(ob_sql optimizer
   optimizer/ob_delete_log_plan.cpp
   optimizer/ob_explain_log_plan.cpp
   optimizer/ob_fd_item.cpp
-  optimizer/ob_help_log_plan.cpp
   optimizer/ob_index_info_cache.cpp
   optimizer/ob_insert_log_plan.cpp
   optimizer/ob_join_order.cpp
@@ -1279,8 +1278,6 @@ ob_set_subtarget(ob_sql resolver_cmd
   resolver/cmd/ob_empty_query_resolver.cpp
   resolver/cmd/ob_get_diagnostics_resolver.cpp
   resolver/cmd/ob_get_diagnostics_stmt.cpp
-  resolver/cmd/ob_help_resolver.cpp
-  resolver/cmd/ob_help_stmt.cpp
   resolver/cmd/ob_kill_resolver.cpp
   resolver/cmd/ob_mock_resolver.cpp
   resolver/cmd/ob_load_data_resolver.cpp

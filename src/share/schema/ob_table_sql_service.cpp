@@ -895,13 +895,6 @@ int ObTableSqlService::drop_table(const ObTableSchema &table_schema,
     }
   }
 
-  //delete from __all_temp_table if it is a temporary table or ctas temporary table
-  if (OB_SUCC(ret) && (table_schema.is_ctas_tmp_table() || table_schema.is_tmp_table())) {
-    if (OB_FAIL(delete_from_all_temp_table(sql_client, table_id))) {
-      LOG_WARN("delete from all temp table failed", K(ret));
-    }
-  }
-
   // delete from __all_part_info, __all_part and __all_sub_part
   if (OB_SUCC(ret)) {
     if (OB_FAIL(delete_table_part_info(table_schema, new_schema_version, sql_client))) {
@@ -2509,7 +2502,6 @@ int ObTableSqlService::batch_create_table(ObIArray<ObTableSchema> &tables,
   if (tables.empty()) {
   } else {
     ObDMLSqlSplicer ddl_operation_dml;
-    ObDMLSqlSplicer ddl_id_dml;
     
     const bool has_sys_table = is_sys_table(tables.at(0).get_table_id());
     const bool update_object_status_ignore_version = false;
@@ -2562,7 +2554,7 @@ int ObTableSqlService::batch_create_table(ObIArray<ObTableSchema> &tables,
       } else {
         // for user table
         // add ddl operation
-        if (OB_FAIL(log_operation_dml(opt, ddl_operation_dml, ddl_id_dml))) {
+        if (OB_FAIL(log_operation_dml(opt, ddl_operation_dml))) {
           LOG_WARN("log operation failed", K(opt), KR(ret));
         }
       }
@@ -2588,9 +2580,6 @@ int ObTableSqlService::batch_create_table(ObIArray<ObTableSchema> &tables,
             tables.count()))) {
       LOG_WARN("log operation failed", KR(ret));
     } else if (FALSE_IT(time_guard.click("insert_all_ddl_operation"))) {
-    } else if (OB_FAIL(exec_dml(sql_client, OB_ALL_DDL_ID_TNAME, ddl_id_dml))) {
-      LOG_WARN("log operation failed", KR(ret));
-    } else if (FALSE_IT(time_guard.click("insert_all_ddl_id"))) {
     } else {
       ObTableSchema &last_table = tables.at(tables.count() - 1);
       for (int64_t i = 0; i < tables.count() && OB_SUCC(ret); i++) {
@@ -2896,7 +2885,6 @@ int ObTableSqlService::gen_table_dml_without_check(
       || OB_FAIL(dml.add_column("index_column_num", table.get_index_column_num()))
       || OB_FAIL(dml.add_column("max_used_column_id", table.get_max_used_column_id()))
       || OB_FAIL(dml.add_column("session_id", table.get_session_id()))
-      //|| OB_FAIL(dml.add_column("create_host", table.get_create_host()))
       || OB_FAIL(dml.add_column("tablet_size", table.get_tablet_size()))
       || OB_FAIL(dml.add_column("pctfree", table.get_pctfree()))
       || OB_FAIL(dml.add_column("autoinc_column_id", table.get_autoinc_column_id()))
@@ -3326,27 +3314,6 @@ int ObTableSqlService::delete_from_all_table(
   return ret;
 }
 
-int ObTableSqlService::delete_from_all_temp_table(ObISQLClient &sql_client,
-                                                  const uint64_t table_id)
-{
-  int ret = OB_SUCCESS;
-  ObDMLSqlSplicer dml;
-  
-  if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(table_id)))) {
-    LOG_WARN("add column failed", K(ret));
-  } else {
-    int64_t affected_rows = 0;
-    if (OB_FAIL(exec_delete(sql_client, table_id,
-                            OB_ALL_TEMP_TABLE_TNAME, dml, affected_rows))) {
-      LOG_WARN("exec delete failed", K(ret));
-    } else if (!is_single_row(affected_rows)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error", K(affected_rows), K(ret));
-    }
-  }
-  return ret;
-}
-
 int ObTableSqlService::delete_from_all_table_stat(ObISQLClient &sql_client,
                                                   const uint64_t table_id,
                                                   ObSqlString *extra_condition)
@@ -3714,7 +3681,6 @@ int ObTableSqlService::add_sequence(ObISQLClient &sql_client,
   int ret = OB_SUCCESS;
   ObDMLSqlSplicer dml;
   ObDMLExecHelper exec(sql_client);
-  // FIXME:__all_time_zone contains auto increment column. Cyclic dependence may occur.
   if (OB_FAIL(add_sequence_dml(dml, table_id, column_id, auto_increment, truncate_version))) {
     LOG_WARN("failed to add sequence dml", KR(ret), K(table_id), K(column_id), K(auto_increment), K(truncate_version));
   } else if (OB_FAIL(dml.finish_row())) {
@@ -4392,50 +4358,6 @@ int ObTableSqlService::insert_ori_schema_version(
   } else if (OB_FAIL(batch_insert_ori_schema_version(sql_client, table_ids, ori_schema_version))) {
     LOG_WARN("failed to batch insert ori schema version", KR(ret), K(table_ids),
         K(ori_schema_version));
-  }
-  return ret;
-}
-
-int ObTableSqlService::batch_insert_temp_table_info(
-    common::ObISQLClient &sql_client,
-    const ObIArray<ObTableSchema> &tables)
-{
-  int ret = OB_SUCCESS;
-  
-  
-  ObDMLSqlSplicer dml;
-  int64_t row_count = 0;
-  for (int64_t i = 0; i < tables.count() && OB_SUCC(ret); i++) {
-    const ObTableSchema &table_schema = tables.at(i);
-    const uint64_t table_id = table_schema.get_table_id();
-    if (OB_FAIL(check_ddl_allowed(table_schema))) {
-      LOG_WARN("check ddl allowd failed", KR(ret), K(table_schema));
-    } else if (table_schema.is_ctas_tmp_table() || table_schema.is_tmp_table()) {
-      if (OB_FAIL(dml.add_pk_column("table_id", table_id))
-          || OB_FAIL(dml.add_column("create_host", table_schema.get_create_host_str()))) {
-        LOG_WARN("fail to add dml", KR(ret));
-      } else if (OB_FAIL(dml.finish_row())) {
-        LOG_WARN("failed to finish_row", KR(ret));
-      } else {
-        row_count++;
-      }
-    }
-  }
-  if (OB_FAIL(ret) || 0 == row_count) {
-  } else if (OB_FAIL(exec_dml(sql_client, OB_ALL_TEMP_TABLE_TNAME, dml, row_count))) {
-    LOG_WARN("execute sql failed", KR(ret));
-  }
-  return ret;
-}
-
-int ObTableSqlService::insert_temp_table_info(ObISQLClient &sql_client, const ObTableSchema &table_schema)
-{
-  int ret = OB_SUCCESS;
-  ObSEArray<ObTableSchema, 1> tables;
-  if (OB_FAIL(tables.push_back(table_schema))) {
-    LOG_WARN("failed to push_back table", KR(ret), K(table_schema));
-  } else if (OB_FAIL(batch_insert_temp_table_info(sql_client, tables))) {
-    LOG_WARN("failed to batch insert temp table info", KR(ret));
   }
   return ret;
 }

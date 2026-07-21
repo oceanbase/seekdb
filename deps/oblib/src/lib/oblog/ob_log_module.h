@@ -62,7 +62,6 @@ DEFINE_LOG_SUB_MOD(SQL)                  // sql
 DEFINE_LOG_SUB_MOD(PL)                   // pl
 DEFINE_LOG_SUB_MOD(JIT)                  // jit
 DEFINE_LOG_SUB_MOD(STORAGE)              // storage, blocksstable
-DEFINE_LOG_SUB_MOD(TLOG)                 // liboblog
 DEFINE_LOG_SUB_MOD(STORAGETEST)          // storagetest
 DEFINE_LOG_SUB_MOD(LOGTOOL)              // logtool
 DEFINE_LOG_SUB_MOD(WRS)                  // weak read service
@@ -76,10 +75,8 @@ DEFINE_LOG_SUB_MOD(FLT)                // trace
 DEFINE_LOG_SUB_MOD(OBTRACE)                // trace
 DEFINE_LOG_SUB_MOD(BALANCE)              // balance module
 DEFINE_LOG_SUB_MOD(MDS)                  // multi data source
-DEFINE_LOG_SUB_MOD(DATA_DICT)            // data_dictionary module
 DEFINE_LOG_SUB_MOD(MVCC)                 // concurrency_control
 DEFINE_LOG_SUB_MOD(WR)                 // workload repository
-DEFINE_LOG_SUB_MOD(LOGMINER)             // logminer
 LOG_MOD_END(ROOT)
 
 //statement of WRS's sub_modules
@@ -172,7 +169,6 @@ LOG_MOD_END(STORAGE)
 
 // statement of clog's sub-modules
 LOG_MOD_BEGIN(CLOG)
-DEFINE_LOG_SUB_MOD(EXTLOG)               // external fetch log
 DEFINE_LOG_SUB_MOD(CSR)                  // cursor cache
 DEFINE_LOG_SUB_MOD(ARCHIVE)                  //archive
 LOG_MOD_END(CLOG)
@@ -211,21 +207,6 @@ LOG_MOD_END(RS)
 LOG_MOD_BEGIN(BALANCE)
 DEFINE_LOG_SUB_MOD(TRANSFER)            // transfer service
 LOG_MOD_END(BALANCE)
-
-// liboblog submodules
-LOG_MOD_BEGIN(TLOG)
-DEFINE_LOG_SUB_MOD(FETCHER)                 // fetcher
-DEFINE_LOG_SUB_MOD(PARSER)                  // Parser
-DEFINE_LOG_SUB_MOD(SEQUENCER)               // Sequencer
-DEFINE_LOG_SUB_MOD(FORMATTER)               // Formatter
-DEFINE_LOG_SUB_MOD(COMMITTER)               // committer
-DEFINE_LOG_SUB_MOD(TAILF)                   // oblog_tailf
-DEFINE_LOG_SUB_MOD(SCHEMA)                  // schema
-DEFINE_LOG_SUB_MOD(STORAGER)                // storager
-DEFINE_LOG_SUB_MOD(READER)                  // reader
-DEFINE_LOG_SUB_MOD(DISPATCHER)              // redo_dispatcher
-DEFINE_LOG_SUB_MOD(SORTER)                  // br_sorter
-LOG_MOD_END(TLOG)
 
 // easy submodules
 LOG_MOD_BEGIN(EASY)
@@ -378,8 +359,6 @@ LOG_MOD_END(PL)
 #define _CLIENT_LOG(level, _fmt_, args...) _OB_MOD_LOG(CLIENT, level, _fmt_, ##args)
 #define CLOG_LOG(level, info_string, args...) OB_MOD_LOG(CLOG, level, info_string, ##args)
 #define _CLOG_LOG(level, _fmt_, args...) _OB_MOD_LOG(CLOG, level, _fmt_, ##args)
-#define EXTLOG_LOG(level, info_string, args...) OB_SUB_MOD_LOG(CLOG, EXTLOG, level, info_string, ##args)
-#define _EXTLOG_LOG(level, info_string, args...) _OB_SUB_MOD_LOG(CLOG, EXTLOG, level, info_string, ##args)
 #define CSR_LOG(level, info_string, args...) OB_SUB_MOD_LOG(CLOG, CSR, level, info_string, ##args)
 #define _CSR_LOG(level, info_string, args...) _OB_SUB_MOD_LOG(CLOG, CSR, level, info_string, ##args)
 #define COMMON_LOG(level, info_string, args...) OB_MOD_LOG(COMMON, level, info_string, ##args)
@@ -437,8 +416,6 @@ LOG_MOD_END(PL)
 #define _REPLAY_LOG(level, _fmt_, args...) _OB_SUB_MOD_LOG(STORAGE, REPLAY, level, _fmt_, ##args)
 #define IMC_LOG(level, info_string, args...) OB_SUB_MOD_LOG(STORAGE, IMC, level, info_string, ##args)
 #define _IMC_LOG(level, _fmt_, args...) _OB_SUB_MOD_LOG(STORAGE, IMC, level, _fmt_, ##args)
-#define OBLOG_LOG(level, info_string, args...) OB_MOD_LOG(TLOG, level, info_string, ##args)
-#define _OBLOG_LOG(level, _fmt_, args...) _OB_MOD_LOG(TLOG, level, _fmt_, ##args)
 #define LOGTOOL_LOG(level, info_string, args...) OB_MOD_LOG(LOGTOOL, level, info_string, ##args)
 #define _LOGTOOL_LOG(level, _fmt_, args...) _OB_MOD_LOG(LOGTOOL, level, _fmt_, ##args)
 #define DETECT_LOG(level, info_string, args...) OB_MOD_LOG(DETECT, level, info_string, ##args)
@@ -457,14 +434,10 @@ LOG_MOD_END(PL)
 #define _BALANCE_LOG(level, _fmt_, args...) _OB_MOD_LOG(BALANCE, level, _fmt_, ##args)
 #define MDS_LOG(level, info_string, args...) OB_MOD_LOG(MDS, level, info_string, ##args)
 #define _MDS_LOG(level, _fmt_, args...) _OB_MOD_LOG(MDS, level, _fmt_, ##args)
-#define DDLOG(level, info_string, args...) OB_MOD_LOG(DATA_DICT, level, info_string, ##args)
-#define _DDLOG(level, _fmt_, args...) _OB_MOD_LOG(DATA_DICT, level, _fmt_, ##args)
 #define MVCC_LOG(level, info_string, args...) OB_MOD_LOG(MVCC, level, info_string, ##args)
 #define _MVCC_LOG(level, _fmt_, args...) _OB_MOD_LOG(MVCC, level, _fmt_, ##args)
 #define WR_LOG(level, info_string, args...) OB_MOD_LOG(WR, level, info_string, ##args)
 #define _WR_LOG(level, _fmt_, args...) _OB_MOD_LOG(WR, level, _fmt_, ##args)
-#define LOGMNR_LOG(level, info_string, args...) OB_MOD_LOG(LOGMINER, level, info_string, ##args)
-#define _LOGMNR_LOG(level, _fmt_, args...) _OB_MOD_LOG(LOGMINER, level, _fmt_, ##args)
 
 //dfine ParMod_SubMod_LOG
 #define WRS_CLUSTER_LOG(level, info_string, args...) OB_SUB_MOD_LOG(WRS, CLUSTER, level,        \
@@ -849,30 +822,6 @@ LOG_MOD_END(PL)
 #define _BALANCE_TRANSFER_LOG(level, info_string, args...)     \
   _OB_SUB_MOD_LOG(BALANCE, TRANSFER, level, info_string, ##args)
 
-// liboblog submod definition
-#define OBLOG_FETCHER_LOG(level, fmt, args...) OB_SUB_MOD_LOG(TLOG, FETCHER, level, fmt, ##args)
-#define _OBLOG_FETCHER_LOG(level, fmt, args...) _OB_SUB_MOD_LOG(TLOG, FETCHER, level, fmt, ##args)
-#define OBLOG_PARSER_LOG(level, fmt, args...) OB_SUB_MOD_LOG(TLOG, PARSER, level, fmt, ##args)
-#define _OBLOG_PARSER_LOG(level, fmt, args...) _OB_SUB_MOD_LOG(TLOG, PARSER, level, fmt, ##args)
-#define OBLOG_SEQUENCER_LOG(level, fmt, args...) OB_SUB_MOD_LOG(TLOG, SEQUENCER, level, fmt, ##args)
-#define _OBLOG_SEQUENCER_LOG(level, fmt, args...) _OB_SUB_MOD_LOG(TLOG, SEQUENCER, level, fmt, ##args)
-#define OBLOG_FORMATTER_LOG(level, fmt, args...) OB_SUB_MOD_LOG(TLOG, FORMATTER, level, fmt, ##args)
-#define _OBLOG_FORMATTER_LOG(level, fmt, args...) _OB_SUB_MOD_LOG(TLOG, FORMATTER, level, fmt, ##args)
-#define OBLOG_COMMITTER_LOG(level, fmt, args...) OB_SUB_MOD_LOG(TLOG, COMMITTER, level, fmt, ##args)
-#define _OBLOG_COMMITTER_LOG(level, fmt, args...) _OB_SUB_MOD_LOG(TLOG, COMMITTER, level, fmt, ##args)
-#define OBLOG_TAILF_LOG(level, fmt, args...) OB_SUB_MOD_LOG(TLOG, TAILF, level, fmt, ##args)
-#define _OBLOG_TAILF_LOG(level, fmt, args...) _OB_SUB_MOD_LOG(TLOG, TAILF, level, fmt, ##args)
-#define OBLOG_SCHEMA_LOG(level, fmt, args...) OB_SUB_MOD_LOG(TLOG, SCHEMA, level, fmt, ##args)
-#define _OBLOG_SCHEMA_LOG(level, fmt, args...) _OB_SUB_MOD_LOG(TLOG, SCHEMA, level, fmt, ##args)
-#define OBLOG_STORAGER_LOG(level, fmt, args...) OB_SUB_MOD_LOG(TLOG, STORAGER, level, fmt, ##args)
-#define _OBLOG_STORAGER_LOG(level, fmt, args...) _OB_SUB_MOD_LOG(TLOG, STORAGER, level, fmt, ##args)
-#define OBLOG_READER_LOG(level, fmt, args...) OB_SUB_MOD_LOG(TLOG, READER, level, fmt, ##args)
-#define _OBLOG_READER_LOG(level, fmt, args...) _OB_SUB_MOD_LOG(TLOG, READER, level, fmt, ##args)
-#define OBLOG_DISPATCHER_LOG(level, fmt, args...) OB_SUB_MOD_LOG(TLOG, DISPATCHER, level, fmt, ##args)
-#define _OBLOG_DISPATCHER_LOG(level, fmt, args...) _OB_SUB_MOD_LOG(TLOG, DISPATCHER, level, fmt, ##args)
-#define OBLOG_SORTER_LOG(level, fmt, args...) OB_SUB_MOD_LOG(TLOG, SORTER, level, fmt, ##args)
-#define _OBLOG_SORTER_LOG(level, fmt, args...) _OB_SUB_MOD_LOG(TLOG, SORTER, level, fmt, ##args)
-
 // END MODULE LOG MACRO DEFINE
 
 #define _OB_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _OB_LOG(level, ##args); }
@@ -889,8 +838,6 @@ LOG_MOD_END(PL)
 #define _CLIENT_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _CLIENT_LOG(level, ##args); }
 #define CLOG_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; CLOG_LOG(level, ##args); }
 #define _CLOG_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _CLOG_LOG(level, ##args); }
-#define EXTLOG_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; EXTLOG_LOG(level, ##args); }
-#define _EXTLOG_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _EXTLOG_LOG(level, ##args); }
 #define CSR_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; CSR_LOG(level, ##args); }
 #define _CSR_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _CSR_LOG(level, ##args); }
 #define COMMON_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; COMMON_LOG(level, ##args); }
@@ -948,8 +895,6 @@ LOG_MOD_END(PL)
 #define _REPLAY_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _REPLAY_LOG(level, ##args); }
 #define IMC_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; IMC_LOG(level, ##args); }
 #define _IMC_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _IMC_LOG(level, ##args); }
-#define OBLOG_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; OBLOG_LOG(level, ##args); }
-#define _OBLOG_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _OBLOG_LOG(level, ##args); }
 #define LOGTOOL_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; LOGTOOL_LOG(level, ##args); }
 #define _LOGTOOL_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _LOGTOOL_LOG(level, ##args); }
 #define DETECT_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; DETECT_LOG(level, ##args); }
@@ -1140,35 +1085,8 @@ LOG_MOD_END(PL)
 #define _RS_RESTORE_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _RS_RESTORE_LOG(level, ##args); }
 #define STORAGETEST_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; STORAGETEST_LOG(level, ##args); }
 #define _STORAGETEST_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _STORAGETEST_LOG(level, ##args); }
-#define OBLOG_FETCHER_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; OBLOG_FETCHER_LOG(level, ##args); }
-#define _OBLOG_FETCHER_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _OBLOG_FETCHER_LOG(level, ##args); }
-#define OBLOG_PARSER_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; OBLOG_PARSER_LOG(level, ##args); }
-#define _OBLOG_PARSER_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _OBLOG_PARSER_LOG(level, ##args); }
-#define OBLOG_SEQUENCER_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; OBLOG_SEQUENCER_LOG(level, ##args); }
-#define _OBLOG_SEQUENCER_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _OBLOG_SEQUENCER_LOG(level, ##args); }
-#define OBLOG_FORMATTER_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; OBLOG_FORMATTER_LOG(level, ##args); }
-#define _OBLOG_FORMATTER_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _OBLOG_FORMATTER_LOG(level, ##args); }
-#define OBLOG_COMMITTER_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; OBLOG_COMMITTER_LOG(level, ##args); }
-#define _OBLOG_COMMITTER_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _OBLOG_COMMITTER_LOG(level, ##args); }
-#define OBLOG_TAILF_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; OBLOG_TAILF_LOG(level, ##args); }
-#define _OBLOG_TAILF_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _OBLOG_TAILF_LOG(level, ##args); }
-#define OBLOG_SCHEMA_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; OBLOG_SCHEMA_LOG(level, ##args); }
-#define _OBLOG_SCHEMA_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _OBLOG_SCHEMA_LOG(level, ##args); }
-#define OBLOG_STORAGER_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; OBLOG_STORAGER_LOG(level, ##args); }
-#define _OBLOG_STORAGER_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _OBLOG_STORAGER_LOG(level, ##args); }
-#define OBLOG_READER_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; OBLOG_READER_LOG(level, ##args); }
-#define _OBLOG_READER_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _OBLOG_READER_LOG(level, ##args); }
-#define OBLOG_DISPATCHER_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; OBLOG_DISPATCHER_LOG(level, ##args); }
-#define _OBLOG_DISPATCHER_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _OBLOG_DISPATCHER_LOG(level, ##args); }
-#define OBLOG_SORTER_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; OBLOG_SORTER_LOG(level, ##args); }
-#define _OBLOG_SORTER_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _OBLOG_SORTER_LOG(level, ##args); }
-#define LOGMNR_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; LOGMNR_LOG(level, ##args); }
-#define _LOGMNR_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _LOGMNR_LOG(level, ##args); }
 #define MDS_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; MDS_LOG(level, ##args); }
 #define _MDS_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _MDS_LOG(level, ##args); }
-#define DDLOG_RET(level, errcode, args...){ int __ret__ = errcode; int ret = __ret__; DDLOG(level, ##args); }
-#define _DDLOG_RET(level, errcode, args...){ int __ret__ = errcode; int ret = __ret__; _DDLOG(level, ##args); }
-
 // END XXX_LOG_RET MACRO DEFINE
 
 

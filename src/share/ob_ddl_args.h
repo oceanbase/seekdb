@@ -30,7 +30,6 @@ struct ObDDLArg
 public:
   ObDDLArg() :
       ddl_stmt_str_(),
-      ddl_id_str_(),
       sync_from_primary_(false),
       based_schema_object_infos_(),
       parallelism_(0),
@@ -56,8 +55,6 @@ public:
   void reset()
   {
     ddl_stmt_str_.reset();
-    
-    ddl_id_str_.reset();
     sync_from_primary_ = false;
     based_schema_object_infos_.reset();
     parallelism_ = 0;
@@ -67,8 +64,6 @@ public:
   DECLARE_TO_STRING;
 
   common::ObString ddl_stmt_str_;
-  
-  common::ObString ddl_id_str_;
   bool sync_from_primary_;
   common::ObSArray<share::schema::ObBasedSchemaObjectInfo> based_schema_object_infos_;
   int64_t parallelism_;

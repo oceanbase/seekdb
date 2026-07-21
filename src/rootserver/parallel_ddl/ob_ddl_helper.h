@@ -132,7 +132,7 @@ protected:
   virtual int calc_schema_version_cnt_() = 0;
   int gen_task_id_and_schema_versions_();
   virtual int operate_schemas_() = 0;
-  int serialize_inc_schema_dict_();
+  int register_ddl_trans_();
   virtual int operation_before_commit_() = 0;
   virtual int clean_on_fail_commit_() = 0;
   virtual int construct_and_adjust_result_(int &return_ret) = 0;

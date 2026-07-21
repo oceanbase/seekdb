@@ -21,7 +21,6 @@
 #include "sql/plan_cache/ob_ps_cache.h"
 #include "sql/plan_cache/ob_pcv_set.h"
 #include "sql/ob_sql_init.h"
-#include "sql/resolver/cmd/ob_help_stmt.h"
 #include "sql/resolver/ob_resolver.h"
 #include "sql/resolver/cmd/ob_variable_set_stmt.h"
 #include "sql/resolver/cmd/ob_call_procedure_stmt.h"
@@ -322,42 +321,6 @@ int ObSql::fill_result_set(ObResultSet &result_set,
         LOG_WARN("reserve field columns failed", K(ret));
       } else if (OB_FAIL(result_set.add_field_column(field))) {
         LOG_WARN("fail to add field column to result_set", K(ret));
-      }
-      break;
-    }
-    case stmt::T_HELP: {
-      ObHelpStmt *help_stmt = static_cast<ObHelpStmt *>(stmt);
-      if (OB_UNLIKELY(NULL == help_stmt)) {
-        ret = OB_ERR_PARSE_SQL;
-        LOG_WARN("logical plan of help statement error", K(ret));
-      } else {
-        ObString tname = ObString::make_string("help_table");
-        field.tname_ = tname;
-        field.org_tname_ = tname;
-        field.charsetnr_ = CS_TYPE_UTF8MB4_GENERAL_CI;
-        int64_t col_count = help_stmt->get_col_count();
-        if (OB_FAIL(result_set.reserve_field_columns(col_count))) {
-          LOG_WARN("reserve field columns failed", K(ret), K(col_count));
-        }
-        for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
-          field.type_.set_type(ObVarcharType);
-          field.type_.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
-          field.type_.set_collation_level(CS_LEVEL_IMPLICIT);
-          field.type_.set_varchar(type_name);
-          ObString col_name;
-          if (OB_FAIL(help_stmt->get_col_name(i, col_name))) {
-            LOG_WARN("fail to get column name", K(ret), K(i));
-          } else if (OB_FAIL(ob_write_string(alloc, col_name, field.cname_))) {
-            LOG_WARN("fail to alloc string", K(ret), "name", col_name);
-          } else if (OB_FAIL(ob_write_string(alloc, col_name, field.org_cname_))) {
-            LOG_WARN("fail to alloc string", K(ret), "name", col_name);
-          } else if (OB_FAIL(result_set.add_field_column(field))) {
-            LOG_WARN("fail to add field column to result_set", K(ret));
-          } else {
-            field.cname_.assign(NULL, 0);
-            field.org_cname_.assign(NULL, 0);
-          }
-        }
       }
       break;
     }
@@ -2830,8 +2793,7 @@ int ObSql::generate_physical_plan(ParseResult &parse_result,
     ret = OB_BATCHED_MULTI_STMT_ROLLBACK;
     LOG_WARN("batched multi_stmt needs rollback", K(ret));
   } else if (basic_stmt->is_dml_stmt()
-            || basic_stmt->is_explain_stmt()
-            || basic_stmt->is_help_stmt()) {
+            || basic_stmt->is_explain_stmt()) {
 #ifdef __ANDROID__
     // On Android: if the outline's max_concurrent is stricter than all DATABASE_AND_TABLE CCL
     // rules, skip level-3 CCL check (outline is the binding constraint).
@@ -3081,7 +3043,7 @@ int ObSql::generate_plan(ParseResult &parse_result,
     END_OPT_TRACE(session_info);
     if (OB_SUCC(ret)) {
       ObSqlPlan sql_plan(result.get_mem_pool());
-      if (stmt->is_explain_stmt() || stmt->is_help_stmt()) {
+      if (stmt->is_explain_stmt()) {
         // do nothing
       } else if (OB_FAIL(sql_plan.store_sql_plan(logical_plan, phy_plan))) {
         LOG_WARN("failed to store sql plan", K(ret));

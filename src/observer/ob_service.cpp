@@ -32,17 +32,15 @@
 
 #include "sql/optimizer/ob_storage_estimator.h"
 #include "rootserver/ob_bootstrap.h"
-#include "rootserver/ob_tenant_event_history_table_operator.h" // TENANT_EVENT_INSTANCE
 #include "observer/ob_server.h"
-#include "ob_server_event_history_table_operator.h"
+#include "share/ob_structured_event_logger.h"
 #include "storage/ddl/ob_delete_lob_meta_row_task.h" // delete lob meta row for drop vec index
 #include "storage/ddl/ob_build_index_task.h"
 #include "storage/tx_storage/ob_tenant_freezer.h"
 #include "logservice/ob_log_service.h"        // ObLogService
 #include "share/ob_ddl_sim_point.h" // for DDL_SIM
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
-#include "share/ob_cluster_event_history_table_operator.h"//CLUSTER_EVENT_INSTANCE
-#include "share/ob_zone_merge_table_operator.h"
+#include "share/ob_zone_merge_info.h"
 #include "share/ob_global_merge_table_operator.h"
 #include "share/ob_column_checksum_error_operator.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
@@ -192,21 +190,6 @@ int ObService::init(common::ObMySQLProxy &sql_proxy,
   } else if (OB_ISNULL(GCTX.meta_db_pool_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("meta_db_pool_ is not initialized", K(ret));
-  } else if (OB_ISNULL(GCTX.kv_storage_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("kv_storage_ is not initialized", K(ret));
-  } else if (OB_FAIL(GCTX.kv_storage_->init(GCTX.meta_db_pool_))) {
-    FLOG_WARN("init kv storage failed", KR(ret));
-  } else if (OB_FAIL(CLUSTER_EVENT_INSTANCE.init(GCTX.meta_db_pool_))) {
-    FLOG_WARN("init cluster event history table failed", KR(ret));
-  } else if (OB_FAIL(TENANT_EVENT_INSTANCE.init(GCTX.meta_db_pool_, gctx_.self_addr()))) {
-    FLOG_WARN("init tenant event history table failed", KR(ret), K(gctx_.self_addr()));
-  } else if (OB_FAIL(SERVER_EVENT_INSTANCE.init(GCTX.meta_db_pool_, gctx_.self_addr()))) {
-    FLOG_WARN("init server event history table failed", KR(ret));
-  } else if (OB_FAIL(DEALOCK_EVENT_INSTANCE.init(sql_proxy))) {
-    FLOG_WARN("init deadlock event history cleaner failed", KR(ret));
-  } else if (OB_FAIL(ObZoneMergeTableOperator::init())) {
-    FLOG_WARN("init zone merge table operator failed", KR(ret));
   } else if (OB_FAIL(ObGlobalMergeTableOperator::init())) {
     FLOG_WARN("init global merge table operator failed", KR(ret));
   } else if (OB_FAIL(ObColumnChecksumErrorOperator::init())) {
@@ -326,21 +309,6 @@ void ObService::stop()
     schema_updater_.stop();
     FLOG_INFO("schema updater stopped");
 
-    FLOG_INFO("begin to stop deadlock event service");
-    DEALOCK_EVENT_INSTANCE.stop();
-    FLOG_INFO("deadlock event service stopped");
-
-    FLOG_INFO("begin to stop server event instance");
-    SERVER_EVENT_INSTANCE.stop();
-    FLOG_INFO("server event instance stopped");
-
-    FLOG_INFO("begin to stop cluster event instance");
-    CLUSTER_EVENT_INSTANCE.stop();
-    FLOG_INFO("cluster event instance stopped");
-
-    FLOG_INFO("begin to stop tenant event instance");
-    TENANT_EVENT_INSTANCE.stop();
-    FLOG_INFO("tenant event instance stopped");
   }
   FLOG_INFO("[OBSERVICE_NOTICE] observice finish stop", K_(stopped));
 }
@@ -358,21 +326,6 @@ void ObService::wait()
     schema_updater_.wait();
     FLOG_INFO("wait schema updater success");
 
-    FLOG_INFO("begin to wait deadlock event service");
-    DEALOCK_EVENT_INSTANCE.wait();
-    FLOG_INFO("wait deadlock event service success");
-
-    FLOG_INFO("begin to wait server event instance");
-    SERVER_EVENT_INSTANCE.wait();
-    FLOG_INFO("wait server event instance success");
-
-    FLOG_INFO("begin to wait cluster event instance");
-    CLUSTER_EVENT_INSTANCE.wait();
-    FLOG_INFO("wait cluster event instance success");
-
-    FLOG_INFO("begin to wait tenant event instance");
-    TENANT_EVENT_INSTANCE.wait();
-    FLOG_INFO("wait tenant event instance success");
   }
   FLOG_INFO("[OBSERVICE_NOTICE] wait ob_service end");
 }
@@ -392,21 +345,6 @@ int ObService::destroy()
     schema_updater_.destroy();
     FLOG_INFO("schema updater destroyed");
 
-    FLOG_INFO("begin to destroy cluster event instance");
-    CLUSTER_EVENT_INSTANCE.destroy();
-    FLOG_INFO("cluster event instance destroyed");
-
-    FLOG_INFO("begin to destroy tenant event instance");
-    TENANT_EVENT_INSTANCE.destroy();
-    FLOG_INFO("tenant event instance destroyed");
-
-    FLOG_INFO("begin to destroy server event instance");
-    SERVER_EVENT_INSTANCE.destroy();
-    FLOG_INFO("server event instance destroyed");
-
-    FLOG_INFO("begin to destroy deadlock event service");
-    DEALOCK_EVENT_INSTANCE.destroy();
-    FLOG_INFO("deadlock event service destroyed");
     // restore_net_driver_ is now managed by ObLogRestoreService, no need to destroy here
   }
   FLOG_INFO("[OBSERVICE_NOTICE] destroy ob_service end", KR(ret));

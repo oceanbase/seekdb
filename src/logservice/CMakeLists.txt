@@ -79,16 +79,4 @@ ob_set_subtarget(ob_logservice common_util
 
 
 
-ob_set_subtarget(ob_logservice data_dictionary
-  data_dictionary/ob_data_dict_meta_info.cpp
-  data_dictionary/ob_data_dict_service.cpp
-  data_dictionary/ob_data_dict_sql_client.cpp
-  data_dictionary/ob_data_dict_storager.cpp
-  data_dictionary/ob_data_dict_struct.cpp
-  data_dictionary/ob_data_dict_utils.cpp
-  data_dictionary/ob_data_dict_iterator.cpp
-)
-
-
-
 ob_server_add_target(ob_logservice)

@@ -63,61 +63,56 @@ int ObTimezoneImporter::import_timezone_info(const ObString &file_path)
   } else if (OB_FAIL(trans.start(sql_proxy))) {
     LOG_WARN("fail to start transaction", K(ret));
   } else {
-    // 1. truncate tables.
-    ObSqlString trunc_sql1;
-    ObSqlString trunc_sql2;
-    ObSqlString trunc_sql3;
-    ObSqlString trunc_sql4;
-    if (OB_FAIL(trunc_sql1.assign_fmt("DELETE FROM %s", OB_ALL_TIME_ZONE_TNAME))) {
+    ObSqlString trunc_name_sql;
+    ObSqlString trunc_transition_sql;
+    ObSqlString trunc_transition_type_sql;
+    if (OB_FAIL(trunc_name_sql.assign_fmt("DELETE FROM %s", OB_ALL_TIME_ZONE_NAME_TNAME))) {
       LOG_WARN("assign fmt failed", K(ret));
-    } else if (OB_FAIL(trunc_sql2.assign_fmt("DELETE FROM %s", OB_ALL_TIME_ZONE_NAME_TNAME))) {
+    } else if (OB_FAIL(trunc_transition_sql.assign_fmt("DELETE FROM %s", OB_ALL_TIME_ZONE_TRANSITION_TNAME))) {
       LOG_WARN("assign fmt failed", K(ret));
-    } else if (OB_FAIL(trunc_sql3.assign_fmt("DELETE FROM %s", OB_ALL_TIME_ZONE_TRANSITION_TNAME))) {
+    } else if (OB_FAIL(trunc_transition_type_sql.assign_fmt("DELETE FROM %s", OB_ALL_TIME_ZONE_TRANSITION_TYPE_TNAME))) {
       LOG_WARN("assign fmt failed", K(ret));
-    } else if (OB_FAIL(trunc_sql4.assign_fmt("DELETE FROM %s", OB_ALL_TIME_ZONE_TRANSITION_TYPE_TNAME))) {
-      LOG_WARN("assign fmt failed", K(ret));
-    } else if (OB_FAIL(trans.write(trunc_sql1.ptr(), affected_rows))) {
+    } else if (OB_FAIL(trans.write(trunc_name_sql.ptr(), affected_rows))) {
       LOG_WARN("write failed", K(ret));
-    } else if (OB_FAIL(trans.write(trunc_sql2.ptr(), affected_rows))) {
+    } else if (OB_FAIL(trans.write(trunc_transition_sql.ptr(), affected_rows))) {
       LOG_WARN("write failed", K(ret));
-    } else if (OB_FAIL(trans.write(trunc_sql3.ptr(), affected_rows))) {
-      LOG_WARN("write failed", K(ret));
-    } else if (OB_FAIL(trans.write(trunc_sql4.ptr(), affected_rows))) {
+    } else if (OB_FAIL(trans.write(trunc_transition_type_sql.ptr(), affected_rows))) {
       LOG_WARN("write failed", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
-    // 2. load data
-    ObSqlString load_sql1;
-    ObSqlString load_sql2;
-    ObSqlString load_sql3;
-    ObSqlString load_sql4;
-    const char *timezone_file = "timezone.data";
+    ObSqlString load_name_sql;
+    ObSqlString load_transition_sql;
+    ObSqlString load_transition_type_sql;
+    ObSqlString update_version_sql;
     const char *timezone_name_file = "timezone_name.data";
     const char *timezone_transition_file = "timezone_trans.data";
     const char *timezone_transition_type_file = "timezone_trans_type.data";
-    if (OB_FAIL(load_sql1.assign_fmt("LOAD DATA INFILE '%.*s/%s' INTO TABLE %s FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"'",
-                file_path.length(), file_path.ptr(), timezone_file, OB_ALL_TIME_ZONE_TNAME))) {
-      LOG_WARN("assign fmt failed", K(ret));
-    } else if (OB_FAIL(load_sql2.assign_fmt("LOAD DATA INFILE '%.*s/%s' INTO TABLE %s FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"'",
+    if (OB_FAIL(load_name_sql.assign_fmt("LOAD DATA INFILE '%.*s/%s' INTO TABLE %s FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"'",
                 file_path.length(), file_path.ptr(), timezone_name_file, OB_ALL_TIME_ZONE_NAME_TNAME))) {
       LOG_WARN("assign fmt failed", K(ret));
-    } else if (OB_FAIL(load_sql3.assign_fmt("LOAD DATA INFILE '%.*s/%s' INTO TABLE %s FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"'",
+    } else if (OB_FAIL(load_transition_sql.assign_fmt("LOAD DATA INFILE '%.*s/%s' INTO TABLE %s FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"'",
                 file_path.length(), file_path.ptr(), timezone_transition_file, OB_ALL_TIME_ZONE_TRANSITION_TNAME))) {
       LOG_WARN("assign fmt failed", K(ret));
-    } else if (OB_FAIL(load_sql4.assign_fmt("LOAD DATA INFILE '%.*s/%s' INTO TABLE %s FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"'",
+    } else if (OB_FAIL(load_transition_type_sql.assign_fmt("LOAD DATA INFILE '%.*s/%s' INTO TABLE %s FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"'",
                 file_path.length(), file_path.ptr(), timezone_transition_type_file, OB_ALL_TIME_ZONE_TRANSITION_TYPE_TNAME))) {
       LOG_WARN("assign fmt failed", K(ret));
-    } else if (OB_FAIL(trans.write(load_sql1.ptr(), affected_rows))) {
-      LOG_WARN("write failed", K(ret));
-    } else if (OB_FAIL(trans.write(load_sql2.ptr(), affected_rows))) {
+    } else if (OB_FAIL(update_version_sql.assign_fmt(
+                   "INSERT INTO %s (data_type, name, value, info) "
+                   "VALUES (5, 'current_timezone_version', 1, 'current time zone version') "
+                   "ON DUPLICATE KEY UPDATE value = CAST(value AS SIGNED) + 1",
+                   OB_ALL_SYS_STAT_TNAME))) {
+      LOG_WARN("assign fmt failed", K(ret));
+    } else if (OB_FAIL(trans.write(load_name_sql.ptr(), affected_rows))) {
       LOG_WARN("write failed", K(ret));
     } else if (OB_FAIL(EN_LOAD_TIME_ZONE_INFO_FAILED)) {
       LOG_WARN("load time zone info failed due to trace point", K(ret));
-    } else if (OB_FAIL(trans.write(load_sql3.ptr(), affected_rows))) {
+    } else if (OB_FAIL(trans.write(load_transition_sql.ptr(), affected_rows))) {
       LOG_WARN("write failed", K(ret));
-    } else if (OB_FAIL(trans.write(load_sql4.ptr(), affected_rows))) {
+    } else if (OB_FAIL(trans.write(load_transition_type_sql.ptr(), affected_rows))) {
       LOG_WARN("write failed", K(ret));
+    } else if (OB_FAIL(trans.write(update_version_sql.ptr(), affected_rows))) {
+      LOG_WARN("update timezone version failed", K(ret));
     }
   }
   if (trans.is_started()) {

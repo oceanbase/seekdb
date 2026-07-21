@@ -546,8 +546,6 @@ int ObTabletSchemaVersionChangeLog::init(const ObTabletID &tablet_id, const int6
 
 OB_SERIALIZE_MEMBER(ObTabletSchemaVersionChangeLog, tablet_id_, schema_version_);
 
-OB_SERIALIZE_MEMBER(ObDDLBarrierLog, hidden_tablet_ids_);
-
 OB_SERIALIZE_MEMBER(ObTableForkFreezeLog, tablet_ids_);
 OB_SERIALIZE_MEMBER(ObTableForkStartLog, fork_info_);
 OB_SERIALIZE_MEMBER(ObTableForkFinishLog, fork_info_);

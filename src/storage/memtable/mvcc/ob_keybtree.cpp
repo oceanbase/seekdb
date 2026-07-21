@@ -1635,8 +1635,10 @@ int ObKeyBtree<BtreeKey, BtreeVal>::insert_or_get(const BtreeKey key,
   }
   handle.release_ref();
   handle.retire(ret);
-  if (OB_SUCC(ret) && inserted) {
-    size_.inc(1);
+  if (OB_SUCC(ret)) {
+    if (inserted) {
+      size_.inc(1);
+    }
   } else if (OB_ALLOCATE_MEMORY_FAILED == ret) {
     OB_LOG(WARN, "btree.insert_or_get(key) error", KR(ret), K(key), K(val));
   } else {

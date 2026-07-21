@@ -427,9 +427,6 @@ public:
       const share::schema::ObTableSchema &hidden_table_schema,
       const int64_t schema_version,
       ObDDLSQLTransaction &trans);
-  int write_ddl_barrier(
-      const share::schema::ObTableSchema &hidden_table_schema,
-      ObDDLSQLTransaction &trans);
   int check_hidden_table_constraint_exist(
       const ObTableSchema *hidden_table_schema,
       const ObTableSchema *orig_table_schema,
@@ -1293,9 +1290,7 @@ int check_will_be_having_domain_index_operation(
       const share::schema::ObTableSchema &orig_table_schema,
       const share::schema::ObTableSchema &hidden_table_schema,
       share::schema::ObTableSchema &new_orig_table_schema,
-      share::schema::ObTableSchema &new_hidden_table_schema,
-      ObDDLOperator &ddl_operator,
-      common::ObMySQLTransaction &trans);
+      share::schema::ObTableSchema &new_hidden_table_schema);
   int rebuild_hidden_table_priv(
       const share::schema::ObTableSchema &orig_table_schema,
       const share::schema::ObTableSchema &hidden_table_schema,
@@ -1982,7 +1977,6 @@ private:
   int rebuild_table_schema_with_new_id(const share::schema::ObTableSchema &orig_table_schema,
                                        const share::schema::ObDatabaseSchema &new_database_schema,
                                        const common::ObString &new_table_name,
-                                       const common::ObString &create_host,
                                        const int64_t session_id,
                                        const share::schema::ObTableType table_type_,
                                        share::schema::ObSchemaService &schema_service,
@@ -2259,7 +2253,6 @@ public:
                         
                         start_operation_schema_version_(OB_INVALID_VERSION),
                         need_end_signal_(need_end_signal),
-                        trans_start_schema_version_(0),
                         enable_ddl_parallel_(enable_ddl_parallel),
                         enable_check_ddl_epoch_(enable_check_ddl_epoch),
                         trans_start_ddl_epoch_(OB_INVALID_VERSION),
@@ -2287,35 +2280,10 @@ public:
   int register_tx_data(const transaction::ObTxDataSourceType &type,
                        const char *buf,
                        const int64_t buf_len);
-  void disable_serialize_inc_schemas() { trans_start_schema_version_ = 0; }
-  // serialize inc schemas from (start_schema_version, ]
-  int serialize_inc_schemas(const int64_t start_schema_version);
+  // Mark this transaction as DDL for the local Change Stream consumer.
+  int register_ddl_trans();
   bool is_enable_parallel() {return enable_ddl_parallel_;}
 private:
-  // generate inc schema_metas and regist multi_data_source data
-  // all schemas should contains basic info(id/name/schema_version/charset_type/collation_type)
-  // @param [in] allocator          allocator used to generate meta and serialization.
-  // @param [in] tenant_schemas     tenant_schema_array; tenant_schema should record
-  //                                drop_tenant_time and is_in_recyclebin if tenant is dropped.
-  // @param [in] database_schemas   database_schema_array, database_schema should contains
-  //                                tenant, and should record is_in_recyclebin if database is deleted
-  // @param [in] table_schemas      table_schema_array, table_schema should contains table basic info including
-  //                                tenant/db_id/table_type/table_mode/ etc. and also contains
-  //                                rowkey_info/column_info/lob table info(meta_tid/piece_tid)/
-  //                                index info(index_type/index_col_cnt/index_col_info) and
-  //                                could provide table_id_arr..
-  //                                ColumnSchema recorded in
-  //                                table_schema(cols/rowkey_cols/index_cols) should preovide
-  //                                rowkey_position/index_position/meta_type/accuracy/column_flag/
-  //                                is_part_key_col/cur_default_value/orig_default_value/extended_type_info/... etc.
-  // PLEASE REFER src/logservice/data_dictionary/ob_data_dict_struct.cpp FOR DETAIL.
-  int serialize_inc_schemas_(
-      ObIAllocator &allocator,
-      const ObIArray<const ObTenantSchema*> &tenant_schemas,
-      const ObIArray<const ObDatabaseSchema*> &database_schemas,
-      const ObIArray<const ObTableSchema*> &table_schemas);
-  // regist multi_data_source data into trans
-  int regist_multi_source_data_();
   int lock_ddl_epoch_(common::ObMySQLTransaction &trans);
 
 private:
@@ -2329,12 +2297,6 @@ private:
   
   //no need to set end_signal while ddl end transaction
   bool need_end_signal_;
-  // Used for fetch increment schemas generate by this DDL trans.
-  // 1. when bootstrap/create tenant, trans_start_schema_version_ is 0, won't fetch increment schema.
-  // 2. when enable_ddl_parallel_ = true(truncate table in 4.1), trans_start_schema_version_ is meaningless, it needs fetch increment schema alone.
-  // 3. in some situations, serialize inc schemas may be useless(eg. drop database to recyclebin). Can disable serialize logic by disable_serialize_inc_schemas().
-  // 4. other situations, fetch increament schemas in (trans_start_schema_version_, ].
-  int64_t trans_start_schema_version_;
   // enable ddl parallel
   bool enable_ddl_parallel_;
 

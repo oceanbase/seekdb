@@ -104,7 +104,6 @@ class ObTabletTableOperator;
 class ObSQLiteConnectionPool;
 class ObRsMgr;
 class ObSchemaStatusProxy;
-class ObKVStorage;
 
 namespace schema
 {
@@ -159,9 +158,6 @@ struct ObGlobalContext
   // Primary-Standby configuration
   common::ObClusterRole server_role_;
   
-  // KV storage for simple information (cluster role, switchover status, etc.)
-  share::ObKVStorage *kv_storage_;
-
   static ObGlobalContext& get_instance();
   void init();
   bool is_inited() const { return inited_; }

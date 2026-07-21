@@ -227,12 +227,6 @@ enum ObViewColumnFilledFlag
   FILLED = 1,
 };
 
-enum ObDDLIgnoreSyncCdcFlag
-{
-  DO_SYNC_LOG_FOR_CDC = 0,
-  DONT_SYNC_LOG_FOR_CDC = 1,
-};
-
 struct ObTableMode {
   OB_UNIS_VERSION_V(1);
 private:
@@ -252,8 +246,7 @@ private:
   static const int32_t TM_TABLE_ROWID_MODE_BITS = 1;
   static const int32_t TM_VIEW_COLUMN_FILLED_OFFSET = 23;
   static const int32_t TM_VIEW_COLUMN_FILLED_BITS = 1;
-  static const int32_t TM_DDL_IGNORE_SYNC_CDC_OFFSET = 24;
-  static const int32_t TM_DDL_IGNORE_SYNC_CDC_BITS = 1;
+  static const int32_t TM_RESERVED_24_BITS = 1;
   static const int32_t TM_TABLE_ORGANIZATION_MODE_OFFSET = 25;
   static const int32_t TM_TABLE_ORGANIZATION_MODE_BITS = 1;
   static const int32_t TM_RESERVED = 6;
@@ -266,7 +259,6 @@ private:
   static const uint32_t AUTO_INCREMENT_MODE_MASK = (1U << TM_TABLE_AUTO_INCREMENT_MODE_BITS) - 1;
   static const uint32_t ROWID_MODE_MASK = (1U << TM_TABLE_ROWID_MODE_BITS) - 1;
   static const uint32_t VIEW_COLUMN_FILLED_MASK = (1U << TM_VIEW_COLUMN_FILLED_BITS) - 1;
-  static const uint32_t DDL_IGNORE_SYNC_CDC_MASK = (1U << TM_DDL_IGNORE_SYNC_CDC_BITS) - 1;
   static const uint32_t TABLE_ORGANIZATION_MODE_MASK = (1U << TM_TABLE_ORGANIZATION_MODE_BITS) - 1;
 public:
   ObTableMode() { reset(); }
@@ -326,7 +318,6 @@ public:
                "auto_increment_mode", auto_increment_mode_,
                "rowid_mode", rowid_mode_,
                "view_column_filled_flag", view_column_filled_flag_,
-               "ddl_table_ignore_sync_cdc_flag", ddl_table_ignore_sync_cdc_flag_,
                "table_organization_mode", table_organization_mode_);
   union {
     int32_t mode_;
@@ -340,7 +331,8 @@ public:
       uint32_t auto_increment_mode_: TM_TABLE_AUTO_INCREMENT_MODE_BITS;
       uint32_t rowid_mode_: TM_TABLE_ROWID_MODE_BITS;
       uint32_t view_column_filled_flag_ : TM_VIEW_COLUMN_FILLED_BITS;
-      uint32_t ddl_table_ignore_sync_cdc_flag_ : TM_DDL_IGNORE_SYNC_CDC_BITS;
+      // Bit 24 was used by external CDC. Keep the persisted layout stable.
+      uint32_t reserved_24_ : TM_RESERVED_24_BITS;
       // heap_organization_mode_ will indicate whether the table is index organized(0) or heap organized(1)
       uint32_t table_organization_mode_: TM_TABLE_ORGANIZATION_MODE_BITS;
       uint32_t reserved_ : TM_RESERVED;
@@ -736,11 +728,6 @@ public:
   { return FILLED == (enum ObViewColumnFilledFlag)table_mode_.view_column_filled_flag_; }
   inline void set_view_column_filled_flag(const ObViewColumnFilledFlag flag)
   { table_mode_.view_column_filled_flag_ = flag; }
-  inline void set_ddl_ignore_sync_cdc_flag(const ObDDLIgnoreSyncCdcFlag flag)
-  { table_mode_.ddl_table_ignore_sync_cdc_flag_ = flag; }
-  inline bool is_ddl_table_ignored_to_sync_cdc() const
-  { return DONT_SYNC_LOG_FOR_CDC == table_mode_.ddl_table_ignore_sync_cdc_flag_; }
-
   inline void set_session_id(const uint64_t id)  { session_id_ = id; }
   inline uint64_t get_session_id() const { return session_id_; }
   inline void set_truncate_version(const int64_t truncate_version ) { truncate_version_ = truncate_version; }
@@ -1174,8 +1161,6 @@ public:
   int set_comment(const common::ObString &comment) { return deep_copy_str(comment, comment_); }
   int set_pk_comment(const char *comment) { return deep_copy_str(comment, pk_comment_); }
   int set_pk_comment(const common::ObString &comment) { return deep_copy_str(comment, pk_comment_); }
-  int set_create_host(const char *create_host) { return deep_copy_str(create_host, create_host_); }
-  int set_create_host(const common::ObString &create_host) { return deep_copy_str(create_host, create_host_); }
   int set_expire_info(const common::ObString &expire_info) { return deep_copy_str(expire_info, expire_info_); }
   int set_compress_func_name(const char *compressor);
   int set_compress_func_name(const common::ObString &compressor);
@@ -1295,8 +1280,6 @@ public:
   inline const common::ObString &get_comment_str() const { return comment_; }
   inline const char *get_pk_comment() const { return extract_str(pk_comment_); }
   inline const common::ObString &get_pk_comment_str() const { return pk_comment_; }
-  inline const char *get_create_host() const { return extract_str(create_host_); }
-  inline const common::ObString &get_create_host_str() const { return create_host_; }
   inline const common::ObRowkeyInfo &get_rowkey_info() const { return rowkey_info_; }
   inline const common::ObRowkeyInfo &get_shadow_rowkey_info() const { return shadow_rowkey_info_; }
   inline const common::ObIndexInfo &get_index_info() const { return index_info_; }
@@ -1789,7 +1772,6 @@ protected:
   common::ObString tablegroup_name_;
   common::ObString comment_;
   common::ObString pk_comment_;
-  common::ObString create_host_;
   common::ObCompressorType compressor_type_;
   common::ObString expire_info_;
   common::ObString parser_name_; //fulltext index parser name

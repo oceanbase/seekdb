@@ -23,7 +23,7 @@
 #include "observer/ob_srv_network_frame.h"
 #include "ob_root_service.h"
 #include "rootserver/freeze/ob_major_freeze_helper.h"
-#include "share/ob_cluster_event_history_table_operator.h"//CLUSTER_EVENT_INSTANCE
+#include "share/ob_structured_event_logger.h"//CLUSTER_EVENT_INSTANCE
 #include "sql/plan_cache/ob_plan_cache.h"
 #include "sql/plan_cache/ob_ps_cache.h"
 #include "share/rc/ob_tenant_base.h"

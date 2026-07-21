@@ -66,8 +66,6 @@
 #include "share/errsim_module/ob_tenant_errsim_module_mgr.h"
 #include "share/errsim_module/ob_tenant_errsim_event_mgr.h"
 #endif
-#include "observer/ob_server_event_history_table_operator.h"
-#include "share/index_usage/ob_index_usage_info_mgr.h"
 #include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "observer/change_stream/ob_change_stream_mgr.h"
@@ -1684,97 +1682,11 @@ int64_t ObMemstoreAllocator::nway_per_group()
   return OB_SUCCESS == ret? calc_nway((int64_t)max_cpu, min_memory): 0;
 }
 
-void ObIndexUsageInfoMgr::destroy()
-{
-  if (is_inited_) {
-    // cancel report task
-    if (report_task_.get_is_inited()) {
-      omt::ObSharedTimer *timer = OB_ISNULL(share::g_mp) ? NULL : share::g_mp->shared_timer();
-      if (OB_NOT_NULL(timer) && timer->task_exist(report_task_)) {
-        timer->cancel_task(report_task_);
-        timer->wait_task(report_task_);
-        report_task_.destroy();
-      }
-    }
-    if (refresh_conf_task_.get_is_inited()) {
-      omt::ObSharedTimer *timer = OB_ISNULL(share::g_mp) ? NULL : share::g_mp->shared_timer();
-      if (OB_NOT_NULL(timer) && timer->task_exist(refresh_conf_task_)) {
-        timer->cancel_task(refresh_conf_task_);
-        timer->wait_task(refresh_conf_task_);
-        refresh_conf_task_.destroy();
-      }
-    }
-    is_inited_ = false;
-    is_enabled_ = false;
-    destroy_hash_map();
-    allocator_.reset();
-  }
-}
-
 }  // namespace share
 }  // namespace oceanbase
 
-// ===== definition moved from share index_usage(start/stop/wait)+io_manager(gc/print, omt real user) =====
 namespace oceanbase
 {
-namespace share
-{
-
-int ObIndexUsageInfoMgr::start()
-{
-  int ret = OB_SUCCESS;
-  if (is_inited_) {
-    omt::ObSharedTimer *timer = OB_ISNULL(share::g_mp) ? NULL : share::g_mp->shared_timer();
-    // report index usage
-    if (OB_ISNULL(timer)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("shared timer is null", K(ret));
-    } else if (OB_FAIL(timer->schedule(report_task_, INDEX_USAGE_REPORT_INTERVAL, true))) {
-      LOG_WARN("failed to schedule index usage report task", K(ret));
-    } else if (OB_FAIL(report_task_.init(this))) {
-      LOG_WARN("fail to init report task", K(ret));
-    } else if (OB_FAIL(timer->schedule(refresh_conf_task_, INDEX_USAGE_REFRESH_CONF_INTERVAL, true))) {
-      LOG_WARN("failed to schedule index usage refresh conf task", K(ret));
-    } else if (OB_FAIL(refresh_conf_task_.init((this)))) {
-      LOG_WARN("fail to init refresh conf task", K(ret));
-    } else {
-      LOG_TRACE("success to start ObIndexUsageInfoMgr");
-    }
-  }
-  return ret;
-}
-
-void ObIndexUsageInfoMgr::stop()
-{
-  omt::ObSharedTimer *timer = OB_ISNULL(share::g_mp) ? NULL : share::g_mp->shared_timer();
-  if (OB_ISNULL(timer)) {
-    LOG_WARN_RET(OB_ERR_UNEXPECTED, "shared timer is null");
-  } else {
-    if (OB_LIKELY(report_task_.get_is_inited())) {
-      timer->cancel_task(report_task_);
-    }
-    if (OB_LIKELY(refresh_conf_task_.get_is_inited())) {
-      timer->cancel_task(refresh_conf_task_);
-    }
-  }
-}
-
-void ObIndexUsageInfoMgr::wait()
-{
-  omt::ObSharedTimer *timer = OB_ISNULL(share::g_mp) ? NULL : share::g_mp->shared_timer();
-  if (OB_ISNULL(timer)) {
-    LOG_WARN_RET(OB_ERR_UNEXPECTED, "shared timer is null");
-  } else {
-    if (OB_LIKELY(report_task_.get_is_inited())) {
-      timer->wait_task(report_task_);
-    }
-    if (OB_LIKELY(refresh_conf_task_.get_is_inited())) {
-      timer->wait_task(refresh_conf_task_);
-    }
-  }
-}
-
-}  // namespace share
 namespace common
 {
 
@@ -1979,7 +1891,6 @@ int ObServer::obs_construct_modules()
   if (OB_SUCC(ret) && OB_FAIL(mtl_new_default(mods_dbms_sched_service_))) { SERVER_LOG(WARN, "mods_dbms_sched_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(mtl_new_default(mods_opt_stat_monitor_manager_))) { SERVER_LOG(WARN, "mods_opt_stat_monitor_manager_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(mtl_new_default(mods_tenant_srs_))) { SERVER_LOG(WARN, "mods_tenant_srs_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(mtl_new_default(mods_index_usage_info_mgr_))) { SERVER_LOG(WARN, "mods_index_usage_info_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(mtl_new_default(mods_tablet_memtable_mgr_pool_))) { SERVER_LOG(WARN, "mods_tablet_memtable_mgr_pool_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(mtl_new_default(mods_resource_limit_calculator_))) { SERVER_LOG(WARN, "mods_resource_limit_calculator_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(mtl_new_default(mods_global_iterator_pool_))) { SERVER_LOG(WARN, "mods_global_iterator_pool_ fail", KR(ret)); }
@@ -2056,7 +1967,6 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(rootserver::ObDBMSSchedService::mtl_init(mods_dbms_sched_service_))) { SERVER_LOG(WARN, "mods_dbms_sched_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObOptStatMonitorManager::mtl_init(mods_opt_stat_monitor_manager_))) { SERVER_LOG(WARN, "mods_opt_stat_monitor_manager_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(omt::ObTenantSrs::mtl_init(mods_tenant_srs_))) { SERVER_LOG(WARN, "mods_tenant_srs_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(ObIndexUsageInfoMgr::mtl_init(mods_index_usage_info_mgr_))) { SERVER_LOG(WARN, "mods_index_usage_info_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(storage::ObTabletMemtableMgrPool::mtl_init(mods_tablet_memtable_mgr_pool_))) { SERVER_LOG(WARN, "mods_tablet_memtable_mgr_pool_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObResourceLimitCalculator::mtl_init(mods_resource_limit_calculator_))) { SERVER_LOG(WARN, "mods_resource_limit_calculator_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObGlobalIteratorPool::mtl_init(mods_global_iterator_pool_))) { SERVER_LOG(WARN, "mods_global_iterator_pool_ fail", KR(ret)); }
@@ -2105,7 +2015,6 @@ int ObServer::obs_start_modules()
   if (OB_SUCC(ret) && OB_FAIL(mtl_start_default(mods_dbms_sched_service_))) { SERVER_LOG(WARN, "mods_dbms_sched_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObOptStatMonitorManager::mtl_start(mods_opt_stat_monitor_manager_))) { SERVER_LOG(WARN, "mods_opt_stat_monitor_manager_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(mtl_start_default(mods_tenant_srs_))) { SERVER_LOG(WARN, "mods_tenant_srs_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(mtl_start_default(mods_index_usage_info_mgr_))) { SERVER_LOG(WARN, "mods_index_usage_info_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(mtl_start_default(mods_rb_mem_mgr_))) { SERVER_LOG(WARN, "mods_rb_mem_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(mtl_start_default(mods_plugin_vector_index_service_))) { SERVER_LOG(WARN, "mods_plugin_vector_index_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(mtl_start_default(mods_tenant_ai_service_))) { SERVER_LOG(WARN, "mods_tenant_ai_service_ fail", KR(ret)); }
@@ -2120,7 +2029,6 @@ void ObServer::obs_stop_modules()
   rootserver::ObDDLScheduler::mtl_stop(mods_ddl_scheduler_);
   mtl_stop_default(mods_plugin_vector_index_service_);
   mtl_stop_default(mods_rb_mem_mgr_);
-  mtl_stop_default(mods_index_usage_info_mgr_);
   mtl_stop_default(mods_tenant_srs_);
   ObOptStatMonitorManager::mtl_stop(mods_opt_stat_monitor_manager_);
   mtl_stop_default(mods_dbms_sched_service_);
@@ -2167,7 +2075,6 @@ void ObServer::obs_wait_modules()
   rootserver::ObDDLScheduler::mtl_wait(mods_ddl_scheduler_);
   mtl_wait_default(mods_plugin_vector_index_service_);
   mtl_wait_default(mods_rb_mem_mgr_);
-  mtl_wait_default(mods_index_usage_info_mgr_);
   mtl_wait_default(mods_tenant_srs_);
   ObOptStatMonitorManager::mtl_wait(mods_opt_stat_monitor_manager_);
   mtl_wait_default(mods_dbms_sched_service_);
@@ -2219,7 +2126,6 @@ void ObServer::obs_destroy_modules()
   ObGlobalIteratorPool::mtl_destroy(mods_global_iterator_pool_);
   mtl_destroy_default(mods_resource_limit_calculator_);
   mtl_destroy_default(mods_tablet_memtable_mgr_pool_);
-  mtl_destroy_default(mods_index_usage_info_mgr_);
   mtl_destroy_default(mods_tenant_srs_);
   mtl_destroy_default(mods_opt_stat_monitor_manager_);
   mtl_destroy_default(mods_dbms_sched_service_);

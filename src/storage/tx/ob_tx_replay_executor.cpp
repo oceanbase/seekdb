@@ -528,7 +528,7 @@ int ObTxReplayExecutor::replay_redo_in_memtable_(ObTxRedoLog &redo, const bool s
       } else if (FALSE_IT(row_head = mmi_ptr_->get_row_head())) {
         // do nothing
       } else if (MutatorType::MUTATOR_ROW_EXT_INFO == row_head.mutator_type_) {
-        // ext info redo log is only used for obcdc, no need replay
+        // LOB extension records are consumed from the log by Change Stream, not replayed into memtables.
         if (EXECUTE_COUNT_PER_SEC(8)) {
           TRANS_LOG(INFO, "ext info redo log no need replay", K(row_head), K(redo));
         }

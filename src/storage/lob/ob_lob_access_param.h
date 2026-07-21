@@ -169,7 +169,7 @@ public:
   uint32_t used_seq_cnt_;
   uint32_t total_seq_cnt_;
   // used calc checksum in ObLobDataOutRowCtx::check_sum_
-  // currently not used actualy by obcdc
+  // retained for the out-row context checksum
   int64_t checksum_;
   // record new lob data byte len when update outrow lob in dml
   // to calculate the number of seq_no that need to be pre-allocated
@@ -184,7 +184,7 @@ public:
 
   // used for dml
   // true is full mode of binlog_row_image
-  // default should be true, beacuse obcdc need old_row when delete
+  // default to full row images so the local Change Stream can process deletes
   bool is_total_quantity_log_;
   // means main table is read_latest, not lob aux table
   bool read_latest_;

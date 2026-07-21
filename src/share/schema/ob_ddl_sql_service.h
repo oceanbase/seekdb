@@ -52,15 +52,10 @@ protected:
                             common::ObSqlString *public_sql_string = NULL);
   int log_operation_dml(
       const ObSchemaOperation &ddl_operation,
-      share::ObDMLSqlSplicer &ddl_operation_dml,
-      share::ObDMLSqlSplicer &ddl_id_dml);
+      share::ObDMLSqlSplicer &ddl_operation_dml);
   int gen_ddl_operation_dml(
       const ObSchemaOperation &ddl_operation,
       share::ObDMLSqlSplicer &ddl_operation_dml);
-  int gen_ddl_id_dml(
-      const ObSchemaOperation &ddl_operation,
-      const ObString *ddl_id_str,
-      share::ObDMLSqlSplicer &ddl_id_dml);
 private:
   uint64_t fill_schema_id(const uint64_t schema_id);
 
@@ -68,21 +63,6 @@ protected:
   ObSchemaService &schema_service_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDDLSqlService);
-};
-
-struct TSIDDLVar
-{
-  //  In bootstrap or other internal requests, exec_tenant_ will be the sys tenant identity, 
-  //  so the default value is changed to the system tenant
-  //  ddl_id_str_ default value is null
-  //  Before processing the rpc request, exec_tenant_/ddl_id_str_ will be set, 
-  //  and the value is obtained from the arg of the resolver
-  //  In log operation, write to __all_ddl_operation
-  
-  common::ObString *ddl_id_str_;
-  TSIDDLVar() :
-      ddl_id_str_(NULL)
-  {}
 };
 
 struct TSILastOper {

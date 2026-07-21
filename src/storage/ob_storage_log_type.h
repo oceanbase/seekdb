@@ -27,7 +27,7 @@ enum ObStorageLogType
 {
   //attention:!!!
   //you should modify storage_log_type_to_string() below at the same when adding new log type
-  //In addition, if you add new log types, please consider liboblog, archive and other consumption log applications outside
+  // Keep log readers in sync when adding a new storage log type.
   //OB as supporting support
   OB_LOG_UNKNOWN = 0,
 

@@ -248,9 +248,6 @@ int ObTableHelper::create_tables_(const ObString *ddl_stmt_str)
                 ddl_stmt_str,
                 true/*sync_schema_version_for_last_table*/))) {
       LOG_WARN("failed to batch create table", KR(ret), K_(new_tables), KPC(ddl_stmt_str));
-    } else if (OB_FAIL(schema_service_impl->get_table_sql_service().batch_insert_temp_table_info(
-                 get_trans_(), new_tables_))) {
-      LOG_WARN("failed to batch insert temp table info", KR(ret), K_(new_tables));
     }
   }
   return ret;
