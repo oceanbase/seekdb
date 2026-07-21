@@ -107,60 +107,6 @@ gen_sqlite_table_def(
   primary_key = ['id']
   )
 
-# __all_zone_merge_info: SQLite table for zone merge info
-gen_sqlite_table_def(
-  table_name = '__all_zone_merge_info',
-  columns = [
-      ('id', 'INTEGER', 'NOT NULL DEFAULT 0', None),
-      ('all_merged_scn', 'INTEGER', 'NOT NULL', None),
-      ('broadcast_scn', 'INTEGER', 'NOT NULL', None),
-      ('frozen_scn', 'INTEGER', 'NOT NULL', None),
-      ('is_merging', 'INTEGER', 'NOT NULL', None),
-      ('last_merged_time', 'INTEGER', 'NOT NULL', None),
-      ('last_merged_scn', 'INTEGER', 'NOT NULL', None),
-      ('merge_start_time', 'INTEGER', 'NOT NULL', None),
-      ('merge_status', 'INTEGER', 'NOT NULL', None)
-  ],
-  primary_key = ['id']
-  )
-
-# __all_reserved_snapshot: SQLite table for reserved snapshot
-gen_sqlite_table_def(
-  table_name = '__all_reserved_snapshot',
-  columns = [
-      ('snapshot_type', 'INTEGER', 'NOT NULL', None),
-      ('create_time', 'INTEGER', 'NOT NULL', None),
-      ('snapshot_version', 'INTEGER', 'NOT NULL', None),
-      ('status', 'INTEGER', 'NOT NULL', None)
-  ],
-  primary_key = ['snapshot_type']
-  )
-
-# __all_server_event_history: SQLite table for server event history
-gen_sqlite_table_def(
-  table_name = '__all_server_event_history',
-  columns = [
-      ('gmt_create', 'INTEGER', 'NOT NULL', None),
-      ('event_type', 'INTEGER', 'NOT NULL', None),
-      ('module', 'TEXT', 'NOT NULL', None),
-      ('event', 'TEXT', 'NOT NULL', None),
-      ('name1', 'TEXT', 'NULL', None),
-      ('value1', 'TEXT', 'NULL', None),
-      ('name2', 'TEXT', 'NULL', None),
-      ('value2', 'TEXT', 'NULL', None),
-      ('name3', 'TEXT', 'NULL', None),
-      ('value3', 'TEXT', 'NULL', None),
-      ('name4', 'TEXT', 'NULL', None),
-      ('value4', 'TEXT', 'NULL', None),
-      ('name5', 'TEXT', 'NULL', None),
-      ('value5', 'TEXT', 'NULL', None),
-      ('name6', 'TEXT', 'NULL', None),
-      ('value6', 'TEXT', 'NULL', None),
-      ('extra_info', 'TEXT', 'NULL', None)
-  ],
-  primary_key = ['event_type', 'gmt_create']
-  )
-
 # __all_column_checksum_error_info: SQLite table for column checksum error info
 gen_sqlite_table_def(
   table_name = '__all_column_checksum_error_info',
@@ -259,33 +205,6 @@ gen_sqlite_table_def(
   )
 
 gen_sqlite_table_def(
-    table_name = '__all_event_history',
-    columns = [
-        ('gmt_create', 'INTEGER', 'NOT NULL', None),
-        ('module', 'TEXT', 'NOT NULL', None),
-        ('event', 'TEXT', 'NOT NULL', None),
-        ('name1', 'TEXT', 'NULL', None),
-        ('value1', 'TEXT', 'NULL', None),
-        ('name2', 'TEXT', 'NULL', None),
-        ('value2', 'TEXT', 'NULL', None),
-        ('name3', 'TEXT', 'NULL', None),
-        ('value3', 'TEXT', 'NULL', None),
-        ('name4', 'TEXT', 'NULL', None),
-        ('value4', 'TEXT', 'NULL', None),
-        ('name5', 'TEXT', 'NULL', None),
-        ('value5', 'TEXT', 'NULL', None),
-        ('name6', 'TEXT', 'NULL', None),
-        ('value6', 'TEXT', 'NULL', None),
-        ('extra_info', 'TEXT', 'NULL', None),
-        ('trace_id', 'TEXT', 'NULL', None),
-        ('cost_time', 'INTEGER', 'NULL', None),
-        ('ret_code', 'INTEGER', 'NULL', None),
-        ('error_msg', 'TEXT', 'NULL', None)
-  ],
-    primary_key = ['gmt_create']
-  )
-
-gen_sqlite_table_def(
     table_name = '__all_rootservice_job',
     columns = [
         ('job_id', 'INTEGER', 'NOT NULL', '0'),
@@ -297,18 +216,6 @@ gen_sqlite_table_def(
   ],
     primary_key = ['job_id']
   )
-
-# __all_kv_table: SQLite KV table for simple information storage (tenant info, etc.)
-gen_sqlite_table_def(
-    table_name = '__all_kv_table',
-    columns = [
-        ('key', 'TEXT', 'NOT NULL', None),
-        ('value', 'TEXT', 'NOT NULL', "''"),
-        ('gmt_create', 'INTEGER', 'NOT NULL', None),
-        ('gmt_modified', 'INTEGER', 'NOT NULL', None),
-    ],
-    primary_key = ['key'],
-)
 
 ################################################################################
 # OceanBase System Table Definitions
@@ -882,126 +789,9 @@ def_table_schema(
 # 128: __all_charset (abandoned)
 # 129: __all_collation (abandoned)
 
-def_table_schema(
-  owner = 'bin.lb',
-  database_id    = 'OB_MYSQL_SCHEMA_ID',
-  table_name     = 'help_topic',
-  table_id       = '130',
-  table_type = 'SYSTEM_TABLE',
-  gm_columns = [],
-  rowkey_columns = [
-  ('help_topic_id', 'int','false')
-  ],
-  in_tenant_space = True,
-
-  normal_columns = [
-  ('name', 'varchar:64','false'),
-  ('help_category_id', 'int','false'),
-  ('description', 'varchar:65535','false'),
-  ('example', 'varchar:65535','false'),
-  ('url', 'varchar:65535','false')
-  ]
-  )
-
-def_table_schema(
-  owner = 'bin.lb',
-  database_id    = 'OB_MYSQL_SCHEMA_ID',
-  table_name     = 'help_category',
-  table_id       = '131',
-  table_type = 'SYSTEM_TABLE',
-  gm_columns = [],
-  rowkey_columns = [
-  ('help_category_id', 'int','false')
-  ],
-  in_tenant_space = True,
-
-  normal_columns = [
-  ('name', 'varchar:64','false'),
-  ('parent_category_id', 'int','true'),
-  ('url', 'varchar:65535','false')
-  ]
-  )
-
-def_table_schema(
-  owner = 'bin.lb',
-  database_id    = 'OB_MYSQL_SCHEMA_ID',
-  table_name     = 'help_keyword',
-  table_id       = '132',
-  table_type = 'SYSTEM_TABLE',
-  gm_columns = [],
-  rowkey_columns = [
-  ('help_keyword_id', 'int','false')
-  ],
-  in_tenant_space = True,
-
-  normal_columns = [
-  ('name', 'varchar:64','false')
-  ]
-  )
-
-def_table_schema(
-  owner = 'bin.lb',
-  database_id    = 'OB_MYSQL_SCHEMA_ID',
-  table_name     = 'help_relation',
-  table_id       = '133',
-  table_type = 'SYSTEM_TABLE',
-  gm_columns = [],
-  rowkey_columns = [
-  ('help_topic_id', 'int','false'),
-  ('help_keyword_id', 'int','false')
-  ],
-  in_tenant_space = True,
-
-  normal_columns = []
-  )
-
-def_table_schema(
-  owner = 'yanmu.ztl',
-  table_name     = '__all_dummy',
-  table_id       = '135',
-  table_type = 'SYSTEM_TABLE',
-  gm_columns = [],
-  rowkey_columns = [
-  ('key', 'int')
-  ],
-  in_tenant_space = True,
-
-  normal_columns = []
-  )
-
 # 137: __all_clog_history_info # abandoned in 4.0
 
 # 139: __all_clog_history_info_v2 # abandoned in 4.0
-
-def_table_schema(
-    owner = 'msy164651',
-    table_name = '__all_rootservice_event_history',
-    table_id = '140',
-    table_type = 'SYSTEM_TABLE',
-    gm_columns = [],
-    rowkey_columns = [
-      ('gmt_create', 'timestamp:6', 'false')
-    ],
-    normal_columns = [
-      ('module', 'varchar:MAX_ROOTSERVICE_EVENT_DESC_LENGTH', 'false'),
-      ('event', 'varchar:MAX_ROOTSERVICE_EVENT_DESC_LENGTH', 'false'),
-      ('name1', 'varchar:MAX_ROOTSERVICE_EVENT_NAME_LENGTH', 'true', ''),
-      ('value1', 'varchar:MAX_ROOTSERVICE_EVENT_VALUE_LENGTH', 'true', ''),
-      ('name2', 'varchar:MAX_ROOTSERVICE_EVENT_NAME_LENGTH', 'true', ''),
-      ('value2', 'varchar:MAX_ROOTSERVICE_EVENT_VALUE_LENGTH', 'true', ''),
-      ('name3', 'varchar:MAX_ROOTSERVICE_EVENT_NAME_LENGTH', 'true', ''),
-      ('value3', 'varchar:MAX_ROOTSERVICE_EVENT_VALUE_LENGTH', 'true', ''),
-      ('name4', 'varchar:MAX_ROOTSERVICE_EVENT_NAME_LENGTH', 'true', ''),
-      ('value4', 'varchar:MAX_ROOTSERVICE_EVENT_VALUE_LENGTH', 'true', ''),
-      ('name5', 'varchar:MAX_ROOTSERVICE_EVENT_NAME_LENGTH', 'true', ''),
-      ('value5', 'varchar:MAX_ROOTSERVICE_EVENT_VALUE_LENGTH', 'true', ''),
-      ('name6', 'varchar:MAX_ROOTSERVICE_EVENT_NAME_LENGTH', 'true', ''),
-      ('value6', 'varchar:MAX_ROOTSERVICE_EVENT_VALUE_LENGTH', 'true', ''),
-      ('extra_info', 'varchar:MAX_ROOTSERVICE_EVENT_EXTRA_INFO_LENGTH', 'true', ''),
-      ('rs_svr_ip', 'varchar:MAX_IP_ADDR_LENGTH', 'true', ''),
-      ('rs_svr_port', 'int', 'true', '0')
-  ]
-  )
 
 # 141: __all_privilege (abandoned)
 
@@ -1229,9 +1019,6 @@ def_table_schema(**all_def_sub_part_def)
 
 def_table_schema(**gen_history_table_def(153, all_def_sub_part_def))
 
-# 154: __all_server_event_history # migrated to SQLite, see gen_sqlite_table_def above
-# Placeholder - original definition removed, using SQLite version
-
 # 155: __all_rootservice_job # migrated to SQLite, see gen_sqlite_table_def above
 # Placeholder - original definition removed, using SQLite version
 
@@ -1265,22 +1052,6 @@ def_table_schema(**all_sys_variable_history_def)
 
 # __all_restore_job_history
 # 160: __all_restore_job_history (abandoned)
-
-def_table_schema(
-  owner = 'yanmu.ztl',
-  table_name     = '__all_ddl_id',
-  table_id       = '165',
-  table_type = 'SYSTEM_TABLE',
-  gm_columns = ['gmt_create', 'gmt_modified'],
-  rowkey_columns = [
-      ('ddl_id_str', 'varchar:OB_MAX_DDL_ID_STR_LENGTH', 'false')
-  ],
-  in_tenant_space = True,
-
-  normal_columns = [
-  ('ddl_stmt_str', 'longtext')
-  ]
-  )
 
 all_foreign_key_def = dict(
   owner = 'webber.wb',
@@ -1573,22 +1344,6 @@ def_table_schema(**gen_history_table_def(210, all_func_def))
 
 
 def_table_schema(
-  owner = 'jim.wjh',
-  table_name     = '__all_temp_table',
-  table_id       = '211',
-  table_type = 'SYSTEM_TABLE',
-  gm_columns = [],
-  rowkey_columns = [
-      ('table_id', 'int', 'false')
-  ],
-  in_tenant_space = True,
-
-  normal_columns = [
-    ('create_host', 'varchar:OB_MAX_HOST_NAME_LENGTH', 'false', '')
-  ]
-  )
-
-def_table_schema(
   owner = 'xiaochu.yh',
   table_name    = '__all_sequence_object',
   table_id      = '213',
@@ -1871,23 +1626,6 @@ def_table_schema(**all_tenant_error_def)
 
 def_table_schema(
   owner = 'dachuan.sdc',
-  table_name     = '__all_time_zone',
-  table_id       = '290',
-  table_type = 'SYSTEM_TABLE',
-  gm_columns = [],
-  rowkey_columns = [
-    ('time_zone_id', 'int', 'false', 'NULL')
-  ],
-  in_tenant_space = True,
-  is_cluster_private = False,
-  normal_columns = [
-  ('use_leap_seconds', 'varchar:8', 'false', 'N'),
-  ('version', 'int', 'true')
-  ]
-  )
-
-def_table_schema(
-  owner = 'dachuan.sdc',
   table_name     = '__all_time_zone_name',
   table_id       = '291',
   table_type = 'SYSTEM_TABLE',
@@ -2145,24 +1883,6 @@ def_table_schema(
     ('field1', 'varchar:MAX_ZONE_LENGTH', 'true'),
     ('scheduler_flags', 'int', 'true', '0'),
     ('exec_env', 'varchar:OB_MAX_PROC_ENV_LENGTH', 'true')
-  ]
-  )
-
-def_table_schema(
-  owner = 'linlin.xll',
-  table_name     = '__all_job_log',
-  table_id       = '325',
-  table_type     = 'SYSTEM_TABLE',
-  gm_columns     = ['gmt_create', 'gmt_modified'],
-  rowkey_columns = [
-    ('job', 'int', 'false'),
-    ('time', 'timestamp', 'false'),
-    ('exec_addr', 'varchar:MAX_IP_PORT_LENGTH', 'false')
-  ],
-  in_tenant_space = True,
-  normal_columns = [
-    ('code', 'int', 'true', '0'),
-    ('message', 'varchar:4000')
   ]
   )
 
@@ -2553,30 +2273,6 @@ def_table_schema(
 
 # 374: legacy ls replica task table (abandoned)
 
-def_table_schema(
-  owner = 'lixinze.lxz',
-  table_name    = '__all_pending_transaction',
-  table_id      = '375',
-  table_type = 'SYSTEM_TABLE',
-  gm_columns = ['gmt_create', 'gmt_modified'],
-  rowkey_columns = [
-    ('trans_id', 'int')
-  ],
-  in_tenant_space = True,
-  is_cluster_private = False,
-  normal_columns = [
-    ('gtrid', 'varbinary:128'),
-    ('bqual', 'varbinary:128'),
-    ('format_id', 'int', 'false', '1'),
-    ('scheduler_ip', 'varchar:OB_MAX_SERVER_ADDR_SIZE'),
-    ('scheduler_port', 'int'),
-    ('state', 'int'),
-    ('spare1', 'int', 'true'),
-    ('spare2', 'int', 'true'),
-    ('spare3', 'varchar:128', 'true'),
-    ('spare4', 'varchar:128', 'true')
-  ]
-  )
 
 
 def_table_schema(
@@ -2636,25 +2332,6 @@ def_table_schema(
     ('this_exec_date', 'timestamp', 'true'),
     ('this_exec_addr', 'varchar:MAX_IP_ADDR_LENGTH', 'true'),
     ('this_exec_trace_id', 'varchar:OB_MAX_TRACE_ID_BUFFER_SIZE', 'true')
-  ]
-  )
-
-def_table_schema(
-  owner = 'fyy280124',
-  table_name     = '__all_scheduler_job_run_detail',
-  table_id       = '378',
-  table_type     = 'SYSTEM_TABLE',
-  gm_columns     = ['gmt_create', 'gmt_modified'],
-  rowkey_columns = [
-    ('job', 'int', 'false'),
-    ('time', 'timestamp', 'false')
-  ],
-  in_tenant_space = True,
-  is_cluster_private = False,
-  normal_columns = [
-    ('code', 'int', 'true', '0'),
-    ('message', 'varchar:4000'),
-    ('job_class', 'varchar:30', 'true')
   ]
   )
 
@@ -2747,7 +2424,6 @@ def_table_schema(**gen_history_table_def(382, all_context_def))
 # 389: __all_backup_delete_task_history # abandoned
 # 390: __all_backup_delete_ls_task # abandoned
 # 391: __all_backup_delete_ls_task_history # abandoned
-# 392: __all_zone_merge_info # abandoned, migrated to SQLite
 # 393: __all_merge_info # abandoned, migrated to SQLite
 
 def_table_schema(
@@ -2872,95 +2548,13 @@ def_table_schema(
 
 # 432: legacy ls arb replica task history table (abandoned)
 
-def_table_schema(
-  owner = 'luofan.zp',
-  table_name    = '__all_rewrite_rules',
-  table_id      = '443',
-  table_type = 'SYSTEM_TABLE',
-  gm_columns = ['gmt_create', 'gmt_modified'],
-  rowkey_columns = [
-    ('rule_name', 'varchar:OB_MAX_ORIGINAL_NANE_LENGTH')
-  ],
-
-  in_tenant_space = True,
-  is_cluster_private = False,
-  meta_record_in_sys = False,
-
-  normal_columns = [
-    ('rule_id', 'int'),
-    ('pattern', 'longtext'),
-    ('db_name', 'varchar:OB_MAX_DATABASE_NAME_LENGTH'),
-    ('replacement', 'longtext'),
-    ('normalized_pattern', 'longtext'),
-    ('status', 'int'),
-    ('version', 'int'),
-    ('pattern_digest', 'uint'),
-    ('fixed_param_infos', 'longtext', 'false', ''),
-    ('dynamic_param_infos', 'longtext', 'false', ''),
-    ('def_name_ctx_str', 'longtext', 'false', '')
-  ]
-  )
-
-# 444: __all_reserved_snapshot # migrated to SQLite, see gen_sqlite_table_def above
-# Placeholder - original definition removed, using SQLite version
 
 # 445: __all_cluster_event_history # migrated to SQLite, see gen_sqlite_table_def above
 # 447 : legacy ls log restore stat table
 
 # 450: __all_external_table_file # abandoned in seekdb
 
-def_table_schema(
-    owner = 'jiangxiu.wt',
-    table_name = '__all_task_opt_stat_gather_history',
-    table_id = '451',
-    table_type = 'SYSTEM_TABLE',
-    gm_columns = ['gmt_create', 'gmt_modified'],
-    rowkey_columns = [
-      ('task_id', 'varchar:36')
-    ],
-    in_tenant_space = True,
-    is_cluster_private = False,
-    meta_record_in_sys = False,
-    normal_columns = [
-      ('type', 'int', 'true'),
-      ('ret_code', 'int', 'true'),
-      ('table_count', 'int', 'true'),
-      ('failed_count', 'int', 'true'),
-      ('start_time', 'timestamp'),
-      ('end_time', 'timestamp'),
-      ('spare1', 'int', 'true'),
-      ('spare2', 'int', 'true'),
-      ('spare3', 'varchar:MAX_VALUE_LENGTH', 'true'),
-      ('spare4', 'varchar:MAX_VALUE_LENGTH', 'true')
-  ]
-  )
 
-def_table_schema(
-    owner = 'jiangxiu.wt',
-    table_name = '__all_table_opt_stat_gather_history',
-    table_id = '452',
-    table_type = 'SYSTEM_TABLE',
-    gm_columns = ['gmt_create', 'gmt_modified'],
-    rowkey_columns = [
-      ('task_id', 'varchar:36'),
-      ('table_id', 'int')
-  ],
-    in_tenant_space = True,
-    is_cluster_private = False,
-    meta_record_in_sys = False,
-    normal_columns = [
-      ('ret_code', 'int', 'true'),
-      ('start_time', 'timestamp', 'true'),
-      ('end_time', 'timestamp', 'true'),
-      ('memory_used', 'int', 'true'),
-      ('stat_refresh_failed_list', 'varchar:MAX_VALUE_LENGTH', 'true'),
-      ('properties', 'varchar:MAX_VALUE_LENGTH', 'true'),
-      ('spare1', 'int', 'true'),
-      ('spare2', 'int', 'true'),
-      ('spare3', 'varchar:MAX_VALUE_LENGTH', 'true'),
-      ('spare4', 'varchar:MAX_VALUE_LENGTH', 'true')
-  ]
-  )
 
 # 453: __all_zone_storage (abandoned)
 # 454: __all_zone_storage_operation (abandoned)
@@ -3064,27 +2658,6 @@ def_table_schema(**gen_history_table_def(491, all_routine_privilege_def))
 
 # __wr_sqlstat # removed
 
-all_ncomp_dll = dict(
-  owner = 'hr351303',
-  table_name = '__all_ncomp_dll',
-  table_id = '493',
-  table_type = 'SYSTEM_TABLE',
-  gm_columns = ['gmt_create', 'gmt_modified'],
-  rowkey_columns = [
-    ('database_id', 'int', 'false'),
-    ('key_id', 'int'),
-    ('compile_db_id', 'int'),
-    ('arch_type', 'int')
-  ],
-  in_tenant_space = True,
-
-  normal_columns = [
-    ('merge_version', 'int'),
-    ('dll', 'longblob', 'true','')
-  ]
-  )
-def_table_schema(**all_ncomp_dll)
-
 def_table_schema(
   owner = 'zhenling.zzg',
   table_name = '__all_aux_stat',
@@ -3105,59 +2678,7 @@ def_table_schema(
   ]
   )
 
-def_table_schema(
-  owner = 'yangjiali.yjl',
-  table_name     = '__all_index_usage_info',
-  table_id       = '495',
-  table_type     = 'SYSTEM_TABLE',
-  gm_columns     = ['gmt_create', 'gmt_modified'],
-  rowkey_columns = [
-      ('object_id', 'bigint')
-  ],
-  in_tenant_space = True,
-  normal_columns = [
-      ('name', 'varchar:128'),
-      ('owner', 'varchar:128'),
-      ('total_access_count', 'bigint'),
-      ('total_exec_count', 'bigint'),
-      ('total_rows_returned', 'bigint'),
-      ('bucket_0_access_count', 'bigint'),
-      ('bucket_1_access_count', 'bigint'),
-      ('bucket_2_10_access_count', 'bigint'),
-      ('bucket_2_10_rows_returned', 'bigint'),
-      ('bucket_11_100_access_count', 'bigint'),
-      ('bucket_11_100_rows_returned', 'bigint'),
-      ('bucket_101_1000_access_count', 'bigint'),
-      ('bucket_101_1000_rows_returned', 'bigint'),
-      ('bucket_1000_plus_access_count', 'bigint'),
-      ('bucket_1000_plus_rows_returned', 'bigint'),
-      ('last_used','timestamp'),
-      ('last_flush_time', 'timestamp')
-  ]
-  )
 
-def_table_schema(
-  owner = 'yangyifei.yyf',
-  table_name = '__all_detect_lock_info',
-  table_id = '496',
-  table_type = 'SYSTEM_TABLE',
-  gm_columns = ['gmt_create', 'gmt_modified'],
-  rowkey_columns = [
-    ('task_type', 'int'),
-    ('obj_type', 'int'),
-    ('obj_id', 'int'),
-    ('lock_mode', 'int'),
-    ('owner_id', 'int')
-  ],
-  in_tenant_space = True,
-  is_cluster_private = False,
-  meta_record_in_sys = False,
-  normal_columns = [
-    ('cnt', 'int'),
-    ('detect_func_no', 'int'),
-    ('detect_func_param', 'varbinary:MAX_LOCK_DETECT_PARAM_LENGTH', 'true', '')
-  ]
-  )
 
 # 497: __all_client_to_server_session_info (removed)
 
@@ -3198,50 +2719,6 @@ def_table_schema(**gen_history_table_def(506, all_column_privilege_def))
 # 516 : __all_service (abandoned)
 # 517: __all_storage_io_usage (abandoned)
 
-def_table_schema(
-  owner = 'fyy280124',
-  table_name     = '__all_scheduler_job_run_detail_v2',
-  table_id       = '519',
-  table_type     = 'SYSTEM_TABLE',
-  gm_columns     = ['gmt_create', 'gmt_modified'],
-  rowkey_columns = [
-    ('job_name', 'varchar:128', 'false'),
-    ('time', 'timestamp', 'false')
-  ],
-  in_tenant_space = True,
-  is_cluster_private = False,
-  normal_columns = [
-    ('job', 'int', 'true', '0'),
-    ('log_id', 'int', 'true', '0'),
-    ('log_date', 'timestamp', 'true'),
-    ('owner', 'varchar:128', 'true'),
-    ('job_subname', 'varchar:128', 'true'),
-    ('job_class', 'varchar:128', 'true'),
-    ('operation', 'varchar:OB_MAX_SQL_LENGTH', 'true'),
-    ('status', 'varchar:128', 'true'),
-    ('code', 'int', 'true', '0'),
-    ('req_start_date', 'timestamp', 'true'),
-    ('actual_start_date', 'timestamp', 'true'),
-    ('run_duration', 'int', 'true'),
-    ('instance_id', 'varchar:128', 'true'),
-    ('session_id', 'uint', 'true'),
-    ('slave_pid', 'varchar:128', 'true'),
-    ('cpu_used', 'int', 'true'),
-    ('user_name', 'varchar:128', 'true'),
-    ('client_id', 'varchar:128', 'true'),
-    ('global_uid', 'varchar:128', 'true'),
-    ('credential_owner', 'varchar:128', 'true'),
-    ('credential_name', 'varchar:128', 'true'),
-    ('destination_owner', 'varchar:128', 'true'),
-    ('destination', 'varchar:128', 'true'),
-    ('message', 'varchar:4000'),
-    ('database_name', 'varchar:OB_MAX_DATABASE_NAME_LENGTH', 'true'),
-    ('this_date', 'timestamp', 'true'),
-    ('this_exec_date', 'timestamp', 'true'),
-    ('this_exec_addr', 'varchar:MAX_IP_ADDR_LENGTH', 'true'),
-    ('this_exec_trace_id', 'varchar:OB_MAX_TRACE_ID_BUFFER_SIZE', 'true')
-  ]
-  )
 
 # 520 : __all_spm_evo_result abandoned
 
@@ -3269,107 +2746,7 @@ def_table_schema(
   ]
   )
 
-# 522 : __all_pkg_type
-# 523 : __all_pkg_type_attr
-# 524 : __all_pkg_coll_type
 # 525: __wr_sql_plan
-
-all_pkg_type_def = dict(
-  owner = 'webber.wb',
-  table_name = '__all_pkg_type',
-  table_id   = '522',
-  table_type = 'SYSTEM_TABLE',
-  gm_columns = ['gmt_create', 'gmt_modified'],
-  rowkey_columns = [
-    ('package_id', 'int', 'false'),
-    ('type_id', 'int', 'false')
-  ],
-  in_tenant_space = True,
-
-  normal_columns = [
-    ('database_id', 'int'),
-    ('schema_version', 'int'),
-    ('typecode', 'int'),
-    ('properties', 'int'),
-    ('attributes', 'int'),
-    ('methods', 'int'),
-    ('hiddenmethods', 'int'),
-    ('supertypes', 'int'),
-    ('subtypes', 'int'),
-    ('externtype', 'int'),
-    ('externname', 'varchar:OB_MAX_TABLE_TYPE_LENGTH', 'true', ''),
-    ('helperclassname', 'varchar:OB_MAX_TABLE_TYPE_LENGTH', 'true', ''),
-    ('local_attrs', 'int'),
-    ('local_methods', 'int'),
-    ('supertypeid', 'int'),
-    ('type_name', 'varchar:OB_MAX_TABLE_TYPE_LENGTH')
-  ]
-  )
-def_table_schema(**all_pkg_type_def)
-
-all_pkg_type_attr_def = dict (
-  owner = 'webber.wb',
-  table_name = '__all_pkg_type_attr',
-  table_id = '523',
-  table_type = 'SYSTEM_TABLE',
-  gm_columns = ['gmt_create', 'gmt_modified'],
-  rowkey_columns = [
-    ('type_id', 'int', 'false'),
-    ('attribute', 'int', 'false')
-  ],
-  in_tenant_space = True,
-
-  normal_columns = [
-    ('schema_version', 'int'),
-    ('attr_package_id', 'int'),
-    ('type_attr_id', 'int'),
-    ('name', 'varchar:OB_MAX_TABLE_TYPE_LENGTH'),
-    ('properties', 'int', 'false'),
-    ('charset_id', 'int'),
-    ('charset_form', 'int'),
-    ('length', 'int'),
-    ('number_precision', 'int'),
-    ('scale', 'int'),
-    ('zero_fill', 'int'),
-    ('coll_type', 'int'),
-    ('externname', 'varchar:OB_MAX_TABLE_TYPE_LENGTH', 'true', ''),
-    ('xflags', 'int'),
-    ('setter', 'int'),
-    ('getter', 'int')
-  ]
-  )
-def_table_schema(**all_pkg_type_attr_def)
-
-all_coll_type_def = dict(
-  owner = 'webber.wb',
-  table_name = '__all_pkg_coll_type',
-  table_id = '524',
-  table_type = 'SYSTEM_TABLE',
-  gm_columns = ['gmt_create', 'gmt_modified'],
-  rowkey_columns = [
-    ('coll_type_id', 'int', 'false')
-  ],
-  in_tenant_space = True,
-
-  normal_columns = [
-    ('schema_version', 'int'),
-    ('elem_package_id', 'int'),
-    ('elem_type_id', 'int'),
-    ('elem_schema_version', 'int'),
-    ('properties', 'int'),
-    ('charset_id', 'int'),
-    ('charset_form', 'int'),
-    ('length', 'int'),
-    ('number_precision', 'int'),
-    ('scale', 'int'),
-    ('zero_fill', 'int'),
-    ('coll_type', 'int'),
-    ('upper_bound', 'int'),
-    ('package_id', 'int'),
-    ('coll_name', 'varchar:OB_MAX_TABLE_TYPE_LENGTH')
-  ]
-  )
-def_table_schema(**all_coll_type_def)
 
 # __wr_sql_plan # removed
 
@@ -6719,11 +6096,6 @@ def_table_schema(
   )
 
 def_table_schema(**gen_sqlite_virtual_table_def(
-  table_id = '12290',
-  table_name = '__all_virtual_zone_merge_info',
-  keywords = all_def_keywords['__all_zone_merge_info']))
-
-def_table_schema(**gen_sqlite_virtual_table_def(
   table_id = '12291',
   table_name = '__all_virtual_merge_info',
   keywords = all_def_keywords['__all_merge_info']))
@@ -7435,7 +6807,6 @@ def_table_schema(
 )
 
 # 12414: __all_virtual_wr_control # removed
-# 12415: __all_virtual_event_history - migrated to SQLite, see gen_sqlite_virtual_table_def above
 
 # 12418: removed (legacy resource isolation deleted)
 # 12419: removed (legacy resource isolation deleted)
@@ -8038,26 +7409,6 @@ def_table_schema(
   ]
   )
 # 12559: __tenant_virtual_list_file # abandoned in seekdb
-
-# __all_virtual_reserved_snapshot: SQLite virtual table
-# Note: Using table_id 12447 (next available after 12444-12446)
-def_table_schema(**gen_sqlite_virtual_table_def(
-  table_id = '12560',
-  table_name = '__all_virtual_reserved_snapshot',
-  keywords = all_def_keywords['__all_reserved_snapshot']))
-
-# __all_virtual_server_event_history: SQLite virtual table
-# Note: Using table_id 12155 (next available after 12154 which is abandoned)
-def_table_schema(**gen_sqlite_virtual_table_def(
-  table_id = '12561',
-  table_name = '__all_virtual_server_event_history',
-  keywords = all_def_keywords['__all_server_event_history']))
-
-def_table_schema(**gen_sqlite_virtual_table_def(
-    table_id = '12562',
-    table_name = '__all_virtual_event_history',
-    keywords = all_def_keywords['__all_event_history']
-  ))
 
 def_table_schema(**gen_sqlite_virtual_table_def(
     table_id = '12563',
@@ -9358,24 +8709,6 @@ def_table_schema(
 def_table_schema(
   owner = 'dachuan.sdc',
   database_id    = 'OB_MYSQL_SCHEMA_ID',
-  table_name      = 'time_zone',
-  table_id        = '21054',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT time_zone_id as Time_zone_id,
-           use_leap_seconds as Use_leap_seconds
-    FROM oceanbase.__all_time_zone
-""".replace("\n", " ")
-
-)
-
-def_table_schema(
-  owner = 'dachuan.sdc',
-  database_id    = 'OB_MYSQL_SCHEMA_ID',
   table_name      = 'time_zone_name',
   table_id        = '21055',
   table_type      = 'SYSTEM_VIEW',
@@ -10073,33 +9406,6 @@ def_table_schema(
 # 21161: DBA_OB_SERVERS (abandoned)
 # 21163: DBA_OB_ZONES (abandoned)
 
-#### sys tenant only view
-def_table_schema(
-    owner = 'wanhong.wwh',
-    table_name     = 'DBA_OB_ROOTSERVICE_EVENT_HISTORY',
-    table_id       = '21164',
-    table_type = 'SYSTEM_VIEW',
-    rowkey_columns  = [],
-    normal_columns  = [],
-    gm_columns      = [],
-    in_tenant_space = False,
-    view_definition = """
-SELECT
-  gmt_create AS `TIMESTAMP`,
-  MODULE,
-  EVENT,
-  NAME1, VALUE1,
-  NAME2, VALUE2,
-  NAME3, VALUE3,
-  NAME4, VALUE4,
-  NAME5, VALUE5,
-  NAME6, VALUE6,
-  EXTRA_INFO
-FROM oceanbase.__all_virtual_server_event_history
-WHERE EVENT_TYPE = 1
-""".replace("\n", " ")
-)
-
 # 21165: DBA_OB_TENANT_JOBS (abandoned)
 # 21166: DBA_OB_UNIT_JOBS (abandoned)
 # 21167: DBA_OB_SERVER_JOBS (abandoned)
@@ -10265,29 +9571,6 @@ def_table_schema(
   WHERE T.TABLE_TYPE in (0, 3, 6)
   AND T.TABLE_MODE >> 12 & 15 in (0,1)
   AND T.INDEX_ATTRIBUTES_SET & 16 = 0
-  """.replace("\n", " ")
-  )
-
-def_table_schema(
-  owner           = 'donglou.zl',
-  table_name      = 'DBA_OB_ZONE_MAJOR_COMPACTION',
-  table_id        = '21184',
-  table_type      = 'SYSTEM_VIEW',
-  gm_columns      = [],
-  rowkey_columns  = [],
-  normal_columns  = [],
-  in_tenant_space = True,
-  view_definition =
-  """
-  SELECT BROADCAST_SCN,
-         LAST_MERGED_SCN AS LAST_SCN,
-         USEC_TO_TIME(LAST_MERGED_TIME) AS LAST_FINISH_TIME,
-         USEC_TO_TIME(MERGE_START_TIME) AS START_TIME,
-         (CASE MERGE_STATUS
-                WHEN 0 THEN 'IDLE'
-                WHEN 1 THEN 'COMPACTING'
-                ELSE 'UNKNOWN' END) AS STATUS
-  FROM OCEANBASE.__ALL_VIRTUAL_ZONE_MERGE_INFO
   """.replace("\n", " ")
   )
 
@@ -12955,32 +12238,6 @@ def_table_schema(
 # 21323: V$OB_TENANTS
 
 def_table_schema(
-  owner           = 'msy164651',
-  table_name      = 'DBA_OB_SERVER_EVENT_HISTORY',
-  table_id        = '21324',
-  table_type      = 'SYSTEM_VIEW',
-  gm_columns      = [],
-  rowkey_columns  = [],
-  normal_columns  = [],
-  view_definition =
-  """
-SELECT
-  gmt_create AS `TIMESTAMP`,
-  MODULE,
-  EVENT,
-  NAME1, VALUE1,
-  NAME2, VALUE2,
-  NAME3, VALUE3,
-  NAME4, VALUE4,
-  NAME5, VALUE5,
-  NAME6, VALUE6,
-  EXTRA_INFO
-FROM oceanbase.__all_virtual_server_event_history
-WHERE EVENT_TYPE = 0
-  """.replace("\n", " ")
-  )
-
-def_table_schema(
   owner           = 'donglou.zl',
   table_name      = 'DBA_OB_FREEZE_INFO',
   table_id        = '21326',
@@ -13228,70 +12485,11 @@ def_table_schema(
   """.replace("\n", " ")
 )
 
-def_table_schema(
-    owner = 'luofan.zp',
-    table_name     = 'DBA_OB_USER_DEFINED_RULES',
-    table_id       = '21340',
-    table_type = 'SYSTEM_VIEW',
-    rowkey_columns  = [],
-    normal_columns  = [],
-    gm_columns      = [],
-    in_tenant_space = True,
-    view_definition = """SELECT
-      CAST(T.DB_NAME AS CHAR(128)) AS DB_NAME,
-      CAST(T.RULE_NAME AS CHAR(256)) AS RULE_NAME,
-      CAST(T.RULE_ID AS SIGNED) AS RULE_ID,
-      PATTERN,
-      REPLACEMENT,
-      NORMALIZED_PATTERN,
-      CAST(CASE STATUS WHEN 1 THEN 'ENABLE'
-                      WHEN 2 THEN 'DISABLE'
-                      ELSE NULL END AS CHAR(10)) AS STATUS,
-      CAST(T.VERSION AS SIGNED) AS VERSION,
-      CAST(T.PATTERN_DIGEST AS UNSIGNED) AS PATTERN_DIGEST
-    FROM
-      oceanbase.__all_rewrite_rules T
-    WHERE T.STATUS != 3
-""".replace("\n", " ")
-)
-
 # 21341: GV$OB_SQL_PLAN # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_sql_plan)
 # 21342: V$OB_SQL_PLAN # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_sql_plan)
 
 # 21343: abandoned
 # 21344: abandoned
-
-def_table_schema(
-    owner = 'yanmu.ztl',
-    table_name     = 'DBA_OB_CLUSTER_EVENT_HISTORY',
-    table_id       = '21345',
-    table_type = 'SYSTEM_VIEW',
-    rowkey_columns  = [],
-    normal_columns  = [],
-    gm_columns      = [],
-    in_tenant_space = False,
-    view_definition = """
-SELECT
-  gmt_create AS `TIMESTAMP`,
-  CAST(MODULE AS CHAR(256)) MODULE,
-  CAST(EVENT AS CHAR(256)) EVENT,
-  CAST(NAME1 AS CHAR(256)) NAME1,
-  CAST(VALUE1 AS CHAR(4096)) VALUE1,
-  CAST(NAME2 AS CHAR(256)) NAME2,
-  CAST(VALUE2 AS CHAR(4096)) VALUE2,
-  CAST(NAME3 AS CHAR(256)) NAME3,
-  CAST(VALUE3 AS CHAR(4096)) VALUE3,
-  CAST(NAME4 AS CHAR(256)) NAME4,
-  CAST(VALUE4 AS CHAR(4096)) VALUE4,
-  CAST(NAME5 AS CHAR(256)) NAME5,
-  CAST(VALUE5 AS CHAR(4096)) VALUE5,
-  CAST(NAME6 AS CHAR(256)) NAME6,
-  CAST(VALUE6 AS CHAR(4096)) VALUE6,
-  CAST(EXTRA_INFO AS CHAR(4096)) EXTRA_INFO
-FROM oceanbase.__all_virtual_server_event_history
-WHERE EVENT_TYPE = 2
-""".replace("\n", " ")
-)
 
 def_table_schema(
   owner = 'shady.hxy',
@@ -14495,82 +13693,7 @@ def_table_schema(
 """.replace("\n", " ")
 )
 
-def_table_schema(
-  owner = 'jiangxiu.wt',
-  table_name      = 'DBA_OB_TASK_OPT_STAT_GATHER_HISTORY',
-  table_id        = '21378',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT
-        CAST(TASK_ID             AS     CHAR(36)) AS TASK_ID,
-        CAST((CASE  WHEN type = 0 THEN 'MANUAL GATHER'
-               ELSE (CASE  WHEN type = 1 THEN 'AUTO GATHER'
-                      ELSE (CASE  WHEN type = 2 THEN 'ASYNC GATHER'
-                         ELSE (CASE  WHEN type IS NULL THEN NULL
-                                  ELSE 'UNDEFINED GATHER' END )END ) END ) END) AS CHAR(16)) AS TYPE,
-        CAST((CASE WHEN RET_CODE = 0 THEN 'SUCCESS'
-                ELSE (CASE WHEN RET_CODE IS NULL THEN NULL
-                      ELSE (CASE WHEN RET_CODE = -5065 THEN 'CANCELED' ELSE 'FAILED' END) END) END) AS CHAR(8)) AS STATUS,
-        CAST(TABLE_COUNT         AS     SIGNED) AS TABLE_COUNT,
-        CAST(FAILED_COUNT        AS     SIGNED) AS FAILED_COUNT,
-        CAST(START_TIME          AS     DATETIME(6)) AS START_TIME,
-        CAST(END_TIME            AS     DATETIME(6)) AS END_TIME
-    FROM
-        oceanbase.__all_task_opt_stat_gather_history
-""".replace("\n", " ")
-)
 
-def_table_schema(
-    owner = 'jiangxiu.wt',
-    table_name     = 'DBA_OB_TABLE_OPT_STAT_GATHER_HISTORY',
-    table_id       = '21379',
-    table_type = 'SYSTEM_VIEW',
-    rowkey_columns  = [],
-    normal_columns  = [],
-    gm_columns      = [],
-    in_tenant_space = True,
-    view_definition = """
-        SELECT
-        CAST(DB.DATABASE_NAME         AS     CHAR(128)) AS OWNER,
-        CAST(V.TABLE_NAME             AS     CHAR(256)) AS TABLE_NAME,
-        CAST(STAT.TASK_ID             AS     CHAR(36)) AS TASK_ID,
-        CAST((CASE WHEN RET_CODE = 0 THEN 'SUCCESS'
-                ELSE (CASE WHEN RET_CODE IS NULL THEN NULL
-                      ELSE (CASE WHEN RET_CODE = -5065 THEN 'CANCELED' ELSE 'FAILED' END) END) END) AS CHAR(8)) AS STATUS,
-        CAST(STAT.START_TIME          AS     DATETIME(6)) AS START_TIME,
-        CAST(STAT.END_TIME            AS     DATETIME(6)) AS END_TIME,
-        CAST(STAT.MEMORY_USED         AS     SIGNED) AS MEMORY_USED,
-        CAST(STAT.STAT_REFRESH_FAILED_LIST      AS     CHAR(4096)) AS STAT_REFRESH_FAILED_LIST,
-        CAST(STAT.PROPERTIES       AS     CHAR(4096)) AS PROPERTIES
-        FROM
-        (
-          (SELECT DATABASE_ID,
-                  TABLE_ID,
-                  TABLE_NAME
-              FROM
-                OCEANBASE.__ALL_VIRTUAL_CORE_ALL_TABLE
-            UNION ALL
-            SELECT DATABASE_ID,
-                  TABLE_ID,
-                  TABLE_NAME
-            FROM
-                oceanbase.__all_table T
-            WHERE T.TABLE_TYPE IN (0,2,3,6)
-            AND T.TABLE_MODE >> 12 & 15 in (0,1)
-            AND T.INDEX_ATTRIBUTES_SET & 16 = 0)
-        ) V
-        JOIN
-            oceanbase.__all_database DB
-            ON DB.DATABASE_ID = V.DATABASE_ID
-        LEFT JOIN
-            oceanbase.__all_table_opt_stat_gather_history STAT
-            ON V.TABLE_ID = STAT.TABLE_ID
-""".replace("\n", " ")
-)
 
 # 21380: GV$OB_THREAD # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_thread)
 
@@ -14906,42 +14029,6 @@ JOIN OCEANBASE.__ALL_OPTSTAT_GLOBAL_PREFS GP
 # 21445: DBA_OB_LS_HISTORY (abandoned)
 # 21446: CDB_OB_LS_HISTORY (abandoned)
 
-def_table_schema(
-  owner           = 'wanhong.wwh',
-  table_name      = 'DBA_OB_EVENT_HISTORY',
-  table_id        = '21447',
-  table_type      = 'SYSTEM_VIEW',
-  gm_columns      = [],
-  rowkey_columns  = [],
-  normal_columns  = [],
-  in_tenant_space = True,
-  view_definition =
-  """
-  SELECT
-    gmt_create AS `TIMESTAMP`,
-    CAST(MODULE AS CHAR(256)) AS MODULE,
-    CAST(EVENT AS CHAR(256)) AS EVENT,
-    CAST(NAME1 AS CHAR(256)) AS NAME1,
-    CAST(VALUE1 AS CHAR(4096)) AS VALUE1,
-    CAST(NAME2 AS CHAR(256)) AS NAME2,
-    CAST(VALUE2 AS CHAR(4096)) AS VALUE2,
-    CAST(NAME3 AS CHAR(256)) AS NAME3,
-    CAST(VALUE3 AS CHAR(4096)) AS VALUE3,
-    CAST(NAME4 AS CHAR(256)) AS NAME4,
-    CAST(VALUE4 AS CHAR(4096)) AS VALUE4,
-    CAST(NAME5 AS CHAR(256)) AS NAME5,
-    CAST(VALUE5 AS CHAR(4096)) AS VALUE5,
-    CAST(NAME6 AS CHAR(256)) AS NAME6,
-    CAST(VALUE6 AS CHAR(4096)) AS VALUE6,
-    CAST(EXTRA_INFO AS CHAR(4096)) AS EXTRA_INFO,
-    CAST(TRACE_ID AS CHAR(128)) AS TRACE_ID,
-    COST_TIME AS COST_TIME,
-    RET_CODE AS RET_CODE,
-    CAST(ERROR_MSG AS CHAR(512)) AS ERROR_MSG
-  FROM OCEANBASE.__ALL_VIRTUAL_EVENT_HISTORY
-  """.replace("\n", " ")
-)
-
 # 21448: CDB_OB_TENANT_EVENT_HISTORY (abandoned)
 # 21459: GV$OB_SESSION # removed (single-tenant GV/V collapse; folded into V$OB_SESSION)
 def_table_schema(
@@ -15142,42 +14229,6 @@ def_table_schema(
     from oceanbase.__all_aux_stat;
 """.replace("\n", " ")
 )
-
-def_table_schema(
-  owner = 'yangjiali.yjl',
-  table_name     = 'DBA_INDEX_USAGE',
-  table_id       = '21499',
-  table_type = 'SYSTEM_VIEW',
-  gm_columns = [],
-  in_tenant_space = True,
-  rowkey_columns = [],
-  normal_columns = [],
-  view_definition = """
-    SELECT
-      CAST(IUT.OBJECT_ID AS SIGNED) AS OBJECT_ID,
-      CAST(T.TABLE_NAME AS CHAR(128)) AS NAME,
-      CAST(DB.DATABASE_NAME AS CHAR(128)) AS OWNER,
-      CAST(IUT.TOTAL_ACCESS_COUNT AS SIGNED) AS TOTAL_ACCESS_COUNT,
-      CAST(IUT.TOTAL_EXEC_COUNT AS SIGNED) AS TOTAL_EXEC_COUNT,
-      CAST(IUT.TOTAL_ROWS_RETURNED AS SIGNED) AS TOTAL_ROWS_RETURNED,
-      CAST(IUT.BUCKET_0_ACCESS_COUNT AS SIGNED) AS BUCKET_0_ACCESS_COUNT,
-      CAST(IUT.BUCKET_1_ACCESS_COUNT AS SIGNED) AS BUCKET_1_ACCESS_COUNT,
-      CAST(IUT.BUCKET_2_10_ACCESS_COUNT AS SIGNED) AS BUCKET_2_10_ACCESS_COUNT,
-      CAST(IUT.BUCKET_2_10_ROWS_RETURNED AS SIGNED) AS BUCKET_2_10_ROWS_RETURNED,
-      CAST(IUT.BUCKET_11_100_ACCESS_COUNT AS SIGNED) AS BUCKET_11_100_ACCESS_COUNT,
-      CAST(IUT.BUCKET_11_100_ROWS_RETURNED AS SIGNED) AS BUCKET_11_100_ROWS_RETURNED,
-      CAST(IUT.BUCKET_101_1000_ACCESS_COUNT AS SIGNED) AS BUCKET_101_1000_ACCESS_COUNT,
-      CAST(IUT.BUCKET_101_1000_ROWS_RETURNED AS SIGNED) AS BUCKET_101_1000_ROWS_RETURNED,
-      CAST(IUT.BUCKET_1000_PLUS_ACCESS_COUNT AS SIGNED) AS BUCKET_1000_PLUS_ACCESS_COUNT,
-      CAST(IUT.BUCKET_1000_PLUS_ROWS_RETURNED AS SIGNED) AS BUCKET_1000_PLUS_ROWS_RETURNED,
-      CAST(IUT.LAST_USED AS CHAR(128)) AS LAST_USED
-    FROM
-      oceanbase.__all_index_usage_info IUT
-      JOIN oceanbase.__all_table T ON IUT.OBJECT_ID = T.TABLE_ID
-      JOIN oceanbase.__all_database DB ON T.DATABASE_ID = DB.DATABASE_ID
-    WHERE T.TABLE_ID = IUT.OBJECT_ID
-""".replace("\n", " ")
-  )
 
 def_table_schema(
   owner           = 'dingjincheng.djc',
@@ -16242,76 +15293,6 @@ def_table_schema(
 """.replace("\n", " ")
   )
 
-def_table_schema(
-  owner = 'fyy280124',
-  table_name      = 'DBA_SCHEDULER_JOB_RUN_DETAILS',
-  table_id        = '21589',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-  (
-  SELECT
-                        CAST(NULL AS NUMBER) AS LOG_ID,
-                        CAST(NULL AS DATETIME) AS LOG_DATE,
-                        CAST(NULL AS CHAR(128)) AS OWNER,
-                        CAST(NULL AS CHAR(128)) AS JOB_NAME,
-                        CAST(NULL AS CHAR(128)) AS JOB_SUBNAME,
-                        CAST(NULL AS CHAR(128)) AS STATUS,
-                        CODE,
-                        CAST(NULL AS DATETIME) AS REQ_START_DATE,
-                        CAST(NULL AS DATETIME) AS ACTUAL_START_DATE,
-                        CAST(NULL AS NUMBER) AS RUN_DURATION,
-                        CAST(NULL AS CHAR(128)) AS INSTANCE_ID,
-                        CAST(NULL AS NUMBER) AS SESSION_ID,
-                        CAST(NULL AS CHAR(128)) AS SLAVE_PID,
-                        CAST(NULL AS NUMBER) AS CPU_USED,
-                        CAST(NULL AS CHAR(128)) AS CREDENTIAL_OWNER,
-                        CAST(NULL AS CHAR(128)) AS CREDENTIAL_NAME,
-                        CAST(NULL AS CHAR(128)) AS DESTINATION_OWNER,
-                        CAST(NULL AS CHAR(128)) AS DESTINATION,
-                        MESSAGE,
-                        JOB,
-                        TIME,
-                        JOB_CLASS,
-                        GMT_CREATE,
-                        GMT_MODIFIED
-                       FROM OCEANBASE.__ALL_SCHEDULER_JOB_RUN_DETAIL
-)
-UNION ALL
-(
-SELECT
-                        LOG_ID,
-                        LOG_DATE,
-                        OWNER,
-                        JOB_NAME,
-                        JOB_SUBNAME,
-                        STATUS,
-                        CODE,
-                        REQ_START_DATE,
-                        ACTUAL_START_DATE,
-                        RUN_DURATION,
-                        INSTANCE_ID,
-                        SESSION_ID,
-                        SLAVE_PID,
-                        CPU_USED,
-                        CREDENTIAL_OWNER,
-                        CREDENTIAL_NAME,
-                        DESTINATION_OWNER,
-                        DESTINATION,
-                        MESSAGE,
-                        JOB,
-                        TIME,
-                        JOB_CLASS,
-                        GMT_CREATE,
-                        GMT_MODIFIED
-                       FROM OCEANBASE.__ALL_SCHEDULER_JOB_RUN_DETAIL_V2
-)
-""".replace("\n", " ")
-)
-
 # 21591: DBA_OB_SERVER_SPACE_USAGE (abandoned)
 # 21592: CDB_OB_SERVER_SPACE_USAGE (abandoned)
 # 21593: DBA_OB_SPACE_USAGE
@@ -16994,22 +15975,6 @@ def_sys_index_table(
 # 101008: idx_tenant_deleted(abandoned)
 
 def_sys_index_table(
-  index_name = 'idx_rs_module',
-  index_table_id = 101009,
-  index_columns = ['module'],
-  index_using_type = 'USING_BTREE',
-  index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_rootservice_event_history'])
-
-def_sys_index_table(
-  index_name = 'idx_rs_event',
-  index_table_id = 101010,
-  index_columns = ['event'],
-  index_using_type = 'USING_BTREE',
-  index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_rootservice_event_history'])
-
-def_sys_index_table(
   index_name = 'idx_recyclebin_db_type',
   index_table_id = 101011,
   index_columns = ['database_id','type'],
@@ -17270,14 +16235,6 @@ def_sys_index_table(
   keywords = all_def_keywords['__all_tablet_to_table'])
 
 def_sys_index_table(
-  index_name = 'idx_pending_tx_id',
-  index_table_id = 101070,
-  index_columns = ['gtrid', 'bqual', 'format_id'],
-  index_using_type = 'USING_BTREE',
-  index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_pending_transaction'])
-
-def_sys_index_table(
   index_name = 'idx_ctx_namespace',
   index_table_id = 101071,
   index_columns = ['namespace'],
@@ -17387,70 +16344,6 @@ def_sys_index_table(
   index_using_type = 'USING_BTREE',
   index_type = 'INDEX_TYPE_NORMAL_LOCAL',
   keywords = all_def_keywords['__all_column_privilege'])
-
-def_sys_index_table(
-  index_name = 'idx_scheduler_job_run_detail_v2_time',
-  index_table_id = 101105,
-  index_columns = ['time'],
-  index_using_type = 'USING_BTREE',
-  index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_scheduler_job_run_detail_v2'])
-
-def_sys_index_table(
-  index_name = 'idx_scheduler_job_run_detail_v2_job_class_time',
-  index_table_id = 101106,
-  index_columns = ['job_class', 'time'],
-  index_using_type = 'USING_BTREE',
-  index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_scheduler_job_run_detail_v2'])
-
-def_sys_index_table(
-  index_name = 'idx_pkg_db_type_name',
-  index_table_id = 101107,
-  index_columns = ['database_id', 'type_name'],
-  index_using_type = 'USING_BTREE',
-  index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_pkg_type'])
-
-def_sys_index_table(
-  index_name = 'idx_pkg_type_name',
-  index_table_id = 101108,
-  index_columns = ['type_name'],
-  index_using_type = 'USING_BTREE',
-  index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_pkg_type'])
-
-def_sys_index_table(
-  index_name = 'idx_pkg_type_attr_name',
-  index_table_id = 101109,
-  index_columns = ['name'],
-  index_using_type = 'USING_BTREE',
-  index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_pkg_type_attr'])
-
-def_sys_index_table(
-  index_name = 'idx_pkg_type_attr_id',
-  index_table_id = 101110,
-  index_columns = ['attr_package_id', 'type_attr_id'],
-  index_using_type = 'USING_BTREE',
-  index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_pkg_type_attr'])
-
-def_sys_index_table(
-  index_name = 'idx_pkg_coll_name_type',
-  index_table_id = 101111,
-  index_columns = ['coll_name', 'coll_type'],
-  index_using_type = 'USING_BTREE',
-  index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_pkg_coll_type'])
-
-def_sys_index_table(
-  index_name = 'idx_pkg_coll_name_id',
-  index_table_id = 101112,
-  index_columns = ['elem_package_id', 'elem_type_id'],
-  index_using_type = 'USING_BTREE',
-  index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_pkg_coll_type'])
 
 def_sys_index_table(
   index_name = 'idx_catalog_name',

@@ -1142,8 +1142,6 @@ public:
   int set_comment(const common::ObString &comment) { return deep_copy_str(comment, comment_); }
   int set_pk_comment(const char *comment) { return deep_copy_str(comment, pk_comment_); }
   int set_pk_comment(const common::ObString &comment) { return deep_copy_str(comment, pk_comment_); }
-  int set_create_host(const char *create_host) { return deep_copy_str(create_host, create_host_); }
-  int set_create_host(const common::ObString &create_host) { return deep_copy_str(create_host, create_host_); }
   int set_expire_info(const common::ObString &expire_info) { return deep_copy_str(expire_info, expire_info_); }
   int set_compress_func_name(const char *compressor);
   int set_compress_func_name(const common::ObString &compressor);
@@ -1263,8 +1261,6 @@ public:
   inline const common::ObString &get_comment_str() const { return comment_; }
   inline const char *get_pk_comment() const { return extract_str(pk_comment_); }
   inline const common::ObString &get_pk_comment_str() const { return pk_comment_; }
-  inline const char *get_create_host() const { return extract_str(create_host_); }
-  inline const common::ObString &get_create_host_str() const { return create_host_; }
   inline const common::ObRowkeyInfo &get_rowkey_info() const { return rowkey_info_; }
   inline const common::ObRowkeyInfo &get_shadow_rowkey_info() const { return shadow_rowkey_info_; }
   inline const common::ObIndexInfo &get_index_info() const { return index_info_; }
@@ -1757,7 +1753,6 @@ protected:
   common::ObString tablegroup_name_;
   common::ObString comment_;
   common::ObString pk_comment_;
-  common::ObString create_host_;
   common::ObCompressorType compressor_type_;
   common::ObString expire_info_;
   common::ObString parser_name_; //fulltext index parser name

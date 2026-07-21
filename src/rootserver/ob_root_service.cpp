@@ -2335,7 +2335,10 @@ int ObRootService::truncate_table_v2(const obcall::ObTruncateTableArg &arg, obca
 {
   int ret = OB_SUCCESS;
   // Parallel truncate generates schema versions in batch (gen_batch_new_schema_versions),
-  // which requires an explicit parallel-DDL schema-version context on the tenant ReqWorker.
+  // which only works in the parallel-DDL schema-version context. The former RPC path delivered
+  // this op to the dedicated PARALLEL_DDL thread (in_parallel_ddl_thread_()==true); after the RPC
+  // framework removal it runs on the tenant ReqWorker, so set the batch-generate flag here to
+  // restore that context (otherwise gen_batch_new_schema_versions returns OB_NOT_SUPPORTED).
   struct BatchGenSchemaVersionGuard {
     bool saved_;
     BatchGenSchemaVersionGuard() : saved_(ob_batch_generate_schema_version())
@@ -3842,7 +3845,7 @@ int ObRootService::table_allow_ddl_operation(const obcall::ObAlterTableArg &arg)
   return ret;
 }
 
-// Update optimizer statistic caches on this server.
+// ask each server to update statistic
 int ObRootService::update_stat_cache(const obcall::ObUpdateStatCacheArg &arg)
 {
   int ret = OB_SUCCESS;
@@ -3852,7 +3855,7 @@ int ObRootService::update_stat_cache(const obcall::ObUpdateStatCacheArg &arg)
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else {
-    if (OB_FAIL(ex_rpc::sync_call([&]{ return ObOptStatManager::get_instance().refresh_stat_cache(arg); }))) {
+    if (OB_FAIL(ex_rpc::sync_call([&]{ return ObOptStatManager::get_instance().add_refresh_stat_task(arg); }))) {
       LOG_WARN("fail to update table statistic", K(ret));
       // OB_SQL_PC_NOT_EXIST represent evict plan failed
       if (OB_SQL_PC_NOT_EXIST == ret) {

@@ -1480,7 +1480,6 @@ typedef enum ObItemType
   T_DBMS_STATS = 3681,
 
   T_KILL = 3682,
-  T_HELP = 3683,
   T_CANCEL = 3684,
   T_CANCEL_TASK = 3685,
   T_BOOTSTRAP = 3686,

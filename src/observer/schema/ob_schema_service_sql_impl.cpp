@@ -376,6 +376,11 @@ int ObSchemaServiceSQLImpl::get_new_schema_version(int64_t &schema_version)
   return ret;
 }
 
+bool ObSchemaServiceSQLImpl::in_parallel_ddl_thread_()
+{
+  return 0 == STRCASECMP(PARALLEL_DDL_THREAD_NAME, ob_get_origin_thread_name());
+}
+
 int ObSchemaServiceSQLImpl::gen_new_schema_version(
     const int64_t refreshed_schema_version,
     int64_t &schema_version)
@@ -383,7 +388,8 @@ int ObSchemaServiceSQLImpl::gen_new_schema_version(
   int ret = OB_SUCCESS;
   schema_version = OB_INVALID_VERSION;
   const int64_t version_cnt = 1;
-  if (ob_batch_generate_schema_version()) {
+  // create tenant now need in_parallel_ddl_thread_()
+  if (ob_batch_generate_schema_version() || in_parallel_ddl_thread_()) {
     auto *tsi_generator = GET_TSI(TSISchemaVersionGenerator);
     if (OB_ISNULL(tsi_generator)) {
       ret = OB_ERR_UNEXPECTED;
@@ -411,7 +417,7 @@ int ObSchemaServiceSQLImpl::gen_batch_new_schema_versions(const int64_t refreshe
   if (OB_UNLIKELY(version_cnt < 1)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret), K(version_cnt));
-  } else if (OB_UNLIKELY(!ob_batch_generate_schema_version())) {
+  } else if (OB_UNLIKELY(!ob_batch_generate_schema_version() && !in_parallel_ddl_thread_())) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("this interface only works for parallel-enable ddl",
              KR(ret), "thread_name", ob_get_origin_thread_name(),

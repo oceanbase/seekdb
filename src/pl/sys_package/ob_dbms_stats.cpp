@@ -3309,7 +3309,7 @@ int ObDbmsStats::update_stat_cache(obcall::ObUpdateStatCacheArg &stat_arg,
     ret = OB_TIMEOUT;
     LOG_WARN("query timeout is reached", K(ret), K(timeout));
   } else if (OB_FAIL(ex_rpc::sync_call([&]{
-    return ObOptStatManager::get_instance().refresh_stat_cache(stat_arg);
+    return ObOptStatManager::get_instance().add_refresh_stat_task(stat_arg);
   }))) {
       LOG_WARN("failed to update local stat cache caused by unknow error",
                                         K(ret), K(stat_arg));
@@ -6746,7 +6746,7 @@ int ObDbmsStats::update_system_stats_cache()
     ret = OB_TIMEOUT;
     LOG_WARN("query timeout is reached", K(ret), K(timeout));
   } else if (OB_FAIL(ex_rpc::sync_call([&]{
-    return ObOptStatManager::get_instance().refresh_stat_cache(stat_arg);
+    return ObOptStatManager::get_instance().add_refresh_stat_task(stat_arg);
   }))) {
     LOG_WARN("failed to update local stat cache caused by unknow error",
                                       K(ret), K(stat_arg));

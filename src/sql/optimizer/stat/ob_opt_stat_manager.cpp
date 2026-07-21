@@ -79,21 +79,38 @@ int ObOptStatManager::init(ObMySQLProxy *proxy,
     LOG_WARN("optimizer statistics manager has already been initialized.", K(ret));
   } else if (OB_FAIL(stat_service_.init(proxy, config))) {
     LOG_WARN("failed to init stat service", K(ret));
+  } else if (OB_FAIL(refresh_stat_task_queue_.init(1, "OptRefTask", REFRESH_STAT_TASK_NUM, REFRESH_STAT_TASK_NUM))) {
+    LOG_WARN("initialize timer failed. ", K(ret));
   } else {
     inited_ = true;
   }
   return ret;
 }
 
-int ObOptStatManager::refresh_stat_cache(const obcall::ObUpdateStatCacheArg &arg)
+void ObOptStatManager::stop()
+{
+  refresh_stat_task_queue_.stop();
+}
+
+void ObOptStatManager::wait()
+{
+  refresh_stat_task_queue_.wait();
+}
+
+void ObOptStatManager::destroy()
+{
+  refresh_stat_task_queue_.destroy();
+}
+
+int ObOptStatManager::add_refresh_stat_task(const obcall::ObUpdateStatCacheArg &analyze_arg)
 {
   int ret = OB_SUCCESS;
-  if (arg.update_system_stats_only_) {
-    if (OB_FAIL(refresh_system_stat_cache(arg))) {
+  if (analyze_arg.update_system_stats_only_) {
+    if (OB_FAIL(handle_refresh_system_stat_task(analyze_arg))) {
       LOG_WARN("failed to handle refresh system stat cache", K(ret));
     }
-  } else if (OB_FAIL(refresh_table_stat_cache(arg))) {
-    LOG_WARN("failed to refresh stat cache", K(ret));
+  } else if (OB_FAIL(handle_refresh_stat_task(analyze_arg))) {
+    LOG_WARN("failed to handld refresh stat task", K(ret));
   }
   return ret;
 }
@@ -401,7 +418,7 @@ int ObOptStatManager::batch_write(share::schema::ObSchemaGetterGuard *schema_gua
 }
 
 
-int ObOptStatManager::refresh_table_stat_cache(const obcall::ObUpdateStatCacheArg &arg)
+int ObOptStatManager::handle_refresh_stat_task(const obcall::ObUpdateStatCacheArg &arg)
 {
   int ret = OB_SUCCESS;
   uint64_t table_id = arg.table_id_;
@@ -428,7 +445,7 @@ int ObOptStatManager::refresh_table_stat_cache(const obcall::ObUpdateStatCacheAr
   return ret;
 }
 
-int ObOptStatManager::refresh_system_stat_cache(const obcall::ObUpdateStatCacheArg &arg)
+int ObOptStatManager::handle_refresh_system_stat_task(const obcall::ObUpdateStatCacheArg &arg)
 {
   int ret = OB_SUCCESS;
   ObOptSystemStat::Key key;
