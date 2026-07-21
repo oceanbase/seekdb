@@ -29,6 +29,7 @@ class ObIAllocator;
 
 namespace sql
 {
+class ObPlanCache;
 // The abstract interface class of library cache object, each object in the ObLibCacheNameSpace
 // enum structure needs to inherit from this interface and implement its own implementation class
 class ObILibCacheObject
@@ -54,6 +55,8 @@ public:
   inline bool is_anon() const { return ObLibCacheNameSpace::NS_ANON == ns_; }
   inline bool is_valid_cache_obj() const { return ns_ > NS_INVALID && ns_ < NS_MAX; }
   inline uint64_t get_object_id() const { return object_id_; }
+  inline ObPlanCache *get_lib_cache() const { return lib_cache_; }
+  inline void set_lib_cache(ObPlanCache *lib_cache) { lib_cache_ = lib_cache; }
   inline int64_t get_mem_size() const { return allocator_.total(); }
   int64_t get_ref_count() const { return ATOMIC_LOAD(&ref_count_); }
   int64_t inc_ref_count(const CacheRefHandleID ref_handle);
@@ -100,6 +103,7 @@ protected:
   common::ObIAllocator &allocator_;
   volatile int64_t ref_count_;
   uint64_t object_id_;
+  ObPlanCache *lib_cache_;
   int64_t log_del_time_;
   bool added_to_lc_;
   ObLibCacheNameSpace ns_;

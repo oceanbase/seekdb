@@ -18,6 +18,7 @@
 #define SRC_OBSERVER_VIRTUAL_SQL_PLAN_H_
 
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_session_plan_cache_utils.h"
 #include "sql/plan_cache/ob_plan_cache.h"
 #include "lib/container/ob_se_array.h"
 #include "common/ob_range.h"
@@ -115,9 +116,11 @@ private:
     PlanInfo();
     virtual ~PlanInfo();
     void reset();
+    uint32_t session_id_;
     int64_t plan_id_;
     
     TO_STRING_KV(
+      K_(session_id),
       K_(plan_id)
     );
   };
@@ -129,6 +132,7 @@ private:
     void reset();
     int operator()(common::hash::HashMapPair<sql::ObCacheObjID, sql::ObILibCacheObject *> &entry);
     ObSEArray<PlanInfo, 8> *plan_ids_;
+    uint32_t session_id_;
     
   };
 

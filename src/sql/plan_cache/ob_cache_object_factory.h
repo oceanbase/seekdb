@@ -42,6 +42,9 @@ friend class ObPlanCache;
 public:
   static int alloc(ObCacheObjGuard& guard,
                    ObLibCacheNameSpace ns);
+  static int alloc(ObPlanCache *plan_cache,
+                   ObCacheObjGuard& guard,
+                   ObLibCacheNameSpace ns);
   static void inner_free(ObILibCacheObject *&cache_obj,
                          const CacheRefHandleID ref_handle);
   static void inner_free(ObPlanCache *pc,
@@ -77,16 +80,21 @@ private:
   ObILibCacheObject* cache_obj_;
   // readable and writable
   CacheRefHandleID ref_handle_;
+  // The cache which owns cache_obj_. It must be used for dereference because
+  // SQL plans can be owned by a session cache instead of the tenant cache.
+  ObPlanCache *owner_cache_;
 
 public:
   ObCacheObjGuard()
     : cache_obj_(NULL),
-    ref_handle_(MAX_HANDLE)
+    ref_handle_(MAX_HANDLE),
+    owner_cache_(NULL)
   {
   }
   ObCacheObjGuard(CacheRefHandleID ref_handle)
     : cache_obj_(NULL),
-    ref_handle_(ref_handle)
+    ref_handle_(ref_handle),
+    owner_cache_(NULL)
   {
   }
 
@@ -95,8 +103,11 @@ public:
     if (OB_ISNULL(cache_obj_)) {
       // do nothing
     } else {
-      ObCacheObjectFactory::free(cache_obj_, ref_handle_);
+      ObPlanCache *owner_cache = OB_NOT_NULL(owner_cache_)
+          ? owner_cache_ : cache_obj_->get_lib_cache();
+      ObCacheObjectFactory::free(owner_cache, cache_obj_, ref_handle_);
       cache_obj_ = NULL;
+      owner_cache_ = NULL;
     }
   }
 
@@ -113,6 +124,11 @@ public:
   CacheRefHandleID get_ref_handle() const
   {
     return ref_handle_;
+  }
+
+  ObPlanCache *get_owner_cache() const
+  {
+    return owner_cache_;
   }
 
   int force_early_release(ObPlanCache *pc);
@@ -133,12 +149,15 @@ public:
 
     tmp.cache_obj_ = this->cache_obj_;
     tmp.ref_handle_ = this->ref_handle_;
+    tmp.owner_cache_ = this->owner_cache_;
 
     this->cache_obj_ = other.cache_obj_;
     this->ref_handle_ = other.ref_handle_;
+    this->owner_cache_ = other.owner_cache_;
 
     other.cache_obj_ = tmp.cache_obj_;
     other.ref_handle_ = tmp.ref_handle_;
+    other.owner_cache_ = tmp.owner_cache_;
 
     // If not reset tmp in this line, the reference count of current cache_obj_
     //  will be mistakenly decrease.
@@ -149,6 +168,7 @@ private:
   void reset(){
     cache_obj_ = NULL;
     ref_handle_ = MAX_HANDLE;
+    owner_cache_ = NULL;
   }
 };
 

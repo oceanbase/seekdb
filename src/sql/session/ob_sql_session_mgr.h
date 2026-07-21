@@ -281,6 +281,22 @@ public:
   void free_session(ObSQLSessionInfo *session);
   void clean_session_pool();
   int64_t count() const { return ATOMIC_LOAD(&count_); }
+  uint64_t get_sql_plan_flush_epoch() const
+  {
+    return ATOMIC_LOAD(&sql_plan_flush_epoch_);
+  }
+  uint64_t inc_sql_plan_flush_epoch()
+  {
+    return ATOMIC_AAF(&sql_plan_flush_epoch_, 1);
+  }
+  ObCacheObjID alloc_sql_plan_id()
+  {
+    return ATOMIC_AAF(&next_sql_plan_id_, 1);
+  }
+  volatile ObCacheObjID *get_sql_plan_id_counter()
+  {
+    return &next_sql_plan_id_;
+  }
 private:
   class SessionPool
   {
@@ -303,6 +319,8 @@ private:
   
   SessionPool session_pool_;
   int64_t count_;
+  volatile uint64_t sql_plan_flush_epoch_;
+  volatile ObCacheObjID next_sql_plan_id_;
   ObFixedClassAllocator<ObSQLSessionInfo> session_allocator_;
   DISALLOW_COPY_AND_ASSIGN(ObTenantSQLSessionMgr);
 }; // end of class ObSQLSessionMgr

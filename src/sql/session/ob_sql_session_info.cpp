@@ -18,6 +18,7 @@
 
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_sql_session_info.h"
+#include "ob_sql_session_mgr.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/memtable/mvcc/ob_btree_iter_cache.h"
 #include "storage/tx/ob_ts_mgr.h"
@@ -25,6 +26,7 @@
 #include "pl/ob_pl_package.h"
 #include "observer/mysql/obmp_stmt_send_piece_data.h"
 #include "observer/ob_server.h"
+#include "sql/plan_cache/ob_plan_cache.h"
 #include "sql/plan_cache/ob_ps_cache.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h" // for ObOptStatManager
 
@@ -102,6 +104,8 @@ ObSQLSessionInfo::ObSQLSessionInfo() :
       version_provider_(NULL),
       config_provider_(NULL),
       plan_cache_(NULL),
+      sql_plan_cache_(NULL),
+      last_seen_sql_plan_flush_epoch_(0),
       ps_cache_(NULL),
       found_rows_(1),
       affected_rows_(-1),
@@ -162,8 +166,13 @@ ObSQLSessionInfo::ObSQLSessionInfo() :
 
 ObSQLSessionInfo::~ObSQLSessionInfo()
 {
-  plan_cache_ = NULL;
+  // Cursors and prepared statements can still own physical-plan guards.
+  // Release them in destroy() before destroying their owner cache.
   destroy(false);
+  // destroy() is a no-op for an uninited session, so keep this as a safe
+  // fallback for partially initialized/test sessions.
+  reset_sql_plan_cache();
+  plan_cache_ = NULL;
 }
 
 int ObSQLSessionInfo::init(uint32_t sessid,
@@ -221,6 +230,8 @@ int ObSQLSessionInfo::test_init(uint32_t version, uint32_t sessid,
 
 void ObSQLSessionInfo::reset(bool skip_sys_var)
 {
+  reset_sql_plan_cache();
+  last_seen_sql_plan_flush_epoch_ = 0;
   if (is_inited_) {
     // ObVersionProvider::reset();
     reset_all_package_changed_info();
@@ -798,6 +809,81 @@ ObPlanCache *ObSQLSessionInfo::get_plan_cache()
     }
   }
   return plan_cache_;
+}
+
+ObPlanCache *ObSQLSessionInfo::get_sql_plan_cache()
+{
+  int ret = OB_SUCCESS;
+  lib::ObMutexGuard cache_guard(sql_plan_cache_mutex_);
+  if (OB_FAIL(cache_guard.get_ret())) {
+    LOG_WARN("failed to lock session sql plan cache", K(ret),
+             "session_id", get_server_sid());
+    return NULL;
+  }
+  ObTenantSQLSessionMgr *tenant_session_mgr = get_tenant_session_mgr();
+  if (OB_ISNULL(tenant_session_mgr) && OB_NOT_NULL(share::g_mp)) {
+    tenant_session_mgr = share::g_mp->tenant_sql_session_mgr();
+  }
+  const uint64_t current_flush_epoch = OB_ISNULL(tenant_session_mgr)
+      ? 0
+      : tenant_session_mgr->get_sql_plan_flush_epoch();
+
+  if (OB_NOT_NULL(sql_plan_cache_)
+      && current_flush_epoch != last_seen_sql_plan_flush_epoch_) {
+    if (OB_FAIL(sql_plan_cache_->clear_session_sql_cache())) {
+      LOG_WARN("failed to clear stale session sql plan cache",
+               K(ret), K(current_flush_epoch), K_(last_seen_sql_plan_flush_epoch),
+               "session_id", get_server_sid());
+      // Cache maintenance must not make the statement fail. Do not destroy the
+      // cache here: this method can be called again while the current compile
+      // result still owns a guard whose object belongs to this cache. Keep the
+      // old epoch so the next cache access retries the lazy invalidation.
+      ret = OB_SUCCESS;
+    } else {
+      last_seen_sql_plan_flush_epoch_ = current_flush_epoch;
+    }
+  }
+
+  if (OB_SUCC(ret) && OB_ISNULL(sql_plan_cache_)) {
+    void *buf = get_session_allocator().alloc(sizeof(ObPlanCache));
+    if (OB_ISNULL(buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate session sql plan cache", K(ret),
+               "session_id", get_server_sid());
+    } else {
+      ObPlanCache *new_plan_cache = new (buf) ObPlanCache();
+      volatile ObCacheObjID *object_id_counter = OB_ISNULL(tenant_session_mgr)
+          ? NULL
+          : tenant_session_mgr->get_sql_plan_id_counter();
+      if (OB_FAIL(new_plan_cache->init_session_cache(get_server_sid(),
+                                                     object_id_counter))) {
+        LOG_WARN("failed to initialize session sql plan cache",
+                 K(ret), "session_id", get_server_sid());
+        new_plan_cache->~ObPlanCache();
+        get_session_allocator().free(new_plan_cache);
+      } else {
+        sql_plan_cache_ = new_plan_cache;
+        last_seen_sql_plan_flush_epoch_ = current_flush_epoch;
+      }
+    }
+  }
+
+  return OB_SUCC(ret) ? sql_plan_cache_ : NULL;
+}
+
+void ObSQLSessionInfo::reset_sql_plan_cache()
+{
+  int ret = OB_SUCCESS;
+  lib::ObMutexGuard cache_guard(sql_plan_cache_mutex_);
+  if (OB_FAIL(cache_guard.get_ret())) {
+    LOG_ERROR("failed to lock session sql plan cache for reset",
+              K(ret), "session_id", get_server_sid());
+  } else if (OB_NOT_NULL(sql_plan_cache_)) {
+    sql_plan_cache_->destroy();
+    sql_plan_cache_->~ObPlanCache();
+    get_session_allocator().free(sql_plan_cache_);
+    sql_plan_cache_ = NULL;
+  }
 }
 
 ObPsCache *ObSQLSessionInfo::get_ps_cache()

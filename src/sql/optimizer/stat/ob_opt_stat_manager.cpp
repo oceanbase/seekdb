@@ -19,6 +19,7 @@
 #include "share/rc/ob_module_provider.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "sql/plan_cache/ob_plan_cache.h"
+#include "sql/session/ob_sql_session_mgr.h"
 #include "sql/optimizer/ob_opt_selectivity.h"
 
 namespace oceanbase
@@ -459,11 +460,14 @@ int ObOptStatManager::handle_refresh_system_stat_task(const obcall::ObUpdateStat
   }
   if (OB_SUCC(ret)) {
     MOD_SCOPE {
-      sql::ObPlanCache *pc = share::g_mp->plan_cache();
-      if (OB_FAIL(pc->flush_plan_cache())) {
-        LOG_WARN("failed to evict plan", K(ret));
-        // use OB_SQL_PC_NOT_EXIST represent evict plan failed
-        ret = OB_SQL_PC_NOT_EXIST;
+      sql::ObTenantSQLSessionMgr *session_mgr = share::g_mp->tenant_sql_session_mgr();
+      if (OB_ISNULL(session_mgr)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("tenant sql session manager is null", K(ret));
+      } else {
+        const uint64_t flush_epoch = session_mgr->inc_sql_plan_flush_epoch();
+        LOG_INFO("invalidate session sql plans after system statistics refresh",
+                 K(flush_epoch));
       }
     }
   }
@@ -474,12 +478,14 @@ int ObOptStatManager::invalidate_plan(const uint64_t table_id)
 {
   int ret = OB_SUCCESS;
   MOD_SCOPE {
-    sql::ObPlanCache *pc = share::g_mp->plan_cache();
-
-    if (OB_FAIL(pc->evict_plan(table_id))) {
-      LOG_WARN("failed to evict plan", K(ret));
-      // use OB_SQL_PC_NOT_EXIST represent evict plan failed
-      ret = OB_SQL_PC_NOT_EXIST;
+    sql::ObTenantSQLSessionMgr *session_mgr = share::g_mp->tenant_sql_session_mgr();
+    if (OB_ISNULL(session_mgr)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("tenant sql session manager is null", K(ret), K(table_id));
+    } else {
+      const uint64_t flush_epoch = session_mgr->inc_sql_plan_flush_epoch();
+      LOG_INFO("invalidate session sql plans after optimizer statistics refresh",
+               K(table_id), K(flush_epoch));
     }
   }
   return ret;
@@ -947,11 +953,21 @@ int ObOptStatManager::add_ds_stat_cache(const ObOptDSStat::Key &key,
 }
 
 
+int ObOptStatManager::update_opt_stat_gather_stat(const ObOptStatGatherStat &gather_stat)
+{
+  return stat_service_.get_sql_service().update_opt_stat_gather_stat(gather_stat);
+}
+
 int ObOptStatManager::update_table_stat_failed_count(const uint64_t table_id,
                                                      const ObIArray<int64_t> &part_ids,
                                                      int64_t &affected_rows)
 {
   return stat_service_.get_sql_service().update_table_stat_failed_count(table_id, part_ids, affected_rows);
+}
+
+int ObOptStatManager::update_opt_stat_task_stat(const ObOptStatTaskInfo &task_info)
+{
+  return stat_service_.get_sql_service().update_opt_stat_task_stat(task_info);
 }
 
 int ObOptStatManager::get_system_stat(ObOptSystemStat &stat)

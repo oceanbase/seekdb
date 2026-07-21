@@ -31,6 +31,8 @@ using namespace pl;
 ObGVSql::ObGVSql()
     :plan_id_array_(),
      plan_id_array_idx_(OB_INVALID_ID),
+     session_plan_array_(),
+     session_plan_array_idx_(OB_INVALID_ID),
      plan_cache_(NULL)
 {
 }
@@ -44,6 +46,8 @@ void ObGVSql::reset()
   ObAllPlanCacheBase::reset();
   plan_id_array_.reset();
   plan_id_array_idx_ = OB_INVALID_ID;
+  session_plan_array_.reset();
+  session_plan_array_idx_ = OB_INVALID_ID;
   plan_cache_ = NULL;
 }
 
@@ -55,6 +59,32 @@ int ObGVSql::inner_open()
 
 int ObGVSql::get_row_from_specified_tenant(bool &is_end)
 {
+  class GetAllPlanStatCacheIdOp
+  {
+  public:
+    explicit GetAllPlanStatCacheIdOp(common::ObIArray<uint64_t> &id_array)
+      : id_array_(id_array)
+    {}
+    int operator()(common::hash::HashMapPair<
+                   ObCacheObjID, ObILibCacheObject *> &entry)
+    {
+      int ret = OB_SUCCESS;
+      if (OB_ISNULL(entry.second)) {
+        ret = OB_ERR_UNEXPECTED;
+        SERVER_LOG(WARN, "unexpected null cache object", K(ret));
+      } else if (((entry.second->get_ns() >= ObLibCacheNameSpace::NS_PRCR
+                   && entry.second->get_ns() <= ObLibCacheNameSpace::NS_PKG)
+                  || ObLibCacheNameSpace::NS_CALLSTMT == entry.second->get_ns())
+                 && OB_FAIL(id_array_.push_back(entry.first))) {
+        SERVER_LOG(WARN, "failed to collect library cache object id",
+                   K(ret), K(entry.first));
+      }
+      return ret;
+    }
+  private:
+    common::ObIArray<uint64_t> &id_array_;
+  };
+
   int ret = OB_SUCCESS;
   // !!! Must add ObReqTimeGuard before referencing plan cache resources
   ObReqTimeGuard req_timeinfo_guard;
@@ -62,11 +92,18 @@ int ObGVSql::get_row_from_specified_tenant(bool &is_end)
   if (OB_INVALID_ID == static_cast<uint64_t>(plan_id_array_idx_)) {
     plan_cache_ = share::g_mp->plan_cache();
     NG_TRACE(trav_ps_map_start);
-    ObGetAllCacheIdOp plan_id_op(&plan_id_array_);
-    if (OB_FAIL(plan_cache_->foreach_alloc_cache_obj(plan_id_op))) {
+    GetAllPlanStatCacheIdOp plan_id_op(plan_id_array_);
+    if (OB_ISNULL(plan_cache_)) {
+      ret = OB_ERR_UNEXPECTED;
+      SERVER_LOG(WARN, "tenant library cache is null", K(ret));
+    } else if (OB_FAIL(plan_cache_->foreach_alloc_cache_obj(plan_id_op))) {
       SERVER_LOG(WARN, "fail to traverse id2stat_map");
+    } else if (OB_FAIL(collect_session_plan_cache_entries(
+                       GCTX.session_mgr_, session_plan_array_))) {
+      SERVER_LOG(WARN, "failed to collect session sql plans", K(ret));
     } else {
       plan_id_array_idx_ = 0;
+      session_plan_array_idx_ = 0;
     }
     NG_TRACE(trav_ps_map_end);
   }
@@ -79,17 +116,7 @@ int ObGVSql::get_row_from_specified_tenant(bool &is_end)
       if (plan_id_array_idx_ < 0) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "invalid plan_stat_array index", K(plan_id_array_idx_));
-      } else if (plan_id_array_idx_ >= plan_id_array_.count()) {
-        is_end = true;
-        plan_id_array_idx_ = OB_INVALID_ID;
-        plan_id_array_.reset();
-        if (OB_UNLIKELY(NULL == plan_cache_)) {
-          ret = OB_ERR_UNEXPECTED;
-          SERVER_LOG(WARN, "plan cache is null", K(ret));
-        } else {
-          plan_cache_ = NULL;
-        }
-      } else {
+      } else if (plan_id_array_idx_ < plan_id_array_.count()) {
         is_end = false;
         uint64_t plan_id= plan_id_array_.at(plan_id_array_idx_);
         ++plan_id_array_idx_;
@@ -108,6 +135,65 @@ int ObGVSql::get_row_from_specified_tenant(bool &is_end)
         } else {
           is_filled = true;
         }
+      } else if (session_plan_array_idx_ < session_plan_array_.count()) {
+        const ObSessionPlanCacheEntry entry =
+            session_plan_array_.at(session_plan_array_idx_++);
+        if (OB_ISNULL(GCTX.session_mgr_)) {
+          ret = OB_ERR_UNEXPECTED;
+          SERVER_LOG(WARN, "sql session manager is null", K(ret));
+        } else {
+          ObSessionGetterGuard session_guard(*GCTX.session_mgr_,
+                                             entry.session_id_);
+          ObSQLSessionInfo *session = NULL;
+          int tmp_ret = session_guard.get_session(session);
+          if (OB_ENTRY_NOT_EXIST == tmp_ret) {
+            // The session ended after the snapshot was collected.
+          } else if (OB_SUCCESS != tmp_ret) {
+            ret = tmp_ret;
+            SERVER_LOG(WARN, "failed to get plan owner session",
+                       K(ret), K(entry.session_id_), K(entry.object_id_));
+          } else if (OB_ISNULL(session)) {
+            ret = OB_ERR_UNEXPECTED;
+            SERVER_LOG(WARN, "unexpected null plan owner session", K(ret));
+          } else {
+            ObSessionPlanCacheLockGuard lock_guard(*session);
+            if (OB_SUCCESS != lock_guard.get_lock_ret()) {
+              ret = lock_guard.get_lock_ret();
+              SERVER_LOG(WARN, "failed to lock plan owner session cache",
+                         K(ret), K(entry.session_id_), K(entry.object_id_));
+            } else {
+              ObPlanCache *session_plan_cache = session->peek_sql_plan_cache();
+              ObCacheObjGuard guard(PC_DIAG_HANDLE);
+              if (OB_ISNULL(session_plan_cache)) {
+                // RESET CONNECTION may have cleared the cache.
+              } else if (OB_SUCCESS !=
+                         (tmp_ret = session_plan_cache->ref_alloc_obj(
+                             entry.object_id_, guard))) {
+                if (OB_HASH_NOT_EXIST != tmp_ret) {
+                  ret = tmp_ret;
+                  SERVER_LOG(WARN, "failed to reference session sql plan",
+                             K(ret), K(entry.session_id_), K(entry.object_id_));
+                }
+              } else if (OB_ISNULL(guard.get_cache_obj())) {
+                ret = OB_ERR_UNEXPECTED;
+                SERVER_LOG(WARN, "unexpected null session cache object", K(ret));
+              } else if (OB_FAIL(fill_cells(guard.get_cache_obj(),
+                                            *session_plan_cache))) {
+                SERVER_LOG(WARN, "failed to fill session sql plan row",
+                           K(ret), K(entry.session_id_), K(entry.object_id_));
+              } else {
+                is_filled = true;
+              }
+            }
+          }
+        }
+      } else {
+        is_end = true;
+        plan_id_array_idx_ = OB_INVALID_ID;
+        session_plan_array_idx_ = OB_INVALID_ID;
+        plan_id_array_.reset();
+        session_plan_array_.reset();
+        plan_cache_ = NULL;
       }
     } //while end
   }
@@ -866,7 +952,9 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
       if (!cache_stat_updated) {
         cells[i].set_null();
       } else if (cache_obj->is_sql_crsr()) {
-        cells[i].set_uint64(plan->stat_.sessid_);
+        cells[i].set_uint64(plan_cache.is_session_sql_cache()
+                            ? plan_cache.get_owner_sessid()
+                            : plan->stat_.sessid_);
       } else {
         cells[i].set_uint64(OB_INVALID_ID);
       }

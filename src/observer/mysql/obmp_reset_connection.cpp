@@ -219,6 +219,7 @@ int ObMPResetConnection::process()
 
 
     if (OB_SUCC(ret)) {
+      session->reset_sql_plan_cache();
       session->clean_status();
     }
   }

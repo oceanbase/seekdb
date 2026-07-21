@@ -88,6 +88,8 @@ int64_t ObTenantSQLSessionMgr::SessionPool::count() const
 
 ObTenantSQLSessionMgr::ObTenantSQLSessionMgr()
   : count_(0),
+    sql_plan_flush_epoch_(0),
+    next_sql_plan_id_(0),
     session_allocator_(lib::ObMemAttr("SQLSessionInfo"), MTL_CPU_COUNT(), 4)
 {}
 
