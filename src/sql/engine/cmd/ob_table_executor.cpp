@@ -2013,13 +2013,9 @@ int ObForkTableExecutor::execute(ObExecContext &ctx, ObForkTableStmt &stmt)
       LOG_WARN("root service is null in embed mode", K(ret));
     } else if (OB_FAIL(GCTX.root_service_->fork_table(fork_table_arg, res))) {
       LOG_WARN("local root service fork table failed", K(ret), K(res), K(fork_table_arg));
-    } else if (0 != res.task_id_ && OB_ISNULL(GCTX.rs_rpc_proxy_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("rs rpc proxy is null, cannot wait fork ddl", K(ret), K(res));
     } else if (0 != res.task_id_
                && OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(
-                      res.tenant_id_, res.task_id_, false /* ddl_need_retry_at_executor */,
-                      my_session, GCTX.rs_rpc_proxy_))) {
+                      res.task_id_, false /* ddl_need_retry_at_executor */, my_session))) {
       LOG_WARN("wait fork ddl finish failed", K(ret), K(res));
     } else {
       LOG_INFO("fork table executor finished (embed local)", K(fork_table_arg), K(res));
