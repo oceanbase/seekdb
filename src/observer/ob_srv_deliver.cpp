@@ -19,7 +19,6 @@
 #include "lib/json/ob_json.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "observer/ob_srv_deliver.h"
-#include "lib/ob_running_mode.h"
 #include "share/rc/ob_module_provider.h"
 
 #include "util/easy_mod_stat.h"
@@ -47,16 +46,6 @@ namespace observer
 ObString extract_user_name(const ObString &in);
 int extract_user_tenant(const ObString &in, ObString &user_name, ObString &tenant_name);
 }  // namespace observer
-
-namespace
-{
-int64_t get_diagnose_thread_cnt()
-{
-  return lib::is_mini_mode()
-      ? observer::ObSrvDeliver::MINI_MODE_MYSQL_DIAG_TASK_THREAD_CNT
-      : observer::ObSrvDeliver::MYSQL_DIAG_TASK_THREAD_CNT;
-}
-} // namespace
 
 int get_endpoint_tenant(char *endpoint_tenant_mapping_buf, const int64_t vid, const ObAddr &vaddr, ObString &tenant_name)
 {
@@ -283,16 +272,16 @@ int dispatch_req(ObRequest &req)
 
 ObSrvDeliver::ObSrvDeliver(ObiReqQHandler &qhandler)
     : ObReqQDeliver(qhandler),
-      diagnose_queue_()
+      unix_socket_login_queue_()
 {}
 
 int ObSrvDeliver::init()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(diagnose_queue_.init(get_diagnose_thread_cnt(), qhandler_))) {
-    SERVER_LOG(ERROR, "init diagnose queue thread fail", K(ret));
-  } else if (OB_FAIL(diagnose_queue_.start())) {
-    SERVER_LOG(ERROR, "start diagnose queue thread fail", K(ret));
+  if (OB_FAIL(unix_socket_login_queue_.init(UNIX_SOCKET_LOGIN_THREAD_CNT, qhandler_))) {
+    SERVER_LOG(ERROR, "init unix socket login queue thread fail", K(ret));
+  } else if (OB_FAIL(unix_socket_login_queue_.start())) {
+    SERVER_LOG(ERROR, "start unix socket login queue thread fail", K(ret));
   } else {
     SERVER_LOG(INFO, "init ObSrvDeliver done");
   }
@@ -302,8 +291,8 @@ int ObSrvDeliver::init()
 void ObSrvDeliver::stop()
 {
   // stop sql service first
-  diagnose_queue_.stop();
-  diagnose_queue_.wait();
+  unix_socket_login_queue_.stop();
+  unix_socket_login_queue_.wait();
 }
 
 int ObSrvDeliver::deliver_mysql_request(ObRequest &req)
@@ -338,10 +327,10 @@ int ObSrvDeliver::deliver_mysql_request(ObRequest &req)
 
       if (OB_UNLIKELY(SQL_REQ_OP.get_peer(&req).get_port() <= 0)) {
         LOG_INFO("receive login request from unix domain socket");
-        if (!diagnose_queue_.push(&req, MAX_QUEUE_LEN)) {
+        if (!unix_socket_login_queue_.push(&req, UNIX_SOCKET_LOGIN_QUEUE_MAX_LEN)) {
           ret = OB_QUEUE_OVERFLOW;
           EVENT_INC(common::ObStatEventIds::MYSQL_DELIVER_FAIL);
-          LOG_ERROR("deliver request fail", K(req));
+          LOG_ERROR("deliver unix socket login request fail", K(req));
         }
       } else {
         char user_name_buf[OB_MAX_USER_NAME_BUF_LENGTH] = "";

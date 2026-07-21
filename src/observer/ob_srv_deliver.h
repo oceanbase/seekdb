@@ -35,7 +35,7 @@ namespace observer
 using rpc::frame::ObReqQueue;
 using rpc::frame::ObiReqQHandler;
 
-class ObDiagnoseQueueThread
+class ObUnixSocketLoginQueueThread
 {
 private:
   class Thread : public lib::ThreadPool
@@ -45,7 +45,7 @@ private:
         : lib::ThreadPool(1), queue_(queue) {}
     void run1() override
     {
-      lib::set_thread_name("DiagnoseQueueTh", get_thread_idx());
+      lib::set_thread_name("UnixLogin", get_thread_idx());
       queue_.loop();
     }
 
@@ -54,10 +54,10 @@ private:
   };
 
 public:
-  ObDiagnoseQueueThread()
+  ObUnixSocketLoginQueueThread()
       : queue_(), thread_(queue_) {}
 
-  ~ObDiagnoseQueueThread() { destroy(); }
+  ~ObUnixSocketLoginQueueThread() { destroy(); }
 
   int init(const int64_t thread_cnt, ObiReqQHandler &qhandler)
   {
@@ -109,13 +109,12 @@ private:
   int deliver_mysql_request(rpc::ObRequest &req);
 
 private:
-  ObDiagnoseQueueThread diagnose_queue_;
+  ObUnixSocketLoginQueueThread unix_socket_login_queue_;
   DISALLOW_COPY_AND_ASSIGN(ObSrvDeliver);
 
 public:
-  static const int64_t MAX_QUEUE_LEN = 10000;
-  static const int MYSQL_DIAG_TASK_THREAD_CNT = 2;
-  static const int MINI_MODE_MYSQL_DIAG_TASK_THREAD_CNT = 1;
+  static const int64_t UNIX_SOCKET_LOGIN_QUEUE_MAX_LEN = 10000;
+  static const int UNIX_SOCKET_LOGIN_THREAD_CNT = 1;
 }; // end of class ObSrvDeliver
 
 } // end of namespace observer
