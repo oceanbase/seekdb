@@ -49,23 +49,17 @@ int ObMPAuthResponse::process()
   } else if (OB_FAIL(session->get_query_timeout(query_timeout))) {
     LOG_WARN("fail to get query timeout", K(ret));
   } else if (FALSE_IT(THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout))) {
+  } else if (OB_FAIL(session->set_login_auth_data(auth_data_))) {
+    LOG_WARN("failed to set login auth data", K(ret));
+  } else if (OB_FAIL(load_privilege_info_for_change_user(session))) {
+    OB_LOG(WARN,"load privilige info failed", K(ret),K(session->get_server_sid()));
   } else {
-    // The first CHANGE USER phase has already closed PS/cursor resources.
-    // Keep diagnostics out while authentication installs the new identity and
-    // destroys the old identity's session SQL plan cache.
-    sql::ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
-    if (OB_FAIL(session->set_login_auth_data(auth_data_))) {
-      LOG_WARN("failed to set login auth data", K(ret));
-    } else if (OB_FAIL(load_privilege_info_for_change_user(session))) {
-      OB_LOG(WARN,"load privilige info failed", K(ret),K(session->get_server_sid()));
-    } else {
-      session->reset_sql_plan_cache();
-      conn->set_auth_phase();
-      ObOKPParam ok_param; // use default values
-      ok_param.is_on_change_user_ = true;
-      if (OB_FAIL(send_ok_packet(*session, ok_param))) {
-        LOG_WARN("fail to send ok pakcet in statistic response", K(ok_param), K(ret));
-      }
+    session->reset_sql_plan_cache();
+    conn->set_auth_phase();
+    ObOKPParam ok_param; // use default values
+    ok_param.is_on_change_user_ = true;
+    if (OB_FAIL(send_ok_packet(*session, ok_param))) {
+      LOG_WARN("fail to send ok pakcet in statistic response", K(ok_param), K(ret));
     }
   }
   if (OB_LIKELY(NULL != session)) {

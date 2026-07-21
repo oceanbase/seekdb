@@ -222,10 +222,6 @@ int ObMPChangeUser::process()
 
   // Releases prepared statements. (include ps stmt, ps cursor, piece)
   if (OB_SUCC(ret)) {
-    // A cursor/result set can still own a guard into the session SQL cache.
-    // Serialize cleanup with diagnostics and destroy the cache only after all
-    // such resources have released their plan references.
-    ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
     // 1 ps stmt
     if (OB_FAIL(session->close_all_ps_stmt())) {
       LOG_WARN("failed to close all stmt", K(ret));
