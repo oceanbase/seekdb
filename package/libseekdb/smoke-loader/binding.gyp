@@ -40,11 +40,9 @@
           "defines": [ "NAPI_DISABLE_CPP_EXCEPTIONS" ],
           "library_dirs": [ "<(pack_dir)" ],
           "libraries": [ "-lseekdb" ],
-          "link_settings": {
-            "libraries": [
-              "-Wl,-rpath,$$ORIGIN"
-            ]
-          },
+          "ldflags": [
+            "-Wl,-rpath,<(pack_dir)"
+          ],
           "product_dir": '<(pack_dir)'
         }]
       ]

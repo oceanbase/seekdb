@@ -71,10 +71,14 @@ if [[ ! -f "$UNPACK_DIR/seekdb.node" ]]; then
 fi
 
 echo "[smoke] seekdb.node install_name / rpath:"
-if [[ "$(uname -s)" == Darwin ]]; then
+if [[ "$(uname -s)" == "Darwin" ]]; then
   otool -L "$UNPACK_DIR/seekdb.node" | head -5
 else
   readelf -d "$UNPACK_DIR/seekdb.node" 2>/dev/null | grep -E 'RPATH|RUNPATH|NEEDED' | head -8 || true
+  if ! readelf -d "$UNPACK_DIR/seekdb.node" 2>/dev/null | grep -qE 'RUNPATH|RPATH'; then
+    echo "error: seekdb.node missing RUNPATH/RPATH; cannot load libseekdb.so from unpack dir" >&2
+    exit 1
+  fi
 fi
 
 # Ad-hoc sign like seekdb-js build:package (macOS only)
