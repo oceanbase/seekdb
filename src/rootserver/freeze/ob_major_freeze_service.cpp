@@ -60,13 +60,22 @@ int ObMajorFreezeService::activate()
       tenant_major_freeze_->resume();
     }
   }
+  // The log-service role router owns database-role decisions. In the standby-capable
+  // implementation APPEND activates ObPrimaryMajorFreezeService, while RAW_WRITE
+  // activates ObRestoreMajorFreezeService. Do not infer the database role here from
+  // LS online state or GCTX: tenant-role recovery may finish after LS startup.
   if (OB_SUCC(ret) && ObMajorFreezeServiceType::SERVICE_TYPE_PRIMARY == get_service_type()) {
     SpinRLockGuard r_guard(rw_lock_);
     if (OB_ISNULL(tenant_major_freeze_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tenant major freeze is null after activate", KR(ret));
-    } else if (OB_FAIL(tenant_major_freeze_->on_become_primary())) {
-      LOG_WARN("fail to activate primary epoch", KR(ret));
+    } else {
+      int tmp_ret = OB_SUCCESS;
+      if (OB_SUCCESS != (tmp_ret = tenant_major_freeze_->on_become_primary())) {
+        // APPEND activation has already completed. Snapshot-GC catch-up is best effort
+        // and must not turn a completed database-role transition into a failure.
+        LOG_WARN("fail to activate primary snapshot gc catch-up", KR(tmp_ret));
+      }
     }
   }
   const int64_t cost_us = ObTimeUtility::current_time() - start_time_us;

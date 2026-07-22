@@ -18,6 +18,7 @@
 #define OCEANBASE_ROOTSERVER_FREEZE_OB_FREEZE_INFO_DETECTOR_
 
 #include "lib/task/ob_timer.h"
+#include "lib/lock/ob_recursive_mutex.h"
 #include "common/ob_role.h"
 
 namespace oceanbase
@@ -48,12 +49,8 @@ public:
   void stop();
   void wait();
   int destroy();
-  void pause()
-  {
-    ATOMIC_STORE(&is_primary_active_, false);
-    ATOMIC_STORE(&is_paused_, true);
-  }
-  void resume() { ATOMIC_STORE(&is_paused_, false); }
+  void pause();
+  void resume();
   bool is_paused() const { return ATOMIC_LOAD(&is_paused_); }
   int on_become_primary();
 
@@ -73,7 +70,14 @@ private:
   // adjust global_merge_info in memory to avoid useless major freezes on restore major_freeze_service
   int try_adjust_global_merge_info();
   int check_global_merge_info(bool &is_initial) const;
-  bool need_renew_snapshot_gc_scn_(const int64_t now) const;
+  static bool need_reload_freeze_info_(const bool is_primary_service);
+  bool need_renew_snapshot_gc_scn_(const int64_t now);
+  static bool is_snapshot_gc_history_due_(
+      const int64_t current_time_ns,
+      const int64_t first_pending_history_scn,
+      const int64_t undo_retention_s);
+  int64_t latch_first_pending_snapshot_gc_history_scn_(
+      const int64_t pending_history_scn);
   void update_last_run_timestamp_();
 private:
   static const int64_t UPDATER_INTERVAL_US = 10 * 1000 * 1000; // 10s
@@ -86,12 +90,16 @@ private:
   bool is_global_merge_info_adjusted_;
   bool is_gc_scn_inited_;
   common::ObMySQLProxy *sql_proxy_;
-  int64_t last_gc_renew_attempt_ts_;
+  int64_t last_gc_renew_attempt_ts_; // > 0 after renewal starts; retries use the fixed interval
+  int64_t first_pending_snapshot_gc_history_scn_; // retained until the first renewal is due
   int64_t last_run_timestamp_;
   ObMajorMergeInfoManager *major_merge_info_mgr_;
   ObThreadIdling *major_scheduler_idling_;
   int64_t last_schedule_ts_;
   bool need_immediate_run_;
+  // Serialize primary activation/deactivation with the complete renew transaction.
+  // Once pause() returns, no renewal from the old APPEND service can still be running.
+  common::ObRecursiveMutex snapshot_gc_role_lock_;
   common::ObTimer timer_;
 
 private:
