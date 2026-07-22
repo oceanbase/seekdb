@@ -39,7 +39,7 @@ public:
     reset();
   }
   // nano second
-  static const int64_t TIMESTAMP_PREALLOCATED_RANGE = 10L * 1000L * 1000L * 1000L;
+  static const int64_t TIMESTAMP_PREALLOCATED_RANGE = 10LL * 1000LL * 1000LL * 1000LL;
   static const int64_t TIMESTAMP_RECOVERY_SAFETY_RANGE = 2 * TIMESTAMP_PREALLOCATED_RANGE;
   int get_timestamp(int64_t &gts);
   int64_t get_limited_id() const { return limited_id_; }
