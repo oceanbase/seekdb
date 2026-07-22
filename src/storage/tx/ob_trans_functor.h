@@ -410,7 +410,7 @@ public:
   {
     int ret = common::OB_SUCCESS;
     bool bool_ret = false;
-    // Threshold for a primary database updating internal tables.
+    // threshold for primary tenant inserting inner table
     int64_t INSERT_INTERNAL_FOR_PRIMARY = 10 * 60 * 1000 * 1000L;
 
     if (!tx_id.is_valid() || OB_ISNULL(tx_ctx)) {

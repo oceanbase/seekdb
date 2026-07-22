@@ -110,6 +110,7 @@ class ObTxCtx : public ObTransCtx, public common::ObLink
   friend class IterateTxStatFunctor;
   friend class IterateTransStatForKeyFunctor;
   friend class ObTxELRHandler;
+  friend class ObIRetainCtxCheckFunctor;
   friend class memtable::ObRedoLogGenerator;
   template<typename T>
   friend class ObTxCtxLogOperator;
@@ -128,8 +129,10 @@ public:
   ~ObTxCtx() { destroy(); }
   void destroy();
   int init(const uint32_t session_id,
+           const uint32_t associated_session_id,
            const ObTransID &trans_id,
            const int64_t trans_expired_time,
+           const uint64_t cluster_version,
            ObTransService *trans_service,
            ObLSTxCtxMgr *ls_ctx_mgr,
            const bool for_replay,
@@ -202,6 +205,7 @@ public:
 private:
   // thread unsafe
   ON_DEMAND_TO_STRING_KV_(K_(session_id),
+                          K_(associated_session_id),
                           K_(part_trans_action),
                           K_(pending_write),
                           K(extra_cb_group_list_.get_size()),
@@ -240,6 +244,7 @@ private:
   int tx_end_(const bool commit);
   int trans_replay_commit_(const share::SCN &commit_version,
                            const share::SCN &final_log_ts,
+                           const uint64_t log_cluster_version,
                            const uint64_t checksum);
   int trans_replay_abort_(const share::SCN &final_log_ts);
   int update_publish_version_(const share::SCN &publish_version, const bool for_replay);
@@ -336,6 +341,8 @@ public:
   int serialize_tx_ctx_to_buffer(ObTxLocalBuffer &buffer, int64_t &serialize_size);
   int recover_tx_ctx_table_info(ObTxCtxTableInfo &ctx_info);
 
+  int correct_cluster_version_(uint64_t cluster_version_in_log);
+
   bool need_commit_callback_();
   int supplement_tx_op_if_exist_(const bool for_replay, const share::SCN replay_scn);
   int recover_tx_ctx_from_tx_op_(ObTxOpVector &tx_op_list, const share::SCN replay_scn);
@@ -356,6 +363,15 @@ public:
   {
     return ctx_tx_data_.get_end_log_ts();
   }
+
+  void set_retain_cause(RetainCause cause)
+  {
+    ATOMIC_CAS(&retain_cause_, static_cast<int16_t>(RetainCause::UNKOWN),
+               static_cast<int16_t>(cause));
+  }
+  RetainCause get_retain_cause() const { return static_cast<RetainCause>(ATOMIC_LOAD(&retain_cause_)); };
+
+  int del_retain_ctx();
 
   // ========================================================
 private:
@@ -416,6 +432,7 @@ private:
   bool has_persisted_log_() const;
 
   int update_replaying_log_no_(const share::SCN &log_ts_ns, int64_t part_log_no);
+  int check_and_merge_redo_lsns_(const palf::LSN &offset);
   int try_submit_next_log_(const bool for_freeze = false);
   // redo lsns is stored when submit log, when log fails to majority
   // and is callbacked via on_failure, redo lsns should be fixed
@@ -465,7 +482,7 @@ private:
                            bool need_replace = false);
   int prepare_mds_tx_op_(const ObTxBufferNodeArray &mds_array,
                          share::SCN op_scn,
-                         share::ObTxDataOpAllocator &tx_op_allocator,
+                         share::ObTenantTxDataOpAllocator &tx_op_allocator,
                          ObTxOpArray &tx_op_list,
                          bool is_replay);
   int replay_mds_to_tx_table_(const ObTxBufferNodeArray &mds_node_array, const share::SCN op_scn);
@@ -480,11 +497,24 @@ private:
   bool is_contain_mds_type_(const ObTxDataSourceType target_type);
   int submit_multi_data_source_();
   int submit_multi_data_source_(ObTxLogBlock &log_block);
+  void clean_retain_cause_()
+  {
+    ATOMIC_STORE(&retain_cause_, static_cast<int16_t>(RetainCause::UNKOWN));
+  }
+
+  int try_alloc_retain_ctx_func_();
+  int try_gc_retain_ctx_func_();
+  int insert_into_retain_ctx_mgr_(RetainCause cause,
+                                  const share::SCN &log_ts,
+                                  palf::LSN lsn,
+                                  bool for_replay);
 
   int prepare_mul_data_source_tx_end_(bool is_commit);
 
+  bool is_support_parallel_replay_() const;
   int set_replay_completeness_(const bool complete, const share::SCN replay_scn);
   int errsim_notify_mds_();
+  bool is_support_tx_op_() const;
 protected:
   virtual int get_gts_(share::SCN &gts);
   virtual int wait_gts_elapse_commit_version_(bool &need_wait);
@@ -615,6 +645,12 @@ private:
 
   int64_t last_check_tx_status_ts_;
   int64_t cur_query_start_time_;
+  // when cluster_version is unknown at ctx created time, will choice
+  // CLUSTER_CURRENT_VERSION, which may not the real cluster_version
+  // of this transaction
+  // this can only happen when create ctx for replay and create ctx
+  // for recovery before v.4.3
+  bool cluster_version_accurate_;
   /*
    * used during txn protected data access
    */
@@ -637,6 +673,7 @@ private:
   // it is moved to exec_info_.multi_source_data_ when corresponding
   // redo log callbacked.
   ObTxMDSCache mds_cache_;
+  ObIRetainCtxCheckFunctor *retain_ctx_func_ptr_;
   // runtime_state_ is volatile
   ObTxRuntimeState runtime_state_;
 
@@ -690,6 +727,8 @@ private:
   bool is_submitting_redo_log_for_freeze_;
   share::SCN create_ctx_scn_; // replay or recover debug
   TxCtxSource ctx_source_; // transaction context creation source
+
+  int16_t retain_cause_;
 
   ObTxState target_state_;
   // this is used to denote the time of last request including start_access, commit, rollback

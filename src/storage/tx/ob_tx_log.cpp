@@ -189,6 +189,7 @@ OB_DEF_DESERIALIZE(ObTxRedoLog)
   if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &tmp_size))) {
     TRANS_LOG(WARN, "decode mutator_size_ error", K(ret));
   } else {
+    // cluster_version_ = static_cast<uint64_t>(tmp_cluster_version);
     mutator_size_ = static_cast<int64_t>(tmp_size);
     replay_mutator_buf_ = buf + pos;
     pos = pos + mutator_size_;
@@ -212,7 +213,6 @@ OB_DEF_SERIALIZE_SIZE(ObTxRedoLog)
   return len;
 }
 
-// Other LogBody
 OB_SERIALIZE_MEMBER(ObTxCommitInfoLog,
                        /* 1 */ can_elr_,
                        /* 2 */ app_trace_id_str_,
@@ -221,13 +221,13 @@ OB_SERIALIZE_MEMBER(ObTxCommitInfoLog,
                        /* 5 */ redo_lsns_);
 
 OB_SERIALIZE_MEMBER(ObTxCommitLog,
-                    /* 1 */ commit_version_,
-                    /* 2 */ checksum_,
-                    /* 3 */ multi_source_data_,
-                    /* 4 */ tx_data_backup_,
-                    /* 5 */ prev_lsn_,
-                    /* 6 */ checksum_sig_serde_,
-                    /* 7 */ prev_log_type_);
+                       /* 1 */ commit_version_,
+                       /* 2 */ checksum_,
+                       /* 3 */ multi_source_data_,
+                       /* 4 */ tx_data_backup_,
+                       /* 5 */ prev_lsn_,
+                       /* 6 */ checksum_sig_serde_,
+                       /* 7 */ prev_log_type_);
 
 OB_SERIALIZE_MEMBER(ObTxClearLog);
 
@@ -301,7 +301,7 @@ int ObTxRedoLog::set_mutator_size(const int64_t size, const bool after_fill)
   } else if (!after_fill) {
     int len = 0;
     SERIALIZE_SIZE_HEADER(UNIS_VERSION);
-    len = len + MUTATOR_SIZE_NEED_BYTES;
+    len += MUTATOR_SIZE_NEED_BYTES;
     if (size <= len) {
       ret = OB_SIZE_OVERFLOW;
       TRANS_LOG(WARN, "mutator buf is not enough", K(len), K(size));
@@ -745,6 +745,7 @@ int ObTxAbortLog::init_tx_data_backup(const share::SCN &start_scn)
 
 // ============================== Tx Log Block =============================
 OB_SERIALIZE_MEMBER(ObTxLogBlockHeader,
+                    cluster_version_,
                     __log_entry_no_,
                     tx_id_,
                     flags_);

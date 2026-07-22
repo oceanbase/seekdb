@@ -29,6 +29,7 @@
 #include "logservice/palf/lsn.h"
 #include "logservice/ob_log_base_header.h"
 #include "share/scn.h"
+#include "share/ob_cluster_version.h"
 #include "share/allocator/ob_reserve_arena.h"
 #include "sql/ob_sql_define.h"
 #include "sql/resolver/ob_stmt_type.h"
@@ -396,6 +397,8 @@ class ObStartTransParam  // unreferenced, need remove
 {
   OB_UNIS_VERSION(1);
 public:
+  const static uint64_t INVALID_CLUSTER_VERSION = 0;
+public:
   ObStartTransParam() { reset(); }
   ~ObStartTransParam() { magic_ = INVALID_MAGIC_NUM; }
   void reset();
@@ -417,6 +420,8 @@ public:
   { return ObTransConsistencyType::is_current_read(consistency_type_); }
   void set_read_snapshot_type(const int32_t type) { read_snapshot_type_ = type; }
   int32_t get_read_snapshot_type() const { return read_snapshot_type_; }
+  void set_cluster_version(uint64_t cluster_version) { cluster_version_ = cluster_version; }
+  uint64_t get_cluster_version() const { return cluster_version_; }
   void set_inner_trans(const bool is_inner_trans) { is_inner_trans_ = is_inner_trans; }
   bool is_inner_trans() const { return is_inner_trans_; }
   bool need_consistent_snapshot() const
@@ -446,6 +451,7 @@ private:
   bool autocommit_;
   int32_t consistency_type_;    // ObTransConsistencyType
   int32_t read_snapshot_type_;  // ObTransReadSnapshotType
+  uint64_t cluster_version_;
   bool is_inner_trans_;
   int64_t expired_ts_;
 };
@@ -846,10 +852,11 @@ class ObTransRetryTaskType
 public:
   static const int64_t UNKNOWN = -1;
   static const int64_t END_TRANS_CB_TASK = 0;
-  static const int64_t MAX = 1;
+  static const int64_t ADVANCE_LS_CKPT_TASK = 1;
+  static const int64_t MAX = 2;
 public:
   static bool is_valid(const int64_t task_type)
-  { return END_TRANS_CB_TASK == task_type; }
+  { return END_TRANS_CB_TASK == task_type || ADVANCE_LS_CKPT_TASK == task_type; }
 };
 
 class ObMemtableKeyInfo
@@ -1207,6 +1214,13 @@ static const char * to_str_ctx_source(const TxCtxSource & ctx_src)
 }
 
 
+enum class RetainCause : int16_t
+{
+  UNKOWN = -1,
+  MDS_WAIT_GC_COMMIT_LOG = 0,
+  MAX = 1
+};
+
 class ObTxMDSCache;
 
 static const int64_t MAX_TABLET_MODIFY_RECORD_COUNT = 16;
@@ -1227,7 +1241,7 @@ public:
   }
 public:
   int generate_mds_buffer_ctx_array();
-  int merge_buffer_ctx_array_to_multi_data_source() const;
+  void mrege_buffer_ctx_array_to_multi_data_source() const;
   void clear_buffer_ctx_in_multi_data_source();
   void reset();
   // can not destroy in tx_ctx_table

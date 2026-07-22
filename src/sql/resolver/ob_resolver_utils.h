@@ -125,9 +125,6 @@ struct ObResolverUtils
   static const int NAMENODE = 1;
   static ObItemType item_type_;
 public:
-  // Validate compatibility selectors such as TENANT = sys after TENANT was
-  // removed as a global keyword in the standalone runtime.
-  static int resolve_local_runtime_selector(const ParseNode *runtime_selector);
   static int get_user_type(common::ObIAllocator *allocator,
                            ObSQLSessionInfo *session_info,
                            common::ObMySQLProxy *sql_proxy,
@@ -436,25 +433,29 @@ public:
                                                const common::ObString &part_name,
                                                const share::schema::ObPartitionFuncType part_type,
                                                const common::ObIArray<ObRawExpr *> &part_func_exprs,
-                                               common::ObIArray<ObRawExpr *> &part_value_expr_array);
+                                               common::ObIArray<ObRawExpr *> &part_value_expr_array,
+                                               const bool &in_tablegroup = false);
   static int resolve_partition_list_value_expr(ObResolverParams &params,
                                                const ParseNode &node,
                                                const common::ObString &part_name,
                                                const share::schema::ObPartitionFuncType part_type,
                                                int64_t &expr_num,
-                                               common::ObIArray<ObRawExpr *> &part_value_expr_array);
+                                               common::ObIArray<ObRawExpr *> &part_value_expr_array,
+                                               const bool &in_tablegroup = false);
   static int resolve_columns_for_partition_range_value_expr(ObRawExpr *&expr, ObArray<ObQualifiedName> &columns);
   static int resolve_partition_range_value_expr(ObResolverParams &params,
                                                 const ParseNode &node,
                                                 const common::ObString &part_name,
                                                 const share::schema::ObPartitionFuncType part_type,
                                                 const ObRawExpr &part_func_expr,
-                                                ObRawExpr *&part_value_expr);
+                                                ObRawExpr *&part_value_expr,
+                                                const bool &in_tablegroup = false);
   static int resolve_partition_range_value_expr(ObResolverParams &params,
                                                 const ParseNode &node,
                                                 const common::ObString &part_name,
                                                 const share::schema::ObPartitionFuncType part_type,
                                                 ObRawExpr *&part_value_expr,
+                                                const bool &in_tablegroup = false,
                                                 const bool interval_check = false);
   static int resolve_columns_for_partition_expr(ObResolverParams &params,
                                                 ObRawExpr *&expr,
@@ -513,11 +514,13 @@ public:
   static int resolve_default_expr_v2_column_expr(ObResolverParams &params,
                                                  const common::ObString &expr_str,
                                                  share::schema::ObColumnSchemaV2 &default_expr_v2_column,
-                                                 ObRawExpr *&expr);
+                                                 ObRawExpr *&expr,
+                                                 bool allow_sequence);
   static int resolve_default_expr_v2_column_expr(ObResolverParams &params,
                                                  const ParseNode *node,
                                                  share::schema::ObColumnSchemaV2 &default_expr_v2_column,
-                                                 ObRawExpr *&expr);
+                                                 ObRawExpr *&expr,
+                                                 bool allow_sequence);
   static int resolve_constraint_expr(ObResolverParams &params,
                                      const common::ObString &expr_str,
                                      share::schema::ObTableSchema &tbl_schema,
@@ -545,10 +548,12 @@ public:
   static int check_partition_value_expr_for_range(const common::ObString &part_name,
                                                   const ObRawExpr &part_func_expr,
                                                   ObRawExpr &part_value_expr,
-                                                  const share::schema::ObPartitionFuncType part_type);
+                                                  const share::schema::ObPartitionFuncType part_type,
+                                                  const bool &in_tablegroup = false);
   static int check_partition_value_expr_for_range(const common::ObString &part_name,
                                                   ObRawExpr &part_value_expr,
                                                   const share::schema::ObPartitionFuncType part_type,
+                                                  const bool &in_tablegroup = false,
                                                   const bool interval_check = false);
   static int check_column_valid_for_partition(const ObRawExpr &part_expr,
                                               const share::schema::ObPartitionFuncType part_func_type,
@@ -556,7 +561,8 @@ public:
   static int check_expr_valid_for_partition(ObRawExpr &part_expr,
                                             ObSQLSessionInfo &session_info,
                                             const share::schema::ObPartitionFuncType part_func_type,
-                                            const share::schema::ObTableSchema &tbl_schema);
+                                            const share::schema::ObTableSchema &tbl_schema,
+                                            const bool &in_tablegroup = false);
   static bool is_valid_partition_column_type(const common::ObObjType type,
                                              const share::schema::ObPartitionFuncType part_type,
                                              const bool is_check_value,
@@ -565,6 +571,8 @@ public:
   static bool is_valid_interval_data_type(
       const common::ObObjType type,
       ObItemType &item_type);
+  // WARNING: is_sync_ddl_user=true means outside program won't wait ddl, which is so misleading
+  static int check_sync_ddl_user(ObSQLSessionInfo *session_info, bool &is_sync_ddl_user);
   static bool is_restore_user(ObSQLSessionInfo &session_info);
   static bool is_drc_user(ObSQLSessionInfo &session_info);
   static int resolve_udf_name_by_parse_node(
@@ -725,13 +733,23 @@ public:
   static int resolve_file_size_node(const ParseNode *file_size_node, int64_t &parse_int_value);
   static int resolve_varchar_file_size(const ParseNode *child, int64_t &parse_int_value);
 
+  struct FileFormatContext {
+    bool is_tunnel_set;
+    FileFormatContext(): is_tunnel_set(false) {}
+    void reset() {
+      is_tunnel_set = false;
+    }
+  };
   static int resolve_file_format(const ParseNode *node,
                                  ObExternalFileFormat &format,
-                                 ObResolverParams &params);
+                                 ObResolverParams &params,
+                                 FileFormatContext &ff_ctx);
   static int resolve_file_compression_format(const ParseNode *node,
                                              ObExternalFileFormat &format,
                                              ObResolverParams &params);
   static int resolve_binary_format(const ParseNode *node, ObExternalFileFormat &format);
+  static int resolve_column_index_type(const ParseNode *node, ObExternalFileFormat &format);
+  static int wrap_csv_binary_format_expr(ObResolverParams &params, const ObCSVGeneralFormat& csv_format, ObRawExpr *&real_ref_expr);
   static int resolve_file_format_string_value(const ParseNode *node,
                                               const ObCharsetType &format_charset,
                                               ObResolverParams &params,
@@ -781,6 +799,8 @@ public:
   static int generate_subschema_id(ObSQLSessionInfo &session_info, 
                                    const common::ObIArray<common::ObString> &extended_type_info,
                                    uint16_t &subschema_id);
+  static bool is_pseudo_partition_column_name(const ObString name);
+
   static int append_escaped_identifier(common::ObSqlString &sql, const common::ObString &name);
   static int append_qualified_identifier(common::ObSqlString &sql,
                                          const common::ObString &db_name,

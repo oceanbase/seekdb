@@ -105,6 +105,13 @@ const char *ObSysVarInnodbStatsPersistent::INNODB_STATS_PERSISTENT_NAMES[] = {
   "ON",
   0
 };
+const char *ObSysVarInnodbCompressDebug::INNODB_COMPRESS_DEBUG_NAMES[] = {
+  "NONE",
+  "ZLIB",
+  "LZ4",
+  "LZ4HC",
+  0
+};
 const char *ObSysVarCardinalityEstimationModel::CARDINALITY_ESTIMATION_MODEL_NAMES[] = {
   "INDEPENDENT",
   "PARTIAL",
@@ -676,6 +683,7 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarForeignKeyChecks)
         + sizeof(ObSysVarObTcpInvitedNodes)
         + sizeof(ObSysVarAutoIncrementCacheSize)
+        + sizeof(ObSysVarPluginDir)
         + sizeof(ObSysVarParallelServersTarget)
         + sizeof(ObSysVarObTrxIdleTimeout)
         + sizeof(ObSysVarBlockEncryptionMode)
@@ -727,6 +735,7 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarInnodbStatsPersistent)
         + sizeof(ObSysVarDebug)
         + sizeof(ObSysVarInnodbChangeBufferingDebug)
+        + sizeof(ObSysVarInnodbCompressDebug)
         + sizeof(ObSysVarInnodbDisableResizeBufferPoolDebug)
         + sizeof(ObSysVarInnodbFilMakePageDirtyDebug)
         + sizeof(ObSysVarInnodbLimitOptimisticInsertDebug)
@@ -943,6 +952,8 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarInnodbAutoincLockMode)
         + sizeof(ObSysVarSkipExternalLocking)
         + sizeof(ObSysVarSuperReadOnly)
+        + sizeof(ObSysVarEventScheduler)
+        + sizeof(ObSysVarPlsqlOptimizeLevel)
         + sizeof(ObSysVarLowPriorityUpdates)
         + sizeof(ObSysVarMaxErrorCount)
         + sizeof(ObSysVarMaxInsertDelayedThreads)
@@ -956,6 +967,7 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarInnodbTempDataFilePath)
         + sizeof(ObSysVarInnodbDataFilePath)
         + sizeof(ObSysVarInnodbDataHomeDir)
+        + sizeof(ObSysVarAvoidTemporalUpgrade)
         + sizeof(ObSysVarDefaultTmpStorageEngine)
         + sizeof(ObSysVarInnodbFtEnableDiagPrint)
         + sizeof(ObSysVarInnodbFtNumWordOptimize)
@@ -1196,6 +1208,7 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarDisconnectOnExpiredPassword)
         + sizeof(ObSysVarExternalUser)
         + sizeof(ObSysVarHaveCrypt)
+        + sizeof(ObSysVarHaveDynamicLoading)
         + sizeof(ObSysVarLanguage)
         + sizeof(ObSysVarLcMessagesDir)
         + sizeof(ObSysVarLowerCaseFileSystem)
@@ -1222,8 +1235,13 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarSha256PasswordPrivateKeyPath)
         + sizeof(ObSysVarSha256PasswordPublicKeyPath)
         + sizeof(ObSysVarSkipShowDatabase)
+        + sizeof(ObSysVarPluginLoad)
+        + sizeof(ObSysVarPluginLoadAdd)
         + sizeof(ObSysVarBigTables)
         + sizeof(ObSysVarCheckProxyUsers)
+        + sizeof(ObSysVarConnectionControlFailedConnectionsThreshold)
+        + sizeof(ObSysVarConnectionControlMaxConnectionDelay)
+        + sizeof(ObSysVarConnectionControlMinConnectionDelay)
         + sizeof(ObSysVarDefaultWeekFormat)
         + sizeof(ObSysVarDelayedInsertTimeout)
         + sizeof(ObSysVarDelayedQueueSize)
@@ -1236,6 +1254,11 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarInnodbStatsPersistentSamplePages)
         + sizeof(ObSysVarInnodbStatsSamplePages)
         + sizeof(ObSysVarInnodbStatsTransientSamplePages)
+        + sizeof(ObSysVarKeyringEncryptedFileData)
+        + sizeof(ObSysVarKeyringEncryptedFilePassword)
+        + sizeof(ObSysVarKeyringFileData)
+        + sizeof(ObSysVarKeyringOkvConfDir)
+        + sizeof(ObSysVarKeyringOperations)
         + sizeof(ObSysVarOptimizerSwitch)
         + sizeof(ObSysVarMaxConnectErrors)
         + sizeof(ObSysVarMysqlFirewallMode)
@@ -1277,6 +1300,7 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarSocket)
         + sizeof(ObSysVarEnableOptimizerRowgoal)
         + sizeof(ObSysVarObIvfNprobes)
+        + sizeof(ObSysVarCurrentDefaultCatalog)
         + sizeof(ObSysVarObHnswExtraInfoMaxSize)
         + sizeof(ObSysVarPushJoinPredicate)
         + sizeof(ObSysVarObSparseDropRatioSearch)
@@ -2360,6 +2384,15 @@ int ObSysVarFactory::create_all_sys_vars_()
       }
     }
     if (OB_SUCC(ret)) {
+      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarPluginDir())) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_ERROR("fail to new ObSysVarPluginDir", K(ret));
+      } else {
+        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_PLUGIN_DIR))] = sys_var_ptr;
+        ptr = (void *)((char *)ptr + sizeof(ObSysVarPluginDir));
+      }
+    }
+    if (OB_SUCC(ret)) {
       if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarParallelServersTarget())) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_ERROR("fail to new ObSysVarParallelServersTarget", K(ret));
@@ -2816,6 +2849,15 @@ int ObSysVarFactory::create_all_sys_vars_()
       } else {
         store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_INNODB_CHANGE_BUFFERING_DEBUG))] = sys_var_ptr;
         ptr = (void *)((char *)ptr + sizeof(ObSysVarInnodbChangeBufferingDebug));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarInnodbCompressDebug())) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_ERROR("fail to new ObSysVarInnodbCompressDebug", K(ret));
+      } else {
+        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_INNODB_COMPRESS_DEBUG))] = sys_var_ptr;
+        ptr = (void *)((char *)ptr + sizeof(ObSysVarInnodbCompressDebug));
       }
     }
     if (OB_SUCC(ret)) {
@@ -4763,6 +4805,24 @@ int ObSysVarFactory::create_all_sys_vars_()
       }
     }
     if (OB_SUCC(ret)) {
+      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarEventScheduler())) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_ERROR("fail to new ObSysVarEventScheduler", K(ret));
+      } else {
+        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_EVENT_SCHEDULER))] = sys_var_ptr;
+        ptr = (void *)((char *)ptr + sizeof(ObSysVarEventScheduler));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarPlsqlOptimizeLevel())) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_ERROR("fail to new ObSysVarPlsqlOptimizeLevel", K(ret));
+      } else {
+        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_PLSQL_OPTIMIZE_LEVEL))] = sys_var_ptr;
+        ptr = (void *)((char *)ptr + sizeof(ObSysVarPlsqlOptimizeLevel));
+      }
+    }
+    if (OB_SUCC(ret)) {
       if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarLowPriorityUpdates())) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_ERROR("fail to new ObSysVarLowPriorityUpdates", K(ret));
@@ -4877,6 +4937,15 @@ int ObSysVarFactory::create_all_sys_vars_()
       } else {
         store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_INNODB_DATA_HOME_DIR))] = sys_var_ptr;
         ptr = (void *)((char *)ptr + sizeof(ObSysVarInnodbDataHomeDir));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarAvoidTemporalUpgrade())) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_ERROR("fail to new ObSysVarAvoidTemporalUpgrade", K(ret));
+      } else {
+        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_AVOID_TEMPORAL_UPGRADE))] = sys_var_ptr;
+        ptr = (void *)((char *)ptr + sizeof(ObSysVarAvoidTemporalUpgrade));
       }
     }
     if (OB_SUCC(ret)) {
@@ -7040,6 +7109,15 @@ int ObSysVarFactory::create_all_sys_vars_()
       }
     }
     if (OB_SUCC(ret)) {
+      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarHaveDynamicLoading())) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_ERROR("fail to new ObSysVarHaveDynamicLoading", K(ret));
+      } else {
+        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_HAVE_DYNAMIC_LOADING))] = sys_var_ptr;
+        ptr = (void *)((char *)ptr + sizeof(ObSysVarHaveDynamicLoading));
+      }
+    }
+    if (OB_SUCC(ret)) {
       if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarLanguage())) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_ERROR("fail to new ObSysVarLanguage", K(ret));
@@ -7274,6 +7352,24 @@ int ObSysVarFactory::create_all_sys_vars_()
       }
     }
     if (OB_SUCC(ret)) {
+      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarPluginLoad())) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_ERROR("fail to new ObSysVarPluginLoad", K(ret));
+      } else {
+        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_PLUGIN_LOAD))] = sys_var_ptr;
+        ptr = (void *)((char *)ptr + sizeof(ObSysVarPluginLoad));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarPluginLoadAdd())) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_ERROR("fail to new ObSysVarPluginLoadAdd", K(ret));
+      } else {
+        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_PLUGIN_LOAD_ADD))] = sys_var_ptr;
+        ptr = (void *)((char *)ptr + sizeof(ObSysVarPluginLoadAdd));
+      }
+    }
+    if (OB_SUCC(ret)) {
       if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarBigTables())) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_ERROR("fail to new ObSysVarBigTables", K(ret));
@@ -7289,6 +7385,33 @@ int ObSysVarFactory::create_all_sys_vars_()
       } else {
         store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_CHECK_PROXY_USERS))] = sys_var_ptr;
         ptr = (void *)((char *)ptr + sizeof(ObSysVarCheckProxyUsers));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarConnectionControlFailedConnectionsThreshold())) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_ERROR("fail to new ObSysVarConnectionControlFailedConnectionsThreshold", K(ret));
+      } else {
+        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_CONNECTION_CONTROL_FAILED_CONNECTIONS_THRESHOLD))] = sys_var_ptr;
+        ptr = (void *)((char *)ptr + sizeof(ObSysVarConnectionControlFailedConnectionsThreshold));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarConnectionControlMaxConnectionDelay())) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_ERROR("fail to new ObSysVarConnectionControlMaxConnectionDelay", K(ret));
+      } else {
+        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_CONNECTION_CONTROL_MAX_CONNECTION_DELAY))] = sys_var_ptr;
+        ptr = (void *)((char *)ptr + sizeof(ObSysVarConnectionControlMaxConnectionDelay));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarConnectionControlMinConnectionDelay())) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_ERROR("fail to new ObSysVarConnectionControlMinConnectionDelay", K(ret));
+      } else {
+        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_CONNECTION_CONTROL_MIN_CONNECTION_DELAY))] = sys_var_ptr;
+        ptr = (void *)((char *)ptr + sizeof(ObSysVarConnectionControlMinConnectionDelay));
       }
     }
     if (OB_SUCC(ret)) {
@@ -7397,6 +7520,51 @@ int ObSysVarFactory::create_all_sys_vars_()
       } else {
         store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_INNODB_STATS_TRANSIENT_SAMPLE_PAGES))] = sys_var_ptr;
         ptr = (void *)((char *)ptr + sizeof(ObSysVarInnodbStatsTransientSamplePages));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarKeyringEncryptedFileData())) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_ERROR("fail to new ObSysVarKeyringEncryptedFileData", K(ret));
+      } else {
+        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_KEYRING_ENCRYPTED_FILE_DATA))] = sys_var_ptr;
+        ptr = (void *)((char *)ptr + sizeof(ObSysVarKeyringEncryptedFileData));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarKeyringEncryptedFilePassword())) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_ERROR("fail to new ObSysVarKeyringEncryptedFilePassword", K(ret));
+      } else {
+        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_KEYRING_ENCRYPTED_FILE_PASSWORD))] = sys_var_ptr;
+        ptr = (void *)((char *)ptr + sizeof(ObSysVarKeyringEncryptedFilePassword));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarKeyringFileData())) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_ERROR("fail to new ObSysVarKeyringFileData", K(ret));
+      } else {
+        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_KEYRING_FILE_DATA))] = sys_var_ptr;
+        ptr = (void *)((char *)ptr + sizeof(ObSysVarKeyringFileData));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarKeyringOkvConfDir())) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_ERROR("fail to new ObSysVarKeyringOkvConfDir", K(ret));
+      } else {
+        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_KEYRING_OKV_CONF_DIR))] = sys_var_ptr;
+        ptr = (void *)((char *)ptr + sizeof(ObSysVarKeyringOkvConfDir));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarKeyringOperations())) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_ERROR("fail to new ObSysVarKeyringOperations", K(ret));
+      } else {
+        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_KEYRING_OPERATIONS))] = sys_var_ptr;
+        ptr = (void *)((char *)ptr + sizeof(ObSysVarKeyringOperations));
       }
     }
     if (OB_SUCC(ret)) {
@@ -7766,6 +7934,15 @@ int ObSysVarFactory::create_all_sys_vars_()
       } else {
         store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_OB_IVF_NPROBES))] = sys_var_ptr;
         ptr = (void *)((char *)ptr + sizeof(ObSysVarObIvfNprobes));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarCurrentDefaultCatalog())) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_ERROR("fail to new ObSysVarCurrentDefaultCatalog", K(ret));
+      } else {
+        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR__CURRENT_DEFAULT_CATALOG))] = sys_var_ptr;
+        ptr = (void *)((char *)ptr + sizeof(ObSysVarCurrentDefaultCatalog));
       }
     }
     if (OB_SUCC(ret)) {
@@ -8296,6 +8473,10 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, share::ObSysVarCla
       ret = create_one_sys_var<ObSysVarAutoIncrementCacheSize>(allocator_, sys_var_ptr, "ObSysVarAutoIncrementCacheSize");
       break;
     }
+    case share::SYS_VAR_PLUGIN_DIR: {
+      ret = create_one_sys_var<ObSysVarPluginDir>(allocator_, sys_var_ptr, "ObSysVarPluginDir");
+      break;
+    }
     case share::SYS_VAR_PARALLEL_SERVERS_TARGET: {
       ret = create_one_sys_var<ObSysVarParallelServersTarget>(allocator_, sys_var_ptr, "ObSysVarParallelServersTarget");
       break;
@@ -8498,6 +8679,10 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, share::ObSysVarCla
     }
     case share::SYS_VAR_INNODB_CHANGE_BUFFERING_DEBUG: {
       ret = create_one_sys_var<ObSysVarInnodbChangeBufferingDebug>(allocator_, sys_var_ptr, "ObSysVarInnodbChangeBufferingDebug");
+      break;
+    }
+    case share::SYS_VAR_INNODB_COMPRESS_DEBUG: {
+      ret = create_one_sys_var<ObSysVarInnodbCompressDebug>(allocator_, sys_var_ptr, "ObSysVarInnodbCompressDebug");
       break;
     }
     case share::SYS_VAR_INNODB_DISABLE_RESIZE_BUFFER_POOL_DEBUG: {
@@ -9364,6 +9549,14 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, share::ObSysVarCla
       ret = create_one_sys_var<ObSysVarSuperReadOnly>(allocator_, sys_var_ptr, "ObSysVarSuperReadOnly");
       break;
     }
+    case share::SYS_VAR_EVENT_SCHEDULER: {
+      ret = create_one_sys_var<ObSysVarEventScheduler>(allocator_, sys_var_ptr, "ObSysVarEventScheduler");
+      break;
+    }
+    case share::SYS_VAR_PLSQL_OPTIMIZE_LEVEL: {
+      ret = create_one_sys_var<ObSysVarPlsqlOptimizeLevel>(allocator_, sys_var_ptr, "ObSysVarPlsqlOptimizeLevel");
+      break;
+    }
     case share::SYS_VAR_LOW_PRIORITY_UPDATES: {
       ret = create_one_sys_var<ObSysVarLowPriorityUpdates>(allocator_, sys_var_ptr, "ObSysVarLowPriorityUpdates");
       break;
@@ -9414,6 +9607,10 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, share::ObSysVarCla
     }
     case share::SYS_VAR_INNODB_DATA_HOME_DIR: {
       ret = create_one_sys_var<ObSysVarInnodbDataHomeDir>(allocator_, sys_var_ptr, "ObSysVarInnodbDataHomeDir");
+      break;
+    }
+    case share::SYS_VAR_AVOID_TEMPORAL_UPGRADE: {
+      ret = create_one_sys_var<ObSysVarAvoidTemporalUpgrade>(allocator_, sys_var_ptr, "ObSysVarAvoidTemporalUpgrade");
       break;
     }
     case share::SYS_VAR_DEFAULT_TMP_STORAGE_ENGINE: {
@@ -10376,6 +10573,10 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, share::ObSysVarCla
       ret = create_one_sys_var<ObSysVarHaveCrypt>(allocator_, sys_var_ptr, "ObSysVarHaveCrypt");
       break;
     }
+    case share::SYS_VAR_HAVE_DYNAMIC_LOADING: {
+      ret = create_one_sys_var<ObSysVarHaveDynamicLoading>(allocator_, sys_var_ptr, "ObSysVarHaveDynamicLoading");
+      break;
+    }
     case share::SYS_VAR_LANGUAGE: {
       ret = create_one_sys_var<ObSysVarLanguage>(allocator_, sys_var_ptr, "ObSysVarLanguage");
       break;
@@ -10480,12 +10681,32 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, share::ObSysVarCla
       ret = create_one_sys_var<ObSysVarSkipShowDatabase>(allocator_, sys_var_ptr, "ObSysVarSkipShowDatabase");
       break;
     }
+    case share::SYS_VAR_PLUGIN_LOAD: {
+      ret = create_one_sys_var<ObSysVarPluginLoad>(allocator_, sys_var_ptr, "ObSysVarPluginLoad");
+      break;
+    }
+    case share::SYS_VAR_PLUGIN_LOAD_ADD: {
+      ret = create_one_sys_var<ObSysVarPluginLoadAdd>(allocator_, sys_var_ptr, "ObSysVarPluginLoadAdd");
+      break;
+    }
     case share::SYS_VAR_BIG_TABLES: {
       ret = create_one_sys_var<ObSysVarBigTables>(allocator_, sys_var_ptr, "ObSysVarBigTables");
       break;
     }
     case share::SYS_VAR_CHECK_PROXY_USERS: {
       ret = create_one_sys_var<ObSysVarCheckProxyUsers>(allocator_, sys_var_ptr, "ObSysVarCheckProxyUsers");
+      break;
+    }
+    case share::SYS_VAR_CONNECTION_CONTROL_FAILED_CONNECTIONS_THRESHOLD: {
+      ret = create_one_sys_var<ObSysVarConnectionControlFailedConnectionsThreshold>(allocator_, sys_var_ptr, "ObSysVarConnectionControlFailedConnectionsThreshold");
+      break;
+    }
+    case share::SYS_VAR_CONNECTION_CONTROL_MAX_CONNECTION_DELAY: {
+      ret = create_one_sys_var<ObSysVarConnectionControlMaxConnectionDelay>(allocator_, sys_var_ptr, "ObSysVarConnectionControlMaxConnectionDelay");
+      break;
+    }
+    case share::SYS_VAR_CONNECTION_CONTROL_MIN_CONNECTION_DELAY: {
+      ret = create_one_sys_var<ObSysVarConnectionControlMinConnectionDelay>(allocator_, sys_var_ptr, "ObSysVarConnectionControlMinConnectionDelay");
       break;
     }
     case share::SYS_VAR_DEFAULT_WEEK_FORMAT: {
@@ -10534,6 +10755,26 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, share::ObSysVarCla
     }
     case share::SYS_VAR_INNODB_STATS_TRANSIENT_SAMPLE_PAGES: {
       ret = create_one_sys_var<ObSysVarInnodbStatsTransientSamplePages>(allocator_, sys_var_ptr, "ObSysVarInnodbStatsTransientSamplePages");
+      break;
+    }
+    case share::SYS_VAR_KEYRING_ENCRYPTED_FILE_DATA: {
+      ret = create_one_sys_var<ObSysVarKeyringEncryptedFileData>(allocator_, sys_var_ptr, "ObSysVarKeyringEncryptedFileData");
+      break;
+    }
+    case share::SYS_VAR_KEYRING_ENCRYPTED_FILE_PASSWORD: {
+      ret = create_one_sys_var<ObSysVarKeyringEncryptedFilePassword>(allocator_, sys_var_ptr, "ObSysVarKeyringEncryptedFilePassword");
+      break;
+    }
+    case share::SYS_VAR_KEYRING_FILE_DATA: {
+      ret = create_one_sys_var<ObSysVarKeyringFileData>(allocator_, sys_var_ptr, "ObSysVarKeyringFileData");
+      break;
+    }
+    case share::SYS_VAR_KEYRING_OKV_CONF_DIR: {
+      ret = create_one_sys_var<ObSysVarKeyringOkvConfDir>(allocator_, sys_var_ptr, "ObSysVarKeyringOkvConfDir");
+      break;
+    }
+    case share::SYS_VAR_KEYRING_OPERATIONS: {
+      ret = create_one_sys_var<ObSysVarKeyringOperations>(allocator_, sys_var_ptr, "ObSysVarKeyringOperations");
       break;
     }
     case share::SYS_VAR_OPTIMIZER_SWITCH: {
@@ -10698,6 +10939,10 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, share::ObSysVarCla
     }
     case share::SYS_VAR_OB_IVF_NPROBES: {
       ret = create_one_sys_var<ObSysVarObIvfNprobes>(allocator_, sys_var_ptr, "ObSysVarObIvfNprobes");
+      break;
+    }
+    case share::SYS_VAR__CURRENT_DEFAULT_CATALOG: {
+      ret = create_one_sys_var<ObSysVarCurrentDefaultCatalog>(allocator_, sys_var_ptr, "ObSysVarCurrentDefaultCatalog");
       break;
     }
     case share::SYS_VAR_OB_HNSW_EXTRA_INFO_MAX_SIZE: {

@@ -20,7 +20,7 @@
 #include "storage/tx/ob_weak_read_util.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ls/ob_ls.h"
-#include "observer/omt/ob_server_runtime.h"
+#include "observer/omt/ob_tenant.h"
 // ------------------------------------------------------------------------------------------
 // Implimentation notes:
 // there are two relation we need care:
@@ -59,28 +59,36 @@ using namespace share;
 namespace transaction {
 
 inline int ObTransService::init_tx_(ObTxDesc &tx,
-                                    const uint32_t session_id)
+                                    const uint32_t session_id,
+                                    const uint64_t cluster_version)
 {
   int ret = OB_SUCCESS;
 
   tx.addr_      = self_;
   tx.sess_id_   = session_id;
+  tx.assoc_sess_id_ = session_id;
   tx.alloc_ts_  = ObClockGenerator::getClock();
   tx.expire_ts_ = INT64_MAX;
   tx.op_sn_     = 1;
   tx.state_     = ObTxDesc::State::IDLE;
+  tx.cluster_version_ = cluster_version;
+  // cluster_version is invalid, need to get it
+  if (0 == cluster_version && OB_FAIL(GET_MIN_DATA_VERSION(tx.cluster_version_))) {
+    TRANS_LOG(WARN, "get min data version fail", K(ret), K(tx));
+  }
   tx.seq_base_ = common::ObSequence::get_max_seq_no() - 1;
   return ret;
 }
 
 int ObTransService::acquire_tx(ObTxDesc *&tx,
-                               const uint32_t session_id)
+                               const uint32_t session_id,
+                               const uint64_t cluster_version)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(tx_desc_mgr_.alloc(tx))) {
     TRANS_LOG(WARN, "alloc tx fail", K(ret));
   } else {
-    ret = init_tx_(*tx, session_id);
+    ret = init_tx_(*tx, session_id, cluster_version);
   }
   TRANS_LOG(TRACE, "acquire tx", KPC(tx), K(session_id));
   if (OB_SUCC(ret)) {
@@ -132,9 +140,18 @@ int ObTransService::finalize_tx_(ObTxDesc &tx)
  */
 int ObTransService::release_tx(ObTxDesc &tx)
 {
+  /*
+   * for compatible with cross tenant session usage
+   * we should switch tenant to prevent missmatch
+   * eg.
+   *    SYS tenant swith to Normal tenant execute SQL
+   *    and then destory its session after switch back
+   */
   int ret = OB_SUCCESS;
   TRANS_LOG(TRACE, "release tx", KPC(this), K(tx));
-  // There is one process-wide ObTransService; release directly on this service.
+  // Single-tenant: sys tenant is constant and there is a single ObTransService.
+  // The historical cross-tenant switch-and-retry now recurses forever because
+  // MTL_SWITCH no longer changes sys tenant; release directly on this service.
   {
     ObTransTraceLog &tlog = tx.get_tlog();
     REC_TRANS_TRACE_EXT(&tlog, release, OB_Y(ret),
@@ -156,7 +173,7 @@ int ObTransService::release_tx(ObTxDesc &tx)
   return ret;
 }
 
-int ObTransService::reuse_tx(ObTxDesc &tx)
+int ObTransService::reuse_tx(ObTxDesc &tx, const uint64_t data_version)
 {
   int ret = OB_SUCCESS;
   int spin_cnt = 0;
@@ -195,7 +212,7 @@ int ObTransService::reuse_tx(ObTxDesc &tx)
 #endif
     }
     // it is safe to operate tx without lock when not shared
-    ret = reinit_tx_(tx, tx.sess_id_);
+    ret = reinit_tx_(tx, tx.sess_id_, data_version);
   }
   TRANS_LOG(DEBUG, "reuse tx", K(ret), K(orig_tx_id), K(tx));
   ObTransTraceLog &tlog = tx.get_tlog();
@@ -209,10 +226,10 @@ int ObTransService::reuse_tx(ObTxDesc &tx)
   return ret;
 }
 
-int ObTransService::reinit_tx_(ObTxDesc &tx, const uint32_t session_id)
+int ObTransService::reinit_tx_(ObTxDesc &tx, const uint32_t session_id, const uint64_t cluster_version)
 {
   tx.reset();
-  return init_tx_(tx, session_id);
+  return init_tx_(tx, session_id, cluster_version);
 }
 
 int ObTransService::stop_tx(ObTxDesc &tx)
@@ -1138,14 +1155,16 @@ int ObTransService::sync_rollback_to_savepoint_(ObTxCtx *part_ctx,
 }
 
 int ObTransService::create_explicit_savepoint(ObTxDesc &tx,
-                                              const ObString &savepoint)
+                                              const ObString &savepoint,
+                                              const uint32_t session_id,
+                                              const bool user_create)
 {
   int ret = OB_SUCCESS;
   ObSpinLockGuard guard(tx.lock_);
   tx.inc_op_sn();
   const ObTxSEQ scn = tx.inc_and_get_tx_seq(0);
   ObTxSavePoint sp;
-  if (OB_SUCC(sp.init(scn, savepoint))) {
+  if (OB_SUCC(sp.init(scn, savepoint, session_id, user_create))) {
     if (OB_FAIL(tx.savepoints_.push_back(sp))) {
       TRANS_LOG(WARN, "push savepoint failed", K(ret));
     } else if (!tx.tx_id_.is_valid() && OB_FAIL(tx_desc_mgr_.add(tx))) {
@@ -1156,7 +1175,7 @@ int ObTransService::create_explicit_savepoint(ObTxDesc &tx,
       ARRAY_FOREACH_X(tx.savepoints_, i, cnt, i != cnt - 1) {
         ObTxSavePoint &it = tx.savepoints_.at(cnt - 2 - i);
         if (it.is_stash()) { break; }
-        if (it.is_savepoint() && it.name_ == savepoint) {
+        if (it.is_savepoint() && it.name_ == savepoint && it.session_id_ == session_id) {
           TRANS_LOG(TRACE, "move savepoint", K(savepoint), "from", it.scn_, "to", scn, K(tx));
           it.release();
           break; // assume only one if exist
@@ -1182,7 +1201,8 @@ int ObTransService::create_explicit_savepoint(ObTxDesc &tx,
 // 2. invalidate savepoint and snapshot after the savepoint Node.
 int ObTransService::rollback_to_explicit_savepoint(ObTxDesc &tx,
                                                    const ObString &savepoint,
-                                                   const int64_t expire_ts)
+                                                   const int64_t expire_ts,
+                                                   const uint32_t session_id)
 {
   int ret = OB_SUCCESS;
   int64_t start_ts = ObTimeUtility::current_time();
@@ -1194,14 +1214,14 @@ int ObTransService::rollback_to_explicit_savepoint(ObTxDesc &tx,
       const ObTxSavePoint &it = tx.savepoints_.at(cnt - 1 - i);
       TRANS_LOG(TRACE, "sp iterate:", K(it));
       if (it.is_stash()) { break; }
-      if (it.is_savepoint() && it.name_ == savepoint) {
+      if (it.is_savepoint() && it.name_ == savepoint && it.session_id_ == session_id) {
         sp_scn = it.scn_;
         break;
       }
     }
     if (!sp_scn.is_valid()) {
       ret = OB_SAVEPOINT_NOT_EXIST;
-      TRANS_LOG(WARN, "savepoint not exist", K(ret), K(savepoint), K_(tx.savepoints));
+      TRANS_LOG(WARN, "savepoint not exist", K(ret), K(session_id), K(savepoint), K_(tx.savepoints));
     }
   }
   if (OB_SUCC(ret)) {
@@ -1224,7 +1244,7 @@ int ObTransService::rollback_to_explicit_savepoint(ObTxDesc &tx,
     // rollback savepoints > sp (note, current savepoint with sp won't be released)
     ARRAY_FOREACH_N(tx.savepoints_, i, cnt) {
       ObTxSavePoint &it = tx.savepoints_.at(cnt - 1 - i);
-      if (it.scn_ > sp_scn) {
+      if (it.scn_ > sp_scn && it.session_id_ == session_id) {
         it.rollback();
       }
       const bool is_stack_top = tx.savepoints_.count() == (cnt - i);
@@ -1247,7 +1267,7 @@ int ObTransService::rollback_to_explicit_savepoint(ObTxDesc &tx,
 
 // impl note
 // registered snapshot keep valid
-int ObTransService::release_explicit_savepoint(ObTxDesc &tx, const ObString &savepoint)
+int ObTransService::release_explicit_savepoint(ObTxDesc &tx, const ObString &savepoint, const uint32_t session_id)
 {
   int ret = OB_SUCCESS;
   bool hit = false;
@@ -1257,7 +1277,7 @@ int ObTransService::release_explicit_savepoint(ObTxDesc &tx, const ObString &sav
     tx.inc_op_sn();
     ARRAY_FOREACH_N(tx.savepoints_, i, cnt) {
       ObTxSavePoint &it = tx.savepoints_.at(cnt - 1 - i);
-      if (it.is_savepoint() && it.name_ == savepoint) {
+      if (it.is_savepoint() && it.name_ == savepoint && it.session_id_ == session_id) {
         hit = true;
         sp_id = it.scn_;
         break;
@@ -1278,7 +1298,7 @@ int ObTransService::release_explicit_savepoint(ObTxDesc &tx, const ObString &sav
           tx.savepoints_.pop_back();
         }
       }
-      TRANS_LOG(TRACE, "release savepoint", K(savepoint), K(sp_id), K(tx));
+      TRANS_LOG(TRACE, "release savepoint", K(savepoint), K(sp_id), K(session_id), K(tx));
     }
   }
   ObTransTraceLog &tlog = tx.get_tlog();
@@ -1296,7 +1316,7 @@ int ObTransService::create_stash_savepoint(ObTxDesc &tx, const ObString &name)
   tx.inc_op_sn();
   const ObTxSEQ seq_no = tx.inc_and_get_tx_seq(0);
   ObTxSavePoint sp;
-  if (OB_SUCC(sp.init(seq_no, name, true))) {
+  if (OB_SUCC(sp.init(seq_no, name, 0, false, true))) {
     if (OB_FAIL(tx.savepoints_.push_back(sp))) {
       TRANS_LOG(WARN, "push savepoint failed", K(ret));
     }
