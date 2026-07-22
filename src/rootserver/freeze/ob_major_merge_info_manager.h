@@ -19,7 +19,7 @@
 
 #include "lib/lock/ob_recursive_mutex.h"
 #include "share/ob_freeze_info_manager.h"
-#include "rootserver/freeze/ob_global_merge_manager.h"
+#include "rootserver/freeze/ob_zone_merge_manager.h"
 #include "share/ob_freeze_info_proxy.h"
 #include "common/storage/ob_freeze_define.h"
 #include "share/ob_rpc_struct.h"
@@ -39,38 +39,37 @@ class ObFreezeInfoManager;
 }
 namespace rootserver
 {
-class ObGlobalMergeManager;
+class ObZoneMergeManager;
 
 
-// Database runtime major-merge state.
+// ObMajorMergeInfoManager (tenant level)
 class ObMajorMergeInfoManager
 {
 public:
   ObMajorMergeInfoManager()
     : is_inited_(false),
-      global_merge_mgr_(),
+      zone_merge_mgr_(),
       freeze_info_mgr_(),
       lock_(common::ObLatchIds::OB_MAJOR_MERGE_INFO_MANAGER_LOCK)
   {}
   virtual ~ObMajorMergeInfoManager() {}
-  ObGlobalMergeManager &get_global_merge_mgr() { return global_merge_mgr_; }
+  ObZoneMergeManager &get_zone_merge_mgr() { return zone_merge_mgr_; }
   share::ObFreezeInfoManager &get_freeze_info_mgr() { return freeze_info_mgr_; }
   int init(common::ObMySQLProxy &sql_proxy);
   int try_reload();
-  int reload(const bool force_reload_global_info = false);
+  int reload(const bool reload_zone_merge_info = false);
   void reset_info()
   {
-    global_merge_mgr_.reset_merge_info();
+    zone_merge_mgr_.reset_merge_info();
     freeze_info_mgr_.reset_freeze_info();
   };
 
   int set_freeze_info(const ObMajorFreezeReason freeze_reason);
 
-  int renew_snapshot_gc_scn();
+  int renew_snapshot_gc_scn(share::SCN &new_snapshot_gc_scn);
   int try_gc_freeze_info();
-  int try_reload_merge_info();
+  int try_update_zone_info();
 
-  int check_snapshot_gc_scn();
   int check_need_broadcast(bool &need_broadcast);
   int broadcast_freeze_info();
   int get_local_latest_frozen_scn(share::SCN &frozen_scn);
@@ -88,14 +87,10 @@ private:
 
   int inner_get_min_freeze_info(share::ObFreezeInfo &frozen_status);
 
-public:
-  static const int64_t SNAPSHOT_GC_TS_WARN = 30LL * 60LL * 1000LL * 1000LL;
-  static const int64_t SNAPSHOT_GC_TS_ERROR = 2LL * 60LL * 60LL * 1000LL * 1000LL;
-
 private:
   bool is_inited_;
   
-  ObGlobalMergeManager global_merge_mgr_;
+  ObZoneMergeManager zone_merge_mgr_;
   share::ObFreezeInfoManager freeze_info_mgr_;
   mutable common::ObRecursiveMutex lock_;
 

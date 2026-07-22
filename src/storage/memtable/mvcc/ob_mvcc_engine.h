@@ -121,6 +121,7 @@ public:
   int scan(ObMvccAccessCtx &ctx,
            const ObMvccScanRange &range,
            const common::ObVersionRange &version_range,
+           const common::ObTabletID &tablet_id,
            ObMultiVersionRowIterator &row_iter);
   int prefix_exist(const ObMemtableKey *parameter_key, bool &may_exist);
   // check_row_locked check the status of the tx node for forzen memtable. It

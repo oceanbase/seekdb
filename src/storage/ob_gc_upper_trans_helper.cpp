@@ -54,12 +54,14 @@ int ObGCUpperTransHelper::check_need_gc_or_update_upper_trans_version(
     const ObTablet &tablet,
     int64_t &multi_version_start,
     UpdateUpperTransParam &upper_trans_param,
-    bool &need_update)
+    bool &need_update,
+    int64_t &max_resolved_upper_trans_version)
 {
   int ret = OB_SUCCESS;
   const ObTabletID &tablet_id = tablet.get_tablet_meta().tablet_id_;
   bool is_paused = false; // TODO(DanLing) get is_paused
   need_update = false;
+  max_resolved_upper_trans_version = 0;
   ObTabletMemberWrapper<ObTabletTableStore> table_store_wrapper;
   ObStorageSnapshotInfo snapshot_info;
   ObIArray<int64_t> *new_upper_trans = upper_trans_param.new_upper_trans_;
@@ -71,7 +73,7 @@ int ObGCUpperTransHelper::check_need_gc_or_update_upper_trans_version(
     LOG_INFO("paused, cannot update trans version now", K(ret), K(tablet_id));
   } else if (OB_FAIL(tablet.fetch_table_store(table_store_wrapper))) {
     LOG_WARN("fail to fetch table store", K(ret));
-  } else if (tablet.get_tablet_meta().local_status_.is_data_status_complete()) {
+  } else {
     ObITable *table = nullptr;
     ObSSTable *sstable = nullptr;
     int64_t new_upper_trans_version = INT64_MAX;
@@ -94,6 +96,10 @@ int ObGCUpperTransHelper::check_need_gc_or_update_upper_trans_version(
         LOG_WARN("failed to update upper trans version", K(ret), KPC(sstable));
       } else {
         need_update = need_update || (INT64_MAX != new_upper_trans_version);
+        if (INT64_MAX != new_upper_trans_version) {
+          max_resolved_upper_trans_version =
+              MAX(max_resolved_upper_trans_version, new_upper_trans_version);
+        }
         if (OB_FAIL(new_upper_trans->push_back(new_upper_trans_version))) {
           LOG_WARN("failed to push back new upper_trans_version", K(ret), K(new_upper_trans_version), KPC(sstable));
         }

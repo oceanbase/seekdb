@@ -90,10 +90,12 @@ private:
       share::SCN &trans_version_at_merge_scn);
   int get_state_of_curr_trans_node(
       transaction::ObTransID &trans_id,
-      int64_t &state);
+      int64_t &state,
+      uint64_t &cluster_version);
   int get_trans_status(
       const transaction::ObTransID &trans_id,
-      int64_t &state);
+      int64_t &state,
+      uint64_t &cluster_version);
   DISALLOW_COPY_AND_ASSIGN(ObMultiVersionValueIterator);
 private:
   bool is_inited_;
@@ -120,13 +122,18 @@ public:
   int init(ObQueryEngine &query_engine,
            ObMvccAccessCtx &ctx,
            const common::ObVersionRange &version_range,
-           const ObMvccScanRange &range);
+           const ObMvccScanRange &range,
+           const common::ObTabletID &tablet_id);
   int get_next_row(const ObMemtableKey *&key, ObMultiVersionValueIterator *&value_iter);
   void get_tnode_dml_stat(storage::ObTransNodeDMLStat &mt_stat) const;
   void reset();
 private:
-  int try_cleanout_mvcc_row_(ObMvccRow *value);
-  int try_cleanout_tx_node_(ObMvccRow *value, ObMvccTransNode *tnode);
+  int try_cleanout_mvcc_row_(const ObMemtableKey *key, ObMvccRow *value);
+  int try_cleanout_tx_node_(
+      ObMvccRow *value,
+      ObMvccTransNode *tnode,
+      const bool ignore_snapshot_gc_history);
+  bool is_snapshot_gc_scn_row_(const ObMemtableKey *key) const;
   DISALLOW_COPY_AND_ASSIGN(ObMultiVersionRowIterator);
 private:
   bool is_inited_;
@@ -135,9 +142,11 @@ private:
   ObMultiVersionValueIterator value_iter_;
   ObQueryEngine *query_engine_;
   ObIQueryEngineIterator *query_engine_iter_;
+  common::ObTabletID tablet_id_;
   int64_t insert_row_count_;
   int64_t update_row_count_;
   int64_t delete_row_count_;
+  int64_t snapshot_gc_history_row_count_;
 };
 
 }

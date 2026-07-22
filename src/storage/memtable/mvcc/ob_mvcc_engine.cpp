@@ -125,7 +125,7 @@ int ObMvccEngine::get(ObMvccAccessCtx &ctx,
       // rewrite ret
       ret = OB_SUCCESS;
     }
-  } else if (!query_flag.is_prewarm() && value->need_compact(for_read, for_replay)) {
+  } else if (!query_flag.is_prewarm() && value->need_compact(for_read, for_replay, memtable_->is_delete_insert_table())) {
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = try_compact_row_when_mvcc_read_(ctx.get_snapshot_version(), *value))) {
       TRANS_LOG(WARN, "fail to try to compact row", K(tmp_ret));
@@ -180,6 +180,7 @@ int ObMvccEngine::scan(
     ObMvccAccessCtx &ctx,
     const ObMvccScanRange &range,
     const common::ObVersionRange &version_range,
+    const ObTabletID &tablet_id,
     ObMultiVersionRowIterator &row_iter)
 {
   int ret = OB_SUCCESS;
@@ -192,7 +193,8 @@ int ObMvccEngine::scan(
   } else if (OB_FAIL(row_iter.init(*query_engine_,
                                    ctx,
                                    version_range,
-                                   range))) {
+                                   range,
+                                   tablet_id))) {
     TRANS_LOG(WARN, "row_iter init fail", K(ret));
   } else {
     // do nothing

@@ -19,6 +19,7 @@
 #include "share/rc/ob_module_provider.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
 #include "storage/compaction/ob_schedule_tablet_func.h"
+#include "storage/compaction/ob_tenant_freeze_info_mgr.h"
 #include "storage/compaction/filter/ob_tx_data_minor_filter.h"
 #include "storage/tablet/ob_tablet_medium_info_reader.h"
 
@@ -155,10 +156,39 @@ int ObTabletMiniMergeCtx::update_tablet(
     LOG_WARN("failed to release memtable", KR(ret), "param", get_dag_param());
   } else if (FALSE_IT(time_guard_click(ObStorageCompactionTimeGuard::RELEASE_MEMTABLE))) {
   } else {
+    try_notify_snapshot_gc_history_created();
     // schedule after mini
     try_schedule_compaction_after_mini(new_tablet_handle);
   }
   return ret;
+}
+
+void ObTabletMiniMergeCtx::try_notify_snapshot_gc_history_created()
+{
+  int tmp_ret = OB_SUCCESS;
+  const ObSSTable *new_sstable = nullptr;
+  storage::ObTenantFreezeInfoMgr *freeze_info_mgr = nullptr;
+  int64_t history_scn = 0;
+  if (info_collector_.tnode_stat_.snapshot_gc_history_row_count_ <= 0) {
+    // No update/delete history, or this mini merge only contains the snapshot_gc_scn row.
+  } else if (OB_TMP_FAIL(merged_table_handle_.get_sstable(new_sstable))) {
+    LOG_WARN_RET(tmp_ret, "failed to get merged sstable for snapshot gc history event",
+        K(tmp_ret), K(get_dag_param()), K_(merged_table_handle));
+  } else if (OB_ISNULL(new_sstable)) {
+    LOG_WARN_RET(OB_ERR_UNEXPECTED, "merged sstable is null for snapshot gc history event",
+        K(get_dag_param()), K_(merged_table_handle));
+  } else if (FALSE_IT(history_scn = new_sstable->get_max_merged_trans_version())) {
+  } else if (history_scn <= 0 || INT64_MAX == history_scn) {
+    // An unresolved transaction is covered when its upper_trans_version becomes finite.
+  } else if (OB_ISNULL(share::g_mp)
+      || OB_ISNULL(freeze_info_mgr = share::g_mp->tenant_freeze_info_mgr())) {
+    LOG_WARN_RET(OB_ERR_UNEXPECTED, "tenant freeze info mgr is null",
+        K(history_scn), K(get_dag_param()));
+  } else {
+    freeze_info_mgr->notify_snapshot_gc_history_created(history_scn);
+    LOG_INFO("notify snapshot gc history created after mini merge",
+        K(history_scn), K(get_dag_param()), "tnode_stat", info_collector_.tnode_stat_);
+  }
 }
 
 void ObTabletMiniMergeCtx::try_schedule_compaction_after_mini(ObTabletHandle &tablet_handle)
@@ -167,13 +197,13 @@ void ObTabletMiniMergeCtx::try_schedule_compaction_after_mini(ObTabletHandle &ta
   bool create_dag = false;
   bool during_restore = false;
   // when restoring, some log stream may be not ready,
-  // thus the inner sql in ObFreezeInfoMgr::try_update_info may timeout
+  // thus the inner sql in ObTenantFreezeInfoMgr::try_update_info may timeout
   if (OB_SUCCESS == ObBasicMergeScheduler::get_merge_scheduler()->during_restore(during_restore) && !during_restore) {
     if (get_tablet_id().is_ls_inner_tablet() ||
         0 == get_merge_info().get_merge_history().get_macro_block_count()) {
       // do nothing
     } else if (FALSE_IT(try_report_tablet_stat_after_mini())) { // try report after mini every time for updating table mode for tablet.
-    } else if (OB_TMP_FAIL(ObTabletScheduler::try_schedule_adaptive_merge(
+    } else if (OB_TMP_FAIL(ObTenantTabletScheduler::try_schedule_adaptive_merge(
                               static_param_.ls_,
                               tablet_handle,
                               ObAdaptiveMergePolicy::SCHEDULE_AFTER_MINI,
@@ -185,7 +215,7 @@ void ObTabletMiniMergeCtx::try_schedule_compaction_after_mini(ObTabletHandle &ta
 
     if (create_dag || 0 == get_merge_info().get_merge_history().get_macro_block_count()) {
       // no need to schedule minor merge
-    } else if (OB_TMP_FAIL(ObTabletScheduler::schedule_tablet_minor_merge<ObTabletMergeExecuteDag>(
+    } else if (OB_TMP_FAIL(ObTenantTabletScheduler::schedule_tablet_minor_merge<ObTabletMergeExecuteDag>(
         static_param_.ls_, tablet_handle))) {
       if (OB_SIZE_OVERFLOW != tmp_ret) {
         LOG_ERROR_RET(tmp_ret, "failed to schedule special tablet minor merge",
@@ -214,7 +244,7 @@ int ObTabletMiniMergeCtx::try_report_tablet_stat_after_mini()
     report_stat.insert_row_cnt_ = tnode_stat.insert_row_count_;
     report_stat.update_row_cnt_ = tnode_stat.update_row_count_;
     report_stat.delete_row_cnt_ = tnode_stat.delete_row_count_;
-    if (OB_FAIL(share::g_mp->tablet_stat_mgr()->report_stat(report_stat, report_succ))) {
+    if (OB_FAIL(share::g_mp->tenant_tablet_stat_mgr()->report_stat(report_stat, report_succ))) {
       LOG_WARN("failed to report tablet stat", KR(ret));
     }
   }

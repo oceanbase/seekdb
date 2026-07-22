@@ -20,7 +20,7 @@
 #include "lib/utility/ob_print_utils.h"
 #include "storage/compaction/ob_partition_merge_progress.h"
 #include "share/scn.h"
-#include "storage/ob_tablet_stat_mgr.h"
+#include "storage/ob_tenant_tablet_stat_mgr.h"
 #include "storage/compaction/ob_tablet_merge_info.h"
 #include "storage/compaction/ob_basic_tablet_merge_ctx.h"
 
@@ -75,6 +75,7 @@ private:
   int pre_process_tx_data_table_merge();
   virtual int update_tablet(
     ObTabletHandle &new_tablet_handle) override;
+  void try_notify_snapshot_gc_history_created();
   void try_schedule_compaction_after_mini(storage::ObTabletHandle &tablet_handle);
   int try_report_tablet_stat_after_mini();
 };

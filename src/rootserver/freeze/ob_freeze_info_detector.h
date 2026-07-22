@@ -48,9 +48,14 @@ public:
   void stop();
   void wait();
   int destroy();
-  void pause() { is_paused_ = true; }
-  void resume() { is_paused_ = false; }
-  bool is_paused() const { return is_paused_; }
+  void pause()
+  {
+    ATOMIC_STORE(&is_primary_active_, false);
+    ATOMIC_STORE(&is_paused_, true);
+  }
+  void resume() { ATOMIC_STORE(&is_paused_, false); }
+  bool is_paused() const { return ATOMIC_LOAD(&is_paused_); }
+  int on_become_primary();
 
   int signal();
 
@@ -59,30 +64,29 @@ private:
   int try_broadcast_freeze_info();
   int try_renew_snapshot_gc_scn();
   int try_minor_freeze();
-  int try_reload_merge_info();
+  int try_update_zone_info();
 
   int can_start_work(bool &can_work);
-  bool is_primary_service() { return is_primary_service_; }
+  bool is_primary_service() const { return is_primary_service_; }
+  int check_tenant_is_restore(bool &is_restore);
   int try_reload_freeze_info();
-  // Adjust global_merge_info in memory before scheduling major freezes.
+  // adjust global_merge_info in memory to avoid useless major freezes on restore major_freeze_service
   int try_adjust_global_merge_info();
   int check_global_merge_info(bool &is_initial) const;
+  bool need_renew_snapshot_gc_scn_(const int64_t now) const;
   void update_last_run_timestamp_();
-  // After a server switches to primary, FreezeInfoDetector may not have write access
-  // immediately. Delay the first snapshot_gc_scn check to allow the service to settle.
-  // 
-  bool need_check_snapshot_gc_scn(const int64_t start_time_us);
-
 private:
   static const int64_t UPDATER_INTERVAL_US = 10 * 1000 * 1000; // 10s
 
   bool is_inited_;
   bool is_paused_;
   bool is_primary_service_;  // identify ObMajorFreezeServiceType::SERVICE_TYPE_PRIMARY
+  bool is_primary_active_;
+  bool need_primary_catchup_;
   bool is_global_merge_info_adjusted_;
   bool is_gc_scn_inited_;
   common::ObMySQLProxy *sql_proxy_;
-  int64_t last_gc_timestamp_;
+  int64_t last_gc_renew_attempt_ts_;
   int64_t last_run_timestamp_;
   ObMajorMergeInfoManager *major_merge_info_mgr_;
   ObThreadIdling *major_scheduler_idling_;
