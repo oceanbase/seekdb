@@ -937,8 +937,6 @@ int ObCreateFunctionResolver::resolve_impl(
     ParseNode *param_node = source_tree.children_[2];
     ParseNode *ret_node = source_tree.children_[3];
     ParseNode *sf_clause_list = source_tree.children_[4];
-    ParseNode *pipelined_clase =  NULL;
-
     if (OB_FAIL(ObCreateRoutineResolver::resolve(parse_tree,
                                                  sp_definer_node,
                                                  sf_name_node,

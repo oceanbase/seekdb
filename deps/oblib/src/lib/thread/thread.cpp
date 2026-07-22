@@ -31,7 +31,6 @@
 #include "lib/utility/ob_hang_fatal_error.h"
 #include "lib/signal/ob_signal_struct.h"
 #include "lib/thread_local/ob_tsi_factory.h"
-#include "lib/resource/ob_affinity_ctrl.h"
 
 using namespace oceanbase;
 using namespace oceanbase::common;
@@ -46,7 +45,7 @@ Thread &Thread::current()
   return *current_thread_;
 }
 
-Thread::Thread(Threads *threads, int64_t idx, int64_t stack_size, int32_t numa_node)
+Thread::Thread(Threads *threads, int64_t idx, int64_t stack_size)
 #ifdef _WIN32
     : pth_(pthread_null()),
 #else
@@ -63,8 +62,7 @@ Thread::Thread(Threads *threads, int64_t idx, int64_t stack_size, int32_t numa_n
       tid_(0),
       thread_list_node_(this),
       cpu_time_(0),
-      create_ret_(OB_NOT_RUNNING),
-      numa_node_(numa_node)
+      create_ret_(OB_NOT_RUNNING)
 {}
 
 Thread::~Thread()
@@ -76,7 +74,6 @@ int Thread::start()
 {
   int ret = OB_SUCCESS;
   const int64_t count = ATOMIC_FAA(&total_thread_count_, 1);
-  ObNumaNodeGuard numa_guard(numa_node_);
   if (count >= get_max_thread_num() - OB_RESERVED_THREAD_NUM) {
     ret = OB_SIZE_OVERFLOW;
     LOG_ERROR("thread count reach limit", K(ret), "current count", count);
@@ -189,9 +186,6 @@ void Thread::stop()
 
 void Thread::run()
 {
-  if (OB_NUMA_SHARED_INDEX != numa_node_) {
-    AFFINITY_CTRL.thread_bind_to_node(numa_node_);
-  }
   IRunWrapper *run_wrapper_ = threads_->get_effective_run_wrapper();
   if (OB_NOT_NULL(run_wrapper_)) {
     {
@@ -377,9 +371,9 @@ void* Thread::__th_start(void *arg)
     LOG_ERROR("invalid argument", K(th), K(ret));
   } else {
     ObPageManager pm;
-    ret = pm.set_tenant_ctx(common::ObCtxIds::GLIBC);
+    ret = pm.set_ctx(common::ObCtxIds::GLIBC);
     if (OB_FAIL(ret)) {
-      LOG_ERROR("set tenant ctx failed", K(ret));
+      LOG_ERROR("set runtime context failed", K(ret));
     } else {
       ObPageManager::set_thread_local_instance(pm);
       MemoryContext *mem_context = GET_TSI0(MemoryContext);

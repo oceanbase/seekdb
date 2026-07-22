@@ -6,4 +6,3 @@ seekdb:
     memory_limit: '2G'
     datafile_size: '20G'
     cpu_count: '24'
-{{%% PROXY_CONF %%}}

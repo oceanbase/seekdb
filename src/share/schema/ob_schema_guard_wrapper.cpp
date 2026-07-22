@@ -227,50 +227,18 @@ int ObSchemaGuardWrapper::get_table_id(const uint64_t database_id,
   return ret;
 }
 
-int ObSchemaGuardWrapper::get_tenant_schema(
-                                            const ObTenantSchema *&tenant_schema)
+int ObSchemaGuardWrapper::get_server_runtime_schema(
+                                            const ObServerRuntimeSchema *&runtime_schema)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("not init", KR(ret));
   } else if (is_local_guard_) {
-    if (OB_FAIL(local_schema_guard_.get_tenant_info(tenant_schema))) {
-      LOG_WARN("fail to get tenant schema", KR(ret));
+    if (OB_FAIL(local_schema_guard_.get_server_runtime_info(runtime_schema))) {
+      LOG_WARN("fail to get runtime schema", KR(ret));
     }
-  } else if (OB_FAIL(latest_schema_guard_.get_tenant_schema( tenant_schema))) {
-    LOG_WARN("fail to get tenant schema", KR(ret));
-  }
-  return ret;
-}
-
-int ObSchemaGuardWrapper::get_tablegroup_id(const common::ObString &tablegroup_name,
-                                            uint64_t &tablegroup_id)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("not init", KR(ret));
-  } else if (is_local_guard_) {
-    if (OB_FAIL(local_schema_guard_.get_tablegroup_id(tablegroup_name, tablegroup_id))) {
-      LOG_WARN("fail to get tablegroup id", KR(ret), K(tablegroup_name));
-    }
-  } else if (OB_FAIL(latest_schema_guard_.get_tablegroup_id(tablegroup_name, tablegroup_id))) {
-    LOG_WARN("fail to get tablegroup id", KR(ret), K(tablegroup_name));
-  }
-  return ret;
-}
-
-int ObSchemaGuardWrapper::get_tablegroup_schema(const uint64_t tablegroup_id,
-                                                const ObTablegroupSchema *&tablegroup_schema)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("not init", KR(ret));
-  } else if (is_local_guard_) {
-    if (OB_FAIL(local_schema_guard_.get_tablegroup_schema( tablegroup_id, tablegroup_schema))) {
-      LOG_WARN("fail to get tablegroup schema", KR(ret), K(tablegroup_id));
-    }
-  } else if (OB_FAIL(latest_schema_guard_.get_tablegroup_schema(tablegroup_id, tablegroup_schema))) {
-    LOG_WARN("fail to get tablegroup schema", KR(ret), K(tablegroup_id));
+  } else if (OB_FAIL(latest_schema_guard_.get_server_runtime_schema( runtime_schema))) {
+    LOG_WARN("fail to get runtime schema", KR(ret));
   }
   return ret;
 }
@@ -413,66 +381,7 @@ int ObSchemaGuardWrapper::get_coded_index_name_info_mysql(common::ObIAllocator &
   return ret;
 }
 
-int ObSchemaGuardWrapper::get_sequence_schema(const uint64_t sequence_id,
-                                              const ObSequenceSchema *&sequence_schema)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("not init", KR(ret));
-  } else if (is_local_guard_) {
-    if(OB_FAIL(local_schema_guard_.get_sequence_schema( sequence_id, sequence_schema))) {
-      LOG_WARN("fail to get sequence schema", KR(ret), K(sequence_id));
-    }
-  } else if (OB_FAIL(latest_schema_guard_.get_sequence_schema(sequence_id, sequence_schema))) {
-    LOG_WARN("fail to get sequence schema", KR(ret), K(sequence_id));
-  }
-  return ret;
-}
 // TODO: impelete local guard way later
-int ObSchemaGuardWrapper::get_table_id_and_table_name_in_tablegroup(
-                          const uint64_t tablegroup_id,
-                          common::ObIArray<ObString> &table_names,
-                          common::ObIArray<uint64_t> &table_ids)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("not init", KR(ret));
-  } else if (OB_FAIL(latest_schema_guard_.get_table_id_and_table_name_in_tablegroup(tablegroup_id, table_names, table_ids))) {
-    LOG_WARN("fail to get table id and table name in tablegroup", KR(ret), K(tablegroup_id));
-  }
-  return ret;
-}
-
-int ObSchemaGuardWrapper::get_table_schemas_in_tablegroup(
-                          const uint64_t tablegroup_id,
-                          common::ObIArray<const ObTableSchema *> &table_schemas)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("not init", KR(ret));
-  } else if (is_local_guard_) {
-    if(OB_FAIL(local_schema_guard_.get_table_schemas_in_tablegroup(tablegroup_id, table_schemas))) {
-      LOG_WARN("fail to get table schemas in tablegroup", KR(ret), K(tablegroup_id));
-    }
-  } else if (OB_FAIL(latest_schema_guard_.get_table_schemas_in_tablegroup(tablegroup_id, table_schemas))) {
-    LOG_WARN("fail to get table schemas in tablegroup", KR(ret), K(tablegroup_id));
-  }
-  return ret;
-}
-
-int ObSchemaGuardWrapper::check_database_exists_in_tablegroup(
-                          const uint64_t tablegroup_id,
-                          bool &exists)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("not init", KR(ret));
-  } else if (OB_FAIL(latest_schema_guard_.check_database_exists_in_tablegroup(tablegroup_id, exists))) {
-    LOG_WARN("fail to check database exists in tablegroup", KR(ret), K(tablegroup_id));
-  }
-  return ret;
-}
-
 int ObSchemaGuardWrapper::get_sys_variable_schema(const ObSysVariableSchema *&sys_var_schema)
 {
   int ret = OB_SUCCESS;
@@ -481,7 +390,7 @@ int ObSchemaGuardWrapper::get_sys_variable_schema(const ObSysVariableSchema *&sy
     LOG_WARN("not init", KR(ret));
   } else if (is_local_guard_) {
     if (OB_FAIL(local_schema_guard_.get_sys_variable_schema( sys_var_schema))) {
-      LOG_WARN("fail to get tenant system variable", KR(ret));
+      LOG_WARN("fail to get runtime system variable", KR(ret));
     }
   } else {
     if (OB_FAIL(latest_schema_guard_.get_sys_variable_schema(sys_var_schema))) {

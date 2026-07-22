@@ -31,7 +31,7 @@ public:
   ObTransIDService() {}
   ~ObTransIDService() {}
   int init();
-  static int mtl_init(ObTransIDService *&trans_id_service);
+  static int server_module_init(ObTransIDService *&trans_id_service);
   void destroy() { reset(); }
   static const int64_t TRANS_ID_PREALLOCATED_RANGE = 1000000; // TransID default preallocated size
 };

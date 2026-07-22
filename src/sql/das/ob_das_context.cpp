@@ -76,46 +76,29 @@ int ObDASCtx::get_das_tablet_mapper(const uint64_t ref_table_id,
   tablet_mapper.related_info_.related_tids_ = related_table_ids;
 
   bool is_vt = is_virtual_table(ref_table_id);
-  bool is_external_object = is_external_object_id(ref_table_id);
   uint64_t real_table_id = ref_table_id;
   
   if (tablet_mapper.is_non_partition_optimized()) {
     // table ids has calced for no partition entity table, continue
   } else if (!is_vt) {
-    if (!is_external_object) {
-      //get ObTableSchema object corresponding to the table_id from ObSchemaGetterGuard
-      //record the ObTableSchema into tablet_mapper
-      //the tablet and partition info come from ObTableSchema in the real table
-      ObSchemaGetterGuard *schema_guard = nullptr;
-      if (OB_ISNULL(sql_ctx_) || OB_ISNULL(schema_guard = sql_ctx_->schema_guard_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("schema guard is nullptr", K(ret), K(sql_ctx_), K(schema_guard));
-      } else if (OB_ISNULL(tablet_mapper.table_schema_)
-          && OB_FAIL(schema_guard->get_table_schema( real_table_id, tablet_mapper.table_schema_))) {
-        LOG_WARN("get table schema failed", K(ret), K(real_table_id));
-      } else if (OB_ISNULL(tablet_mapper.table_schema_)) {
-        ret = OB_TABLE_NOT_EXIST;
-        LOG_WARN("table schema is not found", K(ret), K(real_table_id));
-      } else {
-        tablet_mapper.related_info_.guard_ = schema_guard;
-      }
+    //get ObTableSchema object corresponding to the table_id from ObSchemaGetterGuard
+    //record the ObTableSchema into tablet_mapper
+    //the tablet and partition info come from ObTableSchema in the real table
+    ObSchemaGetterGuard *schema_guard = nullptr;
+    if (OB_ISNULL(sql_ctx_) || OB_ISNULL(schema_guard = sql_ctx_->schema_guard_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("schema guard is nullptr", K(ret), K(sql_ctx_), K(schema_guard));
+    } else if (OB_ISNULL(tablet_mapper.table_schema_)
+        && OB_FAIL(schema_guard->get_table_schema( real_table_id, tablet_mapper.table_schema_))) {
+      LOG_WARN("get table schema failed", K(ret), K(real_table_id));
+    } else if (OB_ISNULL(tablet_mapper.table_schema_)) {
+      ret = OB_TABLE_NOT_EXIST;
+      LOG_WARN("table schema is not found", K(ret), K(real_table_id));
     } else {
-      ObSqlSchemaGuard *sql_schema_guard = &(sql_ctx_->cur_stmt_->get_query_ctx()->sql_schema_guard_);
-      if (OB_ISNULL(sql_schema_guard)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("schema guard is nullptr", K(ret), K(sql_ctx_), K(sql_schema_guard));
-      } else if (OB_ISNULL(tablet_mapper.table_schema_) &&
-          OB_FAIL(sql_schema_guard->get_mocked_table_schema(real_table_id, tablet_mapper.table_schema_))) {
-        LOG_WARN("get table schema failed", K(ret), K(real_table_id));
-      } else if (OB_ISNULL(tablet_mapper.table_schema_)) {
-        ret = OB_TABLE_NOT_EXIST;
-        LOG_WARN("table schema is not found", K(ret), K(real_table_id));
-      }
+      tablet_mapper.related_info_.guard_ = schema_guard;
     }
   } else {
-    //get all server lists corresponding to the table_id from the tablet location cache
-    //and record the server list in tablet_mapper
-    //the tablet_id and partition id of the virtual table is the index of server list
+    // Record the local virtual-table location in the tablet mapper.
     if (OB_FAIL(location_router_.get_vt_svr_pair(real_table_id, tablet_mapper.vt_svr_pair_))) {
       LOG_WARN("get virtual table server pair failed", K(ret), K(real_table_id));
     }
@@ -169,21 +152,6 @@ int ObDASCtx::extended_tablet_loc(ObDASTableLoc &table_loc,
     if (OB_SUCC(ret) && OB_FAIL(build_related_tablet_loc(*tablet_loc))) {
       LOG_WARN("build related tablet loc failed", K(ret), KPC(tablet_loc), KPC(tablet_loc->loc_meta_));
     }
-    if (OB_SUCC(ret) && need_check_server_ && OB_FAIL(check_same_server(tablet_loc))) {
-      LOG_WARN("check same server failed", KR(ret));
-    }
-  }
-  return ret;
-}
-
-int ObDASCtx::check_same_server(const ObDASTabletLoc *tablet_loc)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(tablet_loc)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tablet location is null", KR(ret), KP(tablet_loc));
-  } else {
-    same_server_ = 1;
   }
   return ret;
 }
@@ -198,16 +166,17 @@ int ObDASCtx::extended_tablet_loc(ObDASTableLoc &table_loc,
     LOG_WARN("get tablet loc failed", KR(ret), K(opt_tablet_loc.get_tablet_id()));
   }
   if (OB_SUCC(ret) && tablet_loc == nullptr) {
-    ObLSReplicaLocation replica_loc;
+    const ObAddr &server = opt_tablet_loc.get_server();
     void *tablet_buf = allocator_.alloc(sizeof(ObDASTabletLoc));
     if (OB_ISNULL(tablet_buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate tablet loc buf failed", K(ret), K(sizeof(ObDASTabletLoc)));
-    } else if (OB_FAIL(candi_tablet_loc.get_selected_replica(replica_loc))) {
-      LOG_WARN("fail to get selected replica", K(ret), K(candi_tablet_loc));
+    } else if (OB_UNLIKELY(!server.is_valid())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("local tablet location is invalid", K(ret), K(candi_tablet_loc));
     } else {
       tablet_loc = new(tablet_buf) ObDASTabletLoc();
-      tablet_loc->server_ = replica_loc.get_server();
+      tablet_loc->server_ = server;
       tablet_loc->tablet_id_ = opt_tablet_loc.get_tablet_id();
       tablet_loc->partition_id_ = opt_tablet_loc.get_partition_id();
       tablet_loc->first_level_part_id_ = opt_tablet_loc.get_first_level_part_id();
@@ -219,9 +188,6 @@ int ObDASCtx::extended_tablet_loc(ObDASTableLoc &table_loc,
     //build related tablet location
     if (OB_SUCC(ret) && OB_FAIL(build_related_tablet_loc(*tablet_loc))) {
       LOG_WARN("build related tablet loc failed", K(ret), KPC(tablet_loc), KPC(tablet_loc->loc_meta_));
-    }
-    if (OB_SUCC(ret) && need_check_server_ && OB_FAIL(check_same_server(tablet_loc))) {
-      LOG_WARN("check same server failed", KR(ret));
     }
   }
   return ret;
@@ -246,9 +212,9 @@ OB_INLINE int ObDASCtx::build_related_tablet_loc(ObDASTabletLoc &tablet_loc)
                K(related_table_id), K(table_locs_));
     } else if (OB_ISNULL(rv = related_tablet_map_.get_related_tablet_id(tablet_loc.tablet_id_,
                                                                         related_table_id))) {
-      //related local index tablet_id pruning only can be used in local plan or remote plan(all operator
-      //use the same das context),
-      //because the distributed plan will pass tablet_id through exchange operator,
+      // Related local-index tablet pruning is available only when all operators
+      // share the same DAS context.
+      // A distributed plan passes tablet_id through an exchange operator,
       //but the related tablet_id map can not be passed by exchange operator,
       //unused related pruning in distributed plan's dml operator,
       //we will use get_all_tablet_and_object_id() to build the related tablet_id map when
@@ -455,13 +421,6 @@ int ObDASCtx::rebuild_tablet_loc_reference()
     }
   }
   return ret;
-}
-
-void ObDASCtx::unmark_need_check_server()
-{
-  if (!table_locs_.empty() && !table_locs_.get_first()->get_tablet_locs().empty()) {
-    need_check_server_ = false;
-  }
 }
 
 int ObDASCtx::build_related_tablet_map(const ObDASTableLocMeta &loc_meta)

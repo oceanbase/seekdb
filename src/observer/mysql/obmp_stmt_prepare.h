@@ -47,7 +47,6 @@ public:
                                   bool &need_response_error);
 protected:
   virtual int deserialize();
-  virtual int before_process() override;
   virtual int process();
 
 private:

@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL
 
-#include "mtlenv/mock_tenant_module_env.h"
+#include "mtlenv/mock_server_runtime_env.h"
 #include "storage/blocksstable/ob_data_file_prepare.h"
 #include "sql/ob_sql_init.h"
 
@@ -33,12 +33,6 @@ public:
   virtual void SetUp() override
   {
     GCONF.enable_sql_operator_dump.set_value("True");
-    int ret = OB_SUCCESS;
-    lib::ObMallocAllocator *malloc_allocator = lib::ObMallocAllocator::get_instance();
-    //ret = malloc_allocator->create_tenant_ctx_allocator(OB_SYS_TENANT_ID);
-    //ASSERT_EQ(OB_SUCCESS, ret);
-    ret = malloc_allocator->create_and_add_tenant_allocator();
-    ASSERT_EQ(OB_SUCCESS, ret);
     int s = (int)time(NULL);
     SERVER_STORAGE_META_SERVICE.is_started_ = true;
     LOG_INFO("initial setup random seed", K(s));
@@ -80,7 +74,7 @@ struct MyAllocator : public DefaultPageAllocator
 };
 
 // The storage env (data dir, tmp caches, IO manager, ObTimerService,
-// ObTenantTmpFileManager, ...) is now owned by MockTenantModuleEnv with a
+// ObTmpFileManager, ...) is now owned by MockServerRuntimeEnv with a
 // per-suite lifecycle: built once in SetUpTestCase, torn down once in
 // TearDownTestCase. Do NOT inherit blocksstable::TestDataFilePrepare: its member
 // util_ destructor tears the env down per fixture (i.e. per test case), so the
@@ -125,11 +119,11 @@ public:
   static void SetUpTestCase()
   {
     ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
-    ASSERT_EQ(OB_SUCCESS, MockTenantModuleEnv::get_instance().init());
+    ASSERT_EQ(OB_SUCCESS, MockServerRuntimeEnv::get_instance().init());
   }
   static void TearDownTestCase()
   {
-    MockTenantModuleEnv::get_instance().destroy();
+    MockServerRuntimeEnv::get_instance().destroy();
     ObTimerService::get_instance().stop();
     ObTimerService::get_instance().wait();
     ObTimerService::get_instance().destroy();
@@ -177,10 +171,10 @@ public:
   {
     int ret = OB_SUCCESS;
     ASSERT_EQ(OB_SUCCESS, init_tenant_mgr());
-    // Single-tenant seekdb: MockTenantModuleEnv (installed in SetUpTestCase)
+    // Single-runtime seekdb: MockServerRuntimeEnv (installed in SetUpTestCase)
     // owns the storage env / data dir, the tmp block/page caches and the
-    // ObTenantTmpFileManager / ObTenantIOManager module set, and switches the
-    // thread into OB_SERVER_TENANT_ID so g_mp / MTL lookups resolve. The former
+    // ObTmpFileManager / ObIOService module set, and switches the
+    // thread into OB_SERVER_RUNTIME_ID so g_mp / MTL lookups resolve. The former
     // per-SetUp data-file + tmp-cache bootstrap is therefore redundant.
 
     cell_cnt_ = COLS;
@@ -396,7 +390,7 @@ protected:
   int64_t batch_size_ = (64L << 10) * 5 / 256;
   ObBitVector *skip_;
 
-  int64_t tenant_id_ = OB_SERVER_TENANT_ID;
+  int64_t tenant_id_ = OB_SERVER_RUNTIME_ID;
   int64_t ctx_id_ = ObCtxIds::WORK_AREA;
   const char *label_ = ObModIds::OB_SQL_ROW_STORE;
 
@@ -418,7 +412,7 @@ int TestChunkDatumStore::init_tenant_mgr()
   self.set_ip_addr("127.0.0.1", 8086);
   const int64_t ulmt = 128LL << 30;
   const int64_t llmt = 128LL << 30;
-  ret = getter.add_tenant(ulmt, llmt);
+  ret = getter.set_memory_limit(llmt, ulmt);
   EXPECT_EQ(OB_SUCCESS, ret);
   oceanbase::lib::set_memory_limit(128LL << 32);
   return ret;

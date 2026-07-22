@@ -43,11 +43,7 @@ int ObLockTableExecutor::execute_mysql_(ObExecContext &ctx,
   int ret = OB_SUCCESS;
   // only execute normally after enable lock_priority configuration, otherwise
   // it will directly throw OB_SUCCESS, which is an empty implementation
-  if (!true) {
-    ret = OB_INVALID_ARGUMENT;
-    // if tenant config is invalid, this config will be set as false
-    LOG_WARN("tenant config is invalid");
-  } else if (GCONF.enable_lock_priority) {
+  if (GCONF.enable_lock_priority) {
     switch(stmt.get_lock_stmt_type()) {
     case ObLockTableStmt::MYSQL_LOCK_TABLE_STMT: {
       ObMySQLLockTableExecutor executor;

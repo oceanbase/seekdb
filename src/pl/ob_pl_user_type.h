@@ -22,7 +22,7 @@
 #include "lib/hash/ob_array_index_hash_set.h"
 #include "lib/container/ob_array_wrap.h"
 #include "common/json_type/ob_json_tree.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 
 
 namespace oceanbase
@@ -80,17 +80,6 @@ public:
                                const sql::ObSqlExpression *default_expr,
                                bool default_construct,
                                common::ObObj &obj) const;
-
-  // --------- for session serialize/deserialize interface ---------
-  virtual int get_serialize_size(
-    const ObPLResolveCtx &resolve_ctx, char *&src, int64_t &size) const;
-  virtual int serialize(
-    const ObPLResolveCtx &resolve_ctx,
-    char *&src, char* dst, int64_t dst_len, int64_t &dst_pos) const;
-  virtual int deserialize(
-    const ObPLResolveCtx &resolve_ctx,
-    common::ObIAllocator &allocator,
-    const char* src, const int64_t src_len, int64_t &src_pos, char *&dst) const;
 
   virtual int add_package_routine_schema_param(const ObPLResolveCtx &resolve_ctx,
                                                const ObPLBlockNS &block_ns,
@@ -312,17 +301,6 @@ public:
                                bool default_construct,
                                common::ObObj &obj) const;
 
-  // --------- for session serialize/deserialize interface ---------
-  virtual int get_serialize_size(
-    const ObPLResolveCtx &resolve_ctx, char *&src, int64_t &size) const;
-  virtual int serialize(
-    const ObPLResolveCtx &resolve_ctx,
-    char *&src, char* dst, int64_t dst_len, int64_t &dst_pos) const;
-  virtual int deserialize(
-    const ObPLResolveCtx &resolve_ctx,
-    common::ObIAllocator &allocator,
-    const char* src, const int64_t src_len, int64_t &src_pos, char *&dst) const;
-
   virtual int add_package_routine_schema_param(const ObPLResolveCtx &resolve_ctx,
                                                const ObPLBlockNS &block_ns,
                                                const common::ObString &package_name,
@@ -410,17 +388,6 @@ public:
                                const sql::ObSqlExpression *default_expr,
                                bool default_construct,
                                common::ObObj &obj) const;
-
-  // --------- for session serialize/deserialize interface ---------
-  virtual int get_serialize_size(
-    const ObPLResolveCtx &resolve_ctx, char *&src, int64_t &size) const;
-  virtual int serialize(
-    const ObPLResolveCtx &resolve_ctx,
-    char *&src, char* dst, int64_t dst_len, int64_t &dst_pos) const;
-  virtual int deserialize(
-    const ObPLResolveCtx &resolve_ctx,
-    common::ObIAllocator &allocator,
-    const char* src, const int64_t src_len, int64_t &src_pos, char *&dst) const;
 
   virtual int add_package_routine_schema_param(const ObPLResolveCtx &resolve_ctx,
                                                const ObPLBlockNS &block_ns,

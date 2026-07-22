@@ -267,42 +267,36 @@ int ObCacheObjIterator::next(ObCacheObjGuard &guard)
   int ret = OB_SUCCESS;
   bool find = false;
   do {
-    if (plan_id_array_.count() == 0) {
-      if (id_arr_idx_ < id_arr_.count() - 1) {
-        ++id_arr_idx_;
-        MOD_SCOPE {
-          ObPlanCache* plan_cache = share::g_mp->plan_cache();
-          if (OB_ISNULL(plan_cache)) {
-            ret = OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "plan_cache is NULL", K(ret));
-          } else if (!plan_cache->is_inited()) {
-            // not inited
-            SERVER_LOG(INFO, "plan cache is not inited, ", K(ret));
-          } else if (OB_FAIL(plan_cache->foreach_cache_obj(*this))) {
-            SERVER_LOG(WARN, "fail to traverse plan cache obj", K(ret));
-          }
-        } else {
-          ret = OB_SUCCESS;
-          SERVER_LOG(INFO, "fail to switch tenant, may be deleted", K(ret));
-        }
-      } else {
+    if (!loaded_) {
+      loaded_ = true;
+      if (!share::g_server_modules_ready) {
         ret = OB_ITER_END;
+      } else {
+        ObPlanCache* plan_cache = share::g_mp->plan_cache();
+        if (OB_ISNULL(plan_cache)) {
+          ret = OB_ERR_UNEXPECTED;
+          SERVER_LOG(WARN, "plan_cache is NULL", K(ret));
+        } else if (!plan_cache->is_inited()) {
+          SERVER_LOG(INFO, "plan cache is not inited", K(ret));
+        } else if (OB_FAIL(plan_cache->foreach_cache_obj(*this))) {
+          SERVER_LOG(WARN, "fail to traverse plan cache obj", K(ret));
+        }
       }
     }
     if (OB_SUCC(ret)) {
       if (plan_id_array_.count() == 0) {
+        ret = OB_ITER_END;
       } else {
         uint64_t plan_id = 0;
-        MOD_SCOPE {
+        if (!share::g_server_modules_ready) {
+          ret = OB_ITER_END;
+        } else {
           ObPlanCache* plan_cache = share::g_mp->plan_cache();
           if (OB_ISNULL(plan_cache)) {
             ret = OB_ERR_UNEXPECTED;
             SERVER_LOG(WARN, "plan_cache is NULL", K(ret));
           } else if (OB_FAIL(plan_id_array_.pop_back(plan_id))) {
             SERVER_LOG(WARN, "failed to pop back plan id", K(ret));
-          } else if (OB_ISNULL(plan_cache)) {
-              ret = OB_ERR_UNEXPECTED;
-              SERVER_LOG(WARN, "plan_cache is NULL", K(ret));
           } else if (OB_FAIL(plan_cache->ref_cache_obj(plan_id, guard))) {
             if (ret == OB_HASH_NOT_EXIST) {
               ret = OB_SUCCESS;
@@ -312,11 +306,6 @@ int ObCacheObjIterator::next(ObCacheObjGuard &guard)
           } else {
             find = true;
           }
-        } else {
-          // tenant has been deleted, clear all plan id of the tenant
-          plan_id_array_.reuse();
-          ret = OB_SUCCESS;
-          SERVER_LOG(INFO, "fail to switch tenant, may be deleted", K(ret));
         }
       }
     }
@@ -324,7 +313,7 @@ int ObCacheObjIterator::next(ObCacheObjGuard &guard)
   return ret;
 }
 
-int ObPlanCachePlanExplain::set_tenant_plan_id(const common::ObIArray<common::ObNewRange> &ranges)
+int ObPlanCachePlanExplain::set_plan_id_filter(const common::ObIArray<common::ObNewRange> &ranges)
 {
   int ret = OB_SUCCESS;
   // display only one plan
@@ -356,18 +345,20 @@ int ObPlanCachePlanExplain::inner_open()
   int ret = OB_SUCCESS;
   ObPhysicalPlan *plan = NULL;
   static_engine_exp_visitor_.set_row_mem_attr();
-  if (OB_FAIL(set_tenant_plan_id(key_ranges_))) {
-    LOG_WARN("set tenant id and plan id failed", K(ret));
+  if (OB_FAIL(set_plan_id_filter(key_ranges_))) {
+    LOG_WARN("set plan id filter failed", K(ret));
   } else if (!scan_all_plan_) {
     ObPlanCache *plan_cache = NULL;
     // !!!Before referencing plan cache resources, ObReqTimeGuard must be added
     ObReqTimeGuard req_timeinfo_guard;
-    ObCacheObjGuard guard(PLAN_EXPLAIN_HANDLE);
+    ObCacheObjGuard guard;
     int tmp_ret = OB_SUCCESS;
-    {
-      MOD_SCOPE {
+    if (share::g_server_modules_ready) {
         plan_cache = share::g_mp->plan_cache();
-        if (OB_SUCCESS != (tmp_ret = plan_cache->ref_plan(plan_id_, guard))) {
+        if (OB_ISNULL(plan_cache)) {
+          ret = OB_ERR_UNEXPECTED;
+          SERVER_LOG(WARN, "plan_cache is NULL", K(ret));
+        } else if (OB_SUCCESS != (tmp_ret = plan_cache->ref_plan(plan_id_, guard))) {
           // should not panic
         } else if (FALSE_IT(plan = static_cast<ObPhysicalPlan*>(guard.get_cache_obj()))) {
           // do nothing
@@ -382,19 +373,6 @@ int ObPlanCachePlanExplain::inner_open()
         } else {
           // done
         }
-      } else {
-        // failed to switch tenant
-        ret = OB_SUCCESS;
-        SERVER_LOG(INFO, "fail to switch tenant, may be deleted", K(ret));
-      }
-    }
-  } else {
-    // scan all plan
-    if (OB_ISNULL(GCTX.omt_)) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "GCTX.omt_ is NULL", K(ret));
-    } else if (OB_FAIL(id_arr_.push_back(0))) {
-      SERVER_LOG(WARN, "failed to get all tenant id", K(ret));
     }
   }
 
@@ -419,7 +397,7 @@ int ObPlanCachePlanExplain::inner_get_next_row(common::ObNewRow *&row)
           if (scan_all_plan_) {
             ret = OB_SUCCESS;
             ObReqTimeGuard req_timeinfo_guard;
-            ObCacheObjGuard guard(PLAN_EXPLAIN_HANDLE);
+            ObCacheObjGuard guard;
             if (OB_FAIL(cache_obj_iterator_.next(guard))) {
               if (OB_ITER_END == ret) {
                 iter_end_ = true;

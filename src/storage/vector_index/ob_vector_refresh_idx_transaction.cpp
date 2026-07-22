@@ -141,10 +141,7 @@ int ObVectorRefreshIdxTransaction::start_transaction()
 {
   int ret = OB_SUCCESS;
   ObISQLConnection *conn = nullptr;
-  if (OB_UNLIKELY(false)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret));
-  } else if (OB_ISNULL(conn = get_connection())) {
+  if (OB_ISNULL(conn = get_connection())) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("conn_ is NULL", KR(ret));
   } else {

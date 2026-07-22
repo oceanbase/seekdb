@@ -46,7 +46,7 @@ public:
       const ObITable::TableKey &table_key,
       const ObMacroDataSeq &start_sequence,
       const int64_t row_offset,
-      const int64_t lob_start_seq = 0 /* Used to order LOB macro block metadata in shared storage mode. */);
+      const int64_t lob_start_seq = 0 /* Used to order LOB macro-block metadata. */);
   void reset();
   int append_row(const blocksstable::ObDatumRow &curr_row);
   int append_batch(const blocksstable::ObBatchDatumRows &curr_rows);

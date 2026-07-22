@@ -23,22 +23,6 @@ namespace oceanbase
 namespace sql
 {
 
-struct ObDataAccessPathExtraInfo : public ObIExprExtraInfo
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObDataAccessPathExtraInfo(common::ObIAllocator &alloc, ObExprOperatorType type)
-    : ObIExprExtraInfo(alloc, type)
-  {}
-  virtual ~ObDataAccessPathExtraInfo() {}
-  virtual int deep_copy(common::ObIAllocator &allocator,
-                        const ObExprOperatorType type,
-                        ObIExprExtraInfo *&copied_info) const override;
-  TO_STRING_KV(K(type_), K(data_access_path_));
-  ObString data_access_path_;
-};
-
-
 class ObExprGetPath: public ObFuncExprOperator
 {
 public:
@@ -69,5 +53,4 @@ private:
 }
 }
 #endif // OB_EXPR_GET_PATH_H
-
 

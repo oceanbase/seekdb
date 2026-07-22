@@ -37,8 +37,7 @@ protected:
   int inner_calc_scan_range(const ObIArray<blocksstable::ObDatumRange> *&ranges,
                             common::ObSEArray<blocksstable::ObDatumRange, 32> &cow_ranges,
                             int64_t curr_scan_index_,
-                            blocksstable::ObDatumRowkey &curr_rowkey,
-                            bool calc_di_base_range);
+                            blocksstable::ObDatumRowkey &curr_rowkey);
   virtual int construct_iters() override;
   virtual int inner_get_next_row(blocksstable::ObDatumRow &row);
   virtual int is_range_valid() const override;
@@ -48,8 +47,6 @@ protected:
 private:
   const ObIArray<blocksstable::ObDatumRange> *ranges_;
   common::ObSEArray<blocksstable::ObDatumRange, 32> cow_ranges_;
-  const ObIArray<blocksstable::ObDatumRange> *di_base_ranges_;
-  common::ObSEArray<blocksstable::ObDatumRange, 32> di_base_cow_ranges_;
 private:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObMultipleMultiScanMerge);

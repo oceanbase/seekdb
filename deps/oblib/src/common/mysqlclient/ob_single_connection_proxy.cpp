@@ -93,28 +93,6 @@ int ObSingleConnectionProxy::read(ReadResult &res, const char *sql, const int32_
   return ret;
 }
 
-int ObSingleConnectionProxy::read(ReadResult &res,
-    const int64_t cluster_id, const char *sql)
-{
-  int ret = OB_SUCCESS;
-  res.reset();
-  if (!check_inner_stat()) {
-    ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("check inner stat failed");
-  } else if (OB_FAIL(conn_->execute_read(cluster_id, sql, res))) {
-    errno_ = ret;
-    const int ERR_LOCK_WAIT_TIMEOUT = -1205;
-    if (ERR_LOCK_WAIT_TIMEOUT == ret) {
-      LOG_INFO("execute query failed", K(ret), K(sql), K_(conn), K(cluster_id));
-    } else {
-      LOG_WARN("execute query failed", K(ret), K(sql), K_(conn), K(cluster_id));
-    }
-  }
-  ++statement_count_;
-  LOG_TRACE("execute sql", K(sql), K(ret));
-  return ret;
-}
-
 int ObSingleConnectionProxy::write(
     const char *sql, const int32_t group_id, int64_t &affected_rows)
 {

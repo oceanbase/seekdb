@@ -17,9 +17,9 @@
 #ifndef OB_SQL_MEM_MGR_PROCESSOR_H
 #define OB_SQL_MEM_MGR_PROCESSOR_H
 
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/rc/ob_module_provider.h"
-#include "ob_tenant_sql_memory_manager.h"
+#include "ob_sql_memory_manager.h"
 #include "sql/engine/basic/ob_chunk_row_store.h"
 
 namespace oceanbase {
@@ -49,15 +49,15 @@ public:
     dummy_ptr_(nullptr), dummy_alloc_(nullptr) {}
   virtual ~ObSqlMemMgrProcessor() {}
 
-  void set_sql_mem_mgr(ObTenantSqlMemoryManager *sql_mem_mgr)
+  void set_sql_mem_mgr(ObSqlMemoryManager *sql_mem_mgr)
   {
     sql_mem_mgr_ = sql_mem_mgr;
   }
 
-  OB_INLINE ObTenantSqlMemoryManager *get_sql_mem_mgr()
+  OB_INLINE ObSqlMemoryManager *get_sql_mem_mgr()
   {
     if (nullptr == sql_mem_mgr_) {
-      sql_mem_mgr_ = share::g_mp->tenant_sql_memory_manager();
+      sql_mem_mgr_ = share::g_mp->sql_memory_manager();
       if (OB_NOT_NULL(sql_mem_mgr_)) {
         mem_callback_ = sql_mem_mgr_->get_sql_memory_callback();
       }
@@ -190,7 +190,7 @@ private:
   static const int64_t EXTEND_RATIO = 10;
   ObSqlWorkAreaProfile &profile_;
   ObMonitorNode *op_monitor_info_;
-  ObTenantSqlMemoryManager *sql_mem_mgr_;
+  ObSqlMemoryManager *sql_mem_mgr_;
   ObSqlMemoryCallback *mem_callback_;
   int64_t periodic_cnt_;
   int64_t origin_max_mem_size_;

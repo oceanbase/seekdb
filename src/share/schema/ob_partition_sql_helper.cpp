@@ -20,7 +20,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "share/ob_tenant_timezone_mgr.h"
+#include "share/ob_timezone_mgr.h"
 #include "lib/net/ob_addr.h"
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_level.h"
@@ -74,8 +74,8 @@ int ObPartDMLGenerator::gen_high_bound_val_str(
   //TODO:@yanhua add session timezone_info is better
   ObTimeZoneInfo tz_info;
   tz_info.set_offset(0);
-  if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tz_info.get_tz_map_wrap()))) {
-    LOG_WARN("get tenant timezone map failed", K(ret));
+  if (OB_FAIL(OTTZ_MGR.get_timezone_map(tz_info.get_tz_map_wrap()))) {
+    LOG_WARN("get time zone map failed", K(ret));
   } else if (OB_FAIL(ObPartitionUtils::convert_rowkey_to_sql_literal(
              high_bound_val, high_bound_val_,
              OB_MAX_B_HIGH_BOUND_VAL_LENGTH, pos, false, &tz_info))) {
@@ -106,8 +106,8 @@ int ObPartDMLGenerator::gen_list_val_str(
   //TODO:@yanhua add session timezone_info is better
   ObTimeZoneInfo tz_info;
   tz_info.set_offset(0);
-  if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tz_info.get_tz_map_wrap()))) {
-    LOG_WARN("get tenant timezone map failed", K(ret));
+  if (OB_FAIL(OTTZ_MGR.get_timezone_map(tz_info.get_tz_map_wrap()))) {
+    LOG_WARN("get time zone map failed", K(ret));
   } else if (OB_FAIL(ObPartitionUtils::convert_rows_to_sql_literal(
              list_value, list_val_,
              OB_MAX_B_PARTITION_EXPR_LENGTH, pos, false, &tz_info))) {
@@ -683,8 +683,8 @@ int ObAddPartInfoHelper::add_high_bound_val_column(
     if (OB_ISNULL(table)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("table ptr is null", KR(ret));
-    } else if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tz_info.get_tz_map_wrap()))) {
-      LOG_WARN("get tenant timezone map failed", KR(ret));
+    } else if (OB_FAIL(OTTZ_MGR.get_timezone_map(tz_info.get_tz_map_wrap()))) {
+      LOG_WARN("get time zone map failed", KR(ret));
     } else if (OB_FAIL(ObPartitionUtils::convert_rowkey_to_sql_literal(
                part_option.get_high_bound_val(), high_bound_val_,
                OB_MAX_B_HIGH_BOUND_VAL_LENGTH, pos, false, &tz_info))) {
@@ -730,8 +730,8 @@ int ObAddPartInfoHelper::add_list_val_column(
     if (OB_ISNULL(table)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("table ptr is null", KR(ret));
-    } else if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tz_info.get_tz_map_wrap()))) {
-      LOG_WARN("get tenant timezone map failed", K(ret));
+    } else if (OB_FAIL(OTTZ_MGR.get_timezone_map(tz_info.get_tz_map_wrap()))) {
+      LOG_WARN("get time zone map failed", K(ret));
     } else if (OB_FAIL(ObPartitionUtils::convert_rows_to_sql_literal(
                part_option.get_list_row_values(), list_val_,
                OB_MAX_B_PARTITION_EXPR_LENGTH, pos, false, &tz_info))) {
@@ -872,17 +872,6 @@ int ObAddIncSubPartDMLGenerator::convert_to_dml(const PartInfo &part_info, ObDML
       || OB_FAIL(dml.add_column("tablet_id", part_info.tablet_id_.id()))) {
     LOG_WARN("dml add part info failed", K(ret));
   }
-  if (OB_SUCC(ret)) {
-    const char *part_policy = nullptr;
-    if (OB_FAIL(storage::ObStorageCacheGlobalPolicy::safely_get_str(part_info.part_storage_cache_policy_type_, part_policy))) {
-      LOG_WARN("get part policy failed", K(ret), K(part_info.part_storage_cache_policy_type_));
-    } else if (OB_ISNULL(part_policy)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("part policy is null", K(ret));
-    } else if (OB_FAIL(dml.add_column("storage_cache_policy", part_policy))) {
-      LOG_WARN("add part info column failed", K(ret));
-    }
-  }
   if (OB_FAIL(ret)) {
     //nothing todo
   }
@@ -910,12 +899,6 @@ int ObAddIncSubPartDMLGenerator::extract_part_info(PartInfo &part_info)
     part_info.sub_part_idx_ = sub_part_.get_sub_part_idx();
     part_info.partition_type_ = sub_part_.get_partition_type();
     part_info.tablet_id_ = sub_part_.get_tablet_id();
-    part_info.part_storage_cache_policy_type_ = storage::ObStorageCacheGlobalPolicy::NONE_POLICY;
-
-    if (OB_FAIL(ret)) {
-    } else if (storage::ObStorageCacheGlobalPolicy::is_valid(sub_part_.get_part_storage_cache_policy_type())) {
-      part_info.part_storage_cache_policy_type_ = sub_part_.get_part_storage_cache_policy_type();
-    }
     if (OB_FAIL(ret)) {
     } else if (ori_table_->is_range_subpart()) {
       if (OB_FAIL(gen_high_bound_val_str(sub_part_.get_high_bound_val(),
@@ -972,22 +955,6 @@ int ObAddIncPartDMLGenerator::convert_to_dml(const PartInfo &part_info, ObDMLSql
       || OB_FAIL(dml.add_column("tablet_id", part_info.tablet_id_.id()))) {
     LOG_WARN("dml add part info failed", K(ret));
   }
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(dml.add_column("external_location", ObHexEscapeSqlStr(part_info.external_location_)))) {
-      LOG_WARN("add part info column failed", K(ret));
-    }
-  }
- if (OB_SUCC(ret)) {
-    const char *part_policy = nullptr;
-    if (OB_FAIL(storage::ObStorageCacheGlobalPolicy::safely_get_str(part_info.part_storage_cache_policy_type_, part_policy))) {
-      LOG_WARN("get part policy failed", K(ret), K(part_info.part_storage_cache_policy_type_));
-    } else if (OB_ISNULL(part_policy)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("part policy is null", K(ret), K(part_policy));
-    } else if (OB_FAIL(dml.add_column("storage_cache_policy", part_policy))) {
-      LOG_WARN("add part info column failed", K(ret));
-    }
-  }
   if (OB_FAIL(ret)) {
     //nothing todo
   }
@@ -1015,8 +982,6 @@ int ObAddIncPartDMLGenerator::extract_part_info(PartInfo &part_info)
     part_info.part_idx_ = part_.get_part_idx();
     part_info.partition_type_ = part_.get_partition_type();
     part_info.tablet_id_ = part_.get_tablet_id();
-    part_info.part_storage_cache_policy_type_ = storage::ObStorageCacheGlobalPolicy::NONE_POLICY;
-
     if (OB_FAIL(ret)) {
     } else if (!ori_table_->is_interval_part() || !part_.get_part_name().empty()) {
       part_info.part_name_ = part_.get_part_name();
@@ -1024,14 +989,6 @@ int ObAddIncPartDMLGenerator::extract_part_info(PartInfo &part_info)
       LOG_WARN("fail to gen_interval_part_name", K(ret));
     }
 
-    if (OB_FAIL(ret)) {
-    } else if (!part_.get_external_location().empty()) {
-      part_info.external_location_ = part_.get_external_location();
-    }
-    if (OB_FAIL(ret)) {
-    } else if (storage::ObStorageCacheGlobalPolicy::is_valid(part_.get_part_storage_cache_policy_type())) {
-      part_info.part_storage_cache_policy_type_ = part_.get_part_storage_cache_policy_type();
-    }
     if (OB_FAIL(ret)) {
     } else if (ori_table_->is_range_part()) {
       if (OB_FAIL(gen_high_bound_val_str(part_.get_high_bound_val(),

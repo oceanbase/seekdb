@@ -28,7 +28,7 @@
 #include "sql/session/ob_sql_session_mgr.h"
 #include "sql/engine/expr/ob_expr_vector.h"
 #include "sql/engine/expr/ob_expr_vector_similarity.h"
-#include "storage/allocator/ob_tenant_vector_allocator.h"
+#include "storage/allocator/ob_vector_allocator.h"
 
 namespace oceanbase {
 namespace share {

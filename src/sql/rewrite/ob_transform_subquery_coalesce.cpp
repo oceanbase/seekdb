@@ -1732,7 +1732,7 @@ int ObTransformSubqueryCoalesce::get_subquery_assign_exprs(ObIArray<ObRawExpr*> 
         LOG_WARN("unexpect null stmt", K(ret));
       } else if (!query_ref_expr->is_scalar()) {
         //do nothing
-      } else if (stmt->has_limit() || stmt->has_distinct() || stmt->is_set_stmt() || stmt->has_sequence()) {
+      } else if (stmt->has_limit() || stmt->has_distinct() || stmt->is_set_stmt()) {
         //stmt can not coalesce,do nothing
       } else if (ObOptimizerUtil::find_item(subqueries, stmt)) {
         //do nothing
@@ -1751,7 +1751,7 @@ int ObTransformSubqueryCoalesce::get_subquery_assign_exprs(ObIArray<ObRawExpr*> 
         if (OB_ISNULL(stmt)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpect null stmt", K(ret));
-        } else if (stmt->has_limit() || stmt->has_distinct() || stmt->is_set_stmt() || stmt->has_sequence()) {
+        } else if (stmt->has_limit() || stmt->has_distinct() || stmt->is_set_stmt()) {
           //stmt can not coalesce,do nothing
         } else if (ObOptimizerUtil::find_item(subqueries, stmt)) {
           //do nothing

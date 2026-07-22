@@ -177,15 +177,11 @@ ObStorageSchema::ObStorageSchema()
     block_size_(0),
     progressive_merge_round_(0),
     progressive_merge_num_(0),
-    master_key_id_(INVALID_ID),
     compressor_type_(ObCompressorType::NONE_COMPRESSOR),
-    encryption_(),
-    encrypt_key_(),
     rowkey_array_(),
     column_array_(),
     skip_idx_attr_array_(),
     store_column_cnt_(0),
-    merge_engine_type_(ObMergeEngineType::OB_MERGE_ENGINE_PARTIAL_UPDATE),
     semistruct_encoding_type_(),
     is_inited_(false)
 {
@@ -197,15 +193,11 @@ ObStorageSchema::~ObStorageSchema()
 }
 
 // move storage_schema_version calculation here
-int ObStorageSchema::set_storage_schema_version(const uint64_t tenant_data_version)
+int ObStorageSchema::set_storage_schema_version(const uint64_t data_format_version)
 {
   int ret = OB_SUCCESS;
-  if (tenant_data_version < DATA_VERSION_1_0_0_0) {
-    ret = OB_NOT_SUPPORTED;
-    STORAGE_LOG(WARN, "tenant data version not supported", K(ret));
-  } else {
-    storage_schema_version_ = STORAGE_SCHEMA_VERSION_LATEST;
-  }
+  UNUSED(data_format_version);
+  storage_schema_version_ = STORAGE_SCHEMA_VERSION_LATEST;
   return ret;
 }
 
@@ -213,7 +205,7 @@ int ObStorageSchema::init(
     common::ObIAllocator &allocator,
     const ObTableSchema &input_schema,
     const bool skip_column_info/* = false*/,
-    const uint64_t tenant_data_version/* = DATA_CURRENT_VERSION */)
+    const uint64_t data_format_version/* = DATA_CURRENT_VERSION */)
 {
   int ret = OB_SUCCESS;
 
@@ -231,16 +223,14 @@ int ObStorageSchema::init(
     rowkey_array_.set_allocator(&allocator);
     column_array_.set_allocator(&allocator);
     skip_idx_attr_array_.set_allocator(&allocator);
-    if (OB_FAIL(set_storage_schema_version(tenant_data_version))) {
-      STORAGE_LOG(WARN, "cal storage schema version failed, not suppert this tenant data version", K(ret), K(tenant_data_version));
+    if (OB_FAIL(set_storage_schema_version(data_format_version))) {
+      STORAGE_LOG(WARN, "failed to calculate storage schema version; unsupported data format version", K(ret), K(data_format_version));
     }
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(generate_str(input_schema))) {
-    STORAGE_LOG(WARN, "failed to generate string", K(ret), K(input_schema));
   } else if (OB_FAIL(generate_column_array(input_schema))) {
-    STORAGE_LOG(WARN, "failed to generate column array", K(ret), K(input_schema), K(tenant_data_version));
+    STORAGE_LOG(WARN, "failed to generate column array", K(ret), K(input_schema), K(data_format_version));
   }
 
   if (OB_FAIL(ret)) {
@@ -248,7 +238,6 @@ int ObStorageSchema::init(
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(ERROR, "storage schema is invalid", K(ret));
   } else {
-    enable_macro_block_bloom_filter_ = input_schema.get_enable_macro_block_bloom_filter();
     is_inited_ = true;
   }
 
@@ -294,11 +283,7 @@ int ObStorageSchema::init(
     column_cnt_ = old_schema.column_cnt_;
     store_column_cnt_ = old_schema.store_column_cnt_;
 
-    if (OB_FAIL(deep_copy_str(old_schema.encryption_, encryption_))) {
-      STORAGE_LOG(WARN, "failed to deep copy encryption", K(ret), K(old_schema));
-    } else if (OB_FAIL(deep_copy_str(old_schema.encrypt_key_, encrypt_key_))) {
-      STORAGE_LOG(WARN, "failed to deep copy encryption key", K(ret), K(old_schema));
-    } else if (OB_FAIL(rowkey_array_.reserve(old_schema.rowkey_array_.count()))) {
+    if (OB_FAIL(rowkey_array_.reserve(old_schema.rowkey_array_.count()))) {
       STORAGE_LOG(WARN, "failed to reserve for rowkey array", K(ret), K(old_schema));
     } else if (OB_FAIL(rowkey_array_.assign(old_schema.rowkey_array_))) {
       STORAGE_LOG(WARN, "failed to copy row key array", K(ret), K(old_schema));
@@ -317,7 +302,6 @@ int ObStorageSchema::init(
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(ERROR, "storage schema is invalid", K(ret));
     } else {
-      enable_macro_block_bloom_filter_ = old_schema.get_enable_macro_block_bloom_filter();
       is_inited_ = true;
     }
   }
@@ -408,13 +392,8 @@ void ObStorageSchema::reset()
   block_size_ = 0;
   progressive_merge_round_ = 0;
   progressive_merge_num_ = 0;
-  master_key_id_ = INVALID_ID;
   compressor_type_ = ObCompressorType::NONE_COMPRESSOR;
-  merge_engine_type_ = ObMergeEngineType::OB_MERGE_ENGINE_PARTIAL_UPDATE;
   if (nullptr != allocator_) {
-    reset_string(encryption_);
-    reset_string(encrypt_key_);
-
     rowkey_array_.reset();
     for (int i = 0; i < column_array_.count(); ++i) {
       column_array_.at(i).destroy(*allocator_);
@@ -492,10 +471,7 @@ int ObStorageSchema::serialize(char *buf, const int64_t buf_len, int64_t &pos) c
         block_size_,
         progressive_merge_round_,
         progressive_merge_num_,
-        master_key_id_,
-        compressor_type_,
-        encryption_,
-        encrypt_key_);
+        compressor_type_);
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(serialize_schema_array(buf, buf_len, pos, rowkey_array_))){
       STORAGE_LOG(WARN, "failed to serialize rowkey columns", K_(rowkey_array));
@@ -506,7 +482,6 @@ int ObStorageSchema::serialize(char *buf, const int64_t buf_len, int64_t &pos) c
     } else if (OB_FAIL(serialize_schema_array(buf, buf_len, pos, skip_idx_attr_array_))){
       STORAGE_LOG(WARN, "failed to serialize skip idx attr array", K_(skip_idx_attr_array));
     } else {
-      OB_UNIS_ENCODE(merge_engine_type_);
       OB_UNIS_ENCODE(semistruct_encoding_type_);
     }
   } else {
@@ -560,8 +535,6 @@ int ObStorageSchema::deserialize(
   } else if (OB_FAIL(serialization::decode(buf, data_len, pos, storage_schema_version_))) {
     STORAGE_LOG(WARN, "failed to deserialize version", K(ret), K(data_len), K(pos));
   } else if (STORAGE_SCHEMA_VERSION_LATEST == storage_schema_version_) {
-    ObString tmp_encryption;
-    ObString tmp_encrypt_key;
     LST_DO_CODE(OB_UNIS_DECODE,
         info_,
         table_type_,
@@ -575,15 +548,8 @@ int ObStorageSchema::deserialize(
         block_size_,
         progressive_merge_round_,
         progressive_merge_num_,
-        master_key_id_,
-        compressor_type_,
-        tmp_encryption,
-        tmp_encrypt_key);
+        compressor_type_);
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(deep_copy_str(tmp_encryption, encryption_))) {
-      STORAGE_LOG(WARN, "failed to deep copy string", K(ret), K(tmp_encryption));
-    } else if (OB_FAIL(deep_copy_str(tmp_encrypt_key, encrypt_key_))) {
-      STORAGE_LOG(WARN, "failed to deep copy string", K(ret), K(tmp_encrypt_key));
     } else if (OB_FAIL(deserialize_rowkey_column_array(buf, data_len, pos))){
       STORAGE_LOG(WARN, "failed to deserialize rowkey columns", K(ret), K_(rowkey_array));
     } else if (!column_info_simplified_ && OB_FAIL(deserialize_column_array(allocator, buf, data_len, pos))){
@@ -593,7 +559,6 @@ int ObStorageSchema::deserialize(
     } else if (OB_FAIL(deserialize_skip_idx_attr_array(buf, data_len, pos))) {
       STORAGE_LOG(WARN, "failed to deserialize skip idx attr array", K(ret));
     } else {
-      OB_UNIS_DECODE(merge_engine_type_);
       OB_UNIS_DECODE(semistruct_encoding_type_);
     }
 
@@ -742,10 +707,7 @@ int64_t ObStorageSchema::get_serialize_size() const
       block_size_,
       progressive_merge_round_,
       progressive_merge_num_,
-      master_key_id_,
-      compressor_type_,
-      encryption_,
-      encrypt_key_);
+      compressor_type_);
   len += get_array_serialize_length(rowkey_array_);
   //get columms size
   if (!column_info_simplified_) {
@@ -753,20 +715,8 @@ int64_t ObStorageSchema::get_serialize_size() const
   }
   len += serialization::encoded_length_i64(store_column_cnt_);
   len += get_array_serialize_length(skip_idx_attr_array_);
-  OB_UNIS_ADD_LEN(merge_engine_type_);
   OB_UNIS_ADD_LEN(semistruct_encoding_type_);
   return len;
-}
-
-int ObStorageSchema::generate_str(const ObTableSchema &input_schema)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(deep_copy_str(input_schema.get_encryption_str(), encryption_))) {
-    STORAGE_LOG(WARN, "failed to deep copy string", K(ret), K(*this));
-  } else if (OB_FAIL(deep_copy_str(input_schema.get_encrypt_key(), encrypt_key_))) {
-    STORAGE_LOG(WARN, "failed to deep copy string", K(ret), K(*this));
-  }
-  return ret;
 }
 
 int ObStorageSchema::generate_column_array(const ObTableSchema &input_schema)
@@ -1032,26 +982,6 @@ int ObStorageSchema::get_skip_index_col_attr(
   return ret;
 }
 
-int ObStorageSchema::get_encryption_id(int64_t &encrypt_id) const
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    STORAGE_LOG(WARN, "not inited", K(ret), K_(is_inited));
-  } else if (OB_FAIL(share::ObEncryptionUtil::parse_encryption_id(encryption_, encrypt_id))) {
-    STORAGE_LOG(WARN, "failed to parse_encryption_id", K(ret), K(encryption_));
-  }
-  return ret;
-}
-
-bool ObStorageSchema::need_encrypt() const {
-  bool ret = false;
-  if (0 != encryption_.length() && 0 != encryption_.case_compare("none")) {
-    ret = true;
-  }
-  return ret;
-}
-
 int ObStorageSchema::get_stored_column_count_in_sstable(int64_t &column_count) const
 {
   int ret = OB_SUCCESS;
@@ -1237,7 +1167,6 @@ int ObStorageSchema::copy_from(const share::schema::ObMergeSchema &input_schema)
   if (OB_FAIL(input_schema.get_semistruct_encoding_type(semistruct_encoding_type_))) {
     STORAGE_LOG(WARN, "Fail to get semistruct encoding options", K(ret));
   } else {
-    is_use_bloomfilter_ = input_schema.is_use_bloomfilter();
     table_type_ = input_schema.get_table_type();
     table_mode_ = input_schema.get_table_mode_struct();
     index_type_ = input_schema.get_index_type();
@@ -1249,44 +1178,10 @@ int ObStorageSchema::copy_from(const share::schema::ObMergeSchema &input_schema)
     block_size_ = input_schema.get_block_size();
     progressive_merge_round_ = input_schema.get_progressive_merge_round();
     progressive_merge_num_ = input_schema.get_progressive_merge_num();
-    master_key_id_ = input_schema.get_master_key_id();
     compressor_type_ = input_schema.get_compressor_type();
-    merge_engine_type_ = input_schema.get_merge_engine_type();
   }
 
   return ret;
-}
-
-int ObStorageSchema::deep_copy_str(const ObString &src, ObString &dest)
-{
-  int ret = OB_SUCCESS;
-  char *buf = NULL;
-
-  if (src.length() > 0) {
-    int64_t len = src.length() + 1;
-    if (OB_ISNULL(src.ptr())) {
-      ret = OB_INVALID_ARGUMENT;
-      STORAGE_LOG(WARN, "The src is NULL", K(ret), K(src));
-    } else if (OB_ISNULL(buf = static_cast<char *>(allocator_->alloc(len)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      STORAGE_LOG(WARN, "Fail to allocate memory", K(ret), K(src.length()));
-    } else {
-      MEMCPY(buf, src.ptr(), len - 1);
-      buf[len - 1] = '\0';
-      dest.assign_ptr(buf, static_cast<ObString::obstr_size_t>(len-1));
-    }
-  } else {
-    dest.reset();
-  }
-  return ret;
-}
-
-void ObStorageSchema::reset_string(ObString &str)
-{
-  if (NULL != str.ptr() && 0 != str.length()) {
-    allocator_->free(str.ptr());
-  }
-  str.reset();
 }
 
 void ObStorageSchema::update_column_cnt(const int64_t input_col_cnt)
@@ -1338,10 +1233,10 @@ int ObCreateTabletSchema::init(
     common::ObIAllocator &allocator,
     const share::schema::ObTableSchema &input_schema,
     const bool skip_column_info,
-    const uint64_t tenant_data_version)
+    const uint64_t data_format_version)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObStorageSchema::init(allocator, input_schema, skip_column_info, tenant_data_version))) {
+  if (OB_FAIL(ObStorageSchema::init(allocator, input_schema, skip_column_info, data_format_version))) {
     STORAGE_LOG(WARN, "failed to init", K(ret), KPC(this));
   } else {
     table_id_ = input_schema.get_table_id();

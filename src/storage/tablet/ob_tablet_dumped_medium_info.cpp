@@ -534,8 +534,6 @@ int64_t ObTabletDumpedMediumInfo::simple_to_string(char* buf, const int64_t buf_
       } else {
         databuff_printf(buf, buf_len, pos, "{");
         databuff_print_json_kv(buf, buf_len, pos, "i", i);
-        databuff_print_json_kv_comma(buf, buf_len, pos, "medium_compat_version", info->medium_compat_version_);
-        databuff_print_json_kv_comma(buf, buf_len, pos, "cluster_id", info->cluster_id_);
         databuff_print_json_kv_comma(buf, buf_len, pos, "data_version", info->data_version_);
         databuff_print_json_kv_comma(buf, buf_len, pos, "medium_snapshot", info->medium_snapshot_);
         databuff_printf(buf, buf_len, pos, "}");

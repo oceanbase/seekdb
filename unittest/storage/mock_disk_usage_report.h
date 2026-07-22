@@ -30,7 +30,7 @@ class MockDiskUsageReport : public observer::ObIDiskReport
 public:
   MockDiskUsageReport() {}
   virtual ~MockDiskUsageReport() {}
-  virtual int delete_tenant_usage_stat() override
+  virtual int delete_usage_stat() override
   {
     return OB_SUCCESS;
   }

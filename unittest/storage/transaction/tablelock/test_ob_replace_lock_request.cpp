@@ -15,24 +15,12 @@
  */
 
 #define UNITTEST_DEBUG
+#include "common/ob_version_def.h"
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
 #include <gtest/gtest.h>
 
 namespace oceanbase
 {
-namespace transaction
-{
-namespace tablelock
-{
-int ObTableLockOwnerID::get_data_version_(uint64_t &data_version) const
-{
-  int ret = OB_SUCCESS;
-  data_version = DATA_CURRENT_VERSION;
-  return ret;
-}
-}
-}
-
 namespace unittest
 {
 using namespace common;

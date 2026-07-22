@@ -76,8 +76,6 @@ private:
   int64_t filt_del_count_;
   const blocksstable::ObDatumRange *range_;
   blocksstable::ObDatumRange cow_range_;
-  const blocksstable::ObDatumRange *di_base_range_;
-  blocksstable::ObDatumRange di_base_cow_range_;
 
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObMultipleScanMerge);

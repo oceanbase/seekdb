@@ -18,12 +18,11 @@
 
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "rootserver/ob_bootstrap.h"
-//(removed deleted node_balancer)  // previously hidden behind a transitive include, make the dependency explicit
 #include "share/rc/ob_module_provider.h"
 
 #include "share/ob_global_stat_proxy.h"
 #include "rootserver/ob_table_creator.h"
-#include "rootserver/ob_root_service.h"
+#include "rootserver/ob_local_management_service.h"
 #include "share/inner_table/ob_load_inner_table_schema.h"
 #include "rootserver/ob_load_inner_table_schema_executor.h"
 #include "src/logservice/ob_server_log_block_mgr.h"
@@ -33,7 +32,6 @@
 #include "rootserver/ob_partition_creator.h"
 #include "share/ob_version.h" // for get_package_and_svn
 #include "observer/ob_service.h" // for ObService
-#include "share/ob_all_tenant_info.h" // ObAllTenantInfoProxy
 #include "share/ob_server_struct.h" // GCTX
 
 namespace oceanbase
@@ -76,8 +74,6 @@ int ObPreBootstrap::prepare_bootstrap(ObAddr &master_rs)
     LOG_WARN("check_inner_stat failed", KR(ret));
   } else if (OB_FAIL(check_server_is_empty())) {
     LOG_WARN("failed to check bootstrap stat", KR(ret));
-  } else if (OB_FAIL(notify_sys_tenant_config_())) {
-    LOG_WARN("fail to notify sys tenant config", KR(ret));
   } else if (OB_FAIL(create_ls())) {
     LOG_WARN("failed to create core table partition", KR(ret));
   } else {
@@ -88,37 +84,21 @@ int ObPreBootstrap::prepare_bootstrap(ObAddr &master_rs)
     LOG_DBA_ERROR_V2(OB_BOOTSTRAP_PREPARE_FAIL, ret, "bootstrap prepare fail. "
                      "you may find solutions in previous error logs or seek help from official technicians.");
   } else {
-    LOG_DBA_INFO_V2(OB_BOOTSTRAP_PREPARE_SUCCESS, "bootstrap prepare success.", "server_id", GCTX.get_server_id());
+    LOG_DBA_INFO_V2(OB_BOOTSTRAP_PREPARE_SUCCESS, "bootstrap prepare success.");
   }
-  return ret;
-}
-
-int ObPreBootstrap::notify_sys_tenant_config_()
-{
-  int ret = OB_SUCCESS;
-  common::ObConfigPairs config;
-  common::ObSEArray<common::ObConfigPairs, 1> init_configs;
-  if (OB_FAIL(ObTenantDDLService::gen_tenant_init_config(DATA_CURRENT_VERSION, config))) {
-  } else if (OB_FAIL(init_configs.push_back(config))) {
-    LOG_WARN("fail to push back config", KR(ret), K(config));
-  } else if (OB_FAIL(ObTenantDDLService::notify_init_tenant_config(init_configs))) {
-    LOG_WARN("fail to notify init tenant config", KR(ret), K(init_configs));
-  }
-
-  BOOTSTRAP_CHECK_SUCCESS();
   return ret;
 }
 
 int ObPreBootstrap::create_ls()
 {
   int ret = OB_SUCCESS;
-  MOD_SCOPE {
+  SERVER_MODULE_SCOPE {
     ObLSService *ls_svr = share::g_mp->ls_service();
     if (OB_FAIL(check_inner_stat())) {
       LOG_WARN("fail to check inner stat", KR(ret));
     } else if (OB_ISNULL(ls_svr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("mtl ObLSService should not be null", K(ret));
+      LOG_WARN("runtime ObLSService should not be null", K(ret));
     } else if (OB_FAIL(ls_svr->create_ls())) {
       LOG_WARN("failed create log stream", KR(ret));
     } else {
@@ -132,24 +112,20 @@ int ObPreBootstrap::create_ls()
 int ObPreBootstrap::check_server_is_empty()
 {
   int ret = OB_SUCCESS;
-  Bool is_server_empty;
-  ObCheckServerEmptyArg arg;
-  uint64_t server_id = OB_INIT_SERVER_ID;
-  const ObCheckServerEmptyArg::Mode mode = ObCheckServerEmptyArg::BOOTSTRAP;
-  const uint64_t data_version = DATA_CURRENT_VERSION;
+  bool is_server_empty = false;
 
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("check_inner_stat failed", K(ret));
   } else if (OB_ISNULL(GCTX.ob_service_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.ob_service_));
-  } else if (OB_FAIL(arg.init(mode, data_version, server_id))) {
-    LOG_WARN("failed to init ObCheckServerEmptyArg", KR(ret), K(mode), K(data_version), K(server_id));
-  } else if (OB_FAIL(GCTX.ob_service_->check_server_empty(arg, is_server_empty))) {
-    LOG_WARN("failed to check if server is empty", KR(ret), K(arg));
+  } else if (OB_FAIL(GCTX.ob_service_->check_server_empty(is_server_empty))) {
+    LOG_WARN("failed to check if server is empty", KR(ret));
   } else if (!is_server_empty) {
     ret = OB_INIT_TWICE;
     LOG_WARN("cannot do bootstrap on not empty server", KR(ret));
+  } else {
+    GCTX.in_bootstrap_ = true;
   }
   BOOTSTRAP_CHECK_SUCCESS();
   return ret;
@@ -192,11 +168,11 @@ bool ObBootstrap::TableIdCompare::operator() (const ObSimpleTableSchemaV2* left,
 
 ObBootstrap::ObBootstrap(
     ObDDLService &ddl_service,
-    ObTenantDDLService &tenant_ddl_service,
+    ObRuntimeDDLService &runtime_ddl_service,
     ObServerConfig &config)
   : ObBaseBootstrap(config),
     ddl_service_(ddl_service),
-    tenant_ddl_service_(tenant_ddl_service),
+    runtime_ddl_service_(runtime_ddl_service),
     begin_ts_(0)
 {
 }
@@ -227,8 +203,8 @@ int ObBootstrap::execute_bootstrap()
     LOG_WARN("failed to init_global_stat", K(ret));
   } else if (OB_FAIL(construct_all_schema(table_schemas, arena_allocator))) {
     LOG_WARN("failed to construct all schema", K(ret));
-  } else if (OB_FAIL(broadcast_sys_schema(table_schemas))) {
-    LOG_WARN("broadcast_sys_schema failed", K(ret));
+  } else if (OB_FAIL(publish_sys_schema(table_schemas))) {
+    LOG_WARN("publish_sys_schema failed", K(ret));
   } else if (OB_FAIL(partition_creator.init(this, &table_schemas))) {
     LOG_WARN("failed to init async partition creator", K(ret));
   } else if (OB_FAIL(partition_creator.submit_create_partitions_task())) {
@@ -279,7 +255,7 @@ int ObBootstrap::execute_bootstrap()
   }
   BOOTSTRAP_CHECK_SUCCESS_V2("refresh_schema");
 
-  ROOTSERVICE_EVENT_ADD("bootstrap", "bootstrap_succeed");
+  MANAGEMENT_EVENT_ADD("bootstrap", "bootstrap_succeed");
   BOOTSTRAP_CHECK_SUCCESS();
   return ret;
 }
@@ -417,7 +393,6 @@ int ObBootstrap::prepare_create_partition(
     const share::schema_create_func func)
 {
   int ret = OB_SUCCESS;
-  ObArray<ObUnit> units;
   ObTableSchema tschema;
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("check_inner_stat failed", KR(ret));
@@ -655,16 +630,16 @@ int ObBootstrap::construct_all_schema(ObSArray<ObTableSchema> &table_schemas, Ob
   return ret;
 }
 
-int ObBootstrap::broadcast_sys_schema(const ObSArray<ObTableSchema> &table_schemas)
+int ObBootstrap::publish_sys_schema(const ObSArray<ObTableSchema> &table_schemas)
 {
   int ret = OB_SUCCESS;
   ObMultiVersionSchemaService &schema_service = ddl_service_.get_schema_service();
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("failed to check_inner_stat", KR(ret));
-  } else if (OB_FAIL(schema_service.broadcast_tenant_schema(table_schemas))) {
-    LOG_WARN("failed to broadcast tenant schema", KR(ret));
+  } else if (OB_FAIL(schema_service.broadcast_runtime_schema(table_schemas))) {
+    LOG_WARN("failed to publish runtime schema", KR(ret));
   } else {
-    LOG_INFO("successfully broadcast sys schema");
+    LOG_INFO("successfully published sys schema");
   }
   BOOTSTRAP_CHECK_SUCCESS();
   return ret;
@@ -754,10 +729,10 @@ int ObBootstrap::check_is_already_bootstrap(bool &is_bootstrap)
   ObSchemaGetterGuard guard;
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("check_inner_stat failed", K(ret));
-  } else if (OB_FAIL(schema_service.get_tenant_schema_guard(guard))) {
+  } else if (OB_FAIL(schema_service.get_runtime_schema_guard(guard))) {
     LOG_WARN("get_schema_manager failed", K(ret));
   } else if (OB_FAIL(guard.get_schema_version(schema_version))) {
-    LOG_WARN("fail to get tenant schema version", K(ret));
+    LOG_WARN("fail to get runtime schema version", K(ret));
   } else if (OB_CORE_SCHEMA_VERSION == schema_version) {
     is_bootstrap = false;
   } else {
@@ -780,7 +755,6 @@ int ObBootstrap::init_global_stat()
     LOG_WARN("check_inner_stat failed", KR(ret));
   } else {
     const int64_t baseline_schema_version = OB_INVALID_VERSION; // OB_INVALID_VERSION == -1
-    const int64_t rootservice_epoch = 0;
     const SCN snapshot_gc_scn = SCN::min_scn();
     const int64_t snapshot_gc_timestamp = 0;
     const int64_t ddl_epoch = 0;
@@ -793,10 +767,9 @@ int ObBootstrap::init_global_stat()
       LOG_WARN("schema_status_proxy is null", KR(ret));
     } else if (OB_FAIL(global_stat_proxy.set_init_value(
                OB_CORE_SCHEMA_VERSION, OB_CORE_SCHEMA_VERSION, baseline_schema_version,
-               rootservice_epoch, snapshot_gc_scn, snapshot_gc_timestamp, ddl_epoch,
-               DATA_CURRENT_VERSION, DATA_CURRENT_VERSION, DATA_CURRENT_VERSION))) {
+               snapshot_gc_scn, snapshot_gc_timestamp, ddl_epoch))) {
       LOG_WARN("set_init_value failed", KR(ret), "schema_version", OB_CORE_SCHEMA_VERSION,
-               K(baseline_schema_version), K(rootservice_epoch), K(ddl_epoch), "data_version", DATA_CURRENT_VERSION);
+               K(baseline_schema_version), K(ddl_epoch));
     }
 
     int temp_ret = OB_SUCCESS;
@@ -807,10 +780,10 @@ int ObBootstrap::init_global_stat()
 
     // Initializes a new state of refresh schema
     if (OB_SUCC(ret)) {
-      ObRefreshSchemaStatus tenant_status(OB_INVALID_TIMESTAMP,
+      ObRefreshSchemaStatus runtime_status(OB_INVALID_TIMESTAMP,
           OB_INVALID_VERSION);
-      if (OB_FAIL(schema_status_proxy->set_tenant_schema_status(tenant_status))) {
-        LOG_WARN("fail to init create partition status", KR(ret), K(tenant_status));
+      if (OB_FAIL(schema_status_proxy->set_runtime_schema_status(runtime_status))) {
+        LOG_WARN("fail to initialize runtime schema status", KR(ret), K(runtime_status));
       } else {}
     }
   }
@@ -818,32 +791,25 @@ int ObBootstrap::init_global_stat()
   return ret;
 }
 
-int ObBootstrap::create_sys_tenant()
+int ObBootstrap::create_system_runtime()
 {
-  // insert zero system stat value for create system tenant.
   int ret= OB_SUCCESS;
-  ObTenantSchema tenant;
+  ObServerRuntimeSchema runtime_schema;
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("check_inner_stat failed", K(ret));
   } else {
-    obcall::ObCreateTenantArg arg;
-    arg.name_case_mode_ = OB_LOWERCASE_AND_INSENSITIVE;
-    
-    tenant.set_schema_version(OB_CORE_SCHEMA_VERSION);
+    runtime_schema.set_schema_version(OB_CORE_SCHEMA_VERSION);
 
-    share::schema::ObSchemaGetterGuard dummy_schema_guard;
-    if (OB_FAIL(tenant.set_tenant_name(OB_SYS_TENANT_NAME))) {
-      LOG_WARN("set_tenant_name failed", "tenant_name", OB_SYS_TENANT_NAME, K(ret));
-    } else if (OB_FAIL(tenant.set_comment("system tenant"))) {
-      LOG_WARN("set_comment failed", "comment", "system tenant", K(ret));
-    } else if (OB_FAIL(set_replica_options(tenant))) {
-      LOG_WARN("failed to set replica options", KR(ret));
-    } else if (OB_FAIL(tenant_ddl_service_.create_sys_tenant(arg, tenant))) {
-      LOG_WARN("create tenant failed", K(ret), K(tenant));
+    if (OB_FAIL(runtime_schema.set_runtime_name(OB_SERVER_RUNTIME_NAME))) {
+      LOG_WARN("set_runtime_name failed", "runtime_name", OB_SERVER_RUNTIME_NAME, K(ret));
+    } else if (OB_FAIL(runtime_schema.set_comment("server runtime"))) {
+      LOG_WARN("set_comment failed", "comment", "server runtime", K(ret));
+    } else if (OB_FAIL(runtime_ddl_service_.create_system_runtime(runtime_schema))) {
+      LOG_WARN("create server runtime failed", K(ret), K(runtime_schema));
     } else {} // no more to do
   }
 
-  LOG_INFO("create tenant", K(ret), K(tenant));
+  LOG_INFO("create server runtime", K(ret), K(runtime_schema));
   BOOTSTRAP_CHECK_SUCCESS();
   return ret;
 }
@@ -851,65 +817,23 @@ int ObBootstrap::create_sys_tenant()
 int ObBootstrap::init_system_data()
 {
   int ret = OB_SUCCESS;
-  LOG_DBA_INFO_V2(OB_BOOTSTRAP_CREATE_SYS_TENANT_BEGIN,
+  LOG_DBA_INFO_V2(OB_BOOTSTRAP_CREATE_RUNTIME_BEGIN,
                   DBA_STEP_INC_INFO(bootstrap),
-                  "bootstrap create sys tenant begin.");
+                  "bootstrap create server runtime begin.");
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("check_inner_stat failed", KR(ret));
-  } else if (OB_FAIL(create_sys_tenant())) {
-    LOG_WARN("create system tenant failed", KR(ret));
+  } else if (OB_FAIL(create_system_runtime())) {
+    LOG_WARN("create server runtime failed", KR(ret));
   }
   if (OB_FAIL(ret)) {
-    LOG_DBA_ERROR_V2(OB_BOOTSTRAP_CREATE_SYS_TENANT_FAIL, ret,
+    LOG_DBA_ERROR_V2(OB_BOOTSTRAP_CREATE_RUNTIME_FAIL, ret,
                      DBA_STEP_INC_INFO(bootstrap),
-                     "bootstrap create sys tenant fail. maybe some resources are not enough. "
+                     "bootstrap create server runtime failed. maybe some resources are not enough. "
                      "you may find solutions in previous error logs or seek help from official technicians.");
   } else {
-    LOG_DBA_INFO_V2(OB_BOOTSTRAP_CREATE_SYS_TENANT_SUCCESS,
+    LOG_DBA_INFO_V2(OB_BOOTSTRAP_CREATE_RUNTIME_SUCCESS,
                     DBA_STEP_INC_INFO(bootstrap),
-                    "bootstrap create sys tenant success.");
-  }
-  BOOTSTRAP_CHECK_SUCCESS();
-  return ret;
-}
-
-int ObBootstrap::init_sys_unit_config(share::ObUnitConfig &unit_config)
-{
-  int ret = OB_SUCCESS;
-  const bool is_hidden_sys = false;
-
-  if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("check_inner_stat failed", K(ret));
-  } else if (OB_FAIL(unit_config.gen_sys_tenant_unit_config(is_hidden_sys, GCTX.log_block_mgr_->get_log_disk_size()))) {
-    LOG_WARN("gen sys tenant unit config fail", KR(ret), K(is_hidden_sys));
-  } else {
-    LOG_INFO("init sys tenant unit config succ", K(unit_config));
-  }
-  BOOTSTRAP_CHECK_SUCCESS();
-  return ret;
-}
-
-template<typename SCHEMA>
-int ObBootstrap::set_replica_options(SCHEMA &schema)
-{
-  int ret = OB_SUCCESS;
-  BOOTSTRAP_CHECK_SUCCESS_V2("before set replica options");
-  ObArray<ObString> zone_str_list;
-  if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("check_inner_stat failed", K(ret));
-  } else if (!schema.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(schema), K(ret));
-  } else if (OB_ISNULL(GCTX.config_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.config_));
-  } else if (OB_FAIL(zone_str_list.push_back(ObString::make_string(GCTX.config_->zone.str())))) {
-    LOG_WARN("push_back failed", K(ret));
-  } else if (zone_str_list.count() <= 0) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("zone_str_list is empty", K(zone_str_list), K(ret));
-  } else if (OB_FAIL(schema.set_zone_list(zone_str_list))) {
-    LOG_WARN("set_zone_list failed", K(zone_str_list), K(ret));
+                    "bootstrap create server runtime success.");
   }
   BOOTSTRAP_CHECK_SUCCESS();
   return ret;

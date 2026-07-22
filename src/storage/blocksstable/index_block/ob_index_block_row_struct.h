@@ -26,7 +26,7 @@
 #include "storage/blocksstable/index_block/ob_agg_row_struct.h"
 #include "storage/ob_row_id_range.h"
 #include "sql/engine/basic/ob_pushdown_filter.h"
-#include "storage/access/ob_index_skip_scanner.h"
+#include "storage/access/ob_advance_scan_helper.h"
 
 namespace oceanbase
 {
@@ -62,30 +62,18 @@ public:
   void set_compressor_type(const ObCompressorType compressor_type) { compressor_type_ = compressor_type; }
   int64_t get_schema_version() const { return schema_version_; }
   void set_schema_version(const int64_t schema_version) { schema_version_ = schema_version; }
-  int64_t get_master_key_id() const { return master_key_id_; }
-  void set_master_key_id(const int64_t master_key_id) { master_key_id_ = master_key_id; }
-  int64_t get_encrypt_id() const { return encrypt_id_; }
-  void set_encrypt_id(const int64_t encrypt_id) { encrypt_id_ = encrypt_id; }
-  const char * get_encrypt_key() const { return encrypt_key_; }
-  void set_encrypt_key(const char * encrypt_key)
-  {
-    MEMCPY(encrypt_key_, encrypt_key, sizeof(encrypt_key_));
-  }
   share::SCN get_end_scn() const { return end_scn_; }
   int set_end_scn_by_snapshot_version(const int64_t snapshot_version);
   void set_end_scn(const share::SCN end_scn) { end_scn_ = end_scn; }
   bool is_major_or_meta_merge_type() const { return compaction::is_major_or_meta_merge_type(merge_type_); }
   void set_merge_type(const compaction::ObMergeType merge_type) { merge_type_ = merge_type; }
-  void set_major_working_cluster_version(const int64_t major_working_cluster_version) { major_working_cluster_version_ = major_working_cluster_version; }
-  int64_t get_major_working_cluster_version() const { return major_working_cluster_version_; }
+  void set_data_format_version(const int64_t data_format_version) { data_format_version_ = data_format_version; }
+  int64_t get_data_format_version() const { return data_format_version_; }
 private:
   ObCompressorType compressor_type_;
   ObRowStoreType row_store_type_;
   int64_t schema_version_;
-  int64_t master_key_id_;
-  int64_t encrypt_id_;
-  int64_t major_working_cluster_version_;
-  char encrypt_key_[share::OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH];
+  int64_t data_format_version_;
   share::SCN end_scn_;
   compaction::ObMergeType merge_type_;
 
@@ -97,7 +85,6 @@ public:
   ObDatumRowkey row_key_;
   MacroBlockId macro_id_;
   ObLogicMicroBlockId logic_micro_id_;
-  MacroBlockId shared_data_macro_id_;
   int64_t data_checksum_;
   int64_t block_offset_;
   int64_t row_count_;
@@ -117,22 +104,17 @@ public:
   bool is_last_row_last_flag_;
   bool is_serialized_agg_row_;
   bool is_clustered_index_;
-  bool has_macro_block_bloom_filter_;
 
   TO_STRING_KV(K_(compressor_type),
                K_(row_store_type),
                K_(schema_version),
-               K_(master_key_id),
-               K_(encrypt_id),
-               K_(major_working_cluster_version),
-               KP_(encrypt_key),
+               K_(data_format_version),
                K_(end_scn),
                K_(merge_type),
                KP_(aggregated_row),
                K_(row_key),
                K_(macro_id),
                K_(logic_micro_id),
-               K_(shared_data_macro_id),
                K_(data_checksum),
                K_(block_offset),
                K_(row_count),
@@ -151,18 +133,14 @@ public:
                K_(has_lob_out_row),
                K_(is_last_row_last_flag),
                K_(is_serialized_agg_row),
-               K_(is_clustered_index),
-               K_(has_macro_block_bloom_filter));
+               K_(is_clustered_index));
 };
 
 struct ObIndexBlockRowHeader
 {
-  static const int64_t INDEX_BLOCK_HEADER_V1 = 1;
-  static const int64_t INDEX_BLOCK_HEADER_V2 = 2;
-  static const int64_t INDEX_BLOCK_HEADER_V3 = 3; // add meta info for major node
+  static const int64_t INDEX_BLOCK_HEADER_VERSION = 1;
   static const int64_t DEFAULT_IDX_ROW_MACRO_IDX  = MacroBlockId::AUTONOMIC_BLOCK_INDEX;
   static MacroBlockId DEFAULT_IDX_ROW_MACRO_ID;
-  static MacroBlockId INVALID_MACRO_BLOCK_ID;
   static ObLogicMicroBlockId INVALID_LOGICAL_MICRO_BLOCK_ID;
 
   ObIndexBlockRowHeader();
@@ -174,19 +152,11 @@ struct ObIndexBlockRowHeader
     macro_id_third_id_ = other.macro_id_third_id_;
     block_offset_ = other.block_offset_;
     block_size_ = other.block_size_;
-    master_key_id_ = other.master_key_id_;
-    encrypt_id_ = other.encrypt_id_;
-    MEMCPY(encrypt_key_, other.encrypt_key_, share::OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH);
     row_count_ = other.row_count_;
     schema_version_ = other.schema_version_;
     macro_block_count_ = other.macro_block_count_;
     micro_block_count_ = other.micro_block_count_;
-    macro_id_fourth_id_ = other.macro_id_fourth_id_;
-    if (other.has_valid_shared_macro_id()) {
-      shared_data_macro_id_ = other.shared_data_macro_id_;
-    } else {
-      logic_micro_id_ = other.logic_micro_id_;
-    }
+    logic_micro_id_ = other.logic_micro_id_;
     data_checksum_ = other.data_checksum_;
     return *this;
   }
@@ -194,20 +164,16 @@ struct ObIndexBlockRowHeader
   void reset();
   OB_INLINE bool is_valid() const
   {
-    bool version_valid = INDEX_BLOCK_HEADER_V1 == version_ ||
-                         INDEX_BLOCK_HEADER_V2 == version_ ||
-                         INDEX_BLOCK_HEADER_V3 == version_;
+    bool version_valid = INDEX_BLOCK_HEADER_VERSION == version_;
     bool macro_id_valid
         = (get_macro_id() == DEFAULT_IDX_ROW_MACRO_ID) || !is_data_block() || !is_data_index()
           || (get_macro_id() != DEFAULT_IDX_ROW_MACRO_ID && is_data_block() && is_data_index() /* clustered index */);
-    bool logic_id_valid = !(has_logic_micro_id() && has_shared_data_macro_id());
-    bool bloom_filter_valid = (!has_macro_block_bloom_filter() || is_macro_node());
-    return version_valid && macro_id_valid && logic_id_valid && bloom_filter_valid;
+    return version_valid && macro_id_valid;
   }
 
   OB_INLINE bool is_minor_meta_info_valid() const
   {
-    return is_data_index() && (INDEX_BLOCK_HEADER_V3 == version_ || !is_major_node());
+    return is_data_index();
   }
   OB_INLINE uint64_t get_version() const { return version_; }
   OB_INLINE uint64_t get_block_offset() const { return block_offset_; }
@@ -220,10 +186,6 @@ struct ObIndexBlockRowHeader
   {
     return has_logic_micro_id() ? logic_micro_id_ : INVALID_LOGICAL_MICRO_BLOCK_ID;
   }
-  OB_INLINE const MacroBlockId &get_shared_data_macro_id() const
-  {
-    return has_shared_data_macro_id() ? shared_data_macro_id_ : INVALID_MACRO_BLOCK_ID;
-  }
   OB_INLINE int64_t get_data_checksum() const
   {
     return has_logic_micro_id() ? data_checksum_ : 0;
@@ -232,9 +194,6 @@ struct ObIndexBlockRowHeader
   {
     return static_cast<ObCompressorType>(compressor_type_);
   }
-  OB_INLINE int64_t get_encrypt_id() const { return encrypt_id_; }
-  OB_INLINE int64_t get_master_key_id() const { return master_key_id_; }
-  OB_INLINE const char *get_encrypt_key() const { return encrypt_key_; }
   OB_INLINE uint64_t get_row_count() const { return row_count_; }
   OB_INLINE uint64_t get_macro_block_count() const { return macro_block_count_; }
   OB_INLINE uint64_t get_micro_block_count() const { return micro_block_count_; }
@@ -242,12 +201,9 @@ struct ObIndexBlockRowHeader
   OB_INLINE MacroBlockId get_macro_id() const
   {
     MacroBlockId macro_id;
-    if (INDEX_BLOCK_HEADER_V1 == version_) {
-      macro_id = MacroBlockId(macro_id_first_id_, macro_id_second_id_, macro_id_third_id_, 0);
-      macro_id.set_version_v2();
-    } else {
-      macro_id = MacroBlockId(macro_id_first_id_, macro_id_second_id_, macro_id_third_id_, macro_id_fourth_id_);
-    }
+    macro_id.set_first_id(macro_id_first_id_);
+    macro_id.set_second_id(macro_id_second_id_);
+    macro_id.set_third_id(macro_id_third_id_);
     return macro_id;
   }
   int set_macro_id(const MacroBlockId &macro_id);
@@ -256,31 +212,15 @@ struct ObIndexBlockRowHeader
     logic_micro_id_ = micro_id;
     data_checksum_ = data_checksum;
     set_has_logic_micro_id();
-    unset_has_shared_data_macro_id();
   }
   OB_INLINE bool has_valid_logic_micro_id() const
   {
     return has_logic_micro_id() && get_logic_micro_id().is_valid();
   }
-  OB_INLINE void set_shared_data_macro_id(const MacroBlockId &macro_id)
-  {
-    shared_data_macro_id_ = macro_id;
-    set_has_shared_data_macro_id();
-    unset_has_logic_micro_id();
-  }
-  OB_INLINE bool has_valid_shared_macro_id() const
-  {
-    return has_shared_data_macro_id() && get_shared_data_macro_id().is_valid();
-  }
   OB_INLINE int64_t get_serialize_size() const
   {
-    int64_t header_size = 0;
-    if (INDEX_BLOCK_HEADER_V1 == version_) {
-      header_size = sizeof(ObIndexBlockRowHeader) - sizeof(macro_id_fourth_id_);
-    } else {
-      header_size = sizeof(ObIndexBlockRowHeader);
-    }
-    if (!has_logic_micro_id() && !has_shared_data_macro_id()) {
+    int64_t header_size = sizeof(ObIndexBlockRowHeader);
+    if (!has_logic_micro_id()) {
       header_size -= (sizeof(logic_micro_id_) + sizeof(data_checksum_));
     }
     return header_size;
@@ -288,9 +228,6 @@ struct ObIndexBlockRowHeader
   OB_INLINE void fill_deserialize_meta(ObMicroBlockDesMeta &des_meta) const
   {
     des_meta.compressor_type_ = static_cast<common::ObCompressorType>(compressor_type_);
-    des_meta.encrypt_id_ = encrypt_id_;
-    des_meta.master_key_id_ = master_key_id_;
-    des_meta.encrypt_key_ = encrypt_key_;
   }
   OB_INLINE bool is_data_block() const { return 1 == is_data_block_; }
   OB_INLINE bool is_clustered_node() const
@@ -308,9 +245,7 @@ struct ObIndexBlockRowHeader
   OB_INLINE bool is_data_index() const { return 1 == is_data_index_; }
   OB_INLINE bool has_string_out_row() const { return 1 == has_string_out_row_; }
   OB_INLINE bool has_lob_out_row() const { return 0 == all_lob_in_row_; }
-  OB_INLINE bool has_shared_data_macro_id() const { return 1 == has_shared_data_macro_id_; }
 
-  OB_INLINE bool has_macro_block_bloom_filter() const { return 1 == has_macro_block_bloom_filter_; }
   OB_INLINE void set_data_block() { is_data_block_ = 1; }
   OB_INLINE void set_leaf_block() { is_leaf_block_ = 1; }
   OB_INLINE void set_major_node() { is_major_node_ = 1; }
@@ -320,10 +255,8 @@ struct ObIndexBlockRowHeader
   OB_INLINE void set_macro_node() { is_macro_node_ = 1; }
   OB_INLINE void set_has_logic_micro_id() { has_logic_micro_id_ = 1; }
   OB_INLINE void unset_has_logic_micro_id() { has_logic_micro_id_ = 0; }
-  OB_INLINE void set_has_shared_data_macro_id() { has_shared_data_macro_id_ = 1; }
-  OB_INLINE void unset_has_shared_data_macro_id() { has_shared_data_macro_id_ = 0; }
 
-  int fill_micro_des_meta(const bool need_deep_copy_key, ObMicroBlockDesMeta &des_meta) const;
+  int fill_micro_des_meta(ObMicroBlockDesMeta &des_meta) const;
 
   union
   {
@@ -344,9 +277,7 @@ struct ObIndexBlockRowHeader
       uint64_t has_string_out_row_ : 1;           // Whether sub-tree of this node has string column out row as lob
       uint64_t all_lob_in_row_ : 1;               // Whether sub-tree of this node has out row lob column
       uint64_t has_logic_micro_id_ : 1;           // Whether this row has logic micro id
-      uint64_t has_shared_data_macro_id_ : 1;     // Whether this row has shared storage macro data id
-      uint64_t has_macro_block_bloom_filter_ : 1; // Whether this macro block has bloom filter (only in macro level)
-      uint64_t reserved_ : 27;
+      uint64_t reserved_ : 29;
     };
   };
   int64_t macro_id_first_id_; // Physical macro block id, set to default in leaf node
@@ -354,9 +285,6 @@ struct ObIndexBlockRowHeader
   int64_t macro_id_third_id_;
   int32_t block_offset_;                    // Offset of micro block in macro block
   int32_t block_size_;                      // Length of micro block data
-  int64_t master_key_id_;                   // Master key id for encryption
-  int64_t encrypt_id_;                      // Encryption id
-  char encrypt_key_[share::OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH]; // Encrypt key 16 bytes
   uint64_t row_count_;                      // Row count of the blocks this row points to
   uint64_t schema_version_;                 // Schema version of the data block
   // TODO: fill block count correctly
@@ -377,35 +305,21 @@ struct ObIndexBlockRowHeader
                K_(has_string_out_row),
                K_(all_lob_in_row),
                K_(has_logic_micro_id),
-               K_(has_shared_data_macro_id),
-               K_(has_macro_block_bloom_filter),
                K(get_macro_id()),
                K_(block_offset),
                K_(block_size),
-               K_(master_key_id),
-               K_(encrypt_id),
-               KPHEX_(encrypt_key, sizeof(encrypt_key_)),
                K_(row_count),
                K_(schema_version),
                K_(macro_block_count),
                K_(micro_block_count),
                K_(logic_micro_id),
-               K_(data_checksum),
-               K_(shared_data_macro_id),
-               K_(has_shared_data_macro_id));
+               K_(data_checksum));
 private:
   OB_INLINE bool has_logic_micro_id() const { return 1 == has_logic_micro_id_; }
 
 private:
-  // The macro block id of old verison has only three ids, but a fourth id is added since OB4.3.3.
-  // To deal with compatibility, we put the fourth id at the end of ObIndexBlockRowHeader and raise
-  // the version from INDEX_BLOCK_HEADER_V1 to INDEX_BLOCK_HEADER_V2.
-  int64_t macro_id_fourth_id_;
-  union {
-    // The logic id of micro block, will keep unchanged if this block is reuse in compaction.
-    ObLogicMicroBlockId logic_micro_id_;
-    MacroBlockId shared_data_macro_id_;
-  };
+  // The logic id of micro block, will keep unchanged if this block is reuse in compaction.
+  ObLogicMicroBlockId logic_micro_id_;
   // The checksum of micro block data.
   // It's used to verify whether the cached data is consistent with upper logic id.
   int64_t data_checksum_;
@@ -493,7 +407,7 @@ public:
       row_id_range_(),
       skipping_filter_results_(),
       table_read_info_(nullptr),
-      skip_state_()
+      advance_scan_state_()
   {
   }
   OB_INLINE void reset()
@@ -512,7 +426,7 @@ public:
     row_id_range_.reset();
     skipping_filter_results_.reset();
     table_read_info_ = nullptr;
-    skip_state_.reset();
+    advance_scan_state_.reset();
   }
   OB_INLINE bool is_valid() const
   {
@@ -570,25 +484,10 @@ public:
     OB_ASSERT(nullptr != row_header_);
     return row_header_->has_valid_logic_micro_id();
   }
-  OB_INLINE bool has_valid_shared_macro_id() const
-  {
-    OB_ASSERT(nullptr != row_header_);
-    return row_header_->has_valid_shared_macro_id();
-  }
-  OB_INLINE bool has_macro_block_bloom_filter() const
-  {
-    OB_ASSERT(nullptr != row_header_);
-    return row_header_->has_macro_block_bloom_filter();
-  }
   OB_INLINE const ObLogicMicroBlockId &get_logic_micro_id() const
   {
     OB_ASSERT(nullptr != row_header_);
     return row_header_->get_logic_micro_id();
-  }
-  OB_INLINE const MacroBlockId &get_shared_data_macro_id() const
-  {
-    OB_ASSERT(nullptr != row_header_);
-    return row_header_->get_shared_data_macro_id();
   }
   OB_INLINE int64_t get_data_checksum() const
   {
@@ -794,7 +693,7 @@ public:
   TO_STRING_KV(KP_(query_range), KPC_(row_header), KPC_(minor_meta_info), K_(endkey), KP_(ps_node),
       KP_(agg_row_buf), K_(agg_buf_size), K_(flag), K_(range_idx), K_(parent_macro_id),
       K_(nested_offset), K_(rowkey_begin_idx), K_(rowkey_end_idx), K_(row_id_range),
-      K_(skipping_filter_results), KP_(table_read_info), K_(skip_state));
+      K_(skipping_filter_results), KP_(table_read_info), K_(advance_scan_state));
 
 public:
   const ObIndexBlockRowHeader *row_header_;
@@ -835,7 +734,7 @@ public:
   ObMicroBlockRowIdRange row_id_range_;
   ObSkippingFilterResults skipping_filter_results_;
   const ObITableReadInfo *table_read_info_;
-  ObIndexSkipState skip_state_;
+  ObAdvanceScanState advance_scan_state_;
 };
 
 struct ObMicroIndexData

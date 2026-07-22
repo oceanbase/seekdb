@@ -33,7 +33,7 @@ ObBasicScheduleTabletFunc::ObBasicScheduleTabletFunc(
     freeze_param_(),
     ls_could_schedule_new_round_(false),
     ls_could_schedule_merge_(false),
-    is_skip_merge_tenant_(false),
+    should_skip_merge_(false),
     loop_cnt_(loop_cnt)
 {
 }
@@ -58,22 +58,22 @@ int ObBasicScheduleTabletFunc::init(ObLS *ls)
     freeze_param_.compaction_scn_ = merge_version_;
   }
   if (OB_SUCC(ret)) {
-    update_tenant_cached_status();
+    update_runtime_cached_status();
   }
   return ret;
 }
 
-void ObBasicScheduleTabletFunc::update_tenant_cached_status()
+void ObBasicScheduleTabletFunc::update_runtime_cached_status()
 {
   const ObBasicMergeScheduler * scheduler = ObBasicMergeScheduler::get_merge_scheduler();
   if (OB_NOT_NULL(scheduler)) {
-    is_skip_merge_tenant_ = scheduler->get_tenant_status().is_skip_merge_tenant();
+    should_skip_merge_ = scheduler->get_runtime_status().should_skip_merge();
     ls_could_schedule_merge_ = scheduler->could_major_merge_start() && ls_status_.can_merge();
     ls_could_schedule_new_round_ = ls_could_schedule_merge_;
 
     if (!ls_status_.can_merge() && REACH_THREAD_TIME_INTERVAL(PRINT_LOG_INVERVAL)) {
       LOG_INFO("should not schedule major merge for ls", K_(ls_status),
-        "tenant_status", scheduler->get_tenant_status());
+        "runtime_status", scheduler->get_runtime_status());
       ADD_COMMON_SUSPECT_INFO(
                   MEDIUM_MERGE, share::ObDiagnoseTabletType::TYPE_MEDIUM_MERGE,
                   ObSuspectInfoType::SUSPECT_SUSPEND_MERGE,
@@ -91,7 +91,7 @@ void ObBasicScheduleTabletFunc::schedule_freeze_dag(const bool force)
     freeze_param_.loop_cnt_ = get_loop_cnt();
     if (OB_TMP_FAIL(ObScheduleDagFunc::schedule_batch_freeze_dag(freeze_param_))) {
       LOG_ERROR_RET(tmp_ret, "failed to schedule batch force freeze tablets dag", K(freeze_param_));
-      // most tablets will clear failed since the capacity of ObTenantTabletStatMgr is limited
+      // most tablets will clear failed since the capacity of ObTabletStatMgr is limited
     } else {
       LOG_INFO("success to schedule batch freeze dag", KR(tmp_ret), K_(freeze_param));
     }
@@ -111,7 +111,7 @@ int ObBasicScheduleTabletFunc::diagnose_init(
       LOG_WARN("failed to init ls status", KR(ret), K_(merge_version), KP(ls));
     }
   } else {
-    update_tenant_cached_status();
+    update_runtime_cached_status();
   }
   return ret;
 }

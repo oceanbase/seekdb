@@ -75,7 +75,6 @@ int ObMPDisconnect::run()
       if (OB_FAIL(GCTX.session_mgr_->free_session(ctx_))) {
         LOG_WARN("free session fail", K(ctx_));
       } else {
-        common::ObTenantDiagnosticInfoSummaryGuard guard{};
         EVENT_INC(SQL_USER_LOGOUTS_CUMULATIVE);
         LOG_INFO("free session successfully", "sessid", ctx_.sessid_);
       }

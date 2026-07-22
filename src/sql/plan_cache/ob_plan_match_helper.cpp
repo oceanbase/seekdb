@@ -165,9 +165,9 @@ int ObPlanMatchHelper::calc_table_locations(
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ObPhyLocationGetter::get_candi_phy_locations(out_tbl_locations,
-                                                               pc_ctx,
-                                                               phy_tbl_infos))) {
+      if (OB_FAIL(ObPhyLocationGetter::get_phy_locations(out_tbl_locations,
+                                                         pc_ctx,
+                                                         phy_tbl_infos))) {
         LOG_WARN("failed to get phy locations", K(ret));
       } else {
         LOG_DEBUG("calculated phy locations", K(loc_cons), K(phy_tbl_infos));
@@ -375,7 +375,7 @@ int ObPlanMatchHelper::check_strict_pwj_cons(
   }
 
   if (1 == part_count) {
-    // all tables in pwj constraint are local or remote
+    // All tables in this PWJ constraint are single-partition tables.
     for (int64_t i = 0; OB_SUCC(ret) && is_same && i < pwj_cons.count() - 1; ++i) {
       const ObCandiTableLoc &l_phy_tbl_info = phy_tbl_infos.at(pwj_cons.at(i));
       const ObCandiTableLoc &r_phy_tbl_info = phy_tbl_infos.at(pwj_cons.at(i+1));
@@ -457,32 +457,26 @@ int ObPlanMatchHelper::match_tbl_partition_locs(const ObCandiTableLoc &left,
     LOG_WARN("there is no partition_location in phy_location", K(ret), K(left),
              K(right));
   } else {
-    ObLSReplicaLocation left_replica_loc;
-    ObLSReplicaLocation right_replica_loc;
     for (int64_t i = 0;
          OB_SUCC(ret) && is_matched && i < left.get_partition_cnt(); i++) {
-      left_replica_loc.reset();
-      right_replica_loc.reset();
       const ObCandiTabletLoc &left_phy_part_loc_info =
           left.get_phy_part_loc_info_list().at(i);
       const ObCandiTabletLoc &right_phy_part_loc_info =
           right.get_phy_part_loc_info_list().at(i);
+      const ObAddr &left_server =
+          left_phy_part_loc_info.get_partition_location().get_server();
+      const ObAddr &right_server =
+          right_phy_part_loc_info.get_partition_location().get_server();
 
-      if (OB_FAIL(left_phy_part_loc_info.get_selected_replica(left_replica_loc)) ||
-          OB_FAIL(right_phy_part_loc_info.get_selected_replica(right_replica_loc))) {
-        LOG_WARN("failed to get selected replica", K(ret), K(left_replica_loc),
-                 K(right_replica_loc));
-      } else if (!left_replica_loc.is_valid() ||
-                 !right_replica_loc.is_valid()) {
-        LOG_WARN("replica_location is invalid", K(ret), K(left_replica_loc),
-                 K(right_replica_loc));
-      } else if (left_replica_loc.get_server() != right_replica_loc.get_server()) {
+      if (!left_server.is_valid() || !right_server.is_valid()) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("local server is invalid", K(ret), K(left_server), K(right_server));
+      } else if (left_server != right_server) {
         is_matched = false;
         LOG_DEBUG("part location do not match", K(ret), K(i),
-                  K(left_replica_loc), K(right_replica_loc));
+                  K(left_server), K(right_server));
       } else {
-        LOG_DEBUG("matched partition location", K(left_replica_loc),
-                  K(right_replica_loc), K(i));
+        LOG_DEBUG("matched local tablet location", K(left_server), K(right_server), K(i));
       }
     }
   }

@@ -410,7 +410,7 @@ public:
   {
     int ret = common::OB_SUCCESS;
     bool bool_ret = false;
-    // threshold for primary tenant inserting inner table
+    // Threshold for a primary database updating internal tables.
     int64_t INSERT_INTERNAL_FOR_PRIMARY = 10 * 60 * 1000 * 1000L;
 
     if (!tx_id.is_valid() || OB_ISNULL(tx_ctx)) {
@@ -460,7 +460,6 @@ public:
                                  tx_ctx->get_flushed_log_size(),
                                  tx_ctx->session_id_,
                                  tx_ctx->is_exiting_,
-                                 tx_ctx->exec_info_.xid_,
                                  tx_ctx->last_request_ts_,
                                  OB_NOT_NULL(tx_data) ? tx_data->start_scn_.atomic_load() : SCN::invalid_scn(),
                                  OB_NOT_NULL(tx_data) ? tx_data->end_scn_.atomic_load() : SCN::invalid_scn(),
@@ -913,7 +912,6 @@ public:
                                                     tx_desc->sess_id_,
                                                     tx_desc->tx_id_,
                                                     (int64_t)tx_desc->state_,
-                                                    tx_desc->xid_,
                                                     has_write_state,
                                                     write_state,
                                                     tx_desc->isolation_,

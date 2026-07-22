@@ -110,23 +110,6 @@ if (0) { #ST_SRID 未支持
   INSERT INTO t1 (col1) VALUES (ST_GeomFromText('POINT(1 1)', 4326));
   DROP TABLE t1;
 }
---echo # Creating a column with SRID property on a MyISAM table should only
---echo # be supported if the SRID represents a cartesian coordinate system.
---disable_warnings
-drop table if exists t1, t2;
---enable_warnings
-CREATE TABLE t1 (col1 POINT SRID 0) ENGINE = MyISAM;
---source mysql_test/include/show_create_table_old_version_replica2.inc
-show create table t1;
-CREATE TABLE t2 (col1 POINT SRID 2000) ENGINE = MyISAM;
---source mysql_test/include/show_create_table_old_version_replica2.inc
-show create table t1;
-
-#--error ER_CHECK_NOT_IMPLEMENTED
-#CREATE TABLE t3 (col1 POINT SRID 4326) ENGINE = MyISAM;
-
-DROP TABLE t1, t2;
-
 --echo # It should not be possible to use the SRID property with any other types
 --echo # than geometric types.
 

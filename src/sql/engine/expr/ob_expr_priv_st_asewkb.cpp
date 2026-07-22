@@ -75,7 +75,7 @@ int ObExprStPrivAsEwkb::eval_priv_st_as_ewkb(const ObExpr &expr,
   bool is_null_result = false;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_ST_ASEWKB);
+  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
   const ObSrsItem *srs = NULL;
   omt::ObSrsCacheGuard srs_guard;
   bool is_geog = false;
@@ -91,7 +91,6 @@ int ObExprStPrivAsEwkb::eval_priv_st_as_ewkb(const ObExpr &expr,
   } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(tmp_allocator, *wkb_datum,
               expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkb_str))) {
     LOG_WARN("fail to get real data.", K(ret), K(wkb_str));
-  } else if (FALSE_IT(tmp_allocator.set_baseline_size(wkb_str.length()))) {
   } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb_str, srs))) {
     LOG_WARN("fail to get srs item", K(ret), K(wkb_str));
   } else if (OB_FAIL(ObGeoTypeUtil::create_geo_by_wkb(tmp_allocator, wkb_str, srs, geo, true, true, true))) {

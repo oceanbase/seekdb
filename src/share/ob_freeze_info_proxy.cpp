@@ -210,7 +210,7 @@ int ObFreezeInfoProxy::set_freeze_info(
   int64_t affected_rows = 0;
   ObDMLExecHelper exec(sql_proxy);
 
-  if (!frozen_status.is_valid() || !true) {
+  if (!frozen_status.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("invalid argument", KR(ret), K(frozen_status));
   } else if (OB_FAIL(dml.add_uint64_pk_column("frozen_scn", frozen_status.frozen_scn_.get_val_for_inner_table_field()))
@@ -400,7 +400,7 @@ int ObFreezeInfoProxy::construct_frozen_status_(
 int ObFreezeInfoProxy::get_freeze_schema_info(
     ObISQLClient &sql_proxy,
     const SCN &frozen_scn,
-    TenantIdAndSchemaVersion &schema_version_info)
+    SchemaVersionInfo &schema_version_info)
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;

@@ -63,7 +63,6 @@ public:
   static const char *SNAPSHOT_TIMESTAMP_CNAME;
   static const char *READABLE_SCHEMA_VERSION_CNAME;
   static const char *CREATED_SCHEMA_VERSION_CNAME;
-  static const int64_t TENANT_SCHEMA_STATUS_BUCKET_NUM = 100;
 public:
   ObSchemaStatusProxy(common::ObISQLClient &sql_proxy)
     : sql_proxy_(sql_proxy),
@@ -83,7 +82,7 @@ public:
 
   int load_refresh_schema_status();
 
-  int set_tenant_schema_status(
+  int set_runtime_schema_status(
     const share::schema::ObRefreshSchemaStatus &refresh_schema_status);
 
 
@@ -91,7 +90,7 @@ private:
   int check_inner_stat();
 private:
   common::ObISQLClient &sql_proxy_;
-  // single-tenant: collapsed from ObHashMap<tenant, ObRefreshSchemaStatus> (only OB_SYS entry) to a single value + class-level RWLock
+  // The server keeps one current refresh status protected by this lock.
   share::schema::ObRefreshSchemaStatus schema_status_cache_;
   mutable common::SpinRWLock schema_status_cache_lock_;
   bool is_inited_;

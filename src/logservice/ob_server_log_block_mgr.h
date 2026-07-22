@@ -97,17 +97,16 @@ public:
   int remove_block_at(const palf::FileDesc &src_dir_fd,
                       const char *src_block_path) override final;
 
-  // @brief before 'update_tenant_log_disk_size' in ObMultiTenant, need update it.
-  // @param[in] the log disk size used by tenant.
-  // @param[in] the log disk size need by tenant.
-  // @param[in] the log disk size allowed by tenant
+  // @brief before 'update_server_log_disk_size' in ObServerRuntimeController, need update it.
+  // @param[in] current and requested local runtime log-disk sizes.
+  // @param[out] the log-disk size accepted by the log service.
   // @param[in] ObLogService*
   //   OB_SUCCESS
   //   OB_MACHINE_RESOURCE_NOT_ENOUGH
-  int update_tenant(const int64_t old_log_disk_size,
-                    const int64_t new_log_disk_size,
-                    int64_t &allowed_log_disk_size,
-                    ObLogService *log_service);
+  int update_log_disk_size(const int64_t old_log_disk_size,
+                           const int64_t new_log_disk_size,
+                           int64_t &allowed_log_disk_size,
+                           ObLogService *log_service);
   TO_STRING_KV(K_(is_inited));
 
 private:
@@ -115,23 +114,23 @@ private:
   int scan_log_disk_dir_(const char *log_disk_path, int64_t &has_allocated_block_cnt);
 
   bool check_space_is_enough_(const int64_t log_disk_size) const;
-  int get_all_tenants_log_disk_size_(int64_t &log_disk_size) const;
+  int get_runtime_log_disk_size_(int64_t &log_disk_size) const;
 private:
   int64_t get_in_use_size_();
   int allocate_block_at_(const palf::FileDesc &dir_fd, const char *block_path, const int64_t block_size);
   int free_block_at_(const palf::FileDesc &dir_fd, const char *block_path);
   int get_has_allocated_blocks_cnt_in_(const char *log_disk_path,
                                        int64_t &has_allocated_block_cnt);
-  int remove_tmp_file_or_directory_for_tenant_(const char *log_disk_path);
+  int remove_tmp_file_or_directory_for_runtime_(const char *log_disk_path);
 private:
   int unlinkat_until_success_(const palf::FileDesc &src_dir_fd, const char *block_path,
                               const int flag);
   int fsync_until_success_(const palf::FileDesc &src_fd);
-  int scan_tenant_dir_(const char *tenant_dir, int64_t &has_allocated_block_cnt);
-  int scan_log_stream_dir_(const char *log_stream_dir, int64_t &has_allocated_block_cnt);
+  int scan_runtime_dir_(const char *runtime_dir, int64_t &has_allocated_block_cnt);
+  int scan_ls_dir_(const char *ls_dir, int64_t &has_allocated_block_cnt);
 private:
-  typedef common::ObFunction<int(int64_t&)> GetTenantsLogDiskSize;
-  GetTenantsLogDiskSize get_tenants_log_disk_size_func_;
+  typedef common::ObFunction<int(int64_t&)> GetRuntimeLogDiskSize;
+  GetRuntimeLogDiskSize get_runtime_log_disk_size_func_;
   // NB: in progress of expanding, the free size byte calcuated by BLOCK_SIZE * (max_block_id_ - min_block_id_) may be greater than
   //     curr_total_size_, if we calcuated log disk in use by curr_total_size_ - 'free size byte', the resule may be negative.
   int64_t block_cnt_in_use_;

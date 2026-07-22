@@ -266,8 +266,7 @@ int ObTmpFileFlushPriorityManager::update_flush_list_(const bool is_meta, ObITmp
 int ObTmpFileFlushPriorityManager::remove_file(ObITmpFile &file)
 {
   int ret = OB_SUCCESS;
-  if (file.get_mode() == ObITmpFile::ObTmpFileMode::SHARED_NOTHING &&
-      OB_FAIL(remove_file(true /*is_meta*/, file))) {
+  if (OB_FAIL(remove_file(true /*is_meta*/, file))) {
     LOG_ERROR("fail to remove file from meta flush list", KR(ret));
   } else if (OB_FAIL(remove_file(false /*is_meta*/, file))) {
     LOG_WARN("fail to remove file from data flush list", KR(ret));
@@ -366,12 +365,7 @@ int ObTmpFileFlushPriorityManager::get_file_flush_node_(const bool is_meta, ObIT
   flush_node = nullptr;
 
   if (is_meta) {
-    if (OB_UNLIKELY(file.get_mode() != ObITmpFile::ObTmpFileMode::SHARED_NOTHING)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("file mode is not SHARED_NOTHING", KR(ret), K(file));
-    } else {
-      flush_node = static_cast<ObSharedNothingTmpFile&>(file).get_meta_flush_node();
-    }
+    flush_node = static_cast<ObSharedNothingTmpFile&>(file).get_meta_flush_node();
   } else {
     flush_node = file.get_data_flush_node();
   }
@@ -385,12 +379,7 @@ int ObTmpFileFlushPriorityManager::get_file_flush_level_(const bool is_meta, ObI
   flush_level = FileList::INVALID;
 
   if (is_meta) {
-    if (OB_UNLIKELY(file.get_mode() != ObITmpFile::ObTmpFileMode::SHARED_NOTHING)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("file mode is not SHARED_NOTHING", KR(ret), K(file));
-    } else {
-      flush_level = static_cast<FileList>(static_cast<ObSharedNothingTmpFile&>(file).get_meta_page_flush_level());
-    }
+    flush_level = static_cast<FileList>(static_cast<ObSharedNothingTmpFile&>(file).get_meta_page_flush_level());
   } else {
     flush_level = static_cast<FileList>(file.get_data_page_flush_level());
   }
@@ -402,12 +391,7 @@ int ObTmpFileFlushPriorityManager::set_flush_page_level_(const bool is_meta, con
 {
   int ret = OB_SUCCESS;
   if (is_meta) {
-    if (OB_UNLIKELY(file.get_mode() != ObITmpFile::ObTmpFileMode::SHARED_NOTHING)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("file mode is not SHARED_NOTHING", KR(ret), K(file));
-    } else {
-      static_cast<ObSharedNothingTmpFile&>(file).set_meta_page_flush_level(flush_idx);
-    }
+    static_cast<ObSharedNothingTmpFile&>(file).set_meta_page_flush_level(flush_idx);
   } else {
     file.set_data_page_flush_level(flush_idx);
   }

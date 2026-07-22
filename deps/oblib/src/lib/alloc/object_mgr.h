@@ -23,49 +23,20 @@
 #include "lib/ob_abort.h"
 #include "lib/ob_define.h"
 #include "lib/alloc/alloc_interface.h"
-#ifndef ENABLE_SANITY
 #include "lib/lock/ob_latch.h"
-#else
-#include "lib/alloc/ob_latch_v2.h"
-#endif
 #include "object_set.h"
 
 namespace oceanbase
 {
 namespace lib
 {
-class ObjectMgrV2
-{
-  static const int OBJECT_SET_CNT = 32;
-public:
-  ObjectMgrV2(int parallel, IBlockMgr *blk_mgr);
-  AObject *alloc_object(uint64_t size, const ObMemAttr &attr)
-  {
-    static int64_t global_idx = 0;
-    AObject *obj = NULL;
-    static thread_local int idx = ATOMIC_FAA(&global_idx, 1);
-    for (int64_t i = 0; NULL == obj && i < parallel_; i++) {
-      obj = obj_sets_[(idx + i) % parallel_].alloc_object(size, attr);
-    }
-    return obj;
-  }
-  AObject *realloc_object(
-      AObject *obj, const uint64_t size, const ObMemAttr &attr);
-  void do_cleanup();
-  bool check_has_unfree(char *first_label, char *first_bt);
-
-public:
-  int parallel_;
-  ObjectSetV2 obj_sets_[OBJECT_SET_CNT];
-}; // end of class ObjectMgrV2
-
 // object_set needs to be lightweight, and some large or logically optional members need to be stripped out
 // SubObjectMgr is a combination of object_set and attributes stripped from object_set, such as block_set, mutex, etc.
 class SubObjectMgr : public IBlockMgr
 {
-  friend class ObTenantCtxAllocator;
+  friend class ObCtxAllocator;
 public:
-  SubObjectMgr(ObTenantCtxAllocator &ta,
+  SubObjectMgr(ObCtxAllocator &ctx_allocator,
                const bool enable_no_log,
                const uint32_t ablock_size,
                const bool enable_dirty_list,
@@ -100,12 +71,8 @@ public:
     return os_.check_has_unfree(first_label, first_bt);
   }
 private:
-  ObTenantCtxAllocator &ta_;
-#ifndef ENABLE_SANITY
+  ObCtxAllocator &ctx_allocator_;
   lib::ObMutex mutex_;
-#else
-  lib::ObMutexV2 mutex_;
-#endif
   SetLocker<decltype(mutex_)> normal_locker_;
   SetLockerNoLog<decltype(mutex_)> no_log_locker_;
   ISetLocker &locker_;
@@ -126,7 +93,7 @@ public:
     int64_t used_;
   };
 public:
-  ObjectMgr(ObTenantCtxAllocator &ta,
+  ObjectMgr(ObCtxAllocator &ctx_allocator,
             bool enable_no_log,
             uint32_t ablock_size,
             int parallel,
@@ -148,13 +115,12 @@ public:
   Stat get_stat();
   bool check_has_unfree();
   bool check_has_unfree(char *first_label, char *first_bt);
-  void do_cleanup() { obj_mgr_v2_.do_cleanup(); }
 private:
   SubObjectMgr *create_sub_mgr();
   void destroy_sub_mgr(SubObjectMgr *sub_mgr);
 
 public:
-  ObTenantCtxAllocator &ta_;
+  ObCtxAllocator &ctx_allocator_;
   bool enable_no_log_;
   uint32_t ablock_size_;
   int parallel_;
@@ -163,7 +129,6 @@ public:
   int sub_cnt_;
   SubObjectMgr root_mgr_;
   SubObjectMgr *sub_mgrs_[N];
-  ObjectMgrV2 obj_mgr_v2_;
 }; // end of class ObjectMgr
 } // end of namespace lib
 } // end of namespace oceanbase

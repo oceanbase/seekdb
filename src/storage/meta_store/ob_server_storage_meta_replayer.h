@@ -16,7 +16,7 @@
 #ifndef OCEANBASE_STORAGE_META_STORE_OB_SERVER_STORAGE_META_REPLAYER_H_
 #define OCEANBASE_STORAGE_META_STORE_OB_SERVER_STORAGE_META_REPLAYER_H_
 
-#include "observer/omt/ob_tenant_meta.h"
+#include "observer/omt/ob_server_runtime_meta.h"
 #include "lib/hash/ob_hashmap.h"
 
 
@@ -42,10 +42,9 @@ public:
   void destroy();
   
 private:
-  int apply_replay_result_(const omt::ObTenantMeta &tenant_meta, const bool is_valid);
-  int handle_tenant_creating_(const omt::ObTenantMeta &tenant_meta);
-  int handle_tenant_create_commit_(const omt::ObTenantMeta &tenant_meta);
-  int handle_tenant_deleting_(const omt::ObTenantMeta &tenant_meta);
+  int apply_replay_result_(const omt::ObServerRuntimeMeta &runtime_meta, const bool is_valid);
+  int handle_runtime_creating_();
+  int handle_runtime_create_commit_(const omt::ObServerRuntimeMeta &runtime_meta);
   static int finish_storage_meta_replay_();
   static int online_ls_();
 

@@ -18,7 +18,7 @@
 #define OCEANBASE_SHARE_THROTTLE_OB_THROTTLE_UNIT_H
 
 #include "share/ob_light_hashmap.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 #include "lib/objectpool/ob_concurrency_objpool.h"
 #include "lib/alloc/alloc_struct.h"
 
@@ -103,7 +103,7 @@ public:
   /**
    * @brief Check if this throttle unit has triggerd throttle but do not alloc any resource
    *        ATTENTION : This function is different from is_throttling(). is_throttling() only checks if current
-   *        thread is throttling, but this function checks if this tenant is throttling
+   *        thread is throttling, but this function checks the server runtime throttle state
    */
   bool has_triggered_throttle(const int64_t holding_resource);
 

@@ -17,7 +17,7 @@
 #ifndef OB_ALL_VIRTUAL_SERVER_COMPACTION_PROGRESS_H_
 #define OB_ALL_VIRTUAL_SERVER_COMPACTION_PROGRESS_H_
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
-#include "storage/compaction/ob_tenant_compaction_progress.h"
+#include "storage/compaction/ob_compaction_progress.h"
 
 namespace oceanbase
 {
@@ -53,8 +53,8 @@ private:
 
   char ip_buf_[common::OB_IP_STR_BUFF];
   char event_buf_[common::OB_COMPACTION_EVENT_STR_LENGTH];
-  compaction::ObTenantCompactionProgress progress_;
-  compaction::ObTenantCompactionProgressIterator progress_iter_;
+  compaction::ObMajorCompactionProgress progress_;
+  compaction::ObCompactionProgressIterator progress_iter_;
   bool is_inited_;
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualServerCompactionProgress);
 };

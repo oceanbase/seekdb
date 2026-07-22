@@ -22,8 +22,6 @@ create database if not exists database_test;
   "name_case_mode":-1,
   "comment":"",
   "read_only":false,
-  "default_tablegroup_id":-1,
-  "default_tablegroup_name":"",
   "in_recyclebin":false,
   "primary_zone_array": [
   ]
@@ -44,8 +42,6 @@ alter database database_test CHARACTER SET UTF8;
   "name_case_mode":-1,
   "comment":"",
   "read_only":false,
-  "default_tablegroup_id":-1,
-  "default_tablegroup_name":"",
   "in_recyclebin":false,
   "primary_zone_array": [
   ]
@@ -66,8 +62,6 @@ alter database database_test collate utf8mb4_general_ci;
   "name_case_mode":-1,
   "comment":"",
   "read_only":false,
-  "default_tablegroup_id":-1,
-  "default_tablegroup_name":"",
   "in_recyclebin":false,
   "primary_zone_array": [
   ]
@@ -88,8 +82,6 @@ alter database database_test CHARACTER SET UTF8 collate utf8mb4_general_ci;
   "name_case_mode":-1,
   "comment":"",
   "read_only":false,
-  "default_tablegroup_id":-1,
-  "default_tablegroup_name":"",
   "in_recyclebin":false,
   "primary_zone_array": [
   ]
@@ -118,8 +110,6 @@ create database database_test CHARACTER SET UTF8;
   "name_case_mode":-1,
   "comment":"",
   "read_only":false,
-  "default_tablegroup_id":-1,
-  "default_tablegroup_name":"",
   "in_recyclebin":false,
   "primary_zone_array": [
   ]
@@ -148,8 +138,6 @@ create database database_test collate utf8mb4_general_ci;
   "name_case_mode":-1,
   "comment":"",
   "read_only":false,
-  "default_tablegroup_id":-1,
-  "default_tablegroup_name":"",
   "in_recyclebin":false,
   "primary_zone_array": [
   ]
@@ -178,8 +166,6 @@ create database database_test CHARACTER SET UTF8 collate utf8mb4_general_ci;
   "name_case_mode":-1,
   "comment":"",
   "read_only":false,
-  "default_tablegroup_id":-1,
-  "default_tablegroup_name":"",
   "in_recyclebin":false,
   "primary_zone_array": [
   ]

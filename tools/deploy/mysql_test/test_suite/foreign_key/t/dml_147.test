@@ -5,8 +5,6 @@
 --disable_warnings
 set foreign_key_checks=on;
 
-#drop tablegroup if exists fk_group;
-#create tablegroup fk_group;
 
 drop table if exists t6, t5, t4, t3, t2, t1;
 
@@ -388,4 +386,3 @@ select * from B order by c1;
 --disable_warnings
 drop table if exists A, B;
 --enable_warnings
-

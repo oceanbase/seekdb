@@ -22,17 +22,14 @@ namespace oceanbase
 namespace storage
 {
 /**
-* -----------------------------------ObTenantDicLoader-----------------------------------
+* -----------------------------------ObDicLoader-----------------------------------
 */
-int ObTenantDicLoader::load_dictionary_in_trans(ObMySQLTransaction &trans)
+int ObDicLoader::load_dictionary_in_trans(ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("the dic loader is not initialized", K(ret));
-  } else if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant id", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < dic_tables_info_.count(); ++i) {
       int64_t array_size = dic_tables_info_.at(i).array_size_;
@@ -92,15 +89,12 @@ int ObTenantDicLoader::load_dictionary_in_trans(ObMySQLTransaction &trans)
   return ret;
 }
 
-int ObTenantDicLoader::try_load_dictionary_in_trans(ObMySQLTransaction &trans)
+int ObDicLoader::try_load_dictionary_in_trans(ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("the dic loader is not initialized", K(ret));
-  } else if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant id", K(ret));
   } else {
     if (!is_load_) {
       bool is_need_load_dic = false;
@@ -131,15 +125,12 @@ int ObTenantDicLoader::try_load_dictionary_in_trans(ObMySQLTransaction &trans)
   return ret;
 }
 
-int ObTenantDicLoader::try_load_dictionary_in_trans()
+int ObDicLoader::try_load_dictionary_in_trans()
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("the dic loader is not initialized", K(ret));
-  } else if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant id", K(ret));
   } else {
     if (!is_load_) {
       ObTimeoutCtx timeout_ctx;
@@ -170,7 +161,7 @@ int ObTenantDicLoader::try_load_dictionary_in_trans()
   return ret; 
 }
 
-int ObTenantDicLoader::check_need_load_dic(bool &is_need_load_dic)
+int ObDicLoader::check_need_load_dic(bool &is_need_load_dic)
 {
   int ret = OB_SUCCESS;
   // we keep the code here even though we don't load data into system table anymore.
@@ -179,9 +170,9 @@ int ObTenantDicLoader::check_need_load_dic(bool &is_need_load_dic)
 }
 
 /**
-* -----------------------------------ObTenantDicLoaderHandle-----------------------------------
+* -----------------------------------ObDicLoaderHandle-----------------------------------
 */
-ObTenantDicLoaderHandle &ObTenantDicLoaderHandle::operator =(const ObTenantDicLoaderHandle &other)
+ObDicLoaderHandle &ObDicLoaderHandle::operator =(const ObDicLoaderHandle &other)
 {
   if (this != &other) {
     reset();
@@ -193,19 +184,19 @@ ObTenantDicLoaderHandle &ObTenantDicLoaderHandle::operator =(const ObTenantDicLo
   return *this;
 }
 
-void ObTenantDicLoaderHandle::reset()
+void ObDicLoaderHandle::reset()
 {
   if (nullptr != loader_) {
     const int64_t ref_cnt = loader_->dec_ref();
     if (0 == ref_cnt) {
       ObMemAttr attr("dic_loader");
-      OB_DELETE(ObTenantDicLoader, attr, loader_);
+      OB_DELETE(ObDicLoader, attr, loader_);
     }
     loader_ = nullptr;
   }
 }
 
-int ObTenantDicLoaderHandle::set_loader(ObTenantDicLoader *loader)
+int ObDicLoaderHandle::set_loader(ObDicLoader *loader)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(loader)) {

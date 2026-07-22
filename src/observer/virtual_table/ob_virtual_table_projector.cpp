@@ -97,7 +97,7 @@ int ObSimpleVirtualTableIterator::inner_open()
   if (OB_UNLIKELY(NULL == schema_service_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("schema_service_ not init", K(ret));
-  } else if (OB_FAIL(schema_service_->get_tenant_schema_guard(schema_guard_))) {
+  } else if (OB_FAIL(schema_service_->get_runtime_schema_guard(schema_guard_))) {
     LOG_WARN("fail to get schema guard", K(ret));
   } else if (OB_FAIL(get_table_schema( table_id_))) {
     LOG_WARN("fail to get table schema", K(ret));

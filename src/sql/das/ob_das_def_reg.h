@@ -34,7 +34,6 @@ struct ObDASOpTypeTraits
   //and does not have its own operator.
   constexpr static bool attached_ = false;
   typedef char DASOp;
-  typedef char DASOpResult;
   typedef char DASCtDef;
   typedef char DASRtDef;
 };
@@ -46,7 +45,7 @@ struct ObDASOpTraits
 };
 }  // namespace das_reg
 
-#define REGISTER_DAS_OP(type, op, op_result, ctdef, rtdef)                                      \
+#define REGISTER_DAS_OP(type, op, ctdef, rtdef)                                                 \
   namespace das_reg {                                                                           \
   template<>                                                                                    \
   struct ObDASOpTypeTraits<type>                                                                \
@@ -54,7 +53,6 @@ struct ObDASOpTraits
     constexpr static bool registered_ = true;                                                   \
     constexpr static bool attached_ = false;                                                    \
     typedef op DASOp;                                                                           \
-    typedef op_result DASOpResult;                                                              \
     typedef ctdef DASCtDef;                                                                     \
     typedef rtdef DASRtDef;                                                                     \
   };                                                                                            \
@@ -62,55 +60,46 @@ struct ObDASOpTraits
   }
 
 class ObDASScanOp;
-class ObDASScanResult;
 struct ObDASScanCtDef;
 struct ObDASScanRtDef;
-REGISTER_DAS_OP(DAS_OP_TABLE_SCAN, ObDASScanOp, ObDASScanResult, ObDASScanCtDef, ObDASScanRtDef);
+REGISTER_DAS_OP(DAS_OP_TABLE_SCAN, ObDASScanOp, ObDASScanCtDef, ObDASScanRtDef);
 
 class ObDASInsertOp;
-class ObDASInsertResult;
 struct ObDASInsCtDef;
 struct ObDASInsRtDef;
-REGISTER_DAS_OP(DAS_OP_TABLE_INSERT, ObDASInsertOp, ObDASInsertResult, ObDASInsCtDef, ObDASInsRtDef);
+REGISTER_DAS_OP(DAS_OP_TABLE_INSERT, ObDASInsertOp, ObDASInsCtDef, ObDASInsRtDef);
 
 class ObDASDeleteOp;
-class ObDASDeleteResult;
 struct ObDASDelCtDef;
 struct ObDASDelRtDef;
-REGISTER_DAS_OP(DAS_OP_TABLE_DELETE, ObDASDeleteOp, ObDASDeleteResult, ObDASDelCtDef, ObDASDelRtDef);
+REGISTER_DAS_OP(DAS_OP_TABLE_DELETE, ObDASDeleteOp, ObDASDelCtDef, ObDASDelRtDef);
 
 class ObDASUpdateOp;
-class ObDASUpdateResult;
 struct ObDASUpdCtDef;
 struct ObDASUpdRtDef;
-REGISTER_DAS_OP(DAS_OP_TABLE_UPDATE, ObDASUpdateOp, ObDASUpdateResult, ObDASUpdCtDef, ObDASUpdRtDef);
+REGISTER_DAS_OP(DAS_OP_TABLE_UPDATE, ObDASUpdateOp, ObDASUpdCtDef, ObDASUpdRtDef);
 
 class ObDASLockOp;
-class ObDASLockResult;
 struct ObDASLockCtDef;
 struct ObDASLockRtDef;
-REGISTER_DAS_OP(DAS_OP_TABLE_LOCK, ObDASLockOp, ObDASLockResult, ObDASLockCtDef, ObDASLockRtDef);
+REGISTER_DAS_OP(DAS_OP_TABLE_LOCK, ObDASLockOp, ObDASLockCtDef, ObDASLockRtDef);
 
 class ObDASGroupScanOp;
-class ObDASScanResult;
 struct ObDASScanCtDef;
 struct ObDASScanRtDef;
-REGISTER_DAS_OP(DAS_OP_TABLE_BATCH_SCAN, ObDASGroupScanOp, ObDASScanResult, ObDASScanCtDef, ObDASScanRtDef);
+REGISTER_DAS_OP(DAS_OP_TABLE_BATCH_SCAN, ObDASGroupScanOp, ObDASScanCtDef, ObDASScanRtDef);
 
 class ObDASSplitRangesOp;
-class ObDASSplitRangesResult;
 class ObDASEmptyCtDef;
 class ObDASEmptyRtDef;
-REGISTER_DAS_OP(DAS_OP_SPLIT_MULTI_RANGES, ObDASSplitRangesOp, ObDASSplitRangesResult, ObDASEmptyCtDef, ObDASEmptyRtDef);
+REGISTER_DAS_OP(DAS_OP_SPLIT_MULTI_RANGES, ObDASSplitRangesOp, ObDASEmptyCtDef, ObDASEmptyRtDef);
 
 class ObDASRangesCostOp;
-class ObDASRangesCostResult;
-REGISTER_DAS_OP(DAS_OP_GET_RANGES_COST, ObDASRangesCostOp, ObDASRangesCostResult, ObDASEmptyCtDef, ObDASEmptyRtDef);
+REGISTER_DAS_OP(DAS_OP_GET_RANGES_COST, ObDASRangesCostOp, ObDASEmptyCtDef, ObDASEmptyRtDef);
 
 #undef REGISTER_DAS_OP
 
 class ObDASEmptyOp;
-class ObDASEmptyResult;
 #define REGISTER_DAS_ATTACH_OP(type, ctdef, rtdef)                                              \
   namespace das_reg {                                                                           \
   template<>                                                                                    \
@@ -119,7 +108,6 @@ class ObDASEmptyResult;
     constexpr static bool registered_ = true;                                                   \
     constexpr static bool attached_ = true;                                                     \
     typedef ObDASEmptyOp DASOp;                                                                 \
-    typedef ObDASEmptyResult DASOpResult;                                                       \
     typedef ctdef DASCtDef;                                                                     \
     typedef rtdef DASRtDef;                                                                     \
   };                                                                                            \

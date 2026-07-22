@@ -186,7 +186,7 @@ private:
 
   ObExtraMediumInfo extra_info_;
 
-  MediumInfoList medium_info_list_; // need for compat, will not store any MediumCompactionInfo after 4.2
+  MediumInfoList medium_info_list_;
 };
 
 } // namespace compaction

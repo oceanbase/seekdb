@@ -97,6 +97,7 @@ enum ParseMode
   DYNAMIC_SQL_MODE, /*Parse dynamic SQL, :idx and :identifier need to be determined whether to check the placeholder name based on the statement type*/
   DBMS_SQL_MODE,
   INS_MULTI_VALUES,
+  METHOD_OPT_MODE,
 };
 
 typedef struct
@@ -147,7 +148,6 @@ typedef struct _ParseNode
       uint32_t is_literal_bool_ : 1; // indicate node is a literal TRUE/FALSE
       uint32_t is_empty_ : 1; // indicates whether the node is default, 1 means default, 0 means not default, used in opt_asc_desc node
       uint32_t is_multiset_ : 1; // for cast(multiset(...) as ...)
-      uint32_t is_forbid_anony_parameter_ : 1; // 1 indicates prohibiting anonymous block parameterization
       uint32_t is_input_quoted_ : 1; // indicate name_ob input whether with double quote
       uint32_t is_forbid_parameter_ : 1; //1 indicate forbid parameter
       uint32_t is_default_literal_expression_ : 1; // 1 indicate in default literal expression, "DEFAULT NOW()"
@@ -323,9 +323,9 @@ typedef struct
     uint32_t is_for_remap_                     : 1;
     uint32_t contain_sensitive_data_           : 1;
     uint32_t may_contain_sensitive_data_       : 1;
-    uint32_t is_external_table_                : 1;
     uint32_t is_returning_                     : 1;
     uint32_t is_into_cluster_                  : 1;
+    uint32_t is_method_opt_parser_             : 1;
   };
 
   ParseNode *result_tree_;

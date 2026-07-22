@@ -101,8 +101,8 @@ void ObOptStatMonitorFlushAllTask::runTimerTask()
     
     bool is_primary = true;
     THIS_WORKER.set_timeout_ts(FLUSH_INTERVAL / 2 + ObTimeUtility::current_time());
-    if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(is_primary))) {
-      LOG_WARN("fail to execute mtl_check_if_tenant_role_is_primary", KR(ret));
+    if (OB_FAIL(ObShareUtil::check_if_server_role_is_primary(is_primary))) {
+      LOG_WARN("fail to execute check_if_server_role_is_primary", KR(ret));
     } else if (!is_primary) {
       // do nothing
     } else if (OB_FAIL(optstat_monitor_mgr_->update_column_usage_info(false))) {
@@ -121,8 +121,8 @@ void ObOptStatMonitorCheckTask::runTimerTask()
     
     bool is_primary = true;
     THIS_WORKER.set_timeout_ts(CHECK_INTERVAL + ObTimeUtility::current_time());
-    if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(is_primary))) {
-      LOG_WARN("fail to execute mtl_check_if_tenant_role_is_primary", KR(ret));
+    if (OB_FAIL(ObShareUtil::check_if_server_role_is_primary(is_primary))) {
+      LOG_WARN("fail to execute check_if_server_role_is_primary", KR(ret));
     } else if (!is_primary) {
       // do nothing
     } else if (OB_FAIL(optstat_monitor_mgr_->update_column_usage_info(true))) {
@@ -186,7 +186,7 @@ int ObOptStatMonitorManager::flush_database_monitoring_info(sql::ObExecContext &
       ret = OB_TIMEOUT;
       LOG_WARN("query timeout is reached", K(ret), K(timeout));
     } else if (OB_FAIL(ex_rpc::sync_call([&]() -> int {
-      MOD_SCOPE {
+      SERVER_MODULE_SCOPE {
         return share::g_mp->opt_stat_monitor_manager()->update_opt_stat_monitoring_info(arg);
       }
       return OB_SUCCESS;
@@ -275,9 +275,9 @@ int ObOptStatMonitorManager::update_opt_stat_monitoring_info(const obcall::ObFlu
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(arg));
   } else if (arg.is_flush_col_usage_ && OB_FAIL(update_column_usage_info(false))) {
-    LOG_WARN("failed to update tenant column usage info", K(ret));
+    LOG_WARN("failed to update column usage info", K(ret));
   } else if (arg.is_flush_dml_stat_ && OB_FAIL(update_dml_stat_info())) {
-    LOG_WARN("failed to update tenant column usage info", K(ret));
+    LOG_WARN("failed to update DML statistics", K(ret));
   } else { /*do nothing*/ }
   return ret;
 }
@@ -357,11 +357,8 @@ int ObOptStatMonitorManager::update_dml_stat_info()
       }
     }
     if (OB_SUCC(ret)) {
-      bool no_check = (OB_E(EventTable::EN_LEADER_STORAGE_ESTIMATION) OB_SUCCESS) != OB_SUCCESS;
       if (OB_FAIL(clean_useless_dml_stat_info())) {
         LOG_WARN("failed to clean useless dml stat info", K(ret));
-      } else if (no_check) {
-        //do nothing
       } else if (OB_FAIL(check_opt_stats_expired(dml_stats))) {
         LOG_WARN("failed to check opt stats expired", K(ret));
       } else {/*do nohting*/}
@@ -532,8 +529,8 @@ int ObOptStatMonitorManager::check_table_writeable(bool &is_writeable)
   int ret = OB_SUCCESS;
   is_writeable = true;
   bool is_primary = true;
-  if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(is_primary))) {
-    LOG_WARN("fail to execute mtl_check_if_tenant_role_is_primary", KR(ret));
+  if (OB_FAIL(ObShareUtil::check_if_server_role_is_primary(is_primary))) {
+    LOG_WARN("fail to execute check_if_server_role_is_primary", KR(ret));
   } else if (OB_UNLIKELY(!is_primary)) {
     is_writeable = false;
   }
@@ -660,7 +657,7 @@ int ObOptStatMonitorManager::clean_useless_dml_stat_info()
   return ret;
 }
 
-int ObOptStatMonitorManager::mtl_init(ObOptStatMonitorManager* &optstat_monitor_mgr)
+int ObOptStatMonitorManager::server_module_init(ObOptStatMonitorManager* &optstat_monitor_mgr)
 {
   int ret = OB_SUCCESS;
   
@@ -672,7 +669,7 @@ int ObOptStatMonitorManager::mtl_init(ObOptStatMonitorManager* &optstat_monitor_
   return ret;
 }
 
-int ObOptStatMonitorManager::mtl_start(ObOptStatMonitorManager* &optstat_monitor_mgr)
+int ObOptStatMonitorManager::server_module_start(ObOptStatMonitorManager* &optstat_monitor_mgr)
 {
   int ret = OB_SUCCESS;
   if (OB_LIKELY(nullptr != optstat_monitor_mgr)) {
@@ -694,7 +691,7 @@ int ObOptStatMonitorManager::mtl_start(ObOptStatMonitorManager* &optstat_monitor
   return ret;
 }
 
-void ObOptStatMonitorManager::mtl_stop(ObOptStatMonitorManager* &optstat_monitor_mgr)
+void ObOptStatMonitorManager::server_module_stop(ObOptStatMonitorManager* &optstat_monitor_mgr)
 {
   if (OB_LIKELY(nullptr != optstat_monitor_mgr)) {
     share::g_mp->shared_timer()->cancel_task(optstat_monitor_mgr->get_flush_all_task());
@@ -702,7 +699,7 @@ void ObOptStatMonitorManager::mtl_stop(ObOptStatMonitorManager* &optstat_monitor
   }
 }
 
-void ObOptStatMonitorManager::mtl_wait(ObOptStatMonitorManager* &optstat_monitor_mgr)
+void ObOptStatMonitorManager::server_module_wait(ObOptStatMonitorManager* &optstat_monitor_mgr)
 {
   if (OB_LIKELY(nullptr != optstat_monitor_mgr)) {
     share::g_mp->shared_timer()->wait_task(optstat_monitor_mgr->get_flush_all_task());
@@ -821,8 +818,8 @@ int ObOptStatMonitorManager::gen_tablet_list(const ObIArray<ObOptDmlStat> &dml_s
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(GCTX.schema_service_));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("get tenant schema guard failed", K(ret));
+  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("get runtime schema guard failed", K(ret));
   } else {
     bool is_first = true;
     for (int64_t i = begin_idx; OB_SUCC(ret) && i < end_idx; ++i) {
@@ -1014,8 +1011,8 @@ int ObOptStatMonitorManager::get_expired_table_part_info(ObIAllocator &allocator
   if (OB_ISNULL(GCTX.schema_service_) || OB_UNLIKELY(!expired_table_info.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(expired_table_info), K(GCTX.schema_service_));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("get tenant schema guard failed", K(ret));
+  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("get runtime schema guard failed", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema(
                                                    expired_table_info.table_id_,
                                                    table_schema))) {

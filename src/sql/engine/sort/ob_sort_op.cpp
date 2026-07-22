@@ -482,8 +482,7 @@ int ObSortOp::inner_get_next_row()
     ret = OB_ITER_END;
   } else if (is_first_) {
     // Here what we want is to account
-    // the resource usage(memory usage in this case) to a 'real' tenant rather than billing
-    // the innocent DEFAULT tenant. We should think about changing the name of this function.
+    // Charge memory to the runtime that owns the execution context.
     is_first_ = false;
     int64_t topn_cnt = INT64_MAX;
     int64_t row_count = MY_SPEC.rows_;

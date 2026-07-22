@@ -86,7 +86,6 @@ int ObFTDocWordScanIterator::reuse()
     LOG_WARN("fail to reuse storage scan iter", K(ret));
   } else {
     scan_param_.key_ranges_.reuse();
-    scan_param_.ss_key_ranges_.reuse();
     scan_param_.mbr_filters_.reuse();
     scan_allocator_.reset_remain_one_page();
   }
@@ -183,7 +182,6 @@ int ObFTDocWordScanIterator::init_scan_param(
     scan_param_.is_get_ = false;
     scan_param_.scan_flag_.flag_ = query_flag.flag_;
     scan_param_.key_ranges_.set_attr(ObMemAttr("ScanParamKR"));
-    scan_param_.ss_key_ranges_.set_attr(ObMemAttr("ScanParamSSKR"));
     scan_param_.index_id_ = 0;
     scan_param_.timeout_ = THIS_WORKER.get_timeout_ts();
     scan_param_.reserved_cell_count_ = scan_param_.column_ids_.count();
@@ -195,7 +193,6 @@ int ObFTDocWordScanIterator::init_scan_param(
     scan_param_.for_update_wait_timeout_ = scan_param_.timeout_;
     scan_param_.scan_allocator_ = &scan_allocator_;
     scan_param_.frozen_version_ = -1;
-    scan_param_.force_refresh_lc_ = false;
     scan_param_.output_exprs_ = nullptr;
     scan_param_.aggregate_exprs_ = nullptr;
     scan_param_.op_ = nullptr;
@@ -204,7 +201,6 @@ int ObFTDocWordScanIterator::init_scan_param(
     scan_param_.pd_storage_flag_ = false;
     scan_param_.table_param_ = &table_param_;
     scan_param_.key_ranges_.reset();
-    scan_param_.ss_key_ranges_.reset();
     if (OB_FAIL(scan_param_.snapshot_.assign(*snapshot))) {
       LOG_WARN("fail to assign snapshot", K(ret), KPC(snapshot));
     } else {
@@ -228,8 +224,8 @@ int ObFTDocWordScanIterator::build_table_param(
   if (OB_UNLIKELY(OB_INVALID_ID == table_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(table_id));
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", K(ret));
+  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get runtime schema guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
     LOG_WARN("fail to get table scheam", K(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {

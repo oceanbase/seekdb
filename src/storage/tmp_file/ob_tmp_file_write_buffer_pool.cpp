@@ -38,7 +38,7 @@ ObTmpWriteBufferPool::ObTmpWriteBufferPool()
       first_free_page_id_(ObTmpFileGlobal::INVALID_PAGE_ID),
       wbp_memory_limit_(-1),
       default_wbp_memory_limit_(-1),
-      last_access_tenant_config_ts_(-1),
+      last_access_runtime_config_ts_(-1),
       last_shrink_complete_ts_(ObTimeUtility::current_time()),
       max_used_watermark_after_shrinking_(0),
       meta_page_cnt_(0),
@@ -81,7 +81,7 @@ void ObTmpWriteBufferPool::destroy()
   dirty_page_num_ = 0;
   used_page_num_ = 0;
   first_free_page_id_ = ObTmpFileGlobal::INVALID_PAGE_ID;
-  last_access_tenant_config_ts_ = -1;
+  last_access_runtime_config_ts_ = -1;
   last_shrink_complete_ts_ = -1;
   max_used_watermark_after_shrinking_ = 0;
   data_page_cnt_ = 0;
@@ -1036,27 +1036,23 @@ uint32_t ObTmpWriteBufferPool::cal_max_allow_alloc_page_id_(int64_t lower_bound,
 int64_t ObTmpWriteBufferPool::get_memory_limit()
 {
   int64_t memory_limit = 0;
-  int64_t last_access_ts = ATOMIC_LOAD(&last_access_tenant_config_ts_);
+  int64_t last_access_ts = ATOMIC_LOAD(&last_access_runtime_config_ts_);
   int64_t default_wbp_memory_limit = ATOMIC_LOAD(&default_wbp_memory_limit_);
   if (default_wbp_memory_limit > 0) {
     memory_limit = (default_wbp_memory_limit + WBP_BLOCK_SIZE - 1) / WBP_BLOCK_SIZE * WBP_BLOCK_SIZE; // upper_align
   } else if (last_access_ts > 0 && common::ObClockGenerator::getClock() - last_access_ts < 10000000) { // 10s
     memory_limit = ATOMIC_LOAD(&wbp_memory_limit_);
   } else {
-    if (!true) {
-      static const int64_t DEFAULT_MEMORY_LIMIT = 64 * WBP_BLOCK_SIZE; // 126.5MB
-      memory_limit = wbp_memory_limit_ <= 0 ? DEFAULT_MEMORY_LIMIT : wbp_memory_limit_;
-      LOG_INFO("failed to get tenant config", K(memory_limit), K(wbp_memory_limit_));
-    } else if (0 == GCONF._temporary_file_io_area_size) {
+    if (0 == GCONF._temporary_file_io_area_size) {
       memory_limit = WBP_BLOCK_SIZE;
     } else {
       int64_t config_memory_limit =
-        lib::get_tenant_memory_limit() * GCONF._temporary_file_io_area_size / 100;
+        lib::get_allocator_memory_limit() * GCONF._temporary_file_io_area_size / 100;
       memory_limit = config_memory_limit;
     }
     memory_limit = ((memory_limit + WBP_BLOCK_SIZE - 1) / WBP_BLOCK_SIZE) * WBP_BLOCK_SIZE;
     ATOMIC_STORE(&wbp_memory_limit_, memory_limit);
-    ATOMIC_STORE(&last_access_tenant_config_ts_, common::ObClockGenerator::getClock());
+    ATOMIC_STORE(&last_access_runtime_config_ts_, common::ObClockGenerator::getClock());
   }
   return memory_limit;
 }
@@ -1393,7 +1389,7 @@ int ObTmpWriteBufferPool::notify_write_back_fail(int64_t fd, uint32_t page_id,
   return ret;
 }
 
-// return write buffer pool maximum page number, which is determined by tenant memory and config
+// Return the maximum page count derived from runtime memory and configuration.
 int64_t ObTmpWriteBufferPool::get_max_page_num()
 {
   int64_t mem_limit = get_memory_limit();

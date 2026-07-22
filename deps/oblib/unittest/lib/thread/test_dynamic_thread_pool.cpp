@@ -17,7 +17,6 @@
 #include "lib/thread/ob_dynamic_thread_pool.h"
 #include <gtest/gtest.h>
 #include <malloc.h>
-#include "lib/restore/ob_storage.h"
 
 using namespace oceanbase::common;
 class TestObDynamicThreadPool: public ::testing::Test
@@ -114,4 +113,3 @@ int main(int argc, char **argv)
   ::testing::InitGoogleTest(&argc,argv);
   return RUN_ALL_TESTS();
 }
-

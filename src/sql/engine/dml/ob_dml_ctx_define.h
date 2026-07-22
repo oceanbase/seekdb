@@ -189,13 +189,12 @@ public:
   inline bool is_contains_sql() const { return is_contains_sql_; }
   inline bool is_wps() const { return is_wps_; }
   inline bool is_rps() const { return is_rps_; }
-  inline bool is_has_sequence() const { return is_has_sequence_; }
   inline bool is_has_out_param() const { return is_has_out_param_; }
   inline bool is_external_state() const { return is_external_state_; }
 
   inline bool is_execute_single_row() const
   {
-    return (is_modifies_sql_data_ || is_wps_ || is_rps_ || is_has_sequence_ ||
+    return (is_modifies_sql_data_ || is_wps_ || is_rps_ ||
             is_reads_sql_data_ || is_external_state_);
   }
 
@@ -231,10 +230,9 @@ private:
       uint64_t is_contains_sql_ : 1;      // it marks trigger do not contain read and write sql, but contain other sql stmt, such as set stmt
       uint64_t is_wps_ : 1;               // it marks trigger write package var
       uint64_t is_rps_ : 1;               // it marks trigger read package var
-      uint64_t is_has_sequence_ : 1;      // it marks trigger used sequence
       uint64_t is_has_out_param_ : 1;     // it marks trigger has out param
       uint64_t is_external_state_ : 1;    // it marks trigger access other store routine or global var etc..
-      uint64_t reserved_:54;
+      uint64_t reserved_:55;
     };
   };
 };
@@ -1057,7 +1055,7 @@ struct ObDMLRtCtx
   {
     bool bret = false;
     int64_t simulate_buffer_size = - EVENT_CALL(EventTable::EN_DAS_DML_BUFFER_OVERFLOW);
-    int64_t buffer_size_limit = das::OB_DAS_MAX_TOTAL_PACKET_SIZE;
+    int64_t buffer_size_limit = das::OB_DAS_TOTAL_TASK_BUFFER_SIZE;
     if (OB_UNLIKELY(simulate_buffer_size > 0)) {
       buffer_size_limit = simulate_buffer_size;
     }

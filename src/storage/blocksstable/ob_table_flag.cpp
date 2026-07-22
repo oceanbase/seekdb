@@ -63,30 +63,5 @@ OB_SERIALIZE_MEMBER(ObTableBackupFlag, flag_);
 
 
 
-ObTableSharedFlag::ObTableSharedFlag()
-  : shared_flag_(PRIVATE),
-    reserved_(0)
-{
-}
-
-ObTableSharedFlag::~ObTableSharedFlag()
-{
-}
-
-void ObTableSharedFlag::reset()
-{
-  shared_flag_ = PRIVATE;
-  reserved_ = 0;
-}
-
-bool ObTableSharedFlag::is_valid() const
-{
-  return shared_flag_ >= PRIVATE && shared_flag_ < MAX;
-}
-
-
-OB_SERIALIZE_MEMBER(ObTableSharedFlag, flag_);
-
-
 }
 }

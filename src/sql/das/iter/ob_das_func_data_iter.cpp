@@ -397,7 +397,6 @@ int ObDASFuncDataIter::init_main_lookup_scan_param(
   
   
   param.key_ranges_.set_attr(ObMemAttr("SParamKR"));
-  param.ss_key_ranges_.set_attr(ObMemAttr("SParamSSKR"));
   if (OB_ISNULL(ctdef) || OB_ISNULL(rtdef)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr ctdef or rtdef", K(ret), KPC(ctdef), KPC(rtdef));
@@ -413,7 +412,6 @@ int ObDASFuncDataIter::init_main_lookup_scan_param(
     param.reserved_cell_count_ = ctdef->access_column_ids_.count();
     param.sql_mode_ = rtdef->sql_mode_;
     param.frozen_version_ = rtdef->frozen_version_;
-    param.force_refresh_lc_ = rtdef->force_refresh_lc_;
     param.output_exprs_ = &(ctdef->pd_expr_spec_.access_exprs_);
     param.aggregate_exprs_ = &(ctdef->pd_expr_spec_.pd_storage_aggregate_output_);
     param.calc_exprs_ = &(ctdef->pd_expr_spec_.calc_exprs_);
@@ -421,7 +419,7 @@ int ObDASFuncDataIter::init_main_lookup_scan_param(
     param.op_ = rtdef->p_pd_expr_op_;
     param.row2exprs_projector_ = rtdef->p_row2exprs_projector_;
     param.schema_version_ = ctdef->schema_version_;
-    param.tenant_schema_version_ = rtdef->tenant_schema_version_;
+    param.runtime_schema_version_ = rtdef->runtime_schema_version_;
     param.limit_param_ = rtdef->limit_param_;
     param.need_scn_ = rtdef->need_scn_;
     param.pd_storage_flag_ = ctdef->pd_expr_spec_.pd_storage_flag_.pd_flag_;

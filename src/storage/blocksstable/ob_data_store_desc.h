@@ -60,8 +60,7 @@ public:
     const compaction::ObMergeType merge_type,
     const int64_t snapshot_version,
     const share::SCN &end_scn,
-    const int64_t cluster_version,
-    const compaction::ObExecMode exec_mode,
+    const int64_t data_format_version,
     const bool micro_index_clustered,
     const int64_t concurrent_cnt,
     const bool need_submit_io = true,
@@ -75,26 +74,19 @@ public:
       "merge_type", merge_type_to_str(merge_type_),
       K_(snapshot_version),
       K_(end_scn),
-      "exec_mode", exec_mode_to_str(exec_mode_),
       K_(is_ddl),
       K_(compressor_type),
       K_(macro_block_size),
       K_(macro_store_size),
       K_(micro_block_size_limit),
       K_(schema_version),
-      K_(encrypt_id),
-      K_(master_key_id),
-      KPHEX_(encrypt_key, sizeof(encrypt_key_)),
-      K_(major_working_cluster_version),
+      K_(data_format_version),
       K_(micro_index_clustered),
-      K_(enable_macro_block_bloom_filter),
       K_(progressive_merge_round),
       K_(need_submit_io),
-      K_(is_delete_insert_table),
       K_(encoding_granularity),
       K_(semistruct_encoding_type));
 private:
-  OB_INLINE int init_encryption_info(const share::schema::ObMergeSchema &merge_schema);
   OB_INLINE void init_block_size(const share::schema::ObMergeSchema &merge_schema);
   static const int64_t DEFAULT_RESERVE_PERCENT = 90;
   static const int64_t MIN_RESERVED_SIZE = 1024; //1KB;
@@ -113,18 +105,9 @@ public:
   int64_t snapshot_version_;
   share::SCN end_scn_;
   int64_t progressive_merge_round_;
-  // indicate the min_cluster_version which trigger the major freeze
-  // major_working_cluster_version_ == 0 means upgrade from old cluster
-  // which still use freezeinfo without cluster version
-  int64_t major_working_cluster_version_;
-  int64_t encrypt_id_;
-  int64_t master_key_id_;
-  char encrypt_key_[share::OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH];
-  compaction::ObExecMode exec_mode_;
+  int64_t data_format_version_;
   bool micro_index_clustered_;
-  bool enable_macro_block_bloom_filter_;
   bool need_submit_io_;
-  bool is_delete_insert_table_;
   uint64_t encoding_granularity_;
   share::schema::ObSemiStructEncodingType semistruct_encoding_type_;
 };
@@ -139,7 +122,7 @@ struct ObColDataStoreDesc
   int init(
     const bool is_major,
     const share::schema::ObMergeSchema &merge_schema,
-    const int64_t major_working_cluster_version);
+    const int64_t data_format_version);
   // be carefule to cal mock function
   int mock_valid_col_default_checksum_array(int64_t column_cnt);
   OB_INLINE int add_col_desc(const ObObjMeta meta, int64_t col_idx);
@@ -155,7 +138,7 @@ private:
   int generate_skip_index_meta(
       const bool is_major,
       const share::schema::ObMergeSchema &schema,
-      const int64_t major_working_cluster_version);
+      const int64_t data_format_version);
   void fresh_col_meta(const share::schema::ObMergeSchema &merge_schema);
   int gene_col_default_checksum_array(
       const share::schema::ObMergeSchema &merge_schema);
@@ -234,18 +217,11 @@ public:
   {
     return get_row_column_count() == get_col_desc_array().count();
   }
-  int64_t get_fixed_header_version() const
-  {
-    return ObSSTableMacroBlockHeader::SSTABLE_MACRO_BLOCK_HEADER_VERSION_V2;
-  }
   int64_t get_fixed_header_col_type_cnt() const
   {
     return col_desc_->rowkey_column_count_;
   }
   bool micro_index_clustered() const;
-  bool is_delete_insert_merge() const
-  { return get_is_delete_insert_table() && !is_major_merge_type(); }
-  bool enable_macro_block_bloom_filter() const;
   int update_basic_info_from_macro_meta(const ObSSTableBasicMeta &meta);
   /* GET FUNC */
   #define STORE_DESC_DEFINE_POINT_FUNC(var_type, desc, var_name) \
@@ -262,17 +238,12 @@ public:
   STATIC_DESC_FUNC(int64_t, progressive_merge_round);
   STATIC_DESC_FUNC(int64_t, schema_version);
   STATIC_DESC_FUNC(int64_t, snapshot_version);
-  STATIC_DESC_FUNC(int64_t, encrypt_id);
-  STATIC_DESC_FUNC(int64_t, master_key_id);
   STATIC_DESC_FUNC(share::SCN, end_scn);
   STATIC_DESC_FUNC(bool, is_ddl);
   STATIC_DESC_FUNC(ObCompressorType, compressor_type);
-  STATIC_DESC_FUNC(int64_t, major_working_cluster_version);
-  STATIC_DESC_FUNC(const char *, encrypt_key);
-  STATIC_DESC_FUNC(compaction::ObExecMode, exec_mode);
+  STATIC_DESC_FUNC(int64_t, data_format_version);
   STATIC_DESC_FUNC(bool, need_submit_io);
   STATIC_DESC_FUNC(int64_t, concurrent_cnt);
-  STATIC_DESC_FUNC(bool, is_delete_insert_table);
   COL_DESC_FUNC(int64_t, row_column_count);
   COL_DESC_FUNC(int64_t, rowkey_column_count);
   COL_DESC_FUNC(int64_t, schema_rowkey_col_cnt);
@@ -285,16 +256,10 @@ public:
   #undef COL_DESC_FUNC
   #undef STATIC_DESC_FUNC
   #undef STORE_DESC_DEFINE_POINT_FUNC
-  OB_INLINE int64_t get_encrypt_key_size() const { return sizeof(static_desc_->encrypt_key_); }
   OB_INLINE int64_t get_micro_block_size() const { return micro_block_size_; }
   OB_INLINE common::ObRowStoreType get_row_store_type() const { return row_store_type_; }
   OB_INLINE const share::schema::ObSemiStructEncodingType& get_semistruct_encoding_type() const { return static_desc_->semistruct_encoding_type_; }
   static const int64_t MIN_MICRO_BLOCK_SIZE = 4 * 1024; //4KB
-  // emergency magic table id is 10000
-  static const uint64_t EMERGENCY_TENANT_ID_MAGIC = 0;
-  static const uint64_t EMERGENCY_LS_ID_MAGIC = 0;
-  static const ObTabletID EMERGENCY_TABLET_ID_MAGIC;
-
   TO_STRING_KV(
       KPC_(static_desc),
       "row_store_type", ObStoreFormat::get_row_store_name(row_store_type_),
@@ -353,11 +318,10 @@ struct ObWholeDataStoreDesc
     const common::ObTabletID tablet_id,
     const compaction::ObMergeType merge_type,
     const int64_t snapshot_version,
-    const int64_t cluster_version,
+    const int64_t data_format_version,
     const bool micro_index_clustered,
     const int64_t concurrent_cnt,
     const share::SCN &end_scn = share::SCN::invalid_scn(),
-    const compaction::ObExecMode exec_mode = compaction::ObExecMode::EXEC_MODE_LOCAL,
     const bool need_submit_io = true);
   int gen_index_store_desc(const ObDataStoreDesc &data_desc);
   int assign(const ObDataStoreDesc &desc);

@@ -189,17 +189,6 @@ public:
   UnionTZCtx time_ctx_;   //time ctx, such as version, tail_ns, tz_id...
   int64_t time_us_;     //full time with usec, same as timestamp
 }__attribute__ ((packed));
-// The old version of ObOTimestampData, originally time_us_ was first, time_ctx_ was after.
-// For ObTimestampNanoType type, only the first two bytes of time_ctx_ are valid, therefore crc64_v2 directly calculates the checksum of the first 10 bytes.
-// When implementing the new engine, I made some optimizations by swapping the positions of two members in ObOTimestampData, which led to the crc64_v2 calculation producing results incompatible with the old version,
-// Storage layer inspection error. Add ObOTimestampDataOld class, used for calculating checksum value compatible with the old version.
-struct ObOTimestampDataOld {
-  int64_t time_us_;
-  int32_t time_ctx_;
-  ObOTimestampDataOld() : time_us_(0), time_ctx_(0) { }
-  ObOTimestampDataOld(const int64_t time_us, const int32_t tz_ctx) :
-	                 time_us_(time_us), time_ctx_(tz_ctx) { }
-};
 
 struct ObOTimestampTinyData {
   ObOTimestampTinyData &from_timestamp_data(const ObOTimestampData &v) {
@@ -246,7 +235,6 @@ struct ObTimeZoneTrans
 static const int32_t INVALID_TZ_OFF = INT32_MAX;
 
 class ObTZInfoMap;
-class ObTenantTimezone;
 
 // wrap ObTZInfoMap with ref count
 class ObTZMapWrap

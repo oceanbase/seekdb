@@ -29,7 +29,6 @@ public:
   ObCreateOutlineStmt() :
       ObDDLStmt(stmt::T_CREATE_OUTLINE),
       create_outline_arg_(),
-      max_concurrent_(-1),
       outline_stmt_(NULL)
   {}
   ~ObCreateOutlineStmt() { }
@@ -46,8 +45,6 @@ public:
   common::ObString &get_outline_sql() { return create_outline_arg_.outline_info_.get_sql_text_str(); }
   common::ObString &get_format_outline_sql() { return create_outline_arg_.outline_info_.get_format_sql_text_str(); }
   void set_outline_stmt(ObStmt *stmt) { outline_stmt_ = stmt; }
-  void set_max_concurrent(int64_t max_concurrent) { max_concurrent_ = max_concurrent; }
-  int64_t get_max_concurrent() { return max_concurrent_; }
   ObStmt *&get_outline_stmt() { return outline_stmt_; }
   void set_target_sql(const common::ObString &target) { create_outline_arg_.outline_info_.set_outline_target(target);}
   const common::ObString &get_target_sql() const { return create_outline_arg_.outline_info_.get_outline_target_str(); }
@@ -65,7 +62,6 @@ private:
   common::ObString sql_id_; // given sql_idofcase
   common::ObString format_sql_id_; // Given sql_id situation
   common::ObString hint_; // What is the given hint
-  int64_t max_concurrent_;
   ObStmt *outline_stmt_;//the stmt for outline, determine the situation by whether this value is null or not
   DISALLOW_COPY_AND_ASSIGN(ObCreateOutlineStmt);
 };

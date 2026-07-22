@@ -15,7 +15,7 @@
  */
 
 #include "ob_storage_log.h"
-#include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
+#include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
 
 namespace oceanbase
 {
@@ -23,82 +23,60 @@ using namespace share;
 namespace storage
 {
 
-ObCreateTenantPrepareLog::ObCreateTenantPrepareLog(omt::ObTenantMeta &meta)
+ObCreateRuntimePrepareLog::ObCreateRuntimePrepareLog(omt::ObServerRuntimeMeta &meta)
   : meta_(meta)
 {
 }
 
-bool ObCreateTenantPrepareLog::is_valid() const
+bool ObCreateRuntimePrepareLog::is_valid() const
 {
   return meta_.is_valid();
 }
 
-OB_SERIALIZE_MEMBER(ObCreateTenantPrepareLog, meta_);
+OB_SERIALIZE_MEMBER(ObCreateRuntimePrepareLog, meta_);
 
-ObCreateTenantCommitLog::ObCreateTenantCommitLog()
+ObCreateRuntimeCommitLog::ObCreateRuntimeCommitLog()
 {
 }
 
-bool ObCreateTenantCommitLog::is_valid() const
-{
-  return true;
-}
-
-OB_SERIALIZE_MEMBER(ObCreateTenantCommitLog);
-ObCreateTenantAbortLog::ObCreateTenantAbortLog()
-{
-}
-
-bool ObCreateTenantAbortLog::is_valid() const
+bool ObCreateRuntimeCommitLog::is_valid() const
 {
   return true;
 }
 
-OB_SERIALIZE_MEMBER(ObCreateTenantAbortLog);
-
-ObDeleteTenantPrepareLog::ObDeleteTenantPrepareLog()
+OB_SERIALIZE_MEMBER(ObCreateRuntimeCommitLog);
+ObCreateRuntimeAbortLog::ObCreateRuntimeAbortLog()
 {
 }
 
-bool ObDeleteTenantPrepareLog::is_valid() const
-{
-  return true;
-}
-
-OB_SERIALIZE_MEMBER(ObDeleteTenantPrepareLog);
-
-ObDeleteTenantCommitLog::ObDeleteTenantCommitLog()
-{
-}
-
-bool ObDeleteTenantCommitLog::is_valid() const
+bool ObCreateRuntimeAbortLog::is_valid() const
 {
   return true;
 }
 
-OB_SERIALIZE_MEMBER(ObDeleteTenantCommitLog);
+OB_SERIALIZE_MEMBER(ObCreateRuntimeAbortLog);
 
-ObUpdateTenantUnitLog::ObUpdateTenantUnitLog(share::ObUnitInfoGetter::ObTenantConfig &unit)
-  : unit_(unit)
+ObUpdateServerResourcesLog::ObUpdateServerResourcesLog(share::ObServerRuntimeConfig &runtime_config)
+  : runtime_config_(runtime_config)
 {
 }
-bool ObUpdateTenantUnitLog::is_valid() const
+bool ObUpdateServerResourcesLog::is_valid() const
 {
-  return unit_.is_valid();
+  return runtime_config_.is_valid();
 }
 
-OB_SERIALIZE_MEMBER(ObUpdateTenantUnitLog, unit_);
+OB_SERIALIZE_MEMBER(ObUpdateServerResourcesLog, runtime_config_);
 
-ObUpdateTenantSuperBlockLog::ObUpdateTenantSuperBlockLog(ObTenantSuperBlock &super_block)
+ObUpdateRuntimeSuperBlockLog::ObUpdateRuntimeSuperBlockLog(ObServerRuntimeSuperBlock &super_block)
   : super_block_(super_block)
 {
 }
-bool ObUpdateTenantSuperBlockLog::is_valid() const
+bool ObUpdateRuntimeSuperBlockLog::is_valid() const
 {
   return super_block_.is_valid();
 }
 
-OB_SERIALIZE_MEMBER(ObUpdateTenantSuperBlockLog, super_block_);
+OB_SERIALIZE_MEMBER(ObUpdateRuntimeSuperBlockLog, super_block_);
 
 ObLSMetaLog::ObLSMetaLog(const ObLSMeta &ls_meta)
   : ls_meta_(ls_meta)

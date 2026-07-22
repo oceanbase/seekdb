@@ -63,7 +63,7 @@ int ObAllVirtualTabletBufferInfo::get_tablet_pool_infos()
   int ret = OB_SUCCESS;
   ObMemAttr attr("TabletBuffer");
   buffer_infos_.set_attr(attr);
-  if (OB_FAIL(share::g_mp->tenant_meta_mem_mgr()->get_tablet_buffer_infos(buffer_infos_))) {
+  if (OB_FAIL(share::g_mp->storage_meta_mem_mgr()->get_tablet_buffer_infos(buffer_infos_))) {
     SERVER_LOG(WARN, "fail to get tablet buffer infos", K(ret));
   }
   return ret;

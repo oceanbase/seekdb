@@ -91,7 +91,7 @@ int ObTxTable::offline_tx_ctx_table_()
   } else if (OB_FAIL(ls_tablet_svr->get_tablet(LS_TX_CTX_TABLET, handle))) {
     LOG_WARN("get tablet failed", K(ret));
     if (OB_TABLET_NOT_EXIST == ret) {
-      // a ls that of migrate does not have tx ctx tablet
+      // A log stream without a tx context tablet has nothing to take offline.
       ret = OB_SUCCESS;
     }
   } else if (FALSE_IT(tablet = handle.get_obj())) {
@@ -689,7 +689,7 @@ int ObTxTable::check_tx_data_in_mini_cache_(ObReadTxDataArg &read_tx_data_arg, O
       STORAGE_LOG(WARN, "check tx data in mini cache failed", KR(ret), K(read_tx_data_arg), K(tx_data));
     }
   } else {
-    EVENT_INC(ObStatEventIds::TX_DATA_HIT_MINI_CACHE_COUNT);
+    EVENT_INC(TX_DATA_HIT_MINI_CACHE_COUNT);
     if (OB_FAIL(fn(tx_data))) {
       STORAGE_LOG(WARN, "check tx data in mini cache failed", KR(ret), K(read_tx_data_arg), K(tx_data));
     }
@@ -720,7 +720,7 @@ int ObTxTable::check_tx_data_in_kv_cache_(ObReadTxDataArg &read_tx_data_arg, ObI
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(ERROR, "tx data in cache value is nullptr", KR(ret), K(read_tx_data_arg), KPC(cache_val));
     } else {
-      EVENT_INC(ObStatEventIds::TX_DATA_HIT_KV_CACHE_COUNT);
+      EVENT_INC(TX_DATA_HIT_KV_CACHE_COUNT);
       ret = fn(*tx_data);
 
       if (ObTxData::RUNNING == tx_data->state_) {
@@ -741,7 +741,7 @@ int ObTxTable::check_tx_data_in_tables_(ObReadTxDataArg &read_tx_data_arg, ObITx
   int ret = OB_SUCCESS;
 
   if (OB_SUCC(tx_ctx_table_.check_with_tx_data(read_tx_data_arg.tx_id_, fn))) {
-    EVENT_INC(ObStatEventIds::TX_DATA_READ_TX_CTX_COUNT);
+    EVENT_INC(TX_DATA_READ_TX_CTX_COUNT);
     TRANS_LOG(DEBUG, "tx ctx table check with tx data succeed", K(read_tx_data_arg), K(fn));
   } else if (OB_TRANS_CTX_NOT_EXIST == ret) {
     ObTxDataGuard tx_data_guard;
@@ -943,7 +943,7 @@ int ObTxTable::get_recycle_scn_(const int64_t tx_result_retention_s, share::SCN 
     real_recycle_scn = SCN::min_scn();
     ret = OB_REPLICA_NOT_READABLE;
     STORAGE_LOG(WARN,
-                "this tx table is migrating or has migrated",
+                "tx table state changed while collecting recycle scn",
                 KR(ret),
                 K(state),
                 K(prev_epoch),

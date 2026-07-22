@@ -170,8 +170,8 @@ TEST_F(TestUniqTaskQueue, test_concurrency_execute)
   MockUpdate updater;
   ObUniqTaskQueue<ObPTUpdateTask, MockUpdate> queue;
   queue.init(&updater, 1, 100000);
-  int64_t core_table_id = combine_id(OB_SYS_TENANT_ID, OB_ALL_CORE_TABLE_TID);
-  int64_t sys_table_id = combine_id(OB_SYS_TENANT_ID, OB_ALL_DDL_OPERATION_TID);
+  int64_t core_table_id = combine_id(OB_SERVER_RUNTIME_ID, OB_ALL_CORE_TABLE_TID);
+  int64_t sys_table_id = combine_id(OB_SERVER_RUNTIME_ID, OB_ALL_DDL_OPERATION_TID);
   int64_t user_table_id = combine_id(500001, 100001);
   int64_t partition_cnt = 1;
   int64_t partition_id = 0;

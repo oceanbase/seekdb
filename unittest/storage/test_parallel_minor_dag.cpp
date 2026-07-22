@@ -21,7 +21,7 @@
 #define private public
 #define protected public
 
-#include "mtlenv/mock_tenant_module_env.h"
+#include "mtlenv/mock_server_runtime_env.h"
 
 namespace oceanbase
 {
@@ -36,7 +36,7 @@ class TestParallelMinorDag : public ::testing::Test
 {
 public:
   TestParallelMinorDag()
-    : tenant_id_(1), allocator_(ObModIds::TEST) {}
+    : allocator_(ObModIds::TEST) {}
   virtual ~TestParallelMinorDag() {}
   int prepare_merge_result(const int64_t sstable_cnt, ObGetMergeTablesResult &result);
 
@@ -52,13 +52,11 @@ public:
       const int64_t sstable_cnt,
       const int64_t result_cnt);
 
-  static const int64_t TENANT_ID = 1;
   static const int64_t TABLE_ID = 7777;
   static const int64_t TEST_ROWKEY_COLUMN_CNT = 3;
   static const int64_t TEST_COLUMN_CNT = 6;
   static const int64_t MAX_SSTABLE_CNT = 64;
 
-  const uint64_t tenant_id_;
   common::ObArenaAllocator allocator_;
   ObSSTable *fake_sstables_[MAX_SSTABLE_CNT];
 };
@@ -66,11 +64,11 @@ public:
 void TestParallelMinorDag::SetUpTestCase()
 {
   ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
-  EXPECT_EQ(OB_SUCCESS, MockTenantModuleEnv::get_instance().init());
+  EXPECT_EQ(OB_SUCCESS, MockServerRuntimeEnv::get_instance().init());
 }
 void TestParallelMinorDag::TearDownTestCase()
 {
-  MockTenantModuleEnv::get_instance().destroy();
+  MockServerRuntimeEnv::get_instance().destroy();
   ObTimerService::get_instance().stop();
   ObTimerService::get_instance().wait();
   ObTimerService::get_instance().destroy();

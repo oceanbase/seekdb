@@ -25,7 +25,7 @@
 #include "observer/change_stream/ob_change_stream_plugin.h"
 #include "observer/change_stream/ob_change_stream_worker.h"
 #include "observer/change_stream/ob_change_stream_mgr.h"
-#include "share/schema/ob_tenant_schema_service.h"
+#include "share/schema/ob_schema_runtime_service.h"
 #include "share/ob_server_struct.h"
 #include "share/ob_debug_sync.h"
 #include "share/ob_global_stat_proxy.h"
@@ -63,7 +63,7 @@ int ObCSDispatcher::init()
     LOG_WARN("ObCSDispatcher: init tx_ring failed", K(ret));
   } else if (OB_FAIL(dispatch_cond_.init(ObWaitEventIds::THREAD_IDLING_COND_WAIT))) {
     LOG_WARN("ObCSDispatcher: dispatch_cond init failed", K(ret));
-  } else if (FALSE_IT(ObThreadPool::set_run_wrapper(MTL_CTX()))) {
+  } else if (FALSE_IT(ObThreadPool::set_run_wrapper(share::server_runtime()))) {
   } else if (OB_FAIL(ObThreadPool::init())) {
     LOG_WARN("ObCSDispatcher: thread pool init failed", K(ret));
   } else {
@@ -104,7 +104,7 @@ int ObCSDispatcher::init_refresh_scn_()
   } else if (GCTX.in_bootstrap_ || GCTX.start_service_time_ <= 0) {
     ret = common::OB_NOT_INIT;
     LOG_WARN("ObCSDispatcher: wait bootstrap", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_refreshed_schema_version(schema_version))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_refreshed_schema_version(schema_version))) {
     LOG_WARN("get schema_version failed", KR(ret));
   } else if (schema_version <= 0 || !ObSchemaService::is_formal_version(schema_version)) {
     ret = OB_SCHEMA_EAGAIN;
@@ -531,7 +531,7 @@ int ObCSDispatcher::do_dispatch_()
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(exec_ctx->init_plugins())) {
     LOG_WARN("init plugins failed", KR(ret));
-  } else if (OB_ISNULL(schema_service = share::g_mp->tenant_schema_service()->get_schema_service())) {
+  } else if (OB_ISNULL(schema_service = share::g_mp->schema_runtime_service()->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", KR(ret));
   } else if (OB_FAIL(exec_ctx->trans_.start(GCTX.sql_proxy_))) {

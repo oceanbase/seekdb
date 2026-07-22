@@ -16,7 +16,7 @@ create table msdt_normal(a int, b int);
 let $tablet_id1 = query_get_value(select tablet_id from oceanbase.__all_table where table_name = 'msdt_lob', tablet_id, 1);
 
 let $report_cnt1 = query_get_value(select count(*) as cnt from oceanbase.__all_virtual_tablet_meta_table where tablet_id = $tablet_id1, cnt, 1);
-let $unit_cnt1 = query_get_value(select count(*) as cnt from oceanbase.__all_virtual_unit, cnt, 1);
+let $runtime_cnt1 = query_get_value(select count(*) as cnt from oceanbase.__all_virtual_server_stat, cnt, 1);
 
 --disable_query_log
 
@@ -26,24 +26,24 @@ while($__i__ > 0)
     sleep 1;
     dec $__i__;
     let $report_cnt1 = query_get_value(select count(*) as cnt from oceanbase.__all_virtual_tablet_meta_table where tablet_id = $tablet_id1, cnt, 1);
-    if($report_cnt1 == $unit_cnt1)
+    if($report_cnt1 == $runtime_cnt1)
     {
       let $__i__ = -1;
     }
 }
 
 
-eval select $report_cnt1 = $unit_cnt1 as result;
+eval select $report_cnt1 = $runtime_cnt1 as result;
 --enable_query_log
 
 # msdt_normal
 let $tablet_id2 = query_get_value(select tablet_id from oceanbase.__all_table where table_name = 'msdt_normal', tablet_id, 1);
 
 let $report_cnt2 = query_get_value(select count(*) as cnt from oceanbase.__all_virtual_tablet_meta_table where tablet_id = $tablet_id2, cnt, 1);
-let $unit_cnt2 = query_get_value(select count(*) as cnt from oceanbase.__all_virtual_unit, cnt, 1);
+let $runtime_cnt2 = query_get_value(select count(*) as cnt from oceanbase.__all_virtual_server_stat, cnt, 1);
 
 --disable_query_log
-eval select $report_cnt2 = $unit_cnt2 as result;
+eval select $report_cnt2 = $runtime_cnt2 as result;
 --enable_query_log
 
 drop table msdt_lob;

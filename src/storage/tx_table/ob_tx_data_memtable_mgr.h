@@ -28,7 +28,7 @@ namespace oceanbase
 
 namespace share
 {
-class ObTenantTxDataAllocator;
+class ObTxDataAllocator;
 };
 
 namespace storage
@@ -43,7 +43,7 @@ public:
   }
   ~ObTxDataMemtableWriteGuard() { reset(); }
 
-  int push_back_table(ObIMemtable *i_memtable, ObTenantMetaMemMgr *t3m)
+  int push_back_table(ObIMemtable *i_memtable, ObStorageMetaMemMgr *t3m)
   {
     int ret = OB_SUCCESS;
     ObTxDataMemtable *tx_data_memtable = nullptr;
@@ -97,7 +97,7 @@ public:  // ObTxDataMemtableMgr
   virtual ~ObTxDataMemtableMgr();
   int init(const common::ObTabletID &tablet_id,
            ObFreezer *freezer,
-           ObTenantMetaMemMgr *t3m) override;
+           ObStorageMetaMemMgr *t3m) override;
   virtual void destroy() override;
 
   int offline();

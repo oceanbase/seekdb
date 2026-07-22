@@ -32,7 +32,7 @@ ObSchemaOperation::ObSchemaOperation()
       user_id_(0),
       database_id_(0),
       database_name_(""),
-      tablegroup_id_(0),
+      column_id_(0),
       table_id_(0),
       table_name_(""),
       op_type_(OB_INVALID_DDL_OP),
@@ -52,7 +52,7 @@ void ObSchemaOperation::reset()
   user_id_ = 0;
   database_id_ = 0;
   database_name_.reset();
-  tablegroup_id_ = 0;
+  column_id_ = 0;
   table_id_ = 0;
   table_name_.reset();
   op_type_ = OB_INVALID_DDL_OP;
@@ -67,7 +67,7 @@ ObSchemaOperation& ObSchemaOperation::operator=(const ObSchemaOperation &other)
     user_id_ = other.user_id_;
     database_id_ = other.database_id_;
     database_name_ = other.database_name_;
-    tablegroup_id_ = other.tablegroup_id_;
+    column_id_ = other.column_id_;
     table_id_ = other.table_id_;
     table_name_ = other.table_name_;
     op_type_ = other.op_type_;
@@ -81,13 +81,11 @@ OB_SERIALIZE_MEMBER(ObSchemaOperation,
                     user_id_,
                     table_id_,
                     database_id_,
-                    tablegroup_id_,
+                    column_id_,
                     op_type_,
-                    outline_id_,                // for compat
-                    sequence_id_,               // for compat
-                    grantee_id_,                // for compat
-                    grantor_id_,                // for compat
-                    directory_id_);             // for compat
+                    outline_id_,
+                    grantee_id_,
+                    grantor_id_);
 
 bool ObSchemaOperation::is_valid() const
 {
@@ -104,10 +102,10 @@ int64_t ObSchemaOperation::to_string(char *buf, const int64_t buf_len) const
 {
   int64_t pos = 0;
   J_KV(K_(schema_version), K_(database_id), K_(user_id), K_(database_name),
-       K_(tablegroup_id), K_(table_id), "operation_type", type_str(op_type_),
-       K_(outline_id), K_(udf_name), K_(sequence_id),
+       K_(column_id), K_(table_id), "operation_type", type_str(op_type_),
+       K_(outline_id),
        K_(grantee_id), K_(grantor_id),
-       K_(ddl_stmt_str), K_(directory_id), K_(catalog_id), K_(catalog_name));
+       K_(ddl_stmt_str));
   return pos;
 }
 
@@ -188,8 +186,6 @@ DEFINE_SERIALIZE(AlterTableSchema)
     SHARE_SCHEMA_LOG(WARN, "fail to serialize new_datbase_name, ", K(ret));
   } else if (OB_FAIL(origin_database_name_.serialize(buf, buf_len, pos))) {
     SHARE_SCHEMA_LOG(WARN, "fail to serialize origin_database_name, ", K(ret));
-  } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, origin_tablegroup_id_))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to serialize origin_tablegroup_id_", K(ret));
   } else if (OB_FAIL(alter_option_bitset_.serialize(buf, buf_len, pos))) {
     SHARE_SCHEMA_LOG(WARN, "fail to serialized bitset", K(ret));
   } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, sql_mode_))) {
@@ -215,8 +211,6 @@ DEFINE_DESERIALIZE(AlterTableSchema)
     SHARE_SCHEMA_LOG(WARN, "fail to deserialize new_database_name, ", K(ret));
   } else if (OB_FAIL(origin_database_name_.deserialize(buf, data_len, pos))) {
     SHARE_SCHEMA_LOG(WARN, "fail to deserialize origin_database_name, ", K(ret));
-  } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, ((int64_t *)(&origin_tablegroup_id_))))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to deserialize origin_tablegroup_id");
   } else if (OB_FAIL(alter_option_bitset_.deserialize(buf, data_len, pos))) {
     SHARE_SCHEMA_LOG(WARN, "fail to deserialize bitset", K(ret));
   } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, ((int64_t *)(&sql_mode_))))) {
@@ -234,7 +228,6 @@ void AlterTableSchema::reset()
   origin_table_name_.reset();
   new_database_name_.reset();
   origin_database_name_.reset();
-  origin_tablegroup_id_ = common::OB_INVALID_ID;
   alter_option_bitset_.reset();
   sql_mode_ = SMO_DEFAULT;
   new_part_name_.reset();
@@ -343,7 +336,6 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
       part_key_column_num_ = src_schema.part_key_column_num_;
       subpart_key_column_num_ = src_schema.subpart_key_column_num_;
       block_size_ = src_schema.block_size_;
-      is_use_bloomfilter_ = src_schema.is_use_bloomfilter_;
       progressive_merge_num_ = src_schema.progressive_merge_num_;
       tablet_size_ = src_schema.tablet_size_;
       pctfree_ = src_schema.pctfree_;
@@ -355,37 +347,17 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
       def_type_ = src_schema.def_type_;
       charset_type_ = src_schema.charset_type_;
       collation_type_ = src_schema.collation_type_;
-      code_version_ = src_schema.code_version_;
       index_attributes_set_ = src_schema.index_attributes_set_;
       session_id_ = src_schema.session_id_;
       compressor_type_ = src_schema.compressor_type_;
       lob_inrow_threshold_ = src_schema.lob_inrow_threshold_;
       micro_index_clustered_ = src_schema.micro_index_clustered_;
-      enable_macro_block_bloom_filter_ = src_schema.enable_macro_block_bloom_filter_;
-      merge_engine_type_ = src_schema.merge_engine_type_;
-      external_location_id_ = src_schema.external_location_id_;
-      if (OB_FAIL(deep_copy_str(src_schema.tablegroup_name_, tablegroup_name_))) {
-        LOG_WARN("Fail to deep copy tablegroup_name", K(ret));
-      } else if (OB_FAIL(deep_copy_str(src_schema.comment_, comment_))) {
+      if (OB_FAIL(deep_copy_str(src_schema.comment_, comment_))) {
         LOG_WARN("Fail to deep copy comment", K(ret));
-      } else if (OB_FAIL(deep_copy_str(src_schema.expire_info_, expire_info_))) {
-        LOG_WARN("Fail to deep copy expire info string", K(ret));
       } else if (OB_FAIL(deep_copy_str(src_schema.parser_name_, parser_name_))) {
         LOG_WARN("deep copy parser name failed", K(ret));
       } else if (OB_FAIL(deep_copy_str(src_schema.parser_properties_, parser_properties_))) {
         LOG_WARN("fail to deep copy parser properties", K(ret));
-      } else if (OB_FAIL(deep_copy_str(src_schema.external_file_location_, external_file_location_))) {
-        LOG_WARN("deep copy external_file_location failed", K(ret));
-      } else if (OB_FAIL(deep_copy_str(src_schema.external_file_location_access_info_, external_file_location_access_info_))) {
-        LOG_WARN("deep copy external_file_location_access_info failed", K(ret));
-      } else if (OB_FAIL(deep_copy_str(src_schema.external_file_format_, external_file_format_))) {
-        LOG_WARN("deep copy external_file_format failed", K(ret));
-      } else if (OB_FAIL(deep_copy_str(src_schema.external_file_pattern_, external_file_pattern_))) {
-        LOG_WARN("deep copy external_file_pattern failed", K(ret));
-      } else if (OB_FAIL(deep_copy_str(src_schema.external_properties_, external_properties_))) {
-        LOG_WARN("deep copy external_properties failed", K(ret));
-      } else if (OB_FAIL(deep_copy_str(src_schema.external_sub_path_, external_sub_path_))) {
-        LOG_WARN("deep copy external_sub_path failed", K(ret));
       }
 
       //view schema
@@ -490,12 +462,6 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
     }
 
   }
-  if (OB_SUCC(ret) && OB_FAIL(deep_copy_str(src_schema.ttl_definition_, ttl_definition_))) {
-    LOG_WARN("Fail to deep copy ttl definition string", K(ret));
-  }
-  if (OB_SUCC(ret) && OB_FAIL(deep_copy_str(src_schema.storage_cache_policy_, storage_cache_policy_))) {
-    LOG_WARN("Fail to deep copy storage_cache_policy string", K(ret));
-  }
   if (OB_SUCC(ret) && OB_FAIL(deep_copy_str(src_schema.index_params_, index_params_))) {
     LOG_WARN("Fail to deep copy vector index param string", K(ret));
   }
@@ -570,7 +536,6 @@ DEFINE_GET_SERIALIZE_SIZE(AlterTableSchema)
   size += origin_table_name_.get_serialize_size();
   size += new_database_name_.get_serialize_size();
   size += origin_database_name_.get_serialize_size();
-  size += serialization::encoded_length_vi64(origin_tablegroup_id_);
   size += alter_option_bitset_.get_serialize_size();
   size += serialization::encoded_length_vi64(sql_mode_);
   size += new_part_name_.get_serialize_size();

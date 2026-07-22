@@ -420,12 +420,9 @@ int ObLobTabletDmlHelper::prepare_lob_write(
     bool &need_do_write)
 {
   int ret = OB_SUCCESS;
-  uint64_t data_version = 0;
   if (is_sys_table(run_ctx.relative_table_.get_table_id())) {
     // sys table just write
     need_do_write = true;
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(data_version))) {
-    LOG_WARN("failed to get data version", K(ret));
   } else {
     ObString raw_data = (new_datum.is_null() || new_datum.is_nop_value())
                             ? ObString(0, nullptr) : new_datum.get_string();

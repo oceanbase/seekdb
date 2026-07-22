@@ -99,7 +99,6 @@ private:
   common::ObCastMode cm_;
   ObErrLogService err_log_service_;
   ObErrLogRtDef err_log_rt_def_;
-  bool has_sequence_;
   int64_t real_value_cnt_;
   int64_t param_idx_;
   int64_t param_cnt_;

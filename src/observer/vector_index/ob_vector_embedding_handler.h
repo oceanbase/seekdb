@@ -93,9 +93,8 @@ struct ObEmbeddingTaskInfo {
   }
 
   bool is_valid() const {
-    return true && 
-          task_id_ != OB_INVALID_ID && 
-          status_ != OB_EMBEDDING_TASK_INVALID;
+    return task_id_ != OB_INVALID_ID
+        && status_ != OB_EMBEDDING_TASK_INVALID;
   }
 
   TO_STRING_KV(K_(task_id), K_(status), 

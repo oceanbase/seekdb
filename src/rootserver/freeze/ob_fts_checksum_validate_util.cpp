@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 #include "rootserver/freeze/ob_fts_checksum_validate_util.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {

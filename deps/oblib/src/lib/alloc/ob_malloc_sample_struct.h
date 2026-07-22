@@ -107,7 +107,11 @@ inline bool ObMallocSampleLimiter::try_acquire(int64_t alloc_bytes)
 inline bool ObMallocSampleLimiter::malloc_sample_allowed(const int64_t size, const ObMemAttr &attr)
 {
   bool ret = false;
-  if (OB_UNLIKELY(min_sample_size == 0)) {
+  // A smart-call stack is allocated only after the current stack approaches
+  // exhaustion. Capturing a full backtrace here can exhaust the remaining
+  // stack inside libunwind before the new stack is available.
+  if (attr.label_ == ObLabel("CoStack")) {
+  } else if (OB_UNLIKELY(min_sample_size == 0)) {
     // Zero sample mode.
   } else if (OB_UNLIKELY(MUST_SAMPLE_SIZE <= size)) {
     // Full sample when size is bigger than 16M.
@@ -156,7 +160,7 @@ inline int ObMallocSampleKey::hash(uint64_t &hash_val) const
 inline bool ObMallocSampleKey::operator==(const ObMallocSampleKey &other) const
 {
   bool ret = true;
-  if (false || ctx_id_ != other.ctx_id_
+  if (ctx_id_ != other.ctx_id_
       || 0 != STRNCMP(label_, other.label_, sizeof(label_))
       || 0 != MEMCMP((char*)bt_, (char*)other.bt_, sizeof(bt_))) {
     ret = false;

@@ -45,7 +45,7 @@ public:
   ObExprUDFInfo(common::ObIAllocator &alloc, ObExprOperatorType type)
       : ObIExprExtraInfo(alloc, type),
       subprogram_path_(alloc), params_type_(alloc), params_desc_(alloc), nocopy_params_(alloc),
-      is_result_cache_(false), is_deterministic_(false)
+      is_deterministic_(false)
   {
   }
 
@@ -67,7 +67,6 @@ public:
   uint64_t loc_;
   bool is_udt_cons_;
   bool is_called_in_sql_;
-  bool is_result_cache_;
   bool is_deterministic_;
 };
 class ObSqlCtx;
@@ -228,7 +227,6 @@ private:
   common::ObSEArray<ObUDFParamDesc, 5> params_desc_;
   common::ObSEArray<int64_t, 8> nocopy_params_;
   bool is_udt_udf_;
-  bool call_in_sql_; // has been deprecated, there are compatibility issues and it cannot be deleted, now use is_called_in_sql() in the base class.
   uint64_t loc_; // this is col and line number combination,
   bool is_udt_cons_;
 

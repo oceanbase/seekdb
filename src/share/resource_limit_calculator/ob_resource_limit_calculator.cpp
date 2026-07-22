@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "ob_resource_limit_calculator.h"
-#include "share/rc/ob_tenant_base.h"  // MTL macro, previously hidden behind the ls_service include chain(free within share)
+#include "share/rc/ob_server_runtime.h"  // Server runtime API used from the share layer.
 #include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
@@ -200,7 +200,7 @@ DEF_TO_STRING(ObUserResourceCalculateArg)
   return pos;
 }
 
-int ObResourceLimitCalculator::mtl_init(ObResourceLimitCalculator *&calculator)
+int ObResourceLimitCalculator::server_module_init(ObResourceLimitCalculator *&calculator)
 {
   return calculator->init();
 }
@@ -222,7 +222,7 @@ int ObResourceLimitCalculator::get_logic_resource_stat(
     LOG_WARN("invalid resource type", K(ret), K(type));
   } else if (OB_ISNULL(handler = handlers_[type])) {
     ret = OB_NOT_RUNNING;
-    LOG_WARN("the tenant may destroyed", K(ret), KP(handler));
+    LOG_WARN("resource handler is unavailable", K(ret), KP(handler));
   } else if (OB_FAIL(handler->get_current_info(val))) {
     LOG_WARN("get resource stat failed", K(ret), K(type));
   }
@@ -244,7 +244,7 @@ int ObResourceLimitCalculator::get_logic_resource_constraint_value(
     LOG_WARN("invalid resource type", K(ret), K(type));
   } else if (OB_ISNULL(handler = handlers_[type])) {
     ret = OB_NOT_RUNNING;
-    LOG_WARN("the tenant may destroyed", K(ret), KP(handler));
+    LOG_WARN("resource handler is unavailable", K(ret), KP(handler));
   } else if (OB_FAIL(handler->get_resource_constraint_value(val))) {
     LOG_WARN("get resource stat failed", K(ret), K(type));
   }
@@ -255,7 +255,7 @@ int ObResourceLimitCalculator::get_logic_resource_constraint_value(
 
 // moved definition to storage/tx_storage/ob_ls_service.cpp(X-macro inventory, second overload)
 
-int ObResourceLimitCalculator::get_tenant_logical_resource(ObUserResourceCalculateArg &arg)
+int ObResourceLimitCalculator::get_runtime_logical_resource(ObUserResourceCalculateArg &arg)
 {
   int ret = OB_SUCCESS;
   arg.reset();

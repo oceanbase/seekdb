@@ -20,7 +20,6 @@
 #include "ob_dbms_job_utils.h"
 
 #include "lib/ob_define.h"
-#include "lib/net/ob_addr.h"
 #include "lib/allocator/page_arena.h"
 #include "common/mysqlclient/ob_isql_client.h"
 #include "lib/lock/ob_spin_lock.h"
@@ -51,13 +50,12 @@ public:
   ObDBMSJobKey(
     uint64_t job_id,
     uint64_t execute_at, uint64_t delay,
-    bool check_job, bool check_new, bool check_new_tenant)
+    bool check_job, bool check_new)
   : job_id_(job_id),
     execute_at_(execute_at),
     delay_(delay),
     check_job_(check_job),
-    check_new_(check_new),
-    check_new_tenant_(check_new_tenant) {}
+    check_new_(check_new) {}
 
   virtual ~ObDBMSJobKey() {}
 
@@ -66,9 +64,8 @@ public:
   OB_INLINE uint64_t get_execute_at() const { return execute_at_;}
   OB_INLINE uint64_t get_delay() const { return delay_; }
 
-  OB_INLINE bool is_check() { return check_job_ || check_new_ || check_new_tenant_; }
+  OB_INLINE bool is_check() { return check_job_ || check_new_; }
   OB_INLINE bool is_check_new() { return check_new_; }
-  OB_INLINE bool is_check_new_tenant() { return check_new_tenant_; }
 
   
   OB_INLINE void set_job_id(uint64_t job_id) { job_id_ = job_id; }
@@ -78,7 +75,6 @@ public:
 
   OB_INLINE void set_check_job(bool check_job) { check_job_ = check_job; }
   OB_INLINE void set_check_new(bool check_new) { check_new_ = check_new; }
-  OB_INLINE void set_check_new_tenant(bool check_new) { check_new_tenant_ = check_new; }
 
   OB_INLINE uint64_t get_adjust_delay() const
   {
@@ -88,21 +84,20 @@ public:
 
   OB_INLINE bool is_valid()
   {
-    return job_id_ != OB_INVALID_ID && true;
+    return job_id_ != OB_INVALID_ID;
   }
 
   TO_STRING_KV(
-    K_(check_job), K_(check_new), K_(check_new_tenant),
+    K_(check_job), K_(check_new),
     K_(execute_at), K_(delay), K_(job_id));
 
 private:
-  uint64_t job_id_; // for check_new, job_id is max job id in current tenant
+  uint64_t job_id_; // for check_new, job_id is the highest registered job id
   uint64_t execute_at_;
   uint64_t delay_;
 
   bool check_job_; // for check job update ...
   bool check_new_; // for check new job coming ...
-  bool check_new_tenant_; // for check new tenant ...
 };
 
 class ObDBMSJobTask : public ObTimerTask
@@ -157,9 +152,6 @@ public:
       stoped_(false),
       running_(false),
       trace_id_(NULL),
-      rand_(),
-      schema_service_(NULL),
-      self_addr_(),
       ready_queue_(),
       scheduler_task_(),
       scheduler_thread_(),
@@ -185,14 +177,8 @@ public:
   int alloc_job_key(
     ObDBMSJobKey *&job_key, uint64_t job_id,
     uint64_t execute_at, uint64_t delay,
-    bool check_job = false, bool check_new = false, bool check_new_tenant = false);
+    bool check_job = false, bool check_new = false);
 
-  int server_random_pick(common::ObString &pick_zone, ObAddr &server);
-  int get_all_servers(ObString &pick_zone, ObIArray<ObAddr> &servers);
-  int get_execute_addr(ObDBMSJobInfo &job_info, common::ObAddr &execute_addr);
-
-  int register_check_tenant_job();
-  int load_and_register_all_jobs(ObDBMSJobKey *job_key = NULL);
   int load_and_register_new_jobs(ObDBMSJobKey *job_key = NULL);
   int register_jobs(
     common::ObIArray<ObDBMSJobInfo> &job_infos, ObDBMSJobKey *job_key = NULL);
@@ -210,10 +196,6 @@ private:
 
   const uint64_t *trace_id_;
 
-  common::ObRandom rand_; // for random pick server
-  share::schema::ObMultiVersionSchemaService *schema_service_; // for got all tenant info
-
-  common::ObAddr self_addr_;
   ObDBMSJobQueue ready_queue_;
   ObDBMSJobTask scheduler_task_;
   ObDBMSJobThread scheduler_thread_;

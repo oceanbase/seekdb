@@ -63,12 +63,8 @@ public:
                    uint64_t &table_id,
                    ObTableType &table_type,
                    int64_t &schema_version);
-  int get_tenant_schema(
-                        const ObTenantSchema *&tenant_schema);
-  int get_tablegroup_id(const common::ObString &tablegroup_name,
-                        uint64_t &tablegroup_id);
-  int get_tablegroup_schema(const uint64_t tablegroup_id,
-                            const ObTablegroupSchema *&tablegroup_schema);
+  int get_server_runtime_schema(
+                        const ObServerRuntimeSchema *&runtime_schema);
 #ifndef GET_OBJ_SCHEMA_VERSIONS
 #define GET_OBJ_SCHEMA_VERSIONS(OBJECT_NAME) \
   int get_##OBJECT_NAME##_schema_versions(const common::ObIArray<uint64_t> &obj_ids, \
@@ -90,19 +86,6 @@ int get_trigger_info(const uint64_t trigger_id,
                                       const ObString &index_name,
                                       const bool is_built_in,
                                       ObIndexSchemaInfo &index_info);
-  int get_sequence_schema(const uint64_t sequence_id,
-                          const ObSequenceSchema *&sequence_schema);
-
-  int get_table_id_and_table_name_in_tablegroup(
-      const uint64_t tablegroup_id,
-      common::ObIArray<ObString> &table_names,
-      common::ObIArray<uint64_t> &table_ids);
-  int get_table_schemas_in_tablegroup(
-      const uint64_t tablegroup_id,
-      common::ObIArray<const ObTableSchema *> &table_schemas);
-  int check_database_exists_in_tablegroup(
-      const uint64_t tablegroup_id,
-      bool &exists);
   int get_sys_variable_schema(const ObSysVariableSchema *&sys_var_schema);
   ObLatestSchemaGuard* get_latest_schema_guard() { return &latest_schema_guard_; }
 private:

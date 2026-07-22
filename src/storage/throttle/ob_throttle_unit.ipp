@@ -22,7 +22,7 @@
 #include "ob_throttle_unit.h"
 #endif
 
-#include "share/config/ob_tenant_config_mgr.h"
+#include "share/config/ob_runtime_config.h"
 #include "lib/thread_local/ob_tsi_utils.h"
 
 namespace oceanbase {

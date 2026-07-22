@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_set_password_executor.h"
-#include "rootserver/ob_rs_serial_call.h"
-#include "rootserver/ob_root_service.h"
+#include "rootserver/ob_local_ddl_serial_call.h"
+#include "rootserver/ob_local_management_service.h"
 #include "lib/encrypt/ob_encrypted_helper.h"
 #include "sql/resolver/dcl/ob_set_password_stmt.h"
 #include "sql/engine/ob_exec_context.h"
@@ -109,7 +109,7 @@ int ObSetPasswordExecutor::execute(ObExecContext &ctx, ObSetPasswordStmt &stmt)
       } else {
         arg.passwd_ = passwd;
       }
-      if (OB_SUCC(ret) && OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->set_passwd(arg); }))) {
+      if (OB_SUCC(ret) && OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->set_passwd(arg); }))) {
           LOG_WARN("Set password failed", K(ret));
       } else if (0 == user_name.case_compare(session->get_user_name())) {
         session->set_password_expired(false);

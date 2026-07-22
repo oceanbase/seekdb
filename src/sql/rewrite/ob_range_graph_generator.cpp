@@ -351,7 +351,6 @@ int ObRangeGraphGenerator::and_two_range_node(ObRangeNode *&l_node,
     // for example `c1 > 1` (1, max; max, max) and `c2 < 2` (ept, min; ept, 2)
     //    will not be merged as (1, max; max, 2) which equals to (1, max; max, max).
     //    Instead we remain both (1, max; max, max) and (ept, min; ept, 2).
-    //    (ept, min; ept, 2) can used to extract skip scan range.
   } else {
     bool merge_start = false;
     bool use_r_start = false;
@@ -628,9 +627,8 @@ int ObRangeGraphGenerator::get_and_tails(ObRangeNode *range_node,
 /**
  * formalize final range graph
  * 1. estimate range size
- * 2. check if skip scan valid
- * 3. remove useless range node for standard range
- * 4. generate node id
+ * 2. remove useless range node for standard range
+ * 3. generate node id
 */
 int ObRangeGraphGenerator::formalize_final_range_node(ObRangeNode *&range_node)
 {
@@ -689,21 +687,12 @@ int ObRangeGraphGenerator::formalize_final_range_node(ObRangeNode *&range_node)
     }
     if (OB_SUCC(ret)) {
       if (is_standard_range(range_node)) {
-        ObRangeNode *ss_head = nullptr;
-        if (OB_FAIL(check_skip_scan_valid(range_node, ss_head))) {
-          LOG_WARN("failed to check skip scan valid");
-        } else if (ss_head != nullptr) {
-          if (OB_FAIL(remove_useless_range_node(ss_head, pre_range_graph_->get_skip_scan_offset()))) {
-            LOG_WARN("failed to remove useless range", K(ret));
-          }
-        } else if (OB_FAIL(remove_useless_range_node(range_node))) {
+        if (OB_FAIL(remove_useless_range_node(range_node))) {
           LOG_WARN("failed to remove useless range", K(ret));
         }
-      } else {
-        update_ss_max_precise_offset(0);
       }
     }
-    if (OB_SUCC(ret) && !start_from_zero && !pre_range_graph_->is_ss_range()) {
+    if (OB_SUCC(ret) && !start_from_zero) {
       range_node->set_always_true();
       pre_range_graph_->set_range_size(1);
     }
@@ -808,35 +797,6 @@ int ObRangeGraphGenerator::collect_graph_infos(ObRangeNode *range_node,
   return ret;
 }
 
-int ObRangeGraphGenerator::check_skip_scan_valid(ObRangeNode *range_node,
-                                                ObRangeNode *&ss_head)
-{
-  int ret = OB_SUCCESS;
-  ss_head = NULL;
-  int64_t max_precise_pos = 0;
-  int64_t ss_max_precise_pos = 0;
-  ObRangeNode *cur_node = range_node;
-  if (OB_FAIL(get_max_precise_pos(range_node, max_precise_pos))) {
-    LOG_WARN("failed to get max precise pos");
-  } else {
-    update_max_precise_offset(max_precise_pos);
-    // skip prefix precise range
-    while (cur_node != nullptr && cur_node->min_offset_ < max_precise_pos) {
-      cur_node = cur_node->and_next_;
-    }
-    if (NULL != cur_node) {
-      ss_head = cur_node;
-      pre_range_graph_->set_skip_scan_offset(ss_head->min_offset_);
-      if (OB_FAIL(get_max_precise_pos(ss_head, ss_max_precise_pos, ss_head->min_offset_))) {
-        LOG_WARN("failed to get max precise pos");
-      } else {
-        update_ss_max_precise_offset(ss_max_precise_pos);
-      }
-    }
-  }
-  return ret;
-}
-
 int ObRangeGraphGenerator::remove_useless_range_node(ObRangeNode *range_node, int64_t start_pos) const
 {
   int ret = OB_SUCCESS;
@@ -874,9 +834,7 @@ int ObRangeGraphGenerator::check_graph_type(ObRangeNode *range_node)
   pre_range_graph_->set_range_head(range_node);
   pre_range_graph_->set_is_precise_get(is_precise_get(range_node));
   pre_range_graph_->set_is_standard_range(is_standard_range(range_node));
-  if (pre_range_graph_->is_ss_range()) {
-    // do nothing
-  } else if (OB_FAIL(get_max_precise_pos(range_node, max_precise_pos))) {
+  if (OB_FAIL(get_max_precise_pos(range_node, max_precise_pos))) {
     LOG_WARN("failed to get max precise pos");
   } else {
     update_max_precise_offset(max_precise_pos);
@@ -1207,7 +1165,6 @@ int ObRangeGraphGenerator::fill_range_exprs(ObIArray<ObPriciseExprItem> &pricise
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObRawExpr*, 4> range_exprs;
-  ObSEArray<ObRawExpr*, 4> ss_range_exprs;
   ObSEArray<ObRawExpr*, 4> unpricise_range_exprs;
   ObSEArray<int64_t, 4> range_expr_max_offsets;
   for (int64_t i = 0; OB_SUCC(ret) && i < pricise_exprs.count(); ++i) {
@@ -1218,9 +1175,6 @@ int ObRangeGraphGenerator::fill_range_exprs(ObIArray<ObPriciseExprItem> &pricise
       } else if (OB_FAIL(range_expr_max_offsets.push_back(expr_item.offset_desc_.max_))) {
         LOG_WARN("failed to push back to array", K(ret));
       }
-    } else if (expr_item.offset_desc_.max_ < ss_max_precise_offset_ &&
-               OB_FAIL(ss_range_exprs.push_back(const_cast<ObRawExpr*>(expr_item.expr_)))) {
-      LOG_WARN("push back precise range expr failed", K(ret));
     } else if (OB_FAIL(unpricise_exprs.push_back(expr_item))) {
       LOG_WARN("push back unprecise range expr failed", K(ret));
     }
@@ -1236,15 +1190,13 @@ int ObRangeGraphGenerator::fill_range_exprs(ObIArray<ObPriciseExprItem> &pricise
   if (OB_SUCC(ret)) {
     if (OB_FAIL(pre_range_graph_->set_range_exprs(range_exprs))) {
       LOG_WARN("failed to assign range exprs", K(ret));
-    } else if (OB_FAIL(pre_range_graph_->set_ss_range_exprs(ss_range_exprs))) {
-      LOG_WARN("failed to assign range exprs", K(ret));
     } else if (OB_FAIL(pre_range_graph_->set_unprecise_range_exprs(unpricise_range_exprs))) {
       LOG_WARN("failed to assign range exprs", K(ret));
     } else if (OB_FAIL(pre_range_graph_->set_range_expr_max_offsets(range_expr_max_offsets))) {
       LOG_WARN("failed to assign range expr max offsets", K(ret));
     } else {
-      LOG_TRACE("finish fill range exprs", K(max_precise_offset_), K(ss_max_precise_offset_),
-                  K(range_exprs), K(ss_range_exprs), K(unpricise_range_exprs));
+      LOG_TRACE("finish fill range exprs", K(max_precise_offset_),
+                  K(range_exprs), K(unpricise_range_exprs));
     }
   }
   return ret;

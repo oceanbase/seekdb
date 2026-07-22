@@ -24,7 +24,6 @@ ObCompressorPool::ObCompressorPool()
     :allocator_(ObMemAttr("Compressor"), OB_MALLOC_BIG_BLOCK_SIZE),
      none_compressor(),
      zstd_compressor_1_3_8(allocator_),
-     zstd_stream_compressor_1_3_8(allocator_),
      zlib_compressor()
 {
   allocator_.set_nway(32);
@@ -85,18 +84,8 @@ int ObCompressorPool::get_compressor_type(const char *compressor_name,
     compressor_type = NONE_COMPRESSOR;
   } else if (!STRCASECMP(compressor_name, "zstd_1.3.8")) {
     compressor_type = ZSTD_1_3_8_COMPRESSOR;
-  } else if (!STRCASECMP(compressor_name, "stream_zstd_1.3.8")) {
-    compressor_type = STREAM_ZSTD_1_3_8_COMPRESSOR;
   } else if (!STRCASECMP(compressor_name, "zlib_1.0")) {
     compressor_type = ZLIB_COMPRESSOR;
-  } else if (!STRCASECMP(compressor_name, "lz4_1.0")
-             || !STRCASECMP(compressor_name, "lz4_1.9.1")
-             || !STRCASECMP(compressor_name, "snappy_1.0")
-             || !STRCASECMP(compressor_name, "zstd_1.0")) {
-    compressor_type = ZSTD_1_3_8_COMPRESSOR;
-  } else if (!STRCASECMP(compressor_name, "stream_lz4_1.0")
-             || !STRCASECMP(compressor_name, "stream_zstd_1.0")) {
-    compressor_type = STREAM_ZSTD_1_3_8_COMPRESSOR;
   } else {
     ret = OB_NOT_SUPPORTED;
     LIB_LOG(WARN, "no support compressor type, ", K(ret), KCSTRING(compressor_name));
@@ -118,39 +107,6 @@ int ObCompressorPool::get_compressor_type(const ObString &compressor_name,
     if (OB_FAIL(get_compressor_type(comp_name, compressor_type))) {
       LIB_LOG(ERROR, "no support compressor name", K(ret), K(compressor_name));
     }
-  }
-  return ret;
-}
-
-int ObCompressorPool::get_stream_compressor(const char *compressor_name,
-                                            ObStreamCompressor *&stream_compressor)
-{
-  int ret = OB_SUCCESS;
-  ObCompressorType compressor_type = INVALID_COMPRESSOR;
-
-  if (OB_ISNULL(compressor_name)) {
-    ret = OB_INVALID_ARGUMENT;
-    LIB_LOG(WARN, "invalid compressor name argument, ", K(ret), KP(compressor_name));
-  } else if (OB_FAIL(get_compressor_type(compressor_name, compressor_type))) {
-    LIB_LOG(WARN, "fail to get compressor type, ", K(ret), KCSTRING(compressor_name));
-  } else if (OB_FAIL(get_stream_compressor(compressor_type, stream_compressor))) {
-    LIB_LOG(WARN, "fail to get stream compressor", K(ret), K(compressor_type));
-  } else {/*do nothing*/}
-  return ret;
-}
-
-int ObCompressorPool::get_stream_compressor(const ObCompressorType &compressor_type,
-                                            ObStreamCompressor *&stream_compressor)
-{
-  int ret = OB_SUCCESS;
-  switch(compressor_type) {
-    case STREAM_ZSTD_1_3_8_COMPRESSOR:
-      stream_compressor = &zstd_stream_compressor_1_3_8;
-      break;
-    default:
-      stream_compressor = NULL;
-      ret = OB_NOT_SUPPORTED;
-      LIB_LOG(WARN, "not support compress type for stream compress", K(ret), K(compressor_type));
   }
   return ret;
 }

@@ -37,9 +37,7 @@ public:
         const int64_t task_id,
         ObPxTaskChSet &ch_set,
         bool is_transmit);
-  static int check_status(int64_t timeout_ts,
-                          const common::ObAddr &qc_addr,
-                          int64_t query_start_time);
+  static int check_status(int64_t timeout_ts);
 };
 
 class ObPxTransmitChProvider
@@ -51,11 +49,9 @@ public:
   int get_data_ch(const int64_t sqc_id, const int64_t task_id, int64_t timeout_ts, ObPxTaskChSet &ch_set,
                   dtl::ObDtlChTotalInfo **ch_info);
   int get_data_ch_nonblock(const int64_t sqc_id, const int64_t task_id, int64_t timeout_ts,
-            ObPxTaskChSet &ch_set, dtl::ObDtlChTotalInfo **ch_info, const common::ObAddr &qc_addr,
-            int64_t query_start_time);
+            ObPxTaskChSet &ch_set, dtl::ObDtlChTotalInfo **ch_info);
   int get_part_ch_map(ObPxPartChInfo &map, int64_t timeout_ts);
-  int get_part_ch_map_nonblock(ObPxPartChInfo &map, int64_t timeout_ts,
-                               const common::ObAddr &qc_addr, int64_t query_start_time);
+  int get_part_ch_map_nonblock(ObPxPartChInfo &map, int64_t timeout_ts);
   int add_msg(const ObPxTransmitDataChannelMsg &msg);
 private:
   int wait_msg(int64_t timeout_ts);
@@ -87,10 +83,8 @@ public:
                           const int64_t sqc_id,
                           const int64_t task_id,
                           int64_t timeout_ts,
-                          ObPxTaskChSet &ch_set,
-                          dtl::ObDtlChTotalInfo *ch_info,
-                          const common::ObAddr &qc_addr,
-                          int64_t query_start_time);
+                  ObPxTaskChSet &ch_set,
+                  dtl::ObDtlChTotalInfo *ch_info);
   int add_msg(const ObPxReceiveDataChannelMsg &msg);
 private:
   /* functions */

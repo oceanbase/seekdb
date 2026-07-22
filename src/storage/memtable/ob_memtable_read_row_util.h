@@ -48,15 +48,6 @@ public:
                          ObNopBitMap &bitmap,
                          int64_t &row_scn);
 
-  static int iterate_delete_insert_row(const storage::ObITableReadInfo &read_info,
-                                       const ObStoreRowkey &key,
-                                       ObMvccValueIterator &value_iter,
-                                       blocksstable::ObDatumRow &latest_row,
-                                       blocksstable::ObDatumRow &earliest_row,
-                                       ObNopBitMap &bitmap,
-                                       int64_t &latest_row_scn,
-                                       int64_t &earliest_row_scn,
-                                       int64_t &acquired_row_cnt);
   static int iterate_row_key(const common::ObStoreRowkey &rowkey, blocksstable::ObDatumRow &row);
 
 private:
@@ -74,9 +65,6 @@ private:
                                        ObNopBitMap &bitmap,
                                        int64_t &row_scn,
                                        bool &read_finished);
-  static int acquire_delete_insert_tx_node_(ObMvccValueIterator &value_iter,
-                                            const ObMvccTransNode *&latest_tx_node,
-                                            const ObMvccTransNode *&earliest_tx_node);
 };
 
 }  // namespace memtable

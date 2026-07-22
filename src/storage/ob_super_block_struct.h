@@ -19,10 +19,10 @@
 
 #include "common/log/ob_log_cursor.h"
 #include "storage/blocksstable/ob_macro_block_id.h"
-#include "share/tenant_snapshot/ob_tenant_snapshot_id.h"
+#include "share/server_snapshot/ob_server_snapshot_id.h"
+#include "share/ob_ls_id.h"
 #include "common/ob_tablet_id.h"
 #include "storage/meta_mem/ob_meta_obj_struct.h"
-#include "storage/meta_store/ob_tenant_seq_generator.h"
 
 namespace oceanbase
 {
@@ -59,13 +59,11 @@ public:
   int32_t body_crc_;
 };
 
-enum class ObTenantCreateStatus
+enum class ObServerRuntimeCreateStatus
 {
   CREATING = 0,
   CREATED, // 1
   CREATE_ABORT, // 2
-  DELETING, // 3
-  DELETED, // 4
   MAX
 };
 
@@ -80,9 +78,9 @@ public:
 
   int64_t total_macro_block_count_;
   int64_t total_file_size_;
+  // Local recovery cursor and checkpoint entry for the process-wide server runtime.
   common::ObLogCursor replay_start_point_;
-  // entry to the (single) server tenant-meta checkpoint
-  blocksstable::MacroBlockId tenant_meta_entry_;
+  blocksstable::MacroBlockId runtime_meta_entry_;
 
   ServerSuperBlockBody();
   bool is_valid() const;
@@ -95,7 +93,7 @@ public:
                K_(total_macro_block_count),
                K_(total_file_size),
                K_(replay_start_point),
-               K_(tenant_meta_entry));
+               K_(runtime_meta_entry));
 
   OB_UNIS_VERSION(SUPER_BLOCK_BODY_VERSION);
 };
@@ -134,10 +132,10 @@ public:
   ServerSuperBlockBody body_;
 };
 
-struct ObTenantSnapshotMeta final
+struct ObServerSnapshotMeta final
 {
 public:
-  ObTenantSnapshotMeta()
+  ObServerSnapshotMeta()
     : ls_meta_entry_(oceanbase::storage::ObServerSuperBlock::EMPTY_LIST_ENTRY_BLOCK), snapshot_id_()
   {
   }
@@ -146,28 +144,77 @@ public:
   OB_UNIS_VERSION(1);
 public:
   blocksstable::MacroBlockId ls_meta_entry_;
-  share::ObTenantSnapshotID snapshot_id_;
+  share::ObServerSnapshotID snapshot_id_;
 };
 
-struct ObTenantSuperBlock final
+enum class ObLSItemStatus : uint8_t
+{
+  CREATING = 0,
+  CREATED,
+  CREATE_ABORT,
+  DELETED,
+  MAX
+};
+
+struct ObLSItem
+{
+public:
+  ObLSItem()
+    : ls_id_(),
+      epoch_(0),
+      status_(ObLSItemStatus::MAX),
+      min_macro_seq_(UINT64_MAX),
+      max_macro_seq_(UINT64_MAX)
+  {
+  }
+  virtual ~ObLSItem() { reset(); }
+
+  void reset()
+  {
+    ls_id_.reset();
+    epoch_ = 0;
+    status_ = ObLSItemStatus::MAX;
+    min_macro_seq_ = UINT64_MAX;
+    max_macro_seq_ = UINT64_MAX;
+  }
+
+  bool is_valid() const
+  {
+    return ls_id_.is_valid()
+        && epoch_ >= 0
+        && ObLSItemStatus::MAX != status_
+        && min_macro_seq_ < max_macro_seq_;
+  }
+
+  TO_STRING_KV(K_(ls_id), K_(epoch), K_(status), K_(min_macro_seq), K_(max_macro_seq));
+  OB_UNIS_VERSION_V(1);
+
+  share::ObLSID ls_id_;
+  int64_t epoch_;
+  ObLSItemStatus status_;
+  uint64_t min_macro_seq_;
+  uint64_t max_macro_seq_;
+};
+
+struct ObServerRuntimeSuperBlock final
 {
 public:
   static const int64_t MAX_SNAPSHOT_NUM = 32;
-  static const int64_t MIN_SUPER_BLOCK_VERSION = 0;
-  static const int64_t TENANT_SUPER_BLOCK_VERSION = 5;
-  ObTenantSuperBlock();
-  ObTenantSuperBlock(const bool is_hidden);
-  ~ObTenantSuperBlock() = default;
-  ObTenantSuperBlock(const ObTenantSuperBlock &other);
-  ObTenantSuperBlock &operator==(const ObTenantSuperBlock &other) = delete;
-  ObTenantSuperBlock &operator!=(const ObTenantSuperBlock &other) = delete;
-  void copy_snapshots_from(const ObTenantSuperBlock &other);
+  static const int64_t SERVER_RUNTIME_SUPER_BLOCK_VERSION = 4;
+  static const int64_t MAX_LS_COUNT = 128;
+  ObServerRuntimeSuperBlock();
+  ObServerRuntimeSuperBlock(const bool is_hidden);
+  ~ObServerRuntimeSuperBlock() = default;
+  ObServerRuntimeSuperBlock(const ObServerRuntimeSuperBlock &other);
+  ObServerRuntimeSuperBlock &operator==(const ObServerRuntimeSuperBlock &other) = delete;
+  ObServerRuntimeSuperBlock &operator!=(const ObServerRuntimeSuperBlock &other) = delete;
+  void copy_snapshots_from(const ObServerRuntimeSuperBlock &other);
   void reset();
   bool is_valid() const;
-  int get_snapshot(const share::ObTenantSnapshotID &snapshot_id, ObTenantSnapshotMeta &snapshot) const;
-  int add_snapshot(const ObTenantSnapshotMeta &snapshot);
-  int delete_snapshot(const share::ObTenantSnapshotID &snapshot_id);
-  int check_new_snapshot(const share::ObTenantSnapshotID &snapshot_id) const;
+  int get_snapshot(const share::ObServerSnapshotID &snapshot_id, ObServerSnapshotMeta &snapshot) const;
+  int add_snapshot(const ObServerSnapshotMeta &snapshot);
+  int delete_snapshot(const share::ObServerSnapshotID &snapshot_id);
+  int check_new_snapshot(const share::ObServerSnapshotID &snapshot_id) const;
 
   TO_STRING_KV(
                K_(replay_start_point),
@@ -176,13 +223,13 @@ public:
                K_(is_hidden),
                K_(version),
                K_(snapshot_cnt),
-               K_(preallocated_seqs),
-               K_(auto_inc_ls_epoch));
+               K_(auto_inc_ls_epoch),
+               K_(ls_cnt));
 
-  OB_UNIS_VERSION(TENANT_SUPER_BLOCK_VERSION);
+  OB_UNIS_VERSION(SERVER_RUNTIME_SUPER_BLOCK_VERSION);
 public:
   
-  // only meaningful for shared-nothing
+  // Local recovery state for LS and tablet metadata.
   common::ObLogCursor replay_start_point_;
   blocksstable::MacroBlockId ls_meta_entry_;
   blocksstable::MacroBlockId tablet_meta_entry_;
@@ -190,10 +237,11 @@ public:
   bool is_hidden_;
   int64_t version_;
   int64_t snapshot_cnt_;
-  ObTenantSnapshotMeta tenant_snapshots_[MAX_SNAPSHOT_NUM];
-  // only meaningful for shared-storage
-  ObTenantMonotonicIncSeqs preallocated_seqs_;
+  ObServerSnapshotMeta snapshots_[MAX_SNAPSHOT_NUM];
+  // Persisted LS catalog state for the current server runtime.
   int64_t auto_inc_ls_epoch_;
+  int64_t ls_cnt_;
+  ObLSItem ls_item_arr_[MAX_LS_COUNT];
 };
 
 #define IS_EMPTY_BLOCK_LIST(entry_block) (entry_block == oceanbase::storage::ObServerSuperBlock::EMPTY_LIST_ENTRY_BLOCK)

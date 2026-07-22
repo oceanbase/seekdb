@@ -31,7 +31,7 @@
 #include "share/config/ob_config.h"
 #include "share/config/ob_system_config.h"
 #include "share/config/ob_system_config_key.h"
-#include "share/config/ob_tenant_config_mgr.h"
+#include "share/config/ob_runtime_config.h"
 #include "share/ob_errno.h"
 #include "share/ob_rpc_struct.h"
 #include "share/ob_server_struct.h"
@@ -78,20 +78,6 @@ int ObServerConfig::init(const ObSystemConfig &config)
   }
   return ret;
 }
-
-bool ObServerConfig::in_upgrade_mode() const
-{
-  bool bret = false;
-  if (enable_upgrade_mode) {
-    bret = true;
-  } else {
-    obcall::ObUpgradeStage stage = GCTX.get_upgrade_stage();
-    bret = (stage >= obcall::OB_UPGRADE_STAGE_PREUPGRADE
-            && stage <= obcall::OB_UPGRADE_STAGE_POSTUPGRADE);
-  }
-  return bret;
-}
-
 
 int ObServerConfig::read_config(const bool enable_static_effect)
 {
@@ -155,7 +141,7 @@ int ObServerConfig::add_extra_config(const char *config_str,
   return add_extra_config_unsafe(config_str, version, check_config);
 }
 
-static double calc_default_tenant_cpu(const double quota)
+static double calc_default_server_cpu(const double quota)
 {
   double cpu = quota;
   if (0 == cpu) {
@@ -170,14 +156,14 @@ static double calc_default_tenant_cpu(const double quota)
   return cpu;
 }
 
-double ObServerConfig::get_sys_tenant_default_min_cpu()
+double ObServerConfig::get_server_default_min_cpu()
 {
-  return calc_default_tenant_cpu(server_cpu_quota_min);
+  return calc_default_server_cpu(server_cpu_quota_min);
 }
 
-double ObServerConfig::get_sys_tenant_default_max_cpu()
+double ObServerConfig::get_server_default_max_cpu()
 {
-  return calc_default_tenant_cpu(server_cpu_quota_max);
+  return calc_default_server_cpu(server_cpu_quota_max);
 }
 
 ObServerMemoryConfig::ObServerMemoryConfig()
@@ -208,18 +194,14 @@ int ObServerMemoryConfig::reload_config(const ObServerConfig& server_config)
   return ret;
 }
 
-void ObServerMemoryConfig::check_limit(bool ignore_error)
+void ObServerMemoryConfig::check_limit()
 {
-  int ret = OB_SUCCESS;
   // check unmanaged memory size
   const int64_t UNMANAGED_MEMORY_LIMIT = 2LL<<30;
   int64_t unmanaged_memory_size = lib::get_unmanaged_memory_size();
   if (unmanaged_memory_size > UNMANAGED_MEMORY_LIMIT) {
-    if (ignore_error) {
-      LOG_WARN("unmanaged_memory_size is over the limit", K(unmanaged_memory_size), K(UNMANAGED_MEMORY_LIMIT));
-    } else {
-      LOG_ERROR("unmanaged_memory_size is over the limit", K(unmanaged_memory_size), K(UNMANAGED_MEMORY_LIMIT));
-    }
+    LOG_ERROR_RET(OB_EXCEED_MEM_LIMIT, "unmanaged_memory_size is over the limit",
+                  K(unmanaged_memory_size), K(UNMANAGED_MEMORY_LIMIT));
   }
 }
 
@@ -231,27 +213,6 @@ int ObServerConfig::publish_special_config_after_dump()
 
 
 } // end of namespace common
-namespace obcall {
-int64_t get_max_rpc_packet_size()
-{
-  return GCONF._max_rpc_packet_size;
-}
-
-int64_t get_stream_rpc_max_wait_timeout()
-{
-  int64_t stream_rpc_max_wait_timeout = 30 * 1000 * 1000L;  // was ObCallProcessorBase::DEFAULT_WAIT_NEXT_PACKET_TIMEOUT
-  if (OB_LIKELY(true)) {
-    stream_rpc_max_wait_timeout = GCONF._stream_rpc_max_wait_timeout;
-  }
-  return stream_rpc_max_wait_timeout;
-}
-
-bool stream_rpc_update_timeout()
-{
-  return true;
-}
-
-} // end of namespace obcall
 namespace obgrpc {
 bool ob_grpc_is_rpc_tls_enabled()
 {

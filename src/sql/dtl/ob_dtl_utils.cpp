@@ -29,29 +29,29 @@ int ObDtlAsynSender::calc_batch_buffer_cnt(int64_t &max_batch_size, int64_t &max
 {
   int ret = OB_SUCCESS;
   int64_t dop = 0;
-  int64_t server_cnt = 0;
+  int64_t task_group_cnt = 0;
   int64_t total_task_cnt = 0;
   ObIArray<int64_t> *prefix_task_counts = nullptr;
   if (is_transmit_) {
-    dop = ch_info_->transmit_exec_server_.total_task_cnt_;
-    prefix_task_counts = &ch_info_->receive_exec_server_.prefix_task_counts_;
-    server_cnt = ch_info_->receive_exec_server_.exec_addrs_.count();
-    total_task_cnt = ch_info_->receive_exec_server_.total_task_cnt_;
+    dop = ch_info_->transmit_task_layout_.total_task_cnt_;
+    prefix_task_counts = &ch_info_->receive_task_layout_.prefix_task_counts_;
+    task_group_cnt = ch_info_->receive_task_layout_.prefix_task_counts_.count();
+    total_task_cnt = ch_info_->receive_task_layout_.total_task_cnt_;
   } else {
-    dop = ch_info_->receive_exec_server_.total_task_cnt_;
-    prefix_task_counts = &ch_info_->transmit_exec_server_.prefix_task_counts_;
-    server_cnt = ch_info_->transmit_exec_server_.exec_addrs_.count();
-    total_task_cnt = ch_info_->transmit_exec_server_.total_task_cnt_;
+    dop = ch_info_->receive_task_layout_.total_task_cnt_;
+    prefix_task_counts = &ch_info_->transmit_task_layout_.prefix_task_counts_;
+    task_group_cnt = ch_info_->transmit_task_layout_.prefix_task_counts_.count();
+    total_task_cnt = ch_info_->transmit_task_layout_.total_task_cnt_;
   }
-  if (server_cnt == 0) {
+  if (task_group_cnt == 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: ", K(server_cnt), K(total_task_cnt), K(prefix_task_counts), K(ret));
+    LOG_WARN("unexpected status: ", K(task_group_cnt), K(total_task_cnt), K(prefix_task_counts), K(ret));
   } else {
-    int64_t queue_size = common::ObServerConfig::get_instance().tenant_task_queue_size;
+    int64_t queue_size = common::ObServerConfig::get_instance().server_task_queue_size;
     int64_t max_buffer_cnt = (queue_size + 1) / 4;
-    int64_t dop_per_server = dop / server_cnt + 1;
+    int64_t dop_per_group = dop / task_group_cnt + 1;
     max_batch_size = 1;
-    int64_t buffer_cnt = dop_per_server * server_cnt;
+    int64_t buffer_cnt = dop_per_group * task_group_cnt;
     while (buffer_cnt * (max_batch_size + 1) < max_buffer_cnt) {
       ++max_batch_size;
     }
@@ -69,9 +69,9 @@ int ObDtlAsynSender::calc_batch_buffer_cnt(int64_t &max_batch_size, int64_t &max
     }
     max_batch_size = min(max_batch_size, max_loop_cnt);
     LOG_DEBUG("calc batch size", K_(is_transmit), K(prefix_task_counts),
-              K(server_cnt), K(total_task_cnt), K(prefix_task_counts->count()),
-              K(max_batch_size), K(dop), K(server_cnt),
-              K(max_loop_cnt), K(max_buffer_cnt), K(dop_per_server), K(lbt()));
+              K(task_group_cnt), K(total_task_cnt), K(prefix_task_counts->count()),
+              K(max_batch_size), K(dop), K(task_group_cnt),
+              K(max_loop_cnt), K(max_buffer_cnt), K(dop_per_group), K(lbt()));
   }
   return ret;
 }
@@ -106,7 +106,7 @@ int ObDtlAsynSender::asyn_send()
     // px coord rescan, channels is cleared and it's empty
     // max_loop_times indicates how many rounds are needed to send all channels, this value equals the maximum number of threads per sqc on the receiving end
     // max_batch_size indicates the number of channels sent in each batch
-    // For example assume the receiver has 2 servers, sqc0: 10 tasks sqc1: 12 tasks, i.e., channel has 22 (10+12)
+    // For example assume the receiver has 2 task groups, sqc0: 10 tasks sqc1: 12 tasks, i.e., channel has 22 (10+12)
     //    then max_loop_times = 22, if max_batch_size=5, then it indicates that 3 rounds are needed (12/5+1)
     //    If max_batch_size equals (will not be greater than max_loop_times) max_loop_times, it indicates that all channel data will be sent in one go
     // Fallback to synchronous send
@@ -121,11 +121,11 @@ int ObDtlAsynSender::asyn_send()
     ObIArray<int64_t> *prefix_task_counts = nullptr;
     int64_t total_task_cnt = 0;
     if (is_transmit_) {
-      prefix_task_counts = &ch_info_->receive_exec_server_.prefix_task_counts_;
-      total_task_cnt = ch_info_->receive_exec_server_.total_task_cnt_;
+      prefix_task_counts = &ch_info_->receive_task_layout_.prefix_task_counts_;
+      total_task_cnt = ch_info_->receive_task_layout_.total_task_cnt_;
     } else {
-      prefix_task_counts = &ch_info_->transmit_exec_server_.prefix_task_counts_;
-      total_task_cnt = ch_info_->transmit_exec_server_.total_task_cnt_;
+      prefix_task_counts = &ch_info_->transmit_task_layout_.prefix_task_counts_;
+      total_task_cnt = ch_info_->transmit_task_layout_.total_task_cnt_;
     }
     if (OB_FAIL(wait_channels.prepare_allocate(prefix_task_counts->count() * max_batch_size))) {
       LOG_WARN("fail alloc memory", K(max_batch_size), K(prefix_task_counts->count()), K(ret));
@@ -202,9 +202,9 @@ int ObDfcDrainAsynSender::action(ObDtlChannel* ch)
 {
   int ret = OB_SUCCESS;
   ObDtlDrainMsg drain_msg;
-  LOG_TRACE("drain channel", K(ret), KP(ch->get_id()), K(ch->get_peer()));
+  LOG_TRACE("drain channel", K(ret), KP(ch->get_id()));
   if (OB_FAIL(ch->send(drain_msg, timeout_ts_))) {
-    LOG_WARN("failed to push data to channel", K(ret), KP(ch->get_id()), K(ch->get_peer()));
+    LOG_WARN("failed to push data to channel", K(ret), KP(ch->get_id()));
   } else if (OB_FAIL(ch->flush(true, false))) {
     LOG_WARN("failed to drain msg", K(ret));
   }

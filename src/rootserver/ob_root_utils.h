@@ -16,15 +16,12 @@
 
 #ifndef _OB_ROOT_UTILS_H
 #define _OB_ROOT_UTILS_H 1
-#include "share/unit/ob_unit_info.h"
 #include "share/ob_check_stop_provider.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/container/ob_array.h"
 #include "lib/container/ob_array_iterator.h"
 #include "lib/hash/ob_hashmap.h"
 #include "share/ob_define.h"
-#include "rootserver/ob_replica_addr.h"
-#include "share/ob_cluster_role.h"
 #include "share/ob_rpc_struct.h"
 namespace oceanbase
 {
@@ -49,26 +46,6 @@ inline T majority(const T n)
   return n / 2 + 1;
 }
 
-template<typename T>
-inline bool is_same_tg(const T &left, const T &right)
-{
-  bool same = false;
-  if (left.tablegroup_id_ == right.tablegroup_id_) {
-    if (common::OB_INVALID_ID != left.tablegroup_id_) {
-      same = true;
-    } else {
-      same = left.table_id_ == right.table_id_;
-    }
-  }
-  return same;
-}
-
-template<typename T>
-inline bool is_same_pg(const T &left, const T &right)
-{
-  return is_same_tg(left, right) && left.partition_idx_ == right.partition_idx_;
-}
-
 
 enum ObResourceType
 {
@@ -88,13 +65,6 @@ public:
   virtual ~ObIServerResourceDemand() = default;
   // return -1 if resource_type is invalid
   virtual double get_demand(ObResourceType resource_type) const = 0;
-};
-
-class ObTenantUtils
-{
-public:
-private:
-
 };
 
 ObTraceEventRecorder *get_rs_trace_recorder();
@@ -162,14 +132,6 @@ int ObRootUtils::copy_array(
   return ret;
 }
 
-class ObClusterInfoGetter
-{
-public:
-  ObClusterInfoGetter() {}
-  virtual ~ObClusterInfoGetter() {}
-  static common::ObClusterRole get_cluster_role_v2();
-  static common::ObClusterRole get_cluster_role();
-};
 } // end namespace rootserver
 } // end namespace oceanbase
 

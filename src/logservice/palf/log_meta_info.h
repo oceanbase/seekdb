@@ -70,10 +70,8 @@ public:
 
   int64_t version_;
   LSN base_lsn_;
-  // prev_log_info_ is invalid by default,
-  // it's valid for migrating dest ls.
-  // By using this info, the dest ls does not need fetch prev log file
-  // of base_lsn from the source ls.
+  // prev_log_info_ is invalid by default. Physical restore persists it when advancing
+  // base_lsn so restart recovery does not need a discarded prefix log block.
   LogInfo prev_log_info_;
   LSN prev_log_tail_lsn_;
 

@@ -57,7 +57,7 @@ int ObExprSTCentroid::eval_st_centroid(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_ST_CENTROID);
+  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
   ObDatum *datum = NULL;
   bool is_null_result = false;
   omt::ObSrsCacheGuard srs_guard;
@@ -81,7 +81,6 @@ int ObExprSTCentroid::eval_st_centroid(const ObExpr &expr, ObEvalCtx &ctx, ObDat
             expr.args_[0]->obj_meta_.has_lob_header(),
             wkb))) {
       LOG_WARN("fail to get real string data", K(ret), K(wkb));
-    } else if (FALSE_IT(tmp_allocator.set_baseline_size(wkb.length()))) {
     } else if (OB_FAIL(
                    ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb, srs, true, N_ST_CENTROID))) {
       LOG_WARN("fail to get srs item", K(ret), K(wkb));
@@ -143,9 +142,6 @@ int ObExprSTCentroid::eval_st_centroid(const ObExpr &expr, ObEvalCtx &ctx, ObDat
         res.set_string(res_wkb);
       }
     }
-  }
-  if (mem_ctx != nullptr) {
-    tmp_allocator.add_ext_used((*mem_ctx)->arena_used());
   }
 
   return ret;

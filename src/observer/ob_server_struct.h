@@ -19,7 +19,6 @@
 
 #include "share/ob_lease_struct.h"
 #include "lib/net/ob_addr.h"
-#include "share/ob_cluster_role.h"              // ObClusterRole
 #include "share/ob_rpc_struct.h"
 #include "share/ob_server_struct.h"
 
@@ -30,7 +29,6 @@ namespace oceanbase
 namespace observer
 {
 using ObServiceStatus = share::ObServiceStatus;
-using ObServerMode = share::ObServerMode;
 using ObGlobalContext = share::ObGlobalContext;
 } // end of namespace observer
 } // end of namespace oceanbase

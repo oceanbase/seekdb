@@ -62,8 +62,8 @@ class ObLogService
 public:
   ObLogService();
   virtual ~ObLogService();
-  static int mtl_init(ObLogService* &logservice);
-  static void mtl_destroy(ObLogService* &logservice);
+  static int server_module_init(ObLogService* &logservice);
+  static void server_module_destroy(ObLogService* &logservice);
   int start();
   void stop();
   void wait();
@@ -103,8 +103,8 @@ public:
   int get_palf_stable_disk_usage(int64_t &used_size_byte, int64_t &total_size_byte);
   // why we need update 'log_disk_size_' and 'log_disk_util_threshold' separately.
   //
-  // 'log_disk_size' is a member of unit config.
-  // 'log_disk_util_threshold' and 'log_disk_util_limit_threshold' are members of tenant parameters.
+  // 'log_disk_size' is part of the server resource configuration.
+  // 'log_disk_util_threshold' and 'log_disk_util_limit_threshold' are runtime parameters.
   // If we just only provide 'update_disk_options', the correctness of PalfDiskOptions can not be guaranteed.
   // for example, original PalfDiskOptions is that
   // {

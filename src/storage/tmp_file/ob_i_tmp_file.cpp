@@ -209,7 +209,6 @@ int ObITmpFileHandle::init(ObITmpFile *tmp_file)
 
 ObITmpFile::ObITmpFile()
     : is_inited_(false),
-      mode_(ObTmpFileMode::INVALID),
       dir_id_(ObTmpFileGlobal::INVALID_TMP_FILE_DIR_ID),
       fd_(ObTmpFileGlobal::INVALID_TMP_FILE_FD),
       is_deleting_(false),
@@ -276,8 +275,7 @@ int ObITmpFile::init(const int64_t dir_id,
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret), KPC(this));
   } else if (OB_UNLIKELY(ObTmpFileGlobal::INVALID_TMP_FILE_FD == fd ||
-                         ObTmpFileGlobal::INVALID_TMP_FILE_DIR_ID == dir_id ||
-                         !true)) {
+                         ObTmpFileGlobal::INVALID_TMP_FILE_DIR_ID == dir_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(fd), K(dir_id));
   } else if (OB_ISNULL(wbp) || OB_ISNULL(flush_prio_mgr) || OB_ISNULL(callback_allocator) ||
@@ -319,7 +317,6 @@ void ObITmpFile::reset()
 {
   if (is_inited_) {
     is_inited_ = false;
-    mode_ = ObTmpFileMode::INVALID;
     
     dir_id_ = ObTmpFileGlobal::INVALID_TMP_FILE_DIR_ID;
     fd_ = ObTmpFileGlobal::INVALID_TMP_FILE_FD;

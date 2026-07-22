@@ -41,7 +41,7 @@ public:
       const ObVecIndexDDLChildTaskInfo &vec_index_snapshot_data,
       const ObVecIndexDDLChildTaskInfo &hybrid_embedded_vec,
       const int64_t schema_version,
-      const uint64_t tenant_data_version,
+      const uint64_t data_format_version,
       const obcall::ObDropIndexArg &drop_index_arg);
   int init(const ObDDLTaskRecord &task_record);
   virtual int process() override;
@@ -97,8 +97,8 @@ private:
   int create_drop_share_index_task();
   int update_task_message();
   int succ();
-  int send_build_single_replica_request();
-  int check_build_single_replica(bool &is_end);
+  int send_local_build_request();
+  int check_local_build(bool &is_end);
   int check_snapshot_table_exist(bool &is_exist);
   virtual int cleanup_impl() override;
   virtual bool is_error_need_retry(const int ret_code) override
@@ -108,7 +108,7 @@ private:
     return task_status_ < share::ObDDLTaskStatus::DROP_AUX_INDEX_TABLE;
   }
 private:
-  ObRootService *root_service_;
+  ObLocalManagementService *local_management_service_;
   ObVecIndexDDLChildTaskInfo rowkey_vid_;
   ObVecIndexDDLChildTaskInfo vid_rowkey_;
   ObVecIndexDDLChildTaskInfo domain_index_;
@@ -116,7 +116,7 @@ private:
   ObVecIndexDDLChildTaskInfo vec_index_snapshot_data_;
   ObVecIndexDDLChildTaskInfo hybrid_embedded_vec_;
   obcall::ObDropIndexArg drop_index_arg_;
-  ObDDLReplicaBuildExecutor replica_builder_;
+  ObDDLLocalBuildExecutor local_builder_;
   common::hash::ObHashMap<common::ObTabletID, common::ObTabletID> check_dag_exit_tablets_map_; // for delete lob meta row data ddl only.
   ObDDLWaitTransEndCtx wait_trans_ctx_;
   int64_t delte_lob_meta_request_time_;

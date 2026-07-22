@@ -75,7 +75,7 @@ public:
     //   to return immediately, yet for all the existing logics there, they don't care the return
     //   code and wants to continue iteration anyway. So to keep the old behavior and makes everyone
     //   else happy, we have to return OB_SUCCESS here. And we only make this return code thing
-    //   affects the behavior in tenant meta manager washing tablet. If you want to change the
+    //   affects tablet metadata eviction. If you want to change the
     //   behavior in such places, please consult the individual file owners to fully understand the
     //   needs there.
     return common::OB_SUCCESS;
@@ -115,7 +115,7 @@ public:
     //   to return immediately, yet for all the existing logics there, they don't care the return
     //   code and wants to continue iteration anyway. So to keep the old behavior and makes everyone
     //   else happy, we have to return OB_SUCCESS here. And we only make this return code thing
-    //   affects the behavior in tenant meta manager washing tablet. If you want to change the
+    //   affects tablet metadata eviction. If you want to change the
     //   behavior in such places, please consult the individual file owners to fully understand the
     //   needs there.
     return common::OB_SUCCESS;
@@ -228,8 +228,8 @@ protected:
   typedef common::hash::HashMapPair<ObPlanCacheKey, ObPCVSet *> PsPlanCacheKV;
 
 public:
-  ObPsPCVSetAtomicOp(const CacheRefHandleID ref_handle)
-    : pcv_set_(NULL), ref_handle_(ref_handle) {}
+  ObPsPCVSetAtomicOp()
+    : pcv_set_(NULL) {}
   virtual ~ObPsPCVSetAtomicOp() {}
   // get pcv_set and lock
   virtual int get_value(ObPCVSet *&pcv_set);
@@ -243,7 +243,6 @@ protected:
   // back to the caller via the callback functor.
   // pcv_set_ - the plan cache value that is referenced.
   ObPCVSet *pcv_set_;
-  const CacheRefHandleID ref_handle_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPsPCVSetAtomicOp);
 };
@@ -251,8 +250,8 @@ private:
 class ObPsPCVSetWlockAndRef : public ObPsPCVSetAtomicOp
 {
 public:
-  ObPsPCVSetWlockAndRef(const CacheRefHandleID ref_handle)
-    : ObPsPCVSetAtomicOp(ref_handle) {}
+  ObPsPCVSetWlockAndRef()
+    : ObPsPCVSetAtomicOp() {}
   virtual ~ObPsPCVSetWlockAndRef() {}
   int lock(ObPCVSet &pcv_set)
   {
@@ -265,8 +264,8 @@ private:
 class ObPsPCVSetRlockAndRef : public ObPsPCVSetAtomicOp
 {
 public:
-  ObPsPCVSetRlockAndRef(const CacheRefHandleID ref_handle)
-    : ObPsPCVSetAtomicOp(ref_handle) {}
+  ObPsPCVSetRlockAndRef()
+    : ObPsPCVSetAtomicOp() {}
   virtual ~ObPsPCVSetRlockAndRef() {}
   int lock(ObPCVSet &pcvs)
   {

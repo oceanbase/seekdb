@@ -389,7 +389,8 @@ int ObCheckpointExecutor::calculate_min_recycle_scn_(const LSN clog_checkpoint_l
   } else if (OB_FAIL(log_service->get_palf_disk_usage(used_size, total_size))) {
     STORAGE_LOG(WARN, "get_disk_usage failed", K(ret), K(used_size), K(total_size));
   } else {
-    LSN min_recycle_lsn = clog_checkpoint_lsn + (total_size * DEFAULT_MIN_LS_RECYCLE_CLOG_PERCENTAGE / 100);
+    LSN min_recycle_lsn = clog_checkpoint_lsn
+        + (total_size * DEFAULT_MIN_LS_RECYCLE_CLOG_PERCENTAGE / 100);
     if (OB_FAIL(loghandler_->locate_by_lsn_coarsely(min_recycle_lsn, min_recycle_scn))) {
       STORAGE_LOG(WARN, "locate min_recycle_scn by lsn failed", KR(ret));
     }
@@ -451,19 +452,6 @@ int ObCheckpointExecutor::get_checkpoint_info(ObIArray<ObCheckpointVTInfo> &chec
   return ret;
 }
 
-
-int ObCheckpointExecutor::get_clog_checkpoint_stat(ObLsClogCheckpointStat &stat) const
-{
-  int ret = OB_SUCCESS;
-  RLockGuard guard(rwlock_);
-  int log_type_index = 0;
-  stat.clog_checkpoint_scn_ = ls_->get_clog_checkpoint_scn();
-  stat.min_rec_scn_.set_max();
-  get_min_rec_scn(log_type_index, stat.min_rec_scn_);
-  ObLogBaseType log_type = static_cast<ObLogBaseType>(log_type_index);
-  stat.min_rec_scn_log_type_ = log_type;
-  return ret;
-}
 
 int ObCheckpointExecutor::traversal_flush() const
 {

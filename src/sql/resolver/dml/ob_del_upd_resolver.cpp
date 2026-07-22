@@ -1372,10 +1372,6 @@ int ObDelUpdResolver::resolve_err_log_table(const ParseNode *node)
   int ret = OB_SUCCESS;
   ObString table_name;
   ObString database_name;
-  ObString catalog_name;
-  uint64_t catalog_id = OB_INVALID_ID;
-  UNUSED(catalog_name);
-  UNUSED(catalog_id);
   uint64_t database_id = OB_INVALID_ID;
   ObString synonym_name;
   ObString synonym_db_name;
@@ -1392,12 +1388,10 @@ int ObDelUpdResolver::resolve_err_log_table(const ParseNode *node)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("relation_factor_node type should be T_RELATION_FACTOR", K(relation_factor_node->type_));
   } else if (OB_FAIL(resolve_table_relation_factor_wrapper(relation_factor_node,
-                                                           catalog_id,
                                                            database_id,
                                                            table_name,
                                                            synonym_name,
                                                            synonym_db_name,
-                                                           catalog_name,
                                                            database_name,
                                                            is_db_explicit,
                                                            ref_obj_ids))) {
@@ -1858,7 +1852,7 @@ int ObDelUpdResolver::check_need_fired_trigger(const TableItem* table_item)
   return ret;
 }
 
-// generated column、identity column
+// generated column
 int ObDelUpdResolver::view_pullup_special_column_exprs()
 {
   int ret = OB_SUCCESS;
@@ -1927,9 +1921,6 @@ int ObDelUpdResolver::view_pullup_special_column_exprs()
                 view_column_item->expr_->set_column_flags(
                                           basic_column_item->expr_->get_column_flags());
               }
-            } else if (basic_column_item->expr_->is_identity_column()) {
-              view_column_item->expr_->set_column_flags(
-                                        basic_column_item->expr_->get_column_flags());
             }
           }
         }
@@ -2611,15 +2602,12 @@ int ObDelUpdResolver::build_autoinc_param(
     const ObObjType column_type = column_schema->get_data_type();
     
     param.autoinc_table_id_ = table_id;
-    param.autoinc_first_part_num_ = table_schema->get_first_part_num();
     param.autoinc_table_part_num_ = table_schema->get_all_part_num();
     param.autoinc_col_id_ = column_id;
     param.auto_increment_cache_size_ = get_auto_increment_cache_size(
       table_schema->get_auto_increment_cache_size(), auto_increment_cache_size);
-    param.part_level_ = table_schema->get_part_level();
     param.autoinc_col_type_ = column_type;
     param.autoinc_desired_count_ = 0;
-    param.autoinc_mode_is_order_ = table_schema->is_order_auto_increment_mode();
     param.autoinc_version_ = table_schema->get_truncate_version();
     param.autoinc_auto_increment_ = table_schema->get_auto_increment();
 
@@ -2629,10 +2617,6 @@ int ObDelUpdResolver::build_autoinc_param(
     if (OB_HIDDEN_PK_INCREMENT_COLUMN_ID == column_id) {
       param.autoinc_increment_ = 1;
       param.autoinc_offset_ = 1;
-      param.part_value_no_order_ = true;
-    } else if (column_schema->is_tbl_part_key_column()) {
-      // don't keep intra-partition value asc order when partkey column is auto inc
-      param.part_value_no_order_ = true;
     }
 
     if (OB_FAIL(get_value_row_size(param.total_value_count_))) {
@@ -2931,15 +2915,7 @@ int ObDelUpdResolver::resolve_insert_values(const ParseNode *node,
                 LOG_USER_ERROR(OB_NON_DEFAULT_VALUE_FOR_GENERATED_COLUMN,
                               column_name.length(), column_name.ptr(), table_name.length(), table_name.ptr());
               }
-            } else if (column_expr->is_always_identity_column()) {
-              ret = OB_ERR_INSERT_INTO_GENERATED_ALWAYS_IDENTITY_COLUMN;
-              LOG_USER_ERROR(OB_ERR_INSERT_INTO_GENERATED_ALWAYS_IDENTITY_COLUMN);
             } else {
-              if ((column_expr->is_table_part_key_column()
-                  || column_expr->is_table_part_key_org_column())
-                  && expr->has_flag(CNT_SEQ_EXPR)) {
-                del_upd_stmt->set_has_part_key_sequence(true);
-              }
             }
             const ObIArray<ObColumnRefRawExpr*> &dep_cols = table_info.part_generated_col_dep_cols_;
             if (OB_SUCC(ret) && 0 != dep_cols.count()) {
@@ -3695,31 +3671,6 @@ int ObDelUpdResolver::replace_column_ref_for_check_constraint(ObInsertTableInfo&
   return ret;
 }
 
-
-int ObDelUpdResolver::recursive_search_sequence_expr(const ObRawExpr *default_expr)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(default_expr)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret));
-  } else if (default_expr->has_flag(IS_SEQ_EXPR)) {
-    const ObSequenceRawExpr *seq_raw_expr = static_cast<const ObSequenceRawExpr *>(default_expr);
-    int64_t sequence_id = seq_raw_expr->get_sequence_id();
-    const ObString &action = seq_raw_expr->get_action();
-    if (OB_FAIL(add_sequence_id_to_stmt(sequence_id, 0 == action.case_compare("CURRVAL")))) {
-      LOG_WARN("add sequence id to stmt failed", K(ret));
-    }
-  } else {
-    for (int64_t i = 0; i < default_expr->get_param_count() && OB_SUCC(ret); i++) {
-      const ObRawExpr *child_expr = default_expr->get_param_expr(i);
-      if (child_expr->has_flag(CNT_SEQ_EXPR)
-          && OB_FAIL(SMART_CALL(recursive_search_sequence_expr(child_expr)))) {
-        LOG_WARN("resursive search sequence expr failed", K(ret));
-      }
-    }
-  }
-  return ret;
-}
 
 int ObDelUpdResolver::check_need_match_all_params(const common::ObIArray<ObColumnRefRawExpr*> &value_descs, bool &need_match)
 {

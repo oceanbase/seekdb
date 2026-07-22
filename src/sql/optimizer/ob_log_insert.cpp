@@ -220,23 +220,6 @@ int ObLogInsert::compute_plan_type()
     LOG_WARN("get unexpected null", K(child), K(get_plan()), K(ret));
   } else if (OB_FAIL(ObLogDelUpd::compute_plan_type())) { 
     LOG_WARN("failed to compute plan type", K(ret));
-  } else if (is_multi_part_dml() &&
-             ObPhyPlanType::OB_PHY_PLAN_DISTRIBUTED != phy_plan_type_ &&
-             !get_plan()->get_stmt()->has_instead_of_trigger() &&
-             is_insert_select()) {
-    // The view containing instead of trigger does not have table_partition_info_, no need to go through the logic below
-    ObTableLocationType location_type = OB_TBL_LOCATION_UNINITIALIZED;
-    ObAddr &server = get_plan()->get_optimizer_context().get_local_server_addr();
-    if (OB_ISNULL(table_partition_info_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
-    } else if (OB_FAIL(table_partition_info_->get_location_type(server, location_type))) {
-      LOG_WARN("get location type failed", K(ret));
-    } else if (child->is_local() && ObTableLocationType::OB_TBL_LOCATION_REMOTE == location_type  ) {
-      // Special insert case handling: insert table is remote, child corresponds to local, need to set the plan to dist plan
-      phy_plan_type_ = ObPhyPlanType::OB_PHY_PLAN_DISTRIBUTED;
-      exchange_allocated_ = true;
-    } else { /*do nothing*/ }
   }
   return ret;
 }

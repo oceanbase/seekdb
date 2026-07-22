@@ -27,15 +27,11 @@ class ObPhysicalPlan;
 class ObPlanCacheCtx;
 class ObTableLocation;
 class ObPhyTableLocation;
-class ObSqlPlanSet;
 
 class ObPlanMatchHelper
 {
 public:
-  ObPlanMatchHelper(ObSqlPlanSet *plan_set)
-    : plan_set_(plan_set)
-  {
-  }
+  ObPlanMatchHelper() = default;
   int match_plan(const ObPlanCacheCtx &pc_ctx,
                  const ObPhysicalPlan *plan,
                  bool &is_matched,
@@ -119,8 +115,6 @@ private:
   int match_tbl_partition_locs(const ObCandiTableLoc &left,
                                const ObCandiTableLoc &right,
                                bool &is_matched) const;
-private:
-  ObSqlPlanSet *plan_set_;
 };
 } // namespace sql
 } // namespace oceanbase

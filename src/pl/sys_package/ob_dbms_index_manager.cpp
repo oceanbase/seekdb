@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX PL
 #include "ob_dbms_index_manager.h"
 #include "observer/change_stream/ob_change_stream_mgr.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 #include "common/mysqlclient/ob_mysql_proxy.h"
 
 using namespace oceanbase::common;

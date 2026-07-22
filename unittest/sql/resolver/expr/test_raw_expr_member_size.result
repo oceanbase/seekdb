@@ -43,7 +43,7 @@
 
 | class | sizeof(class) |
 | --- | --- |
-| ObColumnRefRawExpr | 320 |
+| ObColumnRefRawExpr | 312 |
 | ObTerminalRawExpr | 176 |
 | expr.table_id_ | 8 |
 | expr.column_id_ | 8 |
@@ -61,7 +61,6 @@
 | expr.is_rowkey_column_ | 1 |
 | expr.is_unique_key_column_ | 1 |
 | expr.is_mul_key_column_ | 1 |
-| expr.is_pseudo_column_ref_ | 1 |
 | expr.is_strict_json_column_ | 1 |
 | expr.srs_id_ | 8 |
 | expr.udt_set_id_ | 8 |
@@ -80,13 +79,12 @@
 
 | class | sizeof(class) |
 | --- | --- |
-| ObAggFunRawExpr | 544 |
+| ObAggFunRawExpr | 488 |
 | ObRawExpr | 176 |
 | expr.real_param_exprs_ | 144 |
 | expr.distinct_ | 1 |
 | expr.order_items_ | 136 |
 | expr.separator_param_expr_ | 8 |
-| expr.udf_meta_ | 56 |
 | expr.expr_in_inner_stmt_ | 1 |
 | expr.is_need_deserialize_row_ | 1 |
 | expr.pl_agg_udf_expr_ | 8 |

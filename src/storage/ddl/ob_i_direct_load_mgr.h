@@ -43,10 +43,9 @@ enum class ObDirectLoadMgrRole
 };
 
 /*
- *  base_direct_load_mgr have two total different interface
+ *  base_direct_load_mgr has two interfaces
  *  1. v1 interface,
-       v1 interface is firstly used for shared nothing mode,
-       * global unique param, the sub class will be managed by the ObTenantDirectLoadMgr,
+       * global unique param, the sub class will be managed by the ObDirectLoadMgr,
        * rely on different execution id to distinguish from different retry tasks
        * lob hanlde will be bind to to the data direct load mg
       +-------+    +-------------------+    +-----------------+
@@ -54,8 +53,8 @@ enum class ObDirectLoadMgrRole
       +-------+    +-------------------+    +-----------------+
 
     2. v2 interface
-       v2 interface use idempodency logic for both shared storage & share nothing,
-       * local param, sub classes management don't rely on tenant direct load mgr any more
+       v2 interface uses idempotency logic,
+       * Local parameters are owned by the concrete direct-load manager.
        * rely on idempodency logic, data will be the same in different retry tasks
        * lob handle & data handle are seperated, direct_load_mgr_agent can directly operate on both of them
       +-------+    +-------------------+
@@ -73,7 +72,7 @@ public:
   ObBaseTabletDirectLoadMgr();
   virtual ~ObBaseTabletDirectLoadMgr();
   virtual bool is_valid() = 0;
-  TO_STRING_KV(K_(table_key), K_(tenant_data_version), K_(direct_load_type),
+  TO_STRING_KV(K_(table_key), K_(data_format_version), K_(direct_load_type),
                K_(tablet_id));
 public: /* some baisc method */
   void inc_ref() { ATOMIC_INC(&ref_cnt_); };
@@ -167,12 +166,10 @@ public: /* --------- direct_load_mgr interface  v2 ---------*/
 public:
   /* get basic info */
   inline  ObITable::TableKey get_table_key() const { return table_key_; }
-  inline uint64_t get_tenant_data_version() const { return tenant_data_version_; }
+  inline uint64_t get_data_format_version() const { return data_format_version_; }
   inline ObDirectLoadType get_direct_load_type() const { return direct_load_type_; }
   inline ObTabletID get_tablet_id() const { return tablet_id_; }
-  /* some getter method for compat
-   * which should be remove
-  */
+  /* Build metadata exposed to direct-load implementations. */
   virtual int64_t get_ddl_task_id() const = 0;
   virtual ObWholeDataStoreDesc &get_data_block_desc() = 0;
   virtual ObTabletDirectLoadInsertParam &get_build_param() = 0;
@@ -180,14 +177,11 @@ public:
   virtual const ObIArray<ObColumnSchemaItem> &get_column_info() const = 0;
   virtual bool get_micro_index_clustered() = 0;
 
-  /* TODO zhuoran, wait to fullfil in new sub class*/
-  virtual bool get_is_no_logging() {return false; }
-
 protected:
   /* basic info */
   ObTabletID tablet_id_;
   ObITable::TableKey table_key_;
-  uint64_t tenant_data_version_;
+  uint64_t data_format_version_;
   ObDirectLoadType direct_load_type_;
   /* concurrent control param */
   int64_t ref_cnt_;
@@ -198,4 +192,4 @@ protected:
 }// namespace storage
 }// namespace oceanbase
 
-#endif//OCEANBASE_STORAGE_OB_DIRECT_INSERT_SSTABLE_CTX_NEW_H
+#endif//OCEANBASE_STORAGE_DDL_OB_I_DIRECT_LOAD_MGR_H

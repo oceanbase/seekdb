@@ -18,14 +18,11 @@
 #define OCEANBASE_SHARE_OB_TABLET_INFO
 
 #include "common/ob_tablet_id.h" // ObTabletID
-#include "lib/net/ob_addr.h" // ObAddr
 
 namespace oceanbase
 {
 namespace share
 {
-class ObTabletReplicaFilter;
-
 enum class ObDataChecksumType : uint8_t
 {
   DATA_CHECKSUM_NORMAL = 0,
@@ -45,7 +42,7 @@ inline bool is_normal_column_checksum_type(const ObDataChecksumType &type)
 }
 
 
-class ObTabletReplica
+class ObTabletRuntimeInfo
 {
 public:
   enum ScnStatus
@@ -55,13 +52,12 @@ public:
     SCN_STATUS_MAX
   };
 
-  ObTabletReplica();
-  virtual ~ObTabletReplica();
+  ObTabletRuntimeInfo();
+  virtual ~ObTabletRuntimeInfo();
   void reset();
   inline bool is_valid() const
   {
-    return tablet_id_.is_valid_with_tenant()
-        && server_.is_valid()
+    return tablet_id_.is_valid()
         && snapshot_version_ >= 0
         && data_size_ >= 0
         && required_size_ >= 0
@@ -70,13 +66,11 @@ public:
   }
   inline bool primary_keys_are_valid() const
   {
-    return tablet_id_.is_valid_with_tenant()
-        && server_.is_valid();
+    return tablet_id_.is_valid();
   }
-  int assign(const ObTabletReplica &other);
+  int assign(const ObTabletRuntimeInfo &other);
   
   inline const common::ObTabletID &get_tablet_id() const { return tablet_id_; }
-  inline const common::ObAddr &get_server() const { return server_; }
   inline int64_t get_snapshot_version() const { return snapshot_version_; }
   inline int64_t get_data_size() const { return data_size_; }
   inline int64_t get_required_size() const { return required_size_; }
@@ -84,21 +78,18 @@ public:
   inline ScnStatus get_status() const { return status_; }
   int init(
       const common::ObTabletID &tablet_id,
-      const common::ObAddr &server,
       const int64_t snapshot_version,
       const int64_t data_size,
       const int64_t required_size,
       const int64_t report_scn,
       const ScnStatus status);
   void fake_for_diagnose(const common::ObTabletID &tablet_id);
-  bool is_equal_for_report(const ObTabletReplica &other) const;
   static bool is_status_valid(const ScnStatus status)
   {
     return status >= SCN_STATUS_IDLE && status < SCN_STATUS_MAX;
   }
   TO_STRING_KV(
       K_(tablet_id),
-      K_(server),
       K_(snapshot_version),
       K_(data_size),
       K_(required_size),
@@ -106,51 +97,11 @@ public:
       K_(status));
 private:
   common::ObTabletID tablet_id_;
-  common::ObAddr server_;
   int64_t snapshot_version_;
-  int64_t data_size_; // load balancing releated
-  int64_t required_size_; // load balancing releated
-  // below: tablet level member for compaction
+  int64_t data_size_;
+  int64_t required_size_;
   int64_t report_scn_;
   ScnStatus status_;
-};
-
-class ObTabletInfo
-{
-public:
-  ObTabletInfo();
-  explicit ObTabletInfo(const common::ObTabletID &tablet_id);
-  explicit ObTabletInfo(
-      const common::ObTabletID &tablet_id,
-      const ObTabletReplica &replica);
-  virtual ~ObTabletInfo();
-  void reset();
-  inline bool is_valid() const
-  {
-    return true
-        && tablet_id_.is_valid_with_tenant()
-        && has_replica_
-        && replica_.is_valid();
-  }
-  int assign(const ObTabletInfo &other);
-  
-  inline const common::ObTabletID &get_tablet_id() const { return tablet_id_; }
-  inline bool has_replica() const { return has_replica_; }
-  inline const ObTabletReplica &get_replica() const { return replica_; }
-  int64_t replica_count() const { return has_replica_ ? 1 : 0; }
-  int init_empty(const common::ObTabletID &tablet_id);
-  int init(const common::ObTabletID &tablet_id,
-           const ObTabletReplica &replica);
-  int init_by_replica(const ObTabletReplica &replica);
-  int set_replica(const ObTabletReplica &replica);
-  bool is_self_replica(const ObTabletReplica &replica) const;
-  int filter(const ObTabletReplicaFilter &filter);
-  TO_STRING_KV(K_(tablet_id), K_(has_replica), K_(replica));
-private:
-  common::ObTabletID tablet_id_;
-  bool has_replica_;
-  ObTabletReplica replica_;
-  DISALLOW_COPY_AND_ASSIGN(ObTabletInfo);
 };
 
 class ObTabletTablePair

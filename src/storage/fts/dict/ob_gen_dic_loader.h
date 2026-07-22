@@ -19,7 +19,7 @@
 
 #include "lib/lock/ob_tc_rwlock.h"
 #include "storage/fts/dict/ob_dic_loader.h"
-#include "share/ob_plugin_helper.h"
+#include "storage/fts/ob_fts_parser_name.h"
 
 namespace oceanbase
 {
@@ -33,7 +33,7 @@ public:
   public:
     ObGenDicLoaderKey() : charset_(CHARSET_INVALID) 
     {
-      MEMSET(parser_name_, '\0', share::OB_PLUGIN_NAME_LENGTH);
+      MEMSET(parser_name_, '\0', OB_FT_PARSER_NAME_LENGTH);
     }
     ~ObGenDicLoaderKey() = default;
     int init(const ObString &parser_name, const ObCharsetType charset);
@@ -46,7 +46,7 @@ public:
     }
     bool is_valid() const
     {
-      return true && 0 != STRLEN(parser_name_) && CHARSET_INVALID != charset_;
+      return 0 != STRLEN(parser_name_) && CHARSET_INVALID != charset_;
     }
     int hash(uint64_t &hash_val) const;
     
@@ -60,19 +60,8 @@ public:
     int set_parser_name(const ObString &parser_name);
 
   private:
-    char parser_name_[share::OB_PLUGIN_NAME_LENGTH];
+    char parser_name_[OB_FT_PARSER_NAME_LENGTH];
     ObCharsetType charset_;
-  };
-
-  class ObNeedDeleteDicLoadersFn final
-  {
-  public:
-    ObNeedDeleteDicLoadersFn() = default;
-    ~ObNeedDeleteDicLoadersFn() = default;
-    int operator() (hash::HashMapPair<ObGenDicLoaderKey, ObTenantDicLoader*> &entry);
-    
-  public:
-    ObArray<ObGenDicLoaderKey> need_delete_loaders_;
   };
 
 public:
@@ -84,20 +73,18 @@ public:
   int init();
   int get_dic_loader(const ObString &parser_name, 
                      const ObCharsetType charset, 
-                     ObTenantDicLoaderHandle &loader_handle);
-  int destroy_dic_loader_for_tenant();
-
+                     ObDicLoaderHandle &loader_handle);
 private:
   ObGenDicLoader() 
       : is_inited_(false), lock_(), dic_loader_map_() { }
   ~ObGenDicLoader() { dic_loader_map_.destroy(); }
   int gen_dic_loader(const ObGenDicLoaderKey &dic_loader_key, 
-                     ObTenantDicLoader *&dic_loader);
+                     ObDicLoader *&dic_loader);
 
 private:
   bool is_inited_;
   common::TCRWLock lock_;
-  hash::ObHashMap<ObGenDicLoaderKey, ObTenantDicLoader*> dic_loader_map_;
+  hash::ObHashMap<ObGenDicLoaderKey, ObDicLoader*> dic_loader_map_;
   DISALLOW_COPY_AND_ASSIGN(ObGenDicLoader);
 };
 } //end storage

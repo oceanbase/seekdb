@@ -39,7 +39,7 @@ class TestIndexBlockAggregator : public ::testing::Test
 public:
   TestIndexBlockAggregator()
   {
-    data_version_ = DATA_VERSION_1_0_0_0;
+    data_version_ = cal_version(1, 0, 0, 0);
   }
   virtual ~TestIndexBlockAggregator() {}
   virtual void SetUp() {}
@@ -102,7 +102,6 @@ void TestIndexBlockAggregator::init_schema(const int64_t col_count, const int64_
   col_obj_types_ = col_obj_types;
   ObColumnSchemaV2 col;
   schema_.reset();
-  schema_.set_tablegroup_id(1);
   schema_.set_database_id(1);
   schema_.set_table_id(200001);
   schema_.set_table_name("test_index_aggregator_schema");
@@ -142,7 +141,7 @@ void TestIndexBlockAggregator::init_data_encoder(ObIMicroBlockWriter *&micro_wri
   ctx_.rowkey_column_cnt_ = rowkey_count_;
   ctx_.column_cnt_ = full_column_count_;
   ctx_.col_descs_ = &col_descs_;
-  ctx_.major_working_cluster_version_ = cal_version(1, 0, 0, 0);
+  ctx_.data_format_version_ = cal_version(1, 0, 0, 0);
   ctx_.row_store_type_ = ObRowStoreType::ENCODING_ROW_STORE;
   ctx_.compressor_type_ = common::ObCompressorType::NONE_COMPRESSOR;
   ctx_.need_calc_column_chksum_ = true;
@@ -1031,9 +1030,9 @@ TEST_F(TestIndexBlockAggregator, test_loose_min_max_data_desc)
   ASSERT_EQ(OB_SUCCESS, storage_schema.init(arena, table_schema));
 
   ASSERT_EQ(OB_SUCCESS, major_static_desc.init(false, table_schema, ObTabletID(200000), compaction::MAJOR_MERGE, 10000, share::SCN::invalid_scn(),
-      DATA_VERSION_1_0_0_0, compaction::EXEC_MODE_LOCAL, false, 0));
+      cal_version(1, 0, 0, 0), false, 0));
   ASSERT_EQ(OB_SUCCESS, minor_static_desc.init(false, table_schema, ObTabletID(200000), compaction::MINI_MERGE, 1, share::SCN::base_scn(),
-      DATA_VERSION_1_0_0_0, compaction::EXEC_MODE_LOCAL, false, 0));
+      cal_version(1, 0, 0, 0), false, 0));
 
   ASSERT_EQ(OB_SUCCESS, major_data_desc.init(major_static_desc, storage_schema));
   ASSERT_EQ(OB_SUCCESS, minor_data_desc.init(minor_static_desc, storage_schema));

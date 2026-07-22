@@ -73,7 +73,7 @@ public:
       const ObMetaDiskAddr &old_addr,
       const ObMetaDiskAddr &new_addr,
       const bool set_pool /* whether to set pool */,
-      ObITenantMetaObjPool *pool);
+      ObIStorageMetaObjPool *pool);
   template <typename Operator> int for_each_value_store(Operator &op);
   int wash_meta_obj(const ObTabletMapKey &key, ObMetaObjGuard<ObTablet> &guard, void *&free_obj);
   int64_t count() const { return ResourceMap::map_.size(); }

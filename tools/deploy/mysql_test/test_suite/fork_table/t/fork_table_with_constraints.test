@@ -41,7 +41,6 @@ insert into t1 values (101, 'Bob', 'bob@example.com', 30);
 fork table t1 to t1_fork;
 
 --echo # 验证Fork表约束
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t1_fork;
 
 --echo # 验证NOT NULL约束在Fork表中生效

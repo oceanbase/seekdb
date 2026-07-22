@@ -39,31 +39,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObOptimizeTableResolver);
 };
 
-class ObOptimizeTenantResolver : public ObDDLResolver
-{
-public:
-  explicit ObOptimizeTenantResolver(ObResolverParams &params)
-    : ObDDLResolver(params)
-  {}
-  virtual ~ObOptimizeTenantResolver() = default;
-  virtual int resolve(const ParseNode &parser_tree);
-private:
-  static const int64_t TABLE_LIST_NODE = 0;
-  DISALLOW_COPY_AND_ASSIGN(ObOptimizeTenantResolver);
-};
-
-class ObOptimizeAllResolver : public ObDDLResolver
-{
-public:
-  explicit ObOptimizeAllResolver(ObResolverParams &params)
-    : ObDDLResolver(params)
-  {}
-  virtual ~ObOptimizeAllResolver() = default;
-  virtual int resolve(const ParseNode &parser_tree);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObOptimizeAllResolver);
-};
-
 }  // end namespace sql
 }  // end namespace oceanbase
 

@@ -28,7 +28,7 @@ namespace obmysql
 ObSqlSockSession::ObSqlSockSession(ObISMConnectionCallback& conn_cb, ObSqlNio* nio):
     nio_(nio),
     sm_conn_cb_(conn_cb),
-    sql_req_(ObRequest::OB_MYSQL, 1),
+    sql_req_(ObRequest::OB_MYSQL),
     last_pkt_sz_(0),
     pending_write_buf_(NULL),
     pending_write_sz_(0),

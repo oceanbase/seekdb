@@ -24,7 +24,6 @@ using namespace oceanbase;
 using namespace oceanbase::common;
 using namespace oceanbase::lib;
 
-const uint64_t tenant_id = 100;
 const uint64_t ctx_id = 2;
 const int64_t limit = 1 << 30;
 const lib::ObLabel &label = "1";
@@ -40,9 +39,8 @@ public:
   virtual void SetUp()
   {
     ObMallocAllocator *ma = ObMallocAllocator::get_instance();
-    ASSERT_EQ(OB_SUCCESS, ma->create_and_add_tenant_allocator());
-    ASSERT_EQ(OB_SUCCESS, ma->set_tenant_limit(limit));
-    auto ta = ma->get_tenant_ctx_allocator(ctx_id);
+    ASSERT_EQ(OB_SUCCESS, ma->set_allocator_limit(limit));
+    auto ta = ma->get_ctx_allocator(ctx_id);
     ASSERT_TRUE(NULL != ta);
   }
   //virtual void TearDown();
@@ -52,7 +50,7 @@ public:
 TEST_F(TestAllocator, basic)
 {
   ObMallocAllocator *ma = ObMallocAllocator::get_instance();
-  auto ta = ma->get_tenant_ctx_allocator(ctx_id);
+  auto ta = ma->get_ctx_allocator(ctx_id);
   ObMemAttr attr(label, ctx_id);
   ObAllocator a(nullptr, attr);
   int64_t sz = 100;
@@ -102,7 +100,7 @@ TEST_F(TestAllocator, basic)
 TEST_F(TestAllocator, reveal_unfree)
 {
   ObMallocAllocator *ma = ObMallocAllocator::get_instance();
-  auto ta = ma->get_tenant_ctx_allocator(ctx_id);
+  auto ta = ma->get_ctx_allocator(ctx_id);
   ObMemAttr attr(label, ctx_id);
   has_unfree = false;
   // no unfree
@@ -134,7 +132,7 @@ TEST_F(TestAllocator, reveal_unfree)
 TEST_F(TestAllocator, reset)
 {
   ObMallocAllocator *ma = ObMallocAllocator::get_instance();
-  auto ta = ma->get_tenant_ctx_allocator(ctx_id);
+  auto ta = ma->get_ctx_allocator(ctx_id);
   ObMemAttr attr(label, ctx_id);
   const int64_t hold = 0;
   ObAllocator a(nullptr, attr);
@@ -151,102 +149,6 @@ TEST_F(TestAllocator, reset)
   a.~ObAllocator();
   ASSERT_EQ(a.used(), hold);
 }
-
-#if 0
-TEST_F(TestAllocator, pm_basic)
-{
-  ObPageManager pm;
-  // use default
-  void *page = pm.alloc_page(100);
-  ASSERT_NE(nullptr, page);
-  ASSERT_EQ(pm.get_hold(), pm.set_.get_total_hold());
-  pm.free_page(page);
-  ASSERT_EQ(OB_SUCCESS, pm.set_tenant_ctx(tenant_id, ctx_id));
-  int64_t ps = 1024;
-  void *ptr = nullptr;
-
-  void *p[128] = {};
-  ps = 8L << 10;
-
-  int i = 0;
-  // For cut tenants, the release of chunks is lazy and triggered by the next application (that is, the first application of a new tenant)
-  // So here hold> 0
-  int64_t hold = pm.get_hold();
-  while (i < 30) {
-    p[i] = pm.alloc_page(ps);
-    ASSERT_NE(nullptr, p[i++]);
-    ps = (8L << 10) * i;
-  }
-  ASSERT_GT(pm.get_hold(), hold);
-  while (i--) {
-    pm.free_page(p[i]);
-  }
-  ASSERT_EQ(pm.get_hold(), 0);
-
-  // freelist
-  int large_size = INTACT_ACHUNK_SIZE - 200;
-  ptr = pm.alloc_page(large_size);
-  hold = pm.get_hold();
-  ASSERT_GT(hold, 0);
-  pm.free_page(ptr);
-  ASSERT_EQ(pm.get_hold(), hold);
-  ptr = pm.alloc_page(large_size);
-  ASSERT_EQ(pm.get_hold(), hold);
-  pm.free_page(ptr);
-  ASSERT_LT(pm.get_hold(), hold);
-  hold = pm.get_hold();
-  ptr = pm.alloc_page(large_size);
-  ASSERT_GT(pm.get_hold(), hold);
-  pm.free_page(ptr);
-  ASSERT_EQ(pm.get_hold(), hold);
-
-  pm.alloc_page(large_size);
-  pm.alloc_page(large_size);
-  pm.alloc_page(large_size);
-
-  // switch tenant
-  hold = pm.get_hold();
-  ASSERT_EQ(OB_SUCCESS, pm.set_tenant_ctx(new_tenant_id, ctx_id));
-  ptr = pm.alloc_page(100);
-  ASSERT_LT(pm.get_hold(), hold);
-  ASSERT_GT(pm.get_hold(), 0);
-
-  cout << "done" << endl;
-}
-
-TEST_F(TestAllocator, pm_reveal_unfree)
-{
-  ObMallocAllocator *ma = ObMallocAllocator::get_instance();
-  auto ta = ma->get_tenant_ctx_allocator(ctx_id);
-  has_unfree = false;
-  int64_t ps = 8L << 10;
-  // no unfree
-  {
-    const int64_t hold = ta->get_hold();
-    ObPageManager pm;
-    ASSERT_EQ(OB_SUCCESS, pm.set_tenant_ctx(tenant_id, ctx_id));
-    void *ptr = pm.alloc_page(ps);
-    ASSERT_NE(ptr, nullptr);
-    ASSERT_GT(ta->get_hold(), hold);
-    pm.free_page(ptr);
-    ASSERT_EQ(ta->get_hold(), hold);
-    pm.~ObPageManager();
-    ASSERT_FALSE(has_unfree);
-  }
-  // has unfree
-  {
-    const int64_t hold = ta->get_hold();
-    ObPageManager pm;
-    ASSERT_EQ(OB_SUCCESS, pm.set_tenant_ctx(tenant_id, ctx_id));
-    void *ptr = pm.alloc_page(100);
-    ASSERT_NE(ptr, nullptr);
-    ASSERT_GT(ta->get_hold(), hold);
-    pm.~ObPageManager();
-    ASSERT_TRUE(has_unfree);
-    ASSERT_EQ(ta->get_hold(), hold);
-  }
-}
-#endif
 
 int main(int argc, char **argv)
 {

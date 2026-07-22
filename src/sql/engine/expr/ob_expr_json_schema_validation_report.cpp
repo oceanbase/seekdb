@@ -110,7 +110,7 @@ int ObExprJsonSchemaValidationReport::eval_json_schema_validation_report(const O
   bool is_null_result = false;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("JSONModule"));
   ObJsonBin j_schema_bin;
   if (OB_ISNULL(info)) {

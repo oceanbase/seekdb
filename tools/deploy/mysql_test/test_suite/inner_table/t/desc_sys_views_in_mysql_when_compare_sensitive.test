@@ -4,20 +4,10 @@
 #description: check sys view definition in mysql
 --disable_abort_on_error
 connect (sys,$OBMYSQL_MS0,root,,oceanbase,$OBMYSQL_PORT);
---disable_warnings
-#drop tenant if exists yanmu_tenant force;
-#drop resource pool if exists yanmu_resource_pool;
-#--enable_warnings
-
-#--disable_query_log
-#let $zone_name=query_get_value(select zone from oceanbase.__all_zone where zone != '' limit 1, zone, 1);
-#eval create resource pool yanmu_resource_pool unit = '2c2g', unit_num = 1;
-#set @@session.ob_query_timeout = 100000000;
-#eval create tenant yanmu_tenant primary_zone = "$zone_name", resource_pool_list=('yanmu_resource_pool') set lower_case_table_names = 0, ob_tcp_invited_nodes='%';
 --source mysql_test/include/check_tenant_sync.inc
 --enable_query_log
 
-connect (mysql,$OBMYSQL_MS0,root@sys,,test,$OBMYSQL_PORT);
+connect (mysql,$OBMYSQL_MS0,root,,test,$OBMYSQL_PORT);
 connection sys;
 let $cnt = query_get_value(select count(*) as cnt from oceanbase.__all_table where table_type = 1, cnt, 1);
 
@@ -53,9 +43,3 @@ eval select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from $database_
 
 inc $idx;
 }
-
-connection sys;
---disable_query_log
-#drop tenant if exists yanmu_tenant force;
---enable_query_log
-

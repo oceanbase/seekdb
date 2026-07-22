@@ -100,14 +100,9 @@ public:
 
   // sql execute interface
   virtual int execute_read(const ObString &sql,
-      ObISQLClient::ReadResult &res, bool is_user_sql = false,
-      const common::ObAddr *sql_exec_addr = nullptr) = 0;
-  virtual int execute_read(const int64_t cluster_id, const ObString &sql,
-      ObISQLClient::ReadResult &res, bool is_user_sql = false,
-      const common::ObAddr *sql_exec_addr = nullptr) = 0;
+      ObISQLClient::ReadResult &res, bool is_user_sql = false) = 0;
   virtual int execute_write(const ObString &sql,
-      int64_t &affected_rows, bool is_user_sql = false,
-      const common::ObAddr *sql_exec_addr = nullptr) = 0;
+      int64_t &affected_rows, bool is_user_sql = false) = 0;
   virtual int execute_proc() { return OB_NOT_SUPPORTED; }
   virtual int execute_proc(ObIAllocator &allocator,
                         ParamStore &params,
@@ -154,7 +149,6 @@ public:
   virtual int get_session_variable(const ObString &name, int64_t &val) = 0;
   virtual int set_session_variable(const ObString &name, int64_t val) = 0;
   virtual int set_session_variable(const ObString &name, const ObString &val) = 0;
-
   virtual int execute(ObIExecutor &executor)
   {
     UNUSED(executor);
@@ -169,10 +163,8 @@ public:
   virtual int set_tz_info_wrap(const ObTimeZoneInfoWrap &tz_info_wrap) { UNUSED(tz_info_wrap); return OB_NOT_SUPPORTED; }
   virtual void set_nls_formats(const ObString *nls_formats) { UNUSED(nls_formats); }
   virtual void set_is_load_data_exec(bool v) { UNUSED(v); }
-  virtual void set_force_remote_exec(bool v) { UNUSED(v); }
   virtual void set_use_external_session(bool v) { UNUSED(v); }
   virtual void set_ob_enable_pl_cache(bool v) { UNUSED(v); }
-  virtual int64_t get_cluster_id() const { return common::OB_INVALID_ID; }
   virtual void set_user_timeout(int64_t user_timeout) { UNUSED(user_timeout); }
   virtual int64_t get_user_timeout() const { return 0; }
   void set_usable(bool flag) { usable_ = flag; }

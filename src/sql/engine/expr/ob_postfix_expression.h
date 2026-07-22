@@ -294,12 +294,6 @@ OB_INLINE int ObPostExprItem::get_indirect_const(const ObPhysicalPlanCtx &plan_c
   return ret;
 }
 
-enum ObWriteExprItemFlag
-{
-  NEW_OP_WHEN_COPY,
-  NO_NEW_OP_WHEN_COPY
-};
-
 enum ObSqlParamNumFlag
 {
   TWO_OR_THREE = -3,
@@ -307,82 +301,12 @@ enum ObSqlParamNumFlag
   MORE_THAN_ZERO = -1,
 };
 
-struct ObPostfixExpressionCalcStack
+struct ObExpressionCalcStack
 {
   // should be larger than MAX_SQL_EXPRESSION_SYMBOL_COUNT(=256)
   static const int64_t STACK_SIZE = 1024 * 8;
   common::ObObj stack_[STACK_SIZE];
 };
-
-class ObPostfixExpression
-{
-public:
-  ObPostfixExpression(common::ObIAllocator &alloc, int64_t item_count);
-  ~ObPostfixExpression();
-  int assign(const ObPostfixExpression &other);
-
-  inline void set_output_column_count(int64_t output_column_count) { output_column_count_ = output_column_count; }
-  inline int64_t get_output_column_count() const { return output_column_count_; }
-
-  int set_item_count(int64_t count) { return post_exprs_.init(count, str_buf_); }
-  // add expression object into array directly,
-  // user assure objects of postfix expr sequence.
-  // int add_expr_obj(const common::ObObj &obj);
-  int add_expr_item(const ObPostExprItem &item);
-  inline const ObSqlFixedArray<ObPostExprItem> &get_expr_items() const { return post_exprs_; }
-  void reset();
-  /* Substitute the values in row into expr for calculation result */
-  int calc(common::ObExprCtx &expr_ctx, const common::ObNewRow &row, common::ObObj &result_val) const;
-  int calc(common::ObExprCtx &expr_ctx, const common::ObNewRow &row1, const common::ObNewRow &row2,
-           common::ObObj &result_val) const;
-  int uk_fast_project(common::ObExprCtx &expr_ctx, const common::ObNewRow &row, common::ObObj &result_val) const;
-  int calc_result_row(common::ObExprCtx &expr_ctx, const common::ObNewRow &row,
-                      common::ObNewRow &result_row) const;
-  int calc_result_row(common::ObExprCtx &expr_ctx, const common::ObNewRow &row1,
-                      const common::ObNewRow &row2, common::ObNewRow &result_row) const;
-  int calc_ref_column(const common::ObNewRow &row,
-                      common::ObNewRow &result_row, const ObPostExprItem &item,
-                      common::ObObj *stack, int64_t &stack_top) const;
-  int calc_ref_column(const common::ObNewRow &row1, const common::ObNewRow &row2,
-                      common::ObNewRow &result_row, const ObPostExprItem &item,
-                      common::ObObj *stack, int64_t &stack_top) const;
-  int calc_question_mark(common::ObExprCtx &expr_ctx,
-                         common::ObNewRow &result_row, const ObPostExprItem &item,
-                         common::ObObj *stack, int64_t &stack_top) const;
-  int calc_other_op(common::ObExprCtx &expr_ctx, const ObPostExprItem &item,
-                    common::ObObj *stack, int64_t &stack_top) const;
-  int calc_agg_param_list(common::ObNewRow &result_row, const ObPostExprItem &item,
-                          common::ObObj *stack, int64_t stack_top) const;
-  template <ObItemType item_type>
-  int calc_row(common::ObExprCtx &expr_ctx, const common::ObNewRow &row,
-               common::ObNewRow &result_row, const ObPostExprItem &item,
-               common::ObObj *stack, int64_t stack_top) const;
-  bool is_empty() const;
-  bool is_equijoin_cond(int64_t &c1, int64_t &c2,
-                        common::ObObjType &cmp_type, common::ObCollationType &cmp_cs_type,
-                        bool &is_null_safe) const;
-  int64_t to_string(char *buf, const int64_t buf_len) const;
-  NEED_SERIALIZE_AND_DESERIALIZE;
-private:
-  // Helper function, check if the expression represents const or column index
-  int check_expr_type(const int64_t type_val, bool &is_type, const int64_t stack_len) const;
-private:
-  static const int64_t DEF_STRING_BUF_SIZE = 64 * 1024L;
-  static const int64_t BASIC_SYMBOL_COUNT = 64;
-  typedef ObSqlFixedArray<ObPostExprItem> PostfixExprArray;
-  void data_clear();
-private:
-  PostfixExprArray post_exprs_;
-  common::ObIAllocator &str_buf_;
-  int64_t output_column_count_;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObPostfixExpression);
-}; // class ObPostfixExpression
-
-inline bool ObPostfixExpression::is_empty() const
-{
-  return (0 == post_exprs_.count());
-}
 
 } // namespace sql
 }// namespace oceanbase

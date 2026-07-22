@@ -43,7 +43,7 @@ struct ObObjMysqlPrivSortKey
   }
   bool operator<(const ObObjMysqlPrivSortKey &rhs) const
   {
-    ObCompareNameWithTenantID name_cmp;
+    ObSchemaNameComparator name_cmp;
     bool bret = false;
     if (false == bret) {
       bret = user_id_ < rhs.user_id_;

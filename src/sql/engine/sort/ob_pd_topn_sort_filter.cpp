@@ -197,7 +197,7 @@ int ObPushDownTopNFilter::publish_topn_msg()
     // TODO XUNSI: impl global topn filter
   } else if (!msg_set_) {
     pd_topn_filter_msg_->set_is_ready(true);
-    if (OB_FAIL(PX_P2P_DH.send_local_p2p_msg(*pd_topn_filter_msg_))) {
+    if (OB_FAIL(PX_P2P_DH.publish_local_msg(*pd_topn_filter_msg_))) {
       LOG_WARN("fail to send local p2p msg", K(ret));
     } else {
       msg_set_ = true;

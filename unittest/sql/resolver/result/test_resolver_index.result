@@ -22,8 +22,6 @@ create database index_db;
   "name_case_mode":-1,
   "comment":"",
   "read_only":false,
-  "default_tablegroup_id":-1,
-  "default_tablegroup_name":"",
   "in_recyclebin":false,
   "primary_zone_array": [
   ]
@@ -35,10 +33,10 @@ use index_db;
 }
 ***************   Case 4   ***************
 create table t1(c1 int primary key, c2 int) partition by hash(c1 + 1) partitions 3
-{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "tablegroup_id":1099511627777, "table_id":18446744073709551615, "table_name":"t1", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":1, "part_option":{"part_func_type":0, "part_func_expr":"c1 + 1", "part_num":3, "partition_cnt_within_partition_table":-1, "max_used_part_id":2}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":3, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}, {"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":1, "name":"p1", "high_bound_val":, "list_row_values":[], "part_idx":1}, "mapping_pg_part_id":-1}, {"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":2, "name":"p2", "high_bound_val":, "list_row_values":[], "part_idx":2}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":17, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":1, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "is_use_bloomfilter":false, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "tablegroup_name":"", "compress_func_name":"zstd_1.0", "row_store_type":1, "store_format":3, "expire_info":"", "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "partition_key_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"index_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
+{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "table_id":18446744073709551615, "table_name":"t1", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":1, "part_option":{"part_func_type":0, "part_func_expr":"c1 + 1", "part_num":3, "partition_cnt_within_partition_table":-1, "max_used_part_id":2}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":3, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}, {"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":1, "name":"p1", "high_bound_val":, "list_row_values":[], "part_idx":1}, "mapping_pg_part_id":-1}, {"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":2, "name":"p2", "high_bound_val":, "list_row_values":[], "part_idx":2}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":17, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":1, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "compress_func_name":"zstd_1.3.8", "row_store_type":1, "store_format":3, "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "partition_key_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"index_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
 ***************   Case 5   ***************
 create table test(c1 int , c2 int, c3 varchar(50), c4 varchar(50), c5 int , c6 double, c7 int, primary key(c1, c2, c3))
-{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "tablegroup_id":1099511627777, "table_id":18446744073709551615, "table_name":"test", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":22, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":3, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "is_use_bloomfilter":false, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "tablegroup_name":"", "compress_func_name":"zstd_1.0", "row_store_type":1, "store_format":3, "expire_info":"", "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}, {"length":0, "column_id":17, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}, {"length":50, "column_id":18, "type":{"type":"VARCHAR", "collation":"utf8mb4_general_ci", "coercibility":"INVALID"}, "order":0, "fulltext_flag":false}], "capacity":3}, "partition_key_info":{"columns":null, "capacity":0}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"index_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
+{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "table_id":18446744073709551615, "table_name":"test", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":22, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":3, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "compress_func_name":"zstd_1.3.8", "row_store_type":1, "store_format":3, "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}, {"length":0, "column_id":17, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}, {"length":50, "column_id":18, "type":{"type":"VARCHAR", "collation":"utf8mb4_general_ci", "coercibility":"INVALID"}, "order":0, "fulltext_flag":false}], "capacity":3}, "partition_key_info":{"columns":null, "capacity":0}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"index_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
 ***************   Case 6   ***************
 create index test_indx on test(c4, c5)
 {
@@ -75,10 +73,8 @@ create index test_indx on test(c4, c5)
       "block_size":16384,
       "replica_num":0,
       "index_status":1,
-      "use_bloom_filter":false,
       "compress_method":"none",
       "comment":"",
-      "tablegroup_name":"",
       "progressive_merge_num":0,
       "primary_zone":"",
       "parser_name":"TAOBAO_CHN",
@@ -94,7 +90,6 @@ create index test_indx on test(c4, c5)
       "simple_table_schema": {
         "tenant_id":1,
         "database_id":-1,
-        "tablegroup_id":-1,
         "table_id":-1,
         "table_name":"",
         "replica_num":0,
@@ -141,7 +136,6 @@ create index test_indx on test(c4, c5)
       "index_column_num":2,
       "rowkey_split_pos":0,
       "block_size":16384,
-      "is_use_bloomfilter":false,
       "progressive_merge_num":0,
       "tablet_size":134217728,
       "pctfree":10,
@@ -162,11 +156,9 @@ create index test_indx on test(c4, c5)
       ],
       "region_replica_num_array": [
       ],
-      "tablegroup_name":"",
       "compress_func_name":"",
       "row_store_type":1,
       "store_format":0,
-      "expire_info":"",
       "view_schema": {
         "view_definition":"",
         "check_option":"none",
@@ -276,7 +268,7 @@ drop table if exists index_t1;
 }
 ***************   Case 8   ***************
 create table index_t1(c1 int primary key, c2 int, c3 int, c4 varchar(50));
-{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "tablegroup_id":1099511627777, "table_id":18446744073709551615, "table_name":"index_t1", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":19, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":1, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "is_use_bloomfilter":false, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "tablegroup_name":"", "compress_func_name":"zstd_1.0", "row_store_type":1, "store_format":3, "expire_info":"", "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "partition_key_info":{"columns":null, "capacity":0}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"index_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
+{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "table_id":18446744073709551615, "table_name":"index_t1", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":19, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":1, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "compress_func_name":"zstd_1.3.8", "row_store_type":1, "store_format":3, "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "partition_key_info":{"columns":null, "capacity":0}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"index_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
 ***************   Case 9   ***************
 create index index_ia1 on index_t1(c2, c3) LOCAL;
 {
@@ -313,10 +305,8 @@ create index index_ia1 on index_t1(c2, c3) LOCAL;
       "block_size":16384,
       "replica_num":0,
       "index_status":1,
-      "use_bloom_filter":false,
       "compress_method":"none",
       "comment":"",
-      "tablegroup_name":"",
       "progressive_merge_num":0,
       "primary_zone":"",
       "parser_name":"TAOBAO_CHN",
@@ -332,7 +322,6 @@ create index index_ia1 on index_t1(c2, c3) LOCAL;
       "simple_table_schema": {
         "tenant_id":1,
         "database_id":-1,
-        "tablegroup_id":-1,
         "table_id":-1,
         "table_name":"",
         "replica_num":0,
@@ -379,7 +368,6 @@ create index index_ia1 on index_t1(c2, c3) LOCAL;
       "index_column_num":0,
       "rowkey_split_pos":0,
       "block_size":16384,
-      "is_use_bloomfilter":false,
       "progressive_merge_num":0,
       "tablet_size":134217728,
       "pctfree":10,
@@ -400,11 +388,9 @@ create index index_ia1 on index_t1(c2, c3) LOCAL;
       ],
       "region_replica_num_array": [
       ],
-      "tablegroup_name":"",
       "compress_func_name":"",
       "row_store_type":1,
       "store_format":0,
-      "expire_info":"",
       "view_schema": {
         "view_definition":"",
         "check_option":"none",
@@ -473,10 +459,8 @@ create unique index index_ia2 on index_t1(c2, c3) LOCAL;
       "block_size":16384,
       "replica_num":0,
       "index_status":1,
-      "use_bloom_filter":false,
       "compress_method":"none",
       "comment":"",
-      "tablegroup_name":"",
       "progressive_merge_num":0,
       "primary_zone":"",
       "parser_name":"TAOBAO_CHN",
@@ -492,7 +476,6 @@ create unique index index_ia2 on index_t1(c2, c3) LOCAL;
       "simple_table_schema": {
         "tenant_id":1,
         "database_id":-1,
-        "tablegroup_id":-1,
         "table_id":-1,
         "table_name":"",
         "replica_num":0,
@@ -539,7 +522,6 @@ create unique index index_ia2 on index_t1(c2, c3) LOCAL;
       "index_column_num":0,
       "rowkey_split_pos":0,
       "block_size":16384,
-      "is_use_bloomfilter":false,
       "progressive_merge_num":0,
       "tablet_size":134217728,
       "pctfree":10,
@@ -560,11 +542,9 @@ create unique index index_ia2 on index_t1(c2, c3) LOCAL;
       ],
       "region_replica_num_array": [
       ],
-      "tablegroup_name":"",
       "compress_func_name":"",
       "row_store_type":1,
       "store_format":0,
-      "expire_info":"",
       "view_schema": {
         "view_definition":"",
         "check_option":"none",
@@ -633,10 +613,8 @@ create index index_ia3 on index_t1(c2, c3) GLOBAL;
       "block_size":16384,
       "replica_num":0,
       "index_status":1,
-      "use_bloom_filter":false,
       "compress_method":"none",
       "comment":"",
-      "tablegroup_name":"",
       "progressive_merge_num":0,
       "primary_zone":"",
       "parser_name":"TAOBAO_CHN",
@@ -652,7 +630,6 @@ create index index_ia3 on index_t1(c2, c3) GLOBAL;
       "simple_table_schema": {
         "tenant_id":1,
         "database_id":-1,
-        "tablegroup_id":-1,
         "table_id":-1,
         "table_name":"",
         "replica_num":0,
@@ -699,7 +676,6 @@ create index index_ia3 on index_t1(c2, c3) GLOBAL;
       "index_column_num":2,
       "rowkey_split_pos":0,
       "block_size":16384,
-      "is_use_bloomfilter":false,
       "progressive_merge_num":0,
       "tablet_size":134217728,
       "pctfree":10,
@@ -720,11 +696,9 @@ create index index_ia3 on index_t1(c2, c3) GLOBAL;
       ],
       "region_replica_num_array": [
       ],
-      "tablegroup_name":"",
       "compress_func_name":"",
       "row_store_type":1,
       "store_format":0,
-      "expire_info":"",
       "view_schema": {
         "view_definition":"",
         "check_option":"none",
@@ -827,10 +801,8 @@ create unique index index_ia4 on index_t1(c2, c3) GLOBAL;
       "block_size":16384,
       "replica_num":0,
       "index_status":1,
-      "use_bloom_filter":false,
       "compress_method":"none",
       "comment":"",
-      "tablegroup_name":"",
       "progressive_merge_num":0,
       "primary_zone":"",
       "parser_name":"TAOBAO_CHN",
@@ -846,7 +818,6 @@ create unique index index_ia4 on index_t1(c2, c3) GLOBAL;
       "simple_table_schema": {
         "tenant_id":1,
         "database_id":-1,
-        "tablegroup_id":-1,
         "table_id":-1,
         "table_name":"",
         "replica_num":0,
@@ -893,7 +864,6 @@ create unique index index_ia4 on index_t1(c2, c3) GLOBAL;
       "index_column_num":2,
       "rowkey_split_pos":0,
       "block_size":16384,
-      "is_use_bloomfilter":false,
       "progressive_merge_num":0,
       "tablet_size":134217728,
       "pctfree":10,
@@ -914,11 +884,9 @@ create unique index index_ia4 on index_t1(c2, c3) GLOBAL;
       ],
       "region_replica_num_array": [
       ],
-      "tablegroup_name":"",
       "compress_func_name":"",
       "row_store_type":1,
       "store_format":0,
-      "expire_info":"",
       "view_schema": {
         "view_definition":"",
         "check_option":"none",
@@ -1021,10 +989,8 @@ create index index_ib1 on index_t1(c2, c3);
       "block_size":16384,
       "replica_num":0,
       "index_status":1,
-      "use_bloom_filter":false,
       "compress_method":"none",
       "comment":"",
-      "tablegroup_name":"",
       "progressive_merge_num":0,
       "primary_zone":"",
       "parser_name":"TAOBAO_CHN",
@@ -1040,7 +1006,6 @@ create index index_ib1 on index_t1(c2, c3);
       "simple_table_schema": {
         "tenant_id":1,
         "database_id":-1,
-        "tablegroup_id":-1,
         "table_id":-1,
         "table_name":"",
         "replica_num":0,
@@ -1087,7 +1052,6 @@ create index index_ib1 on index_t1(c2, c3);
       "index_column_num":2,
       "rowkey_split_pos":0,
       "block_size":16384,
-      "is_use_bloomfilter":false,
       "progressive_merge_num":0,
       "tablet_size":134217728,
       "pctfree":10,
@@ -1108,11 +1072,9 @@ create index index_ib1 on index_t1(c2, c3);
       ],
       "region_replica_num_array": [
       ],
-      "tablegroup_name":"",
       "compress_func_name":"",
       "row_store_type":1,
       "store_format":0,
-      "expire_info":"",
       "view_schema": {
         "view_definition":"",
         "check_option":"none",
@@ -1215,10 +1177,8 @@ create unique index index_ib2 on index_t1(c2, c3);
       "block_size":16384,
       "replica_num":0,
       "index_status":1,
-      "use_bloom_filter":false,
       "compress_method":"none",
       "comment":"",
-      "tablegroup_name":"",
       "progressive_merge_num":0,
       "primary_zone":"",
       "parser_name":"TAOBAO_CHN",
@@ -1234,7 +1194,6 @@ create unique index index_ib2 on index_t1(c2, c3);
       "simple_table_schema": {
         "tenant_id":1,
         "database_id":-1,
-        "tablegroup_id":-1,
         "table_id":-1,
         "table_name":"",
         "replica_num":0,
@@ -1281,7 +1240,6 @@ create unique index index_ib2 on index_t1(c2, c3);
       "index_column_num":2,
       "rowkey_split_pos":0,
       "block_size":16384,
-      "is_use_bloomfilter":false,
       "progressive_merge_num":0,
       "tablet_size":134217728,
       "pctfree":10,
@@ -1302,11 +1260,9 @@ create unique index index_ib2 on index_t1(c2, c3);
       ],
       "region_replica_num_array": [
       ],
-      "tablegroup_name":"",
       "compress_func_name":"",
       "row_store_type":1,
       "store_format":0,
-      "expire_info":"",
       "view_schema": {
         "view_definition":"",
         "check_option":"none",
@@ -1409,10 +1365,8 @@ create index index_i1 on index_t1(c2, c3) BLOCK_SIZE=16384;
       "block_size":16384,
       "replica_num":0,
       "index_status":1,
-      "use_bloom_filter":false,
       "compress_method":"none",
       "comment":"",
-      "tablegroup_name":"",
       "progressive_merge_num":0,
       "primary_zone":"",
       "parser_name":"TAOBAO_CHN",
@@ -1428,7 +1382,6 @@ create index index_i1 on index_t1(c2, c3) BLOCK_SIZE=16384;
       "simple_table_schema": {
         "tenant_id":1,
         "database_id":-1,
-        "tablegroup_id":-1,
         "table_id":-1,
         "table_name":"",
         "replica_num":0,
@@ -1475,7 +1428,6 @@ create index index_i1 on index_t1(c2, c3) BLOCK_SIZE=16384;
       "index_column_num":2,
       "rowkey_split_pos":0,
       "block_size":16384,
-      "is_use_bloomfilter":false,
       "progressive_merge_num":0,
       "tablet_size":134217728,
       "pctfree":10,
@@ -1496,11 +1448,9 @@ create index index_i1 on index_t1(c2, c3) BLOCK_SIZE=16384;
       ],
       "region_replica_num_array": [
       ],
-      "tablegroup_name":"",
       "compress_func_name":"",
       "row_store_type":1,
       "store_format":0,
-      "expire_info":"",
       "view_schema": {
         "view_definition":"",
         "check_option":"none",
@@ -1603,10 +1553,8 @@ create unique index index_i2 on index_t1(c2, c3) comment 'unique index';
       "block_size":16384,
       "replica_num":0,
       "index_status":1,
-      "use_bloom_filter":false,
       "compress_method":"none",
       "comment":"unique index",
-      "tablegroup_name":"",
       "progressive_merge_num":0,
       "primary_zone":"",
       "parser_name":"TAOBAO_CHN",
@@ -1622,7 +1570,6 @@ create unique index index_i2 on index_t1(c2, c3) comment 'unique index';
       "simple_table_schema": {
         "tenant_id":1,
         "database_id":-1,
-        "tablegroup_id":-1,
         "table_id":-1,
         "table_name":"",
         "replica_num":0,
@@ -1669,7 +1616,6 @@ create unique index index_i2 on index_t1(c2, c3) comment 'unique index';
       "index_column_num":2,
       "rowkey_split_pos":0,
       "block_size":16384,
-      "is_use_bloomfilter":false,
       "progressive_merge_num":0,
       "tablet_size":134217728,
       "pctfree":10,
@@ -1690,11 +1636,9 @@ create unique index index_i2 on index_t1(c2, c3) comment 'unique index';
       ],
       "region_replica_num_array": [
       ],
-      "tablegroup_name":"",
       "compress_func_name":"",
       "row_store_type":1,
       "store_format":0,
-      "expire_info":"",
       "view_schema": {
         "view_definition":"",
         "check_option":"none",
@@ -1797,10 +1741,8 @@ create index index_i3 on index_t1(c2 asc, c3 desc);
       "block_size":16384,
       "replica_num":0,
       "index_status":1,
-      "use_bloom_filter":false,
       "compress_method":"none",
       "comment":"",
-      "tablegroup_name":"",
       "progressive_merge_num":0,
       "primary_zone":"",
       "parser_name":"TAOBAO_CHN",
@@ -1816,7 +1758,6 @@ create index index_i3 on index_t1(c2 asc, c3 desc);
       "simple_table_schema": {
         "tenant_id":1,
         "database_id":-1,
-        "tablegroup_id":-1,
         "table_id":-1,
         "table_name":"",
         "replica_num":0,
@@ -1863,7 +1804,6 @@ create index index_i3 on index_t1(c2 asc, c3 desc);
       "index_column_num":2,
       "rowkey_split_pos":0,
       "block_size":16384,
-      "is_use_bloomfilter":false,
       "progressive_merge_num":0,
       "tablet_size":134217728,
       "pctfree":10,
@@ -1884,11 +1824,9 @@ create index index_i3 on index_t1(c2 asc, c3 desc);
       ],
       "region_replica_num_array": [
       ],
-      "tablegroup_name":"",
       "compress_func_name":"",
       "row_store_type":1,
       "store_format":0,
-      "expire_info":"",
       "view_schema": {
         "view_definition":"",
         "check_option":"none",
@@ -1991,10 +1929,8 @@ create index index_i4 on index_t1(c2, c3) comment 'kk contains c2/c3' BLOCK_SIZE
       "block_size":16384,
       "replica_num":0,
       "index_status":1,
-      "use_bloom_filter":false,
       "compress_method":"none",
       "comment":"kk contains c2/c3",
-      "tablegroup_name":"",
       "progressive_merge_num":0,
       "primary_zone":"",
       "parser_name":"TAOBAO_CHN",
@@ -2010,7 +1946,6 @@ create index index_i4 on index_t1(c2, c3) comment 'kk contains c2/c3' BLOCK_SIZE
       "simple_table_schema": {
         "tenant_id":1,
         "database_id":-1,
-        "tablegroup_id":-1,
         "table_id":-1,
         "table_name":"",
         "replica_num":0,
@@ -2057,7 +1992,6 @@ create index index_i4 on index_t1(c2, c3) comment 'kk contains c2/c3' BLOCK_SIZE
       "index_column_num":2,
       "rowkey_split_pos":0,
       "block_size":16384,
-      "is_use_bloomfilter":false,
       "progressive_merge_num":0,
       "tablet_size":134217728,
       "pctfree":10,
@@ -2078,11 +2012,9 @@ create index index_i4 on index_t1(c2, c3) comment 'kk contains c2/c3' BLOCK_SIZE
       ],
       "region_replica_num_array": [
       ],
-      "tablegroup_name":"",
       "compress_func_name":"",
       "row_store_type":1,
       "store_format":0,
-      "expire_info":"",
       "view_schema": {
         "view_definition":"",
         "check_option":"none",
@@ -2186,10 +2118,8 @@ create index index_i5 on index_t1(c2, c3) storing(c4);
       "block_size":16384,
       "replica_num":0,
       "index_status":1,
-      "use_bloom_filter":false,
       "compress_method":"none",
       "comment":"",
-      "tablegroup_name":"",
       "progressive_merge_num":0,
       "primary_zone":"",
       "parser_name":"TAOBAO_CHN",
@@ -2205,7 +2135,6 @@ create index index_i5 on index_t1(c2, c3) storing(c4);
       "simple_table_schema": {
         "tenant_id":1,
         "database_id":-1,
-        "tablegroup_id":-1,
         "table_id":-1,
         "table_name":"",
         "replica_num":0,
@@ -2252,7 +2181,6 @@ create index index_i5 on index_t1(c2, c3) storing(c4);
       "index_column_num":2,
       "rowkey_split_pos":0,
       "block_size":16384,
-      "is_use_bloomfilter":false,
       "progressive_merge_num":0,
       "tablet_size":134217728,
       "pctfree":10,
@@ -2273,11 +2201,9 @@ create index index_i5 on index_t1(c2, c3) storing(c4);
       ],
       "region_replica_num_array": [
       ],
-      "tablegroup_name":"",
       "compress_func_name":"",
       "row_store_type":1,
       "store_format":0,
-      "expire_info":"",
       "view_schema": {
         "view_definition":"",
         "check_option":"none",
@@ -2381,10 +2307,8 @@ create index index_i6 on index_t1(c2, c3) storing(c4) comment 'kk contains c2/c3
       "block_size":16384,
       "replica_num":0,
       "index_status":1,
-      "use_bloom_filter":false,
       "compress_method":"none",
       "comment":"kk contains c2/c3",
-      "tablegroup_name":"",
       "progressive_merge_num":0,
       "primary_zone":"",
       "parser_name":"TAOBAO_CHN",
@@ -2400,7 +2324,6 @@ create index index_i6 on index_t1(c2, c3) storing(c4) comment 'kk contains c2/c3
       "simple_table_schema": {
         "tenant_id":1,
         "database_id":-1,
-        "tablegroup_id":-1,
         "table_id":-1,
         "table_name":"",
         "replica_num":0,
@@ -2447,7 +2370,6 @@ create index index_i6 on index_t1(c2, c3) storing(c4) comment 'kk contains c2/c3
       "index_column_num":0,
       "rowkey_split_pos":0,
       "block_size":16384,
-      "is_use_bloomfilter":false,
       "progressive_merge_num":0,
       "tablet_size":134217728,
       "pctfree":10,
@@ -2468,11 +2390,9 @@ create index index_i6 on index_t1(c2, c3) storing(c4) comment 'kk contains c2/c3
       ],
       "region_replica_num_array": [
       ],
-      "tablegroup_name":"",
       "compress_func_name":"",
       "row_store_type":1,
       "store_format":0,
-      "expire_info":"",
       "view_schema": {
         "view_definition":"",
         "check_option":"none",
@@ -2542,10 +2462,8 @@ create index index_i7 on index_t1(C2, C3) storing(C4);
       "block_size":16384,
       "replica_num":0,
       "index_status":1,
-      "use_bloom_filter":false,
       "compress_method":"none",
       "comment":"",
-      "tablegroup_name":"",
       "progressive_merge_num":0,
       "primary_zone":"",
       "parser_name":"TAOBAO_CHN",
@@ -2561,7 +2479,6 @@ create index index_i7 on index_t1(C2, C3) storing(C4);
       "simple_table_schema": {
         "tenant_id":1,
         "database_id":-1,
-        "tablegroup_id":-1,
         "table_id":-1,
         "table_name":"",
         "replica_num":0,
@@ -2608,7 +2525,6 @@ create index index_i7 on index_t1(C2, C3) storing(C4);
       "index_column_num":2,
       "rowkey_split_pos":0,
       "block_size":16384,
-      "is_use_bloomfilter":false,
       "progressive_merge_num":0,
       "tablet_size":134217728,
       "pctfree":10,
@@ -2629,11 +2545,9 @@ create index index_i7 on index_t1(C2, C3) storing(C4);
       ],
       "region_replica_num_array": [
       ],
-      "tablegroup_name":"",
       "compress_func_name":"",
       "row_store_type":1,
       "store_format":0,
-      "expire_info":"",
       "view_schema": {
         "view_definition":"",
         "check_option":"none",
@@ -2903,10 +2817,8 @@ create index test_idx4 using btree on test(c1) using hash;
       "block_size":16384,
       "replica_num":0,
       "index_status":1,
-      "use_bloom_filter":false,
       "compress_method":"none",
       "comment":"",
-      "tablegroup_name":"",
       "progressive_merge_num":0,
       "primary_zone":"",
       "parser_name":"TAOBAO_CHN",
@@ -2922,7 +2834,6 @@ create index test_idx4 using btree on test(c1) using hash;
       "simple_table_schema": {
         "tenant_id":1,
         "database_id":-1,
-        "tablegroup_id":-1,
         "table_id":-1,
         "table_name":"",
         "replica_num":0,
@@ -2969,7 +2880,6 @@ create index test_idx4 using btree on test(c1) using hash;
       "index_column_num":1,
       "rowkey_split_pos":0,
       "block_size":16384,
-      "is_use_bloomfilter":false,
       "progressive_merge_num":0,
       "tablet_size":134217728,
       "pctfree":10,
@@ -2990,11 +2900,9 @@ create index test_idx4 using btree on test(c1) using hash;
       ],
       "region_replica_num_array": [
       ],
-      "tablegroup_name":"",
       "compress_func_name":"",
       "row_store_type":1,
       "store_format":0,
-      "expire_info":"",
       "view_schema": {
         "view_definition":"",
         "check_option":"none",
@@ -3091,10 +2999,8 @@ create unique index test_uidx4 using btree on test(c1) using hash;
       "block_size":16384,
       "replica_num":0,
       "index_status":1,
-      "use_bloom_filter":false,
       "compress_method":"none",
       "comment":"",
-      "tablegroup_name":"",
       "progressive_merge_num":0,
       "primary_zone":"",
       "parser_name":"TAOBAO_CHN",
@@ -3110,7 +3016,6 @@ create unique index test_uidx4 using btree on test(c1) using hash;
       "simple_table_schema": {
         "tenant_id":1,
         "database_id":-1,
-        "tablegroup_id":-1,
         "table_id":-1,
         "table_name":"",
         "replica_num":0,
@@ -3157,7 +3062,6 @@ create unique index test_uidx4 using btree on test(c1) using hash;
       "index_column_num":1,
       "rowkey_split_pos":0,
       "block_size":16384,
-      "is_use_bloomfilter":false,
       "progressive_merge_num":0,
       "tablet_size":134217728,
       "pctfree":10,
@@ -3178,11 +3082,9 @@ create unique index test_uidx4 using btree on test(c1) using hash;
       ],
       "region_replica_num_array": [
       ],
-      "tablegroup_name":"",
       "compress_func_name":"",
       "row_store_type":1,
       "store_format":0,
-      "expire_info":"",
       "view_schema": {
         "view_definition":"",
         "check_option":"none",

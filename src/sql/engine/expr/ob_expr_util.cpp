@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_util.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
-#include "share/ob_tenant_timezone_mgr.h"
+#include "share/ob_timezone_mgr.h"
 #include "sql/engine/ob_exec_context.h"
 
 using namespace oceanbase::common;
@@ -753,7 +753,7 @@ int ObSolidifiedVarsContext::get_local_tz_info(const sql::ObBasicSessionInfo *se
       const ObTZInfoMap *tz_info_map = NULL;
       if (OB_ISNULL(tz_info_map = session->get_timezone_info()->get_tz_info_map())) {
         ObTZMapWrap tz_map_wrap;
-        if (OB_SUCC(OTTZ_MGR.get_tenant_tz(tz_map_wrap))) {
+        if (OB_SUCC(OTTZ_MGR.get_timezone_map(tz_map_wrap))) {
           tz_info_map = tz_map_wrap.get_tz_map();
         } else {
           LOG_WARN("get tz info map failed", K(ret));

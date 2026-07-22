@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_EXE
 #include "sql/executor/ob_maintain_dependency_info_task.h"
-#include "rootserver/ob_rs_serial_call.h"
-#include "rootserver/ob_root_service.h"
+#include "rootserver/ob_local_ddl_serial_call.h"
+#include "rootserver/ob_local_management_service.h"
 
 namespace oceanbase
 {
@@ -140,7 +140,7 @@ int ObMaintainObjDepInfoTask::process()
     
     dep_obj_info_arg.reset_view_column_infos_ = reset_view_column_infos_;
     OZ (gctx_.schema_service_->async_refresh_schema(last_version));
-    OZ (gctx_.schema_service_->get_tenant_schema_guard(schema_guard));
+    OZ (gctx_.schema_service_->get_runtime_schema_guard(schema_guard));
     OZ (check_and_build_dep_info_arg(schema_guard, dep_obj_info_arg,
     insert_dep_objs_, share::schema::ObReferenceObjTable::INSERT_OP));
     OZ (check_and_build_dep_info_arg(schema_guard, dep_obj_info_arg,
@@ -155,7 +155,7 @@ int ObMaintainObjDepInfoTask::process()
               && dep_obj_info_arg.delete_dep_objs_.empty()
               && !dep_obj_info_arg.schema_.is_valid()) {
       // do nothing
-    } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->maintain_obj_dependency_info(dep_obj_info_arg); }))) {
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->maintain_obj_dependency_info(dep_obj_info_arg); }))) {
       LOG_WARN("failed to maintain_obj_dependency_info", K(ret), K(dep_obj_info_arg));
     }
   }
@@ -174,7 +174,7 @@ int ObMaintainObjDepInfoTask::assign_view_schema(const ObTableSchema &view_schem
 int ObMaintainDepInfoTaskQueue::init(const int64_t thread_cnt, const int64_t queue_size)
 {
   int ret = OB_SUCCESS;
-  auto attr = SET_USE_500("DepInfoTaskQ");
+  auto attr = lib::ObMemAttr("DepInfoTaskQ");
   if (OB_FAIL(ObAsyncTaskQueue::init(thread_cnt, queue_size, "MaintainDepInfoTaskQueue", OB_MALLOC_MIDDLE_BLOCK_SIZE))) {
     LOG_WARN("failed to init base queue", K(ret));
   } else if (OB_FAIL(view_info_set_.create(INIT_BKT_SIZE, attr, attr))) {
@@ -293,10 +293,10 @@ int process_reference_obj_table(share::schema::ObReferenceObjTable &ref_obj_tabl
                                                      sql::ObMaintainDepInfoTaskQueue &task_queue)
 {
   int ret = OB_SUCCESS;
-  share::ObTenantRole::Role tenant_role;
+  share::ObServerRole::Role server_role;
   bool is_standby = false;
-  if (OB_FAIL(share::ObShareUtil::mtl_check_if_tenant_role_is_standby(is_standby))) {
-    LOG_WARN("fail to execute mtl_check_if_tenant_role_is_standby", KR(ret));
+  if (OB_FAIL(share::ObShareUtil::check_if_server_role_is_standby(is_standby))) {
+    LOG_WARN("fail to execute check_if_server_role_is_standby", KR(ret));
   } else if (OB_UNLIKELY(!ref_obj_table.is_inited() || is_standby)) {
     if (OB_INVALID_ID != dep_obj_id) {
       OZ (task_queue.erase_view_id_from_set(dep_obj_id));

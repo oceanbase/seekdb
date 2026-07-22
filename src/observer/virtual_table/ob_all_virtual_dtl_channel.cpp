@@ -28,11 +28,11 @@ using namespace oceanbase::observer;
 void ObVirtualChannelInfo::get_info(ObDtlChannel* dtl_ch)
 {
   ObDtlBasicChannel *ch = reinterpret_cast<ObDtlBasicChannel*>(dtl_ch);
-  is_local_ = ObDtlChannel::DtlChannelType::LOCAL_CHANNEL == ch->get_channel_type();
+  is_local_ = true;
   is_data_ = ch->is_data_channel();
   is_transmit_ = ch->belong_to_transmit_data();
   channel_id_ = ch->get_id();
-  peer_id_ = ch->get_peer_id();;
+  peer_id_ = ch->get_peer_id();
   alloc_buffer_cnt_ = ch->get_alloc_buffer_cnt();
   free_buffer_cnt_ = ch->get_free_buffer_cnt();
   send_buffer_cnt_ = ch->get_send_buffer_cnt();
@@ -40,7 +40,7 @@ void ObVirtualChannelInfo::get_info(ObDtlChannel* dtl_ch)
   processed_buffer_cnt_ = ch->get_processed_buffer_cnt();
   send_buffer_size_ = ch->get_send_buffer_size();
   hash_val_ = ch->get_hash_val();
-  buffer_pool_id_ = ObDtlTenantMemManager::hash(hash_val_,
+  buffer_pool_id_ = ObDtlMemManager::hash(hash_val_,
     common::ObServerConfig::get_instance()._px_chunklist_count_ratio);
   pins_ = ch->get_pins();
   ObOpMetric &metric = ch->get_op_metric();
@@ -52,7 +52,7 @@ void ObVirtualChannelInfo::get_info(ObDtlChannel* dtl_ch)
   op_id_ = ch->get_op_id();
   thread_id_ = ch->get_thread_id();
   owner_mod_ = ch->get_owner_mod();
-  peer_ = ch->get_peer();
+  peer_ = GCTX.self_addr();
   eof_ = metric.get_eof();
 }
 
@@ -61,7 +61,7 @@ int ObVirtualDtlChannelOp::operator()(ObDtlChannel *ch)
   int ret = OB_SUCCESS;
   ObVirtualChannelInfo chan_info;
   chan_info.get_info(ch);
-  if (channels_->count() < MAX_CHANNEL_CNT_PER_TENANT) {
+  if (channels_->count() < MAX_CHANNEL_COUNT) {
     if (OB_FAIL(channels_->push_back(chan_info))) {
       LOG_WARN("failed to push back channel info", K(ret));
     }

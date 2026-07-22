@@ -98,10 +98,6 @@ public:
   ObPhysicalPlan* get_first_plan();
 
 private:
-  bool is_plan_available(const ObPhysicalPlan &plan, ObPlanCacheCtx &pc_ctx) const;
-  bool is_same_plan(const ObPhysicalPlan &plan, const ObPhysicalPlan &compare_plan,
-                    ObPlanCacheCtx &pc_ctx) const;
-
   /**
    * @brief Set table location for pc_ctx.exec_ctx
    *

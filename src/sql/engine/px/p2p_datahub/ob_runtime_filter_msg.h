@@ -36,21 +36,10 @@ class ObRFBloomFilterMsg final : public ObP2PDatahubMsgBase
 {
   OB_UNIS_VERSION_V(1);
 public:
-  enum ObSendBFPhase
-  {
-    FIRST_LEVEL,
-    SECOND_LEVEL
-  };
-  ObRFBloomFilterMsg() : phase_(), bloom_filter_(),
-      next_peer_addrs_(allocator_), expect_first_phase_count_(0),
-      piece_size_(0), filter_indexes_(allocator_), receive_count_array_(allocator_),
-      filter_idx_(0), create_finish_(false), is_finish_regen_(false),
-      use_rich_format_(false) {}
+  ObRFBloomFilterMsg() : bloom_filter_(), use_rich_format_(false) {}
   ~ObRFBloomFilterMsg() { destroy(); }
   virtual int assign(const ObP2PDatahubMsgBase &) final;
   virtual int merge(ObP2PDatahubMsgBase &) final;
-  virtual int broadcast(ObIArray<ObAddr> &target_addrs) final;
-  bool is_first_phase() { return FIRST_LEVEL == phase_; }
   virtual int might_contain(const ObExpr &expr,
       ObEvalCtx &ctx,
       ObExprJoinFilter::ObExprJoinFilterContext &filter_ctx,
@@ -90,17 +79,8 @@ public:
     ObEvalCtx &eval_ctx,
     uint64_t *batch_hash_values) override;
   virtual int reuse() override;
-  virtual int process_receive_count(ObP2PDatahubMsgBase &) override;
-  common::ObIArray<common::ObAddr>& get_next_phase_addrs() { return next_peer_addrs_; }
   virtual int deep_copy_msg(ObP2PDatahubMsgBase *&new_msg_ptr);
   virtual int destroy();
-  int generate_filter_indexes(int64_t each_group_size,
-    int64_t addr_cnt, int64_t piece_size);
-  int process_first_phase_recieve_count(
-      ObRFBloomFilterMsg &msg, bool &first_phase_end);
-  virtual int process_msg_internal(bool &need_free);
-  virtual int regenerate() override;
-  int atomic_merge(ObP2PDatahubMsgBase &other_msg);
   inline void set_use_rich_format(bool value) { use_rich_format_ = value; }
   inline bool get_use_rich_format() const { return use_rich_format_; }
 
@@ -113,8 +93,6 @@ private:
       const ObExpr *calc_tablet_id_expr,
       ObEvalCtx &eval_ctx,
       uint64_t &hash_value, bool &ignore);
-  int shadow_copy(const ObRFBloomFilterMsg &msg);
-  int generate_receive_count_array(int64_t piece_size, int64_t cur_begin_idx);
   int do_might_contain_vector(
       const ObExpr &expr,
       ObEvalCtx &ctx,
@@ -126,16 +104,7 @@ private:
                                     uint64_t *batch_hash_values);
 
 public:
-  ObSendBFPhase phase_;
   ObPxBloomFilter bloom_filter_;
-  common::ObFixedArray<common::ObAddr, common::ObIAllocator> next_peer_addrs_;
-  int64_t expect_first_phase_count_;
-  int64_t piece_size_;
-  common::ObFixedArray<BloomFilterIndex, common::ObIAllocator> filter_indexes_;
-  common::ObFixedArray<BloomFilterReceiveCount, common::ObIAllocator> receive_count_array_;
-  int64_t filter_idx_; //for shared msg
-  bool create_finish_; //for shared msg
-  bool is_finish_regen_;
   bool use_rich_format_;
   bool use_hash_join_seed_ {false};
 };
@@ -299,7 +268,6 @@ public:
     ObEvalCtx &eval_ctx,
     uint64_t *batch_hash_values) override;
   virtual int reuse() override;
-  void check_finish_receive() override final;
   void after_process() override;
   int try_extract_query_range(bool &has_extract, ObIArray<ObNewRange> &ranges,
                               bool need_deep_copy = false,

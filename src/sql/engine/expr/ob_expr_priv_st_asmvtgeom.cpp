@@ -163,7 +163,6 @@ int ObExprPrivSTAsMVTGeom::process_input_geometry(const ObExpr &expr, ObEvalCtx 
                    wkb2))) {
       LOG_WARN(
           "fail to read real string data", K(ret), K(arg2->obj_meta_.has_lob_header()), K(wkb2));
-    } else if (FALSE_IT(allocator.set_baseline_size(wkb1.length() + wkb2.length()))) {
     } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb1, srs1, true, N_PRIV_ST_ASMVTGEOM))
               || OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb2, srs2, true, N_PRIV_ST_ASMVTGEOM))) {
       if (ret == OB_ERR_SRS_NOT_FOUND) {
@@ -440,7 +439,7 @@ int ObExprPrivSTAsMVTGeom::eval_priv_st_asmvtgeom(const ObExpr &expr, ObEvalCtx 
   bool is_geo_empty = false;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_ST_ASMVTGEOM);
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   ObGeogBox *bounds = nullptr;
   int32_t extent = 4096;
   int32_t buffer = 256;
@@ -538,9 +537,6 @@ int ObExprPrivSTAsMVTGeom::eval_priv_st_asmvtgeom(const ObExpr &expr, ObEvalCtx 
         res.set_string(res_wkb);
       }
     }
-  }
-  if (mem_ctx != nullptr) {
-    temp_allocator.add_ext_used((*mem_ctx)->arena_used());
   }
   return ret;
 }

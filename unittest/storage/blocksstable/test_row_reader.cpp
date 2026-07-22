@@ -22,6 +22,7 @@
 
 
 #include "ob_data_file_prepare.h"
+#include "storage/blocksstable/ob_row_writer.h"
 #include "storage/memtable/ob_nop_bitmap.h"
 #include "unittest/storage/mock_ob_table_read_info.h"
 
@@ -183,12 +184,10 @@ void TestNewRowReader::SetUp()
 
   const int64_t table_id = 3001;
 
-  oceanbase::common::ObClusterVersion::get_instance().refresh_cluster_version("1.4.70");
   ObColumnSchemaV2 column;
   //init table schema
   table_schema_.reset();
   ASSERT_EQ(OB_SUCCESS, table_schema_.set_table_name("test_row_writer"));
-  table_schema_.set_tablegroup_id(1);
   table_schema_.set_database_id(1);
   table_schema_.set_table_id(table_id);
   table_schema_.set_rowkey_column_num(rowkey_column_count);

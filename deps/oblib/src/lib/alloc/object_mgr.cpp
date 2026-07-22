@@ -20,27 +20,25 @@
 using namespace oceanbase;
 using namespace lib;
 
-SubObjectMgr::SubObjectMgr(ObTenantCtxAllocator &ta,
+SubObjectMgr::SubObjectMgr(ObCtxAllocator &ctx_allocator,
                            const bool enable_no_log,
                            const uint32_t ablock_size,
                            const bool enable_dirty_list,
                            IBlockMgr *blk_mgr)
-  : IBlockMgr(ta.get_ctx_id()),
-    ta_(ta),
+  : IBlockMgr(ctx_allocator.get_ctx_id()),
+    ctx_allocator_(ctx_allocator),
     mutex_(common::ObLatchIds::ALLOC_OBJECT_LOCK),
     normal_locker_(mutex_), no_log_locker_(mutex_),
     locker_(!enable_no_log ? static_cast<ISetLocker&>(normal_locker_) :
             static_cast<ISetLocker&>(no_log_locker_)),
     bs_(), os_(NULL, ablock_size, enable_dirty_list)
 {
-  bs_.set_tenant_ctx_allocator(ta);
+  bs_.set_ctx_allocator(ctx_allocator);
   bs_.set_locker(&locker_);
-  bs_.set_chunk_mgr(&ta.get_chunk_mgr());
+  bs_.set_chunk_mgr(&ctx_allocator.get_chunk_mgr());
   os_.set_locker(&locker_);
   NULL == blk_mgr ? os_.set_block_mgr(this) : os_.set_block_mgr(blk_mgr);
-#ifndef ENABLE_SANITY
   mutex_.enable_record_stat(false);
-#endif
 }
 
 void SubObjectMgr::free_object(AObject *object)
@@ -65,23 +63,22 @@ void SubObjectMgr::free_block(ABlock *block)
   bs_.free_block(block);
 }
 
-ObjectMgr::ObjectMgr(ObTenantCtxAllocator &ta,
+ObjectMgr::ObjectMgr(ObCtxAllocator &ctx_allocator,
                      bool enable_no_log,
                      uint32_t ablock_size,
                      int parallel,
                      bool enable_dirty_list,
                      IBlockMgr *blk_mgr)
-  : IBlockMgr(ta.get_ctx_id()),
-    ta_(ta),
+  : IBlockMgr(ctx_allocator.get_ctx_id()),
+    ctx_allocator_(ctx_allocator),
     enable_no_log_(enable_no_log),
     ablock_size_(ablock_size),
     parallel_(parallel),
     enable_dirty_list_(enable_dirty_list),
     blk_mgr_(blk_mgr),
     sub_cnt_(0),
-    root_mgr_(ta, enable_no_log, ablock_size_,
-              enable_dirty_list, blk_mgr_),
-    obj_mgr_v2_(parallel, this)
+    root_mgr_(ctx_allocator, enable_no_log, ablock_size_,
+              enable_dirty_list, blk_mgr_)
 {
   MEMSET(sub_mgrs_, 0, sizeof(sub_mgrs_));
 }
@@ -103,7 +100,6 @@ void ObjectMgr::reset() {
 
 AObject *ObjectMgr::alloc_object(uint64_t size, const ObMemAttr &attr)
 {
-  if (OB_LIKELY(attr.use_malloc_v2_)) return obj_mgr_v2_.alloc_object(size, attr);
   AObject *obj = NULL;
   const uint64_t start = common::get_itid();
   SubObjectMgr *sub_mgr = nullptr;
@@ -151,7 +147,6 @@ AObject *ObjectMgr::alloc_object(uint64_t size, const ObMemAttr &attr)
 AObject *ObjectMgr::realloc_object(
     AObject *obj, const uint64_t size, const ObMemAttr &attr)
 {
-  if (OB_LIKELY(attr.use_malloc_v2_)) return obj_mgr_v2_.realloc_object(obj, size, attr);
   AObject *new_obj = NULL;
 
   if (NULL != obj) {
@@ -255,9 +250,9 @@ SubObjectMgr *ObjectMgr::create_sub_mgr()
   SubObjectMgr *sub_mgr = nullptr;
   ObMemAttr attr;
   
-  attr.label_ = common::ObModIds::OB_TENANT_CTX_ALLOCATOR;
+  attr.label_ = common::ObModIds::OB_CTX_ALLOCATOR;
   attr.ctx_id_ = ObCtxIds::DEFAULT_CTX_ID;
-  auto ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(attr.ctx_id_);
+  auto ctx_allocator = ObMallocAllocator::get_instance()->get_ctx_allocator(attr.ctx_id_);
 
   class SubObjectMgrWrapper {
   public:
@@ -277,10 +272,11 @@ SubObjectMgr *ObjectMgr::create_sub_mgr()
     }
   private:
     SubObjectMgr& sub_mgr_;
-  } root_mgr(static_cast<ObjectMgr&>(ta->get_block_mgr()).root_mgr_);
-  void *ptr = ObTenantCtxAllocator::common_realloc(NULL, sizeof(SubObjectMgr), attr, *(ta.ref_allocator()), root_mgr);
+  } root_mgr(static_cast<ObjectMgr&>(ctx_allocator->get_block_mgr()).root_mgr_);
+  void *ptr = ObCtxAllocator::common_realloc(NULL, sizeof(SubObjectMgr), attr,
+      *(ctx_allocator.ref_allocator()), root_mgr);
   if (OB_NOT_NULL(ptr)) {
-    sub_mgr = new (ptr) SubObjectMgr(ta_, enable_no_log_,
+    sub_mgr = new (ptr) SubObjectMgr(ctx_allocator_, enable_no_log_,
         ablock_size_, enable_dirty_list_, blk_mgr_);
   }
   return sub_mgr;
@@ -290,7 +286,7 @@ void ObjectMgr::destroy_sub_mgr(SubObjectMgr *sub_mgr)
 {
   if (sub_mgr != nullptr) {
     sub_mgr->~SubObjectMgr();
-    ObTenantCtxAllocator::common_free(sub_mgr);
+    ObCtxAllocator::common_free(sub_mgr);
   }
 }
 
@@ -335,7 +331,7 @@ bool ObjectMgr::check_has_unfree()
 
 bool ObjectMgr::check_has_unfree(char *first_label, char *first_bt)
 {
-  bool has_unfree = obj_mgr_v2_.check_has_unfree(first_label, first_bt);
+  bool has_unfree = false;
   for (uint64_t idx = 0; idx < ATOMIC_LOAD(&sub_cnt_) && !has_unfree; idx++) {
     auto sub_mgr = ATOMIC_LOAD(&sub_mgrs_[idx]);
     if (OB_ISNULL(sub_mgr)) {
@@ -347,56 +343,4 @@ bool ObjectMgr::check_has_unfree(char *first_label, char *first_bt)
     }
   }
   return has_unfree;
-}
-
-ObjectMgrV2::ObjectMgrV2(int parallel, IBlockMgr *blk_mgr)
-  : parallel_(parallel)
-{
-  if (true &&
-      blk_mgr->get_ctx_id() == ObCtxIds::GLIBC) {
-    parallel_ = OBJECT_SET_CNT;
-  }
-  for (int i = 0; i < parallel_; ++i) {
-    obj_sets_[i].set_block_mgr(blk_mgr);
-  }
-}
-
-void ObjectMgrV2::do_cleanup()
-{
-  for (uint64_t idx = 0; idx < parallel_; idx++) {
-    obj_sets_[idx].do_cleanup();
-  }
-}
-
-bool ObjectMgrV2::check_has_unfree(char *first_label, char *first_bt)
-{
-  bool has_unfree = false;
-  for (uint64_t idx = 0; idx < parallel_ && !has_unfree; idx++) {
-    has_unfree = obj_sets_[idx].check_has_unfree(first_label, first_bt);
-  }
-  return has_unfree;
-}
-
-AObject *ObjectMgrV2::realloc_object(
-      AObject *obj, const uint64_t size, const ObMemAttr &attr)
-{
-  AObject *new_obj = NULL;
-
-  if (NULL != obj) {
-    abort_unless(obj->MAGIC_CODE_ == AOBJECT_MAGIC_CODE
-                 || obj->MAGIC_CODE_ == BIG_AOBJECT_MAGIC_CODE);
-
-    ABlock *block = obj->block();
-
-    abort_unless(block->is_valid());
-    abort_unless(block->in_use_);
-
-    ObjectSetV2 *os = block->obj_set_v2_;
-    abort_unless(os);
-    new_obj = os->realloc_object(obj, size, attr);
-  } else {
-    new_obj = alloc_object(size, attr);
-  }
-
-  return new_obj;
 }

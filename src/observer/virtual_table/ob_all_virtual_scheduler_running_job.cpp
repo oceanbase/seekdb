@@ -1,0 +1,236 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "observer/virtual_table/ob_all_virtual_scheduler_running_job.h"
+
+using namespace oceanbase::common;
+namespace oceanbase
+{
+namespace observer
+{
+
+ObAllVirtualSchedulerRunningJob::ObAllVirtualSchedulerRunningJob()
+    : ObVirtualTableScannerIterator(),
+      session_mgr_(NULL),
+      fill_scanner_()
+{
+}
+
+ObAllVirtualSchedulerRunningJob::~ObAllVirtualSchedulerRunningJob()
+{
+  reset();
+}
+
+void ObAllVirtualSchedulerRunningJob::reset()
+{
+  session_mgr_ = NULL;
+  fill_scanner_.reset();
+  ObVirtualTableScannerIterator::reset();
+}
+
+int ObAllVirtualSchedulerRunningJob::inner_get_next_row(ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(session_mgr_)) {
+    ret = OB_NOT_INIT;
+    SERVER_LOG(WARN, "sessionMgr is NULL", K(ret));
+  } else {
+    if (!start_to_read_) {
+      if (OB_FAIL(fill_scanner_.init(&scanner_,
+                                     &cur_row_,
+                                     output_column_ids_))) {
+        SERVER_LOG(WARN, "init fill_scanner fail", K(ret));
+      } else if (OB_FAIL(session_mgr_->for_each_session(fill_scanner_))) {
+        SERVER_LOG(WARN, "fill scanner fail", K(ret));
+      } else {
+        scanner_it_ = scanner_.begin();
+        start_to_read_ = true;
+      }
+    }
+    if (OB_SUCCESS == ret && start_to_read_) {
+      if (OB_FAIL(scanner_it_.get_next_row(cur_row_))) {
+        if (OB_UNLIKELY(OB_ITER_END != ret)) {
+          SERVER_LOG(WARN, "fail to get next row", K(ret));
+        }
+      } else {
+        row = &cur_row_;
+      }
+    }
+  }
+  return ret;
+}
+
+bool ObAllVirtualSchedulerRunningJob::FillScanner::operator()(
+              sql::ObSQLSessionMgr::Key key, ObSQLSessionInfo *sess_info)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(key);
+  ObSQLSessionInfo::LockGuard lock_guard(sess_info->get_thread_data_lock());
+  if (OB_UNLIKELY(NULL == scanner_
+                  || NULL == cur_row_
+                  || NULL == cur_row_->cells_
+                  || NULL == sess_info)) {
+    ret = OB_NOT_INIT;
+    SERVER_LOG(WARN,
+               "parameter or data member is NULL",
+               K(ret),
+               K(scanner_),
+               K(cur_row_),
+               K(sess_info));
+  } else if (OB_ISNULL(sess_info->get_job_info())) {
+    // skip session without dbms scheduler job
+  } else if (OB_UNLIKELY(cur_row_->count_ < output_column_ids_.count())) {
+        ret = OB_ERR_UNEXPECTED;
+        SERVER_LOG(WARN,
+                   "cells count is less than output column count",
+                   K(ret),
+                   K(cur_row_->count_),
+                   K(output_column_ids_.count()));
+  } else {
+    uint64_t cell_idx = 0;
+    const int64_t col_count = output_column_ids_.count();
+    ObCharsetType default_charset = ObCharset::get_default_charset();
+    ObCollationType default_collation = ObCharset::get_default_collation(default_charset);
+    for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
+      uint64_t col_id = output_column_ids_.at(i);
+      switch(col_id) {
+        case OWNER: {
+          if (sess_info->get_is_deserialized()) {
+            cur_row_->cells_[cell_idx].set_varchar("");
+            cur_row_->cells_[cell_idx].set_collation_type(default_collation);
+          } else {
+            cur_row_->cells_[cell_idx].set_varchar(sess_info->get_user_name());
+            cur_row_->cells_[cell_idx].set_collation_type(default_collation);
+          }
+          break;
+        }
+        case JOB_NAME: {
+          if (OB_NOT_NULL(sess_info->get_job_info())) {
+            cur_row_->cells_[cell_idx].set_varchar(sess_info->get_job_info()->get_job_name());
+            cur_row_->cells_[cell_idx].set_collation_type(default_collation);
+          } else {
+            cur_row_->cells_[cell_idx].set_null();
+          }
+          break;
+        }
+        case JOB_SUBNAME: {
+          cur_row_->cells_[cell_idx].set_null();
+          break;
+        }
+        case JOB_CLASS: {
+          if (OB_NOT_NULL(sess_info->get_job_info())) {
+            cur_row_->cells_[cell_idx].set_varchar(sess_info->get_job_info()->get_job_class());
+            cur_row_->cells_[cell_idx].set_collation_type(default_collation);
+          } else {
+            cur_row_->cells_[cell_idx].set_null();
+          }
+          break;
+        }
+        case JOB_STYLE: {
+          cur_row_->cells_[cell_idx].set_null();
+          break;
+        }
+        case DETACHED: {
+          cur_row_->cells_[cell_idx].set_null();
+          break;
+        }
+        case SESSION_ID: {
+          cur_row_->cells_[cell_idx].set_uint64(static_cast<uint64_t>(sess_info->get_server_sid()));
+          break;
+        }
+        case SLAVE_PROCESS_ID: {
+          cur_row_->cells_[cell_idx].set_null();
+          break;
+        }
+        case SLAVE_OS_PROCESS_ID: {
+          cur_row_->cells_[cell_idx].set_null();
+          break;
+        }
+        case RUNNING_INSTANCE: {
+          cur_row_->cells_[cell_idx].set_null();
+          break;
+        }
+        case ELAPSED_TIME: {
+          cur_row_->cells_[cell_idx].set_int(ObTimeUtility::current_time() - sess_info->get_sess_create_time());
+          break;
+        }
+        case CPU_USED: {
+          cur_row_->cells_[cell_idx].set_null();
+          break;
+        }
+        case DESTINATION_OWNER: {
+          cur_row_->cells_[cell_idx].set_null();
+          break;
+        }
+        case DESTINATION: {
+          cur_row_->cells_[cell_idx].set_null();
+          break;
+        }
+        case CREDENTIAL_OWNER: {
+          cur_row_->cells_[cell_idx].set_null();
+          break;
+        }
+        case CREDENTIAL_NAME: {
+          cur_row_->cells_[cell_idx].set_null();
+          break;
+        }
+        default: {
+          ret = OB_ERR_UNEXPECTED;
+          SERVER_LOG(WARN, "invalid column id", K(ret), K(cell_idx),
+                      K(i), K(output_column_ids_), K(col_id));
+          break;
+        }
+      }
+      if (OB_SUCC(ret)) {
+        cell_idx++;
+      }
+    } // for
+    // The scanner supports up to 64M, so the overflow situation is not considered for the time being
+    if (FAILEDx(scanner_->add_row(*cur_row_))) {
+      SERVER_LOG(WARN, "fail to add row", K(ret), K(*cur_row_));
+    }
+  }
+  return OB_SUCCESS == ret;
+}
+
+void ObAllVirtualSchedulerRunningJob::FillScanner::reset()
+{
+  scanner_ = NULL;
+  cur_row_ = NULL;
+  output_column_ids_.reset();
+}
+
+int ObAllVirtualSchedulerRunningJob::FillScanner::init(common::ObScanner *scanner,
+                                               common::ObNewRow *cur_row,
+                                               const ObIArray<uint64_t> &column_ids)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(NULL == scanner
+                  || NULL == cur_row)) {
+    ret = OB_NOT_INIT;
+    SERVER_LOG(WARN,
+               "some parameter is NULL", K(ret), K(scanner), K(cur_row));
+  } else if (OB_FAIL(output_column_ids_.assign(column_ids))) {
+    SQL_ENG_LOG(WARN, "fail to assign output column ids", K(ret), K(column_ids));
+  } else {
+    scanner_ = scanner;
+    cur_row_ = cur_row;
+  }
+  return ret;
+}
+
+}/* ns observer*/
+}/* ns oceanbase */

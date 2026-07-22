@@ -20,6 +20,7 @@
 #include "share/ob_max_id_fetcher.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 #include "observer/ob_inner_sql_connection.h"
+#include "common/ob_timeout_ctx.h"
 #include "lib/utility/ob_utility.h"
 
 #define USING_LOG_PREFIX SHARE

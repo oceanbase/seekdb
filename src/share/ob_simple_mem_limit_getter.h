@@ -19,34 +19,34 @@
 
 #include "lib/container/ob_se_array.h"
 #include "lib/lock/ob_spin_rwlock.h"
-#include "share/ob_i_tenant_mem_limit_getter.h"
+#include "share/ob_i_server_mem_limit_getter.h"
 
 namespace oceanbase
 {
 namespace common
 {
-class ObSimpleMemLimitGetter : public ObITenantMemLimitGetter
+class ObSimpleMemLimitGetter : public ObIServerMemLimitGetter
 {
 public:
-  ObSimpleMemLimitGetter() : lock_(ObLatchIds::DEFAULT_SPIN_RWLOCK), has_tenant_value_(false) {}
+  ObSimpleMemLimitGetter() : lock_(ObLatchIds::DEFAULT_SPIN_RWLOCK), has_memory_limit_value_(false) {}
   virtual ~ObSimpleMemLimitGetter() {}
-  int add_tenant(const int64_t lower_limit,
-                 const int64_t upper_limit);
-  bool has_tenant() const override;
-  int get_tenant_mem_limit(int64_t &lower_limit,
-                           int64_t &upper_limit) const override;
+  int set_memory_limit(const int64_t lower_limit,
+                       const int64_t upper_limit);
+  bool has_memory_limit() const override;
+  int get_memory_limit(int64_t &lower_limit,
+                       int64_t &upper_limit) const override;
   void reset();
 private:
-  bool has_tenant_() const;
+  bool has_memory_limit_() const;
 private:
-  struct ObTenantInfo
+  struct ObMemoryLimitInfo
   {
-    ObTenantInfo()
+    ObMemoryLimitInfo()
       : mem_lower_limit_(-1),
         mem_upper_limit_(-1) {}
 
-    ObTenantInfo(int64_t lower_limit,
-                 int64_t upper_limit)
+    ObMemoryLimitInfo(int64_t lower_limit,
+                      int64_t upper_limit)
       : mem_lower_limit_(lower_limit),
         mem_upper_limit_(upper_limit) {}
 
@@ -58,8 +58,8 @@ private:
 
 private:
   SpinRWLock lock_;
-  ObTenantInfo tenant_info_;
-  bool has_tenant_value_;
+  ObMemoryLimitInfo memory_limit_info_;
+  bool has_memory_limit_value_;
 };
 
 } // common

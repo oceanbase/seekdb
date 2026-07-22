@@ -1762,7 +1762,6 @@ int ObTransformWinMagic::check_join_push_down(ObDMLStmt *main_stmt,
              view_table->ref_query_->has_limit() ||
              view_table->ref_query_->has_rollup() ||
              view_table->ref_query_->is_set_stmt() ||
-             view_table->ref_query_->has_sequence() ||
              !view_table->ref_query_->has_window_function()) {
     is_valid = false;
   } else {

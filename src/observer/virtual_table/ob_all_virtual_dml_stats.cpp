@@ -26,12 +26,6 @@ using namespace sql;
 namespace observer
 {
 
-int ObAllVirtualDMmlStats::inner_open()
-{
-  int ret = OB_SUCCESS;
-  return ret;
-}
-
 int ObOptDmlStatMapGetter::operator()(common::hash::HashMapPair<StatKey, ObOptDmlStat> &entry)
 {
   int ret = OB_SUCCESS;
@@ -131,12 +125,12 @@ int ObAllVirtualDMmlStats::fill_scanner()
     ret = OB_ERR_UNEXPECTED;
   } else {
     port_ = addr.get_port();
-    MOD_SCOPE {
+    SERVER_MODULE_SCOPE {
       ObOptDmlStatMapGetter getter(scanner_, output_column_ids_, svr_ip_, port_, cur_row_);
       ObOptStatMonitorManager *optstat_monitor_mgr = share::g_mp->opt_stat_monitor_manager();
       if (OB_ISNULL(optstat_monitor_mgr)) {
         ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "optstat monitor mgr is NULL", K(ret), K(1UL));
+        SERVER_LOG(WARN, "optstat monitor mgr is NULL", K(ret));
       } else if (OB_FAIL(optstat_monitor_mgr->generate_opt_stat_monitoring_info_rows(getter))) {
         SERVER_LOG(WARN, "generate monitor info array failed", K(ret));
       } else {

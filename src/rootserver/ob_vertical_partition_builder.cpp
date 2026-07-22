@@ -84,7 +84,6 @@ int ObVertialPartitionBuilder::set_basic_infos(
   // priority same with data table schema
   
   aux_vp_table_schema.set_database_id(data_schema.get_database_id());
-  aux_vp_table_schema.set_tablegroup_id(OB_INVALID_ID);
   aux_vp_table_schema.set_load_type(data_schema.get_load_type());
   aux_vp_table_schema.set_def_type(data_schema.get_def_type());
   aux_vp_table_schema.set_charset_type(data_schema.get_charset_type());
@@ -100,7 +99,6 @@ int ObVertialPartitionBuilder::set_basic_infos(
   aux_vp_table_schema.set_table_mode(data_schema.get_table_mode());
   aux_vp_table_schema.set_block_size(data_schema.get_block_size());
   aux_vp_table_schema.set_pctfree(data_schema.get_pctfree());
-  aux_vp_table_schema.set_storage_format_version(data_schema.get_storage_format_version());
   aux_vp_table_schema.set_progressive_merge_round(data_schema.get_progressive_merge_round());
   if (OB_FAIL(aux_vp_table_schema.set_compress_func_name(data_schema.get_compress_func_name()))) {
     LOG_WARN("set_compress_func_name failed", K(data_schema));

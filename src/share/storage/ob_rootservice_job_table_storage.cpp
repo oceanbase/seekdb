@@ -28,16 +28,16 @@ namespace oceanbase
 namespace share
 {
 
-ObRootServiceJobTableStorage::ObRootServiceJobTableStorage()
+ObLocalManagementServiceJobTableStorage::ObLocalManagementServiceJobTableStorage()
   : pool_(nullptr)
 {
 }
 
-ObRootServiceJobTableStorage::~ObRootServiceJobTableStorage()
+ObLocalManagementServiceJobTableStorage::~ObLocalManagementServiceJobTableStorage()
 {
 }
 
-int ObRootServiceJobTableStorage::init(ObSQLiteConnectionPool *pool)
+int ObLocalManagementServiceJobTableStorage::init(ObSQLiteConnectionPool *pool)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(pool_ = pool)) {
@@ -52,7 +52,7 @@ int ObRootServiceJobTableStorage::init(ObSQLiteConnectionPool *pool)
   return ret;
 }
 
-int ObRootServiceJobTableStorage::create_table_if_not_exists_()
+int ObLocalManagementServiceJobTableStorage::create_table_if_not_exists_()
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(pool_)) {
@@ -70,7 +70,7 @@ int ObRootServiceJobTableStorage::create_table_if_not_exists_()
   return ret;
 }
 
-int ObRootServiceJobTableStorage::create_job(const ObRootServiceJobEntry &entry)
+int ObLocalManagementServiceJobTableStorage::create_job(const ObLocalManagementServiceJobEntry &entry)
 {
   int ret = OB_SUCCESS;
   if (!is_inited()) {
@@ -108,7 +108,7 @@ int ObRootServiceJobTableStorage::create_job(const ObRootServiceJobEntry &entry)
   return ret;
 }
 
-int ObRootServiceJobTableStorage::complete_job(
+int ObLocalManagementServiceJobTableStorage::complete_job(
     const int64_t job_id,
     const common::ObString &job_status,
     const int64_t result_code)
@@ -145,7 +145,7 @@ int ObRootServiceJobTableStorage::complete_job(
   return ret;
 }
 
-int ObRootServiceJobTableStorage::get_max_job_id(int64_t &max_job_id)
+int ObLocalManagementServiceJobTableStorage::get_max_job_id(int64_t &max_job_id)
 {
   int ret = OB_SUCCESS;
   max_job_id = -1;
@@ -176,7 +176,7 @@ int ObRootServiceJobTableStorage::get_max_job_id(int64_t &max_job_id)
   return ret;
 }
 
-int ObRootServiceJobTableStorage::get_job_count(const common::ObString &job_type, int64_t &job_count)
+int ObLocalManagementServiceJobTableStorage::get_job_count(const common::ObString &job_type, int64_t &job_count)
 {
   int ret = OB_SUCCESS;
   if (!is_inited()) {
@@ -209,7 +209,7 @@ int ObRootServiceJobTableStorage::get_job_count(const common::ObString &job_type
   return ret;
 }
 
-int ObRootServiceJobTableStorage::find_job(const common::ObString &job_type, int64_t &job_id)
+int ObLocalManagementServiceJobTableStorage::find_job(const common::ObString &job_type, int64_t &job_id)
 {
   int ret = OB_SUCCESS;
   job_id = -1;

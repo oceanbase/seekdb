@@ -53,7 +53,7 @@ public:
   void destroy();
   int write_log(ObStorageLogParam &param);
   int write_log(ObIArray<ObStorageLogParam> &param_arr);
-  const char *get_dir() { return tnt_slog_dir_; }
+  const char *get_dir() { return slog_dir_; }
   int get_active_cursor(common::ObLogCursor &log_cursor);
   int remove_useless_log_file(const int64_t end_file_id);
 
@@ -90,9 +90,9 @@ private:
 private:
   bool is_inited_;
   ObStorageLogWriter *log_writer_;
-  ObStorageLogWriter tenant_log_writer_;
+  ObStorageLogWriter local_log_writer_;
   ObServerSlogWriter server_log_writer_;
-  char tnt_slog_dir_[MAX_PATH_SIZE];
+  char slog_dir_[MAX_PATH_SIZE];
   // When we write logs with multiple threads, log_writer_'s cursor may not be the newest
   // In other word, the log_writer_'s cursor is only updated when the backup thread flushes
   // So, we need maintain another variable los_seq_ in this class

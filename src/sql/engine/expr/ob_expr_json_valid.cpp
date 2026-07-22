@@ -91,7 +91,6 @@ int ObExprJsonValid::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta,
       } else {
         is_invalid = true;
       }
-    } else if (OB_FALSE_IT(allocator->add_baseline_size(j_str.length()))) {
     } else if (type == ObJsonType) { // json bin
       ObIJsonBase *j_bin = NULL;
       if (OB_FAIL(ObJsonBaseFactory::get_json_base(allocator, j_str, ObJsonInType::JSON_BIN,
@@ -136,7 +135,7 @@ int ObExprJsonValid::eval_json_valid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   } else {
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     
-    MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+    MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
     if (OB_FAIL(calc(ctx, *datum, arg->datum_meta_, arg->obj_meta_.has_lob_header(), &tmp_allocator, res))) {
       LOG_WARN("fail to calc json valid result", K(ret), K(arg->datum_meta_));
     }

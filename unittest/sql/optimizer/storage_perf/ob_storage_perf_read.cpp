@@ -18,37 +18,31 @@
 #include "storage/memtable/ob_memtable_interface.h"
 #include "storage/access/ob_table_scan_iterator.h"
 #include "lib/stat/ob_diagnose_info.h"
-#include "lib/stat/ob_di_cache.h"
 #include "lib/container/ob_se_array_iterator.h"
-#define private public
-#define protected public
-#include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
 #include <stdio.h>
 #include <iostream>
 
 
-#define EVENT_TGET(stat_no)                                      \
-    ({                                                            \
-         int64_t ret = 0;                                            \
-         oceanbase::common::ObDiagnoseTenantInfo *session_info            \
-           = oceanbase::common::ObDiagnoseTenantInfo::get_local_diagnose_info();   \
-         if (NULL != session_info) {                                \
-           if (oceanbase::common::stat_no < oceanbase::common::ObStatEventIds::STAT_EVENT_ADD_END) {    \
-             oceanbase::common::ObStatEventAddStat *stat                  \
-                 = session_info->get_add_stat_stats().get(                \
-                                     ::oceanbase::common::stat_no);    \
-             if (NULL != stat) {                                       \
-               ret = stat->get_stat_value();                           \
-             }                                                         \
-           }                                                         \
-         }                                                           \
-         ret;                                                        \
-       })
+#define SESSION_EVENT_GET(stat_no)                                      \
+  ({                                                                    \
+    int64_t ret = 0;                                                    \
+    oceanbase::common::ObDiagnoseSessionInfo *session_info =            \
+        oceanbase::common::ObDiagnoseSessionInfo::get_local_diagnose_info(); \
+    if (NULL != session_info &&                                        \
+        (stat_no) < oceanbase::common::ObStatEventIds::STAT_EVENT_ADD_END) { \
+      oceanbase::common::ObStatEventAddStat *stat =                     \
+          session_info->get_add_stat_stats().get(stat_no);              \
+      if (NULL != stat) {                                               \
+        ret = stat->get_stat_value();                                   \
+      }                                                                 \
+    }                                                                   \
+    ret;                                                                \
+  })
 
 #define GLOBAL_EVENT_GET(stat_no)             \
   ({                                                \
       int64_t ret = 0;                              \
-      ObStatEventAddStat *stat = tenant_info->get_add_stat_stats().get(stat_no); \
+      ObStatEventAddStat *stat = runtime_info_.get_add_stat_stats().get(stat_no); \
       if (NULL != stat) {         \
         ret = stat->stat_value_;   \
       }   \
@@ -57,7 +51,7 @@
 
 #define GLOBAL_WAIT_GET(stat_no, wait_event)             \
   ({                                                \
-      ObWaitEventStat *stat = tenant_info->get_event_stats().get(stat_no); \
+      ObWaitEventStat *stat = runtime_info_.get_event_stats().get(stat_no); \
       if (NULL != stat) {         \
         wait_event.total_waits_ = stat->total_waits_;   \
         wait_event.total_timeouts_ = stat->total_timeouts_; \
@@ -419,7 +413,7 @@ ObStoragePerfRead::ObStoragePerfRead()
  , cache_suite_(NULL)
  , barrier_(NULL)
  , allocator_()
- , tenant_dis_()
+ , runtime_info_()
  , thread_no_(-1)
  , is_inited_(false)
  , ret_(OB_SUCCESS)
@@ -1210,79 +1204,46 @@ int ObStoragePerfRead::set_trans_desc(ObTransDesc &trans_desc)
 int ObStoragePerfRead::set_global_stat(ObStoragePerfStatistics &statics)
 {
   int ret = OB_SUCCESS;
-  ObDiagnoseTenantInfo *tenant_info = NULL;
-  if (OB_FAIL(ObDIGlobalTenantCache::get_instance().get_all_stat_event(allocator_, tenant_dis_))) {
-    STORAGE_LOG(WARN, "failed to get stat event", K(ret));
+  if (OB_FAIL(ObDIGlobalRuntimeCache::get_instance().get_runtime_info(runtime_info_))) {
+    STORAGE_LOG(WARN, "failed to get runtime diagnostic info", K(ret));
   } else {
-    for (int64_t i = 0; i < tenant_dis_.count(); ++i) {
-      if (tenant_dis_.at(i).first == 1) {
-        tenant_info = tenant_dis_.at(i).second;
-        break;
-      }
-    }
-    if (tenant_info == NULL) {
-      ret = OB_ERR_UNEXPECTED;
-      STORAGE_LOG(WARN, "tenant_info not found", K(ret));
-    } else {
-      statics.row_cache_hit_ = GLOBAL_EVENT_GET(ObStatEventIds::ROW_CACHE_HIT);
-      statics.row_cache_miss_ = GLOBAL_EVENT_GET(ObStatEventIds::ROW_CACHE_MISS);
-      statics.block_cache_hit_ = GLOBAL_EVENT_GET(ObStatEventIds::BLOCK_CACHE_HIT);
-      statics.block_cache_miss_ = GLOBAL_EVENT_GET(ObStatEventIds::BLOCK_CACHE_MISS);
-      statics.bf_cache_hit_ = GLOBAL_EVENT_GET(ObStatEventIds::BLOOM_FILTER_CACHE_HIT);
-      statics.bf_cache_miss_ = GLOBAL_EVENT_GET(ObStatEventIds::BLOOM_FILTER_CACHE_MISS);
-      statics.io_read_count_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_COUNT);
-      statics.io_read_size_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_BYTES);
-      statics.io_read_delay_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_DELAY);
-      statics.io_read_queue_delay_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_QUEUE_DELAY);
-      statics.io_read_cb_alloc_delay_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_CB_ALLOC_DELAY);
-      statics.io_read_cb_process_delay_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_CB_PROCESS_DELAY);
-      statics.io_read_prefetch_micro_cnt_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_PREFETCH_MICRO_COUNT);
-      statics.io_read_prefetch_micro_size_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_PREFETCH_MICRO_BYTES);
-      statics.io_read_uncomp_micro_cnt_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_UNCOMP_MICRO_COUNT);
-      statics.io_read_uncomp_micro_size_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_UNCOMP_MICRO_BYTES);
-    }
-  }
+    statics.row_cache_hit_ = GLOBAL_EVENT_GET(ObStatEventIds::ROW_CACHE_HIT);
+    statics.row_cache_miss_ = GLOBAL_EVENT_GET(ObStatEventIds::ROW_CACHE_MISS);
+    statics.block_cache_hit_ = GLOBAL_EVENT_GET(ObStatEventIds::BLOCK_CACHE_HIT);
+    statics.block_cache_miss_ = GLOBAL_EVENT_GET(ObStatEventIds::BLOCK_CACHE_MISS);
+    statics.bf_cache_hit_ = GLOBAL_EVENT_GET(ObStatEventIds::BLOOM_FILTER_CACHE_HIT);
+    statics.bf_cache_miss_ = GLOBAL_EVENT_GET(ObStatEventIds::BLOOM_FILTER_CACHE_MISS);
+    statics.io_read_count_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_COUNT);
+    statics.io_read_size_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_BYTES);
+    statics.io_read_delay_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_DELAY);
+    statics.io_read_queue_delay_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_QUEUE_DELAY);
+    statics.io_read_cb_alloc_delay_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_CB_ALLOC_DELAY);
+    statics.io_read_cb_process_delay_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_CB_PROCESS_DELAY);
+    statics.io_read_prefetch_micro_cnt_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_PREFETCH_MICRO_COUNT);
+    statics.io_read_prefetch_micro_size_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_PREFETCH_MICRO_BYTES);
+    statics.io_read_uncomp_micro_cnt_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_UNCOMP_MICRO_COUNT);
+    statics.io_read_uncomp_micro_size_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_UNCOMP_MICRO_BYTES);
 
-  //io_read_queue_delay -> cb_alloc_delay -> read_delay -> cb_process_delay
-  if (OB_SUCC(ret)) {
-    allocator_.reuse();
-    tenant_dis_.reuse();
-    if (OB_FAIL(ObDIGlobalTenantCache::get_instance().get_all_wait_event(allocator_, tenant_dis_))) {
-      STORAGE_LOG(WARN, "failed to get stat event", K(ret));
-    } else {
-      for (int64_t i = 0; i < tenant_dis_.count(); ++i) {
-        if (tenant_dis_.at(i).first == 1) {
-          tenant_info = tenant_dis_.at(i).second;
-          break;
-        }
-      }
-      if (tenant_info == NULL) {
-        ret = OB_ERR_UNEXPECTED;
-        STORAGE_LOG(WARN, "tenant_info not found");
-      } else {
-        GLOBAL_WAIT_GET(ObWaitEventIds::DB_FILE_DATA_READ, statics.db_file_data_read_);
-        GLOBAL_WAIT_GET(ObWaitEventIds::DB_FILE_DATA_INDEX_READ,statics.db_file_data_index_read_);
-        GLOBAL_WAIT_GET(ObWaitEventIds::KV_CACHE_BUCKET_LOCK_WAIT,statics.kv_cache_bucket_lock_wait_);
-        GLOBAL_WAIT_GET(ObWaitEventIds::IO_QUEUE_LOCK_WAIT, statics.io_queue_lock_wait_);
-        GLOBAL_WAIT_GET(ObWaitEventIds::IO_CONTROLLER_COND_WAIT, statics.io_controller_cond_wait_);
-        GLOBAL_WAIT_GET(ObWaitEventIds::IO_PROCESSOR_COND_WAIT, statics.io_processor_cond_wait_);
-        allocator_.reuse();
-        tenant_dis_.reuse();
-      }
-    }
+    // io_read_queue_delay -> cb_alloc_delay -> read_delay -> cb_process_delay
+    GLOBAL_WAIT_GET(ObWaitEventIds::DB_FILE_DATA_READ, statics.db_file_data_read_);
+    GLOBAL_WAIT_GET(ObWaitEventIds::DB_FILE_DATA_INDEX_READ, statics.db_file_data_index_read_);
+    GLOBAL_WAIT_GET(ObWaitEventIds::KV_CACHE_BUCKET_LOCK_WAIT, statics.kv_cache_bucket_lock_wait_);
+    GLOBAL_WAIT_GET(ObWaitEventIds::IO_QUEUE_LOCK_WAIT, statics.io_queue_lock_wait_);
+    GLOBAL_WAIT_GET(ObWaitEventIds::IO_CONTROLLER_COND_WAIT, statics.io_controller_cond_wait_);
+    GLOBAL_WAIT_GET(ObWaitEventIds::IO_PROCESSOR_COND_WAIT, statics.io_processor_cond_wait_);
   }
   return ret;
 }
 
 void ObStoragePerfRead::set_statistics(ObStoragePerfStatistics &statics)
 {
-  statics.row_cache_hit_ = EVENT_TGET(ObStatEventIds::ROW_CACHE_HIT);
-  statics.row_cache_miss_ = EVENT_TGET(ObStatEventIds::ROW_CACHE_MISS);
-  statics.block_cache_hit_ = EVENT_TGET(ObStatEventIds::BLOCK_CACHE_HIT);
-  statics.block_cache_miss_ = EVENT_TGET(ObStatEventIds::BLOCK_CACHE_MISS);
-  statics.io_read_count_ = EVENT_TGET(ObStatEventIds::IO_READ_COUNT);
-  statics.io_read_size_ = EVENT_TGET(ObStatEventIds::IO_READ_BYTES);
-  statics.io_read_delay_ = EVENT_TGET(ObStatEventIds::IO_READ_DELAY);
+  statics.row_cache_hit_ = SESSION_EVENT_GET(ObStatEventIds::ROW_CACHE_HIT);
+  statics.row_cache_miss_ = SESSION_EVENT_GET(ObStatEventIds::ROW_CACHE_MISS);
+  statics.block_cache_hit_ = SESSION_EVENT_GET(ObStatEventIds::BLOCK_CACHE_HIT);
+  statics.block_cache_miss_ = SESSION_EVENT_GET(ObStatEventIds::BLOCK_CACHE_MISS);
+  statics.io_read_count_ = SESSION_EVENT_GET(ObStatEventIds::IO_READ_COUNT);
+  statics.io_read_size_ = SESSION_EVENT_GET(ObStatEventIds::IO_READ_BYTES);
+  statics.io_read_delay_ = SESSION_EVENT_GET(ObStatEventIds::IO_READ_DELAY);
   statics.io_read_queue_delay_ = EVENT_TGET(ObStatEventIds::IO_READ_QUEUE_DELAY);
   statics.io_read_cb_alloc_delay_ = EVENT_TGET(ObStatEventIds::IO_READ_CB_ALLOC_DELAY);
   statics.io_read_cb_process_delay_ = EVENT_TGET(ObStatEventIds::IO_READ_CB_PROCESS_DELAY);

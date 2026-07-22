@@ -19,7 +19,7 @@
 #include "share/rc/ob_module_provider.h"
 #include "storage/meta_store/ob_storage_meta_io_util.h"
 #include "storage/ls/ob_ls.h"
-#include "storage/meta_store/ob_tenant_storage_meta_service.h"
+#include "storage/meta_store/ob_local_storage_meta_service.h"
 
 namespace oceanbase
 {
@@ -273,10 +273,10 @@ int ObTabletPointerMap::get_meta_obj(
     if (OB_FAIL(load_and_hook_meta_obj(key, ptr_hdl, guard))) {
       STORAGE_LOG(WARN, "fail to load and hook meta obj", K(ret), K(key));
     } else {
-      EVENT_INC(ObStatEventIds::TABLET_CACHE_MISS);
+      EVENT_INC(TABLET_CACHE_MISS);
     }
   } else {
-    EVENT_INC(ObStatEventIds::TABLET_CACHE_HIT);
+    EVENT_INC(TABLET_CACHE_HIT);
   }
   return ret;
 }
@@ -305,10 +305,10 @@ int ObTabletPointerMap::get_meta_obj_with_filter(
     if (OB_FAIL(load_and_hook_meta_obj(key, ptr_hdl, guard))) {
       STORAGE_LOG(WARN, "fail to load and hook meta obj", K(ret), K(key));
     } else {
-      EVENT_INC(ObStatEventIds::TABLET_CACHE_MISS);
+      EVENT_INC(TABLET_CACHE_MISS);
     }
   } else {
-    EVENT_INC(ObStatEventIds::TABLET_CACHE_HIT);
+    EVENT_INC(TABLET_CACHE_HIT);
   }
   return ret;
 }
@@ -455,7 +455,7 @@ int ObTabletPointerMap::read_from_disk(
       real_load_addr.set_size(ObTabletCommon::MAX_TABLET_FIRST_LEVEL_META_SIZE);
     }
   }
-  if (OB_FAIL(share::g_mp->tenant_storage_meta_service()->read_from_disk(real_load_addr, ls_epoch, allocator, r_buf, r_len))) {
+  if (OB_FAIL(share::g_mp->local_storage_meta_service()->read_from_disk(real_load_addr, allocator, r_buf, r_len))) {
     if (OB_SEARCH_NOT_FOUND != ret) {
       STORAGE_LOG(WARN, "fail to read from addr", K(ret), K(real_load_addr), K(ls_epoch));
     }
@@ -553,7 +553,7 @@ int ObTabletPointerMap::get_meta_obj_with_external_memory(
       STORAGE_LOG(WARN, "fail to try get in memory meta obj", K(ret), K(key));
     }
   } else if (is_in_memory) {
-    EVENT_INC(ObStatEventIds::TABLET_CACHE_HIT);
+    EVENT_INC(TABLET_CACHE_HIT);
   }
   if (OB_SUCC(ret) && !is_in_memory) {
     t_ptr = ptr_hdl.get_resource_ptr();
@@ -572,7 +572,7 @@ int ObTabletPointerMap::get_meta_obj_with_external_memory(
         if (CLICK_FAIL(load_meta_obj(key, t_ptr, allocator, disk_addr, t))) {
           STORAGE_LOG(WARN, "load obj from disk fail", K(ret), K(key), KPC(t_ptr), K(lbt()));
         } else {
-          ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
+          ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
           ObTabletPointerHandle tmp_ptr_hdl(*this);
           common::ObBucketHashWLockGuard lock_guard(ResourceMap::bucket_lock_, hash_val);
           // some other thread finish loading
@@ -746,7 +746,7 @@ int ObTabletPointerMap::compare_and_swap_address_without_object(
     const ObMetaDiskAddr &old_addr,
     const ObMetaDiskAddr &new_addr,
     const bool set_pool /* whether to set pool */,
-    ObITenantMetaObjPool *pool)
+    ObIStorageMetaObjPool *pool)
 {
   int ret = common::OB_SUCCESS;
   uint64_t hash_val = 0;

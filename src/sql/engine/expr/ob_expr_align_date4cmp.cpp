@@ -154,7 +154,7 @@ int ObExprAlignDate4Cmp::eval_align_date4cmp(const ObExpr &expr, ObEvalCtx &ctx,
         bool is_valid_time = false;
         int cmp_type = cmp_type_datum->get_int();
         if (cmp_type == T_OP_EQ || cmp_type == T_OP_NSEQ || cmp_type == T_OP_NE) {
-          // Compatible with previous versions of ob, not with mysql
+          // Equality comparisons normalize allowed out-of-range days.
           if (is_allow_invalid_dates) {
             int32_t offset = get_day_over_limit(ob_time);
             if (offset > 0) {
@@ -163,7 +163,7 @@ int ObExprAlignDate4Cmp::eval_align_date4cmp(const ObExpr &expr, ObEvalCtx &ctx,
             }
           }
         } else {  // cmp_type is: >, >=, <, <=
-          // Compatible with mysql, not with previous versions of ob
+          // Ordering comparisons follow MySQL boundary semantics.
           if (is_day_over_limit(ob_time)) {
             offset = (cmp_type == T_OP_GT || cmp_type == T_OP_LE) ? false : true;
             set_valid_time_floor(ob_time);

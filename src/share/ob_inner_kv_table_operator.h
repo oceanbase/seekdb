@@ -86,7 +86,7 @@ private:
 };
 
 
-// Define one kv item, which tenant id is not part of the primary key of the kv table.
+// Define one kv item.
 class ObInnerKVItem : public ObIInnerTableRow
 {
 public:
@@ -118,48 +118,6 @@ protected:
   NameType name_;
   ObInnerKVItemValue *value_;
 }; 
-
-// Define one kv item, which tenant id is part of the primary key of the kv table.
-class ObInnerKVItemTenantIdWrapper : public ObInnerKVItem
-{
-public:
-  explicit ObInnerKVItemTenantIdWrapper(ObInnerKVItem *item);
-  virtual ~ObInnerKVItemTenantIdWrapper() {}
-
-
-  // Set the name of kv item.
-  int set_kv_name(const char *name) override
-  {
-    return item_->set_kv_name(name);
-  }
-
-  const char *get_kv_name() const override
-  {
-    return item_->get_kv_name();
-  }
-
-  const ObInnerKVItemValue *get_kv_value() const override
-  {
-    return item_->get_kv_value();
-  }
-
-
-  bool is_pkey_valid() const override;
-  bool is_valid() const override;
-  // Fill primary key to dml.
-  int fill_pkey_dml(share::ObDMLSqlSplicer &dml) const override;
-  // Parse row from the sql result, the result has full columns.
-  int parse_from(common::sqlclient::ObMySQLResult &result) override;
-  // Fill primary key and value to dml.
-  int fill_dml(share::ObDMLSqlSplicer &dml) const override;
-
-  VIRTUAL_TO_STRING_KV(K_(*item));
-
-private:
-  static const char *TENANT_ID_COLUMN_NAME;
-  ObInnerKVItem *item_;
-};
-
 
 // Define kv table operator.
 class ObInnerKVTableOperator final

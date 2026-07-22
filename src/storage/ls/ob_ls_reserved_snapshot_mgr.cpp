@@ -155,7 +155,7 @@ int ObLSReservedSnapshotMgr::submit_log(
   return ret;
 }
 
-// called by ObTenantFreezeInfoMgr, sync clog in Timer
+// Called by the local freeze manager to synchronize the reserved snapshot.
 int ObLSReservedSnapshotMgr::update_min_reserved_snapshot(const int64_t new_snapshot_version)
 {
   int ret = OB_SUCCESS;

@@ -19,7 +19,7 @@
 #include "observer/mysql/obmp_stmt_fetch.h"
 #include "observer/mysql/obsm_utils.h"
 #include "sql/ob_sql.h"
-#include "observer/omt/ob_tenant.h"
+#include "observer/omt/ob_server_runtime.h"
 #include "observer/mysql/ob_sync_plan_driver.h"
 #include "rpc/obmysql/packet/ompk_eof.h"
 #include "observer/mysql/obmp_stmt_send_piece_data.h"
@@ -386,8 +386,8 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
           }
           if (OB_FAIL(ret)) {
             // do nothing
-          } else if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(schema_guard))) {
-            LOG_WARN("get tenant schema guard failed ", K(ret));
+          } else if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(schema_guard))) {
+            LOG_WARN("get runtime schema guard failed ", K(ret));
           } else if (!need_fetch && NULL != row) {
             if (has_long_data()) {
               OZ (response_row(session, *(const_cast<common::ObNewRow*>(row)), 
@@ -502,7 +502,8 @@ int ObMPStmtFetch::process_fetch_stmt(ObSQLSessionInfo &session,
   setup_wb(session);
   //set session log_level.Must use ObThreadLogLevelUtils::clear() in pair
   ObThreadLogLevelUtils::init(session.get_log_id_level_map());
-  // Refresh the local schema cache up to the session's DDL fence.
+  // Clients may use 'SET @@last_schema_version = xxxx' to publish a newer schema
+  // version; observer refreshes when its local version is older.
   if (OB_FAIL(check_and_refresh_schema())) {
     LOG_WARN("failed to check_and_refresh_schema", K(ret));
   } else {
@@ -546,9 +547,9 @@ int ObMPStmtFetch::process()
   } else if (OB_UNLIKELY(!conn->is_in_authed_phase())) {
     ret = OB_ERR_NO_PRIVILEGE;
     LOG_WARN("receive sql without session", K_(cursor_id), K(ret));
-  } else if (OB_ISNULL(conn->tenant_)) {
+  } else if (OB_ISNULL(conn->runtime_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid tenant", K_(cursor_id), K(conn->tenant_), K(ret));
+    LOG_ERROR("invalid runtime", K_(cursor_id), K(conn->runtime_), K(ret));
   } else if (OB_FAIL(get_session(sess))) {
     LOG_WARN("get session fail", K_(cursor_id), K(ret));
   } else if (OB_ISNULL(sess)) {
@@ -556,8 +557,7 @@ int ObMPStmtFetch::process()
     LOG_WARN("session is NULL or invalid", K_(cursor_id), K(sess), K(ret));
   } else {
     ObSQLSessionInfo &session = *sess;
-    int64_t tenant_version = 0;
-    int64_t sys_version = 0;
+    int64_t runtime_version = 0;
     THIS_WORKER.set_session(sess);
     ObSQLSessionInfo::LockGuard lock_guard(session.get_query_lock());
     session.set_current_trace_id(ObCurTraceId::get_trace_id());
@@ -581,12 +581,9 @@ int ObMPStmtFetch::process()
       LOG_WARN("packet too large than allowed for the session", K_(cursor_id), K(ret));
     } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
       LOG_WARN("fail to get query timeout", K(ret));
-    } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
-                tenant_version))) {
-      LOG_WARN("fail get tenant broadcast version", K(ret));
-    } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
-                sys_version))) {
-      LOG_WARN("fail get tenant broadcast version", K(ret));
+    } else if (OB_FAIL(gctx_.schema_service_->get_runtime_received_broadcast_version(
+                runtime_version))) {
+      LOG_WARN("fail to get runtime broadcast version", K(ret));
     } else {
       need_disconnect = false;
       ObPLCursorInfo *cursor = NULL;

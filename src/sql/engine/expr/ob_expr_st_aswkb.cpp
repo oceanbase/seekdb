@@ -106,7 +106,7 @@ int ObExprGeomWkb::eval_geom_wkb(const ObExpr &expr,
   bool is_null_result = false;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, get_func_name());
+  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
   omt::ObSrsCacheGuard srs_guard;
   ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   const ObSrsItem *srs = NULL;
@@ -127,7 +127,6 @@ int ObExprGeomWkb::eval_geom_wkb(const ObExpr &expr,
   } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(tmp_allocator, *wkb_datum,
              expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkb))) {
     LOG_WARN("fail to get real string data", K(ret), K(wkb));
-  } else if (FALSE_IT(tmp_allocator.set_baseline_size(wkb.length()))) {
   } else if (OB_FAIL(ObGeoExprUtils::construct_geometry(tmp_allocator,
       wkb, srs_guard, srs, geo, get_func_name(), true, false))) {
     LOG_WARN("fail to create geo bin", K(ret), K(wkb));

@@ -52,7 +52,6 @@ class ObInnerSQLConnectionPool : public common::sqlclient::ObISQLConnectionPool
 {
 public:
   friend class ObInnerSQLConnection;
-  friend class ObResourceInnerSQLConnectionPool;
   static constexpr int64_t RP_MAX_FREE_LIST_NUM = 1024;
   class LinkNode : public common::ObDLinkBase<LinkNode>
   {

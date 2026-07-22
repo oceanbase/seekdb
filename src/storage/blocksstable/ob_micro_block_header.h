@@ -38,7 +38,7 @@ public:
   struct {
     uint16_t has_column_checksum_ : 1;
     uint16_t has_string_out_row_ : 1; // flag for furture, varchar and char can be overflowed as lob handle
-    uint16_t all_lob_in_row_ : 1; // compatible with 4.0, we assume that all lob is out row in old data
+    uint16_t all_lob_in_row_ : 1; // true when every LOB value is stored in-row
     uint16_t contains_hash_index_   : 1;
     uint16_t hash_index_offset_from_end_ : 10;
     uint16_t has_min_merged_trans_version_   : 1;

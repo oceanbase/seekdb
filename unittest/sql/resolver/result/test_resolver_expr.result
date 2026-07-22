@@ -22,8 +22,6 @@ create database expr_db;
   "name_case_mode":-1,
   "comment":"",
   "read_only":false,
-  "default_tablegroup_id":-1,
-  "default_tablegroup_name":"",
   "in_recyclebin":false,
   "primary_zone_array": [
   ]
@@ -35,13 +33,13 @@ use expr_db;
 }
 ***************   Case 4   ***************
 create table t1(c1 int primary key, c2 int) partition by hash(c1 + 1) partitions 3
-{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "tablegroup_id":1099511627777, "table_id":18446744073709551615, "table_name":"t1", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":1, "part_option":{"part_func_type":0, "part_func_expr":"c1 + 1", "part_num":3, "partition_cnt_within_partition_table":-1, "max_used_part_id":2}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":3, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}, {"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":1, "name":"p1", "high_bound_val":, "list_row_values":[], "part_idx":1}, "mapping_pg_part_id":-1}, {"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":2, "name":"p2", "high_bound_val":, "list_row_values":[], "part_idx":2}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":17, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":1, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "is_use_bloomfilter":false, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "tablegroup_name":"", "compress_func_name":"zstd_1.0", "row_store_type":1, "store_format":3, "expire_info":"", "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "partition_key_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"expr_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
+{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "table_id":18446744073709551615, "table_name":"t1", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":1, "part_option":{"part_func_type":0, "part_func_expr":"c1 + 1", "part_num":3, "partition_cnt_within_partition_table":-1, "max_used_part_id":2}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":3, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}, {"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":1, "name":"p1", "high_bound_val":, "list_row_values":[], "part_idx":1}, "mapping_pg_part_id":-1}, {"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":2, "name":"p2", "high_bound_val":, "list_row_values":[], "part_idx":2}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":17, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":1, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "compress_func_name":"zstd_1.3.8", "row_store_type":1, "store_format":3, "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "partition_key_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"expr_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
 ***************   Case 5   ***************
 create table t2(c1 int, c2 int, c3 varchar(32), primary key(c2, c3)) partition by key(c2, c3) partitions 3
-{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "tablegroup_id":1099511627777, "table_id":18446744073709551615, "table_name":"t2", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":1, "part_option":{"part_func_type":6, "part_func_expr":"c2, c3", "part_num":3, "partition_cnt_within_partition_table":-1, "max_used_part_id":2}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":3, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}, {"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":1, "name":"p1", "high_bound_val":, "list_row_values":[], "part_idx":1}, "mapping_pg_part_id":-1}, {"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":2, "name":"p2", "high_bound_val":, "list_row_values":[], "part_idx":2}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":18, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":2, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "is_use_bloomfilter":false, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "tablegroup_name":"", "compress_func_name":"zstd_1.0", "row_store_type":1, "store_format":3, "expire_info":"", "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":17, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}, {"length":32, "column_id":18, "type":{"type":"VARCHAR", "collation":"utf8mb4_general_ci", "coercibility":"INVALID"}, "order":0, "fulltext_flag":false}], "capacity":2}, "partition_key_info":{"columns":[{"length":0, "column_id":17, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}, {"length":32, "column_id":18, "type":{"type":"VARCHAR", "collation":"utf8mb4_general_ci", "coercibility":"INVALID"}, "order":0, "fulltext_flag":false}], "capacity":2}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"expr_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
+{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "table_id":18446744073709551615, "table_name":"t2", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":1, "part_option":{"part_func_type":6, "part_func_expr":"c2, c3", "part_num":3, "partition_cnt_within_partition_table":-1, "max_used_part_id":2}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":3, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}, {"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":1, "name":"p1", "high_bound_val":, "list_row_values":[], "part_idx":1}, "mapping_pg_part_id":-1}, {"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":2, "name":"p2", "high_bound_val":, "list_row_values":[], "part_idx":2}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":18, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":2, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "compress_func_name":"zstd_1.3.8", "row_store_type":1, "store_format":3, "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":17, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}, {"length":32, "column_id":18, "type":{"type":"VARCHAR", "collation":"utf8mb4_general_ci", "coercibility":"INVALID"}, "order":0, "fulltext_flag":false}], "capacity":2}, "partition_key_info":{"columns":[{"length":0, "column_id":17, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}, {"length":32, "column_id":18, "type":{"type":"VARCHAR", "collation":"utf8mb4_general_ci", "coercibility":"INVALID"}, "order":0, "fulltext_flag":false}], "capacity":2}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"expr_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
 ***************   Case 6   ***************
 create table t3(c3 int primary key, c4 int)
-{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "tablegroup_id":1099511627777, "table_id":18446744073709551615, "table_name":"t3", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":17, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":1, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "is_use_bloomfilter":false, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "tablegroup_name":"", "compress_func_name":"zstd_1.0", "row_store_type":1, "store_format":3, "expire_info":"", "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "partition_key_info":{"columns":null, "capacity":0}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"expr_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
+{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "table_id":18446744073709551615, "table_name":"t3", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":17, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":1, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "compress_func_name":"zstd_1.3.8", "row_store_type":1, "store_format":3, "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "partition_key_info":{"columns":null, "capacity":0}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"expr_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
 ***************   Case 7   ***************
 create index idx1 on t1(c2) LOCAL
 {
@@ -72,10 +70,8 @@ create index idx1 on t1(c2) LOCAL
       "block_size":16384,
       "replica_num":0,
       "index_status":1,
-      "use_bloom_filter":false,
       "compress_method":"none",
       "comment":"",
-      "tablegroup_name":"",
       "progressive_merge_num":0,
       "primary_zone":"",
       "parser_name":"TAOBAO_CHN",
@@ -91,7 +87,6 @@ create index idx1 on t1(c2) LOCAL
       "simple_table_schema": {
         "tenant_id":1,
         "database_id":-1,
-        "tablegroup_id":-1,
         "table_id":-1,
         "table_name":"",
         "replica_num":0,
@@ -138,7 +133,6 @@ create index idx1 on t1(c2) LOCAL
       "index_column_num":0,
       "rowkey_split_pos":0,
       "block_size":16384,
-      "is_use_bloomfilter":false,
       "progressive_merge_num":0,
       "tablet_size":134217728,
       "pctfree":10,
@@ -159,11 +153,9 @@ create index idx1 on t1(c2) LOCAL
       ],
       "region_replica_num_array": [
       ],
-      "tablegroup_name":"",
       "compress_func_name":"",
       "row_store_type":1,
       "store_format":0,
-      "expire_info":"",
       "view_schema": {
         "view_definition":"",
         "check_option":"none",
@@ -198,7 +190,7 @@ create index idx1 on t1(c2) LOCAL
 }
 ***************   Case 8   ***************
 create table test(c1 int , c2 int, c3 varchar(50), c4 varchar(50), c5 int , c6 double, c7 int, primary key(c1, c2, c3))
-{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "tablegroup_id":1099511627777, "table_id":18446744073709551615, "table_name":"test", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":22, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":3, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "is_use_bloomfilter":false, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "tablegroup_name":"", "compress_func_name":"zstd_1.0", "row_store_type":1, "store_format":3, "expire_info":"", "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}, {"length":0, "column_id":17, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}, {"length":50, "column_id":18, "type":{"type":"VARCHAR", "collation":"utf8mb4_general_ci", "coercibility":"INVALID"}, "order":0, "fulltext_flag":false}], "capacity":3}, "partition_key_info":{"columns":null, "capacity":0}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"expr_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
+{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "table_id":18446744073709551615, "table_name":"test", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":22, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":3, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "compress_func_name":"zstd_1.3.8", "row_store_type":1, "store_format":3, "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}, {"length":0, "column_id":17, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}, {"length":50, "column_id":18, "type":{"type":"VARCHAR", "collation":"utf8mb4_general_ci", "coercibility":"INVALID"}, "order":0, "fulltext_flag":false}], "capacity":3}, "partition_key_info":{"columns":null, "capacity":0}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"expr_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
 ***************   Case 9   ***************
 create index test_indx on test(c4, c5)
 {
@@ -235,10 +227,8 @@ create index test_indx on test(c4, c5)
       "block_size":16384,
       "replica_num":0,
       "index_status":1,
-      "use_bloom_filter":false,
       "compress_method":"none",
       "comment":"",
-      "tablegroup_name":"",
       "progressive_merge_num":0,
       "primary_zone":"",
       "parser_name":"TAOBAO_CHN",
@@ -254,7 +244,6 @@ create index test_indx on test(c4, c5)
       "simple_table_schema": {
         "tenant_id":1,
         "database_id":-1,
-        "tablegroup_id":-1,
         "table_id":-1,
         "table_name":"",
         "replica_num":0,
@@ -301,7 +290,6 @@ create index test_indx on test(c4, c5)
       "index_column_num":2,
       "rowkey_split_pos":0,
       "block_size":16384,
-      "is_use_bloomfilter":false,
       "progressive_merge_num":0,
       "tablet_size":134217728,
       "pctfree":10,
@@ -322,11 +310,9 @@ create index test_indx on test(c4, c5)
       ],
       "region_replica_num_array": [
       ],
-      "tablegroup_name":"",
       "compress_func_name":"",
       "row_store_type":1,
       "store_format":0,
-      "expire_info":"",
       "view_schema": {
         "view_definition":"",
         "check_option":"none",
@@ -417,19 +403,19 @@ create index test_indx on test(c4, c5)
 }
 ***************   Case 10   ***************
 create table non_reserved_key_test(value int primary key)
-{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "tablegroup_id":1099511627777, "table_id":18446744073709551615, "table_name":"non_reserved_key_test", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":16, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":1, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "is_use_bloomfilter":false, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "tablegroup_name":"", "compress_func_name":"zstd_1.0", "row_store_type":1, "store_format":3, "expire_info":"", "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "partition_key_info":{"columns":null, "capacity":0}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"expr_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
+{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "table_id":18446744073709551615, "table_name":"non_reserved_key_test", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":16, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":1, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "compress_func_name":"zstd_1.3.8", "row_store_type":1, "store_format":3, "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "partition_key_info":{"columns":null, "capacity":0}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"expr_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
 ***************   Case 11   ***************
 create table test2(c1 int primary key, c2 varchar(30), c3 timestamp(6) default now(6))
-{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "tablegroup_id":1099511627777, "table_id":18446744073709551615, "table_name":"test2", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":18, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":1, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "is_use_bloomfilter":false, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "tablegroup_name":"", "compress_func_name":"zstd_1.0", "row_store_type":1, "store_format":3, "expire_info":"", "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "partition_key_info":{"columns":null, "capacity":0}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"expr_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
+{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "table_id":18446744073709551615, "table_name":"test2", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":18, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":1, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "compress_func_name":"zstd_1.3.8", "row_store_type":1, "store_format":3, "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "partition_key_info":{"columns":null, "capacity":0}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"expr_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
 ***************   Case 12   ***************
 create table t4(c1 int primary key, c2 int not null, c3 int default 1, c4 int not null default 2)
-{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "tablegroup_id":1099511627777, "table_id":18446744073709551615, "table_name":"t4", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":19, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":1, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "is_use_bloomfilter":false, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "tablegroup_name":"", "compress_func_name":"zstd_1.0", "row_store_type":1, "store_format":3, "expire_info":"", "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "partition_key_info":{"columns":null, "capacity":0}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"expr_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
+{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "table_id":18446744073709551615, "table_name":"t4", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":19, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":1, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "compress_func_name":"zstd_1.3.8", "row_store_type":1, "store_format":3, "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "partition_key_info":{"columns":null, "capacity":0}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"expr_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
 ***************   Case 13   ***************
 create table ta(c1 int primary key, c2 int auto_increment) comment='test', auto_increment= 5
-{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "tablegroup_id":1099511627777, "table_id":18446744073709551615, "table_name":"ta", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":17, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":1, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "is_use_bloomfilter":false, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"test", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "tablegroup_name":"", "compress_func_name":"zstd_1.0", "row_store_type":1, "store_format":3, "expire_info":"", "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":17, "auto_increment":5, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "partition_key_info":{"columns":null, "capacity":0}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"expr_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
+{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "table_id":18446744073709551615, "table_name":"ta", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":17, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":1, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"test", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "compress_func_name":"zstd_1.3.8", "row_store_type":1, "store_format":3, "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":17, "auto_increment":5, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "partition_key_info":{"columns":null, "capacity":0}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"expr_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
 ***************   Case 14   ***************
 create table alter_table1(c1 int primary key, c2 varchar(11) not null default 'c2', c3 tinyint default 3, c4 char(11)) partition by hash(c1) partitions 3
-{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "tablegroup_id":1099511627777, "table_id":18446744073709551615, "table_name":"alter_table1", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":1, "part_option":{"part_func_type":0, "part_func_expr":"c1", "part_num":3, "partition_cnt_within_partition_table":-1, "max_used_part_id":2}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":3, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}, {"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":1, "name":"p1", "high_bound_val":, "list_row_values":[], "part_idx":1}, "mapping_pg_part_id":-1}, {"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":2, "name":"p2", "high_bound_val":, "list_row_values":[], "part_idx":2}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":19, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":1, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "is_use_bloomfilter":false, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "tablegroup_name":"", "compress_func_name":"zstd_1.0", "row_store_type":1, "store_format":3, "expire_info":"", "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "partition_key_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"expr_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
+{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "table_id":18446744073709551615, "table_name":"alter_table1", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":1, "part_option":{"part_func_type":0, "part_func_expr":"c1", "part_num":3, "partition_cnt_within_partition_table":-1, "max_used_part_id":2}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":3, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}, {"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":1, "name":"p1", "high_bound_val":, "list_row_values":[], "part_idx":1}, "mapping_pg_part_id":-1}, {"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":2, "name":"p2", "high_bound_val":, "list_row_values":[], "part_idx":2}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":19, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":1, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "compress_func_name":"zstd_1.3.8", "row_store_type":1, "store_format":3, "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "partition_key_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"expr_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
 ***************   Case 15   ***************
 create index idx_c1 on alter_table1(c1) LOCAL
 {
@@ -460,10 +446,8 @@ create index idx_c1 on alter_table1(c1) LOCAL
       "block_size":16384,
       "replica_num":0,
       "index_status":1,
-      "use_bloom_filter":false,
       "compress_method":"none",
       "comment":"",
-      "tablegroup_name":"",
       "progressive_merge_num":0,
       "primary_zone":"",
       "parser_name":"TAOBAO_CHN",
@@ -479,7 +463,6 @@ create index idx_c1 on alter_table1(c1) LOCAL
       "simple_table_schema": {
         "tenant_id":1,
         "database_id":-1,
-        "tablegroup_id":-1,
         "table_id":-1,
         "table_name":"",
         "replica_num":0,
@@ -526,7 +509,6 @@ create index idx_c1 on alter_table1(c1) LOCAL
       "index_column_num":0,
       "rowkey_split_pos":0,
       "block_size":16384,
-      "is_use_bloomfilter":false,
       "progressive_merge_num":0,
       "tablet_size":134217728,
       "pctfree":10,
@@ -547,11 +529,9 @@ create index idx_c1 on alter_table1(c1) LOCAL
       ],
       "region_replica_num_array": [
       ],
-      "tablegroup_name":"",
       "compress_func_name":"",
       "row_store_type":1,
       "store_format":0,
-      "expire_info":"",
       "view_schema": {
         "view_definition":"",
         "check_option":"none",
@@ -586,13 +566,13 @@ create index idx_c1 on alter_table1(c1) LOCAL
 }
 ***************   Case 16   ***************
 create table t_auto_inc(c1 int primary key, c2 int auto_increment)
-{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "tablegroup_id":1099511627777, "table_id":18446744073709551615, "table_name":"t_auto_inc", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":17, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":1, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "is_use_bloomfilter":false, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "tablegroup_name":"", "compress_func_name":"zstd_1.0", "row_store_type":1, "store_format":3, "expire_info":"", "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":17, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "partition_key_info":{"columns":null, "capacity":0}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"expr_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
+{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "table_id":18446744073709551615, "table_name":"t_auto_inc", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":17, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":1, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "compress_func_name":"zstd_1.3.8", "row_store_type":1, "store_format":3, "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":17, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "partition_key_info":{"columns":null, "capacity":0}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"expr_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
 ***************   Case 17   ***************
 create table coll_table(c1 varchar(10) collate utf8_general_ci, c2 varchar(10) collate utf8_bin, c3 varchar(10), primary key(c1, c2));
-{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "tablegroup_id":1099511627777, "table_id":18446744073709551615, "table_name":"coll_table", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":18, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":2, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "is_use_bloomfilter":false, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "tablegroup_name":"", "compress_func_name":"zstd_1.0", "row_store_type":1, "store_format":3, "expire_info":"", "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":10, "column_id":16, "type":{"type":"VARCHAR", "collation":"utf8mb4_general_ci", "coercibility":"INVALID"}, "order":0, "fulltext_flag":false}, {"length":10, "column_id":17, "type":{"type":"VARCHAR", "collation":"utf8mb4_bin", "coercibility":"INVALID"}, "order":0, "fulltext_flag":false}], "capacity":2}, "partition_key_info":{"columns":null, "capacity":0}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"expr_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
+{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "table_id":18446744073709551615, "table_name":"coll_table", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":18, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":2, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "compress_func_name":"zstd_1.3.8", "row_store_type":1, "store_format":3, "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":10, "column_id":16, "type":{"type":"VARCHAR", "collation":"utf8mb4_general_ci", "coercibility":"INVALID"}, "order":0, "fulltext_flag":false}, {"length":10, "column_id":17, "type":{"type":"VARCHAR", "collation":"utf8mb4_bin", "coercibility":"INVALID"}, "order":0, "fulltext_flag":false}], "capacity":2}, "partition_key_info":{"columns":null, "capacity":0}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"expr_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
 ***************   Case 18   ***************
 create table ts(c1 int primary key, c2 timestamp default current_timestamp on update current_timestamp, c3 int);
-{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "tablegroup_id":1099511627777, "table_id":18446744073709551615, "table_name":"ts", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":18, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":1, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "is_use_bloomfilter":false, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "tablegroup_name":"", "compress_func_name":"zstd_1.0", "row_store_type":1, "store_format":3, "expire_info":"", "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "partition_key_info":{"columns":null, "capacity":0}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"expr_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
+{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "table_id":18446744073709551615, "table_name":"ts", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":18, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":1, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "compress_func_name":"zstd_1.3.8", "row_store_type":1, "store_format":3, "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "partition_key_info":{"columns":null, "capacity":0}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"expr_db", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
 ***************   Case 19   ***************
 set @var_name = "varchar"
 {
@@ -1555,7 +1535,6 @@ show collation like "utf%"
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -2314,7 +2293,6 @@ show collation like "utf%"
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1,
@@ -3015,7 +2993,6 @@ insert t1 values(3, default)
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -3365,7 +3342,6 @@ select -(5)
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -3501,7 +3477,6 @@ select -(1.5)
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -3640,7 +3615,6 @@ select -(1231*-23)
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -3908,7 +3882,6 @@ select -(-(-3.45*23.23))
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -4140,7 +4113,6 @@ select -(-1)
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -4279,7 +4251,6 @@ select (-1) + 1
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -4514,7 +4485,6 @@ select +1 + 1
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -4749,7 +4719,6 @@ select (-1) - 1
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -4984,7 +4953,6 @@ select (-1) / 1
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -5219,7 +5187,6 @@ select (-5) * 5
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -5454,7 +5421,6 @@ select (-1) div 1
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -5689,7 +5655,6 @@ select 5 % 2
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -5924,7 +5889,6 @@ select 1 < 2
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -6159,7 +6123,6 @@ select 1 >= 2
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -6394,7 +6357,6 @@ select 1 > 2
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -6629,7 +6591,6 @@ select 1 >= 2
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -6864,7 +6825,6 @@ select 1 != 2
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -7099,7 +7059,6 @@ select (1 < 2) or ((3 > 5) and (1 != 1))
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -7588,7 +7547,6 @@ select (1 and (1 and (1 or 0)) or (1 and (0 and 1)) and (1 or 0))
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -8273,7 +8231,6 @@ select (1 and (1 and (1 and 0)))
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -8634,7 +8591,6 @@ select 1 or (1 and 0)
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -8934,7 +8890,6 @@ select 1 and (1 and 0)
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -9232,7 +9187,6 @@ select 1 or (1 and 0) or (1 or 2)
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -9730,7 +9684,6 @@ select not(not(1>2))
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -10720,7 +10673,6 @@ select c1,c2,sum(c1 + c2) as c4 from t2 group by c1
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -11391,7 +11343,6 @@ select c1,c2,c3 from t2 order by c1 desc limit 3,3
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -12213,7 +12164,6 @@ select * from t2 where not(c1 > 1 and c2 > 1)
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -13111,7 +13061,6 @@ select * from t2 where (c1 > 1 and c2 > 1) and c3 >1
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -14120,7 +14069,6 @@ select * from t2 where (c1 > 1 or c2 > 1) and c3 >1
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -15162,7 +15110,6 @@ select * from t2 where c1 > 1 or (c1 > 1 and c2 > 1)
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -16149,7 +16096,6 @@ select * from t1 where (c1 > 1 and c2 > 1) or (c1 > 1 and c2 > 1)
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -16723,7 +16669,6 @@ select c1, c2 from t1 where c1 <= all(select c2 from t1)
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -17102,7 +17047,6 @@ select c1, c2 from t1 where c1 <= all(select c2 from t1)
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1,
@@ -17680,7 +17624,6 @@ select c1, c2 from t1 where c1 <= any(select c2 from t1)
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -18059,7 +18002,6 @@ select c1, c2 from t1 where c1 <= any(select c2 from t1)
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1,
@@ -18708,7 +18650,6 @@ select c1, c2 from t2 where c1 <= some(select c2 from t2)
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -19105,7 +19046,6 @@ select c1, c2 from t2 where c1 <= some(select c2 from t2)
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1,
@@ -19693,7 +19633,6 @@ select count(*) from t2 where t2.c2 in (select c1 from t2)
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -20143,7 +20082,6 @@ select count(*) from t2 where t2.c2 in (select c1 from t2)
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1,
@@ -20784,7 +20722,6 @@ select count(*) from t2 where t2.c1 not in (select c1 from t2)
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -21234,7 +21171,6 @@ select count(*) from t2 where t2.c1 not in (select c1 from t2)
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1,
@@ -21772,7 +21708,6 @@ select count(*) from t2 where exists (select c1 from t2)
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -22222,7 +22157,6 @@ select count(*) from t2 where exists (select c1 from t2)
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1,
@@ -22846,7 +22780,6 @@ select c1,c2 from t2 where c2!=100
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -23468,7 +23401,6 @@ select c1,c2 from t2 where c2 = -(100%3)
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -24226,7 +24158,6 @@ select c1,c2 from t2 where c3 = NULL
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -24881,7 +24812,6 @@ select c1,c2 from t2 where c1 between 100 and 200
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -25651,7 +25581,6 @@ select c1,c2 from t2 where c2 <> 100
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -26418,7 +26347,6 @@ select c1,c2 from t2 where c2 <> 100 or c1 = 100
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -27332,7 +27260,6 @@ select c1,c2 from t2 where c2 != 100 or c1 = 100 and c3 = "aa"
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -28019,7 +27946,6 @@ select c1,c2 from t2 where c1 in(10,100)
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -28706,7 +28632,6 @@ select c1,c2 from t2 where c2 not in (10,100)
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -29380,7 +29305,6 @@ select * from t2 where c3 regexp '^a'
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -30090,7 +30014,6 @@ select * from t2 where c3 not regexp 'm'
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -30658,7 +30581,6 @@ select c1 from t2 where c3 regexp '1000|2000'
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -31363,7 +31285,6 @@ select * from t2 where c3 like '%m%'
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -32104,7 +32025,6 @@ select * from t2 where c3 not like '_'
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -32845,7 +32765,6 @@ select * from t2 where c3 not like "ss"
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -33587,7 +33506,6 @@ select * from t2 where c3 not like 2
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -34368,7 +34286,6 @@ select * from t2 where c3 like "//" ESCAPE "/"
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -35075,7 +34992,6 @@ select * from t2 where c3 like '//' escape 2
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -35805,7 +35721,6 @@ select c1,c2 from t2 where c1 between 1 and 10
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -36609,7 +36524,6 @@ select c1,c2 from t2 where c1 not between 1 and 10
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -37413,7 +37327,6 @@ select c1,c2 from t2 where c3 not between "aaa" and "bbb"
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -38007,7 +37920,6 @@ select CASE c3 WHEN 'name1' THEN 'name2' WHEN 'name2' THEN 'name3' ELSE 'name4' 
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -38037,7 +37949,7 @@ select CASE c3 WHEN 'name1' THEN 'name2' WHEN 'name2' THEN 'name3' ELSE 'name4' 
   "is_hierarchical_query":false
 }
 ***************   Case 82   ***************
-select * from t2 order by c1 
+select * from t2 order by c1
 {
   "stmt_type":1,
   "table": [
@@ -38618,7 +38530,6 @@ select * from t2 order by c1
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -39536,7 +39447,6 @@ select avg(c1) as avg_c1 from t2 where c2 > 10
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -40454,7 +40364,6 @@ select avg(distinct c1) as ds from t2 where c3 = "aa"
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -40833,7 +40742,6 @@ select count(*) from (select c1 from t2) as cc where cc.c1 = 1
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -41283,7 +41191,6 @@ select count(*) from (select c1 from t2) as cc where cc.c1 = 1
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1,
@@ -41992,7 +41899,6 @@ select count(c1) from t2 where c3 = "aa"
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -42719,7 +42625,6 @@ select max(c1) from t2 where c1 not in (select c2 from t2)
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -43116,7 +43021,6 @@ select max(c1) from t2 where c1 not in (select c2 from t2)
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1,
@@ -43847,7 +43751,6 @@ select min(c1) from t2 where c1 not in (select c2 from t2)
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -44244,7 +44147,6 @@ select min(c1) from t2 where c1 not in (select c2 from t2)
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1,
@@ -44951,7 +44853,6 @@ select sum(c1) as sum_c1 from t2 where c1 > 10
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -46343,7 +46244,6 @@ select count(*) as num, min(c1) as c1_min, max(c1) as max_c1, avg(c1) as c1_avg 
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -46994,7 +46894,6 @@ select concat (c3, '(', c2 ,')') as ncc from t2 order by c1
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -47759,7 +47658,6 @@ update t2 set c3 = "aaa" where c1 > all(select c1 from t1)
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -48534,7 +48432,6 @@ select c1 as cc1 from t2 where c1 > (select c2 as cc2 from t2)
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -48931,7 +48828,6 @@ select c1 as cc1 from t2 where c1 > (select c2 as cc2 from t2)
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1,
@@ -49376,7 +49272,6 @@ select * from (select c2 , case c3 when 'aa' then 'bb' when 'cc' then 'dd' else 
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -50093,7 +49988,6 @@ select * from (select c2 , case c3 when 'aa' then 'bb' when 'cc' then 'dd' else 
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1,
@@ -50694,7 +50588,6 @@ select c1 from t1 where c2 not in (select c2 as cc2 from t2)
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -51091,7 +50984,6 @@ select c1 from t1 where c2 not in (select c2 as cc2 from t2)
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1,
@@ -52148,7 +52040,6 @@ select * from t2 where (c1, c2, c3) in ((0, 1, 2), (3, 4, 5))
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -52934,7 +52825,6 @@ select * from t2 where c1 in (1, 2, c2)
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -53633,7 +53523,6 @@ select * from t2 where c1 in (select count(*) from t1)
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -54003,7 +53892,6 @@ select * from t2 where c1 in (select count(*) from t1)
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1,

@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_role_cmd_executor.h"
-#include "rootserver/ob_rs_serial_call.h"
-#include "rootserver/ob_root_service.h"
+#include "rootserver/ob_local_ddl_serial_call.h"
+#include "rootserver/ob_local_management_service.h"
 
 #include "lib/encrypt/ob_encrypted_helper.h"
 #include "sql/resolver/dcl/ob_create_role_stmt.h"
@@ -65,7 +65,7 @@ int ObCreateRoleExecutor::execute(ObExecContext &ctx, ObCreateRoleStmt &stmt)
       user_info.set_is_locked(true);
       OZ (arg.user_infos_.push_back(user_info));
     }
-    OZ (rootserver::serial_call([&]{ return GCTX.root_service_->create_user(arg, failed_index); }));
+    OZ (rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_user(arg, failed_index); }));
   }
 
   return ret;
@@ -109,7 +109,7 @@ int ObAlterRoleExecutor::execute(ObExecContext &ctx, ObAlterRoleStmt &stmt)
   arg.pwd_enc_ = pwd_enc;
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->alter_role(arg); }))) {
+  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->alter_role(arg); }))) {
     LOG_WARN("Alter user error", K(ret));
   }
   return ret;

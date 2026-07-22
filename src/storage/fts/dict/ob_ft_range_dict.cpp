@@ -224,7 +224,7 @@ int ObFTRangeDict::build_ranges_concurrently_thread_pool(const ObFTDictDesc &des
       handles.reset();
     } else {
       DATBuilderThreadPool pool;
-      pool.set_run_wrapper(MTL_CTX());
+      pool.set_run_wrapper(share::server_runtime());
       pool.set_tries(&all_tries);
       pool.set_desc(&desc);
       pool.set_thread_count(static_cast<int64_t>(all_tries.size()));

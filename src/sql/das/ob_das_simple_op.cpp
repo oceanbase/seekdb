@@ -42,12 +42,6 @@ int ObDASSimpleOp::init_task_info(uint32_t row_extend_size)
   return ret;
 }
 
-int ObDASSimpleOp::swizzling_remote_task(ObDASRemoteInfo *remote_info)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(remote_info);
-  return ret;
-}
 OB_SERIALIZE_MEMBER((ObDASSimpleOp, ObIDASTaskOp));
 
 OB_SERIALIZE_MEMBER(ObDASEmptyCtDef);
@@ -71,37 +65,6 @@ int ObDASSplitRangesOp::open_op()
   return ret;
 }
 
-int ObDASSplitRangesOp::fill_task_result(ObIDASTaskResult &task_result, bool &has_more, int64_t &memory_limit)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(memory_limit);
-#if !defined(NDEBUG)
-  CK(typeid(task_result) == typeid(ObDASSplitRangesResult));
-#endif
-  if (OB_SUCC(ret)) {
-    ObDASSplitRangesResult &result = static_cast<ObDASSplitRangesResult&>(task_result);
-    result.assign(multi_range_split_array_);
-    has_more = false;
-  }
-  return ret;
-}
-
-int ObDASSplitRangesOp::decode_task_result(ObIDASTaskResult *task_result)
-{
-  int ret = OB_SUCCESS;
-#if !defined(NDEBUG)
-  CK(typeid(*task_result) == typeid(ObDASSplitRangesResult));
-  CK(task_id_ == task_result->get_task_id());
-#endif
-  if (OB_SUCC(ret)) {
-    ObDASSplitRangesResult *result = static_cast<ObDASSplitRangesResult*>(task_result);
-    if (OB_FAIL(multi_range_split_array_.assign(result->get_split_array()))) {
-      LOG_WARN("failed to decode multi_range_split_array", K(ret));
-    }
-  }
-  return ret;
-}
-
 int ObDASSplitRangesOp::init(const common::ObIArray<ObStoreRange> &ranges, int64_t expected_task_count, const int64_t timeout_us)
 {
   int ret = OB_SUCCESS;
@@ -118,90 +81,6 @@ OB_SERIALIZE_MEMBER((ObDASSplitRangesOp, ObIDASTaskOp),
                      expected_task_count_,
                      timeout_us_);
 
-ObDASSplitRangesResult::ObDASSplitRangesResult()
-  : ObIDASTaskResult(), result_alloc_(nullptr) {}
-
-ObDASSplitRangesResult::~ObDASSplitRangesResult()
-{
-  multi_range_split_array_.reset();
-}
-
-int ObDASSplitRangesResult::init(const ObIDASTaskOp &op, common::ObIAllocator &alloc)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(op);
-  result_alloc_ = &alloc;
-  multi_range_split_array_.reset();
-  return ret;
-}
-
-int ObDASSplitRangesResult::reuse()
-{
-  int ret = OB_SUCCESS;
-  multi_range_split_array_.reuse();
-  return ret;
-}
-
-int ObDASSplitRangesResult::assign(const ObArrayArray<ObStoreRange> &array)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(multi_range_split_array_.assign(array))) {
-    LOG_WARN("failed to assign multi ranges array", K(ret));
-  }
-  return ret;
-}
-
-OB_DEF_SERIALIZE_SIZE(ObDASSplitRangesResult)
-{
-  int64_t len = 0;
-  BASE_ADD_LEN((ObDASSplitRangesResult, ObIDASTaskResult));
-  OB_UNIS_ADD_LEN(multi_range_split_array_);
-  return len;
-}
-
-OB_DEF_SERIALIZE(ObDASSplitRangesResult)
-{
-  int ret = OB_SUCCESS;
-  BASE_SER((ObDASSplitRangesResult, ObIDASTaskResult));
-  OB_UNIS_ENCODE(multi_range_split_array_);
-  return ret;
-}
-
-OB_DEF_DESERIALIZE(ObDASSplitRangesResult)
-{
-  int ret = OB_SUCCESS;
-  BASE_DESER((ObDASSplitRangesResult, ObIDASTaskResult));
-  OB_UNIS_DECODE(multi_range_split_array_);
-
-  if (OB_ISNULL(result_alloc_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null ptr result_alloc", K(ret));
-  } else {
-    int64_t count = multi_range_split_array_.count();
-    for (int64_t i = 0; OB_SUCC(ret) && i < count; i++) {
-      for (int64_t j = 0; OB_SUCC(ret) && j < multi_range_split_array_.count(i); j++) {
-        ObStoreRange &store_range = multi_range_split_array_.at(i, j);
-
-        // deep copy ObRowKey of store_range
-        const ObStoreRowkey &start_key = store_range.get_start_key();
-        const ObStoreRowkey &end_key = store_range.get_end_key();
-        ObStoreRowkey dst_start_key;
-        ObStoreRowkey dst_end_key;
-        if (OB_FAIL(start_key.deep_copy(dst_start_key, *result_alloc_))) {
-          LOG_WARN("failed to deep copy start key", K(start_key), K(ret));
-        } else if (OB_FAIL(end_key.deep_copy(dst_end_key, *result_alloc_))) {
-          LOG_WARN("failed to deep copy end key", K(start_key), K(ret));
-        } else {
-          store_range.set_start_key(dst_start_key);
-          store_range.set_end_key(dst_end_key);
-        }
-      }
-    }
-  }
-
-  return ret;
-}
-
 ObDASRangesCostOp::ObDASRangesCostOp(common::ObIAllocator &op_alloc)
   : ObDASSimpleOp(op_alloc), total_size_(0), timeout_us_(0) {}
 
@@ -214,35 +93,6 @@ int ObDASRangesCostOp::open_op()
                                                     ranges_,
                                                     total_size_))) {
     LOG_WARN("failed to get multi ranges cost", K(ret), K_(tablet_id));
-  }
-  return ret;
-}
-
-int ObDASRangesCostOp::fill_task_result(ObIDASTaskResult &task_result, bool &has_more, int64_t &memory_limit)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(memory_limit);
-#if !defined(NDEBUG)
-  CK(typeid(task_result) == typeid(ObDASRangesCostResult));
-#endif
-  if (OB_SUCC(ret)) {
-    ObDASRangesCostResult &result = static_cast<ObDASRangesCostResult&>(task_result);
-    result.set_total_size(total_size_);
-    has_more = false;
-  }
-  return ret;
-}
-
-int ObDASRangesCostOp::decode_task_result(ObIDASTaskResult *task_result)
-{
-  int ret = OB_SUCCESS;
-#if !defined(NDEBUG)
-  CK(typeid(*task_result) == typeid(ObDASRangesCostResult));
-  CK(task_id_ == task_result->get_task_id());
-#endif
-  if (OB_SUCC(ret)) {
-    ObDASRangesCostResult *result = static_cast<ObDASRangesCostResult*>(task_result);
-    total_size_ = result->get_total_size();
   }
   return ret;
 }
@@ -261,27 +111,6 @@ OB_SERIALIZE_MEMBER((ObDASRangesCostOp, ObIDASTaskOp),
                      ranges_,
                      total_size_,
                      timeout_us_);
-
-ObDASRangesCostResult::ObDASRangesCostResult()
-  : ObIDASTaskResult(), total_size_(0) {}
-
-int ObDASRangesCostResult::init(const ObIDASTaskOp &op, common::ObIAllocator &alloc)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(op);
-  UNUSED(alloc);
-  total_size_ = 0;
-  return ret;
-}
-
-int ObDASRangesCostResult::reuse()
-{
-  int ret = OB_SUCCESS;
-  return ret;
-}
-
-OB_SERIALIZE_MEMBER((ObDASRangesCostResult, ObIDASTaskResult),
-                     total_size_);
 
 int ObDASSimpleUtils::split_multi_ranges(ObExecContext &exec_ctx,
                                          ObDASTabletLoc *tablet_loc,

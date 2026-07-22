@@ -19,7 +19,7 @@
 
 #include "lib/container/ob_se_array.h"
 #include "sql/engine/basic/ob_chunk_datum_store.h"
-#include "sql/engine/ob_tenant_sql_memory_manager.h"
+#include "sql/engine/ob_sql_memory_manager.h"
 #include "sql/engine/ob_sql_mem_mgr_processor.h"
 #include "sql/engine/ob_io_event_observer.h"
 

@@ -42,9 +42,9 @@ class TestIColumnEncoder : public ::testing::Test
 {
 public:
   TestIColumnEncoder(const bool is_multi_version_row = false)
-    : tenant_ctx_(OB_SERVER_TENANT_ID), is_multi_version_row_(is_multi_version_row)
+    : runtime_state_(), is_multi_version_row_(is_multi_version_row)
   {
-    share::ObTenantEnv::set_tenant(&tenant_ctx_);
+    share::g_server_runtime = &runtime_state_;
   }
   virtual ~TestIColumnEncoder() {}
   virtual void SetUp();
@@ -59,18 +59,16 @@ protected:
   ObRowkeyReadInfo read_info_;
   ObArenaAllocator allocator_;
   common::ObArray<share::schema::ObColDesc> col_descs_;
-  share::ObTenantBase tenant_ctx_;
+  share::ObServerRuntimeState runtime_state_;
   bool is_multi_version_row_;
 };
 
 void TestIColumnEncoder::SetUp()
 {
-  oceanbase::ObClusterVersion::get_instance().update_data_version(DATA_CURRENT_VERSION);
   const int64_t tid = 200001;
   ObTableSchema table;
   ObColumnSchemaV2 col;
   table.reset();
-  table.set_tablegroup_id(1);
   table.set_database_id(1);
   table.set_table_id(tid);
   table.set_table_name("test_micro_decoder_schema");
@@ -111,7 +109,7 @@ void TestIColumnEncoder::SetUp()
   ctx_.rowkey_column_cnt_ = rowkey_cnt_;
   ctx_.column_cnt_ = is_multi_version_row_ ? column_cnt_ + 2 : column_cnt_;
   ctx_.col_descs_ = &col_descs_;
-  ctx_.major_working_cluster_version_=cal_version(3, 1, 0, 0);
+  ctx_.data_format_version_=cal_version(3, 1, 0, 0);
   ctx_.row_store_type_ = common::ENCODING_ROW_STORE;
   ctx_.compressor_type_ = common::ObCompressorType::NONE_COMPRESSOR;
 }
@@ -138,7 +136,6 @@ public:
 
 TEST_F(TestEncoderOverFlow, test_append_row_with_timestamp_and_max_estimate_limit)
 {
-  common::ObClusterVersion::get_instance().update_cluster_version(cal_version(2, 2, 0, 75));
   ObMicroBlockEncoder encoder;
   ASSERT_EQ(OB_SUCCESS, encoder.init(ctx_));
 
@@ -357,7 +354,7 @@ TEST_F(TestStringDiffNullLength, test_string_diff_null_length)
        ObColumnHeader::Type::STRING_DIFF};
   ctx_.column_encodings_ = column_encoding_array;
   ctx_.micro_block_size_ = 1 << 20; // 1M
-  ctx_.major_working_cluster_version_ = DATA_VERSION_1_0_0_0;
+  ctx_.data_format_version_ = cal_version(1, 0, 0, 0);
   ObMicroBlockEncoder encoder;
   ASSERT_EQ(OB_SUCCESS, encoder.init(ctx_));
 

@@ -85,15 +85,7 @@ void ObVirtualSqlPlanStatistics::reset()
   iter_end_ = false;
 }
 
-int ObVirtualSqlPlanStatistics::inner_open()
-{
-  int ret = OB_SUCCESS;
-  return ret;
-}
-
-
-
-int ObVirtualSqlPlanStatistics::get_row_from_specified_tenant(bool &is_end)
+int ObVirtualSqlPlanStatistics::get_next_operator_stat_row(bool &is_end)
 {
   int ret = OB_SUCCESS;
   // !!! Must add ObReqTimeGuard before referencing plan cache resources
@@ -127,7 +119,7 @@ int ObVirtualSqlPlanStatistics::get_row_from_specified_tenant(bool &is_end)
     }
   }
   SERVER_LOG(DEBUG,
-             "add plan from a tenant",
+             "add plan",
              K(ret));
   return ret;
 }
@@ -209,13 +201,13 @@ int ObVirtualSqlPlanStatistics::inner_get_next_row(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   bool is_sub_end = false;
-  // At most one MOD_SCOPE pass
+  // At most one SERVER_MODULE_SCOPE pass
   if (iter_end_) {
     ret = OB_ITER_END;
   } else {
-    MOD_SCOPE {
-      if (OB_FAIL(get_row_from_specified_tenant(is_sub_end))) {
-        SERVER_LOG(WARN, "fail to insert plan by tenant id", K(ret));
+    SERVER_MODULE_SCOPE {
+      if (OB_FAIL(get_next_operator_stat_row(is_sub_end))) {
+        SERVER_LOG(WARN, "fail to get plan statistics", K(ret));
       } else if (is_sub_end) {
         iter_end_ = true;
         ret = OB_ITER_END;
@@ -229,4 +221,3 @@ int ObVirtualSqlPlanStatistics::inner_get_next_row(common::ObNewRow *&row)
 }
 } //end namespace observer
 } //end namespace oceanbase
-

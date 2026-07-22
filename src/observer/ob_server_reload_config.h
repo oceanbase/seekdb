@@ -26,8 +26,6 @@ namespace oceanbase
 namespace observer
 {
 
-int set_cluster_name_hash(const common::ObString &cluster_name);
-int calc_cluster_name_hash(const common::ObString &cluster_name, uint64_t &cluster_name_hash);
 class ObServerReloadConfig
   : public common::ObReloadConfig
 {
@@ -37,8 +35,8 @@ public:
 
   int operator()();
 private:
-  void reload_tenant_scheduler_config_();
-  void reload_tenant_freezer_config_();
+  void reload_scheduler_config_();
+  void reload_memstore_freezer_config_();
 private:
   ObGlobalContext &gctx_;
 };

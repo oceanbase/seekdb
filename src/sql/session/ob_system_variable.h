@@ -247,7 +247,6 @@ public:
   inline bool is_influence_pl() const { return 0 != (flags_ & share::ObSysVarFlag::INFLUENCE_PL); }
   inline bool is_enum_type() const { return is_enum_type_; }
   inline bool is_mysql_only() const { return 0 != (flags_ & share::ObSysVarFlag::MYSQL_ONLY); }
-  inline bool is_with_upgrade() const { return 0 != (flags_ & share::ObSysVarFlag::WITH_UPGRADE); }
   inline bool is_need_serialize() const { return 0 != (flags_ & share::ObSysVarFlag::NEED_SERIALIZE); }
   const common::ObString get_name() const;
   static int get_charset_var_and_val_by_collation(const common::ObString &coll_var_name,
@@ -487,31 +486,6 @@ private:
                                    common::ObObj &out_val);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObCharsetSysVar);
-};
-
-class ObVersionSysVar : public ObBasicSysVar
-{
-public:
-  ObVersionSysVar(OnCheckAndConvertFunc on_check_and_convert = NULL,
-                  OnUpdateFunc on_update = NULL,
-                  ToObjFunc to_select_obj = NULL,
-                  ToStrFunc to_show_str = NULL,
-                  GetMetaTypeFunc get_meta_type = NULL)
-      : ObBasicSysVar(on_check_and_convert,
-                      on_update,
-                      to_select_obj,
-                      to_show_str,
-                      get_meta_type)
-  {
-  }
-  virtual ~ObVersionSysVar() {}
-private:
-  virtual int do_check_and_convert(sql::ObExecContext &ctx,
-                                   const ObSetVar &set_var,
-                                   const common::ObObj &in_val,
-                                   common::ObObj &out_val);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObVersionSysVar);
 };
 
 /////////////////////////////
@@ -901,6 +875,11 @@ public:
                                                      const ObBasicSysVar &sys_var,
                                                      const common::ObObj &in_val,
                                                      common::ObObj &out_val);
+  static int check_and_convert_default_storage_engine(sql::ObExecContext &ctx,
+                                                      const ObSetVar &set_var,
+                                                      const ObBasicSysVar &sys_var,
+                                                      const common::ObObj &in_val,
+                                                      common::ObObj &out_val);
 private:
   static int check_session_readonly(sql::ObExecContext &ctx,
                                     const ObSetVar &set_var,
@@ -950,6 +929,10 @@ public:
                               const ObBasicSysVar &sys_var, common::ObObj &result_obj);
   static int to_obj_sql_mode(common::ObIAllocator &allocator, const sql::ObBasicSessionInfo &session,
                              const ObBasicSysVar &sys_var, common::ObObj &result_obj);
+  static int to_obj_default_storage_engine(common::ObIAllocator &allocator,
+                                           const sql::ObBasicSessionInfo &session,
+                                           const ObBasicSysVar &sys_var,
+                                           common::ObObj &result_obj);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSysVarToObjFuncs);
 };
@@ -966,6 +949,10 @@ public:
                               const ObBasicSysVar &sys_var, common::ObString &result_str);
   static int to_str_sql_mode(common::ObIAllocator &allocator, const sql::ObBasicSessionInfo &session,
                              const ObBasicSysVar &sys_var, common::ObString &result_str);
+  static int to_str_default_storage_engine(common::ObIAllocator &allocator,
+                                           const sql::ObBasicSessionInfo &session,
+                                           const ObBasicSysVar &sys_var,
+                                           common::ObString &result_str);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSysVarToStrFuncs);
 };

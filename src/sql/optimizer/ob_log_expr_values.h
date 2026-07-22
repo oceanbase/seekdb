@@ -93,7 +93,6 @@ class ObLogExprValues : public ObLogicalOperator
     inline void set_values_table_def(ObValuesTableDef *table_def) { table_def_ = table_def; }
   private:
     int construct_array_binding_values();
-    int construct_sequence_values();
   private:
     common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> value_exprs_;
     common::ObSEArray<ObColumnRefRawExpr*, 4, common::ModulePageAllocator, true> value_desc_;

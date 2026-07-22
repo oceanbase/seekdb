@@ -96,7 +96,6 @@ int ObLobPieceBuilder::generate_aux_lob_piece_schema(
     }
     if (OB_SUCC(ret)) {
       aux_lob_piece_schema.set_micro_index_clustered(data_schema.get_micro_index_clustered());
-      aux_lob_piece_schema.set_enable_macro_block_bloom_filter(data_schema.get_enable_macro_block_bloom_filter());
     }
 
   }
@@ -137,11 +136,6 @@ int ObLobPieceBuilder::set_basic_infos(
   // priority same with data table schema
   
   aux_lob_piece_schema.set_database_id(data_schema.get_database_id());
-  if (is_inner_table(data_schema.get_table_id())) {
-    aux_lob_piece_schema.set_tablegroup_id(data_schema.get_tablegroup_id());
-  } else {
-    aux_lob_piece_schema.set_tablegroup_id(OB_INVALID_ID);
-  }
   aux_lob_piece_schema.set_load_type(data_schema.get_load_type());
   aux_lob_piece_schema.set_def_type(data_schema.get_def_type());
   aux_lob_piece_schema.set_charset_type(data_schema.get_charset_type());
@@ -158,7 +152,6 @@ int ObLobPieceBuilder::set_basic_infos(
   //aux_lob_piece_schema.set_table_mode(data_schema.get_table_mode());
   aux_lob_piece_schema.set_block_size(data_schema.get_block_size());
   aux_lob_piece_schema.set_pctfree(data_schema.get_pctfree());
-  aux_lob_piece_schema.set_storage_format_version(data_schema.get_storage_format_version());
   aux_lob_piece_schema.set_progressive_merge_round(data_schema.get_progressive_merge_round());
   if (OB_FAIL(aux_lob_piece_schema.set_compress_func_name(data_schema.get_compress_func_name()))) {
     LOG_WARN("set_compress_func_name failed", K(data_schema));

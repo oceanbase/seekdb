@@ -18,58 +18,42 @@
 #define OBDEV_SRC_SQL_DAS_OB_DATA_ACCESS_SERVICE_H_
 #include "lib/atomic/ob_atomic.h"
 #include "share/ob_define.h"
-#include "sql/das/ob_das_task_result.h"
+#include "sql/das/ob_das_id_allocator.h"
 #include "sql/das/ob_das_ref.h"
 namespace oceanbase
 {
 namespace sql
 {
 class ObDASRef;
-class ObDASTaskArg;
-class ObDASTaskResp;
 class ObPhyTableLocation;
-class ObDASExtraData;
 class ObDataAccessService
 {
 public:
   ObDataAccessService();
   ~ObDataAccessService() = default;
-  static int mtl_init(ObDataAccessService *&das);
-  static void mtl_destroy(ObDataAccessService *&das);
-  int init(const common::ObAddr &self_addr);
+  static void server_module_destroy(ObDataAccessService *&das);
   // Enable DAS Task partition related transaction control, and execute the op corresponding to the task
-  int execute_das_task(ObDASRef &das_ref,
-      ObDasAggregatedTask &task_ops, bool async = true);
+  int execute_das_task(ObDASRef &das_ref, ObDasAggregatedTask &task_ops);
   // Close the execution flow of DAS Task, release the resources held by the task, and end the related transaction control
   int end_das_task(ObDASRef &das_ref, ObIDASTaskOp &task_op);
   int get_das_task_id(int64_t &das_id);
   int rescan_das_task(ObDASRef &das_ref, ObDASScanOp &scan_op);
-  ObDASTaskResultMgr &get_task_res_mgr() { return task_result_mgr_; }
-  const common::ObAddr &get_ctrl_addr() const { return ctrl_addr_; };
   void set_max_concurrency(int32_t cpu_count);
   int32_t get_das_concurrency_limit() const { return das_concurrency_limit_; };
   int retry_das_task(ObDASRef &das_ref, ObIDASTaskOp &task_op);
-  int setup_extra_result(ObDASRef &das_ref,
-                        const ObDASTaskResp &task_resp,
-                        const ObIDASTaskOp *task_op,
-                        ObDASExtraData *&extra_result);
-  int process_task_resp(ObDASRef &das_ref, const ObDASTaskResp &task_resp, const common::ObSEArray<ObIDASTaskOp*, 2> &task_ops);
   int parallel_execute_das_task(common::ObIArray<ObIDASTaskOp *> &task_list);
   int parallel_submit_das_task(ObDASRef &das_ref, ObDasAggregatedTask &agg_task);
   int push_parallel_task(ObDASRef &das_ref, ObDasAggregatedTask &agg_task, int32_t group_id);
-  int collect_das_task_info(ObIArray<ObIDASTaskOp*> &task_list, ObDASRemoteInfo &remote_info);
+  int collect_das_copy_refs(ObIArray<ObIDASTaskOp*> &task_list, ObDASCopyContext &copy_context);
 private:
-  int execute_dist_das_task(ObDASRef &das_ref,
-      ObDasAggregatedTask &task_ops, bool async = true);
+  int execute_local_das_task(ObDasAggregatedTask &task_ops);
   int clear_task_exec_env(ObDASRef &das_ref, ObIDASTaskOp &task_op);
   int refresh_task_location_info(ObDASRef &das_ref, ObIDASTaskOp &task_op);
   int do_local_das_task(ObIArray<ObIDASTaskOp*> &task_list);
-  int collect_das_task_attach_info(ObDASRemoteInfo &remote_info,
+  int collect_das_copy_attach_refs(ObDASCopyContext &copy_context,
                                    ObDASBaseRtDef *attach_rtdef);
 private:
-  common::ObAddr ctrl_addr_;
-  int64_t next_das_id_ CACHE_ALIGNED;
-  ObDASTaskResultMgr task_result_mgr_;
+  ObDASIDAllocator id_allocator_;
   int32_t das_concurrency_limit_;
 };
 }  // namespace sql

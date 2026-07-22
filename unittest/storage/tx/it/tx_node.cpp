@@ -25,13 +25,6 @@
 } while(0);
 
 namespace oceanbase {
-namespace common {
-int ObClusterVersion::get_tenant_data_version(uint64_t &data_version)
-{
-  data_version = DATA_CURRENT_VERSION;
-  return OB_SUCCESS;
-}
-}
 namespace share
 {
 void* ObMemstoreAllocator::alloc(AllocHandle& handle, int64_t size, const int64_t expire_ts)
@@ -89,9 +82,7 @@ ObTxNode::ObTxNode(const ObAddr &addr,
                    MsgBus &msg_bus) :
   name_(name_buf_),
   addr_(addr),
-  tenant_id_(1001),
-  tenant_(0, 10),
-  fake_part_trans_ctx_pool_(false, false, 4),
+  runtime_state_(),
   memtable_(NULL),
   msg_consumer_(get_identifer_str(),
                 &msg_queue_,
@@ -102,16 +93,14 @@ ObTxNode::ObTxNode(const ObAddr &addr,
   fake_tx_log_adapter_(nullptr),
   owns_log_adapter_(false)
 {
-  fake_part_trans_ctx_pool_.init();
   addr.to_string(name_buf_, sizeof(name_buf_));
   msg_consumer_.set_name(name_);
-  provider_.tenant_freezer_ = &fake_tenant_freezer_;
-  provider_.part_trans_ctx_obj_pool_ = &fake_part_trans_ctx_pool_;
+  provider_.memstore_freezer_ = &fake_memstore_freezer_;
   fake_shared_mem_alloc_mgr_.init();
   provider_.shared_mem_alloc_mgr_ = &fake_shared_mem_alloc_mgr_;
   share::g_mp = &provider_;
-  tenant_.start();
-  ObTenantEnv::set_tenant(&tenant_);
+  runtime_state_.init();
+  share::g_server_runtime = &runtime_state_;
   share::g_mp = &provider_;
   ObTableHandleV2 lock_memtable_handle;
   lock_memtable_handle.set_table(&lock_memtable_, &t3m_, ObITable::LOCK_MEMTABLE);
@@ -121,9 +110,9 @@ ObTxNode::ObTxNode(const ObAddr &addr,
   fake_lock_table_.is_inited_ = true;
   fake_lock_table_.parent_ = &fake_ls_;
   fake_lock_table_.lock_mt_mgr_ = &(fake_ls_.ls_tablet_svr_.lock_memtable_mgr_);
-  fake_tenant_freezer_.is_inited_ = true;
-  fake_tenant_freezer_.tenant_info_.is_loaded_ = true;
-  fake_tenant_freezer_.tenant_info_.mem_memstore_limit_ = INT64_MAX;
+  fake_memstore_freezer_.is_inited_ = true;
+  fake_memstore_freezer_.memstore_info_.is_loaded_ = true;
+  fake_memstore_freezer_.memstore_info_.mem_memstore_limit_ = INT64_MAX;
   // memtable.freezer
   fake_freezer_.freeze_flag_ = 0;// is_freeze() = false;
   // txn service
@@ -161,7 +150,7 @@ ObTxDescGuard ObTxNode::get_tx_guard() {
 }
 int ObTxNode::start() {
   int ret = OB_SUCCESS;
-  ObTenantEnv::set_tenant(&tenant_);
+  share::g_server_runtime = &runtime_state_;
   share::g_mp = &provider_;
 
   if (nullptr == fake_tx_log_adapter_) {
@@ -232,7 +221,7 @@ void ObTxNode::wait_tx_log_synced()
 ObTxNode::~ObTxNode() __attribute__((optnone)) {
   int ret = OB_SUCCESS;
   TRANS_LOG(INFO, "destroy TxNode", KPC(this));
-  ObTenantEnv::set_tenant(&tenant_);
+  share::g_server_runtime = &runtime_state_;
   share::g_mp = &provider_;
   fake_tx_table_.tx_ctx_table_.ls_tx_ctx_mgr_ = nullptr;
   bool is_tx_clean = false;
@@ -263,7 +252,7 @@ ObTxNode::~ObTxNode() __attribute__((optnone)) {
     delete fake_tx_log_adapter_;
   }
   FAST_FAIL();
-  ObTenantEnv::set_tenant(NULL);
+  share::g_server_runtime = &share::g_bootstrap_server_runtime;
 }
 
 int ObTxNode::create_memtable_(const int64_t tablet_id, memtable::ObMemtable *&mt) {
@@ -338,7 +327,7 @@ int ObTxNode::sync_recv_msg(const ObAddr &sender, ObString &m, ObString &resp)
 
 int ObTxNode::handle_msg_(MsgPack *pkt)
 {
-  ObTenantEnv::set_tenant(&tenant_);
+  share::g_server_runtime = &runtime_state_;
   share::g_mp = &provider_;
   TRANS_LOG(INFO, "begin to handle_msg", "msg_ptr", OB_P(pkt->body_.ptr()), KPC(this));
   int ret = OB_NOT_SUPPORTED;
@@ -370,7 +359,7 @@ int ObTxNode::read(const ObTxReadSnapshot &snapshot,
 {
   TRANS_LOG(INFO, "read", K(key), K(snapshot), KPC(this));
   int ret = OB_SUCCESS;
-  ObTenantEnv::set_tenant(&tenant_);
+  share::g_server_runtime = &runtime_state_;
   share::g_mp = &provider_;
   ObStoreCtx read_store_ctx;
   read_store_ctx.ls_ = &fake_ls_;
@@ -465,7 +454,7 @@ int ObTxNode::write(ObTxDesc &tx,
 {
   TRANS_LOG(INFO, "write", K(key), K(value), K(snapshot), K(tx), KPC(this));
   int ret = OB_SUCCESS;
-  ObTenantEnv::set_tenant(&tenant_);
+  share::g_server_runtime = &runtime_state_;
   share::g_mp = &provider_;
   ObStoreCtx write_store_ctx;
   auto iter = new ObTableStoreIterator();
@@ -532,7 +521,7 @@ int ObTxNode::write_begin(ObTxDesc &tx,
                           ObStoreCtx& write_store_ctx)
 {
   int ret = OB_SUCCESS;
-  ObTenantEnv::set_tenant(&tenant_);
+  share::g_server_runtime = &runtime_state_;
   share::g_mp = &provider_;
   auto iter = new ObTableStoreIterator();
   iter->reset();
@@ -551,7 +540,7 @@ int ObTxNode::write_begin(ObTxDesc &tx,
 int ObTxNode::write_one_row(ObStoreCtx& write_store_ctx, const int64_t key, const int64_t value)
 {
   int ret = OB_SUCCESS;
-  ObTenantEnv::set_tenant(&tenant_);
+  share::g_server_runtime = &runtime_state_;
   share::g_mp = &provider_;
 
   ObArenaAllocator allocator;
@@ -600,7 +589,7 @@ int ObTxNode::write_one_row(ObStoreCtx& write_store_ctx, const int64_t key, cons
 int ObTxNode::write_end(ObStoreCtx& write_store_ctx)
 {
   int ret = OB_SUCCESS;
-  ObTenantEnv::set_tenant(&tenant_);
+  share::g_server_runtime = &runtime_state_;
   share::g_mp = &provider_;
 
   delete write_store_ctx.table_iter_;
@@ -615,7 +604,7 @@ int ObTxNode::replay(const void *buffer,
                      const palf::LSN &lsn,
                      const int64_t ts_ns)
 {
-  ObTenantEnv::set_tenant(&tenant_);
+  share::g_server_runtime = &runtime_state_;
   share::g_mp = &provider_;
   int ret = OB_SUCCESS;
   logservice::ObLogBaseHeader base_header;

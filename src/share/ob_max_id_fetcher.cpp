@@ -31,26 +31,23 @@ namespace share
 using namespace share::schema;
 
 const char *ObMaxIdFetcher::max_id_name_info_[OB_MAX_ID_TYPE][2] = {
-  { "ob_max_used_id", "max used tenant id"},
-  { "ob_max_used_unit_config_id", "max used unit config id"},
-  { "ob_max_used_unit_id", "max used unit id"},
-  { "ob_max_used_resource_pool_id", "max used resource pool id"},
+  { NULL, NULL },
+  { NULL, NULL },
+  { NULL, NULL },
+  { NULL, NULL },
   { "ob_max_used_server_id", "max used server id"},
   { "ob_max_used_ddl_task_id", "max used ddl task id"},
-  { "ob_max_used_unit_group_id", "max used unit group id"},
+  { NULL, NULL },
   { "ob_max_used_non_primary_key_table_tablet_id", "ob max used non primary key table tablet id"},
-  { "ob_max_used_primary_key_table_tablet_id", "ob max used primary key table tablet id"},
-  { "ob_reserved_max_used_id_10", "reserved max used id slot"},
+  { "ob_max_used_logstrema_id", "max used log stream id"},
+  { "ob_max_used_logstrema_group_id", "max used log stream group id"},
   { "ob_max_used_sys_pl_object_id", "max used sys pl object id"},
   { "ob_max_used_object_id", "max used object id"},
   { "ob_max_used_lock_owner_id", "max used lock owner id"},
-  { "ob_max_used_ttl_task_id", "max used ttl task id"},
   /* OB_MAX_USED_TABLE_ID_TYPE ~ OB_MAX_USED_RLS_CONTEXT_ID_TYPE ObMaxIdType will be changed to OB_MAX_USED_OBJECT_ID_TYPE and won't be persisted. */
   { "ob_max_used_table_id", "max used table id"},
   { "ob_max_used_database_id", "max used database id"},
   { "ob_max_used_user_id", "max used user id"},
-  { "ob_max_used_tablegroup_id", "max used tablegroup id"},
-  { "ob_max_used_sequence_id", "max used sequence id"},
   { "ob_max_used_outline_id", "max used outline id"},
   { "ob_max_used_constraint_id", "max used constraint id"},
   { "ob_max_used_synonym_id", "max used synonym id"},
@@ -58,8 +55,6 @@ const char *ObMaxIdFetcher::max_id_name_info_[OB_MAX_ID_TYPE][2] = {
   { "ob_max_used_udt_id", "max used udt id"},
   { "ob_max_used_routine_id", "max used routine id"},
   { "ob_max_used_package_id", "max used package id"},
-  { "ob_max_used_keystore_id", "max used keystore id"},
-  { "ob_max_used_master_key_id", "max used master_key id"},
   { "ob_max_used_label_se_policy_id", "max used label se policy id"},
   { "ob_max_used_label_se_component_id", "max used label se component id"},
   { "ob_max_used_label_se_label_id", "max used label se label id"},
@@ -68,20 +63,13 @@ const char *ObMaxIdFetcher::max_id_name_info_[OB_MAX_ID_TYPE][2] = {
   { "ob_max_used_trigger_id", "max used trigger id"},
   { "ob_max_used_profile_id", "max used profile id"},
   { "ob_max_used_audit_id", "max used audit id"},
-  { "ob_max_used_directory_id", "max used directory id"},
-  { "ob_max_used_context_id", "max used context id" },
   { "ob_max_used_partition_id", "max used partition_id" },
   { "ob_max_used_rls_policy_id", "max used ddl rls policy id"},
   { "ob_max_used_rls_group_id", "max used ddl rls group id"},
   { "ob_max_used_rls_context_id", "max used ddl rls context id"},
   /* the following ObMaxIdType will be persisted. */
   { "ob_max_used_service_name_id", "max used service name id"},
-  { "ob_max_used_storage_id", "max used storage id"},
-  { "ob_max_used_storage_op_id", "max used storage op id"},
-  { "ob_max_used_catalog_id", "max used catalog id"},
-  { "ob_max_used_ccl_rule_id", "max used ccl rule id"},
   {"ob_max_used_external_resource_id", "max used external resources id"}, // OB_MAX_USED_EXTERNAL_RESOURCE_ID_TYPE will be changed to OB_MAX_USED_OBJECT_ID_TYPE and won't be persisted.
-  { "ob_max_used_location_id", "max used location id"},
   { "ob_max_used_ai_model_id", "max used ai model id"},
   { "ob_max_used_ai_model_endpoint_id", "max used ai model endpoint id"}
 };
@@ -110,31 +98,20 @@ int ObMaxIdFetcher::convert_id_type(
 {
   int ret = OB_SUCCESS;
   switch (src) {
-    case OB_MAX_USED_TENANT_ID_TYPE:
-    case OB_MAX_USED_UNIT_CONFIG_ID_TYPE:
-    case OB_MAX_USED_UNIT_ID_TYPE:
-    case OB_MAX_USED_RESOURCE_POOL_ID_TYPE:
     case OB_MAX_USED_SERVER_ID_TYPE:
     case OB_MAX_USED_DDL_TASK_ID_TYPE:
-    case OB_MAX_USED_STORAGE_ID_TYPE:
-    case OB_MAX_USED_STORAGE_OP_ID_TYPE:
-    case OB_MAX_USED_UNIT_GROUP_ID_TYPE:
     case OB_MAX_USED_NORMAL_ROWID_TABLE_TABLET_ID_TYPE:
-    case OB_MAX_USED_EXTENDED_ROWID_TABLE_TABLET_ID_TYPE:
     case OB_MAX_USED_SYS_PL_OBJECT_ID_TYPE:
     case OB_MAX_USED_OBJECT_ID_TYPE:
     case OB_MAX_USED_LOCK_OWNER_ID_TYPE:
     case OB_MAX_USED_SERVICE_NAME_ID_TYPE:
-    case OB_MAX_USED_AI_MODEL_ENDPOINT_ID_TYPE:
-    case OB_MAX_USED_TTL_TASK_ID_TYPE: {
+    case OB_MAX_USED_AI_MODEL_ENDPOINT_ID_TYPE: {
       dst = src;
       break;
     }
     case OB_MAX_USED_TABLE_ID_TYPE:
     case OB_MAX_USED_DATABASE_ID_TYPE:
     case OB_MAX_USED_USER_ID_TYPE:
-    case OB_MAX_USED_TABLEGROUP_ID_TYPE:
-    case OB_MAX_USED_SEQUENCE_ID_TYPE:
     case OB_MAX_USED_OUTLINE_ID_TYPE:
     case OB_MAX_USED_CONSTRAINT_ID_TYPE:
     case OB_MAX_USED_SYNONYM_ID_TYPE:
@@ -142,8 +119,6 @@ int ObMaxIdFetcher::convert_id_type(
     case OB_MAX_USED_UDT_ID_TYPE:
     case OB_MAX_USED_ROUTINE_ID_TYPE:
     case OB_MAX_USED_PACKAGE_ID_TYPE:
-    case OB_MAX_USED_KEYSTORE_ID_TYPE:
-    case OB_MAX_USED_MASTER_KEY_ID_TYPE:
     case OB_MAX_USED_LABEL_SE_POLICY_ID_TYPE:
     case OB_MAX_USED_LABEL_SE_COMPONENT_ID_TYPE:
     case OB_MAX_USED_LABEL_SE_LABEL_ID_TYPE:
@@ -152,16 +127,11 @@ int ObMaxIdFetcher::convert_id_type(
     case OB_MAX_USED_TRIGGER_ID_TYPE:
     case OB_MAX_USED_PROFILE_ID_TYPE:
     case OB_MAX_USED_AUDIT_ID_TYPE:
-    case OB_MAX_USED_DIRECTORY_ID_TYPE:
-    case OB_MAX_USED_CONTEXT_ID_TYPE:
     case OB_MAX_USED_PARTITION_ID_TYPE:
     case OB_MAX_USED_RLS_POLICY_ID_TYPE:
     case OB_MAX_USED_RLS_GROUP_ID_TYPE:
     case OB_MAX_USED_RLS_CONTEXT_ID_TYPE:
-    case OB_MAX_USED_CATALOG_ID_TYPE:
-    case OB_MAX_USED_AI_MODEL_ID_TYPE:
-    case OB_MAX_USED_CCL_RULE_ID_TYPE:
-    case OB_MAX_USED_LOCATION_ID_TYPE: {
+    case OB_MAX_USED_AI_MODEL_ID_TYPE: {
       dst = OB_MAX_USED_OBJECT_ID_TYPE;
       break;
     }
@@ -180,8 +150,7 @@ int ObMaxIdFetcher::fetch_new_max_ids(ObMaxIdType max_id_type,
 {
   int ret = OB_SUCCESS;
   uint64_t max_id = OB_INVALID_ID;
-  if (OB_MAX_USED_NORMAL_ROWID_TABLE_TABLET_ID_TYPE != max_id_type
-             && OB_MAX_USED_EXTENDED_ROWID_TABLE_TABLET_ID_TYPE != max_id_type) {
+  if (OB_MAX_USED_NORMAL_ROWID_TABLE_TABLET_ID_TYPE != max_id_type) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid schema type", K(ret), K(max_id_type));
   } else if (OB_SUCC(fetch_max_id_from_cache_( max_id_type, max_id, size))) {
@@ -213,10 +182,6 @@ int ObMaxIdFetcher::fetch_new_max_id(const ObMaxIdType max_id_type,
       || size < 1) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(max_id_type), K(size));
-  } else if (OB_MAX_USED_TENANT_ID_TYPE == max_id_type && 1 != size) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("can only generate one new id at a time for this id type",
-             KR(ret), K(max_id_type), K(size));
   } else if (OB_FAIL(convert_id_type(max_id_type, fetch_max_id_type))) {
     LOG_WARN("fail to convert id type", KR(ret), K(max_id_type));
   } else if (OB_FAIL(check_use_max_id_cache_(fetch_max_id_type, use_cache))) {
@@ -244,10 +209,6 @@ int ObMaxIdFetcher::fetch_new_max_id_from_inner_table_(const ObMaxIdType max_id_
       || size < 1) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(max_id_type), K(size));
-  } else if (OB_MAX_USED_TENANT_ID_TYPE == max_id_type && 1 != size) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("can only generate one new id at a time for this id type",
-             KR(ret), K(max_id_type), K(size));
   } else if (OB_FAIL(convert_id_type(max_id_type, fetch_max_id_type))) {
     LOG_WARN("fail to convert id type", KR(ret), K(max_id_type));
   } else if (OB_FAIL(trans.start(&proxy_, false))) {
@@ -268,13 +229,6 @@ int ObMaxIdFetcher::fetch_new_max_id_from_inner_table_(const ObMaxIdType max_id_
 
   if (OB_SUCC(ret)) {
     fetch_id += size;
-
-    if (OB_MAX_USED_TENANT_ID_TYPE == max_id_type) {
-      // user sys tenant must be even in ver 4.0
-      if (0 != (fetch_id & META_TENANT_MASK)) {
-        fetch_id++;
-      }
-    }
 
     // update max_id when:
     //  - id is invalid
@@ -351,8 +305,7 @@ int ObMaxIdFetcher::check_use_max_id_cache_(const ObMaxIdType &max_id_type, bool
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("this function should use real type", KR(ret), K(max_id_type));
   } else if (OB_MAX_USED_OBJECT_ID_TYPE == max_id_type 
-      || OB_MAX_USED_NORMAL_ROWID_TABLE_TABLET_ID_TYPE == max_id_type 
-      || OB_MAX_USED_EXTENDED_ROWID_TABLE_TABLET_ID_TYPE == max_id_type) {
+      || OB_MAX_USED_NORMAL_ROWID_TABLE_TABLET_ID_TYPE == max_id_type) {
     use_cache = true;
   } else {
     use_cache = false;
@@ -361,7 +314,6 @@ int ObMaxIdFetcher::check_use_max_id_cache_(const ObMaxIdType &max_id_type, bool
 }
 
 // moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in the header, transitional state) -> src/rootserver/ob_root_utils.cpp
-// Note: master tenant-elim changed the original body(removed the tenant_id parameter), HOST(ob_root_utils.cpp) must be synced (see routing item)
 
 int ObMaxIdFetcher::update_max_id(ObISQLClient &sql_client,
                                   ObMaxIdType max_id_type, const uint64_t max_id)
@@ -428,7 +380,7 @@ int ObMaxIdFetcher::fetch_max_id(ObISQLClient &sql_client,
           result->print_info();
         } else if (OB_FAIL(str_to_uint(id_str, max_id))) {
           LOG_WARN("str_to_uint failed", K(id_str), K(ret));
-          // The fetch_id of ordinary tenants may be 0, which requires special treatment
+          // A stored fetch_id may be 0, which requires special treatment.
         } else if (OB_ITER_END != (ret = result->next())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("result is more than one row", K(ret));
@@ -540,25 +492,17 @@ int ObMaxIdFetcher::check_id_valid(const ObMaxIdType &max_id_type, const uint64_
 {
   int ret = OB_SUCCESS;
   // FIXME: Some columns of object_id are defined as `int`, so we restrict the max avaliable user object_id is INT64_MAX.
-  if (id > INT64_MAX && max_id_type != OB_MAX_USED_EXTENDED_ROWID_TABLE_TABLET_ID_TYPE) {
+  if (id > INT64_MAX) {
     ret = OB_SIZE_OVERFLOW;
     LOG_ERROR("new object_id is reach limit", KR(ret), K(id), K(max_id_type));
   } else {
     switch (max_id_type) {
-      case OB_MAX_USED_TENANT_ID_TYPE:
-      case OB_MAX_USED_UNIT_CONFIG_ID_TYPE:
-      case OB_MAX_USED_UNIT_ID_TYPE:
-      case OB_MAX_USED_RESOURCE_POOL_ID_TYPE:
       case OB_MAX_USED_SERVER_ID_TYPE:
       case OB_MAX_USED_DDL_TASK_ID_TYPE:
-      case OB_MAX_USED_STORAGE_ID_TYPE:
-      case OB_MAX_USED_STORAGE_OP_ID_TYPE:
-      case OB_MAX_USED_UNIT_GROUP_ID_TYPE:
       case OB_MAX_USED_LOCK_OWNER_ID_TYPE:
       case OB_MAX_USED_SERVICE_NAME_ID_TYPE:
       case OB_MAX_USED_AI_MODEL_ID_TYPE:
-      case OB_MAX_USED_AI_MODEL_ENDPOINT_ID_TYPE:
-      case OB_MAX_USED_TTL_TASK_ID_TYPE: {
+      case OB_MAX_USED_AI_MODEL_ENDPOINT_ID_TYPE: {
         // won't check other id
         break;
       }
@@ -566,13 +510,6 @@ int ObMaxIdFetcher::check_id_valid(const ObMaxIdType &max_id_type, const uint64_
         if (!ObTabletID(id).is_user_normal_rowid_table_tablet()) {
           ret = OB_SIZE_OVERFLOW;
           LOG_ERROR("normal rowid table tablet id reach max", K(ret), K(id));
-        }
-        break;
-      }
-      case OB_MAX_USED_EXTENDED_ROWID_TABLE_TABLET_ID_TYPE: {
-        if (!ObTabletID(id).is_user_extended_rowid_table_tablet()) {
-          ret = OB_SIZE_OVERFLOW;
-          LOG_ERROR("extended rowid table tablet id reach max", K(ret), K(id));
         }
         break;
       }
@@ -619,24 +556,10 @@ int ObMaxIdFetcher::check_id_valid(const ObMaxIdType &max_id_type, const uint64_
         }
         break;
       }
-      case OB_MAX_USED_TABLEGROUP_ID_TYPE: {
-        if (is_inner_object_id(id) && !is_sys_tablegroup_id(id)) {
-          ret = OB_SIZE_OVERFLOW;
-          LOG_ERROR("inner database_id is invalid", KR(ret), K(id), K(max_id_type));
-        }
-        break;
-      }
-      case OB_MAX_USED_KEYSTORE_ID_TYPE: {
-        if (is_inner_object_id(id) && !is_inner_keystore_id(id)) {
-          ret = OB_SIZE_OVERFLOW;
-          LOG_ERROR("inner keystore_id is invalid", KR(ret), K(id), K(max_id_type));
-        }
-        break;
-      }
       case OB_MAX_USED_PROFILE_ID_TYPE: {
         if (is_inner_object_id(id) && !is_inner_profile_id(id)) {
           ret = OB_SIZE_OVERFLOW;
-          LOG_ERROR("inner keystore_id is invalid", KR(ret), K(id), K(max_id_type));
+          LOG_ERROR("inner profile_id is invalid", KR(ret), K(id), K(max_id_type));
         }
         break;
       }

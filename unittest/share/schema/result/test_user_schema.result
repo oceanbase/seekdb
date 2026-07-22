@@ -13,15 +13,12 @@
   "collation_type":"utf8mb4_general_ci",
   "name_case_mode":1,
   "comment":"",
-  "read_only":false,
-  "default_tablegroup_id":-1,
-  "default_tablegroup_name":""
+  "read_only":false
 }
 -------------[txxx1] table schema start -----------
 {
   "tenant_id":1000,
   "database_id":1099511627777001,
-  "tablegroup_id":-1,
   "table_id":1099511627826001,
   "table_name":"txxx1",
   "max_used_column_id":16,
@@ -29,7 +26,6 @@
   "index_column_num":0,
   "rowkey_split_pos":0,
   "block_size":16384,
-  "is_use_bloomfilter":false,
   "progressive_merge_num":0,
   "replica_num":1,
   "load_type":0,
@@ -52,13 +48,11 @@
     "part_num":1
   },
   "comment":"",
-  "tablegroup_name":"",
   "compress_func_name":"none",
   "zone_list": [
     "test"
   ],
   "primary_zone":"test",
-  "expire_info":"",
   "view_schema": {
     "view_definition":"",
     "check_option":"none",
@@ -109,4 +103,3 @@
 -------------[txxx1] table schema end -----------
 
 =============[testdatabase schema end ------------------
-

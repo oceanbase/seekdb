@@ -23,17 +23,16 @@
 #include "observer/dbms_scheduler/ob_dbms_sched_service.h"
 #include "rootserver/ddl_task/ob_ddl_scheduler.h" // for ObDDLScheduler
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
-#include "observer/ob_sys_tenant_load_sys_package_service.h" // for ObSysTenantLoadSysPackageService
-#include "share/ob_global_autoinc_service.h"
+#include "observer/ob_system_package_load_service.h" // for ObSystemPackageLoadService
 #include "share/ob_internal_table_change_notifier.h"
-#include "storage/compaction/ob_tenant_tablet_scheduler.h"
+#include "storage/compaction/ob_tablet_scheduler.h"
 #include "storage/compaction/ob_tablet_merge_ctx.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "storage/tx/ob_timestamp_service.h"
 #include "storage/tx/ob_trans_id_service.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
-#include "storage/tx_storage/ob_tenant_freezer.h"
+#include "storage/tx_storage/ob_memstore_freezer.h"
 
 namespace oceanbase
 {
@@ -66,8 +65,7 @@ ObLS::ObLS()
     state_seq_(-1),
     switch_epoch_(0),
     ls_meta_(),
-    ls_epoch_(0),
-    need_delay_resource_recycle_(false)
+    ls_epoch_(0)
 {}
 
 ObLS::~ObLS()
@@ -86,8 +84,7 @@ int ObLS::init(const ObRestoreStatus &restore_status,
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ls is already initialized", K(ret), K_(ls_meta));
-  } else if (OB_FAIL(ls_meta_.init(restore_status,
-                                   create_scn))) {
+  } else if (OB_FAIL(ls_meta_.init(restore_status, create_scn))) {
     LOG_WARN("failed to init ls meta", K(ret));
   } else if (OB_FAIL(ls_freezer_.init(this))) {
     LOG_WARN("init freezer failed", K(ret));
@@ -132,7 +129,6 @@ int ObLS::init(const ObRestoreStatus &restore_status,
     } else if (OB_FAIL(register_to_service_())) {
       LOG_WARN("register to service failed", K(ret));
     } else {
-      need_delay_resource_recycle_ = false;
       is_inited_ = true;
       LOG_INFO("ls init success");
     }
@@ -263,6 +259,17 @@ int ObLS::set_start_work_state()
   int ret = OB_SUCCESS;
   if (OB_FAIL(ls_meta_.set_start_work_state())) {
     LOG_WARN("set start work state failed", K(ret), K_(ls_meta));
+  } else {
+    update_state_seq_();
+  }
+  return ret;
+}
+
+int ObLS::set_start_restore_state()
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(ls_meta_.set_start_restore_state())) {
+    LOG_WARN("set start restore state failed", K(ret), K_(ls_meta));
   } else {
     update_state_seq_();
   }
@@ -445,8 +452,6 @@ void ObLS::destroy()
   reserved_snapshot_clog_handler_.reset();
   medium_compaction_clog_handler_.reset();
   is_inited_ = false;
-  
-  need_delay_resource_recycle_ = false;
 }
 
 int ObLS::offline_tx_(const int64_t start_ts)
@@ -468,7 +473,7 @@ int ObLS::offline_compaction_()
 {
   int ret = OB_SUCCESS;
   if (FALSE_IT(ls_freezer_.offline())) {
-  } else if (OB_FAIL(share::g_mp->tenant_tablet_scheduler()->check_ls_compaction_finish())) {
+  } else if (OB_FAIL(share::g_mp->tablet_scheduler()->check_ls_compaction_finish())) {
     LOG_WARN("check compaction finish failed", K(ret), K(ls_meta_));
   }
   return ret;
@@ -560,7 +565,7 @@ int ObLS::offline_(const int64_t start_ts)
   } else if (OB_FAIL(log_handler_.offline())) {
     LOG_WARN("failed to offline log", K(ret));
   // TODO: delete it if apply sequence
-  // force set allocators frozen to reduce active tenant_memory
+  // Freeze allocators to reduce active runtime memory.
   } else if (OB_FAIL(ls_tablet_svr_.set_frozen_for_all_memtables())) {
     LOG_WARN("tablet service offline failed", K(ret), K(ls_meta_));
   }
@@ -623,8 +628,6 @@ int ObLS::online_tx_()
   int ret = OB_SUCCESS;
   if (OB_FAIL(ls_tx_svr_.online())) {
     LOG_WARN("ls tx service online failed", K(ret), K(ls_meta_));
-  } else if (OB_FAIL(ls_tx_svr_.advance_commit_version(ls_meta_.get_clog_checkpoint_scn()))) {
-    LOG_WARN("advance commit version failed", K(ret), K(ls_meta_.get_clog_checkpoint_scn()));
   } else if (OB_FAIL(tx_table_.online())) {
     LOG_WARN("tx table online failed", K(ret), K(ls_meta_));
   }
@@ -687,7 +690,7 @@ int ObLS::register_local_services_()
   REGISTER_TO_LOGSERVICE(DBMS_SCHEDULER_LOG_BASE_TYPE, share::g_mp->dbms_sched_service());
   REGISTER_TO_LOGSERVICE(SYS_DDL_SCHEDULER_LOG_BASE_TYPE, share::g_mp->ddl_scheduler());
   REGISTER_TO_LOGSERVICE(DDL_SERVICE_LAUNCHER_LOG_BASE_TYPE, share::g_mp->ddl_service_launcher());
-  REGISTER_TO_LOGSERVICE(SYS_TENANT_LOAD_SYS_PACKAGE_SERVICE_LOG_BASE_TYPE, share::g_mp->sys_tenant_load_sys_package_service());
+  REGISTER_TO_LOGSERVICE(SYSTEM_PACKAGE_LOAD_SERVICE_LOG_BASE_TYPE, share::g_mp->system_package_load_service());
   // ObInternalTableChangeNotifier only needs local lifecycle callbacks.
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(local_log_handler_set_.register_handler(
@@ -695,16 +698,17 @@ int ObLS::register_local_services_()
       &share::ObInternalTableChangeNotifier::get_instance()))) {
     LOG_WARN("local_log_handler_set_ register notifier failed", K(ret));
   }
+#ifdef OB_BUILD_SYS_VEC_IDX
   REGISTER_TO_LOGSERVICE(VEC_INDEX_SERVICE_LOG_BASE_TYPE, share::g_mp->plugin_vector_index_service());
   if (OB_SUCC(ret)) {
-    // table_api removed from build: TTL_LOG_BASE_TYPE handler is gone, only the
-    // vector index scheduler (formerly hosted by the tablet ttl mgr) is kept.
+    // The vector index scheduler owns its lifecycle independently.
     if (OB_FAIL(init_vector_idx_scheduler_())) {
       LOG_WARN("fail to init vector index scheduler", KR(ret));
     } else {
       REGISTER_TO_LOGSERVICE(VEC_INDEX_LOG_BASE_TYPE, &vector_idx_scheduler_);
     }
   }
+#endif
 
   return ret;
 }
@@ -714,7 +718,7 @@ int ObLS::register_to_service_()
   int ret = OB_SUCCESS;
   
   if (OB_FAIL(register_common_service())) {
-    LOG_WARN("common tenant register failed", K(ret));
+    LOG_WARN("common runtime registration failed", K(ret));
   } else if (OB_FAIL(register_local_services_())) {
     LOG_WARN("register local services failed", K(ret));
   }
@@ -722,8 +726,6 @@ int ObLS::register_to_service_()
   return ret;
 }
 
-// table_api removed from build: the following helpers preserve the vector index
-// scheduler lifecycle that used to be managed by table::ObTenantTabletTTLMgr.
 int ObLS::init_vector_idx_scheduler_()
 {
   int ret = OB_SUCCESS;
@@ -731,7 +733,7 @@ int ObLS::init_vector_idx_scheduler_()
     ret = OB_INIT_TWICE;
     LOG_WARN("vector index scheduler init twice", KR(ret));
   } else if (OB_FAIL(vector_idx_scheduler_timer_.init(
-      "TTLTabletMgr", common::ObMemAttr("TTLTabletMgr")))) {
+      "VecIdxSched", common::ObMemAttr("VecIdxSched")))) {
     LOG_WARN("fail to init vector index scheduler timer", KR(ret));
   } else if (OB_FAIL(vector_idx_scheduler_.init(this, vector_idx_scheduler_timer_))) {
     LOG_WARN("fail to init vector idx scheduler", KR(ret));
@@ -775,11 +777,13 @@ void ObLS::unregister_local_services_()
   UNREGISTER_FROM_LOGSERVICE(DBMS_SCHEDULER_LOG_BASE_TYPE, share::g_mp->dbms_sched_service());
   UNREGISTER_FROM_LOGSERVICE(SYS_DDL_SCHEDULER_LOG_BASE_TYPE, share::g_mp->ddl_scheduler());
   UNREGISTER_FROM_LOGSERVICE(DDL_SERVICE_LAUNCHER_LOG_BASE_TYPE, share::g_mp->ddl_service_launcher());
-  UNREGISTER_FROM_LOGSERVICE(SYS_TENANT_LOAD_SYS_PACKAGE_SERVICE_LOG_BASE_TYPE, share::g_mp->sys_tenant_load_sys_package_service());
+  UNREGISTER_FROM_LOGSERVICE(SYSTEM_PACKAGE_LOAD_SERVICE_LOG_BASE_TYPE, share::g_mp->system_package_load_service());
   local_log_handler_set_.unregister_handler(INTERNAL_TABLE_NOTIFIER_LOG_BASE_TYPE);
+#ifdef OB_BUILD_SYS_VEC_IDX
   UNREGISTER_FROM_LOGSERVICE(VEC_INDEX_SERVICE_LOG_BASE_TYPE, share::g_mp->plugin_vector_index_service());
   UNREGISTER_FROM_LOGSERVICE(VEC_INDEX_LOG_BASE_TYPE, &vector_idx_scheduler_);
   destroy_vector_idx_scheduler_();
+#endif
 }
 
 void ObLS::unregister_from_service_()
@@ -901,8 +905,8 @@ int ObLS::get_ls_info(ObLSVTInfo &ls_info)
   } else if (OB_FAIL(ls_tx_svr_.check_tx_blocked(tx_blocked))) {
     LOG_WARN("check tx ls state error", K(ret),KPC(this));
   } else {
-    // The readable point of the primary tenant is weak read ts,
-    // and the readable point of the standby tenant is readable scn
+    // The primary database uses the weak-read timestamp; the standby database
+    // uses its readable SCN.
     ls_info.weak_read_scn_ = ls_wrs_handler_.get_ls_weak_read_ts();
     if (OB_SUCC(ret)) {
       ls_info.tablet_count_ = ls_tablet_svr_.get_tablet_count();
@@ -1073,7 +1077,7 @@ int ObLS::inner_build_tablet_with_batch_tables_(
     LOG_WARN("ls is not inited", K(ret));
   } else if (!tablet_id.is_valid() || !param.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("build ha tablet new table store get invalid argument", K(ret), K(tablet_id), K(param));
+    LOG_WARN("build tablet table store get invalid argument", K(ret), K(tablet_id), K(param));
   } else if (OB_FAIL(ls_tablet_svr_.build_tablet_with_batch_tables(tablet_id, param))) {
     LOG_WARN("failed to update tablet table store", K(ret), K(tablet_id), K(param));
   }
@@ -1106,7 +1110,6 @@ int ObLS::finish_storage_meta_replay()
   int ret = OB_SUCCESS;
   int64_t read_lock = 0;
   int64_t write_lock = LSLOCKALL;
-  const int64_t start_ts = ObTimeUtility::current_time();
   ObLSLockGuard lock_myself(this, lock_, read_lock, write_lock);
 
   if (OB_FAIL(running_state_.create_finish())) {
@@ -1259,7 +1262,7 @@ int ObLS::logstream_freeze(const bool is_sync,
   }
 
   if (OB_SUCC(ret)) {
-    share::g_mp->tenant_freezer()->record_freezer_source_event(source);
+    share::g_mp->memstore_freezer()->record_freezer_source_event(source);
   }
 
   return ret;
@@ -1381,7 +1384,7 @@ int ObLS::tablet_freeze(const ObIArray<ObTabletID> &tablet_ids,
   }
 
   if (OB_SUCC(ret)) {
-    share::g_mp->tenant_freezer()->record_freezer_source_event(source);
+    share::g_mp->memstore_freezer()->record_freezer_source_event(source);
   }
 
   return ret;
@@ -1461,18 +1464,18 @@ void ObLS::record_async_freeze_tablets_(const ObIArray<ObTabletID> &tablet_ids, 
 
 int ObLS::advance_checkpoint_by_flush(SCN recycle_scn,
                                       const int64_t abs_timeout_ts,
-                                      const bool is_tenant_freeze,
+                                      const bool is_global_freeze,
                                       const ObFreezeSourceFlag source)
 {
   int ret = OB_SUCCESS;
-  if (is_tenant_freeze) {
-    ObDataCheckpoint::set_tenant_freeze();
-    LOG_INFO("set tenant_freeze");
+  if (is_global_freeze) {
+    ObDataCheckpoint::set_global_freeze();
+    LOG_INFO("set global freeze");
   }
   ObDataCheckpoint::set_freeze_source(source);
   ret = checkpoint_executor_.advance_checkpoint_by_flush(recycle_scn);
   ObDataCheckpoint::reset_freeze_source();
-  ObDataCheckpoint::reset_tenant_freeze();
+  ObDataCheckpoint::reset_global_freeze();
   return ret;
 }
 
@@ -1507,45 +1510,6 @@ int ObLS::check_ls_need_online(bool &need_online)
   return ret;
 }
 
-int ObLS::disable_replay()
-{
-  int ret = OB_SUCCESS;
-  int64_t read_lock = LSLOCKLSSTATE;
-  int64_t write_lock = LSLOCKLOGSTATE;
-  ObLSLockGuard lock_myself(this, lock_, read_lock, write_lock);
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ls is not inited", K(ret));
-  } else if (OB_FAIL(log_handler_.disable_replay())) {
-    LOG_WARN("disable replay failed", K(ret), K_(ls_meta));
-  } else {
-    LOG_INFO("disable replay successfully", K(ret), K_(ls_meta));
-  }
-  return ret;
-}
-
-int ObLS::diagnose(DiagnoseInfo &info) const
-{
-  int ret = OB_SUCCESS;
-  ObLogService *log_service = share::g_mp->log_service();
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    STORAGE_LOG(WARN, "ls is not inited", K(ret));
-  } else if (OB_FAIL(checkpoint_executor_.get_clog_checkpoint_stat(info.ls_clog_checkpoint_stat_))) {
-    STORAGE_LOG(WARN, "get clog checkpoint stat failed", K(ret));
-  } else if (OB_FAIL(log_service->diagnose_apply(info.apply_diagnose_info_))) {
-    STORAGE_LOG(WARN, "diagnose apply failed", K(ret));
-  } else if (OB_FAIL(log_service->diagnose_replay(info.replay_diagnose_info_))) {
-    STORAGE_LOG(WARN, "diagnose replay failed", K(ret));
-  } else if (OB_FAIL(log_handler_.diagnose_palf(info.palf_diagnose_info_))) {
-    STORAGE_LOG(WARN, "diagnose palf failed", K(ret));
-  }
-  ObReadOnlyTxDiagnoseFunctor fn(info.read_only_tx_info_, 0, sizeof(info.read_only_tx_info_));
-  READ_CHECKER_FOR_EACH(fn);
-  STORAGE_LOG(INFO, "diagnose finish", K(ret), K(info));
-  return ret;
-}
-
 int ObLS::set_restore_status(const ObRestoreStatus &restore_status)
 {
   int ret = OB_SUCCESS;
@@ -1566,24 +1530,6 @@ int ObLS::set_restore_status(const ObRestoreStatus &restore_status)
     LOG_WARN("failed to set restore status", K(ret), K(restore_status));
   }
   return ret;
-}
-
-bool ObLS::need_delay_resource_recycle() const
-{
-  LOG_INFO("need delay resource recycle", KPC(this));
-  return need_delay_resource_recycle_;
-}
-
-void ObLS::set_delay_resource_recycle()
-{
-  need_delay_resource_recycle_ = true;
-  LOG_INFO("set delay resource recycle", KPC(this));
-}
-
-void ObLS::clear_delay_resource_recycle()
-{
-  need_delay_resource_recycle_ = false;
-  LOG_INFO("clear delay resource recycle", KPC(this));
 }
 
 }

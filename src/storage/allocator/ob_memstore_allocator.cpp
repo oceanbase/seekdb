@@ -28,9 +28,9 @@ namespace oceanbase
 using namespace share;
 namespace share
 {
-// moved definition to storage ob_tenant_freezer.cpp(storage real user)
+// moved definition to storage ob_memstore_freezer.cpp(storage real user)
 
-// moved definition to storage ob_tenant_freezer.cpp(storage real user)
+// moved definition to storage ob_memstore_freezer.cpp(storage real user)
 
 int ObMemstoreAllocator::AllocHandle::init()
 {
@@ -79,7 +79,7 @@ void ObMemstoreAllocator::destroy_handle(AllocHandle& handle)
   handle.do_reset();
 }
 
-// moved definition to storage ob_tenant_freezer.cpp(storage real user)
+// moved definition to storage ob_memstore_freezer.cpp(storage real user)
 
 void ObMemstoreAllocator::set_frozen(AllocHandle& handle)
 {
@@ -90,7 +90,7 @@ void ObMemstoreAllocator::set_frozen(AllocHandle& handle)
 
 // moved definition to the upper-layer owner cpp(omt/timer real user)
 
-// moved definition to observer/omt/ob_multi_tenant.cpp(omt/freezer real user)
+// moved definition to observer/omt/ob_server_runtime_controller.cpp(omt/freezer real user)
 
 int ObMemstoreAllocator::set_memstore_threshold()
 {
@@ -99,7 +99,7 @@ int ObMemstoreAllocator::set_memstore_threshold()
   return ret;
 }
 
-// moved definition to storage ob_tenant_freezer.cpp(storage real user)
+// moved definition to storage ob_memstore_freezer.cpp(storage real user)
 
 int64_t ObMemstoreAllocator::resource_unit_size()
 {
@@ -107,7 +107,7 @@ int64_t ObMemstoreAllocator::resource_unit_size()
   return MEMSTORE_RESOURCE_UNIT_SIZE;
 }
 
-// moved definition to storage ob_tenant_freezer.cpp(storage real user)
+// moved definition to storage ob_memstore_freezer.cpp(storage real user)
 
 void ObMemstoreAllocator::adaptive_update_limit(const int64_t holding_size,
                                                 const int64_t config_specify_resource_limit,

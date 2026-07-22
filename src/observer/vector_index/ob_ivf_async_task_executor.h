@@ -106,7 +106,6 @@ private:
     uint64_t &task_trace_base_num_;
   };
 
-  bool check_operation_allow() override;
   int generate_aux_table_info_map(ObIvfAuxTableInfoMap &aux_table_info_map);
   int generate_aux_table_info_map(ObSchemaGetterGuard &schema_guard, const int64_t table_id,
                                   ObIvfAuxTableInfoMap &aux_table_info_map);

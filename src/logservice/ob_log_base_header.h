@@ -55,7 +55,6 @@ public:
 public:
   void reset();
   bool is_valid() const;
-  bool is_compressed() const;
   bool need_pre_replay_barrier() const;
   bool need_post_replay_barrier() const;
   ObLogBaseType get_log_type() const;
@@ -66,13 +65,11 @@ public:
                 "flag", flag_,
                 "need_pre_replay_barrier", need_pre_replay_barrier(),
                 "need_post_replay_barrier", need_post_replay_barrier(),
-                "is_compressed", is_compressed(),
                 "replay_hint", replay_hint_);
 private:
   static const int16_t BASE_HEADER_VERSION = 1;
   static const uint32_t NEED_POST_REPLAY_BARRIER_FLAG = (1 << 31);
   static const uint32_t NEED_PRE_REPLAY_BARRIER_FLAG = (1 << 30);
-  static const uint32_t PAYLOAD_IS_COMPRESSED = (1 << 29);
   int16_t version_;
   int16_t log_type_;
   int32_t flag_;

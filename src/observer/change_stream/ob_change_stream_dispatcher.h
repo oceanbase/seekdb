@@ -50,7 +50,7 @@ class ObCSExecCtx;
 // ob_change_stream_plugin.h.  Defined here as a plain constant so that
 // dispatcher.h does NOT include plugin.h (which depends on types defined here,
 // creating a circular include).
-static const int64_t CS_MAX_PLUGIN_COUNT = 2;
+static const int64_t CS_MAX_PLUGIN_COUNT = 1;
 
 // ---------------------------------------------------------------------------
 // Dispatcher: one parsed redo row, execution context, subtask

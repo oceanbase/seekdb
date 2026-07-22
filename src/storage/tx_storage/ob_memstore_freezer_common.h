@@ -1,0 +1,177 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEABASE_STORAGE_MEMSTORE_FREEZER_COMMON_
+#define OCEABASE_STORAGE_MEMSTORE_FREEZER_COMMON_
+
+#include "share/ob_define.h"
+#include "lib/literals/ob_literals.h"
+#include "common/ob_tablet_id.h"
+#include "common/storage/ob_freeze_define.h"
+
+namespace oceanbase
+{
+namespace storage
+{
+struct ObMemstoreFreezeArg
+{
+  storage::ObFreezeType freeze_type_; // minor/major
+  int64_t try_frozen_scn_;            // frozen scn.
+
+  DECLARE_TO_STRING;
+  OB_UNIS_VERSION(1);
+};
+
+struct ObRetryMajorInfo
+{
+  int64_t frozen_scn_;
+
+  ObRetryMajorInfo()
+    : frozen_scn_(0)
+  {}
+  bool is_valid() const {
+    return true;
+  }
+  void reset() {
+    frozen_scn_ = 0;
+  }
+
+  TO_STRING_KV(K_(frozen_scn));
+};
+
+// store a snapshot of the runtime info to make sure
+// the memstore_info will be a atomic value
+struct ObMemstoreFreezeCtx final
+{
+public:
+  ObMemstoreFreezeCtx();
+  ~ObMemstoreFreezeCtx() { reset(); }
+  void reset();
+public:
+  // snapshot of memstore_info
+  int64_t mem_memstore_limit_;
+
+  // running data
+  int64_t memstore_freeze_trigger_;
+  int64_t max_mem_memstore_can_get_now_;
+
+  int64_t active_memstore_used_;
+  int64_t freezable_active_memstore_used_;
+  int64_t total_memstore_used_;
+  int64_t total_memstore_hold_;
+  int64_t max_cached_memstore_size_;
+
+private:
+  DISABLE_COPY_ASSIGN(ObMemstoreFreezeCtx);
+};
+
+struct ObMemstoreStatistic
+{
+public:
+  ObMemstoreStatistic();
+  ~ObMemstoreStatistic() { reset(); }
+  void reset();
+public:
+  int64_t active_memstore_used_;
+  int64_t total_memstore_used_;
+  int64_t total_memstore_hold_;
+  int64_t memstore_freeze_trigger_;
+  int64_t memstore_limit_;
+  int64_t memory_limit_;
+  int64_t memory_hold_;
+  int64_t memstore_can_get_now_;
+  int64_t max_cached_memstore_size_;
+
+  // these used to analysis write/frozen/release speed of memstore
+  int64_t memstore_allocated_pos_;
+  int64_t memstore_frozen_pos_;
+  int64_t memstore_reclaimed_pos_;
+private:
+  DISABLE_COPY_ASSIGN(ObMemstoreStatistic);
+};
+
+// store the runtime info, such as memory limit, memstore limit,
+// slow freeze flag, freezing flag and so on.
+class ObMemstoreInfo : public ObDLinkBase<ObMemstoreInfo>
+{
+  const static int64_t MAX_FREEZE_INTERVAL = 60_s;
+public:
+  ObMemstoreInfo();
+  virtual ~ObMemstoreInfo() { reset(); }
+  void reset();
+  int update_frozen_scn(int64_t frozen_scn);
+
+  void update_mem_limit(const int64_t lower_limit, const int64_t upper_limit);
+  void get_mem_limit(int64_t &lower_limit, int64_t &upper_limit) const;
+  void update_memstore_limit(const int64_t memstore_limit_percentage);
+  int64_t get_memstore_limit() const;
+  bool is_memstore_limit_changed(const int64_t curr_memstore_limit_percentage) const;
+  void get_freeze_ctx(ObMemstoreFreezeCtx &ctx) const;
+
+  // used slow freeze.
+  bool is_freeze_need_slow() const;
+  bool is_freeze_slowed() const
+  {
+    return slow_freeze_;
+  }
+  void update_slow_freeze_interval();
+  void set_slow_freeze(const common::ObTabletID &tablet_id,
+                       const int64_t retire_clock,
+                       const int64_t default_interval);
+  void unset_slow_freeze(const common::ObTabletID &tablet_id);
+  TO_STRING_KV(K_(slow_freeze), K_(slow_freeze_timestamp), K_(freeze_interval),
+               K_(last_freeze_timestamp), K_(slow_tablet));
+public:
+  bool is_loaded_;             // whether the memory limit set or not.
+  int64_t frozen_scn_;         // used by major, the timestamp of frozen.
+  int64_t freeze_cnt_;         // minor freeze times.
+private:
+  // protect mem_lower_limit_/mem_upper_limit_/mem_memstore_limit_
+  // to make sure it is consistency
+  SpinRWLock lock_;
+  bool slow_freeze_;           // Avoid frequent freezing when abnormal
+  int64_t slow_freeze_timestamp_; // the last slow freeze time timestamp
+  int64_t slow_freeze_mt_retire_clock_;
+  int64_t freeze_interval_;
+  int64_t last_freeze_timestamp_;
+  common::ObTabletID slow_tablet_;
+
+  int64_t mem_lower_limit_;    // the min memory limit
+  int64_t mem_upper_limit_;    // the max memory limit
+  // mem_memstore_limit will be checked when **leader** partitions
+  // perform writing operation (select for update is included)
+  int64_t mem_memstore_limit_; // the max memstore limit
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObMemstoreInfo);
+};
+
+class ObMemstoreFreezeGuard
+{
+public:
+  ObMemstoreFreezeGuard(int &ret,
+                      const ObMemstoreInfo &memstore_info,
+                      const int64_t warn_threshold = 60 * 1000 * 1000 /* 1 min */);
+  ~ObMemstoreFreezeGuard();
+private:
+  const ObMemstoreInfo &memstore_info_;
+  int64_t pre_retire_pos_;
+  int &error_code_;
+  ObTimeGuard time_guard_;
+};
+
+} // storage
+} // oceanbase
+#endif

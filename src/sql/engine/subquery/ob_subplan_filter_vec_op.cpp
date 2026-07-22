@@ -195,7 +195,7 @@ int ObSubPlanFilterVecOp::init_subplan_iters()
           // enable_left_px_batch_ = true;
         }
         if (!MY_SPEC.exec_param_idxs_inited_) {
-          //unittest or old version, do not init hashmap
+          // Non-deterministic subqueries bypass the parameter-result cache.
         } else if (OB_FAIL(iter->init_mem_entity())) {
           LOG_WARN("failed to init mem_entity", K(ret));
         } else if (MY_SPEC.exec_param_array_[i - 1].count() > 0) {

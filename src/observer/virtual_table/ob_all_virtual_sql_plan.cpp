@@ -15,7 +15,7 @@
  */
  
 #include "observer/ob_server_utils.h"
-#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind the server_struct include chain, make the dependency explicit
+#include "observer/omt/ob_server_runtime_controller.h"  // previously hidden behind the server_struct include chain, make the dependency explicit
 #include "share/rc/ob_module_provider.h"
 #include "ob_all_virtual_sql_plan.h"
 
@@ -113,8 +113,8 @@ void ObAllVirtualSqlPlan::reset()
 int ObAllVirtualSqlPlan::inner_open()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(extract_tenant_and_plan_id(key_ranges_))) {
-    SERVER_LOG(WARN, "set tenant id and plan id failed", K(ret));
+  if (OB_FAIL(extract_plan_ids(key_ranges_))) {
+    SERVER_LOG(WARN, "extract plan ids failed", K(ret));
   }
   return ret;
 }
@@ -144,7 +144,6 @@ int ObAllVirtualSqlPlan::fill_cells(ObSqlPlanItem *plan_item)
   int ret = OB_SUCCESS;
   const int64_t col_count = output_column_ids_.count();
   ObObj *cells = cur_row_.cells_;
-    common::ObAddr addr;
   #define REFINE_LENGTH(len) ((len) > MAX_LENGTH ? MAX_LENGTH : (len))
   if (OB_ISNULL(cells) || OB_ISNULL(plan_item)) {
     ret = OB_INVALID_ARGUMENT;
@@ -391,7 +390,7 @@ int ObAllVirtualSqlPlan::fill_cells(ObSqlPlanItem *plan_item)
   return ret;
 }
 
-int ObAllVirtualSqlPlan::extract_tenant_and_plan_id(const common::ObIArray<common::ObNewRange> &ranges)
+int ObAllVirtualSqlPlan::extract_plan_ids(const common::ObIArray<common::ObNewRange> &ranges)
 {
   int ret = OB_SUCCESS;
   ObRowkey start_key, end_key;
@@ -418,8 +417,8 @@ int ObAllVirtualSqlPlan::extract_tenant_and_plan_id(const common::ObIArray<commo
     } else if (start_key_obj_ptr[KEY_PLAN_ID_IDX].is_min_value() && 
                end_key_obj_ptr[KEY_PLAN_ID_IDX].is_max_value()) {
       is_always_true = true;
-      if (OB_FAIL(dump_tenant_plans())) {
-        SERVER_LOG(WARN, "failed to dump tenant plans", K(ret));
+      if (OB_FAIL(dump_plans())) {
+        SERVER_LOG(WARN, "failed to dump plans", K(ret));
       }
     } else if (start_key_obj_ptr[KEY_PLAN_ID_IDX].is_max_value() &&
                end_key_obj_ptr[KEY_PLAN_ID_IDX].is_min_value()) {
@@ -450,16 +449,7 @@ int ObAllVirtualSqlPlan::extract_tenant_and_plan_id(const common::ObIArray<commo
   return ret;
 }
 
-int ObAllVirtualSqlPlan::dump_all_tenant_plans()
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(dump_tenant_plans())) {
-    SERVER_LOG(WARN, "failed to dump tenant` plan", K(ret));
-  }
-  return ret;
-}
-
-int ObAllVirtualSqlPlan::dump_tenant_plans()
+int ObAllVirtualSqlPlan::dump_plans()
 {
   int ret = OB_SUCCESS;
   {
@@ -469,7 +459,7 @@ int ObAllVirtualSqlPlan::dump_tenant_plans()
     // !!!Before referencing plan cache resources, ObReqTimeGuard must be added
     ObReqTimeGuard req_timeinfo_guard;
     ObPlanCache *plan_cache = NULL;
-    MOD_SCOPE {
+    SERVER_MODULE_SCOPE {
       plan_cache = share::g_mp->plan_cache();
       if (OB_ISNULL(plan_cache)) {
         ret = OB_ERR_UNEXPECTED;
@@ -477,7 +467,7 @@ int ObAllVirtualSqlPlan::dump_tenant_plans()
       } else if (OB_FAIL(plan_cache->foreach_alloc_cache_obj(dump_plan))) {
         SERVER_LOG(WARN, "failed to dump plan", K(ret));
       }
-    } // mtl switch ends
+    }
     if (OB_OP_NOT_ALLOW == ret) {
       ret = OB_SUCCESS;
     }
@@ -494,8 +484,7 @@ int ObAllVirtualSqlPlan::prepare_next_plan()
   if (plan_idx_ >= plan_ids_.count()) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "no more plan", K(ret));
-  } else if (OB_INVALID_INDEX == 1UL || 
-             OB_INVALID_INDEX == plan_ids_.at(plan_idx_).plan_id_) {
+  } else if (OB_INVALID_INDEX == plan_ids_.at(plan_idx_).plan_id_) {
     SERVER_LOG(DEBUG, "invalid plan_id");
     //next plan
     ++plan_idx_;
@@ -508,9 +497,9 @@ int ObAllVirtualSqlPlan::prepare_next_plan()
     // !!!Before referencing plan cache resources, ObReqTimeGuard must be added
     ObReqTimeGuard req_timeinfo_guard;
     ObPlanCache *plan_cache = NULL;
-    ObCacheObjGuard guard(PC_DIAG_HANDLE);
+    ObCacheObjGuard guard;
     int tmp_ret = OB_SUCCESS;
-    MOD_SCOPE {
+    SERVER_MODULE_SCOPE {
       plan_cache = share::g_mp->plan_cache();
       if (OB_SUCCESS != (tmp_ret = plan_cache->ref_alloc_plan(plan_id_, guard))) {
         // should not panic
@@ -537,7 +526,7 @@ int ObAllVirtualSqlPlan::prepare_next_plan()
           }
         }
       }
-    } // mtl switch ends
+    }
   }
   return ret;
 }

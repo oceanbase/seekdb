@@ -16,7 +16,6 @@
 
 #ifndef OCEANBASE_LOGSERVICE_PALF_OPTIONS_
 #define OCEANBASE_LOGSERVICE_PALF_OPTIONS_
-#include "lib/compress/ob_compress_util.h"
 #include <stdint.h>
 namespace oceanbase
 {

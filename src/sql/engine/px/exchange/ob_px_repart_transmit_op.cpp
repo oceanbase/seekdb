@@ -120,7 +120,7 @@ int ObPxRepartTransmitOp::do_transmit()
   } else {
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *table_schema = NULL;
-    if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
+    if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
                 schema_guard))) {
       LOG_WARN("faile to get schema guard", K(ret));
     } else if (OB_FAIL(schema_guard.get_table_schema(

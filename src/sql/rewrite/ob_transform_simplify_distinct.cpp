@@ -187,7 +187,7 @@ int ObTransformSimplifyDistinct::remove_child_stmt_distinct(ObSelectStmt *set_st
 }
 // Recursively eliminate distinct condition:
 //  1.stmt is a non-recursive set op, no limit, attempt to recursively delete downwards
-//  2.stmt not set, no sequence/limit, can eliminate distinct
+//  2.stmt not set and no limit, can eliminate distinct
 int ObTransformSimplifyDistinct::try_remove_child_stmt_distinct(ObSelectStmt *stmt,
                                                                 bool &trans_happened)
 {
@@ -198,10 +198,9 @@ int ObTransformSimplifyDistinct::try_remove_child_stmt_distinct(ObSelectStmt *st
     LOG_WARN("unexpected null", K(ret), K(stmt));
   } else if (!stmt->is_set_stmt()) {
     if (!stmt->has_distinct()
-        || stmt->has_sequence()
         || stmt->has_limit()) {
       /*do nothing*/
-      OPT_TRACE("stmt do not has distinct or has sequence/limit");
+      OPT_TRACE("stmt does not have distinct or has limit");
     } else {
       stmt->assign_all();
       trans_happened = true;

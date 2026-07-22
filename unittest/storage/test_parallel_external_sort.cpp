@@ -19,7 +19,8 @@
 #include "lib/restore/ob_device_common.h"
 #undef private
 #include "./blocksstable/ob_data_file_prepare.h"
-#include "mtlenv/mock_tenant_module_env.h"
+#include "mtlenv/mock_server_runtime_env.h"
+#include "observer/omt/ob_server_module_lifecycle.h"
 #include "storage/ob_parallel_external_sort.h"
 
 namespace oceanbase
@@ -30,14 +31,12 @@ using namespace common;
 using namespace share::schema;
 static ObSimpleMemLimitGetter getter;
 
-// Single-tenant seekdb: route the test's ObTenantIOManager / ObTenantTmpFileManager through share::g_mp.
+// Route the test's process-wide temporary-file manager through share::g_mp.
 class FakeModuleProvider : public share::ObIModuleProvider
 {
 public:
-  common::ObTenantIOManager *tenant_io_manager() override { return io_manager_; }
-  tmp_file::ObTenantTmpFileManager *tenant_tmp_file_manager() override { return tmp_file_mgr_; }
-  common::ObTenantIOManager *io_manager_ = nullptr;
-  tmp_file::ObTenantTmpFileManager *tmp_file_mgr_ = nullptr;
+  tmp_file::ObTmpFileManager *tmp_file_manager() override { return tmp_file_mgr_; }
+  tmp_file::ObTmpFileManager *tmp_file_mgr_ = nullptr;
 };
 
 namespace unittest
@@ -158,8 +157,8 @@ class TestParallelExternalSort : public blocksstable::TestDataFilePrepare
 public:
   TestParallelExternalSort();
   virtual ~TestParallelExternalSort() {}
-  int init_tenant_mgr();
-  void destroy_tenant_mgr();
+  int init_memory_limit();
+  void reset_memory_limit();
   int generate_random_str(char *&buf, int32_t &buf_len);
   int generate_items(const int64_t item_nums, const bool is_sorted, ObVector<TestItem *> &items);
   int generate_items_dup(const int64_t item_nums, const bool is_sorted, ObVector<TestItem *> &items);
@@ -191,79 +190,77 @@ public:
   static const int64_t MACRO_BLOCK_COUNT = 15* 1024;
 private:
   common::ObArenaAllocator allocator_;
+  FakeModuleProvider provider_;
+  tmp_file::ObTmpFileManager *tmp_file_mgr_;
+  share::ObIModuleProvider *old_module_provider_;
 };
 
 TestParallelExternalSort::TestParallelExternalSort()
   : TestDataFilePrepare(&getter, "TestParallelExternalSort", MACRO_BLOCK_SIZE, MACRO_BLOCK_COUNT),
-    allocator_(ObModIds::TEST)
+    allocator_(ObModIds::TEST),
+    provider_(),
+    tmp_file_mgr_(nullptr),
+    old_module_provider_(nullptr)
 {
 }
 
 void TestParallelExternalSort::SetUp()
 {
   TestDataFilePrepare::SetUp();
-  ASSERT_EQ(OB_SUCCESS, init_tenant_mgr());
+  ASSERT_EQ(OB_SUCCESS, init_memory_limit());
   ASSERT_EQ(OB_SUCCESS, common::ObClockGenerator::init());
   ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpBlockCache::get_instance().init("tmp_block_cache"));
   ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpPageCache::get_instance().init("sn_tmp_page_cache"));
   ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
-  static ObTenantBase tenant_ctx(OB_SERVER_TENANT_ID);
-  static FakeModuleProvider provider;
-  share::g_mp = &provider;
-  ObTenantEnv::set_tenant(&tenant_ctx);
-  ObTenantIOManager *io_service = nullptr;
-  EXPECT_EQ(OB_SUCCESS, ObTenantIOManager::mtl_new(io_service));
-  EXPECT_EQ(OB_SUCCESS, ObTenantIOManager::mtl_init(io_service));
-  EXPECT_EQ(OB_SUCCESS, io_service->start());
-  provider.io_manager_ = io_service;
-
-  tmp_file::ObTenantTmpFileManager *tf_mgr = nullptr;
-  EXPECT_EQ(OB_SUCCESS, mtl_new_default(tf_mgr));
-  EXPECT_EQ(OB_SUCCESS, tmp_file::ObTenantTmpFileManager::mtl_init(tf_mgr));
-  tf_mgr->get_sn_file_manager().page_cache_controller_.write_buffer_pool_.default_wbp_memory_limit_ = 40*1024*1024;
-  EXPECT_EQ(OB_SUCCESS, tf_mgr->start());
-  provider.tmp_file_mgr_ = tf_mgr;
-
-  ObTenantEnv::set_tenant(&tenant_ctx);
+  old_module_provider_ = share::g_mp;
+  ASSERT_EQ(OB_SUCCESS, server_module_new_default(tmp_file_mgr_));
+  ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpFileManager::server_module_init(tmp_file_mgr_));
+  tmp_file_mgr_->get_sn_file_manager().page_cache_controller_.write_buffer_pool_.default_wbp_memory_limit_ = 40*1024*1024;
+  ASSERT_EQ(OB_SUCCESS, tmp_file_mgr_->start());
+  provider_.tmp_file_mgr_ = tmp_file_mgr_;
+  share::g_mp = &provider_;
   SERVER_STORAGE_META_SERVICE.is_started_ = true;
 }
 
 void TestParallelExternalSort::TearDown()
 {
   allocator_.reuse();
-  // ObTenantTmpFileManager uses ObServerBlockManager, which is destroyed in TestDataFilePrepare::TearDown()
-  // so we need to destroy ObTenantTmpFileManager first
-  tmp_file::ObTenantTmpFileManager *tmp_file_mgr = MTL(tmp_file::ObTenantTmpFileManager *);
-  if (OB_NOT_NULL(tmp_file_mgr)) {
-    tmp_file_mgr->stop();
-    tmp_file_mgr->wait();
-    tmp_file_mgr->destroy();
+  // ObTmpFileManager uses ObServerBlockManager, which is destroyed in TestDataFilePrepare::TearDown()
+  // so we need to destroy ObTmpFileManager first
+  if (OB_NOT_NULL(tmp_file_mgr_)) {
+    tmp_file_mgr_->stop();
+    tmp_file_mgr_->wait();
+    server_module_destroy_default(tmp_file_mgr_);
   }
+  provider_.tmp_file_mgr_ = nullptr;
+  share::g_mp = old_module_provider_;
+  old_module_provider_ = nullptr;
   tmp_file::ObTmpBlockCache::get_instance().destroy();
   tmp_file::ObTmpPageCache::get_instance().destroy();
   TestDataFilePrepare::TearDown();
   common::ObClockGenerator::destroy();
-  destroy_tenant_mgr();
+  reset_memory_limit();
   ObTimerService::get_instance().stop();
   ObTimerService::get_instance().wait();
   ObTimerService::get_instance().destroy();
 }
 
-int TestParallelExternalSort::init_tenant_mgr()
+int TestParallelExternalSort::init_memory_limit()
 {
   int ret = OB_SUCCESS;
   ObAddr self;
   self.set_ip_addr("127.0.0.1", 8086);
   const int64_t ulmt = 128LL << 30;
   const int64_t llmt = 128LL << 30;
-  ret = getter.add_tenant(ulmt, llmt);
+  ret = getter.set_memory_limit(llmt, ulmt);
   EXPECT_EQ(OB_SUCCESS, ret);
   lib::set_memory_limit(128LL << 32);
   return ret;
 }
 
-void TestParallelExternalSort::destroy_tenant_mgr()
+void TestParallelExternalSort::reset_memory_limit()
 {
+  getter.reset();
 }
 
 int TestParallelExternalSort::generate_random_str(char *&buf, int32_t &buf_len)
@@ -401,7 +398,7 @@ int TestParallelExternalSort::build_reader(const ObVector<TestItem *> &items, co
     ObFragmentWriterV2<TestItem> writer;
     int64_t dir_id = -1;
     std::sort(items.begin(), items.end(), compare);
-    if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.alloc_dir(dir_id))) {
+    if (OB_FAIL(SERVER_TMP_FILE_MANAGER.alloc_dir(dir_id))) {
       COMMON_LOG(WARN, "fail to allocate file directory", K(ret));
     } else if (OB_FAIL(writer.open(buf_cap, expire_timestamp, dir_id))) {
       COMMON_LOG(WARN, "fail to open writer", K(ret));
@@ -712,7 +709,7 @@ TEST_F(TestParallelExternalSort, test_writer)
   int ret = OB_SUCCESS;
   int64_t dir_id = -1;
 
-  ret = FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.alloc_dir(dir_id);
+  ret = SERVER_TMP_FILE_MANAGER.alloc_dir(dir_id);
   ASSERT_EQ(OB_SUCCESS, ret);
   // single macro buffer, total write bytes is less than single macro buffer length
   ret = writer.open(buf_cap, expire_timestamp, dir_id);
@@ -769,7 +766,7 @@ TEST_F(TestParallelExternalSort, test_reader)
   int ret = OB_SUCCESS;
   int64_t dir_id = -1;
 
-  ret = FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.alloc_dir(dir_id);
+  ret = SERVER_TMP_FILE_MANAGER.alloc_dir(dir_id);
   ASSERT_EQ(OB_SUCCESS, ret);
   // single macro buffer, total write bytes is less than single macro buffer length
   ret = writer.open(buf_cap, expire_timestamp, dir_id);

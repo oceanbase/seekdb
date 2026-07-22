@@ -32,8 +32,7 @@ class ObMySQLProxy;
 namespace rootserver
 {
 class ObMajorMergeInfoManager;
-// primary cluster: sys tenant, meta tenant, user tenant all have this launcher
-// standby cluster: only sys tenant, meta tenant have this launcher
+// The local launcher follows the current database role.
 class ObDailyMajorFreezeLauncher : public common::ObTimerTask
 {
 public:

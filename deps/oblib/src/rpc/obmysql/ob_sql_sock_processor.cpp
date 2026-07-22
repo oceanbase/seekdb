@@ -116,7 +116,7 @@ int ObSqlSockProcessor::build_sql_req(ObSqlSockSession& sess, rpc::ObPacket* pkt
 {
   int ret = OB_SUCCESS;
   ObRequest* ret_req = &sess.sql_req_;
-  new(ret_req)ObRequest(ObRequest::OB_MYSQL, 1);
+  new(ret_req)ObRequest(ObRequest::OB_MYSQL);
   ret_req->set_server_handle_context(&sess);
   ret_req->set_packet(pkt);
   ret_req->set_receive_timestamp(common::ObTimeUtility::current_time());

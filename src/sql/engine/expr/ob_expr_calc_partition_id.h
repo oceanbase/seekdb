@@ -226,8 +226,6 @@ public:
   virtual bool need_rt_ctx() const override { return true; }
   static int get_first_part_id(ObExecContext &ctx, const ObExpr &expr, int64_t &first_part_id);
   static int set_first_part_id(ObExecContext &ctx, const ObExpr &expr, const int64_t first_part_id);
-  static int update_part_id_calc_type_for_upgrade(ObExecContext &ctx, const ObExpr &expr,
-                                            PartitionIdCalcType calc_type);
   static int calc_part_and_subpart_and_tablet_id(const ObExpr *calc_part_id,
                                                 ObEvalCtx &eval_ctx,
                                                 ObObjectID &partition_id,

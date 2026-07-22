@@ -17,7 +17,7 @@
 #include "log_block_handler.h"
 #include "lib/stat/ob_diagnose_info.h"        // EVENT_*
 #include "lib/stat/ob_diagnostic_info_guard.h"
-#include "share/rc/ob_tenant_base.h"                    // mtl_malloc
+#include "share/rc/ob_server_runtime.h"                    // server_malloc
 #include "log_writer_utils.h"                           // LogWriteBuf
 #include "log_io_utils.h"                               // close_with_ret
 #include "log_io_adapter.h"                             // LogIOAdapter
@@ -50,7 +50,7 @@ int LogDIOAlignedBuf::init(uint32_t align_size, uint32_t aligned_buf_size)
     ret = OB_INIT_TWICE;
     PALF_LOG(ERROR,"LogDIOAlignedBuf has initted", K(ret), KPC(this));
   } else if (OB_ISNULL(aligned_data_buf_ = reinterpret_cast<char *>(
-      mtl_malloc_align(align_size, aligned_buf_size, "LogDIOAligned")))) {
+      server_malloc_align(align_size, aligned_buf_size, "LogDIOAligned")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     buf_write_offset_ = 0;
@@ -69,7 +69,7 @@ void LogDIOAlignedBuf::destroy()
   if (IS_INIT) {
     is_inited_ = false;
     if (NULL != aligned_data_buf_) {
-      mtl_free_align(aligned_data_buf_);
+      server_free_align(aligned_data_buf_);
       aligned_data_buf_ = NULL;
     }
     PALF_LOG(INFO, "destroy LogDIOAlignedBuf success");
@@ -359,7 +359,7 @@ int LogBlockHandler::inner_load_data_(const offset_t offset)
   offset_t aligned_read_count = upper_align(offset - aligned_offset, LOG_DIO_ALIGN_SIZE);
   int64_t aligned_out_read_count = 0;
   if (OB_ISNULL(input = reinterpret_cast<char *>(
-      mtl_malloc_align(LOG_DIO_ALIGN_SIZE, aligned_read_count, "LogDIOAligned")))) {
+      server_malloc_align(LOG_DIO_ALIGN_SIZE, aligned_read_count, "LogDIOAligned")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     PALF_LOG(WARN, "allocate memory failed", K(ret));
   } else if (OB_FAIL(io_adapter_->pread(io_fd_, aligned_read_count, aligned_offset, input, aligned_out_read_count))) {
@@ -374,7 +374,7 @@ int LogBlockHandler::inner_load_data_(const offset_t offset)
         K(aligned_out_read_count));
   }
   if (NULL != input) {
-    mtl_free_align(input);
+    server_free_align(input);
   }
   return ret;
 }
@@ -455,9 +455,9 @@ int LogBlockHandler::inner_write_impl_(const ObIOFd &io_fd, const char *buf, con
     }
   } while (OB_FAIL(ret));
   int64_t cost_ts = ObTimeUtility::fast_current_time() - start_ts;
-  EVENT_TENANT_INC(ObStatEventIds::PALF_WRITE_IO_COUNT);
-  EVENT_ADD(ObStatEventIds::PALF_WRITE_SIZE, count);
-  EVENT_ADD(ObStatEventIds::PALF_WRITE_TIME, cost_ts);
+  EVENT_INC(PALF_WRITE_IO_COUNT);
+  EVENT_ADD(PALF_WRITE_SIZE, count);
+  EVENT_ADD(PALF_WRITE_TIME, cost_ts);
   ATOMIC_AAF(&ob_pwrite_used_ts_, cost_ts);
   return ret;
 }

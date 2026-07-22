@@ -17,7 +17,6 @@
 #ifndef OB_LOAD_DATA_STMT_H_
 #define OB_LOAD_DATA_STMT_H_
 
-#include "sql/engine/cmd/ob_load_data_storage_info.h"
 #include "sql/resolver/cmd/ob_cmd_stmt.h"
 #include "sql/resolver/dml/ob_del_upd_stmt.h"
 #include "sql/resolver/dml/ob_hint.h"
@@ -29,8 +28,7 @@ namespace sql
 {
 enum class ObLoadFileLocation {
   SERVER_DISK = 0,
-  CLIENT_DISK,
-  OSS,
+  CLIENT_DISK
 };
 
 class ObLoadFileIterator
@@ -72,8 +70,6 @@ struct ObLoadArgument
                K_(dupl_action),
                K_(file_cs_type),
                K_(file_name),
-               K_(url_spec),
-               K_(access_info),
                K_(database_name),
                K_(table_name),
                K_(combined_name),
@@ -93,7 +89,6 @@ struct ObLoadArgument
     dupl_action_ = other.dupl_action_;
     file_cs_type_ = other.file_cs_type_;
     file_name_ = other.file_name_;
-    url_spec_ = other.url_spec_;
     diagnosis_limit_num_ = other.diagnosis_limit_num_;
     is_diagnosis_enabled_ = other.is_diagnosis_enabled_;
     database_name_ = other.database_name_;
@@ -105,9 +100,6 @@ struct ObLoadArgument
     part_level_ = other.part_level_;
     file_iter_.copy(other.file_iter_);
     compression_format_ = other.compression_format_;
-    if (OB_FAIL(access_info_.assign(other.access_info_))) {
-      OB_LOG(WARN, "fail to assign access info", K(ret), K_(other.access_info));
-    }
     return ret;
   }
 
@@ -117,8 +109,6 @@ struct ObLoadArgument
   ObLoadDupActionType dupl_action_;
   common::ObCollationType file_cs_type_;
   common::ObString file_name_;
-  common::ObString url_spec_;
-  ObLoadDataStorageInfo access_info_;
   common::ObString database_name_;
   common::ObString table_name_;
   common::ObString combined_name_;

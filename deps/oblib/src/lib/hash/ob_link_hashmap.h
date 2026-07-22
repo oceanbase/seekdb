@@ -215,10 +215,7 @@ public:
   int init(const lib::ObMemAttr &attr)
   {
     int ret = OB_SUCCESS;
-    if (OB_UNLIKELY(!true)) {
-      ret = OB_INVALID_ARGUMENT;
-      COMMON_LOG(WARN, "invalid argument", K(ret), K(attr));
-    } else if (OB_FAIL(array_alloc_.init(attr))) {
+    if (OB_FAIL(array_alloc_.init(attr))) {
       COMMON_LOG(ERROR, "array_alloc_ init error", K(ret), K(attr));
     } else {
       magic_code_ = MAGIC_CODE;
@@ -592,7 +589,7 @@ protected:
 };
 
 template<typename Key, typename Value, typename AllocHandle, typename RefHandle=RefHandle>
-class ObTenantLinkHashMap : public ObLinkHashMap<Key, Value, AllocHandle, RefHandle>
+class ObAllocatingLinkHashMap : public ObLinkHashMap<Key, Value, AllocHandle, RefHandle>
 {
 public:
   int create(const Key &key, Value *&value)
@@ -606,9 +603,9 @@ public:
     }
     return ret;
   }
-  int clean_tenant()
+  int clean_sessions()
   {
-    return this->alloc_handle_.clean_tenant();
+    return this->alloc_handle_.clean_sessions();
   }
 };
 

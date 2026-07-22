@@ -17,11 +17,11 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_drop_lob_task.h"
-#include "rootserver/ob_rs_serial_call.h"
+#include "rootserver/ob_local_ddl_serial_call.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "share/ob_ddl_error_message_table_operator.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
-#include "rootserver/ob_root_service.h"
+#include "rootserver/ob_local_management_service.h"
 
 using namespace oceanbase::rootserver;
 using namespace oceanbase::common;
@@ -32,7 +32,7 @@ using namespace oceanbase::share::schema;
 using namespace oceanbase::sql;
 
 ObDropLobTask::ObDropLobTask()
-  : ObDDLTask(DDL_DROP_LOB), wait_trans_ctx_(), root_service_(NULL), ddl_arg_()
+  : ObDDLTask(DDL_DROP_LOB), wait_trans_ctx_(), local_management_service_(NULL), ddl_arg_()
 {
 }
 
@@ -54,9 +54,9 @@ int ObDropLobTask::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", KR(ret), K(task_id), K(data_table_id),
         K(schema_version), K(parent_task_id));
-  } else if (OB_ISNULL(root_service_ = GCTX.root_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, root service is null", KR(ret));
+    LOG_WARN("error sys, local management service is null", KR(ret));
   } else if (OB_FAIL(deep_copy_ddl_arg(allocator_, ddl_arg, ddl_arg_))) {
     LOG_WARN("deep copy drop index arg failed", KR(ret));
   } else {
@@ -83,9 +83,9 @@ int ObDropLobTask::init(
   if (OB_UNLIKELY(!task_record.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", KR(ret), K(task_record));
-  } else if (OB_ISNULL(root_service_ = GCTX.root_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, root service is null", KR(ret));
+    LOG_WARN("error sys, local management service is null", KR(ret));
   } else {
   
     object_id_ = task_record.object_id_;
@@ -135,11 +135,11 @@ int ObDropLobTask::drop_lob_impl()
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *data_table_schema = nullptr;
   ObSqlString drop_lob_sql;
-  if (OB_ISNULL(root_service_)) {
+  if (OB_ISNULL(local_management_service_)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, root_service is nullptr", KR(ret));
-  } else if (OB_FAIL(root_service_->get_schema_service().get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("get tenant schema failed", KR(ret));
+    LOG_WARN("error sys, local_management_service is nullptr", KR(ret));
+  } else if (OB_FAIL(local_management_service_->get_schema_service().get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("get runtime schema failed", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, data_table_schema))) {
     LOG_WARN("get data table schema failed", KR(ret), K(object_id_));
   } else if (OB_ISNULL(data_table_schema)) {
@@ -161,7 +161,7 @@ int ObDropLobTask::drop_lob_impl()
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(2 * data_table_schema->get_all_part_num(), ddl_rpc_timeout))) {
       LOG_WARN("failed to get ddl rpc timeout", KR(ret));
     } else if (FALSE_IT(schema_guard.reset())) {
-    } else if (OB_FAIL(rootserver::serial_call([&]{ return root_service_->drop_lob(arg); }))) {
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return local_management_service_->drop_lob(arg); }))) {
       LOG_WARN("drop lob failed", KR(ret), K(ddl_rpc_timeout));
     }
     LOG_INFO("finish drop lob", KR(ret), K(arg));
@@ -278,13 +278,13 @@ int ObDropLobTask::check_switch_succ_()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
-  } else if (OB_ISNULL(root_service_)) {
+  } else if (OB_ISNULL(local_management_service_)) {
     ret = OB_ERR_SYS;
     LOG_WARN("error sys", KR(ret));
   } else if (OB_FAIL(refresh_schema_version())) {
     LOG_WARN("refresh schema version failed", KR(ret));
-  } else if (OB_FAIL(root_service_->get_schema_service().get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("get tenant schema failed", KR(ret));
+  } else if (OB_FAIL(local_management_service_->get_schema_service().get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("get runtime schema failed", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, data_table_schema_ptr))) {
     LOG_WARN("faild to get_table_schema", KR(ret), K(object_id_));
   } else if (OB_ISNULL(data_table_schema_ptr)) {

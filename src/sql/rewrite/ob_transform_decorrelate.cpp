@@ -760,10 +760,9 @@ int ObTransformDecorrelate::check_transform_aggr_validity(ObDMLStmt *stmt,
              NULL != ref_query->get_limit_percent_expr() ||
              NULL != ref_query->get_offset_expr() ||
              ref_query->has_window_function() ||
-             ref_query->has_sequence() ||
              ref_query->is_set_stmt()) {
     is_valid = false;
-    OPT_TRACE("ref query has rollup/having/limit offset/limit percent/win_func/sequence");
+    OPT_TRACE("ref query has rollup/having/limit offset/limit percent/win_func/set op");
   } else if (OB_FAIL(ObTransformUtils::check_is_basic_aggr_item(*ref_query, is_valid))) {
     LOG_WARN("failed to check subquery select item", K(ret));
   } else if (!is_valid) {

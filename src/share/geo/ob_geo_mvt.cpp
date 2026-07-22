@@ -18,7 +18,7 @@
 #include "ob_geo_mvt.h"
 #include "share/ob_lob_access_utils.h"
 #include "share/object/ob_obj_cast.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/geo/ob_geo_utils.h"
 #include "share/geo/ob_geo_mvt_encode_visitor.h"
 #include "common/json_type/ob_json_bin.h"

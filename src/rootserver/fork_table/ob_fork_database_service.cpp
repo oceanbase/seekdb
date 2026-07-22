@@ -59,12 +59,12 @@ int ObDDLService::fork_database(
     ObArenaAllocator allocator(lib::ObLabel("ForkDatabase"));
 
     ObDDLSQLTransaction trans(schema_service_);
-    if (OB_FAIL(get_tenant_schema_guard_with_version_in_inner_table(
+    if (OB_FAIL(get_runtime_schema_guard_with_version_in_inner_table(
             schema_guard))) {
       LOG_WARN("get schema guard in inner table failed", K(ret));
     } else if (OB_FAIL(schema_guard.get_schema_version(
                    refreshed_schema_version))) {
-      LOG_WARN("failed to get tenant schema version", KR(ret));
+      LOG_WARN("failed to get runtime schema version", KR(ret));
     }
 
     // Database existence basic check.
@@ -106,7 +106,7 @@ int ObDDLService::fork_database(
       }
     }
 
-    // Check unsupported database objects: Routine, Package, Trigger, Sequence and Outline.
+    // Check unsupported database objects: Routine, Package, Trigger and Outline.
     if (OB_SUCC(ret)) {
       const uint64_t database_id = src_db_schema->get_database_id();
 
@@ -149,21 +149,6 @@ int ObDDLService::fork_database(
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "fork database containing triggers");
           LOG_WARN("fork database with triggers is not supported", K(ret),
                    K(database_id), "trigger_count", trigger_ids.count());
-        }
-      }
-
-      // Check if database has Sequence
-      ObArray<const ObSequenceSchema *> sequences;
-      if (OB_SUCC(ret)) {
-        if (OB_FAIL(schema_guard.get_sequence_schemas_in_database(
-                database_id, sequences))) {
-          LOG_WARN("failed to get sequence schemas in database", KR(ret),
-                   K(database_id));
-        } else if (sequences.count() > 0) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "fork database containing sequences");
-          LOG_WARN("fork database with sequences is not supported", K(ret),
-                   K(database_id), "sequence_count", sequences.count());
         }
       }
 

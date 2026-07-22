@@ -240,7 +240,7 @@ int ObLogGranuleIterator::check_adaptive_task_splitting(ObLogTableScan *tsc)
     // pre_graph maybe null
     const ObQueryRangeProvider *pre_graph = tsc->get_pre_graph();
     if (tsc->get_scan_order() == common::ObQueryFlag::ScanOrder::NoOrder) {
-      // not support for delete insert noorder scan
+      // unordered scans cannot be paused safely
     } else if (!tsc->get_pushdown_aggr_exprs().empty()
                || !tsc->get_pushdown_groupby_columns().empty()) {
       // not support for aggregate/group by push down
@@ -250,8 +250,6 @@ int ObLogGranuleIterator::check_adaptive_task_splitting(ObLogTableScan *tsc)
       // not support for access domain id in full text index
     } else if (tsc->use_das()) {
       // not support das split
-    } else if (nullptr != pre_graph && tsc->get_pre_graph()->is_ss_range()) {
-      // not support in skip scan scene
     } else if (nullptr != pre_graph && OB_FAIL(pre_graph->is_get(is_table_get))) {
       LOG_WARN("failed to do is_table_get");
     } else if (is_table_get) {

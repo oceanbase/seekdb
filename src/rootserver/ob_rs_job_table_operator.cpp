@@ -22,96 +22,8 @@ using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::rootserver;
 
-namespace {
-const char *get_job_status_str_(const int result_code)
-{
-  const char *status = "FAILED";
-  if (OB_SUCCESS == result_code) {
-    status = "SUCCESS";
-  }
-  return status;
-}
-} // namespace
-
-const char* const ObRsJobTableOperator::TABLE_NAME = "__all_rootservice_job";
-
-static const char* job_type_str_array[JOB_TYPE_MAX] = {
-  NULL,
-  "ALTER_TENANT_LOCALITY",
-  "ROLLBACK_ALTER_TENANT_LOCALITY", // deprecated in V4.2
-  "MIGRATE_UNIT",
-  "DELETE_SERVER",
-  "SHRINK_RESOURCE_TENANT_UNIT_NUM", // deprecated in V4.2
-  "RESTORE_TENANT",
-  "UPGRADE_STORAGE_FORMAT_VERSION",
-  "STOP_UPGRADE_STORAGE_FORMAT_VERSION",
-  "CREATE_INNER_SCHEMA",
-  "UPGRADE_POST_ACTION",
-  "UPGRADE_SYSTEM_VARIABLE",
-  "UPGRADE_SYSTEM_TABLE",
-  "UPGRADE_BEGIN",
-  "UPGRADE_VIRTUAL_SCHEMA",
-  "UPGRADE_SYSTEM_PACKAGE",
-  "UPGRADE_ALL_POST_ACTION",
-  "UPGRADE_INSPECTION",
-  "UPGRADE_END",
-  "UPGRADE_ALL",
-  "ALTER_RESOURCE_TENANT_UNIT_NUM",
-  "ALTER_TENANT_PRIMARY_ZONE",
-  "UPGRADE_FINISH",
-  "LOAD_MYSQL_SYS_PACKAGE",
-};
-
-bool ObRsJobTableOperator::is_valid_job_type(const ObRsJobType &rs_job_type)
-{
-  return rs_job_type > ObRsJobType::JOB_TYPE_INVALID && rs_job_type < ObRsJobType::JOB_TYPE_MAX;
-}
-
-const char* ObRsJobTableOperator::get_job_type_str(ObRsJobType job_type)
-{
-  STATIC_ASSERT(ARRAYSIZEOF(job_type_str_array) == JOB_TYPE_MAX,
-                "type string array size mismatch with enum ObRsJobType");
-
-  const char* str = NULL;
-  if (is_valid_job_type(job_type)) {
-    str = job_type_str_array[job_type];
-  }
-  return str;
-}
-
-ObRsJobType ObRsJobTableOperator::get_job_type(const common::ObString &job_type_str)
-{
-  ObRsJobType ret_job_type = JOB_TYPE_INVALID;
-  for (int i = 0; i < static_cast<int>(JOB_TYPE_MAX); ++i) {
-    if (NULL != job_type_str_array[i]
-        && 0 == job_type_str.case_compare(job_type_str_array[i])) {
-      ret_job_type = static_cast<ObRsJobType>(i);
-      break;
-    }
-  }
-  return ret_job_type;
-}
-
-static const char* job_status_str_array[JOB_STATUS_MAX] = {
-  NULL,
-  "INPROGRESS",
-  "SUCCESS",
-  "FAILED",
-  "SKIP_CHECKING_LS_STATUS",
-};
-
-ObRsJobStatus ObRsJobTableOperator::get_job_status(const common::ObString &job_status_str)
-{
-  ObRsJobStatus ret_job_status = JOB_STATUS_INVALID;
-  for (int i = 0; i < static_cast<int>(JOB_STATUS_MAX); ++i) {
-    if (NULL != job_status_str_array[i]
-        && 0 == job_status_str.case_compare(job_status_str_array[i])) {
-      ret_job_status = static_cast<ObRsJobStatus>(i);
-      break;
-    }
-  }
-  return ret_job_status;
-}
+const char* const ObRsJobTableOperator::SYSTEM_PACKAGE_LOAD_JOB_TYPE = "LOAD_SYSTEM_PACKAGE";
+const char* const ObRsJobTableOperator::JOB_STATUS_INPROGRESS = "INPROGRESS";
 
 
 ObRsJobTableOperator::ObRsJobTableOperator()
@@ -137,25 +49,20 @@ int ObRsJobTableOperator::init()
   return ret;
 }
 
-int ObRsJobTableOperator::create_job(ObRsJobType job_type, int64_t &job_id)
+int ObRsJobTableOperator::create_system_package_load_job(int64_t &job_id)
 {
   int ret = OB_SUCCESS;
-  const char* job_type_str = NULL;
-  if (!is_valid_job_type(job_type)
-      || NULL == (job_type_str = get_job_type_str(job_type))) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid job type", K(ret), K(job_type), K(job_type_str));
-  } else if (!inited_) {
+  job_id = OB_INVALID_ID;
+  if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(alloc_job_id(job_id))) {
     LOG_WARN("failed to alloc job id", K(ret), K(job_id));
   } else {
-    const int64_t now = ObTimeUtility::current_time();
-    share::ObRootServiceJobEntry entry;
+    share::ObLocalManagementServiceJobEntry entry;
     entry.job_id_ = job_id;
-    entry.job_type_ = common::ObString::make_string(job_type_str);
-    entry.job_status_ = common::ObString::make_string(job_status_str_array[JOB_STATUS_INPROGRESS]);
+    entry.job_type_ = common::ObString::make_string(SYSTEM_PACKAGE_LOAD_JOB_TYPE);
+    entry.job_status_ = common::ObString::make_string(JOB_STATUS_INPROGRESS);
     entry.result_code_ = 0;
     if (OB_FAIL(storage_.create_job(entry))) {
       LOG_WARN("failed to create rs job in sqlite", K(ret));
@@ -166,50 +73,38 @@ int ObRsJobTableOperator::create_job(ObRsJobType job_type, int64_t &job_id)
   return ret;
 }
 
-int ObRsJobTableOperator::find_job(
-    const ObRsJobType job_type,
-    int64_t &job_id)
+int ObRsJobTableOperator::find_system_package_load_job(int64_t &job_id)
 {
   int ret = OB_SUCCESS;
-  const char* job_type_str = NULL;
   job_id = 0;
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (!is_valid_job_type(job_type)
-      || NULL == (job_type_str = get_job_type_str(job_type))) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid job type", K(ret), K(job_type), K(job_type_str));
-  } else if (OB_FAIL(storage_.find_job(common::ObString::make_string(job_type_str), job_id))) {
-    LOG_WARN("fail to find rootservice job", KR(ret), K(job_type));
+  } else if (OB_FAIL(storage_.find_job(
+                 common::ObString::make_string(SYSTEM_PACKAGE_LOAD_JOB_TYPE), job_id))) {
+    LOG_WARN("fail to find system package load job", KR(ret));
   }
   return ret;
 }
 
-int ObRsJobTableOperator::get_job_count(
-    const ObRsJobType job_type,
-    int64_t &job_count)
+int ObRsJobTableOperator::get_system_package_load_job_count(int64_t &job_count)
 {
   int ret = OB_SUCCESS;
-  const char* job_type_str = NULL;
   job_count = 0;
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (!is_valid_job_type(job_type)
-      || NULL == (job_type_str = get_job_type_str(job_type))) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid job type", K(ret), K(job_type), K(job_type_str));
-  } else if (OB_FAIL(storage_.get_job_count(common::ObString::make_string(job_type_str), job_count))) {
-    LOG_WARN("fail to find rootservice job", KR(ret), K(job_type));
+  } else if (OB_FAIL(storage_.get_job_count(
+                 common::ObString::make_string(SYSTEM_PACKAGE_LOAD_JOB_TYPE), job_count))) {
+    LOG_WARN("fail to count system package load jobs", KR(ret));
   }
   return ret;
 }
 
-int ObRsJobTableOperator::complete_job(int64_t job_id, int result_code)
+int ObRsJobTableOperator::complete_system_package_load_job(int64_t job_id, int result_code)
 {
   int ret = OB_SUCCESS;
-  const char *status_str = get_job_status_str_(result_code);
+  const char *status_str = OB_SUCCESS == result_code ? "SUCCESS" : "FAILED";
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret), K(inited_));

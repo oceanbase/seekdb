@@ -181,8 +181,6 @@ int ObRowFuse::fuse_row(const blocksstable::ObDatumRow &former,
   if (OB_UNLIKELY(!former.is_valid() || !result.is_valid() || !nop_pos.is_valid())) {
     ret = common::OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid arguments", K(ret), K(former), K(result), K(nop_pos.count()), K(nop_pos.capacity()));
-  } else if (OB_FAIL(result.fuse_delete_insert(former))) {
-    STORAGE_LOG(WARN, "Fail to fuse delete_insert info", K(ret), K(former), K(result));
   } else if (result.row_flag_.is_delete() || former.row_flag_.is_not_exist()) {
     // do nothing
   } else {

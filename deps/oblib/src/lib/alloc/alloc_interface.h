@@ -27,7 +27,7 @@ namespace oceanbase
 {
 namespace lib
 {
-class ObTenantCtxAllocator;
+class ObCtxAllocator;
 struct AChunk;
 struct ABlock;
 struct ObMemAttr;

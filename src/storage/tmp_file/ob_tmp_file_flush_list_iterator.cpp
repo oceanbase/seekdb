@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "share/ob_errno.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tmp_file/ob_tmp_file_flush_list_iterator.h"
 #include "storage/tmp_file/ob_shared_nothing_tmp_file.h"
 
@@ -149,12 +149,8 @@ int ObTmpFileFlushListIterator::reinsert_files_into_flush_list_(const int64_t st
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null", KR(ret));
       } else if (files_[i].is_meta_) {
-        ObSharedNothingTmpFile *sn_file = nullptr;
-        if (OB_UNLIKELY(file_handle.get()->get_mode() != ObITmpFile::ObTmpFileMode::SHARED_NOTHING)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_ERROR("unexpected file mode", KR(ret), KPC(file_handle.get()));
-        } else if (FALSE_IT(sn_file = static_cast<ObSharedNothingTmpFile *>(file_handle.get()))) {
-        } else if (sn_file->is_in_meta_flush_list()) {
+        ObSharedNothingTmpFile *sn_file = static_cast<ObSharedNothingTmpFile *>(file_handle.get());
+        if (sn_file->is_in_meta_flush_list()) {
           // do nothing, because meta flush node may be re-inserted after
           // tmp file insert meta tree item; do not handle data flush node here
           // because data node will not be re-inserted during flushing procedure
@@ -298,12 +294,8 @@ int ObTmpFileFlushListIterator::cache_files_(const FlushCtxState iter_stage)
       if (OB_ISNULL(tmp_file)) {
         // could not happen, just skip
       } else if (cur_caching_list_is_meta_) {
-        ObSharedNothingTmpFile *sn_file = nullptr;
-        if (OB_UNLIKELY(tmp_file->get_mode() != ObITmpFile::ObTmpFileMode::SHARED_NOTHING)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_ERROR("unexpected file mode", KR(ret), KPC(tmp_file));
-        } else if (FALSE_IT(sn_file = static_cast<ObSharedNothingTmpFile *>(tmp_file))) {
-        } else if (OB_FAIL(sn_file->reinsert_meta_flush_node())) {
+        ObSharedNothingTmpFile *sn_file = static_cast<ObSharedNothingTmpFile *>(tmp_file);
+        if (OB_FAIL(sn_file->reinsert_meta_flush_node())) {
           LOG_WARN("fail to reinsert flush node", KR(ret), K(files_[i]));
         }
       } else if (OB_TMP_FAIL(tmp_file->reinsert_data_flush_node())) {
@@ -463,9 +455,6 @@ int ObTmpFileFlushListIterator::get_flushing_file_dirty_page_num_(const ObITmpFi
     ObITmpFile &mutable_file_ref = const_cast<ObITmpFile &>(file);
     int64_t dirty_page_size = mutable_file_ref.get_dirty_data_page_size_with_lock();
     page_num = upper_align(dirty_page_size, ObTmpFileGlobal::ALLOC_PAGE_SIZE) / ObTmpFileGlobal::ALLOC_PAGE_SIZE;
-  } else if (OB_UNLIKELY(file.get_mode() != ObITmpFile::ObTmpFileMode::SHARED_NOTHING)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected file mode", KR(ret), K(file));
   } else { // stage > FlushCtxState::FSM_F3 is flushing meta page
     int64_t non_rightmost_dirty_page_num = 0;
     int64_t rightmost_dirty_page_num = 0;
@@ -746,16 +735,9 @@ bool ObTmpFileFlushListIterator::ObFlushingTmpFileWrapper::operator <(const ObFl
   } else if (file_handle_.get()->get_dir_id() > other.file_handle_.get()->get_dir_id()) {
     b_ret = false;
   } else if (is_meta_) {
-    if (OB_UNLIKELY(file_handle_.get()->get_mode() != ObITmpFile::ObTmpFileMode::SHARED_NOTHING ||
-                    other.file_handle_.get()->get_mode() != ObITmpFile::ObTmpFileMode::SHARED_NOTHING)) {
-      ret = OB_ERR_UNEXPECTED;
-      b_ret = false;
-      LOG_ERROR("unexpected file mode", KR(ret), K(file_handle_), K(other.file_handle_));
-    } else {
-      ObSharedNothingTmpFile *sn_file = static_cast<ObSharedNothingTmpFile *>(file_handle_.get());
-      ObSharedNothingTmpFile *sn_other_file = static_cast<ObSharedNothingTmpFile *>(other.file_handle_.get());
-      b_ret = sn_file->get_meta_page_flush_level() < sn_other_file->get_meta_page_flush_level();
-    }
+    ObSharedNothingTmpFile *sn_file = static_cast<ObSharedNothingTmpFile *>(file_handle_.get());
+    ObSharedNothingTmpFile *sn_other_file = static_cast<ObSharedNothingTmpFile *>(other.file_handle_.get());
+    b_ret = sn_file->get_meta_page_flush_level() < sn_other_file->get_meta_page_flush_level();
   } else {
     b_ret = file_handle_.get()->get_data_page_flush_level() < other.file_handle_.get()->get_data_page_flush_level();
   }

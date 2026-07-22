@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_storage_table_guard.h"
-#include "storage/tx_storage/ob_tenant_freezer.h"  // previously hidden behind a transitive include
+#include "storage/tx_storage/ob_memstore_freezer.h"  // previously hidden behind a transitive include
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -63,7 +63,7 @@ void ObStorageTableGuard::throttle_if_needed_()
   } else {
     ObSharedMemAllocMgr *shared_mem_alloc_mgr = share::g_mp->shared_mem_alloc_mgr();
     if (OB_ISNULL(shared_mem_alloc_mgr)) {
-      // during bootstrap phase, tenant module may not be initialized yet, skip throttle
+      // During bootstrap the server runtime may not be initialized yet; skip throttling.
     } else {
       TxShareThrottleTool &throttle_tool = shared_mem_alloc_mgr->share_resource_throttle_tool();
       ObThrottleInfoGuard share_ti_guard;
@@ -82,7 +82,7 @@ void ObStorageTableGuard::throttle_if_needed_()
             (void)TxShareMemThrottleUtil::do_throttle<ObMemstoreAllocator>(for_replay_,
                                                                            store_ctx_.timeout_,
                                                                            share::memstore_throttled_alloc(),
-                                                                           share::g_mp->tenant_freezer()->exist_ls_throttle_is_skipping(),
+                                                                           share::g_mp->memstore_freezer()->exist_ls_throttle_is_skipping(),
                                                                            ls->is_offline(),
                                                                            throttle_tool,
                                                                            share_ti_guard,

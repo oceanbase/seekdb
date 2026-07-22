@@ -129,7 +129,8 @@ int ObSSTableIndexBlockLevelScanner::init(
   } else if (OB_UNLIKELY(prefetch_depth > MAX_PREFIX_DEPTH || prefetch_depth < 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid prefetch depth", K(ret), K(prefetch_depth));
-  } else if (OB_FAIL(idx_row_scanner_.init(datum_utils, scan_allocator, query_flag, nested_offset))) {
+  } else if (OB_FAIL(idx_row_scanner_.init(
+                 datum_utils, scan_allocator, query_flag, nested_offset))) {
     LOG_WARN("fail to init idx row scanner", K(ret));
   } else {
     query_range_ = query_range;

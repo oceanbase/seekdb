@@ -53,7 +53,6 @@ alter table fts_table drop c3, add c4 char(10) default 'a';
 ALTER TABLE fts_table ADD c5 INT AUTO_INCREMENT;
 ALTER TABLE fts_table ADD COLUMN c6 int AS (c1 + 3) STORED;
 alter table fts_table drop primary key;
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table fts_table;
 
 --disable_warnings
@@ -66,7 +65,6 @@ alter table fts_table modify c2 varchar(128) first;
 alter table fts_table modify c2 varchar(12) after c1;
 alter table fts_table modify c1 int unsigned not null auto_increment;
 alter table fts_table modify c3 char(30);
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table fts_table;
 
 --disable_warnings
@@ -77,10 +75,8 @@ create table fts_table(c1 int, c2 varchar(20), primary key(c1), fulltext index f
 alter table fts_table change c1 c1 varchar(128);
 alter table fts_table change c1 c1 varchar(128) before c2;
 alter table fts_table change c1 c3 int after c2;
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table fts_table;
 drop index f102 on fts_table;
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table fts_table;
 
 --disable_warnings
@@ -136,10 +132,8 @@ alter table fts_table drop primary key;
 alter table fts_table add primary key(c1);
 alter table fts_table drop primary key;
 alter table fts_table modify c1 bigint, add primary key(c1);
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table fts_table;
 alter table fts_table drop primary key, add primary key(c1);
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table fts_table;
 
 --disable_warnings
@@ -176,13 +170,10 @@ alter table fts_table modify c3 varchar(5) charset 'utf8mb4';
 alter table fts_table modify c3 char(8) , add c5 int, drop column c4;
 alter table fts_table convert to CHARACTER SET 'utf8mb4';
 alter table fts_table modify c3 varchar(5) charset 'utf8';
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table fts_table;
 alter table fts_table drop index f102;
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table fts_table;
 alter table fts_table partition by range(c1) (partition p0 values less than (20), partition p1 values less than (200));
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table fts_table;
 
 --disable_warnings

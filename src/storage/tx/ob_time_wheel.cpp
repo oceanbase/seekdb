@@ -15,7 +15,7 @@
  */
 
 #include "ob_time_wheel.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -313,12 +313,12 @@ void TimeWheelBase::run1()
 TimeWheelBase *TimeWheelBase::alloc(const char *name)
 {
   TimeWheelBase *base = NULL;
-  void *ptr = share::mtl_malloc(sizeof(TimeWheelBase), name);
+  void *ptr = share::server_malloc(sizeof(TimeWheelBase), name);
   if (OB_ISNULL(ptr)) {
     TRANS_LOG_RET(ERROR, OB_ALLOCATE_MEMORY_FAILED, "alloc TimeWheelBase failed");
   } else if (OB_ISNULL(base = new(ptr) TimeWheelBase())) {
     TRANS_LOG_RET(ERROR, OB_ALLOCATE_MEMORY_FAILED, "construct TimeWheelBase failed");
-    share::mtl_free(ptr);
+    share::server_free(ptr);
     ptr = NULL;
   }
   return base;
@@ -328,7 +328,7 @@ void TimeWheelBase::free(TimeWheelBase *base)
 {
   if (OB_NOT_NULL(base)) {
     base->~TimeWheelBase();
-    share::mtl_free(base);
+    share::server_free(base);
   }
 }
 
@@ -351,7 +351,7 @@ int ObTimeWheel::init(const int64_t precision, const int64_t real_thread_num, co
       } else if (OB_SUCCESS != (ret = tw_base_[i]->init(precision, name))) {
         TRANS_LOG(WARN, "TimeWheelBase init error", KR(ret));
       } else {
-        tw_base_[i]->set_run_wrapper(MTL_CTX());
+        tw_base_[i]->set_run_wrapper(share::server_runtime());
       }
     }
     if (OB_FAIL(ret)) {

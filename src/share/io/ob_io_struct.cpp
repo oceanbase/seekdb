@@ -18,9 +18,8 @@
 
 #include "ob_io_struct.h"
 #include "share/ob_server_struct.h"  // GCTX, previously hidden behind a transitive include(free within share)
-#include "share/rc/ob_tenant_base.h"  // MTL_ID, previously hidden behind a transitive include(free within share)
+#include "share/rc/ob_server_runtime.h"  // SERVER_ID, previously hidden behind a transitive include(free within share)
 #include "share/ob_io_device_helper.h"
-#include "lib/restore/ob_fd_simulator.h"
 
 
 #ifdef _WIN32
@@ -174,7 +173,7 @@ int ObIOAllocator::init(const int64_t memory_limit)
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("io allocator init twice", K(ret), K(is_inited_));
-  } else if (OB_UNLIKELY(!true || memory_limit <= 0)) {
+  } else if (OB_UNLIKELY(memory_limit <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(memory_limit));
   } else if (OB_FAIL(inner_allocator_.init(OB_MALLOC_MIDDLE_BLOCK_SIZE,
@@ -347,10 +346,7 @@ ObIOUsage::~ObIOUsage()
 int ObIOUsage::init(const int64_t group_num)
 {
   int ret =OB_SUCCESS;
-  if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
-  } else if (FALSE_IT(info_.set_attr(ObMemAttr("IOUsageInfo")))) {
+  if (FALSE_IT(info_.set_attr(ObMemAttr("IOUsageInfo")))) {
   } else if (FALSE_IT(failed_req_info_.set_attr(ObMemAttr("IOUsageInfo")))) {
   } else if (FALSE_IT(group_throttled_time_us_.set_attr(ObMemAttr("CPUUSage")))) {
   } else if (OB_FAIL(refresh_group_num(group_num))) {
@@ -1132,7 +1128,7 @@ int ObAsyncIOChannel::on_full_return(ObIORequest &req, const int64_t complete_si
     LOG_WARN("io result is null", K(ret));
   } else {
     req.io_result_->complete_size_ = complete_size;
-    if (OB_FAIL(req.tenant_io_mgr_->enqueue_callback(req))) {
+    if (OB_FAIL(req.io_service_->enqueue_callback(req))) {
       LOG_WARN("push io request into callback queue failed", K(ret), K(req));
       req.io_result_->finish(ret, &req);
     }
@@ -1394,10 +1390,6 @@ int ObSyncIOChannel::do_sync_io(ObIORequest &req)
   int64_t io_offset = -1;
   ObIODevice *device_handle = req.fd_.device_handle_;
 
-  const int64_t timeout_us = MIN(req.get_remained_io_timeout_us(), 
-      OB_IO_MANAGER.get_object_storage_io_timeout_ms() * 1000LL);
-  ObObjectStorageTenantGuard guard(timeout_us);
-
   // no need to perform io for req that has already been canceled
   if (req.is_canceled()) {
     ret = OB_CANCELED;
@@ -1416,49 +1408,10 @@ int ObSyncIOChannel::do_sync_io(ObIORequest &req)
         LOG_WARN("pread failed", K(ret), K(req));
     }
   } else if (req.get_flag().is_write()) {
-    if (device_handle->is_local_device()) {
-      if (OB_FAIL(check_io_hang_errsim())) {
-      } else if (OB_FAIL(device_handle->pwrite(req.fd_, io_offset, req.io_result_->size_, req.calc_io_buf(), io_size))) {
-        LOG_WARN("pwrite failed", K(ret), K(req));
-      }
-    } else {
-      int flag = -1;
-      ObFdSimulator::get_fd_flag(req.fd_, flag);
-      if (ObStorageAccessType::OB_STORAGE_ACCESS_OVERWRITER == flag) {
-        if (0 == req.io_result_->size_) {
-          char buf = '\0';
-          if (OB_FAIL(device_handle->write(req.fd_, &buf, req.io_result_->size_, io_size))) {
-            LOG_WARN("write failed", K(ret), K(req));
-          }
-        } else {
-          if (OB_FAIL(device_handle->write(req.fd_, req.calc_io_buf(), req.io_result_->size_, io_size))) {
-            LOG_WARN("write failed", K(ret), K(req));
-          }
-        }
-      } else if ((ObStorageAccessType::OB_STORAGE_ACCESS_APPENDER == flag)
-                 || (ObStorageAccessType::OB_STORAGE_ACCESS_MULTIPART_WRITER == flag)) {
-        if (OB_FAIL(device_handle->pwrite(req.fd_, io_offset, req.io_result_->size_, req.calc_io_buf(), io_size))) {
-          LOG_WARN("pwrite failed", K(ret), K(req));
-        }
-      } else if (OB_STORAGE_ACCESS_DIRECT_MULTIPART_WRITER == flag) {
-        if (OB_FAIL(device_handle->upload_part(req.fd_, req.calc_io_buf(),
-                                                req.io_result_->size_,
-                                                req.part_id_,
-                                                io_size))) {
-          LOG_WARN("direct upload part failed", K(ret), K(req), K(flag), K(req.io_result_));
-        }
-      } else if (OB_STORAGE_ACCESS_BUFFERED_MULTIPART_WRITER == flag) {
-        // buffered multipart writer does not require reallocation of memory and data copying
-        if (OB_FAIL(device_handle->upload_part(req.fd_, nullptr,
-                                                req.io_result_->size_,
-                                                req.part_id_,
-                                                io_size))) {
-          LOG_WARN("buffered upload part failed", K(ret), K(req), K(flag), K(req.io_result_));
-        }
-      } else {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("storage access type not supported", K(ret), K(flag), K(req));
-      }
+    if (OB_FAIL(check_io_hang_errsim())) {
+    } else if (OB_FAIL(device_handle->pwrite(
+        req.fd_, io_offset, req.io_result_->size_, req.calc_io_buf(), io_size))) {
+      LOG_WARN("pwrite failed", K(ret), K(req));
     }
   } else {
     ret = OB_NOT_SUPPORTED;
@@ -1468,7 +1421,7 @@ int ObSyncIOChannel::do_sync_io(ObIORequest &req)
     req.io_result_->time_log_.return_ts_ = ObTimeUtility::fast_current_time();
     req.io_result_->complete_size_ = io_size;
     if (req.can_callback()) {
-      if (OB_FAIL(req.tenant_io_mgr_->enqueue_callback(req))) {
+      if (OB_FAIL(req.io_service_->enqueue_callback(req))) {
         LOG_WARN("push io request into callback queue failed", K(ret), K(req));
         req.io_result_->finish(ret, &req);
       }
@@ -2019,8 +1972,6 @@ void ObIOFaultDetector::handle(void *task)
     retry_task->io_info_.flag_.set_detect();
     if (is_device_warning_ && retry_task->io_info_.flag_.is_time_detect()) {
       //ignore
-    } else if (!is_supported_detect_read_( retry_task->io_info_.fd_)) {
-      //ignore
     } else {
       int64_t timeout_ms = retry_task->timeout_ms_;
       // remain 1s to avoid race condition for retry_black_list_interval
@@ -2152,13 +2103,6 @@ int ObIOFaultDetector::set_detect_task_io_info_(
   return ret;
 }
 
-bool ObIOFaultDetector::is_supported_detect_read_(const ObIOFd &fd)
-{
-  bool bret = true;
-  int ret = OB_SUCCESS;
-  return bret;
-}
-
 void ObIOFaultDetector::record_io_timeout(const ObIOResult &result, const ObIORequest &req)
 {
   int ret = OB_SUCCESS;
@@ -2169,7 +2113,7 @@ void ObIOFaultDetector::record_io_timeout(const ObIOResult &result, const ObIORe
     //ignore, do not retry
   } else if (req.get_flag().is_sync()) {
     LOG_INFO("ignore fault detect for sync io", K(req));
-  } else if (result.flag_.is_read() && !result.is_object_device_req_) {
+  } else if (result.flag_.is_read()) {
     RetryTask *retry_task = nullptr;
     if (OB_ISNULL(retry_task = op_alloc(RetryTask))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -2205,7 +2149,7 @@ void ObIOFaultDetector::record_io_error(const ObIOResult &result, const ObIORequ
     //ignore, do not retry
   } else if (req.get_flag().is_sync()) {
     LOG_INFO("ignore fault detect for sync io", K(req));
-  } else if (result.flag_.is_read() && !result.is_object_device_req_) {
+  } else if (result.flag_.is_read()) {
     if (OB_FAIL(record_read_failure_(result, req))) {
       LOG_WARN("record read failure failed", K(ret), K(result), K(req));
     }
@@ -2264,13 +2208,10 @@ ObIOTracer::~ObIOTracer()
 int ObIOTracer::init()
 {
   int ret = OB_SUCCESS;
-  const ObMemAttr attr = SET_USE_500("io_trace_map");
+  const ObMemAttr attr("io_trace_map");
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(trace_map_.create(1009, attr))) {
     LOG_WARN("create trace map failed", K(ret));
   } else {

@@ -464,7 +464,7 @@ jx_t1	CREATE TABLE `jx_t1` (
   PRIMARY KEY (`obschema_c_0_AOA0Kr`, `obschema_c_1_WVgnv`),
   KEY `obschema_i_0_o` (`obschema_c_3_lcWP`(5), `obschema_c_4_U`, `obschema_c_5_Oz`(213)) BLOCK_SIZE 16384 LOCAL,
   KEY `obschema_i_1_4Q` (`obschema_c_1_WVgnv`, `obschema_c_2_7`, `obschema_c_3_lcWP`(84), `obschema_c_4_U`, `obschema_c_5_Oz`(183)) BLOCK_SIZE 16384 LOCAL
-) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = NUM BLOCK_SIZE = SIZE USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = SIZE PCTFREE = 10
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = SIZE TABLET_SIZE = SIZE PCTFREE = 10
 select * from jx_t1;
 +---------------------+--------------------+----------------------------+-------------------+----------------+-----------------+
 | obschema_c_0_AOA0Kr | obschema_c_1_WVgnv | obschema_c_2_7             | obschema_c_3_lcWP | obschema_c_4_U | obschema_c_5_Oz |

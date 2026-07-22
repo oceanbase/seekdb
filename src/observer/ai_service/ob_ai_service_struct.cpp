@@ -16,8 +16,8 @@
 
 #include "observer/ai_service/ob_ai_service_struct.h"
 #include "lib/json/ob_json.h"
-#include "share/rc/ob_tenant_base.h"
-#include "observer/omt/ob_tenant_ai_service.h"
+#include "share/rc/ob_server_runtime.h"
+#include "observer/omt/ob_ai_service.h"
 
 
 #define USING_LOG_PREFIX SHARE
@@ -153,7 +153,7 @@ bool ObAiModelEndpointInfo::is_valid_ai_model_name(const ObString &ai_model_name
   if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", KR(ret));
-  } else if (OB_FAIL(schema_service->get_tenant_schema_guard(guard))) {
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(guard))) {
     LOG_WARN("fail to get schema guard", KR(ret));
   } else if (OB_FAIL(guard.get_ai_model_schema( ai_model_name, ai_model_schema))) {
     LOG_WARN("fail to get ai model schema", KR(ret), K(ai_model_name));

@@ -17,7 +17,6 @@
 #include "storage/tx/ob_tx_loop_worker.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/tx/ob_trans_service.h"
-#include "storage/tx/ob_leak_checker.h"
 #include "storage/tx/ob_weak_read_util.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ls/ob_ls.h"
@@ -31,7 +30,7 @@ using namespace logservice;
 namespace transaction
 {
 
-int ObTxLoopWorker::mtl_init(ObTxLoopWorker *& ka)
+int ObTxLoopWorker::server_module_init(ObTxLoopWorker *& ka)
 {
   return ka->init();
 }
@@ -87,9 +86,8 @@ void ObTxLoopWorker::destroy()
 void ObTxLoopWorker::reset()
 {
   last_tx_gc_ts_ = 0;
-  last_retain_ctx_gc_ts_ = 0;
   last_log_cb_pool_adjust_ts_ = 0;
-  last_tenant_config_refresh_ts_ = 0;
+  last_runtime_config_refresh_ts_ = 0;
   stop_flag_ = true;
 }
 
@@ -100,14 +98,9 @@ void ObTxLoopWorker::runTimerTask()
   int64_t time_used = 0;
   lib::set_thread_name("TxLoopWorker");
   bool can_gc_tx = false;
-  bool can_gc_retain_ctx = false;
   bool can_adjust_log_cb_pool =  false;
 
   start_time_us = ObTimeUtility::current_time();
-  if (REACH_TIME_INTERVAL(60000000)) {
-    ObLeakChecker::dump();
-  }
-
     // tx gc, interval = 5s
     if (common::ObClockGenerator::getClock() - last_tx_gc_ts_ > TX_GC_INTERVAL) {
       TRANS_LOG(INFO, "tx gc loop thread is running");
@@ -115,13 +108,6 @@ void ObTxLoopWorker::runTimerTask()
       can_gc_tx = true;
     }
     
-    //retain ctx gc, interval = 5s
-    if (common::ObClockGenerator::getClock() - last_retain_ctx_gc_ts_ > TX_RETAIN_CTX_GC_INTERVAL) {
-      TRANS_LOG(INFO, "try gc retain ctx");
-      last_retain_ctx_gc_ts_ = common::ObClockGenerator::getClock();
-      can_gc_retain_ctx = true;
-    }
-
     if (common::ObClockGenerator::getClock() - last_log_cb_pool_adjust_ts_
         > TX_LOG_CB_POOL_ADJUST_INTERVAL) {
       TRANS_LOG(INFO, "try to adjust log cb pool");
@@ -129,14 +115,14 @@ void ObTxLoopWorker::runTimerTask()
       can_adjust_log_cb_pool = true;
     }
 
-    // refresh tx tenant config
+    // Refresh transaction runtime configuration.
     if (common::ObClockGenerator::getClock() -
-          last_tenant_config_refresh_ts_ > LOOP_INTERVAL /*5s*/) {
-      refresh_tenant_config_();
-      last_tenant_config_refresh_ts_ = common::ObClockGenerator::getClock();
+          last_runtime_config_refresh_ts_ > LOOP_INTERVAL /*5s*/) {
+      refresh_runtime_config_();
+      last_runtime_config_refresh_ts_ = common::ObClockGenerator::getClock();
     }
 
-  (void)maintain_tx_state_(can_gc_tx, can_gc_retain_ctx, can_adjust_log_cb_pool);
+  (void)maintain_tx_state_(can_gc_tx, can_adjust_log_cb_pool);
 
     // TODO shanyan.g
     // 1) We use max(max_commit_ts, gts_cache) as read snapshot,
@@ -147,12 +133,10 @@ void ObTxLoopWorker::runTimerTask()
   time_used = ObTimeUtility::current_time() - start_time_us;
   UNUSED(time_used);
   can_gc_tx = false;
-  can_gc_retain_ctx = false;
   can_adjust_log_cb_pool = false;
 }
 
 int ObTxLoopWorker::maintain_tx_state_(bool can_tx_gc,
-                                      bool can_gc_retain_ctx,
                                       bool can_adjust_log_cb_pool)
 {
   int ret = OB_SUCCESS;
@@ -201,10 +185,6 @@ int ObTxLoopWorker::maintain_tx_state_(bool can_tx_gc,
     // used to do this has been deleted.
     do_update_ls_weak_read_ts_(cur_ls_ptr);
 
-    if (can_gc_retain_ctx) {
-      do_retain_ctx_gc_(cur_ls_ptr);
-    }
-
     // ignore ret
     (void)cur_ls_ptr->get_tx_svr()->check_all_readonly_tx_clean_up();
 
@@ -236,8 +216,7 @@ void ObTxLoopWorker::do_update_ls_weak_read_ts_(ObLS *ls_ptr)
   int ret = OB_SUCCESS;
   SCN version;
   bool need_skip = false;
-  const int64_t max_stale_time = ObWeakReadUtil::max_stale_time_for_weak_consistency(
-      ObWeakReadUtil::IGNORE_TENANT_EXIST_WARN);
+  const int64_t max_stale_time = ObWeakReadUtil::max_stale_time_for_weak_consistency();
   if (OB_FAIL(ls_ptr->get_ls_wrs_handler()->generate_ls_weak_read_snapshot_version(
                  *ls_ptr, need_skip, version, max_stale_time))) {
     if (REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
@@ -260,7 +239,7 @@ void ObTxLoopWorker::do_tx_gc_(ObLS *ls_ptr, SCN &min_start_scn, MinStartScnStat
   UNUSED(ret);
 }
 
-void ObTxLoopWorker::refresh_tenant_config_()
+void ObTxLoopWorker::refresh_runtime_config_()
 {
   int ret = OB_SUCCESS;
   ObTransService *txs = NULL;
@@ -299,30 +278,6 @@ void ObTxLoopWorker::update_max_commit_ts_()
       txs->get_tx_version_mgr().update_max_commit_ts(snapshot, false);
     }
   } while (OB_EAGAIN == ret);
-}
-
-void ObTxLoopWorker::do_retain_ctx_gc_(ObLS *ls_ptr)
-{
-  int ret = OB_SUCCESS;
-
-  ObTxRetainCtxMgr *retain_ctx_mgr = ls_ptr->get_tx_svr()->get_retain_ctx_mgr();
-  if (OB_ISNULL(retain_ctx_mgr)) {
-    // ignore ret
-    TRANS_LOG(WARN, "[Tx Loop Worker] retain_ctx_mgr  is not inited", K(ret),
-              K(*ls_ptr));
-
-  } else if (OB_FAIL(retain_ctx_mgr->try_gc_retain_ctx(ls_ptr))) {
-    TRANS_LOG(WARN, "[Tx Loop Worker] retain_ctx_mgr try to gc retain ctx failed", K(ret),
-              K(*ls_ptr));
-  } else {
-    TRANS_LOG(DEBUG, "[Tx Loop Worker] retain_ctx_mgr try to gc retain ctx success", K(ret),
-              K(*ls_ptr));
-  }
-
-  retain_ctx_mgr->print_retain_ctx_info();
-  retain_ctx_mgr->try_advance_retain_ctx_gc();
-
-  UNUSED(ret);
 }
 
 void ObTxLoopWorker::do_log_cb_pool_adjust_(ObLS *ls_ptr)

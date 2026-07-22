@@ -16,6 +16,7 @@
 
 #include "ob_gti_source.h"
 #include "ob_trans_id_service.h"
+#include "share/ob_server_struct.h"
 #include "share/rc/ob_module_provider.h"
 
 namespace oceanbase

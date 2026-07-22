@@ -24,7 +24,6 @@
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tablet/ob_tablet_create_sstable_param.h"
 #include "storage/blocksstable/index_block/ob_macro_meta_temp_store.h"
-#include "share/compaction/ob_shared_storage_compaction_util.h"
 
 using namespace oceanbase::observer;
 using namespace oceanbase::share::schema;
@@ -84,7 +83,7 @@ int ObIDDLMergeHelper::freeze_ddl_kv(ObDDLTabletMergeDagParamV2 &param)
                                                         param.direct_load_type_,
                                                         param.start_scn_,
                                                         param.ddl_task_param_.snapshot_version_,
-                                                        param.ddl_task_param_.tenant_data_version_))) {
+                                                        param.ddl_task_param_.data_format_version_))) {
     LOG_WARN("failed to freeze ddl kv", K(ret));
   }
   return ret;
@@ -125,7 +124,7 @@ int ObSNDDLMergeHelperV2::set_ddl_complete(ObIDag *dag, ObTablet &tablet, ObDDLT
     complete_arg.tablet_id_             = target_tablet_id;
     complete_arg.direct_load_type_      = ddl_merge_param.direct_load_type_;
     complete_arg.start_scn_             = ddl_merge_param.start_scn_;
-    complete_arg.data_format_version_   = ddl_merge_param.ddl_task_param_.tenant_data_version_;
+    complete_arg.data_format_version_   = ddl_merge_param.ddl_task_param_.data_format_version_;
     complete_arg.snapshot_version_      = ddl_merge_param.ddl_task_param_.snapshot_version_;
     complete_arg.table_key_             = ddl_merge_param.table_key_;
     const ObDDLWriteStat *write_stat = target_tablet_id == tablet_context->lob_meta_tablet_id_ ? &tablet_context->lob_write_stat_ : &tablet_context->write_stat_;
@@ -452,7 +451,7 @@ int ObIDDLMergeHelper::prepare_ddl_param(const ObDDLTabletMergeDagParamV2 &merge
     ddl_param.table_key_           = merge_param.table_key_;
     ddl_param.start_scn_           = merge_param.start_scn_;
     ddl_param.snapshot_version_    = merge_param.ddl_task_param_.snapshot_version_;
-    ddl_param.data_format_version_ = merge_param.ddl_task_param_.tenant_data_version_;
+    ddl_param.data_format_version_ = merge_param.ddl_task_param_.data_format_version_;
     LOG_INFO("prepare_ddl_param", K(ddl_param));
   }
   return ret;
@@ -623,7 +622,7 @@ int ObSNDDLMergeHelperV2::assemble_sstable(ObDDLTabletMergeDagParamV2 &merge_par
                                                                        merge_param.ddl_task_param_.target_table_id_,
                                                                        merge_param.ddl_task_param_.execution_id_,
                                                                        merge_param.ddl_task_param_.ddl_task_id_,
-                                                                       merge_param.ddl_task_param_.tenant_data_version_))) {
+                                                                       merge_param.ddl_task_param_.data_format_version_))) {
     LOG_ERROR("failed to report ddl checksum", K(ret), K(merge_param));
   }
 

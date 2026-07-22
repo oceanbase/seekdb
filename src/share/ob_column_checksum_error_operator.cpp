@@ -80,7 +80,7 @@ int ObColumnChecksumErrorOperator::delete_column_checksum_err_info(
   if (!storage_.is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("storage not initialized", K(ret));
-  } else if (OB_UNLIKELY((!true)) || (!min_frozen_scn.is_valid())) {
+  } else if (OB_UNLIKELY(!min_frozen_scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(min_frozen_scn));
   } else {
@@ -100,7 +100,7 @@ int ObColumnChecksumErrorOperator::delete_column_checksum_err_info_by_scn(
   if (!storage_.is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("storage not initialized", K(ret));
-  } else if (OB_UNLIKELY((!true)) || compaction_scn <= 0) {
+  } else if (OB_UNLIKELY(compaction_scn <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(compaction_scn));
   } else {

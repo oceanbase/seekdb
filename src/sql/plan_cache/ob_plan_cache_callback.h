@@ -30,8 +30,8 @@ protected:
   typedef common::hash::HashMapPair<ObILibCacheKey*, ObILibCacheNode *> LibCacheKV;
 
 public:
-  ObLibCacheAtomicOp(const CacheRefHandleID ref_handle)
-    : cache_node_(NULL), ref_handle_(ref_handle)
+  ObLibCacheAtomicOp()
+    : cache_node_(NULL)
   {
   }
   virtual ~ObLibCacheAtomicOp() {}
@@ -48,7 +48,6 @@ protected:
   // back to the caller via the callback functor.
   // cache_node_ - the plan cache value that is referenced.
   ObILibCacheNode *cache_node_;
-  CacheRefHandleID ref_handle_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObLibCacheAtomicOp);
 };
@@ -56,8 +55,8 @@ private:
 class ObLibCacheWlockAndRef : public ObLibCacheAtomicOp
 {
 public:
-  ObLibCacheWlockAndRef(const CacheRefHandleID ref_handle)
-    : ObLibCacheAtomicOp(ref_handle)
+  ObLibCacheWlockAndRef()
+    : ObLibCacheAtomicOp()
   {
   }
   virtual ~ObLibCacheWlockAndRef() {}
@@ -72,8 +71,8 @@ private:
 class ObLibCacheRlockAndRef : public ObLibCacheAtomicOp
 {
 public:
-  ObLibCacheRlockAndRef(const CacheRefHandleID ref_handle)
-    : ObLibCacheAtomicOp(ref_handle)
+  ObLibCacheRlockAndRef()
+    : ObLibCacheAtomicOp()
   {
   }
   virtual ~ObLibCacheRlockAndRef() {}
@@ -91,7 +90,7 @@ protected:
   typedef common::hash::HashMapPair<ObCacheObjID, ObILibCacheObject *> ObjKV;
 
 public:
-  ObCacheObjAtomicOp(const CacheRefHandleID ref_handle): cache_obj_(NULL), ref_handle_(ref_handle) {}
+  ObCacheObjAtomicOp(): cache_obj_(NULL) {}
   virtual ~ObCacheObjAtomicOp() {}
   // get lock and increase reference count
   void operator()(ObjKV &entry);
@@ -100,7 +99,6 @@ public:
 
 protected:
   ObILibCacheObject *cache_obj_;
-  const CacheRefHandleID ref_handle_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObCacheObjAtomicOp);
 };

@@ -17,8 +17,6 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/ob_srv_xlator.h"
-#include "share/ob_ex_rpc.h"
-
 #include "sql/ob_sql_task.h"
 #include "observer/mysql/obmp_query.h"
 #include "observer/mysql/obmp_ping.h"
@@ -49,7 +47,6 @@ using namespace oceanbase::lib;
 using namespace oceanbase::rpc;
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
-using namespace oceanbase::transaction;
 using namespace oceanbase::obmysql;
 
 #define PROCESSOR_BEGIN(pcode)                  \
@@ -110,11 +107,9 @@ int ObSrvXlator::th_destroy()
 }
 
 typedef union EP_CALLP_BUF {
-  char rpcp_buffer_[CALLP_BUF_SIZE]; // reserve memory for rpc processor
   char ep_buffer_[sizeof (ObMPError)];
   char obmp_query_buffer_[ObMPQuery::MAX_SELF_OBJ_SIZE];
 } EP_CALLP_BUF;
-// palf election rpc processors removed (single-replica seekdb): no buffer-size asserts needed.
 
 typedef struct {
   char buffer_[sizeof (ObMPStmtClose)];
@@ -217,7 +212,7 @@ int ObSrvMySQLXlator::translate(rpc::ObRequest &req, ObReqProcessor *&processor)
             break;
           }
           case obmysql::COM_FIELD_LIST: {
-            // obproxy support removed: COM_FIELD_LIST is served as a normal query
+            // COM_FIELD_LIST is served through the normal query path.
             ObSMConnection *conn = reinterpret_cast<ObSMConnection* >(
                 SQL_REQ_OP.get_sql_session(&req));
             if (OB_ISNULL(conn)) {
@@ -299,17 +294,15 @@ int ObSrvXlator::release(ObReqProcessor *processor)
   int ret = OB_SUCCESS;
   const char *epbuf = (&co_ep_callp_buf)->ep_buffer_;
   const char *cpbuf = (&co_closepbuf)->buffer_;
-  const char *rpcpbuf = (&co_ep_callp_buf)->rpcp_buffer_;
   const char *mp_query_buf = (&co_ep_callp_buf)->obmp_query_buffer_;
   if (NULL == processor) {
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("invalid argument", K(processor), K(ret));
-  } else if (reinterpret_cast<char*>(processor) == epbuf || reinterpret_cast<char*>(processor) == rpcpbuf) {
+  } else if (reinterpret_cast<char*>(processor) == epbuf) {
     processor->destroy();
     processor->~ObReqProcessor();
   } else if (reinterpret_cast<char*>(processor) == cpbuf) {
     processor->destroy();
-    ObRequest::TransportProto nio_protocol = (ObRequest::TransportProto)processor->get_nio_protocol();
     processor->~ObReqProcessor();
   } else if (reinterpret_cast<char*>(processor) == mp_query_buf) {
     processor->destroy();
@@ -321,9 +314,6 @@ int ObSrvXlator::release(ObReqProcessor *processor)
     // here.
     ObRequest *req = const_cast<ObRequest*>(processor->get_ob_request());
     ObRequest::Type req_type = (ObRequest::Type)processor->get_req_type();
-    ObRequest::TransportProto nio_protocol = (ObRequest::TransportProto)processor->get_nio_protocol();
-    bool need_retry = processor->get_need_retry();
-    bool async_resp_used = processor->get_async_resp_used();
     if (ObRequest::OB_TASK == req_type) {
       //Deal with sqltask memory release
       ob_delete(req);

@@ -117,7 +117,7 @@ int ObBaseOrderMap::reorder_partition_as_base_order(int64_t pwj_group_id,
 // Physical distribution strategy: For leaf nodes, dfo distribution is generally directly according to data distribution
 // Note: If there are two or more scans in dfo, only consider the first one. And, the remaining scans
 //       The copy distribution is exactly the same as the first scan, otherwise an error is reported.
-int ObPXServerAddrUtil::alloc_by_data_distribution(const ObIArray<ObTableLocation> *table_locations,
+int ObPxSqcDistributionUtil::alloc_by_data_distribution(const ObIArray<ObTableLocation> *table_locations,
                                                    ObExecContext &ctx,
                                                    ObDfo &dfo)
 {
@@ -134,7 +134,7 @@ int ObPXServerAddrUtil::alloc_by_data_distribution(const ObIArray<ObTableLocatio
 }
 
 
-int ObPXServerAddrUtil::build_dynamic_partition_table_location(common::ObIArray<const ObTableScanSpec *> &scan_ops,
+int ObPxSqcDistributionUtil::build_dynamic_partition_table_location(common::ObIArray<const ObTableScanSpec *> &scan_ops,
       const ObIArray<ObTableLocation> *table_locations, ObDfo &dfo)
 {
   int ret = OB_SUCCESS;
@@ -160,7 +160,7 @@ int ObPXServerAddrUtil::build_dynamic_partition_table_location(common::ObIArray<
   return ret;
 }
 
-int ObPXServerAddrUtil::alloc_by_data_distribution_inner(
+int ObPxSqcDistributionUtil::alloc_by_data_distribution_inner(
     const ObIArray<ObTableLocation> *table_locations,
     ObExecContext &ctx,
     ObDfo &dfo)
@@ -184,7 +184,7 @@ int ObPXServerAddrUtil::alloc_by_data_distribution_inner(
     LOG_TRACE("this dfo has been built", K(dfo.get_dfo_id()));
   } else if (OB_FAIL(ObTaskSpliter::find_scan_ops(scan_ops, *root_op))) {
     LOG_WARN("fail find scan ops in dfo", K(dfo), K(ret));
-  } else if (OB_FAIL(ObPXServerAddrUtil::find_dml_ops(dml_ops, *root_op))) {
+  } else if (OB_FAIL(ObPxSqcDistributionUtil::find_dml_ops(dml_ops, *root_op))) {
     LOG_WARN("failed find insert op in dfo", K(ret), K(dfo));
   } else if (1 < dml_ops.count()) { // Currently, there is at most one DML operator in one DFO
     ret = OB_ERR_UNEXPECTED;
@@ -219,7 +219,7 @@ int ObPXServerAddrUtil::alloc_by_data_distribution_inner(
     } else if (dml_op && dml_op->is_table_location_uncertain()) {
       // Need to get FULL TABLE LOCATION. FIX ME YISHEN.
       CK(OB_NOT_NULL(ctx.get_my_session()));
-      OZ(ObTableLocation::get_full_leader_table_loc(DAS_CTX(ctx).get_location_router(),
+      OZ(ObTableLocation::get_full_local_table_loc(DAS_CTX(ctx).get_location_router(),
                                                     ctx.get_allocator(),
                                                     table_location_key,
                                                     ref_table_id,
@@ -261,13 +261,13 @@ int ObPXServerAddrUtil::alloc_by_data_distribution_inner(
   return ret;
 }
 
-int ObPXServerAddrUtil::find_dml_ops(common::ObIArray<const ObTableModifySpec *> &insert_ops,
+int ObPxSqcDistributionUtil::find_dml_ops(common::ObIArray<const ObTableModifySpec *> &insert_ops,
                              const ObOpSpec &op)
 {
   return find_dml_ops_inner(insert_ops, op);
 }
 
-bool ObPXServerAddrUtil::check_build_dfo_with_dml(const ObOpSpec &op)
+bool ObPxSqcDistributionUtil::check_build_dfo_with_dml(const ObOpSpec &op)
 {
   bool b_ret = false;
   if (static_cast<const ObTableModifySpec &>(op).use_dist_das()
@@ -281,7 +281,7 @@ bool ObPXServerAddrUtil::check_build_dfo_with_dml(const ObOpSpec &op)
   return b_ret;
 }
 
-int ObPXServerAddrUtil::find_dml_ops_inner(common::ObIArray<const ObTableModifySpec *> &insert_ops,
+int ObPxSqcDistributionUtil::find_dml_ops_inner(common::ObIArray<const ObTableModifySpec *> &insert_ops,
                              const ObOpSpec &op)
 {
   int ret = OB_SUCCESS;
@@ -306,148 +306,45 @@ int ObPXServerAddrUtil::find_dml_ops_inner(common::ObIArray<const ObTableModifyS
 }
 
 
-int ObPXServerAddrUtil::generate_dh_map_info(ObDfo &dfo)
-{
-  int ret = OB_SUCCESS;
-  ObP2PDhMapInfo &p2p_map_info = dfo.get_p2p_dh_map_info();
-  if (OB_ISNULL(dfo.get_coord_info_ptr())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected coord info ptr", K(ret));
-  } else if (!dfo.get_p2p_dh_ids().empty() && p2p_map_info.is_empty()) {
-    ObP2PDfoMapNode node;
-    for (int i = 0; i < dfo.get_p2p_dh_ids().count() && OB_SUCC(ret); ++i) {
-      node.reset();
-      if (OB_FAIL(dfo.get_coord_info_ptr()->p2p_dfo_map_.get_refactored(
-          dfo.get_p2p_dh_ids().at(i), node))) {
-        LOG_WARN("fail to get target dfo id", K(ret));
-      } else if (node.addrs_.empty()) {
-        ObDfo *target_dfo_ptr = nullptr;
-        if (OB_FAIL(dfo.get_coord_info_ptr()->dfo_mgr_.find_dfo_edge(
-            node.target_dfo_id_, target_dfo_ptr))) {
-          LOG_WARN("fail to find dfo edge", K(ret));
-        } else if (target_dfo_ptr->get_p2p_dh_addrs().empty()) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("fail to get p2p dh addrs", K(ret), K(dfo.get_p2p_dh_ids().at(i)));
-        } else if (OB_FAIL(node.addrs_.assign(target_dfo_ptr->get_p2p_dh_addrs()))) {
-          LOG_WARN("fail to assign p2p dh addrs", K(ret));
-        } else if (OB_FAIL(dfo.get_coord_info_ptr()->p2p_dfo_map_.set_refactored(
-              dfo.get_p2p_dh_ids().at(i), node, 1/*over_write*/))) {
-          LOG_WARN("fail to set p2p dh addrs", K(ret));
-        }
-      }
-      if (OB_SUCC(ret)) {
-        if (OB_FAIL(p2p_map_info.p2p_sequence_ids_.push_back(dfo.get_p2p_dh_ids().at(i)))) {
-          LOG_WARN("fail to push back p2p map info", K(ret));
-        } else if (OB_FAIL(p2p_map_info.target_addrs_.push_back(node.addrs_))) {
-          LOG_WARN("fail to push back addrs", K(ret));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObPXServerAddrUtil::build_dfo_sqc(ObExecContext &ctx,
+int ObPxSqcDistributionUtil::build_dfo_sqc(ObExecContext &ctx,
                                       const DASTabletLocList &locations,
                                       ObDfo &dfo)
 {
   int ret = OB_SUCCESS;
-  ObArray<ObAddr> addrs;
   const ObPhysicalPlanCtx *phy_plan_ctx = GET_PHY_PLAN_CTX(ctx);
-  const ObPhysicalPlan *phy_plan = NULL;
-  ObArray<int64_t> sqc_max_task_count;
-  ObArray<int64_t> sqc_part_count;
-  int64_t parallel = 0;
-  if (OB_ISNULL(phy_plan_ctx) ||
-      OB_ISNULL(phy_plan = phy_plan_ctx->get_phy_plan())) {
+  const ObPhysicalPlan *phy_plan = nullptr;
+  int64_t parallel = std::max<int64_t>(dfo.get_assigned_worker_count(), 1);
+  if (OB_ISNULL(phy_plan_ctx)
+      || OB_ISNULL(phy_plan = phy_plan_ctx->get_phy_plan())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL phy plan ptr", K(ret));
-  } else if (OB_FAIL(get_location_addrs<DASTabletLocList>(locations, addrs))) {
-    LOG_WARN("fail get location addrs", K(ret));
-  } else if (OB_FAIL(sqc_part_count.prepare_allocate(addrs.count()))) {
-    LOG_WARN("Failed to pre allocate sqc part count");
-  } else {
-    parallel = dfo.get_assigned_worker_count();
-    if (0 >= parallel) {
-      parallel = 1;
-      LOG_TRACE("parallel not set in query hint. set default to 1");
-    }
-  }
-  // generate dh map info
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(generate_dh_map_info(dfo))) {
-      LOG_WARN("fail to generate dh map info", K(ret));
-    }
-  }
-
-  if (OB_SUCC(ret) && addrs.count() > 0) {
-    ObIArray<ObPxSqcMeta> &sqcs = dfo.get_sqcs();
-    int64_t total_part_cnt = 0;
-    DASTabletLocSEArray sqc_locations;
-    for (int64_t i = 0; OB_SUCC(ret) && i < addrs.count(); ++i) {
-      SMART_VAR(ObPxSqcMeta, sqc) {
-        sqc_locations.reuse();
-        sqc.set_dfo_id(dfo.get_dfo_id());
-        sqc.set_sqc_id(i);
-        sqc.set_exec_addr(addrs.at(i));
-        sqc.set_qc_addr(GCTX.self_addr());
-        sqc.set_execution_id(dfo.get_execution_id());
-        sqc.set_px_sequence_id(dfo.get_px_sequence_id());
-        sqc.set_qc_id(dfo.get_qc_id());
-        sqc.set_interrupt_id(dfo.get_interrupt_id());
-        sqc.set_fulltree(dfo.is_fulltree());
-        sqc.set_qc_server_id(dfo.get_qc_server_id());
-        sqc.set_parent_dfo_id(dfo.get_parent_dfo_id());
-        sqc.set_single_tsc_leaf_dfo(dfo.is_single_tsc_leaf_dfo());
-        sqc.get_monitoring_info().init(dfo);
-        sqc.set_partition_random_affinitize(dfo.partition_random_affinitize());
-        if (OB_SUCC(ret)) {
-          if (!dfo.get_p2p_dh_map_info().is_empty()) {
-            if (OB_FAIL(sqc.get_p2p_dh_map_info().assign(dfo.get_p2p_dh_map_info()))) {
-              LOG_WARN("fail to assign p2p dh map info", K(ret));
-            }
-          }
-        }
-        for (auto iter = locations.begin(); OB_SUCC(ret) && iter != locations.end(); ++iter) {
-          if (addrs.at(i) == (*iter)->server_) {
-            if (OB_FAIL(sqc_locations.push_back(*iter))) {
-              LOG_WARN("fail add location to sqc", K(ret));
-            }
-          }
-        }
-        total_part_cnt += sqc_locations.count();
-        sqc_part_count.at(i) = sqc_locations.count();
-        if (OB_SUCC(ret)) {
-          if (OB_FAIL(dfo.add_sqc(sqc))) {
-            LOG_WARN("Failed to add sqc", K(ret), K(sqc));
-          }
-        }
+  } else if (!locations.empty()) {
+    SMART_VAR(ObPxSqcMeta, sqc) {
+      sqc.set_dfo_id(dfo.get_dfo_id());
+      sqc.set_sqc_id(0);
+      sqc.set_execution_id(dfo.get_execution_id());
+      sqc.set_px_sequence_id(dfo.get_px_sequence_id());
+      sqc.set_qc_id(dfo.get_qc_id());
+      sqc.set_interrupt_id(dfo.get_interrupt_id());
+      sqc.set_fulltree(dfo.is_fulltree());
+      sqc.set_parent_dfo_id(dfo.get_parent_dfo_id());
+      sqc.set_single_tsc_leaf_dfo(dfo.is_single_tsc_leaf_dfo());
+      sqc.set_min_task_count(1);
+      sqc.set_max_task_count(parallel);
+      sqc.set_total_task_count(parallel);
+      sqc.set_total_part_count(locations.size());
+      sqc.get_monitoring_info().init(dfo);
+      sqc.set_partition_random_affinitize(dfo.partition_random_affinitize());
+      if (OB_FAIL(dfo.add_sqc(sqc))) {
+        LOG_WARN("failed to add local sqc", K(ret), K(sqc));
       }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(split_parallel_into_task(parallel, sqc_part_count, sqc_max_task_count))) {
-        LOG_WARN("Failed to get sqc max task count", K(ret));
-      } else if (sqcs.count() != sqc_max_task_count.count()) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexpected sqcs count and sqc max task count", K(ret), K(sqcs.count()), K(sqc_max_task_count.count()));
-      }
-    }
-    int64_t total_task_count = 0;
-    for (int64_t i = 0; OB_SUCC(ret) && i < sqc_max_task_count.count(); ++i) {
-      sqcs.at(i).set_min_task_count(1);
-      sqcs.at(i).set_max_task_count(sqc_max_task_count.at(i));
-      total_task_count += sqc_max_task_count.at(i);
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < sqc_max_task_count.count(); ++i) {
-      sqcs.at(i).set_total_task_count(total_task_count);
-      sqcs.at(i).set_total_part_count(total_part_cnt);
     }
   }
   return ret;
 }
 
 
-int ObPXServerAddrUtil::alloc_by_temp_child_distribution(ObExecContext &exec_ctx,
+int ObPxSqcDistributionUtil::alloc_by_temp_child_distribution(ObExecContext &exec_ctx,
                                                          ObDfo &dfo)
 {
   int ret = OB_SUCCESS;
@@ -462,7 +359,7 @@ int ObPXServerAddrUtil::alloc_by_temp_child_distribution(ObExecContext &exec_ctx
   return ret;
 }
 
-int ObPXServerAddrUtil::alloc_by_temp_child_distribution_inner(ObExecContext &exec_ctx,
+int ObPxSqcDistributionUtil::alloc_by_temp_child_distribution_inner(ObExecContext &exec_ctx,
                                                                ObDfo &child)
 {
   int ret = OB_SUCCESS;
@@ -484,65 +381,28 @@ int ObPXServerAddrUtil::alloc_by_temp_child_distribution_inner(ObExecContext &ex
   }
   if (OB_NOT_NULL(ctx) && !ctx->interm_result_infos_.empty()) {
     ObIArray<ObTempTableResultInfo> &interm_result_infos = ctx->interm_result_infos_;
-    ObArray<int64_t> sqc_max_task_count;
-    ObArray<int64_t> sqc_result_count;
-    if (OB_FAIL(sqc_result_count.prepare_allocate(interm_result_infos.count()))) {
-      LOG_WARN("Failed to pre allocate sqc part count");
-    } else if (OB_FAIL(generate_dh_map_info(child))) {
-      LOG_WARN("fail to generate dh map info", K(ret));
+    int64_t result_count = 0;
+    for (int64_t i = 0; i < interm_result_infos.count(); ++i) {
+      result_count += interm_result_infos.at(i).interm_result_ids_.count();
     }
-    for (int64_t j = 0; OB_SUCC(ret) && j < interm_result_infos.count(); j++) {
-      SMART_VAR(ObPxSqcMeta, sqc) {
-        ObTempTableResultInfo &info = interm_result_infos.at(j);
-        sqc.set_exec_addr(info.addr_);
-        sqc.set_qc_addr(GCTX.self_addr());
-        sqc.set_dfo_id(child.get_dfo_id());
-        sqc.set_sqc_id(j);
-        sqc.set_execution_id(child.get_execution_id());
-        sqc.set_px_sequence_id(child.get_px_sequence_id());
-        sqc.set_qc_id(child.get_qc_id());
-        sqc.set_interrupt_id(child.get_interrupt_id());
-        sqc.set_fulltree(child.is_fulltree());
-        sqc.set_qc_server_id(child.get_qc_server_id());
-        sqc.set_parent_dfo_id(child.get_parent_dfo_id());
-        sqc.get_monitoring_info().init(child);
-        sqc.set_partition_random_affinitize(child.partition_random_affinitize());
-        if (OB_SUCC(ret)) {
-          if (!child.get_p2p_dh_map_info().is_empty()) {
-            if (OB_FAIL(sqc.get_p2p_dh_map_info().assign(child.get_p2p_dh_map_info()))) {
-              LOG_WARN("fail to assign p2p dh map info", K(ret));
-            }
-          }
-        }
-        if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(child.add_sqc(sqc))) {
-          LOG_WARN("fail add sqc", K(sqc), K(ret));
-        }
+    SMART_VAR(ObPxSqcMeta, sqc) {
+      sqc.set_dfo_id(child.get_dfo_id());
+      sqc.set_sqc_id(0);
+      sqc.set_execution_id(child.get_execution_id());
+      sqc.set_px_sequence_id(child.get_px_sequence_id());
+      sqc.set_qc_id(child.get_qc_id());
+      sqc.set_interrupt_id(child.get_interrupt_id());
+      sqc.set_fulltree(child.is_fulltree());
+      sqc.set_parent_dfo_id(child.get_parent_dfo_id());
+      sqc.set_min_task_count(1);
+      sqc.set_max_task_count(parallel);
+      sqc.set_total_task_count(parallel);
+      sqc.set_total_part_count(std::max<int64_t>(result_count, 1));
+      sqc.get_monitoring_info().init(child);
+      sqc.set_partition_random_affinitize(child.partition_random_affinitize());
+      if (OB_FAIL(child.add_sqc(sqc))) {
+        LOG_WARN("failed to add local temp-table sqc", K(ret), K(sqc));
       }
-    }
-    for (int64_t j = 0; OB_SUCC(ret) && j < interm_result_infos.count(); j++) {
-      sqc_result_count.at(j) = interm_result_infos.at(j).interm_result_ids_.count();
-      if (0 >= sqc_result_count.at(j)) {
-        sqc_result_count.at(j) = 1;
-      }
-    }
-    ObIArray<ObPxSqcMeta> &sqcs = child.get_sqcs();
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(split_parallel_into_task(parallel, sqc_result_count, sqc_max_task_count))) {
-        LOG_WARN("Failed to split parallel into task", K(ret));
-      } else if (OB_UNLIKELY(sqcs.count() != sqc_max_task_count.count())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexpected sqcs count and sqc max task count", K(ret));
-      }
-    }
-    int64_t total_task_count = 0;
-    for (int64_t i = 0; OB_SUCC(ret) && i < sqc_max_task_count.count(); ++i) {
-      sqcs.at(i).set_min_task_count(1);
-      sqcs.at(i).set_max_task_count(sqc_max_task_count.at(i));
-      total_task_count += sqc_max_task_count.at(i);
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < sqc_max_task_count.count(); ++i) {
-      sqcs.at(i).set_total_task_count(total_task_count);
     }
   } else if (OB_ISNULL(ctx)) {
     ret = OB_ERR_UNEXPECTED;
@@ -565,193 +425,52 @@ int ObPXServerAddrUtil::alloc_by_temp_child_distribution_inner(ObExecContext &ex
   return ret;
 }
 
-int ObPXServerAddrUtil::alloc_by_child_distribution(const ObDfo &child, ObDfo &parent)
+int ObPxSqcDistributionUtil::alloc_by_child_distribution(const ObDfo &child, ObDfo &parent)
 {
   int ret = OB_SUCCESS;
   const ObIArray<ObPxSqcMeta> &sqcs = child.get_sqcs();
-  if (OB_FAIL(generate_dh_map_info(parent))) {
-    LOG_WARN("fail to generate dh map info", K(ret));
-  } else {
-    for (int64_t i = 0; i < sqcs.count() && OB_SUCC(ret); ++i) {
-      const ObPxSqcMeta &child_sqc = sqcs.at(i);
-      SMART_VAR(ObPxSqcMeta, sqc) {
-        sqc.set_exec_addr(child_sqc.get_exec_addr());
-        sqc.set_qc_addr(GCTX.self_addr());
+  if (!sqcs.empty()) {
+    const ObPxSqcMeta &child_sqc = sqcs.at(0);
+    SMART_VAR(ObPxSqcMeta, sqc) {
         sqc.set_dfo_id(parent.get_dfo_id());
         sqc.set_min_task_count(child_sqc.get_min_task_count());
         sqc.set_max_task_count(child_sqc.get_max_task_count());
         sqc.set_total_task_count(child_sqc.get_total_task_count());
         sqc.set_total_part_count(child_sqc.get_total_part_count());
-        sqc.set_sqc_id(i);
+        sqc.set_sqc_id(0);
         sqc.set_execution_id(parent.get_execution_id());
         sqc.set_px_sequence_id(parent.get_px_sequence_id());
         sqc.set_qc_id(parent.get_qc_id());
         sqc.set_interrupt_id(parent.get_interrupt_id());
         sqc.set_fulltree(parent.is_fulltree());
-        sqc.set_qc_server_id(parent.get_qc_server_id());
         sqc.set_parent_dfo_id(parent.get_parent_dfo_id());
         sqc.get_monitoring_info().assign(child_sqc.get_monitoring_info());
         sqc.set_partition_random_affinitize(child.partition_random_affinitize());
-        if (!parent.get_p2p_dh_map_info().is_empty()) {
-          if (OB_FAIL(sqc.get_p2p_dh_map_info().assign(parent.get_p2p_dh_map_info()))) {
-            LOG_WARN("fail to assign p2p dh map info", K(ret));
-          }
-        }
-        if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(parent.add_sqc(sqc))) {
+        if (OB_FAIL(parent.add_sqc(sqc))) {
           LOG_WARN("fail add sqc", K(sqc), K(ret));
         }
-      }
     }
     LOG_TRACE("allocate by child distribution", K(sqcs));
   }
   return ret;
 }
 
-int ObPXServerAddrUtil::alloc_by_random_distribution(ObExecContext &exec_ctx,
-    const ObDfo &child, ObDfo &parent, ObPxNodePool &px_node_pool)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(exec_ctx.get_physical_plan_ctx()) ||
-      OB_ISNULL(exec_ctx.get_physical_plan_ctx()->get_phy_plan())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL phy plan ctx", K(ret), K(exec_ctx.get_physical_plan_ctx()));
-  } else if (0 != parent.get_sqcs_count()) {
-    /**
-     * this dfo has been built. do nothing.
-     */
-    LOG_TRACE("this dfo has been built", K(parent.get_dfo_id()));
-  } else if (OB_FAIL(px_node_pool.init(exec_ctx))) {
-    LOG_WARN("Fail to init mpp node info", K(ret));
-  } else if (px_node_pool.data_node_empty()) {
-    // a defensive code, if this SQL does not have a location, still alloc by child
-    // this kind of plan is not common
-    if (OB_FAIL(alloc_by_child_distribution(child, parent))) {
-      LOG_WARN("fail to alloc by child distribution", K(ret));
-    }
-  } else {
-    const ObAddrFixedArray &px_candidate_node_pool = px_node_pool.get_candidate_node_pool();
-    sql::ObTMArray<ObAddr> addrs;
-    int64_t parallel = std::max(parent.get_assigned_worker_count(), (int64_t)(1));
-    ObTMArray<int64_t> sqc_max_task_counts;
-    ObTMArray<int64_t> sqc_part_counts;
-    int64_t total_task_count = 0;
-    ObPxNodeSelectionMode selection_mode = px_node_pool.get_px_node_selection_mode();
-    LOG_TRACE("px candidate node pool", K(parallel),
-        K(px_candidate_node_pool.count()), K(px_candidate_node_pool));
-    switch (selection_mode) {
-      case ObPxNodeSelectionMode::SPECIFY_NODE: {
-        if (OB_FAIL(addrs.assign(px_candidate_node_pool))) {
-          LOG_WARN("Fail to assign", K(ret));
-        }
-        break;
-      }
-      case ObPxNodeSelectionMode::SPECIFY_COUNT: {
-        int64_t actual_node_num = std::min(
-              exec_ctx.get_physical_plan_ctx()->get_phy_plan()->get_px_node_count(),
-              px_candidate_node_pool.count());
-        for (int i = 0; OB_SUCC(ret) && i < actual_node_num; ++i) {
-          if (OB_FAIL(addrs.push_back(px_candidate_node_pool.at(i)))) {
-            LOG_WARN("fail to push back", K(ret));
-          }
-        }
-        break;
-      }
-      case ObPxNodeSelectionMode::DEFAULT: {
-        int64_t actual_node_num = std::min(parallel, px_candidate_node_pool.count());
-        for (int i = 0; OB_SUCC(ret) && i < actual_node_num; ++i) {
-          if (OB_FAIL(addrs.push_back(px_candidate_node_pool.at(i)))) {
-            LOG_WARN("fail to push back", K(ret));
-          }
-        }
-        break;
-      }
-      default: {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected mpp node selection mode", K(selection_mode));
-        break;
-      }
-    }
-    for (int i = 0; i < addrs.count() && OB_SUCC(ret); ++i) {
-      if (OB_FAIL(sqc_part_counts.push_back(1))) {
-        LOG_WARN("fail to push back sqc part count", K(ret));
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(split_parallel_into_task(parallel, sqc_part_counts, sqc_max_task_counts))) {
-      LOG_WARN("fail to split parallel task", K(ret));
-    } else {
-      CK(sqc_max_task_counts.count() == addrs.count());
-      for (int i = 0; i < sqc_max_task_counts.count() && OB_SUCC(ret); ++i) {
-        total_task_count += sqc_max_task_counts.at(i);
-      }
-      LOG_TRACE("sqc task count", K(total_task_count),
-          K(addrs.count()), K(addrs), K(sqc_max_task_counts));
-    }
-    // generate dh map info
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(generate_dh_map_info(parent))) {
-        LOG_WARN("fail to generate dh map info", K(ret));
-      }
-    }
-    for (int64_t i = 0; i < addrs.count() && OB_SUCC(ret); ++i) {
-      SMART_VAR(ObPxSqcMeta, sqc) {
-        sqc.set_exec_addr(addrs.at(i));
-        sqc.set_qc_addr(GCTX.self_addr());
-        sqc.set_dfo_id(parent.get_dfo_id());
-        sqc.set_min_task_count(1);
-        sqc.set_max_task_count(sqc_max_task_counts.at(i));
-        sqc.set_total_task_count(total_task_count);
-        sqc.set_total_part_count(sqc_part_counts.count());
-        sqc.set_sqc_id(i);
-        sqc.set_execution_id(parent.get_execution_id());
-        sqc.set_px_sequence_id(parent.get_px_sequence_id());
-        sqc.set_qc_id(parent.get_qc_id());
-        sqc.set_interrupt_id(parent.get_interrupt_id());
-        sqc.set_fulltree(parent.is_fulltree());
-        sqc.set_qc_server_id(parent.get_qc_server_id());
-        sqc.set_parent_dfo_id(parent.get_parent_dfo_id());
-        sqc.get_monitoring_info().init(parent);
-        sqc.set_partition_random_affinitize(parent.partition_random_affinitize());
-        if (OB_SUCC(ret)) {
-          if (!parent.get_p2p_dh_map_info().is_empty()) {
-            if (OB_FAIL(sqc.get_p2p_dh_map_info().assign(parent.get_p2p_dh_map_info()))) {
-              LOG_WARN("fail to assign p2p dh map info", K(ret));
-            }
-          }
-        }
-        if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(parent.add_sqc(sqc))) {
-          LOG_WARN("fail add sqc", K(sqc), K(ret));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObPXServerAddrUtil::alloc_by_local_distribution(ObExecContext &exec_ctx,
+int ObPxSqcDistributionUtil::alloc_by_local_distribution(ObExecContext &exec_ctx,
                                                     ObDfo &dfo)
 {
   int ret = OB_SUCCESS;
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(exec_ctx);
-  // generate dh map info
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(generate_dh_map_info(dfo))) {
-      LOG_WARN("fail to generate dh map info", K(ret));
-    }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(plan_ctx)) {
+  if (OB_ISNULL(plan_ctx)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL phy plan ctx", K(ret));
   } else {
     SMART_VAR(ObPxSqcMeta, sqc) {
-      sqc.set_exec_addr(GCTX.self_addr());
-      sqc.set_qc_addr(GCTX.self_addr());
       sqc.set_dfo_id(dfo.get_dfo_id());
       sqc.set_min_task_count(1);
-      sqc.set_max_task_count(dfo.get_assigned_worker_count());
+      const int64_t parallel = std::max<int64_t>(dfo.get_assigned_worker_count(), 1);
+      sqc.set_max_task_count(parallel);
+      sqc.set_total_task_count(parallel);
+      sqc.set_total_part_count(1);
       sqc.set_sqc_id(0);
       sqc.set_execution_id(dfo.get_execution_id());
       sqc.set_px_sequence_id(dfo.get_px_sequence_id());
@@ -759,12 +478,8 @@ int ObPXServerAddrUtil::alloc_by_local_distribution(ObExecContext &exec_ctx,
       sqc.set_interrupt_id(dfo.get_interrupt_id());
       sqc.set_fulltree(dfo.is_fulltree());
       sqc.set_parent_dfo_id(dfo.get_parent_dfo_id());
-      sqc.set_qc_server_id(dfo.get_qc_server_id());
       sqc.get_monitoring_info().init(dfo);
       sqc.set_partition_random_affinitize(dfo.partition_random_affinitize());
-      if (!dfo.get_p2p_dh_map_info().is_empty()) {
-        OZ(sqc.get_p2p_dh_map_info().assign(dfo.get_p2p_dh_map_info()));
-      }
       OZ(dfo.add_sqc(sqc));
     }
   }
@@ -787,7 +502,7 @@ int ObPXServerAddrUtil::alloc_by_local_distribution(ObExecContext &exec_ctx,
  * according to dfo2's sqc.
  *
  */
-int ObPXServerAddrUtil::alloc_by_reference_child_distribution(
+int ObPxSqcDistributionUtil::alloc_by_reference_child_distribution(
     ObDfo &parent)
 {
   int ret = OB_SUCCESS;
@@ -803,7 +518,7 @@ int ObPXServerAddrUtil::alloc_by_reference_child_distribution(
   return ret;
 }
 
-int ObPXServerAddrUtil::alloc_distribution_of_reference_child(
+int ObPxSqcDistributionUtil::alloc_distribution_of_reference_child(
                                           const ObIArray<ObTableLocation> *table_locations,
                                           ObExecContext &exec_ctx,
                                           ObDfo &parent)
@@ -821,7 +536,7 @@ int ObPXServerAddrUtil::alloc_distribution_of_reference_child(
   return ret;
 }
 
-int ObPXServerAddrUtil::find_reference_child(ObDfo &parent, ObDfo *&reference_child)
+int ObPxSqcDistributionUtil::find_reference_child(ObDfo &parent, ObDfo *&reference_child)
 {
   int ret = OB_SUCCESS;
   reference_child = nullptr;
@@ -843,7 +558,7 @@ int ObPXServerAddrUtil::find_reference_child(ObDfo &parent, ObDfo *&reference_ch
 }
 
 
-int ObPXServerAddrUtil::get_access_partition_order(
+int ObPxSqcDistributionUtil::get_access_partition_order(
   ObDfo &dfo,
   const ObOpSpec *phy_op,
   bool &asc_order)
@@ -860,7 +575,7 @@ int ObPXServerAddrUtil::get_access_partition_order(
   return ret;
 }
 
-int ObPXServerAddrUtil::get_access_partition_order_recursively (
+int ObPxSqcDistributionUtil::get_access_partition_order_recursively (
   const ObOpSpec *root,
   const ObOpSpec *phy_op,
   bool &asc_order)
@@ -881,7 +596,7 @@ int ObPXServerAddrUtil::get_access_partition_order_recursively (
   return ret;
 }
 
-int ObPXServerAddrUtil::set_dfo_accessed_location(ObExecContext &ctx,
+int ObPxSqcDistributionUtil::set_dfo_accessed_location(ObExecContext &ctx,
                                                   int64_t base_table_location_key,
                                                   ObDfo &dfo,
                                                   ObIArray<const ObTableScanSpec *> &scan_ops,
@@ -979,7 +694,7 @@ int ObPXServerAddrUtil::set_dfo_accessed_location(ObExecContext &ctx,
   return ret;
 }
 
-int ObPXServerAddrUtil::set_sqcs_accessed_location(
+int ObPxSqcDistributionUtil::set_sqcs_accessed_location(
     ObExecContext &ctx, int64_t base_table_location_key, ObDfo &dfo,
     ObBaseOrderMap &base_order_map,
     const ObDASTableLoc *table_loc, const ObOpSpec *phy_op,
@@ -1001,7 +716,7 @@ int ObPXServerAddrUtil::set_sqcs_accessed_location(
       LOG_WARN("the locations can not be zero", K(ret), K(locations.size()));
     } else if (OB_FAIL(get_access_partition_order(dfo, phy_op, asc_order))) {
       LOG_WARN("fail to get table scan partition order", K(ret));
-    } else if (OB_FAIL(ObPXServerAddrUtil::reorder_all_partitions(table_location_key,
+    } else if (OB_FAIL(ObPxSqcDistributionUtil::reorder_all_partitions(table_location_key,
         table_loc->get_ref_table_id(), locations,
         temp_locations, asc_order, ctx, base_order_map, phy_op->get_id(), locations_order))) {
       // Sort the partitions involved in the current SQC according to the access order required by GI
@@ -1011,33 +726,30 @@ int ObPXServerAddrUtil::set_sqcs_accessed_location(
       LOG_TRACE("sqc partition order is", K(asc_order), K(locations), K(temp_locations), KPC(table_loc->loc_meta_));
     }
   }
-  // Distribute all partitions involved in a table to the corresponding sqc according to server addr
-  ARRAY_FOREACH_X(sqcs, sqc_idx, sqc_cnt, OB_SUCC(ret)) {
-    ObPxSqcMeta &sqc_meta = sqcs.at(sqc_idx);
+  if (OB_SUCC(ret) && 1 != sqcs.count()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("expected exactly one local sqc", K(ret), K(sqcs.count()));
+  } else if (OB_SUCC(ret)) {
+    ObPxSqcMeta &sqc_meta = sqcs.at(0);
     DASTabletLocIArray &sqc_locations = sqc_meta.get_access_table_locations_for_update();
     ObIArray<ObSqcTableLocationKey> &sqc_location_keys = sqc_meta.get_access_table_location_keys();
     ObIArray<ObSqcTableLocationIndex> &sqc_location_indexes = sqc_meta.get_access_table_location_indexes();
     int64_t location_start_pos = sqc_locations.count();
     int64_t location_end_pos = sqc_locations.count();
-    const common::ObAddr &sqc_server = sqc_meta.get_exec_addr();
     ARRAY_FOREACH_X(temp_locations, idx, cnt, OB_SUCC(ret)) {
-      const common::ObAddr &server = temp_locations.at(idx)->server_;
-      if (server == sqc_server) {
-        if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(sqc_locations.push_back(temp_locations.at(idx)))) {
-          LOG_WARN("sqc push back table location failed", K(ret));
-        } else if (OB_FAIL(sqc_location_keys.push_back(ObSqcTableLocationKey(
-              table_loc->get_table_location_key(),
-              table_loc->get_ref_table_id(),
-              temp_locations.at(idx)->tablet_id_,
-              IS_DML(phy_op->get_type()),
-              IS_DML(phy_op->get_type()) ?
-                static_cast<const ObTableModifySpec *>(phy_op)->is_table_location_uncertain() :
-                false)))) {
-        } else {
-          ++n_locations;
-          ++location_end_pos;
-        }
+      if (OB_FAIL(sqc_locations.push_back(temp_locations.at(idx)))) {
+        LOG_WARN("sqc push back table location failed", K(ret));
+      } else if (OB_FAIL(sqc_location_keys.push_back(ObSqcTableLocationKey(
+            table_loc->get_table_location_key(),
+            table_loc->get_ref_table_id(),
+            temp_locations.at(idx)->tablet_id_,
+            IS_DML(phy_op->get_type()),
+            IS_DML(phy_op->get_type()) ?
+              static_cast<const ObTableModifySpec *>(phy_op)->is_table_location_uncertain() :
+              false)))) {
+      } else {
+        ++n_locations;
+        ++location_end_pos;
       }
     }
     if (OB_SUCC(ret) && location_start_pos < location_end_pos) {
@@ -1051,7 +763,7 @@ int ObPXServerAddrUtil::set_sqcs_accessed_location(
   }
   if (OB_SUCC(ret) && n_locations != locations.size()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("we do not find this addr's execution sqc", K(ret), K(n_locations),
+    LOG_WARN("some tablet locations were not assigned to the local sqc", K(ret), K(n_locations),
              K(locations.size()), K(sqcs), K(locations));
   }
   return ret;
@@ -1061,7 +773,7 @@ int ObPXServerAddrUtil::set_sqcs_accessed_location(
 // used to fast lookup from phy partition id to partition order(index)
 // for a range partition, the greater the range, the greater the partition_index
 // for a hash partition, the index means nothing
-int ObPXServerAddrUtil::build_tablet_idx_map(ObTaskExecutorCtx &task_exec_ctx,
+int ObPxSqcDistributionUtil::build_tablet_idx_map(ObTaskExecutorCtx &task_exec_ctx,
                                               uint64_t ref_table_id,
                                               ObTabletIdxMap &idx_map)
 {
@@ -1069,7 +781,7 @@ int ObPXServerAddrUtil::build_tablet_idx_map(ObTaskExecutorCtx &task_exec_ctx,
   share::schema::ObSchemaGetterGuard schema_guard;
   const share::schema::ObTableSchema *table_schema = NULL;
   if (OB_ISNULL(task_exec_ctx.schema_service_)) {
-  } else if (OB_FAIL(task_exec_ctx.schema_service_->get_tenant_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(task_exec_ctx.schema_service_->get_runtime_schema_guard(schema_guard))) {
     LOG_WARN("fail get schema guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( ref_table_id, table_schema))) {
     LOG_WARN("fail get table schema", K(ref_table_id), K(ret));
@@ -1110,7 +822,7 @@ private:
   ObTabletIdxMap *map_;
 };
 
-int ObPXServerAddrUtil::reorder_all_partitions(
+int ObPxSqcDistributionUtil::reorder_all_partitions(
     int64_t table_location_key, int64_t ref_table_id, const DASTabletLocList &src_locations,
     DASTabletLocIArray &dst_locations, bool asc, ObExecContext &exec_ctx,
     ObBaseOrderMap &base_order_map, int64_t op_id,
@@ -1207,7 +919,7 @@ int ObPXServerAddrUtil::reorder_all_partitions(
  * b. Calculate the execution time of sqc and sort them accordingly.
  * c. The remaining threads are added to the sqc from longest to shortest execution time.
  */
-int ObPXServerAddrUtil::split_parallel_into_task(const int64_t parallel,
+int ObPxSqcDistributionUtil::split_parallel_into_task(const int64_t parallel,
                                                  const common::ObIArray<int64_t> &sqc_part_count,
                                                  common::ObIArray<int64_t> &results) {
   int ret = OB_SUCCESS;
@@ -1291,7 +1003,7 @@ int ObPXServerAddrUtil::split_parallel_into_task(const int64_t parallel,
   return ret;
 }
 
-int ObPXServerAddrUtil::adjust_sqc_task_count(common::ObIArray<ObPxSqcTaskCountMeta> &sqc_tasks,
+int ObPxSqcDistributionUtil::adjust_sqc_task_count(common::ObIArray<ObPxSqcTaskCountMeta> &sqc_tasks,
                                               int64_t parallel,
                                               int64_t partition)
 {
@@ -1321,40 +1033,6 @@ int ObPXServerAddrUtil::adjust_sqc_task_count(common::ObIArray<ObPxSqcTaskCountM
   return ret;
 }
 
-int ObPXServerAddrUtil::do_random_dfo_distribution(
-    const common::ObIArray<common::ObAddr> &src_addrs,
-    int64_t dst_addrs_count,
-    common::ObIArray<common::ObAddr> &dst_addrs)
-{
-  int ret = OB_SUCCESS;
-  common::ObArray<common::ObAddr> new_addrs;
-  CK(src_addrs.count() > dst_addrs_count && dst_addrs_count > 0);
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(new_addrs.assign(src_addrs))) {
-    LOG_WARN("fail to assign src addrs", K(ret));
-  } else {
-    int64_t rand_num = 0;
-    int64_t m = dst_addrs_count;
-    // reservoir sampling
-    // https://en.wikipedia.org/wiki/Reservoir_sampling
-    for (int i = m; i < new_addrs.count() && OB_SUCC(ret); ++i) {
-      rand_num = ObRandom::rand(0, i); //thread local random, seed_[0] is thread id.
-      if (rand_num < m) {
-        std::swap(new_addrs.at(i), new_addrs.at(rand_num));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      dst_addrs.reset();
-      for (int i = 0; i < m && OB_SUCC(ret); ++i) {
-        if (OB_FAIL(dst_addrs.push_back(new_addrs.at(i)))) {
-          LOG_WARN("fail to push back dst addrs", K(ret));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
 int ObPxOperatorVisitor::visit(ObExecContext &ctx, const ObOpSpec &root, ApplyFunc &func)
 {
   int ret = OB_SUCCESS;
@@ -1377,7 +1055,7 @@ int ObPxOperatorVisitor::visit(ObExecContext &ctx, const ObOpSpec &root, ApplyFu
   return ret;
 }
 
-int ObPXServerAddrUtil::build_tablet_idx_map(
+int ObPxSqcDistributionUtil::build_tablet_idx_map(
       const share::schema::ObTableSchema *table_schema,
       ObTabletIdxMap &idx_map)
 {
@@ -1389,12 +1067,8 @@ int ObPXServerAddrUtil::build_tablet_idx_map(
   } else if (OB_FAIL(idx_map.create(table_schema->get_all_part_num(), "TabletOrderIdx"))) {
     LOG_WARN("fail create index map", K(ret), "cnt", table_schema->get_all_part_num());
   } else if (is_virtual_table(table_schema->get_table_id())) {
-    // In observer 4.2, the table schema of a distributed virtual table will show all_part_num as 1,
-    // whereas in lower versions it would display as 65536.
-    // For a distributed virtual table, we may encounter a situation where part_id is 1 in sqc1,
-    // part_id is 2 in sqc2 and so on, but the idx_map only contains one item with key=1.
-    // Hence, if we seek with part_id=2, the idx_map will return -4201 (OB_HASH_NOT_EXIST)
-    // will return -4201(OB_HASH_NOT_EXIST). In such cases, we can directly obtain the value that equals part_id + 1.
+    // Distributed virtual tables expose a single schema partition while workers may use
+    // distinct logical partition ids. Map each logical id directly to its array position.
     for (int i = 0; OB_SUCC(ret) && i < table_schema->get_all_part_num(); ++i) {
       if (OB_FAIL(idx_map.set_refactored(i + 1, tablet_idx++))) {
         LOG_WARN("fail set value to hashmap", K(ret));
@@ -1477,7 +1151,6 @@ int ObPxTreeSerializer::serialize_tree(char *buf,
                                        int64_t &pos,
                                        const ObOpSpec &root,
                                        bool is_fulltree,
-                                       const ObAddr &run_svr,
                                        ObPhyOpSeriCtx *seri_ctx)
 {
   int ret = OB_SUCCESS;
@@ -1495,18 +1168,13 @@ int ObPxTreeSerializer::serialize_tree(char *buf,
              && OB_FAIL(serialize_sub_plan(buf, buf_len, pos, root))) {
     LOG_WARN("fail to serialize sub plan", K(ret));
   }
-  if (OB_SUCC(ret)
-      && root.is_table_scan()
-      && static_cast<const ObTableScanSpec&>(root).is_global_index_back()) {
-    UNUSED(run_svr);
-  }
   // Terminate serialization when meet ObReceive, as this op indicates
   for (int32_t i = 0; OB_SUCC(ret) && i < child_cnt; ++i) {
     const ObOpSpec *child_op = root.get_child(i);
     if (OB_ISNULL(child_op)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null child operator", K(i), K(root.type_));
-    } else if (OB_FAIL(serialize_tree(buf, buf_len, pos, *child_op, is_fulltree, run_svr, seri_ctx))) {
+    } else if (OB_FAIL(serialize_tree(buf, buf_len, pos, *child_op, is_fulltree, seri_ctx))) {
       LOG_WARN("fail to serialize tree", K(ret));
     }
   }
@@ -1916,9 +1584,8 @@ int ObPxChannelUtil::unlink_ch_set(dtl::ObDtlChSet &ch_set, ObDtlFlowControl *df
       }
     }
   } else {
-    // Here we separate the removal and release of channel from dtl service, mainly to solve the problem that rpc processor and px worker may concurrently take the channel for different processing
-    // If not removed, rpc processor will continue to insert msg, at this time, after the cleanup operation on the channel is complete, there will still be msg coming in, thus the channel will not be a clean msg, making many statistics impossible to perform
-    // So first remove, then clean up and release, this way there won't be a concurrency issue causing the channel to still receive msg
+    // Detach every channel from the DTL registry before cleanup so local producers
+    // cannot append messages while the PX worker releases flow-control state.
     ObSEArray<ObDtlChannel*, 16> chans;
     ObDtlChannel *ch = nullptr;
     ObDtlChannel *first_ch = nullptr;
@@ -1995,9 +1662,7 @@ int ObPxChannelUtil::flush_rows(common::ObIArray<dtl::ObDtlChannel*> &channels)
       LOG_ERROR("unexpected NULL ptr", K(ret));
     } else {
       if (OB_FAIL(ch->flush())) {
-        LOG_WARN("Fail to flush row to slice channel."
-                 "The peer side may not set up as expected.",
-                 K(slice_idx), "peer", ch->get_peer(), K(ret));
+        LOG_WARN("fail to flush row to slice channel", K(slice_idx), K(ret));
       }
     }
   }
@@ -2014,8 +1679,7 @@ int ObPxChannelUtil::sqcs_channles_asyn_wait(ObIArray<ObPxSqcMeta> &sqcs)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected status: channel is null", K(ret), K(idx));
     } else if (OB_FAIL(ch->flush())) {
-      LOG_WARN("failed to wait for channel", K(ret), K(idx),
-          "peer", ch->get_peer());
+      LOG_WARN("failed to wait for channel", K(ret), K(idx));
     }
   }
   return ret;
@@ -2167,7 +1831,7 @@ double ObPxSqcUtil::get_sqc_partition_ratio(ObExecContext *exec_ctx)
   double ratio = 1.0;
   ObPxSqcHandler *sqc_handle = exec_ctx->get_sqc_handler();
   if (OB_NOT_NULL(sqc_handle)) {
-    ObPxRpcInitSqcArgs &sqc_args = sqc_handle->get_sqc_init_arg();
+    ObPxInitSqcArgs &sqc_args = sqc_handle->get_sqc_init_arg();
     int64_t total_part_cnt = sqc_args.sqc_.get_total_part_count();
     int64_t sqc_part_cnt = sqc_args.sqc_.get_access_table_locations().count();
     if (0 < total_part_cnt && 0 < sqc_part_cnt) {
@@ -2183,7 +1847,7 @@ double ObPxSqcUtil::get_sqc_est_worker_ratio(ObExecContext *exec_ctx)
   double ratio = 1.0;
   ObPxSqcHandler *sqc_handle = exec_ctx->get_sqc_handler();
   if (OB_NOT_NULL(sqc_handle)) {
-    ObPxRpcInitSqcArgs &sqc_args = sqc_handle->get_sqc_init_arg();
+    ObPxInitSqcArgs &sqc_args = sqc_handle->get_sqc_init_arg();
     int64_t est_total_task_cnt = sqc_args.sqc_.get_total_task_count();
     int64_t est_sqc_task_cnt = sqc_args.sqc_.get_max_task_count();
     if (0 < est_total_task_cnt && 0 < est_sqc_task_cnt) {
@@ -2201,7 +1865,7 @@ int64_t ObPxSqcUtil::get_total_partition_count(ObExecContext *exec_ctx)
   int64_t total_part_cnt = 1;
   ObPxSqcHandler *sqc_handle = exec_ctx->get_sqc_handler();
   if (OB_NOT_NULL(sqc_handle)) {
-    ObPxRpcInitSqcArgs &sqc_args = sqc_handle->get_sqc_init_arg();
+    ObPxInitSqcArgs &sqc_args = sqc_handle->get_sqc_init_arg();
     int64_t tmp_total_part_cnt = sqc_args.sqc_.get_total_part_count();
     if (0 < tmp_total_part_cnt) {
       total_part_cnt = tmp_total_part_cnt;
@@ -2216,7 +1880,7 @@ int64_t ObPxSqcUtil::get_actual_worker_count(ObExecContext *exec_ctx)
   int64_t sqc_actual_worker_cnt = 1;
   ObPxSqcHandler *sqc_handle = exec_ctx->get_sqc_handler();
   if (OB_NOT_NULL(sqc_handle)) {
-    ObPxRpcInitSqcArgs &sqc_args = sqc_handle->get_sqc_init_arg();
+    ObPxInitSqcArgs &sqc_args = sqc_handle->get_sqc_init_arg();
     sqc_actual_worker_cnt = sqc_args.sqc_.get_task_count();
   }
   return sqc_actual_worker_cnt;
@@ -2327,7 +1991,7 @@ int ObSlaveMapUtil::build_mn_channel(
   ObDfo &parent)
 {
   int ret = OB_SUCCESS;
-  // Set [M, N, start_ch_id_, ch_count_, sqc_addrs_, prefix_sqc_task_counts_]
+  // Build channel ids and the local transmit/receive task layouts.
   if (OB_ISNULL(dfo_ch_total_infos)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("transmit or receive mn channel info is null", KP(dfo_ch_total_infos));
@@ -2335,15 +1999,15 @@ int ObSlaveMapUtil::build_mn_channel(
     OZ(dfo_ch_total_infos->prepare_allocate(1));
     if (OB_SUCC(ret)) {
       ObDtlChTotalInfo &transmit_ch_info = dfo_ch_total_infos->at(0);
-      OZ(ObDfo::fill_channel_info_by_sqc(transmit_ch_info.transmit_exec_server_, child.get_sqcs()));
-      OZ(ObDfo::fill_channel_info_by_sqc(transmit_ch_info.receive_exec_server_, parent.get_sqcs()));
-      transmit_ch_info.channel_count_ = transmit_ch_info.transmit_exec_server_.total_task_cnt_
-                                      * transmit_ch_info.receive_exec_server_.total_task_cnt_;
+      OZ(ObDfo::fill_channel_info_by_sqc(transmit_ch_info.transmit_task_layout_, child.get_sqcs()));
+      OZ(ObDfo::fill_channel_info_by_sqc(transmit_ch_info.receive_task_layout_, parent.get_sqcs()));
+      transmit_ch_info.channel_count_ = transmit_ch_info.transmit_task_layout_.total_task_cnt_
+                                      * transmit_ch_info.receive_task_layout_.total_task_cnt_;
       transmit_ch_info.start_channel_id_ = ObDtlChannel::generate_id(transmit_ch_info.channel_count_)
                                          - transmit_ch_info.channel_count_ + 1;
       
-      if (transmit_ch_info.transmit_exec_server_.exec_addrs_.count() >
-          transmit_ch_info.transmit_exec_server_.total_task_cnt_) {
+      if (transmit_ch_info.transmit_task_layout_.prefix_task_counts_.count() >
+          transmit_ch_info.transmit_task_layout_.total_task_cnt_) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected ch info", K(transmit_ch_info), K(child));
       }
@@ -2359,7 +2023,7 @@ int ObSlaveMapUtil::build_mn_channel_per_sqcs(
   int64_t sqc_count)
 {
   int ret = OB_SUCCESS;
-  // Set [M, N, start_ch_id_, ch_count_, sqc_addrs_, prefix_sqc_task_counts_]
+  // Build one local channel layout for each slave-mapping SQC pair.
   if (OB_ISNULL(dfo_ch_total_infos)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("transmit or receive mn channel info is null", KP(dfo_ch_total_infos));
@@ -2373,36 +2037,12 @@ int ObSlaveMapUtil::build_mn_channel_per_sqcs(
         ObDtlChTotalInfo &transmit_ch_info = dfo_ch_total_infos->at(i);
         transmit_ch_info.is_local_shuffle_ = true;
         ObPxSqcMeta *child_sqc = &child.get_sqcs().at(i);
-        ObPxSqcMeta *parent_sqc = nullptr;
-        if (parent.need_access_store() && parent.is_in_slave_mapping()
-            && ObPQDistributeMethod::HASH == child.get_dist_method()
-            && child.is_out_slave_mapping()) {
-          // for slave mapping under union all, the parent dfo may contain scan ops
-          // the sqc addr's sequence for each union branch may be different
-          // we should map the sqc pair of parent and child for slave mapping
-          for (int64_t j = 0; j < sqc_count && OB_SUCC(ret); ++j) {
-            if (child_sqc->get_exec_addr() == parent.get_sqcs().at(j).get_exec_addr()) {
-              parent_sqc = &parent.get_sqcs().at(j);
-              break;
-            }
-          }
-          if (OB_FAIL(ret)) {
-          } else if (OB_ISNULL(parent_sqc)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("addr not match", K(ret), K(child.get_dfo_id()), K(parent.get_dfo_id()));
-          }
-        } else if (OB_UNLIKELY(parent.get_sqcs().at(i).get_exec_addr()
-                               != child.get_sqcs().at(i).get_exec_addr())) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("addr not match", K(ret), K(child.get_dfo_id()), K(parent.get_dfo_id()));
-        } else {
-          parent_sqc = &parent.get_sqcs().at(i);
-        }
+        ObPxSqcMeta *parent_sqc = &parent.get_sqcs().at(i);
         if (OB_SUCC(ret)) {
-          OZ(ObDfo::fill_channel_info_by_sqc(transmit_ch_info.transmit_exec_server_, *child_sqc));
-          OZ(ObDfo::fill_channel_info_by_sqc(transmit_ch_info.receive_exec_server_, *parent_sqc));
-          transmit_ch_info.channel_count_ = transmit_ch_info.transmit_exec_server_.total_task_cnt_
-                                          * transmit_ch_info.receive_exec_server_.total_task_cnt_;
+          OZ(ObDfo::fill_channel_info_by_sqc(transmit_ch_info.transmit_task_layout_, *child_sqc));
+          OZ(ObDfo::fill_channel_info_by_sqc(transmit_ch_info.receive_task_layout_, *parent_sqc));
+          transmit_ch_info.channel_count_ = transmit_ch_info.transmit_task_layout_.total_task_cnt_
+                                          * transmit_ch_info.receive_task_layout_.total_task_cnt_;
           transmit_ch_info.start_channel_id_ = ObDtlChannel::generate_id(transmit_ch_info.channel_count_)
                                             - transmit_ch_info.channel_count_ + 1;
           
@@ -2578,7 +2218,7 @@ int ObSlaveMapUtil::build_ppwj_bcast_slave_mn_map(ObDfo &parent, ObDfo &child)
   ObPxChTotalInfos *dfo_ch_total_infos = &child.get_dfo_ch_total_infos();
   ObPxPartChMapArray &map = child.get_part_ch_map();
   LOG_DEBUG("build ppwj bcast slave map", K(parent.get_dfo_id()), K(parent.get_sqcs_count()),
-      K(parent.get_tasks()));
+      K(parent.get_total_task_count()));
   ObIArray<ObPxSqcMeta> &sqcs = parent.get_sqcs();
   if (OB_UNLIKELY(sqcs.count() <= 0)) {
     ret = OB_ERR_UNEXPECTED;
@@ -2592,7 +2232,7 @@ int ObSlaveMapUtil::build_ppwj_bcast_slave_mn_map(ObDfo &parent, ObDfo &child)
     LOG_WARN("unexpected status: receive ch info is error", K(ret), KP(dfo_ch_total_infos));
   } else if (OB_FAIL(build_partition_map_by_sqcs(
       sqcs, child,
-      dfo_ch_total_infos->at(0).receive_exec_server_.prefix_task_counts_, map))) {
+      dfo_ch_total_infos->at(0).receive_task_layout_.prefix_task_counts_, map))) {
     LOG_WARN("failed to build channel map by sqc", K(ret));
   } else if (map.count() <= 0) {
     ret = OB_ERR_UNEXPECTED;
@@ -2609,7 +2249,7 @@ int ObSlaveMapUtil::build_ppwj_slave_mn_map(ObDfo &parent, ObDfo &child)
     int64_t child_dfo_idx = -1;
     ObPxChTotalInfos *dfo_ch_total_infos = &child.get_dfo_ch_total_infos();
     ObPxPartChMapArray &map = child.get_part_ch_map();
-    if (OB_FAIL(ObPXServerAddrUtil::find_reference_child(parent, reference_child))) {
+    if (OB_FAIL(ObPxSqcDistributionUtil::find_reference_child(parent, reference_child))) {
       LOG_WARN("find reference child", K(ret));
     } else if (OB_ISNULL(reference_child)) {
       ret = OB_ERR_UNEXPECTED;
@@ -2626,7 +2266,7 @@ int ObSlaveMapUtil::build_ppwj_slave_mn_map(ObDfo &parent, ObDfo &child)
       LOG_WARN("the count of sqc is unexpected", K(ret));
     } else if (OB_FAIL(build_partition_map_by_sqcs(
         reference_child->get_sqcs(), child,
-        dfo_ch_total_infos->at(0).receive_exec_server_.prefix_task_counts_, map))) {
+        dfo_ch_total_infos->at(0).receive_task_layout_.prefix_task_counts_, map))) {
       LOG_WARN("failed to build channel map by sqc", K(ret));
     }
   } else if (OB_FAIL(build_pwj_slave_map_mn_group(parent, child))) {
@@ -2674,14 +2314,14 @@ int ObSlaveMapUtil::build_pkey_affinitized_ch_mn_map(ObDfo &parent,
       } else if (OB_FAIL(build_affinitized_partition_map_by_sqcs(
           sqcs,
           child,
-          dfo_ch_total_infos->at(0).receive_exec_server_.prefix_task_counts_,
-          dfo_ch_total_infos->at(0).receive_exec_server_.total_task_cnt_,
+          dfo_ch_total_infos->at(0).receive_task_layout_.prefix_task_counts_,
+          dfo_ch_total_infos->at(0).receive_task_layout_.total_task_cnt_,
           map))) {
         LOG_WARN("failed to build channel map by sqc", K(ret));
       } else if (map.count() <= 0) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("the size of channel map is unexpected",
-          K(ret), K(map.count()), K(parent.get_tasks()), K(sqcs));
+          K(ret), K(map.count()), K(parent.get_total_task_count()), K(sqcs));
       }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -2723,12 +2363,12 @@ int ObSlaveMapUtil::build_pkey_random_ch_mn_map(ObDfo &parent, ObDfo &child)
         LOG_WARN("unexpected status: receive ch info is error", K(ret), KP(dfo_ch_total_infos));
       } else if (OB_FAIL(build_partition_map_by_sqcs(
           sqcs, child,
-          dfo_ch_total_infos->at(0).receive_exec_server_.prefix_task_counts_, map))) {
+          dfo_ch_total_infos->at(0).receive_task_layout_.prefix_task_counts_, map))) {
         LOG_WARN("failed to build channel map by sqc", K(ret));
       } else if (map.count() <= 0) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("the size of channel map is unexpected",
-          K(ret), K(map.count()), K(parent.get_tasks()), K(sqcs));
+          K(ret), K(map.count()), K(parent.get_total_task_count()), K(sqcs));
       }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -2752,8 +2392,8 @@ int ObSlaveMapUtil::build_ppwj_ch_mn_map(ObExecContext &ctx, ObDfo &parent, ObDf
   ObPxPartChMapArray &map = child.get_part_ch_map();
   int64_t child_dfo_idx = -1;
   ObPxChTotalInfos *dfo_ch_total_infos = &child.get_dfo_ch_total_infos();
-  if (OB_FAIL(map.reserve(parent.get_tasks().count()))) {
-    LOG_WARN("fail reserve memory for map", K(ret), K(parent.get_tasks().count()));
+  if (OB_FAIL(map.reserve(parent.get_total_task_count()))) {
+    LOG_WARN("fail reserve memory for map", K(ret), K(parent.get_total_task_count()));
   } else if (OB_FAIL(ObDfo::check_dfo_pair(parent, child, child_dfo_idx))) {
     LOG_WARN("failed to check dfo pair", K(ret));
   } else if (OB_FAIL(build_mn_channel(dfo_ch_total_infos, child, parent))) {
@@ -2766,7 +2406,7 @@ int ObSlaveMapUtil::build_ppwj_ch_mn_map(ObExecContext &ctx, ObDfo &parent, ObDf
     const share::schema::ObTableSchema *table_schema = NULL;
     ObTabletIdxMap idx_map;
     common::ObIArray<int64_t> &prefix_task_counts =
-      dfo_ch_total_infos->at(0).receive_exec_server_.prefix_task_counts_;
+      dfo_ch_total_infos->at(0).receive_task_layout_.prefix_task_counts_;
     if (prefix_task_counts.count() != sqcs.count()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected status: prefix task count is not match sqcs count", K(ret),
@@ -2791,7 +2431,7 @@ int ObSlaveMapUtil::build_ppwj_ch_mn_map(ObExecContext &ctx, ObDfo &parent, ObDf
         const ObDASTabletLoc &location = *locations.at(loc_idx);
         if (NULL == table_schema) {
           uint64_t table_id = location.loc_meta_->ref_table_id_;
-          if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
+          if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
                       schema_guard))) {
             LOG_WARN("faile to get schema guard", K(ret));
           } else if (OB_FAIL(schema_guard.get_table_schema(
@@ -2800,7 +2440,7 @@ int ObSlaveMapUtil::build_ppwj_ch_mn_map(ObExecContext &ctx, ObDfo &parent, ObDf
           } else if (OB_ISNULL(table_schema)) {
             ret = OB_TABLE_NOT_EXIST;
             LOG_WARN("table schema is null", K(ret), K(table_id));
-          } else if (OB_FAIL(ObPXServerAddrUtil::build_tablet_idx_map(table_schema, idx_map))) {
+          } else if (OB_FAIL(ObPxSqcDistributionUtil::build_tablet_idx_map(table_schema, idx_map))) {
             LOG_WARN("fail to build tablet idx map", K(ret));
           }
         }
@@ -2950,42 +2590,35 @@ int ObDtlChannelUtil::get_mn_receive_dtl_channel_set(
   int ret = OB_SUCCESS;
   // receive
   int64_t ch_cnt = 0;
-  if (0 > sqc_id || sqc_id >= ch_total_info.receive_exec_server_.prefix_task_counts_.count()) {
+  if (0 > sqc_id || sqc_id >= ch_total_info.receive_task_layout_.prefix_task_counts_.count()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid sqc id", K(sqc_id), K(ret),
-      K(ch_total_info.receive_exec_server_.prefix_task_counts_.count()));
-  } else if (ch_total_info.transmit_exec_server_.prefix_task_counts_.count() != ch_total_info.transmit_exec_server_.exec_addrs_.count()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: prefix task count is not match with execute address", K(ret),
-      "prefix task count", ch_total_info.transmit_exec_server_.prefix_task_counts_.count(),
-      "execute address count", ch_total_info.transmit_exec_server_.exec_addrs_.count());
+      K(ch_total_info.receive_task_layout_.prefix_task_counts_.count()));
   } else {
-    int64_t start_task_id = ch_total_info.receive_exec_server_.prefix_task_counts_.at(sqc_id);
-    int64_t receive_task_cnt = ch_total_info.receive_exec_server_.total_task_cnt_;
+    int64_t start_task_id = ch_total_info.receive_task_layout_.prefix_task_counts_.at(sqc_id);
+    int64_t receive_task_cnt = ch_total_info.receive_task_layout_.total_task_cnt_;
     int64_t base_chid = ch_total_info.start_channel_id_ + (start_task_id + task_id);
     int64_t chid = 0;
-    ObIArray<int64_t> &prefix_task_counts = ch_total_info.transmit_exec_server_.prefix_task_counts_;
+    ObIArray<int64_t> &prefix_task_counts = ch_total_info.transmit_task_layout_.prefix_task_counts_;
     int64_t pre_prefix_task_count = 0;
-    if (OB_FAIL(ch_set.reserve(ch_total_info.transmit_exec_server_.total_task_cnt_))) {
+    if (OB_FAIL(ch_set.reserve(ch_total_info.transmit_task_layout_.total_task_cnt_))) {
       LOG_WARN("fail reserve memory for channels", K(ret),
-               "channels", ch_total_info.transmit_exec_server_.total_task_cnt_);
+               "channels", ch_total_info.transmit_task_layout_.total_task_cnt_);
     }
     // Traverse all servers of transmit, and construct the channel between this receive task and each of them
     for (int64_t i = 0; i < prefix_task_counts.count() && OB_SUCC(ret); ++i) {
       int64_t prefix_task_count = 0;
       if (i + 1 == prefix_task_counts.count()) {
-        prefix_task_count = ch_total_info.transmit_exec_server_.total_task_cnt_;
+        prefix_task_count = ch_total_info.transmit_task_layout_.total_task_cnt_;
       } else {
         prefix_task_count = prefix_task_counts.at(i + 1);
       }
-      ObAddr &dst_addr = ch_total_info.transmit_exec_server_.exec_addrs_.at(i);
-      bool is_local = dst_addr == GCONF.self_addr_;
       // [pre_prefix_task_count, prefix_task_count) represents the transmit tasks in the i-th sqc of transmit,
       // The index number in all sqcs' transmit tasks
       for (int64_t j = pre_prefix_task_count; j < prefix_task_count && OB_SUCC(ret); ++j) {
         ObDtlChannelInfo ch_info;
         chid = base_chid + receive_task_cnt * j;
-        ObDtlChannelGroup::make_receive_channel(dst_addr, chid, ch_info, is_local);
+        ObDtlChannelGroup::make_receive_channel(chid, ch_info);
         OZ(ch_set.add_channel_info(ch_info));
         LOG_DEBUG("debug receive channel", KP(chid), K(ch_info), K(sqc_id), K(task_id),
           K(ch_total_info.start_channel_id_));
@@ -2993,11 +2626,11 @@ int ObDtlChannelUtil::get_mn_receive_dtl_channel_set(
       }
       pre_prefix_task_count = prefix_task_count;
     }
-    if (OB_SUCC(ret) && ch_cnt != ch_total_info.transmit_exec_server_.total_task_cnt_) {
+    if (OB_SUCC(ret) && ch_cnt != ch_total_info.transmit_task_layout_.total_task_cnt_) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected status: channel count is not match", K(ch_cnt),
         K(ch_total_info.channel_count_), K(receive_task_cnt), K(prefix_task_counts),
-        K(ch_total_info.transmit_exec_server_.total_task_cnt_), K(sqc_id), K(task_id));
+        K(ch_total_info.transmit_task_layout_.total_task_cnt_), K(sqc_id), K(task_id));
     }
   }
   LOG_DEBUG("get mn receive dtl channel set", K(sqc_id), K(task_id), K(ch_total_info), K(ch_set));
@@ -3012,25 +2645,20 @@ int ObDtlChannelUtil::get_sm_receive_dtl_channel_set(
 {
   int ret = OB_SUCCESS;
   UNUSED(sqc_id);
-  int64_t receive_task_cnt = ch_total_info.receive_exec_server_.total_task_cnt_;
-  int64_t transmit_task_cnt = ch_total_info.transmit_exec_server_.total_task_cnt_;
-  if (OB_UNLIKELY(1 != ch_total_info.receive_exec_server_.exec_addrs_.count()
-                  || 1 != ch_total_info.transmit_exec_server_.exec_addrs_.count()
-                  || ch_total_info.receive_exec_server_.exec_addrs_.at(0) !=
-                      ch_total_info.transmit_exec_server_.exec_addrs_.at(0)
-                  || ch_total_info.receive_exec_server_.exec_addrs_.at(0) != GCONF.self_addr_)) {
+  int64_t receive_task_cnt = ch_total_info.receive_task_layout_.total_task_cnt_;
+  int64_t transmit_task_cnt = ch_total_info.transmit_task_layout_.total_task_cnt_;
+  if (OB_UNLIKELY(1 != ch_total_info.receive_task_layout_.prefix_task_counts_.count()
+                  || 1 != ch_total_info.transmit_task_layout_.prefix_task_counts_.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected exec addrs count", K(ret), K(ch_total_info), K(GCONF.self_addr_));
+    LOG_WARN("unexpected local task group count", K(ret), K(ch_total_info));
   } else if (OB_FAIL(ch_set.reserve(transmit_task_cnt))) {
     LOG_WARN("fail reserve memory for channels", K(ret), K(transmit_task_cnt));
   } else {
-    ObAddr &dst_addr = ch_total_info.transmit_exec_server_.exec_addrs_.at(0);
-    bool is_local = true;
     int64_t chid = 0;
     for (int64_t i = 0; i < transmit_task_cnt && OB_SUCC(ret); ++i) {
       ObDtlChannelInfo ch_info;
       chid = ch_total_info.start_channel_id_ + task_id + receive_task_cnt * i;
-      ObDtlChannelGroup::make_receive_channel(dst_addr, chid, ch_info, is_local);
+      ObDtlChannelGroup::make_receive_channel(chid, ch_info);
       OZ(ch_set.add_channel_info(ch_info));
     }
   }
@@ -3045,35 +2673,33 @@ int ObDtlChannelUtil::get_mn_transmit_dtl_channel_set(
   ObDtlChSet &ch_set)
 {
   int ret = OB_SUCCESS;
-  if (0 > sqc_id || sqc_id >= ch_total_info.transmit_exec_server_.prefix_task_counts_.count()) {
+  if (0 > sqc_id || sqc_id >= ch_total_info.transmit_task_layout_.prefix_task_counts_.count()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid sqc id", K(sqc_id), K(ret),
-      K(ch_total_info.transmit_exec_server_.prefix_task_counts_.count()));
+      K(ch_total_info.transmit_task_layout_.prefix_task_counts_.count()));
   } else {
-    int64_t start_task_id = ch_total_info.transmit_exec_server_.prefix_task_counts_.at(sqc_id);
+    int64_t start_task_id = ch_total_info.transmit_task_layout_.prefix_task_counts_.at(sqc_id);
     int64_t base_chid = ch_total_info.start_channel_id_
-          + (start_task_id + task_id) * ch_total_info.receive_exec_server_.total_task_cnt_;
-    ObIArray<int64_t> &prefix_task_counts = ch_total_info.receive_exec_server_.prefix_task_counts_;
+          + (start_task_id + task_id) * ch_total_info.receive_task_layout_.total_task_cnt_;
+    ObIArray<int64_t> &prefix_task_counts = ch_total_info.receive_task_layout_.prefix_task_counts_;
     int64_t ch_cnt = 0;
     int64_t pre_prefix_task_count = 0;
     int64_t chid = 0;
-    if (OB_FAIL(ch_set.reserve(ch_total_info.receive_exec_server_.total_task_cnt_))) {
+    if (OB_FAIL(ch_set.reserve(ch_total_info.receive_task_layout_.total_task_cnt_))) {
       LOG_WARN("fail reserve memory for channels", K(ret),
-               "channels", ch_total_info.receive_exec_server_.total_task_cnt_);
+               "channels", ch_total_info.receive_task_layout_.total_task_cnt_);
     }
     for (int64_t i = 0; i < prefix_task_counts.count() && OB_SUCC(ret); ++i) {
       int64_t prefix_task_count = 0;
       if (i + 1 == prefix_task_counts.count()) {
-        prefix_task_count = ch_total_info.receive_exec_server_.total_task_cnt_;
+        prefix_task_count = ch_total_info.receive_task_layout_.total_task_cnt_;
       } else {
         prefix_task_count = prefix_task_counts.at(i + 1);
       }
-      ObAddr &dst_addr = ch_total_info.receive_exec_server_.exec_addrs_.at(i);
-      bool is_local = dst_addr == GCONF.self_addr_;
       for (int64_t j = pre_prefix_task_count; j < prefix_task_count && OB_SUCC(ret); ++j) {
         ObDtlChannelInfo ch_info;
         chid = base_chid + j;
-        ObDtlChannelGroup::make_transmit_channel(dst_addr, chid, ch_info, is_local);
+        ObDtlChannelGroup::make_transmit_channel(chid, ch_info);
         OZ(ch_set.add_channel_info(ch_info));
         ++ch_cnt;
         LOG_DEBUG("debug transmit channel", KP(chid), K(ch_info), K(sqc_id), K(task_id),
@@ -3081,10 +2707,10 @@ int ObDtlChannelUtil::get_mn_transmit_dtl_channel_set(
       }
       pre_prefix_task_count = prefix_task_count;
     }
-    if (OB_SUCC(ret) && ch_cnt != ch_total_info.receive_exec_server_.total_task_cnt_) {
+    if (OB_SUCC(ret) && ch_cnt != ch_total_info.receive_task_layout_.total_task_cnt_) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected status: channel count is not match", K(ch_cnt),
-        K(ch_total_info.transmit_exec_server_.total_task_cnt_));
+        K(ch_total_info.transmit_task_layout_.total_task_cnt_));
     }
   }
   LOG_DEBUG("get transmit dtl channel set", K(sqc_id), K(task_id), K(ch_total_info), K(ch_set));
@@ -3099,25 +2725,20 @@ int ObDtlChannelUtil::get_sm_transmit_dtl_channel_set(
 {
   int ret = OB_SUCCESS;
   UNUSED(sqc_id);
-  int64_t receive_task_cnt = ch_total_info.receive_exec_server_.total_task_cnt_;
-  int64_t transmit_task_cnt = ch_total_info.transmit_exec_server_.total_task_cnt_;
-  if (OB_UNLIKELY(1 != ch_total_info.receive_exec_server_.exec_addrs_.count()
-                  || 1 != ch_total_info.transmit_exec_server_.exec_addrs_.count()
-                  || ch_total_info.receive_exec_server_.exec_addrs_.at(0) !=
-                      ch_total_info.transmit_exec_server_.exec_addrs_.at(0)
-                  || ch_total_info.receive_exec_server_.exec_addrs_.at(0) != GCONF.self_addr_)) {
+  int64_t receive_task_cnt = ch_total_info.receive_task_layout_.total_task_cnt_;
+  int64_t transmit_task_cnt = ch_total_info.transmit_task_layout_.total_task_cnt_;
+  if (OB_UNLIKELY(1 != ch_total_info.receive_task_layout_.prefix_task_counts_.count()
+                  || 1 != ch_total_info.transmit_task_layout_.prefix_task_counts_.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected exec addrs count", K(ret), K(ch_total_info), K(GCONF.self_addr_));
+    LOG_WARN("unexpected local task group count", K(ret), K(ch_total_info));
   } else if (OB_FAIL(ch_set.reserve(receive_task_cnt))) {
     LOG_WARN("fail reserve memory for channels", K(ret), K(receive_task_cnt));
   } else {
-    ObAddr &dst_addr = ch_total_info.receive_exec_server_.exec_addrs_.at(0);
-    bool is_local = true;
     int64_t chid = 0;
     for (int64_t i = 0; i < receive_task_cnt && OB_SUCC(ret); ++i) {
       ObDtlChannelInfo ch_info;
       chid = ch_total_info.start_channel_id_ + receive_task_cnt * task_id + i;
-      ObDtlChannelGroup::make_transmit_channel(dst_addr, chid, ch_info, is_local);
+      ObDtlChannelGroup::make_transmit_channel(chid, ch_info);
       OZ(ch_set.add_channel_info(ch_info));
     }
   }
@@ -3127,67 +2748,11 @@ int ObDtlChannelUtil::get_sm_transmit_dtl_channel_set(
 }
 
 
-int ObExtraServerAliveCheck::check() const
-{
-  int ret = OB_SUCCESS;
-  const int64_t CHECK_INTERVAL = 10000000; // 10 second
-  int64_t cur_time  = ObTimeUtil::fast_current_time();
-  if (cur_time - last_check_time_ > CHECK_INTERVAL) {
-    ret = do_check();
-    if (OB_SUCC(ret)) {
-      last_check_time_ = cur_time;
-    }
-  }
-  return ret;
-}
-
-int ObExtraServerAliveCheck::do_check() const
-{
-  int ret = OB_SUCCESS;
-  if (NULL != dfo_mgr_) {
-    ObSEArray<ObDfo *, 32> dfos;
-    if (OB_FAIL(dfo_mgr_->get_running_dfos(dfos))) {
-      LOG_WARN("fail find dfo", K(ret));
-    } else {
-      // need check all sqc because we set sqc need_report = false here and don't need wait sqc finish msg.
-      for (int64_t i = 0; i < dfos.count(); i++) {
-        ObIArray<ObPxSqcMeta> &sqcs = dfos.at(i)->get_sqcs();
-        for (int64_t j = 0; j < sqcs.count(); j++) {
-          if (sqcs.at(j).need_report()) {
-            if (OB_UNLIKELY(ObPxCheckAlive::is_in_blacklist(sqcs.at(j).get_exec_addr(),
-                query_start_time_))) {
-              sqcs.at(j).set_need_report(false);
-              sqcs.at(j).set_thread_finish(true);
-              sqcs.at(j).set_server_not_alive(true);
-              if (!sqcs.at(j).is_ignore_vtable_error()) {
-                ret = OB_RPC_CONNECT_ERROR;
-                LOG_WARN("server not in communication, maybe crashed.", K(ret),
-                          KPC(dfos.at(i)), K(sqcs.at(j)));
-              }
-            }
-          }
-        }
-      }
-    }
-  } else if (OB_LIKELY(qc_addr_.is_valid())) {
-    if (OB_UNLIKELY(ObPxCheckAlive::is_in_blacklist(qc_addr_, query_start_time_))) {
-      ret = OB_RPC_CONNECT_ERROR;
-      LOG_WARN("qc not in communication, maybe crashed", K(ret), K(qc_addr_));
-    }
-  }
-  LOG_DEBUG("server alive do check", K(ret), K(qc_addr_), K(cluster_id_), K(dfo_mgr_));
-  return ret;
-}
-
 bool ObVirtualTableErrorWhitelist::should_ignore_vtable_error(int error_code)
 {
   bool should_ignore = false;
   switch (error_code) {
     CASE_IGNORE_ERR_HELPER(OB_ALLOCATE_MEMORY_FAILED)
-    CASE_IGNORE_ERR_HELPER(OB_RPC_CONNECT_ERROR)
-    CASE_IGNORE_ERR_HELPER(OB_RPC_SEND_ERROR)
-    CASE_IGNORE_ERR_HELPER(OB_RPC_POST_ERROR)
-    CASE_IGNORE_ERR_HELPER(OB_TENANT_NOT_IN_SERVER)
     default: {
       if (is_schema_error(error_code)) {
         should_ignore = true;
@@ -3198,15 +2763,6 @@ bool ObVirtualTableErrorWhitelist::should_ignore_vtable_error(int error_code)
     }
   }
   return should_ignore;
-}
-
-bool ObPxCheckAlive::is_in_blacklist(const common::ObAddr &addr, int64_t server_start_time)
-{
-  // Single-replica seekdb: the only peer is the local server, which is never
-  // blacklisted (the obcall net-keepalive blacklist is gone).
-  UNUSED(addr);
-  UNUSED(server_start_time);
-  return false;
 }
 
 int LowestCommonAncestorFinder::find_op_common_ancestor(
@@ -3285,309 +2841,15 @@ int LowestCommonAncestorFinder::get_op_dfo(const ObOpSpec *op, ObDfo *root_dfo, 
   return ret;
 }
 
-int ObPXServerAddrUtil::get_data_servers(ObExecContext &exec_ctx,
-                                         sql::ObTMArray<ObAddr> &addrs,
-                                         bool &is_empty,
-                                         int64_t &data_node_cnt)
-{
-  int ret = OB_SUCCESS;
-  DASTableLocList &table_locs = DAS_CTX(exec_ctx).get_table_loc_list();
-  DASTabletLocArray locations;
-  FOREACH_X(tmp_node, table_locs, OB_SUCC(ret)) {
-    ObDASTableLoc *table_loc = *tmp_node;
-    for (DASTabletLocListIter tablet_node = table_loc->tablet_locs_begin();
-        OB_SUCC(ret) && tablet_node != table_loc->tablet_locs_end(); ++tablet_node) {
-      OZ(locations.push_back(*tablet_node));
-    }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (locations.empty()) {
-    is_empty = true;
-  } else if (OB_FAIL(get_location_addrs<DASTabletLocArray>(locations, addrs))) {
-    LOG_WARN("fail get location addrs", K(ret));
-  } else {
-    data_node_cnt = addrs.count();
-    if (OB_FAIL(shuffle_px_node_pool(addrs, data_node_cnt))) {
-      LOG_WARN("Fail to shuffle calc node pool", K(ret),
-                K(data_node_cnt), K(addrs));
-    }
-  }
-  return ret;
-}
-
-int ObPXServerAddrUtil::get_data_servers(ObExecContext &exec_ctx,
-                                         ObAddrSet &addr_set,
-                                         bool &is_empty)
-{
-  int ret = OB_SUCCESS;
-  DASTableLocList &table_locs = DAS_CTX(exec_ctx).get_table_loc_list();
-  DASTabletLocArray locations;
-  FOREACH_X(tmp_node, table_locs, OB_SUCC(ret)) {
-    ObDASTableLoc *table_loc = *tmp_node;
-    for (DASTabletLocListIter tablet_node = table_loc->tablet_locs_begin();
-        OB_SUCC(ret) && tablet_node != table_loc->tablet_locs_end(); ++tablet_node) {
-      OZ(locations.push_back(*tablet_node));
-    }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (locations.empty()) {
-    is_empty = true;
-  } else {
-    addr_set.reuse();
-    if (OB_FAIL(addr_set.create(locations.size()))) {
-      LOG_WARN("fail create addr set", K(locations.size()), K(ret));
-    }
-    for (int i = 0; OB_SUCC(ret) && i < locations.count(); ++i) {
-      ret = addr_set.exist_refactored((locations.at(i))->server_);
-      if (OB_HASH_EXIST == ret) {
-        ret = OB_SUCCESS;
-      } else if (OB_HASH_NOT_EXIST == ret) {
-        if (OB_FAIL(addr_set.set_refactored((locations.at(i))->server_))) {
-          LOG_WARN("fail set addr to addr_set", K(ret));
-        }
-      } else {
-        LOG_WARN("fail check server exist in addr_set", K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObPXServerAddrUtil::inner_get_zone_servers(const ObAddrSet &data_addr_set,
-                                               ObIArray<ObAddr> &addrs)
-{
-  int ret = OB_SUCCESS;
-  addrs.reset();
-  if (OB_FAIL(addrs.push_back(GCTX.self_addr()))) {
-    LOG_WARN("fail to construct addrs", KR(ret));
-  }
-  return ret;
-}
-
-int ObPXServerAddrUtil::get_zone_servers(ObExecContext &exec_ctx,
-                                         sql::ObTMArray<ObAddr> &addrs,
-                                         bool &is_empty,
-                                         int64_t &data_node_cnt)
-{
-  int ret = OB_SUCCESS;
-  addrs.reset();
-  ObAddrSet data_addr_set;
-  if (OB_FAIL(get_data_servers(exec_ctx, data_addr_set, is_empty))) {
-    LOG_WARN("Fail to get_data_servers", K(ret));
-  } else if (is_empty) {
-    // do nothing
-  } else {
-    data_node_cnt = data_addr_set.size();
-    if (OB_FAIL(inner_get_zone_servers(data_addr_set, addrs))) {
-      LOG_WARN("Failed to inner_get_zone_servers", K(ret));
-    } else if (OB_FAIL(shuffle_px_node_pool(addrs, data_node_cnt))) {
-      LOG_WARN("Fail to shuffle calc node pool", K(ret),
-                K(data_node_cnt), K(addrs));
-    }
-  }
-  return ret;
-}
-
-int ObPXServerAddrUtil::get_tenant_server_set(ObAddrSet &tenant_server_set)
-{
-  int ret = OB_SUCCESS;
-  tenant_server_set.reuse();
-  if (OB_FAIL(tenant_server_set.create(1))) {
-    LOG_WARN("fail create tenant_server_set", KR(ret));
-  } else {
-    ret = tenant_server_set.exist_refactored(GCTX.self_addr());
-    if (OB_HASH_EXIST == ret) {
-      ret = OB_SUCCESS;
-    } else if (OB_HASH_NOT_EXIST == ret) {
-      if (OB_FAIL(tenant_server_set.set_refactored(GCTX.self_addr()))) {
-        LOG_WARN("fail set addr to tenant_server_set", K(ret));
-      }
-    } else {
-      LOG_WARN("fail check server exist in tenant_server_set", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObPXServerAddrUtil::get_tenant_servers(ObIArray<ObAddr> &tenant_servers)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(tenant_servers.push_back(GCTX.self_addr()))) {
-    LOG_WARN("fail to push back server", KR(ret));
-  }
-  return ret;
-}
-
-int ObPXServerAddrUtil::get_cluster_servers(ObExecContext &exec_ctx,
-                                            sql::ObTMArray<ObAddr> &addrs,
-                                            bool &is_empty,
-                                            int64_t &data_node_cnt)
-{
-  int ret = OB_SUCCESS;
-  addrs.reset();
-  ObAddrSet addr_set;
-  ObTMArray<ObAddr> tenant_servers;
-  if (OB_FAIL(get_data_servers(exec_ctx, addr_set, is_empty))) {
-    LOG_WARN("Fail to get_data_servers", K(ret));
-  } else if (is_empty) {
-    // do nothing
-  } else if (OB_FAIL(get_tenant_servers(tenant_servers))) {
-    LOG_WARN("fail to get_units_by_tenant from inner_table",
-            K(ret));
-  } else {
-    data_node_cnt = addr_set.size();
-    FOREACH_X(addr_iter, addr_set, OB_SUCC(ret)) {
-      // Data nodes are placed at the front of the candidate node pool.
-      if (OB_FAIL(addrs.push_back(addr_iter->first))) {
-        LOG_WARN("addrs failed to push_back", K(ret));
-      }
-    }
-    for (int i = 0; OB_SUCC(ret) && i < tenant_servers.count(); ++i) {
-      ret = addr_set.exist_refactored(tenant_servers.at(i));
-      if (OB_HASH_EXIST == ret) {
-        ret = OB_SUCCESS;
-      } else if (OB_HASH_NOT_EXIST == ret) {
-        if (OB_FAIL(addrs.push_back(tenant_servers.at(i)))) {
-          LOG_WARN("fail push back addr", K(ret));
-        }
-      } else {
-        LOG_WARN("fail check server exist in addr_set", K(ret));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(shuffle_px_node_pool(addrs, data_node_cnt))) {
-        LOG_WARN("Fail to shuffle calc node pool", K(ret),
-                  K(data_node_cnt), K(addrs));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObPXServerAddrUtil::get_specified_servers(ObExecContext &exec_ctx,
-                                              sql::ObTMArray<ObAddr> &addrs,
-                                              bool &is_empty,
-                                              int64_t &data_node_cnt)
-{
-  int ret = OB_SUCCESS;
-  addrs.reset();
-  ObAddrSet tenant_addr_set;
-  const common::ObFixedArray<common::ObAddr, common::ObIAllocator> &px_node_addrs =
-            exec_ctx.get_physical_plan_ctx()->get_phy_plan()->get_px_node_addrs();
-  if (OB_FAIL(ObPXServerAddrUtil::get_tenant_server_set(tenant_addr_set))) {
-    LOG_WARN("Fail to get tenant server set", K(ret));
-  } else if (tenant_addr_set.empty()) {
-    is_empty = true;
-  } else {
-    for (int i = 0; OB_SUCC(ret) && i < px_node_addrs.count(); ++i) {
-      ret = tenant_addr_set.exist_refactored(px_node_addrs.at(i));
-      if (OB_HASH_EXIST == ret) {
-        if (OB_FAIL(addrs.push_back(px_node_addrs.at(i)))) {
-          LOG_WARN("fail push back addr", K(ret));
-        }
-      } else if (OB_HASH_NOT_EXIST == ret) {
-        LOG_WARN("unexpected addr during the execution period",
-                  K(ret), K(px_node_addrs.at(i)));
-      } else {
-        LOG_WARN("fail check server exist in tenant addrset", K(ret));
-      }
-    }
-    data_node_cnt = px_node_addrs.count();
-  }
-  return ret;
-}
-
-int ObPXServerAddrUtil::shuffle_px_node_pool(sql::ObTMArray<ObAddr> &addrs,
-                                              int64_t data_node_cnt)
-{
-  int ret = OB_SUCCESS;
-  uint64_t seed = ObTimeUtil::current_time();
-  // Ensure that data nodes are placed at the beginning of the array
-  // by separately shuffling the data nodes and the candidate compute nodes.
-  if (data_node_cnt > 1) {
-    std::shuffle(addrs.begin(), addrs.begin() + data_node_cnt,
-                  std::default_random_engine(seed));
-  }
-  if (addrs.count() - data_node_cnt > 1) {
-    std::shuffle(addrs.begin() + data_node_cnt, addrs.end(),
-                  std::default_random_engine(seed));
-  }
-  return ret;
-}
-
-int ObPXServerAddrUtil::get_zone_server_cnt(const ObIArray<ObAddr> &server_list,
-                                            int64_t &server_cnt)
-{
-  int ret = OB_SUCCESS;
-  server_cnt = 0;
-  ObAddrSet data_addr_set;
-  if (OB_FAIL(data_addr_set.create(server_list.count()))) {
-    LOG_WARN("data_addr_set failed to create", K(ret), K(server_list.count()));
-  } else {
-    for (int i = 0; i < server_list.count() && OB_SUCC(ret); ++i) {
-      ret = data_addr_set.exist_refactored(server_list.at(i));
-      if (OB_HASH_EXIST == ret) {
-        ret = OB_SUCCESS;
-      } else if (OB_HASH_NOT_EXIST == ret) {
-        if (OB_FAIL(data_addr_set.set_refactored(server_list.at(i)))) {
-          LOG_WARN("fail push back addr", K(ret));
-        }
-      } else {
-        LOG_WARN("fail check server exist in data addrset", K(ret));
-      }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    ObTMArray<ObAddr> zone_servers;
-    if (OB_FAIL(inner_get_zone_servers(data_addr_set, zone_servers))) {
-      LOG_WARN("Failed to inner_get_zone_servers", K(ret));
-    } else {
-      server_cnt = zone_servers.count();
-    }
-  }
-  return ret;
-}
-
-int ObPXServerAddrUtil::get_cluster_server_cnt(const ObIArray<ObAddr> &server_list,
-                                              int64_t &server_cnt)
-{
-  int ret = OB_SUCCESS;
-  ObTMArray<ObAddr> tenant_servers;
-  if (OB_FAIL(get_tenant_servers(tenant_servers))) {
-    LOG_WARN("fail to get_units_by_tenant from inner_table",
-            K(ret));
-  } else {
-    server_cnt = std::max(server_list.count(), tenant_servers.count());
-  }
-  return ret;
-}
-
-// for slave mapping under union all, the parent dfo may also contain scan ops,
-// thus we should check the sqc addr is match
-int ObPXServerAddrUtil::check_slave_mapping_location_constraint(ObDfo &child, ObDfo &parent)
+int ObPxSqcDistributionUtil::check_slave_mapping_location_constraint(ObDfo &child, ObDfo &parent)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(child.get_sqcs_count() != parent.get_sqcs_count())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sqc count not match for slave_mapping", K(child.get_dfo_id()), K(parent.get_dfo_id()));
-  } else {
-    common::ObIArray<ObPxSqcMeta> &child_sqcs = child.get_sqcs();
-    common::ObIArray<ObPxSqcMeta> &parent_sqcs = parent.get_sqcs();
-    for (int64_t i = 0; i < child_sqcs.count() && OB_SUCC(ret); ++i) {
-      bool match = false;
-      const ObAddr &child_addr = child_sqcs.at(i).get_exec_addr();
-      for (int64_t j = 0; j < parent_sqcs.count() && OB_SUCC(ret); ++j) {
-        const ObAddr &parent_addr = parent_sqcs.at(j).get_exec_addr();
-        if (child_addr == parent_addr) {
-          match = true;
-          break;
-        }
-      }
-      if (OB_UNLIKELY(!match)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("sqc addr not match", K(child.get_dfo_id()), K(parent.get_dfo_id()));
-      }
-    }
+  } else if (OB_UNLIKELY(child.get_sqcs_count() > 1)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("expected at most one local sqc", K(ret), K(child.get_sqcs_count()));
   }
   return ret;
 }

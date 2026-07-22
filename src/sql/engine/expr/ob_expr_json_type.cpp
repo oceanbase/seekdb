@@ -204,10 +204,8 @@ int ObExprJsonType::eval_json_type(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     bool is_null = false;
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     
-    MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
-    if (OB_FAIL(tmp_allocator.add_baseline_size(datum, arg->obj_meta_.has_lob_header()))) {
-      LOG_WARN("failed to add baseline size.", K(ret));
-    } else if (OB_FAIL(calc(ctx, *datum, arg->datum_meta_, arg->obj_meta_.has_lob_header(), &tmp_allocator, type_idx, is_null))) {
+    MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
+    if (OB_FAIL(calc(ctx, *datum, arg->datum_meta_, arg->obj_meta_.has_lob_header(), &tmp_allocator, type_idx, is_null))) {
       LOG_WARN("fail to calc json type result", K(ret), K(arg->datum_meta_));
     } else if (is_null) {
       res.set_null();

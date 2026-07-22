@@ -49,20 +49,11 @@ ObInfoSchemaUserPrivilegesTable::StaticInit::StaticInit()
   ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_PROCESS_SHIFT] = "PROCESS";
   ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_CREATE_SYNONYM_SHIFT] = "CREATE SYNONYM";
   ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_FILE_SHIFT] = "FILE";
-  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_ALTER_TENANT_SHIFT] = "ALTER TENANT";
   ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_ALTER_SYSTEM_SHIFT] = "ALTER SYSTEM";
-  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_CREATE_RESOURCE_POOL_SHIFT] = 
-                                                   "CREATE RESOURCE POOL";
-  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_CREATE_RESOURCE_UNIT_SHIFT] = 
-                                                   "CREATE RESOURCE UNIT";
-  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_REPL_SLAVE_SHIFT] = 
+  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_REPL_SLAVE_SHIFT] =
                                                    "REPLICATION SLAVE";
-  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_REPL_CLIENT_SHIFT] = 
+  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_REPL_CLIENT_SHIFT] =
                                                    "REPLICATION CLIENT";
-  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_DROP_DATABASE_LINK_SHIFT] = 
-                                                   "DROP DATABASE LINK";
-  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_CREATE_DATABASE_LINK_SHIFT] = 
-                                                   "CREATE DATABASE LINK";
   ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_EXECUTE_SHIFT] = 
                                                    "EXECUTE";
   ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_ALTER_ROUTINE_SHIFT] = 
@@ -83,16 +74,6 @@ ObInfoSchemaUserPrivilegesTable::StaticInit::StaticInit()
                                                    "CREATE ROLE";
   ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_DROP_ROLE_SHIFT] =
                                                    "DROP ROLE";
-  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_ENCRYPT_SHIFT] = 
-                                                   "ENCRYPT";
-  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_DECRYPT_SHIFT] = 
-                                                   "DECRYPT";
-  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_EVENT_SHIFT] = 
-                                                   "EVENT";
-  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_CREATE_CATALOG_SHIFT] = 
-                                                   "CREATE CATALOG";
-  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_USE_CATALOG_SHIFT] = 
-                                                   "USE CATALOG";
   ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_CREATE_AI_MODEL_SHIFT] = 
                                                    "CREATE AI MODEL";
   ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_ALTER_AI_MODEL_SHIFT] = 
@@ -187,13 +168,13 @@ int ObInfoSchemaUserPrivilegesTable::get_user_infos(const uint64_t user_id,
       user_db_priv_set |= db_priv_set;
       if (OB_PRIV_HAS_ANY(user_db_priv_set, OB_PRIV_SELECT)) {
         if (OB_FAIL(schema_guard_->get_user_infos_by_id(user_infos))) {
-          SERVER_LOG(WARN, "Get user infos with tenant id error", K(ret));
+          SERVER_LOG(WARN, "get user infos failed", K(ret));
         }
       } else {
         const share::schema::ObUserInfo *user_info = NULL;
         if (OB_ISNULL(user_info = schema_guard_->get_user_info(user_id))) {
           // ignore ret
-          SERVER_LOG(WARN, "Get user infos with tenant user id error", K(ret));
+          SERVER_LOG(WARN, "get user info failed", K(ret));
         } else if (OB_FAIL(user_infos.push_back(user_info))) {
           SERVER_LOG(WARN, "Failed to add user info", K(ret));
         }

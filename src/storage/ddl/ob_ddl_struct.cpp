@@ -22,7 +22,7 @@
 #include "storage/ddl/ob_tablet_ddl_kv.h"
 #include "storage/ob_i_table.h"
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
-#include "storage/ddl/ob_direct_insert_sstable_ctx_new.h"
+#include "storage/ddl/ob_direct_insert_sstable_ctx.h"
 
 using namespace oceanbase::storage;
 using namespace oceanbase::blocksstable;
@@ -106,13 +106,10 @@ int ObDDLMacroBlock::set_data_macro_meta(const MacroBlockId &macro_id, const cha
   if (!macro_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(macro_id));
-  } else if (ObDDLMacroBlockType::DDL_MB_SS_EMPTY_DATA_TYPE == block_type) {
-    /* skip no logging type, not need to set meta*/
   } else if (nullptr == macro_block_buf || 0 >= size) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(macro_block_buf), K(size));
   } else {
-    /* shared nothing need macro_meta*/
     if (OB_FAIL(ObIndexBlockRebuilder::get_macro_meta(macro_block_buf, size, macro_id, allocator_, data_macro_meta_))) {
       LOG_WARN("failed to set macro meta", K(ret),  K(macro_id), KP(macro_block_buf), K(size));
     }
@@ -179,7 +176,7 @@ void ObDDLKVHandle::reset()
     } else {
       const int64_t ref_cnt = ddl_kv_->dec_ref();
       if (0 == ref_cnt) {
-        share::g_mp->tenant_meta_mem_mgr()->release_ddl_kv(ddl_kv_);
+        share::g_mp->storage_meta_mem_mgr()->release_ddl_kv(ddl_kv_);
       } else if (OB_UNLIKELY(ref_cnt < 0)) {
         LOG_ERROR_RET(OB_ERR_UNEXPECTED, "table ref cnt may be leaked", K(ref_cnt), KP(ddl_kv_));
       }
@@ -189,19 +186,19 @@ void ObDDLKVHandle::reset()
 }
 
 ObDDLKVPendingGuard::ObDDLKVPendingGuard(
-    ObTablet *tablet, 
-    const SCN &scn, 
+    ObTablet *tablet,
+    const SCN &scn,
     const SCN &start_scn,
-    const int64_t snapshot_version, // used for shared-storage mode.
-    const uint64_t data_format_version, // used for shared-storage mode.
+    const int64_t snapshot_version,
+    const uint64_t data_format_version,
     ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
     const ObDirectLoadType direct_load_type)
-  : tablet_(tablet), scn_(scn), kv_handle_(), ret_(OB_SUCCESS)
+  : tablet_(tablet), scn_(scn), kv_handle_(), ret_(OB_SUCCESS), can_freeze_(false)
 {
   int ret = OB_SUCCESS;
   ObDDLKV *curr_kv = nullptr;
   ObDDLKvMgrHandle ddl_kv_mgr_handle;
-  if (OB_UNLIKELY(nullptr == tablet 
+  if (OB_UNLIKELY(nullptr == tablet
       || !scn.is_valid_and_not_min()
       || !start_scn.is_valid_and_not_min()
       || snapshot_version <= 0
@@ -221,7 +218,7 @@ ObDDLKVPendingGuard::ObDDLKVPendingGuard(
   } else {
     if (OB_FAIL(tablet->get_ddl_kv_mgr(ddl_kv_mgr_handle, true /*try_create*/))) {
       LOG_WARN("get ddl kv mgr failed", K(ret));
-    } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->get_or_create_shared_nothing_ddl_kv(
+    } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->get_or_create_local_ddl_kv(
         scn, start_scn, direct_load_mgr_handle, kv_handle_))) {
       LOG_WARN("acquire ddl kv failed", K(ret));
     }
@@ -267,7 +264,7 @@ ObDDLKVPendingGuard::~ObDDLKVPendingGuard()
 }
 
 int ObDDLKVPendingGuard::set_macro_block(
-    ObTablet *tablet, 
+    ObTablet *tablet,
     const ObDDLMacroBlock &macro_block,
     const int64_t snapshot_version,
     const uint64_t data_format_version,
@@ -286,7 +283,7 @@ int ObDDLKVPendingGuard::set_macro_block(
     int64_t try_count = 0;
     while ((OB_SUCCESS == ret || OB_EAGAIN == ret) && try_count < MAX_RETRY_COUNT) {
       ObDDLKV *ddl_kv = nullptr;
-      ObDDLKVPendingGuard guard(tablet, macro_block.scn_, macro_block.ddl_start_scn_, 
+      ObDDLKVPendingGuard guard(tablet, macro_block.scn_, macro_block.ddl_start_scn_,
           snapshot_version, data_format_version, direct_load_mgr_handle,
           direct_load_type);
       if (OB_FAIL(guard.get_ddl_kv(ddl_kv))) {
@@ -313,7 +310,7 @@ ObDDLMacroBlockRedoInfo::ObDDLMacroBlockRedoInfo()
     data_buffer_(),
     block_type_(ObDDLMacroBlockType::DDL_MB_INVALID_TYPE),
     start_scn_(SCN::min_scn()),
-    data_format_version_(0/*for compatibility*/),
+    data_format_version_(0),
     type_(ObDirectLoadType::DIRECT_LOAD_DDL),
     macro_block_id_(MacroBlockId::mock_valid_macro_id()),
     parallel_cnt_(0),
@@ -338,17 +335,13 @@ void ObDDLMacroBlockRedoInfo::reset()
 bool ObDDLMacroBlockRedoInfo::is_valid() const
 {
   bool ret = table_key_.is_valid() && block_type_ != ObDDLMacroBlockType::DDL_MB_INVALID_TYPE
-              && start_scn_.is_valid_and_not_min() && data_format_version_ >= 0 && macro_block_id_.is_valid()
-              && is_valid_direct_load(type_);
-  
-  if (ret && ObDDLMacroBlockType::DDL_MB_SS_EMPTY_DATA_TYPE != block_type_){
-    /* when in ss empty type, nullptr is allowded*/
+              && logic_id_.is_valid() && start_scn_.is_valid_and_not_min()
+              && data_format_version_ >= 0 && macro_block_id_.is_valid()
+              && is_full_direct_load(type_);
+  if (ret) {
     ret = ret && !((data_buffer_.ptr() == nullptr || data_buffer_.length() == 0));
   }
 
-  if (ret) {  /* for shared nothing */
-    ret = logic_id_.is_valid();
-  }
   return ret;
 }
 
@@ -387,7 +380,7 @@ int ObTabletDirectLoadMgrHandle::set_obj(ObBaseTabletDirectLoadMgr *mgr)
   return ret;
 }
 
-ObBaseTabletDirectLoadMgr* ObTabletDirectLoadMgrHandle::get_base_obj() 
+ObBaseTabletDirectLoadMgr* ObTabletDirectLoadMgrHandle::get_base_obj()
 {
   return tablet_mgr_;
 }
@@ -437,7 +430,7 @@ void ObTabletDirectLoadMgrHandle::reset()
         tablet_mgr_->~ObBaseTabletDirectLoadMgr();
       } else {
         tablet_mgr_->~ObBaseTabletDirectLoadMgr();
-        share::g_mp->tenant_direct_load_mgr()->get_allocator().free(tablet_mgr_);
+        share::g_mp->direct_load_mgr()->get_allocator().free(tablet_mgr_);
       }
     }
     tablet_mgr_ = nullptr;
@@ -588,11 +581,11 @@ int ObDDLTableSchema::fill_ddl_table_schema(const uint64_t table_id,
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = nullptr;
   bool is_vector_data_complement = false;
-  if (OB_UNLIKELY(false || OB_INVALID_ID == table_id)) {
+  if (OB_UNLIKELY(OB_INVALID_ID == table_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(table_id));
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("get tenant schema failed", K(ret));
+  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("get runtime schema failed", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
     LOG_WARN("get table schema failed", K(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {

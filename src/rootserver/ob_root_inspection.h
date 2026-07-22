@@ -47,19 +47,19 @@ class ObMultiVersionSchemaService;
 
 namespace rootserver
 {
-class ObRootService;
+class ObLocalManagementService;
 
 ////////////////////////////////////////////////////////////////
 // Class I: purge recyclebin in the background
 class ObPurgeRecyclebinTask: public common::ObTimerTask
 {
 public:
-  explicit ObPurgeRecyclebinTask(ObRootService &rs);
+  explicit ObPurgeRecyclebinTask(ObLocalManagementService &local_management_service);
   virtual ~ObPurgeRecyclebinTask() {}
 
   virtual void runTimerTask() override;
 private:
-  ObRootService &root_service_;
+  ObLocalManagementService &local_management_service_;
 };
 
 }//end namespace rootserver

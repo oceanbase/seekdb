@@ -29,22 +29,7 @@ DEFINE_ENUM_FUNC(ObP2PDatahubMsgBase::ObP2PDatahubMsgType, p2p_datahub_msg_type,
 OB_SERIALIZE_MEMBER(ObP2PDatahubMsgBase,
     trace_id_, p2p_datahub_id_, px_sequence_id_,
     task_id_, timeout_ts_, msg_type_,
-    msg_receive_cur_cnt_, msg_receive_expect_cnt_,
     is_active_, is_empty_);
-
-int ObP2PDatahubMsgBase::broadcast(
-    ObIArray<ObAddr> &target_addrs)
-{
-  int ret = OB_SUCCESS;
-  // Single-replica seekdb: all targets are loopback. Deliver in-process by
-  // mirroring ObPxP2pDhMsgP::process (PX_P2P_DH.process_msg deep-copies the msg).
-  for (int i = 0; i < target_addrs.count() && OB_SUCC(ret); ++i) {
-    if (OB_FAIL(PX_P2P_DH.process_msg(*this))) {
-      LOG_WARN("fail to process p2p dh msg locally", K(ret));
-    }
-  }
-  return ret;
-}
 
 int ObP2PDatahubMsgBase::init(int64_t p2p_dh_id,
     int64_t px_sequence_id, int64_t task_id, int64_t timeout_ts)
@@ -77,74 +62,8 @@ int ObP2PDatahubMsgBase::assign(const ObP2PDatahubMsgBase &msg)
   is_active_ = msg.is_active();
   is_ready_ = msg.check_ready();
   is_empty_ = msg.is_empty();
-  msg_receive_cur_cnt_ = msg.get_msg_receive_cur_cnt();
-  msg_receive_expect_cnt_ = msg.get_msg_receive_expect_cnt();
   
   allocator_.set_label("ObP2PDHMsg");
-  return ret;
-}
-
-int ObP2PDatahubMsgBase::process_receive_count(ObP2PDatahubMsgBase &msg)
-{
-  int ret = OB_SUCCESS;
-  CK(msg.get_msg_receive_expect_cnt() > 0 && msg_receive_expect_cnt_ > 0);
-  if (OB_SUCC(ret)) {
-    int64_t cur_cnt = ATOMIC_AAF(&msg_receive_cur_cnt_, msg.get_msg_receive_cur_cnt());
-    if (cur_cnt > msg_receive_expect_cnt_) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected receive count", K(ret));
-    }
-    check_finish_receive();
-  }
-  return ret;
-}
-
-void ObP2PDatahubMsgBase::check_finish_receive()
-{
-  if (msg_receive_expect_cnt_ == ATOMIC_LOAD(&msg_receive_cur_cnt_)) {
-    (void)after_process();
-    is_ready_ = true;
-  }
-}
-
-int ObP2PDatahubMsgBase::process_msg_internal(bool &need_free)
-{
-  int ret = OB_SUCCESS;
-  ObP2PDhKey dh_key(p2p_datahub_id_, px_sequence_id_, task_id_);
-  ObP2PDatahubManager::P2PMsgSetCall set_call(dh_key, *this);
-  ObP2PDatahubManager::P2PMsgMergeCall merge_call(*this);
-  ObP2PDatahubManager::MsgMap &map = PX_P2P_DH.get_map();
-  start_time_ = ObTimeUtility::current_time();
-  ObP2PDatahubMsgGuard guard(this);
-
-  bool need_merge = true;
-  // to avoid data racing in the process of check_finish_receive, protect it in hashmap lock
-  // if set succ, check_finish_receive() in P2PMsgSetCall
-  // if set failed(with OB_HASH_EXIST, need merge), check_finish_receive() in P2PMsgMergeCall
-  if (OB_FAIL(map.set_refactored(dh_key, this, 0/*flag*/, 0/*broadcast*/, 0/*overwrite_key*/, &set_call))) {
-    if (OB_HASH_EXIST == ret) {
-      ret = OB_SUCCESS;
-    } else {
-      LOG_WARN("fail to set refactored", K(ret));
-    }
-    need_free = true;
-  } else {
-    need_merge = false; // set success, not need to merge
-  }
-
-  // merge filter
-  if (OB_SUCC(ret) && need_merge) {
-    if (OB_FAIL(map.atomic_refactored(dh_key, merge_call))) {
-      if (OB_HASH_NOT_EXIST != ret) {
-        LOG_WARN("fail to merge p2p dh msg", K(ret));
-      }
-    }
-  }
-
-  if (need_free) {
-    // msg not in map, dec ref count
-    guard.dec_msg_ref_count();
-  }
   return ret;
 }
 

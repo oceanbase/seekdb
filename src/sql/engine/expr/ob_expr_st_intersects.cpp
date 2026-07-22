@@ -71,7 +71,7 @@ int ObExprSTIntersects::eval_st_intersects(const ObExpr &expr, ObEvalCtx &ctx, O
   ObObjType input_type2 = gis_arg2->datum_meta_.type_;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_ST_INTERSECTS);
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   bool inter_result = false;
   if (OB_FAIL(temp_allocator.eval_arg(gis_arg1, ctx, gis_datum1)) || OB_FAIL(temp_allocator.eval_arg(gis_arg2, ctx, gis_datum2))) {
     LOG_WARN("eval geo args failed", K(ret));
@@ -125,7 +125,6 @@ int ObExprSTIntersects::eval_st_intersects(const ObExpr &expr, ObEvalCtx &ctx, O
       LOG_WARN("get first geo by wkb failed", K(ret));   
     } else if (!is_geo2_cached && OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator, wkb2, geo2, nullptr, N_ST_INTERSECTS, ObGeoBuildFlag::GEO_ALLOW_3D_CARTESIAN))) {
       LOG_WARN("get second geo by wkb failed", K(ret));
-    } else if (FALSE_IT(temp_allocator.set_baseline_size(geo1->length() + geo2->length()))) {
     } else if ((!is_geo1_cached && OB_FAIL(ObGeoExprUtils::check_empty(geo1, is_geo1_empty)))
         || (!is_geo2_cached && OB_FAIL(ObGeoExprUtils::check_empty(geo2, is_geo2_empty)))) {
       LOG_WARN("check geo empty failed", K(ret));
@@ -156,9 +155,6 @@ int ObExprSTIntersects::eval_st_intersects(const ObExpr &expr, ObEvalCtx &ctx, O
       } else {
         res.set_bool(inter_result);
       }
-    }
-    if (mem_ctx != nullptr) {
-      temp_allocator.add_ext_used((*mem_ctx)->arena_used());
     }
   }
   return ret;

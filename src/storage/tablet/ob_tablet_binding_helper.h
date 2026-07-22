@@ -98,7 +98,7 @@ public:
   OB_UNIS_VERSION_V(2);
 
 public:
-  
+
   ObSArray<ObTabletID> data_tablet_ids_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObBatchUnbindLobTabletArg);
@@ -161,6 +161,9 @@ public:
   void reset();
   TO_STRING_KV(K_(tablet_ids), K_(binding_datas));
 public:
+
+  uint64_t data_format_version_;
+  share::ObLSID ls_id_;
   ObSArray<ObTabletID> tablet_ids_;
   ObSArray<ObTabletBindingMdsUserData> binding_datas_;
 private:

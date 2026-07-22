@@ -28,25 +28,8 @@ flag_dict["INFLUENCE_PLAN"] = "INFLUENCE_PLAN"
 flag_dict["NEED_SERIALIZE"] = "NEED_SERIALIZE"
 flag_dict["QUERY_SENSITIVE"] = "QUERY_SENSITIVE"
 flag_dict["WITH_CREATE"] = "WITH_CREATE"
-flag_dict["WITH_UPGRADE"] = "WITH_UPGRADE"
 flag_dict["MYSQL_ONLY"] = "MYSQL_ONLY"
 flag_dict["INFLUENCE_PL"] = "INFLUENCE_PL"
-
-flag_value_dict = {}
-flag_value_dict["GLOBAL"] = 1L
-flag_value_dict["SESSION"] = (1L << 1)
-flag_value_dict["READONLY"] = (1L << 2)
-flag_value_dict["SESSION_READONLY"] = (1L << 3)
-flag_value_dict["INVISIBLE"] = (1L << 4)
-flag_value_dict["NULL"] = (1L << 5)
-flag_value_dict["NULLABLE"] = (1L << 5)
-flag_value_dict["INFLUENCE_PLAN"] = (1L << 6)
-flag_value_dict["NEED_SERIALIZE"] = (1L << 7)
-flag_value_dict["QUERY_SENSITIVE"] = (1L << 8)
-flag_value_dict["WITH_CREATE"] = (1L << 10)
-flag_value_dict["WITH_UPGRADE"] = (1L << 11)
-flag_value_dict["MYSQL_ONLY"] = (1L << 12)
-flag_value_dict["INFLUENCE_PL"] = (1L << 13)
 
 type_dict = {}
 type_dict["tinyint"] = "ObTinyIntType"
@@ -56,15 +39,6 @@ type_dict["numeric"] = "ObNumberType"
 type_dict["varchar"] = "ObVarcharType"
 type_dict["bool"] = "ObIntType"
 type_dict["enum"] = "ObIntType"
-type_value_dict = {}
-type_value_dict["tinyint"] = 1
-type_value_dict["int"] = 5
-type_value_dict["uint"] = 10
-type_value_dict["numeric"] = 15
-type_value_dict["varchar"] = 22
-type_value_dict["bool"] = 5
-type_value_dict["enum"] = 5
-
 required_attrs = ["publish_version", "info_cn", "background_cn", "ref_url"]
 ignored_attrs = ["publish_version", "info_cn", "background_cn", "ref_url", "placeholder"]
 
@@ -141,7 +115,7 @@ def make_head_file(pdir, head_file_name, sorted_list):
   head_file.write("{\n");
   head_file.write("namespace share\n");
   head_file.write("{\n");
-  head_file.write("// The value of ObSysVarFlag cannot be added, deleted or modified arbitrarily. Any addition, deletion or modification must be synchronized to the flag_value_dict variable in sql/session/gen_ob_sys_variables.py\n");
+  head_file.write("// ObSysVarFlag values are persistent and must not be changed arbitrarily.\n");
   head_file.write("struct ObSysVarFlag\n");
   head_file.write("{\n");
   head_file.write("  const static int64_t NONE = 0LL;\n");
@@ -155,7 +129,6 @@ def make_head_file(pdir, head_file_name, sorted_list):
   head_file.write("  const static int64_t NEED_SERIALIZE = (1LL << 7);\n");
   head_file.write("  const static int64_t QUERY_SENSITIVE = (1LL << 8);\n");
   head_file.write("  const static int64_t WITH_CREATE = (1LL << 10);\n");
-  head_file.write("  const static int64_t WITH_UPGRADE = (1LL << 11);\n");
   head_file.write("  const static int64_t MYSQL_ONLY = (1LL << 12);\n");
   head_file.write("  const static int64_t INFLUENCE_PL = (1LL << 13);\n");
   head_file.write("};\n");
@@ -163,7 +136,7 @@ def make_head_file(pdir, head_file_name, sorted_list):
   head_file.write("  ObSysVarClassType id_;\n");
   head_file.write("  common::ObString name_;\n");
   head_file.write("  common::ObObjType data_type_;\n");
-  head_file.write("  common::ObString default_value_; // used for init tenant\n");
+  head_file.write("  common::ObString default_value_; // used for runtime initialization\n");
   head_file.write("  common::ObString base_value_; // used for session sync\n");
   head_file.write("  common::ObString min_val_;\n");
   head_file.write("  common::ObString max_val_;\n");
@@ -219,7 +192,7 @@ def make_head_file(pdir, head_file_name, sorted_list):
 
   # Add ESSENTIAL_SYS_VARS declaration
   head_file.write("// Auto-generated ESSENTIAL_SYS_VARS array for inner session initialization\n");
-  head_file.write("// These variables are frequently used in session initialization, tenant processing, schema setting and other critical processes\n");
+  head_file.write("// These variables are frequently used in session initialization, runtime processing, schema setting and other critical processes\n");
   head_file.write("extern const ObSysVarClassType ESSENTIAL_SYS_VARS[];\n");
   head_file.write("extern const int64_t ESSENTIAL_SYS_VARS_COUNT;\n");
 
@@ -311,7 +284,7 @@ def make_cpp_file(pdir, cpp_file_name, sorted_list):
     var_num += 1
     cpp_file.write("    }();\n\n")
 
-  cpp_file.write("    if (cur_max_var_id >= ObSysVarMeta::OB_MAX_SYS_VAR_ID) { \n")
+  cpp_file.write("    if (cur_max_var_id >= ObSysVarMeta::OB_MAX_SYS_VAR_ID) {\n")
   cpp_file.write("      HasInvalidSysVar = true;\n")
   cpp_file.write("    }\n")
   cpp_file.write("  }\n")
@@ -1115,30 +1088,6 @@ int ObSysVarFactory::create_sys_var(share::ObSysVarClassType sys_var_id, ObBasic
 """)
   print("Generate " + str(filename) + " successfully!\n")
 
-def calc_flags_from_str(flags_str):
-  result = 0
-  flags = flags_str.split("|")
-  flags_len = len(flags)
-  for i in range(0, flags_len):
-    result = (result | flag_value_dict[flags[i].strip().upper()])
-  return result
-
-def gen_sys_vars_dict_script_for_upgrade(filename, list_sorted_by_id):
-  os.chmod(filename, stat.S_IRUSR + stat.S_IWUSR + stat.S_IRGRP + stat.S_IROTH)
-  wfile = open(filename, 'w')
-  wfile.write(file_head_annotation)
-  annotation_is_written = False
-  wfile.write('#!/usr/bin/env python\n')
-  wfile.write('# -*- coding: utf-8 -*-\n')
-  wfile.write('\n')
-  wfile.write("# sys_vars_dict.py is generated by gen_ob_sys_variables.py based on ob_system_variable_init.json and upgrade_sys_var_base_script.py files, and cannot be modified\n")
-  wfile.write('sys_var_dict = {}\n')
-  for (name, attributes) in list_sorted_by_id:
-    wfile.write("sys_var_dict[\"" + name + "\"] = {\"id\": " + str(attributes["id"]) + ", \"name\": \"" + attributes["name"] + "\", \"value\": \"" + attributes["value"] + "\", \"data_type\": " + str(type_value_dict[attributes["data_type"]]) + ", \"info\": \"" + attributes["info"] + "\", \"flags\": " + str(calc_flags_from_str(attributes["flags"])) + ((", \"min_val\": \"" + attributes["min_val"] + "\"") if "min_val" in attributes.keys() else "") + ((", \"max_val\": \"" + attributes["max_val"] + "\"") if "max_val" in attributes.keys() else "") + "}\n")
-  wfile.close()
-  os.chmod(filename, stat.S_IRUSR + stat.S_IRGRP + stat.S_IROTH)
-  print("Generate " + str(filename) + " successfully!\n")
-
 def generate_essential_sys_vars_in_init_cpp(cpp_filename, list_sorted_by_id):
   essential_core_vars = [
     "sql_mode",
@@ -1171,7 +1120,7 @@ def generate_essential_sys_vars_in_init_cpp(cpp_filename, list_sorted_by_id):
 
   essential_array_content = []
   essential_array_content.append('// Auto-generated ESSENTIAL_SYS_VARS array for inner session initialization')
-  essential_array_content.append('// These variables are frequently used in session initialization, tenant processing, schema setting and other critical processes')
+  essential_array_content.append('// These variables are frequently used in session initialization, runtime processing, schema setting and other critical processes')
   essential_array_content.append('const ObSysVarClassType ESSENTIAL_SYS_VARS[] = {')
 
   core_vars_written = False
@@ -1182,7 +1131,7 @@ def generate_essential_sys_vars_in_init_cpp(cpp_filename, list_sorted_by_id):
       essential_array_content.append('  // compatibility mode related vars - affect SQL parsing and execution behavior')
       core_vars_written = True
     elif var_type == "influence_plan" and not influence_plan_vars_written:
-      essential_array_content.append('  ')
+      essential_array_content.append('')
       essential_array_content.append('  // all system vars with INFLUENCE_PLAN flag - affect execution plan generation')
       influence_plan_vars_written = True
 
@@ -1211,7 +1160,7 @@ def generate_essential_sys_vars_in_init_cpp(cpp_filename, list_sorted_by_id):
 
   os.chmod(cpp_filename, stat.S_IRUSR + stat.S_IWUSR + stat.S_IRGRP + stat.S_IROTH)
   with codecs.open(cpp_filename, 'w', encoding='utf-8') as wfile:
-    wfile.write('\n'.join(lines))
+    wfile.write('\n'.join(lines).rstrip() + '\n')
   os.chmod(cpp_filename, stat.S_IRUSR + stat.S_IRGRP + stat.S_IROTH)
 
   print("Generate ESSENTIAL_SYS_VARS array in " + str(cpp_filename) + " successfully!")
@@ -1229,8 +1178,6 @@ sys_var_meta_head_file_name = "ob_sys_var_meta.h"
 sys_var_meta_cpp_file_name = "ob_sys_var_meta.cpp"
 sys_var_sql_head_file_name = "ob_system_variable_factory.h"
 sys_var_sql_cpp_file_name = "ob_system_variable_factory.cpp"
-#sys_vars_dict_script_file_name = "../../../tools/upgrade/sys_vars_dict.py"
-
 (json_Dict, list_sorted_by_name, list_sorted_by_id) = parse_json(json_file_name)
 
 # Generate share metadata files (unchanged from old generator)
@@ -1250,5 +1197,3 @@ make_sys_var_sql_cpp(sql_pdir, "../../" + sql_pdir + "/" + sys_var_sql_cpp_file_
 
 # Generate ESSENTIAL_SYS_VARS array in ob_system_variable_init.cpp
 generate_essential_sys_vars_in_init_cpp(cpp_file_name, list_sorted_by_id)
-
-#gen_sys_vars_dict_script_for_upgrade(sys_vars_dict_script_file_name, list_sorted_by_id)

@@ -389,11 +389,6 @@ private:
     }
     return num;
   }
-  // TODO This function already exists in ObTransformUtils in the updated version, but not in this version
-  // So first write one yourself, handle it when merging
-  int create_aggr_expr(ObTransformerCtx *ctx, ObItemType type,
-                       ObAggFunRawExpr *&agg_expr, ObRawExpr *child_expr);
-
 };
 
 }

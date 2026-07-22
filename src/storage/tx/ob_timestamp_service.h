@@ -30,7 +30,7 @@ public:
   ObTimestampService() {}
   ~ObTimestampService() {}
   int init();
-  static int mtl_init(ObTimestampService *&timestamp_service);
+  static int server_module_init(ObTimestampService *&timestamp_service);
   int start() { return common::OB_SUCCESS; }
   void stop() {}
   void wait() {}

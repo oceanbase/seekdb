@@ -75,23 +75,12 @@ public:
   static int interrupt_tasks(ObPxSqcMeta &sqc, int code);
   // DFO retry, need to use a new interrupt number to avoid being misinterrupted by interrupt residue
   static int regenerate_interrupt_id(ObDfo &dfo);
-  // Only in normal px worker thread executing process call this function will set
-  // px_worker_execute_start_schema_version
-  static void update_schema_error_code(ObExecContext *exec_ctx, int &code,
-                           int64_t px_worker_execute_start_schema_version = OB_INVALID_VERSION);
   // SQC and Tasks send interrupt to QC
-  static int interrupt_qc(ObPxSqcMeta &sqc, int code, ObExecContext *exec_ctx);
-  static int interrupt_qc(ObPxTask &task, int code, ObExecContext *exec_ctx);
-  // Combine server_id, execution_id, and qc_id to form the interrupt id
-  // Suggest using GCTX.get_server_index() instead of GCTX.get_server_id(),
-  // as it guarantees uniqueness within the cluster and is constrained to a maximum value of MAX_SERVER_COUNT.
-  static int generate_query_interrupt_id(const uint32_t server_index,
-                                         const uint64_t px_sequence_id,
+  static int interrupt_qc(ObPxSqcMeta &sqc, int code);
+  static int interrupt_qc(ObPxTask &task, int code);
+  static int generate_query_interrupt_id(const uint64_t px_sequence_id,
                                          common::ObInterruptibleTaskID &interrupt_id);
-  // Suggest using GCTX.get_server_index() instead of GCTX.get_server_id(),
-  // as it guarantees uniqueness within the cluster and is constrained to a maximum value of MAX_SERVER_COUNT.
-  static int generate_px_interrupt_id(const uint32_t server_index,
-                                      const uint32_t qc_id,
+  static int generate_px_interrupt_id(const uint32_t qc_id,
                                       const uint64_t px_sequence_id,
                                       const int64_t dfo_id,
                                       common::ObInterruptibleTaskID &interrupt_id);
@@ -101,11 +90,9 @@ class ObDfoInterruptIdGen
 {
 public:
   ObDfoInterruptIdGen(const common::ObInterruptibleTaskID &query_interrupt_id,
-                      const uint32_t server_id,
                       const uint32_t qc_id,
                       const uint64_t px_sequence_id)
       : query_interrupt_id_(query_interrupt_id),
-        server_id_(server_id),
         qc_id_(qc_id),
         px_sequence_id_(px_sequence_id)
   {}
@@ -113,8 +100,7 @@ public:
   int gen_id(int64_t dfo_id, ObPxInterruptID &int_id) const
   {
     int_id.query_interrupt_id_ = query_interrupt_id_;
-    return ObInterruptUtil::generate_px_interrupt_id(server_id_,
-                                                     qc_id_,
+    return ObInterruptUtil::generate_px_interrupt_id(qc_id_,
                                                      px_sequence_id_,
                                                      dfo_id,
                                                      int_id.px_interrupt_id_);
@@ -123,7 +109,6 @@ public:
   uint64_t get_px_sequence_id() const { return px_sequence_id_; }
 private:
   const common::ObInterruptibleTaskID &query_interrupt_id_;
-  const uint32_t server_id_;
   const uint32_t qc_id_;
   const uint64_t px_sequence_id_;
 };

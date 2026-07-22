@@ -54,8 +54,8 @@ int ObMySQLProcTable::inner_get_next_row(common::ObNewRow *&row)
         SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
       }  else {
         ObArray<const ObRoutineInfo *> routine_array;
-        if (OB_FAIL(schema_guard_->get_routine_infos_in_tenant( routine_array))) {
-          SERVER_LOG(WARN, "Get user info with tenant id error", K(ret));
+        if (OB_FAIL(schema_guard_->get_routine_infos_in_runtime(routine_array))) {
+          SERVER_LOG(WARN, "get routine info failed", K(ret));
         } else {
           const ObRoutineInfo *routine_info = NULL;
           sql::ObExecEnv exec_env;
@@ -500,4 +500,3 @@ int ObMySQLProcTable::get_info_from_all_routine(const uint64_t col_id,
 
 }
 }
-

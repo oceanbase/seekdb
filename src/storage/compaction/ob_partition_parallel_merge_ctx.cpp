@@ -18,8 +18,6 @@
 #include "share/rc/ob_module_provider.h"
 #include "storage/ob_partition_range_spliter.h"
 #include "ob_tablet_merge_ctx.h"
-#include "storage/compaction/ob_compaction_dag_ranker.h"
-#include "storage/compaction/ob_tenant_tablet_scheduler.h"
 
 namespace oceanbase
 {
@@ -92,7 +90,7 @@ int ObParallelMergeCtx::init(compaction::ObBasicTabletMergeCtx &merge_ctx)
   if (OB_FAIL(ret)) {
   } else if (tablet_size <= 0
           || (!enable_parallel_minor_merge && !is_major_merge_type(merge_type))
-          || (is_mini_merge(merge_type) && ObTenantCompactionMemPool::NORMAL_MODE != share::g_mp->tenant_compaction_mem_pool()->get_memory_mode())) {
+          || (is_mini_merge(merge_type) && ObCompactionMemPool::NORMAL_MODE != share::g_mp->compaction_mem_pool()->get_memory_mode())) {
     if (OB_FAIL(init_serial_merge())) {
       STORAGE_LOG(WARN, "Failed to init serialize merge", K(ret), K(tablet_size), K(merge_ctx));
     }
@@ -291,10 +289,9 @@ int ObParallelMergeCtx::init_parallel_mini_merge(compaction::ObBasicTabletMergeC
   }
 
   if (OB_SUCC(ret)) {
-    calc_adaptive_parallel_degree(ObDagPrio::DAG_PRIO_COMPACTION_HIGH,
-                                  ObCompactionEstimator::MINI_MEM_PER_THREAD,
-                                  (total_bytes + ObCompactionEstimator::MINI_PARALLEL_BASE_MEM - 1) / ObCompactionEstimator::MINI_PARALLEL_BASE_MEM,
-                                  concurrent_cnt_);
+    calc_parallel_degree(ObDagPrio::DAG_PRIO_COMPACTION_HIGH,
+                         (total_bytes + MINI_PARALLEL_BASE_MEM - 1) / MINI_PARALLEL_BASE_MEM,
+                         concurrent_cnt_);
 
 #ifdef ERRSIM
   if (concurrent_cnt_ <= 1) {
@@ -371,10 +368,9 @@ int ObParallelMergeCtx::init_parallel_mini_minor_merge(compaction::ObBasicTablet
       STORAGE_LOG(WARN, "Invalid argument to calc mini minor parallel degree", K(ret), K(tablet_size),
                 K(total_size), K(tables.count()), K(merge_ctx));
     } else {
-      calc_adaptive_parallel_degree(ObDagPrio::DAG_PRIO_COMPACTION_MID,
-                                    ObCompactionEstimator::MINOR_MEM_PER_THREAD,
-                                    (total_size / tables.count() + tablet_size - 1) / tablet_size,
-                                    parallel_target_count);
+      calc_parallel_degree(ObDagPrio::DAG_PRIO_COMPACTION_MID,
+                           (total_size / tables.count() + tablet_size - 1) / tablet_size,
+                           parallel_target_count);
     }
 
     if (OB_FAIL(ret)) {
@@ -414,33 +410,19 @@ int ObParallelMergeCtx::init_parallel_mini_minor_merge(compaction::ObBasicTablet
   return ret;
 }
 
-void ObParallelMergeCtx::calc_adaptive_parallel_degree(
+void ObParallelMergeCtx::calc_parallel_degree(
     const int64_t prio,
-    const int64_t mem_per_thread,
     const int64_t origin_degree,
     int64_t &parallel_degree)
 {
   int tmp_ret = OB_SUCCESS;
   int64_t dag_worker_limit = 0;
 
-  if (OB_TMP_FAIL(share::g_mp->tenant_dag_scheduler()->get_limit(prio, dag_worker_limit))) {
-    dag_worker_limit = ObCompactionEstimator::DEFAULT_MERGE_THREAD_CNT;
+  if (OB_TMP_FAIL(share::g_mp->dag_scheduler()->get_limit(prio, dag_worker_limit))) {
+    dag_worker_limit = DEFAULT_MERGE_THREAD_CNT;
     STORAGE_LOG_RET(WARN, tmp_ret, "failed to get worker thread cnt, use dfault value", K(prio), K(dag_worker_limit));
   }
   parallel_degree = MIN(MAX(dag_worker_limit, PARALLEL_MERGE_TARGET_TASK_CNT), origin_degree);
-
-  if (parallel_degree <= 2) {
-    // do nothing
-  } else if (share::g_mp->tenant_tablet_scheduler()->enable_adaptive_merge_schedule()) {
-    int64_t tenant_free_mem_byte = lib::get_tenant_memory_remain();
-    int64_t mem_allow_max_thread_cnt = tenant_free_mem_byte * ADAPTIVE_PERCENT / MAX(mem_per_thread, 1);
-    if (mem_allow_max_thread_cnt < parallel_degree) {
-      parallel_degree = MAX(parallel_degree / 2, 2); // fix the parallel degree
-    }
-
-    STORAGE_LOG(INFO, "[ADAPTIVE_SCHED] calc adaptive parallel degree", K(prio), K(tenant_free_mem_byte), K(mem_per_thread),
-                K(dag_worker_limit), K(origin_degree), K(mem_allow_max_thread_cnt), K(parallel_degree));
-  }
 }
 
 

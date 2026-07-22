@@ -35,7 +35,6 @@
 #include "sql/optimizer/ob_log_plan_factory.h"
 #include "sql/executor/ob_executor.h"
 #include "sql/executor/ob_execute_result.h"
-#include "sql/executor/ob_executor_rpc_impl.h"
 #include "sql/executor/ob_cmd_executor.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/ob_sql_trans_control.h"
@@ -199,9 +198,6 @@ public:
   int64_t get_query_string_id() const;
   void refresh_location_cache_by_errno(bool is_nonblock, int err);
   void force_refresh_location_cache(bool is_nonblock, int err);
-  bool need_execute_remote_sql_async() const
-  { return get_exec_context().use_remote_sql() && !is_inner_result_set_; }
-
   ////////////////////////////////////////////////////////////////
   // the following methods are used by the ob_sql module internally
   /// add a field columns
@@ -240,7 +236,6 @@ public:
   uint64_t get_last_insert_id_to_client();
   void set_warning_count(const int64_t &warning_count);
   ObCacheObjGuard& get_cache_obj_guard();
-  ObCacheObjGuard& get_temp_cache_obj_guard();
   void set_cmd(ObICmd *cmd);
   bool is_end_trans_async();
   void set_end_trans_async(bool is_async);
@@ -313,14 +308,6 @@ public:
   }
   bool is_cursor_end() const;
 
-  inline bool can_execute_async() const
-  {
-    ObPhysicalPlan* physical_plan_ = static_cast<ObPhysicalPlan*>(cache_obj_guard_.get_cache_obj());
-    return get_exec_context().use_remote_sql()
-        && physical_plan_ != nullptr
-        && physical_plan_->get_location_type() != OB_PHY_PLAN_UNCERTAIN;
-    // Temporarily do not allow the global index plan to execute asynchronously
-  }
   void set_is_com_filed_list() { is_com_filed_list_ = true; }
   bool get_is_com_filed_list() { return is_com_filed_list_; }
   void set_wildcard_string(common::ObString string) { wild_str_ = string; }
@@ -401,7 +388,6 @@ protected:
 private:
   // add cache object guard
   ObCacheObjGuard cache_obj_guard_;
-  ObCacheObjGuard temp_cache_obj_guard_;
   // data members
   common::ObArenaAllocator inner_mem_pool_;
   common::ObIAllocator &mem_pool_;
@@ -455,7 +441,6 @@ private:
   bool is_returning_;
   bool is_com_filed_list_; //used to mark COM_FIELD_LIST
   bool will_retry_; // the query will retry, to figure out the final close
-  bool xa_checking_lock_stoped_;
   common::ObString wild_str_;//uesd to save filed wildcard in COM_FIELD_LIST;
   common::ObString ps_sql_; // for sql in pl
   bool is_init_;
@@ -493,8 +478,7 @@ private:
 
 inline ObResultSet::ObResultSet(ObSQLSessionInfo &session, common::ObIAllocator &allocator)
     : is_user_sql_(false),
-      cache_obj_guard_(MAX_HANDLE),
-      temp_cache_obj_guard_(MAX_HANDLE),
+      cache_obj_guard_(),
       inner_mem_pool_(),
       mem_pool_(allocator),
       statement_id_(common::OB_INVALID_ID),
@@ -533,7 +517,6 @@ inline ObResultSet::ObResultSet(ObSQLSessionInfo &session, common::ObIAllocator 
       is_returning_(false),
       is_com_filed_list_(false),
       will_retry_(false),
-      xa_checking_lock_stoped_(false),
       wild_str_(),
       ps_sql_(),
       is_init_(false),
@@ -745,11 +728,6 @@ inline void ObResultSet::set_cmd(ObICmd *cmd)
 inline ObCacheObjGuard& ObResultSet::get_cache_obj_guard()
 {
   return cache_obj_guard_;
-}
-
-inline ObCacheObjGuard& ObResultSet::get_temp_cache_obj_guard()
-{
-  return temp_cache_obj_guard_;
 }
 
 inline void ObResultSet::fields_clear()

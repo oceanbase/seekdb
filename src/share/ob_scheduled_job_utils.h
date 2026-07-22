@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-// common scheduled-job utility(extracted from q_stat's ObDbmsStatsMaintenanceWindow:
-// time-zone offset calculation and job-existence checks are independent of statistics,normal share consumers should not depend on the isolated zone)
+// Common scheduled-job utilities shared outside the statistics module.
 #ifndef OCEANBASE_SHARE_OB_SCHEDULED_JOB_UTILS_H_
 #define OCEANBASE_SHARE_OB_SCHEDULED_JOB_UTILS_H_
 

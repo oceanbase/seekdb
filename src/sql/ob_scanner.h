@@ -37,7 +37,7 @@ struct ObEvalCtx;
 namespace common
 {
 class ObIAllocator;
-// the result of remote sql query
+// Serialized SQL query result.
 class ObScanner
 {
   OB_UNIS_VERSION(1);

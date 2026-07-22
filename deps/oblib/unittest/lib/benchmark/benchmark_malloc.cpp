@@ -17,12 +17,12 @@ int benchmark_initialize(void)
   init_malloc_hook();
   oceanbase::lib::set_memory_limit(1L<<40);
 #if defined(VSLICE_MALLOC)
-  g_alloc.init(8L<<10, default_blk_alloc, ObMemAttr(500, "test"));
+  g_alloc.init(8L<<10, default_blk_alloc,
+               ObMemAttr("test", ObCtxIds::DEFAULT_CTX_ID));
   g_alloc.set_nway(16);
 #elif defined(OB_MALLOC)
 #elif defined(HOOK_MALLOC)
 #endif
-  enable_malloc_v2(true);
   return 0;
 }
 

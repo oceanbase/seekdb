@@ -15,7 +15,7 @@
  */
 
 #include "ob_information_partitions_table.h"
-#include "share/ob_tenant_timezone_mgr.h"
+#include "share/ob_timezone_mgr.h"
 #include "share/schema/ob_part_mgr_util.h" // ObPartitionSchemaIter
 
 using namespace oceanbase::common;
@@ -54,8 +54,8 @@ int ObInfoSchemaPartitionsTable::inner_get_next_row(common::ObNewRow *&row)
 
   if (OB_SUCCESS == ret && !start_to_read_) {
     ObSArray<const ObDatabaseSchema *> database_schemas;
-    if (OB_FAIL(schema_guard_->get_database_schemas_in_tenant(database_schemas))) {
-      SERVER_LOG(WARN, "failed to get database schema of tenant");
+    if (OB_FAIL(schema_guard_->get_database_schemas_in_runtime(database_schemas))) {
+      SERVER_LOG(WARN, "failed to get database schemas");
     } else {
       const int64_t col_count = output_column_ids_.count();
       ObObj *cells = NULL;
@@ -454,8 +454,8 @@ int ObInfoSchemaPartitionsTable::gen_high_bound_val_str(
       MEMSET(high_bound_val, 0, OB_MAX_B_HIGH_BOUND_VAL_LENGTH);
       ObTimeZoneInfo tz_info;
       tz_info.set_offset(0);
-      if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tz_info.get_tz_map_wrap()))) {
-        SERVER_LOG(WARN, "get tenant timezone map failed", K(ret));
+      if (OB_FAIL(OTTZ_MGR.get_timezone_map(tz_info.get_tz_map_wrap()))) {
+        SERVER_LOG(WARN, "get time zone map failed", K(ret));
       } else if (OB_FAIL(ObPartitionUtils::convert_rowkey_to_sql_literal(
           part->get_high_bound_val(), high_bound_val,
           OB_MAX_B_HIGH_BOUND_VAL_LENGTH, pos, false, &tz_info))) {
@@ -485,8 +485,8 @@ int ObInfoSchemaPartitionsTable::gen_list_bound_val_str(
       MEMSET(list_val, 0, OB_MAX_B_PARTITION_EXPR_LENGTH);
       ObTimeZoneInfo tz_info;
       tz_info.set_offset(0);
-      if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tz_info.get_tz_map_wrap()))) {
-        SERVER_LOG(WARN, "get tenant timezone map failed", K(ret));
+      if (OB_FAIL(OTTZ_MGR.get_timezone_map(tz_info.get_tz_map_wrap()))) {
+        SERVER_LOG(WARN, "get time zone map failed", K(ret));
       } else if (OB_FAIL(ObPartitionUtils::convert_rows_to_sql_literal(
           part->get_list_row_values(), list_val,
           OB_MAX_B_PARTITION_EXPR_LENGTH, pos, false, &tz_info))) {

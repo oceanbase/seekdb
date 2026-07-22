@@ -18,7 +18,7 @@
 #include "ob_sub_column_path.h"
 #include "lib/utility/ob_fast_convert.h"
 #include "common/json_type/ob_json_tree.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {

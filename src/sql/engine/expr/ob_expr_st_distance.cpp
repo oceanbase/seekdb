@@ -82,7 +82,7 @@ int ObExprSTDistance::eval_st_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDat
 
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_ST_DISTANCE);
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   const int max_arg_num = 3;
   ObDatum *gis_unit = NULL;
   double factor = 0.0;
@@ -121,7 +121,6 @@ int ObExprSTDistance::eval_st_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *gis_datum2,
               gis_arg2->datum_meta_, gis_arg2->obj_meta_.has_lob_header(), wkb2))) {
       LOG_WARN("fail to get real string data", K(ret), K(wkb2));
-    } else if (FALSE_IT(temp_allocator.set_baseline_size(wkb1.length() + wkb2.length()))) {
     } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb1, srs, true, N_ST_DISTANCE))) {
       LOG_WARN("fail to get srs item", K(ret), K(wkb1));
     } else if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator, wkb1, geo1, srs, N_ST_DISTANCE, ObGeoBuildFlag::GEO_ALLOW_3D_DEFAULT | GEO_NOT_COPY_WKB))) {
@@ -172,9 +171,6 @@ int ObExprSTDistance::eval_st_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDat
       } else {
         res.set_double(result);
       }
-    }
-    if (mem_ctx != nullptr) {
-      temp_allocator.add_ext_used((*mem_ctx)->arena_used());
     }
   }
   return ret;

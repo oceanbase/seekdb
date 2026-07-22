@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_outline_executor.h"
-#include "rootserver/ob_rs_serial_call.h"
-#include "rootserver/ob_root_service.h"
+#include "rootserver/ob_local_ddl_serial_call.h"
+#include "rootserver/ob_local_management_service.h"
 
 #include "sql/ob_sql.h"
 #include "sql/resolver/ddl/ob_create_outline_stmt.h"
@@ -41,18 +41,10 @@ int ObOutlineExecutor::generate_outline_info2(ObExecContext &ctx,
                                              ObOutlineInfo &outline_info)
 {
   int ret = OB_SUCCESS;
-  
+  UNUSED(ctx);
   outline_info.set_outline_content(create_outline_stmt->get_hint());
   outline_info.set_sql_id(create_outline_stmt->get_sql_id());
   outline_info.set_format_sql_id(create_outline_stmt->get_format_sql_id());
-
-  if (create_outline_stmt->get_max_concurrent() >= 0) {
-    ObMaxConcurrentParam concurrent_param(&ctx.get_allocator());
-    concurrent_param.concurrent_num_ = create_outline_stmt->get_max_concurrent();
-    if (OB_FAIL(outline_info.add_param(concurrent_param))) {
-     LOG_WARN("fail to add param", K(ret));
-    }
-  }
   return ret;
 }
 
@@ -82,14 +74,9 @@ int ObOutlineExecutor::generate_outline_info1(ObExecContext &ctx,
   ObString outline_key;
   ObString &outline_sql = outline_info.is_format() ?
             outline_info.get_format_sql_text_str() : outline_info.get_sql_text_str();
-  int64_t max_concurrent = ObGlobalHint::UNSET_MAX_CONCURRENT;
-  const ObQueryHint *query_hint = NULL;
   char* buf = NULL;
   int32_t len = 0;
   int32_t pos = 0;
-  ObMaxConcurrentParam concurrent_param(&ctx.get_allocator());
-  bool has_in_expr = false;
-  int64_t in_expr_pos = 0;
   buf = (char *)ctx.get_allocator().alloc(outline_sql.length());
   if (OB_ISNULL(ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
@@ -97,33 +84,19 @@ int ObOutlineExecutor::generate_outline_info1(ObExecContext &ctx,
   } else if (NULL == buf) {
     SQL_PC_LOG(WARN, "fail to alloc buf", K(outline_sql.length()));
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_ISNULL(outline_stmt) || OB_ISNULL(outline_stmt->get_query_ctx())
-             || OB_ISNULL(query_hint = &outline_stmt->get_query_ctx()->get_query_hint())) {
+  } else if (OB_ISNULL(outline_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid outline stmt is NULL", K(ret), K(outline_stmt), K(query_hint));
+    LOG_WARN("invalid outline stmt is NULL", K(ret), K(outline_stmt));
   } else if (OB_FAIL(ObSQLUtils::get_outline_key(ctx.get_allocator(), ctx.get_my_session(),
                                                  outline_sql, outline_key,
-                                                 concurrent_param.fixed_param_store_,
                                                  FP_PARAMERIZE_AND_FILTER_HINT_MODE,
                                                  has_questionmark_in_outline_sql,
                                                  outline_info.is_format()))) {
     LOG_WARN("fail to get outline key", "outline_sql", outline_sql, K(ret));
-  } else if (OB_FAIL(ObSqlParameterization::search_in_expr_pos(outline_info.get_format_sql_text_str().ptr(),
-                                                               outline_info.get_format_sql_text_str().length(),
-                                                               in_expr_pos, has_in_expr))) {
-    LOG_WARN("failed to search in expr", K(ret), K(outline_info.get_format_sql_text_str()));
-  } else if (FALSE_IT(max_concurrent = query_hint->get_global_hint().max_concurrent_)) {
-  } else if (OB_UNLIKELY(has_questionmark_in_outline_sql && query_hint->has_hint_exclude_concurrent())) {
+  } else if (OB_UNLIKELY(has_questionmark_in_outline_sql)) {
     ret = OB_INVALID_OUTLINE;
-    LOG_USER_ERROR(OB_INVALID_OUTLINE, "sql text should have no ? when there is no concurrent limit");
-    LOG_WARN("outline should have no ? when there is no concurrent limit",
-             K(outline_sql), K(ret));
-  } else if (OB_UNLIKELY(max_concurrent > ObGlobalHint::UNSET_MAX_CONCURRENT && has_in_expr 
-                         && concurrent_param.fixed_param_store_.count() > 0 && outline_info.is_format())) {
-    ret = OB_INVALID_OUTLINE;
-    LOG_USER_ERROR(OB_INVALID_OUTLINE, "format outline with in expr not support concurrent limit, recommend to use normal outline");
-    LOG_WARN("format outline with in expr can not have const param",
-             "outline_format_sql_text", outline_info.get_format_sql_text_str(), K(ret));
+    LOG_USER_ERROR(OB_INVALID_OUTLINE, "sql text should have no ?");
+    LOG_WARN("outline should have no question mark", K(outline_sql), K(ret));
   } else if (OB_FAIL(get_outline(ctx, outline_stmt, outline))) {
     LOG_WARN("fail to get outline", K(ret));
   } else {
@@ -135,15 +108,11 @@ int ObOutlineExecutor::generate_outline_info1(ObExecContext &ctx,
     if (!target_sql.empty()) {
       ObString target_key;
       ObString target_key_with_hint;
-      ObMaxConcurrentParam target_param(&ctx.get_allocator());
-      ObMaxConcurrentParam target_param_with_hint(&ctx.get_allocator());
       bool has_questionmark_in_target_sql = false;
-      bool is_same_param = true;
       //get signature derived from to_clause, then check if equal with signature derived from
       //on_clause
       if (OB_FAIL(ObSQLUtils::get_outline_key(ctx.get_allocator(), ctx.get_my_session(),
                                               target_sql, target_key,
-                                              target_param.fixed_param_store_,
                                               FP_PARAMERIZE_AND_FILTER_HINT_MODE,
                                               has_questionmark_in_target_sql,
                                               outline_info.is_format()))) {
@@ -155,19 +124,8 @@ int ObOutlineExecutor::generate_outline_info1(ObExecContext &ctx,
                        "signature derived from on_clause is not same as signature derived from to_clause");
         LOG_WARN("outline key is not same with target key", K(outline_sql), K(target_sql),
                  K(has_questionmark_in_target_sql), K(has_questionmark_in_outline_sql), K(ret));
-      } else if (max_concurrent >= 0
-                 && (OB_FAIL(concurrent_param.same_param_as(target_param, is_same_param)) || !is_same_param)) {
-        if (OB_FAIL(ret)) {
-          LOG_WARN("fail to check if param is same", K(outline_sql), K(target_sql), K(ret));
-        } else {
-          ret = OB_INVALID_OUTLINE;
-          LOG_USER_ERROR(OB_INVALID_OUTLINE,
-                         "fixed_param  derived from on_clause is not same as fixed_param derived from to_clause");
-          LOG_WARN("outline fixed_param is not same with target fixed_param", K(outline_sql), K(target_sql), K(ret));
-        }
       } else if (OB_FAIL(ObSQLUtils::get_outline_key(ctx.get_allocator(), ctx.get_my_session(),
                                                      target_sql, target_key_with_hint,
-                                                     target_param_with_hint.fixed_param_store_,
                                                      FP_MODE,
                                                      has_questionmark_in_target_sql,
                                                      outline_info.is_format()))) {
@@ -175,18 +133,6 @@ int ObOutlineExecutor::generate_outline_info1(ObExecContext &ctx,
       } else {
         //replace outline_key with target_key derived from to_clause with index not filtered
         outline_info.set_signature(target_key_with_hint);
-      }
-    }
-    if (OB_SUCC(ret)) {
-      //set concurrent limit info to ObOutlineInfo
-      if (max_concurrent < 0) {
-        //if concurrent num is negative, you should reset the max concurrent param store
-      } else {
-        concurrent_param.concurrent_num_ = max_concurrent;
-        concurrent_param.sql_text_ = outline_info.get_sql_text_str();
-        if (OB_FAIL(outline_info.add_param(concurrent_param))) {
-          LOG_WARN("fail to add param", K(ret));
-        }
       }
     }
   }
@@ -202,7 +148,7 @@ int ObOutlineExecutor::generate_logical_plan(ObExecContext &ctx,
   ObSQLSessionInfo *session_info = ctx.get_my_session();
   ObPhysicalPlan *phy_plan = NULL;
   ObOptimizer optimizer(opt_ctx);
-  ObCacheObjGuard guard(OUTLINE_EXEC_HANDLE);
+  ObCacheObjGuard guard;
   if (OB_ISNULL(session_info) || OB_ISNULL(outline_stmt)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid parameter", K(session_info), K(outline_stmt));
@@ -336,7 +282,7 @@ int ObCreateOutlineExecutor::execute(ObExecContext &ctx, ObCreateOutlineStmt &st
     LOG_WARN("get task executor context failed", K(ret));
   } else if (OB_FAIL(ctx.get_sql_ctx()->schema_guard_->reset())){
     LOG_WARN("schema_guard reset failed", K(ret));
-  } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->create_outline(arg); }))) {
+  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_outline(arg); }))) {
     LOG_WARN("rpc proxy create outline failed", "dst", GCTX.self_addr(), K(ret));
   } else {/*do nothing*/ }
   return ret;
@@ -366,21 +312,14 @@ int ObAlterOutlineExecutor::execute(ObExecContext &ctx, ObAlterOutlineStmt &stmt
     LOG_WARN("generate_outline_info failed", K(outline_sql), K(ret));
   } else {
     ObAlterOutlineInfo &alter_outline_info = arg.alter_outline_info_;
-    int64_t index = OB_INVALID_INDEX;
-    bool has_limit_param = false;
-    if (OB_FAIL(alter_outline_info.has_concurrent_limit_param(has_limit_param))) {
-      LOG_WARN("fail to judge whether outline_info has concurrent_limit_param", K(ret));
-    } else if (has_limit_param) {
-      index = ObAlterOutlineArg::ADD_CONCURRENT_LIMIT;
-    } else if (!alter_outline_info.get_outline_content_str().empty()) {
-      index = ObAlterOutlineArg::ADD_OUTLINE_CONTENT;
+    if (!alter_outline_info.get_outline_content_str().empty()) {
+      if (OB_FAIL(alter_outline_info.get_alter_option_bitset().add_member(
+              ObAlterOutlineArg::ADD_OUTLINE_CONTENT))) {
+        LOG_WARN("failed to add member to alter_option_bitset", K(ret));
+      }
     } else {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid alter outline info", K(alter_outline_info), K(ret));
-    }
-
-    if (OB_SUCC(ret) && OB_FAIL(alter_outline_info.get_alter_option_bitset().add_member(index))) {
-      LOG_WARN("failed to add member to alter_option_bitset", K(ret));
     }
   }
 
@@ -390,7 +329,7 @@ int ObAlterOutlineExecutor::execute(ObExecContext &ctx, ObAlterOutlineStmt &stmt
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(ctx.get_sql_ctx()->schema_guard_->reset())){
     LOG_WARN("schema_guard reset failed", K(ret));
-  } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->alter_outline(arg); }))) {
+  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->alter_outline(arg); }))) {
     LOG_WARN("rpc proxy alter outline failed", "dst", GCTX.self_addr(), K(ret));
   } else {/*do nothing*/ }
   return ret;
@@ -411,7 +350,7 @@ int ObDropOutlineExecutor::execute(ObExecContext &ctx, ObDropOutlineStmt &stmt)
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_outline(arg); }))) {
+  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_outline(arg); }))) {
     LOG_WARN("rpc proxy drop outline failed", K(ret),
              "dst", GCTX.self_addr());
   } else {/*do nothing*/ }

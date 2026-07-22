@@ -95,14 +95,14 @@ PRIMARY KEY (`dispute_id`),
 KEY `idx_boid` (`biz_order_id`) BLOCK_SIZE 16384,
 KEY `idx_poid` (`pay_order_id`) BLOCK_SIZE 16384,
 KEY `idx_bid_gc` (`buyer_id`, `gmt_create`, `dispute_status`, `biz_type`, `seller_id`));
-explain select dispute_id, buyer_id, seller_id, buyer_nick, seller_nick , biz_order_id, pay_order_id, 
-biz_type, out_biz_id, auction_id , auction_title, auction_url, refund_fee, refund_type, dispute_type 
-, dispute_reason_id, dispute_reason_text, dispute_sub_reason_id, dispute_sub_reason_text, multiple , 
-gmt_agreement_modified, dispute_end_time, gmt_timeout, timeout_type, dispute_desc , attributes, attribute_cc, 
-dispute_status, goods_status, goods_needs , goods_count, advance_status, cs_status, proof_status, from_group 
-, step_id, gmt_create, gmt_modified, dispute_request from `trade_dispute` `trade_dispute` where `buyer_id` 
-= 100 and `seller_id` = 100 and `dispute_type` = 100 and `from_group` != 101 and `gmt_create` > str_to_date('1969-12-31 
-16:01:41.0', '%Y-%m-%d %H:%i:%s') and `gmt_create` < str_to_date('1969-12-31 16:01:41.0', '%Y-%m-%d 
+explain select dispute_id, buyer_id, seller_id, buyer_nick, seller_nick , biz_order_id, pay_order_id,
+biz_type, out_biz_id, auction_id , auction_title, auction_url, refund_fee, refund_type, dispute_type
+, dispute_reason_id, dispute_reason_text, dispute_sub_reason_id, dispute_sub_reason_text, multiple ,
+gmt_agreement_modified, dispute_end_time, gmt_timeout, timeout_type, dispute_desc , attributes, attribute_cc,
+dispute_status, goods_status, goods_needs , goods_count, advance_status, cs_status, proof_status, from_group
+, step_id, gmt_create, gmt_modified, dispute_request from `trade_dispute` `trade_dispute` where `buyer_id`
+= 100 and `seller_id` = 100 and `dispute_type` = 100 and `from_group` != 101 and `gmt_create` > str_to_date('1969-12-31
+16:01:41.0', '%Y-%m-%d %H:%i:%s') and `gmt_create` < str_to_date('1969-12-31 16:01:41.0', '%Y-%m-%d
 %H:%i:%s') order by `gmt_create` desc limit 0, 100;
 Query Plan
 ============================================================
@@ -137,8 +137,8 @@ Outputs & filters:
        [trade_dispute.multiple], [trade_dispute.gmt_agreement_modified], [trade_dispute.dispute_end_time], [trade_dispute.gmt_timeout], [trade_dispute.timeout_type],
        [trade_dispute.dispute_desc], [trade_dispute.attributes], [trade_dispute.attribute_cc], [trade_dispute.dispute_status], [trade_dispute.goods_status], [trade_dispute.goods_needs],
        [trade_dispute.goods_count], [trade_dispute.advance_status], [trade_dispute.cs_status], [trade_dispute.proof_status], [trade_dispute.step_id], [trade_dispute.gmt_modified],
-       [trade_dispute.dispute_request]), filter([trade_dispute.gmt_create > str_to_date('1969-12-31 \n16:01:41.0', '%Y-%m-%d %H:%i:%s')], [trade_dispute.gmt_create 
-      < str_to_date('1969-12-31 16:01:41.0', '%Y-%m-%d \n%H:%i:%s')], [trade_dispute.from_group != 101], [trade_dispute.buyer_id = 100], [trade_dispute.seller_id 
+       [trade_dispute.dispute_request]), filter([trade_dispute.gmt_create > str_to_date('1969-12-31\n16:01:41.0', '%Y-%m-%d %H:%i:%s')], [trade_dispute.gmt_create 
+      < str_to_date('1969-12-31 16:01:41.0', '%Y-%m-%d\n%H:%i:%s')], [trade_dispute.from_group != 101], [trade_dispute.buyer_id = 100], [trade_dispute.seller_id 
       = 100], [trade_dispute.dispute_type = 100]), rowset=16
       access([trade_dispute.dispute_id], [trade_dispute.buyer_id], [trade_dispute.seller_id], [trade_dispute.dispute_type], [trade_dispute.from_group], 
       [trade_dispute.gmt_create], [trade_dispute.buyer_nick], [trade_dispute.seller_nick], [trade_dispute.biz_order_id], [trade_dispute.pay_order_id], [trade_dispute.biz_type],
@@ -697,7 +697,7 @@ CREATE TABLE `wfsydp` (
 PRIMARY KEY (`WSJJDM`, `WSJJZH`, `WSDRDM`, `WSJYZH`),
 KEY `WSJJDM` (`WSJJDM`, `WSJWSY`) GLOBAL,
 KEY `WSJJDM_LOCAL` (`WSJJDM`, `WSJWSY`) LOCAL
-) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 3 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 10
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 10
 partition by key(`wsjjdm`, `wsjjzh`) partitions 31;
 explain select `WSJJDM`, `WSJWSY` from wfsydp where wsjjdm = '666888' order by `WSJJDM`, `WSJWSY` limit 0 , 181819;
 Query Plan

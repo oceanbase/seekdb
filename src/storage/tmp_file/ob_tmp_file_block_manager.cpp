@@ -576,11 +576,8 @@ int ObTmpFileBlockManager::init()
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTmpFileBlockManager init twice", KR(ret), K(is_inited_));
-  } else if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", KR(ret));
   } else if (OB_FAIL(block_map_.init("TmpFileBlkMgr"))) {
-    LOG_WARN("fail to init tenant temporary file block manager", KR(ret));
+    LOG_WARN("fail to init temporary file block manager", KR(ret));
   } else if (OB_FAIL(block_allocator_.init(common::OB_MALLOC_MIDDLE_BLOCK_SIZE,
                                            ObModIds::OB_TMP_BLOCK_MANAGER, INT64_MAX))) {
     LOG_WARN("fail to init temporary file block allocator", KR(ret));

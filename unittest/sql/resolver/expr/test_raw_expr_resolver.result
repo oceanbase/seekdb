@@ -1841,12 +1841,6 @@
   "order_by": [
   ],
   "separator_param_expr":null,
-  "udf_meta": {
-    "name":"",
-    "ret":0,
-    "dl":"",
-    "type":0
-  },
   "expr_in_inner_stmt":false,
   "pl_agg_udf_expr":null,
   "expr_hash":0
@@ -1922,12 +1916,6 @@
   "order_by": [
   ],
   "separator_param_expr":null,
-  "udf_meta": {
-    "name":"",
-    "ret":0,
-    "dl":"",
-    "type":0
-  },
   "expr_in_inner_stmt":false,
   "pl_agg_udf_expr":null,
   "expr_hash":0

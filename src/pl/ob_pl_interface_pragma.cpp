@@ -32,12 +32,9 @@ struct ObPLInterface {
 
 template <typename U, U func>
 struct interface_checker {
-  // only these types are allowed for PL C interfaces.
-  // T3, T4 is for compatibility and deprecated.
-  // using T_INTERFACE as interface signature is encouraged.
-  // any other signature will yield a compile-time error.
+  // These are the two supported PL C interface signatures. Any other
+  // signature yields a compile-time error.
   using T3 = int(&)(ObExecContext &, ParamStore &, ObObj &);
-  using T4 = int(&)(ObExecContext &, ParamStore &, ObObj &, ObPLExecCtx &);
   using T_INTERFACE = int(&)(ObPLExecCtx &, ParamStore &, ObObj&);
 
   template <typename T, T v>
@@ -48,10 +45,6 @@ struct interface_checker {
     static int value(ObPLExecCtx &pl_exec_ctx, ParamStore &param, ObObj &obj) {
       return v(*pl_exec_ctx.exec_ctx_, param, obj);
     }
-  };
-
-  template <T4 v>
-  struct interface_checker_helper<T4, v> {
   };
 
   template <T_INTERFACE v>
@@ -129,4 +122,3 @@ int ObPLInterfaceImpl::call(sql::ObExecContext &ctx, sql::ParamStore &params, Ob
 
 }
 }
-

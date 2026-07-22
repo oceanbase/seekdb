@@ -150,7 +150,7 @@ void ObDataBlockCachePreWarmer::update_rest()
 
 void ObDataBlockCachePreWarmer::inner_update_rest()
 {
-  int64_t free_memory = lib::get_tenant_memory_limit() - lib::get_tenant_memory_hold();
+  int64_t free_memory = lib::get_allocator_memory_limit() - lib::get_allocator_memory_hold();
   rest_size_ = free_memory / 100 * warm_size_percentage_;
   calculate_base_percentage(free_memory);
   update_step_ = 0;
@@ -159,7 +159,7 @@ void ObDataBlockCachePreWarmer::inner_update_rest()
 
 void ObDataBlockCachePreWarmer::calculate_base_percentage(const int64_t free_memory)
 {
-  base_percentage_ = MIN(free_memory * 200 / lib::get_tenant_memory_limit(), 50);
+  base_percentage_ = MIN(free_memory * 200 / lib::get_allocator_memory_limit(), 50);
 }
 
 bool ObDataBlockCachePreWarmer::warm_block_for_memory(const int64_t level)

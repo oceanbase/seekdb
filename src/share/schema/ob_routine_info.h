@@ -69,9 +69,7 @@ enum ObRoutineFlag
   SP_FLAG_DETERMINISTIC   = 4,
   SP_FLAG_PARALLEL_ENABLE = 8,
   SP_FLAG_INVOKER_RIGHT = 16,
-  SP_FLAG_RESULT_CACHE = 32,
   SP_FLAG_ACCESSIBLE_BY = 64,
-  SP_FLAG_PIPELINED = 128,
   SP_FLAG_STATIC = 256, // udt static function
   SP_FLAG_UDT_MAP = 512, // UDT map function
   SP_FLAG_UDT_UDF = 1024, // this is udt udf
@@ -85,8 +83,7 @@ enum ObRoutineFlag
   SP_FLAG_CONTAINS_SQL = 262144,
   SP_FLAG_WPS = SP_FLAG_CONTAINS_SQL * 2,
   SP_FLAG_RPS = SP_FLAG_WPS * 2,
-  SP_FLAG_HAS_SEQUENCE = SP_FLAG_RPS * 2,
-  SP_FLAG_HAS_OUT_PARAM = SP_FLAG_HAS_SEQUENCE * 2,
+  SP_FLAG_HAS_OUT_PARAM = SP_FLAG_RPS * 2,
   SP_FLAG_EXTERNAL_STATE = SP_FLAG_HAS_OUT_PARAM * 2,
 };
 
@@ -142,8 +139,6 @@ public:
   virtual bool is_parallel_enable() const = 0;
   virtual void set_invoker_right() {}
   virtual bool is_invoker_right() const { return false; }
-  virtual void set_result_cache() = 0;
-  virtual bool is_result_cache() const = 0;
   virtual void set_accessible_by_clause() = 0;
   virtual bool has_accessible_by_clause() const = 0;
   virtual bool is_udt_static_routine() const = 0;
@@ -151,8 +146,6 @@ public:
   virtual bool is_udt_cons() const = 0;
   virtual bool is_udt_map() const = 0;
   virtual bool is_udt_order() const = 0;
-  virtual void set_pipelined() = 0;
-  virtual bool is_pipelined() const = 0;
   virtual void set_no_sql() = 0;
   virtual bool is_no_sql() const = 0;
   virtual void set_reads_sql_data() = 0;
@@ -163,12 +156,10 @@ public:
   virtual bool is_contains_sql() const = 0;
   virtual bool is_wps() const = 0;
   virtual bool is_rps() const = 0;
-  virtual bool is_has_sequence() const = 0;
   virtual bool is_has_out_param() const = 0;
   virtual bool is_external_state() const = 0;
   virtual void set_wps() = 0;
   virtual void set_rps() = 0;
-  virtual void set_has_sequence() = 0;
   virtual void set_has_out_param() = 0;
   virtual void set_external_state() = 0;
   virtual int64_t get_param_start_idx() const { return 0; }
@@ -435,9 +426,7 @@ public:
   OB_INLINE void set_parallel_enable() { flag_ |= SP_FLAG_PARALLEL_ENABLE; }
   OB_INLINE void set_invoker_right() { flag_ |= SP_FLAG_INVOKER_RIGHT; }
   OB_INLINE void clear_invoker_right() { flag_ &= (~((uint64_t)SP_FLAG_INVOKER_RIGHT)); }
-  OB_INLINE void set_result_cache() { flag_ |= SP_FLAG_RESULT_CACHE; }
   OB_INLINE void set_accessible_by_clause() { flag_ |= SP_FLAG_ACCESSIBLE_BY; }
-  OB_INLINE void set_pipelined() { flag_ |= SP_FLAG_PIPELINED; }
   OB_INLINE void set_is_static() { flag_ |= SP_FLAG_STATIC; }
   OB_INLINE void set_is_udt_udf() { flag_ |= SP_FLAG_UDT_UDF; }
   OB_INLINE void set_is_udt_function() { flag_ |= SP_FLAG_UDT_FUNC; }
@@ -464,20 +453,17 @@ public:
     flag_ &= ~(uint64_t)SP_FLAG_CONTAINS_SQL;
     flag_ &= ~(uint64_t)SP_FLAG_WPS;
     flag_ &= ~(uint64_t)SP_FLAG_RPS;
-    flag_ &= ~(uint64_t)SP_FLAG_HAS_SEQUENCE;
     flag_ &= ~(uint64_t)SP_FLAG_HAS_OUT_PARAM;
     flag_ &= ~(uint64_t)SP_FLAG_EXTERNAL_STATE;
   }
 
   OB_INLINE bool is_wps() const { return SP_FLAG_WPS == (flag_ & SP_FLAG_WPS); }
   OB_INLINE bool is_rps() const { return SP_FLAG_RPS == (flag_ & SP_FLAG_RPS); }
-  OB_INLINE bool is_has_sequence() const { return SP_FLAG_HAS_SEQUENCE == (flag_ & SP_FLAG_HAS_SEQUENCE); }
   OB_INLINE bool is_has_out_param() const { return SP_FLAG_HAS_OUT_PARAM == (flag_ & SP_FLAG_HAS_OUT_PARAM); }
   OB_INLINE bool is_external_state() const { return SP_FLAG_EXTERNAL_STATE == (flag_ & SP_FLAG_EXTERNAL_STATE); }
 
   OB_INLINE void set_wps() { flag_ |= SP_FLAG_WPS;}
   OB_INLINE void set_rps() { flag_ |= SP_FLAG_RPS;}
-  OB_INLINE void set_has_sequence() { flag_ |= SP_FLAG_HAS_SEQUENCE;}
   OB_INLINE void set_has_out_param() { flag_ |= SP_FLAG_HAS_OUT_PARAM;}
   OB_INLINE void set_external_state() { flag_ |= SP_FLAG_EXTERNAL_STATE;}
 
@@ -527,17 +513,9 @@ public:
   {
     return SP_FLAG_INVOKER_RIGHT == (flag_ & SP_FLAG_INVOKER_RIGHT);
   }
-  OB_INLINE bool is_result_cache() const
-  {
-    return SP_FLAG_RESULT_CACHE == (flag_ & SP_FLAG_RESULT_CACHE);
-  }
   OB_INLINE bool has_accessible_by_clause() const
   {
     return SP_FLAG_ACCESSIBLE_BY == (flag_ & SP_FLAG_ACCESSIBLE_BY);
-  }
-  OB_INLINE bool is_pipelined() const
-  {
-    return SP_FLAG_PIPELINED == (flag_ & SP_FLAG_PIPELINED);
   }
   virtual bool is_udt_static_routine() const {
     return is_udt_routine() && SP_FLAG_STATIC == (flag_ & SP_FLAG_STATIC);

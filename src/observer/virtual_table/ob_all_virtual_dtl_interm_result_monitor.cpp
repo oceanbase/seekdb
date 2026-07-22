@@ -15,7 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_dtl_interm_result_monitor.h"
-#include "observer/omt/ob_multi_tenant.h"  // TenantIdList, previously hidden behind a transitive include
+#include "observer/omt/ob_server_runtime_controller.h"
 #include "share/rc/ob_module_provider.h"
 #include "observer/ob_server_utils.h"
 #include "sql/dtl/ob_dtl_interm_result_manager.h"
@@ -223,13 +223,12 @@ int ObAllDtlIntermResultMonitor::fill_scanner()
         {
           ObDTLIntermResultMonitorInfoGetter monitor_getter(scanner_, *allocator_, output_column_ids_,
                                   cur_row_);
-          MOD_SCOPE {
+          SERVER_MODULE_SCOPE {
             if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->generate_monitor_info_rows(monitor_getter))) {
               SERVER_LOG(WARN, "generate monitor info array failed", K(ret));
             }
           } else {
-            // During the iteration process, tenants may be deleted,
-            // so we need to ignore the error code of MTL_SWITCH.
+            // The server module set may not be ready during shutdown.
             ret = OB_SUCCESS;
           }
         }
@@ -245,4 +244,3 @@ int ObAllDtlIntermResultMonitor::fill_scanner()
 
 }/* ns observer*/
 }/* ns oceanbase */
-

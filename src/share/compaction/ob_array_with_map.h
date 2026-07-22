@@ -17,7 +17,7 @@
 #define OB_SHARE_COMPACTION_ARRAY_WITH_MAP_H_
 #include "lib/container/ob_array.h"
 #include "lib/hash/ob_hashmap.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/ob_delegate.h"
 #include "common/ob_tablet_id.h"
 namespace oceanbase

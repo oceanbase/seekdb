@@ -33,7 +33,7 @@ enum ObTextStringIterState : int;
 // dependency-inversion port: complete abstract service surface for the lob-read domain。
 // share layer(ObTextStringIter/ObDeltaLob/ObLobTextIterCtx)reads out-of-row lob through this port,
 // no longer depends directly on storage::ObLobManager / ObLobAccessParam and other storage types。
-// storage layer(ObLobManager)implements this port, injected through MTL(ObILobReadService*)。
+// The storage layer (ObLobManager) implements this port and the server module provider injects it.
 //
 // constraint: all inputs/outputs are share-level types(ObLobTextIterCtx&/ObString/ObIAllocator*/
 //       ObObjType/ObCollationType/ObTextStringIterState&), no storage types appear;

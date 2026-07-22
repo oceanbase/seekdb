@@ -20,10 +20,6 @@
 #include "share/ob_rpc_struct.h"
 #include "storage/tablet/ob_tablet_binding_mds_user_data.h"
 #include "storage/tablet/ob_tablet_create_delete_mds_user_data.h"
-#include "storage/tx/ob_multi_data_source.h"
-#include "storage/ddl/ob_ddl_struct.h"
-#include "storage/ob_i_table.h"
-#include "storage/blocksstable/ob_block_sstable_struct.h"
 namespace oceanbase
 {
 namespace obcall
@@ -41,24 +37,22 @@ public:
   common::ObSArray<storage::ObTabletBindingMdsUserData> binding_datas_;
 };
 
-struct ObDDLBuildSingleReplicaRequestArg final
+struct ObDDLLocalBuildArg final
 {
   OB_UNIS_VERSION(1);
 public:
-  ObDDLBuildSingleReplicaRequestArg() :
+  ObDDLLocalBuildArg() :
       source_tablet_id_(), dest_tablet_id_(),
       source_table_id_(OB_INVALID_ID), dest_schema_id_(OB_INVALID_ID),
       schema_version_(0), snapshot_version_(0), ddl_type_(0), task_id_(0), parallelism_(0), execution_id_(-1), tablet_task_id_(0),
-      data_format_version_(0), dest_schema_version_(0),
-      lob_col_idxs_(), is_no_logging_(false)
+      data_format_version_(0), dest_schema_version_(0), lob_col_idxs_()
   {}
   bool is_valid() const;
-  int assign(const ObDDLBuildSingleReplicaRequestArg &other);
+  int assign(const ObDDLLocalBuildArg &other);
   TO_STRING_KV(K_(source_tablet_id), K_(dest_tablet_id),
     K_(source_table_id), K_(dest_schema_id), K_(schema_version), K_(snapshot_version), K_(ddl_type),
     K_(task_id), K_(parallelism), K_(execution_id), K_(tablet_task_id), K_(data_format_version),
-    K_(dest_schema_version),
-    K_(lob_col_idxs), K_(is_no_logging));
+    K_(dest_schema_version), K_(lob_col_idxs));
 public:
   ObTabletID source_tablet_id_;
   ObTabletID dest_tablet_id_;
@@ -74,17 +68,16 @@ public:
   uint64_t data_format_version_;
   int64_t dest_schema_version_;
   ObSArray<uint64_t> lob_col_idxs_;
-  bool is_no_logging_;
 };
 
-struct ObDDLBuildSingleReplicaRequestResult final
+struct ObDDLLocalBuildResult final
 {
   OB_UNIS_VERSION(1);
 public:
-  ObDDLBuildSingleReplicaRequestResult()
+  ObDDLLocalBuildResult()
     : ret_code_(OB_SUCCESS), row_inserted_(0), row_scanned_(0), physical_row_count_(0)
   {}
-  ~ObDDLBuildSingleReplicaRequestResult() = default;
+  ~ObDDLLocalBuildResult() = default;
   TO_STRING_KV(K_(ret_code), K_(row_inserted), K_(row_scanned), K_(physical_row_count))
 public:
   int64_t ret_code_;

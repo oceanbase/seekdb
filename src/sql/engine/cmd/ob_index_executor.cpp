@@ -17,12 +17,11 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_index_executor.h"
-#include "rootserver/ob_rs_serial_call.h"
-#include "rootserver/ob_root_service.h"
+#include "rootserver/ob_local_ddl_serial_call.h"
+#include "rootserver/ob_local_management_service.h"
 
 #include "sql/resolver/ddl/ob_drop_index_stmt.h"
 #include "sql/resolver/ddl/ob_purge_stmt.h"
-#include "sql/resolver/ob_resolver_utils.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
 #include "sql/engine/cmd/ob_partition_executor_utils.h"
 #include "share/ob_structured_event_logger.h"
@@ -52,9 +51,7 @@ int ObCreateIndexExecutor::execute(ObExecContext &ctx, ObCreateIndexStmt &stmt)
   const bool is_sys_index = is_inner_table(create_index_arg.index_table_id_);
   obcall::ObAlterTableRes res;
   ObString first_stmt;
-  bool is_sync_ddl_user = false;
   
-  uint64_t data_version = 0;
   int64_t start_time = 0;
   int64_t refresh_time = 0;
   int64_t ddl_task_time = 0;
@@ -86,9 +83,8 @@ int ObCreateIndexExecutor::execute(ObExecContext &ctx, ObCreateIndexStmt &stmt)
       LOG_WARN("fail to push back create index arg", KR(ret));
     }
   }
-  if (FAILEDx(GET_MIN_DATA_VERSION(data_version))) {
-    LOG_WARN("fail to get data version", KR(ret));
-  } else if (FALSE_IT(create_index_arg.data_version_ = data_version)) {
+  if (OB_FAIL(ret)) {
+  } else if (FALSE_IT(create_index_arg.data_version_ = DATA_CURRENT_VERSION)) {
   } else {
     bool is_parallel_ddl = true;
     if (OB_FAIL(ObParallelDDLControlMode::is_parallel_ddl_enable(
@@ -98,7 +94,7 @@ int ObCreateIndexExecutor::execute(ObExecContext &ctx, ObCreateIndexStmt &stmt)
               || share::schema::is_fts_or_multivalue_index(create_index_arg.index_type_)
               || share::schema::is_vec_index(create_index_arg.index_type_)) {
       start_time = ObTimeUtility::current_time();
-      if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->create_index(create_index_arg, res); }))) {    //send the signal of creating index to rs
+      if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_index(create_index_arg, res); }))) {    //send the signal of creating index to rs
         LOG_WARN("rpc proxy create index failed", K(create_index_arg),
                  "dst", GCTX.self_addr(), K(ret));
       }
@@ -111,24 +107,19 @@ int ObCreateIndexExecutor::execute(ObExecContext &ctx, ObCreateIndexStmt &stmt)
       const int64_t rpc_timeout = THIS_WORKER.get_timeout_remain();
       if (OB_FAIL(ctx.set_timeout(rpc_timeout))) {
         LOG_WARN("fail to set timeout ctx", KR(ret));
-      } else if (OB_FAIL(GCTX.root_service_->parallel_create_index(create_index_arg, res))) {
+      } else if (OB_FAIL(GCTX.local_management_service_->parallel_create_index(create_index_arg, res))) {
         LOG_WARN("fail to parallel create index", KR(ret), "dst", GCTX.self_addr());
       } else {
         refresh_time = ObTimeUtility::current_time();
-        if (OB_FAIL(ObDDLExecutorUtil::try_check_parallel_ddl_schema_in_sync(
-            ctx, my_session, res.schema_version_, false /*skip_consensus*/))) {
-          LOG_WARN("fail to check parallel ddl schema in sync", KR(ret), K(res));
+        if (OB_FAIL(ObDDLExecutorUtil::wait_local_schema_visible(
+            ctx, my_session, res.schema_version_))) {
+          LOG_WARN("fail to wait for local schema visibility", KR(ret), K(res));
         }
         ddl_task_time = ObTimeUtility::current_time();
       }
     }
   }
-  if (FAILEDx(ObResolverUtils::check_sync_ddl_user(my_session, is_sync_ddl_user))) {
-    LOG_WARN("Failed to check sync_dll_user", K(ret));
-  } else if (0 == res.task_id_) {
-  } else if (!is_sys_index && !is_sync_ddl_user) {
-    // Only consider index synchronization check for non-system tables and non-backup recovery scenarios
-    bool build_index_need_retry_at_executor = false;
+  if (OB_SUCC(ret) && 0 != res.task_id_ && !is_sys_index) {
     create_index_arg.index_schema_.set_table_id(res.index_table_id_);
     create_index_arg.index_schema_.set_schema_version(res.schema_version_);
     if (OB_UNLIKELY(OB_INVALID_ID == create_index_arg.index_schema_.get_table_id())) {
@@ -256,7 +247,7 @@ int ObCreateIndexExecutor::sync_check_index_status(sql::ObSQLSessionInfo &my_ses
         ObDropIndexRes drop_index_res;
         if (OB_SUCCESS != (tmp_ret = set_drop_index_stmt_str(drop_index_arg, allocator))) {
           LOG_WARN("fail to set drop index ddl_stmt_str", K(tmp_ret));
-        } else if (OB_SUCCESS != (tmp_ret = rootserver::serial_call([&]{ return GCTX.root_service_->drop_index(drop_index_arg, drop_index_res); }))) {
+        } else if (OB_SUCCESS != (tmp_ret = rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_index(drop_index_arg, drop_index_res); }))) {
           LOG_WARN("drop index failed", "dst", GCTX.self_addr(), K(tmp_ret),
               K(drop_index_arg.table_name_), K(drop_index_arg.index_name_));
         }
@@ -266,11 +257,6 @@ int ObCreateIndexExecutor::sync_check_index_status(sql::ObSQLSessionInfo &my_ses
     }
     // Handle the scenario of leader-follower switch, if a switch occurs during activation, directly return user session_killed;
     // Subsequent standby database will handle this index;
-    if (OB_FAIL(ret)) {
-    } else {
-      //no need to process sys tenant
-    }
-
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObDDLExecutorUtil::wait_build_index_finish( res.task_id_, is_finish))) {
       LOG_WARN("wait build index finish failed", K(ret), K(res.task_id_));
@@ -314,7 +300,7 @@ int ObDropIndexExecutor::wait_drop_index_finish(
     const int64_t retry_interval = 100 * 1000;
     while (OB_SUCC(ret)) {
       int tmp_ret = OB_SUCCESS;
-      bool is_primary_cluster = true;
+      bool is_primary_server = true;
       if (OB_SUCCESS == share::ObDDLErrorMessageTableOperator::get_ddl_error_message(task_id, -1 /* target_object_id */, unused_addr, false /* is_ddl_retry_task */, *GCTX.sql_proxy_, error_message, unused_user_msg_len)) {
         ret = error_message.ret_code_;
         if (OB_SUCCESS != ret) {
@@ -323,12 +309,12 @@ int ObDropIndexExecutor::wait_drop_index_finish(
         break;
       } else {
         if (OB_FAIL(ret)) {
-        } else if (OB_TMP_FAIL(ObShareUtil::is_primary_cluster(is_primary_cluster))) {
-          LOG_WARN("fail to check whether is primary cluster", KR(ret), K(is_primary_cluster));
-        } else if (!is_primary_cluster) {
-          ret = OB_STANDBY_READ_ONLY;
+        } else if (OB_TMP_FAIL(ObShareUtil::is_primary_server(is_primary_server))) {
+          LOG_WARN("fail to check whether is primary server", KR(ret), K(is_primary_server));
+        } else if (!is_primary_server) {
+          ret = OB_STANDBY_DATABASE_READ_ONLY;
           FORWARD_USER_ERROR(ret, "DDL not finish, need check");
-          LOG_WARN("tenant is standby now, stop wait", K(ret));
+          LOG_WARN("server is standby now, stop wait", K(ret));
         }
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(session.check_session_status())) {
@@ -368,7 +354,7 @@ int ObDropIndexExecutor::execute(ObExecContext &ctx, ObDropIndexStmt &stmt)
   }  else if (OB_INVALID_ID == drop_index_arg.session_id_
              && FALSE_IT(tmp_arg.session_id_ = my_session->get_sessid_for_table())) {
     //impossible
-  } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_index(drop_index_arg, res); }))) {
+  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_index(drop_index_arg, res); }))) {
     LOG_WARN("rpc proxy drop index failed", "dst", GCTX.self_addr(), K(ret));
   } else if (OB_FAIL(wait_drop_index_finish(res.task_id_, *my_session))) {
     LOG_WARN("wait drop index finish failed", K(ret));
@@ -397,7 +383,7 @@ int ObPurgeIndexExecutor::execute(ObExecContext &ctx, ObPurgeIndexStmt &stmt) {
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->purge_index(purge_index_arg); }))) {
+  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->purge_index(purge_index_arg); }))) {
     LOG_WARN("purge index failed", "dst", GCTX.self_addr(), K(ret));
   }
   SERVER_EVENT_ADD("ddl", "purge index execute finish",

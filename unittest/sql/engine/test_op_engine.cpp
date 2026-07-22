@@ -29,49 +29,56 @@ using namespace oceanbase::sql;
 namespace test
 {
 // Single-tenant module provider for the engine test: exposes the mock
-// ObDataAccessService and ObTenantIOManager through share::g_mp.
+// ObDataAccessService and ObIOService through share::g_mp.
 class TestOpEngineModuleProvider : public share::ObIModuleProvider
 {
 public:
   sql::ObDataAccessService *data_access_service() override { return das_; }
-  common::ObTenantIOManager *tenant_io_manager() override { return io_mgr_; }
+  common::ObIOService *io_service() override { return io_mgr_; }
   sql::ObDataAccessService *das_ = nullptr;
-  common::ObTenantIOManager *io_mgr_ = nullptr;
+  common::ObIOService *io_mgr_ = nullptr;
 };
-TestOpEngine::TestOpEngine() : tbase_(), vec_2_exec_ctx_(vec_2_alloc_)
+TestOpEngine::TestOpEngine()
+    : runtime_state_(),
+      old_server_runtime_(nullptr),
+      old_mp_(nullptr),
+      test_mp_(nullptr),
+      io_service_(nullptr),
+      destroyed_(false),
+      vec_2_exec_ctx_(vec_2_alloc_)
 {
   vec_2_exec_ctx_.set_sql_ctx(&sql_ctx_);
 }
 
 TestOpEngine::~TestOpEngine()
 {
-  destory();
+  destroy();
 }
 
 void TestOpEngine::SetUp()
 {
+  old_server_runtime_ = share::g_server_runtime;
+  old_mp_ = share::g_mp;
   TestOptimizerUtils::SetUp();
   addr_.set_ip_addr("1.1.1.1", 8888);
   vec_2_exec_ctx_.set_my_session(&session_info_);
   vec_2_exec_ctx_.create_physical_plan_ctx();
   ASSERT_EQ(prepare_io(ObTestOpConfig::get_instance().test_filename_prefix_), OB_SUCCESS);
 
-  // init mock location service, used in optimizer compute table property
   // Single-tenant seekdb: low-layer modules are reached through share::g_mp
   // (ObIModuleProvider). Publish a test provider exposing the ObDataAccessService
-  // (used in ObTableScanOp ctor) and the ObTenantIOManager.
-  ASSERT_EQ(tbase_.init(), 0);
-  ObTenantEnv::set_tenant(&tbase_);
+  // (used in ObTableScanOp ctor) and the ObIOService.
+  ASSERT_EQ(runtime_state_.init(), 0);
+  share::g_server_runtime = &runtime_state_;
   static ObDataAccessService das_instance;
-  common::ObTenantIOManager *io_service = nullptr;
-  EXPECT_EQ(OB_SUCCESS, common::ObTenantIOManager::mtl_new(io_service));
-  EXPECT_EQ(OB_SUCCESS, common::ObTenantIOManager::mtl_init(io_service));
-  EXPECT_EQ(OB_SUCCESS, io_service->start());
+  ASSERT_EQ(OB_SUCCESS, common::ObIOService::server_module_new(io_service_));
+  ASSERT_EQ(OB_SUCCESS, common::ObIOService::server_module_init(io_service_));
+  ASSERT_EQ(OB_SUCCESS, io_service_->start());
   static TestOpEngineModuleProvider mp;
   mp.das_ = &das_instance;
-  mp.io_mgr_ = io_service;
+  mp.io_mgr_ = io_service_;
+  test_mp_ = &mp;
   share::g_mp = &mp;
-  ObTenantEnv::set_tenant(&tbase_);
 
   out_origin_result_stream_.open(ObTestOpConfig::get_instance().test_filename_origin_output_file_, std::ios::out | std::ios::trunc);
   out_vec_result_stream_.open(ObTestOpConfig::get_instance().test_filename_vec_output_file_, std::ios::out | std::ios::trunc);
@@ -82,8 +89,31 @@ void TestOpEngine::TearDown()
   destroy();
 }
 
-void TestOpEngine::destory()
+void TestOpEngine::destroy()
 {
+  if (destroyed_) {
+    return;
+  }
+  destroyed_ = true;
+
+  if (share::g_mp == test_mp_) {
+    share::g_mp = old_mp_;
+  }
+  if (nullptr != test_mp_) {
+    TestOpEngineModuleProvider *mp = static_cast<TestOpEngineModuleProvider *>(test_mp_);
+    mp->das_ = nullptr;
+    mp->io_mgr_ = nullptr;
+    test_mp_ = nullptr;
+  }
+  if (nullptr != io_service_) {
+    io_service_->stop();
+    common::ObIOService::server_module_destroy(io_service_);
+  }
+  if (share::g_server_runtime == &runtime_state_) {
+    share::g_server_runtime = old_server_runtime_;
+  }
+  runtime_state_.destroy();
+
   SERVER_STORAGE_META_SERVICE.destroy();
   OB_STORAGE_OBJECT_MGR.stop();
   OB_STORAGE_OBJECT_MGR.wait();
@@ -91,7 +121,6 @@ void TestOpEngine::destory()
   OB_STORE_CACHE.destroy();
   ObIOManager::get_instance().destroy();
   ObKVGlobalCache::get_instance().destroy();
-  ObClusterVersion::get_instance().destroy();
 
   // LOCAL_DEVICE_INSTANCE.destroy();
 }
@@ -108,7 +137,7 @@ common::ObIODevice *TestOpEngine::get_device_inner()
   return device;
 }
 
-// copy from mittest/mtlenv/mock_tenant_module_env.h and unittest/storage/blocksstable/ob_data_file_prepare.h
+// copy from unittest/mtlenv/mock_server_runtime_env.h and unittest/storage/blocksstable/ob_data_file_prepare.h
 // refine some code
 // call prepare_io() for testing operators that needs to dump intermediate data
 int TestOpEngine::prepare_io(const std::string & test_data_name_suffix)
@@ -159,7 +188,7 @@ int TestOpEngine::prepare_io(const std::string & test_data_name_suffix)
   iod_opt_array[3].set("datafile_disk_percentage", storage_env_.data_disk_percentage_);
   iod_opt_array[4].set("datafile_size", storage_env_.data_disk_size_);
   iod_opts.opt_cnt_ = 5;
-  ObTenantIOConfig io_config = ObTenantIOConfig::default_instance();
+  ObIOServiceConfig io_config = ObIOServiceConfig::default_instance();
   const int64_t async_io_thread_count = 8;
   const int64_t sync_io_thread_count = 2;
   const int64_t max_io_depth = 256;
@@ -273,16 +302,14 @@ int TestOpEngine::do_optimize(ObStmt *stmt, ObLogPlan *&plan, ObPhyPlanType dist
 int TestOpEngine::do_code_generate(const ObLogPlan &log_plan, ObCodeGenerator &code_gen, ObPhysicalPlan &phy_plan)
 {
   int ret = OB_SUCCESS;
-  const uint64_t cur_cluster_version = CLUSTER_CURRENT_VERSION;
-
   // WARN: may have bug here
   log_plan.get_optimizer_context().set_batch_size(ObTestOpConfig::get_instance().batch_size_);
   phy_plan.set_batch_size(ObTestOpConfig::get_instance().batch_size_);
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(code_gen.generate_exprs(log_plan, phy_plan, cur_cluster_version))) {
+  } else if (OB_FAIL(code_gen.generate_exprs(log_plan, phy_plan))) {
     LOG_WARN("fail to get all raw exprs", K(ret));
-  } else if (OB_FAIL(code_gen.generate_operators(log_plan, phy_plan, cur_cluster_version))) {
+  } else if (OB_FAIL(code_gen.generate_operators(log_plan, phy_plan))) {
     LOG_WARN("fail to generate plan", K(ret));
   }
 
@@ -498,15 +525,7 @@ int TestOpEngine::generate_physical_plan(ObLogPlan *log_plan, ObPhysicalPlan &ph
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("pctx is null");
   } else {
-    /*
-    bool ObStaticEngineExprCG::enable_rich_format() const {
-      //TODO shengle change the version
-      return cur_cluster_version_ >= CLUSTER_VERSION_4_1_0_0
-            && op_cg_ctx_.session_->enable_rich_format();
-    }
-    */
-    // So we need set here to support rich_format
-    ObCodeGenerator code_gen(CLUSTER_VERSION_1_0_0_0, &(pctx->get_datum_param_store()));
+    ObCodeGenerator code_gen(&(pctx->get_datum_param_store()));
     log_plan->get_optimizer_context().get_session_info()->sys_vars_cache_.set_enable_rich_vector_format(enable_rich_format);
     log_plan->get_optimizer_context().get_session_info()->init_use_rich_format();
     phy_plan.set_use_rich_format(enable_rich_format);

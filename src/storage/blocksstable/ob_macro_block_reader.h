@@ -74,7 +74,7 @@ public:
       const int64_t size,
       char *uncomp_buf,
       const int64_t uncomp_buf_size);
-  int decrypt_and_decompress_data(
+  int decompress_data(
       const ObSSTableMacroBlockHeader &block_header,
       const char *buf,
       const int64_t size,
@@ -82,7 +82,7 @@ public:
       const char *&uncomp_buf,
       int64_t &uncomp_size,
       bool &is_compressed);
-  int decrypt_and_decompress_data(
+  int decompress_data(
       const ObSimplifiedSSTableMacroBlockHeader &block_header,
       const char *buf,
       const int64_t size,
@@ -90,7 +90,7 @@ public:
       const char *&uncomp_buf,
       int64_t &uncomp_size,
       bool &is_compressed);
-  int decrypt_and_decompress_data(
+  int decompress_data(
       const ObMicroBlockDesMeta &deserialize_meta,
       const char *input,
       const int64_t size,
@@ -99,7 +99,7 @@ public:
       bool &is_compressed,
       const bool need_deep_copy = false,
       ObIAllocator *ext_allocator = nullptr);
-  int do_decrypt_and_decompress_data(
+  int do_decompress_data(
       const ObMicroBlockHeader &header,
       const ObMicroBlockDesMeta &deserialize_meta,
       const char *src_buf,
@@ -141,7 +141,6 @@ private:
   };
 
   int dump_sstable_macro_block(const MicroBlockType block_type);
-  int dump_bloom_filter_data_block();
   int dump_sstable_micro_block(
       const int64_t micro_idx,
       const MicroBlockType block_type,
@@ -166,7 +165,6 @@ private:
   ObSSTableMacroBlockHeader macro_header_;
   ObLinkedMacroBlockHeader linked_header_;
   // parsed objects
-  const ObBloomFilterMacroBlockHeader *bloomfilter_header_;
   const common::ObObjMeta *column_types_;
   const common::ObOrderType *column_orders_;
   const int64_t *column_checksum_;

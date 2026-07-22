@@ -34,18 +34,18 @@ public:
   virtual void SetUp() {}
   virtual void TearDown() {}
 };
-// Serialization and deserialization functionality
-TEST_F(TestUserBinaryKey, serialization) {
+TEST_F(TestUserBinaryKey, local_identity) {
   UserBinaryKey key1;
-  key1.set_user_key(ObDeadLockTestIntKey(1));
-  const int64_t length = 1024;
-  int64_t pos = 0;
-  char* buffer = new char[key1.get_serialize_size()];
-  ASSERT_EQ(OB_SUCCESS, key1.serialize(buffer, length, pos));
-  UserBinaryKey key2;
-  pos = 0;
-  ASSERT_EQ(OB_SUCCESS, key2.deserialize(buffer, length, pos));
-  ASSERT_EQ(true, key1 == key2);
+  ASSERT_EQ(OB_SUCCESS, key1.set_user_key(ObDeadLockTestIntKey(1)));
+  UserBinaryKey key2(key1);
+  UserBinaryKey key3;
+  UserBinaryKey other;
+  key3 = key1;
+  ASSERT_EQ(OB_SUCCESS, other.set_user_key(ObDeadLockTestIntKey(2)));
+  EXPECT_TRUE(key1 == key2);
+  EXPECT_TRUE(key1 == key3);
+  EXPECT_EQ(key1.hash(), key2.hash());
+  EXPECT_TRUE(key1 != other);
 }
 
 }// namespace unittest

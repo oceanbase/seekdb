@@ -53,7 +53,6 @@ public:
   virtual int generate_foreign_keys_() override;
   virtual int generate_table_schema_() override;
   virtual int generate_aux_table_schemas_() override;
-  virtual int generate_sequence_object_() override { return OB_SUCCESS; };
 
 private:
   const obcall::ObCreateTableLikeArg &arg_;

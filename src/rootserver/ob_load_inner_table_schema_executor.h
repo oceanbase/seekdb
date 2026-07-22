@@ -31,10 +31,10 @@ namespace rootserver
 class ObLoadInnerTableSchemaExecutor
 {
 public:
-  static int load_inner_table_schema(const obcall::ObLoadTenantTableSchemaArg &arg);
+  static int load_inner_table_schema(const obcall::ObLoadRuntimeTableSchemaArg &arg);
   static int load_schema_version(common::ObISQLClient &client, const int64_t core_schema_version, const int64_t sys_schema_version);
 private:
-  static int load_inner_table_schema(const obcall::ObLoadTenantTableSchemaArg &arg,
+  static int load_inner_table_schema(const obcall::ObLoadRuntimeTableSchemaArg &arg,
       const share::ObLoadInnerTableSchemaInfo &info);
 
 public:
@@ -56,7 +56,7 @@ private:
   
 private:
   bool inited_;
-  ObArray<obcall::ObLoadTenantTableSchemaArg> args_;
+  ObArray<obcall::ObLoadRuntimeTableSchemaArg> args_;
   int64_t next_arg_index_;
   int64_t load_rpc_timeout_;
   int64_t parallel_count_;

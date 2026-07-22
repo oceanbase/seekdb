@@ -72,7 +72,6 @@ public:
   share::schema::ObSchemaGetterGuard schema_guard_;
   //int64_t schema_version_;
   uint64_t table_id_;
-  uint64_t tenant_id_;
   uint64_t database_id_;
 };
 }

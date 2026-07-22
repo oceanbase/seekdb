@@ -1,4 +1,3 @@
-#oblib_addtest(test_memfrag_recycle_allocator.cpp)
 oblib_addtest(test_cell_reader.cpp)
 oblib_addtest(test_cell_writer.cpp)
 oblib_addtest(test_common_utility.cpp)

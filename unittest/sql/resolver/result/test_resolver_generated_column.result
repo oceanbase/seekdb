@@ -22,8 +22,6 @@ create database generated_column_db;
   "name_case_mode":-1,
   "comment":"",
   "read_only":false,
-  "default_tablegroup_id":-1,
-  "default_tablegroup_name":"",
   "in_recyclebin":false,
   "primary_zone_array": [
   ]

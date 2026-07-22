@@ -64,7 +64,7 @@ int ObExprPrivSTMakeValid::eval_priv_st_makevalid(const ObExpr &expr, ObEvalCtx 
   bool is_null_result = false;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_ST_MAKEVALID);
+  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
   ObDatum *gis_datum1 = nullptr;
   omt::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = nullptr;
@@ -130,9 +130,6 @@ int ObExprPrivSTMakeValid::eval_priv_st_makevalid(const ObExpr &expr, ObEvalCtx 
         res.set_string(res_wkb);
       }
     }
-  }
-  if (mem_ctx != nullptr) {
-    tmp_allocator.add_ext_used((*mem_ctx)->arena_used());
   }
   
   return ret;

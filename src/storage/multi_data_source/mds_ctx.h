@@ -50,7 +50,6 @@ public:
   int assign(const MdsCtx &);
   int set_writer(const MdsWriter &writer);
   void set_seq_no(const transaction::ObTxSEQ seq_no);
-  int inc_seq_no();
   transaction::ObTxSEQ get_seq_no() const;
   bool can_write() const;
   VIRTUAL_TO_STRING_KV(K_(writer), K_(write_list), K(obj_to_string(state_)), K_(seq_no));

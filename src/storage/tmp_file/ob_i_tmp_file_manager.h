@@ -27,13 +27,13 @@ namespace oceanbase
 {
 namespace tmp_file
 {
-class ObITenantTmpFileManager
+class ObITmpFileManager
 {
 public:
   typedef common::ObLinearHashMap<ObTmpFileKey, ObITmpFileHandle> TmpFileMap;
 public:
-  ObITenantTmpFileManager();
-  ~ObITenantTmpFileManager();
+  ObITmpFileManager();
+  ~ObITmpFileManager();
   virtual int init();
   virtual int start();
   virtual void stop();

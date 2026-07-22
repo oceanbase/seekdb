@@ -639,9 +639,6 @@ OB_DEF_SERIALIZE(ObKeyPart)
 OB_DEF_DESERIALIZE(ObKeyPart)
 {
   int ret = OB_SUCCESS;
-  // To ensure forward compatibility, because the range of null_safe is larger than that of not null safe, for old versions without filtering the plan
-  // Prefer range to become larger, cannot accept range being reduced, so here null_safe_ is initialized to true
-  null_safe_ = true;
   OB_UNIS_DECODE(id_);
   OB_UNIS_DECODE(pos_);
   OB_UNIS_DECODE(key_type_);

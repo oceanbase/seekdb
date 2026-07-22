@@ -74,7 +74,7 @@ public:
   virtual ~ObVirtualOpenCursorTable();
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
-  void set_session_mgr(sql::ObSQLSessionMgr *sess_mgr) { session_mgr_ = sess_mgr; }
+  void sesession_pool(sql::ObSQLSessionMgr *sess_mgr) { session_mgr_ = sess_mgr; }
   int set_addr(const common::ObAddr &addr);
   
 private:

@@ -241,9 +241,9 @@ int ObRowCache::get_row(const ObRowCacheKey &key, ObRowValueHandle &handle)
     if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
       STORAGE_LOG(WARN, "Fail to get key from row cache, ", K(ret));
     }
-    EVENT_INC(ObStatEventIds::ROW_CACHE_MISS);
+    EVENT_INC(ROW_CACHE_MISS);
   } else {
-    EVENT_INC(ObStatEventIds::ROW_CACHE_HIT);
+    EVENT_INC(ROW_CACHE_HIT);
     if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "Unexpected error, the value is NULL, ", K(ret));

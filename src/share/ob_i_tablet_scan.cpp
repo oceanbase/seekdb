@@ -29,6 +29,5 @@ OB_SERIALIZE_MEMBER(ObTableScanOption, io_read_batch_size_, io_read_gap_size_, s
 
 
 // ObVTableScanParam::to_string moved definition to sql/engine/table/ob_table_scan_op.cpp(printing ObFixedArray<sql::ObExpr*> needs ObExpr complete type)
-// Note: master removed external_file_format_/external_file_location_ printing of two fields, must be synced in HOST(ob_table_scan_op.cpp) (see routing item)
 }
 }

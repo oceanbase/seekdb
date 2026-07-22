@@ -23,15 +23,15 @@ namespace oceanbase
 using namespace lib;
 namespace common
 {
-int ObTenantMBList::init()
+int ObKVMemBlockList::init()
 {
   int ret = OB_SUCCESS;
   if (inited_) {
     ret = OB_INIT_TWICE;
     COMMON_LOG(WARN, "init twice", K(ret));
-  } else if (OB_FAIL(ObResourceMgr::get_instance().get_tenant_resource_mgr(
+  } else if (OB_FAIL(ObResourceMgr::get_instance().get_handle(
       resource_mgr_))) {
-    COMMON_LOG(WARN, "get_tenant_resource_mgr failed", K(ret));
+    COMMON_LOG(WARN, "get_resource_mgr failed", K(ret));
   } else {
     head_.reset();
     head_.prev_ = &head_;
@@ -129,7 +129,7 @@ ObKVCacheInstMap::~ObKVCacheInstMap()
 }
 
 int ObKVCacheInstMap::init(const int64_t max_entry_cnt, const ObKVCacheConfig *configs,
-                           const ObITenantMemLimitGetter &mem_limit_getter,
+                           const ObIServerMemLimitGetter &mem_limit_getter,
                            ObLfFIFOAllocator *node_allocator)
 {
   int ret = OB_SUCCESS;
@@ -183,7 +183,7 @@ int ObKVCacheInstMap::get_cache_inst(
   } else {
     inst_handle.reset();
     ObKVCacheInst *inst = NULL;
-    //try get store tenant handle
+    // Try to get the cache instance.
     {
       DRWLock::RDLockGuard rd_guard(lock_);
       if (OB_SUCC(inst_map_.get_refactored(inst_key, inst))) {
@@ -241,7 +241,7 @@ int ObKVCacheInstMap::get_cache_inst(
   return ret;
 }
 
-int ObKVCacheInstMap::mark_tenant_delete()
+int ObKVCacheInstMap::mark_all_delete()
 {
   int ret = OB_SUCCESS;
 
@@ -265,7 +265,7 @@ int ObKVCacheInstMap::mark_tenant_delete()
   return ret;
 }
 
-int ObKVCacheInstMap::erase_tenant()
+int ObKVCacheInstMap::erase_all()
 {
   int ret = OB_SUCCESS;
 
@@ -303,7 +303,7 @@ int ObKVCacheInstMap::erase_tenant()
       }
     }
   }
-  COMMON_LOG(INFO, "erase tenant cache inst details", K(ret));
+  COMMON_LOG(INFO, "erase cache instance details", K(ret));
 
   return ret;
 }

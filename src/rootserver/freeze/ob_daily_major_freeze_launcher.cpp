@@ -21,7 +21,7 @@
 #include "rootserver/freeze/ob_major_freeze_helper.h"
 #include "share/ob_tablet_checksum_operator.h"
 #include "observer/ob_srv_network_frame.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 #include "rootserver/freeze/ob_major_merge_info_manager.h"
 
 namespace oceanbase
@@ -105,7 +105,7 @@ void ObDailyMajorFreezeLauncher::runTimerTask()
     LOG_WARN("fail to run, not init", KR(ret));
   } else if (stop_ || is_paused()) {
   } else {
-    MOD_SCOPE {
+    SERVER_MODULE_SCOPE {
       LOG_INFO("start daily major_freeze_launcher");
       LOG_TRACE("run daily major freeze launcher");
 
@@ -185,9 +185,7 @@ int ObDailyMajorFreezeLauncher::try_launch_major_freeze()
         do {
           ObMajorFreezeParam param;
           param.freeze_reason_ = MF_DAILY_MERGE;
-          if (OB_FAIL(param.add_freeze_info())) {
-            LOG_WARN("fail to push_back", KR(ret));
-          } else if (OB_FAIL(ObMajorFreezeHelper::major_freeze(param))) {
+          if (OB_FAIL(ObMajorFreezeHelper::major_freeze(param))) {
             if ((OB_TIMEOUT == ret)) {
               ret = OB_EAGAIN; // in order to try launch major freeze again, set ret = OB_EAGAIN here
               LOG_WARN("may be ddl confilict, will try to launch major freeze again", KR(ret), K(param),

@@ -196,7 +196,6 @@ ObExprValuesOp::ObExprValuesOp(ObExecContext &exec_ctx,
     cm_(CM_NONE),
     err_log_service_(get_eval_ctx()),
     err_log_rt_def_(),
-    has_sequence_(false),
     real_value_cnt_(0),
     param_idx_(0),
     param_cnt_(0)
@@ -227,11 +226,7 @@ int ObExprValuesOp::inner_open()
       cm_ = cm_ | CM_WARN_ON_FAIL | CM_CHARSET_CONVERT_IGNORE_ERR;
       LOG_TRACE("is ignore, set CM_WARN_ON_FAIL and CM_CHARSET_CONVERT_IGNORE_ERR", K(cm_));
     }
-    if (0 == child_cnt_) {
-    } else if (1 == child_cnt_) {
-      CK (PHY_SEQUENCE == left_->get_spec().get_type());
-      has_sequence_ = true;
-    } else {
+    if (0 != child_cnt_) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected child cnt", K(child_cnt_), K(ret));
     }
@@ -462,13 +457,6 @@ OB_INLINE int ObExprValuesOp::calc_next_row()
       group_idx = node_idx_ / my_spec.get_value_count();
       if (OB_FAIL(plan_ctx->replace_batch_param_datum(group_idx, param_idx_, param_cnt_))) {
         LOG_WARN("replace batch param datum failed", K(ret), K(group_idx));
-      }
-    }
-    if (OB_SUCC(ret) && has_sequence_) {
-      if (OB_FAIL(left_->get_next_row())) {
-        if (OB_ITER_END != ret) {
-          LOG_WARN("failed to calc next row", K(ret));
-        }
       }
     }
     while (OB_SUCC(ret) && node_idx_ < real_value_cnt_ && !is_break) {

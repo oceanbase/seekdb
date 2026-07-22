@@ -50,7 +50,6 @@ public:
   common::ObSqlString redo_dir_;
   KeyValueArray       parameters_;
   KeyValueArray       variables_;
-  const char *        devname_ = nullptr;
   
   // Server role configuration
   common::ObSqlString role_;      // PRIMARY only

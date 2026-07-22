@@ -73,7 +73,7 @@ int ObExprPrivSTGeogFromText::eval_priv_st_geogfromtext_common(const ObExpr &exp
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, func_name);
+  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
   ObDatum *datum = NULL;
 
   // get wkt
@@ -92,7 +92,6 @@ int ObExprPrivSTGeogFromText::eval_priv_st_geogfromtext_common(const ObExpr &exp
     if (OB_FAIL(ObTextStringHelper::read_real_string_data(tmp_allocator, *datum,
                 expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkt))) {
       LOG_WARN("fail to get real data.", K(ret), K(wkt));
-    } else if (FALSE_IT(tmp_allocator.set_baseline_size(wkt.length()))) {
     } else if (OB_NOT_NULL(wkt.find(';'))) {
       ObString srid_str = wkt.split_on(';');
       if (OB_FAIL(ObGeoExprUtils::parse_srid(srid_str, srid))) {
@@ -106,7 +105,7 @@ int ObExprPrivSTGeogFromText::eval_priv_st_geogfromtext_common(const ObExpr &exp
     }
 
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(OTSRS_MGR->get_tenant_srs_guard(srs_guard))) {
+    } else if (OB_FAIL(SRS_SERVICE->get_srs_guard(srs_guard))) {
       LOG_WARN("failed to get srs guard", K(ret));
     } else if (OB_FAIL(srs_guard.get_srs_item(srid, srs_item))) {
       LOG_WARN("failed to get srs item", K(ret));

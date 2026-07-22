@@ -95,7 +95,7 @@ int ObIExprSTGeomFromWKB::eval_geom_wkb(const ObExpr &expr, ObEvalCtx &ctx, ObDa
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, get_func_name());
+  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
   ObDatum *datum = NULL;
   int num_args = expr.arg_cnt_;
   bool is_null_result = false;
@@ -122,7 +122,7 @@ int ObIExprSTGeomFromWKB::eval_geom_wkb(const ObExpr &expr, ObEvalCtx &ctx, ObDa
          ret = OB_OPERATE_OVERFLOW;
          LOG_WARN("srid input value out of range", K(ret), K(datum->get_int()));
     } else if (0 != (srid = datum->get_uint32())) {
-      if (OB_FAIL(OTSRS_MGR->get_tenant_srs_guard(srs_guard))) {
+      if (OB_FAIL(SRS_SERVICE->get_srs_guard(srs_guard))) {
         LOG_WARN("failed to get srs guard", K(ret));
       } else if (OB_FAIL(srs_guard.get_srs_item(srid, srs_item))) {
         LOG_WARN("failed to get srs item", K(ret));
@@ -148,7 +148,6 @@ int ObIExprSTGeomFromWKB::eval_geom_wkb(const ObExpr &expr, ObEvalCtx &ctx, ObDa
     } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(tmp_allocator, *datum,
               expr.args_[2]->datum_meta_, expr.args_[2]->obj_meta_.has_lob_header(), axis_str))) {
       LOG_WARN("fail to get real string data", K(ret), K(axis_str));
-    } else if (FALSE_IT(tmp_allocator.add_baseline_size(axis_str.length()))) {
     } else if (OB_FAIL(ObGeoExprUtils::parse_axis_order(axis_str, get_func_name(), axis_order))) {
       LOG_WARN("failed to parse axis order option string", K(ret));
     } else if (OB_FAIL(ObGeoExprUtils::check_need_reverse(axis_order, need_reverse))) {
@@ -167,7 +166,6 @@ int ObIExprSTGeomFromWKB::eval_geom_wkb(const ObExpr &expr, ObEvalCtx &ctx, ObDa
       if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(tmp_allocator, *datum,
           expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkb))) {
         LOG_WARN("fail to get real string data", K(ret), K(wkb));
-      } else if (FALSE_IT(tmp_allocator.add_baseline_size(wkb.length()))) {
       } else if (OB_FAIL(create_by_wkb_without_srid(tmp_allocator, wkb, srs_item, geo, bo))) {
         LOG_WARN("failed to create geometry object with raw wkb", K(ret));
         ret = OB_ERR_GIS_INVALID_DATA;

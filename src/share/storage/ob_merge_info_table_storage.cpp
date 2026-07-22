@@ -19,7 +19,7 @@
 #include "share/storage/ob_merge_info_table_storage.h"
 #include "share/storage/ob_sqlite_connection.h"
 #include "lib/oblog/ob_log.h"
-#include "share/ob_zone_merge_info.h"
+#include "share/ob_merge_info.h"
 
 #include "share/storage/ob_sqlite_table_schema.h"
 

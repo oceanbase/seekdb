@@ -24,11 +24,7 @@
 #include "lib/alloc/ob_malloc_allocator.h"
 #include "lib/alloc/alloc_interface.h"
 #include "lib/allocator/ob_page_manager.h"
-#ifndef ENABLE_SANITY
 #include "lib/lock/ob_latch.h"
-#else
-#include "lib/alloc/ob_latch_v2.h"
-#endif
 
 namespace oceanbase
 {
@@ -76,11 +72,7 @@ private:
   void *pm_;
   lib::ISetLocker *locker_;
   lib::SetDoNothingLocker do_nothing_locker_;
-#ifndef ENABLE_SANITY
   lib::ObMutex mutex_;
-#else
-  lib::ObMutexV2 mutex_;
-#endif
   lib::SetLocker<decltype(mutex_)> do_locker_;
   class : public lib::IBlockMgr
   {
@@ -88,27 +80,27 @@ private:
     virtual ABlock *alloc_block(uint64_t size, const ObMemAttr &attr) override
     {
       ABlock *block = NULL;
-      if (ta_.ref_allocator() != nullptr) {
-        block = ta_->get_block_mgr().alloc_block(size, attr);
+      if (ctx_allocator_.ref_allocator() != nullptr) {
+        block = ctx_allocator_->get_block_mgr().alloc_block(size, attr);
       }
       return block;
     }
     virtual void free_block(ABlock *block) override
     {
-      if (ta_.ref_allocator() != nullptr) {
-        ta_->get_block_mgr().free_block(block);
+      if (ctx_allocator_.ref_allocator() != nullptr) {
+        ctx_allocator_->get_block_mgr().free_block(block);
       } else {
-        OB_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "tenant ctx allocator is null", K(ctx_id_));
+        OB_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "context allocator is null", K(ctx_id_));
       }
     }
-    void set_tenant_ctx(const int64_t ctx_id)
+    void set_ctx(const int64_t ctx_id)
     {
       
       ctx_id_ = ctx_id;
-      ta_ = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(ctx_id_);
+      ctx_allocator_ = ObMallocAllocator::get_instance()->get_ctx_allocator(ctx_id_);
     }
   private:
-    lib::ObTenantCtxAllocatorGuard ta_;
+    lib::ObCtxAllocatorGuard ctx_allocator_;
   } blk_mgr_, nblk_mgr_;
   ObjectSet os_;
   bool is_inited_;
@@ -145,12 +137,12 @@ inline int ObAllocator::init()
     blk_mgr = pm;
     pm_ = pm;
   } else {
-    blk_mgr_.set_tenant_ctx(attr_.ctx_id_);
+    blk_mgr_.set_ctx(attr_.ctx_id_);
     blk_mgr = &blk_mgr_;
   }
 
   if (OB_SUCC(ret)) {
-    nblk_mgr_.set_tenant_ctx(attr_.ctx_id_);
+    nblk_mgr_.set_ctx(attr_.ctx_id_);
     nblk_mgr = &nblk_mgr_;
     os_.set_block_mgr(blk_mgr);
     os_.set_locker(locker_);
@@ -203,11 +195,7 @@ private:
   const int sub_cnt_;
   bool is_inited_;
   // for init
-#ifndef ENABLE_SANITY
   lib::ObMutex mutex_;
-#else
-  lib::ObMutexV2 mutex_;
-#endif
 };
 
 inline ObParallelAllocator::ObParallelAllocator(ObAllocator &root_allocator,

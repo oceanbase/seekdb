@@ -53,11 +53,9 @@ ObTableIterParam::ObTableIterParam()
       limit_prefetch_(false),
       is_mds_query_(false),
       is_non_unique_local_index_(false),
-      is_advance_skip_scan_(false),
-      ss_rowkey_prefix_cnt_(0),
+      is_advance_scan_(false),
       pd_storage_flag_(),
       table_scan_opt_(),
-      is_delete_insert_(false),
       need_update_tablet_param_(nullptr)
 {}
 
@@ -72,7 +70,7 @@ ObTableIterParam::~ObTableIterParam()
 
 void ObTableIterParam::reuse()
 {
-  is_advance_skip_scan_ = false;
+  is_advance_scan_ = false;
 }
 
 void ObTableIterParam::reset()
@@ -94,7 +92,6 @@ void ObTableIterParam::reset()
     pushdown_filter_->clear();
     pushdown_filter_ = nullptr;
   }
-  ss_rowkey_prefix_cnt_ = 0;
   op_ = nullptr;
   output_exprs_ = nullptr;
   aggregate_exprs_ = nullptr;
@@ -106,9 +103,8 @@ void ObTableIterParam::reset()
   limit_prefetch_ = false;
   is_mds_query_ = false;
   is_non_unique_local_index_ = false;
-  is_advance_skip_scan_ = false;
+  is_advance_scan_ = false;
   table_scan_opt_.reset();
-  is_delete_insert_ = false;
   ObSSTableIndexFilterFactory::destroy_sstable_index_filter(sstable_index_filter_);
   need_update_tablet_param_ = nullptr;
 }
@@ -190,10 +186,8 @@ DEF_TO_STRING(ObTableIterParam)
        K_(limit_prefetch),
        K_(is_mds_query),
        K_(is_non_unique_local_index),
-       K_(is_advance_skip_scan),
-       K_(ss_rowkey_prefix_cnt),
+       K_(is_advance_scan),
        K_(table_scan_opt),
-       K_(is_delete_insert),
        KP_(need_update_tablet_param));
   J_OBJ_END();
   return pos;
@@ -302,9 +296,7 @@ int ObTableAccessParam::init(
     }
     iter_param_.pushdown_filter_ = scan_param.pd_storage_filters_;
      // disable blockscan if scan order is KeepOrder
-     // disable blockscan if use index skip scan as no large range to scan
     if (OB_UNLIKELY(ObQueryFlag::KeepOrder == scan_param.scan_flag_.scan_order_ ||
-                    scan_param.use_index_skip_scan() ||
                     !scan_param.scan_flag_.is_use_block_cache())) {
       iter_param_.disable_blockscan();
     }
@@ -320,20 +312,8 @@ int ObTableAccessParam::init(
 
     if (OB_FAIL(iter_param_.refresh_lob_column_out_status())) {
       STORAGE_LOG(WARN, "Failed to refresh lob column out status", K(ret), K(iter_param_));
-    } else if (scan_param.use_index_skip_scan() &&
-               OB_FAIL(get_prefix_cnt_for_skip_scan(scan_param, iter_param_))) {
-      STORAGE_LOG(WARN, "Failed to get prefix for skip scan", K(ret));
     } else {
       iter_param_.need_update_tablet_param_ = &scan_param.need_update_tablet_param_;
-      if (iter_param_.vectorized_enabled_ &&
-          iter_param_.enable_pd_filter() &&
-          !scan_param.is_get_ &&
-          scan_param.table_param_->is_safe_filter_with_di() &&
-          ObQueryFlag::NoOrder == scan_param.scan_flag_.scan_order_ &&
-          scan_param.sample_info_.is_no_sample() &&
-          !iter_param_.is_skip_scan()) {
-        iter_param_.is_delete_insert_ = true;
-      }
       is_inited_ = true;
     }
   }
@@ -355,32 +335,11 @@ int ObTableAccessParam::check_valid_before_query_init(
   return ret;
 }
 
-int ObTableAccessParam::get_prefix_cnt_for_skip_scan(const ObTableScanParam &scan_param, ObTableIterParam &iter_param)
-{
-  int ret = OB_SUCCESS;
-  const int64_t key_range_count = scan_param.key_ranges_.count();
-  const int64_t skip_range_count = scan_param.ss_key_ranges_.count();
-  if (OB_UNLIKELY(key_range_count != skip_range_count)) {
-    ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "invalid argument", K(ret), K(key_range_count), K(skip_range_count));
-  } else {
-    const int64_t prefix = iter_param.get_schema_rowkey_count() - scan_param.ss_key_ranges_.at(0).start_key_.length();
-    if (OB_UNLIKELY(prefix <= 0)) {
-      ret = OB_INVALID_ARGUMENT;
-      STORAGE_LOG(WARN, "invalid argument", K(ret), K(prefix), K(scan_param.key_ranges_), K(scan_param.ss_key_ranges_));
-    } else {
-      iter_param.ss_rowkey_prefix_cnt_ = prefix;
-    }
-  }
-  return ret;
-}
-
 int ObTableAccessParam::init_merge_param(
     const uint64_t table_id,
     const common::ObTabletID &tablet_id,
     const ObITableReadInfo &read_info,
-    const bool is_multi_version_minor_merge,
-    const bool is_delete_insert)
+    const bool is_multi_version_minor_merge)
 {
   int ret = OB_SUCCESS;
 
@@ -393,7 +352,6 @@ int ObTableAccessParam::init_merge_param(
     iter_param_.is_multi_version_minor_merge_ = is_multi_version_minor_merge;
     iter_param_.read_info_ = &read_info;
     iter_param_.rowkey_read_info_ = &read_info;
-    iter_param_.is_delete_insert_ = is_multi_version_minor_merge && is_delete_insert;
     // merge_query will not goto ddl_merge_query, no need to pass tablet
     is_inited_ = true;
   }

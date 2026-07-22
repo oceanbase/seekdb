@@ -537,11 +537,10 @@ int ObTransformAggrSubquery::check_aggr_first_validity(ObDMLStmt &stmt,
              NULL != subquery->get_limit_percent_expr() ||
              NULL != subquery->get_offset_expr() ||
              subquery->has_window_function() ||
-             subquery->has_sequence() ||
              subquery->is_set_stmt()) {
     is_valid = false;
     LOG_TRACE("invalid subquery", K(is_valid), K(*subquery));
-    OPT_TRACE("subquery has rollup/having/limit offset/limit percent/win_func/sequence");
+    OPT_TRACE("subquery has rollup/having/limit offset/limit percent/win_func/set op");
   } else if (OB_FAIL(check_subquery_aggr_item(*subquery, is_valid))) {
     LOG_WARN("failed to check subquery select item", K(ret));
   } else if (!is_valid) {
@@ -1461,11 +1460,10 @@ int ObTransformAggrSubquery::check_join_first_validity(ObQueryRefRawExpr &query_
   } else if (subquery->get_group_expr_size() > 0 ||
              subquery->has_rollup() ||
              subquery->has_window_function() ||
-             subquery->has_sequence() ||
              subquery->is_set_stmt()) {
     is_valid = false;
     LOG_TRACE("invalid subquery", K(is_valid), K(*subquery));
-    OPT_TRACE("subquery has rollup/win_func/sequence");
+    OPT_TRACE("subquery has group by/rollup/win_func/set op");
   } else if (in_exists) {
     if (!subquery->has_having()) {
       is_valid = false;
@@ -2745,7 +2743,6 @@ int ObTransformAggrSubquery::check_can_trans_any_all_as_scalar_subquery(ObDMLStm
   } else if (subquery->has_group_by() ||
              subquery->has_window_function() ||
              subquery->has_limit() ||
-             subquery->has_sequence() ||
              subquery->is_set_stmt()) {
     is_valid = false;
   } else {
@@ -2790,7 +2787,6 @@ int ObTransformAggrSubquery::check_can_trans_exists_as_scalar_subquery(ObQueryRe
              subquery->has_window_function() ||
              NULL != subquery->get_limit_percent_expr() ||
              NULL != subquery->get_offset_expr() ||
-             subquery->has_sequence() ||
              subquery->is_set_stmt()) {
     // do nothing
   } else if (OB_NOT_NULL(subquery->get_limit_expr()) && limit_value < 1) {

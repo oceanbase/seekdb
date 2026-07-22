@@ -109,9 +109,8 @@ int ObExprAutoincNextval::calc_result_typeN(ObExprResType &type,
 // Output parameter description:
 // casted_value is used to set to the lii_ field of ObPacket, it is an unsigned value
 //    When param is a negative number, casted_value = UINT64_MAX
-// try_sync is for handling compatibility issues: when casted_value = UINT64_MAX
-//    Through setting try_sync = false, makes it not compare with last_sync_value,
-//    Otherwise it will always sync UINT64_MAX to other nodes as the maximum value for insertion. This is incorrect.
+// try_sync handles the negative signed-value case. Setting it to false prevents
+// UINT64_MAX from being persisted as the explicit-value high watermark.
 int ObExprAutoincNextval::get_casted_value_by_result_type(ObCastCtx &cast_ctx,
                                                           ObObjType result_type,
                                                           const ObObj &param,
@@ -258,9 +257,9 @@ int ObExprAutoincNextval::generate_autoinc_value(const ObSQLSessionInfo &my_sess
                  K(autoinc_range_interval));
       }
     } else {
-      // sync insert value globally before sync value globally
-      if (OB_FAIL(auto_service.sync_insert_value_global(*autoinc_param))) {
-        LOG_WARN("failed to sync insert value globally", K(ret));
+      // Persist any pending explicit value before allocating the next value.
+      if (OB_FAIL(auto_service.sync_insert_value(*autoinc_param))) {
+        LOG_WARN("failed to persist insert value", K(ret));
       }
       if (OB_SUCC(ret)) {
         uint64_t value = 0;

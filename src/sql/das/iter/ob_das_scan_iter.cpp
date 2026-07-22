@@ -53,7 +53,6 @@ int ObDASScanIter::inner_reuse()
     LOG_WARN("failed to reuse storage scan iter", K(ret));
   } else {
     scan_param_->key_ranges_.reuse();
-    scan_param_->ss_key_ranges_.reuse();
     scan_param_->mbr_filters_.reuse();
   }
   return ret;

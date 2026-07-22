@@ -20,7 +20,6 @@ CREATE FULLTEXT INDEX fts_ik_text on cn_word_table(text) WITH PARSER ik PARSER_P
 --echo ========= default smart =========
 CREATE FULLTEXT INDEX fts_ik_note on cn_word_table(note) WITH PARSER ik;
 
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table cn_word_table;
 
 --echo ==ik dict load when memory is not enough will be frequentialy failed, so we use small batch to insert to avoid timeout when memory is not enough=========

@@ -410,7 +410,7 @@ void ObRADatumStore::reset()
   inner_reader_.reset();
 
   if (is_file_open()) {
-    if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.remove(fd_))) {
+    if (OB_FAIL(SERVER_TMP_FILE_MANAGER.remove(fd_))) {
       LOG_WARN("remove file failed", K(ret), K_(fd));
     } else {
       LOG_INFO("close file success", K(ret), K_(fd));
@@ -440,7 +440,7 @@ void ObRADatumStore::reuse()
   row_cnt_ = 0;
   inner_reader_.reset();
   if (is_file_open()) {
-    if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.remove(fd_))) {
+    if (OB_FAIL(SERVER_TMP_FILE_MANAGER.remove(fd_))) {
       LOG_WARN("remove file failed", K(ret), K_(fd));
     } else {
       LOG_INFO("close file success", K(ret), K_(fd));
@@ -1215,9 +1215,9 @@ int ObRADatumStore::write_file(BlockIndex &bi, void *buf, int64_t size)
     LOG_WARN("get timeout failed", K(ret));
   } else {
     if (!is_file_open()) {
-      if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.alloc_dir(dir_id_))) {
+      if (OB_FAIL(SERVER_TMP_FILE_MANAGER.alloc_dir(dir_id_))) {
         LOG_WARN("alloc file directory failed", K(ret));
-      } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.open(fd_, dir_id_))) {
+      } else if (OB_FAIL(SERVER_TMP_FILE_MANAGER.open(fd_, dir_id_))) {
         LOG_WARN("open file failed", K(ret));
       } else {
         file_size_ = 0;
@@ -1237,7 +1237,7 @@ int ObRADatumStore::write_file(BlockIndex &bi, void *buf, int64_t size)
     io.io_desc_.set_wait_event(ObWaitEventIds::ROW_STORE_DISK_WRITE);
     io.io_timeout_ms_ = timeout_ms;
     const uint64_t start = rdtsc();
-    if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.write(io))) {
+    if (OB_FAIL(SERVER_TMP_FILE_MANAGER.write(io))) {
       LOG_WARN("write to file failed", K(ret), K(io), K(timeout_ms));
     }
     if (NULL != io_observer_) {
@@ -1278,7 +1278,7 @@ int ObRADatumStore::read_file(void *buf, const int64_t size, const int64_t offse
     io.io_timeout_ms_ = timeout_ms;
     const uint64_t start = rdtsc();
     tmp_file::ObTmpFileIOHandle handle;
-    if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.pread(io, offset, handle))) {
+    if (OB_FAIL(SERVER_TMP_FILE_MANAGER.pread(io, offset, handle))) {
       LOG_WARN("read form file failed", K(ret), K(io), K(offset), K(timeout_ms));
     } else if (OB_UNLIKELY(handle.get_done_size() != size)) {
       ret = OB_INNER_STAT_ERROR;
@@ -1379,13 +1379,13 @@ bool ObRADatumStore::need_dump(const int64_t extra_size)
   } else {
     const int64_t mem_ctx_pct_trigger = 80;
     lib::ObMallocAllocator *instance = lib::ObMallocAllocator::get_instance();
-    lib::ObTenantCtxAllocatorGuard allocator = NULL;
+    lib::ObCtxAllocatorGuard allocator = NULL;
     if (NULL == instance) {
       int ret = common::OB_ERR_SYS;
       LOG_ERROR("NULL allocator", K(ret));
-    } else if (OB_ISNULL(allocator = instance->get_tenant_ctx_allocator(
+    } else if (OB_ISNULL(allocator = instance->get_ctx_allocator(
         ctx_id_))) {
-      // no tenant allocator, do nothing
+      // no context allocator, do nothing
     } else {
       const int64_t limit = allocator->get_limit();
       const int64_t hold = allocator->get_hold();

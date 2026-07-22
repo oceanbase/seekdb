@@ -74,7 +74,7 @@ void ObPocSqlRequestOperator::disconnect_sql_conn(ObRequest* req)
 void ObPocSqlRequestOperator::finish_sql_request(ObRequest* req)
 {
   ObSqlSockSession* sess = (ObSqlSockSession*)req->get_server_handle_context();
-  req->set_trace_point(ObRequest::OB_FINISH_SQL_REQUEST);
+  req->set_trace_point(ObRequest::OB_REQUEST_FINISH_SQL);
   request_finish_callback();
   sess->revert_sock();
 }
@@ -122,7 +122,7 @@ int ObPocSqlRequestOperator::async_write_response(ObRequest* req, const char* bu
 
 void ObPocSqlRequestOperator::get_sock_desc(ObRequest* req, ObSqlSockDesc& desc)
 {
-  desc.set(ObRequest::TRANSPORT_PROTO_POC, (void*)req->get_server_handle_context());
+  desc.set((void*)req->get_server_handle_context());
 }
 
 void ObPocSqlRequestOperator::disconnect_by_sql_sock_desc(ObSqlSockDesc& desc)

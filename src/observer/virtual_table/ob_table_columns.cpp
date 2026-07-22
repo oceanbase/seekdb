@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SERVER
 #include "observer/virtual_table/ob_table_columns.h"
 #include "sql/resolver/ddl/ob_create_view_resolver.h"
-#include "sql/ob_sql_mock_schema_utils.h"
 using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
@@ -111,9 +110,7 @@ void ObTableColumns::reset()
 
 int ObTableColumns::init() {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(GET_MIN_DATA_VERSION(min_data_version_))) {
-    LOG_WARN("fail to get min data version", K(ret));
-  }
+  min_data_version_ = DATA_CURRENT_VERSION;
   return ret;
 }
 
@@ -1147,9 +1144,7 @@ int ObTableColumns::set_col_attrs_according_binary_expr(const ObSelectStmt *sele
       ret = OB_SUCCESS;
       LOG_WARN("fail to get table schema", K(ret), "table_id", tbl_item->ref_id_);
     } else if (table_schema->is_table()) {
-      if (OB_FAIL(sql::ObSQLMockSchemaUtils::try_mock_partid(table_schema, table_schema))) {
-        LOG_WARN("failed to try mock rowid column", K(ret));
-      } else if (OB_UNLIKELY(NULL == (column_schema =
+      if (OB_UNLIKELY(NULL == (column_schema =
             table_schema->get_column_schema(bexpr->get_column_id())))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN(" column schema is NULL", K(ret), K(column_schema));
@@ -1179,10 +1174,6 @@ int ObTableColumns::resolve_view_definition(
     ObStmtFactory &stmt_factory,
     bool throw_error) {
   int ret = OB_SUCCESS;
-  /*
-    The previous logic here was to switch tenants before resolving the view definition, however, the resolver layer already has a set of tenant switching logic, having both coexist is difficult to maintain and prone to issues,
-    Now we are modifying it, constructing a select * from view statement, transferring the tenant switching logic to the resolver
-  */
   const ObDatabaseSchema *db_schema = NULL;
   
   if (OB_UNLIKELY(!table_schema.is_view_table()

@@ -20,14 +20,12 @@
 #include "lib/resource/achunk_mgr.h"
 #undef protected
 #undef private
-#include "lib/resource/ob_affinity_ctrl.h"
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
 
 int main(int argc, char *argv[])
 {
-  AFFINITY_CTRL.init();
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

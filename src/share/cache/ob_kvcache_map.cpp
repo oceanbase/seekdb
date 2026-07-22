@@ -521,55 +521,6 @@ int ObKVCacheMap::erase_all(const int64_t cache_id)
   return ret;
 }
 
-int ObKVCacheMap::erase_tenant(const bool force_erase)
-{
-  int ret = OB_SUCCESS;
-
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    COMMON_LOG(WARN, "The ObKVCacheMap has not been inited, ", K(ret));
-  } else {
-    Node *iter = NULL;
-    Node *prev = NULL;
-    ObKVCacheHazardGuard hazard_guard(global_hazard_station_);
-    if (OB_FAIL(hazard_guard.get_ret())) {
-      COMMON_LOG(WARN, "Fail to acquire hazard version", K(ret));
-    } else {
-      HazptrHolder hazptr_holder;
-      bool protect_success;
-      for (int64_t i = 0; i < bucket_num_ && OB_SUCC(ret); i++) {
-        ObBucketWLockGuard guard(bucket_lock_, i);
-        if (OB_FAIL(guard.get_ret())) {
-          COMMON_LOG(WARN, "Fail to write lock bucket", K(ret), K(i));
-        } else {
-          Node *&bucket_ptr = get_bucket_node(i);
-          prev = NULL;
-          iter = bucket_ptr;
-          while (NULL != iter) {
-            if (OB_FAIL(hazptr_holder.protect(protect_success, iter->mb_handle_, iter->seq_num_))) {
-              COMMON_LOG(WARN, "protect failed", KP(iter->mb_handle_));
-            } else if (protect_success) {
-              (void)ATOMIC_SAF(&iter->mb_handle_->kv_cnt_, 1);
-              (void) ATOMIC_SAF(&iter->get_cnt_, iter->get_cnt_);
-              hazptr_holder.release();
-            }
-            (void) ATOMIC_SAF(&iter->inst_->status_.kv_cnt_, 1);
-            internal_map_erase(hazard_guard, prev, iter, bucket_ptr);
-          }
-        }
-      }
-    } // hazard version guard
-  }
-
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(global_hazard_station_.retire())) {
-    COMMON_LOG(WARN, "Fail to retire global hazard version", K(ret), K(force_erase));
-  }
-
-  return ret;
-}
-
-
 int ObKVCacheMap::clean_garbage_node(int64_t &start_pos, const int64_t clean_num)
 {
   int ret = OB_SUCCESS;

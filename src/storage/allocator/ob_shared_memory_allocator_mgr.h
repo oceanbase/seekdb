@@ -23,10 +23,10 @@
 #include "lib/stat/ob_diagnose_info.h"  // previously hidden behind a transitive include(free within lib)
 #include "storage/allocator/ob_tx_data_allocator.h"
 #include "storage/allocator/ob_mds_allocator.h"
-#include "storage/allocator/ob_tenant_vector_allocator.h"
+#include "storage/allocator/ob_vector_allocator.h"
 #include "storage/throttle/ob_share_resource_throttle_tool.h"
-#include "share/rc/ob_tenant_base.h"
-#include "storage/tx_storage/ob_tenant_freezer.h"
+#include "share/rc/ob_server_runtime.h"
+#include "storage/tx_storage/ob_memstore_freezer.h"
 #include "storage/ls/ob_ls.h"
 #include "share/config/ob_server_config.h"
 
@@ -44,7 +44,7 @@ public:
   ObSharedMemAllocMgr &operator=(ObSharedMemAllocMgr &rhs) = delete;
   ~ObSharedMemAllocMgr() {}
 
-  static int mtl_init(ObSharedMemAllocMgr *&shared_mem_alloc_mgr) { return shared_mem_alloc_mgr->init(); }
+  static int server_module_init(ObSharedMemAllocMgr *&shared_mem_alloc_mgr) { return shared_mem_alloc_mgr->init(); }
 
   int init()
   {
@@ -65,7 +65,7 @@ public:
     } else {
       
       share_resource_throttle_tool_.enable_adaptive_limit<FakeAllocatorForTxShare>();
-      SHARE_LOG(INFO, "finish init mtl share mem allocator mgr", KP(this));
+      SHARE_LOG(INFO, "finish init runtime shared memory allocator mgr", KP(this));
     }
     return ret;
   }
@@ -77,11 +77,11 @@ public:
   void update_throttle_config();
 
   ObMemstoreAllocator &memstore_allocator() { return memstore_allocator_; }
-  ObTenantTxDataAllocator &tx_data_allocator() { return tx_data_allocator_; }
-  ObTenantMdsAllocator &mds_allocator() { return mds_allocator_; }
+  ObTxDataAllocator &tx_data_allocator() { return tx_data_allocator_; }
+  ObMdsAllocator &mds_allocator() { return mds_allocator_; }
   TxShareThrottleTool &share_resource_throttle_tool() { return share_resource_throttle_tool_; }
-  ObTenantTxDataOpAllocator &tx_data_op_allocator() { return tx_data_op_allocator_; }
-  ObTenantVectorAllocator &vector_allocator() { return vector_allocator_; }
+  ObTxDataOpAllocator &tx_data_op_allocator() { return tx_data_op_allocator_; }
+  ObVectorAllocator &vector_allocator() { return vector_allocator_; }
 
 private:
   void update_share_throttle_config_(const int64_t total_memory, common::ObServerConfig *config);
@@ -93,10 +93,10 @@ private:
   
   TxShareThrottleTool share_resource_throttle_tool_;
   ObMemstoreAllocator memstore_allocator_;
-  ObTenantTxDataAllocator tx_data_allocator_;
-  ObTenantMdsAllocator mds_allocator_;
-  ObTenantTxDataOpAllocator tx_data_op_allocator_;
-  ObTenantVectorAllocator vector_allocator_;
+  ObTxDataAllocator tx_data_allocator_;
+  ObMdsAllocator mds_allocator_;
+  ObTxDataOpAllocator tx_data_op_allocator_;
+  ObVectorAllocator vector_allocator_;
 };
 
 class TxShareMemThrottleUtil
@@ -107,7 +107,7 @@ public:
   static int do_throttle(const bool for_replay,
                          const int64_t abs_expire_time,
                          const int64_t throttle_memory_size,
-                         const bool tenant_throttle_skip,
+                         const bool replay_throttle_skip,
                          const bool is_ls_offline,
                          TxShareThrottleTool &throttle_tool,
                          ObThrottleInfoGuard &share_ti_guard,
@@ -127,7 +127,7 @@ public:
     while (throttle_tool.still_throttling<ALLOCATOR>(share_ti_guard, module_ti_guard) &&
            (left_interval > 0)) {
       int64_t expected_wait_time = 0;
-      if ((for_replay && tenant_throttle_skip) || is_ls_offline) {  // upper-layer decision is injected by the caller(removes share→storage dependency)
+      if ((for_replay && replay_throttle_skip) || is_ls_offline) {  // upper-layer decision is injected by the caller(removes share→storage dependency)
         // skip throttle if : 1) throttle need skipping; 2) this logstream offline
         break;
       } else if ((expected_wait_time =
@@ -163,7 +163,7 @@ public:
                                              has_printed_lbt);
     }
     PrintThrottleUtil::print_throttle_statistic(ret, ALLOCATOR::throttle_unit_name(), sleep_time, throttle_memory_size);
-    EVENT_ADD(ObStatEventIds::STORAGE_WRITING_THROTTLE_TIME, sleep_time);
+    EVENT_ADD(STORAGE_WRITING_THROTTLE_TIME, sleep_time);
 
     if (for_replay && sleep_time > 0) {
       // avoid print replay_timeout

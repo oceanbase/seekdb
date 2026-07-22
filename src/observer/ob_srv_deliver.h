@@ -24,11 +24,6 @@
 namespace oceanbase
 {
 
-namespace omt
-{
-class ObTenant;
-} // end of namespace omt
-
 namespace observer
 {
 

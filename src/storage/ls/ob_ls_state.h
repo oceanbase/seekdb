@@ -152,10 +152,13 @@ public:
   int64_t get_serialize_size() const;
 
   int start_work();
+  int start_restore();
+  int finish_restore();
   int remove();
   inline bool can_update_ls_meta() const
   {
-    return State::LS_NORMAL == state_;
+    return (State::LS_NORMAL == state_ ||
+            State::LS_RESTORE == state_);
   }
   bool is_need_gc() const
   {
@@ -185,7 +188,8 @@ public:
     static const int64_t LS_NORMAL = 1;
     static const int64_t LS_CREATE_ABORTED = 2;
     static const int64_t LS_ZOMBIE = 3;
-    static const int64_t MAX = 4;
+    static const int64_t LS_RESTORE = 4;
+    static const int64_t MAX = 5;
   public:
     static bool is_valid(const int64_t state)
     { return state > INVALID && state < MAX; }
@@ -202,6 +206,7 @@ public:
         TCM_STATE_CASE_TO_STR(LS_NORMAL);
         TCM_STATE_CASE_TO_STR(LS_CREATE_ABORTED);
         TCM_STATE_CASE_TO_STR(LS_ZOMBIE);
+        TCM_STATE_CASE_TO_STR(LS_RESTORE);
       default:
         break;
       }
@@ -215,8 +220,10 @@ public:
   public:
     static const int64_t INVALID = -1;
     static const int64_t START_WORK = 0;
-    static const int64_t REMOVE = 1;
-    static const int64_t MAX = 2;
+    static const int64_t START_RESTORE = 1;
+    static const int64_t FINISH_RESTORE = 2;
+    static const int64_t REMOVE = 3;
+    static const int64_t MAX = 4;
   public:
     static bool is_valid(const int64_t op)
     { return op > INVALID && op < MAX; }
@@ -231,6 +238,8 @@ public:
       const char* str = "INVALID";
       switch (op) {
         TCM_OP_CASE_TO_STR(START_WORK);
+        TCM_OP_CASE_TO_STR(START_RESTORE);
+        TCM_OP_CASE_TO_STR(FINISH_RESTORE);
         TCM_OP_CASE_TO_STR(REMOVE);
       default:
         break;

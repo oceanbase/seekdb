@@ -29,7 +29,6 @@
 #include "sql/engine/expr/ob_expr_obj_access.h"
 #include "sql/engine/expr/ob_expr_type_to_str.h"
 #include "sql/engine/expr/ob_expr_column_conv.h"
-#include "sql/engine/expr/ob_expr_dll_udf.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/engine/expr/ob_expr_udf.h"
 #include "sql/engine/expr/ob_expr_pl_integer_checker.h"
@@ -117,7 +116,6 @@ int ObExprGeneratorImpl::generate_infix_expr(ObRawExpr &raw_expr)
     LOG_WARN("invalid argument", K(ret));
   } else {
     ObSEArray<ObRawExpr *, 64> visited_exprs;
-    sql_expr_->start_gen_infix_exr();
     auto &exprs = sql_expr_->get_infix_expr().get_exprs();
     if (OB_FAIL(raw_expr.do_visit(*this))) {
       LOG_WARN("expr visit failed", K(ret));
@@ -495,15 +493,7 @@ int ObExprGeneratorImpl::visit(ObColumnRefRawExpr &expr)
       LOG_WARN("failed to add expr item", K(ret));
     }
   } else if (expr.is_generated_column() && expr.get_dependant_expr() != NULL) {
-    // If it is a virtual column, it is calculated based on other columns, therefore calculating the virtual column means calculating its dependent expr
-    //However, the virtual column is output externally in the form of a column ref, so the column ref of the virtual column needs to be added to the row desc.
-    if (!sql_expr_->is_gen_infix_expr()) {
-      if (OB_FAIL(expr.get_dependant_expr()->postorder_accept(*this))) {
-        LOG_WARN("failed to postorder accept", K(ret), KPC(expr.get_dependant_expr()));
-      }
-    } else {
-      // do nothing for infix expr generation, especially processed in infix_visit_child()
-    }
+    // The dependent expression is processed by infix_visit_child().
   } else {
     // Basic list expression has already been translated externally
     ret = OB_ERR_UNEXPECTED;
@@ -610,11 +600,6 @@ int ObExprGeneratorImpl::visit_simple_op(ObNonTerminalRawExpr &expr)
           ret = visit_fun_interval(expr, enum_set_op);
           break;
         }
-        case T_FUN_NORMAL_UDF: {
-          ObExprDllUdf *normal_udf_op = static_cast<ObExprDllUdf*>(op);
-          ret = visit_normal_udf_expr(expr, normal_udf_op);
-          break;
-        }
         case T_FUN_PL_GET_CURSOR_ATTR: {
           ObExprPLGetCursorAttr *get_cursor_attr = static_cast<ObExprPLGetCursorAttr *>(op);
           ret = visit_pl_get_cursor_attr_expr(expr, get_cursor_attr);
@@ -638,13 +623,6 @@ int ObExprGeneratorImpl::visit_simple_op(ObNonTerminalRawExpr &expr)
         case T_FUN_PL_OBJECT_CONSTRUCT: {
           ObExprObjectConstruct *object_op = static_cast<ObExprObjectConstruct*>(op);
           ret = visit_pl_object_construct_expr(expr, object_op);
-          break;
-        }
-        case T_FUN_SYS_CAST: {
-          ObExprCast *cast_op = static_cast<ObExprCast*>(op);
-          const bool is_implicit = expr.has_flag(IS_INNER_ADDED_EXPR);
-          cast_op->set_implicit_cast(is_implicit);
-          LOG_DEBUG("cast debug, explicit or implicit", K(ret), K(is_implicit));
           break;
         }
         default: {
@@ -765,7 +743,6 @@ inline int ObExprGeneratorImpl::visit_in_expr(ObOpRawExpr &expr, ObExprInOrNotIn
         }
       }
       //for row_type in left_param of EXPR IN
-      //if min_cluster_version < 3.1, do not check params can use hash optimization
       bool param_all_const = true;
       bool param_all_same_type = true;
       bool param_all_same_cs_type = true;
@@ -1005,28 +982,6 @@ int ObExprGeneratorImpl::visit_enum_set_expr(ObNonTerminalRawExpr &expr, ObExprT
     } else if (OB_FAIL(enum_set_op->deep_copy_str_values(type_to_str->get_str_values()))) {
       LOG_WARN("failed to deep_copy_str_values", K(expr), K(ret));
     } else {/*do nothing*/}
-  }
-  return ret;
-}
-
-int ObExprGeneratorImpl::visit_normal_udf_expr(ObNonTerminalRawExpr &expr, ObExprDllUdf *normal_udf_op)
-{
-  int ret = OB_SUCCESS;
-  ObNormalDllUdfRawExpr &fun_sys = static_cast<ObNormalDllUdfRawExpr &>(expr);
-  //used to check the old op exist or not
-  ObExprOperator *old_op = NULL;
-  if (OB_ISNULL(normal_udf_op)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("enum_set_op is null", K(ret));
-  } else if (OB_ISNULL(old_op = expr.get_op())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid old op", K(expr), K(ret));
-  } else if (OB_FAIL(normal_udf_op->set_udf_meta(fun_sys.get_udf_meta()))) {
-    LOG_WARN("failed to set udf to expr", K(ret));
-  } else if (OB_FAIL(normal_udf_op->init_udf(fun_sys.get_param_exprs()))) {
-    LOG_WARN("failed to init udf", K(ret));
-  } else {
-    LOG_DEBUG("set udf meta to expr", K(fun_sys.get_udf_meta()));
   }
   return ret;
 }
@@ -1514,8 +1469,7 @@ int ObExprGeneratorImpl::visit(ObCaseOpRawExpr &expr)
   return ret;
 }
 
-// ObAggFunRawExpr is visited twice to generate %post_expr_ and %infix_expr_.
-// some property of %aggr_expr is produced in the last visit (aggr_expr->is_gen_infix_expr()).
+// Generate the aggregate's infix item and its aggregate-specific properties together.
 int ObExprGeneratorImpl::visit(ObAggFunRawExpr &expr)
 {
   int ret = OB_SUCCESS;
@@ -1555,11 +1509,9 @@ int ObExprGeneratorImpl::visit(ObAggFunRawExpr &expr)
     aggr_expr->set_real_param_col_count(col_count);
     aggr_expr->set_all_param_col_count(col_count);
     const ObIArray<ObRawExpr*> &real_param_exprs = expr.get_real_param_exprs();
-    if (aggr_expr->is_gen_infix_expr()
-        && OB_FAIL(aggr_expr->init_aggr_cs_type_count(real_param_exprs.count()))) {
+    if (OB_FAIL(aggr_expr->init_aggr_cs_type_count(real_param_exprs.count()))) {
       LOG_WARN("failed to init aggr cs type count", K(ret));
-    } else if (aggr_expr->is_gen_infix_expr()
-        && OB_FAIL(aggr_expr->init_pl_agg_udf_params_type_count(real_param_exprs.count()))) {
+    } else if (OB_FAIL(aggr_expr->init_pl_agg_udf_params_type_count(real_param_exprs.count()))) {
       LOG_WARN("failed to init aggr cs type count", K(ret));
     }
     //set pl agg udf type id
@@ -1579,10 +1531,9 @@ int ObExprGeneratorImpl::visit(ObAggFunRawExpr &expr)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("real param expr is null", K(ret), K(i));
       } else {
-        if (aggr_expr->is_gen_infix_expr()
-            && OB_FAIL(aggr_expr->add_aggr_cs_type(real_param_exprs.at(i)->get_collation_type()))) {
+        if (OB_FAIL(aggr_expr->add_aggr_cs_type(real_param_exprs.at(i)->get_collation_type()))) {
           LOG_WARN("add cs type fail", K(ret));
-        } else if (aggr_expr->is_gen_infix_expr() && T_FUN_PL_AGG_UDF == expr.get_expr_type() &&
+        } else if (T_FUN_PL_AGG_UDF == expr.get_expr_type() &&
                    OB_FAIL(aggr_expr->add_pl_agg_udf_param_type(
                                           real_param_exprs.at(i)->get_result_type()))) {
           LOG_WARN("add cs type fail", K(ret));
@@ -1600,7 +1551,6 @@ int ObExprGeneratorImpl::visit(ObAggFunRawExpr &expr)
         || (T_FUN_APPROX_COUNT_DISTINCT == expr.get_expr_type() && expr.get_real_param_count() > 1)
         || (T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS == expr.get_expr_type() && expr.get_real_param_count() > 1)
         || T_FUN_GROUP_CONCAT == expr.get_expr_type()
-        || T_FUN_AGG_UDF == expr.get_expr_type()
         || T_FUN_GROUP_RANK == expr.get_expr_type()
         || T_FUN_GROUP_DENSE_RANK == expr.get_expr_type()
         || T_FUN_GROUP_PERCENT_RANK == expr.get_expr_type()
@@ -1666,7 +1616,7 @@ int ObExprGeneratorImpl::visit(ObAggFunRawExpr &expr)
             } else {
             }
 
-            if (OB_SUCC(ret) && aggr_expr->is_gen_infix_expr()) {
+            if (OB_SUCC(ret)) {
               // Child expr may set IS_COLUMNLIZED flag by %row_desc.add_column(), we need to
               // revert this. Since child is visited after parent in infix expression generation,
               // Error will be reported if child is visited with incorrect IS_COLUMNLIZED flag.

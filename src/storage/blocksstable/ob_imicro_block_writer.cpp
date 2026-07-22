@@ -221,7 +221,7 @@ int ObIMicroBlockWriter::build_micro_block_desc(ObMicroBlockDesc &micro_block_de
     micro_block_desc.has_lob_out_row_ = has_lob_out_row_;
     micro_block_desc.original_size_ = get_original_size();
     micro_block_desc.is_last_row_last_flag_ = is_last_row_last_flag();
-    // fill micro header for bugfix on micro block that bypass compression/encryption
+    // fill micro header for bugfix on micro block that bypasses compression
     // since these fields will be only filled on compression in current implementation
     micro_header->data_length_ = micro_block_desc.buf_size_;
     micro_header->data_zlength_ = micro_block_desc.buf_size_;

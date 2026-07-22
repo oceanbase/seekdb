@@ -127,7 +127,7 @@ int ObExprPrivSTMakeEnvelope::read_args(omt::ObSrsCacheGuard &srs_guard, const O
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "SRID", N_PRIV_ST_MAKEENVELOPE);
       LOG_WARN("srid input value out of range", K(ret), K(srid));
     } else if (0 != (srid = datum->get_uint32())) {
-      if (OB_FAIL(OTSRS_MGR->get_tenant_srs_guard(srs_guard))) {
+      if (OB_FAIL(SRS_SERVICE->get_srs_guard(srs_guard))) {
         LOG_WARN("fail to get srs guard", K(ret));
       } else if (OB_FAIL(srs_guard.get_srs_item(srid, srs_item))) {
         LOG_WARN("fail to get srs item", K(ret));

@@ -60,7 +60,7 @@ int ObScheduleTabletFunc::schedule_tablet(
   } else if (FALSE_IT(tablet_id = tablet->get_tablet_id())) {
   } else if (OB_FAIL(tablet_status_.init_for_major(
                  ls_status_.get_ls(), merge_version_, *tablet,
-                 is_skip_merge_tenant_, ls_could_schedule_new_round_))) {
+                 should_skip_merge_, ls_could_schedule_new_round_))) {
     need_diagnose = true;
     LOG_WARN("failed to init tablet status", KR(ret), K_(ls_status), K(tablet_id));
   } else {
@@ -109,12 +109,12 @@ int ObScheduleTabletFunc::schedule_tablet_new_round(
     LOG_WARN("medium list in tablet status is null", KR(ret), K_(tablet_status));
   } else if (!tablet_status_.tablet_merge_finish()
       || user_request
-      || ObBasicMergeScheduler::get_merge_scheduler()->get_tenant_status().enable_adaptive_compaction_with_cpu_load()) {
+      || ObBasicMergeScheduler::get_merge_scheduler()->enable_adaptive_compaction()) {
     ObMediumCompactionScheduleFunc func(
         ls_status_.get_ls(), tablet_handle, ls_status_.weak_read_ts_,
         *tablet_status_.medium_list(), &tablet_cnt_,
         merge_reason_);
-    if (OB_FAIL(func.schedule_next_medium(
+    if (OB_FAIL(func.schedule_next_medium_for_leader(
         tablet_status_.tablet_merge_finish() ? 0 : merge_version_,
         medium_clog_submitted))) {
       LOG_WARN("failed to schedule next medium", K(ret), K_(ls_status), K(tablet_id));
@@ -147,12 +147,12 @@ int ObScheduleTabletFunc::request_schedule_new_round(
   } else if (FALSE_IT(tablet_id = tablet->get_tablet_id())) {
   } else if (OB_FAIL(tablet_status_.init_for_major(
                  ls_status_.get_ls(), merge_version_, *tablet,
-                 is_skip_merge_tenant_, ls_could_schedule_new_round_))) {
+                 should_skip_merge_, ls_could_schedule_new_round_))) {
     LOG_WARN("failed to init tablet status", KR(ret), K_(ls_status), K(tablet_id));
   } else if (user_request) { // should print error log for user request
     if (!tablet_status_.tablet_merge_finish()) {
       ret = OB_MAJOR_FREEZE_NOT_FINISHED;
-      LOG_WARN("no major sstable or not finish tenant major compaction, can't schedule another medium",
+      LOG_WARN("no major sstable or database major compaction is unfinished; cannot schedule another medium compaction",
         K(ret), K_(ls_status), K(tablet_id), K_(merge_version), K_(tablet_status));
     } else if (!tablet_status_.can_merge()) {
       ret = OB_STATE_NOT_MATCH;
@@ -189,7 +189,7 @@ int ObScheduleTabletFunc::schedule_tablet_execute(
   const ObTabletID &tablet_id = tablet.get_tablet_id();
   bool can_merge = false;
   int64_t schedule_scn = 0;
-  if (OB_FAIL(ObTenantTabletScheduler::check_ready_for_major_merge(tablet, MEDIUM_MERGE))) {
+  if (OB_FAIL(ObTabletScheduler::check_ready_for_major_merge(tablet, MEDIUM_MERGE))) {
     LOG_WARN("failed to check ready for major merge", K(ret), K(tablet_id));
   } else if (OB_FAIL(get_schedule_execute_info(tablet, schedule_scn))) {
     if (OB_NO_NEED_MERGE == ret) {
@@ -200,7 +200,7 @@ int ObScheduleTabletFunc::schedule_tablet_execute(
   } else if (OB_FAIL(check_with_schedule_scn(tablet, schedule_scn, tablet_status_, can_merge))) {
     LOG_WARN("failed to check with schedule scn", KR(ret), K(schedule_scn));
   } else if (can_merge) {
-    if (OB_FAIL(ObTenantTabletScheduler::schedule_merge_dag(tablet, MEDIUM_MERGE, schedule_scn, EXEC_MODE_LOCAL))) {
+    if (OB_FAIL(ObTabletScheduler::schedule_merge_dag(tablet, MEDIUM_MERGE, schedule_scn))) {
       if (OB_SIZE_OVERFLOW != ret && OB_EAGAIN != ret) {
         LOG_ERROR("failed to schedule medium merge dag", K(ret), K_(ls_status), K(tablet_id));
       }
@@ -245,7 +245,7 @@ void ObScheduleTabletFunc::schedule_freeze_dag(const bool force)
   int tmp_ret = OB_SUCCESS;
   IGNORE_RETURN ObBasicScheduleTabletFunc::schedule_freeze_dag(force);
   if (force || clear_stat_tablets_.count() > SCHEDULE_DAG_THREHOLD) {
-    if (OB_TMP_FAIL(share::g_mp->tenant_tablet_stat_mgr()->batch_clear_tablet_stat(clear_stat_tablets_))) {
+    if (OB_TMP_FAIL(share::g_mp->tablet_stat_mgr()->batch_clear_tablet_stat(clear_stat_tablets_))) {
       LOG_WARN_RET(tmp_ret, "failed to batch clear tablet stats");
     }
     clear_stat_tablets_.reset();

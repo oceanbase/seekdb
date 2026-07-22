@@ -170,7 +170,6 @@ int ObExchangeInfo::assign(const ObExchangeInfo &other)
   } else if (OB_FAIL(server_list_.assign(other.server_list_))) {
     LOG_WARN("failed to assign server list", K(ret));
   } else {
-    is_remote_ = other.is_remote_;
     is_task_order_ = other.is_task_order_;
     is_merge_sort_ = other.is_merge_sort_;
     is_sort_local_order_ = other.is_sort_local_order_;
@@ -877,8 +876,6 @@ int ObLogicalOperator::compute_plan_type()
   ObLogicalOperator *child = NULL;
   if (is_local()) {
     phy_plan_type_ = ObPhyPlanType::OB_PHY_PLAN_LOCAL;
-  } else if (is_remote()) {
-    phy_plan_type_ = ObPhyPlanType::OB_PHY_PLAN_REMOTE;
   } else if (is_distributed()) {
     phy_plan_type_ = ObPhyPlanType::OB_PHY_PLAN_DISTRIBUTED;
   } else {
@@ -1093,7 +1090,7 @@ int ObLogicalOperator::check_need_parallel_valid(int64_t need_parallel) const {
   int ret = OB_SUCCESS;
   if (get_parallel() == need_parallel) {
     /* do nothing */
-  } else if (ObGlobalHint::DEFAULT_PARALLEL < need_parallel && (is_local() || is_remote())) {
+  } else if (ObGlobalHint::DEFAULT_PARALLEL < need_parallel && is_local()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected parallel degree", K(ret), K(get_parallel()), K(need_parallel),
                                               K(is_single()));
@@ -1628,16 +1625,6 @@ int ObLogicalOperator::do_post_traverse_operation(const TraverseOp &op, void *ct
           ObPxPipeBlockingCtx *pipe_blocking_ctx = static_cast<ObPxPipeBlockingCtx *>(ctx);
           CK(OB_NOT_NULL(pipe_blocking_ctx));
           OC( (px_pipe_blocking_post)(*pipe_blocking_ctx) );
-        } else if (get_type() == LOG_EXCHANGE) {
-          // parallel = 1,it must use single-dfo
-          ObLogExchange *exchange = static_cast<ObLogExchange *>(this);
-          if (OB_ISNULL(exchange)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected status: exchange is null", K(ret));
-          } else {
-            exchange->set_old_unblock_mode(false);
-            LOG_TRACE("pipe blocking ctx", K(get_name()));
-          }
         }
         break;
       }
@@ -2301,7 +2288,6 @@ int ObLogicalOperator::get_pushdown_producer_id(const ObRawExpr *expr, uint64_t 
 int ObLogicalOperator::allocate_expr_post(ObAllocExprContext &ctx)
 {
   int ret = OB_SUCCESS;
-  ObLogicalOperator *parent = NULL;
   ObLogicalOperator *child = NULL;
   if (IS_EXPR_PASSBY_OPER(type_) && !is_plan_root()) {
     if (OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
@@ -2309,18 +2295,6 @@ int ObLogicalOperator::allocate_expr_post(ObAllocExprContext &ctx)
       LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(output_exprs_.assign(child->get_output_exprs()))) {
       LOG_WARN("failed to assign output exprs", K(ret));
-    } else { /*do nothing*/ }
-  } else if (log_op_def::LOG_EXCHANGE == type_ &&
-             static_cast<ObLogExchange*>(this)->get_is_remote() &&
-             static_cast<ObLogExchange*>(this)->is_producer()) {
-    if (OB_ISNULL(parent = get_parent()) ||
-        OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(parent), K(child), K(ret));
-    } else if (OB_FAIL(output_exprs_.assign(parent->get_output_exprs()))) {
-      LOG_WARN("failed to assign output exprs", K(ret));
-    } else if (OB_FAIL(child->get_output_exprs().assign(parent->get_output_exprs()))) {
-      LOG_WARN("failed to push back exprs", K(ret));
     } else { /*do nothing*/ }
   } else {
     ObIArray<ExprProducer> &producers = ctx.expr_producers_;
@@ -2581,7 +2555,7 @@ int ObLogicalOperator::reorder_filters_exprs(common::ObIArray<ObExprSelPair> &pr
 int ObLogicalOperator::gen_location_constraint(void *ctx)
 {
   int ret = OB_SUCCESS;
-  bool is_union_all_set_pw = false;
+  bool is_non_strict_pw = false;
   bool is_setop_ext_pw = false;
   bool is_join_ext_pw = false;
   if (OB_ISNULL(ctx) || OB_ISNULL(get_stmt()) || OB_ISNULL(get_plan())) {
@@ -2640,14 +2614,27 @@ int ObLogicalOperator::gen_location_constraint(void *ctx)
       bool is_pdml = false;
       if (log_op_def::LOG_SET == get_type()) {
         ObLogSet *set_op = static_cast<ObLogSet *>(this);
-        is_union_all_set_pw = (ObSelectStmt::UNION == set_op->get_set_op() && !set_op->is_set_distinct()) ||
-                              set_op->is_recursive_union();
-        is_union_all_set_pw = is_union_all_set_pw && (DistAlgo::DIST_SET_PARTITION_WISE == set_op->get_distributed_algo());
+        const bool is_union_all = (ObSelectStmt::UNION == set_op->get_set_op() &&
+                                   !set_op->is_set_distinct()) ||
+                                  set_op->is_recursive_union();
+        is_non_strict_pw =
+            (is_union_all && DistAlgo::DIST_SET_PARTITION_WISE == set_op->get_distributed_algo()) ||
+            (DistAlgo::DIST_BASIC_METHOD == set_op->get_distributed_algo() && set_op->is_local());
         is_setop_ext_pw = (DistAlgo::DIST_EXT_PARTITION_WISE == set_op->get_distributed_algo());
       } else if (log_op_def::LOG_JOIN == get_type()) {
         ObLogJoin *join_op = static_cast<ObLogJoin *>(this);
+        is_non_strict_pw = DistAlgo::DIST_BASIC_METHOD == join_op->get_dist_method() &&
+                           join_op->is_local();
         is_join_ext_pw = (DistAlgo::DIST_EXT_PARTITION_WISE == join_op->get_dist_method());
+      } else if (log_op_def::LOG_SUBPLAN_FILTER == get_type()) {
+        ObLogSubPlanFilter *subplan_filter = static_cast<ObLogSubPlanFilter *>(this);
+        is_non_strict_pw =
+            DistAlgo::DIST_BASIC_METHOD == subplan_filter->get_distributed_algo() &&
+            subplan_filter->is_local();
       }
+      // Local basic set/join/subplan-filter operators only require their branches to be co-located.
+      // Their pruned tablet sets are independent and therefore must not be
+      // treated as a strict partition-wise relationship.
 
       if (log_op_def::LOG_INSERT == get_type() &&
           !get_stmt()->has_instead_of_trigger() &&
@@ -2661,6 +2648,10 @@ int ObLogicalOperator::gen_location_constraint(void *ctx)
           LOG_WARN("failed to get location constraint for insert op", K(ret));
         } else if (!is_multi_part_dml) {
           // non-multi part insert
+          // A local source may span several tablets while the target has only
+          // one tablet.  They need to be on the same server, but their
+          // partition layouts do not need to match one-to-one.
+          is_non_strict_pw = is_local();
           if (OB_FAIL(loc_cons_ctx->base_table_constraints_.push_back(loc_cons))) {
             LOG_WARN("failed to push back location constraint", K(ret));
           } else if (OB_FAIL(strict_pwj_constraint_.push_back(
@@ -2770,14 +2761,14 @@ int ObLogicalOperator::gen_location_constraint(void *ctx)
             if (need_add_strict) {
               if (OB_FAIL(append(strict_pwj_constraint_, get_child(i)->strict_pwj_constraint_))) {
                 LOG_WARN("failed to append child pwj constraint", K(ret));
-              } else if (is_union_all_set_pw || is_setop_ext_pw || is_join_ext_pw) {
+              } else if (is_non_strict_pw || is_setop_ext_pw || is_join_ext_pw) {
                 need_add_strict = false;
               }
             }
             if (need_add_non_strict) {
               if (OB_FAIL(append(non_strict_pwj_constraint_, get_child(i)->non_strict_pwj_constraint_))) {
                 LOG_WARN("failed to append child pwj constraint", K(ret));
-              } else if (!is_union_all_set_pw) {
+              } else if (!is_non_strict_pw) {
                 need_add_non_strict = false;
               }
             }
@@ -2786,14 +2777,14 @@ int ObLogicalOperator::gen_location_constraint(void *ctx)
       } // for end
 
       if (OB_SUCC(ret) && add_count > 1) {
-        if (is_union_all_set_pw) {
+        if (is_non_strict_pw) {
           if (OB_FAIL(loc_cons_ctx->non_strict_constraints_.push_back(&non_strict_pwj_constraint_))) {
             LOG_WARN("failed to push back pwj constraint");
           }
         } else if (OB_FAIL(loc_cons_ctx->strict_constraints_.push_back(&strict_pwj_constraint_))) {
           LOG_WARN("fail to push back pwj constraint", K(ret));
         }
-        LOG_TRACE("succ to gen location cons", K(is_union_all_set_pw), K(is_setop_ext_pw), K(is_join_ext_pw),
+        LOG_TRACE("succ to gen location cons", K(is_non_strict_pw), K(is_setop_ext_pw), K(is_join_ext_pw),
                   K(strict_pwj_constraint_), K(non_strict_pwj_constraint_));
       }
     } else { /* do nothing */ }
@@ -3093,7 +3084,7 @@ int ObLogicalOperator::refine_dop_by_hint()
 }
 
 // disable material op allocation in following cases:
-// nlj, subplan filter, remote execution.s
+// NLJ and subplan filter execution.
 int ObLogicalOperator::alloc_op_pre(AllocOpContext& ctx)
 {
   int ret = OB_SUCCESS;
@@ -3121,17 +3112,6 @@ int ObLogicalOperator::alloc_op_pre(AllocOpContext& ctx)
         LOG_WARN("fail to get the second child of nested loop join", K(ret));
       } else if (OB_FAIL(get_child(second_child)->recursively_disable_alloc_op_above(ctx))) {
         LOG_WARN("fail to disable alloc op above", K(ret));
-      }
-    }
-    // disable nodes of a remote plan
-    if (OB_SUCC(ret) &&
-        (get_plan()->get_optimizer_context().get_exec_ctx()->get_sql_ctx()->is_remote_sql_
-        || OB_PHY_PLAN_REMOTE == get_plan()->get_optimizer_context().get_phy_plan_type())) {
-      ret = ctx.disabled_op_set_.set_refactored(op_id_);
-      if (ret != OB_SUCCESS && ret != OB_HASH_EXIST) {
-        LOG_WARN("set_refactored fail", K(ret));
-      } else {
-        ret = OB_SUCCESS;
       }
     }
   }
@@ -3438,7 +3418,6 @@ int ObLogicalOperator::project_pruning_pre()
   // but not used by it's parent's output_exprs_
   if (NULL != parent_ && !is_plan_root() &&
       LOG_EXPR_VALUES != type_ &&
-      !(LOG_EXCHANGE == type_ && static_cast<ObLogExchange*>(this)->get_is_remote()) &&
       LOG_VALUES_TABLE_ACCESS != type_) {
     PPDeps deps;
     if (OB_FAIL(parent_->check_output_dependance(get_output_exprs(), deps))) {
@@ -4537,8 +4516,7 @@ int ObLogicalOperator::allocate_monitoring_dump_node_above(uint64_t flags, uint6
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Get unexpected null", K(ret), K(get_plan()));
   } else if (LOG_EXCHANGE == get_type() &&
-             (static_cast<ObLogExchange*>(this)->is_producer() ||
-             (static_cast<ObLogExchange*>(this)->is_consumer() && static_cast<ObLogExchange*>(this)->get_is_remote()))) {
+             static_cast<ObLogExchange*>(this)->is_producer()) {
     // Do nothing.
   } else if (LOG_JOIN_FILTER == get_type()
              && static_cast<ObLogJoinFilter *>(this)->use_realistic_runtime_bloom_filter_size()) {
@@ -5334,7 +5312,7 @@ int ObLogicalOperator::allocate_partition_join_filter(const ObIArray<JoinFilterI
         join_filter_create->set_tablet_id_expr(info.calc_part_id_expr_);
       }
       OZ(join_filter_create->compute_property());
-      OZ(bf_info.init(filter_id, GCTX.get_server_id(),
+      OZ(bf_info.init(filter_id,
           join_filter_create->is_shared_join_filter(),
           info.skip_subpart_,
           join_filter_create->get_p2p_sequence_ids().at(0),

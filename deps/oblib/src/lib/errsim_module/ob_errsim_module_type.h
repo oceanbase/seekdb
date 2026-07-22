@@ -33,8 +33,6 @@ public:
   {
     ERRSIM_MODULE_NONE = 0,
     ERRSIM_MODULE_ALL = 1,
-    ERRSIM_MODULE_MIGRATION = 2,
-    ERRSIM_MODULE_TRANSFER = 3,
     ERRSIM_MODULE_MAX
   };
   ObErrsimModuleType() : type_(ERRSIM_MODULE_NONE) {}

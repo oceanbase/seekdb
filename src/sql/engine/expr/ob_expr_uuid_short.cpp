@@ -34,21 +34,16 @@ ObExprUuidShort::~ObExprUuidShort()
 {
 }
 
-/**
- * Note:
- * The total number of serverids over(>=) 256 will not guarantee uniqueness, 
- * but we will not report an error, because this is a undefined behavior in mysql. 
- * In short, users should need to know this.
- */
 uint64_t ObExprUuidShort::generate_uuid_short()
 {
   //                        uuid_short
-  // |      <8>       |        <32>       |       <24>
-  //     server_id      server_start_time   incremented_variable
-  static volatile uint64_t server_id_and_server_startup_time = ((GCTX.get_server_id() & 255) << 56) |
-                                                               ((static_cast<uint64_t>(common::ObTimeUtility::current_time() / 1000000) << 24) &
-                                                               ((static_cast<uint64_t>(1) << 56) - 1));
-  uint64_t uuid_short = ATOMIC_AAF(&server_id_and_server_startup_time, 1);
+  // |             <40>             |       <24>
+  //       process startup time          counter
+  const int64_t process_start_time = GCTX.start_time_ > 0
+      ? GCTX.start_time_ : common::ObTimeUtility::current_time();
+  static volatile uint64_t startup_time_and_counter =
+      (static_cast<uint64_t>(process_start_time / 1000000) & ((1ULL << 40) - 1)) << 24;
+  uint64_t uuid_short = ATOMIC_AAF(&startup_time_and_counter, 1);
   LOG_DEBUG("uuid_short generated.", K(uuid_short));
   return uuid_short;
 }

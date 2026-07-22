@@ -214,8 +214,8 @@ public:
 public:
   ObDLink dlink_ CACHE_ALIGNED;
 public:
-  ObBlockSlicer(int32_t limit, int32_t slice_size, ObSliceAlloc* slice_alloc, void* tmallocator = NULL)
-    : slice_alloc_(slice_alloc), tmallocator_(tmallocator) {
+  ObBlockSlicer(int32_t limit, int32_t slice_size, ObSliceAlloc* slice_alloc, void* owner = NULL)
+    : slice_alloc_(slice_alloc), owner_(owner) {
     int64_t isize = lib::align_up2((int32_t)sizeof(Item) + slice_size, 16);
     int64_t total = (limit - (int32_t)sizeof(*this))/(isize + (int32_t)sizeof(void*));
     char* istart = (char*)lib::align_up2((uint64_t)((char*)(this + 1) + sizeof(void*) * total), 16);
@@ -229,7 +229,7 @@ public:
     init_stock((int32_t)total);
   }
   ~ObBlockSlicer() {
-    tmallocator_ = NULL;
+    owner_ = NULL;
   }
   static uint64_t hash(uint64_t h)
   {
@@ -258,12 +258,12 @@ public:
     flist_.push(p);
     return free_stock(first_free);
   }
-  void* get_tmallocator() { return tmallocator_; }
+  void* get_owner() { return owner_; }
   void* get_slice_alloc() { return slice_alloc_; }
   void print_leak_slice();
 private:
   ObSliceAlloc* slice_alloc_;
-  void* tmallocator_;
+  void* owner_;
   FList flist_ CACHE_ALIGNED;
 };
 
@@ -316,13 +316,13 @@ public:
     Block* blk_;
   } CACHE_ALIGNED;
   ObSliceAlloc(): nway_(0), bsize_(0), isize_(0),
-                  slice_limit_(0), blk_alloc_(default_blk_alloc), tmallocator_(NULL) {}
+                  slice_limit_(0), blk_alloc_(default_blk_alloc), owner_(NULL) {}
   ObSliceAlloc(const int size, const ObMemAttr &attr, int block_size=DEFAULT_BLOCK_SIZE,
-      BlockAlloc &blk_alloc = default_blk_alloc, void* tmallocator = NULL)
+      BlockAlloc &blk_alloc = default_blk_alloc, void* owner = NULL)
     : nway_(1), bsize_(block_size), isize_(size), attr_(attr),
-      blk_alloc_(blk_alloc), tmallocator_(tmallocator) {
+      blk_alloc_(blk_alloc), owner_(owner) {
       slice_limit_ = block_size - (int32_t)sizeof(Block) - (int32_t)sizeof(Block::Item);
-      LIB_LOG(INFO, "ObSliceAlloc init finished", K(bsize_), K(isize_), K(slice_limit_), KP(tmallocator_));
+      LIB_LOG(INFO, "ObSliceAlloc init finished", K(bsize_), K(isize_), K(slice_limit_), KP(owner_));
     }
   ~ObSliceAlloc() {
     destroy();
@@ -476,7 +476,7 @@ private:
     if (NULL == ret_blk) {
       void *ptr = NULL;
       if (NULL != (ptr = blk_alloc_.alloc_block(bsize_, attr_))) {
-        ret_blk = new(ptr)Block(bsize_, isize_, this, tmallocator_);
+        ret_blk = new(ptr)Block(bsize_, isize_, this, owner_);
       }
     }
     return ret_blk;
@@ -499,7 +499,7 @@ protected:
   Arena arena_[MAX_ARENA_NUM];
   Sync blk_ref_[MAX_REF_NUM];
   BlockAlloc &blk_alloc_;
-  void* tmallocator_;
+  void* owner_;
 
 /******************************************** debug code *********************************************/
 

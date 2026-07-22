@@ -18,7 +18,7 @@
 #define protected public
 #define private public
 #include "share/allocator/ob_reserve_arena.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 
 #define OK(ass) ASSERT_EQ(OB_SUCCESS, (ass))
 

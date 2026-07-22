@@ -27,7 +27,6 @@ namespace share
 {
 namespace schema
 {
-class ObTenantSchema;
 class ObSysVariableSchema;
 }
 }

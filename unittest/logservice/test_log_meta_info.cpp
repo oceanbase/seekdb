@@ -17,90 +17,99 @@
 #define private public
 #include "logservice/palf/log_meta_info.h"
 #undef private
+
 #include <gtest/gtest.h>
-#include "share/ob_cluster_version.h"
 
 namespace oceanbase
 {
-using namespace common;
-using namespace palf;
 namespace unittest
 {
+using namespace common;
+using namespace palf;
 
-TEST(TestLogMetaInfos, test_log_mode_meta)
+namespace
 {
-  static const int64_t BUFSIZE = 1 << 21;
-  char buf[BUFSIZE];
-  LogModeMeta log_mode_meta1;
-  LSN lsn; lsn.val_ = 1;
-  ObAddr addr(ObAddr::IPV4, "127.0.0.1", 4096);
+constexpr int64_t BUF_SIZE = 4096;
+}
 
+TEST(TestLogMetaInfos, log_mode_meta)
+{
+  char buf[BUF_SIZE];
+  LogModeMeta meta;
   share::SCN invalid_scn;
-  // Test invalid argument
-  EXPECT_FALSE(log_mode_meta1.is_valid());
-  EXPECT_EQ(OB_INVALID_ARGUMENT, log_mode_meta1.generate(AccessMode::INVALID_ACCESS_MODE, share::SCN::min_scn()));
-  EXPECT_EQ(OB_INVALID_ARGUMENT, log_mode_meta1.generate(AccessMode::APPEND, invalid_scn));
-  EXPECT_EQ(OB_SUCCESS, log_mode_meta1.generate(AccessMode::APPEND, share::SCN::min_scn()));
-  EXPECT_TRUE(log_mode_meta1.is_valid());
+  EXPECT_FALSE(meta.is_valid());
+  EXPECT_EQ(OB_INVALID_ARGUMENT,
+            meta.generate(AccessMode::INVALID_ACCESS_MODE, share::SCN::min_scn()));
+  EXPECT_EQ(OB_INVALID_ARGUMENT, meta.generate(AccessMode::APPEND, invalid_scn));
+  ASSERT_EQ(OB_SUCCESS, meta.generate(AccessMode::APPEND, share::SCN::min_scn()));
+  ASSERT_TRUE(meta.is_valid());
 
-  // Test serialize and deserialize
   int64_t pos = 0;
-  EXPECT_EQ(OB_SUCCESS, log_mode_meta1.serialize(buf, BUFSIZE, pos));
-  EXPECT_EQ(pos, log_mode_meta1.get_serialize_size());
+  ASSERT_EQ(OB_SUCCESS, meta.serialize(buf, BUF_SIZE, pos));
+  EXPECT_EQ(meta.get_serialize_size(), pos);
+  const int64_t serialized_size = pos;
+  LogModeMeta restored;
   pos = 0;
-  LogModeMeta log_mode_meta2;
-  EXPECT_EQ(OB_SUCCESS, log_mode_meta2.deserialize(buf, BUFSIZE, pos));
-  const bool equal = (log_mode_meta1.access_mode_ == log_mode_meta2.access_mode_ &&
-                      log_mode_meta1.ref_scn_ == log_mode_meta2.ref_scn_);
-  EXPECT_TRUE(equal);
+  ASSERT_EQ(OB_SUCCESS, restored.deserialize(buf, serialized_size, pos));
+  ASSERT_TRUE(restored.is_valid());
+  EXPECT_EQ(serialized_size, pos);
+  EXPECT_EQ(meta.access_mode_, restored.access_mode_);
+  EXPECT_EQ(meta.ref_scn_, restored.ref_scn_);
+
+  restored.reset();
+  EXPECT_FALSE(restored.is_valid());
 }
 
-TEST(TestLogMetaInfos, test_log_snapshot_meta)
+TEST(TestLogMetaInfos, log_snapshot_meta)
 {
-  static const int64_t BUFSIZE = 1 << 21;
-  char buf[BUFSIZE];
-  LogSnapshotMeta log_snapshot_meta1;
-  LSN lsn; lsn.val_ = 1;
-  ObAddr addr(ObAddr::IPV4, "127.0.0.1", 4096);
+  char buf[BUF_SIZE];
+  LogSnapshotMeta meta;
+  LogInfo prev_log_info;
+  prev_log_info.generate_by_default();
+  const LSN prev_tail_lsn(PALF_BLOCK_SIZE);
+  const LSN base_lsn(2 * PALF_BLOCK_SIZE);
 
-  LogInfo prev_log_info; prev_log_info.generate_by_default();
-  // Test invalid argument
-  EXPECT_FALSE(log_snapshot_meta1.is_valid());
-  LSN base_lsn(2*PALF_BLOCK_SIZE), prev_tail_lsn(PALF_BLOCK_SIZE);
-  EXPECT_EQ(OB_SUCCESS, log_snapshot_meta1.generate(base_lsn, prev_log_info, prev_tail_lsn));
-  EXPECT_EQ(true, log_snapshot_meta1.prev_log_info_.is_valid());
-  EXPECT_EQ(true, log_snapshot_meta1.prev_log_tail_lsn_.is_valid());
-  EXPECT_EQ(LogSnapshotMeta::LOG_SNAPSHOT_META_VERSION, log_snapshot_meta1.version_);
-  LogInfo result_log_info;
-  LSN input_curr_lsn = prev_tail_lsn;
-  LSN output_prev_tail_lsn;
-  EXPECT_EQ(OB_SUCCESS, log_snapshot_meta1.get_prev_log_info(input_curr_lsn, result_log_info, output_prev_tail_lsn));
-  EXPECT_EQ(result_log_info, prev_log_info);
-  EXPECT_EQ(output_prev_tail_lsn.is_valid(), true);
-  // return OB_ENTRY_NOT_EXIST when base_lsn is not same as prev_tail_lsn of prev_log_info
-  EXPECT_EQ(OB_ENTRY_NOT_EXIST, log_snapshot_meta1.get_prev_log_info(base_lsn, result_log_info, output_prev_tail_lsn));
-  EXPECT_TRUE(log_snapshot_meta1.is_valid());
-  // Test serialize and deserialize
+  EXPECT_FALSE(meta.is_valid());
+  EXPECT_EQ(OB_INVALID_ARGUMENT, meta.generate(LSN(), prev_log_info, prev_tail_lsn));
+  EXPECT_EQ(OB_INVALID_ARGUMENT, meta.generate(base_lsn, LogInfo(), prev_tail_lsn));
+  EXPECT_EQ(OB_INVALID_ARGUMENT, meta.generate(base_lsn, prev_log_info, LSN()));
+  ASSERT_EQ(OB_SUCCESS, meta.generate(base_lsn, prev_log_info, prev_tail_lsn));
+  ASSERT_TRUE(meta.is_valid());
+
+  LogInfo restored_log_info;
+  LSN restored_tail_lsn;
+  EXPECT_EQ(OB_SUCCESS,
+            meta.get_prev_log_info(prev_tail_lsn, restored_log_info, restored_tail_lsn));
+  EXPECT_EQ(prev_log_info, restored_log_info);
+  EXPECT_EQ(prev_tail_lsn, restored_tail_lsn);
+  EXPECT_EQ(OB_ENTRY_NOT_EXIST,
+            meta.get_prev_log_info(base_lsn, restored_log_info, restored_tail_lsn));
+
   int64_t pos = 0;
-  EXPECT_EQ(OB_SUCCESS, log_snapshot_meta1.serialize(buf, BUFSIZE, pos));
-  EXPECT_EQ(pos, log_snapshot_meta1.get_serialize_size());
+  ASSERT_EQ(OB_SUCCESS, meta.serialize(buf, BUF_SIZE, pos));
+  EXPECT_EQ(meta.get_serialize_size(), pos);
+  const int64_t serialized_size = pos;
+  LogSnapshotMeta restored;
   pos = 0;
-  LogSnapshotMeta log_snapshot_meta2;
-  EXPECT_EQ(OB_SUCCESS, log_snapshot_meta2.deserialize(buf, BUFSIZE, pos));
-  EXPECT_EQ(log_snapshot_meta1.base_lsn_,
-            log_snapshot_meta2.base_lsn_);
+  ASSERT_EQ(OB_SUCCESS, restored.deserialize(buf, serialized_size, pos));
+  ASSERT_TRUE(restored.is_valid());
+  EXPECT_EQ(serialized_size, pos);
+  EXPECT_EQ(meta.version_, restored.version_);
+  EXPECT_EQ(meta.base_lsn_, restored.base_lsn_);
+  EXPECT_EQ(meta.prev_log_info_, restored.prev_log_info_);
+  EXPECT_EQ(meta.prev_log_tail_lsn_, restored.prev_log_tail_lsn_);
+
+  restored.reset();
+  EXPECT_FALSE(restored.is_valid());
 }
 
-} // end of unittest
-} // end of oceanbase
+} // namespace unittest
+} // namespace oceanbase
 
-int main(int args, char **argv)
+int main(int argc, char **argv)
 {
   OB_LOGGER.set_file_name("test_log_meta_infos.log", true);
   OB_LOGGER.set_log_level("TRACE");
-  PALF_LOG(INFO, "begin unittest::test_log_meta_infos");
-  ::testing::InitGoogleTest(&args, argv);
-  oceanbase::ObClusterVersion::get_instance().update_data_version(DATA_CURRENT_VERSION);
-  oceanbase::ObClusterVersion::get_instance().update_cluster_version(CLUSTER_CURRENT_VERSION);
+  ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

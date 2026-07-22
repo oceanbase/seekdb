@@ -71,15 +71,9 @@ int ObOutlineSqlService::replace_outline(const ObOutlineInfo &outline_info,
     
     
     uint64_t outline_id = outline_info.get_outline_id();
-    ObString outline_params_hex_str;
-    ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
     uint64_t compat_version = 0;
     // modify __all_outline table
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(outline_info.get_hex_str_from_outline_params(outline_params_hex_str, allocator))) {
-        LOG_WARN("fail to get_hex_str_from_outline_params", K(ret));
-      }
-
       if (OB_SUCC(ret)) {
         ObDMLExecHelper exec(sql_client);
         ObDMLSqlSplicer dml;
@@ -87,7 +81,6 @@ int ObOutlineSqlService::replace_outline(const ObOutlineInfo &outline_info,
             || OB_FAIL(dml.add_column("outline_content", ObHexEscapeSqlStr(
                         outline_info.get_outline_content_str().empty() ? ObString::make_string("")
                         : outline_info.get_outline_content_str())))
-            || OB_FAIL(dml.add_column("outline_params", ObHexEscapeSqlStr(outline_params_hex_str)))
             || OB_FAIL(dml.add_column("sql_text", outline_info.get_sql_text_str().empty() ? ObString::make_string("") : ObHexEscapeSqlStr(outline_info.get_sql_text_str())))
             || OB_FAIL(dml.add_column("sql_id", outline_info.get_sql_id_str().empty() ? ObString::make_string("") : ObHexEscapeSqlStr(outline_info.get_sql_id_str())))
             || OB_FAIL(dml.add_column("format_sql_text",
@@ -158,14 +151,8 @@ int ObOutlineSqlService::alter_outline(const ObOutlineInfo &outline_info,
     
     
     uint64_t outline_id = outline_info.get_outline_id();
-    ObString outline_params_hex_str;
-    ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
     // modify __all_outline table
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(outline_info.get_hex_str_from_outline_params(outline_params_hex_str, allocator))) {
-        LOG_WARN("fail to get_hex_str_from_max_concurrent_param", K(ret));
-      }
-
       // outline_content is described by sql_test here.
       if (OB_SUCC(ret)) {
         ObDMLExecHelper exec(sql_client);
@@ -174,7 +161,6 @@ int ObOutlineSqlService::alter_outline(const ObOutlineInfo &outline_info,
             || OB_FAIL(dml.add_column("outline_content", ObHexEscapeSqlStr(
                         outline_info.get_outline_content_str().empty() ? ObString::make_string("")
                         : outline_info.get_outline_content_str())))
-            || OB_FAIL(dml.add_column("outline_params", ObHexEscapeSqlStr(outline_params_hex_str)))
             || OB_FAIL(dml.add_column("sql_text", ObHexEscapeSqlStr(
                         outline_info.get_sql_text_str().empty() ? ObString::make_string("")
                         : outline_info.get_sql_text_str())))
@@ -295,14 +281,6 @@ int ObOutlineSqlService::add_outline(common::ObISQLClient &sql_client,
   ObSqlString sql;
   ObSqlString values;
   const char *tname[] = {OB_ALL_OUTLINE_TNAME, OB_ALL_OUTLINE_HISTORY_TNAME};
-  ObString max_outline_params_hex_str;
-  ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
-  
-  
-  if (OB_FAIL(outline_info.get_hex_str_from_outline_params(max_outline_params_hex_str, allocator))) {
-    LOG_WARN("fail to get_hex_str_from_outline_params", K(ret));
-  }
-
   for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(tname); i++) {
     if (only_history && 0 == STRCMP(tname[i], OB_ALL_OUTLINE_TNAME)) {
       continue;
@@ -330,8 +308,6 @@ int ObOutlineSqlService::add_outline(common::ObISQLClient &sql_client,
       SQL_COL_APPEND_VALUE(sql, values, outline_info.is_compatible(), "compatible", "%d");
       SQL_COL_APPEND_VALUE(sql, values, outline_info.is_enabled(), "enabled", "%d");
       SQL_COL_APPEND_VALUE(sql, values, outline_info.get_hint_format(), "format", "%d");
-      SQL_COL_APPEND_ESCAPE_STR_VALUE(sql, values, max_outline_params_hex_str.ptr(),
-                                      max_outline_params_hex_str.length(), "outline_params");
       SQL_COL_APPEND_ESCAPE_STR_VALUE(sql, values, outline_info.get_outline_target(),
                                       outline_info.get_outline_target_str().length(), "outline_target");
 

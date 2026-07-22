@@ -103,7 +103,10 @@ int ObSetPasswordResolver::resolve(const ParseNode &parse_tree)
           LOG_WARN("failed to check role as user", K(ret));
         } else if (!is_valid) {
           ret = OB_USER_NOT_EXIST;
-          LOG_USER_ERROR(OB_USER_NOT_EXIST, int(user_hostname_node->str_len_), user_hostname_node->str_value_);
+          // Keep the standard ER_PASSWORD_NO_MATCH text for an empty account.
+          // Formatting the raw parse node would append the token "''" to the
+          // message even though there is no user name to report.
+          LOG_WARN("empty user cannot be used by SET PASSWORD", K(ret));
         } else if (OB_ISNULL(user_hostname_node->children_[0])) {
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("username should not be NULL", K(ret));
@@ -323,7 +326,9 @@ int ObSetPasswordResolver::check_role_as_user(ParseNode *user_hostname_node, boo
   if (OB_ISNULL(user_hostname_node)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to check_role_as_user, user_hostname_node is NULL", K(ret));
-  } else {
+  } else if (user_hostname_node->num_child_ > 0
+             && OB_NOT_NULL(user_hostname_node->children_[0])
+             && user_hostname_node->children_[0]->str_len_ > 0) {
     is_valid = true;
   }
   return ret;

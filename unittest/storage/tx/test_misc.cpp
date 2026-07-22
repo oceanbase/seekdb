@@ -115,59 +115,6 @@ TEST_F(TestObTxMisc, multiple_checksum_collapse_for_commit_log)
   }
 }
 
-TEST_F(TestObTxMisc, TxDesc_add_mofied_tables)
-{
-  ObTxDesc txdesc;
-  {
-    uint64_t tids[] = {1,2,3,4,5,6,7};
-    int cnt = sizeof(tids)/sizeof(uint64_t);
-    EXPECT_EQ(OB_SUCCESS, txdesc.add_modified_tables(ObArrayHelper<uint64_t>(cnt, tids, cnt)));
-    for (int i = 0; i < 7; i++) {
-      EXPECT_EQ(txdesc.modified_tables_[i], i+1);
-    }
-  }
-  {
-    uint64_t tids[] = {8, 9};
-    int cnt = sizeof(tids)/sizeof(uint64_t);
-    EXPECT_EQ(OB_SUCCESS, txdesc.add_modified_tables(ObArrayHelper<uint64_t>(cnt, tids, cnt)));
-    for (int i = 0; i < 9; i++) {
-      EXPECT_EQ(txdesc.modified_tables_[i], i+1);
-    }
-  }
-  {
-    uint64_t tids[] = {8, 9, 10};
-    int cnt = sizeof(tids)/sizeof(uint64_t);
-    EXPECT_EQ(OB_SUCCESS, txdesc.add_modified_tables(ObArrayHelper<uint64_t>(cnt, tids, cnt)));
-    for (int i = 0; i < 10; i++) {
-      EXPECT_EQ(txdesc.modified_tables_[i], i+1);
-    }
-  }
-  {
-    uint64_t tids[] = {8, 9, 10, 1, 5, 7};
-    int cnt = sizeof(tids)/sizeof(uint64_t);
-    EXPECT_EQ(OB_SUCCESS, txdesc.add_modified_tables(ObArrayHelper<uint64_t>(cnt, tids, cnt)));
-    for (int i = 0; i < 10; i++) {
-      EXPECT_EQ(txdesc.modified_tables_[i], i+1);
-    }
-  }
-  {
-    uint64_t tids[] = {11,12,13,14,15,16,17,18,19,20};
-    int cnt = sizeof(tids)/sizeof(uint64_t);
-    EXPECT_EQ(OB_SUCCESS, txdesc.add_modified_tables(ObArrayHelper<uint64_t>(cnt, tids, cnt)));
-    for (int i = 0; i < 20; i++) {
-      EXPECT_EQ(txdesc.modified_tables_[i], i+1);
-    }
-  }
-  {
-    uint64_t tids[] = {20, 19, 17, 14, 18, 20, 1, 7, 5, 4, 9};
-    int cnt = sizeof(tids)/sizeof(uint64_t);
-    EXPECT_EQ(OB_SUCCESS, txdesc.add_modified_tables(ObArrayHelper<uint64_t>(cnt, tids, cnt)));
-    for (int i = 0; i < 20; i++) {
-      EXPECT_EQ(txdesc.modified_tables_[i], i+1);
-    }
-  }
-}
-
 }//end of unittest
 }//end of oceanbase
 

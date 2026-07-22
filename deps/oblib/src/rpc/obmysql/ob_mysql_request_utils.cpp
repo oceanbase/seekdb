@@ -250,13 +250,6 @@ static int send_compressed_buffer(bool pkt_has_completed, ObCompressionContext &
   return ret;
 }
 
-int ObMySQLRequestUtils::flush_buffer(ObFlushBufferParam &param)
-{
-  int ret = OB_NOT_SUPPORTED;
-  SERVER_LOG(ERROR, "not supported, should not be here", K(ret));
-  return ret;
-}
-
 int ObMysqlPktContext::save_fragment_mysql_packet(const char *start, const int64_t len)
 {
   int ret = OB_SUCCESS;

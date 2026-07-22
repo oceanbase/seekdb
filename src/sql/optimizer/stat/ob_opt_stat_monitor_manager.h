@@ -107,10 +107,10 @@ public:
       {}
   virtual ~ObOptStatMonitorManager() { if (inited_) { destroy(); }  }
   void destroy();
-  static int mtl_init(ObOptStatMonitorManager* &optstat_monitor_mgr);
-  static int mtl_start(ObOptStatMonitorManager* &optstat_monitor_mgr);
-  static void mtl_stop(ObOptStatMonitorManager* &optstat_monitor_mgr);
-  static void mtl_wait(ObOptStatMonitorManager* &optstat_monitor_mgr);
+  static int server_module_init(ObOptStatMonitorManager* &optstat_monitor_mgr);
+  static int server_module_start(ObOptStatMonitorManager* &optstat_monitor_mgr);
+  static void server_module_stop(ObOptStatMonitorManager* &optstat_monitor_mgr);
+  static void server_module_wait(ObOptStatMonitorManager* &optstat_monitor_mgr);
 public:
   static int flush_database_monitoring_info(sql::ObExecContext &ctx,
                                             const bool is_flush_col_usage = true,

@@ -49,17 +49,6 @@ INSERT INTO d.t1 PARTITION (p3, p4) VALUES (24, 'Tim', 'Greene', 3, 1),  (26, 'L
 REPLACE INTO d.t1 PARTITION (p0) VALUES (20, 'Jan', 'Jones', 3, 2);
 SELECT e.id, s.city, d.name FROM e JOIN stores PARTITION (p1) ON e.id=s.id JOIN departments PARTITION (p0) ON e.id=d.id;
 alter system major freeze;
-alter system start merge zone = 'z1';
-alter system suspend merge;
-alter system suspend merge tenant = sys;
-alter system suspend merge tenant = all_user;
-alter system suspend merge tenant = all_meta;
-alter system resume merge;
-alter system resume merge tenant = sys;
-alter system resume merge tenant = all_user;
-alter system resume merge tenant = all_meta;
-alter system clear roottable;
-alter system clear roottable tenant = 'xxx';
 select * from t1 where c1>ANY(select c1 from t2 where c2>1);
 select * from t1 where c1>SOME(select c1 from t2 where c2>1);
 select * from t1 where c1>ALL(select c1 from t2 where c2>1);

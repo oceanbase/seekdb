@@ -375,8 +375,6 @@ int ObOptStatGatherStatList::list_to_array(common::ObIAllocator &allocator,
   ObSpinLockGuard guard(lock_);
   stat_array.reserve(stat_list_.get_size());
   DLIST_FOREACH(cur, stat_list_) {
-    // sys tenant list all tenant stat
-    // non-sys tennat list self tenant stat
     ObOptStatGatherStat *tmp_stat = NULL;
     if (cur->deep_copy(allocator, tmp_stat)) {
       LOG_WARN("failed to deep copy", K(ret));
@@ -396,8 +394,6 @@ int ObOptStatGatherStatList::cancel_gather_stats(const ObString &task_id)
   ObSpinLockGuard guard(lock_);
   bool is_cancel = false;
   DLIST_FOREACH(cur, stat_list_) {
-    // sys tenant list all tenant stat
-    // non-sys tennat list self tenant stat
     ObOptStatGatherStat *tmp_stat = NULL;
     if (0 != cur->get_task_id().case_compare(task_id) || OB_ISNULL(cur->get_session())) {
       //do nothing

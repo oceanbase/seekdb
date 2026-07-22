@@ -255,7 +255,6 @@ ObKVMemBlockHandle::ObKVMemBlockHandle()
       recent_get_cnt_(0),
       score_(0),
       kv_cnt_(0),
-      ref_cnt_(0),
       seq_num_(0),
       status_(FREE)
 {
@@ -322,4 +321,3 @@ bool ObKVMemBlockHandle::retire()
 
 }//end namespace common
 }//end namespace oceanbase
-

@@ -768,20 +768,12 @@ int ObRepartSliceIdxCalc::setup_one_side_one_level_info()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected calc part id expr", K(ret));
   } else if (OB_REPARTITION_ONE_SIDE_ONE_LEVEL_FIRST == repart_type_) {
-    if (OB_FAIL(ObExprCalcPartitionBase::
-        update_part_id_calc_type_for_upgrade(exec_ctx_, *calc_part_id_expr_,
-        CALC_IGNORE_SUB_PART))) {
-      LOG_WARN("update calc type for mixed run failed", K(ret));
-    } else if (OB_FAIL(build_part2tablet_id_map())) {
+    if (OB_FAIL(build_part2tablet_id_map())) {
       LOG_WARN("fail to build part2tablet id map", K(ret));
     }
   } else if (OB_REPARTITION_ONE_SIDE_ONE_LEVEL_SUB == repart_type_) {
     int64_t first_part_id = OB_INVALID_ID;
-    if (OB_FAIL(ObExprCalcPartitionBase::
-        update_part_id_calc_type_for_upgrade(exec_ctx_, *calc_part_id_expr_,
-        CALC_IGNORE_FIRST_PART))) {
-      LOG_WARN("update calc type for mixed run failed", K(ret));
-    } else if (OB_FAIL(get_part_id_by_one_level_sub_ch_map(first_part_id))) {
+    if (OB_FAIL(get_part_id_by_one_level_sub_ch_map(first_part_id))) {
       LOG_WARN("fail to get part id by ch map", K(ret));
     } else if (OB_FAIL(ObExprCalcPartitionBase::set_first_part_id(exec_ctx_, *calc_part_id_expr_,
                                                                   first_part_id))) {
@@ -1455,7 +1447,7 @@ int ObSlaveMapPkeyRangeIdxCalc::destroy()
         //   to return immediately, yet for all the existing logics there, they don't care the return
         //   code and wants to continue iteration anyway. So to keep the old behavior and makes everyone
         //   else happy, we have to return OB_SUCCESS here. And we only make this return code thing
-        //   affects the behavior in tenant meta manager washing tablet. If you want to change the
+        //   affects tablet metadata eviction. If you want to change the
         //   behavior in such places, please consult the individual file owners to fully understand the
         //   needs there.
         return OB_SUCCESS;

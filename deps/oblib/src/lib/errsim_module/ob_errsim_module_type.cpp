@@ -27,8 +27,6 @@ namespace common
 static const char *OB_ERRSIM_MODULE_TYPES[] = {
     "NONE",
     "ALL",
-    "MIGRATION",
-    "TRANSFER",
 };
 
 void ObErrsimModuleType::reset()

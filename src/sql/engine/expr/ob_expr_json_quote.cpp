@@ -91,7 +91,6 @@ int ObExprJsonQuote::calc(ObEvalCtx &ctx, MultimodeAlloctor &temp_allocator, con
       if (OB_FAIL(j_buf.append("\"\"", 2))) {
         LOG_WARN("failed: jbuf append", K(ret));        
       }
-    } else if (OB_FALSE_IT(temp_allocator.add_baseline_size(j_buf.length()))) {
     } else if (OB_FAIL(ObJsonPathUtil::double_quote(json_val, &j_buf))) {
       LOG_WARN("failed: add double quote", K(ret), K(json_val));
     }
@@ -105,7 +104,7 @@ int ObExprJsonQuote::eval_json_quote(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   INIT_SUCC(ret);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("JSONModule"));
   ObJsonBuffer j_buf(&temp_allocator);
   ObExpr *arg = expr.args_[0];

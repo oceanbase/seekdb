@@ -38,7 +38,7 @@
 #include "lib/thread/threads.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/thread/ob_thread_name.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/ob_thread_pool.h"
 
 
@@ -55,7 +55,7 @@ struct DefaultAllocator : public ObIAllocator {
 #ifdef UNITTEST_DEBUG
     total_alive_num++;
 #endif
-    return ob_malloc(size, SET_USE_UNEXPECTED_500("OccamThreadPool"));
+    return ob_malloc(size, "OccamThreadPool");
   }
   void* alloc(const int64_t size, const ObMemAttr &attr) override {
     UNUSED(attr);
@@ -95,14 +95,14 @@ public:
   }
   template <typename T>
   int init_and_start(T &&func,
-                     bool need_set_tenant_ctx = true,
+                     bool need_set_runtime_ctx = true,
                      const char *thread_name = "Occam") {
     if (OB_NOT_NULL(thread_name) && '\0' != thread_name[0]) {
       MEMSET(thread_name_, 0, sizeof(thread_name_));
       STRNCPY(thread_name_, thread_name, sizeof(thread_name_) - 1);
     }
-    if (need_set_tenant_ctx) {
-      share::ObThreadPool::set_run_wrapper(MTL_CTX());
+    if (need_set_runtime_ctx) {
+      share::ObThreadPool::set_run_wrapper(share::server_runtime());
     }
     int ret = OB_SUCCESS;
     if (is_inited_) {
@@ -259,7 +259,7 @@ public:
             uint64_t thread_id = threads_[thread_init_idx].get_id();
             ret = threads_[thread_init_idx].init_and_start(
                 [this, thread_id]() { this->keep_fetching_task_until_stop_(thread_id); },
-                true /* need_set_tenant_ctx */,
+                true /* need_set_runtime_ctx */,
                 thread_name);
           }
           if (OB_SUCC(ret)) {

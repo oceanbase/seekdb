@@ -54,15 +54,12 @@ int ObDatabaseSqlService::insert_database(const ObDatabaseSchema &database_schem
     int64_t affected_rows = 0;
     ObDMLSqlSplicer dml;
     if (OB_SUCC(ret)) {
-      const int64_t INVALID_REPLICA_NUM = -1;
       if (OB_FAIL(dml.add_pk_column("database_id", ObSchemaUtils::get_extract_schema_id(
                                                       database_schema.get_database_id())))
           || OB_FAIL(dml.add_column("database_name", ObHexEscapeSqlStr(database_schema.get_database_name_str())))
           || OB_FAIL(dml.add_column("collation_type", database_schema.get_collation_type()))
           || OB_FAIL(dml.add_column("comment", database_schema.get_comment()))
           || OB_FAIL(dml.add_column("read_only", database_schema.is_read_only()))
-          || OB_FAIL(dml.add_column("default_tablegroup_id", ObSchemaUtils::get_extract_schema_id(
-                                                             database_schema.get_default_tablegroup_id())))
           || OB_FAIL(dml.add_column("in_recyclebin", database_schema.is_in_recyclebin()))
           || OB_FAIL(dml.add_gmt_modified())) {
         LOG_WARN("add column failed", K(ret));
@@ -98,7 +95,6 @@ int ObDatabaseSqlService::insert_database(const ObDatabaseSchema &database_schem
       ObSchemaOperation create_db_op;
       
       create_db_op.database_id_ = database_schema.get_database_id();
-      create_db_op.tablegroup_id_ = 0;
       create_db_op.table_id_ = 0;
       create_db_op.op_type_ = OB_DDL_ADD_DATABASE;
       create_db_op.schema_version_ = database_schema.get_schema_version();
@@ -127,14 +123,11 @@ int ObDatabaseSqlService::update_database(const ObDatabaseSchema &database_schem
     int64_t affected_rows = 0;
     ObDMLSqlSplicer dml;
     if (OB_SUCC(ret)) {
-      const int64_t INVALID_REPLICA_NUM = -1;
       if (OB_FAIL(dml.add_pk_column("database_id", ObSchemaUtils::get_extract_schema_id(
                                        database_schema.get_database_id())))
           || OB_FAIL(dml.add_column("database_name", ObHexEscapeSqlStr(database_schema.get_database_name_str())))
           || OB_FAIL(dml.add_column(OBJ_GET_K(database_schema, collation_type)))
           || OB_FAIL(dml.add_column("read_only", database_schema.is_read_only()))
-          || OB_FAIL(dml.add_column("default_tablegroup_id", ObSchemaUtils::get_extract_schema_id(
-                                    database_schema.get_default_tablegroup_id())))
           || OB_FAIL(dml.add_column("in_recyclebin", database_schema.is_in_recyclebin()))
           || OB_FAIL(dml.add_gmt_modified())) {
         LOG_WARN("add column failed", K(ret));
@@ -172,7 +165,6 @@ int ObDatabaseSqlService::update_database(const ObDatabaseSchema &database_schem
       ObSchemaOperation alter_db_op;
       
       alter_db_op.database_id_ = database_schema.get_database_id();
-      alter_db_op.tablegroup_id_ = 0;
       alter_db_op.table_id_ = 0;
       alter_db_op.op_type_ = op_type;
       alter_db_op.schema_version_ = database_schema.get_schema_version();
@@ -228,7 +220,6 @@ int ObDatabaseSqlService::delete_database(const ObDatabaseSchema &db_schema,
     ObSchemaOperation delete_db_op;
     
     delete_db_op.database_id_ = database_id;
-    delete_db_op.tablegroup_id_ = 0;
     delete_db_op.table_id_ = 0;
     delete_db_op.schema_version_ = new_schema_version;
     delete_db_op.ddl_stmt_str_ = ddl_stmt_str ? *ddl_stmt_str : ObString();

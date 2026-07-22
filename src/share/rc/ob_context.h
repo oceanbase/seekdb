@@ -23,15 +23,9 @@
 
 namespace oceanbase
 {
-namespace omt
-{
-class ObTenant;
-}
 namespace share
 {
-class ObTenantSpace;
 class ObResourceOwner;
-class ObTenantSpaceFetcher;
 }
 
 #define CREATE_ENTITY(entity, ...) share::create_entity(entity, __VA_ARGS__)
@@ -39,12 +33,9 @@ class ObTenantSpaceFetcher;
 #define WITH_ENTITY_P(condition, entity)                                                              \
   ENTITY_P(condition, share::Entity2Enum<typename std::remove_pointer<decltype(entity)>::type>::type, \
            share::EntitySource::WITH, entity)
-#define FETCH_ENTITY_P(condition, entity_type, ...)                                                   \
-  ENTITY_P(condition, share::ObEntityType::entity_type, share::EntitySource::FETCH, __VA_ARGS__)
 #define CREATE_WITH_TEMP_ENTITY_P(condition, entity_type, ...)                                        \
   ENTITY_P(condition, share::ObEntityType::entity_type, share::EntitySource::CREATE, __VA_ARGS__)
 #define WITH_ENTITY(entity) WITH_ENTITY_P(true, entity)
-#define FETCH_ENTITY(entity_type, ...) FETCH_ENTITY_P(true, entity_type, __VA_ARGS__)
 #define CREATE_WITH_TEMP_ENTITY(entity_type, ...) CREATE_WITH_TEMP_ENTITY_P(true, entity_type, __VA_ARGS__)
 // The following are auxiliary macros
 #define ENTITY_P(condition, entity_type, entity_source, ...)                                                   \
@@ -67,20 +58,11 @@ class ObTenantSpaceFetcher;
     const static ObEntityType type = ENTITY_TYPE; \
   };
 
-#define BIND_FETCHER(ENTITY_TYPE, CLS)        \
-  template<>                                  \
-  class Type2Fetcher<ENTITY_TYPE>             \
-  {                                           \
-  public:                                     \
-    using type = CLS;                         \
-  };
-
 namespace share
 {
 
 enum class ObEntityType
 {
-  TENANT_SPACE,
   RESOURCE_OWNER
 };
 
@@ -88,9 +70,6 @@ template<ObEntityType et>
 class Enum2Entity;
 template<typename T_Entity>
 class Entity2Enum;
-template<ObEntityType et>
-class Type2Fetcher;
-class ObTenantBase;
 
 class EntityBase
 {
@@ -107,22 +86,6 @@ public:
     : need_free_(true) {}
 private:
   bool need_free_;
-};
-
-class ObTenantSpace : public EntityBase
-{
-public:
-  ObTenantSpace(ObTenantBase *tenant)
-    : tenant_(tenant)
-  {}
-  int init() { return common::OB_SUCCESS; }
-  void deinit() {}
-  ObTenantBase *get_tenant() const { return tenant_; }
-  static int guard_init_cb(const ObTenantSpace &tenant_space, char *buf, bool &is_inited);
-  static void guard_deinit_cb(const ObTenantSpace &tenant_space, char *buf);
-  static ObTenantSpace &root();
-private:
-  ObTenantBase *tenant_;
 };
 
 class ObResourceOwner : public EntityBase
@@ -142,37 +105,15 @@ private:
   uint64_t owner_id_;
 };
 
-// For example, if you want to switch to TenantSpace, the most convenient interface for the upper layer is to only provide tenant.
-// The TenantSpace is obtained by the framework, if the tenant is used as the parameter of the TenantGuard, the TenantGuard will do the search,
-// Will destroy the Guard's positioning, we keep the Guard simple (Guard only does the switching function), so the logic of obtaining TenantSpace is placed on the outer layer
-class ObTenantSpaceFetcher
-{
-public:
-  ObTenantSpaceFetcher();
-  ~ObTenantSpaceFetcher();
-  int get_ret() const { return ret_; }
-  ObTenantSpace &entity()
-  {
-    abort_unless(entity_ != nullptr);
-    return *entity_;
-  }
-private:
-  int ret_;
-  ObTenantSpace *entity_;
-};
-
 template<ObEntityType et>
 class Guard;
 enum class EntitySource
 {
   WITH,     // The parameter is already the target Entity, switch directly
-  FETCH,    // Find by parameter
   CREATE    // Created by parameters
 };
 
-BIND_ENTITY(ObEntityType::TENANT_SPACE, share::ObTenantSpace);
 BIND_ENTITY(ObEntityType::RESOURCE_OWNER, share::ObResourceOwner);
-BIND_FETCHER(ObEntityType::TENANT_SPACE, share::ObTenantSpaceFetcher);
 
 template<ObEntityType et>
 class Guard final
@@ -366,47 +307,6 @@ public:
 };
 
 template<ObEntityType ct>
-class _S<ct, EntitySource::FETCH> : public _SBase
-{
-  using T_Guard =  Guard<ct>;
-  using T_Entity = typename Enum2Entity<ct>::type;
-  using T_EntityFetcher = typename Type2Fetcher<ct>::type;
-public:
-  template<typename ... Args>
-  _S(const bool condition, Args && ... args)
-    : _SBase(), fetcher_(nullptr), guard_(nullptr)
-  {
-    int ret = common::OB_SUCCESS;                                                                                                                                                                                                                                                                                               if (condition) {
-      fetcher_ = new (buf0_) T_EntityFetcher(args...);
-      if (OB_FAIL(fetcher_->get_ret())) {
-      } else {
-        T_Guard *tmp_guard = new (buf1_) T_Guard(fetcher_->entity());
-        if (OB_FAIL(tmp_guard->init())) {
-        } else {
-          guard_ = tmp_guard;
-        }
-      }
-    }
-    ret_ = ret;
-  }
-  ~_S()
-  {
-    if (guard_ != nullptr) {
-      guard_->deinit();
-      guard_->~T_Guard();
-    }
-    if (fetcher_ != nullptr) {
-      fetcher_->~T_EntityFetcher();
-    }
-  }
-private:
-  char buf0_[sizeof(T_EntityFetcher)] __attribute__ ((aligned (16)));
-  char buf1_[sizeof(T_Guard)] __attribute__ ((aligned (16)));
-  T_EntityFetcher *fetcher_;
-  T_Guard *guard_;
-};
-
-template<ObEntityType ct>
 class _S<ct, EntitySource::CREATE> : public _SBase
 {
   using T_Guard =  Guard<ct>;
@@ -448,9 +348,7 @@ public:
   T_Guard *guard_;
 };
 
-extern int get_tenant_ctx_with_tenant_lock(ObTenantSpace *&tenant_ctx);
-
-} // end of namespace lib
+} // end of namespace share
 } // end of namespace oceanbase
 
 #endif // OB_CONTEXT_H_

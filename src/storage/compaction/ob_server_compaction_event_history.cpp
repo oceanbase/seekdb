@@ -50,7 +50,7 @@ const char *ObServerCompactionEvent::get_comp_event_str(enum ObCompactionEvent e
 }
 
 const static char *ObCompactionRoleStr[] = {
-    "TENANT_RS",
+    "ROOT_SERVICE",
     "STORAGE",
     "LS_LEADER",
     "LS_SVR"
@@ -60,7 +60,7 @@ const char *ObServerCompactionEvent::get_comp_role_str(enum ObCompactionRole rol
 {
   STATIC_ASSERT(static_cast<int64_t>(COMPACTION_ROLE_MAX) == ARRAYSIZEOF(ObCompactionRoleStr), "compaction role str len is mismatch");
   const char *str = "";
-  if (role >= COMPACTION_ROLE_MAX || role < TENANT_RS) {
+  if (role >= COMPACTION_ROLE_MAX || role < ROOT_SERVICE) {
     str = "invalid_role";
   } else {
     str = ObCompactionRoleStr[role];
@@ -81,7 +81,7 @@ int ObServerCompactionEvent::generate_event_str(char *buf, const int64_t buf_len
   return ret;
 }
 
-int ObServerCompactionEventHistory::mtl_init(ObServerCompactionEventHistory* &event_history)
+int ObServerCompactionEventHistory::server_module_init(ObServerCompactionEventHistory* &event_history)
 {
   return event_history->init();
 }
@@ -135,19 +135,16 @@ int ObServerCompactionEventIterator::open()
   if (is_opened_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("The ObServerCompactionEventIterator has been opened", K(ret));
-  } else if (!true) {
-    ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "invalid argument", K(ret));
   }
   if (OB_SUCC(ret)) {
-    { // skip virtual tenant
-      MOD_SCOPE {
+    {
+      SERVER_MODULE_SCOPE {
         if (OB_FAIL(share::g_mp->server_compaction_event_history()->get_list(event_array_))) {
           LOG_WARN("failed to get compaction info", K(ret));
         }
       } else {
-        if (OB_TENANT_NOT_IN_SERVER != ret) {
-          STORAGE_LOG(WARN, "switch tenant failed", K(ret));
+        if (OB_SERVER_RUNTIME_NOT_READY != ret) {
+          STORAGE_LOG(WARN, "enter server module scope failed", K(ret));
         } else {
           ret = OB_SUCCESS;
           continue;

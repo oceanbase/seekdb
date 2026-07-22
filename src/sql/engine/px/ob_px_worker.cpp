@@ -19,7 +19,7 @@
 #include "share/rc/ob_module_provider.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
 #include "sql/engine/px/ob_px_admission.h"
-#include "observer/omt/ob_tenant.h"
+#include "observer/omt/ob_server_runtime.h"
 
 using namespace oceanbase;
 using namespace oceanbase::common;
@@ -49,7 +49,7 @@ ObPxCoroWorker::ObPxCoroWorker(const observer::ObGlobalContext &gctx,
 {
 }
 
-int ObPxCoroWorker::run(ObPxRpcInitTaskArgs &arg)
+int ObPxCoroWorker::run(ObPxInitTaskArgs &arg)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(deep_copy_assign(arg, task_arg_))) {
@@ -66,8 +66,8 @@ int ObPxCoroWorker::exit()
   return ret;
 }
 
-int ObPxCoroWorker::deep_copy_assign(const ObPxRpcInitTaskArgs &src,
-                                     ObPxRpcInitTaskArgs &dest)
+int ObPxCoroWorker::deep_copy_assign(const ObPxInitTaskArgs &src,
+                                     ObPxInitTaskArgs &dest)
 {
   int ret = OB_SUCCESS;
   dest.set_deserialize_param(exec_ctx_, phy_plan_, &alloc_);
@@ -134,7 +134,7 @@ void PxWorkerFunctor::operator ()(bool need_exec)
   ObCurTraceId::set(env_arg_.get_trace_id());
   /**
    * The interrupt must cover the release handler, because its process involves sqc sending messages to qc,
-   * requiring a check for interrupts. The interrupt itself is thread-local and should not depend on tenant space.
+   * requiring an interrupt check. The interrupt itself is thread-local and runtime-independent.
    */
   ObPxInterruptGuard px_int_guard(task_arg_.task_.get_interrupt_id().px_interrupt_id_);
   ObPxSqcHandler *sqc_handler = task_arg_.get_sqc_handler();
@@ -147,8 +147,8 @@ void PxWorkerFunctor::operator ()(bool need_exec)
   } else if (OB_FAIL(px_int_guard.get_interrupt_reg_ret())) {
     LOG_WARN("px worker failed to SET_INTERRUPTABLE");
   } else if (OB_NOT_NULL(sqc_handler) && OB_LIKELY(!sqc_handler->has_interrupted())) {
-    THIS_WORKER.set_worker_level(sqc_handler->get_rpc_level());
-    THIS_WORKER.set_curr_request_level(sqc_handler->get_rpc_level());
+    THIS_WORKER.set_worker_level(sqc_handler->get_request_level());
+    THIS_WORKER.set_curr_request_level(sqc_handler->get_request_level());
     // Do not set thread local log level while log level upgrading (OB_LOGGER.is_info_as_wdiag)
     if (OB_LOGGER.is_info_as_wdiag()) {
       ObThreadLogLevelUtils::clear();
@@ -157,9 +157,9 @@ void PxWorkerFunctor::operator ()(bool need_exec)
         ObThreadLogLevelUtils::init(env_arg_.get_log_level());
       }
     }
-    // single process owner id (de-tenant: replaces former sys-tenant resource-owner arg)
+    // Single-process resource owner.
     static const uint64_t PROCESS_OWNER_ID = 1;
-    MOD_SCOPE {
+    SERVER_MODULE_SCOPE {
       CREATE_WITH_TEMP_ENTITY(RESOURCE_OWNER, PROCESS_OWNER_ID) {
         if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(mem_context,
             lib::ContextParam().set_mem_attr(ObModIds::OB_SQL_PX)))) {
@@ -168,7 +168,7 @@ void PxWorkerFunctor::operator ()(bool need_exec)
           WITH_CONTEXT(mem_context) {
             lib::ContextTLOptGuard guard(true);
             // In the worker thread, perform a deep copy of args to alleviate the burden on the sqc thread.
-            ObPxRpcInitTaskArgs runtime_arg;
+            ObPxInitTaskArgs runtime_arg;
             if (OB_FAIL(runtime_arg.init_deserialize_param(task_arg_, mem_context, *env_arg_.get_gctx()))) {
               LOG_WARN("fail to init args", K(ret));
             } else if (OB_FAIL(runtime_arg.deep_copy_assign(task_arg_, mem_context->get_arena_allocator()))) {
@@ -210,8 +210,7 @@ void PxWorkerFunctor::operator ()(bool need_exec)
     if (task_arg_.sqc_task_ptr_ != NULL) {
       task_arg_.sqc_task_ptr_->set_task_state(SQC_TASK_EXIT);
     }
-    ObInterruptUtil::update_schema_error_code(task_arg_.exec_ctx_, ret, task_arg_.task_.px_worker_execute_start_schema_version_);
-    (void) ObInterruptUtil::interrupt_qc(task_arg_.task_, ret, task_arg_.exec_ctx_);
+    (void) ObInterruptUtil::interrupt_qc(task_arg_.task_, ret);
   }
 
   PxWorkerFinishFunctor on_func_finish;
@@ -236,7 +235,7 @@ ObPxThreadWorker::~ObPxThreadWorker()
 {
 }
 // Execute in the px_pool corresponding to the group
-int ObPxThreadWorker::run(ObPxRpcInitTaskArgs &task_arg)
+int ObPxThreadWorker::run(ObPxInitTaskArgs &task_arg)
 {
   int ret = OB_SUCCESS;
   int64_t group_id = 0;
@@ -255,7 +254,7 @@ int ObPxThreadWorker::run(ObPxRpcInitTaskArgs &task_arg)
   return ret;
 }
 
-int ObPxThreadWorker::run_at(ObPxRpcInitTaskArgs &task_arg, omt::ObPxPool &px_pool)
+int ObPxThreadWorker::run_at(ObPxInitTaskArgs &task_arg, omt::ObPxPool &px_pool)
 {
   int ret = OB_SUCCESS;
   int retry_times = 0;
@@ -308,7 +307,7 @@ int ObPxThreadWorker::exit()
   return OB_SUCCESS;
 }
 
-int ObPxLocalWorker::run(ObPxRpcInitTaskArgs &task_arg)
+int ObPxLocalWorker::run(ObPxInitTaskArgs &task_arg)
 {
   int ret = OB_SUCCESS;
   ObDIActionGuard action_guard("FastDFO");

@@ -29,7 +29,6 @@
 #include "pl/sys_package/ob_dbms_limit_calculator_mysql.h"
 #include "pl/sys_package/ob_dbms_vector_mysql.h"
 #include "pl/sys_package/ob_dbms_hybrid_vector_mysql.h"
-#include "pl/pl_recompile/ob_pl_recompile_task_helper.h"
 #include "pl/sys_package/ob_dbms_ai_service.h"
 #include "pl/sys_package/ob_dbms_index_manager.h"
 
@@ -52,8 +51,6 @@
   INTERFACE_DEF(INTERFACE_DBMS_CLIENT_ID_TRACE_DISABLE, "OB_CLIENT_ID_TRACE_DISABLE", (ObDBMSMonitor::client_id_trace_disable))
   INTERFACE_DEF(INTERFACE_DBMS_MOD_ACT_TRACE_ENABLE, "OB_MOD_ACT_TRACE_ENABLE", (ObDBMSMonitor::mod_act_trace_enable))
   INTERFACE_DEF(INTERFACE_DBMS_MOD_ACT_TRACE_DISABLE, "OB_MOD_ACT_TRACE_DISABLE", (ObDBMSMonitor::mod_act_trace_disable))
-  INTERFACE_DEF(INTERFACE_DBMS_TENANT_TRACE_ENABLE, "OB_TENANT_TRACE_ENABLE", (ObDBMSMonitor::tenant_trace_enable))
-  INTERFACE_DEF(INTERFACE_DBMS_TENANT_TRACE_DISABLE, "OB_TENANT_TRACE_DISABLE", (ObDBMSMonitor::tenant_trace_disable))
   // end of dbms_monitor
 
 
@@ -161,13 +158,8 @@
 
   // start of dbms_ob_limit_calculator
   INTERFACE_DEF(INTERFACE_DBMS_OB_LIMIT_CALCULATOR_PHY_RES_CALCULATE_BY_LOGIC_RES, "PHY_RES_CALCULATE_BY_LOGIC_RES", (ObDBMSLimitCalculator::phy_res_calculate_by_logic_res))
-  INTERFACE_DEF(INTERFACE_DBMS_OB_LIMIT_CALCULATOR_PHY_RES_CALCULATE_BY_UNIT, "PHY_RES_CALCULATE_BY_UNIT", (ObDBMSLimitCalculator::phy_res_calculate_by_unit))
-  INTERFACE_DEF(INTERFACE_DBMS_OB_LIMIT_CALCULATOR_PHY_RES_CALCULATE_BY_STADNBY_TENANT, "PHY_RES_CALCULATE_BY_STANDBY_TENANT", (ObDBMSLimitCalculator::phy_res_calculate_by_standby_tenant))
   // end of dbms_ob_limit_calculator
 
-
-  // start of dbms_ddl
-  // end of dbms_ddl
 
   // start of dbms_ai_service
   INTERFACE_DEF(INTERFACE_DBMS_AI_SERVICE_CREATE_AI_MODEL_MYSQL, "DBMS_AI_SERVICE_CREATE_AI_MODEL_MYSQL", (ObDBMSAiService::create_ai_model))

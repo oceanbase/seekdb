@@ -154,10 +154,10 @@ int ObUserSqlService::drop_user_delete_role_grantee_map(bool is_role,
   const bool is_need_update = schema_id_array.count() > 0;
   if (is_need_update) {
     common::ObArray<ObUserInfo> user_infos; // used to update related users' schema version
-    ObSqlString del_sql; // from __all_tenant_role_grantee_map
-    ObSqlString insert_sql; // insert into __all_tenant_role_grantee_map_history
+    ObSqlString del_sql; // from __all_role_grantee_map
+    ObSqlString insert_sql; // insert into __all_role_grantee_map_history
     bool is_first = true;
-    // delete row from __all_tenant_role_grantee_map
+    // delete row from __all_role_grantee_map
     if (is_role) {
       if (OB_FAIL(del_sql.append_fmt("DELETE FROM %s WHERE ROLE_ID = %lu and GRANTEE_ID IN (",
           OB_ALL_ROLE_GRANTEE_MAP_TNAME,
@@ -170,7 +170,7 @@ int ObUserSqlService::drop_user_delete_role_grantee_map(bool is_role,
       LOG_WARN("append table name failed, ", K(ret), K(user_id));
     }
 
-    // insert new row into __all_tenant_role_grantee_map_history
+    // insert new row into __all_role_grantee_map_history
     if (FAILEDx(insert_sql.append_fmt("INSERT INTO %s VALUES ", OB_ALL_ROLE_GRANTEE_MAP_HISTORY_TNAME))) {
       LOG_WARN("append table name failed, ", K(ret));
     }
@@ -220,7 +220,7 @@ int ObUserSqlService::drop_user_delete_role_grantee_map(bool is_role,
       }
       is_first = false;
     }
-    // delete from __all_tenant_role_grantee_map
+    // delete from __all_role_grantee_map
     if (OB_SUCC(ret)) {
       if (OB_FAIL(del_sql.append_fmt(")"))) {
         LOG_WARN("append sql failed, ", K(ret));
@@ -231,7 +231,7 @@ int ObUserSqlService::drop_user_delete_role_grantee_map(bool is_role,
         LOG_WARN("del affected_rows is not expected", K(ret), K(affected_rows), K(schema_id_array.count()));
       }
     }
-    // insert into __all_tenant_role_grantee_map_history
+    // insert into __all_role_grantee_map_history
     if (OB_SUCC(ret)) {
       affected_rows = 0;
       if (OB_FAIL(sql_client.write(insert_sql.ptr(), affected_rows))) {
@@ -767,12 +767,7 @@ int ObUserSqlService::gen_user_dml(
       || OB_FAIL(dml.add_column("IS_LOCKED", user.get_is_locked() ? 1 : 0))
       || OB_FAIL(dml.add_column("PRIV_CREATE_SYNONYM", user.get_priv(OB_PRIV_CREATE_SYNONYM) ? 1 : 0))
       || OB_FAIL(dml.add_column("PRIV_FILE", user.get_priv(OB_PRIV_FILE) ? 1 : 0))
-      || OB_FAIL(dml.add_column("PRIV_ALTER_TENANT", user.get_priv(OB_PRIV_ALTER_TENANT) ? 1 : 0))
       || OB_FAIL(dml.add_column("PRIV_ALTER_SYSTEM", user.get_priv(OB_PRIV_ALTER_SYSTEM) ? 1 : 0))
-      || OB_FAIL(dml.add_column("PRIV_CREATE_RESOURCE_POOL", 
-                                user.get_priv(OB_PRIV_CREATE_RESOURCE_POOL) ? 1 : 0))
-      || OB_FAIL(dml.add_column("PRIV_CREATE_RESOURCE_UNIT", 
-                                user.get_priv(OB_PRIV_CREATE_RESOURCE_UNIT) ? 1 : 0))
       || OB_FAIL(dml.add_column("max_connections", user.get_max_connections()))
       || OB_FAIL(dml.add_column("max_user_connections", user.get_max_user_connections()))
       || OB_FAIL(dml.add_column("PRIV_REPL_SLAVE", user.get_priv(OB_PRIV_REPL_SLAVE) ? 1 : 0))
@@ -785,10 +780,6 @@ int ObUserSqlService::gen_user_dml(
       || OB_FAIL(dml.add_time_column("password_last_changed", user.get_password_last_changed()))
       || OB_FAIL(dml.add_gmt_modified())) {
     LOG_WARN("add column failed", K(ret));
-  } else if (OB_FAIL(dml.add_column("PRIV_DROP_DATABASE_LINK", user.get_priv(OB_PRIV_DROP_DATABASE_LINK) ? 1 : 0))) {
-    LOG_WARN("add  PRIV_DROP_DATABASE_LINK column failed", K(user.get_priv(OB_PRIV_DROP_DATABASE_LINK)), K(ret));
-  } else if (OB_FAIL(dml.add_column("PRIV_CREATE_DATABASE_LINK", user.get_priv(OB_PRIV_CREATE_DATABASE_LINK) ? 1 : 0))) {
-    LOG_WARN("add  PRIV_CREATE_DATABASE_LINK column failed", K(user.get_priv(OB_PRIV_CREATE_DATABASE_LINK)), K(ret));
   }
   int64_t priv_others = 0;
   if (OB_SUCC(ret)) {
@@ -803,16 +794,10 @@ int ObUserSqlService::gen_user_dml(
     if ((user.get_priv_set() & OB_PRIV_DROP_ROLE) != 0) { priv_others |= OB_PRIV_OTHERS_DROP_ROLE; }
     if ((user.get_priv_set() & OB_PRIV_TRIGGER) != 0) { priv_others |= OB_PRIV_OTHERS_TRIGGER; }
     if ((user.get_priv_set() & OB_PRIV_LOCK_TABLE) != 0) { priv_others |= OB_PRIV_OTHERS_LOCK_TABLE; }
-    if ((user.get_priv_set() & OB_PRIV_ENCRYPT) != 0) { priv_others |= OB_PRIV_OTHERS_ENCRYPT; }
-    if ((user.get_priv_set() & OB_PRIV_DECRYPT) != 0) { priv_others |= OB_PRIV_OTHERS_DECRYPT; }
-    if ((user.get_priv_set() & OB_PRIV_EVENT) != 0) { priv_others |= OB_PRIV_OTHERS_EVENT; }
-    if ((user.get_priv_set() & OB_PRIV_CREATE_CATALOG) != 0) { priv_others |= OB_PRIV_OTHERS_CREATE_CATALOG; }
-    if ((user.get_priv_set() & OB_PRIV_USE_CATALOG) != 0) { priv_others |= OB_PRIV_OTHERS_USE_CATALOG; }
     if ((user.get_priv_set() & OB_PRIV_CREATE_AI_MODEL) != 0) { priv_others |= OB_PRIV_OTHERS_CREATE_AI_MODEL; }
     if ((user.get_priv_set() & OB_PRIV_ALTER_AI_MODEL) != 0) { priv_others |= OB_PRIV_OTHERS_ALTER_AI_MODEL; }
     if ((user.get_priv_set() & OB_PRIV_DROP_AI_MODEL) != 0) { priv_others |= OB_PRIV_OTHERS_DROP_AI_MODEL; }
     if ((user.get_priv_set() & OB_PRIV_ACCESS_AI_MODEL) != 0) { priv_others |= OB_PRIV_OTHERS_ACCESS_AI_MODEL; }
-    if ((user.get_priv_set() & OB_PRIV_CREATE_LOCATION) != 0) {priv_others |= OB_PRIV_OTHERS_CREATE_LOCATION; }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(dml.add_column("PRIV_OTHERS", priv_others))) {

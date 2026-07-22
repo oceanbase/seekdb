@@ -46,7 +46,7 @@ int ObEmptyReadBucket::init()
   return ret;
 }
 
-int ObEmptyReadBucket::mtl_init(ObEmptyReadBucket *&bucket)
+int ObEmptyReadBucket::server_module_init(ObEmptyReadBucket *&bucket)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(bucket->init())) {
@@ -68,7 +68,7 @@ void ObEmptyReadBucket::destroy()
   }
 }
 
-void ObEmptyReadBucket::mtl_destroy(ObEmptyReadBucket *&bucket)
+void ObEmptyReadBucket::server_module_destroy(ObEmptyReadBucket *&bucket)
 {
   if (OB_NOT_NULL(bucket)) {
     bucket->destroy();

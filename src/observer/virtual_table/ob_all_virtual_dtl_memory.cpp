@@ -25,14 +25,14 @@ using namespace oceanbase::sql::dtl;
 using namespace oceanbase::observer;
 using namespace oceanbase::share;
 
-void ObAllVirtualDtlMemoryPoolInfo::set_mem_pool_info(ObTenantDfc *&tenant_dfc, ObDtlChannelMemManager *mgr)
+void ObAllVirtualDtlMemoryPoolInfo::set_mem_pool_info(ObDfc *&dfc_manager, ObDtlChannelMemManager *mgr)
 {
-  channel_total_cnt_ = tenant_dfc->get_channel_cnt();
-  channel_block_cnt_ = tenant_dfc->get_current_total_blocked_cnt();
-  max_parallel_cnt_ = tenant_dfc->get_max_parallel();
-  max_blocked_buffer_size_ = tenant_dfc->get_max_blocked_buffer_size();
-  accumulated_block_cnt_ =tenant_dfc->get_accumulated_blocked_cnt();
-  current_buffer_used_ = tenant_dfc->get_current_buffer_used();
+  channel_total_cnt_ = dfc_manager->get_channel_cnt();
+  channel_block_cnt_ = dfc_manager->get_current_total_blocked_cnt();
+  max_parallel_cnt_ = dfc_manager->get_max_parallel();
+  max_blocked_buffer_size_ = dfc_manager->get_max_blocked_buffer_size();
+  accumulated_block_cnt_ =dfc_manager->get_accumulated_blocked_cnt();
+  current_buffer_used_ = dfc_manager->get_current_buffer_used();
   seqno_ = mgr->get_seqno();
   alloc_cnt_ = mgr->get_alloc_cnt();
   free_cnt_ = mgr->get_free_cnt();
@@ -69,33 +69,23 @@ void ObAllVirtualDtlMemoryIterator::destroy()
   iter_allocator_ = nullptr;
 }
 
-int ObAllVirtualDtlMemoryIterator::prepare_tenants()
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(NULL == GCTX.omt_)) {
-    ret = OB_NOT_INIT;
-    SERVER_LOG(WARN, "GCTX.omt_ shouldn't be NULL",
-        K_(GCTX.omt), K(GCTX), K(ret));
-  }
-  return ret;
-}
-
 int ObAllVirtualDtlMemoryIterator::init()
 {
   int ret = OB_SUCCESS;
   mem_pool_infos_.set_block_allocator(ObWrapperAllocator(iter_allocator_));
-  if (OB_FAIL(prepare_tenants())) {
-    LOG_WARN("failed to get tenant ids", K(ret));
+  if (OB_ISNULL(share::g_mp) || OB_ISNULL(share::g_mp->dfc_manager())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("DFC manager is not initialized", K(ret));
   }
   return ret;
 }
 
-int ObAllVirtualDtlMemoryIterator::get_tenant_memory_pool_infos()
+int ObAllVirtualDtlMemoryIterator::get_memory_pool_infos()
 {
   int ret = OB_SUCCESS;
-  MOD_SCOPE {
-    ObTenantDfc *tenant_dfc = share::g_mp->tenant_dfc();
-    ObDtlTenantMemManager *mem_mgr = tenant_dfc->get_tenant_mem_manager();
+  SERVER_MODULE_SCOPE {
+    ObDfc *dfc_manager = share::g_mp->dfc_manager();
+    ObDtlMemManager *mem_mgr = dfc_manager->get_mem_manager();
     int64_t cnt = mem_mgr->get_channel_mgr_count();
     for (int64_t i = 0; i < cnt && OB_SUCC(ret); ++i) {
       ObDtlChannelMemManager *chan_mem_mgr = nullptr;
@@ -103,7 +93,7 @@ int ObAllVirtualDtlMemoryIterator::get_tenant_memory_pool_infos()
         LOG_WARN("failed to get channel memory manager", K(ret), K(i));
       } else {
         ObAllVirtualDtlMemoryPoolInfo mem_pool_info;
-        mem_pool_info.set_mem_pool_info(tenant_dfc, chan_mem_mgr);
+        mem_pool_info.set_mem_pool_info(dfc_manager, chan_mem_mgr);
         if (OB_FAIL(mem_pool_infos_.push_back(mem_pool_info))) {
           LOG_WARN("failed to push back memory pool info", K(ret), K(i));
         }
@@ -121,7 +111,7 @@ int ObAllVirtualDtlMemoryIterator::get_next_memory_pools()
     LOG_WARN("mem pool infos must be empty", K(ret));
   } else if (!done_) {
     done_ = true;
-    if (OB_FAIL(get_tenant_memory_pool_infos())) {
+    if (OB_FAIL(get_memory_pool_infos())) {
       LOG_WARN("failed to get dtl memory pool infos", K(ret));
     }
   } else {

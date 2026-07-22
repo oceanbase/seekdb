@@ -94,7 +94,7 @@ int LogIOAdapter::init(common::ObIODevice *log_local_device,
                        ObIOManager *io_manager)
 {
   int ret = OB_SUCCESS;
-  if (!true || OB_ISNULL(log_local_device) || OB_ISNULL(io_manager)) {
+  if (OB_ISNULL(log_local_device) || OB_ISNULL(io_manager)) {
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid argument", K(ret), KP(log_local_device), KP(io_manager));
   } else {

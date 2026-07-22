@@ -18,7 +18,6 @@
 #define OCEANBASE_SQL_EXECUTOR_OB_EXECUTE_RESULT_
 
 #include "common/row/ob_row.h"
-#include "sql/ob_scanner.h"
 #include "sql/engine/ob_operator.h"
 
 namespace oceanbase
@@ -42,7 +41,6 @@ public:
 
 class ObExecuteResult : public ObIExecuteResult
 {
-  friend class ObLocalTaskExecutor;
   friend class ObExecutor;
 public:
   ObExecuteResult()
@@ -77,34 +75,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObExecuteResult);
 };
 
-class ObAsyncExecuteResult : public ObIExecuteResult
-{
-public:
-  ObAsyncExecuteResult();
-  virtual ~ObAsyncExecuteResult() { }
-
-  void set_result_stream(common::ObScanner *scanner, int64_t field_count)
-  {
-    scanner_ = scanner;
-    field_count_ = field_count;
-  }
-  virtual int open(ObExecContext &ctx) override;
-  virtual int get_next_row(ObExecContext &ctx, const common::ObNewRow *&row) override;
-  virtual int close(ObExecContext &ctx) override;
-  // interface for static typing engine
-  const ObOpSpec* get_static_engine_spec() const { return spec_; }
-  void set_static_engine_spec(const ObOpSpec *spec) { spec_ = spec; }
-
-private:
-  int64_t field_count_;
-  common::ObScanner *scanner_;
-  common::ObNewRow *cur_row_;
-  common::ObScanner::Iterator row_iter_;
-  // used for static engine
-  const ObOpSpec *spec_;
-  ObChunkDatumStore::Iterator datum_iter_;
-};
 }
 }
 #endif /* OCEANBASE_SQL_EXECUTOR_OB_EXECUTE_RESULT_ */
-

@@ -41,7 +41,7 @@ namespace omt
  * out of the worker loop, leaving a "zombie" entry in the workers_ list.
  * The derived class MUST run a periodic background task (e.g. timeup())
  * to reap these stopped workers — remove their nodes from the list and
- * destroy them. See ObTenant::check_worker_count().
+ * destroy them. See ObServerRuntime::check_worker_count().
  *
  * ## Achieving th_worker-style min/max limits
  * Two independent limits, enforced at different call sites:

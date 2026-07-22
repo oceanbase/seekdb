@@ -53,7 +53,7 @@ ObTransService::ObTransService()
   check_env_();
 }
 
-int ObTransService::mtl_init(ObTransService *&it)
+int ObTransService::server_module_init(ObTransService *&it)
 {
   int ret = OB_SUCCESS;
   const ObAddr &self = GCTX.self_addr();
@@ -75,10 +75,10 @@ int ObTransService::init(const ObAddr &self,
                          share::schema::ObMultiVersionSchemaService *schema_service)
 {
   int ret = OB_SUCCESS;
-  set_run_wrapper(MTL_CTX());
+  set_run_wrapper(share::server_runtime());
   
-  const int64_t tenant_memory_limit = lib::get_tenant_memory_limit();
-  int64_t msg_task_cnt = MSG_TASK_CNT_PER_GB * (tenant_memory_limit / (1024 * 1024 * 1024));
+  const int64_t runtime_memory_limit = lib::get_allocator_memory_limit();
+  int64_t msg_task_cnt = MSG_TASK_CNT_PER_GB * (runtime_memory_limit / (1024 * 1024 * 1024));
   if (msg_task_cnt < MSG_TASK_CNT_PER_GB) {
     msg_task_cnt = MSG_TASK_CNT_PER_GB;
   }
@@ -117,7 +117,7 @@ int ObTransService::init(const ObAddr &self,
     schema_service_ = schema_service;
     ts_mgr_ = ts_mgr;
     is_inited_ = true;
-    TRANS_LOG(INFO, "transaction service inited success", KPC(this), K(tenant_memory_limit));
+    TRANS_LOG(INFO, "transaction service inited success", KPC(this), K(runtime_memory_limit));
   }
   if (OB_SUCC(ret)) {
 #ifdef ENABLE_DEBUG_LOG
@@ -141,7 +141,7 @@ int ObTransService::init(const ObAddr &self,
     }
 #endif
   } else {
-    TRANS_LOG(WARN, "transaction service inited failed", K(ret), K(tenant_memory_limit));
+    TRANS_LOG(WARN, "transaction service inited failed", K(ret), K(runtime_memory_limit));
   }
   return ret;
 }
@@ -317,19 +317,6 @@ void ObTransService::handle(LinkTask *task)
         TRANS_LOG(WARN, "transaction service push task error", KR(ret), KPC(commit_cb_task));
       } else {
         // do nothing
-      }
-    } else if (ObTransRetryTaskType::ADVANCE_LS_CKPT_TASK == trans_task->get_task_type()) {
-      ObAdvanceLSCkptTask *advance_ckpt_task = static_cast<ObAdvanceLSCkptTask *>(trans_task);
-      if (OB_ISNULL(advance_ckpt_task)) {
-        // ignore ret
-        TRANS_LOG(WARN, "advance ckpt task is null", KP(advance_ckpt_task));
-      } else if (OB_FAIL(advance_ckpt_task->try_advance_ls_ckpt_ts())) {
-        TRANS_LOG(WARN, "advance ls ckpt ts failed", K(ret));
-      }
-
-      if (OB_NOT_NULL(advance_ckpt_task)) {
-        mtl_free(advance_ckpt_task);
-        advance_ckpt_task = nullptr;
       }
     } else {
       ret = OB_ERR_UNEXPECTED;

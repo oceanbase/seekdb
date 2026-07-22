@@ -625,7 +625,7 @@ public:
       if (0 == replay_status_->dec_ref()) {
         CLOG_LOG(INFO, "free replay status", KPC(replay_status_));
         replay_status_->~ObReplayStatus();
-        share::mtl_free(replay_status_);
+        share::server_free(replay_status_);
       }
       replay_status_ = NULL;
     }

@@ -143,7 +143,7 @@ int ObMacroMetaTempStore::init(const int64_t dir_id)
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("double initialization", K(ret));
-  } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.open(io_.fd_, io_.dir_id_))) {
+  } else if (OB_FAIL(SERVER_TMP_FILE_MANAGER.open(io_.fd_, io_.dir_id_))) {
     LOG_WARN("open tmp file failed", K(ret));
   } else {
     
@@ -160,7 +160,7 @@ void ObMacroMetaTempStore::reset()
   int ret = OB_SUCCESS;
   if (io_.fd_ > 0) {
     io_handle_.reset();
-    if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.remove(io_.fd_))) {
+    if (OB_FAIL(SERVER_TMP_FILE_MANAGER.remove(io_.fd_))) {
       LOG_WARN("remove tmp file failed", K(ret), K_(io));
     } else {
       LOG_INFO("remove tmp file success", K(ret), K_(io));
@@ -241,7 +241,7 @@ int ObMacroMetaTempStore::inner_append(const ObDataMacroBlockMeta &macro_meta, c
   int64_t macro_meta_serialize_size = 0;
   char *macro_meta_buf = nullptr;
   int64_t pos = 0;
-  const uint64_t data_version = CLUSTER_CURRENT_VERSION;
+  const uint64_t data_version = DATA_CURRENT_VERSION;
   if (OB_UNLIKELY(!macro_meta.is_valid() || !macro_meta.get_macro_id().is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument, un-expected macro meta", K(ret), K(macro_meta));
@@ -276,7 +276,7 @@ int ObMacroMetaTempStore::inner_append(const ObDataMacroBlockMeta &macro_meta, c
       const int64_t timeout_us = THIS_WORKER.get_timeout_remain();
       io_.io_timeout_ms_ = timeout_us <= 0 ? 0 : timeout_us / 1000;
       io_.io_desc_.set_wait_event(ObWaitEventIds::INTERM_RESULT_DISK_WRITE);
-      if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.aio_write(io_, io_handle_))) {
+      if (OB_FAIL(SERVER_TMP_FILE_MANAGER.aio_write(io_, io_handle_))) {
         LOG_WARN("failed to write store item to tmp file", K(ret), K_(io));
       }
     }
@@ -332,14 +332,14 @@ int ObMacroMetaTempStore::get_macro_meta_from_block_buf(const ObSSTableMacroBloc
   if (OB_UNLIKELY(buf == nullptr || buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument for macro meta buffer and size", K(ret), KP(buf), K(buf_size));
-  } else if (OB_FAIL(macro_reader_.decrypt_and_decompress_data(macro_header,
+  } else if (OB_FAIL(macro_reader_.decompress_data(macro_header,
                                                               buf,
                                                               buf_size,
                                                               false,
                                                               meta_block.get_buf(),
                                                               meta_block.get_buf_size(),
                                                               is_compressed))) {
-    LOG_WARN("failed to decrypt and decompress meta block", K(ret));
+    LOG_WARN("failed to decompress meta block", K(ret));
   } else if (OB_UNLIKELY(!meta_block.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("meta block invalid", K(ret), K(meta_block));
@@ -414,7 +414,7 @@ int ObMacroMetaTempStoreIter::init(ObMacroMetaTempStore &temp_meta_store)
     LOG_WARN("fail to init macro meta temp store iter, invalid argument", K(ret), K(temp_meta_store));
   } else if (OB_FAIL(temp_meta_store.wait())) {
     LOG_WARN("fail to wait temp meta store write finish", K(ret), K(temp_meta_store));
-  } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.get_tmp_file_size(temp_meta_store.io_.fd_,
+  } else if (OB_FAIL(SERVER_TMP_FILE_MANAGER.get_tmp_file_size(temp_meta_store.io_.fd_,
                                                                              meta_store_file_length_))) {
     LOG_WARN("fail to get temp file length", K(ret), K(temp_meta_store), K(temp_meta_store.io_.fd_));
   } else {
@@ -499,7 +499,7 @@ int ObMacroMetaTempStoreIter::try_submit_io()
       }
       if (OB_FAIL(ret)) {
         // pass
-      } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.pread(io_info, meta_store_read_offset_, read_handle))) {
+      } else if (OB_FAIL(SERVER_TMP_FILE_MANAGER.pread(io_info, meta_store_read_offset_, read_handle))) {
         LOG_WARN("failed to do tmp file pread", K(ret));
       } else if (OB_FAIL(read_handle.wait())) {
         LOG_WARN("failed to wait read io finish", K(ret));

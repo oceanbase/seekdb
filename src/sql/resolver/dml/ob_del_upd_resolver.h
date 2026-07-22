@@ -54,7 +54,6 @@ public:
   const static uint8_t IS_JSON_CONSTRAINT_RELAX = 1;
   const static uint8_t IS_JSON_CONSTRAINT_STRICT = 4;
   inline bool is_resolve_insert_update() { return is_resolve_insert_update_;}
-  int recursive_search_sequence_expr(const ObRawExpr *default_expr);
 protected:
 
   int resolve_assignments(const ParseNode &parse_node,

@@ -19,7 +19,6 @@
 
 #include "sql/engine/ob_operator.h"
 #include "lib/file/ob_file.h"
-#include "share/io/ob_backup_storage_info.h"
 #include "sql/engine/cmd/ob_load_data_parser.h"
 #include "sql/engine/basic/ob_select_into_basic.h"
 #include "sql/engine/basic/ob_external_file_writer.h"
@@ -75,21 +74,18 @@ public:
       escaped_cht_(),
       cs_type_(CS_TYPE_INVALID),
       parallel_(1),
-      file_partition_expr_(NULL),
       buffer_size_(DEFAULT_BUFFER_SIZE),
       is_overwrite_(false),
-      external_properties_(alloc),
-      external_partition_(alloc)
+      external_properties_(alloc)
   {
   }
 
   ObItemType into_type_;
   common::ObFixedArray<common::ObString, common::ObIAllocator> user_vars_;
   common::ObObj outfile_name_;
-  common::ObObj field_str_; // FARM COMPAT WHITELIST FOR filed_str_: renamed
+  common::ObObj field_str_;
   common::ObObj line_str_;
-  // Versions below 431 cannot execute select into in parallel, will not serialize operators, modifying closed_cht_type will not cause upgrade compatibility issues
-  common::ObObj closed_cht_; // FARM COMPAT WHITELIST FOR closed_cht_: change type
+  common::ObObj closed_cht_;
   bool is_optional_;
   common::ObFixedArray<ObExpr*, common::ObIAllocator> select_exprs_;
   bool is_single_;
@@ -97,11 +93,9 @@ public:
   common::ObObj escaped_cht_;
   common::ObCollationType cs_type_;
   int64_t parallel_;
-  sql::ObExpr* file_partition_expr_;
   int64_t buffer_size_;
   bool is_overwrite_;
   ObExternalFileFormat::StringData external_properties_;
-  ObExternalFileFormat::StringData external_partition_;
   static const int64_t DEFAULT_MAX_FILE_SIZE = 256LL * 1024 * 1024;
   static const int64_t DEFAULT_BUFFER_SIZE = 1LL * 1024 * 1024;
 };
@@ -117,8 +111,6 @@ public:
       line_str_(),
       cs_type_(CS_TYPE_INVALID),
       basic_url_(),
-      file_location_(IntoFileLocation::SERVER_DISK),
-      write_offset_(0),
       data_writer_(NULL),
       char_enclose_(0),
       char_escape_('\\'),
@@ -130,15 +122,12 @@ public:
       has_coll_(false),
       print_params_(),
       escape_printer_(),
-      do_partition_(false),
       json_buf_(NULL),
       json_buf_len_(0),
       shared_buf_(NULL),
       shared_buf_len_(0),
       use_shared_buf_(false),
       has_compress_(false),
-      partition_map_(),
-      curr_partition_num_(0),
       external_properties_(),
       format_type_(ObExternalFileFormat::FormatType::CSV_FORMAT),
       block_id_(0),
@@ -263,17 +252,15 @@ private:
   int into_varlist();
   int calc_next_file_path(ObExternalFileWriter &data_writer);
   int calc_first_file_path(ObString &path);
-  int calc_file_path_with_partition(ObString partition, ObExternalFileWriter &data_writer);
   int check_csv_file_size(ObCsvFileWriter &data_writer);
   int split_file(ObExternalFileWriter &data_writer);
   int prepare_escape_printer();
   int check_has_lob_or_json();
-  int calc_url_and_set_access_info();
+  int calc_outfile_path();
   int create_shared_buffer_for_data_writer();
   int create_the_only_data_writer(ObExternalFileWriter *&data_writer);
   int new_data_writer(ObExternalFileWriter *&data_writer);
   int check_secure_file_path(ObString file_name);
-  int get_data_writer_for_partition(const ObString &partition_str, ObExternalFileWriter *&data_writer);
   char *get_json_buf() { return json_buf_; }
   int64_t get_json_buf_len() { return json_buf_len_; }
   char *get_shared_buf() { return shared_buf_; }
@@ -289,9 +276,6 @@ private:
   ObObj file_name_;
   common::ObCollationType cs_type_;
   ObString basic_url_; // url without partition expr
-  share::ObBackupStorageInfo access_info_;
-  IntoFileLocation file_location_;
-  int64_t write_offset_;
   ObExternalFileWriter* data_writer_;
   char char_enclose_;
   char char_escape_;
@@ -303,22 +287,17 @@ private:
   bool has_coll_;
   common::ObObjPrintParams print_params_;
   ObEscapePrinter escape_printer_;
-  bool do_partition_;
   char *json_buf_;  // json needs one more buffer to hold the string before escaping
   int64_t json_buf_len_;
   char *shared_buf_;
   int64_t shared_buf_len_;
   bool use_shared_buf_;
   bool has_compress_;
-  typedef common::hash::ObHashMap<common::ObString, ObExternalFileWriter*, hash::NoPthreadDefendMode> ObPartitionWriterMap;
-  ObPartitionWriterMap partition_map_;
-  int curr_partition_num_;
   ObExternalFileFormat external_properties_;
   ObExternalFileFormat::FormatType format_type_;
   uint32_t block_id_;
   bool need_commit_;
   static const int64_t SHARED_BUFFER_SIZE = 2LL * 1024 * 1024;
-  static const int64_t MAX_OSS_FILE_SIZE = 5LL * 1024 * 1024 * 1024;
 
 };
 

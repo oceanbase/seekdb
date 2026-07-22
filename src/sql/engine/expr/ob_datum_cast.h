@@ -84,37 +84,6 @@ public:
                                      const ObCastMode cast_mode);
 };
 
-class ObOdpsDataTypeCastUtil : public ObDataTypeCastUtil
-{
-public:
-  static int common_string_decimalint_wrap(const ObExpr &expr, const ObString &in_str,
-                                          const ObUserLoggingCtx *user_logging_ctx,
-                                          ObDecimalIntBuilder &res_val);
-  static int common_string_string_wrap(const ObExpr &expr,
-                                      const ObObjType in_type,
-                                      const ObCollationType in_cs_type,
-                                      const ObObjType out_type,
-                                      const ObCollationType out_cs_type,
-                                      const ObString &in_str,
-                                      ObEvalCtx &ctx,
-                                      ObDatum &res_datum,
-                                      bool& has_set_res);
-  static int common_string_text_wrap(const ObExpr &expr,
-                                    const ObString &in_str,
-                                    ObEvalCtx &ctx,
-                                    const ObLobLocatorV2 *lob_locator,
-                                    ObDatum &res_datum,
-                                    ObObjType &in_type,
-                                    ObCollationType &in_cs_type);
-  static int common_check_convert_string(const ObExpr &expr,
-                                        ObEvalCtx &ctx,
-                                        const ObString &in_str,
-                                        ObObjType in_type,
-                                        ObCollationType in_cs_type,
-                                        ObDatum &res_datum,
-                                        bool &has_set_res);
-};
-
 template <typename IN_TYPE, typename OUT_TYPE>
 static OB_INLINE int common_floating_int(IN_TYPE &in_val, OUT_TYPE &out_val)
 {

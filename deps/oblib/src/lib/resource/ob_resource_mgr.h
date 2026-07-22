@@ -18,7 +18,6 @@
 #define OCEANBASE_RESOURCE_OB_RESOURCE_MGR_H_
 
 #include "lib/ob_define.h"
-#include "lib/queue/ob_link.h"
 #include "lib/lock/ob_mutex.h"
 #include "lib/lock/ob_spin_rwlock.h"
 #include "lib/alloc/alloc_struct.h"
@@ -30,14 +29,14 @@ namespace oceanbase
 {
 namespace lib
 {
-class ObTenantMemoryMgr
+class ObMemoryMgr
 {
 public:
   static const int64_t LARGE_REQUEST_EXTRA_MB_COUNT = 2;
   static const int64_t ALIGN_SIZE = static_cast<int64_t>(INTACT_ACHUNK_SIZE);
-  ObTenantMemoryMgr();
+  ObMemoryMgr();
 
-  virtual ~ObTenantMemoryMgr() {}
+  virtual ~ObMemoryMgr() {}
 
   void set_cache_washer(ObICacheWasher &cache_washer);
   AChunk *alloc_chunk(const int64_t size, const ObMemAttr &attr);
@@ -84,37 +83,37 @@ private:
   volatile int64_t hard_limit_bytes_[common::ObCtxIds::MAX_CTX_ID];
 };
 
-struct ObTenantResourceMgr : public common::ObLink
+struct ObResourceState
 {
-  ObTenantResourceMgr();
-  virtual ~ObTenantResourceMgr();
+  ObResourceState();
+  virtual ~ObResourceState();
 
   
-  ObTenantMemoryMgr memory_mgr_;
+  ObMemoryMgr memory_mgr_;
   // add other mgr here
   int64_t ref_cnt_;
 };
 
 class ObResourceMgr;
-class ObTenantResourceMgrHandle
+class ObResourceMgrHandle
 {
 public:
-  ObTenantResourceMgrHandle();
-  virtual ~ObTenantResourceMgrHandle();
+  ObResourceMgrHandle();
+  virtual ~ObResourceMgrHandle();
 
-  int init(ObResourceMgr *resource_mgr, ObTenantResourceMgr *tenant_resource_mgr);
+  int init(ObResourceMgr *owner, ObResourceState *state);
   bool is_valid() const;
   void reset();
-  ObTenantMemoryMgr *get_memory_mgr();
-  const ObTenantMemoryMgr *get_memory_mgr() const;
+  ObMemoryMgr *get_memory_mgr();
+  const ObMemoryMgr *get_memory_mgr() const;
 private:
-  ObResourceMgr *resource_mgr_;
-  ObTenantResourceMgr *tenant_resource_mgr_;
+  ObResourceMgr *owner_;
+  ObResourceState *state_;
 };
 
 class ObResourceMgr
 {
-  friend class ObTenantResourceMgrHandle;
+  friend class ObResourceMgrHandle;
 public:
   ObResourceMgr();
   virtual ~ObResourceMgr();
@@ -124,20 +123,20 @@ public:
   static ObResourceMgr &get_instance();
   int set_cache_washer(ObICacheWasher &cache_washer);
 
-  // will create resource mgr if not exist
-  int get_tenant_resource_mgr(ObTenantResourceMgrHandle &handle);
+  // Creates the resource state on first use.
+  int get_handle(ObResourceMgrHandle &handle);
 private:
-  void inc_ref(ObTenantResourceMgr *tenant_resource_mgr);
-  void dec_ref(ObTenantResourceMgr *tenant_resource_mgr);
-  int get_tenant_resource_mgr_unsafe(ObTenantResourceMgr *&tenant_resource_mgr);
-  int remove_tenant_resource_mgr_unsafe();
-  int create_tenant_resource_mgr_unsafe(ObTenantResourceMgr *&tenant_resource_mgr);
+  void inc_ref(ObResourceState *state);
+  void dec_ref(ObResourceState *state);
+  int get_state_unsafe(ObResourceState *&state);
+  int remove_state_unsafe();
+  int create_state_unsafe(ObResourceState *&state);
 
   bool inited_;
   ObICacheWasher *cache_washer_;
-  // single-tenant: bucket array collapsed to one slot
+  // single server resource state
   common::SpinRWLock lock_;
-  ObTenantResourceMgr *tenant_resource_mgr_;
+  ObResourceState *state_;
 };
 
 }//end namespace lib

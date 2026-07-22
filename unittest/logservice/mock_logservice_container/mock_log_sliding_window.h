@@ -17,189 +17,108 @@
 #ifndef OCEANBASE_UNITTEST_LOGSERVICE_MOCK_CONTAINER_LOG_SLIDING_WINDOW_
 #define OCEANBASE_UNITTEST_LOGSERVICE_MOCK_CONTAINER_LOG_SLIDING_WINDOW_
 
-#define private public
 #include "logservice/palf/log_sliding_window.h"
-#include "share/scn.h"
-#include "mock_log_state_mgr.h"
-#undef private
 
 namespace oceanbase
 {
 namespace palf
 {
-class PalfFSCbWrapper;
 
 class MockLogSlidingWindow : public LogSlidingWindow
 {
 public:
   MockLogSlidingWindow()
-    : all_log_flushed_(true),
-      all_committed_slided_out_(true),
-      activated_(false),
-      pending_end_lsn_(0),
-      mock_start_id_(1)
+    : pending_end_lsn_(PALF_INITIAL_LSN_VAL),
+      last_slide_end_lsn_(PALF_INITIAL_LSN_VAL),
+      max_lsn_(PALF_INITIAL_LSN_VAL),
+      committed_end_lsn_(PALF_INITIAL_LSN_VAL),
+      start_id_(1),
+      is_empty_(true),
+      all_log_flushed_(true),
+      all_committed_slided_(true),
+      activate_ret_(OB_SUCCESS),
+      activate_called_(false)
   {}
-  virtual ~MockLogSlidingWindow() {}
-public:
-  void destroy() {}
-  int sliding_cb(const int64_t sn, const FixedSlidingWindowSlot *data)
+  ~MockLogSlidingWindow() override = default;
+
+  void destroy() override {}
+  int init(const common::ObAddr &self,
+           LogStateMgr *state_mgr,
+           LogModeMgr *mode_mgr,
+           LogEngine *log_engine,
+           PalfFSCbWrapper *palf_fs_cb,
+           common::ObILogAllocator *alloc_mgr,
+           const PalfBaseInfo &palf_base_info) override
   {
-    int ret = OB_SUCCESS;
-    UNUSED(sn);
-    UNUSED(data);
-    return ret;
-  }
-  int64_t get_max_log_id() const
-  {
-    return 1;
-  }
-  int64_t get_max_log_ts() const
-  {
-    return 1;
-  }
-  LSN get_max_lsn() const
-  {
-    LSN lsn;
-    lsn.val_ = 0;
-    return lsn;
-  }
-  int64_t get_start_id() const
-  {
-    return mock_start_id_;
-  }
-  int get_committed_end_lsn(LSN &committed_end_lsn) const
-  {
-    int ret = OB_SUCCESS;
-    UNUSED(committed_end_lsn);
-    return ret;
-  }
-  bool is_empty() const
-  {
-    return true;
-  }
-  bool check_all_log_has_flushed()
-  {
-    return all_log_flushed_;
-  }
-  int get_majority_match_lsn(LSN &majority_match_lsn)
-  {
-    UNUSED(majority_match_lsn);
+    UNUSEDx(self, state_mgr, mode_mgr, log_engine, palf_fs_cb,
+            alloc_mgr, palf_base_info);
     return OB_SUCCESS;
   }
-  // ================= log sync part begin
-  int submit_log(const char *buf,
-                 const int64_t buf_len,
-                 const int64_t ref_ts_ns,
-                 LSN &lsn,
-                 int64_t &log_timestamp)
+  int64_t get_max_log_id() const override { return start_id_ - 1; }
+  const share::SCN get_max_scn() const override { return share::SCN::min_scn(); }
+  LSN get_max_lsn() const override { return max_lsn_; }
+  int64_t get_start_id() const override { return start_id_; }
+  int get_committed_end_lsn(LSN &committed_end_lsn) const override
   {
-    int ret = OB_SUCCESS;
-    UNUSED(buf);
-    UNUSED(buf_len);
-    UNUSED(ref_ts_ns);
-    UNUSED(lsn);
-    UNUSED(log_timestamp);
-    return ret;
+    committed_end_lsn = committed_end_lsn_;
+    return OB_SUCCESS;
   }
-  int after_flush_log(const FlushLogCbCtx &flush_cb_ctx)
+  bool is_empty() const override { return is_empty_; }
+  bool check_all_log_has_flushed() override { return all_log_flushed_; }
+  bool is_all_committed_log_slided_out(LSN &prev_lsn,
+                                       int64_t &prev_log_id,
+                                       LSN &committed_end_lsn) const override
   {
-    int ret = OB_SUCCESS;
-    UNUSED(flush_cb_ctx);
-    return ret;
+    prev_lsn = last_slide_end_lsn_;
+    prev_log_id = start_id_ - 1;
+    committed_end_lsn = committed_end_lsn_;
+    return all_committed_slided_;
   }
-  int ack_log(const common::ObAddr &src_server, const LSN &end_lsn)
+  int report_log_task_trace(const int64_t log_id) override
   {
-    int ret = OB_SUCCESS;
-    UNUSED(src_server);
-    UNUSED(end_lsn);
-    return ret;
-  }
-  int truncate_for_rebuild(const PalfBaseInfo &palf_base_info)
-  {
-    int ret = OB_SUCCESS;
-    UNUSED(palf_base_info);
-    return ret;
-  }
-  // ================= log sync part end
-  int append_disk_log(const LSN &lsn, const LogGroupEntry &group_entry)
-  {
-    int ret = OB_SUCCESS;
-    UNUSED(lsn);
-    UNUSED(group_entry);
-    return ret;
-  }
-  int report_log_task_trace(const int64_t log_id)
-  {
-    int ret = OB_SUCCESS;
     UNUSED(log_id);
-    return ret;
+    return OB_SUCCESS;
   }
-  void get_max_flushed_end_lsn(LSN &end_lsn) const
+  void get_max_flushed_end_lsn(LSN &end_lsn) const override
   {
-    end_lsn = max_flushed_end_lsn_;
+    end_lsn = max_lsn_;
   }
-  int clean_log(const bool need_clear_log_exist_flag)
-  {
-    int ret = OB_SUCCESS;
-    UNUSED(need_clear_log_exist_flag);
-    return ret;
-  }
+  int clean_log() override { return OB_SUCCESS; }
   int activate() override
   {
-    activated_ = true;
+    activate_called_ = true;
+    return activate_ret_;
+  }
+  int try_advance_committed_end_lsn(const LSN &end_lsn) override
+  {
+    committed_end_lsn_ = end_lsn;
     return OB_SUCCESS;
   }
-  int try_advance_committed_end_lsn(const LSN &end_lsn)
+  int get_last_slide_end_lsn(LSN &out_end_lsn) const override
   {
-    pending_end_lsn_ = end_lsn;
-    return OB_SUCCESS;
-  }
-  int64_t get_last_submit_log_id_() const
-  {
-    return 1;
-  }
-  int get_last_slide_end_lsn(LSN &out_end_lsn) const
-  {
-    int ret = OB_SUCCESS;
     out_end_lsn = last_slide_end_lsn_;
-    return ret;
+    return OB_SUCCESS;
   }
-  int64_t get_last_slide_log_ts() const
+  int inc_update_scn_base(const share::SCN &scn) override
   {
-    return 1;
+    UNUSED(scn);
+    return OB_SUCCESS;
   }
-  int try_freeze_last_log()
-  {
-    int ret = OB_SUCCESS;
-    return ret;
-  }
-  int inc_update_scn_base(const share::SCN &scn)
-  {
-    int ret = OB_SUCCESS;
-    return ret;
-  }
-  bool is_all_committed_log_slided_out(LSN &prev_lsn, int64_t &prev_log_id, LSN &committed_end_lsn) const
-  {
-    prev_lsn = LSN(PALF_INITIAL_LSN_VAL);
-    prev_log_id = OB_INVALID_LOG_ID;
-    committed_end_lsn = LSN(PALF_INITIAL_LSN_VAL + 1000);
-    return all_committed_slided_out_;
-  }
+
 public:
-  bool all_log_flushed_;
-  bool all_committed_slided_out_;
-  bool activated_;
-  palf::MockLogStateMgr *state_mgr_;
   LSN pending_end_lsn_;
-  int64_t mock_start_id_;
-  int64_t mock_last_submit_log_id_;
-  LSN mock_last_submit_lsn_;
-  LSN mock_last_submit_end_lsn_;
-  LSN mock_max_flushed_lsn_;
-  LSN mock_max_flushed_end_lsn_;
+  LSN last_slide_end_lsn_;
+  LSN max_lsn_;
+  LSN committed_end_lsn_;
+  int64_t start_id_;
+  bool is_empty_;
+  bool all_log_flushed_;
+  bool all_committed_slided_;
+  int activate_ret_;
+  bool activate_called_;
 };
 
-} // end of palf
-} // end of oceanbase
+} // namespace palf
+} // namespace oceanbase
 
 #endif

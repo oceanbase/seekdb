@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 #include "ob_i_table.h"
 #include "share/rc/ob_module_provider.h"
-#include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
+#include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
 #include "storage/tablelock/ob_lock_memtable.h"
 #include "storage/tx_table/ob_tx_ctx_memtable.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
@@ -403,7 +403,7 @@ ObTableHandleV2 &ObTableHandleV2::operator= (const ObTableHandleV2 &other)
 
 int ObTableHandleV2::set_table(
     ObITable *table,
-    ObTenantMetaMemMgr *t3m,
+    ObStorageMetaMemMgr *t3m,
     const ObITable::TableType table_type)
 {
   int ret = OB_SUCCESS;
@@ -508,7 +508,7 @@ int ObTablesHandleArray::add_memtable(ObITable *table)
     LOG_WARN("get invalid arguments", K(ret), KP(table));
   } else if (OB_FAIL(tablet_id_check(table->get_key().get_tablet_id()))) {
     LOG_WARN("failed to check tablet id", K(ret), KPC(table));
-  } else if (OB_FAIL(handle.set_table(table, share::g_mp->tenant_meta_mem_mgr(), table->get_key().table_type_))) {
+  } else if (OB_FAIL(handle.set_table(table, share::g_mp->storage_meta_mem_mgr(), table->get_key().table_type_))) {
     LOG_WARN("failed to set table to handle", K(ret));
   } else if (OB_FAIL(handles_array_.push_back(handle))) {
     LOG_WARN("failed to add table handle", K(ret), K(handle));

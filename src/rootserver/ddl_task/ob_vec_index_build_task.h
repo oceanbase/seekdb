@@ -37,7 +37,7 @@ public:
       const int64_t schema_version,
       const int64_t parallelism,
       const obcall::ObCreateIndexArg &create_index_arg,
-      const uint64_t tenant_data_version,
+      const uint64_t data_format_version,
       const int64_t parent_task_id = 0,
       const int64_t task_status = share::ObDDLTaskStatus::PREPARE,
       const int64_t snapshot_version = 0,
@@ -144,9 +144,9 @@ private:
   struct ChangeTaskStatusFn final
   {
   public:
-    ChangeTaskStatusFn(common::hash::ObHashMap<uint64_t, share::ObDomainDependTaskStatus> &dependent_task_result_map, ObRootService *root_service, int64_t &not_finished_cnt) :
+    ChangeTaskStatusFn(common::hash::ObHashMap<uint64_t, share::ObDomainDependTaskStatus> &dependent_task_result_map, ObLocalManagementService *local_management_service, int64_t &not_finished_cnt) :
       dependent_task_result_map_(dependent_task_result_map),
-      rt_service_(root_service),
+      local_management_service_(local_management_service),
       not_finished_cnt_(not_finished_cnt)
     {}
   public:
@@ -154,7 +154,7 @@ private:
     int operator() (common::hash::HashMapPair<uint64_t, share::ObDomainDependTaskStatus> &entry);
   public:
     common::hash::ObHashMap<uint64_t, share::ObDomainDependTaskStatus> &dependent_task_result_map_;
-    ObRootService *rt_service_;
+    ObLocalManagementService *local_management_service_;
     
     int64_t &not_finished_cnt_;
   };
@@ -214,7 +214,7 @@ private:
   int64_t hybrid_vector_embedded_vec_task_id_;
   bool hybrid_vector_embedded_vec_task_submitted_;
   bool is_post_create_hybrid_vector_;
-  ObRootService *root_service_;
+  ObLocalManagementService *local_management_service_;
   ObDDLWaitTransEndCtx wait_trans_ctx_;
   obcall::ObCreateIndexArg create_index_arg_;
   common::hash::ObHashMap<uint64_t, share::ObDomainDependTaskStatus> dependent_task_result_map_;

@@ -28,7 +28,7 @@ inline int MockObMultiVersionSchemaService::init()
      _OB_LOG(WARN, "fail to init maps, ret[%d]", ret);
   } else if (OB_FAIL(schema_cache_.init())) {
     _OB_LOG(WARN, "schema_cache_ init fail, ret[%d]", ret);
-  } else if (OB_FAIL(init_sys_tenant_user_schema())) {
+  } else if (OB_FAIL(init_system_runtime_user_schema())) {
     _OB_LOG(WARN, "init sys tenant user schema fail, ret[%d]", ret);
   } else {
     //increment_basepoint_set_ = true;
@@ -70,19 +70,19 @@ inline int MockObMultiVersionSchemaService::add_table_schema(ObTableSchema &tabl
 {
   int ret = common::OB_SUCCESS;
   schema::ObSchemaGetterGuard schema_guard;
-  const ObTenantSchema *tenant_schema = NULL;
+  const ObServerRuntimeSchema *runtime_schema = NULL;
   const ObSysVariableSchema *sys_variable = NULL;
   if (OB_FAIL(get_schema_guard(schema_guard, INT64_MAX))) {
     _OB_LOG(WARN, "get schema guard fail, ret %d", ret);
-  } else if (OB_FAIL(schema_guard.get_tenant_info(common::OB_SYS_TENANT_ID, tenant_schema))) {
+  } else if (OB_FAIL(schema_guard.get_server_runtime_info(common::OB_SERVER_RUNTIME_ID, runtime_schema))) {
     OB_LOG(WARN, "get tenant info failed", K(ret));
-  } else if (OB_ISNULL(tenant_schema)) {
-    ret = common::OB_TENANT_NOT_EXIST;
+  } else if (OB_ISNULL(runtime_schema)) {
+    ret = common::OB_RUNTIME_SCHEMA_NOT_READY;
     _OB_LOG(WARN, "tenant schema is null", K(ret));
-  } else if (OB_FAIL(schema_guard.get_sys_variable_schema(common::OB_SYS_TENANT_ID, sys_variable))) {
+  } else if (OB_FAIL(schema_guard.get_sys_variable_schema(common::OB_SERVER_RUNTIME_ID, sys_variable))) {
     OB_LOG(WARN, "get tenant info failed", K(ret));
   } else if (OB_ISNULL(sys_variable)) {
-    ret = common::OB_TENANT_NOT_EXIST;
+    ret = common::OB_RUNTIME_SCHEMA_NOT_READY;
     _OB_LOG(WARN, "sys variable schema is null", K(ret));
   } else {
     common::ObNameCaseMode local_mode = sys_variable->get_name_case_mode();
@@ -120,19 +120,19 @@ inline int MockObMultiVersionSchemaService::add_database_schema(ObDatabaseSchema
 {
   int ret = common::OB_SUCCESS;
   schema::ObSchemaGetterGuard schema_guard;
-  const ObTenantSchema *tenant_schema = NULL;
+  const ObServerRuntimeSchema *runtime_schema = NULL;
   const ObSysVariableSchema *sys_variable = NULL;
   if (OB_FAIL(get_schema_guard(schema_guard, INT64_MAX))) {
     _OB_LOG(WARN, "get schema guard fail, ret %d", ret);
-  } else if (OB_FAIL(schema_guard.get_tenant_info(common::OB_SYS_TENANT_ID, tenant_schema))) {
+  } else if (OB_FAIL(schema_guard.get_server_runtime_info(common::OB_SERVER_RUNTIME_ID, runtime_schema))) {
     OB_LOG(WARN, "get tenant info failed", K(database_schema), K(ret));
-  } else if (OB_ISNULL(tenant_schema)) {
-    ret = common::OB_TENANT_NOT_EXIST;
+  } else if (OB_ISNULL(runtime_schema)) {
+    ret = common::OB_RUNTIME_SCHEMA_NOT_READY;
     _OB_LOG(WARN, "tenant schema is null", K(ret));
-  } else if (OB_FAIL(schema_guard.get_sys_variable_schema(common::OB_SYS_TENANT_ID, sys_variable))) {
+  } else if (OB_FAIL(schema_guard.get_sys_variable_schema(common::OB_SERVER_RUNTIME_ID, sys_variable))) {
     OB_LOG(WARN, "get tenant info failed", K(ret));
   } else if (OB_ISNULL(sys_variable)) {
-    ret = common::OB_TENANT_NOT_EXIST;
+    ret = common::OB_RUNTIME_SCHEMA_NOT_READY;
     _OB_LOG(WARN, "sys variable schema is null", K(ret));
   } else {
     common::ObNameCaseMode local_mode = sys_variable->get_name_case_mode();

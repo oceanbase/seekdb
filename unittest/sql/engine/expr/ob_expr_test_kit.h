@@ -24,7 +24,6 @@
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/engine/ob_exec_context.h"
 #include "observer/ob_server.h"
-#include "share/ob_tenant_mgr.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "sql/ob_sql_init.h"
 #include "sql/code_generator/ob_expr_generator_impl.h"

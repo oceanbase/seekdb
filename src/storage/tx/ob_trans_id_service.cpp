@@ -22,14 +22,13 @@ namespace oceanbase
 namespace transaction
 {
 
-int ObTransIDService::mtl_init(ObTransIDService *&trans_id_service)
+int ObTransIDService::server_module_init(ObTransIDService *&trans_id_service)
 {
   return trans_id_service->init();
 }
 
 int ObTransIDService::init()
 {
-  self_ = GCTX.self_addr();
   service_type_ = ServiceType::TransIDService;
   pre_allocated_range_ = TRANS_ID_PREALLOCATED_RANGE;
   return OB_SUCCESS;

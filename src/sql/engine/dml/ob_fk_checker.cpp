@@ -243,14 +243,12 @@ int ObForeignKeyChecker::init_foreign_key_checker(int64_t estimate_row,
                                                   common::ObIAllocator *allocator)
 {
   int ret = OB_SUCCESS;
-  ObSQLSessionInfo *session = eval_ctx_.exec_ctx_.get_my_session();
   const ObDASTableLocMeta &loc_meta = fk_ctdef.loc_meta_;
   ObMemAttr mem_attr;
   
   mem_attr.label_ = "SqlFKeyCkr";
   das_ref_.set_expr_frame_info(expr_frame_info);
   das_ref_.set_mem_attr(mem_attr);
-  das_ref_.set_execute_directly(false); // Confirm the reasonableness of this parameter setting
   if (OB_FAIL(DAS_CTX(das_ref_.get_exec_ctx()).extended_table_loc(loc_meta, table_loc_))) {
     LOG_WARN("failed to extend table_loc", K(ret), K(loc_meta));
   } else if (OB_ISNULL(table_loc_)) {
@@ -316,8 +314,8 @@ int ObForeignKeyChecker::init_das_scan_rtdef()
                          true // read_latest
                         );
   das_scan_rtdef_.scan_flag_.flag_ = query_flag.flag_;
-  int64_t schema_version = task_exec_ctx.get_query_tenant_begin_schema_version();
-  das_scan_rtdef_.tenant_schema_version_ = schema_version;
+  int64_t schema_version = task_exec_ctx.get_query_begin_schema_version();
+  das_scan_rtdef_.runtime_schema_version_ = schema_version;
   das_scan_rtdef_.eval_ctx_ = &eval_ctx_;
   das_scan_rtdef_.is_for_foreign_check_ = true;
   das_scan_rtdef_.scan_flag_.set_for_foreign_key_check();

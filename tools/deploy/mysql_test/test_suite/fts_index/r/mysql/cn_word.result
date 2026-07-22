@@ -19,7 +19,7 @@ cn_word_table	CREATE TABLE `cn_word_table` (
   FULLTEXT KEY `fts_ik_title` (`title`) WITH PARSER ik PARSER_PROPERTIES=(ik_mode="max_word") BLOCK_SIZE 16384,
   FULLTEXT KEY `fts_ik_text` (`text`) WITH PARSER ik PARSER_PROPERTIES=(ik_mode="smart") BLOCK_SIZE 16384,
   FULLTEXT KEY `fts_ik_note` (`note`) WITH PARSER ik PARSER_PROPERTIES=(ik_mode="smart") BLOCK_SIZE 16384
-) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
 ==ik dict load when memory is not enough will be frequentialy failed, so we use small batch to insert to avoid timeout when memory is not enough=========
 INSERT INTO cn_word_table (title, text, note) VALUES
 ('晨曦中的问候', '在每一个新的早晨，当第一缕阳光洒进窗户，一句温暖的“你好”可以为新的一天定下积极的基调。无论是对家人、同事还是陌生人，一句简单的问候都能够传递出关怀与尊重，让对方感受到一天的美好从这里开始。', '日常礼仪');

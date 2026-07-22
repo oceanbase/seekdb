@@ -21,8 +21,8 @@
 #include "share/rc/ob_module_provider.h"
 #include "storage/compaction/ob_schedule_dag_func.h"
 #include "storage/tx_storage/ob_ls_service.h"
-#include "storage/tx_storage/ob_tenant_freezer.h"
-#include "storage/ddl/ob_direct_insert_sstable_ctx_new.h"
+#include "storage/tx_storage/ob_memstore_freezer.h"
+#include "storage/ddl/ob_direct_insert_sstable_ctx.h"
 #include "storage/ddl/ob_ddl_merge_task_utils.h"
 #include "storage/ddl/ob_ddl_merge_schedule.h"
 #include "storage/ddl/ob_tablet_fork_task.h"
@@ -189,7 +189,7 @@ int ObDDLStartReplayExecutor::replay_ddl_start(ObTabletHandle &tablet_handle, co
 {
   int ret = OB_SUCCESS;
   ObTabletDirectLoadMgrHandle direct_load_mgr_handle;
-  ObTenantDirectLoadMgr *tenant_direct_load_mgr = share::g_mp->tenant_direct_load_mgr();
+  ObDirectLoadMgr *direct_load_mgr = share::g_mp->direct_load_mgr();
   const int64_t unused_context_id = -1;
   bool need_replay = true;
   ObTabletID tablet_id;
@@ -209,7 +209,7 @@ int ObDDLStartReplayExecutor::replay_ddl_start(ObTabletHandle &tablet_handle, co
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("need replay but tablet handle is invalid", K(ret), K(need_replay), K(tablet_handle));
   } else if (FALSE_IT(tablet_id = tablet_handle.get_obj()->get_tablet_id())) {
-  } else if (OB_ISNULL(tenant_direct_load_mgr)) {
+  } else if (OB_ISNULL(direct_load_mgr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(ret));
   } else {
@@ -231,9 +231,9 @@ int ObDDLStartReplayExecutor::replay_ddl_start(ObTabletHandle &tablet_handle, co
       table_key = log_->get_table_key();
     }
 
-    if (OB_FAIL(tenant_direct_load_mgr->replay_create_tablet_direct_load(tablet_handle.get_obj(), log_->get_execution_id(), direct_load_param))) {
+    if (OB_FAIL(direct_load_mgr->replay_create_tablet_direct_load(tablet_handle.get_obj(), log_->get_execution_id(), direct_load_param))) {
       LOG_WARN("create tablet manager failed", K(ret));
-    } else if (OB_FAIL(tenant_direct_load_mgr->get_tablet_mgr_and_check_major(
+    } else if (OB_FAIL(direct_load_mgr->get_tablet_mgr_and_check_major(
             tablet_id,
             true/* is_full_direct_load */,
             direct_load_mgr_handle,
@@ -431,7 +431,7 @@ int ObDDLRedoReplayExecutor::do_full_replay_(
   } else {
     const ObDDLMacroBlockRedoInfo &redo_info = log_->get_redo_info();
     ObStorageObjectOpt opt;
-    opt.set_private_object_opt(tablet_handle.get_obj()->get_tablet_id().id());
+    opt.set_data_macro_object_opt();
     ObStorageObjectHandle macro_handle;
     ObStorageObjectWriteInfo write_info;
     write_info.buffer_ = redo_info.data_buffer_.ptr();
@@ -470,8 +470,8 @@ int ObDDLRedoReplayExecutor::do_full_replay_(
       bool is_major_sstable_exist = false;
       uint64_t data_format_version = redo_info.data_format_version_;
       ObTabletDirectLoadMgrHandle direct_load_mgr_handle;
-      ObTenantDirectLoadMgr *tenant_direct_load_mgr = share::g_mp->tenant_direct_load_mgr();
-      if (OB_ISNULL(tenant_direct_load_mgr)) {
+      ObDirectLoadMgr *direct_load_mgr = share::g_mp->direct_load_mgr();
+      if (OB_ISNULL(direct_load_mgr)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected err", K(ret));
       }
@@ -614,10 +614,10 @@ int ObDDLCommitReplayExecutor::replay_ddl_commit(ObTabletHandle &tablet_handle)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("need replay but tablet handle is invalid", K(ret), K(need_replay), K(tablet_handle), K_(log), K_(scn));
   } else if (OB_FALSE_IT(tablet_id = tablet_handle.get_obj()->get_tablet_id())) {
-  } else if (OB_ISNULL(share::g_mp->tenant_direct_load_mgr())) {
+  } else if (OB_ISNULL(share::g_mp->direct_load_mgr())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(ret));
-  } else if (OB_FAIL(share::g_mp->tenant_direct_load_mgr()->get_tablet_mgr_and_check_major(
+  } else if (OB_FAIL(share::g_mp->direct_load_mgr()->get_tablet_mgr_and_check_major(
           tablet_id,
           true/* is_full_direct_load */,
           direct_load_mgr_handle,

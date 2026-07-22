@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/tablet/ob_tablet_to_table_history_operator.h"
+#include "common/mysqlclient/ob_isql_client.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/ob_dml_sql_splicer.h"                // ObDMLSqlSplicer
 #include "share/schema/ob_schema_service.h"
@@ -57,7 +58,7 @@ int ObTabletToTableHistoryOperator::create_tablet_to_table_history(
       for (int64_t i = start_idx; OB_SUCC(ret) && i < end_idx; i++) {
         const ObTabletTablePair &pair = pairs.at(i);
         if (OB_UNLIKELY(!pair.is_valid()
-            || !pair.get_tablet_id().is_valid_with_tenant())) {
+            || !pair.get_tablet_id().is_valid())) {
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("invalid tablet-table pair", KR(ret), K(pair));
         } else if (OB_FAIL(dml_splicer.add_pk_column("tablet_id", pair.get_tablet_id().id()))
@@ -116,7 +117,7 @@ int ObTabletToTableHistoryOperator::drop_tablet_to_table_history(
       for (int64_t i = start_idx; OB_SUCC(ret) && i < end_idx; i++) {
         const ObTabletID &tablet_id = tablet_ids.at(i);
         if (OB_UNLIKELY(!tablet_id.is_valid()
-            || !tablet_id.is_valid_with_tenant())) {
+            || !tablet_id.is_valid())) {
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("invalid tablet_id", KR(ret), K(tablet_id));
         } else if (OB_FAIL(dml_splicer.add_pk_column("tablet_id", tablet_id.id()))

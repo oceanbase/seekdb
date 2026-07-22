@@ -117,7 +117,6 @@ public:
                  K(ds_level_),
                  K(sample_block_),
                  K(expression_hash_));
-//tenant id
     uint64_t table_id_;//sample table id
     uint64_t partition_hash_;//sample table partition hash
     uint64_t ds_level_; //dynamic sampling level
@@ -197,7 +196,6 @@ public:
                K(stat_expired_time_));
 
 private:
-//tenant id
   uint64_t table_id_;//table id
   uint64_t partition_hash_;//partition hash
   uint64_t ds_level_;//dynamic sampling level

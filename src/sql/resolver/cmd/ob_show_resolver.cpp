@@ -17,10 +17,9 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/cmd/ob_show_resolver.h"
 #include "sql/resolver/dcl/ob_grant_resolver.h"
-#include "observer/virtual_table/ob_tenant_all_tables.h"
-#include "storage/tx/ob_xa_define.h"
+#include "sql/resolver/ob_resolver_utils.h"
+#include "observer/virtual_table/ob_show_table_status.h"
 #include "sql/printer/ob_schema_printer.h"
-#include "share/catalog/ob_catalog_utils.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -112,14 +111,13 @@ static constexpr char check_table_view_invalid2[] =
     "'Corrupt' As Msg_text "
     "FROM dual)";
 
-int ObShowResolver::check_db_access_for_show_sql(const uint64_t catalog_id,
-                                                 const ObShowResolverContext &show_resv_ctx,
+int ObShowResolver::check_db_access_for_show_sql(const ObShowResolverContext &show_resv_ctx,
                                                  ObSessionPrivInfo &session_priv,
                                                  const common::ObIArray<uint64_t> &enable_role_id_array)
 {
   int ret = OB_SUCCESS;
   ObString show_db_name = show_resv_ctx.show_database_name_;
-  if (OB_FAIL(schema_checker_->check_db_access(session_priv, enable_role_id_array, catalog_id, show_db_name))) {
+  if (OB_FAIL(schema_checker_->check_db_access(session_priv, enable_role_id_array, show_db_name))) {
     if (OB_ERR_NO_DB_PRIVILEGE == ret) {
       LOG_USER_ERROR(OB_ERR_NO_DB_PRIVILEGE, session_priv.user_name_.length(), session_priv.user_name_.ptr(),
                       session_priv.host_name_.length(),session_priv.host_name_.ptr(),
@@ -135,7 +133,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
   uint64_t real_id = OB_INVALID_ID;
-  uint64_t catalog_id = OB_INVALID_ID;
   ObString database_name;
   ObSessionPrivInfo session_priv;
   ObString select_sql;
@@ -156,22 +153,14 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
   } else if (OB_UNLIKELY(parse_tree.type_ < T_SHOW_TABLES || parse_tree.type_ > T_SHOW_GRANTS)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_TRIGGERS)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_PROFILE)
-            && OB_UNLIKELY(parse_tree.type_ != T_SHOW_PROCEDURE_CODE)
-            && OB_UNLIKELY(parse_tree.type_ != T_SHOW_FUNCTION_CODE)
-            && OB_UNLIKELY(parse_tree.type_ != T_XA_RECOVER)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_ENGINE)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_OPEN_TABLES)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_CREATE_USER)
-            && OB_UNLIKELY(parse_tree.type_ != T_SHOW_CHECK_TABLE)
-            && OB_UNLIKELY(parse_tree.type_ != T_SHOW_CATALOGS)
-            && OB_UNLIKELY(parse_tree.type_ != T_SHOW_CREATE_CATALOG)
-            && OB_UNLIKELY(parse_tree.type_ != T_SHOW_LOCATIONS)
-            && OB_UNLIKELY(parse_tree.type_ != T_SHOW_CREATE_LOCATION)) {
+            && OB_UNLIKELY(parse_tree.type_ != T_SHOW_CHECK_TABLE)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected parse tree type", K(ret), K(parse_tree.type_));
   } else {
     real_id = 1;
-    catalog_id = session_info_->get_current_default_catalog();
     database_name.assign_ptr(session_info_->get_database_name().ptr(),
                              session_info_->get_database_name().length());
     user_name.assign_ptr(session_info_->get_user_name().ptr(),
@@ -214,8 +203,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
           ParseNode *condition_node = show_resv_ctx.condition_node_;
           ObString show_db_name;
           uint64_t show_db_id = OB_INVALID_ID;
-          if (OB_FAIL(get_database_info(catalog_id,
-                                        parse_tree.children_[0],
+          if (OB_FAIL(get_database_info(parse_tree.children_[0],
                                         database_name,
                                         real_id,
                                         show_resv_ctx,
@@ -224,7 +212,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
           } else if (OB_UNLIKELY(OB_INVALID_ID == show_db_id)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("database id is invalid", K(ret), K(show_db_id));
-          } else if (OB_FAIL(check_db_access_for_show_sql(catalog_id, show_resv_ctx, session_priv, enable_role_id_array))) {
+          } else if (OB_FAIL(check_db_access_for_show_sql(show_resv_ctx, session_priv, enable_role_id_array))) {
             LOG_WARN("check db access for show sql failed", K(ret));
           } else {
             /* (parse_tree.children_[2]->value_)&1        ->  FULL
@@ -354,29 +342,14 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                     K(condition_node->num_child_),
                     K(condition_node->children_[0]),
                     K(condition_node->children_[1]));
-              } else {
-                if (show_db_status) {
-                  if (is_external_catalog_id(catalog_id)) {
-                    ret = OB_NOT_SUPPORTED;
-                    LOG_USER_ERROR(OB_NOT_SUPPORTED, "show database status like in catalog is");
-                  } else {
+                } else {
+                  if (show_db_status) {
                     GEN_SQL_STEP_1(ObShowSqlSet::SHOW_DATABASES_STATUS_LIKE,
                                    static_cast<ObString::obstr_size_t>(
                                        show_resv_ctx.condition_node_->children_[0]->str_len_), // cast int64_t to obstr_size_t
                                    show_resv_ctx.condition_node_->children_[0]->str_value_);
                     GEN_SQL_STEP_2(ObShowSqlSet::SHOW_DATABASES_STATUS_LIKE, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_DATABASE_STATUS_TNAME);
-                  }
                 } else {
-                  if (is_external_catalog_id(catalog_id)) {
-                    GEN_SQL_STEP_1(ObShowSqlSet::SHOW_CATALOG_DATABASES_LIKE,
-                                   static_cast<ObString::obstr_size_t>(
-                                   show_resv_ctx.condition_node_->children_[0]->str_len_), // cast int64_t to obstr_size_t
-                                   show_resv_ctx.condition_node_->children_[0]->str_value_);
-                    GEN_SQL_STEP_2(ObShowSqlSet::SHOW_CATALOG_DATABASES_LIKE,
-                                   OB_SYS_DATABASE_NAME,
-                                   OB_ALL_VIRTUAL_SHOW_CATALOG_DATABASES_TNAME,
-                                   catalog_id);
-                  } else {
                     GEN_SQL_STEP_1(ObShowSqlSet::SHOW_DATABASES_LIKE,
                                    static_cast<ObString::obstr_size_t>(
                                        show_resv_ctx.condition_node_->children_[0]->str_len_), // cast int64_t to obstr_size_t
@@ -388,26 +361,13 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                                     OB_RECYCLEBIN_SCHEMA_NAME,
                                     OB_PUBLIC_SCHEMA_NAME,
                                     OB_PUBLIC_SCHEMA_NAME);
-                  }
                 }
               }
             } else {
               if (show_db_status) {
-                if (is_external_catalog_id(catalog_id)) {
-                  ret = OB_NOT_SUPPORTED;
-                  LOG_USER_ERROR(OB_NOT_SUPPORTED, "show database status in catalog is");
-                } else {
                   GEN_SQL_STEP_1(ObShowSqlSet::SHOW_DATABASES_STATUS);
                   GEN_SQL_STEP_2(ObShowSqlSet::SHOW_DATABASES_STATUS, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_DATABASE_STATUS_TNAME);
-                }
               } else {
-                if (is_external_catalog_id(catalog_id)) {
-                  GEN_SQL_STEP_1(ObShowSqlSet::SHOW_CATALOG_DATABASES);
-                  GEN_SQL_STEP_2(ObShowSqlSet::SHOW_CATALOG_DATABASES,
-                                 OB_SYS_DATABASE_NAME,
-                                 OB_ALL_VIRTUAL_SHOW_CATALOG_DATABASES_TNAME,
-                                 catalog_id);
-                } else {
                   GEN_SQL_STEP_1(ObShowSqlSet::SHOW_DATABASES);
                   // Add OB_PUBLIC_SCHEMA_NAME to match three parameters
                   GEN_SQL_STEP_2(ObShowSqlSet::SHOW_DATABASES,
@@ -416,7 +376,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                                   OB_RECYCLEBIN_SCHEMA_NAME,
                                   OB_PUBLIC_SCHEMA_NAME,
                                   OB_PUBLIC_SCHEMA_NAME);
-                }
               }
             }
           }
@@ -460,7 +419,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                 K(ret),
                 K(parse_tree.children_[0]));
           } else {
-            uint64_t show_catalog_id = OB_INVALID_ID;
             ObString show_db_name;
             uint64_t show_db_id = OB_INVALID_ID;
             ObString show_table_name;
@@ -470,7 +428,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             show_resv_ctx.stmt_type_ = stmt::T_SHOW_COLUMNS;
             if (OB_FAIL(resolve_show_from_table(parse_tree.children_[1], parse_tree.children_[2],
                                                 database_name.empty(), T_SHOW_COLUMNS, real_id,
-                                                show_catalog_id, show_db_name, show_db_id, show_table_name,
+                                                show_db_name, show_db_id, show_table_name,
                                                 show_table_id, is_view))) {
               LOG_WARN("fail to resolve show from table", K(ret));
             } else {
@@ -514,10 +472,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
       }
       case T_SHOW_CREATE_DATABASE: {
         [&] {
-          if (is_external_catalog_id(catalog_id)) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "show create database in catalog is");
-          } else if (OB_UNLIKELY(parse_tree.num_child_ != 2 || NULL == parse_tree.children_)) {
+          if (OB_UNLIKELY(parse_tree.num_child_ != 2 || NULL == parse_tree.children_)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_), K(parse_tree.children_));
           } else if (OB_UNLIKELY(NULL == parse_tree.children_[1])) {
@@ -531,11 +486,10 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             show_resv_ctx.stmt_type_ = stmt::T_SHOW_CREATE_DATABASE;
             if (OB_FAIL(resolve_show_from_database(*parse_tree.children_[1],
                                                    real_id,
-                                                   catalog_id, // here catalog_id is 0, because external catalog will not go here
                                                    show_db_id,
                                                    show_db_name))) {
               LOG_WARN("fail to resolve show database", K(ret));
-            } else if (OB_FAIL(schema_checker_->check_db_access(session_priv, enable_role_id_array, catalog_id, show_db_name))) {
+            } else if (OB_FAIL(schema_checker_->check_db_access(session_priv, enable_role_id_array, show_db_name))) {
               if (OB_ERR_NO_DB_PRIVILEGE == ret) {
                 LOG_USER_ERROR(OB_ERR_NO_DB_PRIVILEGE, session_priv.user_name_.length(), session_priv.user_name_.ptr(),
                                session_priv.host_name_.length(),session_priv.host_name_.ptr(),
@@ -561,7 +515,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_), K(parse_tree.children_));
           } else {
-            uint64_t show_catalog_id = OB_INVALID_ID;
             ObString show_db_name;
             uint64_t show_db_id = OB_INVALID_ID;
             ObString show_table_name;
@@ -569,7 +522,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             bool is_view = false;
             bool allow_show = false;
             if (OB_FAIL(resolve_show_from_table(parse_tree.children_[0], NULL, database_name.empty(),
-                                                parse_tree.type_, real_id, show_catalog_id, show_db_name,
+                                                parse_tree.type_, real_id, show_db_name,
                                                 show_db_id, show_table_name, show_table_id, is_view))) {
               LOG_WARN("fail to resolve show from table", K(ret));
             }
@@ -587,7 +540,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
               } else if (OB_FAIL(schema_checker_->check_priv(session_priv, enable_role_id_array, stmt_need_privs))) {
                 LOG_WARN("Failed to check acc", K(ret));
               } else { }//do nothing
-            } else if (OB_FAIL(schema_checker_->check_table_show(session_priv, enable_role_id_array, catalog_id, show_db_name, show_table_name, allow_show))) {
+            } else if (OB_FAIL(schema_checker_->check_table_show(session_priv, enable_role_id_array, show_db_name, show_table_name, allow_show))) {
               LOG_WARN("Check table show error", K(ret));
             } else if (!allow_show) {
               ret = OB_ERR_NO_TABLE_PRIVILEGE;
@@ -612,10 +565,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
       }
       case T_SHOW_CHECK_TABLE:
       {
-        if (is_external_catalog_id(catalog_id)) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "show check table in catalog is");
-        } else if (OB_FAIL(resolve_show_check_table(parse_tree, show_resv_ctx, select_sql))) {
+        if (OB_FAIL(resolve_show_check_table(parse_tree, show_resv_ctx, select_sql))) {
           LOG_WARN("failed to resolve show check table", K(ret));
         }
         break;
@@ -670,57 +620,9 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         }();
         break;
       }
-      case T_SHOW_PROCEDURE_CODE:
-      case T_SHOW_FUNCTION_CODE: {
-        [&] {
-          if (OB_UNLIKELY(parse_tree.num_child_ != 1 || NULL == parse_tree.children_)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_), K(parse_tree.children_));
-          } else {
-            ObString show_db_name;
-            uint64_t show_db_id = OB_INVALID_ID;
-            ObString show_routine_name;
-            uint64_t show_routine_id = OB_INVALID_ID;
-            int64_t proc_type = -1;
-            bool allow_show = false;
-            if (OB_FAIL(resolve_show_from_routine(parse_tree.children_[0], database_name.empty(),
-                                                  parse_tree.type_, real_id, show_db_name,
-                                                  show_db_id, show_routine_name, show_routine_id, proc_type))) {
-              LOG_WARN("fail to resolve show from routine", K(ret));
-            }
-            if (OB_FAIL(ret)) {
-            } else if (OB_FAIL(schema_checker_->check_routine_show(
-                              session_priv, show_db_name, show_routine_name, allow_show))) {
-              LOG_WARN("Check routine show error", K(ret));
-            } else if (!allow_show) {
-              ret = OB_ERR_NO_TABLE_PRIVILEGE;
-              LOG_USER_ERROR(OB_ERR_NO_TABLE_PRIVILEGE, static_cast<int>(strlen("SHOW")), "SHOW",
-                            session_priv.user_name_.length(), session_priv.user_name_.ptr(),
-                            session_priv.host_name_.length(), session_priv.host_name_.ptr(),
-                            show_routine_name.length(), show_routine_name.ptr());
-            } else { }//do nothing
-            if (OB_SUCC(ret)) {
-              show_resv_ctx.stmt_type_ = (parse_tree.type_ == T_SHOW_PROCEDURE_CODE) ? stmt::T_SHOW_PROCEDURE_CODE : stmt::T_SHOW_FUNCTION_CODE;
-              if (parse_tree.type_ == T_SHOW_PROCEDURE_CODE) {
-                GEN_SQL_STEP_1(ObShowSqlSet::SHOW_PROCEDURE_CODE);
-                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_PROCEDURE_CODE);
-                LOG_USER_WARN(OB_NOT_SUPPORTED, "show procedure code statement is currently implemented as mock,");
-              } else {
-                GEN_SQL_STEP_1(ObShowSqlSet::SHOW_FUNCTION_CODE);
-                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_FUNCTION_CODE);
-                LOG_USER_WARN(OB_NOT_SUPPORTED, "show function code statement is currently implemented as mock,");
-              }
-            }
-          }
-        }();
-        break;
-      }
       case T_SHOW_CREATE_TRIGGER: {
         [&] {
-          if (is_external_catalog_id(catalog_id)) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "show create trigger in catalog is");
-          } else if (OB_UNLIKELY(parse_tree.num_child_ != 1 || NULL == parse_tree.children_)) {
+          if (OB_UNLIKELY(parse_tree.num_child_ != 1 || NULL == parse_tree.children_)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_),
                     K(parse_tree.children_));
@@ -764,7 +666,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_), K(parse_tree.children_));
           } else {
-            uint64_t show_catalog_id = OB_INVALID_ID;
             ObString show_db_name;
             uint64_t show_db_id = OB_INVALID_ID;
             ObString show_table_name;
@@ -775,12 +676,9 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             show_resv_ctx.condition_node_ = parse_tree.children_[2];
             show_resv_ctx.stmt_type_ = stmt::T_SHOW_INDEXES;
             if (OB_FAIL(resolve_show_from_table(parse_tree.children_[0], parse_tree.children_[1], database_name.empty(),
-                                                T_SHOW_INDEXES, real_id, show_catalog_id, show_db_name, show_db_id,
+                                                T_SHOW_INDEXES, real_id, show_db_name, show_db_id,
                                                 show_table_name, show_table_id, is_view))) {
               LOG_WARN("fail to resolve show from table", K(ret));
-            } else if (is_external_catalog_id(show_catalog_id)) {
-              ret = OB_NOT_SUPPORTED;
-              LOG_USER_ERROR(OB_NOT_SUPPORTED, "show indexes in catalog is");
             } else {
               if (OB_FAIL(stmt_need_privs.need_privs_.init(3))) {
                 LOG_WARN("fail to init need privs array", K(ret));
@@ -1037,10 +935,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
       }
       case T_SHOW_TABLE_STATUS: {
         [&] {
-          if (is_external_catalog_id(catalog_id)) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "show table status in catalog is");
-          } else if (OB_UNLIKELY(parse_tree.num_child_ != 2 || NULL == parse_tree.children_)) {
+          if (OB_UNLIKELY(parse_tree.num_child_ != 2 || NULL == parse_tree.children_)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("parse tree is wrong",
                 K(ret),
@@ -1049,8 +944,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
           } else {
             show_resv_ctx.condition_node_ = parse_tree.children_[1];
             uint64_t show_db_id;
-            if (OB_FAIL(get_database_info(catalog_id,
-                                          parse_tree.children_[0],
+            if (OB_FAIL(get_database_info(parse_tree.children_[0],
                                           database_name,
                                           real_id,
                                           show_resv_ctx,
@@ -1059,7 +953,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             } else if (OB_UNLIKELY(OB_INVALID_ID == show_db_id)) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("database id is invalid", K(ret), K(show_db_id));
-            } else if (OB_FAIL(check_db_access_for_show_sql(catalog_id, show_resv_ctx, session_priv, enable_role_id_array))) {
+            } else if (OB_FAIL(check_db_access_for_show_sql(show_resv_ctx, session_priv, enable_role_id_array))) {
               LOG_WARN("check db access for show sql failed", K(ret));    
             } else {
               show_resv_ctx.stmt_type_ = stmt::T_SHOW_TABLE_STATUS;
@@ -1073,10 +967,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
       case T_SHOW_PROCEDURE_STATUS: //fallthrough
       case T_SHOW_FUNCTION_STATUS: {
         [&] {
-          if (is_external_catalog_id(catalog_id)) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "show procedure/function status in catalog is");
-          } else if (OB_UNLIKELY(parse_tree.num_child_ != 2 || NULL == parse_tree.children_)) {
+          if (OB_UNLIKELY(parse_tree.num_child_ != 2 || NULL == parse_tree.children_)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("parse tree is wrong",
                 K(ret),
@@ -1085,8 +976,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
           } else {
             show_resv_ctx.condition_node_ = parse_tree.children_[1];
             uint64_t show_db_id;
-            if (OB_FAIL(get_database_info(catalog_id,
-                                          parse_tree.children_[0],
+            if (OB_FAIL(get_database_info(parse_tree.children_[0],
                                           database_name,
                                           real_id,
                                           show_resv_ctx,
@@ -1095,7 +985,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             } else if (OB_UNLIKELY(OB_INVALID_ID == show_db_id)) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("database id is invalid", K(ret), K(show_db_id));
-            } else if (OB_FAIL(check_db_access_for_show_sql(catalog_id, show_resv_ctx, session_priv, enable_role_id_array))) {
+            } else if (OB_FAIL(check_db_access_for_show_sql(show_resv_ctx, session_priv, enable_role_id_array))) {
               LOG_WARN("check db access for show sql failed", K(ret));  
             } else {
               int64_t proc_type = T_SHOW_PROCEDURE_STATUS == parse_tree.type_ ? ROUTINE_PROCEDURE_TYPE : ROUTINE_FUNCTION_TYPE;
@@ -1113,10 +1003,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
       }
       case T_SHOW_TRIGGERS: {
         [&] {
-          if (is_external_catalog_id(catalog_id)) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "show triggers in catalog is");
-          } else if (OB_UNLIKELY(parse_tree.num_child_ != 2 || NULL == parse_tree.children_)) {
+          if (OB_UNLIKELY(parse_tree.num_child_ != 2 || NULL == parse_tree.children_)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("parse tree is wrong",
                 K(ret),
@@ -1127,8 +1014,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             show_resv_ctx.stmt_type_ = stmt::T_SHOW_TRIGGERS;
             ParseNode *condition_node = show_resv_ctx.condition_node_;
             uint64_t show_db_id = OB_INVALID_ID;
-            if (OB_FAIL(get_database_info(catalog_id,
-                                          parse_tree.children_[0],
+            if (OB_FAIL(get_database_info(parse_tree.children_[0],
                                           database_name,
                                           real_id,
                                           show_resv_ctx,
@@ -1269,68 +1155,16 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         if (OB_UNLIKELY(parse_tree.num_child_ != 2 || nullptr == parse_tree.children_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_), K(parse_tree.children_));
+        } else if (OB_FAIL(ObResolverUtils::resolve_local_runtime_selector(parse_tree.children_[1]))) {
+          LOG_WARN("fail to resolve show-parameters runtime selector", K(ret));
         } else {
           show_resv_ctx.stmt_type_ = stmt::T_SHOW_PARAMETERS;
           show_resv_ctx.condition_node_ = parse_tree.children_[0];
-          // tenant=
-          if (nullptr != parse_tree.children_[1]) {
-            if (OB_UNLIKELY(T_TENANT_NAME != parse_tree.children_[1]->type_)) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("type is not T_TENANT_NAME", "type",
-                        get_type_name(parse_tree.type_));
-            } else {
-              const ParseNode *tenant_node = parse_tree.children_[1];
-              if (OB_ISNULL(tenant_node->children_)) {
-                ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("children should not be null");
-              } else {
-                ObString show_tenant_name(tenant_node->children_[0]->str_len_,
-                                     tenant_node->children_[0]->str_value_);
-                if (ObString::make_string("seed") == show_tenant_name) {
-                  params_.show_seed_ = true; // pass to stmt
-                } else {
-                }
-              }
-            }
-            if (OB_FAIL(ret)) {
-              break;
-            }
-          } // if
-          if (params_.show_seed_) {
-            GEN_SQL_STEP_1(ObShowSqlSet::SHOW_PARAMETERS_SEED);
-            GEN_SQL_STEP_2(ObShowSqlSet::SHOW_PARAMETERS_SEED, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_PARAMETER_STAT_TNAME);
-          } else {
-            GEN_SQL_STEP_1(ObShowSqlSet::SHOW_PARAMETERS_WITH_DEFAULT_VALUE);
-            GEN_SQL_STEP_2(ObShowSqlSet::SHOW_PARAMETERS_WITH_DEFAULT_VALUE,
-                OB_SYS_DATABASE_NAME,
-                OB_ALL_VIRTUAL_PARAMETER_STAT_TNAME);
-          }
+          GEN_SQL_STEP_1(ObShowSqlSet::SHOW_PARAMETERS_WITH_DEFAULT_VALUE);
+          GEN_SQL_STEP_2(ObShowSqlSet::SHOW_PARAMETERS_WITH_DEFAULT_VALUE,
+              OB_SYS_DATABASE_NAME,
+              OB_ALL_VIRTUAL_PARAMETER_STAT_TNAME);
         }
-        break;
-      }
-      case T_SHOW_TABLEGROUPS:{
-        [&] {
-          const char *table_name = NULL;
-          if (OB_UNLIKELY(parse_tree.num_child_ != 1 || NULL == parse_tree.children_)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_), K(parse_tree.children_));
-          } else if (OB_FAIL(ObSchemaUtils::get_all_table_name(table_name))) {
-            LOG_WARN("fail to get all table name", K(ret));
-          } else {
-            ObSqlStrGenerator sql_gen;
-            show_resv_ctx.condition_node_ = parse_tree.children_[0];
-            show_resv_ctx.stmt_type_ = stmt::T_SHOW_TABLEGROUPS;
-
-            GEN_SQL_STEP_1(ObShowSqlSet::SHOW_TABLEGROUPS_V2);
-            GEN_SQL_STEP_2(ObShowSqlSet::SHOW_TABLEGROUPS_V2,
-                          OB_SYS_DATABASE_NAME,
-                          OB_ALL_TABLEGROUP_TNAME,
-                          OB_SYS_DATABASE_NAME,
-                          table_name,
-                          OB_SYS_DATABASE_NAME,
-                          OB_ALL_DATABASE_TNAME);
-          }
-        }();
         break;
       }
       case T_SHOW_STATUS: {
@@ -1358,39 +1192,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         }();
         break;
       }
-      case T_SHOW_CREATE_TABLEGROUP: {
-        [&] {
-          if (OB_UNLIKELY(parse_tree.num_child_ != 1 || NULL == parse_tree.children_)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_), K(parse_tree.children_));
-          } else if (OB_UNLIKELY(NULL == parse_tree.children_[0])) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parser tree child is NULL",
-                K(ret),
-                K(parse_tree.children_[1]));
-          } else {
-            ObString show_tablegroup_name;
-            uint64_t show_tablegroup_id = OB_INVALID_ID;
-            show_resv_ctx.stmt_type_ = stmt::T_SHOW_CREATE_TABLEGROUP;
-            show_tablegroup_name.assign_ptr(parse_tree.children_[0]->str_value_,
-                                            static_cast<ObString::obstr_size_t>(parse_tree.children_[0]->str_len_));
-            const ObTablegroupSchema *tablegroup_schema = NULL;
-            if (OB_FAIL(schema_checker_->get_tablegroup_schema( show_tablegroup_name, tablegroup_schema))) {
-              if (OB_ISNULL(tablegroup_schema) || OB_INVALID_ID == tablegroup_schema->get_tablegroup_id()) {
-                ret = OB_TABLEGROUP_NOT_EXIST;
-                LOG_WARN("tablegroup not exist", K(ret), K(show_tablegroup_name));
-              } else {
-                LOG_WARN("fail to get tablegroup_schema", K(ret));
-              }
-            } else {
-              show_tablegroup_id = tablegroup_schema->get_tablegroup_id();
-              GEN_SQL_STEP_1(ObShowSqlSet::SHOW_CREATE_TABLEGROUP);
-              GEN_SQL_STEP_2(ObShowSqlSet::SHOW_CREATE_TABLEGROUP, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_SHOW_CREATE_TABLEGROUP_TNAME, show_tablegroup_id);
-            }
-          }
-        }();
-        break;
-      }
       case T_SHOW_ENGINES: {
         [&] {
           if (OB_UNLIKELY(parse_tree.num_child_ != 0)) {
@@ -1406,19 +1207,22 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
       }
       case T_SHOW_PROFILE: {
         [&] {
-          ObWarningBuffer *wb = NULL;
-          wb = common::ob_get_tsi_warning_buffer();
+          ObWarningBuffer *wb = common::ob_get_tsi_warning_buffer();
           if (OB_ISNULL(wb)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexcepted null ptr", K(ret));
+            LOG_WARN("unexpected null warning buffer", K(ret));
           } else if (OB_UNLIKELY(parse_tree.num_child_ != 0)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_));
           } else {
             show_resv_ctx.stmt_type_ = stmt::T_SHOW_PROFILE;
             GEN_SQL_STEP_1(ObShowSqlSet::SHOW_PROFILE);
-            GEN_SQL_STEP_2(ObShowSqlSet::SHOW_PROFILE, OB_INFORMATION_SCHEMA_NAME, OB_PROFILING_TNAME);
-            wb->append_warning("SHOW PROFILES Statement just mocks the syntax of MySQL without supporting specific realization", OB_NOT_SUPPORTED);
+            GEN_SQL_STEP_2(ObShowSqlSet::SHOW_PROFILE,
+                           OB_INFORMATION_SCHEMA_NAME,
+                           OB_PROFILING_TNAME);
+            wb->append_warning(
+                "SHOW PROFILES Statement just mocks the syntax of MySQL without supporting specific realization",
+                OB_NOT_SUPPORTED);
           }
         }();
         break;
@@ -1463,17 +1267,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         }();
         break;
       }
-      case T_SHOW_QUERY_RESPONSE_TIME: {
-        if (OB_UNLIKELY(parse_tree.num_child_ != 0)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_));
-        } else {
-          show_resv_ctx.stmt_type_ = stmt::T_SHOW_QUERY_RESPONSE_TIME;
-          GEN_SQL_STEP_1(ObShowSqlSet::SHOW_QUERY_RESPONSE_TIME);
-          GEN_SQL_STEP_2(ObShowSqlSet::SHOW_QUERY_RESPONSE_TIME, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_QUERY_RESPONSE_TIME_TNAME);
-        }
-        break;
-      }
       case T_SHOW_RECYCLEBIN: {
         [&] {
           if (OB_UNLIKELY(parse_tree.num_child_ != 0)) {
@@ -1487,181 +1280,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                           OB_ALL_RECYCLEBIN_TNAME);
           }
         }();
-        break;
-      }
-      case T_SHOW_SEQUENCES: {
-        if (is_external_catalog_id(catalog_id)) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "show sequence in catalog is");
-        } else if (OB_UNLIKELY(parse_tree.num_child_ != 2 || NULL == parse_tree.children_)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_), K(parse_tree.children_));
-        } else {
-          show_resv_ctx.stmt_type_ = stmt::T_SHOW_SEQUENCES;
-          show_resv_ctx.condition_node_ = parse_tree.children_[0];
-          ParseNode *condition_node = show_resv_ctx.condition_node_;
-          ObString show_db_name;
-          uint64_t show_db_id = OB_INVALID_ID;
-          if (OB_FAIL(get_database_info(catalog_id,
-                                        parse_tree.children_[1],
-                                        database_name,
-                                        real_id,
-                                        show_resv_ctx,
-                                        show_db_id))) {
-            LOG_WARN("fail to get database info", K(ret));
-          } else if (OB_UNLIKELY(OB_INVALID_ID == show_db_id)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("database id is invalid", K(ret), K(show_db_id));
-          } else {
-            show_db_name = show_resv_ctx.show_database_name_;
-            if (OB_FAIL(schema_checker_->check_db_access(session_priv, enable_role_id_array, catalog_id, show_db_name))) {
-              if (OB_ERR_NO_DB_PRIVILEGE == ret) {
-                LOG_USER_ERROR(OB_ERR_NO_DB_PRIVILEGE, session_priv.user_name_.length(), session_priv.user_name_.ptr(),
-                               session_priv.host_name_.length(),session_priv.host_name_.ptr(),
-                               show_db_name.length(), show_db_name.ptr());
-              } else {
-                LOG_WARN("fail to check priv", K(ret));
-              }
-            } else {
-              if (NULL != condition_node && T_LIKE_CLAUSE == condition_node->type_) {
-                if (OB_UNLIKELY(condition_node->num_child_ != 2
-                                || NULL == condition_node->children_)) {
-                  ret = OB_ERR_UNEXPECTED;
-                  LOG_WARN("invalid like parse node",
-                      K(ret),
-                      K(condition_node->num_child_),
-                      K(condition_node->children_));
-                } else if (OB_UNLIKELY(NULL == condition_node->children_[0]
-                                        || NULL == condition_node->children_[1])) {
-                  ret = OB_ERR_UNEXPECTED;
-                  LOG_WARN("invalid like parse node",
-                      K(ret),
-                      K(condition_node->num_child_),
-                      K(condition_node->children_[0]),
-                      K(condition_node->children_[1]));
-                } else {
-                  GEN_SQL_STEP_1(ObShowSqlSet::SHOW_SEQUENCES_LIKE,
-                                  show_resv_ctx.show_database_name_.length(),
-                                  show_resv_ctx.show_database_name_.ptr(),
-                                  static_cast<ObString::obstr_size_t>(condition_node->children_[0]->str_len_),//cast int64_t to obstr_size_t
-                                  condition_node->children_[0]->str_value_);
-                  GEN_SQL_STEP_2(ObShowSqlSet::SHOW_SEQUENCES_LIKE, OB_SYS_DATABASE_NAME, OB_ALL_SEQUENCE_OBJECT_TNAME, show_db_id);
-                }
-              } else {
-                GEN_SQL_STEP_1(ObShowSqlSet::SHOW_SEQUENCES, show_resv_ctx.show_database_name_.length(),
-                                show_resv_ctx.show_database_name_.ptr());
-                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_SEQUENCES, OB_SYS_DATABASE_NAME, OB_ALL_SEQUENCE_OBJECT_TNAME, show_db_id);
-              }
-            }
-            //change where condition :Tables_in_xxx=>table_name
-            if (OB_SUCCESS == ret && NULL != condition_node && T_WHERE_CLAUSE == condition_node->type_) {
-              char *column_name = NULL;
-              int64_t tmp_pos = 0;
-              if (OB_FAIL(NULL == (column_name = static_cast<char *>(params_.allocator_->alloc(OB_MAX_COLUMN_NAME_BUF_LENGTH))))) {
-                ret = OB_ALLOCATE_MEMORY_FAILED;
-                LOG_ERROR("failed to alloc column name buf", K(column_name));
-              } else if (OB_FAIL(databuff_printf(column_name,
-                                                 OB_MAX_COLUMN_NAME_BUF_LENGTH,
-                                                 tmp_pos,
-                                                 "sequence_in_%.*s",
-                                                 show_resv_ctx.show_database_name_.length(),
-                                                 show_resv_ctx.show_database_name_.ptr()))) {
-                LOG_WARN("fail to add database name", K(show_resv_ctx.show_database_name_.ptr()));
-                break;
-              } else if (FALSE_IT(show_resv_ctx.column_name_ = ObString::make_string(column_name))){
-                //won't be here
-              } else if(OB_FAIL(replace_where_clause(condition_node->children_[0], show_resv_ctx))) {
-                LOG_WARN("fail to replace where clause", K(condition_node->children_[0]));
-                break;
-              }
-            }
-          }
-        }
-        break;
-      }
-      case T_XA_RECOVER: {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("xa recover is not supported in lite version", KR(ret));
-        break;
-      }
-      case T_SHOW_CATALOGS: {
-        if (OB_UNLIKELY(parse_tree.num_child_ != 0)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_));
-        } else {
-          show_resv_ctx.stmt_type_ = stmt::T_SHOW_CATALOGS;
-          
-          GEN_SQL_STEP_1(ObShowSqlSet::SHOW_CATALOGS);
-          GEN_SQL_STEP_2(ObShowSqlSet::SHOW_CATALOGS,
-                         OB_SYS_DATABASE_NAME,
-                         OB_ALL_CATALOG_TNAME);
-        }
-        break;
-      }
-      case T_SHOW_CREATE_CATALOG: {
-        if (OB_UNLIKELY(parse_tree.num_child_ != 1) || OB_ISNULL(parse_tree.children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_));
-        } else {
-          show_resv_ctx.stmt_type_ = stmt::T_SHOW_CREATE_CATALOG;
-          ObString catalog_name;
-          catalog_name.assign_ptr(parse_tree.children_[0]->str_value_,
-                                  static_cast<ObString::obstr_size_t>(parse_tree.children_[0]->str_len_));
-          ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_guard();
-          uint64_t catalog_id = OB_INVALID_ID;
-          if (OB_FAIL(schema_checker_->get_catalog_id_name(catalog_name, catalog_id))) {
-            LOG_WARN("failed to get catalog schema", K(ret));
-          } else if (catalog_id == OB_INTERNAL_CATALOG_ID) {
-            // do nothing
-          } else if (OB_FAIL(schema_guard->check_catalog_access(session_priv, enable_role_id_array, catalog_name))) {
-            LOG_WARN("failed to check catalog access", K(ret));
-          }
-          if (OB_SUCC(ret)) {
-            GEN_SQL_STEP_1(ObShowSqlSet::SHOW_CREATE_CATALOG);
-            GEN_SQL_STEP_2(ObShowSqlSet::SHOW_CREATE_CATALOG,
-                           OB_SYS_DATABASE_NAME,
-                           OB_ALL_VIRTUAL_SHOW_CREATE_CATALOG_TNAME,
-                           catalog_id);
-          }
-        }
-        break;
-      }
-      case T_SHOW_LOCATIONS: {
-        if (OB_UNLIKELY(parse_tree.num_child_ != 0)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_));
-        } else {
-          show_resv_ctx.stmt_type_ = stmt::T_SHOW_LOCATIONS;
-          
-          GEN_SQL_STEP_1(ObShowSqlSet::SHOW_LOCATIONS);
-          GEN_SQL_STEP_2(ObShowSqlSet::SHOW_LOCATIONS,
-                         OB_SYS_DATABASE_NAME,
-                         OB_ALL_LOCATION_TNAME);
-        }
-        break;
-      }
-      case T_SHOW_CREATE_LOCATION: {
-        if (OB_UNLIKELY(parse_tree.num_child_ != 1) || OB_ISNULL(parse_tree.children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_));
-        } else {
-          show_resv_ctx.stmt_type_ = stmt::T_SHOW_CREATE_LOCATION;
-          ObString location_name;
-          location_name.assign_ptr(parse_tree.children_[0]->str_value_,
-                                  static_cast<ObString::obstr_size_t>(parse_tree.children_[0]->str_len_));
-          ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_guard();
-          uint64_t location_id = OB_INVALID_ID;
-          if (OB_FAIL(schema_checker_->get_location_id(location_name, location_id))) {
-            LOG_WARN("failed to get location id", K(ret));
-          } else if (OB_FAIL(schema_guard->check_location_access(session_priv, enable_role_id_array, location_name))) {
-            LOG_WARN("failed to check location access", K(ret));
-          }
-          if (OB_SUCC(ret)) {
-            GEN_SQL_STEP_1(ObShowSqlSet::SHOW_CREATE_LOCATION);
-            GEN_SQL_STEP_2(ObShowSqlSet::SHOW_CREATE_LOCATION, OB_SYS_DATABASE_NAME, 
-                           OB_ALL_VIRTUAL_SHOW_CREATE_LOCATION_TNAME, location_id);
-          }
-        }
         break;
       }
       default:
@@ -2019,8 +1637,7 @@ int ObShowResolver::check_show_create_user_privilege(const bool show_current_use
   return ret;
 }
 
-int ObShowResolver::get_database_info(const uint64_t session_catalog_id,
-                                      const ParseNode *database_node,
+int ObShowResolver::get_database_info(const ParseNode *database_node,
                                       const ObString &session_database_name,
                                       uint64_t real_id,
                                       ObShowResolverContext &show_resv_ctx,
@@ -2037,8 +1654,8 @@ int ObShowResolver::get_database_info(const uint64_t session_catalog_id,
         LOG_WARN("no database selected");
       } else {
         show_resv_ctx.show_database_name_ = session_database_name;
-        if (OB_FAIL(schema_checker_->get_database_id(session_catalog_id, session_database_name, show_db_id))) {
-          LOG_WARN("fail to get database_id", K(ret), K(session_catalog_id), K(session_database_name));
+        if (OB_FAIL(schema_checker_->get_database_id(session_database_name, show_db_id))) {
+          LOG_WARN("fail to get database_id", K(ret), K(session_database_name));
         }
       }
     } else {
@@ -2050,7 +1667,6 @@ int ObShowResolver::get_database_info(const uint64_t session_catalog_id,
         LOG_WARN("show from database node is NULL", K(ret));
       } else if (OB_FAIL(resolve_show_from_database(*database_node->children_[0],
                                                     real_id,
-                                                    session_catalog_id,
                                                     show_db_id,
                                                     show_resv_ctx.show_database_name_))) {
         LOG_WARN("fail to resolve show from database", K(ret));
@@ -2064,9 +1680,6 @@ int ObShowResolver::process_select_type(ObSelectStmt *select_stmt,
                                         stmt::StmtType stmt_type,
                                         const ParseNode &parse_tree)
 {
-  // Commented out code should not be deleted, it will be added back after the corresponding function is implemented by rongxuan.lc
-  //is not a complete enumeration, where some OB functions that should not be implemented are removed, for example: show master status; show open tables
-  // Specifically you can refer to the commented out case in mysql_test/t/found_rows_show_stmt.test
   int ret = OB_SUCCESS;
   if ((stmt_type == stmt::T_SHOW_ERRORS
        || stmt_type == stmt::T_SHOW_WARNINGS)
@@ -2077,15 +1690,12 @@ int ObShowResolver::process_select_type(ObSelectStmt *select_stmt,
   } else if (stmt_type == stmt::T_SHOW_CREATE_TABLE
              //|| stmt_type == stmt::T_SHOW_CREATE_TRIGGER
              || stmt_type == stmt::T_SHOW_CREATE_DATABASE
-             || stmt_type == stmt::T_SHOW_CREATE_TABLEGROUP
-             //|| stmt_type == stmt::T_SHOW_CREATE_EVENT
              //|| stmt_type == stmt::T_SHOW_CREATE_FUNCIONT
              || stmt_type == stmt::T_SHOW_CREATE_VIEW
              || stmt_type == stmt::T_SHOW_ERRORS
              || stmt_type == stmt::T_SHOW_GRANTS
              //|| stmt_type == stmt::T_SHOW_PRIVILEGES
              || stmt_type == stmt::T_SHOW_PROCESSLIST
-             //|| stmt_type == stmt::T_SHOW_PROFILES
              || stmt_type == stmt::T_SHOW_WARNINGS
              || stmt_type == stmt::T_SHOW_CREATE_USER) {
     select_stmt->set_select_type(NOT_AFFECT_FOUND_ROWS);
@@ -2100,7 +1710,6 @@ int ObShowResolver::resolve_show_from_table(const ParseNode *from_table_node,
                                             bool is_database_unselected,
                                             ObItemType node_type,
                                             uint64_t real_id,
-                                            uint64_t &show_catalog_id,
                                             ObString &show_database_name,
                                             uint64_t &show_database_id,
                                             ObString &show_table_name,
@@ -2131,11 +1740,7 @@ int ObShowResolver::resolve_show_from_table(const ParseNode *from_table_node,
     LOG_WARN("parser tree child is NULL",
         K(ret),
         K(from_table_node->children_[1]));
-  } else if (OB_FALSE_IT(show_catalog_id = session_info_->get_current_default_catalog())) {
-    // assign show_catalog_id from session_info_ first
-    // if user select * from catalog.db.tbl, we will re-assign show_catalog_id from TableParseNode
   } else {
-    bool is_sys_view = false;
     const ObTableSchema *table_schema = NULL;
     if (NULL == from_database_clause_node) {
       if(OB_UNLIKELY(is_database_unselected && NULL == from_table_node->children_[0])) {
@@ -2144,28 +1749,14 @@ int ObShowResolver::resolve_show_from_table(const ParseNode *from_table_node,
       } else {      // get from table clause in database
         ObString synonym_name;
         ObString synonym_db_name;
-        ObString catalog_name;
-        UNUSED(catalog_name);
         if (OB_FAIL(resolve_table_relation_factor_normal(from_table_node,
-                                                         show_catalog_id,
                                                          show_database_id,
                                                          show_table_name,
                                                          synonym_name,
                                                          synonym_db_name,
-                                                         catalog_name,
                                                          show_database_name))) {
           if (OB_TABLE_NOT_EXIST == ret) {
-            // check inner sys view
-            int tmp_ret = OB_SUCCESS;
-            if (OB_SUCCESS != (tmp_ret = inner_resolve_sys_view(from_table_node, show_database_id, show_table_name, show_database_name))) {
-              LOG_WARN("fail to resolve sys view", K(tmp_ret));
-            } else {
-              ret = OB_SUCCESS;
-            }
-            if (OB_SUCC(ret)) {
-              is_sys_view = true;
-              // resolve success
-            } else if (is_information_schema_database_id(show_database_id)) {
+            if (is_information_schema_database_id(show_database_id)) {
               ret = OB_ERR_UNKNOWN_TABLE;
               LOG_USER_ERROR(OB_ERR_UNKNOWN_TABLE, show_table_name.length(), show_table_name.ptr(),
                              show_database_name.length(), show_database_name.ptr());
@@ -2199,8 +1790,6 @@ int ObShowResolver::resolve_show_from_table(const ParseNode *from_table_node,
             K(ret),
             K(from_database_clause_node->children_[0]));
       } else {
-        // Currently only supports parsing database_factor, catalog_factor parsing is not yet supported
-        // So here the show_catalog_id is directly sourced from session_info_.
         ParseNode *relation_node = from_table_node->children_[1];
         show_table_name.assign_ptr(const_cast<char *>(relation_node->str_value_),
                                    static_cast<int32_t>(relation_node->str_len_));
@@ -2209,7 +1798,6 @@ int ObShowResolver::resolve_show_from_table(const ParseNode *from_table_node,
           LOG_WARN("table name is empty", K(ret));
         } else if (OB_FAIL(resolve_show_from_database(*from_database_clause_node->children_[0],
                                                       real_id,
-                                                      show_catalog_id,
                                                       show_database_id,
                                                       show_database_name))) {
           LOG_WARN("fail to resolve show from database", K(ret));
@@ -2227,7 +1815,6 @@ int ObShowResolver::resolve_show_from_table(const ParseNode *from_table_node,
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (OB_FAIL(schema_checker_->get_table_schema(
-                                                         show_catalog_id,
                                                          show_database_id,
                                                          show_table_name,
                                                          is_index,
@@ -2235,7 +1822,7 @@ int ObShowResolver::resolve_show_from_table(const ParseNode *from_table_node,
                                                          false/*is_hidden*/,
                                                          table_schema))) {
       LOG_WARN("get table schema failed", K(ret),
-               K(show_catalog_id), K(show_database_id), K(show_table_name));
+               K(show_database_id), K(show_table_name));
     } else if (OB_UNLIKELY(NULL == table_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("table schema from schema checker is NULL", K(ret), K(table_schema));
@@ -2259,14 +1846,12 @@ int ObShowResolver::resolve_show_from_table(const ParseNode *from_table_node,
 
 int ObShowResolver::resolve_show_from_database(const ParseNode &from_db_node,
                                                const uint64_t real_id,
-                                               const uint64_t catalog_id,
                                                uint64_t &show_database_id,
                                                ObString &show_database_name)
 {
   // resolve clause for database name
   int ret = OB_SUCCESS;
   if (OB_FAIL(resolve_database_factor(&from_db_node,
-                                      catalog_id,
                                       show_database_id,
                                       show_database_name))) {
     if (OB_ERR_BAD_DATABASE == ret) {
@@ -2312,30 +1897,6 @@ int ObShowResolver::resolve_show_from_routine(const ParseNode *from_routine_node
     } else {      // database from procedure clause
       show_routine_name.assign_ptr(from_routine_node->children_[1]->str_value_, static_cast<int32_t>(from_routine_node->children_[1]->str_len_));
 
-      // handle catalog name
-      ObNameCaseMode case_mode = ObNameCaseMode::OB_NAME_CASE_INVALID;
-      ObString catalog_name;
-      if (from_routine_node->num_child_ >= 4 && from_routine_node->children_[3] != NULL) {
-        const ParseNode * catalog_node = from_routine_node->children_[3];
-        catalog_name = ObString(catalog_node->str_len_, catalog_node->str_value_);
-      }
-      if (OB_FAIL(session_info_->get_name_case_mode(case_mode))) {
-        LOG_WARN("failed to get case mode", K(ret));
-      } else {
-        bool is_internal_catalog = true;
-        if (catalog_name.empty()) {
-          // catalog name not explicit, judge by session's catalog id
-          is_internal_catalog = is_internal_catalog_id(session_info_->get_current_default_catalog());
-        } else {
-          is_internal_catalog = ObCatalogUtils::is_internal_catalog_name(catalog_name, case_mode);
-        }
-
-        if (!is_internal_catalog) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "show procedure/function in catalog is");
-        }
-      }
-
       // handle db name
       const ParseNode *db_node = NULL;
       if (OB_SUCC(ret)) {
@@ -2355,7 +1916,7 @@ int ObShowResolver::resolve_show_from_routine(const ParseNode *from_routine_node
     if (OB_FAIL(ret)) {
       // do nothing
     } else {
-      if (T_SHOW_CREATE_PROCEDURE == node_type || T_SHOW_PROCEDURE_CODE == node_type) {
+      if (T_SHOW_CREATE_PROCEDURE == node_type) {
         if (OB_FAIL(schema_checker_->get_standalone_procedure_info(show_database_name, show_routine_name, routine_info))) {
           LOG_WARN("get procedure info failed", K(ret),
                    K(show_database_name), K(show_routine_name));
@@ -2405,53 +1966,26 @@ int ObShowResolver::resolve_show_from_trigger(const ParseNode *from_tg_node,
     LOG_WARN("parser tree child is NULL", K(ret), K(from_tg_node->children_[1]));
   } else {
     const ObTriggerInfo *tg_info = NULL;
-    // handle catalog name
-    ObNameCaseMode case_mode = ObNameCaseMode::OB_NAME_CASE_INVALID;
-    ObString catalog_name;
-    if (from_tg_node->num_child_ >= 4 && from_tg_node->children_[3] != NULL) {
-      const ParseNode * catalog_node = from_tg_node->children_[3];
-      catalog_name = ObString(catalog_node->str_len_, catalog_node->str_value_);
-    }
-    if (OB_FAIL(session_info_->get_name_case_mode(case_mode))) {
-      LOG_WARN("failed to get case mode", K(ret));
+    if (OB_UNLIKELY(is_database_unselected && NULL == from_tg_node->children_[0])) {
+      ret = OB_ERR_NO_DB_SELECTED;
+      LOG_WARN("no database selected", K(ret));
     } else {
-      bool is_internal_catalog = true;
-      if (catalog_name.empty()) {
-        // catalog name not explicit, judge by session's catalog id
-        is_internal_catalog = is_internal_catalog_id(session_info_->get_current_default_catalog());
+      const ParseNode *db_node = NULL;
+      show_tg_name.assign_ptr(from_tg_node->children_[1]->str_value_,
+                              static_cast<int32_t>(from_tg_node->children_[1]->str_len_));
+      if (NULL == (db_node = from_tg_node->children_[0])) {
+        show_database_name = session_info_->get_database_name();
+      } else if (OB_UNLIKELY(db_node->type_ != T_IDENT)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("Invalid node type", K(ret));
       } else {
-        is_internal_catalog = ObCatalogUtils::is_internal_catalog_name(catalog_name, case_mode);
+        show_database_name.assign_ptr(db_node->str_value_,
+                                      static_cast<int32_t>(db_node->str_len_));
       }
-
-      if (!is_internal_catalog) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "show create trigger in catalog is");
-      }
-    }
-
-    if (OB_SUCC(ret)) {
-      if (OB_UNLIKELY(is_database_unselected && NULL == from_tg_node->children_[0])) {
-        ret = OB_ERR_NO_DB_SELECTED;
-        LOG_WARN("no database selected", K(ret));
-      } else {
-        const ParseNode *db_node = NULL;
-        show_tg_name.assign_ptr(from_tg_node->children_[1]->str_value_,
-                                static_cast<int32_t>(from_tg_node->children_[1]->str_len_));
-        if (NULL == (db_node = from_tg_node->children_[0])) {
-          show_database_name = session_info_->get_database_name();
-        } else if (OB_UNLIKELY(db_node->type_ != T_IDENT)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Invalid node type", K(ret));
-        } else {
-          show_database_name.assign_ptr(db_node->str_value_,
-                                        static_cast<int32_t>(db_node->str_len_));
-        }
-        // use internal_catalog instead, external catalog will not go here
-        OZ(schema_checker_->get_database_id(OB_INTERNAL_CATALOG_ID, show_database_name, show_database_id),
-           real_id,
-           show_database_name,
-           show_database_id);
-      }
+      OZ(schema_checker_->get_database_id(show_database_name, show_database_id),
+         real_id,
+         show_database_name,
+         show_database_id);
     }
     OZ (schema_checker_->get_trigger_info( show_database_name,
                                           show_tg_name, tg_info),
@@ -2494,18 +2028,8 @@ int ObShowResolver::parse_and_resolve_select_sql(const ObString &select_sql)
         LOG_WARN("result tree is invalid", K(ret), "child ptr", select_result.result_tree_->children_[0]);
       } else {
         ParseNode *select_stmt_node = select_result.result_tree_->children_[0];
-        const uint64_t previous_catalog_id = session_info_->get_current_default_catalog();
-        // Resolve show stmt in OB_INTERNAL_CATALOG
-        ObObj internal_catalog_id_obj;
-        internal_catalog_id_obj.set_uint64(OB_INTERNAL_CATALOG_ID);
-        ObObj previous_catalog_id_obj;
-        previous_catalog_id_obj.set_uint64(previous_catalog_id);
-        if (OB_FAIL(session_info_->update_sys_variable(ObSysVarClassType::SYS_VAR__CURRENT_DEFAULT_CATALOG, internal_catalog_id_obj))) {
-          LOG_WARN("set session variable failed", K(ret));
-        } else if (OB_FAIL(ObSelectResolver::resolve(*select_stmt_node))) {
+        if (OB_FAIL(ObSelectResolver::resolve(*select_stmt_node))) {
           LOG_WARN("resolve select in view definition failed", K(ret), K(select_stmt_node));
-        } else if (OB_FAIL(session_info_->update_sys_variable(ObSysVarClassType::SYS_VAR__CURRENT_DEFAULT_CATALOG, previous_catalog_id_obj))) {
-          LOG_WARN("reset session variable failed", K(ret));
         }
       }
     }
@@ -2535,11 +2059,9 @@ int ObShowResolver::resolve_like_or_where_clause(ObShowResolverContext &ctx)
                  && parse_tree->type_ != T_SHOW_INDEXES
                  && parse_tree->type_ != T_SHOW_PARAMETERS
                  && parse_tree->type_ != T_SHOW_STATUS
-                 && parse_tree->type_ != T_SHOW_TABLEGROUPS
                  && parse_tree->type_ != T_SHOW_PROCEDURE_STATUS
                  && parse_tree->type_ != T_SHOW_FUNCTION_STATUS
-                 && parse_tree->type_ != T_SHOW_TRIGGERS
-                 && parse_tree->type_ != T_SHOW_SEQUENCES)) {
+                 && parse_tree->type_ != T_SHOW_TRIGGERS)) {
     // do nothing
   } else {
     // Like or Where clause
@@ -3171,28 +2693,6 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_CHARSET,
                        "SELECT charset AS Charset, description AS `Description`, default_collation AS `Default collation`, max_length AS `Maxlen` FROM %s.%s",
                        R"(SELECT "CHARSET" AS "CHARSET", "DESCRIPTION" AS "DESCRIPTION", "DEFAULT_COLLATION" AS "DEFAULT COLLATION", "MAX_LENGTH" AS "MAXLEN" FROM %s.%s)",
                        "Charset");
-DEFINE_SHOW_CLAUSE_SET(SHOW_TABLEGROUPS,
-                       NULL,
-                       "SELECT t1.Tablegroup_name AS Tablegroup_name, t2.Table_name AS Table_name, t3.Database_name AS Database_name \
-                        FROM %s.%s t1 LEFT JOIN %s.%s  t2 ON (t1.tablegroup_id = t2.tablegroup_id) \
-                        LEFT JOIN %s.%s  t3 ON (t2.database_id = t3.database_id) \
-                        ORDER BY t1.tablegroup_name, t2.table_name",
-                        "SELECT T1.TABLEGROUP_NAME AS \"TABLEGROUP_NAME\", T2.TABLE_NAME AS \"TABLE_NAME\", T3.DATABASE_NAME AS \"DATABASE_NAME\" \
-                        FROM %s.%s T1 LEFT JOIN %s.%s  T2 ON (T1.TABLEGROUP_ID = T2.TABLEGROUP_ID) \
-                        LEFT JOIN %s.%s  T3 ON (T2.DATABASE_ID = T3.DATABASE_ID) \
-                        ORDER BY T1.TABLEGROUP_NAME, T2.TABLE_NAME",
-                       "Tablegroup_name");
-DEFINE_SHOW_CLAUSE_SET(SHOW_TABLEGROUPS_V2,
-                       NULL,
-                       "SELECT t1.Tablegroup_name AS Tablegroup_name, t2.Table_name AS Table_name, t3.Database_name AS Database_name, t1.Sharding AS Sharding \
-                        FROM %s.%s t1 LEFT JOIN %s.%s  t2 ON (t1.tablegroup_id = t2.tablegroup_id AND t2.table_type in (0, 3, 6)) \
-                        LEFT JOIN %s.%s  t3 ON (t2.database_id = t3.database_id) \
-                        ORDER BY t1.tablegroup_name, t2.table_name",
-                        "SELECT T1.TABLEGROUP_NAME AS \"TABLEGROUP_NAME\", T2.TABLE_NAME AS \"TABLE_NAME\", T3.DATABASE_NAME AS \"DATABASE_NAME\", t1.SHARDING AS \"SHARDING\" \
-                        FROM %s.%s T1 LEFT JOIN %s.%s  T2 ON (T1.TABLEGROUP_ID = T2.TABLEGROUP_ID AND T2.TABLE_TYPE in (0, 3, 6)) \
-                        LEFT JOIN %s.%s  T3 ON (T2.DATABASE_ID = T3.DATABASE_ID) \
-                        ORDER BY T1.TABLEGROUP_NAME, T2.TABLE_NAME",
-                       "Tablegroup_name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_VARIABLES,
                        NULL,
                        "SELECT /*+parallel(1)*/ variable_name AS `Variable_name`, value AS `Value` FROM %s.%s ORDER BY variable_name ASC",
@@ -3241,11 +2741,6 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_CREATE_DATABASE_EXISTS,
                        "SELECT `database_name` AS `Database`, create_database_with_if_not_exists AS `Create Database` FROM %s.%s WHERE database_id = %ld",
                        NULL,
                        NULL);
-DEFINE_SHOW_CLAUSE_SET(SHOW_CREATE_TABLEGROUP,
-                       NULL,
-                       "SELECT tablegroup_name AS `Tablegroup`, create_tablegroup AS `Create Tablegroup` FROM %s.%s  WHERE tablegroup_id = %ld",
-                       R"(SELECT "TABLEGROUP_NAME" AS "TABLEGROUP", "CREATE_TABLEGROUP" AS "CREATE TABLEGROUP" FROM %s.%s  WHERE TABLEGROUP_ID = %ld)",
-                       NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_INDEXES,
                        NULL,
                        "SELECT `TABLE` AS `Table`, NON_UNIQUE AS Non_unique, KEY_NAME AS Key_name, SEQ_IN_INDEX AS Seq_in_index, COLUMN_NAME AS Column_name, COLLATION AS Collation, CARDINALITY AS Cardinality, SUB_PART AS Sub_part, PACKED AS Packed, `NULL` AS `Null`, INDEX_TYPE AS Index_type, `COMMENT` AS `Comment`, INDEX_COMMENT AS Index_comment, IS_VISIBLE AS Visible, EXPRESSION AS Expression FROM %s.%s  where table_id = %ld AND is_column_visible = true",
@@ -3289,7 +2784,6 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_ENGINE,
                        NULL,
                        NULL);
 
-
 DEFINE_SHOW_CLAUSE_SET(SHOW_OPEN_TABLES,
                        NULL,
                        "SELECT 1 as `Database`, 1 as `Table`, 1 as In_use, 1 as Name_locked FROM dual where 0 = 1 ",
@@ -3302,12 +2796,6 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_PRIVILEGES,
                        "SELECT * FROM %s.%s ",
                        NULL);
         
-DEFINE_SHOW_CLAUSE_SET(SHOW_QUERY_RESPONSE_TIME, 
-                       NULL, 
-                       "SELECT response_time as RESPONSE_TIME, sum(count) as COUNT, sum(total) as TOTAL FROM %s.%s group by response_time",
-                       NULL, 
-                       NULL);
-
 DEFINE_SHOW_CLAUSE_SET(SHOW_COLLATION,
                        NULL,
                        "SELECT collation AS `Collation`, charset AS `Charset`, id AS `Id`, is_default AS `Default`, is_compiled AS `Compiled`, sortlen AS `Sortlen` FROM %s.%s ",
@@ -3330,8 +2818,8 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_PROCESSLIST,
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_FULL_PROCESSLIST,
                        NULL,
-                       "SELECT id AS `Id`, user as `User`, tenant as `Tenant`, host AS `Host`, db AS `db`, command AS `Command`, cast(time as SIGNED) AS `Time`, state AS `State`, info AS `Info` FROM %s.%s WHERE %ld>=0",
-                       R"(SELECT "ID" AS "ID", "USER" AS "USER", "TENANT" AS "TENANT", "HOST" AS "HOST", "DB" AS "DB", "COMMAND" AS "COMMAND", CAST("TIME" AS INT) AS "TIME", "STATE" AS "STATE", "INFO" AS "INFO" FROM %s.%s WHERE %ld>=0)",
+                       "SELECT id AS `Id`, user AS `User`, host AS `Host`, db AS `db`, command AS `Command`, cast(time as SIGNED) AS `Time`, state AS `State`, info AS `Info` FROM %s.%s WHERE %ld>=0",
+                       R"(SELECT "ID" AS "ID", "USER" AS "USER", "HOST" AS "HOST", "DB" AS "DB", "COMMAND" AS "COMMAND", CAST("TIME" AS INT) AS "TIME", "STATE" AS "STATE", "INFO" AS "INFO" FROM %s.%s WHERE %ld>=0)",
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_SYS_PROCESSLIST,
                        NULL,
@@ -3340,8 +2828,8 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_SYS_PROCESSLIST,
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_SYS_FULL_PROCESSLIST,
                        NULL,
-                       "SELECT id AS `Id`, user as `User`, tenant as `Tenant`, host AS `Host`, db AS `db`, command AS `Command`, cast(time as SIGNED) AS `Time`, state AS `State`, info AS `Info`, sql_port AS `Port` FROM oceanbase.__all_virtual_server_stat, %s.%s",
-                       R"(SELECT "ID" AS "ID", "USER" AS "USER", "TENANT" AS "TENANT", "HOST" AS "HOST", "DB" AS "DB", "COMMAND" AS "COMMAND", CAST("TIME" AS INT) AS "TIME", "STATE" AS "STATE", "INFO" AS "INFO", "SQL_PORT" AS "PORT" FROM %s.%s)",
+                       "SELECT id AS `Id`, user AS `User`, host AS `Host`, db AS `db`, command AS `Command`, cast(time as SIGNED) AS `Time`, state AS `State`, info AS `Info`, sql_port AS `Port` FROM oceanbase.__all_virtual_server_stat, %s.%s",
+                       R"(SELECT "ID" AS "ID", "USER" AS "USER", "HOST" AS "HOST", "DB" AS "DB", "COMMAND" AS "COMMAND", CAST("TIME" AS INT) AS "TIME", "STATE" AS "STATE", "INFO" AS "INFO", "SQL_PORT" AS "PORT" FROM %s.%s)",
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_TABLE_STATUS,
                        NULL,
@@ -3350,7 +2838,7 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_TABLE_STATUS,
                        "name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_PROCEDURE_STATUS,
                        NULL,
-                       "select database_name AS `Db`, routine_name AS `Name`, c.type AS `Type`, c.definer AS `Definer`, p.gmt_modified AS `Modified`, p.gmt_create AS `Created`, c.security_type AS `Security_type`, p.comment AS `Comment`, character_set_client, collation_connection, db_collation AS `Database Collation`from %s.%s p, %s.%s d, %s.%s c where p.database_id = d.database_id and d.database_name = c.db and p.routine_name = c.name and (case c.type when 'PROCEDURE' then 1 when 'FUNCTION' then 2 else 0 end) = p.routine_type and d.database_id = %ld and p.routine_type = %ld and (0 = sys_privilege_check('routine_acc', 1) or 0 = sys_privilege_check('routine_acc', 1, d.database_name, p.routine_name, p.routine_type)) ORDER BY name COLLATE utf8mb4_bin ASC",
+                       "select database_name AS `Db`, routine_name AS `Name`, c.type AS `Type`, c.definer AS `Definer`, p.gmt_modified AS `Modified`, p.gmt_create AS `Created`, c.security_type AS `Security_type`, p.comment AS `Comment`, character_set_client, collation_connection, db_collation AS `Database Collation`from %s.%s p, %s.%s d, %s.%s c where p.database_id = d.database_id and d.database_name = c.db and p.routine_name = c.name and (case c.type when 'PROCEDURE' then 1 when 'FUNCTION' then 2 else 0 end) = p.routine_type and d.database_id = %ld and p.routine_type = %ld and (0 = sys_privilege_check('routine_acc') or 0 = sys_privilege_check('routine_acc', d.database_name, p.routine_name, p.routine_type)) ORDER BY name COLLATE utf8mb4_bin ASC",
                        NULL,
                        "name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_TRIGGERS,
@@ -3385,28 +2873,23 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_COUNT_ERRORS,
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_PARAMETERS,
                        NULL,
-                       "SELECT zone, svr_type, name, data_type, value, info, section, scope, source, edit_level from %s.%s where name not like '\\_%%'",
-                       R"(SELECT "ZONE", "SVR_TYPE", "NAME", "DATA_TYPE", "VALUE", "INFO", "SECTION", "SCOPE", "SOURCE", "EDIT_LEVEL" FROM %s.%s WHERE NAME NOT LIKE '\_%%' ESCAPE '\')",
+                       "SELECT svr_type, name, data_type, value, info, section, scope, source, edit_level from %s.%s where name not like '\\_%%'",
+                       R"(SELECT "SVR_TYPE", "NAME", "DATA_TYPE", "VALUE", "INFO", "SECTION", "SCOPE", "SOURCE", "EDIT_LEVEL" FROM %s.%s WHERE NAME NOT LIKE '\_%%' ESCAPE '\')",
                        "name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_PARAMETERS_WITH_DEFAULT_VALUE,
                        NULL,
-                      "SELECT zone, svr_type, name, data_type, value, info, section, scope, source, edit_level, default_value, isdefault from %s.%s where (name not like '\\_%%' or isdefault=0)",
-                      R"(SELECT "ZONE", "SVR_TYPE", "NAME", "DATA_TYPE", "VALUE", "INFO", "SECTION", "SCOPE", "SOURCE", "EDIT_LEVEL", "DEFAULT_VALUE", "ISDEFAULT" FROM %s.%s WHERE (NAME NOT LIKE '\_%%' ESCAPE '\' or ISDEFAULT=0))",
+                      "SELECT svr_type, name, data_type, value, info, section, scope, source, edit_level, default_value, isdefault from %s.%s where (name not like '\\_%%' or isdefault=0)",
+                      R"(SELECT "SVR_TYPE", "NAME", "DATA_TYPE", "VALUE", "INFO", "SECTION", "SCOPE", "SOURCE", "EDIT_LEVEL", "DEFAULT_VALUE", "ISDEFAULT" FROM %s.%s WHERE (NAME NOT LIKE '\_%%' ESCAPE '\' or ISDEFAULT=0))",
                       "name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_PARAMETERS_UNSYS,
                        NULL,
-                       "SELECT 1 `gmt_create`, 1 `gmt_modified`, 1 `zone`, 1 `svr_type`, 1 `name`, 1 `data_type`, 1 `value`, 1 `info`, 1 `section`, 1 `scope`, 1 `source`, 1 `edit_level` FROM (SELECT 1 FROM DUAL) tmp_table WHERE 1 != 1",
-                       R"(SELECT 1 "GMT_CREATE", 1 "GMT_MODIFIED", 1 "ZONE", 1 "SVR_TYPE", 1 "NAME", 1 "DATA_TYPE", 1 "VALUE", 1 "INFO", 1 "SECTION", 1 "SCOPE" , 1 "SOURCE", 1 "EDIT_LEVEL" FROM (SELECT 1 FROM DUAL) TMP_TABLE WHERE 1 != 1)",
+                       "SELECT 1 `gmt_create`, 1 `gmt_modified`, 1 `svr_type`, 1 `name`, 1 `data_type`, 1 `value`, 1 `info`, 1 `section`, 1 `scope`, 1 `source`, 1 `edit_level` FROM (SELECT 1 FROM DUAL) tmp_table WHERE 1 != 1",
+                       R"(SELECT 1 "GMT_CREATE", 1 "GMT_MODIFIED", 1 "SVR_TYPE", 1 "NAME", 1 "DATA_TYPE", 1 "VALUE", 1 "INFO", 1 "SECTION", 1 "SCOPE" , 1 "SOURCE", 1 "EDIT_LEVEL" FROM (SELECT 1 FROM DUAL) TMP_TABLE WHERE 1 != 1)",
                        "name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_PARAMETERS_COMPAT,
                        NULL,
-                       "SELECT zone, svr_type, name, data_type, value, info, section from %s.%s where name not like '\\_%%'",
-                       R"(SELECT "ZONE", "SVR_TYPE", "NAME", "DATA_TYPE", "VALUE", "INFO", "SECTION" FROM %s.%s WHERE NAME NOT LIKE '\\_%%')",
-                       "name");
-DEFINE_SHOW_CLAUSE_SET(SHOW_PARAMETERS_SEED,
-                       NULL,
-                       "SELECT zone, svr_type, name, data_type, value, info, section from %s.%s",
-                       R"(SELECT "ZONE", "SVR_TYPE", "NAME", "DATA_TYPE", "VALUE", "INFO", "SECTION" FROM %s.%s)",
+                       "SELECT svr_type, name, data_type, value, info, section from %s.%s where name not like '\\_%%'",
+                       R"(SELECT "SVR_TYPE", "NAME", "DATA_TYPE", "VALUE", "INFO", "SECTION" FROM %s.%s WHERE NAME NOT LIKE '\\_%%')",
                        "name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_SESSION_STATUS,
                        NULL,
@@ -3420,32 +2903,22 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_GLOBAL_STATUS,
                        "Variable_name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_DATABASES,
                        NULL,
-                       "SELECT `database_name` AS `Database` FROM %s.%s  WHERE in_recyclebin = 0 and database_name not in('%s', '%s', '%s') and 0 = sys_privilege_check(\'db_acc\', 1, `database_name`, \'\') order by database_name asc",
-                       NULL,
-                       "Database");
-DEFINE_SHOW_CLAUSE_SET(SHOW_CATALOG_DATABASES,
-                       NULL,
-                       "SELECT `database_name` AS `Database` FROM %s.%s where catalog_id = %ld order by database_name asc",
+                       "SELECT `database_name` AS `Database` FROM %s.%s  WHERE in_recyclebin = 0 and database_name not in('%s', '%s', '%s') and 0 = sys_privilege_check(\'db_acc\', `database_name`, \'\') order by database_name asc",
                        NULL,
                        "Database");
 DEFINE_SHOW_CLAUSE_SET(SHOW_DATABASES_LIKE,
                        "SELECT `Database` AS `Database (%.*s)` ",
-                       "SELECT `database_name` AS `Database` FROM %s.%s  WHERE in_recyclebin = 0 and database_name not in ('%s', '%s', '%s') and 0 = sys_privilege_check(\'db_acc\', 1, `database_name`, \'\') order by database_name asc",
-                       NULL,
-                       "Database");
-DEFINE_SHOW_CLAUSE_SET(SHOW_CATALOG_DATABASES_LIKE,
-                       "SELECT `Database` AS `Database (%.*s)` ",
-                       "SELECT `database_name` AS `Database` FROM %s.%s where catalog_id = %ld order by database_name asc",
+                       "SELECT `database_name` AS `Database` FROM %s.%s  WHERE in_recyclebin = 0 and database_name not in ('%s', '%s', '%s') and 0 = sys_privilege_check(\'db_acc\', `database_name`, \'\') order by database_name asc",
                        NULL,
                        "Database");
 DEFINE_SHOW_CLAUSE_SET(SHOW_DATABASES_STATUS,
                        NULL,
-                       "select db as `Database`, case when sum(read_only) = 0 then \'read write\' when sum(read_only) < count(read_only) then \'partially read only\' else \'read only\' end as `Status` from %s.%s where (0 = sys_privilege_check('db_acc', 1) or 0 = sys_privilege_check('db_acc', 1, `db`, '')) group by db",
+                       "select db as `Database`, case when sum(read_only) = 0 then \'read write\' when sum(read_only) < count(read_only) then \'partially read only\' else \'read only\' end as `Status` from %s.%s where (0 = sys_privilege_check('db_acc') or 0 = sys_privilege_check('db_acc', `db`, '')) group by db",
                        NULL,
                        "Database");
 DEFINE_SHOW_CLAUSE_SET(SHOW_DATABASES_STATUS_LIKE,
                        "SELECT `Database` AS `Database (%.*s)`, `Status` ",
-                       "select db as `Database`, case when sum(read_only) = 0 then \'read write\' when sum(read_only) < count(read_only) then \'partially read only\' else \'read only\' end as `Status` from %s.%s where (0 = sys_privilege_check('db_acc', 1) or 0 = sys_privilege_check('db_acc', 1, `db`, '')) group by db",
+                       "select db as `Database`, case when sum(read_only) = 0 then \'read write\' when sum(read_only) < count(read_only) then \'partially read only\' else \'read only\' end as `Status` from %s.%s where (0 = sys_privilege_check('db_acc') or 0 = sys_privilege_check('db_acc', `db`, '')) group by db",
                        NULL,
                        "Database");
 DEFINE_SHOW_CLAUSE_SET(SHOW_CREATE_TABLE,
@@ -3468,16 +2941,6 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_CREATE_FUNCTION,
                        "SELECT routine_name AS `Function`, sql_mode, create_routine AS `Create Function`, character_set_client, collation_connection, collation_database AS `Database Collation` FROM %s.%s  WHERE routine_id = %ld and proc_type = %ld",
                        R"(SELECT "ROUTINE_NAME" AS "FUNCTION", "SQL_MODE", "CREATE_ROUTINE" AS "CREATE FUNCTION", "CHARACTER_SET_CLIENT", "COLLATION_CONNECTION", "COLLATION_DATABASE" AS "DATABASE COLLATION" FROM %s.%s  WHERE ROUTINE_ID = %ld AND PROC_TYPE = %ld)",
                        NULL);
-DEFINE_SHOW_CLAUSE_SET(SHOW_PROCEDURE_CODE,
-                       NULL,
-                       "SELECT 1 `Pos`, 1 `Instruction` FROM (SELECT 1 FROM DUAL) tmp_table WHERE 1 != 1",
-                       NULL,
-                       NULL);
-DEFINE_SHOW_CLAUSE_SET(SHOW_FUNCTION_CODE,
-                       NULL,
-                       "SELECT 1 `Pos`, 1 `Instruction` FROM (SELECT 1 FROM DUAL) tmp_table WHERE 1 != 1",
-                       NULL,
-                       NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_CREATE_TRIGGER,
                        NULL,
                        "SELECT trigger_name AS `Trigger`, sql_mode, create_trigger AS `SQL Original Statement`, character_set_client, collation_connection, collation_database AS `Database Collation` FROM %s.%s  WHERE trigger_id = %ld",
@@ -3488,50 +2951,10 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_RECYCLEBIN,
                        "SELECT OBJECT_NAME, ORIGINAL_NAME, case TYPE when 1 then 'TABLE' when 2 then 'INDEX' when 3 then 'VIEW' when 4 then 'DATABASE' when 5 then 'AUX_VP' when 6 then 'TRIGGER' when 7 then 'TENANT' else 'INVALID' end as TYPE, gmt_create as CREATETIME FROM %s.%s WHERE TYPE != 8 AND TYPE != 9",
                        R"(SELECT "OBJECT_NAME", "ORIGINAL_NAME", CASE "TYPE" WHEN 1 THEN 'TABLE' WHEN 2 THEN 'INDEX' WHEN 3 THEN 'VIEW' WHEN 4 THEN 'DATABASE' when 5 then 'AUX_VP' when 6 then 'TRIGGER' WHEN 7 THEN 'TENANT' ELSE 'INVALID' END AS "TYPE", "GMT_CREATE" AS "CREATETIME" FROM %s.%s WHERE TYPE != 8 AND TYPE != 9)",
                        NULL);
-DEFINE_SHOW_CLAUSE_SET(SHOW_SEQUENCES,
-                       "SELECT sequence_name AS `Sequences_in_%.*s` ",
-                       "SELECT sequence_name FROM %s.%s WHERE database_id = %ld ORDER BY sequence_name COLLATE utf8mb4_bin ASC",
-                       NULL,
-                       "sequence_name");
-DEFINE_SHOW_CLAUSE_SET(SHOW_SEQUENCES_LIKE,
-                       "SELECT sequence_name AS `Sequences_in_%.*s (%.*s)` ",
-                       "SELECT sequence_name FROM %s.%s WHERE database_id = %ld ORDER BY sequence_name COLLATE utf8mb4_bin ASC",
-                       NULL,
-                       "sequence_name");
-DEFINE_SHOW_CLAUSE_SET(XA_RECOVER,
-                       NULL,
-                       "SELECT format_id as formatID, length(gtrid) as gtrid_length, length(bqual) as bqual_length, concat(gtrid,bqual) as data from %s.%s where state =  %ld",
-                       NULL,
-                       NULL);
-DEFINE_SHOW_CLAUSE_SET(XA_RECOVER_CONVERT_XID,
-                       NULL,
-                       "SELECT format_id as formatID, length(gtrid) as gtrid_length, length(bqual) as bqual_length, concat('0x',hex(concat(gtrid,bqual))) as data from %s.%s where state = %ld",
-                       NULL,
-                       NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_CREATE_USER,
                        NULL,
                        "SELECT \"%.*s\" AS `CREATE USER for %.*s@%.*s` FROM DUAL",
                        NULL,
                        NULL);
-DEFINE_SHOW_CLAUSE_SET(SHOW_CATALOGS,
-                       NULL,
-                       "(SELECT \"internal\" AS `Catalog`) UNION (SELECT `catalog_name` AS `Catalog` FROM %s.%s WHERE check_catalog_access(`catalog_name`)) order by `Catalog` asc",
-                       R"((SELECT 'INTERNAL' AS "Catalog" FROM DUAL) UNION (SELECT catalog_name AS "Catalog" FROM %s.%s WHERE check_catalog_access(catalog_name) = 1) order by "Catalog" asc)",
-                       NULL);
-DEFINE_SHOW_CLAUSE_SET(SHOW_CREATE_CATALOG,
-                       NULL,
-                       "SELECT `catalog_name` AS `Catalog`, create_catalog AS `Create Catalog` FROM %s.%s  WHERE catalog_id = %ld",
-                       R"(SELECT catalog_name AS "Catalog", create_catalog AS "Create Catalog" FROM %s.%s  WHERE catalog_id = %ld)",
-                       NULL);
-DEFINE_SHOW_CLAUSE_SET(SHOW_LOCATIONS,
-                       NULL,
-                       "SELECT `location_name` AS `Location` FROM %s.%s WHERE check_location_access(`location_name`) order by `Location` asc",
-                       NULL,
-                       NULL);
-DEFINE_SHOW_CLAUSE_SET(SHOW_CREATE_LOCATION,
-                        NULL,
-                        "SELECT `location_name` AS `Location`, `create_location` AS `Create Location` FROM %s.%s  WHERE location_id = %ld",
-                        NULL,
-                        NULL);
 }/* ns sql*/
 }/* ns oceanbase */

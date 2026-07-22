@@ -43,7 +43,7 @@ public:
   enum BlockType : uint8_t {
     CHUNK_TYPE,
     PIECE_TYPE,
-    MTL_PIECE_TYPE,
+    SERVER_PIECE_TYPE,
     INVALID_TYPE = 3
   };
 
@@ -94,7 +94,7 @@ public:
 };
 
 
-class ObTenantCompactionMemPool
+class ObCompactionMemPool
 {
 public:
   enum MemoryMode : uint8_t
@@ -104,9 +104,9 @@ public:
     CRITICAL_MODE = 2 // disable parallel mini merge && limit mini merge concurrency
   };
 
-  static int mtl_init(ObTenantCompactionMemPool* &mem_pool);
-  ObTenantCompactionMemPool();
-  virtual ~ObTenantCompactionMemPool();
+  static int server_module_init(ObCompactionMemPool* &mem_pool);
+  ObCompactionMemPool();
+  virtual ~ObCompactionMemPool();
   void wait();
   void stop();
   void destroy();
@@ -132,13 +132,13 @@ private:
   class MemPoolShrinkTask : public common::ObTimerTask
   {
   public:
-    MemPoolShrinkTask(ObTenantCompactionMemPool &mem_pool)
+    MemPoolShrinkTask(ObCompactionMemPool &mem_pool)
       : mem_pool_(mem_pool),
         last_check_dag_cnt_(-1) {}
     virtual ~MemPoolShrinkTask() {}
     virtual void runTimerTask();
   private:
-    ObTenantCompactionMemPool &mem_pool_;
+    ObCompactionMemPool &mem_pool_;
     int64_t last_check_dag_cnt_;
   };
 
@@ -161,7 +161,7 @@ private:
   common::ObTimer shrink_timer_;
   bool is_inited_;
 
-  DISALLOW_COPY_AND_ASSIGN(ObTenantCompactionMemPool);
+  DISALLOW_COPY_AND_ASSIGN(ObCompactionMemPool);
 };
 
 

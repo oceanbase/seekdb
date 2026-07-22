@@ -105,7 +105,7 @@ select /*+qb_name(select_1) */* from t4 where t4.c1 > any(select /*+qb_name(sele
 select /*+qb_name(select_1) */* from t4 where t4.c1 > any(select /*+qb_name(select_1)*/c1 from t5);
 
 ################################## 测试不应该显示的hint  ##################################
-select /*+topk(1 100) hotspot max_concurrent(1)*/* from t4;
+select /*+topk(1 100) hotspot*/* from t4;
 
 ################################## 测试指定即生效的hint  #################################
 select /*+read_consistency("weak")*/* from t1;

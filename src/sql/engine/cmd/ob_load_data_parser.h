@@ -34,89 +34,6 @@ class ObColumnSchemaV2;
 namespace sql
 {
 class ObDataInFileStruct;
-struct ObODPSGeneralFormatParam {
-  const static ObString TUNNEL_API;
-  const static ObString STORAGE_API;
-  const static ObString BYTE;
-  const static ObString ROW;
-};
-
-enum ColumnIndexType
-{
-  NAME = 0,      // Index by column name
-  POSITION = 1,  // index by column order (position)
-  ID = 2         // index by column id
-};
-
-struct ObODPSGeneralFormat {
-  enum ApiMode {
-    TUNNEL_API = 0,
-    BYTE,
-    ROW,
-  };
-  ObODPSGeneralFormat() :
-    access_type_(),
-    access_id_(),
-    access_key_(),
-    sts_token_(),
-    endpoint_(),
-    tunnel_endpoint_(),
-    project_(),
-    schema_(),
-    table_(),
-    quota_(),
-    compression_code_(),
-    collect_statistics_on_create_(false),
-    region_(),
-    api_mode_(ApiMode::TUNNEL_API)
-  {
-  }
-  int deep_copy_str(const ObString &src,
-                    ObString &dest);
-  int deep_copy(const ObODPSGeneralFormat &src);
-  int encrypt_str(common::ObString &src, common::ObString &dst);
-  int decrypt_str(common::ObString &src, common::ObString &dst);
-  int encrypt();
-  int decrypt();
-  static constexpr const char *OPTION_NAMES[] = {
-    "ACCESSTYPE",
-    "ACCESSID",
-    "ACCESSKEY",
-    "STSTOKEN",
-    "ENDPOINT",
-    "TUNNEL_ENDPOINT",
-    "PROJECT_NAME",
-    "SCHEMA_NAME",
-    "TABLE_NAME",
-    "QUOTA_NAME",
-    "COMPRESSION_CODE",
-    "COLLECT_STATISTICS_ON_CREATE",
-    "REGION",
-    "API_MODE",
-    "SPLIT"
-  };
-  common::ObString access_type_;
-  common::ObString access_id_;
-  common::ObString access_key_;
-  common::ObString sts_token_;
-  common::ObString endpoint_;
-  common::ObString tunnel_endpoint_;
-  common::ObString project_;
-  common::ObString schema_;
-  common::ObString table_;
-  common::ObString quota_;
-  common::ObString compression_code_;
-  bool collect_statistics_on_create_;
-  common::ObString region_;
-  ApiMode api_mode_;
-  common::ObArenaAllocator arena_alloc_;
-  int to_json_kv_string(char* buf, const int64_t buf_len, int64_t &pos) const;
-  int load_from_json_data(json::Pair *&node, common::ObIAllocator &allocator);
-  TO_STRING_KV(K_(access_type), K_(access_id), K_(access_key), K_(sts_token),
-               K_(endpoint), K_(tunnel_endpoint), K_(project), K_(schema), K_(table), K_(quota),
-               K_(compression_code), K_(collect_statistics_on_create), K_(region), K(api_mode_));
-  OB_UNIS_VERSION(1);
-};
 
 struct ObCSVGeneralFormat {
   ObCSVGeneralFormat () :
@@ -230,47 +147,6 @@ struct ObCSVGeneralFormat {
   TO_STRING_KV(K(cs_type_), K(file_column_nums_), K(line_start_str_), K(field_enclosed_char_),
                K(is_optional_), K(field_escaped_char_), K(field_term_str_), K(line_term_str_),
                K(compression_algorithm_), K(file_extension_), K(binary_format_), K(skip_blank_lines_), K(ignore_extra_fields_));
-  OB_UNIS_VERSION(1);
-};
-
-struct ObOrcGeneralFormat {
-  ObOrcGeneralFormat () :
-    stripe_size_(64LL * 1024 * 1024),      /* default 64 MB */
-    compress_type_index_(0),               /* default UNCOMPRESSED */
-    compression_block_size_(256LL * 1024), /* default 256 KB */
-    row_index_stride_(10000),
-    column_use_bloom_filter_(),
-    column_index_type_(sql::ColumnIndexType::NAME)
-  {}
-  static constexpr const char *OPTION_NAMES[] = {
-    "STRIPE_SIZE",
-    "COMPRESSION",
-    "COMPRESSION_BLOCK_SIZE",
-    "ROW_INDEX_STRIDE",
-    "COLUMN_USE_BLOOM_FILTER",
-    "COLUMN_INDEX_TYPE"
-  };
-  static constexpr const char *COMPRESSION_ALGORITHMS[] = {
-    "UNCOMPRESSED",
-    "ZLIB",
-    "SNAPPY",
-    "LZO",
-    "LZ4",
-    "ZSTD"
-  };
-  static constexpr const char *DEFAULT_FILE_EXTENSION = ".orc";
-
-  int64_t stripe_size_;
-  int64_t compress_type_index_;
-  int64_t compression_block_size_;
-  int64_t row_index_stride_;
-  common::ObArrayWrap<int64_t> column_use_bloom_filter_;
-  sql::ColumnIndexType column_index_type_;
-
-  int to_json_kv_string(char* buf, const int64_t buf_len, int64_t &pos) const;
-  int load_from_json_data(json::Pair *&node, common::ObIAllocator &allocator);
-  TO_STRING_KV(K(stripe_size_), K(compress_type_index_), K(compression_block_size_),
-              K(row_index_stride_), K(column_use_bloom_filter_), K(column_index_type_));
   OB_UNIS_VERSION(1);
 };
 
@@ -1026,7 +902,7 @@ int ObCSVGeneralParser::scan_utf8_ex(const char *&str,
   return ret;
 }
 
-// user using to define create external table format
+// Preserve the original text of user-specified file format options.
 struct ObOriginFileFormat
 {
   int to_json_kv_string(char *buf, const int64_t buf_len, int64_t &pos) const;
@@ -1055,9 +931,6 @@ int compression_algorithm_from_string(ObString compression_name,
 const char *binary_format_to_string(const ObCSVGeneralFormat::ObCSVBinaryFormat binary_format);
 int binary_format_from_string(const ObString binary_format_str,
                                         ObCSVGeneralFormat::ObCSVBinaryFormat &binary_format);
-const char *column_index_type_to_string(const sql::ColumnIndexType column_index_type);
-int column_index_type_from_string(const ObString column_index_type_str,
-                                  sql::ColumnIndexType &column_index_type);
 /**
  * guess compression format from filename suffix
  *
@@ -1082,9 +955,7 @@ struct ObExternalFileFormat
   enum FormatType {
     INVALID_FORMAT = -1,
     CSV_FORMAT = 0,
-    ODPS_FORMAT = 2,
-    ORC_FORMAT = 3,
-    MAX_FORMAT = 4
+    MAX_FORMAT
   };
 
   enum Options {
@@ -1103,8 +974,6 @@ struct ObExternalFileFormat
   ObOriginFileFormat origin_file_format_str_;
   FormatType format_type_;
   sql::ObCSVGeneralFormat csv_format_;
-  sql::ObODPSGeneralFormat odps_format_;
-  sql::ObOrcGeneralFormat orc_format_;
   uint64_t options_;
   static const char *FORMAT_TYPE_STR[];
 };

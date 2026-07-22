@@ -542,11 +542,11 @@ double ObTopKFrequencyHistograms::get_current_min_topk_ratio() const
 //allocte object total memory used restict[1MB ~ 10MB]
 void ObTopKFrequencyHistograms::set_the_obj_memory_use_limit()
 {
-  //default is current tenant limit's 1/1000
-  obj_memory_limit_ = lib::get_tenant_memory_limit() / 1000;
+  // Default to one thousandth of the runtime memory limit.
+  obj_memory_limit_ = lib::get_allocator_memory_limit() / 1000;
   //then see the sql work arena limit, set the limit's 1/100
   if (lib::ObMallocAllocator::get_instance() != NULL) {
-    auto ta = lib::ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(common::ObCtxIds::WORK_AREA);
+    auto ta = lib::ObMallocAllocator::get_instance()->get_ctx_allocator(common::ObCtxIds::WORK_AREA);
     obj_memory_limit_ = std::min(obj_memory_limit_, ta->get_limit() / 100);
   }
   obj_memory_limit_ = std::max(obj_memory_limit_, MIN_OBJ_MEMORY_LIMIT);

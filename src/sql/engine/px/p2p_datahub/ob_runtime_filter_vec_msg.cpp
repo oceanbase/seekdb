@@ -244,10 +244,10 @@ OB_DEF_DESERIALIZE(ObRFInFilterVecMsg)
   OB_UNIS_DECODE(build_send_opt_);
   if (OB_SUCC(ret) && is_active_) {
     if (build_send_opt_) {
-      // new fashion, directly deserialize
+      // The compact-hash representation can be decoded directly.
       OB_UNIS_DECODE(sm_hash_set_);
     } else {
-      // old fashion, insert from row store
+      // Row-store mode rebuilds the compact hash set from stored rows.
       if (OB_FAIL(sm_hash_set_.init(max_in_num_))) {
         LOG_WARN("failed to init small hash set", K(max_in_num_));
       }
@@ -1212,7 +1212,7 @@ int ObRFInFilterVecMsg::do_insert_by_row_vector(const ObBatchRows *child_brs,
 
     if (OB_FAIL(ret)) {
     } else if (build_send_opt_ && !query_range_info_.can_extract()) {
-      // in new fashion, insert datum only when extract query range
+      // Compact-hash-only mode stores datums only when query-range extraction needs them.
     } else {
       ObRowWithHash &cur_row = cur_row_with_hash_;
       ObDatum datum;
@@ -1444,9 +1444,9 @@ int ObRFInFilterVecMsg::merge(ObP2PDatahubMsgBase &msg)
     }
 
     if (build_send_opt_ && !query_range_info_.can_extract()) {
-      // in new fashion, insert datum only when extract query range
+      // Compact-hash-only mode stores datums only when query-range extraction needs them.
     } else if (!build_send_opt_) {
-      // old fashion, for compaction
+      // Row-store mode merges complete rows for exact comparison.
       for (int64_t i = 0; i < other_msg.row_store_.get_row_cnt() && OB_SUCC(ret); ++i) {
         ObCompactRow *cur_row = other_msg.row_store_.get_row(i);
         int64_t row_size = other_msg.row_store_.get_row_size(i);
@@ -2119,16 +2119,6 @@ int ObRFInFilterVecMsg::generate_one_range(int row_idx)
     }
   }
   return ret;
-}
-
-void ObRFInFilterVecMsg::check_finish_receive()
-{
-  if (msg_receive_expect_cnt_ == ATOMIC_LOAD(&msg_receive_cur_cnt_)) {
-    if (ATOMIC_LOAD(&is_active_)) {
-      (void)after_process();
-    }
-    is_ready_ = true;
-  }
 }
 
 void ObRFInFilterVecMsg::after_process()

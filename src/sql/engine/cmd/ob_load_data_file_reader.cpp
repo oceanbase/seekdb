@@ -17,8 +17,6 @@
 #define USING_LOG_PREFIX  SQL_ENG
 
 #include "sql/engine/cmd/ob_load_data_file_reader.h"
-#include "share/ob_device_manager.h"
-#include "share/io/ob_backup_io_adapter.h"
 #include "rpc/obmysql/ob_i_cs_mem_pool.h"
 #include "rpc/obmysql/packet/ompk_local_infile.h"
 #include "sql/session/ob_sql_session_info.h"
@@ -79,17 +77,6 @@ int ObFileReader::open(const ObFileReadParam &param, ObIAllocator &allocator, Ob
     } else if (OB_FAIL(tmp_reader->open(param.filename_))) {
       LOG_WARN("fail to open random file reader", KR(ret), K(param.filename_));
       OB_DELETE(ObRandomFileReader, MEMORY_ATTR, tmp_reader);
-    } else {
-      file_reader = tmp_reader;
-    }
-  } else if (param.file_location_ == ObLoadFileLocation::OSS) {
-    ObRandomOSSReader *tmp_reader = OB_NEW(ObRandomOSSReader, MEMORY_ATTR, allocator);
-    if (OB_ISNULL(tmp_reader)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to create RandomOSSReader", K(ret));
-    } else if (OB_FAIL(tmp_reader->open(param.access_info_, param.filename_))) {
-      LOG_WARN("fail to open random oss reader", KR(ret), K(param.filename_));
-      OB_DELETE(ObRandomOSSReader, MEMORY_ATTR, tmp_reader);
     } else {
       file_reader = tmp_reader;
     }
@@ -231,111 +218,6 @@ int ObRandomFileReader::get_file_size(int64_t &file_size)
     LOG_WARN("ObRandomFileReader not init", KR(ret), KP(this));
   } else {
     file_size = ::get_file_size(filename_.ptr());
-  }
-  return ret;
-}
-
-/**
- * ObRandomOSSReader
- */
-
-ObRandomOSSReader::ObRandomOSSReader(ObIAllocator &allocator)
-    : ObFileReader(allocator),
-      device_handle_(nullptr),
-      offset_(0),
-      eof_(false),
-      is_inited_(false)
-{
-}
-
-ObRandomOSSReader::~ObRandomOSSReader()
-{
-  if (fd_.is_valid()) {
-    device_handle_->close(fd_);
-    fd_.reset();
-  }
-  if (nullptr != device_handle_) {
-    common::ObDeviceManager::get_instance().release_device(device_handle_);
-    device_handle_ = nullptr;
-  }
-  is_inited_ = false;
-}
-
-int ObRandomOSSReader::open(const share::ObBackupStorageInfo &storage_info, const ObString &filename)
-{
-  int ret = OB_SUCCESS;
-  ObIODOpt opt;
-  ObIODOpts iod_opts;
-  ObBackupIoAdapter util;
-  iod_opts.opts_ = &opt;
-  iod_opts.opt_cnt_ = 0;
-  if (IS_INIT) {
-    ret = OB_INIT_TWICE;
-    LOG_WARN("ObRandomOSSReader init twice", KR(ret), KP(this));
-  } else if (OB_FAIL(
-        util.get_and_init_device(device_handle_, &storage_info, filename,
-                                 ObStorageIdMod(OB_STORAGE_ID_LOAD_DATA,
-                                                ObStorageUsedMod::STORAGE_USED_DDL)))) {
-    LOG_WARN("fail to get device manager", KR(ret), K(filename));
-  } else if (OB_FAIL(util.set_access_type(&iod_opts, false, 1))) {
-    LOG_WARN("fail to set access type", KR(ret));
-  } else {
-    ObCStringHelper helper;
-    const char *filename_str = helper.convert(filename);
-    if (OB_ISNULL(filename_str)) {
-      ret = OB_ERR_NULL_VALUE;
-      LOG_WARN("fail to convert filename", K(ret), K(filename));
-    } else if (OB_FAIL(device_handle_->open(filename_str, -1, 0, fd_, &iod_opts))) {
-      LOG_WARN("fail to open oss file", KR(ret), K(filename));
-    } else {
-      offset_ = 0;
-      eof_ = false;
-      is_inited_ = true;
-    }
-  }
-  return ret;
-}
-
-int ObRandomOSSReader::read(char *buf, int64_t count, int64_t &read_size)
-{
-  int ret = OB_SUCCESS;
-  ObBackupIoAdapter io_adapter;
-  ObIOHandle io_handle;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRandomOSSReader not init", KR(ret), KP(this));
-  } else if (OB_FAIL(io_adapter.async_pread(*device_handle_, fd_, buf, offset_, count, io_handle))) {
-    LOG_WARN("fail to async read oss buf", KR(ret), K_(offset), K(count), K(read_size));
-  } else if (OB_FAIL(io_handle.wait())) {
-    LOG_WARN("fail to wait", KR(ret));
-  } 
-  
-  if (OB_SUCC(ret)) {
-    read_size = io_handle.get_data_size();
-    if (0 == read_size) {
-      eof_ = true;
-    } else {
-      offset_ += read_size;
-    }
-  }
-  return ret;
-}
-
-int ObRandomOSSReader::seek(int64_t offset)
-{
-  offset_ = offset;
-  return OB_SUCCESS;
-}
-
-int ObRandomOSSReader::get_file_size(int64_t &file_size)
-{
-  int ret = OB_SUCCESS;
-  ObBackupIoAdapter util;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRandomOSSReader not init", KR(ret), KP(this));
-  } else if (OB_FAIL(util.get_file_size(device_handle_, fd_, file_size))) {
-    LOG_WARN("fail to get oss file size", KR(ret), K(file_size));
   }
   return ret;
 }

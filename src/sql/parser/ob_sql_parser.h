@@ -41,16 +41,6 @@ public:
 
   int parse(const char *str_ptr, const int64_t str_len, ParseResult &result);
 
-  // only for obproxy fast parser
-  // do not use the this function in observer kernel
-  int parse_and_gen_sqlid(void *malloc_pool,
-                          const char *str_ptr, const int64_t str_len,
-                          const int64_t len,
-                          char *sql_id);
-private:
-  int gen_sqlid(const char* paramed_sql, const int64_t sql_len,
-                const int64_t len, char *sql_id);
-
 private:
   common::ObIAllocator &allocator_ __attribute__((unused));
   ObSQLMode sql_mode_ __attribute__((unused));

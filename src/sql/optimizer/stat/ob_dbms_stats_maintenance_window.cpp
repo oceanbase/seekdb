@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/optimizer/stat/ob_dbms_stats_maintenance_window.h"
 #include "share/ob_scheduled_job_utils.h"
-#include "share/ob_tenant_timezone_mgr.h"
+#include "share/ob_timezone_mgr.h"
 #include "observer/dbms_scheduler/ob_dbms_sched_table_operator.h"
 #include "observer/dbms_scheduler/ob_dbms_sched_job_utils.h"
 #include "share/ob_sql_client_decorator.h"
@@ -428,37 +428,6 @@ int ObDbmsStatsMaintenanceWindow::check_date_validate(const ObString &job_name,
     }
   }
 
-  return ret;
-}
-
-int ObDbmsStatsMaintenanceWindow::get_async_gather_stats_job_for_upgrade(common::ObMySQLProxy *sql_proxy)
-{
-  int ret = OB_SUCCESS;
-  int64_t job_id = 0;
-  ObString exec_env;
-  ObSqlString values_list;
-  bool is_join_exists = false;
-  //bug:
-  ObArenaAllocator allocator("AsyncStatsJob");
-  if (OB_FAIL(check_job_exists(sql_proxy, async_gather_stats_job_proc, is_join_exists))) {
-    LOG_WARN("failed to check async gather job exists", K(ret));
-  } else if (is_join_exists) {
-    //do nothing
-  } else if (OB_FAIL(get_next_job_id_and_exec_env(sql_proxy, allocator, job_id, exec_env))) {
-    LOG_WARN("failed to get async gather stats job id and exec env", K(ret));
-  } else if (OB_UNLIKELY(job_id > dbms_scheduler::ObDBMSSchedTableOperator::JOB_ID_OFFSET ||
-                         exec_env.empty())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(job_id), K(exec_env));
-  } else {
-    HEAP_VAR(dbms_scheduler::ObDBMSSchedJobInfo, job_info) {
-      if (OB_FAIL(get_async_gather_stats_job_info(job_id, exec_env, job_info))) {
-        LOG_WARN("failed to get async gather stats job info", K(ret), K(job_info));
-      } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(*sql_proxy, job_id, job_info))) {
-        LOG_WARN("failed to create dbms sched job", K(ret), K(job_info));
-      }
-    }
-  }
   return ret;
 }
 

@@ -169,7 +169,6 @@ protected:
   int resolve_into_line_node(const ParseNode *node, ObSelectIntoItem &into_item);
   int resolve_into_variable_node(const ParseNode *node, ObSelectIntoItem &into_item);
   int resolve_into_file_node(const ParseNode *node, ObSelectIntoItem &into_item);
-  int resolve_file_partition_node(const ParseNode *node, ObSelectIntoItem &into_item);
   int resolve_into_outfile_without_format(const ParseNode *node, ObSelectIntoItem &into_item);
   int resolve_into_outfile_with_format(const ParseNode *node, ObSelectIntoItem &into_item);
   // resolve_star related functions
@@ -225,7 +224,6 @@ protected:
   int check_grouping_columns();
   int check_grouping_columns(ObSelectStmt &stmt, ObRawExpr *&expr);
   int check_window_exprs();
-  int check_sequence_exprs();
   int check_udt_set_query();
   int check_win_func_arg_valid(ObSelectStmt *select_stmt,
                                const ObItemType func_type,
@@ -330,7 +328,7 @@ protected:
   bool has_top_limit_;
   // Used to identify whether the current query is the left or right branch of a set query (UNION/INTERSECT/EXCEPT)
   bool in_set_query_;
-  // Used to indicate whether the current query is a sub query, used for sequence validity check etc.
+  // Used to indicate whether the current query is a subquery.
   bool is_sub_stmt_;
   // query is subquery in exists
   bool in_exists_subquery_;

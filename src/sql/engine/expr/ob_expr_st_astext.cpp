@@ -93,7 +93,7 @@ int ObExprSTAsText::eval_st_astext_common(const ObExpr &expr,
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, func_name);
+  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
   int num_args = expr.arg_cnt_;
   bool is_null_result = false;
   ObString res_wkt;
@@ -175,10 +175,6 @@ int ObExprSTAsText::eval_st_astext_common(const ObExpr &expr,
       if (OB_SUCC(ret)) {
         if (OB_FAIL(to_wkt(tmp_allocator, geo, res_wkt, func_name))) {
           LOG_WARN("failed to transform geo to wkt", K(ret));
-        } else {
-          // assume that ObStringBuffer has 4 times memory enlargement
-          tmp_allocator.set_baseline_size(res_wkt.length() * 4 + wkb.length());
-          tmp_allocator.memory_usage_check_if_need();
         }
       }
     }

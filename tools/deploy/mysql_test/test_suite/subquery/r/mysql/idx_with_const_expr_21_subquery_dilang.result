@@ -1,8 +1,6 @@
 drop table if exists t1,t2;
 set ob_enable_index_direct_select=1;
-alter system set merger_check_interval = '10s' tenant sys;
-alter system set merger_check_interval = '10s' tenant all_user;
-alter system set merger_check_interval = '10s' tenant all_meta;
+alter system set merger_check_interval='10s';
 create table t1(
 a1 char(3) primary key,
 a2 int,

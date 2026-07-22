@@ -43,7 +43,7 @@ void ObSqlWorkareaHistogramIterator::reset()
 int ObSqlWorkareaHistogramIterator::init()
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(GCTX.omt_)) {
+  if (OB_ISNULL(GCTX.server_runtime_controller_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null of omt", KR(ret));
   }
@@ -59,15 +59,15 @@ int ObSqlWorkareaHistogramIterator::get_next_batch_wa_histograms()
     ret = OB_ITER_END;
   } else {
     
-    MOD_SCOPE {
-      ObTenantSqlMemoryManager *sql_mem_mgr = nullptr;
-      sql_mem_mgr = share::g_mp->tenant_sql_memory_manager();
+    SERVER_MODULE_SCOPE {
+      ObSqlMemoryManager *sql_mem_mgr = nullptr;
+      sql_mem_mgr = share::g_mp->sql_memory_manager();
       if (nullptr != sql_mem_mgr && OB_FAIL(sql_mem_mgr->get_workarea_histogram(wa_histograms_))) {
         LOG_WARN("failed to get workarea stat", K(ret));
       }
     }
     done_ = true;
-    LOG_TRACE("trace get histogram for next tenant", K(wa_histograms_.count()));
+    LOG_TRACE("get next workarea histogram batch", K(wa_histograms_.count()));
   }
   return ret;
 }

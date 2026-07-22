@@ -49,9 +49,6 @@
 #define INVALID_COLLATION 0
 #define INVALID_INDEX -1
 
-#define PACKAGE_KEY_PREFIX_V1  "pkg."
-#define PACKAGE_KEY_PREFIX_V2  "pkg.v2."
-
 #define YYLEX_PARAM result->yyscan_info_
 
 #define JOIN_MERGE_NODES(node1, node2)                                                  \
@@ -947,32 +944,6 @@ int STORE_PARAM_NODE_NEED_PARAMETERIZE(ParamList *param,
       int_flag = false;                                                     \
     }                                                                       \
     result = (int64_t)temp_val;                                             \
-  } while (0);
-
-#define CHECK_VALID_PACKAGE_VARIABLE_NAME(node)                             \
-  do {                                                                      \
-    int64_t len = strlen(PACKAGE_KEY_PREFIX_V1);                        \
-    if (OB_UNLIKELY(NULL == node || NULL == node->str_value_)) {            \
-      yyerror(NULL, result, "invalid arguments node: %p", node);            \
-      YYABORT_UNEXPECTED;                                                   \
-    } else if (strncmp(node->str_value_, PACKAGE_KEY_PREFIX_V1, 4) != 0) { \
-      yyerror(NULL, result, "invalid arguments node,not start with 'pkg.'");\
-      YYABORT_UNEXPECTED;                                                   \
-    } else {                                     \
-      int64_t len2 = strlen(PACKAGE_KEY_PREFIX_V2);                        \
-      if (0 == strncmp(node->str_value_, PACKAGE_KEY_PREFIX_V2, len2)) {   \
-        len = len2;                                  \
-      }        \
-      for (int32_t i = len; i < node->str_len_; ++i) {                        \
-        if (!((node->str_value_[i] >= '0'                                   \
-               && node->str_value_[i] <= '9')                                  \
-            || (node->str_value_[i] >= 'a'                                 \
-               && node->str_value_[i] <= 'z'))) {                             \
-          yyerror(NULL, result, "invalid arguments node, include invalid char"); \
-          YYABORT_UNEXPECTED;                                               \
-        }                                                                   \
-      }                                                                     \
-    }                                                                       \
   } while (0);
 
 // bugfix: 

@@ -106,8 +106,8 @@ class ObEmptyReadBucket
 public:
   ObEmptyReadBucket();
   virtual ~ObEmptyReadBucket();
-  static int mtl_init(ObEmptyReadBucket *&bucket);
-  static void mtl_destroy(ObEmptyReadBucket *&bucket);
+  static int server_module_init(ObEmptyReadBucket *&bucket);
+  static void server_module_destroy(ObEmptyReadBucket *&bucket);
   int init();
   void destroy();
   OB_INLINE bool is_valid() const { return NULL != buckets_; }

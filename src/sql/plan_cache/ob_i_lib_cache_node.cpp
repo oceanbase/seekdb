@@ -56,9 +56,7 @@ void ObILibCacheNode::free_cache_obj_array()
       if (OB_ISNULL(obj)) {
         //do nothing
       } else {
-        CacheRefHandleID ref_handle = obj->get_dynamic_ref_handle();
-        ref_handle = (ref_handle != MAX_HANDLE ? ref_handle : LC_REF_CACHE_NODE_HANDLE);
-        mgr.free(obj, ref_handle);
+        mgr.free(obj);
         obj = NULL;
       }
     }
@@ -98,9 +96,7 @@ int ObILibCacheNode::get_cache_obj(ObILibCacheCtx &ctx,
   } else if (OB_FAIL(inner_get_cache_obj(ctx, key, obj))) {
     LOG_DEBUG("failed to inner get cache obj", K(ret), K(key));
   } else {
-    CacheRefHandleID ref_handle = obj->get_dynamic_ref_handle();
-    ref_handle = (ref_handle != MAX_HANDLE ? ref_handle : LC_REF_CACHE_NODE_HANDLE);
-    obj->inc_ref_count(ref_handle);
+    obj->inc_ref_count();
     LOG_DEBUG("succ to get cache obj", KPC(obj));
   }
   return ret;
@@ -127,9 +123,7 @@ int ObILibCacheNode::add_cache_obj(ObILibCacheCtx &ctx,
       }
     }
     if (OB_SUCC(ret)) {
-      CacheRefHandleID ref_handle = obj->get_dynamic_ref_handle();
-      ref_handle = (ref_handle != MAX_HANDLE ? ref_handle : LC_REF_CACHE_NODE_HANDLE);
-      obj->inc_ref_count(ref_handle);
+      obj->inc_ref_count();
       obj->set_added_lc(true);
       LOG_DEBUG("succ to add cache obj", KPC(obj));
     }
@@ -204,31 +198,14 @@ int64_t ObILibCacheNode::get_cache_obj_mem_size()
   return total_mem_size;
 }
 
-int64_t ObILibCacheNode::inc_ref_count(const CacheRefHandleID ref_handle)
+int64_t ObILibCacheNode::inc_ref_count()
 {
-  int ret = OB_SUCCESS;
-  if (GCONF._enable_plan_cache_mem_diagnosis) {
-    if (OB_ISNULL(lib_cache_)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_ERROR("invalid null lib cache", K(ret));
-    } else {
-      lib_cache_->get_ref_handle_mgr().record_ref_op(ref_handle);
-    }
-  }
   return ATOMIC_AAF(&ref_count_, 1);
 }
 
-int64_t ObILibCacheNode::dec_ref_count(const CacheRefHandleID ref_handle)
+int64_t ObILibCacheNode::dec_ref_count()
 {
   int ret = OB_SUCCESS;
-  if (GCONF._enable_plan_cache_mem_diagnosis) {
-    if (OB_ISNULL(lib_cache_)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_ERROR("invalid null lib cache", K(ret));
-    } else {
-      lib_cache_->get_ref_handle_mgr().record_deref_op(ref_handle);
-    }
-  }
   int64_t ref_count = ATOMIC_SAF(&ref_count_, 1);
   if (ref_count > 0) {
     // do nothing
@@ -271,9 +248,7 @@ int ObILibCacheNode::remove_cache_obj_entry(const ObCacheObjID obj_id)
         BACKTRACE(ERROR, true, "invalid cache obj");
       } else if (obj_id == obj->get_object_id()) {
         co_list_.erase(iter);
-        CacheRefHandleID ref_handle = obj->get_dynamic_ref_handle();
-        ref_handle = (ref_handle != MAX_HANDLE ? ref_handle : LC_REF_CACHE_NODE_HANDLE);
-        mgr.free(obj, ref_handle);
+        mgr.free(obj);
         obj = NULL;
         break;
       }

@@ -71,7 +71,7 @@ int ObGCUpperTransHelper::check_need_gc_or_update_upper_trans_version(
     LOG_INFO("paused, cannot update trans version now", K(ret), K(tablet_id));
   } else if (OB_FAIL(tablet.fetch_table_store(table_store_wrapper))) {
     LOG_WARN("fail to fetch table store", K(ret));
-  } else {
+  } else if (tablet.get_tablet_meta().local_status_.is_data_status_complete()) {
     ObITable *table = nullptr;
     ObSSTable *sstable = nullptr;
     int64_t new_upper_trans_version = INT64_MAX;

@@ -597,7 +597,7 @@ int LogStorage::check_read_out_of_bound_(const block_id_t &block_id,
     PALF_LOG(ERROR, "get_block_id_range failed", K(ret), K(min_block_id), K(max_block_id));
   } else if (min_block_id > block_id) {
     ret = OB_ERR_OUT_OF_LOWER_BOUND;
-    PALF_LOG(INFO, "read something out of lower bound, the block may be deleted by GC or rebuild",
+    PALF_LOG(INFO, "read something out of lower bound, the block may be deleted by GC or base-info advancement",
              K(min_block_id), K(max_block_id), K(block_id));
   } else if (block_id > max_block_id) {
     ret = OB_ERR_UNEXPECTED; 

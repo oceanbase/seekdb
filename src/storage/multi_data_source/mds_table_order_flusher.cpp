@@ -26,7 +26,7 @@ namespace mds
 // define in cpp file is for rewrire this function in unittest
 void *MdsFlusherModulePageAllocator::alloc(const int64_t size, const ObMemAttr &attr) {
   void *ret = nullptr;
-  ret = (NULL == allocator_) ? share::mtl_malloc(size, attr) : allocator_->alloc(size, attr);
+  ret = (NULL == allocator_) ? share::server_malloc(size, attr) : allocator_->alloc(size, attr);
   return ret;
 }
 

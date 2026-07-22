@@ -81,12 +81,10 @@ public:
   TO_STRING_KV(K_(in_filter_active), K_(hllc));
   bool in_filter_active_{false};
   uint64_t in_filter_ndv_{0};   
-  // == 435 BP1 Begin to Use ==
   bool use_hllc_estimate_ndv_{false};
   uint64_t bf_ndv_{0};
   common::ObArenaAllocator allocator_;  //help to init hllc when deserialization, don't need to be serialized
   ObHyperLogLogCalculator hllc_;
-  // == 435 BP1 End to Use ==
 private:
   DISALLOW_COPY_AND_ASSIGN(ObJoinFilterNdv);
 };
@@ -129,10 +127,9 @@ public:
       SQL_LOG(WARN, "failed to prepare_allocate");
     } else {
       for (int64_t i = 0; i < source_ndv_info.count() && OB_SUCC(ret); ++i) {
+        // Start aggregation from the neutral active state; any inactive piece
+        // turns the aggregate inactive in gather_piece_ndv().
         target_ndv_info.at(i).in_filter_active_ = true;
-        // pkt.ndv_info_.at(i).hllc_.get_n_bit() may == 0, when there is a lower version pkt send to
-        // this higher version DataHub
-        // So we set target_ndv_info.at(i).in_filter_active_ = true above explicitly
         int32_t n_bit = source_ndv_info.at(i).hllc_.get_n_bit();
         if (source_ndv_info.at(i).use_hllc_estimate_ndv_ && OB_FAIL(target_ndv_info.at(i).init_ndv_info(n_bit))) {
           SQL_LOG(WARN, "fail to init dh or sqc's hyperloglog in joinFilter senario", K(ret));

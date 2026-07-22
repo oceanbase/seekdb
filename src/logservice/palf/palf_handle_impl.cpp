@@ -882,7 +882,7 @@ int PalfHandleImpl::check_and_switch_state()
       (void) sw_.report_log_task_trace(sw_.get_start_id());
     }
   }
-  return OB_SUCCESS;
+  return ret;
 }
 
 
@@ -1186,7 +1186,7 @@ int PalfHandleImpl::stat(PalfStat &palf_stat)
     palf_stat.max_scn_ = get_max_scn();
     PALF_LOG(TRACE, "PalfHandleImpl stat", K(palf_stat));
   }
-  return OB_SUCCESS;
+  return ret;
 }
 
 PalfStat::PalfStat()

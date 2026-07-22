@@ -33,7 +33,7 @@ using namespace blocksstable;
 namespace storage {
 class ObAggStoreBase;
 class ObRowsInfo;
-class ObAdvanceSkipScanner;
+class ObAdvanceScanHelper;
 
 struct ObSSTableReadHandle
 {
@@ -41,13 +41,11 @@ public:
   ObSSTableReadHandle() :
       is_get_(false),
       is_bf_contain_(false),
-      has_macro_block_bf_(false),
       is_sorted_multi_get_(false),
       row_state_(0),
       range_idx_(-1),
       micro_begin_idx_(-1),
       micro_end_idx_(-1),
-      current_rows_info_idx_(-1),
       query_range_(nullptr),
       index_block_info_(),
       row_handle_(),
@@ -59,13 +57,11 @@ public:
   {
     is_get_ = false;
     is_bf_contain_ = false;
-    has_macro_block_bf_ = false;
     is_sorted_multi_get_ = false;
     row_state_ = 0;
     range_idx_ = -1;
     micro_begin_idx_ = -1;
     micro_end_idx_ = -1;
-    current_rows_info_idx_ = -1;
     query_range_ = nullptr;
     index_block_info_.reset();
     row_handle_.reset();
@@ -74,13 +70,11 @@ public:
   {
     is_get_ = false;
     is_bf_contain_ = false;
-    has_macro_block_bf_ = false;
     is_sorted_multi_get_ = false;
     row_state_ = 0;
     range_idx_ = -1;
     micro_begin_idx_ = -1;
     micro_end_idx_ = -1;
-    current_rows_info_idx_ = -1;
     query_range_ = nullptr;
     micro_handle_ = nullptr;
     index_block_info_.reset();
@@ -146,19 +140,17 @@ public:
     }
     return ret;
   }
-  TO_STRING_KV(K_(is_get), K_(is_bf_contain), K_(has_macro_block_bf), K_(is_sorted_multi_get), K_(row_state), K_(range_idx), K_(index_block_info),
+  TO_STRING_KV(K_(is_get), K_(is_bf_contain), K_(is_sorted_multi_get), K_(row_state), K_(range_idx), K_(index_block_info),
                K_(micro_begin_idx), K_(micro_end_idx), KP_(query_range), KPC_(micro_handle));
 
 public:
   bool is_get_;
   bool is_bf_contain_;
-  bool has_macro_block_bf_;
   bool is_sorted_multi_get_;
   int8_t row_state_;    // possible states: NOT_EXIST, IN_ROW_CACHE, IN_BLOCK
   int64_t range_idx_;
   int64_t micro_begin_idx_;
   int64_t micro_end_idx_;
-  int64_t current_rows_info_idx_;
   union {
     const blocksstable::ObDatumRowkey *rowkey_;
     const blocksstable::ObDatumRange *range_;
@@ -514,7 +506,7 @@ public:
       micro_data_prefetch_idx_(0),
       row_lock_check_version_(transaction::ObTransVersion::INVALID_TRANS_VERSION),
       agg_store_(nullptr),
-      skip_scanner_(nullptr),
+      advance_scan_helper_(nullptr),
       can_blockscan_(false),
       need_check_prefetch_depth_(false),
       use_multi_block_prefetch_(false),
@@ -606,15 +598,6 @@ public:
   {
     return DEFAULT_SCAN_MICRO_DATA_HANDLE_CNT;
   }
-  OB_INLINE const ObIndexSkipState *get_next_skip_state() const
-  {
-    const ObIndexSkipState *tmp_state = nullptr;
-    if (cur_micro_data_fetch_idx_ + 1 < micro_data_prefetch_idx_) {
-      tmp_state = &micro_data_infos_[(cur_micro_data_fetch_idx_ + 1) % MAX_DATA_PREFETCH_DEPTH].skip_state_;
-    }
-    return tmp_state;
-  }
-
   static const int16_t MIN_DATA_READ_BATCH_COUNT = 4;
   static const int16_t MAX_INDEX_TREE_HEIGHT = 16;
   static const int32_t MAX_DATA_PREFETCH_DEPTH = DATA_PREFETCH_DEPTH;
@@ -734,10 +717,10 @@ protected:
         OB_INLINE int get_next_data_row(
         const bool is_multi_check,
         ObMicroIndexInfo &block_info,
-        ObAdvanceSkipScanner *skip_scanner = nullptr)
+        ObAdvanceScanHelper *advance_scan_helper = nullptr)
     {
       int ret = OB_SUCCESS;
-      if (OB_FAIL(index_scanner_.get_next(block_info, is_multi_check, false/*is_sorted_multi_get*/, skip_scanner))) {
+      if (OB_FAIL(index_scanner_.get_next(block_info, is_multi_check, false/*is_sorted_multi_get*/, advance_scan_helper))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
           STORAGE_LOG(WARN, "Fail to get_next index row", K(ret), K_(index_scanner));
         }
@@ -759,9 +742,9 @@ protected:
         ObIndexTreeMultiPassPrefetcher &prefetcher)
     {
       int ret = OB_SUCCESS;
-      ObAdvanceSkipScanner *skip_scanner = prefetcher.access_ctx_->query_flag_.is_reverse_scan() ? nullptr : prefetcher.skip_scanner_;
+      ObAdvanceScanHelper *advance_scan_helper = prefetcher.access_ctx_->query_flag_.is_reverse_scan() ? nullptr : prefetcher.advance_scan_helper_;
       while (OB_SUCC(ret)) {
-        if (OB_FAIL(index_scanner_.get_next(block_info, prefetcher.is_multi_check(), false/*is_sorted_multi_get*/, skip_scanner))) {
+        if (OB_FAIL(index_scanner_.get_next(block_info, prefetcher.is_multi_check(), false/*is_sorted_multi_get*/, advance_scan_helper))) {
           if (OB_UNLIKELY(OB_ITER_END != ret)) {
             STORAGE_LOG(WARN, "Fail to get_next index row", K(ret), K_(index_scanner));
           } else if (fetch_idx_ < prefetch_idx_) {
@@ -834,7 +817,7 @@ public:
   int64_t micro_data_prefetch_idx_;
   int64_t row_lock_check_version_;
   ObAggStoreBase *agg_store_;
-  ObAdvanceSkipScanner *skip_scanner_;
+  ObAdvanceScanHelper *advance_scan_helper_;
 protected:
   bool can_blockscan_;
   bool need_check_prefetch_depth_;

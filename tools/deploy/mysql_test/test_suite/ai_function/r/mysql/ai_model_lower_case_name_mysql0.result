@@ -22,10 +22,10 @@ call DBMS_AI_SERVICE.DROP_AI_MODEL('CAFE');
 select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME in ('cafe', 'CAFE', 'café');
 NAME	TYPE	MODEL_NAME
 call DBMS_AI_SERVICE.DROP_AI_MODEL('cafe');
-ERROR HY000: This ai model 'cafe' not found in the tenant
+ERROR HY000: This AI model 'cafe' was not found
 select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME in ('cafe', 'CAFE', 'café');
 NAME	TYPE	MODEL_NAME
 call DBMS_AI_SERVICE.DROP_AI_MODEL('café');
-ERROR HY000: This ai model 'café' not found in the tenant
+ERROR HY000: This AI model 'café' was not found
 select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME in ('cafe', 'CAFE', 'café');
 NAME	TYPE	MODEL_NAME

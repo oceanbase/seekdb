@@ -16,7 +16,7 @@
 #ifndef OCEANBASE_OBSERVER_OB_MOCK_PLUGIN_VECTOR_INDEX_UTILS_DEFINE_H_
 #define OCEANBASE_OBSERVER_OB_MOCK_PLUGIN_VECTOR_INDEX_UTILS_DEFINE_H_
 #include "share/scn.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 #include "observer/vector_index/ob_plugin_vector_index_adaptor.h"
 #include "share/schema/ob_schema_struct.h"
 #include "storage/access/ob_table_access_param.h"
@@ -24,7 +24,7 @@
 #include "storage/tx_storage/ob_access_service.h"
 #include "storage/access/ob_table_scan_iterator.h"
 #include "common/rowkey/ob_rowkey.h"
-#include "share/schema/ob_tenant_schema_service.h"
+#include "share/schema/ob_schema_runtime_service.h"
 #include "lib/vector/ob_vector_util.h"
 #include "ob_vector_kmeans_ctx.h"
 #include "observer/vector_index/ob_vector_index_util.h"
@@ -152,7 +152,7 @@ public:
                                          ObIArray<ObTabletPair> &partial_tablet_ids,
                                          ObIArray<ObTabletPair> &cache_tablet_ids,
                                          char *buf, int64_t buf_len, int64_t &pos);
-  static int get_tenant_vector_index_ids(bool &has_ivf_index, common::ObIArray<uint64_t> &table_id_array);
+  static int get_vector_index_ids(bool &has_ivf_index, common::ObIArray<uint64_t> &table_id_array);
 
 private:
   static const int EMBEDDED_TABLE_BASE_COLUMN_CNT = 2;

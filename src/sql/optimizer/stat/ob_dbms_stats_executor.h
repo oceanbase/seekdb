@@ -218,12 +218,6 @@ private:
   static int fetch_gather_table_snapshot_read(common::sqlclient::ObISQLConnection *conn,
                                               uint64_t &current_scn);
 
- static int fetch_gather_task_addr(ObCommonSqlProxy *sql_proxy,
-                                    ObIAllocator &allcoator,
-                                    const ObString &task_id,
-                                    char *&svr_ip,
-                                    int32_t &svr_port);
-
   static int determine_auto_sample_table(ObExecContext &ctx, ObTableStatParam &param);
   
   static int try_use_prefix_index_refine_min_max(ObExecContext &ctx, ObTableStatParam &param);

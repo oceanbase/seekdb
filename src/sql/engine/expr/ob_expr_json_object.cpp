@@ -94,7 +94,7 @@ int ObExprJsonObject::eval_json_object(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   INIT_SUCC(ret);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("JSONModule"));
   ObJsonObject j_obj(&temp_allocator);
   ObIJsonBase *j_base = &j_obj;
@@ -119,9 +119,6 @@ int ObExprJsonObject::eval_json_object(const ObExpr &expr, ObEvalCtx &ctx, ObDat
       bool is_null = false;
       if (OB_FAIL(ObJsonExprHelper::get_json_or_str_data(arg, ctx, temp_allocator, key, is_null))) {
         LOG_WARN("fail to get real data.", K(ret), K(key));
-      } else if (OB_FALSE_IT(temp_allocator.add_baseline_size(key.length()))) {
-      } else if (OB_FAIL(temp_allocator.add_baseline_size(expr.args_[i+1], ctx))) {
-        LOG_WARN("failed to add baseline size.", K(ret), K(i+1));
       } else if (OB_FAIL(ObJsonExprHelper::get_json_val(expr, ctx, &temp_allocator, i+1, j_val))) {
         ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
         LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT_IN_PARAM);

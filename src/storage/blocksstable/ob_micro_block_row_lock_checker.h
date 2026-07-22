@@ -74,7 +74,7 @@ public:
       const int64_t rowkey_begin_idx,
       const int64_t rowkey_end_idx,
       ObRowsInfo &rows_info);
-   void inc_empty_read(ObSSTableReadHandle &read_handle);
+  void inc_empty_read();
 protected:
   virtual int inner_get_next_row(
       int64_t &current,

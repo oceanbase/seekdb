@@ -173,23 +173,29 @@ int ObTabletMergeInfo::create_sstable(
   }
 
   if (OB_SUCC(ret)) {
-    // if base sstable is small sstable and was reused, we disable the small sstable optimization
-    const ObSSTable *sstable = static_cast<const ObSSTable*>(tables_handle.get_table(0));
-    const bool is_reused_small_sst = is_major_or_meta_merge_type(ctx.get_merge_type())
-                                   && sstable->is_small_sstable()
-                                   && 1 == merge_history_.get_macro_block_count()
-                                   && 1 == merge_history_.get_multiplexed_macro_block_count();
+    const ObSSTable *base_sstable =
+        static_cast<const ObSSTable *>(tables_handle.get_table(0));
+    const bool is_reused_small_sstable =
+        is_major_or_meta_merge_type(ctx.get_merge_type())
+        && base_sstable->is_small_sstable()
+        && 1 == merge_history_.get_macro_block_count()
+        && 1 == merge_history_.get_multiplexed_macro_block_count();
     SMART_VARS_2((ObSSTableMergeRes, res), (ObTabletCreateSSTableParam, param)) {
-      if (!is_reused_small_sst
-          && OB_FAIL(build_sstable_merge_res(ctx.static_param_, ctx.get_pre_warm_param(), macro_start_seq, res))) {
-        LOG_WARN("fail to close index builder", K(ret), KPC(sstable), "is_small_sst", sstable->is_small_sstable());
+      if (!is_reused_small_sstable
+          && OB_FAIL(build_sstable_merge_res(
+                 ctx.static_param_, ctx.get_pre_warm_param(),
+                 macro_start_seq, res))) {
+        LOG_WARN("fail to close index builder", K(ret), KPC(base_sstable));
         CTX_SET_DIAGNOSE_LOCATION(ctx);
       } 
        if (OB_FAIL(ret)) {
-        // error occurred
-      } else if (is_reused_small_sst && OB_FAIL(sstable_builder_.build_reused_small_sst_merge_res(sstable->get_macro_read_size(),
-                        sstable->get_macro_offset(), res))) {
-        LOG_ERROR("fail to close index builder for reused small sstable", K(ret), KPC(sstable));
+         // error occurred
+      } else if (is_reused_small_sstable
+                 && OB_FAIL(sstable_builder_.build_reused_small_sst_merge_res(
+                     base_sstable->get_macro_read_size(),
+                     base_sstable->get_macro_offset(), res))) {
+        LOG_ERROR("fail to build merge result for reused small sstable",
+                  K(ret), KPC(base_sstable));
       } else if (OB_FAIL(ctx.get_macro_seq_by_stage(GET_NEW_ROOT_MACRO_SEQ, new_root_macro_seq))) {
         LOG_WARN("failed to get macro seq", KR(ret), K(new_root_macro_seq), K(ctx));
       } else if (FALSE_IT(res.root_macro_seq_ = new_root_macro_seq)) {

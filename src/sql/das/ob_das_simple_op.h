@@ -34,13 +34,10 @@ public:
   ObDASSimpleOp(common::ObIAllocator &op_alloc);
   virtual ~ObDASSimpleOp() = default;
   virtual int open_op() = 0;
-  virtual int fill_task_result(ObIDASTaskResult &task_result, bool &has_more, int64_t &memory_limit) = 0;
-  virtual int decode_task_result(ObIDASTaskResult *task_result) = 0;
   virtual int record_task_result_to_rtdef() override { return OB_SUCCESS; }
   virtual int assign_task_result(ObIDASTaskOp *other) override { return OB_SUCCESS; }
   virtual int release_op() override;
   virtual int init_task_info(uint32_t row_extend_size) override;
-  virtual int swizzling_remote_task(ObDASRemoteInfo *remote_info) override;
 };
 
 class ObDASEmptyOp : public ObDASSimpleOp
@@ -52,32 +49,6 @@ public:
   }
   virtual ~ObDASEmptyOp() = default;
   virtual int open_op() override { return common::OB_NOT_IMPLEMENT; }
-  virtual int fill_task_result(ObIDASTaskResult &task_result, bool &has_more, int64_t &memory_limit) override
-  {
-    UNUSEDx(task_result, has_more, memory_limit);
-    return common::OB_NOT_IMPLEMENT;
-  }
-  virtual int decode_task_result(ObIDASTaskResult *task_result) override
-  {
-    UNUSEDx(task_result);
-    return common::OB_NOT_IMPLEMENT;
-  }
-};
-
-class ObDASEmptyResult : public ObIDASTaskResult
-{
-public:
-  ObDASEmptyResult() {}
-  virtual ~ObDASEmptyResult() {}
-  virtual int init(const ObIDASTaskOp &op, common::ObIAllocator &alloc) override
-  {
-    UNUSEDx(op, alloc);
-    return common::OB_NOT_IMPLEMENT;
-  }
-  virtual int reuse() override
-  {
-    return common::OB_NOT_IMPLEMENT;
-  }
 };
 
 struct ObDASEmptyCtDef : ObDASBaseCtDef
@@ -103,8 +74,6 @@ public:
   ObDASSplitRangesOp(common::ObIAllocator &op_alloc);
   virtual ~ObDASSplitRangesOp() = default;
   virtual int open_op() override;
-  virtual int fill_task_result(ObIDASTaskResult &task_result, bool &has_more, int64_t &memory_limit) override;
-  virtual int decode_task_result(ObIDASTaskResult *task_result) override;
   int init(const common::ObIArray<ObStoreRange> &ranges, int64_t expected_task_count, const int64_t timeout_us);
   const ObArrayArray<ObStoreRange> &get_split_array() { return multi_range_split_array_; }
   INHERIT_TO_STRING_KV("parent", ObDASSimpleOp,
@@ -118,24 +87,6 @@ private:
   int64_t timeout_us_;
 };
 
-class ObDASSplitRangesResult : public ObIDASTaskResult
-{
-  OB_UNIS_VERSION_V(1);
-public:
-  ObDASSplitRangesResult();
-  virtual ~ObDASSplitRangesResult();
-  virtual int init(const ObIDASTaskOp &op, common::ObIAllocator &alloc) override;
-  virtual int reuse() override;
-  const ObArrayArray<ObStoreRange> &get_split_array() const { return multi_range_split_array_; }
-  ObArrayArray<ObStoreRange> &get_split_array() { return multi_range_split_array_; }
-  int assign(const ObArrayArray<ObStoreRange> &array);
-  INHERIT_TO_STRING_KV("parent", ObIDASTaskResult,
-                        K_(multi_range_split_array));
-private:
-  ObArrayArray<ObStoreRange> multi_range_split_array_;
-  common::ObIAllocator *result_alloc_;
-};
-
 class ObDASRangesCostOp : public ObDASSimpleOp
 {
   OB_UNIS_VERSION(1);
@@ -143,8 +94,6 @@ public:
   ObDASRangesCostOp(common::ObIAllocator &op_alloc);
   virtual ~ObDASRangesCostOp() = default;
   virtual int open_op() override;
-  virtual int fill_task_result(ObIDASTaskResult &task_result, bool &has_more, int64_t &memory_limit) override;
-  virtual int decode_task_result(ObIDASTaskResult *task_result) override;
   int init(const common::ObIArray<ObStoreRange> &ranges, const int64_t timeout_us);
   int64_t get_total_size() const { return total_size_; }
   INHERIT_TO_STRING_KV("parent", ObDASSimpleOp,
@@ -154,22 +103,6 @@ private:
   common::ObSEArray<ObStoreRange, 16> ranges_;
   int64_t total_size_;
   int64_t timeout_us_;
-};
-
-class ObDASRangesCostResult : public ObIDASTaskResult
-{
-  OB_UNIS_VERSION_V(1);
-public:
-  ObDASRangesCostResult();
-  virtual ~ObDASRangesCostResult() = default;
-  virtual int init(const ObIDASTaskOp &op, common::ObIAllocator &alloc) override;
-  virtual int reuse() override;
-  int64_t get_total_size() const { return total_size_; }
-  void set_total_size(int64_t total_size) { total_size_ = total_size; }
-  INHERIT_TO_STRING_KV("parent", ObIDASTaskResult,
-                        K_(total_size));
-private:
-  int64_t total_size_;
 };
 
 class ObDASSimpleUtils

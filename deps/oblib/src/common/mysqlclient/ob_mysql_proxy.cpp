@@ -68,22 +68,6 @@ int ObCommonSqlProxy::read(ReadResult &result, const char *sql, const int32_t gr
   return ret;
 }
 
-int ObCommonSqlProxy::read(ReadResult &result, const char *sql, const common::ObAddr *exec_sql_addr)
-{
-  int ret = OB_SUCCESS;
-  ObISQLConnection *conn = NULL;
-  if (OB_ISNULL(exec_sql_addr)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("read with typically exec addr failed", K(ret), K(exec_sql_addr));
-  } else if (OB_FAIL(acquire(conn, 0/*group_id*/))) {
-    LOG_WARN("acquire connection failed", K(ret), K(conn));
-  } else if (OB_FAIL(read(conn, result, sql, exec_sql_addr))) {
-    LOG_WARN("read failed", K(ret));
-  }
-  close(conn, ret);
-  return ret;
-}
-
 int ObCommonSqlProxy::read(ReadResult &result, const char *sql, const ObSessionParam *session_param, int64_t user_set_timeout)
 {
   int ret = OB_SUCCESS;
@@ -104,9 +88,6 @@ int ObCommonSqlProxy::read(ReadResult &result, const char *sql, const ObSessionP
       }
     }
 
-    if (session_param->ddl_info_.is_ddl()) {
-      conn->set_force_remote_exec(true);
-    }
   }
 
   if (OB_FAIL(ret)) {
@@ -118,7 +99,7 @@ int ObCommonSqlProxy::read(ReadResult &result, const char *sql, const ObSessionP
   return ret;
 }
 
-int ObCommonSqlProxy::read(ObISQLConnection *conn, ReadResult &result, const char *sql, const common::ObAddr *exec_sql_addr)
+int ObCommonSqlProxy::read(ObISQLConnection *conn, ReadResult &result, const char *sql)
 {
   int ret = OB_SUCCESS;
   const int64_t start = ::oceanbase::common::ObTimeUtility::current_time();
@@ -130,7 +111,7 @@ int ObCommonSqlProxy::read(ObISQLConnection *conn, ReadResult &result, const cha
     ret = OB_INACTIVE_SQL_CLIENT;
     LOG_WARN("in active sql client", K(ret), KCSTRING(sql));
   } else {
-    if (OB_FAIL(conn->execute_read(sql, result, exec_sql_addr))) {
+    if (OB_FAIL(conn->execute_read(sql, result))) {
       LOG_WARN("query failed", K(ret), K(conn), K(start), KCSTRING(sql));
     }
   }
@@ -166,8 +147,7 @@ int ObCommonSqlProxy::write(const char *sql, const int32_t group_id, int64_t &af
 
 int ObCommonSqlProxy::write(const ObString sql,
                         int64_t &affected_rows,
-                        const ObSessionParam *param /* = nullptr*/,
-                        const common::ObAddr *sql_exec_addr)
+                        const ObSessionParam *param /* = nullptr*/)
 {
   int ret = OB_SUCCESS;
   bool is_user_sql = false;
@@ -196,7 +176,6 @@ int ObCommonSqlProxy::write(const ObString sql,
       LOG_WARN("fail to set ddl info", K(ret));
     }
     if (param->ddl_info_.is_ddl()) {
-      conn->set_force_remote_exec(true);
       conn->set_nls_formats(param->nls_formats_);
     }
     if (!param->secure_file_priv_.empty()) {
@@ -214,7 +193,7 @@ int ObCommonSqlProxy::write(const ObString sql,
     }
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(conn->execute_write(sql, affected_rows, is_user_sql, sql_exec_addr))) {
+    if (OB_FAIL(conn->execute_write(sql, affected_rows, is_user_sql))) {
       LOG_WARN("execute sql failed", K(ret), K(conn), K(start), K(sql));
     } else {
       LOG_TRACE("execute sql successfully", K(sql));
@@ -266,38 +245,5 @@ int ObCommonSqlProxy::acquire(sqlclient::ObISQLConnection *&conn, const int32_t 
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("connection must not be null", K(ret), K(conn));
   }
-  return ret;
-}
-
-int ObCommonSqlProxy::read(
-    ReadResult &result,
-    const int64_t cluster_id,
-    const char *sql)
-{
-  int ret = OB_SUCCESS;
-  ObISQLConnection *conn = NULL;
-  const int64_t start = ::oceanbase::common::ObTimeUtility::current_time();
-  result.reset();
-  if (!is_inited()) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("mysql proxy not inited", K(ret), K(cluster_id), KCSTRING(sql));
-  } else if (NULL == sql) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("empty sql");
-  } else if (OB_FAIL(acquire(conn, 0/*group_id*/))) {
-    LOG_WARN("acquire connection failed", K(ret), K(conn));
-  } else if (NULL == conn) {
-    ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("connection can not be NULL");
-  } else if (!is_active()) { // check client active after connection acquired
-    ret = OB_INACTIVE_SQL_CLIENT;
-    LOG_WARN("in active sql client", K(ret), KCSTRING(sql));
-  } else {
-    if (OB_FAIL(conn->execute_read(cluster_id, sql, result))) {
-      LOG_WARN("query failed", K(ret), K(conn), K(start), KCSTRING(sql), K(cluster_id));
-    }
-  }
-  close(conn, ret);
-  LOG_TRACE("execute sql", KCSTRING(sql), K(ret));
   return ret;
 }

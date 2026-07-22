@@ -70,7 +70,7 @@ int ObIndependentDag::basic_init(ObIAllocator &allocator)
    // If the input allocator is an ObArenaAllocator, the memory will not be released until the ObArenaAllocator destructs.
   UNUSED(allocator);
   int ret = OB_SUCCESS;
-  ObTenantDagScheduler* dag_scheduler = share::g_mp->tenant_dag_scheduler();
+  ObDagScheduler* dag_scheduler = share::g_mp->dag_scheduler();
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     COMMON_LOG(WARN, "dag init twice", K(ret));

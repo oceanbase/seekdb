@@ -46,13 +46,6 @@ void ObAlterDatabaseStmt::set_read_only(const bool read_only)
   alter_database_arg_.database_schema_.set_read_only(read_only);
 }
 
-int ObAlterDatabaseStmt::set_default_tablegroup_name(const common::ObString &tablegroup_name)
-{
-  return alter_database_arg_.database_schema_.set_default_tablegroup_name(tablegroup_name);
-}
-
-
-
 void ObAlterDatabaseStmt::set_database_id(const uint64_t database_id)
 {
   //alter database will not set database_id

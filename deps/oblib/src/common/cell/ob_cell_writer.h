@@ -86,13 +86,12 @@ public:
 public:
   ObCellWriter();
   virtual ~ObCellWriter() {}
-  int init(char *buf, int64_t size, const ObCompactStoreType store_type, const bool old_text_format = false);
+  int init(char *buf, int64_t size, const ObCompactStoreType store_type);
   int append(uint64_t column_id, const ObObj &obj, ObObj *clone_obj = NULL);
   int append(const ObObj &obj);
   int extend_buf(char *buf, int64_t size);
   int revert_buf(char *buf, int64_t size);
   void reuse() { pos_ = 0; last_append_pos_ = 0; cell_cnt_ = 0; }
-  void reset_text_format(const bool old_text_format) { old_text_format_ = old_text_format;  }
   void set_store_type(const ObCompactStoreType store_type) { store_type_ = store_type; }
   int row_finish();
   inline int64_t get_cell_cnt() { return cell_cnt_; }
@@ -110,7 +109,6 @@ private:
   inline int write_ext(const int64_t ext_value);
   inline int write_decimal_int(const ObObj &obj, ObObj *clone_obj);
   inline int get_int_byte(int64_t int_value);
-  inline bool old_text_format () const { return old_text_format_; }
 private:
   char *buf_;
   int64_t buf_size_;
@@ -121,7 +119,6 @@ private:
   int64_t last_append_pos_;
   int64_t cell_cnt_;
   ObCompactStoreType store_type_;
-  bool old_text_format_;
   bool is_inited_;
 };
 }//end namespace common

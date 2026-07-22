@@ -189,7 +189,6 @@ class MockSQLClient : public ObISQLClient
 {
 public:
   using ReadResult = ObISQLClient::ReadResult;
-  int read(ReadResult &res, const int64_t cluster_id, const char *sql) override { return OB_OP_NOT_ALLOW; }
   int read(ReadResult &res, const char *sql, const int32_t group_id) override { return OB_OP_NOT_ALLOW; }
   int escape(const char *from, const int64_t from_size, char *to, const int64_t to_size, int64_t &out_size) { return OB_OP_NOT_ALLOW; }
 

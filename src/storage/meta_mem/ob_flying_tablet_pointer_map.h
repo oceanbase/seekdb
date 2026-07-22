@@ -29,7 +29,7 @@ namespace storage
 {
 class ObFlyingTabletPointerMap final
 {
-  friend class ObTenantMetaMemMgr;
+  friend class ObStorageMetaMemMgr;
   typedef ObTabletPointerHandle* ObInnerTPHandlePtr;
 public:
   ObFlyingTabletPointerMap(const int64_t capacity);

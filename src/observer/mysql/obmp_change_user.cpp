@@ -153,8 +153,7 @@ int ObMPChangeUser::process()
   const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
   int64_t query_timeout = 0;
   bool need_send_auth_switch =
-      get_conn()->is_support_plugin_auth() &&
-      GCONF._enable_auth_switch;
+      get_conn()->is_support_plugin_auth();
   if (OB_FAIL(get_session(session))) {
     LOG_ERROR("get session  fail", K(ret));
   } else if (OB_ISNULL(session)) {
@@ -276,30 +275,15 @@ int ObMPChangeUser::load_login_info(ObSQLSessionInfo *session)
 {
   int ret = OB_SUCCESS;
   share::schema::ObUserLoginInfo login_info;
-  const char *sep_pos = username_.find('@');
-  if (NULL != sep_pos) {
-    ObString username(sep_pos - username_.ptr(), username_.ptr());
-    login_info.user_name_ = username;
-    login_info.tenant_name_ = username_.after(sep_pos);
-    if (login_info.tenant_name_ != session->get_tenant_name()) {
-      ret = OB_OP_NOT_ALLOW;
-      OB_LOG(WARN, "failed to change user in different tenant", K(ret),
-          K(login_info.tenant_name_), K(session->get_tenant_name()));
-      LOG_USER_ERROR(OB_OP_NOT_ALLOW, "forbid! change user command in differernt tenant");
-    }
-  } else {
-    login_info.user_name_ = username_;
-  }
+  login_info.user_name_ = username_;
+  login_info.runtime_name_ = session->get_runtime_name();
   if (OB_SUCC(ret)) {
-    if (login_info.tenant_name_.empty()) {
-      login_info.tenant_name_ = session->get_tenant_name();
-    }
     if (!database_.empty()) {
       login_info.db_ = database_;
     }
     login_info.client_ip_ = session->get_client_ip();
     OB_LOG(INFO, "com change user", "username", login_info.user_name_,
-          "tenant name", login_info.tenant_name_);
+          "runtime name", login_info.runtime_name_);
     const ObSMConnection &conn = *get_conn();
     login_info.scramble_str_.assign_ptr(conn.scramble_buf_, static_cast<ObString::obstr_size_t>(sizeof(conn.scramble_buf_)));
     login_info.passwd_ = auth_response_;

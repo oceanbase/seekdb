@@ -21,7 +21,7 @@
 #include "lib/atomic/ob_atomic.h"
 #include "sql/dtl/ob_dtl_flow_control.h"
 #include "sql/dtl/ob_dtl_linked_buffer.h"
-#include "sql/dtl/ob_dtl_tenant_mem_manager.h"
+#include "sql/dtl/ob_dtl_mem_manager.h"
 #include "lib/list/ob_dlist.h"
 #include "lib/hash/ob_hashmap.h"
 #include "lib/lock/ob_mutex.h"

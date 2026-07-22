@@ -118,10 +118,6 @@ int ObAllVirtualKVCacheStoreMemblock::process_row(const ObKVCacheStoreMemblockIn
           cur_row_.cells_[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
-        case REF_COUNT : {
-          cur_row_.cells_[cell_idx].set_int(info.ref_count_);
-          break;
-        }
         case STATUS : {
           cur_row_.cells_[cell_idx].set_int(info.using_status_);
           break;

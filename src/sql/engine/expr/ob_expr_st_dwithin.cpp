@@ -86,7 +86,6 @@ int ObExprPrivSTDWithin::eval_st_dwithin_common(ObEvalCtx &ctx,
   uint32_t srid2;
   omt::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = NULL;
-  temp_allocator.set_baseline_size(wkb1.length() + wkb2.length());
   
   ObGeoBoostAllocGuard guard{};
   lib::MemoryContext *mem_ctx = nullptr;
@@ -156,9 +155,6 @@ int ObExprPrivSTDWithin::eval_st_dwithin_common(ObEvalCtx &ctx,
       res.set_bool(result <= distance_tolerance);
     }
   }
-  if (mem_ctx != nullptr) {
-    temp_allocator.add_ext_used((*mem_ctx)->arena_used());
-  }
   return ret;
 }
 
@@ -179,7 +175,7 @@ int ObExprPrivSTDWithin::eval_st_dwithin(const ObExpr &expr, ObEvalCtx &ctx, ObD
 
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_ST_DWITHIN);
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   if (OB_FAIL(temp_allocator.eval_arg(gis_arg1, ctx, gis_datum1)) || OB_FAIL(temp_allocator.eval_arg(gis_arg2, ctx, gis_datum2))
       || OB_FAIL(temp_allocator.eval_arg(gis_arg3, ctx, gis_datum3))) {
     LOG_WARN("eval geo args failed", K(ret), KP(gis_datum1),KP(gis_datum2),KP(gis_datum3));

@@ -109,7 +109,6 @@ typedef common::ObFixedArray<LogWriteBuf *, ObIAllocator> LogWriteBufArray;
 // ====================== Local log state begin =====================
 constexpr int64_t DEFAULT_GROUP_BUFFER_SIZE = 1 << 22;
 const int64_t PALF_STAT_PRINT_INTERVAL_US = 1 * 1000 * 1000L;
-// The advance delay threshold for match lsn is 1s.
 const int64_t PALF_IO_STAT_PRINT_INTERVAL_US = 10 * 1000 * 1000L;
 const int64_t MATCH_LSN_ADVANCE_DELAY_THRESHOLD_US = 1 * 1000 * 1000L;
 const int32_t PALF_MAX_REPLAY_TIMEOUT = 500 * 1000;
@@ -123,7 +122,7 @@ constexpr char PADDING_LOG_CONTENT_CHAR = '\0';
 const int64_t MIN_WRITING_THTOTTLING_TRIGGER_PERCENTAGE = 40;
 constexpr int64_t PALF_IO_WAIT_EVENT_TIMEOUT_MS = 100;
 
-// ====================== Consensus end ==============================
+// ====================== Local log state end ========================
 
 // =========== LSN begin ==============
 const uint64_t LOG_INVALID_LSN_VAL = UINT64_MAX;
@@ -140,8 +139,6 @@ constexpr mode_t FILE_OPEN_MODE = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
 
 // =========== BatchRPC start ==================
 // NOTE: ORDER AND VALUE ARE VITAL, DO NOT CHANGE
-constexpr int64_t LOG_BATCH_PUSH_LOG_REQ = 1;
-constexpr int64_t LOG_BATCH_PUSH_LOG_RESP = 2;
 // =========== BatchRPC end  ==================
 
 // ========== LogCache start =================
@@ -271,10 +268,6 @@ enum PurgeThrottlingType
 {
   INVALID_PURGE_TYPE = 0,
   PURGE_BY_CHECK_BARRIER_CONDITION = 1,
-  PURGE_BY_PRE_CHECK_FOR_CONFIG = 2,
-  PURGE_BY_CHECK_SERVERS_LSN_AND_VERSION = 3,
-  PURGE_BY_GET_MC_REQ = 4,
-  PURGE_BY_NOTIFY_FETCH_LOG = 5,
   MAX_PURGE_TYPE
 };
 
@@ -285,10 +278,6 @@ inline const char *purge_throttling_type_2_str(const PurgeThrottlingType type)
   {
     EXTRACT_PURGE_TYPE(INVALID_PURGE_TYPE);
     EXTRACT_PURGE_TYPE(PURGE_BY_CHECK_BARRIER_CONDITION);
-    EXTRACT_PURGE_TYPE(PURGE_BY_PRE_CHECK_FOR_CONFIG);
-    EXTRACT_PURGE_TYPE(PURGE_BY_CHECK_SERVERS_LSN_AND_VERSION);
-    EXTRACT_PURGE_TYPE(PURGE_BY_GET_MC_REQ);
-    EXTRACT_PURGE_TYPE(PURGE_BY_NOTIFY_FETCH_LOG);
 
     default:
       return "Invalid Type";
@@ -296,9 +285,6 @@ inline const char *purge_throttling_type_2_str(const PurgeThrottlingType type)
 #undef EXTRACT_PURGE_TYPE
 }
 
-bool need_force_purge(PurgeThrottlingType type);
-
-const char *get_purge_throttling_type_str(PurgeThrottlingType type);
 } // end namespace palf
 } // end namespace oceanbase
 

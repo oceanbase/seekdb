@@ -3831,7 +3831,7 @@ Optimization Info:
       table_dop:1
       dop_method:Table DOP
       avaiable_index_name:[t10i1, t10i2, t10i3, t10]
-      unstable_index_name:[t10]
+      unstable_index_name:[t10i1, t10]
       stats info:[version=1970-01-01 08:00:00.000000, is_locked=0, is_expired=0]
       dynamic sampling level:0
       estimation method:[DEFAULT, STORAGE]
@@ -3938,7 +3938,7 @@ Optimization Info:
       table_dop:1
       dop_method:Table DOP
       avaiable_index_name:[t10i1, t10i2, t10i3, t10]
-      pruned_index_name:[t10i3]
+      pruned_index_name:[t10i1, t10i3]
       stats info:[version=1970-01-01 08:00:00.000000, is_locked=0, is_expired=0]
       dynamic sampling level:0
       estimation method:[DEFAULT, STORAGE]
@@ -3991,6 +3991,7 @@ Optimization Info:
       table_dop:1
       dop_method:Table DOP
       avaiable_index_name:[t10i1, t10i2, t10i3, t10]
+      pruned_index_name:[t10i1, t10i2]
       stats info:[version=1970-01-01 08:00:00.000000, is_locked=0, is_expired=0]
       dynamic sampling level:0
       estimation method:[DEFAULT, STORAGE]
@@ -4044,8 +4045,7 @@ Optimization Info:
       table_dop:1
       dop_method:Table DOP
       avaiable_index_name:[t10i1, t10i2, t10i3, t10]
-      pruned_index_name:[t10i1]
-      unstable_index_name:[t10]
+      unstable_index_name:[t10i1, t10]
       stats info:[version=1970-01-01 08:00:00.000000, is_locked=0, is_expired=0]
       dynamic sampling level:0
       estimation method:[DEFAULT, STORAGE]
@@ -4099,7 +4099,7 @@ Optimization Info:
       table_dop:1
       dop_method:Table DOP
       avaiable_index_name:[t10i1, t10i2, t10i3, t10]
-      pruned_index_name:[t10i1, t10i3]
+      pruned_index_name:[t10i3]
       stats info:[version=1970-01-01 08:00:00.000000, is_locked=0, is_expired=0]
       dynamic sampling level:0
       estimation method:[DEFAULT, STORAGE]
@@ -4155,7 +4155,7 @@ Optimization Info:
       table_dop:1
       dop_method:Table DOP
       avaiable_index_name:[t10i1, t10i2, t10i3, t10]
-      pruned_index_name:[t10i2, t10i3]
+      pruned_index_name:[t10i3]
       stats info:[version=1970-01-01 08:00:00.000000, is_locked=0, is_expired=0]
       dynamic sampling level:0
       estimation method:[DEFAULT, STORAGE]
@@ -4211,7 +4211,7 @@ Optimization Info:
       table_dop:1
       dop_method:Table DOP
       avaiable_index_name:[t10i1, t10i2, t10i3, t10]
-      pruned_index_name:[t10i1, t10i3]
+      pruned_index_name:[t10i1]
       stats info:[version=1970-01-01 08:00:00.000000, is_locked=0, is_expired=0]
       dynamic sampling level:0
       estimation method:[DEFAULT, STORAGE]
@@ -4425,7 +4425,6 @@ Optimization Info:
       table_dop:1
       dop_method:Table DOP
       avaiable_index_name:[t11i1, t11]
-      pruned_index_name:[t11i1]
       stats info:[version=1970-01-01 08:00:00.000000, is_locked=0, is_expired=0]
       dynamic sampling level:0
       estimation method:[DEFAULT, STORAGE]
@@ -4479,7 +4478,6 @@ Optimization Info:
       table_dop:1
       dop_method:Table DOP
       avaiable_index_name:[t11i1, t11]
-      pruned_index_name:[t11i1]
       stats info:[version=1970-01-01 08:00:00.000000, is_locked=0, is_expired=0]
       dynamic sampling level:0
       estimation method:[DEFAULT, STORAGE]
@@ -4590,7 +4588,6 @@ Optimization Info:
       table_dop:1
       dop_method:Table DOP
       avaiable_index_name:[t11i1, t11]
-      pruned_index_name:[t11i1]
       stats info:[version=1970-01-01 08:00:00.000000, is_locked=0, is_expired=0]
       dynamic sampling level:0
       estimation method:[DEFAULT, STORAGE]
@@ -4879,17 +4876,17 @@ Optimization Info:
       Degree of Parallelisim is 1 because of table property
 explain extended_noaddr select * from t12 where c2 < 0 and c2 > 0;
 Query Plan
-================================================
-|ID|OPERATOR        |NAME|EST.ROWS|EST.TIME(us)|
-------------------------------------------------
-|0 |TABLE RANGE SCAN|t12 |0       |3           |
-================================================
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t12 |0       |3           |
+===============================================
 Outputs & filters:
 -------------------------------------
   0 - output([t12.c1], [t12.c2], [t12.c3], [t12.c4]), filter([t12.c2 < 0], [t12.c2 > 0]), rowset=16
       access([t12.c1], [t12.c2], [t12.c3], [t12.c4]), partitions(p0)
       is_index_back=false, is_global_index=false, filter_before_indexback[false,false], 
-      range_key([t12.c1], [t12.c2]), range(MAX,MAX ; MIN,MIN)always false
+      range_key([t12.c1], [t12.c2]), range(MIN,MIN ; MAX,MAX)always true
 Used Hint:
 -------------------------------------
   /*+
@@ -4903,7 +4900,7 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-      INDEX(@"SEL$1" "hualong"."t12"@"SEL$1" "primary")
+      FULL(@"SEL$1" "hualong"."t12"@"SEL$1")
       END_OUTLINE_DATA
   */
 Optimization Info:
@@ -4917,7 +4914,7 @@ Optimization Info:
       table_dop:1
       dop_method:Table DOP
       avaiable_index_name:[t12i1, t12i2, t12]
-      pruned_index_name:[t12i1, t12i2]
+      pruned_index_name:[t12i2]
       stats info:[version=1970-01-01 08:00:00.000000, is_locked=0, is_expired=0]
       dynamic sampling level:0
       estimation method:[DEFAULT, STORAGE]
@@ -4930,17 +4927,17 @@ Optimization Info:
       Degree of Parallelisim is 1 because of table property
 explain extended_noaddr select 1 from t12 where c2 < 0 and c2 > 0 and c3 = 1;
 Query Plan
-================================================
-|ID|OPERATOR        |NAME|EST.ROWS|EST.TIME(us)|
-------------------------------------------------
-|0 |TABLE RANGE SCAN|t12 |0       |3           |
-================================================
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t12 |0       |3           |
+===============================================
 Outputs & filters:
 -------------------------------------
   0 - output([1]), filter([t12.c2 < 0], [t12.c2 > 0], [t12.c3 = 1]), rowset=16
       access([t12.c2], [t12.c3]), partitions(p0)
       is_index_back=false, is_global_index=false, filter_before_indexback[false,false,false], 
-      range_key([t12.c1], [t12.c2]), range(MAX,MAX ; MIN,MIN)always false
+      range_key([t12.c1], [t12.c2]), range(MIN,MIN ; MAX,MAX)always true
 Used Hint:
 -------------------------------------
   /*+
@@ -4954,7 +4951,7 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-      INDEX(@"SEL$1" "hualong"."t12"@"SEL$1" "primary")
+      FULL(@"SEL$1" "hualong"."t12"@"SEL$1")
       END_OUTLINE_DATA
   */
 Optimization Info:
@@ -4983,17 +4980,17 @@ Optimization Info:
       Degree of Parallelisim is 1 because of table property
 explain extended_noaddr select * from t12 where c2 < 0 and c2 > 0 and c3 = 1;
 Query Plan
-================================================
-|ID|OPERATOR        |NAME|EST.ROWS|EST.TIME(us)|
-------------------------------------------------
-|0 |TABLE RANGE SCAN|t12 |0       |3           |
-================================================
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t12 |0       |3           |
+===============================================
 Outputs & filters:
 -------------------------------------
   0 - output([t12.c1], [t12.c2], [t12.c3], [t12.c4]), filter([t12.c2 < 0], [t12.c2 > 0], [t12.c3 = 1]), rowset=16
       access([t12.c1], [t12.c2], [t12.c3], [t12.c4]), partitions(p0)
       is_index_back=false, is_global_index=false, filter_before_indexback[false,false,false], 
-      range_key([t12.c1], [t12.c2]), range(MAX,MAX ; MIN,MIN)always false
+      range_key([t12.c1], [t12.c2]), range(MIN,MIN ; MAX,MAX)always true
 Used Hint:
 -------------------------------------
   /*+
@@ -5007,7 +5004,7 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-      INDEX(@"SEL$1" "hualong"."t12"@"SEL$1" "primary")
+      FULL(@"SEL$1" "hualong"."t12"@"SEL$1")
       END_OUTLINE_DATA
   */
 Optimization Info:
@@ -5021,7 +5018,6 @@ Optimization Info:
       table_dop:1
       dop_method:Table DOP
       avaiable_index_name:[t12i1, t12i2, t12]
-      pruned_index_name:[t12i1, t12i2]
       stats info:[version=1970-01-01 08:00:00.000000, is_locked=0, is_expired=0]
       dynamic sampling level:0
       estimation method:[DEFAULT, STORAGE]

@@ -40,10 +40,8 @@ class ObRawExprUniqueSet;
 class ObCodeGenerator
 {
 public:
-  ObCodeGenerator(uint64_t min_cluster_version,
-                  DatumParamStore *param_store)
-    : min_cluster_version_(min_cluster_version),
-      param_store_(param_store)
+  explicit ObCodeGenerator(DatumParamStore *param_store)
+    : param_store_(param_store)
   {}
   virtual ~ObCodeGenerator() {}
   //Generate execution plan
@@ -60,19 +58,16 @@ private:
   //@param [in]  log_plan logical execution plan
   //@param [out] phy_plan physical execution plan, will initialize rt_exprs_ and frame_info_ in the physical object
   int generate_exprs(const ObLogPlan &log_plan,
-                     ObPhysicalPlan &phy_plan,
-                     const uint64_t cur_cluster_version);
+                     ObPhysicalPlan &phy_plan);
   //Generate physical operators
   //@param [in]  log_plan logical execution plan
   //@param [out] phy_plan physical execution plan
   int generate_operators(const ObLogPlan &log_plan,
-                         ObPhysicalPlan &phy_plan,
-                         const uint64_t cur_cluster_version);
+                         ObPhysicalPlan &phy_plan);
 
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObCodeGenerator);
 private:
-  uint64_t min_cluster_version_;
   // All parameterized constant objects
   DatumParamStore *param_store_;
 };

@@ -66,7 +66,7 @@ int ObExprSTArea::eval_st_area(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
   ObExpr *gis_arg = expr.args_[0];
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_ST_AREA);
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   ObObjType input_type = gis_arg->datum_meta_.type_;
 
   if (OB_FAIL(temp_allocator.eval_arg(gis_arg, ctx, gis_datum))) {
@@ -83,7 +83,6 @@ int ObExprSTArea::eval_st_area(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
     if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *gis_datum,
         gis_arg->datum_meta_, gis_arg->obj_meta_.has_lob_header(), wkb))) {
       LOG_WARN("fail to get real string data", K(ret), K(wkb));
-    } else if (FALSE_IT(temp_allocator.set_baseline_size(wkb.length()))) {
     } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb, srs, true, N_ST_AREA))) {
       LOG_WARN("fail to get srs item", K(ret), K(wkb));
     } else if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator, wkb, geo, srs, N_ST_AREA, GEO_ALLOW_3D_DEFAULT | GEO_NOT_COPY_WKB))) {
@@ -114,9 +113,6 @@ int ObExprSTArea::eval_st_area(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
       } else {
         res.set_double(result);
       }
-    }
-    if (mem_ctx != nullptr) {
-      temp_allocator.add_ext_used((*mem_ctx)->arena_used());
     }
   }
   return ret;

@@ -286,6 +286,7 @@ public:
       K(LOG_TYPE),
       // KP(mutator_buf_),
       K(mutator_size_));
+
 private:
   //------------ For ob_admin
   int format_mutator_row_(const memtable::ObMemtableMutatorRow &row, share::ObAdminMutatorStringArg &arg);
@@ -296,7 +297,6 @@ private:
   char *mutator_buf_;              // for fill
   const char *replay_mutator_buf_; // for replay, only set by deserialize
   int64_t mutator_size_;
-
 };
 
 // for dist trans write it's multi source data, the same as redo,
@@ -380,7 +380,7 @@ class ObTxCommitInfoLogTempRef
 {
 public:
   ObTxCommitInfoLogTempRef()
-    : app_trace_id_str_(), app_trace_info_(), prev_record_lsn_(), redo_lsns_(), xid_()
+    : app_trace_id_str_(), app_trace_info_(), prev_record_lsn_(), redo_lsns_()
   {}
 
 public:
@@ -388,7 +388,6 @@ public:
   common::ObString app_trace_info_;
   LogOffSet prev_record_lsn_;
   ObRedoLSNArray redo_lsns_;
-  ObXATransID xid_;
 };
 
 class ObTxCommitInfoLog
@@ -399,22 +398,19 @@ public:
   ObTxCommitInfoLog(ObTxCommitInfoLogTempRef &temp_ref)
       : can_elr_(false),
         app_trace_id_str_(temp_ref.app_trace_id_str_), app_trace_info_(temp_ref.app_trace_info_),
-        prev_record_lsn_(temp_ref.prev_record_lsn_), redo_lsns_(temp_ref.redo_lsns_),
-        xid_(temp_ref.xid_)
+        prev_record_lsn_(temp_ref.prev_record_lsn_), redo_lsns_(temp_ref.redo_lsns_)
   {}
   ObTxCommitInfoLog(bool is_elr,
                     common::ObString &app_trace_id,
                     const common::ObString &app_trace_info,
                     const LogOffSet &prev_record_lsn,
-                    ObRedoLSNArray &redo_lsns,
-                    const ObXATransID &xid);
+                    ObRedoLSNArray &redo_lsns);
 
   bool is_elr() const { return can_elr_; }
   const common::ObString &get_app_trace_id() const { return app_trace_id_str_; }
   const common::ObString &get_app_trace_info() const { return app_trace_info_; }
   const ObRedoLSNArray &get_redo_lsns() const { return redo_lsns_; }
   const LogOffSet &get_prev_record_lsn() const { return prev_record_lsn_; }
-  const ObXATransID &get_xid() const { return xid_; }
   int ob_admin_dump(share::ObAdminMutatorStringArg &arg);
 
   static const ObTxLogType LOG_TYPE;
@@ -423,8 +419,7 @@ public:
                K(app_trace_id_str_),
                K(app_trace_info_),
                K(prev_record_lsn_),
-               K(redo_lsns_),
-               K(xid_))
+               K(redo_lsns_))
 
 private:
   bool can_elr_;
@@ -434,8 +429,6 @@ private:
   common::ObString app_trace_info_;
   LogOffSet prev_record_lsn_;
   ObRedoLSNArray &redo_lsns_;
-  // for xa
-  ObXATransID xid_;
 };
 
 class ObTxDataBackup
@@ -659,7 +652,6 @@ public:
 public:
   void reset()
   {
-    cluster_version_ = 0;
     log_entry_no_ = 0;
     tx_id_ = 0;
     flags_ = 0;
@@ -668,22 +660,18 @@ public:
   {
     reset();
   };
-  ObTxLogBlockHeader(const int64_t cluster_version,
-                     const int64_t log_entry_no,
+  ObTxLogBlockHeader(const int64_t log_entry_no,
                      const ObTransID &tx_id)
     : __log_entry_no_(log_entry_no_), flags_(0)
   {
-    init(cluster_version, log_entry_no, tx_id);
+    init(log_entry_no, tx_id);
   }
-  void init(const int64_t cluster_version,
-            const int64_t log_entry_no,
+  void init(const int64_t log_entry_no,
             const ObTransID &tx_id) {
-    cluster_version_ = cluster_version;
     log_entry_no_ = log_entry_no;
     tx_id_ = tx_id;
     flags_ = 0;
   }
-  int64_t get_cluster_version() const { return cluster_version_; }
   int64_t get_log_entry_no() const { return log_entry_no_; }
   void set_log_entry_no(int64_t entry_no) { log_entry_no_ = entry_no; }
   const ObTransID &get_tx_id() const { return tx_id_; }
@@ -693,7 +681,7 @@ public:
   void set_has_async_index() { flags_ |= HAS_ASYNC_INDEX; }
   bool has_async_index() const { return (flags_ & HAS_ASYNC_INDEX) == HAS_ASYNC_INDEX; }
   uint8_t flags() const { return flags_; }
-  TO_STRING_KV(K_(cluster_version), K_(log_entry_no), K_(tx_id), K_(flags));
+  TO_STRING_KV(K_(log_entry_no), K_(tx_id), K_(flags));
 
 public:
   // the last serial log
@@ -701,7 +689,6 @@ public:
   // tx contains redo that involves tables with async indexes (for Change Stream fast filtering)
   static const uint8_t HAS_ASYNC_INDEX = ((uint8_t)1) << 1;
 private:
-  int64_t cluster_version_;
   int64_t log_entry_no_;
   FixSizeTrait_int64_t __log_entry_no_; // serialize helper member, hiden for others
   ObTransID tx_id_;
@@ -793,7 +780,7 @@ private:
   {
     int ret = OB_ALLOCATE_MEMORY_FAILED;
     char *ptr = NULL;
-    if (OB_ISNULL(ptr = static_cast<char *>(share::mtl_malloc(NORMAL_LOG_BUF_SIZE, "NORMAL_CLOG_BUF")))) {
+    if (OB_ISNULL(ptr = static_cast<char *>(share::server_malloc(NORMAL_LOG_BUF_SIZE, "NORMAL_CLOG_BUF")))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       TRANS_LOG(WARN, "alloc clog normal buffer failed", K(ret));
     }
@@ -803,7 +790,7 @@ private:
   {
     int ret = OB_ALLOCATE_MEMORY_FAILED;
     char *ptr = NULL;
-    if (OB_ISNULL(ptr = static_cast<char *>(share::mtl_malloc(BIG_LOG_BUF_SIZE, "BIG_CLOG_BUF")))) {
+    if (OB_ISNULL(ptr = static_cast<char *>(share::server_malloc(BIG_LOG_BUF_SIZE, "BIG_CLOG_BUF")))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       TRANS_LOG(WARN, "alloc clog big buffer failed", K(ret));
     }
@@ -812,7 +799,7 @@ private:
   void free_buf_(char *buf)
   {
     if (OB_NOT_NULL(buf)) {
-      share::mtl_free(buf);
+      share::server_free(buf);
     }
   }
 public:

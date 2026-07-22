@@ -16,7 +16,7 @@
 
 #include "ob_geo.h"
 #include "lib/container/ob_vector.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase {
 namespace common {
@@ -44,9 +44,9 @@ ObWkbConstIterator<T, O>::ObWkbConstIterator(self& iter, bool do_array_assign)
 {
   int ret = OB_SUCCESS; // for log
   if (iter.offsets_ptr_ != nullptr && do_array_assign) {
-    // If the tenant ID can be obtained, use tenant memory
+    // Allocate from the active runtime context when available.
     ObMemAttr mem_attr("GeoWkbIter");
-    if (nullptr != MTL_CTX()) {
+    if (nullptr != share::server_runtime()) {
       
     }
     void *buf = ob_malloc(sizeof(ObWkbIterOffsetArray), mem_attr);
@@ -66,9 +66,9 @@ ObWkbConstIterator<T, O>::ObWkbConstIterator(const self& iter, bool do_array_ass
 {
   int ret = OB_SUCCESS; // for log
   if (iter.offsets_ptr_ != nullptr && do_array_assign) {
-    // If the tenant ID can be obtained, use tenant memory
+    // Allocate from the active runtime context when available.
     ObMemAttr mem_attr("GeoWkbIter");
-    if (nullptr != MTL_CTX()) {
+    if (nullptr != share::server_runtime()) {
       
     }
     void *buf = ob_malloc(sizeof(ObWkbIterOffsetArray), mem_attr);
@@ -130,9 +130,9 @@ const typename ObWkbConstIterator<T, O>::self& ObWkbConstIterator<T, O>::operato
       *iter.offsets_ptr_ = *iter.offsets_ptr_;
     } else {
       int ret = OB_SUCCESS; // for log
-      // If the tenant ID can be obtained, use tenant memory
+      // Allocate from the active runtime context when available.
       ObMemAttr mem_attr("GeoWkbIter");
-      if (nullptr != MTL_CTX()) {
+      if (nullptr != share::server_runtime()) {
         
       }
       void *buf = ob_malloc(sizeof(ObWkbIterOffsetArray), mem_attr);
@@ -363,9 +363,9 @@ void ObWkbUtils::get_sub_addr_common(const T& obj,
   INIT_SUCC(ret);
   bool enable_offset_info = true;
   if (offsets == nullptr) {
-    // If the tenant ID can be obtained, use tenant memory
+    // Allocate from the active runtime context when available.
     ObMemAttr mem_attr("GeoWkbIter");
-    if (nullptr != MTL_CTX()) {
+    if (nullptr != share::server_runtime()) {
       
     }
     void *buf = ob_malloc(sizeof(ObWkbIterOffsetArray), mem_attr);

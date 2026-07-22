@@ -45,7 +45,7 @@ static const int64_t RANGE_EXPR_OTHER = 1 << 6;
 
 /**
  * TODO list:
- *  spatial_expr use new query range
+ *  spatial_expr uses range graph extraction
  * */ 
 
 int ObExprRangeConverter::convert_expr_to_range_node(const ObRawExpr *expr,
@@ -1383,7 +1383,7 @@ int ObExprRangeConverter::convert_not_in_expr(const ObRawExpr *expr, int64_t exp
     LOG_WARN("get null expr", K(expr), K(l_expr), K(r_expr));
   } else if (OB_FAIL(ObOptimizerUtil::get_expr_without_lossless_cast(l_expr, l_expr, use_implicit_cast_feature))) {
     LOG_WARN("failed to get expr without lossless cast", K(ret));
-  } else if (l_expr->get_expr_type() == T_OP_ROW || r_expr->get_param_count() > NEW_MAX_NOT_IN_SIZE) {
+  } else if (l_expr->get_expr_type() == T_OP_ROW || r_expr->get_param_count() > MAX_NOT_IN_SIZE) {
     // do nothing
   } else if (l_expr->is_column_ref_expr()) {
     if (OB_FAIL(get_single_not_in_range_node(static_cast<const ObColumnRefRawExpr*>(l_expr),
@@ -1392,46 +1392,6 @@ int ObExprRangeConverter::convert_not_in_expr(const ObRawExpr *expr, int64_t exp
                                              expr_depth,
                                              range_node))) {
       LOG_WARN("failed to get single not in range node", K(ret));
-    }
-  } else if (r_expr->get_param_count() > MAX_NOT_IN_SIZE) {
-    // do nothing
-  } else if (l_expr->is_column_ref_expr()) {
-    ObSEArray<ObRangeNode*, 10> and_range_nodes;
-    ObSEArray<ObRangeNode*, 2> or_range_nodes;
-    bool is_precise = true;
-    for (int64_t i = 0; OB_SUCC(ret) && i < r_expr->get_param_count(); ++i) {
-      or_range_nodes.reuse();
-      ObRangeNode *tmp_node = nullptr;
-      ObRangeNode *final_node = nullptr;
-      const ObRawExpr* const_expr = r_expr->get_param_expr(i);
-      if (OB_ISNULL(const_expr)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null");
-      } else if (!const_expr->is_const_expr()) {
-        // ignore current node
-        is_precise = false;
-      } else if (OB_FAIL(get_basic_range_node(l_expr, const_expr, T_OP_LT, expr_depth + 1, tmp_node))) {
-        LOG_WARN("failed tp get basic range node", K(ret));
-      } else if (OB_FAIL(or_range_nodes.push_back(tmp_node))) {
-        LOG_WARN("failed to push back range node");
-      } else if (OB_FALSE_IT(is_precise &= ctx_.cur_is_precise_)) {
-      } else if (OB_FAIL(get_basic_range_node(l_expr, const_expr, T_OP_GT, expr_depth + 1, tmp_node))) {
-        LOG_WARN("failed tp get basic range node", K(ret));
-      } else if (OB_FAIL(or_range_nodes.push_back(tmp_node))) {
-        LOG_WARN("failed to push back range node");
-      } else if (OB_FALSE_IT(is_precise &= ctx_.cur_is_precise_)) {
-      } else if (OB_FAIL(ObRangeGraphGenerator::or_range_nodes(*this, or_range_nodes, ctx_.column_cnt_, final_node))) {
-        LOG_WARN("failed to or range nodes");
-      } else if (OB_FAIL(and_range_nodes.push_back(final_node))) {
-        LOG_WARN("failed to push back range node");
-      }
-    }
-    if (OB_SUCC(ret) && !and_range_nodes.empty()) {
-      if (OB_FAIL(ObRangeGraphGenerator::and_range_nodes(and_range_nodes, ctx_, range_node))) {
-        LOG_WARN("failed to or range nodes");
-      } else {
-        ctx_.cur_is_precise_ = is_precise;
-      }
     }
   } 
   

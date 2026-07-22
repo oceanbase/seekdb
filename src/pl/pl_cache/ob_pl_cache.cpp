@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX PL_CACHE
 #define LONG_COMPILE_TIME 10000000
-#include "ob_pl_cache.h"  //MTL
+#include "ob_pl_cache.h"
 #include "pl/ob_pl_stmt.h"
 #include "sql/resolver/ob_stmt_resolver.h"
 #include "src/sql/resolver/ob_resolver_utils.h"
@@ -272,7 +272,6 @@ void ObPLObjectKey::reset()
 {
   db_id_ = common::OB_INVALID_ID;
   key_id_ = common::OB_INVALID_ID;
-  sessid_ = 0;
   mode_ = ObjectMode::NORMAL;
   name_.reset();
   namespace_ = ObLibCacheNameSpace::NS_INVALID;
@@ -290,7 +289,6 @@ int ObPLObjectKey::deep_copy(ObIAllocator &allocator, const ObILibCacheKey &othe
   } else {
     db_id_ = key.db_id_;
     key_id_ = key.key_id_;
-    sessid_ = key.sessid_;
     mode_ = key.mode_;
     namespace_ = key.namespace_;
   }
@@ -311,7 +309,6 @@ uint64_t ObPLObjectKey::hash() const
 {
   uint64_t hash_ret = murmurhash(&db_id_, sizeof(uint64_t), 0);
   hash_ret = murmurhash(&key_id_, sizeof(uint64_t), hash_ret);
-  hash_ret = murmurhash(&sessid_, sizeof(uint32_t), hash_ret);
   hash_ret = murmurhash(&mode_, sizeof(mode_), hash_ret);
   hash_ret = name_.hash(hash_ret);
   hash_ret = murmurhash(&namespace_, sizeof(ObLibCacheNameSpace), hash_ret);
@@ -324,7 +321,6 @@ bool ObPLObjectKey::is_equal(const ObILibCacheKey &other) const
   const ObPLObjectKey &key = static_cast<const ObPLObjectKey&>(other);
   bool cmp_ret = db_id_ == key.db_id_ &&
                  key_id_ == key.key_id_ &&
-                 sessid_ == key.sessid_ &&
                  mode_ == key.mode_ &&
                  name_ == key.name_ &&
                  namespace_ == key.namespace_ &&
@@ -352,71 +348,6 @@ int ObPLObjectValue::init(const ObILibCacheObject &cache_obj, ObPLCacheCtx &pc_c
   return ret;
 }
 
-int ObPLObjectValue::set_max_concurrent_num_for_add(ObPLCacheCtx &pc_ctx)
-{
-  int ret = OB_SUCCESS;
-  const ObString sql_id(pc_ctx.sql_id_);
-  const uint64_t database_id = pc_ctx.session_info_->get_database_id();
-  const ObOutlineInfo *outline_info = NULL;
-  OZ (pc_ctx.schema_guard_->get_outline_info_with_sql_id(database_id,
-                        sql_id,
-                        false,
-                        outline_info));
-  if (NULL != outline_info && outline_info->has_outline_params()) {
-    OZ (inner_set_max_concurrent_num(outline_info));
-  }                  
-  return ret;
-}
-
-int ObPLObjectValue::set_max_concurrent_num_for_get(ObPLCacheCtx &pc_ctx)
-{
-  int ret = OB_SUCCESS;
-  ObString sql_id;
-  const uint64_t database_id = pc_ctx.session_info_->get_database_id();
-  const ObOutlineInfo *outline_info = NULL;
-  ObOutlineState state;
-  ObArenaAllocator tmp_alloc(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE);
-  OZ (ob_write_string(tmp_alloc, pl_routine_obj_->get_stat().sql_id_, sql_id));
-  OZ (pc_ctx.schema_guard_->get_outline_info_with_sql_id(database_id,
-                        sql_id,
-                        false,
-                        outline_info));
-  if (OB_SUCCESS != ret) {
-  } else if (NULL != outline_info) {
-    if (outline_info->get_outline_id() == pl_routine_obj_->get_stat().outline_version_.object_id_
-        && pl_routine_obj_->get_stat().outline_version_.version_ == outline_info->get_schema_version()) {
-      // do nothing 
-    } else if (outline_info->has_outline_params()) {
-      // reset concurrent num
-      OZ (inner_set_max_concurrent_num(outline_info));
-    }
-  } else {
-    OX (pl_routine_obj_->get_stat_for_update().outline_version_.reset());
-    OX (pl_routine_obj_->set_max_concurrent_num(ObMaxConcurrentParam::UNLIMITED));
-  }
-  return ret;
-}
-
-int ObPLObjectValue::inner_set_max_concurrent_num(const ObOutlineInfo *outline_info)
-{
-  int ret = OB_SUCCESS;
-  int64_t concurrent_num = INT64_MAX;
-  int64_t param_count = outline_info->get_outline_params_wrapper().get_outline_params().count();
-  for (int64_t i = 0; OB_SUCC(ret) && i < param_count; ++i) {
-    const ObMaxConcurrentParam *param = outline_info->get_outline_params_wrapper().get_outline_params().at(i);
-    if (OB_ISNULL(param)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("param is NULl", K(ret));
-    } else if (param->concurrent_num_ < concurrent_num) {
-      concurrent_num = param->concurrent_num_;
-    } else {/*do nothing*/}
-  }
-  OX (pl_routine_obj_->set_max_concurrent_num(concurrent_num));
-  OX (pl_routine_obj_->get_stat_for_update().outline_version_.object_id_ = outline_info->get_outline_id());
-  OX (pl_routine_obj_->get_stat_for_update().outline_version_.version_ = outline_info->get_schema_version());
-  return ret;
-}
-
 void ObPLObjectValue::reset()
 {
   ObDLinkBase<ObPLObjectValue>::reset();
@@ -430,7 +361,7 @@ void ObPLObjectValue::reset()
   }
   stored_schema_objs_.reset();
   sys_schema_version_ = OB_INVALID_VERSION;
-  tenant_schema_version_ = OB_INVALID_VERSION;
+  runtime_schema_version_ = OB_INVALID_VERSION;
   sessid_ = 0;
   sess_create_time_ = 0;
   contain_sys_name_table_ = false;
@@ -452,13 +383,13 @@ int64_t ObPLObjectValue::get_mem_size()
   return value_mem_size;
 }
 
-int ObPLObjectValue::lift_tenant_schema_version(int64_t new_schema_version)
+int ObPLObjectValue::lift_runtime_schema_version(int64_t new_schema_version)
 {
   int ret = OB_SUCCESS;
-  if (new_schema_version <= tenant_schema_version_) {
+  if (new_schema_version <= runtime_schema_version_) {
     // do nothing
   } else {
-    ATOMIC_STORE(&(tenant_schema_version_), new_schema_version);
+    ATOMIC_STORE(&(runtime_schema_version_), new_schema_version);
   }
   return ret;
 }
@@ -538,8 +469,6 @@ int ObPLObjectValue::check_value_version(share::schema::ObSchemaGetterGuard *sch
             OX (is_old_version = 
                   schema_obj1->table_name_ != schema_obj2.table_name_ || 
                   !schema_obj1->match_columns(column_infos));
-          } else if (SEQUENCE_SCHEMA == schema_obj1->schema_type_) {
-            // alter sequence should not make pl cache obj expired
           } else {
             is_old_version = true;
           }
@@ -564,15 +493,15 @@ int ObPLObjectValue::need_check_schema_version(ObPLCacheCtx &pc_ctx,
   int ret = OB_SUCCESS;
   need_check = false;
   if (OB_FAIL(pc_ctx.schema_guard_->get_schema_version(new_schema_version))) {
-    LOG_WARN("failed to get tenant schema version", K(ret));
+    LOG_WARN("failed to get runtime schema version", K(ret));
   } else {
-    int64_t cached_tenant_schema_version = ATOMIC_LOAD(&tenant_schema_version_);
-    need_check = ((new_schema_version != cached_tenant_schema_version)
+    int64_t cached_runtime_schema_version = ATOMIC_LOAD(&runtime_schema_version_);
+    need_check = ((new_schema_version != cached_runtime_schema_version)
                   || contain_tmp_table_
                   || contain_sys_pl_object_
                   || contain_sys_name_table_);
     if (need_check && REACH_TIME_INTERVAL(10000000)) {
-      LOG_INFO("need check schema", K(new_schema_version), K(cached_tenant_schema_version));
+      LOG_INFO("need check schema", K(new_schema_version), K(cached_runtime_schema_version));
     }
     if (need_check && (pl_routine_obj_->is_prcr() || pl_routine_obj_->is_sfc())
       && static_cast<ObPLExecutableUnit*>(pl_routine_obj_)->has_incomplete_rt_dep_error()) {
@@ -768,7 +697,7 @@ int ObPLObjectValue::add_match_info(ObILibCacheCtx &ctx,
                K(ret), K(cache_object.get_dependency_table()));
   } else {
     sys_schema_version_ = cache_object.get_sys_schema_version();
-    tenant_schema_version_ = cache_object.get_tenant_schema_version();
+    runtime_schema_version_ = cache_object.get_runtime_schema_version();
     if (contain_tmp_table_) {
       sessid_ = pc_ctx.session_info_->get_sessid_for_table();
       sess_create_time_ = pc_ctx.session_info_->get_sess_create_time();
@@ -840,11 +769,8 @@ int ObPLObjectValue::set_stored_schema_objs(const DependenyTableStore &dep_table
            and need to be distinguished when matching plans to match different plans.
            The table under sys contains system tables and views, so call is_sys_table_name
            to check whether the table is under sys.
-           In addition, if SQL contains internal tables, the schema version changes of the
-           internal tables will not be reflected in the tenant schema version of ordinary tenants.
-           In order to be able to update the plan in time, you need to check the schema version number
-           of the corresponding internal table. In MySQL-only mode, tenant-visible internal tables
-           are under oceanbase. */
+           Internal-table changes may not advance the cached runtime schema version,
+           so check the corresponding internal-table schema version directly. */
         if (OB_FAIL(share::schema::ObSysTableChecker::is_sys_table_name(OB_SYS_DATABASE_ID,
                                                                                table_schema->get_table_name(),
                                                                                contain_sys_name_table_))) {
@@ -1155,7 +1081,7 @@ int ObPLObjectSet::inner_get_cache_obj(ObILibCacheCtx &ctx,
   ObSEArray<ObSchemaObjVersion, 4> out_of_date_objs;
   DLIST_FOREACH(pl_object_value, object_value_sets_) {
     schema_array.reset();
-    int64_t new_tenant_schema_version = OB_INVALID_VERSION;
+    int64_t new_runtime_schema_version = OB_INVALID_VERSION;
     bool need_check_schema = true;
     bool is_old_version = false;
     bool is_same = true;
@@ -1166,7 +1092,7 @@ int ObPLObjectSet::inner_get_cache_obj(ObILibCacheCtx &ctx,
       // do nothing
     } else if (OB_FAIL(pl_object_value->get_all_dep_schema(pc_ctx,
                                         pc_ctx.session_info_->get_database_id(),
-                                        new_tenant_schema_version,
+                                        new_runtime_schema_version,
                                         need_check_schema,
                                         schema_array))) {
       if (OB_OLD_SCHEMA_VERSION == ret) {
@@ -1187,13 +1113,10 @@ int ObPLObjectSet::inner_get_cache_obj(ObILibCacheCtx &ctx,
     } else if (true == is_old_version) {
       ret = OB_OLD_SCHEMA_VERSION;
       has_old_version_err = true;
-    } else if (OB_FAIL(pl_object_value->set_max_concurrent_num_for_get(pc_ctx))) {
-      LOG_WARN("Failed to adjust concurrent num!", K(ret));
     } else {
       cache_obj = pl_object_value->pl_routine_obj_;
-      cache_obj->set_dynamic_ref_handle(pc_ctx.handle_id_);
-      if (OB_FAIL(pl_object_value->lift_tenant_schema_version(new_tenant_schema_version))) {
-        LOG_WARN("failed to lift pcv's tenant schema version", K(ret));
+      if (OB_FAIL(pl_object_value->lift_runtime_schema_version(new_runtime_schema_version))) {
+        LOG_WARN("failed to lift cached runtime schema version", K(ret));
       }
       break;
     }
@@ -1299,10 +1222,7 @@ int ObPLObjectSet::inner_add_cache_obj(ObILibCacheCtx &ctx,
         LOG_WARN("old schema version, to be delete", K(ret), K(pl_object_value->pl_routine_obj_->get_object_id()));
       } else {
         pl_object_value->pl_routine_obj_ = cache_object;
-        pl_object_value->pl_routine_obj_->set_dynamic_ref_handle(PC_REF_PL_HANDLE);
-        if (OB_FAIL(pl_object_value->set_max_concurrent_num_for_add(pc_ctx))) {
-          LOG_WARN("set concurrent num for add failed!", K(ret), K(pc_ctx));
-        } else if (!object_value_sets_.add_last(pl_object_value)) {
+        if (!object_value_sets_.add_last(pl_object_value)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("fail to add pcv to object_value_sets_", K(ret));
           free_pl_object_value(pl_object_value);

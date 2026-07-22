@@ -18,7 +18,7 @@
 
 #include "ob_dtl_channel_mem_manager.h"
 #include "share/rc/ob_module_provider.h"
-#include "storage/tx_storage/ob_tenant_freezer.h"
+#include "storage/tx_storage/ob_memstore_freezer.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::lib;
@@ -26,9 +26,9 @@ using namespace oceanbase::omt;
 using namespace oceanbase::sql;
 using namespace oceanbase::sql::dtl;
 
-ObDtlChannelMemManager::ObDtlChannelMemManager(ObDtlTenantMemManager &tenant_mgr) :
+ObDtlChannelMemManager::ObDtlChannelMemManager(ObDtlMemManager &mem_mgr) :
   size_per_buffer_(GCONF.dtl_buffer_size), seqno_(-1), allocator_{}, pre_alloc_cnt_(0),
-  max_mem_percent_(0), memstore_limit_percent_(0), alloc_cnt_(0), free_cnt_(0), real_alloc_cnt_(0), real_free_cnt_(0), tenant_mgr_(tenant_mgr),
+  max_mem_percent_(0), memstore_limit_percent_(0), alloc_cnt_(0), free_cnt_(0), real_alloc_cnt_(0), real_free_cnt_(0), mem_mgr_(mem_mgr),
   mem_used_(0), last_update_memory_time_(-1)
 {}
 
@@ -62,8 +62,8 @@ int ObDtlChannelMemManager::get_max_mem_percent()
 int ObDtlChannelMemManager::get_memstore_limit_percentage_()
 {
   int ret = OB_SUCCESS;
-  MOD_SCOPE {
-    memstore_limit_percent_ = share::g_mp->tenant_freezer()->get_memstore_limit_percentage();
+  SERVER_MODULE_SCOPE {
+    memstore_limit_percent_ = share::g_mp->memstore_freezer()->get_memstore_limit_percentage();
   }
   return ret;
 }
@@ -147,7 +147,7 @@ ObDtlLinkedBuffer *ObDtlChannelMemManager::alloc(int64_t chid, int64_t size)
     LOG_INFO("alloc dtl buffer", KP(allocated_buf));
   }
   LOG_TRACE("channel memory status", K(get_alloc_cnt()), K(get_free_cnt()),
-    K(get_free_queue_length()), K(get_max_tenant_memory_limit_size()), K(get_max_dtl_memory_size()),
+    K(get_free_queue_length()), K(get_max_memory_limit_size()), K(get_max_dtl_memory_size()),
     K(get_used_memory_size()), K(max_mem_percent_), KP(allocated_buf), K(seqno_));
   return allocated_buf;
 }
@@ -224,7 +224,7 @@ int64_t ObDtlChannelMemManager::get_used_memory_size()
   int64_t curr_time = ::oceanbase::common::ObTimeUtility::current_time();
   if (OB_UNLIKELY(curr_time - last_update_memory_time_ >= static_cast<int64_t> (100_ms))) {
     last_update_memory_time_ = curr_time;
-    mem_used_ = tenant_mgr_.get_used_memory_size();
+    mem_used_ = mem_mgr_.get_used_memory_size();
   }
   return mem_used_;
 }

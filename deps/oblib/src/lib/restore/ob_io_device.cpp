@@ -24,10 +24,9 @@ namespace common {
  * -------------------------------------ObIOFd--------------------------------------------
  */
 ObIOFd::ObIOFd(ObIODevice *device_handle, const int64_t first_id,
-    const int64_t second_id, const int64_t third_id,
-    const int64_t fd_id, const int64_t slot_version)
+    const int64_t second_id, const int64_t third_id)
   : first_id_(first_id), second_id_(second_id), third_id_(third_id),
-    fd_id_(fd_id), slot_version_(slot_version), device_handle_(device_handle)
+    device_handle_(device_handle)
 {
 }
 
@@ -36,8 +35,6 @@ void ObIOFd::reset()
   first_id_ = -1;
   second_id_ = -1;
   third_id_ = -1;
-  fd_id_ = -1;
-  slot_version_ = -1;
   device_handle_ = nullptr;
 }
 
@@ -46,17 +43,10 @@ bool ObIOFd::is_valid() const
   bool is_valid = false;
   if (is_block_file()) {
     is_valid = first_id_ >= 0 && second_id_ >= 0;
-  } else if (is_backup_block_file()) {
-    is_valid = first_id_ >= 0 && second_id_ >= 0 && third_id_ >= 0;
   } else {
-    is_valid = (first_id_ == NORMAL_FILE_ID && second_id_ >= 0) || (fd_id_ >= 0 || slot_version_ >= 0);
+    is_valid = first_id_ == NORMAL_FILE_ID && second_id_ >= 0;
   }
   return is_valid;
-}
-
-bool ObIOFd::is_backup_block_file() const {
-  // TODO(yanfeng): Due to the problem of circular dependency during compilation, we will temporarily handle it this way
-  return BACKUP_BLOCK_ID_MODE == ((first_id_ >> BACKUP_BLOCK_ID_MODE_SHIFT_SIZE) & BACKUP_BLOCK_ID_MODE_FIELD_MASK);
 }
 
 DEFINE_SERIALIZE(ObIOFd)
@@ -72,10 +62,6 @@ DEFINE_SERIALIZE(ObIOFd)
     LOG_WARN("serialize second id failed.", K(ret), K(pos), K(buf_len), K(ser_len), K(*this));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, third_id_))) {
     LOG_WARN("serialize third id failed.", K(ret), K(pos), K(buf_len), K(ser_len), K(*this));
-  } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, fd_id_))) {
-    LOG_WARN("serialize fd id failed.", K(ret), K(pos), K(buf_len), K(ser_len), K(*this));
-  } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, slot_version_))) {
-    LOG_WARN("serialize slot version failed.", K(ret), K(pos), K(buf_len), K(ser_len), K(*this));
   }
   return ret;
 }
@@ -92,10 +78,6 @@ DEFINE_DESERIALIZE(ObIOFd)
     LOG_WARN("decode second_id_ failed.", K(ret), K(pos), K(data_len), K(*this));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, &third_id_))) {
     LOG_WARN("decode third_id_ failed.", K(ret), K(pos), K(data_len), K(*this));
-  } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, &fd_id_))) {
-    LOG_WARN("decode fouth_id_ failed.", K(ret), K(pos), K(data_len), K(*this));
-  } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, &slot_version_))) {
-    LOG_WARN("decode slot_version_ failed.", K(ret), K(pos), K(data_len), K(*this));
   }
   return ret;
 }
@@ -106,8 +88,6 @@ DEFINE_GET_SERIALIZE_SIZE(ObIOFd)
   len += serialization::encoded_length_i64(first_id_);
   len += serialization::encoded_length_i64(second_id_);
   len += serialization::encoded_length_i64(third_id_);
-  len += serialization::encoded_length_i64(fd_id_);
-  len += serialization::encoded_length_i64(slot_version_);
   return len;
 }
 
@@ -161,10 +141,8 @@ int ObDirRegularEntryNameFilter::func(const dirent *entry)
 int ObIODevice::get_io_aligned_size(int64_t &aligned_size) const
 {
   int ret = OB_SUCCESS;
-  if (is_object_device()) {
-    aligned_size = 1;
-  } else if ((ObStorageType::OB_STORAGE_LOCAL == device_type_)
-             || (ObStorageType::OB_STORAGE_LOCAL_CACHE == device_type_)) {
+  if ((ObStorageType::OB_STORAGE_LOCAL == device_type_)
+      || (ObStorageType::OB_STORAGE_LOCAL_CACHE == device_type_)) {
     aligned_size = DIO_ALIGN_SIZE;
   } else {
     ret = OB_ERR_UNEXPECTED;

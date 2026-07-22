@@ -39,11 +39,11 @@ int ObTxDataCacheValue::init(const ObTxData &tx_data)
     if (TX_DATA_SLICE_SIZE == size) {
       // this tx data do not have undo actions, use reserved memory
       tx_data_buf = &reserved_buf_;
-    } else if (OB_ISNULL(tx_data_buf = mtl_malloc(size, "TX_DATA_CACHE"))) {
+    } else if (OB_ISNULL(tx_data_buf = server_malloc(size, "TX_DATA_CACHE"))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       STORAGE_LOG(WARN, "allocate memory for tx data cache value failed", KR(ret));
     } else {
-      mtl_alloc_buf_ = tx_data_buf;
+      server_alloc_buf_ = tx_data_buf;
     }
 
     // deep copy tx data to the buf
@@ -78,8 +78,8 @@ int ObTxDataCacheValue::init(const ObTxDataCacheValue &tx_data_cache_val, void *
 
 void ObTxDataCacheValue::destroy()
 {
-  if (OB_NOT_NULL(mtl_alloc_buf_)) {
-    mtl_free(mtl_alloc_buf_);
+  if (OB_NOT_NULL(server_alloc_buf_)) {
+    server_free(server_alloc_buf_);
   }
   is_inited_ = false;
   tx_data_ = nullptr;

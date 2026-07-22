@@ -225,7 +225,7 @@ int ObTransformQueryPushDown::check_hint_allowed_query_push_down(const ObDMLStmt
 
 /**
  * @brief check_transform_validity Check if the rewrite meets the relevant conditions:
- * 1.Determine if there are cte etc. (the outer layer contains sequence, the inner layer must be spj)
+ * 1.Determine whether the query shapes support pushdown (for example, CTE and SPJ constraints)
  * 2.Determine if set-op can be pushed down --> placed at the first judgment because outer-layer set-op pushing inward is not supported
  * 4.Determine if select item can be pushed down
  * 5.Determine if where condition can be pushed down --> may be pushed down as having expr
@@ -255,7 +255,6 @@ int ObTransformQueryPushDown::check_transform_validity(ObSelectStmt *select_stmt
   } else if (select_stmt->is_recursive_union() ||
              (view_stmt->is_recursive_union() && !select_stmt->is_spj()) ||
              select_stmt->is_set_stmt() ||
-             (select_stmt->has_sequence() && !view_stmt->is_spj()) ||
              view_stmt->has_ora_rowscn()) {//judgment 1, 2
     can_transform = false;
     OPT_TRACE("stmt is not spj");
@@ -846,14 +845,6 @@ int ObTransformQueryPushDown::push_down_stmt_exprs(ObSelectStmt *select_stmt,
     if (OB_FAIL(ret)) {
     } else if (select_stmt->has_limit() && OB_FAIL(do_limit_merge(*select_stmt, *view_stmt))) {
       LOG_WARN("failed to merge limit", K(ret));
-    } else if (select_stmt->has_sequence() && // handle sequence
-               OB_FAIL(append(view_stmt->get_nextval_sequence_ids(),
-                              select_stmt->get_nextval_sequence_ids()))) {
-      LOG_WARN("failed to append nextval sequence ids", K(ret));
-    } else if (select_stmt->has_sequence()
-               && OB_FAIL(append(view_stmt->get_currval_sequence_ids(),
-                                 select_stmt->get_currval_sequence_ids()))) {
-      LOG_WARN("failed to append currval sequence ids", K(ret));
     } else if (view_stmt->is_set_stmt()) {
       if (select_offset.empty()){
         /*do nothing*/
@@ -886,7 +877,7 @@ int ObTransformQueryPushDown::push_down_stmt_exprs(ObSelectStmt *select_stmt,
                        select_stmt->get_subquery_exprs()))) {
       LOG_WARN("view stmt append subquery failed", K(ret));
     } else {
-      //bug20488629, standby tenant SHOW database statement execution timeout, always require selecting Leader replica
+      // A standby database SHOW DATABASES query must read the leader replica.
       // view pull after needs to inherit original show db information
       bool is_from_show_stmt = select_stmt->is_from_show_stmt();
       stmt::StmtType literal_stmt_type = select_stmt->get_query_ctx()->get_literal_stmt_type();

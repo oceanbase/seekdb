@@ -49,14 +49,6 @@ public:
   const common::ObString &get_masked_sql() const { return masked_sql_; }
   virtual bool cause_implicit_commit() const { return true; }
   virtual obcall::ObDDLArg &get_ddl_arg() { return create_user_arg_; }
-  void set_profile_id(const uint64_t profile_id) { profile_id_ = profile_id; }
-  uint64_t get_profile_id() const { return profile_id_; }
-  common::ObString &get_primary_zone() { return create_user_arg_.primary_zone_;}
-  int set_primary_zone(const ObString &primary_zone) 
-  { 
-    create_user_arg_.primary_zone_ = primary_zone; 
-    return OB_SUCCESS;
-  }
   uint64_t get_max_connections_per_hour() { return max_connections_per_hour_; }
   void set_max_connections_per_hour(uint64_t val) { max_connections_per_hour_ = val; }
   uint64_t get_max_user_connections() { return max_user_connections_; }
@@ -70,7 +62,6 @@ private:
                             //  ssl_type, ssl_cipher, x509_issuer, x509_subject)
   common::ObString masked_sql_;
   bool if_not_exist_;
-  uint64_t profile_id_; // Legacy profile id kept for follow-up cleanup.
   obcall::ObCreateUserArg create_user_arg_; // used to return exec_tid_
   uint64_t max_connections_per_hour_;
   uint64_t max_user_connections_;

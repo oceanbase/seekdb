@@ -75,7 +75,7 @@ public:
 
   bool operator==(const ObFTDictInfoKey &other) const
   {
-    return type_ == other.type_ && true;
+    return type_ == other.type_;
   }
 
   int compare(const ObFTDictInfoKey &other) const

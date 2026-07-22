@@ -56,8 +56,7 @@ namespace sql
    (type) == PHY_PX_MULTI_PART_INSERT)
 // Determine if an operator is a subclass of Transmit, used for splitting Job
 #define IS_TRANSMIT(type) \
-    ((type) == PHY_DIRECT_TRANSMIT || \
-     (type) == PHY_DISTRIBUTED_TRANSMIT || \
+    ((type) == PHY_DISTRIBUTED_TRANSMIT || \
      (type) == PHY_PX_DIST_TRANSMIT || \
      (type) == PHY_PX_REPART_TRANSMIT || \
      (type) == PHY_PX_REDUCE_TRANSMIT || \

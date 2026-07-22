@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX LIB
 #include "worker.h"
-namespace oceanbase { namespace rpc { extern common::ObAddr g_rpc_self_addr; } }  // fwd-decl (reduce deps)
+namespace oceanbase { namespace rpc { extern common::ObAddr g_server_self_addr; } }
 
 using namespace oceanbase::common;
 using namespace oceanbase::lib;
@@ -24,7 +24,7 @@ using namespace oceanbase::lib;
 OB_DEF_SERIALIZE(ObExtraRpcHeader)
 {
   int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_ENCODE, rpc::g_rpc_self_addr);
+  LST_DO_CODE(OB_UNIS_ENCODE, rpc::g_server_self_addr);
   return ret;
 }
 OB_DEF_DESERIALIZE(ObExtraRpcHeader)
@@ -36,7 +36,7 @@ OB_DEF_DESERIALIZE(ObExtraRpcHeader)
 OB_DEF_SERIALIZE_SIZE(ObExtraRpcHeader)
 {
   int64_t len = 0;
-  LST_DO_CODE(OB_UNIS_ADD_LEN, rpc::g_rpc_self_addr);
+  LST_DO_CODE(OB_UNIS_ADD_LEN, rpc::g_server_self_addr);
   return len;
 }
 

@@ -70,7 +70,7 @@ int LogIOWorker::init(const LogIOWorkerConfig &config,
                                              &wait_cost_stat_))) {
     PALF_LOG(ERROR, "BatchLogIOFlushLogTaskMgr init failed", K(ret), K(config));
   } else {
-    share::ObThreadPool::set_run_wrapper(MTL_CTX());
+    share::ObThreadPool::set_run_wrapper(share::server_runtime());
     cb_thread_pool_ = cb_thread_pool;
     palf_env_impl_ = palf_env_impl;
     PALF_REPORT_INFO_KV(KP_(cb_thread_pool));

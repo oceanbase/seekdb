@@ -35,7 +35,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$E5385516" ("opt"."t2"@"SEL$1" ("VIEW2"@"SEL$6FCAE2AA" "opt"."t1"@"SEL$1")))
       USE_NL(@"SEL$E5385516" ("opt"."t1"@"SEL$1" "VIEW2"@"SEL$6FCAE2AA"))
       USE_NL_MATERIALIZATION(@"SEL$E5385516" ("opt"."t1"@"SEL$1" "VIEW2"@"SEL$6FCAE2AA"))
@@ -47,18 +46,6 @@ Outline Data:
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
       MERGE(@"SEL$2" < "SEL$7BD09C5F")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" ("opt.t1"@"SEL$1" "VIEW1"@"SEL$1" )))
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" "VIEW1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" "VIEW1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" "VIEW1"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      USE_MERGE(@"SEL$1" ("VIEW1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("VIEW1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -87,7 +74,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$612EAAC9" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$2"))
       USE_NL(@"SEL$612EAAC9" "opt"."t2"@"SEL$2")
       USE_NL_MATERIALIZATION(@"SEL$612EAAC9" "opt"."t2"@"SEL$2")
@@ -95,15 +81,6 @@ Outline Data:
       FULL(@"SEL$612EAAC9" "opt"."t2"@"SEL$2")
       UNNEST(@"SEL$2")
       MERGE(@"SEL$2" > "SEL$6FCAE2AA")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -138,7 +115,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$FE336D0E" ("opt"."t2"@"SEL$1" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$2")))
       USE_NL(@"SEL$FE336D0E" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$2"))
       USE_NL_MATERIALIZATION(@"SEL$FE336D0E" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$2"))
@@ -149,18 +125,6 @@ Outline Data:
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
       MERGE(@"SEL$2" > "SEL$E5385516")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" )))
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      USE_MERGE(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -188,15 +152,9 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       FULL(@"SEL$2" "opt"."t2"@"SEL$2")
       SIMPLIFY_SUBQUERY(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -223,7 +181,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$FE336D0E" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$2"))
       USE_MERGE(@"SEL$FE336D0E" "opt"."t2"@"SEL$2")
       FULL(@"SEL$FE336D0E" "opt"."t1"@"SEL$1")
@@ -231,14 +188,6 @@ Outline Data:
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
       MERGE(@"SEL$2" > "SEL$E5385516")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -265,7 +214,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$FE336D0E" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$2"))
       USE_MERGE(@"SEL$FE336D0E" "opt"."t2"@"SEL$2")
       FULL(@"SEL$FE336D0E" "opt"."t1"@"SEL$1")
@@ -273,14 +221,6 @@ Outline Data:
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
       MERGE(@"SEL$2" > "SEL$E5385516")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -307,22 +247,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$612EAAC9" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$2"))
       USE_NL(@"SEL$612EAAC9" "opt"."t2"@"SEL$2")
       FULL(@"SEL$612EAAC9" "opt"."t1"@"SEL$1")
       FULL(@"SEL$612EAAC9" "opt"."t2"@"SEL$2")
       UNNEST(@"SEL$2")
       MERGE(@"SEL$2" > "SEL$6FCAE2AA")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("VIEW1"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      NO_USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      FULL(@"SEL$3" "opt"."t2"@"SEL$3")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -349,22 +279,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$612EAAC9" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$2"))
       USE_NL(@"SEL$612EAAC9" "opt"."t2"@"SEL$2")
       FULL(@"SEL$612EAAC9" "opt"."t1"@"SEL$1")
       FULL(@"SEL$612EAAC9" "opt"."t2"@"SEL$2")
       UNNEST(@"SEL$2")
       MERGE(@"SEL$2" > "SEL$6FCAE2AA")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "VIEW1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("VIEW1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("VIEW1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("VIEW1"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$3" "opt"."t2"@"SEL$3")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -397,22 +317,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$6FCAE2AA" ("opt"."t1"@"SEL$1" "VIEW1"@"SEL$1"))
       USE_NL(@"SEL$6FCAE2AA" "VIEW1"@"SEL$1")
       USE_NL_MATERIALIZATION(@"SEL$6FCAE2AA" "VIEW1"@"SEL$1")
       FULL(@"SEL$6FCAE2AA" "opt"."t1"@"SEL$1")
       FULL(@"SEL$2" "opt"."t2"@"SEL$2")
       UNNEST(@"SEL$2")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "VIEW1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("VIEW1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("VIEW1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("VIEW1"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -445,7 +355,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$AA0F5665" ("opt"."t1"@"SEL$1" "VIEW1"@"SEL$1"))
       USE_NL(@"SEL$AA0F5665" "VIEW1"@"SEL$1")
       USE_NL_MATERIALIZATION(@"SEL$AA0F5665" "VIEW1"@"SEL$1")
@@ -454,15 +363,6 @@ Outline Data:
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
       PROJECT_PRUNE(@"SEL$E5385516")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("VIEW1"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      NO_USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      FULL(@"SEL$3" "opt"."t2"@"SEL$3")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -500,7 +400,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$F64FDB4A" ("opt"."t1"@"SEL$1" "VIEW3"@"SEL$1"))
       USE_NL(@"SEL$F64FDB4A" "VIEW3"@"SEL$1")
       USE_NL_MATERIALIZATION(@"SEL$F64FDB4A" "VIEW3"@"SEL$1")
@@ -509,15 +408,6 @@ Outline Data:
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW3")
       PROJECT_PRUNE(@"SEL$62590B6F")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "VIEW3"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("VIEW3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("VIEW3"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("VIEW3"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -554,7 +444,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       LEADING(@"SEL$119A0069" ("opt"."t2"@"SEL$2" "opt"."t3"@"SEL$3"))
       USE_NL(@"SEL$119A0069" "opt"."t3"@"SEL$3")
@@ -564,16 +453,6 @@ Outline Data:
       UNNEST(@"SEL$3")
       SIMPLIFY_SUBQUERY(@"SEL$1")
       MERGE(@"SEL$3" > "SEL$19FECD1D")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      LEADING(@"SEL$2" ("opt.t2"@"SEL$2" "VIEW1"@"SEL$2" ))
-      USE_NL(@"SEL$2" ("VIEW1"@"SEL$2" ))
-      PQ_DISTRIBUTE(@"SEL$2" ("VIEW1"@"SEL$2" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$2" ("VIEW1"@"SEL$2" ))
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
-      FULL(@"SEL$4" "opt"."t3"@"SEL$4")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -600,7 +479,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$726C2C09" ("opt"."t2"@"SEL$2" "opt"."t1"@"SEL$1"))
       USE_HASH(@"SEL$726C2C09" "opt"."t1"@"SEL$1")
       FULL(@"SEL$726C2C09" "opt"."t2"@"SEL$2")
@@ -608,14 +486,6 @@ Outline Data:
       UNNEST(@"SEL$2")
       PROJECT_PRUNE(@"SEL$6FCAE2AA")
       MERGE(@"SEL$2" > "SEL$351291A2")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -642,18 +512,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$612EAAC9" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$2"))
       USE_HASH(@"SEL$612EAAC9" "opt"."t2"@"SEL$2")
       FULL(@"SEL$612EAAC9" "opt"."t1"@"SEL$1")
       FULL(@"SEL$612EAAC9" "opt"."t2"@"SEL$2")
       UNNEST(@"SEL$2")
       MERGE(@"SEL$2" > "SEL$6FCAE2AA")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$3" "opt"."t2"@"SEL$3")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -683,10 +547,6 @@ Outline Data:
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$2" "opt"."t2"@"SEL$2")
-<<<<<<< HEAD
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -715,10 +575,6 @@ Outline Data:
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$2" "opt"."t2"@"SEL$2")
-<<<<<<< HEAD
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -745,7 +601,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$FE336D0E" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$2"))
       USE_MERGE(@"SEL$FE336D0E" "opt"."t2"@"SEL$2")
       FULL(@"SEL$FE336D0E" "opt"."t1"@"SEL$1")
@@ -753,14 +608,6 @@ Outline Data:
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
       MERGE(@"SEL$2" > "SEL$E5385516")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -788,15 +635,9 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       FULL(@"SEL$2" "opt"."t2"@"SEL$2")
       SIMPLIFY_SUBQUERY(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -824,15 +665,9 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       FULL(@"SEL$2" "opt"."t2"@"SEL$2")
       SIMPLIFY_SUBQUERY(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -860,16 +695,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       FULL(@"SEL$B15E051B" "opt"."t2"@"SEL$2")
       SIMPLIFY_GROUP_BY(@"SEL$2")
       SIMPLIFY_SUBQUERY(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -896,7 +725,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$FE336D0E" ("opt"."t2"@"SEL$2" "opt"."t1"@"SEL$1"))
       USE_NL(@"SEL$FE336D0E" "opt"."t1"@"SEL$1")
       FULL(@"SEL$FE336D0E" "opt"."t2"@"SEL$2")
@@ -904,15 +732,6 @@ Outline Data:
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
       MERGE(@"SEL$2" > "SEL$E5385516")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      NO_USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -942,20 +761,11 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$6FCAE2AA" ("opt"."t1"@"SEL$1" "VIEW1"@"SEL$1"))
       USE_MERGE(@"SEL$6FCAE2AA" "VIEW1"@"SEL$1")
       FULL(@"SEL$6FCAE2AA" "opt"."t1"@"SEL$1")
       FULL(@"SEL$2" "opt"."t2"@"SEL$2")
       UNNEST(@"SEL$2")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "VIEW1"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("VIEW1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("VIEW1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -982,7 +792,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$FE336D0E" ("opt"."t2"@"SEL$2" "opt"."t1"@"SEL$1"))
       USE_NL(@"SEL$FE336D0E" "opt"."t1"@"SEL$1")
       FULL(@"SEL$FE336D0E" "opt"."t2"@"SEL$2")
@@ -990,15 +799,6 @@ Outline Data:
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
       MERGE(@"SEL$2" > "SEL$E5385516")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      NO_USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1030,22 +830,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$6FCAE2AA" ("opt"."t1"@"SEL$1" "VIEW1"@"SEL$1"))
       USE_NL(@"SEL$6FCAE2AA" "VIEW1"@"SEL$1")
       USE_NL_MATERIALIZATION(@"SEL$6FCAE2AA" "VIEW1"@"SEL$1")
       FULL(@"SEL$6FCAE2AA" "opt"."t1"@"SEL$1")
       FULL(@"SEL$2" "opt"."t2"@"SEL$2")
       UNNEST(@"SEL$2")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "VIEW1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("VIEW1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("VIEW1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("VIEW1"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1077,22 +867,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$6FCAE2AA" ("opt"."t1"@"SEL$1" "VIEW1"@"SEL$1"))
       USE_NL(@"SEL$6FCAE2AA" "VIEW1"@"SEL$1")
       USE_NL_MATERIALIZATION(@"SEL$6FCAE2AA" "VIEW1"@"SEL$1")
       FULL(@"SEL$6FCAE2AA" "opt"."t1"@"SEL$1")
       FULL(@"SEL$2" "opt"."t2"@"SEL$2")
       UNNEST(@"SEL$2")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "VIEW1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("VIEW1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("VIEW1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("VIEW1"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1122,20 +902,11 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$6FCAE2AA" ("opt"."t1"@"SEL$1" "VIEW1"@"SEL$1"))
       USE_MERGE(@"SEL$6FCAE2AA" "VIEW1"@"SEL$1")
       FULL(@"SEL$6FCAE2AA" "opt"."t1"@"SEL$1")
       FULL(@"SEL$2" "opt"."t2"@"SEL$2")
       UNNEST(@"SEL$2")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "VIEW1"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("VIEW1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("VIEW1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1162,21 +933,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$612EAAC9" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$2"))
       USE_HASH(@"SEL$612EAAC9" "opt"."t2"@"SEL$2")
       FULL(@"SEL$612EAAC9" "opt"."t1"@"SEL$1")
       FULL(@"SEL$612EAAC9" "opt"."t2"@"SEL$2")
       UNNEST(@"SEL$2")
       MERGE(@"SEL$2" > "SEL$6FCAE2AA")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1203,22 +965,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$612EAAC9" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$2"))
       USE_NL(@"SEL$612EAAC9" "opt"."t2"@"SEL$2")
       FULL(@"SEL$612EAAC9" "opt"."t1"@"SEL$1")
       FULL(@"SEL$612EAAC9" "opt"."t2"@"SEL$2")
       UNNEST(@"SEL$2")
       MERGE(@"SEL$2" > "SEL$6FCAE2AA")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      NO_USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1245,7 +997,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$FE336D0E" ("opt"."t3"@"SEL$1" "opt"."t2"@"SEL$2"))
       USE_MERGE(@"SEL$FE336D0E" "opt"."t2"@"SEL$2")
       FULL(@"SEL$FE336D0E" "opt"."t3"@"SEL$1")
@@ -1253,14 +1004,6 @@ Outline Data:
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
       MERGE(@"SEL$2" > "SEL$E5385516")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t3"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1289,13 +1032,8 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       SIMPLIFY_SUBQUERY(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1324,13 +1062,8 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       SIMPLIFY_SUBQUERY(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1351,14 +1084,9 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$9384ECF8" "opt"."t1"@"SEL$1")
       SIMPLIFY_SUBQUERY(@"SEL$1")
       SIMPLIFY_EXPR(@"SEL$4D615D57")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1379,13 +1107,8 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       SIMPLIFY_SUBQUERY(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1406,14 +1129,9 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$9384ECF8" "opt"."t1"@"SEL$1")
       SIMPLIFY_SUBQUERY(@"SEL$1")
       SIMPLIFY_EXPR(@"SEL$4D615D57")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1434,13 +1152,8 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       SIMPLIFY_SUBQUERY(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1467,7 +1180,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$B65D6EEC" ("opt"."t2"@"SEL$2" "opt"."t1"@"SEL$1"))
       USE_MERGE(@"SEL$B65D6EEC" "opt"."t1"@"SEL$1")
       FULL(@"SEL$B65D6EEC" "opt"."t2"@"SEL$2")
@@ -1475,14 +1187,6 @@ Outline Data:
       MERGE(@"SEL$2" > "SEL$1")
       SIMPLIFY_SUBQUERY(@"SEL$CFEA49FE")
       SIMPLIFY_EXPR(@"SEL$2C137791")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1509,7 +1213,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$30EEE2A3" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$2"))
       USE_MERGE(@"SEL$30EEE2A3" "opt"."t2"@"SEL$2")
       FULL(@"SEL$30EEE2A3" "opt"."t1"@"SEL$1")
@@ -1519,14 +1222,6 @@ Outline Data:
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
       SIMPLIFY_EXPR(@"SEL$1676657F")
       MERGE(@"SEL$F5FEA8F3" > "SEL$E5385516")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1554,16 +1249,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       FULL(@"SEL$B15E051B" "opt"."t2"@"SEL$2")
       SIMPLIFY_GROUP_BY(@"SEL$2")
       SIMPLIFY_SUBQUERY(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1591,16 +1280,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       FULL(@"SEL$B15E051B" "opt"."t2"@"SEL$2")
       SIMPLIFY_GROUP_BY(@"SEL$2")
       SIMPLIFY_SUBQUERY(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1628,16 +1311,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       FULL(@"SEL$B15E051B" "opt"."t2"@"SEL$2")
       SIMPLIFY_GROUP_BY(@"SEL$2")
       SIMPLIFY_SUBQUERY(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1665,16 +1342,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       FULL(@"SEL$B15E051B" "opt"."t2"@"SEL$2")
       SIMPLIFY_GROUP_BY(@"SEL$2")
       SIMPLIFY_SUBQUERY(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1702,16 +1373,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       FULL(@"SEL$B15E051B" "opt"."t2"@"SEL$2")
       SIMPLIFY_GROUP_BY(@"SEL$2")
       SIMPLIFY_SUBQUERY(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1739,16 +1404,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       FULL(@"SEL$B15E051B" "opt"."t2"@"SEL$2")
       SIMPLIFY_GROUP_BY(@"SEL$2")
       SIMPLIFY_SUBQUERY(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1776,16 +1435,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       FULL(@"SEL$B15E051B" "opt"."t2"@"SEL$2")
       SIMPLIFY_GROUP_BY(@"SEL$2")
       SIMPLIFY_SUBQUERY(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1813,16 +1466,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       FULL(@"SEL$B15E051B" "opt"."t2"@"SEL$2")
       SIMPLIFY_GROUP_BY(@"SEL$2")
       SIMPLIFY_SUBQUERY(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1850,16 +1497,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       FULL(@"SEL$B15E051B" "opt"."t2"@"SEL$2")
       SIMPLIFY_GROUP_BY(@"SEL$2")
       SIMPLIFY_SUBQUERY(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1887,16 +1528,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       FULL(@"SEL$B15E051B" "opt"."t2"@"SEL$2")
       SIMPLIFY_GROUP_BY(@"SEL$2")
       SIMPLIFY_SUBQUERY(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1923,20 +1558,11 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$CFEA49FE" ("opt"."t2"@"SEL$2" "opt"."t1"@"SEL$1"))
       USE_MERGE(@"SEL$CFEA49FE" "opt"."t1"@"SEL$1")
       FULL(@"SEL$CFEA49FE" "opt"."t2"@"SEL$2")
       FULL(@"SEL$CFEA49FE" "opt"."t1"@"SEL$1")
       MERGE(@"SEL$2" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1970,7 +1596,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$2C137791" ("opt"."t2"@"SEL$2" "opt"."t1"@"SEL$1"))
       USE_MERGE(@"SEL$2C137791" "opt"."t1"@"SEL$1")
       FULL(@"SEL$2C137791" "opt"."t2"@"SEL$2")
@@ -1979,15 +1604,6 @@ Outline Data:
       SIMPLIFY_GROUP_BY(@"SEL$3")
       MERGE(@"SEL$2" > "SEL$1")
       SIMPLIFY_SUBQUERY(@"SEL$CFEA49FE")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$3" "opt"."t3"@"SEL$3")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -2022,7 +1638,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       LEADING(@"SEL$7B2284C6" ("opt"."t2"@"SEL$2" "opt"."t3"@"SEL$3"))
       USE_NL(@"SEL$7B2284C6" "opt"."t3"@"SEL$3")
@@ -2034,16 +1649,6 @@ Outline Data:
       SEMI_TO_INNER(@"SEL$F5618A85" "VIEW1")
       PROJECT_PRUNE(@"SEL$9BD44FD1")
       MERGE(@"SEL$3" > "SEL$F12D9503")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      LEADING(@"SEL$2" ("opt.t2"@"SEL$2" "opt.t3"@"SEL$2" ))
-      USE_NL(@"SEL$2" ("opt.t3"@"SEL$2" ))
-      PQ_DISTRIBUTE(@"SEL$2" ("opt.t3"@"SEL$2" ) LOCAL LOCAL)
-      NO_USE_NL_MATERIALIZATION(@"SEL$2" ("opt.t3"@"SEL$2" ))
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
-      FULL(@"SEL$2" "opt"."t3"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -2078,7 +1683,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       LEADING(@"SEL$7B2284C6" ("opt"."t2"@"SEL$2" "opt"."t3"@"SEL$3"))
       USE_NL(@"SEL$7B2284C6" "opt"."t3"@"SEL$3")
@@ -2090,16 +1694,6 @@ Outline Data:
       SEMI_TO_INNER(@"SEL$F5618A85" "VIEW1")
       PROJECT_PRUNE(@"SEL$9BD44FD1")
       MERGE(@"SEL$3" > "SEL$F12D9503")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      LEADING(@"SEL$2" ("opt.t2"@"SEL$2" "opt.t3"@"SEL$2" ))
-      USE_NL(@"SEL$2" ("opt.t3"@"SEL$2" ))
-      PQ_DISTRIBUTE(@"SEL$2" ("opt.t3"@"SEL$2" ) LOCAL LOCAL)
-      NO_USE_NL_MATERIALIZATION(@"SEL$2" ("opt.t3"@"SEL$2" ))
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
-      FULL(@"SEL$2" "opt"."t3"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -2135,18 +1729,11 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1676657F" "opt"."t2"@"SEL$2")
       FULL(@"SEL$3" "opt"."t3"@"SEL$3")
       SIMPLIFY_SUBQUERY(@"SEL$2")
       SIMPLIFY_SUBQUERY(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
-      FULL(@"SEL$3" "opt"."t3"@"SEL$3")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -2174,16 +1761,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1676657F" "opt"."t2"@"SEL$2")
       SIMPLIFY_SUBQUERY(@"SEL$2")
       SIMPLIFY_SUBQUERY(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -2204,14 +1785,9 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       SIMPLIFY_SUBQUERY(@"SEL$2")
       SIMPLIFY_SUBQUERY(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -2239,15 +1815,9 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$4D615D57" "opt"."pullup1"@"SEL$1")
       FULL(@"SEL$2" "opt"."pullup2"@"SEL$2")
       SIMPLIFY_SUBQUERY(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."pullup2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -2275,15 +1845,9 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$4D615D57" "opt"."pullup1"@"SEL$1")
       FULL(@"SEL$2" "opt"."pullup2"@"SEL$2")
       SIMPLIFY_SUBQUERY(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."pullup2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -2316,13 +1880,8 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
-<<<<<<< HEAD
       USE_HASH_DISTINCT(@"SEL$2")
       FULL(@"SEL$2" "opt"."pullup2"@"SEL$2")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$2" "opt"."pullup2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -2349,7 +1908,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$FE336D0E" ("opt"."pullup1"@"SEL$1" "opt"."pullup2"@"SEL$2"))
       USE_HASH(@"SEL$FE336D0E" "opt"."pullup2"@"SEL$2")
       FULL(@"SEL$FE336D0E" "opt"."pullup1"@"SEL$1")
@@ -2357,14 +1915,6 @@ Outline Data:
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
       MERGE(@"SEL$2" > "SEL$E5385516")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.pullup1"@"SEL$1" "opt.pullup2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.pullup2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.pullup2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."pullup2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -2391,7 +1941,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$FE336D0E" ("opt"."pullup1"@"SEL$1" "opt"."pullup2"@"SEL$2"))
       USE_HASH(@"SEL$FE336D0E" "opt"."pullup2"@"SEL$2")
       FULL(@"SEL$FE336D0E" "opt"."pullup1"@"SEL$1")
@@ -2399,14 +1948,6 @@ Outline Data:
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
       MERGE(@"SEL$2" > "SEL$E5385516")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.pullup1"@"SEL$1" "opt.pullup2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.pullup2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.pullup2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."pullup2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -2433,7 +1974,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$FE336D0E" ("opt"."pullup2"@"SEL$2" "opt"."pullup1"@"SEL$1"))
       USE_HASH(@"SEL$FE336D0E" "opt"."pullup1"@"SEL$1")
       FULL(@"SEL$FE336D0E" "opt"."pullup2"@"SEL$2")
@@ -2441,14 +1981,6 @@ Outline Data:
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
       MERGE(@"SEL$2" > "SEL$E5385516")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.pullup2"@"SEL$1" "opt.pullup1"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.pullup1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.pullup1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."pullup2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -2475,7 +2007,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$FE336D0E" ("opt"."pullup2"@"SEL$2" "opt"."pullup1"@"SEL$1"))
       USE_HASH(@"SEL$FE336D0E" "opt"."pullup1"@"SEL$1")
       FULL(@"SEL$FE336D0E" "opt"."pullup2"@"SEL$2")
@@ -2483,14 +2014,6 @@ Outline Data:
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
       MERGE(@"SEL$2" > "SEL$E5385516")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.pullup2"@"SEL$1" "opt.pullup1"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.pullup1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.pullup1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."pullup2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -2517,7 +2040,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$59F24E97" ("opt"."pullup1"@"SEL$1" "opt"."pullup2"@"SEL$2"))
       USE_HASH(@"SEL$59F24E97" "opt"."pullup2"@"SEL$2")
       FULL(@"SEL$59F24E97" "opt"."pullup1"@"SEL$1")
@@ -2526,14 +2048,6 @@ Outline Data:
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$F1AC7F5D" "VIEW1")
       MERGE(@"SEL$2" > "SEL$4E2CC640")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.pullup1"@"SEL$1" "opt.pullup2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.pullup2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.pullup2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."pullup2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -2560,27 +2074,13 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
-<<<<<<< HEAD
       LEADING(@"SEL$612EAAC9" ("opt"."pullup2"@"SEL$2" "opt"."pullup1"@"SEL$1"))
       USE_HASH(@"SEL$612EAAC9" "opt"."pullup1"@"SEL$1")
       INDEX(@"SEL$612EAAC9" "opt"."pullup2"@"SEL$2" "uniq")
-=======
-      LEADING(@"SEL$612EAAC9" ("opt"."pullup1"@"SEL$1" "opt"."pullup2"@"SEL$2"))
-      USE_HASH(@"SEL$612EAAC9" "opt"."pullup2"@"SEL$2")
->>>>>>> refine idnex scan cost
       FULL(@"SEL$612EAAC9" "opt"."pullup1"@"SEL$1")
       INDEX(@"SEL$612EAAC9" "opt"."pullup2"@"SEL$2" "uniq")
       UNNEST(@"SEL$2")
       MERGE(@"SEL$2" > "SEL$6FCAE2AA")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.pullup1"@"SEL$1" "opt.pullup2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.pullup2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.pullup2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
-      INDEX(@"SEL$1" "opt"."pullup2"@"SEL$1" "uniq")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -2607,21 +2107,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$612EAAC9" ("opt"."pullup1"@"SEL$1" "opt"."pullup2"@"SEL$2"))
       USE_HASH(@"SEL$612EAAC9" "opt"."pullup2"@"SEL$2")
       FULL(@"SEL$612EAAC9" "opt"."pullup1"@"SEL$1")
       FULL(@"SEL$612EAAC9" "opt"."pullup2"@"SEL$2")
       UNNEST(@"SEL$2")
       MERGE(@"SEL$2" > "SEL$6FCAE2AA")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.pullup1"@"SEL$1" "opt.pullup2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.pullup2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.pullup2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."pullup2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -2651,20 +2142,11 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$6FCAE2AA" ("VIEW1"@"SEL$1" "opt"."pullup1"@"SEL$1"))
       USE_HASH(@"SEL$6FCAE2AA" "opt"."pullup1"@"SEL$1")
       FULL(@"SEL$2" "opt"."pullup2"@"SEL$2")
       FULL(@"SEL$6FCAE2AA" "opt"."pullup1"@"SEL$1")
       UNNEST(@"SEL$2")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("VIEW1"@"SEL$1" "opt.pullup1"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.pullup1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.pullup1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$2" "opt"."pullup2"@"SEL$2")
-      FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -2694,20 +2176,11 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$6FCAE2AA" ("VIEW1"@"SEL$1" "opt"."pullup1"@"SEL$1"))
       USE_HASH(@"SEL$6FCAE2AA" "opt"."pullup1"@"SEL$1")
       FULL(@"SEL$2" "opt"."pullup2"@"SEL$2")
       FULL(@"SEL$6FCAE2AA" "opt"."pullup1"@"SEL$1")
       UNNEST(@"SEL$2")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("VIEW1"@"SEL$1" "opt.pullup1"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.pullup1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.pullup1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$2" "opt"."pullup2"@"SEL$2")
-      FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -2734,28 +2207,14 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
-<<<<<<< HEAD
       LEADING(@"SEL$CA3A399F" ("opt"."pullup2"@"SEL$2" "opt"."pullup1"@"SEL$1"))
       USE_HASH(@"SEL$CA3A399F" "opt"."pullup1"@"SEL$1")
       INDEX(@"SEL$CA3A399F" "opt"."pullup2"@"SEL$2" "uniq")
-=======
-      LEADING(@"SEL$CA3A399F" ("opt"."pullup1"@"SEL$1" "opt"."pullup2"@"SEL$2"))
-      USE_HASH(@"SEL$CA3A399F" "opt"."pullup2"@"SEL$2")
->>>>>>> refine idnex scan cost
       FULL(@"SEL$CA3A399F" "opt"."pullup1"@"SEL$1")
       INDEX(@"SEL$CA3A399F" "opt"."pullup2"@"SEL$2" "uniq")
       SIMPLIFY_ORDER_BY(@"SEL$1")
       UNNEST(@"SEL$2")
       MERGE(@"SEL$2" > "SEL$F1AC7F5D")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.pullup1"@"SEL$1" "opt.pullup2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.pullup2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.pullup2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
-      INDEX(@"SEL$1" "opt"."pullup2"@"SEL$1" "uniq")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -2788,7 +2247,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$E5385516" ("VIEW1"@"SEL$1" "opt"."pullup1"@"SEL$1"))
       USE_HASH(@"SEL$E5385516" "opt"."pullup1"@"SEL$1")
       USE_HASH_DISTINCT(@"SEL$2")
@@ -2796,14 +2254,6 @@ Outline Data:
       FULL(@"SEL$E5385516" "opt"."pullup1"@"SEL$1")
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("VIEW1"@"SEL$1" "opt.pullup1"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.pullup1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.pullup1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$2" "opt"."pullup2"@"SEL$2")
-      FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -2838,21 +2288,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$E5385516" ("VIEW1"@"SEL$1" "opt"."pullup1"@"SEL$1"))
       USE_HASH(@"SEL$E5385516" "opt"."pullup1"@"SEL$1")
       FULL(@"SEL$2" "opt"."pullup2"@"SEL$2")
       FULL(@"SEL$E5385516" "opt"."pullup1"@"SEL$1")
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("VIEW1"@"SEL$1" "opt.pullup1"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.pullup1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.pullup1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$2" "opt"."pullup2"@"SEL$2")
-      FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -2879,7 +2320,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$26FED1F3" ("opt"."pullup1"@"SEL$1" "opt"."pullup2"@"SEL$2"))
       USE_HASH(@"SEL$26FED1F3" "opt"."pullup2"@"SEL$2")
       FULL(@"SEL$26FED1F3" "opt"."pullup1"@"SEL$1")
@@ -2887,14 +2327,6 @@ Outline Data:
       SIMPLIFY_SUBQUERY(@"SEL$1")
       UNNEST(@"SEL$2")
       MERGE(@"SEL$2" > "SEL$048AAAB5")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.pullup1"@"SEL$1" "opt.pullup2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.pullup2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.pullup2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."pullup2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -2925,21 +2357,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$E5385516" ("VIEW1"@"SEL$1" "opt"."pullup1"@"SEL$1"))
       USE_HASH(@"SEL$E5385516" "opt"."pullup1"@"SEL$1")
       FULL(@"SEL$2" "opt"."pullup2"@"SEL$2")
       FULL(@"SEL$E5385516" "opt"."pullup1"@"SEL$1")
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("VIEW1"@"SEL$1" "opt.pullup1"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.pullup1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.pullup1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$2" "opt"."pullup2"@"SEL$2")
-      FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -2976,14 +2399,9 @@ Outline Data:
       USE_HASH(@"SEL$E5385516" "opt"."pullup1"@"SEL$1")
       USE_HASH_AGGREGATION(@"SEL$2")
       FULL(@"SEL$2" "opt"."pullup2"@"SEL$2")
-<<<<<<< HEAD
       FULL(@"SEL$E5385516" "opt"."pullup1"@"SEL$1")
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -3018,22 +2436,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$41514E58" ("opt"."pullup1"@"SEL$1" "VIEW1"@"SEL$1"))
       USE_HASH(@"SEL$41514E58" "VIEW1"@"SEL$1")
       FULL(@"SEL$41514E58" "opt"."pullup1"@"SEL$1")
       INDEX(@"SEL$2" "opt"."pullup2"@"SEL$2" "uniq")
       INDEX(@"SEL$3" "opt"."pullup3"@"SEL$3" "uniq")
       UNNEST(@"SET$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.pullup1"@"SEL$1" "VIEW1"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("VIEW1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("VIEW1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
-      INDEX(@"SEL$2" "opt"."pullup2"@"SEL$2" "uniq")
-      INDEX(@"SEL$3" "opt"."pullup3"@"SEL$3" "uniq")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -3066,7 +2474,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$AA0F5665" ("opt"."pullup1"@"SEL$1" "VIEW1"@"SEL$1"))
       USE_NL(@"SEL$AA0F5665" "VIEW1"@"SEL$1")
       USE_NL_MATERIALIZATION(@"SEL$AA0F5665" "VIEW1"@"SEL$1")
@@ -3075,15 +2482,6 @@ Outline Data:
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
       PROJECT_PRUNE(@"SEL$E5385516")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.pullup1"@"SEL$1" "VIEW1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("VIEW1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("VIEW1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("VIEW1"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."pullup2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -3116,7 +2514,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$94A25D82" ("opt"."pullup1"@"SEL$1" "VIEW2"@"SEL$A7362098"))
       USE_NL(@"SEL$94A25D82" "VIEW2"@"SEL$A7362098")
       USE_NL_MATERIALIZATION(@"SEL$94A25D82" "VIEW2"@"SEL$A7362098")
@@ -3127,15 +2524,6 @@ Outline Data:
       MERGE(@"SEL$2" > "SEL$4CF4068D")
       SEMI_TO_INNER(@"SEL$A7362098" "opt"."pullup2")
       PROJECT_PRUNE(@"SEL$19C4775B")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.pullup1"@"SEL$1" "VIEW1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("VIEW1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("VIEW1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("VIEW1"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."pullup2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -3162,21 +2550,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$612EAAC9" ("opt"."pullup1"@"SEL$1" "opt"."pullup2"@"SEL$2"))
       USE_HASH(@"SEL$612EAAC9" "opt"."pullup2"@"SEL$2")
       FULL(@"SEL$612EAAC9" "opt"."pullup1"@"SEL$1")
       INDEX(@"SEL$612EAAC9" "opt"."pullup2"@"SEL$2" "uniq")
       UNNEST(@"SEL$2")
       MERGE(@"SEL$2" > "SEL$6FCAE2AA")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.pullup1"@"SEL$1" "opt.pullup2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.pullup2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.pullup2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
-      INDEX(@"SEL$1" "opt"."pullup2"@"SEL$1" "uniq")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -3203,21 +2582,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$612EAAC9" ("opt"."pullup1"@"SEL$1" "opt"."pullup2"@"SEL$2"))
       USE_HASH(@"SEL$612EAAC9" "opt"."pullup2"@"SEL$2")
       FULL(@"SEL$612EAAC9" "opt"."pullup1"@"SEL$1")
       FULL(@"SEL$612EAAC9" "opt"."pullup2"@"SEL$2")
       UNNEST(@"SEL$2")
       MERGE(@"SEL$2" > "SEL$6FCAE2AA")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.pullup1"@"SEL$1" "opt.pullup2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.pullup2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.pullup2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."pullup2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -3257,7 +2627,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$6FCAE2AA" ("opt"."pullup1"@"SEL$1" "VIEW1"@"SEL$1"))
       USE_MERGE(@"SEL$6FCAE2AA" "VIEW1"@"SEL$1")
       FULL(@"SEL$6FCAE2AA" "opt"."pullup1"@"SEL$1")
@@ -3267,19 +2636,6 @@ Outline Data:
       FULL(@"SEL$2" "opt"."pullup2"@"SEL$2")
       FULL(@"SEL$2" "opt"."pullup3"@"SEL$2")
       UNNEST(@"SEL$2")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.pullup1"@"SEL$1" "VIEW1"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("VIEW1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("VIEW1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
-      LEADING(@"SEL$2" ("opt.pullup2"@"SEL$2" "opt.pullup3"@"SEL$2" ))
-      USE_NL(@"SEL$2" ("opt.pullup3"@"SEL$2" ))
-      PQ_DISTRIBUTE(@"SEL$2" ("opt.pullup3"@"SEL$2" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$2" ("opt.pullup3"@"SEL$2" ))
-      FULL(@"SEL$2" "opt"."pullup2"@"SEL$2")
-      INDEX(@"SEL$2" "opt"."pullup3"@"SEL$2" "uniq")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -3310,7 +2666,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$9A306378" ("VIEW1"@"SEL$1" "opt"."pullup1"@"SEL$1"))
       USE_HASH(@"SEL$9A306378" "opt"."pullup1"@"SEL$1")
       FULL(@"SEL$4BA056C1" "opt"."pullup2"@"SEL$3")
@@ -3319,14 +2674,6 @@ Outline Data:
       UNNEST(@"SEL$C0C14ABD")
       SEMI_TO_INNER(@"SEL$091516ED" "VIEW1")
       MERGE(@"SEL$3" < "SEL$C0C14ABD")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("VIEW1"@"SEL$1" "opt.pullup1"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.pullup1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.pullup1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$3" "opt"."pullup2"@"SEL$3")
-      FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -3362,7 +2709,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$6FCAE2AA" ("opt"."pullup1"@"SEL$1" "VIEW1"@"SEL$1"))
       USE_HASH(@"SEL$6FCAE2AA" "VIEW1"@"SEL$1")
       FULL(@"SEL$6FCAE2AA" "opt"."pullup1"@"SEL$1")
@@ -3372,18 +2718,6 @@ Outline Data:
       FULL(@"SEL$9DC52427" "opt"."pullup2"@"SEL$2")
       UNNEST(@"SEL$2")
       OUTER_TO_INNER(@"SEL$2")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.pullup1"@"SEL$1" "VIEW1"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("VIEW1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("VIEW1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
-      LEADING(@"SEL$2" ("opt.pullup3"@"SEL$2" "opt.pullup2"@"SEL$2" ))
-      USE_HASH(@"SEL$2" ("opt.pullup2"@"SEL$2" ))
-      PQ_DISTRIBUTE(@"SEL$2" ("opt.pullup2"@"SEL$2" ) LOCAL LOCAL)
-      FULL(@"SEL$2" "opt"."pullup3"@"SEL$2")
-      FULL(@"SEL$2" "opt"."pullup2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -3410,7 +2744,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$26FED1F3" ("opt"."pullup1"@"SEL$1" "opt"."pullup2"@"SEL$2"))
       USE_HASH(@"SEL$26FED1F3" "opt"."pullup2"@"SEL$2")
       FULL(@"SEL$26FED1F3" "opt"."pullup1"@"SEL$1")
@@ -3418,14 +2751,6 @@ Outline Data:
       SIMPLIFY_SUBQUERY(@"SEL$1")
       UNNEST(@"SEL$2")
       MERGE(@"SEL$2" > "SEL$048AAAB5")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.pullup1"@"SEL$1" "opt.pullup2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.pullup2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.pullup2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."pullup2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -3454,21 +2779,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$612EAAC9" ("opt"."pullup2"@"SEL$2" "opt"."pullup1"@"SEL$1"))
       USE_HASH(@"SEL$612EAAC9" "opt"."pullup1"@"SEL$1")
       FULL(@"SEL$612EAAC9" "opt"."pullup2"@"SEL$2")
       FULL(@"SEL$612EAAC9" "opt"."pullup1"@"SEL$1")
       UNNEST(@"SEL$2")
       MERGE(@"SEL$2" > "SEL$6FCAE2AA")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.pullup2"@"SEL$1" "opt.pullup1"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.pullup1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.pullup1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."pullup2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -3498,7 +2814,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       USE_HASH_AGGREGATION(@"SEL$612EAAC9")
       LEADING(@"SEL$612EAAC9" ("opt"."pullup1"@"SEL$1" "opt"."pullup2"@"SEL$2"))
       USE_HASH(@"SEL$612EAAC9" "opt"."pullup2"@"SEL$2")
@@ -3506,15 +2821,6 @@ Outline Data:
       FULL(@"SEL$612EAAC9" "opt"."pullup2"@"SEL$2")
       UNNEST(@"SEL$2")
       MERGE(@"SEL$2" > "SEL$6FCAE2AA")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      USE_HASH_AGGREGATION(@"SEL$1")
-      LEADING(@"SEL$1" ("opt.pullup1"@"SEL$1" "opt.pullup2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.pullup2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.pullup2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."pullup1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."pullup2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -3535,7 +2841,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$9C3A6326" "opt"."pullup2"@"SEL$1")
       SIMPLIFY_GROUP_BY(@"SEL$2")
       SIMPLIFY_ORDER_BY(@"SEL$1")
@@ -3543,10 +2848,6 @@ Outline Data:
       SEMI_TO_INNER(@"SEL$1D3338C5" "VIEW1")
       MERGE(@"SEL$B15E051B" > "SEL$AFFE0C9F")
       ELIMINATE_JOIN(@"SEL$C56738EE" "opt"."pullup2"@"SEL$C56738EE")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."pullup2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -3587,7 +2888,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$7ACE2E3D" ("opt"."t2"@"SEL$4" ("opt"."t1"@"SEL$2" "VIEW2"@"SEL$CFEA49FE")))
       USE_MERGE(@"SEL$7ACE2E3D" ("opt"."t1"@"SEL$2" "VIEW2"@"SEL$CFEA49FE"))
       FULL(@"SEL$7ACE2E3D" "opt"."t2"@"SEL$4")
@@ -3601,19 +2901,6 @@ Outline Data:
       UNNEST(@"SEL$3")
       SEMI_TO_INNER(@"SEL$B236E011" "VIEW1")
       MERGE(@"SEL$4" > "SEL$EACAC17B")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" ("opt.t1"@"SEL$1" "VIEW2"@"SEL$1" )))
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" "VIEW2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" "VIEW2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      USE_NL(@"SEL$1" ("VIEW2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("VIEW2"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("VIEW2"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      USE_HASH_AGGREGATION(@"SEL$3")
-      FULL(@"SEL$3" "opt"."t2"@"SEL$3")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -3654,7 +2941,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$7ACE2E3D" ("opt"."t2"@"SEL$4" ("opt"."t1"@"SEL$2" "VIEW2"@"SEL$CFEA49FE")))
       USE_MERGE(@"SEL$7ACE2E3D" ("opt"."t1"@"SEL$2" "VIEW2"@"SEL$CFEA49FE"))
       FULL(@"SEL$7ACE2E3D" "opt"."t2"@"SEL$4")
@@ -3668,19 +2954,6 @@ Outline Data:
       UNNEST(@"SEL$3")
       SEMI_TO_INNER(@"SEL$B236E011" "VIEW1")
       MERGE(@"SEL$4" > "SEL$EACAC17B")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" ("opt.t1"@"SEL$1" "VIEW2"@"SEL$1" )))
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" "VIEW2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" "VIEW2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      USE_NL(@"SEL$1" ("VIEW2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("VIEW2"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("VIEW2"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      USE_HASH_AGGREGATION(@"SEL$3")
-      FULL(@"SEL$3" "opt"."t2"@"SEL$3")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -3715,7 +2988,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$CFEA49FE" (("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1") "opt"."t3"@"SEL$2"))
       USE_NL(@"SEL$CFEA49FE" "opt"."t3"@"SEL$2")
       USE_NL_MATERIALIZATION(@"SEL$CFEA49FE" "opt"."t3"@"SEL$2")
@@ -3724,18 +2996,6 @@ Outline Data:
       FULL(@"SEL$CFEA49FE" "opt"."t1"@"SEL$1")
       FULL(@"SEL$CFEA49FE" "opt"."t3"@"SEL$2")
       MERGE(@"SEL$2" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" (("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" )"opt.t3"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t3"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -3770,7 +3030,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" (("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1") "opt"."t3"@"SEL$1"))
       USE_NL(@"SEL$1" "opt"."t3"@"SEL$1")
       USE_NL_MATERIALIZATION(@"SEL$1" "opt"."t3"@"SEL$1")
@@ -3778,18 +3037,6 @@ Outline Data:
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" (("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" )"opt.t3"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t3"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -3830,7 +3077,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$CFEA49FE" (("opt"."t3"@"SEL$1" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1")) "opt"."t3"@"SEL$2"))
       USE_NL(@"SEL$CFEA49FE" "opt"."t3"@"SEL$2")
       USE_NL_MATERIALIZATION(@"SEL$CFEA49FE" "opt"."t3"@"SEL$2")
@@ -3841,21 +3087,6 @@ Outline Data:
       FULL(@"SEL$CFEA49FE" "opt"."t1"@"SEL$1")
       FULL(@"SEL$CFEA49FE" "opt"."t3"@"SEL$2")
       MERGE(@"SEL$2" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" (("opt.t3"@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))"opt.t3"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t3"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -3896,7 +3127,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" (("opt"."t3"@"SEL$1" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1")) "opt"."v3"@"SEL$1"))
       USE_NL(@"SEL$1" "opt"."v3"@"SEL$1")
       USE_NL_MATERIALIZATION(@"SEL$1" "opt"."v3"@"SEL$1")
@@ -3906,21 +3136,6 @@ Outline Data:
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."v3"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" (("opt.t3"@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))"opt.v3"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.v3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.v3"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.v3"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."v3"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -3981,7 +3196,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$8BBEF027" ((("opt"."t5"@"SEL$1" ((("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1") "opt"."t3"@"SEL$1") "opt"."t4"@"SEL$1")) "opt"."t3"@"SEL$2") "opt"."t2"@"SEL$3"))
       USE_NL(@"SEL$8BBEF027" "opt"."t2"@"SEL$3")
       USE_NL_MATERIALIZATION(@"SEL$8BBEF027" "opt"."t2"@"SEL$3")
@@ -4001,31 +3215,6 @@ Outline Data:
       MERGE(@"SEL$2" > "SEL$1")
       MERGE(@"SEL$3" > "SEL$1")
       OUTER_TO_INNER(@"SEL$56956D83")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" (((((("opt.t5"@"SEL$1" "opt.t1"@"SEL$1" )"opt.t2"@"SEL$1" )"opt.t3"@"SEL$1" )"opt.t4"@"SEL$1" )"opt.t3"@"SEL$1" )"opt.t2"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t3"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t4"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t4"@"SEL$1" ) LOCAL LOCAL)
-      USE_MERGE(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t3"@"SEL$1" ) LOCAL LOCAL)
-      USE_MERGE(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -4078,7 +3267,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$C6D21C0F" (("opt"."t3"@"SEL$1" ("opt"."t5"@"SEL$1" ("opt"."t4"@"SEL$1" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1")))) "opt"."v3"@"SEL$1"))
       USE_NL(@"SEL$C6D21C0F" "opt"."v3"@"SEL$1")
       USE_NL_MATERIALIZATION(@"SEL$C6D21C0F" "opt"."v3"@"SEL$1")
@@ -4093,27 +3281,6 @@ Outline Data:
       FULL(@"SEL$C6D21C0F" "opt"."t1"@"SEL$1")
       FULL(@"SEL$C6D21C0F" "opt"."v3"@"SEL$1")
       OUTER_TO_INNER(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" (("opt.t3"@"SEL$1" ("opt.t5"@"SEL$1" ("opt.t4"@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))))"opt.v3"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.v3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.v3"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.v3"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t5"@"SEL$1" "opt.t4"@"SEL$1" "opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t5"@"SEL$1" "opt.t4"@"SEL$1" "opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      USE_HASH(@"SEL$1" ("opt.t4"@"SEL$1" "opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t4"@"SEL$1" "opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."v3"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -4162,7 +3329,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$8BBEF027" (((("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1") "opt"."t3"@"SEL$1") "opt"."t3"@"SEL$2") "opt"."t2"@"SEL$3"))
       USE_NL(@"SEL$8BBEF027" "opt"."t2"@"SEL$3")
       USE_NL_MATERIALIZATION(@"SEL$8BBEF027" "opt"."t2"@"SEL$3")
@@ -4178,25 +3344,6 @@ Outline Data:
       MERGE(@"SEL$2" > "SEL$1")
       MERGE(@"SEL$3" > "SEL$1")
       OUTER_TO_INNER(@"SEL$56956D83")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" (((("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" )"opt.t3"@"SEL$1" )"opt.t3"@"SEL$1" )"opt.t2"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t3"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t3"@"SEL$1" ) LOCAL LOCAL)
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -4245,7 +3392,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$C6D21C0F" (((("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1") "opt"."t3"@"SEL$1") "opt"."v3"@"SEL$1") "opt"."v2"@"SEL$1"))
       USE_NL(@"SEL$C6D21C0F" "opt"."v2"@"SEL$1")
       USE_NL_MATERIALIZATION(@"SEL$C6D21C0F" "opt"."v2"@"SEL$1")
@@ -4259,25 +3405,6 @@ Outline Data:
       FULL(@"SEL$C6D21C0F" "opt"."v3"@"SEL$1")
       FULL(@"SEL$C6D21C0F" "opt"."v2"@"SEL$1")
       OUTER_TO_INNER(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" (((("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" )"opt.t3"@"SEL$1" )"opt.v3"@"SEL$1" )"opt.v2"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.v2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.v2"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.v2"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.v3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.v3"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.v3"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t3"@"SEL$1" ) LOCAL LOCAL)
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      FULL(@"SEL$1" "opt"."v3"@"SEL$1")
-      FULL(@"SEL$1" "opt"."v2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -4338,7 +3465,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$8BBEF027" ((("opt"."t5"@"SEL$1" ((("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1") "opt"."t3"@"SEL$1") "opt"."t4"@"SEL$1")) "opt"."t3"@"SEL$2") "opt"."t2"@"SEL$3"))
       USE_NL(@"SEL$8BBEF027" "opt"."t2"@"SEL$3")
       USE_NL_MATERIALIZATION(@"SEL$8BBEF027" "opt"."t2"@"SEL$3")
@@ -4358,31 +3484,6 @@ Outline Data:
       MERGE(@"SEL$2" > "SEL$1")
       MERGE(@"SEL$3" > "SEL$1")
       OUTER_TO_INNER(@"SEL$56956D83")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" (((((("opt.t5"@"SEL$1" "opt.t1"@"SEL$1" )"opt.t2"@"SEL$1" )"opt.t3"@"SEL$1" )"opt.t4"@"SEL$1" )"opt.t3"@"SEL$1" )"opt.t2"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t3"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t4"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t4"@"SEL$1" ) LOCAL LOCAL)
-      USE_MERGE(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t3"@"SEL$1" ) LOCAL LOCAL)
-      USE_MERGE(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -4431,7 +3532,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$C6D21C0F" (((("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1") "opt"."t3"@"SEL$1") "opt"."v3"@"SEL$1") "opt"."v2"@"SEL$1"))
       USE_NL(@"SEL$C6D21C0F" "opt"."v2"@"SEL$1")
       USE_NL_MATERIALIZATION(@"SEL$C6D21C0F" "opt"."v2"@"SEL$1")
@@ -4445,25 +3545,6 @@ Outline Data:
       FULL(@"SEL$C6D21C0F" "opt"."v3"@"SEL$1")
       FULL(@"SEL$C6D21C0F" "opt"."v2"@"SEL$1")
       OUTER_TO_INNER(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" (((("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" )"opt.t3"@"SEL$1" )"opt.v3"@"SEL$1" )"opt.v2"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.v2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.v2"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.v2"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.v3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.v3"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.v3"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t3"@"SEL$1" ) LOCAL LOCAL)
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      FULL(@"SEL$1" "opt"."v3"@"SEL$1")
-      FULL(@"SEL$1" "opt"."v2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -4504,7 +3585,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$AB180AFC" (("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$1") ("opt"."t2"@"SEL$2" "opt"."t3"@"SEL$2")))
       USE_NL(@"SEL$AB180AFC" ("opt"."t2"@"SEL$2" "opt"."t3"@"SEL$2"))
       USE_NL_MATERIALIZATION(@"SEL$AB180AFC" ("opt"."t2"@"SEL$2" "opt"."t3"@"SEL$2"))
@@ -4517,21 +3597,6 @@ Outline Data:
       PROJECT_PRUNE(@"SEL$1")
       MERGE(@"SEL$2" > "SEL$9BD67295")
       OUTER_TO_INNER(@"SEL$17829019")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" (("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" )("opt.t2"@"SEL$1" "opt.t3"@"SEL$1" )))
-      USE_NL(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t3"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t3"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      USE_MERGE(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t3"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -4564,24 +3629,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" (("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$1") "opt"."t3"@"SEL$1"))
       USE_MERGE(@"SEL$1" "opt"."t3"@"SEL$1")
       USE_MERGE(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" (("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" )"opt.t3"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t3"@"SEL$1" ) LOCAL LOCAL)
-      USE_MERGE(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -4608,21 +3661,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$A7A036C9" ("opt"."t1"@"SEL$2" "opt"."t2"@"SEL$2"))
       USE_MERGE(@"SEL$A7A036C9" "opt"."t2"@"SEL$2")
       FULL(@"SEL$A7A036C9" "opt"."t1"@"SEL$2")
       FULL(@"SEL$A7A036C9" "opt"."t2"@"SEL$2")
       MERGE(@"SEL$2" > "SEL$1")
       OUTER_TO_INNER(@"SEL$CFEA49FE")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -4649,19 +3693,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$1"))
       USE_MERGE(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -4685,15 +3720,9 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       USE_HASH_AGGREGATION(@"SEL$F53088DF")
       FULL(@"SEL$F53088DF" "opt"."t1"@"SEL$2")
       MERGE(@"SEL$2" < "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      USE_HASH_AGGREGATION(@"SEL$2")
-      FULL(@"SEL$2" "opt"."t1"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -4728,7 +3757,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$A7A036C9" (("opt"."t2"@"SEL$2" "opt"."t3"@"SEL$2") "opt"."t1"@"SEL$2"))
       USE_NL(@"SEL$A7A036C9" "opt"."t1"@"SEL$2")
       USE_NL_MATERIALIZATION(@"SEL$A7A036C9" "opt"."t1"@"SEL$2")
@@ -4738,18 +3766,6 @@ Outline Data:
       FULL(@"SEL$A7A036C9" "opt"."t1"@"SEL$2")
       MERGE(@"SEL$2" > "SEL$1")
       OUTER_TO_INNER(@"SEL$CFEA49FE")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" (("opt.t2"@"SEL$1" "opt.t3"@"SEL$1" )"opt.t1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t3"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -4784,7 +3800,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$C6D21C0F" (("opt"."t2"@"SEL$1" "opt"."t3"@"SEL$1") "opt"."t1"@"SEL$1"))
       USE_NL(@"SEL$C6D21C0F" "opt"."t1"@"SEL$1")
       USE_NL_MATERIALIZATION(@"SEL$C6D21C0F" "opt"."t1"@"SEL$1")
@@ -4793,18 +3808,6 @@ Outline Data:
       FULL(@"SEL$C6D21C0F" "opt"."t3"@"SEL$1")
       FULL(@"SEL$C6D21C0F" "opt"."t1"@"SEL$1")
       OUTER_TO_INNER(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" (("opt.t2"@"SEL$1" "opt.t3"@"SEL$1" )"opt.t1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t3"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -4831,20 +3834,11 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$CFEA49FE" ("opt"."t2"@"SEL$2" "opt"."t1"@"SEL$1"))
       USE_MERGE(@"SEL$CFEA49FE" "opt"."t1"@"SEL$1")
       FULL(@"SEL$CFEA49FE" "opt"."t2"@"SEL$2")
       FULL(@"SEL$CFEA49FE" "opt"."t1"@"SEL$1")
       MERGE(@"SEL$2" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -4871,21 +3865,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$A7A036C9" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$2"))
       USE_HASH(@"SEL$A7A036C9" "opt"."t2"@"SEL$2")
       FULL(@"SEL$A7A036C9" "opt"."t1"@"SEL$1")
       FULL(@"SEL$A7A036C9" "opt"."t2"@"SEL$2")
       MERGE(@"SEL$2" > "SEL$1")
       OUTER_TO_INNER(@"SEL$CFEA49FE")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -4912,21 +3897,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$A7A036C9" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$2"))
       USE_HASH(@"SEL$A7A036C9" "opt"."t2"@"SEL$2")
       FULL(@"SEL$A7A036C9" "opt"."t1"@"SEL$1")
       FULL(@"SEL$A7A036C9" "opt"."t2"@"SEL$2")
       MERGE(@"SEL$2" > "SEL$1")
       OUTER_TO_INNER(@"SEL$CFEA49FE")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -4948,10 +3924,6 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."v"@"SEL$1")
-<<<<<<< HEAD
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -4972,13 +3944,8 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$CFEA49FE" "opt"."t1"@"SEL$2")
       MERGE(@"SEL$2" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -5005,21 +3972,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$A7A036C9" ("opt"."t3"@"SEL$1" "opt"."t1"@"SEL$2"))
       USE_MERGE(@"SEL$A7A036C9" "opt"."t1"@"SEL$2")
       FULL(@"SEL$A7A036C9" "opt"."t3"@"SEL$1")
       FULL(@"SEL$A7A036C9" "opt"."t1"@"SEL$2")
       MERGE(@"SEL$2" > "SEL$1")
       OUTER_TO_INNER(@"SEL$CFEA49FE")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t3"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -5052,7 +4010,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$A7A036C9" (("opt"."t2"@"SEL$2" "opt"."t3"@"SEL$1") "opt"."t1"@"SEL$1"))
       USE_MERGE(@"SEL$A7A036C9" "opt"."t1"@"SEL$1")
       USE_MERGE(@"SEL$A7A036C9" "opt"."t3"@"SEL$1")
@@ -5061,17 +4018,6 @@ Outline Data:
       FULL(@"SEL$A7A036C9" "opt"."t1"@"SEL$1")
       MERGE(@"SEL$2" > "SEL$1")
       OUTER_TO_INNER(@"SEL$CFEA49FE")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" (("opt.t2"@"SEL$1" "opt.t3"@"SEL$1" )"opt.t1"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      USE_MERGE(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t3"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -5104,24 +4050,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" (("opt"."t2"@"SEL$1" "opt"."t3"@"SEL$1") "opt"."t1"@"SEL$1"))
       USE_MERGE(@"SEL$1" "opt"."t1"@"SEL$1")
       USE_MERGE(@"SEL$1" "opt"."t3"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t3"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" ("opt.t3"@"SEL$1" "opt.t1"@"SEL$1" )))
-      USE_MERGE(@"SEL$1" ("opt.t3"@"SEL$1" "opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t3"@"SEL$1" "opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -5148,21 +4082,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$A7A036C9" ("opt"."t2"@"SEL$2" "opt"."t1"@"SEL$1"))
       USE_MERGE(@"SEL$A7A036C9" "opt"."t1"@"SEL$1")
       FULL(@"SEL$A7A036C9" "opt"."t2"@"SEL$2")
       FULL(@"SEL$A7A036C9" "opt"."t1"@"SEL$1")
       MERGE(@"SEL$2" > "SEL$1")
       OUTER_TO_INNER(@"SEL$CFEA49FE")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -5189,19 +4114,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1"))
       USE_MERGE(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -5234,7 +4150,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$C6D21C0F" ("opt"."t3"@"SEL$1" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1")))
       USE_HASH(@"SEL$C6D21C0F" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$1"))
       FULL(@"SEL$C6D21C0F" "opt"."t3"@"SEL$1")
@@ -5242,17 +4157,6 @@ Outline Data:
       FULL(@"SEL$C6D21C0F" "opt"."t2"@"SEL$1")
       FULL(@"SEL$C6D21C0F" "opt"."t1"@"SEL$1")
       OUTER_TO_INNER(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t3"@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" )))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -5279,20 +4183,11 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$C6D21C0F" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1"))
       USE_MERGE(@"SEL$C6D21C0F" "opt"."t1"@"SEL$1")
       FULL(@"SEL$C6D21C0F" "opt"."t2"@"SEL$1")
       FULL(@"SEL$C6D21C0F" "opt"."t1"@"SEL$1")
       OUTER_TO_INNER(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -5325,22 +4220,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$954C3366" ("VIEW1"@"SEL$CFEA49FE" "opt"."t1"@"SEL$2"))
       USE_NL(@"SEL$954C3366" "opt"."t1"@"SEL$2")
       FULL(@"SEL$3" "opt"."t2"@"SEL$3")
       FULL(@"SEL$954C3366" "opt"."t1"@"SEL$2")
       MERGE(@"SEL$2" > "SEL$1")
       UNNEST(@"SEL$3")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("VIEW1"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      NO_USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      FULL(@"SEL$3" "opt"."t2"@"SEL$3")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -5373,21 +4258,11 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$D91D0E3F" ("VIEW1"@"SEL$1" "opt"."t1"@"SEL$1"))
       USE_NL(@"SEL$D91D0E3F" "opt"."t1"@"SEL$1")
       FULL(@"SEL$2" "opt"."t2"@"SEL$2")
       FULL(@"SEL$D91D0E3F" "opt"."t1"@"SEL$1")
       UNNEST(@"SEL$2")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("VIEW1"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      NO_USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -5428,7 +4303,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$954C3366" ("opt"."t3"@"SEL$1" ("VIEW1"@"SEL$CFEA49FE" "opt"."t1"@"SEL$2")))
       USE_NL(@"SEL$954C3366" ("opt"."t1"@"SEL$2" "VIEW1"@"SEL$CFEA49FE"))
       USE_NL_MATERIALIZATION(@"SEL$954C3366" ("opt"."t1"@"SEL$2" "VIEW1"@"SEL$CFEA49FE"))
@@ -5438,19 +4312,6 @@ Outline Data:
       FULL(@"SEL$954C3366" "opt"."t1"@"SEL$2")
       MERGE(@"SEL$2" > "SEL$1")
       UNNEST(@"SEL$3")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t3"@"SEL$1" ("VIEW1"@"SEL$1" "opt.t1"@"SEL$1" )))
-      USE_NL(@"SEL$1" ("VIEW1"@"SEL$1" "opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("VIEW1"@"SEL$1" "opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("VIEW1"@"SEL$1" "opt.t1"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      NO_USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      FULL(@"SEL$3" "opt"."t2"@"SEL$3")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -5491,7 +4352,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$D91D0E3F" ("opt"."t3"@"SEL$1" ("VIEW1"@"SEL$1" "opt"."t1"@"SEL$1")))
       USE_NL(@"SEL$D91D0E3F" ("opt"."t1"@"SEL$1" "VIEW1"@"SEL$1"))
       USE_NL_MATERIALIZATION(@"SEL$D91D0E3F" ("opt"."t1"@"SEL$1" "VIEW1"@"SEL$1"))
@@ -5500,19 +4360,6 @@ Outline Data:
       FULL(@"SEL$2" "opt"."t2"@"SEL$2")
       FULL(@"SEL$D91D0E3F" "opt"."t1"@"SEL$1")
       UNNEST(@"SEL$2")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t3"@"SEL$1" ("VIEW1"@"SEL$1" "opt.t1"@"SEL$1" )))
-      USE_NL(@"SEL$1" ("VIEW1"@"SEL$1" "opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("VIEW1"@"SEL$1" "opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("VIEW1"@"SEL$1" "opt.t1"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      NO_USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -5553,7 +4400,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$5A05AF53" ("opt"."t3"@"SEL$1" ("VIEW1"@"SEL$A7A036C9" "opt"."t1"@"SEL$2")))
       USE_MERGE(@"SEL$5A05AF53" ("opt"."t1"@"SEL$2" "VIEW1"@"SEL$A7A036C9"))
       FULL(@"SEL$5A05AF53" "opt"."t3"@"SEL$1")
@@ -5563,18 +4409,6 @@ Outline Data:
       MERGE(@"SEL$2" > "SEL$1")
       OUTER_TO_INNER(@"SEL$CFEA49FE")
       UNNEST(@"SEL$3")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t3"@"SEL$1" ("VIEW1"@"SEL$1" "opt.t1"@"SEL$1" )))
-      USE_MERGE(@"SEL$1" ("VIEW1"@"SEL$1" "opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("VIEW1"@"SEL$1" "opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      NO_USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      FULL(@"SEL$3" "opt"."t2"@"SEL$3")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -5615,7 +4449,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$D91D0E3F" ("opt"."t3"@"SEL$1" ("VIEW1"@"SEL$1" "opt"."t1"@"SEL$1")))
       USE_NL(@"SEL$D91D0E3F" ("opt"."t1"@"SEL$1" "VIEW1"@"SEL$1"))
       USE_NL_MATERIALIZATION(@"SEL$D91D0E3F" ("opt"."t1"@"SEL$1" "VIEW1"@"SEL$1"))
@@ -5624,19 +4457,6 @@ Outline Data:
       FULL(@"SEL$2" "opt"."t2"@"SEL$2")
       FULL(@"SEL$D91D0E3F" "opt"."t1"@"SEL$1")
       UNNEST(@"SEL$2")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t3"@"SEL$1" ("VIEW1"@"SEL$1" "opt.t1"@"SEL$1" )))
-      USE_NL(@"SEL$1" ("VIEW1"@"SEL$1" "opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("VIEW1"@"SEL$1" "opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("VIEW1"@"SEL$1" "opt.t1"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      NO_USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -5663,7 +4483,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$C390A4A1" ("opt"."t1"@"SEL$2" "opt"."t2"@"SEL$3"))
       USE_MERGE(@"SEL$C390A4A1" "opt"."t2"@"SEL$3")
       FULL(@"SEL$C390A4A1" "opt"."t1"@"SEL$2")
@@ -5672,14 +4491,6 @@ Outline Data:
       UNNEST(@"SEL$3")
       SEMI_TO_INNER(@"SEL$239BDFF3" "VIEW1")
       MERGE(@"SEL$3" > "SEL$BA6DBD7D")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -5706,7 +4517,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$FE336D0E" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$2"))
       USE_MERGE(@"SEL$FE336D0E" "opt"."t2"@"SEL$2")
       FULL(@"SEL$FE336D0E" "opt"."t1"@"SEL$1")
@@ -5714,14 +4524,6 @@ Outline Data:
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
       MERGE(@"SEL$2" > "SEL$E5385516")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -5748,7 +4550,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$F01CC182" ("opt"."t1"@"SEL$2" "opt"."t2"@"SEL$4"))
       USE_MERGE(@"SEL$F01CC182" "opt"."t2"@"SEL$4")
       FULL(@"SEL$F01CC182" "opt"."t1"@"SEL$2")
@@ -5759,14 +4560,6 @@ Outline Data:
       SEMI_TO_INNER(@"SEL$B236E011" ("VIEW1" "VIEW2"))
       ELIMINATE_JOIN(@"SEL$E9DF76DF" "VIEW2"@"SEL$E9DF76DF")
       MERGE(@"SEL$4" > "SEL$760024B2")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -5793,7 +4586,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$FE336D0E" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$2"))
       USE_MERGE(@"SEL$FE336D0E" "opt"."t2"@"SEL$2")
       FULL(@"SEL$FE336D0E" "opt"."t1"@"SEL$1")
@@ -5801,14 +4593,6 @@ Outline Data:
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
       MERGE(@"SEL$2" > "SEL$E5385516")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -5836,16 +4620,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$2C137791" "opt"."t1"@"SEL$2")
       FULL(@"SEL$3" "opt"."t2"@"SEL$3")
       MERGE(@"SEL$2" > "SEL$1")
       SIMPLIFY_SUBQUERY(@"SEL$CFEA49FE")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$3" "opt"."t2"@"SEL$3")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -5873,15 +4651,9 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       FULL(@"SEL$2" "opt"."t2"@"SEL$2")
       SIMPLIFY_SUBQUERY(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -5908,7 +4680,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$F769838B" ("opt"."t1"@"SEL$2" "opt"."t2"@"SEL$3"))
       USE_NL(@"SEL$F769838B" "opt"."t2"@"SEL$3")
       FULL(@"SEL$F769838B" "opt"."t1"@"SEL$2")
@@ -5918,15 +4689,6 @@ Outline Data:
       SEMI_TO_INNER(@"SEL$239BDFF3" "VIEW1")
       REPLACE_CONST(@"SEL$3")
       MERGE(@"SEL$9404CA0D" > "SEL$BA6DBD7D")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      NO_USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -5953,7 +4715,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1AB260EC" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$2"))
       USE_NL(@"SEL$1AB260EC" "opt"."t2"@"SEL$2")
       FULL(@"SEL$1AB260EC" "opt"."t1"@"SEL$1")
@@ -5963,15 +4724,6 @@ Outline Data:
       SEMI_TO_INNER(@"SEL$D771FEF4" "VIEW1")
       PROJECT_PRUNE(@"SEL$22B124E6")
       MERGE(@"SEL$2" > "SEL$86196EE0")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      NO_USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -5998,7 +4750,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$C390A4A1" ("opt"."t1"@"SEL$2" "opt"."t2"@"SEL$3"))
       USE_NL(@"SEL$C390A4A1" "opt"."t2"@"SEL$3")
       FULL(@"SEL$C390A4A1" "opt"."t1"@"SEL$2")
@@ -6007,15 +4758,6 @@ Outline Data:
       UNNEST(@"SEL$3")
       SEMI_TO_INNER(@"SEL$239BDFF3" "VIEW1")
       MERGE(@"SEL$3" > "SEL$BA6DBD7D")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      NO_USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -6042,7 +4784,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$FE336D0E" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$2"))
       USE_NL(@"SEL$FE336D0E" "opt"."t2"@"SEL$2")
       FULL(@"SEL$FE336D0E" "opt"."t1"@"SEL$1")
@@ -6050,15 +4791,6 @@ Outline Data:
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
       MERGE(@"SEL$2" > "SEL$E5385516")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      NO_USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -6085,7 +4817,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1358553D" ("opt"."t1"@"SEL$2" "opt"."t2"@"SEL$3"))
       USE_NL(@"SEL$1358553D" "opt"."t2"@"SEL$3")
       FULL(@"SEL$1358553D" "opt"."t1"@"SEL$2")
@@ -6093,15 +4824,6 @@ Outline Data:
       MERGE(@"SEL$2" > "SEL$1")
       UNNEST(@"SEL$3")
       MERGE(@"SEL$3" > "SEL$239BDFF3")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("VIEW1"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      NO_USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      FULL(@"SEL$4" "opt"."t2"@"SEL$4")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -6128,22 +4850,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$612EAAC9" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$2"))
       USE_NL(@"SEL$612EAAC9" "opt"."t2"@"SEL$2")
       FULL(@"SEL$612EAAC9" "opt"."t1"@"SEL$1")
       FULL(@"SEL$612EAAC9" "opt"."t2"@"SEL$2")
       UNNEST(@"SEL$2")
       MERGE(@"SEL$2" > "SEL$6FCAE2AA")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("VIEW1"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      NO_USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      FULL(@"SEL$3" "opt"."t2"@"SEL$3")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -6173,22 +4885,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$239BDFF3" ("opt"."t1"@"SEL$2" "VIEW1"@"SEL$CFEA49FE"))
       USE_NL(@"SEL$239BDFF3" "VIEW1"@"SEL$CFEA49FE")
       FULL(@"SEL$239BDFF3" "opt"."t1"@"SEL$2")
       FULL(@"SEL$3" "opt"."t2"@"SEL$3")
       MERGE(@"SEL$2" > "SEL$1")
       UNNEST(@"SEL$3")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("VIEW1"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      NO_USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      FULL(@"SEL$4" "opt"."t2"@"SEL$4")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -6218,21 +4920,11 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$6FCAE2AA" ("opt"."t1"@"SEL$1" "VIEW1"@"SEL$1"))
       USE_NL(@"SEL$6FCAE2AA" "VIEW1"@"SEL$1")
       FULL(@"SEL$6FCAE2AA" "opt"."t1"@"SEL$1")
       FULL(@"SEL$2" "opt"."t2"@"SEL$2")
       UNNEST(@"SEL$2")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("VIEW1"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      NO_USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      FULL(@"SEL$3" "opt"."t2"@"SEL$3")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -6259,7 +4951,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1358553D" ("opt"."t1"@"SEL$2" "opt"."t2"@"SEL$3"))
       USE_NL(@"SEL$1358553D" "opt"."t2"@"SEL$3")
       FULL(@"SEL$1358553D" "opt"."t1"@"SEL$2")
@@ -6267,15 +4958,6 @@ Outline Data:
       MERGE(@"SEL$2" > "SEL$1")
       UNNEST(@"SEL$3")
       MERGE(@"SEL$3" > "SEL$239BDFF3")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "VIEW1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("VIEW1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("VIEW1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("VIEW1"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$4" "opt"."t2"@"SEL$4")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -6302,22 +4984,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$612EAAC9" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$2"))
       USE_NL(@"SEL$612EAAC9" "opt"."t2"@"SEL$2")
       FULL(@"SEL$612EAAC9" "opt"."t1"@"SEL$1")
       FULL(@"SEL$612EAAC9" "opt"."t2"@"SEL$2")
       UNNEST(@"SEL$2")
       MERGE(@"SEL$2" > "SEL$6FCAE2AA")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "VIEW1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("VIEW1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("VIEW1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("VIEW1"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$3" "opt"."t2"@"SEL$3")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -6350,7 +5022,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$239BDFF3" ("opt"."t1"@"SEL$2" "VIEW1"@"SEL$CFEA49FE"))
       USE_NL(@"SEL$239BDFF3" "VIEW1"@"SEL$CFEA49FE")
       USE_NL_MATERIALIZATION(@"SEL$239BDFF3" "VIEW1"@"SEL$CFEA49FE")
@@ -6358,15 +5029,6 @@ Outline Data:
       FULL(@"SEL$3" "opt"."t2"@"SEL$3")
       MERGE(@"SEL$2" > "SEL$1")
       UNNEST(@"SEL$3")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "VIEW1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("VIEW1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("VIEW1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("VIEW1"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$3" "opt"."t2"@"SEL$3")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -6399,22 +5061,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$6FCAE2AA" ("opt"."t1"@"SEL$1" "VIEW1"@"SEL$1"))
       USE_NL(@"SEL$6FCAE2AA" "VIEW1"@"SEL$1")
       USE_NL_MATERIALIZATION(@"SEL$6FCAE2AA" "VIEW1"@"SEL$1")
       FULL(@"SEL$6FCAE2AA" "opt"."t1"@"SEL$1")
       FULL(@"SEL$2" "opt"."t2"@"SEL$2")
       UNNEST(@"SEL$2")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "VIEW1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("VIEW1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("VIEW1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("VIEW1"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -6447,7 +5099,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$BA8F8855" ("opt"."t1"@"SEL$2" "VIEW1"@"SEL$CFEA49FE"))
       USE_NL(@"SEL$BA8F8855" "VIEW1"@"SEL$CFEA49FE")
       USE_NL_MATERIALIZATION(@"SEL$BA8F8855" "VIEW1"@"SEL$CFEA49FE")
@@ -6457,15 +5108,6 @@ Outline Data:
       UNNEST(@"SEL$3")
       SEMI_TO_INNER(@"SEL$239BDFF3" "VIEW1")
       PROJECT_PRUNE(@"SEL$BA6DBD7D")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("VIEW1"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      NO_USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      FULL(@"SEL$4" "opt"."t2"@"SEL$4")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -6498,7 +5140,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$AA0F5665" ("opt"."t1"@"SEL$1" "VIEW1"@"SEL$1"))
       USE_NL(@"SEL$AA0F5665" "VIEW1"@"SEL$1")
       USE_NL_MATERIALIZATION(@"SEL$AA0F5665" "VIEW1"@"SEL$1")
@@ -6507,15 +5148,6 @@ Outline Data:
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
       PROJECT_PRUNE(@"SEL$E5385516")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("VIEW1"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      NO_USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      FULL(@"SEL$3" "opt"."t2"@"SEL$3")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -6553,7 +5185,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$BE2B3A15" ("VIEW3"@"SEL$CFEA49FE" "opt"."t1"@"SEL$2"))
       USE_NL(@"SEL$BE2B3A15" "opt"."t1"@"SEL$2")
       USE_NL_MATERIALIZATION(@"SEL$BE2B3A15" "opt"."t1"@"SEL$2")
@@ -6563,15 +5194,6 @@ Outline Data:
       UNNEST(@"SEL$3")
       SEMI_TO_INNER(@"SEL$239BDFF3" "VIEW3")
       PROJECT_PRUNE(@"SEL$3D0CE304")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("VIEW3"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      FULL(@"SEL$3" "opt"."t2"@"SEL$3")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -6609,7 +5231,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$F64FDB4A" ("VIEW3"@"SEL$1" "opt"."t1"@"SEL$1"))
       USE_NL(@"SEL$F64FDB4A" "opt"."t1"@"SEL$1")
       USE_NL_MATERIALIZATION(@"SEL$F64FDB4A" "opt"."t1"@"SEL$1")
@@ -6618,15 +5239,6 @@ Outline Data:
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW3")
       PROJECT_PRUNE(@"SEL$62590B6F")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("VIEW3"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -6663,7 +5275,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$2C137791" "opt"."t1"@"SEL$2")
       LEADING(@"SEL$807AF9A7" ("opt"."t2"@"SEL$3" "opt"."t3"@"SEL$4"))
       USE_NL(@"SEL$807AF9A7" "opt"."t3"@"SEL$4")
@@ -6674,16 +5285,6 @@ Outline Data:
       UNNEST(@"SEL$4")
       SIMPLIFY_SUBQUERY(@"SEL$CFEA49FE")
       MERGE(@"SEL$4" > "SEL$3C0FC11D")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      LEADING(@"SEL$3" ("opt.t2"@"SEL$3" "VIEW1"@"SEL$3" ))
-      USE_NL(@"SEL$3" ("VIEW1"@"SEL$3" ))
-      PQ_DISTRIBUTE(@"SEL$3" ("VIEW1"@"SEL$3" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$3" ("VIEW1"@"SEL$3" ))
-      FULL(@"SEL$3" "opt"."t2"@"SEL$3")
-      FULL(@"SEL$5" "opt"."t3"@"SEL$5")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -6720,7 +5321,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       LEADING(@"SEL$119A0069" ("opt"."t2"@"SEL$2" "opt"."t3"@"SEL$3"))
       USE_NL(@"SEL$119A0069" "opt"."t3"@"SEL$3")
@@ -6730,16 +5330,6 @@ Outline Data:
       UNNEST(@"SEL$3")
       SIMPLIFY_SUBQUERY(@"SEL$1")
       MERGE(@"SEL$3" > "SEL$19FECD1D")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      LEADING(@"SEL$2" ("opt.t2"@"SEL$2" "VIEW1"@"SEL$2" ))
-      USE_NL(@"SEL$2" ("VIEW1"@"SEL$2" ))
-      PQ_DISTRIBUTE(@"SEL$2" ("VIEW1"@"SEL$2" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$2" ("VIEW1"@"SEL$2" ))
-      FULL(@"SEL$2" "opt"."t2"@"SEL$2")
-      FULL(@"SEL$4" "opt"."t3"@"SEL$4")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -6766,7 +5356,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$58F6ED0C" ("opt"."t2"@"SEL$3" "opt"."t1"@"SEL$2"))
       USE_HASH(@"SEL$58F6ED0C" "opt"."t1"@"SEL$2")
       FULL(@"SEL$58F6ED0C" "opt"."t2"@"SEL$3")
@@ -6775,14 +5364,6 @@ Outline Data:
       UNNEST(@"SEL$3")
       PROJECT_PRUNE(@"SEL$239BDFF3")
       MERGE(@"SEL$3" > "SEL$6A4779C9")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -6809,7 +5390,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$726C2C09" ("opt"."t2"@"SEL$2" "opt"."t1"@"SEL$1"))
       USE_HASH(@"SEL$726C2C09" "opt"."t1"@"SEL$1")
       FULL(@"SEL$726C2C09" "opt"."t2"@"SEL$2")
@@ -6817,14 +5397,6 @@ Outline Data:
       UNNEST(@"SEL$2")
       PROJECT_PRUNE(@"SEL$6FCAE2AA")
       MERGE(@"SEL$2" > "SEL$351291A2")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -6851,7 +5423,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1358553D" ("opt"."t1"@"SEL$2" "opt"."t2"@"SEL$3"))
       USE_HASH(@"SEL$1358553D" "opt"."t2"@"SEL$3")
       FULL(@"SEL$1358553D" "opt"."t1"@"SEL$2")
@@ -6859,11 +5430,6 @@ Outline Data:
       MERGE(@"SEL$2" > "SEL$1")
       UNNEST(@"SEL$3")
       MERGE(@"SEL$3" > "SEL$239BDFF3")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$4" "opt"."t2"@"SEL$4")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -6890,18 +5456,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$612EAAC9" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$2"))
       USE_HASH(@"SEL$612EAAC9" "opt"."t2"@"SEL$2")
       FULL(@"SEL$612EAAC9" "opt"."t1"@"SEL$1")
       FULL(@"SEL$612EAAC9" "opt"."t2"@"SEL$2")
       UNNEST(@"SEL$2")
       MERGE(@"SEL$2" > "SEL$6FCAE2AA")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$3" "opt"."t2"@"SEL$3")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -6929,15 +5489,9 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$CFEA49FE" "opt"."t1"@"SEL$2")
       FULL(@"SEL$3" "opt"."t2"@"SEL$3")
       MERGE(@"SEL$2" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$3" "opt"."t2"@"SEL$3")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -6967,10 +5521,6 @@ Outline Data:
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$2" "opt"."t2"@"SEL$2")
-<<<<<<< HEAD
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -6997,15 +5547,9 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$CFEA49FE" "opt"."t1"@"SEL$2")
       FULL(@"SEL$3" "opt"."t2"@"SEL$3")
       MERGE(@"SEL$2" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$3" "opt"."t2"@"SEL$3")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -7034,10 +5578,6 @@ Outline Data:
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$2" "opt"."t2"@"SEL$2")
-<<<<<<< HEAD
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -7070,7 +5610,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$C6D21C0F" ("opt"."t3"@"SEL$1" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1")))
       USE_HASH(@"SEL$C6D21C0F" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$1"))
       FULL(@"SEL$C6D21C0F" "opt"."t3"@"SEL$1")
@@ -7078,17 +5617,6 @@ Outline Data:
       FULL(@"SEL$C6D21C0F" "opt"."t2"@"SEL$1")
       FULL(@"SEL$C6D21C0F" "opt"."t1"@"SEL$1")
       OUTER_TO_INNER(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t3"@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" )))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -7109,13 +5637,8 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$CFEA49FE" "opt"."t1"@"SEL$2")
       MERGE(@"SEL$2" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -7137,10 +5660,6 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-<<<<<<< HEAD
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -7169,7 +5688,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$EE4C473D" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$3"))
       USE_NL(@"SEL$EE4C473D" "opt"."t1"@"SEL$3")
       USE_NL_MATERIALIZATION(@"SEL$EE4C473D" "opt"."t1"@"SEL$3")
@@ -7177,15 +5695,6 @@ Outline Data:
       FULL(@"SEL$EE4C473D" "opt"."t1"@"SEL$3")
       MERGE(@"SEL$3" > "SEL$2")
       MERGE(@"SEL$B9DE6649" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -7214,21 +5723,11 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1"))
       USE_NL(@"SEL$1" "opt"."t1"@"SEL$1")
       USE_NL_MATERIALIZATION(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -7255,21 +5754,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$EE4C473D" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$3"))
       USE_MERGE(@"SEL$EE4C473D" "opt"."t1"@"SEL$3")
       FULL(@"SEL$EE4C473D" "opt"."t2"@"SEL$1")
       FULL(@"SEL$EE4C473D" "opt"."t1"@"SEL$3")
       MERGE(@"SEL$3" > "SEL$2")
       MERGE(@"SEL$B9DE6649" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -7296,19 +5786,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1"))
       USE_MERGE(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -7335,7 +5816,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$279C1F14" ("opt"."t1"@"SEL$3" "opt"."t2"@"SEL$5"))
       USE_MERGE(@"SEL$279C1F14" "opt"."t2"@"SEL$5")
       FULL(@"SEL$279C1F14" "opt"."t1"@"SEL$3")
@@ -7345,14 +5825,6 @@ Outline Data:
       MERGE(@"SEL$5" > "SEL$E53046BD")
       MERGE(@"SEL$B9DE6649" > "SEL$1")
       MERGE(@"SEL$668E86FC" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -7379,19 +5851,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$1"))
       USE_MERGE(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -7418,7 +5881,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$E0F265EB" ("opt"."t1"@"SEL$3" "opt"."t2"@"SEL$5"))
       USE_HASH(@"SEL$E0F265EB" "opt"."t2"@"SEL$5")
       FULL(@"SEL$E0F265EB" "opt"."t1"@"SEL$3")
@@ -7427,14 +5889,6 @@ Outline Data:
       MERGE(@"SEL$5" > "SEL$4")
       MERGE(@"SEL$B9DE6649" > "SEL$1")
       MERGE(@"SEL$E0925040" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -7461,19 +5915,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$1"))
       USE_HASH(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -7506,7 +5951,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$C6D21C0F" ("opt"."t1"@"SEL$1" ("opt"."t2"@"SEL$1" "opt"."t3"@"SEL$1")))
       USE_HASH(@"SEL$C6D21C0F" ("opt"."t2"@"SEL$1" "opt"."t3"@"SEL$1"))
       FULL(@"SEL$C6D21C0F" "opt"."t1"@"SEL$1")
@@ -7514,17 +5958,6 @@ Outline Data:
       FULL(@"SEL$C6D21C0F" "opt"."t2"@"SEL$1")
       FULL(@"SEL$C6D21C0F" "opt"."t3"@"SEL$1")
       OUTER_TO_INNER(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" ("opt.t2"@"SEL$1" "opt.t3"@"SEL$1" )))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t3"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      USE_MERGE(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t3"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -7546,10 +5979,6 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-<<<<<<< HEAD
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -7576,20 +6005,11 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$CFEA49FE" ("opt"."t1"@"SEL$2" "opt"."t2"@"SEL$1"))
       USE_HASH(@"SEL$CFEA49FE" "opt"."t2"@"SEL$1")
       FULL(@"SEL$CFEA49FE" "opt"."t1"@"SEL$2")
       FULL(@"SEL$CFEA49FE" "opt"."t2"@"SEL$1")
       MERGE(@"SEL$2" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -7616,19 +6036,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$1"))
       USE_HASH(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -7655,20 +6066,11 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$CFEA49FE" ("opt"."t1"@"SEL$2" "opt"."t2"@"SEL$1"))
       USE_HASH(@"SEL$CFEA49FE" "opt"."t2"@"SEL$1")
       FULL(@"SEL$CFEA49FE" "opt"."t1"@"SEL$2")
       FULL(@"SEL$CFEA49FE" "opt"."t2"@"SEL$1")
       MERGE(@"SEL$2" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -7695,19 +6097,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$1"))
       USE_HASH(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -7737,22 +6130,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       USE_HASH_AGGREGATION(@"SEL$CFEA49FE")
       LEADING(@"SEL$CFEA49FE" ("opt"."t2"@"SEL$2" "opt"."t1"@"SEL$1"))
       USE_MERGE(@"SEL$CFEA49FE" "opt"."t1"@"SEL$1")
       FULL(@"SEL$CFEA49FE" "opt"."t2"@"SEL$2")
       FULL(@"SEL$CFEA49FE" "opt"."t1"@"SEL$1")
       MERGE(@"SEL$2" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      USE_HASH_AGGREGATION(@"SEL$1")
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -7783,19 +6166,10 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       USE_HASH_AGGREGATION(@"SEL$1")
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1"))
       USE_MERGE(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -7817,10 +6191,6 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-<<<<<<< HEAD
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -7841,13 +6211,8 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$354178DD" "opt"."t1"@"SEL$1")
       SIMPLIFY_DISTINCT(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -7874,21 +6239,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$E1B7C4B9" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1"))
       USE_MERGE(@"SEL$E1B7C4B9" "opt"."t1"@"SEL$1")
       FULL(@"SEL$E1B7C4B9" "opt"."t2"@"SEL$1")
       FULL(@"SEL$E1B7C4B9" "opt"."t1"@"SEL$1")
       SIMPLIFY_EXPR(@"SEL$1")
       OUTER_TO_INNER(@"SEL$F8C4A4E7")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -7917,7 +6273,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$64B35BFC" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1"))
       USE_NL(@"SEL$64B35BFC" "opt"."t1"@"SEL$1")
       USE_NL_MATERIALIZATION(@"SEL$64B35BFC" "opt"."t1"@"SEL$1")
@@ -7925,15 +6280,6 @@ Outline Data:
       FULL(@"SEL$64B35BFC" "opt"."t1"@"SEL$1")
       OUTER_TO_INNER(@"SEL$1")
       SIMPLIFY_EXPR(@"SEL$C6D21C0F")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -7956,10 +6302,6 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-<<<<<<< HEAD
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -7988,7 +6330,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$64B35BFC" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1"))
       USE_NL(@"SEL$64B35BFC" "opt"."t1"@"SEL$1")
       USE_NL_MATERIALIZATION(@"SEL$64B35BFC" "opt"."t1"@"SEL$1")
@@ -7996,15 +6337,6 @@ Outline Data:
       FULL(@"SEL$64B35BFC" "opt"."t1"@"SEL$1")
       OUTER_TO_INNER(@"SEL$1")
       SIMPLIFY_EXPR(@"SEL$C6D21C0F")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -8028,10 +6360,6 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-<<<<<<< HEAD
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -8064,24 +6392,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" (("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1") "opt"."t3"@"SEL$1"))
       USE_HASH(@"SEL$1" "opt"."t3"@"SEL$1")
       USE_MERGE(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" (("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" )"opt.t3"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t3"@"SEL$1" ) LOCAL LOCAL)
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -8108,19 +6424,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1"))
       USE_MERGE(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -8147,20 +6454,11 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$CFEA49FE" ("opt"."t2"@"SEL$2" "opt"."t1"@"SEL$1"))
       USE_MERGE(@"SEL$CFEA49FE" "opt"."t1"@"SEL$1")
       FULL(@"SEL$CFEA49FE" "opt"."t2"@"SEL$2")
       FULL(@"SEL$CFEA49FE" "opt"."t1"@"SEL$1")
       MERGE(@"SEL$2" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -8187,19 +6485,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1"))
       USE_MERGE(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -8226,19 +6515,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1"))
       USE_MERGE(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -8267,7 +6547,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$8EFDB464" ("opt"."t2"@"SEL$3" "opt"."t1"@"SEL$2"))
       USE_NL(@"SEL$8EFDB464" "opt"."t1"@"SEL$2")
       USE_NL_MATERIALIZATION(@"SEL$8EFDB464" "opt"."t1"@"SEL$2")
@@ -8276,15 +6555,6 @@ Outline Data:
       PROJECT_PRUNE(@"SEL$1")
       MERGE(@"SEL$2" > "SEL$9BD67295")
       MERGE(@"SEL$3" > "SEL$9BD67295")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -8313,21 +6583,11 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1"))
       USE_NL(@"SEL$1" "opt"."t1"@"SEL$1")
       USE_NL_MATERIALIZATION(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -8354,21 +6614,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$17829019" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$2"))
       USE_MERGE(@"SEL$17829019" "opt"."t2"@"SEL$2")
       FULL(@"SEL$17829019" "opt"."t1"@"SEL$1")
       FULL(@"SEL$17829019" "opt"."t2"@"SEL$2")
       PROJECT_PRUNE(@"SEL$1")
       MERGE(@"SEL$2" > "SEL$9BD67295")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -8395,19 +6646,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$1"))
       USE_MERGE(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -8436,7 +6678,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$17829019" ("opt"."t2"@"SEL$2" "opt"."t1"@"SEL$1"))
       USE_NL(@"SEL$17829019" "opt"."t1"@"SEL$1")
       USE_NL_MATERIALIZATION(@"SEL$17829019" "opt"."t1"@"SEL$1")
@@ -8444,15 +6685,6 @@ Outline Data:
       FULL(@"SEL$17829019" "opt"."t1"@"SEL$1")
       PROJECT_PRUNE(@"SEL$1")
       MERGE(@"SEL$2" > "SEL$9BD67295")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -8481,21 +6713,11 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1"))
       USE_NL(@"SEL$1" "opt"."t1"@"SEL$1")
       USE_NL_MATERIALIZATION(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -8522,20 +6744,11 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$CFEA49FE" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$2"))
       USE_HASH(@"SEL$CFEA49FE" "opt"."t2"@"SEL$2")
       FULL(@"SEL$CFEA49FE" "opt"."t1"@"SEL$1")
       FULL(@"SEL$CFEA49FE" "opt"."t2"@"SEL$2")
       MERGE(@"SEL$2" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -8562,19 +6775,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$1"))
       USE_HASH(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -8601,21 +6805,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$17829019" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$2"))
       USE_MERGE(@"SEL$17829019" "opt"."t2"@"SEL$2")
       FULL(@"SEL$17829019" "opt"."t1"@"SEL$1")
       FULL(@"SEL$17829019" "opt"."t2"@"SEL$2")
       PROJECT_PRUNE(@"SEL$1")
       MERGE(@"SEL$2" > "SEL$9BD67295")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -8642,19 +6837,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$1"))
       USE_MERGE(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -8681,7 +6867,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$8EFDB464" ("opt"."t2"@"SEL$3" "opt"."t1"@"SEL$2"))
       USE_MERGE(@"SEL$8EFDB464" "opt"."t1"@"SEL$2")
       FULL(@"SEL$8EFDB464" "opt"."t2"@"SEL$3")
@@ -8689,14 +6874,6 @@ Outline Data:
       PROJECT_PRUNE(@"SEL$1")
       MERGE(@"SEL$2" > "SEL$9BD67295")
       MERGE(@"SEL$3" > "SEL$9BD67295")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -8723,19 +6900,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1"))
       USE_MERGE(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -8768,7 +6936,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$C7385261" (("opt"."t1"@"SEL$2" "opt"."t2"@"SEL$3") "opt"."t3"@"SEL$4"))
       USE_HASH(@"SEL$C7385261" "opt"."t3"@"SEL$4")
       USE_MERGE(@"SEL$C7385261" "opt"."t2"@"SEL$3")
@@ -8778,17 +6945,6 @@ Outline Data:
       MERGE(@"SEL$2" > "SEL$1")
       MERGE(@"SEL$3" > "SEL$1")
       MERGE(@"SEL$4" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" (("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" )"opt.t3"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t3"@"SEL$1" ) LOCAL LOCAL)
-      USE_MERGE(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -8821,24 +6977,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" (("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$1") "opt"."t3"@"SEL$1"))
       USE_HASH(@"SEL$1" "opt"."t3"@"SEL$1")
       USE_MERGE(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" (("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" )"opt.t3"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t3"@"SEL$1" ) LOCAL LOCAL)
-      USE_MERGE(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -8871,7 +7015,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$17829019" ("opt"."t3"@"SEL$1" ("opt"."t2"@"SEL$2" "opt"."t1"@"SEL$1")))
       USE_HASH(@"SEL$17829019" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$2"))
       FULL(@"SEL$17829019" "opt"."t3"@"SEL$1")
@@ -8880,17 +7023,6 @@ Outline Data:
       FULL(@"SEL$17829019" "opt"."t1"@"SEL$1")
       PROJECT_PRUNE(@"SEL$1")
       MERGE(@"SEL$2" > "SEL$9BD67295")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t3"@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" )))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -8923,24 +7055,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t3"@"SEL$1" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1")))
       USE_HASH(@"SEL$1" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$1"))
       FULL(@"SEL$1" "opt"."t3"@"SEL$1")
       USE_MERGE(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t3"@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" )))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -8973,7 +7093,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$8EFDB464" ("opt"."t3"@"SEL$3" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$2")))
       USE_HASH(@"SEL$8EFDB464" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$2"))
       FULL(@"SEL$8EFDB464" "opt"."t3"@"SEL$3")
@@ -8983,17 +7102,6 @@ Outline Data:
       PROJECT_PRUNE(@"SEL$1")
       MERGE(@"SEL$2" > "SEL$9BD67295")
       MERGE(@"SEL$3" > "SEL$9BD67295")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t3"@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" )))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -9026,24 +7134,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t3"@"SEL$1" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1")))
       USE_HASH(@"SEL$1" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$1"))
       FULL(@"SEL$1" "opt"."t3"@"SEL$1")
       USE_MERGE(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t3"@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" )))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      USE_MERGE(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -9064,13 +7160,8 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$CFEA49FE" "opt"."t1"@"SEL$2")
       MERGE(@"SEL$2" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -9092,10 +7183,6 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-<<<<<<< HEAD
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -9122,7 +7209,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$8EFDB464" ("opt"."t2"@"SEL$3" "opt"."t1"@"SEL$2"))
       USE_HASH(@"SEL$8EFDB464" "opt"."t1"@"SEL$2")
       FULL(@"SEL$8EFDB464" "opt"."t2"@"SEL$3")
@@ -9130,14 +7216,6 @@ Outline Data:
       PROJECT_PRUNE(@"SEL$1")
       MERGE(@"SEL$2" > "SEL$9BD67295")
       MERGE(@"SEL$3" > "SEL$9BD67295")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -9164,19 +7242,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1"))
       USE_HASH(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -9197,14 +7266,9 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$17829019" "opt"."t2"@"SEL$2")
       PROJECT_PRUNE(@"SEL$1")
       MERGE(@"SEL$2" > "SEL$9BD67295")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -9226,10 +7290,6 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-<<<<<<< HEAD
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -9256,20 +7316,11 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$CFEA49FE" ("opt"."t1"@"SEL$2" "opt"."t2"@"SEL$1"))
       USE_HASH(@"SEL$CFEA49FE" "opt"."t2"@"SEL$1")
       FULL(@"SEL$CFEA49FE" "opt"."t1"@"SEL$2")
       FULL(@"SEL$CFEA49FE" "opt"."t2"@"SEL$1")
       MERGE(@"SEL$2" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -9296,19 +7347,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$1"))
       USE_HASH(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -9329,13 +7371,8 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$CFEA49FE" "opt"."t1"@"SEL$2")
       MERGE(@"SEL$2" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -9357,10 +7394,6 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-<<<<<<< HEAD
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -9381,13 +7414,8 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$CFEA49FE" "opt"."t1"@"SEL$2")
       MERGE(@"SEL$2" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -9409,10 +7437,6 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-<<<<<<< HEAD
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -9433,13 +7457,8 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$CFEA49FE" "opt"."t1"@"SEL$2")
       MERGE(@"SEL$2" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -9461,10 +7480,6 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-<<<<<<< HEAD
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -9491,20 +7506,11 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$CFEA49FE" ("opt"."t1"@"SEL$2" "opt"."t2"@"SEL$1"))
       USE_HASH(@"SEL$CFEA49FE" "opt"."t2"@"SEL$1")
       FULL(@"SEL$CFEA49FE" "opt"."t1"@"SEL$2")
       FULL(@"SEL$CFEA49FE" "opt"."t2"@"SEL$1")
       MERGE(@"SEL$2" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -9531,19 +7537,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$1"))
       USE_HASH(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -9570,20 +7567,11 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$CFEA49FE" ("opt"."t1"@"SEL$2" "opt"."t2"@"SEL$1"))
       USE_HASH(@"SEL$CFEA49FE" "opt"."t2"@"SEL$1")
       FULL(@"SEL$CFEA49FE" "opt"."t1"@"SEL$2")
       FULL(@"SEL$CFEA49FE" "opt"."t2"@"SEL$1")
       MERGE(@"SEL$2" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -9610,19 +7598,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$1"))
       USE_HASH(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -9649,20 +7628,11 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$CFEA49FE" ("opt"."t1"@"SEL$2" "opt"."t2"@"SEL$1"))
       USE_HASH(@"SEL$CFEA49FE" "opt"."t2"@"SEL$1")
       FULL(@"SEL$CFEA49FE" "opt"."t1"@"SEL$2")
       FULL(@"SEL$CFEA49FE" "opt"."t2"@"SEL$1")
       MERGE(@"SEL$2" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -9689,19 +7659,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$1"))
       USE_HASH(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -9728,20 +7689,11 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$CFEA49FE" ("opt"."t1"@"SEL$2" "opt"."t2"@"SEL$1"))
       USE_HASH(@"SEL$CFEA49FE" "opt"."t2"@"SEL$1")
       FULL(@"SEL$CFEA49FE" "opt"."t1"@"SEL$2")
       FULL(@"SEL$CFEA49FE" "opt"."t2"@"SEL$1")
       MERGE(@"SEL$2" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -9768,19 +7720,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$1"))
       USE_HASH(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -9807,21 +7750,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$56956D83" ("opt"."t1"@"SEL$2" "opt"."t2"@"SEL$3"))
       USE_HASH(@"SEL$56956D83" "opt"."t2"@"SEL$3")
       FULL(@"SEL$56956D83" "opt"."t1"@"SEL$2")
       FULL(@"SEL$56956D83" "opt"."t2"@"SEL$3")
       MERGE(@"SEL$2" > "SEL$1")
       MERGE(@"SEL$3" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -9848,19 +7782,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$1"))
       USE_HASH(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -9887,21 +7812,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$56956D83" ("opt"."t1"@"SEL$2" "opt"."t2"@"SEL$3"))
       USE_HASH(@"SEL$56956D83" "opt"."t2"@"SEL$3")
       FULL(@"SEL$56956D83" "opt"."t1"@"SEL$2")
       FULL(@"SEL$56956D83" "opt"."t2"@"SEL$3")
       MERGE(@"SEL$2" > "SEL$1")
       MERGE(@"SEL$3" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -9928,19 +7844,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$1"))
       USE_HASH(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -9967,21 +7874,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$56956D83" ("opt"."t1"@"SEL$2" "opt"."t2"@"SEL$3"))
       USE_HASH(@"SEL$56956D83" "opt"."t2"@"SEL$3")
       FULL(@"SEL$56956D83" "opt"."t1"@"SEL$2")
       FULL(@"SEL$56956D83" "opt"."t2"@"SEL$3")
       MERGE(@"SEL$2" > "SEL$1")
       MERGE(@"SEL$3" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -10008,19 +7906,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$1"))
       USE_HASH(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -10049,22 +7938,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$CFEA49FE" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$2"))
       USE_NL(@"SEL$CFEA49FE" "opt"."t1"@"SEL$2")
       USE_NL_MATERIALIZATION(@"SEL$CFEA49FE" "opt"."t1"@"SEL$2")
       FULL(@"SEL$CFEA49FE" "opt"."t2"@"SEL$1")
       FULL(@"SEL$CFEA49FE" "opt"."t1"@"SEL$2")
       MERGE(@"SEL$2" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -10093,22 +7972,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$CFEA49FE" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$2"))
       USE_NL(@"SEL$CFEA49FE" "opt"."t1"@"SEL$2")
       USE_NL_MATERIALIZATION(@"SEL$CFEA49FE" "opt"."t1"@"SEL$2")
       FULL(@"SEL$CFEA49FE" "opt"."t2"@"SEL$1")
       FULL(@"SEL$CFEA49FE" "opt"."t1"@"SEL$2")
       MERGE(@"SEL$2" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -10135,19 +8004,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$1"))
       USE_HASH(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -10174,21 +8034,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$56956D83" ("opt"."t1"@"SEL$2" "opt"."t2"@"SEL$3"))
       USE_HASH(@"SEL$56956D83" "opt"."t2"@"SEL$3")
       FULL(@"SEL$56956D83" "opt"."t1"@"SEL$2")
       FULL(@"SEL$56956D83" "opt"."t2"@"SEL$3")
       MERGE(@"SEL$2" > "SEL$1")
       MERGE(@"SEL$3" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -10215,19 +8066,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$1"))
       USE_HASH(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -10254,21 +8096,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$56956D83" ("opt"."t2"@"SEL$2" "opt"."t1"@"SEL$3"))
       USE_HASH(@"SEL$56956D83" "opt"."t1"@"SEL$3")
       FULL(@"SEL$56956D83" "opt"."t2"@"SEL$2")
       FULL(@"SEL$56956D83" "opt"."t1"@"SEL$3")
       MERGE(@"SEL$2" > "SEL$1")
       MERGE(@"SEL$3" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -10295,19 +8128,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t1"@"SEL$1" "opt"."t2"@"SEL$1"))
       USE_HASH(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -10329,10 +8153,6 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-<<<<<<< HEAD
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -10364,22 +8184,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$56956D83" ("opt"."t1"@"SEL$2" "opt"."t2"@"SEL$3"))
       USE_HASH(@"SEL$56956D83" "opt"."t2"@"SEL$3")
       FULL(@"SEL$56956D83" "opt"."t1"@"SEL$2")
       FULL(@"SEL$56956D83" "opt"."t2"@"SEL$3")
       MERGE(@"SEL$2" > "SEL$1")
       MERGE(@"SEL$3" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      NO_USE_HASH_AGGREGATION(@"SEL$1")
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -10406,19 +8216,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1"))
       USE_HASH(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -10450,22 +8251,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$56956D83" ("opt"."t1"@"SEL$2" "opt"."t2"@"SEL$3"))
       USE_HASH(@"SEL$56956D83" "opt"."t2"@"SEL$3")
       FULL(@"SEL$56956D83" "opt"."t1"@"SEL$2")
       FULL(@"SEL$56956D83" "opt"."t2"@"SEL$3")
       MERGE(@"SEL$2" > "SEL$1")
       MERGE(@"SEL$3" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      NO_USE_HASH_AGGREGATION(@"SEL$1")
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -10492,19 +8283,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1"))
       USE_HASH(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -10536,22 +8318,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$56956D83" ("opt"."t1"@"SEL$2" "opt"."t2"@"SEL$3"))
       USE_HASH(@"SEL$56956D83" "opt"."t2"@"SEL$3")
       FULL(@"SEL$56956D83" "opt"."t1"@"SEL$2")
       FULL(@"SEL$56956D83" "opt"."t2"@"SEL$3")
       MERGE(@"SEL$2" > "SEL$1")
       MERGE(@"SEL$3" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      NO_USE_HASH_AGGREGATION(@"SEL$1")
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -10578,19 +8350,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1"))
       USE_HASH(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -10622,22 +8385,12 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$56956D83" ("opt"."t1"@"SEL$2" "opt"."t2"@"SEL$3"))
       USE_HASH(@"SEL$56956D83" "opt"."t2"@"SEL$3")
       FULL(@"SEL$56956D83" "opt"."t1"@"SEL$2")
       FULL(@"SEL$56956D83" "opt"."t2"@"SEL$3")
       MERGE(@"SEL$2" > "SEL$1")
       MERGE(@"SEL$3" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      NO_USE_HASH_AGGREGATION(@"SEL$1")
-      LEADING(@"SEL$1" ("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -10664,19 +8417,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" ("opt"."t2"@"SEL$1" "opt"."t1"@"SEL$1"))
       USE_HASH(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t2"@"SEL$1" "opt.t1"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t1"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -10719,7 +8463,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$A7A036C9" ((("opt"."t1"@"SEL$2" "opt"."t2"@"SEL$2") "opt"."t3"@"SEL$2") "opt"."tt"@"SEL$2"))
       USE_NL(@"SEL$A7A036C9" "opt"."tt"@"SEL$2")
       USE_NL_MATERIALIZATION(@"SEL$A7A036C9" "opt"."tt"@"SEL$2")
@@ -10732,22 +8475,6 @@ Outline Data:
       FULL(@"SEL$A7A036C9" "opt"."tt"@"SEL$2")
       MERGE(@"SEL$2" > "SEL$1")
       OUTER_TO_INNER(@"SEL$CFEA49FE")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ((("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" )"opt.t3"@"SEL$1" )"opt.tt"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.tt"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.tt"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.tt"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t3"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      FULL(@"SEL$1" "opt"."tt"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -10784,7 +8511,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$B58AD9CE" (("opt"."t1"@"SEL$2" "opt"."t3"@"SEL$2") "opt"."tt"@"SEL$2"))
       USE_NL(@"SEL$B58AD9CE" "opt"."tt"@"SEL$2")
       USE_NL_MATERIALIZATION(@"SEL$B58AD9CE" "opt"."tt"@"SEL$2")
@@ -10795,19 +8521,6 @@ Outline Data:
       FULL(@"SEL$B58AD9CE" "opt"."tt"@"SEL$2")
       MERGE(@"SEL$2" > "SEL$1")
       ELIMINATE_JOIN(@"SEL$CFEA49FE" "opt"."t2"@"SEL$CFEA49FE")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" (("opt.t1"@"SEL$1" "opt.t3"@"SEL$1" )"opt.tt"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.tt"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.tt"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.tt"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t3"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t3"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t3"@"SEL$1")
-      FULL(@"SEL$1" "opt"."tt"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -10856,7 +8569,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$A7A036C9" ((("opt"."t1"@"SEL$2" "opt"."t2"@"SEL$2") ("opt"."tt2"@"SEL$2" "opt"."tt3"@"SEL$2")) "opt"."tt"@"SEL$2"))
       USE_NL(@"SEL$A7A036C9" "opt"."tt"@"SEL$2")
       USE_NL_MATERIALIZATION(@"SEL$A7A036C9" "opt"."tt"@"SEL$2")
@@ -10871,25 +8583,6 @@ Outline Data:
       FULL(@"SEL$A7A036C9" "opt"."tt"@"SEL$2")
       MERGE(@"SEL$2" > "SEL$1")
       OUTER_TO_INNER(@"SEL$CFEA49FE")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ((("opt.t1"@"SEL$1" "opt.t2"@"SEL$1" )("opt.tt2"@"SEL$1" "opt.tt3"@"SEL$1" ))"opt.tt"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.tt"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.tt"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.tt"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.tt2"@"SEL$1" "opt.tt3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.tt2"@"SEL$1" "opt.tt3"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.tt2"@"SEL$1" "opt.tt3"@"SEL$1" ))
-      USE_MERGE(@"SEL$1" ("opt.t2"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t2"@"SEL$1")
-      USE_HASH(@"SEL$1" ("opt.tt3"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.tt3"@"SEL$1" ) LOCAL LOCAL)
-      FULL(@"SEL$1" "opt"."tt2"@"SEL$1")
-      FULL(@"SEL$1" "opt"."tt3"@"SEL$1")
-      FULL(@"SEL$1" "opt"."tt"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 

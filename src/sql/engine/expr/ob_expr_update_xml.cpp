@@ -74,7 +74,7 @@ int ObExprUpdateXml::eval_mysql_update_xml(const ObExpr &expr, ObEvalCtx &ctx, O
   INIT_SUCC(ret);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+  MultimodeAlloctor allocator(tmp_alloc_g.get_allocator());
   lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("XMLModule"));
   int64_t num_child = expr.arg_cnt_;
   ObString xml_target;
@@ -103,12 +103,10 @@ int ObExprUpdateXml::eval_mysql_update_xml(const ObExpr &expr, ObEvalCtx &ctx, O
     LOG_WARN("failed to get xml_target str from expr", K(ret));
   } else if (xml_target.empty()) {
     // do nothing
-  } else if (OB_FALSE_IT(allocator.add_baseline_size(xml_target.length()))) {
   } else if (OB_FAIL(ObXMLExprHelper::get_str_from_expr(expr.args_[1], ctx, xpath_expr, allocator))) {
     LOG_WARN("failed to get xpath expr.", K(ret));
   } else if (OB_FAIL(ObXMLExprHelper::get_str_from_expr(expr.args_[2], ctx, new_xml, allocator))) {
     LOG_WARN("failed to get new xml.", K(ret));
-  } else if (OB_FALSE_IT(allocator.add_baseline_size(new_xml.length()))) {
   } else if (OB_FAIL(ObMulModeFactory::get_xml_base(xml_mem_ctx, xml_target, xml_base, M_DOCUMENT))) {
     ret = OB_SUCCESS;
     if (OB_FAIL(ObMulModeFactory::get_xml_base(xml_mem_ctx, xml_target, xml_base, M_CONTENT))) {

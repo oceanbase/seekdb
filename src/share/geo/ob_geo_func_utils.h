@@ -21,7 +21,7 @@
 #include "lib/utility/ob_hang_fatal_error.h"
 #include "share/geo/ob_geo_to_tree_visitor.h"
 #include "lib/utility/ob_smart_call.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {

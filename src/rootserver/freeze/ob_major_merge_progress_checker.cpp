@@ -137,7 +137,7 @@ int ObMajorMergeProgressChecker::clear_cached_info()
 }
 
 int ObMajorMergeProgressChecker::get_uncompacted_tablets(
-    ObArray<ObTabletReplica> &input_tablets,
+    ObArray<ObTabletRuntimeInfo> &input_tablets,
     common::ObArray<uint64_t> &input_table_ids) const
 {
   int ret = OB_SUCCESS;
@@ -262,9 +262,9 @@ int ObMajorMergeProgressChecker::check_table_merge_progress(
         if (OB_TMP_FAIL(finish_tablet_ids_.push_back(cur_tablet_ids))) {
           LOG_WARN("failed to push back tablet ids", KR(tmp_ret), K(cur_tablet_ids));
         } else if (finish_tablet_ids_.count() < MAX_BATCH_INSERT_COUNT) {
-        } else if (OB_TMP_FAIL(ObTabletMetaTableCompactionOperator::batch_update_report_scn(get_compaction_scn_val(),
-                                                                                            finish_tablet_ids_,
-                                                                                            ObTabletReplica::ScnStatus::SCN_STATUS_ERROR /*except_status*/))) {
+        } else if (OB_TMP_FAIL(ObTabletMetaTableCompactionOperator::batch_update_report_scn(
+              get_compaction_scn_val(), finish_tablet_ids_,
+              ObTabletRuntimeInfo::ScnStatus::SCN_STATUS_ERROR /*except_status*/))) {
           LOG_WARN("fail to batch update report_scn", KR(tmp_ret), K_(finish_tablet_ids));
         } else {
           LOG_INFO("success to batch update report_scn", "table_cnt", finish_tablet_ids_.count());
@@ -400,9 +400,9 @@ int ObMajorMergeProgressChecker::check_schema_version()
     LOG_WARN("merge_info_mgr is unexpected null", KR(ret), K_(merge_info_mgr));
   } else if (OB_FAIL(merge_info_mgr_->get_freeze_info_mgr().get_freeze_info(get_compaction_scn(), freeze_info_))) {
     LOG_WARN("failed to get freeze info by snapshot version", KR(ret), "compaction_scn", get_compaction_scn());
-  } else if (OB_FAIL(schema_service_->get_tenant_refreshed_schema_version(
+  } else if (OB_FAIL(schema_service_->get_runtime_refreshed_schema_version(
                     local_schema_version))) {
-    LOG_WARN("fail to get tenant local schema version", KR(ret));
+    LOG_WARN("fail to get local runtime schema version", KR(ret));
   } else if (!ObSchemaService::is_formal_version(local_schema_version)) {
     ret = OB_EAGAIN;
     LOG_WARN("is not a formal_schema_version", KR(ret), K(local_schema_version));
@@ -444,10 +444,10 @@ int ObMajorMergeProgressChecker::prepare_unfinish_table_ids()
     LOG_WARN("fail to check schema version", KR(ret));
   } else { // get table_id array
     ObSchemaGetterGuard schema_guard(ObSchemaMgrItem::MOD_RS_MAJOR_CHECK); // temp schema guard to build table_id array
-    if (OB_FAIL(schema_service_->get_tenant_schema_guard(schema_guard))) {
+    if (OB_FAIL(schema_service_->get_runtime_schema_guard(schema_guard))) {
       LOG_WARN("fail to get schema guard", KR(ret));
-    } else if (OB_FAIL(schema_guard.get_table_ids_in_tenant(table_id_array))) {
-      LOG_WARN("fail to get table ids in tenant", KR(ret));
+    } else if (OB_FAIL(schema_guard.get_table_ids_in_runtime(table_id_array))) {
+      LOG_WARN("fail to get runtime table ids", KR(ret));
     }
   }
   if (OB_SUCC(ret) && table_id_array.count() > 0) {
@@ -470,7 +470,7 @@ int ObMajorMergeProgressChecker::prepare_unfinish_table_ids()
     ObSchemaGetterGuard schema_guard(ObSchemaMgrItem::MOD_RS_MAJOR_CHECK); // temp schema guard to loop table_id array
     start_idx = end_idx;
     end_idx = MIN(table_id_array.count(), start_idx + TABLE_ID_BATCH_CHECK_SIZE);
-    if (OB_FAIL(schema_service_->get_tenant_schema_guard(schema_guard))) {
+    if (OB_FAIL(schema_service_->get_runtime_schema_guard(schema_guard))) {
       LOG_WARN("fail to get schema guard", KR(ret));
     }
     for (int64_t idx = start_idx; OB_SUCC(ret) && idx < end_idx; ++idx) {
@@ -526,11 +526,11 @@ int ObMajorMergeProgressChecker::prepare_unfinish_table_ids()
         get_compaction_scn_val(),
         ObServerCompactionEvent::RS_REPAPRE_UNFINISH_TABLE_IDS,
         common::ObTimeUtility::fast_current_time(),
-        "tenant_table_cnt", table_id_array.count(),
+        "runtime_table_cnt", table_id_array.count(),
         "data_table_cnt", table_ids_.count() - verified_index_cnt[0] - verified_index_cnt[1],
         "local_index_cnt", verified_index_cnt[0],
         "global_index_cnt", verified_index_cnt[1]);
-    LOG_INFO("success to prepare table_id map", KR(ret), "tenant_table_cnt", table_id_array.count(),
+    LOG_INFO("success to prepare table_id map", KR(ret), "runtime_table_cnt", table_id_array.count(),
       K_(table_ids), "data_table_cnt", table_ids_.count() - verified_index_cnt[0] - verified_index_cnt[1],
       "local_index_cnt", verified_index_cnt[0], "global_index_cnt", verified_index_cnt[1]);
   }
@@ -683,7 +683,7 @@ int ObMajorMergeProgressChecker::check_progress()
     LOG_WARN("failed to prepare check progress", KR(ret));
   } else {
     SMART_VAR(ObArray<uint64_t>, unfinish_table_id_array) {
-      int64_t tenant_schema_version = 0;
+      int64_t runtime_schema_version = 0;
       unfinish_table_id_array.set_attr(ObMemAttr("RSCompTableIds"));
       if (OB_FAIL(unfinish_table_id_array.reserve(DEFAULT_ARRAY_CNT))) {
         LOG_WARN("failed to reserve unfinish table id array", KR(ret), "array_cnt", DEFAULT_ARRAY_CNT);
@@ -695,10 +695,10 @@ int ObMajorMergeProgressChecker::check_progress()
       ObSchemaGetterGuard schema_guard(ObSchemaMgrItem::MOD_RS_MAJOR_CHECK);
       int64_t last_epoch_check_us = 0;
       while (OB_SUCC(ret) && !table_ids_.loop_finish() && !stop_) { // split batch table_ids
-        if (OB_FAIL(schema_service_->get_tenant_refreshed_schema_version(tenant_schema_version))) {
+        if (OB_FAIL(schema_service_->get_runtime_refreshed_schema_version(runtime_schema_version))) {
           LOG_WARN("failed to get schema version", K(ret));
-        } else if (OB_FAIL(schema_service_->get_tenant_schema_guard(schema_guard,
-            tenant_schema_version, OB_INVALID_VERSION,
+        } else if (OB_FAIL(schema_service_->get_runtime_schema_guard(schema_guard,
+            runtime_schema_version,
             ObMultiVersionSchemaService::RefreshSchemaMode::FORCE_LAZY))) {
           LOG_WARN("fail to get schema guard", KR(ret));
         }
@@ -711,11 +711,11 @@ int ObMajorMergeProgressChecker::check_progress()
         }
 #endif
         if (FAILEDx(check_verification(schema_guard, unfinish_table_id_array))) {
-          // check tablet_replica_checksum & table_index_checksum & cross_cluter_checksum
+          // check local_tablet_checksum & table_index_checksum & cross_cluter_checksum
           LOG_WARN("failed to check verification", KR(ret), "compaction_scn", get_compaction_scn());
           // only record OB_CHECKSUM_ERROR, and thus avoid confusing DBA
-          if (TC_REACH_TIME_INTERVAL(ADD_RS_EVENT_INTERVAL) && (OB_CHECKSUM_ERROR == ret)) {
-            ROOTSERVICE_EVENT_ADD("daily_merge", "verification",
+          if (TC_REACH_TIME_INTERVAL(ADD_MANAGEMENT_EVENT_INTERVAL) && (OB_CHECKSUM_ERROR == ret)) {
+            MANAGEMENT_EVENT_ADD("daily_merge", "verification",
                                   "check verification fail", ret,
                                   "global_broadcast_scn", get_compaction_scn().get_val_for_inner_table_field(),
                                   "service_addr", GCONF.self_addr_);
@@ -766,9 +766,9 @@ void ObMajorMergeProgressChecker::print_unfinish_info(const int64_t cost_us)
   const int64_t array_cnt = ObUncompactInfo::DEBUG_INFO_CNT;
   ObSEArray<uint64_t, array_cnt> tmp_table_id_array;
   ObSEArray<uint64_t, array_cnt> tmp_tablets_array;
-  ObSEArray<ObTabletReplica, array_cnt> uncompacted_replica_array;
+  ObSEArray<ObTabletRuntimeInfo, array_cnt> uncompacted_tablet_array;
   ObSEArray<uint64_t, array_cnt> uncompacted_table_array;
-  (void) uncompact_info_.get_uncompact_info(uncompacted_replica_array, uncompacted_table_array);
+  (void) uncompact_info_.get_uncompact_info(uncompacted_tablet_array, uncompacted_table_array);
   if (table_ids_.count() > 0) {
     const int64_t table_id_cnt = MIN(array_cnt, table_ids_.count());
     for (int64_t idx = 0; OB_SUCC(ret) && idx < table_id_cnt; ++idx) {
@@ -777,9 +777,9 @@ void ObMajorMergeProgressChecker::print_unfinish_info(const int64_t cost_us)
       }
     }
   }
-  for (int64_t idx = 0; OB_SUCC(ret) && idx < uncompacted_replica_array.count(); ++idx) {
+  for (int64_t idx = 0; OB_SUCC(ret) && idx < uncompacted_tablet_array.count(); ++idx) {
     if (OB_FAIL(tmp_tablets_array.push_back(
-            uncompacted_replica_array.at(idx).get_tablet_id().id()))) {
+            uncompacted_tablet_array.at(idx).get_tablet_id().id()))) {
       LOG_WARN("failed to push array", KR(ret));
     }
   }
@@ -796,7 +796,7 @@ void ObMajorMergeProgressChecker::print_unfinish_info(const int64_t cost_us)
   LOG_INFO("succ to check merge progress", K_(loop_cnt), "compaction_scn", get_compaction_scn(), K(cost_us),
     K_(progress), "remain_table_id_count", table_ids_.count(),
     "remain_table_ids", tmp_table_id_array,
-    "uncompacted_tablets", uncompacted_replica_array,
+    "uncompacted_tablets", uncompacted_tablet_array,
     "uncompacted_table_ids", uncompacted_table_array,
     "skip_verify_tables", uncompact_info_.skip_verify_tables_,
     K_(total_time_guard), K_(validator_statistics));
@@ -929,7 +929,7 @@ int ObMajorMergeProgressChecker::loop_index_ckm_validate_array()
   uint64_t prev_data_table_id = OB_INVALID_ID;
   ObSchemaGetterGuard schema_guard(ObSchemaMgrItem::MOD_RS_MAJOR_CHECK);
   ObTableCkmItems data_table_ckm{};
-  if (OB_FAIL(schema_service_->get_tenant_schema_guard(schema_guard))) {
+  if (OB_FAIL(schema_service_->get_runtime_schema_guard(schema_guard))) {
     LOG_WARN("fail to get schema guard", KR(ret));
   }
   for (int64_t idx = 0; idx < idx_ckm_validate_array_.count(); ++idx) {
@@ -944,7 +944,7 @@ int ObMajorMergeProgressChecker::loop_index_ckm_validate_array()
       data_table_ckm.clear();
       prev_data_table_id = data_table_id;
       if (OB_FAIL(data_table_ckm.build(data_table_id, get_compaction_scn(),
-                                       *sql_proxy_, schema_guard))) {
+                                       schema_guard))) {
         LOG_WARN("fail to prepare schema checksum items", KR(ret), K(data_table_id));
       } else {
         ++validator_statistics_.query_ckm_sql_cnt_;
@@ -986,7 +986,7 @@ int ObMajorMergeProgressChecker::get_idx_ckm_and_validate(
   // only for case : check special index table first
   if (should_handle_index_table) {
     if (OB_FAIL(index_table_ckm.build(index_table_id, get_compaction_scn(),
-                                      *sql_proxy_, schema_guard))) {
+                                      schema_guard))) {
       LOG_WARN("failed to get checksum items", KR(ret), K(index_table_id), "compaction_scn", get_compaction_scn());
     } else if (OB_UNLIKELY(index_table_ckm.get_table_schema()->should_not_validate_data_index_ckm())) {
       ret = OB_ERR_UNEXPECTED;
@@ -1055,10 +1055,7 @@ int ObMajorMergeProgressChecker::update_finish_index_cnt_for_data_table(
 int ObMajorMergeProgressChecker::generate_tablet_status_map()
 {
   int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
-  ObTabletInfo tablet_info;
-  int64_t idx = 0;
-  bool filter = false;
+  ObTabletRuntimeInfo tablet_info;
   ObCompactionTabletMetaIterator iter(!is_extra_check_round(), get_compaction_scn_val());
   if (OB_FAIL(iter.init(batch_size_mgr_.get_inner_table_scan_batch_size()))) {
     LOG_WARN("failed to init iter", KR(ret));
@@ -1076,23 +1073,22 @@ int ObMajorMergeProgressChecker::generate_tablet_status_map()
       LOG_WARN("iterate invalid tablet info", KR(ret), K(tablet_info));
     } else {
       ObTabletCompactionStatusEnum status = ObTabletCompactionStatusEnum::COMPACTED;
-      SCN replica_snapshot_scn;
+      SCN tablet_snapshot_scn;
       SCN report_scn;
-      const ObTabletReplica &replica = tablet_info.get_replica();
-      filter = false;
-      if (OB_FAIL(replica_snapshot_scn.convert_for_tx(replica.get_snapshot_version()))) {
-        LOG_WARN("fail to convert val to SCN", KR(ret), K(replica));
-      } else if (OB_UNLIKELY(ObTabletReplica::ScnStatus::SCN_STATUS_ERROR == replica.get_status())) {
-        ret = OB_CHECKSUM_ERROR;
-        LOG_ERROR("ERROR! ERROR! ERROR! find error status tablet replica", KR(ret), K(tablet_info));
-      } else if (replica_snapshot_scn < get_compaction_scn()) {
+      if (OB_FAIL(tablet_snapshot_scn.convert_for_tx(tablet_info.get_snapshot_version()))) {
+        LOG_WARN("fail to convert val to SCN", KR(ret), K(tablet_info));
+      } else if (OB_UNLIKELY(ObTabletRuntimeInfo::ScnStatus::SCN_STATUS_ERROR == tablet_info.get_status())) {
+          ret = OB_CHECKSUM_ERROR;
+          LOG_ERROR("find error status in local tablet runtime metadata", KR(ret), K(tablet_info));
+      } else if (tablet_snapshot_scn < get_compaction_scn()) {
         status = ObTabletCompactionStatusEnum::INITIAL;
-        (void) uncompact_info_.add_tablet(replica);
-        LOG_TRACE("unfinish tablet", KR(ret), K(replica), K(replica_snapshot_scn), "compaction_scn", get_compaction_scn());
-      } else if (OB_FAIL(report_scn.convert_for_tx(replica.get_report_scn()))) { // check report_scn
-        LOG_WARN("fail to convert val to SCN", KR(ret), K(replica));
+        (void) uncompact_info_.add_tablet(tablet_info);
+        LOG_TRACE("unfinish tablet", KR(ret), K(tablet_info), K(tablet_snapshot_scn),
+            "compaction_scn", get_compaction_scn());
+      } else if (OB_FAIL(report_scn.convert_for_tx(tablet_info.get_report_scn()))) {
+        LOG_WARN("fail to convert val to SCN", KR(ret), K(tablet_info));
       } else if (report_scn >= get_compaction_scn()
-        || replica_snapshot_scn > get_compaction_scn()) {
+          || tablet_snapshot_scn > get_compaction_scn()) {
         status = ObTabletCompactionStatusEnum::CAN_SKIP_VERIFYING;
       }
       if (OB_SUCC(ret) && ObTabletCompactionStatusEnum::INITIAL != status) {
@@ -1190,12 +1186,12 @@ int ObMajorMergeProgressChecker::prepare_fts_group(
 int ObMajorMergeProgressChecker::handle_fts_checksum()
 {
   int ret = OB_SUCCESS;
-  int64_t tenant_schema_version = 0;
+  int64_t runtime_schema_version = 0;
   ObSchemaGetterGuard schema_guard(ObSchemaMgrItem::MOD_RS_MAJOR_CHECK);
-  if (OB_FAIL(schema_service_->get_tenant_refreshed_schema_version(tenant_schema_version))) {
+  if (OB_FAIL(schema_service_->get_runtime_refreshed_schema_version(runtime_schema_version))) {
     LOG_WARN("failed to get schema version", K(ret));
-  } else if (OB_FAIL(schema_service_->get_tenant_schema_guard(
-          schema_guard, tenant_schema_version, OB_INVALID_VERSION,
+  } else if (OB_FAIL(schema_service_->get_runtime_schema_guard(
+          schema_guard, runtime_schema_version,
           ObMultiVersionSchemaService::RefreshSchemaMode::FORCE_LAZY))) {
     LOG_WARN("fail to get schema guard", KR(ret));
   } else if (OB_FAIL(ckm_validator_.handle_fts_checksum(schema_guard, fts_group_array_))) {

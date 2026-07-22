@@ -57,7 +57,6 @@ int ObCreateUserResolver::resolve(const ParseNode &parse_tree)
     ParseNode *users = const_cast<ParseNode*>(parse_tree.children_[1]);
     ParseNode *require_info = const_cast<ParseNode*>(parse_tree.children_[2]);
     ParseNode *resource_options = const_cast<ParseNode*>(parse_tree.children_[3]);
-    ParseNode *primary_zone = NULL; 
     ParseNode *ssl_infos = NULL;
     
 		//resolve if_not_exists
@@ -198,16 +197,6 @@ int ObCreateUserResolver::resolve(const ParseNode &parse_tree)
             }
           }
         }
-      }
-    }
-    if (OB_SUCC(ret) && OB_NOT_NULL(primary_zone)) {
-      if (T_PRIMARY_ZONE != primary_zone->type_ || NULL == primary_zone->children_ || 
-          primary_zone->num_child_ != 1) {
-        ret = common::OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid primary_zone argument", K(ret), "num_child", primary_zone->num_child_);
-      } else if (OB_FAIL(ObDatabaseResolver<ObCreateUserStmt>::resolve_primary_zone(
-            create_user_stmt, primary_zone->children_[0]))) {
-        LOG_WARN("fail to resolve primary zone", K(ret));
       }
     }
     if (OB_SUCC(ret)) {

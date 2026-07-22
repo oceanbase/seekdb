@@ -61,7 +61,6 @@ public:
   virtual int trans_replay_end(const bool commit,
                                const share::SCN trans_version,
                                const share::SCN final_scn,
-                               const uint64_t log_cluster_version = 0,
                                const uint64_t checksum = 0) = 0;
   virtual void print_callbacks() = 0;
   //method called when leader takeover
@@ -87,7 +86,6 @@ struct CreateMemtableArg {
   share::SCN clog_checkpoint_scn_;
   share::SCN new_clog_checkpoint_scn_;
   bool for_replay_;
-  bool is_delete_insert_;
 
   CreateMemtableArg() { reset(); }
 
@@ -96,14 +94,12 @@ struct CreateMemtableArg {
     clog_checkpoint_scn_.set_min();
     new_clog_checkpoint_scn_.set_min();
     for_replay_ = false;
-    is_delete_insert_ = false;
   }
 
   TO_STRING_KV(K(schema_version_),
                K(clog_checkpoint_scn_),
                K(new_clog_checkpoint_scn_),
-               K(for_replay_),
-               K(is_delete_insert_));
+               K(for_replay_));
 };
 
 class ObIMemtable : public storage::ObITable {

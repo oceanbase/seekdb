@@ -35,10 +35,6 @@ struct ObExpr;
 namespace share
 {
 class ObAutoincrementService;
-namespace schema
-{
-class ObUDFMeta;
-}
 }
 
 namespace common
@@ -150,7 +146,6 @@ public:
      div_precision_increment_(OB_INVALID_COUNT),
      ob_max_allowed_packet_(OB_INVALID_COUNT),
      session_(NULL),
-     udf_meta_(NULL),
      cast_mode_(CM_NONE),
      raw_expr_(NULL),
      enable_mysql_compatible_dates_(false)
@@ -185,14 +180,6 @@ public:
 
   inline void set_session(const sql::ObSQLSessionInfo *session) {
     session_ = session;
-  }
-
-  inline const share::schema::ObUDFMeta* get_udf_meta() {
-    return udf_meta_;
-  }
-
-  inline void set_udf_meta(const share::schema::ObUDFMeta *udf_meta) {
-    udf_meta_ = udf_meta;
   }
 
   inline common::ObCastMode get_cast_mode() { return cast_mode_; }
@@ -230,7 +217,6 @@ public:
                K_(div_precision_increment),
                K_(ob_max_allowed_packet),
                KP_(session),
-               KP_(udf_meta),
                K_(cast_mode),
                K_(sql_mode),
                K_(enable_mysql_compatible_dates));
@@ -245,7 +231,6 @@ private:
    int64_t div_precision_increment_;
    int64_t ob_max_allowed_packet_;
    const sql::ObSQLSessionInfo *session_;
-   const share::schema::ObUDFMeta *udf_meta_; /* for udf */
    // In the type inference, the expression can set cast_mode to control the behavior of each parameter for type conversion
    // Just add your own special cast mode, some regular modes will be automatically added before putting in the cast expr
    // Set cast_mode of type_ctx when calc_result_type works for static engine.

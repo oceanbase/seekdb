@@ -72,23 +72,6 @@ int ObCreateOutlineResolver::resolve_hint(const ParseNode *node, ObCreateOutline
       }
     }
   }
-
-  if (OB_SUCC(ret)) {
-    for (int32_t i = 0; i < node->num_child_; i ++) {
-      ParseNode *hint_node = node->children_[i];
-      if (!hint_node) {
-       continue;
-      }
-      if (hint_node->type_ == T_MAX_CONCURRENT) {
-        if (OB_ISNULL(hint_node->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("child of max concurrent node should not be NULL", K(ret));
-        } else if (hint_node->children_[0]->value_ >= 0) {
-          create_outline_stmt.set_max_concurrent(hint_node->children_[0]->value_);
-        } else {/*do nothing*/}
-      }
-    }
-  }
   return ret;
 }
 
@@ -97,14 +80,10 @@ int ObCreateOutlineResolver::resolve(const ParseNode &parse_tree)
   int ret = OB_SUCCESS;
   ParseNode *node = const_cast<ParseNode *>(&parse_tree);
   ObCreateOutlineStmt *create_outline_stmt = NULL;
-  uint64_t compat_version = 0;
   if (OB_ISNULL(session_info_) || OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session_info_ or allocator_ is NULL",
              KP(session_info_), K(allocator_), K(ret));
-  } else if (OB_UNLIKELY(is_external_catalog_id(session_info_->get_current_default_catalog()))) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "create outline in catalog is");
   } else if (OB_ISNULL(node)
       || OB_UNLIKELY(node->type_ != T_CREATE_OUTLINE)
       || OB_UNLIKELY(node->num_child_ != OUTLINE_CHILD_COUNT)) {
@@ -116,8 +95,6 @@ int ObCreateOutlineResolver::resolve(const ParseNode &parse_tree)
   } else if (OB_UNLIKELY(NULL == (create_outline_stmt = create_stmt<ObCreateOutlineStmt>()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to create create_outline_stmt", K(ret));
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(compat_version))) {
-    LOG_WARN("fail to get data version", KR(ret));
   } else {
     stmt_ = create_outline_stmt;
     //set is_replace

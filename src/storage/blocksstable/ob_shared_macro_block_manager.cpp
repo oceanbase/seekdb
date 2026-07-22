@@ -22,6 +22,7 @@
 #include "storage/tablet/ob_mds_schema_helper.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
+#include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
 
 namespace oceanbase
 {
@@ -272,7 +273,7 @@ int ObSharedMacroBlockMgr::write_block(
   read_info.offset_ = offset;
   read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_READ);
   read_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
-  read_info.io_desc_.set_sys_module_id(ObIOModule::SHARED_MACRO_BLOCK_MGR_IO);
+  read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_WHOLE_SCANNER_IO);
   ObMacroBlockHandle read_handle;
   ObSSTableMacroBlockChecker macro_block_checker;
   ObArenaAllocator io_allocator("SMBM_IOUB", OB_MALLOC_NORMAL_BLOCK_SIZE);
@@ -437,7 +438,7 @@ int ObSharedMacroBlockMgr::defragment()
   ObArenaAllocator iter_allocator("SSTDefragIter", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObFixedArray<MacroBlockId, ObIAllocator> macro_ids(task_allocator);
   ObHasNestedTableFilterOp op;
-  ObTenantTabletIterator tablet_iter(*(share::g_mp->tenant_meta_mem_mgr()), iter_allocator, &op);
+  ObTabletIterator tablet_iter(*(share::g_mp->storage_meta_mem_mgr()), iter_allocator, &op);
   ObSSTableIndexBuilder *sstable_index_builder = nullptr;
   ObIndexBlockRebuilder *index_block_rebuilder = nullptr;
   int64_t rewrite_cnt = 0;
@@ -527,7 +528,7 @@ int ObSharedMacroBlockMgr::update_tablet(
   common::ObArenaAllocator allocator("ShareBlkUpTab");
   ObSArray<ObITable *> new_sstables;
   ObTableStoreIterator table_store_iter;
-  uint64_t data_version = 0;
+  const uint64_t data_version = DATA_CURRENT_VERSION;
   const ObTabletMeta &tablet_meta = tablet_handle.get_obj()->get_tablet_meta();
   ObTabletHandle updated_tablet_handle;
   ObMetaDiskAddr cur_addr;
@@ -535,12 +536,6 @@ int ObSharedMacroBlockMgr::update_tablet(
 
   if (OB_FAIL(tablet_handle.get_obj()->get_all_sstables(table_store_iter))) {
     LOG_WARN("fail to get sstables of this tablet", K(ret));
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(data_version))) {
-    if (OB_ENTRY_NOT_EXIST == ret) {
-      ret = OB_EAGAIN;
-    } else {
-      LOG_WARN("fail to get data version", K(ret));
-    }
   }
   while (OB_SUCC(ret)) {
     ObITable *table = nullptr;
@@ -568,8 +563,8 @@ int ObSharedMacroBlockMgr::update_tablet(
       if (OB_FAIL(tablet_handle.get_obj()->load_storage_schema(tmp_arena, storage_schema))) {
         LOG_WARN("fail to get storage schema");
       } else if (storage_schema->is_column_info_simplified()) {
-        /* column info simplified, cannot calculate column checksum while ObSSTableIndexBuilder::merge_index_tree 
-           in ObSSTableIndexBuilder::close operation later. Therefore, the defragmentation action is deferred 
+        /* column info simplified, cannot calculate column checksum while ObSSTableIndexBuilder::merge_index_tree
+           in ObSSTableIndexBuilder::close operation later. Therefore, the defragmentation action is deferred
            until a complete storage schema is available. */
         ret = OB_EAGAIN;
       } else if (OB_UNLIKELY(1 != data_block_count)) {
@@ -871,7 +866,7 @@ int ObSharedMacroBlockMgr::read_sstable_block(
     read_info.size_ = upper_align(sstable.get_macro_read_size(), DIO_READ_ALIGN_SIZE);
     read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_READ);
     read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
-    read_info.io_desc_.set_sys_module_id(ObIOModule::SHARED_MACRO_BLOCK_MGR_IO);
+    read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_WHOLE_SCANNER_IO);
 
     if (OB_ISNULL(read_info.buf_ = reinterpret_cast<char*>(allocator.alloc(read_info.size_)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;

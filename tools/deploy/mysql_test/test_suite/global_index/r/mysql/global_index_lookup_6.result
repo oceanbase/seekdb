@@ -472,8 +472,6 @@ select /*+index(t28 gkey)*/ * from t28 order by a,b;
 
 ##     part three 生成列 FIXME  生成列也有问题
 drop table if exists bmsql_oorder;
-drop tablegroup if exists tpcc_group;
-CREATE TABLEGROUP IF NOT EXISTS `tpcc_group`;
 CREATE TABLE `bmsql_oorder` (
   `o_w_id` int(11) NOT NULL,
   `o_d_id` int(11) NOT NULL,
@@ -486,7 +484,7 @@ CREATE TABLE `bmsql_oorder` (
   PRIMARY KEY (`o_w_id`, `o_d_id`, `o_id`),
   KEY `o_w_id` (`o_w_id`, `o_d_id`, `o_c_id`, `o_id`) GLOBAL  BLOCK_SIZE 16384,
   KEY `o_w_id_2` (`o_w_id`, `o_d_id`, `o_ol_cnt`) GLOBAL  BLOCK_SIZE 16384
-) DEFAULT CHARSET = utf8mb4 TABLEGROUP = 'tpcc_group'
+) DEFAULT CHARSET = utf8mb4
  partition by hash(o_w_id) partitions 2;
 
 insert into bmsql_oorder(o_w_id,o_d_id,o_id,o_c_id,o_carrier_id) values(36,7,1,169,1);

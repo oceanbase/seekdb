@@ -233,7 +233,7 @@ int ObInfixExpression::add_expr_item(const ObInfixExprItem &item)
     if (OB_ISNULL(_calc_stack)) { \
       ret = OB_ALLOCATE_MEMORY_FAILED; \
       LOG_WARN("get thread local stack failed", K(ret)); \
-    } else if (OB_UNLIKELY(_stack_size + _cur_top > ObPostfixExpressionCalcStack::STACK_SIZE)) { \
+    } else if (OB_UNLIKELY(_stack_size + _cur_top > ObExpressionCalcStack::STACK_SIZE)) { \
       if (NULL == (stack = static_cast<ObObj *>(expr_ctx.calc_buf_->alloc( \
                       sizeof(ObObj) * _stack_size)))) { \
         ret = OB_ALLOCATE_MEMORY_FAILED; \

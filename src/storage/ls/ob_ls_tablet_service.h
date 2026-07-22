@@ -27,7 +27,7 @@
 #include "storage/ob_dml_common.h"
 #include "storage/ob_relative_table.h"
 #include "storage/slog/ob_storage_log.h"
-#include "storage/ob_tablet_restore_state.h"
+#include "storage/ob_tablet_local_status.h"
 #include "storage/tablelock/ob_lock_memtable_mgr.h"
 #include "storage/tx_table/ob_tx_ctx_memtable_mgr.h"
 #include "storage/tx_table/ob_tx_data_memtable_mgr.h"
@@ -110,7 +110,7 @@ public:
   int offline();
   int online();
   // TODO: delete it if apply sequence
-  // set allocators frozen to reduce active tenant_memory in ObLS::offline_()
+  // Freeze allocators to reduce active runtime memory in ObLS::offline_().
   int set_frozen_for_all_memtables();
 private:
   // for replay
@@ -215,7 +215,6 @@ public:
   int update_tablet_restore_status(
       const common::ObTabletID &tablet_id,
       const ObTabletRestoreStatus::STATUS &restore_status);
-  int update_tablet_column_store_schema(const common::ObTabletID &tablet_id);
   int get_tablet_without_memtables(
       const WashTabletPriority &priority,
       const ObTabletMapKey &key,

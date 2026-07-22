@@ -46,7 +46,7 @@ int ObTransID::compare(const ObTransID& other) const
 
 OB_SERIALIZE_MEMBER(ObTransID, tx_id_);
 OB_SERIALIZE_MEMBER(ObStartTransParam, access_mode_, type_, isolation_, consistency_type_,
-                    cluster_version_, is_inner_trans_, read_snapshot_type_);
+                    is_inner_trans_, read_snapshot_type_);
 OB_SERIALIZE_MEMBER(ObElrTransInfo, trans_id_, commit_version_, result_);
 OB_SERIALIZE_MEMBER(ObTransDesc, a_);
 
@@ -60,7 +60,6 @@ void ObStartTransParam::reset()
   autocommit_ = false;
   consistency_type_ = ObTransConsistencyType::CURRENT_READ;
   read_snapshot_type_ = ObTransReadSnapshotType::STATEMENT_SNAPSHOT;
-  cluster_version_ = ObStartTransParam::INVALID_CLUSTER_VERSION;
   is_inner_trans_ = false;
 }
 
@@ -79,12 +78,12 @@ int64_t ObStartTransParam::to_string(char *buf, const int64_t buf_len) const
   int64_t pos = 0;
   databuff_printf(buf, buf_len, pos,
                   "[access_mode=%d, type=%d, isolation=%d, magic=%lu, autocommit=%d, "
-                  "consistency_type=%d(%s), read_snapshot_type=%d(%s), cluster_version=%lu, "
+                  "consistency_type=%d(%s), read_snapshot_type=%d(%s), "
                   "is_inner_trans=%d]",
                   access_mode_, type_, isolation_, magic_, autocommit_,
                   consistency_type_, ObTransConsistencyType::cstr(consistency_type_),
                   read_snapshot_type_, ObTransReadSnapshotType::cstr(read_snapshot_type_),
-                  cluster_version_, is_inner_trans_);
+                  is_inner_trans_);
   return pos;
 }
 
@@ -346,7 +345,6 @@ void ObTxExecInfo::reset()
   data_complete_ = false;
   //touched_pkeys_.reset();
   multi_data_source_.reset();
-  xid_.reset();
   need_checksum_ = true;
   serial_final_scn_.reset();
   serial_final_seq_no_.reset();
@@ -365,7 +363,7 @@ void ObTxExecInfo::destroy(ObTxMDSCache &mds_cache)
     ObTxBufferNode &node = multi_data_source_.at(i);
     if (nullptr != node.data_.ptr()) {
       mds_cache.free_mds_node(node.data_, node.get_register_no());
-      // share::mtl_free(node.data_.ptr());
+      // share::server_free(node.data_.ptr());
       node.buffer_ctx_node_.destroy_ctx();
     }
   }
@@ -389,23 +387,16 @@ int ObTxExecInfo::generate_mds_buffer_ctx_array()
   return ret;
 }
 
-void ObTxExecInfo::mrege_buffer_ctx_array_to_multi_data_source() const
+int ObTxExecInfo::merge_buffer_ctx_array_to_multi_data_source() const
 {
+  int ret = OB_SUCCESS;
   ObTxBufferNodeArray &multi_data_source = const_cast<ObTxBufferNodeArray &>(multi_data_source_);
   ObTxBufferCtxArray &mds_buffer_ctx_array = const_cast<ObTxBufferCtxArray &>(mds_buffer_ctx_array_);
   TRANS_LOG_RET(INFO, OB_SUCCESS, "merge deserialized buffer ctx to multi_data_source", K(mds_buffer_ctx_array), K(multi_data_source));
   if (mds_buffer_ctx_array.count() != multi_data_source.count()) {
-    if (mds_buffer_ctx_array.count() == 0) {// 4.1 -> 4.2 compat case
-      TRANS_LOG_RET(WARN, OB_ERR_UNEXPECTED,
-                    "mds buffer ctx array size not equal to multi data source array size"
-                    ", destroy deserialized mds_buffer_ctx_array directly",
-                    K(multi_data_source), K(mds_buffer_ctx_array), K(*this));
-    } else {
-      TRANS_LOG_RET(ERROR, OB_ERR_UNEXPECTED,
-                    "mds buffer ctx array size not equal to multi data source array size"
-                    ", destroy deserialized mds_buffer_ctx_array directly",
-                    K(multi_data_source), K(mds_buffer_ctx_array), K(*this));
-    }
+    ret = OB_ERR_UNEXPECTED;
+    TRANS_LOG(ERROR, "mds buffer ctx array size does not match multi data source array size",
+              K(ret), K(multi_data_source), K(mds_buffer_ctx_array), K(*this));
     for (int64_t idx = 0; idx < mds_buffer_ctx_array.count(); ++idx) {
       mds_buffer_ctx_array[idx].destroy_ctx();
     }
@@ -415,6 +406,7 @@ void ObTxExecInfo::mrege_buffer_ctx_array_to_multi_data_source() const
     }
   }
   mds_buffer_ctx_array.reset();
+  return ret;
 }
 
 void ObTxExecInfo::clear_buffer_ctx_in_multi_data_source()
@@ -456,7 +448,6 @@ int ObTxExecInfo::assign(const ObTxExecInfo &exec_info)
     }
     max_durable_lsn_ = exec_info.max_durable_lsn_;
     data_complete_ = exec_info.data_complete_;
-    xid_ = exec_info.xid_;
     need_checksum_ = exec_info.need_checksum_;
     serial_final_scn_ = exec_info.serial_final_scn_;
     serial_final_seq_no_ = exec_info.serial_final_seq_no_;
@@ -479,9 +470,8 @@ OB_SERIALIZE_MEMBER(ObTxExecInfo,
                     checksum_[0],       // FARM COMPAT WHITELIST
                     checksum_scn_[0],   // FARM COMPAT WHITELIST
                     max_durable_lsn_,
-  data_complete_,
+                    data_complete_,
 //                    touched_pkeys_,
-                    xid_,
                     need_checksum_,
                     mds_buffer_ctx_array_,
                     checksum_,

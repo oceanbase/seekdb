@@ -53,10 +53,7 @@ int ObLCObjectManager::alloc(ObCacheObjGuard& guard,
   ObILibCacheObject *cache_obj = NULL;
   
   mem_attr.ctx_id_ = ObCtxIds::PLAN_CACHE_CTX_ID;
-  if (guard.ref_handle_ == MAX_HANDLE) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cache object guard has not been initalized!", K(ret));
-  } else if (ns <= NS_INVALID || ns >= NS_MAX || OB_ISNULL(LC_CO_ALLOC[ns])) {
+  if (ns <= NS_INVALID || ns >= NS_MAX || OB_ISNULL(LC_CO_ALLOC[ns])) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("out of the max type", K(ret), K(ns));
   } else if (FALSE_IT(mem_attr.label_ = LC_NS_TYPE_LABELS[ns])) {
@@ -68,7 +65,7 @@ int ObLCObjectManager::alloc(ObCacheObjGuard& guard,
     LOG_WARN("NULL memory entity", K(ret));
   } else {
     WITH_CONTEXT(entity) {
-      if (OB_FAIL(LC_CO_ALLOC[ns](entity, cache_obj, guard.ref_handle_))) {
+      if (OB_FAIL(LC_CO_ALLOC[ns](entity, cache_obj))) {
         LOG_WARN("failed to create lib cache node", K(ret), K(ns));
       } else {
         uint64_t obj_id = allocate_object_id();
@@ -102,7 +99,7 @@ int ObLCObjectManager::add_cache_obj(ObILibCacheObject *cache_obj)
   return ret;
 }
 
-int ObLCObjectManager::erase_cache_obj(ObCacheObjID id, const CacheRefHandleID ref_handle)
+int ObLCObjectManager::erase_cache_obj(ObCacheObjID id)
 {
   int ret = OB_SUCCESS;
   ObILibCacheObject *cache_obj = NULL;
@@ -117,28 +114,27 @@ int ObLCObjectManager::erase_cache_obj(ObCacheObjID id, const CacheRefHandleID r
                                         K(cache_obj->get_object_id()),
                                         K(cache_obj->added_lc()),
                                         K(cache_obj));
-      common_free(cache_obj, ref_handle);
+      common_free(cache_obj);
       cache_obj = NULL;
     }
   }
   return ret;
 }
 
-void ObLCObjectManager::common_free(ObILibCacheObject *cache_obj,
-                                    const CacheRefHandleID ref_handle)
+void ObLCObjectManager::common_free(ObILibCacheObject *cache_obj)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(cache_obj)) {
     // do nothing
   } else {
-    if (ref_handle != PC_DIAG_HANDLE && !cache_obj->added_lc()) {
-        cache_obj->set_logical_del_time(ObTimeUtility::current_monotonic_time());
-        LOG_WARN("set logical del time", K(cache_obj->get_logical_del_time()),
-                                         K(cache_obj->added_lc()),
-                                         K(cache_obj->get_object_id()),
-                                         K(lbt()));
+    if (!cache_obj->added_lc()) {
+      cache_obj->set_logical_del_time(ObTimeUtility::current_monotonic_time());
+      LOG_WARN("set logical del time", K(cache_obj->get_logical_del_time()),
+                                       K(cache_obj->added_lc()),
+                                       K(cache_obj->get_object_id()),
+                                       K(lbt()));
     }
-    int64_t ref_count = cache_obj->dec_ref_count(ref_handle);
+    int64_t ref_count = cache_obj->dec_ref_count();
     if (ref_count > 0) {
       // do nothing
     } else if (ref_count == 0) {

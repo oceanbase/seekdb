@@ -1236,13 +1236,13 @@ public:
   public:
     ObStatItem(const char *item, const int64_t stat_interval)
       : item_(item), stat_interval_(stat_interval), last_ts_(0), stat_count_(0), accum_count_(0), lock_tag_(false) {
-        MEMSET(extra_info_, '\0', MAX_ROOTSERVICE_EVENT_EXTRA_INFO_LENGTH);
+        MEMSET(extra_info_, '\0', MAX_MANAGEMENT_EVENT_EXTRA_INFO_LENGTH);
       }
     ~ObStatItem() {}
   public:
     void set_extra_info(const char *extra_info)
     {
-      MEMCPY(extra_info_, extra_info, MAX_ROOTSERVICE_EVENT_EXTRA_INFO_LENGTH);
+      MEMCPY(extra_info_, extra_info, MAX_MANAGEMENT_EVENT_EXTRA_INFO_LENGTH);
     }
     void stat(const int64_t count = 0)
     {
@@ -1280,7 +1280,7 @@ public:
   private:
     const char *const item_;
     const int64_t stat_interval_;
-    char extra_info_[MAX_ROOTSERVICE_EVENT_EXTRA_INFO_LENGTH];
+    char extra_info_[MAX_MANAGEMENT_EVENT_EXTRA_INFO_LENGTH];
     int64_t last_ts_;
     int64_t stat_count_;
     int64_t accum_count_;

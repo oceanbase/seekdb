@@ -81,9 +81,6 @@ public:
   virtual void callback(int cb_param, const transaction::ObTransID &trans_id) = 0;
   virtual const char *get_type() const = 0;
   virtual ObEndTransCallbackType get_callback_type() const = 0;
-  // Indicates whether it is possible for the same callback object to be shared by multiple end trans functions, which may concurrently call the callback function of the same callback object
-  virtual bool is_shared() const = 0;
-
   /*
    * Set external error code, refer to the error code specified by cb_param in the callback(callback(cb_param))
    * after the transaction is completed, along with this external error code, return the first occurring error code

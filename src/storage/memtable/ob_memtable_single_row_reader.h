@@ -42,9 +42,6 @@ public:
   int init_a_new_range(const blocksstable::ObDatumRange &new_range_to_scan);
   int get_next_row(const blocksstable::ObDatumRow *&row);
   int fill_in_next_row(blocksstable::ObDatumRow &row);
-  int fill_in_next_delete_insert_row(blocksstable::ObDatumRow &latest_row,
-                                     blocksstable::ObDatumRow &earliest_row,
-                                     int64_t &acquired_row_cnt);
   const ObITableReadInfo *get_read_info() { return read_info_; }
   TO_STRING_KV(K_(is_range_scan), K_(row_has_been_gotten), KPC_(read_info),
                K_(private_row), K_(cur_range));
@@ -52,15 +49,11 @@ public:
 private:
   int check_is_range_scan_(const blocksstable::ObDatumRange &new_range_to_scan);
   int get_real_range_(const blocksstable::ObDatumRange &range, blocksstable::ObDatumRange &real_range);
-  int inner_fill_in_next_row_(blocksstable::ObDatumRow &next_row,
-                              blocksstable::ObDatumRow &delete_row,
-                              int64_t &acquired_row_cnt);
+  int inner_fill_in_next_row_(blocksstable::ObDatumRow &next_row);
   int get_next_value_iter_(const ObMemtableKey *&key, ObMvccValueIterator *&value_iter);
   int fill_in_next_row_by_value_iter_(const ObMemtableKey *key,
                                       ObMvccValueIterator *value_iter,
-                                      blocksstable::ObDatumRow &next_row,
-                                      blocksstable::ObDatumRow &delete_row,
-                                      int64_t &acquired_row_cnt);
+                                      blocksstable::ObDatumRow &next_row);
   int fill_in_row_scn_(const int64_t row_scn, const ObMvccValueIterator *value_iter, blocksstable::ObDatumRow &new_row);
 
 private:

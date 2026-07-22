@@ -33,7 +33,6 @@ int __attribute__((weak))  build_test_schema(share::schema::ObTableSchema &table
   share::schema::ObColumnSchemaV2 column;
   table_schema.reset();
   table_schema.set_table_name(table_name);
-  table_schema.set_tablegroup_id(1);
   table_schema.set_database_id(1);
   table_schema.set_table_id(table_id);
   table_schema.set_schema_version(1000);
@@ -101,7 +100,7 @@ int __attribute__((weak)) gen_create_tablet_arg(const ObTabletID &tablet_id,
     STORAGE_LOG(WARN, "failed to init tablet info", KR(ret), K(index_tablet_ids),
         K(tablet_id), K(index_tablet_schema_idxs));
   } else if (OB_FAIL(arg.init_create_tablet(share::SCN::min_scn(), false/*need_check_tablet_cnt*/))) {
-    STORAGE_LOG(WARN, "failed to init create tablet", KR(ret), K(OB_SERVER_TENANT_ID));
+    STORAGE_LOG(WARN, "failed to init create tablet", KR(ret));
   } else if (OB_FAIL(arg.table_schemas_.push_back(table_schema))) {
     STORAGE_LOG(WARN, "failed to push back table schema", KR(ret), K(table_schema));
   } else if (OB_FAIL(arg.tablets_.push_back(tablet_info))) {

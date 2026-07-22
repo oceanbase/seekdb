@@ -62,7 +62,7 @@ TestRefCnt::~TestRefCnt()
 void TestRefCnt::SetUp()
 {
   int ret = OB_SUCCESS;
-  ret = getter.add_tenant(2 * 1024L * 1024L, 4 * 1024L * 1024L);
+  ret = getter.set_memory_limit(2 * 1024L * 1024L, 4 * 1024L * 1024L);
   ASSERT_EQ(OB_SUCCESS, ret);
   TestDataFilePrepare::SetUp();
 }
@@ -150,8 +150,8 @@ TEST_F(TestRefCnt, server_super_block)
   int ret = OB_SUCCESS;
 
   ObServerSuperBlock super_block;
-  super_block.body_.tenant_meta_entry_ = MacroBlockId(0, 133, 0);
-  super_block.body_.tenant_meta_entry_.set_write_seq(131);
+  super_block.body_.runtime_meta_entry_ = MacroBlockId(0, 133, 0);
+  super_block.body_.runtime_meta_entry_.set_write_seq(131);
   super_block.body_.replay_start_point_.file_id_ = 1;
   super_block.body_.replay_start_point_.log_id_ = 21923;
   super_block.body_.replay_start_point_.offset_ = 11497472;
@@ -288,75 +288,6 @@ TEST_F(TestRefCnt, test_1_0_1)
   ret = OB_SERVER_BLOCK_MGR.dec_ref(macro_id);
   ASSERT_NE(OB_SUCCESS, OB_SERVER_BLOCK_MGR.inc_ref(macro_id));
 }
-
-/*TEST_F(TestStorageFile, test_not_enough_mem)
-{
-  int ret = OB_SUCCESS;
-  uint64_t tenant_id = 1001;
-
-  ret = ObTenantManager::get_instance().add_tenant(tenant_id);
-  ASSERT_EQ(OB_SUCCESS, ret);
-  ret = ObTenantManager::get_instance().set_tenant_mem_limit(tenant_id, 2 * 1024L * 1024L, 4 * 1024L * 1024L);
-  ASSERT_EQ(OB_SUCCESS, ret);
-
-  ObConcurrentFIFOAllocator allocator;
-  ret = allocator.init(1LL * 1024 * 1024, ObModIds::TEST, tenant_id, 1024LL * 1024 * 1024 * 1024);
-  ASSERT_EQ(OB_SUCCESS, ret);
-
-  ret = OB_SERVER_FILE_MGR.alloc_storage_file(pg_file_);
-  ASSERT_EQ(OB_SUCCESS, ret);
-
-  ret = pg_file_->init(ObStorageFile::FileType::SERVER_ROOT, tenant_id);
-  ASSERT_EQ(OB_SUCCESS, ret);
-
-  CHUNK_MGR.set_limit(4 * 1024L * 1024L);
-
-  void *buf;
-  int i = 0;
-  while (OB_NOT_NULL(buf = allocator.alloc(1 * 1024L))) {
-    STORAGE_LOG(WARN, "tenant allocator", K(i++));
-  }
-
-  while (OB_NOT_NULL(buf = ob_malloc(1 * 1024L, pg_file_->macro_block_info_.memattr_))) {
-    STORAGE_LOG(WARN, "ob_malloc", K(i++));
-  }
-
-  MacroBlockId macro_id(1);
-
-  int64_t block_num = 1000000;
-  i = 0;
-  macro_id.write_seq_ = 0;
-  while (OB_SUCC(ret) && i++ < block_num) {
-    int count = 2;
-    while (OB_SUCC(ret) && count--) {
-      ret = pg_file_->inc_ref(macro_id);
-    }
-    count = 1;
-    while (OB_SUCC(ret) && count--) {
-      ret = pg_file_->dec_ref(macro_id);
-    }
-    if (macro_id.block_index_ < 10220) {
-      macro_id.block_index_++;
-    } else {
-      macro_id.block_index_ = 1;
-      macro_id.write_seq_++;
-    }
-    STORAGE_LOG(WARN, "jinzhu debug", K(ret), K(i));
-  }
-  ASSERT_EQ(OB_ALLOCATE_MEMORY_FAILED, ret);
-
-  ObStorageFile::BlockInfo block_info;
-  macro_id.set_real_block_id(1);
-  ret = pg_file_->macro_block_info_.get(macro_id, block_info);
-  ASSERT_EQ(OB_SUCCESS, ret);
-  ASSERT_EQ(1, block_info.ref_cnt_);
-
-  ObMallocAllocator::get_instance()->print_tenant_memory_usage(tenant_id);
-  ObMallocAllocator::get_instance()->print_tenant_ctx_memory_usage(tenant_id);
-
-  ret = OB_SERVER_FILE_MGR.free_storage_file(pg_file_);
-  ASSERT_EQ(OB_SUCCESS, ret);
-}*/
 
 } // end namespace unittest
 } // end namespace oceanbase

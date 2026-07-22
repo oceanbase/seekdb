@@ -42,11 +42,10 @@ public:
     LinkedBlock = 2,
     TmpFileData = 3,
     SSTableMacroID = 4,
-    BloomFilterData = 5,
-    SSTableIndex = 6,
-    SSTableMacroMeta = 7,
+    SSTableIndex = 5,
+    SSTableMacroMeta = 6,
+    StorageMetaData = 7,
     SharedSSTableData = 8,
-    SharedMetaData = 9,
     MaxMacroType,
   };
   static_assert(
@@ -63,19 +62,12 @@ public:
   int check_integrity() const;
   bool is_valid() const;
 
-  bool is_data_block() const
-  {
-    return is_sstable_data_block() || is_bloom_filter_data_block();
-  }
   bool is_sstable_data_block() const { return MacroBlockType::SSTableData == attr_; }
   bool is_linked_macro_block() const { return MacroBlockType::LinkedBlock == attr_; }
-  bool is_bloom_filter_data_block() const { return MacroBlockType::BloomFilterData == attr_; }
   bool is_sstable_index_block() const { return MacroBlockType::SSTableIndex ==  attr_; }
   bool is_sstable_macro_meta_block() const { return MacroBlockType::SSTableMacroMeta == attr_; }
-  bool is_shared_macro_block() const
-  {
-    return MacroBlockType::SharedSSTableData == attr_ || MacroBlockType::SharedMetaData == attr_;
-  }
+  bool is_storage_meta_block() const { return MacroBlockType::StorageMetaData == attr_; }
+  bool is_shared_macro_block() const { return MacroBlockType::SharedSSTableData == attr_; }
   int32_t get_header_size() const { return header_size_; }
   int32_t get_version() const { return version_; }
   int32_t get_magic() const { return magic_; }

@@ -22,37 +22,37 @@ namespace oceanbase
 {
 namespace tmp_file
 {
-int64_t ObSNTenantTmpFileManager::current_fd_ = ObTmpFileGlobal::INVALID_TMP_FILE_FD;
-int64_t ObSNTenantTmpFileManager::current_dir_id_ = ObTmpFileGlobal::INVALID_TMP_FILE_DIR_ID;
+int64_t ObSNTmpFileManager::current_fd_ = ObTmpFileGlobal::INVALID_TMP_FILE_FD;
+int64_t ObSNTmpFileManager::current_dir_id_ = ObTmpFileGlobal::INVALID_TMP_FILE_DIR_ID;
 
-ObSNTenantTmpFileManager::ObSNTenantTmpFileManager()
-  : ObITenantTmpFileManager(),
+ObSNTmpFileManager::ObSNTmpFileManager()
+  : ObITmpFileManager(),
     tmp_file_block_manager_(),
     page_cache_controller_(tmp_file_block_manager_)
 {
 }
 
-ObSNTenantTmpFileManager::~ObSNTenantTmpFileManager()
+ObSNTmpFileManager::~ObSNTmpFileManager()
 {
   destroy();
 }
 
-int ObSNTenantTmpFileManager::init_sub_module_()
+int ObSNTmpFileManager::init_sub_module_()
 {
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(tmp_file_block_manager_.init())) {
-    LOG_WARN("fail to init tenant tmp file block manager", KR(ret));
+    LOG_WARN("failed to initialize tmp file block manager", KR(ret));
   } else if (OB_FAIL(page_cache_controller_.init())) {
     LOG_WARN("fail to init page cache controller", KR(ret));
   } else {
-    LOG_INFO("ObSNTenantTmpFileManager init successful", KP(this));
+    LOG_INFO("ObSNTmpFileManager init successful", KP(this));
   }
 
   return ret;
 }
 
-int ObSNTenantTmpFileManager::start_sub_module_()
+int ObSNTmpFileManager::start_sub_module_()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(page_cache_controller_.start())) {
@@ -60,48 +60,48 @@ int ObSNTenantTmpFileManager::start_sub_module_()
     LOG_WARN("fail to start page cache controller background threads", KR(ret));
   } else {
     is_running_ = true;
-    LOG_INFO("ObSNTenantTmpFileManager start successful", KP(this));
+    LOG_INFO("ObSNTmpFileManager start successful", KP(this));
   }
   return ret;
 }
 
-int ObSNTenantTmpFileManager::stop_sub_module_()
+int ObSNTmpFileManager::stop_sub_module_()
 {
   int ret = OB_SUCCESS;
   page_cache_controller_.stop();
-  LOG_INFO("ObSNTenantTmpFileManager stop successful", KP(this));
+  LOG_INFO("ObSNTmpFileManager stop successful", KP(this));
   return ret;
 }
 
-int ObSNTenantTmpFileManager::wait_sub_module_()
+int ObSNTmpFileManager::wait_sub_module_()
 {
   int ret = OB_SUCCESS;
   page_cache_controller_.wait();
-  LOG_INFO("ObSNTenantTmpFileManager wait successful", KP(this));
+  LOG_INFO("ObSNTmpFileManager wait successful", KP(this));
   return ret;
 }
 
-int ObSNTenantTmpFileManager::destroy_sub_module_()
+int ObSNTmpFileManager::destroy_sub_module_()
 {
   int ret = OB_SUCCESS;
   page_cache_controller_.destroy();
   tmp_file_block_manager_.destroy();
 
-  LOG_INFO("ObSNTenantTmpFileManager destroy", KP(this));
+  LOG_INFO("ObSNTmpFileManager destroy", KP(this));
   return ret;
 }
 
-int ObSNTenantTmpFileManager::alloc_dir(int64_t &dir_id)
+int ObSNTmpFileManager::alloc_dir(int64_t &dir_id)
 {
   int ret = OB_SUCCESS;
   dir_id = ObTmpFileGlobal::INVALID_TMP_FILE_DIR_ID;
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObSNTenantTmpFileManager has not been inited", KR(ret));
+    LOG_WARN("ObSNTmpFileManager has not been inited", KR(ret));
   } else if (OB_UNLIKELY(!is_running())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObSNTenantTmpFileManager is not running", KR(ret), K(is_running_));
+    LOG_WARN("ObSNTmpFileManager is not running", KR(ret), K(is_running_));
   } else {
     dir_id = ATOMIC_AAF(&current_dir_id_, 1);
   }
@@ -110,7 +110,7 @@ int ObSNTenantTmpFileManager::alloc_dir(int64_t &dir_id)
   return ret;
 }
 
-int ObSNTenantTmpFileManager::open(int64_t &fd, const int64_t &dir_id, const char* const label)
+int ObSNTmpFileManager::open(int64_t &fd, const int64_t &dir_id, const char* const label)
 {
   int ret = OB_SUCCESS;
   fd = ObTmpFileGlobal::INVALID_TMP_FILE_FD;
@@ -119,10 +119,10 @@ int ObSNTenantTmpFileManager::open(int64_t &fd, const int64_t &dir_id, const cha
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObSNTenantTmpFileManager has not been inited", KR(ret));
+    LOG_WARN("ObSNTmpFileManager has not been inited", KR(ret));
   } else if (OB_UNLIKELY(!is_running())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObSNTenantTmpFileManager is not running", KR(ret), K(is_running_));
+    LOG_WARN("ObSNTmpFileManager is not running", KR(ret), K(is_running_));
   } else if (OB_ISNULL(buf = tmp_file_allocator_.alloc(sizeof(ObSharedNothingTmpFile),
                                                        lib::ObMemAttr("SNTmpFile")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -150,16 +150,16 @@ int ObSNTenantTmpFileManager::open(int64_t &fd, const int64_t &dir_id, const cha
 }
 
 // Get tmp file and increase its refcnt
-int ObSNTenantTmpFileManager::get_tmp_file(const int64_t fd, ObSNTmpFileHandle &file_handle) const
+int ObSNTmpFileManager::get_tmp_file(const int64_t fd, ObSNTmpFileHandle &file_handle) const
 {
   int ret = OB_SUCCESS;
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObSNTenantTmpFileManager has not been inited", KR(ret));
+    LOG_WARN("ObSNTmpFileManager has not been inited", KR(ret));
   } else if (OB_UNLIKELY(!is_running())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObSNTenantTmpFileManager is not running", KR(ret), K(is_running_));
+    LOG_WARN("ObSNTmpFileManager is not running", KR(ret), K(is_running_));
   } else if (OB_FAIL(files_.get(ObTmpFileKey(fd), file_handle))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       LOG_WARN("tmp file does not exist", KR(ret), K(fd));
@@ -174,16 +174,16 @@ int ObSNTenantTmpFileManager::get_tmp_file(const int64_t fd, ObSNTmpFileHandle &
   return ret;
 }
 
-int ObSNTenantTmpFileManager::get_macro_block_list(common::ObIArray<blocksstable::MacroBlockId> &macro_id_list)
+int ObSNTmpFileManager::get_macro_block_list(common::ObIArray<blocksstable::MacroBlockId> &macro_id_list)
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObSNTenantTmpFileManager has not been inited", KR(ret));
-// XXX This function must still be available after the tenant is stopped and before it is destroyed.
+    LOG_WARN("ObSNTmpFileManager has not been inited", KR(ret));
+// This function remains available after the service stops and before destruction.
 //  } else if (OB_UNLIKELY(!is_running())) {
 //    ret = OB_ERR_UNEXPECTED;
-//    LOG_WARN("ObSNTenantTmpFileManager is not running", KR(ret), K(is_running_));
+//    LOG_WARN("ObSNTmpFileManager is not running", KR(ret), K(is_running_));
   } else if (OB_FAIL(tmp_file_block_manager_.get_macro_block_list(macro_id_list))) {
     LOG_WARN("fail to get macro block id list", KR(ret));
   }
@@ -192,7 +192,7 @@ int ObSNTenantTmpFileManager::get_macro_block_list(common::ObIArray<blocksstable
   return ret;
 }
 
-int ObSNTenantTmpFileManager::get_tmp_file_disk_usage(int64_t &disk_data_size, int64_t &occupied_disk_size)
+int ObSNTmpFileManager::get_tmp_file_disk_usage(int64_t &disk_data_size, int64_t &occupied_disk_size)
 {
   int ret = OB_SUCCESS;
   int64_t used_page_num = 0;
@@ -202,11 +202,11 @@ int ObSNTenantTmpFileManager::get_tmp_file_disk_usage(int64_t &disk_data_size, i
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObSNTenantTmpFileManager has not been inited", KR(ret));
-// XXX This function must still be available after the tenant is stopped and before it is destroyed.
+    LOG_WARN("ObSNTmpFileManager has not been inited", KR(ret));
+// This function remains available after the service stops and before destruction.
 //  } else if (OB_UNLIKELY(!is_running())) {
 //    ret = OB_ERR_UNEXPECTED;
-//    LOG_WARN("ObSNTenantTmpFileManager is not running", KR(ret), K(is_running_));
+//    LOG_WARN("ObSNTmpFileManager is not running", KR(ret), K(is_running_));
   } else if (OB_FAIL(tmp_file_block_manager_.get_block_usage_stat(used_page_num, macro_block_count))) {
     LOG_WARN("fail to get block usage stat", KR(ret));
   } else {

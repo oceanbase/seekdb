@@ -79,7 +79,6 @@ public:
   bool is_blob() { return coll_type_ == common::ObCollationType::CS_TYPE_BINARY; }
 
   bool is_remote() const;
-  bool is_across_tenant() const;
 
   // chunk size can be changed online.
   // that means lob data that has been writed may have different chunk size with schema
@@ -137,8 +136,7 @@ public:
   transaction::ObTransID tx_id_; // used when read-latest
   ObSQLMode sql_mode_;
   ObDMLBaseParam* dml_base_param_;
-  // some lob manager func will access other lob for data
-  // other lob can read from other tenant
+  // Some LOB operations read data from another LOB in the same database.
   
   common::ObTabletID tablet_id_;
   common::ObTabletID lob_meta_tablet_id_;
@@ -177,7 +175,7 @@ public:
   // write operation type
   //  1. if is normal dml , should be SQL
   //  2. if is json partial update, should be DIFF
-  //  3. other is used for dbms_lob partial update
+  //  3. other is used for partial LOB updates
   //  4. and EMPTY_SQL should not be used
   ObLobDataOutRowCtx::OpType op_type_;
   // bool field
@@ -189,7 +187,7 @@ public:
   // means main table is read_latest, not lob aux table
   bool read_latest_;
   bool scan_backward_;
-  bool is_fill_zero_; // fill zero when dbms lob erase
+  bool is_fill_zero_; // fill zero during a LOB erase
   bool from_rpc_;
   bool inrow_read_nocopy_;
   bool is_store_char_len_;

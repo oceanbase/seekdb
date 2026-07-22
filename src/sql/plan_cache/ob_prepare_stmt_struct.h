@@ -213,8 +213,8 @@ public:
   int64_t get_dep_objs_cnt() const { return dep_objs_cnt_; }
   ObPsStmtItem *get_ps_item() const { return ps_item_; }
   void set_ps_item(ObPsStmtItem *ps_item) { ps_item_ = ps_item; }
-  int64_t get_tenant_version() const { return tenant_version_; }
-  void set_tenant_version(int64_t tenant_version) { tenant_version_ = tenant_version; }
+  int64_t get_runtime_schema_version() const { return runtime_schema_version_; }
+  void set_runtime_schema_version(int64_t runtime_schema_version) { runtime_schema_version_ = runtime_schema_version; }
   void set_is_expired() { ATOMIC_STORE(&is_expired_, true); }
   bool is_expired() { return ATOMIC_LOAD(&is_expired_); }
   bool *get_is_expired_evicted_ptr() { return &is_expired_evicted_; }
@@ -238,7 +238,7 @@ private:
   ObSchemaObjVersion *dep_objs_;
   int64_t dep_objs_cnt_;
   ObPsStmtItem *ps_item_;
-  int64_t tenant_version_;
+  int64_t runtime_schema_version_;
   bool is_expired_;
   //check whether has dec ref count for ps info expired
   bool is_expired_evicted_;

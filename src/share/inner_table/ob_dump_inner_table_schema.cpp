@@ -332,7 +332,7 @@ int ObInnerTableSchemaDumper::get_all_ddl_operation_info_(const ObIArray<schema:
       OZ (dml.add_column("user_id", 0));
       OZ (dml.add_column("database_id", table->get_database_id()));
       OZ (dml.add_column("database_name", ""));
-      OZ (dml.add_column("tablegroup_id", table->get_tablegroup_id()));
+      OZ (dml.add_column("column_id", 0));
       OZ (dml.add_column("table_id", table->get_table_id()));
       OZ (dml.add_column("table_name", ""));
       OZ (dml.add_column("operation_type", op_type));

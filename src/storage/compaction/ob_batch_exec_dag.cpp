@@ -49,7 +49,7 @@ void ObBatchExecCollector::add(
       ADD_COMMENT("errno", info_.errno_);
     }
 #undef ADD_COMMENT
-    if (OB_FAIL(share::g_mp->tenant_ss_table_merge_info_mgr()->add_sstable_merge_info(merge_history_))) {
+    if (OB_FAIL(share::g_mp->sstable_merge_info_mgr()->add_sstable_merge_info(merge_history_))) {
       STORAGE_LOG(WARN, "failed to add sstable merge info", KR(ret), K_(merge_history));
     }
   }

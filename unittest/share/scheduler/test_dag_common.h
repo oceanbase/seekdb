@@ -18,21 +18,21 @@
 #include <gtest/gtest.h>
 #define protected public
 #define private public
-#include "storage/compaction/ob_tenant_tablet_scheduler.h"
+#include "storage/compaction/ob_tablet_scheduler.h"
 #include "observer/scheduler/ob_dag_warning_history_mgr.h"
-#include "observer/scheduler/ob_tenant_dag_scheduler.h"
+#include "observer/scheduler/ob_dag_scheduler.h"
 #include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
 // MTL(T*) compatibility shim routed through share::g_mp.
 template <class T> T mtl_get_module();
-template <> inline share::ObTenantDagScheduler *mtl_get_module<share::ObTenantDagScheduler*>()
-{ return ::oceanbase::share::g_mp->tenant_dag_scheduler(); }
+template <> inline share::ObDagScheduler *mtl_get_module<share::ObDagScheduler*>()
+{ return ::oceanbase::share::g_mp->dag_scheduler(); }
 template <> inline share::ObDagWarningHistoryManager *mtl_get_module<share::ObDagWarningHistoryManager*>()
 { return ::oceanbase::share::g_mp->dag_warning_history_manager(); }
-template <> inline compaction::ObTenantTabletScheduler *mtl_get_module<compaction::ObTenantTabletScheduler*>()
-{ return ::oceanbase::share::g_mp->tenant_tablet_scheduler(); }
+template <> inline compaction::ObTabletScheduler *mtl_get_module<compaction::ObTabletScheduler*>()
+{ return ::oceanbase::share::g_mp->tablet_scheduler(); }
 } // namespace oceanbase
 
 #ifndef MTL
@@ -52,12 +52,12 @@ class TestDagModuleProvider : public share::ObIModuleProvider
 public:
   TestDagModuleProvider()
     : dag_scheduler_(nullptr), dag_history_mgr_(nullptr), tablet_scheduler_(nullptr) {}
-  virtual share::ObTenantDagScheduler *tenant_dag_scheduler() override { return dag_scheduler_; }
+  virtual share::ObDagScheduler *dag_scheduler() override { return dag_scheduler_; }
   virtual share::ObDagWarningHistoryManager *dag_warning_history_manager() override { return dag_history_mgr_; }
-  virtual compaction::ObTenantTabletScheduler *tenant_tablet_scheduler() override { return tablet_scheduler_; }
-  share::ObTenantDagScheduler *dag_scheduler_;
+  virtual compaction::ObTabletScheduler *tablet_scheduler() override { return tablet_scheduler_; }
+  share::ObDagScheduler *dag_scheduler_;
   share::ObDagWarningHistoryManager *dag_history_mgr_;
-  compaction::ObTenantTabletScheduler *tablet_scheduler_;
+  compaction::ObTabletScheduler *tablet_scheduler_;
 };
 
 static const int64_t SLEEP_SLICE = 100;
@@ -243,12 +243,12 @@ int alloc_task(ObIDag &dag, T *&task) {
 }
 
 void wait_scheduler() {
-  ObTenantDagScheduler *scheduler = MTL(ObTenantDagScheduler*);
+  ObDagScheduler *scheduler = MTL(ObDagScheduler*);
   ASSERT_TRUE(nullptr != scheduler);
   while (!scheduler->is_empty()) {
     ::usleep(100000);
   }
-  ObIAllocator &basic_allocator = scheduler->get_allocator(false /*is_ha*/);
+  ObIAllocator &basic_allocator = scheduler->get_allocator(false /*use_reserved_allocator*/);
   ObIAllocator &basic_root_allocator = static_cast<ObParallelAllocator *>(&basic_allocator)->root_allocator_;
   while ((basic_allocator.used() - basic_root_allocator.used()) != 0) {
     ::usleep(100000);
@@ -326,7 +326,7 @@ public:
     UNUSEDx(buf, buf_len);
     return OB_SUCCESS;
   }
-  virtual bool is_ha_dag() const override { return false; }
+  virtual bool uses_reserved_allocator() const override { return false; }
   INHERIT_TO_STRING_KV("ObIDag", ObIDag, K_(is_inited), K_(type), K_(id), K(task_list_.get_size()));
 protected:
   int64_t id_;
@@ -518,18 +518,13 @@ public:
       scheduler_(nullptr),
       dag_history_mgr_(nullptr),
       old_mp_(nullptr),
-      allocator_("DagScheduler"),
-      inited_(false)
+      allocator_("DagScheduler")
   { }
   ~TestDagScheduler() {}
   void SetUp()
   {
-    if (!inited_) {
-      ObMallocAllocator::get_instance()->create_and_add_tenant_allocator();
-      inited_ = true;
-    }
-    tablet_scheduler_ = OB_NEW(compaction::ObTenantTabletScheduler, ObModIds::TEST);
-    scheduler_ = OB_NEW(ObTenantDagScheduler, ObModIds::TEST);
+    tablet_scheduler_ = OB_NEW(compaction::ObTabletScheduler, ObModIds::TEST);
+    scheduler_ = OB_NEW(ObDagScheduler, ObModIds::TEST);
     dag_history_mgr_ = OB_NEW(ObDagWarningHistoryManager, ObModIds::TEST);
 
     provider_.tablet_scheduler_ = tablet_scheduler_;
@@ -539,7 +534,7 @@ public:
     share::g_mp = &provider_;
 
     ObMallocAllocator *ma = ObMallocAllocator::get_instance();
-    ASSERT_EQ(OB_SUCCESS, ma->set_tenant_limit(1LL << 30));
+    ASSERT_EQ(OB_SUCCESS, ma->set_allocator_limit(1LL << 30));
   }
   void TearDown()
   {
@@ -553,13 +548,12 @@ public:
   }
 private:
   const uint64_t tenant_id_;
-  compaction::ObTenantTabletScheduler *tablet_scheduler_;
-  ObTenantDagScheduler *scheduler_;
+  compaction::ObTabletScheduler *tablet_scheduler_;
+  ObDagScheduler *scheduler_;
   ObDagWarningHistoryManager *dag_history_mgr_;
   TestDagModuleProvider provider_;
   share::ObIModuleProvider *old_mp_;
   ObArenaAllocator allocator_;
-  bool inited_;
   DISALLOW_COPY_AND_ASSIGN(TestDagScheduler);
 };
 

@@ -16,7 +16,7 @@
 
 #include "share/ob_debug_sync.h"
 #include "share/ob_server_struct.h"
-#include "rootserver/ob_root_service.h"
+#include "rootserver/ob_local_management_service.h"
 namespace oceanbase
 {
 namespace common
@@ -67,8 +67,8 @@ int ObDebugSync::add_debug_sync(const ObString &str, const bool is_global,
       arg.reset_ = reset;
       arg.clear_ = clear;
       arg.action_ = action;
-      if (OB_FAIL(GCTX.root_service_->broadcast_ds_action(arg))) {
-        LOG_WARN("broadcast debug sync action failed", K(ret), K(arg));
+      if (OB_FAIL(GCTX.local_management_service_->apply_ds_action(arg))) {
+        LOG_WARN("apply debug sync action failed", K(ret), K(arg));
       }
     }
   }

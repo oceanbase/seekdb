@@ -40,9 +40,9 @@ TEST(test_basic_session_info, init_set_get)
   ObArenaAllocator calc_buf(ObModIds::OB_SQL_SESSION);
   ASSERT_EQ(OB_SUCCESS, session_info.test_init(0, &allocator));
   {
-    ObString tenant_name = ObString::make_string("yyy");
+    ObString runtime_name = ObString::make_string("yyy");
     ObString user_name = ObString::make_string("aaa");
-    session_info.init_tenant(tenant_name);
+    session_info.init_runtime(runtime_name);
     session_info.set_user(user_name, OB_DEFAULT_HOST_NAME, 1);
     ObObj autocommit_obj, min_val, max_val;
     ObObj autocommit_type;
@@ -57,9 +57,9 @@ TEST(test_basic_session_info, init_set_get)
   }
   bool ac = true;
   ASSERT_EQ(OB_SUCCESS, session_info.get_autocommit(ac));
-  ObString tenant_name = ObString::make_string("yyy");
+  ObString runtime_name = ObString::make_string("yyy");
   ObString user_name = ObString::make_string("aaa");
-  ASSERT_EQ(tenant_name, session_info.get_tenant_name());
+  ASSERT_EQ(runtime_name, session_info.get_runtime_name());
   ASSERT_EQ(user_name, session_info.get_user_name());
   ASSERT_EQ(autocommit, ac);
   ASSERT_EQ(is_valid, ac);

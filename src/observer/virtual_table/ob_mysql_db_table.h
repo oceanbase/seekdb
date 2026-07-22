@@ -57,7 +57,6 @@ private:
     CREATE_ROUTINE_PRIV,
     ALTER_ROUTINE_PRIV,
     EXECUTE_PRIV,
-    EVENT_PRIV,
     TRIGGER_PRIV,
   };
 

@@ -18,7 +18,7 @@
 #define OCEANBASE_STORAGE_COMPACTION_OB_SCHEDULE_DAG_FUNC_H_
 #include "lib/container/ob_iarray.h"
 #include "storage/compaction/ob_compaction_util.h"
-#include "observer/scheduler/ob_tenant_dag_scheduler.h"
+#include "observer/scheduler/ob_dag_scheduler.h"
 
 namespace oceanbase
 {
@@ -36,7 +36,7 @@ class ObTablet;
 
 namespace share
 {
-class ObTenantDagScheduler;
+class ObDagScheduler;
 }
 namespace compaction
 {
@@ -73,7 +73,6 @@ public:
     const storage::ObTablet &tablet,
     const ObMergeType merge_type,
     const int64_t &merge_snapshot_version,
-    const ObExecMode exec_mode,
     ObTabletMergeDagParam &param);
 };
 

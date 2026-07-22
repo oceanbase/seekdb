@@ -35,7 +35,7 @@ int ObSqlProcessor::run()
   } else if (OB_FAIL(before_process())) {
     LOG_WARN("before process fail", K(ret));
   } else {
-    req_->set_trace_point(ObRequest::OB_EASY_REQUEST_SQL_PROCESSOR_RUN);
+    req_->set_trace_point(ObRequest::OB_REQUEST_SQL_PROCESSOR_RUN);
     if (OB_FAIL(process())) {
       LOG_DEBUG("process fail", K(ret));
     } else {

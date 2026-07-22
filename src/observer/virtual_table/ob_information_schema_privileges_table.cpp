@@ -127,7 +127,6 @@ int ObInfoSchemaSchemaPrivilegesTable::get_db_privs(const uint64_t user_id,
     SERVER_LOG(WARN, "session_ is null", K(ret));
   } else {
     ObPrivSet user_db_priv_set = session_->get_user_priv_set();
-    //ObOriginalDBKey db_key(sys tenant, user_id, ObString::make_string("mysql"));
     ObPrivSet db_priv_set = OB_PRIV_SET_EMPTY;
     if (OB_FAIL(schema_guard_->get_db_priv_set(user_id, ObString::make_string("mysql"), db_priv_set))) {
       SERVER_LOG(WARN, "get db priv set failed", K(ret));
@@ -135,7 +134,7 @@ int ObInfoSchemaSchemaPrivilegesTable::get_db_privs(const uint64_t user_id,
       user_db_priv_set |= db_priv_set;
       if (OB_PRIV_HAS_ANY(user_db_priv_set, OB_PRIV_SELECT)) {
         if (OB_FAIL(schema_guard_->get_db_priv_by_id(db_privs))) {
-          SERVER_LOG(WARN, "Get db priv with tenant id error", K(ret));
+          SERVER_LOG(WARN, "get database privilege failed", K(ret));
         }
       } else {
         if (OB_FAIL(schema_guard_->get_db_priv_with_user_id(user_id_,
@@ -158,7 +157,7 @@ int ObInfoSchemaSchemaPrivilegesTable::get_user_name_from_db_priv(const ObDBPriv
   if (OB_ISNULL(db_priv)) {
     ret = OB_INVALID_ARGUMENT;
     SERVER_LOG(WARN, "db_priv is null", K(ret));
-  } else if (OB_ISNULL(user_info = schema_guard_->get_user_info(db_priv->get_tenant_user_id().user_id_))) {
+  } else if (OB_ISNULL(user_info = schema_guard_->get_user_info(db_priv->get_user_id()))) {
     ret = OB_USER_NOT_EXIST;
     SERVER_LOG(WARN, "user not exist", K(ret));
   } else {

@@ -85,9 +85,6 @@ int ObDDLIndependentDag::init_by_param(const share::ObIDagInitParam *param)
   if (OB_UNLIKELY(nullptr == init_param || !init_param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(init_param));
-  } else if (init_param->ddl_task_param_.tenant_data_version_ < DDL_IDEM_DATA_FORMAT_VERSION) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("reject execute dag when request comes from old version", K(ret), KPC(init_param));
   } else if (OB_FAIL(tablet_ids_.assign(init_param->tablet_ids_))) {
     LOG_WARN("assign tablet id array failed", K(ret), K(init_param->tablet_ids_));
   } else {

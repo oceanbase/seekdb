@@ -97,8 +97,6 @@ public:
     { return alter_table_arg_.foreign_key_arg_list_; }
   const common::ObSArray<obcall::ObCreateForeignKeyArg> &get_read_only_foreign_key_arg_list() const
     { return alter_table_arg_.foreign_key_arg_list_; }
-  void set_sequence_ddl_arg(const obcall::ObSequenceDDLArg sequence_ddl_arg);
-  const obcall::ObSequenceDDLArg &get_sequence_ddl_arg() const;
   INHERIT_TO_STRING_KV("ObTableStmt", ObTableStmt, K_(stmt_type), K_(alter_table_arg), K_(index_arg_list));
   const common::ObSArray<obcall::ObIndexArg*> &get_alter_index_arg_list() const 
     { return alter_table_arg_.index_arg_list_; }
@@ -131,12 +129,7 @@ private:
 
 inline int ObAlterTableStmt::set_tz_info_wrap(const common::ObTimeZoneInfoWrap &tz_info_wrap)
 {
-  int ret = alter_table_arg_.tz_info_wrap_.deep_copy(tz_info_wrap);
-  if (OB_SUCC(ret)) {
-    //compat for old server
-    alter_table_arg_.tz_info_ = tz_info_wrap.get_tz_info_offset();
-  }
-  return ret;
+  return alter_table_arg_.tz_info_wrap_.deep_copy(tz_info_wrap);
 }
 
 inline int ObAlterTableStmt::set_nls_formats(const common::ObString &nls_date_format,
@@ -145,17 +138,6 @@ inline int ObAlterTableStmt::set_nls_formats(const common::ObString &nls_date_fo
 {
   return alter_table_arg_.set_nls_formats(nls_date_format, nls_timestamp_format,
                                           nls_timestamp_tz_format);
-}
-
-inline void ObAlterTableStmt::set_sequence_ddl_arg(
-    const obcall::ObSequenceDDLArg sequence_ddl_arg)
-{
-  alter_table_arg_.sequence_ddl_arg_ = sequence_ddl_arg; 
-}
-
-inline const obcall::ObSequenceDDLArg &ObAlterTableStmt::get_sequence_ddl_arg() const
-{
-  return alter_table_arg_.sequence_ddl_arg_; 
 }
 
 } // namespace sql

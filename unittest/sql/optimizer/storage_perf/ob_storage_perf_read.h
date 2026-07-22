@@ -19,10 +19,8 @@
 
 #include "ob_storage_perf_schema.h"
 #include "share/schema/ob_table_schema.h"
-#include "share/ob_tenant_mgr.h"
 #include "storage/blocksstable/ob_sstable.h"
 #include "storage/ob_ss_store.h"
-#include "share/ob_tenant_mgr.h"
 #include "lib/file/file_directory_utils.h"
 #include "share/schema/ob_table_schema.h"
 #include "storage/blocksstable/ob_macro_block_meta.h"
@@ -244,7 +242,7 @@ private:
 
   pthread_barrier_t *barrier_;
   common::ObArenaAllocator allocator_;
-  common::ObArray<std::pair<uint64_t, common::ObDiagnoseTenantInfo*> > tenant_dis_;
+  common::ObDiagnoseRuntimeInfo runtime_info_;
 
   int64_t thread_no_;
   bool is_inited_;

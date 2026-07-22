@@ -76,7 +76,7 @@ int ObExprSTTransform::eval_st_transform(const ObExpr &expr, ObEvalCtx &ctx, ObD
   const ObSrsItem *src_srs_item = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_ST_TRANSFORM);
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   ObString src_proj4_param;
   ObString dest_proj4_param;
   bool need_eval = true;
@@ -101,7 +101,6 @@ int ObExprSTTransform::eval_st_transform(const ObExpr &expr, ObEvalCtx &ctx, ObD
     if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *gis_datum,
               expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkb))) {
       LOG_WARN("fail to get real string data", K(ret), K(wkb));
-    } else if (FALSE_IT(temp_allocator.set_baseline_size(wkb.length()))) {
     } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb, src_srs_item, true, N_ST_TRANSFORM))) {
       LOG_WARN("fail to get srs item", K(ret), K(wkb));
     } else if (OB_FAIL(ObGeoTypeUtil::get_srid_from_wkb(wkb, src_srid))) {
@@ -218,9 +217,6 @@ int ObExprSTTransform::eval_st_transform(const ObExpr &expr, ObEvalCtx &ctx, ObD
           }
         } 
       } 
-      if (mem_ctx != nullptr) {
-        temp_allocator.add_ext_used((*mem_ctx)->arena_used());
-      }
     }
   }
 

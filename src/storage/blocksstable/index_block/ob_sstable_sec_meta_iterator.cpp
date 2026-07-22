@@ -253,7 +253,8 @@ int ObSSTableSecMetaIterator::get_next(ObDataMacroBlockMeta &macro_meta)
     } else if (OB_FAIL(macro_meta.parse_row(row_))) {
       LOG_WARN("Fail to parse macro meta", K(ret));
     } else {
-      const ObSSTableMacroInfo &macro_info = sstable_meta_hdl_.get_sstable_meta().get_macro_info();
+      const ObSSTableMacroInfo &macro_info =
+          sstable_meta_hdl_.get_sstable_meta().get_macro_info();
       const int64_t data_block_count = sstable_meta_hdl_.get_sstable_meta().get_basic_meta().get_data_macro_block_count();
       if (macro_meta.get_macro_id() == ObIndexBlockRowHeader::DEFAULT_IDX_ROW_MACRO_ID) {
         // this means macro meta root block is larger than 16KB but read from the end of data block
@@ -509,7 +510,8 @@ int ObSSTableSecMetaIterator::get_micro_block(
   int ret = OB_SUCCESS;
   data_handle.reset();
   ObTabletHandle tablet_handle;
-  const int64_t nested_offset = sstable_meta_hdl_.get_sstable_meta().get_macro_info().get_nested_offset();
+  const int64_t nested_offset =
+      sstable_meta_hdl_.get_sstable_meta().get_macro_info().get_nested_offset();
   if (OB_UNLIKELY(!macro_id.is_valid() || !idx_row_header.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid parameters to locate micro block", K(ret), K(macro_id), K(idx_row_header));
@@ -519,7 +521,8 @@ int ObSSTableSecMetaIterator::get_micro_block(
     ObMicroBlockCacheKey key;
     idx_row_header.has_valid_logic_micro_id() ?
       key.set(idx_row_header.get_logic_micro_id(), idx_row_header.get_data_checksum()) :
-      key.set(macro_id, idx_row_header.get_block_offset() + nested_offset, idx_row_header.get_block_size());
+      key.set(macro_id, idx_row_header.get_block_offset() + nested_offset,
+              idx_row_header.get_block_size());
     if (OB_FAIL(block_cache_->get_cache_block(key, data_handle.cache_handle_))) {
       if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
         LOG_WARN("Fail to get micro block handle from cache", K(ret), K(idx_row_header));
@@ -553,8 +556,7 @@ int ObSSTableSecMetaIterator::get_micro_block(
                                 idx_row_header.get_block_size(),
                                 idx_row_header.get_logic_micro_id(),
                                 idx_row_header.get_data_checksum());
-    const bool deep_copy_key = true;
-    if (OB_FAIL(idx_row_header.fill_micro_des_meta(deep_copy_key, data_handle.des_meta_))) {
+    if (OB_FAIL(idx_row_header.fill_micro_des_meta(data_handle.des_meta_))) {
       LOG_WARN("Fail to fill deserialize meta", K(ret));
     }
   }

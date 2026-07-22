@@ -82,7 +82,7 @@ int ObExprJsonArray::eval_json_array(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   ObDatum *json_datum = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("JSONModule"));
   ObJsonArray j_arr(&temp_allocator);
   ObIJsonBase *j_base = &j_arr;
@@ -94,9 +94,7 @@ int ObExprJsonArray::eval_json_array(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
 
   for (uint32_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; i++) {
     ObIJsonBase *j_val;
-    if (OB_FAIL(temp_allocator.add_baseline_size(expr.args_[i], ctx))) {
-      LOG_WARN("failed to add baselien size", K(ret), K(i));
-    } else if (OB_FAIL(ObJsonExprHelper::get_json_val(expr, ctx, &temp_allocator, i, j_val))) {
+    if (OB_FAIL(ObJsonExprHelper::get_json_val(expr, ctx, &temp_allocator, i, j_val))) {
       ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
       LOG_WARN("failed: get_json_val failed", K(ret));
     } else if (OB_FAIL(j_base->array_append(j_val))) {

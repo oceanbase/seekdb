@@ -146,7 +146,6 @@ int ObAllVirtualTxData::handle_key_range_(ObNewRange &key_range)
                K(tx_id_low),
                K(tx_id_high));
   } else {
-// Use sys tenant in single-node mode
     tx_id_ = tx_id_low;
   }
 
@@ -156,7 +155,7 @@ int ObAllVirtualTxData::handle_key_range_(ObNewRange &key_range)
 int ObAllVirtualTxData::generate_virtual_tx_data_row_(VirtualTxDataRow &tx_data_row)
 {
   int ret = OB_SUCCESS;
-  MOD_SCOPE
+  SERVER_MODULE_SCOPE
   {
     ObLS *ls = nullptr;
     ObLSService *ls_service = share::g_mp->ls_service();
@@ -170,10 +169,6 @@ int ObAllVirtualTxData::generate_virtual_tx_data_row_(VirtualTxDataRow &tx_data_
     } else {
       SERVER_LOG(DEBUG, "generate tx data row succeed", K(tx_data_row));
     }
-  }
-
-  if (OB_FAIL(ret) && OB_TENANT_NOT_IN_SERVER == ret) {
-    ret = OB_ITER_END;
   }
   return ret;
 }

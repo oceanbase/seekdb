@@ -27,7 +27,6 @@ ObCreateUserStmt::ObCreateUserStmt(ObIAllocator *name_pool)
       users_(),
       masked_sql_(),
       if_not_exist_(false),
-      profile_id_(OB_INVALID_ID),
       max_connections_per_hour_(0),
       max_user_connections_(0)
 {
@@ -38,7 +37,6 @@ ObCreateUserStmt::ObCreateUserStmt()
       users_(),
       masked_sql_(),
       if_not_exist_(false),
-      profile_id_(OB_INVALID_ID),
       max_connections_per_hour_(0),
       max_user_connections_(0)
 {

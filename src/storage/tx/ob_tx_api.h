@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-int acquire_tx(ObTxDesc *&tx, const uint32_t session_id = 0, const uint64_t data_version = 0);
+int acquire_tx(ObTxDesc *&tx, const uint32_t session_id = 0);
 
 /**
  * start_tx - explicit start transaction
@@ -26,12 +26,10 @@ int acquire_tx(ObTxDesc *&tx, const uint32_t session_id = 0, const uint64_t data
  *
  * @tx:       the target transaction's descriptor
  * @tx_param: transaction parameters
- * @tx_id:    the txid applied for when xa start
- *
  * Return:
  * OB_SUCCESS - OK
  */
-int start_tx(ObTxDesc &tx, const oceanbase::transaction::ObTxParam &tx_param, const ObTransID &tx_id = ObTransID());
+int start_tx(ObTxDesc &tx, const oceanbase::transaction::ObTxParam &tx_param);
 
 /**
  * abort_tx - abort transaction
@@ -104,11 +102,10 @@ int submit_commit_tx(ObTxDesc &tx,
  * this is the end of lifecycle of a transaction
  *
  * @tx:         the target transaction's descriptor
- * @is_from_xa: whether xa ctx calls this interface
  *
  * Return: OB_SUCCESS - OK
  */
-int release_tx(ObTxDesc &tx, const bool is_from_xa = false);
+int release_tx(ObTxDesc &tx);
 
 /**
  * reuse_tx - reuse transaction descriptor
@@ -116,12 +113,11 @@ int release_tx(ObTxDesc &tx, const bool is_from_xa = false);
  * when txn end, in stead of release txn descriptor, reuse it for
  * better performance.
  *
- * @tx:           the target transaction's descriptor
- * @data_version: tx data_version 
+ * @tx: the target transaction's descriptor
  *
  * Return: OB_SUCCESS -OK
  */
-int reuse_tx(ObTxDesc &tx, const uint64_t data_version);
+int reuse_tx(ObTxDesc &tx);
 
 /**
  * stop_tx - stop txn immediately (for admin reason)
@@ -172,10 +168,10 @@ int get_read_snapshot(ObTxDesc &tx,
 // ------------------------------------------------------------------
 
 /**
- * get_read_snapshot_version - get a read snapshot of current tenant
+ * get_read_snapshot_version - get a database read snapshot
  *
  * the snasphot can be used to read a consistency view of the state
- * of current tenant
+ * of the current database
  *
  * @expire_ts:                 microseconds of timestamp after which
  *                             acquire action timeout
@@ -327,18 +323,13 @@ int create_branch_savepoint(ObTxDesc &tx,
  *                             which hold the savepoint
  * @savepoint:                 the name of savepoint to be created
  * 
- * @session_id:                the session id to which the savepoint
- *                             belongs, used for xa
- *
  * Return:
  * OB_SUCCESS                - OK
  * OB_ERR_TOO_LONG_IDENT     - if savepoint was longer than 128 characters
  * OB_ERR_TOO_MANY_SAVEPOINT - alive savepoint count out of limit (default 255)
  */
 int create_explicit_savepoint(ObTxDesc &tx,
-                              const ObString &savepoint,
-                              const uint32_t session_id,
-                              const bool user_create);
+                              const ObString &savepoint);
 
 /**
  * rollback_to_implicit_savepoint - rollback to a implicit savepoint
@@ -402,8 +393,7 @@ int create_explicit_savepoint(ObTxDesc &tx,
  */
 int rollback_to_explicit_savepoint(ObTxDesc &tx,
                                    const ObString &savepoint,
-                                   const int64_t expire_ts,
-                                   const uint32_t session_id);
+                                   const int64_t expire_ts);
 
 /**
  * release_explicit_savepoint - release savepoint
@@ -417,7 +407,7 @@ int rollback_to_explicit_savepoint(ObTxDesc &tx,
  * OB_SUCCESS             - OK
  * OB_SAVEPOINT_NOT_EXIST - savepoint not found
  */
-int release_explicit_savepoint(ObTxDesc &tx, const ObString &savepoint, const uint32_t session_id);
+int release_explicit_savepoint(ObTxDesc &tx, const ObString &savepoint);
 
 // ------------------------------------------------------------------
 // savepoints stash
@@ -549,16 +539,3 @@ int add_tx_exec_result(ObTxDesc &tx, const ObTxExecResult &exec_info);
  * OB_SUCCESS - test result is confident
  * OB_ERR_XXX - internal error which is unexpected arised
  */
-
-/******************************************************************************
- * SQL relative hooks
- *
- * in case of participant in XA DTP, txn state is required to be coordinated
- * between tighly couple branchs around the SQL stmt
- * these hooks place on stmt start and end position to handle these works
- *****************************************************************************/
-int sql_stmt_start_hook(const ObXATransID &xid,
-                        ObTxDesc &tx,
-                        const uint32_t session_id,
-                        const uint32_t real_session_id);
-int sql_stmt_end_hook(const ObXATransID &xid, ObTxDesc &tx);

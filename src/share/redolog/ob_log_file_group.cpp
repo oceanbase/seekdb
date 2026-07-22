@@ -23,11 +23,9 @@
 #include "share/redolog/ob_log_file_handler.h"
 #include "share/config/ob_server_config.h"
 #include "share/ob_io_device_helper.h"
-#include "share/ob_unit_getter.h"
 #include "lib/statistic_event/ob_stat_event.h"
 
 using namespace oceanbase::share;
-using namespace oceanbase::storage;
 
 namespace oceanbase
 {

@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE_FTS
 
 #include "rootserver/ddl_task/ob_drop_fts_index_task.h"
-#include "rootserver/ob_rs_serial_call.h"
+#include "rootserver/ob_local_ddl_serial_call.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
 #include "storage/ddl/ob_ddl_lock.h"
 
@@ -30,7 +30,7 @@ namespace rootserver
 
 ObDropFTSIndexTask::ObDropFTSIndexTask()
   : ObDDLTask(DDL_DROP_FTS_INDEX),
-    root_service_(nullptr),
+    local_management_service_(nullptr),
     rowkey_doc_(),
     doc_rowkey_(),
     domain_index_(),
@@ -68,9 +68,9 @@ int ObDropFTSIndexTask::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_id), K(data_table_id),
         K(domain_index), K(schema_version));
-  } else if (OB_ISNULL(root_service_ = GCTX.root_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, root service is null", K(ret));
+    LOG_WARN("error sys, local management service is null", K(ret));
   } else if (OB_FAIL(rowkey_doc_.deep_copy_from_other(rowkey_doc, allocator_))) {
     LOG_WARN("fail to deep copy from other", K(ret), K(rowkey_doc));
   } else if (OB_FAIL(doc_rowkey_.deep_copy_from_other(doc_rowkey, allocator_))) {
@@ -105,9 +105,9 @@ int ObDropFTSIndexTask::init(const ObDDLTaskRecord &task_record)
   if (OB_UNLIKELY(!task_record.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_record));
-  } else if (OB_ISNULL(root_service_ = GCTX.root_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, root service is nullptr", K(ret));
+    LOG_WARN("unexpected error, local management service is nullptr", K(ret));
   } else {
     task_type_ = task_record.ddl_type_;
     
@@ -350,8 +350,8 @@ int ObDropFTSIndexTask::check_switch_succ()
     LOG_WARN("there are invalid arguments", KR(ret), KP(GCTX.schema_service_), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(refresh_schema_version())) {
     LOG_WARN("refresh schema version failed", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get tenant schema", K(ret));
+  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get runtime schema", K(ret));
   } else if (domain_index_.is_valid()
           && OB_FAIL(schema_guard.check_table_exist(domain_index_.table_id_, is_domain_index_exist))) {
     LOG_WARN("fail to check table exist", K(ret), K(domain_index_));
@@ -429,8 +429,8 @@ int ObDropFTSIndexTask::check_and_wait_finish(const share::ObDDLTaskStatus &new_
   } else if (ObDDLTaskStatus::WAIT_CHILD_TASK_FINISH != task_status_) {
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("task status not match", K(ret), K(task_status_));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", K(ret));
+  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get runtime schema guard", K(ret));
   }
   if (OB_SUCC(ret)) {
     if (!drop_domain_index_finish_) {
@@ -599,7 +599,7 @@ int ObDropFTSIndexTask::create_drop_index_task(
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(
             index_schema->get_all_part_num() + data_table_schema->get_all_part_num(), ddl_rpc_timeout_us))) {
       LOG_WARN("fail to get ddl rpc timeout", K(ret));
-    } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_index(arg, res); }))) {
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_index(arg, res); }))) {
       LOG_WARN("fail to drop index", K(ret), K(ddl_rpc_timeout_us), K(arg), K(res.task_id_));
     } else {
       task_id = res.task_id_;
@@ -650,8 +650,8 @@ int ObDropFTSIndexTask::cleanup_impl()
     const ObTableSchema *data_table_schema = nullptr;
     ObTableLockOwnerID owner_id;
     ObMySQLTransaction trans;
-    if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("fail to get tenant schema guard", K(ret));
+    if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+      LOG_WARN("fail to get runtime schema guard", K(ret));
     } else if (OB_FAIL(schema_guard.get_table_schema(
                                                      object_id_,
                                                      data_table_schema))) {

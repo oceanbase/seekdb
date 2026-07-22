@@ -63,7 +63,7 @@ int ObExprPrivSTNumInteriorRings::eval_priv_st_numinteriorrings(
   ObObjType type1 = arg1->datum_meta_.type_;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_ST_NUMINTERIORRINGS);
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   uint32_t res_num = 0;
 
   if (ob_is_null(type1)) {
@@ -80,7 +80,6 @@ int ObExprPrivSTNumInteriorRings::eval_priv_st_numinteriorrings(
     if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(
             temp_allocator, *datum1, arg1->datum_meta_, arg1->obj_meta_.has_lob_header(), wkb))) {
       LOG_WARN("fail to read real string data", K(ret), K(arg1->obj_meta_.has_lob_header()));
-    } else if (FALSE_IT(temp_allocator.set_baseline_size(wkb.length()))) {
     } else if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator,
                    wkb,
                    geo,

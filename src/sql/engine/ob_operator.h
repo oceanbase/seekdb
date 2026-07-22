@@ -589,17 +589,12 @@ private:
                          bool &all_active);
   int convert_vector_format();
   int check_stack_once();
-  int output_expr_sanity_check();
-  int output_expr_sanity_check_batch();
-  int output_expr_sanity_check_batch_inner(const ObExpr &expr);
-  int output_nested_expr_sanity_check_batch(const ObExpr &expr);
   int output_expr_decint_datum_len_check();
   int output_expr_decint_datum_len_check_batch();
   int setup_op_feedback_info();
   // child can implement this interface, but can't call this directly
   virtual int inner_drain_exch() { return common::OB_SUCCESS; }
 
-  bool enable_get_next_row() const;
   int try_push_stash_rows(const int64_t max_row_cnt);
   int push_stash_rows(const int64_t max_row_cnt, const int64_t output_row_cnt);
   int pop_stash_rows(const int64_t max_row_cnt);

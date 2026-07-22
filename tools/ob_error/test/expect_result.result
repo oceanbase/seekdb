@@ -49,13 +49,6 @@ $ob_error 24761
 
 OceanBase:
 	Error Code 24761 not found.
-$ob_error 5727
-
-OceanBase:
-	OceanBase Error Code: OB_ERR_PROXY_REROUTE(-5727)
-	Message: SQL request should be rerouted
-	Cause: Internal Error
-	Solution: Contact OceanBase Support
 $ob_error 5133
 
 OceanBase:

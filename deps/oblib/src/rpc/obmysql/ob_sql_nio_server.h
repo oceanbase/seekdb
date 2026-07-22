@@ -32,7 +32,7 @@ public:
         io_handler_(conn_cb, thread_processor_, nio_) {}
   virtual ~ObSqlNioServer() {}
   ObSqlNio *get_nio() { return &nio_; }
-  int start(int port, rpc::frame::ObReqDeliver* deliver, int n_thread, bool enable_numa_aware, bool disable_tcp);
+  int start(int port, rpc::frame::ObReqDeliver* deliver, int n_thread, bool disable_tcp);
   void revert_sock(void* sess);
   int peek_data(void* sess, int64_t limit, const char*& buf, int64_t& sz);
   int consume_data(void* sess, int64_t sz);
@@ -46,7 +46,7 @@ public:
   ObSqlSockProcessor& get_sql_sock_processor();
 
 private:
-  ObSqlSockProcessor thread_processor_; // for tenant worker
+  ObSqlSockProcessor thread_processor_; // runtime SQL worker
   ObSqlSockHandler io_handler_; // for io thread
   ObSqlNio nio_;
   
@@ -56,4 +56,3 @@ extern ObSqlNioServer* global_sql_nio_server;
 }; // end namespace oceanbase
 
 #endif /* OCEANBASE_OBMYSQL_OB_SQL_NIO_SERVER_H_ */
-

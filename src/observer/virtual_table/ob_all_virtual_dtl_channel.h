@@ -78,7 +78,7 @@ public:
 
 private:
   // the maxinum of get channels
-  static const int64_t MAX_CHANNEL_CNT_PER_TENANT = 1000000;
+  static const int64_t MAX_CHANNEL_COUNT = 1000000;
   common::ObArray<ObVirtualChannelInfo, common::ObWrapperAllocator> *channels_;
 };
 

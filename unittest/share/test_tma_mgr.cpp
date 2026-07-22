@@ -15,8 +15,8 @@
  */
 
 #include <gtest/gtest.h>
-#include "logservice/ob_tenant_mutil_allocator_mgr.h"
-#include "logservice/ob_tenant_mutil_allocator.h"
+#include "logservice/ob_log_allocator_mgr.h"
+#include "logservice/ob_log_allocator.h"
 
 namespace oceanbase
 {
@@ -27,27 +27,27 @@ namespace unittest
 
 TEST(TestTMAMgr, test_tma_mgr)
 {
-  PALF_LOG(INFO, "test_tma_mgr begin", "TMA size", sizeof(ObTenantMutilAllocator));
+  PALF_LOG(INFO, "test_tma_mgr begin", "log allocator size", sizeof(ObLogAllocator));
   ObMallocAllocator *malloc_allocator = ObMallocAllocator::get_instance();
-  ASSERT_EQ(OB_SUCCESS, TMA_MGR_INSTANCE.init());
+  ASSERT_EQ(OB_SUCCESS, LOG_ALLOCATOR_MGR_INSTANCE.init());
 
   // single-tenant: create the log allocator (idempotent)
-  ObILogAllocator *tenant_allocator = NULL;
-  EXPECT_EQ(OB_SUCCESS, TMA_MGR_INSTANCE.get_tenant_log_allocator(tenant_allocator));
-  EXPECT_TRUE(NULL != tenant_allocator);
-  ObILogAllocator *tenant_allocator2 = NULL;
-  EXPECT_EQ(OB_SUCCESS, TMA_MGR_INSTANCE.get_tenant_log_allocator(tenant_allocator2));
-  EXPECT_EQ(tenant_allocator, tenant_allocator2);
-  PALF_LOG(INFO, "after create TMA", "TMA size", sizeof(ObTenantMutilAllocator), "tenant hold", \
-      malloc_allocator->get_tenant_hold());
+  ObILogAllocator *log_allocator = NULL;
+  EXPECT_EQ(OB_SUCCESS, LOG_ALLOCATOR_MGR_INSTANCE.get_log_allocator(log_allocator));
+  EXPECT_TRUE(NULL != log_allocator);
+  ObILogAllocator *log_allocator2 = NULL;
+  EXPECT_EQ(OB_SUCCESS, LOG_ALLOCATOR_MGR_INSTANCE.get_log_allocator(log_allocator2));
+  EXPECT_EQ(log_allocator, log_allocator2);
+  PALF_LOG(INFO, "after create TMA", "log allocator size", sizeof(ObLogAllocator), "allocator hold", \
+      malloc_allocator->get_total_hold());
 
   // delete then re-create
-  EXPECT_EQ(OB_SUCCESS, TMA_MGR_INSTANCE.delete_tenant_log_allocator());
-  tenant_allocator = NULL;
-  EXPECT_EQ(OB_SUCCESS, TMA_MGR_INSTANCE.get_tenant_log_allocator(tenant_allocator));
-  EXPECT_TRUE(NULL != tenant_allocator);
-  PALF_LOG(INFO, "after delete TMA", "TMA size", sizeof(ObTenantMutilAllocator), "tenant hold", \
-      malloc_allocator->get_tenant_hold());
+  EXPECT_EQ(OB_SUCCESS, LOG_ALLOCATOR_MGR_INSTANCE.delete_log_allocator());
+  log_allocator = NULL;
+  EXPECT_EQ(OB_SUCCESS, LOG_ALLOCATOR_MGR_INSTANCE.get_log_allocator(log_allocator));
+  EXPECT_TRUE(NULL != log_allocator);
+  PALF_LOG(INFO, "after delete TMA", "log allocator size", sizeof(ObLogAllocator), "allocator hold", \
+      malloc_allocator->get_total_hold());
   PALF_LOG(INFO, "test_tma_mgr end");
 }
 

@@ -18,7 +18,7 @@
 
 #include "share/redolog/ob_log_file_reader.h"
 #include "share/redolog/ob_log_file_handler.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -171,7 +171,7 @@ int ObLogFileReader2::init()
     LOG_WARN("already inited", K(ret));
   } else if (OB_FAIL(quick_map_.create(MAP_BUCKET_INIT_CNT, "LogFileReaderM"))) {
     LOG_WARN("already inited", K(ret));
-  } else if (OB_FAIL(timer_.set_run_wrapper_with_ret(MTL_CTX()))) {
+  } else if (OB_FAIL(timer_.set_run_wrapper_with_ret(share::server_runtime()))) {
     LOG_WARN("timer set_run_wrapper fail", K(ret));
   } else if (OB_FAIL(timer_.init("ObLogFileReader2"))) {
     LOG_WARN("init timer fail", K(ret));

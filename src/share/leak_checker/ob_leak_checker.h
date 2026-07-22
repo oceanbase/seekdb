@@ -26,7 +26,7 @@ namespace share
 template <typename Key, typename Value>
 class ObBaseLeakChecker
 {
-  typedef common::ObLinearHashMap<Key, Value> tenant_leak_checker_t;
+  typedef common::ObLinearHashMap<Key, Value> leak_checker_map_t;
   struct Printer
   {
     bool operator()(const Key &k, const Value &v)
@@ -52,7 +52,7 @@ public:
 private:
   static constexpr int MEMORY_LIMIT = 128L << 20;
   static constexpr int MAP_SIZE_LIMIT = MEMORY_LIMIT / sizeof(Value);
-  tenant_leak_checker_t checker_info_;
+  leak_checker_map_t checker_info_;
   int64_t total_size_;
 };
 

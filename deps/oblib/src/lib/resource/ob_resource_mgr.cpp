@@ -19,14 +19,13 @@
 
 #include "ob_resource_mgr.h"
 #include "lib/utility/utility.h"
-#include "lib/resource/ob_affinity_ctrl.h"
 
 namespace oceanbase
 {
 using namespace common;
 namespace lib
 {
-ObTenantMemoryMgr::ObTenantMemoryMgr()
+ObMemoryMgr::ObMemoryMgr()
   : cache_washer_(NULL),
     limit_(INT64_MAX), hard_limit_(INT64_MAX), sum_hold_(0),
     cache_hold_(0), cache_item_count_(0)
@@ -37,12 +36,12 @@ ObTenantMemoryMgr::ObTenantMemoryMgr()
     ATOMIC_STORE(&(hard_limit_bytes_[i]), INT64_MAX);
   }
 }
-void ObTenantMemoryMgr::set_cache_washer(ObICacheWasher &cache_washer)
+void ObMemoryMgr::set_cache_washer(ObICacheWasher &cache_washer)
 {
   cache_washer_ = &cache_washer;
 }
 
-AChunk *ObTenantMemoryMgr::alloc_chunk(const int64_t size, const ObMemAttr &attr)
+AChunk *ObMemoryMgr::alloc_chunk(const int64_t size, const ObMemAttr &attr)
 {
   AChunk *chunk = NULL;
   int ret = OB_SUCCESS;
@@ -100,7 +99,7 @@ AChunk *ObTenantMemoryMgr::alloc_chunk(const int64_t size, const ObMemAttr &attr
   return chunk;
 }
 
-void ObTenantMemoryMgr::free_chunk(AChunk *chunk, const ObMemAttr &attr)
+void ObMemoryMgr::free_chunk(AChunk *chunk, const ObMemAttr &attr)
 {
   if (NULL != chunk) {
     bool reach_ctx_limit = false;
@@ -110,7 +109,7 @@ void ObTenantMemoryMgr::free_chunk(AChunk *chunk, const ObMemAttr &attr)
   }
 }
 
-void *ObTenantMemoryMgr::alloc_cache_mb(const int64_t size)
+void *ObMemoryMgr::alloc_cache_mb(const int64_t size)
 {
   void *ptr = NULL;
   AChunk *chunk = NULL;
@@ -119,14 +118,12 @@ void *ObTenantMemoryMgr::alloc_cache_mb(const int64_t size)
   attr.prio_ = OB_NORMAL_ALLOC;
   attr.label_ = ObNewModIds::OB_KVSTORE_CACHE_MB;
   if (NULL != (chunk = alloc_chunk(size, attr))) {
-    const int64_t all_size = CHUNK_MGR.aligned(size);
-    SANITY_UNPOISON(chunk, all_size);
     ptr = chunk->data_;
   }
   return ptr;
 }
 
-void ObTenantMemoryMgr::free_cache_mb(void *ptr)
+void ObMemoryMgr::free_cache_mb(void *ptr)
 {
   if (NULL != ptr) {
     ObMemAttr attr;
@@ -134,13 +131,11 @@ void ObTenantMemoryMgr::free_cache_mb(void *ptr)
     attr.prio_ = OB_NORMAL_ALLOC;
     attr.label_ = ObNewModIds::OB_KVSTORE_CACHE_MB;
     AChunk *chunk = ptr2chunk(ptr);
-    const int64_t all_size = chunk->aligned();
-    SANITY_POISON(chunk, all_size);
     free_chunk(chunk, attr);
   }
 }
 
-int ObTenantMemoryMgr::set_ctx_hard_limit(const uint64_t ctx_id, const int64_t hard_limit)
+int ObMemoryMgr::set_ctx_hard_limit(const uint64_t ctx_id, const int64_t hard_limit)
 {
   int ret = OB_SUCCESS;
   if (ctx_id >= ObCtxIds::MAX_CTX_ID || hard_limit <= 0) {
@@ -152,7 +147,7 @@ int ObTenantMemoryMgr::set_ctx_hard_limit(const uint64_t ctx_id, const int64_t h
   return ret;
 }
 
-int ObTenantMemoryMgr::set_ctx_limit(const uint64_t ctx_id, const int64_t limit)
+int ObMemoryMgr::set_ctx_limit(const uint64_t ctx_id, const int64_t limit)
 {
   int ret = OB_SUCCESS;
   if (ctx_id >= ObCtxIds::MAX_CTX_ID || limit <= 0) {
@@ -164,7 +159,7 @@ int ObTenantMemoryMgr::set_ctx_limit(const uint64_t ctx_id, const int64_t limit)
   return ret;
 }
 
-int ObTenantMemoryMgr::get_ctx_limit(const uint64_t ctx_id, int64_t &limit) const
+int ObMemoryMgr::get_ctx_limit(const uint64_t ctx_id, int64_t &limit) const
 {
   int ret = OB_SUCCESS;
   if (ctx_id >= ObCtxIds::MAX_CTX_ID) {
@@ -176,7 +171,7 @@ int ObTenantMemoryMgr::get_ctx_limit(const uint64_t ctx_id, int64_t &limit) cons
   return ret;
 }
 
-int ObTenantMemoryMgr::get_ctx_hold(const uint64_t ctx_id, int64_t &hold) const
+int ObMemoryMgr::get_ctx_hold(const uint64_t ctx_id, int64_t &hold) const
 {
   int ret = OB_SUCCESS;
   if (ctx_id >= ObCtxIds::MAX_CTX_ID) {
@@ -191,7 +186,7 @@ int ObTenantMemoryMgr::get_ctx_hold(const uint64_t ctx_id, int64_t &hold) const
   return ret;
 }
 
-void ObTenantMemoryMgr::update_cache_hold(const int64_t size)
+void ObMemoryMgr::update_cache_hold(const int64_t size)
 {
   if (0 != size) {
     ATOMIC_AAF(&cache_hold_, size);
@@ -199,7 +194,7 @@ void ObTenantMemoryMgr::update_cache_hold(const int64_t size)
   }
 }
 
-bool ObTenantMemoryMgr::update_hold(const int64_t size, const uint64_t ctx_id,
+bool ObMemoryMgr::update_hold(const int64_t size, const uint64_t ctx_id,
                                     const lib::ObLabel &label, bool &reach_ctx_limit, bool high_prio)
 {
   bool updated = true;
@@ -210,11 +205,11 @@ bool ObTenantMemoryMgr::update_hold(const int64_t size, const uint64_t ctx_id,
     ATOMIC_AAF(&sum_hold_, -size);
     updated = false;
     auto &afc = g_alloc_failed_ctx();
-    afc.reason_ = TENANT_HOLD_REACH_LIMIT;
+    afc.reason_ = MEMORY_HOLD_REACH_LIMIT;
     afc.alloc_size_ = size;
     
-    afc.tenant_hold_ = get_sum_hold();
-    afc.tenant_limit_ = hard_limit_;
+    afc.memory_hold_ = get_sum_hold();
+    afc.memory_limit_ = hard_limit_;
   } else if (label != ObNewModIds::OB_KVSTORE_CACHE_MB) {
     if (!update_ctx_hold(ctx_id, size, high_prio)) {
       ATOMIC_AAF(&sum_hold_, -size);
@@ -227,7 +222,7 @@ bool ObTenantMemoryMgr::update_hold(const int64_t size, const uint64_t ctx_id,
   return updated;
 }
 
-bool ObTenantMemoryMgr::update_ctx_hold(const uint64_t ctx_id, const int64_t size, bool high_prio)
+bool ObMemoryMgr::update_ctx_hold(const uint64_t ctx_id, const int64_t size, bool high_prio)
 {
   bool updated = false;
   if (ctx_id < ObCtxIds::MAX_CTX_ID) {
@@ -260,7 +255,7 @@ bool ObTenantMemoryMgr::update_ctx_hold(const uint64_t ctx_id, const int64_t siz
   return updated;
 }
 
-AChunk *ObTenantMemoryMgr::ptr2chunk(void *ptr)
+AChunk *ObMemoryMgr::ptr2chunk(void *ptr)
 {
   AChunk *chunk = NULL;
   if (NULL != ptr) {
@@ -269,7 +264,7 @@ AChunk *ObTenantMemoryMgr::ptr2chunk(void *ptr)
   return chunk;
 }
 
-AChunk *ObTenantMemoryMgr::alloc_chunk_(const int64_t size, const ObMemAttr &attr)
+AChunk *ObMemoryMgr::alloc_chunk_(const int64_t size, const ObMemAttr &attr)
 {
   AChunk *chunk = nullptr;
   if (OB_UNLIKELY(attr.ctx_id_ == ObCtxIds::CO_STACK)) {
@@ -280,7 +275,7 @@ AChunk *ObTenantMemoryMgr::alloc_chunk_(const int64_t size, const ObMemAttr &att
   return chunk;
 }
 
-void ObTenantMemoryMgr::free_chunk_(AChunk *chunk, const ObMemAttr &attr)
+void ObMemoryMgr::free_chunk_(AChunk *chunk, const ObMemAttr &attr)
 {
   if (OB_UNLIKELY(attr.ctx_id_ == ObCtxIds::CO_STACK)) {
     CHUNK_MGR.free_co_chunk(chunk);
@@ -289,30 +284,30 @@ void ObTenantMemoryMgr::free_chunk_(AChunk *chunk, const ObMemAttr &attr)
   }
 }
 
-ObTenantResourceMgr::ObTenantResourceMgr()
+ObResourceState::ObResourceState()
   : memory_mgr_(), ref_cnt_(0)
 {
 }
 
 
-ObTenantResourceMgr::~ObTenantResourceMgr()
+ObResourceState::~ObResourceState()
 {
   
   ref_cnt_ = 0;
 }
 
-ObTenantResourceMgrHandle::ObTenantResourceMgrHandle()
-  : resource_mgr_(NULL),
-    tenant_resource_mgr_(NULL)
+ObResourceMgrHandle::ObResourceMgrHandle()
+  : owner_(NULL),
+    state_(NULL)
 {
 }
 
-ObTenantResourceMgrHandle::~ObTenantResourceMgrHandle()
+ObResourceMgrHandle::~ObResourceMgrHandle()
 {
   reset();
 }
 
-int ObTenantResourceMgrHandle::init(ObResourceMgr *resource_mgr, ObTenantResourceMgr *tenant_resource_mgr)
+int ObResourceMgrHandle::init(ObResourceMgr *owner, ObResourceState *state)
 {
   // can't invoke reset here, because init is invoked with read lock acquired,
   // reset will invoke dec_ref which may try to acquire write lock, leading to
@@ -321,54 +316,54 @@ int ObTenantResourceMgrHandle::init(ObResourceMgr *resource_mgr, ObTenantResourc
   if (is_valid()) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (NULL == resource_mgr || NULL == tenant_resource_mgr) {
+  } else if (NULL == owner || NULL == state) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(resource_mgr), KP(tenant_resource_mgr));
+    LOG_WARN("invalid arguments", K(ret), KP(owner), KP(state));
   } else {
-    resource_mgr_ = resource_mgr;
-    tenant_resource_mgr_ = tenant_resource_mgr;
-    resource_mgr_->inc_ref(tenant_resource_mgr_);
+    owner_ = owner;
+    state_ = state;
+    owner_->inc_ref(state_);
   }
   return ret;
 }
 
-bool ObTenantResourceMgrHandle::is_valid() const
+bool ObResourceMgrHandle::is_valid() const
 {
-  return NULL != resource_mgr_ && NULL != tenant_resource_mgr_;
+  return NULL != owner_ && NULL != state_;
 }
 
-void ObTenantResourceMgrHandle::reset()
+void ObResourceMgrHandle::reset()
 {
   if (is_valid()) {
-    resource_mgr_->dec_ref(tenant_resource_mgr_);
-    resource_mgr_ = NULL;
-    tenant_resource_mgr_ = NULL;
+    owner_->dec_ref(state_);
+    owner_ = NULL;
+    state_ = NULL;
   }
 }
 
-ObTenantMemoryMgr *ObTenantResourceMgrHandle::get_memory_mgr()
+ObMemoryMgr *ObResourceMgrHandle::get_memory_mgr()
 {
-  ObTenantMemoryMgr *memory_mgr = NULL;
-  if (NULL != tenant_resource_mgr_) {
-    memory_mgr = &tenant_resource_mgr_->memory_mgr_;
+  ObMemoryMgr *memory_mgr = NULL;
+  if (NULL != state_) {
+    memory_mgr = &state_->memory_mgr_;
   }
   return memory_mgr;
 }
 
-const ObTenantMemoryMgr *ObTenantResourceMgrHandle::get_memory_mgr() const
+const ObMemoryMgr *ObResourceMgrHandle::get_memory_mgr() const
 {
-  const ObTenantMemoryMgr *memory_mgr = NULL;
-  if (NULL != tenant_resource_mgr_) {
-    memory_mgr = &tenant_resource_mgr_->memory_mgr_;
+  const ObMemoryMgr *memory_mgr = NULL;
+  if (NULL != state_) {
+    memory_mgr = &state_->memory_mgr_;
   }
   return memory_mgr;
 }
 
 ObResourceMgr::ObResourceMgr()
-  : inited_(false), cache_washer_(NULL), lock_(), tenant_resource_mgr_(NULL)
+  : inited_(false), cache_washer_(NULL), lock_(), state_(NULL)
 {
   lock_.enable_record_stat(false);
-  lock_.set_latch_id(common::ObLatchIds::TENANT_RES_MGR_LIST_LOCK);
+  lock_.set_latch_id(common::ObLatchIds::RESOURCE_MGR_LIST_LOCK);
 }
 
 ObResourceMgr::~ObResourceMgr()
@@ -391,7 +386,7 @@ void ObResourceMgr::destroy()
 {
   if (inited_) {
     cache_washer_ = NULL;
-    tenant_resource_mgr_ = NULL;
+    state_ = NULL;
     inited_ = false;
   }
 }
@@ -423,14 +418,14 @@ int ObResourceMgr::set_cache_washer(ObICacheWasher &cache_washer)
     cache_washer_ = &cache_washer;
     ObDisableDiagnoseGuard disable_diagnose_guard;
     SpinWLockGuard guard(lock_);
-    if (NULL != tenant_resource_mgr_) {
-      tenant_resource_mgr_->memory_mgr_.set_cache_washer(cache_washer);
+    if (NULL != state_) {
+      state_->memory_mgr_.set_cache_washer(cache_washer);
     }
   }
   return ret;
 }
 
-int ObResourceMgr::get_tenant_resource_mgr(ObTenantResourceMgrHandle &handle)
+int ObResourceMgr::get_handle(ObResourceMgrHandle &handle)
 {
   int ret = OB_SUCCESS;
   handle.reset();
@@ -439,36 +434,36 @@ int ObResourceMgr::get_tenant_resource_mgr(ObTenantResourceMgrHandle &handle)
     LOG_WARN("not init", K(ret));
   } else {
     ObDisableDiagnoseGuard disable_diagnose_guard;
-    ObTenantResourceMgr *tenant_resource_mgr = NULL;
+    ObResourceState *resource_state = NULL;
     {
       SpinRLockGuard guard(lock_);
-      if (OB_FAIL(get_tenant_resource_mgr_unsafe(tenant_resource_mgr))) {
+      if (OB_FAIL(get_state_unsafe(resource_state))) {
         if (OB_ENTRY_NOT_EXIST != ret) {
-          LOG_WARN("get_tenant_resource_mgr_unsafe failed", K(ret));
+          LOG_WARN("get_state_unsafe failed", K(ret));
         } else {
           ret = OB_SUCCESS;
         }
-      } else if (OB_FAIL(handle.init(this, tenant_resource_mgr))) {
-        LOG_WARN("init handle failed", K(ret), KP(tenant_resource_mgr));
+      } else if (OB_FAIL(handle.init(this, resource_state))) {
+        LOG_WARN("init handle failed", K(ret), KP(resource_state));
       }
     }
 
     if (OB_SUCC(ret) && !handle.is_valid()) {
       SpinWLockGuard guard(lock_);
       // maybe other thread create, so retry get here
-      if (OB_FAIL(get_tenant_resource_mgr_unsafe(tenant_resource_mgr))) {
+      if (OB_FAIL(get_state_unsafe(resource_state))) {
         if (OB_ENTRY_NOT_EXIST != ret) {
-          LOG_WARN("get_tenant_resource_mgr_unsafe failed", K(ret));
+          LOG_WARN("get_state_unsafe failed", K(ret));
         } else {
           ret = OB_SUCCESS;
-          if (OB_FAIL(create_tenant_resource_mgr_unsafe(tenant_resource_mgr))) {
-            LOG_WARN("create_tenant_resource_mgr_unsafe failed", K(ret));
+          if (OB_FAIL(create_state_unsafe(resource_state))) {
+            LOG_WARN("create_state_unsafe failed", K(ret));
           }
         }
       }
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(handle.init(this, tenant_resource_mgr))) {
-          LOG_WARN("init handle failed", K(ret), KP(tenant_resource_mgr));
+        if (OB_FAIL(handle.init(this, resource_state))) {
+          LOG_WARN("init handle failed", K(ret), KP(resource_state));
         }
       }
     }
@@ -476,24 +471,24 @@ int ObResourceMgr::get_tenant_resource_mgr(ObTenantResourceMgrHandle &handle)
   return ret;
 }
 
-void ObResourceMgr::inc_ref(ObTenantResourceMgr *tenant_resource_mgr)
+void ObResourceMgr::inc_ref(ObResourceState *resource_state)
 {
-  if (NULL != tenant_resource_mgr) {
-    ATOMIC_AAF(&tenant_resource_mgr->ref_cnt_, 1);
+  if (NULL != resource_state) {
+    ATOMIC_AAF(&resource_state->ref_cnt_, 1);
   }
 }
 
-void ObResourceMgr::dec_ref(ObTenantResourceMgr *tenant_resource_mgr)
+void ObResourceMgr::dec_ref(ObResourceState *resource_state)
 {
-  if (NULL != tenant_resource_mgr) {
+  if (NULL != resource_state) {
     int64_t ref_cnt = 0;
-    if (0 == (ref_cnt = ATOMIC_SAF(&tenant_resource_mgr->ref_cnt_, 1))) {
+    if (0 == (ref_cnt = ATOMIC_SAF(&resource_state->ref_cnt_, 1))) {
       ObDisableDiagnoseGuard disable_diagnose_guard;
       SpinWLockGuard guard(lock_);
-      if (0 == ATOMIC_LOAD(&tenant_resource_mgr->ref_cnt_)) {
+      if (0 == ATOMIC_LOAD(&resource_state->ref_cnt_)) {
         int ret = OB_SUCCESS;
-        if (OB_FAIL(remove_tenant_resource_mgr_unsafe())) {
-          LOG_WARN("remove_tenant_resource_mgr_unsafe failed", K(ret));
+        if (OB_FAIL(remove_state_unsafe())) {
+          LOG_WARN("remove_state_unsafe failed", K(ret));
         }
       }
     } else if (ref_cnt < 0) {
@@ -502,68 +497,61 @@ void ObResourceMgr::dec_ref(ObTenantResourceMgr *tenant_resource_mgr)
   }
 }
 
-int ObResourceMgr::get_tenant_resource_mgr_unsafe(ObTenantResourceMgr *&tenant_resource_mgr)
+int ObResourceMgr::get_state_unsafe(ObResourceState *&resource_state)
 {
   int ret = OB_SUCCESS;
-  tenant_resource_mgr = NULL;
+  resource_state = NULL;
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else {
-    tenant_resource_mgr = tenant_resource_mgr_;
-    if (NULL == tenant_resource_mgr) {
+    resource_state = state_;
+    if (NULL == resource_state) {
       ret = OB_ENTRY_NOT_EXIST;
     }
   }
   return ret;
 }
 
-int ObResourceMgr::create_tenant_resource_mgr_unsafe(ObTenantResourceMgr *&tenant_resource_mgr)
+int ObResourceMgr::create_state_unsafe(ObResourceState *&resource_state)
 {
   int ret = OB_SUCCESS;
 
-  tenant_resource_mgr = NULL;
+  resource_state = NULL;
   void *ptr = NULL;
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_UNLIKELY(true)) {
-    static char buf[sizeof(ObTenantResourceMgr)] __attribute__((__aligned__(16)));
-    ptr = buf;
   } else {
-    ObMemAttr attr("TntResourceMgr");
-    SET_USE_500(attr);
-    if (OB_ISNULL(ptr = ob_malloc(sizeof(ObTenantResourceMgr), attr))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc memory failed", K(ret));
-    }
+    static char buf[sizeof(ObResourceState)] __attribute__((__aligned__(16)));
+    ptr = buf;
   }
   if (OB_SUCC(ret)) {
-    tenant_resource_mgr = new (ptr) ObTenantResourceMgr();
+    resource_state = new (ptr) ObResourceState();
     if (NULL != cache_washer_) {
-      tenant_resource_mgr->memory_mgr_.set_cache_washer(*cache_washer_);
+      resource_state->memory_mgr_.set_cache_washer(*cache_washer_);
     }
-    tenant_resource_mgr_ = tenant_resource_mgr;
+    state_ = resource_state;
   }
   return ret;
 }
 
-int ObResourceMgr::remove_tenant_resource_mgr_unsafe()
+int ObResourceMgr::remove_state_unsafe()
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else {
-    ObTenantResourceMgr *tenant_resource_mgr = tenant_resource_mgr_;
-    tenant_resource_mgr_ = NULL;
-    if (NULL == tenant_resource_mgr) {
+    ObResourceState *resource_state = state_;
+    state_ = NULL;
+    if (NULL == resource_state) {
       ret = OB_ENTRY_NOT_EXIST;
-      LOG_WARN("tenant memory mgr not exist", K(ret));
+      LOG_WARN("resource state not exist", K(ret));
     } else {
-      tenant_resource_mgr->~ObTenantResourceMgr();
+      resource_state->~ObResourceState();
       
-      tenant_resource_mgr = NULL;
+      resource_state = NULL;
     }
   }
   return ret;

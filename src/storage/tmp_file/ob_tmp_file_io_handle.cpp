@@ -66,9 +66,6 @@ int ObTmpFileIOHandle::init_write(const ObTmpFileIOInfo &io_info)
   } else if (OB_UNLIKELY(!io_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(io_info), KPC(this));
-  } else if (OB_UNLIKELY(!true || false)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(io_info));
   } else if (OB_FAIL(ctx_.init(io_info.fd_, io_info.dir_id_, false /*is_read*/,
                                io_info.io_desc_, io_info.io_timeout_ms_, io_info.disable_page_cache_,
                                io_info.disable_block_cache_, false /*prefetch*/))) {
@@ -93,9 +90,6 @@ int ObTmpFileIOHandle::init_pread(const ObTmpFileIOInfo &io_info, const int64_t 
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTmpFileIOHandle has been inited twice", KR(ret), KPC(this));
   } else if (OB_UNLIKELY(!io_info.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(io_info));
-  } else if (OB_UNLIKELY(!true || false)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(io_info));
   } else if (OB_UNLIKELY(read_offset < 0)) {
@@ -128,9 +122,6 @@ int ObTmpFileIOHandle::init_read(const ObTmpFileIOInfo &io_info)
   } else if (OB_UNLIKELY(!io_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(io_info));
-  } else if (OB_UNLIKELY(!true || false)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(io_info));
   } else if (OB_FAIL(ctx_.init(io_info.fd_, io_info.dir_id_, true /*is_read*/,
                                io_info.io_desc_, io_info.io_timeout_ms_, io_info.disable_page_cache_,
                                io_info.disable_block_cache_, io_info.prefetch_))) {
@@ -153,7 +144,6 @@ int ObTmpFileIOHandle::init_read(const ObTmpFileIOInfo &io_info)
 bool ObTmpFileIOHandle::is_valid() const
 {
   return is_inited_ &&
-         true && !false &&
          nullptr != buf_ &&
          done_size_ >= 0 && buf_size_ > 0 &&
          buf_size_ >= done_size_;
@@ -173,7 +163,6 @@ int ObTmpFileIOHandle::wait()
   } else if (is_finished() || !ctx_.is_read()) {
     // do nothing
   } else {
-    MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
     
     if (FAILEDx(ctx_.wait())) {
       LOG_WARN("fail to wait tmp file io", KR(ret), KPC(this));
@@ -182,7 +171,7 @@ int ObTmpFileIOHandle::wait()
     } else if (OB_UNLIKELY(done_size_ > buf_size_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("done size is larger than total todo size", KR(ret), KPC(this));
-    } else if (OB_FAIL(share::g_mp->tenant_tmp_file_manager()->get_tmp_file(fd_, file_handle))) {
+    } else if (OB_FAIL(share::g_mp->tmp_file_manager()->get_tmp_file(fd_, file_handle))) {
       LOG_WARN("fail to get tmp file handle", KR(ret), K(fd_));
     } else {
       while (OB_SUCC(ret) && !is_finished()) {

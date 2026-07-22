@@ -530,8 +530,7 @@ public:
     tablet_id_(ObTabletID::INVALID_TABLET_ID),
     object_id_(OB_INVALID_ID),
     related_list_(allocator_),
-    check_no_partition_(false),
-    is_dynamic_replica_select_table_(false)
+    check_no_partition_(false)
   {
   }
   // Used for optimizers etc., where destructors are not called, to ensure each member array is passed an external allocator
@@ -578,8 +577,7 @@ public:
     tablet_id_(ObTabletID::INVALID_TABLET_ID),
     object_id_(OB_INVALID_ID),
     related_list_(allocator_),
-    check_no_partition_(false),
-    is_dynamic_replica_select_table_(false)
+    check_no_partition_(false)
   {
   }
   virtual ~ObTableLocation() { reset(); }
@@ -743,15 +741,11 @@ public:
                                         common::ObIArray<ObRawExpr *> *sort_exprs) const;
   bool has_generated_column() const { return NULL != se_gen_col_expr_ || NULL != se_sub_gen_col_expr_ ||
                                              NULL != gen_col_node_ || NULL != sub_gen_col_node_; }
-  static int get_full_leader_table_loc(ObDASLocationRouter &loc_router,
-                                       ObIAllocator &allocator,
-                                       uint64_t table_id,
-                                       uint64_t ref_table_id,
-                                       ObDASTableLoc *&table_loc);
-  bool is_dynamic_replica_select_table() const { return is_dynamic_replica_select_table_; } 
-  void set_dynamic_replica_select_table(const bool is_dynamic_replica_select_table) {
-    is_dynamic_replica_select_table_ = is_dynamic_replica_select_table;
-  }
+  static int get_full_local_table_loc(ObDASLocationRouter &loc_router,
+                                      ObIAllocator &allocator,
+                                      uint64_t table_id,
+                                      uint64_t ref_table_id,
+                                      ObDASTableLoc *&table_loc);
   int add_part_hint_ids(const ObIArray<ObObjectID> &part_ids) {
     return append_array_no_dup(part_hint_ids_, part_ids);
   }
@@ -1236,7 +1230,6 @@ private:
   ObObjectID object_id_;
   common::ObList<DASRelatedTabletMap::MapEntry, common::ObIAllocator> related_list_;
   bool check_no_partition_;
-  bool is_dynamic_replica_select_table_;
 };
 
 }

@@ -24,18 +24,11 @@ namespace oceanbase
 {
 namespace rpc
 {
-void OB_WEAK_SYMBOL response_rpc_error_packet(ObRequest* req, int ret)
-{
-  UNUSED(ret);
-  RPC_REQ_OP.response_result(req);
-}
+common::ObAddr g_server_self_addr;
 
-void on_translate_fail(ObRequest* req, int ret)
+void on_translate_fail(ObRequest* req, int)
 {
-  ObRequest::Type req_type = req->get_type();
-  if (ObRequest::OB_RPC == req_type) {
-    response_rpc_error_packet(req, ret);
-  } else if (ObRequest::OB_MYSQL == req_type) {
+  if (ObRequest::OB_MYSQL == req->get_type()) {
     SQL_REQ_OP.disconnect_sql_conn(req);
     SQL_REQ_OP.finish_sql_request(req);
   }
@@ -43,15 +36,7 @@ void on_translate_fail(ObRequest* req, int ret)
 
 int ObRequest::set_trace_point(int trace_point)
 {
-  if (ez_req_ != NULL) {
-    if (trace_point != 0) {
-      ez_req_->trace_point = trace_point;
-    } else {
-      snprintf(ez_req_->trace_bt, EASY_REQ_TRACE_BT_SIZE, "%s", lbt());
-    }
-  } else {
-    handling_state_ = trace_point;
-  }
+  handling_state_ = trace_point;
   return OB_SUCCESS;
 }
 

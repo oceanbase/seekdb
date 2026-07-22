@@ -18,7 +18,7 @@
 #include "share/rc/ob_module_provider.h"
 #include "src/storage/compaction/ob_basic_schedule_tablet_func.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
-#include "observer/report/ob_tablet_table_updater.h" // for ObTabletTableUpdater
+#include "observer/ob_tablet_runtime_meta_updater.h" // for ObTabletRuntimeMetaUpdater
 namespace oceanbase
 {
 using namespace storage;
@@ -126,7 +126,7 @@ const static char * ObTabletExecuteStateStr[] = {
     "DATA_NOT_COMPLETE",
     "NO_MAJOR_SSTABLE",
     "INVALID_LS_STATE",
-    "TENANT_SKIP_MERGE",
+    "DATABASE_SKIP_MERGE",
     "STATE_MAX"
 };
 
@@ -166,7 +166,7 @@ int ObTabletStatusCache::init_for_major(
   ObLS &ls,
   const int64_t merge_version,
   const ObTablet &tablet,
-  const bool is_skip_merge_tenant,
+  const bool should_skip_merge,
   const bool ls_could_schedule_new_round)
 {
   int ret = OB_SUCCESS;
@@ -175,7 +175,7 @@ int ObTabletStatusCache::init_for_major(
     LOG_WARN("init twice", KR(ret), KPC(this));
   } else {
     const ObTabletID &tablet_id = tablet.get_tablet_id();
-    if (OB_FAIL(inner_init_state(merge_version, tablet, is_skip_merge_tenant))) {
+    if (OB_FAIL(inner_init_state(merge_version, tablet, should_skip_merge))) {
       LOG_WARN("failed to init state", KR(ret), K(merge_version), K(tablet_id));
     } else if (OB_FAIL(update_tablet_report_status(ls, tablet))) {
       LOG_WARN("failed to update tablet report status", KR(ret), K(tablet_id));
@@ -208,7 +208,7 @@ int ObTabletStatusCache::init_for_diagnose(
     LOG_WARN("init twice", KR(ret), KPC(this));
   } else {
     const ObTabletID &tablet_id = tablet.get_tablet_id();
-    if (OB_FAIL(inner_init_state(merge_version, tablet, false/*is_skip_merge_tenant*/))) {
+    if (OB_FAIL(inner_init_state(merge_version, tablet, false/*should_skip_merge*/))) {
       LOG_WARN("failed to init state", KR(ret), K(merge_version), K(tablet_id));
     } else {
       inner_init_could_schedule_new_round(tablet,
@@ -233,7 +233,7 @@ int ObTabletStatusCache::init_for_diagnose(
 int ObTabletStatusCache::inner_init_state(
     const int64_t merge_version,
     const ObTablet &tablet,
-    const bool is_skip_merge_tenant)
+    const bool should_skip_merge)
 {
   int ret = OB_SUCCESS;
   const ObTabletID &tablet_id = tablet.get_tablet_id();
@@ -248,8 +248,8 @@ int ObTabletStatusCache::inner_init_state(
     execute_state_ = NO_MAJOR_SSTABLE;
     LOG_TRACE("no major", KR(ret), K(tablet_id), K(last_major_snapshot));
   } else if (FALSE_IT(tablet_merge_finish_ = (last_major_snapshot >= merge_version))){
-  } else if (is_skip_merge_tenant) {
-    execute_state_ = TENANT_SKIP_MERGE;
+  } else if (should_skip_merge) {
+    execute_state_ = DATABASE_SKIP_MERGE;
   } else {
     execute_state_ = CAN_MERGE;
   }
@@ -266,14 +266,8 @@ void ObTabletStatusCache::inner_init_could_schedule_new_round(
 {
   int ret = OB_SUCCESS;
   const ObTabletID &tablet_id = tablet.get_tablet_id();
-  ObTabletCreateDeleteMdsUserData user_data;
-  mds::MdsWriter writer;// will be removed later
-  mds::TwoPhaseCommitState trans_stat;// will be removed later
-  share::SCN trans_version;// will be removed later
   new_round_state_ = NEW_ROUND_STATE_MAX;
-  if (OB_FAIL(tablet.ObITabletMdsInterface::get_latest_tablet_status(user_data, writer, trans_stat, trans_version))) {
-    LOG_WARN("failed to get tablet status", K(ret), K(tablet), K(user_data));
-  } else if (OB_FAIL(check_medium_list(tablet, normal_schedule))) {
+  if (OB_FAIL(check_medium_list(tablet, normal_schedule))) {
     // call medium_list_->need_check_finish even if ls_could_schedule_new_round=false
     LOG_WARN("failed to check medium list", K(ret), K(tablet_id));
   } else if (!ls_could_schedule_new_round || NEW_ROUND_STATE_MAX != new_round_state_) {
@@ -317,7 +311,7 @@ int ObTabletStatusCache::check_medium_list(
     new_round_state_ = NEED_CHECK_LAST_MEDIUM_CKM;
     if (normal_schedule) {
       int tmp_ret = OB_SUCCESS;
-      if (OB_TMP_FAIL(share::g_mp->tenant_medium_checker()->add_tablet(
+      if (OB_TMP_FAIL(share::g_mp->medium_checker()->add_tablet(
           tablet_id, medium_list_->get_wait_check_medium_scn()))) {
         LOG_WARN("failed to add tablet", K(tmp_ret), K(tablet_id));
       } else {
@@ -355,7 +349,7 @@ int ObTabletStatusCache::update_tablet_report_status(
     int tmp_ret = OB_SUCCESS;
     const ObTabletID &tablet_id = tablet.get_tablet_id();
     if (tablet.get_tablet_meta().report_status_.need_report()) {
-      if (OB_TMP_FAIL(share::g_mp->tablet_table_updater()->submit_tablet_update_task(tablet_id, true/*need_diagnose*/))) {
+      if (OB_TMP_FAIL(share::g_mp->tablet_runtime_meta_updater()->submit_update_task(tablet_id, true/*need_diagnose*/))) {
         LOG_WARN("failed to submit tablet update task to report", K(tmp_ret), K(tablet_id));
       } else if (OB_TMP_FAIL(ls.get_tablet_svr()->update_tablet_report_status(tablet_id))) {
         LOG_WARN("failed to update tablet report status", K(tmp_ret), K(tablet_id));
@@ -403,7 +397,7 @@ bool ObTabletStatusCache::need_diagnose() const
 {
   bool bret = false;
   if (!can_merge()) {
-    bret = (INVALID_LS_STATE != execute_state_ && TENANT_SKIP_MERGE != execute_state_);
+    bret = (INVALID_LS_STATE != execute_state_ && DATABASE_SKIP_MERGE != execute_state_);
   }
   return bret;
 }

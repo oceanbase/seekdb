@@ -119,10 +119,6 @@ public:
   static double cost_get_rows(double rows, 
                               const ObOptimizerContext &opt_ctx);
 
-  static double cost_sequence(double rows, 
-                              double uniq_sequence_cnt, 
-                              const ObOptimizerContext &opt_ctx);
-
   static double cost_material(const double rows, 
                               const double average_row_size, 
                               const ObOptimizerContext &opt_ctx);

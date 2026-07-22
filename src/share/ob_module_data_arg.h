@@ -36,9 +36,8 @@ public:
   };
   enum ObExecModule {
     INVALID_MOD = -1,
-    // 0 is reserved for a removed module-data path.
-    TIMEZONE = 1,
-    GIS = 2,
+    TIMEZONE,
+    GIS,
     MAX_MOD
   };
   ObModuleDataArg()

@@ -32,12 +32,10 @@ int ObAllVirtualSessionPsInfo::inner_get_next_row()
   if (is_iter_end_) {
     ret = OB_ITER_END;
   } else {
-    MOD_SCOPE {
-      if (OB_FAIL(get_next_row_from_specified_tenant(is_filled))) {
-        if (ret == OB_ITER_END) {
-          // sub iteration exhausted for the single sys tenant
-        } else {
-          SERVER_LOG(WARN, "get_rows_from_specified_tenant failed", K(ret));
+    SERVER_MODULE_SCOPE {
+      if (OB_FAIL(get_next_row_from_sessions(is_filled))) {
+        if (ret != OB_ITER_END) {
+          SERVER_LOG(WARN, "get_rows_from_sessions failed", K(ret));
         }
       }
     } else {
@@ -54,26 +52,16 @@ int ObAllVirtualSessionPsInfo::inner_get_next_row()
 int ObAllVirtualSessionPsInfo::inner_open()
 {
   int ret = OB_SUCCESS;
-  
-  
-  
-  if (OB_ISNULL(GCTX.omt_)) {
+  session_ids_.reset();
+  if (OB_ISNULL(GCTX.session_mgr_)) {
     ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "GCTX.omt_ is NULL", K(ret));
+    SERVER_LOG(WARN, "GCTX.session_mgr_ is NULL", K(ret));
+  } else if (OB_FAIL(GCTX.session_mgr_->for_each_session(all_sql_session_iterator_))) {
+    SERVER_LOG(WARN, "failed to read each session", K(ret));
   } else {
-    tenant_session_list_.reset();
-  }
-  if (OB_SUCC(ret)) {
-    if (OB_ISNULL(GCTX.session_mgr_)) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "GCTX.session_mgr_ is NULL", K(ret));
-    } else if (OB_FAIL(GCTX.session_mgr_->for_each_session(all_sql_session_iterator_))) {
-      SERVER_LOG(WARN, "failed to read each session", K(ret));
-    } else {
-      int64_t cnt = 0;
-      GCTX.session_mgr_->get_session_count(cnt);
-      SERVER_LOG(WARN, "all virtual ssinfo get_session_count", K(cnt));
-    }
+    int64_t cnt = 0;
+    GCTX.session_mgr_->get_session_count(cnt);
+    SERVER_LOG(WARN, "all virtual ssinfo get_session_count", K(cnt));
   }
 
   return ret;
@@ -203,7 +191,7 @@ int ObAllVirtualSessionPsInfo::fill_cells(ObPsStmtId ps_client_stmt_id,
   return ret;
 }
 
-int ObAllVirtualSessionPsInfo::get_next_row_from_specified_tenant(
+int ObAllVirtualSessionPsInfo::get_next_row_from_sessions(
     bool &is_filled)
 {
   int ret = OB_SUCCESS;
@@ -248,7 +236,7 @@ void ObAllVirtualSessionPsInfo::reset()
 {
   ObAllPlanCacheBase::reset();
   fetcher_.reset();
-  tenant_session_list_.reset();
+  session_ids_.reset();
   all_sql_session_iterator_.reset();
   cur_session_info_ = nullptr;
   
@@ -263,7 +251,7 @@ int ObAllVirtualSessionPsInfo::operator()(
   return ps_client_stmt_ids_.push_back(ps_client_stmt_id);
 }
 
-bool ObAllVirtualSessionPsInfo::ObTenantSessionInfoIterator::operator()(
+bool ObAllVirtualSessionPsInfo::ObSessionInfoIterator::operator()(
     ObSQLSessionMgr::Key key, ObSQLSessionInfo *sess_info)
 {
   int ret = OB_SUCCESS;
@@ -273,7 +261,7 @@ bool ObAllVirtualSessionPsInfo::ObTenantSessionInfoIterator::operator()(
   } else {
     if (sess_info->is_shadow()) {
     } else {
-      ObArray<SessionID> *session_id_list = &tenant_session_list_;
+      ObArray<SessionID> *session_id_list = &session_ids_;
       if (OB_ISNULL(session_id_list)) {
       } else if (OB_FAIL(session_id_list->push_back(sess_info->get_server_sid()))) {
         SERVER_LOG(WARN, "failed to push session id into session_id_list", K(ret),
@@ -284,7 +272,7 @@ bool ObAllVirtualSessionPsInfo::ObTenantSessionInfoIterator::operator()(
   return ret == OB_SUCCESS;
 }
 
-int ObAllVirtualSessionPsInfo::ObTenantSessionInfoIterator::next(
+int ObAllVirtualSessionPsInfo::ObSessionInfoIterator::next(
     ObSQLSessionInfo *&sess_info)
 {
   int ret = OB_SUCCESS;
@@ -300,7 +288,7 @@ int ObAllVirtualSessionPsInfo::ObTenantSessionInfoIterator::next(
     }
   }
   if (OB_SUCC(ret) && OB_ISNULL(cur_session_id_list_)) {
-    cur_session_id_list_ = &tenant_session_list_;
+    cur_session_id_list_ = &session_ids_;
     if (OB_NOT_NULL(cur_session_id_list_)) {
       
     } else {
@@ -334,7 +322,7 @@ int ObAllVirtualSessionPsInfo::ObTenantSessionInfoIterator::next(
   return ret;
 }
 
-void ObAllVirtualSessionPsInfo::ObTenantSessionInfoIterator::reset()
+void ObAllVirtualSessionPsInfo::ObSessionInfoIterator::reset()
 {
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(last_attach_session_info_)) {

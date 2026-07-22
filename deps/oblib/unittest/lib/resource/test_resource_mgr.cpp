@@ -23,9 +23,9 @@ namespace oceanbase
 using namespace common;
 namespace lib
 {
-TEST(TestTenantMemoryMgr, basic)
+TEST(TestMemoryMgr, basic)
 {
-  ObTenantMemoryMgr memory_mgr;
+  ObMemoryMgr memory_mgr;
   const int64_t limit = 1 * 1024 * 1024 * 1024;
   memory_mgr.set_limit(limit);
   memory_mgr.set_hard_limit(limit);
@@ -118,19 +118,19 @@ class FakeCacheWasher : public ObICacheWasher
 {
 public:
   FakeCacheWasher(const int64_t mb_size)
-    : tenant_id_(OB_SERVER_TENANT_ID), mb_size_(mb_size), mb_blocks_(NULL)
+    : mb_size_(mb_size), mb_blocks_(NULL)
   {
   }
   virtual ~FakeCacheWasher() {}
 
   int erase_cache() override { return 0; }
-  int alloc_mb(ObTenantMemoryMgr &mgr)
+  int alloc_mb(ObMemoryMgr &mgr)
   {
     int ret = OB_SUCCESS;
     void *ptr = NULL;
     if (NULL == (ptr = mgr.alloc_cache_mb(mb_size_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LIB_LOG(WARN, "alloc_cache_mb failed", K(ret), K_(tenant_id), K_(mb_size));
+      LIB_LOG(WARN, "alloc_cache_mb failed", K(ret), K_(mb_size));
     } else {
       ObCacheMemBlock *block = new (ptr) ObCacheMemBlock();
       block->next_ = mb_blocks_;
@@ -161,7 +161,7 @@ public:
     }
     return ret;
   }
-  void free_mbs(ObTenantMemoryMgr &mgr)
+  void free_mbs(ObMemoryMgr &mgr)
   {
     ObCacheMemBlock *mb = mb_blocks_;
     while (NULL != mb) {
@@ -171,23 +171,22 @@ public:
     }
   }
 private:
-  uint64_t tenant_id_;
   int64_t mb_size_;
   ObCacheMemBlock *mb_blocks_;
 };
 
-TEST(TestTenantMemoryMgr, sync_wash)
+TEST(TestMemoryMgr, sync_wash)
 {
   int ret = OB_SUCCESS;
   const int64_t limit = 2L * 1024L * 1024L * 1024L;
   oceanbase::lib::set_memory_limit(limit);
   FakeCacheWasher washer(ACHUNK_SIZE);
-  ObTenantMemoryMgr memory_mgr;
+  ObMemoryMgr memory_mgr;
   ObArray<void *> chunks;
   chunks.reserve(512);
-  const int64_t tenant_limit = 2 * limit;
-  memory_mgr.set_limit(tenant_limit);
-  memory_mgr.set_hard_limit(tenant_limit);
+  const int64_t memory_limit = 2 * limit;
+  memory_mgr.set_limit(memory_limit);
+  memory_mgr.set_hard_limit(memory_limit);
   int64_t mb_count = 0;
   while (OB_SUCC(washer.alloc_mb(memory_mgr))) {
     ++mb_count;
@@ -233,18 +232,18 @@ TEST(TestTenantMemoryMgr, sync_wash)
   ASSERT_EQ(0, memory_mgr.get_sum_hold());
 }
 
-TEST(TestTenantMemoryMgr, DISABLED_large_sync_wash)
+TEST(TestMemoryMgr, DISABLED_large_sync_wash)
 {
   int ret = OB_SUCCESS;
   const int64_t limit = 1L * 1024L * 1024L * 1024L;
   const int64_t aligned_size = CHUNK_MGR.aligned(ACHUNK_SIZE);
   oceanbase::lib::set_memory_limit(limit);
   FakeCacheWasher washer(ACHUNK_SIZE);
-  ObTenantMemoryMgr memory_mgr;
+  ObMemoryMgr memory_mgr;
   ObArray<void *> chunks;
   chunks.reserve(512);
-  const int64_t tenant_limit = 2 * limit;
-  memory_mgr.set_limit(tenant_limit);
+  const int64_t memory_limit = 2 * limit;
+  memory_mgr.set_limit(memory_limit);
   int64_t mb_count = 0;
   while (OB_SUCC(washer.alloc_mb(memory_mgr))) {
     ++mb_count;

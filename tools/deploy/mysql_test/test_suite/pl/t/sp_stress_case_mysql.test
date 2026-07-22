@@ -14,7 +14,6 @@ set @@session.explicit_defaults_for_timestamp=off;
 #
 connect (obsys,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
 connection obsys;
-alter system set _enable_malloc_v2=false;
 connection default;
 
 --disable_warnings
@@ -116,7 +115,3 @@ DROP PROCEDURE bug_19194_simple;
 DROP PROCEDURE bug_19194_searched;
 
 DROP PROCEDURE proc_19194_codegen;
-
-connection obsys;
-alter system set _enable_malloc_v2=true;
-connection default;

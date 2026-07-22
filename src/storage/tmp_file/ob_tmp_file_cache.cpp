@@ -151,7 +151,7 @@ int ObTmpBlockCache::get_block(const ObTmpBlockCacheKey &key, ObTmpBlockValueHan
     if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
       STORAGE_LOG(WARN, "fail to get key from block cache", KR(ret), K(key));
     } else {
-      EVENT_INC(ObStatEventIds::TMP_BLOCK_CACHE_MISS);
+      EVENT_INC(TMP_BLOCK_CACHE_MISS);
     }
   } else {
     if (OB_ISNULL(value)) {
@@ -159,7 +159,7 @@ int ObTmpBlockCache::get_block(const ObTmpBlockCacheKey &key, ObTmpBlockValueHan
       STORAGE_LOG(WARN, "unexpected error, the value must not be NULL", KR(ret));
     } else {
       handle.value_ = const_cast<ObTmpBlockCacheValue *>(value);
-      EVENT_INC(ObStatEventIds::TMP_BLOCK_CACHE_HIT);
+      EVENT_INC(TMP_BLOCK_CACHE_HIT);
     }
   }
   return ret;
@@ -228,26 +228,6 @@ ObTmpPageCacheKey::ObTmpPageCacheKey(const int64_t block_id, const int64_t page_
 {
 }
 
-ObTmpPageCacheKey::ObTmpPageCacheKey(const int64_t tmp_file_id,
-                                     const uint64_t unfilled_page_length,
-                                     const uint64_t virtual_page_id)
-{
-  int ret = OB_SUCCESS;
-  // Validate Check.
-  if (OB_UNLIKELY(
-          tmp_file_id <= 0 || unfilled_page_length >= PAGE_CACHE_KEY_PAGE_LENGTH_MAX ||
-          virtual_page_id >= PAGE_CACHE_KEY_VIRTUAL_PAGE_ID_MAX)) {
-    ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(ERROR, "unexpected tmp page cache key", KR(ret), K(tmp_file_id),
-                K(unfilled_page_length), K(virtual_page_id));
-  } else {
-    tmp_file_id_ = tmp_file_id;
-    unfilled_page_length_ = unfilled_page_length;
-    virtual_page_id_ = virtual_page_id;
-    
-  }
-}
-
 ObTmpPageCacheKey::~ObTmpPageCacheKey()
 {
 }
@@ -256,8 +236,7 @@ bool ObTmpPageCacheKey::operator ==(const ObIKVCacheKey &other) const
 {
   const ObTmpPageCacheKey &other_key = reinterpret_cast<const ObTmpPageCacheKey &> (other);
   return block_id_ == other_key.block_id_
-         && page_id_ == other_key.page_id_
-         && true;
+         && page_id_ == other_key.page_id_;
 }
 
 
@@ -296,9 +275,7 @@ int64_t ObTmpPageCacheKey::to_string(char* buf, const int64_t buf_len) const
 {
   int64_t pos = 0;
   J_OBJ_START();
-  if (!GCTX.is_shared_storage_mode()) {
-    J_KV(K(block_id_), K(page_id_));
-  }
+  J_KV(K(block_id_), K(page_id_));
   J_OBJ_END();
   return pos;
 }
@@ -453,7 +430,7 @@ int ObTmpPageCache::get_page(const ObTmpPageCacheKey &key, ObTmpPageValueHandle 
     STORAGE_LOG(WARN, "invalid arguments", KR(ret), K(key));
   } else if (OB_FAIL(get(key, value, handle.handle_))) {
     if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST == ret)) {
-      EVENT_INC(ObStatEventIds::TMP_PAGE_CACHE_MISS);
+      EVENT_INC(TMP_PAGE_CACHE_MISS);
     } else {
       STORAGE_LOG(WARN, "fail to get key from page cache", KR(ret), K(key));
     }
@@ -463,7 +440,7 @@ int ObTmpPageCache::get_page(const ObTmpPageCacheKey &key, ObTmpPageValueHandle 
       STORAGE_LOG(WARN, "unexpected error, the value must not be NULL", KR(ret));
     } else {
       handle.value_ = const_cast<ObTmpPageCacheValue *>(value);
-      EVENT_INC(ObStatEventIds::TMP_PAGE_CACHE_HIT);
+      EVENT_INC(TMP_PAGE_CACHE_HIT);
     }
   }
   return ret;
@@ -500,9 +477,6 @@ int ObTmpPageCache::load_page(const ObTmpPageCacheKey &key,
   } else if (OB_ISNULL(callback_allocator)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "callback_allocator is unexpected nullptr", KR(ret), K(key));
-  } else if (OB_UNLIKELY(GCTX.is_shared_storage_mode())) {
-    ret = OB_NOT_SUPPORTED;
-    STORAGE_LOG(WARN, "shared storage mode not support this function", KR(ret), K(key));
   } else if (OB_FAIL(alloc(key.size(),
       sizeof(ObTmpPageCacheValue) + ObTmpFileGlobal::ALLOC_PAGE_SIZE,
       kvpair, p_handle.handle_, inst_handle))) {
@@ -515,7 +489,7 @@ int ObTmpPageCache::load_page(const ObTmpPageCacheKey &key,
     p_handle.value_ = new (buf) ObTmpPageCacheValue(buf + sizeof(ObTmpPageCacheValue));
   }
   if (OB_SUCC(ret)) {
-    ObTmpFileBlockManager &block_manager = share::g_mp->tenant_tmp_file_manager()->get_sn_file_manager().get_tmp_file_block_manager();
+    ObTmpFileBlockManager &block_manager = share::g_mp->tmp_file_manager()->get_sn_file_manager().get_tmp_file_block_manager();
     blocksstable::ObStorageObjectHandle obj_handle;
     blocksstable::MacroBlockId macro_block_id;
     //TODO: io_desc and io_timeout_ms value settings

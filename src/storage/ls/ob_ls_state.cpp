@@ -141,12 +141,13 @@ ObLSPersistentState &ObLSPersistentState::operator=(const int64_t state)
 }
 
 // the state machine of ObLSPersistentState
-//STATE \ ACTION    START_WORK   REMOVE
-//--------------------------------------
-//INIT              NORMAL       ZOMBIE
-//NORMAL            NORMAL       ZOMBIE
-//CREATE_ABORTED    N            N
-//ZOMBIE            N            ZOMBIE
+//STATE \ ACTION    START_WORK   START_RESTORE FINISH_RESTORE REMOVE
+//-------------------------------------------------------------------
+//INIT              NORMAL       RESTORE     N              ZOMBIE
+//NORMAL            NORMAL       RESTORE     N              ZOMBIE
+//CREATE_ABORTED    N            N           N              N
+//ZOMBIE            N            N           N              ZOMBIE
+//RESTORE           N            RESTORE     NORMAL         ZOMBIE
 int ObLSPersistentState::StateHelper::switch_state(const int64_t op)
 {
   int ret = OB_SUCCESS;
@@ -155,13 +156,15 @@ int ObLSPersistentState::StateHelper::switch_state(const int64_t op)
   static const int64_t LS_NORMAL = State::LS_NORMAL;
   static const int64_t LS_CREATE_ABORTED = State::LS_CREATE_ABORTED;
   static const int64_t LS_ZOMBIE = State::LS_ZOMBIE;
+  static const int64_t LS_RESTORE = State::LS_RESTORE;
 
   static const int64_t STATE_MAP[State::MAX][Ops::MAX] = {
-          //         START_WORK      REMOVE
-/* INIT */           {LS_NORMAL,     LS_ZOMBIE},
-/* NORMAL */         {LS_NORMAL,     LS_ZOMBIE},
-/* CREATE_ABORTED */ {N,             N},
-/* ZOMBIE */         {N,             LS_ZOMBIE},
+          //         START_WORK      START_RESTORE FINISH_RESTORE REMOVE
+/* INIT */           {LS_NORMAL,     LS_RESTORE,  N,             LS_ZOMBIE},
+/* NORMAL */         {LS_NORMAL,     LS_RESTORE,  N,             LS_ZOMBIE},
+/* CREATE_ABORTED */ {N,             N,           N,             N},
+/* ZOMBIE */         {N,             N,           N,             LS_ZOMBIE},
+/* RESTORE */        {N,             LS_RESTORE,  LS_NORMAL,     LS_ZOMBIE},
   };
 
   if (OB_UNLIKELY(!Ops::is_valid(op))) {
@@ -195,6 +198,26 @@ int ObLSPersistentState::start_work()
   StateHelper state_helper(state_);
   if (OB_FAIL(state_helper.switch_state(Ops::START_WORK))) {
     LOG_WARN("start work failed", K(ret));
+  }
+  return ret;
+}
+
+int ObLSPersistentState::start_restore()
+{
+  int ret = OB_SUCCESS;
+  StateHelper state_helper(state_);
+  if (OB_FAIL(state_helper.switch_state(Ops::START_RESTORE))) {
+    LOG_WARN("start restore failed", K(ret));
+  }
+  return ret;
+}
+
+int ObLSPersistentState::finish_restore()
+{
+  int ret = OB_SUCCESS;
+  StateHelper state_helper(state_);
+  if (OB_FAIL(state_helper.switch_state(Ops::FINISH_RESTORE))) {
+    LOG_WARN("finish restore failed", K(ret));
   }
   return ret;
 }

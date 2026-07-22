@@ -55,7 +55,7 @@ public:
   // to alloc the memtable.
   virtual int init(const common::ObTabletID &tablet_id,
                    ObFreezer *freezer,
-                   ObTenantMetaMemMgr *t3m) override;
+                   ObStorageMetaMemMgr *t3m) override;
   virtual void destroy() override;
 
   // create_memtable is used for creating the only memtable for CheckpointMgr

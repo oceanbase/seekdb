@@ -62,8 +62,6 @@ int ObRawExprFactory::create_raw_expr<ObSysFunRawExpr>(ObItemType expr_type, ObS
 {
   int ret = OB_SUCCESS;
   switch (expr_type) {
-    GENERATE_CASE(T_FUN_SYS_SEQ_NEXTVAL, ObSequenceRawExpr);
-    GENERATE_CASE(T_FUN_NORMAL_UDF, ObNormalDllUdfRawExpr);
     GENERATE_CASE(T_FUN_PL_COLLECTION_CONSTRUCT, ObCollectionConstructRawExpr);
     GENERATE_CASE(T_FUN_UDF, ObUDFRawExpr);
     GENERATE_CASE(T_FUN_PL_OBJECT_CONSTRUCT, ObObjectConstructRawExpr);
@@ -112,7 +110,7 @@ void ObQualifiedName::format_qualified_name()
 void ObQualifiedName::format_qualified_name(ObNameCaseMode mode)
 {
   UNUSED(mode); //TODO: @ryan.ly @yuming.wyc
-  bool maybe_column = !is_sys_func() && !is_pl_udf() && !is_dll_udf() && !is_pl_var() && !is_udf_return_access();
+  bool maybe_column = !is_sys_func() && !is_pl_udf() && !is_pl_var() && !is_udf_return_access();
   for (int64_t i = 0; maybe_column && i < access_idents_.count(); ++i) {
     if (access_idents_.at(i).access_name_.empty() || access_idents_.at(i).access_index_ != OB_INVALID_INDEX) {
       maybe_column = false;
@@ -214,7 +212,6 @@ bool ObRawExpr::has_generalized_column(bool ignore_column/* = false */) const
 {
   return (!ignore_column && has_flag(CNT_COLUMN)) || has_flag(CNT_AGG) || has_flag(CNT_SET_OP) || has_flag(CNT_SUB_QUERY)
          || has_flag(CNT_WINDOW_FUNC) || has_flag(CNT_PSEUDO_COLUMN)
-         || has_flag(CNT_SEQ_EXPR)
          || has_flag(CNT_OP_PSEUDO_COLUMN) || has_flag(CNT_MATCH_EXPR);
 
 }
@@ -234,9 +231,7 @@ bool ObRawExpr::is_vectorize_result() const
       || has_flag(CNT_DYNAMIC_USER_VARIABLE)
       || has_flag(CNT_ALIAS)
       || has_flag(CNT_VALUES)
-      || has_flag(CNT_SEQ_EXPR)
       || has_flag(CNT_RAND_FUNC)
-      || has_flag(CNT_SO_UDF)
       || has_flag(CNT_OP_PSEUDO_COLUMN)
       || has_flag(CNT_VOLATILE_CONST);
 
@@ -909,9 +904,7 @@ bool ObRawExpr::is_not_calculable_expr() const
          || has_flag(IS_DYNAMIC_USER_VARIABLE)
          || has_flag(IS_ALIAS)
          || has_flag(IS_VALUES)
-         || has_flag(IS_SEQ_EXPR)
          || has_flag(IS_RAND_FUNC)
-         || has_flag(IS_SO_UDF_EXPR)
          || has_flag(IS_VOLATILE_CONST)
          || has_flag(IS_ASSIGN_EXPR);
 }
@@ -925,9 +918,7 @@ bool ObRawExpr::cnt_not_calculable_expr() const
          || has_flag(CNT_DYNAMIC_USER_VARIABLE)
          || has_flag(CNT_ALIAS)
          || has_flag(CNT_VALUES)
-         || has_flag(CNT_SEQ_EXPR)
          || has_flag(CNT_RAND_FUNC)
-         || has_flag(CNT_SO_UDF)
          || has_flag(CNT_VOLATILE_CONST)
          || has_flag(CNT_ASSIGN_EXPR);
 }
@@ -941,9 +932,7 @@ bool ObRawExpr::cnt_not_calculable_expr_ignore_column() const
          || has_flag(CNT_DYNAMIC_USER_VARIABLE)
          || has_flag(CNT_ALIAS)
          || has_flag(CNT_VALUES)
-         || has_flag(CNT_SEQ_EXPR)
          || has_flag(CNT_RAND_FUNC)
-         || has_flag(CNT_SO_UDF)
          || has_flag(CNT_VOLATILE_CONST)
          || has_flag(CNT_ASSIGN_EXPR);
 }
@@ -967,7 +956,6 @@ int ObRawExpr::is_const_inherit_expr(bool &is_const_inherit,
       || T_FUN_SYS_GENERATOR == type_
       || T_FUN_SYS_UUID == type_
       || T_FUN_SYS_UUID_SHORT == type_
-      || T_FUN_SYS_SEQ_NEXTVAL == type_
       || T_FUN_SYS_AUTOINC_NEXTVAL == type_
       || T_FUN_SYS_DOC_ID == type_
       || T_FUN_SYS_VEC_VID == type_
@@ -977,7 +965,6 @@ int ObRawExpr::is_const_inherit_expr(bool &is_const_inherit,
       || T_FUN_SYS_STMT_ID == type_
       || T_FUN_SYS_SLEEP == type_
       || T_OP_ASSIGN == type_
-      || T_FUN_NORMAL_UDF == type_
       || T_FUN_SYS_REMOVE_CONST == type_
       || T_FUN_SYS_WRAPPER_INNER == type_
       || T_FUN_SYS_VALUES == type_
@@ -1027,10 +1014,8 @@ bool ObRawExpr::check_is_deterministic_expr() const
   if (has_flag(CNT_VOLATILE_CONST)
       || has_flag(CNT_ASSIGN_EXPR)
       || has_flag(CNT_RAND_FUNC)
-      || has_flag(CNT_SEQ_EXPR)
       || has_flag(CNT_STATE_FUNC)
       || has_flag(CNT_DYNAMIC_USER_VARIABLE)
-      || has_flag(CNT_SO_UDF)
       // unclear performance expr type
       || T_FUN_SYS_STMT_ID == type_
       || T_FUN_LABEL_SE_SESSION_LABEL == type_
@@ -2058,7 +2043,6 @@ int ObColumnRefRawExpr::assign(const ObRawExpr &other)
       is_strict_json_column_ = tmp.is_strict_json_column_;
       srs_id_ = tmp.srs_id_;
       udt_set_id_ = tmp.udt_set_id_;
-      is_pseudo_column_ref_ = tmp.is_pseudo_column_ref_;
     }
   }
   return ret;
@@ -3823,7 +3807,6 @@ int ObAggFunRawExpr::assign(const ObRawExpr &other)
         separator_param_expr_ = tmp.separator_param_expr_;
         expr_in_inner_stmt_ = tmp.expr_in_inner_stmt_;
         pl_agg_udf_expr_ = tmp.pl_agg_udf_expr_;
-        udf_meta_.assign(tmp.udf_meta_);
         is_need_deserialize_row_ = tmp.is_need_deserialize_row_;
       }
     }
@@ -3842,10 +3825,6 @@ int ObAggFunRawExpr::inner_deep_copy(ObIRawExprCopier &copier)
     if (OB_ISNULL(inner_alloc_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("inner alloc is null", K(ret));
-    } else if (OB_FAIL(ob_write_string(*inner_alloc_, udf_meta_.name_, udf_meta_.name_))) {
-      LOG_WARN("failed to write string", K(ret));
-    } else if (OB_FAIL(ob_write_string(*inner_alloc_, udf_meta_.dl_, udf_meta_.dl_))) {
-      LOG_WARN("failed to write string", K(ret));
     }
   }
   return ret;
@@ -4034,11 +4013,7 @@ int ObAggFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t
                                        ExplainType type) const
 {
   int ret = OB_SUCCESS;
-  if (T_FUN_AGG_UDF == get_expr_type()) {
-    if (OB_FAIL(BUF_PRINTF("%.*s(", udf_meta_.name_.length(), udf_meta_.name_.ptr()))) {
-      LOG_WARN("fail to BUF_PRINTF", K(ret));
-    }
-  } else if (T_FUN_PL_AGG_UDF == get_expr_type()) {
+  if (T_FUN_PL_AGG_UDF == get_expr_type()) {
     if (OB_ISNULL(pl_agg_udf_expr_) || OB_UNLIKELY(!pl_agg_udf_expr_->is_udf_expr())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected error", K(ret), K(pl_agg_udf_expr_));
@@ -4151,24 +4126,6 @@ int ObAggFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t
       } else {}
     }
   }
-  return ret;
-}
-
-int ObAggFunRawExpr::set_udf_meta(const share::schema::ObUDF &udf)
-{
-  int ret = OB_SUCCESS;
-  
-  udf_meta_.ret_ = udf.get_ret();
-  udf_meta_.type_ = udf.get_type();
-
-  if (OB_ISNULL(inner_alloc_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("inner allocator or expr factory is NULL", K(inner_alloc_), K(ret));
-  } else if (OB_FAIL(ob_write_string(*inner_alloc_, udf.get_name_str(), udf_meta_.name_))) {
-    LOG_WARN("fail to write string", K(udf.get_name_str()), K(ret));
-  } else if (OB_FAIL(ob_write_string(*inner_alloc_, udf.get_dl_str(), udf_meta_.dl_))) {
-    LOG_WARN("fail to write string", K(udf.get_name_str()), K(ret));
-  } else { /*do nothing*/ }
   return ret;
 }
 
@@ -4780,183 +4737,6 @@ int ObSysFunRawExpr::get_type_demotion_name(char *buf, int64_t buf_len, int64_t 
     LOG_WARN("fail to BUF_PRINTF", K(ret));
   } else if (OB_FAIL(get_cast_type_name(buf, buf_len, pos))) {
     LOG_WARN("fail to get_cast_type_name", K(ret));
-  }
-  return ret;
-}
-
-int ObSequenceRawExpr::assign(const ObRawExpr &other)
-{
-  int ret = OB_SUCCESS;
-  if (OB_LIKELY(this != &other)) {
-    if (OB_UNLIKELY(get_expr_class() != other.get_expr_class() ||
-                    get_expr_type() != other.get_expr_type())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid input expr", K(ret), K(other.get_expr_type()));
-    } else if (OB_FAIL(ObSysFunRawExpr::assign(other))) {
-      LOG_WARN("failed to assign sys raw expr");
-    } else {
-      const ObSequenceRawExpr &tmp =
-          static_cast<const ObSequenceRawExpr &>(other);
-      database_name_ = tmp.database_name_;
-      name_ = tmp.name_;
-      action_ = tmp.action_;
-      sequence_id_ = tmp.sequence_id_;
-    }
-  }
-  return ret;
-}
-
-int ObSequenceRawExpr::inner_deep_copy(ObIRawExprCopier &copier)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObSysFunRawExpr::inner_deep_copy(copier))) {
-    LOG_WARN("failed to copy expr attributes", K(ret));
-  } else if (copier.deep_copy_attributes()) {
-    if (OB_ISNULL(inner_alloc_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("inner allocator or expr factory is NULL", K(inner_alloc_), K(ret));
-    } else if (OB_FAIL(ob_write_string(*inner_alloc_, database_name_, database_name_))) {
-      LOG_WARN("fail to write string", K(database_name_), K(ret));
-    } else if (OB_FAIL(ob_write_string(*inner_alloc_, name_, name_))) {
-      LOG_WARN("fail to write string", K(name_), K(ret));
-    } else if (OB_FAIL(ob_write_string(*inner_alloc_, action_, action_))) {
-      LOG_WARN("fail to write string", K(action_), K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObSequenceRawExpr::set_sequence_meta(const common::ObString &database_name,
-                                         const common::ObString &name,
-                                         const common::ObString &action,
-                                         uint64_t sequence_id)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ob_write_string(*inner_alloc_, database_name, database_name_))) {
-    LOG_WARN("fail to write string", K(name), K(ret));
-  } else if (OB_FAIL(ob_write_string(*inner_alloc_, name, name_))) {
-    LOG_WARN("fail to write string", K(name), K(ret));
-  } else if (OB_FAIL(ob_write_string(*inner_alloc_, action, action_))) {
-    LOG_WARN("fail to write string", K(action), K(ret));
-  } else {
-    sequence_id_ = sequence_id;
-  }
-  return ret;
-}
-
-bool ObSequenceRawExpr::inner_same_as(const ObRawExpr &expr,
-                                      ObExprEqualCheckContext *check_context) const
-{
-  UNUSED(expr);
-  UNUSED(check_context);
-  return false;
-}
-
-void ObSequenceRawExpr::inner_calc_hash()
-{
-  ObRawExpr::inner_calc_hash();
-}
-
-int ObSequenceRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &pos,
-                                         ExplainType type) const
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(BUF_PRINTF("%.*s.%.*s",
-                          name_.length(), name_.ptr(),
-                          action_.length(), action_.ptr()))) {
-    LOG_WARN("fail to BUF_PRINTF", K(ret));
-  }
-  if (OB_SUCC(ret) && EXPLAIN_EXTENDED == type) {
-    if (OB_FAIL(BUF_PRINTF("("))) {
-      LOG_WARN("fail to BUF_PRINTF", K(ret));
-    } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
-      LOG_WARN("fail to BUF_PRINTF", K(ret));
-    } else if (OB_FAIL(BUF_PRINTF(")"))) {
-      LOG_WARN("fail to BUF_PRINTF", K(ret));
-    } else {}
-  }
-  return ret;
-}
-
-int ObNormalDllUdfRawExpr::set_udf_meta(const share::schema::ObUDF &udf)
-{
-  int ret = OB_SUCCESS;
-  
-  udf_meta_.ret_ = udf.get_ret();
-  udf_meta_.type_ = udf.get_type();
-
-  /* data from schema, deep copy maybe a better choices */
-  if (OB_ISNULL(inner_alloc_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("inner allocator or expr factory is NULL", K(inner_alloc_), K(ret));
-  } else if (OB_FAIL(ob_write_string(*inner_alloc_, udf.get_name_str(), udf_meta_.name_))) {
-    LOG_WARN("fail to write string", K(udf.get_name_str()), K(ret));
-  } else if (OB_FAIL(ob_write_string(*inner_alloc_, udf.get_dl_str(), udf_meta_.dl_))) {
-    LOG_WARN("fail to write string", K(udf.get_name_str()), K(ret));
-  } else { /*do nothing*/ }
-  return ret;
-}
-
-int ObNormalDllUdfRawExpr::add_udf_attribute_name(const common::ObString &name)
-{
-  return udf_attributes_.push_back(name);
-}
-
-
-bool ObNormalDllUdfRawExpr::inner_same_as(const ObRawExpr &expr,
-                                          ObExprEqualCheckContext *check_context) const
-{
-  //FIXME muhang not sure about the purpose of this same as, set all to false for now
-  UNUSED(expr);
-  UNUSED(check_context);
-  return false;
-}
-
-void ObNormalDllUdfRawExpr::inner_calc_hash()
-{
-  ObRawExpr::inner_calc_hash();
-}
-
-int ObNormalDllUdfRawExpr::assign(const ObRawExpr &other)
-{
-  int ret = OB_SUCCESS;
-  if (OB_LIKELY(this != &other)) {
-    if (OB_UNLIKELY(get_expr_class() != other.get_expr_class() ||
-                    get_expr_type() != other.get_expr_type())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid input expr", K(ret), K(other.get_expr_type()));
-    } else if (OB_FAIL(ObSysFunRawExpr::assign(other))) {
-      LOG_WARN("failed to assign sys raw expr");
-    } else {
-      const ObNormalDllUdfRawExpr &tmp =
-          static_cast<const ObNormalDllUdfRawExpr &>(other);
-      IGNORE_RETURN udf_meta_.assign(tmp.get_udf_meta());
-    }
-  }
-  return ret;
-}
-
-int ObNormalDllUdfRawExpr::inner_deep_copy(ObIRawExprCopier &copier)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObSysFunRawExpr::inner_deep_copy(copier))) {
-    LOG_WARN("copy in Base class ObSysRawExpr failed", K(ret));
-  } else if (copier.deep_copy_attributes()) {
-    if (OB_ISNULL(inner_alloc_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("inner allocator or expr factory is NULL", K(inner_alloc_), K(ret));
-    } else if (OB_FAIL(ob_write_string(*inner_alloc_, udf_meta_.name_, udf_meta_.name_))) {
-      LOG_WARN("fail to write string", K(udf_meta_.name_), K(ret));
-    } else if (OB_FAIL(ob_write_string(*inner_alloc_, udf_meta_.dl_, udf_meta_.dl_))) {
-      LOG_WARN("fail to write string", K(udf_meta_.name_), K(ret));
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < udf_attributes_.count(); ++i) {
-      if (OB_FAIL(ob_write_string(*inner_alloc_,
-                                  udf_attributes_.at(i),
-                                  udf_attributes_.at(i)))) {
-        LOG_WARN("failed to write string", K(ret));
-      }
-    }
   }
   return ret;
 }
@@ -6275,7 +6055,6 @@ int ObPseudoColumnRawExpr::assign(const ObRawExpr &other)
           static_cast<const ObPseudoColumnRawExpr &>(other);
       table_id_ = tmp.table_id_;
       table_name_ = tmp.table_name_;
-      data_access_path_ = tmp.data_access_path_;
     }
   }
   return ret;
@@ -6296,8 +6075,7 @@ bool ObPseudoColumnRawExpr::inner_same_as(const ObRawExpr &expr,
 {
   UNUSED(check_context);
   return type_ == expr.get_expr_type() &&
-         table_id_ == static_cast<const ObPseudoColumnRawExpr&>(expr).get_table_id() &&
-         0 == data_access_path_.compare(static_cast<const ObPseudoColumnRawExpr&>(expr).get_data_access_path());
+         table_id_ == static_cast<const ObPseudoColumnRawExpr&>(expr).get_table_id();
 }
 
 void ObPseudoColumnRawExpr::inner_calc_hash()
@@ -6332,16 +6110,6 @@ int ObPseudoColumnRawExpr::get_name_internal(char *buf, const int64_t buf_len, i
     case T_PSEUDO_GROUP_PARAM:
     case T_PSEUDO_IDENTIFY_SEQ:
       if (OB_FAIL(databuff_print_obj(buf, buf_len, pos, expr_name_))) {
-        LOG_WARN("failed to print expr name", K(ret));
-      }
-      break;
-    case T_PSEUDO_EXTERNAL_FILE_URL:
-    case T_PSEUDO_PARTITION_LIST_COL:
-    case T_PSEUDO_EXTERNAL_FILE_COL:
-    case T_PSEUDO_EXTERNAL_FILE_ROW:
-      if (!table_name_.empty() && OB_FAIL(BUF_PRINTF("%.*s.", table_name_.length(), table_name_.ptr()))) {
-        LOG_WARN("failed to print table name", K(ret));
-      } else if (OB_FAIL(databuff_print_obj(buf, buf_len, pos, expr_name_))) {
         LOG_WARN("failed to print expr name", K(ret));
       }
       break;
@@ -6851,27 +6619,7 @@ int ObRawExprFactory::create_raw_expr(ObRawExpr::ExprClass expr_class,
     break;
   }
   case ObRawExpr::EXPR_SYS_FUNC: {
-    if (T_FUN_SYS_SEQ_NEXTVAL == expr_type) {
-      ObSequenceRawExpr *dest_seq = NULL;
-      if (OB_FAIL(create_raw_expr(expr_type, dest_seq))) {
-        LOG_WARN("failed to allocate raw expr", K(dest_seq), K(ret));
-      } else if (OB_ISNULL(dest_seq)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("expr is NULL", K(dest_seq), K(ret));
-      } else {
-        dest = dest_seq;
-      }
-    } else if (T_FUN_NORMAL_UDF == expr_type) {
-      ObNormalDllUdfRawExpr *dest_nudf = NULL;
-      if (OB_FAIL(create_raw_expr(expr_type, dest_nudf))) {
-        LOG_WARN("failed to allocate raw expr", K(dest_nudf), K(ret));
-      } else if (OB_ISNULL(dest_nudf)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("expr is NULL", K(dest_nudf), K(ret));
-      } else {
-        dest = dest_nudf;
-      }
-    } else if (T_FUN_PL_COLLECTION_CONSTRUCT == expr_type) {
+    if (T_FUN_PL_COLLECTION_CONSTRUCT == expr_type) {
       ObCollectionConstructRawExpr *dest_cc = NULL;
       if (OB_FAIL(create_raw_expr(expr_type, dest_cc))) {
         LOG_WARN("failed to allocate raw expr", K(dest_cc), K(ret));

@@ -1204,7 +1204,6 @@ int ObTransformPredicateMoveAround::rename_pullup_predicates(
  * -  push down predicates
  * -  limit                 cannot be pushed down past limit
  * -  order by              can be pushed down past order by
- * -  sequence              cannot be pushed down past sequence
  * -  distinct              can be pushed down past distinct
  * -  window function       can be pushed down if the predicate-related columns are a subset of the partition by columns
  * -  groupby/having        can be pushed down if the predicate-related columns are a subset of the group by columns (rollup columns are not checked when there is rollup, push down if the predicate-related columns are a subset of the group by columns)
@@ -1214,7 +1213,8 @@ int ObTransformPredicateMoveAround::rename_pullup_predicates(
  *
  * we would like to push down predicates as far as possible
  *
- * when there is limit, sequence, or user variable assignment, predicates may not be able to be pushed down, in which case they need to be added back to the upper level
+ * when there is a limit or user variable assignment, predicates may not be able to be pushed down,
+ * in which case they need to be added back to the upper level
  * @return
  */
 int ObTransformPredicateMoveAround::pushdown_predicates(
@@ -1266,10 +1266,10 @@ int ObTransformPredicateMoveAround::pushdown_predicates(
       has_distinct = sel_stmt->has_distinct();
     }
     if (OB_SUCC(ret)) {
-      if (stmt->has_limit() || stmt->has_sequence() ||
+      if (stmt->has_limit() ||
           stmt->is_contains_assignment()) {
         // no exprs can be pushed down
-        OPT_TRACE("stmt has limit/sequence/assignmen, can not pushdown any pred");
+        OPT_TRACE("stmt has limit/assignment, can not pushdown any pred");
       } else if (has_winfunc) {
         if (!has_distinct
             && OB_FAIL(pushdown_into_qualify_filter(pushdown_preds, *sel_stmt, is_happened))) {

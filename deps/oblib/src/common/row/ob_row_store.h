@@ -173,9 +173,6 @@ public:
   /// dump all data for debug purpose
   void dump() const;
 
-  // set tenant id
-  
-
   void set_use_compact(bool opt) { use_compact_row_ = opt; }
 
 
@@ -230,7 +227,7 @@ private:
   void del_block_list(BlockInfo *del_block);
   int adjust_row_cells_reference();
 private:
-  // xiyu@TODO: add control for tenant
+  // xiyu@TODO: add runtime-level control
   DefaultPageAllocator inner_alloc_;
   ObFixedArray<int64_t, common::ObIAllocator> reserved_columns_;
   BlockList blocks_;  // ASSERT: all linked blocks has at least one row stored
@@ -240,7 +237,7 @@ private:
   int64_t col_count_;
   int64_t last_last_row_size_;  // for rollback & get_last_row
   int64_t last_row_size_;     // for get_last_row, -1 means invalid
-   // the tenant who owns the store
+   // the runtime that owns the store
   lib::ObLabel label_;
   int64_t ctx_id_;
   bool is_read_only_;

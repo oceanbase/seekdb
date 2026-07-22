@@ -20,8 +20,8 @@
 #include "observer/ob_service.h"
 #include "observer/ob_server_struct.h"
 #include "share/config/ob_server_config.h"
-#include "share/ob_cluster_role.h"  // ObClusterRole
-#include "share/ob_all_tenant_info.h"  // ObAllTenantInfoProxy
+#include "share/ob_server_role.h"
+#include "share/ob_server_info.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -35,7 +35,6 @@ ObAllVirtualServer::ObAllVirtualServer()
       config_(nullptr)
 {
   ip_buf_[0] = '\0';
-  log_restore_source_buf_[0] = '\0';
   role_buf_[0] = '\0';
   switchover_status_buf_[0] = '\0';
 }
@@ -44,7 +43,6 @@ ObAllVirtualServer::~ObAllVirtualServer()
 {
   addr_.reset();
   ip_buf_[0] = '\0';
-  log_restore_source_buf_[0] = '\0';
   role_buf_[0] = '\0';
   switchover_status_buf_[0] = '\0';
   config_ = nullptr;
@@ -56,12 +54,6 @@ int ObAllVirtualServer::init(common::ObAddr &addr, common::ObServerConfig *confi
   ip_buf_[0] = '\0';
   config_ = config;
   return OB_SUCCESS;
-}
-
-int ObAllVirtualServer::inner_open()
-{
-  int ret = OB_SUCCESS;
-  return ret;
 }
 
 int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
@@ -88,45 +80,36 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
     SERVER_LOG(WARN, "get device health status fail", KR(ret));
   } else {
     const int64_t col_count = output_column_ids_.count();
-    const double hard_limit = GCONF.resource_hard_limit;
     const int64_t data_disk_allocated =
         OB_STORAGE_OBJECT_MGR.get_total_macro_block_count() * OB_STORAGE_OBJECT_MGR.get_macro_block_size();
     const char *data_disk_health_status = device_health_status_to_str(dhs);
     const int64_t ssl_cert_expired_time = GCTX.ssl_key_expired_time_;
 
-    // Get role directly from GCTX.server_role_
+    share::ObServerInfo server_info;
+    const int load_info_ret = share::ObServerInfoProxy::load_server_info(server_info);
+
     role_buf_[0] = '\0';
-    switch (GCTX.server_role_) {
-      case common::PRIMARY_CLUSTER:
-        snprintf(role_buf_, sizeof(role_buf_), "PRIMARY");
-        break;
-      case common::STANDBY_CLUSTER:
-        snprintf(role_buf_, sizeof(role_buf_), "STANDBY");
-        break;
-      default:
-        snprintf(role_buf_, sizeof(role_buf_), "UNKNOWN");
-        break;
-    }
-
-    // Get switchover_status from tenant info
     switchover_status_buf_[0] = '\0';
-    {
-      share::ObAllTenantInfo tenant_info;
-      int tmp_ret = share::ObAllTenantInfoProxy::load_tenant_info(false, tenant_info);
-      if (OB_SUCCESS == tmp_ret && tenant_info.is_valid()) {
-        snprintf(switchover_status_buf_, sizeof(switchover_status_buf_), "%s",
-                 tenant_info.get_switchover_status().to_str());
-      } else {
-        snprintf(switchover_status_buf_, sizeof(switchover_status_buf_), "UNKNOWN");
+    if (OB_SUCCESS == load_info_ret && server_info.is_valid()) {
+      switch (server_info.get_server_role().value()) {
+        case share::ObServerRole::PRIMARY_ROLE:
+          snprintf(role_buf_, sizeof(role_buf_), "PRIMARY");
+          break;
+        case share::ObServerRole::STANDBY_ROLE:
+          snprintf(role_buf_, sizeof(role_buf_), "STANDBY");
+          break;
+        default:
+          snprintf(role_buf_, sizeof(role_buf_), "UNKNOWN");
+          break;
       }
-    }
-
-    // Get log_restore_source from config parameter
-    log_restore_source_buf_[0] = '\0';
-    const ObString config_value = GCONF.log_restore_source.str();
-    if (!config_value.empty()) {
-      snprintf(log_restore_source_buf_, sizeof(log_restore_source_buf_), "%.*s",
-               static_cast<int>(config_value.length()), config_value.ptr());
+      snprintf(switchover_status_buf_, sizeof(switchover_status_buf_), "%s",
+               server_info.get_switchover_status().to_str());
+    } else {
+      if (OB_SUCCESS != load_info_ret) {
+        SERVER_LOG(WARN, "load server info failed", K(load_info_ret));
+      }
+      snprintf(role_buf_, sizeof(role_buf_), "UNKNOWN");
+      snprintf(switchover_status_buf_, sizeof(switchover_status_buf_), "UNKNOWN");
     }
 
     // Get sync_scn and readable_scn from LS in real-time
@@ -173,7 +156,7 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
           cur_row_.cells_[i].set_int(resource_info.cpu_);
           break;
         case CPU_CAPACITY_MAX:
-          cur_row_.cells_[i].set_double((resource_info.cpu_ * hard_limit) / 100);
+          cur_row_.cells_[i].set_double(resource_info.cpu_);
           break;
         case CPU_ASSIGNED:
           cur_row_.cells_[i].set_double(resource_info.report_cpu_assigned_);
@@ -189,9 +172,6 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
           break;
         case DATA_DISK_CAPACITY:
           cur_row_.cells_[i].set_int(resource_info.data_disk_total_);
-          break;
-        case DATA_DISK_ASSIGNED:
-          cur_row_.cells_[i].set_null();
           break;
         case DATA_DISK_IN_USE:
           cur_row_.cells_[i].set_int(resource_info.data_disk_in_use_);
@@ -236,10 +216,6 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
           break;
         case SWITCHOVER_STATUS:
           cur_row_.cells_[i].set_varchar(switchover_status_buf_);
-          cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        case LOG_RESTORE_SOURCE:
-          cur_row_.cells_[i].set_varchar(log_restore_source_buf_);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         case SYNC_SCN:

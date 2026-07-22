@@ -18,7 +18,7 @@
 #define STORAGE_COMPACTION_OB_TABLET_MERGE_TASK_H_
 
 #include "share/ob_occam_time_guard.h"
-#include "observer/scheduler/ob_tenant_dag_scheduler.h"
+#include "observer/scheduler/ob_dag_scheduler.h"
 #include "storage/ob_i_table.h"
 #include "storage/blocksstable/ob_datum_range.h"
 #include "storage/compaction/ob_i_compaction_filter.h"
@@ -64,9 +64,6 @@ struct ObMergeParameter {
   const storage::ObTablesHandleArray & get_tables_handle() const;
   const ObStorageSchema *get_schema() const;
   bool is_full_merge() const;
-  bool is_delete_insert_merge() const;
-  bool is_restore_complete() const;
-
   const ObStaticMergeParam &static_param_;
   /* rest variables are different for MergeTask */
   ObVersionRange merge_version_range_; // modify for different merge_type
@@ -85,21 +82,10 @@ struct ObCompactionParam
 public:
   ObCompactionParam();
   ~ObCompactionParam() = default;
-  void estimate_concurrent_count(const compaction::ObMergeType merge_type);
-  TO_STRING_KV(K_(score), K_(occupy_size), K_(estimate_phy_size), K_(replay_interval), K_(add_time), K_(last_end_scn),
-      K_(sstable_cnt), K_(parallel_dag_cnt), K_(parallel_sstable_cnt), K_(estimate_concurrent_cnt), K_(batch_size));
+  TO_STRING_KV(K_(occupy_size), K_(last_end_scn));
 public:
-  int64_t score_; // used for final sort, the lower score, the higher priority.
   uint64_t occupy_size_;
-  uint64_t estimate_phy_size_;
-  uint64_t replay_interval_;
-  uint64_t add_time_;
   share::SCN last_end_scn_;
-  uint16_t sstable_cnt_;
-  uint16_t parallel_dag_cnt_;
-  uint16_t parallel_sstable_cnt_;
-  uint16_t estimate_concurrent_cnt_;
-  uint16_t batch_size_;
 };
 
 struct ObTabletMergeDagParam : public share::ObIDagInitParam
@@ -110,17 +96,15 @@ struct ObTabletMergeDagParam : public share::ObIDagInitParam
     const ObTabletID &tablet_id);
   virtual bool is_valid() const override;
   VIRTUAL_TO_STRING_KV(K_(skip_get_tablet), "merge_type", merge_type_to_str(merge_type_), K_(merge_version),
-     K_(tablet_id), "exec_mode", exec_mode_to_str(exec_mode_),
-     K_(need_swap_tablet_flag), K_(is_reserve_mode));
+     K_(tablet_id), K_(need_swap_tablet_flag), K_(is_reserve_mode));
 
   bool skip_get_tablet_;
   bool need_swap_tablet_flag_;
   bool is_reserve_mode_;
-  ObExecMode exec_mode_;
   compaction::ObMergeType merge_type_;
   int64_t merge_version_;
   ObTabletID tablet_id_;
-  ObCompactionParam compaction_param_; // used for adaptive compaction dag scheduling
+  ObCompactionParam compaction_param_; // merge DAG accounting
 };
 
 class ObTabletMergePrepareTask: public share::ObITask
@@ -214,13 +198,12 @@ public:
   virtual void set_dag_error_location() override;
   int update_compaction_param(const ObTabletMergeDagParam &param);
   int generate_merge_task(ObBasicTabletMergeCtx &ctx, share::ObITask *prepare_task);
-  virtual bool is_ha_dag() const override { return false; }
+  virtual bool uses_reserved_allocator() const override { return false; }
   int alloc_merge_ctx();
   int get_min_sstable_end_scn(share::SCN &min_end_scn);
   int init_min_sstable_end_scn();
 protected:
   int inner_init(const ObTabletMergeDagParam *param);
-  int collect_compaction_param(const ObTabletHandle &tablet_handle);
   void fill_compaction_progress(compaction::ObTabletCompactionProgress &progress,
       ObBasicTabletMergeCtx &ctx,
       compaction::ObPartitionMergeProgress *input_progress);

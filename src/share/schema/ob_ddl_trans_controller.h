@@ -56,8 +56,6 @@ public:
       ObIArray<int64_t> &schema_version_res);
   int wait_task_ready(const int64_t task_id, const int64_t wait_us);
   int remove_task(const int64_t task_id);
-  int broadcast_consensus_version(const int64_t schema_version,
-                                  const ObArray<ObAddr> &server_list);
   int reserve_schema_version(const uint64_t schema_version_count);
 private:
   virtual void run1() override;

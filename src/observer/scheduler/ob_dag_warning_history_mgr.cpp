@@ -95,7 +95,7 @@ int64_t ObDagWarningInfo::get_hash() const
  * ObDagWarningHistoryManager Func
  * */
 
-int ObDagWarningHistoryManager::mtl_init(ObDagWarningHistoryManager *&dag_warning_history)
+int ObDagWarningHistoryManager::server_module_init(ObDagWarningHistoryManager *&dag_warning_history)
 {
   int64_t max_size = cal_max();
   return dag_warning_history->init(true, "DagWarnHis", INFO_PAGE_SIZE, max_size);
@@ -103,8 +103,8 @@ int ObDagWarningHistoryManager::mtl_init(ObDagWarningHistoryManager *&dag_warnin
 
 int64_t ObDagWarningHistoryManager::cal_max()
 {
-  
-  int64_t max_size = std::min(lib::get_tenant_memory_limit() * MEMORY_PERCENTAGE / 100, 
+
+  int64_t max_size = std::min(lib::get_allocator_memory_limit() * MEMORY_PERCENTAGE / 100,
                           static_cast<int64_t>(POOL_MAX_SIZE));
   return max_size;
 }

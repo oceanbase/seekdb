@@ -19,10 +19,10 @@
 
 
 ////////////////////////////////////////////////////////////////////////////////
-// SCOPE macro to support cluster or tenant parameter
+// Scope macros for server parameters.
 ////////////////////////////////////////////////////////////////////////////////
 #define _OB_CLUSTER_PARAMETER common::Scope::CLUSTER
-#define _OB_TENANT_PARAMETER common::Scope::TENANT
+#define _OB_RUNTIME_PARAMETER common::Scope::RUNTIME
 
 // Updated macros with name as first parameter: name, SCOPE, ...
 #define _DEF_PARAMETER_SCOPE_EASY(param, name, SCOPE, ...)                        \
@@ -139,7 +139,7 @@ public:                                                                         
 // Unified parameter definition macro: DEF_PARAM(name, type, SCOPE, ...)
 // name: parameter name (first parameter)
 // type: parameter type (STR, INT, CAP, TIME, BOOL, etc.)
-// SCOPE: OB_CLUSTER_PARAMETER or OB_TENANT_PARAMETER
+// SCOPE: OB_CLUSTER_PARAMETER
 // ...: remaining arguments (def, range/checker, description, attr, optional_values)
 #define DEF_PARAM(name, type, SCOPE, ...)                                      \
   _DEF_PARAM_IMPL(name, type, SCOPE, __VA_ARGS__)

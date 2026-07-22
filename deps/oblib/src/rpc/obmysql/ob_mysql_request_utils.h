@@ -245,36 +245,12 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObCompressionContext);
 };
 
-class ObFlushBufferParam
-{
-public:
-  ObFlushBufferParam(easy_buf_t &ez_buf, easy_request_t &ez_req, ObCompressionContext &context,
-                     bool &conn_valid, bool &req_has_wokenup,
-                     const bool pkt_has_completed)
-    : orig_send_buf_(ez_buf), ez_req_(ez_req), comp_context_(context), conn_valid_(conn_valid),
-      req_has_wokenup_(req_has_wokenup),
-      pkt_has_completed_(pkt_has_completed)
-    {}
-
-public:
-  ObEasyBuffer orig_send_buf_;
-  easy_request_t &ez_req_;
-  ObCompressionContext &comp_context_;
-  bool &conn_valid_;
-  bool &req_has_wokenup_;
-  const bool pkt_has_completed_;
-
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObFlushBufferParam);
-};
-
 class ObMySQLRequestUtils
 {
 public:
   ObMySQLRequestUtils();
   virtual ~ObMySQLRequestUtils();
 
-  static int flush_buffer(ObFlushBufferParam &param);
   static int flush_compressed_buffer(bool pkt_has_completed, ObCompressionContext &comp_context, 
                                                   ObEasyBuffer &orig_send_buf, rpc::ObRequest &req);
 private:

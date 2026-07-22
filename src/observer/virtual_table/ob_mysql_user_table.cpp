@@ -56,7 +56,7 @@ int ObMySQLUserTable::inner_get_next_row(common::ObNewRow *&row)
       }  else {
         ObArray<const ObUserInfo *> user_array;
         if (OB_FAIL(schema_guard_->get_user_infos_by_id(user_array))) {
-          SERVER_LOG(WARN, "Get user info with tenant id error", K(ret));
+          SERVER_LOG(WARN, "get user info failed", K(ret));
         } else {
           const ObUserInfo *user_info = NULL;
           for (int64_t row_idx = 0; OB_SUCC(ret) && row_idx < user_array.count(); ++row_idx) {
@@ -138,14 +138,11 @@ int ObMySQLUserTable::inner_get_next_row(common::ObNewRow *&row)
                   EXIST_PRIV_CASE(EXECUTE);
                   EXIST_PRIV_CASE(REPL_SLAVE);
                   EXIST_PRIV_CASE(REPL_CLIENT);
-                  EXIST_PRIV_CASE(DROP_DATABASE_LINK);
-                  EXIST_PRIV_CASE(CREATE_DATABASE_LINK);
                   EXIST_PRIV_CASE(CREATE_VIEW);
                   EXIST_PRIV_CASE(SHOW_VIEW);
                   EXIST_PRIV_CASE(CREATE_ROUTINE);
                   EXIST_PRIV_CASE(ALTER_ROUTINE);
                   EXIST_PRIV_CASE(CREATE_USER);
-                  EXIST_PRIV_CASE(EVENT);
                   EXIST_PRIV_CASE(TRIGGER);
                   EXIST_PRIV_CASE(CREATE_TABLESPACE);
                   EXIST_PRIV_CASE(CREATE_ROLE);

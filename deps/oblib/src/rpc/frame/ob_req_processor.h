@@ -69,7 +69,6 @@ public:
   virtual void set_ob_request(ObRequest &req);
   const ObRequest *get_ob_request() const { return req_; }
   int get_req_type() const { return req_type_; }
-  int get_nio_protocol() const { return nio_protocol_; }
   bool get_need_retry() const { return need_retry_; }
   bool get_async_resp_used() const { return async_resp_used_; }
   virtual int run() = 0;
@@ -107,7 +106,6 @@ private:
 
 protected:
   int req_type_;
-  int nio_protocol_;
   bool need_retry_;
   bool async_resp_used_;
   ObRequest *req_;
@@ -120,7 +118,6 @@ protected:
 
 inline ObReqProcessor::ObReqProcessor()
     : req_type_(-1),
-      nio_protocol_(-1),
       need_retry_(false),
       async_resp_used_(false),
       req_(NULL),
@@ -134,7 +131,6 @@ inline ObReqProcessor::ObReqProcessor()
 inline void ObReqProcessor::set_ob_request(ObRequest &req)
 {
   req_type_ = req.get_type();
-  nio_protocol_ = req.get_nio_protocol();
   req_ = &req;
   receive_timestamp_ = req.get_receive_timestamp();
   enqueue_timestamp_ = req.get_enqueue_timestamp();

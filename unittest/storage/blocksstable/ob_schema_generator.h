@@ -39,13 +39,10 @@ int ObSchemaGenerator::generate_table(
     const int64_t rowkey_count, share::schema::ObTableSchema &table_schema)
 {
   int ret = common::OB_SUCCESS;
-  const uint64_t tenant_id = OB_SYS_TENANT_ID;
   share::schema::ObColumnSchemaV2 column;
   table_schema.reset();
   table_schema.set_table_name("test_table");
-  table_schema.set_tenant_id(tenant_id);
-  table_schema.set_tablegroup_id(combine_id(tenant_id, 1));
-  table_schema.set_database_id(combine_id(tenant_id, 1));
+  table_schema.set_database_id(1);
   table_schema.set_table_id(table_id);
   table_schema.set_rowkey_column_num(rowkey_count);
   table_schema.set_max_used_column_id(column_count);

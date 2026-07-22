@@ -172,11 +172,7 @@ int ObPxResourceAnalyzer::analyze(
   // 3. Continue scheduling in this manner until all dfo scheduling is complete
   //
   // ref: 
-  if (log_op_def::LOG_EXCHANGE == root_op.get_type() &&
-      static_cast<const ObLogExchange *>(&root_op)->get_is_remote()) {
-    max_parallel_thread_count = 0;
-    max_parallel_group_count = 0;
-  } else if (OB_FAIL(convert_log_plan_to_nested_px_tree(root_op))) {
+  if (OB_FAIL(convert_log_plan_to_nested_px_tree(root_op))) {
     LOG_WARN("fail convert log plan to nested px tree", K(ret));
   } else if (OB_FAIL(walk_through_logical_plan(root_op, max_parallel_thread_count,
                                                 max_parallel_group_count,
@@ -448,15 +444,17 @@ int ObPxResourceAnalyzer::get_dfo_addr_set(const ObLogicalOperator &root_op, ObH
       const ObCandiTableLoc &phy_tbl_loc_info = tbl_part_info->get_phy_tbl_location_info();
       const ObCandiTabletLocIArray &phy_part_loc_info_arr = phy_tbl_loc_info.get_phy_part_loc_info_list();
       for (int64_t i = 0; i < phy_part_loc_info_arr.count() && OB_SUCC(ret); ++i) {
-        share::ObLSReplicaLocation replica_loc;
-        if (OB_FAIL(phy_part_loc_info_arr.at(i).get_selected_replica(replica_loc))) {
-          LOG_WARN("get selected replica failed", K(ret));
-        } else if (OB_FAIL(addr_set.set_refactored(replica_loc.get_server(), 1))) {
+        const ObAddr &server =
+            phy_part_loc_info_arr.at(i).get_partition_location().get_server();
+        if (OB_UNLIKELY(!server.is_valid())) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("local tablet server is invalid", K(ret), K(server));
+        } else if (OB_FAIL(addr_set.set_refactored(server, 1))) {
           LOG_WARN("addr set refactored failed");
         } else {
           LOG_DEBUG("resource analyzer", K(root_op.get_type()),
                                          K(root_op.get_operator_id()),
-                                         K(replica_loc.get_server()));
+                                         K(server));
         }
       }
     }

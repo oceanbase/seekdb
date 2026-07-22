@@ -26,12 +26,11 @@
 #include "lib/string/ob_string.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "object/ob_object.h"
-#include "plugin/sys/ob_plugin_helper.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "share/ob_json_access_utils.h"
 #include "storage/fts/dict/ob_gen_dic_loader.h"
 #include "storage/fts/ob_fts_parser_property.h"
-#include "storage/fts/ob_fts_plugin_helper.h"
+#include "storage/fts/ob_fts_parser_helper.h"
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_json_func_helper.h" // file not self-contained, there're logs inside.
@@ -226,7 +225,7 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
 
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
 
   if (OB_UNLIKELY(expr.arg_cnt_ < 1 || expr.arg_cnt_ > 3)) {
     ret = OB_INVALID_ARGUMENT;
@@ -248,20 +247,16 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
 int ObExprTokenize::construct_ft_parser_inner_name(const ObString &input_str, TokenizeParam &param)
 {
   int ret = OB_SUCCESS;
-  // make an extract parser name
-  share::ObPluginName plugin_name;
   storage::ObFTParser parser;
 
   char *parser_name_buf = nullptr;
   if (OB_ISNULL(parser_name_buf
-                = static_cast<char *>(param.allocator_.alloc(OB_PLUGIN_NAME_LENGTH)))) {
+                = static_cast<char *>(param.allocator_.alloc(storage::OB_FT_PARSER_NAME_LENGTH)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Fail to alloc memory", K(ret));
-  } else if (OB_FAIL(plugin_name.set_name(input_str))) {
-    LOG_WARN("Fail to set plugin name", K(ret));
-  } else if (OB_FAIL(plugin::ObPluginHelper::find_ftparser(input_str, parser))) {
+  } else if (OB_FAIL(parser.init(input_str))) {
     LOG_WARN("Fail to get ft parser", K(ret));
-  } else if (OB_FAIL(parser.serialize_to_str(parser_name_buf, OB_PLUGIN_NAME_LENGTH))) {
+  } else if (OB_FAIL(parser.serialize_to_str(parser_name_buf, storage::OB_FT_PARSER_NAME_LENGTH))) {
     LOG_WARN("Fail to parse ft parser name", K(ret));
   } else {
     param.parser_name_ = ObString::make_string(parser_name_buf);
@@ -440,7 +435,7 @@ int ObExprTokenize::TokenizeParam::try_load_dictionary_for_ik()
 {
   int ret = OB_SUCCESS;
   bool need_to_load_dic = false;
-  ObTenantDicLoaderHandle dic_loader_handle;
+  ObDicLoaderHandle dic_loader_handle;
   if (OB_FAIL(ObFtsIndexBuilderUtil::check_need_to_load_dic(parser_name_,
                                                             need_to_load_dic))) {
     LOG_WARN("fail to check need to load dic",

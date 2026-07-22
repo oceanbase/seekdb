@@ -92,18 +92,16 @@ class ObGranuleTaskInfo
 public:
 	ObGranuleTaskInfo()
 	  : ranges_(),
-      ss_ranges_(),
 	    tablet_loc_(nullptr),
 	    task_id_(0),
       granule_type_(OB_GRANULE_UNINITIALIZED)
 	{ }
 	virtual ~ObGranuleTaskInfo() { }
   int assign(const ObGranuleTaskInfo &other);
-	TO_STRING_KV(K_(ranges), K_(ss_ranges), K_(task_id), K_(granule_type), "tablet_id: ",
+	TO_STRING_KV(K_(ranges), K_(task_id), K_(granule_type), "tablet_id: ",
                OB_ISNULL(tablet_loc_) ? OB_INVALID_ID : tablet_loc_->tablet_id_.id());
 public:
   common::ObSEArray<common::ObNewRange, 1> ranges_;
-  common::ObSEArray<common::ObNewRange, 1> ss_ranges_;
   ObDASTabletLoc *tablet_loc_;
   //just for print
   int64_t task_id_;
@@ -219,7 +217,7 @@ public:
   virtual ~ObTaskInfo();
   void set_root_spec(ObOpSpec *root_spec) { root_spec_ = root_spec; }
   ObOpSpec *get_root_spec() const { return root_spec_; }
-  // Report execution status to the control node after the remote Task completes
+  // Report execution status to the control node after the worker task completes.
   ObTaskState get_state() const { return state_; }
   void set_state(ObTaskState state) { state_ = state; }
   // Lowest level task for reading data
@@ -235,11 +233,6 @@ public:
   // Get the data structure required for obtaining the intermediate result
   inline void set_pull_slice_id(uint64_t pull_slice_id) { pull_slice_id_ = pull_slice_id; }
   inline uint64_t get_pull_slice_id() const { return pull_slice_id_; }
-  inline void set_force_save_interm_result(bool force_save_interm_result)
-  {
-    force_save_interm_result_ = force_save_interm_result;
-  }
-  inline bool is_force_save_interm_result() const { return force_save_interm_result_; }
   // Get location information, index in LocationList
   inline void set_location_idx(uint64_t location_idx) { location_idx_ = location_idx; }
   inline uint64_t get_location_idx() const { return location_idx_; }
@@ -312,9 +305,6 @@ private:
   /*** Read the necessary data structure for Task processing ***/
   // The slice id to pull
   uint64_t pull_slice_id_;
-  // The location of the intermediate result is calculated in the ObReceiveInput::init function, therefore it does not need to be saved here
-  // Force saving intermediate results remotely, do not bring them back in task event
-  bool force_save_interm_result_;
   // task execution report result
   common::ObSEArray<ObSliceEvent, 1> slice_events_;
   // Get location information, index in LocationList

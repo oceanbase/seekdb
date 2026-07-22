@@ -457,34 +457,7 @@ public:
   inline bool is_generic_collection_type() const { return PL_COLLECTION_1 == generic_type_; }
   inline bool is_generic_ref_cursor_type() const { return PL_REF_CURSOR_1 == generic_type_; }
   inline bool is_enum_or_set_type() const { return (is_obj_type() && ob_is_enum_or_set_type(obj_type_.get_obj_type())); }
-  /*!
-   * ------ new session serialize/deserialize interface -------
-   */
-  // for session module interface
-  int get_serialize_size(
-    const ObPLResolveCtx &resolve_ctx, common::ObObj &obj, int64_t &size) const;
-  int serialize(
-    const ObPLResolveCtx &resolve_ctx, common::ObObj &obj, common::ObObj &result) const;
-  int deserialize(
-    const ObPLResolveCtx &resolve_ctx,
-    common::ObIAllocator &allocator,
-    const char* src, const int64_t src_len, common::ObObj &result) const;
-
-  // for PL type interface
-  virtual int get_serialize_size(
-    const ObPLResolveCtx &resolve_ctx, char *&src, int64_t &size) const;
-  virtual int serialize(
-    const ObPLResolveCtx &resolve_ctx,
-    char *&src, char* dst, int64_t dst_len, int64_t &dst_pos) const;
-  virtual int deserialize(
-    const ObPLResolveCtx &resolve_ctx,
-    common::ObIAllocator &allocator,
-    const char* src, const int64_t src_len, int64_t &src_pos, char *&dst) const;
-  // ------ new session serialize/deserialize interface -------
-  // Type stored by the legacy native-code path.
   // Type stored in SQL.
-
-
   virtual int newx(common::ObIAllocator &allocator, const ObPLINS *ns, int64_t &ptr) const;
   virtual int get_size(ObPLTypeSize type, int64_t &size) const;
   virtual int init_session_var(const ObPLResolveCtx &resolve_ctx,
@@ -700,7 +673,6 @@ public:
     IS_SELF_ATTRIBUTE     = 23,// self attribute for udt
     IS_UDT_MEMBER_ROUTINE = 24,// UDT member routine
     IS_TRIGGER            = 25,// Trigger
-    IS_SEQUENCE           = 26,// Sequence
   };
 
   ObObjAccessIdx()
@@ -766,7 +738,6 @@ public:
   bool is_pkg_ns() const { return IS_PKG_NS == access_type_; }
   bool is_database() const { return IS_DB_NS == access_type_; }
   bool is_trigger() const { return IS_TRIGGER == access_type_; }
-  bool is_sequence() const { return IS_SEQUENCE == access_type_; }
 
   static bool is_table(const common::ObIArray<ObObjAccessIdx> &access_idxs);
   static bool is_table_column(const common::ObIArray<ObObjAccessIdx> &access_idxs);
@@ -821,7 +792,6 @@ enum ObPLCursorFlag {
   REF_BY_REFCURSOR = 1, // this a ref cursor
   SESSION_CURSOR = 2, // this cursor is alloc in session memory
   TRANSFERING_RESOURCE = 4, // this cursor is returned by a udf
-  SYNC_CURSOR = 8, // this cursor from package cursor sync, can not used by this server.
   INVALID_CURSOR = 16, // this cursor is convert to a dbms cursor, invalid for dynamic cursor op.
   DBMS_SQL_CURSOR = 32, // this is a dbms_sql cursor
 };
@@ -1062,9 +1032,6 @@ public:
      static_cast<ObPLCursorFlag>(static_cast<uint64_t>(cursor_flag_) & ~static_cast<uint64_t>(flag)); }
   inline bool test_flag_bit(const ObPLCursorFlag &flag) const { return
      !!(static_cast<uint64_t>(cursor_flag_) & static_cast<uint64_t>(flag)); }
-
-  inline void set_sync_cursor() { set_flag_bit(SYNC_CURSOR); }
-  inline bool is_sync_cursor() { return test_flag_bit(SYNC_CURSOR); }
 
   inline void set_invalid_cursor() { set_flag_bit(INVALID_CURSOR); }
   inline bool is_invalid_cursor() { return test_flag_bit(INVALID_CURSOR); }

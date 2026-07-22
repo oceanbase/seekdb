@@ -157,7 +157,7 @@ public:
   explicit ObCallProcedureStmt()
       : ObCMDStmt(NULL, stmt::T_CALL_PROCEDURE),
         call_proc_info_(NULL),
-        cache_call_info_guard_(MAX_HANDLE)
+        cache_call_info_guard_()
   {
   }
 

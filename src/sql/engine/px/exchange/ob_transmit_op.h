@@ -69,34 +69,6 @@ public:
     return split_task_count_;
   }
 
-  inline void set_parallel_server_count(int64_t count)
-  {
-    if (OB_UNLIKELY(count <=0)) {
-      parallel_server_count_ = 1;
-    } else {
-      parallel_server_count_ = count;
-    }
-  }
-
-  inline int64_t get_parallel_server_count() const
-  {
-    return parallel_server_count_;
-  }
-
-  inline void set_server_parallel_thread_count(int64_t count)
-  {
-    if (OB_UNLIKELY(count <=0)) {
-      server_parallel_thread_count_ = 1;
-    } else {
-      server_parallel_thread_count_ = count;
-    }
-  }
-
-  inline int64_t get_server_parallel_thread_count() const
-  {
-    return server_parallel_thread_count_;
-  }
-
   inline void set_has_lgi(bool has_lgi) { has_lgi_ = has_lgi; }
   inline bool has_lgi() const { return has_lgi_; }
 
@@ -105,11 +77,6 @@ public:
   bool is_slave_mapping() const { return SlaveMappingType::SM_NONE != slave_mapping_type_; }
   // Split into how many tasks
   int64_t split_task_count_;
-  // Maximum number of machines to send to for parallel execution at the same time
-  int64_t parallel_server_count_;
-  // Each machine can execute up to how many threads of this job's task in parallel
-  int64_t server_parallel_thread_count_;
-
   int64_t px_dop_;
   bool px_single_;
   int64_t dfo_id_; // Assign id to dfo before CG

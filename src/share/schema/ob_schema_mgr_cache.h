@@ -126,9 +126,8 @@ public:
   int get_nearest(const int64_t schema_version,
           const ObSchemaMgr *&schema_mgr,
           ObSchemaMgrHandle &handle);
-  int get_recycle_schema_version(int64_t &schema_version) const;
   int get_slot_info(common::ObIAllocator &allocator,
-                    common::ObIArray<ObSchemaSlot> &tenant_slot_infos);
+                    common::ObIArray<ObSchemaSlot> &schema_slot_infos);
   int put(ObSchemaMgr *schema_mgr,
           ObSchemaMgr *&eli_schema_mgr,
           ObSchemaMgrHandle *handle = NULL);

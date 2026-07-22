@@ -92,45 +92,15 @@ int ObTablePartitionInfo::calculate_phy_table_location_info(
   }
   return ret;
 }
-// Select all as leader, and set direction
-int ObTablePartitionInfo::calc_phy_table_loc_and_select_leader(ObExecContext &exec_ctx,
-                                                               const ParamStore &params,
-                                                               const common::ObDataTypeCastParams &dtc_params)
+int ObTablePartitionInfo::calculate_local_tablet_locations(ObExecContext &exec_ctx,
+                                                           const ParamStore &params,
+                                                           const common::ObDataTypeCastParams &dtc_params)
 {
   int ret = OB_SUCCESS;
-  bool is_on_same_server = true;
-  ObAddr same_server;
   if (OB_FAIL(calculate_phy_table_location_info(exec_ctx,
                                                 params,
                                                 dtc_params))) {
     LOG_WARN("fail to calculate phy table location info", K(ret));
-  } else if (OB_FAIL(candi_table_loc_.all_select_leader(is_on_same_server, same_server))) {
-    LOG_WARN("fail to all select leader", K(ret), K(candi_table_loc_));
-    // 
-    //
-    // Consider the scenario without a leader, all_select_leader will definitely fail
-    // Cause optimize failure. Optimize failure will not enter the execution phase, consequently
-    // Causes no available retry information to be recorded.
-    //
-    // So: add the current info to the exec ctx, so there is a chance to retry refreshing
-    //
-    ObCandiTableLoc candi_table_loc;
-    ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(exec_ctx);
-    int tmp_ret = OB_SUCCESS;
-    if (OB_ISNULL(task_exec_ctx)) {
-      // don't overwirte err code
-      tmp_ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("task_exec_ctx not inited", K(tmp_ret));
-    } else if (OB_SUCCESS != (tmp_ret = candi_table_loc.assign(candi_table_loc_))) {
-      LOG_WARN("fail to assign", K(tmp_ret), K(candi_table_loc_));
-    } else {
-      if (OB_SUCCESS != tmp_ret) {
-        //nothing todo
-      } else if (OB_SUCCESS != (tmp_ret = task_exec_ctx
-                         ->append_table_location(candi_table_loc))) {
-        LOG_WARN("fail append table locaion info", K(ret), K(tmp_ret));
-      }
-    }
   }
   return ret;
 }

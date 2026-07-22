@@ -18,8 +18,6 @@
 #define OCEANBASE_SHARE_DEADLOCK_OB_DEADLOCK_KEY_WRAPPER_
 #include "ob_deadlock_parameters.h"
 #include "lib/ob_errno.h"
-#include "lib/utility/ob_unify_serialize.h"
-#include "lib/utility/serialization.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/utility/utility.h"
 #include "lib/oblog/ob_log_module.h"
@@ -68,8 +66,6 @@ class ObDetectorLabelRequest;
 
 class UserBinaryKey
 {
-  // for serialization
-  OB_UNIS_VERSION(1);
 public:
   UserBinaryKey();
   UserBinaryKey(const UserBinaryKey &other);
@@ -87,10 +83,6 @@ public:
   uint64_t hash() const;
   // for log print
   int64_t to_string(char *buffer, const int64_t length) const;
-  struct BufferFactory {
-    static uint64_t malloc_times;
-    static uint64_t free_times;
-  };
 private:
   uint64_t key_type_id_;
   uint64_t key_binary_code_buffer_length_;

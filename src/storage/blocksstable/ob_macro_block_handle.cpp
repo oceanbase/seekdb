@@ -21,7 +21,7 @@
 #include "storage/blocksstable/ob_block_manager.h"
 #include "share/ob_io_device_helper.h"
 #include "share/io/ob_io_manager.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -139,12 +139,6 @@ int ObMacroBlockHandle::async_read(const ObMacroBlockReadInfo &read_info)
     io_info.flag_.set_sys_module_id(read_info.io_desc_.get_sys_module_id());
 
     io_info.flag_.set_read();
-    if (io_info.fd_.is_backup_block_file()) {
-      // Backup removed, backup-mode macro blocks cannot exist
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("backup block file is not supported", K(ret), K(read_info));
-    }
-
     if (FAILEDx(ObIOManager::get_instance().aio_read(io_info, io_handle_))) {
       LOG_WARN("Fail to aio_read", K(read_info), K(ret));
     } else if (OB_FAIL(set_macro_block_id(read_info.macro_block_id_))) {

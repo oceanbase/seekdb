@@ -20,15 +20,9 @@
 #include "sql/ob_scanner.h"
 #include "common/row/ob_row.h"
 #include "logservice/palf/palf_handle.h"
-#include "logservice/palf/log_meta_info.h"//CONFIG_VERSION_LEN
 
 namespace oceanbase
 {
-namespace logservice
-{
-class ObLogStat;
-}
-
 namespace observer
 {
 class ObAllVirtualPalfStat: public common::ObVirtualTableScannerIterator
@@ -40,7 +34,7 @@ public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   void destroy();
 private:
-  int insert_log_stat_(const logservice::ObLogStat &log_stat, common::ObNewRow *row);
+  int insert_log_stat_(const palf::PalfStat &palf_stat);
 private:
   static const int64_t VARCHAR_32 = 32;
   char access_mode_str_[VARCHAR_32] = {'\0'};

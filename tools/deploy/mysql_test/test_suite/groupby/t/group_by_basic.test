@@ -15,7 +15,7 @@ set @@session.explicit_defaults_for_timestamp=off;
 
 --disable_warnings
 drop table if exists t1, t2, t3, t4, t5;
-drop sequence if exists s1;
+SET @test_counter_s1 = NULL;
 --enable_warnings
 
 ## create tables
@@ -266,8 +266,8 @@ CREATE TABLE `t1` (
   `c8` int(127) NOT NULL
 );
  
-create sequence s1 cache 10000000;
-insert into t1 select s1.nextval c1, s1.nextval c2, s1.nextval c3 from table(generator(20000));
+SET @test_counter_s1 = 0;
+insert into t1 select (@test_counter_s1 := @test_counter_s1 + 1) c1, (@test_counter_s1 := @test_counter_s1 + 1) c2, (@test_counter_s1 := @test_counter_s1 + 1) c3 from table(generator(20000));
 explain basic SELECT t29_25.c1, t29_25.c8
 FROM   (SELECT (SELECT t29_25.c1
                 FROM   t1 AS t29_25

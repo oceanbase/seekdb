@@ -126,7 +126,6 @@ int ObExprPrivSTCovers::eval_st_covers_common(const ObExpr &expr, ObEvalCtx &ctx
   } else if (!is_geo2_cached && OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator, wkb2, geo2, nullptr, N_PRIV_ST_COVERS,
                                                     ObGeoBuildFlag::GEO_ALLOW_3D_DEFAULT | ObGeoBuildFlag::GEO_CHECK_RING))) {
     LOG_WARN("get second geo by wkb failed", K(ret));
-  } else if (OB_FALSE_IT(temp_allocator.set_baseline_size(geo1->length() + geo2->length()))) {
   } else if ((!is_geo1_cached && OB_FAIL(ObGeoExprUtils::check_empty(geo1, is_geo1_empty)))
           || (!is_geo2_cached && OB_FAIL(ObGeoExprUtils::check_empty(geo2, is_geo2_empty)))) {
     LOG_WARN("check geo empty failed", K(ret));
@@ -201,9 +200,6 @@ int ObExprPrivSTCovers::eval_st_covers_common(const ObExpr &expr, ObEvalCtx &ctx
       }
     }
   }
-  if (mem_ctx != nullptr) {
-    temp_allocator.add_ext_used((*mem_ctx)->arena_used());
-  }
   return ret;
 }
 
@@ -220,7 +216,7 @@ int ObExprPrivSTCovers::eval_st_covers(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   ObObjType input_type2 = gis_arg2->datum_meta_.type_;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_ST_COVERS);
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   if (OB_FAIL(temp_allocator.eval_arg(gis_arg1, ctx, gis_datum1)) || OB_FAIL(temp_allocator.eval_arg(gis_arg2, ctx, gis_datum2))) {
     LOG_WARN("eval geo args failed", K(ret));
   } else if (gis_datum1->is_null() || gis_datum2->is_null()) {

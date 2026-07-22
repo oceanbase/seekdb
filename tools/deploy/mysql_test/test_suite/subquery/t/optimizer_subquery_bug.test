@@ -4,11 +4,11 @@ set @@session.explicit_defaults_for_timestamp=off;
 #owner:link.zt
 #owner group: sql1
 # tags: optimizer
-#bug 
-#bug 
-#bug 
-#bug 
-#bug 
+#bug
+#bug
+#bug
+#bug
+#bug
 
 --disable_warnings
 drop table if exists t1, t2, t3, table10_key_pk_parts_1_bigint, table0_hash_pk_parts_1_bigint, table2_bigint, table10_bigint, table100_bigint, tt, `table300_bigint`, t, m;
@@ -91,7 +91,7 @@ pk bigint,
 col_bigint bigint,
 col_decimal_20_0 decimal(20,0),
 /*Indices*/
-primary key (pk) ) ; 
+primary key (pk) ) ;
 CREATE TABLE table10_bigint (
 col_decimal_20_0 decimal(20,0),
 col_bigint bigint,
@@ -99,7 +99,7 @@ col_timestamp_6 timestamp(6) NULL DEFAULT NULL,
 pk bigint,
 col_char_20 char(20),
 /*Indices*/
-primary key (pk) ) ; 
+primary key (pk) ) ;
 CREATE TABLE table100_bigint (
 col_decimal_20_0 decimal(20,0),
 col_bigint bigint,
@@ -107,7 +107,7 @@ col_timestamp_6 timestamp(6) NULL DEFAULT NULL,
 col_char_20 char(20),
 pk bigint,
 /*Indices*/
-primary key (pk) ) ; 
+primary key (pk) ) ;
 
 CREATE TABLE `tt` (
 `pk` bigint(20) NOT NULL
@@ -218,8 +218,8 @@ INSERT INTO table100_bigint VALUES  (6473, 1, '2006-06-10 19:15:15.029803', 'p',
 
 --result_format 4
 --explain_protocol 2
-## bug 
-## 
+## bug
+##
 ## test non-correlated subquery
 select /*+no_rewrite*/ sum((select sum(a) from t1)) from t1;
 select /*+no_rewrite*/ sum((select sum(a) from t1)) from t1 group by b;
@@ -228,9 +228,9 @@ select /*+no_rewrite*/ sum((select sum(a) from t1)) from t1 group by b;
 select /*+no_rewrite*/ sum((select sum(a) from t1 as t2 where t2.a = t1.a)) from t1;
 select /*+no_rewrite*/ sum((select sum(a) from t1 as t2 where t2.a = t1.a)) from t1 group by b;
 
-## bug 
-## 
-## 
+## bug
+##
+##
 select * from t1, t2 where t1.a + (select sum(b) from t3) = t2.b;
 select * from t1, t2 where t1.a + (select sum(b) from t3 where t1.a = t3.a) = t2.b;
 
@@ -240,50 +240,47 @@ select (select sum(b) from t2) as temp from t1 group by temp having temp < 4;
 select (select sum(b) from t2) as temp from t1 group by temp having temp > 4 and temp > (select sum(b) from t3);
 select (select sum(b) from t2) as temp from t1 group by temp having temp > 4 and temp > (select sum(b) from t2);
 
-## bug 
+## bug
 select (select sum(b) from t2) as temp, a from t1 group by a having temp > 4;
 
-## bug 
+## bug
 explain select t1.a from t1 right outer join t2 using(a) where t1.a <=> (select 4 from t1 limit 1);
 
-## bug 
+## bug
 SELECT a IN (SELECT a FROM t1 ) FROM t1  LIMIT 1;
 
-## bug 
+## bug
 select /*+no_rewrite*/ a, (select sum(b) from t2 where t1.a = t2.a) as agg from t1 having agg > 1 and agg < 3;
 
-## bug 
+## bug
 select (SELECT coalesce( (SELECT/*+no_rewrite*/ * FROM ( SELECT MAX( pk ) FROM table10_key_pk_parts_1_bigint WHERE CAST( CONCAT( SUBSTR( 'q' , 1, 20) , col_char_20_index ) AS CHAR) >= CAST( CONCAT( SUBSTR( 'kqqdwykxz' , 1, 20) , col_char_20_index ) AS CHAR) ORDER BY col_timestamp_6_index  , col_char_5_key ASC , col_bigint_index ASC , pk  ) TC1), (SELECT * FROM ( SELECT col_bigint FROM table0_hash_pk_parts_1_bigint WHERE ( col_char_20 NOT IN ('a' , 'b' , 'a') ) OR NOT ( col_char_20_index IN ( 'a' , 'b' , 'a' ) ) ORDER BY col_bigint DESC , col_char_20_index  , pk ASC LIMIT 1 ) TC2), 2 ));
 select (SELECT coalesce( (SELECT * FROM ( SELECT MAX( pk ) FROM table10_key_pk_parts_1_bigint WHERE CAST( CONCAT( SUBSTR( 'q' , 1, 20) , col_char_20_index ) AS CHAR) >= CAST( CONCAT( SUBSTR( 'kqqdwykxz' , 1, 20) , col_char_20_index ) AS CHAR) ORDER BY col_timestamp_6_index  , col_char_5_key ASC , col_bigint_index ASC , pk  ) TC1), (SELECT * FROM ( SELECT col_bigint FROM table0_hash_pk_parts_1_bigint WHERE ( col_char_20 NOT IN ('a' , 'b' , 'a') ) OR NOT ( col_char_20_index IN ( 'a' , 'b' , 'a' ) ) ORDER BY col_bigint DESC , col_char_20_index  , pk ASC LIMIT 1 ) TC2), 2 ));
 
-## bug 
+## bug
 SELECT Sum(1) FROM table10_bigint WHERE pk NOT IN (SELECT pk FROM table2_bigint WHERE pk NOT IN (SELECT col_decimal_20_0 FROM table100_bigint WHERE (SELECT (SELECT Min(10) FROM table100_bigint WHERE col_char_20 > 0)) = col_decimal_20_0));
 SELECT coalesce( (SELECT SUM(LENGTH(TRIM(SUBSTR(SUBSTR('hizctdn', 1, 20), 1, 20)))) FROM table10_bigint WHERE pk NOT IN (SELECT pk FROM table2_bigint WHERE pk NOT IN (SELECT col_decimal_20_0 FROM table100_bigint WHERE (SELECT coalesce( (SELECT MIN(10) FROM table100_bigint WHERE col_char_20 > CAST(CONCAT(col_char_20, SUBSTR('nhizctdn', 1, 20)) AS CHAR(100)) ORDER BY pk , pk), (SELECT ROUND(FLOOR(62))), 1)) = ROUND(ABS(ROUND(FLOOR(col_decimal_20_0)))) ORDER BY pk , col_bigint , col_char_20 DESC , pk DESC) ORDER BY col_decimal_20_0 , pk DESC) ORDER BY col_bigint, col_char_20, col_decimal_20_0, col_timestamp_6, pk , pk DESC), (SELECT col_decimal_20_0 FROM table10_bigint WHERE pk < -10 ORDER BY col_bigint , pk DESC LIMIT 1), 99);
 
-## bug 
+## bug
 SELECT pk FROM table300_bigint WHERE col_char_20 <> (SELECT ( SELECT MIN((SELECT pk FROM m WHERE  col_bigint <=> 13624)) FROM t));
 
-## bug 
+## bug
 SELECT * FROM tt AS table1 WHERE table1 . pk <> (SELECT coalesce((SELECT MAX((SELECT SUM(-100) FROM tt WHERE NOT EXISTS (SELECT * FROM tt AS table3 LEFT OUTER JOIN tt AS table4 USING (pk) WHERE table1 . pk <> 99 LIMIT 8) )) FROM tt ), 99)) ;
 
-## bug 
+## bug
 --disable_warnings
 drop table if exists t1, t2;
 --enable_warnings
  create table t1 (pk int);
  create table t2 (pk int, c1 char(20));
- 
  --disable_query_log
  --disable_result_log
  insert into t1 values (1);
  insert into t2 values (1, '1'),(2, '2');
  --enable_result_log
  --enable_query_log
- 
  select (select SUM(     (select SUM(c1)      from t1)     )      from t1      ) from t2;
  --error 1111
  select (select SUM( c1 + (select SUM(c1)      from t1)     )      from t1      ) from t2;
- 
  --disable_query_log
  --disable_result_log
  insert into t1 values (2);
@@ -293,13 +290,12 @@ drop table if exists t1, t2;
   select (select SUM(     (select SUM(c1)      from t1)     )      from t1      ) from t2;
   --error 1111
   select (select SUM( c1 + (select SUM(c1)      from t1)     )      from t1      ) from t2;
-  
-## bug 
+## bug
 --disable_warnings
 drop table if exists t0;
 --enable_warnings
 CREATE TABLE t0(c0 FLOAT  COMMENT 'asdf' , c1 DECIMAL ZEROFILL  NULL COMMENT 'asdf'  ) ;
-SELECT /*+ USE_HASH_AGGREGATION  */ ALL t0.c0 AS ref0 FROM t0 WHERE (CAST( EXISTS (SELECT 1 from dual wHERE FALSE) AS SIGNED)) IN (( EXISTS (SELECT 1)) XOR ( EXISTS (SELECT 1)), t0.c0, CAST("" AS SIGNED)) UNION ALL SELECT /*+ USE_HASH_AGGREGATION  */ t0.c0 AS ref0 FROM t0 WHERE (NOT ((CAST( EXISTS (SELECT 1 from dual wHERE FALSE) AS SIGNED)) IN (( EXISTS (SELECT 1)) XOR ( EXISTS (SELECT 1)), t0.c0, CAST("" AS SIGNED)))) UNION ALL SELECT /*+ USE_HASH_AGGREGATION  */ ALL t0.c0 AS ref0 FROM t0 WHERE ((CAST( EXISTS (SELECT 1 from dual wHERE FALSE) AS SIGNED)) IN (( EXISTS (SELECT 1)) XOR ( EXISTS (SELECT 1)), t0.c0, CAST("" AS SIGNED))) IS NULL; 
+SELECT /*+ USE_HASH_AGGREGATION  */ ALL t0.c0 AS ref0 FROM t0 WHERE (CAST( EXISTS (SELECT 1 from dual wHERE FALSE) AS SIGNED)) IN (( EXISTS (SELECT 1)) XOR ( EXISTS (SELECT 1)), t0.c0, CAST("" AS SIGNED)) UNION ALL SELECT /*+ USE_HASH_AGGREGATION  */ t0.c0 AS ref0 FROM t0 WHERE (NOT ((CAST( EXISTS (SELECT 1 from dual wHERE FALSE) AS SIGNED)) IN (( EXISTS (SELECT 1)) XOR ( EXISTS (SELECT 1)), t0.c0, CAST("" AS SIGNED)))) UNION ALL SELECT /*+ USE_HASH_AGGREGATION  */ ALL t0.c0 AS ref0 FROM t0 WHERE ((CAST( EXISTS (SELECT 1 from dual wHERE FALSE) AS SIGNED)) IN (( EXISTS (SELECT 1)) XOR ( EXISTS (SELECT 1)), t0.c0, CAST("" AS SIGNED))) IS NULL;
 
 --disable_warnings
 DROP TABLE IF EXISTS T1;
@@ -442,7 +438,7 @@ drop table if exists case_partition_10_parent, case_partition_10_set_null_parent
 CREATE TABLE `case_partition_10_parent` (
   `pk` int(11) NOT NULL,
   PRIMARY KEY (`pk`)
-) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 3 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
  partition by hash(pk)
 (partition `p0`,
 partition `p1`,
@@ -456,7 +452,7 @@ partition `p7`);
 CREATE TABLE `case_partition_10_set_null_parent` (
   `pk` int(11) NOT NULL,
   PRIMARY KEY (`pk`)
-) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 3 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
  partition by hash(pk)
 (partition `p0`,
 partition `p1`,
@@ -470,7 +466,7 @@ partition `p7`);
 CREATE TABLE `case6_grandparent1` (
   `pk` int(11) NOT NULL,
   PRIMARY KEY (`pk`)
-) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 3 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0;
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0;
 
 explain
 UPDATE

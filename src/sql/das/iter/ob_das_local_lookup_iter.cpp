@@ -21,7 +21,6 @@
 #include "sql/das/iter/ob_das_domain_id_merge_iter.h"
 #include "sql/das/ob_das_ir_define.h"
 #include "sql/das/ob_das_vec_define.h"
-#include "storage/concurrency_control/ob_data_validation_service.h"
 
 namespace oceanbase
 {
@@ -105,7 +104,6 @@ int ObDASLocalLookupIter::init_scan_param(ObTableScanParam &param, const ObDASSc
   
   
   param.key_ranges_.set_attr(ObMemAttr("ScanParamKR"));
-  param.ss_key_ranges_.set_attr(ObMemAttr("ScanParamSSKR"));
   if (OB_ISNULL(ctdef) || OB_ISNULL(rtdef)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr ctdef or rtdef", K(ctdef), K(rtdef));
@@ -122,7 +120,6 @@ int ObDASLocalLookupIter::init_scan_param(ObTableScanParam &param, const ObDASSc
     param.reserved_cell_count_ = ctdef->access_column_ids_.count();
     param.sql_mode_ = rtdef->sql_mode_;
     param.frozen_version_ = rtdef->frozen_version_;
-    param.force_refresh_lc_ = rtdef->force_refresh_lc_;
     param.output_exprs_ = &(ctdef->pd_expr_spec_.access_exprs_);
     param.aggregate_exprs_ = &(ctdef->pd_expr_spec_.pd_storage_aggregate_output_);
     param.calc_exprs_ = &(ctdef->pd_expr_spec_.calc_exprs_);
@@ -130,7 +127,7 @@ int ObDASLocalLookupIter::init_scan_param(ObTableScanParam &param, const ObDASSc
     param.op_ = rtdef->p_pd_expr_op_;
     param.row2exprs_projector_ = rtdef->p_row2exprs_projector_;
     param.schema_version_ = ctdef->schema_version_;
-    param.tenant_schema_version_ = rtdef->tenant_schema_version_;
+    param.runtime_schema_version_ = rtdef->runtime_schema_version_;
     param.limit_param_ = rtdef->limit_param_;
     param.need_scn_ = rtdef->need_scn_;
     param.pd_storage_flag_ = ctdef->pd_expr_spec_.pd_storage_flag_.pd_flag_;
@@ -322,7 +319,6 @@ int ObDASLocalLookupIter::check_index_lookup()
             "main table id", lookup_ctdef_->ref_table_id_,
             "main tablet id", lookup_tablet_id_,
             KPC_(trans_desc), KPC_(snapshot));
-        concurrency_control::ObDataValidationService::set_delay_resource_recycle();
         const ObTableScanParam &scan_param = scan_iter->get_scan_param();
         if (trans_info_array_.count() == scan_param.key_ranges_.count()) {
           for (int64_t i = 0; i < trans_info_array_.count(); i++) {

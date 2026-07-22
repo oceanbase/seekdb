@@ -611,7 +611,7 @@ private:
   static int parse_degree_option(ObExecContext &ctx, const ObObjParam &degree,
                                  ObTableStatParam &stat_param);
 
-  static int refresh_tenant_schema_guard(ObExecContext &ctx);
+  static int refresh_runtime_schema_guard(ObExecContext &ctx);
 
   static int adjust_auto_gather_stat_option(const ObIArray<ObPartitionStatInfo> &partition_stat_infos,
                                             ObTableStatParam &param);

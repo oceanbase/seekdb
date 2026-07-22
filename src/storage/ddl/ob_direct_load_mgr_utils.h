@@ -43,7 +43,7 @@ static bool need_process_vec_index(const ObIndexType & index_type)
                                            bool &is_major_eixst,
                                            ObTabletDirectLoadMgrHandle &data_mgr_handle,
                                            ObTabletDirectLoadMgrHandle &lob_mgr_handle);
-  static ObDirectLoadType ddl_get_direct_load_type(const uint64_t data_format_version);
+  static ObDirectLoadType ddl_get_direct_load_type();
   static int generate_merge_param(const ObTabletDDLCompleteArg &arg, ObDDLTableMergeDagParam &merge_param);
   static int generate_merge_param(const ObTabletDDLCompleteMdsUserData &data, ObTablet &tablet, ObDDLTableMergeDagParam &merge_param);
   static int is_ddl_need_major_merge(const ObTablet &tablet, bool &ddl_need_merging);

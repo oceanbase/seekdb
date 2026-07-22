@@ -229,7 +229,7 @@ int ObSmallHashSet<_Accurate>::serialize(char *buf, const int64_t buf_len, int64
     int64_t pos_bak = (pos += size_nbytes);
     if (OB_SUCC(ret)) {
       if (OB_FAIL(serialize_(buf, buf_len, pos))) {
-        RPC_WARN("serialize fail", K(ret));
+        COMMON_LOG(WARN, "serialize fail", K(ret));
       }
     }
     int64_t serial_size = pos - pos_bak;
@@ -273,7 +273,7 @@ int ObSmallHashSet<_Accurate>::deserialize(const char *buf, int64_t data_len, in
     int64_t pos_orig = pos;
     pos = 0;
     if (OB_FAIL(deserialize_(buf + pos_orig, len, pos))) {
-      RPC_WARN("deserialize_ fail", "slen", len, K(pos), K(ret));
+      COMMON_LOG(WARN, "deserialize_ fail", "slen", len, K(pos), K(ret));
     }
     pos = pos_orig + len;
   }
@@ -290,13 +290,13 @@ int ObSmallHashSet<_Accurate>::deserialize_(const char *buf, int64_t data_len, i
   OB_UNIS_DECODE(size);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(init(capacity))) {
-    RPC_WARN("failed to init");
+    COMMON_LOG(WARN, "failed to init");
   }
   uint64_t hash = 0;
   for (int64_t i = 0; i < size && OB_SUCC(ret); ++i) {
     OB_UNIS_DECODE(hash);
     if (OB_FAIL(insert_hash(hash))) {
-      RPC_WARN("failed to insert_hash");
+      COMMON_LOG(WARN, "failed to insert_hash");
     }
   }
   return ret;

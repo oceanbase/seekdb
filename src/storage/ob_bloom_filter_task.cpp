@@ -70,7 +70,7 @@ bool ObBloomFilterBuildTask::operator ==(const IObDedupTask &other) const
     if (get_type() == other.get_type()) {
       // it's safe to do this transformation, we have checked the task's type
       const ObBloomFilterBuildTask &o = static_cast<const ObBloomFilterBuildTask &>(other);
-      is_equal = true && o.table_id_ == table_id_
+      is_equal = o.table_id_ == table_id_
                  && o.macro_id_ == macro_id_ && o.prefix_len_ == prefix_len_;
     }
   }
@@ -99,8 +99,7 @@ int ObBloomFilterBuildTask::process()
   int ret = OB_SUCCESS;
   ObBloomFilterCacheValue bfcache_value;
 
-  if (OB_UNLIKELY(false)
-      || OB_UNLIKELY(!macro_id_.is_valid())
+  if (OB_UNLIKELY(!macro_id_.is_valid())
       || OB_UNLIKELY(prefix_len_ <= 0)) {
     ret = OB_INVALID_DATA;
     LOG_WARN("The bloom filter build task is not valid, ",
@@ -118,7 +117,7 @@ int ObBloomFilterBuildTask::build_bloom_filter()
 {
   int ret = OB_SUCCESS;
 
-  MOD_SCOPE {
+  SERVER_MODULE_SCOPE {
     void *buf = nullptr;
     ObStoreCtx store_ctx;
     bool need_build = false;

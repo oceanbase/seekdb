@@ -37,14 +37,12 @@ enum class ObDDLClogType : int64_t
 {
   UNKNOWN = -1,
   DDL_REDO_LOG = 0x1,
-  OLD_DDL_COMMIT_LOG = 0x2, // deprecated, only compatable use
   DDL_TABLET_SCHEMA_VERSION_CHANGE_LOG = 0x10,
   DDL_START_LOG = 0x20,
   DDL_COMMIT_LOG = 0x40,// rename from DDL_PREPARE_LOG
   DDL_TABLE_FORK_FREEZE_LOG = 0x44,
   DDL_TABLE_FORK_START_LOG = 0x45,
   DDL_TABLE_FORK_FINISH_LOG = 0x46,
-  DDL_FINISH_LOG = 0x80,// finish log, smilarity role in shared storage mode
 };
 
 enum ObDDLClogState : uint8_t

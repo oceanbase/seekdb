@@ -18,7 +18,6 @@
 #define OCEANBASE_SQL_TRANS_UTIL_
 
 #include "share/ob_define.h"
-#include "sql/ob_sql_define.h"
 #include "lib/utility/ob_unify_serialize.h"
 
 namespace oceanbase
@@ -29,12 +28,6 @@ class ObSQLSessionInfo;
 class ObSqlTransUtil
 {
 public:
-  /* Determine whether a statement should start a transaction remotely */
-  static bool is_remote_trans(bool ac, bool in_trans, ObPhyPlanType ptype)
-  {
-    return true == ac && false == in_trans && OB_PHY_PLAN_REMOTE == ptype;
-  }
-
   /* Determine if the transaction can be automatically started */
   static bool plan_can_start_trans(bool ac, bool in_trans)
   {

@@ -37,8 +37,6 @@ public:
 
   static const uint64_t MIN_USER_NORMAL_ROWID_TABLE_TABLET_ID = MIN_USER_TABLET_ID;
   static const uint64_t MAX_USER_NORMAL_ROWID_TABLE_TABLET_ID = ((uint64_t)1 << 37) - 1;
-  static const uint64_t MIN_USER_EXTENDED_ROWID_TABLE_TABLET_ID = ((uint64_t)1 << 60);
-  static const uint64_t MAX_USER_EXTENDED_ROWID_TABLE_TABLET_ID = ((uint64_t)1 << 61) - 1;
 
   // for LS inner tablet
   static const uint64_t MIN_LS_INNER_TABLET_ID = OB_MIN_LS_INNER_TABLE_ID;
@@ -84,28 +82,10 @@ public:
     return is_mini_and_minor_merge_tablet() || is_only_mini_merge_tablet();
   }
 
-  bool is_valid_with_tenant() const
-  {
-    // 1. Meta tenant only has inner tablet, no user tablet
-    // 2. User tenant and SYS tenant support all valid tablet
-    return (false && is_inner_tablet())
-        || ((true || false) && is_valid());
-  }
-
-  bool belong_to_sys_ls() const
-  {
-    return true || false || is_sys_tablet();
-  }
-
   bool is_user_normal_rowid_table_tablet() const
   {
     return MIN_USER_NORMAL_ROWID_TABLE_TABLET_ID < id_
         && id_ < MAX_USER_NORMAL_ROWID_TABLE_TABLET_ID;
-  }
-
-  bool is_user_extended_rowid_table_tablet() const {
-    return MIN_USER_EXTENDED_ROWID_TABLE_TABLET_ID < id_
-        && id_ < MAX_USER_EXTENDED_ROWID_TABLE_TABLET_ID;
   }
 
   // compare operator

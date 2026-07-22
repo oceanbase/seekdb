@@ -18,7 +18,6 @@
 #define OCEANBASE_ENGINE_OB_OPERATOR_REG_H_
 
 #include "sql/engine/ob_phy_operator_type.h"
-#include "share/ob_cluster_version.h"
 #include <type_traits>
 
 namespace oceanbase
@@ -36,7 +35,6 @@ struct ObOpTypeTraits
   constexpr static bool registered_ = false;
   constexpr static bool has_input_ = false;
   constexpr static bool vectorized_ = false;
-  constexpr static uint64_t ob_version_ = 0;
   constexpr static bool support_rich_format_ = false;
   constexpr static const char *vec_op_name_ = "";
   typedef char LogOp;
@@ -82,8 +80,6 @@ struct SUPPORT_RICH_FORMAT {};
     constexpr static bool has_input_ = !std::is_same<char, input_type>::value; \
     constexpr static bool vectorized_ =                                        \
         std::is_same<VECTORIZED_OP, vec_type>::value;                          \
-    constexpr static uint64_t ob_version_ =                                    \
-        (ob_version == 0 ? CLUSTER_VERSION_1_0_0_0 : ob_version);              \
     constexpr static bool support_rich_format_ =                               \
         std::is_same<SUPPORT_RICH_FORMAT, rich_fmt>::value;                    \
     constexpr static const char *vec_op_name_ = support_rich_format_ ? vec_op_name : #type;\
@@ -573,12 +569,6 @@ class ObMonitoringDumpOp;
 REGISTER_OPERATOR(ObLogMonitoringDump, PHY_MONITORING_DUMP, ObMonitoringDumpSpec,
                   ObMonitoringDumpOp, NOINPUT, VECTORIZED_OP);
 
-class ObLogSequence;
-class ObSequenceSpec;
-class ObSequenceOp;
-REGISTER_OPERATOR(ObLogSequence, PHY_SEQUENCE, ObSequenceSpec, ObSequenceOp,
-                  NOINPUT);
-
 class ObLogJoinFilter;
 class ObJoinFilterSpec;
 class ObJoinFilterOp;
@@ -679,19 +669,6 @@ class ObPxMSCoordVecOpInput;
 REGISTER_OPERATOR(ObLogExchange, PHY_VEC_PX_MERGE_SORT_COORD, ObPxMSCoordVecSpec,
                   ObPxMSCoordVecOp, ObPxMSCoordVecOpInput, VECTORIZED_OP,
                   0 /*+version*/, SUPPORT_RICH_FORMAT);
-
-class ObLogExchange;
-class ObDirectReceiveSpec;
-class ObDirectReceiveOp;
-REGISTER_OPERATOR(ObLogExchange, PHY_DIRECT_RECEIVE, ObDirectReceiveSpec,
-                  ObDirectReceiveOp, NOINPUT);
-
-class ObLogExchange;
-class ObDirectTransmitSpec;
-class ObDirectTransmitOp;
-class ObDirectTransmitOpInput;
-REGISTER_OPERATOR(ObLogExchange, PHY_DIRECT_TRANSMIT, ObDirectTransmitSpec,
-                  ObDirectTransmitOp, ObDirectTransmitOpInput);
 
 class ObLogErrLog;
 class ObErrLogSpec;

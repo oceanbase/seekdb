@@ -27,11 +27,11 @@ namespace oceanbase
 namespace lib
 {
 
-class ObTenantCtxAllocator;
+class ObCtxAllocator;
 class ISetLocker;
 class BlockSet
 {
-  friend class ObTenantCtxAllocator;
+  friend class ObCtxAllocator;
 public:
   BlockSet();
   ~BlockSet();
@@ -47,11 +47,11 @@ public:
   inline uint64_t get_total_payload() const;
   inline uint64_t get_total_used() const;
 
-  void set_tenant_ctx_allocator(ObTenantCtxAllocator &allocator);
+  void set_ctx_allocator(ObCtxAllocator &allocator);
   void reset();
   void set_locker(ISetLocker *locker) { locker_ = locker; }
   bool check_has_unfree();
-  ObTenantCtxAllocator *get_tenant_ctx_allocator() const { return  tallocator_; }
+  ObCtxAllocator *get_ctx_allocator() const { return ctx_allocator_; }
   void set_chunk_mgr(IChunkMgr *chunk_mgr) { chunk_mgr_ = chunk_mgr; }
 
 private:
@@ -69,7 +69,7 @@ private:
   void free_chunk(AChunk *const chunk);
 
 private:
-  ObTenantCtxAllocator *tallocator_;
+  ObCtxAllocator *ctx_allocator_;
   ObMemAttr attr_;
   ISetLocker *locker_;
   IChunkMgr *chunk_mgr_;

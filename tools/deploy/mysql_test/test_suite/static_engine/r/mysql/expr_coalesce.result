@@ -27,7 +27,7 @@ Warning	1265	Data truncated for column 'c17' at row 1
 Warning	1265	Data truncated for column '"test"."t1"."c18"' at row 1
 
 // Case1: normal test.测试各种类型组合, 跟不开新引擎开关进行对比
-alter system flush plan cache global;
+alter system flush plan cache;
 explain_protocol: 0
 set @@ob_enable_plan_cache = 0;
 select coalesce(c1, null) from t1;
@@ -6976,7 +6976,7 @@ insert into t1 values(1, 0,
     '2019-12-01 12:00:00', '0000-00-00 00:00:00'
     '9.5', '000000000');
 ERROR 21S01: Column count doesn't match value count at row 1
-alter system flush plan cache global;
+alter system flush plan cache;
 explain_protocol: 0
 set @@ob_enable_plan_cache = 0;
 select coalesce(c1, null) from t1;
@@ -10016,7 +10016,7 @@ select coalesce(c22, c22, null) from t1;
 +--------------------------+
 
 
-#for 
+#for
 drop table t1_enum;
 ERROR 42S02: Unknown table 'test.t1_enum'
 create table t1_enum (a enum ('2015-09-11','2015-09-21'));
@@ -10028,7 +10028,7 @@ SELECT * FROM t1_enum  WHERE COALESCE(a)=DATE('2015-09-11') AND COALESCE(a)='00:
 drop table t1_enum;
 
 explain_protocol: 0
-##bugfix: 
+##bugfix:
 DROP TABLE IF EXISTS `table1_hash_abs_pk_parts_8_bigint`;
 CREATE TABLE `table1_hash_abs_pk_parts_8_bigint` (
   `col_bigint` bigint(20) DEFAULT NULL,
@@ -10037,7 +10037,7 @@ CREATE TABLE `table1_hash_abs_pk_parts_8_bigint` (
   `col_decimal_20_0` decimal(20,0) DEFAULT NULL,
   `pk` bigint(20) NOT NULL,
   PRIMARY KEY (`pk`)
-) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
  partition by hash(abs(pk))
 (partition p0,
 partition p1,
@@ -10060,12 +10060,12 @@ SELECT * FROM table1_hash_abs_pk_parts_8_bigint WHERE (COALESCE( col_timestamp_6
 +------------+-------------+-----------------+------------------+----+
 drop table `table1_hash_abs_pk_parts_8_bigint`;
 
-##bugfix: 
+##bugfix:
 DROP TABLE IF EXISTS `tbl_108`;
-CREATE TABLE `tbl_108` (                                                                
-  `col_1623` text NOT NULL,                                                            
-  `col_1629` text DEFAULT NULL,                                                       
-  `col_1631` set('Alice','Bob','Charlie','David') NOT NULL DEFAULT 'Bob'          
+CREATE TABLE `tbl_108` (
+  `col_1623` text NOT NULL,
+  `col_1629` text DEFAULT NULL,
+  `col_1631` set('Alice','Bob','Charlie','David') NOT NULL DEFAULT 'Bob'
 );
 UPDATE tbl_108 SET    col_1623 = Coalesce(col_1631, col_1629) ;
 UPDATE tbl_108 SET    col_1623 = Coalesce(col_1629, col_1631) ;

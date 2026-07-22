@@ -130,7 +130,7 @@ int ObConfigManager::got_version()
   return ret;
 }
 
-int ObConfigManager::add_extra_config(const obcall::ObTenantConfigArg &arg)
+int ObConfigManager::add_extra_config(const obcall::ObRuntimeConfigArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!arg.is_valid()) {
@@ -139,11 +139,11 @@ int ObConfigManager::add_extra_config(const obcall::ObTenantConfigArg &arg)
   } else {
     ret = server_config_.add_extra_config(arg.config_str_.ptr());
   }
-  LOG_INFO("add tenant extra config", K(arg));
+  LOG_INFO("add extra runtime config", K(arg));
   return ret;
 }
 
-int ObConfigManager::init_tenant_config(const obcall::ObTenantConfigArg &arg)
+int ObConfigManager::init_runtime_config(const obcall::ObRuntimeConfigArg &arg)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(add_extra_config(arg))) {

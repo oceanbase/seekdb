@@ -447,8 +447,6 @@ int ObStrictPwjComparer::is_physically_equal_partitioned(const PwjTable &l_table
       for (int64_t i = 0; OB_SUCC(ret) && is_physical_equal && i < N; ++i) {
         uint64_t l_tablet_id = l_table.ordered_tablet_ids_.at(i);
         uint64_t r_tablet_id = 0;
-        share::ObLSReplicaLocation l_replica_loc;
-        share::ObLSReplicaLocation r_replica_loc;
         const ObCandiTabletLoc *left_location = NULL;
         const ObCandiTabletLoc *right_location = NULL;
         if (OB_FAIL(phy_part_map_.get_refactored(l_tablet_id, r_tablet_id))) {
@@ -456,17 +454,19 @@ int ObStrictPwjComparer::is_physically_equal_partitioned(const PwjTable &l_table
         } else if (OB_FAIL(l_tablet_id_map.get_refactored(l_tablet_id, left_location)) ||
                   OB_FAIL(r_tablet_id_map.get_refactored(r_tablet_id, right_location))) {
           LOG_WARN("failed to get refactored", K(ret));
-        } else if (OB_FAIL(left_location->get_selected_replica(l_replica_loc))) {
-          LOG_WARN("failed to get selected replica", K(ret), K(left_location));
-        } else if (OB_FAIL(right_location->get_selected_replica(r_replica_loc))) {
-          LOG_WARN("failed to get selected replica", K(ret), K(right_locations.at(i)));
-        } else if (!l_replica_loc.is_valid() || !r_replica_loc.is_valid()) {
+        } else if (OB_ISNULL(left_location) || OB_ISNULL(right_location)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_ERROR("replica location is invalid", K(ret), K(i), K(l_replica_loc), K(r_replica_loc));
+          LOG_ERROR("tablet location is invalid", K(ret), KP(left_location), KP(right_location));
         } else {
-          is_physical_equal = l_replica_loc.get_server() == r_replica_loc.get_server();
+          const ObAddr &left_server = left_location->get_partition_location().get_server();
+          const ObAddr &right_server = right_location->get_partition_location().get_server();
+          if (!left_server.is_valid() || !right_server.is_valid()) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_ERROR("local tablet server is invalid", K(ret), K(i), K(left_server), K(right_server));
+          } else {
+            is_physical_equal = left_server == right_server;
+          }
         }
-
         if (OB_SUCC(ret) && is_physical_equal) {
           r_array->at(i) = r_tablet_id;
         }

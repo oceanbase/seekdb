@@ -68,10 +68,9 @@ private:
 class ObDMLSqlSplicer
 {
 public:
-  friend class ObPTSqlSplicer;
   // for columns with NULL value
   static const char *const NULL_VALUE;
-  static const int64_t MAX_TO_STRING_BUF_SIZE = common::MAX_ROOTSERVICE_EVENT_EXTRA_INFO_LENGTH;
+  static const int64_t MAX_TO_STRING_BUF_SIZE = common::MAX_MANAGEMENT_EVENT_EXTRA_INFO_LENGTH;
   static const int64_t DEF_COLUMN_CNT = 10;
 
   enum Mode
@@ -255,21 +254,6 @@ private:
   ObSqlString default_column_value_;
   DISALLOW_COPY_AND_ASSIGN(ObDMLSqlSplicer);
   static const int64_t MAX_DML_NUM = 128;
-};
-
-class ObPTSqlSplicer : public ObDMLSqlSplicer
-{
-public:
-  ObPTSqlSplicer() {}
-  ~ObPTSqlSplicer() {}
-private:
-  int splice_batch_insert_update_replica_column(
-      const bool with_role,
-      const common::ObString &sep,
-      const common::ObIArray<common::ObString> &names,
-      common::ObSqlString &sql) const ;
-  int splice_insert_update_replica_column(const char *sep,
-                                          common::ObSqlString &sql) const;
 };
 
 #define OBJ_K(obj, name) #name, (obj).name##_

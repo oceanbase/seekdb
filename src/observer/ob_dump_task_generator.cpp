@@ -17,11 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/ob_dump_task_generator.h"
-#ifdef _WIN32
-#include <fcntl.h>
-#endif
 #include "lib/alloc/memory_dump.h"
-#include "lib/allocator/ob_mem_leak_checker.h"
 #include "sql/parser/ob_parser.h"
 
 namespace oceanbase
@@ -90,109 +86,40 @@ int ObDumpTaskGenerator::generate_task_from_file()
     LOG_WARN("nullptr", K(cmd), K(ret));
   } else {
     LOG_INFO("read command", K(cmd));
-    if (SET_LEAK_MOD == node->value_) {
-      char str[lib::AOBJECT_LABEL_SIZE + 1];
-      snprintf(str, sizeof(str), "%.*s",
+    ObMemoryDumpTask task;
+    task.type_ = node->value_ <= 1 ? DUMP_CONTEXT : DUMP_CHUNK;
+    task.dump_all_ = 0 == node->value_ || 2 == node->value_;
+    char atoi_buf[32];
+    if (CONTEXT_ALL == node->value_) {
+      // do-nothing
+    } else if (CONTEXT == node->value_) {
+      snprintf(atoi_buf, sizeof(atoi_buf), "%.*s",
                (int32_t)node->children_[0]->str_len_, node->children_[0]->str_value_);
-      reset_mem_leak_checker_label(str);
-    } else if (SET_LEAK_RATE == node->value_) {
-      reset_mem_leak_checker_rate(node->children_[0]->value_);
-    } else if (MEMORY_LEAK == node->value_) {
-      dump_memory_leak();
-    } else {
-      ObMemoryDumpTask task;
-      task.type_ = node->value_ <= 1 ? DUMP_CONTEXT : DUMP_CHUNK;
-      task.dump_all_ = 0 == node->value_ || 2 == node->value_;
-      char atoi_buf[32];
-      if (CONTEXT_ALL == node->value_) {
-        // do-nothing
-      } else if (CONTEXT == node->value_) {
-        snprintf(atoi_buf, sizeof(atoi_buf), "%.*s",
-                 (int32_t)node->children_[0]->str_len_, node->children_[0]->str_value_);
-        task.p_context_ = (void*)std::stoll(atoi_buf, nullptr, 0);
-        task.slot_idx_ = node->children_[1]->value_;
-      } else if (CHUNK_ALL == node->value_) {
-        // do-nothing
-      } else if (CHUNK_OF_TENANT_CTX == node->value_) {
-        task.dump_tenant_ctx_ = true;
-        
-        uint64_t ctx_id = 0;
-        if (!get_global_ctx_info().is_valid_ctx_name(node->children_[1]->str_value_, ctx_id)) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid ctx", K(node->children_[1]->str_value_));
-        } else {
-          task.ctx_id_ = ctx_id;
-        }
-      } else if (CHUNK == node->value_) {
-        snprintf(atoi_buf, sizeof(atoi_buf), "%.*s",
-                 (int32_t)node->children_[0]->str_len_, node->children_[0]->str_value_);
-        task.p_chunk_ = (void*)std::stoll(atoi_buf, nullptr, 0);
+      task.p_context_ = (void*)std::stoll(atoi_buf, nullptr, 0);
+      task.slot_idx_ = node->children_[1]->value_;
+    } else if (CHUNK_ALL == node->value_) {
+      // do-nothing
+    } else if (CHUNK_OF_CTX == node->value_) {
+      task.dump_ctx_ = true;
+
+      uint64_t ctx_id = 0;
+      if (!get_global_ctx_info().is_valid_ctx_name(node->children_[0]->str_value_, ctx_id)) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid ctx", K(node->children_[0]->str_value_));
+      } else {
+        task.ctx_id_ = ctx_id;
       }
-      LOG_INFO("task info", K(task));
-      if (OB_FAIL(mem_dump.request_dump(task))) {
-        LOG_WARN("request dump failed", K(ret));
-      }
+    } else if (CHUNK == node->value_) {
+      snprintf(atoi_buf, sizeof(atoi_buf), "%.*s",
+               (int32_t)node->children_[0]->str_len_, node->children_[0]->str_value_);
+      task.p_chunk_ = (void*)std::stoll(atoi_buf, nullptr, 0);
+    }
+    LOG_INFO("task info", K(task));
+    if (OB_FAIL(mem_dump.request_dump(task))) {
+      LOG_WARN("request dump failed", K(ret));
     }
   }
   return ret;
-}
-
-
-void ObDumpTaskGenerator::dump_memory_leak()
-{
-  int ret = OB_SUCCESS;
-  int fd = -1;
-  if (-1 == (fd = ::open(ObMemoryDump::LOG_FILE,
-                         O_CREAT | O_WRONLY | O_APPEND
-#ifdef _WIN32
-                         | _O_BINARY
-#endif
-                         , S_IRUSR | S_IWUSR))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("create new file failed", K(strerror(errno)));
-  } else {
-    ObMemAttr attr("dumpLeak", ObCtxIds::DEFAULT_CTX_ID);
-    const int buf_len = 1L << 20;
-    char *buf = (char*)ob_malloc(buf_len, attr);
-    if (OB_ISNULL(buf)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc failed", K(ret));
-    } else {
-      common::ObMemLeakChecker::mod_info_map_t tmp_map;
-      if (OB_FAIL(tmp_map.create(1024))) {
-        LOG_WARN("create map failed", K(ret));
-      } else if (OB_FAIL(get_mem_leak_checker().load_leak_info_map(tmp_map))) {
-        LOG_WARN("load map failed", K(ret));
-      } else {
-        int64_t pos = 0;
-        pos += snprintf(buf + pos, buf_len - pos,
-                        "\n######## LEAK_CHECKER (origin_str = %s, label_ = %s, check_type = %d, "
-                        "current_ts = %ld)########\n",
-                        get_mem_leak_checker().get_str(),
-                        get_mem_leak_checker().get_label(),
-                        get_mem_leak_checker().get_check_type(),
-                        ObTimeUtility::current_time());
-        for (auto it = tmp_map->begin(); it != tmp_map->end(); ++it) {
-          pos += snprintf(buf + pos, buf_len - pos, "bt=%s, count=%ld, bytes=%ld\n",
-              it->first.bt_, it->second.first, it->second.second);
-          if (pos > buf_len / 2) {
-            ::write(fd, buf, pos);
-            pos = 0;
-          }
-        }
-        if (pos > 0) {
-          ::write(fd, buf, pos);
-          pos = 0;
-        }
-      }
-    }
-    if (buf != nullptr) {
-      ob_free(buf);
-    }
-  }
-  if (fd >= 0) {
-    ::close(fd);
-  }
 }
 
 }

@@ -26,7 +26,7 @@ using namespace oceanbase::share::schema;
 using namespace oceanbase::sql;
 
 ObBaseTabletDirectLoadMgr::ObBaseTabletDirectLoadMgr()
- : tablet_id_(), table_key_(), tenant_data_version_(), direct_load_type_(ObDirectLoadType::DIRECT_LOAD_INVALID), ref_cnt_(0)
+ : tablet_id_(), table_key_(), data_format_version_(), direct_load_type_(ObDirectLoadType::DIRECT_LOAD_INVALID), ref_cnt_(0)
 {
 }
 
@@ -34,7 +34,7 @@ ObBaseTabletDirectLoadMgr::~ObBaseTabletDirectLoadMgr()
 {
   tablet_id_.reset();
   table_key_.reset();
-  tenant_data_version_ = 0;
+  data_format_version_ = 0;
   direct_load_type_ = ObDirectLoadType::DIRECT_LOAD_INVALID;
   ATOMIC_STORE(&ref_cnt_, 0);
 }

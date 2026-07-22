@@ -256,7 +256,7 @@ private:
   int64_t wbp_memory_limit_;           // in bytes
   int64_t default_wbp_memory_limit_;   // if this var is valid, the wbp memory limit will always be it.
                                        // currently, this var is only modified in ut.
-  int64_t last_access_tenant_config_ts_;
+  int64_t last_access_runtime_config_ts_;
   int64_t last_shrink_complete_ts_;
   int64_t max_used_watermark_after_shrinking_;
   int64_t meta_page_cnt_;

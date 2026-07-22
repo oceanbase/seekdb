@@ -18,7 +18,7 @@
 #define OCEANBASE_SHARE_STORAGE_OB_MERGE_INFO_TABLE_STORAGE_H_
 
 #include "share/storage/ob_sqlite_connection_pool.h"
-#include "share/ob_zone_merge_info.h"
+#include "share/ob_merge_info.h"
 
 namespace oceanbase
 {

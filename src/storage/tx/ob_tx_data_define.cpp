@@ -77,7 +77,7 @@ int ObUndoStatusList::serialize_(char *buf, const int64_t buf_len, int64_t &pos)
 int ObUndoStatusList::deserialize(const char *buf,
                                   const int64_t data_len,
                                   int64_t &pos,
-                                  ObTenantTxDataAllocator &tx_data_allocator)
+                                  ObTxDataAllocator &tx_data_allocator)
 {
   int ret = OB_SUCCESS;
   int64_t version = 0;
@@ -112,7 +112,7 @@ int ObUndoStatusList::deserialize(const char *buf,
 int ObUndoStatusList::deserialize_(const char *buf,
                                    const int64_t data_len,
                                    int64_t &pos,
-                                   ObTenantTxDataAllocator &tx_data_allocator)
+                                   ObTxDataAllocator &tx_data_allocator)
 {
   int ret = OB_SUCCESS;
   ObUndoStatusNode *cur_node = nullptr;
@@ -356,7 +356,7 @@ int64_t ObTxData::size_need_cache() const
 int ObTxData::deserialize(const char *buf,
                           const int64_t data_len,
                           int64_t &pos,
-                          ObTenantTxDataAllocator &slice_allocator)
+                          ObTxDataAllocator &slice_allocator)
 {
   int ret = OB_SUCCESS;
   int64_t version = 0;
@@ -387,7 +387,7 @@ int ObTxData::deserialize(const char *buf,
 int ObTxData::deserialize_(const char *buf,
                            const int64_t data_len,
                            int64_t &pos,
-                           ObTenantTxDataAllocator &tx_data_allocator)
+                           ObTxDataAllocator &tx_data_allocator)
 {
   int ret = OB_SUCCESS;
 

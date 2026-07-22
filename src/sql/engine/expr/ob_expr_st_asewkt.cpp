@@ -88,7 +88,7 @@ int ObExprPrivSTAsEwkt::eval_priv_st_asewkt(const ObExpr &expr, ObEvalCtx &ctx, 
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_ST_ASEWKT);
+  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
   int num_args = expr.arg_cnt_;
   bool is_null_result = false;
   ObString res_wkt;
@@ -125,10 +125,6 @@ int ObExprPrivSTAsEwkt::eval_priv_st_asewkt(const ObExpr &expr, ObEvalCtx &ctx, 
       LOG_WARN("eval geo to ewkt failed", K(ret), K(wkb), K(maxdecimaldigits));
     } else if (OB_FAIL(ObGeoExprUtils::pack_geo_res(expr, ctx, res, res_wkt))) {
       LOG_WARN("fail to pack geo res", K(ret));
-    } else {
-      // assume that ObStringBuffer has 4 times memory enlargement
-      tmp_allocator.set_baseline_size(res_wkt.length() * 4 + wkb.length());
-      tmp_allocator.memory_usage_check_if_need();
     }
   }
 

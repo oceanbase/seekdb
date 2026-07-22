@@ -16,7 +16,7 @@
 
 #include "ob_protected_memtable_mgr_handle.h"
 #include "share/rc/ob_module_provider.h"
-#include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
+#include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::memtable;

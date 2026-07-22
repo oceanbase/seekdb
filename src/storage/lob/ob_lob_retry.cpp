@@ -44,7 +44,7 @@ int ObLobRetryUtil::check_need_retry(ObLobAccessParam &param, const int error_co
   } else {
     need_retry = true;
     switch (error_code) {
-      case  OB_LS_NOT_EXIST: // single tenant never drops tenant; fall through to refresh location
+      case  OB_LS_NOT_EXIST: // Fall through to refresh the local LS location.
       case	OB_REPLICA_NOT_READABLE:
       case  OB_RPC_CONNECT_ERROR:
       case  OB_RPC_SEND_ERROR:

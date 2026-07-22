@@ -126,7 +126,7 @@ public:
   int get_mock_fk_parent_table_schema(
       const uint64_t mock_fk_parent_table_id,
       const ObSimpleMockFKParentTableSchema *&schema) const;
-  int get_mock_fk_parent_table_schemas_in_tenant(
+  int get_mock_fk_parent_table_schemas_in_runtime(
       common::ObIArray<const ObSimpleMockFKParentTableSchema *> &schemas) const;
   int get_mock_fk_parent_table_schemas_in_database(
       const uint64_t database_id,

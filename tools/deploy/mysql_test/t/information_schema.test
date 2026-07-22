@@ -79,30 +79,6 @@ select * from information_schema.schemata where schema_name in ('oceanbase', 'my
 select * from information_schema.views where table_schema in ('oceanbase', 'mysql', 'information_schema', 'test1') order by TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME;
 
 
-# login using sys tenant
-connect (conn_sys,$OBMYSQL_MS0,root@sys,,*NO-ONE*,$OBMYSQL_PORT);
-set @@session.ob_query_timeout = 60000000;
-use information_schema;
---disable_query_log
---disable_warnings
-drop table if exists oceanbase.t1, oceanbase.t2, oceanbase.t3;
---enable_warnings
---enable_query_log
-#select * from information_schema.schemata;
-#select * from information_schema.columns;
-#select * from information_schema.session_variables where variable_name != 'version_comment' and variable_name != 'version' order by VARIABLE_NAME;
-#select * from information_schema.global_variables where variable_name != 'version_comment' and variable_name != 'version' order by VARIABLE_NAME;
---sorted_result
-select * from information_schema.table_constraints where table_schema in ('oceanbase', 'mysql', 'information_schema', 'SYS', 'LBACSYS', 'ORAAUDITOR') order by CONSTRAINT_CATALOG, CONSTRAINT_SCHEMA, CONSTRAINT_NAME;
---sorted_result
-select * from information_schema.statistics where table_schema in ('oceanbase', 'mysql', 'information_schema', 'SYS', 'LBACSYS', 'ORAAUDITOR') and TABLE_NAME not like "ob_all_proxy%" order by TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME;
---sorted_result
-select * from information_schema.views where table_schema in ('oceanbase', 'mysql', 'information_schema', 'SYS', 'LBACSYS', 'ORAAUDITOR') order by TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME;
-
-
---error 1049
-use test1000;
-connection default;
 use information_schema;
 #select * from information_schema.columns;
 #select * from information_schema.schemata;

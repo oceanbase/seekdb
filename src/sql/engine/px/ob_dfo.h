@@ -22,7 +22,6 @@
 #include "lib/queue/ob_lighty_queue.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/container/ob_array.h"
-#include "lib/net/ob_addr.h"
 #include "sql/dtl/ob_dtl_task.h"
 #include "sql/dtl/ob_dtl_channel.h"
 #include "sql/engine/ob_exec_context.h"
@@ -64,33 +63,6 @@ class ObPxSqcHandler;
 class ObJoinFilter;
 class ObPxCoordInfo;
 class ObDfo;
-// Describe each SQC's task on the PX side
-// Through exec_addr distinguish SQC
-class ObPxTaskMeta
-{
-public:
-  ObPxTaskMeta() : exec_addr_(), sqc_id_(common::OB_INVALID_INDEX),
-  task_id_(common::OB_INVALID_INDEX), sm_group_id_(common::OB_INVALID_INDEX) {}
-  ~ObPxTaskMeta() = default;
-  void set_exec_addr(const common::ObAddr &addr) { exec_addr_ = addr; }
-  const common::ObAddr &get_exec_addr() const {   return exec_addr_; }
-  void set_task_id(int64_t task_id) { task_id_ = task_id; }
-  int64_t get_task_id() const { return task_id_; }
-  void set_sqc_id(int64_t sqc_id) { sqc_id_ = sqc_id; }
-  int64_t get_sqc_id() const { return sqc_id_; }
-  void set_sm_group_id(int64_t sm_group_id) { sm_group_id_ = sm_group_id; }
-  int64_t get_sm_group_id() const { return sm_group_id_; }
-  TO_STRING_KV(K_(exec_addr), K_(sqc_id), K_(task_id));
-private:
-  common::ObAddr exec_addr_;
-  // Considering fault tolerance retries, there may be multiple sqcs on the same addr, distinguished by sqc_id_ to determine which sqc the task belongs to
-  int64_t sqc_id_;
-  // Record Task is the nth task in SQC, used for partial partition wise join scenario
-  // ref: 
-  int64_t task_id_;
-  // slave map group id
-  int64_t sm_group_id_;
-};
 struct ObSqcTableLocationKey
 {
  OB_UNIS_VERSION(1);
@@ -130,36 +102,6 @@ public:
   TO_STRING_KV(K_(table_location_key), K_(location_start_pos), K_(location_end_pos));
 };
 
-struct ObP2PDhMapInfo
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObP2PDhMapInfo() : p2p_sequence_ids_(),
-                     target_addrs_() {}
-  ~ObP2PDhMapInfo() {
-    p2p_sequence_ids_.reset();
-    target_addrs_.reset();
-  }
-  void destroy() {
-    p2p_sequence_ids_.reset();
-    target_addrs_.reset();
-  }
-  int assign(const ObP2PDhMapInfo &other) {
-    int ret = OB_SUCCESS;
-    if (OB_FAIL(p2p_sequence_ids_.assign(other.p2p_sequence_ids_))) {
-      OB_LOG(WARN, "fail to assign other p2p seq id", K(ret));
-    } else if (OB_FAIL(target_addrs_.assign(other.target_addrs_))) {
-      OB_LOG(WARN, "fail to assign other target_addrs_", K(ret));
-    }
-    return ret;
-  }
-  bool is_empty() { return p2p_sequence_ids_.empty(); }
-public:
-  common::ObSArray<int64_t> p2p_sequence_ids_;
-  common::ObSArray<ObSArray<ObAddr>> target_addrs_;
-  TO_STRING_KV(K_(p2p_sequence_ids), K_(target_addrs));
-};
-
 struct ObQCMonitoringInfo {
   OB_UNIS_VERSION(1);
 public:
@@ -189,8 +131,6 @@ public:
               sqc_ch_info_(),
               qc_channel_(NULL),
               sqc_channel_(NULL),
-              exec_addr_(),
-              qc_addr_(),
               task_count_(0),
               max_task_count_(3),
               min_task_count_(1),
@@ -200,9 +140,7 @@ public:
               thread_finish_(false),
               px_int_id_(),
               is_fulltree_(false),
-              is_rpc_worker_(false),
               need_report_(false),
-              qc_server_id_(common::OB_INVALID_ID),
               parent_dfo_id_(common::OB_INVALID_ID),
               px_sequence_id_(common::OB_INVALID_ID),
               transmit_use_interm_result_(false),
@@ -214,12 +152,9 @@ public:
               ignore_vtable_error_(false),
               access_table_location_keys_(),
               access_table_location_indexes_(),
-              server_not_alive_(false),
               adjoining_root_dfo_(false),
               is_single_tsc_leaf_dfo_(false),
               allocator_("PxSqcMetaInner"),
-              interrupt_by_dm_(false),
-              p2p_dh_map_info_(),
               sqc_order_gi_tasks_(false),
               locations_order_()
   {}
@@ -245,10 +180,6 @@ public:
   inline ObPxInterruptID get_interrupt_id() { return px_int_id_; }
   inline void set_interrupt_id(const ObPxInterruptID &px_int_id)
                               { px_int_id_ = px_int_id; }
-  void set_interrupt_by_dm(bool val) { interrupt_by_dm_ = val; }
-  bool is_interrupt_by_dm() { return interrupt_by_dm_; }
-  void set_exec_addr(const common::ObAddr &addr) {   exec_addr_ = addr; }
-  void set_qc_addr(const common::ObAddr &addr) {   qc_addr_ = addr; }
   void set_qc_channel(dtl::ObDtlChannel *ch) {   qc_channel_ = ch; }
   void set_sqc_channel(dtl::ObDtlChannel *ch) { sqc_channel_ = ch; }
   void set_task_count(int64_t task_count) {   task_count_ =  task_count; }
@@ -264,9 +195,6 @@ public:
   common::ObIArray<ObPxTabletInfo> &get_partitions_info() { return partitions_info_; }
   common::ObIArray<ObSqlTempTableCtx> &get_temp_table_ctx() { return temp_table_ctx_; }
 
-  const common::ObAddr &get_exec_addr() const {   return exec_addr_; }
-  const common::ObAddr &get_sqc_addr() const {   return exec_addr_; } // get_exec_addr alias
-  const common::ObAddr &get_qc_addr() const {   return qc_addr_; }
   dtl::ObDtlChannel *get_qc_channel() {   return qc_channel_; }
   dtl::ObDtlChannel *get_sqc_channel() { return sqc_channel_; }
   dtl::ObDtlChannel *get_sqc_channel() const { return sqc_channel_; }
@@ -283,16 +211,12 @@ public:
   bool is_thread_finish() const { return thread_finish_; }
   void set_need_report(bool v) { need_report_ = v; }
   bool need_report() { return need_report_; }
-  void set_qc_server_id(int64_t qc_server_id) { qc_server_id_ = qc_server_id; }
-  int64_t get_qc_server_id() { return qc_server_id_; }
   void set_parent_dfo_id(int64_t parent_dfo_id) { parent_dfo_id_ = parent_dfo_id; }
   int64_t get_parent_dfo_id() { return parent_dfo_id_; }
   void set_px_sequence_id(uint64_t px_sequence_id) { px_sequence_id_ = px_sequence_id; }
   int64_t get_px_sequence_id() { return px_sequence_id_; }
   void set_ignore_vtable_error(bool flag) { ignore_vtable_error_ = flag; }
   bool is_ignore_vtable_error() { return ignore_vtable_error_; }
-  void set_server_not_alive(bool not_alive) { server_not_alive_ = not_alive; }
-  bool is_server_not_alive() { return server_not_alive_; }
   ObPxTransmitDataChannelMsg &get_transmit_channel_msg() { return transmit_channel_; }
   ObPxReceiveDataChannelMsg &get_receive_channel_msg() { return receive_channel_; }
   common::ObIArray<ObPxReceiveDataChannelMsg>& get_serial_receive_channels()
@@ -335,7 +259,6 @@ public:
   bool adjoining_root_dfo() const { return adjoining_root_dfo_; }
   void set_single_tsc_leaf_dfo(bool flag) { is_single_tsc_leaf_dfo_ = flag; }
   bool is_single_tsc_leaf_dfo() { return is_single_tsc_leaf_dfo_; }
-  ObP2PDhMapInfo &get_p2p_dh_map_info() { return p2p_dh_map_info_;};
   void set_sqc_count(int64_t sqc_cnt) { sqc_count_ = sqc_cnt; }
   int64_t get_sqc_count() const { return sqc_count_;}
   void set_sqc_order_gi_tasks(bool v) { sqc_order_gi_tasks_ = v; }
@@ -353,7 +276,7 @@ public:
   void set_branch_id_base(const int16_t branch_id_base) { branch_id_base_ = branch_id_base; }
   int16_t get_branch_id_base() const { return branch_id_base_; }
   ObIArray<std::pair<int64_t, bool>> &get_locations_order() { return locations_order_; }
-  TO_STRING_KV(K_(need_report), K_(execution_id), K_(qc_id), K_(sqc_id), K_(dfo_id), K_(exec_addr), K_(qc_addr),
+  TO_STRING_KV(K_(need_report), K_(execution_id), K_(qc_id), K_(sqc_id), K_(dfo_id),
                K_(branch_id_base), K_(qc_ch_info), K_(sqc_ch_info),
                K_(task_count), K_(max_task_count), K_(min_task_count),
                K_(thread_inited), K_(thread_finish), K_(px_int_id),
@@ -373,8 +296,8 @@ private:
   // used for px worker execution
   // no need serialize
   DASTabletLocSEArray access_table_locations_;
-  // Extra access table locations, not used for px worker execution, addr may be different from sqc's
-  // Mainly used for pdml merge into now, which may modify global indexes on other servers.
+  // Additional tablet locations not scanned directly by this DFO, used by
+  // PDML operations that also maintain global indexes.
   DASTabletLocSEArray extra_access_table_locations_;
 
   ObPxTransmitDataChannelMsg transmit_channel_; // Used for quickly establishing QC-Task channel mode
@@ -383,8 +306,6 @@ private:
   dtl::ObDtlChannelInfo sqc_ch_info_;
   dtl::ObDtlChannel *qc_channel_; /* Used by qc to send data to sqc */
   dtl::ObDtlChannel *sqc_channel_; /* Used by sqc to send data to qc */
-  common::ObAddr exec_addr_; /* The running address of SQC */
-  common::ObAddr qc_addr_; /* Record the QC's address, used for SQC-QC communication */
   int64_t task_count_; /* Each DFO will be split into task-count SQCs for concurrent execution */
   int64_t max_task_count_;
   int64_t min_task_count_;
@@ -394,11 +315,9 @@ private:
   bool thread_finish_;
   ObPxInterruptID px_int_id_;
   bool is_fulltree_;
-  bool is_rpc_worker_;
   // No need to serialize
   ObSEArray<ObPxTabletInfo, 8> partitions_info_;
   bool need_report_;
-  uint64_t qc_server_id_;
   int64_t parent_dfo_id_;
   uint64_t px_sequence_id_;
   // The following two variables will be used in the single-layer scheduling dfo scenario
@@ -419,16 +338,12 @@ private:
   bool ignore_vtable_error_;
   ObSEArray<ObSqcTableLocationKey, 2> access_table_location_keys_;
   ObSEArray<ObSqcTableLocationIndex, 2> access_table_location_indexes_;
-  bool server_not_alive_;
   /*used for init channel msg, indicate a transmit
   op is adjoining coodinator, that need not wait that msg*/
   bool adjoining_root_dfo_;
   //for auto scale
   bool is_single_tsc_leaf_dfo_;
   ObArenaAllocator allocator_;
-  bool interrupt_by_dm_;
-  // for p2p dh msg
-  ObP2PDhMapInfo p2p_dh_map_info_;
   int64_t sqc_count_;
   bool sqc_order_gi_tasks_;
   bool partition_random_affinitize_{true}; // whether do partition random in gi task split
@@ -476,9 +391,7 @@ public:
     receive_ch_sets_map_(),
     dfo_ch_infos_(),
     is_fulltree_(false),
-    is_rpc_worker_(false),
     earlier_sched_(false),
-    qc_server_id_(common::OB_INVALID_ID),
     parent_dfo_id_(common::OB_INVALID_ID),
     px_sequence_id_(common::OB_INVALID_ID),
     temp_table_id_(0),
@@ -489,12 +402,7 @@ public:
     total_task_cnt_(0),
     pkey_table_loc_id_(0),
     tsc_op_cnt_(0),
-    node_sequence_id_(0),
     p2p_dh_ids_(),
-    p2p_dh_addrs_(),
-    p2p_dh_loc_(nullptr),
-    need_p2p_info_(false),
-    p2p_dh_map_info_(),
     coord_info_ptr_(nullptr),
     force_bushy_(false),
     query_sql_()
@@ -593,16 +501,11 @@ public:
   void set_dfo_id(int64_t dfo_id) { dfo_id_ = dfo_id; }
   int64_t get_dfo_id() const { return dfo_id_; }
 
-  void set_qc_server_id(int64_t qc_server_id) { qc_server_id_ = qc_server_id; }
-  int64_t get_qc_server_id() const { return qc_server_id_; }
   void set_parent_dfo_id(int64_t parent_dfo_id) { parent_dfo_id_ = parent_dfo_id; }
   int64_t get_parent_dfo_id() const { return parent_dfo_id_; }
 
   void set_px_sequence_id(uint64_t px_sequence_id) { px_sequence_id_ = px_sequence_id; }
   int64_t get_px_sequence_id() const { return px_sequence_id_; }
-  void set_node_sequence_id(uint64_t node_sequence_id) { node_sequence_id_ = node_sequence_id; }
-  uint64_t get_node_sequence_id() { return node_sequence_id_; }
-
   void set_temp_table_id(uint64_t temp_table_id) { temp_table_id_ = temp_table_id; }
   uint64_t get_temp_table_id() const { return temp_table_id_; }
   // TODO: The following four states need to be reorganized, it's too messy
@@ -614,7 +517,6 @@ public:
   bool is_thread_inited() const { return thread_inited_; }
   void set_thread_finish(bool v) { thread_finish_ = v; }
   bool is_thread_finish() const { return thread_finish_; }
-  const common::ObArray<ObPxTaskMeta> &get_tasks() const { return tasks_; }
   int get_task_receive_chs(int64_t child_dfo_id,
                            ObPxTaskChSets &ch_sets) const;
   int get_task_receive_chs(int64_t child_dfo_id,
@@ -634,10 +536,10 @@ public:
   int prepare_channel_info();
   static int check_dfo_pair(ObDfo &parent, ObDfo &child, int64_t &child_dfo_idx);
   static int fill_channel_info_by_sqc(
-              dtl::ObDtlExecServer &ch_servers,
+              dtl::ObDtlTaskLayout &ch_servers,
               common::ObIArray<ObPxSqcMeta> &sqcs);
   static int fill_channel_info_by_sqc(
-              dtl::ObDtlExecServer &ch_servers,
+              dtl::ObDtlTaskLayout &ch_servers,
               ObPxSqcMeta &sqc);
   static bool is_valid_dfo_id(int64_t dfo_id)
   {
@@ -651,14 +553,8 @@ public:
   bool is_single_tsc_leaf_dfo() { return is_leaf_dfo() && 1 == tsc_op_cnt_; }
   int add_p2p_dh_ids(int64_t id) { return p2p_dh_ids_.push_back(id); }
   common::ObIArray<int64_t> &get_p2p_dh_ids() { return p2p_dh_ids_; }
-  void set_p2p_dh_loc(ObDASTableLoc *p2p_dh_loc) { p2p_dh_loc_ = p2p_dh_loc; }
-  ObDASTableLoc *get_p2p_dh_loc() { return p2p_dh_loc_; }
-  common::ObIArray<ObAddr> &get_p2p_dh_addrs() { return p2p_dh_addrs_; }
-  void set_need_p2p_info(bool flag) { need_p2p_info_ = flag; }
-  bool need_p2p_info() { return need_p2p_info_; }
   void set_coord_info_ptr(ObPxCoordInfo *ptr) { coord_info_ptr_ = ptr; }
   ObPxCoordInfo *get_coord_info_ptr() { return coord_info_ptr_; }
-  ObP2PDhMapInfo &get_p2p_dh_map_info() { return p2p_dh_map_info_;};
   bool force_bushy() { return force_bushy_; }
   void set_force_bushy(bool flag) { force_bushy_ = flag; }
   inline void set_partition_random_affinitize(bool partition_random_affinitize)
@@ -697,9 +593,7 @@ public:
                K_(tsc_op_cnt),
                K_(transmit_ch_sets),
                K_(receive_ch_sets_map),
-               K_(p2p_dh_ids),
-               K_(p2p_dh_addrs),
-               K_(need_p2p_info));
+               K_(p2p_dh_ids));
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDfo);
@@ -711,22 +605,16 @@ private:
   uint64_t qc_id_;
   int64_t dfo_id_;
   ObPxInterruptID px_int_id_;
-  // dop is the concurrency degree suggested by the user/optimizer, which is the sum of the expected number of workers allocated across all servers
+  // dop is the concurrency degree suggested by the user/optimizer.
   // used_worker_cnt used to count how many px workers were consumed in total to complete the current dfo
   // The relationship among the three:
-  // 1. When dop is small, and the accessed partitions are distributed across many servers,
-  // To ensure each server has at least one px worker to serve,
-  // used_worker_cnt is greater than actual dop
-  // 2. When the server threads are insufficient, the actual number of workers created may be less than expected (DOP downgrade)
-  // userd_worker_cnt may be smaller than dop
-  // 3. assigned_worker_cnt is the number of threads each dfo can obtain calculated based on the admission thread count
+  // 1. used_worker_cnt is the number of local PX workers consumed by this DFO.
+  // 2. When local worker capacity is insufficient, the actual number of workers may be less than DOP.
+  // 3. assigned_worker_cnt is calculated from the admitted local worker count.
   int64_t dop_;
   int64_t assigned_worker_cnt_;
   int64_t used_worker_cnt_;
-  // is_single is used to mark that this dfo is scheduled by one thread, which may be local or remote.
-  // If this dfo contains a table scan operator, it will be scheduled to follow the table scan location during scheduling
-  // If this dfo does not contain a table scan operator, it can theoretically be scheduled on any server during scheduling,
-  // But in the current implementation, when the table scan operator is not included, it will be scheduled locally
+  // is_single marks a DFO that runs on one local worker.
   bool is_single_;
   bool is_root_dfo_;
   /* Data channel not equal sqc returns how many workers were pre-allocated */
@@ -750,12 +638,9 @@ private:
   ObPxTaskChSets transmit_ch_sets_;
   common::ObArray<ObPxTaskChSets *>receive_ch_sets_map_;
   ObPxChTotalInfos dfo_ch_infos_;
-  common::ObArray<ObPxSqcMeta> sqcs_; // All servers are allocated and then initialized
-  common::ObArray<ObPxTaskMeta> tasks_; // All SQCs are setup complete after initializing based on the actual number of threads allocated by the SQCs
+  common::ObArray<ObPxSqcMeta> sqcs_;
   bool is_fulltree_;
-  bool is_rpc_worker_;
   bool earlier_sched_; // Mark whether this dfo was scheduled earlier due to the 3 DFO scheduling strategy
-  uint64_t qc_server_id_;
   int64_t parent_dfo_id_;
   uint64_t px_sequence_id_;
   uint64_t temp_table_id_;
@@ -766,15 +651,8 @@ private:
   int64_t total_task_cnt_;      // the task total count of dfo start worker
   int64_t pkey_table_loc_id_; // record pkey table loc id for child dfo
   int64_t tsc_op_cnt_;
-  // for dm
-  uint64_t node_sequence_id_;
-  // ---------------
   // for p2p dh mgr
   common::ObArray<int64_t>p2p_dh_ids_; //for dh create
-  common::ObArray<ObAddr>p2p_dh_addrs_; //for dh use
-  ObDASTableLoc *p2p_dh_loc_;
-  bool need_p2p_info_;
-  ObP2PDhMapInfo p2p_dh_map_info_;
   // ---------------
   ObPxCoordInfo *coord_info_ptr_;
   bool force_bushy_;
@@ -800,10 +678,10 @@ public:
   int64_t slen_; // serialize length cache
 };
 
-class ObPxRpcInitSqcArgs {
+class ObPxInitSqcArgs {
   OB_UNIS_VERSION(1);
 public:
-  ObPxRpcInitSqcArgs()
+  ObPxInitSqcArgs()
       : sqc_(),
         exec_ctx_(NULL),
         ser_phy_plan_(NULL),
@@ -815,7 +693,7 @@ public:
         scan_spec_ops_(),
         qc_order_gi_tasks_(true)
   {}
-  ~ObPxRpcInitSqcArgs() = default;
+  ~ObPxInitSqcArgs() = default;
 
   void set_serialize_param(ObExecContext &exec_ctx,
                            ObOpSpec &op_spec_root,
@@ -923,10 +801,8 @@ public:
       fb_info_(),
       err_msg_(),
       memstore_read_row_count_(0),
-      ssstore_read_row_count_(0),
-      px_worker_execute_start_schema_version_(0)
+      ssstore_read_row_count_(0)
   {
-    
     allocator_.set_label("PxTaskArena");
   }
   ~ObPxTask() = default;
@@ -943,9 +819,6 @@ public:
     execution_id_ = other.execution_id_;
     sqc_ch_info_ = other.sqc_ch_info_;
     task_ch_info_ = other.task_ch_info_;
-    sqc_addr_ = other.sqc_addr_;
-    exec_addr_ = other.exec_addr_;
-    qc_addr_ = other.qc_addr_;
     rc_ = other.rc_;
     state_ = other.state_;
     task_co_id_ = other.task_co_id_;
@@ -961,7 +834,6 @@ public:
     fb_info_.assign(other.fb_info_);
     memstore_read_row_count_ = other.memstore_read_row_count_;
     ssstore_read_row_count_ = other.ssstore_read_row_count_;
-    px_worker_execute_start_schema_version_ = other.px_worker_execute_start_schema_version_;
     return *this;
   }
 public:
@@ -973,9 +845,6 @@ public:
                K_(execution_id),
                K_(sqc_ch_info),
                K_(task_ch_info),
-               K_(sqc_addr),
-               K_(exec_addr),
-               K_(qc_addr),
                K_(rc),
                K_(das_retry_rc),
                K_(task_co_id),
@@ -989,8 +858,7 @@ public:
                K_(is_use_local_thread),
                K_(fb_info),
                K_(memstore_read_row_count),
-               K_(ssstore_read_row_count),
-               K_(px_worker_execute_start_schema_version));
+               K_(ssstore_read_row_count));
   dtl::ObDtlChannelInfo &get_sqc_channel_info() { return sqc_ch_info_; }
   dtl::ObDtlChannelInfo &get_task_channel_info() { return task_ch_info_; }
   void set_task_channel(dtl::ObDtlChannel *ch) { task_channel_ = ch; }
@@ -1019,12 +887,6 @@ public:
   void set_das_retry_rc(int das_retry_rc)
   { das_retry_rc_ = (das_retry_rc_ == common::OB_SUCCESS ? das_retry_rc : das_retry_rc_); }
   int get_das_retry_rc() const { return das_retry_rc_; }
-  void set_exec_addr(const common::ObAddr &addr) {   exec_addr_ = addr; }
-  void set_sqc_addr(const common::ObAddr &addr) {   sqc_addr_ = addr; }
-  void set_qc_addr(const common::ObAddr &addr) {   qc_addr_ = addr; }
-  const common::ObAddr &get_exec_addr() const {   return exec_addr_; }
-  const common::ObAddr &get_sqc_addr() const {   return sqc_addr_; }
-  const common::ObAddr &get_qc_addr() const {   return qc_addr_; }
   inline void set_task_co_id(const uint64_t &id) { task_co_id_ = id; }
   inline uint64_t get_task_co_id() const { return task_co_id_; }
   void set_fulltree(bool v) { is_fulltree_ = v; }
@@ -1042,8 +904,6 @@ public:
   void set_ssstore_read_row_count(int64_t v) { ssstore_read_row_count_ = v; }
   int64_t get_memstore_read_row_count() const { return memstore_read_row_count_; }
   int64_t get_ssstore_read_row_count() const { return ssstore_read_row_count_; }
-  void set_px_execute_start_schema_version(int64_t schema_version) { px_worker_execute_start_schema_version_ = schema_version; }
-  int64_t get_px_execute_start_schema_version() const { return px_worker_execute_start_schema_version_; }
 public:
   // Less than or equal to 0 indicates that the rc value is set, task default ret value is 1
   static const int64_t TASK_DEFAULT_RET_VALUE = 1;
@@ -1058,9 +918,6 @@ public:
   dtl::ObDtlChannelInfo task_ch_info_;
   dtl::ObDtlChannel *task_channel_;
   dtl::ObDtlChannel *sqc_channel_;
-  common::ObAddr sqc_addr_; /* Record the address of SQC, used for SQC-Task communication */
-  common::ObAddr exec_addr_; /* Task's running address */
-  common::ObAddr qc_addr_;  /*Record QC's address, used for interrupt*/
   int rc_;
   int das_retry_rc_;
   volatile int32_t state_; // set by task thread
@@ -1078,19 +935,14 @@ public:
   ObPxUserErrorMsg err_msg_; // for error msg & warning msg
   int64_t memstore_read_row_count_; // the count of row from mem
   int64_t ssstore_read_row_count_; // the count of row from disk
-  //the schema version that px worker start executing
-  //Note: this parameter only valid in px worker 
-  //we don't need to serialize it from sqc rpc thread to px worker thread
-  //because it is inited used only in px worker
-  int64_t px_worker_execute_start_schema_version_; 
   ObArenaAllocator allocator_;
 };
 
-class ObPxRpcInitTaskArgs
+class ObPxInitTaskArgs
 {
   OB_UNIS_VERSION(1);
 public:
-  ObPxRpcInitTaskArgs()
+  ObPxInitTaskArgs()
         : task_(),
           exec_ctx_(NULL),
           ser_phy_plan_(NULL),
@@ -1110,10 +962,10 @@ public:
   void set_deserialize_param(ObExecContext &exec_ctx,
                              ObPhysicalPlan &des_phy_plan,
                              ObIAllocator *des_allocator);
-  int init_deserialize_param(const ObPxRpcInitTaskArgs &arg,
+  int init_deserialize_param(const ObPxInitTaskArgs &arg,
                            lib::MemoryContext &mem_context,
                            const observer::ObGlobalContext &gctx);
-  int deep_copy_assign(ObPxRpcInitTaskArgs &src,
+  int deep_copy_assign(ObPxInitTaskArgs &src,
                       common::ObIAllocator &alloc);
 
   void destroy() {
@@ -1140,7 +992,7 @@ public:
     return sqc_handler_;
   }
 
-  ObPxRpcInitTaskArgs &operator = (const ObPxRpcInitTaskArgs &other) {
+  ObPxInitTaskArgs &operator = (const ObPxInitTaskArgs &other) {
     if (&other != this) {
       task_ = other.task_;
       exec_ctx_ = other.exec_ctx_;
@@ -1177,11 +1029,11 @@ public:
   ObPxSqcHandler *sqc_handler_; // point to SQC Handler memory
 };
 
-struct ObPxRpcInitTaskResponse
+struct ObPxInitTaskResponse
 {
   OB_UNIS_VERSION(1);
 public:
-  ObPxRpcInitTaskResponse()
+  ObPxInitTaskResponse()
       : task_co_id_(0)
   {}
   TO_STRING_KV(K_(task_co_id));
@@ -1189,11 +1041,11 @@ public:
   uint64_t task_co_id_;
 };
 
-struct ObPxRpcInitSqcResponse
+struct ObPxInitSqcResponse
 {
   OB_UNIS_VERSION(1);
 public:
-  ObPxRpcInitSqcResponse()
+  ObPxInitSqcResponse()
       : rc_(common::OB_NOT_INIT),
         reserved_thread_count_(0),
         partitions_info_(),

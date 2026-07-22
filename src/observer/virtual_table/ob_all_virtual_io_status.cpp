@@ -310,63 +310,31 @@ int ObAllVirtualIOQuota::init(const common::ObAddr &addr)
     LOG_WARN("init failed", K(ret), K(addr));
   } else {
     {
-      ObRefHolder<ObTenantIOManager> tenant_holder;
-      if (OB_FAIL(OB_IO_MANAGER.get_tenant_io_manager(tenant_holder))) {
+      ObRefHolder<ObIOService> service_holder;
+      if (OB_FAIL(OB_IO_MANAGER.get_io_service(service_holder))) {
         if (OB_HASH_NOT_EXIST != ret) {
-          LOG_WARN("get tenant io manager failed", K(ret), K(1UL));
+          LOG_WARN("get io service failed", K(ret));
         } else {
-          ret = OB_TENANT_NOT_EXIST;
-          LOG_WARN("tenant not exist", K(ret), K(1UL));
+          ret = OB_ENTRY_NOT_EXIST;
+          LOG_WARN("io service does not exist", K(ret));
         }
-      } else if (OB_FAIL(record_user_group( tenant_holder.get_ptr()->get_io_usage(), tenant_holder.get_ptr()->get_io_config()))) {
-        LOG_WARN("fail to record user group item", K(ret), K(1UL), K(tenant_holder.get_ptr()->get_io_config()));
-      } else if (OB_FAIL(record_sys_group( tenant_holder.get_ptr()->get_sys_io_usage()))) {
-        LOG_WARN("fail to record sys group item", K(ret), K(1UL));
+      } else if (OB_FAIL(record_user_group( service_holder.get_ptr()->get_io_usage(), service_holder.get_ptr()->get_io_config()))) {
+        LOG_WARN("fail to record user group item", K(ret), K(service_holder.get_ptr()->get_io_config()));
+      } else if (OB_FAIL(record_sys_group( service_holder.get_ptr()->get_sys_io_usage()))) {
+        LOG_WARN("fail to record sys group item", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
-      // TODO fengshuo.fs: remove this after tenant rpc bandwidth supported.
-      int64_t ibw = OB_IO_MANAGER.get_tc().get_net_ibw();
-      int64_t obw = OB_IO_MANAGER.get_tc().get_net_obw();
-      if (ibw > 0) {
-        QuotaInfo read;
-        
-        read.group_id_ = -1;
-        read.group_mode_ = ObIOGroupMode::LOCALREAD;
-        read.real_iops_ = OB_IO_MANAGER.get_tc().get_net_ibw();
-        read.max_iops_ = OB_IO_MANAGER.get_tc().get_device_bandwidth();
-        if (OB_FAIL(quota_infos_.push_back(read))) {
-          LOG_WARN("fail to push ibw info", K(ret));
-        }
-      }
-      if (obw > 0) {
-        QuotaInfo write;
-        
-        write.group_id_ = -1;
-        write.group_mode_ = ObIOGroupMode::LOCALWRITE;
-        write.real_iops_ = OB_IO_MANAGER.get_tc().get_net_obw();
-        write.max_iops_ = OB_IO_MANAGER.get_tc().get_device_bandwidth();
-        if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(quota_infos_.push_back(write))) {
-          LOG_WARN("fail to push obw info", K(ret));
-        }
-      }
-      if (OB_SUCC(ret)) {
-        is_inited_ = true;
-      }
+      is_inited_ = true;
     }
   }
   return ret;
 }
 
-int ObAllVirtualIOQuota::record_user_group(ObIOUsage &io_usage, const ObTenantIOConfig &io_config)
+int ObAllVirtualIOQuota::record_user_group(ObIOUsage &io_usage, const ObIOServiceConfig &io_config)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant id", K(ret));
-  } else {
-    const int64_t MODE_COUNT = static_cast<int64_t>(ObIOMode::MAX_MODE) + 1;
+  {
     const int64_t GROUP_MODE_CNT = static_cast<int64_t>(ObIOGroupMode::MODECNT);
     io_usage.calculate_io_usage();
     const ObIOUsageInfoArray &info = io_usage.get_io_usage();
@@ -396,10 +364,7 @@ int ObAllVirtualIOQuota::record_user_group(ObIOUsage &io_usage, const ObTenantIO
         } else {
           LOG_INFO("get group config", K(ret), K(group_config_index), K(io_config), K(item), K(group_min), K(group_max), K(group_weight));
         }
-        if (OB_FAIL(ret)) {
-          // do nothing
-        } else if (ObIOGroupMode::LOCALREAD == item.group_mode_ ||
-                   ObIOGroupMode::LOCALWRITE == item.group_mode_) {
+        if (OB_SUCC(ret)) {
           const ObIOMode access_mode = (ObIOGroupMode::LOCALREAD == item.group_mode_ ? ObIOMode::READ : ObIOMode::WRITE);
           bool is_io_ability_valid = false; // useless
           ObIOCalibration::get_instance().get_iops_scale(access_mode,
@@ -410,8 +375,6 @@ int ObAllVirtualIOQuota::record_user_group(ObIOUsage &io_usage, const ObTenantIO
             group_min = group_max = INT64_MAX;
             LOG_INFO("invalid io ability", K(ret), K(item), K(access_mode), K(info), K(iops_scale));
           }
-        } else {
-          iops_scale = 1.0 / info.at(i).avg_byte_;
         }
         if (OB_SUCC(ret)) {
           item.min_iops_ = group_min == INT64_MAX ? INT64_MAX : static_cast<int64_t>((double)group_min * iops_scale);
@@ -431,11 +394,7 @@ int ObAllVirtualIOQuota::record_user_group(ObIOUsage &io_usage, const ObTenantIO
 int ObAllVirtualIOQuota::record_sys_group(ObIOUsage &sys_io_usage)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant id", K(ret));
-  } else {
-    const int64_t MODE_COUNT = static_cast<int64_t>(ObIOMode::MAX_MODE) + 1;
+  {
     const int64_t GROUP_MODE_CNT = static_cast<int64_t>(ObIOGroupMode::MODECNT);
     sys_io_usage.calculate_io_usage();
     const ObIOUsageInfoArray &info = sys_io_usage.get_io_usage();
@@ -493,12 +452,7 @@ int ObAllVirtualIOQuota::inner_get_next_row(common::ObNewRow *&row)
           break;
         }
         case MODE: {
-          const char *str = nullptr;
-          if (item.group_id_ == -1) {
-            str = item.group_mode_ == ObIOGroupMode::LOCALREAD ? "RPC READ" : "RPC WRITE";
-          } else {
-            str = get_io_mode_string(item.group_mode_);
-          }
+          const char *str = get_io_mode_string(item.group_mode_);
           cells[i].set_varchar(str);
           cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
@@ -508,39 +462,20 @@ int ObAllVirtualIOQuota::inner_get_next_row(common::ObNewRow *&row)
           break;
         }
         case MIN_IOPS: {
-          if (-1 == item.group_id_) {
-            cells[i].set_int(0);
-          } else if (item.group_mode_ == ObIOGroupMode::REMOTEREAD || item.group_mode_ == ObIOGroupMode::REMOTEWRITE){
-            cells[i].set_int(INT64_MAX);
-          } else {
-            cells[i].set_int(static_cast<int64_t>(item.min_iops_));
-          }
+          cells[i].set_int(static_cast<int64_t>(item.min_iops_));
           break;
         }
-        // TODO fengshuo.fs: remove group_id == -1 after tenant rpc bandwidth supported.
         case MAX_IOPS: {
-          if (-1 == item.group_id_) {
-            cells[i].set_int(0);
-          } else if (item.group_mode_ == ObIOGroupMode::REMOTEREAD || item.group_mode_ == ObIOGroupMode::REMOTEWRITE){
-            cells[i].set_int(INT64_MAX);
-          } else {
-            cells[i].set_int(static_cast<int64_t>(item.max_iops_));
-          }
+          cells[i].set_int(static_cast<int64_t>(item.max_iops_));
           break;
         }
         case REAL_IOPS: {
-          if (-1 == item.group_id_) {
-            cells[i].set_int(0);
-          } else {
-            cells[i].set_int(static_cast<int64_t>(item.real_iops_));
-          }
+          cells[i].set_int(static_cast<int64_t>(item.real_iops_));
           break;
         }
         case MIN_MBPS: {
           if (item.min_iops_ == INT64_MAX) {
             cells[i].set_int(INT64_MAX);
-          } else if (-1 == item.group_id_) {
-            cells[i].set_int(static_cast<int64_t>(item.min_iops_ / 1024L / 1024L));
           } else {
             cells[i].set_int(static_cast<int64_t>(item.min_iops_ * item.size_ / 1024L / 1024L));
           }
@@ -549,19 +484,13 @@ int ObAllVirtualIOQuota::inner_get_next_row(common::ObNewRow *&row)
         case MAX_MBPS: {
           if (item.max_iops_ == INT64_MAX){
             cells[i].set_int(INT64_MAX);
-          } else if (-1 == item.group_id_) {
-            cells[i].set_int(static_cast<int64_t>(item.max_iops_ / 1024L / 1024L));
           } else {
             cells[i].set_int(static_cast<int64_t>(item.max_iops_ * item.size_ / 1024L / 1024L));
           }
           break;
         }
         case REAL_MBPS: {
-          if (-1 == item.group_id_) {
-            cells[i].set_int(static_cast<int64_t>(item.real_iops_ / 1024L / 1024L));
-          } else {
-            cells[i].set_int(static_cast<int64_t>(item.real_iops_ * item.size_ / 1024L / 1024L));
-          }
+          cells[i].set_int(static_cast<int64_t>(item.real_iops_ * item.size_ / 1024L / 1024L));
           break;
         }
         case SCHEDULE_US: {
@@ -614,19 +543,19 @@ int ObAllVirtualGroupIOStat::init(const common::ObAddr &addr)
     LOG_WARN("init failed", K(ret), K(addr));
   } else {
     {
-      ObRefHolder<ObTenantIOManager> tenant_holder;
+      ObRefHolder<ObIOService> service_holder;
       {
-        if (OB_FAIL(OB_IO_MANAGER.get_tenant_io_manager(tenant_holder))) {
+        if (OB_FAIL(OB_IO_MANAGER.get_io_service(service_holder))) {
           if (OB_HASH_NOT_EXIST != ret) {
-            LOG_WARN("get tenant io manager failed", K(ret), K(1UL));
+            LOG_WARN("get io service failed", K(ret));
           } else {
-            ret = OB_TENANT_NOT_EXIST;
-            LOG_WARN("tenant not exist", K(ret), K(1UL));
+            ret = OB_ENTRY_NOT_EXIST;
+            LOG_WARN("io service does not exist", K(ret));
           }
-        } else if (OB_FAIL(record_user_group_io_status(tenant_holder.get_ptr()))) {
-          LOG_WARN("fail to record group io status", K(ret), K(1UL));
-        } else if (OB_FAIL(record_sys_group_io_status(tenant_holder.get_ptr()))) {
-          LOG_WARN("fail to record sys group io status", K(ret), K(1UL));
+        } else if (OB_FAIL(record_user_group_io_status(service_holder.get_ptr()))) {
+          LOG_WARN("fail to record group io status", K(ret));
+        } else if (OB_FAIL(record_sys_group_io_status(service_holder.get_ptr()))) {
+          LOG_WARN("fail to record sys group io status", K(ret));
         }
       }
     }
@@ -638,13 +567,13 @@ int ObAllVirtualGroupIOStat::init(const common::ObAddr &addr)
   return ret;
 }
 
-int ObAllVirtualGroupIOStat::record_user_group_io_status(ObTenantIOManager *io_manager)
+int ObAllVirtualGroupIOStat::record_user_group_io_status(ObIOService *io_manager)
 {
   int ret = OB_SUCCESS;
 
-  if (OB_UNLIKELY(!true) || OB_ISNULL(io_manager)) {
+  if (OB_ISNULL(io_manager)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant id", K(ret));
+    LOG_WARN("io manager is null", K(ret));
   } else {
     ObIOUsage io_usage;
     if (OB_FAIL(io_usage.init(2))) {
@@ -653,104 +582,63 @@ int ObAllVirtualGroupIOStat::record_user_group_io_status(ObTenantIOManager *io_m
       LOG_WARN("assign io usage failed", K(ret));
     } else {
       int tmp_ret = OB_SUCCESS;
-      const ObTenantIOConfig io_config = io_manager->get_io_config();
+      const ObIOServiceConfig io_config = io_manager->get_io_config();
       const ObIOUsageInfoArray &info = io_usage.get_io_usage();
-      const int64_t MODE_COUNT = static_cast<int64_t>(ObIOMode::MAX_MODE) + 1;
       const int64_t GROUP_MODE_CNT = static_cast<int64_t>(ObIOGroupMode::MODECNT);
-      uint64_t local_group_config_index = 0;
-      uint64_t remote_group_config_index = 0;
+      uint64_t group_config_index = 0;
 
       if (info.count() % GROUP_MODE_CNT != 0 ) {
         LOG_WARN("unexpected group count", K(ret), K(info.count()));
       } else {
         for (int64_t left = 0; left < info.count() && OB_SUCC(ret); left += GROUP_MODE_CNT) {
-          int64_t local_read_index = -1, remote_read_index = -1;
-          int64_t local_write_index = -1, remote_write_index = -1;
-
-          local_read_index = left + static_cast<int64_t>(ObIOGroupMode::LOCALREAD);
-          remote_read_index = left + static_cast<int64_t>(ObIOGroupMode::REMOTEREAD);
-          local_write_index = left + static_cast<int64_t>(ObIOGroupMode::LOCALWRITE);
-          remote_write_index = left + static_cast<int64_t>(ObIOGroupMode::REMOTEWRITE);
+          const int64_t local_read_index = left + static_cast<int64_t>(ObIOGroupMode::LOCALREAD);
+          const int64_t local_write_index = left + static_cast<int64_t>(ObIOGroupMode::LOCALWRITE);
 
           int64_t group_min_iops = 0, group_max_iops = 0, group_iops_weight = 0;
-          int64_t group_min_net_bandwidth = 0, group_max_net_bandwidth = 0, group_net_bandwidth_weight = 0;
 
-          if (local_read_index < 0 || remote_read_index < 0 ||
-              local_write_index < 0 || local_write_index < 0) {
-          } else if (OB_TMP_FAIL(oceanbase::common::transform_usage_index_to_group_config_index(local_read_index, local_group_config_index))) {
-          } else if (OB_TMP_FAIL(oceanbase::common::transform_usage_index_to_group_config_index(remote_read_index, remote_group_config_index))) {
-          } else if (io_config.group_configs_.at(local_group_config_index).cleared_ ||
-                     io_config.group_configs_.at(local_group_config_index).deleted_ ||
-                     io_config.group_configs_.at(remote_group_config_index).cleared_ ||
-                     io_config.group_configs_.at(remote_group_config_index).deleted_) {
+          if (OB_TMP_FAIL(oceanbase::common::transform_usage_index_to_group_config_index(
+                  local_read_index, group_config_index))) {
+          } else if (group_config_index >= io_config.group_configs_.count()) {
+            LOG_WARN("unexpected group config index", K(ret), K(group_config_index), K(io_config.group_configs_.count()));
+          } else if (io_config.group_configs_.at(group_config_index).cleared_ ||
+                     io_config.group_configs_.at(group_config_index).deleted_) {
             // do nothing
-          } else if (OB_FAIL(io_config.calc_group_config(local_group_config_index,
+          } else if (OB_FAIL(io_config.calc_group_config(group_config_index,
                                                       group_min_iops,
                                                       group_max_iops,
                                                       group_iops_weight))) {
-            LOG_WARN("get group io config failed", K(ret), K(local_group_config_index));
-          } else if (OB_FAIL(io_config.calc_group_config(remote_group_config_index,
-                                                      group_min_net_bandwidth,
-                                                      group_max_net_bandwidth,
-                                                      group_net_bandwidth_weight))) {
-            LOG_WARN("get group net config failed", K(ret), K(remote_group_config_index));
+            LOG_WARN("get group io config failed", K(ret), K(group_config_index));
           } else {
-            // local read and remote read
             GroupIoStat read_item;
             
             read_item.mode_ = ObIOMode::READ;
-            read_item.group_id_ = io_config.group_configs_.at(local_group_config_index).group_id_;
-            const int64_t read_item_group_name_len = std::strlen(io_config.group_configs_.at(local_group_config_index).group_name_) + 1;
-            memcpy(read_item.group_name_,
-                   io_config.group_configs_.at(local_group_config_index).group_name_,
-                   read_item_group_name_len);
-            read_item.group_name_[read_item_group_name_len] = '\0';
+            read_item.group_id_ = io_config.group_configs_.at(group_config_index).group_id_;
+            snprintf(read_item.group_name_, sizeof(read_item.group_name_), "%s",
+                     io_config.group_configs_.at(group_config_index).group_name_);
 
             read_item.min_iops_ = group_min_iops;
             read_item.max_iops_ = group_max_iops;
-            read_item.max_net_bandwidth_ = group_max_net_bandwidth;
             read_item.real_iops_ = info.at(local_read_index).avg_iops_;
-            read_item.real_net_bandwidth_ = info.at(remote_read_index).avg_iops_ *
-                                            info.at(remote_read_index).avg_byte_;
             read_item.norm_iops_ = oceanbase::common::get_norm_iops(
                 info.at(local_read_index).avg_byte_, info.at(local_read_index).avg_iops_, ObIOMode::READ);
-            if (OB_FAIL(convert_bandwidth_format(read_item.max_net_bandwidth_,
-                                                 read_item.max_net_bandwidth_display_))) {
-              LOG_WARN("convert bandwidth format failed", K(ret), K(read_item));
-            } else if (OB_FAIL(convert_bandwidth_format(read_item.real_net_bandwidth_,
-                                                        read_item.real_net_bandwidth_display_))) {
-              LOG_WARN("convert bandwidth format failed", K(ret), K(read_item));
-            } else if (OB_FAIL(group_io_stats_.push_back(read_item))) {
+            if (OB_FAIL(group_io_stats_.push_back(read_item))) {
               LOG_WARN("push back group io stat failed", K(ret), K(read_item));
             }
-            // local write and remote write
             if (OB_FAIL(ret)) {
             } else {
               GroupIoStat write_item;
               
               write_item.mode_ = ObIOMode::WRITE;
-              write_item.group_id_ = io_config.group_configs_.at(local_group_config_index).group_id_;
-              const int64_t write_item_group_name_len = std::strlen(io_config.group_configs_.at(local_group_config_index).group_name_) + 1;
-              memcpy(write_item.group_name_,
-                     io_config.group_configs_.at(local_group_config_index).group_name_,
-                     write_item_group_name_len);
-              write_item.group_name_[write_item_group_name_len] = '\0';
+              write_item.group_id_ = io_config.group_configs_.at(group_config_index).group_id_;
+              snprintf(write_item.group_name_, sizeof(write_item.group_name_), "%s",
+                       io_config.group_configs_.at(group_config_index).group_name_);
               
               write_item.min_iops_ = group_min_iops;
               write_item.max_iops_ = group_max_iops;
-              write_item.max_net_bandwidth_ = group_max_net_bandwidth;
               write_item.real_iops_ = info.at(local_write_index).avg_iops_;
-              write_item.real_net_bandwidth_ = info.at(remote_write_index).avg_iops_ *
-                                               info.at(remote_write_index).avg_byte_;
               write_item.norm_iops_ = oceanbase::common::get_norm_iops(
                   info.at(local_write_index).avg_byte_, info.at(local_write_index).avg_iops_, ObIOMode::WRITE);
-              if (OB_FAIL(convert_bandwidth_format(write_item.max_net_bandwidth_,
-                                                   write_item.max_net_bandwidth_display_))) {
-                LOG_WARN("convert bandwidth format failed", K(ret), K(write_item));
-              } else if (OB_FAIL(convert_bandwidth_format(write_item.real_net_bandwidth_,
-                                                          write_item.real_net_bandwidth_display_))) {
-                LOG_WARN("convert bandwidth format failed", K(ret), K(write_item));
-              } else if (OB_FAIL(group_io_stats_.push_back(write_item))) {
+              if (OB_FAIL(group_io_stats_.push_back(write_item))) {
                 LOG_WARN("push back group io stat failed", K(ret), K(write_item));
               }
             }
@@ -763,15 +651,14 @@ int ObAllVirtualGroupIOStat::record_user_group_io_status(ObTenantIOManager *io_m
   return ret;
 }
 
-int ObAllVirtualGroupIOStat::record_sys_group_io_status(ObTenantIOManager *io_manager)
+int ObAllVirtualGroupIOStat::record_sys_group_io_status(ObIOService *io_manager)
 {
   int ret = OB_SUCCESS;
 
-  if (OB_UNLIKELY(!true)) {
+  if (OB_ISNULL(io_manager)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant id", K(ret));
+    LOG_WARN("io manager is null", K(ret));
   } else {
-    const int64_t MODE_COUNT = static_cast<int64_t>(ObIOMode::MAX_MODE) + 1;
     const int64_t GROUP_MODE_CNT = static_cast<int64_t>(ObIOGroupMode::MODECNT);
     ObIOUsage sys_io_usage;
     if (OB_FAIL(sys_io_usage.init(2))) {
@@ -781,114 +668,45 @@ int ObAllVirtualGroupIOStat::record_sys_group_io_status(ObTenantIOManager *io_ma
     } else {
       sys_io_usage.calculate_io_usage();
       const ObIOUsageInfoArray &info = sys_io_usage.get_io_usage();
-      int tmp_ret = OB_SUCCESS;
-      uint64_t group_config_index = 0;
 
       if (info.count() % GROUP_MODE_CNT != 0 ) {
         LOG_WARN("unexpected group count", K(ret), K(info.count()));
       } else {
         for (int64_t left = 0; left < info.count() && OB_SUCC(ret); left += GROUP_MODE_CNT) {
-          int64_t local_read_index = -1, remote_read_index = -1;
-          int64_t local_write_index = -1, remote_write_index = -1;
+          const int64_t local_read_index = left + static_cast<int64_t>(ObIOGroupMode::LOCALREAD);
+          const int64_t local_write_index = left + static_cast<int64_t>(ObIOGroupMode::LOCALWRITE);
+          const int64_t sys_group_id = SYS_MODULE_START_ID + left / GROUP_MODE_CNT;
+          const char *group_name = get_io_sys_group_name(static_cast<common::ObIOModule>(sys_group_id));
 
-          local_read_index = left + static_cast<int64_t>(ObIOGroupMode::LOCALREAD);
-          remote_read_index = left + static_cast<int64_t>(ObIOGroupMode::REMOTEREAD);
-          local_write_index = left + static_cast<int64_t>(ObIOGroupMode::LOCALWRITE);
-          remote_write_index = left + static_cast<int64_t>(ObIOGroupMode::REMOTEWRITE);
-    
-          if (local_read_index < 0 || remote_read_index < 0 ||
-               local_write_index < 0 || local_write_index < 0) {
+          GroupIoStat read_item;
+          read_item.mode_ = ObIOMode::READ;
+          read_item.group_id_ = sys_group_id;
+          snprintf(read_item.group_name_, sizeof(read_item.group_name_), "%s", group_name);
+          read_item.min_iops_ = 0;
+          read_item.max_iops_ = INT64_MAX;
+          read_item.real_iops_ = static_cast<int64_t>(info.at(local_read_index).avg_iops_);
+          read_item.norm_iops_ = oceanbase::common::get_norm_iops(
+              info.at(local_read_index).avg_byte_, info.at(local_read_index).avg_iops_, ObIOMode::READ);
+          if (OB_FAIL(group_io_stats_.push_back(read_item))) {
+            LOG_WARN("push back group io stat failed", K(ret), K(read_item));
           } else {
-            // local read and remote read
-            const int64_t sys_group_id =  SYS_MODULE_START_ID + left / GROUP_MODE_CNT;
-            GroupIoStat read_item;
-            
-            read_item.mode_ = ObIOMode::READ;
-            read_item.group_id_ = sys_group_id;
-            const char *tmp_name = get_io_sys_group_name(static_cast<common::ObIOModule>(sys_group_id));
-            const int64_t read_item_group_name_len = std::strlen(tmp_name) + 1;
-            memcpy(read_item.group_name_, tmp_name, read_item_group_name_len);
-            read_item.group_name_[read_item_group_name_len] = '\0';
-            read_item.min_iops_ = 0;
-            read_item.max_iops_ = INT64_MAX;
-            read_item.max_net_bandwidth_ = INT64_MAX;
-            // sys group real net bandwidth = iops * bytes
-            read_item.real_iops_ = static_cast<int64_t>(info.at(local_read_index).avg_iops_);
-            read_item.real_net_bandwidth_ = static_cast<int64_t>(info.at(remote_read_index).avg_iops_) *
-                                            static_cast<int64_t>(info.at(remote_read_index).avg_byte_);
-            read_item.norm_iops_ = oceanbase::common::get_norm_iops(
-                info.at(local_read_index).avg_byte_, info.at(local_read_index).avg_iops_, ObIOMode::READ);
-            if (OB_FAIL(convert_bandwidth_format(read_item.max_net_bandwidth_,
-                                                 read_item.max_net_bandwidth_display_))) {
-                LOG_WARN("convert bandwidth format failed", K(ret), K(read_item));
-            } else if (OB_FAIL(convert_bandwidth_format(read_item.real_net_bandwidth_,
-                                                        read_item.real_net_bandwidth_display_))) {
-              LOG_WARN("convert bandwidth format failed", K(ret), K(read_item));
-            } else if (OB_FAIL(group_io_stats_.push_back(read_item))) {
-              LOG_WARN("push back group io stat failed", K(ret), K(read_item));
-            }
-            // local write and remote write
-            if (OB_FAIL(ret)) {
-            } else {
-              GroupIoStat write_item;
-              
-              write_item.mode_ = ObIOMode::WRITE;
-              write_item.group_id_ = sys_group_id;
-              const char *tmp_name = get_io_sys_group_name(static_cast<common::ObIOModule>(sys_group_id));
-              const int64_t write_item_group_name_len = std::strlen(tmp_name) + 1;
-              memcpy(write_item.group_name_, tmp_name, std::strlen(tmp_name));
-              write_item.group_name_[write_item_group_name_len] = '\0';
-              write_item.min_iops_ = 0;
-              write_item.max_iops_ = INT64_MAX;
-              write_item.max_net_bandwidth_ = INT64_MAX;
-              // sys group real net bandwidth = iops * bytes
-              write_item.real_iops_ = static_cast<int64_t>(info.at(local_write_index).avg_iops_);
-              write_item.real_net_bandwidth_ = static_cast<int64_t>(info.at(remote_write_index).avg_iops_) *
-                                               static_cast<int64_t>(info.at(remote_write_index).avg_byte_);
-              write_item.norm_iops_ = oceanbase::common::get_norm_iops(
-                  info.at(local_write_index).avg_byte_, info.at(local_write_index).avg_iops_, ObIOMode::WRITE);
-              if (OB_FAIL(convert_bandwidth_format(write_item.max_net_bandwidth_,
-                                                   write_item.max_net_bandwidth_display_))) {
-                  LOG_WARN("convert bandwidth format failed", K(ret), K(write_item));
-              } else if (OB_FAIL(convert_bandwidth_format(write_item.real_net_bandwidth_,
-                                                          write_item.real_net_bandwidth_display_))) {
-                LOG_WARN("convert bandwidth format failed", K(ret), K(write_item));
-              } else if (OB_FAIL(group_io_stats_.push_back(write_item))) {
-                LOG_WARN("push back group io stat failed", K(ret), K(write_item));
-              } 
+            GroupIoStat write_item;
+            write_item.mode_ = ObIOMode::WRITE;
+            write_item.group_id_ = sys_group_id;
+            snprintf(write_item.group_name_, sizeof(write_item.group_name_), "%s", group_name);
+            write_item.min_iops_ = 0;
+            write_item.max_iops_ = INT64_MAX;
+            write_item.real_iops_ = static_cast<int64_t>(info.at(local_write_index).avg_iops_);
+            write_item.norm_iops_ = oceanbase::common::get_norm_iops(
+                info.at(local_write_index).avg_byte_, info.at(local_write_index).avg_iops_, ObIOMode::WRITE);
+            if (OB_FAIL(group_io_stats_.push_back(write_item))) {
+              LOG_WARN("push back group io stat failed", K(ret), K(write_item));
             }
           }
         }
       }
     }
   }
-  return ret;
-}
-
-int ObAllVirtualGroupIOStat::convert_bandwidth_format(const int64_t bandwidth, char *buf)
-{
-  int ret = OB_SUCCESS;
-
-  if (bandwidth < 0 || OB_ISNULL(buf)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(bandwidth), KP(buf));
-  } else if (bandwidth == INT64_MAX) {
-    sprintf(buf, "unlimited");
-  } else {
-    if (bandwidth < KBYTES) {
-      sprintf(buf, "%ldB/s", bandwidth);
-    } else if (bandwidth < MBYTES) {
-      double kb = static_cast<double>(bandwidth) / KBYTES;
-      sprintf(buf, "%.3fKB/s", kb);
-    } else if (bandwidth < GBYTES) {
-      double mb = static_cast<double>(bandwidth) / MBYTES;
-      sprintf(buf, "%.3fMB/s", mb);
-    } else {
-      double gb = static_cast<double>(bandwidth) / GBYTES;
-      sprintf(buf, "%.3fGB/s", gb);
-    }
-  }
-
   return ret;
 }
 
@@ -937,24 +755,6 @@ int ObAllVirtualGroupIOStat::inner_get_next_row(common::ObNewRow *&row)
         }
         case REAL_IOPS: {
           cells[i].set_int(item.real_iops_);
-          break;
-        }
-        case MAX_NET_BANDWIDTH: {
-          cells[i].set_int(item.max_net_bandwidth_);
-          break;
-        }
-        case MAX_NET_BANDWIDTH_DISPLAY: {
-          cells[i].set_varchar(item.max_net_bandwidth_display_);
-          cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        }
-        case REAL_NET_BANDWIDTH: {
-          cells[i].set_int(item.real_net_bandwidth_);
-          break;
-        }
-        case REAL_NET_BANDWIDTH_DISPLAY: {
-          cells[i].set_varchar(item.real_net_bandwidth_display_);
-          cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
       }

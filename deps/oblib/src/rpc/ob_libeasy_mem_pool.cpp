@@ -26,7 +26,6 @@ void *common::ob_easy_realloc(void *ptr, size_t size)
   void *ret = NULL;
   if (size != 0) {
     ObMemAttr attr;
-    // obcall RPC transport removed: the pcode->label table is gone. Use a fixed label.
     attr.label_ = "rpc";
     attr.ctx_id_ = ObCtxIds::DEFAULT_CTX_ID;
     

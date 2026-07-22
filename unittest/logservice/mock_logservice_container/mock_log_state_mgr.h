@@ -30,36 +30,34 @@ class MockLogStateMgr : public LogStateMgr
 {
 public:
   MockLogStateMgr()
-    : is_changing_config_with_arb_(false)
-  {
-    state_ = ACTIVE;
-  }
-  ~MockLogStateMgr() {}
+    : can_append_(true), can_slide_sw_(true), state_(ACTIVE)
+  {}
+  ~MockLogStateMgr() override = default;
 
   void destroy() override {}
+
+  int init(const common::ObAddr &self,
+           LogSlidingWindow *sw,
+           LogModeMgr *mode_mgr) override
+  {
+    UNUSEDx(self, sw, mode_mgr);
+    return OB_SUCCESS;
+  }
+
   bool is_state_changed() override { return false; }
   int switch_state() override { return OB_SUCCESS; }
   int set_scan_disk_log_finished() override { return OB_SUCCESS; }
-  bool can_append() const override { return true; }
-  bool can_slide_sw() const override { return true; }
-  LogState get_state() const override { return static_cast<LogState>(state_); }
-  bool need_freeze_group_buffer() const override { return false; }
+  bool can_append() const override { return can_append_; }
+  bool can_slide_sw() const override { return can_slide_sw_; }
+  LogState get_state() const override { return state_; }
+  bool need_freeze_group_buffer() const override { return ACTIVE == state_; }
   bool is_active() const override { return ACTIVE == state_; }
   bool is_recovering() const override { return RECOVERING == state_; }
-  int set_changing_config_with_arb()
-  {
-    is_changing_config_with_arb_ = true;
-    return OB_SUCCESS;
-  }
-  int reset_changing_config_with_arb()
-  {
-    is_changing_config_with_arb_ = false;
-    return OB_SUCCESS;
-  }
-  bool is_changing_config_with_arb() const { return is_changing_config_with_arb_; }
 
 public:
-  bool is_changing_config_with_arb_;
+  bool can_append_;
+  bool can_slide_sw_;
+  LogState state_;
 };
 
 } // namespace palf

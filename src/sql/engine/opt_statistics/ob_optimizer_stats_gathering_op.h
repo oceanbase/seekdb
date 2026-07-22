@@ -110,9 +110,9 @@ private:
   // generate stat_param that is used to write inner_table.
   int generate_stat_param(ObTableStatParam &param);
 
-  // get tab stat by key(tenant, table_id, partition_id), if NOT_EXISTS, alloc a new one.
+  // Get table statistics by table and partition; allocate when absent.
   int get_tab_stat_by_key(ObOptTableStat::Key &key, ObOptTableStat *&tab_stat);
-  // get tab stat by key(tenant, table_id, partition_id, column_id), if NOT_EXISTS, alloc a new one.
+  // Get column statistics by table, partition, and column; allocate when absent.
   int get_col_stat_by_key(ObOptColumnStat::Key &key, ObOptOSGColumnStat *&osg_col_stat);
 
   int merge_tab_stat(ObOptTableStat *src_tab_stat);

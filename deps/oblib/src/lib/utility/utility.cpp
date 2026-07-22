@@ -503,7 +503,7 @@ int replace_str(char *src_str, const int64_t src_str_buf_size,
   int64_t match_str_len   = 0;
   int64_t replace_str_len = 0;
   const char *find_pos    = NULL;
-  char new_str[OB_MAX_EXPIRE_INFO_STRING_LENGTH];
+  char new_str[OB_MAX_REPLACE_STR_LENGTH];
 
   if (NULL == src_str || src_str_buf_size <= 0
       || NULL == match_str || NULL == replace_str) {
@@ -517,15 +517,15 @@ int replace_str(char *src_str, const int64_t src_str_buf_size,
     while (OB_SUCC(ret) && NULL != find_pos) {
       str_len = find_pos - src_str + replace_str_len
           + strlen(find_pos + match_str_len);
-      if (str_len >= OB_MAX_EXPIRE_INFO_STRING_LENGTH
+      if (str_len >= OB_MAX_REPLACE_STR_LENGTH
           || str_len >= src_str_buf_size) {
         _OB_LOG(WARN, "str after replace is too large, new_size=%ld, "
                 "new_buf_size=%ld, src_str_buf_size=%ld",
-                str_len, OB_MAX_EXPIRE_INFO_STRING_LENGTH, src_str_buf_size);
+                str_len, OB_MAX_REPLACE_STR_LENGTH, src_str_buf_size);
         ret = OB_ERROR;
         break;
       } else {
-        memset(new_str, 0, OB_MAX_EXPIRE_INFO_STRING_LENGTH);
+        memset(new_str, 0, OB_MAX_REPLACE_STR_LENGTH);
         strncpy(new_str, src_str, find_pos - src_str);
         strcat(new_str, replace_str);
         strcat(new_str, find_pos + match_str_len);
@@ -2005,7 +2005,7 @@ int extract_cert_expired_time(const char* cert, const int64_t cert_len, int64_t 
   BIO *cbio = NULL;
   if (OB_ISNULL(cert)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("public cert from kms is null!", K(ret));
+    LOG_WARN("certificate is null", K(ret));
   } else if (OB_ISNULL(cbio = BIO_new_mem_buf((void*)cert, cert_len))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("BIO_new_mem_buf failed", K(ret));

@@ -132,29 +132,6 @@ if (OB_USE_CLANG)
       -Wno-vla ${VLA_WARN_FLAG})
   endif()
   target_compile_options(oblib_base_without_pass INTERFACE ${OBLIB_COMPILE_DEFINITIONS})
-  if (ENABLE_SANITY)
-    target_compile_options(oblib_pass
-      INTERFACE
-      "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-fpass-plugin=${DEVTOOLS_DIR}/lib64/libsanitypass.so>"
-      -fno-builtin-memset
-      -fno-builtin-bzero
-      -fno-builtin-memcpy
-      -fno-builtin-memmove
-      -fno-builtin-memcmp
-      -fno-builtin-strlen
-      -fno-builtin-strnlen
-      -fno-builtin-strcpy
-      -fno-builtin-strncpy
-      -fno-builtin-strcmp
-      -fno-builtin-strncmp
-      -fno-builtin-strcasecmp
-      -fno-builtin-strncasecmp
-      -fno-builtin-vsprintf
-      -fno-builtin-vsnprintf
-      -fno-builtin-sprintf
-      -fno-builtin-snprintf
-    )
-  endif()
 else()
   target_compile_options(oblib_base_without_pass
     INTERFACE

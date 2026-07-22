@@ -65,7 +65,7 @@ int ObLobLocatorHelper::init(const ObTableScanParam &scan_param,
     if (OB_UNLIKELY(!table_param.enable_lob_locator_v2())) {
       // LOB locator v2 is required in MySQL-only mode.
       ret = OB_ERR_UNEXPECTED;
-      STORAGE_LOG(WARN, "Unexpected tenant mode to init ObLobLocatorHelper", K(ret), K(table_param));
+      STORAGE_LOG(WARN, "unexpected compatibility mode for ObLobLocatorHelper", K(ret), K(table_param));
     } else {
       table_id_ = table_param.get_table_id();
       tablet_id_ = scan_param.tablet_id_.id();

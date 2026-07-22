@@ -133,8 +133,8 @@ int ObSchemaCacheValue::deep_copy(char *buf,
   } else {
     ObSchemaCacheValue *pvalue = NULL;
     switch (schema_type_) {
-    case TENANT_SCHEMA: {
-      DEEP_COPY_SCHEMA(ObTenantSchema);
+    case SERVER_RUNTIME_SCHEMA: {
+      DEEP_COPY_SCHEMA(ObServerRuntimeSchema);
       break;
     }
     case USER_SCHEMA: {
@@ -143,10 +143,6 @@ int ObSchemaCacheValue::deep_copy(char *buf,
     }
     case DATABASE_SCHEMA: {
       DEEP_COPY_SCHEMA(ObDatabaseSchema);
-      break;
-    }
-    case TABLEGROUP_SCHEMA: {
-      DEEP_COPY_SCHEMA(ObTablegroupSchema);
       break;
     }
     case TABLE_SCHEMA: {
@@ -173,24 +169,12 @@ int ObSchemaCacheValue::deep_copy(char *buf,
       DEEP_COPY_SCHEMA(ObTriggerInfo);
       break;
     }
-    case UDF_SCHEMA: {
-      DEEP_COPY_SCHEMA(ObUDF);
-      break;
-    }
-    case SEQUENCE_SCHEMA: {
-      DEEP_COPY_SCHEMA(ObSequenceSchema);
-      break;
-    }
     case SYS_VARIABLE_SCHEMA: {
       DEEP_COPY_SCHEMA(ObSysVariableSchema);
       break;
     }
     case MOCK_FK_PARENT_TABLE_SCHEMA: {
       DEEP_COPY_SCHEMA(ObMockFKParentTableSchema);
-      break;
-    }
-    case CCL_RULE_SCHEMA: {
-      DEEP_COPY_SCHEMA(ObCCLRuleSchema);
       break;
     }
     default: {
@@ -268,7 +252,7 @@ int ObTabletCacheKey::init(
 bool ObTabletCacheKey::is_valid() const
 {
   return true
-          && tablet_id_.is_valid_with_tenant()
+          && tablet_id_.is_valid()
           && schema_version_ > 0;
 }
 
@@ -611,13 +595,13 @@ int ObSchemaCache::get_schema_history_cache(
       if (OB_ENTRY_NOT_EXIST != ret) {
         LOG_WARN("fail to get schema history value", KR(ret), K(cache_key));
       }
-      EVENT_INC(ObStatEventIds::SCHEMA_HISTORY_CACHE_MISS);
+      EVENT_INC(SCHEMA_HISTORY_CACHE_MISS);
     } else if (OB_ISNULL(cache_value)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("cache_value is null", KR(ret), KP(cache_value));
     } else {
       precise_schema_version = cache_value->schema_version_;
-      EVENT_INC(ObStatEventIds::SCHEMA_HISTORY_CACHE_HIT);
+      EVENT_INC(SCHEMA_HISTORY_CACHE_HIT);
       LOG_TRACE("get schema history cache succeed", KR(ret), K(cache_key));
     }
   }
@@ -729,14 +713,14 @@ int ObSchemaFetcher::fetch_schema(ObSchemaType schema_type,
       }
       schema = NULL;
       switch (schema_type) {
-      case TENANT_SCHEMA: {
-          ObTenantSchema *tenant_schema = NULL;
-          if (OB_FAIL(fetch_tenant_schema(schema_version,
+      case SERVER_RUNTIME_SCHEMA: {
+          ObServerRuntimeSchema *runtime_schema = NULL;
+          if (OB_FAIL(fetch_runtime_schema(schema_version,
                                           allocator,
-                                          tenant_schema))) {
-            LOG_WARN("fetch tenant schema failed", K(ret), K(schema_status), K(schema_id), K(schema_version));
+                                          runtime_schema))) {
+            LOG_WARN("fetch runtime schema failed", K(ret), K(schema_status), K(schema_id), K(schema_version));
           } else {
-            schema = tenant_schema;
+            schema = runtime_schema;
           }
           break;
         }
@@ -775,19 +759,6 @@ int ObSchemaFetcher::fetch_schema(ObSchemaType schema_type,
             LOG_WARN("fetch database schema failed", K(ret), K(schema_status), K(schema_id), K(schema_version));
           } else {
             schema = db_schema;
-          }
-          break;
-        }
-      case TABLEGROUP_SCHEMA: {
-          ObTablegroupSchema *tg_schema = NULL;
-          if (OB_FAIL(fetch_tablegroup_schema(schema_status,
-                                              schema_id,
-                                              schema_version,
-                                              allocator,
-                                              tg_schema))) {
-            LOG_WARN("fetch tablegroup schema failed", K(ret), K(schema_status), K(schema_id), K(schema_version));
-          } else {
-            schema = tg_schema;
           }
           break;
         }
@@ -857,24 +828,6 @@ int ObSchemaFetcher::fetch_schema(ObSchemaType schema_type,
           }
           break;
         }
-      case UDF_SCHEMA: {
-          ObUDF *udf_info = NULL;
-          if (OB_FAIL(fetch_udf_info(schema_status, schema_id, schema_version, allocator, udf_info))) {
-            LOG_WARN("fetch udf info failed", K(ret), K(schema_status), K(schema_id), K(schema_version));
-          } else {
-            schema = udf_info;
-          }
-          break;
-        }
-      case SEQUENCE_SCHEMA: {
-          ObSequenceSchema *seq_schema = NULL;
-          if (OB_FAIL(fetch_sequence_info(schema_status, schema_id, schema_version, allocator, seq_schema))) {
-            LOG_WARN("fetch sequence schema failed", K(ret));
-          } else {
-            schema = seq_schema;
-          }
-          break;
-        }
       case MOCK_FK_PARENT_TABLE_SCHEMA: {
         ObMockFKParentTableSchema *mock_fk_parent_table_schema = NULL;
           if (OB_FAIL(fetch_mock_fk_parent_table_info(schema_status, schema_id, schema_version, allocator, mock_fk_parent_table_schema))) {
@@ -884,18 +837,6 @@ int ObSchemaFetcher::fetch_schema(ObSchemaType schema_type,
           }
           break;
         }
-      case CCL_RULE_SCHEMA: {
-        ObCCLRuleSchema *ccl_rule_schema = NULL;
-        if (OB_FAIL(fetch_ccl_rule_info(
-                schema_status, schema_id, schema_version, allocator,
-                ccl_rule_schema))) {
-          LOG_WARN("fetch ccl_rule_schema failed", K(ret),
-                    K(schema_status), K(schema_id), K(schema_version));
-        } else {
-          schema = ccl_rule_schema;
-        }
-        break;
-      }
       default: {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unknown schema type, should not reach here", K(ret), K(schema_type));
@@ -911,12 +852,12 @@ int ObSchemaFetcher::fetch_schema(ObSchemaType schema_type,
   return ret;
 }
 
-int ObSchemaFetcher::fetch_tenant_schema(int64_t schema_version,
+int ObSchemaFetcher::fetch_runtime_schema(int64_t schema_version,
                                          common::ObIAllocator &allocator,
-                                         ObTenantSchema *&tenant_schema)
+                                         ObServerRuntimeSchema *&runtime_schema)
 {
   int ret = OB_SUCCESS;
-  tenant_schema = NULL;
+  runtime_schema = NULL;
 
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
@@ -925,27 +866,27 @@ int ObSchemaFetcher::fetch_tenant_schema(int64_t schema_version,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(schema_version));
   } else {
-    ObTenantSchema *tmp_tenant_schema = NULL;
-    ObArray<ObTenantSchema> tenant_schema_array;
-    if (OB_FAIL(schema_service_->get_batch_tenants(*sql_client_,
+    ObServerRuntimeSchema *tmp_runtime_schema = NULL;
+    ObArray<ObServerRuntimeSchema> runtime_schema_array;
+    if (OB_FAIL(schema_service_->get_runtime_schemas(*sql_client_,
                                                    schema_version,
-                                                   tenant_schema_array))) {
-      LOG_WARN("get tenant schema failed", K(ret));
-    } else if (1 != tenant_schema_array.count()) {
+                                                   runtime_schema_array))) {
+      LOG_WARN("get runtime schema failed", K(ret));
+    } else if (1 != runtime_schema_array.count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected schema count", K(tenant_schema_array.count()),
+      LOG_WARN("unexpected schema count", K(runtime_schema_array.count()),
                K(schema_version), K(ret));
     } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator,
-                                                   tenant_schema_array.at(0),
-                                                   tmp_tenant_schema))) {
-      LOG_WARN("alloc tenant schema failed", K(ret));
-    } else if (OB_ISNULL(tmp_tenant_schema)) {
+                                                   runtime_schema_array.at(0),
+                                                   tmp_runtime_schema))) {
+      LOG_WARN("alloc runtime schema failed", K(ret));
+    } else if (OB_ISNULL(tmp_runtime_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL ptr", K(tmp_tenant_schema), K(schema_version), K(ret));
+      LOG_WARN("NULL ptr", K(tmp_runtime_schema), K(schema_version), K(ret));
     } else {
-      tenant_schema = tmp_tenant_schema;
-      LOG_TRACE("fetch tenant schema succeed", K(schema_version),
-                "tenant_name", tenant_schema->get_tenant_name_str());
+      runtime_schema = tmp_runtime_schema;
+      LOG_TRACE("fetch runtime schema succeeded", K(schema_version),
+                "runtime_name", runtime_schema->get_runtime_name_str());
     }
   }
 
@@ -975,7 +916,7 @@ int ObSchemaFetcher::fetch_sys_variable_schema(
                      schema_status,
                      schema_version,
                      tmp_schema))) {
-    LOG_WARN("get tenant schema failed", K(ret), K(schema_version), K(schema_status));
+    LOG_WARN("get runtime schema failed", K(ret), K(schema_version), K(schema_status));
   } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator,
                                                  tmp_schema,
                                                  sys_variable_schema))) {
@@ -1035,38 +976,6 @@ int ObSchemaFetcher::fetch_database_schema(const ObRefreshSchemaStatus &schema_s
     }
   }
 
-  return ret;
-}
-
-int ObSchemaFetcher::fetch_tablegroup_schema(const ObRefreshSchemaStatus &schema_status,
-                                             uint64_t tablegroup_id,
-                                             int64_t schema_version,
-                                             common::ObIAllocator &allocator,
-                                             ObTablegroupSchema *&tablegroup_schema)
-{
-  int ret = OB_SUCCESS;
-  tablegroup_schema = NULL;
-
-  if (!check_inner_stat()) {
-    ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
-  } else if (OB_INVALID_ID == tablegroup_id || schema_version < 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablegroup_id), K(schema_version));
-  } else if (OB_FAIL(schema_service_->get_tablegroup_schema(schema_status,
-                                                            tablegroup_id,
-                                                            schema_version,
-                                                            *sql_client_,
-                                                            allocator,
-                                                            tablegroup_schema))) {
-    LOG_WARN("get tablegroup schema failed", K(ret));
-  } else if (OB_ISNULL(tablegroup_schema)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL ptr", K(tablegroup_schema), K(tablegroup_id), K(schema_version), K(ret));
-  } else {
-    LOG_TRACE("fetch tablegroup schema succeed", K(tablegroup_id), K(schema_version),
-              "tablegroup_name", tablegroup_schema->get_tablegroup_name());
-  }
   return ret;
 }
 
@@ -1174,18 +1083,18 @@ int ObSchemaFetcher::fetch_##OBJECT_NAME##_info(const ObRefreshSchemaStatus &sch
     LOG_WARN("invalid argument", K(ret), K(object_id), K(schema_version)); \
   } else { \
     OBJECT_SCHEMA_TYPE *tmp_object_schema = NULL; \
-    ObArray<uint64_t> tenant_object_ids; \
+    ObArray<uint64_t> object_ids; \
     ObArray<OBJECT_SCHEMA_TYPE> object_schema_array; \
-    if (OB_FAIL(tenant_object_ids.push_back(object_id))) { \
+    if (OB_FAIL(object_ids.push_back(object_id))) { \
       LOG_WARN("fail to push back object_id for " #OBJECT_NAME, \
                K(object_id), K(ret)); \
     } else if (OB_FAIL(SMART_CALL_LARGE(schema_service_->get_batch_##OBJECT_NAME##s(schema_status, \
                                                                                     schema_version, \
-                                                                                    tenant_object_ids, \
+                                                                                    object_ids, \
                                                                                     *sql_client_, \
                                                                                     object_schema_array)))) { \
       LOG_WARN("fail to get batch " #OBJECT_NAME, \
-               K(tenant_object_ids), K(schema_version), K(ret)); \
+               K(object_ids), K(schema_version), K(ret)); \
     } else if (OB_UNLIKELY(1 != object_schema_array.count())) { \
       ret = OB_ERR_UNEXPECTED; \
       LOG_WARN("unexpected schema count", K(object_schema_array), \
@@ -1211,10 +1120,7 @@ int ObSchemaFetcher::fetch_##OBJECT_NAME##_info(const ObRefreshSchemaStatus &sch
   DEF_SCHEMA_INFO_FETCHER(package, ObPackageInfo);
   DEF_SCHEMA_INFO_FETCHER(routine, ObRoutineInfo);
   DEF_SCHEMA_INFO_FETCHER(trigger, ObTriggerInfo);
-  DEF_SCHEMA_INFO_FETCHER(udf, ObUDF);
-  DEF_SCHEMA_INFO_FETCHER(sequence, ObSequenceSchema);
   DEF_SCHEMA_INFO_FETCHER(mock_fk_parent_table, ObMockFKParentTableSchema);
-  DEF_SCHEMA_INFO_FETCHER(ccl_rule, ObCCLRuleSchema);
 #undef DEF_SCHEMA_INFO_FETCHER
 #endif
 }      //end of namespace schema

@@ -128,7 +128,7 @@ int ObPsPCVSetAtomicOp::get_value(ObPCVSet *&pcvs)
     pcvs = pcv_set_;
   } else {
     if (NULL != pcv_set_) {
-      pcv_set_->dec_ref_count(ref_handle_);
+      pcv_set_->dec_ref_count();
     }
     SQL_PC_LOG(ERROR, "failed to get read lock of plan cache value", K(ret));
   }

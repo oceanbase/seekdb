@@ -69,7 +69,7 @@ class ObSchemaMemMgr
 public:
   ObSchemaMemMgr();
   virtual ~ObSchemaMemMgr();
-  // TODO: Subsequent need to do 500 tenant memory split, schema_mgr memory usage needs to be split to tenants
+  // Schema-manager memory belongs to the single server runtime.
   //       
   int init(const char *label);
   int check_can_switch_allocator(const int64_t &switch_cnt, bool &can_switch) const;
@@ -83,7 +83,7 @@ public:
   int get_another_ptrs(common::ObArray<void *> &ptrs);
   int get_current_ptrs(common::ObArray<void *> &ptrs);
   int get_all_ptrs(common::ObArray<void *> &ptrs);
-  int get_all_alloc_info(common::ObIArray<ObSchemaMemory> &tenant_mem_infos);
+  int get_all_alloc_info(common::ObIArray<ObSchemaMemory> &schema_mem_infos);
   int alloc_schema_mgr(ObSchemaMgr *&schema_mgr);
   int free_schema_mgr(ObSchemaMgr *&schema_mgr);
 private:

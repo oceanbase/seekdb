@@ -73,8 +73,6 @@ public:
   inline const common::ObString &get_sql_id_str() const { return sql_id_; }
   inline const char *get_format_sql_id() const { return extract_str(format_sql_id_); }
   inline const common::ObString &get_format_sql_id_str() const { return format_sql_id_; }
-  inline ObTenantOutlineId get_tenant_outline_id() const
-  { return ObTenantOutlineId(outline_id_); }
   void set_format_outline(bool is_format) { format_outline_ = is_format;}
   inline bool is_format() const { return format_outline_; }
 
@@ -186,7 +184,7 @@ public:
 
   int add_outlines(const common::ObIArray<ObSimpleOutlineSchema> &outline_schemas);
   int add_outline(const ObSimpleOutlineSchema &outline_schema);
-  int del_outline(const ObTenantOutlineId &outline);
+  int del_outline(const ObOutlineId &outline);
   int get_outline_schema(const uint64_t outline_id,
                          const ObSimpleOutlineSchema *&outline_schema) const;
   int get_outline_schema_with_name(const uint64_t database_id,
@@ -201,7 +199,7 @@ public:
                                      const common::ObString &sql_id,
                                      const bool is_format,
                                      const ObSimpleOutlineSchema *&outline_schema) const;
-  int get_outline_schemas_in_tenant(common::ObIArray<const ObSimpleOutlineSchema *> &outline_schemas) const;
+  int get_outline_schemas_in_runtime(common::ObIArray<const ObSimpleOutlineSchema *> &outline_schemas) const;
   int get_outline_schemas_in_database(const uint64_t database_id,
       common::ObIArray<const ObSimpleOutlineSchema *> &outline_schemas) const;
   int get_outline_schema_count(int64_t &outline_schema_count) const;
@@ -212,10 +210,10 @@ private:
                                      const ObSimpleOutlineSchema *rhs);
   inline static bool equal_outline(const ObSimpleOutlineSchema *lhs,
                                    const ObSimpleOutlineSchema *rhs);
-  inline static bool compare_with_tenant_outline_id(const ObSimpleOutlineSchema *lhs,
-                                                    const ObTenantOutlineId &tenant_outline_id);
-  inline static bool equal_with_tenant_outline_id(const ObSimpleOutlineSchema *lhs,
-                                                  const ObTenantOutlineId &tenant_outline_id);
+  inline static bool compare_with_outline_id(const ObSimpleOutlineSchema *lhs,
+                                                    const ObOutlineId &outline_id);
+  inline static bool equal_with_outline_id(const ObSimpleOutlineSchema *lhs,
+                                                  const ObOutlineId &outline_id);
   int rebuild_outline_hashmap();
 private:
   common::ObArenaAllocator local_allocator_;

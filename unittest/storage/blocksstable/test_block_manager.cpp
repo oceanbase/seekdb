@@ -29,8 +29,10 @@
 #define private public
 
 #include "storage/blocksstable/ob_data_file_prepare.h"
+#include "lib/utility/ob_defer.h"
+#include "observer/omt/ob_server_module_lifecycle.h"
 #include "observer/ob_server_utils.h"
-#include "mtlenv/mock_tenant_module_env.h"
+#include "mtlenv/mock_server_runtime_env.h"
 
 namespace oceanbase
 {
@@ -42,13 +44,12 @@ static ObSimpleMemLimitGetter getter;
 
 namespace unittest
 {
-// Single-tenant seekdb: ObTenantBase module slots are gone; route the test's
-// ObTenantTmpFileManager through share::g_mp (ObIModuleProvider).
+// Route the test's ObTmpFileManager through share::g_mp.
 class FakeModuleProvider : public share::ObIModuleProvider
 {
 public:
-  tmp_file::ObTenantTmpFileManager *tenant_tmp_file_manager() override { return tmp_file_mgr_; }
-  tmp_file::ObTenantTmpFileManager *tmp_file_mgr_ = nullptr;
+  tmp_file::ObTmpFileManager *tmp_file_manager() override { return tmp_file_mgr_; }
+  tmp_file::ObTmpFileManager *tmp_file_mgr_ = nullptr;
 };
 
 class TestBlockManager : public blocksstable::TestDataFilePrepare
@@ -69,11 +70,7 @@ public:
   }
 
 private:
-  int init_multi_tenant();
-
-private:
   common::ObAddr addr_;
-  omt::ObMultiTenant multi_tenant_;
 };
 
 TestBlockManager::TestBlockManager()
@@ -81,22 +78,8 @@ TestBlockManager::TestBlockManager()
 {
 }
 
-int TestBlockManager::init_multi_tenant()
-{
-  int ret = OB_SUCCESS;
-  GCONF.cpu_count = 6;
-  if (OB_SUCCESS != (ret = multi_tenant_.init(addr_))) {
-    STORAGE_LOG(WARN, "init multi_tenant failed", K(ret));
-  } else {
-    multi_tenant_.start();
-    GCTX.omt_ = &multi_tenant_;
-  }
-  return ret;
-}
-
 void TestBlockManager::SetUp()
 {
-  ASSERT_EQ(OB_SUCCESS, init_multi_tenant());
   TestDataFilePrepare::SetUp();
   OB_SERVER_BLOCK_MGR.block_map_.reset();
   SERVER_STORAGE_META_SERVICE.is_started_ = true;
@@ -151,6 +134,30 @@ TEST_F(TestBlockManager, test_mark_and_sweep)
   const int64_t max_cache_size = 1024 * 1024 * 1024;
   const int64_t block_size = common::OB_MALLOC_BIG_BLOCK_SIZE;
 
+  tmp_file::ObTmpFileManager *tf_mgr = nullptr;
+  bool tf_mgr_inited = false;
+  share::ObIModuleProvider *old_module_provider = share::g_mp;
+  FakeModuleProvider provider;
+  DEFER({
+    macro_handle.reset();
+    if (nullptr != tf_mgr) {
+      if (tf_mgr_inited) {
+        tf_mgr->stop();
+        tf_mgr->wait();
+      }
+      server_module_destroy_default(tf_mgr);
+    }
+    provider.tmp_file_mgr_ = nullptr;
+    share::g_mp = old_module_provider;
+    tmp_file::ObTmpBlockCache::get_instance().destroy();
+    tmp_file::ObTmpPageCache::get_instance().destroy();
+    ObKVGlobalCache::get_instance().destroy();
+    common::ObClockGenerator::destroy();
+    ObTimerService::get_instance().stop();
+    ObTimerService::get_instance().wait();
+    ObTimerService::get_instance().destroy();
+  });
+
   ret = ObKVGlobalCache::get_instance().init(&getter, bucket_num, max_cache_size, block_size);
   if (OB_INIT_TWICE == ret) {
     ret = common::OB_SUCCESS;
@@ -160,21 +167,16 @@ TEST_F(TestBlockManager, test_mark_and_sweep)
 
   ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
 
-  static ObTenantBase tenant_ctx(OB_SERVER_TENANT_ID);
-  ObTenantEnv::set_tenant(&tenant_ctx);
-
   ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpBlockCache::get_instance().init("tmp_block_cache"));
   ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpPageCache::get_instance().init("sn_tmp_page_cache"));
 
-  tmp_file::ObTenantTmpFileManager *tf_mgr = nullptr;
-  EXPECT_EQ(OB_SUCCESS, mtl_new_default(tf_mgr));
-  EXPECT_EQ(OB_SUCCESS, tmp_file::ObTenantTmpFileManager::mtl_init(tf_mgr));
+  ASSERT_EQ(OB_SUCCESS, server_module_new_default(tf_mgr));
+  ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpFileManager::server_module_init(tf_mgr));
+  tf_mgr_inited = true;
   tf_mgr->get_sn_file_manager().page_cache_controller_.write_buffer_pool_.default_wbp_memory_limit_ = 40*1024*1024;
-  EXPECT_EQ(OB_SUCCESS, tf_mgr->start());
-  static FakeModuleProvider provider;
+  ASSERT_EQ(OB_SUCCESS, tf_mgr->start());
   provider.tmp_file_mgr_ = tf_mgr;
   share::g_mp = &provider;
-  ObTenantEnv::set_tenant(&tenant_ctx);
   SERVER_STORAGE_META_SERVICE.is_started_ = true;
   ASSERT_EQ(0, OB_SERVER_BLOCK_MGR.block_map_.count());
 
@@ -225,16 +227,6 @@ TEST_F(TestBlockManager, test_mark_and_sweep)
   ASSERT_EQ(blk_cnt - 1, mark_info.count());
 
   OB_SERVER_BLOCK_MGR.mark_and_sweep();
-
-  macro_handle.reset();
-
-  tmp_file::ObTmpBlockCache::get_instance().destroy();
-  tmp_file::ObTmpPageCache::get_instance().destroy();
-  ObKVGlobalCache::get_instance().destroy();
-  common::ObClockGenerator::destroy();
-  ObTimerService::get_instance().stop();
-  ObTimerService::get_instance().wait();
-  ObTimerService::get_instance().destroy();
 }
 
 TEST_F(TestBlockManager, test_mark_and_sweep_skip_mark)

@@ -17,6 +17,7 @@
 #define __SQL_ENG_P2P_DH_MGR_H__
 #include "lib/ob_define.h"
 #include "lib/hash/ob_hashmap.h"
+#include "lib/time/ob_time_utility.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_share_info.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_msg.h"
 
@@ -25,21 +26,9 @@ namespace oceanbase
 namespace sql
 {
 
-class ObPxSQCProxy;
-
 class ObP2PDatahubManager
 {
 public:
-  struct P2PMsgMergeCall
-  {
-    P2PMsgMergeCall(ObP2PDatahubMsgBase &db_msg) : dh_msg_(db_msg), need_free_(false) {};
-    ~P2PMsgMergeCall() = default;
-    int operator() (common::hash::HashMapPair<ObP2PDhKey, ObP2PDatahubMsgBase *> &entry);
-    int ret_;
-    ObP2PDatahubMsgBase &dh_msg_;
-    bool need_free_;
-  };
-
   struct P2PMsgGetCall
   {
     P2PMsgGetCall(ObP2PDatahubMsgBase *&db_msg) : dh_msg_(db_msg), ret_(OB_SUCCESS) {};
@@ -57,32 +46,17 @@ public:
     int ret_;
   };
 
-  struct P2PMsgSetCall
-  {
-    P2PMsgSetCall(ObP2PDhKey &dh_key, ObP2PDatahubMsgBase &db_msg)
-        : dh_key_(dh_key), dh_msg_(db_msg), ret_(OB_SUCCESS), succ_reg_dm_(false) {};
-    ~P2PMsgSetCall() = default;
-    int operator() (const common::hash::HashMapPair<ObP2PDhKey, ObP2PDatahubMsgBase *> &entry);
-    ObP2PDhKey &dh_key_;
-    ObP2PDatahubMsgBase &dh_msg_;
-    int ret_;
-    bool succ_reg_dm_;
-  };
-
 public:
   ObP2PDatahubManager() : map_(), is_inited_(false),
-      p2p_dh_id_(0)
+      p2p_dh_id_((common::ObTimeUtility::current_time() / 1000000) << 20)
   {}
   ~ObP2PDatahubManager() { destroy(); }
   static ObP2PDatahubManager &instance();
   typedef common::hash::ObHashMap<ObP2PDhKey, ObP2PDatahubMsgBase *> MsgMap;
   int init();
   void destroy();
-  int process_msg(ObP2PDatahubMsgBase &msg);
-  int send_p2p_msg(
-      ObP2PDatahubMsgBase &msg,
-      ObPxSQCProxy &sqc_proxy);
-  int send_local_p2p_msg(ObP2PDatahubMsgBase &msg);
+  int publish_local_copy(ObP2PDatahubMsgBase &msg);
+  int publish_local_msg(ObP2PDatahubMsgBase &msg);
   template<typename T>
   int alloc_msg(const ObMemAttr &attr, T *&msg_ptr)
   {

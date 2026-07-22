@@ -21,7 +21,7 @@
 #include "common/object/ob_object.h"
 #include "common/object/ob_obj_type.h"
 #include "common/datum/ob_datum.h"
-#include "share/ob_cluster_version.h"
+#include "share/ob_version_parser.h"
 #include "share/ob_i_lob_read_service.h"  // lob-read domain port(dependency inversion, replaces the direct dependency on storage::ObLobManager)
 
 namespace oceanbase

@@ -26,13 +26,13 @@ namespace oceanbase
 namespace tmp_file
 {
 
-class ObTenantTmpFileManager
+class ObTmpFileManager
 {
 public:
-  ObTenantTmpFileManager(): is_inited_(false) {}
-  virtual ~ObTenantTmpFileManager() { destroy(); }
-  static int mtl_init(ObTenantTmpFileManager *&manager);
-  virtual ObSNTenantTmpFileManager &get_sn_file_manager() { return sn_file_manager_; }
+  ObTmpFileManager(): is_inited_(false) {}
+  virtual ~ObTmpFileManager() { destroy(); }
+  static int server_module_init(ObTmpFileManager *&manager);
+  virtual ObSNTmpFileManager &get_sn_file_manager() { return sn_file_manager_; }
   virtual int init();
   int start();
   void stop();
@@ -68,14 +68,14 @@ public:
   int get_tmp_file_info(const int64_t fd, ObTmpFileInfo *tmp_file_info);
 private:
   bool is_inited_;
-  ObSNTenantTmpFileManager sn_file_manager_;
+  ObSNTmpFileManager sn_file_manager_;
 
 };
 
-class ObTenantTmpFileManagerWithMTLSwitch final
+class ObServerTmpFileManagerProxy final
 {
 public:
-  static ObTenantTmpFileManagerWithMTLSwitch &get_instance();
+  static ObServerTmpFileManagerProxy &get_instance();
   int alloc_dir(int64_t &dir_id);
   int open(int64_t &fd,
            const int64_t &dir_id,
@@ -99,7 +99,7 @@ public:
   int get_tmp_file_info(const int64_t fd, ObTmpFileInfo *tmp_file_info);
 };
 
-#define FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH (::oceanbase::tmp_file::ObTenantTmpFileManagerWithMTLSwitch::get_instance())
+#define SERVER_TMP_FILE_MANAGER (::oceanbase::tmp_file::ObServerTmpFileManagerProxy::get_instance())
 }  // end namespace tmp_file
 }  // end namespace oceanbase
 

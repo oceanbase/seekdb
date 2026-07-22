@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX LIB
 #include "threads.h"
 #include "lib/worker.h"
-#include "lib/resource/ob_affinity_ctrl.h"
 #include "lib/utility/ob_platform_utils.h"
 using namespace oceanbase;
 using namespace oceanbase::lib;
@@ -30,7 +29,7 @@ const int64_t THREAD_STACK_RESERVED_SIZE = 16L << 10;
 int64_t global_thread_stack_size = (1L << 18) - THREAD_STACK_RESERVED_SIZE - ACHUNK_PRESERVE_SIZE;
 thread_local uint64_t ThreadPool::thread_idx_ = 0;
 static IRunWrapper *g_default_run_wrapper = nullptr;
-// Get the thread-local tenant context, for use when checking at thread pool startup
+// Get the thread-local runtime context for thread-pool startup validation.
 IRunWrapper *&Threads::get_expect_run_wrapper()
 {
   static thread_local IRunWrapper *instance = nullptr;
@@ -85,15 +84,7 @@ int Threads::do_set_thread_count(int64_t n_threads, bool async_recycle)
         MEMCPY(new_threads, threads_, sizeof (Thread*) * n_threads_);
         for (auto i = n_threads_; i < n_threads; i++) {
           Thread *thread = nullptr;
-          int32_t numa_node = OB_NUMA_SHARED_INDEX;
-          if (OB_NUMA_SHARED_INDEX != numa_info_.numa_node_) {
-            if (numa_info_.interleave_) {
-              numa_node = i % numa_info_.num_nodes_;
-            } else {
-              numa_node = numa_info_.numa_node_;
-            }
-          }
-          ret = create_thread(thread, i, numa_node);
+          ret = create_thread(thread, i);
           if (OB_FAIL(ret)) {
             n_threads = i;
             break;
@@ -211,12 +202,12 @@ int Threads::init()
 int Threads::start()
 {
   int ret = OB_SUCCESS;
-  // Check tenant context
+  // Check the runtime context.
   IRunWrapper *expect_wrapper = get_expect_run_wrapper();
   n_threads_ = init_threads_;
   if (expect_wrapper != nullptr && expect_wrapper != run_wrapper_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("Threads::start tenant ctx not match", KP(expect_wrapper), KP(run_wrapper_));
+    LOG_ERROR("Threads::start runtime context does not match", KP(expect_wrapper), KP(run_wrapper_));
     ob_abort();
   } else if (n_threads_ > 0) {
     threads_ = reinterpret_cast<Thread**>(
@@ -230,15 +221,7 @@ int Threads::start()
     MEMSET(threads_, 0, sizeof (Thread*) * n_threads_);
     for (int i = 0; i < n_threads_; i++) {
       Thread *thread = nullptr;
-      int32_t numa_node = OB_NUMA_SHARED_INDEX;
-      if (OB_NUMA_SHARED_INDEX != numa_info_.numa_node_) {
-        if (numa_info_.interleave_) {
-          numa_node = i % numa_info_.num_nodes_;
-        } else {
-          numa_node = numa_info_.numa_node_;
-        }
-      }
-      ret = create_thread(thread, i, numa_node);
+      ret = create_thread(thread, i);
       if (OB_FAIL(ret)) {
         break;
       } else {
@@ -262,7 +245,7 @@ void Threads::run(int64_t idx)
   run1();
 }
 
-int Threads::create_thread(Thread *&thread, int64_t idx, int32_t numa_node)
+int Threads::create_thread(Thread *&thread, int64_t idx)
 {
   int ret = OB_SUCCESS;
   thread = nullptr;
@@ -270,7 +253,7 @@ int Threads::create_thread(Thread *&thread, int64_t idx, int32_t numa_node)
   if (buf == nullptr) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    thread = new (buf) Thread(this, idx, stack_size_, numa_node);
+    thread = new (buf) Thread(this, idx, stack_size_);
     if (OB_FAIL(thread->start())) {
       thread->~Thread();
       ob_free(thread);
@@ -326,28 +309,6 @@ void Threads::destroy()
     }
     ob_free(threads_);
     threads_ = nullptr;
-  }
-}
-
-
-void Threads::set_numa_info(bool enable_numa_aware, int32_t group_index)
-{
-  if (false == enable_numa_aware) {
-  } else {
-    int num_nodes = AFFINITY_CTRL.get_num_nodes();
-    if (num_nodes > 0) {
-      if (group_index != -1) {
-        if (group_index >= 0 && group_index < INT32_MAX) {
-          numa_info_.numa_node_ = group_index % num_nodes;
-          numa_info_.num_nodes_ = num_nodes;
-          numa_info_.interleave_ = false;
-        } else {
-          numa_info_.num_nodes_ = num_nodes;
-          numa_info_.numa_node_ = INT32_MAX;
-          numa_info_.interleave_ = true;
-        }
-      }
-    }
   }
 }
 

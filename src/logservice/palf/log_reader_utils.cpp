@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 #include "log_define.h"
 #include "log_reader_utils.h"
 
@@ -87,7 +87,7 @@ int alloc_read_buf(const char *label, const int64_t buf_len, ReadBuf &read_buf)
   const int64_t cache_align_size = LOG_CACHE_ALIGN_SIZE;
   const int64_t size = upper_align(buf_len, dio_align_size) + dio_align_size + cache_align_size;
   if (NULL == (read_buf.buf_ = static_cast<char *>(
-      mtl_malloc_align(dio_align_size, size, label)))) {
+      server_malloc_align(dio_align_size, size, label)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     read_buf.buf_len_ = size;
@@ -98,7 +98,7 @@ int alloc_read_buf(const char *label, const int64_t buf_len, ReadBuf &read_buf)
 void free_read_buf(ReadBuf &read_buf)
 {
   if (true == read_buf.is_valid()) {
-    mtl_free_align(read_buf.buf_);
+    server_free_align(read_buf.buf_);
     read_buf.buf_ = NULL;
     read_buf.buf_len_ = 0;
   }

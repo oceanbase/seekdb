@@ -43,8 +43,8 @@ enum class ObFreezeSourceFlag : int64_t
   DIRECT_INC_START    = 7,
   DIRECT_INC_END      = 8,
   DIRECT_INC_FREEZE   = 9,
-  GC_RETAIN_CTX       = 10, // deprecated
-  TEST_MODE           = 11, // used for test only
+  TEST_MODE           = 10, // used for test only
+  TABLET_SPLIT        = 11,
   MAX_SOURCE          = 12,
 };
 
@@ -89,9 +89,6 @@ inline const char *obj_to_cstring(const ObFreezeSourceFlag type)
     break;
   case ObFreezeSourceFlag::DIRECT_INC_FREEZE:
     ret = "DIRECT_INC_FREEZE";
-    break;
-  case ObFreezeSourceFlag::GC_RETAIN_CTX:
-    ret = "GC_RETAIN_CTX";
     break;
   case ObFreezeSourceFlag::TEST_MODE:
     ret = "TEST_MODE";

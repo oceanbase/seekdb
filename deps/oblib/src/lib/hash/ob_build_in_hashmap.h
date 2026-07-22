@@ -27,7 +27,7 @@ namespace common
 {
 namespace hash
 {
-// A hash map usable by obproxy.
+// A hash map backed by intrusive-list buckets.
 //
 // This class depends on the @c DLL class from @c ob_intrusive_list.h. It assumes it can uses instances of
 // that class to store chains of elements.

@@ -67,7 +67,6 @@ enum ObCipherOpMode {
   ob_sm4_gcm = 29,
   /* attention:
     1.remember to modify compare_aes_mod_safety when add new mode
-    2.considering compatibility of parse_encryption_id, only add modes sequentially
   */
   ob_max_mode
 };
@@ -103,36 +102,14 @@ public:
   static const int OB_DEFAULT_AEAD_TAG_LENGTH = 16;
 };
 
-const int64_t OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH = 16;
-
 class ObEncryptionUtil
 {
 public:
 
   static int init_ssl_malloc();
-  static int parse_encryption_algorithm(const char *str,
-                                        ObCipherOpMode &encryption_algorithm);
-  static int parse_encryption_id(const common::ObString &str, int64_t &encrypt_id);
   static bool is_aes_encryption(const ObCipherOpMode opmode);
   static bool is_sm4_encryption(const ObCipherOpMode opmode);
   static bool is_ecb_mode(const ObCipherOpMode opmode);
-};
-
-struct ObBackupEncryptionMode final
-{
-  enum EncryptionMode
-  {
-    NONE = 0, // no encryption
-    PASSWORD = 1, // password validation
-    PASSWORD_ENCRYPTION = 2,//password validation + encryption
-    TRANSPARENT_ENCRYPTION = 3,//transparent encryption
-    DUAL_MODE_ENCRYPTION = 4,//Transparent encryption + password validation
-    MAX_MODE
-  };
-  static bool is_valid(const EncryptionMode &mode);
-  static const char *to_str(const EncryptionMode &mode);
-  static EncryptionMode parse_str(const char *str);
-  static EncryptionMode parse_str(const common::ObString &str);
 };
 
 enum ObHashAlgorithm {
@@ -161,32 +138,6 @@ public:
   static int get_sha_hash_algorightm(const int64_t bit_length, ObHashAlgorithm &algo);
 private:
   static const EVP_MD* get_hash_evp_md(const ObHashAlgorithm algo);
-};
-
-class ObTdeEncryptEngineLoader {
-public:
-  enum ObEncryptEngineType {
-    OB_NONE_ENGINE = 0,
-    OB_INVALID_ENGINE = 1,
-    OB_AES_ENGINE = 2,
-    OB_SM4_ENGINE = 3,
-    OB_MAX_ENGINE
-  };
-  static ObTdeEncryptEngineLoader &get_instance();
-  ObTdeEncryptEngineLoader() { 
-    ssl_init();
-    MEMSET(tde_engine_, 0, sizeof(ENGINE*)*OB_MAX_ENGINE);
-  }
-  ~ObTdeEncryptEngineLoader() { destroy(); }
-  void ssl_init();
-  void destroy();
-  int  load(const common::ObString& engine);
-  ObEncryptEngineType get_engine_type(const common::ObString& engine);
-  ENGINE* get_tde_engine(ObCipherOpMode &mode) const;
-  int reload_config();
-private:
-  bool is_inited_;
-  ENGINE* tde_engine_[OB_MAX_ENGINE];
 };
 
 }//end share

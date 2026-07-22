@@ -17,7 +17,7 @@
 #ifndef OB_PARTITION_MERGE_POLICY_H_
 #define OB_PARTITION_MERGE_POLICY_H_
 
-#include "storage/compaction/ob_tenant_freeze_info_mgr.h"
+#include "storage/compaction/ob_freeze_info_mgr.h"
 #include "storage/compaction/ob_compaction_util.h"
 #include "share/ob_table_range.h"
 #include "observer/scheduler/ob_diagnose_config.h"
@@ -226,7 +226,7 @@ public:
     TOMBSTONE_SCENE = 2,
     INEFFICIENT_QUERY = 3,
     FREQUENT_WRITE = 4,
-    TENANT_MAJOR = 5,
+    DATABASE_MAJOR = 5,
     USER_REQUEST = 6,
     CRAZY_MEDIUM_FOR_TEST = 7,
     // no incremental data(MEMTABLE/MINI/MINOR) after last major

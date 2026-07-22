@@ -16,10 +16,10 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "ob_fifo_arena.h"
+#include "lib/alloc/ob_ctx_allocator.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 
 using namespace oceanbase::lib;
-using namespace oceanbase::omt;
 using namespace oceanbase::share;
 namespace oceanbase
 {
@@ -30,7 +30,7 @@ int64_t ObFifoArena::total_hold_ = 0;
 
 int64_t ObFifoArena::Page::get_actual_hold_size()
 {
-  return ObTenantCtxAllocator::get_obj_hold(this);
+  return lib::ObCtxAllocator::get_obj_hold(this);
 }
 
 int ObFifoArena::init()

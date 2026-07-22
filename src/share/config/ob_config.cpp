@@ -15,17 +15,17 @@
  */
 
 #include "ob_config.h"
-#include "share/config/ob_tenant_config_mgr.h"
+#include "share/config/ob_runtime_config.h"
 
 #include "share/config/ob_server_config.h"
 #include "share/ob_task_define.h"
-#include "share/ob_cluster_version.h"
+#include "share/ob_version_parser.h"
 using namespace oceanbase::share;
 namespace oceanbase
 {
 namespace common
 {
-ObMemAttr g_config_mem_attr = SET_USE_UNEXPECTED_500("ConfigChecker");
+ObMemAttr g_config_mem_attr("ConfigChecker");
 
 template<typename T>
 static bool check_range(const ObConfigRangeOpts left_opt,
@@ -933,7 +933,7 @@ int64_t ObConfigVersionItem::parse(const char *str, bool &valid) const
 {
   int ret = OB_SUCCESS;
   uint64_t version = 0;
-  if (OB_FAIL(ObClusterVersion::get_version(str, version))) {
+  if (OB_FAIL(ObVersionParser::get_version(str, version))) {
     OB_LOG(ERROR, "parse version failed", KR(ret), "name", name(), K(str));
   }
   valid = OB_SUCC(ret);

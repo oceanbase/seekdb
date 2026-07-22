@@ -17,7 +17,6 @@ add_library(zstd_1_3_8_objs OBJECT
   zstd_src/huf.h
   zstd_src/mem.h
   ob_zstd_compressor_1_3_8.h
-  ob_zstd_stream_compressor_1_3_8.h
   ob_zstd_wrapper.h
   zstd_src/pool.c
   zstd_src/pool.h

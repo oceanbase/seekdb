@@ -43,23 +43,20 @@ int ObTaskExecutorCtx::CalcVirtualPartitionIdParams::init(uint64_t ref_table_id)
 OB_SERIALIZE_MEMBER(ObTaskExecutorCtx,
                     table_locations_,
                     retry_times_,
-                    min_cluster_version_,
                     expected_worker_cnt_,
                     admited_worker_cnt_,
-                    query_tenant_begin_schema_version_,
+                    query_begin_schema_version_,
                     query_sys_begin_schema_version_,
                     minimal_worker_cnt_);
 
 ObTaskExecutorCtx::ObTaskExecutorCtx(ObExecContext &exec_context)
-    : task_resp_handler_(NULL),
-      exec_ctx_(&exec_context),
+    : exec_ctx_(&exec_context),
       expected_worker_cnt_(0),
       minimal_worker_cnt_(0),
       admited_worker_cnt_(0),
       retry_times_(0),
-      min_cluster_version_(ObExecutorRpcCtx::INVALID_CLUSTER_VERSION),
       sys_job_id_(-1),
-      query_tenant_begin_schema_version_(-1),
+      query_begin_schema_version_(-1),
       query_sys_begin_schema_version_(-1),
       schema_service_(GCTX.schema_service_)
 {
@@ -67,10 +64,6 @@ ObTaskExecutorCtx::ObTaskExecutorCtx(ObExecContext &exec_context)
 
 ObTaskExecutorCtx::~ObTaskExecutorCtx()
 {
-  if (NULL != task_resp_handler_) {
-    task_resp_handler_->~RemoteExecuteStreamHandle();
-    task_resp_handler_ = NULL;
-  }
 }
 
 
@@ -113,73 +106,5 @@ int ObTaskExecutorCtx::append_table_location(const ObCandiTableLoc &phy_location
   return ret;
 }
 
-//
-//
-//  Utility
-//
-int ObTaskExecutorCtxUtil::get_stream_handler(
-    ObExecContext &ctx,
-    RemoteExecuteStreamHandle *&handler)
-{
-  int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *executor_ctx = NULL;
-  if (OB_ISNULL(executor_ctx = ctx.get_task_executor_ctx())) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("fail get executor ctx");
-  } else if (OB_ISNULL(handler = executor_ctx->get_stream_handler())) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("stream handler is not inited", K(ret));
-  }
-  return ret;
-}
-int ObTaskExecutorCtxUtil::get_task_executor_rpc(
-    ObExecContext &ctx,
-    ObExecutorRpcImpl *&rpc)
-{
-  int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *executor_ctx = NULL;
-  if (OB_ISNULL(executor_ctx = ctx.get_task_executor_ctx())) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObTaskExecutorCtx is null", K(ret));
-  } else if (OB_ISNULL(rpc = executor_ctx->get_task_executor_rpc())) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("rpc is null", K(ret));
-  }
-  return ret;
-}
-
-
-int ObTaskExecutorCtx::reset_and_init_stream_handler()
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(exec_ctx_)) {
-    ret = OB_NOT_INIT;
-    LOG_ERROR("unexpected error. exec ctx is not inited", K(ret));
-  } else {
-    if (NULL != task_resp_handler_) {
-      // It might be caused by transaction_set_violation_and_retry leading to a retry at the executor level,
-      // ObTaskExecutorCtx destructor is called multiple times before this function,
-      // So here we need to destruct the previous memory first
-      task_resp_handler_->~RemoteExecuteStreamHandle();
-      task_resp_handler_ = NULL;
-    }
-    RemoteExecuteStreamHandle *buffer = NULL;
-    if (OB_ISNULL(buffer = static_cast<RemoteExecuteStreamHandle*>(exec_ctx_->get_allocator().//is this allocator ok ?
-        alloc(sizeof(RemoteExecuteStreamHandle))))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc memory for RemoteExecuteStreamHandle", K(ret));
-    } else {
-      task_resp_handler_ = new (buffer) RemoteExecuteStreamHandle("RemoteExecStream");
-    }
-  }
-  return ret;
-}
-
-
-
-const common::ObAddr ObTaskExecutorCtx::get_self_addr() const
-{
-  return MYADDR;
-}
 }/* ns sql*/
 }/* ns oceanbase */

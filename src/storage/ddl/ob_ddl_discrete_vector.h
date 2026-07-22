@@ -16,7 +16,6 @@
 
 #pragma once
 
-#include "share/rc/ob_tenant_base.h"
 #include "sql/engine/vector/ob_continuous_base.h"
 #include "sql/engine/vector/ob_discrete_base.h"
 #include "sql/engine/vector/ob_uniform_base.h"

@@ -128,8 +128,6 @@ int TestOptimizerUtils::generate_logical_plan(ObResultSet &result, //ObIAllocato
       if (parameterized) {
         SqlInfo not_param_info;
         ParseNode *root = parse_result.result_tree_->children_[0];
-        ObMaxConcurrentParam::FixParamStore fixed_param_store(OB_MALLOC_NORMAL_BLOCK_SIZE,
-                                                        ObWrapperAllocator(&allocator_));
         bool is_transform_outline = false;
         if (T_SELECT == root->type_
             || T_INSERT == root->type_
@@ -142,7 +140,6 @@ int TestOptimizerUtils::generate_logical_plan(ObResultSet &result, //ObIAllocato
                                                                   not_param_info,
                                                                   param_store,
                                                                   NULL,
-                                                                  fixed_param_store,
                                                                   is_transform_outline)) {
             LOG_WARN("failed to parameterized", K(ret));
           }
@@ -603,7 +600,7 @@ int MockCacheObjectFactory::alloc(ObILibCacheObject *&cache_obj,
       ret = OB_ALLOCATE_MEMORY_FAILED;
       OB_LOG(ERROR, "fail to alloc cache obj", K(ret), KP(buf), K(ns));
     } else {
-      cache_obj->inc_ref_count(PLAN_GEN_HANDLE);
+      cache_obj->inc_ref_count();
     }
   }
 
@@ -621,7 +618,7 @@ void MockCacheObjectFactory::free(ObILibCacheObject *cache_obj)
     //nothing to do
   } else {
     lib::MemoryContext entity = cache_obj->get_mem_context();
-    int64_t ref_count = cache_obj->dec_ref_count(PLAN_GEN_HANDLE);
+    int64_t ref_count = cache_obj->dec_ref_count();
     if (ref_count > 0) {
       //nothing todo
     } else if (ref_count == 0) {

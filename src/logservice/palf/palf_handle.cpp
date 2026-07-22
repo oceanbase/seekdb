@@ -221,7 +221,7 @@ int PalfHandle::register_file_size_cb(PalfFSCb *fs_cb)
     ret = OB_NOT_SUPPORTED;
     PALF_LOG(WARN, "PalfHandle has register_file_size_cb, not support regist repeatedly", K(ret), K(fs_cb_), K(fs_cb));
   } else {
-    PalfFSCbNode *fs_cb_node = MTL_NEW(PalfFSCbNode, "PalfFSCbNode", fs_cb);
+    PalfFSCbNode *fs_cb_node = SERVER_NEW(PalfFSCbNode, "PalfFSCbNode", fs_cb);
     if (NULL == fs_cb_node) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else if (OB_FAIL(palf_handle_impl_->register_file_size_cb(fs_cb_node))) {
@@ -230,7 +230,7 @@ int PalfHandle::register_file_size_cb(PalfFSCb *fs_cb)
       fs_cb_ = fs_cb_node;
     }
     if (OB_FAIL(ret)) {
-      MTL_DELETE(PalfFSCbNode, "PalfFSCbNode", fs_cb_);
+      SERVER_DELETE(PalfFSCbNode, "PalfFSCbNode", fs_cb_);
       fs_cb_ = NULL;
     }
   }
@@ -246,7 +246,7 @@ int PalfHandle::unregister_file_size_cb()
   } else if (OB_FAIL(palf_handle_impl_->unregister_file_size_cb(fs_cb_))) {
     PALF_LOG(WARN, "unregister_file_size_cb failed", K(ret));
   } else {
-    MTL_DELETE(PalfFSCbNode, "PalfFSCbNode", fs_cb_);
+    SERVER_DELETE(PalfFSCbNode, "PalfFSCbNode", fs_cb_);
     fs_cb_ = NULL;
   }
   return ret;

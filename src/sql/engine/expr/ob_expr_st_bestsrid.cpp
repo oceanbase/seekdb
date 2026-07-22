@@ -114,7 +114,7 @@ int ObExprPrivSTBestsrid::eval_st_bestsrid(const ObExpr &expr, ObEvalCtx &ctx, O
   uint32_t param_num = expr.arg_cnt_;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_ST_BESTSRID);
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   omt::ObSrsCacheGuard srs_guard;
   bool is_null_res = false;
   bool is_geo_empty = false;
@@ -140,7 +140,6 @@ int ObExprPrivSTBestsrid::eval_st_bestsrid(const ObExpr &expr, ObEvalCtx &ctx, O
     } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *(geo_datum[i]),
               geo_arg->datum_meta_, geo_arg->obj_meta_.has_lob_header(), geo_str))) {
       LOG_WARN("fail to get real string data", K(ret), K(geo_str));
-    } else if (FALSE_IT(temp_allocator.add_baseline_size(geo_str.length()))) {
     } else if (OB_FAIL(guard.init())) {
       LOG_WARN("fail to init geo allocator guard", K(ret));
     } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
@@ -162,9 +161,6 @@ int ObExprPrivSTBestsrid::eval_st_bestsrid(const ObExpr &expr, ObEvalCtx &ctx, O
     } else {
       res.set_int(bestsrid);
     }
-  }
-  if (mem_ctx != nullptr) {
-    temp_allocator.add_ext_used((*mem_ctx)->arena_used());
   }
   return ret;
 }

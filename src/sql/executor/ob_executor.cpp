@@ -18,8 +18,6 @@
 
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_executor.h"
-#include "sql/executor/ob_remote_scheduler.h"
-#include "sql/executor/ob_task_spliter.h"
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
 
@@ -79,11 +77,7 @@ int ObExecutor::execute_plan(ObExecContext &ctx)
     LOG_WARN("create implicit cursor infos failed", K(ret), K(batched_stmt_cnt));
   } else {
     ObPhyPlanType execute_type = phy_plan_->get_plan_type();
-    // Special handling for the following cases:
-    // MULTI PART INSERT (remote)
-    //   SELECT (local)
-    // Such a plan in the optimizer generation phase, plan type is OB_PHY_PLAN_DISTRIBUTED,
-    // But need to use local way for execution scheduling
+    // Some parallel plans do not require the PX scheduler.
     if (execute_type != OB_PHY_PLAN_LOCAL && phy_plan_->is_require_local_execution()) {
       execute_type = OB_PHY_PLAN_LOCAL;
       LOG_TRACE("change the plan execution type",
@@ -108,14 +102,6 @@ int ObExecutor::execute_plan(ObExecContext &ctx)
         }
         break;
       }
-      case OB_PHY_PLAN_REMOTE:
-        if (session_info->is_inner()) {
-          EVENT_INC(SQL_INNER_REMOTE_COUNT);
-        } else {
-          EVENT_INC(SQL_REMOTE_COUNT);
-        }
-        ret = execute_remote_single_partition_plan(ctx);
-        break;
       case OB_PHY_PLAN_DISTRIBUTED:
         if (session_info->is_inner()) {
           EVENT_INC(SQL_INNER_DISTRIBUTED_COUNT);
@@ -133,12 +119,6 @@ int ObExecutor::execute_plan(ObExecContext &ctx)
   }
   NG_TRACE(exec_plan_end);
   return ret;
-}
-
-int ObExecutor::execute_remote_single_partition_plan(ObExecContext &ctx)
-{
-  ObRemoteScheduler scheduler;
-  return scheduler.schedule(ctx, phy_plan_);
 }
 
 int ObExecutor::execute_static_cg_px_plan(ObExecContext &ctx)

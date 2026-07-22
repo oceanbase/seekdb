@@ -36,7 +36,7 @@ struct ObBlockInfo;
 struct ObSSTableBasicMeta;
 class ObSSTableMacroInfo;
 class ObSSTableMeta;
-class ObForkSSTableParam;
+class ObSSTableCloneParam;
 class ObSSTable;
 class ObSSTableIndexBuilder;
 }
@@ -93,12 +93,6 @@ public:
                        ObBlockMetaTree &block_meta_tree);
 
   // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
-  int init_for_ss_ddl(blocksstable::ObSSTableMergeRes &res,
-                      const ObITable::TableKey &table_key,
-                      const ObStorageSchema &storage_schema,
-                      const int64_t create_schema_version_on_tablet);
-
-  // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
   int init_for_fork(const ObTabletID &dst_tablet_id,
                      const ObITable::TableKey &src_table_key,
                      const blocksstable::ObSSTableBasicMeta &basic_meta,
@@ -112,7 +106,18 @@ public:
                                    const share::SCN &end_scn,
                                    const blocksstable::ObSSTableBasicMeta &basic_meta);
 
-  int init_for_fork(const blocksstable::ObForkSSTableParam &sstable_param,
+  // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
+  int init_for_lob_split(const ObTabletID &new_tablet_id,
+                         const ObITable::TableKey &table_key,
+                         const blocksstable::ObSSTableBasicMeta &basic_meta,
+                         const compaction::ObMergeType &merge_type,
+                         const int64_t schema_version,
+                         const int64_t dst_major_snapshot_version,
+                         const int64_t uncommitted_tx_id,
+                         const int64_t sstable_logic_seq,
+                         const blocksstable::ObSSTableMergeRes &res);
+
+  int init_for_fork(const blocksstable::ObSSTableCloneParam &sstable_param,
                     const ObTabletID &dst_tablet_id,
                     const ObITable::TableKey &src_table_key,
                     const blocksstable::ObSSTableMeta &sstable_meta,
@@ -165,22 +170,18 @@ public:
       K_(contain_uncommitted_row),
       K_(is_meta_root),
       K_(compressor_type),
-      K_(encrypt_id),
-      K_(master_key_id),
       K_(recycle_version),
-      K_(root_macro_seq),
       K_(nested_offset),
       K_(nested_size),
-      KPHEX_(encrypt_key, sizeof(encrypt_key_)),
+      K_(root_macro_seq),
       K_(table_backup_flag),
-      K_(table_shared_flag),
       K_(uncommitted_tx_id));
 private:
   static const int64_t DEFAULT_MACRO_BLOCK_CNT = 64;
   int inner_init_with_merge_res(const blocksstable::ObSSTableMergeRes &res);
-  int inner_init_with_shared_sstable(const blocksstable::ObForkSSTableParam &sstable_param,
-                                     const common::ObIArray<blocksstable::MacroBlockId> &data_block_ids,
-                                     const common::ObIArray<blocksstable::MacroBlockId> &other_block_ids);
+  int inner_init_with_embedded_meta(const blocksstable::ObSSTableCloneParam &sstable_param,
+                                    const common::ObIArray<blocksstable::MacroBlockId> &data_block_ids,
+                                    const common::ObIArray<blocksstable::MacroBlockId> &other_block_ids);
   int collect_macro_block_ids_from_meta(
       const blocksstable::ObSSTableMacroInfo &macro_info,
       common::ObIArray<blocksstable::MacroBlockId> &data_block_ids,
@@ -223,17 +224,13 @@ public:
   bool contain_uncommitted_row_;
   bool is_meta_root_;
   common::ObCompressorType compressor_type_;
-  int64_t encrypt_id_;
-  int64_t master_key_id_;
   int64_t recycle_version_;
   int64_t nested_offset_;
   int64_t nested_size_;
   int64_t root_macro_seq_;
-  char encrypt_key_[share::OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH];
   common::ObSEArray<blocksstable::MacroBlockId, DEFAULT_MACRO_BLOCK_CNT> data_block_ids_;
   common::ObSEArray<blocksstable::MacroBlockId, DEFAULT_MACRO_BLOCK_CNT> other_block_ids_;
   storage::ObTableBackupFlag table_backup_flag_; //ObTableBackupFlag will be updated by ObSSTableMergeRes
-  storage::ObTableSharedFlag table_shared_flag_; //ObTableSharedFlag will be updated by ObTabletCreateSSTableParam
   int64_t uncommitted_tx_id_;
 };
 

@@ -76,37 +76,18 @@ int64_t ObPxTargetMonitor::get_parallel_session_count()
   return parallel_session_count_;
 }
 
-int ObPxTargetMonitor::apply_target(hash::ObHashMap<ObAddr, int64_t> &worker_map,
-                              int64_t wait_time_us, int64_t session_target, int64_t req_cnt,
-                              int64_t &admit_count)
+int ObPxTargetMonitor::apply_target(int64_t wait_time_us, int64_t session_target,
+                                   int64_t req_cnt, int64_t &admit_count)
 {
   int ret = OB_SUCCESS;
   admit_count = 0;
   bool need_wait = false;
   {
-    // Serialize on spin_lock_: apply and release both read-modify-write the
-    // single px_target_used_ counter, so they must be mutually exclusive.
     SpinWLockGuard guard(spin_lock_);
     int64_t target = session_target;
     int64_t total_use = px_target_used_;
-    int64_t total_req = 0;
-    for (hash::ObHashMap<ObAddr, int64_t>::iterator it = worker_map.begin();
-        OB_SUCC(ret) && it != worker_map.end(); it++) {
-      total_req += it->second;
-    }
-    if (total_use == 0 || total_use + total_req <= target) {
-      // Clamp each worker_map entry to target and WRITE IT BACK, so that
-      // release_target() -- which subtracts the same worker_map values -- removes
-      // exactly what we add here. This restores the pre-refactor behavior; the
-      // single-counter refactor kept the clamp but dropped the write-back, so apply
-      // added min(total_req,target) while release subtracted the full total_req,
-      // drifting px_target_used_ negative on idle over-sized admissions.
-      int64_t acquired = 0;
-      for (hash::ObHashMap<ObAddr, int64_t>::iterator it = worker_map.begin();
-          OB_SUCC(ret) && it != worker_map.end(); it++) {
-        it->second = std::min(it->second, target);
-        acquired += it->second;
-      }
+    if (total_use == 0 || total_use + req_cnt <= target) {
+      const int64_t acquired = std::min(req_cnt, target);
       px_target_used_ += acquired;
       admit_count = acquired;
       parallel_session_count_++;
@@ -123,16 +104,11 @@ int ObPxTargetMonitor::apply_target(hash::ObHashMap<ObAddr, int64_t> &worker_map
   return ret;
 }
 
-int ObPxTargetMonitor::release_target(hash::ObHashMap<ObAddr, int64_t> &worker_map)
+int ObPxTargetMonitor::release_target(int64_t worker_count)
 {
   int ret = OB_SUCCESS;
   SpinWLockGuard guard(spin_lock_);
-  int64_t total_rel = 0;
-  for (hash::ObHashMap<ObAddr, int64_t>::iterator it = worker_map.begin();
-      OB_SUCC(ret) && it != worker_map.end(); it++) {
-    total_rel += it->second;
-  }
-  px_target_used_ -= total_rel;
+  px_target_used_ -= worker_count;
   target_cond_.notifyAll();
   parallel_session_count_--;
   return ret;

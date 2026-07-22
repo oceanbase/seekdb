@@ -17,7 +17,7 @@
 #include <gtest/gtest.h>
 #define private public
 #define protected public
-#include "observer/omt/ob_tenant_srs.h"
+#include "observer/omt/ob_srs_service.h"
 #undef protected
 #undef private
 

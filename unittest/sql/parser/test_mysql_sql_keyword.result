@@ -155,8 +155,6 @@ Reserved Keyword: GROUP
 Test Table Name and Column Name Sql:create table GROUP(GROUP int);
 Reserved Keyword: HAVING
 Test Table Name and Column Name Sql:create table HAVING(HAVING int);
-Reserved Keyword: HIGH_PRIORITY
-Test Table Name and Column Name Sql:create table HIGH_PRIORITY(HIGH_PRIORITY int);
 Reserved Keyword: HOUR_MICROSECOND
 Test Table Name and Column Name Sql:create table HOUR_MICROSECOND(HOUR_MICROSECOND int);
 Reserved Keyword: HOUR_MINUTE
@@ -373,12 +371,8 @@ Reserved Keyword: SQLSTATE
 Test Table Name and Column Name Sql:create table SQLSTATE(SQLSTATE int);
 Reserved Keyword: SQLWARNING
 Test Table Name and Column Name Sql:create table SQLWARNING(SQLWARNING int);
-Reserved Keyword: SQL_BIG_RESULT
-Test Table Name and Column Name Sql:create table SQL_BIG_RESULT(SQL_BIG_RESULT int);
 Reserved Keyword: SQL_CALC_FOUND_ROWS
 Test Table Name and Column Name Sql:create table SQL_CALC_FOUND_ROWS(SQL_CALC_FOUND_ROWS int);
-Reserved Keyword: SQL_SMALL_RESULT
-Test Table Name and Column Name Sql:create table SQL_SMALL_RESULT(SQL_SMALL_RESULT int);
 Reserved Keyword: SSL
 Test Table Name and Column Name Sql:create table SSL(SSL int);
 Reserved Keyword: SKIP
@@ -459,9 +453,7 @@ Reserved Keyword: YEAR_MONTH
 Test Table Name and Column Name Sql:create table YEAR_MONTH(YEAR_MONTH int);
 Reserved Keyword: ZEROFILL
 Test Table Name and Column Name Sql:create table ZEROFILL(ZEROFILL int);
-Reserved Keyword: TABLEGROUP
-Test Table Name and Column Name Sql:create table TABLEGROUP(TABLEGROUP int);
-************** Total Count of Reserved Keyword:231   ***************
+************** Total Count of Reserved Keyword:230   ***************
 **************   End Test Reserved Keyword   ***************
 **************   Begin Test Non-Reserved Keyword  ***************
 **************   End Test Non-Reserved Keyword  ***************

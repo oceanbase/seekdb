@@ -45,37 +45,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObOptimizeTableStmt);
 };
 
-class ObOptimizeTenantStmt : public ObDDLStmt
-{
-public:
-  explicit ObOptimizeTenantStmt(common::ObIAllocator *name_pool);
-  ObOptimizeTenantStmt();
-  virtual ~ObOptimizeTenantStmt() = default;
-  const obcall::ObOptimizeTenantArg &get_optimize_tenant_arg() const { return optimize_tenant_arg_; }
-  obcall::ObOptimizeTenantArg &get_optimize_tenant_arg() { return optimize_tenant_arg_; }
-  virtual bool cause_implicit_commit() const { return true; }
-  void set_tenant_name(const common::ObString &tenant_name);
-  virtual obcall::ObDDLArg &get_ddl_arg() { return optimize_tenant_arg_; }
-private:
-  obcall::ObOptimizeTenantArg optimize_tenant_arg_;
-  DISALLOW_COPY_AND_ASSIGN(ObOptimizeTenantStmt);
-};
-
-class ObOptimizeAllStmt : public ObDDLStmt
-{
-public:
-  explicit ObOptimizeAllStmt(common::ObIAllocator *name_pool);
-  ObOptimizeAllStmt();
-  virtual ~ObOptimizeAllStmt() = default;
-  const obcall::ObOptimizeAllArg &get_optimize_all_arg() const { return optimize_all_arg_; }
-  obcall::ObOptimizeAllArg &get_optimize_all_arg() { return optimize_all_arg_; }
-  virtual bool cause_implicit_commit() const { return true; }
-  virtual obcall::ObDDLArg &get_ddl_arg() { return optimize_all_arg_; }
-private:
-  obcall::ObOptimizeAllArg optimize_all_arg_;
-  DISALLOW_COPY_AND_ASSIGN(ObOptimizeAllStmt);
-};
-
 }
 }
 

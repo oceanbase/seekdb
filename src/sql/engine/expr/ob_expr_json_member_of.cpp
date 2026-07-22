@@ -94,7 +94,7 @@ int ObExprJsonMemberOf::eval_json_member_of(const ObExpr &expr, ObEvalCtx &ctx, 
   ObIJsonBase *json_b = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("JSONModule"));
   bool is_null_result = (expr.args_[0]->datum_meta_.type_ == ObNullType);
   if (!is_null_result) {
@@ -105,8 +105,6 @@ int ObExprJsonMemberOf::eval_json_member_of(const ObExpr &expr, ObEvalCtx &ctx, 
       LOG_WARN("eval json arg failed", K(ret));
     } else if (json_datum->is_null()) {
       is_null_result = true; 
-    } else if (OB_FAIL(temp_allocator.add_baseline_size(json_datum,  json_arg->obj_meta_.has_lob_header()))) {
-      LOG_WARN("failed to add baselien size", K(ret));
     } else if (OB_FAIL(ObJsonExprHelper::get_json_val(expr, ctx, &temp_allocator, 0, json_a))) {
       LOG_WARN("get_json_value failed", K(ret));
     } else if (!ObJsonExprHelper::is_convertible_to_json(type2)) {

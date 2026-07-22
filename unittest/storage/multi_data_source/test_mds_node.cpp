@@ -136,15 +136,15 @@ TEST_F(TestMdsNode, release_node_while_node_in_ctx_concurrent) {
   MdsCtx ctx(mds::MdsWriter(transaction::ObTransID(100)), transaction::ObTxSEQ(1, 0));// commit finally
   // Submitting these nodes will take 50ms
   ASSERT_EQ(OB_SUCCESS, row.set(UserDataWithCallBack(1), ctx, {0}));
-  ASSERT_EQ(OB_SUCCESS, ctx.inc_seq_no());
+  ctx.set_seq_no(ctx.get_seq_no() + 1);
   ASSERT_EQ(OB_SUCCESS, row.set(UserDataWithCallBack(2), ctx, {0}));
-  ASSERT_EQ(OB_SUCCESS, ctx.inc_seq_no());
+  ctx.set_seq_no(ctx.get_seq_no() + 1);
   ASSERT_EQ(OB_SUCCESS, row.set(UserDataWithCallBack(3), ctx, {0}));
-  ASSERT_EQ(OB_SUCCESS, ctx.inc_seq_no());
+  ctx.set_seq_no(ctx.get_seq_no() + 1);
   ASSERT_EQ(OB_SUCCESS, row.set(UserDataWithCallBack(4), ctx, {0}));
-  ASSERT_EQ(OB_SUCCESS, ctx.inc_seq_no());
+  ctx.set_seq_no(ctx.get_seq_no() + 1);
   ASSERT_EQ(OB_SUCCESS, row.set(UserDataWithCallBack(5), ctx, {0}));
-  ASSERT_EQ(OB_SUCCESS, ctx.inc_seq_no());
+  ctx.set_seq_no(ctx.get_seq_no() + 1);
 
   std::thread t1([&ctx]() {
     OCCAM_LOG(DEBUG, "t1 start");

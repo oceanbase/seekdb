@@ -71,9 +71,9 @@ int ObPhyLocationGetter::get_phy_locations(const common::ObIArray<ObTablePartiti
   }
   return ret;
 }
-int ObPhyLocationGetter::get_candi_phy_locations(const ObIArray<ObTableLocation> &table_locations,
-                                                 const ObPlanCacheCtx &pc_ctx,
-                                                 ObIArray<ObCandiTableLoc> &candi_table_locs)
+int ObPhyLocationGetter::get_phy_locations(const ObIArray<ObTableLocation> &table_locations,
+                                           const ObPlanCacheCtx &pc_ctx,
+                                           ObIArray<ObCandiTableLoc> &candi_table_locs)
 {
   int ret = OB_SUCCESS;
   ObExecContext &exec_ctx = pc_ctx.exec_ctx_;
@@ -118,50 +118,16 @@ int ObPhyLocationGetter::get_candi_phy_locations(const ObIArray<ObTableLocation>
     }
 
     if (OB_SUCC(ret) && N!=0 ) {
-      if (OB_FAIL(ObLogPlan::select_replicas(exec_ctx, table_location_ptrs,
-                                             exec_ctx.get_addr(),
-                                             phy_location_info_ptrs))) {
-        LOG_WARN("failed to select replicas", K(ret), K(table_locations),
-                 K(exec_ctx.get_addr()), K(phy_location_info_ptrs));
+      if (OB_FAIL(ObLogPlan::validate_local_tablets(exec_ctx,
+                                                    table_location_ptrs,
+                                                    phy_location_info_ptrs))) {
+        LOG_WARN("failed to validate local tablet locations", K(ret), K(table_locations),
+                 K(phy_location_info_ptrs));
       }
-      LOG_TRACE("after select_replicas", K(candi_table_locs), K(table_locations), K(ret));
+      LOG_TRACE("after validating local tablet locations", K(candi_table_locs),
+                K(table_locations), K(ret));
     }
-  }
-
-  return ret;
-}
-
-int ObPhyLocationGetter::get_phy_locations(const ObIArray<ObTableLocation> &table_locations,
-                                           const ObPlanCacheCtx &pc_ctx,
-                                           ObIArray<ObCandiTableLoc> &candi_table_locs)
-{
-  int ret = OB_SUCCESS;
-  ObExecContext &exec_ctx = pc_ctx.exec_ctx_;
-  const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(pc_ctx.sql_ctx_.session_info_);
-  ObPhysicalPlanCtx *plan_ctx = exec_ctx.get_physical_plan_ctx();
-  const ParamStore &params = plan_ctx->get_param_store();
-  int64_t N = table_locations.count();
-  bool use_fast_leader_selection = true;
-  if (OB_ISNULL(plan_ctx)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid executor ctx!", K(ret), K(plan_ctx));
-  } else {
-    for (int64_t i = 0; use_fast_leader_selection && i < N ; i++) {
-      use_fast_leader_selection &= table_locations.at(i).get_loc_meta().select_leader_;
-    }
-    if (use_fast_leader_selection) {
-      // Directly select leader replica for each table location.
-      for (int64_t i = 0; OB_SUCC(ret) && i < N; i++) {
-        if (OB_FAIL(table_locations.at(i).calculate_final_tablet_locations(exec_ctx, params, dtc_params))) {
-          LOG_WARN("failed to calculate final tablet locations", K(ret), K(table_locations.at(i)));
-        }
-      }
-    } else {
-      // Not all tables require select leader, fallback to original path.
-      if (OB_FAIL(get_candi_phy_locations(table_locations, pc_ctx, candi_table_locs))) {
-        LOG_WARN("failed to get phy locations", K(ret), K(table_locations), K(pc_ctx));
-      }
-    }
+    LOG_TRACE("after get_phy_locations", K(candi_table_locs));
   }
 
   return ret;
@@ -218,8 +184,7 @@ OB_SERIALIZE_MEMBER(ObTableRowCount, op_id_, row_count_);
 int ObConfigInfoInPC::load_influence_plan_config()
 {
   int ret = OB_SUCCESS;
-  // Note: if you need to add a tenant config please
-  //        uncomment next line to retrive tenant config.
+  // Add runtime configuration dependencies here when needed.
 
   // For Cluster configs
   // here to add value of configs that can influence execution plan.
@@ -230,8 +195,8 @@ int ObConfigInfoInPC::load_influence_plan_config()
   realistic_runtime_bloom_filter_size_ = !GCONF._preset_runtime_bloom_filter_size;
   ndv_runtime_bloom_filter_size_ = GCONF._ndv_runtime_bloom_filter_size;
 
-  // For Tenant configs
-  // tenant config use tenant_config to get configs
+  // Runtime configuration dependencies.
+  // Use the runtime configuration to read the current settings.
 
   pushdown_storage_level_ = GCONF._pushdown_storage_level;
   rowsets_enabled_ = GCONF._rowsets_enabled;
@@ -239,7 +204,6 @@ int ObConfigInfoInPC::load_influence_plan_config()
   bloom_filter_enabled_ = GCONF._bloom_filter_enabled;
   px_join_skew_handling_ = GCONF._px_join_skew_handling;
   px_join_skew_minfreq_ = static_cast<int8_t>(GCONF._px_join_skew_minfreq);
-  min_cluster_version_ = GET_MIN_CLUSTER_VERSION();
   enable_spf_batch_rescan_ = GCONF._enable_spf_batch_rescan;
   enable_var_assign_use_das_ = GCONF._enable_var_assign_use_das;
   enable_das_keep_order_ = GCONF._enable_das_keep_order;
@@ -295,9 +259,6 @@ int ObConfigInfoInPC::serialize_configs(char *buf, int buf_len, int64_t &pos)
     SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(px_join_skew_minfreq_));
 
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-                               "%lu,", min_cluster_version_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(min_cluster_version_));
-  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                "%d,", enable_spf_batch_rescan_))) {
     SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_spf_batch_rescan_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
@@ -349,23 +310,3 @@ int ObConfigInfoInPC::serialize_configs(char *buf, int buf_len, int64_t &pos)
 
 }
 }
-
-// ===== definition moved from src/share/config/ob_config_helper.cpp =====
-namespace oceanbase
-{
-namespace common
-{
-
-bool ObConfigPlanCacheGCChecker::check(const ObConfigItem &t) const
-{
-  bool is_valid = false;
-  for (int i = 0; i < ARRAYSIZEOF(sql::plan_cache_gc_confs) && !is_valid; i++) {
-    if (0 == ObString::make_string(sql::plan_cache_gc_confs[i]).case_compare(t.str())) {
-      is_valid = true;
-    }
-  }
-  return is_valid;
-}
-
-}  // namespace common
-}  // namespace oceanbase

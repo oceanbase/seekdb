@@ -56,7 +56,6 @@ typedef ObPrivSet ObPackedObjPriv;  // used in obj priv in priv schema packed
 
 #define OBJ_LEVEL_FOR_TAB_PRIV         OB_ALL_MAX_COLUMN_ID   //When table-level privileges are set, colid is set to this value
 #define OBJ_LEVEL_FOR_COL_PRIV         (OBJ_LEVEL_FOR_TAB_PRIV + 1) // When column privileges can be checked, colid is set to this
-#define ALL_DIR_NAME                "DIRECTORY"
 #define OBJ_ID_FOR_DIR              0
 
 class ObPrivPacker {

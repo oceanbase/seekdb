@@ -154,9 +154,7 @@ int ObBasicStatsEstimator::estimate_block_count(ObExecContext &ctx,
   ObSEArray<ObObjectID, 4> partition_ids;
   ObSEArray<EstimateBlockRes, 4> estimate_result;
   hash::ObHashMap<int64_t, int64_t> first_part_idx_map;
-  uint64_t table_id = share::is_real_table_mapping_virtual_table(param.table_id_)
-                          ? share::get_real_table_mappings_tid(param.table_id_)
-                          : param.table_id_;
+  uint64_t table_id = param.table_id_;
   if (is_virtual_table(table_id)) {  // virtual table no need estimate block count
     // do nothing
   } else if (OB_FAIL(get_all_tablet_id_and_object_id(param, tablet_ids, partition_ids))) {
@@ -301,7 +299,7 @@ int ObBasicStatsEstimator::do_estimate_block_count(ObExecContext &ctx,
       LOG_WARN("failed to check status", K(ret));
       retry_cnt = MAX_RETRY_CNT;
     } else if (OB_FAIL(do_estimate_block_count_and_row_count(ctx, table_id,
-                                                             false, tablet_ids,
+                                                             tablet_ids,
                                                              partition_ids, estimate_res))) {
       LOG_WARN("failed to do estimate block count and row count", K(ret));
       if (DAS_CTX(ctx).get_location_router().is_refresh_location_error(ret)) {
@@ -318,7 +316,6 @@ int ObBasicStatsEstimator::do_estimate_block_count(ObExecContext &ctx,
 
 int ObBasicStatsEstimator::do_estimate_block_count_and_row_count(ObExecContext &ctx,
                                                                  const uint64_t table_id,
-                                                                 bool force_leader,
                                                                  const ObIArray<ObTabletID> &tablet_ids,
                                                                  const ObIArray<ObObjectID> &partition_ids,
                                                                  ObIArray<EstimateBlockRes> &estimate_res)
@@ -339,17 +336,9 @@ int ObBasicStatsEstimator::do_estimate_block_count_and_row_count(ObExecContext &
       ObSEArray<ObAddr, 4> all_selected_addr;
       for (int64_t i = 0; OB_SUCC(ret) && i < candi_tablet_locs.count(); ++i) {
         ObAddr selected_addr;
-        if (!force_leader &&
-            OB_FAIL(ObSQLUtils::choose_best_partition_replica_addr(ctx.get_addr(),
-                                                                  candi_tablet_locs.at(i),
-                                                                  true,
-                                                                  selected_addr))) {
-          LOG_WARN("failed to get best partition replica addr", K(ret), K(candi_tablet_locs), K(i),
-                                                                K(ctx.get_addr()));
-        } else if (force_leader &&
-                   OB_FAIL(ObSQLUtils::get_strong_partition_replica_addr(candi_tablet_locs.at(i),
-                                                                         selected_addr))) {
-          LOG_WARN("failed to get strong partition replicate addr", K(ret));
+        if (OB_FAIL(ObSQLUtils::get_local_partition_addr(candi_tablet_locs.at(i),
+                                                         selected_addr))) {
+          LOG_WARN("failed to get local partition addr", K(ret), K(candi_tablet_locs), K(i));
         } else if (OB_FAIL(all_selected_addr.push_back(selected_addr))) {
           LOG_WARN("failed to push back", K(ret));
         } else {/*do nothing*/}
@@ -388,7 +377,7 @@ int ObBasicStatsEstimator::do_estimate_block_count_and_row_count(ObExecContext &
             } else {/*do nothing*/}
           }
           if (OB_SUCC(ret)) {//begin storage estimate block count
-            if (OB_FAIL(stroage_estimate_block_count_and_row_count(ctx, cur_selected_addr, arg, result))) {
+            if (OB_FAIL(stroage_estimate_block_count_and_row_count(arg, result))) {
               LOG_WARN("failed to stroage estimate block count", K(ret));
             } else {
               for (int64_t i = 0; OB_SUCC(ret) && i < selected_tablet_idx.count(); ++i) {
@@ -417,32 +406,14 @@ int ObBasicStatsEstimator::do_estimate_block_count_and_row_count(ObExecContext &
   return ret;
 }
 
-int ObBasicStatsEstimator::stroage_estimate_block_count_and_row_count(ObExecContext &ctx,
-                                                                      const ObAddr &addr,
-                                                                      const obcall::ObEstBlockArg &arg,
+int ObBasicStatsEstimator::stroage_estimate_block_count_and_row_count(const obcall::ObEstBlockArg &arg,
                                                                       obcall::ObEstBlockRes &result)
 {
   int ret = OB_SUCCESS;
-  if (addr == ctx.get_addr()) {
-    if (OB_FAIL(ObStorageEstimator::estimate_block_count_and_row_count(arg, result))) {
-      LOG_WARN("failed to estimate partition rows", K(ret));
-    } else {
-      LOG_TRACE("succeed to stroage estimate block count and row count", K(addr), K(arg), K(result));
-    }
+  if (OB_FAIL(ObStorageEstimator::estimate_block_count_and_row_count(arg, result))) {
+    LOG_WARN("failed to estimate partition rows", K(ret));
   } else {
-    const ObSQLSessionInfo *session_info = NULL;
-    int64_t timeout = std::min(MAX_OPT_STATS_PROCESS_RPC_TIMEOUT, THIS_WORKER.get_timeout_remain());
-    if (OB_ISNULL(session_info = ctx.get_my_session())) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("session is null", K(ret), K(session_info));
-    } else if (0 >= timeout) {
-      ret = OB_TIMEOUT;
-      LOG_WARN("query timeout is reached", K(ret), K(timeout));
-    } else if (OB_FAIL(GCTX.ob_service_->estimate_tablet_block_count(arg, result))) {
-      LOG_WARN("failed to remote storage est failed", K(ret));
-    } else {
-      LOG_TRACE("succeed to stroage estimate block count", K(addr), K(arg), K(result));
-    }
+    LOG_TRACE("succeed to storage estimate block count and row count", K(arg), K(result));
   }
   return ret;
 }
@@ -470,7 +441,6 @@ int ObBasicStatsEstimator::get_tablet_locations(ObExecContext &ctx,
       ObDASTableLocMeta loc_meta(allocator);
       loc_meta.ref_table_id_ = ref_table_id;
       loc_meta.table_loc_id_ = ref_table_id;
-      loc_meta.select_leader_ = 0;
       if (OB_FAIL(loc_router.nonblock_get_candi_tablet_locations(loc_meta,
                                                                  tablet_ids,
                                                                  partition_ids,
@@ -744,9 +714,7 @@ int ObBasicStatsEstimator::update_last_modified_count(sqlclient::ObISQLConnectio
   bool is_all_update = false;
 
 
-  //if this is virtual table real agent, we need update the real table id modifed count
-  uint64_t table_id = share::is_real_table_mapping_virtual_table(param.table_id_) ?
-                              share::get_real_table_mappings_tid(param.table_id_) : param.table_id_;
+  uint64_t table_id = param.table_id_;
   if (OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(conn));

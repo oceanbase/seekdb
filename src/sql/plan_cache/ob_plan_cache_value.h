@@ -206,7 +206,6 @@ public:
 
   int match_all_params_info(ObPlanSet *batch_plan_set,
                             ObPlanCacheCtx &pc_ctx,
-                            int64_t outline_param_idx,
                             bool &is_same);
   // choose an appropriate physical plan
   int choose_plan(ObPlanCacheCtx &pc_ctx,
@@ -218,8 +217,7 @@ public:
                ObPlanCacheCtx &pc_ctx);
 
   int match_and_generate_ext_params(ObPlanSet *batch_plan_set,
-                                    ObPlanCacheCtx &pc_ctx,
-                                    int64_t outline_param_idx);
+                                    ObPlanCacheCtx &pc_ctx);
 
   //this sql contain can't be parameterized value
   const common::ObBitSet<> &get_not_param_index() const { return not_param_index_; }
@@ -238,23 +236,18 @@ public:
   //}
   //bool get_use_global_location_cache() { return use_global_location_cache_; }
   //StmtStat *get_stmt_stat() { return &stmt_stat_;}
-  void set_tenant_schema_version(int64_t version) { tenant_schema_version_ = version; }
+  void set_runtime_schema_version(int64_t version) { runtime_schema_version_ = version; }
   void set_sys_schema_version(int64_t version) { sys_schema_version_ = version; }
   bool is_plan_fixed() { return outline_state_.is_plan_fixed_; }
   void set_outline_state(const ObOutlineState &outline_state)
   {
     outline_state_ = outline_state;
   }
-  int set_outline_params_wrapper(const share::schema::ObOutlineParamsWrapper &params)
-  {
-    return outline_params_wrapper_.assign(params);
-  }
   char *get_sql_id() {
     return sql_id_;
   }
   ObIAllocator *get_pc_alloc() const { return pc_alloc_; }
   ObIAllocator *get_pc_malloc() const { return pc_malloc_; }
-  const share::schema::ObMaxConcurrentParam *get_outline_param(int64_t index) const;
 
   /**
    * @brief  get sessid
@@ -276,7 +269,7 @@ public:
                                 const DependenyTableStore &dep_schema_objs,
                                 common::ObIArray<PCVSchemaObj> &schema_array);
 
-  int lift_tenant_schema_version(int64_t new_schema_version);
+  int lift_runtime_schema_version(int64_t new_schema_version);
   int check_contains_table(uint64_t db_id, common::ObString tab_name, bool &contains);
 private:
   //used for add plan
@@ -294,7 +287,6 @@ private:
   int get_outline_version(share::schema::ObSchemaGetterGuard &schema_guard,
                           share::schema::ObSchemaObjVersion &local_outline_version);
 
-  int get_outline_param_index(ObExecContext &exec_ctx, int64_t &param_idx) const;
   /**
    * @brief if there is a temporary table in dependency tables
    * @retval is_contain: true for containing temporary table
@@ -374,10 +366,9 @@ private:
   common::ObDList<ObPlanSet> plan_sets_;
   // if there is no virtual table in ObPhysicalPlan, set true(default), or set false
   // bool use_global_location_cache_;
-  int64_t tenant_schema_version_;
+  int64_t runtime_schema_version_;
   int64_t sys_schema_version_;
   ObOutlineState outline_state_;
-  share::schema::ObOutlineParamsWrapper outline_params_wrapper_;
   char sql_id_[OB_MAX_SQL_ID_LENGTH + 1];
   char format_sql_id_[OB_MAX_SQL_ID_LENGTH + 1];
 

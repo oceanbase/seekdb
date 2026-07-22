@@ -33,8 +33,7 @@ namespace storage
 
 struct ObLinkedMacroBlockHeader final
 {
-  static const int32_t LINKED_MACRO_BLOCK_HEADER_VERSION_V1 = 1;
-  static const int32_t LINKED_MACRO_BLOCK_HEADER_VERSION_V2 = 2;
+  static const int32_t LINKED_MACRO_BLOCK_HEADER_VERSION = 1;
   static const int32_t LINKED_MACRO_BLOCK_HEADER_MAGIC = 10000;
 
   ObLinkedMacroBlockHeader()
@@ -61,7 +60,7 @@ struct ObLinkedMacroBlockHeader final
 
   void reset()
   {
-    version_ = LINKED_MACRO_BLOCK_HEADER_VERSION_V2;
+    version_ = LINKED_MACRO_BLOCK_HEADER_VERSION;
     magic_ = LINKED_MACRO_BLOCK_HEADER_MAGIC;
     item_count_ = 0;
     fragment_offset_ = 0;

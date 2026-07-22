@@ -104,23 +104,18 @@ int ObClusteredIndexBlockWriter::init(const ObDataStoreDesc &data_store_desc,
     task_allocator_ = &task_allocator;
   }
   // Build macro writer.
-  ObSSTablePrivateObjectCleaner *object_cleaner = nullptr;
   if (OB_SUCC(ret)) {
     abort_unless(macro_writer_ == nullptr);
     if (OB_ISNULL(macro_writer_ = OB_NEWx(ObMacroBlockWriter, task_allocator_, true /* use double buffer */))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to allocate and construct macro writer in clustered index block writer", K(ret));
-    } else if (OB_FAIL(ObSSTablePrivateObjectCleaner::get_cleaner_from_data_store_desc(leaf_block_desc,
-                                                                                       object_cleaner))) {
-      LOG_WARN("fail to get cleaner from data store desc", K(ret), K(leaf_block_desc), KP(object_cleaner));
     } else if (OB_FAIL(macro_writer_->open(clustered_index_store_desc_,
                                            0 /* parallel_idx */,
                                            macro_seq_param,
                                            pre_warm_param,
-                                           *object_cleaner,
                                            ddl_callback))) {
       LOG_WARN("fail to open macro writer in clustered index block writer",
-               K(ret), K(leaf_block_desc), KPC(object_cleaner));
+               K(ret), K(leaf_block_desc));
     }
   }
   // Build clustered row builder.
@@ -482,7 +477,6 @@ int ObClusteredIndexBlockWriter::make_clustered_index_micro_block_with_rewrite(
       } else {
         ObIndexBlockRowDesc clustered_row_desc;
         clustered_row_desc.set_merge_type(data_store_desc_->get_merge_type());
-        // The following code needs to consider compatibility.
         int64_t agg_row_size = 0;
         const ObIndexBlockRowHeader *idx_row_header = nullptr;
         if (OB_FAIL(ret)) {
@@ -639,9 +633,6 @@ void ObClusteredIndexBlockWriter::prepare_clustered_row_desc_from_row_header(
   // The following items need to remain consistent with meta_to_row_desc.
   clustered_row_desc.set_row_store_type(idx_row_header.get_row_store_type());
   clustered_row_desc.set_compressor_type(idx_row_header.get_compressor_type());
-  clustered_row_desc.set_master_key_id(idx_row_header.get_master_key_id());
-  clustered_row_desc.set_encrypt_id(idx_row_header.get_encrypt_id());
-  clustered_row_desc.set_encrypt_key(idx_row_header.get_encrypt_key());
   clustered_row_desc.set_schema_version(idx_row_header.get_schema_version());
 
   clustered_row_desc.is_serialized_agg_row_ = true;
@@ -655,7 +646,6 @@ void ObClusteredIndexBlockWriter::prepare_clustered_row_desc_from_row_header(
   clustered_row_desc.block_size_ = idx_row_header.get_block_size();
   clustered_row_desc.logic_micro_id_ = idx_row_header.get_logic_micro_id();
   clustered_row_desc.data_checksum_ = idx_row_header.get_data_checksum();
-  clustered_row_desc.shared_data_macro_id_ = idx_row_header.get_shared_data_macro_id();
   clustered_row_desc.macro_block_count_ = idx_row_header.macro_block_count_;
   clustered_row_desc.micro_block_count_ = idx_row_header.micro_block_count_;
   clustered_row_desc.row_count_ = idx_row_header.get_row_count();
@@ -673,21 +663,18 @@ int ObClusteredIndexBlockWriter::decompress_micro_block_data(
   ObMicroBlockHeader header;
 
   block_des_meta.compressor_type_ = macro_meta.get_meta_val().compressor_type_;
-  block_des_meta.encrypt_id_ = macro_meta.get_meta_val().encrypt_id_;
-  block_des_meta.encrypt_key_ = macro_meta.get_meta_val().encrypt_key_;
-  block_des_meta.master_key_id_ = macro_meta.get_meta_val().master_key_id_;
 
   const char * micro_block_buf = micro_block_data.get_buf();
   const int64_t micro_block_size = micro_block_data.get_buf_size();
 
   if (OB_FAIL(header.deserialize_and_check_header(micro_block_buf, micro_block_size))) {
     LOG_WARN("fail to deserialize and check header", K(ret));
-  } else if (OB_FAIL(macro_reader.do_decrypt_and_decompress_data(
+  } else if (OB_FAIL(macro_reader.do_decompress_data(
                  header, block_des_meta, micro_block_buf, micro_block_size,
                  micro_block_data.get_buf(), micro_block_data.get_buf_size(),
                  is_compressed, true /* need deep copy */,
                  &decompress_allocator_ /* allocator */))) {
-    LOG_WARN("Fail to decrypt and decompress data", K(ret));
+    LOG_WARN("Fail to decompress data", K(ret));
   }
 
   return ret;

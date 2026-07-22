@@ -101,8 +101,7 @@ int ObCallProcedureInfo::final_expression(const common::ObIArray<sql::ObRawExpr*
                                   session_info,
                                   schema_guard,
                                   0 /* original param cnt */,
-                                  0/* param count*/,
-                                  GET_MIN_CLUSTER_VERSION());
+                                  0/* param count*/);
   se_cg.set_rt_question_mark_eval(true);
   OZ(se_cg.generate(raw_exprs, frame_info_));
 
@@ -159,5 +158,3 @@ void ObCallProcedureInfo::dump_deleted_log_info(const bool is_debug_log /* = tru
 
 }
 }
-
-

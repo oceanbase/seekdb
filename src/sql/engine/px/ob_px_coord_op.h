@@ -57,7 +57,6 @@ public:
   virtual void destroy() override
   {
     // don't change the order
-    // no need to reset rpc_proxy_
     // no need to reset root_receive_ch_provider_
     coord_info_.destroy();
     row_allocator_.reset();
@@ -91,8 +90,7 @@ public:
   virtual int receive_channel_root_dfo(ObExecContext &ctx, ObDfo &parent, ObPxTaskChSets &parent_ch_sets) override;
   virtual int receive_channel_root_dfo(
       ObExecContext &ctx, ObDfo &parent, dtl::ObDtlChTotalInfo &ch_info) override;
-  virtual int notify_peers_mock_eof(
-      ObDfo *dfo, int64_t timeout_ts, common::ObAddr addr) const;
+  virtual int notify_tasks_mock_eof(ObDfo *dfo, int64_t timeout_ts) const;
   const ObString &query_sql() { return query_sql_; }
 protected:
   virtual int free_allocator() { return common::OB_SUCCESS; }
@@ -130,7 +128,7 @@ protected:
   int init_batch_info();
   int batch_rescan();
   int erase_dtl_interm_result();
-  // send rpc to clean dtl interm result of not scheduled dfos.
+  // Clean DTL intermediate results owned by DFOs that were not scheduled.
   virtual void clean_dfos_dtl_interm_result() = 0;
   int try_clear_p2p_dh_info();
   int64_t get_adaptive_px_dop(int64_t dop) const;
@@ -148,14 +146,12 @@ protected:
     *   px_sequnce_id  explaination
     *   There is a requirement for the uniqueness of the key in both interrupt functions and dtl buffer.
     *   Executing nested px plans according to the previous design will have the defect of non-unique key ids.
-    *   Introducing px_sequence_id, this id can ensure that every px under this server is uniquely and incrementally increasing.
-    *   Using it in conjunction with server_id will make it unique across the entire cluster.
+    *   Introducing px_sequence_id makes every local PX execution unique and monotonically increasing.
     * */
   uint64_t px_sequence_id_;
   ObInterruptibleTaskID interrupt_id_;
   int64_t time_recorder_;
   int64_t batch_rescan_param_version_;
-  ObExtraServerAliveCheck server_alive_checker_;
   int64_t last_px_batch_rescan_size_;
   ObString query_sql_;
   bool use_serial_scheduler_;

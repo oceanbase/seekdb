@@ -22,7 +22,7 @@
 #include "lib/hash/ob_hashmap.h"
 #include "lib/hash/ob_hashutils.h"
 #include "lib/lock/ob_bucket_lock.h"
-#include "src/share/rc/ob_tenant_base.h"
+#include "src/share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -220,8 +220,7 @@ int ObResourceMap<Key, Value>::init(
   if (OB_UNLIKELY(is_inited_)) {
     ret = common::OB_INIT_TWICE;
     STORAGE_LOG(WARN, "ObResourceMap has already been inited", K(ret));
-  } else if (OB_UNLIKELY(bucket_num <= 0 || total_limit <= 0 || hold_limit <= 0 || page_size <= 0
-      || false)) {
+  } else if (OB_UNLIKELY(bucket_num <= 0 || total_limit <= 0 || hold_limit <= 0 || page_size <= 0)) {
     ret = common::OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid argument", K(ret), K(bucket_num), K(total_limit), K(hold_limit),
         K(page_size));
@@ -252,7 +251,7 @@ int ObResourceMap<Key, Value>::init(const int64_t bucket_num, const ObMemAttr &a
   if (OB_UNLIKELY(is_inited_)) {
     ret = common::OB_INIT_TWICE;
     STORAGE_LOG(WARN, "ObResourceMap has already been inited", K(ret));
-  } else if (OB_UNLIKELY(bucket_num <= 0 || false)) {
+  } else if (OB_UNLIKELY(bucket_num <= 0)) {
     ret = common::OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid argument", K(ret), K(bucket_num));
   } else if (OB_FAIL(bucket_lock_.init(bkt_num, ObLatchIds::DEFAULT_BUCKET_LOCK, ObMemAttr("ResourMapLock")))) {

@@ -54,7 +54,7 @@ void ObPxWorkNotifier::worker_start(int64_t tid)
 {
   int64_t start_worker_count = ATOMIC_AAF(&start_worker_count_, 1);
   if (start_worker_count == expect_worker_count_) {
-    // notify rpc worker to exit
+    // Notify the local SQC launcher after all task workers have started.
     cond_.signal();
   }
   tid_array_[start_worker_count - 1] = tid;
@@ -67,8 +67,8 @@ void ObPxWorkNotifier::worker_end(bool &all_worker_finish)
    * Memory should not be accessed after ATOMIC_AAF execution, as data on the heap may have been recycled.
    * Therefore, a record was made in advance here.
    */
-  const int64_t rpc_thread = 1;
-  int64_t expect_end_count = expect_worker_count_ + rpc_thread;
+  const int64_t sqc_launcher_thread = 1;
+  int64_t expect_end_count = expect_worker_count_ + sqc_launcher_thread;
   int64_t finish_worker_count = ATOMIC_AAF(&finish_worker_count_, 1);
   if (finish_worker_count == expect_end_count) {
     all_worker_finish = true;
@@ -105,7 +105,7 @@ int ObPxSqcHandler::pre_acquire_px_worker(int64_t &reserved_thread_count)
   int ret = OB_SUCCESS;
   int64_t max_thread_count = sqc_init_args_->sqc_.get_max_task_count();
   int64_t min_thread_count = sqc_init_args_->sqc_.get_min_task_count();
-    // Pre-reserve thread count in the tenant for px worker execution
+    // Pre-reserve threads for PX worker execution.
   reserved_px_thread_count_ = max_thread_count;
   if (OB_FAIL(notifier_->set_expect_worker_count(reserved_px_thread_count_))) {
     LOG_WARN("failed to set expect worker count", K(ret), K(reserved_px_thread_count_));
@@ -124,7 +124,7 @@ int ObPxSqcHandler::pre_acquire_px_worker(int64_t &reserved_thread_count)
               K(sqc_init_args_));
     }
     /**
-     * sqc handler's reference count, 1 for rpc thread, at this time only the rpc thread references it.
+     * The initial reference belongs to the local SQC launcher thread.
      */
     reference_count_ = 1;
     LOG_TRACE("SQC acquire px worker", K(max_thread_count), K(min_thread_count),
@@ -161,7 +161,7 @@ int ObPxSqcHandler::init()
 {
   int ret = OB_SUCCESS;
   reserved_px_thread_count_ = 0;
-  rpc_level_ = THIS_WORKER.get_curr_request_level();
+  request_level_ = THIS_WORKER.get_curr_request_level();
   void *buf = nullptr;
   observer::ObGlobalContext &gctx = GCTX;
   lib::ContextParam param;
@@ -191,10 +191,10 @@ int ObPxSqcHandler::init()
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Failed to alloc physical plan", K(ret));
   } else if (FALSE_IT(des_phy_plan_ = new(buf) ObPhysicalPlan(mem_context_))) {
-  } else if (OB_ISNULL(buf = allocator->alloc(sizeof(ObPxRpcInitSqcArgs)))) {
+  } else if (OB_ISNULL(buf = allocator->alloc(sizeof(ObPxInitSqcArgs)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Failed to alloc sqc init args", K(ret));
-  } else if (FALSE_IT(sqc_init_args_ = new(buf) ObPxRpcInitSqcArgs())) {
+  } else if (FALSE_IT(sqc_init_args_ = new(buf) ObPxInitSqcArgs())) {
   } else if (OB_ISNULL(buf = allocator->alloc(sizeof(ObPxSubCoord)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Failed to alloc des px sub coord", K(ret));
@@ -305,8 +305,8 @@ int ObPxSqcHandler::destroy_sqc(int &report_ret)
   }
   if (has_flag(OB_SQC_HANDLER_QC_SQC_LINKED)) {
     /**
-     * The connection of the sqc-qc channel is the last step in rpc process. If the link is successful, this flag will be set.
-     * That means once this flag is set, rpc will return normally, and qc will consider sqc as started normally,
+     * Linking the SQC-QC channel is the last local launch step. Once linked, QC
+     * considers the SQC started and expects exactly one finish report.
      * qc will record in its own information that this sqc has started normally. qc's current termination is synchronous termination, every
      * marked started sqc must report to qc when it ends normally or abnormally. If any marked started sqc does not report, qc will keep waiting until timeout.
      */

@@ -102,7 +102,7 @@ private:
   bool is_inited_;
   int64_t next_available_write_ts_;
   int64_t write_speed_;
-  int64_t disk_used_stop_write_threshold_; // stop write threshold on tenant level.
+  int64_t disk_used_stop_write_threshold_; // Database-wide stop-write threshold.
   bool need_stop_write_;
   int64_t ref_cnt_; // reference count
   DISALLOW_COPY_AND_ASSIGN(ObDDLCtrlSpeedItem);
@@ -220,9 +220,7 @@ public:
       const storage::ObDDLMacroBlockRedoInfo &redo_info,
       const blocksstable::MacroBlockId &macro_block_id,
       const int64_t task_id);
-  int wait_macro_block_log_finish(
-      const storage::ObDDLMacroBlockRedoInfo &redo_info,
-      const blocksstable::MacroBlockId &macro_block_id);
+  int wait_macro_block_log_finish();
   int write_commit_log(
       const ObITable::TableKey &table_key,
       const share::SCN &start_scn,
@@ -267,8 +265,6 @@ private:
   ObTabletID tablet_id_;
   ObSEArray<ObDDLRedoLogHandle, 1> ddl_redo_handle_array_;
   char *buffer_;
-  ObArenaAllocator allocator_;
-  ObTablet shared_tablet_;
 };
 
 struct ObDDLRedoLogWriterCallbackInitParam
@@ -279,8 +275,7 @@ struct ObDDLRedoLogWriterCallbackInitParam
   void reset();
   TO_STRING_KV(K_(tablet_id), K_(direct_load_type), K_(block_type),
                K_(table_key), K_(start_scn), K_(task_id), K_(data_format_version),
-               K_(parallel_cnt), K_(need_delay),
-               K_(need_submit_io), K_(merge_slice_idx),
+               K_(need_delay), K_(need_submit_io), K_(merge_slice_idx),
                KP_(macro_meta_store), KP_(write_stat));
   common::ObTabletID tablet_id_;
   storage::ObDirectLoadType direct_load_type_;
@@ -289,7 +284,6 @@ struct ObDDLRedoLogWriterCallbackInitParam
   share::SCN start_scn_;
   int64_t task_id_;
   uint64_t data_format_version_;
-  int64_t parallel_cnt_;
   bool need_delay_;
   bool need_submit_io_;
   int64_t merge_slice_idx_;

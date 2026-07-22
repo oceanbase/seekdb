@@ -21,7 +21,6 @@
 #include "parser/ob_pl_parser.h"
 #include "sql/ob_spi.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
-#include "sql/resolver/dml/ob_sequence_namespace_checker.h"
 #include "sql/parser/ob_item_type.h"
 
 #ifndef LOG_IN_CHECK_MODE
@@ -87,7 +86,6 @@ public:
                  const ParamStore *param_list = NULL,
                  sql::ExternalParams *extern_param_info = NULL,
                  TgTimingEvent tg_timing_event = TgTimingEvent::TG_TIMING_EVENT_INVALID,
-                 bool is_sync_package_var = false,
                  bool need_add_pl_cache = true) :
         allocator_(allocator),
         session_info_(session_info),
@@ -100,7 +98,6 @@ public:
         is_sql_scope_(is_sql_scope_),
         extern_param_info_(extern_param_info),
         is_udt_udf_ctx_(false),
-        is_sync_package_var_(is_sync_package_var),
         need_add_pl_cache_(need_add_pl_cache)
   {
     params_.param_list_ = param_list;
@@ -124,7 +121,6 @@ public:
   bool is_sql_scope_; // Indicates whether the expression parsing request comes from a pure SQL statement
   sql::ExternalParams *extern_param_info_;
   bool is_udt_udf_ctx_; // indicate this context is belong to a udt udf
-  bool is_sync_package_var_;
   bool need_add_pl_cache_; // indicate if this pl object need add into pl cache when re_compile
   ObSEArray<const ObUserDefinedType *, 32> type_buffer_;
   ObPLEnumSetCtx *enum_set_ctx_;
@@ -240,7 +236,6 @@ public:
     arg_cnt_(0),
     question_mark_cnt_(0),
     next_user_defined_exception_id_(1),
-    ob_sequence_ns_checker_(resolve_ctx_.params_),
     item_type_(T_MAX),
     fast_check_status_times_(0) { expr_factory_.set_is_called_sql(false); }
   virtual ~ObPLResolver() {}
@@ -459,7 +454,6 @@ public:
   static int get_local_variable_constraint(
     const ObPLBlockNS &ns, int64_t var_idx, bool &not_null, ObPLIntegerRange &range);
 
-  static int restriction_on_result_cache(share::schema::ObIRoutineInfo *routine_info);
   static int resolve_sf_clause(const ObStmtNodeTree *node,
                                share::schema::ObIRoutineInfo *routine_info,
                                ObProcType &routine_type,
@@ -809,9 +803,6 @@ private:
                       ObIArray<int64_t> &expr_idx);
   int check_in_param_type_legal(const share::schema::ObIRoutineParam *param_info, const ObRawExpr* param);
   int resolve_inout_param(ObRawExpr *param_expr, ObPLRoutineParamMode param_mode, int64_t &out_idx);
-  int resolve_sequence_object(
-    const sql::ObQualifiedName &q_name, ObPLAstUnit &unit_ast, ObRawExpr *&real_ref_expr);
-
   int resolve_udf_pragma(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &ast);
   int resolve_serially_reusable_pragma(const ObStmtNodeTree *parse_tree, ObPLPackageAST &ast);
   int resolve_restrict_references_pragma(const ObStmtNodeTree *parse_tree, ObPLPackageAST &ast);
@@ -911,9 +902,6 @@ private:
   int transform_to_new_assign_stmt(ObIArray<int64_t> &transform_array, ObPLAssignStmt *&old_stmt);
 
   int replace_to_const_expr_if_need(ObRawExpr *&expr);
-  int build_seq_value_expr(ObRawExpr *&expr,
-                           const sql::ObQualifiedName &q_name,
-                           uint64_t seq_id);
   int resolve_external_types_from_expr(ObRawExpr &expr);
   int add_external_cursor(ObPLBlockNS &ns,
                           const ObPLBlockNS *external_ns,
@@ -1042,7 +1030,6 @@ private:
   uint64_t arg_cnt_; // For anonymous blocks, used to indicate the total number of question marks; for routines, used to indicate the number of input parameters
   uint64_t question_mark_cnt_; // indicates the number of question_mark_cnt_ parsed up to the current statement (excluding the current statement)
   uint64_t next_user_defined_exception_id_; // User-defined ExceptionID, starting from 1 and incrementing
-  sql::ObSequenceNamespaceChecker ob_sequence_ns_checker_; // check if an sequence is defined.
   ObArray<int64_t> current_subprogram_path_; // The addressing path of the subprogram currently being parsed
   ObArray<ObPLStmt *> goto_stmts_; // index of goto statements, used for secondary parsing.
   ObItemType item_type_;

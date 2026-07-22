@@ -85,7 +85,6 @@ int ObExprJsonLength::calc(ObEvalCtx &ctx, const ObDatum &data1, ObDatumMeta met
       LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT);
     } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(*allocator, data1, meta1, has_lob_header1, j_doc))) {
       LOG_WARN("fail to get real data.", K(ret), K(j_doc));
-    } else if (OB_FALSE_IT(allocator->add_baseline_size(j_doc.length()))) {
     } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(allocator, j_doc, j_in_type,
                                                         j_in_type, j_base, 0,
                                                         ObJsonExprHelper::get_json_max_depth_config()))) {
@@ -146,7 +145,7 @@ int ObExprJsonLength::eval_json_length(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   ObExpr *arg0 = expr.args_[0];
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
 
   if (OB_FAIL(tmp_allocator.eval_arg(arg0, ctx, datum0))) { // json doc
     LOG_WARN("fail to eval json arg", K(ret), K(arg0->datum_meta_));

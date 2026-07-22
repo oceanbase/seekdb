@@ -92,7 +92,6 @@ int ObExprJsonUnquote::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta met
     ObJsonInType j_in_type = ObJsonExprHelper::get_json_internal_type(type);
     if (OB_FAIL(ObTextStringHelper::read_real_string_data(*allocator, data, meta, has_lob_header, j_str))) {
       LOG_WARN("fail to get real data.", K(ret), K(j_str));
-    } else if (OB_FALSE_IT(allocator->add_baseline_size(j_str.length()))) {
     } else if (ob_is_string_type(type) && (j_str.length() < 2 || j_str[0] != '"' || j_str[j_str.length() - 1] != '"')) {
       if (OB_FAIL(j_buf.reserve(j_str.length()))) {
         LOG_WARN("failed to reserve j_buf", K(ret), K(j_str.length()));
@@ -124,7 +123,7 @@ int ObExprJsonUnquote::eval_json_unquote(const ObExpr &expr, ObEvalCtx &ctx, ObD
   ObDatum* json_datum = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   ObJsonBuffer j_buf(&temp_allocator);
   bool is_null = false;
 

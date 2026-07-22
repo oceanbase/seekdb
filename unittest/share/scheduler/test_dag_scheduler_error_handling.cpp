@@ -37,7 +37,7 @@ namespace unittest
 
 TEST_F(TestDagScheduler, test_error_handling)
 {
-  ObTenantDagScheduler *scheduler = MTL(ObTenantDagScheduler*);
+  ObDagScheduler *scheduler = MTL(ObDagScheduler*);
   ASSERT_TRUE(nullptr != scheduler);
   ASSERT_EQ(OB_SUCCESS, scheduler->init( time_slice));
 

@@ -29,7 +29,7 @@ namespace common
 
 ObScanner::ObScanner(const char *label /*= ObModIds::OB_NEW_SCANNER*/,
                      ObIAllocator *allocator /*= NULL*/,
-                     int64_t mem_size_limit /*= OB_INVALID_TENANT_ID*/,
+                     int64_t mem_size_limit,
                      bool use_row_compact/*= true*/)
     : row_store_(label, use_row_compact),
       mem_size_limit_(mem_size_limit),
@@ -181,7 +181,7 @@ int ObScanner::add_row(const ObNewRow &row)
        * The default size of ObScanner is 64MB.
        * Previously, when using ObScanner as an RPC transport carrier,
        * the default limit of 64MB was used.
-       * Now, with remote execution, the unit of RPC packets has been changed to 2MB.
+       * The current RPC packet unit is 2MB.
        * This may cause previously oversized rows (greater than 2MB) to be unable to be written.
        * Therefore, an additional processing is added in the "add_row" function to ensure that
        * the row length is within 64MB.
@@ -210,7 +210,7 @@ int ObScanner::try_add_row(const common::ObIArray<sql::ObExpr *> &exprs,
      * The default size of ObScanner is 64MB.
      * Previously, when using ObScanner as an RPC transport carrier,
      * the default limit of 64MB was used.
-     * Now, with remote execution, the unit of RPC packets has been changed to 2MB.
+     * The current RPC packet unit is 2MB.
      * This may cause previously oversized rows (greater than 2MB) to be unable to be written.
      * Therefore, an additional processing is added in the "add_row" function to ensure that
      * the row length is within 64MB.
@@ -282,13 +282,7 @@ int ObScanner::set_session_var_map(const sql::ObSQLSessionInfo *p_session_info)
       }
       for (sql::ObSessionValMap::VarNameValMap::const_iterator iter = current_map.get_val_map().begin();
         OB_SUCC(ret) && iter != current_map.get_val_map().end(); ++iter) {
-        if (iter->first.prefix_match(pl::package_key_prefix_v1) // For package variables, only changes will be synchronized
-            && !p_session_info->is_already_tracked(
-                  iter->first, p_session_info->get_changed_user_var())) {
-          // do nothing ...
-        } else {
-          OZ (user_var_map_.set_refactored(iter->first, iter->second));
-        }
+        OZ (user_var_map_.set_refactored(iter->first, iter->second));
       }
     }
   }

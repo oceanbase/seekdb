@@ -90,12 +90,10 @@ private:
       share::SCN &trans_version_at_merge_scn);
   int get_state_of_curr_trans_node(
       transaction::ObTransID &trans_id,
-      int64_t &state,
-      uint64_t &cluster_version);
+      int64_t &state);
   int get_trans_status(
       const transaction::ObTransID &trans_id,
-      int64_t &state,
-      uint64_t &cluster_version);
+      int64_t &state);
   DISALLOW_COPY_AND_ASSIGN(ObMultiVersionValueIterator);
 private:
   bool is_inited_;

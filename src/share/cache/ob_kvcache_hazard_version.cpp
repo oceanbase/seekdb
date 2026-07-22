@@ -74,46 +74,33 @@ void ObKVCacheHazardSlot::delete_node(ObKVCacheHazardNode &node)
 
 void ObKVCacheHazardSlot::retire(const uint64_t version)
 {
-  if (version > ATOMIC_LOAD(&last_retire_version_) || true) {
-    while(!ATOMIC_BCAS(&is_retiring_, false, true)) {
-      // wait until get retiring
-      PAUSE();
-    }
-
-    ObKVCacheHazardNode *head = ATOMIC_LOAD(&delete_list_);
-    if (nullptr != head) {
-      if (version > last_retire_version_) {
-        (void) ATOMIC_SET(&last_retire_version_, version);
-      }
-      ObKVCacheHazardNode *temp_node = head;
-      while (temp_node != (head = ATOMIC_VCAS(&delete_list_, temp_node, nullptr))) {
-        temp_node = head;
-      }
-
-      int64_t retire_count = 0;
-      ObKVCacheHazardNode *remain_list = nullptr;
-      while (head != nullptr) {
-        temp_node = head;
-        head = head->get_next();
-        if (temp_node->get_version() < version ||
-            (true && true)) {
-          temp_node->retire();
-          temp_node = nullptr;
-          ++retire_count;
-        } else {
-          temp_node->set_next(remain_list);
-          remain_list = temp_node;
-        }
-      }
-      if (remain_list != nullptr) {
-        add_nodes(*remain_list);
-      }
-      if (retire_count > 0) {
-        ATOMIC_SAF(&waiting_nodes_count_, retire_count);
-      }
-    }
-    ATOMIC_SET(&is_retiring_, false);  // return retiring
+  while(!ATOMIC_BCAS(&is_retiring_, false, true)) {
+    // wait until get retiring
+    PAUSE();
   }
+
+  ObKVCacheHazardNode *head = ATOMIC_LOAD(&delete_list_);
+  if (nullptr != head) {
+    if (version > last_retire_version_) {
+      (void) ATOMIC_SET(&last_retire_version_, version);
+    }
+    ObKVCacheHazardNode *temp_node = head;
+    while (temp_node != (head = ATOMIC_VCAS(&delete_list_, temp_node, nullptr))) {
+      temp_node = head;
+    }
+
+    int64_t retire_count = 0;
+    while (head != nullptr) {
+      temp_node = head;
+      head = head->get_next();
+      temp_node->retire();
+      ++retire_count;
+    }
+    if (retire_count > 0) {
+      ATOMIC_SAF(&waiting_nodes_count_, retire_count);
+    }
+  }
+  ATOMIC_SET(&is_retiring_, false);  // return retiring
 }
 
 void ObKVCacheHazardSlot::add_nodes(ObKVCacheHazardNode &list)
@@ -290,7 +277,7 @@ int ObKVCacheHazardStation::retire()
   }
 
   {
-    COMMON_LOG(INFO, "erase tenant hazard map node details", K(ret));
+    COMMON_LOG(INFO, "retire hazard map node details", K(ret));
   }
 
   return ret;

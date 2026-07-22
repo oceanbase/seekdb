@@ -16,8 +16,6 @@ create database hualong
   "name_case_mode":1,
   "comment":"",
   "read_only":false,
-  "default_tablegroup_id":-1,
-  "default_tablegroup_name":""
 }
 =============[hualong] database schema start =============
 
@@ -29,7 +27,6 @@ create table t1(c1 int primary key, c2 int not null default 2);
 {
   "tenant_id":1000,
   "database_id":1099511627777002,
-  "tablegroup_id":-1,
   "table_id":1099511627826002,
   "table_name":"t1",
   "max_used_column_id":17,
@@ -37,7 +34,6 @@ create table t1(c1 int primary key, c2 int not null default 2);
   "index_column_num":0,
   "rowkey_split_pos":0,
   "block_size":16384,
-  "is_use_bloomfilter":false,
   "progressive_merge_num":0,
   "replica_num":1,
   "load_type":0,
@@ -60,13 +56,11 @@ create table t1(c1 int primary key, c2 int not null default 2);
     "part_num":1
   },
   "comment":"",
-  "tablegroup_name":"",
   "compress_func_name":"none",
   "zone_list": [
     "test"
   ],
   "primary_zone":"test",
-  "expire_info":"",
   "view_schema": {
     "view_definition":"",
     "check_option":"none",
@@ -74,7 +68,7 @@ create table t1(c1 int primary key, c2 int not null default 2);
   },
   "autoinc_column_id":0,
   "auto_increment":0,
-  "read_only":false,
+  "read_only":false
   "index_tid_array": [
   ],
   "column_array": [
@@ -156,7 +150,6 @@ alter table t1 add column c3 char(10) not null default 3
 {
   "tenant_id":1000,
   "database_id":1099511627777002,
-  "tablegroup_id":-1,
   "table_id":1099511627826002,
   "table_name":"t1",
   "max_used_column_id":18,
@@ -164,7 +157,6 @@ alter table t1 add column c3 char(10) not null default 3
   "index_column_num":0,
   "rowkey_split_pos":0,
   "block_size":16384,
-  "is_use_bloomfilter":false,
   "progressive_merge_num":0,
   "replica_num":1,
   "load_type":0,
@@ -187,13 +179,11 @@ alter table t1 add column c3 char(10) not null default 3
     "part_num":1
   },
   "comment":"",
-  "tablegroup_name":"",
   "compress_func_name":"none",
   "zone_list": [
     "test"
   ],
   "primary_zone":"test",
-  "expire_info":"",
   "view_schema": {
     "view_definition":"",
     "check_option":"none",
@@ -319,7 +309,6 @@ alter table t1 change c3 column3 char(11) not null default 'column3'
 {
   "tenant_id":1000,
   "database_id":1099511627777002,
-  "tablegroup_id":-1,
   "table_id":1099511627826002,
   "table_name":"t1",
   "max_used_column_id":18,
@@ -327,7 +316,6 @@ alter table t1 change c3 column3 char(11) not null default 'column3'
   "index_column_num":0,
   "rowkey_split_pos":0,
   "block_size":16384,
-  "is_use_bloomfilter":false,
   "progressive_merge_num":0,
   "replica_num":1,
   "load_type":0,
@@ -350,13 +338,11 @@ alter table t1 change c3 column3 char(11) not null default 'column3'
     "part_num":1
   },
   "comment":"",
-  "tablegroup_name":"",
   "compress_func_name":"none",
   "zone_list": [
     "test"
   ],
   "primary_zone":"test",
-  "expire_info":"",
   "view_schema": {
     "view_definition":"",
     "check_option":"none",
@@ -482,7 +468,6 @@ alter table t1 alter column3 drop default
 {
   "tenant_id":1000,
   "database_id":1099511627777002,
-  "tablegroup_id":-1,
   "table_id":1099511627826002,
   "table_name":"t1",
   "max_used_column_id":18,
@@ -490,7 +475,6 @@ alter table t1 alter column3 drop default
   "index_column_num":0,
   "rowkey_split_pos":0,
   "block_size":16384,
-  "is_use_bloomfilter":false,
   "progressive_merge_num":0,
   "replica_num":1,
   "load_type":0,
@@ -513,13 +497,11 @@ alter table t1 alter column3 drop default
     "part_num":1
   },
   "comment":"",
-  "tablegroup_name":"",
   "compress_func_name":"none",
   "zone_list": [
     "test"
   ],
   "primary_zone":"test",
-  "expire_info":"",
   "view_schema": {
     "view_definition":"",
     "check_option":"none",
@@ -644,7 +626,6 @@ alter table t1 alter column3 set default 'xxxxx'
 {
   "tenant_id":1000,
   "database_id":1099511627777002,
-  "tablegroup_id":-1,
   "table_id":1099511627826002,
   "table_name":"t1",
   "max_used_column_id":18,
@@ -652,7 +633,6 @@ alter table t1 alter column3 set default 'xxxxx'
   "index_column_num":0,
   "rowkey_split_pos":0,
   "block_size":16384,
-  "is_use_bloomfilter":false,
   "progressive_merge_num":0,
   "replica_num":1,
   "load_type":0,
@@ -675,13 +655,11 @@ alter table t1 alter column3 set default 'xxxxx'
     "part_num":1
   },
   "comment":"",
-  "tablegroup_name":"",
   "compress_func_name":"none",
   "zone_list": [
     "test"
   ],
   "primary_zone":"test",
-  "expire_info":"",
   "view_schema": {
     "view_definition":"",
     "check_option":"none",
@@ -807,7 +785,6 @@ alter table t1 modify column3 char(12) default 'yyyyy'
 {
   "tenant_id":1000,
   "database_id":1099511627777002,
-  "tablegroup_id":-1,
   "table_id":1099511627826002,
   "table_name":"t1",
   "max_used_column_id":18,
@@ -815,7 +792,6 @@ alter table t1 modify column3 char(12) default 'yyyyy'
   "index_column_num":0,
   "rowkey_split_pos":0,
   "block_size":16384,
-  "is_use_bloomfilter":false,
   "progressive_merge_num":0,
   "replica_num":1,
   "load_type":0,
@@ -838,13 +814,11 @@ alter table t1 modify column3 char(12) default 'yyyyy'
     "part_num":1
   },
   "comment":"",
-  "tablegroup_name":"",
   "compress_func_name":"none",
   "zone_list": [
     "test"
   ],
   "primary_zone":"test",
-  "expire_info":"",
   "view_schema": {
     "view_definition":"",
     "check_option":"none",
@@ -970,7 +944,6 @@ alter table t1 drop column3
 {
   "tenant_id":1000,
   "database_id":1099511627777002,
-  "tablegroup_id":-1,
   "table_id":1099511627826002,
   "table_name":"t1",
   "max_used_column_id":18,
@@ -978,7 +951,6 @@ alter table t1 drop column3
   "index_column_num":0,
   "rowkey_split_pos":0,
   "block_size":16384,
-  "is_use_bloomfilter":false,
   "progressive_merge_num":0,
   "replica_num":1,
   "load_type":0,
@@ -1001,13 +973,11 @@ alter table t1 drop column3
     "part_num":1
   },
   "comment":"",
-  "tablegroup_name":"",
   "compress_func_name":"none",
   "zone_list": [
     "test"
   ],
   "primary_zone":"test",
-  "expire_info":"",
   "view_schema": {
     "view_definition":"",
     "check_option":"none",
@@ -1097,7 +1067,6 @@ alter table t1 add column (c3 int, c4 int default 4)
 {
   "tenant_id":1000,
   "database_id":1099511627777002,
-  "tablegroup_id":-1,
   "table_id":1099511627826002,
   "table_name":"t1",
   "max_used_column_id":20,
@@ -1105,7 +1074,6 @@ alter table t1 add column (c3 int, c4 int default 4)
   "index_column_num":0,
   "rowkey_split_pos":0,
   "block_size":16384,
-  "is_use_bloomfilter":false,
   "progressive_merge_num":0,
   "replica_num":1,
   "load_type":0,
@@ -1128,13 +1096,11 @@ alter table t1 add column (c3 int, c4 int default 4)
     "part_num":1
   },
   "comment":"",
-  "tablegroup_name":"",
   "compress_func_name":"none",
   "zone_list": [
     "test"
   ],
   "primary_zone":"test",
-  "expire_info":"",
   "view_schema": {
     "view_definition":"",
     "check_option":"none",
@@ -1292,7 +1258,6 @@ alter table t1 add index idxt1 (c2,c3)
 {
   "tenant_id":1000,
   "database_id":1099511627777002,
-  "tablegroup_id":-1,
   "table_id":1099511627826002,
   "table_name":"t1",
   "max_used_column_id":20,
@@ -1300,7 +1265,6 @@ alter table t1 add index idxt1 (c2,c3)
   "index_column_num":0,
   "rowkey_split_pos":0,
   "block_size":16384,
-  "is_use_bloomfilter":false,
   "progressive_merge_num":0,
   "replica_num":1,
   "load_type":0,
@@ -1323,13 +1287,11 @@ alter table t1 add index idxt1 (c2,c3)
     "part_num":1
   },
   "comment":"",
-  "tablegroup_name":"",
   "compress_func_name":"none",
   "zone_list": [
     "test"
   ],
   "primary_zone":"test",
-  "expire_info":"",
   "view_schema": {
     "view_definition":"",
     "check_option":"none",
@@ -1488,7 +1450,6 @@ alter table t1 add index idxt2 (c3,c4)
 {
   "tenant_id":1000,
   "database_id":1099511627777002,
-  "tablegroup_id":-1,
   "table_id":1099511627826002,
   "table_name":"t1",
   "max_used_column_id":20,
@@ -1496,7 +1457,6 @@ alter table t1 add index idxt2 (c3,c4)
   "index_column_num":0,
   "rowkey_split_pos":0,
   "block_size":16384,
-  "is_use_bloomfilter":false,
   "progressive_merge_num":0,
   "replica_num":1,
   "load_type":0,
@@ -1519,13 +1479,11 @@ alter table t1 add index idxt2 (c3,c4)
     "part_num":1
   },
   "comment":"",
-  "tablegroup_name":"",
   "compress_func_name":"none",
   "zone_list": [
     "test"
   ],
   "primary_zone":"test",
-  "expire_info":"",
   "view_schema": {
     "view_definition":"",
     "check_option":"none",
@@ -1685,7 +1643,6 @@ alter table t1 add unique uidx (c2,c4)
 {
   "tenant_id":1000,
   "database_id":1099511627777002,
-  "tablegroup_id":-1,
   "table_id":1099511627826002,
   "table_name":"t1",
   "max_used_column_id":20,
@@ -1693,7 +1650,6 @@ alter table t1 add unique uidx (c2,c4)
   "index_column_num":0,
   "rowkey_split_pos":0,
   "block_size":16384,
-  "is_use_bloomfilter":false,
   "progressive_merge_num":0,
   "replica_num":1,
   "load_type":0,
@@ -1716,13 +1672,11 @@ alter table t1 add unique uidx (c2,c4)
     "part_num":1
   },
   "comment":"",
-  "tablegroup_name":"",
   "compress_func_name":"none",
   "zone_list": [
     "test"
   ],
   "primary_zone":"test",
-  "expire_info":"",
   "view_schema": {
     "view_definition":"",
     "check_option":"none",
@@ -1883,7 +1837,6 @@ alter table t1 drop index uidx
 {
   "tenant_id":1000,
   "database_id":1099511627777002,
-  "tablegroup_id":-1,
   "table_id":1099511627826002,
   "table_name":"t1",
   "max_used_column_id":20,
@@ -1891,7 +1844,6 @@ alter table t1 drop index uidx
   "index_column_num":0,
   "rowkey_split_pos":0,
   "block_size":16384,
-  "is_use_bloomfilter":false,
   "progressive_merge_num":0,
   "replica_num":1,
   "load_type":0,
@@ -1914,13 +1866,11 @@ alter table t1 drop index uidx
     "part_num":1
   },
   "comment":"",
-  "tablegroup_name":"",
   "compress_func_name":"none",
   "zone_list": [
     "test"
   ],
   "primary_zone":"test",
-  "expire_info":"",
   "view_schema": {
     "view_definition":"",
     "check_option":"none",
@@ -2080,7 +2030,6 @@ alter table t1 set comment = 'I am table t1'
 {
   "tenant_id":1000,
   "database_id":1099511627777002,
-  "tablegroup_id":-1,
   "table_id":1099511627826002,
   "table_name":"t1",
   "max_used_column_id":20,
@@ -2088,7 +2037,6 @@ alter table t1 set comment = 'I am table t1'
   "index_column_num":0,
   "rowkey_split_pos":0,
   "block_size":16384,
-  "is_use_bloomfilter":false,
   "progressive_merge_num":0,
   "replica_num":1,
   "load_type":0,
@@ -2111,13 +2059,11 @@ alter table t1 set comment = 'I am table t1'
     "part_num":1
   },
   "comment":"I am table t1",
-  "tablegroup_name":"",
   "compress_func_name":"none",
   "zone_list": [
     "test"
   ],
   "primary_zone":"test",
-  "expire_info":"",
   "view_schema": {
     "view_definition":"",
     "check_option":"none",
@@ -2277,7 +2223,6 @@ alter table t1 rename to table1
 {
   "tenant_id":1000,
   "database_id":1099511627777002,
-  "tablegroup_id":-1,
   "table_id":1099511627826002,
   "table_name":"table1",
   "max_used_column_id":20,
@@ -2285,7 +2230,6 @@ alter table t1 rename to table1
   "index_column_num":0,
   "rowkey_split_pos":0,
   "block_size":16384,
-  "is_use_bloomfilter":false,
   "progressive_merge_num":0,
   "replica_num":1,
   "load_type":0,
@@ -2308,13 +2252,11 @@ alter table t1 rename to table1
     "part_num":1
   },
   "comment":"I am table t1",
-  "tablegroup_name":"",
   "compress_func_name":"none",
   "zone_list": [
     "test"
   ],
   "primary_zone":"test",
-  "expire_info":"",
   "view_schema": {
     "view_definition":"",
     "check_option":"none",
@@ -2467,4 +2409,3 @@ alter table t1 rename to table1
   ]
 }
 -------------[table1] table schema end -----------
-

@@ -25,7 +25,7 @@
 #include "lib/time/ob_time_utility.h"
 #include "lib/queue/ob_fixed_queue.h"
 #include "common/storage/ob_freeze_define.h"
-#include "share/ob_cluster_version.h"
+#include "share/ob_version_parser.h"
 
 namespace oceanbase
 {
@@ -43,20 +43,20 @@ namespace share
 {
 const int64_t OB_INVALID_SCHEMA_VERSION = -1;
 
-struct TenantIdAndSchemaVersion
+struct SchemaVersionInfo
 {
 public:
-  TenantIdAndSchemaVersion() : schema_version_(0) {}
-  TenantIdAndSchemaVersion(const int64_t schema_version) :
+  SchemaVersionInfo() : schema_version_(0) {}
+  SchemaVersionInfo(const int64_t schema_version) :
       schema_version_(schema_version) {}
   TO_STRING_KV(K_(schema_version));
   void reset() {schema_version_ = 0; }
-  bool operator == (const TenantIdAndSchemaVersion &other) const
+  bool operator == (const SchemaVersionInfo &other) const
   {
-    return ((this == &other) || (true && schema_version_ == other.schema_version_));
+    return this == &other || schema_version_ == other.schema_version_;
   }
   bool is_valid() const { return schema_version_ > 0; }
-  int assign(const TenantIdAndSchemaVersion &other)
+  int assign(const SchemaVersionInfo &other)
   {
     int ret = common::OB_SUCCESS;
     schema_version_ = other.schema_version_;

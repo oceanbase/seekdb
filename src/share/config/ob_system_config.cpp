@@ -17,7 +17,7 @@
 #include "ob_system_config.h"
 #include "share/config/ob_server_config.h"
 #include "share/ob_task_define.h"
-#include "share/ob_cluster_version.h"
+#include "share/ob_version_parser.h"
 
 namespace oceanbase
 {
@@ -106,7 +106,6 @@ int ObSystemConfig::read_int64(const ObSystemConfigKey &key,
 }
 
 
-// tenant is OB_INVALID_TENANT_ID(0) means it's cluster parameter
 int ObSystemConfig::read_config(
     const ObSystemConfigKey &key,
     ObConfigItem &item) const

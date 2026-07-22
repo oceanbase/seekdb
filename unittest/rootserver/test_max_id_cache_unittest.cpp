@@ -19,7 +19,7 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 #define  private public
-#include "rootserver/ob_root_service.h"
+#include "rootserver/ob_local_management_service.h"
 #include "share/ob_max_id_cache.h"
 #include "share/ob_max_id_fetcher.h"
 #include "common/mysqlclient/ob_mysql_proxy.h"
@@ -64,9 +64,6 @@ void reset_id_size()
 }
 TEST(MaxIdCache, basic)
 {
-  rootserver::ObRootService rs;
-  GCTX.root_service_ = &rs;
-  rs.rs_status_.rs_status_ = share::status::ObRootServiceStatus::FULL_SERVICE;
   ObMaxIdCacheMgr mgr;
   ObMySQLProxy proxy;
   uint64_t id = OB_INVALID_ID;

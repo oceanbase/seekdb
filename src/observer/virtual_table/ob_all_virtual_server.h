@@ -48,12 +48,10 @@ class ObAllVirtualServer : public common::ObVirtualTableScannerIterator
     RPC_TLS_ENABLED,
     MEMORY_LIMIT,
     DATA_DISK_ALLOCATED,
-    DATA_DISK_ASSIGNED,
     START_SERVICE_TIME,
     CREATE_TIME,
     ROLE,
     SWITCHOVER_STATUS,
-    LOG_RESTORE_SOURCE,
     SYNC_SCN,
     READABLE_SCN
   };
@@ -62,14 +60,12 @@ public:
   ObAllVirtualServer();
   virtual ~ObAllVirtualServer();
   int init(common::ObAddr &addr, common::ObServerConfig *config);
-  virtual int inner_open();
   virtual int inner_get_next_row(common::ObNewRow *&row);
 
 private:
   char ip_buf_[common::OB_IP_STR_BUFF];
   common::ObAddr addr_;
   common::ObServerConfig *config_;
-  char log_restore_source_buf_[1024];
   char role_buf_[64];
   char switchover_status_buf_[128];
 

@@ -141,20 +141,7 @@ ObGroupScanIter::ObGroupScanIter()
     iter_(&result_tmp_iter_)
 {
 }
-// Old version algorithm:
-// 1. If last_group_idx > cur_group_idx then return iter_end
-// 2. If last_group_idx = cur_group_idx
-//     then store the cached row to the corresponding output row expression, set last_group_idx = -1, return row
-// 3. If last_group_idx < cur_group_idx
-//     3.1 Get a row of data from the storage layer
-//     3.2 Determine if group_idx in this row of data is the same as the current cur_group_idx
-//         If the same:
-//           then return;
-//         if not the same:
-//           record the current read line's group_idx to last_group_idx
-//           Perform a deep copy of the current line for temporary storage
-//           return iter end
-// 2022-12-03 update support for skip reading algorithm:
+// Skip-reading algorithm:
 // 1. If last_group_idx > cur_group_idx then return iter_end
 // 2. If last_group_idx == cur_group_idx
 //     then store the cached row to the corresponding output row expression, set last_group_idx = -1, return row
@@ -214,23 +201,7 @@ int ObGroupScanIter::get_next_row()
 
   return ret;
 }
-// Old version algorithm:
-// 1. If last_group_idx > cur_group_idx then return iter_end
-// 2. If last_group_idx = cur_group_idx
-//     2.1 Traverse the cached rows, calculate the corresponding group_idx, whether the current row belongs to cur_group_idx:
-//       a. If group_idx = cur_group_idx, then repeat 2.1
-//       b. If group_idx != cur_group_idx, then record group_idx to last_group_idx,
-//          Record the starting point for the next access of this cache data
-//     2.2 If traversal ends, then iter_end, last_group_idx = -1
-// 3. If last_group_idx < cur_group_idx
-//     3.1 Fetch a batch of data from the storage layer
-//     3.2 Traverse each group_idx in the row data to see if the current row belongs to cur_group_idx:
-//        a. If group_idx = cur_group_idx, then repeat step 3.2
-//        b. If group_idx != cur_group_idx, then record group_idx to last_group_idx,
-//           and copy the batch data to cache deeply
-//        c. iter_end
-//     3.3 If traversal ends, then iter_end, last_group_idx = -1
-// 2022-12-03 update support for skip reading algorithm:
+// Skip-reading algorithm:
 // 1. If last_group_idx > cur_group_idx then return iter_end algorithm ends.
 // 2. If row_store_ has data (i.e., MIN_GROUP_INDEX != last_group_idx_)
 //     Loop through row_store_.

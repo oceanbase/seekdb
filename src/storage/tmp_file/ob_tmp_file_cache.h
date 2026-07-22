@@ -128,12 +128,7 @@ class ObTmpPageCacheKey final : public common::ObIKVCacheKey
 {
 public:
   ObTmpPageCacheKey();
-  // For Shared nothing mode
   ObTmpPageCacheKey(const int64_t block_id, const int64_t page_id);
-  // For Shared Storage mode
-  ObTmpPageCacheKey(const int64_t tmp_file_id,
-                    const uint64_t unfilled_page_length,
-                    const uint64_t virtual_page_id);
   ~ObTmpPageCacheKey();
   bool operator ==(const ObIKVCacheKey &other) const override;
   
@@ -145,22 +140,8 @@ public:
   int64_t get_block_id() const { return block_id_; }
   int64_t to_string(char* buf, const int64_t buf_len) const;
 private:
-  static const int64_t PAGE_CACHE_KEY_VIRTUAL_PAGE_ID_BITS = 48;
-  static const int64_t PAGE_CACHE_KEY_PAGE_LENGTH_BITS = 16;
-  static const int64_t PAGE_CACHE_KEY_PAGE_LENGTH_MAX = (1 << 13);
-  static const int64_t PAGE_CACHE_KEY_VIRTUAL_PAGE_ID_MAX = (1LL << PAGE_CACHE_KEY_VIRTUAL_PAGE_ID_BITS);
-  union {
-    int64_t block_id_;      // for sn mode
-    int64_t tmp_file_id_;   // for ss mode
-  };
-  union {
-    int64_t page_id_;       // for sn mode
-    struct {                // for ss mode
-      uint64_t unfilled_page_length_ : PAGE_CACHE_KEY_PAGE_LENGTH_BITS;
-      uint64_t virtual_page_id_      : PAGE_CACHE_KEY_VIRTUAL_PAGE_ID_BITS;
-    };
-  };
-  
+  int64_t block_id_;
+  int64_t page_id_;
 
 };
 
@@ -342,5 +323,4 @@ private:
 }  // end namespace tmp_file
 }  // end namespace oceanbase
 #endif // OCEANBASE_STORAGE_TMP_FILE_OB_TMP_FILE_CACHE_H_
-
 

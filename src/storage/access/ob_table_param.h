@@ -284,7 +284,6 @@ public:
   inline const storage::ObTableReadInfo &get_read_info() const { return main_read_info_; }
   inline const ObString &get_parser_name() const { return parser_name_; }
   inline const ObString &get_parser_property() const { return parser_properties_; }
-  inline bool is_safe_filter_with_di() const { return is_safe_filter_with_di_; }
   inline int8_t get_access_virtual_col_cnt() const { return access_virtual_col_cnt_; }
   DECLARE_TO_STRING;
 
@@ -296,8 +295,6 @@ public:
   static int deserialize_columns(const char *buf, const int64_t data_len,
                                  int64_t &pos, Columns &columns, common::ObIAllocator &allocator);
   static int alloc_column(common::ObIAllocator &allocator, ObColumnParam *& col_ptr);
-  int check_is_safe_filter_with_di(common::ObIArray<sql::ObRawExpr *> &exprs,
-                                   sql::ObPushdownFilterNode &pushdown_filters);
 private:
   int construct_columns_and_projector(const ObTableSchema &table_schema,
                                       const common::ObIArray<uint64_t> &output_column_ids,
@@ -349,7 +346,7 @@ private:
   bool use_lob_locator_;
   ObString parser_name_;
   ObString parser_properties_;
-  // if min cluster version < 4.1 use lob locator v1, else use lob locator v2.
+  // Select the LOB locator format once when the scan starts.
   // use enable_lob_locator_v2_ to avoid locator type sudden change while table scan is running
   bool enable_lob_locator_v2_;
   bool is_spatial_index_;
@@ -358,7 +355,6 @@ private:
   bool is_vec_index_;
   bool is_partition_table_;
   bool is_enable_semistruct_encoding_;
-  bool is_safe_filter_with_di_;
   int8_t access_virtual_col_cnt_;
 };
 } //namespace schema

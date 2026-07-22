@@ -141,7 +141,7 @@ public:
       tablet_shell_task_(*this)
   {}
 
-  static int mtl_init(ObTabletGCService *&m);
+  static int server_module_init(ObTabletGCService *&m);
   int init();
   int start();
   int stop();

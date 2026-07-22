@@ -27,12 +27,9 @@ OB_DEF_SERIALIZE(obcall::ObInnerSQLTransmitArg)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE,
-    ctrl_svr_,
-    runner_svr_,
     conn_id_,
     inner_sql_,
     operation_type_,
-    source_cluster_id_,
     worker_timeout_,
     query_timeout_,
     trx_timeout_,
@@ -49,13 +46,9 @@ OB_DEF_DESERIALIZE(obcall::ObInnerSQLTransmitArg)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE,
-    ctrl_svr_,
-    runner_svr_,
-    
     conn_id_,
     inner_sql_,
     operation_type_,
-    source_cluster_id_,
     worker_timeout_,
     query_timeout_,
     trx_timeout_,
@@ -75,12 +68,9 @@ OB_DEF_SERIALIZE_SIZE(obcall::ObInnerSQLTransmitArg)
 {
   int64_t len = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN,
-    ctrl_svr_,
-    runner_svr_,
     conn_id_,
     inner_sql_,
     operation_type_,
-    source_cluster_id_,
     worker_timeout_,
     query_timeout_,
     trx_timeout_,

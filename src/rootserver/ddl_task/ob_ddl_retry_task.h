@@ -24,7 +24,7 @@ namespace oceanbase
 {
 namespace rootserver
 {
-class ObRootService;
+class ObLocalManagementService;
 
 class ObDDLRetryTask : public ObDDLTask
 {
@@ -66,7 +66,7 @@ private:
 private:
   static const int64_t OB_DDL_RETRY_TASK_VERSION = 1L;
   obcall::ObDDLArg *ddl_arg_;
-  ObRootService *root_service_;
+  ObLocalManagementService *local_management_service_;
   int64_t affected_rows_;
   common::ObString forward_user_message_;
   common::ObArenaAllocator allocator_;

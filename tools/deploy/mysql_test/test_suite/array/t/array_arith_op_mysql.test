@@ -69,7 +69,7 @@ drop table arr_t2;
 # test cmp (= != > < ), only = != supported
 #########################################################################
 --error 5083
-select [1,2] > [1,null];                                                                                                
+select [1,2] > [1,null];
 --error 5083
 select [1,2] < [1,null];
 select [1,2] = [1,null];
@@ -78,7 +78,7 @@ select [1,2] = "[1,2]";
 select [1,2,3,4,5] = [1,2,3,4,5];
 select [1,2] = [1.0, 2.0];
 select [1,2] = [1.0000000000001, 2.0];
---error 5083                               
+--error 5083
 select [1,2] < [1,null,3];
 --error 5083
 select [1,2] < [[1,null,3]];
@@ -309,7 +309,7 @@ while($loop < 10)
   if ($val == 0) {
     insert into t1(c2,c3,c4) values([1,2,3,4],[1.2,2.3,6.9,-1.02],['中文ing123',1,'1']);
     inc $val;
-  } 
+  }
   if ($val != 0) {
     insert into t1(c2,c3,c4) values([1,2,3,4],[5.2,6.3,7.9,-10.02],['中文ing123',1,'1']);
     dec $val;
@@ -344,7 +344,7 @@ CREATE TABLE `tbl_42` (
   PRIMARY KEY (`col_531`, `col_534`, `col_524`),
   UNIQUE KEY `idx_585` (`col_535`, `col_528`, `col_530`) BLOCK_SIZE 16384 GLOBAL,
   KEY `idx_92` (`col_532`) BLOCK_SIZE 16384 GLOBAL
-) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = CONDENSED COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0;
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = CONDENSED COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0;
 
 --disable_result_log
 --disable_query_log
@@ -434,7 +434,7 @@ CREATE TABLE `test` (
   `c2` VECTOR(3) DEFAULT NULL,
   `c3` VECTOR(4) DEFAULT NULL,
   `c4` ARRAY(INT) DEFAULT NULL
-) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0;
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0;
 
 insert into test values ( 1,[1,-1,1],[1,2,-3],[1,2,3,4],[1,2,3]),
 ( 2,[2.2,2.3,2.4],[-1.5,2.566,3.44],[1,2,3,4],[1,2,3,4]),
@@ -463,7 +463,7 @@ CREATE TABLE `t1` (
   `c13` longblob DEFAULT NULL,
   `f1` float DEFAULT NULL,
   `v1` VECTOR(3) DEFAULT NULL
-) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0;
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0;
 
 insert into t1 values ( 1,'[1.0,1,2]','[1.0,1,2]','[1.0,1,2]','[1.0,1,2]','[1.0,1,2]','[1.0,1,2]','[1.0,1,2]','[1.0,1,2]','[1.0,1,2]','[1.0,1,2]','[1.0,1,2]','[1.0,1,2]', 1.1,'[2,2,3]');
 
@@ -471,7 +471,7 @@ CREATE TABLE `t` (
   `id` int(11) NOT NULL,
   `c1` VECTOR(3) DEFAULT NULL,
   PRIMARY KEY (`id`)
-) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0;
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0;
 
 insert into t values(1,[1,1,1]), (2,[2.2,3.3,4.4]), (3,[3.33,4.44,5.55]);
 
@@ -496,7 +496,7 @@ select avg(c1) from  t2_vector;
 drop table if exists t,test,tt0,t2, t1, t1_vector, t2_vector;
 --enable_warnings
 
-set ob_default_lob_inrow_threshold=0; 
+set ob_default_lob_inrow_threshold=0;
 create table t1(c1 int,c2 tinyint[],c3 vector(3),c4 smallint[],c5 varchar(30),c6 int[],c7 vector(3) as (c5*c4+c6)) PARTITION BY KEY(c1) PARTITIONS 100;
 insert into t1(c1,c2,c3,c4,c5,c6) values(1,'[1,1,2]','[2,2,3]',array(1,3,2),'[1,2,3]',[2,3,4]);
 insert into t1(c1,c2,c3,c4,c5,c6) values(2,'[1,0,3]','[1,0,3]',array(2,3,2),'[2,2,3]',[5,3,4]);

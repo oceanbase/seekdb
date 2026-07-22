@@ -33,7 +33,7 @@ public:
         index_id_tb_id_(OB_INVALID_ID), trans_(nullptr),
         refresh_method_(share::schema::ObVectorRefreshMethod::MAX) {}
   bool is_valid() const {
-    return true &&
+    return
            OB_INVALID_ID != domain_tb_id_ && OB_INVALID_ID != base_tb_id_ &&
            OB_INVALID_ID != index_id_tb_id_ && OB_NOT_NULL(trans_) &&
            share::schema::ObVectorRefreshMethod::MAX != refresh_method_;

@@ -37,11 +37,11 @@ int ObDbmsInfo::init()
   if (!define_columns_.created() &&
              OB_FAIL(define_columns_.create(common::hash::cal_next_prime(32),
                                            ObModIds::OB_HASH_BUCKET, ObModIds::OB_HASH_NODE))) {
-    SQL_ENG_LOG(WARN, "create sequence current value map failed", K(ret));
+    SQL_ENG_LOG(WARN, "create define column map failed", K(ret));
   } else if (!define_arrays_.created() &&
       OB_FAIL(define_arrays_.create(common::hash::cal_next_prime(32),
                                     ObModIds::OB_HASH_BUCKET, ObModIds::OB_HASH_NODE))) {
-    SQL_ENG_LOG(WARN, "create sequence current value map failed", K(ret));
+    SQL_ENG_LOG(WARN, "create define array map failed", K(ret));
   } else { /*do nothing*/ }
   return ret;
 }

@@ -17,7 +17,6 @@
 #include "ob_all_virtual_thread.h"
 #include "lib/file/file_directory_utils.h"
 #include "lib/thread/protected_stack_allocator.h"
-#include "lib/resource/ob_affinity_ctrl.h"
 
 #ifdef __APPLE__
 #include <sys/uio.h>
@@ -95,10 +94,6 @@ int ObAllVirtualThread::inner_get_next_row(common::ObNewRow *&row)
           }
         }
         
-        if (!true
-            && false) {
-          continue;
-        }
         GET_OTHER_TSI_ADDR(wait_addr, &ObLatch::current_wait);
         for (int64_t i = 0; i < col_count && OB_SUCC(ret); ++i) {
           const uint64_t col_id = output_column_ids_.at(i);
@@ -157,16 +152,6 @@ int ObAllVirtualThread::inner_get_next_row(common::ObNewRow *&row)
               cells[i].set_varchar(trace_id_buf_);
               cells[i].set_collation_type(
                   ObCharset::get_default_collation(ObCharset::get_default_charset()));
-              break;
-            }
-            case NUMA_NODE: {
-              GET_OTHER_TSI_ADDR(numa_node, &ObAffinityCtrl::get_tls_node());
-              int64_t numa_node_display = -1;
-              if (numa_node == OB_NUMA_SHARED_INDEX) {
-              } else {
-                numa_node_display = numa_node;
-              }
-              cells[i].set_int(numa_node_display);
               break;
             }
             default: {

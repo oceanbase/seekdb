@@ -937,22 +937,10 @@ int ObDynamicSampling::estimate_table_block_count_and_row_count(const ObDSTableP
     LOG_WARN("failed to get all tablet id and object id", K(ret));
   } else if (OB_FAIL(ObBasicStatsEstimator::do_estimate_block_count_and_row_count(*ctx_->get_exec_ctx(),
                                                                                   param.table_id_,
-                                                                                  false,
                                                                                   tablet_ids,
                                                                                   partition_ids,
                                                                                   estimate_result))) {
-    LOG_WARN("failed to do estimate block count and row count use best replication", K(ret));
-    if (!ObAccessPathEstimation::is_retry_ret(ret)) {
-      // do nothing
-    } else if (OB_FALSE_IT(ret = OB_SUCCESS)) {
-    } else if (OB_FAIL(ObBasicStatsEstimator::do_estimate_block_count_and_row_count(*ctx_->get_exec_ctx(),
-                                                                                    param.table_id_,
-                                                                                    true,
-                                                                                    tablet_ids,
-                                                                                    partition_ids,
-                                                                                    estimate_result))) {
-      LOG_WARN("failed to do estimate block count and row count use leader replication", K(ret));
-    }
+    LOG_WARN("failed to do estimate block count and row count on local server", K(ret));
   } 
 
   if (OB_SUCC(ret)) {
@@ -1127,9 +1115,6 @@ int ObDynamicSampling::prepare_and_store_session(ObSQLSessionInfo *session,
     session_value = new(ptr)sql::ObSQLSessionInfo::StmtSavedValue();
     if (OB_FAIL(session->save_session(*session_value))) {
       LOG_WARN("failed to save session", K(ret));
-    } else if (session->is_in_external_catalog()
-               && OB_FAIL(session->set_internal_catalog_db())) {
-      LOG_WARN("failed to set catalog", K(ret));
     } else {
       ObSQLSessionInfo::LockGuard data_lock_guard(session->get_thread_data_lock());
       is_sess_in_retry = session->get_is_in_retry();
@@ -1179,7 +1164,7 @@ int ObDynamicSampling::restore_session(ObSQLSessionInfo *session,
         auto txs = share::g_mp->trans_service();
         if (OB_ISNULL(txs)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_ERROR("can not acquire MTL TransService", KR(ret));
+          LOG_ERROR("can not acquire server TransService", KR(ret));
           session->get_tx_desc()->dump_and_print_trace();
         } else {
           txs->release_tx(*session->get_tx_desc());
@@ -1432,8 +1417,7 @@ int ObDynamicSamplingUtils::get_ds_table_param(ObOptimizerContext &ctx,
     LOG_WARN("get unexpected null", K(ret), K(log_plan), KPC(table_meta), KPC(table_item));
   } else if (OB_UNLIKELY(!log_plan->get_stmt()->is_select_stmt()) ||
              OB_UNLIKELY(ctx.use_default_stat()) ||
-             OB_UNLIKELY(is_virtual_table(table_meta->get_ref_table_id()) && !is_ds_virtual_table(table_meta->get_ref_table_id())) ||
-             OB_UNLIKELY(is_external_object_id(table_meta->get_ref_table_id()))) {
+             OB_UNLIKELY(is_virtual_table(table_meta->get_ref_table_id()) && !is_ds_virtual_table(table_meta->get_ref_table_id()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected param", K(ret), K(log_plan), KPC(table_meta), KPC(table_item));
   } else if (OB_FAIL(get_valid_dynamic_sampling_level(ctx.get_session_info(),
@@ -1506,7 +1490,6 @@ int ObDynamicSamplingUtils::check_ds_can_be_applied_to_filter(const ObRawExpr *f
              filter->has_flag(CNT_RAND_FUNC) ||
              filter->has_flag(CNT_DYNAMIC_USER_VARIABLE) ||
              filter->has_flag(CNT_PL_UDF) ||
-             filter->has_flag(CNT_SO_UDF) ||
              filter->has_flag(CNT_MATCH_EXPR) ||
              filter->get_expr_type() == T_FUN_SET_TO_STR ||
              filter->get_expr_type() == T_FUN_ENUM_TO_STR ||
@@ -2040,7 +2023,7 @@ bool ObDynamicSamplingUtils::is_valid_ds_col_type(const ObObjType type)
 //         OB_FAIL(gen_partition_str(other_ds_param, other_partition_str))) {
 //        LOG_WARN("failed to print filter exprs", K(ret));
 //     } else {
-//       key.tenant_ = sys tenant;
+//       key.runtime_ = server runtime;
 //       key.sample_tab_id_ = sample_ds_param.table_id_;
 //       key.sample_index_id_ = sample_ds_param.index_id_;
 //       key.sample_partition_hash_ = murmurhash64A(sample_partition_str.ptr(), sample_partition_str.length(), 0);

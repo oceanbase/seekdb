@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX LIB
 #include "sql/executor/ob_memory_tracker.h"
 #include "lib/rc/context.h"
-#include "share/config/ob_tenant_config_mgr.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/config/ob_runtime_config.h"
+#include "share/rc/ob_server_runtime.h"
 
 using namespace oceanbase::lib;
 

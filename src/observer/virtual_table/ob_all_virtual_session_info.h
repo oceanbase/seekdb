@@ -37,14 +37,13 @@ class ObAllVirtualSessionInfo : public common::ObVirtualTableScannerIterator
 public:
   ObAllVirtualSessionInfo();
   virtual ~ObAllVirtualSessionInfo();
-  inline void set_session_mgr(sql::ObSQLSessionMgr *session_mgr) { session_mgr_ = session_mgr; }
+  inline void sesession_pool(sql::ObSQLSessionMgr *session_mgr) { session_mgr_ = session_mgr; }
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
 private:
   enum SESSION_INFO_COLUMN {
     ID = OB_APP_MIN_COLUMN_ID,
     USER,
-    TENANT,
     HOST,
     DB_NAME,
     COMMAND,
@@ -59,8 +58,6 @@ private:
     THREAD_ID,
     SSL_CIPHER,
     TRACE_ID,
-    REF_COUNT,
-    BACKTRACE,
     TRANS_STATE,
     USER_CLIENT_PORT,
     TOTAL_CPU_TIME
@@ -80,7 +77,7 @@ private:
       trace_id_[0] = '\0';
     }
     virtual ~FillScanner(){}
-    int operator()(common::hash::HashMapPair<uint64_t, sql::ObSQLSessionInfo *> &entry);
+    bool operator()(sql::ObSQLSessionMgr::Key key, sql::ObSQLSessionInfo *sess_info);
     int init(ObIAllocator *allocator,
              common::ObScanner *scanner,
              sql::ObSQLSessionInfo * session_info,

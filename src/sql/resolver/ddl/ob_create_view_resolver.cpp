@@ -19,7 +19,6 @@
 #include "sql/resolver/ddl/ob_create_view_resolver.h"
 #include "sql/printer/ob_select_stmt_printer.h"
 #include "observer/virtual_table/ob_table_columns.h"
-#include "share/table/ob_ttl_util.h"
 
 namespace oceanbase
 {
@@ -41,7 +40,6 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
   ObCreateTableStmt *stmt = NULL;
-  bool is_sync_ddl_user = false;
   if (OB_UNLIKELY(T_CREATE_VIEW != parse_tree.type_)
       || OB_UNLIKELY(ROOT_NUM_CHILD != parse_tree.num_child_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -54,8 +52,6 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
                                     K(parse_tree.children_[VIEW_NODE]),
                                     K(allocator_), K(session_info_),
                                     K(params_.query_ctx_));
-  } else if (OB_FAIL(ObResolverUtils::check_sync_ddl_user(session_info_, is_sync_ddl_user))) {
-    LOG_WARN("Failed to check sync_dll_user", K(ret));
   } else if (OB_UNLIKELY(NULL == (stmt = create_stmt<ObCreateTableStmt>()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("create view stmt failed", K(ret));
@@ -76,16 +72,14 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
     // Originally compatible with mysql, first resolve view_definition then resolve view_name
     // resolve view_name does not depend on view_definition, but resolve view_definition checks for circular dependencies and needs view_name,
     // Therefore exchange the positions of the two resolves
-    // resolve view name; create view [ or replace] view <view_name>[column_list] [table_id]
+    // resolve view name; create view [ or replace] view <view_name>[column_list]
     create_arg.if_not_exist_ = NULL != parse_tree.children_[IF_NOT_EXISTS_NODE]
                                || 1 == parse_tree.reserved_;
     create_arg.is_alter_view_ = (1 == parse_tree.reserved_);
     table_schema.set_force_view(is_force_view);
     
-    //table_schema.set_tablegroup_id(OB_SYS_TABLEGROUP_ID);
     table_schema.set_define_user_id(session_info_->get_priv_user_id());
     table_schema.set_view_created_method_flag((ObViewCreatedMethodFlag)(create_arg.if_not_exist_ || is_force_view));
-    ParseNode *table_id_node = parse_tree.children_[TABLE_ID_NODE];
     const int64_t max_user_table_name_length = OB_MAX_USER_TABLE_NAME_LENGTH_MYSQL;
     ObNameCaseMode mode = OB_NAME_CASE_INVALID;
     bool perserve_lettercase = false; // (mode != OB_LOWERCASE_AND_INSENSITIVE);
@@ -119,10 +113,6 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
       LOG_WARN("fail to check and convert view_name", K(ret), K(view_name));
     } else if (OB_FAIL(table_schema.set_table_name(view_name))) {
       LOG_WARN("fail to set table_name", K(view_name), K(ret));
-    } else if (OB_UNLIKELY(NULL != table_id_node && (T_TABLE_ID != table_id_node->type_
-                                                     || 1 != table_id_node->num_child_))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to resolve table_id", K(ret));
     } else if (OB_ISNULL(schema_checker_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null", K(ret));
@@ -138,10 +128,6 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
                                        session_info_->get_database_name(),
                                        old_database_name))) {
       LOG_WARN("failed to write string", K(ret));
-    } else {
-      table_schema.set_table_id(table_id_node ?
-                                static_cast<uint64_t>(table_id_node->children_[0]->value_) :
-                                OB_INVALID_ID);
     }
 
     if (OB_SUCC(ret)) {
@@ -179,14 +165,6 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
           if (OB_FAIL(try_add_error_info(ret, create_arg.error_info_))) {
             LOG_WARN("failed to add error info to for force view", K(ret));
           }
-        } else if (is_sync_ddl_user && session_info_->is_inner()
-                    && !session_info_->is_user_session()
-                    && (OB_TABLE_NOT_EXIST == ret || OB_ERR_BAD_FIELD_ERROR == ret
-                        || OB_ERR_KEY_DOES_NOT_EXISTS == ret)) {
-          // ret: OB_TABLE_NOT_EXIST || OB_ERR_BAD_FIELD_ERROR
-          // resolve select_stmt_mode may result in table or column not existing, here we avoid it
-          LOG_WARN("resolve select in create view failed", K(ret));
-          ret = OB_SUCCESS;
         } else {
           LOG_WARN("resolve select in create view failed", K(select_stmt_node), K(ret));
         }
@@ -286,7 +264,7 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
     }
 
     if (OB_SUCC(ret)) {
-      if (!is_force_view && !is_sync_ddl_user) {
+      if (!is_force_view) {
         // The view definition was directly set using the SQL for creating the view in table_schema.set_view_definition
         // Baseline backup when creating view must all use the view definition inside show create view
         // create force view use origin view_define
@@ -300,8 +278,7 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
       }
     }
     // Permission addition requires complete stmt information, adjust the position of this code segment with caution
-    if (OB_SUCC(ret) && !(is_sync_ddl_user && session_info_->is_inner())
-        && !(select_stmt == NULL && !resolve_succ)
+    if (OB_SUCC(ret) && !(select_stmt == NULL && !resolve_succ)
         && OB_FAIL(check_privilege_needed(*stmt, *select_stmt, is_force_view))) {
       LOG_WARN("fail to check privilege needed", K(ret));
     }
@@ -706,7 +683,6 @@ int ObCreateViewResolver::print_rebuilt_view_stmt(const ObSelectStmt *stmt,
       pos = 0;
       ObObjPrintParams obj_print_params(params_.query_ctx_->get_timezone_info());
       obj_print_params.print_origin_stmt_ = true;
-      obj_print_params.not_print_internal_catalog_ = true;
       ObSelectStmtPrinter stmt_printer(buf, buf_len, &pos, stmt,
                                       params_.schema_checker_->get_schema_guard(),
                                       obj_print_params, true);
@@ -1005,7 +981,7 @@ int ObCreateViewResolver::add_column_infos(ObSelectStmt &select_stmt,
   ObColumnSchemaV2 column;
   int64_t cur_column_id = OB_APP_MIN_COLUMN_ID;
   share::schema::ObSchemaGetterGuard schema_guard;
-  if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+  if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
     LOG_WARN("fail to get schema guard", K(ret));
   } else {
     if ((!column_list.empty() && OB_UNLIKELY(column_list.count() != select_items.count()))

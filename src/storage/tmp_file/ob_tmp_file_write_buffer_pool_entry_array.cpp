@@ -17,7 +17,7 @@
 
 #include "storage/tmp_file/ob_tmp_file_write_buffer_pool_entry_array.h"
 #include "lib/oblog/ob_log_module.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {

@@ -51,12 +51,12 @@ TEST(TestTrace, basic_test)
   FLT_SET_AUTO_FLUSH(auto_flush);
   //
   auto trace_id = FLT_BEGIN_TRACE();
-  auto* proxy = FLT_BEGIN_SPAN(ObProxy);
+  auto* server = FLT_BEGIN_SPAN(ObServer);
   FLT_SET_TAG(sql_text, "select 1 from dual;");
   FLUSH_TRACE();
   auto t = std::thread([=]() {
     // RPC framework end completes initialization
-    OBTRACE->init(trace_id, proxy->get_span_id(), (auto_flush << 7) + level);
+    OBTRACE->init(trace_id, server->get_span_id(), (auto_flush << 7) + level);
     //
     FLTSpanGuard(ObSql);
     FLT_SET_TAG(sql_id, 123);
@@ -78,7 +78,7 @@ TEST(TestTrace, basic_test)
     // sql end here
   });
   t.join();
-  FLT_END_SPAN(proxy);
+  FLT_END_SPAN(server);
   FLT_END_TRACE();
 }
 
@@ -89,4 +89,3 @@ int main(int argc, char **argv)
   ::testing::InitGoogleTest(&argc,argv);
   return RUN_ALL_TESTS();
 }
-

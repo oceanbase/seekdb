@@ -124,10 +124,18 @@ class ObWaitEventHistory
 public:
   ObWaitEventHistory();
   virtual ~ObWaitEventHistory();
+  int push(const int64_t event_no, const uint64_t timeout_ms,
+      const uint64_t p1, const uint64_t p2, const uint64_t p3);
+  int add(const ObWaitEventHistory &other);
   int get_iter(ObWaitEventHistoryIter &iter);
+  int get_last_wait(ObWaitEventDesc *&item);
   int get_curr_wait(ObWaitEventDesc *&item);
+  int get_accord_event(ObWaitEventDesc *&event_desc);
+  int calc_wait_time(ObWaitEventDesc *&event_desc);
   void reset();
+private:
   int get_next_and_compare(int64_t &iter_1, int64_t &iter_2, int64_t &cnt, const ObWaitEventHistory &other, ObWaitEventDesc *tmp);
+private:
   int64_t curr_pos_;
   int64_t item_cnt_;
   int64_t nest_cnt_;
@@ -140,7 +148,17 @@ class ObDiagnoseSessionInfo
 public:
   ObDiagnoseSessionInfo();
   virtual ~ObDiagnoseSessionInfo();
+  int add(ObDiagnoseSessionInfo &other);
   void reset();
+  int notify_wait_begin(
+      const int64_t event_no,
+      const uint64_t timeout_ms = 0,
+      const uint64_t p1 = 0,
+      const uint64_t p2 = 0,
+      const uint64_t p3 = 0,
+      const bool is_atomic = false);
+  int notify_wait_end(class ObDiagnoseRuntimeInfo *runtime_info,
+      const bool is_atomic, const bool is_idle);
   int set_max_wait(ObWaitEventDesc *max_wait)
   {
     max_wait_ = max_wait;
@@ -153,6 +171,9 @@ public:
     return OB_SUCCESS;
   }
   ObWaitEventDesc &get_curr_wait();
+  int inc_stat(const int16_t stat_no);
+  int update_stat(const int16_t stat_no, const int64_t delta);
+  static ObDiagnoseSessionInfo *get_local_diagnose_info();
   inline ObWaitEventHistory &get_event_history()  { return event_history_; }
   inline ObWaitEventStatArray &get_event_stats()  { return event_stats_; }
   inline ObStatEventAddStatArray &get_add_stat_stats()  { return stat_add_stats_; }
@@ -182,9 +203,113 @@ private:
   DIRWLock lock_;
 };
 
+// Process-wide diagnostic counters.  seekdb has one runtime, so this object
+// deliberately has no runtime id and no id-to-bucket lookup layer.
+class ObDiagnoseRuntimeInfo final
+{
+public:
+  explicit ObDiagnoseRuntimeInfo(ObIAllocator *allocator = NULL);
+  ~ObDiagnoseRuntimeInfo();
+  int add(const ObDiagnoseRuntimeInfo &other);
+  int add_wait_event(const ObDiagnoseRuntimeInfo &other);
+  int add_stat_event(const ObDiagnoseRuntimeInfo &other);
+  int add_latch_stat(const ObDiagnoseRuntimeInfo &other);
+  void reset();
+  int inc_stat(const int16_t stat_no);
+  int update_stat(const int16_t stat_no, const int64_t delta);
+  int set_stat(const int16_t stat_no, const int64_t value);
+  int get_stat(const int16_t stat_no, int64_t &value) const;
+  int record_wait_event(const int64_t event_no, const int64_t wait_time,
+      const uint64_t timeout_ms);
+  int merge_wait_event(const int64_t event_no, const ObWaitEventStat &other);
+  inline ObWaitEventStatArray &get_event_stats() { return event_stats_; }
+  inline ObStatEventAddStatArray &get_add_stat_stats() { return stat_add_stats_; }
+  inline ObStatEventSetStatArray &get_set_stat_stats() { return stat_set_stats_; }
+  inline ObLatchStatArray &get_latch_stats() { return latch_stats_; }
+  TO_STRING_EMPTY();
+private:
+  ObWaitEventStatArray event_stats_;
+  ObStatEventAddStatArray stat_add_stats_;
+  ObStatEventSetStatArray stat_set_stats_;
+  ObLatchStatArray latch_stats_;
+};
 
-// ObWaitEventGuard, ObMaxWaitGuard, ObTotalWaitGuard deleted - wait event diagnostics removed
-// ObSleepEventGuard deleted - wait event diagnostics removed
+class ObDIGlobalRuntimeCache
+{
+public:
+  static ObDIGlobalRuntimeCache &get_instance();
+  int update_stat(const int16_t stat_no, const int64_t delta);
+  int set_stat(const int16_t stat_no, const int64_t value);
+  int record_wait_event(const int64_t event_no, const int64_t wait_time,
+      const uint64_t timeout_ms);
+  int merge_wait_event(const int64_t event_no, const ObWaitEventStat &other);
+  int get_runtime_info(ObDiagnoseRuntimeInfo &runtime_info) const;
+  void reset();
+private:
+  ObDIGlobalRuntimeCache() = default;
+  ~ObDIGlobalRuntimeCache() = default;
+  DISALLOW_COPY_AND_ASSIGN(ObDIGlobalRuntimeCache);
+private:
+  ObDiagnoseRuntimeInfo runtime_info_;
+};
+
+class ObWaitEventGuard
+{
+public:
+  explicit ObWaitEventGuard(
+      const int64_t event_no,
+      const uint64_t timeout_ms = 0,
+      const int64_t p1 = 0,
+      const int64_t p2 = 0,
+      const int64_t p3 = 0,
+      const bool is_atomic = false);
+  ~ObWaitEventGuard();
+private:
+  int64_t event_no_;
+  ObDiagnoseSessionInfo *di_;
+  bool is_atomic_;
+  bool need_record_;
+};
+
+template<ObWaitEventIds::ObWaitEventIdEnum EVENT_ID>
+class ObSleepEventGuard : public ObWaitEventGuard
+{
+public:
+  ObSleepEventGuard(const int64_t sleep_us, const uint64_t timeout_ms = 0)
+      : ObWaitEventGuard(EVENT_ID, timeout_ms, sleep_us, 0, 0)
+  {}
+  ObSleepEventGuard(const int64_t sleep_us, const int64_t p1,
+      const int64_t p2, const int64_t p3, const uint64_t timeout_ms = 0)
+      : ObWaitEventGuard(EVENT_ID, timeout_ms, p1, p2, p3)
+  {
+    UNUSED(sleep_us);
+  }
+};
+
+class ObMaxWaitGuard
+{
+public:
+  explicit ObMaxWaitGuard(ObWaitEventDesc *max_wait);
+  ~ObMaxWaitGuard();
+private:
+  ObWaitEventDesc *prev_wait_;
+  ObDiagnoseSessionInfo *di_;
+  bool need_record_;
+  ObWaitEventDesc *max_wait_;
+};
+
+class ObTotalWaitGuard
+{
+public:
+  explicit ObTotalWaitGuard(ObWaitEventStat *total_wait);
+  ~ObTotalWaitGuard();
+private:
+  ObWaitEventStat *prev_wait_;
+  ObDiagnoseSessionInfo *di_;
+  bool need_record_;
+  ObWaitEventStat *total_wait_;
+};
+
 
 } /* namespace common */
 } /* namespace oceanbase */
@@ -192,21 +317,29 @@ private:
 #ifdef _WIN32
 #define SLEEP(time)                                                                        \
   do {                                                                                     \
+    oceanbase::common::ObSleepEventGuard<oceanbase::common::ObWaitEventIds::DEFAULT_SLEEP> \
+        wait_guard(((int64_t)time) * 1000 * 1000);                                         \
     ::Sleep((DWORD)(time) * 1000);                                                         \
   } while (0)
 
 #define USLEEP(time)                                                                       \
   do {                                                                                     \
+    oceanbase::common::ObSleepEventGuard<oceanbase::common::ObWaitEventIds::DEFAULT_SLEEP> \
+        wait_guard((int64_t)time);                                                         \
     ::Sleep((DWORD)(((time) + 999) / 1000));                                               \
   } while (0)
 #else
 #define SLEEP(time)                                                                        \
   do {                                                                                     \
+    oceanbase::common::ObSleepEventGuard<oceanbase::common::ObWaitEventIds::DEFAULT_SLEEP> \
+        wait_guard(((int64_t)time) * 1000 * 1000);                                         \
     ::sleep(time);                                                                         \
   } while (0)
 
 #define USLEEP(time)                                                                       \
   do {                                                                                     \
+    oceanbase::common::ObSleepEventGuard<oceanbase::common::ObWaitEventIds::DEFAULT_SLEEP> \
+        wait_guard((int64_t)time);                                                         \
     ::usleep(time);                                                                        \
   } while (0)
 #endif

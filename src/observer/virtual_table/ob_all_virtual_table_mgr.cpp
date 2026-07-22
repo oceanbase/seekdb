@@ -44,7 +44,7 @@ void ObAllVirtualTableMgr::reset()
   table_store_iter_.reset();
   tablet_handle_.reset();
   if (OB_NOT_NULL(tablet_iter_)) {
-    tablet_iter_->~ObTenantTabletIterator();
+    tablet_iter_->~ObTabletIterator();
     tablet_iter_ = nullptr;
   }
   tablet_allocator_.reset();
@@ -66,7 +66,7 @@ int ObAllVirtualTableMgr::init(common::ObIAllocator *allocator)
   } else if (OB_ISNULL(allocator)) {
     ret = OB_INVALID_ARGUMENT;
     SERVER_LOG(WARN, "invalid argument", K(ret), KP(allocator));
-  } else if (OB_ISNULL(iter_buf_ = allocator->alloc(sizeof(ObTenantTabletIterator)))) {
+  } else if (OB_ISNULL(iter_buf_ = allocator->alloc(sizeof(ObTabletIterator)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     SERVER_LOG(WARN, "fail to alloc tablet iter buf", K(ret));
   } else {
@@ -84,8 +84,8 @@ int ObAllVirtualTableMgr::get_next_tablet()
   tablet_allocator_.reuse();
   if (nullptr == tablet_iter_) {
     
-    ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
-    if (OB_ISNULL(tablet_iter_ = new (iter_buf_) ObTenantTabletIterator(*t3m, tablet_allocator_, nullptr/*no op*/))) {
+    ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+    if (OB_ISNULL(tablet_iter_ = new (iter_buf_) ObTabletIterator(*t3m, tablet_allocator_, nullptr/*no op*/))) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "fail to new tablet_iter_", K(ret));
     }
@@ -139,7 +139,6 @@ int ObAllVirtualTableMgr::get_next_table(ObITable *&table)
 
 int ObAllVirtualTableMgr::inner_get_next_row(common::ObNewRow *&row)
 {
-  // each get_next_row will switch to required tenant, and released guard later
   int ret = OB_SUCCESS;
   ObITable *table = nullptr;
   if (OB_UNLIKELY(!start_to_read_)) {
@@ -156,8 +155,10 @@ int ObAllVirtualTableMgr::inner_get_next_row(common::ObNewRow *&row)
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "table shouldn't NULL here", K(ret), K(table));
   } else {
-    const int64_t nested_offset = table->is_sstable() ? static_cast<ObSSTable *>(table)->get_macro_offset() : 0;
-    const int64_t nested_size = table->is_sstable() ? static_cast<ObSSTable *>(table)->get_macro_read_size() : 0;
+    const int64_t nested_offset = table->is_sstable()
+        ? static_cast<ObSSTable *>(table)->get_macro_offset() : 0;
+    const int64_t nested_size = table->is_sstable()
+        ? static_cast<ObSSTable *>(table)->get_macro_read_size() : 0;
     const ObITable::TableKey &table_key = table->get_key();
     const int64_t col_count = output_column_ids_.count();
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {

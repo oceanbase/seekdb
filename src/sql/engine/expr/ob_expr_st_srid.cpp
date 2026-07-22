@@ -87,7 +87,7 @@ int ObExprSTSRID::eval_st_srid_common(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, func_name);
+  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
   ObDatum *datum = NULL;
   int num_args = expr.arg_cnt_;
   bool is_null_result = false;
@@ -114,7 +114,7 @@ int ObExprSTSRID::eval_st_srid_common(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "SRID", func_name);
       LOG_WARN("srid input value out of range", K(ret), K(datum->get_int()));
     } else if (0 != (srid = datum->get_uint32())) {
-      if (OB_FAIL(OTSRS_MGR->get_tenant_srs_guard(srs_guard))) {
+      if (OB_FAIL(SRS_SERVICE->get_srs_guard(srs_guard))) {
         LOG_WARN("failed to get srs guard", K(ret));
       } else if (OB_FAIL(srs_guard.get_srs_item(srid, srs))) {
         LOG_WARN("failed to get srs item", K(ret));
@@ -136,7 +136,6 @@ int ObExprSTSRID::eval_st_srid_common(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
       if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(tmp_allocator, *datum,
                 expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkb))) {
         LOG_WARN("fail to get real string data", K(ret), K(wkb));
-      } else if (FALSE_IT(tmp_allocator.set_baseline_size(wkb.length()))) {
       } else if (num_args == 1) {
         if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb, srs, true, func_name))) {
           LOG_WARN("fail to get srs item", K(ret), K(wkb));

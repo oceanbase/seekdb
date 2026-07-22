@@ -18,11 +18,6 @@
 
 #include "rpc/obmysql/packet/ompk_handshake.h"
 
-ObString OB_WEAK_SYMBOL get_display_mysql_version_cfg()
-{
-  return ObString((DEFAULT_MYSQL_VERSION_CSTR)); // default server version string for mysql mode
-}
-
 using namespace oceanbase::common;
 using namespace oceanbase::obmysql;
 
@@ -37,7 +32,7 @@ OMPKHandshake::OMPKHandshake()
       terminated_(0)
 {
   protocol_version_ = 10; // Protocol::HandshakeV10
-  server_version_ = get_display_mysql_version_cfg();
+  server_version_ = ObString(DEFAULT_MYSQL_VERSION_CSTR);
   thread_id_ = 1;
   memset(scramble_buff_, 'a', 8);
   filler_ = 0;
@@ -64,8 +59,6 @@ OMPKHandshake::OMPKHandshake()
   server_capabilities_upper_.capability_flag_.OB_SERVER_SESSION_VARIABLE_TRACK = 1;
   server_capabilities_upper_.capability_flag_.OB_SERVER_PLUGIN_AUTH = 1;
   server_capabilities_upper_.capability_flag_.OB_SERVER_CONNECT_ATTRS = 1;
-  server_capabilities_upper_.capability_flag_.OB_SERVER_USE_LOB_LOCATOR = 1;
-  server_capabilities_upper_.capability_flag_.OB_SERVER_RETURN_HIDDEN_ROWID = 1;
   server_capabilities_upper_.capability_flag_.OB_SERVER_PS_MULTIPLE_RESULTS = 1;
 
   if (server_capabilities_upper_.capability_flag_.OB_SERVER_PLUGIN_AUTH != 0) {
@@ -190,7 +183,7 @@ int OMPKHandshake::decode()
     ObMySQLUtil::get_uint1(pos, protocol_version_);
 
     int64_t sv_len = strlen(pos);
-    server_version_ = get_display_mysql_version_cfg();
+    server_version_ = ObString(DEFAULT_MYSQL_VERSION_CSTR);
     pos += sv_len + 1;
 
     ObMySQLUtil::get_uint4(pos, thread_id_);

@@ -34,8 +34,7 @@ struct ObAggRowHeader final
 public:
   static const int64_t AGG_COL_TYPE_BITMAP_SIZE = 1; // 1 byte bitmap
   static const int64_t AGG_COL_MAX_OFFSET_SIZE = 2; // total size of agg_data < 1K, at most 64K
-  static const int64_t AGG_ROW_HEADER_VERSION = 1;
-  static const int64_t AGG_ROW_HEADER_VERSION_2 = 2;
+  static const int64_t AGG_ROW_HEADER_VERSION = 2;
   static const int64_t TYPE_BITMAP_IDX = 0;
   static const int64_t PREFIX_BITMAP_IDX = 1;
 public:
@@ -43,7 +42,7 @@ public:
   ~ObAggRowHeader() = default;
   bool is_valid() const
   {
-    return (version_ == AGG_ROW_HEADER_VERSION || version_ == AGG_ROW_HEADER_VERSION_2) && agg_col_cnt_ > 0 && agg_col_idx_size_ > 0 && agg_col_idx_off_size_ > 0
+    return version_ == AGG_ROW_HEADER_VERSION && agg_col_cnt_ > 0 && agg_col_idx_size_ > 0 && agg_col_idx_off_size_ > 0
            && bitmap_size_ == AGG_COL_TYPE_BITMAP_SIZE;
   }
   TO_STRING_KV(K_(version), K_(length), K_(agg_col_cnt), K_(agg_col_idx_size),
@@ -81,7 +80,7 @@ public:
   ~ObAggRowWriter();
   int init(const ObIArray<ObSkipIndexColMeta> &agg_col_arr,
            const ObSkipIndexAggResult &agg_data,
-           const int64_t major_working_cluster_version,
+           const int64_t data_format_version,
            ObIAllocator &allocator);
   OB_INLINE int64_t get_serialize_data_size() const { return header_.length_; }
   int write_agg_data(char *buf, const int64_t buf_size, int64_t &pos);
@@ -108,7 +107,7 @@ private:
   ColMetaList col_meta_list_;
   ObAggRowHeader header_;
   ObAggRowHelper row_helper_;
-  int64_t major_working_cluster_version_;
+  int64_t data_format_version_;
   DISALLOW_COPY_AND_ASSIGN(ObAggRowWriter);
 };
 
@@ -129,10 +128,6 @@ private:
   int read_cell(
       const char *cell_buf, const int64_t buf_size, const int64_t type,
       bool &found, int64_t &col_off, int64_t &col_len, bool &is_prefix);
-  inline bool has_cell_prefix_bitmap()
-  {
-    return header_->version_ >= ObAggRowHeader::AGG_ROW_HEADER_VERSION_2;
-  }
 
 private:
   bool is_inited_;

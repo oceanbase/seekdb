@@ -1,6 +1,6 @@
 ob_set_subtarget(ob_logservice common
-  ob_tenant_mutil_allocator.cpp
-  ob_tenant_mutil_allocator_mgr.cpp
+  ob_log_allocator.cpp
+  ob_log_allocator_mgr.cpp
   ob_append_callback.cpp
   ob_log_base_header.cpp
   ob_log_handler.cpp
@@ -39,6 +39,7 @@ ob_set_subtarget(ob_logservice palf
   palf/log_io_task_cb_utils.cpp
   palf/log_shared_task.cpp
   palf/log_io_worker.cpp
+  palf/log_io_worker_wrapper.cpp
   palf/log_iterator_storage.cpp
   palf/log_loop_thread.cpp
   palf/log_meta.cpp
@@ -66,7 +67,6 @@ ob_set_subtarget(ob_logservice palf
   palf/palf_options.cpp
   palf/log_mode_mgr.cpp
   palf/log_io_utils.cpp
-  palf/log_io_worker_wrapper.cpp
   palf/log_throttle.cpp
   palf/log_io_context.cpp
   palf/log_io_adapter.cpp

@@ -34,7 +34,7 @@ namespace ex_rpc {
 // MAX_RPC_TIMEOUT (the proxy default applied when a former RPC set no .timeout()).
 static const int64_t EX_RPC_DEFAULT_TIMEOUT_US = 9L * 1000 * 1000;
 
-// Defined in ob_ex_rpc.cpp: dispatch fn to the caller's tenant ReqWorker (real
+// Defined in ob_ex_rpc.cpp: dispatch fn to the caller's ReqWorker (real
 // ObThWorker) carrying timeout_us as the deadline, and WAIT (reproduces the former
 // loopback sync RPC). fn captures by reference -- safe because the caller waits, so
 // no arg serialization is needed.

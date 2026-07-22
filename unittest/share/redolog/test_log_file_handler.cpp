@@ -15,6 +15,7 @@
  */
 
 #include "share/redolog/ob_log_file_reader.h"
+#include "lib/file/ob_file.h"
 #include "storage/blocksstable/ob_data_file_prepare.h"
 
 #define private public

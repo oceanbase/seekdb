@@ -15,7 +15,6 @@
  */
 
 #include "ob_deadlock_detector_common_define.h"
-#include "ob_deadlock_detector_mgr.h"
 
 namespace oceanbase
 {
@@ -28,14 +27,6 @@ using namespace common;
 
 int64_t ObIDeadLockDetector::total_constructed_count = 0;
 int64_t ObIDeadLockDetector::total_destructed_count = 0;
-
-OB_SERIALIZE_MEMBER(ObDetectorUserReportInfo, module_name_, resource_visitor_,
-                    required_resource_, extra_columns_names_, extra_columns_values_,
-                    valid_extra_column_size_, blocked_seq_);
-OB_SERIALIZE_MEMBER(ObDetectorInnerReportInfo, binary_key_, addr_,
-                    detector_id_, report_time_,
-                    created_time_, event_id_, role_, start_delay_, priority_, user_report_info_);
-OB_SERIALIZE_MEMBER(ObDetectorPriority, priority_range_, priority_value_)
 
 static int check_and_assign_ptr_(const char *others_ptr,
                                  const int64_t len,
@@ -165,21 +156,14 @@ ObDependencyResource::ObDependencyResource(const ObDependencyResource &rhs)
   operator=(rhs);
 }
 
-ObDependencyResource::ObDependencyResource(const ObAddr &addr, const UserBinaryKey &user_key) :
-  addr_(addr),
+ObDependencyResource::ObDependencyResource(const UserBinaryKey &user_key) :
   user_key_(user_key) {}
 
 
-int ObDependencyResource::set_args(const common::ObAddr &addr, const UserBinaryKey &user_key)
+int ObDependencyResource::set_args(const UserBinaryKey &user_key)
 {
-  addr_ = addr;
   user_key_ = user_key;
   return OB_SUCCESS;
-}
-
-const ObAddr& ObDependencyResource::get_addr() const
-{
-  return addr_;
 }
 
 const UserBinaryKey &ObDependencyResource::get_user_key() const
@@ -189,28 +173,23 @@ const UserBinaryKey &ObDependencyResource::get_user_key() const
 
 bool ObDependencyResource::is_valid() const
 {
-  return user_key_.is_valid() && addr_.is_valid();
+  return user_key_.is_valid();
 }
 
 ObDependencyResource& ObDependencyResource::operator=(const ObDependencyResource &rhs)
 {
-  addr_ = rhs.addr_;
   user_key_ = rhs.user_key_;
   return *this;
 }
 
 uint64_t ObDependencyResource::hash() const
 {
-  uint64_t hash_val = 0;
-  hash_val = addr_.hash();
-  uint64_t key_hash = user_key_.hash();
-  hash_val = murmurhash(&key_hash, sizeof(key_hash), hash_val);
-  return hash_val;
+  return user_key_.hash();
 }
 
 bool ObDependencyResource::operator==(const ObDependencyResource &rhs) const
 {
-  return  addr_ == rhs.addr_ && user_key_ == rhs.user_key_;
+  return user_key_ == rhs.user_key_;
 }
 
 
@@ -273,12 +252,12 @@ const ObString &ObDetectorUserReportInfo::get_required_resource() const
   return required_resource_;
 }
 
-const ObSArray<ObString> &ObDetectorUserReportInfo::get_extra_columns_names() const
+const ObArray<ObString> &ObDetectorUserReportInfo::get_extra_columns_names() const
 {
   return extra_columns_names_;
 }
 
-const ObSArray<ObString> &ObDetectorUserReportInfo::get_extra_columns_values() const
+const ObArray<ObString> &ObDetectorUserReportInfo::get_extra_columns_values() const
 {
   return extra_columns_values_;
 }
@@ -375,7 +354,7 @@ ObDetectorInnerReportInfo::ObDetectorInnerReportInfo() :
 }
 
 int ObDetectorInnerReportInfo::set_args(const UserBinaryKey &binary_key,
-                                        const ObAddr &addr, const uint64_t detector_id,
+                                        const uint64_t detector_id,
                                         const int64_t report_time, const int64_t created_time,
                                         const uint64_t event_id,  const char *role,
                                         const uint64_t start_delay,
@@ -391,7 +370,6 @@ int ObDetectorInnerReportInfo::set_args(const UserBinaryKey &binary_key,
     start_delay_ = start_delay;
     priority_ = priority;
     binary_key_ = binary_key;
-    addr_ = addr;
     detector_id_ = detector_id;
     report_time_ = report_time;
     created_time_ = created_time;
@@ -408,11 +386,6 @@ const UserBinaryKey &ObDetectorInnerReportInfo::get_user_key() const
 }
 
 
-
-const ObAddr &ObDetectorInnerReportInfo::get_addr() const
-{
-  return addr_;
-}
 
 uint64_t ObDetectorInnerReportInfo::get_detector_id() const
 {
@@ -458,7 +431,6 @@ int ObDetectorInnerReportInfo::assign(const ObDetectorInnerReportInfo &rhs)
     DETECT_LOG(WARN, "fail to assign user report info", K(rhs));
   } else {
     binary_key_ = rhs.binary_key_;
-    addr_ = rhs.addr_;
     detector_id_ = rhs.detector_id_;
     report_time_ = rhs.report_time_;
     created_time_ = rhs.created_time_;
@@ -468,6 +440,43 @@ int ObDetectorInnerReportInfo::assign(const ObDetectorInnerReportInfo &rhs)
     priority_ = rhs.priority_;
   }
   return ret;
+}
+
+int ObDeadLockCycleInfo::append(const ObDetectorInnerReportInfo &info)
+{
+  return collected_info_.push_back(info);
+}
+
+int ObDeadLockCycleInfo::set_dest_key(const UserBinaryKey &dest_key)
+{
+  dest_key_ = dest_key;
+  return OB_SUCCESS;
+}
+
+bool ObDeadLockCycleInfo::is_valid() const
+{
+  return dest_key_.is_valid();
+}
+
+int ObDeadLockCycleInfo::assign(const ObDeadLockCycleInfo &rhs)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(collected_info_.assign(rhs.collected_info_))) {
+    DETECT_LOG(WARN, "fail to copy collected info");
+  } else {
+    dest_key_ = rhs.dest_key_;
+  }
+  return ret;
+}
+
+const UserBinaryKey &ObDeadLockCycleInfo::get_dest_key() const
+{
+  return dest_key_;
+}
+
+const ObArray<ObDetectorInnerReportInfo> &ObDeadLockCycleInfo::get_collected_info() const
+{
+  return collected_info_;
 }
 
 }// namespace detector

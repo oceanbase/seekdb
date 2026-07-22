@@ -375,15 +375,14 @@ int ObDDLHelper::gen_task_id_and_schema_versions_()
   return ret;
 }
 
-int ObDDLHelper::register_ddl_trans_()
+int ObDDLHelper::register_ddl_trans_signal_()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_FAIL(get_trans_().register_ddl_trans())) {
-    LOG_WARN("fail to register DDL transaction", KR(ret));
+  } else if (OB_FAIL(get_trans_().register_ddl_trans_signal())) {
+    LOG_WARN("fail to register ddl transaction signal", KR(ret));
   }
-  RS_TRACE(register_ddl_trans);
   return ret;
 }
 
@@ -466,10 +465,10 @@ int ObDDLHelper::execute()
     LOG_WARN("fail to create schemas", KR(ret));
   }
   /* ----------------------------------------------
-   * 6. Mark the transaction as DDL for the local Change Stream consumer.
+   * 6. Mark the DDL transaction for Change Stream.
    */
-  if (FAILEDx(register_ddl_trans_())) {
-    LOG_WARN("fail to register DDL transaction", KR(ret));
+  if (FAILEDx(register_ddl_trans_signal_())) {
+    LOG_WARN("fail to register ddl transaction signal", KR(ret));
   }
   
   /* ----------------------------------------------
@@ -937,7 +936,7 @@ int ObDDLHelper::check_parallel_ddl_conflict_(const common::ObIArray<share::sche
     ObArray<uint64_t> parent_table_ids;
     ObArray<uint64_t> mock_fk_parent_table_ids;
     ObSchemaGetterGuard local_guard;
-    if (OB_FAIL(schema_service_->get_tenant_schema_guard(local_guard))) {
+    if (OB_FAIL(schema_service_->get_runtime_schema_guard(local_guard))) {
       LOG_WARN("fail to get local guard", KR(ret));
     }
     // check schema object infos are all existed.
@@ -1036,7 +1035,7 @@ int ObDDLHelper::add_lock_table_udt_id_(const ObTableSchema &table_schema)
     ObTableSchema::const_column_iterator begin = table_schema.column_begin();
     ObTableSchema::const_column_iterator end = table_schema.column_end();
     ObSchemaGetterGuard guard;
-    if (OB_FAIL(schema_service_->get_tenant_schema_guard(guard))) {
+    if (OB_FAIL(schema_service_->get_runtime_schema_guard(guard))) {
       LOG_WARN("fail to get schema guard", KR(ret));
     }
     for (; OB_SUCC(ret) && begin != end; begin++) {
@@ -1060,9 +1059,9 @@ int ObDDLHelper::check_table_udt_exist_(const ObTableSchema &table_schema)
     ObTableSchema::const_column_iterator end = table_schema.column_end();
     ObSchemaGetterGuard guard;
     ObSchemaGetterGuard local_guard;
-    if (OB_FAIL(schema_service_->get_tenant_schema_guard(guard))) {
+    if (OB_FAIL(schema_service_->get_runtime_schema_guard(guard))) {
       LOG_WARN("fail to get schema guard", KR(ret));
-    } else if (OB_FAIL(schema_service_->get_tenant_schema_guard(local_guard))) {
+    } else if (OB_FAIL(schema_service_->get_runtime_schema_guard(local_guard))) {
       LOG_WARN("fail to get local guard", KR(ret));
     }
     for (; OB_SUCC(ret) && begin != end; begin++) {
@@ -1095,9 +1094,6 @@ ObSchemaType ObDDLHelper::transfer_obj_type_to_schema_type_for_dep_(const ObObje
     case ObObjectType::PACKAGE_BODY:
       ret_type = PACKAGE_SCHEMA;
       break;
-    case ObObjectType::SEQUENCE:
-      ret_type = SEQUENCE_SCHEMA;
-      break;
     case ObObjectType::TYPE:
     case ObObjectType::TYPE_BODY:
       ret_type = UDT_SCHEMA;
@@ -1111,18 +1107,6 @@ ObSchemaType ObDDLHelper::transfer_obj_type_to_schema_type_for_dep_(const ObObje
   return ret_type;
 }
 
-int ObDDLHelper::add_lock_object_by_tablegroup_name_(
-    const ObString &tablegroup_name,
-    const transaction::tablelock::ObTableLockMode lock_mode)
-{
-  int ret = OB_SUCCESS;
-  ObString mock_database_name(OB_SYS_DATABASE_NAME);  // consider that tablegroup may across databases.
-  if (OB_FAIL(add_lock_object_by_name_(mock_database_name, tablegroup_name,
-      share::schema::TABLEGROUP_SCHEMA, lock_mode))) {
-    LOG_WARN("fail to add lock object by tablegroup name", KR(ret), K(tablegroup_name));
-  }
-  return ret;
-}
 int ObDDLHelper::get_current_version_(int64_t &version)
 {
   int ret = OB_SUCCESS;

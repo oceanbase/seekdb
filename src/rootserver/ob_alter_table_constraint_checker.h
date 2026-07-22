@@ -62,7 +62,7 @@ public:
       bool &need_modify);
   static int modify_not_null_constraint_validate(
       const obcall::ObAlterTableArg &alter_table_arg,
-      AlterTableSchema &alter_table_schema);
+      share::schema::AlterTableSchema &alter_table_schema);
 };
 
 } // end namespace rootserver

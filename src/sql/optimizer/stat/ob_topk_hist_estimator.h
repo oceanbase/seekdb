@@ -18,7 +18,7 @@
 #define OB_TOPK_HIST_ESTIMATOR_H
 
 #include "sql/optimizer/stat/ob_stat_define.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/optimizer/stat/ob_basic_stats_estimator.h"
 
 namespace oceanbase

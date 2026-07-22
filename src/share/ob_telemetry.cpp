@@ -111,7 +111,7 @@ int generate_telemetry_json(const char* reporter, const char* event_name, ObIAll
   snprintf(host_memory_size, sizeof(host_memory_size), "%.9gG", host_memory_size_gb);
   snprintf(log_disk_size, sizeof(log_disk_size), "%.9gG", log_disk_size_gb);
   snprintf(datafile_size, sizeof(datafile_size), "%.9gG", datafile_size_gb);
-  VersionUtil::print_version_str(version, sizeof(version), CLUSTER_CURRENT_VERSION);
+  VersionUtil::print_version_str(version, sizeof(version), SERVER_CURRENT_VERSION);
   get_host_hash(host_hash, sizeof(host_hash));
   get_os_info(os_name, sizeof(os_name), os_version, sizeof(os_version));
   get_cpu_model(cpu_model, sizeof(cpu_model));

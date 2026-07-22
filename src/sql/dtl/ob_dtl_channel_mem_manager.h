@@ -25,7 +25,7 @@
 #include "lib/utility/ob_mod_define.h"
 #include "lib/alloc/alloc_func.h"
 #include "share/config/ob_server_config.h"
-#include "src/sql/dtl/ob_dtl_tenant_mem_manager.h"
+#include "src/sql/dtl/ob_dtl_mem_manager.h"
 
 namespace oceanbase {
 namespace sql {
@@ -33,11 +33,11 @@ namespace dtl {
 
 //class ObDtlLinkedBuffer;
 
-class ObDtlTenantMemManager;
+class ObDtlMemManager;
 class ObDtlChannelMemManager
 {
 public:
-  ObDtlChannelMemManager(ObDtlTenantMemManager &tenant_mgr);
+  explicit ObDtlChannelMemManager(ObDtlMemManager &mem_mgr);
   virtual ~ObDtlChannelMemManager() { destroy(); }
 
   int init();
@@ -74,7 +74,7 @@ public:
 private:
   int64_t get_used_memory_size();
   int64_t get_max_dtl_memory_size();
-  int64_t get_max_tenant_memory_limit_size();
+  int64_t get_max_memory_limit_size();
   int get_memstore_limit_percentage_();
   void real_free(ObDtlLinkedBuffer *buf);
 private:
@@ -94,7 +94,7 @@ private:
 
   int64_t real_alloc_cnt_;
   int64_t real_free_cnt_;
-  ObDtlTenantMemManager &tenant_mgr_;
+  ObDtlMemManager &mem_mgr_;
   int64_t mem_used_;
   int64_t last_update_memory_time_;
 };
@@ -104,17 +104,17 @@ OB_INLINE int64_t ObDtlChannelMemManager::get_max_dtl_memory_size()
   if (0 == max_mem_percent_) {
     get_max_mem_percent();
   }
-  return get_max_tenant_memory_limit_size() * max_mem_percent_ / 100;
+  return get_max_memory_limit_size() * max_mem_percent_ / 100;
 }
 
-OB_INLINE int64_t ObDtlChannelMemManager::get_max_tenant_memory_limit_size()
+OB_INLINE int64_t ObDtlChannelMemManager::get_max_memory_limit_size()
 {
   int ret = OB_SUCCESS;
   if (0 == memstore_limit_percent_) {
     get_memstore_limit_percentage_();
   }
   int64_t percent_execpt_memstore = 100 - memstore_limit_percent_;
-  return lib::get_tenant_memory_limit() * percent_execpt_memstore / 100;
+  return lib::get_allocator_memory_limit() * percent_execpt_memstore / 100;
 }
 
 OB_INLINE void ObDtlChannelMemManager::update_max_memory_percent()

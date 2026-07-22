@@ -266,7 +266,6 @@ int ObTabletAutoincrementService::init()
 {
   int ret = OB_SUCCESS;
   lib::ObMemAttr attr("AutoincMgr");
-  SET_USE_500(attr);
   if (OB_FAIL(node_allocator_.init(sizeof(ObTabletAutoincMgr), ObModIds::OB_AUTOINCREMENT))) {
     LOG_WARN("failed to init table node allocator", K(ret));
   } else if (OB_FAIL(tablet_autoinc_mgr_map_.init(attr))) {
@@ -347,10 +346,7 @@ int ObTabletAutoincCacheCleaner::add_single_table(const schema::ObSimpleTableSch
   if (table_schema.is_table_with_hidden_pk_column() || table_schema.is_aux_lob_meta_table()) {
     
     ObArray<ObTabletID> tablet_ids;
-    if (OB_UNLIKELY(false)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tenant id mismatch", K(ret));
-    } else if (OB_FAIL(table_schema.get_tablet_ids(tablet_ids))) {
+    if (OB_FAIL(table_schema.get_tablet_ids(tablet_ids))) {
       LOG_WARN("failed to get tablet ids", K(ret));
     } else if (OB_FAIL(append(tablet_ids_, tablet_ids))) {
       LOG_WARN("failed to append tablet ids", K(ret));
@@ -392,7 +388,7 @@ int ObTabletAutoincCacheCleaner::add_database(const schema::ObDatabaseSchema &da
   const uint64_t database_id = database_schema.get_database_id();
   ObArray<const ObSimpleTableSchemaV2 *> table_schemas;
   ObMultiVersionSchemaService &schema_service = ObMultiVersionSchemaService::get_instance();
-  if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
+  if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
     LOG_WARN("fail to get schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schemas_in_database(database_id,
                                                                 table_schemas))) {
@@ -416,11 +412,6 @@ int ObTabletAutoincCacheCleaner::commit(const int64_t timeout_us)
   int ret = OB_SUCCESS;
   ObTimeGuard time_guard("ObTabletAutoincCacheCleaner", 1 * 1000 * 1000);
   ObTabletAutoincrementService &tablet_autoinc_service = share::ObTabletAutoincrementService::get_instance();
-  uint64_t data_version = 0;
-  common::ObZone zone;
-  common::ObSEArray<common::ObAddr, 8> server_list;
-  ObUnitInfoGetter ui_getter;
-  obcall::ObClearTabletAutoincSeqCacheArg arg;
   int64_t abs_timeout_us = ObTimeUtility::current_time() + timeout_us;
   const ObTimeoutCtx &ctx = ObTimeoutCtx::get_ctx();
   if (THIS_WORKER.is_timeout_ts_valid()) {
@@ -433,20 +424,8 @@ int ObTabletAutoincCacheCleaner::commit(const int64_t timeout_us)
     abs_timeout_us = std::min(abs_timeout_us, ObTimeUtility::current_time() + ctx.get_trx_timeout_us());
   }
 
-  if (OB_ISNULL(GCTX.sql_proxy_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql_proxy in GCTX is null", K(ret), K(GCTX.sql_proxy_));
-  } else if (OB_FAIL(ui_getter.init(*GCTX.sql_proxy_, &GCONF))) {
-    LOG_WARN("init unit info getter failed", K(ret));
-  } else if (OB_FAIL(ui_getter.get_tenant_servers(server_list))) {
-    LOG_WARN("get tenant servers failed", K(ret));
-  } else if (OB_FAIL(arg.init(tablet_ids_))) {
-    LOG_WARN("failed to init clear tablet autoinc arg", K(ret));
-  } else {
-    // seekdb: all servers are local, call handler directly.
-    if (OB_FAIL(tablet_autoinc_service.clear_tablet_autoinc_seq_cache(tablet_ids_, abs_timeout_us))) {
-      LOG_WARN("failed to clear tablet autoinc", K(ret));
-    }
+  if (OB_FAIL(tablet_autoinc_service.clear_tablet_autoinc_seq_cache(tablet_ids_, abs_timeout_us))) {
+    LOG_WARN("failed to clear tablet autoinc", K(ret));
   }
   return ret;
 }

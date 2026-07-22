@@ -113,15 +113,6 @@ int ObUpdateLogPlan::generate_normal_raw_plan()
       }
     }
 
-    // step. allocate 'sequence' if needed
-    if (OB_SUCC(ret) && update_stmt->has_sequence()) {
-      if (OB_FAIL(candi_allocate_sequence())) {
-        LOG_WARN("failed to allocate sequence operator", K(ret));
-      } else {
-        LOG_TRACE("succeed to allocate sequence operator",
-            K(candidates_.candidate_plans_.count()));
-      }
-    }
     //
     // The above is the query part related to the updated table, its output is the rows that meet the conditions
     // Below is the query generation plan involved in the assign part, its output is the updated value

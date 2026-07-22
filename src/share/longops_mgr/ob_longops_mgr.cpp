@@ -234,9 +234,7 @@ int ObLongopsIterator::get_next(ObLongopsValue &value)
     bool need_retry = true;
     while (OB_SUCC(ret) && need_retry && key_cursor_ < key_snapshot_.count()) {
       const ObILongopsKey &key = key_snapshot_.at(key_cursor_);
-      if (false && false) {
-        // Normal user tenants can only check their own longops tasks.
-      } else if (OB_FAIL(longops_mgr_->get_longops(key, value))) {
+      if (OB_FAIL(longops_mgr_->get_longops(key, value))) {
         if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
           LOG_WARN("fail to get parition stat", K(ret), K(key));
         } else {

@@ -23,13 +23,11 @@
 #include "sql/resolver/dml/ob_insert_stmt.h"
 #include "sql/plan_cache/ob_sql_parameterization.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
-#include "share/io/ob_backup_io_adapter.h"
-#include "storage/tx_storage/ob_tenant_freezer.h"
+#include "storage/tx_storage/ob_memstore_freezer.h"
 #include "sql/rewrite/ob_transform_utils.h"
-#include "share/ob_tenant_timezone_mgr.h"
+#include "share/ob_timezone_mgr.h"
 #include "src/observer/mysql/ob_query_driver.h"
 #include "observer/ob_inner_sql_connection_pool.h"
-#include "share/catalog/ob_catalog_utils.h"
 #include "share/ob_ex_rpc.h"
 
 using namespace oceanbase::sql;
@@ -53,7 +51,7 @@ namespace sql
     }\
   } while (0)
 
-const char *ObLoadDataBase::SERVER_TENANT_MEMORY_EXAMINE_SQL =
+const char *ObLoadDataBase::SERVER_MEMORY_EXAMINE_SQL =
     "SELECT case when memstore_used < freeze_trigger * 1.02 then false else true end"
     " as need_wait_freeze"
     " FROM oceanbase.__all_virtual_memstore_info";
@@ -85,8 +83,6 @@ int ObLoadDataBase::make_parameterize_stmt(ObExecContext &ctx,
 
     SqlInfo not_param_info;
     bool is_transform_outline = false;
-    ObMaxConcurrentParam::FixParamStore fixed_param_store(OB_MALLOC_NORMAL_BLOCK_SIZE,
-                                                          ObWrapperAllocator(&ctx.get_allocator()));
     if (OB_FAIL(parser.parse(insertsql.string(), parse_result))) {
       LOG_WARN("parser template insert sql failed", K(ret));
     } else if (OB_FAIL(ObSqlParameterization::transform_syntax_tree(ctx.get_allocator(),
@@ -96,7 +92,6 @@ int ObLoadDataBase::make_parameterize_stmt(ObExecContext &ctx,
                                                                     not_param_info,
                                                                     param_store,
                                                                     NULL,
-                                                                    fixed_param_store,
                                                                     is_transform_outline))) {
       LOG_WARN("parameterize parser tree failed", K(ret));
     } else {
@@ -142,13 +137,13 @@ int ObLoadDataBase::make_parameterize_stmt(ObExecContext &ctx,
   return ret;
 }
 
-int ObLoadDataBase::memory_check_remote(bool &need_wait_minor_freeze)
+int ObLoadDataBase::memory_check_worker(bool &need_wait_minor_freeze)
 {
   int ret = OB_SUCCESS;
 
-  MOD_SCOPE {
-    storage::ObTenantFreezer *freezer = nullptr;
-    if (FALSE_IT(freezer = share::g_mp->tenant_freezer())) {
+  SERVER_MODULE_SCOPE {
+    storage::ObMemstoreFreezer *freezer = nullptr;
+    if (FALSE_IT(freezer = share::g_mp->memstore_freezer())) {
     } else {
       int64_t active_memstore_used = 0;
       int64_t total_memstore_used = 0;
@@ -156,7 +151,7 @@ int ObLoadDataBase::memory_check_remote(bool &need_wait_minor_freeze)
       int64_t memstore_limit = 0;
       int64_t freeze_cnt = 0;
 
-      if (OB_FAIL(freezer->get_tenant_memstore_cond(active_memstore_used,
+      if (OB_FAIL(freezer->get_memstore_condition(active_memstore_used,
                                                     total_memstore_used,
                                                     major_freeze_trigger,
                                                     memstore_limit,
@@ -169,7 +164,7 @@ int ObLoadDataBase::memory_check_remote(bool &need_wait_minor_freeze)
           need_wait_minor_freeze = false;
         }
       }
-      LOG_DEBUG("load data check tenant memory usage", K(active_memstore_used),
+      LOG_DEBUG("load data check server runtime memory usage", K(active_memstore_used),
                                                        K(total_memstore_used),
                                                        K(major_freeze_trigger),
                                                        K(memstore_limit),
@@ -177,7 +172,7 @@ int ObLoadDataBase::memory_check_remote(bool &need_wait_minor_freeze)
                                                        K(need_wait_minor_freeze));
     }
   } else {
-    LOG_ERROR("switch tenant failed", K(ret));
+    LOG_ERROR("enter server runtime failed", K(ret));
   }
   return ret;
 }
@@ -233,7 +228,7 @@ int ObLoadDataBase::memory_wait_local(ObExecContext &ctx,
       }
 
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(sql.assign_fmt(SERVER_TENANT_MEMORY_EXAMINE_SQL))) {
+      } else if (OB_FAIL(sql.assign_fmt(SERVER_MEMORY_EXAMINE_SQL))) {
         LOG_WARN("fail to append sql", K(ret));
       } else if (OB_FAIL(sql_proxy_->read(res, sql.ptr()))) {
         LOG_WARN("fail to execute sql", K(ret), K(sql));
@@ -247,7 +242,7 @@ int ObLoadDataBase::memory_wait_local(ObExecContext &ctx,
         }
       } else {
         EXTRACT_BOOL_FIELD_MYSQL(*result, "need_wait_freeze", need_wait_freeze);
-        //LOG_INFO("LOAD DATA is waiting for tenant memory available",
+        //LOG_INFO("LOAD DATA is waiting for server runtime memory",
                  //K(waited_seconds), K(total_wait_secs));
       }
     }
@@ -1067,8 +1062,8 @@ int ObLoadDataSPImpl::exec_insert(ObInsertTask &task, ObInsertResult& result)
 
   if (OB_SUCC(ret)) {
     ObTZMapWrap tz_map_wrap;
-    if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tz_map_wrap))) {
-      LOG_WARN("get tenant timezone map failed", K(ret));
+    if (OB_FAIL(OTTZ_MGR.get_timezone_map(tz_map_wrap))) {
+      LOG_WARN("get time zone map failed", K(ret));
     } else {
       task.timezone_.set_tz_info_map(tz_map_wrap.get_tz_map());
     }
@@ -1084,10 +1079,10 @@ int ObLoadDataSPImpl::exec_insert(ObInsertTask &task, ObInsertResult& result)
   if (OB_SUCC(ret) && OB_FAIL(GCTX.sql_proxy_->write(sql_str.string(),
                                                      affected_rows,
                                                      &param))) {
-    LOG_WARN("fail to exec insert remote", K(ret), "task_id", task.task_id_);
+    LOG_WARN("fail to execute worker insert", K(ret), "task_id", task.task_id_);
   }
 
-  LOG_DEBUG("LOAD DATA remote process", K(affected_rows), K(task.task_id_), K(ret));
+  LOG_DEBUG("LOAD DATA worker process", K(affected_rows), K(task.task_id_), K(ret));
 
   if (OB_NOT_NULL(field_buff)) {
     ob_free(field_buff);
@@ -1114,7 +1109,7 @@ int ObLoadDataSPImpl::wait_shuffle_task_return(ToolBox &box)
       ret = OB_TRANS_RPC_TIMEOUT;
       LOG_WARN("shuffle task rpc timeout handle", K(ret));
     } else if (OB_FAIL(handle->result.exec_ret_)) {
-      LOG_WARN("shuffle remote exec failed", K(ret));
+      LOG_WARN("shuffle worker execution failed", K(ret));
     } else if (handle->err_records.count() > 0
                && OB_FAIL(handle_returned_shuffle_task(box, *handle))) {
       LOG_WARN("fail to handle returned shuffle task", K(ret));
@@ -1327,45 +1322,31 @@ int ObLoadDataSPImpl::shuffle_task_gen_and_dispatch(ObExecContext &ctx, ToolBox 
           // just stores the raw pointer), so capture handle / task_id / gid_.
           const ObLoadDataGID shuffle_gid = task.gid_;
           const int64_t shuffle_task_id = task.task_id_;
-          // Capture the dispatching tenant so the async pool thread (no MTL
-          // context) can switch into it for get_job_status / exec_shuffle.
-          
           ToolBox *box_ptr = &box;
           (void)ex_rpc::async_call([handle, box_ptr, shuffle_gid, shuffle_task_id,
                                       shuffle_begin_ts]() {
-            int tmp_ret = OB_SUCCESS;
-            // MTL_SWITCH expands to OB_SUCC(...) which assigns to a variable
-            // named `ret`; declare a local one for it (separate from the task
-            // result tracked in tmp_ret). A switch failure is folded into
-            // handle->result.exec_ret_ below.
             int ret = OB_SUCCESS;
-            MOD_SCOPE {
+            SERVER_MODULE_SCOPE {
               ObLoadDataStat *job_status = nullptr;
               if (OB_FAIL(ObGlobalLoadDataStatMap::getInstance()->get_job_status(
                       shuffle_gid, job_status))) {
-                LOG_WARN("fail to get job, main thread has already quit", K(tmp_ret), K(shuffle_gid));
+                LOG_WARN("fail to get job, main thread has already quit", K(ret), K(shuffle_gid));
               } else if (OB_ISNULL(job_status)) {
-                tmp_ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("job status is null", K(tmp_ret));
+                ret = OB_ERR_UNEXPECTED;
+                LOG_WARN("job status is null", K(ret));
               } else {
                 if (OB_ISNULL(handle)) {
-                  tmp_ret = OB_ERR_UNEXPECTED;
-                  LOG_ERROR("handle is null", K(tmp_ret));
+                  ret = OB_ERR_UNEXPECTED;
+                  LOG_ERROR("handle is null", K(ret));
                 } else {
                   if (OB_FAIL(ObLoadDataSPImpl::exec_shuffle(shuffle_task_id, handle))) {
-                    LOG_WARN("fail to exec shuffle task", K(tmp_ret));
+                    LOG_WARN("fail to exec shuffle task", K(ret));
                   }
-                  handle->result.exec_ret_ = tmp_ret;
+                  handle->result.exec_ret_ = ret;
                 }
                 MEM_BARRIER();
                 job_status->release();
               }
-            }
-            if (OB_FAIL(ret) && OB_SUCCESS == tmp_ret) {
-              // tenant switch failed before exec ran; surface it as the result.
-              tmp_ret = ret;
-              handle->result.exec_ret_ = tmp_ret;
-              LOG_WARN("fail to switch tenant for shuffle task", K(tmp_ret));
             }
             handle->result.process_us_ = ObTimeUtil::current_time() - shuffle_begin_ts;
             // Completion bookkeeping (run LAST): push handle back + finish token.
@@ -1654,24 +1635,18 @@ int ObLoadDataSPImpl::insert_task_send(ObInsertTask *insert_task, ToolBox &box)
     // parallelism. Per-task errors propagate via insert_task->result_.exec_ret_
     // (inspected later by the main loop), never returned from send().
     (void)ex_rpc::async_call([insert_task, box_ptr, insert_begin_ts]() {
-      // Async pool threads have no tenant MTL context; switch into the task's
-      // tenant so exec_insert / warning-buffer / memory_check_remote work.
-      int tmp_ret = OB_SUCCESS;
-      // MTL_SWITCH expands to OB_SUCC(...) which assigns to a variable named
-      // `ret`; declare a local one for it (separate from the task result
-      // tracked in tmp_ret). A switch failure is folded into tmp_ret below.
       int ret = OB_SUCCESS;
       ObInsertTask &task = *insert_task;
       ObInsertResult result;
-      MOD_SCOPE {
+      SERVER_MODULE_SCOPE {
         ObWarningBuffer *warning_buf = NULL;
         bool need_wait_freeze = false;
         if (OB_FAIL(ObLoadDataSPImpl::exec_insert(task, result))) {
-          LOG_WARN("fail to exec insert", K(tmp_ret));
+          LOG_WARN("fail to exec insert", K(ret));
         }
-        result.exec_ret_ = tmp_ret;
-        if (OB_FAIL(tmp_ret) && OB_NOT_NULL(warning_buf = ob_get_tsi_warning_buffer())) {
-          int ret_backup = tmp_ret;
+        result.exec_ret_ = ret;
+        if (OB_SUCCESS != ret && OB_NOT_NULL(warning_buf = ob_get_tsi_warning_buffer())) {
+          int ret_backup = ret;
           result.err_line_no_ = warning_buf->get_error_line();
           // Cannot use OZ here: a macro return would skip the completion
           // bookkeeping below in this fire-and-forget worker.
@@ -1679,22 +1654,16 @@ int ObLoadDataSPImpl::insert_task_send(ObInsertTask *insert_task, ToolBox &box)
           if (OB_SUCCESS != write_ret) {
             LOG_WARN("fail to write err msg", K(write_ret));
           }
-          tmp_ret = ret_backup;
+          ret = ret_backup;
         }
-        int temp_ret = ObLoadDataBase::memory_check_remote(need_wait_freeze);
+        int temp_ret = ObLoadDataBase::memory_check_worker(need_wait_freeze);
         if (OB_SUCCESS != temp_ret) {
-          LOG_WARN("LOAD DATA remote memory check failed", K(temp_ret));
+          LOG_WARN("LOAD DATA worker memory check failed", K(temp_ret));
         }
         result.flags_.reset();
         if (need_wait_freeze) {
           result.flags_.set_bit(ObTaskResFlag::NEED_WAIT_MINOR_FREEZE);
         }
-      }
-      if (OB_FAIL(ret) && OB_SUCCESS == tmp_ret) {
-        // tenant switch failed before exec ran; surface it as the task result.
-        tmp_ret = ret;
-        result.exec_ret_ = tmp_ret;
-        LOG_WARN("fail to switch tenant for insert task", K(tmp_ret));
       }
       // mirror ObCallLoadDataInsertTaskCallBack::process()
       int assign_ret = insert_task->result_.assign(result);
@@ -2535,16 +2504,10 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
   const ObLoadArgument &load_args = load_stmt.get_load_arguments();
   const ObDataInFileStruct &file_formats = load_stmt.get_data_struct_in_file();
   const ObLoadDataHint &hint = load_stmt.get_hints();
-  ObIODOpt opt;
-  ObIODOpts iod_opts;
-  ObBackupIoAdapter util;
   bool need_online_osg = false;
 
-  iod_opts.opts_ = &opt;
-  iod_opts.opt_cnt_ = 0;
-
   formats.init(file_formats);
-  self_addr = ctx.get_task_executor_ctx()->get_self_addr();
+  self_addr = GCTX.self_addr();
   //batch_row_count = DEFAULT_BUFFERRED_ROW_COUNT;
   wait_secs_for_mem_release = 0;
   affected_rows = 0;
@@ -2657,9 +2620,6 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
     }
     file_read_param.session_            = ctx.get_my_session();
     file_read_param.timeout_ts_         = THIS_WORKER.get_timeout_ts();
-    if (OB_FAIL(file_read_param.access_info_.assign(load_args.access_info_))) {
-      LOG_WARN("fail to assign access info", K(ret), K(load_args.access_info_));
-    }
   }
 
   OZ (init_file_size(ctx));
@@ -2730,10 +2690,10 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
   if (OB_SUCC(ret)) {
     double min_cpu;
     double max_cpu;
-    if (OB_ISNULL(GCTX.omt_)) {
+    if (OB_ISNULL(GCTX.server_runtime_controller_)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(GCTX.omt_->get_tenant_cpu(min_cpu, max_cpu))) {
-      LOG_WARN("fail to get tenant cpu", K(ret));
+    } else if (OB_FAIL(GCTX.server_runtime_controller_->get_server_cpu(min_cpu, max_cpu))) {
+      LOG_WARN("fail to get server runtime CPU quota", K(ret));
     } else {
       max_cpus = std::max(1L, lround(min_cpu));
     }
@@ -2883,8 +2843,8 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
           }
         }
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(handle->schema_guard))) {
-            LOG_WARN("get tenant schema guard failed", KR(ret));
+          if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(handle->schema_guard))) {
+            LOG_WARN("get runtime schema guard failed", KR(ret));
           } else  {
             handle->exec_ctx.get_sql_ctx()->schema_guard_ = &handle->schema_guard;
           }
@@ -2980,13 +2940,13 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
       const ObString &cur_query_str = ctx.get_my_session()->get_current_query_string();
       char trace_id_buf[OB_MAX_TRACE_ID_BUFFER_SIZE] = {'\0'};
       OZ (databuff_printf(buf, buf_len, pos,
-                          "Tenant name:\t%.*s\n"
+                          "Server runtime:\t%.*s\n"
                           "File name:\t%.*s\n"
                           "Into table:\t%.*s\n"
                           "Parallel:\t%ld\n"
                           "Batch size:\t%ld\n"
                           "SQL trace:\t%s\n",
-                          session->get_tenant_name().length(), session->get_tenant_name().ptr(),
+                          session->get_runtime_name().length(), session->get_runtime_name().ptr(),
                           load_args.file_name_.length(), load_args.file_name_.ptr(),
                           load_args.combined_name_.length(), load_args.combined_name_.ptr(),
                           parallel,

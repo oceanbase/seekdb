@@ -27,18 +27,16 @@ namespace lib
 {
 static bool g_memleak_light_backtrace_enabled = false;
 
-ObMallocHookAttrGuard::ObMallocHookAttrGuard(const ObMemAttr& attr, const bool use_500)
-  : old_attr_(get_tl_mem_attr()), old_use_500_(get_tl_use_500())
+ObMallocHookAttrGuard::ObMallocHookAttrGuard(const ObMemAttr& attr)
+  : old_attr_(get_tl_mem_attr())
 {
   get_tl_mem_attr() = attr;
   get_tl_mem_attr().ctx_id_ = ObCtxIds::GLIBC;
-  get_tl_use_500() = use_500;
 }
 
 ObMallocHookAttrGuard::~ObMallocHookAttrGuard()
 {
   get_tl_mem_attr() = old_attr_;
-  get_tl_use_500() = old_use_500_;
 }
 
 bool ObLabel::operator==(const ObLabel &other) const

@@ -185,7 +185,6 @@ class ObDebugSync
 public:
   static ObDebugSync &instance();
 
-  void set_rpc_proxy(void *rpc_proxy);
 
   int add_debug_sync(const ObString &str, const bool is_global,
       ObDSSessionActions &session_actions);

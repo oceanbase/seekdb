@@ -24,7 +24,7 @@
 #include "common/ob_tablet_id.h"
 #include "storage/memtable/ob_memtable.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
-#include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
+#include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
 #include "share/scn.h"
 #include "storage/tablet/ob_tablet_status.h"
 #include "storage/tablet/ob_tablet_common.h"
@@ -98,7 +98,7 @@ public:
   static int check_read_snapshot_by_commit_version(
       const int64_t snapshot_version,
       const ObTabletCreateDeleteMdsUserData &user_data);
-  static int check_read_snapshot_for_committed_create_tx(
+  static int check_read_snapshot_for_committed_tablet_tx(
       const ObTablet &tablet,
       const int64_t snapshot_version,
       const ObTabletCreateDeleteMdsUserData &user_data);
