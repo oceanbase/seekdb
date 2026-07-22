@@ -15,6 +15,8 @@
  */
 
 #include "ob_hybrid_search_executor.h"
+#include "observer/ob_inner_sql_connection.h"
+#include "observer/ob_inner_sql_connection_pool.h"
 #include "storage/vector_index/cmd/ob_vector_refresh_index_executor.h"
 
 #define USING_LOG_PREFIX SHARE
@@ -71,37 +73,83 @@ int ObHybridSearchExecutor::init(sql::ObExecContext *ctx, const ObHybridSearchAr
 int ObHybridSearchExecutor::execute_search(ObObj &query_res) {
   int ret = OB_SUCCESS;
   ObString query_sql;
+  common::ObMySQLProxy *sql_proxy = NULL;
+  observer::ObInnerSQLConnectionPool *conn_pool = NULL;
+  observer::ObInnerSQLConnection *conn = NULL;
   if (OB_ISNULL(ctx_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("exec context is not initialized", K(ret));
+  } else if (OB_ISNULL(session_info_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("session is not initialized", K(ret));
   } else if (OB_FAIL(do_get_sql(search_arg_.search_params_, query_sql, true))) {
     LOG_WARN("fail to do get sql", KR(ret));
+  } else if (OB_ISNULL(sql_proxy = ctx_->get_sql_proxy())
+             || OB_ISNULL(sql_proxy->get_pool())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("sql proxy or connection pool is null", K(ret), KP(sql_proxy));
+  } else if (OB_UNLIKELY(common::sqlclient::INNER_POOL != sql_proxy->get_pool()->get_type())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("hybrid search requires inner sql connection pool", K(ret),
+             "pool_type", sql_proxy->get_pool()->get_type());
+  } else if (OB_FALSE_IT(conn_pool = static_cast<observer::ObInnerSQLConnectionPool *>(
+                                      sql_proxy->get_pool()))) {
+  } else if (OB_FAIL(conn_pool->acquire_spi_conn(session_info_, conn))) {
+    LOG_WARN("failed to acquire connection with current session", K(ret));
+  } else if (OB_ISNULL(conn)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("inner sql connection is null", K(ret), KP(conn));
   } else {
-    common::ObMySQLProxy* sql_proxy = ctx_->get_sql_proxy();
-    SMART_VAR(ObMySQLProxy::MySQLResult, result) {
-      if (OB_FAIL(sql_proxy->read(result, query_sql.ptr()))) {
-        LOG_WARN("execute query failed", K(ret), K(query_sql));
-      } else if (OB_NOT_NULL(result.get_result())) {
-        if (OB_SUCCESS == (ret = result.get_result()->next())) {
-          ObObj tmp_res;
-          if (OB_FAIL(result.get_result()->get_obj("hits", tmp_res))) {
-            if (OB_ERR_NULL_VALUE == ret || OB_ERR_COLUMN_NOT_FOUND == ret) {
-              query_res.set_null();
-              ret = OB_SUCCESS;
-            } else {
-              LOG_WARN("fail to extract result. ", K(ret));
+    sql::ObSQLSessionInfo::StmtSavedValue saved_session;
+    observer::ObInnerSQLConnection::SavedValue saved_conn;
+    // Execute on the caller's session. begin/end_nested_session only isolates
+    // statement state; retry state is intentionally left to inner SQL.
+    if (OB_FAIL(conn->begin_nested_session(saved_session, saved_conn,
+                                           false /* skip_cur_stmt_tables */))) {
+      LOG_WARN("failed to begin nested session for hybrid search", K(ret));
+    } else {
+      SMART_VAR(ObMySQLProxy::MySQLResult, result) {
+        if (OB_FAIL(conn->execute_read(query_sql,
+                                       result,
+                                       session_info_->is_user_session()
+                                           && !session_info_->is_real_inner_session()))) {
+          LOG_WARN("execute query failed", K(ret), K(query_sql));
+        } else if (OB_NOT_NULL(result.get_result())) {
+          if (OB_SUCCESS == (ret = result.get_result()->next())) {
+            ObObj tmp_res;
+            if (OB_FAIL(result.get_result()->get_obj("hits", tmp_res))) {
+              if (OB_ERR_NULL_VALUE == ret || OB_ERR_COLUMN_NOT_FOUND == ret) {
+                query_res.set_null();
+                ret = OB_SUCCESS;
+              } else {
+                LOG_WARN("fail to extract result. ", K(ret));
+              }
+            } else if (OB_FAIL(common::deep_copy_obj(ctx_->get_allocator(), tmp_res, query_res))) {
+              LOG_WARN("deep copy query result failed", K(ret));
             }
-          } else if (OB_FAIL(common::deep_copy_obj(ctx_->get_allocator(), tmp_res, query_res))) {
-            LOG_WARN("deep copy query result failed", K(ret));
+          } else if (OB_ITER_END == ret) {
+            LOG_INFO("no result return!", K(ret));
+            query_res.set_null();
+            ret = OB_SUCCESS;
+          } else {
+            LOG_WARN("failed to get next", K(ret));
           }
-        } else if (OB_ITER_END == ret) {
-          LOG_INFO("no result return!", K(ret));
-          query_res.set_null();
-          ret = OB_SUCCESS;
-        } else {
-          LOG_WARN("failed to get next", K(ret));
         }
       }
+
+      int tmp_ret = OB_SUCCESS;
+      if (OB_SUCCESS != (tmp_ret = conn->end_nested_session(saved_session, saved_conn))) {
+        LOG_ERROR("failed to restore session after hybrid search", K(tmp_ret));
+        ret = COVER_SUCC(tmp_ret);
+      }
+    }
+  }
+
+  if (OB_NOT_NULL(conn) && OB_NOT_NULL(sql_proxy)) {
+    int tmp_ret = OB_SUCCESS;
+    if (OB_SUCCESS != (tmp_ret = sql_proxy->close(conn, ret))) {
+      LOG_WARN("failed to close hybrid search inner connection", K(tmp_ret));
+      ret = COVER_SUCC(tmp_ret);
     }
   }
 

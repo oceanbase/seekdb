@@ -1057,8 +1057,9 @@ int ObBasicSessionInfo::update_query_sensitive_system_variable(ObSchemaGetterGua
   const ObSimpleSysVariableSchema *sys_variable_schema = NULL;
   
   int64_t refreshed_schema_version = OB_INVALID_VERSION;
-  if (static_cast<ObSQLSessionInfo *>(this)->is_inner()) {
-    // Inner SQL uses its initialized system variables to avoid a recursive schema dependency.
+  ObSQLSessionInfo *session = static_cast<ObSQLSessionInfo *>(this);
+  if (session->is_inner() && !session->is_user_session()) {
+    // Pure system inner SQL uses its initialized system variables to avoid a recursive schema dependency.
   } else if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
     LOG_WARN("fail to get tenant schema version", K(ret));
   } else if (OB_INVALID_VERSION != last_refresh_schema_version_
