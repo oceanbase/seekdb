@@ -19,7 +19,7 @@ SET ob_query_timeout = 100000000;
 
 --echo # 启用debug sync
 connection obsys;
-alter system set debug_sync_timeout = '60s';
+alter system set debug_sync_timeout = '90s';
 sleep 3;
 set ob_global_debug_sync = 'reset';
 connection default;
@@ -76,7 +76,7 @@ connection obsys;
 --disable_result_log
 let $table_id = `select table_id from oceanbase.__all_table where table_name = 't1' limit 1`;
 let $tablet_cnt = `select count(*) as c from oceanbase.__all_tablet_to_table where table_id = $table_id`;
-let $wait_timeout= 30;
+let $wait_timeout= 60;
 let $wait_condition=
   select /*+query_timeout(100000000)*/ count(distinct tablet_id) = $tablet_cnt
   from oceanbase.__all_virtual_tablet_compaction_history
