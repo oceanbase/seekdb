@@ -45,7 +45,7 @@ public:
   ObSMConnection()
   {
     cap_flags_.capability_ = 0;
-    autocommit_snapshot_ = false;
+    autocommit_snapshot_ = 0;
     is_sess_alloc_ = false;
     is_sess_free_ = false;
     has_inc_active_num_ = false;
@@ -112,7 +112,7 @@ public:
   inline void set_logined(bool logined) { logined_ = logined; }
 public:
   obmysql::ObMySQLCapabilityFlags cap_flags_;
-  bool autocommit_snapshot_; // global value advertised by the initial handshake
+  int64_t autocommit_snapshot_; // global value advertised by the initial handshake
   bool is_sess_alloc_;
   bool is_sess_free_;
   bool has_inc_active_num_;

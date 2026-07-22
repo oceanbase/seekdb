@@ -1043,9 +1043,6 @@ public:
   int load_all_sys_vars_default();
   int load_all_sys_vars(share::schema::ObSchemaGetterGuard &schema_guard);
   int load_all_sys_vars(const share::schema::ObSysVariableSchema &sys_var_schema, bool sys_var_created);
-  int load_all_sys_vars(const share::schema::ObSysVariableSchema &sys_var_schema,
-                        bool sys_var_created,
-                        bool autocommit_snapshot);
   int clean_all_sys_vars();
   SysVarIncInfo sys_var_inc_info_;
   const ObString get_cur_sql_id() const { return ObString(sql_id_); }
@@ -1517,9 +1514,6 @@ private:
   int get_int64_sys_var(const share::ObSysVarClassType sys_var_id, int64_t &int64_val) const;
   int get_uint64_sys_var(const share::ObSysVarClassType sys_var_id, uint64_t &uint64_val) const;
   int get_bool_sys_var(const share::ObSysVarClassType sys_var_id, bool &bool_val) const;
-  int load_all_sys_vars_inner(const share::schema::ObSysVariableSchema &sys_var_schema,
-                              bool sys_var_created,
-                              const bool *autocommit_snapshot);
   int get_charset_sys_var(share::ObSysVarClassType sys_var_id, common::ObCharsetType &cs_type) const;
   int get_collation_sys_var(share::ObSysVarClassType sys_var_id, common::ObCollationType &coll_type) const;
   int get_string_sys_var(share::ObSysVarClassType sys_var_id, common::ObString &str) const;

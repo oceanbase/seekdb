@@ -121,7 +121,7 @@ static int sm_conn_build_handshake(ObSMConnection& conn, obmysql::OMPKHandshake&
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected global autocommit", K(ret), K(autocommit));
   } else {
-    conn.autocommit_snapshot_ = (0 != autocommit);
+    conn.autocommit_snapshot_ = autocommit;
     ObServerStatusFlags status_flags;
     status_flags.status_flags_.OB_SERVER_STATUS_AUTOCOMMIT = conn.autocommit_snapshot_;
     hsp.set_server_status(status_flags.flags_);

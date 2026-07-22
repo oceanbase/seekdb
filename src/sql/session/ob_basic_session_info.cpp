@@ -4915,20 +4915,6 @@ int ObBasicSessionInfo::load_all_sys_vars(ObSchemaGetterGuard &schema_guard)
 
 int ObBasicSessionInfo::load_all_sys_vars(const ObSysVariableSchema &sys_var_schema, bool sys_var_created)
 {
-  return load_all_sys_vars_inner(sys_var_schema, sys_var_created, NULL);
-}
-
-int ObBasicSessionInfo::load_all_sys_vars(const ObSysVariableSchema &sys_var_schema,
-                                          bool sys_var_created,
-                                          bool autocommit_snapshot)
-{
-  return load_all_sys_vars_inner(sys_var_schema, sys_var_created, &autocommit_snapshot);
-}
-
-int ObBasicSessionInfo::load_all_sys_vars_inner(const ObSysVariableSchema &sys_var_schema,
-                                                bool sys_var_created,
-                                                const bool *autocommit_snapshot)
-{
   int ret = OB_SUCCESS;
   OZ (clean_all_sys_vars());
   if (!sys_var_created) {
@@ -4941,15 +4927,9 @@ int ObBasicSessionInfo::load_all_sys_vars_inner(const ObSysVariableSchema &sys_v
     const ObSysVarSchema *sys_var = NULL;
     OZ (sys_var_schema.get_sysvar_schema(sys_var_id, sys_var), sys_var_id, i);
     OV (OB_NOT_NULL(sys_var));
-    if (OB_SUCC(ret)) {
-      // Keep the session value consistent with the value advertised in the greeting.
-      const ObString value = (SYS_VAR_AUTOCOMMIT == sys_var_id && OB_NOT_NULL(autocommit_snapshot))
-          ? ObString::make_string(*autocommit_snapshot ? "1" : "0")
-          : sys_var->get_value();
-      OZ (load_sys_variable(calc_buf, sys_var->get_name(), sys_var->get_data_type(),
-                            value, sys_var->get_min_val(),
-                            sys_var->get_max_val(), sys_var->get_flags(), true, i /*store_idx*/));
-    }
+    OZ (load_sys_variable(calc_buf, sys_var->get_name(), sys_var->get_data_type(),
+                          sys_var->get_value(), sys_var->get_min_val(),
+                          sys_var->get_max_val(), sys_var->get_flags(), true, i /*store_idx*/));
     if (OB_NOT_NULL(sys_vars_[i]) && OB_SUCC(ret)) {
       if (sys_vars_[i]->is_influence_plan()) {
         OZ (influence_plan_var_indexs_.push_back(i));
