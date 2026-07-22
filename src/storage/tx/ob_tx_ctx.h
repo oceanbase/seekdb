@@ -129,7 +129,6 @@ public:
   ~ObTxCtx() { destroy(); }
   void destroy();
   int init(const uint32_t session_id,
-           const uint32_t associated_session_id,
            const ObTransID &trans_id,
            const int64_t trans_expired_time,
            const uint64_t cluster_version,
@@ -205,7 +204,6 @@ public:
 private:
   // thread unsafe
   ON_DEMAND_TO_STRING_KV_(K_(session_id),
-                          K_(associated_session_id),
                           K_(part_trans_action),
                           K_(pending_write),
                           K(extra_cb_group_list_.get_size()),

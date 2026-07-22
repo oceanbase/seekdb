@@ -24,7 +24,8 @@ int remove_ls(const bool graceful = true);
 int acquire_tx(const char* buf, const int64_t len, int64_t &pos, ObTxDesc *&tx);
 int release_tx_ref(ObTxDesc &tx);
 /*
- * Used when a session is destroyed while it still references a TxDesc.
+ * used when session destroyed
+ * and TxDesc which referenced by session and the tenant unit has removed
  */
 static void force_release_tx_when_session_destroy(ObTxDesc &tx);
 /*
@@ -111,8 +112,10 @@ int gen_trans_id(ObTransID &trans_id);
 TO_STRING_KV(K(is_inited_), KP(this));
 
 private:
-int init_tx_(ObTxDesc &tx, const uint32_t session_id);
-int reinit_tx_(ObTxDesc &tx, const uint32_t session_id);
+int init_tx_(ObTxDesc &tx,
+             const uint32_t session_id,
+             const uint64_t cluster_version);
+int reinit_tx_(ObTxDesc &tx, const uint32_t session_id, const uint64_t cluster_version);
 int start_tx_(ObTxDesc &tx);
 int abort_tx_(ObTxDesc &tx, const int cause, bool cleanup = true);
 void abort_tx__(ObTxDesc &tx, const bool cleanup);

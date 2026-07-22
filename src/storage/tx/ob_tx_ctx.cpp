@@ -47,14 +47,13 @@ using namespace tablelock;
 bool ObTxCtx::is_inited() const { return ATOMIC_LOAD(&is_inited_); }
 
 int ObTxCtx::init(const uint32_t session_id,
-                         const uint32_t associated_session_id,
-                         const ObTransID &trans_id,
-                         const int64_t trans_expired_time,
-                         const uint64_t cluster_version,
-                         ObTransService *trans_service,
-                         ObLSTxCtxMgr *ls_ctx_mgr,
-                         const bool for_replay,
-                         const TxCtxSource ctx_source)
+                  const ObTransID &trans_id,
+                  const int64_t trans_expired_time,
+                  const uint64_t cluster_version,
+                  ObTransService *trans_service,
+                  ObLSTxCtxMgr *ls_ctx_mgr,
+                  const bool for_replay,
+                  const TxCtxSource ctx_source)
 {
   int ret = OB_SUCCESS;
 
@@ -95,7 +94,6 @@ int ObTxCtx::init(const uint32_t session_id,
 
   if (OB_SUCC(ret)) {
     session_id_ = session_id;
-    associated_session_id_ = associated_session_id;
     addr_ = trans_service->get_server();
     trans_id_ = trans_id;
     for_replay_ = for_replay;
@@ -251,7 +249,6 @@ void ObTxCtx::default_init_()
 
   request_id_ = OB_INVALID_TIMESTAMP;
   session_id_ = 0;
-  associated_session_id_ = 0;
   timeout_task_.reset();
   trace_info_.reset();
   can_elr_ = false;

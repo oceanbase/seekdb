@@ -66,7 +66,6 @@ inline int ObTransService::init_tx_(ObTxDesc &tx,
 
   tx.addr_      = self_;
   tx.sess_id_   = session_id;
-  tx.assoc_sess_id_ = session_id;
   tx.alloc_ts_  = ObClockGenerator::getClock();
   tx.expire_ts_ = INT64_MAX;
   tx.op_sn_     = 1;
@@ -1155,16 +1154,14 @@ int ObTransService::sync_rollback_to_savepoint_(ObTxCtx *part_ctx,
 }
 
 int ObTransService::create_explicit_savepoint(ObTxDesc &tx,
-                                              const ObString &savepoint,
-                                              const uint32_t session_id,
-                                              const bool user_create)
+                                              const ObString &savepoint)
 {
   int ret = OB_SUCCESS;
   ObSpinLockGuard guard(tx.lock_);
   tx.inc_op_sn();
   const ObTxSEQ scn = tx.inc_and_get_tx_seq(0);
   ObTxSavePoint sp;
-  if (OB_SUCC(sp.init(scn, savepoint, session_id, user_create))) {
+  if (OB_SUCC(sp.init(scn, savepoint))) {
     if (OB_FAIL(tx.savepoints_.push_back(sp))) {
       TRANS_LOG(WARN, "push savepoint failed", K(ret));
     } else if (!tx.tx_id_.is_valid() && OB_FAIL(tx_desc_mgr_.add(tx))) {
@@ -1175,7 +1172,7 @@ int ObTransService::create_explicit_savepoint(ObTxDesc &tx,
       ARRAY_FOREACH_X(tx.savepoints_, i, cnt, i != cnt - 1) {
         ObTxSavePoint &it = tx.savepoints_.at(cnt - 2 - i);
         if (it.is_stash()) { break; }
-        if (it.is_savepoint() && it.name_ == savepoint && it.session_id_ == session_id) {
+        if (it.is_savepoint() && it.name_ == savepoint) {
           TRANS_LOG(TRACE, "move savepoint", K(savepoint), "from", it.scn_, "to", scn, K(tx));
           it.release();
           break; // assume only one if exist
@@ -1201,8 +1198,7 @@ int ObTransService::create_explicit_savepoint(ObTxDesc &tx,
 // 2. invalidate savepoint and snapshot after the savepoint Node.
 int ObTransService::rollback_to_explicit_savepoint(ObTxDesc &tx,
                                                    const ObString &savepoint,
-                                                   const int64_t expire_ts,
-                                                   const uint32_t session_id)
+                                                   const int64_t expire_ts)
 {
   int ret = OB_SUCCESS;
   int64_t start_ts = ObTimeUtility::current_time();
@@ -1214,14 +1210,14 @@ int ObTransService::rollback_to_explicit_savepoint(ObTxDesc &tx,
       const ObTxSavePoint &it = tx.savepoints_.at(cnt - 1 - i);
       TRANS_LOG(TRACE, "sp iterate:", K(it));
       if (it.is_stash()) { break; }
-      if (it.is_savepoint() && it.name_ == savepoint && it.session_id_ == session_id) {
+      if (it.is_savepoint() && it.name_ == savepoint) {
         sp_scn = it.scn_;
         break;
       }
     }
     if (!sp_scn.is_valid()) {
       ret = OB_SAVEPOINT_NOT_EXIST;
-      TRANS_LOG(WARN, "savepoint not exist", K(ret), K(session_id), K(savepoint), K_(tx.savepoints));
+      TRANS_LOG(WARN, "savepoint not exist", K(ret), K(savepoint), K_(tx.savepoints));
     }
   }
   if (OB_SUCC(ret)) {
@@ -1244,7 +1240,7 @@ int ObTransService::rollback_to_explicit_savepoint(ObTxDesc &tx,
     // rollback savepoints > sp (note, current savepoint with sp won't be released)
     ARRAY_FOREACH_N(tx.savepoints_, i, cnt) {
       ObTxSavePoint &it = tx.savepoints_.at(cnt - 1 - i);
-      if (it.scn_ > sp_scn && it.session_id_ == session_id) {
+      if (it.scn_ > sp_scn) {
         it.rollback();
       }
       const bool is_stack_top = tx.savepoints_.count() == (cnt - i);
@@ -1267,7 +1263,7 @@ int ObTransService::rollback_to_explicit_savepoint(ObTxDesc &tx,
 
 // impl note
 // registered snapshot keep valid
-int ObTransService::release_explicit_savepoint(ObTxDesc &tx, const ObString &savepoint, const uint32_t session_id)
+int ObTransService::release_explicit_savepoint(ObTxDesc &tx, const ObString &savepoint)
 {
   int ret = OB_SUCCESS;
   bool hit = false;
@@ -1277,7 +1273,7 @@ int ObTransService::release_explicit_savepoint(ObTxDesc &tx, const ObString &sav
     tx.inc_op_sn();
     ARRAY_FOREACH_N(tx.savepoints_, i, cnt) {
       ObTxSavePoint &it = tx.savepoints_.at(cnt - 1 - i);
-      if (it.is_savepoint() && it.name_ == savepoint && it.session_id_ == session_id) {
+      if (it.is_savepoint() && it.name_ == savepoint) {
         hit = true;
         sp_id = it.scn_;
         break;
@@ -1298,7 +1294,7 @@ int ObTransService::release_explicit_savepoint(ObTxDesc &tx, const ObString &sav
           tx.savepoints_.pop_back();
         }
       }
-      TRANS_LOG(TRACE, "release savepoint", K(savepoint), K(sp_id), K(session_id), K(tx));
+      TRANS_LOG(TRACE, "release savepoint", K(savepoint), K(sp_id), K(tx));
     }
   }
   ObTransTraceLog &tlog = tx.get_tlog();
@@ -1316,7 +1312,7 @@ int ObTransService::create_stash_savepoint(ObTxDesc &tx, const ObString &name)
   tx.inc_op_sn();
   const ObTxSEQ seq_no = tx.inc_and_get_tx_seq(0);
   ObTxSavePoint sp;
-  if (OB_SUCC(sp.init(seq_no, name, 0, false, true))) {
+  if (OB_SUCC(sp.init(seq_no, name, true))) {
     if (OB_FAIL(tx.savepoints_.push_back(sp))) {
       TRANS_LOG(WARN, "push savepoint failed", K(ret));
     }

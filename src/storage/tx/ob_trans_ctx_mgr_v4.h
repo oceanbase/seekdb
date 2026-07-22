@@ -88,7 +88,6 @@ struct ObTxCreateArg
                 const ObTransID &trans_id,
                 const uint64_t cluster_version,
                 const uint32_t session_id,
-                const uint32_t associated_session_id,
                 const int64_t trans_expired_time,
                 ObTransService *trans_service)
       : for_replay_(for_replay),
@@ -96,7 +95,6 @@ struct ObTxCreateArg
         tx_id_(trans_id),
         cluster_version_(cluster_version),
         session_id_(session_id),
-        associated_session_id_(associated_session_id),
         trans_expired_time_(trans_expired_time),
         trans_service_(trans_service) {}
   bool is_valid() const
@@ -107,14 +105,13 @@ struct ObTxCreateArg
   }
   TO_STRING_KV(K_(for_replay), "ctx_source", to_str_ctx_source(ctx_source_), K_(tx_id),
                  K_(cluster_version),
-                 K_(session_id), K_(associated_session_id),
+                 K_(session_id),
                  K_(trans_expired_time), KP_(trans_service));
   bool for_replay_;
   TxCtxSource ctx_source_;
   ObTransID tx_id_;
   uint64_t cluster_version_;
   uint32_t session_id_;
-  uint32_t associated_session_id_;
   int64_t trans_expired_time_;
   ObTransService *trans_service_;
 };

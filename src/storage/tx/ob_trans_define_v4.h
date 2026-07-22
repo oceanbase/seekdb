@@ -337,10 +337,6 @@ class ObTxSavePoint
 private:
   enum class T { INVL= 0, SAVEPOINT= 1, SNAPSHOT= 2, STASH= 3 } type_;
   ObTxSEQ scn_;
-  // The savepoint is scoped to a session.
-  uint32_t session_id_;
-  // Distinguishes user savepoints from internal savepoints such as PL implicit savepoints.
-  bool user_create_;
   union {
     ObTxReadSnapshot *snapshot_;
     common::ObFixedLengthString<128> name_;
@@ -350,23 +346,18 @@ public:
   ~ObTxSavePoint();
   ObTxSavePoint(const ObTxSavePoint &s);
   ObTxSavePoint &operator=(const ObTxSavePoint &a);
-  bool operator==(const ObTxSavePoint &a) const;
   void release();
   void rollback();
   int init(const ObTxSEQ &scn,
            const ObString &name,
-           const uint32_t session_id,
-           const bool user_create,
            const bool stash = false);
   void init(ObTxReadSnapshot *snapshot);
   bool is_savepoint() const { return type_ == T::SAVEPOINT || type_ == T::STASH; }
   bool is_snapshot() const { return type_ == T::SNAPSHOT; }
   bool is_stash() const { return type_ == T::STASH; }
-  bool is_user_savepoint() const { return type_ == T::SAVEPOINT && user_create_; }
   bool is_valid() const { return type_ != T::INVL; }
   ObString get_savepoint_name() const { return name_.str(); }
   DECLARE_TO_STRING;
-  OB_UNIS_VERSION(1);
 };
 
 typedef ObSEArray<ObTxSavePoint, 4> ObTxSavePointList;
@@ -433,7 +424,6 @@ protected:
   int64_t snapshot_uncertain_bound_;   // uncertain bound of @snapshot_version_
   ObTxSEQ snapshot_scn_;               // the time of acquire @snapshot_version_
   uint32_t sess_id_;                   // session id of txn start
-  uint32_t assoc_sess_id_;             // the session which associated with
 
   uint64_t op_sn_;                     // Tx level operation sequence No
 
@@ -576,7 +566,6 @@ public:
                K_(state),
                K_(addr),
                "session_id", sess_id_,
-               "assoc_session_id", assoc_sess_id_,
                K_(access_mode),
                K_(tx_consistency_type),
                K_(isolation),
@@ -623,7 +612,6 @@ public:
   bool contain(const ObTransID &trans_id) const { return tx_id_ == trans_id; } /*used by TransHashMap*/
 
   uint32_t get_session_id() const { return sess_id_; }
-  uint32_t get_assoc_session_id() const { return assoc_sess_id_; }
   ObAddr get_addr() const { return addr_; }
   uint64_t get_cluster_version() const { return cluster_version_; }
   ObTxConsistencyType get_tx_consistency_type() const { return tx_consistency_type_; }
@@ -676,7 +664,6 @@ public:
   bool is_tx_timeout() { return expire_ts_ > 0 && ObClockGenerator::getClock() > expire_ts_; }
   bool is_tx_commit_timeout() { return commit_expire_ts_ > 0 && ObClockGenerator::getClock() > commit_expire_ts_;}
   void set_sessid(const uint32_t session_id) { sess_id_ = session_id; }
-  void set_assoc_sessid(const uint32_t session_id) { assoc_sess_id_ = session_id; }
   int64_t get_active_ts() const { return active_ts_; }
   int64_t get_expire_ts() const;
   int64_t get_tx_lock_timeout() const { return lock_timeout_us_; }

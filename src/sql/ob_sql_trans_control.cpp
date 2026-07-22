@@ -805,7 +805,7 @@ int ObSqlTransControl::create_savepoint(ObExecContext &exec_ctx,
   CHECK_SESSION (session);
   OZ (get_tx_service(session, txs));
   OZ (acquire_tx_if_need_(txs, *session));
-  OZ (txs->create_explicit_savepoint(*session->get_tx_desc(), sp_name, 0, user_create), sp_name);
+  OZ (txs->create_explicit_savepoint(*session->get_tx_desc(), sp_name), sp_name);
   if (user_create) {
     OX(session->get_raw_audit_record().seq_num_ = ObSequence::get_max_seq_no());
   }
@@ -827,7 +827,7 @@ int ObSqlTransControl::rollback_savepoint(ObExecContext &exec_ctx,
   OZ (acquire_tx_if_need_(txs, *session));
   OX (stmt_expire_ts = get_stmt_expire_ts(plan_ctx, *session));
 
-  OZ (txs->rollback_to_explicit_savepoint(*session->get_tx_desc(), sp_name, stmt_expire_ts, 0), sp_name);
+  OZ (txs->rollback_to_explicit_savepoint(*session->get_tx_desc(), sp_name, stmt_expire_ts), sp_name);
   if (0 == session->get_raw_audit_record().seq_num_) {
     OX (session->get_raw_audit_record().seq_num_ = ObSequence::get_max_seq_no());
   }
@@ -847,9 +847,7 @@ int ObSqlTransControl::release_stash_savepoint(ObExecContext &exec_ctx,
   OZ (get_tx_service(session, txs), *session);
   OZ (acquire_tx_if_need_(txs, *session));
   // NOTE that stash savepoint only for mysql mode
-  // since the session id is 0 (default value) in create stash savepoint,
-  // we MUST set session id to 0 in release
-  OZ (txs->release_explicit_savepoint(*session->get_tx_desc(), sp_name, 0/*session id*/), *session, sp_name);
+  OZ (txs->release_explicit_savepoint(*session->get_tx_desc(), sp_name), *session, sp_name);
   return ret;
 }
 
@@ -863,7 +861,7 @@ int ObSqlTransControl::release_savepoint(ObExecContext &exec_ctx,
   CHECK_SESSION (session);
   OZ (get_tx_service(session, txs), *session);
   OZ (acquire_tx_if_need_(txs, *session));
-  OZ (txs->release_explicit_savepoint(*session->get_tx_desc(), sp_name, 0), *session, sp_name);
+  OZ (txs->release_explicit_savepoint(*session->get_tx_desc(), sp_name), *session, sp_name);
   return ret;
 }
 

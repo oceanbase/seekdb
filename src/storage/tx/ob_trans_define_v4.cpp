@@ -44,7 +44,7 @@ ObTxIsolationLevel tx_isolation_from_str(const ObString &s)
 
 
 ObTxSavePoint::ObTxSavePoint()
-  : type_(T::INVL), scn_(), session_id_(0), user_create_(false), name_() {}
+  : type_(T::INVL), scn_(), name_() {}
 
 ObTxSavePoint::ObTxSavePoint(const ObTxSavePoint &a)
 {
@@ -59,31 +59,12 @@ ObTxSavePoint &ObTxSavePoint::operator=(const ObTxSavePoint &a)
   case T::SAVEPOINT:
   case T::STASH: {
     name_ = a.name_;
-    session_id_ = a.session_id_;
-    user_create_ = a.user_create_;
     break;
   }
   case T::SNAPSHOT: snapshot_ = a.snapshot_; break;
   default: break;
   }
   return *this;
-}
-
-bool ObTxSavePoint::operator==(const ObTxSavePoint &a) const
-{
-  bool is_equal = false;
-  if (type_ == a.type_ && scn_== a.scn_) {
-    switch(type_) {
-    case T::SAVEPOINT:
-    case T::STASH: {
-      is_equal = name_ == a.name_ && session_id_ == a.session_id_ && user_create_ == a.user_create_;
-      break;
-    }
-    case T::SNAPSHOT: is_equal = snapshot_ == a.snapshot_; break;
-    default: break;
-    }
-  }
-  return is_equal;
 }
 
 ObTxSavePoint::~ObTxSavePoint()
@@ -96,8 +77,6 @@ void ObTxSavePoint::release()
   type_ = T::INVL;
   snapshot_ = NULL;
   scn_.reset();
-  session_id_ = 0;
-  user_create_ = false;
 }
 
 void ObTxSavePoint::rollback()
@@ -115,7 +94,7 @@ void ObTxSavePoint::init(ObTxReadSnapshot *snapshot)
   scn_ = snapshot->tx_seq();
 }
 
-int ObTxSavePoint::init(const ObTxSEQ &scn, const ObString &name, const uint32_t session_id, const bool user_create, const bool stash)
+int ObTxSavePoint::init(const ObTxSEQ &scn, const ObString &name, const bool stash)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(name_.assign(name))) {
@@ -127,8 +106,6 @@ int ObTxSavePoint::init(const ObTxSEQ &scn, const ObString &name, const uint32_t
   } else {
     type_ = stash ? T::STASH : T::SAVEPOINT;
     scn_ = scn;
-    session_id_ = session_id;
-    user_create_ = user_create;
   }
   return ret;
 }
@@ -145,10 +122,6 @@ DEF_TO_STRING(ObTxSavePoint)
   }
   J_COMMA();
   J_KV(K_(scn));
-  J_COMMA();
-  J_KV(K_(session_id));
-  J_COMMA();
-  J_KV(K_(user_create));
   J_OBJ_END();
   return pos;
 }
@@ -275,13 +248,6 @@ OB_SERIALIZE_MEMBER(ObTxParam,
                     lock_timeout_us_,
                     access_mode_,
                     isolation_);
-OB_SERIALIZE_MEMBER(ObTxSavePoint,
-                    type_,
-                    scn_,
-                    session_id_,
-                    user_create_,
-                    name_);
-
 ObTxDesc::ObTxDesc()
   : trace_info_(),
     cluster_version_(0),
@@ -296,7 +262,6 @@ ObTxDesc::ObTxDesc()
     snapshot_uncertain_bound_(0),
     snapshot_scn_(),
     sess_id_(0),
-    assoc_sess_id_(0),
     op_sn_(0),                          // default is from 0
     state_(State::INVL),
     flags_({ 0 }),
