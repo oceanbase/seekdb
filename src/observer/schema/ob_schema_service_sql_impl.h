@@ -964,7 +964,6 @@ private:
       int64_t &timeout,
       int64_t &row_cnt);
 
-  bool in_parallel_ddl_thread_();
   int construct_tenant_schema_(
       ObIArray<ObTenantSchema> &tenant_schema_array);
   int construct_tenant_schema_(

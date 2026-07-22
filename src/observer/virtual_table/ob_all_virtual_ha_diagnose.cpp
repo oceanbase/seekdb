@@ -35,17 +35,27 @@ int ObAllVirtualHADiagnose::inner_get_next_row(common::ObNewRow *&row)
       SERVER_LOG(WARN, "diagnose ls failed", K(ret));
     } else if (OB_FAIL(insert_stat_(diagnose_info))) {
       SERVER_LOG(WARN, "insert stat failed", K(ret), K(diagnose_info));
+    // Some varchar cells reference buffers owned by diagnose_info, so copy the row
+    // into scanner_ before diagnose_info is destroyed.
+    } else if (OB_FAIL(scanner_.add_row(cur_row_))) {
+      SERVER_LOG(WARN, "add diagnose info to scanner failed", K(ret), K(diagnose_info));
     } else {
+      scanner_it_ = scanner_.begin();
+      start_to_read_ = true;
       SERVER_LOG(INFO, "diagnose ls success", K(diagnose_info));
     }
     if (OB_FAIL(ret)) {
       SERVER_LOG(WARN, "iter tenant failed", K(ret));
+    }
+  }
+  if (OB_SUCC(ret) && start_to_read_) {
+    if (OB_FAIL(scanner_it_.get_next_row(cur_row_))) {
+      if (OB_ITER_END != ret) {
+        SERVER_LOG(WARN, "get next row failed", K(ret));
+      }
     } else {
-      start_to_read_ = true;
       row = &cur_row_;
     }
-  } else {
-    ret = OB_ITER_END;
   }
   return ret;
 }

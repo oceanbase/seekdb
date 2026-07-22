@@ -430,9 +430,9 @@ class MockOptStatManager : public oceanbase::common::ObOptStatManager
   }
 
   // virtual int get_table_stat(const ObOptTableStat::Key &key, ObOptTableStat &tstat);
-  virtual int add_refresh_stat_task(const oceanbase::obcall::ObUpdateStatCacheArg &analyze_arg) 
+  int refresh_stat_cache(const oceanbase::obcall::ObUpdateStatCacheArg &arg) override
   {
-    UNUSED(analyze_arg);
+    UNUSED(arg);
     return OB_SUCCESS;
   }
   
@@ -442,4 +442,3 @@ class MockOptStatManager : public oceanbase::common::ObOptStatManager
 } // end namespace test
 
 #endif /* _OB_MOCK_OPT_STAT_MANAGER_H */
-

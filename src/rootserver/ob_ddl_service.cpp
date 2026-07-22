@@ -27502,8 +27502,8 @@ int ObDDLSQLTransaction::end(const bool commit)
 {
   int ret = OB_SUCCESS;
 
-  // always reset index_name_checker_ before non parallell ddl commits.
-  if (commit && !ObSchemaService::in_parallel_ddl_thread()) {
+  // Always reset index_name_checker_ before DDL commits.
+  if (commit) {
     if (OB_ISNULL(GCTX.root_service_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("root_service is null", KR(ret));
@@ -27551,7 +27551,7 @@ int ObDDLSQLTransaction::end(const bool commit)
     }
   }
 
-  if (OB_SUCC(ret) && !ObSchemaService::in_parallel_ddl_thread() && commit) {
+  if (OB_SUCC(ret) && commit) {
     if (FAILEDx(register_ddl_trans())) {
       LOG_WARN("fail to register DDL transaction", KR(ret));
     }

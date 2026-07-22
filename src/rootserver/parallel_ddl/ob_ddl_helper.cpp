@@ -499,7 +499,7 @@ int ObDDLHelper::execute()
     } else {
       // the old executor won't wait consensus schema version, so we need to publish schema here
       // the new executor will wait consensus schema version.
-      if (OB_SUCC(ret) && !ObSchemaService::in_parallel_ddl_thread()) {
+      if (OB_SUCC(ret)) {
         if (OB_FAIL(ddl_service_->publish_schema())) {
           LOG_WARN("fail to refresh schema", KR(ret));
         }

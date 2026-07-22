@@ -21,11 +21,7 @@
 #include "share/config/ob_server_config.h"
 #include "share/ob_encryption_util.h"
 #include "common/ob_version_def.h"
-#ifdef __APPLE__
-#include <unistd.h>
-#else
 #include <curl/curl.h>
-#endif
 
 #define USING_LOG_PREFIX SHARE
 
@@ -319,4 +315,3 @@ int report_telemetry(const char *reporter, const char *event_name)
 
 }
 }
-

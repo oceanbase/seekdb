@@ -499,11 +499,6 @@ void ObServer::destroy()
     signal_handle_.destroy();
     FLOG_INFO("signal handle destroyed");
 
-    FLOG_INFO("opt stat manager destroyed");
-    ObOptStatManager::get_instance().destroy();
-    FLOG_INFO("opt stat manager destroyed");
-
-
     FLOG_INFO("begin to destroy timer monitor");
     ObTimerMonitor::get_instance().destroy();
     FLOG_INFO("timer monitor destroyed");
@@ -1116,10 +1111,6 @@ int ObServer::stop()
     //FLOG_INFO("begin stop partition scheduler");
     //ObPartitionScheduler::get_instance().stop_merge();
     //FLOG_INFO("partition scheduler stopped", KR(ret));
-
-    FLOG_INFO("begin to stop opt stat manager ");
-    ObOptStatManager::get_instance().stop();
-    FLOG_INFO("opt stat manager  stopped");
 
     FLOG_INFO("begin to stop server storage meta service");
     SERVER_STORAGE_META_SERVICE.stop();

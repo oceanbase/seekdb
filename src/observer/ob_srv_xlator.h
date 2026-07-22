@@ -18,7 +18,6 @@
 
 #include "lib/utility/ob_macro_utils.h"
 #include "rpc/frame/ob_req_translator.h"
-#include "rpc/frame/ob_req_session_handler.h"
 #include "rpc/obmysql/ob_mysql_translator.h"
 #include "observer/ob_server_struct.h"
 
@@ -37,7 +36,6 @@ RLOCAL_EXTERN(EP_CALLP_BUF, co_ep_callp_buf);
 namespace oceanbase { namespace observer {
 
 using rpc::frame::ObReqProcessor;
-using rpc::frame::ObReqSessionHandler;
 using obmysql::ObMySQLTranslator;
 using common::ObIAllocator;
 
@@ -67,16 +65,11 @@ public:
   int th_init();
   int th_destroy();
   int release(ObReqProcessor *processor);
-  // The session handler is owned here only because ObSrvDeliver (shared by the
-  // MySQL/RPC listener) takes a reference to one in its constructor. It is no
-  // longer driven by any obcall RPC translation path.
-  ObReqSessionHandler &get_session_handler() { return session_handler_; }
 protected:
   ObReqProcessor *get_processor(rpc::ObRequest &);
 private:
   ObReqProcessor *get_error_mysql_processor(const int ret);
   ObSrvMySQLXlator mysql_xlator_;
-  ObReqSessionHandler session_handler_;
   DISALLOW_COPY_AND_ASSIGN(ObSrvXlator);
 };
 

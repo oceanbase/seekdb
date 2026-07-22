@@ -31,11 +31,11 @@ namespace storage
 namespace checkpoint
 {
 
-// The time interval for waiting persist tablet successful after freezing is 5s
-const int64_t ObTabletGCHandler::FLUSH_CHECK_INTERVAL = 5 * 1000 * 1000L;
+// The time interval for checking tablet persistence after freezing is 1s
+const int64_t ObTabletGCHandler::FLUSH_CHECK_INTERVAL = 1 * 1000 * 1000L;
 
-// The time interval for waiting persist tablet successful after freezing in total is 72 * 5s = 6m
-const int64_t ObTabletGCHandler::FLUSH_CHECK_MAX_TIMES = 72;
+// The maximum wait time for tablet persistence after freezing is 360 * 1s = 6m
+const int64_t ObTabletGCHandler::FLUSH_CHECK_MAX_TIMES = 6 * 60;
 
 // The time interval for checking tablet_persist_trigger_ is 5s
 const int64_t ObTabletGCService::GC_CHECK_INTERVAL = 5 * 1000 * 1000L;
@@ -181,8 +181,7 @@ void ObTabletGCService::ObTabletChangeTask::runTimerTask()
           }
           // 5. wait unpersit_tablet_ids
           else if (no_need_wait_persist) {
-            // temporariily skip for not support persist uncommited mds data.
-            ob_usleep(ObTabletGCHandler::FLUSH_CHECK_INTERVAL, true);
+            // Retry in the next timer round instead of blocking the shared timer worker.
           } else if(OB_FAIL(tablet_gc_handler->wait_unpersist_tablet_ids_flushed(unpersist_tablet_ids, decided_scn))) {
             need_retry = true;
             STORAGE_LOG(ERROR, "fail to wait unpersist tablet ids flushed", KR(ret), KPC(tablet_gc_handler->ls_), K(unpersist_tablet_ids));
@@ -565,8 +564,7 @@ int ObTabletGCHandler::wait_unpersist_tablet_ids_flushed(const common::ObTabletI
     STORAGE_LOG(INFO, "tablet gc handler stop", KR(ret), KPC(this), KPC(ls_), K(ls_->get_ls_meta()));
   }
   // wait all tablet flushed
-  while (unpersist_tablet_ids.count() > i && retry_times > 0 && OB_SUCC(ret)) {
-    ob_usleep(FLUSH_CHECK_INTERVAL, true);
+  while (unpersist_tablet_ids.count() > i && OB_SUCC(ret)) {
     while (unpersist_tablet_ids.count() > i && OB_SUCC(ret)) {
       ObTabletHandle handle;
       ObTablet *tablet = nullptr;
@@ -594,7 +592,13 @@ int ObTabletGCHandler::wait_unpersist_tablet_ids_flushed(const common::ObTabletI
         break;
       }
     }
-    retry_times--;
+    if (OB_SUCC(ret) && unpersist_tablet_ids.count() > i) {
+      if (retry_times <= 0) {
+        break;
+      }
+      retry_times--;
+      ob_usleep(FLUSH_CHECK_INTERVAL, true);
+    }
   }
 
   if (OB_SUCC(ret) && i != unpersist_tablet_ids.count()) {

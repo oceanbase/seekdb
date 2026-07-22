@@ -13,8 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// RS-layer serialization for ex-RPC operations that originally went through the
-// single-threaded ddl_queue_ (ObSrvDeliver::DDL_TASK_THREAD_CNT == 1).
+// RS-layer serialization for operations converted from the former priority-10
+// single-threaded RPC queue.
 #ifndef OCEANBASE_ROOTSERVER_OB_RS_SERIAL_CALL_H_
 #define OCEANBASE_ROOTSERVER_OB_RS_SERIAL_CALL_H_
 
@@ -26,9 +26,8 @@
 namespace oceanbase {
 namespace rootserver {
 
-// One process-global lock reproduces the serialization the single-threaded
-// ddl_queue_ used to provide for priority-10 (non-parallel) RS RPCs, WITHOUT
-// relying on ddl_epoch (which will be removed). Lock and timeout are orthogonal,
+// One process-global lock preserves serialization for priority-10
+// non-parallel RS operations without relying on ddl_epoch. Lock and timeout are orthogonal,
 // but acquisition is bounded by THIS_WORKER's deadline so it never waits forever.
 inline lib::ObMutex &rs_serial_mutex()
 {

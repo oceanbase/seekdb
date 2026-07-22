@@ -26,9 +26,7 @@ using namespace oceanbase::common;
 using namespace oceanbase::lib;
 
 ObReqQueue::ObReqQueue(int capacity)
-    : wait_finish_(true),
-      push_worker_count_(0),
-      queue_(),
+    : queue_(),
       qhandler_(NULL),
       host_()
 {
@@ -38,11 +36,6 @@ ObReqQueue::ObReqQueue(int capacity)
 ObReqQueue::~ObReqQueue()
 {
   LOG_INFO("begin to destroy queue", K(queue_.size()));
-}
-
-int ObReqQueue::init()
-{
-  return OB_SUCCESS;
 }
 
 void ObReqQueue::set_qhandler(ObiReqQHandler *qhandler)
@@ -137,29 +130,24 @@ void ObReqQueue::loop()
       }
     }  // main loop
 
-    if (!wait_finish_) {
-      LOG_INFO("exiting queue thread without wait finish", K(queue_.size()));
-    } else {
-      while(get_push_worker_count() != 0); // wait to push finish
-      LOG_INFO("exiting queue thread and wait remain finish", K(queue_.size()));
-      // Process remains if we should wait until all task has been
-      // processed before exiting this thread. Previous return code
-      // isn't significant, we just ignore it to make progress. When
-      // queue pop a normal task we process it until pop fails.
-      ret = OB_SUCCESS;
-      while (queue_.size() > 0 && OB_SUCC(ret)) {
-        if (OB_FAIL(queue_.pop(task, timeout))) {
-          LOG_DEBUG("queue pop task fail", K(&queue_));
-          if(OB_ENTRY_NOT_EXIST == ret) {
-            // lightyqueue may return OB_ENTRY_NOT_EXIST when tasks existing
-            ret = OB_SUCCESS;
-          }
-        } else if (NULL != task) {
-          process_task(task);  // ignore return code.
-        } else {
-          // unexpected
-          LOG_ERROR("queue pop successfully but task is NULL");
+    LOG_INFO("exiting queue thread and wait remain finish", K(queue_.size()));
+    // Process remains if we should wait until all task has been
+    // processed before exiting this thread. Previous return code
+    // isn't significant, we just ignore it to make progress. When
+    // queue pop a normal task we process it until pop fails.
+    ret = OB_SUCCESS;
+    while (queue_.size() > 0 && OB_SUCC(ret)) {
+      if (OB_FAIL(queue_.pop(task, timeout))) {
+        LOG_DEBUG("queue pop task fail", K(&queue_));
+        if(OB_ENTRY_NOT_EXIST == ret) {
+          // lightyqueue may return OB_ENTRY_NOT_EXIST when tasks existing
+          ret = OB_SUCCESS;
         }
+      } else if (NULL != task) {
+        process_task(task);  // ignore return code.
+      } else {
+        // unexpected
+        LOG_ERROR("queue pop successfully but task is NULL");
       }
     }
 
