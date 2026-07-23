@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_OBSERVER_OB_INNER_SQL_CONNECTION_POOL_H_
 #define OCEANBASE_OBSERVER_OB_INNER_SQL_CONNECTION_POOL_H_
 
-#include "lib/allocator/page_arena.h"
 #include "lib/list/ob_dlist.h"
 #include "common/mysqlclient/ob_isql_connection_pool.h"
 #include "lib/lock/ob_thread_cond.h"
@@ -52,12 +51,6 @@ class ObInnerSQLConnectionPool : public common::sqlclient::ObISQLConnectionPool
 {
 public:
   friend class ObInnerSQLConnection;
-  static constexpr int64_t RP_MAX_FREE_LIST_NUM = 1024;
-  class LinkNode : public common::ObDLinkBase<LinkNode>
-  {
-  };
-  static_assert(sizeof(LinkNode) <= sizeof(ObInnerSQLConnection),
-      "inner sql connection size is too small");
 
   ObInnerSQLConnectionPool();
   virtual ~ObInnerSQLConnectionPool();
@@ -96,9 +89,9 @@ public:
   const static int64_t MAX_DUMP_SIZE = 20;
 
 private:
-  // alloc connection from %free_conn_list_
+  // allocate a new connection
   int alloc_conn(ObInnerSQLConnection *&conn);
-  // revert connection to %free_conn_list_
+  // destroy and free a connection
   int free_conn(ObInnerSQLConnection *conn);
   // revert connection, called by ObInnerSQLConnection::unref()
   int revert(ObInnerSQLConnection *conn);
@@ -110,9 +103,7 @@ private:
   volatile bool stop_;
   common::ObThreadCond cond_;
   int64_t total_conn_cnt_;
-  common::ObDList<LinkNode> free_conn_list_;
   common::ObDList<ObInnerSQLConnection> used_conn_list_;
-  common::ObArenaAllocator allocator_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
   sql::ObSql *ob_sql_;
   ObVTIterCreator *vt_iter_creator_;

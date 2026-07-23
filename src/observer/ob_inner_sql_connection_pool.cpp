@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "ob_inner_sql_connection_pool.h"
+#include "lib/allocator/ob_malloc.h"
 
 namespace oceanbase
 {
@@ -29,8 +30,7 @@ namespace observer
 {
 ObInnerSQLConnectionPool::ObInnerSQLConnectionPool()
     : inited_(false), stop_(false), total_conn_cnt_(0),
-      free_conn_list_(), used_conn_list_(),
-      allocator_(ObMemAttr(ObModIds::OB_INNER_SQL_CONN_POOL)),
+      used_conn_list_(),
       schema_service_(NULL),
       ob_sql_(NULL),
       vt_iter_creator_(NULL),
@@ -44,21 +44,9 @@ ObInnerSQLConnectionPool::~ObInnerSQLConnectionPool()
   int ret = OB_SUCCESS;
   if (inited_) {
     ObThreadCondGuard guard(cond_);
-    if (free_conn_list_.get_size() != total_conn_cnt_) {
+    if (0 != total_conn_cnt_ || !used_conn_list_.is_empty()) {
       LOG_ERROR("not all connection been freed", K_(total_conn_cnt),
-          "free_conn_cnt", free_conn_list_.get_size());
-    }
-
-    while (!free_conn_list_.is_empty()) {
-      LinkNode *node = free_conn_list_.remove_first();
-      if (NULL == node) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL connection", K(ret));
-      } else {
-        node->~LinkNode();
-        allocator_.free(node);
-        node = NULL;
-      }
+          "used_conn_cnt", used_conn_list_.get_size());
     }
   }
 }
@@ -104,7 +92,7 @@ int ObInnerSQLConnectionPool::acquire(common::sqlclient::ObISQLConnection *&conn
     LOG_WARN("alloc connection from pool failed", K(ret));
   } else if (OB_FAIL(inner_sql_conn->init(this, schema_service_, ob_sql_, vt_iter_creator_,
                                           config_, nullptr /* session_info */, client_addr,
-                                          nullptr/*sql modifer*/, is_ddl_))) {
+                                          nullptr/*sql modifer*/, is_ddl_, group_id))) {
     LOG_WARN("init connection failed", K(ret));
   } else if (OB_FAIL(add_to_used_conn_list(inner_sql_conn))) {
     LOG_WARN("add_to_used_conn_list failed", K(ret));
@@ -177,7 +165,7 @@ int ObInnerSQLConnectionPool::acquire(
   } else if (OB_FAIL(alloc_conn(inner_sql_conn))) {
     LOG_WARN("alloc connection from pool failed", K(ret));
   } else if (OB_FAIL(inner_sql_conn->init(this, schema_service_, ob_sql_, vt_iter_creator_, config_,
-                     session_info, NULL, NULL, false))) {
+                                          session_info, NULL, NULL, false, 0/*group_id*/))) {
     LOG_WARN("init connection failed", K(ret));
   } else if (OB_FAIL(add_to_used_conn_list(inner_sql_conn))) {
     LOG_WARN("add_to_used_conn_list failed", K(ret));
@@ -240,10 +228,19 @@ int ObInnerSQLConnectionPool::revert(ObInnerSQLConnection *conn)
       rp_free(conn, ObInnerSQLConnection::LABEL);
     } else if (OB_FAIL(remove_from_used_conn_list(conn))) {
       LOG_WARN("remove_from_used_conn_list failed", K(ret));
-    } else if (OB_FAIL(conn->destroy())) {
-      LOG_WARN("connection destroy failed", K(ret));
-    } else if (OB_FAIL(free_conn(conn))) {
-      LOG_WARN("free connection failed", K(ret));
+    } else {
+      int tmp_ret = conn->destroy();
+      if (OB_SUCCESS != tmp_ret) {
+        ret = tmp_ret;
+        LOG_WARN("connection destroy failed", K(ret));
+      }
+      // The connection object itself is independently allocated and must be
+      // released even if cleaning up its session reports an error.
+      tmp_ret = free_conn(conn);
+      if (OB_SUCCESS != tmp_ret) {
+        ret = OB_SUCCESS == ret ? tmp_ret : ret;
+        LOG_WARN("free connection failed", K(tmp_ret));
+      }
     }
   }
   return ret;
@@ -288,19 +285,13 @@ int ObInnerSQLConnectionPool::alloc_conn(ObInnerSQLConnection *&conn)
     LOG_WARN("connection pool stoped", K(ret));
   } else {
     ObThreadCondGuard guard(cond_);
-    if (free_conn_list_.is_empty()) {
-      void *mem = allocator_.alloc(sizeof(*conn));
-      if (NULL == mem) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("alloc memory failed", K(ret), K_(total_conn_cnt));
-      } else {
-        total_conn_cnt_++;
-        inner_sql_conn = new (mem) ObInnerSQLConnection();
-      }
+    void *mem = ob_malloc(sizeof(*conn), SET_USE_500(ObModIds::OB_INNER_SQL_CONN_POOL));
+    if (NULL == mem) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_ERROR("alloc memory failed", K(ret), K_(total_conn_cnt));
     } else {
-      LinkNode *node = free_conn_list_.remove_first();
-      node->~LinkNode();
-      inner_sql_conn = new (node) ObInnerSQLConnection();
+      total_conn_cnt_++;
+      inner_sql_conn = new (mem) ObInnerSQLConnection();
     }
     if (OB_SUCC(ret)) {
       // leak checking before add connection to used list.
@@ -312,13 +303,13 @@ int ObInnerSQLConnectionPool::alloc_conn(ObInnerSQLConnection *&conn)
         const int64_t duration = leak_check_minutes * 60 * 1000000;
         if (total_conn_cnt_ >= WARNNING_CONNECTION_CNT) {
           LOG_WARN("allocated too many connections, may be connection leak",
-                   K(ret), K_(total_conn_cnt), "free_conn_size", free_conn_list_.get_size());
+                   K(ret), K_(total_conn_cnt), "used_conn_size", used_conn_list_.get_size());
           dump_used_conn_list();
         } else if (!used_conn_list_.is_empty()
                    && used_conn_list_.get_first()->get_init_timestamp() > 0
                    && now - used_conn_list_.get_first()->get_init_timestamp() >= duration) {
           LOG_ERROR("found connection used more than leak check minutes, may be connection leak",
-                   K(ret), K_(total_conn_cnt), "free_conn_size", free_conn_list_.get_size());
+                   K(ret), K_(total_conn_cnt), "used_conn_size", used_conn_list_.get_size());
           dump_used_conn_list();
         }
       }
@@ -339,14 +330,15 @@ int ObInnerSQLConnectionPool::free_conn(ObInnerSQLConnection *conn)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(conn));
   } else {
-    ObThreadCondGuard guard(cond_);
     conn->~ObInnerSQLConnection();
-    LinkNode *node = new (conn) LinkNode();
-    if (!free_conn_list_.add_last(node)) {
+    ob_free(conn);
+    ObThreadCondGuard guard(cond_);
+    if (OB_UNLIKELY(total_conn_cnt_ <= 0)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("add connection to free connection list failed", K(ret));
+      LOG_ERROR("invalid total connection count", K(ret), K_(total_conn_cnt));
     } else {
-      if (stop_ && 0 == used_conn_list_.get_size()) {
+      --total_conn_cnt_;
+      if (stop_ && 0 == total_conn_cnt_) {
         cond_.signal();
       }
     }
@@ -408,11 +400,12 @@ int ObInnerSQLConnectionPool::wait()
     LOG_WARN("not stoped", K(ret));
   } else {
     ObThreadCondGuard guard(cond_);
-    while (used_conn_list_.get_size() > 0) {
+    while (total_conn_cnt_ > 0) {
       const int64_t now = ObTimeUtility::current_time();
       if (now - begin > WARNNING_TIME_US) {
         LOG_WARN_RET(OB_ERR_TOO_MUCH_TIME, "too much time used to wait connection release, may be connection leak",
-            "used_time_ms", now - begin, "used connection count", used_conn_list_.get_size());
+            "used_time_ms", now - begin, K_(total_conn_cnt),
+            "used connection count", used_conn_list_.get_size());
         dump_used_conn_list();
       }
       cond_.wait(WAIT_TIME_MS);
