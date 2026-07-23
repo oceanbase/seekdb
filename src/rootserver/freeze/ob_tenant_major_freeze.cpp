@@ -30,7 +30,8 @@ using namespace share;
 
 ObTenantMajorFreeze::ObTenantMajorFreeze()
   : is_inited_(false), is_primary_service_(true),
-    major_merge_info_mgr_(), major_merge_info_detector_{},
+    major_merge_info_mgr_(), snapshot_gc_scn_renewer_{},
+    major_merge_info_detector_{},
     merge_scheduler_{}, daily_launcher_{}, schema_service_(nullptr)
 {
 }
@@ -51,11 +52,15 @@ int ObTenantMajorFreeze::init(
     LOG_WARN("init twice", KR(ret));
   } else if (OB_FAIL(major_merge_info_mgr_.init(sql_proxy))) {
     LOG_WARN("fail to init major merge info mgr", KR(ret));
+  } else if (OB_FAIL(snapshot_gc_scn_renewer_.init(
+             is_primary_service, major_merge_info_mgr_))) {
+    LOG_WARN("fail to init snapshot gc scn renewer", KR(ret), K(is_primary_service));
   } else if (OB_FAIL(merge_scheduler_.init(is_primary_service, major_merge_info_mgr_,
              schema_service, config, sql_proxy))) {
     LOG_WARN("fail to init merge_scheduler", KR(ret), K(is_primary_service));
   }  else if (OB_FAIL(major_merge_info_detector_.init(is_primary_service, sql_proxy,
-              major_merge_info_mgr_, merge_scheduler_.get_major_scheduler_idling()))) {
+              major_merge_info_mgr_, snapshot_gc_scn_renewer_,
+              merge_scheduler_.get_major_scheduler_idling()))) {
     LOG_WARN("fail to init freeze_info_detector", KR(ret), K(is_primary_service));
   } else if (is_primary_service) {
     if (OB_FAIL(daily_launcher_.init(config, sql_proxy, major_merge_info_mgr_))) {
@@ -95,6 +100,7 @@ void ObTenantMajorFreeze::stop()
     LOG_INFO("daily_launcher start to stop", K_(is_primary_service));
     daily_launcher_.stop();
   }
+  snapshot_gc_scn_renewer_.pause();
   LOG_INFO("freeze_info_detector start to stop", K_(is_primary_service));
   major_merge_info_detector_.stop();
   LOG_INFO("merge_scheduler start to stop", K_(is_primary_service));
@@ -131,6 +137,12 @@ int ObTenantMajorFreeze::destroy()
     }
   }
   if (OB_SUCC(ret)) {
+    LOG_INFO("snapshot gc scn renewer start to destroy", K_(is_primary_service));
+    if (OB_FAIL(snapshot_gc_scn_renewer_.destroy())) {
+      LOG_WARN("fail to destroy snapshot gc scn renewer", KR(ret), K_(is_primary_service));
+    }
+  }
+  if (OB_SUCC(ret)) {
     LOG_INFO("merge_scheduler start to destroy", K_(is_primary_service));
     if (OB_FAIL(merge_scheduler_.destroy())) {
       LOG_WARN("fail to destroy merge_scheduler", KR(ret), K_(is_primary_service));
@@ -144,6 +156,7 @@ void ObTenantMajorFreeze::pause()
   if (is_primary_service()) {
     daily_launcher_.pause();
   }
+  snapshot_gc_scn_renewer_.pause();
   major_merge_info_detector_.pause();
   merge_scheduler_.pause();
 }
@@ -153,6 +166,7 @@ void ObTenantMajorFreeze::resume()
   if (is_primary_service()) {
     daily_launcher_.resume();
   }
+  snapshot_gc_scn_renewer_.resume();
   major_merge_info_detector_.resume();
   merge_scheduler_.resume();
 }
@@ -166,15 +180,19 @@ int ObTenantMajorFreeze::on_become_primary()
   } else if (!is_primary_service()) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("tenant major freeze is not primary service", KR(ret));
-  } else if (OB_FAIL(major_merge_info_detector_.on_become_primary())) {
-    LOG_WARN("fail to activate snapshot gc detector for primary", KR(ret));
+  } else if (OB_FAIL(snapshot_gc_scn_renewer_.on_become_primary())) {
+    LOG_WARN("fail to activate snapshot gc scn renewer for primary", KR(ret));
+  } else if (OB_FAIL(major_merge_info_detector_.signal())) {
+    LOG_WARN("fail to signal freeze info detector after becoming primary", KR(ret));
   }
   return ret;
 }
 
 bool ObTenantMajorFreeze::is_paused() const
 {
-  bool is_paused = (major_merge_info_detector_.is_paused() || merge_scheduler_.is_paused());
+  bool is_paused = (snapshot_gc_scn_renewer_.is_paused()
+      || major_merge_info_detector_.is_paused()
+      || merge_scheduler_.is_paused());
   if (is_primary_service()) {
     is_paused = (is_paused || daily_launcher_.is_paused());
   }

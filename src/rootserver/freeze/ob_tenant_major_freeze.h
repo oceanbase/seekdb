@@ -23,6 +23,7 @@
 #include "rootserver/freeze/ob_zone_merge_manager.h"
 #include "rootserver/freeze/ob_major_merge_info_manager.h"
 #include "rootserver/freeze/ob_freeze_info_detector.h"
+#include "rootserver/freeze/ob_snapshot_gc_scn_renewer.h"
 #include "rootserver/freeze/ob_daily_major_freeze_launcher.h"
 
 namespace oceanbase
@@ -92,6 +93,7 @@ private:
   bool is_primary_service_;  // identify ObMajorFreezeServiceType::SERVICE_TYPE_PRIMARY
 
   ObMajorMergeInfoManager major_merge_info_mgr_;
+  ObSnapshotGcScnRenewer snapshot_gc_scn_renewer_;
   ObMajorMergeInfoDetector major_merge_info_detector_;
   ObMajorMergeScheduler merge_scheduler_;
   ObDailyMajorFreezeLauncher daily_launcher_;

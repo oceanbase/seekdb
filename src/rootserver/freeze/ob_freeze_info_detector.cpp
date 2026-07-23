@@ -21,12 +21,11 @@
 #include "rootserver/freeze/ob_freeze_info_detector.h"
 
 #include "rootserver/freeze/ob_major_merge_info_manager.h"
+#include "rootserver/freeze/ob_snapshot_gc_scn_renewer.h"
 #include "rootserver/ob_root_utils.h"
 #include "share/ob_global_merge_table_operator.h"
 #include "share/ob_global_stat_proxy.h"
 #include "rootserver/ob_thread_idling.h"
-#include "storage/compaction/ob_tenant_freeze_info_mgr.h"
-#include "storage/tx_storage/ob_ls_service.h"
 #include "share/rc/ob_tenant_base.h"
 
 namespace oceanbase
@@ -37,13 +36,11 @@ namespace rootserver
 {
 ObMajorMergeInfoDetector::ObMajorMergeInfoDetector()
   : is_inited_(false), is_paused_(false), is_primary_service_(true),
-    is_primary_active_(false), need_primary_catchup_(false),
     is_global_merge_info_adjusted_(false), is_gc_scn_inited_(false), sql_proxy_(nullptr),
-    last_gc_renew_attempt_ts_(0), first_pending_snapshot_gc_history_scn_(0),
     last_run_timestamp_(0),
-    major_merge_info_mgr_(nullptr), major_scheduler_idling_(nullptr),
+    major_merge_info_mgr_(nullptr), snapshot_gc_scn_renewer_(nullptr),
+    major_scheduler_idling_(nullptr),
     last_schedule_ts_(0), need_immediate_run_(true),
-    snapshot_gc_role_lock_(common::ObLatchIds::MAJOR_FREEZE_SWITCH_LOCK),
     timer_()
 {}
 
@@ -56,6 +53,7 @@ int ObMajorMergeInfoDetector::init(
     const bool is_primary_service,
     ObMySQLProxy &sql_proxy,
     ObMajorMergeInfoManager &major_merge_info_mgr,
+    ObSnapshotGcScnRenewer &snapshot_gc_scn_renewer,
     ObThreadIdling &major_scheduler_idling)
 {
   int ret = OB_SUCCESS;
@@ -64,13 +62,10 @@ int ObMajorMergeInfoDetector::init(
     LOG_WARN("init twice", KR(ret));
   } else {
     is_primary_service_ = is_primary_service;
-    ATOMIC_STORE(&is_primary_active_, false);
-    ATOMIC_STORE(&need_primary_catchup_, false);
     is_global_merge_info_adjusted_ = false;
-    ATOMIC_STORE(&last_gc_renew_attempt_ts_, 0);
-    ATOMIC_STORE(&first_pending_snapshot_gc_history_scn_, 0);
     sql_proxy_ = &sql_proxy;
     major_merge_info_mgr_ = &major_merge_info_mgr;
+    snapshot_gc_scn_renewer_ = &snapshot_gc_scn_renewer;
     major_scheduler_idling_ = &major_scheduler_idling;
     if (OB_FAIL(timer_.init("FrzInfoDetTimer", ObMemAttr("FrzInfoDet")))) {
       LOG_WARN("init freeze info detector timer failed", KR(ret));
@@ -109,7 +104,9 @@ void ObMajorMergeInfoDetector::runTimerTask()
     update_last_run_timestamp_();
   } else {
     const int64_t now = ObTimeUtility::current_time();
-    const bool need_snapshot_gc_run = need_renew_snapshot_gc_scn_(now);
+    const bool need_snapshot_gc_run = is_primary_service()
+        && OB_NOT_NULL(snapshot_gc_scn_renewer_)
+        && snapshot_gc_scn_renewer_->need_renew(now);
     if (!ATOMIC_LOAD(&need_immediate_run_)
         && !need_snapshot_gc_run
         && now < ATOMIC_LOAD(&last_schedule_ts_) + get_schedule_interval()) {
@@ -130,7 +127,10 @@ void ObMajorMergeInfoDetector::runTimerTask()
         LOG_WARN("fail to judge can start work", KR(ret));
       } else if (can_work) {
           if (is_primary_service()) {
-            if (OB_FAIL(try_renew_snapshot_gc_scn())) {
+            if (OB_ISNULL(snapshot_gc_scn_renewer_)) {
+              ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("snapshot gc scn renewer is null", KR(ret));
+            } else if (OB_FAIL(snapshot_gc_scn_renewer_->try_renew())) {
               if (REACH_TIME_INTERVAL(60 * 1000 * 1000L)) {
                 LOG_WARN("fail to renew gc snapshot", KR(ret), K_(is_primary_service));
               }
@@ -205,155 +205,13 @@ int ObMajorMergeInfoDetector::try_broadcast_freeze_info()
   return ret;
 }
 
-int ObMajorMergeInfoDetector::try_renew_snapshot_gc_scn()
-{
-  ObRecursiveMutexGuard role_guard(snapshot_gc_role_lock_);
-  int ret = OB_SUCCESS;
-  const int64_t now = ObTimeUtility::current_time();
-  storage::ObTenantFreezeInfoMgr *freeze_info_mgr = nullptr;
-  int64_t pending_history_scn = 0;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
-  } else if (!ATOMIC_LOAD(&is_primary_active_)) {
-    // nothing
-  } else if (OB_ISNULL(share::g_mp)
-      || OB_ISNULL(freeze_info_mgr = share::g_mp->tenant_freeze_info_mgr())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant freeze info mgr is null", KR(ret));
-  } else if (!need_renew_snapshot_gc_scn_(now)) {
-    // IDLE or waiting for the first pending history SCN to reach undo_retention.
-  } else {
-    const bool need_primary_catchup = ATOMIC_LOAD(&need_primary_catchup_);
-    SCN new_snapshot_gc_scn;
-    if (!need_primary_catchup) {
-      // The retention deadline has been reached. Later retries use the fixed interval.
-      ATOMIC_STORE(&first_pending_snapshot_gc_history_scn_, 0);
-    }
-    ATOMIC_STORE(&last_gc_renew_attempt_ts_, now);
-    if (OB_FAIL(major_merge_info_mgr_->renew_snapshot_gc_scn(new_snapshot_gc_scn))) {
-      // Keep ACTIVE and retry after the same fixed interval.
-    } else {
-      if (need_primary_catchup && ATOMIC_LOAD(&is_primary_active_)) {
-        const int64_t primary_history_scn = new_snapshot_gc_scn.get_val_for_tx();
-        freeze_info_mgr->notify_snapshot_gc_history_created(primary_history_scn);
-        ATOMIC_STORE(&first_pending_snapshot_gc_history_scn_, primary_history_scn);
-        ATOMIC_STORE(&last_gc_renew_attempt_ts_, 0);
-        ATOMIC_STORE(&need_primary_catchup_, false);
-      }
-      pending_history_scn = freeze_info_mgr->get_pending_snapshot_gc_history_scn();
-      if (pending_history_scn > 0) {
-        const int64_t undo_retention_s = GCONF.undo_retention;
-        const int64_t gc_boundary = MAX(0,
-            new_snapshot_gc_scn.get_val_for_tx()
-                - undo_retention_s * 1000L * 1000L * 1000L);
-        if (gc_boundary >= pending_history_scn
-            && freeze_info_mgr->try_clear_pending_snapshot_gc_history_scn(
-                pending_history_scn)) {
-          ATOMIC_STORE(&first_pending_snapshot_gc_history_scn_, 0);
-          ATOMIC_STORE(&last_gc_renew_attempt_ts_, 0);
-          LOG_INFO("snapshot gc history event is covered",
-              K(new_snapshot_gc_scn), K(gc_boundary), K(pending_history_scn),
-              K(undo_retention_s));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-bool ObMajorMergeInfoDetector::is_snapshot_gc_history_due_(
-    const int64_t current_time_ns,
-    const int64_t first_pending_history_scn,
-    const int64_t undo_retention_s)
-{
-  const int64_t undo_retention_ns = undo_retention_s * 1000L * 1000L * 1000L;
-  return current_time_ns > 0
-      && first_pending_history_scn > 0
-      && undo_retention_s >= 0
-      && MAX(0, current_time_ns - undo_retention_ns) >= first_pending_history_scn;
-}
-
-int64_t ObMajorMergeInfoDetector::latch_first_pending_snapshot_gc_history_scn_(
-    const int64_t pending_history_scn)
-{
-  int64_t first_pending_history_scn =
-      ATOMIC_LOAD(&first_pending_snapshot_gc_history_scn_);
-  if (first_pending_history_scn <= 0 && pending_history_scn > 0) {
-    (void)ATOMIC_BCAS(&first_pending_snapshot_gc_history_scn_,
-        0, pending_history_scn);
-    first_pending_history_scn =
-        ATOMIC_LOAD(&first_pending_snapshot_gc_history_scn_);
-  }
-  return first_pending_history_scn;
-}
-
-bool ObMajorMergeInfoDetector::need_renew_snapshot_gc_scn_(const int64_t now)
-{
-  ObRecursiveMutexGuard role_guard(snapshot_gc_role_lock_);
-  storage::ObTenantFreezeInfoMgr *freeze_info_mgr = nullptr;
-  const int64_t last_attempt_ts = ATOMIC_LOAD(&last_gc_renew_attempt_ts_);
-  bool need_renew = false;
-  if (is_primary_service() && ATOMIC_LOAD(&is_primary_active_)) {
-    if (ATOMIC_LOAD(&need_primary_catchup_)) {
-      need_renew = last_attempt_ts <= 0
-          || now >= last_attempt_ts + UPDATER_INTERVAL_US;
-    } else if (OB_NOT_NULL(share::g_mp)
-        && OB_NOT_NULL(freeze_info_mgr = share::g_mp->tenant_freeze_info_mgr())) {
-      const int64_t pending_history_scn =
-          freeze_info_mgr->get_pending_snapshot_gc_history_scn();
-      if (pending_history_scn > 0) {
-        if (last_attempt_ts > 0) {
-          need_renew = now >= last_attempt_ts + UPDATER_INTERVAL_US;
-        } else {
-          const int64_t first_pending_history_scn =
-              latch_first_pending_snapshot_gc_history_scn_(pending_history_scn);
-          need_renew = is_snapshot_gc_history_due_(
-              ObTimeUtility::current_time_ns(), first_pending_history_scn,
-              GCONF.undo_retention);
-        }
-      }
-    }
-  }
-  return need_renew;
-}
-
-int ObMajorMergeInfoDetector::on_become_primary()
-{
-  ObRecursiveMutexGuard role_guard(snapshot_gc_role_lock_);
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
-  } else if (!is_primary_service()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("only primary service can become primary", KR(ret));
-  } else if (ATOMIC_LOAD(&is_primary_active_)) {
-    LOG_INFO("snapshot gc detector is already primary active");
-  } else {
-    ATOMIC_STORE(&need_primary_catchup_, true);
-    ATOMIC_STORE(&last_gc_renew_attempt_ts_, 0);
-    ATOMIC_STORE(&first_pending_snapshot_gc_history_scn_, 0);
-    ATOMIC_STORE(&is_primary_active_, true);
-    if (OB_FAIL(signal())) {
-      LOG_WARN("fail to signal detector after becoming primary", KR(ret));
-    } else {
-      LOG_INFO("snapshot gc detector becomes primary");
-    }
-  }
-  return ret;
-}
-
 void ObMajorMergeInfoDetector::pause()
 {
-  ObRecursiveMutexGuard role_guard(snapshot_gc_role_lock_);
-  ATOMIC_STORE(&is_primary_active_, false);
   ATOMIC_STORE(&is_paused_, true);
 }
 
 void ObMajorMergeInfoDetector::resume()
 {
-  ObRecursiveMutexGuard role_guard(snapshot_gc_role_lock_);
   ATOMIC_STORE(&is_paused_, false);
 }
 
@@ -461,13 +319,10 @@ int ObMajorMergeInfoDetector::destroy()
     timer_.destroy();
   }
   ATOMIC_STORE(&is_paused_, false);
-  ATOMIC_STORE(&is_primary_active_, false);
-  ATOMIC_STORE(&need_primary_catchup_, false);
-  ATOMIC_STORE(&last_gc_renew_attempt_ts_, 0);
-  ATOMIC_STORE(&first_pending_snapshot_gc_history_scn_, 0);
   is_inited_ = false;
   sql_proxy_ = nullptr;
   major_merge_info_mgr_ = nullptr;
+  snapshot_gc_scn_renewer_ = nullptr;
   major_scheduler_idling_ = nullptr;
   return ret;
 }
