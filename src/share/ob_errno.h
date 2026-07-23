@@ -1751,6 +1751,9 @@ constexpr int OB_JNI_CREATE_JVM_ERROR = -11069;
 constexpr int OB_JNI_DESTORY_JVM_ERROR = -11070;
 constexpr int OB_JNI_PARAMS_ERROR = -11071;
 constexpr int OB_JNI_FORCE_CLOSE_JAVA_ENV_ERROR = -11075;
+constexpr int OB_PLUGIN_VERSION_INCOMPATIBLE = -11076;
+constexpr int OB_PLUGIN_DLOPEN_FAILED = -11077;
+constexpr int OB_PLUGIN_ERROR = -11078;
 constexpr int OB_CATALOG_EXIST = -11079;
 constexpr int OB_CATALOG_NOT_EXIST = -11080;
 constexpr int OB_SKIP_PARSE_HEADER_CONFLICT = -11081;
@@ -3944,6 +3947,9 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_JNI_CONNECTOR_PATH_NOT_FOUND_ERROR__USER_ERROR_MSG "connector path could not be found"
 #define OB_JNI_NOT_ENABLE_JAVA_ENV_ERROR__USER_ERROR_MSG "java env was not enabled"
 #define OB_JNI_FORCE_CLOSE_JAVA_ENV_ERROR__USER_ERROR_MSG "Forcefully close java env with error: %.*s"
+#define OB_PLUGIN_VERSION_INCOMPATIBLE__USER_ERROR_MSG "The plugin's version is incompatible with current server"
+#define OB_PLUGIN_DLOPEN_FAILED__USER_ERROR_MSG "Failed to open library"
+#define OB_PLUGIN_ERROR__USER_ERROR_MSG "Plugin internal error"
 #define OB_CATALOG_EXIST__USER_ERROR_MSG "Can't create catalog '%.*s'; catalog exists"
 #define OB_CATALOG_NOT_EXIST__USER_ERROR_MSG "Catalog '%.*s' doesn\'t exist"
 #define OB_SKIP_PARSE_HEADER_CONFLICT__USER_ERROR_MSG "skip_header and parse_header cannot be used at the same time"
@@ -3976,7 +3982,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_DATA_TOO_LONG_MSG_FMT_V2__USER_ERROR_MSG "Data too long for column '%.*s' at row %ld"
 #define OB_ERR_INVALID_DATE_MSG_FMT_V2__USER_ERROR_MSG "Incorrect datetime value for column '%.*s' at row %ld"
 
-extern int g_all_ob_errnos[2189];
+extern int g_all_ob_errnos[2192];
 
   const char *ob_error_name(const int oberr);
   const char* ob_error_cause(const int oberr);

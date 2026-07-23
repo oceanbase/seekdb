@@ -2400,9 +2400,12 @@ typedef enum ObItemType
   T_SINGLE_OPT = 4658,
   T_MAX_FILE_SIZE = 4659,
   T_SHOW_CREATE_USER = 4660,
+  T_INSTALL_PLUGIN = 4661,
+  T_UNINSTALL_PLUGIN = 4662,
   T_FLUSH_MOCK = 4663,
   T_FLUSH_MOCK_LIST = 4664,
   T_HANDLER_MOCK = 4665,
+  T_SHOW_PLUGINS = 4666,
   T_PSEUDO_PARTITION_LIST_COL = 4667,
   T_EXTERNAL_USER_SPECIFIED_PARTITION = 4668,
   T_ALTER_EXTERNAL_PARTITION_OPTION = 4669,
@@ -2623,7 +2626,9 @@ typedef enum ObItemType
   T_LOG_ERROR=4860,
   T_READ_ERROR_LOG=4861,
 
+  T_PLUGIN_PROPERTIES = 4862,
   T_GENERAL_PROPERTY  = 4863,
+  T_PLUGIN_NAME       = 4864,
 
 
   T_UDF_PROPERTY = 4865,
@@ -2829,7 +2834,7 @@ typedef enum ObOutlineType
                            || (op) == T_SHOW_CREATE_CATALOG || (op) == T_SHOW_PROFILE \
                            || (op) == T_SHOW_PROCEDURE_CODE || (op) == T_SHOW_FUNCTION_CODE \
                            || (op) == T_SHOW_ENGINE || (op) == T_SHOW_OPEN_TABLES \
-                           || (op) == T_SHOW_CHECK_TABLE \
+                           || (op) == T_SHOW_PLUGINS || (op) == T_SHOW_CHECK_TABLE \
                            || (op) == T_SHOW_CREATE_LOCATION \
                            || (op) == T_SHOW_LOCATIONS)
 

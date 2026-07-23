@@ -332,7 +332,7 @@ END_P SET_VAR DELIMITER
         OBJECT_ID
 
         PACK_KEYS PAGE PARALLEL PARAMETERS PARSER PARSER_PROPERTIES PARTIAL PARTITION_ID PARTITIONING PARTITIONS PASSWORD PATH PAUSE PAXOS_REPLICA_NUM PER PERCENTAGE
-        PERCENT_RANK PERCENTILE_CONT PHASE PHRASE PLAN PHYSICAL PLANREGRESS POINT POLYGON PERFORMANCE
+        PERCENT_RANK PERCENTILE_CONT PHASE PHRASE PLAN PHYSICAL PLANREGRESS PLUGIN PLUGIN_DIR PLUGINS POINT POLYGON PERFORMANCE
         PRINCIPAL PROTECTION PROJECT_NAME PRIORITY PL POLICY POOL PORT POSITION PREPARE PRESERVE PRETTY PRETTY_COLOR PREV PRIMARY_ZONE PRIVILEGES PROCESS
         PROCESSLIST PROFILE PROFILES PROPERTIES PROXY PRECEDING PCTFREE P_ENTITY P_CHUNK
         PUBLIC PROGRESSIVE_MERGE_NUM PREVIEW PS PLUS PATTERN PARTITION_TYPE FILES PARTIAL_UPDATE ON_ERROR
@@ -527,8 +527,8 @@ END_P SET_VAR DELIMITER
 %type <node> opt_value_on_empty_or_error_or_mismatch opt_on_mismatch
 %type <node> table_values_clause table_values_clause_with_order_by_and_limit values_row_list row_value
 %type <node> geometry_collection
-%type <node> mock_stmt check_table_options check_table_option user_host_or_current_user flush_stmt flush_options flush_options_list flush_option opt_no_write_to_binlog opt_flush_lock handler_stmt handler_read_or_scan handler_scan_function handler_rkey_function handler_rkey_mode
-%type <node> merge_insert_types opt_table_list
+%type <node> mock_stmt check_table_options check_table_option user_host_or_current_user install_plugin_stmt plugin_name uninstall_plugin_stmt flush_stmt flush_options flush_options_list flush_option opt_no_write_to_binlog opt_flush_lock handler_stmt handler_read_or_scan handler_scan_function handler_rkey_function handler_rkey_mode
+%type <node> show_plugin_stmt merge_insert_types opt_table_list
 %type <node> create_server_stmt server_options_list server_option alter_server_stmt drop_server_stmt create_logfile_group_stmt logfile_group_info add_log_file lg_undofile lg_redofile logfile_group_options  opt_ts_initial_size opt_ts_undo_buffer_size opt_ts_redo_buffer_size opt_ts_engine opt_ts_comment 
 %type <node> alter_logfile_group_stmt alter_logfile_group_info alter_logfile_group_option_list alter_logfile_group_options alter_logfile_group_option drop_logfile_group_stmt drop_ts_options_list drop_ts_options drop_ts_option opt_ts_nodegroup logfile_group_option logfile_group_option_list
 %type <node> create_ccl_rule_stmt drop_ccl_rule_stmt ccl_database_table_optition ccl_for_effect_dml ccl_filter_options ccl_keyword_list ccl_with_options ccl_per_sql
@@ -17959,7 +17959,15 @@ STRING_VALUE
  *
  *===========================================================*/
 mock_stmt:
-flush_stmt
+install_plugin_stmt
+{
+  $$ = $1;
+}
+| uninstall_plugin_stmt
+{
+  $$ = $1;
+}
+| flush_stmt
 {
   $$ = $1;
 }
@@ -17967,6 +17975,10 @@ flush_stmt
 {
   (void)($$);
   (void)($1);
+}
+| show_plugin_stmt
+{
+  $$ = $1;
 }
 | create_server_stmt
 {
@@ -17991,6 +18003,30 @@ flush_stmt
 | drop_logfile_group_stmt
 {
   $$ = $1;
+}
+;
+
+plugin_name:
+NAME_OB
+{
+  $$ = $1;
+}
+;
+
+install_plugin_stmt:
+INSTALL PLUGIN plugin_name SONAME STRING_VALUE
+{
+  (void) ($3);
+  (void) ($5);
+  malloc_terminal_node($$, result->malloc_pool_, T_INSTALL_PLUGIN);
+}
+;
+
+uninstall_plugin_stmt:
+UNINSTALL PLUGIN plugin_name
+{
+  (void) ($3);
+  malloc_terminal_node($$, result->malloc_pool_, T_UNINSTALL_PLUGIN);
 }
 ;
 
@@ -18242,6 +18278,13 @@ opt_empty_table_list:
 {
   (void) ($$);
   (void) ($1);
+}
+;
+
+show_plugin_stmt:
+SHOW PLUGINS
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_SHOW_PLUGINS);
 }
 ;
 
@@ -20849,6 +20892,9 @@ ACCESS_INFO
 |       PHYSICAL
 |       PL
 |       PLANREGRESS
+|       PLUGIN
+|       PLUGIN_DIR
+|       PLUGINS
 |       PLUS
 |       POINT
 |       POLICY

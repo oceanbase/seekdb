@@ -1729,6 +1729,12 @@ DEF_PARAM(_ndv_runtime_bloom_filter_size, BOOL, OB_CLUSTER_PARAMETER, "True",
          "whether to use NDV to build a bloom filter in runtime filter."
          "Value:  True:turned on  False: turned off",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(plugins_load, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "", common::ObConfigPluginsLoadChecker,
+                     "The plugins you want to load when starting observer. "
+                     "Note that plugins cannot be loaded dynamically, you should restart the observer when you change the parameter. "
+                     "Format: 'libsoname1.so:on,libsoname2.so:off' "
+                     "which `on'(default) means the plugin is enabled, `off' means the plugin is disabled(don't load), ",
+                     ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(ob_enable_java_env, BOOL, OB_CLUSTER_PARAMETER, "False",
         "Enable or disable java env for external table.",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));

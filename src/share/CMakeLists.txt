@@ -117,6 +117,7 @@ ob_set_subtarget(ob_share common
   ob_occam_time_guard.cpp
   ob_priv_common.cpp
   ob_proposal_id.cpp
+  ob_plugin_helper.cpp
   ob_resource_limit.cpp
   ob_schema_status_proxy.cpp
   ob_server_status.cpp

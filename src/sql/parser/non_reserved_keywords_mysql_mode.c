@@ -712,6 +712,9 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"physical", PHYSICAL},
   {"plan", PLAN},
   {"planregress", PLANREGRESS},
+  {"plugin", PLUGIN},
+  {"plugin_dir", PLUGIN_DIR},
+  {"plugins", PLUGINS},
   {"plus", PLUS},
   {"point", POINT},
   {"policy", POLICY},
@@ -1154,6 +1157,7 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
    | LOGS | STATUS | MASTER | SLAVE | DES_KEY_FILE | USER_RESOURCES}
  GRANT
  INSERT
+ INSTALL PLUGIN
  KILL
  \LOAD INDEX INTO CACHE
  OPTIMIZE TABLE
@@ -1171,6 +1175,7 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
  SHOW {MASTER | SLAVE} STATUS
  SLAVE {START | STOP}
  TRUNCATE TABLE
+ UNINSTALL PLUGIN
  UPDATE
  */
 static const NonReservedKeyword Mysql_sql_keywords_in_pl[] =
@@ -1206,6 +1211,7 @@ static const NonReservedKeyword Mysql_sql_keywords_in_pl[] =
   {"logs", LOGS},
   {"master", MASTER},
   {"optimize", OPTIMIZE},
+  {"plugin", PLUGIN},
   {"privileges", PRIVILEGES},
   {"procedure", PROCEDURE},
   {"query", QUERY},

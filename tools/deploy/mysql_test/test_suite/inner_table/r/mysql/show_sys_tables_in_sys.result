@@ -4435,6 +4435,19 @@ id	field	type	length	precision	nullable
 52	aggregate_read_io_cnt	5	0	20	0
 53	total_wbp_page_read_cnt	5	0	20	0
 54	wbp_page_hits	5	0	20	0
+table oceanbase.__all_virtual_plugin_info column_count 10 table_id 12515
+select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12515 order by column_id;
+id	field	type	length	precision	nullable
+16	name	22	64	-1	1
+17	status	22	64	-1	1
+18	type	22	80	-1	1
+19	library	22	128	-1	1
+20	library_version	22	80	-1	1
+21	library_revision	22	80	-1	1
+22	interface_version	22	80	-1	1
+23	author	22	64	-1	1
+24	license	22	64	-1	1
+25	description	22	65535	-1	1
 table oceanbase.__all_virtual_show_create_catalog column_count 3 table_id 12526
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12526 order by column_id;
 id	field	type	length	precision	nullable
