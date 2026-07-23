@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX  SQL_ENG
 
 #include "sql/engine/expr/ob_expr_uniform.h"
+#include "sql/engine/expr/ob_deterministic_distribution.h"
 #include "sql/engine/ob_exec_context.h"
 
 namespace oceanbase
@@ -36,11 +37,12 @@ int ObExprUniform::ObExprUniformIntCtx::initialize(ObEvalCtx &ctx, const ObExpr 
   } else {
     int64_t a = p1.get_int();
     int64_t b = p2.get_int();
-    std::uniform_int_distribution<int64_t>::param_type param(a, b);
-    int_dist_.param(param);
     if (a > b) {
       ret = OB_INVALID_ARGUMENT;
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "uniform min/max value. min value must be smaller than or equal to max value.");
+    } else {
+      min_ = a;
+      max_ = b;
     }
   }
   return ret;
@@ -48,8 +50,8 @@ int ObExprUniform::ObExprUniformIntCtx::initialize(ObEvalCtx &ctx, const ObExpr 
 
 int ObExprUniform::ObExprUniformIntCtx::generate_next_value(int64_t seed, int64_t &res)
 {
-  gen_.seed(seed);
-  res = int_dist_(gen_);
+  gen_.seed(static_cast<uint64_t>(seed));
+  res = ObDeterministicDistribution::uniform_int(gen_, min_, max_);
   return OB_SUCCESS;
 }
 
@@ -64,11 +66,12 @@ int ObExprUniform::ObExprUniformRealCtx::initialize(ObEvalCtx &ctx, const ObExpr
   } else {
     double a = p1.get_double();
     double b = p2.get_double();
-    std::uniform_real_distribution<double>::param_type param(a, b);
-    real_dist_.param(param);
     if (a > b) {
       ret = OB_INVALID_ARGUMENT;
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "uniform min/max value. min value must be smaller than or equal to max value.");
+    } else {
+      min_ = a;
+      max_ = b;
     }
   }
   return ret;
@@ -76,8 +79,8 @@ int ObExprUniform::ObExprUniformRealCtx::initialize(ObEvalCtx &ctx, const ObExpr
 
 int ObExprUniform::ObExprUniformRealCtx::generate_next_value(int64_t seed, double &res)
 {
-  gen_.seed(seed);
-  res = real_dist_(gen_);
+  gen_.seed(static_cast<uint64_t>(seed));
+  res = ObDeterministicDistribution::uniform_real(gen_, min_, max_);
   return OB_SUCCESS;
 }
 
@@ -273,4 +276,3 @@ int ObExprUniform::cg_expr(ObExprCGCtx &expr_cg_ctx,
 
 } /* namespace sql */
 } /* namespace oceanbase */
-
