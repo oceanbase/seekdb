@@ -15,7 +15,6 @@
  */
 
 #include "ob_empty_read_bucket.h"
-#include "share/config/ob_tenant_config_mgr.h"
 
 namespace oceanbase
 {
@@ -32,25 +31,17 @@ ObEmptyReadBucket::~ObEmptyReadBucket()
 {
 }
 
-int ObEmptyReadBucket::init(const int64_t lower_bound)
+int ObEmptyReadBucket::init()
 {
   int ret = OB_SUCCESS;
   char *buf = NULL;
-  //size must be 2^n, for fast mod
-  int64_t size = 1;
-  while (size <= lower_bound) {
-    size <<= 1;
-  }
-  STORAGE_LOG(DEBUG, "bucket number, ", K(size));
-  if (OB_UNLIKELY(size <= 0 || (size & (size - 1)))) {
-    ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "ObBloomFilterCache bucket size should be > 0 and 2^n ", K(size), K(ret));
-  } else if (OB_ISNULL(buf = static_cast<char*>(allocator_.alloc(sizeof(ObEmptyReadCell) * size)))) {
+  STORAGE_LOG(DEBUG, "bucket number", K(BUCKET_SIZE));
+  if (OB_ISNULL(buf = static_cast<char*>(allocator_.alloc(sizeof(ObEmptyReadCell) * BUCKET_SIZE)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     STORAGE_LOG(WARN, "Fail to allocate memory, ", K(ret));
   } else {
-    buckets_ = new (buf) ObEmptyReadCell[size];
-    bucket_size_ = size;
+    buckets_ = new (buf) ObEmptyReadCell[BUCKET_SIZE];
+    bucket_size_ = BUCKET_SIZE;
   }
   return ret;
 }
@@ -58,15 +49,8 @@ int ObEmptyReadBucket::init(const int64_t lower_bound)
 int ObEmptyReadBucket::mtl_init(ObEmptyReadBucket *&bucket)
 {
   int ret = OB_SUCCESS;
-  int64_t global_mem_limit = GMEMCONF.get_server_memory_avail();
-  if (global_mem_limit <= 0) {
-    ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "Global memory should be greater than 0, ", K(global_mem_limit));
-  } else {
-    int64_t bucket_num_lower_bound = common::calculate_scaled_value_by_memory(BUCKET_SIZE_LOWER_LIMIT, BUCKET_SIZE_LIMIT);
-    if(OB_FAIL(bucket->init(bucket_num_lower_bound))) {
-      STORAGE_LOG(WARN, "failed to init EmptyReadBucket, ", K(ret));
-    }
+  if (OB_FAIL(bucket->init())) {
+    STORAGE_LOG(WARN, "failed to init EmptyReadBucket, ", K(ret));
   }
   return ret;
 }

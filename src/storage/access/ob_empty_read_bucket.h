@@ -108,7 +108,7 @@ public:
   virtual ~ObEmptyReadBucket();
   static int mtl_init(ObEmptyReadBucket *&bucket);
   static void mtl_destroy(ObEmptyReadBucket *&bucket);
-  int init(const int64_t lower_bound);
+  int init();
   void destroy();
   OB_INLINE bool is_valid() const { return NULL != buckets_; }
   int get_cell(const uint64_t hashcode, ObEmptyReadCell *&cell);
@@ -118,8 +118,9 @@ public:
 private:
   OB_INLINE uint64_t get_bucket_size() const { return bucket_size_; }
   static const int64_t MIN_REBUILD_PERIOD_US = 1000 * 1000 * 120; //2min
-  static constexpr int64_t BUCKET_SIZE_LIMIT = 1<<20;//1048576
-  static constexpr int64_t BUCKET_SIZE_LOWER_LIMIT = 1<<14;//16384
+  static constexpr int64_t BUCKET_SIZE = 1 << 14; // 16384 buckets, about 640 KiB
+  static_assert(BUCKET_SIZE > 0 && 0 == (BUCKET_SIZE & (BUCKET_SIZE - 1)),
+                "bucket size must be a power of two");
   ObArenaAllocator allocator_;
   ObEmptyReadCell *buckets_;
   uint64_t bucket_size_;
