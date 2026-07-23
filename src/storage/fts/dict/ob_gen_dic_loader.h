@@ -46,7 +46,7 @@ public:
     }
     bool is_valid() const
     {
-      return 0 != STRLEN(parser_name_) && CHARSET_INVALID != charset_;
+      return true && 0 != STRLEN(parser_name_) && CHARSET_INVALID != charset_;
     }
     int hash(uint64_t &hash_val) const;
     
@@ -64,6 +64,17 @@ public:
     ObCharsetType charset_;
   };
 
+  class ObNeedDeleteDicLoadersFn final
+  {
+  public:
+    ObNeedDeleteDicLoadersFn() = default;
+    ~ObNeedDeleteDicLoadersFn() = default;
+    int operator() (hash::HashMapPair<ObGenDicLoaderKey, ObTenantDicLoader*> &entry);
+    
+  public:
+    ObArray<ObGenDicLoaderKey> need_delete_loaders_;
+  };
+
 public:
   static ObGenDicLoader& get_instance()
   {
@@ -73,18 +84,20 @@ public:
   int init();
   int get_dic_loader(const ObString &parser_name, 
                      const ObCharsetType charset, 
-                     ObDicLoaderHandle &loader_handle);
+                     ObTenantDicLoaderHandle &loader_handle);
+  int destroy_dic_loader_for_tenant();
+
 private:
   ObGenDicLoader() 
       : is_inited_(false), lock_(), dic_loader_map_() { }
   ~ObGenDicLoader() { dic_loader_map_.destroy(); }
   int gen_dic_loader(const ObGenDicLoaderKey &dic_loader_key, 
-                     ObDicLoader *&dic_loader);
+                     ObTenantDicLoader *&dic_loader);
 
 private:
   bool is_inited_;
   common::TCRWLock lock_;
-  hash::ObHashMap<ObGenDicLoaderKey, ObDicLoader*> dic_loader_map_;
+  hash::ObHashMap<ObGenDicLoaderKey, ObTenantDicLoader*> dic_loader_map_;
   DISALLOW_COPY_AND_ASSIGN(ObGenDicLoader);
 };
 } //end storage

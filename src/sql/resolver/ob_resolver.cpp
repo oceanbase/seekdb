@@ -313,13 +313,10 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         break;
       }
       case T_FLUSH_PRIVILEGES: 
-      case T_INSTALL_PLUGIN:
-      case T_UNINSTALL_PLUGIN:
       case T_FLUSH_MOCK:
       case T_FLUSH_TABLE_MOCK:
       case T_HANDLER_MOCK:
       case T_FLUSH_MOCK_LIST:
-      case T_SHOW_PLUGINS:
       case T_CREATE_SERVER:
       case T_ALTER_SERVER:
       case T_DROP_SERVER:

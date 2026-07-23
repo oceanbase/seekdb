@@ -1971,6 +1971,19 @@ id	field	type	length	precision	nullable
 24	cnt	5	0	20	0
 25	detect_func_no	5	0	20	0
 26	detect_func_param	22	512	-1	1
+table oceanbase.__all_ncomp_dll_v2 column_count 10 table_id 1115
+select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=1115 order by column_id;
+id	field	type	length	precision	nullable
+16	gmt_create	18	0	25	1
+17	gmt_modified	18	0	25	1
+18	database_id	5	0	20	0
+19	key_id	5	0	20	0
+20	compile_db_id	5	0	20	0
+21	arch_type	22	128	-1	0
+22	build_version	22	256	-1	0
+23	merge_version	5	0	20	0
+24	dll	30	536870911	-1	0
+25	stack_size	30	536870911	-1	1
 table oceanbase.__ft_dict_ik_utf8 column_count 1 table_id 1116
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=1116 order by column_id;
 id	field	type	length	precision	nullable
@@ -2019,6 +2032,15 @@ id	field	type	length	precision	nullable
 20	schema_version	5	0	20	0
 21	is_deleted	5	0	20	0
 22	priv_set	5	0	20	1
+table oceanbase.__all_pl_recompile_objinfo column_count 6 table_id 1123
+select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=1123 order by column_id;
+id	field	type	length	precision	nullable
+16	gmt_create	18	0	25	1
+17	gmt_modified	18	0	25	1
+18	recompile_obj_id	5	0	20	0
+19	ref_obj_name	22	128	-1	0
+20	schema_version	5	0	20	0
+21	fail_count	5	0	20	0
 table oceanbase.__all_vector_index_task column_count 11 table_id 1124
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=1124 order by column_id;
 id	field	type	length	precision	nullable
@@ -3764,7 +3786,7 @@ id	field	type	length	precision	nullable
 27	data_disk_size	5	0	20	1
 28	max_net_bandwidth	5	0	20	1
 29	net_bandwidth_weight	5	0	20	1
-table oceanbase.__all_virtual_server_stat column_count 28 table_id 12276
+table oceanbase.__all_virtual_server_stat column_count 29 table_id 12276
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12276 order by column_id;
 id	field	type	length	precision	nullable
 16	svr_ip	22	46	-1	0
@@ -3793,8 +3815,9 @@ id	field	type	length	precision	nullable
 39	create_time	5	0	20	0
 40	role	22	64	-1	0
 41	switchover_status	22	100	-1	0
-42	sync_scn	10	0	20	0
-43	readable_scn	10	0	20	0
+42	log_restore_source	22	1024	-1	0
+43	sync_scn	10	0	20	0
+44	readable_scn	10	0	20	0
 table oceanbase.__all_virtual_dtl_interm_result_monitor column_count 16 table_id 12278
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12278 order by column_id;
 id	field	type	length	precision	nullable
@@ -4435,19 +4458,6 @@ id	field	type	length	precision	nullable
 52	aggregate_read_io_cnt	5	0	20	0
 53	total_wbp_page_read_cnt	5	0	20	0
 54	wbp_page_hits	5	0	20	0
-table oceanbase.__all_virtual_plugin_info column_count 10 table_id 12515
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12515 order by column_id;
-id	field	type	length	precision	nullable
-16	name	22	64	-1	1
-17	status	22	64	-1	1
-18	type	22	80	-1	1
-19	library	22	128	-1	1
-20	library_version	22	80	-1	1
-21	library_revision	22	80	-1	1
-22	interface_version	22	80	-1	1
-23	author	22	64	-1	1
-24	license	22	64	-1	1
-25	description	22	65535	-1	1
 table oceanbase.__all_virtual_show_create_catalog column_count 3 table_id 12526
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12526 order by column_id;
 id	field	type	length	precision	nullable

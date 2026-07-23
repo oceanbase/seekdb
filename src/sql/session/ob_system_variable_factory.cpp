@@ -683,7 +683,6 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarForeignKeyChecks)
         + sizeof(ObSysVarObTcpInvitedNodes)
         + sizeof(ObSysVarAutoIncrementCacheSize)
-        + sizeof(ObSysVarPluginDir)
         + sizeof(ObSysVarParallelServersTarget)
         + sizeof(ObSysVarObTrxIdleTimeout)
         + sizeof(ObSysVarBlockEncryptionMode)
@@ -1208,7 +1207,6 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarDisconnectOnExpiredPassword)
         + sizeof(ObSysVarExternalUser)
         + sizeof(ObSysVarHaveCrypt)
-        + sizeof(ObSysVarHaveDynamicLoading)
         + sizeof(ObSysVarLanguage)
         + sizeof(ObSysVarLcMessagesDir)
         + sizeof(ObSysVarLowerCaseFileSystem)
@@ -1235,8 +1233,6 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarSha256PasswordPrivateKeyPath)
         + sizeof(ObSysVarSha256PasswordPublicKeyPath)
         + sizeof(ObSysVarSkipShowDatabase)
-        + sizeof(ObSysVarPluginLoad)
-        + sizeof(ObSysVarPluginLoadAdd)
         + sizeof(ObSysVarBigTables)
         + sizeof(ObSysVarCheckProxyUsers)
         + sizeof(ObSysVarConnectionControlFailedConnectionsThreshold)
@@ -2381,15 +2377,6 @@ int ObSysVarFactory::create_all_sys_vars_()
       } else {
         store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_AUTO_INCREMENT_CACHE_SIZE))] = sys_var_ptr;
         ptr = (void *)((char *)ptr + sizeof(ObSysVarAutoIncrementCacheSize));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarPluginDir())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarPluginDir", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_PLUGIN_DIR))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarPluginDir));
       }
     }
     if (OB_SUCC(ret)) {
@@ -7109,15 +7096,6 @@ int ObSysVarFactory::create_all_sys_vars_()
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarHaveDynamicLoading())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarHaveDynamicLoading", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_HAVE_DYNAMIC_LOADING))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarHaveDynamicLoading));
-      }
-    }
-    if (OB_SUCC(ret)) {
       if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarLanguage())) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_ERROR("fail to new ObSysVarLanguage", K(ret));
@@ -7349,24 +7327,6 @@ int ObSysVarFactory::create_all_sys_vars_()
       } else {
         store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_SKIP_SHOW_DATABASE))] = sys_var_ptr;
         ptr = (void *)((char *)ptr + sizeof(ObSysVarSkipShowDatabase));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarPluginLoad())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarPluginLoad", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_PLUGIN_LOAD))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarPluginLoad));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarPluginLoadAdd())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarPluginLoadAdd", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_PLUGIN_LOAD_ADD))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarPluginLoadAdd));
       }
     }
     if (OB_SUCC(ret)) {
@@ -8471,10 +8431,6 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, share::ObSysVarCla
     }
     case share::SYS_VAR_AUTO_INCREMENT_CACHE_SIZE: {
       ret = create_one_sys_var<ObSysVarAutoIncrementCacheSize>(allocator_, sys_var_ptr, "ObSysVarAutoIncrementCacheSize");
-      break;
-    }
-    case share::SYS_VAR_PLUGIN_DIR: {
-      ret = create_one_sys_var<ObSysVarPluginDir>(allocator_, sys_var_ptr, "ObSysVarPluginDir");
       break;
     }
     case share::SYS_VAR_PARALLEL_SERVERS_TARGET: {
@@ -10573,10 +10529,6 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, share::ObSysVarCla
       ret = create_one_sys_var<ObSysVarHaveCrypt>(allocator_, sys_var_ptr, "ObSysVarHaveCrypt");
       break;
     }
-    case share::SYS_VAR_HAVE_DYNAMIC_LOADING: {
-      ret = create_one_sys_var<ObSysVarHaveDynamicLoading>(allocator_, sys_var_ptr, "ObSysVarHaveDynamicLoading");
-      break;
-    }
     case share::SYS_VAR_LANGUAGE: {
       ret = create_one_sys_var<ObSysVarLanguage>(allocator_, sys_var_ptr, "ObSysVarLanguage");
       break;
@@ -10679,14 +10631,6 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, share::ObSysVarCla
     }
     case share::SYS_VAR_SKIP_SHOW_DATABASE: {
       ret = create_one_sys_var<ObSysVarSkipShowDatabase>(allocator_, sys_var_ptr, "ObSysVarSkipShowDatabase");
-      break;
-    }
-    case share::SYS_VAR_PLUGIN_LOAD: {
-      ret = create_one_sys_var<ObSysVarPluginLoad>(allocator_, sys_var_ptr, "ObSysVarPluginLoad");
-      break;
-    }
-    case share::SYS_VAR_PLUGIN_LOAD_ADD: {
-      ret = create_one_sys_var<ObSysVarPluginLoadAdd>(allocator_, sys_var_ptr, "ObSysVarPluginLoadAdd");
       break;
     }
     case share::SYS_VAR_BIG_TABLES: {

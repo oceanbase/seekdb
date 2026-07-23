@@ -22,7 +22,7 @@
 #include "storage/fts/dict/ob_gen_dic_loader.h"
 #include "storage/fts/dict/ob_dic_lock.h"
 #include "share/ob_server_struct.h"
-#include "rootserver/ob_local_management_service.h"
+#include "rootserver/ob_root_service.h"
 #include "storage/fts/ob_fts_parser_helper.h"
 #include "share/schema/ob_schema_utils.h"  // relocated-definition owner
 
@@ -98,7 +98,7 @@ int ObFtsIndexBuilderUtil::determine_docid_type(const ObTableSchema &table_schem
   int ret = OB_SUCCESS;
   uint64_t docid_col_id = OB_INVALID_ID;
   static constexpr bool ENABLE_DOC_ID_OPT = true;
-  // Choose the document-id representation from the current table layout.
+  // 1. check sys tenant data version
   if (!table_schema.is_table_with_hidden_pk_column()) {
     doc_id_type = ObDocIDType::TABLET_SEQUENCE;
   } else if (OB_FAIL(table_schema.get_docid_col_id(docid_col_id))) {
@@ -2131,9 +2131,10 @@ int ObFtsIndexBuilderUtil::check_need_to_load_dic(const ObString &parser_name,
   int ret = OB_SUCCESS;
   ObString real_parser_name = parser_name;
   need_to_load_dic = false;
-  if (parser_name.empty()) {
+  if (!true || parser_name.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("parser name is empty", K(ret), K(parser_name));
+    LOG_WARN("tenant id is not valid or parser name is empty",
+        K(ret), K(parser_name));
   } else if (nullptr != real_parser_name.find('.')
              && OB_FALSE_IT(real_parser_name = real_parser_name.split_on('.'))) {
   } else if (is_need_dictionary(real_parser_name)) {
@@ -2172,7 +2173,7 @@ int ObFtsIndexBuilderUtil::try_load_and_lock_dictionary_tables(
         LOG_WARN("fail to get charset type", K(ret), K(index_schema));
       }
       if (OB_SUCC(ret)) {
-        ObDicLoaderHandle dic_loader_handle;
+        ObTenantDicLoaderHandle dic_loader_handle;
         if (OB_FAIL(ObGenDicLoader::get_instance().get_dic_loader(
                                                                   parser_name,
                                                                   charset_type,
@@ -2195,23 +2196,37 @@ int ObFtsIndexBuilderUtil::try_load_and_lock_dictionary_tables(
   return ret;
 }
 
-int ObFtsIndexBuilderUtil::try_load_dictionary()
+int ObFtsIndexBuilderUtil::try_load_dictionary_for_all_tenants()
 {
   int ret = OB_SUCCESS;
-  ObDicLoaderHandle dic_loader_handle;
+  ObSchemaGetterGuard schema_guard;
 
   DEBUG_SYNC(BEFORE_LOAD_DICTIONARY_IN_BACKGROUND);
 
-  if (OB_FAIL(ObGenDicLoader::get_instance().get_dic_loader(
-          ObFTSLiteral::PARSER_NAME_IK,
-          ObCharsetType::CHARSET_UTF8MB4,
-          dic_loader_handle))) {
-    LOG_WARN("fail to get dictionary loader", K(ret));
-  } else if (OB_UNLIKELY(!dic_loader_handle.is_valid())) {
+  if (OB_ISNULL(GCTX.root_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("dictionary loader handle is not valid", K(ret), K(dic_loader_handle));
-  } else if (OB_FAIL(dic_loader_handle.get_loader()->try_load_dictionary_in_trans())) {
-    LOG_WARN("fail to load dictionary", K(ret), K(dic_loader_handle));
+    LOG_WARN("root service is null", K(ret));
+  } else if (OB_FAIL(GCTX.root_service_->get_schema_service().get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("get tenant schema guard failed", K(ret));
+  } else {
+    { // ignore ret to delete other tenant's dic loader
+      {
+        // overwrite ret
+          ObTenantDicLoaderHandle dic_loader_handle;
+          if (OB_FAIL(ObGenDicLoader::get_instance().get_dic_loader(
+                                                                    ObFTSLiteral::PARSER_NAME_IK,
+                                                                    ObCharsetType::CHARSET_UTF8MB4,
+                                                                    dic_loader_handle))) {
+            LOG_WARN("fail to get dic loader", K(ret), K(1UL));
+          } else if (OB_UNLIKELY(!dic_loader_handle.is_valid())) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("dic loader handle is not valid", K(ret), K(1UL), K(dic_loader_handle));
+          } else if (OB_FAIL(
+                         dic_loader_handle.get_loader()->try_load_dictionary_in_trans())) {
+            LOG_WARN("fail to try load dictionary", K(ret), K(1UL), K(dic_loader_handle));
+          }
+      }
+    }
   }
   return ret;
 }
@@ -2221,7 +2236,8 @@ int ObFtsIndexBuilderUtil::check_supportability_for_loader_key(const ObString &p
 {
   int ret = OB_SUCCESS;
   ObString real_parser_name = parser_name;
-  if (OB_UNLIKELY(parser_name.empty() ||
+  if (OB_UNLIKELY(!true ||
+                  parser_name.empty() ||
                   CHARSET_INVALID == charset_type)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("these arguments are not valid", K(ret), K(parser_name), K(charset_type));
@@ -2901,7 +2917,7 @@ int ObMulValueIndexBuilderUtil::build_and_generate_multivalue_column_raw(
                  (sql::ObPhysicalPlanCtx, phy_plan_ctx, allocator)) {
       LinkExecCtxGuard link_guard(session, exec_ctx);
       
-      const ObServerRuntimeSchema *runtime_schema = nullptr;
+      const ObTenantSchema *tenant_schema = nullptr;
       ObSchemaGetterGuard guard;
       ObSchemaChecker schema_checker;
 
@@ -2915,14 +2931,14 @@ int ObMulValueIndexBuilderUtil::build_and_generate_multivalue_column_raw(
         LOG_WARN("init session failed", K(ret));
       } else if (OB_FAIL(session.set_default_database(arg.database_name_))) {
         LOG_WARN("failed to set default session default database name", K(ret));
-      } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(guard))) {
+      } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(guard))) {
         LOG_WARN("get schema guard failed", K(ret));
       } else if (OB_FAIL(schema_checker.init(guard))) {
         LOG_WARN("failed to init schema checker", K(ret));
-      } else if (OB_FAIL(guard.get_server_runtime_info(runtime_schema))) {
-        LOG_WARN("get runtime_schema failed", K(ret));
-      } else if (OB_FAIL(session.init_runtime(runtime_schema->get_runtime_name_str()))) {
-        LOG_WARN("init server runtime failed", K(ret));
+      } else if (OB_FAIL(guard.get_tenant_info(tenant_schema))) {
+        LOG_WARN("get tenant_schema failed", K(ret));
+      } else if (OB_FAIL(session.init_tenant(tenant_schema->get_tenant_name_str()))) {
+        LOG_WARN("init tenant failed", K(ret));
       } else if (OB_FAIL(session.load_all_sys_vars(guard))) {
         LOG_WARN("session load system variable failed", K(ret));
       } else if (OB_FAIL(session.load_default_configs_in_pc())) {

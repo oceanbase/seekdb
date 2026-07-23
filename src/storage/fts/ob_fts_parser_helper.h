@@ -14,14 +14,15 @@
  * limitations under the License.
  */
 
-#ifndef OB_FTS_PLUGIN_HELPER_H_
-#define OB_FTS_PLUGIN_HELPER_H_
+#ifndef OB_FTS_PARSER_HELPER_H_
+#define OB_FTS_PARSER_HELPER_H_
 
 #include "lib/allocator/ob_fifo_allocator.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/string/ob_string.h"
 #include "object/ob_object.h"
-#include "share/ob_plugin_helper.h"
+#include "storage/fts/ob_fts_parser.h"
+#include "storage/fts/ob_fts_parser_name.h"
 #include "storage/fts/ob_fts_parser_property.h"
 #include "storage/fts/ob_fts_struct.h"
 
@@ -30,12 +31,6 @@ namespace oceanbase
 namespace common
 {
 class ObIJsonBase;
-}
-
-namespace plugin
-{
-class ObIFTParserDesc;
-class ObPluginParam;
 }
 
 namespace storage
@@ -56,33 +51,36 @@ class ObFTParser final
 {
 public:
   enum ParserType : int64_t {
-    FTP_NON_BUILDIN = 0,
 #define FT_PARSER_TYPE(ftp_type, parser_name) ftp_type,
     FTS_BUILD_IN_PARSER_LIST
 #undef FT_PARSER_TYPE
     FTP_MAX
   };
-  static const char *NAME_STR[ParserType::FTP_MAX + 1];
+  static const char *NAME_STR[ParserType::FTP_MAX];
+  static const int64_t BUILTIN_VERSION = 1;
 
 public:
   ObFTParser() : parser_name_(), parser_version_(-1) {}
   ~ObFTParser() = default;
-  int parse_from_str(const char *plugin_name, const int64_t buf_len);
+  int init(const common::ObString &parser_name);
+  int parse_from_str(const char *parser_name, const int64_t buf_len);
   int serialize_to_str(char *buf, const int64_t buf_len);
+  int get_desc(const ObIFTParserDesc *&parser_desc) const;
 
 #define FT_PARSER_TYPE(fts_type, parser_name)                          \
   OB_INLINE bool is_##parser_name() const {                            \
     ParserType type = fts_type;                                        \
-    return share::ObPluginName(NAME_STR[type]) == parser_name_;        \
+    return ObFTParserName(NAME_STR[type]) == parser_name_;             \
   }
   FTS_BUILD_IN_PARSER_LIST
 #undef FT_PARSER_TYPE
 
-  OB_INLINE const share::ObPluginName &get_parser_name() const { return parser_name_; }
+  OB_INLINE const ObFTParserName &get_parser_name() const { return parser_name_; }
   OB_INLINE int64_t get_parser_version() const { return parser_version_; }
-  OB_INLINE bool is_valid() const { return parser_name_.is_valid() && parser_version_ >= 0; }
+  bool is_builtin() const;
+  OB_INLINE bool is_valid() const { return is_builtin() && parser_version_ >= 0; }
   OB_INLINE bool is_type_before_4_3_5_1() const { return is_space() || is_beng() || is_ngram(); }
-  OB_INLINE void set_name_and_version(const share::ObPluginName &name, const int64_t version)
+  OB_INLINE void set_name_and_version(const ObFTParserName &name, const int64_t version)
   {
     parser_name_ = name;
     parser_version_ = version;
@@ -98,22 +96,22 @@ public:
   OB_INLINE bool operator !=(const ObFTParser &other) const { return !(*this == other); }
   TO_STRING_KV(K_(parser_name), K_(parser_version));
 private:
-  share::ObPluginName parser_name_;
+  ObFTParserName parser_name_;
   int64_t parser_version_;
 };
 
-class ObFTParsePluginData final
+class ObFTParseData final
 {
 public:
-  ObFTParsePluginData() = default;
-  ~ObFTParsePluginData();
+  ObFTParseData() = default;
+  ~ObFTParseData();
 
   /**
    * create a process global instance
    */
   static int  init_global();
   static void deinit_global();
-  static ObFTParsePluginData &instance();
+  static ObFTParseData &instance();
 
   int init();
   void destroy();
@@ -161,8 +159,8 @@ public:
    */
   int init(
       common::ObIAllocator *allocator,
-      const common::ObString &plugin_name,
-      const common::ObString &plugin_properties);
+      const common::ObString &parser_name,
+      const common::ObString &parser_properties);
   /**
    * Split document into multiple words
    *
@@ -179,8 +177,8 @@ public:
       int64_t &doc_length,
       ObFTWordMap &words) const;
   int check_is_the_same(
-      const common::ObString &plugin_name,
-      const common::ObString &plugin_properties,
+      const common::ObString &parser_name,
+      const common::ObString &parser_properties,
       bool &is_same) const;
   /**
    * Make json document for fulltext search
@@ -212,18 +210,16 @@ private:
   static int segment(
       const ObFTParserProperty &property,
       const int64_t parser_version,
-      const plugin::ObIFTParserDesc *parser_desc,
-      plugin::ObPluginParam *plugin_param,
+      const ObIFTParserDesc *parser_desc,
       const ObCharsetInfo *cs,
       const char *fulltext,
       const int64_t fulltext_len,
       common::ObIAllocator &allocator,
       ObAddWord &add_word);
-  int set_add_word_flag(const plugin::ObIFTParserDesc &ftparser_desc);
+  int set_add_word_flag(const ObIFTParserDesc &ftparser_desc);
 private:
   common::ObIAllocator *allocator_;
-  plugin::ObIFTParserDesc *parser_desc_;
-  plugin::ObPluginParam *plugin_param_;
+  const ObIFTParserDesc *parser_desc_;
   ObFTParser parser_name_;
   ObAddWordFlag add_word_flag_;
   ObFTParserProperty parser_property_;
@@ -238,4 +234,4 @@ private:
 } // end namespace storage
 } // end namespace oceanbase
 
-#endif // OB_FTS_PLUGIN_HELPER_H_
+#endif // OB_FTS_PARSER_HELPER_H_

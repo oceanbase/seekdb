@@ -19,7 +19,7 @@
 
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
 #include "storage/fts/ob_fts_parser_property.h"
-#include "storage/fts/ob_fts_plugin_helper.h"
+#include "storage/fts/ob_fts_parser_helper.h"
 
 namespace oceanbase
 {

@@ -24,7 +24,7 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/utility.h"
 #include "storage/fts/ob_fts_struct.h"
-#include "storage/fts/ob_fts_plugin_helper.h"
+#include "storage/fts/ob_fts_parser_helper.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 #include "storage/fts/dict/ob_ft_dict_hub.h"
@@ -35,9 +35,6 @@
 #include "storage/fts/ik/ob_ik_processor.h"
 #include "storage/fts/ik/ob_ik_quantifier_processor.h"
 #include "storage/fts/ik/ob_ik_surrogate_processor.h"
-#include "plugin/sys/ob_plugin_mgr.h"
-
-using namespace oceanbase::plugin;
 
 namespace oceanbase
 {
@@ -210,30 +207,15 @@ int ObIKFTParser::process_next_batch()
   return ret;
 }
 
-int ObIKFTParserDesc::init(ObPluginParam *param)
-{
-  is_inited_ = true;
-  return OB_SUCCESS;
-}
-
-int ObIKFTParserDesc::deinit(ObPluginParam *param)
-{
-  is_inited_ = false;
-  return OB_SUCCESS;
-}
-
 int ObIKFTParserDesc::segment(ObFTParserParam *param, ObITokenIterator *&iter) const
 {
   int ret = OB_SUCCESS;
   ObIKFTParser *parser = nullptr;
   ObFTDictHub *hub = nullptr;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("default ft parser desc hasn't be initialized", K(ret), K(is_inited_));
-  } else if (OB_ISNULL(param) || OB_UNLIKELY(!param->is_valid())) {
+  if (OB_ISNULL(param) || OB_UNLIKELY(!param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(param));
-  } else if (OB_FAIL(ObFTParsePluginData::instance().get_dict_hub(hub))) {
+  } else if (OB_FAIL(ObFTParseData::instance().get_dict_hub(hub))) {
     LOG_WARN("Failed to get dict hub.", K(ret));
   } else if (OB_ISNULL(parser = OB_NEWx(ObIKFTParser, param->allocator_, *(param->allocator_), hub))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -267,7 +249,7 @@ int ObIKFTParserDesc::get_add_word_flag(ObAddWordFlag &flag) const
   return ret;
 }
 
-int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
+int ObIKFTParser::init_dict(const ObFTParserParam &param)
 {
   int ret = OB_SUCCESS;
   ObIFTDict *tmp_dict = nullptr;

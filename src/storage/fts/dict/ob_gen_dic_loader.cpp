@@ -16,6 +16,8 @@
 
 #include "storage/fts/dict/ob_gen_dic_loader.h"
 
+#include "rootserver/ob_root_service.h"
+#include "share/ob_server_struct.h"
 #include "storage/fts/dict/ob_ik_utf8_dic_loader.h"
 #include "storage/fts/ob_fts_literal.h"
 #define USING_LOG_PREFIX STORAGE_FTS
@@ -32,7 +34,7 @@ int ObGenDicLoader::ObGenDicLoaderKey::init(
     const ObCharsetType charset)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(parser_name.empty() || CHARSET_INVALID == charset)) {
+  if (OB_UNLIKELY(!true || parser_name.empty() || CHARSET_INVALID == charset)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(parser_name), K(charset));
   } else if (OB_FAIL(set_parser_name(parser_name))) {
@@ -99,6 +101,27 @@ int ObGenDicLoader::ObGenDicLoaderKey::set_parser_name(const ObString &parser_na
   return ret;
 }
 
+int ObGenDicLoader::ObNeedDeleteDicLoadersFn::operator() (hash::HashMapPair<ObGenDicLoaderKey, ObTenantDicLoader*> &entry)
+{
+  int ret = OB_SUCCESS;
+  const ObGenDicLoaderKey &dic_loader_key = entry.first;
+  if (OB_UNLIKELY(!dic_loader_key.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid dic loader key", K(ret), K(dic_loader_key));
+  } else {
+    ObSchemaGetterGuard schema_guard;
+    if (OB_ISNULL(GCTX.root_service_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("root service is null", K(ret));
+    } else if (OB_FAIL(GCTX.root_service_->get_schema_service().get_tenant_schema_guard(schema_guard))) {
+      LOG_WARN("get tenant schema guard failed", K(ret));
+    } else {
+      // single tenant: only sys tenant exists, so is_delete is always false (no orphan loader to delete)
+    }
+  }
+  return ret;
+}
+
 /**
  * -----------------------------------ObDicLoader-----------------------------------
  */
@@ -122,15 +145,16 @@ int ObGenDicLoader::init()
 
 int ObGenDicLoader::get_dic_loader(const ObString &parser_name, 
                                    const ObCharsetType charset, 
-                                   ObDicLoaderHandle &loader_handle)
+                                   ObTenantDicLoaderHandle &loader_handle)
 {
   int ret = OB_SUCCESS;
   ObGenDicLoaderKey dic_loader_key;
-  ObDicLoader *dic_loader = nullptr;
+  ObTenantDicLoader *dic_loader = nullptr;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("gen dic loader is not inited", K(ret));
-  } else if (parser_name.empty()
+  } else if (!true 
+             || parser_name.empty() 
              || charset == CHARSET_INVALID) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(parser_name), K(charset));
@@ -162,9 +186,44 @@ int ObGenDicLoader::get_dic_loader(const ObString &parser_name,
   return ret;
 }
 
+int ObGenDicLoader::destroy_dic_loader_for_tenant()
+{
+  int ret = OB_SUCCESS;
+  ObNeedDeleteDicLoadersFn need_del_dic_loader_fn;
+  TCWLockGuard guard(lock_);
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("gen dic loader is not inited", K(ret));
+  } else if (OB_FAIL(dic_loader_map_.foreach_refactored(need_del_dic_loader_fn))) {
+    LOG_WARN("fail to foreach refactored", K(ret));
+  } else {
+    const ObIArray<ObGenDicLoaderKey> &need_delete_loaders = need_del_dic_loader_fn.need_delete_loaders_;
+    for (int64_t i = 0; i < need_delete_loaders.count(); i++) { // ignore ret to delete other tenant's dic loader
+      const ObGenDicLoaderKey &dic_loader_key = need_delete_loaders.at(i);
+      ObTenantDicLoader *dic_loader = nullptr;
+      // overwrite ret
+      if (OB_UNLIKELY(!dic_loader_key.is_valid())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("the dic loader key is not valid", K(ret), K(dic_loader_key));
+      } else if (OB_FAIL(dic_loader_map_.get_refactored(dic_loader_key, dic_loader))) {
+        LOG_WARN("fail to get dic loader", K(ret), K(dic_loader_key));
+      } else if (OB_FAIL(dic_loader_map_.erase_refactored(dic_loader_key))) {
+        LOG_WARN("fail to erase dic loader", K(ret), K(dic_loader_key));
+      } else if (OB_ISNULL(dic_loader)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("the dic loader is null", K(ret), K(dic_loader_key));
+      } else if (0 == dic_loader->dec_ref()) {
+        ObMemAttr attr("dic_loader");
+        OB_DELETE(ObTenantDicLoader, attr, dic_loader);
+      }
+    }
+  }
+  return ret;
+}
+
 int ObGenDicLoader::gen_dic_loader(
     const ObGenDicLoaderKey &dic_loader_key, 
-    ObDicLoader *&dic_loader)
+    ObTenantDicLoader *&dic_loader)
 {
   int ret = OB_SUCCESS;
   ObString parser_name = dic_loader_key.get_parser_name();
@@ -178,7 +237,7 @@ int ObGenDicLoader::gen_dic_loader(
     switch (charset)
     {
       case ObCharsetType::CHARSET_UTF8MB4: {
-        dic_loader = OB_NEW(ObIKUTF8DicLoader, attr);
+        dic_loader = OB_NEW(ObTenantIKUTF8DicLoader, attr);
         if (OB_ISNULL(dic_loader)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("fail to allocate memory for the loader", K(ret), K(dic_loader_key));

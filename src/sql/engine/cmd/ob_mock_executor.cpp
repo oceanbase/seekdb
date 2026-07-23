@@ -1,0 +1,86 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_ENG
+#include "sql/engine/cmd/ob_mock_executor.h"
+namespace oceanbase
+{
+using namespace common;
+namespace sql
+{
+
+bool is_mock_stmt_flush_table_enabled()
+{
+  bool is_enabled = false;
+
+  is_enabled = GCONF._enable_mock_stmt_flush_table;
+
+  return is_enabled;
+}
+
+int ObMockExecutor::execute(ObExecContext &exec_ctx, ObMockStmt &stmt)
+{
+  int ret = OB_SUCCESS;
+
+  if (stmt::T_FLUSH_MOCK == stmt.get_stmt_type()
+      || stmt::T_HANDLER_MOCK == stmt.get_stmt_type()
+      || stmt::T_CREATE_SERVER == stmt.get_stmt_type() 
+      || stmt::T_ALTER_SERVER == stmt.get_stmt_type() 
+      || stmt::T_DROP_SERVER == stmt.get_stmt_type() 
+      || stmt::T_CREATE_LOGFILE_GROUP == stmt.get_stmt_type() 
+      || stmt::T_ALTER_LOGFILE_GROUP == stmt.get_stmt_type() 
+      || stmt::T_DROP_LOGFILE_GROUP == stmt.get_stmt_type()
+      || stmt::T_GRANT_PROXY == stmt.get_stmt_type()
+      || stmt::T_REVOKE_PROXY == stmt.get_stmt_type()) {
+    LOG_USER_WARN(OB_NOT_SUPPORTED, "This statement is");
+  } else if (stmt::T_FLUSH_TABLE_MOCK == stmt.get_stmt_type()) {
+    if (is_mock_stmt_flush_table_enabled()) {
+      LOG_INFO("mock flush table statment but return success");
+    } else {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "This statement is");
+    }
+  } else if (stmt::T_FLUSH_MOCK_LIST == stmt.get_stmt_type()) {
+    const ObIArray<stmt::StmtType> &type_list = stmt.get_stmt_type_list();
+    for (int64_t i = 0; OB_SUCC(ret) && i < type_list.count(); ++i) {
+      if (stmt::T_FLUSH_MOCK == type_list.at(i)) {
+        LOG_USER_WARN(OB_NOT_SUPPORTED, "This statement is");
+      } else if (stmt::T_FLUSH_PRIVILEGES == type_list.at(i)) {
+        LOG_USER_WARN(OB_NOT_SUPPORTED, "After executing the GRANT and REVOKE statements, "
+                                        "the permissions will be automatically applied and take effect. "
+                                        "There is no need to execute the FLUSH PRIVILEGES command. FLUSH PRIVILEGES");
+      } else {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_USER_WARN(OB_NOT_SUPPORTED, "unknown stmt type");
+      }
+    }
+  } else if (stmt::T_REPAIR_TABLE == stmt.get_stmt_type()) {
+    LOG_USER_WARN(OB_NOT_SUPPORTED, "Repair table Statement just mocks the syntax of MySQL without supporting specific realization");
+  } else if (stmt::T_CHECKSUM_TABLE == stmt.get_stmt_type()) {
+    LOG_USER_WARN(OB_NOT_SUPPORTED, "Checksum table Statement just mocks the syntax of MySQL without supporting specific realization");
+  } else if (stmt::T_CACHE_INDEX == stmt.get_stmt_type()) {
+    LOG_USER_WARN(OB_NOT_SUPPORTED, "Cache index Statement just mocks the syntax of MySQL without supporting specific realization");
+  } else if (stmt::T_LOAD_INDEX_INTO_CACHE == stmt.get_stmt_type()) {
+    LOG_USER_WARN(OB_NOT_SUPPORTED, "Load index into cache Statement just mocks the syntax of MySQL without supporting specific realization");
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_USER_WARN(OB_NOT_SUPPORTED, "unknown stmt type");
+  } 
+  return ret;
+}
+
+}
+}

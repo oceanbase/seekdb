@@ -224,22 +224,6 @@ INSUFFICIENT_PRIVILEGES	bigint(1)	NO
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from information_schema.OPTIMIZER_TRACE limit 1);
 cnt
 1
-desc information_schema.PLUGINS;
-Field	Type	Null	Key	Default	Extra
-PLUGIN_NAME	varchar(64)	NO			
-PLUGIN	varchar(20)	NO			
-PLUGIN_STATUS	varchar(10)	NO			
-PLUGIN_TYPE	varchar(80)	NO			
-PLUGIN_TYPE_VERSION	varchar(20)	NO			
-PLUGIN_LIBRARY	varchar(64)	NO			
-PLUGIN_LIBRARY_VERSION	varchar(20)	NO			
-PLUGIN_AUTHOR	varchar(64)	NO			
-PLUGIN_DESCRIPTION	varchar(200)	NO			
-PLUGIN_LICENSE	varchar(80)	NO			
-LOAD_OPTION	varchar(64)	NO			
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from information_schema.PLUGINS limit 1);
-cnt
-1
 desc information_schema.INNODB_SYS_COLUMNS;
 Field	Type	Null	Key	Default	Extra
 TABLE_ID	bigint(21) unsigned	NO			
@@ -1105,6 +1089,7 @@ RPC_CERT_EXPIRE_TIME	timestamp(6)	NO
 START_SERVICE_TIME	bigint(20)	NO		NULL	
 CREATE_TIME	timestamp(6)	NO		NULL	
 ROLE	varchar(64)	NO		NULL	
+LOG_RESTORE_SOURCE	varchar(1024)	NO		NULL	
 SYNC_SCN	bigint(20) unsigned	NO		NULL	
 READABLE_SCN	bigint(20) unsigned	NO		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.V$OB_SERVER_STAT limit 1);

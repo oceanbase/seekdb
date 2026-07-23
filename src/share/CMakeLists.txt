@@ -117,7 +117,6 @@ ob_set_subtarget(ob_share common
   ob_occam_time_guard.cpp
   ob_priv_common.cpp
   ob_proposal_id.cpp
-  ob_plugin_helper.cpp
   ob_resource_limit.cpp
   ob_schema_status_proxy.cpp
   ob_server_status.cpp
@@ -164,6 +163,7 @@ ob_set_subtarget(ob_share common_mixed
   ob_sys_time_zone_util.cpp
   ls/ob_restore_status.cpp
   location_cache/ob_location_struct.cpp
+  inner_table/ob_inner_table_schema.vt.cpp
   inner_table/ob_inner_table_schema.lob.cpp
   inner_table/ob_inner_table_schema_misc.ipp
   object/ob_obj_cast.cpp

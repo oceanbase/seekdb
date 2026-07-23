@@ -2028,19 +2028,6 @@
     "background_cn": "",
     "ref_url": ""
   },
-  "plugin_dir": {
-    "id": 10052,
-    "name": "plugin_dir",
-    "default_value": "./plugin_dir/",
-    "base_value": "./plugin_dir/",
-    "data_type": "varchar",
-    "info": "the dir to place plugin dll",
-    "flags": "GLOBAL | READONLY",
-    "publish_version": "",
-    "info_cn": "",
-    "background_cn": "",
-    "ref_url": ""
-  },
   "parallel_servers_target": {
     "id": 10060,
     "name": "parallel_servers_target",
@@ -9917,19 +9904,6 @@
     "background_cn": "",
     "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_have_crypt"
   },
-  "have_dynamic_loading": {
-    "id": 10651,
-    "name": "have_dynamic_loading",
-    "default_value": "YES",
-    "base_value": "YES",
-    "data_type": "varchar",
-    "info": "YES if mysqld supports dynamic loading of plugins, NO if not. If the value is NO, you cannot use options such as --plugin-load to load plugins at server startup, or the INSTALL PLUGIN statement to load plugins at runtime",
-    "flags": "GLOBAL | MYSQL_ONLY | READONLY",
-    "publish_version": "",
-    "info_cn": "",
-    "background_cn": "",
-    "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_have_dynamic_loading"
-  },
   "language": {
     "id": 10654,
     "name": "language",
@@ -10273,32 +10247,6 @@
     "info_cn": "",
     "background_cn": "",
     "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_skip_show_database"
-  },
-  "plugin_load": {
-    "id": 10680,
-    "name": "plugin_load",
-    "default_value": "",
-    "base_value": "",
-    "data_type": "varchar",
-    "info": "This option tells the server to load the named plugins at startup",
-    "flags": "SESSION | MYSQL_ONLY | READONLY",
-    "publish_version": "",
-    "info_cn": "",
-    "background_cn": "",
-    "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/server-options.html#option_mysqld_plugin-load"
-  },
-  "plugin_load_add": {
-    "id": 10681,
-    "name": "plugin_load_add",
-    "default_value": "",
-    "base_value": "",
-    "data_type": "varchar",
-    "info": "adds a plugin or plugins to the set of plugins to be loaded at startup",
-    "flags": "SESSION | MYSQL_ONLY | READONLY",
-    "publish_version": "",
-    "info_cn": "",
-    "background_cn": "",
-    "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/server-options.html#option_mysqld_plugin-load-add"
   },
   "big_tables": {
     "id": 10682,

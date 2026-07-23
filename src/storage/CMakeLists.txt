@@ -237,7 +237,8 @@ ob_set_subtarget(ob_storage fts
   fts/ob_beng_ft_parser.cpp
   fts/ob_fts_doc_word_iterator.cpp
   fts/ob_fts_parser_property.cpp
-  fts/ob_fts_plugin_helper.cpp
+  fts/ob_fts_parser_helper.cpp
+  fts/ob_fts_parser_name.cpp
   fts/ob_fts_stop_word.cpp
   fts/ob_fts_struct.cpp
   fts/ob_ngram_ft_parser.cpp
@@ -246,7 +247,6 @@ ob_set_subtarget(ob_storage fts
   fts/dict/ob_gen_dic_loader.cpp
   fts/dict/ob_dic_lock.cpp
   fts/dict/ob_ik_utf8_dic_loader.cpp
-  fts/ob_fts_builtin_parser_register.cpp
   fts/utils/unicode_utils.cpp
   fts/utils/ob_ft_ngram_impl.cpp
 )

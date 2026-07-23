@@ -14,62 +14,58 @@
  * limitations under the License.
  */
 
-#ifndef OB_PLUGIN_HELPER_H_
-#define OB_PLUGIN_HELPER_H_
-
-#ifndef _WIN32
-#include <dlfcn.h>
-#endif
+#pragma once
 
 #include "lib/ob_errno.h"
+#include "lib/string/ob_string.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"
 
 namespace oceanbase
 {
-namespace share
+namespace storage
 {
 
-constexpr int OB_PLUGIN_NAME_LENGTH = 64;
+constexpr int64_t OB_FT_PARSER_NAME_LENGTH = 64;
 
-class ObPluginName final
+class ObFTParserName final
 {
 public:
-  ObPluginName() { memset(name_, 0x0, OB_PLUGIN_NAME_LENGTH); }
-  explicit ObPluginName(const char *name) { OB_ASSERT(common::OB_SUCCESS == set_name(name)); }
-  ~ObPluginName() = default;
+  ObFTParserName() { MEMSET(name_, 0, sizeof(name_)); }
+  explicit ObFTParserName(const char *name)
+  {
+    MEMSET(name_, 0, sizeof(name_));
+    OB_ASSERT(common::OB_SUCCESS == set_name(name));
+  }
+  ~ObFTParserName() = default;
 
   int set_name(const char *name);
-  int set_name(const ObString &name);
+  int set_name(const common::ObString &name);
 
   OB_INLINE bool is_valid() const { return STRLEN(name_) > 0; }
-  OB_INLINE int len() const { return STRLEN(name_); }
+  OB_INLINE int64_t len() const { return STRLEN(name_); }
   OB_INLINE char *str() { return name_; }
   OB_INLINE const char *str() const { return name_; }
   OB_INLINE int hash(uint64_t &value) const
   {
     value = murmurhash(name_, static_cast<int32_t>(STRLEN(name_)), 0);
-    return OB_SUCCESS;
+    return common::OB_SUCCESS;
   }
 
-  OB_INLINE bool operator ==(const ObPluginName &other) const
+  OB_INLINE bool operator==(const ObFTParserName &other) const
   {
     return 0 == STRCMP(name_, other.name_);
   }
-  OB_INLINE bool operator !=(const ObPluginName &other) const
+  OB_INLINE bool operator!=(const ObFTParserName &other) const { return !(*this == other); }
+  OB_INLINE bool operator<(const ObFTParserName &other) const
   {
-    return 0 != STRCMP(name_, other.name_);
-  }
-  OB_INLINE bool operator <(const ObPluginName &other) const
-  {
-    return 0 > STRCMP(name_, other.name_);
+    return STRCMP(name_, other.name_) < 0;
   }
   TO_STRING_KV(K_(name));
+
 private:
-  char name_[OB_PLUGIN_NAME_LENGTH];
+  char name_[OB_FT_PARSER_NAME_LENGTH];
 };
 
-} // end namespace share
-} // end namespace oceanbase
-
-#endif // OB_PLUGIN_HELPER_H_
+} // namespace storage
+} // namespace oceanbase

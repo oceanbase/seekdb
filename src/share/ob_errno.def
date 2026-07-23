@@ -305,6 +305,7 @@ DEFINE_ERROR(OB_WORKING_PARTITION_NOT_EXIST, -4270, -1, "HY000", "Working partit
 DEFINE_ERROR(OB_LIBEASY_REACH_MEM_LIMIT, -4271, -1, "HY000", "LIBEASY reach memory limit");
 DEFINE_ERROR_DEP(OB_CACHE_FREE_BLOCK_NOT_ENOUGH, -4273, -1, "HY000", "free memblock in cache is not enough");
 DEFINE_ERROR(OB_SYNC_WASH_MB_TIMEOUT, -4274, -1, "HY000", "sync wash memblock timeout");
+DEFINE_ERROR(OB_NOT_ALLOW_MIGRATE_IN, -4275, -1, "HY000", "not allow migrate in");
 DEFINE_ERROR(OB_SCHEDULER_TASK_CNT_MISTACH, -4276, -1, "HY000", "Scheduler task cnt does not match")
 DEFINE_ERROR_EXT(OB_MISS_ARGUMENT, -4277, ER_WRONG_ARGUMENTS, "HY000", "Miss argument", "Miss argument for %s");
 DEFINE_ERROR_DEP(OB_LAST_LOG_NOT_COMPLETE, -4278, -1, "HY000", "last log is not complete");
@@ -430,6 +431,7 @@ DEFINE_ERROR(OB_ERR_UNEXPECTED_UNIT_STATUS, -4399, -1, "HY000", "Unit status is 
 DEFINE_ERROR(OB_AUTOINC_CACHE_NOT_EQUAL, -4400, -1, "HY000", "Autoinc cache's autoinc version is not equal to request's autoinc version");
 DEFINE_ERROR(OB_IMPROPER_OS_PARAM, -4403, -1, "HY000", "OS params check failed, because the operating system has improper parameter configurations");
 DEFINE_ERROR(OB_IO_TIMEOUT, -4404, 4012, "HY000", "IO timeout");
+DEFINE_ERROR(OB_MIGRATE_TX_DATA_NOT_CONTINUES, -4408, -1, "HY000", "migrate tx data not continues");
 // 余留位置
 ////////////////////////////////////////////////////////////////
 // 通用错误码值域[-4000, -4500)，含sstable等
@@ -466,16 +468,20 @@ DEFINE_ERROR(OB_GET_ZONE_MASTER_UPS_FAILED, -4531, -1, "HY000", "Failed to get m
 DEFINE_ERROR(OB_MULTIPLE_MASTER_ZONES_EXIST, -4532, -1, "HY000", "Multiple master zones");
 DEFINE_ERROR(OB_INDEXING_ZONE_INVALID, -4533, -1, "HY000", "indexing zone is not exist anymore or not active");
 DEFINE_ERROR(OB_ROOT_TABLE_RANGE_NOT_EXIST, -4537, -1, "HY000", "Tablet range not exist");
+DEFINE_ERROR(OB_ROOT_MIGRATE_CONCURRENCY_FULL, -4538, -1, "HY000", "Migrate concurrency full");
+DEFINE_ERROR(OB_ROOT_MIGRATE_INFO_NOT_FOUND, -4539, -1, "HY000", "Migrate info not found");
 DEFINE_ERROR(OB_NOT_DATA_LOAD_TABLE, -4540, -1, "HY000", "No data to load");
 DEFINE_ERROR(OB_DATA_LOAD_TABLE_DUPLICATED, -4541, -1, "HY000", "Duplicated table data to load");
 DEFINE_ERROR(OB_ROOT_TABLE_ID_EXIST, -4542, -1, "HY000", "Table ID exist");
 DEFINE_ERROR(OB_INDEX_TIMEOUT, -4543, -1, "HY000", "Building index timeout");
 DEFINE_ERROR(OB_ROOT_NOT_INTEGRATED, -4544, -1, "42000", "Root not integrated");
 DEFINE_ERROR(OB_INDEX_INELIGIBLE, -4545, -1, "HY000", "index data not unique");
+DEFINE_ERROR(OB_REBALANCE_EXEC_TIMEOUT, -4546, -1, "HY000", "execute replication or migration task timeout");
 DEFINE_ERROR(OB_MERGE_NOT_STARTED, -4547, -1, "HY000", "global merge not started");
 DEFINE_ERROR(OB_MERGE_ALREADY_STARTED, -4548, -1, "HY000", "merge already started");
 DEFINE_ERROR(OB_ROOTSERVICE_EXIST, -4549, -1, "HY000", "rootservice already exist");
 DEFINE_ERROR(OB_RS_SHUTDOWN, -4550, -1, "HY000", "rootservice is shutdown");
+DEFINE_ERROR(OB_SERVER_MIGRATE_IN_DENIED, -4551, -1, "HY000", "server migrate in denied");
 DEFINE_ERROR(OB_PARTITION_CNT_REACH_ROOTSERVER_LIMIT, -4553, -1, "HY000", "rootserver can not hold more partition");
 DEFINE_ERROR(OB_DATA_SOURCE_NOT_EXIST, -4600, -1, "HY000", "Data source not exist");
 DEFINE_ERROR(OB_DATA_SOURCE_TABLE_NOT_EXIST, -4601, -1, "HY000", "Data source table not exist");
@@ -536,6 +542,7 @@ DEFINE_ERROR(OB_SESSION_ENTRY_EXIST, -4661, -1, "HY000", "Session already exist"
 DEFINE_ERROR_EXT(OB_GOT_SIGNAL_ABORTING, -4662, ER_GOT_SIGNAL, "01000", "Got signal. Aborting!", "%s: Got signal %d. Aborting!");
 DEFINE_ERROR(OB_SERVER_NOT_ALIVE, -4663, -1, "HY000", "server is not alive");
 DEFINE_ERROR(OB_GET_LOCATION_TIME_OUT, -4664, 4012, "HY000", "Timeout");
+DEFINE_ERROR(OB_UNIT_IS_MIGRATING, -4665, -1, "HY000", "Unit is migrating, can not migrate again");
 DEFINE_ERROR_EXT(OB_CLUSTER_NO_MATCH, -4666, -1, "HY000", "cluster name does not match", "cluster name does not match to \'%s\'");
 DEFINE_ERROR(OB_CHECK_ZONE_MERGE_ORDER, -4667, -1, "HY000", "Please check new zone in zone_merge_order. You can show parameters like 'zone_merge_order'");
 DEFINE_ERROR_EXT(OB_ERR_ZONE_NOT_EMPTY, -4668, -1, "HY000", "zone not empty", "The zone is not empty and can not be deleted. You should delete the servers of the zone. There are %ld servers alive and %ld not alive.");
@@ -553,6 +560,7 @@ DEFINE_ERROR_EXT(OB_DUPLICATE_OPTION, -4679, -1, "HY000", "duplicate specificati
 DEFINE_ERROR_EXT(OB_INVALID_OPTION, -4680, -1, "HY000", "invalid specifications", "%s");
 DEFINE_ERROR_EXT(OB_RPC_NEED_RECONNECT, -4681, -1, "HY000", "rpc need reconnect", "%s");
 DEFINE_ERROR(OB_CANNOT_COPY_MAJOR_SSTABLE, -4682, -1, "HY000", "cannot copy major sstable now");
+DEFINE_ERROR(OB_SRC_DO_NOT_ALLOWED_MIGRATE, -4683, -1, "HY000", "src do not allowed migrate");
 DEFINE_ERROR(OB_TOO_MANY_TENANT_PARTITIONS_ERROR, -4684, -1, "HY000", "Too many partitions were defined for this tenant");
 DEFINE_ERROR(OB_ACTIVE_MEMTBALE_NOT_EXSIT, -4685, -1, "HY000", "active memtable not exist");
 DEFINE_ERROR(OB_NO_DISK_NEED_REBUILD, -4687, -1, "HY000", "no disk need rebuild");
@@ -560,8 +568,10 @@ DEFINE_ERROR(OB_STANDBY_READ_ONLY, -4688, -1, "HY000", "standby tenant is read o
 DEFINE_ERROR(OB_INVALD_WEB_SERVICE_CONTENT, -4689, -1, "HY000", "web service content not valid");
 DEFINE_ERROR(OB_PRIMARY_CLUSTER_EXIST, -4690, -1, "HY000", "other primary cluster already exist, can not start as primary");
 DEFINE_ERROR(OB_ARRAY_BINDING_SWITCH_ITERATOR, -4691, -1, "HY000", "array binding needs to switch iterator");
+DEFINE_ERROR(OB_ERR_STANDBY_CLUSTER_NOT_EMPTY, -4692, -1, "HY000", "standby cluster not empty");
 DEFINE_ERROR(OB_NOT_PRIMARY_CLUSTER, -4693, -1, "HY000", "not primary cluster");
 DEFINE_ERROR(OB_ERR_CHECK_DROP_COLUMN_FAILED, -4694, -1, "HY000", "check drop column failed");
+DEFINE_ERROR(OB_NOT_STANDBY_CLUSTER, -4695, -1, "HY000", "not standby cluster");
 DEFINE_ERROR(OB_CLUSTER_VERSION_NOT_COMPATIBLE, -4696, -1, "HY000", "cluster version not compatible");
 DEFINE_ERROR(OB_WAIT_TRANS_TABLE_MERGE_TIMEOUT, -4697, -1, "HY000", "wait trans table merge finish timeout");
 DEFINE_ERROR(OB_SKIP_RENEW_LOCATION_BY_RPC, -4698, -1, "HY000", "skip renew location by rpc");
@@ -584,6 +594,7 @@ DEFINE_ERROR(OB_MAPPING_BETWEEN_TABLET_AND_LS_NOT_EXIST, -4723, -1, "HY000", "ma
 DEFINE_ERROR(OB_TABLET_EXIST, -4724, -1, "HY000", "unexpected tablet existence");
 DEFINE_ERROR(OB_TABLET_NOT_EXIST, -4725, -1, "HY000", "tablet does not exist");
 
+DEFINE_ERROR(OB_ERR_STANDBY_STATUS, -4726, -1, "HY000", "check standby cluster status");
 DEFINE_ERROR(OB_LS_NEED_REVOKE, -4727, -1, "HY000", "ls need revoke");
 DEFINE_ERROR_DEP(OB_ERR_INTERVAL_PARTITION_EXIST, -4728, -1, "HY000", "interval partition already exists");
 DEFINE_ERROR_DEP(OB_ERR_INTERVAL_PARTITION_ERROR, -4729, -1, "HY000", "the property of interval partition is changed");
@@ -612,6 +623,7 @@ DEFINE_ERROR(OB_ERR_ROOTSERVICE_START, -4752, -1, "HY000", "rootservice start pr
 DEFINE_ERROR(OB_ERR_ROOTSERVICE_STOP, -4753, -1, "HY000", "rootservice stop process has failure");
 DEFINE_ERROR(OB_ERR_ROOT_INSPECTION, -4754, -1, "HY000", "root inspection is not passed");
 DEFINE_ERROR(OB_ERR_ROOTSERVICE_THREAD_HUNG, -4755, -1, "HY000", "rootservice background thread may be hung");
+DEFINE_ERROR(OB_MIGRATE_NOT_COMPATIBLE, -4756, -1, "HY000", "Migration src and dest version is not compatible.");
 DEFINE_ERROR(OB_CLUSTER_INFO_MAYBE_REMAINED, -4757, -1, "HY000", "Cluster info may remain on arbitration server '%.*s', please make sure whether to use ob_admin to clean it.");
 DEFINE_ERROR(OB_ARBITRATION_INFO_QUERY_FAILED, -4758, -1, "HY000", "the arbitration service may be unavailable, please check and retry");
 DEFINE_ERROR(OB_IGNORE_ERR_ACCESS_VIRTUAL_TABLE, -4759, -1, "HY000", "An error was ignored when accessing virtual table, actual error code: %d");
@@ -620,6 +632,7 @@ DEFINE_ERROR(OB_LS_IS_DELETED, -4761, -1, "HY000", "log stream is deleted");
 DEFINE_ERROR(OB_SKIP_CHECKING_LS_STATUS, -4762, -1, "HY000", "This operation has been finished without checking ls status");
 DEFINE_ERROR(OB_ERR_USE_ROWID_FOR_UPDATE, -4763, -1, "HY000", "invalid user.table.column, table.column, or column specification");
 DEFINE_ERROR_EXT(OB_ERR_UNKNOWN_SET_OPTION, -4764, -1, "HY000", "unknown SET option", "unknown SET option \'%s\'");
+DEFINE_ERROR_EXT_DEP(OB_CREATE_STANDBY_TENANT_FAILED, -4765, -1, "HY000", "create standby tenant may fail", "create standby tenant may fail, %s");
 DEFINE_ERROR_EXT_DEP(OB_LS_WAITING_SAFE_DESTROY, -4766, -1, "HY000", "ls waiting safe destory", "ls waiting safe destory, %s");
 DEFINE_ERROR(OB_LS_NOT_LEADER, -4767, -1, "HY000", "log stream is not leader log stream");
 DEFINE_ERROR_EXT_DEP(OB_LS_LOCK_CONFLICT, -4768, -1, "HY000", "ls lock conflict", "ls lock conflict, %s");
@@ -1477,6 +1490,8 @@ DEFINE_ERROR(OB_ERR_ARGUMENT_SHOULD_CONSTANT, -5852, -1, "HY000", "Argument shou
 DEFINE_ERROR(OB_ERR_NOT_A_SINGLE_GROUP_FUNCTION, -5853, -1, "HY000", "not a single-group group function");
 DEFINE_ERROR(OB_ERR_ZERO_LENGTH_IDENTIFIER, -5854, -1, "HY000", "illegal zero-length identifier");
 DEFINE_ERROR(OB_ERR_PARAM_VALUE_INVALID, -5855, -1, "HY000", "parameter cannot be modified because specified value is invalid");
+DEFINE_ERROR(OB_ERR_DBMS_SQL_CURSOR_NOT_EXIST, -5856, -1, "HY000", "DBMS_SQL access denied");
+DEFINE_ERROR(OB_ERR_DBMS_SQL_NOT_ALL_VAR_BIND, -5857, -1, "HY000", "not all variables bound");
 DEFINE_ERROR_EXT(OB_ERR_CONFLICTING_DECLARATIONS, -5858, ER_CONFLICTING_DECLARATIONS, "42000", "Conflicting declarations", "Conflicting declarations: '%s' and '%s'");
 DEFINE_ERROR_EXT(OB_ERR_DROP_COL_REFERENCED_MULTI_COLS_CONSTRAINT, -5859, ER_DEPENDENT_BY_CHECK_CONSTRAINT, "HY000", "column is referenced in a multi-column constraint", "Check constraint \'%.*s\' uses column \'%.*s\', hence column cannot be dropped or renamed.");
 DEFINE_ERROR(OB_ERR_MODIFY_COL_DATATYEP_REFERENCED_CONSTRAINT, -5860, -1, "HY000", "cannot modify column datatype with current constraint(s)");
@@ -1500,6 +1515,7 @@ DEFINE_ERROR(OB_ERR_SUBPARTITION_EXPECT_VALUES_IN, -5877, -1, "HY000", "VALUES I
 DEFINE_ERROR(OB_ERR_PARTITION_NOT_EXPECT_VALUES_LESS_THAN, -5878, 1480, "HY000", "Only RANGE PARTITIONING can use VALUES LESS THAN in partition definition");
 DEFINE_ERROR(OB_ERR_PARTITION_EXPECT_VALUES_LESS_THAN, -5879, -1, "HY000", "Expecting VALUES LESS THAN  or AT clause");
 DEFINE_ERROR(OB_ERR_PROGRAM_UNIT_NOT_EXIST, -5880, -1, "HY000", "Procedure, function, package, or package body does not exist");
+DEFINE_ERROR(OB_ERR_INVALID_RESTORE_POINT_NAME, -5881, -1, "HY000", "invalid restore point name specified in connection string");
 DEFINE_ERROR(OB_ERR_INPUT_TIME_TYPE, -5882, -1, "HY000", "invalid time limit specified");
 DEFINE_ERROR(OB_ERR_IN_ARRAY_DML, -5883, -1, "HY000", "error(s) in array DML");
 DEFINE_ERROR_EXT(OB_ERR_TRIGGER_COMPILE_ERROR, -5884, -1, "42000", "trigger compile error", "%s \'%.*s.%.*s\' compile error");
@@ -1587,11 +1603,18 @@ DEFINE_ERROR_EXT(OB_ERR_INCORRECT_METHOD_USAGE, -5956, -1, "HY000", "incorrect u
 DEFINE_ERROR(OB_ERR_TYPE_MISMATCH, -5957, -1, "HY000", "Type Mismatch while constructing or accessing OCIAnyData");
 DEFINE_ERROR(OB_ERR_FETCH_COLUMN_NULL, -5958, -1, "HY000", "fetched column value is NULL");
 DEFINE_ERROR(OB_ERR_INVALID_SIZE_SPECIFIED, -5959, -1, "HY000", "invalid SIZE specified");
+DEFINE_ERROR(OB_ERR_SOURCE_EMPTY, -5960, -1, "HY000", "source text is empty");
+DEFINE_ERROR_EXT(OB_ERR_BAD_VALUE_FOR_OBJECT_TYPE, -5961, -1, "HY000", "bad value for object type: string", "bad value for object type: %.*s");
+DEFINE_ERROR_EXT(OB_ERR_UNABLE_GET_SOURCE, -5962, -1, "HY000", "unable to get source of string \'string\'.\'string\', insufficient privileges or does not exist", "unable to get source of string \'%.*s\'.\'%.*s\', insufficient privileges or does not exist");
+DEFINE_ERROR(OB_ERR_MISSING_IDENTIFIER, -5963, -1, "HY000", "missing identifier");
 DEFINE_ERROR_EXT(OB_ERR_DUP_COMPILE_PARAM, -5964, -1, "HY000", "duplicate setting for PL/SQL compiler parameter string", "duplicate setting for PL/SQL compiler parameter %.*s");
 DEFINE_ERROR(OB_ERR_DATA_NOT_WELL_FORMAT, -5965, -1, "HY000", "OCIAnyData is not well-formed");
 DEFINE_ERROR_EXT(OB_ERR_MUST_COMPOSIT_TYPE, -5966, -1, "HY000", "tc [string] must be that of object/varray/nested table", "tc [%s] must be that of object/varray/nested table");
 DEFINE_ERROR_EXT(OB_ERR_USER_EXCEED_RESOURCE, -5967, 1226, "42000", "User has exceeded the resource", "User '%.*s' has exceeded the '%s' resource (current value: %lu)");
 
+DEFINE_ERROR(OB_ERR_UTL_ENCODE_ARGUMENT_INVALID, -5968, -1, "HY000", "bad argument");
+DEFINE_ERROR(OB_ERR_UTL_ENCODE_CHARSET_INVALID, -5969, -1, "HY000", "invalid Character set");
+DEFINE_ERROR(OB_ERR_UTL_ENCODE_MIME_HEAD_TAG, -5970, -1, "HY000", "invalid mime header tag");
 DEFINE_ERROR_EXT(OB_ERR_CHECK_OPTION_VIOLATED, -5971, ER_VIEW_CHECK_FAILED, "HY000", "CHECK OPTION failed", "CHECK OPTION failed '%.*s.%.*s'");
 DEFINE_ERROR_EXT(OB_ERR_CHECK_OPTION_ON_NONUPDATABLE_VIEW, -5972, ER_VIEW_NONUPD_CHECK, "HY000", "CHECK OPTION on non-updatable view", "CHECK OPTION on non-updatable view '%.*s.%.*s'");
 DEFINE_ERROR(OB_ERR_NO_DESC_FOR_POS, -5973, -1, "HY000", "no descriptor for this position");
@@ -1681,14 +1704,21 @@ DEFINE_ERROR(OB_TRANS_COMMITED, -6233, -1, "HY000", "Transaction has been commit
 DEFINE_ERROR(OB_TRANS_CTX_COUNT_REACH_LIMIT, -6234, 6002, "25000", "transaction context count reach limit");
 DEFINE_ERROR(OB_TRANS_CANNOT_SERIALIZE, -6235, -1, "25000", "can't serialize access for this transaction");
 DEFINE_ERROR(OB_TRANS_WEAK_READ_VERSION_NOT_READY, -6236, -1, "HY000", "transaction weak read version is not ready");
+DEFINE_ERROR(OB_GTS_STANDBY_IS_INVALID, -6237, -1, "HY000", "gts standby is invalid");
 DEFINE_ERROR(OB_GTS_UPDATE_FAILED, -6238, -1, "HY000", "gts update failed");
 DEFINE_ERROR(OB_GTS_IS_NOT_SERVING, -6239, -1, "HY000", "gts is not serving");
 DEFINE_ERROR(OB_PG_PARTITION_NOT_EXIST, -6240, -1, "HY000", "pg partition not exist");
 DEFINE_ERROR(OB_TRANS_STMT_NEED_RETRY, -6241, -1, "HY000", "transaction statement need retry");
 DEFINE_ERROR(OB_SAVEPOINT_NOT_EXIST, -6242, ER_SP_DOES_NOT_EXIST, "42000", "savepoint does not exist");
+DEFINE_ERROR(OB_TRANS_WAIT_SCHEMA_REFRESH, -6243, -1, "HY000", "local schema is not new enough, replaying logs of user table from standby cluster needs to wait for schema refreshing ");
 DEFINE_ERROR(OB_TRANS_OUT_OF_THRESHOLD, -6244, -1, "HY000", "out of transaction threshold");
 DEFINE_ERROR(OB_ERR_ROW_NOT_LOCKED, -6256, -1, "HY000", "Row has not been locked");
 DEFINE_ERROR(OB_EMPTY_PG, -6257, -1, "HY000", "Empty partition group");
+DEFINE_ERROR(OB_ERR_RESTORE_POINT_EXIST, -6259, -1, "HY000", "Restore point %s already exists");
+DEFINE_ERROR(OB_ERR_RESTORE_POINT_NOT_EXIST, -6260, -1, "HY000", "Restore point %s does not exist");
+DEFINE_ERROR(OB_ERR_BACKUP_POINT_EXIST, -6261, -1, "HY000", "Backup point %s already exists");
+DEFINE_ERROR(OB_ERR_BACKUP_POINT_NOT_EXIST, -6262, -1, "HY000", "Backup point %s does not exist");
+DEFINE_ERROR(OB_ERR_RESTORE_POINT_TOO_MANY, -6263, -1, "HY000", "cannot create restore point - too many restore points");
 // for table lock
 DEFINE_ERROR(OB_OBJ_LOCK_NOT_EXIST, -6265, -1, "HY000", "object lock does not exist.");
 DEFINE_ERROR(OB_OBJ_LOCK_EXIST, -6266, -1, "HY000", "object lock exists.");
@@ -2070,30 +2100,99 @@ DEFINE_ERROR_DEP(OB_FILE_LENGTH_INVALID, -9007, -1, "HY000", "Invalid OSS file l
 DEFINE_ERROR(OB_NOT_READ_ALL_DATA, -9008, -1, "HY000", "Read all data fail");
 DEFINE_ERROR(OB_BUILD_MD5_ERROR, -9009, -1, "HY000", "Build MD5 fail");
 DEFINE_ERROR(OB_MD5_NOT_MATCH, -9010, -1, "HY000", "OSS file MD5 not match");
+// do not use OB_BACKUP_FILE_NOT_EXIST, use OB_OBJECT_NOT_EXIST instead
+DEFINE_ERROR_DEP(OB_BACKUP_FILE_NOT_EXIST, -9011, -1, "HY000", "cannot find backup file");
 DEFINE_ERROR(OB_OSS_DATA_VERSION_NOT_MATCHED, -9012, -1, "HY000", "Can not get data version from timestamp");
 DEFINE_ERROR(OB_OSS_WRITE_ERROR, -9013, -1, "HY000", "Write OSS file error");
+DEFINE_ERROR(OB_RESTORE_IN_PROGRESS, -9014, -1, "HY000", "Another restore is in progress");
+DEFINE_ERROR(OB_AGENT_INITING_BACKUP_COUNT_ERROR, -9015, -1, "HY000", "agent initing backup count error");
 DEFINE_ERROR(OB_CLUSTER_NAME_NOT_EQUAL, -9016, -1, "HY000", "ob cluster name not equal");
 DEFINE_ERROR(OB_RS_LIST_INVAILD, -9017, -1, "HY000", "rs list invalid");
 DEFINE_ERROR(OB_AGENT_HAS_FAILED_TASK, -9018, -1, "HY000", "agent has failed task");
+DEFINE_ERROR(OB_RESTORE_PARTITION_IS_COMPLETE, -9019, -1, "HY000", "restore partition is complete");
+DEFINE_ERROR(OB_RESTORE_PARTITION_TWICE, -9020, -1, "HY000", "restore partition twice");
+DEFINE_ERROR(OB_STOP_DROP_SCHEMA, -9022, -1, "HY000", "physical backup switch is on");
+DEFINE_ERROR(OB_CANNOT_START_LOG_ARCHIVE_BACKUP, -9023, -1, "HY000", "cannot start log archive backup");
+DEFINE_ERROR(OB_ALREADY_NO_LOG_ARCHIVE_BACKUP, -9024, -1, "HY000", "log archive backup is already disabled");
+DEFINE_ERROR(OB_LOG_ARCHIVE_BACKUP_INFO_NOT_EXIST, -9025, -1, "HY000", "log archive backup info not exists");
 DEFINE_ERROR_EXT_DEP(OB_INVALID_BACKUP_DEST, -9026, -1, "HY000", "backup destination is not valid", "%s is not a valid uri");
+DEFINE_ERROR(OB_LOG_ARCHIVE_INTERRUPTED, -9027, -1, "HY000", "ob log archive interrupted");
+DEFINE_ERROR(OB_LOG_ARCHIVE_STAT_NOT_MATCH, -9028, -1, "HY000", "ob log archive stat not match");
+DEFINE_ERROR(OB_LOG_ARCHIVE_NOT_RUNNING, -9029, -1, "HY000", "log archive is not running");
+DEFINE_ERROR(OB_LOG_ARCHIVE_INVALID_ROUND, -9030, -1, "HY000", "log archive invalid round");
+DEFINE_ERROR(OB_REPLICA_CANNOT_BACKUP, -9031, -1, "HY000", "Cannot backup ob replica");
+DEFINE_ERROR(OB_BACKUP_INFO_NOT_EXIST, -9032, -1, "HY000", "backup info not exists");
+DEFINE_ERROR(OB_BACKUP_INFO_NOT_MATCH, -9033, -1, "HY000", "Backup meta info stored in system dictionary does not match with current system status");
+DEFINE_ERROR(OB_LOG_ARCHIVE_ALREADY_STOPPED, -9034, -1, "HY000", "log archive already stopped");
+DEFINE_ERROR(OB_RESTORE_INDEX_FAILED, -9035, -1, "HY000", "restore index failed");
+DEFINE_ERROR(OB_BACKUP_IN_PROGRESS, -9036, -1, "HY000", "Backup is in progress");
+DEFINE_ERROR(OB_INVALID_LOG_ARCHIVE_STATUS, -9037, -1, "HY000", "log archive status is not valid");
+DEFINE_ERROR(OB_LOG_ARCHIVE_LEADER_CHANGED, -9039, -1, "HY000", "pg log archive leader changed");
+DEFINE_ERROR_EXT(OB_BACKUP_CAN_NOT_START, -9040, -1, "HY000", "backup can not start", "backup can not start, because %s");
+DEFINE_ERROR(OB_CANCEL_BACKUP_NOT_ALLOWED, -9041, -1, "HY000", "cancel backup do not allow");
+DEFINE_ERROR(OB_BACKUP_DATA_VERSION_GAP_OVER_LIMIT, -9042, -1, "HY000", "backup data version gap over limit");
+DEFINE_ERROR(OB_PG_LOG_ARCHIVE_STATUS_NOT_INIT, -9043, -1, "HY000", "pg log archive status is still invalid");
+DEFINE_ERROR(OB_BACKUP_DELETE_DATA_IN_PROGRESS, -9044, -1, "HY000", "delete backup data is in progress");
+DEFINE_ERROR(OB_BACKUP_DELETE_BACKUP_SET_NOT_ALLOWED, -9045, -1, "HY000", "delete backup set do not allow");
+DEFINE_ERROR(OB_INVALID_BACKUP_SET_ID, -9046, -1, "HY000", "backup set id is not valid");
+DEFINE_ERROR(OB_BACKUP_INVALID_PASSWORD, -9047, -1, "HY000", "invalid password for backup");
+DEFINE_ERROR(OB_ISOLATED_BACKUP_SET, -9048, -1, "HY000", "backup set is isolated by two log archive round");
+DEFINE_ERROR(OB_CANNOT_CANCEL_STOPPED_BACKUP, -9049, -1, "HY000", "backup status is stopped, can not cancel");
+DEFINE_ERROR(OB_BACKUP_BACKUP_CAN_NOT_START, -9050, -1, "HY000", "no backup data to be backuped up");
+DEFINE_ERROR(OB_BACKUP_MOUNT_FILE_NOT_VALID, -9051, -1, "HY000", "backup mount file is not valid");
+DEFINE_ERROR(OB_BACKUP_CLEAN_INFO_NOT_MATCH, -9052, -1, "HY000", "backup clean info not match");
+DEFINE_ERROR(OB_CANCEL_DELETE_BACKUP_NOT_ALLOWED, -9053, -1, "HY000", "cancel delete backup do not allow");
+DEFINE_ERROR(OB_BACKUP_CLEAN_INFO_NOT_EXIST, -9054, -1, "HY000", "backup clean info not exists");
 //DEFINE_ERROR_EXT(OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX, -9055, -1, "HY000", "rebuild global index failed when drop/truncate partitions", "rebuild global index:'%.*s' failed when drop/truncate partitions");
+DEFINE_ERROR_EXT(OB_CANNOT_SET_BACKUP_REGION, -9057, -1, "HY000", "can not set backup region", "can not set backup region, because %s");
+DEFINE_ERROR_EXT(OB_CANNOT_SET_BACKUP_ZONE, -9058, -1, "HY000", "can not set backup zone", "can not set backup zone, because %s");
+DEFINE_ERROR(OB_BACKUP_BACKUP_REACH_MAX_BACKUP_TIMES, -9059, -1, "HY000", "backup backup has reached max backup times");
 // do not use OB_COS_ERROR, use OB_OBJECT_STORAGE_IO_ERROR instead
 DEFINE_ERROR_DEP(OB_COS_ERROR, -9060, -1, "HY000", "COS error");
 DEFINE_ERROR_DEP(OB_IO_LIMIT, -9061, -1, "HY000", "IO limit");
+DEFINE_ERROR_DEP(OB_BACKUP_BACKUP_REACH_COPY_LIMIT, -9062, -1, "HY000", "reach backup backup copy limit");
 DEFINE_ERROR_DEP(OB_BACKUP_IO_PROHIBITED, -9063, -1, "HY000", "backup io is prohibited");
+DEFINE_ERROR(OB_ARCHIVE_LOG_NOT_CONTINUES_WITH_DATA, -9064, -1, "HY000", "the archive log and backup data are not continuous");
 DEFINE_ERROR(OB_AGENT_HAS_SUSPENDED, -9065, -1, "HY000", "agent has suspended");
+DEFINE_ERROR_EXT(OB_BACKUP_CONFLICT_VALUE, -9066, -1, "HY000", "Conflict value", "%.*s is conflict with %.*s");
 
+DEFINE_ERROR(OB_BACKUP_DELETE_BACKUP_PIECE_NOT_ALLOWED, -9069, -1, "HY000", "deleting backup piece is not allowed");
+DEFINE_ERROR(OB_BACKUP_DEST_NOT_CONNECT, -9070, -1, "HY000", "can not connect to backup destination");
+DEFINE_ERROR_DEP(OB_BACKUP_PERMISSION_DENIED, -9071, -1, "HY000", "no I/O operation permission at the backup destination");
 
 DEFINE_ERROR(OB_ESI_SESSION_CONFLICTS, -9072, -1, "HY000", "obesi process session conflicts");
 DEFINE_ERROR_DEP(OB_ESI_OBS_ERROR, -9073, -1, "HY000", "external storage OBS error");
 
+DEFINE_ERROR(OB_BACKUP_VALIDATE_TASK_SKIPPED, -9074, -1, "HY000", "backup validation task skipped");
 DEFINE_ERROR(OB_ESI_IO_ERROR, -9075, -1, "HY000", "obesi process io error");
+DEFINE_ERROR_DEP(OB_BACKUP_META_INDEX_NOT_EXIST, -9076, -1, "HY000", "backup meta index does not exist");
 
+DEFINE_ERROR(OB_ARCHIVE_ROUND_NOT_CONTINUOUS, -9077, -1, "HY000", "log discontinuous between two archive rounds");
+DEFINE_ERROR(OB_ARCHIVE_LOG_TO_END, -9078, -1, "HY000", "archive log is to end");
+DEFINE_ERROR(OB_ARCHIVE_LOG_RECYCLED, -9079, -1, "HY000", "archive log had been recycled");
+DEFINE_ERROR_EXT_DEP(OB_BACKUP_FORMAT_FILE_NOT_EXIST, -9080, -1, "HY000", "format file does not exist", "format file does not exist%s");
+DEFINE_ERROR_EXT_DEP(OB_BACKUP_FORMAT_FILE_NOT_MATCH, -9081, -1, "HY000", "format file does not match", "format file does not match%s");
 DEFINE_ERROR_DEP(OB_BACKUP_DEVICE_OUT_OF_SPACE, -9082, -1, "HY000", "backup device out of space");
+// do not use OB_BACKUP_PWRITE_OFFSET_NOT_MATCH, use OB_OBJECT_STORAGE_PWRITE_OFFSET_NOT_MATCH instead
+DEFINE_ERROR_DEP(OB_BACKUP_PWRITE_OFFSET_NOT_MATCH, -9083, -1, "HY000", "the pwrite offset of the object storage is inconsistent");
+DEFINE_ERROR_DEP(OB_BACKUP_PWRITE_CONTENT_NOT_MATCH, -9084, -1, "HY000", "the contents of pwrite are inconsistent");
 
+DEFINE_ERROR(OB_BACKUP_MAJOR_NOT_COVER_MINOR, -9085, -1, "HY000", "backup major sstable range not cover minor sstable");
+DEFINE_ERROR(OB_BACKUP_ADVANCE_CHECKPOINT_TIMEOUT, -9086, -1, "HY000", "backup advance checkpoint by flush timeout");
+DEFINE_ERROR(OB_CLOG_RECYCLE_BEFORE_ARCHIVE, -9087, -1, "HY000", "seekdb clog is recycled before archive");
+DEFINE_ERROR(OB_SOURCE_TENANT_STATE_NOT_MATCH, -9088, -1, "HY000", "log restore source tenant state not match, switchover to primary not allowed");
+DEFINE_ERROR(OB_SOURCE_LS_STATE_NOT_MATCH, -9089, -1, "HY000", "log restore source LS state not match, switchover to primary is not allowed");
 
 DEFINE_ERROR(OB_ESI_SESSION_NOT_EXIST, -9090, -1, "HY000", "obesi process session not exist");
+DEFINE_ERROR(OB_ALREADY_IN_ARCHIVE_MODE, -9091, -1, "HY000", "Already in ARCHIVELOG mode");
+DEFINE_ERROR(OB_ALREADY_IN_NOARCHIVE_MODE, -9092, -1, "HY000", "Already in NOARCHIVELOG mode");
+DEFINE_ERROR(OB_RESTORE_LOG_TO_END, -9093, -1, "HY000", "Restore log to end");
+DEFINE_ERROR(OB_LS_RESTORE_FAILED, -9094, -1, "HY000", "Restore log stream failed");
+DEFINE_ERROR(OB_NO_TABLET_NEED_BACKUP, -9095, -1, "HY000", "No tablet need backup");
+DEFINE_ERROR(OB_ERR_RESTORE_STANDBY_VERSION_LAG, -9096, -1, "HY000", "standby binary version is lower than primary data version, standby need upgrade");
+DEFINE_ERROR(OB_ERR_RESTORE_PRIMARY_TENANT_DROPPED, -9097, -1, "HY000", "primary tenant has been dropped");
 DEFINE_ERROR_DEP(OB_CLOUD_OBJECT_NOT_APPENDABLE, -9098, -1, "HY000", "normal object in object_storage(oss,cos,etc.) can't be appended content");
+DEFINE_ERROR_EXT_DEP(OB_RESTORE_TENANT_FAILED, -9099, -1, "HY000", "restore tenant failed", "%s restore failed, %s");
 
 DEFINE_ERROR(OB_NO_SUCH_FILE_OR_DIRECTORY, -9100, -1, "HY000", "no such file or directory");
 DEFINE_ERROR(OB_FILE_OR_DIRECTORY_EXIST, -9101, -1, "HY000", "file or directory already exist");
@@ -2113,6 +2212,7 @@ DEFINE_ERROR_DEP(OB_INVALID_STORAGE_DEST, -9114, -1, "HY000", "storage destinati
 DEFINE_ERROR(OB_STORAGE_DEST_NOT_CONNECT, -9115, -1, "HY000", "can not connect to storage destination");
 DEFINE_ERROR_DEP(OB_OBJECT_STORAGE_PERMISSION_DENIED, -9116, -1, "HY000", "no I/O operation permission of the object storage");
 DEFINE_ERROR_DEP(OB_INVALID_OBJECT_STORAGE_ENDPOINT, -9118, -1, "HY000", "object storage endpoint is invalid");
+DEFINE_ERROR_EXT_DEP(OB_RESTORE_SOURCE_NOT_ENOUGH, -9119, -1, "HY000", "do not have enough restore source", "%s");
 
 DEFINE_ERROR_DEP(OB_OBJECT_NOT_EXIST, -9120, -1, "HY000", "cannot find object on object storage");
 DEFINE_ERROR_DEP(OB_S2_REUSE_VERSION_MISMATCH, -9121, -1, "HY000", "reuse_version of mem_block or phy_block is not mismatched with micro_meta in s2 micro_cache");
@@ -2126,10 +2226,12 @@ DEFINE_ERROR_DEP(OB_OBJECT_STORAGE_IO_ERROR, -9129, -1, "HY000", "object storage
 DEFINE_ERROR_DEP(OB_OBJECT_STORAGE_PWRITE_OFFSET_NOT_MATCH, -9130, -1, "HY000", "the pwrite offset of the object storage is inconsistent");
 DEFINE_ERROR_DEP(OB_OBJECT_STORAGE_PWRITE_CONTENT_NOT_MATCH, -9131, -1, "HY000", "the contents of pwrite are inconsistent");
 DEFINE_ERROR_DEP(OB_OBJECT_STORAGE_CHECKSUM_ERROR, -9132, -1, "HY000", "object storage data checksum error");
+DEFINE_ERROR_EXT_DEP(OB_BACKUP_ZONE_IDC_REGION_INVALID, -9133, -1, "HY000", "backup zone or backup idc or backup region invalid", "%s");
 
 DEFINE_ERROR_DEP(OB_ERR_TMP_FILE_ALREADY_SEALED, -9134, -1, "HY000", "tmp file has already sealed");
 DEFINE_ERROR_DEP(OB_TMP_FILE_EXCEED_DISK_QUOTA, -9135, -1, "HY000", "tmp file exceeds disk quota");
 DEFINE_ERROR_DEP(OB_ERR_DUPLICATE_INDEX, -9137, ER_DUP_INDEX, "HY000", "Duplicate index \'%s\' defined on the table \'%s.%s\'");
+DEFINE_ERROR(OB_NO_LS_REPLICA_CAN_DO_BACKUP, -9138, -1, "HY000", "No suitable replica found to perform backup");
 DEFINE_ERROR_EXT_DEP(OB_INVALID_KMS_DEST, -9139, -1, "HY000", "kms destination is not valid", "%s is not a valid uri");
 DEFINE_ERROR_DEP(OB_OBJECT_STORAGE_OBJECT_LOCKED_BY_WORM, -9140, -1, "HY000", "the object is locked by worm");
 DEFINE_ERROR(OB_RESOURCE_RELEASED, -9141, -1, "HY000", "the resource has been released");
@@ -2220,11 +2322,21 @@ DEFINE_ERROR_DEP(OB_ERR_XML_PARSE, -9549, ER_WRONG_VALUE, "HY000", "Incorrect XM
 DEFINE_ERROR_EXT(OB_ERR_EXP_NOT_ASSIGNABLE, -9550, -1, "HY000", "expression cannot be used as an assignment", "expression '%.*s' cannot be used as an assignment");
 DEFINE_ERROR(OB_ERR_CURSOR_CONTAIN_BOTH_REGULAR_AND_ARRAY, -9551, -1, "HY000", "Cursor contains both regular and array defines which is illegal");
 DEFINE_ERROR(OB_ERR_STATIC_BOOL_EXPR, -9552, -1, "HY000", "a static boolean expression must be used");
+DEFINE_ERROR(OB_ERR_DIRECTIVE_CONTEXT, -9553, -1, "HY000", "preprocessor directives are not supported in this context");
+DEFINE_ERROR(OB_UTL_FILE_INVALID_PATH, -9554, -1, "HY000", "invalid directory path");
+DEFINE_ERROR(OB_UTL_FILE_INVALID_MODE, -9555, -1, "HY000", "invalid mode");
 DEFINE_ERROR(OB_UTL_FILE_INVALID_FILEHANDLE, -9556, -1, "HY000", "invalid file ID");
+DEFINE_ERROR_EXT(OB_UTL_FILE_INVALID_OPERATION, -9557, -1, "HY000", "invalid file operation", "invalid file operation: %.*s");
 DEFINE_ERROR(OB_UTL_FILE_READ_ERROR, -9558, -1, "HY000", "file read error");
 DEFINE_ERROR(OB_UTL_FILE_WRITE_ERROR, -9559, -1, "HY000", "file write error");
+DEFINE_ERROR(OB_UTL_FILE_INTERNAL_ERROR, -9560, -1, "HY000", "internal error");
+DEFINE_ERROR(OB_UTL_FILE_CHARSETMISMATCH, -9561, -1, "HY000", "character set mismatch");
+DEFINE_ERROR(OB_UTL_FILE_INVALID_MAXLINESIZE, -9562, -1, "HY000", "invalid maximum line size");
+DEFINE_ERROR(OB_UTL_FILE_INVALID_FILENAME, -9563, -1, "HY000", "invalid file name");
 DEFINE_ERROR(OB_UTL_FILE_ACCESS_DENIED, -9564, -1, "HY000", "directory access denied");
 DEFINE_ERROR(OB_UTL_FILE_INVALID_OFFSET, -9565, -1, "HY000", "invalid offset specified for seek");
+DEFINE_ERROR(OB_UTL_FILE_DELETE_FAILED, -9566, -1, "HY000", "file remove operation failed");
+DEFINE_ERROR(OB_UTL_FILE_RENAME_FAILED, -9567, -1, "HY000", "file rename operation failed");
 DEFINE_ERROR(OB_ERR_BIND_TYPE_NOT_MATCH_COLUMN, -9568, -1, "HY000", "type of out argument must match type of column or bind variable");
 DEFINE_ERROR(OB_ERR_NESTED_TABLE_IN_TRI, -9569, -1, "HY000", "Nested table clause allowed only for INSTEAD OF triggers");
 DEFINE_ERROR(OB_ERR_COL_LIST_IN_TRI, -9570, -1, "HY000", "column list not valid for this trigger type");
@@ -2334,7 +2446,9 @@ DEFINE_ERROR(OB_NULL_CHECK_ERROR, -9673, -1, "HY000", "cannot pass NULL to a NOT
 DEFINE_ERROR(OB_ERR_EX_NAME_ARG, -9674, -1, "HY000", "name of exception expected for first arg in exception_init pragma");
 DEFINE_ERROR(OB_ERR_EX_ARG_NUM, -9675, -1, "HY000", "Illegal number of arguments for pragma EXCEPTION_INIT");
 DEFINE_ERROR(OB_ERR_EX_SECOND_ARG, -9676, -1, "HY000", "second argument to PRAGMA EXCEPTION_INIT must be a numeric literal");
+DEFINE_ERROR(OB_OBEN_CURSOR_NUMBER_IS_ZERO, -9677, -1, "HY000", "DBMS_SQL.OPEN_CURSOR failed. security_level of 0 is not allowed");
 DEFINE_ERROR(OB_NO_STMT_PARSE, -9678, -1, "HY000", "no statement parsed");
+DEFINE_ERROR(OB_ARRAY_CNT_IS_ILLEGAL, -9679, -1, "HY000", "Invalid count argument passed to procedure dbms_sql.define_array");
 DEFINE_ERROR_EXT(OB_ERR_WRONG_SCHEMA_REF, -9680, -1, "HY000", "Table,View Or Sequence reference not allowed in this context", "Table,View Or Sequence reference not '%.*s%.*s%.*s%.*s%.*s' allowed in this context");
 DEFINE_ERROR_EXT(OB_ERR_COMPONENT_UNDECLARED, -9681, -1, "HY000", "component must be declared", "component '%.*s' must be declared");
 DEFINE_ERROR_EXT(OB_ERR_FUNC_ONLY_IN_SQL, -9682, -1, "HY000", "function or pseudo-column may be used inside a SQL statement only", "function or pseudo-column '%s' may be used inside a SQL statement only");
@@ -2400,6 +2514,7 @@ DEFINE_ERROR(OB_ERR_UNPROTECTED_VIRTUAL_COLUMN, -9740, -1, "HY000", "A protected
 DEFINE_ERROR(OB_ERR_ATTRIBUTE_ASSOCIATION, -9741, -1, "HY000", "Attribute association failed for policy %.*s");
 DEFINE_ERROR(OB_ERR_MERGE_INTO_WITH_POLICY, -9742, -1, "HY000", "The MERGE INTO syntax does not support the security policy");
 DEFINE_ERROR_EXT(OB_ERR_SP_NO_DROP_SP, -9743, ER_SP_NO_DROP_SP, "HY000", "Can't drop or alter a procedure/function from within another stored routine.", "Can't drop or alter a '%s' from within another stored routine.");
+DEFINE_ERROR(OB_ERR_RECOMPILATION_OBJECT, -9744, -1, "HY000", "errors during recompilation/revalidation of object");
 DEFINE_ERROR(OB_ERR_VARIABLE_NOT_IN_SELECT_LIST, -9745, -1, "HY000", "variable not in select list");
 DEFINE_ERROR(OB_ERR_MULTI_RECORD, -9746, -1, "HY000", "coercion into multiple record targets not supported");
 DEFINE_ERROR(OB_ERR_MALFORMED_PS_PACKET, -9747, -1, "HY000", "malformed ps packet");
@@ -2433,6 +2548,20 @@ DEFINE_ERROR(OB_ERR_EVENT_RECURSION_FORBIDDEN, -9780, ER_EVENT_RECURSION_FORBIDD
 DEFINE_ERROR(OB_NO_PARTITION_FOR_GIVEN_VALUE_SCHEMA_ERROR, -9781, ER_NO_PARTITION_FOR_GIVEN_VALUE, "HY000", "Table has no partition for value");
 DEFINE_ERROR(OB_ERR_INVALID_CHARACTER, -9782, -1, "HY000", "invalid character");
 DEFINE_ERROR_EXT(OB_ERR_CURSOR_ATTR_APPLY, -9784, -1, "HY000", "cursor attribute may not be applied to non-cursor", "cursor attribute may not be applied to non-cursor %.*s");
+DEFINE_ERROR(OB_UTL_TCP_BUFFER_TOO_SMALL, -9785, -1, "HY000", "buffer too small");
+DEFINE_ERROR(OB_UTL_TCP_END_OF_INPUT, -9786, -1, "HY000", "end-of-input reached");
+DEFINE_ERROR_EXT(OB_UTL_TCP_NETWORK_ERROR, -9787, -1, "HY000", "network error:", "network error: %.*s");
+DEFINE_ERROR(OB_UTL_TCP_BAD_ARGUMENT, -9788, -1, "HY000", "bad argument");
+DEFINE_ERROR(OB_UTL_TCP_PARTIAL_MULTIBYTE_CHAR, -9789, -1, "HY000", "partial multibyte character");
+DEFINE_ERROR(OB_UTL_TCP_TRANSFER_TIMEOUT, -9790, -1, "HY000", "transfer timeout");
+DEFINE_ERROR(OB_UTL_TCP_NETWORK_ACCCESS_DENIED, -9791, -1, "HY000", "network access denied by access control list (ACL)");
+DEFINE_ERROR(OB_ERR_UTL_TCP_TOO_MANY_CONNS, -9792, -1, "HY000", "too many open connections");
+DEFINE_ERROR(OB_UTL_TCP_SECURITY_VIOLATION, -9793, -1, "HY000", "security violation");
+DEFINE_ERROR(OB_UTL_SMTP_INVALID_OPERATION, -9794, -1, "HY000", "invalid SMTP operation");
+DEFINE_ERROR_EXT(OB_UTL_SMTP_TRANSIENT_ERROR, -9795, -1, "HY000", "SMTP transient error:", "SMTP transient error: %.*s");
+DEFINE_ERROR_EXT(OB_UTL_SMTP_PERMANENT_ERROR, -9796, -1, "HY000", "SMTP permanent error:", "SMTP permanent error: %.*s");
+DEFINE_ERROR_EXT(OB_UTL_SMTP_UNSUPPORTED_SCHEME, -9797, -1, "HY000", "Authentication scheme '' not supported", "Authentication scheme '%.*s' not supported");
+DEFINE_ERROR(OB_UTL_SMTP_NO_SUPPORTED_SCHEME, -9798, -1, "HY000", "No supported authentication scheme found");
 DEFINE_ERROR(OB_DTL_WAIT_EAGAIN, -9799, -1, "HY000", "Px wait for dtl message again");
 DEFINE_ERROR_EXT(OB_ERR_COMPILE_RESULT_NOT_ADD_CACHE, -9800, -1, "HY000", "Throw this warning means that the user has handled some MySQL exceptions which may cause performance problems.", "To be compatible with MySQL, if an exception occurs when compiling an OB PL object (such as the object does not exist or a parameter mismatch), the relevant statement will be converted to a statement that throws an exception, and compiled object will be evicted by any schema change which may cause performance problems. User should create or redefine the pl object of the problem indicated in the warning. Problem object name: '%.*s'");
 DEFINE_ERROR_EXT(OB_ELEMENT_AT_GIVEN_INDEX_NOT_EXIST, -9801, -1, "HY000", "collection element at the given index does not exist.", "element at index [%ld] does not exist");
@@ -2441,6 +2570,7 @@ DEFINE_ERROR(OB_ERR_CANNOT_RENAME_TRIGGER, -9803, -1, "HY000", "renaming system 
 DEFINE_ERROR(OB_ERR_LOGON_TRIGGER, -9804, -1, "HY000", "client logon triggers cannot have BEFORE type");
 DEFINE_ERROR(OB_ERR_LOGOFF_TRIGGER, -9805, -1, "HY000", "client logoff triggers cannot have AFTER type");
 DEFINE_ERROR(OB_ERR_MALFORMED_WRAPPED_UNIT, -9806, -1, "HY000", "malformed or corrupted wrapped unit");
+DEFINE_ERROR(OB_ERR_INVALID_PLSQL_UNIT, -9807, -1, "HY000", "input to DBMS_DDL.WRAP is not a legal PL/SQL unit");
 DEFINE_ERROR(OB_ERR_INVALID_NESTED_CURSOR, -9811, -1, "HY000", "Cursor Variable in record, object, or collection is not supported by this release");
 // 余留位置
 ////////////////////////////////////////////////////////////////
@@ -2465,6 +2595,7 @@ DEFINE_ERROR_EXT(OB_TTL_COLUMN_NOT_EXIST, -10502, -1, "HY000", "TTL column not e
 DEFINE_ERROR_EXT(OB_TTL_COLUMN_TYPE_NOT_SUPPORTED, -10503, -1, "HY000", "Column type is not supported in TTL definition", "Column type of '%.*s' is not supported for TTL definition");
 DEFINE_ERROR_EXT(OB_TTL_CMD_NOT_ALLOWED, -10504, -1, "HY000", "TTL command is not allowed", "TTL command is not allowed, current TTL status is '%s'");
 DEFINE_ERROR(OB_TTL_NO_TASK_RUNNING, -10505, -1, "HY000", "No TTL task is running, please try trigger a new TTL task");
+DEFINE_ERROR(OB_TTL_TENANT_IS_RESTORE, -10506, -1, "HY000", "Cannot execute TTL task during tenant is restore");
 
 // 余留位置
 ////////////////////////////////////////////////////////////////
@@ -2524,6 +2655,7 @@ DEFINE_ERROR_DEP(OB_HDFS_PATH_IS_NOT_EMPTY_DIRECTORY, -11034, -1, "HY000", "HDFS
 DEFINE_ERROR_DEP(OB_HDFS_BUSY, -11035, -1, "HY000", "HDFS: io or resource is busy");
 DEFINE_ERROR_DEP(OB_HDFS_AUTHENTICATION_FAILED, -11036, -1, "HY000", "HDFS: authentication failed");
 DEFINE_ERROR_DEP(OB_HDFS_ACCESSCONTROL_ERROR, -11037, -1, "HY000", "HDFS: access control error");
+DEFINE_ERROR_DEP(OB_HDFS_STANDNDBY_ERROR, -11038, -1, "HY000", "HDFS: standby error");
 DEFINE_ERROR_DEP(OB_HDFS_SNAPSHOT_PROTOCOL_ERROR, -11039, -1, "HY000", "HDFS: snapshot protocol error");
 DEFINE_ERROR_DEP(OB_HDFS_INVALID_OFFSET, -11040, -1, "HY000", "HDFS: use invalid offset");
 DEFINE_ERROR_DEP(OB_HDFS_NOT_A_DIRECTORY, -11041, -1, "HY000", "HDFS: not a directory");
@@ -2561,9 +2693,6 @@ DEFINE_ERROR_DEP(OB_JNI_JAVA_OPTS_NOT_FOUND_ERROR, -11072, -1, "HY000", "java op
 DEFINE_ERROR_DEP(OB_JNI_CONNECTOR_PATH_NOT_FOUND_ERROR, -11073, -1, "HY000", "connector path could not be found");
 DEFINE_ERROR_DEP(OB_JNI_NOT_ENABLE_JAVA_ENV_ERROR, -11074, -1, "HY000", "java env was not enabled");
 DEFINE_ERROR_EXT(OB_JNI_FORCE_CLOSE_JAVA_ENV_ERROR, -11075, -1, "HY000", "Forcefully close java env error", "Forcefully close java env with error: %.*s");
-DEFINE_ERROR(OB_PLUGIN_VERSION_INCOMPATIBLE, -11076, -1, "HY000", "The plugin's version is incompatible with current server");
-DEFINE_ERROR(OB_PLUGIN_DLOPEN_FAILED, -11077, -1, "HY000", "Failed to open library");
-DEFINE_ERROR(OB_PLUGIN_ERROR, -11078, -1, "HY000", "Plugin internal error");
 DEFINE_ERROR_EXT(OB_CATALOG_EXIST, -11079, -1, "HY000", "Can't create catalog;catalog exists", "Can't create catalog '%.*s'; catalog exists");
 DEFINE_ERROR_EXT(OB_CATALOG_NOT_EXIST, -11080, -1, "HY000", "Catalog not exists", "Catalog '%.*s' doesn\'t exist");
 DEFINE_ERROR(OB_SKIP_PARSE_HEADER_CONFLICT, -11081, -1, "HY000", "skip_header and parse_header cannot be used at the same time");

@@ -225,7 +225,7 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
 
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
 
   if (OB_UNLIKELY(expr.arg_cnt_ < 1 || expr.arg_cnt_ > 3)) {
     ret = OB_INVALID_ARGUMENT;
@@ -435,7 +435,7 @@ int ObExprTokenize::TokenizeParam::try_load_dictionary_for_ik()
 {
   int ret = OB_SUCCESS;
   bool need_to_load_dic = false;
-  ObDicLoaderHandle dic_loader_handle;
+  ObTenantDicLoaderHandle dic_loader_handle;
   if (OB_FAIL(ObFtsIndexBuilderUtil::check_need_to_load_dic(parser_name_,
                                                             need_to_load_dic))) {
     LOG_WARN("fail to check need to load dic",

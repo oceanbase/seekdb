@@ -184,6 +184,10 @@ OB_STMT_TYPE_DEF(T_AUDIT, no_priv_needed, 199, ACTION_TYPE_OB_AUDIT)
 OB_STMT_TYPE_DEF(T_LOGIN, no_priv_needed, 200, ACTION_TYPE_LOGON)
 OB_STMT_TYPE_DEF(T_LOGOFF, no_priv_needed, 201, ACTION_TYPE_LOGOFF)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ALTER_CLUSTER, get_sys_tenant_super_priv, 202)
+// 203: T_ARCHIVE_LOG abandoned, id reserved
+// 204: T_BACKUP_DATABASE abandoned, id reserved
+// 205: T_BACKUP_MANAGE abandoned, id reserved
+// 206: T_RESTORE_TENANT_2 abandoned, id reserved
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_REFRESH_MEMORY_STAT, get_sys_tenant_super_priv, 207)
 OB_STMT_TYPE_DEF(T_ALTER_TABLESPACE, get_create_tablespace_priv, 209, ACTION_TYPE_ALTER_TABLESPACE)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ADMIN_ROLLING_UPGRADE_CMD, get_sys_tenant_super_priv, 210)
@@ -196,20 +200,31 @@ OB_STMT_TYPE_DEF(T_CREATE_PROFILE, no_priv_needed, 219, ACTION_TYPE_CREATE_PROFI
 OB_STMT_TYPE_DEF(T_ALTER_PROFILE, no_priv_needed, 220, ACTION_TYPE_ALTER_PROFILE)
 OB_STMT_TYPE_DEF(T_DROP_PROFILE, no_priv_needed, 221, ACTION_TYPE_DROP_PROFILE)
 OB_STMT_TYPE_DEF(T_ALTER_USER, get_create_user_privs, 222, ACTION_TYPE_ALTER_USER)
+// 228: T_BACKUP_BACKUPSET abandoned, id reserved
+// 229: T_BACKUP_ARCHIVELOG abandoned, id reserved
 OB_STMT_TYPE_DEF(T_ALTER_TRIGGER, no_priv_needed, 230, ACTION_TYPE_ALTER_TRIGGER)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_CREATE_TRIGGER, err_stmt_type_priv, 232)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_DIAGNOSTICS, no_priv_needed, 233)
+// 234: T_BACKUP_CLEAN abandoned, id reserved
 // 235: T_DELETE_POLICY abandoned, id reserved
 OB_STMT_TYPE_DEF(T_SHOW_QUERY_RESPONSE_TIME, err_stmt_type_priv, 236, ACTION_TYPE_ALTER_USER)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_PROFILE, err_stmt_type_priv, 237)
 
 // 250-251: SQL throttling abandoned, ids reserved
+// 252: T_BACKUP_SET_ENCRYPTION abandoned, id reserved
+// 253: T_BACKUP_SET_DECRYPTION abandoned, id reserved
 
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ADMIN_RECOVERY, get_sys_tenant_alter_system_priv, 254)
+// 255: T_CREATE_RESTORE_POINT abandoned, id reserved
+// 256: T_DROP_RESTORE_POINT abandoned, id reserved
 
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ADMIN_RUN_UPGRADE_JOB, get_sys_tenant_alter_system_priv, 257)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ADMIN_STOP_UPGRADE_JOB, get_sys_tenant_alter_system_priv, 258)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_FLUSH_DAG_WARNINGS, get_sys_tenant_super_priv, 259)
+// 261: T_BACKUP_BACKUPPIECE abandoned, id reserved
+// 262: T_ADD_RESTORE_SOURCE abandoned, id reserved
+// 263: T_CLEAR_RESTORE_SOURCE abandoned, id reserved
+// 264: T_SHOW_RESTORE_PREVIEW abandoned, id reserved
 // TODO
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_CREATE_DIRECTORY, no_priv_needed, 266)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_DROP_DIRECTORY, no_priv_needed, 267)
@@ -221,8 +236,11 @@ OB_STMT_TYPE_DEF_UNKNOWN_AT(T_CREATE_CONTEXT, no_priv_needed, 273)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_DROP_CONTEXT, no_priv_needed, 274)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_CHECKPOINT_SLOG, get_sys_tenant_alter_system_priv, 275)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_REFRESH_IO_CALIBRATION, get_sys_tenant_alter_system_priv, 276)
+// 278: T_PHYSICAL_RESTORE_STANDBY_TENANT abandoned, id reserved
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_RECOVER, get_sys_tenant_alter_system_priv, 279)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_SEQUENCES, err_stmt_type_priv, 283)
+// 284: T_BACKUP_KEY abandoned, id reserved
+// 286: T_CANCEL_RESTORE abandoned, id reserved
 // 287 is reserved for a removed statement type.
 // 288: T_RECOVER_TABLE abandoned, id reserved
 // 289: T_CANCEL_RECOVER_TABLE abandoned, id reserved
@@ -237,12 +255,9 @@ OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_FUNCTION_CODE, err_stmt_type_priv, 301)
 // 302: T_CHANGE_EXTERNAL_STORAGE_DEST abandoned, id reserved
 
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_CREATE_USER, err_stmt_type_priv, 304)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_INSTALL_PLUGIN, no_priv_needed, 305)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_UNINSTALL_PLUGIN, no_priv_needed, 306)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_FLUSH_MOCK, no_priv_needed, 307)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_FLUSH_MOCK_LIST, no_priv_needed, 308)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_HANDLER_MOCK, no_priv_needed, 309)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_PLUGINS, no_priv_needed, 310)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_ENGINE, err_stmt_type_priv, 311)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_OPEN_TABLES, err_stmt_type_priv, 312)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_REPAIR_TABLE, no_priv_needed, 313)
@@ -276,6 +291,7 @@ OB_STMT_TYPE_DEF_UNKNOWN_AT(T_KV_QUERY, err_stmt_type_priv, 340)
 OB_STMT_TYPE_DEF(T_EVENT_JOB_CREATE, get_event_stmt_need_privs, 343, ACTION_TYPE_EXECUTE_PROCEDURE)
 OB_STMT_TYPE_DEF(T_EVENT_JOB_ALTER, get_event_stmt_need_privs, 344, ACTION_TYPE_EXECUTE_PROCEDURE)
 OB_STMT_TYPE_DEF(T_EVENT_JOB_DROP, get_event_stmt_need_privs, 345, ACTION_TYPE_EXECUTE_PROCEDURE)
+// 346: T_BACKUP_CLUSTER_PARAMETERS abandoned, id reserved
 // 347-357 are reserved for removed statement types.
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_CACHE_INDEX, no_priv_needed, 358)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_LOAD_INDEX_INTO_CACHE, no_priv_needed, 359)

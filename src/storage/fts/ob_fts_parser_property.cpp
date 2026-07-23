@@ -26,7 +26,7 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"
 #include "storage/fts/ob_fts_literal.h"
-#include "storage/fts/ob_fts_plugin_helper.h"
+#include "storage/fts/ob_fts_parser_helper.h"
 
 #define USING_LOG_PREFIX STORAGE_FTS
 
@@ -614,8 +614,9 @@ int ObFTParserJsonProps::rebuild_props_for_ddl(const ObString &parser_name,
       if (OB_FAIL(ngram2_rebuild_props_for_ddl(log_to_user))) {
         LOG_WARN("fail to rebuild props for ddl", K(ret));
       }
-    } else if (OB_FAIL(plugin_rebuild_props_for_ddl(log_to_user))) {
-      LOG_WARN("fail to rebuild props for ddl", K(ret));
+    } else {
+      ret = OB_FUNCTION_NOT_DEFINED;
+      LOG_WARN("fulltext parser is not supported", K(ret), K(parser_name));
     }
   }
 
@@ -960,18 +961,6 @@ int ObFTParserJsonProps::ngram2_rebuild_props_for_ddl(const bool log_to_user)
       }
     }
   }
-  return ret;
-}
-
-int ObFTParserJsonProps::plugin_rebuild_props_for_ddl(const bool log_to_user)
-{
-  int ret = OB_SUCCESS;
-  if (!is_empty()) {
-    ret = OB_NOT_SUPPORTED;
-    if (log_to_user) {
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "Non-builtin parser property");
-    }
-  };
   return ret;
 }
 

@@ -1102,9 +1102,6 @@ class SqlKeywords:
          PASSWORD
          PHASE
          PHRASE
-         PLUGIN
-         PLUGINS
-         PLUGIN_DIR
          POINT
          POLYGON
          PORT
@@ -1769,9 +1766,6 @@ class SqlKeywords:
          PASSWORD_LOCK_TIME
          PAUSE
          PHASE
-         PLUGIN
-         PLUGIN_DIR
-         PLUGINS
          POINT
          POLYGON
          POOL

@@ -147,7 +147,6 @@ redo-dir=$BASE_DIR/store/redo
 port=$DEFAULT_PORT
 cpu_count=4
 memory_limit=2G
-plugin-dir=$BASE_DIR/plugin_dir
 EOF
   fi
   chmod 644 "$CONFIG_FILE" 2>/dev/null || true
@@ -515,7 +514,7 @@ cmd_config() {
 Usage:
   seekdb_config
   sudo seekdb_config --base-dir <path> [--restart]
-  sudo seekdb_config --base-dir <path> --data-dir <path> --redo-dir <path> [--port <port>] [--plugin-dir <path>] [--restart]
+  sudo seekdb_config --base-dir <path> --data-dir <path> --redo-dir <path> [--port <port>] [--restart]
 EOF
     return 0
   fi
@@ -528,7 +527,6 @@ EOF
   local new_data=""
   local new_redo=""
   local new_port=""
-  local new_plugin=""
   local new_cpu=""
   local new_memory=""
   local restart=0
@@ -553,11 +551,6 @@ EOF
       --port)
         [ "$#" -ge 2 ] || die "--port requires a value"
         new_port="$2"
-        shift 2
-        ;;
-      --plugin-dir)
-        [ "$#" -ge 2 ] || die "--plugin-dir requires a path"
-        new_plugin="$2"
         shift 2
         ;;
       --cpu-count)
@@ -592,7 +585,6 @@ EOF
   [ -n "$new_data" ] && write_config_value "data-dir" "$new_data"
   [ -n "$new_redo" ] && write_config_value "redo-dir" "$new_redo"
   [ -n "$new_port" ] && write_config_value "port" "$new_port"
-  [ -n "$new_plugin" ] && write_config_value "plugin-dir" "$new_plugin"
   [ -n "$new_cpu" ] && write_config_value "cpu_count" "$new_cpu"
   [ -n "$new_memory" ] && write_config_value "memory_limit" "$new_memory"
 

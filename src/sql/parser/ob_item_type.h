@@ -1360,6 +1360,7 @@ typedef enum ObItemType
   T_SHOW_PROCEDURE_STATUS = 3560,
   T_SHOW_FUNCTION_STATUS = 3561,
   T_SHOW_CREATE_TABLEGROUP = 3562,
+  // 3563: T_SHOW_RESTORE_PREVIEW abandoned, id reserved
   T_SHOW_CREATE_TRIGGER = 3564,
   T_SHOW_QUERY_RESPONSE_TIME = 3565,
   T_SHOW_SEQUENCES = 3566,
@@ -1519,6 +1520,7 @@ typedef enum ObItemType
   T_USE_DATABASE = 3724,
   T_DATABASE_OPTION_LIST = 3725,
   T_DATABASE_LIST = 3726,
+  T_LOG_RESTORE_SOURCE = 3732,
   T_ZONE_LIST = 3733,
   T_RESOURCE_POOL_LIST = 3734,
   T_ZONE = 3735,
@@ -2147,16 +2149,24 @@ typedef enum ObItemType
   T_DISCONNECT_CLUSTER = 4358,
   T_VERIFY = 4359,
   T_OBCONFIG_URL = 4360,
+  // 4361: T_ARCHIVE_LOG abandoned, id reserved
+  // 4362: T_BACKUP_DATABASE abandoned, id reserved
   // 4363: T_RECOVER_TABLE abandoned, id reserved
   T_REMAP_TABLE = 4364,
   T_REMAP_TABLEGROUP = 4365,
   T_REMAP_TABLESPACE = 4366,
+  // 4367: T_BACKUP_MANAGE abandoned, id reserved
+  // 4368: T_BACKUP_CLEAN abandoned, id reserved
   // 4369: T_DELETE_POLICY abandoned, id reserved
+  // 4370: T_BACKUP_KEY abandoned, id reserved
+  // 4371: T_RESTORE_TENANT_2 abandoned, id reserved
+  // 4372: T_CANCEL_RESTORE abandoned, id reserved
   // 4373: T_CANCEL_RECOVER_TABLE abandoned, id reserved
   T_GEN_ROWS = 4374,
   T_LOAD_BATCH_SIZE = 4375,
   T_REMOTE_OSS = 4377,
   T_RECOVER_TABLE_REMAP = 4379,
+  // 4380: T_PHYSICAL_RESTORE_UNTIL abandoned, id reserved
   T_REVOKE_SYSAUTH = 4381,
 
   // hint, for slave mapping
@@ -2223,6 +2233,8 @@ typedef enum ObItemType
   T_AUTO = 4439,
 
   // 4441-4449: SQL throttling abandoned, ids reserved
+  // 4450: T_BACKUP_SET_ENCRYPTION abandoned, id reserved
+  // 4451: T_BACKUP_SET_DECRYPTION abandoned, id reserved
   T_GROUPING_SETS_LIST = 4452,
   T_CUBE_LIST = 4453,
   T_MODIFY_READ_TRANSPORT = 4454,
@@ -2231,6 +2243,8 @@ typedef enum ObItemType
   T_RECOVERY_CONTROL = 4457,
   T_INDEX_ALTER_PARALLEL = 4458,
 
+  // 4459: T_CREATE_RESTORE_POINT abandoned, id reserved
+  // 4460: T_DROP_RESTORE_POINT abandoned, id reserved
 
   T_ADMIN_RUN_UPGRADE_JOB = 4461,
   T_ADMIN_STOP_UPGRADE_JOB = 4462,
@@ -2277,9 +2291,14 @@ typedef enum ObItemType
 
   T_PRIMARY_KEY_DROP = 4495,
   T_PRIMARY_KEY_ALTER = 4496,
+  // 4497: T_BACKUP_BACKUPSET abandoned, id reserved
+  // 4498: T_BACKUP_ARCHIVELOG abandoned, id reserved
   T_COPY_ID = 4499,
   T_CREATE_DIRECTORY = 4500,
   T_DROP_DIRECTORY = 4501,
+  // 4502: T_BACKUP_BACKUPPIECE abandoned, id reserved
+  // 4503: T_ADD_RESTORE_SOURCE abandoned, id reserved
+  // 4504: T_CLEAR_RESTORE_SOURCE abandoned, id reserved
 
   T_PREVIEW = 4505,
 
@@ -2400,12 +2419,9 @@ typedef enum ObItemType
   T_SINGLE_OPT = 4658,
   T_MAX_FILE_SIZE = 4659,
   T_SHOW_CREATE_USER = 4660,
-  T_INSTALL_PLUGIN = 4661,
-  T_UNINSTALL_PLUGIN = 4662,
   T_FLUSH_MOCK = 4663,
   T_FLUSH_MOCK_LIST = 4664,
   T_HANDLER_MOCK = 4665,
-  T_SHOW_PLUGINS = 4666,
   T_PSEUDO_PARTITION_LIST_COL = 4667,
   T_EXTERNAL_USER_SPECIFIED_PARTITION = 4668,
   T_ALTER_EXTERNAL_PARTITION_OPTION = 4669,
@@ -2431,6 +2447,7 @@ typedef enum ObItemType
   T_VEC_INDEX_PARAMS = 4690,
   T_VEC_INDEX_COLUMN = 4691,
   T_VEC_INDEX_COLUMN_EXPR = 4692,
+  // 4693: T_BACKUP_CLUSTER_PARAMETERS abandoned, id reserved
   T_PSEUDO_EXTERNAL_FILE_ROW = 4696,
   T_EXTERNAL_TABLE_AUTO_REFRESH = 4697,
 
@@ -2626,9 +2643,7 @@ typedef enum ObItemType
   T_LOG_ERROR=4860,
   T_READ_ERROR_LOG=4861,
 
-  T_PLUGIN_PROPERTIES = 4862,
   T_GENERAL_PROPERTY  = 4863,
-  T_PLUGIN_NAME       = 4864,
 
 
   T_UDF_PROPERTY = 4865,
@@ -2834,7 +2849,7 @@ typedef enum ObOutlineType
                            || (op) == T_SHOW_CREATE_CATALOG || (op) == T_SHOW_PROFILE \
                            || (op) == T_SHOW_PROCEDURE_CODE || (op) == T_SHOW_FUNCTION_CODE \
                            || (op) == T_SHOW_ENGINE || (op) == T_SHOW_OPEN_TABLES \
-                           || (op) == T_SHOW_PLUGINS || (op) == T_SHOW_CHECK_TABLE \
+                           || (op) == T_SHOW_CHECK_TABLE \
                            || (op) == T_SHOW_CREATE_LOCATION \
                            || (op) == T_SHOW_LOCATIONS)
 

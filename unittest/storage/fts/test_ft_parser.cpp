@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-#include "mtlenv/mock_server_runtime_env.h"
+#include "mtlenv/mock_tenant_module_env.h"
 
 #include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/ob_errno.h"
-#include "storage/tx_storage/ob_server_mem_limit_getter.h"
+#include "storage/tx_storage/ob_tenant_mem_limit_getter.h"
 #include "storage/fts/dict/ob_ft_cache.h"
 #include "storage/fts/dict/ob_ft_cache_dict.h"
 #include "storage/fts/dict/ob_ft_dat_dict.h"
@@ -90,12 +90,12 @@ protected:
   static void SetUpTestCase()
   {
     LOG_INFO("SetUpTestCase");
-    EXPECT_EQ(OB_SUCCESS, MockServerRuntimeEnv::get_instance().init());
+    EXPECT_EQ(OB_SUCCESS, MockTenantModuleEnv::get_instance().init());
   }
   static void TearDownTestCase()
   {
     LOG_INFO("TearDownTestCase");
-    MockServerRuntimeEnv::get_instance().destroy();
+    MockTenantModuleEnv::get_instance().destroy();
   }
   virtual void SetUp()
   {
@@ -104,7 +104,7 @@ protected:
     const int64_t DEFAULT_MAX_CACHE_SIZE = 1024LL * 1024 * 1024 * 1024;
     int ret = OB_SUCCESS;
     ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
-    if (OB_FAIL(ObKVGlobalCache::get_instance().init(&(ObServerMemLimitGetter::get_instance()),
+    if (OB_FAIL(ObKVGlobalCache::get_instance().init(&(ObTenantMemLimitGetter::get_instance()),
                                                      DEFAULT_BUCKET_NUM,
                                                      DEFAULT_MAX_CACHE_SIZE,
                                                      lib::ACHUNK_SIZE,

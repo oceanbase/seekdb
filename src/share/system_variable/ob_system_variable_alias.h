@@ -139,7 +139,6 @@ namespace share
   static const char* const OB_SV_FOREIGN_KEY_CHECKS = "foreign_key_checks";
   static const char* const OB_SV_TCP_INVITED_NODES = "ob_tcp_invited_nodes";
   static const char* const OB_SV_AUTO_INCREMENT_CACHE_SIZE = "auto_increment_cache_size";
-  static const char* const OB_SV_PLUGIN_DIR = "plugin_dir";
   static const char* const OB_SV_PARALLEL_SERVERS_TARGET = "parallel_servers_target";
   static const char* const OB_SV_TRX_IDLE_TIMEOUT = "ob_trx_idle_timeout";
   static const char* const OB_SV_BLOCK_ENCRYPTION_MODE = "block_encryption_mode";
@@ -664,7 +663,6 @@ namespace share
   static const char* const OB_SV_DISCONNECT_ON_EXPIRED_PASSWORD = "disconnect_on_expired_password";
   static const char* const OB_SV_EXTERNAL_USER = "external_user";
   static const char* const OB_SV_HAVE_CRYPT = "have_crypt";
-  static const char* const OB_SV_HAVE_DYNAMIC_LOADING = "have_dynamic_loading";
   static const char* const OB_SV_LANGUAGE = "language";
   static const char* const OB_SV_LC_MESSAGES_DIR = "lc_messages_dir";
   static const char* const OB_SV_LOWER_CASE_FILE_SYSTEM = "lower_case_file_system";
@@ -691,8 +689,6 @@ namespace share
   static const char* const OB_SV_SHA256_PASSWORD_PRIVATE_KEY_PATH = "sha256_password_private_key_path";
   static const char* const OB_SV_SHA256_PASSWORD_PUBLIC_KEY_PATH = "sha256_password_public_key_path";
   static const char* const OB_SV_SKIP_SHOW_DATABASE = "skip_show_database";
-  static const char* const OB_SV_PLUGIN_LOAD = "plugin_load";
-  static const char* const OB_SV_PLUGIN_LOAD_ADD = "plugin_load_add";
   static const char* const OB_SV_BIG_TABLES = "big_tables";
   static const char* const OB_SV_CHECK_PROXY_USERS = "check_proxy_users";
   static const char* const OB_SV_CONNECTION_CONTROL_FAILED_CONNECTIONS_THRESHOLD = "connection_control_failed_connections_threshold";

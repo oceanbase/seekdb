@@ -21,7 +21,6 @@
 #include "storage/fts/ob_fts_struct.h"
 
 using namespace oceanbase::common;
-using namespace oceanbase::plugin;
 
 namespace oceanbase
 {
@@ -91,22 +90,7 @@ int ObNgramFTParser::get_next_token(
   return ret;
 }
 
-ObNgramFTParserDesc::ObNgramFTParserDesc()
-  : is_inited_(false)
-{
-}
-
-int ObNgramFTParserDesc::init(ObPluginParam *param)
-{
-  is_inited_ = true;
-  return OB_SUCCESS;
-}
-
-int ObNgramFTParserDesc::deinit(ObPluginParam *param)
-{
-  reset();
-  return OB_SUCCESS;
-}
+ObNgramFTParserDesc::ObNgramFTParserDesc() {}
 
 int ObNgramFTParserDesc::segment(
     ObFTParserParam *param,
@@ -114,10 +98,7 @@ int ObNgramFTParserDesc::segment(
 {
   int ret = OB_SUCCESS;
   ObNgramFTParser *parser = nullptr;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ngram ft parser desc hasn't be initialized", K(ret), K(is_inited_));
-  } else if (OB_ISNULL(param) || OB_ISNULL(param->fulltext_) || OB_UNLIKELY(!param->is_valid())) {
+  if (OB_ISNULL(param) || OB_ISNULL(param->fulltext_) || OB_UNLIKELY(!param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(param));
   } else if (OB_ISNULL(parser = OB_NEWx(ObNgramFTParser, param->allocator_))) {

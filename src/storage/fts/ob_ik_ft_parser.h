@@ -22,7 +22,7 @@
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 #include "storage/fts/ik/ob_ik_processor.h"
-#include "plugin/interface/ob_plugin_ftparser_intf.h"
+#include "storage/fts/ob_fts_parser.h"
 
 #include <cstdint>
 namespace oceanbase
@@ -31,7 +31,7 @@ namespace storage
 {
 class ObFTDictHub;
 
-class ObIKFTParser final : public plugin::ObITokenIterator
+class ObIKFTParser final : public ObITokenIterator
 {
 public:
   ObIKFTParser(ObIAllocator &allocator, ObFTDictHub *hub)
@@ -52,7 +52,7 @@ public:
 
   virtual ~ObIKFTParser() { reset(); }
 
-  int init(const plugin::ObFTParserParam &param);
+  int init(const ObFTParserParam &param);
 
   int get_next_token(const char *&word,
                      int64_t &word_len,
@@ -72,13 +72,13 @@ private:
                        const ObFTCharUtil::CharType type);
 
 private:
-  int init_dict(const plugin::ObFTParserParam &param);
+  int init_dict(const ObFTParserParam &param);
 
   int init_single_dict(ObFTDictDesc desc, ObFTCacheRangeContainer &container);
 
-  int init_segmenter(const plugin::ObFTParserParam &param);
+  int init_segmenter(const ObFTParserParam &param);
 
-  int init_ctx(const plugin::ObFTParserParam &param);
+  int init_ctx(const ObFTParserParam &param);
 
   void reset();
 
@@ -110,21 +110,14 @@ private:
   DISABLE_COPY_ASSIGN(ObIKFTParser);
 };
 
-class ObIKFTParserDesc final : public plugin::ObIFTParserDesc
+class ObIKFTParserDesc final : public ObIFTParserDesc
 {
 public:
   ObIKFTParserDesc() {}
   virtual ~ObIKFTParserDesc() = default;
-  virtual int init(plugin::ObPluginParam *param) override;
-  virtual int deinit(plugin::ObPluginParam *param) override;
-  virtual int segment(plugin::ObFTParserParam *param, plugin::ObITokenIterator *&iter) const override;
-  virtual void free_token_iter(plugin::ObFTParserParam *param,
-                               plugin::ObITokenIterator *&iter) const override;
+  virtual int segment(ObFTParserParam *param, ObITokenIterator *&iter) const override;
+  virtual void free_token_iter(ObFTParserParam *param, ObITokenIterator *&iter) const override;
   virtual int get_add_word_flag(ObAddWordFlag &flag) const override;
-  OB_INLINE void reset() { is_inited_ = false; }
-
-private:
-  bool is_inited_;
 };
 
 } //  namespace storage

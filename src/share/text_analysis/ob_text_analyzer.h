@@ -45,7 +45,7 @@ public:
   bool filter_stopword_;
   bool need_grouping_;
   // language type
-  // word segment plugin type
+  // word segmentation parser type
   // specified normalization tricks
 };
 
