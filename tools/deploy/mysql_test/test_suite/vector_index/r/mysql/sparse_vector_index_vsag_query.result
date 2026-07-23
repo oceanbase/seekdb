@@ -468,12 +468,14 @@ c1	c2
 alter system set vector_index_optimize_duty_time='[00:00:00, 24:00:00]';
 drop index idx1 on t1;
 create vector index idx1 on t1(c2) with (lib=vsag, type=sindi, distance=inner_product, prune=true, drop_ratio_build=0.5, drop_ratio_search=0);
-select count(*) > 0 as has_results from (select c1 from t1 order by negative_inner_product(c2, '{3:0.3, 4:0.4}') approx limit 4) s;
-has_results
-1
-select count(*) > 0 as has_results from (select c1 from t1 order by negative_inner_product(c2, '{10:1, 11:1.1}') approx limit 4) s;
-has_results
-1
+select * from t1 order by negative_inner_product(c2, '{3:0.3, 4:0.4}') approx limit 4;
+c1	c2
+2	{2:0.2,3:0.3,4:0.4}
+1	{1:0.1,2:0.2,3:0.3}
+select * from t1 order by negative_inner_product(c2, '{10:1, 11:1.1}') approx limit 4;
+c1	c2
+9	{9:0.9,10:1,11:1.1}
+8	{8:0.8,9:0.9,10:1}
 select * from t1 order by negative_inner_product(c2, '{11:1.1, 12:1.2}') approx limit 4;
 c1	c2
 10	{10:1,11:1.1,12:1.2}
@@ -508,11 +510,12 @@ c1	c2	score
 5	{1:0.5,2:0.1,3:0.7}	-0.23000000976026058
 1	{1:0.1,2:0.7,3:0.3}	-0.23000000417232513
 4	{1:0.5,2:0.2,3:0.6}	-0.220000009983778
-select count(*) = 4 as has_four_rows, min(score) < 0 as has_negative_score
-from (select negative_inner_product(c2, '{2:0.2, 3:0.3}') as score
-from t1 order by score approx limit 4 parameters(refine_k=1)) s;
-has_four_rows	has_negative_score
-1	1
+select *, negative_inner_product(c2, '{2:0.2, 3:0.3}') as score from t1 order by score approx limit 4 parameters(refine_k=1);
+c1	c2	score
+5	{1:0.5,2:0.1,3:0.7}	-0.23000000976026058
+1	{1:0.1,2:0.7,3:0.3}	-0.23000000417232513
+4	{1:0.5,2:0.2,3:0.6}	-0.220000009983778
+3	{1:0.3,2:0.3,3:0.5}	-0.21000000834465027
 alter system set vector_index_optimize_duty_time='[00:00:00, 24:00:00]';
 # 多分区查询: 增量数据
 drop table if exists t1;
