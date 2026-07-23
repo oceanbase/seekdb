@@ -87,7 +87,7 @@ ObTenantFreezeInfoMgr::ObTenantFreezeInfoMgr()
     snapshots_(),
     lock_(),
     cur_idx_(0),
-    pending_snapshot_gc_history_scn_(0),
+    snapshot_gc_scn_renewal_state_(),
     reload_timer_(),
     inited_(false)
 {
@@ -467,37 +467,6 @@ share::SCN ObTenantFreezeInfoMgr::get_snapshot_gc_scn()
 {
   RLockGuard lock_guard(lock_);
   return freeze_info_mgr_.get_snapshot_gc_scn();
-}
-
-void ObTenantFreezeInfoMgr::notify_snapshot_gc_history_created(const int64_t history_scn)
-{
-  if (history_scn <= 0 || INT64_MAX == history_scn) {
-    STORAGE_LOG_RET(WARN, OB_INVALID_ARGUMENT,
-        "invalid snapshot gc history scn", K(history_scn));
-  } else {
-    int64_t old_scn = ATOMIC_LOAD(&pending_snapshot_gc_history_scn_);
-    while (old_scn < history_scn) {
-      const int64_t actual_scn = ATOMIC_VCAS(
-          &pending_snapshot_gc_history_scn_, old_scn, history_scn);
-      if (old_scn == actual_scn) {
-        break;
-      } else {
-        old_scn = actual_scn;
-      }
-    }
-  }
-}
-
-int64_t ObTenantFreezeInfoMgr::get_pending_snapshot_gc_history_scn() const
-{
-  return ATOMIC_LOAD(&pending_snapshot_gc_history_scn_);
-}
-
-bool ObTenantFreezeInfoMgr::try_clear_pending_snapshot_gc_history_scn(
-    const int64_t history_scn)
-{
-  return history_scn > 0
-      && ATOMIC_BCAS(&pending_snapshot_gc_history_scn_, history_scn, 0);
 }
 
 ObTenantFreezeInfoMgr::ReloadTask::ReloadTask(ObTenantFreezeInfoMgr &mgr)

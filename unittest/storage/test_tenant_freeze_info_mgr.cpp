@@ -17,7 +17,7 @@
 #include <gtest/gtest.h>
 #include <thread>
 
-#include "storage/compaction/ob_tenant_freeze_info_mgr.h"
+#include "storage/compaction/ob_snapshot_gc_scn_renewal_state.h"
 
 namespace oceanbase
 {
@@ -26,40 +26,35 @@ namespace storage
 namespace unittest
 {
 
-TEST(TestTenantFreezeInfoMgr, snapshot_gc_history_scn_coalesces_by_max)
+TEST(TestSnapshotGcScnRenewalState, renew_target_scn_coalesces_by_max)
 {
-  ObTenantFreezeInfoMgr freeze_info_mgr;
+  ObSnapshotGcScnRenewalState renewal_state;
   static const int64_t THREAD_COUNT = 8;
   std::thread threads[THREAD_COUNT];
 
-  EXPECT_EQ(0, freeze_info_mgr.get_pending_snapshot_gc_history_scn());
-  freeze_info_mgr.notify_snapshot_gc_history_created(100);
-  freeze_info_mgr.notify_snapshot_gc_history_created(50);
-  EXPECT_EQ(100, freeze_info_mgr.get_pending_snapshot_gc_history_scn());
+  EXPECT_EQ(0, renewal_state.get_target_scn());
+  renewal_state.update_target_scn(100);
+  renewal_state.update_target_scn(50);
+  EXPECT_EQ(100, renewal_state.get_target_scn());
 
   for (int64_t i = 0; i < THREAD_COUNT; ++i) {
-    threads[i] = std::thread([&freeze_info_mgr, i]() {
-      freeze_info_mgr.notify_snapshot_gc_history_created(200 + i);
+    threads[i] = std::thread([&renewal_state, i]() {
+      renewal_state.update_target_scn(200 + i);
     });
   }
   for (int64_t i = 0; i < THREAD_COUNT; ++i) {
     threads[i].join();
   }
   EXPECT_EQ(200 + THREAD_COUNT - 1,
-      freeze_info_mgr.get_pending_snapshot_gc_history_scn());
+      renewal_state.get_target_scn());
 }
 
-TEST(TestTenantFreezeInfoMgr, snapshot_gc_history_scn_clear_uses_compare_and_swap)
+TEST(TestSnapshotGcScnRenewalState, renew_target_scn_never_moves_backward)
 {
-  ObTenantFreezeInfoMgr freeze_info_mgr;
-  freeze_info_mgr.notify_snapshot_gc_history_created(100);
-
-  EXPECT_FALSE(freeze_info_mgr.try_clear_pending_snapshot_gc_history_scn(90));
-  freeze_info_mgr.notify_snapshot_gc_history_created(200);
-  EXPECT_FALSE(freeze_info_mgr.try_clear_pending_snapshot_gc_history_scn(100));
-  EXPECT_EQ(200, freeze_info_mgr.get_pending_snapshot_gc_history_scn());
-  EXPECT_TRUE(freeze_info_mgr.try_clear_pending_snapshot_gc_history_scn(200));
-  EXPECT_EQ(0, freeze_info_mgr.get_pending_snapshot_gc_history_scn());
+  ObSnapshotGcScnRenewalState renewal_state;
+  renewal_state.update_target_scn(200);
+  renewal_state.update_target_scn(100);
+  EXPECT_EQ(200, renewal_state.get_target_scn());
 }
 
 } // namespace unittest

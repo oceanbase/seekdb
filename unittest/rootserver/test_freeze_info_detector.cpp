@@ -19,6 +19,7 @@
 #define private public
 #include "rootserver/freeze/ob_freeze_info_detector.h"
 #include "rootserver/freeze/ob_snapshot_gc_scn_renewer.h"
+#include "storage/compaction/ob_snapshot_gc_scn_renewal_state.h"
 #undef private
 
 namespace oceanbase
@@ -31,32 +32,31 @@ namespace unittest
 TEST(TestSnapshotGcScnRenewer, snapshot_gc_history_waits_for_undo_retention)
 {
   static const int64_t SECOND_NS = 1000L * 1000L * 1000L;
+  static const int64_t SECOND_US = 1000L * 1000L;
   static const int64_t HISTORY_SCN = 100L * SECOND_NS;
 
-  EXPECT_FALSE(ObSnapshotGcScnRenewer::is_snapshot_gc_history_due_(
-      119L * SECOND_NS, HISTORY_SCN, 20));
-  EXPECT_TRUE(ObSnapshotGcScnRenewer::is_snapshot_gc_history_due_(
-      120L * SECOND_NS, HISTORY_SCN, 20));
-  EXPECT_TRUE(ObSnapshotGcScnRenewer::is_snapshot_gc_history_due_(
-      120L * SECOND_NS, HISTORY_SCN, 0));
+  EXPECT_EQ(120L * SECOND_US,
+      ObSnapshotGcScnRenewer::calc_next_renew_ts_(
+          HISTORY_SCN, 20));
+  EXPECT_EQ(100L * SECOND_US,
+      ObSnapshotGcScnRenewer::calc_next_renew_ts_(
+          HISTORY_SCN, 0));
 }
 
-TEST(TestSnapshotGcScnRenewer, later_history_does_not_change_first_deadline)
+TEST(TestSnapshotGcScnRenewer, later_history_does_not_change_next_renew_time)
 {
   static const int64_t SECOND_NS = 1000L * 1000L * 1000L;
+  static const int64_t SECOND_US = 1000L * 1000L;
   static const int64_t FIRST_HISTORY_SCN = 100L * SECOND_NS;
   static const int64_t LATEST_HISTORY_SCN = 110L * SECOND_NS;
-  static const int64_t CURRENT_TIME_NS = 120L * SECOND_NS;
   ObSnapshotGcScnRenewer renewer;
 
-  EXPECT_EQ(FIRST_HISTORY_SCN,
-      renewer.latch_first_pending_snapshot_gc_history_scn_(FIRST_HISTORY_SCN));
-  EXPECT_EQ(FIRST_HISTORY_SCN,
-      renewer.latch_first_pending_snapshot_gc_history_scn_(LATEST_HISTORY_SCN));
-  EXPECT_TRUE(ObSnapshotGcScnRenewer::is_snapshot_gc_history_due_(
-      CURRENT_TIME_NS, FIRST_HISTORY_SCN, 20));
-  EXPECT_FALSE(ObSnapshotGcScnRenewer::is_snapshot_gc_history_due_(
-      CURRENT_TIME_NS, LATEST_HISTORY_SCN, 20));
+  EXPECT_EQ(120L * SECOND_US,
+      renewer.latch_next_renew_ts_(FIRST_HISTORY_SCN, 20));
+  EXPECT_EQ(120L * SECOND_US,
+      renewer.latch_next_renew_ts_(LATEST_HISTORY_SCN, 20));
+  EXPECT_EQ(120L * SECOND_US,
+      renewer.latch_next_renew_ts_(LATEST_HISTORY_SCN, 60));
 }
 
 TEST(TestSnapshotGcScnRenewer, standby_start_and_restart_only_reload)
@@ -96,26 +96,41 @@ TEST(TestSnapshotGcScnRenewer, append_activation_immediately_requests_catchup)
 
 TEST(TestSnapshotGcScnRenewer, demotion_stops_renew_and_reactivation_catches_up)
 {
-  static const int64_t PENDING_HISTORY_SCN = 123456789;
+  static const int64_t NEXT_RENEW_TS = 123456789;
+  static const int64_t REFRESHED_SCN = 987654321;
   ObSnapshotGcScnRenewer renewer;
   renewer.is_inited_ = true;
   renewer.is_primary_service_ = true;
   renewer.resume();
   ASSERT_EQ(OB_SUCCESS, renewer.on_become_primary());
-  renewer.first_pending_snapshot_gc_history_scn_ = PENDING_HISTORY_SCN;
+  renewer.next_renew_ts_ = NEXT_RENEW_TS;
+  renewer.refreshed_scn_ = REFRESHED_SCN;
 
   renewer.pause(); // APPEND service deactivation before RAW_WRITE takes over.
   EXPECT_TRUE(renewer.is_paused());
   EXPECT_FALSE(renewer.is_primary_active_);
   EXPECT_FALSE(renewer.need_renew(1));
-  EXPECT_EQ(PENDING_HISTORY_SCN,
-      renewer.first_pending_snapshot_gc_history_scn_);
+  EXPECT_EQ(NEXT_RENEW_TS, renewer.next_renew_ts_);
+  EXPECT_EQ(REFRESHED_SCN, renewer.refreshed_scn_);
 
   renewer.resume();
   ASSERT_EQ(OB_SUCCESS, renewer.on_become_primary());
   EXPECT_TRUE(renewer.is_primary_active_);
   EXPECT_TRUE(renewer.need_primary_catchup_);
   EXPECT_TRUE(renewer.need_renew(1));
+}
+
+TEST(TestSnapshotGcScnRenewer, refreshed_scn_is_consumer_progress)
+{
+  storage::ObSnapshotGcScnRenewalState renewal_state;
+  ObSnapshotGcScnRenewer renewer;
+
+  renewal_state.update_target_scn(100);
+  renewer.refreshed_scn_ = 100;
+  EXPECT_EQ(renewal_state.get_target_scn(), renewer.refreshed_scn_);
+
+  renewal_state.update_target_scn(200);
+  EXPECT_GT(renewal_state.get_target_scn(), renewer.refreshed_scn_);
 }
 
 TEST(TestSnapshotGcScnRenewer, renew_failure_retries_on_fixed_interval)
@@ -125,7 +140,8 @@ TEST(TestSnapshotGcScnRenewer, renew_failure_retries_on_fixed_interval)
   renewer.is_primary_service_ = true;
   renewer.is_primary_active_ = true;
   renewer.need_primary_catchup_ = true;
-  renewer.last_gc_renew_attempt_ts_ = START_TS;
+  renewer.next_renew_ts_ =
+      START_TS + renewer.RENEW_INTERVAL_US;
 
   EXPECT_FALSE(renewer.need_renew(
       START_TS + renewer.RENEW_INTERVAL_US - 1));

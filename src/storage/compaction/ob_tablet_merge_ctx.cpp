@@ -156,14 +156,14 @@ int ObTabletMiniMergeCtx::update_tablet(
     LOG_WARN("failed to release memtable", KR(ret), "param", get_dag_param());
   } else if (FALSE_IT(time_guard_click(ObStorageCompactionTimeGuard::RELEASE_MEMTABLE))) {
   } else {
-    try_notify_snapshot_gc_history_created();
+    try_update_snapshot_gc_renew_target();
     // schedule after mini
     try_schedule_compaction_after_mini(new_tablet_handle);
   }
   return ret;
 }
 
-void ObTabletMiniMergeCtx::try_notify_snapshot_gc_history_created()
+void ObTabletMiniMergeCtx::try_update_snapshot_gc_renew_target()
 {
   int tmp_ret = OB_SUCCESS;
   const ObSSTable *new_sstable = nullptr;
@@ -185,8 +185,9 @@ void ObTabletMiniMergeCtx::try_notify_snapshot_gc_history_created()
     LOG_WARN_RET(OB_ERR_UNEXPECTED, "tenant freeze info mgr is null",
         K(history_scn), K(get_dag_param()));
   } else {
-    freeze_info_mgr->notify_snapshot_gc_history_created(history_scn);
-    LOG_INFO("notify snapshot gc history created after mini merge",
+    freeze_info_mgr->get_snapshot_gc_scn_renewal_state().update_target_scn(
+        history_scn);
+    LOG_INFO("update snapshot gc renewal target after mini merge",
         K(history_scn), K(get_dag_param()), "tnode_stat", info_collector_.tnode_stat_);
   }
 }

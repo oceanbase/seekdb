@@ -452,9 +452,9 @@ int ObTenantTabletScheduler::try_update_upper_trans_version_and_gc_sstable(
                   LOG_WARN_RET(OB_ERR_UNEXPECTED, "tenant freeze info mgr is null",
                       K(tablet_id), K(max_resolved_upper_trans_version));
                 } else {
-                  freeze_info_mgr->notify_snapshot_gc_history_created(
-                      max_resolved_upper_trans_version);
-                  LOG_INFO("notify snapshot gc history after resolving upper trans version",
+                  freeze_info_mgr->get_snapshot_gc_scn_renewal_state()
+                      .update_target_scn(max_resolved_upper_trans_version);
+                  LOG_INFO("update snapshot gc renewal target after resolving upper trans version",
                       K(tablet_id), K(max_resolved_upper_trans_version));
                 }
               }

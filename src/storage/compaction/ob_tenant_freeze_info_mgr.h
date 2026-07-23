@@ -27,6 +27,7 @@
 #include "share/ob_freeze_info_proxy.h"
 #include "rootserver/ob_snapshot_table_proxy.h"
 #include "share/scn.h"
+#include "storage/compaction/ob_snapshot_gc_scn_renewal_state.h"
 
 namespace oceanbase
 {
@@ -123,10 +124,10 @@ public:
   int get_min_dependent_freeze_info(share::ObFreezeInfo &freeze_info);
   int64_t get_snapshot_gc_ts();
   share::SCN get_snapshot_gc_scn();
-
-  void notify_snapshot_gc_history_created(const int64_t history_scn);
-  int64_t get_pending_snapshot_gc_history_scn() const;
-  bool try_clear_pending_snapshot_gc_history_scn(const int64_t history_scn);
+  ObSnapshotGcScnRenewalState &get_snapshot_gc_scn_renewal_state()
+  {
+    return snapshot_gc_scn_renewal_state_;
+  }
 
   ObTenantFreezeInfoMgr(const ObTenantFreezeInfoMgr&) = delete;
   ObTenantFreezeInfoMgr& operator=(const ObTenantFreezeInfoMgr&) = delete;
@@ -189,7 +190,7 @@ private:
   common::ObSEArray<share::ObSnapshotInfo, 8> snapshots_[2]; // snapshots_ maintains multi_version_start for index and others
   common::RWLock lock_;
   int64_t cur_idx_;
-  int64_t pending_snapshot_gc_history_scn_;
+  ObSnapshotGcScnRenewalState snapshot_gc_scn_renewal_state_;
   common::ObTimer reload_timer_;
   bool inited_;
 };

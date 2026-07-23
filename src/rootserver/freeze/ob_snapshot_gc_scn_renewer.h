@@ -45,12 +45,12 @@ public:
   int64_t get_renew_interval() const { return RENEW_INTERVAL_US; }
 
 private:
-  static bool is_snapshot_gc_history_due_(
-      const int64_t current_time_ns,
-      const int64_t first_pending_history_scn,
+  static int64_t calc_next_renew_ts_(
+      const int64_t renew_target_scn,
       const int64_t undo_retention_s);
-  int64_t latch_first_pending_snapshot_gc_history_scn_(
-      const int64_t pending_history_scn);
+  int64_t latch_next_renew_ts_(
+      const int64_t renew_target_scn,
+      const int64_t undo_retention_s);
   bool is_primary_service() const { return is_primary_service_; }
 
 private:
@@ -61,8 +61,11 @@ private:
   bool is_primary_service_;
   bool is_primary_active_;
   bool need_primary_catchup_;
-  int64_t last_gc_renew_attempt_ts_; // > 0 after renewal starts; retries use the fixed interval
-  int64_t first_pending_snapshot_gc_history_scn_; // retained until the first renewal is due
+  // The next wall-clock time in microseconds at which renewal may run.
+  // Zero means no renewal is scheduled; primary catch-up treats zero as immediate.
+  int64_t next_renew_ts_;
+  // The greatest renewal target SCN covered by a successful refresh.
+  int64_t refreshed_scn_;
   ObMajorMergeInfoManager *major_merge_info_mgr_;
   // Serialize primary activation/deactivation with the complete renew transaction.
   // Once pause() returns, no renewal from the old APPEND service can still be running.
