@@ -3990,13 +3990,6 @@ id	field	type	length	precision	nullable
 22	recent_get_cnt	5	0	20	0
 23	score	15	0	38	0
 24	align_size	5	0	20	0
-table oceanbase.__all_virtual_query_response_time column_count 4 table_id 12325
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12325 order by column_id;
-id	field	type	length	precision	nullable
-16	response_time	5	0	20	0
-17	count	5	0	20	0
-18	total	5	0	20	0
-19	sql_type	22	128	-1	0
 table oceanbase.__all_virtual_column_checksum_error_info column_count 9 table_id 12330
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12330 order by column_id;
 id	field	type	length	precision	nullable

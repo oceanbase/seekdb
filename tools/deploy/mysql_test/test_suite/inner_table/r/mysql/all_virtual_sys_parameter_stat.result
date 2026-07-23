@@ -181,9 +181,6 @@ px_node_policy
 px_task_size
 px_workers_per_cpu_quota
 query_memory_limit_percentage
-query_response_time_flush
-query_response_time_range_base
-query_response_time_stats
 range_optimizer_max_mem_size
 recover_table_concurrency
 recover_table_dop

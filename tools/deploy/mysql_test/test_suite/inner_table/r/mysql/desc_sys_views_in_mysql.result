@@ -1638,14 +1638,6 @@ DESCRIPTION	text	YES		NULL
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from information_schema.ST_SPATIAL_REFERENCE_SYSTEMS limit 1);
 cnt
 1
-desc information_schema.QUERY_RESPONSE_TIME;
-Field	Type	Null	Key	Default	Extra
-RESPONSE_TIME	bigint(20)	NO			
-COUNT	decimal(42,0)	NO			
-TOTAL	decimal(42,0)	NO			
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from information_schema.QUERY_RESPONSE_TIME limit 1);
-cnt
-1
 desc oceanbase.DBA_OB_FREEZE_INFO;
 Field	Type	Null	Key	Default	Extra
 FROZEN_SCN	bigint(20) unsigned	NO		NULL	
@@ -2597,15 +2589,6 @@ ret	bigint(20)	NO		NULL
 dl	varchar(128)	NO		NULL	
 type	bigint(20)	NO		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from mysql.func limit 1);
-cnt
-1
-desc oceanbase.V$OB_QUERY_RESPONSE_TIME_HISTOGRAM;
-Field	Type	Null	Key	Default	Extra
-SQL_TYPE	varchar(128)	NO			
-RESPONSE_TIME	decimal(24,6)	NO			
-COUNT	bigint(20)	NO			
-TOTAL	decimal(24,6)	NO			
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.V$OB_QUERY_RESPONSE_TIME_HISTOGRAM limit 1);
 cnt
 1
 desc oceanbase.DBA_OB_TABLE_SPACE_USAGE;
