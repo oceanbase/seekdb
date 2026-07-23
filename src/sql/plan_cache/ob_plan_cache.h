@@ -36,10 +36,6 @@ namespace observer
   class ObGVSql;
   class ObAllVirtualSqlPlan;
 }
-namespace rpc
-{
-  class ObLoadBaselineArg;
-}
 namespace pl
 {
 class ObPLFunction;
@@ -59,7 +55,6 @@ class ObPCVSet;
 class ObILibCacheObject;
 class ObPhysicalPlan;
 class ObLibCacheAtomicOp;
-class ObEvolutionPlan;
 
 
 struct ObKVEntryTraverseOp

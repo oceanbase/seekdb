@@ -1,0 +1,52 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_ROOTSERVICE_OB_CLUSTER_EVENT_H__
+#define OCEANBASE_ROOTSERVICE_OB_CLUSTER_EVENT_H__
+
+#include "lib/utility/ob_print_kv.h"
+#include "lib/profile/ob_trace_id.h"
+#include "share/ob_structured_event_logger.h"  // ROOTSERVICE_EVENT_ADD
+// Cluster event payloads use the larger extra_info field.
+#define CLUSTER_EVENT_ADD(level, error_code, event, args...) \
+    do { \
+      const int64_t MAX_VALUE_LENGTH = 512; \
+      char VALUE[MAX_VALUE_LENGTH]; \
+      int64_t pos = 0; \
+      ::oceanbase::common::ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();\
+      ::oceanbase::common::databuff_print_kv(VALUE, MAX_VALUE_LENGTH, pos, ##args, KPC(trace_id)); \
+      ROOTSERVICE_EVENT_ADD("cluster_event", event, "event_type", #level, "ret", error_code, NULL, "", NULL, "", NULL, "", "message", "", ObHexEscapeSqlStr(VALUE)); \
+    } while (0)
+
+#define CLUSTER_EVENT_ADD_CONTROL(error_code, event, args...) \
+    CLUSTER_EVENT_ADD(CONTROL, error_code, event, ##args)
+
+#define CLUSTER_EVENT_ADD_CONTROL_START(error_code, event, args...) \
+    CLUSTER_EVENT_ADD(CONTROL, error_code, event, "flag", "start", ##args)
+
+#define CLUSTER_EVENT_ADD_CONTROL_FINISH(error_code, event, args...) \
+    CLUSTER_EVENT_ADD(CONTROL, error_code, event,  "flag", "finish", ##args)
+
+#define CLUSTER_EVENT_ADD_LOG(error_code, event, args...)\
+    do {\
+      if (OB_SUCCESS == error_code) {\
+        CLUSTER_EVENT_ADD(INFO, error_code, event, ##args);\
+      } else {\
+        CLUSTER_EVENT_ADD(WARN, error_code, event, ##args);\
+      }\
+    } while (0)
+
+#endif

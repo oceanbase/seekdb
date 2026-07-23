@@ -667,7 +667,7 @@ bool ObSQLSessionMgr::CheckSessionFunctor::operator()(sql::ObSQLSessionMgr::Key 
           } else if (OB_FAIL(sess_info->is_trx_idle_timeout(is_timeout))) {
             // kill transaction which is idle more than configuration 'ob_trx_idle_timeout'
             LOG_WARN("fail to check transaction idle timeout", K(ret));
-          } else if (true == is_timeout && !sess_info->associated_xa()) {
+          } else if (true == is_timeout) {
             LOG_INFO("transaction is idle timeout, start to rollback", K(key.sessid_));
             int tmp_ret;
             if (OB_SUCCESS != (tmp_ret = sess_mgr_->kill_idle_timeout_tx(sess_info))) {

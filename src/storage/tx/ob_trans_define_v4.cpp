@@ -44,7 +44,7 @@ ObTxIsolationLevel tx_isolation_from_str(const ObString &s)
 
 
 ObTxSavePoint::ObTxSavePoint()
-  : type_(T::INVL), scn_(), session_id_(0), user_create_(false), name_() {}
+  : type_(T::INVL), scn_(), name_() {}
 
 ObTxSavePoint::ObTxSavePoint(const ObTxSavePoint &a)
 {
@@ -59,31 +59,12 @@ ObTxSavePoint &ObTxSavePoint::operator=(const ObTxSavePoint &a)
   case T::SAVEPOINT:
   case T::STASH: {
     name_ = a.name_;
-    session_id_ = a.session_id_;
-    user_create_ = a.user_create_;
     break;
   }
   case T::SNAPSHOT: snapshot_ = a.snapshot_; break;
   default: break;
   }
   return *this;
-}
-
-bool ObTxSavePoint::operator==(const ObTxSavePoint &a) const
-{
-  bool is_equal = false;
-  if (type_ == a.type_ && scn_== a.scn_) {
-    switch(type_) {
-    case T::SAVEPOINT:
-    case T::STASH: {
-      is_equal = name_ == a.name_ && session_id_ == a.session_id_ && user_create_ == a.user_create_;
-      break;
-    }
-    case T::SNAPSHOT: is_equal = snapshot_ == a.snapshot_; break;
-    default: break;
-    }
-  }
-  return is_equal;
 }
 
 ObTxSavePoint::~ObTxSavePoint()
@@ -96,8 +77,6 @@ void ObTxSavePoint::release()
   type_ = T::INVL;
   snapshot_ = NULL;
   scn_.reset();
-  session_id_ = 0;
-  user_create_ = false;
 }
 
 void ObTxSavePoint::rollback()
@@ -115,7 +94,7 @@ void ObTxSavePoint::init(ObTxReadSnapshot *snapshot)
   scn_ = snapshot->tx_seq();
 }
 
-int ObTxSavePoint::init(const ObTxSEQ &scn, const ObString &name, const uint32_t session_id, const bool user_create, const bool stash)
+int ObTxSavePoint::init(const ObTxSEQ &scn, const ObString &name, const bool stash)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(name_.assign(name))) {
@@ -127,8 +106,6 @@ int ObTxSavePoint::init(const ObTxSEQ &scn, const ObString &name, const uint32_t
   } else {
     type_ = stash ? T::STASH : T::SAVEPOINT;
     scn_ = scn;
-    session_id_ = session_id;
-    user_create_ = user_create;
   }
   return ret;
 }
@@ -145,10 +122,6 @@ DEF_TO_STRING(ObTxSavePoint)
   }
   J_COMMA();
   J_KV(K_(scn));
-  J_COMMA();
-  J_KV(K_(session_id));
-  J_COMMA();
-  J_KV(K_(user_create));
   J_OBJ_END();
   return pos;
 }
@@ -269,20 +242,12 @@ OB_SERIALIZE_MEMBER(ObTxDesc,
                     active_scn_,
                     has_write_state_,
                     write_state_,
-                    xid_,
                     seq_base_);
 OB_SERIALIZE_MEMBER(ObTxParam,
                     timeout_us_,
                     lock_timeout_us_,
                     access_mode_,
                     isolation_);
-OB_SERIALIZE_MEMBER(ObTxSavePoint,
-                    type_,
-                    scn_,
-                    session_id_,
-                    user_create_,
-                    name_);
-
 ObTxDesc::ObTxDesc()
   : trace_info_(),
     cluster_version_(0),
@@ -290,7 +255,6 @@ ObTxDesc::ObTxDesc()
     tx_consistency_type_(ObTxConsistencyType::INVALID),
     addr_(),
     tx_id_(),
-    xid_(),
     isolation_(ObTxIsolationLevel::RC), // default is RC
     access_mode_(ObTxAccessMode::INVL),   // default is INVL
     snapshot_version_(),
@@ -298,7 +262,6 @@ ObTxDesc::ObTxDesc()
     snapshot_uncertain_bound_(0),
     snapshot_scn_(),
     sess_id_(0),
-    assoc_sess_id_(0),
     op_sn_(0),                          // default is from 0
     state_(State::INVL),
     flags_({ 0 }),
@@ -411,7 +374,6 @@ void ObTxDesc::reset()
 
   addr_.reset();
   tx_id_.reset();
-  xid_.reset();
   isolation_ = ObTxIsolationLevel::INVALID;
   access_mode_ = ObTxAccessMode::INVL;
   snapshot_version_.reset();
@@ -482,11 +444,6 @@ const ObString &ObTxDesc::get_tx_state_str() const {
      ObString("COMMIT_TIMEOUT"),
      ObString("COMMIT_UNKNOWN"),
      ObString("COMMITTED"),
-     ObString("XA_PREPARING"),
-     ObString("XA_COMMITTING"),
-     ObString("XA_COMMITTED"),
-     ObString("XA_ROLLBACKING"),
-     ObString("XA_ROLLBACKED"),
      ObString("UNNAMED STATE")
     };
   const int state = MIN((int)state_, sizeof(TxStateName) / sizeof(ObString) - 1);
@@ -1421,38 +1378,6 @@ int ObTxDescMgr::add(ObTxDesc &tx_desc)
   }
   OX(tx_desc.flags_.SHADOW_ = false);
   TRANS_LOG(TRACE, "txDescMgr.register trans", K(ret), K(tx_id), K(tx_desc));
-  return ret;
-}
-
-int ObTxDescMgr::add_with_txid(const ObTransID &tx_id, ObTxDesc &tx_desc)
-{
-  int ret = OB_SUCCESS;
-  ObTransID desc_tx_id = tx_desc.get_tx_id();
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "ObTxDescMgr not inited", K(ret));
-  } else if (stoped_) {
-    ret = OB_IN_STOP_STATE;
-    TRANS_LOG(WARN, "ObTxDescMgr has been stopped", K(ret));
-  } else if (!tx_id.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", K(ret), K(tx_id), K(tx_desc));
-  } else if (desc_tx_id.is_valid() && desc_tx_id != tx_id) {
-    ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "tx desc with different tx id", K(ret), K(tx_id), K(tx_desc));
-  }
-
-  if (OB_SUCC(ret)) {
-    if (!desc_tx_id.is_valid()) { tx_desc.set_tx_id(tx_id); }
-    if (OB_FAIL(map_.insert(tx_id, &tx_desc))) {
-      TRANS_LOG(WARN, "fail to register trans", K(ret), K(tx_desc));
-    }
-    // if fail revert tx_desc.tx_id_ member
-    if (OB_FAIL(ret) && !desc_tx_id.is_valid()) { tx_desc.reset_tx_id(); }
-    if (OB_SUCC(ret) && tx_desc.flags_.SHADOW_) { tx_desc.flags_.SHADOW_ = false; }
-  }
-  TRANS_LOG(TRACE, "txDescMgr.register trans with txid", K(ret), KP(&tx_desc), K(tx_id),
-      K(map_.alloc_cnt()));
   return ret;
 }
 

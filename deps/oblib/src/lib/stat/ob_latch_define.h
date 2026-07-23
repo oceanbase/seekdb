@@ -82,9 +82,7 @@ LATCH_DEF(MEM_DUMP_ITER_LOCK, 105, "mem dump iter lock", LATCH_FIFO, 2000, 0, tr
 LATCH_DEF(OB_REQ_TIMEINFO_LIST_LOCK, 106, "ob request timeinfo list lock",LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(HASH_MAP_LOCK, 110, "hashmap latch lock", LATCH_FIFO, 2000L, 0, true)
 LATCH_DEF(TIMEZONE_LOCK, 112, "timezone lock", LATCH_READ_PREFER, 2000, 0, true)
-LATCH_DEF(XA_STMT_LOCK, 115, "xa stmt lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(MEMTABLE_CALLBACK_LIST_MGR_LOCK, 118, "memtable calback list mgr lock", LATCH_FIFO, INT64_MAX, 0, true)
-LATCH_DEF(XA_CTX_LOCK, 119, "xa queue lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(MASTER_KEY_LOCK, 120, "master key lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(RATELIMIT_LOCK, 121, "ratelimit lock", LATCH_READ_PREFER, 2000, 0, true)
 LATCH_DEF(LOG_OFFSET_ALLOC_LOCK, 124, "log_offset allocator latch", LATCH_FIFO, 2000, 0, true)
@@ -226,7 +224,6 @@ LATCH_DEF(DEADLOCK_DETECT_LOCK, 288, "deadlock detect lock", LATCH_FIFO, 2000, 0
 LATCH_DEF(FREEZE_THREAD_POOL_LOCK, 289, "freeze thread pool lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(DAS_ASYNC_RPC_LOCK, 290, "das wait remote response lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(CLOG_CKPT_RWLOCK, 291, "clog checkpoint rwlock", LATCH_READ_PREFER, 2000, 0, true)
-LATCH_DEF(REWRITE_RULE_ITEM_LOCK, 292, "rewrite rule item lock", LATCH_FIFO, 2000, 0, true)
 
 LATCH_DEF(DDL_EXECUTE_LOCK, 294, "ddl execute lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(TENANT_IO_CONFIG_LOCK, 295, "tenant io config lock", LATCH_FIFO, 2000, 0, true)

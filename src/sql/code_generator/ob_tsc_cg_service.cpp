@@ -1586,7 +1586,6 @@ int ObTscCgService::generate_table_loc_meta(uint64_t table_loc_id,
   loc_meta.table_loc_id_ = table_loc_id;
   ObTableID real_table_id = table_schema.get_table_id();
   loc_meta.ref_table_id_ = real_table_id;
-  loc_meta.is_dup_table_ = table_schema.is_duplicate_table();
   bool is_weak_read = false;
   if (OB_ISNULL(cg_.opt_ctx_) || OB_ISNULL(cg_.opt_ctx_->get_exec_ctx())) {
     ret = OB_INVALID_ARGUMENT;
@@ -1601,9 +1600,6 @@ int ObTscCgService::generate_table_loc_meta(uint64_t table_loc_id,
   } else if (is_weak_read) {
     loc_meta.is_weak_read_ = 1;
     loc_meta.select_leader_ = 0;
-  } else if (loc_meta.is_dup_table_) {
-    loc_meta.select_leader_ = 0;
-    loc_meta.is_weak_read_ = 0;
   } else {
     //strong consistency read policy is used by default
     loc_meta.select_leader_ = 1;

@@ -64,17 +64,6 @@ int ObTablePartitionInfo::init_table_location(ObSqlSchemaGuard &schema_guard,
       LOG_WARN("fail to init table location", K(ret));
     }
   }
-  // Judge and set whether it is a copy table
-  if (OB_SUCC(ret)) {
-    const ObTableSchema *table_schema = NULL;
-    if (OB_FAIL(schema_guard.get_table_schema(table_id, ref_table_id, &stmt, table_schema))) {
-      LOG_WARN("fail to get table schema", K(ref_table_id), K(ret));
-    } else if (table_schema->is_duplicate_table()) {
-      // If the replication table itself has been modified, only leader can be selected, do not set duplicate table attribute
-      candi_table_loc_.set_duplicate_type(is_dml_table ? ObDuplicateType::DUPLICATE_IN_DML :
-                                                               ObDuplicateType::DUPLICATE);
-    }
-  }
   return ret;
 }
 

@@ -1290,9 +1290,7 @@ int check_will_be_having_domain_index_operation(
       const share::schema::ObTableSchema &orig_table_schema,
       const share::schema::ObTableSchema &hidden_table_schema,
       share::schema::ObTableSchema &new_orig_table_schema,
-      share::schema::ObTableSchema &new_hidden_table_schema,
-      ObDDLOperator &ddl_operator,
-      common::ObMySQLTransaction &trans);
+      share::schema::ObTableSchema &new_hidden_table_schema);
   int rebuild_hidden_table_priv(
       const share::schema::ObTableSchema &orig_table_schema,
       const share::schema::ObTableSchema &hidden_table_schema,
@@ -1979,7 +1977,6 @@ private:
   int rebuild_table_schema_with_new_id(const share::schema::ObTableSchema &orig_table_schema,
                                        const share::schema::ObDatabaseSchema &new_database_schema,
                                        const common::ObString &new_table_name,
-                                       const common::ObString &create_host,
                                        const int64_t session_id,
                                        const share::schema::ObTableType table_type_,
                                        share::schema::ObSchemaService &schema_service,

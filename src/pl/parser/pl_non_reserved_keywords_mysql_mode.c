@@ -200,7 +200,6 @@ static const NonReservedKeyword Mysql_pl_none_reserved_keywords[] =
   {"c", C},
   {"job", JOB},
   {"cancel", CANCEL},
-  {"xa", XA},
   {"recover", RECOVER},
   {"polygon", POLYGON},
   {"multipoint", MULTIPOINT},

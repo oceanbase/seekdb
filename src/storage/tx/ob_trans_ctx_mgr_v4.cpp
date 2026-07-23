@@ -318,15 +318,13 @@ int ObLSTxCtxMgr::create_tx_ctx_(const ObTxCreateArg &arg,
     CtxLockGuard ctx_lock_guard;
     ObTxCtx *tmp = static_cast<ObTxCtx *>(tmp_ctx);
     if (OB_FAIL(tmp->init(arg.session_id_,
-                          arg.associated_session_id_,
                           arg.tx_id_,
                           arg.trans_expired_time_,
                           arg.cluster_version_,
                           arg.trans_service_,
                           this,
                           arg.for_replay_,
-                          arg.ctx_source_,
-                          arg.xid_))) {
+                          arg.ctx_source_))) {
     } else if (FALSE_IT(inc_total_tx_ctx_count())) {
     } else if (FALSE_IT(tmp_ctx->get_ctx_guard(ctx_lock_guard))) {
     } else if (OB_FAIL(ls_tx_ctx_map_.insert_and_get(arg.tx_id_, tmp_ctx, &exist_ctx))) {

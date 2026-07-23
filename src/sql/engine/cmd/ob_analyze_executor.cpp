@@ -53,11 +53,11 @@ int ObAnalyzeExecutor::execute(ObExecContext &ctx, ObAnalyzeStmt &stmt)
   } else {
     
     bool is_primary = true;
-    if (OB_FAIL(ObShareUtil::check_if_server_role_is_primary(is_primary))) {
-      LOG_WARN("fail to execute check_if_server_role_is_primary", KR(ret));
+    if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(is_primary))) {
+      LOG_WARN("fail to execute mtl_check_if_tenant_role_is_primary", KR(ret));
     } else if (OB_UNLIKELY(!is_primary)) {
       ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "analyze table on a standby database");
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "analyze table during non-primary tenant");
     }
   }
   if (FAILEDx(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {

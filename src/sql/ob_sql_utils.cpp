@@ -1179,7 +1179,6 @@ bool ObSQLUtils::is_readonly_stmt(ParseResult &result)
                && NULL == root->children_[1]->children_[PARSE_SELECT_FOR_UPD]) {
       ret = true;
     } else if (IS_SHOW_STMT(type)
-               || T_HELP == type
                || T_USE_DATABASE == type
                || T_TRANSACTION == type
                || T_BEGIN == type
@@ -1188,12 +1187,6 @@ bool ObSQLUtils::is_readonly_stmt(ParseResult &result)
                || T_VARIABLE_SET == type
                || T_SET_NAMES == type //read only not restrict it
                || T_SET_CHARSET == type  //read only not restrict it
-               || T_XA_START == type
-               || T_XA_END == type
-               || T_XA_PREPARE == type
-               || T_XA_COMMIT == type
-               || T_XA_ROLLBACK == type
-               || T_XA_RECOVER == type
                || T_SET_ROLE == type
                || T_SET_CATALOG == type) {
       ret = true;

@@ -673,7 +673,7 @@ protected:
   const common::ObIArray<int64_t> *row_id_list_;
   // for px insert into values
   ObRowIdListArray row_id_list_array_;
-  // Determine if the currently executing plan is a plan during the evolution process
+  // Total number of row IDs stored in row_id_list_array_.
   int64_t total_row_count_;
   // Interminate result of index building is reusable, reused in build index retry with same snapshot.
   // Reusable intermediate result is not deleted in the close phase, deleted deliberately after

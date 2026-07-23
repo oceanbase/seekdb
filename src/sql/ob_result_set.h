@@ -455,7 +455,6 @@ private:
   bool is_returning_;
   bool is_com_filed_list_; //used to mark COM_FIELD_LIST
   bool will_retry_; // the query will retry, to figure out the final close
-  bool xa_checking_lock_stoped_;
   common::ObString wild_str_;//uesd to save filed wildcard in COM_FIELD_LIST;
   common::ObString ps_sql_; // for sql in pl
   bool is_init_;
@@ -533,7 +532,6 @@ inline ObResultSet::ObResultSet(ObSQLSessionInfo &session, common::ObIAllocator 
       is_returning_(false),
       is_com_filed_list_(false),
       will_retry_(false),
-      xa_checking_lock_stoped_(false),
       wild_str_(),
       ps_sql_(),
       is_init_(false),

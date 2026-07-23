@@ -271,9 +271,6 @@ public:
   int check_das_dppr_filter_exprs(const ObIArray<ObRawExpr *> &input_filters,
                                   bool &has_dppr_filters);
 
-  int choose_duplicate_table_replica(ObLogicalOperator *op,
-                                    const ObAddr &addr,
-                                    bool is_root);
   /**
    *  Get allocator used in sql compilation
    *
@@ -319,7 +316,6 @@ public:
                               const int64_t to) const;
   int remove_duplicate_constraints();
   int sort_pwj_constraint(ObLocationConstraintContext &location_constraint) const;
-  int resolve_dup_tab_constraint(ObLocationConstraintContext &location_constraint) const;
 
   int get_current_semi_infos(const ObIArray<SemiInfo*> &semi_infos,
                              const ObIArray<TableItem*> &table_items,
@@ -752,8 +748,6 @@ public:
   int perform_simplify_win_expr(ObLogicalOperator *op);
   int perform_adjust_onetime_expr(ObLogicalOperator *op);
   int init_onetime_replaced_exprs_if_needed();
-  int set_advisor_table_id(ObLogicalOperator *op);
-  int negotiate_advisor_table_id(ObLogicalOperator *op);
   int simplify_win_expr(ObLogicalOperator* child_op, ObWinFunRawExpr &win_expr);
   int simplify_win_partition_exprs(ObLogicalOperator* child_op,
                                    ObWinFunRawExpr &win_expr);
@@ -1503,10 +1497,6 @@ public:
                                              bool need_exchange,
                                              const ObIArray<OrderItem> &sort_keys, 
                                              bool &need_further_sort);
-  static int adjust_dup_table_replica_by_cons(
-    const ObIArray<ObDupTabConstraint> &dup_table_replica_cons,
-    common::ObIArray<ObCandiTableLoc> &phy_tbl_info_list);
-
 protected:
   virtual int generate_normal_raw_plan() = 0;
   int update_plans_interesting_order_info(ObIArray<CandidatePlan> &candidate_plans,
@@ -1773,8 +1763,7 @@ private: // member functions
                                             ObIArray<ObSEArray<ObRawExpr*,4>> &baserel_filters);
   static int strong_select_replicas(const common::ObAddr &local_server,
                                     common::ObIArray<ObCandiTableLoc*> &phy_tbl_loc_info_list,
-                                    bool &is_hit_partition,
-                                    bool sess_in_retry);
+                                    bool &is_hit_partition);
   int calc_and_set_exec_pwj_map(ObLocationConstraintContext &location_constraint) const;
 
   int check_pwj_cons(const ObPwjConstraint &pwj_cons,
@@ -1789,7 +1778,6 @@ private: // member functions
                               ObOptColumnStatHandle &handle,
                               common::ObIArray<ObObj> &popular_values) const;
 
-  int compute_duplicate_table_replicas(ObLogicalOperator *op);
   int prepare_text_retrieval_info(const uint64_t ref_table_id,
                                   const uint64_t index_table_id,
                                   ObMatchFunRawExpr *ma_expr,

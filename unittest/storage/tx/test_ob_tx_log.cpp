@@ -40,14 +40,12 @@ TxID TEST_TX_ID = 1024;
 int64_t TEST_CLUSTER_VERSION = DATA_VERSION_1_0_0_0;
 common::ObString TEST_TRACE_ID_STR("trace_id_test");
 bool TEST_CAN_ELR =  false;
-bool TEST_IS_DUP = true;
 common::ObString TEST_TRCE_INFO("trace_info_test");
 LogOffSet TEST_LOG_OFFSET(10);
 int64_t TEST_COMMIT_VERSION = 190878;
 int64_t TEST_CHECKSUM = 29890209;
 ObArray<uint8_t> TEST_CHECKSUM_SIGNATURE_ARRAY;
 int64_t TEST_LOG_ENTRY_NO = 1233;
-ObXATransID TEST_XID;
 ObTxPrevLogType TEST_PREV_LOG_TYPE(ObTxPrevLogType::TypeEnum::COMMIT_INFO);
 tablelock::ObTableLockPrioOpArray TEST_PRIO_OP_ARRAY;
 
@@ -118,13 +116,11 @@ TEST_F(TestObTxLog, tx_log_body_except_redo)
   node.init(ObTxDataSourceType::LS_TABLE, str, share::SCN(), transaction::ObTxSEQ(100, 0), nullptr);
   TEST_TX_BUFFER_NODE_ARRAY.push_back(node);
 
-  ObTxCommitInfoLog fill_commit_state(TEST_IS_DUP,
-                                       TEST_CAN_ELR,
+  ObTxCommitInfoLog fill_commit_state(TEST_CAN_ELR,
                                        TEST_TRACE_ID_STR,
                                        TEST_TRCE_INFO,
                                        TEST_LOG_OFFSET,
-                                       TEST_LOG_OFFSET_ARRY,
-                                       TEST_XID);
+                                       TEST_LOG_OFFSET_ARRY);
   ObTxCommitLog fill_commit(share::SCN::base_scn(),
                             TEST_CHECKSUM,
                             TEST_CHECKSUM_SIGNATURE_ARRAY,
@@ -190,13 +186,11 @@ TEST_F(TestObTxLog, tx_log_body_redo)
   node.init(ObTxDataSourceType::LS_TABLE, str, share::SCN(), transaction::ObTxSEQ(100, 0), nullptr);
   TEST_TX_BUFFER_NODE_ARRAY.push_back(node);
 
-  ObTxCommitInfoLog fill_commit_state(TEST_IS_DUP,
-                                       TEST_CAN_ELR,
+  ObTxCommitInfoLog fill_commit_state(TEST_CAN_ELR,
                                        TEST_TRACE_ID_STR,
                                        TEST_TRCE_INFO,
                                        TEST_LOG_OFFSET,
-                                       TEST_LOG_OFFSET_ARRY,
-                                       TEST_XID);
+                                       TEST_LOG_OFFSET_ARRY);
   ObTxCommitLog fill_commit(share::SCN::base_scn(),
                             TEST_CHECKSUM,
                             TEST_CHECKSUM_SIGNATURE_ARRAY,

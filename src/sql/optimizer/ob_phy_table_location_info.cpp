@@ -135,8 +135,7 @@ int ObCandiTabletLoc::set_local_tablet_loc(const ObObjectID &partition_id,
 ObCandiTableLoc::ObCandiTableLoc()
   : table_location_key_(OB_INVALID_ID),
     ref_table_id_(OB_INVALID_ID),
-    candi_tablet_locs_(),
-    duplicate_type_(ObDuplicateType::NOT_DUPLICATE)
+    candi_tablet_locs_()
 {
 }
 
@@ -150,35 +149,11 @@ int ObCandiTableLoc::assign(const ObCandiTableLoc &other)
   int ret = OB_SUCCESS;
   table_location_key_ = other.table_location_key_;
   ref_table_id_ = other.ref_table_id_;
-  duplicate_type_ = other.duplicate_type_;
   if (OB_FAIL(candi_tablet_locs_.assign(other.candi_tablet_locs_))) {
     LOG_WARN("Failed to assign phy_part_loc_info_list", K(ret));
   }
   return ret;
 }
-// Previously it was determined to be a copy table, not a session retry & the copy table is not among the DML modification objects, prioritize choosing the local copy, if there is no local copy then choose the leader copy
-int ObCandiTableLoc::all_select_local_replica_or_leader(bool &is_on_same_server,
-                                                              ObAddr &same_server,
-                                                              const ObAddr &local_server)
-{
-  int ret = OB_SUCCESS;
-  is_on_same_server = true;
-  ObAddr first_server;
-  for (int64_t i = 0; OB_SUCC(ret) && i < candi_tablet_locs_.count(); ++i) {
-    const ObAddr &replica_addr =
-        candi_tablet_locs_.at(i).get_partition_location().get_local_replica().get_server();
-    if (0 == i) {
-      first_server = replica_addr;
-    } else if (first_server != replica_addr) {
-      is_on_same_server = false;
-    }
-  }
-  if (OB_SUCC(ret) && is_on_same_server) {
-    same_server = first_server;
-  }
-  return ret;
-}
-
 int ObCandiTableLoc::all_select_leader(bool &is_on_same_server,
                                               ObAddr &same_server)
 {
@@ -216,10 +191,6 @@ int ObCandiTableLoc::get_all_servers(common::ObIArray<common::ObAddr> &servers) 
   }
   return ret;
 }
-// Given ObCandiTableLoc and ObCandiTabletLoc (from the replica table)
-// Determine whether each partition leader of the former is on the same server, and if replicas of the replicated tables exist there, return TRUE
-
-
 void ObCandiTableLoc::set_table_location_key(uint64_t table_location_key, uint64_t ref_table_id)
 {
   table_location_key_ = table_location_key;

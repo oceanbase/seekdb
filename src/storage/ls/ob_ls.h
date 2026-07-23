@@ -252,8 +252,6 @@ public:
     K_(tablet_gc_handler), K_(need_delay_resource_recycle));
 private:
   void update_state_seq_();
-  int ls_init_for_dup_table_();
-  int ls_destory_for_dup_table_();
   int stop_();
   void wait_();
   int prepare_for_safe_destroy_();

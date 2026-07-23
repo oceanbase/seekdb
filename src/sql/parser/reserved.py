@@ -1241,7 +1241,6 @@ class SqlKeywords:
          WORK
          WRAPPER
          X509_
-         XA
          XML
          YEAR
          '''
@@ -1961,7 +1960,6 @@ class SqlKeywords:
          WORK
          WRAPPER
          X509_
-         XA
          XML
          YEAR
          ZONE

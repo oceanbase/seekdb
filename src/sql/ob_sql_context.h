@@ -78,9 +78,7 @@ struct LocationConstraint
     // Partition pruning results in the base table involving only one first-level partition
     SinglePartition    = 1 << 1,
     // After partition pruning, each level one partition of the base table only involves one level two partition
-    SingleSubPartition = 1 << 2,
-    // is duplicate table not in dml
-    DupTabNotInDML     = 1 << 3
+    SingleSubPartition = 1 << 2
   };
   TableLocationKey key_;
   ObTableLocationType phy_loc_type_;
@@ -99,7 +97,6 @@ struct LocationConstraint
   inline bool is_multi_part_insert() const { return constraint_flags_ & IsMultiPartInsert; }
   inline bool is_partition_single() const { return constraint_flags_ & SinglePartition; }
   inline bool is_subpartition_single() const { return constraint_flags_ & SingleSubPartition; }
-  inline bool is_dup_table_not_in_dml() const {return constraint_flags_ & DupTabNotInDML; }
 
   bool operator==(const LocationConstraint &other) const;
 
@@ -119,8 +116,7 @@ struct ObLocationConstraintContext
   ObLocationConstraintContext()
       : base_table_constraints_(),
         strict_constraints_(),
-        non_strict_constraints_(),
-        dup_table_replica_cons_()
+        non_strict_constraints_()
   {
   }
   ~ObLocationConstraintContext()
@@ -132,8 +128,7 @@ struct ObLocationConstraintContext
 
   TO_STRING_KV(K_(base_table_constraints),
                K_(strict_constraints),
-               K_(non_strict_constraints),
-               K_(dup_table_replica_cons));
+               K_(non_strict_constraints));
   // Base table location constraint, including base tables on TABLE_SCAN operator and base tables on INSERT operator
   ObLocationConstraint base_table_constraints_;
   // Strict partition-wise join constraint, requires that the base table partitions within the same group are logically and physically equal.
@@ -142,9 +137,6 @@ struct ObLocationConstraintContext
   // Strict partition-wise join constraint, requires that the base table partitions within a group are physically equal.
   // Each group is an array, saving the offset of the corresponding base table in base_table_constraints_
   common::ObSEArray<ObPwjConstraint *, 8, common::ModulePageAllocator, true> non_strict_constraints_;
-  // constraints for duplicate table's replica selection
-  // if not found values in this array, just use local server's replica.
-  common::ObSEArray<ObDupTabConstraint, 1, common::ModulePageAllocator, true> dup_table_replica_cons_;
 };
 
 class ObIVtScannerableFactory;
@@ -450,23 +442,14 @@ private:
   int64_t mocked_schema_id_counter_;
 };
 
-struct ObBaselineKey
+struct ObSqlPlanKey
 {
-  ObBaselineKey()
+  ObSqlPlanKey()
   : db_id_(common::OB_INVALID_ID),
     constructed_sql_(),
     sql_id_(),
     format_sql_id_(),
     format_sql_() {}
-  ObBaselineKey(uint64_t db_id, const ObString &constructed_sql,
-                const ObString &sql_id, const ObString &format_sql_id,
-                const ObString &format_sql)
-  : db_id_(db_id),
-    constructed_sql_(constructed_sql),
-    sql_id_(sql_id),
-    format_sql_id_(format_sql_id),
-    format_sql_(format_sql) {}
-
   inline void reset()
   {
     db_id_ = common::OB_INVALID_ID;
@@ -588,10 +571,6 @@ public:
   // Strict partition-wise join constraint, requires that the base table partitions within a group are physically equal.
   // Each group is an array, saving the offset of the corresponding base table in base_table_constraints_
   common::ObFixedArray<ObPwjConstraint *, common::ObIAllocator> non_strict_constraints_;
-  // constraints for duplicate table's replica selection
-  // if not found values in this array, just use local server's replica.
-  common::ObFixedArray<ObDupTabConstraint, common::ObIAllocator> dup_table_replica_cons_;
-
   // Constants constraints passed from resolver
   // all_possible_const_param_constraints_ indicates all possible constant constraints in this sql
   // all_plan_const_param_constraints_ indicates all constant constraints existing in this sql
@@ -615,7 +594,7 @@ public:
   bool is_sensitive_;    // whether it contains sensitive information, if so, do not record in sql_audit
   common::ObFixedArray<int64_t, common::ObIAllocator> multi_stmt_rowkey_pos_;
   ObRawExpr *snapshot_query_expr_;
-  ObBaselineKey bl_key_;
+  ObSqlPlanKey plan_key_;
   bool is_execute_call_stmt_;
   bool is_text_ps_mode_;
   uint64_t first_plan_hash_;

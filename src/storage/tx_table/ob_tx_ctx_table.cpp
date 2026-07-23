@@ -112,7 +112,6 @@ int ObTxCtxTableRecoverHelper::recover_one_tx_ctx_(transaction::ObLSTxCtxMgr* ls
                                  ctx_info.tx_id_,
                                  cluster_version,
                                  0, /*session_id*/
-                                 0, /*associated_session_id*/
                                  INT64_MAX,
                                  share::g_mp->trans_service());
   if (OB_FAIL(ls_tx_ctx_mgr->create_tx_ctx(arg,

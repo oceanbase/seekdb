@@ -501,8 +501,8 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           case OB_ALL_VIRTUAL_CORE_ALL_TABLE_TID: {
             ObVritualCoreInnerTable *core_all_table = NULL;
             const char *table_name = NULL;
-            if (OB_FAIL(ObSchemaUtils::get_all_table_name(table_name))) {
-              LOG_WARN("fail to get all table name", K(ret));
+            if (OB_FAIL(ObSchemaUtils::get_all_table_history_name(table_name))) {
+              LOG_WARN("fail to get all table history name", K(ret));
             } else if (OB_FAIL(NEW_VIRTUAL_TABLE(ObVritualCoreInnerTable, core_all_table))) {
               SERVER_LOG(ERROR, "ObCoreAllTable construct failed", K(ret));
             } else if (OB_FAIL(core_all_table->init(*GCTX.sql_proxy_,
@@ -521,11 +521,11 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             if (OB_FAIL(NEW_VIRTUAL_TABLE(ObVritualCoreInnerTable, core_column_table))) {
               SERVER_LOG(ERROR, "ObCoreColumnTable construct failed", K(ret));
             } else if (OB_FAIL(core_column_table->init(*GCTX.sql_proxy_,
-                                                       OB_ALL_COLUMN_TNAME,
+                                                       OB_ALL_COLUMN_HISTORY_TNAME,
                                                        pure_tid,
                                                        &schema_guard))) {
               SERVER_LOG(WARN, "core_column_table init failed", "table_name",
-                          OB_ALL_COLUMN_TNAME, K(pure_tid), K(ret));
+                          OB_ALL_COLUMN_HISTORY_TNAME, K(pure_tid), K(ret));
             } else {
               vt_iter = static_cast<ObVirtualTableIterator *>(core_column_table);
             }

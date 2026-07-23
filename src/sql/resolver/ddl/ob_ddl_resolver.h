@@ -23,7 +23,6 @@
 #include "lib/worker.h"
 #include "share/schema/ob_table_schema.h"
 #include "share/ob_rpc_struct.h"
-#include "share/ob_duplicate_scope_define.h"
 #include "share/schema/ob_schema_struct.h"
 #include "common/sql_mode/ob_sql_mode.h"
 #include "sql/resolver/ddl/ob_table_stmt.h"
@@ -961,8 +960,6 @@ protected:
   share::schema::ObIndexUsingType index_using_type_;
   common::ObString locality_;
   bool is_random_primary_zone_;
-  share::ObDuplicateScope duplicate_scope_;
-  share::ObDuplicateReadConsistency duplicate_read_consistency_;
   bool enable_row_movement_;
   share::schema::ObTableMode table_mode_;
   int64_t table_dop_; // default value is 1

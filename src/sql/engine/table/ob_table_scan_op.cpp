@@ -26,7 +26,6 @@
 #include "share/ob_ddl_checksum.h"
 #include "observer/omt/ob_tenant_srs.h"
 #include "sql/das/iter/ob_das_iter_utils.h"
-#include "share/index_usage/ob_index_usage_info_mgr.h"
 #include "sql/engine/px/ob_granule_iterator_op.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 
@@ -1755,18 +1754,6 @@ int ObTableScanOp::inner_close()
       LOG_WARN("failed to reuse scan iter", K(ret));
     }
   }
-  if (OB_SUCC(ret) && MY_SPEC.should_scan_index()) {
-    ObSQLSessionInfo *session = GET_MY_SESSION(ctx_);
-    if (OB_NOT_NULL(session)) {
-      
-      uint64_t index_id = MY_CTDEF.scan_ctdef_.ref_table_id_;
-      oceanbase::share::ObIndexUsageInfoMgr* mgr = share::g_mp->index_usage_info_mgr();
-      if (OB_NOT_NULL(mgr)) {
-        mgr->update(index_id);
-      }
-    }
-  }
-
   if (OB_SUCC(ret)) {
     fts_index_.reuse();
     iter_end_ = false;

@@ -1166,10 +1166,6 @@ public:
               common::ObIArray<ObString> &table_names,
               common::ObIArray<uint64_t> &table_ids) = 0;
   /*----------- interfaces for latest schema end -------------*/
-  static bool in_parallel_ddl_thread()
-  {
-    return 0 == STRCASECMP(PARALLEL_DDL_THREAD_NAME, ob_get_origin_thread_name());
-  }
 };
 
 // factory injection: implementation ObSchemaServiceSQLImpl now lives in the observer layer(can legally call sql),

@@ -575,7 +575,6 @@ public:
   static int check_sync_ddl_user(ObSQLSessionInfo *session_info, bool &is_sync_ddl_user);
   static bool is_restore_user(ObSQLSessionInfo &session_info);
   static bool is_drc_user(ObSQLSessionInfo &session_info);
-  static int set_sync_ddl_id_str(ObSQLSessionInfo *session_info, common::ObString &ddl_id_str);
   static int resolve_udf_name_by_parse_node(
     const ParseNode *node, const common::ObNameCaseMode case_mode, ObUDFInfo& udf_info);
   // Check duplicate foreign keys for CREATE TABLE and ALTER TABLE ADD FOREIGN KEY.
@@ -643,12 +642,6 @@ public:
                                        ParseNode *&func_udf);
   static int set_direction_by_mode(const ParseNode &sort_node, OrderItem &order_item, bool opt_nulls = false);
   static int resolve_string(const ParseNode *node, common::ObString &string);
-  static int resolve_xid(const ParseNode *node, common::ObString &gtrid_string, common::ObString &bqual_string, int64_t & format_id);
-  static int resolve_text(const ParseNode *node, common::ObString &string);
-  static int resolve_ulong(const ParseNode *node, int64_t & format_id);
-  static int resolve_opt_join_or_resume(const ParseNode *node, int64_t & flag);
-  static int resolve_opt_suspend(const ParseNode *node, int64_t & flag);
-  static int resolve_opt_one_phase(const ParseNode *node, int64_t & flag);
   // Check non-updatable view shapes which are forbidden for DML statements:
   //    aggregate
   //    distinct

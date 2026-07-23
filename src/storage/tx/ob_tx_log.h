@@ -380,7 +380,7 @@ class ObTxCommitInfoLogTempRef
 {
 public:
   ObTxCommitInfoLogTempRef()
-    : app_trace_id_str_(), app_trace_info_(), prev_record_lsn_(), redo_lsns_(), xid_()
+    : app_trace_id_str_(), app_trace_info_(), prev_record_lsn_(), redo_lsns_()
   {}
 
 public:
@@ -388,7 +388,6 @@ public:
   common::ObString app_trace_info_;
   LogOffSet prev_record_lsn_;
   ObRedoLSNArray redo_lsns_;
-  ObXATransID xid_;
 };
 
 class ObTxCommitInfoLog
@@ -397,40 +396,32 @@ class ObTxCommitInfoLog
 
 public:
   ObTxCommitInfoLog(ObTxCommitInfoLogTempRef &temp_ref)
-      : is_dup_tx_(false), can_elr_(false),
+      : can_elr_(false),
         app_trace_id_str_(temp_ref.app_trace_id_str_), app_trace_info_(temp_ref.app_trace_info_),
-        prev_record_lsn_(temp_ref.prev_record_lsn_), redo_lsns_(temp_ref.redo_lsns_),
-        xid_(temp_ref.xid_)
+        prev_record_lsn_(temp_ref.prev_record_lsn_), redo_lsns_(temp_ref.redo_lsns_)
   {}
-  ObTxCommitInfoLog(bool is_dup_tx,
-                    bool is_elr,
+  ObTxCommitInfoLog(bool is_elr,
                     common::ObString &app_trace_id,
                     const common::ObString &app_trace_info,
                     const LogOffSet &prev_record_lsn,
-                    ObRedoLSNArray &redo_lsns,
-                    const ObXATransID &xid);
+                    ObRedoLSNArray &redo_lsns);
 
-  bool is_dup_tx() const { return is_dup_tx_; }
   bool is_elr() const { return can_elr_; }
   const common::ObString &get_app_trace_id() const { return app_trace_id_str_; }
   const common::ObString &get_app_trace_info() const { return app_trace_info_; }
   const ObRedoLSNArray &get_redo_lsns() const { return redo_lsns_; }
   const LogOffSet &get_prev_record_lsn() const { return prev_record_lsn_; }
-  const ObXATransID &get_xid() const { return xid_; }
   int ob_admin_dump(share::ObAdminMutatorStringArg &arg);
 
   static const ObTxLogType LOG_TYPE;
   TO_STRING_KV(K(LOG_TYPE),
-               K(is_dup_tx_),
                K(can_elr_),
                K(app_trace_id_str_),
                K(app_trace_info_),
                K(prev_record_lsn_),
-               K(redo_lsns_),
-               K(xid_))
+               K(redo_lsns_))
 
 private:
-  bool is_dup_tx_;
   bool can_elr_;
 
   // Transaction tracing and redo-chain metadata.
@@ -438,8 +429,6 @@ private:
   common::ObString app_trace_info_;
   LogOffSet prev_record_lsn_;
   ObRedoLSNArray &redo_lsns_;
-  // for xa
-  ObXATransID xid_;
 };
 
 class ObTxDataBackup

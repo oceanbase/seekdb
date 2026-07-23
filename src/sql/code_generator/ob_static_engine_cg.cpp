@@ -914,10 +914,6 @@ int ObStaticEngineCG::generate_spec_final(ObLogicalOperator &op, ObOpSpec &spec)
     }
   }
 
-  if (log_op_def::LOG_INSERT == op.get_type()) {
-    auto &insert = static_cast<ObLogInsert&>(op);
-    phy_plan_->set_is_insert_select(insert.is_insert_select());
-  }
   if (log_op_def::LOG_SET == op.get_type()
       && !static_cast<ObLogSet &>(op).is_recursive_union()
       && spec.is_vectorized()) {
@@ -8072,13 +8068,11 @@ int ObStaticEngineCG::set_properties_post(const ObLogPlan &log_plan, ObPhysicalP
       // do nothing
     } else if (OB_FAIL(phy_plan.set_location_constraints(sql_ctx->base_constraints_,
                                                   sql_ctx->strict_constraints_,
-                                                  sql_ctx->non_strict_constraints_,
-                                                  sql_ctx->dup_table_replica_cons_))) {
+                                                  sql_ctx->non_strict_constraints_))) {
         LOG_WARN("failed to set location constraints", K(ret), K(phy_plan),
                  K(sql_ctx->base_constraints_),
                  K(sql_ctx->strict_constraints_),
-                 K(sql_ctx->non_strict_constraints_),
-                 K(sql_ctx->dup_table_replica_cons_));
+                 K(sql_ctx->non_strict_constraints_));
     }
   }
 
@@ -8088,15 +8082,6 @@ int ObStaticEngineCG::set_properties_post(const ObLogPlan &log_plan, ObPhysicalP
     if (OB_ISNULL(dependency_table)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret));
-    } else {
-      bool has_dep_table = false;
-      for (int64_t i = 0; OB_SUCC(ret) && !has_dep_table && i < dependency_table->count(); i++) {
-        if (DEPENDENCY_TABLE == dependency_table->at(i).object_type_) {
-          has_dep_table = true;
-        }
-      }
-      LOG_DEBUG("is contain global index or dep base table", K(has_dep_table));
-      phy_plan.set_is_dep_base_table(has_dep_table);
     }
     if (OB_SUCC(ret)) {
       int64_t tenant_schema_version = OB_INVALID_VERSION;

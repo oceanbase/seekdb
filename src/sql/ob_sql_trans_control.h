@@ -241,8 +241,6 @@ public:
                         const ObIArray<ObObjectID> &part_ids,
                         const transaction::tablelock::ObTableLockMode lock_mode,
                         const int64_t wait_lock_seconds);
-  static void clear_xa_branch(const transaction::ObXATransID &xid, transaction::ObTxDesc *&tx_desc);
-  static uint32_t get_real_session_id(ObSQLSessionInfo &session);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSqlTransControl);
   static int get_trans_expire_ts(const ObSQLSessionInfo &session,
@@ -251,9 +249,6 @@ private:
                                            const ObSQLSessionInfo &session);
   static int inc_session_ref(const ObSQLSessionInfo *session);
   static int acquire_tx_if_need_(transaction::ObTransService *txs, ObSQLSessionInfo &session);
-  static int start_hook_if_need_(ObSQLSessionInfo &session,
-                                 transaction::ObTransService *txs,
-                                 bool &start_hook);
 public:
   /*
    * create a savepoint without name

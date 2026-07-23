@@ -18,8 +18,6 @@ storage_unittest(test_ob_id_meta)
 storage_unittest(test_ob_trans_tlog)
 add_subdirectory(it)
 
-storage_unittest(test_dup_table_lease)
-
 storage_unittest(test_redo_submitter)
 storage_unittest(test_trans_callback_mgr_fill_redo)
 storage_unittest(test_misc)

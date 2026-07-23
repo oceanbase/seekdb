@@ -704,8 +704,7 @@ void ObPLContext::destory(
         if (has_implicit_savepoint_) {
           // reset_autocommit_ && has_implicit_savepoint_ equal to scene of ac=1 && explict transaction.
           // no need to commit
-        } else if (!session_info.associated_xa()) {
-          // If the current transaction is an xa transaction, then do not commit the current transaction, only set ac=true. Otherwise, commit the current transaction
+        } else {
           // First COMMIT, then modify AutoCommit
           int tmp_ret = OB_SUCCESS;
           if (OB_SUCCESS == ret
@@ -723,9 +722,6 @@ void ObPLContext::destory(
             tmp_ret = implicit_end_trans(session_info, ctx, ret != OB_SUCCESS);
           }
           ret = OB_SUCCESS == ret ? tmp_ret : ret;
-        } else {
-          // in XA trans
-          ctx.set_need_disconnect(false);
         }
       }
       // clean serially package

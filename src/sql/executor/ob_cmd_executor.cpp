@@ -103,14 +103,13 @@
 #include "sql/engine/cmd/ob_load_data_executor.h"
 #include "sql/engine/cmd/ob_sequence_executor.h"
 #include "sql/engine/cmd/ob_role_cmd_executor.h"
-#include "sql/engine/cmd/ob_xa_executor.h"
 #include "sql/engine/cmd/ob_get_diagnostics_executor.h"
 #include "sql/engine/cmd/ob_lock_table_executor.h"
 #include "sql/engine/cmd/ob_mock_executor.h"
 #include "sql/engine/prepare/ob_prepare_executor.h"
 #include "sql/engine/prepare/ob_execute_executor.h"
 #include "sql/engine/prepare/ob_deallocate_executor.h"
-#include "observer/ob_server_event_history_table_operator.h"
+#include "share/ob_structured_event_logger.h"
 #include "observer/omt/ob_tenant.h"
 #include "sql/engine/cmd/ob_directory_executor.h"
 #include "sql/engine/cmd/ob_location_executor.h"
@@ -378,7 +377,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         break;
       }
 
-      case stmt::T_HELP:
       case stmt::T_CREATE_USER: {
         DEFINE_EXECUTE_CMD(ObCreateUserStmt, ObCreateUserExecutor);
         break;
@@ -639,26 +637,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         } else {
           DEFINE_EXECUTE_CMD(ObAlterTableStmt, ObCommentExecutor);
         }
-        break;
-      }
-      case stmt::T_XA_START: {
-        DEFINE_EXECUTE_CMD(ObXaStartStmt, ObXaStartExecutor);
-        break;
-      }
-      case stmt::T_XA_END: {
-        DEFINE_EXECUTE_CMD(ObXaEndStmt, ObXaEndExecutor);
-        break;
-      }
-      case stmt::T_XA_PREPARE: {
-        DEFINE_EXECUTE_CMD(ObXaPrepareStmt, ObXaPrepareExecutor);
-        break;
-      }
-      case stmt::T_XA_COMMIT: {
-        DEFINE_EXECUTE_CMD(ObXaCommitStmt, ObXaCommitExecutor);
-        break;
-      }
-      case stmt::T_XA_ROLLBACK: {
-        DEFINE_EXECUTE_CMD(ObXaRollBackStmt, ObXaRollbackExecutor);
         break;
       }
       case stmt::T_ALTER_DISKGROUP_ADD_DISK: {

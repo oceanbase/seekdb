@@ -21,8 +21,17 @@
 #include "rpc/obmysql/ob_mysql_translator.h"
 #include "observer/ob_server_struct.h"
 
+#define MAX_PCODE 0xFFFF
+#define CALLP_BUF_SIZE 1280
 union EP_CALLP_BUF;
 RLOCAL_EXTERN(EP_CALLP_BUF, co_ep_callp_buf);
+
+// obcall RPC dispatch removed: ObSrvRpcXlator (which derived from
+// obcall::ObCallTranslator), its DirectHandler/RPCProcessFunc tables and the
+// init_srv_xlator_for_* registration helpers are gone — every observer-service
+// RPC is dispatched in-process now, so no obcall packets are translated here.
+// ObSrvXlator is MySQL-only; it still derives from rpc::frame::ObReqTranslator
+// (the framework translator the shared request queue handler needs).
 
 namespace oceanbase { namespace observer {
 

@@ -136,12 +136,6 @@ message(STATUS "Bundled ${_bundled} runtime DLLs into bin/")
     DESTINATION share/admin
     COMPONENT server)
 
-  # Help -> share/help/
-  install(FILES
-    src/sql/fill_help_tables-ob.sql
-    DESTINATION share/help
-    COMPONENT server)
-
   # Timezone -> share/timezone/
   install(FILES
     tools/timezone_V1.log
@@ -256,12 +250,6 @@ else()
   install(
     DIRECTORY ${SYS_PACK_RELEASE_DIR}/
     DESTINATION usr/share/seekdb/admin
-    COMPONENT server)
-
-  # Install help files to /usr/share/seekdb/help
-  install(FILES
-    src/sql/fill_help_tables-ob.sql
-    DESTINATION usr/share/seekdb/help
     COMPONENT server)
 
   # Install timezone files to /usr/share/seekdb/timezone

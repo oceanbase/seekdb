@@ -126,7 +126,6 @@ public:
   inline bool is_update_stmt() const { return stmt::T_UPDATE == stmt_type_; }
   inline bool is_delete_stmt() const { return stmt::T_DELETE == stmt_type_; }
   inline bool is_explain_stmt() const { return stmt::T_EXPLAIN == stmt_type_; }
-  inline bool is_help_stmt() const { return stmt::T_HELP == stmt_type_; }
   bool is_dml_stmt() const;
   bool is_pdml_supported_stmt() const;
   bool is_px_dml_supported_stmt() const;
@@ -577,7 +576,6 @@ public:
   {
     return is_dml_stmt(stmt_type)
            || is_tcl_stmt(stmt_type)
-           || stmt_type == stmt::T_HELP
            || stmt_type == stmt::T_VARIABLE_SET
            || stmt_type == stmt::T_USE_DATABASE
            || stmt_type == stmt::T_EMPTY_QUERY

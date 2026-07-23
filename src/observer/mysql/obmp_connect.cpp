@@ -437,6 +437,9 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
         LOG_WARN("failed to init_tenant", K(ret));
     } else if (OB_FAIL(session.load_all_sys_vars(*sys_variable_schema, false))) {
       LOG_WARN("load system variables failed", K(ret));
+    } else if (OB_FAIL(session.update_sys_variable(
+                   SYS_VAR_AUTOCOMMIT, conn->autocommit_snapshot_))) {
+      LOG_WARN("update autocommit failed", K(ret), K(conn->autocommit_snapshot_));
     } else {
       share::schema::ObUserLoginInfo login_info;
       login_info.tenant_name_ = tenant_name_;

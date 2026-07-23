@@ -434,7 +434,6 @@ ob_set_subtarget(ob_sql engine_cmd
   engine/cmd/ob_udf_executor.cpp
   engine/cmd/ob_user_cmd_executor.cpp
   engine/cmd/ob_variable_set_executor.cpp
-  engine/cmd/ob_xa_executor.cpp
   engine/cmd/ob_context_executor.cpp
   engine/cmd/ob_event_executor.cpp
   engine/cmd/ob_mock_executor.cpp
@@ -1146,7 +1145,6 @@ ob_set_subtarget(ob_sql optimizer
   optimizer/ob_delete_log_plan.cpp
   optimizer/ob_explain_log_plan.cpp
   optimizer/ob_fd_item.cpp
-  optimizer/ob_help_log_plan.cpp
   optimizer/ob_index_info_cache.cpp
   optimizer/ob_insert_log_plan.cpp
   optimizer/ob_join_order.cpp
@@ -1263,11 +1261,6 @@ ob_set_subtarget(ob_sql resolver
   resolver/tcl/ob_savepoint_stmt.cpp
   resolver/tcl/ob_start_trans_resolver.cpp
   resolver/tcl/ob_tcl_resolver.cpp
-  resolver/xa/ob_xa_commit_resolver.cpp
-  resolver/xa/ob_xa_end_resolver.cpp
-  resolver/xa/ob_xa_prepare_resolver.cpp
-  resolver/xa/ob_xa_rollback_resolver.cpp
-  resolver/xa/ob_xa_start_resolver.cpp
 )
 
 ob_set_subtarget(ob_sql resolver_cmd
@@ -1279,8 +1272,6 @@ ob_set_subtarget(ob_sql resolver_cmd
   resolver/cmd/ob_empty_query_resolver.cpp
   resolver/cmd/ob_get_diagnostics_resolver.cpp
   resolver/cmd/ob_get_diagnostics_stmt.cpp
-  resolver/cmd/ob_help_resolver.cpp
-  resolver/cmd/ob_help_stmt.cpp
   resolver/cmd/ob_kill_resolver.cpp
   resolver/cmd/ob_mock_resolver.cpp
   resolver/cmd/ob_load_data_resolver.cpp

@@ -22,7 +22,7 @@
 #include "storage/compaction/ob_tenant_compaction_progress.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
-#include "observer/ob_server_event_history_table_operator.h"
+#include "share/ob_structured_event_logger.h"
 
 namespace oceanbase
 {

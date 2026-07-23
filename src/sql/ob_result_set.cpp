@@ -246,17 +246,10 @@ int ObResultSet::implicit_commit_before_cmd_execute(ObSQLSessionInfo &session_in
                                                     const int cmd_type)
 {
   int ret = OB_SUCCESS;
-  if (session_info.is_in_transaction() && session_info.associated_xa()) {
-    const transaction::ObXATransID xid = session_info.get_xid();
-    ret = OB_TRANS_XA_ERR_COMMIT;
-    LOG_WARN("COMMIT is not allowed in a xa trans", K(ret), K(xid));
-    exec_ctx.set_need_disconnect(false);
-  } else {
-    ret = ObSqlTransControl::end_trans_before_cmd_execute(session_info,
-                                                          exec_ctx.get_need_disconnect_for_update(),
-                                                          exec_ctx.get_trans_state(),
-                                                          cmd_type);
-  }
+  ret = ObSqlTransControl::end_trans_before_cmd_execute(session_info,
+                                                        exec_ctx.get_need_disconnect_for_update(),
+                                                        exec_ctx.get_trans_state(),
+                                                        cmd_type);
   return ret;
 }
 
@@ -752,10 +745,7 @@ OB_INLINE int ObResultSet::do_close_plan(int errcode, ObExecContext &ctx)
     get_exec_context().set_errcode(errcode);
     sret = end_stmt(rollback || OB_SUCCESS != pret);
     // SQL_LOG(INFO, "end_stmt err code", K_(errcode), K(ret), K(pret), K(sret));
-    // if branch fail is returned from end_stmt, then return it first
-    if (OB_TRANS_XA_BRANCH_FAIL == sret) {
-      ret = OB_TRANS_XA_BRANCH_FAIL;
-    } else if (OB_FAIL(ret)) {
+    if (OB_FAIL(ret)) {
       // nop
     } else if (OB_SUCCESS != pret) {
       ret = pret;
@@ -848,16 +838,7 @@ int ObResultSet::do_close(int *client_ret)
 
   int prev_ret = ret;
   bool async = false; // for debug purpose
-  if (OB_TRANS_XA_BRANCH_FAIL == ret) {
-    if (my_session_.associated_xa()) {
-      // ignore ret
-      // Reset session state after the XA branch failure.
-      LOG_WARN("branch fail in global transaction", KPC(my_session_.get_tx_desc()));
-      ObSqlTransControl::clear_xa_branch(my_session_.get_xid(), my_session_.get_tx_desc());
-      my_session_.reset_tx_variable();
-      my_session_.disassociate_xa();
-    }
-  } else if (OB_NOT_NULL(physical_plan_)) {
+  if (OB_NOT_NULL(physical_plan_)) {
     if (is_end_trans_async()) {
       ObCurTraceId::TraceId *cur_trace_id = NULL;
       if (OB_ISNULL(cur_trace_id = ObCurTraceId::get_trace_id())) {

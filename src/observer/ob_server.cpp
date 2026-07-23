@@ -497,11 +497,6 @@ void ObServer::destroy()
     signal_handle_.destroy();
     FLOG_INFO("signal handle destroyed");
 
-    FLOG_INFO("opt stat manager destroyed");
-    ObOptStatManager::get_instance().destroy();
-    FLOG_INFO("opt stat manager destroyed");
-
-
     FLOG_INFO("begin to destroy timer monitor");
     ObTimerMonitor::get_instance().destroy();
     FLOG_INFO("timer monitor destroyed");
@@ -618,10 +613,6 @@ void ObServer::destroy()
     log_block_mgr_.destroy();
     FLOG_INFO("log block mgr destroy");
 
-
-    FLOG_INFO("begin to destroy rootservice event history");
-    ROOTSERVICE_EVENT_INSTANCE.destroy();
-    FLOG_INFO("rootservice event history destroyed");
 
     FLOG_INFO("begin to destroy kv global cache");
     ObKVGlobalCache::get_instance().destroy();
@@ -1119,10 +1110,6 @@ int ObServer::stop()
     //ObPartitionScheduler::get_instance().stop_merge();
     //FLOG_INFO("partition scheduler stopped", KR(ret));
 
-    FLOG_INFO("begin to stop opt stat manager ");
-    ObOptStatManager::get_instance().stop();
-    FLOG_INFO("opt stat manager  stopped");
-
     FLOG_INFO("begin to stop server storage meta service");
     SERVER_STORAGE_META_SERVICE.stop();
     FLOG_INFO("server storage meta service stopped");
@@ -1155,10 +1142,6 @@ int ObServer::stop()
     }
 
   
-    FLOG_INFO("begin to stop rootservice event history");
-    ROOTSERVICE_EVENT_INSTANCE.stop();
-    FLOG_INFO("rootservice event history stopped");
-
     FLOG_INFO("begin to stop kv global cache");
     ObKVGlobalCache::get_instance().stop();
     FLOG_INFO("kv global cache stopped");
@@ -2001,7 +1984,6 @@ int ObServer::init_global_context()
   gctx_.config_mgr_ = &config_mgr_;
   gctx_.tablet_operator_ = &tablet_operator_;
   gctx_.meta_db_pool_ = &meta_db_pool_;
-  gctx_.kv_storage_ = &kv_storage_;
   gctx_.sql_proxy_ = &sql_proxy_;
   gctx_.ddl_sql_proxy_ = &ddl_sql_proxy_;
   gctx_.res_inner_conn_pool_ = &res_inner_conn_pool_;

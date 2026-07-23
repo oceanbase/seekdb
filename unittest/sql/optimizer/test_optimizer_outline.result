@@ -41,6 +41,7 @@ Outline Data:
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
       MERGE(@"SEL$2" > "SEL$E5385516")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -96,6 +97,7 @@ Outline Data:
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
       MERGE(@"SEL$2" < "SEL$7BD09C5F")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -150,6 +152,7 @@ Outline Data:
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
       MERGE(@"SEL$2" < "SEL$7BD09C5F")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -206,6 +209,7 @@ Outline Data:
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
       FAST_MINMAX(@"SEL$2")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -263,6 +267,7 @@ Outline Data:
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
       FAST_MINMAX(@"SEL$2")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -342,6 +347,7 @@ Outline Data:
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
       MERGE(@"SEL$3" < "SEL$2")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -367,6 +373,7 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c3")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -392,6 +399,7 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c3")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -417,6 +425,7 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -442,6 +451,7 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -492,6 +502,7 @@ Outline Data:
       USE_NL_MATERIALIZATION(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -539,6 +550,7 @@ Outline Data:
       PQ_DISTRIBUTE(@"SEL$1" "opt"."t2"@"SEL$1" PARTITION NONE)
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -596,6 +608,7 @@ Outline Data:
       GBY_PUSHDOWN(@"SEL$2")
       FULL(@"SEL$2" "opt"."t2"@"SEL$2")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -666,6 +679,7 @@ Outline Data:
       PQ_DISTRIBUTE(@"SEL$1" "opt"."t1"@"SEL$1" PARTITION NONE)
       FULL(@"SEL$1" "opt"."t9"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -751,6 +765,7 @@ Outline Data:
       PQ_DISTRIBUTE(@"SEL$1" "opt"."t1"@"SEL$1" PARTITION NONE)
       FULL(@"SEL$1" "opt"."t9"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -813,6 +828,7 @@ Outline Data:
       FULL(@"SEL$1" "opt"."t9"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -894,6 +910,7 @@ Outline Data:
       FULL(@"SEL$6FCAE2AA" "opt"."t2"@"SEL$1")
       FULL(@"SEL$6FCAE2AA" "opt"."t1"@"SEL$1")
       UNNEST(@"SEL$2")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -980,6 +997,7 @@ Outline Data:
       FULL(@"SEL$E5385516" "opt"."t1"@"SEL$1")
       UNNEST(@"SEL$2")
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -1044,6 +1062,7 @@ Outline Data:
       FULL(@"SEL$1" "opt"."t8"@"SEL$1")
       UNNEST(@"SEL$3")
       MERGE(@"SEL$3" > "SEL$19FECD1D")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -1093,6 +1112,7 @@ Outline Data:
       PQ_DISTRIBUTE(@"SEL$1" "opt"."t2"@"SEL$1" PARTITION NONE)
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -1142,6 +1162,7 @@ Outline Data:
       PQ_DISTRIBUTE(@"SEL$1" "opt"."t1"@"SEL$1" NONE PARTITION)
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -1189,6 +1210,7 @@ Outline Data:
       PQ_DISTRIBUTE(@"SEL$1" "opt"."tt2"@"SEL$1" PARTITION NONE)
       FULL(@"SEL$1" "opt"."tt1"@"SEL$1")
       FULL(@"SEL$1" "opt"."tt2"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -1221,6 +1243,7 @@ Outline Data:
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       READ_CONSISTENCY( WEAK )
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -1252,6 +1275,7 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -1283,6 +1307,7 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -1315,6 +1340,7 @@ Outline Data:
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       QUERY_TIMEOUT(100)
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -1347,6 +1373,7 @@ Outline Data:
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FROZEN_VERSION(1)
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -1379,6 +1406,7 @@ Outline Data:
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       USE_PLAN_CACHE( NONE )
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -1411,6 +1439,7 @@ Outline Data:
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       USE_PLAN_CACHE( DEFAULT )
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -1442,6 +1471,7 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -1473,6 +1503,7 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -1504,6 +1535,7 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -1556,6 +1588,7 @@ Outline Data:
       GBY_PUSHDOWN(@"SEL$2")
       FULL(@"SEL$2" "opt"."t2"@"SEL$2")
       SIMPLIFY_SUBQUERY(@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -1588,6 +1621,7 @@ Outline Data:
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       TRACE_LOG
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -1620,6 +1654,7 @@ Outline Data:
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       LOG_LEVEL("INFO")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -1678,6 +1713,7 @@ Outline Data:
       FULL(@"SEL$2" "opt"."t2"@"SEL$2")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       LOG_LEVEL("INFO")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -1736,6 +1772,7 @@ Outline Data:
       FULL(@"SEL$2" "opt"."t2"@"SEL$2")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       TRACE_LOG
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -1794,6 +1831,7 @@ Outline Data:
       FULL(@"SEL$2" "opt"."t2"@"SEL$2")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       USE_PLAN_CACHE( NONE )
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -1852,6 +1890,7 @@ Outline Data:
       FULL(@"SEL$2" "opt"."t2"@"SEL$2")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       USE_PLAN_CACHE( DEFAULT )
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -1909,6 +1948,7 @@ Outline Data:
       GBY_PUSHDOWN(@"SEL$2")
       FULL(@"SEL$2" "opt"."t2"@"SEL$2")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -1944,6 +1984,7 @@ Outline Data:
       QUERY_TIMEOUT(100)
       TRACE_LOG
       LOG_LEVEL("info")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -1976,6 +2017,7 @@ Outline Data:
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$EA493D33" "opt"."t1"@"SEL$1")
       SIMPLIFY_GROUP_BY(@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -2017,6 +2059,7 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       INDEX(@"SEL$1" "opt"."t1"@"SEL$1" "idx_t1_c2")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -2049,6 +2092,7 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -2077,6 +2121,7 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       FULL(@"UPD$1" "opt"."t7"@"UPD$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -2108,6 +2153,7 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       FULL(@"DEL$1" "opt"."t1"@"DEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -2142,6 +2188,7 @@ Outline Data:
       BEGIN_OUTLINE_DATA
       USE_LATE_MATERIALIZATION(@"SEL$1")
       INDEX(@"SEL$1" "opt"."t_normal_idx"@"SEL$1" "idx")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -2169,6 +2216,7 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       INDEX(@"SEL$1" "opt"."t_normal_idx"@"SEL$1" "idx")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -2213,6 +2261,7 @@ Outline Data:
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$2" "opt"."t2"@"SEL$2")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -2276,6 +2325,7 @@ Outline Data:
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$2" "opt"."t3"@"SEL$2")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -2352,6 +2402,7 @@ Outline Data:
       USE_NL_MATERIALIZATION(@"SEL$2" "opt"."t3"@"SEL$2")
       INDEX(@"SEL$2" "opt"."t4"@"SEL$2" "idx_t4_c2")
       FULL(@"SEL$2" "opt"."t3"@"SEL$2")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -2415,6 +2466,7 @@ Outline Data:
       FULL(@"SEL$1" "opt"."t2"@"SEL$1")
       FULL(@"SEL$1" "opt"."t1"@"SEL$1")
       FULL(@"SEL$2" "opt"."t2"@"SEL$2")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -2466,6 +2518,7 @@ Outline Data:
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       FULL(@"SEL$4D615D57" "opt"."t2"@"SEL$1")
       SIMPLIFY_SUBQUERY(@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -2517,6 +2570,7 @@ Outline Data:
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       FULL(@"SEL$4D615D57" "opt"."t2"@"SEL$1")
       SIMPLIFY_SUBQUERY(@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -2568,6 +2622,7 @@ Outline Data:
       FULL(@"SEL$4D615D57" "opt"."t2"@"SEL$1")
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       SIMPLIFY_SUBQUERY(@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -2619,6 +2674,7 @@ Outline Data:
       FULL(@"SEL$4D615D57" "opt"."t2"@"SEL$1")
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       SIMPLIFY_SUBQUERY(@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -2688,6 +2744,7 @@ Outline Data:
       FULL(@"SEL$4D615D57" "opt"."t1"@"SEL$1")
       FULL(@"SEL$4D615D57" "opt"."t3"@"SEL$1")
       SIMPLIFY_SUBQUERY(@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -2782,6 +2839,7 @@ Outline Data:
       USE_NL_MATERIALIZATION(@"SEL$2" "opt"."t5"@"SEL$2")
       INDEX(@"SEL$2" "opt"."t4"@"SEL$2" "idx_t4_c2")
       INDEX(@"SEL$2" "opt"."t5"@"SEL$2" "idx_t5_c2")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -2832,6 +2890,7 @@ Outline Data:
       INDEX(@"SEL$3" "opt"."t4"@"SEL$3" "idx_t4_c2")
       OUTER_TO_INNER(@"SEL$1")
       ELIMINATE_JOIN(@"SEL$C6D21C0F" "opt"."t2"@"SEL$C6D21C0F")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -2885,6 +2944,7 @@ Outline Data:
       INDEX(@"SEL$3" "opt"."t4"@"SEL$3" "idx_t4_c2")
       OUTER_TO_INNER(@"SEL$1")
       ELIMINATE_JOIN(@"SEL$C6D21C0F" "opt"."t2"@"SEL$C6D21C0F")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -2944,6 +3004,7 @@ Outline Data:
       FULL(@"SEL$2" "opt"."t3"@"SEL$2")
       OUTER_TO_INNER(@"SEL$1")
       ELIMINATE_JOIN(@"SEL$C6D21C0F" "opt"."t2"@"SEL$C6D21C0F")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -2969,6 +3030,7 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       FULL(@"SELECT_1" "opt"."t4"@"SELECT_1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -2994,6 +3056,7 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -3059,6 +3122,7 @@ Outline Data:
       UNNEST(@"SEL$2")
       OUTER_TO_INNER(@"SEL$2")
       OUTER_TO_INNER(@"SEL$6FCAE2AA")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -3109,6 +3173,7 @@ Outline Data:
       FULL(@"SEL$488F0C13" "opt"."t7"@"SEL$1")
       OUTER_TO_INNER(@"SEL$1")
       ELIMINATE_JOIN(@"SEL$C6D21C0F" "opt"."t8"@"SEL$C6D21C0F")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -3148,6 +3213,7 @@ Outline Data:
       FULL(@"SEL$488F0C13" "opt"."t0"@"SEL$1")
       OUTER_TO_INNER(@"SEL$1")
       ELIMINATE_JOIN(@"SEL$C6D21C0F" ("opt"."t7"@"SEL$C6D21C0F" "opt"."t8"@"SEL$C6D21C0F"))
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -3215,6 +3281,7 @@ Outline Data:
       SEMI_TO_INNER(@"SEL$6FCAE2AA" "VIEW1")
       OUTER_TO_INNER(@"SEL$2")
       OUTER_TO_INNER(@"SEL$E5385516")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -3273,6 +3340,7 @@ Outline Data:
       OUTER_TO_INNER(@"SEL$A4C9DBFA")
       SIMPLIFY_WINFUNC(@"SEL$E4C97F16")
       MERGE(@"SEL$05266C8A" > "SEL$E4C97F18")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 
@@ -3353,6 +3421,7 @@ Outline Data:
       PUSH_LIMIT(@"SEL$9DC52427")
       PROJECT_PRUNE(@"SEL$F70B38FF")
       PROJECT_PRUNE(@"SEL$9F3B17F6")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
       END_OUTLINE_DATA
   */
 

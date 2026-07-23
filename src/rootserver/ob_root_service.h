@@ -32,7 +32,7 @@
 #include "rootserver/ob_root_minor_freeze.h"
 #include "rootserver/ob_system_admin_util.h"
 #include "rootserver/ob_root_inspection.h"
-#include "rootserver/ob_rs_event_history_table_operator.h"
+#include "share/ob_structured_event_logger.h"
 #include "rootserver/ob_snapshot_info_manager.h"
 #include "rootserver/ob_schema_history_recycler.h"
 #include "rootserver/ob_catalog_ddl_service.h"
@@ -125,6 +125,13 @@ public:
     virtual void runTimerTask() override;
   private:
     ObRootService &root_service_;
+  };
+
+  class ObDeadlockEventClearTask : public common::ObTimerTask
+  {
+  public:
+    virtual ~ObDeadlockEventClearTask() = default;
+    virtual void runTimerTask() override;
   };
 
 
@@ -467,13 +474,13 @@ private:
   // timers for rootservice periodic tasks
   common::ObTimer restart_task_timer_;
   common::ObTimer load_ddl_task_timer_;
-  common::ObTimer event_table_clear_task_timer_;
+  common::ObTimer deadlock_event_clear_task_timer_;
   common::ObTimer purge_recyclebin_task_timer_;
 
   // async timer tasks
   ObRestartTask restart_task_;  // repeat on failure and cancel on success
   ObLoadDDLTask load_ddl_task_; // repeat on failure and cancel on success
-  share::ObEventTableClearTask event_table_clear_task_;  // repeat & no retry
+  ObDeadlockEventClearTask deadlock_event_clear_task_;  // repeat & no retry
 
   ObPurgeRecyclebinTask purge_recyclebin_task_;     // periodic schedule
   // for set_config

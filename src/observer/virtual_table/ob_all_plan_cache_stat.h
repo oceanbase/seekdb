@@ -96,8 +96,6 @@ private:
     CLI_QUERY,
     OUTLINE_EXEC,
     PLAN_EXPLAIN,
-    ASYN_BASELINE,
-    LOAD_BASELINE,
     PS_EXEC,
     GV_SQL,
     PL_ANON,

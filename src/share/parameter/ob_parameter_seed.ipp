@@ -1264,12 +1264,6 @@ DEF_PARAM(_max_schema_slot_num, INT, OB_CLUSTER_PARAMETER, "128", "[2,256]",
 DEF_PARAM(_enable_add_fulltext_index_to_existing_table, BOOL, OB_CLUSTER_PARAMETER, "False",
          "enable create fulltext index after table is created",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_xa_gc_timeout, TIME, OB_CLUSTER_PARAMETER, "24h", "[1s,)",
-        "specifies the threshold value for a xa record to be considered as obsolete",
-        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_xa_gc_interval, TIME, OB_CLUSTER_PARAMETER, "1h", "[1s,)",
-        "specifies the scan interval of the gc worker",
-        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_enable_easy_keepalive, BOOL, OB_CLUSTER_PARAMETER, "True",
          "enable keepalive for each TCP connection.",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -1686,20 +1680,6 @@ DEF_PARAM(_ha_diagnose_history_recycle_interval, TIME, OB_CLUSTER_PARAMETER, "7d
          "The recycle interval time of diagnostic history data. Range: [2m, 180d]",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
-
-// index usage
-DEF_PARAM(_iut_enable, BOOL, OB_CLUSTER_PARAMETER, "True",
-        "specifies whether allow the index table usage start monitoring.",
-        ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-
-DEF_PARAM(_iut_max_entries, INT, OB_CLUSTER_PARAMETER, "30000", "[0,]",
-        "maximum of index entries to be monitoring.",
-        ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE))
-
-DEF_PARAM(_iut_stat_collection_type, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "SAMPLED", common::ObConfigIndexStatsModeChecker,
-    "specify index table usage stat collection type, values: SAMPLED, ALL",
-    ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE),
-    "SAMPLED, ALL");
 
 DEF_PARAM(optimizer_index_cost_adj, INT, OB_CLUSTER_PARAMETER, "0", "[0,100]",
         "adjust costing of index scan",

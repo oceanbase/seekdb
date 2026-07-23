@@ -641,8 +641,7 @@ public:
   void set_accessed_session_level_temp_table() { has_accessed_session_level_temp_table_ = true; }
   bool has_accessed_session_level_temp_table() const { return has_accessed_session_level_temp_table_; }
   // Clear temporary table
-  int drop_temp_tables(const bool is_sess_disconn = true, 
-                       const bool is_xa_trans = false, 
+  int drop_temp_tables(const bool is_sess_disconn = true,
                        const bool is_reset_connection = false);
 
   void set_for_trigger_package(bool value) { is_for_trigger_package_ = value; }
@@ -970,8 +969,6 @@ public:
   uint64_t get_priv_user_id() const {
     return (priv_user_id_ == OB_INVALID_ID) ? get_user_id() : priv_user_id_; }
   uint64_t get_priv_user_id_allow_invalid() { return priv_user_id_; }
-  int get_xa_last_result() const { return xa_last_result_; }
-  void set_xa_last_result(const int result) { xa_last_result_ = result; }
   // For performance optimization, tenant-level configuration items do not need to be retrieved in real time, they are cached in the session, and refreshed every 5s
   void refresh_tenant_config() { cached_tenant_config_info_.refresh(); }
   bool is_enable_batched_multi_statement()
@@ -1267,8 +1264,6 @@ private:
   ObTenantCachedSchemaGuardInfo cached_schema_guard_info_;
   bool in_definer_named_proc_;
   uint64_t priv_user_id_;
-  int64_t xa_end_timeout_seconds_;
-  int xa_last_result_;
   // For performance optimization, tenant-level configuration items do not need to be retrieved in real time and are cached in the session, with a refresh triggered every 5s
   ObCachedTenantConfigInfo cached_tenant_config_info_;
   bool prelock_;

@@ -1171,26 +1171,6 @@ int ObTransCallbackMgr::fill_from_all_list(ObTxFillRedoCtx &ctx, ObITxFillRedoFu
   return ret;
 }
 
-inline bool check_dup_tablet_(ObITransCallback *callback_ptr)
-{
-  bool is_dup_tablet = false;
-  int64_t tmp_ret = OB_SUCCESS;
-
-  // If id is a dup table tablet => true
-  // If id is not a dup table tablet => false
-  if (MutatorType::MUTATOR_ROW == callback_ptr->get_mutator_type()) {
-    const ObMvccRowCallback *row_iter = static_cast<const ObMvccRowCallback *>(callback_ptr);
-    const ObTabletID &target_tablet = row_iter->get_tablet_id();
-    // if (OB_TMP_FAIL(mem_ctx_->get_trans_ctx()->merge_tablet_modify_record_(target_tablet))) {
-    //   TRANS_LOG_RET(WARN, tmp_ret, "merge tablet modify record failed", K(tmp_ret),
-    //                 K(target_tablet), KPC(row_iter));
-    // }
-    // check dup table
-  }
-
-  return is_dup_tablet;
-}
-
 int ObTransCallbackMgr::log_submitted(const ObCallbackScopeArray &callbacks, share::SCN scn, int &submitted)
 {
   int ret = OB_SUCCESS;
@@ -1208,9 +1188,6 @@ int ObTransCallbackMgr::log_submitted(const ObCallbackScopeArray &callbacks, sha
 #ifdef ENABLE_DEBUG_LOG
           ob_abort();
 #endif
-        } // check dup table tx
-        else if(check_dup_tablet_(iter)) {
-          // mem_ctx_->get_trans_ctx()->set_dup_table_tx_();
         }
         ++cnt;
         ++submitted;

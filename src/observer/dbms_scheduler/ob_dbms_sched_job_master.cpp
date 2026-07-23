@@ -172,9 +172,6 @@ int ObDBMSSchedJobMaster::scheduler()
       }
       first_iter = false;
 
-      if (is_leader_ && TC_REACH_TIME_INTERVAL(PURGE_RUN_DETAIL_INTERVAL)) {
-        purge_run_detail();
-      }
     }
     clear_wait_vector();
     alive_jobs_.clear();
@@ -303,9 +300,7 @@ int ObDBMSSchedJobMaster::scheduler_job(ObDBMSSchedJobKey *job_key)
         LOG_WARN("job maybe missed, ignore it", K(now), K(job_info));
         int64_t new_next_date = calc_next_date(job_info);
         int tmp = OB_SUCCESS;
-        if (OB_SUCCESS != (tmp = table_operator_.update_for_missed(job_info))) {
-          LOG_WARN("update for end failed for missed job", K(tmp));
-        } else if (OB_SUCCESS != (tmp = table_operator_.update_next_date(job_info, new_next_date))){
+        if (OB_SUCCESS != (tmp = table_operator_.update_next_date(job_info, new_next_date))){
           LOG_WARN("update next date failed", K(tmp), K(job_info));
         } else {
           next_check_date = new_next_date;
@@ -483,49 +478,6 @@ int ObDBMSSchedJobMaster::register_job(ObDBMSSchedJobKey *job_key, int64_t next_
     common::ObSortedVector<ObDBMSSchedJobKey *>::iterator iter;
     ObDBMSSchedJobKey *replace_job_key = NULL;
     OZ (wait_vector_.replace(job_key, iter, compare_job_key, equal_job_key, replace_job_key));
-  }
-  return ret;
-}
-
-int ObDBMSSchedJobMaster::purge_run_detail()
-{
-  int ret = OB_SUCCESS;
-  uint64_t data_version = 0;
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("dbms sched job not init yet", K(ret), K(inited_));
-  } else {
-    // RPC removed: target is self on single replica; run purge in-process.
-    
-    ex_rpc::async_call([]() {
-          int ret = OB_SUCCESS;
-          const int64_t PURGE_RUN_DETAIL_TIMEOUT = 5 * 60 * 1000 * 1000L; // 5min
-          if (OB_ISNULL(GCTX.sql_proxy_)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("sql proxy is null", K(ret));
-          } else {
-            dbms_scheduler::ObDBMSSchedTableOperator table_operator;
-            if (OB_FAIL(table_operator.init(GCTX.sql_proxy_))) {
-              LOG_WARN("failed to init table_operator", K(ret));
-            } else {
-              bool is_primary_cluster = true;
-              if (OB_FAIL(share::ObShareUtil::is_primary_cluster(is_primary_cluster))) {
-                LOG_WARN("fail to check whether is primary cluster", KR(ret), K(is_primary_cluster));
-              } else if (!is_primary_cluster) {
-                LOG_INFO("tenant is standby, not GC", K(is_primary_cluster));
-              } else {
-                const int64_t save_timeout_ts = THIS_WORKER.get_timeout_ts();
-                THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + PURGE_RUN_DETAIL_TIMEOUT);
-                if (OB_FAIL(table_operator.purge_run_detail())) {
-                  LOG_WARN("failed to purge run detail", K(ret));
-                }
-                THIS_WORKER.set_timeout_ts(save_timeout_ts);
-              }
-            }
-            LOG_INFO("[DBMS_SCHED_GC] finish once", K(ret));
-          }
-        });
-    LOG_INFO("dispatch purge run detail async (fire-and-forget)", K(ret));
   }
   return ret;
 }

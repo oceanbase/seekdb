@@ -86,7 +86,6 @@
 #include "sql/resolver/cmd/ob_show_resolver.h"
 #include "sql/resolver/cmd/ob_diff_table_resolver.h"
 #include "sql/resolver/cmd/ob_merge_table_resolver.h"
-#include "sql/resolver/cmd/ob_help_resolver.h"
 #include "sql/resolver/cmd/ob_kill_resolver.h"
 #include "sql/resolver/cmd/ob_set_names_resolver.h"
 #include "sql/resolver/cmd/ob_set_transaction_resolver.h"
@@ -102,11 +101,6 @@
 #include "sql/resolver/ddl/ob_drop_sequence_resolver.h"
 #include "sql/resolver/ddl/ob_set_comment_resolver.h"
 #include "sql/resolver/expr/ob_raw_expr_wrap_enum_set.h"
-#include "sql/resolver/xa/ob_xa_start_resolver.h"
-#include "sql/resolver/xa/ob_xa_end_resolver.h"
-#include "sql/resolver/xa/ob_xa_prepare_resolver.h"
-#include "sql/resolver/xa/ob_xa_commit_resolver.h"
-#include "sql/resolver/xa/ob_xa_rollback_resolver.h"
 #include "sql/resolver/cmd/ob_get_diagnostics_resolver.h"
 #include "sql/resolver/cmd/ob_mock_resolver.h"
 #include "sql/resolver/cmd/ob_event_resolver.h"
@@ -522,7 +516,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       case T_SHOW_ENGINE:
       case T_SHOW_OPEN_TABLES:
       case T_SHOW_SEQUENCES:
-      case T_XA_RECOVER:
       case T_SHOW_CHECK_TABLE:
       case T_SHOW_CREATE_USER:
       case T_SHOW_CATALOGS:
@@ -591,10 +584,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         // fall through
       case T_SET_CHARSET: {
         REGISTER_STMT_RESOLVER(SetNames);
-        break;
-      }
-      case T_HELP: {
-        REGISTER_STMT_RESOLVER(Help);
         break;
       }
       case T_KILL: {
@@ -704,26 +693,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       case T_SET_TABLE_COMMENT:
       case T_SET_COLUMN_COMMENT: {
         REGISTER_STMT_RESOLVER(SetComment);
-        break;
-      }
-      case T_XA_START: {
-        REGISTER_STMT_RESOLVER(XaStart);
-        break;
-      }
-      case T_XA_END: {
-        REGISTER_STMT_RESOLVER(XaEnd);
-        break;
-      }
-      case T_XA_PREPARE: {
-        REGISTER_STMT_RESOLVER(XaPrepare);
-        break;
-      }
-      case T_XA_COMMIT: {
-        REGISTER_STMT_RESOLVER(XaCommit);
-        break;
-      }
-      case T_XA_ROLLBACK: {
-        REGISTER_STMT_RESOLVER(XaRollBack);
         break;
       }
       case T_ALTER_DISKGROUP_ADD_DISK: {
@@ -926,9 +895,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         } else {
           ddl_arg.ddl_stmt_str_ = params_.query_ctx_->get_sql_stmt();
         }
-        if (OB_FAIL(ObResolverUtils::set_sync_ddl_id_str(params_.session_info_, ddl_arg.ddl_id_str_))) {
-          LOG_WARN("Failed to set_sync_ddl_id_str", K(ret));
-        } else { } // do-nothing
       }
     }
   }  // end if

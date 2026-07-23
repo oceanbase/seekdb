@@ -1376,7 +1376,7 @@ int ObMPStmtExecute::do_process(ObSQLSessionInfo &session,
               enable_adaptive_pc ? &adpt_pc_conf : nullptr);
           plan->update_cache_access_stat(audit_record.table_scan_stat_);
         } else if (ctx_.self_add_plan_ && ctx_.plan_cache_hit_) {
-          // spm evolution plan first execute
+          // First execution of a plan generated during this request.
           plan->update_plan_stat(audit_record,
               true,
               table_row_count_list,
@@ -1537,7 +1537,7 @@ int ObMPStmtExecute::do_process_single(ObSQLSessionInfo &session,
     LOG_TRACE("sql retry",
               K(ret), "retry_times", retry_ctrl_.get_retry_times(), "sql", ctx_.cur_sql_);
   }
-  ctx_.bl_key_.reset();
+  ctx_.plan_key_.reset();
   return ret;
 }
 

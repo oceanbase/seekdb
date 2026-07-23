@@ -83,8 +83,6 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     var_init_exprs_(allocator_),
     is_returning_(false),
     is_late_materialized_(false),
-    is_dep_base_table_(false),
-    is_insert_select_(false),
     is_plain_insert_(false),
     contain_paramed_column_field_(false),
     first_array_index_(OB_INVALID_INDEX),
@@ -177,8 +175,6 @@ void ObPhysicalPlan::reset()
   ObPlanCacheObject::reset();
   is_returning_ = false;
   is_late_materialized_ = false;
-  is_dep_base_table_ = false;
-  is_insert_select_ = false;
   is_plain_insert_ = false;
   base_constraints_.reset();
   strict_constrinats_.reset();
@@ -511,7 +507,7 @@ void ObPhysicalPlan::update_plan_expired_info(const ObAuditRecordData &record,
       fill_row_count_info(true, stat_.access_table_num_, stat_.table_row_count_first_exec_, *table_row_count_list);
     }
   } else if (!info_inited) {
-    /* finish evolution, init use sampling infos */
+    /* Initialize the plan-expiration reference statistics from concurrent samples. */
     int64_t first_exec_row_count = 0;
     do {
       first_exec_row_count = ATOMIC_LOAD(&(stat_.first_exec_row_count_));
@@ -532,10 +528,10 @@ void ObPhysicalPlan::update_plan_expired_info(const ObAuditRecordData &record,
           if (stat_.table_row_count_first_exec_[i].row_count_ >= 0) {
             stat_.table_row_count_first_exec_[i].row_count_ /= sample_count;
           }
-          LOG_DEBUG("init first row stat for spm plan", K(i), K(stat_.table_row_count_first_exec_[i]));
+          LOG_DEBUG("init first row stat for plan expiration", K(i), K(stat_.table_row_count_first_exec_[i]));
         }
       }
-      LOG_DEBUG("init first exec info for spm plan", K(sample_count), K(stat_.first_exec_row_count_), K(stat_.first_exec_usec_));
+      LOG_DEBUG("init first exec info for plan expiration", K(sample_count), K(stat_.first_exec_row_count_), K(stat_.first_exec_usec_));
     }
   } else if (stat_.table_row_count_first_exec_ != NULL && table_row_count_list != NULL
              && record.get_elapsed_time() > SLOW_QUERY_TIME_FOR_PLAN_EXPIRE
@@ -817,8 +813,7 @@ int ObPhysicalPlan::set_table_locations(const ObTablePartitionInfoArray &infos,
 
 int ObPhysicalPlan::set_location_constraints(const ObIArray<LocationConstraint> &base_constraints,
                                              const ObIArray<ObPwjConstraint *> &strict_constraints,
-                                             const ObIArray<ObPwjConstraint *> &non_strict_constraints,
-                                             const ObIArray<ObDupTabConstraint> &dup_table_replica_cons)
+                                             const ObIArray<ObPwjConstraint *> &non_strict_constraints)
 {
   // deep copy location constraints
   int ret = OB_SUCCESS;
@@ -899,28 +894,13 @@ int ObPhysicalPlan::set_location_constraints(const ObIArray<LocationConstraint> 
     }
   }
 
-  if (OB_SUCC(ret) && dup_table_replica_cons.count() > 0) {
-    dup_table_replica_cons_.reset();
-    dup_table_replica_cons_.set_allocator(&allocator_);
-    if (OB_FAIL(dup_table_replica_cons_.init(dup_table_replica_cons.count()))) {
-      LOG_WARN("failed to init duplicate table constraints", K(ret));
-    } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < dup_table_replica_cons.count(); ++i) {
-        if(OB_FAIL(dup_table_replica_cons_.push_back(dup_table_replica_cons.at(i)))) {
-          LOG_WARN("failed to assign element", K(ret), K(dup_table_replica_cons.at(i)));
-        } else { /*do nothing*/ }
-      }
-    }
-  }
-
   if (OB_FAIL(ret)) {
     base_constraints_.reset();
     strict_constrinats_.reset();
     non_strict_constrinats_.reset();
-    dup_table_replica_cons_.reset();
   } else {
     LOG_TRACE("deep copied location constraints", K(base_constraints_), K(strict_constrinats_),
-                            K(non_strict_constrinats_), K(dup_table_replica_cons_));
+                            K(non_strict_constrinats_));
   }
 
   return ret;
@@ -935,12 +915,9 @@ bool ObPhysicalPlan::has_same_location_constraints(const ObPhysicalPlan &r) cons
   const ObIArray<ObPlanPwjConstraint>& r_non_strict_cons = r.get_non_strict_constraints();
   const ObIArray<ObPlanPwjConstraint>& l_strict_cons = get_strict_constraints();
   const ObIArray<ObPlanPwjConstraint>& r_strict_cons = r.get_strict_constraints();
-  const ObIArray<ObDupTabConstraint>& l_dup_rep_cons = get_dup_table_replica_constraints();
-  const ObIArray<ObDupTabConstraint>& r_dup_rep_cons = r.get_dup_table_replica_constraints();
   if (l_base_cons.count() != r_base_cons.count() ||
       l_strict_cons.count() != r_strict_cons.count() ||
-      l_non_strict_cons.count() != r_non_strict_cons.count()||
-      l_dup_rep_cons.count() != r_dup_rep_cons.count()) {
+      l_non_strict_cons.count() != r_non_strict_cons.count()) {
     is_same = false;
   } else {
     for (int64_t i = 0; is_same && i < l_base_cons.count(); i++) {
@@ -963,9 +940,6 @@ bool ObPhysicalPlan::has_same_location_constraints(const ObPhysicalPlan &r) cons
           is_same = (l_non_strict_cons.at(i).at(j) == r_non_strict_cons.at(i).at(j));
         }
       }
-    }
-    for(int64_t i = 0; is_same && i < l_dup_rep_cons.count(); i++) {
-      is_same = is_same && (l_dup_rep_cons.at(i) == r_dup_rep_cons.at(i));
     }
   }
   return is_same;
@@ -1175,7 +1149,7 @@ int ObPhysicalPlan::update_cache_obj_stat(ObILibCacheCtx &ctx)
       }
       stat_.ps_stmt_id_ = pc_ctx.sql_ctx_.statement_id_;
     } else {
-      ObTruncatedString trunc_stmt(pc_ctx.sql_ctx_.bl_key_.constructed_sql_, sql_length);
+      ObTruncatedString trunc_stmt(pc_ctx.sql_ctx_.plan_key_.constructed_sql_, sql_length);
       if (OB_FAIL(ob_write_string(get_allocator(),
                                   trunc_stmt.string(),
                                   stat_.stmt_))) {

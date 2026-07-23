@@ -25,7 +25,7 @@
 #include "observer/omt/ob_tenant.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
-#include "observer/ob_server_event_history_table_operator.h"
+#include "share/ob_structured_event_logger.h"
 #include "storage/slog_ckpt/ob_tenant_meta_snapshot_handler.h"
 
 #ifdef _WIN32

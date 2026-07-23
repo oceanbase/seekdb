@@ -586,13 +586,6 @@ int ObCreateTableHelper::set_tablegroup_id_()
     } else if (OB_ISNULL(tablegroup_schema)) {
       ret = OB_TABLEGROUP_NOT_EXIST;
       LOG_WARN("tabelgroup not exist ", KR(ret), K(tablegroup_id));
-    } else if (OB_UNLIKELY(ObDuplicateScope::DUPLICATE_SCOPE_NONE != table.get_duplicate_scope()
-               && OB_INVALID_ID != tablegroup_id)) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("duplicated table in tablegroup is not supported", KR(ret),
-               "table_id", table.get_table_id(),
-               "tablegroup_id", table.get_tablegroup_id());
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "duplicated table in tablegroup");
     }
   }
 

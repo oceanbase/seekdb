@@ -563,7 +563,6 @@ DEFINE_ERROR(OB_CANNOT_COPY_MAJOR_SSTABLE, -4682, -1, "HY000", "cannot copy majo
 DEFINE_ERROR(OB_SRC_DO_NOT_ALLOWED_MIGRATE, -4683, -1, "HY000", "src do not allowed migrate");
 DEFINE_ERROR(OB_TOO_MANY_TENANT_PARTITIONS_ERROR, -4684, -1, "HY000", "Too many partitions were defined for this tenant");
 DEFINE_ERROR(OB_ACTIVE_MEMTBALE_NOT_EXSIT, -4685, -1, "HY000", "active memtable not exist");
-DEFINE_ERROR(OB_USE_DUP_FOLLOW_AFTER_DML, -4686, -1, "HY000", "Should use leader replica for duplicate table after DML operator");
 DEFINE_ERROR(OB_NO_DISK_NEED_REBUILD, -4687, -1, "HY000", "no disk need rebuild");
 DEFINE_ERROR(OB_STANDBY_READ_ONLY, -4688, -1, "HY000", "standby tenant is read only");
 DEFINE_ERROR(OB_INVALD_WEB_SERVICE_CONTENT, -4689, -1, "HY000", "web service content not valid");
@@ -1079,7 +1078,7 @@ DEFINE_ERROR_EXT_DEP(OB_ERR_BLOB_CANT_HAVE_DEFAULT, -5430, ER_BLOB_CANT_HAVE_DEF
 DEFINE_ERROR_EXT_DEP(OB_ERR_INVALID_JSON_PATH_ARRAY_CELL, -5431, ER_INVALID_JSON_PATH_ARRAY_CELL, "42000", "A path expression is not a path to a cell in an array", "A path expression is not a path to a cell in an array");
 DEFINE_ERROR_EXT_DEP(OB_ERR_MISSING_JSON_VALUE, -5432, ER_MISSING_JSON_VALUE, "22035", "No value was found by '%.*s' on the specified path.", "No value was found by '%.192s' on the specified path.");
 DEFINE_ERROR_EXT_DEP(OB_ERR_MULTIPLE_JSON_VALUES, -5433, ER_MULTIPLE_JSON_VALUES, "22034", "More than one value was found by '%.*s' on the specified path.", "More than one value was found by '%.192s' on the specified path.");
-DEFINE_ERROR(OB_SQL_RETRY_SPM, -5434, -1, "HY000", "retry sql due to spm");
+DEFINE_ERROR(OB_SQL_RETRY_OUTLINE, -5434, -1, "HY000", "retry SQL with outline");
 DEFINE_ERROR(OB_OUTLINE_NOT_REPRODUCIBLE, -5435, -1, "HY000", "outline not reproducible");
 DEFINE_ERROR_EXT_DEP(OB_INVALID_ARGUMENT_FOR_TIMESTAMP_TO_SCN, -5436, -1, "42000", "Invalid argument for timestamp_to_scn()", " TIMESTAMP_TO_SCN expected timestamp argument");
 DEFINE_ERROR_EXT_DEP(OB_INVALID_ARGUMENT_FOR_SCN_TO_TIMESTAMP, -5437, -1, "42000", "Invalid argument for scn_to_timestamp()", "SCN_TO_TIMESTAMP expected a integer number as nsec argument");
@@ -1713,26 +1712,13 @@ DEFINE_ERROR(OB_TRANS_STMT_NEED_RETRY, -6241, -1, "HY000", "transaction statemen
 DEFINE_ERROR(OB_SAVEPOINT_NOT_EXIST, -6242, ER_SP_DOES_NOT_EXIST, "42000", "savepoint does not exist");
 DEFINE_ERROR(OB_TRANS_WAIT_SCHEMA_REFRESH, -6243, -1, "HY000", "local schema is not new enough, replaying logs of user table from standby cluster needs to wait for schema refreshing ");
 DEFINE_ERROR(OB_TRANS_OUT_OF_THRESHOLD, -6244, -1, "HY000", "out of transaction threshold");
-DEFINE_ERROR(OB_TRANS_XA_NOTA, -6245, ER_XAER_NOTA, "XAE04", "Unknown XID");
-DEFINE_ERROR_EXT(OB_TRANS_XA_RMFAIL, -6246, ER_XAER_RMFAIL, "XAE07", "The command cannot be executed when global transaction is in this state", "The command cannot be executed when global transaction is in the %s state");
-DEFINE_ERROR(OB_TRANS_XA_DUPID, -6247, ER_XAER_DUPID, "XAE08", "The XID already exists", "The XID already exists");
-DEFINE_ERROR(OB_TRANS_XA_OUTSIDE, -6248, ER_XAER_OUTSIDE, "XAE09", "Some work is done outside global transaction", "Some work is done outside global transaction");
-DEFINE_ERROR(OB_TRANS_XA_INVAL, -6249, ER_XAER_INVAL, "XAE05", "Invalid arguments were given", "XAER_INVAL: Invalid arguments (or unsupported command)");
-DEFINE_ERROR(OB_TRANS_XA_RMERR, -6250, ER_XAER_RMERR, "XAE03", "Resource manager error occurred in the transaction branch", "XAER_RMERR: Fatal error occurred in the transaction branch - check your data for consistency");
-DEFINE_ERROR(OB_TRANS_XA_PROTO, -6251, -1, "HY000", "Routine invoked in an improper context", "Routine invoked in an improper context");
-DEFINE_ERROR(OB_TRANS_XA_RBROLLBACK, -6252, ER_XA_RBROLLBACK, "XA100", "Rollback was caused by an unspecified reason", "XA_RBROLLBACK: Transaction branch was rolled back");
-DEFINE_ERROR(OB_TRANS_XA_RBTIMEOUT, -6253, ER_XA_RBTIMEOUT, "XA106", "Transaction branch took long", "XA_RBTIMEOUT: Transaction branch was rolled back: took too long");
-DEFINE_ERROR(OB_TRANS_XA_RDONLY, -6254, -1, "HY000", "Transaction was read-only and has been committed", "Transaction was read-only and has been committed");
-DEFINE_ERROR(OB_TRANS_XA_RETRY, -6255, -1, "HY000", "Routine returned with no effect and may be re-issued", "The resource manager is not able to commit the transaction branch at this time. Please retry later");
 DEFINE_ERROR(OB_ERR_ROW_NOT_LOCKED, -6256, -1, "HY000", "Row has not been locked");
 DEFINE_ERROR(OB_EMPTY_PG, -6257, -1, "HY000", "Empty partition group");
-DEFINE_ERROR_EXT(OB_TRANS_XA_ERR_COMMIT, -6258, ER_XAER_RMFAIL, "XAE07", "RMFAIL: The command cannot be executed when global transaction is in this state", "RMFAIL: The command cannot be executed when global transaction is in the %s state");
 DEFINE_ERROR(OB_ERR_RESTORE_POINT_EXIST, -6259, -1, "HY000", "Restore point %s already exists");
 DEFINE_ERROR(OB_ERR_RESTORE_POINT_NOT_EXIST, -6260, -1, "HY000", "Restore point %s does not exist");
 DEFINE_ERROR(OB_ERR_BACKUP_POINT_EXIST, -6261, -1, "HY000", "Backup point %s already exists");
 DEFINE_ERROR(OB_ERR_BACKUP_POINT_NOT_EXIST, -6262, -1, "HY000", "Backup point %s does not exist");
 DEFINE_ERROR(OB_ERR_RESTORE_POINT_TOO_MANY, -6263, -1, "HY000", "cannot create restore point - too many restore points");
-DEFINE_ERROR(OB_TRANS_XA_BRANCH_FAIL, -6264, -1, "HY000", "another session or branch in same transaction failed or finalized");
 // for table lock
 DEFINE_ERROR(OB_OBJ_LOCK_NOT_EXIST, -6265, -1, "HY000", "object lock does not exist.");
 DEFINE_ERROR(OB_OBJ_LOCK_EXIST, -6266, -1, "HY000", "object lock exists.");

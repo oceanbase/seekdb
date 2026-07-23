@@ -67,7 +67,7 @@ struct ObTxStat
            const void* const tx_ctx_addr,
            const int64_t pending_log_size, const int64_t flushed_log_size,
            const int64_t session_id,
-           const bool is_exiting, const ObXATransID &xid,
+           const bool is_exiting,
            const int64_t last_request_ts,
            share::SCN start_scn, share::SCN end_scn, share::SCN rec_scn,
            const int busy_cbs_cnt,
@@ -80,8 +80,7 @@ struct ObTxStat
                KP_(tx_ctx_addr),
                K_(pending_log_size), K_(flushed_log_size),
                K_(session_id),
-               K_(is_exiting),
-               K_(xid), K_(last_request_ts),
+               K_(is_exiting), K_(last_request_ts),
                K_(start_scn), K_(end_scn), K_(rec_scn),
                K_(busy_cbs_cnt),
                K_(serial_final_scn),
@@ -105,7 +104,6 @@ public:
   int64_t flushed_log_size_;
   int64_t session_id_;
   bool is_exiting_;
-  ObXATransID xid_;
   int64_t last_request_ts_;
   share::SCN start_scn_;
   share::SCN end_scn_;
@@ -187,7 +185,6 @@ public:
 	            const uint32_t sess_id,
 	            const ObTransID &tx_id,
 	            const int64_t state,
-	            const ObXATransID &xid,
 	            const bool has_write_state,
 	            const ObTxWriteState &write_state,
             const ObTxIsolationLevel &isolation,
@@ -205,7 +202,7 @@ public:
             const bool can_elr);
 	  TO_STRING_KV(K_(addr), K_(sess_id),
 	               K_(tx_id), K_(state),
-	               K_(xid), K_(has_write_state), K_(write_state),
+	               K_(has_write_state), K_(write_state),
                K_(isolation), K_(snapshot_version),
                K_(access_mode), K_(op_sn),
                K_(flag), K_(active_ts), K_(expire_ts),
@@ -221,7 +218,6 @@ public:
   uint32_t sess_id_;
   ObTransID tx_id_;
   int64_t state_;
-	  ObXATransID xid_;
 	  bool has_write_state_;
   ObTxWriteState write_state_;
   ObTxIsolationLevel isolation_;

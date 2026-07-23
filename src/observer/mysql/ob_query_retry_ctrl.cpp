@@ -21,7 +21,6 @@
 #include "pl/ob_pl.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "observer/mysql/obmp_query.h"
-#include "observer/ob_server_event_history_table_operator.h"
 
 namespace oceanbase
 {
@@ -1019,7 +1018,6 @@ int ObQueryRetryCtrl::init()
   ERR_RETRY_FUNC("LOCATION", OB_SERVER_IS_STOPPING,              location_error_proc,        inner_location_error_proc,                            ObDASRetryCtrl::tablet_location_retry_proc);
   ERR_RETRY_FUNC("LOCATION", OB_TENANT_NOT_IN_SERVER,            location_error_proc,        inner_location_error_proc,                            ObDASRetryCtrl::tablet_location_retry_proc);
   ERR_RETRY_FUNC("LOCATION", OB_TRANS_RPC_TIMEOUT,               location_error_proc,        inner_location_error_proc,                            nullptr);
-  ERR_RETRY_FUNC("LOCATION", OB_USE_DUP_FOLLOW_AFTER_DML,        location_error_proc,        inner_location_error_proc,                            ObDASRetryCtrl::tablet_location_retry_proc);
   ERR_RETRY_FUNC("LOCATION", OB_TRANS_STMT_NEED_RETRY,           location_error_proc,        inner_location_error_proc,                            nullptr);
   ERR_RETRY_FUNC("LOCATION", OB_LS_NOT_EXIST,                    location_error_proc,        inner_location_error_proc,                            ObDASRetryCtrl::tablet_location_retry_proc);
   // OB_TABLET_NOT_EXIST may be caused by old version schema or incorrect location.
@@ -1060,7 +1058,7 @@ int ObQueryRetryCtrl::init()
   // wait and retry, will see new part
   ERR_RETRY_FUNC("SQL",      OB_NO_PARTITION_FOR_INTERVAL_PART,  short_wait_retry_proc,             short_wait_retry_proc,                         nullptr);
   ERR_RETRY_FUNC("SQL",      OB_BATCHED_MULTI_STMT_ROLLBACK,     batch_execute_opt_retry_proc,      batch_execute_opt_retry_proc,                  nullptr);
-  ERR_RETRY_FUNC("SQL",      OB_SQL_RETRY_SPM,                   force_local_retry_proc,            force_local_retry_proc,                        nullptr);
+  ERR_RETRY_FUNC("SQL",      OB_SQL_RETRY_OUTLINE,               force_local_retry_proc,            force_local_retry_proc,                        nullptr);
 
   /* timeout */
   ERR_RETRY_FUNC("SQL",      OB_TIMEOUT,                         timeout_proc,                timeout_proc,                                        nullptr);
@@ -1087,8 +1085,7 @@ ObQueryRetryCtrl::ObQueryRetryCtrl()
     curr_query_sys_local_schema_version_(0),
     curr_query_sys_global_schema_version_(0),
     retry_times_(0),
-    retry_type_(RETRY_TYPE_NONE),
-    retry_err_code_(OB_SUCCESS)
+    retry_type_(RETRY_TYPE_NONE)
 {
 }
 
@@ -1142,7 +1139,6 @@ void ObQueryRetryCtrl::test_and_save_retry_state(const ObGlobalContext &gctx,
   ObInterruptCheckerGuard checker_guard(tmp_checker);
   client_ret = err;
   retry_type_ = RETRY_TYPE_NONE;
-  retry_err_code_ = OB_SUCCESS;
   retry_func func = nullptr;
   ObSQLSessionInfo *session = result.get_exec_context().get_my_session();
   if (OB_ISNULL(session)) {
@@ -1192,10 +1188,6 @@ void ObQueryRetryCtrl::test_and_save_retry_state(const ObGlobalContext &gctx,
     // this retry times only apply to current thread retry.
     // reset to 0 after each packet retry
     retry_times_++;
-  }
-  // xiaochu: I don't like the idea 'retry_err_code_', remove it later
-  if (RETRY_TYPE_NONE != retry_type_) {
-    retry_err_code_ = client_ret;
   }
   if (RETRY_TYPE_NONE != retry_type_) {
     struct CloseFailFunctor {

@@ -80,12 +80,25 @@ int ObReqQueue::process_task(ObLink *task)
     CREATE_WITH_TEMP_CONTEXT(param) {
       ObRequest *req = static_cast<ObRequest *>(task);
 
+      // init trace id
+      // obcall RPC transport removed (single-replica): OB_RPC requests are never
+      // queued here, so only the mysql-style init path remains.
       ObCurTraceId::init(host_);
+      //Set the chid of the source package to the thread
+      // int64_t st = ::oceanbase::common::ObTimeUtility::current_time();
+      // PROFILE_LOG(DEBUG, HANDLE_PACKET_START_TIME PCODE, st, packet->get_pcode());
 
       // setup and init warning buffer
+      // For general SQL processing, the rpc processing function entry uses set_tsi_warning_buffer to set the session warning buffer
+      // The warning buffer is set to the thread part; but for the handler of the task remote execution, because
+      // After the error message reaches the process() function, it needs to be used when serializing result_code
+      // Therefore, the warning buffer member of the session cannot be used. Therefore, one is set by default.
       ob_setup_default_tsi_warning_buffer();
       ob_reset_tsi_warning_buffer();
-      qhandler_->handle_request(req);
+      // go!
+      qhandler_->handlePacketQueue(req, nullptr);
+      // int64_t ed = ::oceanbase::common::ObTimeUtility::current_time();
+      // PROFILE_LOG(DEBUG, HANDLE_PACKET_END_TIME PCODE, ed, packet->get_pcode());
       ObCurTraceId::reset();
       ObThreadLogLevelUtils::clear();
     }

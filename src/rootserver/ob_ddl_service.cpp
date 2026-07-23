@@ -173,24 +173,11 @@ int ObDDLService::create_user_tables(
   int ret = OB_SUCCESS;
   ddl_task_id = 0;
   RS_TRACE(create_user_tables_begin);
-  bool have_duplicate_table = false;
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("not init", K(ret));
   } else if (table_schemas.count() < 1) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table_schemas have no element", K(ret));
-  } else {
-    have_duplicate_table = table_schemas.at(0).is_duplicate_table();
-  }
-
-  if (OB_FAIL(ret)) {
-    //do nothing
-  } else if (!have_duplicate_table) {
-    // do nothing
-  } else {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not user tenant, create duplicate table not supported", KR(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "not user tenant, create duplicate table");
   }
 
   if (OB_FAIL(ret)) {
@@ -1405,18 +1392,6 @@ int ObDDLService::set_tablegroup_id(ObTableSchema &table_schema)
     }
   }
 
-  // TODO: (2019.6.24 wendu) Cannot add replicated table to tablegroup
-  if (OB_SUCC(ret)) {
-    if (ObDuplicateScope::DUPLICATE_SCOPE_NONE != table_schema.get_duplicate_scope()
-        && OB_INVALID_ID != table_schema.get_tablegroup_id()) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("changing tablegroup of duplicate table is not supported", K(ret),
-               "table_id", table_schema.get_table_id(),
-               "tablegroup_id", table_schema.get_tablegroup_id());
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "changing tablegroup of duplicate table is");
-    }
-  }
-
   if (OB_SUCC(ret)) {
     uint64_t table_id = table_schema.get_table_id();
     if (!(is_inner_table(table_id)
@@ -1746,8 +1721,6 @@ int ObDDLService::create_tables_in_trans(const bool if_not_exist,
                                                      0 == i ? &tmp_ddl_stmt_str : NULL,
                                                      i == table_schemas.count() - 1))) {
           LOG_WARN("failed to create table schema, ", K(ret));
-        } else if (OB_FAIL(ddl_operator.insert_temp_table_info(trans, table_schema))) {
-          LOG_WARN("failed to insert_temp_table_info!", K(ret));
         } else if (table_schema.is_view_table() && dep_infos != nullptr && 0 == i) {
           for (int64_t i = 0 ; OB_SUCC(ret) && i < dep_infos->count(); ++i) {
             ObDependencyInfo dep;
@@ -1843,8 +1816,6 @@ int ObDDLService::create_index_table_in_trans(
                                                  trans,
                                                  ddl_stmt_str))) {
       LOG_WARN("failed to create table schema, ", KR(ret));
-		} else if (OB_FAIL(ddl_operator.insert_temp_table_info(trans, table_schema))) {
-			LOG_WARN("failed to insert temp table info!", KR(ret));
     } else {
       LOG_INFO("succeed to insert table schema in schema tables",
           K(table_schema.get_database_id()),
@@ -1916,13 +1887,6 @@ int ObDDLService::set_new_table_options(
   } else if (OB_FAIL(set_raw_table_options(
           alter_table_schema, new_table_schema, schema_guard, need_update_index_table))) {
     LOG_WARN("fail to set raw table options", K(ret), K(new_table_schema), K(orig_table_schema));
-  } else if (ObDuplicateScope::DUPLICATE_SCOPE_NONE != new_table_schema.get_duplicate_scope()
-             && OB_INVALID_ID != new_table_schema.get_tablegroup_id()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("changing duplicate_scope of table in tablegroup is not supported", K(ret),
-             "table_id", new_table_schema.get_table_id(),
-             "tablegroup_id", new_table_schema.get_tablegroup_id());
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "changing duplicate_scope of table in tablegroup is");
   } else {
     if (OB_SUCC(ret)
         && alter_table_schema.alter_option_bitset_.has_member(obcall::ObAlterTableArg::TABLEGROUP_NAME)) {
@@ -2213,13 +2177,6 @@ int ObDDLService::set_raw_table_options(
             }
             schema_guard.set_session_id(org_session_id);
           }
-          break;
-        }
-        case ObAlterTableArg::DUPLICATE_SCOPE: {
-          // alter table duplicate scope not allowed in master now
-          new_table_schema.set_duplicate_attribute(alter_table_schema.get_duplicate_scope(),
-                                                   alter_table_schema.get_duplicate_read_consistency());
-          need_update_index_table = true;
           break;
         }
         case ObAlterTableArg::ENABLE_ROW_MOVEMENT: {
@@ -12738,12 +12695,6 @@ int ObDDLService::alter_table_in_trans(obcall::ObAlterTableArg &alter_table_arg,
             }
           }
 
-          if (OB_FAIL(ret)) {
-          } else if (alter_table_schema.alter_option_bitset_.has_member(ObAlterTableArg::SESSION_ID) &&
-                       0 == new_table_schema.get_session_id() && !new_table_schema.is_tmp_table() &&
-                       OB_FAIL(ddl_operator.delete_temp_table_info(trans, new_table_schema))) {
-              LOG_WARN("failed to delete temp table info", K(ret));
-          }
         }
         // scence : alter table rename to a mock fk parent table existed, will replace mock fk parent table with real table
         if (OB_SUCC(ret) && alter_table_schema.alter_option_bitset_.has_member(obcall::ObAlterTableArg::TABLE_NAME)) {
@@ -15064,10 +15015,6 @@ int ObDDLService::alter_table(obcall::ObAlterTableArg &alter_table_arg,
     LOG_DEBUG("debug view comment", K(is_alter_comment), K(alter_table_schema));
     ObTZMapWrap tz_map_wrap;
     if (OB_FAIL(ret)) {
-    } else if (alter_table_arg.has_alter_duplicate_scope()) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not user tenant, alter table duplicate scope not supported", KR(ret));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "not user tenant, alter table duplicate scope");
     } else if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tz_map_wrap))) {
       LOG_WARN("get tenant timezone map failed", K(ret));
     } else if (FALSE_IT(alter_table_arg.set_tz_info_map(tz_map_wrap.get_tz_map()))) {
@@ -15860,8 +15807,6 @@ int ObDDLService::truncate_table_in_trans(const obcall::ObTruncateTableArg &arg,
                                true, /*need_sync_schema_version*/
                                is_truncate_table))) {
               LOG_WARN("failed to create table schema, ", K(ret));
-            } else if (OB_FAIL(ddl_operator.insert_temp_table_info(trans, tmp_schema))) {
-              LOG_WARN("failed to insert_temp_table_info!", K(ret));
             }
           } else {
             if (OB_FAIL(ddl_operator.create_index_in_recyclebin(
@@ -16405,7 +16350,6 @@ int ObDDLService::clear_ctas_hidden_table_session_id_(share::schema::ObTableSche
     LOG_WARN("hidden table is not a CTAS tmp table", K(ret), K(hidden_table_schema));
   } else {
     hidden_table_schema.set_session_id(0);
-    hidden_table_schema.set_create_host("");
     LOG_INFO("clear session_id of hidden table copied from CTAS table", K(hidden_table_schema));
   }
 
@@ -16416,9 +16360,7 @@ int ObDDLService::swap_ctas_hidden_table_session_id_(
     const share::schema::ObTableSchema &orig_table_schema,
     const share::schema::ObTableSchema &hidden_table_schema,
     share::schema::ObTableSchema &new_orig_table_schema,
-    share::schema::ObTableSchema &new_hidden_table_schema,
-    ObDDLOperator &ddl_operator,
-    common::ObMySQLTransaction &trans)
+    share::schema::ObTableSchema &new_hidden_table_schema)
 {
   int ret = OB_SUCCESS;
 
@@ -16429,14 +16371,6 @@ int ObDDLService::swap_ctas_hidden_table_session_id_(
   } else {
     new_orig_table_schema.set_session_id(hidden_table_schema.get_session_id());
     new_hidden_table_schema.set_session_id(orig_table_schema.get_session_id());
-    new_orig_table_schema.set_create_host(hidden_table_schema.get_create_host());
-    new_hidden_table_schema.set_create_host(orig_table_schema.get_create_host());
-    // since the session id is cleared when we create the hidden table, the temp table info
-    // won't be added at the creation time, so we should add it here
-    new_hidden_table_schema.set_in_offline_ddl_white_list(true);
-    if (OB_FAIL(ddl_operator.insert_temp_table_info(trans, new_hidden_table_schema))) {
-      LOG_WARN("failed to insert temp table info", K(ret), K(new_hidden_table_schema));
-    }
     LOG_INFO("restore session_id of hidden table copied from CTAS table",
              K(new_hidden_table_schema), K(new_orig_table_schema));
   }
@@ -16588,8 +16522,6 @@ int ObDDLService::create_user_hidden_table(const ObTableSchema &orig_table_schem
       if (OB_FAIL(ddl_operator.create_table(*table_schema, trans, NULL,
           i == schemas.count() - 1/*need_sync_schema_version, to update data table schema version*/))) {
         LOG_WARN("failed to create table schema", K(ret));
-      } else if (OB_FAIL(ddl_operator.insert_temp_table_info(trans, *table_schema))) {
-        LOG_WARN("failed to insert temp table info", K(ret), KPC(table_schema));
       }
     }
 
@@ -18621,13 +18553,13 @@ int ObDDLService::swap_orig_and_hidden_table_state(obcall::ObAlterTableArg &alte
           }
           // in prepare_hidden_table_schema, we clear the session id for hidden table of
           // CTAS tmp table. now, data loading stage is finished, we are ready to swap hidden table
-          // with CTAS tmp table. we should exchange the session id(and create_host) property to
+          // with CTAS tmp table. we should exchange the session id property to
           // ensure the new CTAS tmp table has correct state.
           if (OB_FAIL(ret)) {
           } else if (orig_table_schema->is_ctas_tmp_table() &&
               OB_FAIL(swap_ctas_hidden_table_session_id_(
                   *orig_table_schema, *hidden_table_schema, new_orig_table_schema,
-                  new_hidden_table_schema, ddl_operator, trans))) {
+                  new_hidden_table_schema))) {
             LOG_WARN("failed to swap ctas hidden table session id", K(ret));
           } else if (OB_FAIL(table_schemas.push_back(new_orig_table_schema)) ||
                      OB_FAIL(table_schemas.push_back(new_hidden_table_schema))) {
@@ -20571,7 +20503,6 @@ int ObDDLService::fill_truncate_table_fk_err_msg_without_schema_guard(const ObFo
 int ObDDLService::rebuild_table_schema_with_new_id(const ObTableSchema &orig_table_schema,
                                                    const ObDatabaseSchema &new_database_schema,
                                                    const ObString &new_table_name,
-                                                   const ObString &create_host,
                                                    const int64_t session_id,
                                                    const share::schema::ObTableType table_type_,
                                                    ObSchemaService &schema_service,
@@ -20642,7 +20573,6 @@ int ObDDLService::rebuild_table_schema_with_new_id(const ObTableSchema &orig_tab
     }
     if (new_table_schema.is_user_table() && TMP_TABLE == table_type_) {
       new_table_schema.set_table_type(table_type_);
-      new_table_schema.set_create_host(create_host);
       new_table_schema.set_session_id(session_id);
     }
     if (orig_table_schema.is_primary_vp_table()) {
@@ -27529,8 +27459,8 @@ int ObDDLSQLTransaction::end(const bool commit)
 {
   int ret = OB_SUCCESS;
 
-  // always reset index_name_checker_ before non parallell ddl commits.
-  if (commit && !ObSchemaService::in_parallel_ddl_thread()) {
+  // Always reset index_name_checker_ before DDL commits.
+  if (commit) {
     if (OB_ISNULL(GCTX.root_service_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("root_service is null", KR(ret));
@@ -27578,9 +27508,33 @@ int ObDDLSQLTransaction::end(const bool commit)
     }
   }
 
-  if (OB_SUCC(ret) && !ObSchemaService::in_parallel_ddl_thread() && commit) {
+  if (OB_SUCC(ret) && commit) {
     if (FAILEDx(register_ddl_trans())) {
       LOG_WARN("fail to register DDL transaction", KR(ret));
+    }
+  }
+
+  // Set the normal schema watermark only after all schema operations have
+  // finished and, for parallel DDL, wait_task_ready() has granted this
+  // transaction permission to commit. Updating the shared core-table row in
+  // log_operation() lets a later DDL task hold the row lock while it waits for
+  // an earlier task, forming a lock-order cycle. Keeping the update in this
+  // transaction preserves atomic visibility with the schema records. The
+  // incremental set only moves the watermark forward.
+  if (OB_SUCC(ret)
+      && commit
+      && start_operation_schema_version_ != tsi_oper->last_operation_schema_version_) {
+    const int64_t final_schema_version = tsi_oper->last_operation_schema_version_;
+    if (OB_UNLIKELY(final_schema_version <= 0)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid final schema version for setting normal schema watermark",
+               KR(ret), K(final_schema_version), K_(start_operation_schema_version));
+    } else {
+      ObGlobalStatProxy proxy(*this);
+      if (OB_FAIL(proxy.set_normal_schema_version(final_schema_version))) {
+        LOG_WARN("failed to set normal schema watermark",
+                 KR(ret), K(final_schema_version));
+      }
     }
   }
 

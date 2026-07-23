@@ -18,7 +18,6 @@ ob_set_subtarget(ob_server common
   ob_inner_sql_result.cpp
   ob_req_time_service.cpp
   ob_root_service_monitor.cpp
-  ob_server_event_history_table_operator.cpp
   ob_server_reload_config.cpp
   ob_server_schema_updater.cpp
   ob_server_utils.cpp

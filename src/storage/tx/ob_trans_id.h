@@ -76,11 +76,6 @@ public:
   { return tx_id_ == other.tx_id_; }
   bool operator!=(const ObTransID &other) const
   { return tx_id_ != other.tx_id_; }
-  /*  XA  */
-  int parse(char *b) {
-    UNUSED(b);
-    return OB_SUCCESS;
-  }
   TO_STRING_AND_YSON(OB_ID(txid), tx_id_);
 private:
   int64_t tx_id_;

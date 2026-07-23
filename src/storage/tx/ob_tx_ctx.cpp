@@ -47,15 +47,13 @@ using namespace tablelock;
 bool ObTxCtx::is_inited() const { return ATOMIC_LOAD(&is_inited_); }
 
 int ObTxCtx::init(const uint32_t session_id,
-                         const uint32_t associated_session_id,
-                         const ObTransID &trans_id,
-                         const int64_t trans_expired_time,
-                         const uint64_t cluster_version,
-                         ObTransService *trans_service,
-                         ObLSTxCtxMgr *ls_ctx_mgr,
-                         const bool for_replay,
-                         const TxCtxSource ctx_source,
-                         ObXATransID xid)
+                  const ObTransID &trans_id,
+                  const int64_t trans_expired_time,
+                  const uint64_t cluster_version,
+                  ObTransService *trans_service,
+                  ObLSTxCtxMgr *ls_ctx_mgr,
+                  const bool for_replay,
+                  const TxCtxSource ctx_source)
 {
   int ret = OB_SUCCESS;
 
@@ -96,7 +94,6 @@ int ObTxCtx::init(const uint32_t session_id,
 
   if (OB_SUCC(ret)) {
     session_id_ = session_id;
-    associated_session_id_ = associated_session_id;
     addr_ = trans_service->get_server();
     trans_id_ = trans_id;
     for_replay_ = for_replay;
@@ -112,10 +109,6 @@ int ObTxCtx::init(const uint32_t session_id,
     last_check_tx_status_ts_ = ObClockGenerator::getClock();
     pending_write_ = 0;
     block_frozen_memtable_ = nullptr;
-
-    if (!xid.empty()) {
-      exec_info_.xid_ = xid;
-    }
 
     if (is_for_replay()) {
       mt_ctx_.trans_replay_begin();
@@ -256,7 +249,6 @@ void ObTxCtx::default_init_()
 
   request_id_ = OB_INVALID_TIMESTAMP;
   session_id_ = 0;
-  associated_session_id_ = 0;
   timeout_task_.reset();
   trace_info_.reset();
   can_elr_ = false;
@@ -1134,14 +1126,6 @@ int ObTxCtx::recover_tx_ctx_table_info(ObTxCtxTableInfo &ctx_info)
     if (OB_SUCC(ret)) {
       if (exec_info_.serial_final_scn_.is_valid()) {
         recovery_parallel_logging_();
-      }
-      if ((ObTxState::COMMIT == exec_info_.state_
-           && exec_info_.max_applying_log_ts_ == exec_info_.max_applied_log_ts_)
-          || ObTxState::CLEAR == exec_info_.state_) {
-        //update max_commit_ts for dup table because of migrate or recover
-        share::g_mp->trans_service()
-            ->get_tx_version_mgr()
-            .update_max_commit_ts(ctx_tx_data_.get_commit_version(), false);
       }
       create_ctx_scn_ = exec_info_.max_applying_log_ts_;
 
@@ -2595,9 +2579,8 @@ int ObTxCtx::submit_redo_commit_info_log_(ObTxLogBlock &log_block,
     TRANS_LOG(WARN, "decide commit info log barrier failed", K(ret), K(barrier), KPC(this));
   } else {
     ObTxCommitInfoLog commit_info_log(
-        exec_info_.is_dup_tx_, can_elr_, trace_info_.get_app_trace_id(),
-        trace_info_.get_app_trace_info(), exec_info_.prev_record_lsn_, exec_info_.redo_lsns_,
-        exec_info_.xid_);
+        can_elr_, trace_info_.get_app_trace_id(),
+        trace_info_.get_app_trace_info(), exec_info_.prev_record_lsn_, exec_info_.redo_lsns_);
 
     if (OB_FAIL(validate_commit_info_log_(commit_info_log))) {
       TRANS_LOG(WARN, "invalid commit info log", K(ret), K(commit_info_log), K(trans_id_));
@@ -3249,8 +3232,6 @@ int ObTxCtx::submit_log_impl_(const ObTxLogType log_type)
                 K(trans_id_), K(big_segment_info_));
     } else {
       switch (log_type) {
-      // for xa and duplicate table
-      // TODO. need submit log in sync log callback
       case ObTxLogType::TX_COMMIT_INFO_LOG: {
         ret = submit_redo_commit_info_log_();
         break;
@@ -4136,7 +4117,6 @@ int ObTxCtx::replay_commit_info(const ObTxCommitInfoLog &commit_info_log,
     TRANS_LOG(WARN, "set app trace id error", K(ret), K(commit_info_log), K(*this));
   } else {
     exec_info_.mark_write_state();
-    exec_info_.xid_ = commit_info_log.get_xid();
     can_elr_ = commit_info_log.is_elr();
     runtime_state_.set_info_log_submitted();
     reset_redo_lsns_();

@@ -20,7 +20,6 @@
 #include "lib/thread/ob_thread_name.h"
 #include "rpc/frame/ob_req_deliver.h"
 #include "share/ob_thread_pool.h"
-#include "observer/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -29,45 +28,52 @@ namespace omt
 {
 class ObTenant;
 } // end of namespace omt
-namespace rpc
-{
-namespace frame
-{
-class ObReqSessionHandler;
-}
-} // end of namespace rpc
 
 namespace observer
 {
 
 using rpc::frame::ObReqQueue;
 using rpc::frame::ObiReqQHandler;
-using rpc::frame::ObReqSessionHandler;
 
-class QueueThread
+class ObUnixSocketLoginQueueThread
 {
+private:
+  class Thread : public lib::ThreadPool
+  {
+  public:
+    explicit Thread(ObReqQueue &queue)
+        : lib::ThreadPool(1), queue_(queue) {}
+    void run1() override
+    {
+      lib::set_thread_name("UnixLogin", get_thread_idx());
+      queue_.loop();
+    }
+
+  private:
+    ObReqQueue &queue_;
+  };
+
 public:
-  QueueThread(const char *thread_name = nullptr,
-              int64_t thread_cnt = 1)
-      : thread_(queue_, thread_cnt, thread_name), n_thread_(thread_cnt) {}
+  ObUnixSocketLoginQueueThread()
+      : queue_(), thread_(queue_) {}
 
-  ~QueueThread() { destroy(); }
+  ~ObUnixSocketLoginQueueThread() { destroy(); }
 
-  int init() { return queue_.init(); }
-  int start() { return thread_.start(); }
-
-public:
-  int set_thread_count(int thread_cnt) {
+  int init(const int64_t thread_cnt, ObiReqQHandler &qhandler)
+  {
     int ret = OB_SUCCESS;
-    if (thread_cnt != n_thread_) {
-      if (OB_FAIL(thread_.set_thread_count(thread_cnt))) {
-        // do nothing
-      } else {
-        n_thread_ = thread_cnt;
-      }
+    if (OB_FAIL(thread_.set_thread_count(thread_cnt))) {
+    } else {
+      queue_.set_qhandler(&qhandler);
     }
     return ret;
   }
+  int start() { return thread_.start(); }
+  bool push(rpc::ObRequest *req, const int max_queue_len)
+  {
+    return queue_.push(req, max_queue_len);
+  }
+
   void stop()
   {
     thread_.stop();
@@ -82,70 +88,33 @@ public:
     thread_.wait();
     thread_.destroy();
   }
-  class Thread : public lib::ThreadPool {
-  public:
-    Thread(ObReqQueue &queue, const int64_t thread_cnt, const char *thread_name)
-        : lib::ThreadPool(thread_cnt), queue_(queue), thread_name_(thread_name) {}
-    void run1() override
-    {
-      if (thread_name_ != nullptr) {
-        lib::set_thread_name(thread_name_, get_thread_idx());
-      }
-      queue_.loop();
-    }
-
-  private:
-    ObReqQueue &queue_;
-    const char *thread_name_;
-  } thread_;
-  ObReqQueue queue_;
 
 private:
-  
-  int n_thread_;
+  ObReqQueue queue_;
+  Thread thread_;
 };
 
 class ObSrvDeliver
     : public rpc::frame::ObReqQDeliver
 {
 public:
-  ObSrvDeliver(ObiReqQHandler &qhandler,
-               ObReqSessionHandler &session_handler,
-               ObGlobalContext &gctx);
+  explicit ObSrvDeliver(ObiReqQHandler &qhandler);
 
   int init();
   void stop();
 
   int repost(void* node);
   virtual int deliver(rpc::ObRequest &req);
-  void set_host(const common::ObAddr &host) { host_ = host; }
-  int create_queue_thread(int64_t thread_cnt, const char *thread_name, QueueThread *&qthread);
 private:
-  int init_queue_threads();
-
-
   int deliver_mysql_request(rpc::ObRequest &req);
 
 private:
-  bool is_inited_;
-  bool stop_;
-  common::ObAddr host_;
-  QueueThread *ddl_queue_;
-  QueueThread *ddl_parallel_queue_;
-  QueueThread *diagnose_queue_;
-  ObReqSessionHandler &session_handler_;
-  ObGlobalContext &gctx_;
+  ObUnixSocketLoginQueueThread unix_socket_login_queue_;
   DISALLOW_COPY_AND_ASSIGN(ObSrvDeliver);
 
 public:
-  static const int64_t MAX_QUEUE_LEN = 10000;
-  static const int LEASE_TASK_THREAD_CNT = 3;
-  static const int MINI_MODE_LEASE_TASK_THREAD_CNT = 1;
-  static const int DDL_TASK_THREAD_CNT = 1;
-  static const int MYSQL_TASK_THREAD_CNT = 6;
-  static const int MINI_MODE_MYSQL_TASK_THREAD_CNT = 1;
-  static const int MYSQL_DIAG_TASK_THREAD_CNT = 2;
-  static const int MINI_MODE_MYSQL_DIAG_TASK_THREAD_CNT = 1;
+  static const int64_t UNIX_SOCKET_LOGIN_QUEUE_MAX_LEN = 10000;
+  static const int UNIX_SOCKET_LOGIN_THREAD_CNT = 1;
 }; // end of class ObSrvDeliver
 
 } // end of namespace observer

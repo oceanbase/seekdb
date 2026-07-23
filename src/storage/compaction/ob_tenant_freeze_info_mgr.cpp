@@ -363,11 +363,11 @@ int64_t ObTenantFreezeInfoMgr::get_min_reserved_snapshot_for_tx()
   int64_t snapshot_version = INT64_MAX;
   uint64_t data_version = 0;
 
-  // is_gc_disabled means whether gc using globally reserved snapshot is disabled,
-  // and it may be because of disk usage or lost connection to inner table
+  // Local disk pressure (or failure to determine disk status) disables the
+  // local active-transaction watermark optimization. Sampling failures keep
+  // using the last complete local watermark instead.
   bool is_gc_disabled = share::g_mp->multi_version_garbage_collector()->
     is_gc_disabled();
-
 
   if (OB_FAIL(GET_MIN_DATA_VERSION(data_version))) {
     STORAGE_LOG(WARN, "get min data version failed", KR(ret));

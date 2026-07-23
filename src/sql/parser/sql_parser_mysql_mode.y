@@ -271,7 +271,7 @@ END_P SET_VAR DELIMITER
         ARRAY ASCII ASIS AT ATTRIBUTE AUTHORS AUTO AUTOEXTEND_SIZE AUTO_INCREMENT AUTO_INCREMENT_MODE AUTO_INCREMENT_CACHE_SIZE
         AVG AVG_ROW_LENGTH ACTIVATE AVAILABILITY ARCHIVELOG ASYNCHRONOUS AUDIT ADMIN AUTO_REFRESH API_MODE APPROX APPROXIMATE ARRAY_AGG ARRAY_FILTER ARRAY_FIRST ARRAY_MAP ARRAY_SORTBY 
 
-        BACKUP BALANCE BASE BASELINE BASELINE_ID BASIC BEGI BINDING SHARDING BINARY_FORMAT BINLOG BIT BIT_AND
+        BACKUP BALANCE BASE BASIC BEGI BINDING SHARDING BINARY_FORMAT BINLOG BIT BIT_AND
         BIT_OR BIT_XOR BLOCK BLOCK_INDEX BLOCK_SIZE BLOOM_FILTER BOOL BOOLEAN BTREE BYTE
         BREADTH BUCKETS BISON_LIST
         BADFILE BOUNDARY_COLUMN BOUNDARY_COLUMN_UNIT BUFFER_SIZE
@@ -285,7 +285,7 @@ END_P SET_VAR DELIMITER
 
         DAG DATA DATAFILE DATA_DISK_SIZE DATA_SOURCE DATA_TABLE_ID DATE DATE_ADD DATE_SUB DATETIME DAY DEALLOCATE DECRYPT
         DEFAULT_AUTH DEFAULT_LOB_INROW_THRESHOLD DEFINER DELAY DELAY_KEY_WRITE DEPTH DES_KEY_FILE DENSE_RANK DESCRIPTION DESTINATION DIAGNOSTICS DICT_TABLE
-        DIFF DIRECTORY DISABLE DISALLOW DISCARD DISK DISKGROUP DO DOT DUMP DUMPFILE DUPLICATE DUPLICATE_SCOPE DUPLICATE_READ_CONSISTENCY DYNAMIC
+        DIFF DIRECTORY DISABLE DISALLOW DISCARD DISK DISKGROUP DO DOT DUMP DUMPFILE DUPLICATE DYNAMIC
         DATABASE_ID DEFAULT_TABLEGROUP DISCONNECT DEMAND DELETE_INSERT
 
         EFFECTIVE EMPTY ENABLE ENABLE_EXTENDED_ROWID ENABLE_MACRO_BLOCK_BLOOM_FILTER ENCRYPT ENCRYPTED ENCRYPTION END ENDPOINT ENDS ENFORCED ENGINE_ ENGINES ENUM ENTITY ERROR_CODE ERROR_P ERRORS ESTIMATE
@@ -373,7 +373,7 @@ END_P SET_VAR DELIMITER
 
         WAIT WARNINGS WASH WEEK WEIGHT_STRING WHENEVER WORK WRAPPER WINDOW WEAK WITHOUT
 
-        X509 XA XID XML
+        X509 XML
 
         YEAR
 
@@ -395,7 +395,7 @@ END_P SET_VAR DELIMITER
 %type <node> subpartition_template_option subpartition_individual_option opt_hash_partition_list hash_partition_list hash_partition_element opt_hash_subpartition_list hash_subpartition_list hash_subpartition_element opt_subpartition_list opt_engine_option
 %type <node> date_unit date_params timestamp_params
 %type <node> drop_table_stmt table_list drop_view_stmt table_or_tables
-%type <node> explain_stmt explainable_stmt format_name kill_stmt help_stmt create_outline_stmt alter_outline_stmt drop_outline_stmt opt_outline_target
+%type <node> explain_stmt explainable_stmt format_name kill_stmt create_outline_stmt alter_outline_stmt drop_outline_stmt opt_outline_target
 %type <node> expr_list expr expr_const conf_const simple_expr simple_expr_list expr_or_default bit_expr bool_pri predicate explain_or_desc pl_expr_stmt
 %type <node> column_ref multi_delete_table
 %type <node> case_expr func_expr in_expr sub_query_flag search_expr
@@ -455,7 +455,7 @@ END_P SET_VAR DELIMITER
 %type <node> parameterized_trim
 %type <ival> opt_with_consistent_snapshot opt_config_scope opt_index_keyname opt_full opt_mode_flag opt_extended opt_extended_or_full
 %type <node> opt_priority opt_low_priority delete_option delete_option_list opt_delete_option_list
-%type <node> opt_work begin_stmt commit_stmt rollback_stmt opt_ignore opt_ignore_or_replace ignore_or_replace xa_begin_stmt xa_end_stmt xa_prepare_stmt xa_commit_stmt xa_rollback_stmt xa_recover_stmt xa_xid opt_join_or_resume opt_suspend opt_one_phase opt_convert_xid
+%type <node> opt_work begin_stmt commit_stmt rollback_stmt opt_ignore opt_ignore_or_replace ignore_or_replace
 %type <node> alter_table_stmt alter_table_actions alter_table_action_list alter_table_action alter_column_option alter_index_option alter_constraint_option standalone_alter_action alter_partition_option opt_to alter_tablegroup_option opt_table opt_tablegroup_option_list alter_tg_partition_option
 %type <node> tablegroup_option_list tablegroup_option alter_tablegroup_actions alter_tablegroup_action tablegroup_option_list_space_seperated
 %type <node> opt_tg_partition_option tg_hash_partition_option tg_key_partition_option tg_range_partition_option tg_subpartition_option tg_list_partition_option
@@ -491,7 +491,7 @@ END_P SET_VAR DELIMITER
 %type <node> recyclebin_restore_stmt purge_stmt opt_recyclebin_restore_rename_table opt_recyclebin_restore_rename_database
 %type <node> tenant_name_list opt_tenant_list tenant_list_tuple cache_type flush_scope
 %type <node> into_opt into_clause field_opt field_term field_term_list line_opt line_term line_term_list into_var_list into_var file_partition_opt file_opt file_option_list file_option file_size_const binary_format
-%type <node> string_list text_string string_val_list ulong_num
+%type <node> string_list text_string string_val_list
 %type <node> list_expr list_partition_element list_partition_expr list_partition_list list_partition_option opt_list_partition_list opt_list_subpartition_list list_subpartition_list list_subpartition_element drop_partition_name_list
 %type <node> distribute_method distribute_method_list opt_distribute_method_list
 %type <node> load_data_stmt opt_load_local opt_duplicate opt_compression opt_load_charset opt_load_ignore_rows infile_string
@@ -647,7 +647,6 @@ stmt:
   | create_index_stmt       { $$ = $1; check_question_mark($$, result); }
   | drop_index_stmt         { $$ = $1; check_question_mark($$, result); }
   | kill_stmt               { $$ = $1; question_mark_issue($$, result); }
-  | help_stmt               { $$ = $1; check_question_mark($$, result); }
   | create_view_stmt
   {
     $$ = $1;
@@ -693,12 +692,6 @@ stmt:
   | create_sequence_stmt    { $$ = $1; check_question_mark($$, result); }
   | alter_sequence_stmt     { $$ = $1; check_question_mark($$, result); }
   | drop_sequence_stmt      { $$ = $1; check_question_mark($$, result); }
-  | xa_begin_stmt           { $$ = $1; check_question_mark($$, result); }
-  | xa_end_stmt             { $$ = $1; check_question_mark($$, result); }
-  | xa_prepare_stmt         { $$ = $1; check_question_mark($$, result); }
-  | xa_commit_stmt          { $$ = $1; check_question_mark($$, result); }
-  | xa_rollback_stmt        { $$ = $1; check_question_mark($$, result); }
-  | xa_recover_stmt         { $$ = $1; check_question_mark($$, result); }
   | optimize_stmt     { $$ = $1; check_question_mark($$, result); }
   | dump_memory_stmt  { $$ = $1; check_question_mark($$, result); }
   | get_diagnostics_stmt    { $$ = $1; question_mark_issue($$, result); }
@@ -6002,28 +5995,6 @@ STRING_VALUE
 };
 
 
-ulong_num:
-INTNUM
-{
-  if(T_UINT64 == $1->type_) {
-    yyerror(&@1, result, "formatID should not greater than INT64_MAX\n");
-    YYERROR;
-  }
-  $$ = $1;
-}
-| HEX_STRING_VALUE
-{
-  int err_no = 0;
-  uint64_t val = 0;
-  val = ob_strntoull($1->raw_text_ + 2, $1->text_len_ - 2, 16, NULL, &err_no);
-  if(val > INT64_MAX || ERANGE == errno) {
-    YYABORT;
-  } else {
-    $1->value_ = val;
-    $$ = $1;
-  }
-};
-
 int_type_i:
 TINYINT     { $$[0] = T_TINYINT; }
 | SMALLINT    { $$[0] = T_SMALLINT; }
@@ -6647,11 +6618,6 @@ TABLE_MODE opt_equal_mark STRING_VALUE
   (void)($2);
   malloc_non_terminal_node($$, result->malloc_pool_, T_TABLE_MODE, 1, $3);
 }
-| DUPLICATE_SCOPE opt_equal_mark STRING_VALUE
-{
-  (void)($2);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_DUPLICATE_SCOPE, 1, $3);
-}
 | EXPIRE_INFO opt_equal_mark '(' expr ')'
 {
   (void)($2) ; /* make bison mute */
@@ -6839,11 +6805,6 @@ TABLE_MODE opt_equal_mark STRING_VALUE
 {
   (void)($2); /*  make bison mute*/
   malloc_non_terminal_node($$, result->malloc_pool_, T_ENABLE_MACRO_BLOCK_BLOOM_FILTER, 1, $3);  
-}
-| DUPLICATE_READ_CONSISTENCY opt_equal_mark STRING_VALUE
-{
-  (void)($2);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_DUPLICATE_READ_CONSISTENCY, 1, $3);
 }
 | STORAGE_CACHE_POLICY opt_equal_mark '(' storage_cache_policy_attribute_list ')'
 {
@@ -14225,24 +14186,6 @@ STATUS
 
 /*****************************************************************************
  *
- *	help grammar
- *
- *****************************************************************************/
-help_stmt:
-HELP STRING_VALUE
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_HELP, 1, $2);
-}
-| HELP NAME_OB
-{
-  $2->type_ = T_VARCHAR;
-  malloc_non_terminal_node($$, result->malloc_pool_, T_HELP, 1, $2);
-}
-;
-
-
-/*****************************************************************************
- *
  *	create user grammar
  *
  *****************************************************************************/
@@ -15092,150 +15035,6 @@ BEGI opt_hint_value opt_work
   malloc_non_terminal_node($$, result->malloc_pool_, T_BEGIN, 2, $$, $2);
 }
 ;
-
-/*****************************************************************************
- *
- *  xa transaction grammar
- *
- ******************************************************************************/
-
-xa_begin_stmt:
-XA START xa_xid opt_join_or_resume
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_XA_START, 2, $3, $4);
-}
-| XA BEGI xa_xid opt_join_or_resume
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_XA_START, 2, $3, $4);
-}
-;
-
-xa_end_stmt:
-XA END xa_xid opt_suspend
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_XA_END, 2, $3, $4);
-}
-;
-
-xa_prepare_stmt:
-XA PREPARE xa_xid
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_XA_PREPARE, 1, $3);
-}
-;
-
-xa_commit_stmt:
-XA COMMIT xa_xid opt_one_phase
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_XA_COMMIT, 2, $3, $4);
-}
-;
-
-xa_rollback_stmt:
-XA ROLLBACK xa_xid
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_XA_ROLLBACK, 1, $3);
-}
-;
-
-xa_recover_stmt:
-XA RECOVER opt_convert_xid
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_XA_RECOVER, 1, $3);
-}
-;
-
-xa_xid:
-text_string
-{
-  if(64 < $1->str_len_) {
-    yyerror(&@1, result, "gtrid length should not greater than 64\n");
-    YYERROR;
-  }
-  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 1, $1);
-}
-| text_string ',' text_string
-{
-  if(64 < $1->str_len_) {
-    yyerror(&@1, result, "gtrid length should not greater than 64\n");
-    YYERROR;
-  }
-  if(64 < $3->str_len_) {
-    yyerror(&@3, result, "bqual length should not greater than 64\n");
-    YYERROR;
-  }
-  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
-}
-| text_string ',' text_string ',' ulong_num
-{
-  if(64 < $1->str_len_) {
-    yyerror(&@1, result, "gtrid length should not greater than 64\n");
-    YYERROR;
-  }
-  if(64 < $3->str_len_) {
-    yyerror(&@3, result, "bqual length should not greater than 64\n");
-    YYERROR;
-  }
-  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 3, $1, $3, $5);
-}
-
-opt_join_or_resume:
-/* empty */
-{
-  $$= NULL;
-}
-| JOIN
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_INT);
-  $$->value_ = 0;
-
-}
-| RESUME
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_INT);
-  $$->value_ = 1;
-}
-;
-
-opt_suspend:
-/* empty */
-{
-  $$= NULL;
-}
-| SUSPEND
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_INT);
-  $$->value_ = 0;
-}
-| SUSPEND FOR MIGRATE
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_INT);
-  $$->value_ = 1;
-}
-;
-
-opt_one_phase:
-/* empty */
-{
- $$= NULL;
-}
-| ONE PHASE
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_INT);
-  $$->value_ = 0;
-}
-;
-
-opt_convert_xid:
-/* empty */
-{
-  $$= NULL;
-}
-| CONVERT XID
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_INT);
-  $$->value_ = 0;
-}
 
 /*****************************************************************************
  *
@@ -20640,8 +20439,6 @@ ACCESS_INFO
 |       BACKUP
 |       BADFILE
 |       BASE
-|       BASELINE
-|       BASELINE_ID
 |       BASIC
 |       BALANCE
 |       BEGI
@@ -20783,8 +20580,6 @@ ACCESS_INFO
 |       DUMP
 |       DUMPFILE
 |       DUPLICATE
-|       DUPLICATE_SCOPE
-|       DUPLICATE_READ_CONSISTENCY
 |       DYNAMIC
 |       DEFAULT_TABLEGROUP
 |       DEFAULT_LOB_INROW_THRESHOLD
@@ -21414,8 +21209,6 @@ ACCESS_INFO
 |       WORK
 |       WRAPPER
 |       X509
-|       XA
-|       XID
 |       XML
 |       YEAR
 |       ZONE

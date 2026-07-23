@@ -32,13 +32,13 @@ select OWNER, TABLE_NAME, NUM_ROWS from OCEANBASE.DBA_TAB_STATISTICS where table
 +-----------+------------------------------+----------+
 | OWNER     | TABLE_NAME                   | NUM_ROWS |
 +-----------+------------------------------+----------+
-| oceanbase | __all_virtual_core_all_table |       16 |
+| oceanbase | __all_virtual_core_all_table |       23 |
 +-----------+------------------------------+----------+
 select OWNER, TABLE_NAME, NUM_ROWS from OCEANBASE.DBA_TAB_STATISTICS where table_name='__ALL_VIRTUAL_CORE_COLUMN_TABLE' and NUM_ROWS > 0;
 +-----------+---------------------------------+----------+
 | OWNER     | TABLE_NAME                      | NUM_ROWS |
 +-----------+---------------------------------+----------+
-| oceanbase | __all_virtual_core_column_table |      182 |
+| oceanbase | __all_virtual_core_column_table |      324 |
 +-----------+---------------------------------+----------+
 select count(*) from OCEANBASE.DBA_TAB_STATISTICS where table_name='__all_table' and NUM_ROWS > 0;
 +----------+

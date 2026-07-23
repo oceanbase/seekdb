@@ -484,10 +484,6 @@ int ObPartitionExchange::check_table_conditions_in_common_(
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("offline ddl is being executed, other ddl operations are not allowed", K(ret), K(base_table_schema.check_can_do_ddl()), K(inc_table_schema.check_can_do_ddl()), K(base_table_schema), K(inc_table_schema));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "execute ddl while other ddl operations are executing long running ddl");
-  } else if (OB_UNLIKELY(share::ObDuplicateScope::DUPLICATE_SCOPE_NONE != base_table_schema.get_duplicate_scope() || share::ObDuplicateScope::DUPLICATE_SCOPE_NONE != inc_table_schema.get_duplicate_scope())) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("can't support exchanging parition between duplicate tables", K(ret), K(base_table_schema.get_duplicate_scope()), K(inc_table_schema.get_duplicate_scope()));
-    LOG_USER_ERROR(OB_OP_NOT_ALLOW, "exchange partition in duplicate tables");
   } else if (OB_UNLIKELY(base_table_schema.is_aux_table() != inc_table_schema.is_aux_table())) {
     LOG_WARN("aux table attribute of exchanging partition tables are not equal", K(ret), K(base_table_schema.is_aux_table()), K(inc_table_schema.is_aux_table()));
   } else if (OB_FAIL(check_tablespace_(base_table_schema, inc_table_schema))) {

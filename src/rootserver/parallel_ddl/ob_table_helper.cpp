@@ -248,9 +248,6 @@ int ObTableHelper::create_tables_(const ObString *ddl_stmt_str)
                 ddl_stmt_str,
                 true/*sync_schema_version_for_last_table*/))) {
       LOG_WARN("failed to batch create table", KR(ret), K_(new_tables), KPC(ddl_stmt_str));
-    } else if (OB_FAIL(schema_service_impl->get_table_sql_service().batch_insert_temp_table_info(
-                 get_trans_(), new_tables_))) {
-      LOG_WARN("failed to batch insert temp table info", KR(ret), K_(new_tables));
     }
   }
   return ret;
@@ -638,10 +635,6 @@ int ObTableHelper::inner_generate_table_schema_(const ObCreateTableArg &arg, ObT
     LOG_WARN("create table with table_id in 4.x is not supported",
              KR(ret), "table_id", arg.schema_.get_table_id());
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "create table with id is");
-  } else if (arg.schema_.is_duplicate_table()) { // check compatibility for duplicate table
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not user tenant, create duplicate table not supported", KR(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "not user tenant, create duplicate table");
   }
 
   if (FALSE_IT(new_table.set_table_id(mock_table_id))) {

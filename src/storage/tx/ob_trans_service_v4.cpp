@@ -880,10 +880,8 @@ int ObTransService::create_tx_ctx_(ObLS *ls,
                     tx.tx_id_,
                     tx.cluster_version_,
                     tx.sess_id_, /*session_id*/
-                    tx.assoc_sess_id_, /*associated_session_id*/
                     tx.get_expire_ts(),
-                    this,
-                    tx.xid_);
+                    this);
   ret = OB_NOT_NULL(ls) ?
     ls->create_tx_ctx(arg, exist, ctx) :
     tx_ctx_mgr_.create_tx_ctx(arg, exist, ctx);
@@ -1286,48 +1284,6 @@ int ObTransService::iterate_tx_scheduler_stat(ObTxSchedulerStatIterator &tx_sche
   }
   return ret;
 }
-
-
-
-int ObTransService::assign_user_savepoint_(ObTxDesc &tx, ObTxSavePointList &savepoints)
-{
-  int ret = OB_SUCCESS;
-  ARRAY_FOREACH_N(tx.savepoints_, i, cnt) {
-    if (tx.savepoints_.at(i).is_user_savepoint()) {
-      if (OB_FAIL(savepoints.push_back(tx.savepoints_.at(i)))) {
-        TRANS_LOG(WARN, "push back user create sp fail", K(ret), K(tx));
-      }
-    }
-  }
-  TRANS_LOG(INFO, "assign user sp finish", K(ret), K(savepoints), K(tx));
-  return ret;
-}
-
-int ObTransService::update_user_savepoint_(ObTxDesc &tx, const ObTxSavePointList &savepoints)
-{
-  int ret = OB_SUCCESS;
-  int j = 0;
-  bool is_contain = false;
-  ARRAY_FOREACH_N(savepoints, i, cnt) {
-    for (j = 0, is_contain = false; j<tx.savepoints_.count() && !is_contain; j++) {
-      is_contain = savepoints.at(i) == tx.savepoints_.at(j);
-    }
-    if (!is_contain) {
-      if (!savepoints.at(i).is_user_savepoint()) {
-        ret = OB_ERR_UNEXPECTED;
-        TRANS_LOG(ERROR, "savepoint isn't user create", K(ret), K(tx), K(i), K(savepoints));
-      } else if (OB_FAIL(tx.savepoints_.push_back(savepoints.at(i)))) {
-        TRANS_LOG(WARN, "push back user sp fail", K(ret));
-      } else {
-        // do thing
-      }
-    }
-  }
-  TRANS_LOG(INFO, "update user sp finish", K(ret), K(savepoints), K(tx));
-  return ret;
-}
-
-
 
 
 

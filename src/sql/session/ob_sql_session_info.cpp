@@ -36,8 +36,6 @@ using namespace oceanbase::pl;
 using namespace oceanbase::obmysql;
 using namespace oceanbase::observer;
 
-static const int64_t DEFAULT_XA_END_TIMEOUT_SECONDS = 60;/*60s*/
-
 const char *state_str[] =
 {
   "INIT",
@@ -126,8 +124,6 @@ ObSQLSessionInfo::ObSQLSessionInfo() :
       enable_role_array_(),
       in_definer_named_proc_(false),
       priv_user_id_(OB_INVALID_ID),
-      xa_end_timeout_seconds_(transaction::ObXADefault::OB_XA_TIMEOUT_SECONDS),
-      xa_last_result_(OB_SUCCESS),
       cached_tenant_config_info_(this),
       prelock_(false),
       is_ignore_stmt_(false),
@@ -279,8 +275,6 @@ void ObSQLSessionInfo::reset(bool skip_sys_var)
     enable_role_array_.reset();
     in_definer_named_proc_ = false;
     priv_user_id_ = OB_INVALID_ID;
-    xa_end_timeout_seconds_ = transaction::ObXADefault::OB_XA_TIMEOUT_SECONDS;
-    xa_last_result_ = OB_SUCCESS;
     prelock_ = false;
     ddl_info_.reset();
     if (OB_NOT_NULL(mem_context_)) {
@@ -688,7 +682,6 @@ int ObSQLSessionInfo::close_all_ps_stmt()
 // SQL proxy for this session's temporary table data.
 // For distributed planning, unless ac=1 otherwise hand over to master session for cleanup, deserialized session does nothing
 int ObSQLSessionInfo::drop_temp_tables(const bool is_disconn,
-                                       const bool is_xa_trans,
                                        const bool is_reset_connection)
 {
   int ret = OB_SUCCESS;
@@ -699,8 +692,7 @@ int ObSQLSessionInfo::drop_temp_tables(const bool is_disconn,
   } else if (!(is_inner() && !is_user_session())
              && (get_has_temp_table_flag()
                  || has_accessed_session_level_temp_table()
-                 || has_tx_level_temp_table()
-                 || is_xa_trans)
+                 || has_tx_level_temp_table())
              && (!get_is_deserialized() || ac)) {
     bool need_drop_temp_table = false;
     // Cleanup is needed on direct connection disconnect or reset connection.
@@ -731,7 +723,6 @@ int ObSQLSessionInfo::drop_temp_tables(const bool is_disconn,
     LOG_WARN("fail to drop temp tables", K(ret),
              K(1UL), K(get_server_sid()),
              K(has_accessed_session_level_temp_table()),
-             K(is_xa_trans),
              K(lbt()));
   }
   return ret;
@@ -1446,7 +1437,6 @@ OB_DEF_SERIALIZE(ObSQLSessionInfo)
       enable_role_array_,
       in_definer_named_proc_,
       priv_user_id_,
-      xa_end_timeout_seconds_,
       prelock_,
       thread_data_.is_in_retry_,
       ddl_info_,
@@ -1472,7 +1462,6 @@ OB_DEF_DESERIALIZE(ObSQLSessionInfo)
       enable_role_array_,
       in_definer_named_proc_,
       priv_user_id_,
-      xa_end_timeout_seconds_,
       prelock_,
       thread_data_.is_in_retry_,
       ddl_info_,
@@ -1499,7 +1488,6 @@ OB_DEF_SERIALIZE_SIZE(ObSQLSessionInfo)
       enable_role_array_,
       in_definer_named_proc_,
       priv_user_id_,
-      xa_end_timeout_seconds_,
       prelock_,
       thread_data_.is_in_retry_,
       ddl_info_,

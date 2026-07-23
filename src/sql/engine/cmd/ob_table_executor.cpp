@@ -36,7 +36,7 @@
 #include "sql/engine/cmd/ob_partition_executor_utils.h"
 
 #include "sql/printer/ob_select_stmt_printer.h"
-#include "observer/ob_server_event_history_table_operator.h"
+#include "share/ob_structured_event_logger.h"
 namespace oceanbase
 {
 using namespace common;
@@ -515,12 +515,6 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
     LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
     LOG_WARN("get first statement failed", K(ret));
-  } else if (table_schema.is_duplicate_table()) {
-
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "create duplicate table under sys or meta tenant");
-    LOG_WARN("create dup table not supported", KR(ret), K(table_schema));
-
   }
 
   if (OB_FAIL(ret)) {
@@ -863,8 +857,6 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
     // do nothing
   } else if (stmt.is_alter_triggers()) {
     if (stmt.get_tg_arg().trigger_infos_.count() > 0) {
-      
-      stmt.get_tg_arg().ddl_id_str_ = alter_table_arg.ddl_id_str_;
       stmt.get_tg_arg().ddl_stmt_str_ = first_stmt;
       OZ (rootserver::serial_call([&]{ return GCTX.root_service_->alter_trigger(stmt.get_tg_arg()); }), GCTX.self_addr());
     }

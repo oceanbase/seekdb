@@ -629,7 +629,6 @@ public:
       origin_table_name_(),
       new_db_name_(),
       new_table_name_(),
-      create_host_(),
       sequence_ddl_arg_(),
       session_id_(0),
       define_user_id_(common::OB_INVALID_ID)
@@ -644,7 +643,6 @@ public:
   common::ObString origin_table_name_;
   common::ObString new_db_name_;
   common::ObString new_table_name_;
-  common::ObString create_host_; //Temporary table is valid
   // Defined for create_user_tables() identity sequence arguments.
   ObSequenceDDLArg sequence_ddl_arg_;
   int64_t session_id_;
@@ -1470,7 +1468,6 @@ public:
        LOCALITY,
        SESSION_ID,
        STORE_FORMAT,
-       DUPLICATE_SCOPE,
        ENABLE_ROW_MOVEMENT,
        PROGRESSIVE_MERGE_ROUND,
        STORAGE_FORMAT_VERSION,
@@ -1573,10 +1570,6 @@ public:
   bool is_valid() const;
   bool has_rename_action() const
   { return alter_table_schema_.alter_option_bitset_.has_member(TABLE_NAME); }
-  bool has_alter_duplicate_scope() const
-  {
-    return alter_table_schema_.alter_option_bitset_.has_member(DUPLICATE_SCOPE);
-  }
   bool need_progressive_merge() const {
     return alter_table_schema_.alter_option_bitset_.has_member(BLOCK_SIZE)
         || alter_table_schema_.alter_option_bitset_.has_member(COMPRESS_METHOD)

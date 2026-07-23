@@ -17,7 +17,7 @@
 #include "ob_progressive_merge_helper.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/compaction/ob_partition_merger.h"
-#include "observer/ob_server_event_history_table_operator.h"
+#include "share/ob_structured_event_logger.h"
 
 namespace oceanbase
 {

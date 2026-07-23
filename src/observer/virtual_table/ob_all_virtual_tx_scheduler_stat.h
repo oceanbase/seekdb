@@ -66,16 +66,12 @@ private:
     SAVEPOINTS,
     SAVEPOINTS_TOTAL_CNT,
     INTERNAL_ABORT_CAUSE,
-    CAN_EARLY_LOCK_RELEASE,
-    GTRID,
-    BQUAL,
-    FORMAT_ID
+    CAN_EARLY_LOCK_RELEASE
   };
   static const int64_t OB_MAX_BUFFER_SIZE = 1024;
   char parts_buffer_[OB_MAX_BUFFER_SIZE];
   char tx_desc_addr_buffer_[20];
   char savepoints_buffer_[OB_MAX_BUFFER_SIZE];
-  transaction::ObXATransID xid_;
   transaction::ObTxSchedulerStatIterator tx_scheduler_stat_iter_;
   DISALLOW_COPY_AND_ASSIGN(ObGVTxSchedulerStat);
 };

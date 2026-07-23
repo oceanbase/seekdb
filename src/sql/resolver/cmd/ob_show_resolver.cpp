@@ -18,7 +18,6 @@
 #include "sql/resolver/cmd/ob_show_resolver.h"
 #include "sql/resolver/dcl/ob_grant_resolver.h"
 #include "observer/virtual_table/ob_tenant_all_tables.h"
-#include "storage/tx/ob_xa_define.h"
 #include "sql/printer/ob_schema_printer.h"
 #include "share/catalog/ob_catalog_utils.h"
 
@@ -158,7 +157,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_PROFILE)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_PROCEDURE_CODE)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_FUNCTION_CODE)
-            && OB_UNLIKELY(parse_tree.type_ != T_XA_RECOVER)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_ENGINE)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_OPEN_TABLES)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_CREATE_USER)
@@ -1566,11 +1564,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             }
           }
         }
-        break;
-      }
-      case T_XA_RECOVER: {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("xa recover is not supported in lite version", KR(ret));
         break;
       }
       case T_SHOW_CATALOGS: {
@@ -3481,16 +3474,6 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_SEQUENCES_LIKE,
                        "SELECT sequence_name FROM %s.%s WHERE database_id = %ld ORDER BY sequence_name COLLATE utf8mb4_bin ASC",
                        NULL,
                        "sequence_name");
-DEFINE_SHOW_CLAUSE_SET(XA_RECOVER,
-                       NULL,
-                       "SELECT format_id as formatID, length(gtrid) as gtrid_length, length(bqual) as bqual_length, concat(gtrid,bqual) as data from %s.%s where state =  %ld",
-                       NULL,
-                       NULL);
-DEFINE_SHOW_CLAUSE_SET(XA_RECOVER_CONVERT_XID,
-                       NULL,
-                       "SELECT format_id as formatID, length(gtrid) as gtrid_length, length(bqual) as bqual_length, concat('0x',hex(concat(gtrid,bqual))) as data from %s.%s where state = %ld",
-                       NULL,
-                       NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_CREATE_USER,
                        NULL,
                        "SELECT \"%.*s\" AS `CREATE USER for %.*s@%.*s` FROM DUAL",

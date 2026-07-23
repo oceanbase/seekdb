@@ -51,14 +51,12 @@ class ObTablePartitionInfo;
 class ObPhyOperatorMonnitorInfo;
 struct ObAuditRecordData;
 class ObOpSpec;
-class ObEvolutionPlan;
 class ObSqlSchemaGuard;
 
 //class ObPhysicalPlan: public common::ObDLinkBase<ObPhysicalPlan>
 typedef common::ObFixedArray<common::ObFixedArray<int64_t, common::ObIAllocator>, common::ObIAllocator> PhyRowParamMap;
 typedef common::ObFixedArray<ObTableLocation, common::ObIAllocator> TableLocationFixedArray;
 typedef common::ObFixedArray<ObPlanPwjConstraint, common::ObIAllocator> PlanPwjConstraintArray;
-typedef common::ObFixedArray<ObDupTabConstraint, common::ObIAllocator> DupTabReplicaArray;
 
 class ObPhysicalPlan : public ObPlanCacheObject
 {
@@ -336,16 +334,9 @@ public:
   const ObIArray<ObPlanPwjConstraint>& get_strict_constraints() const { return strict_constrinats_; }
   ObIArray<ObPlanPwjConstraint>& get_non_strict_constraints() { return non_strict_constrinats_; }
   const ObIArray<ObPlanPwjConstraint>& get_non_strict_constraints() const { return non_strict_constrinats_; }
-  ObIArray<ObDupTabConstraint> &get_dup_table_replica_constraints() {
-    return dup_table_replica_cons_;
-  }
-  const ObIArray<ObDupTabConstraint> &get_dup_table_replica_constraints() const {
-    return dup_table_replica_cons_;
-  }
   int set_location_constraints(const ObIArray<LocationConstraint> &base_constraints,
                                const ObIArray<ObPwjConstraint *> &strict_constraints,
-                               const ObIArray<ObPwjConstraint *> &non_strict_constraints,
-                               const ObIArray<ObDupTabConstraint> &dup_table_replica_cons);
+                               const ObIArray<ObPwjConstraint *> &non_strict_constraints);
   bool has_same_location_constraints(const ObPhysicalPlan &r) const;
   inline bool get_is_late_materialized() const
   {
@@ -357,11 +348,6 @@ public:
     is_late_materialized_ = is_late_mat;
   }
 
-  inline void set_is_dep_base_table(bool v) { is_dep_base_table_ = v; }
-  inline bool is_dep_base_table() const { return is_dep_base_table_; }
-
-  inline void set_is_insert_select(bool v) { is_insert_select_ = v; }
-  inline bool is_insert_select() const { return is_insert_select_; }
   inline void set_is_plain_insert(bool v) { is_plain_insert_ = v; }
   inline bool is_plain_insert() const { return is_plain_insert_; }
   inline void set_is_inner_sql(bool v) { is_inner_sql_ = v; }
@@ -548,9 +534,6 @@ private:
   // Each group is an array, saving the offset of the corresponding base table in base_table_constraints_
   // If t1, t2 need to satisfy non-strict constraints, then for each partition of t1 after partition pruning, there must be a partition of t2 on the same physical machine
   PlanPwjConstraintArray non_strict_constrinats_;
-  // constraint for duplicate table to choose replica
-  // dist plan will use this as (dup_tab_pos, advisor_tab_pos) pos is position in base constraint
-  DupTabReplicaArray dup_table_replica_cons_;
 public:
   ObExprFrameInfo expr_frame_info_;
 
@@ -566,14 +549,8 @@ private:
   bool is_returning_; // whether returning is set
   // Mark whether the plan is a late materialization plan
   bool is_late_materialized_;
-  // **** for spm ****
-  // Determine whether this plan depends on base table
-  bool is_dep_base_table_;
-  //judgethisplancorrespondingsqlwhether it isinsert into ... select ...
-  bool is_insert_select_;
-  // insert into values(x),(x)...(x)
+  // Whether this is INSERT INTO ... VALUES (...).
   bool is_plain_insert_;
-  // **** for spm end ***
   // column field array has parameterized column
   // If there are parameterized columns, ob_result_set must deep copy column_fields_ each time, and construct the column using a template
   bool contain_paramed_column_field_;

@@ -25,7 +25,7 @@
 #include "storage/slog_ckpt/ob_server_checkpoint_writer.h"
 #include "storage/meta_store/ob_tenant_storage_meta_service.h"
 #include "observer/omt/ob_tenant.h"
-#include "observer/ob_server_event_history_table_operator.h"
+#include "share/ob_structured_event_logger.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 
 namespace oceanbase

@@ -22,7 +22,7 @@
 #include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_checkpoint_service.h"
 #include "logservice/ob_log_service.h"
-#include "observer/ob_server_event_history_table_operator.h"
+#include "share/ob_structured_event_logger.h"
 
 namespace oceanbase
 {

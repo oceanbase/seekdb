@@ -30,7 +30,6 @@
 
 #include "share/tablet/ob_tablet_table_operator.h"
 #include "share/storage/ob_sqlite_connection_pool.h"
-#include "share/ob_kv_storage.h"
 #include "sql/ob_sql.h"
 #include "sql/engine/cmd/ob_load_data_rpc.h"
 #include "sql/das/ob_data_access_service.h"
@@ -297,9 +296,6 @@ private:
   // Shared SQLite connection pool for meta database (config and tablet_meta tables)
   share::ObSQLiteConnectionPool meta_db_pool_;
 
-  // KV storage for simple information (cluster role, switchover status, etc.)
-  share::ObKVStorage kv_storage_;
-
   // The Oceanbase partition table relating to
   share::ObTabletTableOperator tablet_operator_;
 
@@ -426,7 +422,6 @@ public:
   table::ObHTableLockMgr * h_table_lock_mgr() override { return mods_h_table_lock_mgr_; }
   table::ObTTLService * ttl_service() override { return mods_ttl_service_; }
   table::ObTableObjectPoolMgr * table_object_pool_mgr() override { return mods_table_object_pool_mgr_; }
-  share::ObIndexUsageInfoMgr * index_usage_info_mgr() override { return mods_index_usage_info_mgr_; }
   storage::ObTabletMemtableMgrPool * tablet_memtable_mgr_pool() override { return mods_tablet_memtable_mgr_pool_; }
   share::ObResourceLimitCalculator * resource_limit_calculator() override { return mods_resource_limit_calculator_; }
   storage::ObGlobalIteratorPool * global_iterator_pool() override { return mods_global_iterator_pool_; }
@@ -519,7 +514,6 @@ private:
   table::ObHTableLockMgr * mods_h_table_lock_mgr_ = nullptr;
   table::ObTTLService * mods_ttl_service_ = nullptr;
   table::ObTableObjectPoolMgr * mods_table_object_pool_mgr_ = nullptr;
-  share::ObIndexUsageInfoMgr * mods_index_usage_info_mgr_ = nullptr;
   storage::ObTabletMemtableMgrPool * mods_tablet_memtable_mgr_pool_ = nullptr;
   share::ObResourceLimitCalculator * mods_resource_limit_calculator_ = nullptr;
   storage::ObGlobalIteratorPool * mods_global_iterator_pool_ = nullptr;

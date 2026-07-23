@@ -265,7 +265,6 @@ namespace share
   static const char* const OB_SV_GTID_PURGED = "gtid_purged";
   static const char* const OB_SV_INNODB_API_BK_COMMIT_INTERVAL = "innodb_api_bk_commit_interval";
   static const char* const OB_SV_INNODB_API_TRX_LEVEL = "innodb_api_trx_level";
-  static const char* const OB_SV_INNODB_SUPPORT_XA = "innodb_support_xa";
   static const char* const OB_SV_SESSION_TRACK_GTIDS = "session_track_gtids";
   static const char* const OB_SV_SESSION_TRACK_TRANSACTION_INFO = "session_track_transaction_info";
   static const char* const OB_SV_TRANSACTION_ALLOC_BLOCK_SIZE = "transaction_alloc_block_size";

@@ -136,9 +136,10 @@ int ObDDLService::fork_single_table_in_trans_(const ObTableSchema &src_table_sch
     if (OB_SUCC(ret)) {
       share::ObForkTableInfo fork_table_info(src_table_schema.get_table_id(),
                                              fork_snapshot_version);
+      obcall::ObSequenceDDLArg empty_sequence_ddl_arg;
 
       if (OB_FAIL(create_tables_for_fork_(
-              ddl_stmt_str, table_schemas,
+              ddl_stmt_str, table_schemas, empty_sequence_ddl_arg,
               mock_fk_parent_table_schema_array, schema_guard, trans,
               fork_table_info))) {
         LOG_WARN("failed to create tables for fork", KR(ret), "table_name",
@@ -198,11 +199,12 @@ int ObDDLService::fork_single_table_in_trans_(const ObTableSchema &src_table_sch
 int ObDDLService::create_tables_for_fork_(
     const common::ObString &ddl_stmt_str,
     common::ObIArray<share::schema::ObTableSchema> &table_schemas,
+    const obcall::ObSequenceDDLArg &sequence_ddl_arg,
     ObIArray<ObMockFKParentTableSchema> &mock_fk_parent_table_schema_array,
     share::schema::ObSchemaGetterGuard &schema_guard,
     ObDDLSQLTransaction &trans, const share::ObForkTableInfo &fork_table_info) {
   int ret = OB_SUCCESS;
-  const uint64_t data_format_version = DATA_CURRENT_VERSION;
+  uint64_t tenant_data_version = 0;
   RS_TRACE(create_tables_in_trans_begin);
 
   if (OB_FAIL(check_inner_stat())) {
@@ -216,31 +218,38 @@ int ObDDLService::create_tables_for_fork_(
   } else {
     ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
     
-    RS_TRACE(operator_create_table_begin);
+    if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_data_version))) {
+      LOG_WARN("get min data version failed", K(ret));
+    } else {
+      RS_TRACE(operator_create_table_begin);
 
-    for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas.count(); i++) {
-      ObTableSchema &table_schema = table_schemas.at(i);
-      if (OB_FAIL(ObFtsIndexBuilderUtil::try_load_and_lock_dictionary_tables(
-              table_schema, trans))) {
-        LOG_WARN("fail to try load and lock dictionary tables", K(ret));
-      } else if (OB_FAIL(ddl_operator.create_table(
-                     table_schema, trans, 0 == i ? &ddl_stmt_str : NULL,
-                     i == table_schemas.count() - 1))) {
-        LOG_WARN("failed to create table schema, ", K(ret));
+      for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas.count(); i++) {
+        ObTableSchema &table_schema = table_schemas.at(i);
+        if (OB_FAIL(ObFtsIndexBuilderUtil::try_load_and_lock_dictionary_tables(
+                table_schema, trans))) {
+          LOG_WARN("fail to try load and lock dictionary tables", K(ret));
+        } else if (OB_FAIL(ddl_operator.create_sequence_in_create_table(
+                       table_schema, trans, schema_guard, &sequence_ddl_arg))) {
+          LOG_WARN("create sequence in create table fail", K(ret));
+        } else if (OB_FAIL(ddl_operator.create_table(
+                       table_schema, trans, 0 == i ? &ddl_stmt_str : NULL,
+                       i == table_schemas.count() - 1))) {
+          LOG_WARN("failed to create table schema, ", K(ret));
+        }
       }
-    }
 
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(ddl_operator.deal_with_mock_fk_parent_tables(
-              trans, schema_guard, mock_fk_parent_table_schema_array))) {
-        LOG_WARN("fail to deal_with_mock_fk_parent_tables", K(ret));
-      } else if (OB_FAIL(create_tablets_in_trans_(
-                     table_schemas, ddl_operator, trans, schema_guard,
-                     data_format_version, fork_table_info))) {
-        LOG_WARN("fail to create tablets in trans", KR(ret));
+      if (OB_SUCC(ret)) {
+        if (OB_FAIL(ddl_operator.deal_with_mock_fk_parent_tables(
+                trans, schema_guard, mock_fk_parent_table_schema_array))) {
+          LOG_WARN("fail to deal_with_mock_fk_parent_tables", K(ret));
+        } else if (OB_FAIL(create_tablets_in_trans_(
+                       table_schemas, ddl_operator, trans, schema_guard,
+                       tenant_data_version, fork_table_info))) {
+          LOG_WARN("fail to create tablets in trans", KR(ret));
+        }
       }
+      RS_TRACE(operator_create_table_end);
     }
-    RS_TRACE(operator_create_table_end);
 
     DEBUG_SYNC(BEFORE_CREATE_TABLE_TRANS_COMMIT);
     if (OB_SUCC(ret) && THIS_WORKER.is_timeout_ts_valid() &&
@@ -300,12 +309,12 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
     bool is_db_in_recyclebin = false;
     ObSEArray<const ObTableSchema*, 1> src_table_schemas;
 
-    if (OB_FAIL(get_runtime_schema_guard_with_version_in_inner_table(
+    if (OB_FAIL(get_tenant_schema_guard_with_version_in_inner_table(
             schema_guard))) {
       LOG_WARN("get schema guard in inner table failed", K(ret));
     } else if (OB_FAIL(schema_guard.get_schema_version(
                    refreshed_schema_version))) {
-      LOG_WARN("failed to get runtime schema version", KR(ret));
+      LOG_WARN("failed to get tenant schema version", KR(ret));
     }
 
     if (OB_SUCC(ret)) {

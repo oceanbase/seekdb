@@ -504,7 +504,7 @@ int ObLockMemtable::post_obj_lock_conflict_(ObMvccAccessCtx &acc_ctx,
                                              false,
                                              -1,
                                              -1,  // total_trans_node_cnt
-                                             acc_ctx.tx_desc_->get_assoc_session_id(),
+                                             acc_ctx.tx_desc_->get_session_id(),
                                              tx_id,
                                              conflict_tx_id,
                                              lock_mode,

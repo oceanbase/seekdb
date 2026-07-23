@@ -177,7 +177,6 @@ class ObDagWarningHistoryManager;
 class ObTenantErrsimModuleMgr;
 class ObTenantErrsimEventMgr;
 class ObSharedMemAllocMgr;
-class ObIndexUsageInfoMgr;
 class ObResourceLimitCalculator;
 
 class ObPluginVectorIndexService;
@@ -288,7 +287,6 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       table::ObHTableLockMgr*,                      \
       table::ObTTLService*,                         \
       table::ObTableObjectPoolMgr*,                \
-      share::ObIndexUsageInfoMgr*,                  \
       storage::ObTabletMemtableMgrPool*,            \
       PublicBlockGCService                          \
       share::ObResourceLimitCalculator*,            \

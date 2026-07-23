@@ -298,11 +298,6 @@ inline bool is_weak_read_service_ready_err(const int err)
   return OB_TRANS_WEAK_READ_VERSION_NOT_READY == err;
 }
 
-inline bool is_select_dup_follow_replic_err(const int err)
-{
-  return OB_USE_DUP_FOLLOW_AFTER_DML == err;
-}
-
 inline bool is_static_engine_retry(const int err)
 {
   return STATIC_ENG_NOT_IMPLEMENT == err;

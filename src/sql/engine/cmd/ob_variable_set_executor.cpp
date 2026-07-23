@@ -258,8 +258,6 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
                       ret = ret_ac;
                     } else if (OB_OP_NOT_ALLOW == ret_ac) {
                       ret = ret_ac;
-                    } else if (OB_TRANS_XA_ERR_COMMIT == ret_ac) {
-                      ret = ret_ac;
                     } else if (OB_ERR_UNEXPECTED == ret_ac) {
                       ret = ret_ac;
                     }
@@ -880,19 +878,7 @@ int ObVariableSetExecutor::process_session_autocommit_hook(ObExecContext &exec_c
       LOG_USER_ERROR(OB_ERR_WRONG_VALUE_FOR_VAR, (int)strlen(OB_SV_AUTOCOMMIT), OB_SV_AUTOCOMMIT,
                      (int)strlen(autocommit_str), autocommit_str);
     } else {
-      // in xa trans
-      if (in_trans && my_session->associated_xa()) {
-        const transaction::ObXATransID xid = my_session->get_xid();
-        // not allow to set autocommit to on
-        if (false == orig_ac && 1 == autocommit) {
-          ret = OB_TRANS_XA_ERR_COMMIT;
-          LOG_WARN("not allow to set autocommit on in xa trans", K(ret), K(xid));
-        } else if (true == orig_ac && 1 == autocommit) {
-          // do nothing
-        } else {
-          LOG_INFO("set autocommit off in xa trans", K(ret), K(xid));
-        }
-      } else if (false == orig_ac &&  true == in_trans && 1 == autocommit) {
+      if (false == orig_ac && true == in_trans && 1 == autocommit) {
         // set autocommit = 1 won't clear next scope transaction settings:
         // `set transaction read only`
         // `set transaction isolation level`

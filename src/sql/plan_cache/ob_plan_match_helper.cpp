@@ -31,14 +31,11 @@ int ObPlanMatchHelper::match_plan(const ObPlanCacheCtx &pc_ctx,
                                   ObIArray<ObTableLocation> &out_tbl_locations) const
 {
   int ret = OB_SUCCESS;
-  bool has_duplicate_table = false;
-  bool is_retrying = false;
   is_matched = true;
   const ObAddr &server = pc_ctx.exec_ctx_.get_addr();
   const ObIArray<LocationConstraint>& base_cons = plan->get_base_constraints();
   const ObIArray<ObPlanPwjConstraint>& strict_cons = plan->get_strict_constraints();
   const ObIArray<ObPlanPwjConstraint>& non_strict_cons = plan->get_non_strict_constraints();
-  const ObIArray<ObDupTabConstraint>& dup_rep_cons = plan->get_dup_table_replica_constraints();
   const ObIArray<ObTableLocation> &plan_tbl_locs = plan->get_table_locations();
   PWJTabletIdMap pwj_map;
   bool use_pwj_map = false;
@@ -50,24 +47,11 @@ int ObPlanMatchHelper::match_plan(const ObPlanCacheCtx &pc_ctx,
     // match all
     is_matched = true;
   } else {
-    if (OB_NOT_NULL(plan_set_) && plan_set_->has_duplicate_table()) {
-      if (OB_FAIL(pc_ctx.is_retry(is_retrying))) {
-        LOG_WARN("failed to test if retrying", K(ret));
-      } else if (is_retrying) {
-        has_duplicate_table = false;
-      } else {
-        has_duplicate_table = true;
-      }
-      LOG_DEBUG("contain duplicate table", K(has_duplicate_table), K(is_retrying));
-    }
     if (OB_SUCC(ret)) {
       // check base table constraints
       if (OB_FAIL(calc_table_locations(base_cons, plan_tbl_locs, pc_ctx,
                                       out_tbl_locations, phy_tbl_infos))) {
         LOG_WARN("failed to calculate table locations", K(ret), K(base_cons));
-      } else if (has_duplicate_table &&
-                OB_FAIL(ObLogPlan::adjust_dup_table_replica_by_cons(dup_rep_cons, phy_tbl_infos))) {
-        LOG_WARN("failed to reselect duplicate table replica", K(ret));
       } else if (OB_FAIL(cmp_table_types(base_cons, server, out_tbl_locations,
                                         phy_tbl_infos, is_matched))) {
         LOG_WARN("failed to compare table types", K(ret), K(base_cons));
@@ -181,11 +165,9 @@ int ObPlanMatchHelper::calc_table_locations(
       }
     }
     if (OB_SUCC(ret)) {
-      bool need_check_on_same_server = true;
-      if (OB_FAIL(ObPhyLocationGetter::get_phy_locations(out_tbl_locations,
-                                                         pc_ctx,
-                                                         phy_tbl_infos,
-                                                         need_check_on_same_server))) {
+      if (OB_FAIL(ObPhyLocationGetter::get_candi_phy_locations(out_tbl_locations,
+                                                               pc_ctx,
+                                                               phy_tbl_infos))) {
         LOG_WARN("failed to get phy locations", K(ret));
       } else {
         LOG_DEBUG("calculated phy locations", K(loc_cons), K(phy_tbl_infos));

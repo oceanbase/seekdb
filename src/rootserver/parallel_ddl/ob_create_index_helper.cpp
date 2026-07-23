@@ -557,8 +557,6 @@ int ObCreateIndexHelper::create_table_()
               index_schema, get_trans_(),
               ddl_stmt_str, true/*need_sync_schema_version*/, false/*is_truncate_table*/))) {
       LOG_WARN("fail to create table", KR(ret));
-    } else if (OB_FAIL(schema_service_impl->get_table_sql_service().insert_temp_table_info(get_trans_(), index_schema))) {
-      LOG_WARN("insert temp table info", KR(ret), K(index_schema));
     } else if (OB_FAIL(tsi_generator->get_current_version(last_schema_version))) {
       LOG_WARN("fail to get end version", KR(ret), K_(arg));
     } else if (OB_UNLIKELY(last_schema_version <= 0)) {

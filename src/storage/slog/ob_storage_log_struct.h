@@ -56,9 +56,7 @@ enum class ObRedoLogSubType
   OB_REDO_LOG_UPDATE_TABLET = 15,
   OB_REDO_LOG_EMPTY_SHELL_TABLET = 16,
 
-  OB_REDO_LOG_UPDATE_DUP_TABLE_LS = 17,
-
-  OB_REDO_LOG_MAX
+  OB_REDO_LOG_MAX = 17
 };
 
 class ObIBaseStorageLogEntry

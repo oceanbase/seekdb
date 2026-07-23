@@ -16,7 +16,7 @@
 
 #include "ob_replay_status.h"
 #include "logservice/ob_log_service.h"
-#include "observer/ob_server_event_history_table_operator.h"
+#include "share/ob_structured_event_logger.h"
 
 namespace oceanbase
 {

@@ -433,8 +433,6 @@ struct ObPlanCacheCtx : public ObILibCacheCtx
     return ret;
   }
 
-  int is_retry(bool &v) const;  // whether in retry
-  int is_retry_for_dup_tbl(bool &v) const; // Only retries due to table duplication will be set to true
   void set_begin_commit_stmt() { begin_commit_stmt_ = true; }
   bool is_begin_commit_stmt() const { return begin_commit_stmt_; }
   void set_is_parameterized_execute() { is_parameterized_execute_ = true; }

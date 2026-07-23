@@ -96,7 +96,6 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
     table_schema.set_tablegroup_id(OB_INVALID_ID);
     table_schema.set_table_id(table_id_);
     table_schema.set_read_only(read_only_);
-    table_schema.set_duplicate_attribute(duplicate_scope_, duplicate_read_consistency_);
     table_schema.set_enable_row_movement(enable_row_movement_);
     table_schema.set_table_mode_struct(table_mode_);
     table_schema.set_dop(table_dop_);

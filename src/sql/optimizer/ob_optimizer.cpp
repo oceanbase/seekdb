@@ -187,7 +187,6 @@ int ObOptimizer::generate_plan_for_temp_table(ObDMLStmt &stmt)
     ObSelectStmt *ref_query = NULL;
     ObSelectLogPlan *temp_plan = NULL;
     ObLogicalOperator *temp_op = NULL;
-    ObShardingInfo *sharding_info = NULL;
     for (int64_t i = 0; OB_SUCC(ret) && i < temp_table_infos.count(); i++) {
       ObRawExpr *temp_table_nonwhere_filter = NULL;
       ObRawExpr *temp_table_where_filter = NULL;
@@ -222,18 +221,10 @@ int ObOptimizer::generate_plan_for_temp_table(ObDMLStmt &stmt)
         LOG_WARN("Failed to generate temp_plan for sub_stmt", K(ret));
       } else if (OB_FAIL(temp_plan->get_candidate_plans().get_best_plan(temp_op))) {
         LOG_WARN("failed to get best plan", K(ret));
-      } else if (OB_FAIL(temp_plan->choose_duplicate_table_replica(temp_op,
-                                                                   ctx_.get_local_server_addr(),
-                                                                   true))) {
-        LOG_WARN("failed to choose duplicate table replica", K(ret));
       } else if (OB_ISNULL(temp_op)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(ret));
       } else {
-        sharding_info = temp_op->get_strong_sharding();
-        if (NULL != sharding_info && sharding_info->get_can_reselect_replica()) {
-          sharding_info->set_can_reselect_replica(false);
-        }
         if (NULL != temp_table_nonwhere_filter) {
           ObSEArray<ObRawExpr *, 1> expr_array;
           if (OB_FAIL(expr_array.push_back(temp_table_nonwhere_filter))) {
@@ -1345,6 +1336,11 @@ int ObOptimizer::init_system_stat()
   if (OB_ISNULL(opt_stat_manager) || OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null param", K(ret));
+  } else if (session->is_inner() && !session->is_user_session()) {
+    // Avoid cyclic dependency for schema/bootstrap and pure system inner SQL:
+    // checking system statistics requires the __all_aux_stat schema, which may need
+    // __all_global_stat to check core schema version.
+    ctx_.set_use_default_stat();
   } else if (OB_FAIL(opt_stat_manager->check_system_stat_validity(ctx_.get_exec_ctx(),
                                                                   is_valid))) {
     LOG_WARN("failed to check system stat is valid", K(ret));

@@ -180,8 +180,6 @@ int get_tx_state_from_tx_table_(const ObTransID &tx_id,
                                 share::SCN &recycle_scn);
 OB_NOINLINE int gen_trans_id_(ObTransID &trans_id);
 bool commit_need_retry_(const int ret);
-int assign_user_savepoint_(ObTxDesc &tx, ObTxSavePointList &savepoints);
-int update_user_savepoint_(ObTxDesc &tx, const ObTxSavePointList &savepoints);
 
 private:
 ObTxCtxMgr tx_ctx_mgr_;

@@ -387,7 +387,6 @@ constexpr int OB_CANNOT_COPY_MAJOR_SSTABLE = -4682;
 constexpr int OB_SRC_DO_NOT_ALLOWED_MIGRATE = -4683;
 constexpr int OB_TOO_MANY_TENANT_PARTITIONS_ERROR = -4684;
 constexpr int OB_ACTIVE_MEMTBALE_NOT_EXSIT = -4685;
-constexpr int OB_USE_DUP_FOLLOW_AFTER_DML = -4686;
 constexpr int OB_NO_DISK_NEED_REBUILD = -4687;
 constexpr int OB_STANDBY_READ_ONLY = -4688;
 constexpr int OB_INVALD_WEB_SERVICE_CONTENT = -4689;
@@ -808,7 +807,7 @@ constexpr int OB_ERR_WRONG_PARAMETERS_TO_NATIVE_FCT = -5407;
 constexpr int OB_ERR_CTE_MAX_RECURSION_DEPTH = -5408;
 constexpr int OB_DUPLICATE_OBJECT_NAME_EXIST = -5409;
 constexpr int OB_ERR_REFRESH_SCHEMA_TOO_LONG = -5410;
-constexpr int OB_SQL_RETRY_SPM = -5434;
+constexpr int OB_SQL_RETRY_OUTLINE = -5434;
 constexpr int OB_OUTLINE_NOT_REPRODUCIBLE = -5435;
 constexpr int OB_EER_WINDOW_NO_CHILD_PARTITIONING = -5438;
 constexpr int OB_EER_WINDOW_NO_INHERIT_FRAME = -5439;
@@ -1320,26 +1319,13 @@ constexpr int OB_TRANS_STMT_NEED_RETRY = -6241;
 constexpr int OB_SAVEPOINT_NOT_EXIST = -6242;
 constexpr int OB_TRANS_WAIT_SCHEMA_REFRESH = -6243;
 constexpr int OB_TRANS_OUT_OF_THRESHOLD = -6244;
-constexpr int OB_TRANS_XA_NOTA = -6245;
-constexpr int OB_TRANS_XA_RMFAIL = -6246;
-constexpr int OB_TRANS_XA_DUPID = -6247;
-constexpr int OB_TRANS_XA_OUTSIDE = -6248;
-constexpr int OB_TRANS_XA_INVAL = -6249;
-constexpr int OB_TRANS_XA_RMERR = -6250;
-constexpr int OB_TRANS_XA_PROTO = -6251;
-constexpr int OB_TRANS_XA_RBROLLBACK = -6252;
-constexpr int OB_TRANS_XA_RBTIMEOUT = -6253;
-constexpr int OB_TRANS_XA_RDONLY = -6254;
-constexpr int OB_TRANS_XA_RETRY = -6255;
 constexpr int OB_ERR_ROW_NOT_LOCKED = -6256;
 constexpr int OB_EMPTY_PG = -6257;
-constexpr int OB_TRANS_XA_ERR_COMMIT = -6258;
 constexpr int OB_ERR_RESTORE_POINT_EXIST = -6259;
 constexpr int OB_ERR_RESTORE_POINT_NOT_EXIST = -6260;
 constexpr int OB_ERR_BACKUP_POINT_EXIST = -6261;
 constexpr int OB_ERR_BACKUP_POINT_NOT_EXIST = -6262;
 constexpr int OB_ERR_RESTORE_POINT_TOO_MANY = -6263;
-constexpr int OB_TRANS_XA_BRANCH_FAIL = -6264;
 constexpr int OB_OBJ_LOCK_NOT_EXIST = -6265;
 constexpr int OB_OBJ_LOCK_EXIST = -6266;
 constexpr int OB_TRY_LOCK_OBJ_CONFLICT = -6267;
@@ -2392,7 +2378,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_SRC_DO_NOT_ALLOWED_MIGRATE__USER_ERROR_MSG "src do not allowed migrate"
 #define OB_TOO_MANY_TENANT_PARTITIONS_ERROR__USER_ERROR_MSG "Too many partitions were defined for this tenant"
 #define OB_ACTIVE_MEMTBALE_NOT_EXSIT__USER_ERROR_MSG "active memtable not exist"
-#define OB_USE_DUP_FOLLOW_AFTER_DML__USER_ERROR_MSG "Should use leader replica for duplicate table after DML operator"
 #define OB_NO_DISK_NEED_REBUILD__USER_ERROR_MSG "no disk need rebuild"
 #define OB_STANDBY_READ_ONLY__USER_ERROR_MSG "standby tenant is read only"
 #define OB_INVALD_WEB_SERVICE_CONTENT__USER_ERROR_MSG "web service content not valid"
@@ -2878,7 +2863,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_INVALID_JSON_PATH_ARRAY_CELL__USER_ERROR_MSG "A path expression is not a path to a cell in an array"
 #define OB_ERR_MISSING_JSON_VALUE__USER_ERROR_MSG "No value was found by '%.192s' on the specified path."
 #define OB_ERR_MULTIPLE_JSON_VALUES__USER_ERROR_MSG "More than one value was found by '%.192s' on the specified path."
-#define OB_SQL_RETRY_SPM__USER_ERROR_MSG "retry sql due to spm"
+#define OB_SQL_RETRY_OUTLINE__USER_ERROR_MSG "retry SQL with outline"
 #define OB_OUTLINE_NOT_REPRODUCIBLE__USER_ERROR_MSG "outline not reproducible"
 #define OB_INVALID_ARGUMENT_FOR_TIMESTAMP_TO_SCN__USER_ERROR_MSG " TIMESTAMP_TO_SCN expected timestamp argument"
 #define OB_INVALID_ARGUMENT_FOR_SCN_TO_TIMESTAMP__USER_ERROR_MSG "SCN_TO_TIMESTAMP expected a integer number as nsec argument"
@@ -3460,26 +3445,13 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_SAVEPOINT_NOT_EXIST__USER_ERROR_MSG "savepoint does not exist"
 #define OB_TRANS_WAIT_SCHEMA_REFRESH__USER_ERROR_MSG "local schema is not new enough, replaying logs of user table from standby cluster needs to wait for schema refreshing "
 #define OB_TRANS_OUT_OF_THRESHOLD__USER_ERROR_MSG "out of transaction threshold"
-#define OB_TRANS_XA_NOTA__USER_ERROR_MSG "Unknown XID"
-#define OB_TRANS_XA_RMFAIL__USER_ERROR_MSG "The command cannot be executed when global transaction is in the %s state"
-#define OB_TRANS_XA_DUPID__USER_ERROR_MSG "The XID already exists"
-#define OB_TRANS_XA_OUTSIDE__USER_ERROR_MSG "Some work is done outside global transaction"
-#define OB_TRANS_XA_INVAL__USER_ERROR_MSG "Invalid arguments were given"
-#define OB_TRANS_XA_RMERR__USER_ERROR_MSG "Resource manager error occurred in the transaction branch"
-#define OB_TRANS_XA_PROTO__USER_ERROR_MSG "Routine invoked in an improper context"
-#define OB_TRANS_XA_RBROLLBACK__USER_ERROR_MSG "Rollback was caused by an unspecified reason"
-#define OB_TRANS_XA_RBTIMEOUT__USER_ERROR_MSG "Transaction branch took long"
-#define OB_TRANS_XA_RDONLY__USER_ERROR_MSG "Transaction was read-only and has been committed"
-#define OB_TRANS_XA_RETRY__USER_ERROR_MSG "Routine returned with no effect and may be re-issued"
 #define OB_ERR_ROW_NOT_LOCKED__USER_ERROR_MSG "Row has not been locked"
 #define OB_EMPTY_PG__USER_ERROR_MSG "Empty partition group"
-#define OB_TRANS_XA_ERR_COMMIT__USER_ERROR_MSG "RMFAIL: The command cannot be executed when global transaction is in the %s state"
 #define OB_ERR_RESTORE_POINT_EXIST__USER_ERROR_MSG "Restore point %s already exists"
 #define OB_ERR_RESTORE_POINT_NOT_EXIST__USER_ERROR_MSG "Restore point %s does not exist"
 #define OB_ERR_BACKUP_POINT_EXIST__USER_ERROR_MSG "Backup point %s already exists"
 #define OB_ERR_BACKUP_POINT_NOT_EXIST__USER_ERROR_MSG "Backup point %s does not exist"
 #define OB_ERR_RESTORE_POINT_TOO_MANY__USER_ERROR_MSG "cannot create restore point - too many restore points"
-#define OB_TRANS_XA_BRANCH_FAIL__USER_ERROR_MSG "another session or branch in same transaction failed or finalized"
 #define OB_OBJ_LOCK_NOT_EXIST__USER_ERROR_MSG "object lock does not exist."
 #define OB_OBJ_LOCK_EXIST__USER_ERROR_MSG "object lock exists."
 #define OB_TRY_LOCK_OBJ_CONFLICT__USER_ERROR_MSG "Try lock object conflict"
@@ -4257,7 +4229,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_DATA_TOO_LONG_MSG_FMT_V2__USER_ERROR_MSG "Data too long for column '%.*s' at row %ld"
 #define OB_ERR_INVALID_DATE_MSG_FMT_V2__USER_ERROR_MSG "Incorrect datetime value for column '%.*s' at row %ld"
 
-extern int g_all_ob_errnos[2336];
+extern int g_all_ob_errnos[2322];
 
   const char *ob_error_name(const int oberr);
   const char* ob_error_cause(const int oberr);

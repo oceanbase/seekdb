@@ -1157,17 +1157,7 @@ int ObSqlPlanSet::add_plan(ObPhysicalPlan &plan,
       }
     }
   }
-  if (stmt::T_SELECT == stmt_type_) {
-    for (int64_t i = 0; OB_SUCC(ret) && i < candi_table_locs.count(); ++i) {
-      const ObCandiTableLoc &candi_table_loc = candi_table_locs.at(i);
-      if (candi_table_loc.is_duplicate_table_not_in_dml()) {
-        has_duplicate_table_ = true;
-        break;
-      }
-    }
-  }
-  SQL_PC_LOG(TRACE, "plan set add plan", K(ret), K(&plan), "plan type ", plan_type,
-                    K(has_duplicate_table_), K(stmt_type_));
+  SQL_PC_LOG(TRACE, "plan set add plan", K(ret), K(&plan), "plan type ", plan_type, K(stmt_type_));
   // increase plan ref_count,
   // if plan doesn't add in plan cache,don't increase ref_count;
   bool real_add = OB_PHY_PLAN_LOCAL != plan_type || pc_ctx.need_add_obj_stat_;
@@ -1204,7 +1194,6 @@ int ObSqlPlanSet::init_new_set(const ObPlanCacheCtx &pc_ctx,
   // set outline_param_idx
   outline_param_idx_ = outline_param_idx;
   need_try_plan_ = 0;
-  has_duplicate_table_ = false;
   const ObSQLSessionInfo *session_info = sql_ctx.session_info_;
   if (OB_ISNULL(session_info)) {
     ret = OB_INVALID_ARGUMENT;
@@ -1401,11 +1390,7 @@ int ObSqlPlanSet::select_plan(ObPlanCacheCtx &pc_ctx, ObPlanCacheObject *&cache_
 //
 //  if (OB_SUCC(ret) && true == is_all_non_partition) { //get local plan directly
 //    ObPartitionKey partition_key = partition_key_;
-//    // directly get plan when spm is off
-//   if (is_spm_acs_closed_ && OB_NOT_NULL(direct_local_plan_)) {
-//      plan = direct_local_plan_;
-//      plan->inc_ref_count(pc_ctx.handle_id_);
-//    } else if (OB_FAIL(gen_partition_key(table_parts, partition_key))) {
+//    if (OB_FAIL(gen_partition_key(table_parts, partition_key))) {
 //      LOG_WARN("fail to gen partition key", K(ret));
 //    } else if (OB_FAIL(local_plans_.get_plan(pc_ctx, partition_key, plan))) {
 //      SQL_PC_LOG(DEBUG, "get local plan failed", K(ret));
@@ -1729,7 +1714,6 @@ void ObSqlPlanSet::reset()
 {
   is_all_non_partition_ = true;
   need_try_plan_ = 0;
-  has_duplicate_table_ = false;
   //has_array_binding_ = false;
   is_contain_virtual_table_ = false;
   is_contain_inner_table_ = false;
@@ -1751,7 +1735,6 @@ void ObSqlPlanSet::reset()
 }
 
 //get plan used
-//need_check_on_same_server: out, whether need to check if the partition is on the same server, if checked inside and not on the same server then set to false
 int ObSqlPlanSet::get_phy_locations(const ObIArray<ObTableLocation> &table_locations,
                                     ObPlanCacheCtx &pc_ctx,
                                     ObIArray<ObCandiTableLoc> &candi_table_locs)
@@ -1779,10 +1762,6 @@ int ObSqlPlanSet::get_phy_locations(const ObIArray<ObTableLocation> &table_locat
  *         if all partitions in local server --->type is local
  *         if all partitions in the same remote server --->type is remote
  *         if all partitions don't in the same server ---->type is distributed
- * parameter need_check_on_same_server,
- * TRUE: default value, need check;
- * FALSE: we know partitions on different servers via ObPhyLocationGetter::get_phy_locations
- *        (when there are duplicate tables not in DML), no need to check again
  */
 int ObSqlPlanSet::calc_phy_plan_type_v2(const common::ObIArray<ObCandiTableLoc> &candi_table_locs,
                                         const ObPlanCacheCtx &pc_ctx,

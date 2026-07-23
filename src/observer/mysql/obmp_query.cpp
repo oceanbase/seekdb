@@ -385,7 +385,7 @@ int ObMPQuery::process_single_stmt(const ObMultiStmtItem &multi_stmt_item,
   sql::ObTraceSpanGuard query_span(&session, sql::TRACE_COM_QUERY_PROCESS);
   sql::ObTraceSpanGuard stmt_span(&session, sql::TRACE_MPQUERY_SINGLE_STMT);
   ObReqTimeGuard req_timeinfo_guard;
-  ctx_.bl_key_.reset();
+  ctx_.plan_key_.reset();
   bool need_response_error = true;
   session.get_raw_audit_record().request_memory_used_ = 0;
   observer::ObProcessMallocCallback pmcb(0,
@@ -407,7 +407,7 @@ int ObMPQuery::process_single_stmt(const ObMultiStmtItem &multi_stmt_item,
     stmt::StmtType stmt_type = stmt::T_NONE;
     if (!ERRSIM_BEGIN_COMMIT_OPT_DISABLE && !multi_stmt_item.is_part_of_multi_stmt()) {
       check_is_trans_ctrl_cmd(multi_stmt_item.get_sql(), is_trans_ctrl_cmd, stmt_type);
-      if (is_trans_ctrl_cmd && !session.associated_xa()) {
+      if (is_trans_ctrl_cmd) {
         do_trans_ctrl_opt = true;
       }
     }
@@ -499,7 +499,7 @@ int ObMPQuery::process_single_stmt(const ObMultiStmtItem &multi_stmt_item,
         !ctx_.multi_stmt_item_.is_batched_multi_stmt()) {
     send_error_packet(ret, NULL);
   }
-  ctx_.bl_key_.reset();
+  ctx_.plan_key_.reset();
   ctx_.reset();
   return ret;
 }
@@ -783,7 +783,7 @@ int ObMPQuery::process_trans_ctrl_cmd(ObSQLSessionInfo &session,
     bool read_only = session.get_tx_read_only();
     transaction::ObTxParam tx_param;
     TransState trans_state;
-    // stmt is T_START_TRANS and not xa cmd, try to end trans before start trans
+    // End the current transaction before starting a new one.
     if (OB_FAIL(ObSqlTransControl::end_trans_before_cmd_execute(session,
                                                                 need_disconnect,
                                                                 trans_state,
@@ -938,7 +938,7 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
             need_response_error = false;
           }
         } else {
-          retry_ctrl_.set_packet_retry(ret);
+          retry_ctrl_.set_packet_retry();
           session.get_retry_info_for_update().set_last_query_retry_err(ret);
           session.get_retry_info_for_update().inc_retry_cnt();
         }
@@ -1099,7 +1099,7 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
                                  enable_adaptive_pc ? &adpt_pc_conf : nullptr);
           plan->update_cache_access_stat(audit_record.table_scan_stat_);
         } else if (ctx_.self_add_plan_ && ctx_.plan_cache_hit_) {
-          // spm evolution plan first execute
+          // First execution of a plan generated during this request.
           plan->update_plan_stat(audit_record,
                                  true,
                                  table_row_count_list,
@@ -1251,7 +1251,6 @@ int ObMPQuery::is_readonly_stmt(ObMySQLResultSet &result, bool &is_readonly)
     case stmt::T_SHOW_SEQUENCES:
     case stmt::T_SHOW_ENGINE:
     case stmt::T_SHOW_OPEN_TABLES:
-    case stmt::T_HELP:
     case stmt::T_USE_DATABASE:
     case stmt::T_SET_NAMES: //read only not restrict it
     case stmt::T_START_TRANS:

@@ -800,10 +800,6 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
       }
       break;
     }
-    case share::ALL_VIRTUAL_PLAN_STAT_CDE::EVOLUTION: {
-      cells[i].set_bool(false);
-      break;
-    }
     case share::ALL_VIRTUAL_PLAN_STAT_CDE::HINTS_ALL_WORKED: {
       if (!cache_stat_updated) {
         cells[i].set_null();
@@ -811,22 +807,6 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
         cells[i].set_bool(plan->stat_.hints_all_worked_);
       } else {
         cells[i].set_bool(false);
-      }
-      break;
-    }
-    case share::ALL_VIRTUAL_PLAN_STAT_CDE::EVO_EXECUTIONS: {
-      if (!cache_stat_updated) {
-        cells[i].set_null();
-      } else {
-        cells[i].set_int(0);
-      }
-      break;
-    }
-    case share::ALL_VIRTUAL_PLAN_STAT_CDE::EVO_CPU_TIME: {
-      if (!cache_stat_updated) {
-        cells[i].set_null();
-      } else {
-        cells[i].set_uint64(0);
       }
       break;
     }

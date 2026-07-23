@@ -229,9 +229,8 @@ void ObSqlCtx::clear()
   base_constraints_.reset();
   strict_constraints_.reset();
   non_strict_constraints_.reset();
-  dup_table_replica_cons_.reset();
   multi_stmt_rowkey_pos_.reset();
-  bl_key_.reset();
+  plan_key_.reset();
   cur_stmt_ = nullptr;
   is_text_ps_mode_ = false;
   ins_opt_ctx_.clear();
@@ -763,11 +762,9 @@ int ObSqlCtx::set_location_constraints(const ObLocationConstraintContext &locati
   base_constraints_.reset();
   strict_constraints_.reset();
   non_strict_constraints_.reset();
-  dup_table_replica_cons_.reset();
   const ObIArray<LocationConstraint> &base_constraints = location_constraint.base_table_constraints_;
   const ObIArray<ObPwjConstraint *> &strict_constraints = location_constraint.strict_constraints_;
   const ObIArray<ObPwjConstraint *> &non_strict_constraints = location_constraint.non_strict_constraints_;
-  const ObIArray<ObDupTabConstraint> &dup_table_replica_cons = location_constraint.dup_table_replica_cons_;
   if (base_constraints.count() > 0) {
     base_constraints_.set_allocator(&allocator);
     if (OB_FAIL(base_constraints_.init(base_constraints.count()))) {
@@ -808,19 +805,6 @@ int ObSqlCtx::set_location_constraints(const ObLocationConstraintContext &locati
         }
       }
       LOG_DEBUG("set non strict constraints", K(non_strict_constraints.count()));
-    }
-  }
-  if (OB_SUCC(ret) && dup_table_replica_cons.count() > 0) {
-    dup_table_replica_cons_.set_allocator(&allocator);
-    if (OB_FAIL(dup_table_replica_cons_.init(dup_table_replica_cons.count()))) {
-      LOG_WARN("init duplicate table replica constraints failed", K(ret));
-    } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < dup_table_replica_cons.count(); i++) {
-        if (OB_FAIL(dup_table_replica_cons_.push_back(dup_table_replica_cons.at(i)))) {
-          LOG_WARN("failed to push back location constraint", K(ret));
-        }
-      }
-      LOG_DEBUG("set duplicate table replica constraints", K(dup_table_replica_cons.count()));
     }
   }
   return ret;

@@ -39,11 +39,6 @@ namespace election
 class ObIElectionMgr;
 }
 
-namespace transaction
-{
-class ObXAService;
-}
-
 namespace storage
 {
 class ObPartitionService;

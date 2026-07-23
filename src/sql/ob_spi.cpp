@@ -945,16 +945,14 @@ int ObSPIService::spi_calc_expr(ObPLExecCtx *ctx,
             }
             ret = OB_SUCCESS == ret ? tmp_ret : ret;
           } else if (ctx->exec_ctx_->get_my_session()->get_local_autocommit() && !explicit_trans) {
-            if (!ctx->exec_ctx_->get_my_session()->associated_xa()) {
-              int tmp_ret = OB_SUCCESS;
-              if (OB_SUCCESS == ret) {
-                if (OB_SUCCESS != (tmp_ret = ObPLContext::implicit_end_trans(*ctx->exec_ctx_->get_my_session(), *ctx->exec_ctx_, false, true))) {
-                  // Do not overwrite the original error code
-                  LOG_WARN("failed to explicit end trans", K(ret), K(tmp_ret));
-                }
+            int tmp_ret = OB_SUCCESS;
+            if (OB_SUCCESS == ret) {
+              if (OB_SUCCESS != (tmp_ret = ObPLContext::implicit_end_trans(*ctx->exec_ctx_->get_my_session(), *ctx->exec_ctx_, false, true))) {
+                // Do not overwrite the original error code
+                LOG_WARN("failed to explicit end trans", K(ret), K(tmp_ret));
               }
-              ret = OB_SUCCESS == ret ? tmp_ret : ret;
             }
+            ret = OB_SUCCESS == ret ? tmp_ret : ret;
           }
         }
       }
@@ -1521,21 +1519,15 @@ int ObSPIService::spi_end_trans(ObPLExecCtx *ctx, const char *sql, bool is_rollb
       int64_t saved_query_start_time = my_session->get_query_start_time();
       my_session->set_query_start_time(ObTimeUtility::current_time());
       if (OB_SUCC(ret)) {
-        if (my_session->is_in_transaction() &&
-          my_session->get_tx_desc()->is_xa_trans()) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("not support ObDbmsXA", K(ret));
-        } else {
-          // Internal submissions in PL use synchronous submission
-          OZ (sql::ObSqlTransControl::end_trans(ctx->exec_ctx_->get_my_session(),
-                                                ctx->exec_ctx_->get_need_disconnect_for_update(),
-                                                ctx->exec_ctx_->get_trans_state(),
-                                                is_rollback,
-                                                true));
-          // If a submission ban has occurred, do not retry PL as a whole
-          if (!is_rollback) {
-            OX (ctx->exec_ctx_->get_my_session()->set_pl_can_retry(false));
-          }
+        // Internal submissions in PL use synchronous submission
+        OZ (sql::ObSqlTransControl::end_trans(ctx->exec_ctx_->get_my_session(),
+                                              ctx->exec_ctx_->get_need_disconnect_for_update(),
+                                              ctx->exec_ctx_->get_trans_state(),
+                                              is_rollback,
+                                              true));
+        // If a submission ban has occurred, do not retry PL as a whole
+        if (!is_rollback) {
+          OX (ctx->exec_ctx_->get_my_session()->set_pl_can_retry(false));
         }
       }
       // restore query_start_time

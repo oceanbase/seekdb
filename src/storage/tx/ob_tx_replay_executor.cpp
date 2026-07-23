@@ -245,7 +245,6 @@ int ObTxReplayExecutor::try_get_tx_ctx_()
                         tx_id,
                         cluster_version,
                         0, /*session_id*/
-                        0, /*associated_session_id*/
                         INT64_MAX,         /*trans_expired_time_*/
                         ls_tx_srv_->get_trans_service());
       ObTxDataThrottleGuard tx_data_throttle_guard(

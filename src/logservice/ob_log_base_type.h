@@ -84,9 +84,6 @@ enum ObLogBaseType
   // for padding log entry
   PADDING_LOG_BASE_TYPE = 25,
 
-  // for dup table trans
-  DUP_TABLE_LOG_BASE_TYPE = 26,
-
   // for obj lock garbage collect service
   OBJ_LOCK_GARBAGE_COLLECT_SERVICE_LOG_BASE_TYPE = 27,
 
@@ -189,8 +186,6 @@ int log_base_type_to_string(const ObLogBaseType log_type,
     strncpy(str ,"HEARTBEAT_SERVICE", str_len);
   } else if (log_type == PADDING_LOG_BASE_TYPE) {
     strncpy(str ,"PADDING_LOG_ENTRY", str_len);
-  } else if (log_type == DUP_TABLE_LOG_BASE_TYPE) {
-    strncpy(str ,"DUP_TABLE", str_len);
   } else if (log_type == OBJ_LOCK_GARBAGE_COLLECT_SERVICE_LOG_BASE_TYPE) {
     strncpy(str ,"OBJ_LOCK_GARBAGE_COLLECT_SERVICE", str_len);
   } else if (log_type == COMMON_LS_SERVICE_LOG_BASE_TYPE) {

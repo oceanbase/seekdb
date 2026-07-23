@@ -227,7 +227,7 @@ void obpl_mysql_wrap_get_user_var_into_subquery(ObParseCtx *parse_ctx, ParseNode
       DATA DAY DEFINER DISABLE ENABLE ENDS END_KEY EVENT EVERY EXTEND FOLLOWS FOUND FUNCTION HANDLER HOUR INTERFACE INTERVAL INVOKER JSON LANGUAGE
       MESSAGE_TEXT MINUTE MONTH MYSQL_ERRNO NATIONAL NEXT NO OF OPEN PACKAGE PRAGMA PRECEDES PRESERVE RECORD RETURNS ROW ROWTYPE
       SCHEDULE SCHEMA_NAME SECOND SECURITY SUBCLASS_ORIGIN TABLE_NAME TO USER TYPE VALUE DATETIME TIMESTAMP TIME DATE YEAR
-      TEXT NCHAR NVARCHAR BOOL BOOLEAN ENUM BIT FIXED SIGNED STARTS ROLE CANCEL JOB XA RECOVER COMPILE REUSE SETTINGS
+      TEXT NCHAR NVARCHAR BOOL BOOLEAN ENUM BIT FIXED SIGNED STARTS ROLE CANCEL JOB RECOVER COMPILE REUSE SETTINGS
       GEOMETRY POINT LINESTRING POLYGON MULTIPOINT MULTILINESTRING MULTIPOLYGON GEOMETRYCOLLECTION GEOMCOLLECTION
       SERIAL
 //-----------------------------non_reserved keyword end---------------------------------------------
@@ -241,7 +241,7 @@ void obpl_mysql_wrap_get_user_var_into_subquery(ObParseCtx *parse_ctx, ParseNode
 %nonassoc AUTHID INTERFACE
 %nonassoc DECLARATION
 
-%type <node> sql_keyword xa_keyword
+%type <node> sql_keyword
 %type <non_reserved_keyword> unreserved_keyword
 %type <node> stmt_block stmt_list stmt outer_stmt sp_proc_outer_statement sp_proc_inner_statement sp_proc_independent_statement
 %type <node> create_procedure_stmt sp_proc_stmt expr expr_list procedure_body default_expr
@@ -411,13 +411,6 @@ sql_stmt_prefix:
   | LOAD { $$ = NULL; }
 ;
 
-xa_keyword:
-  BEGIN_KEY { $$ = NULL; }
-  | SQL_KEYWORD { $$ = NULL; }
-  | END_KEY { $$ = NULL; }
-  | RECOVER { $$ = NULL; }
-;
-
 sql_stmt:
     sql_stmt_prefix /*sql stmt tail*/
     {
@@ -427,13 +420,6 @@ sql_stmt:
       malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_SQL_STMT, 1, sql_stmt);
     }
   | REPLACE /*sql stmt tail*/
-    {
-      //read sql query string直到读到token';'或者END_P
-      ParseNode *sql_stmt = NULL;
-      do_parse_sql_stmt(sql_stmt, parse_ctx, @1.first_column, @1.last_column, 2, ';', END_P);
-      malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_SQL_STMT, 1, sql_stmt);
-    }
-  | XA xa_keyword /*sql stmt tail*/
     {
       //read sql query string直到读到token';'或者END_P
       ParseNode *sql_stmt = NULL;
@@ -859,7 +845,6 @@ unreserved_keyword:
   | BIT
   | FIXED
   | SIGNED
-  | XA
   | RECOVER
   | GEOMETRY
   | POINT

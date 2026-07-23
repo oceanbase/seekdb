@@ -55,6 +55,8 @@ public:
   virtual ~ObDBMSSchedJobKey() {}
 
   static constexpr int64_t JOB_NAME_MAX_SIZE = 128;
+  OB_INLINE uint64_t get_job_id_with_tenant() const { return job_id_; }
+  
   OB_INLINE uint64_t get_job_id() const { return job_id_; }
   OB_INLINE common::ObString &get_job_name() { return job_name_; }
   OB_INLINE uint64_t get_execute_at() const { return execute_at_;}
@@ -69,7 +71,7 @@ public:
 
   OB_INLINE bool is_valid()
   {
-    return job_id_ != OB_INVALID_ID;
+    return job_id_ != OB_INVALID_ID && true;
   }
 
   TO_STRING_KV(
@@ -92,7 +94,9 @@ public:
       stoped_(true),
       is_leader_(false),
       wokeup_(false),
+      rand_(),
       schema_service_(NULL),
+      self_addr_(),
       allocator_(ObMemAttr("DbmsScheduler"), OB_MALLOC_NORMAL_BLOCK_SIZE, block_alloc_),
       alive_jobs_(),
       wait_vector_(0, NULL, ObModIds::VECTOR) {}
@@ -115,9 +119,10 @@ public:
     ObDBMSSchedJobKey *&job_key, uint64_t job_id, const common::ObString &job_name);
   void free_job_key(ObDBMSSchedJobKey *&job_key);
 
+  int get_execute_addr(ObDBMSSchedJobInfo &job_info, common::ObAddr &execute_addr);
   void switch_to_leader();
   void switch_to_follower();
-  int check_runtime_jobs();
+  int check_tenant();
   int check_new_jobs();
   int register_new_jobs(ObIArray<ObDBMSSchedJobInfo> &job_infos);
   int register_job(ObDBMSSchedJobKey *job_key, int64_t next_date);
@@ -125,10 +130,15 @@ public:
   int schedule_due_jobs();
   int64_t calc_next_date(ObDBMSSchedJobInfo &job_info);
   int64_t run_job(ObDBMSSchedJobInfo &job_info, ObDBMSSchedJobKey *job_key, int64_t next_date);
+  bool mysql_event_scheduler_is_off(ObDBMSSchedJobInfo &job_info);
+  bool mysql_event_check_databse_exist(ObDBMSSchedJobInfo &job_info);
+
 private:
   const static int MAX_READY_JOBS_CAPACITY = 1024 * 1024;
   const static int MIN_SCHEDULER_INTERVAL = 1 * 1000 * 1000;
   const static int CHECK_NEW_INTERVAL = 20 * 1000 * 1000;
+  const static int FILTER_ZONE_SIZE = 1;
+  const static int DEFALUT_SERVER_SIZE = 16;
   const static int CHECK_JOB_LOST_THRESHOLD = 60 * 1000 * 1000;
 
   bool inited_;
@@ -138,7 +148,10 @@ private:
 
   common::ObThreadCond thread_cond_;
 
-  share::schema::ObMultiVersionSchemaService *schema_service_;
+  common::ObRandom rand_; // for random pick server
+  share::schema::ObMultiVersionSchemaService *schema_service_; // for got all tenant info
+
+  common::ObAddr self_addr_;
   ObDBMSSchedTableOperator table_operator_;
 
   common::ObBlockAllocMgr block_alloc_;

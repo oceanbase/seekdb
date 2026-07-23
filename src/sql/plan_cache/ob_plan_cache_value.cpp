@@ -254,8 +254,8 @@ int ObPlanCacheValue::init(ObPCVSet *pcv_set, const ObILibCacheObject *cache_obj
           outline_signature_str = pc_ctx.raw_sql_;
           outline_format_signature_.reset();
         } else {
-          outline_signature_str = pc_ctx.sql_ctx_.bl_key_.constructed_sql_;
-          outline_format_signature_str = pc_ctx.sql_ctx_.bl_key_.format_sql_;
+          outline_signature_str = pc_ctx.sql_ctx_.plan_key_.constructed_sql_;
+          outline_format_signature_str = pc_ctx.sql_ctx_.plan_key_.format_sql_;
         }
         int64_t size1 = outline_signature_str.get_serialize_size();
         int64_t size2 = outline_format_signature_str.get_serialize_size();
@@ -282,14 +282,14 @@ int ObPlanCacheValue::init(ObPCVSet *pcv_set, const ObILibCacheObject *cache_obj
           }
         }
       }
-      // deep copy constructed_sql_, used for baseline;
+      // Deep-copy the parameterized SQL retained by the cached plan.
       if (OB_SUCC(ret)) {
         if ((PC_PS_MODE == pc_ctx.mode_ || PC_PL_MODE == pc_ctx.mode_)
              && OB_FAIL(ob_write_string(*pc_alloc_, pc_ctx.raw_sql_, constructed_sql_))) {
           LOG_WARN("fail to deep copy param raw text", K(ret));
         } else if (!(PC_PS_MODE == pc_ctx.mode_ || PC_PL_MODE == pc_ctx.mode_)
                    && OB_FAIL(ob_write_string(*pc_alloc_,
-                                              pc_ctx.sql_ctx_.bl_key_.constructed_sql_,
+                                              pc_ctx.sql_ctx_.plan_key_.constructed_sql_,
                                               constructed_sql_))) {
           LOG_WARN("failed to write string", K(ret));
         }

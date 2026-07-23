@@ -107,7 +107,6 @@ public:
   virtual table::ObHTableLockMgr * h_table_lock_mgr() { return nullptr; }
   virtual table::ObTTLService * ttl_service() { return nullptr; }
   virtual table::ObTableObjectPoolMgr * table_object_pool_mgr() { return nullptr; }
-  virtual share::ObIndexUsageInfoMgr * index_usage_info_mgr() { return nullptr; }
   virtual storage::ObTabletMemtableMgrPool * tablet_memtable_mgr_pool() { return nullptr; }
   virtual share::ObResourceLimitCalculator * resource_limit_calculator() { return nullptr; }
   virtual storage::ObGlobalIteratorPool * global_iterator_pool() { return nullptr; }

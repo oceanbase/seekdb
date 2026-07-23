@@ -78,7 +78,7 @@ int ObSnapshotInfoManager::batch_acquire_snapshot(
     } else if (OB_FAIL(snapshot_proxy.batch_add_snapshot(trans, snapshot_type, schema_version, snapshot.snapshot_scn_, comment, tablet_ids))) {
       LOG_WARN("batch add snapshot failed", K(ret));
     }
-    MANAGEMENT_EVENT_ADD("snapshot", "batch_acquire_snapshot", K(ret), K(snapshot), "rs_addr", self_addr_);
+    ROOTSERVICE_EVENT_ADD("snapshot", "batch_acquire_snapshot", K(ret), K(snapshot), "rs_addr", self_addr_);
   }
   
   return ret;
@@ -109,10 +109,25 @@ int ObSnapshotInfoManager::batch_release_snapshot_in_trans(
                                                            tablet_ids))) {
     LOG_WARN("fail to batch remove snapshots", K(ret));
   }
-  MANAGEMENT_EVENT_ADD("snapshot", "batch_release_snapshot", K(ret), K(snapshot), "rs_addr", self_addr_);
+  ROOTSERVICE_EVENT_ADD("snapshot", "batch_release_snapshot", K(ret), K(snapshot), "rs_addr", self_addr_);
   return ret;
 }
 
+
+
+int ObSnapshotInfoManager::check_restore_point(common::ObMySQLProxy &proxy,
+                                               const int64_t table_id,
+                                               bool &is_exist)
+{
+  int ret = OB_SUCCESS;
+  is_exist = false;
+  ObSnapshotTableProxy snapshot_proxy;
+  if (OB_FAIL(snapshot_proxy.check_snapshot_exist(proxy, table_id,
+      share::SNAPSHOT_FOR_RESTORE_POINT, is_exist))) {
+    LOG_WARN("fail to check snapshot exist", K(ret), K(table_id));
+  }
+  return ret;
+}
 
 
 } //end rootserver

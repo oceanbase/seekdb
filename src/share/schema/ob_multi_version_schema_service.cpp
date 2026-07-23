@@ -1451,11 +1451,6 @@ int ObMultiVersionSchemaService::broadcast_tenant_schema(const common::ObIArray<
   return ret;
 }
 
-void ObMultiVersionSchemaService::clear_bootstrap_schema_cache()
-{
-  schema_cache_.clear_bootstrap_schema();
-}
-
 // check table exist
 // table_schema_version: Indicates the schema_version corresponding to table_schema
 // 1) OB_INVALID_VERSION, Indicates to take the latest version of the local guard

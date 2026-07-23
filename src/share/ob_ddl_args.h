@@ -42,11 +42,12 @@ public:
     return 0 < based_schema_object_infos_.count();
   }
   virtual bool is_allow_when_disable_ddl() const { return false; }
+  virtual bool is_allow_when_upgrade() const { return false; }
   bool is_sync_from_primary() const
   {
     return sync_from_primary_;
   }
-  // DDL availability in physical standby mode.
+  //user tenant can not ddl in standby
   virtual bool is_allow_in_standby() const
   { return true; }
   virtual int assign(const ObDDLArg &other);

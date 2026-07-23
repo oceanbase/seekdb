@@ -80,10 +80,10 @@ int ObVritualCoreInnerTable::inner_open()
   } else {
     {
       
-      const ObSimpleServerRuntimeSchema *runtime_schema = NULL;
-      if (OB_FAIL(schema_guard_->get_server_runtime_info(runtime_schema))) {
-        LOG_WARN("fail to get server runtime info", KR(ret));
-      } else if (OB_ISNULL(runtime_schema) || !runtime_schema->is_normal()) {
+      const ObSimpleTenantSchema *tenant = NULL;
+      if (OB_FAIL(schema_guard_->get_tenant_info(tenant))) {
+        LOG_WARN("fail to get tenant info", KR(ret));
+      } else if (OB_ISNULL(tenant) || !tenant->is_normal()) {
         // skip
       } else {
         ObCoreTableProxy core_table(table_name_, *sql_proxy_);

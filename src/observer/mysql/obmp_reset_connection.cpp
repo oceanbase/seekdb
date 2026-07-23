@@ -104,19 +104,14 @@ int ObMPResetConnection::process()
 
     // 1. Rolls back any active transactions and resets autocommit mode.
     if (OB_SUCC(ret)) {
-      // for XA trans, can not rollback it directly, use kill_tx to abort it
-      if (session->associated_xa()) {
-        if (OB_FAIL(ObSqlTransControl::kill_tx(session, OB_TRANS_ROLLBACKED))) {
-          OB_LOG(WARN, "fail to kill xa trans for reset connection", K(ret));
-        }
-      } else if (OB_FAIL(ObSqlTransControl::rollback_trans(session, need_disconnect))) {
+      if (OB_FAIL(ObSqlTransControl::rollback_trans(session, need_disconnect))) {
         OB_LOG(WARN, "fail to rollback trans for reset connection", K(ret), K(need_disconnect));
       }
     }
 
     // 3. Closes (and drops) all TEMPORARY tables. 
     if (OB_SUCC(ret)) {
-      if (OB_UNLIKELY(OB_FAIL(session->drop_temp_tables(false, false, true)))) {
+      if (OB_UNLIKELY(OB_FAIL(session->drop_temp_tables(false, true)))) {
         LOG_WARN("fail to drop temp tables", K(ret));
       }
     }

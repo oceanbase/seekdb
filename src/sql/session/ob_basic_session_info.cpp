@@ -71,8 +71,6 @@ ObBasicSessionInfo::ObBasicSessionInfo()
       tx_desc_(NULL),
       tx_result_(),
       reserved_read_snapshot_version_(),
-      xid_(),
-      associated_xa_(false),
       cached_tenant_config_version_(0),
       sess_bt_buff_pos_(0),
       sess_ref_cnt_(0),
@@ -267,8 +265,6 @@ void ObBasicSessionInfo::destroy()
   }
   tx_desc_ = NULL;
   tx_result_.reset();
-  xid_.reset();
-  associated_xa_ = false;
   cached_tenant_config_version_ = 0;
   magic_num_ = 0x86427531;
   if (thread_data_.cur_query_ != nullptr) {
@@ -299,8 +295,6 @@ void ObBasicSessionInfo::clean_status()
     }
     tx_desc_ = NULL;
   }
-  xid_.reset();
-  associated_xa_ = false;
   cached_tenant_config_version_ = 0;
   set_valid(true);
   thread_data_.cur_query_start_time_ = 0;
@@ -361,8 +355,6 @@ void ObBasicSessionInfo::reset(bool skip_sys_var)
     }
     tx_desc_ = NULL;
   }
-  xid_.reset();
-  associated_xa_ = false;
   cached_tenant_config_version_ = 0;
   is_deserialized_ = false;
   CHAR_CARRAY_INIT(tenant_);
@@ -1057,7 +1049,10 @@ int ObBasicSessionInfo::update_query_sensitive_system_variable(ObSchemaGetterGua
   const ObSimpleSysVariableSchema *sys_variable_schema = NULL;
   
   int64_t refreshed_schema_version = OB_INVALID_VERSION;
-  if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
+  ObSQLSessionInfo *session = static_cast<ObSQLSessionInfo *>(this);
+  if (session->is_inner() && !session->is_user_session()) {
+    // Pure system inner SQL uses its initialized system variables to avoid a recursive schema dependency.
+  } else if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
     LOG_WARN("fail to get tenant schema version", K(ret));
   } else if (OB_INVALID_VERSION != last_refresh_schema_version_
              && last_refresh_schema_version_ == refreshed_schema_version) {
@@ -5332,9 +5327,6 @@ int ObBasicSessionInfo::trans_save_session(TransSavedValue &saved_value)
   OX (trans_flags_.reset());
   OX (saved_value.nested_count_ = nested_count_);
   OX (nested_count_ = -1);
-  OX (saved_value.xid_ = xid_);
-  OX (xid_.reset());
-  OX (associated_xa_ = false);
   return ret;
 }
 
@@ -5359,10 +5351,6 @@ int ObBasicSessionInfo::trans_restore_session(TransSavedValue &saved_value)
   if (OB_TMP_FAIL(base_restore_session(saved_value))) {
     LOG_ERROR("failed to restore base session", K(tmp_ret));
     ret = COVER_SUCC(tmp_ret);
-  }
-  xid_ = saved_value.xid_;
-  if (!xid_.empty()) {
-    associated_xa_ = true;
   }
   return ret;
 }

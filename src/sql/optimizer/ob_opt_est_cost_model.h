@@ -65,8 +65,7 @@ struct ObTableMetaInfo
       row_count_(0),
       has_opt_stat_(false),
       micro_block_count_(-1),
-      table_type_(share::schema::MAX_TABLE_TYPE),
-      is_broadcast_table_(false)
+      table_type_(share::schema::MAX_TABLE_TYPE)
   { }
   virtual ~ObTableMetaInfo()
   { }
@@ -95,7 +94,6 @@ struct ObTableMetaInfo
   bool has_opt_stat_;
   int64_t micro_block_count_;  // main table micro block count
   share::schema::ObTableType table_type_;
-  bool is_broadcast_table_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTableMetaInfo);
 };

@@ -416,8 +416,6 @@ const int64_t OB_MAX_COMMAND_LENGTH = 4096;
 const int64_t OB_MAX_SESSION_STATE_LENGTH = 128;
 const int64_t OB_MAX_SESSION_INFO_LENGTH = 128;
 const int64_t OB_MAX_TRANS_STATE_LENGTH = 32;
-const int64_t OB_MAX_DUP_TABLE_TABLET_SET_ATTR_LENGTH = 16;
-const int64_t OB_MAX_DUP_TABLE_TABLET_SET_STATE_LENGTH = 16;
 const int64_t OB_MAX_VERSION_LENGTH = 256;
 const int64_t COLUMN_CHECKSUM_LENGTH = 8 * 1024;
 const int64_t OB_MAX_SYS_PARAM_INFO_LENGTH = 1024;
@@ -957,6 +955,7 @@ const char *const OB_LBACSYS_SCHEMA_NAME = "LBACSYS";
 const char *const OB_AUDITOR_SCHEMA_NAME = "ORAAUDITOR";
 const char *const OB_RESTORE_USER_NAME = "__oceanbase_inner_restore_user";
 const char *const OB_DRC_USER_NAME = "__oceanbase_inner_drc_user";
+const int64_t OB_MAX_DDL_OPNAME_LENGTH = 64;
 const char *const OB_SYS_TENANT_NAME = "sys";
 const char *const OB_FAKE_TENANT_NAME = "fake_tenant";
 const char *const OB_SYS_HOST_NAME = "%";
@@ -964,8 +963,6 @@ const char *const OB_DEFAULT_HOST_NAME = "%";
 // const char *const OB_MONITOR_TENANT_NAME = "monitor";
 const char *const OB_DIAG_TENANT_NAME = "diag";
 //for sync ddl (ClusterID_TenantID_SchemaVersion)
-const char *const OB_DDL_ID_VAR_NAME = "__oceanbase_ddl_id";
-const int64_t OB_MAX_DDL_ID_STR_LENGTH = 64;
 #ifdef ERRSIM
 const int64_t OB_MAX_DDL_SINGLE_REPLICA_BUILD_TIMEOUT = 30L * 60L * 1000L * 1000L; // 30 minutes
 #else
@@ -1006,7 +1003,6 @@ const uint64_t OB_SYS_UNIT_ID = 1;
 const uint64_t OB_INIT_SERVER_ID = 1;
 const uint64_t OB_INIT_DDL_TASK_ID = 1;
 const uint64_t OB_SYS_UNIT_GROUP_ID = 1;
-const uint64_t OB_INIT_REWRITE_RULE_VERSION = 1;
 const uint64_t OB_USER_UNIT_CONFIG_ID = 1000;
 const uint64_t OB_USER_RESOURCE_POOL_ID = 1000;
 const uint64_t OB_USER_UNIT_ID = 1000;
@@ -1046,7 +1042,8 @@ OB_INLINE bool is_inner_object_id(const uint64_t object_id)
  * OBJECT_ID FOR TABLE (0, 200000)
  *
  * (0, 100)         : Core Table
- * (0, 10000)       : System Table
+ * [100, 1000)      : Schema Fetch Dependency Table
+ * [1000, 10000)    : Other System Table
  * (10000, 15000)   : MySQL Virtual Table
  * (15000, 20000)   : Extended Virtual Table
  * (20000, 25000)   : MySQL System View
@@ -1067,6 +1064,7 @@ OB_INLINE bool is_inner_object_id(const uint64_t object_id)
  */
 // (0, 10000) for system table
 const uint64_t OB_MAX_CORE_TABLE_ID           = 100;
+const uint64_t OB_MAX_SCHEMA_FETCH_DEP_TABLE_ID = 1000;
 const uint64_t OB_MAX_SYS_TABLE_ID            = 10000;
 // (10000, 15000) for mysql virtual table
 const uint64_t OB_MAX_MYSQL_VIRTUAL_TABLE_ID  = 15000;
@@ -1087,13 +1085,16 @@ const uint64_t OB_MAX_CTE_TABLE_ID            = 49999;
 // (60000, 70000) for inner lob piece table
 const uint64_t OB_MIN_SYS_LOB_META_TABLE_ID   = 50000;
 const uint64_t OB_MAX_CORE_LOB_META_TABLE_ID  = 50100;
+const uint64_t OB_MAX_SCHEMA_FETCH_DEP_LOB_META_TABLE_ID = 51000;
 const uint64_t OB_MIN_SYS_LOB_PIECE_TABLE_ID  = 60000;
 const uint64_t OB_MAX_CORE_LOB_PIECE_TABLE_ID = 60100;
+const uint64_t OB_MAX_SCHEMA_FETCH_DEP_LOB_PIECE_TABLE_ID = 61000;
 const uint64_t OB_MAX_SYS_LOB_PIECE_TABLE_ID  = 70000;
 // (70000, 100000) is reserved
 // (100000, 200000) for sys table index
 const uint64_t OB_MIN_SYS_TABLE_INDEX_ID      = 100000;
 const uint64_t OB_MAX_CORE_TABLE_INDEX_ID     = 101000;
+const uint64_t OB_MAX_SCHEMA_FETCH_DEP_TABLE_INDEX_ID = 102000;
 const uint64_t OB_MAX_SYS_TABLE_INDEX_ID      = 200000;
 const uint64_t OB_MAX_INNER_TABLE_ID          = 200000;
 
@@ -1191,6 +1192,18 @@ OB_INLINE bool is_core_table(const uint64_t tid)
   return (tid > OB_INVALID_OBJECT_ID && tid < OB_MAX_CORE_TABLE_ID)
          || is_core_index_table(tid)
          || is_core_lob_table(tid);
+}
+
+// This function includes schema fetch dependency tables and their indexes and LOB tables.
+OB_INLINE bool is_schema_fetch_dependency_table(const uint64_t tid)
+{
+  return (tid > OB_INVALID_OBJECT_ID && tid < OB_MAX_SCHEMA_FETCH_DEP_TABLE_ID)
+         || (tid > OB_MIN_SYS_TABLE_INDEX_ID
+             && tid < OB_MAX_SCHEMA_FETCH_DEP_TABLE_INDEX_ID)
+         || (tid > OB_MIN_SYS_LOB_META_TABLE_ID
+             && tid < OB_MAX_SCHEMA_FETCH_DEP_LOB_META_TABLE_ID)
+         || (tid > OB_MIN_SYS_LOB_PIECE_TABLE_ID
+             && tid < OB_MAX_SCHEMA_FETCH_DEP_LOB_PIECE_TABLE_ID);
 }
 
 // This function includes system table and its index, lob table
@@ -1917,8 +1930,6 @@ const int64_t MAX_CONSTRAINT_NAME_LEN = 128;
 const char *const OB_LOG_ROW_VALUE_PARTIAL_LOB = "partial_lob";
 const char *const OB_LOG_ROW_VALUE_PARTIAL_JSON = "partial_json";
 const char *const OB_LOG_ROW_VALUE_PARTIAL_ALL = "partial_all";
-// default duplicate read consistency is strong
-const int64_t OB_DEFAULT_DUPLICATE_READ_CONSISTENCY = 0;
 // json partial update expr flag
 enum ObJsonPartialUpdateFlag
 {
@@ -2487,7 +2498,6 @@ OB_INLINE char* ob_get_tname_v2()
   return ret_tname;
 }
 
-static const char* PARALLEL_DDL_THREAD_NAME = "DDLPQueueTh";
 static const char* REPLAY_SERVICE_THREAD_NAME = "ReplaySrv";
 
 // There are many clusters in arbitration server, we need a field identify the different clusters.

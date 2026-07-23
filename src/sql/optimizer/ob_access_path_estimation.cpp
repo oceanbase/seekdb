@@ -1470,7 +1470,6 @@ int ObAccessPathEstimation::get_valid_partition_info(ObOptimizerContext &ctx,
     LOG_WARN("unexpected null", K(table_partition_info), K(ctx.get_session_info()), K(ctx.get_opt_stat_manager()));
   } else {
     valid_table_loc.set_table_location_key(table_loc.get_table_location_key(), table_loc.get_ref_table_id());
-    valid_table_loc.set_duplicate_type(table_loc.get_duplicate_type());
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < all_partitions.count(); ++i) {
     const ObOptTabletLoc &part_loc = all_partitions.at(i).get_partition_location();

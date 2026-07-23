@@ -1659,23 +1659,6 @@ int ObSchemaPrinter::print_table_definition_table_options(const ObTableSchema &t
       SHARE_SCHEMA_LOG(WARN, "fail to print progressive merge num", K(ret), K(table_schema));
     }
   }
-  if (OB_SUCC(ret)
-      && !strict_compat_
-      && ObDuplicateScopeChecker::is_valid_replicate_scope(table_schema.get_duplicate_scope())
-      && !is_no_table_options(sql_mode)
-      && table_schema.is_user_table()) {
-    // Currently only supports cluster
-    if (table_schema.get_duplicate_scope() == ObDuplicateScope::DUPLICATE_SCOPE_CLUSTER) {
-      if (OB_FAIL(databuff_printf(buf, buf_len, pos, "DUPLICATE_SCOPE = 'CLUSTER' "))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to print table duplicate scope", K(ret));
-      } else if (ObDuplicateReadConsistencyChecker::is_valid_duplicate_read_consistency(table_schema.get_duplicate_read_consistency())) {
-        if (OB_FAIL(databuff_printf(buf, buf_len, pos, "DUPLICATE_READ_CONSISTENCY = '%s' ",
-                                    ObDuplicateReadConsistencyChecker::get_duplicate_read_consistency_str(table_schema.get_duplicate_read_consistency())))) {
-          SHARE_SCHEMA_LOG(WARN, "fail to print table duplicate read consistency", K(ret));
-        }
-      }
-    }
-  }
   if (OB_SUCC(ret) && !strict_compat_ && !is_index_tbl
       && table_schema.get_ttl_definition().length() > 0
       && NULL != table_schema.get_ttl_definition().ptr()) {

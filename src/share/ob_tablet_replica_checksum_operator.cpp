@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/ob_tablet_replica_checksum_operator.h"
+#include "share/ob_freeze_info_proxy.h"
 #include "share/rc/ob_module_provider.h"
 #include "share/storage/ob_tablet_replica_checksum_table_storage.h"
 #include "share/storage/ob_sqlite_connection.h"

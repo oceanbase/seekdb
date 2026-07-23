@@ -809,7 +809,6 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarGtidPurged)
         + sizeof(ObSysVarInnodbApiBkCommitInterval)
         + sizeof(ObSysVarInnodbApiTrxLevel)
-        + sizeof(ObSysVarInnodbSupportXa)
         + sizeof(ObSysVarSessionTrackGtids)
         + sizeof(ObSysVarSessionTrackTransactionInfo)
         + sizeof(ObSysVarTransactionAllocBlockSize)
@@ -3516,15 +3515,6 @@ int ObSysVarFactory::create_all_sys_vars_()
       } else {
         store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_INNODB_API_TRX_LEVEL))] = sys_var_ptr;
         ptr = (void *)((char *)ptr + sizeof(ObSysVarInnodbApiTrxLevel));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarInnodbSupportXa())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarInnodbSupportXa", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_INNODB_SUPPORT_XA))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarInnodbSupportXa));
       }
     }
     if (OB_SUCC(ret)) {
@@ -8985,10 +8975,6 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, share::ObSysVarCla
     }
     case share::SYS_VAR_INNODB_API_TRX_LEVEL: {
       ret = create_one_sys_var<ObSysVarInnodbApiTrxLevel>(allocator_, sys_var_ptr, "ObSysVarInnodbApiTrxLevel");
-      break;
-    }
-    case share::SYS_VAR_INNODB_SUPPORT_XA: {
-      ret = create_one_sys_var<ObSysVarInnodbSupportXa>(allocator_, sys_var_ptr, "ObSysVarInnodbSupportXa");
       break;
     }
     case share::SYS_VAR_SESSION_TRACK_GTIDS: {

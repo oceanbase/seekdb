@@ -28,7 +28,7 @@
 #include "share/compaction/ob_shared_storage_compaction_util.h"
 #include "storage/ob_tablet_autoincrement_service.h"
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
-#include "observer/ob_server_event_history_table_operator.h"
+#include "share/ob_structured_event_logger.h"
 using namespace oceanbase;
 using namespace oceanbase::common;
 using namespace oceanbase::storage;

@@ -1098,13 +1098,13 @@ int ObSqlParameterization::parameterize_syntax_tree(common::ObIAllocator &alloca
       } else if (!pc_ctx.is_batch_insert_opt_ &&
                  !pc_ctx.exec_ctx_.has_dynamic_values_table() &&
                  OB_FAIL(ObSqlParameterization::formalize_sql_text(allocator, pc_ctx.raw_sql_,
-                                                  pc_ctx.sql_ctx_.bl_key_.format_sql_,
+                                                  pc_ctx.sql_ctx_.plan_key_.format_sql_,
                                                   sql_info, fp_ctx))) {
         SQL_PC_LOG(WARN, "fail to formalize sql text", K(ret), K(pc_ctx.raw_sql_));
       } else if (is_prepare_mode(mode) && OB_FAIL(transform_neg_param(pc_ctx.fp_result_.raw_params_))) {
         SQL_PC_LOG(WARN, "fail to transform_neg_param", K(ret));
       } else {
-        pc_ctx.sql_ctx_.bl_key_.constructed_sql_.assign_ptr(buf, pos);
+        pc_ctx.sql_ctx_.plan_key_.constructed_sql_.assign_ptr(buf, pos);
         pc_ctx.ps_need_parameterized_ = sql_info.ps_need_parameterized_;
         pc_ctx.normal_parse_const_cnt_ = sql_info.total_;
       }

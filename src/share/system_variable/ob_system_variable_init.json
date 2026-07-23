@@ -2041,34 +2041,6 @@
     "background_cn": "",
     "ref_url": ""
   },
-  "optimizer_use_sql_plan_baselines": {
-    "id": 10057,
-    "placeholder": true,
-    "name": "optimizer_use_sql_plan_baselines",
-    "default_value": "0",
-    "base_value": "0",
-    "data_type": "bool",
-    "info": "Enable use sql plan baseline",
-    "flags": "GLOBAL | SESSION | NEED_SERIALIZE",
-    "publish_version": "",
-    "info_cn": "",
-    "background_cn": "",
-    "ref_url": ""
-  },
-  "optimizer_capture_sql_plan_baselines": {
-    "id": 10058,
-    "placeholder": true,
-    "name": "optimizer_capture_sql_plan_baselines",
-    "default_value": "0",
-    "base_value": "0",
-    "data_type": "bool",
-    "info": "optimizer_capture_sql_plan_baselines enables or disables automitic capture plan baseline.",
-    "flags": "GLOBAL | SESSION | NEED_SERIALIZE",
-    "publish_version": "",
-    "info_cn": "",
-    "background_cn": "",
-    "ref_url": ""
-  },
   "parallel_servers_target": {
     "id": 10060,
     "name": "parallel_servers_target",
@@ -4369,7 +4341,7 @@
     "default_value": "0",
     "base_value": "0",
     "data_type": "enum",
-    "info": "completion_type affects transactions that begin with START TRANSACTION or BEGIN and end with COMMIT or ROLLBACK. It does not apply for XA COMMIT, XA ROLLBACK, or when autocommit=1, merely simulates MySQL 5.7",
+    "info": "completion_type affects transactions that begin with START TRANSACTION or BEGIN and end with COMMIT or ROLLBACK. It does not apply when autocommit=1, merely simulates MySQL 5.7",
     "flags": "GLOBAL | SESSION | MYSQL_ONLY",
     "enum_names": [
       "NO_CHAIN",
@@ -4488,19 +4460,6 @@
     "flags": "GLOBAL | MYSQL_ONLY",
     "min_val": "0",
     "max_val": "3",
-    "publish_version": "424",
-    "info_cn": "",
-    "background_cn": "",
-    "ref_url": ""
-  },
-  "innodb_support_xa": {
-    "id": 10245,
-    "name": "innodb_support_xa",
-    "default_value": "1",
-    "base_value": "1",
-    "data_type": "bool",
-    "info": "Enables InnoDB support for two-phase commit in XA transactions, causing an extra disk flush for transaction preparation, merely simulates MySQL 5.7",
-    "flags": "GLOBAL | SESSION | MYSQL_ONLY",
     "publish_version": "424",
     "info_cn": "",
     "background_cn": "",

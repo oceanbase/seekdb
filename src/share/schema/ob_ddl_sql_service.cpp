@@ -25,7 +25,7 @@ namespace share
 {
 namespace schema
 {
-// A valid SQL execution context records the corresponding __all_ddl_operation row.
+// sql_exec_tenant is valid, indicating that the __all_ddl_operation of the corresponding tenant needs to be written
 int ObDDLSqlService::log_operation(
   ObSchemaOperation &schema_operation,
   common::ObISQLClient &sql_client,
@@ -94,9 +94,9 @@ int ObDDLSqlService::gen_ddl_operation_dml(
   } else if (OB_FAIL(ddl_operation_dml.add_column("database_name",
           ObHexEscapeSqlStr(schema_operation.database_name_?:"")))) {
     LOG_WARN("failed to add column database_name", KR(ret), K(schema_operation));
-  } else if (OB_FAIL(ddl_operation_dml.add_column("column_id",
-          fill_schema_id(schema_operation.column_id_)))) {
-    LOG_WARN("failed to add column column_id", KR(ret), K(schema_operation));
+  } else if (OB_FAIL(ddl_operation_dml.add_column("tablegroup_id",
+          fill_schema_id(schema_operation.tablegroup_id_)))) {
+    LOG_WARN("failed to add column tablegroup_id", KR(ret), K(schema_operation));
   } else if (OB_FAIL(ddl_operation_dml.add_column("table_id",
           fill_schema_id(schema_operation.table_id_)))) {
     LOG_WARN("failed to add column table_id", KR(ret), K(schema_operation));

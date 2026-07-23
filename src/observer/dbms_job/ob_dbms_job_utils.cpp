@@ -32,6 +32,7 @@ using namespace sqlclient;
 
 namespace dbms_job
 {
+const char *ObDBMSJobInfo::__ALL_SERVER_BC = "__ALL_SERVER_BC";
 int ObDBMSJobInfo::deep_copy(ObIAllocator &allocator, const ObDBMSJobInfo &other)
 {
   int ret = OB_SUCCESS;
@@ -54,6 +55,7 @@ int ObDBMSJobInfo::deep_copy(ObIAllocator &allocator, const ObDBMSJobInfo &other
   OZ (ob_write_string(allocator, other.what_, what_));
   OZ (ob_write_string(allocator, other.nlsenv_, nlsenv_));
   OZ (ob_write_string(allocator, other.charenv_, charenv_));
+  OZ (ob_write_string(allocator, other.field1_, field1_));
   OZ (ob_write_string(allocator, other.exec_env_, exec_env_));
   return ret;
 }
@@ -71,6 +73,7 @@ int ObDBMSJobUtils::update_for_start(
   int64_t dummy_execute_at = 0;
 
   CK (OB_NOT_NULL(sql_proxy_));
+  CK (OB_LIKELY(true));
   CK (OB_LIKELY(job_info.job_ != OB_INVALID_ID));
 
   OZ (calc_execute_at(
@@ -97,6 +100,7 @@ int ObDBMSJobUtils::update_nextdate(
   const int64_t now = ObTimeUtility::current_time();
 
   CK (OB_NOT_NULL(sql_proxy_));
+  CK (OB_LIKELY(true));
   CK (OB_LIKELY(job_info.job_ != OB_INVALID_ID));
 
   OZ (dml.add_gmt_modified(now));
@@ -123,6 +127,7 @@ int ObDBMSJobUtils::update_for_end(
   UNUSED(errmsg);
 
   CK (OB_NOT_NULL(sql_proxy_));
+  CK (OB_LIKELY(true));
   CK (OB_LIKELY(job_info.job_ != OB_INVALID_ID));
 
   OX (job_info.failures_ = errmsg.empty() ? 0 : (job_info.failures_ + 1));
@@ -154,16 +159,22 @@ int ObDBMSJobUtils::check_job_can_running(bool &can_running)
   uint64_t job_queue_processor = 0;
   uint64_t job_running_cnt = 0;
   ObSqlString sql;
+  share::schema::ObSchemaGetterGuard guard;
+  bool is_restore = false;
   OX (can_running = false);
   CK (true);
   OX (job_queue_processor = GCONF.job_queue_processes);
   // found current running job count
   OZ (sql.append("select count(*) from __all_job where this_date is not null"));
 
-  // Jobs can run only on the primary server.
+  CK (OB_NOT_NULL(GCTX.schema_service_));
+  OZ (GCTX.schema_service_->get_tenant_schema_guard(guard));
+  OZ (guard.check_tenant_is_restore(is_restore));
+
+  // job can not run in standy and restore tenant.
   bool is_primary = false;
-  if (FAILEDx(ObShareUtil::is_primary_server(is_primary))) {
-    LOG_WARN("fail to check whether server is primary", KR(ret));
+  if (FAILEDx(ObShareUtil::table_check_if_tenant_role_is_primary( is_primary))) {
+    LOG_WARN("fail to execute table_check_if_tenant_role_is_primary", KR(ret));
   } else if (is_primary && job_queue_processor > 0) {
     SMART_VAR(ObMySQLProxy::MySQLResult, result) {
       if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
@@ -241,6 +252,7 @@ do {                                                                  \
   EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "what", job_info_local.what_);
   EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "nlsenv", job_info_local.nlsenv_);
   EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "charenv", job_info_local.charenv_);
+  EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "field1", job_info_local.field1_);
   EXTRACT_INT_FIELD_MYSQL_SKIP_RET(result, "scheduler_flags", job_info_local.scheduler_flags_, uint64_t);
   EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "exec_env", job_info_local.exec_env_);
 
@@ -257,6 +269,7 @@ int ObDBMSJobUtils::get_dbms_job_info(
   int64_t affected_rows = 0;
 
   CK (OB_NOT_NULL(sql_proxy_));
+  CK (OB_LIKELY(true));
   CK (OB_LIKELY(job_id != OB_INVALID_ID));
 
   OZ (sql.append_fmt("select * from %s where job = %ld", OB_ALL_JOB_TNAME, job_id));
@@ -284,7 +297,7 @@ int ObDBMSJobUtils::get_dbms_job_info(
   return ret;
 }
 
-int ObDBMSJobUtils::get_dbms_job_infos_in_runtime(
+int ObDBMSJobUtils::get_dbms_job_infos_in_tenant(
   ObIAllocator &allocator, ObIArray<ObDBMSJobInfo> &job_infos)
 {
   int ret = OB_SUCCESS;
@@ -292,6 +305,7 @@ int ObDBMSJobUtils::get_dbms_job_infos_in_runtime(
   int64_t affected_rows = 0;
 
   CK (OB_NOT_NULL(sql_proxy_));
+  CK (OB_LIKELY(true));
 
   OZ (sql.append_fmt("select * from %s", OB_ALL_JOB_TNAME));
 

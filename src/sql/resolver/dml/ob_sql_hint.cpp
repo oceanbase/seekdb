@@ -698,7 +698,6 @@ int ObQueryHint::print_qb_name_hints(PlanText &plan_text) const
 
 // Used for stmt printer
 // If outline_stmt_id_ is invalid stmt id and has_outline_data(), do not print hint.
-//  This may happened for outline data from SPM.
 int ObQueryHint::print_stmt_hint(PlanText &plan_text, const ObDMLStmt &stmt,
                                  const bool is_first_stmt_for_hint) const
 {

@@ -72,8 +72,10 @@ public:
 
   virtual int set_core_schema_version(const int64_t core_schema_version);
   virtual int set_sys_schema_version(const int64_t sys_schema_version);
+  virtual int set_normal_schema_version(const int64_t normal_schema_version);
   virtual int get_core_schema_version(int64_t &core_schema_version);
   virtual int get_sys_schema_version(int64_t &sys_schema_version);
+  virtual int get_normal_schema_version(int64_t &normal_schema_version);
   virtual int get_core_and_sys_schema_version(int64_t &core_schema_version,
       int64_t &sys_schema_version);
   virtual int set_baseline_schema_version(const int64_t baseline_schema_version);

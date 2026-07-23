@@ -313,7 +313,6 @@ public:
       int64_t &cal_timeout);
   ObDDLTransController &get_ddl_trans_controller() { return ddl_trans_controller_; }
   ObDDLEpochMgr &get_ddl_epoch_mgr() { return ddl_epoch_mgr_; }
-  void clear_bootstrap_schema_cache();
 //this friend class only for backup
 friend class tools::ObAgentTaskGenerator;
 friend class tools::ObAgentTaskWorker;

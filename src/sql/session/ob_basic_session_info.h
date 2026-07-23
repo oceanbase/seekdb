@@ -138,8 +138,7 @@ enum ObSQLSessionState
 enum ObSessionRetryStatus
 {
   SESS_NOT_IN_RETRY,  // session not in retry
-  SESS_IN_RETRY,  // session retrying, and not related to replication tables
-  SESS_IN_RETRY_FOR_DUP_TBL, // retry caused by errors related to duplicate table
+  SESS_IN_RETRY,
 };
 /// ObBasicSessionInfo stores system variables and related variables, and stores the state that needs to be serialized to the remote when executing SQL tasks remotely
 /// ObSQLSessionInfo stores other state information, such as prepared statement related information, etc.
@@ -383,14 +382,12 @@ public:
       trans_flags_.reset();
       tx_result_.reset();
       nested_count_ = -1;
-      xid_.reset();
     }
   public:
     transaction::ObTxDesc *tx_desc_;
     TransFlags trans_flags_;
     transaction::ObTxExecResult tx_result_;
     int64_t nested_count_;
-    transaction::ObXATransID xid_;
   };
 
 public:
@@ -773,28 +770,13 @@ public:
   void set_session_in_retry(ObSessionRetryStatus is_retry)
   {
     LockGuard lock_guard(thread_data_mutex_);
-    if (OB_LIKELY(SESS_NOT_IN_RETRY == is_retry ||
-                  SESS_IN_RETRY_FOR_DUP_TBL != thread_data_.is_in_retry_)) {
-      thread_data_.is_in_retry_ = is_retry;
-    } else {
-      // if the last retry is for duplicate table
-      // and the SQL is retried again
-      // we still keep the retry for dup table status.
-      thread_data_.is_in_retry_ = SESS_IN_RETRY_FOR_DUP_TBL;
-    }
+    thread_data_.is_in_retry_ = is_retry;
   }
 
   void set_session_in_retry(bool is_retry, int ret)
   {
-    ObSessionRetryStatus status;
-    if (!is_retry) {
-      status = sql::SESS_NOT_IN_RETRY;
-    } else if (is_select_dup_follow_replic_err(ret) ||
-               OB_NOT_MASTER == ret) {
-      status = SESS_IN_RETRY_FOR_DUP_TBL;
-    } else {
-      status = SESS_IN_RETRY;
-    }
+    UNUSED(ret);
+    ObSessionRetryStatus status = is_retry ? SESS_IN_RETRY : SESS_NOT_IN_RETRY;
     set_session_in_retry(status);
   }
   bool get_is_in_retry() {
@@ -802,9 +784,6 @@ public:
   }
   bool get_is_in_retry() const {
     return SESS_NOT_IN_RETRY != thread_data_.is_in_retry_;
-  }
-  bool get_is_in_retry_for_dup_tbl() {
-    return SESS_IN_RETRY_FOR_DUP_TBL == thread_data_.is_in_retry_;
   }
   void set_retry_active_time(int64_t time)
   {
@@ -1863,18 +1842,12 @@ protected:
   // snapshot version is generated from remote server(called by start_stmt). So
   // use it only query is active and version is valid.
   share::SCN reserved_read_snapshot_version_;
-  transaction::ObXATransID xid_;
-  bool associated_xa_; // session joined distr-xa-trans by xa-start
   int64_t cached_tenant_config_version_;
 public:
-  const transaction::ObXATransID &get_xid() const { return xid_; }
   transaction::ObTransID get_tx_id() const { return tx_desc_ != NULL ? tx_desc_->get_tx_id() : transaction::ObTransID(); }
   transaction::ObTxDesc /*Nullable*/ *&get_tx_desc() { return tx_desc_; }
   const transaction::ObTxDesc /*Nullable*/ *get_tx_desc() const { return tx_desc_; }
   transaction::ObTxExecResult &get_trans_result() { return tx_result_; }
-  bool associated_xa() const { return associated_xa_; }
-  int associate_xa(const transaction::ObXATransID &xid) { associated_xa_ = true; return xid_.set(xid); }
-  void disassociate_xa() { associated_xa_ = false; xid_.reset(); }
 private:
   common::ObSEArray<TableStmtType, 2> total_stmt_tables_;
   common::ObSEArray<TableStmtType, 1> cur_stmt_tables_;

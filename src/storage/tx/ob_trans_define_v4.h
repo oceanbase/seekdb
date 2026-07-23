@@ -33,6 +33,7 @@
 #include "common/ob_simple_iterator.h"
 #include "share/ob_common_id.h"
 #include "storage/memtable/ob_row_conflict_info.h"
+#include "storage/tx/ob_trans_timer.h"
 
 namespace oceanbase
 {
@@ -336,15 +337,6 @@ class ObTxSavePoint
 private:
   enum class T { INVL= 0, SAVEPOINT= 1, SNAPSHOT= 2, STASH= 3 } type_;
   ObTxSEQ scn_;
-  /* The savepoint should be unique to the session,
-    and the session id is required to distinguish the
-    savepoint for the multi-branch scenario of xa */
-  uint32_t session_id_;
-  /*
-    used by XA, synchronize savepoint should exclude internal savepoint
-    (eg. 'PL IMPLICIT_SAVEPOINT')
-  */
-  bool user_create_;
   union {
     ObTxReadSnapshot *snapshot_;
     common::ObFixedLengthString<128> name_;
@@ -354,23 +346,18 @@ public:
   ~ObTxSavePoint();
   ObTxSavePoint(const ObTxSavePoint &s);
   ObTxSavePoint &operator=(const ObTxSavePoint &a);
-  bool operator==(const ObTxSavePoint &a) const;
   void release();
   void rollback();
   int init(const ObTxSEQ &scn,
            const ObString &name,
-           const uint32_t session_id,
-           const bool user_create,
            const bool stash = false);
   void init(ObTxReadSnapshot *snapshot);
   bool is_savepoint() const { return type_ == T::SAVEPOINT || type_ == T::STASH; }
   bool is_snapshot() const { return type_ == T::SNAPSHOT; }
   bool is_stash() const { return type_ == T::STASH; }
-  bool is_user_savepoint() const { return type_ == T::SAVEPOINT && user_create_; }
   bool is_valid() const { return type_ != T::INVL; }
   ObString get_savepoint_name() const { return name_.str(); }
   DECLARE_TO_STRING;
-  OB_UNIS_VERSION(1);
 };
 
 typedef ObSEArray<ObTxSavePoint, 4> ObTxSavePointList;
@@ -428,7 +415,6 @@ protected:
 
   common::ObAddr addr_;                // where we site
   ObTransID tx_id_;                    // identifier
-  ObXATransID xid_;                    // xa info if participant in XA
   ObTxIsolationLevel isolation_;       // isolation level
   ObTxAccessMode access_mode_;         // READ_ONLY | READ_WRITE
   // for RR/SERIALIZABLE, the transaction level snapshot
@@ -437,8 +423,7 @@ protected:
   share::SCN last_rc_snapshot_version_;
   int64_t snapshot_uncertain_bound_;   // uncertain bound of @snapshot_version_
   ObTxSEQ snapshot_scn_;               // the time of acquire @snapshot_version_
-  uint32_t sess_id_;                   // sesssion id of txn start, for XA it is XA_START session id
-  uint32_t assoc_sess_id_;             // the session which associated with
+  uint32_t sess_id_;                   // session id of txn start
 
   uint64_t op_sn_;                     // Tx level operation sequence No
 
@@ -581,8 +566,6 @@ public:
                K_(state),
                K_(addr),
                "session_id", sess_id_,
-               "assoc_session_id", assoc_sess_id_,
-               "xid", PC((!xid_.empty() ? &xid_ : (ObXATransID*)nullptr)),
                K_(access_mode),
                K_(tx_consistency_type),
                K_(isolation),
@@ -629,7 +612,6 @@ public:
   bool contain(const ObTransID &trans_id) const { return tx_id_ == trans_id; } /*used by TransHashMap*/
 
   uint32_t get_session_id() const { return sess_id_; }
-  uint32_t get_assoc_session_id() const { return assoc_sess_id_; }
   ObAddr get_addr() const { return addr_; }
   uint64_t get_cluster_version() const { return cluster_version_; }
   ObTxConsistencyType get_tx_consistency_type() const { return tx_consistency_type_; }
@@ -681,12 +663,7 @@ public:
 	  bool is_aborted() const { return state_ == State::ABORTED; }
   bool is_tx_timeout() { return expire_ts_ > 0 && ObClockGenerator::getClock() > expire_ts_; }
   bool is_tx_commit_timeout() { return commit_expire_ts_ > 0 && ObClockGenerator::getClock() > commit_expire_ts_;}
-  void set_xid(const ObXATransID &xid) { xid_ = xid; }
   void set_sessid(const uint32_t session_id) { sess_id_ = session_id; }
-  void set_assoc_sessid(const uint32_t session_id) { assoc_sess_id_ = session_id; }
-  const ObXATransID &get_xid() const { return xid_; }
-  void reset_xid() { xid_.reset(); }
-  bool is_xa_trans() const { return false; }
   int64_t get_active_ts() const { return active_ts_; }
   int64_t get_expire_ts() const;
   int64_t get_tx_lock_timeout() const { return lock_timeout_us_; }
@@ -779,7 +756,6 @@ public:
   int alloc(ObTxDesc *&tx_desc);
   void free(ObTxDesc *tx_desc);
   int add(ObTxDesc &tx_desc);
-  int add_with_txid(const ObTransID &tx_id, ObTxDesc &tx_desc);
   int get(const ObTransID &tx_id, ObTxDesc *&tx_desc);
   void revert(ObTxDesc &tx);
   int remove(ObTxDesc &tx);

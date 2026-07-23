@@ -19,7 +19,7 @@
 #include "rpc/obmysql/ob_sql_sock_session.h"
 #include "rpc/obmysql/packet/ompk_handshake.h"
 #include "lib/random/ob_mysql_random.h"
-#include "observer/omt/ob_server_runtime.h"
+#include "observer/omt/ob_tenant.h"
 #include "observer/ob_srv_task.h"
 #include "share/schema/ob_schema_utils.h"
 
@@ -114,7 +114,7 @@ static int sm_conn_build_handshake(ObSMConnection& conn, obmysql::OMPKHandshake&
   hsp.set_ssl_cap(support_ssl);
   const int64_t BUF_LEN = sizeof(conn.scramble_buf_);
   int64_t autocommit = 0;
-  if (OB_FAIL(share::schema::ObSchemaUtils::get_runtime_int_variable(
+  if (OB_FAIL(share::schema::ObSchemaUtils::get_tenant_int_variable(
           share::SYS_VAR_AUTOCOMMIT, autocommit))) {
     LOG_WARN("get global autocommit failed", K(ret));
   } else if (OB_UNLIKELY(0 != autocommit && 1 != autocommit)) {
@@ -156,13 +156,14 @@ int ObSMConnectionCallback::init(ObSqlSockSession& sess, ObSMConnection& conn)
   return ret;
 }
 
-static void sm_conn_unlock_runtime(ObSMConnection& conn)
+static void sm_conn_unlock_tenant(ObSMConnection& conn)
 {
-  if (NULL != conn.runtime_ && conn.is_runtime_locked_) {
-    conn.runtime_->unlock();
-    conn.is_runtime_locked_ = false;
-    conn.runtime_ = NULL;
-    LOG_INFO("unlock session of runtime", K(conn.sessid_));
+  //unlock tenant
+  if (NULL != conn.tenant_ && conn.is_tenant_locked_) {
+    conn.tenant_->unlock();
+    conn.is_tenant_locked_ = false;
+    conn.tenant_ = NULL;
+    LOG_INFO("unlock session of tenant",K(conn.sessid_));
   }
 }
 
@@ -198,9 +199,9 @@ void ObSMConnectionCallback::destroy(ObSMConnection& conn)
                                 ctx);
       if (OB_UNLIKELY(NULL == task)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else if (OB_UNLIKELY(NULL == conn.runtime_)) {
-        ret = OB_RUNTIME_SCHEMA_NOT_READY;
-      } else if (OB_FAIL(conn.runtime_->recv_request(*task))) {
+      } else if (OB_UNLIKELY(NULL == conn.tenant_)) {
+        ret = OB_TENANT_NOT_EXIST;
+      } else if (OB_FAIL(conn.tenant_->recv_request(*task))) {
         LOG_WARN("push disconnect task fail", K(conn.sessid_), K(ret));
         ob_delete(task);
       }
@@ -217,7 +218,7 @@ void ObSMConnectionCallback::destroy(ObSMConnection& conn)
     // sessid no longer needs to be recycled in seekdb
   }
 
-  sm_conn_unlock_runtime(conn);
+  sm_conn_unlock_tenant(conn);
   share::ObTaskController::get().allow_next_syslog();
   LOG_INFO("connection close",
            "sessid", conn.sessid_,

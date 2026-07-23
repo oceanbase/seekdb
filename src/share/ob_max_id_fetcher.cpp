@@ -44,7 +44,6 @@ const char *ObMaxIdFetcher::max_id_name_info_[OB_MAX_ID_TYPE][2] = {
   { "ob_max_used_sys_pl_object_id", "max used sys pl object id"},
   { "ob_max_used_object_id", "max used object id"},
   { "ob_max_used_lock_owner_id", "max used lock owner id"},
-  { "ob_max_used_rewrite_rule_version", "max used rewrite rule version"},
   { "ob_max_used_ttl_task_id", "max used ttl task id"},
   /* OB_MAX_USED_TABLE_ID_TYPE ~ OB_MAX_USED_RLS_CONTEXT_ID_TYPE ObMaxIdType will be changed to OB_MAX_USED_OBJECT_ID_TYPE and won't be persisted. */
   { "ob_max_used_table_id", "max used table id"},
@@ -125,7 +124,6 @@ int ObMaxIdFetcher::convert_id_type(
     case OB_MAX_USED_SYS_PL_OBJECT_ID_TYPE:
     case OB_MAX_USED_OBJECT_ID_TYPE:
     case OB_MAX_USED_LOCK_OWNER_ID_TYPE:
-    case OB_MAX_USED_REWRITE_RULE_VERSION_TYPE:
     case OB_MAX_USED_SERVICE_NAME_ID_TYPE:
     case OB_MAX_USED_AI_MODEL_ENDPOINT_ID_TYPE:
     case OB_MAX_USED_TTL_TASK_ID_TYPE: {
@@ -557,7 +555,6 @@ int ObMaxIdFetcher::check_id_valid(const ObMaxIdType &max_id_type, const uint64_
       case OB_MAX_USED_STORAGE_OP_ID_TYPE:
       case OB_MAX_USED_UNIT_GROUP_ID_TYPE:
       case OB_MAX_USED_LOCK_OWNER_ID_TYPE:
-      case OB_MAX_USED_REWRITE_RULE_VERSION_TYPE:
       case OB_MAX_USED_SERVICE_NAME_ID_TYPE:
       case OB_MAX_USED_AI_MODEL_ID_TYPE:
       case OB_MAX_USED_AI_MODEL_ENDPOINT_ID_TYPE:

@@ -381,7 +381,6 @@ ob_set_subtarget(ob_storage tx
   tx/ob_tx_big_segment_buf.cpp
   tx/ob_tx_on_demand_print.cpp
   tx/ob_tx_replay_executor.cpp
-  tx/ob_xa_define.cpp
   tx/ob_tx_ctx_mds.cpp
   tx/ob_multi_data_source.cpp
   tx/ob_multi_data_source_printer.cpp
