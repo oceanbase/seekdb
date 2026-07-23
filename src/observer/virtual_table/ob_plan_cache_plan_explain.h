@@ -19,6 +19,7 @@
 
 
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_session_plan_cache_utils.h"
 #include "sql/engine/ob_operator.h"
 #include "src/sql/plan_cache/ob_cache_object_factory.h"
 
@@ -104,19 +105,23 @@ private:
 class ObCacheObjIterator
 {
   public:
-    ObCacheObjIterator(common::ObSEArray<uint64_t, 16> &id_array):
-    id_arr_(id_array),
-    id_arr_idx_(-1),
-    plan_id_array_()
+    ObCacheObjIterator()
+      : initialized_(false),
+        entry_idx_(0),
+        entries_()
     {}
 
-    int operator()(common::hash::HashMapPair<sql::ObCacheObjID, sql::ObILibCacheObject *> &entry);
+    int next(ObSessionPlanCacheEntry &entry);
+    void reset()
+    {
+      initialized_ = false;
+      entry_idx_ = 0;
+      entries_.reuse();
+    }
 
-    int next(sql::ObCacheObjGuard &guard);
-
-    common::ObSEArray<uint64_t, 16> &id_arr_;
-    int64_t id_arr_idx_;
-    common::ObSEArray<uint64_t, 16> plan_id_array_;
+    bool initialized_;
+    int64_t entry_idx_;
+    common::ObSEArray<ObSessionPlanCacheEntry, 16> entries_;
 };
 
 class ObPlanCachePlanExplain : public common::ObVirtualTableScannerIterator
@@ -135,9 +140,7 @@ public:
   ObPlanCachePlanExplain()
     : plan_id_(common::OB_INVALID_INDEX),
       scan_all_plan_(true),
-      id_arr_(),
-      id_arr_idx_(0),
-      cache_obj_iterator_(id_arr_),
+      cache_obj_iterator_(),
       iter_end_(false),
       static_engine_exp_visitor_(output_column_ids_,
                                  cur_row_,
@@ -148,11 +151,10 @@ public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
 private:
   int set_tenant_plan_id(const common::ObIArray<common::ObNewRange> &ranges);
+  int add_plan_to_scanner(const ObSessionPlanCacheEntry &entry);
   
   int64_t plan_id_;
   bool scan_all_plan_;
-  common::ObSEArray<uint64_t, 16> id_arr_;
-  int64_t id_arr_idx_;
   ObCacheObjIterator cache_obj_iterator_;
   bool iter_end_;
   ObOpSpecExpVisitor static_engine_exp_visitor_;

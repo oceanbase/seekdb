@@ -29,6 +29,7 @@
 #include "lib/allocator/page_arena.h"
 #include "lib/objectpool/ob_pool.h"
 #include "lib/time/ob_cur_time.h"
+#include "lib/lock/ob_mutex.h"
 #include "lib/lock/ob_recursive_mutex.h"
 #include "lib/hash/ob_link_hashmap.h"
 #include "lib/stat/ob_diagnose_info.h"
@@ -597,6 +598,11 @@ public:
   ObPrivSet get_db_priv_set() const { return db_priv_set_; }
   ObPlanCache *get_plan_cache();
   ObPlanCache *get_plan_cache_directly() const { return plan_cache_; };
+  ObPlanCache *get_sql_plan_cache();
+  lib::ObMutex &get_sql_plan_cache_mutex() { return sql_plan_cache_mutex_; }
+  // The caller must hold get_sql_plan_cache_mutex() while using this pointer.
+  ObPlanCache *peek_sql_plan_cache() const { return sql_plan_cache_; }
+  void reset_sql_plan_cache();
   ObPsCache *get_ps_cache();
   memtable::ObBtreeIterCache *get_btree_iter_cache() { return btree_iter_cache_; }
   void set_user_priv_set(const ObPrivSet priv_set) { user_priv_set_ = priv_set; }
@@ -1183,7 +1189,15 @@ private:
   const common::ObVersionProvider *version_provider_;
   const ObSQLConfigProvider *config_provider_;
   char tenant_buff_[sizeof(share::ObTenantSpaceFetcher)];
+  // Tenant library cache. It remains non-owning and is used by PL and other
+  // non-SQL library-cache namespaces.
   ObPlanCache *plan_cache_;
+  // SQL physical-plan cache owned by this connection.
+  ObPlanCache *sql_plan_cache_;
+  // Protects cache creation/destruction against cross-session diagnostics.
+  // Normal lookup/add concurrency is handled inside ObPlanCache.
+  lib::ObMutex sql_plan_cache_mutex_;
+  uint64_t last_seen_sql_plan_flush_epoch_;
   ObPsCache *ps_cache_;
   // Record the number of rows scanned in the select stmt result set for use with found_row() when setting sql_calc_found_row;
   int64_t found_rows_;

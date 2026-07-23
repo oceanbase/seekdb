@@ -29,6 +29,7 @@
 #include "rootserver/freeze/ob_major_freeze_helper.h" //ObMajorFreezeHelper
 #include "pl/pl_cache/ob_pl_cache_mgr.h"
 #include "sql/plan_cache/ob_ps_cache.h"
+#include "sql/session/ob_sql_session_mgr.h"
 
 #include "rootserver/ob_tenant_event_def.h"
 #include "sql/engine/cmd/ob_redis_importer.h"
@@ -46,6 +47,23 @@ using namespace obmysql;
 using namespace tenant_event;
 namespace sql
 {
+namespace
+{
+int advance_sql_plan_flush_epoch()
+{
+  int ret = OB_SUCCESS;
+  ObTenantSQLSessionMgr *session_mgr = share::g_mp->tenant_sql_session_mgr();
+  if (OB_ISNULL(session_mgr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("tenant sql session manager is null", K(ret));
+  } else {
+    const uint64_t flush_epoch = session_mgr->inc_sql_plan_flush_epoch();
+    LOG_INFO("advance session sql plan flush epoch", K(flush_epoch));
+  }
+  return ret;
+}
+}
+
 int ObFreezeExecutor::execute(ObExecContext &ctx, ObFreezeStmt &stmt)
 {
   int ret = OB_SUCCESS;
@@ -182,19 +200,10 @@ int ObFlushCacheExecutor::execute(ObExecContext &ctx, ObFlushCacheStmt &stmt)
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpected tenant_list in fine-grained plan evict", K(tenant_num));
           } else {
-            for (int64_t i = 0; i < tenant_num; i++) { // ignore ret
-              int64_t t_id = stmt.flush_cache_arg_.batch_ids_.at(i);
-              MOD_SCOPE {
-                ObPlanCache* plan_cache = share::g_mp->plan_cache();
-                // not specified db_name, evict all dbs
-                if (db_num == 0) {
-                  ret = plan_cache->flush_plan_cache_by_sql_id(OB_INVALID_ID, sql_id);
-                } else { // evict db by db
-                  for(int64_t j = 0; j < db_num; j++) { // ignore ret
-                    ret = plan_cache->flush_plan_cache_by_sql_id(stmt.flush_cache_arg_.db_ids_.at(j), sql_id);
-                  }
-                }
-              }
+            MOD_SCOPE {
+              // Fine-grained flush also invalidates the complete session SQL
+              // cache lazily in V1.
+              ret = advance_sql_plan_flush_epoch();
             }
           }
         } else if (0 == tenant_num) { // purge in tenant level, aka. coarse-grained plan evict
@@ -203,18 +212,12 @@ int ObFlushCacheExecutor::execute(ObExecContext &ctx, ObFlushCacheStmt &stmt)
             LOG_WARN("unexpected null of GCTX.omt_", K(ret));
           } else {
             MOD_SCOPE {
-              ObPlanCache* plan_cache = share::g_mp->plan_cache();
-              ret = plan_cache->flush_plan_cache();
+              ret = advance_sql_plan_flush_epoch();
             }
-            // ignore errors at switching tenant
-            ret = OB_SUCCESS;
           }
         } else {
-          for (int64_t i = 0; OB_SUCC(ret) && i < tenant_num; ++i) { //ignore ret
-            MOD_SCOPE {
-              ObPlanCache* plan_cache = share::g_mp->plan_cache();
-              ret = plan_cache->flush_plan_cache();
-            }
+          MOD_SCOPE {
+            ret = advance_sql_plan_flush_epoch();
           }
         }
         break;

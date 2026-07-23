@@ -23,7 +23,7 @@
 #include "observer/ob_srv_network_frame.h"
 #include "ob_root_service.h"
 #include "rootserver/freeze/ob_major_freeze_helper.h"
-#include "share/ob_structured_event_logger.h"//CLUSTER_EVENT_INSTANCE
+#include "share/ob_cluster_event_history_table_operator.h"//CLUSTER_EVENT_INSTANCE
 #include "sql/plan_cache/ob_plan_cache.h"
 #include "sql/plan_cache/ob_ps_cache.h"
 #include "share/rc/ob_tenant_base.h"
@@ -32,6 +32,7 @@
 #include "share/cache/ob_cache_name_define.h"
 #include "observer/omt/ob_multi_tenant.h"
 #include "observer/ob_service.h"
+#include "sql/session/ob_sql_session_mgr.h"
 namespace oceanbase
 {
 using namespace common;
@@ -642,6 +643,20 @@ int ObTenantServerAdminUtil::get_all_servers(common::ObIArray<ObAddr> &servers)
 }
 
 namespace {
+int advance_sql_plan_flush_epoch()
+{
+  int ret = OB_SUCCESS;
+  sql::ObTenantSQLSessionMgr *session_mgr = share::g_mp->tenant_sql_session_mgr();
+  if (OB_ISNULL(session_mgr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("tenant sql session manager is null", K(ret));
+  } else {
+    const uint64_t flush_epoch = session_mgr->inc_sql_plan_flush_epoch();
+    LOG_INFO("advance session sql plan flush epoch", K(flush_epoch));
+  }
+  return ret;
+}
+
 int do_flush_cache_local(obcall::ObFlushCacheArg arg)
 {
   int ret = OB_SUCCESS;
@@ -690,33 +705,14 @@ int do_flush_cache_local(obcall::ObFlushCacheArg arg)
       break;
     }
     case CACHE_TYPE_PLAN: {
-      if (arg.is_fine_grained_) { // fine-grained plan cache evict
+      if (arg.is_all_tenant_ && OB_ISNULL(GCTX.omt_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null of GCTX.omt_", K(ret));
+      } else {
         MOD_SCOPE {
-          ObPlanCache* plan_cache = share::g_mp->plan_cache();
-          if (arg.db_ids_.count() == 0) {
-            ret = plan_cache->flush_plan_cache_by_sql_id(OB_INVALID_ID, arg.sql_id_);
-          } else {
-            for (uint64_t i=0; i<arg.db_ids_.count(); i++) {
-              ret = plan_cache->flush_plan_cache_by_sql_id(arg.db_ids_.at(i), arg.sql_id_);
-            }
-          }
-        }
-      } else if (arg.is_all_tenant_) { //flush all tenant cache
-        if (OB_ISNULL(GCTX.omt_)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected null of GCTX.omt_", K(ret));
-        } else {
-          MOD_SCOPE {
-            ObPlanCache* plan_cache = share::g_mp->plan_cache();
-            ret = plan_cache->flush_plan_cache();
-          }
-          // ignore errors at switching tenant
-          ret = OB_SUCCESS;
-        }
-      } else {  // flush appointed tenant cache
-        MOD_SCOPE {
-          ObPlanCache* plan_cache = share::g_mp->plan_cache();
-          ret = plan_cache->flush_plan_cache();
+          // Session SQL plan caches are invalidated lazily. Fine-grained
+          // requests deliberately advance the same whole-cache epoch in V1.
+          ret = advance_sql_plan_flush_epoch();
         }
       }
       break;

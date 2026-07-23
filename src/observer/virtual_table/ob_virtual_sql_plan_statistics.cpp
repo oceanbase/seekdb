@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_virtual_sql_plan_statistics.h"
+#include "observer/virtual_table/ob_session_plan_cache_utils.h"
 #include "share/rc/ob_module_provider.h"
 #include "observer/ob_server_utils.h"
 #include "sql/plan_cache/ob_ps_cache.h"
@@ -83,6 +84,7 @@ void ObVirtualSqlPlanStatistics::reset()
 {
   operator_stat_array_.reset();
   iter_end_ = false;
+  operator_stat_array_idx_ = OB_INVALID_ID;
 }
 
 int ObVirtualSqlPlanStatistics::inner_open()
@@ -95,16 +97,34 @@ int ObVirtualSqlPlanStatistics::inner_open()
 
 int ObVirtualSqlPlanStatistics::get_row_from_specified_tenant(bool &is_end)
 {
+  class CollectSessionOperatorStats
+  {
+  public:
+    explicit CollectSessionOperatorStats(
+        common::ObIArray<ObOperatorStat> &operator_stats)
+      : operator_stats_(operator_stats)
+    {}
+
+    int operator()(ObSQLSessionInfo &session, ObPlanCache &plan_cache)
+    {
+      UNUSED(session);
+      ObGetAllOperatorStatOp op(&operator_stats_);
+      return plan_cache.foreach_cache_obj(op);
+    }
+
+  private:
+    common::ObIArray<ObOperatorStat> &operator_stats_;
+  };
+
   int ret = OB_SUCCESS;
   // !!! Must add ObReqTimeGuard before referencing plan cache resources
   ObReqTimeGuard req_timeinfo_guard;
   is_end = false;
-  sql::ObPlanCache *plan_cache = NULL;
   if (OB_INVALID_ID == static_cast<uint64_t>(operator_stat_array_idx_)) {
-    plan_cache = share::g_mp->plan_cache();
-    ObGetAllOperatorStatOp operator_stat_op(&operator_stat_array_);
-    if (OB_FAIL(plan_cache->foreach_cache_obj(operator_stat_op))) {
-      SERVER_LOG(WARN, "fail to traverse id2stat_map");
+    CollectSessionOperatorStats operator_stat_op(operator_stat_array_);
+    if (OB_FAIL(for_each_session_plan_cache(GCTX.session_mgr_,
+                                            operator_stat_op))) {
+      SERVER_LOG(WARN, "failed to traverse session sql plan caches", K(ret));
     } else {
       operator_stat_array_idx_ = 0;
     }
@@ -229,4 +249,3 @@ int ObVirtualSqlPlanStatistics::inner_get_next_row(common::ObNewRow *&row)
 }
 } //end namespace observer
 } //end namespace oceanbase
-

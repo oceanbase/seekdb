@@ -31,6 +31,7 @@ ObILibCacheObject::ObILibCacheObject(ObLibCacheNameSpace ns, lib::MemoryContext 
     allocator_(mem_context->get_safe_arena_allocator()),
     ref_count_(0),
     object_id_(OB_INVALID_ID),
+    lib_cache_(NULL),
     log_del_time_(INT64_MAX),
     added_to_lc_(false),
     ns_(ns),
@@ -98,7 +99,10 @@ int64_t ObILibCacheObject::inc_ref_count(const CacheRefHandleID ref_handle)
 {
   int ret = OB_SUCCESS;
   if (GCONF._enable_plan_cache_mem_diagnosis) {
-    ObPlanCache *lib_cache = share::g_mp->plan_cache();
+    ObPlanCache *lib_cache = lib_cache_;
+    if (OB_ISNULL(lib_cache) && OB_NOT_NULL(share::g_mp)) {
+      lib_cache = share::g_mp->plan_cache();
+    }
     if (OB_ISNULL(lib_cache)) {
       // ignore ret
       LOG_ERROR("invalid null lib cache", K(ret));
@@ -117,7 +121,10 @@ bool ObILibCacheObject::try_inc_ref_count(const CacheRefHandleID ref_handle)
     ref_cnt = ATOMIC_LOAD(&ref_count_);
   }
   if (ref_cnt > 0 && GCONF._enable_plan_cache_mem_diagnosis) {
-    ObPlanCache *lib_cache = share::g_mp->plan_cache();
+    ObPlanCache *lib_cache = lib_cache_;
+    if (OB_ISNULL(lib_cache) && OB_NOT_NULL(share::g_mp)) {
+      lib_cache = share::g_mp->plan_cache();
+    }
     if (OB_ISNULL(lib_cache)) {
       // ignore ret
       LOG_ERROR("invalid null lib cache", K(ret));
@@ -132,7 +139,10 @@ int64_t ObILibCacheObject::dec_ref_count(const CacheRefHandleID ref_handle)
 {
   int ret = OB_SUCCESS;
   if (GCONF._enable_plan_cache_mem_diagnosis) {
-    ObPlanCache *lib_cache = share::g_mp->plan_cache();
+    ObPlanCache *lib_cache = lib_cache_;
+    if (OB_ISNULL(lib_cache) && OB_NOT_NULL(share::g_mp)) {
+      lib_cache = share::g_mp->plan_cache();
+    }
     if (OB_ISNULL(lib_cache)) {
       // ignore ret
       LOG_ERROR("invalid null lib cache", K(ret));

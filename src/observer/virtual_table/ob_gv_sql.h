@@ -18,6 +18,7 @@
 #define _OB_GV_SQL_H 1
 
 #include "observer/virtual_table/ob_all_plan_cache_stat.h"
+#include "observer/virtual_table/ob_session_plan_cache_utils.h"
 #include "sql/plan_cache/ob_cache_object.h"
 
 namespace oceanbase
@@ -40,6 +41,8 @@ protected:
 private:
   common::ObSEArray<uint64_t, 1024> plan_id_array_;
   int64_t plan_id_array_idx_;
+  common::ObSEArray<ObSessionPlanCacheEntry, 1024> session_plan_array_;
+  int64_t session_plan_array_idx_;
   sql::ObPlanCache *plan_cache_;
   DISALLOW_COPY_AND_ASSIGN(ObGVSql);
 };
@@ -48,5 +51,4 @@ private:
 }
 
 #endif /* _OB_GV_SQL_H */
-
 

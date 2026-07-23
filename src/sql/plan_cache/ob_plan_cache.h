@@ -20,6 +20,7 @@
 #include "lib/net/ob_addr.h"
 #include "lib/hash/ob_hashmap.h"
 #include "lib/alloc/alloc_func.h"
+#include "lib/lock/ob_mutex.h"
 #include "lib/task/ob_timer.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
 #include "sql/plan_cache/ob_id_manager_allocator.h"
@@ -61,6 +62,11 @@ class ObPhysicalPlan;
 class ObLibCacheAtomicOp;
 class ObEvolutionPlan;
 
+enum ObPlanCacheMode
+{
+  TENANT_LIBRARY_CACHE = 0,
+  SESSION_SQL_CACHE
+};
 
 struct ObKVEntryTraverseOp
 {
@@ -224,6 +230,7 @@ class ObPlanCache
 {
 friend class ObCacheObjectFactory;
 friend class ObPlanCacheEliminationTask;
+friend class TestableSessionPlanCache;
 friend class observer::ObAllVirtualSqlPlan;
 friend class observer::ObGVSql;
 
@@ -232,6 +239,7 @@ public:
   static const int64_t MAX_PLAN_CACHE_SIZE = 5*1024LL*1024LL*1024LL; // 5G
   static const int64_t EVICT_KEY_NUM = 8;
   static const int64_t MAX_TENANT_MEM = ((int64_t)(1) << 40); // 1T
+  static const int64_t SESSION_PLAN_CACHE_CAPACITY = 64;
   typedef common::hash::ObHashMap<ObILibCacheKey*, ObILibCacheNode*> CacheKeyNodeMap;
   typedef common::ObSEArray<uint64_t, 1024> PlanIdArray;
 
@@ -240,7 +248,17 @@ public:
   static int mtl_init(ObPlanCache* &plan_cache);
   static void mtl_stop(ObPlanCache * &plan_cache);
   int init(int64_t hash_bucket);
-  bool is_inited() { return inited_; }
+  int init_session_cache(uint64_t sessid,
+                         volatile ObCacheObjID *external_object_id);
+  int clear_session_sql_cache();
+  bool is_inited() const { return inited_; }
+  bool is_session_sql_cache() const { return SESSION_SQL_CACHE == mode_; }
+  bool is_session_sql_cache_stale() const
+  {
+    return is_session_sql_cache() && 0 != ATOMIC_LOAD(&session_sql_cache_stale_);
+  }
+  ObPlanCacheMode get_mode() const { return mode_; }
+  uint64_t get_owner_sessid() const { return owner_sessid_; }
 
   static int check_can_do_insert_opt(common::ObIAllocator &allocator,
                                      ObPlanCacheCtx &pc_ctx,
@@ -338,7 +356,7 @@ public:
   {
     lib::ObLabel label;
     label = ObNewModIds::OB_SQL_PLAN_CACHE;
-    return mem_used_ + get_label_hold(label);
+    return mem_used_ + (is_session_sql_cache() ? 0 : get_label_hold(label));
   }
   int64_t get_mem_hold() const;
   int64_t get_label_hold(lib::ObLabel &label) const;
@@ -376,6 +394,7 @@ public:
   common::ObIAllocator *get_pc_allocator() { return &inner_allocator_; }
   common::ObIAllocator &get_pc_allocator_ref() { return inner_allocator_; }
   int64_t get_cache_obj_size() const { return co_mgr_.get_cache_obj_size(); }
+  int64_t get_cache_node_size() const { return cache_key_node_map_.size(); }
   ObPlanCacheStat &get_plan_cache_stat() { return pc_stat_; }
   const ObPlanCacheStat &get_plan_cache_stat() const { return pc_stat_; }
   int remove_cache_obj_stat_entry(const ObCacheObjID cache_obj_id);
@@ -411,6 +430,8 @@ public:
   }
 
   TO_STRING_KV(
+               K_(mode),
+               K_(owner_sessid),
                K_(mem_limit_pct),
                K_(mem_high_pct),
                K_(mem_low_pct));
@@ -433,6 +454,13 @@ protected:
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPlanCache);
+  int init_internal(int64_t hash_bucket,
+                    ObPlanCacheMode mode,
+                    uint64_t owner_sessid,
+                    volatile ObCacheObjID *external_object_id);
+  bool can_cache_namespace(ObLibCacheNameSpace ns) const;
+  int ensure_session_cache_capacity();
+  int evict_session_lru_node();
   int add_plan_cache(ObILibCacheCtx &ctx,
                      ObILibCacheObject *cache_obj);
   int get_plan_cache(ObILibCacheCtx &ctx,
@@ -462,6 +490,11 @@ private:
   const static int64_t SLICE_SIZE = 1024; //1k
 private:
   bool inited_;
+  ObPlanCacheMode mode_;
+  uint64_t owner_sessid_;
+  // Set before a lazy epoch flush starts. If eviction fails, lookups and
+  // admissions remain disabled so a pre-flush plan can never be reused.
+  volatile int64_t session_sql_cache_stale_;
   
   int64_t mem_limit_pct_;
   int64_t mem_high_pct_;                     // high water mark percentage
@@ -481,6 +514,7 @@ private:
   CacheKeyNodeMap cache_key_node_map_;
   ObPlanCacheEliminationTask evict_task_;
   common::ObTimer evict_timer_;
+  lib::ObMutex admission_mutex_;
   int64_t idle_scan_cursor_;
   bool idle_evict_done_round_;
   static const int64_t IDLE_SCAN_MAX_NODES = 1000;

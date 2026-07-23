@@ -52,8 +52,9 @@ int ObMPAuthResponse::process()
   } else if (OB_FAIL(session->set_login_auth_data(auth_data_))) {
     LOG_WARN("failed to set login auth data", K(ret));
   } else if (OB_FAIL(load_privilege_info_for_change_user(session))) {
-      OB_LOG(WARN,"load privilige info failed", K(ret),K(session->get_server_sid()));
+    OB_LOG(WARN,"load privilige info failed", K(ret),K(session->get_server_sid()));
   } else {
+    session->reset_sql_plan_cache();
     conn->set_auth_phase();
     ObOKPParam ok_param; // use default values
     ok_param.is_on_change_user_ = true;

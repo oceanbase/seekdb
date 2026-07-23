@@ -200,14 +200,18 @@ int ObOutlineExecutor::generate_logical_plan(ObExecContext &ctx,
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session_info = ctx.get_my_session();
+  ObPlanCache *plan_cache = NULL;
   ObPhysicalPlan *phy_plan = NULL;
   ObOptimizer optimizer(opt_ctx);
   ObCacheObjGuard guard(OUTLINE_EXEC_HANDLE);
   if (OB_ISNULL(session_info) || OB_ISNULL(outline_stmt)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid parameter", K(session_info), K(outline_stmt));
+  } else if (OB_ISNULL(plan_cache = session_info->get_sql_plan_cache())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session sql plan cache is null", K(ret));
   } else if (OB_FAIL(ObCacheObjectFactory::alloc(
-                  guard, ObLibCacheNameSpace::NS_CRSR))) {
+                  plan_cache, guard, ObLibCacheNameSpace::NS_CRSR))) {
     LOG_WARN("fail to alloc phy_plan", K(ret));
   } else if (FALSE_IT(phy_plan = static_cast<ObPhysicalPlan*>(guard.get_cache_obj()))) {
     // do nothing

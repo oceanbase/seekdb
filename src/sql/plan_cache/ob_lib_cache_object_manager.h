@@ -34,8 +34,14 @@ class ObLCObjectManager
 public:
   typedef common::hash::ObHashMap<ObCacheObjID, ObILibCacheObject*> IdCacheObjectMap;
 
-  ObLCObjectManager() : object_id_(0) {}
-  int init(int64_t hash_bucket);
+  ObLCObjectManager()
+    : object_id_(0),
+      external_object_id_(NULL),
+      lib_cache_(NULL)
+  {}
+  int init(int64_t hash_bucket,
+           ObPlanCache *lib_cache,
+           volatile ObCacheObjID *external_object_id = NULL);
   int alloc(ObCacheObjGuard& guard,
             ObLibCacheNameSpace ns,
             lib::MemoryContext &parent_context);
@@ -59,11 +65,17 @@ public:
   int64_t get_cache_obj_size() const { return cache_obj_map_.size(); }
   IdCacheObjectMap &get_cache_obj_map() { return cache_obj_map_; }
   IdCacheObjectMap &get_alloc_cache_obj_map() { return alloc_cache_obj_map_; }
-  uint64_t allocate_object_id() { return __sync_add_and_fetch(&object_id_, 1); }
+  uint64_t allocate_object_id()
+  {
+    return OB_ISNULL(external_object_id_)
+        ? __sync_add_and_fetch(&object_id_, 1)
+        : __sync_add_and_fetch(external_object_id_, 1);
+  }
   template<typename ClassT>
   static int alloc(lib::MemoryContext &mem_ctx,
                    ObILibCacheObject *&obj,
-                   CacheRefHandleID ref_handle);
+                   CacheRefHandleID ref_handle,
+                   ObPlanCache *lib_cache);
 
 private:
   void inner_free(ObILibCacheObject *obj);
@@ -72,6 +84,8 @@ private:
 private:
   // used for generate cache obj ids
   volatile ObCacheObjID object_id_;
+  volatile ObCacheObjID *external_object_id_;
+  ObPlanCache *lib_cache_;
   /**
    *                                 library cache
    *                                       |key
@@ -138,7 +152,8 @@ int ObLCObjectManager::atomic_get_alloc_cache_obj(ObCacheObjID id, _callback &ca
 template<typename ClassT>
 int ObLCObjectManager::alloc(lib::MemoryContext &mem_ctx,
                              ObILibCacheObject *&cache_obj,
-                             CacheRefHandleID ref_handle)
+                             CacheRefHandleID ref_handle,
+                             ObPlanCache *lib_cache)
 {
   int ret = OB_SUCCESS;
   void *ptr = NULL;
@@ -148,7 +163,7 @@ int ObLCObjectManager::alloc(lib::MemoryContext &mem_ctx,
     OB_LOG(WARN, "failed to allocate memory for lib cache node", K(ret));
   } else {
     cache_obj = new(ptr)ClassT(mem_ctx);
-    
+    cache_obj->set_lib_cache(lib_cache);
     cache_obj->inc_ref_count(ref_handle);
   }
   return ret;

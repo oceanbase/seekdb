@@ -21,6 +21,7 @@
 #include "sql/plan_cache/ob_ps_cache.h"
 #include "sql/plan_cache/ob_pcv_set.h"
 #include "sql/ob_sql_init.h"
+#include "sql/resolver/cmd/ob_help_stmt.h"
 #include "sql/resolver/ob_resolver.h"
 #include "sql/resolver/cmd/ob_variable_set_stmt.h"
 #include "sql/resolver/cmd/ob_call_procedure_stmt.h"
@@ -321,6 +322,42 @@ int ObSql::fill_result_set(ObResultSet &result_set,
         LOG_WARN("reserve field columns failed", K(ret));
       } else if (OB_FAIL(result_set.add_field_column(field))) {
         LOG_WARN("fail to add field column to result_set", K(ret));
+      }
+      break;
+    }
+    case stmt::T_HELP: {
+      ObHelpStmt *help_stmt = static_cast<ObHelpStmt *>(stmt);
+      if (OB_UNLIKELY(NULL == help_stmt)) {
+        ret = OB_ERR_PARSE_SQL;
+        LOG_WARN("logical plan of help statement error", K(ret));
+      } else {
+        ObString tname = ObString::make_string("help_table");
+        field.tname_ = tname;
+        field.org_tname_ = tname;
+        field.charsetnr_ = CS_TYPE_UTF8MB4_GENERAL_CI;
+        int64_t col_count = help_stmt->get_col_count();
+        if (OB_FAIL(result_set.reserve_field_columns(col_count))) {
+          LOG_WARN("reserve field columns failed", K(ret), K(col_count));
+        }
+        for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
+          field.type_.set_type(ObVarcharType);
+          field.type_.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
+          field.type_.set_collation_level(CS_LEVEL_IMPLICIT);
+          field.type_.set_varchar(type_name);
+          ObString col_name;
+          if (OB_FAIL(help_stmt->get_col_name(i, col_name))) {
+            LOG_WARN("fail to get column name", K(ret), K(i));
+          } else if (OB_FAIL(ob_write_string(alloc, col_name, field.cname_))) {
+            LOG_WARN("fail to alloc string", K(ret), "name", col_name);
+          } else if (OB_FAIL(ob_write_string(alloc, col_name, field.org_cname_))) {
+            LOG_WARN("fail to alloc string", K(ret), "name", col_name);
+          } else if (OB_FAIL(result_set.add_field_column(field))) {
+            LOG_WARN("fail to add field column to result_set", K(ret));
+          } else {
+            field.cname_.assign(NULL, 0);
+            field.org_cname_.assign(NULL, 0);
+          }
+        }
       }
       break;
     }
@@ -1366,7 +1403,7 @@ int ObSql::handle_sql_execute(const ObString &sql,
   ParamStore *ab_params = NULL;
 
   if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(session) || OB_ISNULL(session->get_plan_cache())) {
+  } else if (OB_ISNULL(session) || OB_ISNULL(session->get_sql_plan_cache())) {
     ret = OB_INVALID_ARGUMENT;
   } else if ((mode == PC_PS_MODE || mode == PC_PL_MODE) && OB_ISNULL(pctx)) {
     ret = OB_INVALID_ARGUMENT;
@@ -2037,7 +2074,7 @@ int ObSql::handle_ps_execute(const ObPsStmtId client_stmt_id,
   ParamStore fixed_params( (ObWrapperAllocator(allocator)) );
   ParamStore ps_params( (ObWrapperAllocator(allocator)) );
   ObPsCache *ps_cache = session.get_ps_cache();
-  ObPlanCache *plan_cache = session.get_plan_cache();
+  ObPlanCache *plan_cache = session.get_sql_plan_cache();
   bool use_plan_cache = session.get_local_ob_enable_plan_cache();
   ObPhysicalPlanCtx *pctx = ectx.get_physical_plan_ctx();
   ObSchemaGetterGuard *schema_guard = context.schema_guard_;
@@ -2793,7 +2830,8 @@ int ObSql::generate_physical_plan(ParseResult &parse_result,
     ret = OB_BATCHED_MULTI_STMT_ROLLBACK;
     LOG_WARN("batched multi_stmt needs rollback", K(ret));
   } else if (basic_stmt->is_dml_stmt()
-            || basic_stmt->is_explain_stmt()) {
+            || basic_stmt->is_explain_stmt()
+            || basic_stmt->is_help_stmt()) {
 #ifdef __ANDROID__
     // On Android: if the outline's max_concurrent is stricter than all DATABASE_AND_TABLE CCL
     // rules, skip level-3 CCL check (outline is the binding constraint).
@@ -2926,15 +2964,15 @@ int ObSql::generate_plan(ParseResult &parse_result,
 
     ObLogPlan *logical_plan = NULL;
     ObPhysicalPlan *phy_plan = NULL;
-    // Internal session tenant switch resource handling separation is not thorough
-    // When the user request is sent to a server without corresponding tenant resources, the plan memory is counted on the regular tenant,
-    // But the plan was hung under the sys tenant's plan cache, leading to abnormal data statistics in the plan_cache_stat table,
-    // Occurs when there appears to be a memory leak but there actually isn't. Here we handle it by directly fetching from plan cache
-    // Get tenant id, so that the resources allocated by the plan are counted under the corresponding tenant of the plan cache
+    ObPlanCache *sql_plan_cache = sql_ctx.session_info_->get_sql_plan_cache();
     ObCacheObjGuard& guard = result.get_cache_obj_guard();
     guard.init(PLAN_GEN_HANDLE);
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObCacheObjectFactory::alloc(guard,
+    } else if (OB_ISNULL(sql_plan_cache)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("session sql plan cache is null", K(ret));
+    } else if (OB_FAIL(ObCacheObjectFactory::alloc(sql_plan_cache,
+                                                    guard,
                                                     ObLibCacheNameSpace::NS_CRSR))) {
       LOG_WARN("fail to alloc phy_plan", K(ret));
     } else if (FALSE_IT(phy_plan = static_cast<ObPhysicalPlan*>(guard.get_cache_obj()))) {
@@ -3043,7 +3081,7 @@ int ObSql::generate_plan(ParseResult &parse_result,
     END_OPT_TRACE(session_info);
     if (OB_SUCC(ret)) {
       ObSqlPlan sql_plan(result.get_mem_pool());
-      if (stmt->is_explain_stmt()) {
+      if (stmt->is_explain_stmt() || stmt->is_help_stmt()) {
         // do nothing
       } else if (OB_FAIL(sql_plan.store_sql_plan(logical_plan, phy_plan))) {
         LOG_WARN("failed to store sql plan", K(ret));
@@ -3497,7 +3535,7 @@ int ObSql::code_generate(
     bool use_plan_cache = (sql_ctx.session_info_->get_local_ob_enable_plan_cache()
                            || sql_ctx.session_info_->force_enable_plan_tracing());
     ObPlanCache *plan_cache = NULL;
-    if (OB_UNLIKELY(NULL == (plan_cache = sql_ctx.session_info_->get_plan_cache()))) {
+    if (OB_UNLIKELY(NULL == (plan_cache = sql_ctx.session_info_->get_sql_plan_cache()))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Invalid plan cache", K(ret));
     } else {
@@ -3656,7 +3694,7 @@ int ObSql::pc_get_plan(ObPlanCacheCtx &pc_ctx,
   //NG_TRACE(cache_get_plan_begin);
   ObPlanCache *plan_cache = NULL;
   ObSQLSessionInfo *session = pc_ctx.sql_ctx_.session_info_;
-  if (OB_ISNULL(session) || OB_ISNULL(plan_cache = session->get_plan_cache())) {
+  if (OB_ISNULL(session) || OB_ISNULL(plan_cache = session->get_sql_plan_cache())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Invalid plan cache", K(ret), K(session), K(plan_cache));
   } else if (OB_FAIL(execute_get_plan(*plan_cache, pc_ctx, guard))) {
@@ -4042,7 +4080,7 @@ int ObSql::parser_and_check(const ObString &outlined_stmt,
             pc_ctx.force_enable_plan_tracing_ =
               (session->force_enable_plan_tracing()
                && !session->get_local_ob_enable_plan_cache());
-            if (OB_UNLIKELY(NULL == (plan_cache = session->get_plan_cache()))) {
+            if (OB_UNLIKELY(NULL == (plan_cache = session->get_sql_plan_cache()))) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("Invalid plan cache", K(ret));
             } else {
@@ -4171,12 +4209,15 @@ int ObSql::pc_add_plan(ObPlanCacheCtx &pc_ctx,
 {
   int ret = OB_SUCCESS;
   ObPhysicalPlan *phy_plan = result.get_physical_plan();
+  ObSQLSessionInfo *session = pc_ctx.sql_ctx_.session_info_;
   pc_ctx.fp_result_.pc_key_.namespace_ = ObLibCacheNameSpace::NS_CRSR;
   plan_added = false;
   bool is_batch_exec = pc_ctx.sql_ctx_.is_batch_params_execute();
-  if (OB_ISNULL(phy_plan) || OB_ISNULL(plan_cache)) {
+  if (OB_ISNULL(session)
+      || OB_ISNULL(plan_cache = session->get_sql_plan_cache())
+      || OB_ISNULL(phy_plan)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Fail to generate plan", K(phy_plan), K(plan_cache));
+    LOG_WARN("Fail to generate plan", K(phy_plan), K(plan_cache), K(session));
   } else if (OB_USE_PLAN_CACHE_NONE == phy_plan->get_phy_plan_hint().plan_cache_policy_) {
     LOG_DEBUG("Hint not use plan cache");
     if (is_batch_exec) {
@@ -4545,7 +4586,7 @@ OB_NOINLINE int ObSql::handle_physical_plan(const ObString &trimed_stmt,
   MEMSET(&outline_parse_result, 0, SIZEOF(ParseResult));
   bool add_plan_to_pc = false;
   ObSQLSessionInfo &session = result.get_session();
-  ObPlanCache *plan_cache = session.get_plan_cache();
+  ObPlanCache *plan_cache = session.get_sql_plan_cache();
   bool use_plan_cache = session.get_local_ob_enable_plan_cache();
   // record whether needs to do parameterization at this time,
   // if exact mode is on, not do parameterizaiton

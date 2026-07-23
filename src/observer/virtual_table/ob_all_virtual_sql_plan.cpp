@@ -40,6 +40,7 @@ ObAllVirtualSqlPlan::PlanInfo::~PlanInfo()
 
 void ObAllVirtualSqlPlan::PlanInfo::reset()
 {
+  session_id_ = 0;
   plan_id_ = OB_INVALID_ID;
   
 }
@@ -57,6 +58,7 @@ ObAllVirtualSqlPlan::DumpAllPlan::~DumpAllPlan()
 void ObAllVirtualSqlPlan::DumpAllPlan::reset()
 {
   plan_ids_ = NULL;
+  session_id_ = 0;
   
 }
 
@@ -75,7 +77,7 @@ int ObAllVirtualSqlPlan::DumpAllPlan::operator()(
     //do nothing
   } else if (NULL != plan->get_logical_plan().logical_plan_) {
     PlanInfo info;
-    
+    info.session_id_ = session_id_;
     info.plan_id_ = plan->get_plan_id();
     if (OB_FAIL(plan_ids_->push_back(info))) {
       SERVER_LOG(WARN, "failed to push back plan id", K(ret));
@@ -105,6 +107,7 @@ ObAllVirtualSqlPlan::~ObAllVirtualSqlPlan() {
 void ObAllVirtualSqlPlan::reset()
 {
   ObVirtualTableScannerIterator::reset();
+  plan_ids_.reuse();
   plan_idx_ = 0;
   plan_items_.reuse();
   plan_item_idx_ = 0;
@@ -438,11 +441,21 @@ int ObAllVirtualSqlPlan::extract_tenant_and_plan_id(const common::ObIArray<commo
                     K(end_key_obj_ptr[KEY_PLAN_ID_IDX].get_type()));
       } else {
         int64_t plan_id = start_key_obj_ptr[KEY_PLAN_ID_IDX].get_int();
-        PlanInfo info;
-        
-        info.plan_id_ = plan_id;
-        if (OB_FAIL(plan_ids_.push_back(info))) {
-          SERVER_LOG(WARN, "failed to push back plan info", K(ret));
+        ObSEArray<ObSessionPlanCacheEntry, 8> entries;
+        if (OB_FAIL(collect_session_plan_cache_entries(GCTX.session_mgr_,
+                                                       entries))) {
+          SERVER_LOG(WARN, "failed to collect session plans", K(ret));
+        } else {
+          for (int64_t j = 0; OB_SUCC(ret) && j < entries.count(); ++j) {
+            if (plan_id == static_cast<int64_t>(entries.at(j).object_id_)) {
+              PlanInfo info;
+              info.session_id_ = entries.at(j).session_id_;
+              info.plan_id_ = plan_id;
+              if (OB_FAIL(plan_ids_.push_back(info))) {
+                SERVER_LOG(WARN, "failed to push back plan info", K(ret));
+              }
+            }
+          }
         }
       }
     }
@@ -461,21 +474,33 @@ int ObAllVirtualSqlPlan::dump_all_tenant_plans()
 
 int ObAllVirtualSqlPlan::dump_tenant_plans()
 {
+  class DumpSessionPlans
+  {
+  public:
+    explicit DumpSessionPlans(ObSEArray<PlanInfo, 8> &plan_ids)
+      : plan_ids_(plan_ids)
+    {}
+
+    int operator()(ObSQLSessionInfo &session, ObPlanCache &plan_cache)
+    {
+      DumpAllPlan dump_plan;
+      dump_plan.plan_ids_ = &plan_ids_;
+      dump_plan.session_id_ = session.get_server_sid();
+      return plan_cache.foreach_alloc_cache_obj(dump_plan);
+    }
+
+  private:
+    ObSEArray<PlanInfo, 8> &plan_ids_;
+  };
+
   int ret = OB_SUCCESS;
   {
-    DumpAllPlan dump_plan;
-    
-    dump_plan.plan_ids_ = &plan_ids_;
     // !!!Before referencing plan cache resources, ObReqTimeGuard must be added
     ObReqTimeGuard req_timeinfo_guard;
-    ObPlanCache *plan_cache = NULL;
     MOD_SCOPE {
-      plan_cache = share::g_mp->plan_cache();
-      if (OB_ISNULL(plan_cache)) {
-        ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "unexpect null plan cache", K(ret));
-      } else if (OB_FAIL(plan_cache->foreach_alloc_cache_obj(dump_plan))) {
-        SERVER_LOG(WARN, "failed to dump plan", K(ret));
+      DumpSessionPlans dump_plan(plan_ids_);
+      if (OB_FAIL(for_each_session_plan_cache(GCTX.session_mgr_, dump_plan))) {
+        SERVER_LOG(WARN, "failed to dump session plans", K(ret));
       }
     } // mtl switch ends
     if (OB_OP_NOT_ALLOW == ret) {
@@ -500,40 +525,75 @@ int ObAllVirtualSqlPlan::prepare_next_plan()
     //next plan
     ++plan_idx_;
   } else {
-    
-    plan_id_ = plan_ids_.at(plan_idx_).plan_id_;
+    const PlanInfo plan_info = plan_ids_.at(plan_idx_);
+    plan_id_ = plan_info.plan_id_;
     //next plan
     ++plan_idx_;
     ObPhysicalPlan *plan = NULL;
     // !!!Before referencing plan cache resources, ObReqTimeGuard must be added
     ObReqTimeGuard req_timeinfo_guard;
-    ObPlanCache *plan_cache = NULL;
-    ObCacheObjGuard guard(PC_DIAG_HANDLE);
     int tmp_ret = OB_SUCCESS;
     MOD_SCOPE {
-      plan_cache = share::g_mp->plan_cache();
-      if (OB_SUCCESS != (tmp_ret = plan_cache->ref_alloc_plan(plan_id_, guard))) {
-        // should not panic
-      } else if (FALSE_IT(plan = static_cast<ObPhysicalPlan*>(guard.get_cache_obj()))) {
-        // do nothing
-      } else if (OB_ISNULL(plan)) {
-        // maybe pl object, do nothing
+      if (OB_ISNULL(GCTX.session_mgr_)) {
+        ret = OB_ERR_UNEXPECTED;
+        SERVER_LOG(WARN, "sql session manager is null", K(ret));
       } else {
-        //decompress logical plan
-        ObLogicalPlanRawData &raw_plan = plan->get_logical_plan();
-        if (OB_ISNULL(allocator_)) {
+        ObSessionGetterGuard session_guard(*GCTX.session_mgr_,
+                                           plan_info.session_id_);
+        ObSQLSessionInfo *session = NULL;
+        tmp_ret = session_guard.get_session(session);
+        if (OB_ENTRY_NOT_EXIST == tmp_ret) {
+          // The session ended after its plan id was collected.
+        } else if (OB_SUCCESS != tmp_ret) {
+          ret = tmp_ret;
+          SERVER_LOG(WARN, "failed to get plan owner session",
+                     K(ret), K(plan_info));
+        } else if (OB_ISNULL(session)) {
           ret = OB_ERR_UNEXPECTED;
-          SERVER_LOG(WARN, "unexpect null allocator", K(ret));
-        } else if (OB_FAIL(raw_plan.uncompress_logical_plan(*allocator_, plan_items_))) {
-          SERVER_LOG(WARN, "failed to uncompress logical plan", K(ret));
+          SERVER_LOG(WARN, "unexpected null plan owner session", K(ret));
         } else {
-          db_id_ = plan->stat_.db_id_;
-          plan_hash_ = plan->get_plan_hash_value();
-          gmt_create_ = plan->stat_.gen_time_;
-          if (plan->stat_.sql_id_.length() <= OB_MAX_SQL_ID_LENGTH) {
-            MEMCPY(sql_id_, plan->stat_.sql_id_.ptr(), plan->stat_.sql_id_.length());
+          ObSessionPlanCacheLockGuard lock_guard(*session);
+          if (OB_SUCCESS != lock_guard.get_lock_ret()) {
+            ret = lock_guard.get_lock_ret();
+            SERVER_LOG(WARN, "failed to lock plan owner session cache",
+                       K(ret), K(plan_info));
           } else {
-            MEMSET(sql_id_, 0, OB_MAX_SQL_ID_LENGTH);
+            ObPlanCache *plan_cache = session->peek_sql_plan_cache();
+            ObCacheObjGuard guard(PC_DIAG_HANDLE);
+            if (OB_ISNULL(plan_cache)) {
+              // RESET CONNECTION may have cleared the cache.
+            } else if (OB_SUCCESS !=
+                       (tmp_ret = plan_cache->ref_alloc_plan(plan_id_, guard))) {
+              if (OB_HASH_NOT_EXIST != tmp_ret) {
+                ret = tmp_ret;
+                SERVER_LOG(WARN, "failed to reference session plan",
+                           K(ret), K(plan_info));
+              }
+            } else if (FALSE_IT(plan =
+                       static_cast<ObPhysicalPlan *>(guard.get_cache_obj()))) {
+              // do nothing
+            } else if (OB_ISNULL(plan)) {
+              // do nothing
+            } else {
+              //decompress logical plan
+              ObLogicalPlanRawData &raw_plan = plan->get_logical_plan();
+              if (OB_ISNULL(allocator_)) {
+                ret = OB_ERR_UNEXPECTED;
+                SERVER_LOG(WARN, "unexpect null allocator", K(ret));
+              } else if (OB_FAIL(raw_plan.uncompress_logical_plan(
+                                 *allocator_, plan_items_))) {
+                SERVER_LOG(WARN, "failed to uncompress logical plan", K(ret));
+              } else {
+                db_id_ = plan->stat_.db_id_;
+                plan_hash_ = plan->get_plan_hash_value();
+                gmt_create_ = plan->stat_.gen_time_;
+                MEMSET(sql_id_, 0, sizeof(sql_id_));
+                if (plan->stat_.sql_id_.length() <= OB_MAX_SQL_ID_LENGTH) {
+                  MEMCPY(sql_id_, plan->stat_.sql_id_.ptr(),
+                         plan->stat_.sql_id_.length());
+                }
+              }
+            }
           }
         }
       }

@@ -28,10 +28,15 @@ class ObIAllocator;
 namespace sql
 {
 
-int ObLCObjectManager::init(int64_t hash_bucket)
+int ObLCObjectManager::init(int64_t hash_bucket,
+                            ObPlanCache *lib_cache,
+                            volatile ObCacheObjID *external_object_id)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(cache_obj_map_.create(hash::cal_next_prime(hash_bucket),
+  if (OB_ISNULL(lib_cache)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid null lib cache", K(ret));
+  } else if (OB_FAIL(cache_obj_map_.create(hash::cal_next_prime(hash_bucket),
                                     ObModIds::OB_HASH_BUCKET_LC_STAT,
                                     ObModIds::OB_HASH_NODE_LC_STAT))) {
     LOG_WARN("failed to init cache obj map", K(ret));
@@ -39,6 +44,9 @@ int ObLCObjectManager::init(int64_t hash_bucket)
                                                  ObModIds::OB_HASH_BUCKET_LC_STAT,
                                                  ObModIds::OB_HASH_NODE_LC_STAT))) {
     LOG_WARN("failed to init alloc cache obj map", K(ret));
+  } else {
+    lib_cache_ = lib_cache;
+    external_object_id_ = external_object_id;
   }
   return ret;
 }
@@ -68,7 +76,7 @@ int ObLCObjectManager::alloc(ObCacheObjGuard& guard,
     LOG_WARN("NULL memory entity", K(ret));
   } else {
     WITH_CONTEXT(entity) {
-      if (OB_FAIL(LC_CO_ALLOC[ns](entity, cache_obj, guard.ref_handle_))) {
+      if (OB_FAIL(LC_CO_ALLOC[ns](entity, cache_obj, guard.ref_handle_, lib_cache_))) {
         LOG_WARN("failed to create lib cache node", K(ret), K(ns));
       } else {
         uint64_t obj_id = allocate_object_id();
@@ -87,6 +95,7 @@ int ObLCObjectManager::alloc(ObCacheObjGuard& guard,
     entity = NULL;
   }
   guard.cache_obj_ = cache_obj;
+  guard.owner_cache_ = OB_NOT_NULL(cache_obj) ? lib_cache_ : NULL;
   return ret;
 }
 

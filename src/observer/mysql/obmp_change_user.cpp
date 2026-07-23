@@ -254,6 +254,12 @@ int ObMPChangeUser::process()
 
       // 5 ps name
       session->reset_ps_name();
+
+      // With auth switch enabled, privilege verification completes in
+      // ObMPAuthResponse. That handler clears the cache after authentication.
+      if (!need_send_auth_switch) {
+        session->reset_sql_plan_cache();
+      }
     }
   }
 
