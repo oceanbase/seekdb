@@ -79,7 +79,7 @@ typedef common::ObSimpleIterator<ObTxStat,
 typedef common::ObSimpleIterator<ObTxLockStat,
         ObModIds::OB_TRANS_VIRTUAL_TABLE_TRANS_STAT, 16> ObTxLockStatIterator;
 
-typedef share::ObLightHashMap<ObTransID, ObTransCtx, TransCtxAlloc, common::SpinRWLock, 1 << 10 /*single LS bucket_num*/> ObLSTxCtxMap;
+typedef share::ObLightHashMap<ObTransID, ObTransCtx, TransCtxAlloc, common::SpinRWLock, 1 << 14 /*single LS bucket_num*/> ObLSTxCtxMap;
 
 struct ObTxCreateArg
 {
