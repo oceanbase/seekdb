@@ -121,8 +121,8 @@ ObInnerSQLConnection::ObInnerSQLConnection()
       execute_start_timestamp_(0),
       execute_end_timestamp_(0),
       config_(NULL),
-      associated_client_(NULL),
       is_in_trans_(false),
+      group_id_(0),
       user_timeout_(0),
       inner_sess_query_locked_(false)
 {
@@ -153,7 +153,8 @@ int ObInnerSQLConnection::init(ObInnerSQLConnectionPool *pool,
                                sql::ObSQLSessionInfo *extern_session, /* = NULL */
                                ObISQLClient *client_addr, /* = NULL */
                                ObRestoreSQLModifier *sql_modifier /* = NULL */,
-                               const bool use_static_engine /* = false */)
+                               const bool use_static_engine /* = false */,
+                               const int32_t group_id /* = 0 */)
 {
   int ret = OB_SUCCESS;
   if (inited_) {
@@ -177,7 +178,6 @@ int ObInnerSQLConnection::init(ObInnerSQLConnectionPool *pool,
       bt_size_ = ob_backtrace(bt_addrs_, MAX_BT_SIZE);
     }
     config_ = config;
-    associated_client_ = client_addr;
     if (OB_FAIL(init_session(extern_session, use_static_engine))) {
       LOG_WARN("init session failed", K(ret));
       int tmp_ret = OB_SUCCESS;
@@ -185,6 +185,11 @@ int ObInnerSQLConnection::init(ObInnerSQLConnectionPool *pool,
         LOG_WARN("Failed to destroy inner session when the session initialization failed, which may result in a session leak.", K(tmp_ret), K(ret));
       }
     } else {
+      if (OB_NOT_NULL(client_addr) && is_inner_session()) {
+        inner_session_->set_inner_sql_client_key(
+            reinterpret_cast<uint64_t>(client_addr));
+      }
+      group_id_ = group_id;
       inited_ = true;
     }
   }
@@ -212,7 +217,6 @@ int ObInnerSQLConnection::destroy()
     }
     extern_session_ = NULL;
     config_ = NULL;
-    associated_client_ = NULL;
     ref_ctx_ = NULL;
     user_timeout_ = 0;
   }
@@ -292,11 +296,6 @@ int ObInnerSQLConnection::set_ddl_info(const void *ddl_info)
   return ret;
 }
 
-void ObInnerSQLConnection::set_nls_formats(const ObString *nls_formats)
-{
-  get_session().set_nls_formats(nls_formats);
-}
-
 int ObInnerSQLConnection::set_tz_info_wrap(const ObTimeZoneInfoWrap &tz_info_wrap)
 {
   int ret = OB_SUCCESS;
@@ -369,7 +368,6 @@ int ObInnerSQLConnection::init_session_info(
             //TODO shengle ?
             session->get_ddl_info().set_is_ddl(is_ddl);
             session->reset_timezone();
-            session->init_use_rich_format();
           }
         }
       }
@@ -425,7 +423,6 @@ int ObInnerSQLConnection::init_result(ObInnerSQLResult &res,
                                       bool is_prepare_protocol,
                                       bool is_prepare_stage,
                                       bool is_dynamic_sql,
-                                      bool is_dbms_sql,
                                       bool is_cursor)
 {
   int ret = OB_SUCCESS;
@@ -442,7 +439,6 @@ int ObInnerSQLConnection::init_result(ObInnerSQLResult &res,
   res.sql_ctx().is_prepare_protocol_ = is_prepare_protocol;
   res.sql_ctx().is_prepare_stage_ = is_prepare_stage;
   res.sql_ctx().is_dynamic_sql_ = is_dynamic_sql;
-  res.sql_ctx().is_dbms_sql_ = is_dbms_sql;
   res.sql_ctx().is_cursor_ = is_cursor;
   res.sql_ctx().schema_guard_ = &schema_guard;
   if (OB_FAIL(res.result_set().init())) {

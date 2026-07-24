@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_OBSERVER_OB_INNER_SQL_CONNECTION_POOL_H_
 #define OCEANBASE_OBSERVER_OB_INNER_SQL_CONNECTION_POOL_H_
 
-#include "lib/list/ob_dlist.h"
 #include "common/mysqlclient/ob_isql_connection_pool.h"
 #include "lib/lock/ob_thread_cond.h"
 #include "ob_inner_sql_connection.h"
@@ -78,15 +77,6 @@ public:
 
   virtual int on_client_inactive(common::ObISQLClient *client_addr) override;
   virtual common::sqlclient::ObSQLConnPoolType get_type() override { return common::sqlclient::INNER_POOL; }
-  void dump_used_conn_list();
-
-  // Dozens of connections may be acquired by one worker because agent virtual
-  // tables need inner connections. Too many connections warning may be
-  // triggered by parallel execution of complicated sys table queries.
-  //
-  // 100000 = 50 connections * 2000 workers.
-  const static int64_t WARNNING_CONNECTION_CNT = 100000;
-  const static int64_t MAX_DUMP_SIZE = 20;
 
 private:
   // allocate a new connection
@@ -96,14 +86,10 @@ private:
   // revert connection, called by ObInnerSQLConnection::unref()
   int revert(ObInnerSQLConnection *conn);
 
-  int add_to_used_conn_list(ObInnerSQLConnection *conn);
-  int remove_from_used_conn_list(ObInnerSQLConnection *conn);
-
   bool inited_;
   volatile bool stop_;
   common::ObThreadCond cond_;
   int64_t total_conn_cnt_;
-  common::ObDList<ObInnerSQLConnection> used_conn_list_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
   sql::ObSql *ob_sql_;
   ObVTIterCreator *vt_iter_creator_;

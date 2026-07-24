@@ -105,6 +105,7 @@ public:
   // Kill every active session during server shutdown.
   int kill_all_sessions(bool force_kill);
   void wait_sessions_drained();
+  int kill_inner_sessions_by_client_key(const uint64_t client_key);
 
   /**
    * @brief timing clean time out session

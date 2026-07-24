@@ -19,7 +19,6 @@
 
 #include "common/mysqlclient/ob_isql_connection.h"
 #include "storage/tx/ob_multi_data_source.h"  // ObRegisterMdsFlag complete type(previously hidden behind the rpc_struct include chain)
-#include "lib/list/ob_dlist.h"
 #include "lib/container/ob_2d_array.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/resolver/ob_stmt_type.h"
@@ -93,8 +92,7 @@ public:
 };
 
 class ObInnerSQLConnection
-    : public common::sqlclient::ObISQLConnection,
-      public common::ObDLinkBase<ObInnerSQLConnection>
+    : public common::sqlclient::ObISQLConnection
 {
 public:
   static constexpr const char LABEL[] = "RPInnerSqlConn";
@@ -144,7 +142,8 @@ public:
            sql::ObSQLSessionInfo *extern_session = NULL,
            ObISQLClient *client_addr = NULL,
            ObRestoreSQLModifier *sql_modifer = NULL,
-           const bool use_static_engine = false);
+           const bool use_static_engine = false,
+           const int32_t group_id = 0);
   int destroy(void);
   inline void reset() { destroy(); }
   virtual int execute_read(const ObString &sql,
@@ -176,7 +175,6 @@ public:
 
   virtual int set_ddl_info(const void *ddl_info);
   virtual int set_tz_info_wrap(const ObTimeZoneInfoWrap &tz_info_wrap);
-  virtual void set_nls_formats(const ObString *nls_formats);
   virtual void set_is_load_data_exec(bool v);
   virtual void set_ob_enable_pl_cache(bool v) override;
   bool is_nested_conn();
@@ -188,6 +186,12 @@ public:
   // when ref count decrease to zero, revert connection to connection pool.
   void unref();
   int64_t get_ref() const { return ref_cnt_; }
+  int64_t to_string(char *buf, const int64_t buf_len) const
+  {
+    UNUSED(buf);
+    UNUSED(buf_len);
+    return 0;
+  }
 
   ObVTIterCreator *get_vt_iter_creator() const { return vt_iter_creator_; }
   ObInnerSQLReadContext *&get_prev_read_ctx() { return ref_ctx_; }
@@ -217,7 +221,6 @@ public:
   int64_t get_single_process_timestamp() const { return get_session().get_query_start_time(); }
   int64_t get_exec_start_timestamp() const { return execute_start_timestamp_; }
   int64_t get_exec_end_timestamp() const { return execute_end_timestamp_; }
-  common::ObISQLClient *get_associated_client() const { return associated_client_; }
   bool is_in_trans() const { return is_in_trans_; }
   void set_is_in_trans(const bool is_in_trans) { is_in_trans_ = is_in_trans; }
 
@@ -296,7 +299,6 @@ private:
                   bool is_prepare_protocol = false,
                   bool is_prepare_stage = false,
                   bool is_dynamic_sql = false,
-                  bool is_dbms_sql = false,
                   bool is_cursor = false);
   int process_retry(ObInnerSQLResult &res,
                     int do_ret,
@@ -348,10 +350,10 @@ private:
   int64_t execute_start_timestamp_;
   int64_t execute_end_timestamp_;
   common::ObServerConfig *config_;
-  common::ObISQLClient *associated_client_;
 
   // The inner SQL connection always executes in the local server runtime.
   bool is_in_trans_;
+  int32_t group_id_;
   //support set user timeout of stream rpc but not depend on internal_sql_execute_timeout
   int64_t user_timeout_;
   sql::ObFreeSessionCtx free_session_ctx_;

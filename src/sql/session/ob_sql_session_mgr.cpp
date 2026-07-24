@@ -167,6 +167,48 @@ int ObSQLSessionMgr::ValueAlloc::clean_sessions()
   return ret;
 }
 
+namespace
+{
+class KillInnerSessionByClient
+{
+public:
+  explicit KillInnerSessionByClient(const uint64_t client_key)
+      : client_key_(client_key),
+        ret_(OB_SUCCESS),
+        killed_count_(0)
+  {
+  }
+
+  bool operator()(ObSQLSessionMgr::Key, ObSQLSessionInfo *session)
+  {
+    if (OB_ISNULL(session)) {
+      ret_ = OB_SUCCESS == ret_ ? OB_ERR_UNEXPECTED : ret_;
+      LOG_WARN_RET(ret_, "session is null", K_(client_key));
+    } else if (client_key_ == session->get_inner_sql_client_key()) {
+      const int tmp_ret =
+          ObSQLSessionMgr::kill_query(*session, ObSQLSessionState::QUERY_KILLED);
+      if (OB_SUCCESS != tmp_ret) {
+        ret_ = OB_SUCCESS == ret_ ? tmp_ret : ret_;
+        LOG_WARN_RET(tmp_ret, "failed to kill inner sql query",
+                     K_(client_key), "session_id", session->get_server_sid());
+      }
+      ++killed_count_;
+    }
+    // Continue traversing so one failed session does not prevent the others
+    // belonging to the same client from being interrupted.
+    return true;
+  }
+
+  int get_ret() const { return ret_; }
+  int64_t get_killed_count() const { return killed_count_; }
+
+private:
+  uint64_t client_key_;
+  int ret_;
+  int64_t killed_count_;
+};
+}
+
 ObSQLSessionInfo *ObSQLSessionMgr::ValueAlloc::alloc_value()
 {
   int ret = OB_SUCCESS;
@@ -510,6 +552,28 @@ void ObSQLSessionMgr::wait_sessions_drained()
     }
   } while (session_count > 0);
   LOG_INFO("all managed sessions have drained");
+}
+
+int ObSQLSessionMgr::kill_inner_sessions_by_client_key(const uint64_t client_key)
+{
+  int ret = OB_SUCCESS;
+  int64_t killed_count = 0;
+  if (OB_UNLIKELY(0 == client_key)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid inner sql client key", K(ret), K(client_key));
+  } else {
+    KillInnerSessionByClient kill_func(client_key);
+    if (OB_FAIL(for_each_session(kill_func))) {
+      LOG_WARN("failed to traverse sessions", K(ret), K(client_key));
+    } else {
+      ret = kill_func.get_ret();
+      killed_count = kill_func.get_killed_count();
+    }
+  }
+  if (killed_count > 0) {
+    LOG_INFO("kill inner sql queries by client", K(ret), K(client_key), K(killed_count));
+  }
+  return ret;
 }
 
 

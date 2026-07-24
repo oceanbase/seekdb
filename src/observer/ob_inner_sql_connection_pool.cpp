@@ -18,6 +18,7 @@
 
 #include "ob_inner_sql_connection_pool.h"
 #include "lib/allocator/ob_malloc.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -30,7 +31,6 @@ namespace observer
 {
 ObInnerSQLConnectionPool::ObInnerSQLConnectionPool()
     : inited_(false), stop_(false), total_conn_cnt_(0),
-      used_conn_list_(),
       schema_service_(NULL),
       ob_sql_(NULL),
       vt_iter_creator_(NULL),
@@ -39,17 +39,7 @@ ObInnerSQLConnectionPool::ObInnerSQLConnectionPool()
 {
 }
 
-ObInnerSQLConnectionPool::~ObInnerSQLConnectionPool()
-{
-  int ret = OB_SUCCESS;
-  if (inited_) {
-    ObThreadCondGuard guard(cond_);
-    if (0 != total_conn_cnt_ || !used_conn_list_.is_empty()) {
-      LOG_ERROR("not all connection been freed", K_(total_conn_cnt),
-          "used_conn_cnt", used_conn_list_.get_size());
-    }
-  }
-}
+ObInnerSQLConnectionPool::~ObInnerSQLConnectionPool() = default;
 
 int ObInnerSQLConnectionPool::init(ObMultiVersionSchemaService *schema_service,
                                    ObSql *ob_sql,
@@ -94,8 +84,6 @@ int ObInnerSQLConnectionPool::acquire(common::sqlclient::ObISQLConnection *&conn
                                           config_, nullptr /* session_info */, client_addr,
                                           nullptr/*sql modifer*/, is_ddl_, group_id))) {
     LOG_WARN("init connection failed", K(ret));
-  } else if (OB_FAIL(add_to_used_conn_list(inner_sql_conn))) {
-    LOG_WARN("add_to_used_conn_list failed", K(ret));
   } else {
     inner_sql_conn->ref();
     conn = inner_sql_conn;
@@ -103,11 +91,7 @@ int ObInnerSQLConnectionPool::acquire(common::sqlclient::ObISQLConnection *&conn
 
   if (OB_FAIL(ret)) {
     if (NULL != inner_sql_conn) {
-      int tmp_ret = remove_from_used_conn_list(inner_sql_conn);
-      if (OB_SUCCESS != tmp_ret) {
-        LOG_WARN("remove_from_used_conn_list failed", "ret", tmp_ret);
-      }
-      tmp_ret = inner_sql_conn->destroy();
+      int tmp_ret = inner_sql_conn->destroy();
       if (OB_SUCCESS != tmp_ret) {
         LOG_WARN("destroy connection failed", "ret", tmp_ret);
       }
@@ -167,8 +151,6 @@ int ObInnerSQLConnectionPool::acquire(
   } else if (OB_FAIL(inner_sql_conn->init(this, schema_service_, ob_sql_, vt_iter_creator_, config_,
                                           session_info, NULL, NULL, false, 0/*group_id*/))) {
     LOG_WARN("init connection failed", K(ret));
-  } else if (OB_FAIL(add_to_used_conn_list(inner_sql_conn))) {
-    LOG_WARN("add_to_used_conn_list failed", K(ret));
   } else {
     if (0 != inner_sql_conn->get_ref()) {
       LOG_WARN("ref is not ZERO after acquire", KP(inner_sql_conn),
@@ -180,11 +162,7 @@ int ObInnerSQLConnectionPool::acquire(
 
   if (OB_FAIL(ret)) {
     if (NULL != inner_sql_conn) {
-      int tmp_ret = remove_from_used_conn_list(inner_sql_conn);
-      if (OB_SUCCESS != tmp_ret) {
-        LOG_WARN("remove_from_used_conn_list failed", "ret", tmp_ret);
-      }
-      tmp_ret = inner_sql_conn->destroy();
+      int tmp_ret = inner_sql_conn->destroy();
       if (OB_SUCCESS != tmp_ret) {
         LOG_WARN("destroy connection failed", "ret", tmp_ret);
       }
@@ -226,8 +204,6 @@ int ObInnerSQLConnectionPool::revert(ObInnerSQLConnection *conn)
     if (conn->is_spi_conn()) {
       //spi connection come from ObServerObjectPool, so release it to ObServerObjectPool
       rp_free(conn, ObInnerSQLConnection::LABEL);
-    } else if (OB_FAIL(remove_from_used_conn_list(conn))) {
-      LOG_WARN("remove_from_used_conn_list failed", K(ret));
     } else {
       int tmp_ret = conn->destroy();
       if (OB_SUCCESS != tmp_ret) {
@@ -294,25 +270,6 @@ int ObInnerSQLConnectionPool::alloc_conn(ObInnerSQLConnection *&conn)
       inner_sql_conn = new (mem) ObInnerSQLConnection();
     }
     if (OB_SUCC(ret)) {
-      // leak checking before add connection to used list.
-      const int64_t leak_check_minutes
-          = std::abs(EVENT_CALL(EventTable::EN_INNER_SQL_CONN_LEAK_CHECK));
-      if (OB_LOG_NEED_TO_PRINT(WARN)
-          && (total_conn_cnt_ >= WARNNING_CONNECTION_CNT || 0 != leak_check_minutes)) {
-        const int64_t now = ObTimeUtility::current_time();
-        const int64_t duration = leak_check_minutes * 60 * 1000000;
-        if (total_conn_cnt_ >= WARNNING_CONNECTION_CNT) {
-          LOG_WARN("allocated too many connections, may be connection leak",
-                   K(ret), K_(total_conn_cnt), "used_conn_size", used_conn_list_.get_size());
-          dump_used_conn_list();
-        } else if (!used_conn_list_.is_empty()
-                   && used_conn_list_.get_first()->get_init_timestamp() > 0
-                   && now - used_conn_list_.get_first()->get_init_timestamp() >= duration) {
-          LOG_ERROR("found connection used more than leak check minutes, may be connection leak",
-                   K(ret), K_(total_conn_cnt), "used_conn_size", used_conn_list_.get_size());
-          dump_used_conn_list();
-        }
-      }
       conn = inner_sql_conn;
     }
   }
@@ -347,51 +304,10 @@ int ObInnerSQLConnectionPool::free_conn(ObInnerSQLConnection *conn)
   return ret;
 }
 
-int ObInnerSQLConnectionPool::add_to_used_conn_list(ObInnerSQLConnection *conn)
-{
-  int ret = OB_SUCCESS;
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (NULL == conn) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(conn));
-  } else {
-    ObThreadCondGuard guard(cond_);
-    if (OB_UNLIKELY(false == used_conn_list_.add_last(conn))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("add connection to used connection list failed", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObInnerSQLConnectionPool::remove_from_used_conn_list(ObInnerSQLConnection *conn)
-{
-  int ret = OB_SUCCESS;
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (NULL == conn) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(conn));
-  } else {
-    ObThreadCondGuard guard(cond_);
-    if (OB_UNLIKELY(NULL == used_conn_list_.remove(conn))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("remove connection from used connection list failed", K(ret));
-    }
-  }
-
-  return ret;
-}
-
 int ObInnerSQLConnectionPool::wait()
 {
   int ret = OB_SUCCESS;
   const int64_t WAIT_TIME_MS = 1000;
-  const int64_t WARNNING_TIME_US = 5 * 1000 * 1000;
-  const int64_t begin = ObTimeUtility::current_time();
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
@@ -401,57 +317,26 @@ int ObInnerSQLConnectionPool::wait()
   } else {
     ObThreadCondGuard guard(cond_);
     while (total_conn_cnt_ > 0) {
-      const int64_t now = ObTimeUtility::current_time();
-      if (now - begin > WARNNING_TIME_US) {
-        LOG_WARN_RET(OB_ERR_TOO_MUCH_TIME, "too much time used to wait connection release, may be connection leak",
-            "used_time_ms", now - begin, K_(total_conn_cnt),
-            "used connection count", used_conn_list_.get_size());
-        dump_used_conn_list();
-      }
       cond_.wait(WAIT_TIME_MS);
     }
   }
   return ret;
 }
 
-void ObInnerSQLConnectionPool::dump_used_conn_list()
-{
-  int64_t dump_size = MIN(used_conn_list_.get_size(), MAX_DUMP_SIZE);
-  LOG_WARN_RET(OB_SUCCESS, "====== DUMP USED CONNECTIONS' BACKTRACE INFO ====== ",
-      K(dump_size));
-  DLIST_FOREACH_X(conn, used_conn_list_, (--dump_size >= 0)) {
-    if (OB_ISNULL(conn)) {
-      LOG_WARN_RET(OB_ERR_UNEXPECTED, "node is null");
-    } else {
-      conn->dump_conn_bt_info();
-    }
-  }
-}
-
 int ObInnerSQLConnectionPool::on_client_inactive(ObISQLClient *client_addr)
 {
   int ret = OB_SUCCESS;
-  int64_t cnt = 0;
-  // do not check ret in loop, continue on error happen.
-  ObThreadCondGuard guard(cond_);
-  DLIST_FOREACH_NORET(conn, used_conn_list_) {
-    if (conn->get_associated_client() == client_addr) {
-      if (NULL == ob_sql_) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL partition service", K(ret));
-      } else {
-        int tmp_ret = sql::ObSQLSessionMgr::kill_query(conn->get_session(),
-                                                       ObSQLSessionState::QUERY_KILLED);
-        if (OB_SUCCESS != tmp_ret) {
-          LOG_WARN("kill query failed", K(tmp_ret));
-          ret = OB_SUCCESS == ret ? tmp_ret : ret;
-        }
-        cnt++;
-      }
-    }
-  }
-  if (cnt > 0) {
-    LOG_INFO("kill inner query", K(ret), K(cnt));
+  if (OB_ISNULL(client_addr)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("client is null", K(ret));
+  } else if (OB_ISNULL(GCTX.session_mgr_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session mgr is null", K(ret));
+  } else if (OB_FAIL(
+                 GCTX.session_mgr_->kill_inner_sessions_by_client_key(
+                     reinterpret_cast<uint64_t>(client_addr)))) {
+    LOG_WARN("failed to kill inner sql queries by client", K(ret),
+             KP(client_addr));
   }
   return ret;
 }
