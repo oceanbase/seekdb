@@ -32,8 +32,9 @@ class ObMajorMergeInfoManager;
 // try_renew(), which keeps the renew decision and transaction inside this
 // class. Becoming primary requests one immediate catch-up renewal. Later
 // renewals wait until the target history is older than undo_retention, and
-// failures are retried at a fixed interval. A target is marked refreshed after
-// the renewed snapshot_gc_scn minus undo_retention covers it.
+// failures are retried at a fixed interval. Each successful renewal records the
+// new snapshot_gc_scn, and renewal stops after its GC boundary covers the latest
+// target.
 //
 // Restore services, paused services, and inactive primary services never renew.
 // Role transitions and the complete renew transaction are serialized by
@@ -61,6 +62,9 @@ private:
   static int64_t calc_next_renew_ts_(
       const int64_t renew_target_scn,
       const int64_t undo_retention_s);
+  static int64_t calc_gc_boundary_(
+      const int64_t snapshot_gc_scn,
+      const int64_t undo_retention_s);
   int64_t latch_next_renew_ts_(
       const int64_t renew_target_scn,
       const int64_t undo_retention_s);
@@ -83,8 +87,9 @@ private:
   // The next wall-clock time in microseconds at which renewal may run.
   // Zero means no renewal is scheduled; primary catch-up treats zero as immediate.
   int64_t next_renew_ts_ = 0;
-  // The greatest renewal target SCN covered by a successful refresh.
-  int64_t refreshed_scn_ = 0;
+  // The snapshot_gc_scn written by the most recent successful renewal.
+  // Its GC boundary is compared directly with the latest renewal target.
+  int64_t last_renewed_snapshot_gc_scn_ = 0;
   // Executes the transactional snapshot_gc_scn renewal.
   ObMajorMergeInfoManager *major_merge_info_mgr_ = nullptr;
   // Serialize primary activation/deactivation with the complete renew transaction.

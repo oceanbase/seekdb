@@ -54,7 +54,7 @@ int ObSnapshotGcScnRenewer::init(
     is_primary_active_ = false;
     need_primary_catchup_ = false;
     next_renew_ts_ = 0;
-    refreshed_scn_ = 0;
+    last_renewed_snapshot_gc_scn_ = 0;
     major_merge_info_mgr_ = &major_merge_info_mgr;
     is_inited_ = true;
   }
@@ -68,7 +68,7 @@ int ObSnapshotGcScnRenewer::destroy()
   is_primary_active_ = false;
   need_primary_catchup_ = false;
   next_renew_ts_ = 0;
-  refreshed_scn_ = 0;
+  last_renewed_snapshot_gc_scn_ = 0;
   major_merge_info_mgr_ = nullptr;
   is_inited_ = false;
   return OB_SUCCESS;
@@ -134,8 +134,9 @@ int ObSnapshotGcScnRenewer::try_renew()
     if (OB_FAIL(major_merge_info_mgr_->renew_snapshot_gc_scn(new_snapshot_gc_scn))) {
       // Keep ACTIVE and retry after the same fixed interval.
     } else {
+      last_renewed_snapshot_gc_scn_ = new_snapshot_gc_scn.get_val_for_tx();
       if (need_primary_catchup && is_primary_active_) {
-        const int64_t primary_history_scn = new_snapshot_gc_scn.get_val_for_tx();
+        const int64_t primary_history_scn = last_renewed_snapshot_gc_scn_;
         freeze_info_mgr->get_snapshot_gc_scn_renewal_state()
             .update_target_scn(primary_history_scn);
         next_renew_ts_ = calc_next_renew_ts_(
@@ -144,20 +145,14 @@ int ObSnapshotGcScnRenewer::try_renew()
       }
       renew_target_scn = freeze_info_mgr->get_snapshot_gc_scn_renewal_state()
           .get_target_scn();
-      if (renew_target_scn > refreshed_scn_) {
-        const int64_t undo_retention_s = GCONF.undo_retention;
-        const int64_t gc_boundary = MAX(0,
-            new_snapshot_gc_scn.get_val_for_tx()
-                - undo_retention_s * 1000L * 1000L * 1000L);
-        if (gc_boundary >= renew_target_scn) {
-          refreshed_scn_ = renew_target_scn;
-          next_renew_ts_ = 0;
-          LOG_INFO("snapshot gc renewal target is refreshed",
-              K(new_snapshot_gc_scn), K(gc_boundary), K(renew_target_scn),
-              K(undo_retention_s));
-        }
-      } else {
+      const int64_t undo_retention_s = GCONF.undo_retention;
+      const int64_t gc_boundary = calc_gc_boundary_(
+          last_renewed_snapshot_gc_scn_, undo_retention_s);
+      if (renew_target_scn <= 0 || gc_boundary >= renew_target_scn) {
         next_renew_ts_ = 0;
+        LOG_INFO("snapshot gc renewal target is covered",
+            K(new_snapshot_gc_scn), K(gc_boundary), K(renew_target_scn),
+            K(undo_retention_s));
       }
     }
   }
@@ -179,7 +174,9 @@ bool ObSnapshotGcScnRenewer::need_renew_(const int64_t now)
         && OB_NOT_NULL(freeze_info_mgr = share::g_mp->tenant_freeze_info_mgr())) {
       const int64_t renew_target_scn =
           freeze_info_mgr->get_snapshot_gc_scn_renewal_state().get_target_scn();
-      if (renew_target_scn > refreshed_scn_) {
+      const int64_t gc_boundary = calc_gc_boundary_(
+          last_renewed_snapshot_gc_scn_, GCONF.undo_retention);
+      if (renew_target_scn > gc_boundary) {
         if (next_renew_ts <= 0) {
           next_renew_ts = latch_next_renew_ts_(
               renew_target_scn, GCONF.undo_retention);
@@ -206,6 +203,18 @@ int64_t ObSnapshotGcScnRenewer::calc_next_renew_ts_(
         + undo_retention_s * 1000L * 1000L;
   }
   return next_renew_ts;
+}
+
+int64_t ObSnapshotGcScnRenewer::calc_gc_boundary_(
+    const int64_t snapshot_gc_scn,
+    const int64_t undo_retention_s)
+{
+  int64_t gc_boundary = 0;
+  if (snapshot_gc_scn > 0 && undo_retention_s >= 0) {
+    gc_boundary = MAX(0,
+        snapshot_gc_scn - undo_retention_s * 1000L * 1000L * 1000L);
+  }
+  return gc_boundary;
 }
 
 int64_t ObSnapshotGcScnRenewer::latch_next_renew_ts_(

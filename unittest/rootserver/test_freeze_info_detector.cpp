@@ -102,21 +102,22 @@ TEST(TestSnapshotGcScnRenewer, append_activation_immediately_requests_catchup)
 TEST(TestSnapshotGcScnRenewer, demotion_stops_renew_and_reactivation_catches_up)
 {
   static const int64_t NEXT_RENEW_TS = 123456789;
-  static const int64_t REFRESHED_SCN = 987654321;
+  static const int64_t LAST_RENEWED_SNAPSHOT_GC_SCN = 987654321;
   ObSnapshotGcScnRenewer renewer;
   renewer.is_inited_ = true;
   renewer.is_primary_service_ = true;
   renewer.resume();
   ASSERT_EQ(OB_SUCCESS, renewer.on_become_primary());
   renewer.next_renew_ts_ = NEXT_RENEW_TS;
-  renewer.refreshed_scn_ = REFRESHED_SCN;
+  renewer.last_renewed_snapshot_gc_scn_ = LAST_RENEWED_SNAPSHOT_GC_SCN;
 
   renewer.pause(); // APPEND service deactivation before RAW_WRITE takes over.
   EXPECT_TRUE(renewer.is_paused());
   EXPECT_FALSE(renewer.is_primary_active_);
   EXPECT_FALSE(renewer.need_renew_(1));
   EXPECT_EQ(NEXT_RENEW_TS, renewer.next_renew_ts_);
-  EXPECT_EQ(REFRESHED_SCN, renewer.refreshed_scn_);
+  EXPECT_EQ(LAST_RENEWED_SNAPSHOT_GC_SCN,
+      renewer.last_renewed_snapshot_gc_scn_);
 
   renewer.resume();
   ASSERT_EQ(OB_SUCCESS, renewer.on_become_primary());
@@ -125,17 +126,17 @@ TEST(TestSnapshotGcScnRenewer, demotion_stops_renew_and_reactivation_catches_up)
   EXPECT_TRUE(renewer.need_renew_(1));
 }
 
-TEST(TestSnapshotGcScnRenewer, refreshed_scn_is_consumer_progress)
+TEST(TestSnapshotGcScnRenewer, last_renewed_snapshot_gc_scn_defines_coverage)
 {
-  storage::ObSnapshotGcScnRenewalState renewal_state;
-  ObSnapshotGcScnRenewer renewer;
+  static const int64_t SECOND_NS = 1000L * 1000L * 1000L;
+  static const int64_t LAST_RENEWED_SNAPSHOT_GC_SCN = 200L * SECOND_NS;
+  static const int64_t GC_BOUNDARY =
+      ObSnapshotGcScnRenewer::calc_gc_boundary_(
+          LAST_RENEWED_SNAPSHOT_GC_SCN, 20);
 
-  renewal_state.update_target_scn(100);
-  renewer.refreshed_scn_ = 100;
-  EXPECT_EQ(renewal_state.get_target_scn(), renewer.refreshed_scn_);
-
-  renewal_state.update_target_scn(200);
-  EXPECT_GT(renewal_state.get_target_scn(), renewer.refreshed_scn_);
+  EXPECT_EQ(180L * SECOND_NS, GC_BOUNDARY);
+  EXPECT_GE(GC_BOUNDARY, 170L * SECOND_NS);
+  EXPECT_LT(GC_BOUNDARY, 190L * SECOND_NS);
 }
 
 TEST(TestSnapshotGcScnRenewer, renew_failure_retries_on_fixed_interval)
