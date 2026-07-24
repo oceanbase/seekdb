@@ -26,7 +26,6 @@
 #include "sql/engine/expr/ob_expr_pl_integer_checker.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "pl/ob_pl_package.h"
-#include "share/schema/ob_trigger_info.h"
 #include "sql/engine/expr/ob_expr_obj_access.h"
 #include "pl/ob_pl_exception_handling.h"
 
@@ -146,6 +145,7 @@ int ObSPIResultSet::init(sql::ObSQLSessionInfo &session_info)
   } else {
     result_set_ = new (buf_) ObResultSet(session_info, mem_context_->get_arena_allocator());
     is_inited_ = true;
+    result_set_->get_exec_context().get_task_exec_ctx().set_min_cluster_version(session_info.get_exec_min_cluster_version());
   }
   return ret;
 }
@@ -1138,7 +1138,7 @@ int ObSPIService::spi_calc_package_expr(ObPLExecCtx *ctx,
   CK (OB_NOT_NULL(session_info = exec_ctx->get_my_session()));
   CK (OB_NOT_NULL(sql_proxy = exec_ctx->get_sql_proxy()));
   CK (OB_NOT_NULL(pl_engine = exec_ctx->get_my_session()->get_pl_engine()));
-  OZ (GCTX.schema_service_->get_runtime_schema_guard(
+  OZ (GCTX.schema_service_->get_tenant_schema_guard(
                             schema_guard));
   if (OB_SUCC(ret)) {
     ObPLPackageGuard package_guard{};
@@ -1251,7 +1251,7 @@ int ObSPIService::spi_set_package_variable(
                                guard != NULL ? *(guard) : package_guard,
                                *sql_proxy,
                                false); // is_prepare_protocol
-    OZ (GCTX.schema_service_->get_runtime_schema_guard(
+    OZ (GCTX.schema_service_->get_tenant_schema_guard(
         schema_guard));
     OZ (package_guard.init());
     OZ (pl_manager.set_package_var_val(
@@ -1982,7 +1982,7 @@ int ObSPIService::spi_prepare(common::ObIAllocator &allocator,
                               pl::ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
-  UNUSED(func);
+  ObPLPrepareEnvGuard prepareEnvGuard(session, func, ret);
   if (OB_SUCC(ret)) {
     ret = spi_parse_prepare(allocator,
                             session,
@@ -1994,6 +1994,28 @@ int ObSPIService::spi_prepare(common::ObIAllocator &allocator,
                             prepare_result);
   }
   return ret;
+}
+
+ObPLPrepareEnvGuard::ObPLPrepareEnvGuard(ObSQLSessionInfo &session_info,
+                                         pl::ObPLAstUnit &func,
+                                         int &ret)
+  : ret_(ret), session_info_(session_info)
+{
+  ret = OB_SUCCESS;
+  need_reset_default_database_ = false;
+}
+
+ObPLPrepareEnvGuard::~ObPLPrepareEnvGuard()
+{
+  int ret = OB_SUCCESS;
+  if (need_reset_default_database_) {
+   if ((ret = session_info_.set_default_database(old_db_name_.string())) != OB_SUCCESS) {
+      ret_ = OB_SUCCESS == ret_ ? ret : ret_;
+      LOG_WARN("failed to reset default database in pl env guard", K(ret), K(ret_), K(old_db_name_));
+   } else {
+    session_info_.set_database_id(old_db_id_);
+   }
+  }
 }
 
 int ObSPIService::spi_parse_prepare(common::ObIAllocator &allocator,
@@ -2017,20 +2039,7 @@ int ObSPIService::spi_parse_prepare(common::ObIAllocator &allocator,
     } else if (OB_FAIL(ob_write_string(allocator, ObString(parse_result.no_param_sql_len_, parse_result.no_param_sql_), prepare_result.route_sql_))) {
       LOG_WARN("failed to write string", K(sql), K(ret));
     } else {
-#ifdef __APPLE__
-      // Pass secondary_namespace for trigger packages so that SQL in trigger body
-      // is fully resolved at compile time, catching references to dropped columns
-      // early instead of crashing at runtime. For non-trigger PL, keep using simple
-      // PS protocol (NULL) to allow deferred resolution of dynamic SQL constructs.
-      pl::ObPLBlockNS *ns_for_prepare = NULL;
-      if (OB_NOT_NULL(secondary_namespace)
-          && ObTriggerInfo::is_trigger_package_id(secondary_namespace->get_package_id())) {
-        ns_for_prepare = secondary_namespace;
-      }
-      PLPrepareCtx pl_prepare_ctx(session, ns_for_prepare, false, false, false);
-#else
       PLPrepareCtx pl_prepare_ctx(session, NULL, false, false, false);
-#endif
       SMART_VAR(PLPrepareResult, pl_prepare_result) {
         CK (OB_NOT_NULL(GCTX.sql_engine_));
         OZ (pl_prepare_result.init(session));
@@ -2672,7 +2681,13 @@ int ObSPIService::spi_execute_immediate(ObPLExecCtx *ctx,
   // Step: execute dynamic SQL now!
   if (OB_FAIL(ret)) {
   } else if (ObStmt::is_select_stmt(stmt_type) && !for_update && into_count <= 0) {
-    /* A SELECT without INTO is parsed but not executed. */
+    /*!
+     * If dynamic_sql_statement is a SELECT statement, and you omit both
+     * into_clause and bulk_collect_into_clause, then
+     * execute_immediate_statement never executes.
+     * For example, this statement never increments the sequence:
+     * EXECUTE IMMEDIATE 'SELECT S.NEXTVAL FROM DUAL'
+     */
     ObPLCursorInfo *implicit_cursor = session->get_pl_implicit_cursor();
     CK (OB_NOT_NULL(implicit_cursor));
     OX (implicit_cursor->set_rowcount(0));
@@ -2929,7 +2944,7 @@ int ObSPIService::spi_get_package_cursor_info(ObPLExecCtx *ctx,
   CK (OB_NOT_NULL(session_info = exec_ctx->get_my_session()));
   CK (OB_NOT_NULL(sql_proxy = exec_ctx->get_sql_proxy()));
   CK (OB_NOT_NULL(pl_engine = exec_ctx->get_my_session()->get_pl_engine()));
-  OZ (GCTX.schema_service_->get_runtime_schema_guard(
+  OZ (GCTX.schema_service_->get_tenant_schema_guard(
                             schema_guard));
   ObPLPackageGuard package_guard{};
   OZ (package_guard.init());
@@ -2948,6 +2963,13 @@ int ObSPIService::spi_get_package_cursor_info(ObPLExecCtx *ctx,
     OX (value.copy_value_or_obj(param,true));
     OX (cursor = value.is_ext() ? reinterpret_cast<ObPLCursorInfo*>(value.get_ext())
                                 : reinterpret_cast<ObPLCursorInfo *>(NULL));
+    if (OB_SUCC(ret) && OB_NOT_NULL(cursor) && cursor->is_sync_cursor()) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("use package cursor in remote server is not supported,"
+               "because we can not sync cursor state to other server for now!",
+               K(ret), K(package_id), K(routine_id), K(index), KPC(cursor));
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "use package cursor in remote server");
+    }
     if (param.is_ref_cursor_type()) {
       // do nothing, cursor may null;
     } else {
@@ -3581,7 +3603,7 @@ int ObSPIService::spi_cursor_open(ObPLExecCtx *ctx,
       OZ (ctx->params_->assign(current_params));
     }
     if (OB_SUCC(ret) && DECL_PKG == loc) {
-      OX (ctx->exec_ctx_->get_my_session()->set_pl_can_retry(false));
+      OZ (spi_update_package_change_info(ctx, package_id, cursor_index));
     }
   }
   if (OB_FAIL(ret)) {
@@ -3970,7 +3992,7 @@ int ObSPIService::spi_cursor_close(ObPLExecCtx *ctx,
   OZ (cursor_close_impl(ctx->exec_ctx_->get_my_session(), cursor, cur_var.is_ref_cursor_type(), package_id, routine_id, ignore),
       package_id, routine_id, cursor_index, cur_var);
   if (OB_SUCC(ret) && DECL_PKG == loc) {
-    OX (ctx->exec_ctx_->get_my_session()->set_pl_can_retry(false));
+    OZ (spi_update_package_change_info(ctx, package_id, cursor_index));
   }
   return ret;
 }
@@ -4447,7 +4469,7 @@ int ObSPIService::spi_get_package_allocator(
   CK (OB_NOT_NULL(session_info = exec_ctx->get_my_session()));
   CK (OB_NOT_NULL(sql_proxy = exec_ctx->get_sql_proxy()));
   CK (OB_NOT_NULL(pl_engine = exec_ctx->get_my_session()->get_pl_engine()));
-  OZ (GCTX.schema_service_->get_runtime_schema_guard(
+  OZ (GCTX.schema_service_->get_tenant_schema_guard(
                             schema_guard));
   ObPLPackageGuard package_guard{};
   OZ (package_guard.init());
@@ -4543,6 +4565,7 @@ int ObSPIService::spi_convert_anonymous_array(pl::ObPLExecCtx *ctx,
   common::ObMySQLProxy *sql_proxy = NULL;
   ObPLPackageGuard *package_guard = NULL;
   const ObUserDefinedType *pl_user_type = NULL;
+  const bool use_original_type = true;
   ObArenaAllocator tmp_alloc(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE);
   CK (OB_NOT_NULL(param));
   CK (OB_NOT_NULL(ctx));
@@ -4555,7 +4578,7 @@ int ObSPIService::spi_convert_anonymous_array(pl::ObPLExecCtx *ctx,
   CK (param->is_ext());
   // For inout anonymous array parameters, if the original type is not empty,
   // the result is returned according to the original type.
-  if (OB_SUCC(ret)) {
+  if (use_original_type) {
     OZ (ctx->get_user_type(user_type_id, pl_user_type, nullptr));
     CK (OB_NOT_NULL(pl_user_type));
     if (OB_SUCC(ret)) {
@@ -5510,7 +5533,7 @@ int ObSPIService::get_package_var_info_by_expr(const ObSqlExpression *expr,
                                               uint64_t &var_idx)
 {
   int ret = OB_SUCCESS;
-  // Identify package variables written through an INTO target.
+  // package var need add package change to sync var to remote
   CK (OB_NOT_NULL(expr));
   if (OB_FAIL(ret)) {
     // do nothing
@@ -5963,8 +5986,9 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
           OX (implicit_cursor->set_rowcount(row_count)); // Set implicit cursor
         }
       }
-      if (OB_SUCC(ret) && !package_vars_info.empty()) {
-        OX (ctx->exec_ctx_->get_my_session()->set_pl_can_retry(false));
+      // update package info
+      for (int64_t i = 0; OB_SUCC(ret) && i < package_vars_info.count(); i++) {
+        OZ (spi_update_package_change_info(ctx, package_vars_info.at(i).first, package_vars_info.at(i).second));
       }
 
       if (OB_SUCC(ret) && not_found) {
@@ -7094,10 +7118,10 @@ int ObSPIService::force_refresh_schema(int64_t refresh_version)
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is NULL", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_refreshed_schema_version(
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_refreshed_schema_version(
                      local_version))) {
     LOG_WARN("fail to get local version", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_received_broadcast_version(
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_received_broadcast_version(
                      global_version))) {
     LOG_WARN("fail to get global version", K(ret));
   }
@@ -7418,6 +7442,23 @@ int ObSPIService::spi_process_nocopy_params(pl::ObPLExecCtx *ctx, int64_t local_
   return ret;
 }
 
+int ObSPIService::spi_update_package_change_info(
+  pl::ObPLExecCtx *ctx, uint64_t package_id, uint64_t var_idx)
+{
+  /*! Before calling this function, PackageState must have already been stored in the Session, here we directly retrieve PackageState from the Session */
+  int ret = OB_SUCCESS;
+  ObSQLSessionInfo *session_info = NULL;
+  ObPLPackageState *package_state = NULL;
+  CK (OB_NOT_NULL(ctx->exec_ctx_));
+  CK (OB_NOT_NULL(session_info = ctx->exec_ctx_->get_my_session()));
+  OZ (session_info->get_package_state(package_id, package_state));
+  CK (OB_NOT_NULL(package_state));
+  OZ (package_state->update_changed_vars(var_idx));
+  OX (session_info->set_pl_can_retry(false));
+  return ret;
+}
+
+
 int ObSPIService::spi_check_composite_not_null(ObObjParam *v)
 {
   int ret = OB_SUCCESS;
@@ -7490,8 +7531,24 @@ int ObSPIService::setup_cursor_snapshot_verify_(ObPLCursorInfo *cursor, ObSPIRes
       LOG_ERROR("for update cursor opened but not trans id invalid", K(ret), KPC(tx), K(snapshot));
     }
     need_register_snapshot = true;
-  } else if (cursor->is_streaming() && tx && tx->is_in_tx()) {
-    need_register_snapshot = true;
+  } else if (cursor->is_streaming() && tx && tx->is_in_tx() && !tx->is_write_state_clean()) {
+    if (exec_ctx.get_my_session()->enable_enhanced_cursor_validation()) {
+      need_register_snapshot = false;
+      LOG_TRACE("enable cursor open check read uncommitted");
+      const DependenyTableStore &tables = spi_result->get_result_set()->get_physical_plan()->get_dependency_table();
+      ARRAY_FOREACH(tables, i) {
+        if (tables.at(i).is_base_table()) {
+          if (tx->has_modify_table((uint64_t)tables.at(i).get_object_id())) {
+            LOG_TRACE("streaming cursor read uncommitted, need register snapshot",
+                      K(tables.at(i).get_object_id()));
+            need_register_snapshot = true;
+            break;
+          }
+        }
+      }
+    } else {
+      need_register_snapshot = true;
+    }
   }
   if (OB_FAIL(ret)) {
   } else if (need_register_snapshot) {
@@ -7576,7 +7633,7 @@ ObSPIRetryCtrlGuard::ObSPIRetryCtrlGuard(
   ObQueryRetryCtrl &retry_ctrl, ObSPIResultSet &spi_result, ObSQLSessionInfo &session_info, int &ret, bool for_fetch)
   : retry_ctrl_(retry_ctrl), spi_result_(spi_result), session_info_(session_info), ret_(ret), init_(false)
 {
-  int64_t runtime_schema_version = 0;
+  int64_t tenant_version = 0;
   int64_t sys_version = 0;
   
   if (!for_fetch) {
@@ -7587,14 +7644,14 @@ ObSPIRetryCtrlGuard::ObSPIRetryCtrlGuard(
   if (THIS_WORKER.is_timeout()) {
     ret = OB_TIMEOUT;
     LOG_WARN("already timeout!", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(spi_result_.get_scheme_guard()))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(spi_result_.get_scheme_guard()))) {
     LOG_WARN("get schema guard failed", K(ret));
-  } else if (OB_FAIL(spi_result_.get_scheme_guard().get_schema_version(runtime_schema_version))) {
+  } else if (OB_FAIL(spi_result_.get_scheme_guard().get_schema_version(tenant_version))) {
     LOG_WARN("fail get schema version", K(ret));
   } else if (OB_FAIL(spi_result_.get_scheme_guard().get_schema_version(sys_version))) {
     LOG_WARN("fail get sys schema version", K(ret));
   } else {
-    retry_ctrl_.set_current_local_schema_version(runtime_schema_version);
+    retry_ctrl_.set_tenant_local_schema_version(tenant_version);
     retry_ctrl_.set_sys_local_schema_version(sys_version);
     spi_result_.get_sql_ctx().schema_guard_ = &spi_result.get_scheme_guard();
     init_ = true;
