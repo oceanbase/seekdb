@@ -129,9 +129,10 @@ ObPlanCacheValue::ObPlanCacheValue()
     pc_alloc_(NULL),
     last_plan_id_(OB_INVALID_ID),
     //use_global_location_cache_(true),
-    runtime_schema_version_(OB_INVALID_VERSION),
+    tenant_schema_version_(OB_INVALID_VERSION),
     sys_schema_version_(OB_INVALID_VERSION),
     outline_state_(),
+    outline_params_wrapper_(),
     sessid_(OB_INVALID_ID),
     sess_create_time_(0),
     contain_sys_name_table_(false),
@@ -141,7 +142,6 @@ ObPlanCacheValue::ObPlanCacheValue()
     has_dynamic_values_table_(false),
     stored_schema_objs_(pc_alloc_),
     stmt_type_(stmt::T_MAX),
-    enable_rich_vector_format_(false),
     switchover_epoch_(OB_INVALID_VERSION)
 {
   MEMSET(sql_id_, 0, sizeof(sql_id_));
@@ -152,23 +152,31 @@ ObPlanCacheValue::ObPlanCacheValue()
   not_param_info_.set_attr(ObMemAttr("NotParamInfo"));
   not_param_var_.set_attr(ObMemAttr("NotParamVar"));
   param_charset_type_.set_attr(ObMemAttr("ParamCharsType"));
-  param_charset_type_.set_block_size(PARAM_CHARSET_TYPE_BLOCK_SIZE);
   fmt_int_or_ch_decint_idx_.set_attr(ObMemAttr("FMTIntPrecIdx"));
 }
 
 int ObPlanCacheValue::init(ObPCVSet *pcv_set, const ObILibCacheObject *cache_obj, ObPlanCacheCtx &pc_ctx)
 {
   int ret = OB_SUCCESS;
+  ObMemAttr mem_attr;
   const ObPlanCacheObject *plan = static_cast<const ObPlanCacheObject*>(cache_obj);
   if (OB_ISNULL(pcv_set) || OB_ISNULL(plan) || OB_ISNULL(pcv_set->get_plan_cache())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(pcv_set), K(plan));
+  } else if (FALSE_IT(mem_attr = pcv_set->get_plan_cache()->get_mem_attr())) {
+      // do nothing
   } else if (OB_ISNULL(pc_alloc_ = pcv_set->get_allocator())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(pcv_set->get_allocator()));
   } else if (OB_ISNULL(pc_malloc_ = pcv_set->get_pc_allocator())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(pcv_set->get_pc_allocator()));
+  } else if (OB_FAIL(outline_params_wrapper_.set_allocator(pc_alloc_, mem_attr))) {
+    LOG_WARN("fail to set outline param wrapper allocator", K(ret));
+  } else if (OB_NOT_NULL(pc_ctx.exec_ctx_.get_outline_params_wrapper())) {
+    if (OB_FAIL(set_outline_params_wrapper(*pc_ctx.exec_ctx_.get_outline_params_wrapper()))) {
+      LOG_WARN("fail to set outline params", K(ret));
+    }
   } else if (OB_ISNULL(pc_ctx.sql_ctx_.session_info_) ||
              OB_ISNULL(pc_ctx.sql_ctx_.schema_guard_)) {
     ret = OB_INVALID_ARGUMENT;
@@ -179,14 +187,13 @@ int ObPlanCacheValue::init(ObPCVSet *pcv_set, const ObILibCacheObject *cache_obj
   }
 
   if (OB_SUCC(ret)) {
-    switchover_epoch_ = share::server_switchover_epoch();
+    switchover_epoch_ = MTL_GET_SWITCHOVER_EPOCH();
     pcv_set_ = pcv_set;
     //use_global_location_cache_ = !cache_obj->is_contain_virtual_table();
     outline_state_ = plan->get_outline_state();
     sys_schema_version_ = plan->get_sys_schema_version();
-    runtime_schema_version_ = plan->get_runtime_schema_version();
+    tenant_schema_version_ = plan->get_tenant_schema_version();
     sql_traits_ = pc_ctx.sql_traits_;
-    enable_rich_vector_format_ = static_cast<const ObPhysicalPlan *>(plan)->get_use_rich_format();
     stmt_type_ = plan->get_stmt_type();
     need_param_ = plan->need_param();
     is_nested_sql_ = ObSQLUtils::is_nested_sql(&pc_ctx.exec_ctx_);
@@ -293,7 +300,8 @@ int ObPlanCacheValue::init(ObPCVSet *pcv_set, const ObILibCacheObject *cache_obj
       // set sessid_ if necessary
       if (OB_SUCC(ret)) {
         if (is_contain_tmp_tbl()) {
-          // Temporary-table plans must be matched against the user-created session.
+          // Temporary table behavior depends on the session created by the user, and for remote execution, the remote session id is a temporary session_id
+          // Therefore here we should uniformly use master session id, to ensure that the matching plan always uses the user session
           sessid_ = pc_ctx.sql_ctx_.session_info_->get_sid();
           sess_create_time_ = pc_ctx.sql_ctx_.session_info_->get_sess_create_time();
           // Get the table name of the temporary table
@@ -314,6 +322,7 @@ int ObPlanCacheValue::init(ObPCVSet *pcv_set, const ObILibCacheObject *cache_obj
 
 int ObPlanCacheValue::match_all_params_info(ObPlanSet *batch_plan_set,
                                             ObPlanCacheCtx &pc_ctx,
+                                            int64_t outline_param_idx,
                                             bool &is_same)
 {
   int ret = OB_SUCCESS;
@@ -342,8 +351,8 @@ int ObPlanCacheValue::match_all_params_info(ObPlanSet *batch_plan_set,
         LOG_WARN("fail to get one params", K(ret));
       } else if (OB_FAIL(pc_ctx.fp_result_.cache_params_->assign(param_store))) {
         LOG_WARN("assign params failed", K(ret), K(param_store));
-      } else if (OB_FAIL(batch_plan_set->match_params_info(params, pc_ctx, is_same))) {
-        LOG_WARN("fail to match_params_info", K(ret), KPC(params));
+      } else if (OB_FAIL(batch_plan_set->match_params_info(params, pc_ctx, outline_param_idx, is_same))) {
+        LOG_WARN("fail to match_params_info", K(ret), K(outline_param_idx), KPC(params));
       } else {
         // not match this plan, try match next plan
       }
@@ -361,8 +370,8 @@ int ObPlanCacheValue::match_all_params_info(ObPlanSet *batch_plan_set,
           LOG_WARN("assign params failed", K(ret), K(param_store));
         } else if (OB_FAIL(phy_ctx->init_datum_param_store())) {
           LOG_WARN("init datum_store failed", K(ret), K(param_store));
-        } else if (OB_FAIL(batch_plan_set->match_params_info(params, pc_ctx, is_same))) {
-          LOG_WARN("fail to match_params_info", K(ret), KPC(params));
+        } else if (OB_FAIL(batch_plan_set->match_params_info(params, pc_ctx, outline_param_idx, is_same))) {
+          LOG_WARN("fail to match_params_info", K(ret), K(outline_param_idx), KPC(params));
         } else if (i != 0 && !is_same) {
           ret = OB_BATCHED_MULTI_STMT_ROLLBACK;
           LOG_TRACE("params is not same type", K(param_store), K(i));
@@ -382,8 +391,8 @@ int ObPlanCacheValue::match_all_params_info(ObPlanSet *batch_plan_set,
       }
     }
   } else {
-    if (OB_FAIL(batch_plan_set->match_params_info(params, pc_ctx, is_same))) {
-      LOG_WARN("fail to match_params_info", K(ret));
+    if (OB_FAIL(batch_plan_set->match_params_info(params, pc_ctx, outline_param_idx, is_same))) {
+      LOG_WARN("fail to match_params_info", K(ret), K(outline_param_idx));
     }
   }
   return ret;
@@ -399,16 +408,15 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
   ObSQLSessionInfo *session = NULL;
   
   ObPlanCacheObject *plan = NULL;
+  int64_t outline_param_idx = 0;
   // Check the version of the view and table involved in this SQL cached in pcv,
   // If not the latest, in the plan cache layer this value will be deleted and the plan will be re-added
   //TODO shengle This copy needs to be handled somehow
   bool need_check_schema = (schema_array.count() != 0);
-  int64_t new_switchover_epoch = share::server_switchover_epoch();
+  int64_t new_switchover_epoch = MTL_GET_SWITCHOVER_EPOCH();
   if (schema_array.count() == 0 && stored_schema_objs_.count() == 0) {
     need_check_schema = true;
   }
-  ObBasicSessionInfo::ForceRichFormatStatus orig_rich_format_status = ObBasicSessionInfo::ForceRichFormatStatus::Disable;
-  bool orig_phy_ctx_rich_format = false;
   if (stmt::T_NONE == pc_ctx.sql_ctx_.stmt_type_) {
     //sql_ctx_.stmt_type_ != stmt::T_NONE means this calling in nested sql,
     //can't cover the first stmt type in sql context
@@ -417,7 +425,6 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
   if (OB_ISNULL(session = pc_ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     SQL_PC_LOG(ERROR, "got session is NULL", K(ret));
-  } else if (FALSE_IT(orig_rich_format_status = session->get_force_rich_format_status())) {
   } else if (FALSE_IT(session->set_stmt_type(stmt_type_))) {
   } else if (OB_UNLIKELY(switchover_epoch_ != new_switchover_epoch)) {
     ret = OB_OLD_SCHEMA_VERSION;
@@ -437,7 +444,9 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
   } else {
     ParamStore *params = pc_ctx.fp_result_.cache_params_;
     //init param store
-    if (OB_LIKELY(pc_ctx.sql_ctx_.is_batch_params_execute())) {
+    if (pc_ctx.try_get_plan_) {
+      // do nothing
+    } else if (OB_LIKELY(pc_ctx.sql_ctx_.is_batch_params_execute())) {
       if (OB_FAIL(resolve_multi_stmt_params(pc_ctx))) {
         if (OB_BATCHED_MULTI_STMT_ROLLBACK != ret) {
           LOG_WARN("failed to resolver row params", K(ret));
@@ -463,19 +472,17 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
     if (OB_SUCC(ret)) {
       ObPhysicalPlanCtx *phy_ctx = pc_ctx.exec_ctx_.get_physical_plan_ctx();
       if (NULL != phy_ctx) {
-        orig_phy_ctx_rich_format = phy_ctx->is_rich_format();
         phy_ctx->set_original_param_cnt(phy_ctx->get_param_store().count());
-        phy_ctx->set_rich_format(enable_rich_vector_format_);
-        session->set_force_rich_format(enable_rich_vector_format_ ?
-                                         ObBasicSessionInfo::ForceRichFormatStatus::FORCE_ON :
-                                         ObBasicSessionInfo::ForceRichFormatStatus::FORCE_OFF);
-        if (OB_FAIL(phy_ctx->init_datum_param_store())) {
+        if (!pc_ctx.try_get_plan_ && OB_FAIL(phy_ctx->init_datum_param_store())) {
           LOG_WARN("fail to init datum param store", K(ret));
         }
       }
     }
     if (OB_FAIL(ret)) {
       //do nothing
+    } else if (OB_FAIL(get_outline_param_index(pc_ctx.exec_ctx_,
+                                               outline_param_idx))) {//need use param store
+      LOG_WARN("fail to judge concurrent limit sql", K(ret));
     } else {
       // Here record org_param_count, used at the end of the matching plan, if no match is successful,
       // Then restore the parameters in param store to the current state (plan_set will perform the calculation table match)
@@ -489,7 +496,7 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
       DLIST_FOREACH(plan_set, plan_sets_) {
         plan = NULL;
         bool is_same = false;
-        if (OB_FAIL(match_all_params_info(plan_set, pc_ctx, is_same))) {
+        if (OB_FAIL(match_all_params_info(plan_set, pc_ctx, outline_param_idx, is_same))) {
           SQL_PC_LOG(WARN, "fail to match params info", K(ret));
         } else if (!is_same) {        //do nothing
           LOG_TRACE("params info does not match", KPC(params));
@@ -529,15 +536,6 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
   if (OB_SUCC(ret)) {
     plan_out = plan;
     pc_ctx.sql_traits_ = sql_traits_; //used for check read only
-  }
-  // reset force rich format status
-  if (NULL == plan) {
-    if (session != nullptr) {
-      session->set_force_rich_format(orig_rich_format_status);
-    }
-    if (pc_ctx.exec_ctx_.get_physical_plan_ctx() != nullptr) {
-      pc_ctx.exec_ctx_.get_physical_plan_ctx()->set_rich_format(orig_phy_ctx_rich_format);
-    }
   }
   return ret;
 }
@@ -914,6 +912,35 @@ int ObPlanCacheValue::check_not_param_value(const ObFastParserResult &fp_result,
   return ret;
 }
 
+int ObPlanCacheValue::get_outline_param_index(ObExecContext &exec_ctx, int64_t &param_idx) const
+{
+  int ret = OB_SUCCESS;
+  param_idx = OB_INVALID_INDEX;
+  int64_t param_count = outline_params_wrapper_.get_outline_params().count();
+  int64_t concurrent_num = INT64_MAX;
+  if (exec_ctx.get_physical_plan_ctx() != NULL) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < param_count; ++i) {
+      bool is_match = false;
+      const ObMaxConcurrentParam *param = outline_params_wrapper_.get_outline_params().at(i);
+      if (OB_ISNULL(param)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("param is NULl", K(ret));
+      } else if (OB_FAIL(param->match_fixed_param(exec_ctx.get_physical_plan_ctx()->get_param_store(), is_match))) {
+        LOG_WARN("fail to match", K(ret), K(i));
+      } else if (is_match && param->concurrent_num_ < concurrent_num) {
+        concurrent_num = param->concurrent_num_;
+        param_idx = i;
+      } else {/*do nothing*/}
+    }
+  }
+  return ret;
+}
+
+const ObMaxConcurrentParam *ObPlanCacheValue::get_outline_param(int64_t index) const
+{
+  return outline_params_wrapper_.get_outline_param(index);
+}
+
 int ObPlanCacheValue::get_one_group_params(int64_t pos, const ParamStore &src_params, ParamStore &dst_params)
 {
   int ret = OB_SUCCESS;
@@ -945,7 +972,8 @@ int ObPlanCacheValue::get_one_group_params(int64_t pos, const ParamStore &src_pa
 }
 
 int ObPlanCacheValue::match_and_generate_ext_params(ObPlanSet *batch_plan_set,
-                                                    ObPlanCacheCtx &pc_ctx)
+                                                    ObPlanCacheCtx &pc_ctx,
+                                                    int64_t outline_param_idx)
 {
   int ret = OB_SUCCESS;
   ParamStore *ab_params = pc_ctx.ab_params_;
@@ -976,8 +1004,9 @@ int ObPlanCacheValue::match_and_generate_ext_params(ObPlanSet *batch_plan_set,
         LOG_WARN("init datum_store failed", K(ret), K(param_store));
       } else if (OB_FAIL(batch_plan_set->match_params_info(&(plan_ctx->get_param_store()),
                                                            pc_ctx,
+                                                           outline_param_idx,
                                                            is_same))) {
-        LOG_WARN("fail to match params info", K(ret), K(i), K(param_store));
+        LOG_WARN("fail to match params info", K(ret), K(i), K(param_store), K(outline_param_idx));
       } else if (!is_same) {
         ret = OB_BATCHED_MULTI_STMT_ROLLBACK;
         LOG_TRACE("params is not same type", K(param_store), K(i));
@@ -1008,6 +1037,7 @@ int ObPlanCacheValue::add_plan(ObPlanCacheObject &plan,
   int ret = OB_SUCCESS;
   bool need_new_planset = true;
   bool is_old_version = false;
+  int64_t outline_param_idx = OB_INVALID_INDEX;
   int add_plan_ret = OB_SUCCESS;
   bool is_multi_stmt_batch = pc_ctx.sql_ctx_.is_batch_params_execute();
   // Check the version of the view and table involved in this SQL cached in pcv,
@@ -1021,11 +1051,17 @@ int ObPlanCacheValue::add_plan(ObPlanCacheObject &plan,
     SQL_PC_LOG(TRACE, "view or table is old version", K(ret));
   }
   if (OB_FAIL(ret)) {//do nothing
+  } else if (OB_FAIL(get_outline_param_index(pc_ctx.exec_ctx_, outline_param_idx))) {
+    LOG_WARN("fail to judge concurrent limit sql", K(ret));
+  } else if (OB_INVALID_INDEX == outline_param_idx
+             && outline_params_wrapper_.get_outline_params().count() > 0) {
+    plan.get_outline_state().reset();
   }
   if (OB_SUCC(ret)) {
     DLIST_FOREACH(cur_plan_set, plan_sets_) {
       bool is_same = false;
       if (OB_FAIL(cur_plan_set->match_params_info(plan.get_params_info(),
+                                                  outline_param_idx,
                                                   pc_ctx,
                                                   is_same))) {
         SQL_PC_LOG(WARN, "fail to match params info", K(ret));
@@ -1034,9 +1070,9 @@ int ObPlanCacheValue::add_plan(ObPlanCacheObject &plan,
         SQL_PC_LOG(DEBUG, "add plan to plan set");
         need_new_planset = false;
         if (is_multi_stmt_batch &&
-            OB_FAIL(match_and_generate_ext_params(cur_plan_set, pc_ctx))) {
+            OB_FAIL(match_and_generate_ext_params(cur_plan_set, pc_ctx, outline_param_idx))) {
           LOG_TRACE("fail to match and generate ext_params", K(ret));
-        } else if (OB_FAIL(cur_plan_set->add_cache_obj(plan, pc_ctx, add_plan_ret))) {
+        } else if (OB_FAIL(cur_plan_set->add_cache_obj(plan, pc_ctx, outline_param_idx, add_plan_ret))) {
           SQL_PC_LOG(TRACE, "failed to add plan", K(ret));
         }
         break;
@@ -1057,12 +1093,13 @@ int ObPlanCacheValue::add_plan(ObPlanCacheObject &plan,
         plan_set->set_plan_cache_value(this);
         if (OB_FAIL(plan_set->init_new_set(pc_ctx,
                                            plan,
+                                           outline_param_idx,
                                            get_pc_malloc()))) {
           LOG_WARN("init new plan set failed", K(ret));
         } else if (is_multi_stmt_batch &&
-            OB_FAIL(match_and_generate_ext_params(plan_set, pc_ctx))) {
+            OB_FAIL(match_and_generate_ext_params(plan_set, pc_ctx, outline_param_idx))) {
           LOG_TRACE("fail to match and generate ext_params", K(ret));
-        } else if (OB_FAIL(plan_set->add_cache_obj(plan, pc_ctx, add_plan_ret))) {
+        } else if (OB_FAIL(plan_set->add_cache_obj(plan, pc_ctx, outline_param_idx, add_plan_ret))) {
           SQL_PC_LOG(TRACE, "failed to add plan to plan set", K(ret));
         } else if (!plan_sets_.add_last(plan_set)) {
           ret = OB_ERROR;
@@ -1082,6 +1119,27 @@ int ObPlanCacheValue::add_plan(ObPlanCacheObject &plan,
   }
   return ret;
 }
+// Delete the corresponding plan from the plan cache value
+/*void ObPlanCacheValue::remove_plan(ObExecContext &exec_context, ObPhysicalPlan &plan)*/
+//{
+  //int ret = OB_SUCCESS;
+  //int64_t outline_param_idx = OB_INVALID_INDEX;
+  //if (OB_FAIL(get_outline_param_index(exec_context, outline_param_idx))) {
+    //LOG_WARN("fail to judge concurrent limit sql", K(ret));
+  //} else {
+    //DLIST_FOREACH(cur_plan_set, plan_sets_) {
+      //bool is_same = false;
+      //if (OB_FAIL(cur_plan_set->match_params_info(plan.get_params_info(),
+                                                  //outline_param_idx,
+                                                  //is_same))) {
+        //BACKTRACE(ERROR, true, "fail to match param info");
+      //} else if (true == is_same) {
+        //cur_plan_set->remove_plan(plan);
+      //}
+    //} // end for
+  //}
+/*}*/
+
 void ObPlanCacheValue::reset()
 {
   // TODO TBD: do nothing to rw_lock_
@@ -1144,8 +1202,12 @@ void ObPlanCacheValue::reset()
   param_charset_type_.reset();
   sql_traits_.reset();
 
+  if (OB_SUCCESS != outline_params_wrapper_.destroy()) {
+    LOG_ERROR_RET(OB_ERROR, "fail to destroy ObOutlineParamWrapper");
+  }
+  outline_params_wrapper_.reset_allocator();
   //use_global_location_cache_ = true;
-  runtime_schema_version_ = OB_INVALID_VERSION;
+  tenant_schema_version_ = OB_INVALID_VERSION;
   sys_schema_version_ = OB_INVALID_VERSION;
   outline_state_.reset();
   sessid_ = OB_INVALID_ID;
@@ -1163,7 +1225,6 @@ void ObPlanCacheValue::reset()
     }
   }
   stored_schema_objs_.reset();
-  enable_rich_vector_format_ = false;
   pcv_set_ = NULL; // put last, there may be need for pcv_set before this
 }
 // Get all plan memory usage under this plan cache value
@@ -1422,8 +1483,9 @@ bool ObPlanCacheValue::is_contain_synonym() const
 }
 
 /*!
- * System package/type changes may advance only the system schema version. Always
- * validate cached objects that depend on system packages or types.
+ * The update of system packages/types will only increase the schema_version of the system tenant. Objects under normal tenants that depend on system packages/types
+ * may miss the check for whether the system packages/types are expired during the update because the schema_version of the normal tenant is not increased,
+ * leading to the routine objects dependent on system packages/types being unavailable after the update. Therefore, schema checks are always performed on objects containing system packages/types.
  */
 bool ObPlanCacheValue::is_contain_sys_pl_object() const
 {
@@ -1565,8 +1627,9 @@ int ObPlanCacheValue::set_stored_schema_objs(const DependenyTableStore &dep_tabl
         // Plan matching needs to distinguish regular tables from system tables
         // with the same name. Tables under sys include system tables and views,
         // so call is_sys_table_name to check whether the table is under sys.
-        // Internal-table changes may not advance the cached runtime schema
-        // version, so check the corresponding table version directly.
+        // If SQL contains internal tables, internal-table schema changes are
+        // not reflected in the normal tenant schema version, so check the
+        // corresponding internal table schema version directly.
         if (OB_FAIL(share::schema::ObSysTableChecker::is_sys_table_name(OB_SYS_DATABASE_ID,
                                                                                table_schema->get_table_name(),
                                                                                contain_sys_name_table_))) {
@@ -1697,7 +1760,9 @@ int ObPlanCacheValue::match_dep_schema(const ObPlanCacheCtx &pc_ctx,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(session_info));
   } else if (schema_array.count() != stored_schema_objs_.count()) {
-    // Schema objects with the same name can resolve to different dependency sets.
+    // schema objs count mismatch, may be the following cases:
+    // select * from all_sequences;  // system view, the dependency_table of the system view has multiple entries
+    // select * from all_sequences;  // ordinary table
     is_same = false;
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && is_same && i < schema_array.count(); i++) {
@@ -1713,7 +1778,9 @@ int ObPlanCacheValue::match_dep_schema(const ObPlanCacheCtx &pc_ctx,
         // Temporary tables are only created in the corresponding session.
         // Different sessid values can distinguish them, and sess_create_time
         // must also be the same because sessid may be reused.
-        // Plan-cache matching for temporary tables always uses the user-created session.
+        // plan cache matching temporary tables should always use the user-created session to ensure the correctness of semantics
+        // When executed remotely, a temporary session object will be created, and its session_id is also temporary,
+        // So here the get_sessid_for_table() rule must be used to determine
         is_same = ((session_info->get_sessid_for_table() == sessid_) &&
                    (session_info->get_sess_create_time() == sess_create_time_));
       } else {
@@ -1779,9 +1846,9 @@ int ObPlanCacheValue::need_check_schema_version(ObPlanCacheCtx &pc_ctx,
   int ret = OB_SUCCESS;
   need_check = false;
   if (OB_FAIL(pc_ctx.sql_ctx_.schema_guard_->get_schema_version(new_schema_version))) {
-    LOG_WARN("failed to get runtime schema version", K(ret));
+    LOG_WARN("failed to get tenant schema version", K(ret));
   } else {
-    int64_t cached_runtime_schema_version = ATOMIC_LOAD(&runtime_schema_version_);
+    int64_t cached_tenant_schema_version = ATOMIC_LOAD(&tenant_schema_version_);
     /*
       session1 :
            create temporary table t1(c1 int, c2 int);
@@ -1798,13 +1865,13 @@ int ObPlanCacheValue::need_check_schema_version(ObPlanCacheCtx &pc_ctx,
         temporary table with the same name in the current session.
         Therefore, if there is a temporary table, you need to recheck the schema .
      */
-    need_check = ((new_schema_version != cached_runtime_schema_version)
+    need_check = ((new_schema_version != cached_tenant_schema_version)
                   || is_contain_synonym()
                   || is_contain_tmp_tbl()
                   || is_contain_sys_pl_object()
                   || contain_sys_name_table_);
     if (need_check && REACH_TIME_INTERVAL(10000000)) { // 10s interval print
-      LOG_INFO("need check schema", K(new_schema_version), K(cached_runtime_schema_version),
+      LOG_INFO("need check schema", K(new_schema_version), K(cached_tenant_schema_version),
                K(is_contain_synonym()), K(contain_sys_name_table_), K(is_contain_tmp_tbl()),
                K(is_contain_sys_pl_object()), K(need_check), K(constructed_sql_));
     }
@@ -1812,13 +1879,13 @@ int ObPlanCacheValue::need_check_schema_version(ObPlanCacheCtx &pc_ctx,
   return ret;
 }
 
-int ObPlanCacheValue::lift_runtime_schema_version(int64_t new_schema_version)
+int ObPlanCacheValue::lift_tenant_schema_version(int64_t new_schema_version)
 {
   int ret = OB_SUCCESS;
-  if (new_schema_version <= runtime_schema_version_) {
+  if (new_schema_version <= tenant_schema_version_) {
     // do nothing
   } else {
-    ATOMIC_STORE(&(runtime_schema_version_), new_schema_version);
+    ATOMIC_STORE(&(tenant_schema_version_), new_schema_version);
   }
   return ret;
 }

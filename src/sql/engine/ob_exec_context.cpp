@@ -148,6 +148,7 @@ ObExecContext::ObExecContext(ObIAllocator &allocator)
     exec_stat_collector_(NULL),
     stmt_factory_(NULL),
     expr_factory_(NULL),
+    outline_params_wrapper_(NULL),
     execution_id_(OB_INVALID_ID),
     has_non_trivial_expr_op_ctx_(false),
     sql_ctx_(NULL),
@@ -162,6 +163,7 @@ ObExecContext::ObExecContext(ObIAllocator &allocator)
     reusable_interm_result_(false),
     is_async_end_trans_(false),
     gi_task_map_(nullptr),
+    udf_ctx_mgr_(nullptr),
     output_row_(NULL),
     field_columns_(NULL),
     is_direct_local_plan_(false),
@@ -181,6 +183,7 @@ ObExecContext::ObExecContext(ObIAllocator &allocator)
     vt_ift_(nullptr),
     px_batch_id_(0),
     admission_acquired_(false),
+    admission_addr_map_(NULL),
     use_temp_expr_ctx_cache_(false),
     temp_expr_ctx_map_(),
     dml_event_(ObDmlEventType::DE_INVALID),
@@ -203,6 +206,7 @@ ObExecContext::ObExecContext(ObIAllocator &allocator)
     auto_dop_map_(),
     force_local_plan_(false),
     diagnosis_manager_(),
+    deterministic_udf_cache_allocator_("UDFCACHE", OB_MALLOC_NORMAL_BLOCK_SIZE),
     current_granule_type_(OB_GRANULE_UNINITIALIZED)
 {
 }
@@ -232,6 +236,10 @@ ObExecContext::~ObExecContext()
     gi_task_map_->destroy();
     gi_task_map_ = NULL;
   }
+  if (OB_NOT_NULL(udf_ctx_mgr_)) {
+    udf_ctx_mgr_->~ObUdfCtxMgr();
+    udf_ctx_mgr_ = NULL;
+  }
   if (OB_NOT_NULL(pl_ctx_)) {
     pl_ctx_->~ObPLCtx();
     pl_ctx_ = NULL;
@@ -258,6 +266,7 @@ ObExecContext::~ObExecContext()
     DESTROY_CONTEXT(mem_context_);
     mem_context_ = NULL;
   }
+  release_admission_addr_map();
   if (!temp_expr_ctx_map_.created()) {
   // do nothing
   } else {
@@ -276,6 +285,16 @@ ObExecContext::~ObExecContext()
     lob_access_ctx_ = nullptr;
   }
   auto_dop_map_.destroy();
+}
+
+void ObExecContext::release_admission_addr_map()
+{
+  if (OB_NOT_NULL(admission_addr_map_)) {
+    admission_addr_map_->destroy();
+    admission_addr_map_->~ObHashMap();
+    ob_free(admission_addr_map_);
+    admission_addr_map_ = NULL;
+  }
 }
 
 void ObExecContext::clean_resolve_ctx()
@@ -332,6 +351,9 @@ void ObExecContext::reset_op_env()
     if (gi_task_map_->created()) {
       gi_task_map_->clear();
     }
+  }
+  if (OB_NOT_NULL(udf_ctx_mgr_)) {
+    udf_ctx_mgr_->reset();
   }
 }
 int ObExecContext::init_phy_op(const uint64_t phy_op_size)
@@ -633,6 +655,11 @@ int ObExecContext::init_pl_ctx()
   return ret;
 }
 
+uint64_t ObExecContext::get_min_cluster_version() const
+{
+  return task_executor_ctx_.get_min_cluster_version();
+}
+
 const common::ObAddr& ObExecContext::get_addr() const
 {
   return MYADDR;
@@ -780,7 +807,7 @@ int ObExecContext::init_physical_plan_ctx(const ObPhysicalPlan &plan)
 {
   int ret = OB_SUCCESS;
   int64_t foreign_key_checks = 0;
-  uint64_t data_format_version = 0;
+  uint64_t tenant_data_version = 0;
   bool supprt_check_pdml_affected_row = false;
   if (OB_ISNULL(phy_plan_ctx_) || OB_ISNULL(my_session_) || OB_ISNULL(sql_ctx_)) {
     ret = OB_INVALID_ARGUMENT;
@@ -802,8 +829,12 @@ int ObExecContext::init_physical_plan_ctx(const ObPhysicalPlan &plan)
         LOG_WARN("fail to get query timeout", K(ret));
       }
     }
-    if (OB_SUCC(ret) && OB_FAIL(phy_plan_ctx_->reserve_param_space(plan.get_param_count()))) {
-      LOG_WARN("reserve param space failed", K(ret), K(plan.get_param_count()));
+    if (OB_SUCC(ret)) {
+      if (!plan.is_remote_plan()) {
+        if (OB_FAIL(phy_plan_ctx_->reserve_param_space(plan.get_param_count()))) {
+          LOG_WARN("reserve param space failed", K(ret), K(plan.get_param_count()));
+        }
+      }
     }
     if (OB_SUCC(ret)) {
       if (stmt::T_SELECT == plan.get_stmt_type()) { // select has weak
@@ -817,7 +848,6 @@ int ObExecContext::init_physical_plan_ctx(const ObPhysicalPlan &plan)
       }
       phy_plan_ctx_->set_consistency_level(consistency);
       phy_plan_ctx_->set_timeout_timestamp(start_time + plan_timeout);
-      phy_plan_ctx_->set_rich_format(my_session_->use_rich_format());
       reference_my_plan(&plan);
       phy_plan_ctx_->set_ignore_stmt(plan.is_ignore());
       phy_plan_ctx_->set_foreign_key_checks(0 != foreign_key_checks);
@@ -1054,7 +1084,10 @@ DEFINE_SERIALIZE(ObExecContext)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("exec context is invalid", K_(phy_op_size), K_(phy_op_ctx_store),
              K_(phy_op_input_store), K_(phy_plan_ctx), K_(my_session), K(ret));
+  } else if (OB_FAIL(my_session_->add_changed_package_info(*const_cast<ObExecContext *>(this)))) {
+    LOG_WARN("add changed package info failed", K(ret));
   } else {
+    my_session_->reset_all_package_changed_info();
     phy_plan_ctx_->set_expr_op_size(ori_expr_op_size_ > 0 ? ori_expr_op_size_ : expr_op_size_);
     OB_UNIS_ENCODE(phy_op_size_);
     OB_UNIS_ENCODE(*phy_plan_ctx_);
@@ -1082,7 +1115,8 @@ DEFINE_GET_SERIALIZE_SIZE(ObExecContext)
   int64_t len = 0;
   uint64_t ser_version = get_ser_version();
 
-  if (is_valid()) {
+  if (is_valid() && OB_SUCCESS == my_session_->add_changed_package_info(*const_cast<ObExecContext *>(this))) {
+    my_session_->reset_all_package_changed_info();
     phy_plan_ctx_->set_expr_op_size(ori_expr_op_size_ > 0 ? ori_expr_op_size_ : expr_op_size_);
     OB_UNIS_ADD_LEN(phy_op_size_);
     OB_UNIS_ADD_LEN(*phy_plan_ctx_);
@@ -1240,6 +1274,21 @@ int ObExecContext::get_subschema_id_by_collection_elem_type(ObNestedType coll_ty
     ret = phy_plan_ctx_->get_subschema_id_by_collection_elem_type(coll_type, elem_type, subschema_id);
   }
   return ret;
+}
+
+bool ObExecContext::support_enum_set_type_subschema(ObSQLSessionInfo &session)
+{
+  bool bret = true;
+  // tenant configuration Control
+  if (!session.is_enable_enum_set_with_subschema()) {
+    bret = false;
+  }
+  // hint control
+  if (OB_NOT_NULL(stmt_factory_) && OB_NOT_NULL(stmt_factory_->get_query_ctx())) {
+    stmt_factory_->get_query_ctx()->get_global_hint().opt_params_.get_bool_opt_param(
+        ObOptParamHint::ENABLE_ENUM_SET_SUBSCHEMA, bret);
+  }
+  return bret;
 }
 
 int ObExecContext::get_subschema_id_by_type_info(const ObObjMeta &obj_meta,

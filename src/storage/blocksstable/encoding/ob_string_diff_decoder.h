@@ -56,10 +56,6 @@ public:
       const int64_t row_cap,
       common::ObDatum *datums) const override;
 
-  virtual int decode_vector(
-      const ObColumnDecoderCtx &decoder_ctx,
-      const ObIRowIndex *row_index,
-      ObVectorDecodeCtx &vector_ctx) const override;
 
   void reset() { this->~ObStringDiffDecoder(); new (this) ObStringDiffDecoder(); }
   OB_INLINE void reuse();
@@ -67,17 +63,7 @@ public:
 
   bool is_inited() const { return NULL != header_; }
 private:
-  template <typename VectorType, bool HAS_NULL, bool HEX_PACKED>
-  int decode_vector_from_fixed_data(
-      const ObColumnDecoderCtx &decoder_ctx,
-      const ObIRowIndex *row_index,
-      ObVectorDecodeCtx &vector_ctx) const;
 
-  template <typename VectorType, bool HAS_NULL, bool HEX_PACKED>
-  int decode_vector_from_var_len_data(
-      const ObColumnDecoderCtx &decoder_ctx,
-      const ObIRowIndex *row_index,
-      ObVectorDecodeCtx &vector_ctx) const;
 private:
   const ObStringDiffHeader *header_;
 };

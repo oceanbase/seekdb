@@ -29,15 +29,16 @@ int ObCodeGenerator::generate(const ObLogPlan &log_plan,
 {
   int ret = OB_SUCCESS;
   int64_t batch_size = 0;
+  const uint64_t cur_cluster_version = CLUSTER_CURRENT_VERSION;
   OZ(detect_batch_size(log_plan, batch_size));
   if (OB_SUCC(ret) && batch_size > 0) {
     log_plan.get_optimizer_context().set_batch_size(batch_size);
     phy_plan.set_batch_size(batch_size);
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(generate_exprs(log_plan, phy_plan))) {
+  } else if (OB_FAIL(generate_exprs(log_plan, phy_plan, cur_cluster_version))) {
     LOG_WARN("fail to get all raw exprs", K(ret));
-  } else if (OB_FAIL(generate_operators(log_plan, phy_plan))) {
+  } else if (OB_FAIL(generate_operators(log_plan, phy_plan, cur_cluster_version))) {
     LOG_WARN("fail to generate plan", K(ret));
   }
 
@@ -48,21 +49,21 @@ int ObCodeGenerator::generate(const ObLogPlan &log_plan,
 //2. Get all expressions that will be used during execution
 //3. Generate all physical expressions
 int ObCodeGenerator::generate_exprs(const ObLogPlan &log_plan,
-                                    ObPhysicalPlan &phy_plan)
+                                    ObPhysicalPlan &phy_plan,
+                                    const uint64_t cur_cluster_version)
 {
   int ret = OB_SUCCESS;
   ObExecContext *exec_ctx = log_plan.get_optimizer_context().get_exec_ctx();
   CK(NULL != exec_ctx && NULL != exec_ctx->get_physical_plan_ctx());
   CK(exec_ctx->get_my_session() != NULL);
-  CK(exec_ctx->get_my_session()->use_rich_format() == exec_ctx->get_physical_plan_ctx()->is_rich_format()
-     && exec_ctx->get_my_session()->use_rich_format() == phy_plan.get_use_rich_format());
   if (OB_SUCC(ret)) {
     ObStaticEngineExprCG expr_cg(
         phy_plan.get_allocator(),
         log_plan.get_optimizer_context().get_session_info(),
         exec_ctx->get_sql_ctx()->schema_guard_,
         exec_ctx->get_physical_plan_ctx()->get_original_param_cnt(),
-        param_store_->count());
+        param_store_->count(),
+        min_cluster_version_);
     // init ctx for operator cg
     expr_cg.set_batch_size(phy_plan.get_batch_size());
     if (OB_FAIL(expr_cg.generate(log_plan.get_optimizer_context().get_all_exprs(),
@@ -77,10 +78,11 @@ int ObCodeGenerator::generate_exprs(const ObLogPlan &log_plan,
 }
 
 int ObCodeGenerator::generate_operators(const ObLogPlan &log_plan,
-                                        ObPhysicalPlan &phy_plan)
+                                        ObPhysicalPlan &phy_plan,
+                                        const uint64_t cur_cluster_version)
 {
   int ret = OB_SUCCESS;
-  ObStaticEngineCG static_engin_cg;
+  ObStaticEngineCG static_engin_cg(min_cluster_version_);
   if (OB_FAIL(static_engin_cg.generate(log_plan, phy_plan))) {
     LOG_WARN("fail to code generate", K(ret));
   }
@@ -114,7 +116,8 @@ int ObCodeGenerator::detect_batch_size(
     double scan_cardinality = 0;
     // TODO bin.lb: move to optimizer and more sophisticated rules
     bool rowsets_enabled = true && GCONF._rowsets_enabled;
-    int64_t lob_rowsets_max_rows = GCONF._lob_rowsets_max_rows;
+    // if tenant config is invalid, use 8 as lob_rowsets_max_rows, compatible to origin behavior
+    int64_t lob_rowsets_max_rows = true ? GCONF._lob_rowsets_max_rows : 8;
     const ObOptParamHint *opt_params = &log_plan.get_stmt()->get_query_ctx()->get_global_hint().opt_params_;
     if (OB_FAIL(opt_params->get_integer_opt_param(ObOptParamHint::LOB_ROWSETS_MAX_ROWS, lob_rowsets_max_rows))) {
       LOG_WARN("get integer opt param failed", K(ret));
@@ -146,7 +149,8 @@ int ObCodeGenerator::detect_batch_size(
           log_plan.get_optimizer_context().get_session_info(),
           exec_ctx->get_sql_ctx()->schema_guard_,
           exec_ctx->get_physical_plan_ctx()->get_original_param_cnt(),
-          0);
+          0,
+          exec_ctx->get_min_cluster_version());
       int64_t rowsets_max_rows = GCONF._rowsets_max_rows;
       OZ(expr_cg.detect_batch_size(flattened_exprs, batch_size,
                                    rowsets_max_rows,

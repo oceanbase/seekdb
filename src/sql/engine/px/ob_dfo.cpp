@@ -24,6 +24,10 @@ using namespace oceanbase::common;
 using namespace oceanbase::sql;
 using namespace oceanbase::sql::dtl;
 
+OB_SERIALIZE_MEMBER(ObP2PDhMapInfo,
+                    p2p_sequence_ids_,
+                    target_addrs_);
+
 OB_SERIALIZE_MEMBER(ObQCMonitoringInfo, cur_sql_, qc_tid_);
 
 OB_SERIALIZE_MEMBER(ObPxSqcMeta,
@@ -34,11 +38,15 @@ OB_SERIALIZE_MEMBER(ObPxSqcMeta,
                     transmit_channel_,
                     qc_ch_info_,
                     sqc_ch_info_,
+                    exec_addr_,
+                    qc_addr_,
                     max_task_count_,
                     min_task_count_,
                     px_int_id_,
                     receive_channel_,
                     is_fulltree_,
+                    is_rpc_worker_,
+                    qc_server_id_,
                     parent_dfo_id_,
                     px_sequence_id_,
                     total_task_count_,
@@ -53,6 +61,7 @@ OB_SERIALIZE_MEMBER(ObPxSqcMeta,
                     access_table_location_keys_,
                     adjoining_root_dfo_,
                     is_single_tsc_leaf_dfo_,
+                    p2p_dh_map_info_,
                     sqc_count_,
                     monitoring_info_,
                     branch_id_base_,
@@ -65,14 +74,17 @@ OB_SERIALIZE_MEMBER(ObPxTask,
                     task_id_,
                     sqc_ch_info_,
                     task_ch_info_,
+                    qc_addr_,
+                    sqc_addr_,
+                    exec_addr_,
                     execution_id_,
                     px_int_id_,
                     is_fulltree_,
                     branch_id_);
-OB_SERIALIZE_MEMBER(ObPxInitTaskResponse,
+OB_SERIALIZE_MEMBER(ObPxRpcInitTaskResponse,
                     task_co_id_);
 
-OB_SERIALIZE_MEMBER(ObPxInitSqcResponse,
+OB_SERIALIZE_MEMBER(ObPxRpcInitSqcResponse,
                     rc_,
                     reserved_thread_count_,
                     partitions_info_,
@@ -135,6 +147,8 @@ int ObPxSqcMeta::assign(const ObPxSqcMeta &other)
     LOG_WARN("failed to assgin to table location keys.", K(ret));
   } else if (OB_FAIL(access_table_location_indexes_.assign(other.access_table_location_indexes_))) {
     LOG_WARN("failed to assgin to table location keys.", K(ret));
+  } else if (OB_FAIL(p2p_dh_map_info_.assign(other.p2p_dh_map_info_))) {
+    LOG_WARN("fail to assign p2p dh map info", K(ret));
   } else if (OB_FAIL(monitoring_info_.assign(other.monitoring_info_))) {
     LOG_WARN("fail to assign qc monitoring info", K(ret));
   } else if (OB_FAIL(locations_order_.assign(other.locations_order_))) {
@@ -147,14 +161,19 @@ int ObPxSqcMeta::assign(const ObPxSqcMeta &other)
     branch_id_base_ = other.branch_id_base_;
     thread_inited_ = other.thread_inited_;
     thread_finish_ = other.thread_finish_;
+    exec_addr_ = other.exec_addr_;
     qc_ch_info_ = other.qc_ch_info_;
     sqc_ch_info_ = other.sqc_ch_info_;
+    exec_addr_ = other.exec_addr_;
+    qc_addr_ = other.qc_addr_;
     task_count_ = other.task_count_;
     max_task_count_ = other.max_task_count_;
     min_task_count_ = other.min_task_count_;
     qc_channel_ = NULL;
     px_int_id_ = other.px_int_id_;
     is_fulltree_ = other.is_fulltree_;
+    is_rpc_worker_ = other.is_rpc_worker_;
+    qc_server_id_ = other.qc_server_id_;
     parent_dfo_id_ = other.parent_dfo_id_;
     total_task_count_ = other.total_task_count_;
     total_part_count_ = other.total_part_count_;
@@ -162,8 +181,10 @@ int ObPxSqcMeta::assign(const ObPxSqcMeta &other)
     transmit_use_interm_result_ = other.transmit_use_interm_result_;
     recieve_use_interm_result_ = other.recieve_use_interm_result_;
     ignore_vtable_error_ = other.ignore_vtable_error_;
+    server_not_alive_ = other.server_not_alive_;
     adjoining_root_dfo_ = other.adjoining_root_dfo_;
     is_single_tsc_leaf_dfo_ = other.is_single_tsc_leaf_dfo_;
+    interrupt_by_dm_ = other.interrupt_by_dm_;
     sqc_count_ = other.sqc_count_;
     partition_random_affinitize_ = other.partition_random_affinitize_;
   }
@@ -230,25 +251,27 @@ int ObDfo::check_dfo_pair(ObDfo &parent, ObDfo &child, int64_t &child_dfo_idx)
 }
 
 int ObDfo::fill_channel_info_by_sqc(
-  ObDtlTaskLayout &ch_servers,
+  ObDtlExecServer &ch_servers,
   ObPxSqcMeta &sqc)
 {
   int ret = OB_SUCCESS;
-  ch_servers.reset();
+  ch_servers.total_task_cnt_ = 0;
   OZ(ch_servers.prefix_task_counts_.push_back(ch_servers.total_task_cnt_));
+  OZ(ch_servers.add_exec_addr(sqc.get_exec_addr()));
   ch_servers.total_task_cnt_ = sqc.get_task_count();
   return ret;
 }
 
 int ObDfo::fill_channel_info_by_sqc(
-  ObDtlTaskLayout &ch_servers,
+  ObDtlExecServer &ch_servers,
   common::ObIArray<ObPxSqcMeta> &sqcs)
 {
   int ret = OB_SUCCESS;
-  ch_servers.reset();
+  ch_servers.total_task_cnt_ = 0;
   for (int64_t i = 0; i < sqcs.count() && OB_SUCC(ret); ++i) {
     ObPxSqcMeta &sqc = sqcs.at(i);
     OZ(ch_servers.prefix_task_counts_.push_back(ch_servers.total_task_cnt_));
+    OZ(ch_servers.add_exec_addr(sqc.get_exec_addr()));
     ch_servers.total_task_cnt_ += sqc.get_task_count();
   }
   return ret;
@@ -348,8 +371,8 @@ int ObDfo::get_dfo_ch_info(int64_t sqc_idx, ObDtlChTotalInfo *&ch_info)
 }
 
 
-////// ObPxInitSqcArgs ////////
-int ObPxInitSqcArgs::serialize_common_parts_1(char *buf, const int64_t buf_len, int64_t &pos) const
+////// ObPxRpcInitSqcArgs ////////
+int ObPxRpcInitSqcArgs::serialize_common_parts_1(char *buf, const int64_t buf_len, int64_t &pos) const
 {
   int ret = OB_SUCCESS;
   ObPhyOpSeriCtx seri_ctx;
@@ -381,7 +404,7 @@ int ObPxInitSqcArgs::serialize_common_parts_1(char *buf, const int64_t buf_len, 
   return ret;
 }
 
-int ObPxInitSqcArgs::serialize_common_parts_2(
+int ObPxRpcInitSqcArgs::serialize_common_parts_2(
     char *buf, const int64_t buf_len, int64_t &pos) const
 {
   int ret = OB_SUCCESS;
@@ -400,7 +423,7 @@ int ObPxInitSqcArgs::serialize_common_parts_2(
     LOG_WARN("unexpected status: op root is null", K(ret));
   } else {
     int64_t old_pos = pos;
-    // Clone the sub-plan tree into the local SQC worker context.
+    // Serialize the core part of Task to remote: sub plan tree
     const ObExprFrameInfo *frame_info = NULL;
     if (OB_UNLIKELY(!IS_PX_TRANSMIT(op_spec_root_->type_))) {
       ret = OB_ERR_UNEXPECTED;
@@ -414,7 +437,7 @@ int ObPxInitSqcArgs::serialize_common_parts_2(
                 buf, buf_len, pos, *exec_ctx_, *frame_info))) {
       LOG_WARN("failed to serialize rt expr", K(ret));
     } else if (OB_FAIL(ObPxTreeSerializer::serialize_tree(
-                buf, buf_len, pos, *op_spec_root_, false /* is_fulltree */, &seri_ctx))) {
+                buf, buf_len, pos, *op_spec_root_, false /* is_fulltree */, sqc_.get_exec_addr(), &seri_ctx))) {
       LOG_WARN("fail serialize root_op", K(ret), K(buf_len), K(pos));
     } else if (OB_FAIL(ObPxTreeSerializer::serialize_op_input(
                 buf, buf_len, pos, *op_spec_root_, exec_ctx_->get_kit_store()))) {
@@ -435,7 +458,7 @@ int ObPxInitSqcArgs::serialize_common_parts_2(
 }
 
 
-OB_DEF_SERIALIZE(ObPxInitSqcArgs)
+OB_DEF_SERIALIZE(ObPxRpcInitSqcArgs)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(op_spec_root_) || OB_ISNULL(exec_ctx_) || OB_ISNULL(ser_phy_plan_)) {
@@ -462,7 +485,7 @@ OB_DEF_SERIALIZE(ObPxInitSqcArgs)
 }
 
 
-OB_DEF_DESERIALIZE(ObPxInitSqcArgs)
+OB_DEF_DESERIALIZE(ObPxRpcInitSqcArgs)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(sqc_handler_)) {
@@ -474,7 +497,7 @@ OB_DEF_DESERIALIZE(ObPxInitSqcArgs)
   return ret;
 }
 
-OB_DEF_SERIALIZE_SIZE(ObPxInitSqcArgs)
+OB_DEF_SERIALIZE_SIZE(ObPxRpcInitSqcArgs)
 {
 
   int ret = OB_SUCCESS;
@@ -502,7 +525,7 @@ OB_DEF_SERIALIZE_SIZE(ObPxInitSqcArgs)
         len += ObPxTreeSerializer::get_serialize_op_input_size(
             *op_spec_root_, exec_ctx_->get_kit_store());
       }
-      LOG_TRACE("trace get serialized local sqc args size", K(len));
+      LOG_TRACE("trace get ser rpc init sqc args size", K(len));
       ser_cache.slen_ = len;
     }
     // always serialize
@@ -515,7 +538,7 @@ OB_DEF_SERIALIZE_SIZE(ObPxInitSqcArgs)
   return len;
 }
 
-void ObPxInitSqcArgs::set_serialize_param(ObExecContext &exec_ctx,
+void ObPxRpcInitSqcArgs::set_serialize_param(ObExecContext &exec_ctx,
                                              ObOpSpec &op_spec_root,
                                              const ObPhysicalPlan &ser_phy_plan)
 {
@@ -524,7 +547,7 @@ void ObPxInitSqcArgs::set_serialize_param(ObExecContext &exec_ctx,
   ser_phy_plan_ = &ser_phy_plan;
 }
 
-void ObPxInitSqcArgs::set_deserialize_param(ObExecContext &exec_ctx,
+void ObPxRpcInitSqcArgs::set_deserialize_param(ObExecContext &exec_ctx,
                                                ObPhysicalPlan &des_phy_plan,
                                                ObIAllocator *des_allocator)
 {
@@ -533,7 +556,7 @@ void ObPxInitSqcArgs::set_deserialize_param(ObExecContext &exec_ctx,
   des_allocator_ = des_allocator;
 }
 
-int ObPxInitSqcArgs::do_deserialize(int64_t &pos, const char *net_buf, int64_t data_len)
+int ObPxRpcInitSqcArgs::do_deserialize(int64_t &pos, const char *net_buf, int64_t data_len)
 {
   int ret = OB_SUCCESS;
   /**
@@ -590,11 +613,11 @@ int ObPxInitSqcArgs::do_deserialize(int64_t &pos, const char *net_buf, int64_t d
             for (int64_t j = 0; j < datum_frame.count() && OB_SUCC(ret); j++) {
               const ObFrameInfo &frame_info = datum_frame.at(j);
               if (expr.frame_idx_ == frame_info.frame_idx_) {
-                int64_t max_offset = ObStaticEngineExprCG::frame_max_offset(expr, batch_size, frame_info.use_rich_format_);
+                int64_t max_offset = ObStaticEngineExprCG::frame_max_offset(expr, batch_size);
                 if (OB_UNLIKELY(max_offset > frame_info.frame_size_)) {
                   ret = OB_SIZE_OVERFLOW;
                   LOG_WARN("unexpected frame size", K(ret), K(frame_info), K(batch_size),
-                           K(max_offset), K(expr), K(expr.batch_result_), K(expr.offset_off_), K(expr.cont_buf_off_), K(expr.null_bitmap_off_));
+                           K(max_offset), K(expr), K(expr.batch_result_));
                 }
               }
             }
@@ -618,8 +641,8 @@ int ObPxInitSqcArgs::do_deserialize(int64_t &pos, const char *net_buf, int64_t d
 
 
 
-////// ObPxInitTaskArgs ////////
-OB_DEF_SERIALIZE(ObPxInitTaskArgs)
+////// ObPxRpcInitTaskArgs ////////
+OB_DEF_SERIALIZE(ObPxRpcInitTaskArgs)
 {
   int ret = OB_SUCCESS;
 
@@ -650,7 +673,7 @@ OB_DEF_SERIALIZE(ObPxInitTaskArgs)
           buf, buf_len, pos, *exec_ctx_, *frame_info))) {
         LOG_WARN("failed to serialize rt expr", K(ret));
       } else if (OB_FAIL(ObPxTreeSerializer::serialize_tree(
-                  buf, buf_len, pos, *op_spec_root_, false /* is_fulltree */))) {
+                  buf, buf_len, pos, *op_spec_root_, false /* is_fulltree */, task_.get_exec_addr()))) {
         LOG_WARN("fail serialize root_op", K(ret), K(buf_len), K(pos));
       } else if (OB_FAIL(ObPxTreeSerializer::serialize_op_input(
           buf, buf_len, pos, *op_spec_root_, exec_ctx_->get_kit_store()))) {
@@ -682,7 +705,7 @@ OB_DEF_SERIALIZE(ObPxInitTaskArgs)
   return ret;
 }
 
-OB_DEF_DESERIALIZE(ObPxInitTaskArgs)
+OB_DEF_DESERIALIZE(ObPxRpcInitTaskArgs)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(exec_ctx_) || OB_ISNULL(inner_phy_plan_) || OB_ISNULL(des_allocator_)) {
@@ -693,8 +716,9 @@ OB_DEF_DESERIALIZE(ObPxInitTaskArgs)
     op_spec_root_ = NULL;
   }
 
-  // The asynchronous worker may outlive the launcher's input buffer, so keep a
-  // private copy for the remainder of task initialization.
+  // PX framework do the work at stage named after-process,
+  // and in this stage we can not ensure the memory to be valid (may be release
+  // by the network framework). So we deep copy these memory here.
 
   pos = 0;
   char *tmp_buf = (char *)des_allocator_->alloc(data_len);
@@ -777,7 +801,7 @@ OB_DEF_DESERIALIZE(ObPxInitTaskArgs)
   return ret;
 }
 
-OB_DEF_SERIALIZE_SIZE(ObPxInitTaskArgs)
+OB_DEF_SERIALIZE_SIZE(ObPxRpcInitTaskArgs)
 {
   int ret = OB_SUCCESS;
   int64_t len = 0;
@@ -825,7 +849,7 @@ OB_DEF_SERIALIZE_SIZE(ObPxInitTaskArgs)
 }
 
 
-void ObPxInitTaskArgs::set_serialize_param(ObExecContext &exec_ctx,
+void ObPxRpcInitTaskArgs::set_serialize_param(ObExecContext &exec_ctx,
                                               ObOpSpec &op_spec_root,
                                               const ObPhysicalPlan &ser_phy_plan)
 {
@@ -834,7 +858,7 @@ void ObPxInitTaskArgs::set_serialize_param(ObExecContext &exec_ctx,
   ser_phy_plan_ = &ser_phy_plan;
 }
 
-void ObPxInitTaskArgs::set_deserialize_param(ObExecContext &exec_ctx,
+void ObPxRpcInitTaskArgs::set_deserialize_param(ObExecContext &exec_ctx,
                                                 ObPhysicalPlan &des_phy_plan,
                                                 ObIAllocator *des_allocator)
 {
@@ -843,7 +867,7 @@ void ObPxInitTaskArgs::set_deserialize_param(ObExecContext &exec_ctx,
   des_allocator_ = des_allocator;
 }
 
-int ObPxInitTaskArgs::init_deserialize_param(const ObPxInitTaskArgs &arg, lib::MemoryContext &mem_context, const observer::ObGlobalContext &gctx)
+int ObPxRpcInitTaskArgs::init_deserialize_param(const ObPxRpcInitTaskArgs &arg, lib::MemoryContext &mem_context, const observer::ObGlobalContext &gctx)
 {
   int ret = OB_SUCCESS;
   void *plan_buf = NULL;
@@ -864,7 +888,7 @@ int ObPxInitTaskArgs::init_deserialize_param(const ObPxInitTaskArgs &arg, lib::M
 }
 
 
-int ObPxInitTaskArgs::deep_copy_assign(ObPxInitTaskArgs &src,
+int ObPxRpcInitTaskArgs::deep_copy_assign(ObPxRpcInitTaskArgs &src,
                                           ObIAllocator &alloc)
 {
   int ret = OB_SUCCESS;
@@ -907,12 +931,14 @@ void ObDfo::reset_resource(ObDfo *dfo)
   if (nullptr != dfo) {
     dfo->sqcs_.reset();
     dfo->child_dfos_.reset();
+    dfo->tasks_.reset();
     for (int64_t j = 0; j < dfo->receive_ch_sets_map_.count(); ++j) {
       if (OB_NOT_NULL(dfo->receive_ch_sets_map_.at(j))) {
         dfo->receive_ch_sets_map_.at(j)->reset();
       }
     }
     dfo->transmit_ch_sets_.reset();
+    dfo->p2p_dh_map_info_.destroy();
     dfo->~ObDfo();
     dfo = nullptr;
   }

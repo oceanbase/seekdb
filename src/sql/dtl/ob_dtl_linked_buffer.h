@@ -20,7 +20,6 @@
 #include "lib/queue/ob_link.h"
 #include "sql/dtl/ob_dtl_msg_type.h"
 #include "lib/container/ob_array_serialization.h"
-#include "sql/engine/basic/ob_compact_row.h"
 namespace oceanbase {
 namespace sql {
 namespace dtl {
@@ -35,12 +34,13 @@ class ObDtlDfoKey
   OB_UNIS_VERSION(1);
 public:
   ObDtlDfoKey() :
-    px_sequence_id_(common::OB_INVALID_ID), qc_id_(-1),
-    dfo_id_(common::OB_INVALID_ID)
+    server_id_(-1), px_sequence_id_(common::OB_INVALID_ID),
+    qc_id_(-1), dfo_id_(common::OB_INVALID_ID)
   {}
   uint64_t hash() const
   {
-    uint64_t val = common::murmurhash(&px_sequence_id_, sizeof(px_sequence_id_), 0);
+    uint64_t val = common::murmurhash(&server_id_, sizeof(server_id_), 0);
+    val = common::murmurhash(&px_sequence_id_, sizeof(px_sequence_id_), val);
     val = common::murmurhash(&qc_id_, sizeof(qc_id_), val);
     val = common::murmurhash(&dfo_id_, sizeof(dfo_id_), val);
     return val;
@@ -49,28 +49,32 @@ public:
 
   bool operator== (const ObDtlDfoKey other) const
   {
-    return px_sequence_id_ == other.px_sequence_id_
+    return server_id_ == other.server_id_
+        && px_sequence_id_ == other.px_sequence_id_
         && qc_id_ == other.qc_id_
         && dfo_id_ == other.dfo_id_;
   }
 
-  void set(uint64_t px_sequence_id, int32_t qc_id, int64_t dfo_id)
+  void set(int32_t server_id, uint64_t px_sequence_id, int32_t qc_id, int64_t dfo_id)
   {
+    server_id_ = server_id;
     px_sequence_id_ = px_sequence_id | PX_SEQ_MASK;
     qc_id_ = qc_id;
     dfo_id_ = dfo_id;
   }
   bool is_valid()
   {
-    return common::OB_INVALID_ID != px_sequence_id_
+    return -1 != server_id_
+        && common::OB_INVALID_ID != px_sequence_id_
         && common::OB_INVALID_ID != dfo_id_;
   }
   int64_t get_dfo_id() { return dfo_id_; }
   uint64_t get_px_sequence_id() { return px_sequence_id_; }
 
-  TO_STRING_KV(K_(px_sequence_id), K_(qc_id), K_(dfo_id));
+  TO_STRING_KV(K_(server_id), K_(px_sequence_id), K_(qc_id), K_(dfo_id));
 public:
   static const uint64_t PX_SEQ_MASK = 0x8000000000000000;
+  int32_t server_id_;
   uint64_t px_sequence_id_;
   int32_t qc_id_;
   int64_t dfo_id_;
@@ -230,7 +234,6 @@ public:
         dfo_id_(common::OB_INVALID_ID),
         sqc_id_(common::OB_INVALID_ID),
         enable_channel_sync_(false),
-        row_meta_(),
         op_info_()
   {}
   ObDtlLinkedBuffer(char * buf, int64_t size)
@@ -241,7 +244,6 @@ public:
         dfo_id_(common::OB_INVALID_ID),
         sqc_id_(common::OB_INVALID_ID),
         enable_channel_sync_(false),
-        row_meta_(),
         op_info_()
   {}
   TO_STRING_KV(K_(size), K_(pos), K_(is_data_msg), K_(seq_no), K_(allocated_chid),
@@ -255,10 +257,6 @@ public:
   static int deserialize_msg_header(const ObDtlLinkedBuffer &buffer,
                                     ObDtlMsgHeader &header,
                                     bool keep_pos = false);
-  int serialize_vector(char *buf, int64_t pos, int64_t size) const;
-  int64_t get_serialize_vector_size() const;
-  int serialize_fixed_vector(char *buf, int64_t pos, int64_t size) const;
-  int64_t get_serialize_fixed_vector_size() const;
 
   void set_empty() {
     if (size_ > 0 && NULL != buf_) {
@@ -375,7 +373,6 @@ public:
     dst->dfo_id_ = src.dfo_id_;
     dst->sqc_id_ = src.sqc_id_;
     dst->enable_channel_sync_ = src.enable_channel_sync_;
-    ret = dst->row_meta_.assign(src.row_meta_);
     dst->op_info_ = src.op_info_;
     return ret;
   }
@@ -397,7 +394,6 @@ public:
     dfo_id_ = src.dfo_id_;
     sqc_id_ = src.sqc_id_;
     enable_channel_sync_ = src.enable_channel_sync_;
-    ret = row_meta_.assign(src.row_meta_);
     op_info_ = src.op_info_;
     return ret;
   }
@@ -453,7 +449,6 @@ public:
     if (batch_info_valid_) {
       batch_info_.reset();
     }
-    row_meta_.reset();
   }
   int push_batch_id(int64_t batch_id, int64_t rows);
   int64_t get_batch_id() { return batch_id_; }
@@ -461,8 +456,6 @@ public:
   void set_dfo_id(int64_t dfo_id) { dfo_id_ = dfo_id; }
   int64_t get_dfo_id() { return dfo_id_; }
   int64_t get_sqc_id() { return sqc_id_; }
-  RowMeta &get_row_meta() { return row_meta_; }
-  void set_row_meta(const RowMeta &row_meta) { row_meta_ = row_meta; }
   uint64_t get_px_sequence_id() { return dfo_key_.px_sequence_id_; }
 
   int64_t get_dop() { return op_info_.dop_; }
@@ -573,7 +566,6 @@ The memory layout is as below:
   int64_t dfo_id_;
   int64_t sqc_id_;
   bool enable_channel_sync_;
-  RowMeta row_meta_;
   ObDtlOpInfo op_info_;
 };
 

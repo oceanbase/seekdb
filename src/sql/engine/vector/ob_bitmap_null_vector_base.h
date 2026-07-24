@@ -29,7 +29,7 @@ class ObBitmapNullVectorBase: public ObVectorBase
 {
 public:
   ObBitmapNullVectorBase(sql::ObBitVector *nulls) :
-    ObVectorBase(), nulls_(nulls), has_null_(false), is_batch_ascii_(UNKNOWN)
+    ObVectorBase(), nulls_(nulls), flag_(0)
   {}
 
   // Returning true is meaningless, returning false indicates that there is indeed no null.
@@ -38,19 +38,13 @@ public:
   inline void set_has_null(bool flag) { has_null_ = flag; };
   OB_INLINE void reset_has_null() override final { has_null_ = false; };
 
-  OB_INLINE bool is_batch_ascii() const override final { return is_batch_ascii_ == ASCII; }
-  OB_INLINE void reset_is_batch_ascii() override final { is_batch_ascii_ = UNKNOWN; }
-  OB_INLINE void set_is_batch_ascii() override final { is_batch_ascii_ = ASCII; }
-  inline void set_is_batch_ascii(CHARSET_FLAG flag) { is_batch_ascii_ = flag; }
-  OB_INLINE void set_has_non_ascii() override final { is_batch_ascii_ = NON_ASCII; }
   inline sql::ObBitVector *get_nulls() { return nulls_; }
   OB_INLINE void set_nulls(sql::ObBitVector *nulls) { nulls_ = nulls; }
   inline const sql::ObBitVector *get_nulls() const { return nulls_; }
   inline uint16_t get_flag() const { return flag_; }
   inline void reset_flag()
   {
-    has_null_ = false;
-    is_batch_ascii_ = UNKNOWN;
+    flag_ = 0;
   }
 
   OB_INLINE bool is_null(const int64_t idx) const override final { return nulls_->at(idx); }
@@ -65,17 +59,14 @@ public:
   inline void from(sql::ObBitVector *nulls, const uint16_t flag)
   {
     nulls_ = nulls;
-    flag_ = flag;
+    flag_ = flag & 1;
   }
 
   // Note: if need to add new flag or change the default value of an existing flag,
   // please make sure to synchronize this function accordingly.
   static uint16_t get_default_flag(bool has_null)
   {
-    uint16_t flag = 0;
-    flag |= has_null;
-    flag |= (UNKNOWN << 1);
-    return flag;
+    return has_null ? 1 : 0;
   }
 
 protected:
@@ -83,8 +74,7 @@ protected:
   union {
 		struct {
 			uint16_t has_null_:1;
-			// is charset ascii
-      CHARSET_FLAG is_batch_ascii_:2;
+			uint16_t reserved_:15;
 		};
 		uint16_t flag_;
 	};

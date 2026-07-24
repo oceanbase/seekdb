@@ -88,11 +88,9 @@ select /*+parallel(2)*/test1.c1, test.c1, test1.c1+test.c1 from test1,test where
 select /*+OPT_PARAM('rowsets_enabled', 'FALSE')*/test1.c1, test.c1, test1.c1+test.c1 from test1,test where test1.id = test.id && test.id = 2;
 
 # need fix
-#set  _enable_rich_vector_format = false;
 #select [1,2,3] + '[1.12,1000.0001, -1.2222]', [1,2,3] - NULL, '[1.2,0.221,0.666]' * [1.11,3.33,5.55], NULL + [11,13.3,2,1.2];
 #select c1, c2, c1 + [1.5,2.3,3.3], [3.3,55.55,66.66] - c2, c2 * c1 from test;
 #select c1 / 0, [2,3,4] + [1,2,3] from test;
-#set  _enable_rich_vector_format = true;
 
 #########################################################################
 # test cmp (= != > < >= <=), only = != supported
@@ -257,7 +255,6 @@ SELECT
     ) AS rolling_sum_3_days
 FROM 
     t1;
-set _enable_rich_vector_format = false;
 SELECT 
     c1,
     SUM(c2) OVER (
@@ -266,7 +263,6 @@ SELECT
     ) AS rolling_sum_3_days
 FROM 
     t1;
-set _enable_rich_vector_format = true;
 #########################################################################
 # test cast
 #########################################################################

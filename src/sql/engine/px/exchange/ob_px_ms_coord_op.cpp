@@ -31,7 +31,8 @@ OB_SERIALIZE_MEMBER((ObPxMSCoordOpInput, ObPxReceiveOpInput));
 OB_SERIALIZE_MEMBER((ObPxMSCoordSpec, ObPxCoordSpec),
                     all_exprs_,
                     sort_collations_,
-                    sort_cmp_funs_);
+                    sort_cmp_funs_,
+                    is_old_unblock_mode_);
 
 int ObPxMSCoordOp::ObPxMSCoordOpEventListener::on_root_data_channel_setup()
 {
@@ -91,8 +92,6 @@ ObPxMSCoordOp::ObPxMSCoordOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOp
   init_channel_piece_msg_proc_(exec_ctx, msg_proc_),
   reporting_wf_piece_msg_proc_(exec_ctx, msg_proc_),
   opt_stats_gather_piece_msg_proc_(exec_ctx, msg_proc_),
-  sp_winfunc_px_piece_msg_proc_(exec_ctx, msg_proc_),
-  rd_winfunc_px_piece_msg_proc_(exec_ctx, msg_proc_),
   join_filter_count_row_piece_msg_proc_(exec_ctx, msg_proc_),
   store_rows_(),
   last_pop_row_(nullptr),
@@ -171,8 +170,6 @@ int ObPxMSCoordOp::setup_loop_proc()
       .register_processor(init_channel_piece_msg_proc_)
       .register_processor(reporting_wf_piece_msg_proc_)
       .register_processor(opt_stats_gather_piece_msg_proc_)
-      .register_processor(sp_winfunc_px_piece_msg_proc_)
-      .register_processor(rd_winfunc_px_piece_msg_proc_)
       .register_processor(join_filter_count_row_piece_msg_proc_)
       .register_interrupt_processor(interrupt_proc_);
   
@@ -228,13 +225,8 @@ int ObPxMSCoordOp::setup_readers()
       LOG_WARN("allocate memory failed", K(ret));
     } else {
       reader_cnt_ = task_channels_.count();
-      bool reorder_fixed_expr = true;
-      common::ObIAllocator *allocator = &ctx_.get_allocator();
       for (int64_t i = 0; i < reader_cnt_; i++) {
-        new (&readers_[i]) ObReceiveRowReader(get_spec().id_,
-              &(static_cast<const ObPxReceiveSpec &>(spec_).child_exprs_),
-              reorder_fixed_expr,
-              allocator);
+        new (&readers_[i]) ObReceiveRowReader();
       }
     }
   }
@@ -394,11 +386,19 @@ int ObPxMSCoordOp::inner_get_next_row()
         // if no data, then unblock blocked data channel, if not, dtl maybe hang
         // bug#28253162
         if (0 < row_heap_.capacity() && first_row_sent_) {
-          if (OB_FAIL(msg_loop_.unblock_channel(receive_order_.get_data_channel_start_idx(),
-                                                row_heap_.writable_channel_idx()))) {
-            LOG_WARN("failed to unblock channel", K(ret));
+          if (MY_SPEC.is_old_unblock_mode_) {
+            if (OB_FAIL(msg_loop_.unblock_channels(receive_order_.get_data_channel_start_idx()))) {
+              LOG_WARN("failed to unblock channels", K(ret));
+            } else {
+              LOG_DEBUG("debug old unblock_channels", K(ret));
+            }
           } else {
-            LOG_DEBUG("unblock writable channel", K(ret));
+            if (OB_FAIL(msg_loop_.unblock_channel(receive_order_.get_data_channel_start_idx(),
+                                                  row_heap_.writable_channel_idx()))) {
+              LOG_WARN("failed to unblock channels", K(ret));
+            } else {
+              LOG_DEBUG("debug old unblock_channel", K(ret));
+            }
           }
         }
       } else if (OB_ITER_END != ret) {

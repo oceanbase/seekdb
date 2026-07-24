@@ -18,9 +18,12 @@
 #define OBDEV_SRC_SQL_DAS_OB_DAS_TASK_H_
 #include "share/ob_define.h"
 #include "storage/tx/ob_trans_define.h"
+#include "rpc/frame/ob_result_code.h"
 #include "sql/das/ob_das_define.h"
 #include "storage/access/ob_dml_param.h"
+#include "sql/engine/basic/ob_chunk_datum_store.h"
 #include "lib/list/ob_obj_store.h"
+#include "rpc/frame/ob_req_packet_code.h"
 namespace oceanbase
 {
 namespace common
@@ -29,9 +32,14 @@ class ObNewRowIterator;
 }  // namespace common
 namespace sql
 {
+class ObDASTaskArg;
+class ObIDASTaskResult;
+class ObDASExtraData;
+class ObExprFrameInfo;
 class ObDASScanOp;
 class ObDASTaskFactory;
 class ObDasAggregatedTask;
+struct ObDASTCBInterruptInfo;
 
 typedef ObDLinkNode<ObIDASTaskOp*> DasTaskNode;
 typedef ObDList<DasTaskNode> DasTaskLinkedList;
@@ -76,26 +84,72 @@ public:
   bool use_specify_snapshot_;
   transaction::ObTxIsolationLevel isolation_level_;
   transaction::ObTxReadSnapshot *specify_snapshot_; // specify snapshot_version for task
-  transaction::ObTxReadSnapshot *response_snapshot_;
+  transaction::ObTxReadSnapshot *response_snapshot_; // remote or local obtained snapshot information
 };
 
-struct ObDASCopyContext
+struct ObDASRemoteInfo
 {
+  OB_UNIS_VERSION(1);
 public:
-  ObDASCopyContext() : ctdefs_(), rtdefs_() {}
-  OB_INLINE static ObDASCopyContext *&get_copy_context()
+  ObDASRemoteInfo()
+    : exec_ctx_(nullptr),
+      frame_info_(nullptr),
+      trans_desc_(nullptr),
+      snapshot_(),
+      ctdefs_(),
+      rtdefs_(),
+      flags_(0),
+      user_id_(0),
+      session_id_(0),
+      plan_id_(0),
+      plan_hash_(0),
+      tsc_monitor_info_(nullptr),
+      stmt_type_(0)
   {
-    RLOCAL_INLINE(ObDASCopyContext*, g_copy_context);
-    return g_copy_context;
+    sql_id_[0] = '\0';
   }
+  OB_INLINE static ObDASRemoteInfo *&get_remote_info()
+  {
+    RLOCAL_INLINE(ObDASRemoteInfo*, g_remote_info);
+    return g_remote_info;
+  }
+  TO_STRING_EMPTY();
+  ObExecContext *exec_ctx_;
+  const ObExprFrameInfo *frame_info_;
+  transaction::ObTxDesc *trans_desc_; // trans desc, transaction is global information, managed by the RPC framework, memory is not maintained here
+  transaction::ObTxReadSnapshot snapshot_; // Mvcc snapshot
   common::ObSEArray<const ObDASBaseCtDef*, 2> ctdefs_;
   common::ObSEArray<ObDASBaseRtDef*, 2> rtdefs_;
+  union {
+    uint64_t flags_;
+    struct {
+      uint64_t has_expr_                        : 1;
+      // expr should be calculated under the following case:
+      // 1. filter pushdown
+      // 2. generated column
+      uint64_t need_calc_expr_                  : 1;
+      uint64_t need_calc_udf_                   : 1;
+      uint64_t need_tx_                         : 1;
+      uint64_t need_subschema_ctx_              : 1;
+      uint64_t reserved_                        : 59;
+    };
+  };
+  char sql_id_[common::OB_MAX_SQL_ID_LENGTH + 1];
+  uint64_t user_id_;
+  uint64_t session_id_;
+  uint64_t plan_id_;
+  uint64_t plan_hash_;
+  ObTSCMonitorInfo *tsc_monitor_info_;
+  uint64_t stmt_type_;
 };
 
 class ObIDASTaskOp
 {
   friend class ObDataAccessService;
+  template<rpc::frame::ObReqPacketCode pcode>
+  friend class ObDASBaseAccessP;
   friend class ObDASRef;
+  friend class ObDataAccessService;
   friend class ObDASParallelHandler;
   OB_UNIS_VERSION_V(1);
 public:
@@ -116,6 +170,7 @@ public:
       das_task_node_(),
       agg_task_(nullptr),
       cur_agg_list_(nullptr),
+      op_result_(nullptr),
       attach_ctdef_(nullptr),
       attach_rtdef_(nullptr),
       das_snapshot_opt_info_(op_alloc),
@@ -139,7 +194,22 @@ public:
   // of DASTaskOp. It can only be touched through das_ref and data_access_service layer.
   const ObDASTabletLoc *get_tablet_loc() const { return tablet_loc_; }
   inline int64_t get_ref_table_id() const { return tablet_loc_->loc_meta_->ref_table_id_; }
+  virtual int decode_task_result(ObIDASTaskResult *task_result) = 0;
+  // Remote execution fills the first RPC result, and returns whether there are remaining RPC results
+  virtual int fill_task_result(ObIDASTaskResult &task_result,
+                               bool &has_more, int64_t &memory_limit)
+  {
+    UNUSED(task_result);
+    UNUSED(has_more);
+    UNUSED(memory_limit);
+    return OB_NOT_IMPLEMENT;
+  }
+  virtual int fill_extra_result(const ObDASTCBInterruptInfo &interrupt_info)
+  {
+    return common::OB_NOT_IMPLEMENT;
+  }
   virtual int init_task_info(uint32_t row_extend_size) = 0;
+  virtual int swizzling_remote_task(ObDASRemoteInfo *remote_info);
   virtual const ObDASBaseCtDef *get_ctdef() const { return nullptr; }
   virtual ObDASBaseRtDef *get_rtdef() { return nullptr; }
   virtual void reset_access_datums_ptr() { }
@@ -163,6 +233,7 @@ public:
                        K_(task_started),
                        K_(in_part_retry),
                        K_(in_stmt_retry),
+                       K_(need_switch_param),
                        KPC_(trans_desc),
                        KPC_(snapshot),
                        K_(tablet_id),
@@ -198,10 +269,13 @@ public:
     OB_ASSERT(agg_task_ == nullptr);
     agg_task_ = agg_task;
   };
-  // Not thread safe. State advances only on the task's scheduling thread.
+  // NOT THREAD SAFE. We only advance state on das controller.
   int state_advance();
   void set_cur_agg_list(DasTaskLinkedList *list) { cur_agg_list_ = list; };
   DasTaskLinkedList *get_cur_agg_list() { return cur_agg_list_; };
+
+  ObIDASTaskResult *get_op_result() const { return op_result_; }
+  void set_op_result(ObIDASTaskResult *op_result) { op_result_ = op_result; }
 
   bool get_inner_rescan()          { return inner_rescan_; }
   void set_inner_rescan(bool flag) { inner_rescan_ = flag; }
@@ -216,7 +290,7 @@ protected:
 
 public:
   int errcode_; //don't need serialize it
-  transaction::ObTxDesc *trans_desc_; // transaction state is owned by the SQL session
+  transaction::ObTxDesc *trans_desc_; // trans desc, transaction is global information, managed by the RPC framework, memory is not maintained here
   transaction::ObTxReadSnapshot *snapshot_; // Mvcc snapshot
 
 protected:
@@ -236,9 +310,10 @@ protected:
       uint16_t task_started_     : 1;
       uint16_t in_part_retry_    : 1;
       uint16_t in_stmt_retry_    : 1;
+      uint16_t need_switch_param_ : 1; //need to switch param in gi table rescan, this parameter has been deprecated
       uint16_t inner_rescan_ : 1; //disable das retry for inner_rescan
       uint16_t write_buff_full_  : 1;
-      uint16_t status_reserved_  : 11;
+      uint16_t status_reserved_  : 10;
     };
   };
   int16_t write_branch_id_;  // branch id for parallel write, required for partially rollback
@@ -263,6 +338,7 @@ protected:
   DasTaskNode das_task_node_;  // tasks's linked list node, do not serialize
   ObDasAggregatedTask *agg_task_;  //task's agg task, do not serialize
   DasTaskLinkedList *cur_agg_list_;  //task's agg_list, do not serialize
+  ObIDASTaskResult *op_result_;
   //The attach_ctdef describes the computations that are pushed down and executed as an attachment to the ObDASTaskOp,
   //such as the back table operation for full-text indexes,
   //rowkey merging for index merge operations, and so on.
@@ -276,6 +352,26 @@ public:
 };
 typedef common::ObObjStore<ObIDASTaskOp*, common::ObIAllocator&> DasTaskList;
 typedef DasTaskList::Iterator DASTaskIter;
+
+class ObIDASTaskResult
+{
+  OB_UNIS_VERSION_V(1);
+public:
+  ObIDASTaskResult() : task_id_(0) { }
+  virtual ~ObIDASTaskResult() { }
+  virtual int init(const ObIDASTaskOp &task_op, common::ObIAllocator &alloc) = 0;
+  virtual int reuse() = 0;
+  virtual int link_extra_result(ObDASExtraData &extra_result, ObIDASTaskOp *task_op)
+  {
+    UNUSED(extra_result);
+    return common::OB_NOT_IMPLEMENT;
+  }
+  void set_task_id(int64_t task_id) { task_id_ = task_id; }
+  int64_t get_task_id() { return task_id_; }
+  VIRTUAL_TO_STRING_KV(K_(task_id));
+protected:
+  int64_t task_id_; // DAS Task ID number, the ID on each server in the DAS layer is incrementing and unique
+};
 
 class DASOpResultIter
 {
@@ -291,8 +387,11 @@ public:
     const ObExprPtrIArray *exprs_;
     ObEvalCtx &eval_ctx_;
     int64_t max_output_rows_;
-    // A global index scan and its lookup can share expressions. Associate the
-    // two iterators so resetting either side also restores the shared datums.
+    //global index scan and its lookup maybe share some expr,
+    //so remote lookup task change its datum ptr,
+    //and also lead index scan touch the wild datum ptr
+    //so need to associate the result iterator of scan and lookup
+    //resetting the index scan result datum ptr will also reset the lookup result datum ptr
     DASOpResultIter *lookup_iter_;
   };
 public:
@@ -317,21 +416,90 @@ private:
   WildDatumPtrInfo *wild_datum_info_;
 };
 
+class ObDASTaskArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObDASTaskArg();
+  ~ObDASTaskArg() { }
+
+  ObIDASTaskOp *get_task_op();
+  const common::ObSEArray<ObIDASTaskOp*, 2> &get_task_ops() const { return task_ops_; };
+  common::ObSEArray<ObIDASTaskOp*, 2> &get_task_ops() { return task_ops_; };
+  void set_remote_info(ObDASRemoteInfo *remote_info) { remote_info_ = remote_info; }
+  ObDASRemoteInfo *get_remote_info() { return remote_info_; }
+  common::ObAddr &get_runner_svr() { return runner_svr_; }
+  common::ObAddr &get_ctrl_svr() { return ctrl_svr_; }
+  void set_ctrl_svr(const common::ObAddr &ctrl_svr) { ctrl_svr_ = ctrl_svr; }
+  bool is_local_task() const { return ctrl_svr_ == runner_svr_; }
+  void set_timeout_ts(int64_t ts) { timeout_ts_ = ts; }
+  int64_t get_timeout_ts() const { return timeout_ts_; }
+  TO_STRING_KV(K_(timeout_ts),
+               K_(ctrl_svr),
+               K_(runner_svr),
+               K_(task_ops),
+               KPC_(remote_info));
+private:
+  int64_t timeout_ts_;
+  common::ObAddr ctrl_svr_; // DAS Task control server address
+  common::ObAddr runner_svr_; // DAS Task execution endpoint address
+  common::ObSEArray<ObIDASTaskOp*, 2> task_ops_; // corresponds to the parameter information of the operation, this is an interface class, the specific definition is provided by DML Service
+  ObDASRemoteInfo *remote_info_;
+};
+
+class ObDASTaskResp
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObDASTaskResp();
+  int add_op_result(ObIDASTaskResult *op_result);
+  const common::ObSEArray<ObIDASTaskResult*, 2> &get_op_results() const { return op_results_; };
+  common::ObSEArray<ObIDASTaskResult*, 2> &get_op_results() { return op_results_; };
+  void set_err_code(int err_code) { rcode_.rcode_ = err_code; }
+  int get_err_code() const { return rcode_.rcode_; }
+  const rpc::frame::ObResultCode &get_rcode() const { return rcode_; }
+  void store_err_msg(const common::ObString &msg);
+  const char *get_err_msg() const { return rcode_.msg_; }
+  int store_warning_msg(const common::ObWarningBuffer &wb);
+  void set_has_more(bool has_more) { has_more_ = has_more; }
+  bool has_more() const { return has_more_; }
+  void set_ctrl_svr(const common::ObAddr &ctrl_svr) { ctrl_svr_ = ctrl_svr; }
+  void set_runner_svr(const common::ObAddr &runner_svr) { runner_svr_ = runner_svr; }
+  common::ObAddr get_runner_svr() const { return runner_svr_; }
+  transaction::ObTxExecResult &get_trans_result() { return trans_result_; }
+  const transaction::ObTxExecResult &get_trans_result() const { return trans_result_; }
+  void set_das_factory(ObDASTaskFactory *das_factory) { das_factory_ = das_factory; };
+  TO_STRING_KV(K_(has_more),
+               K_(ctrl_svr),
+               K_(runner_svr),
+               K_(op_results),
+               K_(rcode),
+               K_(trans_result));
+private:
+  bool has_more_; // There are other response messages that need to be received through the DTL channel
+  common::ObAddr ctrl_svr_; // DAS Task control server address
+  common::ObAddr runner_svr_; // DAS Task execution endpoint address
+  common::ObSEArray<ObIDASTaskResult*, 2> op_results_;  // Corresponding operation result information, this is an interface class, the specific definition is parsed by DML Service
+  rpc::frame::ObResultCode rcode_; // returned error information
+  transaction::ObTxExecResult trans_result_;
+  ObDASTaskFactory *das_factory_;  // no need to serialize
+};
+
 template <typename T>
-struct DASCtRefEncoder
+struct DASCtEncoder
 {
   static int encode(char *buf, const int64_t buf_len, int64_t &pos, const T *val)
   {
     int ret = common::OB_SUCCESS;
     int64_t idx = common::OB_INVALID_INDEX;
     const ObDASBaseCtDef *ctdef = val;
-    ObDASCopyContext *copy_context = ObDASCopyContext::get_copy_context();
-    if (OB_ISNULL(copy_context)) {
+    ObDASRemoteInfo *remote_info = ObDASRemoteInfo::get_remote_info();
+    if (OB_ISNULL(remote_info)) {
       ret = common::OB_ERR_UNEXPECTED;
-      SQL_DAS_LOG(WARN, "copy context is nullptr", K(ret));
+      SQL_DAS_LOG(WARN, "val is nullptr", K(ret), K(remote_info));
     } else if (OB_ISNULL(val)) {
       idx = common::OB_INVALID_INDEX;
-    } else if (!common::has_exist_in_array(copy_context->ctdefs_, ctdef, &idx)) {
+    } else if (!common::has_exist_in_array(remote_info->ctdefs_, ctdef, &idx)) {
       ret = common::OB_ERR_UNEXPECTED;
       SQL_DAS_LOG(WARN, "val not found in ctdefs", K(ret), K(val), KPC(val));
     }
@@ -347,19 +515,19 @@ struct DASCtRefEncoder
   {
     int ret = common::OB_SUCCESS;
     int32_t idx = common::OB_INVALID_INDEX;
-    ObDASCopyContext *copy_context = ObDASCopyContext::get_copy_context();
-    if (OB_ISNULL(copy_context)) {
+    ObDASRemoteInfo *remote_info = ObDASRemoteInfo::get_remote_info();
+    if (OB_ISNULL(remote_info)) {
       ret = common::OB_ERR_UNEXPECTED;
-      SQL_DAS_LOG(WARN, "copy context is nullptr", K(ret));
+      SQL_DAS_LOG(WARN, "remote_info is nullptr", K(ret), K(remote_info));
     } else if (OB_FAIL(common::serialization::decode_i32(buf, data_len, pos, &idx))) {
       SQL_DAS_LOG(WARN, "decode idx failed", K(ret), K(idx));
     } else if (OB_UNLIKELY(common::OB_INVALID_INDEX == idx)) {
       val = nullptr;
-    } else if (OB_UNLIKELY(idx < 0) || OB_UNLIKELY(idx >= copy_context->ctdefs_.count())) {
+    } else if (OB_UNLIKELY(idx < 0) || OB_UNLIKELY(idx >= remote_info->ctdefs_.count())) {
       ret = common::OB_ERR_UNEXPECTED;
-      SQL_DAS_LOG(WARN, "idx is invalid", K(ret), K(idx), K(copy_context->ctdefs_.count()));
+      SQL_DAS_LOG(WARN, "idx is invalid", K(ret), K(idx), K(remote_info->ctdefs_.count()));
     } else {
-      val = static_cast<const T *>(copy_context->ctdefs_.at(idx));
+      val = static_cast<const T *>(remote_info->ctdefs_.at(idx));
     }
     return ret;
   }
@@ -373,20 +541,20 @@ struct DASCtRefEncoder
 };
 
 template <typename T>
-struct DASRtRefEncoder
+struct DASRtEncoder
 {
   static int encode(char *buf, const int64_t buf_len, int64_t &pos, const T *val)
   {
     int ret = common::OB_SUCCESS;
     int64_t idx = common::OB_INVALID_INDEX;
     ObDASBaseRtDef *rtdef = const_cast<T*>(val);
-    ObDASCopyContext *copy_context = ObDASCopyContext::get_copy_context();
-    if (OB_ISNULL(copy_context)) {
+    ObDASRemoteInfo *remote_info = ObDASRemoteInfo::get_remote_info();
+    if (OB_ISNULL(remote_info)) {
       ret = common::OB_ERR_UNEXPECTED;
-      SQL_DAS_LOG(WARN, "copy context is nullptr", K(ret), K(val));
+      SQL_DAS_LOG(WARN, "val is nullptr", K(ret), K(val), K(remote_info));
     } else if (OB_ISNULL(val)) {
       idx = common::OB_INVALID_INDEX;
-    } else if (!common::has_exist_in_array(copy_context->rtdefs_, rtdef, &idx)) {
+    } else if (!common::has_exist_in_array(remote_info->rtdefs_, rtdef, &idx)) {
       ret = common::OB_ERR_UNEXPECTED;
       SQL_DAS_LOG(WARN, "val not found in rtdefs", K(ret), K(val), KPC(val));
     }
@@ -402,19 +570,19 @@ struct DASRtRefEncoder
   {
     int ret = common::OB_SUCCESS;
     int32_t idx = 0;
-    ObDASCopyContext *copy_context = ObDASCopyContext::get_copy_context();
-    if (OB_ISNULL(copy_context)) {
+    ObDASRemoteInfo *remote_info = ObDASRemoteInfo::get_remote_info();
+    if (OB_ISNULL(remote_info)) {
       ret = common::OB_ERR_UNEXPECTED;
-      SQL_DAS_LOG(WARN, "copy context is nullptr", K(ret));
+      SQL_DAS_LOG(WARN, "remote_info is nullptr", K(ret), K(remote_info));
     } else if (OB_FAIL(common::serialization::decode_i32(buf, data_len, pos, &idx))) {
       SQL_DAS_LOG(WARN, "decode idx failed", K(ret), K(idx));
     } else if (OB_UNLIKELY(common::OB_INVALID_INDEX == idx)) {
       val = nullptr;
-    } else if (OB_UNLIKELY(idx < 0) || OB_UNLIKELY(idx >= copy_context->rtdefs_.count())) {
+    } else if (OB_UNLIKELY(idx < 0) || OB_UNLIKELY(idx >= remote_info->rtdefs_.count())) {
       ret = common::OB_ERR_UNEXPECTED;
-      SQL_DAS_LOG(WARN, "idx is invalid", K(ret), K(idx), K(copy_context->rtdefs_.count()));
+      SQL_DAS_LOG(WARN, "idx is invalid", K(ret), K(idx), K(remote_info->rtdefs_.count()));
     } else {
-      val = static_cast<T *>(copy_context->rtdefs_.at(idx));
+      val = static_cast<T *>(remote_info->rtdefs_.at(idx));
     }
     return ret;
   }
@@ -427,6 +595,61 @@ struct DASRtRefEncoder
   }
 };
 
+class ObDASDataFetchReq
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObDASDataFetchReq() : task_id_(0) {}
+  ~ObDASDataFetchReq() {}
+  int init(const int64_t task_id);
+public:
+  
+  int64_t get_task_id() { return task_id_; }
+  TO_STRING_KV(K_(task_id));
+private:
+  int64_t task_id_;
+};
+
+class ObDASDataFetchRes
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObDASDataFetchRes();
+  ~ObDASDataFetchRes() { datum_store_.reset(); };
+  int init(const int64_t task_id);
+public:
+  ObChunkDatumStore &get_datum_store() { return datum_store_; }
+  void set_has_more(const bool has_more) { has_more_ = has_more; }
+  bool has_more() { return has_more_; }
+  int64_t get_task_id() const { return task_id_; }
+  TO_STRING_KV(K_(task_id), K_(has_more), K_(datum_store),
+               K_(io_read_bytes), K_(ssstore_read_bytes),
+               K_(ssstore_read_row_cnt), K_(memstore_read_row_cnt));
+private:
+  ObChunkDatumStore datum_store_;
+  int64_t task_id_;
+  bool has_more_;
+public:
+  int64_t io_read_bytes_;
+  int64_t ssstore_read_bytes_;
+  int64_t ssstore_read_row_cnt_;
+  int64_t memstore_read_row_cnt_;
+};
+
+class ObDASDataEraseReq
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObDASDataEraseReq() : task_id_(0) {}
+  ~ObDASDataEraseReq() {}
+  int init(const int64_t task_id);
+public:
+  
+  int64_t get_task_id() { return task_id_; }
+  TO_STRING_KV(K_(task_id));
+private:
+  int64_t task_id_;
+};
 }  // namespace sql
 }  // namespace oceanbase
 #endif /* OBDEV_SRC_SQL_DAS_OB_DAS_TASK_H_ */

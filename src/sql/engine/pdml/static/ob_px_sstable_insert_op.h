@@ -28,7 +28,6 @@ struct ObInsertMonitor;
 struct ObTabletSliceParam;
 class ObDDLInsertDag;
 class ObISliceWriter;
-class ObHeapBatchSliceWriter;
 struct ObDDLAutoincParam;
 }
 
@@ -49,17 +48,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObPxMultiPartSSTableInsertOpInput);
 };
 
-class ObPxMultiPartSSTableInsertVecOpInput : public ObPxMultiPartSSTableInsertOpInput
-{
-  OB_UNIS_VERSION_V(1);
-public:
-  ObPxMultiPartSSTableInsertVecOpInput(ObExecContext &ctx, const ObOpSpec &spec)
-    : ObPxMultiPartSSTableInsertOpInput(ctx, spec)
-  {}
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObPxMultiPartSSTableInsertVecOpInput);
-};
-
 class ObPxMultiPartSSTableInsertSpec : public ObPxMultiPartInsertSpec
 {
   OB_UNIS_VERSION_V(1);
@@ -74,17 +62,6 @@ public:
   bool regenerate_heap_table_pk_;
   int64_t ddl_slice_id_idx_; // record idx of exprs for ddl slice id
   DISALLOW_COPY_AND_ASSIGN(ObPxMultiPartSSTableInsertSpec);
-};
-
-class ObPxMultiPartSSTableInsertVecSpec : public ObPxMultiPartSSTableInsertSpec
-{
-  OB_UNIS_VERSION_V(1);
-public:
-  ObPxMultiPartSSTableInsertVecSpec(common::ObIAllocator &alloc, const ObPhyOperatorType type)
-    : ObPxMultiPartSSTableInsertSpec(alloc, type)
-  {}
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObPxMultiPartSSTableInsertVecSpec);
 };
 
 class ObPxMultiPartSSTableInsertOp : public ObPxMultiPartInsertOp
@@ -114,20 +91,16 @@ public:
   virtual void destroy() override;
 protected:
   int get_next_row_from_child(ObInsertMonitor *insert_monitor);
-  int get_next_batch_from_child(const int64_t max_batch_size, const ObBatchRows *&brs, ObInsertMonitor *insert_monitor);
   int get_tablet_info_from_row(
       const ObExprPtrIArray &row,
       common::ObTabletID &tablet_id,
       storage::ObTabletSliceParam *tablet_slice_param = nullptr);
   int eval_current_row(const int64_t rowkey_column_count, blocksstable::ObDatumRow &current_row);
   int eval_current_row(ObIArray<ObDatum *> &datums);
-  int eval_current_batch(ObIArray<ObIVector *> &vectors, const ObBatchRows &brs);
   int sync_table_level_autoinc_value();
   bool is_heap_plan() const { return MY_SPEC.regenerate_heap_table_pk_ || is_vec_gen_vid_; }
   int write_heap_slice_by_row();
-  int write_heap_slice_by_batch();
   int write_ordered_slice_by_row();
-  int write_ordered_slice_by_batch();
   int finish_dag();
   bool need_autoinc_by_row();
   int get_data_tablet_id(const ObTabletID &tablet_id, ObTabletID &data_tablet_id);
@@ -137,12 +110,8 @@ protected:
   int locate_exprs();
   int check_need_idempotence();
   int get_or_create_heap_writer(const ObTabletID &tablet_id, ObISliceWriter *&slice_writer);
-  int generate_tablet_active_rows(const ObIVector *tablet_id_vector, const ObBatchRows &brs,
-                                  hash::ObHashMap<ObTabletID, ObHeapBatchSliceWriter *, hash::NoPthreadDefendMode> &slice_writer_map);
-  int switch_slice_if_need(const ObTabletID &tablet_id, const int64_t slice_idx, const bool is_append_batch,
+  int switch_slice_if_need(const ObTabletID &tablet_id, const int64_t slice_idx,
                            ObISliceWriter *&slice_writer, ObDDLAutoincParam *autoinc_param = nullptr);
-  int get_continue_slice(const ObIVector *tablet_id_vector, const ObIVector *slice_info_vector_, const ObBatchRows &brs,
-                         ObTabletID &tablet_id, int64_t &slice_idx, int64_t &offset, int64_t &row_count);
   
 protected:
   static const uint64_t MAP_HASH_BUCKET_NUM = 1543L;
@@ -165,19 +134,6 @@ protected:
   bool need_idempotent_table_autoinc_;
   bool need_idempotent_doc_id_;
   DISALLOW_COPY_AND_ASSIGN(ObPxMultiPartSSTableInsertOp);
-};
-
-class ObPxMultiPartSSTableInsertVecOp : public ObPxMultiPartSSTableInsertOp
-{
-public:
-  ObPxMultiPartSSTableInsertVecOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOpInput *input)
-    : ObPxMultiPartSSTableInsertOp(exec_ctx, spec, input)
-  {}
-
-  virtual int inner_get_next_batch(const int64_t max_row_cnt) override;
-
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObPxMultiPartSSTableInsertVecOp);
 };
 
 }// end namespace sql

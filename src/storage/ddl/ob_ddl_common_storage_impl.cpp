@@ -25,12 +25,18 @@
 #include "share/ob_ddl_checksum.h"
 #include "share/ob_ddl_sim_point.h"
 #include "common/object/ob_object.h"
+#include "share/compaction/ob_shared_storage_compaction_util.h"
 #include "share/tablet/ob_tablet_table_operator.h"
-#include "share/storage/ob_tablet_local_checksum_table_storage.h"
+#include "share/storage/ob_tablet_replica_checksum_table_storage.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
 #include "storage/ddl/ob_ddl_macro_block_writer.h"
 #include "storage/ddl/ob_lob_macro_block_writer.h"
+#include "sql/engine/vector/ob_continuous_base.h"
+#include "sql/engine/vector/ob_discrete_format.h"
+#include "sql/engine/vector/ob_fixed_length_base.h"
+#include "sql/engine/vector/ob_uniform_base.h"
+#include "sql/engine/vector/type_traits.h"
 
 #include "sql/das/ob_das_utils.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
@@ -47,11 +53,6 @@ using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::obcall;
 using namespace oceanbase::sql;
-
-namespace
-{
-constexpr int64_t MACRO_STEP_SIZE = 0x1 << 25;
-}
 
 // lob-column handling free function(moved together from share/ob_ddl_common.cpp;must be defined before use)
 OB_INLINE int check_lob_column_inrow(
@@ -172,23 +173,16 @@ int ObDDLUtil::report_ddl_checksum_from_major_sstable(
       const uint64_t target_table_id,
       const int64_t execution_id,
       const int64_t ddl_task_id,
-      const int64_t data_format_version)
+      const int64_t tenant_data_version)
 {
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
-  ObLSService *ls_service = share::g_mp->ls_service();
   ObTabletHandle tablet_handle;
-  if (OB_UNLIKELY(!tablet_id.is_valid() || OB_INVALID_ID == target_table_id || execution_id < 0 || ddl_task_id < 0 || data_format_version < 0)) {
+  if (OB_UNLIKELY(!tablet_id.is_valid() || OB_INVALID_ID == target_table_id || execution_id < 0 || ddl_task_id < 0 || tenant_data_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id), K(target_table_id), K(execution_id), K(ddl_task_id), K(data_format_version));
-  } else if (OB_ISNULL(ls_service)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls service is null", K(ret));
-  } else if (OB_FAIL(ls_service->get_ls(ls))) {
-    LOG_WARN("get local ls failed", K(ret));
-  } else if (OB_ISNULL(ls)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("local ls is null", K(ret));
+    LOG_WARN("invalid argument", K(ret), K(tablet_id), K(target_table_id), K(execution_id), K(ddl_task_id), K(tenant_data_version));
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+    LOG_WARN("get ls failed", K(ret));
   } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls, tablet_id, tablet_handle))) {
     LOG_WARN("fail to get tablet handle", K(ret), K(tablet_id));
   } else {
@@ -199,8 +193,8 @@ int ObDDLUtil::report_ddl_checksum_from_major_sstable(
     } else if (OB_ISNULL(first_major_sstable = static_cast<ObSSTable *>(table_store_wrapper.get_member()->get_major_sstables().get_boundary_table(false/*first*/)))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("no major after wait merge success", K(ret), K(tablet_id));
-    } else if (OB_FAIL(report_ddl_sstable_checksum(tablet_id, target_table_id, execution_id, ddl_task_id, data_format_version, tablet_handle, first_major_sstable))) {
-      LOG_WARN("report ddl sstable checksum failed", K(ret), K(tablet_id), K(target_table_id), K(execution_id), K(ddl_task_id), K(data_format_version));
+    } else if (OB_FAIL(report_ddl_sstable_checksum(tablet_id, target_table_id, execution_id, ddl_task_id, tenant_data_version, tablet_handle, first_major_sstable))) {
+      LOG_WARN("report ddl sstable checksum failed", K(ret), K(tablet_id), K(target_table_id), K(execution_id), K(ddl_task_id), K(tenant_data_version));
     }
   }
   return ret;
@@ -211,17 +205,17 @@ int ObDDLUtil::report_ddl_sstable_checksum(
       const uint64_t target_table_id,
       const int64_t execution_id,
       const int64_t ddl_task_id,
-      const int64_t data_format_version,
+      const int64_t tenant_data_version,
       ObTabletHandle &tablet_handle,
       ObSSTable *first_major_sstable)
 {
   int ret = OB_SUCCESS;
   ObSSTableMetaHandle sst_meta_hdl;
   if (OB_UNLIKELY(!tablet_id.is_valid() || OB_INVALID_ID == target_table_id ||
-                   execution_id < 0 || ddl_task_id < 0 || data_format_version < 0 || nullptr == first_major_sstable ||
+                   execution_id < 0 || ddl_task_id < 0 || tenant_data_version < 0 || nullptr == first_major_sstable ||
                    !tablet_handle.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id), K(target_table_id), K(execution_id), K(ddl_task_id), K(data_format_version), KPC(first_major_sstable), K(tablet_handle));
+    LOG_WARN("invalid argument", K(ret), K(tablet_id), K(target_table_id), K(execution_id), K(ddl_task_id), K(tenant_data_version), KPC(first_major_sstable), K(tablet_handle));
   } else if (OB_FAIL(first_major_sstable->get_meta(sst_meta_hdl))) {
     LOG_WARN("fail to get sstable meta handle", K(ret));
   } else {
@@ -234,7 +228,7 @@ int ObDDLUtil::report_ddl_sstable_checksum(
                                                       ddl_task_id,
                                                       column_checksums,
                                                       column_count,
-                                                      data_format_version))) {
+                                                      tenant_data_version))) {
         LOG_WARN("report ddl column checksum failed", K(ret), K(tablet_id), K(ddl_task_id));
       } else {
         break;
@@ -748,7 +742,8 @@ int ObDDLUtil::fill_writer_param(
     const ObDDLTaskParam &ddl_task_param = dag->get_ddl_task_param();
     param.tablet_id_ = tablet_id;
     param.lob_meta_tablet_id_ = tablet_context->lob_meta_tablet_id_;
-    param.data_format_version_ = ddl_task_param.data_format_version_;
+    param.tenant_data_version_ = ddl_task_param.tenant_data_version_;
+    param.is_no_logging_ = ddl_task_param.is_no_logging_;
     param.schema_version_ = ddl_task_param.schema_version_;
     param.slice_idx_ = slice_idx;
     param.slice_count_ = tablet_context->slice_count_;
@@ -900,7 +895,7 @@ int ObDDLUtil::set_tablet_autoinc_seq(const ObTabletID &tablet_id, const int64_t
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_id), K(seq_value));
   } else {
-    ObTabletAutoincSeqCopyParam tablet_autoinc_param;
+    ObMigrateTabletAutoincSeqParam tablet_autoinc_param;
     obcall::ObBatchSetTabletAutoincSeqArg arg;
     obcall::ObBatchSetTabletAutoincSeqRes res;
     tablet_autoinc_param.src_tablet_id_ = tablet_id;
@@ -1096,7 +1091,7 @@ int ObDDLStorageUtil::init_macro_block_seq(const int64_t parallel_idx, blockssta
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(parallel_idx));
   } else {
-    start_seq.macro_data_seq_ = parallel_idx * MACRO_STEP_SIZE;
+    start_seq.macro_data_seq_ = parallel_idx * compaction::MACRO_STEP_SIZE;
   }
   return ret;
 }
@@ -1104,7 +1099,7 @@ int ObDDLStorageUtil::init_macro_block_seq(const int64_t parallel_idx, blockssta
 int64_t ObDDLStorageUtil::get_parallel_idx(const blocksstable::ObMacroDataSeq &start_seq)
 {
   int64_t parallel_idx = start_seq.get_parallel_idx();
-  parallel_idx = start_seq.macro_data_seq_ / MACRO_STEP_SIZE;
+  parallel_idx = start_seq.macro_data_seq_ / compaction::MACRO_STEP_SIZE;
   return parallel_idx;
 }
 

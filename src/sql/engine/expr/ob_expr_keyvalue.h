@@ -38,10 +38,6 @@ public:
                       ObExpr &rt_expr) const override;
   static int calc_key_value_expr(const ObExpr &expr, ObEvalCtx &ctx,
                                         ObDatum &res);
-  static int calc_key_value_expr_vector(const ObExpr &expr,
-                                      ObEvalCtx &ctx,
-                                      const ObBitVector &skip,
-                                      const EvalBound &bound);
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprKeyValue);

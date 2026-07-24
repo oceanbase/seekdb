@@ -53,39 +53,6 @@ public:
                             const ObBitVector &skip,
                             const int64_t batch_size);
 
-  template <typename LeftVec, typename ResVec>
-  static int inner_calc_round_expr_numeric1_vector(const ObExpr &expr,
-                             ObEvalCtx &ctx,
-                             const ObBitVector &skip,
-                             const EvalBound &bound);
-
-  template <typename LeftVec, typename ResVec>
-  static int inner_calc_round_expr_numeric2_vector(const ObExpr &expr,
-                             ObEvalCtx &ctx,
-                             const ObBitVector &skip,
-                             const EvalBound &bound);
-
-  template <typename LeftVec, typename ResVec>
-  static int inner_calc_round_expr_datetime1_vector(const ObExpr &expr,
-                             ObEvalCtx &ctx,
-                             const ObBitVector &skip,
-                             const EvalBound &bound);
-                             
-  static int calc_round_expr_numeric1_vector(const ObExpr &expr,
-                             ObEvalCtx &ctx,
-                             const ObBitVector &skip,
-                             const EvalBound &bound);
-
-  static int calc_round_expr_numeric2_vector(const ObExpr &expr,
-                             ObEvalCtx &ctx,
-                             const ObBitVector &skip,
-                             const EvalBound &bound);
-
-  static int calc_round_expr_datetime1_vector(const ObExpr &expr,
-                             ObEvalCtx &ctx,
-                             const ObBitVector &skip,
-                             const EvalBound &bound);
-
   static int do_round_decimalint(
       const int16_t in_prec, const int16_t in_scale,
       const int16_t out_prec, const int16_t out_scale, const int64_t round_scale,

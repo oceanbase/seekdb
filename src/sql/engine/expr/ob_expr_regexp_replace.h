@@ -42,22 +42,8 @@ public:
                                             const common::ObIArray<ObRawExpr *> &exprs,
                                             bool &is_valid) const override;
   static int eval_regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int eval_regexp_replace_vector(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
-                                        const EvalBound &bound);
 
 private:
-  template <typename TextVec, typename ResVec>
-  static int vector_regexp_replace_convert(const ObExpr &expr, ObEvalCtx &ctx,
-                                           const ObBitVector &skip, const EvalBound &bound,
-                                           ObString res_replace, bool is_no_pattern_to_replace,
-                                           ObCollationType res_coll_type,
-                                           ObExprStrResAlloc &out_alloc, ObIAllocator &tmp_alloc,
-                                           const int64_t idx);
-
-  template <typename TextVec, typename ResVec>
-  static int vector_regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
-                                   const EvalBound &bound);
-
   template<typename RegExpCtx>
   static int regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
   DISALLOW_COPY_AND_ASSIGN(ObExprRegexpReplace);

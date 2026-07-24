@@ -25,7 +25,7 @@
 #include "sql/engine/basic/ob_chunk_datum_store.h"
 #include "lib/allocator/ob_allocator.h"
 #include "sql/engine/basic/ob_temp_column_store.h"
-#include "sql/engine/ob_sql_memory_manager.h"
+#include "sql/engine/ob_tenant_sql_memory_manager.h"
 #include "src/sql/engine/ob_sql_mem_mgr_processor.h"
 
 namespace oceanbase
@@ -100,8 +100,8 @@ public:
       mutex_(common::ObLatchIds::SQL_MEMORY_MGR_MUTEX_LOCK) {}
   ~ObDTLMemProfileInfo() {}
 
-  // Local producer and consumer workers may modify intermediate results concurrently,
-  // and those results may be linked to the same profile.
+  // The local channel and the rpc channel may modify the interm results concurrently,
+  // and these interm results may be linked to the same profile.
   // Therefore, access to the profile needs to be protected by locks
   // to prevent concurrent modification issues.
   void alloc(int64_t size)
@@ -174,29 +174,17 @@ struct ObDTLIntermResultInfo
 {
   friend class ObDTLIntermResultManager;
   ObDTLIntermResultInfo()
-      : datum_store_(NULL), block_store_(NULL), ret_(common::OB_SUCCESS),
+      : datum_store_(NULL), ret_(common::OB_SUCCESS),
       is_read_(false), is_eof_(false), ref_count_(0),
       trace_id_(), dump_time_(0), dump_cost_(0),
-      store_type_(StoreType::INVALID), mem_profile_key_()
+      mem_profile_key_()
   {}
   ~ObDTLIntermResultInfo() {}
 
-  enum class StoreType {
-    INVALID,
-    DATUM, // interm_res
-    ROW, // interm_res
-    COLUMN // temp_table
-  };
-
-  bool is_store_valid() const { return is_rich_format() ? NULL != block_store_ : NULL != datum_store_; }
-  void reset() { datum_store_ = NULL; block_store_ = NULL; is_read_ = false; ret_ = common::OB_SUCCESS; }
+  bool is_store_valid() const { return NULL != datum_store_; }
+  void reset() { datum_store_ = NULL; is_read_ = false; ret_ = common::OB_SUCCESS; }
   void set_eof(bool flag) { is_eof_ = flag; }
   int64_t get_ref_count() { return ATOMIC_LOAD(&ref_count_); }
-  
-  sql::ObTempRowStore *get_row_store() { return static_cast<sql::ObTempRowStore *>(block_store_); }
-  sql::ObTempColumnStore *get_column_store() { return static_cast<sql::ObTempColumnStore *>(block_store_); }
-  bool is_rich_format() const { return store_type_ != ObDTLIntermResultInfo::StoreType::INVALID &&
-                                       store_type_ != ObDTLIntermResultInfo::StoreType::DATUM; }
 private:
   void inc_ref_count() { ATOMIC_INC(&ref_count_); }
   int64_t dec_ref_count() { return ATOMIC_SAF(&ref_count_, 1); }
@@ -208,12 +196,10 @@ public:
     K_(ref_count),
     K_(dump_cost),
     K_(monitor_info),
-    K_(store_type),
     K_(mem_profile_key)
   );
 
   sql::ObChunkDatumStore *datum_store_;
-  sql::ObTempBlockStore *block_store_;
   int ret_;
   bool is_read_;
   bool is_eof_;
@@ -222,7 +208,6 @@ public:
   int64_t dump_time_;
   int64_t dump_cost_;
   ObDTLIntermResultMonitorInfo monitor_info_;
-  StoreType store_type_;
   ObDTLMemProfileKey mem_profile_key_;
 };
 
@@ -241,22 +226,17 @@ private:
   ObDTLIntermResultManager *interm_res_manager_;
 };
 
-// helper macro to dispatch action to datum_store_ / block_store_
 #define DTL_IR_STORE_DO(ir, act, ...) \
-    ((ir).is_rich_format() ? ((ir).block_store_->act(__VA_ARGS__)) : \
-      ((ir).datum_store_->act(__VA_ARGS__)))
+    ((ir).datum_store_->act(__VA_ARGS__))
 
 #define DTL_IR_STORE_DO_APPEND_BLOCK(ir, buf, size, need_swizzling) \
-    ((ir).is_rich_format() ? ((ir).block_store_->append_block(buf, size)) :  \
-    ((ir).datum_store_->append_block(buf, size, need_swizzling)))
+    ((ir).datum_store_->append_block(buf, size, need_swizzling))
 
 #define DTL_IR_STORE_DO_APPEND_BLOCK_PAYLOAD(ir, payload, size, rows, need_swizzling) \
-    ((ir).is_rich_format() ? ((ir).block_store_->append_block_payload(payload, size, rows)) :  \
-    ((ir).datum_store_->append_block_payload(payload, size, rows, need_swizzling)))
+    ((ir).datum_store_->append_block_payload(payload, size, rows, need_swizzling))
 
 #define DTL_IR_STORE_DO_DUMP(ir, reuse, all_dump) \
-    ((ir).is_rich_format() ? ((ir).block_store_->dump(all_dump)) :  \
-    ((ir).datum_store_->dump(reuse, all_dump)))
+    ((ir).datum_store_->dump(reuse, all_dump))
 
 class ObDTLIntermResultGC
 {
@@ -414,8 +394,7 @@ public:
                                   bool append_whole_block);
   int get_interm_result_info(ObDTLIntermResultKey &key, ObDTLIntermResultInfo &result_info);
   int create_interm_result_info(ObMemAttr &attr, ObDTLIntermResultInfoGuard &result_info_guard,
-                    const ObDTLIntermResultMonitorInfo &monitor_info,
-                    ObDTLIntermResultInfo::StoreType store_type);
+                    const ObDTLIntermResultMonitorInfo &monitor_info);
   int erase_interm_result_info(const ObDTLIntermResultKey &key, bool need_unregister_check_item_from_dm=true);
   int insert_interm_result_info(ObDTLIntermResultKey &key, ObDTLIntermResultInfo *&result_info);
   // The following two interfaces will hold the bucket read lock.
@@ -427,19 +406,19 @@ public:
   int atomic_append_block(ObDTLIntermResultKey &key, ObAtomicAppendBlockCall &call);
   int atomic_append_part_block(ObDTLIntermResultKey &key, ObAtomicAppendPartBlockCall &call);
   int init();
-  static int server_module_init(ObDTLIntermResultManager* &dtl_interm_result_manager);
+  static int mtl_init(ObDTLIntermResultManager* &dtl_interm_result_manager);
   void destroy();
-  static void server_module_destroy(ObDTLIntermResultManager *&dtl_interm_result_manager);
+  static void mtl_destroy(ObDTLIntermResultManager *&dtl_interm_result_manager);
   int generate_monitor_info_rows(observer::ObDTLIntermResultMonitorInfoGetter &monitor_info_getter);
-  int erase_all_interm_result_info();
+  int erase_tenant_interm_result_info();
   static void free_interm_result_info_store(ObDTLIntermResultInfo *result_info);
   int free_interm_result_info(ObDTLIntermResultInfo *result_info);
   static void inc_interm_result_ref_count(ObDTLIntermResultInfo *result_info);
   int dec_interm_result_ref_count(ObDTLIntermResultInfo *&result_info);
   void runTimerTask();
-  static int server_module_start(ObDTLIntermResultManager *&dtl_interm_result_manager);
-  static void server_module_stop(ObDTLIntermResultManager *&dtl_interm_result_manager);
-  static void server_module_wait(ObDTLIntermResultManager *&dtl_interm_result_manager);
+  static int mtl_start(ObDTLIntermResultManager *&dtl_interm_result_manager);
+  static void mtl_stop(ObDTLIntermResultManager *&dtl_interm_result_manager);
+  static void mtl_wait(ObDTLIntermResultManager *&dtl_interm_result_manager);
   ObDTLIntermResultGCTask &get_gc_task() { return gc_task_; }
   static int init_result_info_store(ObDTLIntermResultInfoGuard &result_info_guard,
                                   ObDtlLinkedBuffer &buffer);

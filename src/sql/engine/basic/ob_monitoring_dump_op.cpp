@@ -54,7 +54,7 @@ int ObMonitoringDumpOp::inner_open()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected status: child is null", K(ret));
   } else {
-    const char* name = get_phy_op_name(spec_.get_left()->type_, spec_.use_rich_format_);
+    const char* name = get_phy_op_name(spec_.get_left()->type_);
     op_name_.set_string(name, strlen(name));
     if (OB_FAIL(output_hash_.init(output.count()))) {
       LOG_WARN("init output hash array failed", K(ret));

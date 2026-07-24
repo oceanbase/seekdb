@@ -47,9 +47,7 @@ typedef ObNumStackAllocator<1> ObNumStackOnceAlloc;
 
 #define array_elements(A) ((uint) (sizeof(A)/sizeof(A[0])))
 
-template <typename T>
-class ObTextStringVectorResult;
-using ObTextStringDatumResult = ObTextStringVectorResult<common::ObIVector>;
+class ObTextStringDatumResult;
 
 class ObExprUtil
 {

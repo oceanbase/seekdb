@@ -240,95 +240,6 @@ int ObExprStringToArray::eval_string_to_array_batch(const ObExpr &expr, ObEvalCt
   return ret;
 }
 
-int ObExprStringToArray::eval_string_to_array_vector(const ObExpr &expr, ObEvalCtx &ctx,
-                                                     const ObBitVector &skip, const EvalBound &bound)
-{
-  int ret = OB_SUCCESS;
-  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
-  const uint16_t subschema_id = expr.obj_meta_.get_subschema_id();
-  ObCollationType cs_type = expr.args_[0]->datum_meta_.cs_type_;;
-  ObIArrayType *arr_obj = NULL;
-
-  if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval source array failed", K(ret));
-  } else if (OB_FAIL(expr.args_[1]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval delimiter string failed", K(ret));
-  } else if (OB_FAIL(expr.arg_cnt_ > 2 && expr.args_[2]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval null string failed", K(ret));
-  } else {
-    ObIVector *arr_str_vec = expr.args_[0]->get_vector(ctx);
-    ObIVector *delimiter_vec = expr.args_[1]->get_vector(ctx);
-    ObIVector *null_str_vec = expr.arg_cnt_ > 2 ? expr.args_[2]->get_vector(ctx) : NULL;
-    ObIVector *res_vec = expr.get_vector(ctx);
-    ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
-    VectorFormat res_format = expr.get_format(ctx);
-    ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-
-    for (int64_t idx = bound.start(); OB_SUCC(ret) && idx < bound.end(); ++idx) {
-      bool has_arr_str = false;
-      bool has_delimiter = false;
-      bool has_null_str = false;
-      std::string arr_str;
-      std::string delimiter;
-      std::string null_str;
-      ObArrayBinary *binary_array = NULL;
-
-      if (skip.at(idx) || eval_flags.at(idx)) {
-        continue;
-      }
-      eval_flags.set(idx);
-      if (!arr_str_vec->is_null(idx)) {
-        has_arr_str = true;
-        ObString get_arr_str;
-        if (OB_FAIL(ObTextStringHelper::read_real_string_data(
-              tmp_allocator,
-              arr_str_vec,
-              expr.args_[0]->datum_meta_,
-              expr.args_[0]->obj_meta_.has_lob_header(),
-              get_arr_str,
-              idx))){
-          LOG_WARN("fail to get real string data", K(ret), K(get_arr_str));
-        } else {
-          arr_str.assign(get_arr_str.ptr(), get_arr_str.length());
-        }
-      }
-      if (!delimiter_vec->is_null(idx)) {
-        has_delimiter = true;
-        delimiter.assign(delimiter_vec->get_string(idx).ptr(), delimiter_vec->get_string(idx).length());
-      }
-      if (expr.arg_cnt_ > 2 && !null_str_vec->is_null(idx)) {
-        has_null_str = true;
-        null_str.assign(null_str_vec->get_string(idx).ptr(), null_str_vec->get_string(idx).length());
-      }
-      if (OB_ISNULL(arr_obj) && OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator, ctx, subschema_id, arr_obj, false))) {
-        LOG_WARN("construct array obj failed", K(ret), K(subschema_id));
-      } else if (OB_FALSE_IT(arr_obj->clear())) {
-      } else if (OB_ISNULL(binary_array = static_cast<ObArrayBinary *>(arr_obj))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("binary array is null", K(ret), K(subschema_id));
-      } else if (OB_FAIL(string_to_array(binary_array, arr_str, delimiter, null_str, cs_type, has_arr_str, has_delimiter, has_null_str))) {
-        LOG_WARN("failed to convert string to array", K(ret));
-      } else if (!has_arr_str) {
-        res_vec->set_null(idx);
-      } else {
-        if (res_format == VEC_DISCRETE) {
-          if (OB_FAIL(ObArrayExprUtils::set_array_res<ObDiscreteFormat>(arr_obj, expr, ctx, static_cast<ObDiscreteFormat *>(res_vec), idx))) {
-            LOG_WARN("set array res failed", K(ret));
-          }
-        } else if (res_format == VEC_UNIFORM) {
-          if (OB_FAIL(ObArrayExprUtils::set_array_res<ObUniformFormat<false>>(arr_obj, expr, ctx, static_cast<ObUniformFormat<false> *>(res_vec), idx))) {
-            LOG_WARN("set array res failed", K(ret));
-          }
-        } else if (OB_FAIL(ObArrayExprUtils::set_array_res<ObVectorBase>(arr_obj, expr, ctx, static_cast<ObVectorBase *>(res_vec), idx))) {
-          LOG_WARN("set array res failed", K(ret));
-        }
-      }
-    } // end for
-  }
-  return ret;
-}
-
 int ObExprStringToArray::string_to_array(ObArrayBinary *binary_array,
                                          std::string arr_str, std::string delimiter, std::string null_str,
                                          ObCollationType cs_type, bool has_arr_str, bool has_delimiter, bool has_null_str)
@@ -403,7 +314,6 @@ int ObExprStringToArray::cg_expr(ObExprCGCtx &expr_cg_ctx,
   UNUSED(raw_expr);
   rt_expr.eval_func_ = eval_string_to_array;
   rt_expr.eval_batch_func_ = eval_string_to_array_batch;
-  rt_expr.eval_vector_func_ = eval_string_to_array_vector;
   return OB_SUCCESS;
 }
 

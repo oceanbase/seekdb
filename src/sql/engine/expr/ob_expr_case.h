@@ -45,10 +45,6 @@ public:
                              ObEvalCtx &ctx,
                              const ObBitVector &skip,
                              const int64_t batch_size);
-  static int eval_case_vector(const ObExpr &expr,
-                             ObEvalCtx &ctx,
-                             const ObBitVector &skip,
-                             const EvalBound &bound);
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
   // disallow copy

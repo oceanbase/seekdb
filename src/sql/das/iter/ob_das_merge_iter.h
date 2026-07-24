@@ -28,6 +28,13 @@ namespace oceanbase
 using namespace common;
 namespace sql
 {
+enum class PseudoCalcType
+{
+  PSEUDO_PART_ID = 0,
+  PSEUDO_PART_NAME,
+  PSEUDO_PART_INDEX
+};
+
 struct ObDASMergeIterParam : public ObDASIterParam
 {
 public:
@@ -41,6 +48,7 @@ public:
       ref_table_id_(),
       is_vectorized_(false),
       frame_info_(nullptr),
+      execute_das_directly_(false),
       used_for_keep_order_(false)
   {}
   ObFixedArray<ObEvalInfo*, ObIAllocator> *eval_infos_;
@@ -51,7 +59,15 @@ public:
   common::ObTableID ref_table_id_;
   bool is_vectorized_;
   const ObExprFrameInfo *frame_info_;
+  bool execute_das_directly_;
   bool used_for_keep_order_;
+  ObExpr *pseudo_partition_id_expr_;
+  ObExpr *pseudo_sub_partition_id_expr_;
+  ObExpr *pseudo_partition_name_expr_;
+  ObExpr *pseudo_sub_partition_name_expr_;
+  ObExpr *pseudo_partition_index_expr_;
+  ObExpr *pseudo_sub_partition_index_expr_;
+
   virtual bool is_valid() const override
   {
     return ObDASIterParam::is_valid() && eval_infos_ != nullptr && frame_info_ != nullptr;
@@ -141,8 +157,6 @@ public:
   virtual int set_merge_status(MergeType merge_type) override;
   virtual int do_table_scan() override;
   MergeType get_merge_type() const { return merge_type_; }
-  int64_t get_current_seq_task_idx() const { return seq_task_idx_; }
-  bool is_sequential_output() const { return get_next_rows_ == &ObDASMergeIter::get_next_seq_rows; }
   void set_global_lookup_iter(ObDASMergeIter *global_lookup_iter);
   INHERIT_TO_STRING_KV("ObDASIter", ObDASIter, K_(merge_type), K_(ref_table_id));
 
@@ -154,6 +168,7 @@ public:
   DASTaskIter begin_task_iter();
   bool is_all_local_task() const;
   int rescan_das_task(ObDASScanOp *scan_op);
+  bool has_pseudo_part_id_columnref();
   virtual int get_diagnosis_info(common::ObRowDiagnosisInfo *diagnosis_info) override {
     int ret = OB_SUCCESS;
     diagnosis_info->set_cur_line_number(diagnosis_mgr_.get_cur_line_number());
@@ -174,6 +189,12 @@ protected:
   void update_wild_datum_ptr(int64_t rows_count);
   void clear_evaluated_flag();
   int update_output_tablet_id(ObIDASTaskOp *output_das_task);
+  int update_pseudo_columns(ObIDASTaskOp *output_das_task);
+  template<bool is_sub_partition, PseudoCalcType calc_type>
+  int update_pseudo_parittion_id(const ObDASTabletLoc *tablet_loc, const ObExpr *expr);
+  int get_index_by_partition_id(int64_t id, int64_t &index, bool is_sub_partition);
+  int get_name_by_partition_id(int64_t id, ObString &name, bool is_sub_partition);
+
 private:
   int get_next_seq_row();
   int get_next_seq_rows(int64_t &count, int64_t capacity);
@@ -193,8 +214,9 @@ private:
     { }
     const ObExprPtrIArray *exprs_;
     int64_t max_output_rows_;
-    // A global index scan and its copied lookup task may share expressions and
-    // therefore observe the same changed datum pointers.
+    // global index scan and its lookup maybe share some expr,
+    // so remote lookup task change its datum ptr,
+    // and also lead index scan touch the wild datum ptr
     // so need to associate the result iterator of scan and lookup
     // resetting the index scan result datum ptr will also reset the lookup result datum ptr
     ObDASMergeIter *global_lookup_iter_;
@@ -249,6 +271,14 @@ private:
   MergeStateArray merge_state_arr_;
   MergeStoreRowsArray merge_store_rows_arr_;
   bool used_for_keep_order_;
+  ObExpr *pseudo_partition_id_expr_;
+  ObExpr *pseudo_sub_partition_id_expr_;
+  ObExpr *pseudo_partition_name_expr_;
+  ObExpr *pseudo_sub_partition_name_expr_;
+  ObExpr *pseudo_partition_index_expr_;
+  ObExpr *pseudo_sub_partition_index_expr_;
+  const share::schema::ObTableSchema *table_schema_ = NULL;
+  share::schema::ObPartitionLevel part_level_;
   /********* SORT MERGE END *********/
 };
 

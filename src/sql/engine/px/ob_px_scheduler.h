@@ -45,7 +45,8 @@ public:
     ObExecContext &ctx, ObDfo &parent, ObPxTaskChSets &parent_ch_sets) = 0;
   virtual int receive_channel_root_dfo(
       ObExecContext &ctx, ObDfo &parent, dtl::ObDtlChTotalInfo &ch_info) = 0;
-  virtual int notify_tasks_mock_eof(ObDfo *dfo, int64_t timeout_ts) const = 0;
+  virtual int notify_peers_mock_eof(
+      ObDfo *dfo, int64_t timeout_ts, common::ObAddr addr) const = 0;
 
 };
 
@@ -77,17 +78,31 @@ public:
 
 struct ObP2PDfoMapNode
 {
-  ObP2PDfoMapNode() : target_dfo_id_(OB_INVALID_ID) {}
-  ~ObP2PDfoMapNode() = default;
+  ObP2PDfoMapNode() : target_dfo_id_(OB_INVALID_ID),  addrs_() {}
+  ~ObP2PDfoMapNode() { addrs_.reset(); }
   int assign(const ObP2PDfoMapNode &other) {
     target_dfo_id_ = other.target_dfo_id_;
-    return OB_SUCCESS;
+    return addrs_.assign(other.addrs_);
   }
   void reset() {
     target_dfo_id_ = OB_INVALID_ID;
+    addrs_.reset();
   }
   int64_t target_dfo_id_;
-  TO_STRING_KV(K(target_dfo_id_));
+  common::ObSArray<ObAddr>addrs_;
+  TO_STRING_KV(K(target_dfo_id_), K(addrs_));
+};
+struct ObTempTableP2PInfo
+{
+  ObTempTableP2PInfo() : temp_access_ops_(),  dfos_() {}
+  ~ObTempTableP2PInfo() { reset(); }
+  void reset() {
+    temp_access_ops_.reset();
+    dfos_.reset();
+  }
+  ObSEArray<const ObOpSpec *, 4> temp_access_ops_;
+  ObSEArray<ObDfo *, 4> dfos_;
+  TO_STRING_KV(K(temp_access_ops_), K(dfos_));
 };
 // These information are variables used during scheduling, temporarily called CoordInfo
 class ObPxCoordInfo
@@ -107,6 +122,7 @@ public:
     pruning_table_location_(NULL),
     table_access_type_(TableAccessType::NO_TABLE),
     p2p_dfo_map_(),
+    p2p_temp_table_info_(),
     rf_dpd_info_()
   {}
   virtual ~ObPxCoordInfo() {}
@@ -115,6 +131,7 @@ public:
     dfo_mgr_.destroy();
     piece_msg_ctx_mgr_.reset();
     p2p_dfo_map_.destroy();
+    p2p_temp_table_info_.reset();
     rf_dpd_info_.destroy();
   }
   void reset_for_rescan()
@@ -124,6 +141,7 @@ public:
     piece_msg_ctx_mgr_.reset();
     batch_rescan_ctl_ = NULL;
     p2p_dfo_map_.reuse();
+    p2p_temp_table_info_.reset();
   }
   int init();
   bool enable_px_batch_rescan() { return get_rescan_param_count() > 0; }
@@ -151,8 +169,9 @@ public:
   ObBatchRescanCtl *batch_rescan_ctl_;
   const common::ObIArray<ObTableLocation> *pruning_table_location_;
   TableAccessType table_access_type_;
-  // key = p2p datahub id, value = target DFO id
+  // key = p2p_dh_id value = dfo_id + target_addrs
   hash::ObHashMap<int64_t, ObP2PDfoMapNode, hash::NoPthreadDefendMode> p2p_dfo_map_;
+  ObTempTableP2PInfo p2p_temp_table_info_;
   RuntimeFilterDependencyInfo rf_dpd_info_;
 };
 
@@ -180,8 +199,6 @@ public:
   int on_piece_msg(ObExecContext &ctx, const ObInitChannelPieceMsg &pkt) { UNUSED(ctx); UNUSED(pkt); return common::OB_NOT_SUPPORTED; }
   int on_piece_msg(ObExecContext &ctx, const ObReportingWFPieceMsg &pkt) { UNUSED(ctx); UNUSED(pkt); return common::OB_NOT_SUPPORTED; }
   int on_piece_msg(ObExecContext &ctx, const ObOptStatsGatherPieceMsg &pkt) { UNUSED(ctx); UNUSED(pkt); return common::OB_NOT_SUPPORTED; }
-  int on_piece_msg(ObExecContext &ctx, const SPWinFuncPXPieceMsg &pkt) { UNUSED(ctx); UNUSED(pkt); return common::OB_NOT_SUPPORTED; }
-  int on_piece_msg(ObExecContext &ctx, const RDWinFuncPXPieceMsg &pkt) { UNUSED(ctx); UNUSED(pkt); return common::OB_NOT_SUPPORTED; }
   int on_piece_msg(ObExecContext &ctx, const ObJoinFilterCountRowPieceMsg &pkt) { UNUSED(ctx); UNUSED(pkt); return common::OB_NOT_SUPPORTED; }
   // End Datahub processing
   ObPxCoordInfo &coord_info_;
@@ -216,8 +233,6 @@ public:
   int on_piece_msg(ObExecContext &ctx, const ObInitChannelPieceMsg &pkt);
   int on_piece_msg(ObExecContext &ctx, const ObReportingWFPieceMsg &pkt);
   int on_piece_msg(ObExecContext &ctx, const ObOptStatsGatherPieceMsg &pkt);
-  int on_piece_msg(ObExecContext &ctx, const SPWinFuncPXPieceMsg &pkt);
-  int on_piece_msg(ObExecContext &ctx, const RDWinFuncPXPieceMsg &pkt);
   int on_piece_msg(ObExecContext &ctx, const ObJoinFilterCountRowPieceMsg &pkt);
   void clean_dtl_interm_result(ObExecContext &ctx);
   // end DATAHUB msg processing

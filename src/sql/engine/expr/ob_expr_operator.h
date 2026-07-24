@@ -31,10 +31,6 @@
 #include "share/datum/ob_datum_funcs.h"
 #include "common/expression/ob_expr_string_buf.h"
 #include "share/object/ob_obj_cast.h"
-#include "sql/engine/vector/ob_uniform_vector.h"
-#include "sql/engine/vector/ob_discrete_vector.h"
-#include "sql/engine/vector/ob_fixed_length_vector.h"
-#include "sql/engine/vector/ob_continuous_vector.h"
 #include "common/object/ob_obj_compare.h"
 #include "common/ob_accuracy.h"
 #include "common/mysqlclient/ob_mysql_global.h"
@@ -768,6 +764,12 @@ protected:
   bool need_charset_convert_;
   ObRawExpr *raw_expr_;
   bool is_called_in_sql_; // Used to distinguish if it is called by pl or sql
+  // A subclass if initially does not define its own serialization method, then it cannot add one in later versions, otherwise the beginning of the serialization buf will have an extra subclass serialization length,
+  // Cause incompatibility with the old version.
+  // For subclasses of ObExprOperator that do not define their own serialization method, if a new member is now added and needs to be serialized, it will be affected
+  // above limitations and cannot be achieved. Therefore, add extra_serialize_ in ObExprOperator, each subclass can interpret it.
+  // For example for ObExprCast, its meaning is is_implicit_cast, i.e., whether it is an implicit cast
+  int64_t extra_serialize_;
   bool is_valid_for_generated_col_;
   bool is_internal_for_mysql_;
 };
@@ -800,6 +802,7 @@ inline ObExprOperator::ObExprOperator(common::ObIAllocator &alloc,
       need_charset_convert_(true),
       raw_expr_(NULL),
       is_called_in_sql_(true),
+      extra_serialize_(0),
       is_valid_for_generated_col_(valid_for_generated_col == 1),
       is_internal_for_mysql_(is_internal_for_mysql)
 {
@@ -1912,11 +1915,7 @@ public:
   static int calc_result2_mysql(const ObExpr &expr, ObEvalCtx &ctx,
                                 ObDatum &res_datum);
 
-  static int calc_bitwise_result2_mysql_vector(VECTOR_EVAL_FUNC_ARG_DECL);
   DECLARE_SET_LOCAL_SESSION_VARS;
-
-private:
-  static void convert_tc_size(VecValueTypeClass vec_tc, int &len);
 
 protected:
   enum BitOperator
@@ -1931,9 +1930,6 @@ protected:
     BIT_MAX,
   };
 
-  static int dispatch_calc_vector(VECTOR_EVAL_FUNC_ARG_DECL, ObCastMode cast_mode);
-  template <typename RES_VEC, typename L_VEC, typename R_VEC>
-  static int inner_calc_vector(VECTOR_EVAL_FUNC_ARG_DECL, ObCastMode cast_mode);
   // Get int64/uint64 from datum, for number rounding/truncation operations are needed, for int tc will get directly
   // int value
   typedef int (*GetIntFunc)(const ObDatumMeta &, const common::ObDatum &, bool, int64_t &,

@@ -445,18 +445,14 @@ int ObExprMinus::cg_expr(ObExprCGCtx &op_cg_ctx,
       case ObIntType:
         rt_expr.may_not_need_raw_check_ = true;
         SET_MINUS_FUNC_PTR(minus_int_int);
-        rt_expr.eval_vector_func_ = minus_int_int_vector;
         break;
       case ObUInt64Type:
         if (ObIntTC == left_tc && ObUIntTC == right_tc) {
           SET_MINUS_FUNC_PTR(minus_int_uint);
-          rt_expr.eval_vector_func_ = minus_int_uint_vector;
         } else if (ObUIntTC == left_tc && ObIntTC == right_tc) {
           SET_MINUS_FUNC_PTR(minus_uint_int);
-          rt_expr.eval_vector_func_ = minus_uint_int_vector;
         } else if (ObUIntTC == left_tc && ObUIntTC == right_tc) {
           SET_MINUS_FUNC_PTR(minus_uint_uint);
-          rt_expr.eval_vector_func_ = minus_uint_uint_vector;
         }
         break;
       case ObDateTimeType:
@@ -468,11 +464,9 @@ int ObExprMinus::cg_expr(ObExprCGCtx &op_cg_ctx,
         break;
       case ObFloatType:
         SET_MINUS_FUNC_PTR(minus_float_float);
-        rt_expr.eval_vector_func_ = minus_float_float_vector;
         break;
       case ObDoubleType:
         SET_MINUS_FUNC_PTR(minus_double_double);
-        rt_expr.eval_vector_func_ = minus_double_double_vector;
         break;
       case ObUNumberType:
       case ObNumberType:
@@ -482,15 +476,12 @@ int ObExprMinus::cg_expr(ObExprCGCtx &op_cg_ctx,
           switch (get_decimalint_type(rt_expr.args_[0]->datum_meta_.precision_)) {
             case DECIMAL_INT_32:
               SET_MINUS_FUNC_PTR(minus_decimalint32_number_result);
-              rt_expr.eval_vector_func_ = minus_decimalint32_number_result_vector;
               break;
             case DECIMAL_INT_64:
               SET_MINUS_FUNC_PTR(minus_decimalint64_number_result);
-              rt_expr.eval_vector_func_ = minus_decimalint64_number_result_vector;
               break;
             case DECIMAL_INT_128:
               SET_MINUS_FUNC_PTR(minus_decimalint128_number_result);
-              rt_expr.eval_vector_func_ = minus_decimalint128_number_result_vector;
               break;
             default:
               ret = OB_ERR_UNEXPECTED;
@@ -499,34 +490,27 @@ int ObExprMinus::cg_expr(ObExprCGCtx &op_cg_ctx,
           }
         } else {
           SET_MINUS_FUNC_PTR(minus_number_number);
-          rt_expr.eval_vector_func_ = minus_number_number_vector;
         }
         break;
       case ObDecimalIntType:
         switch (get_decimalint_type(rt_expr.datum_meta_.precision_)) {
           case DECIMAL_INT_32:
             SET_MINUS_FUNC_PTR(minus_decimalint32);
-            rt_expr.eval_vector_func_ = minus_decimalint32_vector;
             break;
           case DECIMAL_INT_64:
             SET_MINUS_FUNC_PTR(minus_decimalint64);
-            rt_expr.eval_vector_func_ = minus_decimalint64_vector;
             break;
           case DECIMAL_INT_128:
             SET_MINUS_FUNC_PTR(minus_decimalint128);
-            rt_expr.eval_vector_func_ = minus_decimalint128_vector;
             break;
           case DECIMAL_INT_256:
             SET_MINUS_FUNC_PTR(minus_decimalint256);
-            rt_expr.eval_vector_func_ = minus_decimalint256_vector;
             break;
           case DECIMAL_INT_512:
             if (rt_expr.datum_meta_.precision_ < OB_MAX_DECIMAL_POSSIBLE_PRECISION) {
               SET_MINUS_FUNC_PTR(minus_decimalint512);
-              rt_expr.eval_vector_func_ = minus_decimalint512_vector;
             } else {
               SET_MINUS_FUNC_PTR(minus_decimalint512_with_check);
-              rt_expr.eval_vector_func_ = minus_decimalint512_with_check_vector;
             }
             break;
           default:
@@ -545,25 +529,18 @@ int ObExprMinus::cg_expr(ObExprCGCtx &op_cg_ctx,
             LOG_WARN("failed to get collection elem type", K(ret), K(sub_id));
           } else if (elem_type == ObTinyIntType) {
             SET_MINUS_FUNC_PTR(minus_collection_collection_int8_t);
-            rt_expr.eval_vector_func_ = minus_collection_collection_int8_t_vector;
           } else if (elem_type == ObSmallIntType) {
             SET_MINUS_FUNC_PTR(minus_collection_collection_int16_t);
-            rt_expr.eval_vector_func_ = minus_collection_collection_int16_t_vector;
           } else if (elem_type == ObInt32Type) {
             SET_MINUS_FUNC_PTR(minus_collection_collection_int32_t);
-            rt_expr.eval_vector_func_ = minus_collection_collection_int32_t_vector;
           } else if (elem_type == ObIntType) {
             SET_MINUS_FUNC_PTR(minus_collection_collection_int64_t);
-            rt_expr.eval_vector_func_ = minus_collection_collection_int64_t_vector;
           } else if (elem_type == ObFloatType) {
             SET_MINUS_FUNC_PTR(minus_collection_collection_float);
-            rt_expr.eval_vector_func_ = minus_collection_collection_float_vector;
           } else if (elem_type == ObDoubleType) {
             SET_MINUS_FUNC_PTR(minus_collection_collection_double);
-            rt_expr.eval_vector_func_ = minus_collection_collection_double_vector;
           } else if (elem_type == ObUInt64Type) {
             SET_MINUS_FUNC_PTR(minus_collection_collection_uint64_t);
-            rt_expr.eval_vector_func_ = minus_collection_collection_uint64_t_vector;
           } else {
             ret = OB_NOT_SUPPORTED;
             LOG_WARN("invalid element type for array operation", K(ret), K(elem_type));
@@ -617,10 +594,6 @@ int ObExprMinus::minus_int_int_batch(BATCH_EVAL_FUNC_ARG_DECL)
   return def_batch_arith_op<ObArithOpWrap<ObIntIntBatchMinusRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
-int ObExprMinus::minus_int_int_vector(VECTOR_EVAL_FUNC_ARG_DECL)
-{
-  return def_fixed_len_vector_arith_op<ObVectorArithOpWrap<ObIntIntBatchMinusRaw>>(VECTOR_EVAL_FUNC_ARG_LIST);
-}
 
 
 struct ObIntUIntBatchMinusRaw : public ObArithOpRawType<uint64_t, int64_t, uint64_t>
@@ -658,11 +631,6 @@ int ObExprMinus::minus_int_uint_batch(BATCH_EVAL_FUNC_ARG_DECL)
   return def_batch_arith_op<ObArithOpWrap<ObIntUIntBatchMinusRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
-int ObExprMinus::minus_int_uint_vector(VECTOR_EVAL_FUNC_ARG_DECL)
-{
-  return def_fixed_len_vector_arith_op<ObVectorArithOpWrap<ObIntUIntBatchMinusRaw>>(
-    VECTOR_EVAL_FUNC_ARG_LIST);
-}
 
 struct ObUIntUIntBatchMinusRaw : public ObArithOpRawType<uint64_t, uint64_t, uint64_t>
 {
@@ -699,11 +667,6 @@ int ObExprMinus::minus_uint_uint_batch(BATCH_EVAL_FUNC_ARG_DECL)
   return def_batch_arith_op<ObArithOpWrap<ObUIntUIntBatchMinusRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
-int ObExprMinus::minus_uint_uint_vector(VECTOR_EVAL_FUNC_ARG_DECL)
-{
-  return def_fixed_len_vector_arith_op<ObVectorArithOpWrap<ObUIntUIntBatchMinusRaw>>(
-    VECTOR_EVAL_FUNC_ARG_LIST);
-}
 
 struct ObUIntIntBatchMinusRaw : public ObArithOpRawType<uint64_t, uint64_t, int64_t>
 {
@@ -740,11 +703,6 @@ int ObExprMinus::minus_uint_int_batch(BATCH_EVAL_FUNC_ARG_DECL)
   return def_batch_arith_op<ObArithOpWrap<ObUIntIntBatchMinusRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
-int ObExprMinus::minus_uint_int_vector(VECTOR_EVAL_FUNC_ARG_DECL)
-{
-  return def_fixed_len_vector_arith_op<ObVectorArithOpWrap<ObUIntIntBatchMinusRaw>>(
-    VECTOR_EVAL_FUNC_ARG_LIST);
-}
 
 struct ObFloatBatchMinusRawNoCheck : public ObArithOpRawType<float, float, float>
 {
@@ -786,11 +744,6 @@ int ObExprMinus::minus_float_float_batch(BATCH_EVAL_FUNC_ARG_DECL)
   return def_batch_arith_op<ObArithOpWrap<ObFloatBatchMinusRawWithCheck>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
-int ObExprMinus::minus_float_float_vector(VECTOR_EVAL_FUNC_ARG_DECL)
-{
-  return def_fixed_len_vector_arith_op<ObVectorArithOpWrap<ObFloatBatchMinusRawWithCheck>>(
-             VECTOR_EVAL_FUNC_ARG_LIST);
-}
 
 struct ObDoubleBatchMinusRawNoCheck : public ObArithOpRawType<double, double, double>
 {
@@ -840,14 +793,6 @@ int ObExprMinus::minus_double_double_batch(BATCH_EVAL_FUNC_ARG_DECL)
       : def_batch_arith_op<ObArithOpWrap<ObDoubleBatchMinusRawWithCheck>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
-int ObExprMinus::minus_double_double_vector(VECTOR_EVAL_FUNC_ARG_DECL)
-{
-  return T_OP_AGG_MINUS == expr.type_ ?
-           def_fixed_len_vector_arith_op<ObVectorArithOpWrap<ObDoubleBatchMinusRawNoCheck>>(
-             VECTOR_EVAL_FUNC_ARG_LIST) :
-           def_fixed_len_vector_arith_op<ObVectorArithOpWrap<ObDoubleBatchMinusRawWithCheck>>(
-             VECTOR_EVAL_FUNC_ARG_LIST);
-}
 
 struct ObNumberMinusFunc
 {
@@ -949,11 +894,6 @@ struct NmbTryFastMinusOp
   }
 };
 
-int ObExprMinus::minus_number_number_vector(VECTOR_EVAL_FUNC_ARG_DECL)
-{
-  NmbTryFastMinusOp op;
-  return def_number_vector_arith_op(VECTOR_EVAL_FUNC_ARG_LIST, op);
-}
 
 struct ObDatetimeNumberMinusFunc
 {
@@ -1129,10 +1069,6 @@ int ObExprMinus::minus_decimal##TYPE(EVAL_FUNC_ARG_DECL)      \
 int ObExprMinus::minus_decimal##TYPE##_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
 {                                            \
   return def_batch_arith_op<ObArithOpWrap<ObDecimalIntBatchMinusRaw<TYPE##_t>>>(BATCH_EVAL_FUNC_ARG_LIST); \
-}                                            \
-int ObExprMinus::minus_decimal##TYPE##_vector(VECTOR_EVAL_FUNC_ARG_DECL)      \
-{                                            \
-  return def_fixed_len_vector_arith_op<ObVectorArithOpWrap<ObDecimalIntBatchMinusRaw<TYPE##_t>>>(VECTOR_EVAL_FUNC_ARG_LIST); \
 }
 
 
@@ -1152,11 +1088,6 @@ int ObExprMinus::minus_decimalint512_with_check_batch(BATCH_EVAL_FUNC_ARG_DECL)
   return def_batch_arith_op<ObArithOpWrap<ObDecimalIntBatchMinusRawWithCheck>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
-int ObExprMinus::minus_decimalint512_with_check_vector(VECTOR_EVAL_FUNC_ARG_DECL)
-{
-  return def_fixed_len_vector_arith_op<ObVectorArithOpWrap<ObDecimalIntBatchMinusRawWithCheck>>(
-    VECTOR_EVAL_FUNC_ARG_LIST);
-}
 
 #undef DECINC_MINUS_EVAL_FUNC_DECL
 
@@ -1179,27 +1110,6 @@ struct ObDecimalNumberMinusFunc
   }
 };
 
-template<typename T>
-struct ObDecimalNumberVectorMinusFunc
-{
-  template <typename ResVector, typename LeftVector, typename RightVector>
-  int operator()(ResVector &res_vec, const LeftVector &l_vec, const RightVector &r_vec,
-                 const int64_t idx, const int64_t scale, ObNumStackOnceAlloc &alloc) const
-  {
-    int ret = OB_SUCCESS;
-    const T res_int = *reinterpret_cast<const T *>(l_vec.get_payload(idx))
-                      - *reinterpret_cast<const T *>(r_vec.get_payload(idx));
-    number::ObNumber res_num;
-    if (OB_FAIL(wide::to_number(res_int, scale, alloc, res_num))) {
-      LOG_WARN("fail to cast decima int to number", K(ret), K(scale));
-    } else {
-      res_vec.set_number(idx, res_num);
-      alloc.free();  // for batch function reuse alloc
-    }
-    return ret;
-  }
-};
-
 #define DECINC_MINUS_EVAL_FUNC_NUMBER_DECL(TYPE) \
 int ObExprMinus::minus_decimal##TYPE##_number_result(EVAL_FUNC_ARG_DECL)      \
 {                                            \
@@ -1212,13 +1122,6 @@ int ObExprMinus::minus_decimal##TYPE##_number_result_batch(BATCH_EVAL_FUNC_ARG_D
   ObNumStackOnceAlloc tmp_alloc;                                \
   const int64_t scale = expr.args_[0]->datum_meta_.scale_;      \
   return def_batch_arith_op_by_datum_func<ObDecimalNumberMinusFunc<TYPE##_t>>(BATCH_EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
-}                                            \
-int ObExprMinus::minus_decimal##TYPE##_number_result_vector(VECTOR_EVAL_FUNC_ARG_DECL)      \
-{                                            \
-  ObNumStackOnceAlloc tmp_alloc;                                \
-  const int64_t scale = expr.args_[0]->datum_meta_.scale_;      \
-  return def_fixed_len_vector_arith_op_func<ObDecimalNumberVectorMinusFunc<TYPE##_t>,\
-                                            ObArithTypedBase<TYPE##_t, TYPE##_t, TYPE##_t>>(VECTOR_EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
 }
 
 DECINC_MINUS_EVAL_FUNC_NUMBER_DECL(int32)
@@ -1294,10 +1197,6 @@ int ObExprMinus::minus_collection_collection_##TYPE(EVAL_FUNC_ARG_DECL)      \
 int ObExprMinus::minus_collection_collection_##TYPE##_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
 {                                            \
   return def_batch_arith_op_by_datum_func<ObNestedArithOpWrap<ObArrayMinusFunc<TYPE>>>(BATCH_EVAL_FUNC_ARG_LIST, expr, ctx); \
-}                                             \
-int ObExprMinus::minus_collection_collection_##TYPE##_vector(VECTOR_EVAL_FUNC_ARG_DECL)      \
-{                                            \
-  return def_nested_vector_arith_op_func<ObNestedVectorArithOpFunc<ObArrayMinusFunc<TYPE>>>(VECTOR_EVAL_FUNC_ARG_LIST, expr, ctx);  \
 }
 
 COLLECTION_MINUS_EVAL_FUNC_DECL(int8_t)

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 #include "ob_index_tree_prefetcher.h"
 #include "storage/access/ob_aggregate_base.h"
+#include "storage/blocksstable/ob_storage_cache_suite.h"
 
 namespace oceanbase
 {
@@ -332,6 +333,9 @@ inline int ObIndexTreePrefetcher::check_bloom_filter(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), K(index_info), K(read_handle));
   } else if (!access_ctx_->query_flag_.is_index_back() && access_ctx_->enable_bf_cache()) {
+    if (index_info.has_macro_block_bloom_filter()) {
+      read_handle.has_macro_block_bf_ = true;
+    }
     bool is_contain = true;
     const MacroBlockId macro_id = index_info.get_macro_id();
     if (OB_UNLIKELY(!macro_id.is_valid())) {
@@ -860,7 +864,7 @@ inline void ObIndexTreeMultiPassPrefetcher<DATA_PREFETCH_DEPTH, INDEX_PREFETCH_D
   micro_data_prefetch_idx_ = 0;
   row_lock_check_version_ = transaction::ObTransVersion::INVALID_TRANS_VERSION;
   agg_store_ = nullptr;
-  advance_scan_helper_ = nullptr;
+  skip_scanner_ = nullptr;
   prefetch_depth_ = 1;
   total_micro_data_cnt_ = 0;
   query_range_ = nullptr;
@@ -1301,7 +1305,7 @@ inline int ObIndexTreeMultiPassPrefetcher<DATA_PREFETCH_DEPTH, INDEX_PREFETCH_DE
                 K(access_ctx_->micro_block_handle_mgr_));
             prefetch_depth = prefetched_cnt;
             break;
-          } else if (OB_FAIL(tree_handles_[cur_level_].get_next_data_row(is_multi_check(), block_info, advance_scan_helper_))) {
+          } else if (OB_FAIL(tree_handles_[cur_level_].get_next_data_row(is_multi_check(), block_info, skip_scanner_))) {
             if (OB_UNLIKELY(OB_ITER_END != ret)) {
               LOG_WARN("fail to get next", K(ret), K(cur_level_), K(tree_handles_[cur_level_]));
             } else {

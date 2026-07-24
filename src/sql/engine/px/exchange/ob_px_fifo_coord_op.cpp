@@ -45,8 +45,6 @@ ObPxFifoCoordOp::ObPxFifoCoordOp(ObExecContext &exec_ctx, const ObOpSpec &spec, 
     init_channel_piece_msg_proc_(exec_ctx, msg_proc_),
     reporting_wf_piece_msg_proc_(exec_ctx, msg_proc_),
     opt_stats_gather_piece_msg_proc_(exec_ctx, msg_proc_),
-    sp_winfunc_px_piece_msg_proc_(exec_ctx, msg_proc_),
-    rd_winfunc_px_piece_msg_proc_(exec_ctx, msg_proc_),
     join_filter_count_row_piece_msg_proc_(exec_ctx, msg_proc_)
   {}
 
@@ -97,8 +95,6 @@ int ObPxFifoCoordOp::setup_loop_proc()
       .register_processor(init_channel_piece_msg_proc_)
       .register_processor(reporting_wf_piece_msg_proc_)
       .register_processor(opt_stats_gather_piece_msg_proc_)
-      .register_processor(sp_winfunc_px_piece_msg_proc_)
-      .register_processor(rd_winfunc_px_piece_msg_proc_)
       .register_processor(join_filter_count_row_piece_msg_proc_)
       .register_interrupt_processor(interrupt_proc_);
   return ret;
@@ -162,11 +158,8 @@ int ObPxFifoCoordOp::fetch_rows(const int64_t row_cnt)
                                        eval_ctx_);
       } else {
         int64_t read_rows = 0;
-        ret = get_spec().use_rich_format_
-              ? row_reader_.get_next_batch_vec(MY_SPEC.child_exprs_, MY_SPEC.dynamic_const_exprs_,
-                                         eval_ctx_,  row_cnt, read_rows, vector_rows_)
-              : row_reader_.get_next_batch(MY_SPEC.child_exprs_, MY_SPEC.dynamic_const_exprs_,
-                                         eval_ctx_,  row_cnt, read_rows, stored_rows_);
+        ret = row_reader_.get_next_batch(MY_SPEC.child_exprs_, MY_SPEC.dynamic_const_exprs_,
+                                         eval_ctx_, row_cnt, read_rows, stored_rows_);
         brs_.size_ = read_rows;
         brs_.all_rows_active_ = true;
       }

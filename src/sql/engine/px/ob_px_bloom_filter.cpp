@@ -33,24 +33,24 @@ using namespace obcall;
 #define WORD_SIZE 64            // WORD_SIZE * FIXED_HASH_COUNT = BF_BLOCK_SIZE
 #define BLOCK_FILTER_HASH_MASK 0x3F3F3F3F // for each 8 bits, we only use the last 6 bits
 
-class BloomFilterPrefetchOP
+// before assign, please set allocator for channel_ids_ first
+int BloomFilterIndex::assign(const BloomFilterIndex &other)
 {
-public:
-  BloomFilterPrefetchOP(ObPxBloomFilter *bloom_filter, uint64_t *hash_values)
-      : bloom_filter_(bloom_filter), hash_values_(hash_values)
-  {}
-  OB_INLINE int operator()(int64_t i) {
-    (void)bloom_filter_->prefetch_bits_block(hash_values_[i]);
-    return OB_SUCCESS; 
+  int ret = OB_SUCCESS;
+  if (this != &other) {
+    channel_id_ = other.channel_id_;
+    begin_idx_ = other.begin_idx_;
+    end_idx_ = other.end_idx_;
+    if (OB_FAIL(channel_ids_.assign(other.channel_ids_))) {
+      LOG_WARN("failed to assign channel_ids_");
+    }
   }
-private:
-  ObPxBloomFilter *bloom_filter_;
-  uint64_t *hash_values_;
-};
+  return ret;
+}
 
 ObPxBloomFilter::ObPxBloomFilter() : data_length_(0), max_bit_count_(0), bits_count_(0), fpp_(0.0),
     hash_func_count_(0), is_inited_(false), bits_array_length_(0),
-    bits_array_(NULL), true_count_(0), allocator_()
+    bits_array_(NULL), true_count_(0), begin_idx_(0), end_idx_(0), allocator_()
 {
 
 }
@@ -108,9 +108,11 @@ int ObPxBloomFilter::assign(const ObPxBloomFilter &filter)
   true_count_ = filter.true_count_;
   might_contain_ = filter.might_contain_;
   void *bits_array_buf = NULL;
+  begin_idx_ = filter.get_begin_idx();
+  end_idx_ = filter.get_end_idx();
   if (OB_ISNULL(bits_array_buf = allocator_.alloc((bits_array_length_ + CACHE_LINE_SIZE)* sizeof(int64_t)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc filter", K(bits_array_length_), K(ret));
+    LOG_WARN("fail to alloc filter", K(bits_array_length_), K(begin_idx_), K(end_idx_), K(ret));
   } else {
     int64_t align_addr = ((reinterpret_cast<int64_t>(bits_array_buf)
                           + CACHE_LINE_SIZE - 1) >> LOG_CACHE_LINE_SIZE) << LOG_CACHE_LINE_SIZE;
@@ -124,6 +126,28 @@ void ObPxBloomFilter::set_allocator_attr()
 {
   ObMemAttr attr("PxBfAlloc", ObCtxIds::DEFAULT_CTX_ID);
   allocator_.set_attr(attr);
+}
+
+int ObPxBloomFilter::init(const ObPxBloomFilter *filter)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(filter)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("the filter is null", K(ret));
+  } else {
+    data_length_ = filter->data_length_;
+    max_bit_count_ = filter->max_bit_count_;
+    block_mask_ = filter->block_mask_;
+    bits_count_ = filter->bits_count_;
+    fpp_ = filter->fpp_;
+    hash_func_count_ = filter->hash_func_count_;
+    is_inited_ = filter->is_inited_;
+    bits_array_length_ = filter->bits_array_length_;
+    bits_array_ = filter->bits_array_;
+    true_count_ = filter->true_count_;
+    might_contain_ = filter->might_contain_;
+  }
+  return ret;
 }
 
 void ObPxBloomFilter::reset_filter()
@@ -287,11 +311,39 @@ int ObPxBloomFilter::merge_filter(ObPxBloomFilter *filter)
     int64_t old_v = 0, new_v = 0;
     for (int i = 0; i < filter->bits_array_length_; ++i) {
       do {
-        old_v = bits_array_[i];
+        old_v = bits_array_[i + filter->begin_idx_];
         new_v = old_v | filter->bits_array_[i];
       } while (old_v != new_v // do not write if old is equal to new
-               && ATOMIC_CAS(&bits_array_[i], old_v, new_v) != old_v);
+               && ATOMIC_CAS(&bits_array_[i + filter->begin_idx_], old_v, new_v) != old_v);
     }
+  }
+  return ret;
+}
+
+int ObPxBloomFilter::regenerate()
+{
+  int ret = OB_SUCCESS;
+  int64_t bits_array_length = ceil((double)bits_count_ / 64);
+  void *bits_array_buf = NULL;
+  if (bits_array_length <= 0) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected bits array length", K(ret));
+  } else if (OB_ISNULL(bits_array_buf = allocator_.alloc((bits_array_length + CACHE_LINE_SIZE)* sizeof(int64_t)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("fail to alloc filter", K(bits_array_length), K(ret));
+  } else {
+    // cache line aligned address.
+    int64_t align_addr = ((reinterpret_cast<int64_t>(bits_array_buf)
+                          + CACHE_LINE_SIZE - 1) >> LOG_CACHE_LINE_SIZE) << LOG_CACHE_LINE_SIZE;
+    int64_t *bits_array = reinterpret_cast<int64_t *>(align_addr);
+    MEMSET(bits_array, 0, bits_array_length * sizeof(int64_t));
+    for (int i = 0; i < bits_array_length_; ++i) {
+      bits_array[i + begin_idx_] |= bits_array_[i];
+    }
+    bits_array_length_ = bits_array_length;
+    bits_array_ = bits_array;
+    begin_idx_ = 0;
+    end_idx_ = bits_array_length - 1;
   }
   return ret;
 }
@@ -312,8 +364,10 @@ OB_DEF_SERIALIZE(ObPxBloomFilter)
               hash_func_count_,
               is_inited_,
               bits_array_length_,
-              true_count_);
-  for (int i = 0; OB_SUCC(ret) && i < bits_array_length_; ++i) {
+              true_count_,
+              begin_idx_,
+              end_idx_);
+  for (int i = begin_idx_; OB_SUCC(ret) && i <= end_idx_; ++i) {
     if (OB_FAIL(serialization::encode(buf, buf_len, pos, bits_array_[i]))) {
       LOG_WARN("fail to encode bits data", K(ret), K(bits_array_[i]));
     }
@@ -332,12 +386,15 @@ OB_DEF_DESERIALIZE(ObPxBloomFilter)
               hash_func_count_,
               is_inited_,
               bits_array_length_,
-              true_count_);
-  int64_t real_len = bits_array_length_;
+              true_count_,
+              begin_idx_,
+              end_idx_);
+  int64_t real_len = end_idx_ - begin_idx_ + 1;
+  bits_array_length_ = real_len;
   void *bits_array_buf = NULL;
   if (OB_ISNULL(bits_array_buf = allocator_.alloc((real_len + CACHE_LINE_SIZE)* sizeof(int64_t)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc filter", K(real_len), K(ret));
+    LOG_WARN("fail to alloc filter", K(real_len), K(begin_idx_), K(end_idx_), K(ret));
   } else {
     // cache line aligned address.
     int64_t align_addr = ((reinterpret_cast<int64_t>(bits_array_buf)
@@ -369,8 +426,10 @@ OB_DEF_SERIALIZE_SIZE(ObPxBloomFilter)
         hash_func_count_,
         is_inited_,
         bits_array_length_,
-        true_count_);
-  for (int i = 0; i < bits_array_length_; ++i) {
+        true_count_,
+        begin_idx_,
+        end_idx_);
+  for (int i = begin_idx_; i <= end_idx_; ++i) {
     len += serialization::encoded_length(bits_array_[i]);
   }
   OB_UNIS_ADD_LEN(max_bit_count_);
@@ -378,173 +437,9 @@ OB_DEF_SERIALIZE_SIZE(ObPxBloomFilter)
 }
 
 
-namespace oceanbase
-{
-namespace common
-{
-OB_DECLARE_DEFAULT_AND_AVX512_CODE(
-
-template <bool SUPPORT_SIMD, typename ResVec>
-class BloomFilterProbeOP
-{
-public:
-  BloomFilterProbeOP(ResVec *res_vec, ObPxBloomFilter *bloom_filter, int64_t *bits_array,
-                     int64_t block_mask, uint64_t *hash_values, int64_t &total_count,
-                     int64_t &filter_count)
-      : res_vec_(res_vec), bloom_filter_(bloom_filter), bits_array_(bits_array),
-        block_mask_(block_mask), hash_values_(hash_values), total_count_(total_count),
-        filter_count_(filter_count)
-  {}
-  int operator()(int64_t i)
-  {
-    bool is_match = false;
-    constexpr int64_t is_match_payload = 1;
-#if OB_USE_MULTITARGET_CODE
-    if (SUPPORT_SIMD) {
-      (void)common::specific::avx512::inline_might_contain_simd(bits_array_, block_mask_,
-                                                                hash_values_[i], is_match);
-    } else {
-#endif
-      (void)bloom_filter_->might_contain_nonsimd(hash_values_[i], is_match);
-#if OB_USE_MULTITARGET_CODE
-    }
-#endif
-    ++total_count_;
-    if (!is_match) {
-      ++filter_count_;
-      if (std::is_same<ResVec, IntegerUniVec>::value) {
-        res_vec_->set_int(i, 0);
-      }
-    } else {
-      if (std::is_same<ResVec, IntegerUniVec>::value) {
-        res_vec_->set_int(i, 1);
-      } else {
-        res_vec_->set_payload(i, &is_match_payload, sizeof(int64_t));
-      }
-    }
-    return OB_SUCCESS;
-  }
-
-private:
-  ResVec *res_vec_;
-  ObPxBloomFilter *bloom_filter_;
-  int64_t *bits_array_;
-  int64_t block_mask_;
-  uint64_t *hash_values_;
-  int64_t &total_count_;
-  int64_t &filter_count_;
-};
-
-template <bool ALL_ROWS_ACTIVE, bool SUPPORT_SIMD, typename ResVec>
-int inner_might_contain(ObPxBloomFilter *bloom_filter, int64_t *bits_array,
-                        int64_t block_mask, const ObExpr &expr, ObEvalCtx &ctx,
-                        const ObBitVector &skip, const EvalBound &bound,
-                        uint64_t *hash_values, int64_t &total_count,
-                        int64_t &filter_count) {
-  int ret = OB_SUCCESS;
-  ResVec *res_vec = static_cast<ResVec *>(expr.get_vector(ctx));
-  static const int64_t is_match_payload = 1;
-  bool is_match = true;
-  if (std::is_same<ResVec, IntegerFixedVec>::value) {
-    IntegerFixedVec *int_fixed_vec = reinterpret_cast<IntegerFixedVec *>(res_vec);
-    uint64_t *data = reinterpret_cast<uint64_t *>(int_fixed_vec->get_data());
-    MEMSET(data + bound.start(), 0, (bound.range_size() * res_vec->get_length(0)));
-  }
-
-  if (ALL_ROWS_ACTIVE) {
-    total_count += bound.end() - bound.start();
-    for (int64_t i = bound.start(); i < bound.end(); ++i) {
-      (void)bloom_filter->prefetch_bits_block(hash_values[i]);
-    }
-    for (int64_t i = bound.start(); i < bound.end(); ++i) {
-#if OB_USE_MULTITARGET_CODE
-      if (SUPPORT_SIMD) {
-        (void)specific::avx512::inline_might_contain_simd(bits_array, block_mask, hash_values[i],
-                                                          is_match);
-      } else {
-#endif
-        (void)bloom_filter->might_contain_nonsimd(hash_values[i], is_match);
-#if OB_USE_MULTITARGET_CODE
-      }
-#endif
-      if (!is_match) {
-        filter_count += 1;
-        if (std::is_same<ResVec, IntegerUniVec>::value) {
-          res_vec->set_int(i, 0);
-        }
-      } else {
-        if (std::is_same<ResVec, IntegerUniVec>::value) {
-          res_vec->set_int(i, 1);
-        } else {
-          res_vec->set_payload(i, &is_match_payload, sizeof(int64_t));
-        }
-      }
-    }
-  } else {
-    BloomFilterPrefetchOP prefetch_op(bloom_filter, hash_values);
-    BloomFilterProbeOP<SUPPORT_SIMD, ResVec> probe_op(res_vec, bloom_filter, bits_array, block_mask,
-                                                      hash_values, total_count, filter_count);
-    (void)ObBitVector::flip_foreach(skip, bound, prefetch_op);
-    (void)ObBitVector::flip_foreach(skip, bound, probe_op);
-  }
-  return ret;
-}
-)
-
-} // namespace common
-} // namespace oceanbase
-
-#define BLOOM_FILTER_DISPATCH_ALL_ROWS_ACTIVATE(function, all_rows_active, support_simd,           \
-                                                res_format)                                        \
-  if (all_rows_active) {                                                                           \
-    BLOOM_FILTER_DISPATCH_SIMD(function, true, support_simd, res_format)                           \
-  } else {                                                                                         \
-    BLOOM_FILTER_DISPATCH_SIMD(function, false, support_simd, res_format)                          \
-  }
-
-#define BLOOM_FILTER_DISPATCH_SIMD(function, all_rows_active, support_simd, res_format)            \
-  if (support_simd) {                                                                              \
-    BLOOM_FILTER_DISPATCH_RES_FORMAT(function, all_rows_active, true, res_format)                  \
-  } else {                                                                                         \
-    BLOOM_FILTER_DISPATCH_RES_FORMAT(function, all_rows_active, false, res_format)                 \
-  }
-
-#define BLOOM_FILTER_DISPATCH_RES_FORMAT(function, all_rows_active, support_simd, res_format)      \
-  if (res_format == VEC_FIXED) {                                                                   \
-    ret = function<all_rows_active, support_simd, IntegerFixedVec>(                                \
-        this, bits_array_, block_mask_, expr, ctx, skip, bound, hash_values, total_count,          \
-        filter_count);                                                                             \
-  } else {                                                                                         \
-    ret = function<all_rows_active, support_simd, IntegerUniVec>(                                  \
-        this, bits_array_, block_mask_, expr, ctx, skip, bound, hash_values, total_count,          \
-        filter_count);                                                                             \
-  }
-
-int ObPxBloomFilter::might_contain_vector(const ObExpr &expr, ObEvalCtx &ctx,
-                                          const ObBitVector &skip, const EvalBound &bound,
-                                          uint64_t *hash_values, int64_t &total_count,
-                                          int64_t &filter_count)
-{
-  int ret = OB_SUCCESS;
-  bool all_rows_active = bound.get_all_rows_active();
-  VectorFormat res_format = expr.get_format(ctx);
-#if OB_USE_MULTITARGET_CODE
-  if (common::is_arch_supported(ObTargetArch::AVX512)) {
-    constexpr bool support_simd = true;
-    BLOOM_FILTER_DISPATCH_ALL_ROWS_ACTIVATE(common::specific::avx512::inner_might_contain,
-                                            all_rows_active, support_simd, res_format)
-  } else {
-#endif
-    constexpr bool support_simd = false;
-    BLOOM_FILTER_DISPATCH_ALL_ROWS_ACTIVATE(common::specific::normal::inner_might_contain,
-                                            all_rows_active, support_simd, res_format)
-#if OB_USE_MULTITARGET_CODE
-  }
-#endif
-  return ret;
-}
 //-------------------------------------division line----------------------------
-int ObPxBFStaticInfo::init(int64_t filter_id, bool is_shared,
+int ObPxBFStaticInfo::init(int64_t filter_id,
+    int64_t server_id, bool is_shared,
     bool skip_subpart, int64_t p2p_dh_id,
     bool is_shuffle, ObLogJoinFilter *log_join_filter_create_op)
 {
@@ -555,6 +450,7 @@ int ObPxBFStaticInfo::init(int64_t filter_id, bool is_shared,
   } else {
     
     filter_id_ = filter_id;
+    server_id_ = server_id;
     is_shared_ = is_shared;
     skip_subpart_ = skip_subpart;
     p2p_dh_id_ = p2p_dh_id;
@@ -566,4 +462,4 @@ int ObPxBFStaticInfo::init(int64_t filter_id, bool is_shared,
 }
 
 OB_SERIALIZE_MEMBER(ObPxBFStaticInfo, is_inited_, filter_id_,
-    is_shared_, skip_subpart_, p2p_dh_id_, is_shuffle_);
+    server_id_, is_shared_, skip_subpart_, p2p_dh_id_, is_shuffle_);

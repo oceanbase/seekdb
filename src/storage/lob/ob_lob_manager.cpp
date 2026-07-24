@@ -23,6 +23,7 @@
 #include "storage/lob/ob_lob_handler.h"
 #include "storage/lob/ob_lob_locator_struct.h"
 #include "storage/lob/ob_lob_tablet_dml.h"
+#include "storage/blocksstable/ob_datum_row.h"
 #include "share/ob_lob_access_utils.h"  // relocated-definition owner
 
 namespace oceanbase
@@ -61,10 +62,10 @@ static int is_store_char_len(ObLobAccessParam& param, int64_t store_chunk_size, 
   return ret;
 }
 
-int ObLobManager::server_module_new(ObLobManager *&m) {
+int ObLobManager::mtl_new(ObLobManager *&m) {
   int ret = OB_SUCCESS;
   
-  auto attr = lib::ObMemAttr("LobManager");
+  auto attr = SET_USE_500("LobManager");
   m = OB_NEW(ObLobManager, attr);
   if (OB_ISNULL(m)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -159,7 +160,7 @@ int ObLobManager::fill_lob_header(ObIAllocator &allocator, ObString &data, ObStr
 // Only use for default lob col val.
 int ObLobManager::fill_lob_header(
     ObIAllocator &allocator,
-    ObStorageDatum &datum)
+    blocksstable::ObStorageDatum &datum)
 {
   int ret = OB_SUCCESS;
   if (datum.is_null() || datum.is_nop_value()) {

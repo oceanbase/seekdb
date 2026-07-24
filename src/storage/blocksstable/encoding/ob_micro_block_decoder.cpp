@@ -17,7 +17,9 @@
 #define USING_LOG_PREFIX STORAGE
 #include "ob_micro_block_decoder.h"
 #include "storage/access/ob_pushdown_aggregate.h"
-#include "storage/access/ob_pushdown_aggregate_vec.h"
+#include "storage/access/ob_table_access_context.h"
+#include "storage/access/ob_table_access_param.h"
+#include "sql/engine/basic/ob_truncate_filter_struct.h"
 
 namespace oceanbase
 {
@@ -115,24 +117,6 @@ int ObColumnDecoder::batch_decode(
   LOG_DEBUG("[Batch decode] Batch decoded datums: ",
       K(ret), K(row_cap), K(*ctx_), K(ObArrayWrap<int32_t>(row_ids, row_cap)),
       K(ObArrayWrap<ObDatum>(datums, row_cap)));
-  return ret;
-}
-
-int ObColumnDecoder::decode_vector(
-    const ObIRowIndex* row_index,
-    ObVectorDecodeCtx &vector_ctx)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(nullptr == row_index || !vector_ctx.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid null parameter", K(ret), KP(row_index), K(vector_ctx));
-  } else if (OB_FAIL(decoder_->decode_vector(*ctx_, row_index, vector_ctx))) {
-    LOG_WARN("Failed to batch decode data to vector format in column decoder", K(ret), K(*ctx_));
-  } else if (OB_UNLIKELY(ctx_->is_trans_version_col()) &&
-             OB_FAIL(storage::reverse_trans_version_val(vector_ctx.get_vector(), vector_ctx.row_cap_))) {
-     LOG_WARN("Failed to reverse trans version val", K(ret));
-  }
-  LOG_DEBUG("[Vector decode] Batch decoded datums: ", K(ret), K(*ctx_), K(vector_ctx));
   return ret;
 }
 
@@ -1906,9 +1890,10 @@ int ObMicroBlockDecoder::filter_pushdown_truncate_filter(
   } else if (OB_LIKELY(filter.is_filter_white_node())) {
     int64_t col_offset = 0;
     ObColumnDecoder *column_decoder = nullptr;
-    ObTruncateWhiteFilterExecutor *truncate_executor = static_cast<ObTruncateWhiteFilterExecutor*>(&filter);
+    sql::ObTruncateWhiteFilterExecutor *truncate_executor =
+        static_cast<sql::ObTruncateWhiteFilterExecutor*>(&filter);
     const common::ObIArray<int32_t> &col_idxs = truncate_executor->get_col_idxs();
-    ObTruncateWhiteFilterExecutor::FilterBatchGuard filter_guard(*truncate_executor);
+    sql::ObTruncateWhiteFilterExecutor::FilterBatchGuard filter_guard(*truncate_executor);
     if (OB_UNLIKELY(1 != col_idxs.count())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected col idx count for white filter", K(ret), K(col_idxs));
@@ -1937,11 +1922,11 @@ int ObMicroBlockDecoder::filter_pushdown_truncate_filter(
               KPC(truncate_executor), KPC_(header), K(filter));
   }
   if (OB_SUCC(ret) && !filter_applied) {
-    ObITruncateFilterExecutor *truncate_executor = nullptr;
+    sql::ObITruncateFilterExecutor *truncate_executor = nullptr;
     if (filter.is_filter_black_node()) {
-      truncate_executor = static_cast<ObTruncateBlackFilterExecutor*>(&filter);
+      truncate_executor = static_cast<sql::ObTruncateBlackFilterExecutor*>(&filter);
     } else {
-      truncate_executor = static_cast<ObTruncateWhiteFilterExecutor*>(&filter);
+      truncate_executor = static_cast<sql::ObTruncateWhiteFilterExecutor*>(&filter);
     }
     ObStorageDatum *datum_buf = truncate_executor->get_tmp_datum_buffer();
     const common::ObIArray<int32_t> &col_idxs = truncate_executor->get_col_idxs();
@@ -2268,154 +2253,5 @@ int ObMicroBlockDecoder::get_group_by_aggregate_result(
   return ret;
 }
 
-int ObMicroBlockDecoder::get_group_by_aggregate_result(
-    const ObTableIterParam &iter_param,
-    const ObTableAccessContext &context,
-    const int32_t *row_ids,
-    const char **cell_datas,
-    const int64_t row_cap,
-    const int64_t vec_offset,
-    const common::ObIArray<blocksstable::ObStorageDatum> &default_datums,
-    uint32_t *len_array,
-    sql::ObEvalCtx &eval_ctx,
-    storage::ObGroupByCellVec &group_by_cell)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObMicroBlockDecoder is not init", K(ret));
-  } else {
-    const int32_t group_by_col = group_by_cell.get_group_by_col_offset();
-    int32_t last_agg_col_offset = INT32_MIN;
-    for (int64_t i = 0; OB_SUCC(ret) && i < group_by_cell.get_agg_cells().count(); ++i) {
-      storage::ObAggCellVec *agg_cell =  group_by_cell.get_sorted_cell(i);
-      const int32_t agg_col_offset = agg_cell->get_col_offset();
-      bool need_get_col = (0 == i || agg_col_offset != last_agg_col_offset) && agg_cell->need_get_row_ids();
-      if (agg_col_offset == group_by_col) {
-        // agg on group by column
-        ObDatum *datums = static_cast<ObStorageDatum *>(group_by_cell.get_group_by_col_datums());
-        if (OB_FAIL(group_by_cell.eval_batch(datums, row_cap, i, true))) {
-          LOG_WARN("Failed to eval batch", K(ret), K(i));
-        }
-      } else {
-        if (need_get_col) {
-          sql::ObExpr &expr = *(agg_cell->get_project_expr());
-          const bool need_padding = agg_cell->need_padding();
-          const share::schema::ObColumnParam *col_param = agg_cell->get_col_param();
-          if (0 == vec_offset) {
-            const VectorFormat format = need_padding ? VectorFormat::VEC_DISCRETE : expr.get_default_res_format();
-            if (OB_FAIL(storage::init_expr_vector_header(expr, eval_ctx, eval_ctx.max_batch_size_, format))) {
-              LOG_WARN("Failed to init vector", K(ret));
-            }
-          }
-          if (OB_SUCC(ret)) {
-            ObVectorDecodeCtx vector_decode_ctx(
-                cell_datas, len_array, row_ids, row_cap, vec_offset, expr.get_vector_header(eval_ctx));
-            if (decoders_[agg_col_offset].decoder_->is_new_column() && OB_FAIL(agg_cell->get_def_datum(vector_decode_ctx.default_datum_))) {
-              LOG_WARN("Failed to get default datum for new column", K(ret), K(vector_decode_ctx));
-            } else if (OB_FAIL(get_col_data(agg_col_offset, vector_decode_ctx))) {
-              LOG_WARN("Failed to get col datums", K(ret), K(i), K(agg_col_offset), K(vector_decode_ctx));
-            } else if (need_padding && OB_FAIL(storage::pad_on_rich_format_columns(
-                col_param->get_accuracy(),
-                col_param->get_meta_type().get_collation_type(),
-                row_cap,
-                vec_offset,
-                decoder_allocator_.get_inner_allocator(),
-                expr,
-                eval_ctx))) {
-              LOG_WARN("Failed pad on rich format columns", K(ret), K(expr));
-            } else if (iter_param.has_lob_column_out() && has_lob_out_row()
-                       && nullptr != col_param && col_param->get_meta_type().is_lob_storage()
-                       && OB_FAIL(fill_exprs_lob_locator(iter_param, context, *col_param, expr, eval_ctx, vec_offset, row_cap))) {
-              LOG_WARN("Failed to fill lob locator", K(ret), K(i), K(vec_offset), K(row_cap), K(has_lob_out_row()), KPC(col_param), K(iter_param));
-            }
-          }
-        }
-        if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(group_by_cell.eval_batch(nullptr, row_cap, i, false))) {
-          LOG_WARN("Failed to eval batch", K(ret), K(i));
-        } else if (need_get_col) {
-          last_agg_col_offset = agg_col_offset;
-        }
-      }
-      LOG_DEBUG("[GROUP BY PUSHDOWN]", K(ret), K(i), K(group_by_col), K(agg_col_offset), K(group_by_cell), K(need_get_col));
-    }
-  }
-  return ret;
-}
-
-int ObMicroBlockDecoder::get_rows(
-    const common::ObIArray<int32_t> &cols,
-    const common::ObIArray<const share::schema::ObColumnParam *> &col_params,
-    const common::ObIArray<blocksstable::ObStorageDatum> *default_datums,
-    const bool is_padding_mode,
-    const int32_t *row_ids,
-    const int64_t row_cap,
-    const char **cell_datas,
-    const int64_t vec_offset,
-    uint32_t *len_array,
-    sql::ObEvalCtx &eval_ctx,
-    sql::ObExprPtrIArray &exprs,
-    const bool need_init_vector)
-{
-  int ret = OB_SUCCESS;
-  decoder_allocator_.reuse();
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (OB_UNLIKELY(nullptr == row_ids || nullptr == cell_datas ||
-                         cols.count() != exprs.count() || cols.count() != col_params.count() ||
-                         (nullptr != default_datums && cols.count() != default_datums->count()))) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(row_ids), KP(cell_datas),
-             K(cols.count()), K(exprs.count()), K(col_params.count()), KPC(default_datums));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < cols.count(); i++) {
-      const int32_t col_id = cols.at(i);
-      sql::ObExpr &expr = *(exprs.at(i));
-      const bool is_need_padding = nullptr != col_params.at(i) && need_padding(is_padding_mode, col_params.at(i)->get_meta_type());
-      if (0 == vec_offset) {
-        if (need_init_vector) {
-          const VectorFormat format = (is_need_padding) ? VectorFormat::VEC_DISCRETE : expr.get_default_res_format();
-          if (OB_FAIL(storage::init_expr_vector_header(expr, eval_ctx, eval_ctx.max_batch_size_, format))) {
-            LOG_WARN("Fail to init vector", K(ret));
-          }
-        } else {
-          expr.set_all_not_null(eval_ctx, eval_ctx.max_batch_size_);
-        }
-      }
-      if (OB_SUCC(ret)) {
-        ObVectorDecodeCtx vector_decode_ctx(
-          cell_datas, len_array, row_ids, row_cap, vec_offset, expr.get_vector_header(eval_ctx));
-        if (OB_NOT_NULL(default_datums)) {
-          vector_decode_ctx.set_default_datum(default_datums->at(i));
-        }
-        if (OB_FAIL(get_col_data(col_id, vector_decode_ctx))) {
-          LOG_WARN("Failed to get col datums", K(ret), K(i), K(col_id), K(vector_decode_ctx));
-        } else if (is_need_padding && OB_FAIL(storage::pad_on_rich_format_columns(
-            col_params.at(i)->get_accuracy(),
-            col_params.at(i)->get_meta_type().get_collation_type(),
-            row_cap,
-            vec_offset,
-            decoder_allocator_.get_inner_allocator(),
-            expr,
-            eval_ctx))) {
-          LOG_WARN("Failed pad on rich format columns", K(ret), K(expr));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObMicroBlockDecoder::get_col_data(const int32_t col_id, ObVectorDecodeCtx &vector_ctx)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(decoders_[col_id].decode_vector(row_index_, vector_ctx))) {
-    LOG_WARN("fail to get column data from decoder", K(ret), K(header_->column_count_), K(col_id), K(vector_ctx));
-  }
-  return ret;
-}
-
-}
-}
+} // namespace blocksstable
+} // namespace oceanbase

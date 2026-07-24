@@ -59,15 +59,12 @@ public:
 
 struct RangePartCmp {
 public:
-  RangePartCmp() : row_cmp_func_(nullptr), ret_(OB_SUCCESS),
-      part_expr_obj_meta_(), part_array_obj_meta_() {}
+  RangePartCmp() : cmp_func_(nullptr), ret_(OB_SUCCESS) {}
   ~RangePartCmp() = default;
   bool operator()(const ObDatum &l, const RangePartition &r);
 
-  sql::RowCmpFunc row_cmp_func_;
+  ObExprCmpFuncType cmp_func_;
   int ret_;
-  common::ObObjMeta part_expr_obj_meta_;
-  common::ObObjMeta part_array_obj_meta_;
 };
 
 struct PartValKey
@@ -136,16 +133,6 @@ class ObExprCalcPartitionBase : public ObFuncExprOperator
 {
 public:
   static const ObObjectID NONE_PARTITION_ID = OB_INVALID_ID;
-  enum OptRouteType {
-    OPT_ROUTE_NONE,
-    OPT_ROUTE_HASH_ONE
-  };
-  enum class PartType {
-    HASH,
-    KEY,
-    RANGE,
-    LIST
-  };
 
   class ObExprCalcPartCtx : public ObExprOperatorCtx
   {
@@ -207,12 +194,6 @@ public:
   static int calc_partition_level_one(const ObExpr &expr,
                                       ObEvalCtx &ctx,
                                       ObDatum &res_datum);
-  static int calc_partition_level_one_vector(const ObExpr &expr, ObEvalCtx &ctx,
-                                             const ObBitVector &skip, const EvalBound &bound);
-  static int fast_calc_partition_level_one_vector(const ObExpr &expr,
-                                                  ObEvalCtx &ctx,
-                                                  const ObBitVector &skip,
-                                                  const EvalBound &bound);
   static int calc_partition_level_two(const ObExpr &expr,
                                       ObEvalCtx &ctx,
                                       ObDatum &res_datum);
@@ -226,6 +207,8 @@ public:
   virtual bool need_rt_ctx() const override { return true; }
   static int get_first_part_id(ObExecContext &ctx, const ObExpr &expr, int64_t &first_part_id);
   static int set_first_part_id(ObExecContext &ctx, const ObExpr &expr, const int64_t first_part_id);
+  static int update_part_id_calc_type_for_upgrade(ObExecContext &ctx, const ObExpr &expr,
+                                            PartitionIdCalcType calc_type);
   static int calc_part_and_subpart_and_tablet_id(const ObExpr *calc_part_id,
                                                 ObEvalCtx &eval_ctx,
                                                 ObObjectID &partition_id,

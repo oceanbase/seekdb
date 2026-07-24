@@ -128,25 +128,6 @@ TEST_F(TestDictDecoder, cell_decode_to_datum_test)
   cell_decode_to_datum_test();
 }
 
-TEST_F(TestDictDecoder, batch_decode_to_vector_test)
-{
-  #define TEST_ONE_WITH_ALIGN(row_aligned, vec_format) \
-  batch_decode_to_vector_test(false, true, row_aligned, vec_format); \
-  batch_decode_to_vector_test(false, false, row_aligned, vec_format); \
-  batch_decode_to_vector_test(true, true, row_aligned, vec_format); \
-  batch_decode_to_vector_test(true, false, row_aligned, vec_format);
-
-  #define TEST_ONE(vec_format) \
-  TEST_ONE_WITH_ALIGN(true, vec_format) \
-  TEST_ONE_WITH_ALIGN(false, vec_format)
-
-  TEST_ONE(VEC_UNIFORM);
-  TEST_ONE(VEC_FIXED);
-  TEST_ONE(VEC_DISCRETE);
-  TEST_ONE(VEC_CONTINUOUS);
-  #undef TEST_ONE
-  #undef TEST_ONE_WITH_ALIGN
-}
 
 TEST_F(TestDictDecoder, batch_decode_single_var_len_dict) {
   const int64_t string_len = UINT16_MAX + 3;
@@ -185,31 +166,6 @@ TEST_F(TestDictDecoder, batch_decode_single_var_len_dict) {
   ASSERT_EQ(datum.len_, string_len);
   ASSERT_EQ(0, MEMCMP(datum.ptr_, string_buf, string_len));
 
-  // decode vector
-  ObArenaAllocator test_allocator;
-  ObArenaAllocator frame_allocator;
-  sql::ObExecContext exec_context(test_allocator);
-  sql::ObEvalCtx eval_ctx(exec_context);
-  const char *ptr_arr[ROW_CNT];
-  uint32_t len_arr[ROW_CNT];
-
-  ObObjMeta col_meta = col_descs_.at(varchar_col_idx).col_type_;
-  const int16_t precision = col_meta.is_decimal_int() ? col_meta.get_stored_precision() : PRECISION_UNKNOWN_YET;
-  VecValueTypeClass vec_tc = common::get_vec_value_tc(
-      col_meta.get_type(),
-      col_meta.get_scale(),
-      precision);
-  ASSERT_EQ(col_meta.get_type(), ObVarcharType);
-
-  sql::ObExpr col_expr;
-  ASSERT_EQ(OB_SUCCESS, VectorDecodeTestUtil::generate_column_output_expr(
-      ROW_CNT, col_meta, VEC_UNIFORM, eval_ctx, col_expr, frame_allocator));
-  LOG_INFO("Current col: ", K(varchar_col_idx), K(col_meta),  K(*decoder.decoders_[varchar_col_idx].ctx_), K(precision), K(vec_tc));
-
-  ObVectorDecodeCtx vector_ctx(ptr_arr, len_arr, &row_id, 1, 0, col_expr.get_vector_header(eval_ctx));
-  ASSERT_EQ(OB_SUCCESS, decoder.decoders_[varchar_col_idx].decode_vector(decoder.row_index_, vector_ctx));
-  ASSERT_TRUE(VectorDecodeTestUtil::verify_vector_and_datum_match(*(col_expr.get_vector_header(eval_ctx).get_vector()),
-      0, row.storage_datums_[varchar_col_idx]));
 
 }
 
@@ -223,25 +179,6 @@ TEST_F(TestRLEDecoder, cell_decode_to_datum_test)
   cell_decode_to_datum_test();
 }
 
-TEST_F(TestRLEDecoder, batch_decode_to_vector_test)
-{
-  #define TEST_ONE_WITH_ALIGN(row_aligned, vec_format) \
-  batch_decode_to_vector_test(false, true, row_aligned, vec_format); \
-  batch_decode_to_vector_test(false, false, row_aligned, vec_format); \
-  batch_decode_to_vector_test(true, true, row_aligned, vec_format); \
-  batch_decode_to_vector_test(true, false, row_aligned, vec_format);
-
-  #define TEST_ONE(vec_format) \
-  TEST_ONE_WITH_ALIGN(true, vec_format) \
-  TEST_ONE_WITH_ALIGN(false, vec_format)
-
-  TEST_ONE(VEC_UNIFORM);
-  TEST_ONE(VEC_FIXED);
-  TEST_ONE(VEC_DISCRETE);
-  TEST_ONE(VEC_CONTINUOUS);
-  #undef TEST_ONE
-  #undef TEST_ONE_WITH_ALIGN
-}
 
 TEST_F(TestIntBaseDiffDecoder, batch_decode_to_datum_test)
 {
@@ -253,23 +190,6 @@ TEST_F(TestIntBaseDiffDecoder, cell_decode_to_datum_test)
   cell_decode_to_datum_test();
 }
 
-TEST_F(TestIntBaseDiffDecoder, batch_decode_to_vector_test)
-{
-  #define TEST_ONE_WITH_ALIGN(row_aligned, vec_format) \
-  batch_decode_to_vector_test(false, true, row_aligned, vec_format); \
-  batch_decode_to_vector_test(false, false, row_aligned, vec_format); \
-  batch_decode_to_vector_test(true, true, row_aligned, vec_format); \
-  batch_decode_to_vector_test(true, false, row_aligned, vec_format);
-
-  #define TEST_ONE(vec_format) \
-  TEST_ONE_WITH_ALIGN(true, vec_format) \
-  TEST_ONE_WITH_ALIGN(false, vec_format)
-
-  TEST_ONE(VEC_UNIFORM);
-  TEST_ONE(VEC_FIXED);
-  #undef TEST_ONE
-  #undef TEST_ONE_WITH_ALIGN
-}
 
 TEST_F(TestHexDecoder, batch_decode_to_datum_test)
 {
@@ -281,24 +201,6 @@ TEST_F(TestHexDecoder, cell_decode_to_datum_test)
   cell_decode_to_datum_test();
 }
 
-TEST_F(TestHexDecoder, batch_decode_to_vector_test)
-{
-  #define TEST_ONE_WITH_ALIGN(row_aligned, vec_format) \
-  batch_decode_to_vector_test(false, true, row_aligned, vec_format); \
-  batch_decode_to_vector_test(false, false, row_aligned, vec_format); \
-  batch_decode_to_vector_test(true, true, row_aligned, vec_format); \
-  batch_decode_to_vector_test(true, false, row_aligned, vec_format);
-
-  #define TEST_ONE(vec_format) \
-  TEST_ONE_WITH_ALIGN(true, vec_format) \
-  TEST_ONE_WITH_ALIGN(false, vec_format)
-
-  TEST_ONE(VEC_UNIFORM);
-  TEST_ONE(VEC_DISCRETE);
-  TEST_ONE(VEC_CONTINUOUS);
-  #undef TEST_ONE
-  #undef TEST_ONE_WITH_ALIGN
-}
 
 TEST_F(TestStringDiffDecoder, batch_decode_to_datum_test)
 {
@@ -310,24 +212,6 @@ TEST_F(TestStringDiffDecoder, cell_decode_to_datum_test)
   cell_decode_to_datum_test();
 }
 
-TEST_F(TestStringDiffDecoder, batch_decode_to_vector_test)
-{
-  #define TEST_ONE_WITH_ALIGN(row_aligned, vec_format) \
-  batch_decode_to_vector_test(false, true, row_aligned, vec_format); \
-  batch_decode_to_vector_test(false, false, row_aligned, vec_format); \
-  batch_decode_to_vector_test(true, true, row_aligned, vec_format); \
-  batch_decode_to_vector_test(true, false, row_aligned, vec_format);
-
-  #define TEST_ONE(vec_format) \
-  TEST_ONE_WITH_ALIGN(true, vec_format) \
-  TEST_ONE_WITH_ALIGN(false, vec_format)
-
-  TEST_ONE(VEC_UNIFORM);
-  TEST_ONE(VEC_DISCRETE);
-  TEST_ONE(VEC_CONTINUOUS);
-  #undef TEST_ONE
-  #undef TEST_ONE_WITH_ALIGN
-}
 
 TEST_F(TestStringPrefixDecoder, batch_decode_to_datum_test)
 {
@@ -344,49 +228,18 @@ TEST_F(TestStringPrefixDecoder, cell_decode_to_datum_test_without_hex)
   cell_decode_to_datum_test_without_hex();
 }
 
-TEST_F(TestStringPrefixDecoder, batch_decode_to_vector_test)
-{
-  #define TEST_ONE_WITH_ALIGN(row_aligned, vec_format) \
-  batch_decode_to_vector_test(false, true, row_aligned, vec_format); \
-  batch_decode_to_vector_test(false, false, row_aligned, vec_format); \
-  batch_decode_to_vector_test(true, true, row_aligned, vec_format); \
-  batch_decode_to_vector_test(true, false, row_aligned, vec_format);
-
-  #define TEST_ONE(vec_format) \
-  TEST_ONE_WITH_ALIGN(true, vec_format) \
-  TEST_ONE_WITH_ALIGN(false, vec_format)
-
-  TEST_ONE(VEC_UNIFORM);
-  TEST_ONE(VEC_DISCRETE);
-  TEST_ONE(VEC_CONTINUOUS);
-  #undef TEST_ONE
-  #undef TEST_ONE_WITH_ALIGN
-}
 
 TEST_F(TestColumnEqualDecoder, cell_decode_to_datum_test)
 {
   cell_column_equal_decode_to_datum_test();
 }
 
-TEST_F(TestColumnEqualDecoder, col_equal_batch_decode_to_vector_test)
-{
-  col_equal_batch_decode_to_vector_test(VEC_FIXED);
-  col_equal_batch_decode_to_vector_test(VEC_UNIFORM);
-  col_equal_batch_decode_to_vector_test(VEC_DISCRETE);
-  col_equal_batch_decode_to_vector_test(VEC_CONTINUOUS);
-}
 
 TEST_F(TestInterColumnSubstringDecoder, cell_decode_to_datum_test)
 {
   cell_inter_column_substring_to_datum_test();
 }
 
-TEST_F(TestInterColumnSubstringDecoder, col_substr_batch_decode_to_vector_test)
-{
-  col_substr_batch_decode_to_vector_test(VEC_UNIFORM);
-  col_substr_batch_decode_to_vector_test(VEC_DISCRETE);
-  col_substr_batch_decode_to_vector_test(VEC_CONTINUOUS);
-}
 
 
 // TEST_F(TestDictDecoder, batch_decode_perf_test)

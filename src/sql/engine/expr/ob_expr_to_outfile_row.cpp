@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/expr/ob_expr_to_outfile_row.h"
+#include "share/ob_lob_access_utils.h"
 #include "sql/engine/ob_exec_context.h"
 
 using namespace oceanbase::common;

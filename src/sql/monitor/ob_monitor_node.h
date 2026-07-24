@@ -86,7 +86,6 @@ public:
       otherstat_8_id_(0),
       otherstat_9_id_(0),
       otherstat_10_id_(0),
-      enable_rich_format_(false),
       workarea_mem_(0),
       workarea_max_mem_(0),
       workarea_tempseg_(0),
@@ -111,12 +110,11 @@ public:
   void set_operator_type(ObPhyOperatorType type) { op_type_ = type; }
   void set_operator_id(int64_t op_id) { op_id_ = op_id; }
   void set_plan_depth(int64_t plan_depth) { plan_depth_ = plan_depth; }
-  const char *get_operator_name() const { return get_phy_op_name(op_type_, enable_rich_format_); }
+  const char *get_operator_name() const { return get_phy_op_name(op_type_); }
   ObPhyOperatorType get_operator_type() const { return op_type_; }
   int64_t get_op_id() const { return op_id_; }
   const TraceId& get_trace_id() const { return trace_id_; }
   int64_t get_thread_id() { return thread_id_; }
-  void set_rich_format(bool v) { enable_rich_format_ = v; }
   void update_memory(int64_t delta_size);
   void update_tempseg(int64_t delta_size);
   uint64_t calc_db_time();
@@ -164,7 +162,6 @@ public:
   int16_t otherstat_8_id_;
   int16_t otherstat_9_id_;
   int16_t otherstat_10_id_;
-  bool enable_rich_format_;
   int64_t workarea_mem_;
   int64_t workarea_max_mem_;
   int64_t workarea_tempseg_;

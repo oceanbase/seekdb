@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/aggregate/ob_hash_groupby_op.h"
+#include "sql/engine/expr/ob_expr_estimate_ndv.h"
 #include "share/rc/ob_module_provider.h"
 #include "sql/engine/px/ob_px_util.h"
 
@@ -27,6 +28,31 @@ using namespace common::hash;
 
 namespace sql
 {
+
+int LlcEstimate::init_llc_map(common::ObArenaAllocator &allocator)
+{
+  int ret = OB_SUCCESS;
+  char *llc_map = nullptr;
+  int64_t llc_map_size = 0;
+  if (OB_FAIL(ObAggregateProcessor::llc_init_empty(llc_map, llc_map_size, allocator))) {
+    LOG_WARN("failed to init llc map", K(ret));
+  } else {
+    llc_map_.assign_ptr(llc_map, llc_map_size);
+  }
+  return ret;
+}
+
+int LlcEstimate::reset()
+{
+  if (!llc_map_.empty()) {
+    MEMSET(llc_map_.ptr(), 0, llc_map_.length());
+  }
+  avg_group_mem_ = 0;
+  est_cnt_ = 0;
+  last_est_cnt_ = 0;
+  enabled_ = false;
+  return OB_SUCCESS;
+}
 
 OB_SERIALIZE_MEMBER(ObGroupByDupColumnPair, org_expr, dup_expr);
 
@@ -3157,14 +3183,15 @@ int ObHashGroupByOp::check_llc_ndv()
   int64_t global_bound_size = 0;
   bool ndv_ratio_is_small_enough = false;
   bool has_enough_mem_for_deduplication = false;
-  ObSqlMemoryManager *runtime_sql_mem_manager = share::g_mp->sql_memory_manager();
+  ObTenantSqlMemoryManager * tenant_sql_mem_manager = NULL;
+  tenant_sql_mem_manager = share::g_mp->tenant_sql_memory_manager();
   ObExprEstimateNdv::llc_estimate_ndv(ndv, llc_est_.llc_map_);
   if (0 == llc_est_.est_cnt_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpect zero cnt", K(llc_est_.est_cnt_), K(ret));
   } else if (FALSE_IT(ndv_ratio_is_small_enough = (ndv * 1.0 / llc_est_.est_cnt_) < LlcEstimate::LLC_NDV_RATIO_)) {
   } else if (FALSE_IT(llc_est_.last_est_cnt_ = llc_est_.est_cnt_)) {
-  } else if (OB_ISNULL(runtime_sql_mem_manager)) {
+  } else if (OB_ISNULL(tenant_sql_mem_manager)) {
      
      if (ndv_ratio_is_small_enough) {
         bypass_ctrl_.bypass_rebackto_insert(ndv);
@@ -3174,7 +3201,7 @@ int ObHashGroupByOp::check_llc_ndv()
         }
      }
   } else {
-    global_bound_size = runtime_sql_mem_manager->get_global_bound_size();
+    global_bound_size = tenant_sql_mem_manager->get_global_bound_size();
     has_enough_mem_for_deduplication = (global_bound_size * LlcEstimate::GLOBAL_BOUND_RATIO_) > (llc_est_.avg_group_mem_ * ndv);
     LOG_TRACE("check llc ndv", K(ndv_ratio_is_small_enough), K(ndv), K(llc_est_.est_cnt_), K(has_enough_mem_for_deduplication), K(llc_est_.avg_group_mem_), K(global_bound_size), K(get_actual_mem_used_size()));
     if (!has_enough_mem_for_deduplication) {

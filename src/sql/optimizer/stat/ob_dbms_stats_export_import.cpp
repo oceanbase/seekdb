@@ -18,6 +18,7 @@
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "sql/optimizer/stat/ob_dbms_stats_export_import.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
+#include "share/ob_lob_access_utils.h"
 #include "share/ob_sql_client_decorator.h"
 #include "sql/optimizer/stat/ob_dbms_stats_history_manager.h"
 
@@ -95,7 +96,11 @@ int ObDbmsStatsExportImport::create_mysql_stat_table(ObExecContext &ctx,
     LOG_WARN("failed to append format", K(ret));
   } else if (OB_FAIL(raw_sql.append(CREATE_MYSQL_STAT_TABLE))) {
     LOG_WARN("failed to append format", K(ret));
-  } else if (OB_FAIL(raw_sql.append(";"))) {
+  } else if (param.tab_group_.empty() && OB_FAIL(raw_sql.append(";"))) {
+    LOG_WARN("failed to append format", K(ret));
+  } else if (!param.tab_group_.empty() &&
+             OB_FAIL(raw_sql.append_fmt(" tablegroup = '%.*s';",
+                                        param.tab_group_.length(), param.tab_group_.ptr()))) {
     LOG_WARN("failed to append format", K(ret));
   } else if (OB_FAIL(do_execute_sql(ctx, raw_sql))) {
     LOG_WARN("failed to do execute sql", K(ret));

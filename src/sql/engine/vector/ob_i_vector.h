@@ -27,53 +27,11 @@ namespace oceanbase
 {
 namespace sql {
   struct ObExpr;
-  struct ObCompactRow;
-  struct RowMeta;
   struct EvalBound;
 }
 
 namespace common
 {
-
-#define BATCH_EVAL_HASH_ARGS      const sql::ObExpr &expr,      \
-                                  uint64_t *hash_values,        \
-                                  const sql::ObBitVector &skip, \
-                                  const sql::EvalBound &bound,  \
-                                  const uint64_t *seeds,        \
-                                  const bool is_batch_seed      \
-
-#define EVAL_HASH_ARGS_FOR_ROW const sql::ObExpr &expr,        \
-                                  uint64_t &hash_value,        \
-                                  const int64_t batch_idx,     \
-                                  const int64_t batch_size,    \
-                                  const uint64_t seed
-
-#define VECTOR_ONE_COMPARE_ARGS const sql::ObExpr &expr,    \
-                                const int64_t row_idx,      \
-                                const bool r_null,          \
-                                const char *r_v,            \
-                                const ObLength r_len,       \
-                                int &cmp_ret
-
-#define VECTOR_COMPARE_BATCH_ROWS_ARGS const sql::ObExpr &expr,    \
-                                const uint16_t *sel,               \
-                                const uint16_t sel_cnt,            \
-                                sql::ObCompactRow **rows,          \
-                                const int64_t row_col_idx,         \
-                                const sql::RowMeta &row_meta,      \
-                                int *cmp_ret
-#define VECTOR_NOT_NULL_COMPARE_ARGS const sql::ObExpr &expr,    \
-                                const int64_t row_idx1,      \
-                                const int64_t row_idx2,      \
-                                int &cmp_ret
-#define VECTOR_MUL_COMPARE_ARGS const sql::ObExpr &expr,      \
-                                const sql::ObBitVector &skip, \
-                                const sql::EvalBound &bound,  \
-                                const bool r_null,            \
-                                const char *r_v,              \
-                                const ObLength r_len,         \
-                                int64_t &diff_row_idx,        \
-                                int &cmp_ret
 
 #define DEF_VEC_READ_INTERFACES(Derived)                                                           \
 public:                                                                                            \
@@ -403,34 +361,16 @@ private:                                                                        
   }
 
 /*
-                                               ObIVector
-                                                   |
-                                              ObVectorBase
-                                                   |
-                             -------------------------------------------
-                             |                                         |
-                   ObBitmapNullVectorBase                              |
-                             |                                         |
-    ----------------------------------------------                     |
-    |                        |                   |                     |
-ObFixedLengthBase    ObDiscreteBase      ObContinuousBase         ObUniformBase
-    |                        |                   |                     |
-template<ValueType>                       template<Offset>       template<IS_CONST>
-ObFixedLengthFormat   ObDiscreteFormat    ObContinuousFormat     ObUniformFormat
-    |                        |                   |                      |
-template<ValueType,Op>  template<Op>      template<Offset, Op>   template<IS_CONST, Op>
-ObFixedLengthVector   ObDiscreteVector    ObContinuousVector     ObUniformVector
-*/
+ * ObIVector
+ *   `-- ObVectorBase
+ *       |-- ObBitmapNullVectorBase
+ *       |   |-- ObFixedLengthBase -- ObFixedLengthFormat<ValueType>
+ *       |   |-- ObDiscreteBase ---- ObDiscreteFormat
+ *       |   `-- ObContinuousBase -- ObContinuousFormat
+ *       `-- ObUniformBase --------- ObUniformFormat<IS_CONST>
+ */
 class ObIVector
 {
-public:
-  enum CHARSET_FLAG
-  {
-    UNKNOWN = 0,
-    ASCII = 1,
-    NON_ASCII = 2,
-  };
-
 public:
   static const int64_t MAX_VECTOR_STRUCT_SIZE = 64;
   virtual VectorFormat get_format() const = 0;
@@ -458,75 +398,10 @@ public:
   virtual bool has_null() const = 0;
   virtual void set_has_null() = 0;
   virtual void reset_has_null() = 0;
-  virtual bool is_batch_ascii() const = 0;
-  virtual void reset_is_batch_ascii() = 0;
-  virtual void set_is_batch_ascii() = 0;
-  virtual void set_has_non_ascii() = 0;
   virtual bool is_null(const int64_t idx) const = 0;
   virtual void set_null(const int64_t idx) = 0;
   virtual void unset_null(const int64_t idx) = 0;
   void set_null(const sql::EvalBound &bound);
-
-  virtual int default_hash(BATCH_EVAL_HASH_ARGS) const = 0;
-  virtual int murmur_hash(BATCH_EVAL_HASH_ARGS) const = 0;
-  // In vectorization 1.0, hash value (calculated by murmur_hash_v2) of null is inconsistent for different types.
-  // For example, null hash value of ObFixedDouble is equal to `seed`, null hash vlaue of int to equal to `murmur_hash_v2(nullptr, 0, seed)`
-  // In vectorization 2.0, null hash value (calculated by `murmur_hash_v3`)to equal to `seed` for all types (including null type)
-  // We use different interface names (v3 in 2.0, v2 in 1.0) to distinguish hash function behaviors.
-  virtual int murmur_hash_v3(BATCH_EVAL_HASH_ARGS) const = 0;
-  // used for one row calculation
-  virtual int murmur_hash_v3_for_one_row(EVAL_HASH_ARGS_FOR_ROW) const = 0;
-  // compare n-th value in vector with other value,
-  // the type of other value must be same as this vector
-  virtual int null_first_cmp(VECTOR_ONE_COMPARE_ARGS) const = 0;
-  virtual int null_last_cmp(VECTOR_ONE_COMPARE_ARGS) const = 0;
-  virtual int no_null_cmp(VECTOR_NOT_NULL_COMPARE_ARGS) const = 0;
-  // compare the values ​​in the given interval with EvalBound and return the first unequal row idx
-  virtual int null_first_mul_cmp(VECTOR_MUL_COMPARE_ARGS) const = 0;
-  virtual int null_last_mul_cmp(VECTOR_MUL_COMPARE_ARGS) const = 0;
-  virtual int null_first_cmp_batch_rows(VECTOR_COMPARE_BATCH_ROWS_ARGS) const = 0;
-  virtual int no_null_cmp_batch_rows(VECTOR_COMPARE_BATCH_ROWS_ARGS) const = 0;
-
-  // append values to this vector from idx-th column of rows
-  virtual int from_rows(const sql::RowMeta &row_meta,
-                        const sql::ObCompactRow **stored_rows,
-                        const int64_t size,
-                        const int64_t col_idx) = 0;
-
-  virtual int from_rows(const sql::RowMeta &row_meta,
-                        const sql::ObCompactRow **stored_rows,
-                        const uint16_t selector[],
-                        const int64_t size,
-                        const int64_t col_idx) = 0;
-
-  virtual int from_row(const sql::RowMeta &row_meta,
-                       const sql::ObCompactRow *stored_rows,
-                       const int64_t row_idx,
-                       const int64_t col_idx) = 0;
-
-  // set values from this vector to idx-th column of rows
-  virtual int to_rows(const sql::RowMeta &row_meta,
-                      sql::ObCompactRow **stored_rows,
-                      const uint16_t selector[],
-                      const int64_t size,
-                      const int64_t col_idx) const = 0;
-
-  virtual int to_rows(const sql::RowMeta &row_meta,
-                      sql::ObCompactRow **stored_rows,
-                      const int64_t size,
-                      const int64_t col_idx) const = 0;
-
-  virtual int to_row(const sql::RowMeta &row_meta,
-                     sql::ObCompactRow *stored_row,
-                     const uint64_t row_idx,
-                     const int64_t col_idx) const = 0;
-  virtual int to_row(const sql::RowMeta &row_meta,
-                     sql::ObCompactRow *stored_row,
-                     const uint64_t row_idx,
-                     const int64_t col_idx,
-                     const int64_t remain_size,
-                     const bool is_fixed_length_data,
-                     int64_t &row_size) const = 0;
 
   virtual int64_t to_string(char *buf, const int64_t buf_len) const
   {

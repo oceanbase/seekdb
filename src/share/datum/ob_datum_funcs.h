@@ -36,13 +36,6 @@ struct ObDatum;
 typedef int (*ObDatumCmpFuncType)(const ObDatum &datum1, const ObDatum &datum2, int &cmp_ret);
 typedef int (*ObDatumHashFuncType)(const ObDatum &datum, const uint64_t seed, uint64_t &res);
 
-class ObObjMeta;
-// moved down from sql/engine/expr/ob_expr.h:row comparison/batch hash function pointers,signatures are layer-neutral base vocabulary
-// vocabulary; the peer ObDatumCmpFuncType already lives here。sql keeps the original names through using aliases。
-typedef int (*NullSafeRowCmpFunc) (const ObObjMeta &l_meta, const ObObjMeta &r_meta,
-                                   const void *l_data, const int32_t l_len, const bool l_null,
-                                   const void *r_data, const int32_t r_len, const bool r_null,
-                                   int &cmp_ret);
 typedef void (*ObBatchDatumHashFunc)(uint64_t *hash_values,
                                      ObDatum *datums,
                                      const bool is_batch_datum,
@@ -92,7 +85,6 @@ public:
   ObCmpFunc() : cmp_func_(NULL) {}
   union {
     common::ObDatumCmpFuncType cmp_func_;
-    NullSafeRowCmpFunc row_cmp_func_;
     sql::serializable_function ser_cmp_func_;
   };
   TO_STRING_KV(KP_(cmp_func));

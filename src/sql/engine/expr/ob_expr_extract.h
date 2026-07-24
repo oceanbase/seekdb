@@ -53,8 +53,6 @@ public:
   // for static engine batch
   static int calc_extract_mysql_batch(
       const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size);
-  static int calc_extract_mysql_vector(
-      const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const EvalBound &bound);
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObExprExtract);
 

@@ -39,18 +39,11 @@ public:
   static int eval_append_batch(const ObExpr &expr, ObEvalCtx &ctx,
                                const ObBitVector &skip, const int64_t batch_size,
                                bool is_preappend = false);
-  static int eval_append_vector(const ObExpr &expr, ObEvalCtx &ctx,
-                                const ObBitVector &skip, const EvalBound &bound,
-                                bool is_preappend = false);
 
   static int append_elem(ObIAllocator &tmp_allocator, ObEvalCtx &ctx,
                          ObDatum *val_datum, uint16_t val_subschema_id,
                          ObIArrayType *val_arr, ObIArrayType *res_arr);
 
-  static int append_elem_vector(ObIAllocator &tmp_allocator, ObEvalCtx &ctx,
-                                ObIVector *val_vec, int64_t idx,
-                                uint16_t val_subschema_id, ObExpr &param_expr,
-                                ObIArrayType *val_arr, ObIArrayType *res_arr);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprArrayAppendCommon);
 };
@@ -65,8 +58,6 @@ public:
   static int eval_array_append(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
   static int eval_array_append_batch(const ObExpr &expr, ObEvalCtx &ctx,
                                      const ObBitVector &skip, const int64_t batch_size);
-  static int eval_array_append_vector(const ObExpr &expr, ObEvalCtx &ctx,
-                                      const ObBitVector &skip, const EvalBound &bound);
 
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
@@ -85,8 +76,6 @@ public:
   static int eval_array_prepend(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
   static int eval_array_prepend_batch(const ObExpr &expr, ObEvalCtx &ctx,
                                       const ObBitVector &skip, const int64_t batch_size);
-  static int eval_array_prepend_vector(const ObExpr &expr, ObEvalCtx &ctx,
-                                       const ObBitVector &skip, const EvalBound &bound);
 
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,

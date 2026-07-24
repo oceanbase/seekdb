@@ -30,8 +30,7 @@ OB_SERIALIZE_MEMBER(ObFrameInfo,
                     frame_idx_,
                     frame_size_,
                     zero_init_pos_,
-                    zero_init_size_,
-                    use_rich_format_);
+                    zero_init_size_);
 
 int ObExprFrameInfo::assign(const ObExprFrameInfo &other,
                             common::ObIAllocator &allocator)
@@ -53,10 +52,7 @@ int ObExprFrameInfo::assign(const ObExprFrameInfo &other,
     LOG_WARN("failed to prepare allocate array", K(ret));
   } else {
     char *frame_mem = NULL;
-    int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
-    if (const_frame_.count() > 0 && const_frame_.at(0).use_rich_format_) {
-      item_size += sizeof(VectorHeader);
-    }
+    const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
     for (int i = 0; OB_SUCC(ret) && i < other.const_frame_.count(); i++) {
       if (OB_ISNULL(frame_mem = (char *)allocator.alloc(other.const_frame_.at(i).frame_size_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -96,21 +92,6 @@ int ObExprFrameInfo::assign(const ObExprFrameInfo &other,
           }
       } // end for
     } // for end
-    // init const vector header
-    if (const_frame_.count() > 0 && const_frame_.at(0).use_rich_format_) {
-      for (int64_t i = 0; OB_SUCC(ret) && i < other.rt_exprs_.count(); i++) {
-        ObExpr &expr = other.rt_exprs_.at(i);
-        if (IS_CONST_LITERAL(expr.type_)) {
-          char *frame = const_frame_ptrs_.at(expr.frame_idx_);
-          VecValueTypeClass vec_tc = expr.get_vec_value_tc();
-          ObDatum *datum = reinterpret_cast<ObDatum*>(frame + expr.datum_off_);
-          ObEvalInfo *eval_info = reinterpret_cast<ObEvalInfo *>(frame + expr.eval_info_off_);
-          VectorHeader *vec_header = reinterpret_cast<VectorHeader *>(frame + expr.vector_header_off_);
-          ret = vec_header->init_uniform_const_vector(vec_tc, datum, eval_info);
-        }
-      }
-    }
-
     if (OB_SUCC(ret)) {
       // deep copy extra info & inner function ptrs
       for (int i = 0; OB_SUCC(ret) && i < other.rt_exprs_.count(); i++) {
@@ -301,10 +282,7 @@ int ObExprFrameInfo::alloc_frame(ObIAllocator &exec_allocator,
     ALLOC_FRAME_MEM(dynamic_frame_);
     //for subquery core 
     // Preemptively set datum in frame to null
-    int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
-    if (dynamic_frame_.count() > 0 && dynamic_frame_.at(0).use_rich_format_) {
-      item_size += sizeof(VectorHeader);
-    }
+    const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
     for (int64_t i = 0; OB_SUCC(ret) && i < dynamic_frame_.count(); ++i) {
       char *cur_frame = frames[begin_idx + i];
       for (int64_t j = 0; j < dynamic_frame_.at(i).expr_cnt_; ++j) {
@@ -411,20 +389,6 @@ OB_DEF_DESERIALIZE(ObExprFrameInfo)
   OB_UNIS_DECODE(datum_frame_);
   OB_UNIS_DECODE(dynamic_frame_);
   ObExpr::get_serialize_array() = seri_arr_bak;
-  if (const_frame_.count() > 0 && const_frame_.at(0).use_rich_format_) {
-    for (int64_t i = 0; OB_SUCC(ret) && i < rt_exprs_.count(); i++) {
-      ObExpr &expr = rt_exprs_.at(i);
-      if (IS_CONST_LITERAL(expr.type_)) {
-        char *frame = const_frame_ptrs_.at(expr.frame_idx_);
-        VecValueTypeClass vec_tc = expr.get_vec_value_tc();
-        ObDatum *datum = reinterpret_cast<ObDatum*>(frame + expr.datum_off_);
-        ObEvalInfo *eval_info = reinterpret_cast<ObEvalInfo *>(frame + expr.eval_info_off_);
-        VectorHeader *vec_header = reinterpret_cast<VectorHeader *>(frame + expr.vector_header_off_);
-        ret = vec_header->init_uniform_const_vector(vec_tc, datum, eval_info);
-      }
-    }
-  }
-
   return ret;
 }
 
@@ -598,12 +562,7 @@ OB_NOINLINE int ObPreCalcExprFrameInfo::do_batch_stmt_eval(ObExecContext &exec_c
 void ObPreCalcExprFrameInfo::clear_datum_evaluted_flags(char **frames)
 {
   int64_t datum_frame_idx = const_frame_ptrs_.count() + param_frame_.count() + dynamic_frame_.count();
-  int64_t item_size = 0;
-  if (datum_frame_.count() > 0 && datum_frame_.at(0).use_rich_format_) {
-    item_size = sizeof(ObDatum) + sizeof(ObEvalInfo) + sizeof(VectorHeader);
-  } else {
-    item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
-  }
+  const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
   for (int64_t i = 0; i < datum_frame_.count(); ++i) {
     char *cur_frame = frames[datum_frame_idx + i];
     for (int64_t j = 0; j < datum_frame_.at(i).expr_cnt_; ++j) {
@@ -726,4 +685,3 @@ OB_SERIALIZE_MEMBER(RowIdxColumnPair, idx_, expr_pos_);
 OB_SERIALIZE_MEMBER((ObTempExpr, ObExprFrameInfo), expr_idx_, idx_col_arr_);
 }
 }
-

@@ -17,6 +17,7 @@
 #ifndef __OCEANBASE_SQL_ENGINE_PX_UTIL_H__
 #define __OCEANBASE_SQL_ENGINE_PX_UTIL_H__
 
+#include "share/unit/ob_unit_info.h"
 #include "lib/container/ob_array.h"
 #include "sql/engine/px/ob_dfo.h"
 #include "sql/dtl/ob_dtl_task.h"
@@ -34,6 +35,7 @@ namespace sql
 {
 const int64_t PX_RESCAN_BATCH_ROW_COUNT = 8192;
 class ObIExtraStatusCheck;
+class ObPxNodePool;
 enum ObBcastOptimization {
   BC_TO_WORKER,
   BC_TO_SERVER,
@@ -103,7 +105,7 @@ public:
   static uint64_t get_exec_id(ObExecContext *exec_ctx);
   static uint64_t get_session_id(ObExecContext *exec_ctx);
 };
-// Size factors may overlap and are evaluated cumulatively.
+// Consider compatibility, currently set to not be mutually exclusive
 class ObPxEstimateSizeUtil
 {
 public:
@@ -137,10 +139,12 @@ public:
 
 
 typedef common::hash::ObHashMap<uint64_t, int64_t, common::hash::NoPthreadDefendMode> ObTabletIdxMap;
+typedef common::hash::ObHashSet<ObAddr, common::hash::NoPthreadDefendMode> ObAddrSet;
+typedef common::hash::ObHashSet<ObZone, common::hash::NoPthreadDefendMode> ObZoneSet;
 
 
 
-class ObPxSqcDistributionUtil
+class ObPXServerAddrUtil
 {
   class ObPxSqcTaskCountMeta {
   public:
@@ -155,8 +159,8 @@ class ObPxSqcDistributionUtil
     TO_STRING_KV(K_(partition_count), K_(thread_count), K_(time), K_(idx), K_(finish));
   };
 public:
-  ObPxSqcDistributionUtil() = default;
-  ~ObPxSqcDistributionUtil() = default;
+  ObPXServerAddrUtil() = default;
+  ~ObPXServerAddrUtil() = default;
   static int alloc_by_data_distribution(const ObIArray<ObTableLocation> *table_locations,
                                         ObExecContext &ctx,
                                         ObDfo &dfo);
@@ -166,6 +170,10 @@ public:
       ObExecContext &ctx, ObDfo &dfo);
   static int alloc_by_child_distribution(const ObDfo &child,
                                          ObDfo &parent);
+  static int alloc_by_random_distribution(ObExecContext &exec_ctx,
+                                          const ObDfo &child,
+                                          ObDfo &parent,
+                                          ObPxNodePool &px_node_pool);
   static int alloc_by_temp_child_distribution(ObExecContext &ctx,
                                               ObDfo &child);
   static int alloc_by_temp_child_distribution_inner(ObExecContext &ctx,
@@ -185,6 +193,39 @@ public:
       ObTabletIdxMap &idx_map);
   static int find_dml_ops(common::ObIArray<const ObTableModifySpec *> &insert_ops,
                           const ObOpSpec &op);
+  static int init_px_node_exec_info(ObExecContext &exec_ctx);
+  // Because the begin and end interfaces need to be used,
+  // ObIArray cannot be used here.
+  static int get_data_servers(ObExecContext &exec_ctx,
+                              sql::ObTMArray<ObAddr> &addrs,
+                              bool &is_empty,
+                              int64_t &data_node_cnt);
+  static int get_data_servers(ObExecContext &exec_ctx,
+                              ObAddrSet &addr_set,
+                              bool &is_empty);
+  static int inner_get_zone_servers(const ObAddrSet &data_addr_set,
+                                    ObIArray<ObAddr> &addrs);
+  static int get_zone_servers(ObExecContext &exec_ctx,
+                              sql::ObTMArray<ObAddr> &addrs,
+                              bool &is_empty,
+                              int64_t &data_node_cnt);
+  static int get_cluster_servers(ObExecContext &exec_ctx,
+                                sql::ObTMArray<ObAddr> &addrs,
+                                bool &is_empty,
+                                int64_t &data_node_cnt);
+  static int get_specified_servers(ObExecContext &exec_ctx,
+                                  sql::ObTMArray<ObAddr> &addrs,
+                                  bool &is_empty,
+                                  int64_t &data_node_cnt);
+  static int get_tenant_server_set(ObAddrSet &tenant_server_set);
+  static int get_tenant_servers(ObIArray<ObAddr> &tenant_servers);
+  static int shuffle_px_node_pool(sql::ObTMArray<ObAddr> &addrs,
+                                    int64_t data_node_cnt);
+  static int get_zone_server_cnt(const ObIArray<ObAddr> &server_list,
+                                  int64_t &server_cnt);
+  static int get_cluster_server_cnt(const ObIArray<ObAddr> &server_list,
+                                    int64_t &server_cnt);
+
   static int check_slave_mapping_location_constraint(ObDfo &child, ObDfo &parent);
   static bool check_build_dfo_with_dml(const ObOpSpec &op);
 
@@ -261,8 +302,12 @@ private:
   static int adjust_sqc_task_count(common::ObIArray<ObPxSqcTaskCountMeta> &sqc_tasks,
                                    int64_t parallel,
                                    int64_t partition);
+  static int do_random_dfo_distribution(const common::ObIArray<common::ObAddr> &src_addrs,
+                                        int64_t dst_addrs_count,
+                                        common::ObIArray<common::ObAddr> &dst_addrs);
 private:
-  DISALLOW_COPY_AND_ASSIGN(ObPxSqcDistributionUtil);
+  static int generate_dh_map_info(ObDfo &dfo);
+  DISALLOW_COPY_AND_ASSIGN(ObPXServerAddrUtil);
 };
 
 
@@ -273,6 +318,7 @@ public:
   {
   public:
     virtual int apply(ObExecContext &ctx, const ObOpSpec &input) = 0;
+    //TODO. For compatibilty now, to be remove on 4.2
     virtual int reset(const ObOpSpec &input) = 0;
   };
 public:
@@ -306,6 +352,7 @@ public:
                             int64_t &pos,
                             const ObOpSpec &root,
                             bool is_fulltree,
+                            const common::ObAddr &run_svr,
                             ObPhyOpSeriCtx *seri_ctx = NULL);
   static int deserialize_tree(const char *buf,
                               int64_t data_len,
@@ -468,12 +515,7 @@ public:
         OB_UNIS_ENCODE(all_frames.at(i));
       }
     }
-    int64_t item_size = 0;
-    if ((all_frames.count() > 0) && all_frames.at(0).use_rich_format_) {
-      item_size = sizeof(ObDatum) + sizeof(ObEvalInfo) + sizeof(VectorHeader);
-    } else {
-      item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
-    }
+    const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
     for (int64_t i = 0; i < all_frames.count() && OB_SUCC(ret); ++i) {
       const ObFrameInfo &frame_info = all_frames.at(i);
       //TODO shengle seri can opt, only serialize: sizeof(ObDatum) + sizeof(ObEvalInfo)
@@ -515,7 +557,7 @@ public:
           SQL_LOG(WARN, "ser frame info size overflow", K(ret), K(pos),
                    K(expr_datum_size), K(buf_len));
         } else if (0 < expr_datum_size) {
-          // Append the out-of-line datum payload after the serialized frame.
+          // TODO: longzhong.wlz There may be compatibility issues here, temporarily done this way, will modify later
           MEMCPY(buf + pos, expr_datum->ptr_, expr_datum_size);
           pos += expr_datum_size;
           ser_mem_size += expr_datum_size;
@@ -603,17 +645,6 @@ public:
     } else {
       ctx.set_frames(frames);
       ctx.set_frame_cnt(frame_cnt);
-      // init const vector
-      ObEvalCtx eval_ctx(ctx);
-      const ObIArray<ObExpr> &exprs = expr_frame_info.rt_exprs_;
-      for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
-        const ObExpr &expr = exprs.at(i);
-        if (expr.is_const_expr()
-            && UINT32_MAX != expr.vector_header_off_
-            && T_OP_ROW != expr.type_) {
-          ret = expr.init_vector(eval_ctx, VEC_UNIFORM_CONST, 1/*size*/);
-        }
-      }
     }
     return ret;
   }
@@ -690,12 +721,7 @@ public:
     }
     for (int64_t i = 0; i < all_frames.count() && OB_SUCC(ret); ++i) {
       const ObFrameInfo &frame_info = all_frames.at(i);
-      int64_t item_size = 0;
-      if (frame_info.use_rich_format_) {
-        item_size = sizeof(ObDatum) + sizeof(ObEvalInfo) + sizeof(VectorHeader);
-      } else {
-        item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
-      }
+      const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
       char *frame_buf = frames[frame_info.frame_idx_];
       for (int64_t j = 0; j < frame_info.expr_cnt_ && OB_SUCC(ret); ++j) {
         ObDatum *expr_datum = reinterpret_cast<ObDatum *>
@@ -708,7 +734,7 @@ public:
         } else if (0 == expr_datum_size) {
           // For this serialized data, the len_ of datum is 0, ObDatum has already been deserialized before, no further processing is needed
         } else {
-          // Restore the out-of-line datum payload into the destination frame buffer.
+          // TODO: longzhong.wlz previously mentioned there was a compatibility issue here, to be addressed later, for now it's like this
           MEMCPY(expr_datum_buf, buf + pos, expr_datum_size);
           expr_datum->ptr_ = expr_datum_buf;
           pos += expr_datum_size;
@@ -789,12 +815,7 @@ public:
     int ret = OB_SUCCESS;
     int64_t len = 0;
     int64_t need_extra_mem_size = 0;
-    int64_t item_size = 0;
-    if ((all_frames.count() > 0) && all_frames.at(0).use_rich_format_) {
-      item_size = sizeof(ObDatum) + sizeof(ObEvalInfo) + sizeof(VectorHeader);
-    } else {
-      item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
-    }
+    const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
     if (SERIALIZE_PLAN_PART) {
       OB_UNIS_ADD_LEN(all_frames.count());
       for (int64_t i = 0; i < all_frames.count() && OB_SUCC(ret); ++i) {
@@ -830,7 +851,7 @@ public:
         expr_datum_size = no_ser_data ? 0 : (expr_datum->null_ ? 0 : expr_datum->len_);
         OB_UNIS_ADD_LEN(expr_datum_size);
         if (0 < expr_datum_size) {
-          // Include the out-of-line datum payload in the serialized size.
+          // Here may be compatibility issues, temporarily like this, modify later
           len += expr_datum_size;
           ser_mem_size += expr_datum_size;
         }
@@ -997,10 +1018,42 @@ public:
 };
 
 
+class ObExtraServerAliveCheck : public ObIExtraStatusCheck
+{
+public:
+  ObExtraServerAliveCheck(const ObAddr &qc_addr, int64_t query_start_time) :
+    qc_addr_(qc_addr), dfo_mgr_(nullptr), last_check_time_(0), query_start_time_(query_start_time)
+  {
+    cluster_id_ = GCONF.cluster_id;
+  }
+  ObExtraServerAliveCheck(ObDfoMgr &dfo_mgr, int64_t query_start_time) :
+    qc_addr_(), dfo_mgr_(&dfo_mgr), last_check_time_(0), query_start_time_(query_start_time)
+  {
+    cluster_id_ = GCONF.cluster_id;
+  }
+  const char *name() const override { return "qc alive check"; }
+  int check() const override;
+  int do_check() const;
+
+private:
+  ObAddr qc_addr_;
+  ObDfoMgr *dfo_mgr_;
+  int64_t cluster_id_;
+  mutable int64_t last_check_time_;
+  // when check dst server not in blacklist, also check its server_start_time_ < query_start_time_;
+  int64_t query_start_time_;
+};
+
 class ObVirtualTableErrorWhitelist
 {
 public:
   static bool should_ignore_vtable_error(int error_code);
+};
+
+class ObPxCheckAlive
+{
+public:
+  static bool is_in_blacklist(const common::ObAddr &addr, int64_t server_start_time);
 };
 
 class ObPxErrorUtil
@@ -1008,7 +1061,8 @@ class ObPxErrorUtil
 public:
   static inline void update_qc_error_code(int &current_error_code,
                                            const int new_error_code,
-                                           const ObPxUserErrorMsg &from)
+                                           const ObPxUserErrorMsg &from,
+                                           const common::ObAddr &exec_addr)
   {
     int ret = OB_SUCCESS;
     // **replace** error code & error msg
@@ -1018,7 +1072,8 @@ public:
            OB_GOT_SIGNAL_ABORTING == current_error_code) &&
            OB_SUCCESS != new_error_code) {
         current_error_code = new_error_code;
-        SQL_LOG(WARN, "QC updated the local PX error code", K(new_error_code));
+        SQL_LOG(WARN, "QC update the error code. Please visit the corresponding address for more details.",
+            K(new_error_code), K(exec_addr));
         FORWARD_USER_ERROR(new_error_code, from.msg_);
       }
     }
@@ -1070,6 +1125,33 @@ public:
     }
   }
 };
+
+template<class T>
+static int get_location_addrs(const T &locations,
+                              ObIArray<ObAddr> &addrs)
+{
+  int ret = OB_SUCCESS;
+  hash::ObHashSet<ObAddr> addr_set;
+  if (OB_FAIL(addr_set.create(locations.size()))) {
+    SQL_LOG(WARN, "fail create addr set", K(locations.size()), K(ret));
+  }
+  for (auto iter = locations.begin(); OB_SUCC(ret) && iter != locations.end(); ++iter) {
+    ret = addr_set.exist_refactored((*iter)->server_);
+    if (OB_HASH_EXIST == ret) {
+      ret = OB_SUCCESS;
+    } else if (OB_HASH_NOT_EXIST == ret) {
+      if (OB_FAIL(addrs.push_back((*iter)->server_))) {
+        SQL_LOG(WARN, "fail push back server", K(ret));
+      } else if (OB_FAIL(addr_set.set_refactored((*iter)->server_))) {
+        SQL_LOG(WARN, "fail set addr to addr_set", K(ret));
+      }
+    } else {
+      SQL_LOG(WARN, "fail check server exist in addr_set", K(ret));
+    }
+  }
+  (void)addr_set.destroy();
+  return ret;
+}
 
 class LowestCommonAncestorFinder
 {

@@ -31,15 +31,6 @@ int ObDtlBufEncoder::switch_writer(const ObDtlMsg &msg)
         msg_writer_ = &row_msg_writer_;
       } else if (DtlWriterType::CHUNK_DATUM_WRITER == msg_writer_map[px_row.get_data_type()]) {
         msg_writer_ = &datum_msg_writer_;
-      } else if (DtlWriterType::VECTOR_FIXED_WRITER == msg_writer_map[px_row.get_data_type()]) {
-        vector_fixed_msg_writer_.set_size_per_buffer(size_per_buffer_);
-        msg_writer_ = &vector_fixed_msg_writer_;
-      } else if (DtlWriterType::VECTOR_ROW_WRITER == msg_writer_map[px_row.get_data_type()]) {
-        vector_row_msg_writer_.set_row_meta(meta_);
-        msg_writer_ = &vector_row_msg_writer_;
-      } else if (DtlWriterType::VECTOR_WRITER == msg_writer_map[px_row.get_data_type()]) {
-        //TODO : support local channel shuffle in vector mode
-        msg_writer_ = &vector_row_msg_writer_;
       } else {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unkown msg writer", K(msg.get_type()), K(msg_writer_->type()));
@@ -53,19 +44,6 @@ int ObDtlBufEncoder::switch_writer(const ObDtlMsg &msg)
         LOG_WARN("unkown msg writer", K(msg.get_type()), K(msg_writer_->type()));
       }
     }
-  } else {
-// #ifndef NDEBUG
-    // if (msg.is_data_msg() && msg_writer_->type() != DtlWriterType::VECTOR_ROW_WRITER) {
-    //   const ObPxNewRow &px_row = static_cast<const ObPxNewRow&>(msg);
-    //   if (msg_writer_map[px_row.get_data_type()] != msg_writer_->type()) {
-    //     ret = OB_ERR_UNEXPECTED;
-    //   }
-    // } else {
-    //   if (msg_writer_map[msg.get_type()] != msg_writer_->type()) {
-    //     ret = OB_ERR_UNEXPECTED;
-    //   }
-    // }
-// #endif
   }
   return ret;
 }
@@ -96,6 +74,61 @@ int ObDtlBufEncoder::write_data_msg(const ObDtlMsg &msg, ObEvalCtx *eval_ctx, bo
   return ret;
 }
 
+int ObDtlBcastService::send_message(ObDtlLinkedBuffer *&bcast_buf, bool drain)
+{
+  int ret = OB_SUCCESS;
+  /**
+   * A broadcast group is shared by the sending channels on the same machine.
+   * Assuming three sending channels share this bcast service. In one round of send messages, the three channels must be
+   * sending the same message; if they are different messages, an error should be reported.
+   * When the first two channels send messages, they are counting and do not actually send data.
+   * Data is only sent when the third channel sends it.
+   * The action of sending will result in asynchronous responses from all three channels.
+   * State changes caused by asynchronous responses to a channel will take effect at the next send action of the channel.
+   */
+  ObCurTraceId::TraceId *cur_trace_id = NULL;
+  if (OB_ISNULL(cur_trace_id = ObCurTraceId::get_trace_id()) || active_chs_count_ < 0) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid trace id / invalid active count", K(ret), K(active_chs_count_));
+  } else if (0 == active_chs_count_) {
+    // all channel has been drain, do nothing.
+  } else if (nullptr == bcast_buf_ && 0 == send_count_) {
+    // a new buffer come into this broadcast group.
+    bcast_buf_ = bcast_buf;
+    send_count_ = bcast_ch_count_ - 1;
+    // Here each time msg is sent, active_chs_count_ will be decremented, so it needs to be reset each time
+    active_chs_count_ = bcast_ch_count_;
+    bcast_buf = nullptr;
+    if (drain) {
+      // this channel has been drained.
+      active_chs_count_--;
+    }
+  } else if (bcast_buf_ == bcast_buf) {
+    send_count_--;
+    bcast_buf = nullptr;
+    if (drain) {
+      // this channel has been drained.
+      active_chs_count_--;
+    }
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_ERROR("this channel write a msg to other bcast service", K(bcast_buf), K(bcast_buf_), K(send_count_));
+  }
+  if (OB_SUCC(ret)) {
+    if (0 == send_count_ && active_chs_count_ != 0) {
+      // single-replica: broadcast via rpc no longer exists. All dtl channels are
+      // local, so no bcast service is ever created and this path is unreachable.
+      ret = OB_ERR_UNEXPECTED;
+      LOG_ERROR("dtl rpc broadcast is not supported in single-replica", K(ret));
+    } else if (0 == active_chs_count_) {
+      bcast_buf_ = nullptr;
+    }
+  }
+  LOG_TRACE("send message", K(ret), K(this), K(bcast_ch_count_), K(send_count_), K(bcast_buf),
+    K(bcast_buf_), K(peer_ids_), K(send_count_), K(active_chs_count_));
+  return ret;
+}
+
 int ObDtlChanAgent::init(dtl::ObDtlFlowControl &dfc,
                          ObPxTaskChSet &task_ch_set,
                          ObIArray<ObDtlChannel *> &channels,
@@ -114,6 +147,8 @@ int ObDtlChanAgent::init(dtl::ObDtlFlowControl &dfc,
   }
 
   for (int64_t i = 0; i < channels.count() && OB_SUCC(ret); ++i) {
+    bool find_bc_service = false;
+
     ObDtlBasicChannel *data_ch = (ObDtlBasicChannel*)channels.at(i);
     int64_t sys_buffer_size = data_ch->get_send_buffer_size();
 
@@ -122,11 +157,16 @@ int ObDtlChanAgent::init(dtl::ObDtlFlowControl &dfc,
       LOG_WARN("failed to get channel info", K(ret));
     }
     dtl_buf_allocator_.set_sys_buffer_size(sys_buffer_size);
+    UNUSED(find_bc_service);
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(local_channels_.push_back((ObDtlLocalChannel *)data_ch))) {
-      LOG_WARN("failed to add local channel", K(ret));
+    } else if (ObDtlChannel::DtlChannelType::LOCAL_CHANNEL == data_ch->get_channel_type()) {
+      if (OB_FAIL(local_channels_.push_back((ObDtlLocalChannel *)data_ch))) {
+        LOG_WARN("failed to push back server_ch", K(ret));
+      }
+      LOG_DEBUG("channel info by server", KP(data_ch->get_id()), K(data_ch->get_channel_type()));
     } else {
-      LOG_DEBUG("local broadcast channel", KP(data_ch->get_id()));
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected channel type", K(ret));
     }
   }
 
@@ -136,7 +176,7 @@ int ObDtlChanAgent::init(dtl::ObDtlFlowControl &dfc,
     }
   }
 
-  LOG_TRACE("initialized local broadcast channels", K(local_channels_.count()), KP(bcast_channel_));
+  LOG_TRACE("use shared broadcast msg optimizer", K(bc_services_), K(local_channels_.count()), KP(bcast_channel_->get_id()));
   return ret;
 }
 
@@ -296,6 +336,9 @@ int ObDtlChanAgent::destroy()
     if (OB_SUCCESS != temp_ret) {
       ret = temp_ret;
     }
+  }
+  for (int64_t i = 0; i < bc_services_.count(); ++i) {
+    bc_services_.at(i)->~ObDtlBcastService();
   }
   return ret;
 }

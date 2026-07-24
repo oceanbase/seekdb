@@ -35,8 +35,6 @@ public:
   static int eval_array_difference(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
   static int eval_array_difference_batch(const ObExpr &expr, ObEvalCtx &ctx,
                                          const ObBitVector &skip, const int64_t batch_size);
-  static int eval_array_difference_vector(const ObExpr &expr, ObEvalCtx &ctx,
-                                          const ObBitVector &skip, const EvalBound &bound);
   static int calc_difference(ObIArrayType *src_arr, ObIArrayType *res_arr);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,

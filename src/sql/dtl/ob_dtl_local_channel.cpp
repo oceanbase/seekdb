@@ -26,14 +26,18 @@ namespace sql {
 namespace dtl {
 
 ObDtlLocalChannel::ObDtlLocalChannel(
-    const uint64_t id)
-    : ObDtlBasicChannel(id)
+    const uint64_t id,
+    const ObAddr &peer,
+    DtlChannelType type)
+    : ObDtlBasicChannel(id, peer, type)
 {}
 
 ObDtlLocalChannel::ObDtlLocalChannel(
     const uint64_t id,
-    const int64_t hash_val)
-    : ObDtlBasicChannel(id, hash_val)
+    const ObAddr &peer,
+    const int64_t hash_val,
+    DtlChannelType type)
+    : ObDtlBasicChannel(id, peer, hash_val, type)
 {}
 
 ObDtlLocalChannel::~ObDtlLocalChannel()
@@ -52,6 +56,9 @@ int ObDtlLocalChannel::init()
   return ret;
 }
 
+void ObDtlLocalChannel::destroy()
+{
+}
 // Shared memory method
 int ObDtlLocalChannel::feedup(ObDtlLinkedBuffer *&linked_buffer)
 {
@@ -72,18 +79,18 @@ int ObDtlLocalChannel::send_shared_message(ObDtlLinkedBuffer *&buf)
     is_first = buf->is_data_msg() && 1 == buf->seq_no();
     is_eof = buf->is_eof();
     if (buf->is_data_msg() && buf->use_interm_result()) {
-      SERVER_MODULE_SCOPE {
+      MOD_SCOPE {
         if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->process_interm_result(buf, peer_id_))) {
           LOG_WARN("fail to process internal result", K(ret));
         }
       }
-    } else if (ObDtlMsgType::PX_VECTOR == buf->msg_type()) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("vector is not supported in local channel", K(ret), K(buf->msg_type()));
     } else if (OB_FAIL(DTL.get_channel(peer_id_, chan))) {
       int tmp_ret = ret;
-      // The receiver may not be linked yet. Handle drain immediately and let
-      // the first-buffer manager retain an ordinary data message until linking.
+      // cache version upgrade does not require processing, data sent to receive end roughly several cases:
+      // 1) new|old -> old no need to process, does not involve cache issues
+      // 2) old -> new, is_data_msg is false, and consistent with the old logic
+      // 3) new -> new, is_data_msg may be true, then blocking logic is used between new versions, without affecting others
+      // only buffer data msg
       ObDtlMsgHeader header;
       const bool keep_pos = true;
       if (!buf->is_data_msg() && OB_FAIL(ObDtlLinkedBuffer::deserialize_msg_header(*buf, header, keep_pos))) {
@@ -96,22 +103,19 @@ int ObDtlLocalChannel::send_shared_message(ObDtlLinkedBuffer *&buf)
         ret = tmp_ret;
         LOG_WARN("failed to get channel", K(ret), K(peer_id_));
       } else {
-        LOG_TRACE("get DTL channel fail", K(buf->seq_no()), KP(peer_id_), K(ret),
-                  K(tmp_ret), K(buf->is_data_msg()));
+        LOG_TRACE("get DTL channel fail", K(buf->seq_no()), KP(peer_id_), "peer", get_peer(), K(ret), K(tmp_ret), K(buf->is_data_msg()));
       }
     } else {
       ObDtlLocalChannel *local_chan = reinterpret_cast<ObDtlLocalChannel*>(chan);
       if (OB_FAIL(local_chan->feedup(buf))) {
-        LOG_WARN("feed up DTL channel fail", KP(peer_id_), K(ret));
+        LOG_WARN("feed up DTL channel fail", KP(peer_id_), "peer", get_peer(), K(ret));
       } else if (OB_ISNULL(local_chan->get_dfc())) {
-        LOG_TRACE("dfc of local channel is null", K(msg_response_.is_block()), KP(peer_id_),
-                  K(ret), KP(local_chan->get_id()));
+        LOG_TRACE("dfc of rpc channel is null", K(msg_response_.is_block()), KP(peer_id_), K(ret), KP(local_chan->get_id()), K(local_chan->get_peer()));
       } else if (local_chan->belong_to_receive_data()) {
         // Must be the receive end, in order to actively send a response to block the transmit end
         is_block = local_chan->get_dfc()->is_block(local_chan);
         LOG_TRACE("need blocking", K(msg_response_.is_block()), KP(peer_id_), K(ret), KP(local_chan->get_id()),
-          K(local_chan->belong_to_receive_data()), K(local_chan->get_processed_buffer_cnt()),
-          K(local_chan->get_recv_buffer_cnt()));
+          K(local_chan->get_peer()), K(local_chan->belong_to_receive_data()), K(local_chan->get_processed_buffer_cnt()), K(local_chan->get_recv_buffer_cnt()));
       }
       DTL.release_channel(local_chan);
     }
@@ -151,11 +155,12 @@ int ObDtlLocalChannel::send_message(ObDtlLinkedBuffer *&buf)
       LOG_WARN("failed to block data flow", K(ret));
     }
   }
-  LOG_TRACE("local channel send message", KP(get_id()), K(ret),
+  LOG_TRACE("local channel send message", KP(get_id()), K_(peer), K(ret),
     K(get_send_buffer_cnt()), K(get_msg_seq_no()));
 
   if (OB_SUCC(ret) && (!is_drain() || buf->is_eof())) {
-    // The consumer channel may not be linked when the first message arrives.
+    // The peer may not setup when the first message arrive,
+    // we wait first message return and retry until peer setup.
     bool is_eof = buf->is_eof();
     if (OB_FAIL(msg_response_.start())) {
       LOG_WARN("start message process fail", K(ret));
@@ -164,10 +169,11 @@ int ObDtlLocalChannel::send_message(ObDtlLinkedBuffer *&buf)
       //    it's processed rightly, or it's drain
       //    so don't wait first response
       // 2) control message SQC and QC channel also must be linked
-      // Bloom-filter messages use their local datahub path instead of this channel.
-      LOG_DEBUG("data channel linked", K(ret), KP(peer_id_));
+      // 3) bloom filter message rpc processor process, don't need channel
+      // so channel is linked and don't retry
+      LOG_DEBUG("Data channel linked", K_(peer), K(ret), KP(peer_id_));
     }
-    LOG_TRACE("local channel status", K(ret), KP(peer_id_));
+    LOG_TRACE("local channel status", K_(peer), K(ret), KP(peer_id_));
     if (is_eof) {
       set_eof();
     }

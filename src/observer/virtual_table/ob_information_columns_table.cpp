@@ -18,6 +18,7 @@
 #include "observer/virtual_table/ob_information_columns_table.h"
 #include "observer/virtual_table/ob_table_columns.h"
 #include "share/geo/ob_geo_utils.h"
+#include "share/ob_lob_access_utils.h"
 #include "src/sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/ob_sql.h"
 
@@ -79,10 +80,10 @@ int ObInfoSchemaColumnsTable::inner_get_next_row(common::ObNewRow *&row)
       // inside check_database_table_filter, the maximum number of loops is: start_key=MIN,MIN, end_key=MAX,MAX
       if (!is_filter_db_ && OB_FAIL(check_database_table_filter())) {
         SERVER_LOG(WARN, "fail to check database and table filter", K(ret));
-      // When db_name is specified, there is no need to iterate over the entire database schema array.
-      } else if (!is_filter_db_ && OB_FAIL(schema_guard_->get_database_schemas_in_runtime(
+      // When db_name is specified, there is no need to directly iterate over the tenant's entire database_schema_array
+      } else if (!is_filter_db_ && OB_FAIL(schema_guard_->get_database_schemas_in_tenant(
           database_schema_array_))) {
-        SERVER_LOG(WARN, "fail to get database schemas in runtime", K(ret));
+        SERVER_LOG(WARN, "fail to get database schemas in tenant", K(ret));
       } else if (OB_UNLIKELY(NULL == (tmp_ptr = static_cast<char *>(allocator_->alloc(
                              OB_MAX_SYS_PARAM_NAME_LENGTH))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -360,7 +361,7 @@ int ObInfoSchemaColumnsTable::iterate_column_schema_array(
 // Filter strategy:
 // If key_ranges_ is extracted to db_name
 //   directly traverse the current database_schema_array,
-//   then no longer obtain the entire database_schema_array from the schema guard;
+//   then no longer obtain the tenant's entire database_schema_array from the schema guard;
 //   Regardless of whether db_name is valid, is_filter_db_ is set to true
 // if extracted table_name
 //   directly traverse the current table_schema_array,
@@ -388,7 +389,7 @@ int ObInfoSchemaColumnsTable::check_database_table_filter()
                && start_key_obj_ptr[0] == end_key_obj_ptr[0]) {
       // Indicates that at least db_name is specified
       // Include filter condition as db_name + table_name
-      // then there is no need to obtain all database schemas
+      // then there is no need to obtain all database_schemas under the tenant
       ObString database_name = CS_TYPE_BINARY == start_key_obj_ptr[0].get_collation_type()
                                                  ? start_key_obj_ptr[0].get_varchar()
                                                    : start_key_obj_ptr[0].get_varchar().trim_end_space_only();

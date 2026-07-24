@@ -178,18 +178,6 @@ public:
       bool &equal) override;
   virtual void reserve_reader_memory(bool reserve) override
   { allocator_.set_reserve_memory(reserve); }
-  int get_rows(
-      const common::ObIArray<int32_t> &cols_projector,
-      const common::ObIArray<const share::schema::ObColumnParam *> &col_params,
-      const common::ObIArray<blocksstable::ObStorageDatum> *default_datums,
-      const bool is_padding_mode,
-      const int32_t *row_ids,
-      const int64_t vector_offset,
-      const int64_t row_cap,
-      ObDatumRow &row_buf,
-      sql::ObExprPtrIArray &exprs,
-      sql::ObEvalCtx &eval_ctx,
-      const bool need_init_vector);
   virtual bool has_lob_out_row() const override final
   { return nullptr != header_ && header_->has_lob_out_row(); }
 

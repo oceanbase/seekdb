@@ -337,13 +337,11 @@ int ObExprSubstr::cg_expr(ObExprCGCtx &op_cg_ctx,
         && rt_expr.args_[0]->is_batch_result()
         && !rt_expr.args_[1]->is_batch_result()) {
       rt_expr.eval_batch_func_ = eval_substr_batch;
-      rt_expr.eval_vector_func_ = eval_substr_vector;
     } else if (3 == rt_expr.arg_cnt_
                && rt_expr.args_[0]->is_batch_result()
                && !rt_expr.args_[1]->is_batch_result()
                && !rt_expr.args_[2]->is_batch_result()) {
       rt_expr.eval_batch_func_ = eval_substr_batch;
-      rt_expr.eval_vector_func_ = eval_substr_vector;
     }
   }
   return ret;
@@ -607,158 +605,6 @@ int ObExprSubstr::eval_substr_batch(const ObExpr &expr, ObEvalCtx &ctx,
   return ret;
 }
 
-template <typename ArgVec, typename ResVec>
-int ObExprSubstr::vector_substr(VECTOR_EVAL_FUNC_ARG_DECL)
-{
-  int ret = OB_SUCCESS;
-
-  ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-  const bool has_len_param = (expr.arg_cnt_ > 2);
-  const ArgVec *arg0_vec = static_cast<const ArgVec *>(expr.args_[0]->get_vector(ctx));
-  ResVec *res_vec = static_cast<ResVec *>(expr.get_vector(ctx));
-  ConstUniformFormat *pos_vec = NULL;
-  ConstUniformFormat *len_vec = NULL;
-  bool is_text_params_all_null = true; // used for mark if all the first params are all null
-  bool is_result_all_null = false;
-  // 1.1 check if result all null according to text param
-  for (int64_t j = bound.start(); is_text_params_all_null && j < bound.end(); ++j) {
-    if (skip.at(j) || eval_flags.at(j)) {
-      continue;
-    } else if (!arg0_vec->is_null(j)) {
-      is_text_params_all_null = false;
-    }
-  }
-  if (is_text_params_all_null) {
-    is_result_all_null = true;
-  } else if (OB_FAIL(expr.args_[1]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("failed to eval vector result args0", K(ret));
-  } else if (has_len_param && OB_FAIL(expr.args_[2]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("failed to eval vector result args0", K(ret));
-  } else {
-    // 1.2 check if result all null according to pos param and len param
-    pos_vec = static_cast<ConstUniformFormat *>(expr.args_[1]->get_vector(ctx));
-    if (pos_vec->is_null(0)) {
-      is_result_all_null = true;
-    } else if (has_len_param) {
-      len_vec = static_cast<ConstUniformFormat *>(expr.args_[2]->get_vector(ctx));
-      if (len_vec->is_null(0)) {
-        is_result_all_null = true;
-      }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    if (is_result_all_null) { // any param is null, result is null
-      for (int64_t idx = bound.start(); idx < bound.end(); ++idx) {
-        if (skip.at(idx) || eval_flags.at(idx)) {
-          continue;
-        } else {
-          res_vec->set_null(idx);
-          eval_flags.set(idx);
-        }
-      }
-    } else {
-      // 2. calc substr while result is not all null
-      int64_t pos = 0;
-      int64_t len = INT_MAX64;
-      pos = pos_vec->get_int(0);
-      len = has_len_param ? len_vec->get_int(0) : len;
-      bool is_arg_batch_ascii = arg0_vec->is_batch_ascii();
-      bool is_result_batch_ascii = true;
-      bool do_ascii_optimize_check = storage::can_do_ascii_optimize(expr.datum_meta_.cs_type_);
-      for (int64_t idx = bound.start(); OB_SUCC(ret) && idx < bound.end(); ++idx) {
-        if (skip.at(idx) || eval_flags.at(idx)) {
-          continue;
-        } else if (arg0_vec->is_null(idx)) {
-          res_vec->set_null(idx);
-          eval_flags.set(idx);
-        } else {
-          // 2.1 deal with string tc
-          if (!ob_is_text_tc(expr.args_[0]->datum_meta_.type_)) {
-            ObString output;
-            if (OB_FAIL(substr(output, arg0_vec->get_string(idx), pos,
-                               min(len, arg0_vec->get_string(idx).length()),
-                               expr.datum_meta_.cs_type_, do_ascii_optimize_check, is_arg_batch_ascii,
-                               is_result_batch_ascii))) {
-              LOG_WARN("get substr failed", K(ret));
-            } else {
-              res_vec->set_string(idx, output);
-              eval_flags.set(idx);
-            }
-          // 2.2 deal with text tc
-          } else {
-            const ObDatumMeta &input_meta = expr.args_[0]->datum_meta_;
-            const bool has_lob_header = expr.args_[0]->obj_meta_.has_lob_header();
-            ObEvalCtx::TempAllocGuard alloc_guard(ctx);
-            ObIAllocator &calc_alloc = alloc_guard.get_allocator();
-            ObTextStringIter input_iter(input_meta.type_, input_meta.cs_type_,
-                                        arg0_vec->get_string(idx), has_lob_header);
-            ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, res_vec,
-                                                  idx);
-            int64_t total_byte_len = 0;
-            if (OB_FAIL(input_iter.init(0, NULL, &calc_alloc))) {
-              LOG_WARN("init input_iter failed ", K(ret), K(input_iter));
-            } else if (OB_FAIL(input_iter.get_byte_len(total_byte_len))) {
-              LOG_WARN("get input byte len failed", K(ret), K(idx));
-            } else if (OB_FAIL(eval_substr_text(expr.datum_meta_.cs_type_,
-                                                input_iter,
-                                                output_result,
-                                                total_byte_len,
-                                                pos,
-                                                len,
-                                                do_ascii_optimize_check,
-                                                is_arg_batch_ascii,
-                                                is_result_batch_ascii,
-                                                true,
-                                                idx))) {
-              LOG_WARN("eval substr text failed", K(ret));
-            } else {
-              eval_flags.set(idx);
-            }
-          }
-        }
-      }
-      // TODO Set set_is_batch_ascii = true only if bound is a whole batch and there is no skip.
-      /*
-      if (OB_SUCC(ret)) {
-        if (is_result_batch_ascii) {
-          res_vec->set_is_batch_ascii();
-        }
-      } */
-    }
-  }
-  return ret;
-}
-
-int ObExprSubstr::eval_substr_vector(VECTOR_EVAL_FUNC_ARG_DECL)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("failed to eval vector result args0", K(ret));
-  } else {
-    VectorFormat arg_format = expr.args_[0]->get_format(ctx);
-    VectorFormat res_format = expr.get_format(ctx);
-    if (VEC_DISCRETE == arg_format && VEC_DISCRETE == res_format) {
-      ret = vector_substr<StrDiscVec, StrDiscVec>(VECTOR_EVAL_FUNC_ARG_LIST);
-    } else if (VEC_UNIFORM == arg_format && VEC_DISCRETE == res_format) {
-      ret = vector_substr<StrUniVec, StrDiscVec>(VECTOR_EVAL_FUNC_ARG_LIST);
-    } else if (VEC_CONTINUOUS == arg_format && VEC_DISCRETE == res_format) {
-      ret = vector_substr<StrContVec, StrDiscVec>(VECTOR_EVAL_FUNC_ARG_LIST);
-    } else if (VEC_DISCRETE == arg_format && VEC_UNIFORM == res_format) {
-      ret = vector_substr<StrDiscVec, StrUniVec>(VECTOR_EVAL_FUNC_ARG_LIST);
-    } else if (VEC_UNIFORM == arg_format && VEC_UNIFORM == res_format) {
-      ret = vector_substr<StrUniVec, StrUniVec>(VECTOR_EVAL_FUNC_ARG_LIST);
-    } else if (VEC_CONTINUOUS == arg_format && VEC_UNIFORM == res_format) {
-      ret = vector_substr<StrContVec, StrUniVec>(VECTOR_EVAL_FUNC_ARG_LIST);
-    } else {
-      ret = vector_substr<ObVectorBase, ObVectorBase>(VECTOR_EVAL_FUNC_ARG_LIST);
-    }
-  }
-  if (OB_SUCC(ret)) {
-    SQL_LOG(DEBUG, "expr", K(ToStrVectorHeader(expr, ctx, &skip, bound)));
-    SQL_LOG(DEBUG, "expr.args_[0]", K(ToStrVectorHeader(*expr.args_[0], ctx, &skip, bound)));
-  }
-  return ret;
-}
 DEF_SET_LOCAL_SESSION_VARS(ObExprSubstr, raw_expr) {
   int ret = OB_SUCCESS;
   SET_LOCAL_SYSVAR_CAPACITY(1);

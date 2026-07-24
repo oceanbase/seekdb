@@ -445,19 +445,15 @@ int ObExprAdd::cg_expr(ObExprCGCtx &op_cg_ctx,
       case ObIntType:
         rt_expr.may_not_need_raw_check_ = true;
         SET_ADD_FUNC_PTR(add_int_int);
-        rt_expr.eval_vector_func_ = add_int_int_vector;
         break;
       case ObUInt64Type:
         rt_expr.may_not_need_raw_check_ = false;
         if (ObIntTC == left_tc && ObUIntTC == right_tc) {
           SET_ADD_FUNC_PTR(add_int_uint);
-          rt_expr.eval_vector_func_ = add_int_uint_vector;
         } else if (ObUIntTC == left_tc && ObIntTC == right_tc) {
           SET_ADD_FUNC_PTR(add_uint_int);
-          rt_expr.eval_vector_func_ = add_uint_int_vector;
         } else if (ObUIntTC == left_tc && ObUIntTC == right_tc) {
           SET_ADD_FUNC_PTR(add_uint_uint);
-          rt_expr.eval_vector_func_ = add_uint_uint_vector;
         }
         break;
       case ObDateTimeType:
@@ -482,11 +478,9 @@ int ObExprAdd::cg_expr(ObExprCGCtx &op_cg_ctx,
         break;
       case ObFloatType:
         SET_ADD_FUNC_PTR(add_float_float);
-        rt_expr.eval_vector_func_ = add_float_float_vector;
         break;
       case ObDoubleType:
         SET_ADD_FUNC_PTR(add_double_double);
-        rt_expr.eval_vector_func_ = add_double_double_vector;
         break;
       case ObUNumberType:
       case ObNumberType:
@@ -494,15 +488,12 @@ int ObExprAdd::cg_expr(ObExprCGCtx &op_cg_ctx,
           switch (get_decimalint_type(rt_expr.args_[0]->datum_meta_.precision_)) {
             case DECIMAL_INT_32:
               SET_ADD_FUNC_PTR(add_decimalint32_number_result);
-              rt_expr.eval_vector_func_ = add_decimalint32_number_result_vector;
               break;
             case DECIMAL_INT_64:
               SET_ADD_FUNC_PTR(add_decimalint64_number_result);
-              rt_expr.eval_vector_func_ = add_decimalint64_number_result_vector;
               break;
             case DECIMAL_INT_128:
               SET_ADD_FUNC_PTR(add_decimalint128_number_result);
-              rt_expr.eval_vector_func_ = add_decimalint128_number_result_vector;
               break;
             default:
               ret = OB_ERR_UNEXPECTED;
@@ -511,34 +502,27 @@ int ObExprAdd::cg_expr(ObExprCGCtx &op_cg_ctx,
           }
         } else {
           SET_ADD_FUNC_PTR(add_number_number);
-          rt_expr.eval_vector_func_ = add_number_number_vector;
         }
         break;
       case ObDecimalIntType:
         switch (get_decimalint_type(rt_expr.datum_meta_.precision_)) {
           case DECIMAL_INT_32:
             SET_ADD_FUNC_PTR(add_decimalint32);
-            rt_expr.eval_vector_func_ = add_decimalint32_vector;
             break;
           case DECIMAL_INT_64:
             SET_ADD_FUNC_PTR(add_decimalint64);
-            rt_expr.eval_vector_func_ = add_decimalint64_vector;
             break;
           case DECIMAL_INT_128:
             SET_ADD_FUNC_PTR(add_decimalint128);
-            rt_expr.eval_vector_func_ = add_decimalint128_vector;
             break;
           case DECIMAL_INT_256:
             SET_ADD_FUNC_PTR(add_decimalint256);
-            rt_expr.eval_vector_func_ = add_decimalint256_vector;
             break;
           case DECIMAL_INT_512:
             if (rt_expr.datum_meta_.precision_ < OB_MAX_DECIMAL_POSSIBLE_PRECISION) {
               SET_ADD_FUNC_PTR(add_decimalint512);
-              rt_expr.eval_vector_func_ = add_decimalint512_vector;
             } else {
               SET_ADD_FUNC_PTR(add_decimalint512_with_check);
-              rt_expr.eval_vector_func_ = add_decimalint512_with_check_vector;
             }
             break;
           default:
@@ -557,25 +541,18 @@ int ObExprAdd::cg_expr(ObExprCGCtx &op_cg_ctx,
             LOG_WARN("failed to get collection elem type", K(ret), K(sub_id));
           } else if (elem_type == ObTinyIntType) {
             SET_ADD_FUNC_PTR(add_collection_collection_int8_t);
-            rt_expr.eval_vector_func_ = add_collection_collection_int8_t_vector;
           } else if (elem_type == ObSmallIntType) {
             SET_ADD_FUNC_PTR(add_collection_collection_int16_t);
-            rt_expr.eval_vector_func_ = add_collection_collection_int16_t_vector;
           } else if (elem_type == ObInt32Type) {
             SET_ADD_FUNC_PTR(add_collection_collection_int32_t);
-            rt_expr.eval_vector_func_ = add_collection_collection_int32_t_vector;
           } else if (elem_type == ObIntType) {
             SET_ADD_FUNC_PTR(add_collection_collection_int64_t);
-            rt_expr.eval_vector_func_ = add_collection_collection_int64_t_vector;
           } else if (elem_type == ObFloatType) {
             SET_ADD_FUNC_PTR(add_collection_collection_float);
-            rt_expr.eval_vector_func_ = add_collection_collection_float_vector;
           } else if (elem_type == ObDoubleType) {
             SET_ADD_FUNC_PTR(add_collection_collection_double);
-            rt_expr.eval_vector_func_ = add_collection_collection_double_vector;
           } else if (elem_type == ObUInt64Type) {
             SET_ADD_FUNC_PTR(add_collection_collection_uint64_t);
-            rt_expr.eval_vector_func_ = add_collection_collection_uint64_t_vector;
           } else {
             ret = OB_NOT_SUPPORTED;
             LOG_WARN("invalid element type for array operation", K(ret), K(elem_type));
@@ -629,10 +606,6 @@ int ObExprAdd::add_int_int_batch(BATCH_EVAL_FUNC_ARG_DECL)
   return def_batch_arith_op<ObArithOpWrap<ObIntIntBatchAddRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
-int ObExprAdd::add_int_int_vector(VECTOR_EVAL_FUNC_ARG_DECL)
-{
-  return def_fixed_len_vector_arith_op<ObVectorArithOpWrap<ObIntIntBatchAddRaw>>(VECTOR_EVAL_FUNC_ARG_LIST);
-}
 
 struct ObIntUIntBatchAddRaw : public ObArithOpRawType<uint64_t, int64_t, uint64_t>
 {
@@ -669,10 +642,6 @@ int ObExprAdd::add_int_uint_batch(BATCH_EVAL_FUNC_ARG_DECL)
   return def_batch_arith_op<ObArithOpWrap<ObIntUIntBatchAddRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
-int ObExprAdd::add_int_uint_vector(VECTOR_EVAL_FUNC_ARG_DECL)
-{
-  return def_fixed_len_vector_arith_op<ObVectorArithOpWrap<ObIntUIntBatchAddRaw>>(VECTOR_EVAL_FUNC_ARG_LIST);
-}
 
 struct ObUIntUIntBatchAddRaw : public ObArithOpRawType<uint64_t, uint64_t, uint64_t>
 {
@@ -709,10 +678,6 @@ int ObExprAdd::add_uint_uint_batch(BATCH_EVAL_FUNC_ARG_DECL)
   return def_batch_arith_op<ObArithOpWrap<ObUIntUIntBatchAddRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
-int ObExprAdd::add_uint_uint_vector(VECTOR_EVAL_FUNC_ARG_DECL)
-{
-  return def_fixed_len_vector_arith_op<ObVectorArithOpWrap<ObUIntUIntBatchAddRaw>>(VECTOR_EVAL_FUNC_ARG_LIST);
-}
 
 struct ObUIntIntBatchAddRaw : public ObArithOpRawType<uint64_t, uint64_t, int64_t>
 {
@@ -749,10 +714,6 @@ int ObExprAdd::add_uint_int_batch(BATCH_EVAL_FUNC_ARG_DECL)
   return def_batch_arith_op<ObArithOpWrap<ObUIntIntBatchAddRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
-int ObExprAdd::add_uint_int_vector(VECTOR_EVAL_FUNC_ARG_DECL)
-{
-  return def_fixed_len_vector_arith_op<ObVectorArithOpWrap<ObUIntIntBatchAddRaw>>(VECTOR_EVAL_FUNC_ARG_LIST);
-}
 
 struct ObFloatBatchAddRawNoCheck : public ObArithOpRawType<float, float, float>
 {
@@ -794,11 +755,6 @@ int ObExprAdd::add_float_float_batch(BATCH_EVAL_FUNC_ARG_DECL)
   return def_batch_arith_op<ObArithOpWrap<ObFloatBatchAddRawWithCheck>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
-int ObExprAdd::add_float_float_vector(VECTOR_EVAL_FUNC_ARG_DECL)
-{
-  return def_fixed_len_vector_arith_op<ObVectorArithOpWrap<ObFloatBatchAddRawWithCheck>>(
-             VECTOR_EVAL_FUNC_ARG_LIST);
-}
 
 struct ObDoubleBatchAddRawNoCheck : public ObArithOpRawType<double, double, double>
 {
@@ -848,14 +804,6 @@ int ObExprAdd::add_double_double_batch(BATCH_EVAL_FUNC_ARG_DECL)
       : def_batch_arith_op<ObArithOpWrap<ObDoubleBatchAddRawWithCheck>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
-int ObExprAdd::add_double_double_vector(VECTOR_EVAL_FUNC_ARG_DECL)
-{
-  return T_OP_AGG_ADD == expr.type_ ?
-           def_fixed_len_vector_arith_op<ObVectorArithOpWrap<ObDoubleBatchAddRawNoCheck>>(
-             VECTOR_EVAL_FUNC_ARG_LIST) :
-           def_fixed_len_vector_arith_op<ObVectorArithOpWrap<ObDoubleBatchAddRawWithCheck>>(
-             VECTOR_EVAL_FUNC_ARG_LIST);
-}
 
 struct ObNumberAddFunc
 {
@@ -959,11 +907,6 @@ struct NmbTryFastAdditionOp
   }
 };
 
-int ObExprAdd::add_number_number_vector(VECTOR_EVAL_FUNC_ARG_DECL)
-{
-  NmbTryFastAdditionOp op;
-  return def_number_vector_arith_op(VECTOR_EVAL_FUNC_ARG_LIST, op);
-}
 
 template <bool SWAP_L_R>
 struct ObNumberDatetimeAddFunc
@@ -1109,10 +1052,6 @@ int ObExprAdd::add_decimal##TYPE(EVAL_FUNC_ARG_DECL)      \
 int ObExprAdd::add_decimal##TYPE##_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
 {                                            \
   return def_batch_arith_op<ObArithOpWrap<ObDecimalIntBatchAddRaw<TYPE##_t>>>(BATCH_EVAL_FUNC_ARG_LIST); \
-}                                             \
-int ObExprAdd::add_decimal##TYPE##_vector(VECTOR_EVAL_FUNC_ARG_DECL)      \
-{                                            \
-  return def_fixed_len_vector_arith_op<ObVectorArithOpWrap<ObDecimalIntBatchAddRaw<TYPE##_t>>>(VECTOR_EVAL_FUNC_ARG_LIST); \
 }
 
 
@@ -1133,11 +1072,6 @@ int ObExprAdd::add_decimalint512_with_check_batch(BATCH_EVAL_FUNC_ARG_DECL)
     BATCH_EVAL_FUNC_ARG_LIST);
 }
 
-int ObExprAdd::add_decimalint512_with_check_vector(VECTOR_EVAL_FUNC_ARG_DECL)
-{
-  return def_fixed_len_vector_arith_op<ObVectorArithOpWrap<ObDecimalIntBatchAddRawWithCheck>>(
-    VECTOR_EVAL_FUNC_ARG_LIST);
-}
 
 #undef DECINC_ADD_EVAL_FUNC_DECL
 
@@ -1160,28 +1094,6 @@ struct ObDecimalNumberAddFunc
   }
 };
 
-template<typename T>
-struct ObDecimalNumberVectorAddFunc
-{
-  template <typename ResVector, typename LeftVector, typename RightVector>
-  int operator()(ResVector &res_vec, const LeftVector &l_vec, const RightVector &r_vec,
-                 const int64_t idx, const int64_t scale, ObNumStackOnceAlloc &alloc) const
-  {
-    int ret = OB_SUCCESS;
-    const T res_int = *reinterpret_cast<const T *>(l_vec.get_payload(idx))
-                      + *reinterpret_cast<const T *>(r_vec.get_payload(idx));
-    number::ObNumber res_num;
-    if (OB_FAIL(wide::to_number(res_int, scale, alloc, res_num))) {
-      LOG_WARN("fail to cast decima int to number", K(ret), K(scale));
-    } else {
-      res_vec.set_number(idx, res_num);
-      alloc.free();  // for batch function reuse alloc
-    }
-    return ret;
-  }
-};
-
-
 #define DECINC_ADD_EVAL_FUNC_NUMBER_DECL(TYPE) \
 int ObExprAdd::add_decimal##TYPE##_number_result(EVAL_FUNC_ARG_DECL)      \
 {                                            \
@@ -1194,13 +1106,6 @@ int ObExprAdd::add_decimal##TYPE##_number_result_batch(BATCH_EVAL_FUNC_ARG_DECL)
   ObNumStackOnceAlloc tmp_alloc;                                \
   const int64_t scale = expr.args_[0]->datum_meta_.scale_;      \
   return def_batch_arith_op_by_datum_func<ObDecimalNumberAddFunc<TYPE##_t>>(BATCH_EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
-}                                            \
-int ObExprAdd::add_decimal##TYPE##_number_result_vector(VECTOR_EVAL_FUNC_ARG_DECL)      \
-{                                            \
-  ObNumStackOnceAlloc tmp_alloc;                                \
-  const int64_t scale = expr.args_[0]->datum_meta_.scale_;      \
-  return def_fixed_len_vector_arith_op_func<ObDecimalNumberVectorAddFunc<TYPE##_t>,\
-                                            ObArithTypedBase<TYPE##_t, TYPE##_t, TYPE##_t>>(VECTOR_EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
 }
 
 DECINC_ADD_EVAL_FUNC_NUMBER_DECL(int32)
@@ -1275,10 +1180,6 @@ int ObExprAdd::add_collection_collection_##TYPE(EVAL_FUNC_ARG_DECL)      \
 int ObExprAdd::add_collection_collection_##TYPE##_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
 {                                            \
   return def_batch_arith_op_by_datum_func<ObNestedArithOpWrap<ObArrayAddFunc<TYPE>>>(BATCH_EVAL_FUNC_ARG_LIST, expr, ctx); \
-}                                             \
-int ObExprAdd::add_collection_collection_##TYPE##_vector(VECTOR_EVAL_FUNC_ARG_DECL)      \
-{                                            \
-  return def_nested_vector_arith_op_func<ObNestedVectorArithOpFunc<ObArrayAddFunc<TYPE>>>(VECTOR_EVAL_FUNC_ARG_LIST, expr, ctx);  \
 }
 
 COLLECTION_ADD_EVAL_FUNC_DECL(int8_t)

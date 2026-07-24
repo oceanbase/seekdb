@@ -18,10 +18,8 @@
 #include "sql/engine/basic/ob_topk_op.h"
 #include "sql/engine/basic/ob_limit_op.h"
 #include "sql/engine/sort/ob_sort_op.h"
-#include "sql/engine/sort/ob_sort_vec_op.h"
 #include "sql/engine/basic/ob_material_op.h"
 #include "sql/engine/aggregate/ob_hash_groupby_op.h"
-#include "sql/engine/basic/ob_material_vec_op.h"
 #include "sql/engine/basic/ob_monitoring_dump_op.h"
 
 namespace oceanbase
@@ -116,11 +114,6 @@ int ObTopKOp::get_topk_final_count()
         row_count = sort_op->get_sort_row_count();
         break;
       }
-      case PHY_VEC_SORT: {
-        ObSortVecOp *sort_op = static_cast<ObSortVecOp *>(child_);
-        row_count = sort_op->get_sort_row_count();
-        break;
-      }
       case PHY_MATERIAL: {
         ObMaterialOp *mtrl_op = static_cast<ObMaterialOp *>(child_);
         if (OB_FAIL(mtrl_op->get_material_row_count(row_count))) {
@@ -131,18 +124,6 @@ int ObTopKOp::get_topk_final_count()
       case PHY_HASH_GROUP_BY: {
         ObHashGroupByOp *gby_op = static_cast<ObHashGroupByOp *>(child_);
         row_count = gby_op->get_hash_groupby_row_count();
-        break;
-      }
-      case PHY_VEC_HASH_GROUP_BY: {
-        ObHashGroupByVecOp *vec_gby_op = static_cast<ObHashGroupByVecOp *>(child_);
-        row_count = vec_gby_op->get_hash_groupby_row_count();
-        break;
-      }
-      case PHY_VEC_MATERIAL: {
-        ObMaterialVecOp *mtrl_op = static_cast<ObMaterialVecOp *>(child_);
-        if (OB_FAIL(mtrl_op->get_material_row_count(row_count))) {
-          LOG_WARN("get material row count failed", K(ret));
-        }
         break;
       }
       case PHY_MONITORING_DUMP: {

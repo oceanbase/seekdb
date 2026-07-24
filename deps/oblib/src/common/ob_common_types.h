@@ -50,18 +50,19 @@ struct ObQueryFlag
 #define OBSF_BIT_ITER_UNCOMMITTED_ROW 1
 #define OBSF_BIT_IGNORE_TRANS_STAT    1
 #define OBSF_BIT_IS_SSTABLE_CUT       1
+#define OBSF_BIT_IS_SHOW_SEED         1
 #define OBSF_BIT_SKIP_READ_LOB        1
 #define OBSF_BIT_IS_LOOKUP_FOR_4377   1
 #define OBSF_BIT_SKIP_4377_FOR_ASYNC_INDEX_LOOKUP 1
 #define OBSF_BIT_FOREIGN_KEY_CHECK    1
-#define OBSF_BIT_ENABLE_RICH_FORMAT   1
+#define OBSF_BIT_IS_NEW_QUERY_RANGE   1
 #define OBSF_BIT_IS_MDS_QUERY         1
 #define OBSF_BIT_IS_SELECT_FOLLOWER   1
 #define OBSF_BIT_ENABLE_LOB_PREFETCH  1
 #define OBSF_BIT_IS_BARE_ROW_SCAN     1
 #define OBSF_BIT_SNAPSHOT_OPT         1
 #define OBSF_BIT_SKIP_RUNNING_TX      1
-#define OBSF_BIT_RESERVED             24
+#define OBSF_BIT_RESERVED             23
 
   static const uint64_t OBSF_MASK_SCAN_ORDER = (0x1UL << OBSF_BIT_SCAN_ORDER) - 1;
   static const uint64_t OBSF_MASK_DAILY_MERGE =  (0x1UL << OBSF_BIT_DAILY_MERGE) - 1;
@@ -84,8 +85,8 @@ struct ObQueryFlag
   static const uint64_t OBSF_MASK_IGNORE_TRANS_STAT = (0x1UL << OBSF_BIT_IGNORE_TRANS_STAT) - 1;
   static const uint64_t OBSF_MASK_IS_SSTABLE_CUT = (0x1UL << OBSF_BIT_IS_SSTABLE_CUT) - 1;
   static const uint64_t OBSF_MASK_SKIP_READ_LOB = (0x1UL << OBSF_BIT_SKIP_READ_LOB) - 1;
-  static const uint64_t OBSF_MASK_ENABLE_RICH_FORMAT = (0x1UL << OBSF_BIT_ENABLE_RICH_FORMAT) - 1;
   static const uint64_t OBSF_MASK_FOR_FOREIGN_KEY_CHECK = (0x1UL << OBSF_BIT_FOREIGN_KEY_CHECK) - 1;
+  static const uint64_t OBSF_MASK_IS_NEW_QUERY_RANGE = (0x1UL << OBSF_BIT_IS_NEW_QUERY_RANGE) - 1;
   static const uint64_t OBSF_MASK_IS_MDS_QUERY = (0x1UL << OBSF_BIT_IS_MDS_QUERY) - 1;
   static const uint64_t OBSF_MASK_IS_SELECT_FOLLOWER = (0x1UL << OBSF_BIT_IS_SELECT_FOLLOWER) - 1;
   static const uint64_t OBSF_MASK_ENABLE_LOB_PREFETCH = (0x1UL << OBSF_BIT_ENABLE_LOB_PREFETCH) - 1;
@@ -149,12 +150,13 @@ struct ObQueryFlag
       uint64_t iter_uncommitted_row_ : OBSF_BIT_ITER_UNCOMMITTED_ROW;
       uint64_t ignore_trans_stat_: OBSF_BIT_IGNORE_TRANS_STAT;
       uint64_t is_sstable_cut_ : OBSF_BIT_IS_SSTABLE_CUT; //0:sstable no need cut, 1: sstable need cut
+      uint64_t is_show_seed_   : OBSF_BIT_IS_SHOW_SEED;
       uint64_t skip_read_lob_   : OBSF_BIT_SKIP_READ_LOB;
       uint64_t is_lookup_for_4377_ : OBSF_BIT_IS_LOOKUP_FOR_4377;
       uint64_t skip_4377_for_async_index_lookup_ : OBSF_BIT_SKIP_4377_FOR_ASYNC_INDEX_LOOKUP;
       uint64_t for_foreign_key_check_ : OBSF_BIT_FOREIGN_KEY_CHECK;
+      uint64_t is_new_query_range_ : OBSF_BIT_IS_NEW_QUERY_RANGE;
       uint64_t is_select_follower_ : OBSF_BIT_IS_SELECT_FOLLOWER;
-      uint64_t enable_rich_format_ : OBSF_BIT_ENABLE_RICH_FORMAT;
       uint64_t is_mds_query_ : OBSF_BIT_IS_MDS_QUERY;
       uint64_t enable_lob_prefetch_ : OBSF_BIT_ENABLE_LOB_PREFETCH;
       uint64_t is_bare_row_scan_ : OBSF_BIT_IS_BARE_ROW_SCAN; // 1: to scan mult version row directly without compact.
@@ -226,10 +228,8 @@ struct ObQueryFlag
   inline uint64_t get_join_type() const { return join_type_; }
   inline bool is_multi_version_minor_merge() const { return multi_version_minor_merge_; }
   inline bool is_need_feedback() const { return is_need_feedback_; }
-  inline bool is_enable_rich_format() const { return enable_rich_format_; }
   inline bool is_skip_running_tx() const { return skip_running_tx_; }
   inline void set_skip_running_tx(const bool skip) { skip_running_tx_ = skip ? 1 : 0; }
-  inline void set_enable_rich_format() { enable_rich_format_ = true; }
   inline void set_not_use_row_cache() { use_row_cache_ = DoNotUseCache; }
   inline void set_not_use_block_cache() { use_block_cache_ = DoNotUseCache; }
   inline void set_not_use_block_index_cache() { use_block_index_cache_ = DoNotUseCache; }
@@ -264,6 +264,8 @@ struct ObQueryFlag
     set_not_use_block_cache();
     set_not_use_bloomfilter_cache();
   }
+  inline void set_is_new_query_range() { is_new_query_range_ = true; }
+  inline bool is_new_query_range() const { return is_new_query_range_; }
   TO_STRING_KV("scan_order", scan_order_,
                "daily_merge", daily_merge_,
                "rmmb_optimize", rmmb_optimize_,
@@ -289,7 +291,6 @@ struct ObQueryFlag
                "is_lookup_for_4377", is_lookup_for_4377_,
                "skip_4377_for_async_index_lookup", skip_4377_for_async_index_lookup_,
                "is_bare_row_scan", is_bare_row_scan_,
-               "enable_rich_format", enable_rich_format_,
                "is_for_foreign_key_check", for_foreign_key_check_,
                "is_mds_query", is_mds_query_,
                "is_select_follower", is_select_follower_,

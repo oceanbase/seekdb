@@ -186,10 +186,10 @@ namespace share
   static const char* const OB_SV__ENABLE_STORAGE_CARDINALITY_ESTIMATION = "_enable_storage_cardinality_estimation";
   static const char* const OB_SV_LC_TIME_NAMES = "lc_time_names";
   static const char* const OB_SV_ACTIVATE_ALL_ROLES_ON_LOGIN = "activate_all_roles_on_login";
-  static const char* const OB_SV__ENABLE_RICH_VECTOR_FORMAT = "_enable_rich_vector_format";
   static const char* const OB_SV_INNODB_STATS_PERSISTENT = "innodb_stats_persistent";
   static const char* const OB_SV_DEBUG = "debug";
   static const char* const OB_SV_INNODB_CHANGE_BUFFERING_DEBUG = "innodb_change_buffering_debug";
+  static const char* const OB_SV_INNODB_COMPRESS_DEBUG = "innodb_compress_debug";
   static const char* const OB_SV_INNODB_DISABLE_RESIZE_BUFFER_POOL_DEBUG = "innodb_disable_resize_buffer_pool_debug";
   static const char* const OB_SV_INNODB_FIL_MAKE_PAGE_DIRTY_DEBUG = "innodb_fil_make_page_dirty_debug";
   static const char* const OB_SV_INNODB_LIMIT_OPTIMISTIC_INSERT_DEBUG = "innodb_limit_optimistic_insert_debug";
@@ -406,6 +406,8 @@ namespace share
   static const char* const OB_SV_INNODB_AUTOINC_LOCK_MODE = "innodb_autoinc_lock_mode";
   static const char* const OB_SV_SKIP_EXTERNAL_LOCKING = "skip_external_locking";
   static const char* const OB_SV_SUPER_READ_ONLY = "super_read_only";
+  static const char* const OB_SV_EVENT_SCHEDULER = "event_scheduler";
+  static const char* const OB_SV_PLSQL_OPTIMIZE_LEVEL = "plsql_optimize_level";
   static const char* const OB_SV_LOW_PRIORITY_UPDATES = "low_priority_updates";
   static const char* const OB_SV_MAX_ERROR_COUNT = "max_error_count";
   static const char* const OB_SV_MAX_INSERT_DELAYED_THREADS = "max_insert_delayed_threads";
@@ -419,6 +421,7 @@ namespace share
   static const char* const OB_SV_INNODB_TEMP_DATA_FILE_PATH = "innodb_temp_data_file_path";
   static const char* const OB_SV_INNODB_DATA_FILE_PATH = "innodb_data_file_path";
   static const char* const OB_SV_INNODB_DATA_HOME_DIR = "innodb_data_home_dir";
+  static const char* const OB_SV_AVOID_TEMPORAL_UPGRADE = "avoid_temporal_upgrade";
   static const char* const OB_SV_DEFAULT_TMP_STORAGE_ENGINE = "default_tmp_storage_engine";
   static const char* const OB_SV_INNODB_FT_ENABLE_DIAG_PRINT = "innodb_ft_enable_diag_print";
   static const char* const OB_SV_INNODB_FT_NUM_WORD_OPTIMIZE = "innodb_ft_num_word_optimize";
@@ -687,6 +690,9 @@ namespace share
   static const char* const OB_SV_SKIP_SHOW_DATABASE = "skip_show_database";
   static const char* const OB_SV_BIG_TABLES = "big_tables";
   static const char* const OB_SV_CHECK_PROXY_USERS = "check_proxy_users";
+  static const char* const OB_SV_CONNECTION_CONTROL_FAILED_CONNECTIONS_THRESHOLD = "connection_control_failed_connections_threshold";
+  static const char* const OB_SV_CONNECTION_CONTROL_MAX_CONNECTION_DELAY = "connection_control_max_connection_delay";
+  static const char* const OB_SV_CONNECTION_CONTROL_MIN_CONNECTION_DELAY = "connection_control_min_connection_delay";
   static const char* const OB_SV_DEFAULT_WEEK_FORMAT = "default_week_format";
   static const char* const OB_SV_DELAYED_INSERT_TIMEOUT = "delayed_insert_timeout";
   static const char* const OB_SV_DELAYED_QUEUE_SIZE = "delayed_queue_size";
@@ -699,6 +705,11 @@ namespace share
   static const char* const OB_SV_INNODB_STATS_PERSISTENT_SAMPLE_PAGES = "innodb_stats_persistent_sample_pages";
   static const char* const OB_SV_INNODB_STATS_SAMPLE_PAGES = "innodb_stats_sample_pages";
   static const char* const OB_SV_INNODB_STATS_TRANSIENT_SAMPLE_PAGES = "innodb_stats_transient_sample_pages";
+  static const char* const OB_SV_KEYRING_ENCRYPTED_FILE_DATA = "keyring_encrypted_file_data";
+  static const char* const OB_SV_KEYRING_ENCRYPTED_FILE_PASSWORD = "keyring_encrypted_file_password";
+  static const char* const OB_SV_KEYRING_FILE_DATA = "keyring_file_data";
+  static const char* const OB_SV_KEYRING_OKV_CONF_DIR = "keyring_okv_conf_dir";
+  static const char* const OB_SV_KEYRING_OPERATIONS = "keyring_operations";
   static const char* const OB_SV_OPTIMIZER_SWITCH = "optimizer_switch";
   static const char* const OB_SV_MAX_CONNECT_ERRORS = "max_connect_errors";
   static const char* const OB_SV_MYSQL_FIREWALL_MODE = "mysql_firewall_mode";
@@ -740,6 +751,7 @@ namespace share
   static const char* const OB_SV_SOCKET = "socket";
   static const char* const OB_SV_ENABLE_OPTIMIZER_ROWGOAL = "enable_optimizer_rowgoal";
   static const char* const OB_SV_IVF_NPROBES = "ob_ivf_nprobes";
+  static const char* const OB_SV__CURRENT_DEFAULT_CATALOG = "_current_default_catalog";
   static const char* const OB_SV_HNSW_EXTRA_INFO_MAX_SIZE = "ob_hnsw_extra_info_max_size";
   static const char* const OB_SV__PUSH_JOIN_PREDICATE = "_push_join_predicate";
   static const char* const OB_SV_SPARSE_DROP_RATIO_SEARCH = "ob_sparse_drop_ratio_search";

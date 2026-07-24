@@ -44,7 +44,7 @@ public:
       : ObExprOperatorCtx(), topn_filter_msg_(nullptr), topn_filter_key_(), cmp_funcs_(),
         start_time_(0), ready_time_(0), filter_count_(0), total_count_(0), check_count_(0),
         n_times_(0), n_rows_(0), slide_window_(total_count_), flag_(0),
-        state_(FilterState::NOT_READY), row_selector_(nullptr)
+        state_(FilterState::NOT_READY)
   {
     is_first_ = true;
   }
@@ -109,16 +109,12 @@ private:
   inline int bypass(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
   inline int bypass(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
                     const int64_t batch_size);
-  inline int bypass(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
-                     const EvalBound &bound);
   inline int bypass(const ObExpr &expr, ObEvalCtx &ctx,ObDynamicFilterExecutor &dynamic_filter,
                     ObRuntimeFilterParams &params, bool &is_data_prepared);
 
   inline int do_process(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
   inline int do_process(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
                        const int64_t batch_size);
-  inline int do_process(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
-                        const EvalBound &bound);
   inline int do_process(const ObExpr &expr, ObEvalCtx &ctx, ObDynamicFilterExecutor &dynamic_filter,
                         ObRuntimeFilterParams &params, bool &is_data_prepared);
   int check_filter_ready();
@@ -149,7 +145,6 @@ public:
     };
   };
   FilterState state_;
-  uint16_t *row_selector_;
 public:
   static const int64_t ROW_COUNT_CHECK_INTERVAL;
   static const int64_t EVAL_TIME_CHECK_INTERVAL;
@@ -177,9 +172,6 @@ public:
   static int eval_topn_filter(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
   static int eval_topn_filter_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
                                     const int64_t batch_size);
-  static int eval_topn_filter_vector(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
-                                     const EvalBound &bound);
-
   static int prepare_storage_white_filter_data(const ObExpr &expr,
                                                ObDynamicFilterExecutor &dynamic_filter,
                                                ObEvalCtx &eval_ctx, ObRuntimeFilterParams &params,

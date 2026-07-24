@@ -27,10 +27,6 @@
 #include "ob_encoding_util.h"
 #include "ob_row_index.h"
 #include "storage/blocksstable/ob_micro_block_header.h"
-#include "sql/engine/vector/ob_uniform_vector.h"
-#include "sql/engine/vector/ob_continuous_vector.h"
-#include "sql/engine/vector/ob_discrete_vector.h"
-#include "sql/engine/vector/ob_fixed_length_vector.h"
 
 namespace oceanbase
 {
@@ -109,53 +105,6 @@ public:
   bool cache_attributes_[ObColumnHeader::MAX_ATTRIBUTE];
 };
 
-struct ObVectorDecodeCtx
-{
-  explicit ObVectorDecodeCtx(
-      const char **ptr_arr,
-      uint32_t *len_arr,
-      const int32_t *row_ids,
-      const int64_t row_cap,
-      const int64_t vec_offset,
-      sql::VectorHeader &vec_header)
-    : ptr_arr_(ptr_arr), len_arr_(len_arr), row_ids_(row_ids), row_cap_(row_cap),
-      vec_offset_(vec_offset), vec_header_(vec_header), 
-      default_datum_(nullptr) {}
-  
-  OB_INLINE void set_default_datum(const ObStorageDatum &default_datum)
-  {
-    default_datum_ = &default_datum;
-  }
-
-  bool is_valid() const
-  {
-    return nullptr != ptr_arr_ && nullptr != len_arr_ && row_cap_ > 0 && vec_offset_ >= 0;
-  }
-
-  void reset_tmp_arr()
-  {
-    if (nullptr != ptr_arr_) {
-      MEMSET(ptr_arr_, 0, sizeof(const char *) * row_cap_);
-    }
-    if (nullptr != len_arr_) {
-      MEMSET(len_arr_, 0, sizeof(uint32_t) * row_cap_);
-    }
-  }
-
-  VectorFormat get_format() const { return vec_header_.get_format(); }
-  ObIVector *get_vector() { return vec_header_.get_vector(); }
-
-  TO_STRING_KV(KP_(ptr_arr), KP_(len_arr), KP_(row_ids), K_(row_cap), K_(vec_offset), KPC_(default_datum));
-
-  const char **ptr_arr_; // tmp mem buf as pointer array
-  uint32_t *len_arr_; // tmp mem buf as 4-byte array
-  const int32_t *row_ids_; // projection row-ids
-  const int64_t row_cap_; // batch size / array size
-  const int64_t vec_offset_; // vector start projection offset
-  sql::VectorHeader &vec_header_; // result
-  const ObStorageDatum *default_datum_;  // default column
-};
-
 class ObIColumnDecoder
 {
 public:
@@ -167,13 +116,6 @@ public:
 
   virtual int decode(const ObColumnDecoderCtx &ctx, common::ObDatum &datum, const int64_t row_id,
      const ObBitStream &bs, const char *data, const int64_t len) const = 0;
-
-  virtual int decode(const ObColumnDecoderCtx &ctx, const ObBitStream &bs, const char *data, const int64_t len,
-                     sql::VectorHeader &vec_header, const int64_t vec_idx) const
-  {
-    UNUSEDx(ctx, bs, data, len, vec_header, vec_idx);
-    return OB_NOT_SUPPORTED;
-  }
 
   virtual ObColumnHeader::Type get_type() const = 0;
 
@@ -202,20 +144,6 @@ public:
       common::ObDatum *datums) const
   {
     UNUSEDx(ctx, row_index, row_ids, cell_datas, row_cap, datums);
-    return common::OB_NOT_SUPPORTED;
-  }
-
-  /*
-   * row_ids: index array of projected rows, null means all rows from idx_offset needed to be projected
-   * row_cap: count of projected rows
-   * vec_offset: start projection offset of vector header
-   */
-  virtual int decode_vector(
-      const ObColumnDecoderCtx &decoder_ctx,
-      const ObIRowIndex *row_index,
-      ObVectorDecodeCtx &vector_ctx) const
-  {
-    UNUSEDx(decoder_ctx, row_index, vector_ctx);
     return common::OB_NOT_SUPPORTED;
   }
 
@@ -286,20 +214,6 @@ public:
       const int32_t *row_ids,
       const int64_t row_cap,
       common::ObDatum *datums) const;
-
-  virtual int set_null_vector_from_fixed_column(
-      const ObColumnDecoderCtx &ctx,
-      const int32_t *row_ids,
-      const int64_t row_cap,
-      const int64_t vec_offset,
-      const unsigned char *col_data,
-      ObIVector &vector) const;
-
-  int batch_locate_var_len_row(
-      const ObColumnDecoderCtx &ctx,
-      const ObIRowIndex* row_index,
-      ObVectorDecodeCtx &vector_ctx,
-      bool &has_null) const;
 
   virtual int get_null_count(
       const ObColumnDecoderCtx &ctx,
@@ -377,32 +291,7 @@ protected:
 };
 
 class ObSpanColumnDecoder : public ObIColumnDecoder
-{
-protected:
-  int decode_exception_vector(
-      const ObColumnDecoderCtx &decoder_ctx,
-      const int64_t ref,
-      const char *exc_buf,
-      const int64_t exc_buf_len,
-      const int64_t vec_offset,
-      sql::VectorHeader &vec_header) const;
-
-  template <typename ValueType, ObEncodingDecodeMetodType DECODE_TYPE>
-  int inner_decode_exception_vector(
-      const ObColumnDecoderCtx &decoder_ctx,
-      const int64_t ref,
-      const char *exc_buf,
-      const int64_t exc_buf_len,
-      const int64_t vec_offset,
-      sql::VectorHeader &vec_header) const;
-
-  int decode_refed_range(
-      const ObColumnDecoderCtx &decoder_ctx,
-      const ObIRowIndex *row_index,
-      const int64_t ref_start_idx,
-      const int64_t ref_end_idx,
-      ObVectorDecodeCtx &raw_vector_ctx) const;
-};
+{};
 
 // decoder for column not exist in schema
 class ObNoneExistColumnDecoder : public ObIColumnDecoder

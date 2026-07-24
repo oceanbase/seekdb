@@ -24,7 +24,6 @@
 #include "sql/engine/subquery/ob_subplan_filter_op.h"
 #include "sql/dtl/ob_dtl_utils.h"
 #include "sql/engine/px/exchange/ob_px_ms_coord_op.h"
-#include "sql/engine/px/exchange/ob_px_ms_coord_vec_op.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_mgr.h"
 
 namespace oceanbase
@@ -124,6 +123,7 @@ ObPxCoordOp::ObPxCoordOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOpInpu
   interrupt_id_(0),
   time_recorder_(0),
   batch_rescan_param_version_(0),
+  server_alive_checker_(coord_info_.dfo_mgr_, exec_ctx.get_my_session()->get_process_query_time()),
   last_px_batch_rescan_size_(0),
   query_sql_(),
   use_serial_scheduler_(false)
@@ -142,7 +142,7 @@ int ObPxCoordOp::init_dfc(ObDfo &dfo, dtl::ObDtlChTotalInfo *ch_info)
       K(dfo.get_qc_id()), K(dfo.get_dfo_id()));
   } else {
     ObDtlDfoKey dfo_key;
-    dfo_key.set(dfo.get_px_sequence_id(), dfo.get_qc_id(), dfo.get_dfo_id());
+    dfo_key.set(GCTX.get_server_index(), dfo.get_px_sequence_id(), dfo.get_qc_id(), dfo.get_dfo_id());
     dfc_.set_timeout_ts(phy_plan_ctx->get_timeout_timestamp());
     dfc_.set_receive();
     dfc_.set_qc_coord();
@@ -214,6 +214,7 @@ int ObPxCoordOp::inner_rescan()
 int ObPxCoordOp::rescan()
 {
   int ret = OB_SUCCESS;
+  const uint64_t server_index = GCTX.get_server_index();
   if (NULL == coord_info_.batch_rescan_ctl_
       || batch_rescan_param_version_ != coord_info_.batch_rescan_ctl_->param_version_) {
     ObDfo *root_dfo = NULL;
@@ -245,10 +246,12 @@ int ObPxCoordOp::rescan()
       LOG_WARN("fail to register interrupt", K(ret));
     } else if (OB_FAIL(init_dfo_mgr(
                 ObDfoInterruptIdGen(interrupt_id_,
+                                    (uint32_t)server_index,
                                     (uint32_t)MY_SPEC.qc_id_,
                                     px_sequence_id_),
                 coord_info_.dfo_mgr_))) {
       LOG_WARN("fail parse dfo tree",
+               "server_index", server_index,
                "qc_id", MY_SPEC.qc_id_,
                "execution_id", ctx_.get_my_session()->get_current_execution_id(),
                K(ret));
@@ -278,6 +281,7 @@ int ObPxCoordOp::rescan()
 int ObPxCoordOp::inner_open()
 {
   int ret = OB_SUCCESS;
+  const uint64_t server_index = GCTX.get_server_index();
   ObDfo *root_dfo = NULL;
   ObString cur_query_str = ctx_.get_my_session()->get_current_query_string();
   char *buf = reinterpret_cast<char*>(ctx_.get_allocator().alloc(cur_query_str.length() + 1));
@@ -290,6 +294,9 @@ int ObPxCoordOp::inner_open()
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObPxReceiveOp::inner_open())) {
+  } else if (OB_UNLIKELY(!is_valid_server_index(server_index))) {
+    ret = OB_SERVER_IS_INIT;
+    LOG_WARN("Server is initializing", K(ret), K(server_index));
   } else if (OB_FAIL(post_init_op_ctx())) {
     LOG_WARN("init operator context failed", K(ret));
   } else if (OB_FAIL(coord_info_.init())) {
@@ -298,10 +305,12 @@ int ObPxCoordOp::inner_open()
     LOG_WARN("fail to register interrupt", K(ret));
   } else if (OB_FAIL(init_dfo_mgr(
               ObDfoInterruptIdGen(interrupt_id_,
+                                  (uint32_t)server_index,
                                   (uint32_t)(static_cast<const ObPxCoordSpec*>(&get_spec()))->qc_id_,
                                   px_sequence_id_),
                                   coord_info_.dfo_mgr_))) {
     LOG_WARN("fail parse dfo tree",
+             "server_index", server_index,
              "qc_id", (static_cast<const ObPxCoordSpec*>(&get_spec()))->qc_id_,
              "execution_id", ctx_.get_my_session()->get_current_execution_id(),
              K(ret));
@@ -311,6 +320,7 @@ int ObPxCoordOp::inner_open()
   } else if (OB_FAIL(setup_op_input(*root_dfo))) {
     LOG_WARN("fail setup all receive/transmit op input", K(ret));
   } else {
+    ctx_.add_extra_check(server_alive_checker_);
     debug_print(*root_dfo);
   }
   if (OB_SUCC(ret)) {
@@ -439,18 +449,65 @@ int ObPxCoordOp::try_clear_p2p_dh_info()
 #endif
 
   if (!coord_info_.p2p_dfo_map_.empty()) {
-    FOREACH_X(entry, coord_info_.p2p_dfo_map_, true) {
-      ObP2PDhKey key;
-      key.p2p_datahub_id_ = entry->first;
-      key.task_id_ = 0;
-      key.px_sequence_id_ = px_sequence_id_;
-      ObP2PDatahubMsgBase *msg = nullptr;
-      bool is_erased = false;
-      int tmp_ret = PX_P2P_DH.erase_msg_if(key, msg, is_erased);
-      if (OB_SUCCESS != tmp_ret || !is_erased) {
-        LOG_TRACE("fail to erase local p2p datahub message", K(tmp_ret), K(is_erased));
+    hash::ObHashMap<ObAddr, ObSArray<int64_t> *, hash::NoPthreadDefendMode> dh_map;
+    if (OB_FAIL(dh_map.create(coord_info_.p2p_dfo_map_.size() * 2,
+        "ClearP2PDhMap",
+        "ClearP2PDhMap"))) {
+      LOG_WARN("fail to create dh map", K(ret));
+    }
+    ObSArray<int64_t> *p2p_ids = nullptr;
+    void *ptr = nullptr;
+    common::ObArenaAllocator allocator;
+    
+    
+    FOREACH_X(entry, coord_info_.p2p_dfo_map_, OB_SUCC(ret)) {
+      for (int i = 0; OB_SUCC(ret) && i < entry->second.addrs_.count(); ++i) {
+        ptr = nullptr;
+        p2p_ids = nullptr;
+        if (OB_FAIL(dh_map.get_refactored(entry->second.addrs_.at(i), p2p_ids))) {
+          if (OB_HASH_NOT_EXIST == ret) {
+            if (OB_ISNULL(ptr = allocator_.alloc(sizeof(ObSArray<int64_t>)))) {
+              ret = OB_ALLOCATE_MEMORY_FAILED;
+              LOG_WARN("fail to alloc memory", K(ret));
+            } else {
+              p2p_ids = new(ptr) ObSArray<int64_t>();
+              ret = OB_SUCCESS;
+            }
+          } else {
+            LOG_WARN("fail to get array", K(ret));
+          }
+        }
+        if (OB_SUCC(ret) && OB_NOT_NULL(p2p_ids)) {
+          if (OB_FAIL(p2p_ids->push_back(entry->first))) {
+            LOG_WARN("fail to push back array ptr", K(ret));
+          } else if (OB_FAIL(dh_map.set_refactored(entry->second.addrs_.at(i), p2p_ids, 1))) {
+            LOG_WARN("fail to set p2p sequence ids", K(ret));
+          }
+        }
       }
     }
+    FOREACH_X(entry, dh_map, true) {
+      // Single-replica seekdb: target is always loopback. Mirror
+      // ObPxP2pDhClearMsgP::process and erase the messages in-process.
+      ObSArray<int64_t> &p2p_dh_ids = *entry->second;
+      if (!p2p_dh_ids.empty()) {
+        ObP2PDhKey key;
+        ObP2PDatahubMsgBase *msg = nullptr;
+        for (int64_t i = 0; i < p2p_dh_ids.count(); ++i) {
+          key.p2p_datahub_id_ = p2p_dh_ids.at(i);
+          key.task_id_ = 0;
+          key.px_sequence_id_ = px_sequence_id_;
+          bool is_erased = false;
+          msg = nullptr;
+          int tmp_ret = PX_P2P_DH.erase_msg_if(key, msg, is_erased);
+          if (OB_SUCCESS != tmp_ret || !is_erased) {
+            LOG_TRACE("fail to erase msg", K(tmp_ret), K(is_erased));
+          }
+        }
+      }
+      entry->second->reset();
+    }
+    allocator.reset();
   }
   return ret;
 }
@@ -493,6 +550,7 @@ int ObPxCoordOp::inner_close()
   if (OB_SUCCESS != (release_channel_ret = destroy_all_channel())) {
     LOG_WARN("release dtl channel failed", K(release_channel_ret));
   }
+  ctx_.del_extra_check(server_alive_checker_);
   clean_dfos_dtl_interm_result();
   LOG_TRACE("byebye. exit QC Coord", K(spec_.id_), K(enable_px_batch_rescan()));
   return ret;
@@ -626,8 +684,6 @@ int ObPxCoordOp::wait_all_running_dfos_exit()
     dtl::ObDtlPacketEmptyProc<ObInitChannelPieceMsg> init_channel_piece_msg_proc;
     dtl::ObDtlPacketEmptyProc<ObReportingWFPieceMsg> reporting_wf_piece_msg_proc;
     dtl::ObDtlPacketEmptyProc<ObOptStatsGatherPieceMsg> opt_stats_gather_piece_msg_proc;
-    dtl::ObDtlPacketEmptyProc<SPWinFuncPXPieceMsg> sp_winfunc_px_piece_msg_proc;
-    dtl::ObDtlPacketEmptyProc<RDWinFuncPXPieceMsg> rd_winfunc_px_piece_msg_proc;
     dtl::ObDtlPacketEmptyProc<ObJoinFilterCountRowPieceMsg> join_filter_count_row_piece_msg_proc;
     // This registration will replace the old proc.
     (void)msg_loop_.clear_all_proc();
@@ -643,8 +699,6 @@ int ObPxCoordOp::wait_all_running_dfos_exit()
       .register_processor(init_channel_piece_msg_proc)
       .register_processor(reporting_wf_piece_msg_proc)
       .register_processor(opt_stats_gather_piece_msg_proc)
-      .register_processor(sp_winfunc_px_piece_msg_proc)
-      .register_processor(rd_winfunc_px_piece_msg_proc)
       .register_processor(join_filter_count_row_piece_msg_proc);
     loop.ignore_interrupt();
 
@@ -758,6 +812,21 @@ int ObPxCoordOp::check_all_sqc(ObIArray<ObDfo *> &active_dfos,
         }
         all_dfo_terminate = false;
         break;
+      } else if (sqc.is_server_not_alive() || sqc.is_interrupt_by_dm()) {
+        if (sqc.is_interrupt_by_dm()) {
+          rpc::frame::ObResultCode err_msg;
+          ObPxErrorUtil::update_qc_error_code(coord_info_.first_error_code_,
+              OB_RPC_CONNECT_ERROR, err_msg, sqc.get_exec_addr());
+        }
+        sqc.set_server_not_alive(false);
+        sqc.set_interrupt_by_dm(false);
+        const DASTabletLocIArray &access_locations = sqc.get_access_table_locations();
+        const DASTabletLocIArray &extra_access_locations = sqc.get_extra_access_table_locations();
+        if (access_locations.count() > 0 || extra_access_locations.count() > 0) {
+          ctx_.get_my_session()->get_trans_result().mark_touched_storage();
+        }
+        LOG_WARN("server not alive", K(sqc), K(access_locations),
+                  K(sqc.get_access_table_location_keys()), K(extra_access_locations));
       }
     }
   }
@@ -768,7 +837,8 @@ int ObPxCoordOp::register_interrupt()
 {
   int ret = OB_SUCCESS;
   px_sequence_id_ = GCTX.sql_engine_->get_px_sequence_id();
-  ObInterruptUtil::generate_query_interrupt_id(px_sequence_id_,
+  ObInterruptUtil::generate_query_interrupt_id((uint32_t)GCTX.get_server_index(),
+      px_sequence_id_,
       interrupt_id_);
   if (OB_FAIL(SET_INTERRUPTABLE(interrupt_id_))) {
     LOG_WARN("fail to register interrupt", K(ret));
@@ -801,6 +871,7 @@ int ObPxCoordOp::receive_channel_root_dfo(
   } else if (OB_FAIL(ObPxReceiveOp::link_ch_sets(task_ch_set_, task_channels_, &dfc_))) {
     LOG_WARN("fail link px coord data channels with its only child dfo", K(ret));
   } else {
+    uint16_t min_cluster_version = ctx.get_physical_plan_ctx()->get_phy_plan()->get_min_cluster_version();
     if (OB_FAIL(get_listenner().on_root_data_channel_setup())) {
       LOG_WARN("fail notify listener", K(ret));
     }
@@ -826,6 +897,7 @@ int ObPxCoordOp::receive_channel_root_dfo(
         ch->set_operator_owner();
         ch->set_thread_id(thread_id);
         ch->set_enable_channel_sync(true);
+        ch->set_send_by_tenant(true);
         if (enable_px_batch_rescan()) {
           ch->set_interm_result(true);
           ch->set_batch_id(get_batch_id());
@@ -833,21 +905,25 @@ int ObPxCoordOp::receive_channel_root_dfo(
         }
       }
       LOG_TRACE("link qc-task channel and registered to qc msg loop. ready to receive task data msg",
-                K(idx), K(cnt), "ch", *ch, KP(ch->get_id()));
+                K(idx), K(cnt), "ch", *ch, KP(ch->get_id()), K(ch->get_peer()));
     }
   }
   return ret;
 }
 
-int ObPxCoordOp::notify_tasks_mock_eof(ObDfo *dfo, int64_t timeout_ts) const
+int ObPxCoordOp::notify_peers_mock_eof(ObDfo *dfo,
+                                       int64_t timeout_ts,
+                                       common::ObAddr addr) const
 {
   int ret = OB_SUCCESS;
   CK(OB_NOT_NULL(dfo));
   if (OB_SUCC(ret) && dfo->parent()->is_root_dfo()) {
     // need drain task channel
     for (int i = 0; i < task_channels_.count() && OB_SUCC(ret); ++i) {
-      OZ(reinterpret_cast<ObDtlBasicChannel *>(task_channels_.at(i))->
-         mock_eof_buffer(timeout_ts));
+      if (task_channels_.at(i)->get_peer() == addr) {
+        OZ(reinterpret_cast<ObDtlBasicChannel *>(task_channels_.at(i))->
+           mock_eof_buffer(timeout_ts));
+      }
     }
   }
   return ret;
@@ -868,6 +944,7 @@ int ObPxCoordOp::receive_channel_root_dfo(
   } else if (OB_FAIL(ObPxReceiveOp::link_ch_sets(task_ch_set_, task_channels_, &dfc_))) {
     LOG_WARN("fail link px coord data channels with its only child dfo", K(ret));
   } else {
+    uint64_t min_cluster_version = ctx_.get_physical_plan_ctx()->get_phy_plan()->get_min_cluster_version();
     if (OB_FAIL(get_listenner().on_root_data_channel_setup())) {
       LOG_WARN("fail notify listener", K(ret));
     }
@@ -893,6 +970,7 @@ int ObPxCoordOp::receive_channel_root_dfo(
         ch->set_audit(enable_audit);
         ch->set_is_px_channel(true);
         ch->set_enable_channel_sync(true);
+        ch->set_send_by_tenant(true);
         if (enable_px_batch_rescan()) {
           ch->set_interm_result(true);
           ch->set_batch_id(get_batch_id());
@@ -900,7 +978,7 @@ int ObPxCoordOp::receive_channel_root_dfo(
         }
       }
       LOG_TRACE("link qc-task channel and registered to qc msg loop. ready to receive task data msg",
-                K(idx), K(cnt), "ch", *ch, KP(ch->get_id()));
+                K(idx), K(cnt), "ch", *ch, KP(ch->get_id()), K(ch->get_peer()));
     }
   }
   return ret;
@@ -957,10 +1035,6 @@ int ObPxCoordOp::batch_rescan()
       reinterpret_cast<ObPxMSCoordOp *>(this)->reset_finish_ch_cnt();
       reinterpret_cast<ObPxMSCoordOp *>(this)->reset_readers();
       reinterpret_cast<ObPxMSCoordOp *>(this)->reuse_heap();
-    } else if (PHY_VEC_PX_MERGE_SORT_COORD == get_spec().get_type()) {
-      reinterpret_cast<ObPxMSCoordVecOp *>(this)->reset_finish_ch_cnt();
-      reinterpret_cast<ObPxMSCoordVecOp *>(this)->reset_readers();
-      reinterpret_cast<ObPxMSCoordVecOp *>(this)->reuse_heap();
     }
   }
   return ret;

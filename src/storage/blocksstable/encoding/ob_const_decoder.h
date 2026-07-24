@@ -62,10 +62,6 @@ public:
       const char **cell_datas,
       const int64_t row_cap,
       common::ObDatum *datums) const override;
-  virtual int decode_vector(
-      const ObColumnDecoderCtx &decoder_ctx,
-      const ObIRowIndex* row_index,
-      ObVectorDecodeCtx &vector_ctx) const override;
 
   virtual int get_null_count(
       const ObColumnDecoderCtx &ctx,

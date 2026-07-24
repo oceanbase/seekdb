@@ -26,6 +26,34 @@ using namespace share;
 using namespace transaction;
 namespace sql
 {
+DEF_TO_STRING(ObRemoteSqlInfo)
+{
+  int64_t pos = 0;
+  J_OBJ_START();
+  J_KV(K_(use_ps),
+       K_(is_batched_stmt),
+       K_(is_original_ps_mode),
+       K_(ps_param_cnt),
+       K_(remote_sql));
+  J_COMMA();
+  J_NAME("ps_params");
+  J_COLON();
+  if (OB_ISNULL(ps_params_) || ps_param_cnt_ <= 0) {
+    J_NULL();
+  } else {
+    J_ARRAY_START();
+    for (int64_t i = 0; pos < buf_len && i < ps_param_cnt_; ++i) {
+      BUF_PRINTO(ps_params_->at(i));
+      if (i != ps_param_cnt_ - 1) {
+        J_COMMA();
+      }
+    }
+    J_ARRAY_END();
+  }
+  J_OBJ_END();
+  return pos;
+}
+
 ObPhysicalPlanCtx::ObPhysicalPlanCtx(common::ObIAllocator &allocator)
     : allocator_(allocator),
       tsc_snapshot_timestamp_(0),
@@ -42,9 +70,9 @@ ObPhysicalPlanCtx::ObPhysicalPlanCtx(common::ObIAllocator &allocator)
       is_ignore_stmt_(false),
       bind_array_count_(0),
       bind_array_idx_(0),
-      runtime_schema_version_(OB_INVALID_VERSION),
+      tenant_schema_version_(OB_INVALID_VERSION),
       orig_question_mark_cnt_(0),
-      srs_version_(OB_INVALID_VERSION),
+      tenant_srs_version_(OB_INVALID_VERSION),
       array_param_groups_(),
       affected_rows_(0),
       is_affect_found_row_(false),
@@ -66,29 +94,38 @@ ObPhysicalPlanCtx::ObPhysicalPlanCtx(common::ObIAllocator &allocator)
       is_select_into_(false),
       is_result_accurate_(true),
       foreign_key_checks_(true),
+      unsed_worker_count_since_222rel_(0),
       exec_ctx_(NULL),
       table_row_count_list_(allocator),
       batched_stmt_param_idxs_(allocator),
       implicit_cursor_infos_(allocator),
       cur_stmt_id_(-1),
       is_or_expand_transformed_(false),
+      is_show_seed_(false),
       is_multi_dml_(false),
       field_array_(nullptr),
       is_ps_protocol_(false),
       plan_start_time_(0),
       ps_fixed_array_index_(nullptr),
       subschema_ctx_(allocator_),
-      enable_rich_format_(false),
       all_local_session_vars_(allocator),
       total_memstore_read_row_count_(0),
       total_ssstore_read_row_count_(0),
-      check_pdml_affected_rows_(false)
+      check_pdml_affected_rows_(false),
+      enable_adaptive_pc_(false)
 {
 }
 
 ObPhysicalPlanCtx::~ObPhysicalPlanCtx()
 {
   destroy();
+}
+
+void ObPhysicalPlanCtx::restore_param_store(const int64_t original_param_cnt)
+{
+  for (int64_t i = param_store_.count(); i > original_param_cnt; --i) {
+    param_store_.pop_back();
+  }
 }
 
 int ObPhysicalPlanCtx::reserve_param_space(int64_t param_count)
@@ -154,15 +191,15 @@ int ObPhysicalPlanCtx::sync_last_value_local()
 	return ret;
 }
 
-int ObPhysicalPlanCtx::sync_last_value_to_store()
+int ObPhysicalPlanCtx::sync_last_value_global()
 {
   int ret = OB_SUCCESS;
   ObAutoincrementService &auto_service = ObAutoincrementService::get_instance();
   ObIArray<AutoincParam> &autoinc_params = get_autoinc_params();
   for (int64_t i = 0; OB_SUCC(ret) && i < autoinc_params.count(); ++i) {
     AutoincParam &autoinc_param = autoinc_params.at(i);
-    if (OB_FAIL(auto_service.sync_insert_value(autoinc_param))) {
-      LOG_WARN("failed to persist last insert value", K(ret));
+    if (OB_FAIL(auto_service.sync_insert_value_global(autoinc_param))) {
+      LOG_WARN("failed to sync last insert value globally", K(ret));
     }
   }
   return ret;
@@ -303,10 +340,7 @@ int ObPhysicalPlanCtx::switch_implicit_cursor()
 
 void ObPhysicalPlanCtx::reset_datum_frame(char *frame, int64_t expr_cnt)
 {
-  int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
-  if (enable_rich_format_) {
-    item_size += sizeof(VectorHeader);
-  }
+  const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
   for (int64_t j = 0; j < expr_cnt; ++j) {
     ObDatum *datum = reinterpret_cast<ObDatum *>(frame + j * item_size);
     datum->set_null();
@@ -317,12 +351,7 @@ int ObPhysicalPlanCtx::reserve_param_frame(const int64_t input_capacity)
 {
   int ret = OB_SUCCESS;
   if (input_capacity > param_frame_capacity_) {
-    int64_t item_size = 0;
-    if (enable_rich_format_) {
-      item_size = sizeof(ObDatum) + sizeof(ObEvalInfo) + sizeof(VectorHeader);
-    } else {
-      item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
-    }
+    const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
     int64_t cnt_per_frame = common::MAX_FRAME_SIZE / item_size;
     auto calc_frame_cnt = [&](int64_t cap) { return (cap + cnt_per_frame - 1) / cnt_per_frame; };
     // reserve original param frames first
@@ -407,11 +436,10 @@ int ObPhysicalPlanCtx::extend_param_frame(const int64_t old_size)
     for (int64_t i = old_size; i < datum_param_store_.count(); i++) {
       ObDatum *datum = nullptr;
       ObEvalInfo *eval_info = nullptr;
-      VectorHeader *vec_header = nullptr;
-      get_param_frame_info(i, datum, eval_info, vec_header);
+      get_param_frame_info(i, datum, eval_info);
       *datum = datum_param_store_.at(i).datum_;
       eval_info->evaluated_ = false;
-      LOG_TRACE("extend param frame", K(i), K(*datum), K(enable_rich_format_));
+      LOG_TRACE("extend param frame", K(i), K(*datum));
     }
   }
 
@@ -420,15 +448,9 @@ int ObPhysicalPlanCtx::extend_param_frame(const int64_t old_size)
 
 OB_INLINE void ObPhysicalPlanCtx::get_param_frame_info(int64_t param_idx,
                                                        ObDatum *&datum,
-                                                       ObEvalInfo *&eval_info,
-                                                       VectorHeader *&vec_header)
+                                                       ObEvalInfo *&eval_info)
 {
-  int64_t item_size = 0;
-  if (enable_rich_format_) {
-    item_size = sizeof(ObDatum) + sizeof(ObEvalInfo) + sizeof(VectorHeader);
-  } else {
-    item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
-  }
+  const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
   int64_t cnt_per_frame = common::MAX_FRAME_SIZE / item_size;
   int64_t datum_idx = param_idx < original_param_cnt_ ? param_idx : param_idx - original_param_cnt_;
   int64_t idx = datum_idx / cnt_per_frame;
@@ -438,7 +460,7 @@ OB_INLINE void ObPhysicalPlanCtx::get_param_frame_info(int64_t param_idx,
   }
   datum = reinterpret_cast<ObDatum*>(param_frame_ptrs_.at(idx) + off);
   eval_info = reinterpret_cast<ObEvalInfo *>(param_frame_ptrs_.at(idx) + off + sizeof(ObDatum));
-  LOG_DEBUG("get_param_frame_info", K(param_idx), K(off), K(datum), K(item_size), K(enable_rich_format_), K(lbt()));
+  LOG_DEBUG("get_param_frame_info", K(param_idx), K(off), K(datum), K(item_size), K(lbt()));
 }
 
 int ObPhysicalPlanCtx::replace_batch_param_datum(const int64_t cur_group_id,
@@ -456,8 +478,7 @@ int ObPhysicalPlanCtx::replace_batch_param_datum(const int64_t cur_group_id,
         //need to expand the real param to param frame
         ObDatum *datum = nullptr;
         ObEvalInfo *eval_info = nullptr;
-        VectorHeader *vec_header = nullptr;
-        get_param_frame_info(i, datum, eval_info, vec_header);
+        get_param_frame_info(i, datum, eval_info);
         const ObSqlDatumArray *datum_array = datum_param_store_.at(i).get_sql_datum_array();;
         if (OB_UNLIKELY(cur_group_id < 0) || OB_UNLIKELY(cur_group_id >= datum_array->count_)) {
           ret = OB_ERR_UNEXPECTED;
@@ -523,6 +544,7 @@ OB_DEF_SERIALIZE(ObPhysicalPlanCtx)
   // Follow the old sequence method
   OB_UNIS_ENCODE(tsc_snapshot_timestamp_);
   OB_UNIS_ENCODE(cur_time_);
+  OB_UNIS_ENCODE(merging_frozen_time_);
   OB_UNIS_ENCODE(ts_timeout_us_);
   OB_UNIS_ENCODE(consistency_level_);
   OB_UNIS_ENCODE(*param_store);
@@ -600,11 +622,12 @@ OB_DEF_SERIALIZE(ObPhysicalPlanCtx)
     OB_UNIS_ENCODE(param_cnt);
   }
   OB_UNIS_ENCODE(foreign_key_checks_);
-  OB_UNIS_ENCODE(runtime_schema_version_);
+  OB_UNIS_ENCODE(unsed_worker_count_since_222rel_);
+  OB_UNIS_ENCODE(tenant_schema_version_);
   OB_UNIS_ENCODE(cursor_count);
   OB_UNIS_ENCODE(plan_start_time_);
   OB_UNIS_ENCODE(last_trace_id_);
-  OB_UNIS_ENCODE(srs_version_);
+  OB_UNIS_ENCODE(tenant_srs_version_);
   OB_UNIS_ENCODE(original_param_cnt_);
   OB_UNIS_ENCODE(array_param_groups_.count());
   if (OB_SUCC(ret) && array_param_groups_.count() > 0) {
@@ -612,7 +635,6 @@ OB_DEF_SERIALIZE(ObPhysicalPlanCtx)
       OB_UNIS_ENCODE(array_param_groups_.at(i));
     }
   }
-  OB_UNIS_ENCODE(enable_rich_format_);
   OB_UNIS_ENCODE(all_local_session_vars_.count());
   for (int64_t i = 0; OB_SUCC(ret) && i < all_local_session_vars_.count(); ++i) {
     if (OB_ISNULL(all_local_session_vars_.at(i).get_local_vars())) {
@@ -648,6 +670,7 @@ OB_DEF_SERIALIZE_SIZE(ObPhysicalPlanCtx)
   // Follow the old sequence method
   OB_UNIS_ADD_LEN(tsc_snapshot_timestamp_);
   OB_UNIS_ADD_LEN(cur_time_);
+  OB_UNIS_ADD_LEN(merging_frozen_time_);
   OB_UNIS_ADD_LEN(ts_timeout_us_);
   OB_UNIS_ADD_LEN(consistency_level_);
   OB_UNIS_ADD_LEN(*param_store);
@@ -698,11 +721,12 @@ OB_DEF_SERIALIZE_SIZE(ObPhysicalPlanCtx)
     OB_UNIS_ADD_LEN(param_cnt);
   }
   OB_UNIS_ADD_LEN(foreign_key_checks_);
-  OB_UNIS_ADD_LEN(runtime_schema_version_);
+  OB_UNIS_ADD_LEN(unsed_worker_count_since_222rel_);
+  OB_UNIS_ADD_LEN(tenant_schema_version_);
   OB_UNIS_ADD_LEN(cursor_count);
   OB_UNIS_ADD_LEN(plan_start_time_);
   OB_UNIS_ADD_LEN(last_trace_id_);
-  OB_UNIS_ADD_LEN(srs_version_);
+  OB_UNIS_ADD_LEN(tenant_srs_version_);
   OB_UNIS_ADD_LEN(original_param_cnt_);
   OB_UNIS_ADD_LEN(array_param_groups_.count());
   if (array_param_groups_.count() > 0) {
@@ -710,7 +734,6 @@ OB_DEF_SERIALIZE_SIZE(ObPhysicalPlanCtx)
       OB_UNIS_ADD_LEN(array_param_groups_.at(i));
     }
   }
-  OB_UNIS_ADD_LEN(enable_rich_format_);
   OB_UNIS_ADD_LEN(all_local_session_vars_.count());
   for (int64_t i = 0; i < all_local_session_vars_.count(); ++i) {
     if (OB_NOT_NULL(all_local_session_vars_.at(i).get_local_vars())) {
@@ -736,6 +759,7 @@ OB_DEF_DESERIALIZE(ObPhysicalPlanCtx)
   // Follow the old sequence method
   OB_UNIS_DECODE(tsc_snapshot_timestamp_);
   OB_UNIS_DECODE(cur_time_);
+  OB_UNIS_DECODE(merging_frozen_time_);
   OB_UNIS_DECODE(ts_timeout_us_);
   OB_UNIS_DECODE(consistency_level_);
   OB_UNIS_DECODE(param_store_);
@@ -784,7 +808,8 @@ OB_DEF_DESERIALIZE(ObPhysicalPlanCtx)
   	}
   }
   OB_UNIS_DECODE(foreign_key_checks_);
-  OB_UNIS_DECODE(runtime_schema_version_);
+  OB_UNIS_DECODE(unsed_worker_count_since_222rel_);
+  OB_UNIS_DECODE(tenant_schema_version_);
   OB_UNIS_DECODE(cursor_count);
   if (OB_SUCC(ret) && cursor_count > 0) {
     if (OB_FAIL(implicit_cursor_infos_.prepare_allocate(cursor_count))) {
@@ -797,7 +822,7 @@ OB_DEF_DESERIALIZE(ObPhysicalPlanCtx)
     (void)ObSQLUtils::adjust_time_by_ntp_offset(ts_timeout_us_);
   }
   OB_UNIS_DECODE(last_trace_id_);
-  OB_UNIS_DECODE(srs_version_);
+  OB_UNIS_DECODE(tenant_srs_version_);
   OB_UNIS_DECODE(original_param_cnt_);
   int64_t array_group_count = 0;
   OB_UNIS_DECODE(array_group_count);
@@ -810,7 +835,6 @@ OB_DEF_DESERIALIZE(ObPhysicalPlanCtx)
       }
     }
   }
-  OB_UNIS_DECODE(enable_rich_format_);
   OB_UNIS_DECODE(local_var_array_cnt);
   if (OB_SUCC(ret)) {
     if (OB_FAIL(all_local_session_vars_.reserve(local_var_array_cnt))) {

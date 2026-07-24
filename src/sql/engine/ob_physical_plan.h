@@ -77,6 +77,8 @@ public:
   void set_is_last_exec_succ(bool val) { stat_.is_last_exec_succ_ = val; }
   bool is_last_exec_succ() const { return stat_.is_last_exec_succ_; }
   const ObString &get_constructed_sql() const { return stat_.constructed_sql_; }
+  bool temp_sql_can_prepare() const { return temp_sql_can_prepare_; }
+  void set_temp_sql_can_prepare() { temp_sql_can_prepare_ = true; }
   bool with_rows() const
   { return ObStmt::is_select_stmt(stmt_type_) || is_returning() || need_drive_dml_query_; }
   //user var
@@ -90,7 +92,8 @@ public:
    */
   void update_plan_stat(const ObAuditRecordData &record,
                         const bool is_first,
-                        const ObIArray<ObTableRowCount> *table_row_count_list);
+                        const ObIArray<ObTableRowCount> *table_row_count_list,
+                        const AdaptivePCConf *adpt_pc_conf = nullptr);
   void update_cache_access_stat(const ObTableScanStat &scan_stat)
   {
     stat_.update_cache_stat(scan_stat);
@@ -211,6 +214,8 @@ public:
   }
   inline bool is_distributed_plan() const { return OB_PHY_PLAN_DISTRIBUTED == plan_type_; }
   inline bool is_local_plan() const { return OB_PHY_PLAN_LOCAL == plan_type_; }
+  inline bool is_remote_plan() const { return OB_PHY_PLAN_REMOTE == plan_type_; }
+  inline bool is_local_or_remote_plan() const { return is_local_plan() || is_remote_plan(); }
   inline bool is_select_plan() const { return ObStmt::is_select_stmt(stmt_type_); }
   inline bool is_dist_insert_or_replace_plan() const
   {
@@ -268,6 +273,7 @@ public:
   inline void set_is_affect_found_row(bool is_affect_found_row) { is_affect_found_row_ = is_affect_found_row; }
   inline bool is_affect_found_row() const { return is_affect_found_row_; }
   inline uint64_t get_plan_hash_value() const { return signature_; }
+  bool is_limited_concurrent_num() const {return max_concurrent_num_ != share::schema::ObMaxConcurrentParam::UNLIMITED;}
   inline const PhyRowParamMap &get_row_param_map() const { return row_param_map_; }
   inline PhyRowParamMap &get_row_param_map() { return row_param_map_; }
   int init_params_info_str();
@@ -294,14 +300,16 @@ public:
   inline int64_t get_ddl_execution_id() const { return ddl_execution_id_; }
   inline void set_ddl_task_id(const int64_t ddl_task_id) { ddl_task_id_ = ddl_task_id; }
   inline int64_t get_ddl_task_id() const { return ddl_task_id_; }
-  inline void set_use_rich_format(const bool v) { use_rich_format_ = v; }
-  inline bool get_use_rich_format() const { return use_rich_format_; }
   void set_record_plan_info(bool v) { need_record_plan_info_ = v; }
   bool need_record_plan_info() const { return need_record_plan_info_; }
   bool try_record_plan_info();
   int64_t get_das_dop() { return das_dop_; }
   void set_das_dop(int64_t v) { das_dop_ = v; }
 public:
+  int inc_concurrent_num();
+  void dec_concurrent_num();
+  int set_max_concurrent_num(int64_t max_curent_num);
+  int64_t get_max_concurrent_num();
   bool is_sample_time() { return 0 == stat_.execute_times_ % SAMPLE_TIMES; }
   void set_contain_index_location(bool exist) { contain_index_location_ = exist; }
   bool contain_index_location() const { return contain_index_location_; }
@@ -373,6 +381,13 @@ public:
   bool has_instead_of_trigger() const { return has_instead_of_trigger_; }
   virtual int update_cache_obj_stat(ObILibCacheCtx &ctx);
   void calc_whether_need_trans();
+  inline uint64_t get_min_cluster_version() const { return min_cluster_version_; }
+  inline void set_min_cluster_version(uint64_t curr_cluster_version) 
+  { 
+    if (curr_cluster_version > min_cluster_version_) {
+      min_cluster_version_ = curr_cluster_version;
+    } 
+  }
   inline bool is_disable_auto_memory_mgr() const { return disable_auto_memory_mgr_; }
   inline void disable_auto_memory_mgr() { disable_auto_memory_mgr_ = true; }
 
@@ -387,18 +402,35 @@ public:
   const ObSubSchemaCtx &get_subschema_ctx() const { return subschema_ctx_; }
   int set_all_local_session_vars(ObIArray<ObLocalSessionVar> *all_local_session_vars);
   ObIArray<ObLocalSessionVar> & get_all_local_session_vars() { return all_local_session_vars_; }
-  void set_direct_load_need_sort(const bool direct_load_need_sort)
-  {
-    direct_load_need_sort_ = direct_load_need_sort;
-  }
-  bool get_direct_load_need_sort() const { return direct_load_need_sort_; }
-  inline bool get_insertup_can_do_gts_opt() const {return insertup_can_do_gts_opt_; }
-  inline void set_insertup_can_do_gts_opt(bool v) { insertup_can_do_gts_opt_ = v; }
+  ObFixedArray<uint64_t, common::ObIAllocator> &get_dml_table_ids() { return dml_table_ids_; }
+  const ObIArray<uint64_t> &get_dml_table_ids() const { return dml_table_ids_; }
+  inline bool get_insertup_can_use_snapshot_opt() const {return insertup_can_use_snapshot_opt_; }
+  inline void set_insertup_can_use_snapshot_opt(bool v) { insertup_can_use_snapshot_opt_ = v; }
   void set_is_use_auto_dop(bool use_auto_dop)  { stat_.is_use_auto_dop_ = use_auto_dop; }
   bool get_is_use_auto_dop() const { return stat_.is_use_auto_dop_; }
+  void set_px_node_policy(ObPxNodePolicy px_node_policy)
+  {
+    px_node_policy_ = px_node_policy;
+  }
+  void set_px_node_count(int64_t px_node_count)
+  {
+    px_node_count_ = px_node_count;
+  }
+  int set_px_node_addrs(const common::ObIArray<ObAddr> &px_node_addrs);
+  ObPxNodePolicy get_px_node_policy() const { return px_node_policy_; }
+  int64_t get_px_node_count() const { return px_node_count_; }
+  const ObFixedArray<ObAddr, common::ObIAllocator> &get_px_node_addrs() const
+  {
+    return px_node_addrs_;
+  }
   bool px_worker_share_plan_enabled() const { return px_worker_share_plan_enabled_; }
   void set_px_worker_share_plan_enabled(bool v) { px_worker_share_plan_enabled_ = v; }
 
+  bool is_active_status() const { return ObPlanStat::ACTIVE == ATOMIC_LOAD(&stat_.adaptive_pc_info_.status_); }
+  void set_active_status() { ATOMIC_STORE(&(stat_.adaptive_pc_info_.status_), ObPlanStat::ACTIVE);; }
+  void set_inactive_status() { ATOMIC_STORE(&(stat_.adaptive_pc_info_.status_), ObPlanStat::INACTIVE);; }
+  int64_t get_adaptive_feedback_times() const;
+  void update_adaptive_pc_info(const ObAuditRecordData &record, const AdaptivePCConf *adpt_pc_conf);
 public:
   static const int64_t MAX_PRINTABLE_SIZE = 2 * 1024 * 1024;
 private:
@@ -450,7 +482,7 @@ private:
   ObPhyPlanType plan_type_;
   // For transactions, indicating the distribution of data involved in this plan
   ObPhyPlanType location_type_;
-  // Indicates whether the plan must be executed locally.
+  // Indicates whether the plan must be executed locally, used for handling: multi part insert (remote) + select (local) cases
   bool require_local_execution_; // not need serialize
   bool use_px_;
   int64_t px_dop_;
@@ -466,9 +498,9 @@ private:
   bool is_sfu_;
   //if the stmt  contains user variable assignment
   //such as @a:=123
-  //the assignment map is serialized with the physical plan when needed
+  //we may need to serialize the map to remote server
   bool is_contains_assignment_;
-  bool affected_last_insert_id_; // Only needed when generating an execution plan and opening the result set.
+  bool affected_last_insert_id_; // No need to serialize remotely, only needed when generating execution plan and opening result set locally
   bool is_affect_found_row_; //not need serialize，mark whether this plan affects the return value of the found_rows() function
                              // found_rows() details see https://mariadb.com/kb/en/found_rows/
   bool has_top_limit_; //not need serialize
@@ -477,10 +509,13 @@ private:
   bool has_nested_sql_; // whether nested statements may be executed
   uint64_t  session_id_; // When the plan includes temporary tables, record table_schema->session_id, used to determine if the plan can be reused
 
+  int64_t concurrent_num_;           // plan current number of concurrent executions
+  int64_t max_concurrent_num_;       // plan maximum number of concurrent executions, -1 indicates no limit
   //for plan cache, not need serialize
   TableLocationFixedArray table_locations_; // ordinary table's table location, participate in plan cache plan selection
   TableLocationFixedArray das_table_locations_; // DAS table's table location, used for calculating DAS partition information
 
+  ObString dummy_string_;  // for compatibility with the removed 3.x native PL entry member
   PhyRowParamMap row_param_map_;
   bool is_update_uniq_index_;
   // Determine whether the base tables involved in this plan contain a global index
@@ -529,6 +564,7 @@ public:
   bool use_temp_table_;
   bool has_link_sfd_;
   bool need_serial_exec_;//mark if need serial execute?
+  bool temp_sql_can_prepare_;
   bool is_need_trans_;
   // batch row count in vectorized execution
   int64_t batch_size_;
@@ -540,10 +576,9 @@ public:
   //parallel encoding of output_expr in advance to speed up packet response
   bool is_packed_;
   bool has_instead_of_trigger_; // mask if has instead of trigger on view
+  uint64_t min_cluster_version_; // record min cluster version in code gen
   bool need_record_plan_info_;
   ObLogicalPlanRawData logical_plan_;
-  // for detector manager
-  bool use_rich_format_;
   ObSubSchemaCtx subschema_ctx_;
   int64_t das_dop_;
   bool disable_auto_memory_mgr_;
@@ -558,8 +593,14 @@ private:
   bool need_switch_to_table_lock_worker_; // for table lock switch worker thread
   bool data_complement_gen_doc_id_;
 private:
-  bool direct_load_need_sort_;
-  bool insertup_can_do_gts_opt_;
+  // used to record transaction modified tables and
+  // further cursor stmt will check agains
+  // to decide whether it read uncommitted data
+  common::ObFixedArray<uint64_t, common::ObIAllocator> dml_table_ids_;
+  bool insertup_can_use_snapshot_opt_;
+  ObPxNodePolicy px_node_policy_;
+  common::ObFixedArray<common::ObAddr, common::ObIAllocator> px_node_addrs_;
+  int64_t px_node_count_;
   int64_t px_worker_share_plan_enabled_;
 };
 

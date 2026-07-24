@@ -45,6 +45,21 @@ enum ObPlanCachePolicy
   OB_USE_PLAN_CACHE_DEFAULT,//use plan cache
 };
 
+enum class ObPxNodePolicy
+{
+  INVALID,
+  DATA,
+  ZONE,
+  CLUSTER
+};
+
+enum class ObPxNodeSelectionMode
+{
+  DEFAULT,
+  SPECIFY_COUNT,
+  SPECIFY_NODE
+};
+
 struct ObAllocOpHint
 {
   ObAllocOpHint() : id_(0), flags_(0), alloc_level_(INVALID_LEVEL) {}
@@ -109,7 +124,6 @@ struct ObOptParamHint
     DEF(USE_DEFAULT_OPT_STAT,)                      \
     DEF(ENABLE_IN_RANGE_OPTIMIZATION,)              \
     DEF(WORKAREA_SIZE_POLICY,)                      \
-    DEF(ENABLE_RICH_VECTOR_FORMAT,)                 \
     DEF(_ENABLE_STORAGE_CARDINALITY_ESTIMATION,)    \
     DEF(PRESERVE_ORDER_FOR_PAGINATION,)             \
     DEF(ENABLE_DAS_KEEP_ORDER,)                     \
@@ -123,6 +137,7 @@ struct ObOptParamHint
     DEF(NESTED_LOOP_JOIN_ENABLED,)                  \
     DEF(ENABLE_RANGE_EXTRACTION_FOR_NOT_IN,)        \
     DEF(OPTIMIZER_INDEX_COST_ADJ,)                  \
+    DEF(OPTIMIZER_SKIP_SCAN_ENABLED,)               \
     DEF(OPTIMIZER_BETTER_INLIST_COSTING,)           \
     DEF(OPTIMIZER_GROUP_BY_PLACEMENT,)              \
     DEF(WITH_SUBQUERY,)                             \
@@ -131,6 +146,7 @@ struct ObOptParamHint
     DEF(RUNTIME_FILTER_TYPE,)                       \
     DEF(BLOOM_FILTER_RATIO,)                        \
     DEF(OPTIMIZER_COST_BASED_TRANSFORMATION,)       \
+    DEF(CORRELATION_FOR_CARDINALITY_ESTIMATION,)    \
     DEF(CARDINALITY_ESTIMATION_MODEL,)              \
     DEF(_PUSH_JOIN_PREDICATE,)                      \
     DEF(RANGE_INDEX_DIVE_LIMIT,)                    \
@@ -139,6 +155,7 @@ struct ObOptParamHint
     DEF(USE_HASH_ROLLUP,)                           \
     DEF(ENABLE_PX_ORDERED_COORD,)                   \
     DEF(LOB_ROWSETS_MAX_ROWS,)                      \
+    DEF(ENABLE_ENUM_SET_SUBSCHEMA,)                 \
     DEF(ENABLE_OPTIMIZER_ROWGOAL,)                  \
     DEF(DAS_BATCH_RESCAN_FLAG,)                     \
     DEF(ENABLE_CONSTANT_TYPE_DEMOTION,)             \
@@ -147,6 +164,7 @@ struct ObOptParamHint
     DEF(PRESERVE_ORDER_FOR_GROUPBY,)                \
     DEF(ENABLE_PDML_INSERT_UP,)                     \
     DEF(ENABLE_PARTIAL_LIMIT_PUSHDOWN,)             \
+    DEF(ORC_FILTER_PUSHDOWN_LEVEL,)                 \
     DEF(ENABLE_INDEX_MERGE,)                        \
     DEF(ENABLE_PARTIAL_GROUP_BY_PUSHDOWN,)          \
     DEF(ENABLE_PARTIAL_DISTINCT_PUSHDOWN,)          \
@@ -196,6 +214,34 @@ struct ObOptParamHint
   TO_STRING_KV(K_(param_types), K_(param_vals));
   common::ObSEArray<OptParamType, 1, common::ModulePageAllocator, true> param_types_;
   common::ObSEArray<ObObj, 1, common::ModulePageAllocator, true> param_vals_;
+};
+
+struct ObPxNodeHint {
+  static const int64_t UNSET_PX_NODE_COUNT = -1;
+  ObPxNodeHint() { reset(); }
+  void reset() {
+    px_node_policy_ = ObPxNodePolicy::INVALID;
+    px_node_addrs_.reset();
+    px_node_count_ = UNSET_PX_NODE_COUNT;
+  }
+  bool empty() const {
+    return ObPxNodePolicy::INVALID == px_node_policy_
+         && px_node_addrs_.empty()
+         && UNSET_PX_NODE_COUNT == px_node_count_;
+  }
+  int merge_px_node_hint(const ObPxNodeHint &other);
+  void merge_px_node_policy(ObPxNodePolicy px_node_policy);
+  int merge_px_node_addrs(const ObIArray<ObAddr> &px_node_addrs);
+  void merge_px_node_count(int64_t px_node_count);
+  int print_px_node_hint(PlanText &plan_text) const;
+  int print_px_node_addrs(PlanText &plan_text) const;
+
+  TO_STRING_KV(K_(px_node_policy),
+               K_(px_node_addrs),
+               K_(px_node_count));
+  ObPxNodePolicy px_node_policy_;
+  common::ObSArray<common::ObAddr> px_node_addrs_;
+  int64_t px_node_count_;
 };
 
 struct ObTableInHint
@@ -252,19 +298,24 @@ struct ObGlobalHint {
   void reset();
   int assign(const ObGlobalHint &other);
 
+// optimizer version define, move defines below to other file later
   static const common::ObConsistencyLevel UNSET_CONSISTENCY = common::INVALID_CONSISTENCY;
   static const int64_t UNSET_QUERY_TIMEOUT = -1;
+  static const int64_t UNSET_MAX_CONCURRENT = -1;
   static const int64_t DEFAULT_PARALLEL = 1;
   static const int64_t UNSET_PARALLEL = 0;
   static const int64_t SET_ENABLE_AUTO_DOP = -1;
   static const int64_t SET_ENABLE_MANUAL_DOP = -2;
   static const int64_t UNSET_DYNAMIC_SAMPLING = -1;
+  static const int64_t UNSET_PX_NODE_COUNT = -1;
+
   int merge_global_hint(const ObGlobalHint &other);
   int merge_dop_hint(uint64_t dfo, uint64_t dop);
   int merge_dop_hint(const ObIArray<ObDopHint> &dop_hints);
   int merge_alloc_op_hints(const ObIArray<ObAllocOpHint> &alloc_op_hints);
   void merge_query_timeout_hint(int64_t hint_time);
   void reset_query_timeout_hint() { query_timeout_ = -1; }
+  void merge_max_concurrent_hint(int64_t max_concurrent);
   void merge_parallel_hint(int64_t parallel);
   void merge_dml_parallel_hint(int64_t dml_parallel);
   void merge_parallel_dml_hint(ObPDMLOption pdml_option);
@@ -322,7 +373,9 @@ struct ObGlobalHint {
                K_(read_consistency),
                K_(plan_cache_policy),
                K_(force_trace_log),
+               K_(max_concurrent),
                K_(enable_lock_early_release),
+               K_(force_refresh_lc),
                K_(log_level),
                K_(parallel),
                K_(dml_parallel),
@@ -338,7 +391,8 @@ struct ObGlobalHint {
                K_(has_dbms_stats_hint),
                K_(parallel_das_dml_option),
                K_(dynamic_sampling),
-               K_(alloc_op_hints));
+               K_(alloc_op_hints),
+               K_(px_node_hint));
 
   int64_t frozen_version_;
   int64_t topk_precision_;
@@ -347,7 +401,9 @@ struct ObGlobalHint {
   common::ObConsistencyLevel read_consistency_;
   ObPlanCachePolicy plan_cache_policy_;
   bool force_trace_log_;
+  int64_t max_concurrent_;
   bool enable_lock_early_release_;
+  bool force_refresh_lc_;
   common::ObString log_level_;
   int64_t parallel_;
   int64_t dml_parallel_;
@@ -363,6 +419,7 @@ struct ObGlobalHint {
   ObParallelDASOption parallel_das_dml_option_;
   int64_t dynamic_sampling_;
   common::ObSArray<ObAllocOpHint> alloc_op_hints_;
+  ObPxNodeHint px_node_hint_;
 };
 
 // used in physical plan
@@ -882,20 +939,27 @@ public:
   int64_t &get_index_prefix() { return index_prefix_; }
   const int64_t &get_index_prefix() const { return index_prefix_; }
   bool is_use_index_hint()  const { return T_NO_INDEX_HINT != get_hint_type(); }
+  bool use_skip_scan()  const { return T_INDEX_SS_HINT == get_hint_type() ||
+                                       T_INDEX_SS_ASC_HINT == get_hint_type() ||
+                                       T_INDEX_SS_DESC_HINT == get_hint_type(); }
   bool is_match_index(const ObCollationType cs_type,
                       const TableItem &ref_table,
                       const ObTableSchema &index_schema) const;
   bool is_asc_hint() const
   {
-    return T_INDEX_ASC_HINT == get_hint_type();
+    return T_INDEX_ASC_HINT == get_hint_type() ||
+           T_INDEX_SS_ASC_HINT == get_hint_type();
   }
   bool is_desc_hint() const
   {
-    return T_INDEX_DESC_HINT == get_hint_type();
+    return T_INDEX_DESC_HINT == get_hint_type() ||
+           T_INDEX_SS_DESC_HINT == get_hint_type();
   }
   bool is_unordered_hint() const
   {
-    return T_INDEX_HINT == get_hint_type() || T_FULL_HINT == get_hint_type();
+    return T_INDEX_HINT == get_hint_type() ||
+           T_INDEX_SS_HINT == get_hint_type() ||
+           T_FULL_HINT == get_hint_type();
   }
 
   INHERIT_TO_STRING_KV("ObHint", ObHint, K_(table), K_(index_name), K_(index_prefix));

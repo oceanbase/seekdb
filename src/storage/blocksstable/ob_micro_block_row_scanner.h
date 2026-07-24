@@ -27,6 +27,9 @@
 
 namespace oceanbase
 {
+namespace memtable {
+class ObMemtableBlockReader;
+}
 namespace storage
 {
 struct ObTableIterParam;
@@ -34,7 +37,6 @@ struct ObTableAccessContext;
 struct ObRowSampleFilter;
 class ObBlockRowStore;
 class ObTableScanStoreStat;
-class ObAggGroupBase;
 }
 namespace blocksstable
 {
@@ -75,17 +77,6 @@ public:
       sql::PushdownFilterInfo &filter_info,
       const bool can_use_vectorize,
       common::ObBitmap &bitmap);
-  virtual int get_next_rows(
-      const common::ObIArray<int32_t> &cols_projector,
-      const common::ObIArray<const share::schema::ObColumnParam *> &col_params,
-      const int32_t *row_ids,
-      const char **cell_datas,
-      const int64_t row_cap,
-      common::ObIArray<ObSqlDatumInfo> &datums,
-      const int64_t datum_offset,
-      uint32_t *len_array,
-      const bool is_padding_mode,
-      const bool init_vector_header = true);
   int advance_to_border(
       const ObDatumRowkey &rowkey,
       int64_t &start_offset,
@@ -124,18 +115,6 @@ public:
       common::ObIArray<ObSqlDatumInfo> &datum_infos,
       const common::ObIArray<blocksstable::ObStorageDatum> *default_datums,
       const bool is_padding_mode);
-  int get_rows_for_rich_format(
-      const common::ObIArray<int32_t> &col_offsets,
-      const common::ObIArray<const share::schema::ObColumnParam *> &col_params,
-      const int32_t *row_ids,
-      const int64_t row_cap,
-      const int64_t vector_offset,
-      const char **cell_datas,
-      uint32_t *len_array,
-      sql::ObExprPtrIArray &exprs,
-      const common::ObIArray<blocksstable::ObStorageDatum> *default_datums,
-      const bool is_padding_mode,
-      const bool need_init_vector = true);
   int64_t get_current_pos() const
   { return current_; }
   OB_INLINE int64_t get_last_pos() const
@@ -183,6 +162,7 @@ protected:
   OB_INLINE bool is_row_empty(const ObDatumRow &row) const
   { return row.row_flag_.is_not_exist(); }
   int get_filter_result(ObFilterResult &res);
+  bool is_di_bitmap_valid() const;
   int init_bitmap(storage::ObRowBitmap *&bitmap, bool is_all_true);
   int inner_get_next_row_blockscan(const ObDatumRow *&row);
 private:
@@ -213,10 +193,12 @@ protected:
   ObMicroBlockReader *flat_reader_;
   ObIMicroBlockDecoder *decoder_;
   ObMicroBlockDecoder *pax_decoder_;
+  memtable::ObMemtableBlockReader *memtable_reader_;
   const storage::ObTableIterParam *param_;
   storage::ObTableAccessContext *context_;
   ObIAllocator &allocator_;
   storage::ObBlockRowStore *block_row_store_;
+  storage::ObRowBitmap *di_bitmap_;
   storage::ObRowBitmap *filter_bitmap_;
 };
 
@@ -397,6 +379,59 @@ private:
   int64_t cell_cnt_;
   common::ObVersionRange version_range_;
   bool skip_running_tx_;
+};
+
+// multi version sstable micro block scanner for mow tables
+class ObMultiVersionDIMicroBlockRowScanner final : public ObMultiVersionMicroBlockRowScanner
+{
+public: 
+  ObMultiVersionDIMicroBlockRowScanner(common::ObIAllocator &allocator)
+      : ObMultiVersionMicroBlockRowScanner(allocator),
+        is_prev_micro_row_valid_(false),
+        found_first_di_row_(false)
+  {}
+  virtual ~ObMultiVersionDIMicroBlockRowScanner() {}
+  virtual void reuse() override final;
+  virtual int open(
+      const MacroBlockId &macro_id,
+      const ObMicroBlockData &block_data,
+      const bool is_left_border,
+      const bool is_right_border) override final;
+  INHERIT_TO_STRING_KV("ObMultiVersionDIMicroBlockRowScanner", ObMultiVersionMicroBlockRowScanner, 
+      K_(is_prev_micro_row_valid), K_(found_first_di_row));
+protected:
+  virtual int inner_get_next_row(const ObDatumRow *&row) override final;
+private:
+  int inner_get_next_di_row(const ObDatumRow *&row);
+  int inner_get_next_compact_di_row(const ObDatumRow *&ret_row);  
+  int inner_get_next_header_info(
+    int64_t &index,
+    bool &version_fit,
+    bool &final_result,
+    ObDmlRowFlag &row_flag);
+  int locate_next_rowkey(int64_t &index);
+  int preprocess_di_rows();
+  int compact_rows_of_same_rowkey(
+      const int64_t insert_idx,
+      const int64_t delete_idx,
+      const ObDatumRow *&ret_row);
+  int check_meet_next_rowkey(
+      const int64_t start, 
+      const int64_t end,
+      bool &meet_next_rowkey) const;
+  int try_cache_unfinished_row(
+      const int64_t insert_idx,
+      const int64_t delete_idx);
+  int get_trans_version(
+      int64_t &trans_version,
+      const int64_t index);
+  int set_row_trans_col(
+      const int64_t trans_version,
+      ObDatumRow &row);
+
+private:
+  bool is_prev_micro_row_valid_;
+  bool found_first_di_row_;
 };
 
 // multi version sstable micro block scanner for minor merge

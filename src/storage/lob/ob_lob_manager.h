@@ -30,6 +30,10 @@
 
 namespace oceanbase
 {
+namespace blocksstable
+{
+struct ObStorageDatum;
+}
 namespace storage
 {
 
@@ -62,8 +66,8 @@ private:
   {}
 public:
   ~ObLobManager() { destroy(); }
-  static int server_module_new(ObLobManager *&m);
-  // Server module lifecycle.
+  static int mtl_new(ObLobManager *&m);
+  // MTL 
   int init();
   int start();
   int stop();
@@ -72,7 +76,7 @@ public:
 
   // Only use for default lob col val
   static int fill_lob_header(ObIAllocator &allocator, ObString &data, ObString &out);
-  static int fill_lob_header(ObIAllocator &allocator, ObStorageDatum &datum);
+  static int fill_lob_header(ObIAllocator &allocator, blocksstable::ObStorageDatum &datum);
   static int fill_lob_header(ObIAllocator &allocator,
                              const ObIArray<share::schema::ObColDesc> &column_ids,
                              blocksstable::ObDatumRow &datum_row);
@@ -140,7 +144,7 @@ public:
                       int64_t timeout,
                       ObLobLocatorV2 &lob);
 
-  // ===== common::ObILobReadService port implementation (injected by the server module provider) =====
+  // ===== common::ObILobReadService port implementation(lob-read domain, called through share injection via MTL)=====
   virtual int get_outrow_lob_full_data(common::ObLobTextIterCtx &ctx,
                                        common::ObCollationType cs_type,
                                        bool has_lob_header,

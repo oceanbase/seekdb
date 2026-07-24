@@ -30,8 +30,14 @@ int ObLogExchange::get_explain_name_internal(char *buf,
 {
   int ret = OB_SUCCESS;
   ret = BUF_PRINTF("%s ", get_name());
-  if (OB_SUCC(ret) && !is_rescanable()) {
-    ret = BUF_PRINTF("DISTR");
+  if (OB_SUCC(ret)) {
+    if (is_remote_) {
+      ret = BUF_PRINTF("REMOTE");
+    } else if (is_rescanable()) {
+      //PX COORDINATOR, do nothing
+    } else {
+      ret = BUF_PRINTF("DISTR");
+    }
   }
   if (OB_SUCC(ret) && is_producer() &&
       (is_repart_exchange() || is_pq_dist())) {
@@ -90,7 +96,7 @@ const char *ObLogExchange::get_name() const
     "PX COORDINATOR MERGE SORT",
     "PX ORDERED COORDINATOR"
   };
-  int offset = is_rescanable() ? 3 : 0;
+  int offset = is_rescanable() && !is_remote_ ? 3 : 0;
   const char *result = exchange_type[0];
   if (is_producer()) {
     result = exchange_type[0];
@@ -217,10 +223,12 @@ int ObLogExchange::get_plan_special_expr_info(PlanText &plan_text,
                                     exprs);
       }
     }
-    if (is_px_single()) {
+    if (is_px_single() &&
+        OB_PHY_PLAN_REMOTE != get_plan()->get_optimizer_context().get_phy_plan_type()) {
       ret = BUF_PRINTF("is_single, ");
     }
-    if (OB_SUCC(ret) && parallel > 0) {
+    if (OB_SUCC(ret) && parallel > 0 &&
+        OB_PHY_PLAN_REMOTE != get_plan()->get_optimizer_context().get_phy_plan_type()) {
       ret = BUF_PRINTF("dop=%d", parallel);
     }
     if (OB_SUCC(ret) && EXPLAIN_EXTENDED == type && popular_values_.count() > 0) {
@@ -339,8 +347,8 @@ int ObLogExchange::print_annotation_keys(char *buf,
  * If using task sort and range order is True, then set local = False, range = False
  * Otherwise, 
  * local,range    | inherit          | inherit          | True, False      | True, False |
- * EXCHANGE IN    | LOCAL/ALL        | DISTRUBUTE       | LOCAL/ALL        | DISTRUBUTE  |
- * EXCHANGE OUT   | LOCAL/ALL        | LOCAL/ALL        | DISTRUBUTE       | DISTRUBUTE  |
+ * EXCHANGE IN    | LOCAL/REMOTE/ALL | DISTRUBUTE       | LOCAL/REMOTE/ALL | DISTRUBUTE  |
+ * EXCHANGE OUT   | LOCAL/REMOTE/ALL | LOCAL/REMOTE/ALL | DISTRUBUTE       | DISTRUBUTE  |
 */
 int ObLogExchange::compute_op_ordering()
 {
@@ -551,7 +559,8 @@ int ObLogExchange::compute_plan_type()
   } else {
     exchange_allocated_ = true;
     location_type_ = child->get_location_type();
-    phy_plan_type_ = ObPhyPlanType::OB_PHY_PLAN_DISTRIBUTED;
+    phy_plan_type_ =
+        get_is_remote() ? ObPhyPlanType::OB_PHY_PLAN_REMOTE : ObPhyPlanType::OB_PHY_PLAN_DISTRIBUTED;
   }
   return ret;
 }
@@ -559,6 +568,7 @@ int ObLogExchange::compute_plan_type()
 int ObLogExchange::set_exchange_info(const ObExchangeInfo &exch_info)
 {
   int ret = OB_SUCCESS;
+  is_remote_ = exch_info.is_remote_;
   dist_method_ = exch_info.dist_method_;
   unmatch_row_dist_method_ = exch_info.unmatch_row_dist_method_;
   null_row_dist_method_ = exch_info.null_row_dist_method_;
@@ -688,9 +698,7 @@ int ObLogExchange::px_pipe_blocking_pre(ObPxPipeBlockingCtx &ctx)
       op_ctx->dfo_depth_ += 1;
       child_op_ctx->dfo_depth_ = op_ctx->dfo_depth_;
       child_op_ctx->out_.set_exch(true);
-      if (OB_SUCC(ret)) {
-        LOG_TRACE("pipe blocking ctx", K(get_name()), K(*op_ctx));
-      }
+      LOG_TRACE("pipe blocking ctx", K(get_name()), K(*op_ctx));
     }
   }
   return ret;
@@ -744,6 +752,8 @@ int ObLogExchange::px_pipe_blocking_post(ObPxPipeBlockingCtx &ctx)
         }
       }
       if (OB_SUCC(ret)) {
+        // only for compatibility low level version
+        exchange_in->set_old_unblock_mode(false);
         LOG_TRACE("pipe blocking ctx", K(get_name()), K(*op_ctx));
       }
     }
@@ -757,7 +767,10 @@ int ObLogExchange::allocate_granule_pre(AllocGIContext &ctx)
   gi_info_.set_info(ctx);
   LOG_TRACE("GI pre store state", K(gi_info_));
   IGNORE_RETURN ctx.reset_info();
-  ctx.add_exchange_op_count();
+  // remote exchange operator don't need GI
+  if (!is_remote_) {
+    ctx.add_exchange_op_count();
+  }
   return ret;
 }
 
@@ -766,7 +779,9 @@ int ObLogExchange::allocate_granule_post(AllocGIContext &ctx)
   int ret = OB_SUCCESS;
   gi_info_.get_info(ctx);
   LOG_TRACE("GI post reset store state", K(gi_info_));
-  ctx.delete_exchange_op_count();
+  if (!is_remote_) {
+    ctx.delete_exchange_op_count();
+  }
   return ret;
 }
 
@@ -1012,6 +1027,8 @@ int ObLogExchange::allocate_startup_expr_post()
   if (OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpect null plan", K(ret));
+  } else if (OB_PHY_PLAN_REMOTE == get_phy_plan_type()) {
+    //do nothing
   } else if (OB_FAIL(ObLogicalOperator::allocate_startup_expr_post())) {
     LOG_WARN("failed to allocate startup exprs post", K(ret));
   }
@@ -1040,18 +1057,6 @@ int ObLogExchange::is_my_fixed_expr(const ObRawExpr *expr, bool &is_fixed)
     }
   }
   return OB_SUCCESS;
-}
-
-bool ObLogExchange::support_rich_format_vectorize() const {
-  bool res = !(dist_method_ == ObPQDistributeMethod::SM_BROADCAST);
-  int tmp_ret = abs(OB_E(EventTable::EN_OFS_IO_SUBMIT) OB_SUCCESS);
-  if (tmp_ret & (1 << dist_method_)) {
-    res = false;
-  }
-  // ordered: 16
-  // ms: 17
-  LOG_TRACE("[VEC2.0 PX] support_rich_format_vectorize", K(res), K(dist_method_), K(tmp_ret));
-  return res;
 }
 
 int ObLogExchange::open_px_resource_analyze(OPEN_PX_RESOURCE_ANALYZE_DECLARE_ARG)

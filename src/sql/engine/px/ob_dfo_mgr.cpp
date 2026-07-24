@@ -18,12 +18,10 @@
 
 #include "ob_dfo_mgr.h"
 #include "sql/engine/basic/ob_temp_table_access_op.h"
-#include "sql/engine/basic/ob_temp_table_access_vec_op.h"
 #include "sql/engine/basic/ob_material_op.h"
 #include "sql/engine/join/ob_join_filter_op.h"
 #include "src/sql/engine/px/exchange/ob_px_transmit_op.h"
 #include "sql/engine/px/ob_px_coord_op.h"
-#include "sql/engine/basic/ob_material_vec_op.h"
 #include "sql/engine/basic/ob_select_into_op.h"
 
 using namespace oceanbase::common;
@@ -160,16 +158,6 @@ int ObDfoSchedDepthGenerator::try_set_dfo_block(ObExecContext &exec_ctx, ObDfo &
         ObMaterialOpInput *mat_input = static_cast<ObMaterialOpInput *>(kit->input_);
         mat_input->set_bypass(!block); // so that this dfo will have a blocked material op
       }
-    } else if (PHY_VEC_MATERIAL == child->type_) {
-      const ObMaterialVecSpec *mat = static_cast<const ObMaterialVecSpec *>(child);
-      ObOperatorKit *kit = exec_ctx.get_operator_kit(mat->id_);
-      if (OB_ISNULL(kit) || OB_ISNULL(kit->input_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("operator is NULL", K(ret), KP(kit));
-      } else {
-        ObMaterialVecOpInput *mat_input = static_cast<ObMaterialVecOpInput *>(kit->input_);
-        mat_input->set_bypass(!block); // so that this dfo will have a blocked material op
-      }
     }
   }
   return ret;
@@ -210,6 +198,9 @@ int ObDfoWorkerAssignment::calc_admited_worker_count(const ObIArray<ObDfo*> &dfo
       px_admited = 0;
     } else if (query_admited >= query_expected) {
       px_admited = px_expected;
+    } else if (OB_UNLIKELY(query_minimal <= 0)) {
+      // compatible with version before 4.2
+      px_admited = static_cast<int64_t>((double) query_admited * (double)px_expected / (double) query_expected);
     } else if (OB_UNLIKELY(query_admited < query_minimal || query_expected <= query_minimal)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected query admited worker count", K(ret), K(query_minimal), K(query_admited), K(query_expected));
@@ -279,14 +270,20 @@ int ObDfoWorkerAssignment::assign_worker(ObDfoMgr &dfo_mgr,
   const ObIArray<ObDfo *> & dfos = dfo_mgr.get_all_dfos();
   // Based on the dop provided by the optimizer, assign workers to each dfo
   // The actual number of allocated workers is definitely no greater than dop, but may be less than the given dop value
+  // admited_worker_count in rpc as worker scenario, the value is 0.
   double scale_rate = 1.0;
   bool match_expected = false;
+  bool compatible_before_420 = false;
   if (OB_UNLIKELY(admited_worker_count < 0 || expected_worker_count <= 0 || minimal_worker_count <= 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("should have at least one worker",  K(ret), K(admited_worker_count),
                                         K(expected_worker_count), K(minimal_worker_count));
   } else if (admited_worker_count >= expected_worker_count) {
     match_expected = true;
+  } else if (minimal_worker_count <= 0) {
+    // compatible with version before 4.2
+    compatible_before_420 = true;
+    scale_rate = static_cast<double>(admited_worker_count) / static_cast<double>(expected_worker_count);
   } else if (0 >= admited_worker_count) {
     scale_rate = 1.0;
   } else if (minimal_worker_count == admited_worker_count) {
@@ -304,6 +301,8 @@ int ObDfoWorkerAssignment::assign_worker(ObDfoMgr &dfo_mgr,
     int64_t val = 0;
     if (match_expected) {
       val = child->get_dop();
+    } else if (compatible_before_420) {
+      val = std::max(static_cast<int64_t>(1), static_cast<int64_t>(static_cast<double>(child->get_dop()) * scale_rate));
     } else {
       val = 1L + static_cast<int64_t>(std::max(static_cast<double>(child->get_dop() - 1), 0.0) * scale_rate);
     }
@@ -411,6 +410,7 @@ int ObDfoMgr::init(ObExecContext &exec_ctx,
 {
   int ret = OB_SUCCESS;
   root_dfo_ = NULL;
+  ObDfo *rpc_dfo = nullptr;
   int64_t px_expected = 0;
   int64_t px_minimal = 0;
   int64_t px_admited = 0;
@@ -487,9 +487,29 @@ int ObDfoMgr::do_split(ObExecContext &exec_ctx,
     } else {
       px_coord_info.table_access_type_ = TableAccessType::PURE_VIRTUAL_TABLE;
     }
+    if (parent_dfo->need_p2p_info_ && parent_dfo->get_p2p_dh_addrs().empty()) {
+      ObDASTableLoc *table_loc = nullptr;
+       if (OB_ISNULL(table_loc = DAS_CTX(exec_ctx).get_table_loc_by_id(
+            tsc_op->get_table_loc_id(), tsc_op->get_loc_ref_table_id()))) {
+         OZ(ObTableLocation::get_full_leader_table_loc(DAS_CTX(exec_ctx).get_location_router(),
+                                                       exec_ctx.get_allocator(),
+                                                       tsc_op->get_table_loc_id(),
+                                                       tsc_op->get_loc_ref_table_id(),
+                                                       table_loc));
+      }
+      if (OB_FAIL(ret)) {
+      } else {
+        const DASTabletLocList &locations = table_loc->get_tablet_locs();
+        parent_dfo->set_p2p_dh_loc(table_loc);
+        if (OB_FAIL(get_location_addrs<DASTabletLocList>(locations,
+            parent_dfo->get_p2p_dh_addrs()))) {
+          LOG_WARN("fail get location addrs", K(ret));
+        }
+      }
+    }
   } else if (phy_op->is_dml_operator() && NULL != parent_dfo) {
     // The current op is a dml operator, need to set the attributes of dfo
-    if (ObPxSqcDistributionUtil::check_build_dfo_with_dml(*phy_op)) {
+    if (ObPXServerAddrUtil::check_build_dfo_with_dml(*phy_op)) {
       parent_dfo->set_dml_op(true);
     }
     const ObPhyOperatorType op_type = phy_op->get_type();
@@ -501,10 +521,10 @@ int ObDfoMgr::do_split(ObExecContext &exec_ctx,
     parent_dfo->set_temp_table_scan(true);
     const ObTempTableAccessOpSpec *access = static_cast<const ObTempTableAccessOpSpec*>(phy_op);
     parent_dfo->set_temp_table_id(access->get_table_id());
-  } else if (phy_op->get_type() == PHY_VEC_TEMP_TABLE_ACCESS && NULL != parent_dfo) {
-    parent_dfo->set_temp_table_scan(true);
-    const ObTempTableAccessVecOpSpec *access = static_cast<const ObTempTableAccessVecOpSpec*>(phy_op);
-    parent_dfo->set_temp_table_id(access->get_table_id());
+    if (parent_dfo->need_p2p_info_ && parent_dfo->get_p2p_dh_addrs().empty()) {
+      OZ(px_coord_info.p2p_temp_table_info_.temp_access_ops_.push_back(phy_op));
+      OZ(px_coord_info.p2p_temp_table_info_.dfos_.push_back(parent_dfo));
+    }
   } else if (IS_PX_GI(phy_op->get_type()) && NULL != parent_dfo) {
     const ObGranuleIteratorSpec *gi_spec =
         static_cast<const ObGranuleIteratorSpec *>(phy_op);
@@ -517,6 +537,8 @@ int ObDfoMgr::do_split(ObExecContext &exec_ctx,
         LOG_WARN("fail to set p2p dh id to map", K(ret));
       } else if (OB_FAIL(px_coord_info.rf_dpd_info_.rf_use_ops_.push_back(phy_op))) {
         LOG_WARN("failed to push back parition filter gi op");
+      } else {
+        parent_dfo->set_need_p2p_info(true);
       }
     }
   } else if (IS_PX_JOIN_FILTER(phy_op->get_type()) && NULL != parent_dfo) {
@@ -539,6 +561,8 @@ int ObDfoMgr::do_split(ObExecContext &exec_ctx,
               filter_spec->rf_infos_.at(i).p2p_datahub_id_,
               node))) {
           LOG_WARN("fail to set p2p dh id to map", K(ret));
+        } else {
+          parent_dfo->set_need_p2p_info(true);
         }
       }
     }
@@ -627,6 +651,7 @@ int ObDfoMgr::do_split(ObExecContext &exec_ctx,
                                               dfo->get_interrupt_id()))) {
           LOG_WARN("fail gen dfo int id", K(ret));
         } else {
+          dfo->set_qc_server_id(GCTX.get_server_index());
           dfo->set_parent_dfo_id(parent_dfo->get_dfo_id());
           LOG_TRACE("cur dfo dop",
                     "dfo_id", dfo->get_dfo_id(),

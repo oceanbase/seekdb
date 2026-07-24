@@ -188,15 +188,11 @@ int ObSortOp::get_topn_count(int64_t &topn_cnt)
       topn_cnt = std::max(MY_SPEC.minimum_row_count_, limit + offset);
       int64_t row_count = 0;
       ObPhyOperatorType op_type = child_->get_spec().type_;
-      if (PHY_HASH_GROUP_BY != op_type && PHY_VEC_HASH_GROUP_BY != op_type) {
+      if (PHY_HASH_GROUP_BY != op_type) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Invalid child_op_", K(op_type), K(ret));
       } else {
-        if (op_type == PHY_VEC_HASH_GROUP_BY) {
-          row_count = static_cast<ObHashGroupByVecOp *>(child_)->get_hash_groupby_row_count();
-        } else {
-          row_count = static_cast<ObHashGroupByOp *>(child_)->get_hash_groupby_row_count();
-        }
+        row_count = static_cast<ObHashGroupByOp *>(child_)->get_hash_groupby_row_count();
       }
       if (OB_SUCC(ret)) {
         topn_cnt = std::max(topn_cnt,
@@ -482,7 +478,8 @@ int ObSortOp::inner_get_next_row()
     ret = OB_ITER_END;
   } else if (is_first_) {
     // Here what we want is to account
-    // Charge memory to the runtime that owns the execution context.
+    // the resource usage(memory usage in this case) to a 'real' tenant rather than billing
+    // the innocent DEFAULT tenant. We should think about changing the name of this function.
     is_first_ = false;
     int64_t topn_cnt = INT64_MAX;
     int64_t row_count = MY_SPEC.rows_;

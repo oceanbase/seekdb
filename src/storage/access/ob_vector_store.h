@@ -22,7 +22,7 @@
 #include "sql/engine/expr/ob_expr.h"
 #include "ob_block_batched_row_store.h"
 #include "storage/blocksstable/ob_datum_row.h"
-#include "ob_pushdown_aggregate_vec.h"
+#include "ob_pushdown_aggregate.h"
 
 namespace oceanbase
 {
@@ -73,9 +73,7 @@ protected:
       blocksstable::ObIMicroBlockRowScanner &scanner,
       int64_t &begin_index,
       const int64_t end_index,
-      const ObFilterResult &res,
-      const bool need_set_end = true,
-      const bool need_init_vector = true);
+      const ObFilterResult &res);
   int fill_group_by_rows(
       const int64_t group_idx,
       blocksstable::ObIMicroBlockReader *reader,

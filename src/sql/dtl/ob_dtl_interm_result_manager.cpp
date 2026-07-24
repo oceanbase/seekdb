@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_DTL
 #include "ob_dtl_interm_result_manager.h"
-#include "observer/omt/ob_server_runtime_controller.h"  // previously hidden behind a transitive include(free within sql)
+#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind a transitive include(free within sql)
 #include "share/rc/ob_module_provider.h"
 #include "observer/virtual_table/ob_all_virtual_dtl_interm_result_monitor.h"
 
@@ -41,7 +41,7 @@ int ObDTLIntermResultGC::operator() (common::hash::HashMapPair<ObDTLIntermResult
   //   to return immediately, yet for all the existing logics there, they don't care the return
   //   code and wants to continue iteration anyway. So to keep the old behavior and makes everyone
   //   else happy, we have to return OB_SUCCESS here. And we only make this return code thing
-  //   affects tablet metadata eviction. If you want to change the
+  //   affects the behavior in tenant meta manager washing tablet. If you want to change the
   //   behavior in such places, please consult the individual file owners to fully understand the
   //   needs there.
   return common::OB_SUCCESS;
@@ -143,7 +143,7 @@ int ObDTLIntermResultManager::init()
                                  interm_res_hash_buck_attr, interm_res_hash_buck_attr))) {
     LOG_WARN("create interm_res hash table failed", K(ret));
   } else if (OB_FAIL(mem_profile_map_.create(
-                        static_cast<int64_t>(share::server_cpu_count() * cpu_quota_concurrency * 2),
+                        static_cast<int64_t>(MTL_CPU_COUNT() * cpu_quota_concurrency * 2),
                         mem_profile_hash_buck_attr, mem_profile_hash_buck_attr))) {
     LOG_WARN("create mem_profile hash table failed", K(ret));
   } else {
@@ -152,7 +152,7 @@ int ObDTLIntermResultManager::init()
   return ret;
 }
 
-int ObDTLIntermResultManager::server_module_init(ObDTLIntermResultManager *&dtl_interm_result_manager)
+int ObDTLIntermResultManager::mtl_init(ObDTLIntermResultManager *&dtl_interm_result_manager)
 {
   return dtl_interm_result_manager->init();
 }
@@ -160,7 +160,7 @@ int ObDTLIntermResultManager::server_module_init(ObDTLIntermResultManager *&dtl_
 void ObDTLIntermResultManager::destroy()
 {
   if (IS_INIT) {
-    erase_all_interm_result_info();
+    erase_tenant_interm_result_info();
     interm_res_map_.destroy();
     // In theory, mem_profile_map_ should be empty at this point.
     // This is defensive programming.
@@ -203,7 +203,7 @@ int ObDTLIntermResultManager::clear_mem_profile_map()
   return ret;
 }
 
-void ObDTLIntermResultManager::server_module_destroy(ObDTLIntermResultManager *&dtl_interm_result_manager)
+void ObDTLIntermResultManager::mtl_destroy(ObDTLIntermResultManager *&dtl_interm_result_manager)
 {
   if (nullptr != dtl_interm_result_manager) {
     ob_delete(dtl_interm_result_manager);
@@ -226,20 +226,12 @@ int ObDTLIntermResultManager::get_interm_result_info(ObDTLIntermResultKey &key,
 
 int ObDTLIntermResultManager::create_interm_result_info(ObMemAttr &attr,
     ObDTLIntermResultInfoGuard &result_info_guard,
-    const ObDTLIntermResultMonitorInfo &monitor_info,
-    ObDTLIntermResultInfo::StoreType store_type)
+    const ObDTLIntermResultMonitorInfo &monitor_info)
 {
   int ret = OB_SUCCESS;
   void *result_info_buf = NULL;
   void *store_buf = NULL;
-  int64_t store_size = 0;
-  if (store_type == ObDTLIntermResultInfo::StoreType::DATUM) {
-    store_size = sizeof(ObChunkDatumStore);
-  } else if (store_type == ObDTLIntermResultInfo::StoreType::ROW) {
-    store_size = sizeof(ObTempRowStore);
-  } else {
-    store_size = sizeof(ObTempColumnStore);
-  }
+  const int64_t store_size = sizeof(ObChunkDatumStore);
   if (OB_ISNULL(result_info_buf = ob_malloc(sizeof(ObDTLIntermResultInfo), attr))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc dtl interm result info", K(ret));
@@ -248,14 +240,7 @@ int ObDTLIntermResultManager::create_interm_result_info(ObMemAttr &attr,
     LOG_WARN("fail to alloc store", K(ret));
   } else {
     ObDTLIntermResultInfo *result_info = new(result_info_buf) ObDTLIntermResultInfo();
-    if (store_type == ObDTLIntermResultInfo::StoreType::DATUM) {
-      result_info->datum_store_ = new(store_buf) ObChunkDatumStore("DtlIntermRes");
-    } else if (store_type == ObDTLIntermResultInfo::StoreType::ROW) {
-      result_info->block_store_ = new(store_buf) ObTempRowStore();
-    } else {
-      result_info->block_store_ = new(store_buf) ObTempColumnStore();
-    }
-    result_info->store_type_ = store_type;
+    result_info->datum_store_ = new(store_buf) ObChunkDatumStore("DtlIntermRes");
     result_info->is_read_ = false;
     result_info->trace_id_ = *ObCurTraceId::get_trace_id();
     result_info->monitor_info_ = monitor_info;
@@ -283,7 +268,7 @@ int ObDTLIntermResultManager::insert_interm_result_info(ObDTLIntermResultKey &ke
     // The code here is mainly for the use of the temp_table.
     // For the px module,
     // the dir_id has already been set in the previous access_mem_profile.
-    if (OB_FAIL(SERVER_TMP_FILE_MANAGER.alloc_dir(dir_id_))) {
+    if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.alloc_dir(dir_id_))) {
       LOG_WARN("allocate file directory failed", K(ret));
     } else {
       DTL_IR_STORE_DO(*result_info, set_dir_id, dir_id_);
@@ -310,15 +295,6 @@ void ObDTLIntermResultManager::free_interm_result_info_store(ObDTLIntermResultIn
       result_info->datum_store_->~ObChunkDatumStore();
       ob_free(result_info->datum_store_);
       result_info->datum_store_ = NULL;
-    } else if (NULL != result_info->block_store_) {
-      result_info->block_store_->reset();
-      if (result_info->store_type_ == ObDTLIntermResultInfo::StoreType::COLUMN) {
-        result_info->get_column_store()->~ObTempColumnStore();
-      } else if (result_info->store_type_ == ObDTLIntermResultInfo::StoreType::ROW) {
-        result_info->get_row_store()->~ObTempRowStore();
-      }
-      ob_free(result_info->block_store_);
-      result_info->block_store_ = NULL;
     }
   }
 }
@@ -451,7 +427,7 @@ int ObDTLIntermResultManager::generate_monitor_info_rows(
   return ret;
 }
 
-int ObDTLIntermResultManager::erase_all_interm_result_info()
+int ObDTLIntermResultManager::erase_tenant_interm_result_info()
 {
   int ret = OB_SUCCESS;
   IntermResMap::bucket_iterator bucket_it = interm_res_map_.bucket_begin();
@@ -473,7 +449,7 @@ int ObDTLIntermResultManager::erase_all_interm_result_info()
     ++bucket_it;
   }
   if (OB_SUCC(ret)) {
-    LOG_INFO("erased all intermediate result info", K(interm_res_map_.size()));
+    LOG_INFO("erase_tenant_interm_result_info", K(interm_res_map_.size()));
   }
   return ret;
 }
@@ -535,27 +511,15 @@ int ObDTLIntermResultManager::process_interm_result_inner(ObDtlLinkedBuffer &buf
       ret = OB_SUCCESS;
       ObMemAttr attr("DtlIntermRes", common::ObCtxIds::EXECUTE_CTX_ID);
       interm_res_key.start_time_ = oceanbase::common::ObTimeUtility::current_time();
-      ObDTLIntermResultInfo::StoreType store_type = ObDTLIntermResultInfo::StoreType::INVALID;
-      switch (buffer.msg_type()) {
-        case PX_DATUM_ROW: {
-          store_type = ObDTLIntermResultInfo::StoreType::DATUM;
-          break;
-        }
-        case PX_VECTOR_ROW: {
-          store_type = ObDTLIntermResultInfo::StoreType::ROW;
-          break;
-        }
-        default: {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Unexpected buffer msg_type", K(ret), K(buffer.msg_type()));
-        }
+      if (buffer.msg_type() != PX_DATUM_ROW) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("Unexpected buffer msg_type", K(ret), K(buffer.msg_type()));
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(create_interm_result_info(attr,
             result_info_guard,
             ObDTLIntermResultMonitorInfo(buffer.get_dfo_key().qc_id_,
-                buffer.get_dfo_id(), buffer.get_sqc_id()),
-            store_type))) {
+                buffer.get_dfo_id(), buffer.get_sqc_id())))) {
         LOG_WARN("fail to create chunk row store", K(ret));
       } else if (OB_FAIL(ObDTLIntermResultManager::init_result_info_store(result_info_guard, buffer))) {
         LOG_WARN("fail to init result info store", K(ret));
@@ -682,7 +646,7 @@ void ObDTLIntermResultInfoGuard::reset()
   }
 }
 
-int ObDTLIntermResultManager::server_module_start(ObDTLIntermResultManager *&dtl_interm_result_manager)
+int ObDTLIntermResultManager::mtl_start(ObDTLIntermResultManager *&dtl_interm_result_manager)
 {
   int ret = OB_SUCCESS;
   if (OB_LIKELY(nullptr != dtl_interm_result_manager)) {
@@ -699,7 +663,7 @@ int ObDTLIntermResultManager::server_module_start(ObDTLIntermResultManager *&dtl
   return ret;
 }
 
-void ObDTLIntermResultManager::server_module_stop(ObDTLIntermResultManager *&dtl_interm_result_manager)
+void ObDTLIntermResultManager::mtl_stop(ObDTLIntermResultManager *&dtl_interm_result_manager)
 {
   if (OB_LIKELY(nullptr != dtl_interm_result_manager) &&
       dtl_interm_result_manager->get_gc_task().is_start_) {
@@ -707,7 +671,7 @@ void ObDTLIntermResultManager::server_module_stop(ObDTLIntermResultManager *&dtl
   }
 }
 
-void ObDTLIntermResultManager::server_module_wait(ObDTLIntermResultManager *&dtl_interm_result_manager)
+void ObDTLIntermResultManager::mtl_wait(ObDTLIntermResultManager *&dtl_interm_result_manager)
 {
   if (OB_LIKELY(nullptr != dtl_interm_result_manager &&
       dtl_interm_result_manager->get_gc_task().is_start_)) {
@@ -947,25 +911,9 @@ int ObDTLIntermResultManager::init_result_info_store(ObDTLIntermResultInfoGuard 
                                   ObDtlLinkedBuffer &buffer) 
 {
   int ret = OB_SUCCESS;
-  if (result_info_guard.result_info_->store_type_ == ObDTLIntermResultInfo::StoreType::DATUM) {
-    if (OB_FAIL(result_info_guard.result_info_->datum_store_->init(
-                0, common::ObCtxIds::EXECUTE_CTX_ID, "DtlIntermRes"))) {
-      LOG_WARN("fail to init datum_store", K(ret));
-    }
-  } else if (result_info_guard.result_info_->store_type_ == ObDTLIntermResultInfo::StoreType::ROW) {
-    ObMemAttr mem_attr("RowDtlIntermRes", ObCtxIds::EXECUTE_CTX_ID);
-    if (OB_FAIL(result_info_guard.result_info_->get_row_store()->init(
-                                                  buffer.get_row_meta(), 
-                                                  buffer.get_max_batch_size(),
-                                                  mem_attr, 
-                                                  0 /*mem_limit*/,
-                                                  true /*enable_dump*/,
-                                                  NONE_COMPRESSOR))) {
-      LOG_WARN("fail to init row_store", K(ret));
-    }
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected store type", K(result_info_guard.result_info_->store_type_), K(ret));
+  if (OB_FAIL(result_info_guard.result_info_->datum_store_->init(
+              0, common::ObCtxIds::EXECUTE_CTX_ID, "DtlIntermRes"))) {
+    LOG_WARN("fail to init datum_store", K(ret));
   }
   return ret;
 }

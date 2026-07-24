@@ -385,36 +385,6 @@ struct ObFloatDivFunc
   }
 };
 
-struct ObFloatVectorDivFunc
-{
-  template <typename ResVector, typename LeftVector, typename RightVector>
-  int operator()(ResVector &res_vec, const LeftVector &l_vec, const RightVector &r_vec,
-                 const int64_t idx) const
-  {
-    int ret = OB_SUCCESS;
-    const float left_f = l_vec.get_float(idx);
-    const float right_f = r_vec.get_float(idx);
-    const float result_f = left_f / right_f;
-    if (OB_UNLIKELY(ObExprDiv::is_float_out_of_range(result_f))) {
-      ret = OB_OPERATE_OVERFLOW;
-      char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
-      int64_t pos = 0;
-      databuff_printf(expr_str,
-                      OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
-                      pos,
-                      "'(%e / %e)'",
-                      left_f,
-                      right_f);
-      LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BINARY_FLOAT", expr_str);
-      LOG_WARN("float out of range", K(ret), K(left_f), K(right_f));
-    } else {
-      res_vec.set_float(idx, result_f);
-      LOG_DEBUG("succ to div float", K(left_f), K(right_f), K(result_f));
-    }
-    return ret;
-  }
-};
-
 int ObExprDiv::div_float(EVAL_FUNC_ARG_DECL)
 {
   return def_arith_eval_func<ObFloatDivFunc>(EVAL_FUNC_ARG_LIST);
@@ -425,12 +395,6 @@ int ObExprDiv::div_float_batch(BATCH_EVAL_FUNC_ARG_DECL)
   return def_batch_arith_op_by_datum_func<ObFloatDivFunc>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
-int ObExprDiv::div_float_vector(VECTOR_EVAL_FUNC_ARG_DECL)
-{
-  return def_fixed_len_vector_arith_op_func<ObFloatVectorDivFunc,
-                                            ObArithTypedBase<float, float, float>>(
-    VECTOR_EVAL_FUNC_ARG_LIST);
-}
 
 
 struct ObDoubleDivFunc
@@ -471,46 +435,6 @@ struct ObDoubleDivFunc
   }
 };
 
-struct ObDoubleVectorDivFunc
-{
-  template <typename ResVector, typename LeftVector, typename RightVector>
-  int operator()(ResVector &res_vec, const LeftVector &l_vec, const RightVector &r_vec,
-                 const int64_t idx, const ObExpr &expr) const
-  {
-    int ret = OB_SUCCESS;
-    const double left_d = l_vec.get_double(idx);
-    const double right_d = r_vec.get_double(idx);
-    if (fabs(right_d) == 0.0) {
-      if (expr.is_error_div_by_zero_) {
-        ret = OB_DIVISION_BY_ZERO;
-      } else {
-        res_vec.set_null(idx);
-      }
-    } else {
-      const double result_d = left_d / right_d;
-      if (OB_UNLIKELY(ObExprDiv::is_double_out_of_range(result_d))
-          && T_OP_AGG_DIV != expr.type_) {
-        ret = OB_OPERATE_OVERFLOW;
-        char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
-        int64_t pos = 0;
-        databuff_printf(expr_str,
-                        OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
-                        pos,
-                        "'(%e / %e)'",
-                        left_d,
-                        right_d);
-        LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "DOUBLE",
-                       expr_str);
-        LOG_WARN("double out of range", K(ret), "left", left_d, "right", right_d);
-      } else {
-        res_vec.set_double(idx, result_d);
-      }
-      LOG_DEBUG("succ to div double", K(left_d), K(right_d), K(result_d));
-    }
-    return ret;
-  }
-};
-
 int ObExprDiv::div_double(EVAL_FUNC_ARG_DECL)
 {
   return def_arith_eval_func<ObDoubleDivFunc>(EVAL_FUNC_ARG_LIST, expr);
@@ -521,11 +445,6 @@ int ObExprDiv::div_double_batch(BATCH_EVAL_FUNC_ARG_DECL)
   return def_batch_arith_op_by_datum_func<ObDoubleDivFunc>(BATCH_EVAL_FUNC_ARG_LIST, expr);
 }
 
-int ObExprDiv::div_double_vector(VECTOR_EVAL_FUNC_ARG_DECL)
-{
-  return def_fixed_len_vector_arith_op_func<ObDoubleVectorDivFunc, ObArithTypedBase<double, double, double>>(
-    VECTOR_EVAL_FUNC_ARG_LIST, expr);
-}
 
 int ObExprDiv::div_vec(EVAL_FUNC_ARG_DECL)
 {
@@ -588,52 +507,6 @@ struct ObNumberDivFunc
   }
 };
 
-struct ObNumberVectorDivFunc
-{
-  template <typename ResVector, typename LeftVector, typename RightVector>
-  int operator()(ResVector &res_vec, const LeftVector &l_vec, const RightVector &r_vec,
-                 const int64_t idx, const ObExpr &expr, ObEvalCtx &ctx) const
-  {
-    int ret = OB_SUCCESS;
-    if (r_vec.get_number(idx).is_zero()) {
-      if (expr.is_error_div_by_zero_) {
-        ret = OB_DIVISION_BY_ZERO;
-      } else {
-        res_vec.set_null(idx);
-        LOG_DEBUG("divisor is equal to zero", K(idx), K(ret));
-      }
-    } else {
-      number::ObNumber lnum(l_vec.get_number(idx));
-      number::ObNumber rnum(r_vec.get_number(idx));
-      char local_buff[ObNumber::MAX_BYTE_LEN];
-      ObDataBuffer local_alloc(local_buff, ObNumber::MAX_BYTE_LEN);
-      ObNumber result_num;
-
-      if (OB_FAIL(lnum.div_v3(rnum, result_num, local_alloc))) {
-        LOG_WARN("add number failed", K(ret));
-      } else {
-        int64_t div_pi = 0;
-        if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_div_precision_increment(div_pi))) {
-          LOG_WARN("get_div_precision_increment failed", K(ret));
-        } else {
-          const int64_t calc_scale = expr.div_calc_scale_;
-          if (calc_scale > 0 && OB_FAIL(result_num.trunc(calc_scale))) {
-            //calc_scale is calc_scale ,not res_scale.
-            //trunc with calc_scale and round with res_scale
-            LOG_WARN("failed to trunc result number", K(ret), K(result_num), K(calc_scale));
-          } else {
-            res_vec.set_number(idx, result_num);
-          }
-          LOG_DEBUG("finish div", K(ret), K(calc_scale),
-                    /*K(scale1), K(scale2), K(new_scale1), K(new_scale2),*/
-                    K(div_pi), K(result_num), K(lnum), K(rnum));
-        }
-      }
-    }
-    return ret;
-  }
-};
-
 int ObExprDiv::div_number(EVAL_FUNC_ARG_DECL)
 {
   return def_arith_eval_func<ObNumberDivFunc>(EVAL_FUNC_ARG_LIST, expr, ctx);
@@ -644,11 +517,6 @@ int ObExprDiv::div_number_batch(BATCH_EVAL_FUNC_ARG_DECL)
   return def_batch_arith_op_by_datum_func<ObNumberDivFunc>(BATCH_EVAL_FUNC_ARG_LIST, expr, ctx);
 }
 
-int ObExprDiv::div_number_vector(VECTOR_EVAL_FUNC_ARG_DECL)
-{
-  return def_variable_len_vector_arith_op_func<ObNumberVectorDivFunc, ObArithOpBase>(
-    VECTOR_EVAL_FUNC_ARG_LIST, expr, ctx);
-}
 
 template<typename L, typename R>
 struct ObDecimalIntBatchDivRaw : public ObArithOpRawType<L, L, R>
@@ -829,11 +697,9 @@ DECINC_DIV_EVAL_FUNC_WITH_CHECK_DECL(512)
     if (sizeof(ltype) >= sizeof(rtype)) {                                                          \
       rt_expr.eval_func_ = ObExprDiv::decint_div_mysql_fn<ltype, rtype>;                           \
       rt_expr.eval_batch_func_ = ObExprDiv::decint_div_mysql_batch_fn<ltype, rtype>;               \
-      rt_expr.eval_vector_func_ = ObExprDiv::decint_div_mysql_vec_fn<ltype, rtype>;                \
     } else {                                                                                       \
       rt_expr.eval_func_ = nullptr;                                                                \
       rt_expr.eval_batch_func_ = nullptr;                                                          \
-      rt_expr.eval_vector_func_ = nullptr;                                                         \
     }                                                                                              \
   } while (false)
 
@@ -964,12 +830,10 @@ int ObExprDiv::cg_expr(ObExprCGCtx &op_cg_ctx,
   switch (rt_expr.datum_meta_.type_) {
     case ObFloatType: {
       SET_DIV_FUNC_PTR(div_float);
-      rt_expr.eval_vector_func_ = div_float_vector;
       break;
     }
     case ObDoubleType: {
       SET_DIV_FUNC_PTR(div_double);
-      rt_expr.eval_vector_func_ = div_double_vector;
       break;
     }
     case ObUNumberType:
@@ -984,7 +848,6 @@ int ObExprDiv::cg_expr(ObExprCGCtx &op_cg_ctx,
         DISPATCH_INOUT_WIDTH_TASK(l_bytes, r_bytes, CHOOSE_MYSQL_DIV_FUNCS);
       } else {
         SET_DIV_FUNC_PTR(div_number);
-        rt_expr.eval_vector_func_ = div_number_vector;
       }
       break;
     }

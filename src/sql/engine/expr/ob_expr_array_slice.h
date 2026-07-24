@@ -35,8 +35,6 @@ public:
   static int eval_array_slice(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
   static int eval_array_slice_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
                                     const int64_t batch_size);
-  static int eval_array_slice_vector(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
-                                     const EvalBound &bound);
 
   static int get_subarray(ObIArrayType *&res_arr, ObIArrayType *src_arr, int64_t offset,
                           int64_t len, bool has_len);

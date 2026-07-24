@@ -27,7 +27,6 @@ namespace sql
 class ObDynamicFilterExecutor;
 
 class ObP2PDatahubMsgBase;
-struct ObRowWithHash;
 #ifdef _WIN32
 // IN is defined as empty SAL annotation macro in Windows SDK. Permanently undef to avoid conflict.
 #pragma push_macro("IN")
@@ -54,7 +53,7 @@ public:
           rf_msg_(nullptr), rf_key_(), hash_funcs_(), cmp_funcs_(), start_time_(0),
           filter_count_(0), total_count_(0), check_count_(0),
           n_times_(0), ready_ts_(0), by_pass_count_before_ready_(0), slide_window_(total_count_), flag_(0), max_wait_time_ms_(0),
-          cur_row_(), cur_row_with_hash_(nullptr), skip_vector_(nullptr)
+          cur_row_()
         {
           cur_row_.set_attr(ObMemAttr("RfCurRow"));
           need_wait_rf_ = true;
@@ -150,11 +149,6 @@ public:
       };
       int64_t max_wait_time_ms_;
       ObTMArray<ObDatum> cur_row_;
-      ObRowWithHash *cur_row_with_hash_; // used in ObRFInFilterVecMsg, for probe
-      // used in ObRFInFilterVecMsg/ObRFBloomFilterMsg, for probe in single row interface
-      ObBitVector *skip_vector_;
-      // used in ObRFInFilterVecMsg/ObRFBloomFilterMsg, cal probe data's hash value
-      uint64_t *right_hash_vals_;
   };
   ObExprJoinFilter();
   explicit ObExprJoinFilter(common::ObIAllocator& alloc);
@@ -177,27 +171,11 @@ public:
   static int eval_in_filter_batch(
              const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size);
 
-  static int eval_bloom_filter_vector(const ObExpr &expr,
-                                      ObEvalCtx &ctx,
-                                      const ObBitVector &skip,
-                                      const EvalBound &bound);
-  static int eval_range_filter_vector(const ObExpr &expr,
-                                      ObEvalCtx &ctx,
-                                      const ObBitVector &skip,
-                                      const EvalBound &bound);
-  static int eval_in_filter_vector(const ObExpr &expr,
-                                      ObEvalCtx &ctx,
-                                      const ObBitVector &skip,
-                                      const EvalBound &bound);
-
   static int eval_filter_internal(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
 
 
   static int eval_filter_batch_internal(
              const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size);
-
-  static int eval_filter_vector_internal(
-             const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const EvalBound &bound);
 
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;

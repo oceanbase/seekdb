@@ -15,7 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_dtl_interm_result_monitor.h"
-#include "observer/omt/ob_server_runtime_controller.h"
+#include "observer/omt/ob_multi_tenant.h"  // TenantIdList, previously hidden behind a transitive include
 #include "share/rc/ob_module_provider.h"
 #include "observer/ob_server_utils.h"
 #include "sql/dtl/ob_dtl_interm_result_manager.h"
@@ -63,11 +63,7 @@ int ObDTLIntermResultMonitorInfoGetter::operator() (common::hash::HashMapPair<Ob
     const char *owner = NULL;
     ObObj *cells = cur_row_.cells_;
     if (info.is_store_valid()) {
-      if (info.is_rich_format()) {
-        GET_CHUNK_STORE_INFO(info.block_store_);
-      } else {
-        GET_CHUNK_STORE_INFO(info.datum_store_);
-      }
+      GET_CHUNK_STORE_INFO(info.datum_store_);
     }
     for (int64_t cell_idx = 0;
         OB_SUCC(ret) && cell_idx < output_column_ids_.count();
@@ -223,12 +219,13 @@ int ObAllDtlIntermResultMonitor::fill_scanner()
         {
           ObDTLIntermResultMonitorInfoGetter monitor_getter(scanner_, *allocator_, output_column_ids_,
                                   cur_row_);
-          SERVER_MODULE_SCOPE {
+          MOD_SCOPE {
             if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->generate_monitor_info_rows(monitor_getter))) {
               SERVER_LOG(WARN, "generate monitor info array failed", K(ret));
             }
           } else {
-            // The server module set may not be ready during shutdown.
+            // During the iteration process, tenants may be deleted,
+            // so we need to ignore the error code of MTL_SWITCH.
             ret = OB_SUCCESS;
           }
         }

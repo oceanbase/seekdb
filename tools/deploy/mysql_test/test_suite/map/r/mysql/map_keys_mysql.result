@@ -135,7 +135,7 @@ insert into t1(m) values ('{1:1}');
 insert into t1(m) values ('{1:1,2:2,3:3}');
 insert into t1(m) values ('{"1":1,  2  : 2 , "3 " : 3}');
 insert into t1(m) values ('{1.5:2, 1.6:"3"}');
-select /*+ OPT_PARAM('enable_rich_vector_format', 'FALSE') */ map_keys(m) from t1;
+select  map_keys(m) from t1;
 map_keys(m)
 [1]
 [1,2,3]
@@ -152,7 +152,7 @@ insert into t2(m) values ('{1.1:1,2.1:2,3.1:3}');
 insert into t2(m) values ('{"1":1,  2  : 2 , "3 " : 3}');
 insert into t2(m) values ('{1.5:2, 1.6:"3"}');
 insert into t2(m) values ('{1.5:2, 1.6:3.1}');
-select /*+ OPT_PARAM('enable_rich_vector_format', 'FALSE') */ map_keys(m) from t2;
+select  map_keys(m) from t2;
 map_keys(m)
 [1.1,2.1,3.1]
 [1,2,3]
@@ -171,7 +171,7 @@ insert into t3(m) values ('{1.5:2, 1.6:"3"}');
 insert into t3(m) values ('{1.5:2, 1.6:3.1}');
 insert into t3(m) values ('{"1":2, "dog":3.1}');
 insert into t3(m) values ('{"apple":"tengzhen.lk", "dog":"3.1"}');
-select /*+ OPT_PARAM('enable_rich_vector_format', 'FALSE') */ map_keys(m) from t3;
+select  map_keys(m) from t3;
 map_keys(m)
 ["1.1","2.1","3.1"]
 ["1","2","3 "]
@@ -204,7 +204,7 @@ id	m
 5	{1:[]}
 6	{1:[3,4],2:[2]}
 7	{NULL:[],1:NULL,2:[2]}
-select /*+ OPT_PARAM('enable_rich_vector_format', 'FALSE') */ map_keys(m) from t4;
+select  map_keys(m) from t4;
 map_keys(m)
 [1,2,3]
 [1]
@@ -231,7 +231,7 @@ id	m	m2
 1	{1:[[]]}	NULL
 2	{1:[["a","b"],["c"],NULL]}	NULL
 3	NULL	{1:[[[]],[[]]]}
-select /*+ OPT_PARAM('enable_rich_vector_format', 'FALSE') */ map_keys(m) from t5;
+select  map_keys(m) from t5;
 map_keys(m)
 [1]
 [1]

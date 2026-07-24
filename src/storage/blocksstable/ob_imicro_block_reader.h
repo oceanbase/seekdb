@@ -44,10 +44,8 @@ namespace storage
 class ObAggDatumBuf;
 class ObAggCellBase;
 class ObAggCell;
-class ObAggCellVec;
 class ObGroupByCellBase;
 class ObGroupByCell;
-class ObGroupByCellVec;
 struct ObPushdownRowIdCtx;
 };
 namespace memtable {
@@ -282,6 +280,7 @@ public:
     Reader,
     Decoder,
     CSDecoder,
+    MemtableReader,
     MaxReaderType
   };
   ObIMicroBlockReader()
@@ -369,14 +368,6 @@ public:
     UNUSEDx(col_offset, col_param, row_ids, row_cap, datum_buf, agg_cell);
     return OB_NOT_SUPPORTED;
   }
-  virtual int get_aggregate_result(
-      const int32_t col_offset,
-      const ObPushdownRowIdCtx &pd_row_id_ctx,
-      storage::ObAggCellVec &agg_cell)
-  {
-    UNUSEDx(col_offset, pd_row_id_ctx, agg_cell);
-    return OB_NOT_SUPPORTED;
-  }
   // for normal group by pushdown
   virtual int get_distinct_count(const int32_t group_by_col, int64_t &distinct_cnt) const
   {
@@ -412,21 +403,6 @@ public:
     UNUSEDx(iter_param, context, row_ids, cell_datas, row_cap, group_by_cell);
     return OB_NOT_SUPPORTED;
   }
-  virtual int get_group_by_aggregate_result(
-      const ObTableIterParam &iter_param,
-      const ObTableAccessContext &context,
-      const int32_t *row_ids,
-      const char **cell_datas,
-      const int64_t row_cap,
-      const int64_t vec_offset,
-      const common::ObIArray<blocksstable::ObStorageDatum> &default_datums,
-      uint32_t *len_array,
-      sql::ObEvalCtx &eval_ctx,
-      storage::ObGroupByCellVec &group_by_cell)
-  {
-    UNUSEDx(row_ids, cell_datas, row_cap, vec_offset, len_array, eval_ctx, group_by_cell);
-    return OB_NOT_SUPPORTED;
-  }
   virtual void reserve_reader_memory(bool reserve) { UNUSED(reserve); }
   virtual int find_bound_through_linear_search(
       const ObDatumRowkey &rowkey,
@@ -458,6 +434,7 @@ public:
       bool &filtered);
   virtual bool has_lob_out_row() const = 0;
   OB_INLINE ObReaderType get_type() const { return reader_type_; }
+  OB_INLINE bool is_memtable_reader() const { return MemtableReader == reader_type_; }
   int locate_border_row_id(
       const ObDatumRowkey &rowkey,
       const int64_t begin_idx,

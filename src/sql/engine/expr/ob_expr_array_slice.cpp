@@ -245,97 +245,6 @@ int ObExprArraySlice::eval_array_slice_batch(const ObExpr &expr,
   return ret;
 }
 
-int ObExprArraySlice::eval_array_slice_vector(const ObExpr &expr, 
-                          ObEvalCtx &ctx,
-                          const ObBitVector &skip, 
-                          const EvalBound &bound)
-{
-  int ret = OB_SUCCESS;
-
-  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
-  const uint16_t subschema_id = expr.obj_meta_.get_subschema_id();
-  ObIArrayType *src_arr = NULL;
-  ObIArrayType *res_arr = NULL;
-
-  if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval source array failed", K(ret));
-  } else if (OB_FAIL(expr.args_[1]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval offset failed", K(ret));
-  } else if (expr.arg_cnt_ > 2 && OB_FAIL(expr.args_[2]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval len failed", K(ret));
-  } else {
-    ObIVector *arr_vec = expr.args_[0]->get_vector(ctx);
-    VectorFormat arr_format = arr_vec->get_format();
-    ObIVector *offset_vec = expr.args_[1]->get_vector(ctx);
-    ObIVector *len_vec = expr.arg_cnt_ > 2 ? expr.args_[2]->get_vector(ctx) : NULL;
-    ObIVector *res_vec = expr.get_vector(ctx);
-    VectorFormat res_format = expr.get_format(ctx);
-    ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-
-    for (int64_t j = bound.start(); OB_SUCC(ret) && j < bound.end(); ++j) {
-      bool is_null_res = false;
-      if (skip.at(j) || eval_flags.at(j)) {
-        continue;
-      }
-      eval_flags.set(j);
-      if (arr_vec->is_null(j) || offset_vec->is_null(j) ||
-          (expr.arg_cnt_ > 2 && len_vec->is_null(j))) {
-        is_null_res = true;
-      } else if (OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator,
-                                              ctx, 
-                                              subschema_id, 
-                                              res_arr, 
-                                              false))) {
-        LOG_WARN("construct array obj failed", K(ret));
-      } else {
-        ObString arr_string = arr_vec->get_string(j);
-        if (OB_FAIL(ObNestedVectorFunc::construct_param(tmp_allocator, 
-                                            ctx, 
-                                            subschema_id,
-                                            arr_string, 
-                                            src_arr))) {
-          LOG_WARN("construct array obj failed", K(ret));
-        }
-      }
-
-      if (OB_FAIL(ret)) {
-      } else if (is_null_res) {
-        res_vec->set_null(j);
-      } else {
-        uint32_t arr_len = src_arr->size();
-        int64_t offset = offset_vec->get_int(j);
-        int64_t len = 0;
-        bool has_len = false;
-        if (expr.arg_cnt_ > 2) {
-          has_len = true;
-          len = len_vec->get_int(j);
-        }
-        if (OB_FAIL(get_subarray(res_arr, src_arr, offset, len, has_len))) {
-          LOG_WARN("failed to get subarray", K(ret));
-        } else {
-          if (res_format == VEC_DISCRETE) {
-            if (OB_FAIL(ObArrayExprUtils::set_array_res<ObDiscreteFormat>(
-                    res_arr, expr, ctx, static_cast<ObDiscreteFormat *>(res_vec), j))) {
-              LOG_WARN("set array res failed", K(ret));
-            }
-          } else if (res_format == VEC_UNIFORM) {
-            if (OB_FAIL(ObArrayExprUtils::set_array_res<ObUniformFormat<false>>(
-                    res_arr, expr, ctx, static_cast<ObUniformFormat<false> *>(res_vec), j))) {
-              LOG_WARN("set array res failed", K(ret));
-            }
-          } else if (OB_FAIL(ObArrayExprUtils::set_array_res<ObVectorBase>(
-                         res_arr, expr, ctx, static_cast<ObVectorBase *>(res_vec), j))) {
-            LOG_WARN("set array res failed", K(ret));
-          }
-        }
-      }
-    } // end for
-  } // end if
-
-  return ret;
-}
-
 int ObExprArraySlice::get_subarray(ObIArrayType *&res_arr, 
                           ObIArrayType *src_arr, 
                           int64_t offset,
@@ -387,7 +296,6 @@ int ObExprArraySlice::cg_expr(ObExprCGCtx &expr_cg_ctx,
   UNUSED(raw_expr);
   rt_expr.eval_func_ = eval_array_slice;
   rt_expr.eval_batch_func_ = eval_array_slice_batch;
-  rt_expr.eval_vector_func_ = eval_array_slice_vector;
   return OB_SUCCESS;
 }
 

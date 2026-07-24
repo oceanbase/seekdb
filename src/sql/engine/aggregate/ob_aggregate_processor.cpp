@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_aggregate_processor.h"
+#include "share/ob_lob_access_utils.h"
 #include "sql/engine/expr/ob_expr_minus.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/engine/expr/ob_expr_estimate_ndv.h"
@@ -37,9 +38,91 @@ namespace share
 {
 namespace aggregate
 {
-extern bool is_grouping(const ObAggrInfo &aggr_info, const int64_t val);
-extern int get_grouping_id(const ObAggrInfo &aggr_info, const int64_t val, number::ObCompactNumber *grouping_id);
-extern int get_grouping_id(const ObAggrInfo &aggr_info, const int64_t val, int64_t *grouping_id);
+using namespace common;
+using namespace sql;
+
+static bool is_rollup_expr(const ObAggrInfo &aggr_info, ObExpr *expr, const int64_t seq)
+{
+  bool is_rollup = false;
+  if (has_exist_in_array(aggr_info.hash_rollup_info_->gby_exprs_, expr)
+      || !has_exist_in_array(aggr_info.hash_rollup_info_->expand_exprs_, expr)) {
+  } else {
+    ObIArray<ObExpr *> &expand_exprs = aggr_info.hash_rollup_info_->expand_exprs_;
+    bool found = false;
+    for (int64_t i = expand_exprs.count() - seq - 1; !found && i >= 0; --i) {
+      found = expr == expand_exprs.at(i);
+    }
+    is_rollup = !found;
+  }
+  return is_rollup;
+}
+
+bool is_grouping(const ObAggrInfo &aggr_info, const int64_t seq)
+{
+  OB_ASSERT(aggr_info.param_exprs_.count() == 1 && aggr_info.param_exprs_.at(0) != nullptr);
+  return is_rollup_expr(aggr_info, aggr_info.param_exprs_.at(0), seq);
+}
+
+int get_grouping_id(const ObAggrInfo &aggr_info, const int64_t seq,
+                    number::ObCompactNumber *grouping_id)
+{
+  int ret = OB_SUCCESS;
+  const ObIArray<ObExpr *> &param_exprs = aggr_info.param_exprs_;
+  int512_t res = 0;
+  int512_t base = 1;
+  if (OB_UNLIKELY(param_exprs.count() <= 0) || OB_ISNULL(grouping_id)) {
+    ret = OB_ERR_UNEXPECTED;
+    SQL_LOG(WARN, "invalid grouping id arguments", K(ret), K(param_exprs.count()), KP(grouping_id));
+  }
+  for (int64_t i = param_exprs.count() - 1; OB_SUCC(ret) && i >= 0; --i) {
+    ObExpr *grouping_expr = param_exprs.at(i);
+    if (OB_ISNULL(grouping_expr)) {
+      ret = OB_ERR_UNEXPECTED;
+      SQL_LOG(WARN, "invalid null expr", K(ret));
+    } else if (is_rollup_expr(aggr_info, grouping_expr, seq)) {
+      res += base;
+    }
+    base = base << 1;
+  }
+  if (OB_SUCC(ret)) {
+    number::ObNumber tmp_nmb;
+    ObNumStackOnceAlloc tmp_alloc;
+    if (OB_FAIL(wide::to_number(res, 0, tmp_alloc, tmp_nmb))) {
+      SQL_LOG(WARN, "to_number failed", K(ret));
+    } else {
+      grouping_id->desc_ = tmp_nmb.d_;
+      MEMCPY(grouping_id->digits_, tmp_nmb.get_digits(),
+             tmp_nmb.d_.len_ * sizeof(uint32_t));
+    }
+  }
+  return ret;
+}
+
+int get_grouping_id(const ObAggrInfo &aggr_info, const int64_t seq, int64_t *grouping_id)
+{
+  int ret = OB_SUCCESS;
+  const ObIArray<ObExpr *> &param_exprs = aggr_info.param_exprs_;
+  int64_t res = 0;
+  int64_t base = 1;
+  if (OB_UNLIKELY(param_exprs.count() <= 0) || OB_ISNULL(grouping_id)) {
+    ret = OB_ERR_UNEXPECTED;
+    SQL_LOG(WARN, "invalid grouping id arguments", K(ret), K(param_exprs.count()), KP(grouping_id));
+  }
+  for (int64_t i = param_exprs.count() - 1; OB_SUCC(ret) && i >= 0; --i) {
+    ObExpr *grouping_expr = param_exprs.at(i);
+    if (OB_ISNULL(grouping_expr)) {
+      ret = OB_ERR_UNEXPECTED;
+      SQL_LOG(WARN, "invalid null expr", K(ret));
+    } else if (is_rollup_expr(aggr_info, grouping_expr, seq)) {
+      res += base;
+    }
+    base <<= 1;
+  }
+  if (OB_SUCC(ret)) {
+    *grouping_id = res;
+  }
+  return ret;
+}
 } // end aggregate
 } // end share
 using namespace common;
@@ -83,6 +166,9 @@ OB_DEF_SERIALIZE(ObAggrInfo)
               with_unique_keys_,
               max_disuse_param_expr_
   );
+  if (T_FUN_AGG_UDF == get_expr_type()) {
+    OB_UNIS_ENCODE(*dll_udf_);
+  }
   OB_UNIS_ENCODE(distinct_hash_funcs_);
   int8_t grouping_with_hash_rollup = 0;
   if (hash_rollup_info_ != nullptr) {
@@ -128,6 +214,18 @@ OB_DEF_DESERIALIZE(ObAggrInfo)
               with_unique_keys_,
               max_disuse_param_expr_
   );
+  if (T_FUN_AGG_UDF == get_expr_type()) {
+    CK(NULL != alloc_);
+    if (OB_SUCC(ret)) {
+      dll_udf_ = OB_NEWx(ObAggDllUdfInfo, alloc_, (*alloc_), real_aggr_type_);
+      if (OB_ISNULL(dll_udf_)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("allocate failed", K(ret));
+      } else {
+        OB_UNIS_DECODE(*dll_udf_);
+      }
+    }
+  }
   OB_UNIS_DECODE(distinct_hash_funcs_);
   int8_t grouping_with_hash_rollup = 0;
   OB_UNIS_DECODE(grouping_with_hash_rollup);
@@ -179,6 +277,9 @@ OB_DEF_SERIALIZE_SIZE(ObAggrInfo)
               with_unique_keys_,
               max_disuse_param_expr_
   );
+  if (T_FUN_AGG_UDF == get_expr_type()) {
+    OB_UNIS_ADD_LEN(*dll_udf_);
+  }
   OB_UNIS_ADD_LEN(distinct_hash_funcs_);
   int8_t grouping_id_with_hash_rollup = 0;
   OB_UNIS_ADD_LEN(grouping_id_with_hash_rollup);
@@ -238,6 +339,7 @@ int ObAggrInfo::assign(const ObAggrInfo &rhs)
   pl_agg_udf_type_id_ = rhs.pl_agg_udf_type_id_;
 
   pl_result_type_ = rhs.pl_result_type_;
+  dll_udf_ = rhs.dll_udf_;
   bucket_num_param_expr_ = rhs.bucket_num_param_expr_;
   rollup_idx_ = rhs.rollup_idx_;
 
@@ -1283,6 +1385,13 @@ int ObAggrInfo::eval_param_batch(const ObBatchRows &brs, ObEvalCtx &ctx) const
     }
   }
   return ret;
+}
+
+ObAggregateProcessor::DllUdfExtra::~DllUdfExtra()
+{
+  if (NULL != udf_fun_) {
+    udf_fun_->process_deinit_func(udf_ctx_);
+  }
 }
 
 ObAggregateProcessor::ObAggregateProcessor(ObEvalCtx &eval_ctx,
@@ -2529,6 +2638,30 @@ int ObAggregateProcessor::generate_group_row(GroupRow *&new_group_row,
           break;
         }
 
+        case T_FUN_AGG_UDF: {
+          CK(NULL != aggr_info.dll_udf_);
+          DllUdfExtra *extra = NULL;
+          if (OB_SUCC(ret)) {
+            void *tmp_buf = NULL;
+            if (OB_ISNULL(tmp_buf = aggr_alloc_.alloc(sizeof(DllUdfExtra)))) {
+              ret = OB_ALLOCATE_MEMORY_FAILED;
+              LOG_WARN("allocate memory failed", K(ret));
+            } else {
+              DllUdfExtra *extra = new (tmp_buf) DllUdfExtra(aggr_alloc_, op_monitor_info_);
+              aggr_cell.set_extra(extra);
+              OZ(ObUdfUtil::init_udf_args(aggr_alloc_,
+                                        aggr_info.dll_udf_->udf_attributes_,
+                                        aggr_info.dll_udf_->udf_attributes_types_,
+                                        extra->udf_ctx_.udf_args_));
+              OZ(aggr_info.dll_udf_->udf_func_.process_init_func(extra->udf_ctx_));
+              if (OB_SUCC(ret)) { // set func after udf ctx inited
+                extra->udf_fun_ = &aggr_info.dll_udf_->udf_func_;
+              }
+              OZ(extra->udf_fun_->process_clear_func(extra->udf_ctx_));
+            }
+          }
+          break;
+        }
         default:
           break;
       }
@@ -2714,6 +2847,30 @@ int ObAggregateProcessor::fill_group_row(GroupRow *new_group_row,
           break;
         }
 
+        case T_FUN_AGG_UDF: {
+          CK(NULL != aggr_info.dll_udf_);
+          DllUdfExtra *extra = NULL;
+          if (OB_SUCC(ret)) {
+            void *tmp_buf = NULL;
+            if (OB_ISNULL(tmp_buf = aggr_alloc_.alloc(sizeof(DllUdfExtra)))) {
+              ret = OB_ALLOCATE_MEMORY_FAILED;
+              LOG_WARN("allocate memory failed", K(ret));
+            } else {
+              DllUdfExtra *extra = new (tmp_buf) DllUdfExtra(aggr_alloc_, op_monitor_info_);
+              aggr_cell.set_extra(extra);
+              OZ(ObUdfUtil::init_udf_args(aggr_alloc_,
+                                        aggr_info.dll_udf_->udf_attributes_,
+                                        aggr_info.dll_udf_->udf_attributes_types_,
+                                        extra->udf_ctx_.udf_args_));
+              OZ(aggr_info.dll_udf_->udf_func_.process_init_func(extra->udf_ctx_));
+              if (OB_SUCC(ret)) { // set func after udf ctx inited
+                extra->udf_fun_ = &aggr_info.dll_udf_->udf_func_;
+              }
+              OZ(extra->udf_fun_->process_clear_func(extra->udf_ctx_));
+            }
+          }
+          break;
+        }
         default:
           break;
       }
@@ -3141,6 +3298,12 @@ int ObAggregateProcessor::rollup_aggregation(AggrCell &aggr_cell, AggrCell &roll
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "rollup contain hybrid hist");
       break;
     }
+    case T_FUN_AGG_UDF: {
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("rollup contain agg udfs still not supported", K(ret));
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "rollup contain agg udfs");
+      break;
+    }
     case T_FUN_SYS_BIT_AND: {
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("rollup contain bit_and still not supported", K(ret));
@@ -3505,6 +3668,17 @@ int ObAggregateProcessor::prepare_aggr_result(const ObChunkDatumStore::StoredRow
       }
       break;
     }
+    case T_FUN_AGG_UDF: {
+      ObEvalCtx::TempAllocGuard tmp_alloc_g(eval_ctx_);
+      DllUdfExtra *extra = static_cast<DllUdfExtra *>(aggr_cell.get_extra());
+      CK(NULL != extra);
+      // EvalCtx temp allocator is used for udf args deep coping.
+      OZ(extra->udf_fun_->process_add_func(tmp_alloc_g.get_allocator(),
+                                          stored_row.cells(),
+                                          aggr_info.param_exprs_,
+                                          extra->udf_ctx_));
+      break;
+    }
     case T_FUN_SYS_BIT_AND:
     case T_FUN_SYS_BIT_OR:
     case T_FUN_SYS_BIT_XOR: {
@@ -3733,6 +3907,27 @@ int ObAggregateProcessor::process_aggr_batch_result(
           }
         }
         ret = top_fre_hist_calc_batch(aggr_info, extra_info, arg_datums, selector);
+      }
+      break;
+    }
+    case T_FUN_AGG_UDF: {
+      ObEvalCtx::TempAllocGuard tmp_alloc_g(eval_ctx_);
+      DllUdfExtra *extra = static_cast<DllUdfExtra *>(aggr_cell.get_extra());
+      CK(NULL != extra);
+      auto expr_cnt = aggr_info.param_exprs_.count();
+      ObDatum *datums = static_cast<ObDatum *>(
+          tmp_alloc_g.get_allocator().alloc(expr_cnt * sizeof(ObDatum)));
+      // Reuse ObAggUdfFunction::process_add_func, UDF does NOT care performance
+      for (auto it = selector.begin(); OB_SUCC(ret) && it < selector.end();
+           selector.next(it)) {
+        auto batch_idx = selector.get_batch_index(it);
+        for (auto col = 0; col < expr_cnt; col++) {
+          datums[col] = aggr_info.param_exprs_.at(col)->locate_expr_datum(eval_ctx_, batch_idx);
+        }
+        // EvalCtx temp allocator is used for udf args deep coping.
+        OZ(extra->udf_fun_->process_add_func(tmp_alloc_g.get_allocator(),
+                                             datums, aggr_info.param_exprs_,
+                                             extra->udf_ctx_));
       }
       break;
     }
@@ -3985,6 +4180,17 @@ int ObAggregateProcessor::process_aggr_result(const ObChunkDatumStore::StoredRow
           }
         }
       }
+      break;
+    }
+    case T_FUN_AGG_UDF: {
+      ObEvalCtx::TempAllocGuard tmp_alloc_g(eval_ctx_);
+      DllUdfExtra *extra = static_cast<DllUdfExtra *>(aggr_cell.get_extra());
+      CK(NULL != extra);
+      // EvalCtx temp allocator is used for udf args deep coping.
+      OZ(extra->udf_fun_->process_add_func(tmp_alloc_g.get_allocator(),
+                                          stored_row.cells(),
+                                          aggr_info.param_exprs_,
+                                          extra->udf_ctx_));
       break;
     }
     case T_FUN_SYS_BIT_AND:
@@ -4814,6 +5020,28 @@ int ObAggregateProcessor::collect_aggr_result(
       } else {
         LOG_TRACE("succeed to get pl agg udf result");
       }
+      break;
+    }
+    case T_FUN_AGG_UDF: {
+      ObEvalCtx::TempAllocGuard tmp_alloc_g(eval_ctx_);
+      DllUdfExtra *extra = static_cast<DllUdfExtra *>(aggr_cell.get_extra());
+      CK(NULL != extra);
+      ObObj obj_res;
+      // EvalCtx temp allocator is used for result obj
+      OZ(extra->udf_fun_->process_origin_func(tmp_alloc_g.get_allocator(),
+                                             obj_res,
+                                             extra->udf_ctx_));
+      if (OB_SUCC(ret)) {
+        ObDatum &res = aggr_info.expr_->locate_datum_for_write(eval_ctx_);
+        OZ(res.from_obj(obj_res));
+        if (is_lob_storage(obj_res.get_type())) {
+          OZ(ob_adjust_lob_datum(obj_res, aggr_info.expr_->obj_meta_,
+                                eval_ctx_.exec_ctx_.get_allocator(), res));
+        }
+        OZ(aggr_info.expr_->deep_copy_datum(eval_ctx_, res));
+      }
+      OZ(extra->udf_fun_->process_clear_func(extra->udf_ctx_));
+      // call udf deinit in ~DllUdfExtra()
       break;
     }
     case T_FUN_SYS_BIT_AND:
@@ -8465,7 +8693,7 @@ int ObAggregateProcessor::init_asmvt_result(ObIAllocator &allocator,
   if (OB_SUCC(ret)) {
     if (!mvt_res.feature_id_name_.empty() && mvt_res.feat_id_idx_ == UINT32_MAX) {
       // can't find feature id column
-      ret = OB_ERR_INVALID_TYPE_FOR_OP;
+      ret = OB_ERR_IDENTITY_COLUMN_MUST_BE_NUMERIC_TYPE;
       LOG_WARN("invalid column type", K(ret));
     } else {
       mvt_res.column_cnt_ = column_cnt;

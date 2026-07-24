@@ -29,7 +29,7 @@
 #include "sql/ob_sql_define.h"
 #include "sql/ob_sql_utils.h"
 #include "sql/parser/parse_node.h"
-#include "sql/plan_cache/ob_pre_calc_expr_handler.h"
+#include "sql/plan_cache/ob_pc_ref_handle.h"
 #include "sql/das/ob_das_define.h"
 #include "lib/utility/serialization.h"
 
@@ -229,7 +229,7 @@ struct ObSysVarInPC
 
 struct ObPCMemPctConf
 {
-  int64_t limit_pct_; // Percentage of runtime memory available to the plan cache.
+  int64_t limit_pct_; // plan cache usable tenant memory percentage
   int64_t high_pct_;  // eviction high water mark percentage of plan cache memory limit
   int64_t low_pct_; // eviction low water level percentage of plan cache memory upper limit
 
@@ -466,6 +466,19 @@ struct ObTableRowCount
   OB_UNIS_VERSION(1);
 };
 
+struct AdaptivePCConf
+{
+  AdaptivePCConf() :
+    enable_adaptive_plan_cache_(false), pc_adaptive_min_exec_time_threshold_(0),
+    pc_adaptive_effectiveness_ratio_threshold_(0)
+  {}
+  TO_STRING_KV(K_(enable_adaptive_plan_cache), K_(pc_adaptive_min_exec_time_threshold),
+               K_(pc_adaptive_effectiveness_ratio_threshold));
+  bool enable_adaptive_plan_cache_;
+  int64_t pc_adaptive_min_exec_time_threshold_;
+  int64_t pc_adaptive_effectiveness_ratio_threshold_;
+};
+
 struct ObVecIndexExecCtx {
   ObVecIndexExecCtx()
     : cur_path_(0),
@@ -496,6 +509,25 @@ enum ObPlanExpiredStat  {
 
 struct ObPlanStat
 {
+  enum PlanStatus
+  {
+    ACTIVE = 0,
+    INACTIVE = 1
+  };
+  struct AdaptivePCInfo
+  {
+    AdaptivePCInfo()
+      : positive_feedback_times_(0),
+        negative_feedback_times_(0),
+        status_(PlanStatus::ACTIVE)
+    {}
+    TO_STRING_KV(K_(positive_feedback_times),
+                 K_(negative_feedback_times),
+                 K_(status));
+    uint32_t positive_feedback_times_; // Continuous positive feedback times
+    uint32_t negative_feedback_times_; // Continuous negative feedback times
+    PlanStatus status_;
+  };
   static const int64_t DEFAULT_ADDR_NODE_NUM = 16;
   typedef common::hash::ObHashMap<ObAddr, int64_t,
         common::hash::LatchReadWriteDefendMode, common::hash::hash_func<ObAddr>,
@@ -610,6 +642,7 @@ struct ObPlanStat
   bool hints_all_worked_;
   bool is_inner_;
   bool is_use_auto_dop_;
+  AdaptivePCInfo adaptive_pc_info_;
   ObVecIndexExecCtx vec_index_exec_ctx_;
 
 
@@ -683,6 +716,7 @@ struct ObPlanStat
       hints_all_worked_(true),
       is_inner_(false),
       is_use_auto_dop_(false),
+      adaptive_pc_info_(),
       vec_index_exec_ctx_()
 {
   exact_mode_sql_id_[0] = '\0';
@@ -756,6 +790,7 @@ struct ObPlanStat
       hints_all_worked_(rhs.hints_all_worked_),
       is_inner_(rhs.is_inner_),
       is_use_auto_dop_(rhs.is_use_auto_dop_),
+      adaptive_pc_info_(rhs.adaptive_pc_info_),
       vec_index_exec_ctx_(rhs.vec_index_exec_ctx_)
   {
     exact_mode_sql_id_[0] = '\0';
@@ -940,10 +975,19 @@ struct ObPhyLocationGetter
 {
 public:
   // used for getting plan
+  // In this interface, we will first verify whether all tables were marked select_leader.
+  // If confirmed, the fast path will be activated to directly select leader replicas for each table
+  // and add them to das ctx, without the need to construct candi table locs. 
+  // Otherwise, fallback to the original path and add candi table locs to das ctx manually.
   static int get_phy_locations(const ObIArray<ObTableLocation> &table_locations,
                                const ObPlanCacheCtx &pc_ctx,
                                ObIArray<ObCandiTableLoc> &phy_location_infos);
   
+  // used for matching plan
+  static int get_candi_phy_locations(const ObIArray<ObTableLocation> &table_locations,
+                                     const ObPlanCacheCtx &pc_ctx,
+                                     ObIArray<ObCandiTableLoc> &candi_table_locs);
+
   // used for adding plan
   static int get_phy_locations(const common::ObIArray<ObTablePartitionInfo *> &partition_infos,
                                //ObIArray<ObDASTableLoc> &phy_locations,
@@ -992,12 +1036,12 @@ public:
     px_join_skew_handling_(true),
     is_strict_defensive_check_(true),
     px_join_skew_minfreq_(30),
+    min_cluster_version_(0),
     enable_spf_batch_rescan_(false),
     enable_distributed_das_scan_(false),
     enable_das_batch_rescan_flag_(0),
     enable_var_assign_use_das_(false),
     enable_das_keep_order_(false),
-    enable_nlj_spf_use_rich_format_(false),
     enable_index_merge_(false),
     bloom_filter_ratio_(0),
     realistic_runtime_bloom_filter_size_(false),
@@ -1008,25 +1052,25 @@ public:
     enable_px_task_rebalance_(false),
     min_const_integer_precision_(1),
     cluster_config_version_(-1),
-    runtime_config_version_(-1)
+    tenant_config_version_(-1)
   {
   }
-  // Initialize the runtime-local cache state.
+  // init tenant_
   void init() {}
   // load configs which will influence execution plan
   int load_influence_plan_config();
   // generate config string
   int serialize_configs(char *buf, int buf_len, int64_t &pos);
   // whether configs has been changed
-  bool is_out_of_date(int64_t cluster_config, int64_t runtime_config)
+  bool is_out_of_date(int64_t cluster_config, int64_t tenant_config)
   {
     return !(cluster_config==cluster_config_version_ &&
-              runtime_config==runtime_config_version_);
+              tenant_config==tenant_config_version_);
   }
-  void update_version(int64_t cluster_config, int64_t runtime_config)
+  void update_version(int64_t cluster_config, int64_t tenant_config)
   {
     cluster_config_version_ = cluster_config;
-    runtime_config_version_ = runtime_config;
+    tenant_config_version_ = tenant_config;
   }
 private:
   int get_all_influence_plan_config();
@@ -1045,12 +1089,12 @@ public:
   bool px_join_skew_handling_;
   bool is_strict_defensive_check_;
   int8_t px_join_skew_minfreq_;
+  uint64_t min_cluster_version_;
   bool enable_spf_batch_rescan_;
   bool enable_distributed_das_scan_;
   int64_t enable_das_batch_rescan_flag_;
   bool enable_var_assign_use_das_;
   bool enable_das_keep_order_;
-  bool enable_nlj_spf_use_rich_format_;
   bool enable_index_merge_;
   int bloom_filter_ratio_;
   bool realistic_runtime_bloom_filter_size_;
@@ -1064,11 +1108,12 @@ public:
 private:
   // current cluster config version_
   int64_t cluster_config_version_;
-  // Current runtime configuration version.
-  int64_t runtime_config_version_;
+  // current tenant config version_
+  int64_t tenant_config_version_;
   
 };
 
+extern const char* plan_cache_gc_confs[3];
 }
 }
 #endif //_OB_PLAN_CACHE_UTIL_H_

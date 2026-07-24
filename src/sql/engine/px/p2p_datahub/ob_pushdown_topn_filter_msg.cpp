@@ -27,22 +27,6 @@ namespace oceanbase
 namespace sql
 {
 
-class InitSelecterOP
-{
-public:
-  InitSelecterOP(uint16_t *selector, int64_t &selector_cnt)
-      : selector_(selector), selector_cnt_(selector_cnt)
-  {}
-  OB_INLINE int operator() (int64_t batch_i) {
-    selector_[selector_cnt_++] = batch_i;
-    return OB_SUCCESS;
-  }
-private:
-  uint16_t *selector_;
-  int64_t &selector_cnt_;
-};
-
-
 OB_SERIALIZE_MEMBER(ObTopNFilterCmpMeta, ser_cmp_func_, obj_meta_);
 OB_SERIALIZE_MEMBER(ObTopNFilterCompare, build_meta_, filter_meta_, is_ascending_, null_pos_);
 OB_SERIALIZE_MEMBER(ObPushDownTopNFilterInfo, enabled_, p2p_dh_id_, effective_sk_cnt_,
@@ -149,6 +133,8 @@ int ObPushDownTopNFilterMsg::init(const ObPushDownTopNFilterInfo *pd_topn_filter
       compares_.at(i).is_ascending_ = sort_collations->at(i).is_ascending_;
       compares_.at(i).null_pos_ = sort_collations->at(i).null_pos_;
     }
+    set_msg_expect_cnt(1); // TODO fix me in shared msg
+    set_msg_cur_cnt(1);
   }
   LOG_TRACE("[TopN Filter] init ObPushDownTopNFilterMsg", K(ret), K(effective_sk_cnt));
   return ret;
@@ -301,67 +287,6 @@ int ObPushDownTopNFilterMsg::filter_out_data_batch(
   return ret;
 }
 
-int ObPushDownTopNFilterMsg::filter_out_data_vector(
-    const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const EvalBound &bound,
-    ObExprTopNFilterContext &filter_ctx)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(is_empty_)) {
-    int64_t total_count = 0;
-    int64_t filter_count = 0;
-    ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-    VectorFormat res_format = expr.get_format(ctx);
-    if (VEC_UNIFORM == res_format) {
-      IntegerUniVec *res_vec = static_cast<IntegerUniVec *>(expr.get_vector(ctx));
-      ret = proc_filter_empty(res_vec, skip, bound, total_count, filter_count);
-    } else if (VEC_FIXED == res_format) {
-      IntegerFixedVec *res_vec = static_cast<IntegerFixedVec *>(expr.get_vector(ctx));
-      ret = proc_filter_empty(res_vec, skip, bound, total_count, filter_count);
-    }
-    if (OB_SUCC(ret)) {
-      eval_flags.set_all(true);
-      filter_ctx.filter_count_ += filter_count;
-      filter_ctx.check_count_ += total_count;
-      filter_ctx.total_count_ += total_count;
-    }
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
-      ObExpr *e = expr.args_[i];
-      if (OB_FAIL(e->eval_vector(ctx, skip, bound))) {
-        LOG_WARN("evaluate vector failed", K(ret), K(*e));
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(do_filter_out_data_vector(expr, ctx, skip, bound, filter_ctx))) {
-      LOG_WARN("fail to do filter out data vector");
-    }
-  }
-  return ret;
-}
-
-int ObPushDownTopNFilterMsg::update_filter_data(ObCompactRow *compact_row, const RowMeta *row_meta,
-                                                bool &is_updated)
-{
-  int ret = OB_SUCCESS;
-  is_updated = false;
-
-  // TODO XUNSI: update data for shared topn msg, be care of thread safe
-  if (check_has_null(compact_row)) {
-    // do nothing, null will not be updated into filter
-  } else if (OB_FAIL(copy_heap_top_datums_from(compact_row, row_meta))) {
-    LOG_WARN("failed to copy");
-  } else {
-    is_updated = true;
-    int64_t v = ATOMIC_AAF(&data_version_, 1);
-    LOG_TRACE("[TopN Filter] update_filter_data", K(v));
-  }
-  if (OB_SUCC(ret) && is_updated && OB_UNLIKELY(is_empty_)) {
-    is_empty_ = false;
-    LOG_TRACE("[TopN Filter] first update filter data");
-  }
-  return ret;
-}
-
 int ObPushDownTopNFilterMsg::update_filter_data(ObChunkDatumStore::StoredRow *store_row,
                                                 bool &is_updated)
 {
@@ -382,19 +307,6 @@ int ObPushDownTopNFilterMsg::update_filter_data(ObChunkDatumStore::StoredRow *st
     LOG_TRACE("[TopN Filter] first update filter data");
   }
   return ret;
-}
-
-bool ObPushDownTopNFilterMsg::check_has_null(ObCompactRow *compact_row)
-{
-  int ret = OB_SUCCESS;
-  bool has_null = false;
-  for (int64_t i = 0; i < heap_top_datums_.count() && OB_SUCC(ret); ++i) {
-    if (compact_row->is_null(i)) {
-      has_null = true;
-      break;
-    }
-  }
-  return has_null;
 }
 
 bool ObPushDownTopNFilterMsg::check_has_null(ObChunkDatumStore::StoredRow *store_row)
@@ -512,21 +424,6 @@ int ObPushDownTopNFilterMsg::copy_heap_top_datums_from(ObIArray<ObDatum> &incomm
   return ret;
 }
 
-int ObPushDownTopNFilterMsg::copy_heap_top_datums_from(ObCompactRow *compact_row,
-                                                       const RowMeta *row_meta)
-{
-  int ret = OB_SUCCESS;
-  for (int64_t i = 0; i < heap_top_datums_.count() && OB_SUCC(ret); ++i) {
-    const ObDatum &incomming_datum = compact_row->get_datum(*row_meta, i);
-    ObDatum &origin_datum = heap_top_datums_.at(i);
-    int64_t &cell_size = cells_size_.at(i);
-    if (OB_FAIL(dynamic_copy_cell(incomming_datum, origin_datum, cell_size))) {
-      LOG_WARN("fail to deep copy datum");
-    }
-  }
-  return ret;
-}
-
 int ObPushDownTopNFilterMsg::copy_heap_top_datums_from(ObChunkDatumStore::StoredRow *store_row)
 {
   int ret = OB_SUCCESS;
@@ -634,194 +531,6 @@ int ObPushDownTopNFilterMsg::do_filter_out_data_batch(
     filter_ctx.total_count_ += total_count;
     filter_ctx.check_count_ += total_count;
     filter_ctx.collect_sample_info(filter_count, total_count);
-  }
-  return ret;
-}
-
-#define MULTI_COL_COMPARE_DISPATCH_VECTOR_RES_FORMAT(func_name, arg_format, res_format, ...)       \
-  if (res_format == VEC_FIXED) {                                                                   \
-    MULTI_COL_COMPARE_DISPATCH_VECTOR_ARG_FORMAT(func_name, arg_format, IntegerFixedVec,           \
-                                                 __VA_ARGS__);                                     \
-  } else {                                                                                         \
-    MULTI_COL_COMPARE_DISPATCH_VECTOR_ARG_FORMAT(func_name, arg_format, IntegerUniVec,           \
-                                                 __VA_ARGS__);                                     \
-  }
-
-#define MULTI_COL_COMPARE_DISPATCH_VECTOR_ARG_FORMAT(func_name, arg_format, result_format, ...)    \
-  switch (arg_format) {                                                                            \
-  case VEC_FIXED: {                                                                                \
-    ret = func_name<ObFixedLengthBase, result_format>(__VA_ARGS__);                                \
-    break;                                                                                         \
-  }                                                                                                \
-  case VEC_DISCRETE: {                                                                             \
-    ret = func_name<ObDiscreteFormat, result_format>(__VA_ARGS__);                                 \
-    break;                                                                                         \
-  }                                                                                                \
-  case VEC_CONTINUOUS: {                                                                           \
-    ret = func_name<ObContinuousFormat, result_format>(__VA_ARGS__);                               \
-    break;                                                                                         \
-  }                                                                                                \
-  case VEC_UNIFORM: {                                                                              \
-    ret = func_name<ObUniformFormat<false>, result_format>(__VA_ARGS__);                           \
-    break;                                                                                         \
-  }                                                                                                \
-  case VEC_UNIFORM_CONST: {                                                                        \
-    ret = func_name<ObUniformFormat<true>, result_format>(__VA_ARGS__);                            \
-    break;                                                                                         \
-  }                                                                                                \
-  default: {                                                                                       \
-    ret = func_name<ObVectorBase, result_format>(__VA_ARGS__);                                     \
-  }                                                                                                \
-  }
-
-template <typename ArgVec, typename ResVec>
-int ObPushDownTopNFilterMsg::process_multi_columns(int64_t arg_idx, const ObExpr &expr,
-                                                   ObEvalCtx &ctx, uint16_t *selector,
-                                                   int64_t old_row_selector_cnt,
-                                                   int64_t &new_row_selector_cnt,
-                                                   int64_t &filter_count)
-{
-  int ret = OB_SUCCESS;
-  ArgVec *arg_vec = static_cast<ArgVec *>(expr.args_[arg_idx]->get_vector(ctx));
-  ResVec *res_vec = static_cast<ResVec *>(expr.get_vector(ctx));
-  const char *fixed_base_arg_payload = nullptr;
-  bool arg_hash_null = arg_vec->has_null();
-  ObLength arg_len = 0;
-  ObDatum datum;
-  int cmp_res = 0;
-  const int64_t not_filtered_payload = 1; // for VEC_FIXED set set_payload, always 1
-  new_row_selector_cnt = 0;
-
-#define FILL_MUL_COLUMN_RESULT                                                                     \
-  if (datum.is_null()) {                                                                           \
-    cmp_res = -1;                                                                                   \
-  } else if (OB_FAIL(get_compare_result(arg_idx, datum, cmp_res))) {                               \
-    LOG_WARN("fail to get_compare_result", K(ret));                                                \
-  }                                                                                                \
-  if (OB_SUCC(ret)) {                                                                              \
-    if (std::is_same<ResVec, IntegerFixedVec>::value) {                                            \
-      if (cmp_res > 0) {                                                                           \
-        filter_count += 1;                                                                         \
-      } else if (cmp_res < 0) {                                                                    \
-        res_vec->set_payload(batch_idx, &not_filtered_payload, sizeof(int64_t));                   \
-      } else {                                                                                     \
-        selector[new_row_selector_cnt++] = batch_idx;                                              \
-      }                                                                                            \
-    } else {                                                                                       \
-      if (cmp_res > 0) {                                                                           \
-        filter_count += 1;                                                                         \
-        res_vec->set_int(batch_idx, 0);                                                            \
-      } else if (cmp_res < 0) {                                                                    \
-        res_vec->set_int(batch_idx, 1);                                                            \
-      } else {                                                                                     \
-        selector[new_row_selector_cnt++] = batch_idx;                                              \
-      }                                                                                            \
-    }                                                                                              \
-  }
-
-  if (std::is_same<ArgVec, ObFixedLengthBase>::value) {
-    fixed_base_arg_payload = (reinterpret_cast<ObFixedLengthBase *>(arg_vec))->get_data();
-    ObLength arg_len = (reinterpret_cast<ObFixedLengthBase *>(arg_vec))->get_length();
-    datum.len_ = arg_len;
-    if (!arg_hash_null) {
-      datum.null_ = 0;
-      for (int64_t i = 0; OB_SUCC(ret) && i < old_row_selector_cnt; ++i) {
-        int64_t batch_idx = selector[i];
-        datum.ptr_ = fixed_base_arg_payload + arg_len * batch_idx;
-        FILL_MUL_COLUMN_RESULT
-      }
-    } else {
-      ObBitmapNullVectorBase *bn_vec_base = reinterpret_cast<ObBitmapNullVectorBase *>(arg_vec);
-      for (int64_t i = 0; OB_SUCC(ret) && i < old_row_selector_cnt; ++i) {
-        int64_t batch_idx = selector[i];
-        datum.ptr_ = fixed_base_arg_payload + arg_len * batch_idx;
-        datum.null_ = bn_vec_base->is_null(batch_idx);
-        FILL_MUL_COLUMN_RESULT
-      }
-    }
-  } else {
-    if (!arg_hash_null) {
-      datum.null_ = 0;
-      for (int64_t i = 0; OB_SUCC(ret) && i < old_row_selector_cnt; ++i) {
-        int64_t batch_idx = selector[i];
-        arg_vec->get_payload(batch_idx, datum.ptr_, arg_len);
-        datum.len_ = arg_len;
-        FILL_MUL_COLUMN_RESULT
-      }
-    } else {
-      if (!std::is_same<ArgVec, ObUniformFormat<false>>::value
-          && !std::is_same<ArgVec, ObUniformFormat<true>>::value) {
-        ObBitmapNullVectorBase *bn_vec_base = reinterpret_cast<ObBitmapNullVectorBase *>(arg_vec);
-        for (int64_t i = 0; OB_SUCC(ret) && i < old_row_selector_cnt; ++i) {
-          int64_t batch_idx = selector[i];
-          arg_vec->get_payload(batch_idx, datum.ptr_, arg_len);
-          datum.len_ = arg_len;
-          datum.null_ = bn_vec_base->is_null(batch_idx);
-          FILL_MUL_COLUMN_RESULT
-        }
-      } else {
-        for (int64_t i = 0; OB_SUCC(ret) && i < old_row_selector_cnt; ++i) {
-          int64_t batch_idx = selector[i];
-          arg_vec->get_payload(batch_idx, datum.ptr_, arg_len);
-          datum.len_ = arg_len;
-          datum.null_ = arg_vec->is_null(batch_idx);
-          FILL_MUL_COLUMN_RESULT
-        }
-      }
-    }
-  }
-#undef FILL_MUL_COLUMN_RESULT
-  return ret;
-}
-
-int ObPushDownTopNFilterMsg::do_filter_out_data_vector(
-    const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const EvalBound &bound,
-    ObExprTopNFilterContext &filter_ctx)
-{
-  int ret = OB_SUCCESS;
-  int64_t total_count = 0;
-  int64_t filter_count = 0;
-  int64_t batch_size = bound.batch_size();
-  ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-  VectorFormat res_format = expr.get_format(ctx);
-
-  if (VEC_FIXED == res_format) {
-    IntegerFixedVec *res_vec = static_cast<IntegerFixedVec *>(expr.get_vector(ctx));
-    if (OB_FAIL(preset_not_match(res_vec, bound))) {
-      LOG_WARN("failed to preset_not_match", K(ret));
-    }
-  }
-
-  if (OB_FAIL(ret)) {
-  } else  {
-    // init selector
-    int64_t old_row_selector_cnt = 0;
-    int64_t new_row_selector_cnt = 0;
-    if (bound.get_all_rows_active()) {
-      for (int64_t batch_i = bound.start(); batch_i < bound.end(); ++batch_i) {
-        filter_ctx.row_selector_[old_row_selector_cnt++] = batch_i;
-      }
-    } else {
-      InitSelecterOP init_select_op(filter_ctx.row_selector_, old_row_selector_cnt);
-      (void)ObBitVector::flip_foreach(skip, bound, init_select_op);
-    }
-    total_count += old_row_selector_cnt;
-    // compare by column
-    for (int arg_idx = 0; OB_SUCC(ret) && arg_idx < expr.arg_cnt_; ++arg_idx) {
-      const ObExpr &arg_expr = *expr.args_[arg_idx];
-      VectorFormat arg_format = arg_expr.get_format(ctx);
-      MULTI_COL_COMPARE_DISPATCH_VECTOR_RES_FORMAT(
-          process_multi_columns, arg_format, res_format, arg_idx, expr, ctx,
-          filter_ctx.row_selector_, old_row_selector_cnt, new_row_selector_cnt, filter_count);
-      old_row_selector_cnt = new_row_selector_cnt;
-      new_row_selector_cnt = 0;
-    }
-    if (OB_SUCC(ret)) {
-      filter_ctx.total_count_ += total_count;
-      filter_ctx.check_count_ += total_count;
-      filter_ctx.filter_count_ += filter_count;
-      filter_ctx.collect_sample_info(filter_count, total_count);
-    }
   }
   return ret;
 }

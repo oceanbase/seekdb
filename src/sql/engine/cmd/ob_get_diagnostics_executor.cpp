@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX  SQL_ENG
 #include "sql/engine/cmd/ob_get_diagnostics_executor.h"
 #include "observer/ob_inner_sql_connection_pool.h"
+#include "share/ob_lob_access_utils.h"
 #include "sql/session/ob_basic_session_info.h"
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -366,6 +367,7 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
    
   int64_t warning_count = 0;
   ObSqlString query_virtual;
+  ObSwitchCatalogHelper switch_catalog_helper;
   int tmp_ret = OB_SUCCESS;
   if (OB_ISNULL(session_info)) {
     ret = OB_INVALID_ARGUMENT;
@@ -379,6 +381,9 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
   } else if (OB_ISNULL(pool = static_cast<observer::ObInnerSQLConnectionPool*>(sql_proxy->get_pool()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("pool must not null", K(ret));
+  } else if (session_info->is_in_external_catalog()
+             && OB_FAIL(session_info->set_internal_catalog_db(&switch_catalog_helper))) {
+    LOG_WARN("failed to set catalog", K(ret));
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(pool->acquire(session_info, conn))) {
@@ -592,6 +597,12 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected expr type", K(ret));
       }
+    }
+  }
+  if (OB_NOT_NULL(session_info) && switch_catalog_helper.is_set()) {
+    if (OB_SUCCESS != (tmp_ret = switch_catalog_helper.restore())) {
+      ret = OB_SUCCESS == ret ? tmp_ret : ret;
+      LOG_WARN("failed to reset catalog", K(ret), K(tmp_ret));
     }
   }
   if (OB_SUCCESS != (tmp_ret = pool->release(conn, true))) {

@@ -28,12 +28,13 @@ using namespace oceanbase::sql::dtl;
 #define BREAK_TASK_CNT(a) ((a) + 1)
 
 ObPxSQCProxy::ObPxSQCProxy(ObSqcCtx &sqc_ctx,
-                           ObPxInitSqcArgs &arg)
+                           ObPxRpcInitSqcArgs &arg)
   : sqc_ctx_(sqc_ctx),
     sqc_arg_(arg),
     leader_token_lock_(common::ObLatchIds::PX_WORKER_LEADER_LOCK),
     sample_msg_(),
-    init_channel_msg_()
+    init_channel_msg_(),
+    p2p_dh_map_()
 {
 }
 
@@ -53,12 +54,12 @@ int ObPxSQCProxy::init()
   return ret;
 }
 
-int ObPxSQCProxy::link_sqc_qc_channel(ObPxInitSqcArgs &sqc_arg)
+int ObPxSQCProxy::link_sqc_qc_channel(ObPxRpcInitSqcArgs &sqc_arg)
 {
   int ret = OB_SUCCESS;
   ObPxSqcMeta &sqc = sqc_arg.sqc_;
   ObDtlChannel *ch = sqc.get_sqc_channel();
-  // Note: ch has already been linked in ObLocalSqcLauncher::process()
+  // Note: ch has already been linked in ObInitSqcP::process()
   // This is an optimization, to be able to receive the data channel information from qc as early as possible
   if (OB_ISNULL(ch)) {
     ret = OB_ERR_UNEXPECTED;
@@ -94,8 +95,6 @@ int ObPxSQCProxy::setup_loop_proc(ObSqcCtx &sqc_ctx)
         .register_processor(sqc_ctx.init_channel_whole_msg_proc_)
         .register_processor(sqc_ctx.reporting_wf_piece_msg_proc_)
         .register_processor(sqc_ctx.opt_stats_gather_whole_msg_proc_)
-        .register_processor(sqc_ctx.sp_winfunc_whole_msg_proc_)
-        .register_processor(sqc_ctx.rd_winfunc_whole_msg_proc_)
         .register_processor(sqc_ctx.join_filter_count_row_whole_msg_proc_)
         .register_interrupt_processor(sqc_ctx.interrupt_proc_);
   }
@@ -165,7 +164,8 @@ int ObPxSQCProxy::get_transmit_data_ch(
         // Check if the expected transmit channel map has already been received
         if (OB_SUCC(ret)) {
           if (OB_FAIL(sqc_ctx_.transmit_data_ch_provider_.get_data_ch_nonblock(
-                      sqc_id, task_id, timeout_ts, task_ch_set, ch_info))) {
+                      sqc_id, task_id, timeout_ts, task_ch_set, ch_info,
+                      sqc_arg_.sqc_.get_qc_addr(), get_process_query_time()))) {
             if (OB_DTL_WAIT_EAGAIN == ret) {
               // If there are no messages in provider, and it is determined that data should not be retrieved through dtl, it indicates a logical error
               if (!need_process_dtl) {
@@ -210,7 +210,8 @@ int ObPxSQCProxy::get_receive_data_ch(int64_t child_dfo_id,
         // Check if the expected receive channel map has already been received
         if (OB_SUCC(ret)) {
           if (OB_FAIL(sqc_ctx_.receive_data_ch_provider_.get_data_ch_nonblock(
-                      child_dfo_id, sqc_id, task_id, timeout_ts, task_ch_set, ch_info))) {
+                      child_dfo_id, sqc_id, task_id, timeout_ts, task_ch_set, ch_info,
+                      sqc_arg_.sqc_.get_qc_addr(), get_process_query_time()))) {
             if (OB_DTL_WAIT_EAGAIN == ret) {
               // If there are no messages in provider, and it is determined that data should not be retrieved through dtl, it indicates a logical error
               if (!need_process_dtl) {
@@ -250,7 +251,7 @@ int ObPxSQCProxy::get_part_ch_map(ObPxPartChInfo &map, int64_t timeout_ts)
         // Check if the expected transmit channel map has already been received
         if (OB_SUCC(ret)) {
           if (OB_FAIL(sqc_ctx_.transmit_data_ch_provider_.get_part_ch_map_nonblock(
-                      map, timeout_ts))) {
+                      map, timeout_ts, sqc_arg_.sqc_.get_qc_addr(), get_process_query_time()))) {
             if (OB_DTL_WAIT_EAGAIN == ret) {
               // If there are no messages in provider, and it is determined that data should not be retrieved through dtl, it indicates a logical error
               if (!need_process_dtl) {
@@ -329,7 +330,7 @@ int ObPxSQCProxy::check_task_finish_status(int64_t timeout_ts)
 int ObPxSQCProxy::report(int end_ret) const
 {
   int ret = OB_SUCCESS;
-  ObPxInitSqcArgs &sqc_arg = sqc_arg_;
+  ObPxRpcInitSqcArgs &sqc_arg = sqc_arg_;
   ObSqcCtx &sqc_ctx = sqc_ctx_;
   ObPxSqcMeta &sqc = sqc_arg.sqc_;
   ObPxFinishSqcResultMsg finish_msg;
@@ -393,6 +394,10 @@ int ObPxSQCProxy::report(int end_ret) const
   finish_msg.sqc_id_ = sqc.get_sqc_id();
   finish_msg.dfo_id_ = sqc.get_dfo_id();
   finish_msg.rc_ = sqc_ret;
+  // Rewrite error codes so that the scheduler can wait for remote schema refresh and retry
+  if (OB_SUCCESS != sqc_ret && is_schema_error(sqc_ret)) {
+    ObInterruptUtil::update_schema_error_code(sqc_arg.exec_ctx_, finish_msg.rc_);
+  }
   // If session is null, rc will not be SUCCESS, it's fine not to set trans_result
   if (OB_NOT_NULL(session) && OB_NOT_NULL(session->get_tx_desc())) {
     // overwrite ret
@@ -451,13 +456,14 @@ void ObPxSQCProxy::get_self_sqc_info(ObDtlSqcInfo &sqc_info)
 void ObPxSQCProxy::get_self_dfo_key(ObDtlDfoKey &key)
 {
   ObPxSqcMeta &sqc = sqc_arg_.sqc_;
-  key.set(sqc.get_px_sequence_id(), sqc.get_qc_id(), sqc.get_dfo_id());
+  key.set(sqc.get_qc_server_id(), sqc.get_px_sequence_id(), sqc.get_qc_id(), sqc.get_dfo_id());
 }
 
 void ObPxSQCProxy::get_parent_dfo_key(ObDtlDfoKey &key)
 {
   ObPxSqcMeta &sqc = sqc_arg_.sqc_;
-  key.set(sqc.get_px_sequence_id(), sqc.get_qc_id(), sqc.get_parent_dfo_id());
+  key.set(sqc.get_qc_server_id(), sqc.get_px_sequence_id(),
+      sqc.get_qc_id(), sqc.get_parent_dfo_id());
 }
 
 bool ObPxSQCProxy::need_transmit_channel_map_via_dtl()
@@ -560,5 +566,49 @@ int ObPxSQCProxy::sync_wait_all(ObPxDatahubDataProvider &provider)
     }
   } while (OB_SUCC(ret) && provider.dh_msg_cnt_ < BREAK_TASK_CNT(task_cnt) * curr_rescan_cnt);
 
+  return ret;
+}
+
+int ObPxSQCProxy::construct_p2p_dh_map(ObP2PDhMapInfo &map_info)
+{
+  int ret = OB_SUCCESS;
+  int bucket_size = 2 * map_info.p2p_sequence_ids_.count();
+  if (0 == bucket_size) {
+  } else if (OB_FAIL(p2p_dh_map_.create(bucket_size,
+      "SQCDHMapKey",
+      "SQCDHMAPNode"))) {
+    LOG_WARN("create hash table failed", K(ret));
+  } else if (map_info.p2p_sequence_ids_.count() !=
+      map_info.target_addrs_.count()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected map info count", K(ret));
+  } else {
+    for (int i = 0; OB_SUCC(ret) &&
+         i < map_info.p2p_sequence_ids_.count(); ++i) {
+      if (OB_FAIL(p2p_dh_map_.set_refactored(map_info.p2p_sequence_ids_.at(i),
+          &map_info.target_addrs_.at(i)))) {
+        LOG_WARN("fail to set p2p dh map", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObPxSQCProxy::check_is_local_dh(int64_t p2p_dh_id, bool &is_local, int64_t msg_cnt)
+{
+  int ret = OB_SUCCESS;
+  ObSArray<ObAddr> *target_addrs = nullptr;
+  if (OB_FAIL(p2p_dh_map_.get_refactored(p2p_dh_id, target_addrs))) {
+    LOG_WARN("fail to get dh map", K(ret));
+  } else if (OB_ISNULL(target_addrs) || target_addrs->empty()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected target addrs", K(ret));
+  } else if (target_addrs->count() == 1 &&
+             GCTX.self_addr() == target_addrs->at(0) &&
+             1 == msg_cnt) {
+    is_local = true;
+  } else {
+    is_local = false;
+  }
   return ret;
 }

@@ -115,23 +115,6 @@ public:
   }
   static int calc_split_part_expr(const ObExpr &expr, ObEvalCtx &ctx,
                                         ObDatum &res);
-  static int calc_split_part_expr_vec(const ObExpr &expr,
-                                      ObEvalCtx &ctx,
-                                      const ObBitVector &skip,
-                                      const EvalBound &bound);
-
-  template <typename StartPartVecType, typename EndPartVecType>
-  static int calc_split_part_expr_dispatch(const ObExpr &expr,
-                                            ObEvalCtx &ctx,
-                                            ObCollationType cs_type,
-                                            const ObBitVector &skip,
-                                            const EvalBound &bound,
-                                            ObBitVector &eval_flags,
-                                            ObIVector *res_vec,
-                                            ObIVector *str_vec,
-                                            ObIVector *delimiter_vec,
-                                            StartPartVecType *start_part_vec,
-                                            EndPartVecType *end_part_vec);
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprSplitPart);

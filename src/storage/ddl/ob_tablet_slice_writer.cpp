@@ -18,7 +18,6 @@
 #include "storage/ddl/ob_ddl_tablet_context.h"
 #include "storage/ddl/ob_ddl_independent_dag.h"
 #include "sql/engine/pdml/static/ob_px_sstable_insert_op.h"
-#include "sql/das/ob_das_utils.h"
 #include "storage/ddl/ob_direct_load_struct.h"
 #include "storage/ddl/ob_ddl_macro_block_writer.h"
 #include "storage/ddl/ob_lob_macro_block_writer.h"
@@ -760,11 +759,11 @@ int ObBatchSliceWriter::convert_to_storage_vector(ObIArray<ObIVector *> &vectors
       const int64_t sql_column_idx = idx < rowkey_column_count_ ? idx : idx - ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
       ObIVector *&cur_vector = vectors.at(sql_column_idx);
       selector.rescan();
-      if (OB_FAIL(ObDASUtils::reshape_vector_value(column_schema_item.col_type_,
-                                                   column_schema_item.col_accuracy_,
-                                                   row_arena_,
-                                                   cur_vector,
-                                                   selector))) {
+      if (OB_FAIL(ObDDLVectorUtils::reshape_storage_vector(column_schema_item.col_type_,
+                                                           column_schema_item.col_accuracy_,
+                                                           row_arena_,
+                                                           cur_vector,
+                                                           selector))) {
         LOG_WARN("fail to reshape vector value", K(ret), K(column_schema_item), K(idx));
       }
     }

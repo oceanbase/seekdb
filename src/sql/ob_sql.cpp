@@ -31,6 +31,7 @@
 #include "sql/code_generator/ob_code_generator.h"
 #include "sql/plan_cache/ob_values_table_compression.h"
 #include "pl/ob_pl_resolver.h"
+#include "sql/ob_sql_ccl_rule_manager.h"
 #include "lib/utility/ob_smart_call.h"
 #include "sql/monitor/show_trace/ob_show_trace.h"
 
@@ -126,6 +127,9 @@ int ObSql::stmt_query(const common::ObString &stmt, ObSqlCtx &context, ObResultS
                "stmt", context.is_sensitive_ ? ObString(OB_MASKED_STR) : stmt, K(ret));
     }
   }
+  if (OB_SUCC(ret)) {
+    result.get_session().set_exec_min_cluster_version();
+  }
   //LOG_DEBUG("result errno", N_ERR_CODE, result.get_errcode(), K(ret));
   if (OB_SUCCESS != ret
       && OB_SUCCESS == result.get_errcode()) {
@@ -159,6 +163,9 @@ int ObSql::stmt_execute(const ObPsStmtId stmt_id,
     LOG_WARN("failed to init result set", K(ret));
   } else if (OB_FAIL(handle_ps_execute(stmt_id, stmt_type, params, context, result, is_inner_sql))) {
     LOG_WARN("failed to handle ps execute", K(stmt_id), K(ret));
+  }
+  if (OB_SUCC(ret)) {
+    result.get_session().set_exec_min_cluster_version();
   }
   if (OB_FAIL(ret) && OB_SUCCESS == result.get_errcode()) {
     result.set_errcode(ret);
@@ -919,6 +926,8 @@ int ObSql::check_contain_temporary_table(share::schema::ObSchemaGetterGuard &sch
     ObSchemaObjVersion &obj_version = result.get_ref_objects().at(i);
     if (DEPENDENCY_TABLE != obj_version.object_type_) {
       // do nothing
+    } else if (is_external_object_id(obj_version.object_id_)) {
+      // do nothing
     } else if (OB_FAIL(schema_guard.get_table_schema(
                                               obj_version.object_id_,
                                               table_schema))) {
@@ -987,7 +996,7 @@ int ObSql::do_real_prepare(const ObString &sql,
 
   if (OB_FAIL(ret)) {
   } else if (result.is_simple_ps_protocol() // simple_ps_protocol only do parse
-             // for anonymous block, mock prepare only parses and reports bind metadata
+             // for anonymous block, mock prepare only parses and parameterizes the block
              || (stmt::T_ANONYMOUS_BLOCK == stmt_type
                  && context.is_prepare_protocol_
                  && context.is_prepare_stage_
@@ -1232,9 +1241,9 @@ int ObSql::handle_pl_prepare(const ObString &sql,
             LOG_WARN("query is empty", K(ret));
           } else if (OB_FAIL(set_timeout_for_pl(sess, cur_timeout_us))) {
             LOG_WARN("failed to set timeout for pl", K(ret));
-          } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
+          } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
                                   schema_guard))) {
-            LOG_WARN("failed to get runtime schema guard", K(ret));
+            LOG_WARN("failed to get tenant schema guard", K(ret));
           } else if (FALSE_IT(context.schema_guard_ = &schema_guard)) {
           } else if (OB_FAIL(init_result_set(context, result))) {
             LOG_WARN("failed to init result set", K(ret));
@@ -1413,7 +1422,7 @@ int ObSql::handle_sql_execute(const ObString &sql,
 
   if (OB_SUCC(ret) && !context.is_text_ps_mode_) {
     if (OB_FAIL(after_get_plan(pc_ctx, *session, result.get_physical_plan(),
-                result.get_is_from_plan_cache()))) {
+                result.get_is_from_plan_cache(), (mode == PC_PS_MODE || mode == PC_PL_MODE) ? &params : nullptr, pc_ctx.exec_ctx_.get_min_cluster_version()))) {
       LOG_WARN("fail to handle after get plan", K(ret));
     }
   }
@@ -1458,17 +1467,17 @@ int ObSql::handle_pl_execute(const ObString &sql,
     context.plan_key_.db_id_ = session.get_database_id();
     context.disable_privilege_check_ = PRIV_CHECK_FLAG_IN_PL;
     pctx = ectx.get_physical_plan_ctx();
-    int64_t local_runtime_schema_version = -1;
+    int64_t local_tenant_schema_version = -1;
     int64_t local_sys_schema_version = -1;
     if (OB_ISNULL(context.schema_guard_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema guard is null");
-    } else if (OB_FAIL(context.schema_guard_->get_schema_version(local_runtime_schema_version))) {
-      LOG_WARN("failed to get runtime schema version", K(ret));
+    } else if (OB_FAIL(context.schema_guard_->get_schema_version(local_tenant_schema_version))) {
+      LOG_WARN("get tenant schema version failed", K(ret));
     } else if (OB_FAIL(context.schema_guard_->get_schema_version(local_sys_schema_version))) {
-      LOG_WARN("failed to get system schema version", K(ret));
+      LOG_WARN("get sys tenant schema version failed", K(ret));
     } else {
-      result.get_exec_context().get_task_exec_ctx().set_query_begin_schema_version(local_runtime_schema_version);
+      result.get_exec_context().get_task_exec_ctx().set_query_tenant_begin_schema_version(local_tenant_schema_version);
       result.get_exec_context().get_task_exec_ctx().set_query_sys_begin_schema_version(local_sys_schema_version);
     }
   }
@@ -1490,6 +1499,8 @@ int ObSql::handle_pl_execute(const ObString &sql,
     LOG_WARN("store query string fail", K(ret));
   } else if (OB_FAIL(handle_sql_execute(sql, context, result, params, is_prepare_protocol ? PC_PL_MODE : PC_TEXT_MODE))) {
     LOG_WARN("failed to handle sql execute", K(ret));
+  } else {
+    result.get_session().set_exec_min_cluster_version();
   }
   int64_t end_time = ObTimeUtility::current_time();
   if (OB_FAIL(ret) && OB_SUCCESS == result.get_errcode()) {
@@ -1573,7 +1584,10 @@ int ObSql::handle_ps_prepare(const ObString &stmt,
       bool is_expired = false;
       int64_t open_cursors_limit = 0;
       int64_t cur_ps_handle_size = session.get_ps_session_info_size();
-      if (FALSE_IT(open_cursors_limit = GCONF.open_cursors)) {
+      if (!true) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("tenant config is invalid", K(ret));
+      } else if (FALSE_IT(open_cursors_limit = GCONF.open_cursors)) {
       } else if (!is_inner_sql
                 && NEED_CHECK_SESS_MAX_PS_HANDLE_LIMIT(open_cursors_limit)
                 && cur_ps_handle_size >= open_cursors_limit) {
@@ -1965,6 +1979,7 @@ int ObSql::check_read_only_privilege(ParseResult &parse_result,
   ObPhysicalPlanCtx *pctx = exec_ctx.get_physical_plan_ctx();
   ObSQLSessionInfo *session = exec_ctx.get_my_session();
   sql_traits.is_readonly_stmt_ = ObSQLUtils::is_readonly_stmt(parse_result);
+  sql_traits.is_modify_tenant_stmt_ = false;
   sql_traits.is_cause_implicit_commit_
       = ObSQLUtils::cause_implicit_commit(parse_result);
   sql_traits.is_commit_stmt_ = ObSQLUtils::is_commit_stmt(parse_result);
@@ -1972,8 +1987,8 @@ int ObSql::check_read_only_privilege(ParseResult &parse_result,
   if (OB_ISNULL(pctx) || OB_ISNULL(session)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
-  } else if (OB_FAIL(schema_guard.get_runtime_read_only(read_only))) {
-    LOG_WARN("fail to get database runtime read-only attribute", K(ret));
+  } else if (OB_FAIL(schema_guard.get_tenant_read_only(read_only))) {
+    LOG_WARN("fail to get tenant read only attribute", K(ret));
   } else if (OB_FAIL(session->check_read_only_privilege(read_only,
                                                         sql_traits))) {
     LOG_WARN("failed to check read_only privilege", K(ret));
@@ -2114,7 +2129,9 @@ int ObSql::handle_ps_execute(const ObPsStmtId client_stmt_id,
           if (OB_SUCC(ret) && (OB_FAIL(after_get_plan(pc_ctx,
                                                       session,
                                                       result.get_physical_plan(),
-                                                      result.get_is_from_plan_cache())))) {
+                                                      result.get_is_from_plan_cache(),
+                                                      &ps_params,
+                                                      ectx.get_min_cluster_version())))) {
             LOG_WARN("fail to handle after get plan", K(ret));
           }
         }
@@ -2178,6 +2195,174 @@ int ObSql::handle_ps_execute(const ObPsStmtId client_stmt_id,
   return ret;
 }
 
+int ObSql::handle_remote_query(const ObRemoteSqlInfo &remote_sql_info,
+                               ObSqlCtx &context,
+                               ObExecContext &exec_ctx,
+                               ObCacheObjGuard& guard)
+{
+  int ret = OB_SUCCESS;
+  //trim the sql first, let 'select c1 from t' and '  select c1 from t' and hit the same plan_cache
+  const ObString &trimed_stmt = remote_sql_info.remote_sql_;
+
+  ObIAllocator &allocator = THIS_WORKER.get_sql_arena_allocator();
+  ObSQLSessionInfo *session = exec_ctx.get_my_session();
+  int get_plan_err = OB_SUCCESS; //used for judge whether add plan to plan cache
+  bool is_from_plan_cache = false;
+  ObPlanCacheCtx *pc_ctx = NULL;
+  ParamStore param_store( (ObWrapperAllocator(allocator)) );
+  ObSEArray<ObString, 1> queries;
+  if (OB_ISNULL(session) || OB_ISNULL(remote_sql_info.ps_params_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session is null", K(ret), K(session), K(remote_sql_info.ps_params_));
+  } else if (OB_ISNULL(pc_ctx =
+      static_cast<ObPlanCacheCtx *>(allocator.alloc(sizeof(ObPlanCacheCtx))))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("fail to alloc memory", K(ret), K(sizeof(ObPlanCacheCtx)));
+  } else {
+#ifndef NDEBUG
+  LOG_INFO("Begin to handle remote statement",
+           K(remote_sql_info), "sess_id", session->get_server_sid(),
+           "execution_id", session->get_current_execution_id());
+#endif
+    if (exec_ctx.get_min_cluster_version() != session->get_exec_min_cluster_version()) {
+      // src min cluster version may different with local current min cluster version
+      // need to generate plan by src min cluster version
+      LOG_INFO("remote plan cluster version changed", K(exec_ctx.get_min_cluster_version()),
+                                                      K(session->get_exec_min_cluster_version()));
+      exec_ctx.get_task_exec_ctx().set_min_cluster_version(session->get_exec_min_cluster_version());
+    }
+    
+    bool use_plan_cache = session->get_local_ob_enable_plan_cache();
+    context.self_add_plan_ = false;
+    PlanCacheMode mode = remote_sql_info.use_ps_ ? PC_PS_MODE : PC_TEXT_MODE;
+    mode = remote_sql_info.sql_from_pl_ ? PC_PL_MODE : mode;
+    context.cur_sql_ = trimed_stmt;
+    pc_ctx = new (pc_ctx) ObPlanCacheCtx(trimed_stmt,
+                                         mode,
+                                         allocator,
+                                         context,
+                                         exec_ctx);
+    pc_ctx->is_remote_executor_ = true;
+    if (remote_sql_info.use_ps_) {
+      // Since the execution plan for ps mode and the ordinary text protocol cannot be reused, it is necessary to distinguish between them here to avoid some issues when querying the plan
+      // Since the key_id of the ordinary text protocol is OB_INVALID_ID, therefore, here we use key_id=0+name=parameterized SQL to distinguish
+      //@todo: shengle The ordinary ps protocol and text protocol plan sharing also have the same issue, here we need to solve it uniformly
+      context.is_prepare_protocol_ = remote_sql_info.use_ps_;
+      context.plan_key_.db_id_ = session->get_database_id();
+      pc_ctx->fp_result_.pc_key_.key_id_ = 0;
+      pc_ctx->fp_result_.pc_key_.name_ = trimed_stmt;
+      pc_ctx->normal_parse_const_cnt_ = remote_sql_info.ps_params_->count();
+      pc_ctx->set_is_parameterized_execute();
+      pc_ctx->is_original_ps_mode_ = remote_sql_info.is_original_ps_mode_;
+      if (OB_FAIL(construct_param_store(*remote_sql_info.ps_params_, param_store))) {
+        LOG_WARN("construct param store failed", K(ret));
+      } else if (OB_FAIL(construct_parameterized_params(param_store, *pc_ctx))) {
+        LOG_WARN("construct parameterized params failed", K(ret));
+      }
+    } else if (remote_sql_info.is_batched_stmt_) {
+      // Here keep consistent with the control end, if it is batched stmt, need to do a parser split first
+      // The cut-out query will eventually go through the batched multi-stmt logic to query the plan cache and generate the plan
+      ObParser parser(allocator,
+                      session->get_sql_mode(),
+                      session->get_charsets4parser());
+      ObMPParseStat parse_stat;
+      if (OB_FAIL(parser.split_multiple_stmt(remote_sql_info.remote_sql_, queries, parse_stat))) {
+        LOG_WARN("split multiple stmt failed", K(ret), K(remote_sql_info));
+      } else {
+        context.multi_stmt_item_.set_batched_queries(&queries);
+      }
+    }
+
+    if (OB_SUCC(ret)) {
+      ObCacheObjGuard tmp_guard(MAX_HANDLE);
+      ObPhysicalPlan* plan = nullptr;
+      if (OB_FAIL(session->get_database_id(context.plan_key_.db_id_))) {
+        LOG_WARN("Failed to get database id", K(ret));
+      } else if (!use_plan_cache) {
+        if (context.is_batch_params_execute()) {
+          ret = OB_BATCHED_MULTI_STMT_ROLLBACK;
+          LOG_WARN("batched multi_stmt needs rollback");
+        }
+      } else if (OB_FAIL(pc_get_plan(*pc_ctx,
+                                     tmp_guard,
+                                     get_plan_err,
+                                     exec_ctx.get_need_disconnect_for_update()))) {
+        LOG_DEBUG("fail to get plan", K(ret));
+      } else if (FALSE_IT(plan = static_cast<ObPhysicalPlan*>(tmp_guard.get_cache_obj()))) {
+        // do nothing
+      } else if (OB_NOT_NULL(plan)) {
+        if (plan->is_local_plan()) {
+          is_from_plan_cache = true;
+          tmp_guard.init(pc_ctx->handle_id_);
+          guard.swap(tmp_guard);
+        } else {
+          // If the plan selected from the plan cache is not a local execution plan, it means it is not the plan wanted by the remote SQL
+          // Need to discard and regenerate a new local plan
+          is_from_plan_cache = false;
+        }
+      }
+    }
+  }
+
+  if (OB_SUCC(ret) && !is_from_plan_cache) { // did not get plan from plan cache, take the long path to generate plan
+    // Only need plan, no other information required, therefore construct a temporary result set
+    SMART_VAR(ObResultSet, tmp_result, *session, allocator) {
+      tmp_result.set_exec_context(exec_ctx);
+      // After calculation by plan cache, the value in param_store may increase because pre calculation will be executed in plan cache
+      // Here we need to regenerate the plan, requiring the param added by pre calculation in the plan cache to be cleared
+      int64_t initial_param_count = pc_ctx->fp_result_.parameterized_params_.count();
+      for (int64_t i = remote_sql_info.ps_params_->count(); i > initial_param_count; --i) {
+        remote_sql_info.ps_params_->pop_back();
+      }
+      PlanCacheMode mode = remote_sql_info.use_ps_ ? PC_PS_MODE : PC_TEXT_MODE;
+      mode = remote_sql_info.sql_from_pl_ ? PC_PL_MODE : mode;
+      // Use SMART_CALL_LARGE for remote query plan generation
+      if (OB_FAIL(SMART_CALL_LARGE(handle_physical_plan(trimed_stmt, context, tmp_result, *pc_ctx, get_plan_err)))) {
+        LOG_WARN("fail to handle physical plan", K(ret));
+      } else {
+        // we need NOT to de some special operation for remote plan, this because we have swaped
+        // the life cycle of tmp_result's guard with remote_guard, which means plan's life becomes
+        // longer and we needn't to do other operation!!!
+        guard.swap(tmp_result.get_cache_obj_guard());
+      }
+    }
+  }
+
+  if ((NULL != pc_ctx) && !(pc_ctx->sql_ctx_.is_sensitive_)) {
+    // if sql context contains sensitive data, can not flush sql info to trace.log
+  }
+
+
+  // set auto-increment related param into physical plan ctx
+  // if get plan from plan cache, reset its auto-increment variable here
+  // do not set variable for hidden primary key; its default value is 1
+  ObPhysicalPlan* plan = nullptr;
+  if (OB_SUCC(ret)) {
+    plan = static_cast<ObPhysicalPlan*>(guard.get_cache_obj());
+    if (OB_ISNULL(plan)) {
+    } else if (OB_UNLIKELY(!plan->is_local_plan())) {
+      // Not a local plan, control end sends an error, return error code for retry
+      ret = OB_LOCATION_NOT_EXIST;
+      LOG_WARN("plan type is invalid", K(remote_sql_info), KPC(plan));
+    } else if (OB_FAIL(after_get_plan(*pc_ctx,
+                                      *session,
+                                      plan,
+                                      is_from_plan_cache,
+                                      NULL /*ps param*/,
+                                      exec_ctx.get_min_cluster_version()))) {
+      LOG_WARN("fail to handle after get plan", K(ret));
+    }
+  }
+  LOG_DEBUG("get remote plan", K(ret), K(is_from_plan_cache), KPC(plan));
+  // Clear the warning buffer, because the warning buffer for generating the execution plan is recorded on the control side, so there is no need to record it here
+  // Otherwise it will cause duplicate warning messages
+  ob_reset_tsi_warning_buffer();
+  if (NULL != pc_ctx) {
+    pc_ctx->~ObPlanCacheCtx();
+  }
+  return ret;
+}
+
 OB_INLINE int ObSql::handle_text_query(const ObString &stmt, ObSqlCtx &context, ObResultSet &result)
 {
   int ret = OB_SUCCESS;
@@ -2203,6 +2388,20 @@ OB_INLINE int ObSql::handle_text_query(const ObString &stmt, ObSqlCtx &context, 
   bool use_plan_cache = session.get_local_ob_enable_plan_cache();
   ObPlanCacheCtx *pc_ctx = NULL;
   bool is_begin_commit_stmt = false;
+
+  //ccl check level-1: before get into sql engine
+  ObString emptry_format_sqlid;
+  common::ObSEArray<const common::ObObjParam *, 1> param_store;
+  if (OB_SUCC(ret)
+      && OB_FAIL(ObSQLUtils::match_ccl_rule(allocator, session, context, trimed_stmt, false,
+                                            param_store, emptry_format_sqlid,
+                                            CclRuleContainsInfo::NONE))) {
+    if (ret == OB_REACH_MAX_CCL_CONCURRENT_NUM) {
+      result.get_exec_context().set_need_disconnect(false);
+    } else {
+      LOG_WARN("fail to match ccl rule", K(ret));
+    }
+  }
 
   if (OB_FAIL(ret)) {
     // do nothing
@@ -2267,7 +2466,8 @@ OB_INLINE int ObSql::handle_text_query(const ObString &stmt, ObSqlCtx &context, 
   if (OB_SUCC(ret)) {
     if (!context.is_text_ps_mode_
         && OB_FAIL(after_get_plan(*pc_ctx, session, result.get_physical_plan(),
-                                  result.get_is_from_plan_cache()))) {
+                                  result.get_is_from_plan_cache(), NULL,
+                                  ectx.get_min_cluster_version()))) {
       LOG_WARN("fail to handle after get plan", K(ret));
     }
   }
@@ -2324,8 +2524,13 @@ int ObSql::generate_stmt(ParseResult &parse_result,
     resolver_ctx.is_cursor_ = context.is_cursor_;
     resolver_ctx.is_batch_stmt_ = context.is_batch_params_execute();
     resolver_ctx.batch_stmt_num_ = context.get_batch_params_count();
-    resolver_ctx.need_check_col_dup_
-      = !(context.is_prepare_protocol_ && parse_result.question_mark_ctx_.by_ordinal_);
+    if (NULL != pc_ctx && pc_ctx->is_remote_executor_) {
+      resolver_ctx.need_check_col_dup_
+        = !(context.is_prepare_protocol_ && parse_result.question_mark_ctx_.by_ordinal_ && pc_ctx->is_original_ps_mode_);
+    } else {
+      resolver_ctx.need_check_col_dup_
+        = !(context.is_prepare_protocol_ && parse_result.question_mark_ctx_.by_ordinal_);
+    }
     resolver_ctx.external_param_info_.by_name_
         = parse_result.question_mark_ctx_.by_name_ || NULL != context.secondary_namespace_; //static sql in PL must be by name
     resolver_ctx.outline_parse_result_ = outline_parse_result;
@@ -2423,11 +2628,7 @@ int ObSql::generate_stmt(ParseResult &parse_result,
       LOG_DEBUG("got all const param constraints", K(resolver_ctx.query_ctx_->all_possible_const_param_constraints_));
       NG_TRACE(resolve_end);
       if (OB_SUCC(ret)) {
-        // move init datum param store here
-        // if `opt_param("enable_rich_vector_format", "false")` is used in hints, use_rich_format will
-        // be off, we need reset value in pctx and initialize param frame accordingly.
         if (NULL != pc_ctx && NULL != pc_ctx->exec_ctx_.get_physical_plan_ctx()) {
-          pc_ctx->exec_ctx_.get_physical_plan_ctx()->set_rich_format(context.session_info_->use_rich_format());
           if (OB_FAIL(pc_ctx->exec_ctx_.get_physical_plan_ctx()->init_datum_param_store())) {
             LOG_WARN("init datum param store failed", K(ret));
           }
@@ -2588,10 +2789,63 @@ int ObSql::generate_physical_plan(ParseResult &parse_result,
     ret = OB_BATCHED_MULTI_STMT_ROLLBACK;
     LOG_WARN("batched multi_stmt needs rollback", K(ret));
   } else if (basic_stmt->is_dml_stmt()
-             || basic_stmt->is_explain_stmt()
-            ) {
-    if (OB_FAIL(generate_plan(parse_result, pc_ctx, sql_ctx, result, mode, basic_stmt,
-                             stmt_need_privs))) {
+            || basic_stmt->is_explain_stmt()) {
+#ifdef __ANDROID__
+    // On Android: if the outline's max_concurrent is stricter than all DATABASE_AND_TABLE CCL
+    // rules, skip level-3 CCL check (outline is the binding constraint).
+    bool skip_level3_ccl = false;
+    if (OB_NOT_NULL(pc_ctx) && basic_stmt->is_dml_stmt() && OB_NOT_NULL(sql_ctx.schema_guard_)) {
+      int64_t outline_max = ObGlobalHint::UNSET_MAX_CONCURRENT;
+      const ObGlobalHint &gh =
+          static_cast<ObDMLStmt*>(basic_stmt)->get_query_ctx()->get_query_hint().get_global_hint();
+      outline_max = gh.max_concurrent_;
+      if (ObGlobalHint::UNSET_MAX_CONCURRENT == outline_max) {
+        const share::schema::ObOutlineParamsWrapper *pw =
+            pc_ctx->exec_ctx_.get_outline_params_wrapper();
+        if (OB_NOT_NULL(pw)) {
+          for (int64_t i = 0; i < pw->get_outline_params().count(); ++i) {
+            const share::schema::ObMaxConcurrentParam *p = pw->get_outline_params().at(i);
+            if (OB_NOT_NULL(p) && p->is_concurrent_limit_param()) {
+              outline_max = p->get_concurrent_num();
+              break;
+            }
+          }
+        }
+      }
+      if (ObGlobalHint::UNSET_MAX_CONCURRENT != outline_max) {
+        bool all_above = true;
+        share::schema::ObCCLRuleMgr::CCLRuleInfos *rules = nullptr;
+        if (OB_SUCCESS == sql_ctx.schema_guard_->get_ccl_rule_infos(
+                share::schema::CclRuleContainsInfo::DATABASE_AND_TABLE, rules)
+            && OB_NOT_NULL(rules)) {
+          for (int64_t i = 0; all_above && i < rules->size(); ++i) {
+            const share::schema::ObSimpleCCLRuleSchema *s = rules->at(i);
+            const share::schema::ObCCLRuleSchema *fs = nullptr;
+            if (OB_ISNULL(s)
+                || OB_SUCCESS != sql_ctx.schema_guard_->get_ccl_rule_with_ccl_rule_id(s->get_ccl_rule_id(), fs)
+                || OB_ISNULL(fs)
+                || static_cast<int64_t>(fs->get_max_concurrency()) <= outline_max) {
+              all_above = false;
+            }
+          }
+        } else {
+          all_above = false;
+        }
+        skip_level3_ccl = all_above;
+      }
+    }
+#endif
+    //ccl check level-3: after resolve sql
+    if (OB_NOT_NULL(pc_ctx)
+#ifdef __ANDROID__
+        && !skip_level3_ccl
+#endif
+        && OB_FAIL(ObSQLUtils::match_ccl_rule(
+             pc_ctx->allocator_, result.get_session(), sql_ctx, ObString(parse_result.input_sql_len_, parse_result.input_sql_),
+             mode == PC_PS_MODE, pc_ctx->fp_result_.parameterized_params_, pc_ctx->sql_ctx_.format_sql_id_, CclRuleContainsInfo::DATABASE_AND_TABLE, &parse_result, basic_stmt))) {
+      LOG_WARN("fail to match ccl rule", K(ret));
+    } else if (OB_FAIL(generate_plan(parse_result, pc_ctx, sql_ctx, result, mode, basic_stmt,
+                                               stmt_need_privs))) {
       LOG_WARN("failed to generate plan", K(ret));
     }
   } else if (stmt::T_EXECUTE == basic_stmt->get_stmt_type() &&
@@ -2668,7 +2922,13 @@ int ObSql::generate_plan(ParseResult &parse_result,
 
     ObLogPlan *logical_plan = NULL;
     ObPhysicalPlan *phy_plan = NULL;
+    // Internal session tenant switch resource handling separation is not thorough
+    // When the user request is sent to a server without corresponding tenant resources, the plan memory is counted on the regular tenant,
+    // But the plan was hung under the sys tenant's plan cache, leading to abnormal data statistics in the plan_cache_stat table,
+    // Occurs when there appears to be a memory leak but there actually isn't. Here we handle it by directly fetching from plan cache
+    // Get tenant id, so that the resources allocated by the plan are counted under the corresponding tenant of the plan cache
     ObCacheObjGuard& guard = result.get_cache_obj_guard();
+    guard.init(PLAN_GEN_HANDLE);
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObCacheObjectFactory::alloc(guard,
                                                     ObLibCacheNameSpace::NS_CRSR))) {
@@ -2679,8 +2939,10 @@ int ObSql::generate_plan(ParseResult &parse_result,
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_ERROR("Failed to alloc physical plan from tc factory", K(ret));
     } else {
-      phy_plan->set_use_rich_format(sql_ctx.session_info_->use_rich_format());
       phy_plan->stat_.enable_early_lock_release_ = sql_ctx.session_info_->get_early_lock_release();
+      // if phy_plan's tenant id, which refers the tenant who create this plan,
+      // not equal to current effective_tid, plan cache must be invalid
+      // and we shouldn't add this plan to plan cache.
       if (NULL != pc_ctx) {
         pc_ctx->should_add_plan_ = true;
       }
@@ -2796,6 +3058,12 @@ int ObSql::generate_plan(ParseResult &parse_result,
     } else if (OB_ISNULL(stmt->get_query_ctx())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("query ctx is null", K(ret));
+    } else if (stmt::T_SELECT == stmt->get_stmt_type() &&
+                stmt::T_SHOW_PARAMETERS == stmt->get_query_ctx()->get_literal_stmt_type()) {
+      ObSelectStmt *select_stmt = static_cast<ObSelectStmt*>(stmt);
+      
+      pctx->set_show_seed(select_stmt->get_show_seed());
+      result.get_exec_context().reference_my_plan(phy_plan);
     } else {
       result.get_exec_context().reference_my_plan(phy_plan);
     }
@@ -2863,6 +3131,10 @@ int ObSql::generate_stmt_with_reconstruct_sql(ObDMLStmt* &stmt,
                                       stmt,
                                       true))) { //rewrite stmt
       LOG_WARN("Failed to transform stmt", K(ret));
+    }
+    if (OB_FAIL(ret)) {
+      LOG_USER_ERROR(OB_SYNC_DDL_ERROR, sql.length(), sql.ptr());
+      ret = OB_SYNC_DDL_ERROR;
     }
     LOG_TRACE("reconstruct sql:", K(sql));
   }
@@ -3114,7 +3386,8 @@ int ObSql::code_generate(
       LOG_WARN("Logical_plan or phy_plan is NULL", K(ret), K(stmt), K(logical_plan), K(phy_plan),
                "session", sql_ctx.session_info_);
   } else {
-    ObCodeGenerator code_generator(&(pctx->get_datum_param_store()));
+    ObCodeGenerator code_generator(result.get_exec_context().get_min_cluster_version(),
+                                   &(pctx->get_datum_param_store()));
     phy_plan->set_is_packed(logical_plan->get_optimizer_context().is_packed());
     if (OB_FAIL(code_generator.generate(*logical_plan, *phy_plan))) {
       LOG_WARN("Failed to generate physical plan", KPC(logical_plan), K(ret));
@@ -3216,7 +3489,8 @@ int ObSql::code_generate(
   }
 
   if (OB_SUCC(ret)) {
-    bool use_plan_cache = sql_ctx.session_info_->get_local_ob_enable_plan_cache();
+    bool use_plan_cache = (sql_ctx.session_info_->get_local_ob_enable_plan_cache()
+                           || sql_ctx.session_info_->force_enable_plan_tracing());
     ObPlanCache *plan_cache = NULL;
     if (OB_UNLIKELY(NULL == (plan_cache = sql_ctx.session_info_->get_plan_cache()))) {
       ret = OB_ERR_UNEXPECTED;
@@ -3279,8 +3553,6 @@ OB_INLINE int ObSql::init_exec_context(const ObSqlCtx &context, ObExecContext &e
       context.session_info_->get_query_timeout(query_timeout);
       exec_ctx.get_physical_plan_ctx()->set_timeout_timestamp(
         context.session_info_->get_query_start_time() + query_timeout);
-      exec_ctx.get_physical_plan_ctx()->set_rich_format(
-         context.session_info_->use_rich_format());
       exec_ctx.set_retry_info(&context.session_info_->get_retry_info());
     }
   }
@@ -3295,23 +3567,36 @@ int ObSql::execute_get_plan(ObPlanCache &plan_cache,
   ObIAllocator &allocator = pc_ctx.allocator_;
   ObSQLSessionInfo *session = pc_ctx.sql_ctx_.session_info_;
   ObPhysicalPlanCtx *pctx = pc_ctx.exec_ctx_.get_physical_plan_ctx();
+  bool enable_adaptive_pc = session->enable_plan_cache_adaptive();
   if (OB_ISNULL(session) || OB_ISNULL(pctx)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL", K(ret));
   } else {
+    pctx->set_enable_adaptive_pc(enable_adaptive_pc);
+    pc_ctx.enable_adaptive_plan_cache_ = (!session->is_inner() && enable_adaptive_pc);
     if (PC_PS_MODE == pc_ctx.mode_ || PC_PL_MODE == pc_ctx.mode_) {
       // TODO change pl mode hit cache as text mode.
       ObPsStmtId stmt_id = pc_ctx.fp_result_.pc_key_.key_id_;
-      if (OB_FAIL(plan_cache.get_ps_plan(guard, stmt_id, pc_ctx))) {
-        if (OB_SQL_PC_NOT_EXIST == ret || OB_PC_LOCK_CONFLICT == ret) {
+      guard.init(PS_EXEC_HANDLE);
+      if (pc_ctx.try_get_plan_ && OB_FAIL(plan_cache.try_get_ps_plan(guard, stmt_id, pc_ctx))) {
+        LOG_TRACE("fail to try get ps plan", K(ret));
+      } else if (!pc_ctx.try_get_plan_ && OB_FAIL(plan_cache.get_ps_plan(guard, stmt_id, pc_ctx))) {
+        if (OB_SQL_PC_NOT_EXIST == ret && pc_ctx.has_inactive_plan_) {
+          // do nothing
+        } else if (OB_SQL_PC_NOT_EXIST == ret || OB_PC_LOCK_CONFLICT == ret) {
           // do nothing
         } else {
           LOG_WARN("fail to get ps physical plan", K(ret));
         }
       }
     } else {
-      if (OB_FAIL(plan_cache.get_plan(allocator, pc_ctx, guard))) {
-        if (OB_SQL_PC_NOT_EXIST == ret || OB_PC_LOCK_CONFLICT == ret) {
+      guard.init(CLI_QUERY_HANDLE);
+      if (pc_ctx.try_get_plan_ && OB_FAIL(plan_cache.try_get_plan(allocator, pc_ctx, guard))) {
+        LOG_TRACE("fail to try get plan", K(ret));
+      } else if (!pc_ctx.try_get_plan_ && OB_FAIL(plan_cache.get_plan(allocator, pc_ctx, guard))) {
+        if (OB_SQL_PC_NOT_EXIST == ret && pc_ctx.has_inactive_plan_) {
+          // do nothing
+        } else if (OB_SQL_PC_NOT_EXIST == ret || OB_PC_LOCK_CONFLICT == ret) {
           // do nothing
         } else {
           LOG_WARN("fail to get physical plan", K(ret), KPC(guard.get_cache_obj()));
@@ -3345,6 +3630,8 @@ int ObSql::pc_get_plan_and_fill_result(ObPlanCacheCtx &pc_ctx,
     LOG_WARN("plan is null", K(ret));
   } else {
     result.set_is_from_plan_cache(true);
+    // set handle after get physical plan
+    guard.init(pc_ctx.handle_id_);
     if (OB_FAIL(result.from_plan(*plan, pc_ctx.fp_result_.raw_params_))) {
       LOG_WARN("fail to set plan info to ResultSet", K(ret));
     }
@@ -3367,6 +3654,7 @@ int ObSql::pc_get_plan(ObPlanCacheCtx &pc_ctx,
     LOG_WARN("Invalid plan cache", K(ret), K(session), K(plan_cache));
   } else if (OB_FAIL(execute_get_plan(*plan_cache, pc_ctx, guard))) {
     if (OB_EAGAIN == ret
+        || OB_REACH_MAX_CONCURRENT_NUM == ret
         || OB_ARRAY_BINDING_ROLLBACK == ret
         || OB_BATCHED_MULTI_STMT_ROLLBACK == ret) {
       /*do nothing*/
@@ -3400,7 +3688,8 @@ int ObSql::pc_get_plan(ObPlanCacheCtx &pc_ctx,
       //FIXME qianfu NG_TRACE_EXT(set_need_disconnect, OB_ID(need_disconnect), false);
       pc_ctx.sql_ctx_.plan_cache_hit_ = true;
       // In extreme performance scenarios (perf_event=true), permission information is no longer validated
-      if (OB_SUCC(ret) && GCONF.enable_perf_event) {
+      if (OB_SUCC(ret) && !pc_ctx.sql_ctx_.is_remote_sql_ && GCONF.enable_perf_event) {
+        // If it is the second entry of remote SQL into plan cache, no need to do permission check again, because it has already been checked during the first entry into plan cache
         if (OB_FAIL(ObPrivilegeCheck::check_read_only(pc_ctx.sql_ctx_, plan->get_stmt_type(), false,
                                                       plan->get_stmt_need_privs()))) {
           LOG_WARN("database or table is read only, cannot execute this stmt");
@@ -3418,7 +3707,67 @@ int ObSql::pc_get_plan(ObPlanCacheCtx &pc_ctx,
         }
       }
 
+      if (OB_SUCC(ret) && (PC_TEXT_MODE == pc_ctx.mode_ || PC_PS_MODE == pc_ctx.mode_)) {
+#ifdef __ANDROID__
+        bool skip_level3_ccl = false;
+        share::schema::ObSchemaGetterGuard *sg = pc_ctx.sql_ctx_.schema_guard_;
+        if (OB_NOT_NULL(sg)) {
+          // Get outline max_concurrent: prefer plan cache value, fall back to current schema outline.
+          int64_t outline_max = ObGlobalHint::UNSET_MAX_CONCURRENT;
+          if (plan->is_limited_concurrent_num()) {
+            outline_max = plan->get_max_concurrent_num();
+          } else {
+            // Plan was compiled before the outline existed; look up the outline from schema now.
+            const share::schema::ObOutlineInfo *outline_info = nullptr;
+            const uint64_t db_id = pc_ctx.sql_ctx_.plan_key_.db_id_;
+            const ObString &sql_id = pc_ctx.sql_ctx_.plan_key_.sql_id_;
+            if (OB_INVALID_ID != db_id && !sql_id.empty()
+                && OB_SUCCESS == sg->get_outline_info_with_sql_id(db_id, sql_id, false /*normal*/, outline_info)
+                && OB_NOT_NULL(outline_info) && outline_info->has_outline_params()) {
+              const share::schema::ObOutlineParamsWrapper &pw = outline_info->get_outline_params_wrapper();
+              for (int64_t i = 0; i < pw.get_outline_params().count(); ++i) {
+                const share::schema::ObMaxConcurrentParam *p = pw.get_outline_params().at(i);
+                if (OB_NOT_NULL(p) && p->is_concurrent_limit_param()) {
+                  outline_max = p->get_concurrent_num();
+                  break;
+                }
+              }
+            }
+          }
+          if (ObGlobalHint::UNSET_MAX_CONCURRENT != outline_max) {
+            bool all_above = true;
+            share::schema::ObCCLRuleMgr::CCLRuleInfos *rules = nullptr;
+            if (OB_SUCCESS == sg->get_ccl_rule_infos(
+                    share::schema::CclRuleContainsInfo::DATABASE_AND_TABLE, rules)
+                && OB_NOT_NULL(rules)) {
+              for (int64_t i = 0; all_above && i < rules->size(); ++i) {
+                const share::schema::ObSimpleCCLRuleSchema *s = rules->at(i);
+                const share::schema::ObCCLRuleSchema *fs = nullptr;
+                if (OB_ISNULL(s)
+                    || OB_SUCCESS != sg->get_ccl_rule_with_ccl_rule_id(s->get_ccl_rule_id(), fs)
+                    || OB_ISNULL(fs)
+                    || static_cast<int64_t>(fs->get_max_concurrency()) <= outline_max) {
+                  all_above = false;
+                }
+              }
+            } else {
+              all_above = false;
+            }
+            skip_level3_ccl = all_above;
+          }
+        }
+        if (!skip_level3_ccl)
+#endif
+        if (OB_FAIL(ObSQLUtils::match_ccl_rule(&pc_ctx, *session, PC_PS_MODE == pc_ctx.mode_,
+                                               plan->get_dependency_table()))) {
+          LOG_WARN("fail to match ccl rule in plan cache", K(ret), K(pc_ctx.mode_),
+                   K(pc_ctx.raw_sql_));
+        }
+      }
     }
+  }
+  if (OB_REACH_MAX_CONCURRENT_NUM == ret || OB_REACH_MAX_CCL_CONCURRENT_NUM == ret) {
+    need_disconnect = false;
   }
   return ret;
 }
@@ -3565,6 +3914,9 @@ int ObSql::get_outline_data(ObPlanCacheCtx &pc_ctx,
       outline_state.outline_version_.object_id_ = outline_info->get_outline_id();
       outline_state.outline_version_.version_ = outline_info->get_schema_version();
       outline_state.outline_version_.object_type_ = DEPENDENCY_OUTLINE;
+      if (outline_info->has_outline_params()) {
+        pc_ctx.exec_ctx_.set_outline_params_wrapper(&outline_info->get_outline_params_wrapper());
+      }
     }
   }
   return ret;
@@ -3680,12 +4032,15 @@ int ObSql::parser_and_check(const ObString &outlined_stmt,
             THIS_WORKER.set_timeout_ts(session->get_query_start_time() + GCONF._ob_ddl_timeout);
           }
           if (IS_DML_STMT(type) || is_show_variables) {
+            pc_ctx.force_enable_plan_tracing_ =
+              (session->force_enable_plan_tracing()
+               && !session->get_local_ob_enable_plan_cache());
             if (OB_UNLIKELY(NULL == (plan_cache = session->get_plan_cache()))) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("Invalid plan cache", K(ret));
             } else {
               plan_cache->inc_access_cnt();
-              if (OB_SQL_PC_NOT_EXIST == get_plan_err) {
+              if (OB_SQL_PC_NOT_EXIST == get_plan_err || pc_ctx.force_enable_plan_tracing_) {
                 add_plan_to_pc = true;
               } else {
                 add_plan_to_pc = false;
@@ -3705,9 +4060,11 @@ int ObSql::parser_and_check(const ObString &outlined_stmt,
   }
 
   if (OB_SUCC(ret)) {
-    // Database runtime read-only check.
+    // Tenant-level read only check
     if ((session->is_inner() && !session->is_user_session()) || pc_ctx.is_begin_commit_stmt()) {
-      // Internal SQL and transaction control are not governed by database read-only state.
+      // FIXME:
+      // After schema split, to avoid failing to create a tenant due to inability to obtain the tenant's read-only attribute when creating a tenant, for inner sql
+      // Temporarily skip read only check. Actually, for tenant space system tables, the read only attribute should not be checked.
     } else if (OB_ISNULL(pc_ctx.sql_ctx_.schema_guard_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid argument", K(pc_ctx.sql_ctx_.schema_guard_));
@@ -3731,8 +4088,8 @@ int ObSql::parser_and_check(const ObString &outlined_stmt,
       LOG_WARN("failed to deep copy string", K(pc_ctx.raw_sql_), K(ret));
     }
   } else {
-    // Outline statements also need syntax-tree transformation so parameter markers in
-    // their embedded SQL are validated consistently.
+    // For create outline rate limiting statement, there may be issues. We need to do special handling for ?,
+    // So also needs to go through transform_systax_tree
     bool flag = false;
     if ((add_plan_to_pc && !is_show_variables) ||
         is_explain_parameterize ||
@@ -3843,11 +4200,25 @@ int ObSql::pc_add_plan(ObPlanCacheCtx &pc_ctx,
     if (PC_PS_MODE == pc_ctx.mode_ || PC_PL_MODE == pc_ctx.mode_) {
       // pc_key_ may be modified elsewhere, so reset it before adding plan
       pc_ctx.fp_result_.pc_key_.key_id_ = pc_ctx.sql_ctx_.statement_id_;
+      // Remote SQL second entry into plan, store raw_sql as pc_key in plan cache,
+      // Then use the ps interface to directly use the parameterized SQL as the key to look up the plan cache, which can save the cost of one SQL fast parse
+      if (pc_ctx.sql_ctx_.is_remote_sql_) {
+        // Since the execution plan for ps mode and the ordinary text protocol cannot be reused, it is necessary to distinguish between them here to avoid some issues when querying the plan
+        // Since the key_id of the ordinary text protocol is OB_INVALID_ID, therefore, here we use key_id=0+name=parameterized SQL to distinguish
+        //@todo: shengle The ordinary ps protocol and text protocol plan sharing also have the same issue, here we need to solve it uniformly
+        pc_ctx.fp_result_.pc_key_.key_id_ = 0;
+        pc_ctx.fp_result_.pc_key_.name_ = pc_ctx.raw_sql_;
+      }
       ret = plan_cache->add_ps_plan(phy_plan, pc_ctx);
     } else {
+      check_template_sql_can_be_prepare(pc_ctx, *phy_plan);
       ret = plan_cache->add_plan(phy_plan, pc_ctx);
     }
     plan_added = (OB_SUCCESS == ret);
+    if (pc_ctx.is_max_curr_limit_) {
+      ret = OB_REACH_MAX_CONCURRENT_NUM;
+    }
+
     int tmp_ret = OB_SUCCESS;
     tmp_ret = OB_E(EventTable::EN_PC_NOT_SWALLOW_ERROR) OB_SUCCESS;
     if (is_batch_exec) {
@@ -3880,8 +4251,10 @@ int ObSql::pc_add_plan(ObPlanCacheCtx &pc_ctx,
       if (OB_SUCCESS != tmp_ret) {
 
       } else {
-        ret = OB_SUCCESS; // add plan error, overwrite error code, ensure that failure of plan cache does not affect normal execution path
-        LOG_WARN("Failed to add plan to ObPlanCache", K(ret));
+        if (OB_REACH_MAX_CONCURRENT_NUM != ret) { // If it reaches the rate limit upper limit, then throw out the error code
+          ret = OB_SUCCESS; // add plan error, overwrite error code, ensure that failure of plan cache does not affect normal execution path
+          LOG_WARN("Failed to add plan to ObPlanCache", K(ret));
+        }
       }
     } else {
       pc_ctx.sql_ctx_.self_add_plan_ = true;
@@ -3891,13 +4264,51 @@ int ObSql::pc_add_plan(ObPlanCacheCtx &pc_ctx,
 
   return ret;
 }
+// Check if the parameterized template SQL can be prepared
+// Currently some SQL if using text protocol, plan cache parameterized template SQL cannot be directly used for prepare on the remote end
+// Will report syntax error, for example: select * from t1 where a=_utf8'binary';
+// Template-based SQL is: select * from t1 where a=_utf8?; This SQL will report a syntax error in the parser
+// And for most parameterized templates SQL can be directly used to prepare on the remote end, avoiding another fast parser on the text
+// Therefore here we perform a parser on the template SQL, add a check for the template SQL, to determine if this template SQL can be prepared remotely
+void ObSql::check_template_sql_can_be_prepare(ObPlanCacheCtx &pc_ctx, ObPhysicalPlan &plan)
+{
+  int ret = OB_SUCCESS;
+  const ObString &temp_sql = plan.get_constructed_sql();
+  ObSQLSessionInfo *session = pc_ctx.sql_ctx_.session_info_;
+  if (plan.is_remote_plan() && !temp_sql.empty() && session != nullptr
+      && pc_ctx.select_item_param_infos_.empty()) {
+    // select * from (select 1, 2, 3 from dual); such SQL cannot be prepared on the remote end because the select clause would be parameterized
+    ParseResult parse_result;
+    ObParser parser(pc_ctx.allocator_,
+                    session->get_sql_mode(),
+                    session->get_charsets4parser());
+    if (OB_FAIL(parser.parse(temp_sql, parse_result))) {
+      LOG_DEBUG("generate syntax tree failed", K(temp_sql), K(ret));
+    } else {
+      plan.set_temp_sql_can_prepare();
+    }
+  }
+}
+
 int ObSql::after_get_plan(ObPlanCacheCtx &pc_ctx,
                           ObSQLSessionInfo &session,
                           ObPhysicalPlan *phy_plan,
-                          bool from_plan_cache)
+                          bool from_plan_cache,
+                          const ParamStore *ps_params,
+                          uint64_t min_cluster_version)
 {
   int ret = OB_SUCCESS;
   ObPhysicalPlanCtx *pctx = pc_ctx.exec_ctx_.get_physical_plan_ctx();
+  bool enable_send_plan_event = EVENT_CALL(EventTable::EN_DISABLE_REMOTE_EXEC_WITH_PLAN) == 0;
+  bool enable_send_plan = session.get_is_in_retry() && enable_send_plan_event;
+  int last_query_retry_err = session.get_retry_info().get_last_query_retry_err();
+  if (OB_TRANSACTION_SET_VIOLATION == last_query_retry_err
+      || OB_TRY_LOCK_ROW_CONFLICT == last_query_retry_err) {
+    enable_send_plan = false;
+  }
+  LOG_DEBUG("before after_get_plan", K(enable_send_plan), K(enable_send_plan_event),
+            "is_retry",session.get_is_in_retry(), K(last_query_retry_err));
+//  LOG_INFO("after get paln", K(pctx), K(phy_plan));
   if (NULL != pctx) {
     if (NULL != phy_plan) {
       // record the plan id in trace_event, perf_event and atomic_event
@@ -3933,6 +4344,75 @@ int ObSql::after_get_plan(ObPlanCacheCtx &pc_ctx,
         }  // end for
       }
 
+      if (OB_SUCC(ret)) {
+        DAS_CTX(pc_ctx.exec_ctx_).unmark_need_check_server();
+      }
+
+      // the purpose of adding condition (!session.get_is_in_retry()) is
+      // send the plan instead of continue sending sqlinfo when retrying remotely.
+      // bug:
+      if (OB_SUCC(ret) && phy_plan->is_remote_plan()
+          && !phy_plan->contains_temp_table()
+          && !enable_send_plan) {
+        pctx->get_remote_sql_info().sql_from_pl_ = PC_PL_MODE == pc_ctx.mode_;
+        // Handle the situation of forwarding SQL for remote plan
+        ParamStore &param_store = pctx->get_param_store_for_update();
+        if (OB_NOT_NULL(ps_params)) {
+          // Local is ps protocol, remote still uses ps interface
+          int64_t initial_param_count = ps_params->count();
+          // For the PS protocol, use the converted params already in param_store
+          // instead of the user-passed ps_params to avoid duplicate conversion.
+          for (int64_t i = param_store.count(); i > initial_param_count; --i) {
+            // Discard extra parameters generated by the calculation, retain only the initial parameters, to avoid duplicate calculations during the second plan generation causing parameter position errors
+            param_store.pop_back();
+          }
+          pctx->get_remote_sql_info().use_ps_ = true;
+          pctx->get_remote_sql_info().is_original_ps_mode_ = true;
+          // Retrieve the SQL to be executed from ps sql info
+          pctx->get_remote_sql_info().remote_sql_ = pc_ctx.sql_ctx_.cur_sql_;
+          pctx->get_remote_sql_info().ps_params_ = &param_store;
+          pctx->get_remote_sql_info().ps_param_cnt_ = static_cast<int32_t>(param_store.count());
+        } else if (phy_plan->temp_sql_can_prepare()
+            && pc_ctx.neg_param_index_.is_empty()
+            && !pc_ctx.sql_ctx_.is_batch_params_execute()
+            && !pc_ctx.exec_ctx_.has_dynamic_values_table()) {
+          // Local is text protocol SQL, and it is cached in plan, using ps protocol
+          //@TODO:yuchen.wyc If there are parameters in the text protocol that cannot be parameterized, due to the value in param store may not be the corresponding value for parameterization
+          // For example select a, b-1 from t1; Here it will be parameterized as select a, b-? from t1; but param store corresponds to -1
+          // Here should use raw_params information to parse and replace -1 with 1 in param store
+          // But handling is too complicated, temporarily do not allow this type of SQL to go through the remote ps interface
+          // If it is batched_multi_stmt, also directly use the text protocol,
+          // Because batched update stmt's parameters in param store is an array, it is special
+          LOG_DEBUG("after get plan",
+                    K(pc_ctx.fp_result_.raw_params_.count()),
+                    K(pc_ctx.not_param_info_.count()),
+                    K(param_store));
+          int64_t initial_param_count = pc_ctx.fp_result_.raw_params_.count() -
+              pc_ctx.not_param_index_.num_members();
+          for (int64_t i = param_store.count(); i > initial_param_count; --i) {
+            // Discard extra parameters generated by the calculation, retain only the initial parameters, to avoid duplicate calculations during the second plan generation causing parameter position errors
+            param_store.pop_back();
+          }
+          pctx->get_remote_sql_info().use_ps_ = true;
+          pctx->get_remote_sql_info().remote_sql_ = phy_plan->get_constructed_sql();
+          pctx->get_remote_sql_info().ps_params_ = &param_store;
+          pctx->get_remote_sql_info().ps_param_cnt_ = static_cast<int32_t>(param_store.count());
+        } else {
+          // Not in plan cache, and is text protocol, parse the text again on the remote end
+          pctx->get_remote_sql_info().use_ps_ = false;
+          pctx->get_remote_sql_info().is_batched_stmt_ =
+              pc_ctx.sql_ctx_.multi_stmt_item_.is_batched_multi_stmt();
+          pctx->get_remote_sql_info().remote_sql_ = pc_ctx.sql_ctx_.cur_sql_;
+          pctx->get_remote_sql_info().ps_params_ = &param_store;
+        }
+        LOG_DEBUG("generate remote sql info", K(pctx->get_remote_sql_info()),
+                  K(session.get_local_ob_enable_plan_cache()),
+                  K(pc_ctx.fp_result_.raw_params_), K(pc_ctx.not_param_info_),
+                  K(phy_plan->temp_sql_can_prepare()),
+                  K(pc_ctx.neg_param_index_),
+                  K(pc_ctx.sql_ctx_.multi_stmt_item_.is_batched_multi_stmt()),
+                  K(phy_plan->get_constructed_sql()), KPC(ps_params));
+      }
     }
 
     if (OB_SUCC(ret)) {
@@ -3953,7 +4433,7 @@ int ObSql::after_get_plan(ObPlanCacheCtx &pc_ctx,
         }
       }
     }
-    if (OB_SUCC(ret) && NULL != phy_plan) {
+    if (OB_SUCC(ret) && NULL != phy_plan && !phy_plan->is_remote_plan()) {
       if (OB_FAIL(pctx->set_all_local_session_vars(phy_plan->get_all_local_session_vars()))) {
         LOG_WARN("fail to set all local session vars", K(ret));
       }
@@ -3974,14 +4454,67 @@ int ObSql::need_add_plan(const ObPlanCacheCtx &pc_ctx,
   result.get_exec_context().get_stmt_factory()->get_query_ctx();
   if (false == need_add_plan) {
     // do nothing
-  } else if (!is_enable_pc || !pc_ctx.should_add_plan_) {
+  } else if ((!is_enable_pc && !pc_ctx.add_with_compare_) || !pc_ctx.should_add_plan_) {
     need_add_plan = false;
   } else if (OB_ISNULL(result.get_exec_context().get_stmt_factory())
              || OB_ISNULL(result.get_exec_context().get_stmt_factory()->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null ptr", K(ret), KP(result.get_exec_context().get_stmt_factory()));
+  } else if (ObPlanCache::is_contains_external_object(
+                                            result.get_physical_plan()->get_dependency_table())) {
+    need_add_plan = false;
   } else if (result.get_exec_context().get_stmt_factory()->get_query_ctx()->has_hybrid_search()) {
     need_add_plan = false;
+  }
+  return ret;
+}
+
+int ObSql::try_get_plan(ObPlanCacheCtx &pc_ctx, ObResultSet &result, bool is_enable_pc,
+                        bool &add_plan_to_pc)
+{
+  int ret = OB_SUCCESS;
+  int get_plan_err = OB_SUCCESS;
+  ObSQLSessionInfo &session = result.get_session();
+  ObExecContext &exec_ctx = result.get_exec_context();
+  ObPhysicalPlanCtx *plan_ctx = exec_ctx.get_physical_plan_ctx();
+  if ((is_enable_pc && !plan_ctx->enable_adaptive_pc())
+    || (!is_enable_pc && !session.force_enable_plan_tracing())
+    || !add_plan_to_pc) {
+    // do nothing
+  } else {
+    ObPhysicalPlan *plan = result.get_physical_plan();
+    ObCacheObjGuard &guard = result.get_cache_obj_guard();
+    ObPhysicalPlan *temp_plan = nullptr;
+    ObCacheObjGuard& temp_guard = result.get_temp_cache_obj_guard();
+    pc_ctx.enable_adaptive_plan_cache_ = session.enable_plan_cache_adaptive();
+    if (OB_UNLIKELY(nullptr == plan)) {
+    } else if ((!is_enable_pc && session.force_enable_plan_tracing())
+               || (is_enable_pc && pc_ctx.enable_adaptive_plan_cache_ && pc_ctx.has_inactive_plan_)) {
+      pc_ctx.try_get_plan_ = true;
+      pc_ctx.compare_plan_ = plan;
+      if (OB_FAIL(pc_get_plan(pc_ctx, temp_guard, get_plan_err,
+                              exec_ctx.get_need_disconnect_for_update()))) {
+        LOG_TRACE("failed to try get plan", K(ret), K(get_plan_err));
+      } else if (OB_SUCCESS != get_plan_err) {
+        pc_ctx.add_with_compare_ = true;
+      } else {
+        add_plan_to_pc = false;
+        temp_plan = static_cast<ObPhysicalPlan *>(temp_guard.get_cache_obj());
+        if (OB_ISNULL(temp_plan)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("plan is null", K(ret));
+        } else {
+          result.set_is_from_plan_cache(true);
+          temp_guard.init(pc_ctx.handle_id_);
+          guard.swap(temp_guard);
+          if (OB_FAIL(result.from_plan(*temp_plan, pc_ctx.fp_result_.raw_params_))) {
+            LOG_WARN("fail to set plan info to ResultSet", K(ret));
+          }
+        }
+      }
+      pc_ctx.compare_plan_ = nullptr;
+      pc_ctx.try_get_plan_ = false;
+    }
   }
   return ret;
 }
@@ -4042,6 +4575,15 @@ OB_NOINLINE int ObSql::handle_physical_plan(const ObString &trimed_stmt,
   }
   generate_sql_id(pc_ctx, add_plan_to_pc, parse_result, signature_sql, signature_format_sql, ret);
 
+  //ccl check level-2: after parse sql
+  if (OB_SUCC(ret)
+      && OB_FAIL(ObSQLUtils::match_ccl_rule(
+           pc_ctx.allocator_, session, context, trimed_stmt, pc_ctx.mode_ == PC_PS_MODE,
+           pc_ctx.fp_result_.parameterized_params_, pc_ctx.sql_ctx_.format_sql_id_,
+           CclRuleContainsInfo::DML, &parse_result))) {
+    LOG_WARN("fail to match ccl rule", K(ret));
+  }
+
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (OB_FAIL(get_outline_data(context, pc_ctx, signature_sql, signature_format_sql,
@@ -4055,6 +4597,8 @@ OB_NOINLINE int ObSql::handle_physical_plan(const ObString &trimed_stmt,
                                             mode,
                                             &outline_parse_result))) {
     LOG_WARN("Failed to generate plan", K(ret), K(result.get_exec_context().need_disconnect()));
+  } else if (OB_FAIL(try_get_plan(pc_ctx, result, use_plan_cache, add_plan_to_pc))) {
+    LOG_WARN("failed to try get plan", K(ret), K(add_plan_to_pc));
   } else if (OB_FAIL(need_add_plan(pc_ctx,
                                    result,
                                    use_plan_cache,
@@ -4396,7 +4940,8 @@ int ObSql::calc_pre_calculable_exprs(const ObDMLStmt &stmt,
                                  exec_ctx.get_my_session(),
                                  exec_ctx.get_sql_ctx()->schema_guard_,
                                  phy_plan_ctx->get_original_param_cnt(),
-                                 datum_param_store.count());
+                                 datum_param_store.count(),
+                                 exec_ctx.get_min_cluster_version());
     pre_calc_frame = new(frame_buf)ObPreCalcExprFrameInfo(phy_plan.get_allocator());
     if (OB_FAIL(expr_cg.generate_calculable_exprs(calculable_exprs,
                                                   *pre_calc_frame))) {
@@ -4495,7 +5040,8 @@ int ObSql::create_expr_constraint(ObQueryCtx &query_ctx,
     ObStaticEngineExprCG expr_cg(exec_ctx.get_allocator(), exec_ctx.get_my_session(),
                                  exec_ctx.get_sql_ctx()->schema_guard_,
                                  plan_ctx->get_original_param_cnt(),
-                                 plan_ctx->get_datum_param_store().count());
+                                 plan_ctx->get_datum_param_store().count(),
+                                 exec_ctx.get_min_cluster_version());
     pre_calc_constraint = new(cons_buf)ObPreCalcExprConstraint(exec_ctx.get_allocator());
     pre_calc_constraint->expect_result_ = expect_result;
     if (OB_FAIL(expr_cg.generate_calculable_exprs(pre_calc_exprs,

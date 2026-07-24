@@ -18,8 +18,8 @@
 
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_mgr.h"
 #include "sql/engine/px/p2p_datahub/ob_runtime_filter_msg.h"
-#include "sql/engine/px/p2p_datahub/ob_runtime_filter_vec_msg.h"
 #include "sql/engine/px/p2p_datahub/ob_pushdown_topn_filter_msg.h"
+#include "sql/engine/px/ob_px_sqc_proxy.h"
 
 using namespace oceanbase;
 using namespace oceanbase::common;
@@ -54,6 +54,31 @@ void ObP2PDatahubManager::destroy()
   if (IS_INIT) {
     map_.destroy();
   }
+}
+
+int ObP2PDatahubManager::process_msg(ObP2PDatahubMsgBase &msg)
+{
+  int ret = OB_SUCCESS;
+  ObP2PDatahubMsgBase *new_msg = nullptr;
+  bool need_free = false;
+  if (!msg.is_valid_type()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid type", K(ret), K(msg.get_msg_type()));
+  } else if (OB_FAIL(deep_copy_msg(msg, new_msg))) {
+    need_free = true;
+    LOG_WARN("fail to copy msg", K(ret));
+  } else if (OB_ISNULL(new_msg)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected new msg", K(ret));
+  } else if (OB_FAIL(new_msg->process_msg_internal(need_free))) {
+    LOG_WARN("fail to process msg", K(ret));
+  }
+  if (need_free && OB_NOT_NULL(new_msg)) {
+    new_msg->destroy();
+    ob_free(new_msg);
+    new_msg = nullptr;
+  }
+  return ret;
 }
 
 template<typename T>
@@ -92,11 +117,8 @@ int ObP2PDatahubManager::alloc_msg(
   int ret = OB_SUCCESS;
   switch(type) {
     ALLOC_MSG_HELPER(BLOOM_FILTER_MSG, ObRFBloomFilterMsg, "PxBfMsg")
-    ALLOC_MSG_HELPER(BLOOM_FILTER_VEC_MSG, ObRFBloomFilterMsg, "PxBfVecMsg")
     ALLOC_MSG_HELPER(RANGE_FILTER_MSG, ObRFRangeFilterMsg, "PxRangeMsg")
-    ALLOC_MSG_HELPER(RANGE_FILTER_VEC_MSG, ObRFRangeFilterVecMsg, "PxRangeVecMsg")
     ALLOC_MSG_HELPER(IN_FILTER_MSG, ObRFInFilterMsg, "PxInMsg")
-    ALLOC_MSG_HELPER(IN_FILTER_VEC_MSG, ObRFInFilterVecMsg,  "PxInVecMsg")
     ALLOC_MSG_HELPER(PD_TOPN_FILTER_MSG, ObPushDownTopNFilterMsg,  "PxTopNMsg")
     default: {
       ret = OB_ERR_UNEXPECTED;
@@ -123,6 +145,23 @@ int ObP2PDatahubManager::deep_copy_msg(ObP2PDatahubMsgBase &msg, ObP2PDatahubMsg
   return msg.deep_copy_msg(new_msg);
 }
 
+int ObP2PDatahubManager::P2PMsgMergeCall::operator() (common::hash::HashMapPair<ObP2PDhKey,
+    ObP2PDatahubMsgBase *> &entry)
+{
+  int ret = OB_SUCCESS;
+  if (!dh_msg_.is_active()) {
+    entry.second->set_is_active(false);
+  } else if (!dh_msg_.is_empty() && (OB_FAIL(entry.second->merge(dh_msg_)))) {
+    LOG_WARN("fail to merge dh msg", K(ret_), K(entry.first));
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(entry.second->process_receive_count(dh_msg_))) {
+    LOG_WARN("fail to process receive count", K(ret));
+  }
+  need_free_ = true;
+  return ret;
+}
+
 int ObP2PDatahubManager::send_local_msg(ObP2PDatahubMsgBase *msg)
 {
   int ret = OB_SUCCESS;
@@ -131,7 +170,6 @@ int ObP2PDatahubManager::send_local_msg(ObP2PDatahubMsgBase *msg)
     LOG_WARN("msg is null", K(ret));
   } else {
     (void) msg->after_process();
-    msg->set_start_time(ObTimeUtility::current_time());
     ObP2PDhKey dh_key(msg->get_p2p_datahub_id(),
         msg->get_px_seq_id(),
         msg->get_task_id(),
@@ -179,7 +217,9 @@ int ObP2PDatahubManager::erase_msg_if(ObP2PDhKey &dh_key,
   } else if (is_erased && OB_NOT_NULL(msg)) {
     PX_P2P_DH.free_msg(msg);
   } else {
-    // Another local worker still references the message; the coordinator retries cleanup.
+    // If erase failed, means other threads still referencing the msg.
+    // If the caller is an RPC thread, the clearing task will be delegated to DM;
+    // If the caller is DM, the retry policy is utilized to ensure that the message is deleted.
     ret = OB_EAGAIN;
     LOG_WARN("failed to erase msg, other threads still referencing it", K(dh_key));
   }
@@ -189,38 +229,68 @@ int ObP2PDatahubManager::erase_msg_if(ObP2PDhKey &dh_key,
 int ObP2PDatahubManager::generate_p2p_dh_id(int64_t &p2p_dh_id)
 {
   int ret = OB_SUCCESS;
-  p2p_dh_id = ATOMIC_AAF(&p2p_dh_id_, 1);
-  return ret;
-}
-
-int ObP2PDatahubManager::publish_local_copy(ObP2PDatahubMsgBase &msg)
-{
-  int ret = OB_SUCCESS;
-  ObP2PDatahubMsgBase *new_msg = nullptr;
-  if (OB_FAIL(deep_copy_msg(msg, new_msg))) {
-    LOG_WARN("fail to copy msg", K(ret));
-  } else if (OB_ISNULL(new_msg)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected new msg", K(ret));
+  // generate p2p dh id
+  // |    <16>     |      <28>     |     20
+  //    server_id       timestamp     sequence
+  const uint64_t server_index = GCTX.get_server_index();
+  if (OB_UNLIKELY(!is_valid_server_index(server_index))) {
+    ret = OB_SERVER_IS_INIT;
+    LOG_WARN("server index is unexpected", KR(ret), K(server_index));
   } else {
-    ObP2PDatahubMsgGuard guard(new_msg);
-    if (OB_FAIL(send_local_msg(new_msg))) {
-      guard.release();
-      if (OB_HASH_EXIST == ret) {
-        ret = OB_SUCCESS;
-      } else {
-        LOG_WARN("fail to send local message", K(ret));
-      }
-      if (OB_NOT_NULL(new_msg)) {
-        new_msg->destroy();
-        ob_free(new_msg);
-      }
-    }
+    int64_t ts = (common::ObTimeUtility::current_time() / 1000000) << 20;
+    int64_t seq_id = ATOMIC_AAF(&p2p_dh_id_, 1);
+    p2p_dh_id = (ts & 0x0000FFFFFFFFFFFF) | (server_index << 48) | seq_id;
   }
   return ret;
 }
 
-int ObP2PDatahubManager::publish_local_msg(ObP2PDatahubMsgBase &msg)
+int ObP2PDatahubManager::send_p2p_msg(
+    ObP2PDatahubMsgBase &msg,
+    ObPxSQCProxy &sqc_proxy)
+{
+  int ret = OB_SUCCESS;
+  int64_t p2p_dh_id = msg.get_p2p_datahub_id();
+  ObPxSQCProxy::SQCP2PDhMap &dh_map = sqc_proxy.get_p2p_dh_map();
+  ObSArray<ObAddr> *target_addrs = nullptr;
+  if (OB_FAIL(dh_map.get_refactored(p2p_dh_id, target_addrs))) {
+    LOG_WARN("fail to get dh map", K(ret));
+  } else if (OB_ISNULL(target_addrs) || target_addrs->empty()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected target addrs", K(ret));
+  } else if (target_addrs->count() == 1 &&
+             GCTX.self_addr() == target_addrs->at(0) &&
+             1 == msg.get_msg_receive_expect_cnt()) {
+    ObP2PDatahubMsgBase *new_msg = nullptr;
+    if (OB_FAIL(deep_copy_msg(msg, new_msg))) {
+      LOG_WARN("fail to copy msg", K(ret));
+    } else if (OB_ISNULL(new_msg)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected new msg", K(ret));
+    }
+    if (OB_SUCC(ret)) {
+      ObP2PDatahubMsgGuard guard(new_msg);
+      if (OB_FAIL(send_local_msg(new_msg))) {
+        // set failed, which means final_msg is not exists in dh map, let it go
+        guard.release();
+        if (ret == OB_HASH_EXIST) {
+        // it's ok.
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("fail to do local msg send", K(ret));
+        }
+        if (OB_NOT_NULL(new_msg)) {
+          new_msg->destroy();
+          ob_free(new_msg);
+        }
+      }
+    }
+  } else if (OB_FAIL(msg.broadcast(*target_addrs))) {
+    LOG_WARN("fail to do broadcast");
+  }
+  return ret;
+}
+
+int ObP2PDatahubManager::send_local_p2p_msg(ObP2PDatahubMsgBase &msg)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(send_local_msg(&msg))) {
@@ -259,4 +329,21 @@ bool ObP2PDatahubManager::P2PMsgEraseIfCall::operator() (common::hash::HashMapPa
     LOG_WARN("dh_msg_ is null", K(ret));
   }
   return need_erase;
+}
+
+int ObP2PDatahubManager::P2PMsgSetCall::operator() (const common::hash::HashMapPair<ObP2PDhKey,
+    ObP2PDatahubMsgBase *> &entry)
+{
+  // entry.second == &dh_msg_
+  // once the msg is set to p2p datahub map, other threads will access it, so 
+  // the regenerate process must be done in the setting process.
+  UNUSED(entry);
+  int ret = OB_SUCCESS;
+
+  if (OB_FAIL(dh_msg_.regenerate())) {
+    LOG_WARN("failed to do regen_call", K(dh_key_));
+  } else if (FALSE_IT(dh_msg_.check_finish_receive())) {
+  }
+  ret_ = ret;
+  return ret;
 }

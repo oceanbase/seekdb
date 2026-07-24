@@ -32,7 +32,6 @@ class ObNewRow;
 }
 namespace sql
 {
-class LastCompactRow;
 class ObRowComparer
 {
 public:
@@ -67,56 +66,6 @@ public:
   const ObIArray<ObSortFieldCollation> *sort_collations_;
   const ObIArray<ObSortCmpFunc> *sort_cmp_funs_;
   const common::ObIArray<const ObChunkDatumStore::StoredRow*> *rows_;
-};
-
-class ObCompactRowCompare
-{
-public:
-  ObCompactRowCompare();
-  int init(const ObIArray<ObSortFieldCollation> *sort_collations,
-      const ObIArray<ObSortCmpFunc> *sort_cmp_funs,
-      const common::ObIArray<const ObCompactRow*> &rows);
-
-  // compare function for quick sort.
-  bool operator()(int64_t row_idx1, int64_t row_idx2);
-
-  bool is_inited() const { return NULL != sort_collations_; }
-  // interface required by ObBinaryHeap
-  int get_error_code() { return ret_; }
-
-  void reset() { this->~ObCompactRowCompare(); new (this)ObCompactRowCompare(); }
-  int get_ret() const { return ret_; }
-  void set_row_meta(const RowMeta &row_meta) { row_meta_ = &row_meta; }
-public:
-  int ret_;
-  const ObIArray<ObSortFieldCollation> *sort_collations_;
-  const ObIArray<ObSortCmpFunc> *sort_cmp_funs_;
-  const common::ObIArray<const ObCompactRow*> *rows_;
-  const RowMeta *row_meta_;
-};
-
-class ObLastCompactRowCompare
-{
-public:
-  ObLastCompactRowCompare();
-  int init(const ObIArray<ObSortFieldCollation> *sort_collations,
-      const ObIArray<ObSortCmpFunc> *sort_cmp_funs,
-      const common::ObIArray<const LastCompactRow*> &rows);
-
-  // compare function for quick sort.
-  bool operator()(int64_t row_idx1, int64_t row_idx2);
-
-  bool is_inited() const { return NULL != sort_collations_; }
-  // interface required by ObBinaryHeap
-  int get_error_code() { return ret_; }
-
-  void reset() { this->~ObLastCompactRowCompare(); new (this)ObLastCompactRowCompare(); }
-  int get_ret() const { return ret_; }
-public:
-  int ret_;
-  const ObIArray<ObSortFieldCollation> *sort_collations_;
-  const ObIArray<ObSortCmpFunc> *sort_cmp_funs_;
-  const common::ObIArray<const LastCompactRow*> *rows_;
 };
 
 class ObMaxDatumRowCompare
@@ -164,7 +113,6 @@ public:
   void set_sort_columns(const common::ObIArray<ObSortColumn> &sort_columns)
   { sort_columns_ = &sort_columns; }
   int init();
-  void set_row_meta(const RowMeta &row_meta) { indexed_row_comparer_.set_row_meta(row_meta); }
   int push(const ROW *row);
   int pop(const ROW *&row);
   // This interface is only used to clear heap and release memory
@@ -360,4 +308,3 @@ void ObRowHeap<COMPARE, ROW>::shrink()
 }
 #endif /* __OB_SQL_PX_ROW_HEAP_H__ */
 //// end of header file
-

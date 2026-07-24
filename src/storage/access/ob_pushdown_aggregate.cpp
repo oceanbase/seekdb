@@ -1625,10 +1625,10 @@ int ObSumAggCell::init(const bool is_group_by, sql::ObEvalCtx *eval_ctx)
         break;
       }
       case ObObjTypeClass::ObCollectionSQLTC: {
-        eval_func_ = &ObSumAggCell::eval_vector;
-        eval_batch_func_ = &ObSumAggCell::eval_vector_batch;
+        eval_func_ = &ObSumAggCell::eval_collection;
+        eval_batch_func_ = &ObSumAggCell::eval_collection_batch;
         copy_datum_func_ = &ObSumAggCell::copy_vector;
-        eval_skip_index_func_ = &ObSumAggCell::eval_vector;
+        eval_skip_index_func_ = &ObSumAggCell::eval_collection;
         break;
       }
       default: {
@@ -2195,7 +2195,7 @@ int ObSumAggCell::eval_number(const common::ObDatum &datum, const int32_t datum_
   return ret;
 }
 
-int ObSumAggCell::eval_vector(const common::ObDatum &datum, const int32_t datum_offset)
+int ObSumAggCell::eval_collection(const common::ObDatum &datum, const int32_t datum_offset)
 {
   int ret = OB_SUCCESS;
   common::ObDatum &result_datum = get_group_by_result_datum(datum_offset);
@@ -2204,7 +2204,7 @@ int ObSumAggCell::eval_vector(const common::ObDatum &datum, const int32_t datum_
     if (OB_FAIL(result_datum.deep_copy(datum, datum_allocator_))) {
       LOG_WARN("fail to deep copy datum", K(ret));
     }
-  } else if (OB_FAIL(ObArrayExprUtils::vector_datum_add(result_datum, datum, datum_allocator_))){
+  } else if (OB_FAIL(sql::ObArrayExprUtils::vector_datum_add(result_datum, datum, datum_allocator_))){
     LOG_WARN("fail to add vector", K(ret));
   }
   return ret;
@@ -2385,11 +2385,11 @@ int ObSumAggCell::eval_number_batch(const common::ObDatum *datums, const int64_t
   return ret;
 }
 
-int ObSumAggCell::eval_vector_batch(const common::ObDatum *datums, const int64_t count)
+int ObSumAggCell::eval_collection_batch(const common::ObDatum *datums, const int64_t count)
 {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-    if (OB_FAIL(eval_vector(datums[i], -1))) {
+    if (OB_FAIL(eval_collection(datums[i], -1))) {
       LOG_WARN("Failed to eval float", K(ret));
     }
   }

@@ -22,239 +22,12 @@
 #include "lib/hash/ob_hashset.h"
 #include "lib/hash/ob_hashmap.h"
 #include "lib/container/ob_array.h"
-#include "lib/hash/ob_hashutils.h"
 #include "lib/utility/ob_macro_utils.h"
 
 namespace oceanbase
 {
 namespace sql
 {
-struct StrKey
-{
-  StrKey() : hash_(0), len_(0), ptr_(nullptr) {}
-  StrKey(int64_t len, const char *ptr) : len_(len), ptr_(ptr) {}
-  StrKey(const ObString &str) : len_(str.length()), ptr_(str.ptr()) {}
-  StrKey(uint64_t hash, const ObString &str) : hash_(hash), len_(str.length()), ptr_(str.ptr()) {}
-  OB_INLINE void make_key(uint64_t hash, int64_t len, const char *ptr)
-  {
-    hash_ = hash;
-    len_ = len;
-    ptr_ = ptr;
-  }
-  OB_INLINE StrKey &operator=(const StrKey &other)
-  {
-    make_key(other.hash_, other.len_, other.ptr_);
-    return *this;
-  }
-  uint64_t hash_;
-  int64_t len_;
-  const char *ptr_;
-} __attribute__((packed));
-
-struct StrBkt
-{
-  StrBkt() : is_used_(false), key_() {}
-  StrBkt(bool is_used, const StrKey &key) : is_used_(is_used), key_(key) {}
-  OB_INLINE StrBkt &operator=(const StrKey &key)
-  {
-    key_ = key;
-    is_used_ = true;
-    return *this;
-  }
-  bool is_used_;
-  StrKey key_;
-} __attribute__((packed));
-
-struct IntBkt
-{
-  IntBkt() : is_used_(false), key_(0) {}
-  IntBkt(bool is_used, int64_t key) : is_used_(is_used), key_(key) {}
-  OB_INLINE IntBkt &operator=(const uint64_t &key)
-  {
-    key_ = key;
-    is_used_ = true;
-    return *this;
-  }
-  bool is_used_;
-  uint64_t key_;
-} __attribute__((packed));
-
-template <typename Key> struct KeyComparator;
-template <> struct KeyComparator<StrBkt>
-{
-  OB_INLINE static bool cmp(const StrBkt &lhs,
-                            const StrKey &rhs,
-                            ObCollationType cs_type,
-                            bool cmp_end_space = false)
-  {
-    bool is_equal = false;
-    if (lhs.key_.hash_ != rhs.hash_) {
-      is_equal = false;
-    } else {
-      if (lhs.key_.len_ == rhs.len_) {
-        is_equal = !MEMCMP(lhs.key_.ptr_, rhs.ptr_, rhs.len_);
-      }
-      if (!is_equal) {
-        is_equal = !ObCharset::strcmpsp(cs_type,
-                                    lhs.key_.ptr_, lhs.key_.len_,
-                                    rhs.ptr_, rhs.len_, cmp_end_space);
-      }
-    }
-    return is_equal;
-  }
-  OB_INLINE static bool is_empty(const StrBkt &bkt) { return !bkt.is_used_; }
-};
-template <> struct KeyComparator<IntBkt>
-{
-  OB_INLINE static bool cmp(const IntBkt &lhs,
-                            uint64_t rhs,
-                            ObCollationType cs_type,
-                            bool cmp_end_space = false)
-  {
-    return lhs.key_ == rhs;
-  }
-  OB_INLINE static bool is_empty(const IntBkt &bkt) { return !bkt.is_used_; }
-};
-// infer bucket type for primitive types
-template <typename T> struct BktType;
-template <> struct BktType<uint64_t>
-{
-  using type = IntBkt;
-};
-template <> struct BktType<StrKey>
-{
-  using type = StrBkt;
-};
-template <typename T> struct BktType
-{
-  using type = uint64_t;
-};
-
-template <typename KeyType>
-class ObColumnHashSet
-{
-public:
-  using bucket_t = typename BktType<KeyType>::type;
-  using key_cmparator = KeyComparator<bucket_t>;
-  ObColumnHashSet()
-      : inited_(false), buckets_(nullptr), bucket_mask_(0), capacity_(0), size_(0),
-        cs_type_(CS_TYPE_INVALID), cmp_end_space_(false), alloc_()
-  {
-  }
-  ~ObColumnHashSet() {}
-
-  int init(uint64_t capacity,
-           common::ObCollationType cs_type = CS_TYPE_INVALID,
-           bool cmp_end_space = false)
-  {
-    int ret = OB_SUCCESS;
-    cs_type_ = cs_type;
-    cmp_end_space_ = cmp_end_space;
-    if (inited_) {
-      ret = OB_INIT_TWICE;
-      COMMON_LOG(WARN, "init twice");
-    } else {
-      
-      alloc_.set_label("ObColumnHashSet");
-      if (OB_FAIL(alloc_mem(capacity))) {
-        COMMON_LOG(WARN, "failed to alloc when init");
-      } else {
-        inited_ = true;
-      }
-    }
-    return ret;
-  }
-  void clear()
-  {
-    size_ = 0;
-    for (uint64_t i = 0; i < capacity_; ++i) {
-      new (&buckets_[i]) bucket_t();
-    }
-  }
-  OB_INLINE void destroy()
-  {
-    inited_ = false;
-    bucket_mask_ = 0;
-    capacity_ = 0;
-    size_ = 0;
-    alloc_.free(buckets_); // unused for ObArenaAllocator
-    buckets_ = nullptr;
-    alloc_.reset();
-  }
-  OB_INLINE bool inited() const { return inited_; }
-  OB_INLINE uint64_t size() const { return size_; }
-  OB_INLINE int insert(uint64_t hash, const KeyType key)
-  {
-    int ret = OB_SUCCESS;
-    uint64_t offset = hash & bucket_mask_;
-    while ((!key_cmparator::is_empty(buckets_[offset]))
-           && (!key_cmparator::cmp(buckets_[offset], key, cs_type_, cmp_end_space_))) {
-      offset = (offset + 1) & bucket_mask_;
-    }
-    if (key_cmparator::is_empty(buckets_[offset])) {
-      buckets_[offset] = key;
-      size_++;
-    }
-    return ret;
-  }
-
-  OB_INLINE bool exists(uint64_t hash, const KeyType key) const
-  {
-    bool find = false;
-    uint64_t offset = hash & bucket_mask_;
-    while (!key_cmparator::is_empty(buckets_[offset])) {
-      if (key_cmparator::cmp(buckets_[offset], key, cs_type_, cmp_end_space_)) {
-        find = true;
-        break;
-      }
-      offset = (offset + 1) & bucket_mask_;
-    }
-    return find;
-  }
-
-private:
-  uint64_t normalize_capacity(uint64_t n) { return max(MIN_BUCKET_SIZE, next_pow2(2 * n)); }
-
-  int alloc_mem(uint64_t capacity)
-  {
-    int ret = OB_SUCCESS;
-    uint64_t new_capacity = normalize_capacity(capacity);
-    void *buf = nullptr;
-    if (OB_ISNULL(buf = alloc_.alloc_aligned(sizeof(bucket_t) * new_capacity, CACHE_LINE_SIZE))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      COMMON_LOG(WARN, "failed to allocate bucket memory", K(new_capacity));
-    } else {
-      buckets_ = static_cast<bucket_t *>(buf);
-      capacity_ = new_capacity;
-      bucket_mask_ = capacity_ - 1;
-      for (size_t i = 0; i < new_capacity; ++i) {
-        new (&buckets_[i]) bucket_t();
-      }
-      COMMON_LOG(DEBUG, "alloc capacity ", K(capacity_));
-    }
-    return ret;
-  }
-
-private:
-#ifndef _WIN32
-  static constexpr uint64_t KEY_MASK = 1ULL << 63;
-#else
-  static constexpr uint64_t KEY_MASK = UINT64_C(1) << 63;
-#endif
-  static constexpr int64_t MIN_BUCKET_SIZE = 128;
-  static constexpr int64_t CACHE_LINE_SIZE = 64;
-  static constexpr int64_t MAX_SEEK_TIMES = 8;
-
-private:
-  bool inited_{false};
-  bucket_t *buckets_{nullptr};
-  uint64_t bucket_mask_{0};
-  uint64_t capacity_{0};
-  uint64_t size_{0};
-  common::ObCollationType cs_type_{CS_TYPE_INVALID};
-  bool cmp_end_space_{false};
-  common::ObArenaAllocator alloc_;
-};
 // Member explanation:
 // idx_ The binary number represents which columns of the selected Row in the hash table are used as keys, for example, vector (1,2,3) is stored in the hash table with idx_ of 3, binary(3)=011, i.e., the lower 2 bits are selected, key=(1,2)
 //row_dimension_ stores the dimension of Row
@@ -343,8 +116,6 @@ private:
   HashMapMeta meta_;
 };
 
-using normal_inkey_t = uint64_t;
-
 template <class T>
 class ObExprInHashSet
 {
@@ -367,7 +138,6 @@ public:
     return set_.create(param_num);
   }
   int set_refactored(const Row<T> &row);
-  int exist_refactored(uint64_t hash_val, const Row<T> &row, bool &is_exist);
   int exist_refactored(const Row<T> &row, bool &is_exist);
   void set_meta_idx(int idx) { meta_.idx_ = idx; }
   void set_meta_dimension(int64_t row_dimension) { meta_.row_dimension_ = row_dimension; }
@@ -395,11 +165,6 @@ class ObExprInOrNotIn : public ObVectorExprOperator
         cmp_functions_(NULL),
         funcs_ptr_set_(false),
         ctx_hash_null_(false),
-        hash_vals_inited_(false),
-        hash_vals(NULL),
-        int_ht_(),
-        str_ht_(),
-        use_colht_(false),
         right_datums_(NULL),
         static_engine_hashset_(),
         static_engine_hashset_vecs_(NULL),
@@ -412,42 +177,22 @@ class ObExprInOrNotIn : public ObVectorExprOperator
     virtual ~ObExprInCtx()
     {
       static_engine_hashset_.destroy();
-      if (int_ht_.inited()) {
-        (void)int_ht_.destroy();
-      }
-      if (str_ht_.inited()) {
-        (void)str_ht_.destroy();
-      }
-      alloc_.reset();
       if (OB_NOT_NULL(static_engine_hashset_vecs_)) {
         for (int i = 0; i < (1 << row_dimension_); ++i) {
           static_engine_hashset_vecs_[i].destroy();
         }
         static_engine_hashset_vecs_ = NULL;
       }
-    }
+  }
   public:
-    int init_hash_vals(int64_t size);
-    int init_hashset(VecValueTypeClass vec_tc,int64_t param_num, bool use_colhashset,
-                     common::ObCollationType cs_type, bool cmp_end_space);
-    bool need_rebuild_hashset(bool use_colht);
     int init_static_engine_hashset(int64_t param_num);
     int init_static_engine_hashset_vecs(int64_t param_num,
                                         int64_t row_dimension,
                                         ObExecContext *exec_ctx);
 
-    template<typename KeyType>
-    int colht_prefetch(uint64_t *&hash_val, int begin, int end);
     int add_to_static_engine_hashset(const Row<common::ObDatum> &row);
     int add_to_static_engine_hashset_vecs(const Row<common::ObDatum> &row,
                                           const int idx);
-    template<typename ResVec>
-    int colht_probe_batch(int32_t begin, int32_t end, uint64_t *&hash_val,
-                                      const normal_inkey_t *&key, bool is_not_expr_in,
-                                      ResVec *&res_vec);
-
-    int exist_in_static_engine_hashset(uint64_t hash_val, const Row<common::ObDatum> &row,
-                                          bool &is_exist);
     int exist_in_static_engine_hashset(const Row<common::ObDatum> &row,
                                        bool &is_exist);
     int exist_in_static_engine_hashset_vecs(const Row<common::ObDatum> &row,
@@ -460,7 +205,6 @@ class ObExprInOrNotIn : public ObVectorExprOperator
     inline void set_param_exist_null(bool exist_null);
     inline bool is_param_exist_null() const;
     int64_t get_static_engine_hashset_size() const { return static_engine_hashset_.size(); }
-    inline int64_t get_colht_size() const { return int_ht_.size() + str_ht_.size(); }
 
     bool is_hash_calc_disabled() const { return hash_calc_disabled_; }
     void disable_hash_calc(void) { hash_calc_disabled_ = true; }
@@ -493,11 +237,6 @@ class ObExprInOrNotIn : public ObVectorExprOperator
     void **cmp_functions_;
     bool funcs_ptr_set_;
     bool ctx_hash_null_;
-    bool hash_vals_inited_;
-    uint64_t *hash_vals; // probe item hash values for batch hashing
-    ObColumnHashSet<uint64_t> int_ht_;
-    ObColumnHashSet<StrKey> str_ht_;
-    bool use_colht_;
   private:
     common::ObDatum **right_datums_;//IN right constants are stored here
     ObExprInHashSet<common::ObDatum> static_engine_hashset_;
@@ -515,7 +254,6 @@ class ObExprInOrNotIn : public ObVectorExprOperator
     bool param_exist_null_;
     bool hash_calc_disabled_;
     common::ObFixedArray<ObExprCalcType, common::ObIAllocator> cmp_types_;
-    common::ObArenaAllocator alloc_;
   };
 
   OB_UNIS_VERSION_V(1);
@@ -543,12 +281,6 @@ public:
                                const bool is_exist,
                                const bool param_exists_null,
                                ObDatum &result);
-  template<typename ResVec>
-  static void set_vector_result(const bool is_expr_in,
-                                const bool is_exist,
-                                const bool param_exist_null,
-                                ResVec *res_vec,
-                                const int64_t &idx);
   virtual bool need_rt_ctx() const override { return true; }
 public:
   static int eval_in_with_row(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
@@ -569,48 +301,6 @@ public:
                                        ObEvalCtx &ctx,
                                        const ObBitVector &skip,
                                        const int64_t batch_size);
-  template <typename LeftVec, typename ResVec>
-  static int inner_eval_vector_in_without_row_fallback(const ObExpr &expr,
-                                                ObEvalCtx &ctx,
-                                                const ObBitVector &skip,
-                                                const EvalBound &bound);
-  template <typename LeftVec, typename ResVec>
-  static int inner_eval_vector_in_without_row(const ObExpr &expr,
-                                        ObEvalCtx &ctx,
-                                        const ObBitVector &skip,
-                                        const EvalBound &bound);
-  template <typename LeftVec, typename ResVec>
-  static int probe_col(const ObExpr &expr,
-                            ObEvalCtx &ctx,
-                            const ObBitVector &skip,
-                            const EvalBound &bound,
-                            LeftVec *&input_left_vec,
-                            ObExprInCtx *&in_ctx,
-                            ResVec *&res_vec);
-  template <typename ResVec, typename KeyType>
-  static int probe_item(bool is_op_in,
-                    ObExprInCtx *in_ctx,
-                    ObColumnHashSet<KeyType> &colht,
-                    int idx,
-                    const KeyType &key,
-                    ResVec *&res_vec,
-                    ObBitVector& eval_flags);
-  template <typename LeftVec, typename ResVec, typename RawKeyType>
-  static int probe_fixed_col(const ObBitVector &skip,
-                      const EvalBound &bound,
-                      ObBitVector &eval_flags,
-                      LeftVec *&input_left_vec, 
-                      ResVec *&res_vec,
-                      ObExprInCtx *&in_ctx,
-                      bool is_op_in);
-  static int eval_vector_in_without_row_fallback(const ObExpr &expr,
-                                                ObEvalCtx &ctx,
-                                                const ObBitVector &skip,
-                                                const EvalBound &bound);
-  static int eval_vector_in_without_row(const ObExpr &expr,
-                                        ObEvalCtx &ctx,
-                                        const ObBitVector &skip,
-                                        const EvalBound &bound);
   // like "select 1 from dual where (select 1, 2) in ((1,2), (3,4))"
   static int eval_in_with_subquery(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
   static int calc_for_row_static_engine(const ObExpr &expr,
@@ -624,8 +314,7 @@ public:
                                           ObEvalCtx &ctx,
                                           ObExecContext *exec_ctx,
                                           ObExprInCtx *&in_ctx,
-                                          bool &cnt_null,
-                                          bool use_colht = false);
+                                          bool &cnt_null);
   static int build_hash_set(const int64_t right_param_num,
                                const ObExpr &expr,
                                ObEvalCtx &ctx,
@@ -665,11 +354,6 @@ protected:
                                      const ObBitVector &skip, 
                                      const ObBitVector &eval_flags, 
                                      const int64_t batch_size,
-                                     bool &can_cmp_mem);
-  static void check_left_can_cmp_mem(const ObExpr &expr,
-                                     const ObBitVector &skip, 
-                                     const ObBitVector &eval_flags, 
-                                     const EvalBound &bound, 
                                      bool &can_cmp_mem);
 protected:
   typedef uint32_t ObExprInParamFlag;

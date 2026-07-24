@@ -19,6 +19,7 @@
 #include "common/timezone/ob_time_convert.h"
 #include "lib/container/ob_array_serialization.h"
 #include "share/geo/ob_geo_utils.h"
+#include "share/ob_lob_access_utils.h"
 #include "lib/rc/ob_rc.h"
 #include "sql/resolver/dml/ob_dml_stmt.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
@@ -511,6 +512,13 @@ int ObRangeGenerator::formalize_standard_range(const ObRangeNode *node, ObTmpRan
   } else if (OB_FAIL(range.intersect(*new_range, not_consistent))) {
     LOG_WARN("failed to do tmp range intersect");
   } else if (not_consistent || node->and_next_ == nullptr) {
+    if (is_generate_ss_range_) {
+      range.column_cnt_ -= pre_range_graph_->get_skip_scan_offset();
+      range.min_offset_ -= pre_range_graph_->get_skip_scan_offset();
+      range.max_offset_ -= pre_range_graph_->get_skip_scan_offset();
+      range.start_ += pre_range_graph_->get_skip_scan_offset();
+      range.end_ += pre_range_graph_->get_skip_scan_offset();
+    }
     if (OB_FAIL(generate_one_range(range))) {
       LOG_WARN("faield to generate one range", K(range));
     }
@@ -1440,6 +1448,43 @@ int ObRangeGenerator::merge_and_remove_ranges()
   return ret;
 }
 
+int ObRangeGenerator::generate_ss_ranges()
+{
+  int ret = OB_SUCCESS;
+  ObPhysicalPlanCtx *phy_ctx = exec_ctx_.get_physical_plan_ctx();
+  if (OB_ISNULL(pre_range_graph_) || OB_ISNULL(phy_ctx) ||
+      OB_ISNULL(pre_range_graph_->get_range_head())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get null range graph", KPC(pre_range_graph_), K(phy_ctx));
+  } else if (OB_UNLIKELY(pre_range_graph_->get_skip_scan_offset() < 0 ||
+                         pre_range_graph_->get_skip_scan_offset() >= pre_range_graph_->get_column_cnt())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected skip scan range", K(pre_range_graph_->get_skip_scan_offset()),
+                                               K(pre_range_graph_->get_column_cnt()));
+  } else {
+    const ObRangeNode *ss_head = nullptr;
+    const ObRangeNode *cur_node = pre_range_graph_->get_range_head();
+    while (cur_node != nullptr && cur_node->min_offset_ < pre_range_graph_->get_skip_scan_offset()) {
+      cur_node = cur_node->and_next_;
+    }
+    if (cur_node != nullptr && cur_node->min_offset_ == pre_range_graph_->get_skip_scan_offset()) {
+      ss_head = cur_node;
+      if (pre_range_graph_->has_exec_param() && !phy_ctx->is_exec_param_readable()) {
+        // pre range graph has exec param and not exec stage, generate (min; max)
+        if (OB_FAIL(generate_contain_exec_param_range())) {
+          LOG_WARN("faield to generate contain exec param range");
+        }
+      } else {
+        is_generate_ss_range_ = true;
+        if (OB_FAIL(generate_standard_ranges(ss_head))) {
+          LOG_WARN("failed to genenrate precise get range");
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 int ObRangeGenerator::create_new_range(ObNewRange *&range, int64_t column_cnt)
 {
   int ret = OB_SUCCESS;
@@ -1742,12 +1787,12 @@ int ObRangeGenerator::get_intersects_tmp_geo_param(uint32_t input_srid,
   ObS2Adapter *s2object = NULL;
   ObString buffer_geo;
 
-  if ((input_srid != 0) && OB_FAIL(SRS_SERVICE->get_srs_guard(srs_guard))) {
-    LOG_WARN("get runtime SRS guard failed", K(input_srid), K(ret));
+  if ((input_srid != 0) && OB_FAIL(OTSRS_MGR->get_tenant_srs_guard(srs_guard))) {
+    LOG_WARN("get tenant srs guard failed", K(input_srid), K(ret));
   } else if ((input_srid != 0) && OB_FAIL(srs_guard.get_srs_item(input_srid, srs_item))) {
-    LOG_WARN("get runtime SRS failed", K(input_srid), K(ret));
+    LOG_WARN("get tenant srs failed", K(input_srid), K(ret));
   } else if (((input_srid == 0) || !(srs_item->is_geographical_srs())) &&
-             OB_FAIL(SRS_SERVICE->get_srs_bounds(input_srid, srs_item, srs_bound))) {
+             OB_FAIL(OTSRS_MGR->get_srs_bounds(input_srid, srs_item, srs_bound))) {
     LOG_WARN("failed to get srs item", K(ret));
   } else if (op_type == ObDomainOpType::T_GEO_DWITHIN) {
     if (std::isnan(distance)) {
@@ -1867,12 +1912,12 @@ int ObRangeGenerator::get_coveredby_tmp_geo_param(uint32_t input_srid,
   ObS2Adapter *s2object = NULL;
   ObString buffer_geo;
 
-  if ((input_srid != 0) && OB_FAIL(SRS_SERVICE->get_srs_guard(srs_guard))) {
-    LOG_WARN("get runtime SRS guard failed", K(input_srid), K(ret));
+  if ((input_srid != 0) && OB_FAIL(OTSRS_MGR->get_tenant_srs_guard(srs_guard))) {
+    LOG_WARN("get tenant srs guard failed", K(input_srid), K(ret));
   } else if ((input_srid != 0) && OB_FAIL(srs_guard.get_srs_item(input_srid, srs_item))) {
-    LOG_WARN("get runtime SRS failed", K(input_srid), K(ret));
+    LOG_WARN("get tenant srs failed", K(input_srid), K(ret));
   } else if (((input_srid == 0) || !(srs_item->is_geographical_srs())) &&
-             OB_FAIL(SRS_SERVICE->get_srs_bounds(input_srid, srs_item, srs_bound))) {
+             OB_FAIL(OTSRS_MGR->get_srs_bounds(input_srid, srs_item, srs_bound))) {
     LOG_WARN("failed to get srs item", K(ret));
   }
   if (s2object == NULL && OB_SUCC(ret)) {

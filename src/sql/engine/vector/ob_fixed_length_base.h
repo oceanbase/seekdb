@@ -21,10 +21,6 @@
 namespace oceanbase
 {
 
-namespace sql {
-  struct ObCompactRow;
-  struct RowMeta;
-}
 namespace common
 {
 
@@ -69,31 +65,11 @@ public:
       set_payload(idx, datum.ptr_, datum.len_);
     }
   }
-  virtual int to_rows(const sql::RowMeta &row_meta,
-                       sql::ObCompactRow **stored_rows,
-                       const uint16_t selector[],
-                       const int64_t size,
-                       const int64_t col_idx) const override final;
-
-  virtual int to_rows(const sql::RowMeta &row_meta, sql::ObCompactRow **stored_rows,
-                       const int64_t size, const int64_t col_idx) const override final;
-
   inline void from(ObLength len, char *data)
   {
     len_ = len;
     data_ = data;
   }
-
-  // only used in ob_fixed_length_base.cpp
-  template<int len>
-  void set_fixed_cell_payloads(const sql::RowMeta &row_meta, sql::ObCompactRow **stored_rows,
-      const uint16_t selector[], const int64_t size, const int64_t col_idx, const int64_t offset) const;
-
-  // only used in ob_fixed_length_base.cpp
-  template<int len>
-  void set_fixed_cell_payloads(const sql::RowMeta &row_meta, sql::ObCompactRow **stored_rows,
-      const int64_t size, const int64_t col_idx, const int64_t offset) const;
-
 protected:
   ObLength len_; // each cell value length
   char *data_;

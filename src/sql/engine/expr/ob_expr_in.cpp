@@ -20,7 +20,6 @@
 #include "sql/engine/expr/ob_expr_subquery_ref.h"
 #include "sql/engine/expr/ob_expr_multiset.h"
 #include "sql/engine/subquery/ob_subplan_filter_op.h"
-#include "sql/engine/vector/expr_cmp_func.h"
 
 
 namespace oceanbase
@@ -50,50 +49,6 @@ static unsigned last(unsigned int cur_num, unsigned int max)
 {
   unsigned int num = (cur_num ^ max);
   return (max ^ next(num, max));
-}
-
-enum class ItemKT { UN_SUPPORT, KT_INT1B, KT_INT4B, KT_INT8B, KT_STRING };
-
-static inline ItemKT get_key_type(VecValueTypeClass vec_tc)
-{
-  ItemKT b_ret = ItemKT::UN_SUPPORT;
-  switch(vec_tc) {
-    case VEC_TC_INTEGER:
-    case VEC_TC_UINTEGER:
-    case VEC_TC_TIME:
-    case VEC_TC_DATETIME:
-    case VEC_TC_BIT:
-    case VEC_TC_ENUM_SET:
-    case VEC_TC_INTERVAL_YM:
-    case VEC_TC_DEC_INT64:
-      b_ret = ItemKT::KT_INT8B;
-      break;
-    case VEC_TC_DATE:
-    case VEC_TC_DEC_INT32:
-      b_ret = ItemKT::KT_INT4B;
-      break;
-    case VEC_TC_YEAR:
-      b_ret = ItemKT::KT_INT1B;
-      break;
-    case VEC_TC_STRING:
-      b_ret = ItemKT::KT_STRING;
-      break;
-    default:
-      b_ret = ItemKT::UN_SUPPORT;
-      break;
-  }
-  return b_ret;
-}
-
-static bool is_support_fixed_key_type(VecValueTypeClass vec_tc)
-{
-  bool is_support = false;
-  if (ItemKT::KT_INT8B == get_key_type(vec_tc)
-      || ItemKT::KT_INT4B == get_key_type(vec_tc)
-      || ItemKT::KT_INT1B == get_key_type(vec_tc)) {
-    is_support = true;
-  }
-  return is_support;
 }
 
 template <>
@@ -293,26 +248,6 @@ int ObExprInHashSet<T>::set_refactored(const Row<T> &row)
 }
 
 template <class T>
-int ObExprInHashSet<T>::exist_refactored(uint64_t hash_val, const Row<T> &row, bool &is_exist)
-{
-  RowKey<T> tmp_row_key;
-  tmp_row_key.row_= row;
-  tmp_row_key.meta_ = &meta_;
-  tmp_row_key.hash_val_ = hash_val;
-  int ret = set_.exist_refactored(tmp_row_key);
-  if (OB_HASH_EXIST == ret) {
-    ret = OB_SUCCESS;
-    is_exist = true;
-  } else if (OB_HASH_NOT_EXIST == ret) {
-    ret = OB_SUCCESS;
-    is_exist = false;
-  } else {
-    LOG_WARN("failed to search in hashset", K(ret));
-  }
-  return ret;
-}
-
-template <class T>
 int ObExprInHashSet<T>::exist_refactored(const Row<T> &row, bool &is_exist)
 {
   RowKey<T> tmp_row_key;
@@ -330,52 +265,6 @@ int ObExprInHashSet<T>::exist_refactored(const Row<T> &row, bool &is_exist)
   }
   return ret;
 }
-
-inline int ObExprInOrNotIn::ObExprInCtx::init_hash_vals(int64_t size)
-{
-  int ret = OB_SUCCESS;
-  if (!hash_vals_inited_) {
-    if (OB_ISNULL(hash_vals = (uint64_t *)
-                (alloc_.alloc(sizeof(uint64_t) * size)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate memory", K(ret), K(size));
-    }
-  }
-  hash_vals_inited_ = true;
-  return ret;
-}
-
-int ObExprInOrNotIn::ObExprInCtx::init_hashset(VecValueTypeClass vec_tc,
-                                               int64_t param_num,
-                                               bool use_colhashset,
-                                               common::ObCollationType cs_type,
-                                               bool cmp_end_space)
-{
-  int ret = OB_SUCCESS;
-  use_colht_ = use_colhashset;
-  if (use_colhashset) {
-    row_dimension_ = 1;
-    if (vec_tc == VEC_TC_STRING) {
-      ret = str_ht_.init(param_num, cs_type, cmp_end_space);
-    } else {
-      ret = int_ht_.init(param_num);
-    }
-  } else {
-    ret = this->init_static_engine_hashset(param_num);
-  }
-  return ret;
-}
-
-bool ObExprInOrNotIn::ObExprInCtx::need_rebuild_hashset(bool use_colht)
-{
-  bool need_rebuild = false;
-  if ((use_colht && (!this->int_ht_.inited() && !this->str_ht_.inited())) ||
-    (!use_colht && !this->static_engine_hashset_.inited())) {
-    need_rebuild = true;
-  }
-  return need_rebuild;
-}
-
 
 int ObExprInOrNotIn::ObExprInCtx::init_static_engine_hashset(int64_t param_num)
 {
@@ -437,12 +326,6 @@ add_to_static_engine_hashset_vecs(const Row<common::ObDatum> &row, const int idx
   return ret;
 }
 
-inline int ObExprInOrNotIn::ObExprInCtx::exist_in_static_engine_hashset(uint64_t hash_val, const Row<ObDatum> &row,
-                                                                 bool &is_exist)
-{
-  return static_engine_hashset_.exist_refactored(hash_val, row, is_exist);
-}
-
 int ObExprInOrNotIn::ObExprInCtx::exist_in_static_engine_hashset(const Row<ObDatum> &row,
                                                                  bool &is_exist)
 {
@@ -462,22 +345,6 @@ exist_in_static_engine_hashset_vecs(const Row<ObDatum> &row,
   }
   return ret;
 }
-
-template<typename ResVec>
-inline int ObExprInOrNotIn::ObExprInCtx::colht_probe_batch(int32_t begin, int32_t end, uint64_t *&hash_val,
-                                      const normal_inkey_t *&key, bool is_not_expr_in,
-                                      ResVec *&res_vec)
-{
-  int ret = OB_SUCCESS;
-  bool is_exist;
-  for (int i = begin; i < end; ++i) {
-    is_exist = int_ht_.exists(hash_val[i], key[i]);
-    res_vec->set_int(i, (is_not_expr_in) ^ is_exist);
-  }
-  return ret;
-}
-
-
 
 int ObExprInOrNotIn::ObExprInCtx::
 init_hashset_vecs_all_null(const int64_t row_dimension, ObExecContext *exec_ctx)
@@ -817,18 +684,11 @@ int ObExprInOrNotIn::cg_expr_without_row(ObExprCGCtx &expr_cg_ctx,
       //now only support c1 in (1,2,3,4...) to be vectorized
       if (is_param_can_vectorized()) {
         // Currently it is believed that when the right parameter <= 2, the nest_loop algorithm performs better than hash
-        int tmp_in_ret = OB_E(EventTable::EN_ENABLE_VECTOR_IN) OB_SUCCESS;
         if (rt_expr.inner_func_cnt_ <= 2 ||
             (ob_is_json(left_type) || ob_is_json(right_type))) {
           rt_expr.eval_batch_func_ = &ObExprInOrNotIn::eval_batch_in_without_row_fallback;
-          rt_expr.eval_vector_func_ = tmp_in_ret == OB_SUCCESS ?
-                                      &ObExprInOrNotIn::eval_vector_in_without_row_fallback : 
-                                      nullptr;
         } else {
           rt_expr.eval_batch_func_ = &ObExprInOrNotIn::eval_batch_in_without_row;
-          rt_expr.eval_vector_func_ = tmp_in_ret == OB_SUCCESS ?
-                                      &ObExprInOrNotIn::eval_vector_in_without_row :
-                                      nullptr;
         }
       }
     }
@@ -1141,230 +1001,6 @@ int ObExprInOrNotIn::eval_batch_in_without_row_fallback(const ObExpr &expr,
             if (OB_SUCC(ret)) {
               set_datum_result(T_OP_IN == expr.type_,
                               is_equal, cnt_null | left->is_null(), results[idx]);
-              eval_flags.set(idx);
-            }
-          }
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-#define IN_OR_NOTIN_DISPATCH_VECTOR_IN_LEFT_ARG_FORMAT(func_name, res_vec)      \
-switch (left_format) {                                                          \
-  case VEC_FIXED: {                                                             \
-    ret = func_name<ObFixedLengthBase, res_vec>(expr, ctx, skip, bound);        \
-    break;                                                                      \
-  }                                                                             \
-  case VEC_DISCRETE: {                                                          \
-    ret = func_name<ObDiscreteFormat, res_vec>(expr, ctx, skip, bound);         \
-    break;                                                                      \
-  }                                                                             \
-  case VEC_CONTINUOUS: {                                                        \
-    ret = func_name<ObContinuousFormat, res_vec>(expr, ctx, skip, bound);       \
-    break;                                                                      \
-  }                                                                             \
-  case VEC_UNIFORM: {                                                           \
-    ret = func_name<ObUniformFormat<false>, res_vec>(expr, ctx, skip, bound);   \
-    break;                                                                      \
-  }                                                                             \
-  case VEC_UNIFORM_CONST: {                                                     \
-    ret = func_name<ObUniformFormat<true>, res_vec>(expr, ctx, skip, bound);    \
-    break;                                                                      \
-  }                                                                             \
-  default: {                                                                    \
-    ret = func_name<ObVectorBase, res_vec>(expr, ctx, skip, bound);             \
-  }                                                                             \
-}
-
-#define IN_OR_NOTIN_DISPATCH_VECTOR_IN_RES_ARG_FORMAT(func_name)                     \
-switch (res_format) {                                                                \
-  case VEC_FIXED: {                                                                  \
-    IN_OR_NOTIN_DISPATCH_VECTOR_IN_LEFT_ARG_FORMAT(func_name, IntegerFixedVec);      \
-    break;                                                                           \
-  }                                                                                  \
-  case VEC_UNIFORM: {                                                                \
-    IN_OR_NOTIN_DISPATCH_VECTOR_IN_LEFT_ARG_FORMAT(func_name, IntegerUniVec);        \
-    break;                                                                           \
-  }                                                                                  \
-  case VEC_UNIFORM_CONST: {                                                          \
-    IN_OR_NOTIN_DISPATCH_VECTOR_IN_LEFT_ARG_FORMAT(func_name, IntegerUniCVec);       \
-    break;                                                                           \
-  }                                                                                  \
-  default: {                                                                         \
-    IN_OR_NOTIN_DISPATCH_VECTOR_IN_LEFT_ARG_FORMAT(func_name, ObVectorBase);         \
-  }                                                                                  \
-}
-
-int ObExprInOrNotIn::eval_vector_in_without_row_fallback(const ObExpr &expr,
-                                                          ObEvalCtx &ctx,
-                                                          const ObBitVector &skip,
-                                                          const EvalBound &bound)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("failed to eval vector param values", K(ret));
-  } else {
-    VectorFormat res_format = expr.get_format(ctx);
-    VectorFormat left_format = expr.args_[0]->get_format(ctx);
-    IN_OR_NOTIN_DISPATCH_VECTOR_IN_RES_ARG_FORMAT(inner_eval_vector_in_without_row_fallback);
-  }
-  return ret;
-}
-
-template <typename LeftVec, typename ResVec>
-int ObExprInOrNotIn::inner_eval_vector_in_without_row_fallback(const ObExpr &expr,
-                                                          ObEvalCtx &ctx,
-                                                          const ObBitVector &skip,
-                                                          const EvalBound &bound)
-{
-  int ret = OB_SUCCESS;
-  LOG_DEBUG("eval_vector_in start: vector mode", K(bound));
-  ResVec *res_vec = static_cast<ResVec *>(expr.get_vector(ctx));
-  LeftVec *input_left_vec = static_cast<LeftVec *>(expr.args_[0]->get_vector(ctx));
-  ObDatum *right = nullptr;
-  ObDatum *right_store[expr.inner_func_cnt_]; // store all right param ptrs
-  ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-  bool right_has_null = false; // right param has null
-  ObBitVector &my_skip = expr.get_pvt_skip(ctx);
-  my_skip.deep_copy(skip, bound.start(), bound.end());
-  bool left_all_null = true;
-  for (int64_t idx = bound.start(); idx < bound.end(); ++idx) {
-    if (my_skip.at(idx) || eval_flags.at(idx)) {
-      continue;
-    }
-    if (input_left_vec->is_null(idx)) {
-      my_skip.set(idx);
-      res_vec->set_null(idx);
-      eval_flags.set(idx);
-    } else {
-      left_all_null = false;
-    }
-  }
-  // If all the values on the left are null,
-  // perform a short-circuit calculation and return immediately.
-  if (!left_all_null) {
-    /*
-    * CAN_CMP_MEM used for common short path 
-    * the params of left and right 
-    * both are string type
-    * both are CS_TYPE_UTF8MB4_BIN
-    * both dont have null value
-    * both dont have tailing space
-    * right params count is 2(> 2 will turn to hash calc)
-    */
-    bool can_cmp_mem = ob_is_support_cmp_mem_str_type(expr.args_[0]->obj_meta_.get_type(),
-                                                      expr.args_[0]->obj_meta_.get_collation_type());
-    // eval all right params
-    for (int64_t i = 0; OB_SUCC(ret) && i < expr.inner_func_cnt_; ++i) {
-      // Because we know that in this scenario,
-      // the values on the right side are constants,
-      // meaning they are single-line data,
-      // so we use the eval interface.
-      if (OB_FAIL(expr.args_[1]->args_[i]->eval(ctx, right_store[i]))) {
-        LOG_WARN("failed to eval right datum", K(ret), K(i));
-      } else {
-        check_right_can_cmp_mem(*right_store[i], expr.args_[1]->args_[i]->obj_meta_, 
-                                can_cmp_mem, right_has_null);
-      }
-    }
-    if (OB_SUCC(ret)) {
-      check_left_can_cmp_mem(expr, skip, eval_flags, bound, can_cmp_mem);
-      int64_t idx = bound.start();
-      if (can_cmp_mem && !std::is_same<LeftVec, ObFixedLengthBase>::value) {
-        static const char SPACE = ' ';
-        const char *ptr0 = right_store[0]->ptr_;
-        const char *ptr1 = right_store[1]->ptr_;
-        uint32_t len0 = right_store[0]->len_;
-        uint32_t len1 = right_store[1]->len_;          
-        const char *left_str_ptr = nullptr;
-        int32_t left_str_len = 0;
-        for (; OB_SUCC(ret) && idx < bound.end(); ++idx) {
-          // If can_cmp_mem is true, then it is guaranteed that the right side is non-null.
-          // If input_left_vec->is_null(idx), res_vec has been set before.
-          if (!input_left_vec->is_null(idx)) {
-            input_left_vec->get_payload(idx, left_str_ptr, left_str_len);
-            if (left_str_len > 0 && SPACE == left_str_ptr[left_str_len - 1]) {
-              can_cmp_mem = false;
-              break;
-            } else {
-              bool is_equal = false;
-              is_equal = (left_str_len >= len0 
-                          && 0 == MEMCMP(ptr0, left_str_ptr, len0) 
-                          && is_all_space(left_str_ptr + len0, left_str_len - len0));
-              is_equal = is_equal || (left_str_len >= len1 
-                                      && 0 == MEMCMP(ptr1, left_str_ptr, len1) 
-                                      && is_all_space(left_str_ptr + len1, left_str_len - len1));
-              res_vec->set_int(idx, T_OP_IN == expr.type_ ? is_equal : !is_equal);
-            }
-          }
-        }
-        if (idx > bound.start()) {
-          eval_flags.set_all(bound.start(), idx);
-        }
-      }
-      if (!can_cmp_mem) {
-        const char *l_payload = nullptr;
-        const char *fixed_base_l_payload = nullptr;
-        ObLength l_len = 0;
-        int cmp_ret = 0;
-        sql::RowCmpFunc row_cmp_func = VectorCmpExprFuncsHelper::get_row_cmp_func(
-                                                  expr.args_[0]->datum_meta_, 
-                                                  expr.args_[1]->args_[0]->datum_meta_);
-        if (OB_ISNULL(row_cmp_func)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("row_cmp_func is null", K(ret), K(expr.args_[0]->datum_meta_),
-                    K(expr.args_[1]->args_[0]->datum_meta_), K(expr.args_[1]->arg_cnt_));
-        } else {
-          if (std::is_same<LeftVec, ObFixedLengthBase>::value) {
-            fixed_base_l_payload = (reinterpret_cast<ObFixedLengthBase *>(input_left_vec))->get_data();
-            l_len = (reinterpret_cast<ObFixedLengthBase *>(input_left_vec))->get_length();
-          }
-          for (; OB_SUCC(ret) && idx < bound.end(); ++idx) {
-            if (my_skip.at(idx) || eval_flags.at(idx)) {
-              continue;
-            }
-            // The situation "input_left_vec->is_null(idx)" has already been handled previously.
-            if (std::is_same<LeftVec, ObFixedLengthBase>::value) {
-              l_payload = fixed_base_l_payload + l_len * idx;
-            } else {
-              input_left_vec->get_payload(idx, l_payload, l_len);
-            }
-            bool left_hit = false;
-            if (right_has_null) {
-              for (int64_t i = 0; OB_SUCC(ret) && i < expr.inner_func_cnt_; ++i) {
-                right = right_store[i];
-                if (right->is_null()) {
-                  // do nothing
-                } else if (OB_FAIL((row_cmp_func)(expr.args_[0]->obj_meta_,
-                                      expr.args_[1]->args_[i]->obj_meta_,
-                                      (const void *)l_payload, l_len,
-                                      (const void *)right->ptr_, right->len_, cmp_ret))) {
-                  LOG_WARN("row_cmp_func failed!", K(ret), K(expr.args_[0]->obj_meta_),
-                                              K(expr.args_[1]->args_[i]->obj_meta_));
-                } else if (cmp_ret == 0) {
-                  left_hit = true;
-                  break;
-                }
-              }
-            } else {
-              for (int64_t i = 0; OB_SUCC(ret) && i < expr.inner_func_cnt_; ++i) {
-                right = right_store[i];
-                if (OB_FAIL((row_cmp_func)(expr.args_[0]->obj_meta_,
-                                      expr.args_[1]->args_[i]->obj_meta_,
-                                      (const void *)l_payload, l_len,
-                                      (const void *)right->ptr_, right->len_, cmp_ret))) {
-                  LOG_WARN("row_cmp_func failed!", K(ret), K(expr.args_[0]->obj_meta_),
-                                              K(expr.args_[1]->args_[i]->obj_meta_));
-                } else if (cmp_ret == 0) {
-                  left_hit = true;
-                  break;
-                }
-              }
-            }
-            if (OB_SUCC(ret)) {
-              set_vector_result<ResVec>(T_OP_IN == expr.type_, left_hit, right_has_null, res_vec, idx);
               eval_flags.set(idx);
             }
           }
@@ -1803,289 +1439,6 @@ int ObExprInOrNotIn::eval_batch_in_without_row(const ObExpr &expr,
   return ret;
 }
 
-int ObExprInOrNotIn::eval_vector_in_without_row(const ObExpr &expr,
-                                                ObEvalCtx &ctx,
-                                                const ObBitVector &skip,
-                                                const EvalBound &bound)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("failed to eval vector param values", K(ret));
-  } else {
-    VectorFormat res_format = expr.get_format(ctx);
-    VectorFormat left_format = expr.args_[0]->get_format(ctx);
-    IN_OR_NOTIN_DISPATCH_VECTOR_IN_RES_ARG_FORMAT(inner_eval_vector_in_without_row);
-  }
-  return ret;
-}
-
-template <typename LeftVec, typename ResVec>
-int ObExprInOrNotIn::inner_eval_vector_in_without_row(const ObExpr &expr,
-                                                      ObEvalCtx &ctx,
-                                                      const ObBitVector &skip,
-                                                      const EvalBound &bound)
-{
-  int ret = OB_SUCCESS;
-  LOG_DEBUG("eval_vector_in_hash start: vector mode");
-  ResVec *res_vec = static_cast<ResVec *>(expr.get_vector(ctx));
-  LeftVec *input_left_vec = static_cast<LeftVec *>(expr.args_[0]->get_vector(ctx));
-  ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-  ObExprInCtx *in_ctx = NULL;
-  ObExecContext *exec_ctx = &ctx.exec_ctx_;
-  uint64_t in_id = expr.expr_ctx_id_;
-  // During the process of building the hash table,
-  // if eval() failed, we need to try the nest_loop.
-  bool fallback = false;
-  int64_t right_param_num = expr.inner_func_cnt_;
-  bool right_has_null = false;
-  const char *fixed_base_l_payload = nullptr;
-  bool right_all_null = false;
-  bool left_all_null = true;
-  bool left_all_not_null = (!input_left_vec->has_null()) && bound.get_all_rows_active();
-  VecValueTypeClass vec_tc = expr.args_[0]->get_vec_value_tc();
-
-  if (left_all_not_null) {
-    left_all_null = false;
-  } else {
-    for (int64_t idx = bound.start(); idx < bound.end(); ++idx) {
-      if (input_left_vec->is_null(idx)) {
-        res_vec->set_null(idx);
-        eval_flags.set(idx);
-      } else {
-        left_all_null = false;
-      }
-    }
-  }
-  // support specific types use ObColumnHasSet
-  bool use_colht = (ItemKT::UN_SUPPORT != get_key_type(vec_tc)) &&
-                   (vec_tc == expr.args_[1]->args_[0]->get_vec_value_tc());
-
-  if (!left_all_null) {
-    if (OB_FAIL(build_right_hash_without_row(in_id, right_param_num,
-                                             expr, ctx, exec_ctx,
-                                             in_ctx, right_has_null, use_colht))) {
-      LOG_WARN("failed to build hash table for right params", K(ret));
-    } else {
-      fallback = in_ctx->is_hash_calc_disabled();
-      if (!fallback) {
-        if (!in_ctx->funcs_ptr_set_ && !use_colht) {
-          // refresh inctx hash fun to left hash func
-          if (OB_NOT_NULL(in_ctx->hash_func_buff_)) {
-            in_ctx->hash_func_buff_[0] = (void *)
-                (expr.args_[0]->basic_funcs_->murmur_hash_v2_);
-          }
-            // hash table use self as left, so here right param is left for cmp func
-          DatumCmpFunc func_ptr = ObExprCmpFuncsHelper::get_datum_expr_cmp_func(
-                                  expr.args_[1]->args_[0]->datum_meta_.type_,
-                                  expr.args_[0]->datum_meta_.type_,
-                                  expr.args_[1]->args_[0]->datum_meta_.scale_,
-                                  expr.args_[0]->datum_meta_.scale_,
-                                  expr.args_[1]->args_[0]->datum_meta_.precision_,
-                                  expr.args_[0]->datum_meta_.precision_,
-                                  expr.args_[0]->datum_meta_.cs_type_,
-                                  expr.args_[0]->obj_meta_.has_lob_header() ||
-                                  expr.args_[1]->args_[0]->obj_meta_.has_lob_header());
-          for (int i = 0; i < right_param_num; i++) {
-            in_ctx->cmp_functions_[i] = (void *)func_ptr;
-          }
-          in_ctx->funcs_ptr_set_ = true;
-        }
-        if (OB_UNLIKELY(0 == in_ctx->get_static_engine_hashset_size()
-                        && 0 == in_ctx->get_colht_size())) {
-          // Scenarios where in_list contains only null.
-          if (in_ctx->ctx_hash_null_) {
-            for (int64_t left_idx = bound.start(); left_idx < bound.end(); ++left_idx) {
-              if (skip.at(left_idx) || eval_flags.at(left_idx)) { continue; }
-              res_vec->set_null(left_idx);
-              eval_flags.set(left_idx);
-            }
-            right_all_null = true;
-          } else {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("static_engine_hashset_size unexpected",
-                     K(ret),K(right_has_null),
-                     K(in_ctx->get_static_engine_hashset_size()),
-                     K(in_ctx->get_colht_size()));
-          }
-        }
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (right_all_null) {
-    } else if (!fallback) {
-      ret = probe_col<LeftVec, ResVec>(
-                        expr, ctx, skip, bound,
-                        input_left_vec, in_ctx, res_vec);
-      if (OB_FAIL(ret)) {
-        LOG_WARN("failed to probe_col", K(ret));
-      }
-    } else {
-      ret = eval_vector_in_without_row_fallback(expr, ctx, skip, bound);
-    }
-  }
-
-  return ret;
-}
-
-template <typename ResVec, typename KeyType>
-inline int ObExprInOrNotIn::probe_item(bool is_op_in,
-                  ObExprInCtx *in_ctx,
-                  ObColumnHashSet<KeyType> &colht,
-                  int idx,
-                  const KeyType &key,
-                  ResVec *&res_vec,
-                  ObBitVector& eval_flags)
-{
-  int ret = OB_SUCCESS;
-  bool is_exist = colht.exists(in_ctx->hash_vals[idx], key);
-  set_vector_result(is_op_in, is_exist,
-                    in_ctx->ctx_hash_null_, res_vec, idx);
-  eval_flags.set(idx);
-  return ret;
-}
-
-template <typename LeftVec, typename ResVec, typename RawKeyType>
-int ObExprInOrNotIn::probe_fixed_col(const ObBitVector &skip, const EvalBound &bound,
-                  ObBitVector &eval_flags, LeftVec *&input_left_vec, 
-                  ResVec *&res_vec, ObExprInCtx *&in_ctx, bool is_op_in) {
-  int ret = OB_SUCCESS;
-  for (int32_t idx = bound.start(); OB_SUCC(ret) && idx < bound.end(); ++idx) {
-    if (skip.at(idx) || eval_flags.at(idx)) {
-      continue;
-    }
-    const RawKeyType raw_key = *(reinterpret_cast<const RawKeyType *>(input_left_vec->get_payload(idx)));
-    const normal_inkey_t key =  static_cast<const normal_inkey_t>(raw_key);
-    ret = probe_item<ResVec, normal_inkey_t>(
-        is_op_in, in_ctx, in_ctx->int_ht_, idx, key, res_vec, eval_flags);
-    if (OB_FAIL(ret)) {
-      LOG_WARN("failed to process item", K(ret));
-    }
-  }
-  return ret;
-}
-
-template <typename LeftVec, typename ResVec>
-inline int ObExprInOrNotIn::probe_col(const ObExpr &expr,
-                                             ObEvalCtx &ctx,
-                                             const ObBitVector &skip,
-                                             const EvalBound &bound,
-                                             LeftVec *&input_left_vec,
-                                             ObExprInCtx *&in_ctx,
-                                             ResVec *&res_vec)
-{
-  int ret = OB_SUCCESS;
-  bool is_exist = false;
-  ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-  uint64_t seed = 0, hash_val = 0;
-  ObLength type_len = 0;
-  bool is_op_in = (T_OP_IN == expr.type_);
-  const bool is_batch_seed = false;
-
-  VecValueTypeClass vec_tc = expr.args_[0]->get_vec_value_tc();
-  common::ObCollationType cs_type = expr.args_[0]->datum_meta_.cs_type_;
-
-  if (OB_FAIL(in_ctx->init_hash_vals(ctx.max_batch_size_))) {
-    LOG_WARN("failed to init hash values", K(ret), K(ctx.max_batch_size_));
-  } else if (OB_FAIL(input_left_vec->murmur_hash_v3(*expr.args_[0],
-                                                 in_ctx->hash_vals,
-                                                 skip, bound, &seed,
-                                                 is_batch_seed))) {
-        LOG_WARN("failed to murmur hash", K(ret));
-  } else {
-    const uint64_t *l_payload = nullptr;
-    const char *fixed_base_l_payload = nullptr;
-    if (std::is_same<LeftVec, ObFixedLengthBase>::value) {
-      fixed_base_l_payload = (reinterpret_cast<ObFixedLengthBase *>(input_left_vec))->get_data();
-      type_len = (reinterpret_cast<ObFixedLengthBase *>(input_left_vec))->get_length();
-    }
-    int32_t begin = bound.start();
-    int32_t end = bound.end();
-    bool left_all_not_null = (!input_left_vec->has_null()) && bound.get_all_rows_active();
-    if (OB_SUCC(ret) && in_ctx->use_colht_) {
-      if (left_all_not_null && !in_ctx->ctx_hash_null_
-          && ItemKT::KT_INT8B == get_key_type(vec_tc)
-          && std::is_same<LeftVec, ObFixedLengthBase>::value) {
-        l_payload = reinterpret_cast<const uint64_t *>(fixed_base_l_payload);
-        if (OB_FAIL(in_ctx->colht_probe_batch<ResVec>(begin, end, in_ctx->hash_vals,
-                                                        l_payload, !is_op_in,
-                                                        res_vec))) {
-          LOG_WARN("failed to search in hashset", K(ret));
-        }
-        eval_flags.set_all(begin, end);
-      } else if (ItemKT::KT_INT8B == get_key_type(vec_tc)) {
-        ret = probe_fixed_col<LeftVec, ResVec, normal_inkey_t>(skip, bound, 
-                                                               eval_flags, input_left_vec,
-                                                               res_vec, in_ctx, is_op_in);
-        if (OB_FAIL(ret)) {
-          LOG_WARN("failed to probe fixed_8B col", K(ret));
-        }
-      } else if (ItemKT::KT_INT4B == get_key_type(vec_tc)) {
-        ret = probe_fixed_col<LeftVec, ResVec, uint32_t>(skip, bound, 
-                                                         eval_flags, input_left_vec,
-                                                         res_vec, in_ctx, is_op_in);
-        if (OB_FAIL(ret)) {
-          LOG_WARN("failed to probe fixed_4B col", K(ret));
-        }
-      } else if (ItemKT::KT_INT1B == get_key_type(vec_tc)) {
-        ret = probe_fixed_col<LeftVec, ResVec, uint8_t>(skip, bound, eval_flags, input_left_vec,
-                                                        res_vec, in_ctx, is_op_in);
-        if (OB_FAIL(ret)) {
-          LOG_WARN("failed to probe fixed_1B col", K(ret));
-        }
-      } else if (ItemKT::KT_STRING == get_key_type(vec_tc)) {
-        StrKey key;
-        const char *str_ptr = nullptr;
-        for (int32_t idx = begin; OB_SUCC(ret) && idx < end; ++idx) {
-          if (skip.at(idx) || eval_flags.at(idx)) {
-            continue;
-          }
-          if (OB_NOT_NULL(in_ctx)) {
-            input_left_vec->get_payload(idx, str_ptr, type_len);
-            key.make_key(in_ctx->hash_vals[idx], type_len, str_ptr);
-            ret = probe_item<ResVec, StrKey>(is_op_in, in_ctx, in_ctx->str_ht_,
-                                             idx, key, res_vec, eval_flags);
-            if (OB_FAIL(ret)) {
-              LOG_WARN("failed to process item", K(ret));
-            }
-          }
-        }
-      }
-    } else if (OB_SUCC(ret)) {
-      Row<ObDatum> tmp_row;
-      ObDatum left_datum(nullptr, 0, false);
-      for (int32_t left_idx = bound.start(); OB_SUCC(ret) && left_idx < bound.end(); ++left_idx) {
-        if (skip.at(left_idx) || eval_flags.at(left_idx)) {
-          continue;
-        }
-        // The situation "input_left_vec->is_null(idx)" has already been handled previously.
-        if (OB_NOT_NULL(in_ctx)) { // second we search in hashset.
-          if (std::is_same<LeftVec, ObFixedLengthBase>::value) {
-            left_datum.ptr_ = fixed_base_l_payload + left_idx * type_len;
-          } else {
-            input_left_vec->get_payload(left_idx, left_datum.ptr_, type_len);
-            left_datum.len_ = type_len;
-          }
-          if (OB_FAIL(tmp_row.set_elem(&left_datum))) {
-            LOG_WARN("failed to load left", K(ret));
-          } else {
-            if (OB_FAIL(in_ctx->exist_in_static_engine_hashset(in_ctx->hash_vals[left_idx], tmp_row, is_exist))) {
-              LOG_WARN("failed to search in hashset", K(ret));
-            } else {
-              set_vector_result(is_op_in,
-                                is_exist,
-                                in_ctx->ctx_hash_null_,
-                                res_vec,
-                                left_idx);
-              eval_flags.set(left_idx);
-            }
-          }
-        }
-      }
-    }
-  }
-  return ret;
-}
-
 int ObExprInOrNotIn::eval_in_with_subquery(const ObExpr &expr,
                                          ObEvalCtx &ctx,
                                          ObDatum &expr_datum)
@@ -2217,19 +1570,6 @@ void ObExprInOrNotIn::set_datum_result(const bool is_expr_in,
   }
 }
 
-template<typename ResVec>
-inline void ObExprInOrNotIn::set_vector_result(const bool is_expr_in,
-                                       const bool is_exist,
-                                       const bool param_exist_null,
-                                       ResVec *res_vec,
-                                       const int64_t &idx) {
-  if (!is_exist && param_exist_null) {
-    res_vec->set_null(idx);
-  } else {
-    res_vec->set_int(idx, !(is_expr_in ^ is_exist));
-  }
-}
-
 int ObExprInOrNotIn::setup_row(ObExpr **expr,
                                ObEvalCtx &ctx,
                                const bool is_iter, const
@@ -2296,36 +1636,22 @@ int ObExprInOrNotIn::build_right_hash_without_row(const int64_t in_id,
                                           ObEvalCtx &ctx,
                                           ObExecContext *exec_ctx,
                                           ObExprInCtx *&in_ctx,
-                                          bool &cnt_null,
-                                          bool use_colht)
+                                          bool &cnt_null)
 {
   int ret = OB_SUCCESS;
-  ObDatum *right = NULL;
   int64_t row_dimension = 1;
-  VecValueTypeClass vec_tc = expr.args_[1]->args_[0]->get_vec_value_tc();
-  common::ObCollationType cs_type = expr.args_[1]->args_[0]->datum_meta_.cs_type_;
-  constexpr bool cmp_end_space = false;
 
   if (OB_ISNULL(in_ctx = static_cast<ObExprInCtx *> (exec_ctx->get_expr_op_ctx(in_id)))) {
     if (OB_FAIL(exec_ctx->create_expr_op_ctx(in_id, in_ctx))) {
       LOG_WARN("failed to create operator ctx", K(ret));
-    } else if (OB_FAIL(in_ctx->init_hashset(vec_tc, right_param_num, use_colht, cs_type, cmp_end_space))) {
+    } else if (OB_FAIL(in_ctx->init_static_engine_hashset(right_param_num))) {
       LOG_WARN("failed to init hashset", K(ret));
     } else if (OB_FAIL(in_ctx->init_right_datums(right_param_num, row_dimension, exec_ctx))) {
       LOG_WARN("failed to init right datums", K(ret));
     } else if (OB_FAIL(in_ctx->init_cmp_funcs(expr.inner_func_cnt_, exec_ctx))) {
       LOG_WARN("failed to init cmp funcs", K(ret));
     } else if (OB_FAIL(build_hash_set(right_param_num, expr, ctx, exec_ctx, in_ctx, cnt_null))) {
-      LOG_WARN("failed to build hash set", K(ret), K(in_ctx->use_colht_));
-    }
-  } else if (in_ctx->need_rebuild_hashset(use_colht)) {
-    // Rebuild the hashset as needed when different operators in the plan contain
-    // the same 'in' expr but use different interfaces (row, batch, vector) for evaluation.
-    // Both eval_row() and eval_batch() for 'in' always use static_engine_hashset(ObHashSet).
-    if (OB_FAIL(in_ctx->init_hashset(vec_tc, right_param_num, use_colht, cs_type, cmp_end_space))) {
-      LOG_WARN("failed to reinit hashset", K(ret));
-    } else if (OB_FAIL(build_hash_set(right_param_num, expr, ctx, exec_ctx, in_ctx, cnt_null))) {
-      LOG_WARN("failed to rebuild hash set", K(ret), K(in_ctx->use_colht_));
+      LOG_WARN("failed to build hash set", K(ret));
     }
   }
   return ret;
@@ -2341,9 +1667,6 @@ int ObExprInOrNotIn::build_hash_set(
 {
   int ret = OB_SUCCESS;
   ObDatum *right = NULL;
-  VecValueTypeClass vec_tc = expr.args_[1]->args_[0]->get_vec_value_tc();
-  common::ObCollationType cs_type = expr.args_[1]->args_[0]->datum_meta_.cs_type_;
-  constexpr bool cmp_end_space = false;
 
   for (int i = 0; OB_SUCC(ret) && !in_ctx->is_hash_calc_disabled() && i < right_param_num; ++i) {
     if (OB_ISNULL(expr.args_[1]->args_[i])) {
@@ -2375,33 +1698,7 @@ int ObExprInOrNotIn::build_hash_set(
           in_ctx->cmp_functions_[i] = (void *)(expr.args_[1]->args_[i]->basic_funcs_->null_first_cmp_);
         }
       }
-      // Use specific hashset for some fixed length type and string type
-      if (OB_SUCC(ret) && in_ctx->use_colht_) {
-        uint64_t hash_val;
-        if (is_support_fixed_key_type(vec_tc)) {
-          uint64_t key;
-          if (ItemKT::KT_INT4B == get_key_type(vec_tc)) {
-            key = static_cast<uint64_t>(right->get_uint32());
-          } else if (ItemKT::KT_INT1B == get_key_type(vec_tc)) {
-            key = static_cast<uint64_t>(right->get_uint8());
-          } else {
-            key = right->get_uint();
-          }
-          if (OB_FAIL(((ObExprHashFuncType)in_ctx->hash_func_buff_[0])(*right, 0, hash_val))) {
-            LOG_WARN("failed to calculate the hash value", K(ret));
-          } else if (OB_FAIL(in_ctx->int_ht_.insert(hash_val, key))) {
-            LOG_WARN("failed to add int to hashset", K(ret));
-          }
-        } else if (ItemKT::KT_STRING == get_key_type(vec_tc)) {
-          StrKey key(right->get_string());
-          hash_val = ObCharset::hash(cs_type, key.ptr_, key.len_,
-                                     0, cmp_end_space, ObMurmurHash::hash);
-          key.hash_ = hash_val;
-          if (OB_FAIL(in_ctx->str_ht_.insert(hash_val, key))) {
-            LOG_WARN("failed to add int to hashset", K(ret));
-          }
-        }
-      } else {
+      {
         Row<ObDatum> tmp_row;
         // Here all hash functions and cmp functions have been loaded, set the function pointers of tmp_row
         if (OB_FAIL(ret)) {
@@ -2447,17 +1744,6 @@ void ObExprInOrNotIn::check_left_can_cmp_mem(const ObExpr &expr,
   UNUSED(datum);
   can_cmp_mem = can_cmp_mem && T_OP_IN == expr.type_ && 2 == expr.inner_func_cnt_ 
                 && ObBitVector::bit_op_zero(skip, eval_flags, batch_size, 
-                               [](const uint64_t l, const uint64_t r) { return (l | r); });
-}
-
-void ObExprInOrNotIn::check_left_can_cmp_mem(const ObExpr &expr,
-                                             const ObBitVector &skip, 
-                                             const ObBitVector &eval_flags, 
-                                             const EvalBound &bound, 
-                                             bool &can_cmp_mem)
-{
-  can_cmp_mem = can_cmp_mem && 2 == expr.inner_func_cnt_ 
-                && ObBitVector::bit_op_zero(skip, eval_flags, bound, 
                                [](const uint64_t l, const uint64_t r) { return (l | r); });
 }
 

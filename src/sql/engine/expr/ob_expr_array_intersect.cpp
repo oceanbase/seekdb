@@ -47,14 +47,6 @@ int ObExprArrayIntersect::eval_array_intersect_batch(const ObExpr &expr,
   return eval_array_set_operation_batch(expr, ctx, skip, batch_size, INTERSECT);
 }
 
-int ObExprArrayIntersect::eval_array_intersect_vector(const ObExpr &expr, 
-                          ObEvalCtx &ctx,
-                          const ObBitVector &skip, 
-                          const EvalBound &bound)
-{
-  return eval_array_set_operation_vector(expr, ctx, skip, bound, INTERSECT);
-}
-
 int ObExprArrayIntersect::cg_expr(ObExprCGCtx &expr_cg_ctx,
                           const ObRawExpr &raw_expr,
                           ObExpr &rt_expr) const
@@ -63,7 +55,6 @@ int ObExprArrayIntersect::cg_expr(ObExprCGCtx &expr_cg_ctx,
   UNUSED(raw_expr);
   rt_expr.eval_func_ = eval_array_intersect;
   rt_expr.eval_batch_func_ = eval_array_intersect_batch;
-  rt_expr.eval_vector_func_ = eval_array_intersect_vector;   
   return OB_SUCCESS;
 }
 

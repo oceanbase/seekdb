@@ -60,7 +60,8 @@ public:
   : ObPxCoordSpec(alloc, type),
     all_exprs_(alloc),
     sort_collations_(alloc),
-    sort_cmp_funs_(alloc)
+    sort_cmp_funs_(alloc),
+    is_old_unblock_mode_(true)
   {}
   ~ObPxMSCoordSpec() {}
   virtual const common::ObIArray<ObExpr *> *get_all_exprs() const override { return &all_exprs_; }
@@ -68,6 +69,7 @@ public:
   ExprFixedArray all_exprs_;
   ObSortCollations sort_collations_;
   ObSortFuncs sort_cmp_funs_;
+  bool is_old_unblock_mode_;
 };
 
 class ObPxMSCoordOp : public ObPxCoordOp
@@ -166,8 +168,6 @@ private:
   ObInitChannelPieceMsgP init_channel_piece_msg_proc_;
   ObReportingWFPieceMsgP reporting_wf_piece_msg_proc_;
   ObOptStatsGatherPieceMsgP opt_stats_gather_piece_msg_proc_;
-  ObSPWinFuncPXPieceMsgP sp_winfunc_px_piece_msg_proc_;
-  ObRDWinFuncPXPieceMsgP rd_winfunc_px_piece_msg_proc_;
   ObJoinFilterCountRowPieceMsgP join_filter_count_row_piece_msg_proc_;
   // Store the current row of each run in merge sort
   ObArray<ObChunkDatumStore::LastStoredRow*> store_rows_;

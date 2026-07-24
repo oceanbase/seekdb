@@ -117,17 +117,22 @@ public:
   }
   OB_INLINE bool need_fill_group_idx() const
   { return get_group_idx_col_index() != common::OB_INVALID_INDEX; }
-  OB_INLINE void set_is_advance_scan()
+  OB_INLINE int64_t get_ss_rowkey_prefix_cnt() const
+  { return ss_rowkey_prefix_cnt_; }
+  OB_INLINE bool is_skip_scan() const
+  { return ss_rowkey_prefix_cnt_ > 0; }
+  OB_INLINE void set_is_advance_skip_scan()
   {
-    is_advance_scan_ = true;
+    is_advance_skip_scan_ = true;
   }
-  OB_INLINE bool is_advance_scan() const
+  OB_INLINE bool is_advance_skip_scan() const
   {
-    return is_advance_scan_;
+    return is_advance_skip_scan_;
   }
   OB_INLINE void disable_blockscan()
   {
     pd_storage_flag_.set_blockscan_pushdown(false);
+    is_delete_insert_ = false;
   }
   OB_INLINE bool enable_pd_blockscan() const
   { return pd_storage_flag_.is_blockscan_pushdown(); }
@@ -136,6 +141,7 @@ public:
   OB_INLINE void disable_pd_filter()
   {
     pd_storage_flag_.set_filter_pushdown(false);
+    is_delete_insert_ = false;
   }
   OB_INLINE void disable_pd_aggregate()
   { pd_storage_flag_.set_aggregate_pushdown(false); }
@@ -162,8 +168,6 @@ public:
   { pd_storage_flag_.set_use_global_iter_pool(false); }
   OB_INLINE void set_tablet_handle(const ObTabletHandle *tablet_handle)
   { tablet_handle_ = tablet_handle; }
-  OB_INLINE bool use_new_format() const
-  { return op_->enable_rich_format_; }
   OB_INLINE int64_t get_io_read_batch_size() const
   { return table_scan_opt_.io_read_batch_size_; }
   OB_INLINE int64_t get_io_read_gap_size() const
@@ -201,13 +205,11 @@ public:
   bool limit_prefetch_;
   bool is_mds_query_;
   bool is_non_unique_local_index_;
-  bool is_advance_scan_;
+  bool is_advance_skip_scan_;
+  int64_t ss_rowkey_prefix_cnt_;
   sql::ObStoragePushdownFlag pd_storage_flag_;
   ObTableScanOption table_scan_opt_;
-  uint64_t auto_split_filter_type_;
-  const sql::ObExpr *auto_split_filter_;
-  sql::ExprFixedArray *auto_split_params_;
-  bool is_tablet_spliting_;
+  bool is_delete_insert_;
   const bool *need_update_tablet_param_;
 };
 
@@ -228,7 +230,8 @@ public:
   int init_merge_param(const uint64_t table_id,
                        const common::ObTabletID &tablet_id,
                        const ObITableReadInfo &read_info,
-                       const bool is_multi_version_merge = false);
+                       const bool is_multi_version_merge = false,
+                       const bool is_delete_insert = false);
   // used for get unique index conflict row
   int init_dml_access_param(const ObRelativeTable &table,
                             const ObITableReadInfo &rowkey_read_info,
@@ -251,6 +254,7 @@ public:
   OB_INLINE bool is_use_global_iter_pool() const { return iter_param_.is_use_global_iter_pool(); }
 private:
   int check_valid_before_query_init(const ObTableParam &table_param, const ObTabletHandle &tablet_handle);
+  int get_prefix_cnt_for_skip_scan(const ObTableScanParam &scan_param, ObTableIterParam &iter_param);
 public:
   DECLARE_TO_STRING;
 public:

@@ -25,23 +25,17 @@ namespace oceanbase
 using namespace common;
 namespace sql
 {
-#define SPLIT_PART_FUN_FORMAT_DISPATCH(START_PART_ARG_VEC_TYEP,                \
-                                       END_PART_ARG_VEC_TYPE)                  \
-  ret = calc_split_part_expr_dispatch<START_PART_ARG_VEC_TYEP,                 \
-                                            END_PART_ARG_VEC_TYPE>(            \
-                  expr, ctx, cs_type, skip, bound, eval_flags, res_vec,        \
-                  str_vec, delimiter_vec,                                      \
-                  static_cast<START_PART_ARG_VEC_TYEP *>(start_part_vec),      \
-                  static_cast<END_PART_ARG_VEC_TYPE *>(end_part_vec));
-
 ObExprSplitPart::ObExprSplitPart(ObIAllocator &alloc)
-    : ObStringExprOperator(alloc, T_FUN_SYS_SPLIT_PART, N_SPLIT_PART, MORE_THAN_TWO, VALID_FOR_GENERATED_COL)
+    : ObStringExprOperator(alloc, T_FUN_SYS_SPLIT_PART, N_SPLIT_PART, MORE_THAN_TWO,
+                           VALID_FOR_GENERATED_COL)
 {
   need_charset_convert_ = false;
 }
+
 ObExprSplitPart::~ObExprSplitPart()
 {
 }
+
 int ObExprSplitPart::calc_result_typeN(ObExprResType &type,
                                       ObExprResType *types,
                                       int64_t param_num,
@@ -92,7 +86,6 @@ int ObExprSplitPart::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr
   UNUSED(expr_cg_ctx);
   UNUSED(raw_expr);
   rt_expr.eval_func_ = calc_split_part_expr;
-  rt_expr.eval_vector_func_ = calc_split_part_expr_vec;
   return ret;
 }
 
@@ -168,143 +161,6 @@ int ObExprSplitPart::calc_split_part_expr(const ObExpr &expr, ObEvalCtx &ctx,
   return ret;
 }
 
-template <typename StartPartVecType, typename EndPartVecType>
-int ObExprSplitPart::calc_split_part_expr_dispatch(const ObExpr &expr,
-                                                    ObEvalCtx &ctx,
-                                                    ObCollationType cs_type,
-                                                    const ObBitVector &skip,
-                                                    const EvalBound &bound,
-                                                    ObBitVector &eval_flags,
-                                                    ObIVector *res_vec,
-                                                    ObIVector *str_vec,
-                                                    ObIVector *delimiter_vec,
-                                                    StartPartVecType *start_part_vec,
-                                                    EndPartVecType *end_part_vec)
-{
-  int ret = OB_SUCCESS;
-  ObEvalCtx::TempAllocGuard alloc_guard(ctx);
-  ObIAllocator &tmp_alloc = alloc_guard.get_allocator();
-  for (int64_t i = bound.start(); OB_SUCC(ret) && i < bound.end(); i++) {
-    if (skip.at(i) || eval_flags.at(i)) {
-      continue;
-    } else if (str_vec->is_null(i) ||
-             delimiter_vec->is_null(i) ||
-             start_part_vec->is_null(i) ||
-             end_part_vec->is_null(i)) {
-      res_vec->set_null(i);
-    } else {
-      int64_t start_part = start_part_vec->get_int(i) == 0 ? 1 : start_part_vec->get_int(i);
-      int64_t end_part = 3 == expr.arg_cnt_ ? start_part : end_part_vec->get_int(i);
-      if (!ob_is_text_tc(expr.args_[0]->datum_meta_.type_)) {
-        bool null_res = false;
-        ObString res_str;
-        if (OB_FAIL(calc_split_part(cs_type, str_vec->get_string(i),
-                                    delimiter_vec->get_string(i),
-                                    start_part,
-                                    end_part,
-                                    null_res,
-                                    res_str))) {
-          LOG_WARN("clac split part fialed", K(ret));
-        } else {
-          res_vec->set_string(i, res_str);
-        }
-      } else {
-        ObString str;
-        ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, res_vec, i);
-        if (OB_FAIL(ObTextStringHelper::get_string<ObVectorBase>(
-                expr, tmp_alloc, 0, i, static_cast<ObVectorBase *>(str_vec),
-                str))) {
-          LOG_WARN("get full text string failed ", K(ret));
-        } else {
-          bool null_res = false;
-          ObString res_str;
-          if (OB_FAIL(calc_split_part(cs_type, str,
-                                      delimiter_vec->get_string(i),
-                                      start_part,
-                                      end_part,
-                                      null_res,
-                                      res_str))) {
-            LOG_WARN("clac split part fialed", K(ret));
-          } else {
-            if (OB_FAIL(output_result.init_with_batch_idx(res_str.length(), i))) {
-              LOG_WARN("init TextString result failed", K(ret));
-            } else {
-              output_result.append(res_str);
-              output_result.set_result();
-            }
-          }
-        }
-      }
-    }
-    eval_flags.set(i);
-  }
-  return ret;
-}
-
-int ObExprSplitPart::calc_split_part_expr_vec(const ObExpr &expr,
-                                              ObEvalCtx &ctx,
-                                              const ObBitVector &skip,
-                                              const EvalBound &bound)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("calc 1th arg failed", K(ret), K(bound));
-  } else if (OB_FAIL(expr.args_[1]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("calc 2th arg failed", K(ret), K(bound));
-  } else if (OB_FAIL(expr.args_[2]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("calc 3th arg failed", K(ret), K(bound));
-  } else if (4 == expr.arg_cnt_ && OB_FAIL(expr.args_[3]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("calc 4th arg failed", K(ret), K(bound));
-  } else {
-    ObCollationType cs_type = expr.args_[0]->datum_meta_.cs_type_;
-    ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-    ObIVector *res_vec = expr.get_vector(ctx);
-    ObIVector *str_vec = expr.args_[0]->get_vector(ctx);
-    ObIVector *delimiter_vec = expr.args_[1]->get_vector(ctx);
-    ObIVector *start_part_vec = expr.args_[2]->get_vector(ctx);
-    ObIVector *end_part_vec = 4 == expr.arg_cnt_ ? expr.args_[3]->get_vector(ctx) : start_part_vec;
-    VectorFormat start_idx_format = expr.args_[2]->get_format(ctx);
-    VectorFormat end_idx_format = 4 == expr.arg_cnt_ ? expr.args_[3]->get_format(ctx) : start_idx_format;
-    if (start_idx_format == VEC_FIXED && end_idx_format == VEC_FIXED) {
-      SPLIT_PART_FUN_FORMAT_DISPATCH(
-          ObFixedLengthFormat<RTCType<VEC_TC_INTEGER>>,
-          ObFixedLengthFormat<RTCType<VEC_TC_INTEGER>>);
-    } else if (start_idx_format == VEC_FIXED &&
-               end_idx_format == VEC_UNIFORM_CONST) {
-      SPLIT_PART_FUN_FORMAT_DISPATCH(
-          ObFixedLengthFormat<RTCType<VEC_TC_INTEGER>>, ObUniformFormat<true>);
-    } else if (start_idx_format == VEC_FIXED && end_idx_format == VEC_UNIFORM) {
-      SPLIT_PART_FUN_FORMAT_DISPATCH(
-          ObFixedLengthFormat<RTCType<VEC_TC_INTEGER>>, ObUniformFormat<false>);
-    } else if (start_idx_format == VEC_UNIFORM_CONST &&
-               end_idx_format == VEC_FIXED) {
-      SPLIT_PART_FUN_FORMAT_DISPATCH(
-          ObUniformFormat<true>, ObFixedLengthFormat<RTCType<VEC_TC_INTEGER>>);
-    } else if (start_idx_format == VEC_UNIFORM_CONST &&
-               end_idx_format == VEC_UNIFORM_CONST) {
-      SPLIT_PART_FUN_FORMAT_DISPATCH(ObUniformFormat<true>,
-                                     ObUniformFormat<true>);
-    } else if (start_idx_format == VEC_UNIFORM_CONST &&
-               end_idx_format == VEC_UNIFORM) {
-      SPLIT_PART_FUN_FORMAT_DISPATCH(ObUniformFormat<true>,
-                                     ObUniformFormat<false>);
-    } else if (start_idx_format == VEC_UNIFORM && end_idx_format == VEC_FIXED) {
-      SPLIT_PART_FUN_FORMAT_DISPATCH(
-          ObUniformFormat<false>, ObFixedLengthFormat<RTCType<VEC_TC_INTEGER>>);
-    } else if (start_idx_format == VEC_UNIFORM &&
-               end_idx_format == VEC_UNIFORM_CONST) {
-      SPLIT_PART_FUN_FORMAT_DISPATCH(ObUniformFormat<false>,
-                                     ObUniformFormat<true>);
-    } else if (start_idx_format == VEC_UNIFORM &&
-               end_idx_format == VEC_UNIFORM) {
-      SPLIT_PART_FUN_FORMAT_DISPATCH(ObUniformFormat<false>,
-                                     ObUniformFormat<false>);
-    } else {
-      SPLIT_PART_FUN_FORMAT_DISPATCH(ObVectorBase, ObVectorBase);
-    }
-  }
-  return ret;
-}
 DEF_SET_LOCAL_SESSION_VARS(ObExprSplitPart, raw_expr) {
   int ret = OB_SUCCESS;
   SET_LOCAL_SYSVAR_CAPACITY(1);

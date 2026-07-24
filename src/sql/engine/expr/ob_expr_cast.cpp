@@ -16,11 +16,11 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_cast.h"
+#include "sql/engine/expr/ob_datum_cast.h"
 #include "share/geo/ob_geometry_cast.h"
 #include "sql/engine/expr/ob_expr_subquery_ref.h"
 #include "sql/engine/subquery/ob_subplan_filter_op.h"
 #include "pl/ob_pl_resolver.h"
-#include "sql/engine/expr/vector_cast/vector_cast.h"
 
 // from sql_parser_base.h
 #define DEFAULT_STR_LENGTH -1
@@ -37,6 +37,7 @@ ObExprCast::ObExprCast(ObIAllocator &alloc)
                                              2,
                                              VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
 {
+  extra_serialize_ = 0;
   disable_operand_auto_cast();
 }
 
@@ -207,7 +208,8 @@ int ObExprCast::get_cast_string_len(ObExprResType &type1,
   return ret;
 }
 
-// Resolve the cast mode for an explicit cast. Implicit cast mode is set during type deduction.
+// this is only for engine 3.0. old engine will get cast mode from expr_ctx.
+// only for explicit cast, implicit cast's cm is setup while deduce type(in type_ctx.cast_mode_)
 int ObExprCast::get_explicit_cast_cm(const ObExprResType &src_type,
                               const ObExprResType &dst_type,
                               const ObSQLSessionInfo &session,
@@ -470,7 +472,7 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
       // eg: select cast(18446744073709551615 as signed) -> -1
       //     because exprlicit case need CM_NO_RANGE_CHECK
       type_ctx.set_cast_mode(explicit_cast_cm & ~CM_EXPLICIT_CAST);
-      // Let the source or destination helper cast perform the conversion when needed.
+      // in engine 3.0, let implicit cast do the real cast
       bool need_extra_cast_for_src_type = false;
       bool need_extra_cast_for_dst_type = false;
       ObRawExprUtils::need_extra_cast(type1, type, need_extra_cast_for_src_type,
@@ -488,7 +490,8 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
         if (ob_is_enumset_tc(type1.get_type())) {
           // For enum/set type, need to check whether warp to string is required.
           if (OB_FAIL(ObRawExprUtils::need_wrap_to_string(type1, type1.get_calc_type(),
-                                          false, need_wrap, true))) {
+                                          false, need_wrap,
+                                          exec_ctx->support_enum_set_type_subschema(*session)))) {
             LOG_WARN("need_wrap_to_string failed", K(ret), K(type1));
           } else if (!need_wrap) {
             // need_wrap is false, set calc_type to type1 itself.
@@ -745,19 +748,6 @@ int ObExprCast::cg_expr(ObExprCGCtx &op_cg_ctx,
                                                       cast_mode, *(op_cg_ctx.allocator_),
                                                       just_eval_arg, rt_expr))) {
           LOG_WARN("choose_cast_func failed", K(ret));
-        }
-      }
-      if (OB_SUCC(ret)) {
-        int tmp_ret = OB_E(EventTable::EN_ENABLE_VECTOR_CAST) OB_SUCCESS;
-        rt_expr.eval_vector_func_ =
-          tmp_ret == OB_SUCCESS ?
-            VectorCasterUtil::get_vector_cast(rt_expr.args_[0]->get_vec_value_tc(),
-                                              rt_expr.get_vec_value_tc(), just_eval_arg,
-                                              rt_expr.eval_func_, cast_mode) :
-            nullptr;
-        // Some VEC_TC_XXXX classes still have some types not yet implemented for vectorization, and they still use the non-vectorized interface
-        if (ObTinyTextType == in_type || ObTinyTextType == out_type) {
-          rt_expr.eval_vector_func_ = nullptr;
         }
       }
     }
