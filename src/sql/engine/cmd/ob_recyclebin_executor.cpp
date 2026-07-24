@@ -22,7 +22,6 @@
 #include "sql/resolver/ddl/ob_purge_stmt.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/cmd/ob_variable_set_executor.h"
-#include "observer/ob_inner_sql_connection_pool.h"
 namespace oceanbase
 {
 using namespace common;

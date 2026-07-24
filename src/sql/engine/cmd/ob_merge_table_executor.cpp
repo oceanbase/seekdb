@@ -23,7 +23,6 @@
 #include "sql/session/ob_sql_session_info.h"
 #include "common/mysqlclient/ob_isql_client.h"
 #include "observer/ob_inner_sql_connection.h"
-#include "observer/ob_inner_sql_connection_pool.h"
 
 namespace oceanbase
 {
@@ -36,7 +35,6 @@ int ObMergeTableExecutor::execute(ObExecContext &ctx, ObMergeTableStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = ctx.get_my_session();
-  ObInnerSQLConnectionPool *pool = NULL;
   ObInnerSQLConnection *conn = NULL;
   
   bool need_tx = false;
@@ -48,11 +46,7 @@ int ObMergeTableExecutor::execute(ObExecContext &ctx, ObMergeTableStmt &stmt)
   } else if (OB_ISNULL(ctx.get_sql_proxy())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null", K(ret));
-  } else if (OB_ISNULL(pool = static_cast<ObInnerSQLConnectionPool *>(
-                            ctx.get_sql_proxy()->get_pool()))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("connection pool is null", K(ret));
-  } else if (OB_FAIL(pool->acquire_spi_conn(session, conn))) {
+  } else if (OB_FAIL(ObInnerSQLConnection::create_spi(session, conn))) {
     LOG_WARN("failed to acquire inner sql connection", K(ret));
   } else {
   }
@@ -143,7 +137,8 @@ int ObMergeTableExecutor::execute(ObExecContext &ctx, ObMergeTableStmt &stmt)
   }
 
   if (OB_NOT_NULL(conn)) {
-    ctx.get_sql_proxy()->close(conn, ret);
+    conn->unref();
+    conn = NULL;
   }
 
   return ret;

@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_stats_estimator.h"
-#include "observer/ob_inner_sql_connection_pool.h"
+#include "observer/ob_inner_sql_connection.h"
 #include "sql/optimizer/ob_opt_selectivity.h"
 
 namespace oceanbase
@@ -420,15 +420,14 @@ int ObStatsEstimator::do_estimate(const ObOptStatGatherParam &gather_param,
     }
   }
   if (OB_SUCC(ret)) {
-    observer::ObInnerSQLConnectionPool *pool =
-                            static_cast<observer::ObInnerSQLConnectionPool*>(sql_proxy->get_pool());
-    sqlclient::ObISQLConnection *conn = NULL;
+    observer::ObInnerSQLConnection *conn = NULL;
     session->set_inner_session();
     //
     session->set_autocommit(true);
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      if (OB_FAIL(pool->acquire(session, conn))) {
+      if (OB_FAIL(observer::ObInnerSQLConnection::create_with_session(
+                      session, conn))) {
         LOG_WARN("failed to acquire inner connection", K(ret));
       } else if (OB_ISNULL(conn)) {
         ret = OB_ERR_UNEXPECTED;
@@ -468,10 +467,9 @@ int ObStatsEstimator::do_estimate(const ObOptStatGatherParam &gather_param,
           ret = OB_SUCCESS;
         }
       }
-      int tmp_ret = OB_SUCCESS;
-      if (OB_SUCCESS != (tmp_ret = sql_proxy->close(conn, true))) {
-        LOG_WARN("close result set failed", K(ret), K(tmp_ret));
-        ret = COVER_SUCC(tmp_ret);
+      if (OB_NOT_NULL(conn)) {
+        conn->unref();
+        conn = NULL;
       }
     }
     int tmp_ret = OB_SUCCESS;

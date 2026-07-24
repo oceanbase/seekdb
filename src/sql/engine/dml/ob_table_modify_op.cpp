@@ -18,7 +18,7 @@
 
 #include "ob_table_modify_op.h"
 #include "sql/engine/dml/ob_dml_service.h"
-#include "observer/ob_inner_sql_connection_pool.h"
+#include "observer/ob_inner_sql_connection.h"
 
 namespace oceanbase
 {
@@ -670,9 +670,7 @@ ObTableModifyOp::ObTableModifyOp(ObExecContext &ctx,
     need_close_conn_(false),
     iter_end_(false),
     dml_rtctx_(eval_ctx_, ctx, *this),
-    is_error_logging_(false),
     execute_single_row_(false),
-    err_log_rt_def_(),
     dml_modify_rows_(ctx.get_allocator()),
     last_store_row_(),
     saved_session_(NULL)
@@ -994,9 +992,8 @@ int ObTableModifyOp::calc_single_table_loc()
 int ObTableModifyOp::open_inner_conn()
 {
   int ret = OB_SUCCESS;
-  ObInnerSQLConnectionPool *pool = NULL;
   ObSQLSessionInfo *session = NULL;
-  ObISQLConnection *conn;
+  ObInnerSQLConnection *conn = NULL;
   if (OB_ISNULL(sql_proxy_ = ctx_.get_sql_proxy())) {
     ret = OB_NOT_INIT;
     LOG_WARN("sql proxy is NULL", K(ret));
@@ -1005,12 +1002,7 @@ int ObTableModifyOp::open_inner_conn()
     LOG_WARN("session is NULL", K(ret));
   } else if (NULL != session->get_inner_conn()) {
     // do nothing.
-  } else if (OB_ISNULL(pool = static_cast<ObInnerSQLConnectionPool*>(sql_proxy_->get_pool()))) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("connection pool is NULL", K(ret));
-  } else if (INNER_POOL != pool->get_type()) {
-    LOG_WARN("connection pool type is not inner", K(ret), K(pool->get_type()));
-  } else if (OB_FAIL(pool->acquire(session, conn))) {
+  } else if (OB_FAIL(ObInnerSQLConnection::create_with_session(session, conn))) {
     LOG_WARN("failed to acquire inner connection", K(ret));
   } else {
     /**
@@ -1035,11 +1027,20 @@ int ObTableModifyOp::close_inner_conn()
   int ret = OB_SUCCESS;
   if (need_close_conn_) {
     ObSQLSessionInfo *session = ctx_.get_my_session();
-    if (OB_ISNULL(sql_proxy_) || OB_ISNULL(session)) {
+    if (OB_ISNULL(session)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("sql_proxy of session is NULL", K(ret), KP(sql_proxy_), KP(session));
+      LOG_WARN("session is NULL", K(ret), KP(session));
+      if (OB_NOT_NULL(inner_conn_)) {
+        inner_conn_->unref();
+      }
+    } else if (OB_ISNULL(session->get_inner_conn())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("inner connection is NULL", K(ret));
+      if (OB_NOT_NULL(inner_conn_)) {
+        inner_conn_->unref();
+      }
     } else {
-      OZ(sql_proxy_->close(static_cast<ObInnerSQLConnection *>(session->get_inner_conn()), true));
+      static_cast<ObInnerSQLConnection *>(session->get_inner_conn())->unref();
       OX(session->set_inner_conn(NULL));
     }
     need_close_conn_ = false;
@@ -1222,11 +1223,6 @@ int ObTableModifyOp::inner_get_next_row()
         LOG_WARN("write row to das failed", K(ret));
       } else if (OB_FAIL(discharge_das_write_buffer())) {
         LOG_WARN("discharge das write buffer failed", K(ret));
-      } else if (is_error_logging_ && err_log_rt_def_.first_err_ret_ != OB_SUCCESS) {
-        clear_evaluated_flag();
-        err_log_rt_def_.curr_err_log_record_num_++;
-        err_log_rt_def_.reset();
-        continue;
       } else if (MY_SPEC.is_returning_) {
         break;
       }

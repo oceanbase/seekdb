@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/vector_index/ob_vector_refresh_idx_transaction.h"
-#include "observer/ob_inner_sql_connection_pool.h"
+#include "observer/ob_inner_sql_connection.h"
 
 namespace oceanbase
 {
@@ -97,6 +97,8 @@ ObVectorRefreshIdxTransaction::~ObVectorRefreshIdxTransaction()
     if (OB_FAIL(end(OB_SUCCESS == get_errno()))) {
       LOG_WARN("fail to end", KR(ret));
     }
+  } else {
+    close();
   }
 }
 
@@ -110,31 +112,38 @@ int ObVectorRefreshIdxTransaction::connect(ObSQLSessionInfo *session_info, ObISQ
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), KP(session_info), KP(sql_client));
   } else {
-    ObInnerSQLConnectionPool *pool = nullptr;
     ObInnerSQLConnection *conn = nullptr;
-    if (OB_ISNULL(pool = static_cast<ObInnerSQLConnectionPool *>(sql_client->get_pool()))) {
+    if (OB_ISNULL(sql_client->get_pool())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected connection pool", KR(ret));
-    } else if (OB_FAIL(pool->acquire_spi_conn(session_info, conn))) {
-      LOG_WARN("acquire connection failed", KR(ret), K(pool), K(session_info));
+    } else if (OB_FAIL(ObInnerSQLConnection::create_spi(session_info, conn))) {
+      LOG_WARN("create connection failed", KR(ret), K(session_info));
     } else if (OB_ISNULL(conn)) {
       ret = OB_INNER_STAT_ERROR;
-      LOG_WARN("connection can not be NULL", KR(ret), K_(pool));
+      LOG_WARN("connection can not be NULL", KR(ret));
     } else if (!sql_client->is_active()) {
       ret = OB_INACTIVE_SQL_CLIENT;
       LOG_WARN("inactive sql client", KR(ret));
-      int tmp_ret = pool->release(conn, OB_SUCCESS == ret);
-      if (OB_SUCCESS != tmp_ret) {
-        LOG_WARN("release connection failed", K(tmp_ret));
-      }
+      conn->unref();
       conn = nullptr;
     } else {
       sql_client_ = sql_client;
-      pool_ = pool;
+      pool_ = sql_client->get_pool();
       conn_ = conn;
     }
   }
   return ret;
+}
+
+void ObVectorRefreshIdxTransaction::close()
+{
+  if (OB_NOT_NULL(conn_)) {
+    static_cast<ObInnerSQLConnection *>(conn_)->unref();
+  }
+  conn_ = nullptr;
+  pool_ = nullptr;
+  sql_client_ = nullptr;
+  errno_ = OB_SUCCESS;
 }
 
 int ObVectorRefreshIdxTransaction::start_transaction()

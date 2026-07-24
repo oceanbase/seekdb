@@ -80,11 +80,11 @@ int ObLockContext::init(ObExecContext &ctx,
 
       ObTransID parent_tx_id;
       parent_tx_id = session_info->get_tx_id();
-      OZ (session_info->begin_autonomous_session(saved_session_));
+      OZ (session_info->begin_inner_tx_session(saved_session_));
       OX (have_saved_session_ = true);
       OZ (ObSqlTransControl::explicit_start_trans(ctx, false));
       if (OB_SUCC(ret)) {
-        has_autonomous_tx_ = true;
+        has_inner_tx_ = true;
       }
       if (OB_SUCC(ret) && parent_tx_id.is_valid()) {
         (void) register_for_deadlock_(*session_info, parent_tx_id);
@@ -107,7 +107,7 @@ int ObLockContext::destroy(ObExecContext &ctx,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("session_info is null in ObExecContext", K(ret));
   } else {
-    if (has_autonomous_tx_) {
+    if (has_inner_tx_) {
       if (OB_TMP_FAIL(implicit_end_trans_(*session_info, ctx, is_rollback))) {
         LOG_ERROR("failed to rollback trans", K(tmp_ret));
         ret = COVER_SUCC(tmp_ret);
@@ -118,7 +118,7 @@ int ObLockContext::destroy(ObExecContext &ctx,
       ret = COVER_SUCC(tmp_ret);
     }
     if (have_saved_session_) {
-      if (OB_TMP_FAIL(session_info->end_autonomous_session(saved_session_))) {
+      if (OB_TMP_FAIL(session_info->end_inner_tx_session(saved_session_))) {
         LOG_ERROR("failed to switch trans", K(tmp_ret));
         ret = COVER_SUCC(tmp_ret);
       }
@@ -207,10 +207,10 @@ void ObLockContext::register_for_deadlock_(ObSQLSessionInfo &session_info,
       LOG_WARN("get query timeout failed", K(parent_tx_id), K(child_tx_id), KR(ret));
     } else {
       if (OB_FAIL(ObTransDeadlockDetectorAdapter::
-                  autonomous_register_to_deadlock(parent_tx_id,
-                                                  child_tx_id,
-                                                  query_timeout))) {
-        LOG_WARN("autonomous register to deadlock failed", K(parent_tx_id),
+                  inner_tx_register_to_deadlock(parent_tx_id,
+                                                child_tx_id,
+                                                query_timeout))) {
+        LOG_WARN("inner transaction register to deadlock failed", K(parent_tx_id),
                  K(child_tx_id), KR(ret));
       }
     }
@@ -224,21 +224,20 @@ int ObLockContext::open_inner_conn_()
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = nullptr;
-  common::ObMySQLProxy *sql_proxy = nullptr;
   observer::ObInnerSQLConnection *inner_conn = nullptr;
 
   if (OB_ISNULL(my_exec_ctx_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("ObExecContext in ObLockFuncContext is null", K(ret));
-  } else if (OB_ISNULL(session = my_exec_ctx_->get_my_session()) || OB_ISNULL(sql_proxy = my_exec_ctx_->get_sql_proxy())) {
+  } else if (OB_ISNULL(session = my_exec_ctx_->get_my_session())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("session or sql_proxy in ObExecContext is NULL", K(ret), KP(session), KP(sql_proxy));
+    LOG_WARN("session in ObExecContext is NULL", K(ret), KP(session));
   } else if (OB_NOT_NULL(inner_conn_) || OB_NOT_NULL(store_inner_conn_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("inner_conn_ or store_inner_conn_ should be null", K(ret), KP(inner_conn_), KP(store_inner_conn_));
   } else if (FALSE_IT(store_inner_conn_ = static_cast<observer::ObInnerSQLConnection *>(session->get_inner_conn()))) {
   } else if (FALSE_IT(session->set_inner_conn(nullptr))) {
-  } else if (OB_FAIL(ObInnerConnectionLockUtil::create_inner_conn(session, sql_proxy, inner_conn))) {
+  } else if (OB_FAIL(ObInnerConnectionLockUtil::create_inner_conn(session, inner_conn))) {
     LOG_WARN("create inner connection failed", K(ret), KPC(session));
   } else if (OB_ISNULL(inner_conn)) {
     ret = OB_ERR_UNEXPECTED;
@@ -261,17 +260,16 @@ int ObLockContext::close_inner_conn_()
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = nullptr;
-  common::ObMySQLProxy *sql_proxy = nullptr;
 
   if (OB_ISNULL(my_exec_ctx_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("ObExecContext in ObLockFuncContext is null", K(ret));
   } else {
-    if (OB_ISNULL(sql_proxy = my_exec_ctx_->get_sql_proxy()) || OB_ISNULL(inner_conn_)) {
+    if (OB_ISNULL(inner_conn_)) {
       ret = OB_NOT_INIT;
-      LOG_WARN("sql_proxy or inner_conn of session is NULL", K(ret), KP(sql_proxy), KP(session), KP(inner_conn_));
+      LOG_WARN("inner_conn of session is NULL", K(ret), KP(inner_conn_));
     } else {
-      OZ (sql_proxy->close(inner_conn_, true));
+      inner_conn_->unref();
     }
     if (OB_ISNULL(session = my_exec_ctx_->get_my_session())) {
       ret = OB_NOT_INIT;

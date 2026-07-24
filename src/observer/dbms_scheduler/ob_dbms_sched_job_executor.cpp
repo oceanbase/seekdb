@@ -27,7 +27,7 @@
 #include "share/ob_errno.h"
 #include "share/schema/ob_schema_getter_guard.h"
 
-#include "observer/ob_inner_sql_connection_pool.h"
+#include "observer/ob_inner_sql_connection.h"
 #include "sql/executor/ob_worker_session_guard.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/ob_sql.h"
@@ -93,7 +93,6 @@ int ObDBMSSchedJobExecutor::init_session(
     user_info->get_user_name(), user_info->get_host_name_str(), user_info->get_user_id()));
   OX (session.set_priv_user_id(user_info->get_user_id()));
   OX (session.set_user_priv_set(user_info->get_priv_set()));
-  OX (session.init_use_rich_format());
   OZ (schema_guard.get_db_priv_set(user_info->get_user_id(), database_name, db_priv_set));
   OX (session.set_db_priv_set(db_priv_set));
   OX (session.get_enable_role_array().reuse());
@@ -207,7 +206,6 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
 {
   int ret = OB_SUCCESS;
   ObSqlString what;
-  ObInnerSQLConnectionPool *pool = NULL;
   ObInnerSQLConnection *conn = NULL;
   ObSQLSessionInfo *session_info = NULL;
   ObFreeSessionCtx free_session_ctx;
@@ -322,12 +320,11 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
     if (OB_SUCC(ret)) {
       ObWorkerSessionGuard worker_session_guard(session_info);
       OZ (ObDBMSSchedJobExecutor::init_env(job_info, *session_info));
-      CK (OB_NOT_NULL(pool = static_cast<ObInnerSQLConnectionPool *>(sql_proxy_->get_pool())));
       OX (session_info->set_job_info(&job_info));
       OZ (table_operator_.update_for_start_execute(job_info));
       rootserver::ObDBMSSchedService::wakeup_scheduler();
-      OZ (pool->acquire_spi_conn(session_info, conn));
-      if (OB_NOT_NULL(conn) && OB_NOT_NULL(session_info) && !is_root_user(session_info->get_user_id())) {
+      OZ (ObInnerSQLConnection::create_spi(session_info, conn));
+      if (OB_NOT_NULL(conn) && OB_NOT_NULL(session_info) && !is_extended_sys_user(session_info->get_user_id()) && !is_root_user(session_info->get_user_id())) {
         conn->set_check_priv(true);
       }
       OZ (conn->execute_write(what.string().ptr(), affected_rows));
@@ -335,7 +332,8 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
         conn->set_check_priv(false);
       }
       if (OB_NOT_NULL(conn)) {
-        sql_proxy_->close(conn, ret);
+        conn->unref();
+        conn = NULL;
       }
     }
   }

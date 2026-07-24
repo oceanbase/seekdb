@@ -24,6 +24,7 @@
 #include "sql/optimizer/stat/ob_dbms_stats_gather.h"
 #include "observer/omt/ob_server_runtime.h"
 #include "observer/ob_server.h"
+#include "observer/ob_inner_sql_connection.h"
 #include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "lib/random/ob_random.h"
@@ -1498,7 +1499,6 @@ int ObDbmsStatsExecutor::update_online_stat(ObExecContext &ctx,
       if (OB_FAIL(ObDbmsStatsUtils::cancel_async_gather_stats(ctx))) {
         LOG_WARN("failed to cancel async gather stats", K(ret));
       } else if (OB_FAIL(prepare_conn_and_store_session_for_online_stats(ctx.get_my_session(),
-                                                                         ctx.get_sql_proxy(),
                                                                          schema_guard,
                                                                          saved_value,
                                                                          nested_count,
@@ -1540,9 +1540,8 @@ int ObDbmsStatsExecutor::update_online_stat(ObExecContext &ctx,
       //release source
       ctx.set_is_online_stats_gathering(false);
       if (OB_NOT_NULL(conn)) {
-        int tmp_ret = OB_SUCCESS;
-        ctx.get_sql_proxy()->close(conn, tmp_ret);
-        ret = COVER_SUCC(tmp_ret);
+        static_cast<observer::ObInnerSQLConnection *>(conn)->unref();
+        conn = NULL;
       }
       //restore session
       if (need_restore_session) {
@@ -1570,7 +1569,6 @@ int ObDbmsStatsExecutor::update_online_stat(ObExecContext &ctx,
 }
 
 int ObDbmsStatsExecutor::prepare_conn_and_store_session_for_online_stats(sql::ObSQLSessionInfo *session,
-                                                                         common::ObMySQLProxy *sql_proxy,
                                                                          share::schema::ObSchemaGetterGuard *schema_guard,
                                                                          sql::ObSQLSessionInfo::StmtSavedValue &saved_value,
                                                                          int64_t &nested_count,
@@ -1580,9 +1578,9 @@ int ObDbmsStatsExecutor::prepare_conn_and_store_session_for_online_stats(sql::Ob
                                                                          sqlclient::ObISQLConnection *&conn)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(session) || OB_ISNULL(sql_proxy) || OB_ISNULL(schema_guard)) {
+  if (OB_ISNULL(session) || OB_ISNULL(schema_guard)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(session), K(sql_proxy));
+    LOG_WARN("get unexpected error", K(ret), K(session), KP(schema_guard));
   //1.save session info
   } else if (OB_FAIL(session->save_session(saved_value))) {
     LOG_WARN("failed to saved value", K(ret));
@@ -1608,12 +1606,12 @@ int ObDbmsStatsExecutor::prepare_conn_and_store_session_for_online_stats(sql::Ob
       } else {
         need_reset_trx_lock_timeout = true;
         //3.get conn to update stats
-        observer::ObInnerSQLConnectionPool *pool = NULL;
-        if (OB_ISNULL(pool = static_cast<observer::ObInnerSQLConnectionPool *>(sql_proxy->get_pool()))) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected error", K(ret), K(pool));
-        } else if (OB_FAIL(pool->acquire(session, conn))) {
+        observer::ObInnerSQLConnection *inner_conn = NULL;
+        if (OB_FAIL(observer::ObInnerSQLConnection::create_with_session(
+                        session, inner_conn))) {
           LOG_WARN("failed to acquire conn", K(ret));
+        } else {
+          conn = inner_conn;
         }
       }
     }

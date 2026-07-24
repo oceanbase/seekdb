@@ -102,7 +102,6 @@ public:
       const ObReplaceAllLocksRequest &req,
       observer::ObInnerSQLConnection *conn);
   static int create_inner_conn(sql::ObSQLSessionInfo *session_info,
-                               common::ObMySQLProxy *sql_proxy,
                                observer::ObInnerSQLConnection *&inner_conn);
   static int execute_write_sql(observer::ObInnerSQLConnection *conn, const ObSqlString &sql, int64_t &affected_rows);
   static int execute_read_sql(observer::ObInnerSQLConnection *conn,

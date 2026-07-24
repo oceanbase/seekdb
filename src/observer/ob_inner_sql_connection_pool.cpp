@@ -69,51 +69,6 @@ int ObInnerSQLConnectionPool::acquire(common::sqlclient::ObISQLConnection *&conn
   return ret;
 }
 
-//@notice: performance optimization
-//spi inner sql connection will be called frequently by PL(test in TPCC PL)
-//before this, spi inner sql connection was management by inner sql connection pool
-//when acquire inner sql connection, need wrlock to protect concurrency problem
-//this action has serious performance problems
-//cache SPI inner sql connection to ObServerObjectPool
-//ObServerObjectPool has independent allocator on each core
-//so it can reduce the conflict of threads acquiring spi connection
-int ObInnerSQLConnectionPool::acquire_spi_conn(sql::ObSQLSessionInfo *session_info, ObInnerSQLConnection *&conn)
-{
-  int ret = OB_SUCCESS;
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
-  } else if (stop_) {
-    ret = OB_SERVER_IS_STOPPING;
-    LOG_WARN("connection pool stopped", K(ret));
-  } else if (OB_FAIL(ObInnerSQLConnection::create_spi(
-                 session_info, conn))) {
-    LOG_WARN("create spi inner sql connection failed", K(ret));
-  }
-  return ret;
-}
-
-int ObInnerSQLConnectionPool::acquire(
-    sql::ObSQLSessionInfo *session_info,
-    common::sqlclient::ObISQLConnection *&conn)
-{
-  int ret = OB_SUCCESS;
-  ObInnerSQLConnection *inner_sql_conn = NULL;
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
-  } else if (stop_) {
-    ret = OB_SERVER_IS_STOPPING;
-    LOG_WARN("connection pool stopped", K(ret));
-  } else if (OB_FAIL(ObInnerSQLConnection::create_with_session(
-                 session_info, inner_sql_conn))) {
-    LOG_WARN("create inner sql connection with session failed", K(ret));
-  } else {
-    conn = inner_sql_conn;
-  }
-  return ret;
-}
-
 int ObInnerSQLConnectionPool::release(common::sqlclient::ObISQLConnection *conn, const bool success)
 {
   // alway try to destroy connection, ignore success flag.

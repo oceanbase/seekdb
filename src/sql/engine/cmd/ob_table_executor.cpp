@@ -18,6 +18,7 @@
 #include "sql/engine/cmd/ob_table_executor.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "rootserver/ob_local_management_service.h"
+#include "observer/ob_inner_sql_connection.h"
 #include "sql/engine/expr/ob_expr_regexp_context.h"  // ObExprRegexpSessionVariables (unity regroup)
 #include "sql/engine/cmd/ob_index_executor.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
@@ -246,11 +247,6 @@ int ObCreateTableExecutor::prepare_alter_arg(ObCreateTableStmt &stmt,
   
   if (OB_FAIL(alter_table_arg.tz_info_wrap_.deep_copy(my_session->get_tz_info_wrap()))) {
     LOG_WARN("failed to deep_copy tz info wrap", "tz_info_wrap", my_session->get_tz_info_wrap(), K(ret));
-  } else if (OB_FAIL(alter_table_arg.set_nls_formats(
-      my_session->get_local_nls_date_format(),
-      my_session->get_local_nls_timestamp_format(),
-      my_session->get_local_nls_timestamp_tz_format()))) {
-    LOG_WARN("failed to set_nls_formats", K(ret));
   } else if (OB_FAIL(alter_table_schema->assign(table_schema))) {
     LOG_WARN("failed to assign alter table schema", K(ret));
   } else if (!table_schema.is_mysql_tmp_table()
@@ -309,7 +305,6 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
   ObString cur_query;
   int64_t affected_rows = 0;
   ObMySQLProxy *sql_proxy = ctx.get_sql_proxy();
-  common::ObCommonSqlProxy *user_sql_proxy;
   ObSQLSessionInfo *my_session = ctx.get_my_session();
   ObPhysicalPlanCtx *plan_ctx = ctx.get_physical_plan_ctx();
   ObArenaAllocator allocator("CreateTableExec");
@@ -335,11 +330,7 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
     }
     
     if (OB_SUCC(ret)) {
-      ObInnerSQLConnectionPool *pool = static_cast<observer::ObInnerSQLConnectionPool*>(sql_proxy->get_pool());
-      if (OB_ISNULL(pool)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("pool is null", K(ret));
-      } else if (OB_FAIL(prepare_stmt(stmt, *my_session, create_table_name))) {
+      if (OB_FAIL(prepare_stmt(stmt, *my_session, create_table_name))) {
         LOG_WARN("failed to prepare stmt", K(ret));
       } else if (OB_FAIL(prepare_ins_arg(stmt, my_session, ctx.get_sql_ctx()->schema_guard_, &plan_ctx->get_param_store(), ins_sql))) { //1, parameter preparation;
         LOG_WARN("failed to prepare insert table arg", K(ret));
@@ -349,10 +340,6 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
         LOG_WARN("failed to prepare drop table arg", K(ret));
       } else if (OB_FAIL(ctx.get_sql_ctx()->schema_guard_->reset())){
         LOG_WARN("schema_guard reset failed", K(ret));
-      } else if (create_table_arg.schema_.is_interval_part()) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("create ctas for interval part table is not supported", KR(ret));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "create ctas for interval part table is");
       } else {// 2. create table
         DEBUG_SYNC(BEFORE_SEND_PARALLEL_CREATE_TABLE);
         create_table_arg.is_parallel_ = false;
@@ -399,16 +386,16 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
           bool need_set_autocommit = (!is_mysql_temp_table || !in_trans);
           bool original_autocommit = false;
           ObBasicSessionInfo::UserScopeGuard user_scope_guard(my_session->get_sql_scope_flags());
-          common::sqlclient::ObISQLConnection *conn = NULL;
+          observer::ObInnerSQLConnection *conn = NULL;
           
-          user_sql_proxy = sql_proxy;
           if (OB_FAIL(my_session->get_autocommit(original_autocommit))) {
             LOG_WARN("failed to get autocommit", K(ret));
           } else if (need_set_autocommit &&
                      !original_autocommit && OB_FAIL(my_session->set_autocommit(true))) {
             LOG_WARN("failed to set autocommit", K(ret));
           } else {
-            if (OB_FAIL(pool->acquire(my_session, conn))) {
+            if (OB_FAIL(observer::ObInnerSQLConnection::create_with_session(
+                            my_session, conn))) {
               LOG_WARN("failed to acquire inner connection", K(ret));
             } else if (OB_ISNULL(conn)) {
               ret = OB_INNER_STAT_ERROR;
@@ -426,7 +413,8 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
               }
             }
             if (OB_NOT_NULL(conn)) {
-              user_sql_proxy->close(conn, true);
+              conn->unref();
+              conn = NULL;
             }
           } 
         }
@@ -692,10 +680,6 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
     }
   }
   if (OB_SUCC(ret)) {
-    if (obcall::ObAlterTableArg::SET_INTERVAL == alter_table_arg.alter_part_type_
-        || obcall::ObAlterTableArg::INTERVAL_TO_RANGE == alter_table_arg.alter_part_type_) {
-      alter_table_arg.is_alter_partitions_ = true;
-    }
     AlterTableSchema &alter_table_schema = const_cast<AlterTableSchema &>(alter_table_arg.alter_table_schema_);
     if (OB_FAIL(populate_based_schema_obj_info_(alter_table_arg))) {
       LOG_WARN("fail to populate based schema obj info", KR(ret));
@@ -1513,17 +1497,6 @@ int ObAlterTableExecutor::check_alter_partition(ObExecContext &ctx,
       LOG_WARN("no operation", K(arg.alter_part_type_), K(ret));
     }
     LOG_DEBUG("dump table schema", K(table_schema));
-  } else if (stmt.get_interval_expr() != NULL) {
-    CK (NULL != stmt.get_transition_expr());
-    OZ (ObPartitionExecutorUtils::check_transition_interval_valid(
-                                        stmt::T_CREATE_TABLE,
-                                        ctx,
-                                        stmt.get_transition_expr(),
-                                        stmt.get_interval_expr()));
-    OZ (ObPartitionExecutorUtils::set_interval_value(ctx,
-                                                     stmt::T_CREATE_TABLE,
-                                                     table_schema,
-                                                     stmt.get_interval_expr()));
   }
 
   return ret;

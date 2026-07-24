@@ -17,7 +17,7 @@
 
 #define USING_LOG_PREFIX SQL
 
-#include "observer/ob_inner_sql_connection_pool.h"
+#include "observer/ob_inner_sql_connection.h"
 #include "share/rc/ob_module_provider.h"
 #include "sql/optimizer/ob_del_upd_log_plan.h"
 #include "ob_sql_plan.h"
@@ -315,7 +315,6 @@ int ObSqlPlan::inner_store_sql_plan_for_explain(ObExecContext *ctx,
   int ret = OB_SUCCESS;
   obutil::ObSysTime current_time = obutil::ObSysTime::now();
   std::string time_str = current_time.toDateTime();
-  ObInnerSQLConnectionPool *pool = NULL;
   sql::ObSQLSessionInfo *session = NULL;
   ObInnerSQLConnection *conn = NULL;
   ObSQLSessionInfo::StmtSavedValue *saved_session = NULL;
@@ -326,12 +325,10 @@ int ObSqlPlan::inner_store_sql_plan_for_explain(ObExecContext *ctx,
   ObSqlString sql;
   if (OB_ISNULL(ctx) ||
       OB_ISNULL(ctx->get_sql_proxy()) ||
-      OB_ISNULL(session = ctx->get_my_session()) ||
-      OB_ISNULL((pool = static_cast<ObInnerSQLConnectionPool *>
-                (ctx->get_sql_proxy()->get_pool())))) {
+      OB_ISNULL(session = ctx->get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpect null sql proxy", K(ret));
-  } else if (OB_FAIL(pool->acquire_spi_conn(session, conn))) {
+  } else if (OB_FAIL(ObInnerSQLConnection::create_spi(session, conn))) {
     LOG_WARN("failed to get sql connection", K(ret));
   } else if (OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;
@@ -471,10 +468,9 @@ int ObSqlPlan::inner_store_sql_plan_for_explain(ObExecContext *ctx,
       LOG_WARN("failed to exec inner sql", K(ret));
     }
   }
-  if (OB_NOT_NULL(conn) && 
-      OB_NOT_NULL(ctx) && 
-      OB_NOT_NULL(ctx->get_sql_proxy())) {
-    ctx->get_sql_proxy()->close(conn, ret);
+  if (OB_NOT_NULL(conn)) {
+    conn->unref();
+    conn = NULL;
   }
   if (OB_NOT_NULL(session) && need_restore_session) {
     int end_ret = restore_session(session,

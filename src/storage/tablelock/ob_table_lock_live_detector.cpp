@@ -172,7 +172,7 @@ int ObTableLockDetector::record_detect_info_to_inner_table(sql::ObSQLSessionInfo
   } else if (OB_ISNULL(inner_conn = static_cast<observer::ObInnerSQLConnection *>(session_info->get_inner_conn()))) {
     LOG_INFO("there is no inner connection in the session, we will try to create one", K(session_info->get_server_sid()));
 
-    if (OB_FAIL(ObInnerConnectionLockUtil::create_inner_conn(session_info, GCTX.sql_proxy_, inner_conn))) {
+    if (OB_FAIL(ObInnerConnectionLockUtil::create_inner_conn(session_info, inner_conn))) {
       LOG_WARN("get inner connection failed", K(session_info->get_server_sid()));
     } else {
       need_release_conn = true;
@@ -197,7 +197,8 @@ int ObTableLockDetector::record_detect_info_to_inner_table(sql::ObSQLSessionInfo
   }
 
   if (need_release_conn && OB_NOT_NULL(inner_conn)) {
-    GCTX.sql_proxy_->close(inner_conn, ret);
+    inner_conn->unref();
+    inner_conn = nullptr;
   }
   return ret;
 }
@@ -220,7 +221,7 @@ int ObTableLockDetector::remove_detect_info_from_inner_table(sql::ObSQLSessionIn
   need_remove_from_lock_table = false;
   if (OB_ISNULL(inner_conn = static_cast<observer::ObInnerSQLConnection *>(session_info->get_inner_conn()))) {
     LOG_INFO("there is no inner connection in the session, we will try to create one", K(session_info->get_server_sid()));
-    if (OB_FAIL(ObInnerConnectionLockUtil::create_inner_conn(session_info, GCTX.sql_proxy_, inner_conn))) {
+    if (OB_FAIL(ObInnerConnectionLockUtil::create_inner_conn(session_info, inner_conn))) {
       LOG_WARN("get inner connection failed", K(session_info->get_server_sid()));
     } else {
       need_release_conn = true;
@@ -263,7 +264,8 @@ int ObTableLockDetector::remove_detect_info_from_inner_table(sql::ObSQLSessionIn
     ret = OB_EMPTY_RESULT;
   }
   if (need_release_conn && OB_NOT_NULL(inner_conn)) {
-    GCTX.sql_proxy_->close(inner_conn, ret);
+    inner_conn->unref();
+    inner_conn = nullptr;
   }
   return ret;
 }
@@ -280,7 +282,7 @@ int ObTableLockDetector::remove_detect_info_from_inner_table(sql::ObSQLSessionIn
 
   if (OB_ISNULL(inner_conn = static_cast<observer::ObInnerSQLConnection *>(session_info->get_inner_conn()))) {
     LOG_INFO("there is no inner connection in the session, we will try to create one", K(session_info->get_server_sid()));
-    if (OB_FAIL(ObInnerConnectionLockUtil::create_inner_conn(session_info, GCTX.sql_proxy_, inner_conn))) {
+    if (OB_FAIL(ObInnerConnectionLockUtil::create_inner_conn(session_info, inner_conn))) {
       LOG_WARN("get inner connection failed", K(session_info->get_server_sid()));
     } else {
       need_release_conn = true;
@@ -297,7 +299,8 @@ int ObTableLockDetector::remove_detect_info_from_inner_table(sql::ObSQLSessionIn
     LOG_WARN("remove_detect_info_from_table_ failed", K(ret), K(task_type), K(lock_req));
   }
   if (need_release_conn && OB_NOT_NULL(inner_conn)) {
-    GCTX.sql_proxy_->close(inner_conn, ret);
+    inner_conn->unref();
+    inner_conn = nullptr;
   }
   return ret;
 }
@@ -367,7 +370,7 @@ int ObTableLockDetector::check_lock_id_exist_in_inner_table(sql::ObSQLSessionInf
 
   if (OB_ISNULL(inner_conn = static_cast<observer::ObInnerSQLConnection *>(session_info->get_inner_conn()))) {
     LOG_INFO("there is no inner connection in the session, we will try to create one", K(session_info->get_server_sid()));
-    if (OB_FAIL(ObInnerConnectionLockUtil::create_inner_conn(session_info, GCTX.sql_proxy_, inner_conn))) {
+    if (OB_FAIL(ObInnerConnectionLockUtil::create_inner_conn(session_info, inner_conn))) {
       LOG_WARN("get inner connection failed", K(session_info->get_server_sid()));
     } else {
       need_release_conn = true;
@@ -384,7 +387,8 @@ int ObTableLockDetector::check_lock_id_exist_in_inner_table(sql::ObSQLSessionInf
   }
 
   if (need_release_conn && OB_NOT_NULL(inner_conn)) {
-    GCTX.sql_proxy_->close(inner_conn, ret);
+    inner_conn->unref();
+    inner_conn = nullptr;
   }
   return ret;
 }
@@ -401,7 +405,7 @@ int ObTableLockDetector::check_lock_owner_exist_in_inner_table(sql::ObSQLSession
 
   if (OB_ISNULL(inner_conn = static_cast<observer::ObInnerSQLConnection *>(session_info->get_inner_conn()))) {
     LOG_INFO("there is no inner connection in the session, we will try to create one", K(session_info->get_server_sid()));
-    if (OB_FAIL(ObInnerConnectionLockUtil::create_inner_conn(session_info, GCTX.sql_proxy_, inner_conn))) {
+    if (OB_FAIL(ObInnerConnectionLockUtil::create_inner_conn(session_info, inner_conn))) {
       LOG_WARN("get inner connection failed", K(session_info->get_server_sid()));
     } else {
       need_release_conn = true;
@@ -421,7 +425,8 @@ int ObTableLockDetector::check_lock_owner_exist_in_inner_table(sql::ObSQLSession
   }
 
   if (need_release_conn && OB_NOT_NULL(inner_conn)) {
-    GCTX.sql_proxy_->close(inner_conn, ret);
+    inner_conn->unref();
+    inner_conn = nullptr;
   }
   return ret;
 }
@@ -441,7 +446,7 @@ int ObTableLockDetector::check_lock_exist_in_inner_table(sql::ObSQLSessionInfo *
 
   if (OB_ISNULL(inner_conn = static_cast<observer::ObInnerSQLConnection *>(session_info->get_inner_conn()))) {
     LOG_INFO("there is no inner connection in the session, we will try to create one", K(session_info->get_server_sid()));
-    if (OB_FAIL(ObInnerConnectionLockUtil::create_inner_conn(session_info, GCTX.sql_proxy_, inner_conn))) {
+    if (OB_FAIL(ObInnerConnectionLockUtil::create_inner_conn(session_info, inner_conn))) {
       LOG_WARN("get inner connection failed", K(session_info->get_server_sid()));
     } else {
       need_release_conn = true;
@@ -475,7 +480,8 @@ int ObTableLockDetector::check_lock_exist_in_inner_table(sql::ObSQLSessionInfo *
   }
 
   if (need_release_conn && OB_NOT_NULL(inner_conn)) {
-    GCTX.sql_proxy_->close(inner_conn, ret);
+    inner_conn->unref();
+    inner_conn = nullptr;
   }
 
   return ret;
@@ -517,7 +523,7 @@ int ObTableLockDetector::get_unlock_request_list(sql::ObSQLSessionInfo *session,
 
   if (OB_ISNULL(inner_conn = static_cast<observer::ObInnerSQLConnection *>(session->get_inner_conn()))) {
     LOG_INFO("there is no inner connection in the session, we will try to create one", K(session->get_server_sid()));
-    if (OB_FAIL(ObInnerConnectionLockUtil::create_inner_conn(session, GCTX.sql_proxy_, inner_conn))) {
+    if (OB_FAIL(ObInnerConnectionLockUtil::create_inner_conn(session, inner_conn))) {
       LOG_WARN("get inner connection failed", K(session->get_server_sid()));
     } else {
       need_release_conn = true;
@@ -548,7 +554,8 @@ int ObTableLockDetector::get_unlock_request_list(sql::ObSQLSessionInfo *session,
   }
 
   if (need_release_conn && OB_NOT_NULL(inner_conn)) {
-    GCTX.sql_proxy_->close(inner_conn, ret);
+    inner_conn->unref();
+    inner_conn = nullptr;
   }
   return ret;
 }
