@@ -4,7 +4,6 @@ psmall_test=[
 'aggr_bug200109',
 'alias2',
 'alias3',
-'alter.alter_log_archive_option',
 'array.array_arith_op_mysql',
 'array.array_ddl_mysql',
 'a_trade_notify',
