@@ -598,6 +598,9 @@ private:
   // reset datums pointer to reserved buffer.
   void reset_datums_ptr(char *frame, const int64_t size) const;
   void reset_datum_ptr(char *frame, const int64_t size, const int64_t idx) const;
+  // Zero the datum descriptor (pack_) for `size` datums in the frame. See
+  // the implementation comment in ob_expr.cpp for the full rationale.
+  void clear_datum_descriptors(char *frame, const int64_t size) const;
   int eval_one_datum_of_batch(ObEvalCtx &ctx, common::ObDatum *&datum) const;
   int do_eval_batch(ObEvalCtx &ctx, const ObBitVector &skip, const int64_t size) const;
 

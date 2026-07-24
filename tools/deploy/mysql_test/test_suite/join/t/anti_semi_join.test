@@ -147,8 +147,10 @@ select /*+ no_rewrite */ * from xy_t1 where exists (select 1 from xy_t2 where xy
 
 --echo
 --echo ***************** HASH SEMI 最优
+--sorted_result
 select * from xy_t2 where exists (select 1 from xy_t1 where xy_t2.c1 = xy_t1.c1);
 select /*+ use_nl(xy_t2 xy_t1)*/ * from xy_t2 where exists (select 1 from xy_t1 where xy_t2.c1 = xy_t1.c1);
+--sorted_result
 select /*+ use_hash(xy_t2 xy_t1)*/ * from xy_t2 where exists (select 1 from xy_t1 where xy_t2.c1 = xy_t1.c1);
 select /*+ use_merge(xy_t2 xy_t1)*/ * from xy_t2 where exists (select 1 from xy_t1 where xy_t2.c1 = xy_t1.c1);
 
@@ -164,6 +166,7 @@ select /*+ use_merge(xy_t4 xy_t1)*/ * from xy_t4 where exists (select 1 from xy_
 --echo ****************  MERGE SEMI 最优
 select * from xy_t2 where exists (select 1 from xy_t1 where xy_t2.c2 = xy_t1.c2);
 select /*+ use_nl(xy_t2 xy_t1)*/ * from xy_t2 where exists (select 1 from xy_t1 where xy_t2.c2 = xy_t1.c2);
+--sorted_result
 select /*+ use_hash(xy_t2 xy_t1)*/ * from xy_t2 where exists (select 1 from xy_t1 where xy_t2.c2 = xy_t1.c2);
 select /*+ use_merge(xy_t2 xy_t1)*/ * from xy_t2 where exists (select 1 from xy_t1 where xy_t2.c2 = xy_t1.c2);
 
@@ -216,8 +219,10 @@ select * from xy_t1 where exists (select 1 from xy_t2 where xy_t2.c1 = xy_t1.c1)
 
 --echo
 --echo *************** 测试limit下压 HASH LEFT SEMI加limit后情况, limit不影响SEMI代价
+--sorted_result
 select * from xy_t2 where exists (select 1 from xy_t1 where xy_t2.c1 = xy_t1.c1);
 select * from xy_t2 where exists (select 1 from xy_t1 where xy_t2.c1 = xy_t1.c1) limit 3;
+--sorted_result
 select * from xy_t2 where exists (select 1 from xy_t1 where xy_t2.c1 = xy_t1.c1) limit 1000;
 
 
@@ -301,6 +306,5 @@ select /*+ use_nl(xy_t1 xy_t2)*/ c1, c2 from xy_t2 where not exists (select 1 fr
 select /*+ no_rewrite*/ c1, c2 from xy_t2 where not exists (select 1 from xy_t1 where xy_t1.c1 = xy_t2.c2 and xy_t1.c2 < xy_t2.c2) order by 1,2;
 
 drop table xy_t1, xy_t2;
-
 
 

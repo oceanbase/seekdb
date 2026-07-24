@@ -238,6 +238,7 @@ explain select /*+use_nl(t2,t7)*/* from t2 right join t7 on t2.b = t7.a and t2.c
 select /*+use_nl(t2,t7)*/* from t2 right join t7 on t2.b = t7.a and t2.c = t7.d order by t2.a,t2.b,t7.a,t7.b;
 
 explain select /*+leading(t8, t9)*/ t8.b,t8.c,t9.b,t9.c from t8 right join t9 on t8.b = t9.b;
+--sorted_result
 select /*+leading(t8, t9)*/ t8.b,t8.c,t9.b,t9.c from t8 right join t9 on t8.b = t9.b;
 
 --echo ************ 测试left join

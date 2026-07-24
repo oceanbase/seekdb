@@ -188,7 +188,7 @@ protected:
 class ObHeapRsSliceWriter : public ObRsSliceWriter
 {
 public:
-  ObHeapRsSliceWriter() {}
+  ObHeapRsSliceWriter() : heap_info_(), ready_datums_(), autoinc_value_(0), autoinc_datum_() {}
   virtual ~ObHeapRsSliceWriter() {}
   int init(const ObWriteMacroParam &write_param,
            const int64_t parallel_count,
@@ -200,6 +200,9 @@ public:
 
 private:
   ObHeapSliceInfo heap_info_;
+  ObArray<ObDatum *> ready_datums_;
+  uint64_t autoinc_value_;
+  ObDatum autoinc_datum_;
 };
 
 
@@ -285,6 +288,9 @@ protected:
 class ObHeapBatchSliceWriter : public ObBatchSliceWriter
 {
 public:
+  ObHeapBatchSliceWriter()
+    : heap_info_(), active_array_(), ready_datums_(), autoinc_value_(0), autoinc_datum_()
+  {}
   int init(const ObWriteMacroParam &write_param,
            const int64_t parallel_count,
            const int64_t autoinc_column_idx,
@@ -303,6 +309,9 @@ public:
 private:
   ObHeapSliceInfo heap_info_;
   ObArray<uint16_t> active_array_;
+  ObArray<ObDatum *> ready_datums_;
+  uint64_t autoinc_value_;
+  ObDatum autoinc_datum_;
 };
 
 

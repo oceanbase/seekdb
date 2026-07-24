@@ -1568,24 +1568,24 @@ Outputs & filters:
 select /*+leading(t8, t9)*/ t8.b,t8.c,t9.b,t9.c from t8 right join t9 on t8.b = t9.b;
 b	c	b	c
 2	1	2	1
-2	2	2	1
-2	3	2	1
 2	1	2	2
-2	2	2	2
-2	3	2	2
 2	1	2	3
+2	2	2	1
+2	2	2	2
 2	2	2	3
+2	3	2	1
+2	3	2	2
 2	3	2	3
-NULL	NULL	3	1
 4	1	4	1
-4	2	4	1
-4	3	4	1
 4	1	4	2
-4	2	4	2
-4	3	4	2
 4	1	4	3
+4	2	4	1
+4	2	4	2
 4	2	4	3
+4	3	4	1
+4	3	4	2
 4	3	4	3
+NULL	NULL	3	1
 ************ 测试left join
 
 explain select /*+use_merge(t2,t7)*/* from t2 left join t7 on t2.b = t7.a and t2.c = t7.d order by t2.a,t2.b,t7.a,t7.b;

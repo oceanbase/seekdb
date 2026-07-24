@@ -112,6 +112,8 @@ struct ObDoArithBatchEval
   {
     int ret = OB_SUCCESS;
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
+    // Datum operators may allocate a variable-length result from the current batch slot.
+    ObEvalCtx::BatchInfoScopeGuard batch_info_guard(ctx);
     const int64_t step_size = sizeof(uint16_t) * CHAR_BIT;
     common::ObDatumDesc desc;
     for (int64_t i = 0; i < size && OB_SUCC(ret);) {
@@ -130,6 +132,7 @@ struct ObDoArithBatchEval
           }
         } else {
           for (int64_t j = 0; OB_SUCC(ret) && j < step_size; i++, j++) {
+            batch_info_guard.set_batch_idx(i);
             ret = ArithOp::datum_op(iter.datum(i), l_it.datum(i), r_it.datum(i), args...);
             desc.pack_ |= iter.datum(i).pack_;
           }
@@ -143,6 +146,7 @@ struct ObDoArithBatchEval
         const int64_t new_size = std::min(size, i + step_size);
         for (; i < new_size && OB_SUCC(ret); i++) {
           if (!(skip.at(i) || eval_flags.at(i))) {
+            batch_info_guard.set_batch_idx(i);
             ret = ArithOp::datum_op(iter.datum(i), l_it.datum(i), r_it.datum(i), args...);
             eval_flags.bit_or_assign(i, OB_SUCCESS == ret);
             desc.pack_ |= iter.datum(i).pack_;

@@ -369,6 +369,8 @@ int ObHeapRsSliceWriter::append_current_row(const ObIArray<ObDatum *> &datums)
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
+  } else if (OB_FAIL(ready_datums_.assign(datums))) {
+    LOG_WARN("copy datum pointers failed", K(ret));
   } else {
   // set autoinc val
     uint64_t current_pk = 0;
@@ -377,12 +379,15 @@ int ObHeapRsSliceWriter::append_current_row(const ObIArray<ObDatum *> &datums)
     } else if (OB_FAIL(heap_info_.get_next(current_pk))) {
       LOG_WARN("get next hidden pk failed", K(ret), K(heap_info_));
     } else {
-      ObDatum *autoinc_datum = datums.at(heap_info_.get_autoinc_column_idx());
-      autoinc_datum->set_uint(current_pk);
+      // Scalar expression results may share frame storage. Replace only the hidden-PK
+      // pointer so generating it cannot overwrite another column in the input row.
+      autoinc_datum_.ptr_ = reinterpret_cast<const char *>(&autoinc_value_);
+      autoinc_datum_.set_uint(current_pk);
+      ready_datums_.at(heap_info_.get_autoinc_column_idx()) = &autoinc_datum_;
     }
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(ObRsSliceWriter::append_current_row(datums))) {
+    if (OB_FAIL(ObRsSliceWriter::append_current_row(ready_datums_))) {
       LOG_WARN("append row failed", K(ret));
     }
   }
@@ -1073,6 +1078,8 @@ int ObHeapBatchSliceWriter::append_current_row(const ObIArray<ObDatum *> &datums
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
+  } else if (OB_FAIL(ready_datums_.assign(datums))) {
+    LOG_WARN("copy datum pointers failed", K(ret));
   } else {
   // set autoinc val
     uint64_t current_pk = 0;
@@ -1081,12 +1088,15 @@ int ObHeapBatchSliceWriter::append_current_row(const ObIArray<ObDatum *> &datums
     } else if (OB_FAIL(heap_info_.get_next(current_pk))) {
       LOG_WARN("get next hidden pk failed", K(ret), K(heap_info_));
     } else {
-      ObDatum *autoinc_datum = datums.at(heap_info_.get_autoinc_column_idx());
-      autoinc_datum->set_uint(current_pk);
+      // Keep the caller's expression datums immutable for the same reason as the
+      // row-store heap writer above.
+      autoinc_datum_.ptr_ = reinterpret_cast<const char *>(&autoinc_value_);
+      autoinc_datum_.set_uint(current_pk);
+      ready_datums_.at(heap_info_.get_autoinc_column_idx()) = &autoinc_datum_;
     }
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(ObBatchSliceWriter::append_current_row(datums))) {
+    if (OB_FAIL(ObBatchSliceWriter::append_current_row(ready_datums_))) {
       LOG_WARN("append row failed", K(ret));
     }
   }
