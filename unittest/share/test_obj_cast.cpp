@@ -16,7 +16,9 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "share/object/ob_obj_cast.h"
+#include "share/object/ob_obj_cast_util.h"
 #include <gtest/gtest.h>
+#include <limits>
 
 
 namespace oceanbase
@@ -85,6 +87,52 @@ TEST_F(TestObjCast, test_number_range_check_mysql_new)
   }
   int64_t get_range_cost = ObTimeUtility::current_time() - get_range_beg;
   _OB_LOG(INFO, "test_number_range_check_mysql_new(%d) cost time: %f", (ObNumber::MAX_PRECISION + 1) * (ObNumber::MAX_SCALE + 1) / 2, (double)get_range_cost / (double)1000);
+}
+
+TEST_F(TestObjCast, deterministic_floating_to_integer)
+{
+  EXPECT_EQ(INT64_MIN, truncate_floating_to_int64_clamped(-2.0e28));
+  EXPECT_EQ(INT64_MAX, truncate_floating_to_int64_clamped(2.0e28));
+  EXPECT_EQ(INT64_MAX,
+            truncate_floating_to_int64_clamped(
+                static_cast<float>(INT64_UPPER_BOUND_AS_DOUBLE)));
+  EXPECT_EQ(-1, truncate_floating_to_int64_clamped(-1.9));
+  EXPECT_EQ(0,
+            truncate_floating_to_int64_clamped(
+                std::numeric_limits<double>::quiet_NaN()));
+
+  uint64_t out_val = 0;
+  EXPECT_EQ(OB_SUCCESS, round_floating_to_uint64(-0.5, true, true, out_val));
+  EXPECT_EQ(0, out_val);
+  EXPECT_EQ(OB_DATA_OUT_OF_RANGE,
+            round_floating_to_uint64(
+                static_cast<double>(static_cast<float>(-0.50001)),
+                true,
+                true,
+                out_val));
+  EXPECT_EQ(0, out_val);
+  EXPECT_EQ(OB_SUCCESS,
+            round_floating_to_uint64(
+                static_cast<double>(
+                    static_cast<float>(INT64_UPPER_BOUND_AS_DOUBLE)),
+                true,
+                false,
+                out_val));
+  EXPECT_EQ(static_cast<uint64_t>(INT64_MIN), out_val);
+  EXPECT_EQ(OB_SUCCESS,
+            round_floating_to_uint64(
+                static_cast<double>(static_cast<float>(1.2e19)),
+                true,
+                false,
+                out_val));
+  EXPECT_EQ(static_cast<uint64_t>(INT64_MIN), out_val);
+  EXPECT_EQ(OB_SUCCESS,
+            round_floating_to_uint64(
+                INT64_UPPER_BOUND_AS_DOUBLE,
+                false,
+                false,
+                out_val));
+  EXPECT_EQ(static_cast<uint64_t>(INT64_MAX), out_val);
 }
 
 } // end namespace share

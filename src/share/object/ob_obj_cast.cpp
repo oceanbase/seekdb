@@ -67,7 +67,7 @@ namespace common
 {
 using namespace number;
 
-// hook definitions(registered in observer/omt/ob_srs_service.cpp and sql ob_expr_json_func_helper.cpp)
+// hook definitions(registered in observer/omt/ob_tenant_srs.cpp and sql ob_expr_json_func_helper.cpp)
 ObObjCastGetSrsItemFn g_obj_cast_get_srs_item = nullptr;
 ObObjCastJsonMaxDepthFn g_obj_cast_json_max_depth = nullptr;
 
@@ -456,6 +456,8 @@ ObNumber ObNumberConstValue::MYSQL_MIN[ObNumber::MAX_PRECISION + 1][ObNumber::MA
 ObNumber ObNumberConstValue::MYSQL_MAX[ObNumber::MAX_PRECISION + 1][ObNumber::MAX_SCALE + 1] = {};
 ObNumber ObNumberConstValue::MYSQL_CHECK_MIN[ObNumber::MAX_PRECISION + 1][ObNumber::MAX_SCALE + 1] = {};
 ObNumber ObNumberConstValue::MYSQL_CHECK_MAX[ObNumber::MAX_PRECISION + 1][ObNumber::MAX_SCALE + 1] = {};
+ObNumber ObNumberConstValue::NUMBER_CHECK_MIN[OB_MAX_NUMBER_PRECISION + 1][ObNumberConstValue::SCALE_RANGE_SIZE + 1] = {};
+ObNumber ObNumberConstValue::NUMBER_CHECK_MAX[OB_MAX_NUMBER_PRECISION + 1][ObNumberConstValue::SCALE_RANGE_SIZE + 1] = {};
 
 int ObNumberConstValue::init(ObIAllocator &allocator)
 {
@@ -512,6 +514,52 @@ int ObNumberConstValue::init(ObIAllocator &allocator)
     }
   }
 
+  {
+    for (int16_t precision = OB_MIN_NUMBER_PRECISION; OB_SUCC(ret) && precision <= OB_MAX_NUMBER_PRECISION; ++precision) {
+      for (int16_t scale = ObNumber::MIN_SCALE; OB_SUCC(ret) && scale <= ObNumber::MAX_SCALE; ++scale) {
+        pos = 1;
+        MEMSET(buf + pos, 0, BUFFER_SIZE - pos);
+        ObNumber &min_check_num = NUMBER_CHECK_MIN[precision][scale + SCALE_DELTA];
+        ObNumber &max_check_num = NUMBER_CHECK_MAX[precision][scale + SCALE_DELTA];
+        ObString tmp_string;
+
+        if (precision >= scale && scale >= 0) {
+          /* number(3, 1) => legal range(-99.95, 99.95) */
+          if (precision == scale) {
+            buf[pos++] = '0';
+          }
+          MEMSET(buf + pos, '9', precision + 1);
+          buf[pos + precision - scale] = '.';
+          buf[pos + precision + 1] = '5';
+          tmp_string.assign_ptr(buf, pos + precision + 1 + 1);
+        } else if (scale < 0) {
+          /* number(2, -3) => legal range: (-99500, 99500) */
+          MEMSET(buf + pos, '9', precision);
+          buf[pos + precision] = '5';
+          MEMSET(buf + pos + precision + 1, '0', 0 - scale - 1);
+          tmp_string.assign_ptr(buf, pos + precision - scale);
+        } else {
+          //number(2, 3) => legal range:(-0.0995, 0.0995)
+           buf[pos++] = '0';
+           buf[pos++] = '.';
+           MEMSET(buf + pos, '0', scale - precision);
+           MEMSET(buf + pos + scale - precision, '9', precision);
+           buf[pos + scale] = '5';
+           tmp_string.assign_ptr(buf, pos + scale + 1);
+        }
+
+        // make min and max numbers.
+        if (OB_FAIL(min_check_num.from(tmp_string.ptr(), tmp_string.length(), allocator))) {
+          LOG_ERROR("fail to call from", K(precision), K(scale), K(tmp_string), K(ret));
+        } else if (OB_FAIL(max_check_num.from(tmp_string.ptr() + 1, tmp_string.length() - 1, allocator))) {
+          LOG_ERROR("fail to call from", K(precision), K(scale), K(tmp_string), K(ret));
+        } else {
+          total_alloc_size += sizeof(uint32_t) * (min_check_num.get_length() + max_check_num.get_length());
+          LOG_DEBUG("succ to build min max number", K(precision), K(scale), K(tmp_string), K(total_alloc_size), K(min_check_num), K(max_check_num));
+        }
+      }
+    }
+  }
   return ret;
 }
 
@@ -1444,6 +1492,8 @@ static int common_get_srs_item(ObSrsGuardErased &srs_guard,
 {
   int ret = OB_SUCCESS;
   uint32_t srid = UINT32_MAX;
+  // todo : get effective tenant id
+  
   if (wkb.length() < WKB_GEO_SRID_SIZE) {
     ret = OB_ERR_GIS_INVALID_DATA;
     LOG_WARN("invalid data length", K(ret), K(wkb.length()));
@@ -2014,23 +2064,7 @@ static int float_uint(const ObObjType expect_type, ObObjCastParams &params,
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
   } else {
-    if (in_value <= static_cast<double>(LLONG_MIN) || in_value >= static_cast<double>(ULLONG_MAX)) {
-      value = static_cast<uint64_t>(LLONG_MIN);
-      ret = OB_DATA_OUT_OF_RANGE;
-    } else {
-      // Compatible with MySQL behavior, floating-point numbers within (INT64_MAX, UINT64_MAX) cast to uint column result approximately equals the original float value
-      // and in other scenarios such as cast as unsigned, the result should be INT64_MAX + 1, i.e., rint(in_value)->int->uint
-      if (is_column_convert) {
-        value = static_cast<uint64_t>(rint(in_value));
-      } else {
-        value = static_cast<uint64_t>(static_cast<int64_t>(rint(in_value)));
-      }
-      if (in_value < 0 && value != 0) {
-        // Here processing the range [LLONG_MIN, 0) of in, converting to unsigned should report OB_DATA_OUT_OF_RANGE.
-        // out is not equal to 0 to avoid values in the range [-0.5, 0) being misjudged, because their rounded values are 0, which is within the valid range.
-        ret = OB_DATA_OUT_OF_RANGE;
-      }
-    }
+    ret = round_floating_to_uint64(in_value, true, is_column_convert, value);
     if (CAST_FAIL(ret)) {
       LOG_WARN("cast float to uint failed", K(ret), K(in), K(value));
     }
@@ -2289,7 +2323,8 @@ static int float_bit(const ObObjType expect_type, ObObjCastParams &params,
 {
   UNUSED(cast_mode);
   int ret = OB_SUCCESS;
-  uint64_t value = static_cast<uint64_t>(in.get_float());
+  uint64_t value = static_cast<uint64_t>(
+      truncate_floating_to_int64_clamped(in.get_float()));
   int32_t bit_len = 0;
   if (OB_UNLIKELY(ObFloatTC != in.get_type_class()
                   || ObBitTC != ob_obj_type_class(expect_type))) {
@@ -2313,7 +2348,7 @@ static int float_enum(const ObExpectType &expect_type, ObObjCastParams &params, 
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(expect_type), K(in), K(ret));
   } else {
-    int64_t value = static_cast<int64_t>(in.get_float());
+    int64_t value = truncate_floating_to_int64_clamped(in.get_float());
     ObObj int_val(value);
     if (OB_FAIL(int_enum(expect_type, params, int_val, out))) {
       LOG_WARN("fail to cast int to enum", K(expect_type), K(in), K(int_val), K(out), K(ret));
@@ -2330,7 +2365,7 @@ static int float_set(const ObExpectType &expect_type, ObObjCastParams &params, c
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(expect_type), K(in), K(ret));
   } else {
-    int64_t value = static_cast<int64_t>(in.get_float());
+    int64_t value = truncate_floating_to_int64_clamped(in.get_float());
     ObObj int_val(value);
     if (OB_FAIL(int_set(expect_type, params, int_val, out))) {
       LOG_WARN("fail to cast int to enum", K(expect_type), K(in), K(int_val), K(out), K(ret));
@@ -2476,28 +2511,7 @@ static int double_uint(const ObObjType expect_type, ObObjCastParams &params,
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
   } else {
-    if (in_value <= static_cast<double>(LLONG_MIN)) {
-      value = static_cast<uint64_t>(LLONG_MIN);
-      ret = OB_DATA_OUT_OF_RANGE;
-    } else if (in_value >= static_cast<double>(ULLONG_MAX)) {
-      value = static_cast<uint64_t>(LLONG_MAX);
-      ret = OB_DATA_OUT_OF_RANGE;
-    } else {
-      if (is_column_convert) {
-        value = static_cast<uint64_t>(rint(in_value));
-      // Slightly different from float_uint, when converting double to uint for values in the range [INT64_MAX, UINT64_MAX), the result in scenarios other than column_convert
-      // should be INT64_MAX instead of INT64_MAX + 1.
-      } else if (in_value >= static_cast<double>(LLONG_MAX)) {
-        value = static_cast<uint64_t>(LLONG_MAX);
-      } else {
-        value = static_cast<uint64_t>(static_cast<int64_t>(rint(in_value)));
-      }
-      if (in_value < 0 && value != 0) {
-        // Here processing the range [LLONG_MIN, 0) of in, converting to unsigned should report OB_DATA_OUT_OF_RANGE.
-        // out is not equal to 0 to avoid values in the range [-0.5, 0) being misjudged, because their rounded values are 0, which is within the valid range.
-        ret = OB_DATA_OUT_OF_RANGE;
-      }
-    }
+    ret = round_floating_to_uint64(in_value, false, is_column_convert, value);
     if (CAST_FAIL(ret)) {
       LOG_WARN("cast float to uint failed", K(ret), K(in), K(value));
     }
@@ -2821,7 +2835,8 @@ static int double_bit(const ObObjType expect_type, ObObjCastParams &params,
 {
   UNUSED(cast_mode);
   int ret = OB_SUCCESS;
-  uint64_t value = static_cast<uint64_t>(in.get_double());
+  uint64_t value = static_cast<uint64_t>(
+      truncate_floating_to_int64_clamped(in.get_double()));
   int32_t bit_len = 0;
   if (OB_UNLIKELY(ObDoubleTC != in.get_type_class()
                   || ObBitTC != ob_obj_type_class(expect_type))) {
@@ -2844,7 +2859,7 @@ static int double_enum(const ObExpectType &expect_type, ObObjCastParams &params,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(expect_type), K(in), K(ret));
   } else {
-    int64_t value = static_cast<int64_t>(in.get_double());
+    int64_t value = truncate_floating_to_int64_clamped(in.get_double());
     ObObj int_val(value);
     if (OB_FAIL(int_enum(expect_type, params, int_val, out))) {
       LOG_WARN("fail to cast int to enum", K(expect_type), K(in), K(int_val), K(out), K(ret));
@@ -2861,7 +2876,7 @@ static int double_set(const ObExpectType &expect_type, ObObjCastParams &params, 
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(expect_type), K(in), K(ret));
   } else {
-    int64_t value = static_cast<int64_t>(in.get_double());
+    int64_t value = truncate_floating_to_int64_clamped(in.get_double());
     ObObj int_val(value);
     if (OB_FAIL(int_set(expect_type, params, int_val, out))) {
       LOG_WARN("fail to cast int to enum", K(expect_type), K(in), K(int_val), K(out), K(ret));
@@ -12439,7 +12454,10 @@ int ob_obj_accuracy_check_only(const ObAccuracy &accuracy, const ObCollationType
 }
 
 // ob_obj_to_ob_time_with_date moved definition to sql/engine/expr/ob_datum_cast.cpp(transitional state)
+// Note: master tenant-elim removed the MTL_ID() argument to ObArenaAllocator, HOST must be synced (see routing item)
+
 // ob_obj_to_ob_time_without_date moved definition to sql/engine/expr/ob_datum_cast.cpp(transitional state)
+// Note: master tenant-elim removed the MTL_ID() argument to ObArenaAllocator, HOST must be synced (see routing item)
 
 int ObObjCaster::to_type(const ObObjType expect_type, ObCastCtx &cast_ctx,
                          const ObObj &in_obj, ObObj &buf_obj, const ObObj *&res_obj)

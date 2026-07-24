@@ -208,27 +208,11 @@ struct ToIntegerCastImpl
           int warning = OB_SUCCESS;
           IN_TYPE in_val = *reinterpret_cast<const IN_TYPE*>(arg_vec_->get_payload(idx));
           uint64_t out_val = 0;
-          if (in_val <= static_cast<double>(LLONG_MIN)) {
-            out_val = static_cast<uint64_t>(LLONG_MIN);
-            ret = OB_DATA_OUT_OF_RANGE;
-          } else if (in_val >= static_cast<double>(ULLONG_MAX)) {
-            out_val = std::is_same<IN_TYPE, float>::value
-                      ? static_cast<uint64_t>(LLONG_MIN) : static_cast<uint64_t>(LLONG_MAX);
-            ret = OB_DATA_OUT_OF_RANGE;
-          } else {
-            if (CM_IS_COLUMN_CONVERT(expr.extra_)) {
-              out_val = static_cast<uint64_t>(rint(in_val));
-            } else if (std::is_same<IN_TYPE, double>::value && in_val >= static_cast<double>(LLONG_MAX)) {
-              out_val = static_cast<uint64_t>(LLONG_MAX);
-            } else {
-              out_val = static_cast<uint64_t>(static_cast<int64_t>(rint(in_val)));
-            }
-            if (in_val < 0 && out_val != 0) {
-              // 这里处理[LLONG_MIN, 0)范围内的in，转换为unsigned应该报OB_DATA_OUT_OF_RANGE。
-              // out不等于0避免[-0.5, 0)内的值被误判，因为它们round后的值是0，处于合法范围内。
-              ret = OB_DATA_OUT_OF_RANGE;
-            }
-          }
+          ret = round_floating_to_uint64(
+              static_cast<double>(in_val),
+              std::is_same<IN_TYPE, float>::value,
+              CM_IS_COLUMN_CONVERT(expr.extra_),
+              out_val);
           if (CAST_FAIL(ret)) {
             SQL_LOG(WARN, "cast float to uint failed", K(ret), K(in_val), K(out_val));
           } else if (CAST_FAIL(uint_range_check(out_type_, out_val, out_val))) {
