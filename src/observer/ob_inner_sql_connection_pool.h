@@ -18,7 +18,6 @@
 #define OCEANBASE_OBSERVER_OB_INNER_SQL_CONNECTION_POOL_H_
 
 #include "common/mysqlclient/ob_isql_connection_pool.h"
-#include "lib/lock/ob_thread_cond.h"
 #include "ob_inner_sql_connection.h"
 
 namespace oceanbase
@@ -29,40 +28,18 @@ namespace sqlclient
 {
 class ObISQLConnection;
 }
-class ObServerConfig;
-}
-namespace share
-{
-namespace schema
-{
-class ObMultiVersionSchemaService;
-}
-}
-namespace sql
-{
-class ObSql;
 }
 namespace observer
 {
-class ObVTIterCreator;
-
 class ObInnerSQLConnectionPool : public common::sqlclient::ObISQLConnectionPool
 {
 public:
-  friend class ObInnerSQLConnection;
-
   ObInnerSQLConnectionPool();
   virtual ~ObInnerSQLConnectionPool();
 
-  int init(share::schema::ObMultiVersionSchemaService *schema_service,
-           sql::ObSql *ob_sql,
-           ObVTIterCreator *vt_iter_creator_,
-           common::ObServerConfig *config = NULL,
-           const bool is_ddl = false);
+  int init(const bool is_ddl = false);
 
   virtual void stop() { stop_ = true; }
-  // wait all connection been released
-  virtual int wait();
 
   // sql string escape
   virtual int escape(const char *from, const int64_t from_size,
@@ -79,21 +56,8 @@ public:
   virtual common::sqlclient::ObSQLConnPoolType get_type() override { return common::sqlclient::INNER_POOL; }
 
 private:
-  // allocate a new connection
-  int alloc_conn(ObInnerSQLConnection *&conn);
-  // destroy and free a connection
-  int free_conn(ObInnerSQLConnection *conn);
-  // revert connection, called by ObInnerSQLConnection::unref()
-  int revert(ObInnerSQLConnection *conn);
-
   bool inited_;
   volatile bool stop_;
-  common::ObThreadCond cond_;
-  int64_t total_conn_cnt_;
-  share::schema::ObMultiVersionSchemaService *schema_service_;
-  sql::ObSql *ob_sql_;
-  ObVTIterCreator *vt_iter_creator_;
-  common::ObServerConfig *config_;
   bool is_ddl_;
 
   DISALLOW_COPY_AND_ASSIGN(ObInnerSQLConnectionPool);

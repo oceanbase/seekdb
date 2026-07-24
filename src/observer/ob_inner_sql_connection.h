@@ -35,7 +35,6 @@ namespace oceanbase
 namespace common
 {
 class ObString;
-class ObServerConfig;
 namespace sqlclient
 {
 class ObISQLResultHandler;
@@ -74,7 +73,6 @@ class ObUnLockTabletRequest;
 namespace observer
 {
 class ObInnerSQLResult;
-class ObInnerSQLConnectionPool;
 class ObVTIterCreator;
 class ObVirtualTableIteratorFactory;
 class ObInnerSQLReadContext;
@@ -134,11 +132,18 @@ public:
   ObInnerSQLConnection();
   virtual ~ObInnerSQLConnection();
 
-  int init(ObInnerSQLConnectionPool *pool,
-           share::schema::ObMultiVersionSchemaService *schema_service,
-           sql::ObSql *ob_sql,
+  static int create(ObISQLClient *client_addr,
+                    const bool use_static_engine,
+                    const int32_t group_id,
+                    ObInnerSQLConnection *&conn);
+  static int create_with_session(sql::ObSQLSessionInfo *session_info,
+                                 ObInnerSQLConnection *&conn);
+  static int create_spi(
+                        sql::ObSQLSessionInfo *session_info,
+                        ObInnerSQLConnection *&conn);
+
+  int init(sql::ObSql *ob_sql,
            ObVTIterCreator *vt_iter_creator,
-           common::ObServerConfig *config,
            sql::ObSQLSessionInfo *extern_session = NULL,
            ObISQLClient *client_addr = NULL,
            ObRestoreSQLModifier *sql_modifer = NULL,
@@ -183,7 +188,7 @@ public:
   int try_acquire_query_lock();
   void try_release_query_lock();
   void ref();
-  // when ref count decrease to zero, revert connection to connection pool.
+  // Destroy and free the connection when its reference count reaches zero.
   void unref();
   int64_t get_ref() const { return ref_cnt_; }
   int64_t to_string(char *buf, const int64_t buf_len) const
@@ -330,6 +335,14 @@ private:
   int create_default_session();
   bool is_inner_session_mgr_enable();
   int destroy_inner_session();
+  static int create_impl(
+                    sql::ObSQLSessionInfo *extern_session,
+                    ObISQLClient *client_addr,
+                    const bool use_static_engine,
+                    const int32_t group_id,
+                    const bool use_spi_allocator,
+                    ObInnerSQLConnection *&conn);
+  void free_self();
 private:
   bool inited_;
   observer::ObQueryRetryCtrl retry_ctrl_;
@@ -337,8 +350,6 @@ private:
   sql::ObSQLSessionInfo *inner_session_;
   bool is_spi_conn_;
   int64_t ref_cnt_;
-  ObInnerSQLConnectionPool *pool_;
-  share::schema::ObMultiVersionSchemaService *schema_service_;
   sql::ObSql *ob_sql_;
   ObVTIterCreator *vt_iter_creator_;
   ObInnerSQLReadContext *ref_ctx_;
@@ -349,7 +360,6 @@ private:
   void *bt_addrs_[MAX_BT_SIZE];
   int64_t execute_start_timestamp_;
   int64_t execute_end_timestamp_;
-  common::ObServerConfig *config_;
 
   // The inner SQL connection always executes in the local server runtime.
   bool is_in_trans_;

@@ -1491,16 +1491,9 @@ int ObServer::init_pre_setting()
 int ObServer::init_sql_proxy()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(sql_conn_pool_.init(&schema_service_,
-                                  &sql_engine_,
-                                  &vt_data_service_.get_vt_iter_factory().get_vt_iter_creator(),
-                                  &config_))) {
+  if (OB_FAIL(sql_conn_pool_.init())) {
     LOG_ERROR("init sql connection pool failed", KR(ret));
-  } else if (OB_FAIL(ddl_conn_pool_.init(&schema_service_,
-                                  &sql_engine_,
-                                  &vt_data_service_.get_vt_iter_factory().get_vt_iter_creator(),
-                                  &config_,
-                                  true/*use static type engine*/))) {
+  } else if (OB_FAIL(ddl_conn_pool_.init(true/*use static type engine*/))) {
     LOG_ERROR("init sql connection pool failed", KR(ret));
   } else if (OB_FAIL(sql_proxy_.init(&sql_conn_pool_))) {
     LOG_ERROR("init sql proxy failed", KR(ret));
