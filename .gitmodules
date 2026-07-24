@@ -1,0 +1,3 @@
+[submodule "deps/dependencies"]
+	path = deps/dependencies
+	url = ../seekdb-dependencies.git

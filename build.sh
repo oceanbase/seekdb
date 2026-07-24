@@ -5,6 +5,9 @@ BUILD_SH=$TOPDIR/build.sh
 
 DEP_DIR=${TOPDIR}/deps/3rd/usr/local/oceanbase/deps/devel
 TOOLS_DIR=${TOPDIR}/deps/3rd/usr/local/oceanbase/devtools
+SOURCE_DEPS_DIR=""
+SOURCE_DEPS_PLATFORM=""
+SOURCE_DEPS_TRIPLET=""
 
 # Get CPU cores and CMAKE command, compatible with macOS and Linux
 if [[ "$(uname -s)" == "Darwin" ]]; then
@@ -102,6 +105,24 @@ function parse_args
 
     BUILD_ARGS+=("-DWITH_COVERAGE=$WITH_COVERAGE")
     [[ "$WITH_COVERAGE" == "ON" ]] && BUILD_ARGS+=("-DENABLE_BOLT=OFF")
+
+    if [[ "$ANDROID_BUILD" == true ]]; then
+      SOURCE_DEPS_PLATFORM=android
+      SOURCE_DEPS_TRIPLET=android-arm64-v8a
+    elif [[ "$(uname -s)" == "Darwin" ]]; then
+      SOURCE_DEPS_PLATFORM=macos
+      MACOS_MAJOR=$(sw_vers -productVersion | awk -F. '{print $1}')
+      SOURCE_DEPS_TRIPLET="macos${MACOS_MAJOR}-$(uname -m)"
+    elif [[ "$(uname -s)" == "Linux" ]]; then
+      SOURCE_DEPS_PLATFORM=linux
+      SOURCE_DEPS_TRIPLET="linux-$(uname -m)"
+    else
+      SOURCE_DEPS_PLATFORM=windows
+      SOURCE_DEPS_TRIPLET=windows-x86_64
+    fi
+    SOURCE_DEPS_DIR="${TOPDIR}/deps/devel/${SOURCE_DEPS_TRIPLET}/install"
+    DEP_DIR="${SOURCE_DEPS_DIR}"
+    BUILD_ARGS+=("-DDEP_DIR=${SOURCE_DEPS_DIR}")
 }
 
 # try call command make, if use give --make in command line.
@@ -156,6 +177,31 @@ function do_init
     if [ $? -ne 0 ]; then
       exit $?
     fi
+
+    if [[ ! -x "$TOPDIR/deps/dependencies/build.sh" ]]; then
+      echo_err "source dependency submodule is missing"
+      echo_err "run: git submodule update --init deps/dependencies"
+      exit 1
+    fi
+
+    local source_cc="${CC:-}"
+    local source_cxx="${CXX:-}"
+    local source_cmake="${CMAKE_PATH:-}"
+    if [[ "$(uname -s)" == "Linux" ]]; then
+      source_cc="${TOOLS_DIR}/bin/gcc"
+      source_cxx="${TOOLS_DIR}/bin/g++"
+      source_cmake="${TOOLS_DIR}/bin/cmake"
+    fi
+    if [[ "$ANDROID_BUILD" == true ]]; then
+      source_cc=""
+      source_cxx=""
+      source_cmake=""
+    fi
+    echo_log "building source SDKs into ${SOURCE_DEPS_DIR}"
+    env CC="$source_cc" CXX="$source_cxx" CMAKE="$source_cmake" \
+      JOBS="$CPU_CORES" \
+      bash "$TOPDIR/deps/dependencies/build.sh" \
+      --platform "$SOURCE_DEPS_PLATFORM" --prefix "$SOURCE_DEPS_DIR"
     time2_ms=$(get_timestamp_ms)
 
     cost_time_ms=$(($time2_ms - $time1_ms))
@@ -280,6 +326,9 @@ function build
       xpackage) 
         # automatic determination of packaging type 
         build_package "$@"
+        ;;
+      xsanity)
+        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DENABLE_SANITY=ON -DOB_ENABLE_MCMODEL=ON
         ;;
       *)
         BUILD_ARGS=(debug "${BUILD_ARGS[@]}")
