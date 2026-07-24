@@ -52,7 +52,7 @@ public:
   void set_locker(ISetLocker *locker) { locker_ = locker; }
   bool check_has_unfree();
   ObTenantCtxAllocator *get_tenant_ctx_allocator() const { return  tallocator_; }
-  void set_chunk_mgr(IChunkMgr *chunk_mgr) { chunk_mgr_ = chunk_mgr; }
+  void set_chunk_mgr(IChunkMgr *chunk_mgr) { UNUSED(chunk_mgr); }
 
 private:
   DISALLOW_COPY_AND_ASSIGN(BlockSet);
@@ -67,12 +67,12 @@ private:
   AChunk *alloc_chunk(const uint64_t size, const ObMemAttr &attr);
   bool add_chunk(const ObMemAttr &attr);
   void free_chunk(AChunk *const chunk);
+  bool can_cache_whole_chunk(AChunk *chunk);
 
 private:
   ObTenantCtxAllocator *tallocator_;
   ObMemAttr attr_;
   ISetLocker *locker_;
-  IChunkMgr *chunk_mgr_;
   // block_list_ can not be initialized, the state is maintained by avail_bm_
   union {
     ABlock *block_list_[BLOCKS_PER_CHUNK+1];

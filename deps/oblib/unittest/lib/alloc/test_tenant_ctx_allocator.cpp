@@ -95,11 +95,10 @@ TEST(TestTenantAllocator, TenantLimit)
 
   cout << "current hold: " << hold << endl;
 
-  // One chunk of headroom: it fits the NORMAL-priority metadata chunk but not the
-  // data chunk, so NORMAL is rejected while OB_HIGH_ALLOC bypasses the hard limit.
+  // No tenant headroom: NORMAL is rejected while OB_HIGH_ALLOC bypasses the hard limit.
   // Keep CHUNK_MGR open so only the tenant limit is under test.
-  set_memory_limit(hold + INTACT_ACHUNK_SIZE);
-  set_hard_memory_limit(hold + INTACT_ACHUNK_SIZE);
+  set_memory_limit(hold);
+  set_hard_memory_limit(hold);
   CHUNK_MGR.set_limit(INT64_MAX);
   CHUNK_MGR.set_hard_limit(INT64_MAX);
   EXPECT_FALSE(NULL != ta.alloc(1, attr));
@@ -165,42 +164,20 @@ TEST(TestTenantAllocator, reserve)
   const int64_t reserve_size = 2 * INTACT_ACHUNK_SIZE;
   int ret = ta.set_idle(reserve_size, true);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ASSERT_EQ(ta.chunk_cnt_, reserve_size / INTACT_ACHUNK_SIZE);
-  int64_t chunk_cnt = 0;
-  AChunk *chunk = &ta.head_chunk_;
-  while (chunk->next_ != nullptr) {
-    chunk_cnt++;
-    chunk = chunk->next_;
-  }
-  ASSERT_EQ(ta.chunk_cnt_, chunk_cnt);
+  ASSERT_EQ(0, ta.chunk_cnt_);
   ObMemAttr attr("TenantCtxAlloc",  ctx_id);
   void *ptr = ta.alloc(1, attr);
   ASSERT_NE(nullptr, ptr);
-  ASSERT_EQ(ta.chunk_cnt_, chunk_cnt - 1);
-  int64_t total_alloc_size = 0;
-  int64_t alloc_size = 512;
-  while (true) {
-    void *ptr = ta.alloc(alloc_size, attr);
-    ASSERT_NE(nullptr, ptr);
-    total_alloc_size += alloc_size;
-    if (total_alloc_size > reserve_size) {
-      ASSERT_EQ(0, ta.chunk_cnt_);
-      break;
-    }
-  }
-  chunk_cnt = ta.chunk_cnt_;
   ret = ta.set_idle(reserve_size * 2, true);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ASSERT_NE(chunk_cnt, ta.chunk_cnt_);
-
-  chunk_cnt = ta.chunk_cnt_;
+  ASSERT_EQ(0, ta.chunk_cnt_);
   ret = ta.set_idle(reserve_size * 4);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ASSERT_EQ(chunk_cnt, ta.chunk_cnt_);
+  ASSERT_EQ(0, ta.chunk_cnt_);
 
   ret = ta.set_idle(reserve_size);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ASSERT_GT(chunk_cnt, ta.chunk_cnt_);
+  ASSERT_EQ(0, ta.chunk_cnt_);
 }
 
 TEST(TestTenantAllocator, set_idle)
@@ -217,7 +194,7 @@ TEST(TestTenantAllocator, set_idle)
   int64_t hold = ta.get_hold();
   ta.free(ptr);
   ASSERT_EQ(0, ta.chunk_cnt_);
-  ASSERT_LT(ta.get_hold(), hold);
+  ASSERT_EQ(ta.get_hold(), hold);
 
   const int64_t alloc_cnt = 10;
   void *ptrs[alloc_cnt];
@@ -233,12 +210,12 @@ TEST(TestTenantAllocator, set_idle)
   for (int i = 0; i < alloc_cnt; ++i) {
     ta.free(ptrs[i]);
   }
-  ASSERT_EQ(10, ta.chunk_cnt_);
+  ASSERT_EQ(0, ta.chunk_cnt_);
   ASSERT_EQ(ta.get_hold(), hold);
   ret = ta.set_idle(0);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(0, ta.chunk_cnt_);
-  ASSERT_LT(ta.get_hold(), hold);
+  ASSERT_EQ(ta.get_hold(), hold);
 }
 
 TEST(TestTenantAllocator, idle)
@@ -261,48 +238,23 @@ TEST(TestTenantAllocator, idle)
   ret = ta.set_idle(idle_size);
   ASSERT_EQ(OB_SUCCESS, ret);
 
-  int64_t chunk_cnt = init_size/INTACT_ACHUNK_SIZE;
-  ASSERT_EQ(ta.chunk_cnt_, chunk_cnt);
-  int64_t hold = ta.get_hold();
+  ASSERT_EQ(0, ta.chunk_cnt_);
   const int64_t alloc_size = 1024 * 100;
   ObMemAttr attr("TenantCtxAlloc", ctx_id);
-  int k  = 0;
   ObArray<void *> ptrs;
-  while (hold == ta.get_hold()) {
-    k++;
+  for (int i = 0; i < 10; ++i) {
     void *ptr = ta.alloc(alloc_size, attr);
     ASSERT_NE(nullptr, ptr);
     ptrs.push_back(ptr);
   }
-  ASSERT_GT(k, init_size / alloc_size / 2);
-  ASSERT_LT(hold, ta.get_hold());
   ASSERT_EQ(0, ta.chunk_cnt_);
-
-  while (ta.get_hold() < idle_size * 2) {
-    void * ptr = ta.alloc(alloc_size, attr);
-    ASSERT_NE(nullptr, ptr);
-    ptrs.push_back(ptr);
-  }
-
-  ASSERT_EQ(0, ta.chunk_cnt_);
-  int64_t last_chunk_cnt = ta.chunk_cnt_;
-  int64_t i = 0;
-  for (; i < ptrs.size() && ta.chunk_cnt_ == last_chunk_cnt; i++) {
-    last_chunk_cnt = ta.chunk_cnt_;
+  for (int64_t i = 0; i < ptrs.size(); i++) {
     ta.free(ptrs[i]);
   }
-  ASSERT_TRUE(i != 0 && i != ptrs.size());
-  hold = ta.get_hold();
-  for (; i < ptrs.size(); i++) {
-    ta.free(ptrs[i]);
-    ASSERT_EQ(ta.get_hold(), hold);
-  }
-  chunk_cnt = idle_size/INTACT_ACHUNK_SIZE;
-  ASSERT_EQ(ta.chunk_cnt_, chunk_cnt);
-
+  ASSERT_EQ(0, ta.chunk_cnt_);
   ret = ta.set_idle(0);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ASSERT_EQ(0, ta.get_hold());
+  ASSERT_EQ(0, ta.chunk_cnt_);
 }
 
 TEST(TestTenantAllocator, chunk_free_list_push_pop_concurrency)

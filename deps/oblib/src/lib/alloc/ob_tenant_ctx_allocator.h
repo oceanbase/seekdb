@@ -474,15 +474,6 @@ public:
       bool sample_allowed = light_backtrace_allowed || malloc_sample_allowed(size, inner_attr);
       inner_attr.alloc_extra_info_ = sample_allowed;
       nobj = allocator.realloc_object(obj, size, inner_attr);
-      if (OB_ISNULL(nobj)) {
-        int64_t total_size = 0;
-        if (g_alloc_failed_ctx().need_wash_chunk()) {
-          total_size += CHUNK_MGR.sync_wash();
-        }
-        if (total_size > 0) {
-          nobj = allocator.realloc_object(obj, size, inner_attr);
-        }
-      }
       if (OB_UNLIKELY(NULL == nobj && NULL != obj)) {
         SANITY_UNPOISON(obj->data_, obj->alloc_bytes_);
       }

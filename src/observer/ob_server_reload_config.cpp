@@ -158,16 +158,6 @@ int ObServerReloadConfig::operator()()
       }
   }
 
-  int64_t cache_size = GCONF.memory_chunk_cache_size;
-  bool use_large_chunk_cache = false;
-  if (0 == cache_size || 1 == cache_size) {
-    cache_size = GMEMCONF.get_server_memory_limit();
-    if (cache_size >= (32L<<30)) {
-      cache_size -= (4L<<30);
-    }
-  }
-  lib::AChunkMgr::instance().set_max_chunk_cache_size(cache_size, use_large_chunk_cache);
-
     // Refresh cluster_name_hash for non arbitration mode
     if (FAILEDx(set_cluster_name_hash(GCONF.cluster.str()))) {
       LOG_WARN("failed to set_cluster_name_hash", KR(ret), "cluster_name", GCONF.cluster.str(),
