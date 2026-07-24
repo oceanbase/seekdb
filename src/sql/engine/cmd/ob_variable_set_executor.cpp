@@ -389,7 +389,7 @@ int ObVariableSetExecutor::execute_subquery_expr(ObExecContext &ctx,
   if (OB_ISNULL(session_info) || OB_ISNULL(sql_proxy)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(session_info), K(sql_proxy));
-  } else if (OB_FAIL(observer::ObInnerSQLConnection::create_with_session(
+  } else if (OB_FAIL(observer::ObInnerSQLConnection::create_connection_with_external_session(
                          session_info, conn))) {
     LOG_WARN("failed to acquire connection", K(ret));
   } else {

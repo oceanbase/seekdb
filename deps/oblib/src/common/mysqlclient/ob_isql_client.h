@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_MYSQL_PROXY_OB_ISQL_CLIENT_H_
 #define OCEANBASE_MYSQL_PROXY_OB_ISQL_CLIENT_H_
 
-#include "common/mysqlclient/ob_isql_connection_pool.h"
 #include "lib/allocator/page_arena.h"
 
 namespace oceanbase
@@ -29,7 +28,7 @@ namespace sqlclient
 {
 class ObISQLResultHandler;
 class ObMySQLResult;
-class ObISQLConnectionPool;
+class ObISQLConnection;
 class ObIExecutor;
 };
 
@@ -66,8 +65,14 @@ public:
     return OB_NOT_SUPPORTED;
   }
 
-  virtual sqlclient::ObISQLConnectionPool *get_pool() = 0;
   virtual sqlclient::ObISQLConnection *get_connection() = 0;
+
+  virtual int acquire_connection(sqlclient::ObISQLConnection *&conn,
+                                 ObISQLClient *client_addr,
+                                 const int32_t group_id);
+  virtual int release_connection(sqlclient::ObISQLConnection *conn,
+                                 const bool success);
+  virtual int on_client_inactive(ObISQLClient *client_addr);
 
   class ReadResult
   {

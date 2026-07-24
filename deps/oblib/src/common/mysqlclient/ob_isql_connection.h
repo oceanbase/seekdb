@@ -18,9 +18,9 @@
 #define OCEANBASE_MYSQLCLIENT_OB_ISQL_CONNECTION_H_
 
 #include "lib/ob_define.h"
+#include "lib/container/ob_iarray.h"
 #include "common/mysqlclient/ob_isql_client.h"
 #include "common/timezone/ob_timezone_info.h"
-#include "common/mysqlclient/ob_isql_connection_pool.h"
 #include "common/object/ob_object.h"
 
 namespace oceanbase
@@ -163,7 +163,6 @@ public:
   uint32_t get_sessid() { return sessid_; }
   virtual int set_ddl_info(const void *ddl_info) { UNUSED(ddl_info); return OB_NOT_SUPPORTED; }
   virtual int set_tz_info_wrap(const ObTimeZoneInfoWrap &tz_info_wrap) { UNUSED(tz_info_wrap); return OB_NOT_SUPPORTED; }
-  virtual void set_nls_formats(const ObString *nls_formats) { UNUSED(nls_formats); }
   virtual void set_is_load_data_exec(bool v) { UNUSED(v); }
   virtual void set_use_external_session(bool v) { UNUSED(v); }
   virtual void set_ob_enable_pl_cache(bool v) { UNUSED(v); }

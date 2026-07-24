@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX COMMON_MYSQLP
 #include "common/mysqlclient/ob_isql_connection.h"
-#include "common/mysqlclient/ob_isql_connection_pool.h"
 #include "common/mysqlclient/ob_mysql_proxy.h"
 #include "common/sql_mode/ob_sql_mode_utils.h"
 using namespace oceanbase::common;
@@ -25,7 +24,12 @@ using namespace oceanbase::common::sqlclient;
 OB_SERIALIZE_MEMBER(ObSessionDDLInfo, ddl_info_.ddl_info_, // FARM COMPAT WHITELIST
                                       session_id_);
 
-ObCommonSqlProxy::ObCommonSqlProxy() : pool_(NULL)
+ObCommonSqlProxy::ObCommonSqlProxy()
+    : acquire_func_(NULL),
+      release_func_(NULL),
+      inactive_func_(NULL),
+      is_ddl_(false),
+      stopped_(false)
 {
 }
 
@@ -33,17 +37,25 @@ ObCommonSqlProxy::~ObCommonSqlProxy()
 {
 }
 
-int ObCommonSqlProxy::init(ObISQLConnectionPool *pool)
+int ObCommonSqlProxy::init(AcquireConnectionFunc acquire_func,
+                           ReleaseConnectionFunc release_func,
+                           InactiveClientFunc inactive_func,
+                           const bool is_ddl)
 {
   int ret = OB_SUCCESS;
   if (is_inited()) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice");
-  } else if (NULL == pool) {
+    LOG_WARN("init twice", K(ret));
+  } else if (OB_ISNULL(acquire_func)
+             || OB_ISNULL(release_func)
+             || OB_ISNULL(inactive_func)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument");
+    LOG_WARN("invalid inner sql connection callbacks", K(ret));
   } else {
-    pool_ = pool;
+    acquire_func_ = acquire_func;
+    release_func_ = release_func;
+    inactive_func_ = inactive_func;
+    is_ddl_ = is_ddl;
   }
   return ret;
 }
@@ -52,7 +64,11 @@ void ObCommonSqlProxy::operator=(const ObCommonSqlProxy &o)
 {
   this->ObISQLClient::operator=(o);
   active_ = o.active_;
-  pool_ = o.pool_;
+  acquire_func_ = o.acquire_func_;
+  release_func_ = o.release_func_;
+  inactive_func_ = o.inactive_func_;
+  is_ddl_ = o.is_ddl_;
+  stopped_ = o.stopped_;
 }
 
 int ObCommonSqlProxy::read(ReadResult &result, const char *sql, const int32_t group_id)
@@ -174,7 +190,6 @@ int ObCommonSqlProxy::write(const ObString sql,
       LOG_WARN("fail to set ddl info", K(ret));
     }
     if (param->ddl_info_.is_ddl()) {
-      conn->set_nls_formats(param->nls_formats_);
     }
     if (!param->secure_file_priv_.empty()) {
       conn->set_session_variable("secure_file_priv", param->secure_file_priv_);
@@ -207,7 +222,7 @@ int ObCommonSqlProxy::close(ObISQLConnection *conn, const int succ)
 {
   int ret = OB_SUCCESS;
   if (conn != NULL) {
-    ret = pool_->release(conn, OB_SUCCESS == succ);
+    ret = release_connection(conn, OB_SUCCESS == succ);
     if (OB_FAIL(ret)) {
       LOG_WARN("release connection failed", K(ret), K(conn));
     }
@@ -222,10 +237,65 @@ int ObCommonSqlProxy::escape(const char *from, const int64_t from_size,
   if (!is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("mysql proxy not inited");
-  } else if (OB_FAIL(pool_->escape(from, from_size, to, to_size, out_size))) {
-    LOG_WARN("escape string failed",
-        "from", ObString(from_size, from), K(from_size),
-        "to", static_cast<void *>(to), K(to_size));
+  } else if (NULL != from && from_size > 0) {
+    if (to_size < from_size * 2) {
+      ret = OB_BUF_NOT_ENOUGH;
+      LOG_WARN("string buffer not enough", K(ret), K(from_size), K(to_size));
+    } else if (OB_ISNULL(to)) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("to buffer is NULL", K(ret), KP(to), KP(from), K(from_size));
+    } else {
+      MEMCPY(to, from, from_size);
+      out_size = from_size;
+    }
+  } else {
+    out_size = 0;
+  }
+  return ret;
+}
+
+int ObCommonSqlProxy::acquire_connection(
+    ObISQLConnection *&conn,
+    ObISQLClient *client_addr,
+    const int32_t group_id)
+{
+  int ret = OB_SUCCESS;
+  conn = NULL;
+  if (!is_inited()) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("mysql proxy not inited", K(ret));
+  } else if (stopped_) {
+    ret = OB_INACTIVE_SQL_CLIENT;
+    LOG_WARN("sql proxy stopped", K(ret));
+  } else if (!is_active()) {
+    ret = OB_INACTIVE_SQL_CLIENT;
+    LOG_WARN("inactive sql client", K(ret));
+  } else {
+    ret = acquire_func_(client_addr, is_ddl_, group_id, conn);
+  }
+  return ret;
+}
+
+int ObCommonSqlProxy::release_connection(
+    ObISQLConnection *conn,
+    const bool success)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(conn)) {
+  } else if (OB_ISNULL(release_func_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("release callback is null", K(ret));
+  } else {
+    ret = release_func_(conn, success);
+  }
+  return ret;
+}
+
+int ObCommonSqlProxy::on_client_inactive(ObISQLClient *client_addr)
+{
+  int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(inactive_func_)) {
+    ret = inactive_func_(client_addr);
   }
   return ret;
 }
@@ -237,7 +307,7 @@ int ObCommonSqlProxy::acquire(sqlclient::ObISQLConnection *&conn, const int32_t 
   if (!is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("mysql proxy not inited", K(ret));
-  } else if (OB_FAIL(pool_->acquire(conn, this, group_id))) {
+  } else if (OB_FAIL(acquire_connection(conn, this, group_id))) {
     LOG_WARN("acquire connection failed", K(ret), K(conn));
   } else if (OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;

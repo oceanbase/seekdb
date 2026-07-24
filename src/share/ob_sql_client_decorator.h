@@ -36,8 +36,13 @@ public:
   virtual int read(ReadResult &res, const char *sql, const int32_t group_id) override;
   virtual int write(const char *sql, const int32_t group_id, int64_t &affected_rows) override;
 
-  virtual sqlclient::ObISQLConnectionPool *get_pool() override;
   virtual sqlclient::ObISQLConnection *get_connection() override;
+  virtual int acquire_connection(sqlclient::ObISQLConnection *&conn,
+                                 ObISQLClient *client_addr,
+                                 const int32_t group_id) override;
+  virtual int release_connection(sqlclient::ObISQLConnection *conn,
+                                 const bool success) override;
+  virtual int on_client_inactive(ObISQLClient *client_addr) override;
   using ObISQLClient::read;
   using ObISQLClient::write;
 

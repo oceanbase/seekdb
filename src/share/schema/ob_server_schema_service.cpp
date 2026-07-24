@@ -78,14 +78,14 @@ int ObServerSchemaService::init_runtime_basic_schema()
   } else {
     const char *runtime_name = OB_SERVER_RUNTIME_NAME;
     ObSimpleServerRuntimeSchema runtime_schema;
-    
+
     runtime_schema.set_runtime_name(ObString(runtime_name));
     runtime_schema.set_name_case_mode(OB_LOWERCASE_AND_INSENSITIVE);
     runtime_schema.set_read_only(false);
     runtime_schema.set_schema_version(OB_CORE_SCHEMA_VERSION);
 
     ObSimpleSysVariableSchema sys_variable;
-    
+
     sys_variable.set_name_case_mode(OB_LOWERCASE_AND_INSENSITIVE);
     sys_variable.set_schema_version(OB_CORE_SCHEMA_VERSION);
 
@@ -124,11 +124,11 @@ int ObServerSchemaService::init(ObMySQLProxy *sql_proxy,
   auto attr = lib::ObMemAttr(ObModIds::OB_SCHEMA_ID_VERSIONS, ObCtxIds::SCHEMA_SERVICE);
   if (OB_ISNULL(sql_proxy)
      || NULL != schema_service_
-     || OB_ISNULL(sql_proxy->get_pool())
+     || !sql_proxy->is_inited()
      || OB_ISNULL(config)) {
     ret = OB_INIT_FAIL;
     LOG_WARN("check param failed", KR(ret), KP(sql_proxy), KP_(schema_service),
-        "proxy->pool", (NULL == sql_proxy ? NULL : sql_proxy->get_pool()), KP(config));
+        KP(config));
   } else if (OB_FAIL(ObSysTableChecker::instance().init())) {
     LOG_WARN("fail to init runtime space table checker", KR(ret));
   } else if (NULL == (schema_service_ = ObSchemaServiceFactory::create())) {
@@ -324,11 +324,11 @@ int ObServerSchemaService::get_increment_sys_variable_keys(const ObSchemaMgr &sc
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     const int64_t schema_version = schema_operation.schema_version_;
     int hash_ret = OB_SUCCESS;
     SchemaKey schema_key;
-    
+
     schema_key.schema_version_ = schema_version;
     //the server runtime schema is refreshed incrementally as well
     if (!schema_operation.is_valid()) {
@@ -357,7 +357,7 @@ int ObServerSchemaService::get_increment_sys_variable_keys_reversely(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     const int64_t schema_version = schema_operation.schema_version_;
     SchemaKey schema_key;
     
@@ -821,24 +821,6 @@ int ObServerSchemaService::get_increment_routine_keys_reversely(
       }
     }
   }
-  return ret;
-}
-
-int ObServerSchemaService::get_increment_synonym_keys(
-  const ObSchemaMgr &schema_mgr,
-  const ObSchemaOperation &schema_operation,
-  AllSchemaKeys &schema_keys)
-{
-  int ret = OB_SUCCESS;
-  return ret;
-}
-
-int ObServerSchemaService::get_increment_synonym_keys_reversely(
-    const ObSchemaMgr &schema_mgr,
-    const ObSchemaOperation &schema_operation,
-    AllSchemaKeys &schema_keys)
-{
-  int ret = OB_SUCCESS;
   return ret;
 }
 
@@ -2220,12 +2202,6 @@ int ObServerSchemaService::replay_log(
                                                schema_operation, schema_keys))) {
             LOG_WARN("fail to get increment table id", K(ret));
           }
-        } else if (schema_operation.op_type_ > OB_DDL_SYNONYM_OPERATION_BEGIN
-                   && schema_operation.op_type_ < OB_DDL_SYNONYM_OPERATION_END) {
-          if (OB_FAIL(get_increment_synonym_keys(schema_mgr,
-                                                 schema_operation, schema_keys))) {
-            LOG_WARN("fail to get increment synonym id", K(ret));
-          }
         } else if (schema_operation.op_type_ > OB_DDL_OUTLINE_OPERATION_BEGIN
                    && schema_operation.op_type_ < OB_DDL_OUTLINE_OPERATION_END) {
           if (OB_FAIL(get_increment_outline_keys(schema_mgr,
@@ -2344,11 +2320,6 @@ int ObServerSchemaService::replay_log_reversely(
         if (OB_FAIL(get_increment_table_keys_reversely(schema_mgr, schema_operation, schema_keys))) {
           LOG_WARN("fail to get increment table keys reversely", KR(ret));
         }
-      } else if (schema_operation.op_type_ > OB_DDL_SYNONYM_OPERATION_BEGIN
-                 && schema_operation.op_type_ < OB_DDL_SYNONYM_OPERATION_END) {
-        if (OB_FAIL(get_increment_synonym_keys_reversely(schema_mgr, schema_operation, schema_keys))) {
-          LOG_WARN("fail to get increment synonym keys reversely", KR(ret));
-        }
       } else if (schema_operation.op_type_ > OB_DDL_OUTLINE_OPERATION_BEGIN
                  && schema_operation.op_type_ < OB_DDL_OUTLINE_OPERATION_END) {
         if (OB_FAIL(get_increment_outline_keys_reversely(schema_mgr, schema_operation, schema_keys))) {
@@ -2429,7 +2400,6 @@ bool ObServerSchemaService::need_construct_aux_infos_(
   bool bret = true;
   if (table_schema.is_index_table()
       || table_schema.is_view_table()
-      || table_schema.is_aux_vp_table()
       || table_schema.is_aux_lob_table()) {
     bret = false;
   }
@@ -2466,10 +2436,6 @@ int ObServerSchemaService::construct_aux_infos_(
         table_schema.set_aux_lob_meta_tid(aux_table_meta.table_id_);
       } else if (AUX_LOB_PIECE == aux_table_meta.table_type_) {
         table_schema.set_aux_lob_piece_tid(aux_table_meta.table_id_);
-      } else if (AUX_VERTIAL_PARTITION_TABLE == aux_table_meta.table_type_) {
-        if (OB_FAIL(table_schema.add_aux_vp_tid(aux_table_meta.table_id_))) {
-          LOG_WARN("add aux vp table id failed", KR(ret), K(aux_table_meta));
-        }
       }
     } // end FOREACH_CNT_X
   }
@@ -3813,14 +3779,14 @@ int ObServerSchemaService::get_increment_obj_mysql_priv_keys(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     const uint64_t user_id = schema_operation.user_id_;
     const ObString &obj_name = schema_operation.obj_name_;
     const int64_t obj_type = schema_operation.obj_type_;
     const int64_t schema_version = schema_operation.schema_version_;
     int hash_ret = OB_SUCCESS;
     SchemaKey obj_mysql_priv_key;
-    
+
     obj_mysql_priv_key.user_id_ = user_id;
     obj_mysql_priv_key.obj_name_ = obj_name;
     obj_mysql_priv_key.obj_type_ = obj_type;
@@ -3865,14 +3831,14 @@ int ObServerSchemaService::get_increment_obj_mysql_priv_keys_reversely(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     const uint64_t user_id = schema_operation.user_id_;
     const ObString &obj_name = schema_operation.obj_name_;
     const int64_t obj_type = schema_operation.obj_type_;
     const int64_t schema_version = schema_operation.schema_version_;
     int hash_ret = OB_SUCCESS;
     SchemaKey obj_mysql_priv_key;
-    
+
     obj_mysql_priv_key.user_id_ = user_id;
     obj_mysql_priv_key.obj_name_ = obj_name;
     obj_mysql_priv_key.obj_type_ = obj_type;

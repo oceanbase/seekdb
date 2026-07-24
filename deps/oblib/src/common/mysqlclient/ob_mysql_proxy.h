@@ -18,7 +18,7 @@
 #define OCEANBASE_MYSQL_PROXY_H_
 
 #include "common/mysqlclient/ob_isql_client.h"
-#include "common/timezone/ob_time_convert.h"  // ObNLSFormatEnum (self-contained include)
+#include "common/timezone/ob_time_convert.h"  // ObTimeZoneInfoWrap (self-contained include)
 #include "common/mysqlclient/ob_mysql_result.h"
 
 namespace oceanbase
@@ -28,7 +28,6 @@ namespace common
 namespace sqlclient
 {
 class ObISQLConnection;
-class ObISQLConnectionPool;
 }
 
 
@@ -144,7 +143,7 @@ struct ObSessionParam final
 public:
   ObSessionParam()
       : sql_mode_(nullptr), tz_info_wrap_(nullptr), ddl_info_(), is_load_data_exec_(false),
-        nls_formats_{}, enable_pl_cache_(true),
+        enable_pl_cache_(true),
         secure_file_priv_() {}
   ~ObSessionParam() = default;
 public:
@@ -152,7 +151,6 @@ public:
   ObTimeZoneInfoWrap *tz_info_wrap_;
   ObSessionDDLInfo ddl_info_;
   bool is_load_data_exec_;
-  common::ObString nls_formats_[common::ObNLSFormatEnum::NLS_MAX];
   bool enable_pl_cache_;
   common::ObString secure_file_priv_;
 };
@@ -162,6 +160,14 @@ public:
 class ObCommonSqlProxy : public ObISQLClient
 {
 public:
+  typedef int (*AcquireConnectionFunc)(ObISQLClient *client_addr,
+                                       bool is_ddl,
+                                       int32_t group_id,
+                                       sqlclient::ObISQLConnection *&conn);
+  typedef int (*ReleaseConnectionFunc)(sqlclient::ObISQLConnection *conn,
+                                       bool success);
+  typedef int (*InactiveClientFunc)(ObISQLClient *client_addr);
+
   // FIXME baihua: remove this typedef?
   typedef ReadResult MySQLResult;
 
@@ -169,8 +175,11 @@ public:
   virtual ~ObCommonSqlProxy();
 
 
-  // init the connection pool
-  virtual int init(sqlclient::ObISQLConnectionPool *pool);
+  // init the connection callbacks
+  int init(AcquireConnectionFunc acquire_func,
+           ReleaseConnectionFunc release_func,
+           InactiveClientFunc inactive_func,
+           const bool is_ddl);
 
   virtual int escape(const char *from, const int64_t from_size,
       char *to, const int64_t to_size, int64_t &out_size) override;
@@ -184,9 +193,19 @@ public:
         const ObSessionParam *session_param = nullptr);
   using ObISQLClient::write;
 
-  bool is_inited() const { return NULL != pool_; }
-  virtual sqlclient::ObISQLConnectionPool *get_pool() override { return pool_; }
+  bool is_inited() const { return NULL != acquire_func_; }
   virtual sqlclient::ObISQLConnection *get_connection() override { return NULL; }
+  virtual int acquire_connection(sqlclient::ObISQLConnection *&conn,
+                                 ObISQLClient *client_addr,
+                                 const int32_t group_id) override;
+  virtual int release_connection(sqlclient::ObISQLConnection *conn,
+                                 const bool success) override;
+  virtual int on_client_inactive(ObISQLClient *client_addr) override;
+  void stop()
+  {
+    stopped_ = true;
+    active_ = false;
+  }
 
   // can only use assign() to copy to prevent passing ObCommonSqlProxy by value unintentionally.
   void assign(const ObCommonSqlProxy &proxy) { *this = proxy; }
@@ -200,7 +219,11 @@ protected:
   int acquire(sqlclient::ObISQLConnection *&conn, const int32_t group_id);
   int read(sqlclient::ObISQLConnection *conn, ReadResult &result, const char *sql);
 
-  sqlclient::ObISQLConnectionPool *pool_;
+  AcquireConnectionFunc acquire_func_;
+  ReleaseConnectionFunc release_func_;
+  InactiveClientFunc inactive_func_;
+  bool is_ddl_;
+  bool stopped_;
 
   DISALLOW_COPY_AND_ASSIGN(ObCommonSqlProxy);
 };

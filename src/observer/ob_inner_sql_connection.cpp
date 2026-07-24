@@ -146,16 +146,17 @@ ObInnerSQLConnection::~ObInnerSQLConnection()
   }
 }
 
-int ObInnerSQLConnection::create(ObISQLClient *client_addr,
-                                 const bool use_static_engine,
-                                 const int32_t group_id,
-                                 ObInnerSQLConnection *&conn)
+int ObInnerSQLConnection::create_connection_with_owned_session(
+    ObISQLClient *client_addr,
+    const bool use_static_engine,
+    const int32_t group_id,
+    ObInnerSQLConnection *&conn)
 {
   return create_impl(NULL, client_addr, use_static_engine, group_id,
                      false, conn);
 }
 
-int ObInnerSQLConnection::create_with_session(
+int ObInnerSQLConnection::create_connection_with_external_session(
     ObSQLSessionInfo *session_info,
     ObInnerSQLConnection *&conn)
 {
@@ -169,8 +170,9 @@ int ObInnerSQLConnection::create_with_session(
   return ret;
 }
 
-int ObInnerSQLConnection::create_spi(ObSQLSessionInfo *session_info,
-                                     ObInnerSQLConnection *&conn)
+int ObInnerSQLConnection::create_spi_connection_with_external_session(
+    ObSQLSessionInfo *session_info,
+    ObInnerSQLConnection *&conn)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(session_info)) {
@@ -178,6 +180,54 @@ int ObInnerSQLConnection::create_spi(ObSQLSessionInfo *session_info,
     LOG_WARN("session is null", K(ret));
   } else {
     ret = create_impl(session_info, NULL, true, 0, true, conn);
+  }
+  return ret;
+}
+
+int ObInnerSQLConnection::create_for_proxy(
+    ObISQLClient *client_addr,
+    bool is_ddl,
+    int32_t group_id,
+    common::sqlclient::ObISQLConnection *&conn)
+{
+  int ret = OB_SUCCESS;
+  ObInnerSQLConnection *inner_conn = NULL;
+  conn = NULL;
+  if (OB_FAIL(create_connection_with_owned_session(
+          client_addr, is_ddl, group_id, inner_conn))) {
+    LOG_WARN("create inner sql connection failed", K(ret));
+  } else {
+    conn = inner_conn;
+  }
+  return ret;
+}
+
+int ObInnerSQLConnection::release_for_proxy(
+    common::sqlclient::ObISQLConnection *conn,
+    bool success)
+{
+  UNUSED(success);
+  int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(conn)) {
+    static_cast<ObInnerSQLConnection *>(conn)->unref();
+  }
+  return ret;
+}
+
+int ObInnerSQLConnection::on_client_inactive(ObISQLClient *client_addr)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(client_addr)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("client is null", K(ret));
+  } else if (OB_ISNULL(GCTX.session_mgr_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session mgr is null", K(ret));
+  } else if (OB_FAIL(
+                 GCTX.session_mgr_->kill_inner_sessions_by_client_key(
+                     reinterpret_cast<uint64_t>(client_addr)))) {
+    LOG_WARN("failed to kill inner sql queries by client", K(ret),
+             KP(client_addr));
   }
   return ret;
 }

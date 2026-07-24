@@ -25,6 +25,7 @@
 #endif
 #include <thread>
 #include "observer/ob_server.h"
+#include "observer/ob_inner_sql_connection.h"
 #include "storage/lob/ob_lob_manager.h"
 #include "storage/compaction/ob_freeze_info_mgr.h"
 #include "share/ob_freeze_info_proxy.h"
@@ -142,7 +143,7 @@ ObServer::ObServer()
   : need_ctas_cleanup_(true),
     gctx_(GCTX),
     prepare_stop_(true), stop_(true), has_stopped_(true), has_destroy_(false),
-    net_frame_(gctx_), sql_conn_pool_(), ddl_conn_pool_(),
+    net_frame_(gctx_),
     sql_proxy_(),
     config_(ObServerConfig::get_instance()),
     reload_config_(config_, gctx_), config_mgr_(config_, reload_config_),
@@ -1024,13 +1025,10 @@ int ObServer::stop()
     ctas_clean_up_timer_.stop();
     FLOG_INFO("ctas clean up timer stopped");
 
-    FLOG_INFO("begin to stop sql conn pool");
-    sql_conn_pool_.stop();
-    FLOG_INFO("sql connection pool stopped");
-
-    FLOG_INFO("begin to stop ddl connection pool");
-    ddl_conn_pool_.stop();
-    FLOG_INFO("ddl connection pool stopped");
+    FLOG_INFO("begin to stop inner sql proxy");
+    sql_proxy_.stop();
+    ddl_sql_proxy_.stop();
+    FLOG_INFO("inner sql proxy stopped");
 
     FLOG_INFO("begin to stop local management service");
     if (OB_FAIL(local_management_service_.stop())) {
@@ -1491,13 +1489,17 @@ int ObServer::init_pre_setting()
 int ObServer::init_sql_proxy()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(sql_conn_pool_.init())) {
-    LOG_ERROR("init sql connection pool failed", KR(ret));
-  } else if (OB_FAIL(ddl_conn_pool_.init(true/*use static type engine*/))) {
-    LOG_ERROR("init sql connection pool failed", KR(ret));
-  } else if (OB_FAIL(sql_proxy_.init(&sql_conn_pool_))) {
+  if (OB_FAIL(sql_proxy_.init(
+          ObInnerSQLConnection::create_for_proxy,
+          ObInnerSQLConnection::release_for_proxy,
+          ObInnerSQLConnection::on_client_inactive,
+          false /* is_ddl */))) {
     LOG_ERROR("init sql proxy failed", KR(ret));
-  } else if (OB_FAIL(ddl_sql_proxy_.init(&ddl_conn_pool_))) {
+  } else if (OB_FAIL(ddl_sql_proxy_.init(
+                 ObInnerSQLConnection::create_for_proxy,
+                 ObInnerSQLConnection::release_for_proxy,
+                 ObInnerSQLConnection::on_client_inactive,
+                 true /* is_ddl */))) {
     LOG_ERROR("init ddl sql proxy failed", KR(ret));
   }
   return ret;

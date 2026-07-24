@@ -328,7 +328,9 @@ int ObSqlPlan::inner_store_sql_plan_for_explain(ObExecContext *ctx,
       OB_ISNULL(session = ctx->get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpect null sql proxy", K(ret));
-  } else if (OB_FAIL(ObInnerSQLConnection::create_spi(session, conn))) {
+  } else if (OB_FAIL(
+                 ObInnerSQLConnection::create_spi_connection_with_external_session(
+                     session, conn))) {
     LOG_WARN("failed to get sql connection", K(ret));
   } else if (OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;

@@ -18,18 +18,15 @@
 
 #include "lib/ob_define.h"
 #include "common/mysqlclient/ob_mysql_proxy_util.h"
-#include "common/mysqlclient/ob_isql_connection_pool.h"
 
 using namespace oceanbase::common;
-using namespace oceanbase::common::sqlclient;
 
-ObMySQLProxyUtil::ObMySQLProxyUtil() : pool_(NULL)
+ObMySQLProxyUtil::ObMySQLProxyUtil()
 {
 }
 
 ObMySQLProxyUtil::~ObMySQLProxyUtil()
 {
 }
-
 
 

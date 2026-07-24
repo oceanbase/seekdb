@@ -1037,7 +1037,7 @@ int ObDynamicSampling::do_estimate_rowcount(ObSQLSessionInfo *session_info,
       if (OB_UNLIKELY(raw_sql.empty())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected empty", K(ret));
-      } else if (OB_FAIL(observer::ObInnerSQLConnection::create_with_session(
+      } else if (OB_FAIL(observer::ObInnerSQLConnection::create_connection_with_external_session(
                              session_info, conn))) {
         LOG_WARN("failed to acquire inner connection", K(ret));
       } else if (OB_ISNULL(conn)) {

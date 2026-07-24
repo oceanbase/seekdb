@@ -394,7 +394,7 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
                      !original_autocommit && OB_FAIL(my_session->set_autocommit(true))) {
             LOG_WARN("failed to set autocommit", K(ret));
           } else {
-            if (OB_FAIL(observer::ObInnerSQLConnection::create_with_session(
+            if (OB_FAIL(observer::ObInnerSQLConnection::create_connection_with_external_session(
                             my_session, conn))) {
               LOG_WARN("failed to acquire inner connection", K(ret));
             } else if (OB_ISNULL(conn)) {

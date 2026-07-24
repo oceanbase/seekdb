@@ -371,7 +371,7 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
     LOG_WARN("invalid args", K(ret), KP(session_info));
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(observer::ObInnerSQLConnection::create_with_session(
+  } else if (OB_FAIL(observer::ObInnerSQLConnection::create_connection_with_external_session(
                          session_info, conn))) {
     LOG_WARN("failed to get conn", K(ret));
   } else if (OB_FAIL(query_virtual.assign_fmt("select count(*) from %s.%s", 

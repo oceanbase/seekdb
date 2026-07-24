@@ -29,7 +29,6 @@ namespace common
 namespace sqlclient
 {
 class ObISQLConnection;
-class ObISQLConnectionPool;
 }
 
 // query stash desc for query batch

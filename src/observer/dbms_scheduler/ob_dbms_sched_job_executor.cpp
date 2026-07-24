@@ -323,7 +323,8 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
       OX (session_info->set_job_info(&job_info));
       OZ (table_operator_.update_for_start_execute(job_info));
       rootserver::ObDBMSSchedService::wakeup_scheduler();
-      OZ (ObInnerSQLConnection::create_spi(session_info, conn));
+      OZ (ObInnerSQLConnection::create_spi_connection_with_external_session(
+          session_info, conn));
       if (OB_NOT_NULL(conn) && OB_NOT_NULL(session_info) && !is_extended_sys_user(session_info->get_user_id()) && !is_root_user(session_info->get_user_id())) {
         conn->set_check_priv(true);
       }

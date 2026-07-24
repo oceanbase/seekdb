@@ -1607,7 +1607,7 @@ int ObDbmsStatsExecutor::prepare_conn_and_store_session_for_online_stats(sql::Ob
         need_reset_trx_lock_timeout = true;
         //3.get conn to update stats
         observer::ObInnerSQLConnection *inner_conn = NULL;
-        if (OB_FAIL(observer::ObInnerSQLConnection::create_with_session(
+        if (OB_FAIL(observer::ObInnerSQLConnection::create_connection_with_external_session(
                         session, inner_conn))) {
           LOG_WARN("failed to acquire conn", K(ret));
         } else {

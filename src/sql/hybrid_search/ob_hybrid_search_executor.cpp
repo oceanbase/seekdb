@@ -85,7 +85,9 @@ int ObHybridSearchExecutor::execute_search(ObObj &query_res) {
   } else if (OB_ISNULL(sql_proxy = ctx_->get_sql_proxy())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null", K(ret), KP(sql_proxy));
-  } else if (OB_FAIL(observer::ObInnerSQLConnection::create_spi(session_info_, conn))) {
+  } else if (OB_FAIL(
+                 observer::ObInnerSQLConnection::create_spi_connection_with_external_session(
+                     session_info_, conn))) {
     LOG_WARN("failed to acquire connection with current session", K(ret));
   } else if (OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;

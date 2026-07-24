@@ -41,7 +41,8 @@ int ObDBMSSchedulerMysql::execute_sql(sql::ObExecContext &ctx, ObSqlString &sql,
   CK (OB_NOT_NULL(ctx.get_sql_proxy()));
   CK (OB_NOT_NULL(session = ctx.get_my_session()));
 
-  OZ (ObInnerSQLConnection::create_spi(session, conn));
+  OZ (ObInnerSQLConnection::create_spi_connection_with_external_session(
+      session, conn));
   OZ (conn->execute_write(sql.ptr(), affected_rows));
   if (OB_NOT_NULL(conn)) {
     conn->unref();

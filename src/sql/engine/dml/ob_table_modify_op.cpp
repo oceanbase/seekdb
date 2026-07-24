@@ -1002,7 +1002,9 @@ int ObTableModifyOp::open_inner_conn()
     LOG_WARN("session is NULL", K(ret));
   } else if (NULL != session->get_inner_conn()) {
     // do nothing.
-  } else if (OB_FAIL(ObInnerSQLConnection::create_with_session(session, conn))) {
+  } else if (OB_FAIL(
+                 ObInnerSQLConnection::create_connection_with_external_session(
+                     session, conn))) {
     LOG_WARN("failed to acquire inner connection", K(ret));
   } else {
     /**

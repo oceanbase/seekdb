@@ -426,7 +426,7 @@ int ObStatsEstimator::do_estimate(const ObOptStatGatherParam &gather_param,
     session->set_autocommit(true);
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      if (OB_FAIL(observer::ObInnerSQLConnection::create_with_session(
+      if (OB_FAIL(observer::ObInnerSQLConnection::create_connection_with_external_session(
                       session, conn))) {
         LOG_WARN("failed to acquire inner connection", K(ret));
       } else if (OB_ISNULL(conn)) {

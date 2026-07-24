@@ -2047,7 +2047,7 @@ int ObDDLTaskRecordOperator::update_snapshot_version_if_not_exist(
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       ObSqlString sql_string;
       sqlclient::ObMySQLResult *result = nullptr;
-      if (OB_ISNULL(sql_client.get_pool()) || OB_UNLIKELY(task_id <= 0 || new_fetched_snapshot <= 0)) {
+      if (OB_UNLIKELY(task_id <= 0 || new_fetched_snapshot <= 0)) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid arg", K(ret), K(task_id), K(new_fetched_snapshot));
       } else if (OB_FAIL(sql_string.assign_fmt("SELECT snapshot_version FROM %s WHERE task_id = %lu FOR UPDATE",
@@ -2082,7 +2082,7 @@ int ObDDLTaskRecordOperator::update_snapshot_version(
   int ret = OB_SUCCESS;
   ObSqlString sql_string;
   int64_t affected_rows = 0;
-  if (OB_ISNULL(sql_client.get_pool()) || OB_UNLIKELY(task_id <= 0)) {
+  if (OB_UNLIKELY(task_id <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(task_id));
   } else if (OB_FAIL(sql_string.assign_fmt(" UPDATE %s SET snapshot_version=%lu WHERE task_id=%lu ",
@@ -2109,7 +2109,7 @@ int ObDDLTaskRecordOperator::update_ret_code(
   int ret = OB_SUCCESS;
   ObSqlString sql_string;
   int64_t affected_rows = 0;
-  if (OB_ISNULL(sql_client.get_pool()) || OB_UNLIKELY(task_id <= 0)) {
+  if (OB_UNLIKELY(task_id <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(task_id));
   } else if (OB_FAIL(sql_string.assign_fmt(" UPDATE %s SET ret_code=%ld WHERE task_id=%lu ",
@@ -2136,7 +2136,7 @@ int ObDDLTaskRecordOperator::update_execution_id(
   int ret = OB_SUCCESS;
   ObSqlString sql_string;
   int64_t affected_rows = 0;
-  if (OB_ISNULL(sql_client.get_pool()) || OB_UNLIKELY(task_id <= 0 || execution_id < 0)) {
+  if (OB_UNLIKELY(task_id <= 0 || execution_id < 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(task_id));
   } else if (OB_FAIL(sql_string.assign_fmt(" UPDATE %s SET execution_id=%lu WHERE task_id=%lu ",
@@ -2492,9 +2492,8 @@ int ObDDLTaskRecordOperator::update_published_schema_version(
   int ret = OB_SUCCESS;
   ObSqlString sql_string;
   int64_t affected_rows = 0;
-  if (OB_ISNULL(sql_client.get_pool())
-      || OB_UNLIKELY(task_id <= 0
-                     || published_schema_version <= 0)) {
+  if (OB_UNLIKELY(task_id <= 0
+                  || published_schema_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret), K(task_id));
   } else if (OB_FAIL(sql_string.assign_fmt("UPDATE %s SET published_schema_version=%ld WHERE task_id=%lu ",

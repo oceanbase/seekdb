@@ -329,7 +329,7 @@ int ObInnerConnectionLockUtil::create_inner_conn(sql::ObSQLSessionInfo *session_
     LOG_WARN("session is NULL", KP(session_info));
   } else if (OB_NOT_NULL(inner_conn = static_cast<observer::ObInnerSQLConnection *>(session_info->get_inner_conn()))) {
     LOG_INFO("session has had inner connection, no need to create again", KPC(session_info));
-  } else if (OB_FAIL(observer::ObInnerSQLConnection::create_with_session(
+  } else if (OB_FAIL(observer::ObInnerSQLConnection::create_connection_with_external_session(
                          session_info, inner_conn))) {
     LOG_WARN("create inner sql connection failed", KR(ret), KPC(session_info));
   } else if (OB_ISNULL(inner_conn)) {

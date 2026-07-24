@@ -21,10 +21,6 @@ namespace oceanbase
 {
 namespace common
 {
-namespace sqlclient
-{
-class ObISQLConnectionPool;
-}
 // mysql lib function utility class
 class ObMySQLProxyUtil
 {
@@ -32,10 +28,7 @@ public:
   ObMySQLProxyUtil();
   virtual ~ObMySQLProxyUtil();
 public:
-  // init the connection pool
   // escape the old string convert from to to
-private:
-  sqlclient::ObISQLConnectionPool *pool_;
 };
 }
 }

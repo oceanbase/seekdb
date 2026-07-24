@@ -46,7 +46,9 @@ int ObMergeTableExecutor::execute(ObExecContext &ctx, ObMergeTableStmt &stmt)
   } else if (OB_ISNULL(ctx.get_sql_proxy())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null", K(ret));
-  } else if (OB_FAIL(ObInnerSQLConnection::create_spi(session, conn))) {
+  } else if (OB_FAIL(
+                 ObInnerSQLConnection::create_spi_connection_with_external_session(
+                     session, conn))) {
     LOG_WARN("failed to acquire inner sql connection", K(ret));
   } else {
   }

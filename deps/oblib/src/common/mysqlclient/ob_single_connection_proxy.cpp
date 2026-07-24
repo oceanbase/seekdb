@@ -24,7 +24,6 @@ ObSingleConnectionProxy::ObSingleConnectionProxy()
     :errno_(OB_SUCCESS),
      statement_count_(0),
      conn_(NULL),
-     pool_(NULL),
      sql_client_(NULL)
 {
 }
@@ -37,24 +36,22 @@ ObSingleConnectionProxy::~ObSingleConnectionProxy()
 int ObSingleConnectionProxy::connect(const int32_t group_id, ObISQLClient *sql_client)
 {
   int ret = OB_SUCCESS;
-  if (NULL == sql_client || NULL == sql_client->get_pool() || group_id < 0) {
+  if (NULL == sql_client || group_id < 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(sql_client), K(group_id));
-  } else if (NULL != pool_ || NULL != conn_) {
+  } else if (NULL != sql_client_ || NULL != conn_) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("transaction can only be started once", K(pool_), K(conn_));
+    LOG_WARN("transaction can only be started once", K_(sql_client), K_(conn));
   } else {
-    pool_ = sql_client->get_pool();
-
-    if (OB_FAIL(pool_->acquire(conn_, sql_client, group_id))) {
-      LOG_WARN("acquire connection failed", K(ret), K(pool_));
+    if (OB_FAIL(sql_client->acquire_connection(conn_, sql_client, group_id))) {
+      LOG_WARN("acquire connection failed", K(ret), K(sql_client));
     } else if (NULL == conn_) {
       ret = OB_INNER_STAT_ERROR;
-      LOG_WARN("connection can not be NULL", K_(pool));
+      LOG_WARN("connection can not be NULL", K(ret));
     } else if (!sql_client->is_active()) { // check client active after connection acquired
       ret = OB_INACTIVE_SQL_CLIENT;
       LOG_WARN("inactive sql client", K(ret));
-      int tmp_ret = pool_->release(conn_, OB_SUCCESS == ret);
+      int tmp_ret = sql_client->release_connection(conn_, OB_SUCCESS == ret);
       if (OB_SUCCESS != tmp_ret) {
         LOG_WARN("release connection failed", K(tmp_ret));
       }
@@ -64,9 +61,46 @@ int ObSingleConnectionProxy::connect(const int32_t group_id, ObISQLClient *sql_c
     }
     if (OB_FAIL(ret)) {
       conn_ = NULL;
-      pool_ = NULL;
       sql_client_ = NULL;
     }
+  }
+  return ret;
+}
+
+int ObSingleConnectionProxy::acquire_connection(
+    ObISQLConnection *&conn,
+    ObISQLClient *client_addr,
+    const int32_t group_id)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(sql_client_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("sql client is null", K(ret));
+  } else {
+    ret = sql_client_->acquire_connection(conn, client_addr, group_id);
+  }
+  return ret;
+}
+
+int ObSingleConnectionProxy::release_connection(
+    ObISQLConnection *conn,
+    const bool success)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(sql_client_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("sql client is null", K(ret));
+  } else {
+    ret = sql_client_->release_connection(conn, success);
+  }
+  return ret;
+}
+
+int ObSingleConnectionProxy::on_client_inactive(ObISQLClient *client_addr)
+{
+  int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(sql_client_)) {
+    ret = sql_client_->on_client_inactive(client_addr);
   }
   return ret;
 }
@@ -118,11 +152,11 @@ int ObSingleConnectionProxy::write(
 
 void ObSingleConnectionProxy::close()
 {
-  if (NULL != pool_ && NULL != conn_) {
-    pool_->release(conn_, OB_SUCCESS == errno_);
+  if (NULL != sql_client_ && NULL != conn_) {
+    sql_client_->release_connection(conn_, OB_SUCCESS == errno_);
   }
   conn_ = NULL;
-  pool_ = NULL;
+  sql_client_ = NULL;
   errno_ = OB_SUCCESS;
 }
 
@@ -130,10 +164,10 @@ int ObSingleConnectionProxy::escape(const char *from, const int64_t from_size,
     char *to, const int64_t to_size, int64_t &out_size)
 {
   int ret = OB_SUCCESS;
-  if (NULL == pool_) {
+  if (NULL == sql_client_) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("transcation not started");
-  } else if (OB_FAIL(pool_->escape(from, from_size, to, to_size, out_size))) {
+  } else if (OB_FAIL(sql_client_->escape(from, from_size, to, to_size, out_size))) {
     LOG_WARN("escape string failed",
         "from", ObString(from_size, from), K(from_size),
         "to", static_cast<void *>(to), K(to_size));
