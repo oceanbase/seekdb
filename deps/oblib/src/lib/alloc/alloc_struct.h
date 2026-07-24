@@ -243,6 +243,7 @@ struct AChunk {
   uint64_t washed_blks_;
   uint64_t washed_size_;
   uint64_t alloc_bytes_;
+  int64_t cache_ts_;
   AChunk *prev_, *next_; // ObTenantCtxAllocator's free_list or BlockSet's using_list
   AChunk *prev2_, *next2_; // ObTenantCtxAllocator's using_list
   ASimpleBitSet<MAX_BLOCKS_CNT> blk_bs_;
@@ -432,7 +433,7 @@ AChunk::AChunk() :
 #endif
     using_cnt_(0),
     block_set_(nullptr),
-    washed_blks_(0), washed_size_(0), alloc_bytes_(0),
+    washed_blks_(0), washed_size_(0), alloc_bytes_(0), cache_ts_(0),
     prev_(this), next_(this),
     prev2_(this), next2_(this)
 {}

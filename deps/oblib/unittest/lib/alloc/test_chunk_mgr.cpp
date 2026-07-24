@@ -51,12 +51,21 @@ public:
     madvise_len_ = length;
     return AChunkMgr::madvise(addr, length, advice);
   }
+  virtual int64_t current_time_us() const override
+  {
+    return now_;
+  }
+  void advance_time(const int64_t delta_us)
+  {
+    now_ += delta_us;
+  }
   AChunk *alloc_chunk(const uint64_t size) { return AChunkMgr::alloc_chunk(size); }
   AChunk *alloc_co_chunk(const uint64_t size) { return AChunkMgr::alloc_co_chunk(size); }
   Slot &normal_slot(int idx = 0) { return slots_[idx]; }
   Slot &large_slot(int idx = 0) { return slots_[MIN_LARGE_ACHUNK_INDEX + idx]; }
   bool need_fail_ = false;
   int madvise_len_ = 0;
+  int64_t now_ = 1000;
 };
 
 TEST_F(TestChunkMgr, NormalChunk)
@@ -307,6 +316,38 @@ TEST_F(TestChunkMgr, FreeListBasic)
     EXPECT_EQ(3, normal_slot()->get_pushes());
     EXPECT_EQ(2, normal_slot()->get_pops());
   }
+}
+
+TEST_F(TestChunkMgr, EvictExpiredNormalChunkOneSlot)
+{
+  int NORMAL_SIZE = OB_MALLOC_BIG_BLOCK_SIZE;
+  AChunk *chunks[2] = {};
+  chunks[0] = alloc_chunk(NORMAL_SIZE);
+  chunks[1] = alloc_chunk(NORMAL_SIZE);
+  const int64_t normal_hold = chunks[0]->hold();
+  free_chunk(chunks[0]);
+  free_chunk(chunks[1]);
+
+  EXPECT_EQ(2, normal_slot()->count());
+  EXPECT_EQ(2 * normal_hold, get_freelist_hold());
+
+  evict_cursor_ = 0;
+  advance_time(CACHE_EXPIRE_US - 1);
+  evict_expired_chunk(current_time_us());
+  EXPECT_EQ(2, normal_slot()->count());
+  EXPECT_EQ(0, expired_unmaps_);
+
+  advance_time(1);
+  evict_cursor_ = 1;
+  evict_expired_chunk(current_time_us());
+  EXPECT_EQ(2, normal_slot()->count());
+  EXPECT_EQ(0, expired_unmaps_);
+
+  evict_cursor_ = 0;
+  evict_expired_chunk(current_time_us());
+  EXPECT_EQ(1, normal_slot()->count());
+  EXPECT_EQ(normal_hold, get_freelist_hold());
+  EXPECT_EQ(1, expired_unmaps_);
 }
 
 TEST_F(TestChunkMgr, sync_wash)

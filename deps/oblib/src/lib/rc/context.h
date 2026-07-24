@@ -461,6 +461,7 @@ public:
           && ContextTLOptGuard::enable_tl_opt) {
         use_pm = true;
       }
+      use_pm=false;
       p_alloc_ = new (&allocator) common::ObAllocator(this, attr_, use_pm, ablock_size);
       freeable_alloc_ = p_alloc_;
     }
