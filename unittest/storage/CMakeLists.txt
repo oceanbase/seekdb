@@ -11,10 +11,6 @@ target_include_directories(truncate_info_helper PUBLIC
   ${CMAKE_SOURCE_DIR}/unittest)
 target_link_libraries(truncate_info_helper PUBLIC ob_base mockcontainer)
 
-# add_library(mock_ft_parser SHARED
-#   mock_ft_parser.cpp)
-# target_link_libraries(mock_ft_parser PUBLIC oceanbase)
-
 function(storage_unittest case)
   ob_unittest(${ARGV})
   target_link_libraries(${case} PRIVATE mockcontainer)
@@ -82,7 +78,7 @@ storage_unittest(test_multi_version_garbage_collector)
 #storage_unittest(test_create_tablet_memtable test_create_tablet_memtable.cpp)
 storage_unittest(test_tenant_meta_obj_pool test_tenant_meta_obj_pool.cpp)
 storage_unittest(test_tablet_pointer_map test_tablet_pointer_map.cpp)
-storage_fts_unittest(test_fts_plugin test_fts_plugin.cpp)
+storage_fts_unittest(test_fts_parser_helper test_fts_parser_helper.cpp)
 storage_fts_unittest(test_fts_property test_fts_property.cpp)
 storage_unittest(test_storage_logger_manager slog/test_storage_logger_manager.cpp)
 storage_unittest(test_storage_log_read_write slog/test_storage_log_read_write.cpp)

@@ -198,7 +198,7 @@ private:
   int init_pre_setting();
   int init_network();
   int init_interrupt();
-  int init_plugin();
+  int init_fts();
   int init_multi_tenant();
   int init_sql_proxy();
   int init_io();
@@ -241,7 +241,7 @@ private:
   int check_if_schema_ready();
   int check_if_timezone_usable();
   int parse_mode();
-  void deinit_plugin();
+  void deinit_fts();
 
 public:
   static int get_network_speed_from_config_file(int64_t &network_speed);
@@ -357,7 +357,6 @@ public:
   omt::ObSharedTimer * shared_timer() override { return mods_shared_timer_; }
   oceanbase::sql::ObTenantSQLSessionMgr * tenant_sql_session_mgr() override { return mods_tenant_sql_session_mgr_; }
   storage::ObTenantMetaMemMgr * tenant_meta_mem_mgr() override { return mods_tenant_meta_mem_mgr_; }
-  storage::ObTenantFTPluginMgr * tenant_ft_plugin_mgr() override { return mods_tenant_ft_plugin_mgr_; }
   ObTxCtxObjPool * part_trans_ctx_obj_pool() override { return mods_part_trans_ctx_obj_pool_; }
   ObTableScanIteratorObjPool * table_scan_iterator_obj_pool() override { return mods_table_scan_iterator_obj_pool_; }
   common::ObTenantIOManager * tenant_io_manager() override { return mods_tenant_io_manager_; }
@@ -453,7 +452,6 @@ private:
   omt::ObSharedTimer * mods_shared_timer_ = nullptr;
   oceanbase::sql::ObTenantSQLSessionMgr * mods_tenant_sql_session_mgr_ = nullptr;
   storage::ObTenantMetaMemMgr * mods_tenant_meta_mem_mgr_ = nullptr;
-  storage::ObTenantFTPluginMgr * mods_tenant_ft_plugin_mgr_ = nullptr;
   ObTxCtxObjPool * mods_part_trans_ctx_obj_pool_ = nullptr;
   ObTableScanIteratorObjPool * mods_table_scan_iterator_obj_pool_ = nullptr;
   common::ObTenantIOManager * mods_tenant_io_manager_ = nullptr;

@@ -7128,30 +7128,6 @@ def_table_schema(
 
 # 12513: removed
 
-# 12515: __all_virtual_plugin_info
-def_table_schema(
-  owner = 'wangyunlai.wyl',
-  table_name = '__all_virtual_plugin_info',
-  table_id   = '12515',
-  table_type = 'VIRTUAL_TABLE',
-  in_tenant_space = True,
-  gm_columns = [],
-  rowkey_columns = [
-  ],
-  normal_columns = [
-    ('name', 'varchar:64', 'true', 'NULL'),               # true means nullable and NULL is the default value
-    ('status', 'varchar:64', 'true', 'NULL'),             # plugin status: READY, UNINIT, DEAD
-    ('type', 'varchar:80', 'true', 'NULL'),               # plugin type, such as tokenizer
-    ('library', 'varchar:128', 'true', 'NULL'),           # plugin dynamic link library name (built-in plugins do not have corresponding link libraries)
-    ('library_version', 'varchar:80', 'true', 'NULL'),    # version of the plugin library itself
-    ('library_revision', 'varchar:80', 'true', 'NULL'),   # plugin library revision version, such as git commit id
-    ('interface_version', 'varchar:80', 'true', 'NULL'),  # specific interface API version implemented by this plugin
-    ('author', 'varchar:64', 'true', 'NULL'),             # plugin author information
-    ('license', 'varchar:64', 'true', 'NULL'),            # plugin LICENSE
-    ('description', 'varchar:65535', 'true', 'NULL')      # plugin description information
-  ],  vtable_route_policy = 'local'
-)
-
 # 12516: __all_virtual_catalog # removed (single-tenant: iterate VT mechanism deleted)
 
 # 12517: __all_virtual_catalog_history # removed (single-tenant: iterate VT mechanism deleted)
@@ -8164,7 +8140,6 @@ def_table_schema(
 
 # 20016: PROFILING
 # 20017: OPTIMIZER_TRACE
-# 20018: PLUGINS
 # 20019: INNODB_SYS_COLUMNS
 
 def_table_schema(
@@ -8218,33 +8193,6 @@ def_table_schema(
            CAST('trace'              as CHAR(200)) as TRACE,
            CAST(00000000000000000000 as SIGNED) as MISSING_BYTES_MAX_MEM_SIZE,
            CAST(0 as SIGNED) as INSUFFICIENT_PRIVILEGES
-    FROM DUAL limit 0;
-  """.replace("\n", " ")
-)
-
-def_table_schema(
-  owner         = 'sanquan.qz',
-  tablegroup_id = 'OB_INVALID_ID',
-  database_id   = 'OB_INFORMATION_SCHEMA_ID',
-  table_name    = 'PLUGINS',
-  table_id      = '20018',
-  table_type    = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT CAST('plugin name'    as CHAR(64)) as PLUGIN_NAME,
-           CAST('version'        as CHAR(20)) as PLUGIN,
-           CAST('plugin status'  as CHAR(10)) as PLUGIN_STATUS,
-           CAST('type'           as CHAR(80)) as PLUGIN_TYPE,
-           CAST('version'        as CHAR(20)) as PLUGIN_TYPE_VERSION,
-           CAST('library'        as CHAR(64)) as PLUGIN_LIBRARY,
-           CAST('lib version'    as CHAR(20)) as PLUGIN_LIBRARY_VERSION,
-           CAST('author'         as CHAR(64)) as PLUGIN_AUTHOR,
-           CAST('description'    as CHAR(200)) as PLUGIN_DESCRIPTION,
-           CAST('license'        as CHAR(80)) as PLUGIN_LICENSE,
-           CAST('load option'    as CHAR(64)) as LOAD_OPTION
     FROM DUAL limit 0;
   """.replace("\n", " ")
 )
@@ -15342,9 +15290,6 @@ def_table_schema(
 # 21630: CDB_OB_OBJECT_BALANCE_WEIGHT
 
 # 21633: removed
-
-# 21635: GV$OB_PLUGINS # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_plugin_info)
-# 21636: V$OB_PLUGINS # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_plugin_info)
 
 def_table_schema(
   owner           = 'yangjiali.yjl',

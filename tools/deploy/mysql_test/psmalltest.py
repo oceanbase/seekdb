@@ -516,7 +516,6 @@ psmall_test += [
 'session.bug_51639473',
 'json.json_merge_preserve_mysql',
 'json.json_array_insert_mysql',
-'inner_table.all_virtual_plugin_info',
 'parser.parser_bug_49371776',
 'pl.pl_bug_52067717_mysql',
 'op_xor',

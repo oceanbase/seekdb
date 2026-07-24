@@ -61,7 +61,6 @@ add_subdirectory(share)
 add_subdirectory(lib)
 add_subdirectory(rootserver)
 add_subdirectory(tools)
-add_subdirectory(plugin)
 
 # Android: single combined test binary (all TEST() macros in one executable)
 # Uses sources registered by ob_unittest() and friends via ANDROID_TEST_SOURCES property.
@@ -97,7 +96,7 @@ if(ANDROID)
     ${CMAKE_SOURCE_DIR}/unittest
     ${CMAKE_SOURCE_DIR}/deps/oblib/unittest)
   # Add test subdirectories so relative includes (e.g. ../share/...) resolve
-  set(_android_test_inc_dirs backup lib logservice observer plugin rootserver share sql storage)
+  set(_android_test_inc_dirs backup lib logservice observer rootserver share sql storage)
   foreach(_dir ${_android_test_inc_dirs})
     target_include_directories(all_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/${_dir})
   endforeach()

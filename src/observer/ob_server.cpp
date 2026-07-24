@@ -71,7 +71,7 @@ int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share:
 #include "storage/fts/dict/ob_ft_cache.h"
 #include "lib/utility/ob_target_specific.h"
 #include "storage/fts/dict/ob_gen_dic_loader.h"
-#include "plugin/sys/ob_plugin_mgr.h"
+#include "storage/fts/ob_fts_parser_helper.h"
 #include "rpc/frame/ob_net_consts.h"
 #include "rpc/ob_req_operator.h"   // rpc::g_rpc_self_addr
 #include "storage/blocksstable/ob_block_sstable_struct.h"
@@ -84,7 +84,6 @@ using namespace oceanbase::storage;
 using namespace oceanbase::blocksstable;
 using namespace oceanbase::transaction;
 using namespace oceanbase::logservice;
-using namespace oceanbase::plugin;
 
 extern "C" void ussl_stop();
 extern "C" void ussl_wait();
@@ -342,8 +341,8 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
     if (OB_FAIL(init_interrupt())) {
       LOG_ERROR("init interrupt failed", KR(ret));
     }
-    if (OB_SUCC(ret) && OB_FAIL(init_plugin())) {
-      LOG_ERROR("init plugin failed", KR(ret));
+    if (OB_SUCC(ret) && OB_FAIL(init_fts())) {
+      LOG_ERROR("init fulltext parser data failed", KR(ret));
     } else if (OB_FAIL(init_ob_service(need_initialize))) {
       LOG_ERROR("init ob service failed", KR(ret));
     }
@@ -381,8 +380,6 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
     }
     if (OB_SUCC(ret) && OB_FAIL(ObClockGenerator::init())) {
       LOG_ERROR("init create clock generator failed", KR(ret));
-      //} else if (OB_FAIL(ObTenantFTPluginMgr::register_plugins())) {
-      //     LOG_ERROR("init fulltext plugins failed", K(ret));
     }
     if (OB_SUCC(ret) && OB_FAIL(init_storage())) {
       LOG_ERROR("init storage failed", KR(ret));
@@ -631,7 +628,7 @@ void ObServer::destroy()
     ObClockGenerator::destroy();
     FLOG_INFO("clock generator destroyed");
 
-    deinit_plugin();
+    deinit_fts();
 
     FLOG_INFO("begin to destroy io device");
     ObIODeviceWrapper::get_instance().destroy();
@@ -1685,48 +1682,21 @@ int ObServer::init_interrupt()
   return ret;
 }
 
-int ObServer::init_plugin()
+int ObServer::init_fts()
 {
-  int ret = OB_SUCCESS;
-  ObPluginMgr *mgr = nullptr;
-  ObString plugin_dir = ObSysVariables::get_value(ObSysVarsToIdxMap::get_store_idx(SYS_VAR_PLUGIN_DIR));
-
-  if (plugin_dir.empty()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("plugin dir is invalid", KR(ret), K(plugin_dir));
+  int ret = ObFTParseData::init_global();
+  if (OB_FAIL(ret)) {
+    LOG_ERROR("failed to initialize fulltext parser data", KR(ret));
   } else {
-    LOG_INFO("got plugin dir", K(plugin_dir));
-
-    if (OB_ISNULL(mgr = new ObPluginMgr())) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_ERROR("failed to create plugin manager instance", KR(ret));
-    } else if (OB_FAIL(mgr->init(plugin_dir))) {
-      LOG_ERROR("failed to init plugin manager", KR(ret));
-    } else if (OB_FAIL(mgr->load_builtin_plugins())) {
-      LOG_ERROR("failed to load builtin plugins", KR(ret));
-    } else if (OB_FAIL(mgr->load_dynamic_plugins(config_.plugins_load.get_value()))) {
-      LOG_ERROR("failed to load dynamic plugins", KR(ret));
-    } else {
-      GCTX.plugin_mgr_ = mgr;
-      LOG_INFO("plugin init done");
-    }
-  }
-
-  if (OB_FAIL(ret) && OB_NOT_NULL(mgr)) {
-    delete mgr;
+    LOG_INFO("fulltext parser data initialized");
   }
   return ret;
 }
 
-void ObServer::deinit_plugin()
+void ObServer::deinit_fts()
 {
-  ObPluginMgr *mgr = GCTX.plugin_mgr_;
-  if (OB_NOT_NULL(mgr)) {
-    mgr->destroy();
-    delete mgr;
-    GCTX.plugin_mgr_ = nullptr;
-  }
-  LOG_INFO("plugin deinit done");
+  ObFTParseData::deinit_global();
+  LOG_INFO("fulltext parser data deinitialized");
 }
 
 int ObServer::init_loaddata_global_stat()
