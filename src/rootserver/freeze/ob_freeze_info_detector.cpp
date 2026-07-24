@@ -104,11 +104,7 @@ void ObMajorMergeInfoDetector::runTimerTask()
     update_last_run_timestamp_();
   } else {
     const int64_t now = ObTimeUtility::current_time();
-    const bool need_snapshot_gc_run = is_primary_service()
-        && OB_NOT_NULL(snapshot_gc_scn_renewer_)
-        && snapshot_gc_scn_renewer_->need_renew(now);
     if (!ATOMIC_LOAD(&need_immediate_run_)
-        && !need_snapshot_gc_run
         && now < ATOMIC_LOAD(&last_schedule_ts_) + get_schedule_interval()) {
       return;
     }
@@ -126,14 +122,12 @@ void ObMajorMergeInfoDetector::runTimerTask()
       if (OB_FAIL(can_start_work(can_work))) {
         LOG_WARN("fail to judge can start work", KR(ret));
       } else if (can_work) {
-          if (is_primary_service()) {
-            if (OB_ISNULL(snapshot_gc_scn_renewer_)) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("snapshot gc scn renewer is null", KR(ret));
-            } else if (OB_FAIL(snapshot_gc_scn_renewer_->try_renew())) {
-              if (REACH_TIME_INTERVAL(60 * 1000 * 1000L)) {
-                LOG_WARN("fail to renew gc snapshot", KR(ret), K_(is_primary_service));
-              }
+          if (OB_ISNULL(snapshot_gc_scn_renewer_)) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("snapshot gc scn renewer is null", KR(ret));
+          } else if (OB_FAIL(snapshot_gc_scn_renewer_->try_renew())) {
+            if (REACH_TIME_INTERVAL(60 * 1000 * 1000L)) {
+              LOG_WARN("fail to renew gc snapshot", KR(ret), K_(is_primary_service));
             }
           }
 
