@@ -38,12 +38,35 @@ struct ObDedupTaskTypeTraits
 REGISTER_DEDUP_TASK_TYPE_NAME(T_BLOOMFILTER, "BloomFilterBuild");
 REGISTER_DEDUP_TASK_TYPE_NAME(T_SCHEMA, "Schema");
 REGISTER_DEDUP_TASK_TYPE_NAME(T_BF_WARMUP, "BloomFilterWarmup");
-REGISTER_DEDUP_TASK_TYPE_NAME(T_MANAGEMENT_EVENT_UPDATE, "ManagementEventUpdate");
+REGISTER_DEDUP_TASK_TYPE_NAME(T_PT_MAINTENANCE, "PartitionTableMainTenance");
+REGISTER_DEDUP_TASK_TYPE_NAME(T_PL_UPDATE, "PartitionLocationUpdate");
+REGISTER_DEDUP_TASK_TYPE_NAME(T_PT_MERGE, "PartitionLocationMerge");
+REGISTER_DEDUP_TASK_TYPE_NAME(T_PT_CHECK, "PartitionLocationCheck");
+REGISTER_DEDUP_TASK_TYPE_NAME(T_PL_FETCH, "PartitionLocationFetch");
+REGISTER_DEDUP_TASK_TYPE_NAME(T_PT_LOCAL_INDEX_BUILD, "PartLocalIndexBuild");
+REGISTER_DEDUP_TASK_TYPE_NAME(T_CONN_ID_FETCH, "ConnectionIdFetch");
+REGISTER_DEDUP_TASK_TYPE_NAME(T_VIP_TENANT_FETCH, "VipTenantFetch");
+REGISTER_DEDUP_TASK_TYPE_NAME(T_CLUSTER_RESOURCE_INIT, "ClusterResourceInit");
+REGISTER_DEDUP_TASK_TYPE_NAME(T_SS_FETCH, "ServerStateFetch");
+REGISTER_DEDUP_TASK_TYPE_NAME(T_RS_ET_UPDATE, "RSEventFetch");
+REGISTER_DEDUP_TASK_TYPE_NAME(T_SYS_VAR_FETCH, "RenewSystemVariable");
+REGISTER_DEDUP_TASK_TYPE_NAME(T_PT_FREEZE, "PartitionTableFreeze");
+REGISTER_DEDUP_TASK_TYPE_NAME(T_ELECTION_ET_UPDATE, "ElectionEventUpdate");
 REGISTER_DEDUP_TASK_TYPE_NAME(T_WARM_UP_TASK, "WarmUpTask");
+REGISTER_DEDUP_TASK_TYPE_NAME(T_MAIN_ST_MERGE, "MainSStableMerge");
+REGISTER_DEDUP_TASK_TYPE_NAME(T_INDEX_ST_MERGE, "IndexSStableMerge");
+REGISTER_DEDUP_TASK_TYPE_NAME(T_MAIN_MB_MERGE, "MainMacroBlockMerge");
+REGISTER_DEDUP_TASK_TYPE_NAME(T_INDEX_MB_MERGE, "IndexMacroBlockMerge");
+REGISTER_DEDUP_TASK_TYPE_NAME(T_REFRESH_LOCALITY, "RefreshLocality");
+REGISTER_DEDUP_TASK_TYPE_NAME(T_DANGLING_REPLICA_CHECK, "DanglingReplicaCheck");
+REGISTER_DEDUP_TASK_TYPE_NAME(T_PL_LEADER_UPDATE, "PartitionLocationLeaderUpdate");
 REGISTER_DEDUP_TASK_TYPE_NAME(T_REFRESH_OPT_STAT, "RefreshOptimizerStat");
 REGISTER_DEDUP_TASK_TYPE_NAME(T_SCHEMA_RELEASE, "SchemaRelease");
 REGISTER_DEDUP_TASK_TYPE_NAME(T_BLOOMFILTER_LOAD, "BloomFilterLoad");
 REGISTER_DEDUP_TASK_TYPE_NAME(T_SCHEMA_ASYNC_REFRESH, "SchemaAsyncRefresh");
+REGISTER_DEDUP_TASK_TYPE_NAME(T_CHECK_PG_RECOVERY_FINISHED, "CheckPGRecoveryFinished");
+REGISTER_DEDUP_TASK_TYPE_NAME(T_UPDATE_FILE_RECOVERY_STATUS, "UpdateFileRecoveryStatus");
+REGISTER_DEDUP_TASK_TYPE_NAME(T_UPDATE_FILE_RECOVERY_STATUS_V2, "UpdateFileRecoveryStatusV2");
 //append new task type name here
 
 //REGISTER_DEDUP_TASK_TYPE_NAME(T_DEDUP_TASK_TYPE_MAX, "ErrorType");
@@ -133,7 +156,7 @@ int ObDedupQueue::init(const int64_t thread_num /*= DEFAULT_THREAD_NUM*/,
                        const int64_t task_map_size /*= TASK_MAP_SIZE*/,
                        const int64_t total_mem_limit /*= TOTAL_LIMIT*/,
                        const int64_t hold_mem_limit /*= HOLD_LIMIT*/,
-                       const int64_t page_size /*= OB_SERVER_RUNTIME_ID*/,
+                       const int64_t page_size /*= OB_SERVER_TENANT_ID*/,
                        const lib::ObLabel &label /*= "DedupQueue"*/)
 {
   int ret = OB_SUCCESS;
@@ -141,7 +164,7 @@ int ObDedupQueue::init(const int64_t thread_num /*= DEFAULT_THREAD_NUM*/,
     ret = OB_INIT_TWICE;
   } else if (thread_num <= 0 || thread_num > MAX_THREAD_NUM
              || total_mem_limit <= 0 || hold_mem_limit <= 0
-             || page_size <= 0) {
+             || page_size <= 0 || false) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid argument", K(thread_num), K(queue_size),
                K(total_mem_limit), K(hold_mem_limit), K(page_size));

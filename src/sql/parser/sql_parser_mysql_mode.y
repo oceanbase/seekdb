@@ -311,7 +311,7 @@ END_P SET_VAR DELIMITER
 
         LAG LANGUAGE LAST LAST_VALUE LATERAL LEAD LEADER LEAVES LESS LEAK LEAK_MOD LEAK_RATE LIB LINESTRING LIST_
         LISTAGG LOB_INROW_THRESHOLD LOCAL LOCALITY LOCATION LOCKED LOCKS LOGFILE LOGONLY_REPLICA_NUM LOGS LOCK_ LOGICAL_READS
-        LEVEL LN LOG LINK LOG_RESTORE_SOURCE LINE_DELIMITER LOCATIONS
+        LEVEL LN LOG LINK LINE_DELIMITER LOCATIONS
 
         MAJOR MAP MANHATTAN MANUAL MASTER MASTER_AUTO_POSITION MASTER_CONNECT_RETRY MASTER_DELAY MASTER_HEARTBEAT_PERIOD
         MASTER_HOST MASTER_LOG_FILE MASTER_LOG_POS MASTER_PASSWORD MASTER_PORT MASTER_RETRY_COUNT
@@ -17666,21 +17666,6 @@ opt_server_or_zone opt_tenant_name
                            $7     /* tenant */
                            );
   $$->value_ = $5[0];                /* scope */
-}
-|
-LOG_RESTORE_SOURCE COMP_EQ STRING_VALUE opt_comment opt_config_scope
-opt_server_or_zone opt_tenant_name
-{
-  ParseNode *log_restore_source= NULL;
-  make_name_node(log_restore_source, result->malloc_pool_, "log_restore_source");
-  malloc_non_terminal_node($$, result->malloc_pool_, T_SYSTEM_ACTION, 5,
-                           log_restore_source,    /* param_name */
-                           $3,    /* param_value */
-                           $4,    /* comment */
-                           $6,    /* zone or server */
-                           $7     /* tenant */
-                           );
-  $$->value_ = $5[0];                /* scope */
 };
 
 alter_system_reset_parameter_actions:
@@ -20685,7 +20670,6 @@ ACCESS_INFO
 |       LOGFILE
 |       LOGONLY_REPLICA_NUM
 |       LOGS
-|       LOG_RESTORE_SOURCE
 |       LOCATIONS
 |       MAJOR
 |       MANHATTAN

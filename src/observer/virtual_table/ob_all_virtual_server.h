@@ -48,6 +48,7 @@ class ObAllVirtualServer : public common::ObVirtualTableScannerIterator
     RPC_TLS_ENABLED,
     MEMORY_LIMIT,
     DATA_DISK_ALLOCATED,
+    DATA_DISK_ASSIGNED,
     START_SERVICE_TIME,
     CREATE_TIME,
     ROLE,
@@ -60,6 +61,7 @@ public:
   ObAllVirtualServer();
   virtual ~ObAllVirtualServer();
   int init(common::ObAddr &addr, common::ObServerConfig *config);
+  virtual int inner_open();
   virtual int inner_get_next_row(common::ObNewRow *&row);
 
 private:

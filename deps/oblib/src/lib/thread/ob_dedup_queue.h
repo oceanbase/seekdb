@@ -36,12 +36,35 @@ enum ObDedupTaskType
   T_BLOOMFILTER = 0,
   T_SCHEMA = 1,
   T_BF_WARMUP = 2,
-  T_MANAGEMENT_EVENT_UPDATE = 3,
-  T_WARM_UP_TASK = 4,
-  T_REFRESH_OPT_STAT = 5,
-  T_SCHEMA_RELEASE = 6,
-  T_BLOOMFILTER_LOAD = 7,
-  T_SCHEMA_ASYNC_REFRESH = 8,
+  T_PT_MAINTENANCE = 3, // partition table maintenance
+  T_PL_UPDATE = 4, // partition location update
+  T_PT_CHECK = 5,
+  T_PT_MERGE = 6,
+  T_PL_FETCH = 7, // obproxy partition location fetch
+  T_PT_LOCAL_INDEX_BUILD = 8,
+  T_CONN_ID_FETCH = 9, // obproxy conn id fetch
+  T_VIP_TENANT_FETCH = 10,  // obproxy vip--->tenant fetch
+  T_CLUSTER_RESOURCE_INIT = 11, // obproxy cluster resource init
+  T_SS_FETCH = 12, // obproxy server state fetch
+  T_RS_ET_UPDATE = 13, // rootservice event history table update
+  T_SYS_VAR_FETCH = 14, // obproxy renew system variable
+  T_PT_FREEZE = 15,
+  T_ELECTION_ET_UPDATE = 16,
+  T_WARM_UP_TASK = 17,
+  T_MAIN_ST_MERGE = 18,
+  T_INDEX_ST_MERGE = 19,
+  T_MAIN_MB_MERGE = 20,
+  T_INDEX_MB_MERGE = 21,
+  T_REFRESH_LOCALITY = 22,
+  T_DANGLING_REPLICA_CHECK = 23,
+  T_PL_LEADER_UPDATE = 24,  //partition location leader update
+  T_REFRESH_OPT_STAT = 25,
+  T_SCHEMA_RELEASE = 26,
+  T_BLOOMFILTER_LOAD = 27,
+  T_SCHEMA_ASYNC_REFRESH = 28,
+  T_CHECK_PG_RECOVERY_FINISHED = 29,
+  T_UPDATE_FILE_RECOVERY_STATUS = 30,
+  T_UPDATE_FILE_RECOVERY_STATUS_V2 = 31,
   T_DEDUP_TASK_TYPE_MAX
 };
 

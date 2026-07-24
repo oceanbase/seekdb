@@ -1907,9 +1907,6 @@ private:
       SysVarsCache &sys_vars_cache,
       const common::ObObj &val);
 private:
-  // @Xiu Ming 2.2 version before used to identify the SHOW statement for read-only zone scenarios, its value due to implementation defects, is always false
-  // After version 2.2, the read-only zone is removed, and the physical standby database no longer depends on this value, thus, this value is no longer used
-  // bool literal_query_;
   // The end time of the previous statement
   int64_t curr_trans_last_stmt_end_time_;
 

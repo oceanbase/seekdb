@@ -74,6 +74,10 @@ ObCreateViewHelper::~ObCreateViewHelper()
      ret = OB_NOT_SUPPORTED;
      LOG_WARN("create view with tablespace_id in 4.x is not supported",
               KR(ret), "tablespace_id", arg_.schema_.get_tablespace_id());
+   } else if (OB_UNLIKELY(OB_INVALID_ID != arg_.schema_.get_tablegroup_id())) {
+     ret = OB_NOT_SUPPORTED;
+     LOG_WARN("create view with tablegroup_id in 4.x is not supported",
+              KR(ret), "tablegroup_id", arg_.schema_.get_tablegroup_id());
    } else if (OB_UNLIKELY(PARTITION_LEVEL_ZERO != arg_.schema_.get_part_level())) {
      ret = OB_NOT_SUPPORTED;
      LOG_WARN("create view with partition in 4.x is not supported",
@@ -335,24 +339,38 @@ int ObCreateViewHelper::check_parallel_ddl_conflict_()
     ObArray<uint64_t> routine_ids;
     ObArray<uint64_t> synonym_ids;
     ObArray<uint64_t> package_ids;
+    ObArray<uint64_t> sequence_ids;
     ObArray<uint64_t> type_ids;
     for (int64_t i = 0; OB_SUCC(ret) && (i < arg_.dep_infos_.count()); ++i) {
       const ObDependencyInfo &dep = arg_.dep_infos_.at(i);
       if (is_inner_pl_object_id(dep.get_ref_obj_id())
           || is_inner_pl_udt_id(dep.get_ref_obj_id())) {
         // do nothing
+        // pl inner object should check in sys tenant
       } else {
         switch (dep.get_ref_obj_type()) {
           case ObObjectType::TABLE:
           case ObObjectType::VIEW:
-            if (OB_FAIL(table_ids.push_back(dep.get_ref_obj_id()))) {
-              LOG_WARN("fail to push back table id", KR(ret), K(dep));
+            // create view v1 as select * from odps_catalog.default.table;
+            // catalog table should not check 
+            // because  resolver gen table schema temporarily
+            // this schema will not store in rs do not need 
+            // to check check_max_dependency_version_
+            if (!is_external_object_id(dep.get_ref_obj_id())) {
+              if (OB_FAIL(table_ids.push_back(dep.get_ref_obj_id()))) {
+                LOG_WARN("fail to push back table id", KR(ret), K(dep));
+              }
             }
             break;
           case ObObjectType::PROCEDURE:
           case ObObjectType::FUNCTION:
             if (OB_FAIL(routine_ids.push_back(dep.get_ref_obj_id()))) {
               LOG_WARN("fail to push back routine id", KR(ret), K(dep));
+            }
+            break;
+          case ObObjectType::SEQUENCE:
+            if (OB_FAIL(sequence_ids.push_back(dep.get_ref_obj_id()))) {
+              LOG_WARN("fail to push back sequence id", KR(ret), K(dep));
             }
             break;
           case ObObjectType::SYNONYM:

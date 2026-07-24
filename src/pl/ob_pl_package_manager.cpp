@@ -893,12 +893,16 @@ int ObPLPackageManager::set_package_var_val(const ObPLResolveCtx &resolve_ctx,
                                             sql::ObExecContext &exec_ctx,
                                             uint64_t package_id,
                                             int64_t var_idx,
-                                            const ObObj &var_val)
+                                            const ObObj &var_val,
+                                            bool need_deserialize,
+                                            bool from_proxy)
 {
   int ret = OB_SUCCESS;
+  bool need_free_new = false;
   bool need_free_old = false;
   ObPLPackageState *package_state = NULL;
   ObObj old_var_val;
+  ObObj new_var_val;
   const ObPLVar *var = NULL;
   CK (package_id != OB_INVALID_ID);
   CK (var_idx != OB_INVALID_INDEX);
@@ -907,17 +911,68 @@ int ObPLPackageManager::set_package_var_val(const ObPLResolveCtx &resolve_ctx,
   OZ (package_state->get_package_var_val(var_idx, old_var_val), K(package_id), K(var_idx));
   OZ (get_package_var(resolve_ctx, package_id, var_idx, var), K(package_id), K(var_idx));
   OV (OB_NOT_NULL(var), OB_ERR_UNEXPECTED, K(package_id), K(var_idx));
-  if (OB_SUCC(ret) && var->is_not_null() && var_val.is_null()) {
+  if (need_deserialize) {
+    OZ (var->get_type().init_session_var(resolve_ctx,
+                                         var->get_type().is_cursor_type() ?
+                                          package_state->get_pkg_cursor_allocator()
+                                          : package_state->get_pkg_allocator(),
+                                         exec_ctx,
+                                         NULL,
+                                         false,
+                                         new_var_val), K(package_id), K(var_idx), K(var_val));
+    OX (need_free_new = true);
+    if (OB_FAIL(ret)) {
+    } else if (var->get_type().is_cursor_type()) {
+      OV (var_val.is_tinyint() || var_val.is_number() || var_val.is_decimal_int(), OB_ERR_UNEXPECTED, K(var_val));
+      if (OB_SUCC(ret)
+          && (var_val.is_tinyint()
+              ? var_val.get_bool()
+                : (var_val.is_number() ? !var_val.is_zero_number() : !var_val.is_zero_decimalint()))) {
+        if (from_proxy) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_WARN("can not sync package open cursor from proxy,"
+                   "need route current sql to orignal server", K(ret));
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "sync package open cursor from proxy");
+        } else {
+          ObPLCursorInfo *cursor = reinterpret_cast<ObPLCursorInfo *>(new_var_val.get_ext());
+          CK (OB_NOT_NULL(cursor));
+          OX (cursor->set_sync_cursor());
+        }
+      }
+    } else if (var->get_type().is_opaque_type()) {
+      if (var_val.is_null()) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_WARN("can not sync package opaque type", K(ret));
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "sync package opaque type");
+      }
+    } else {
+      OZ (var->get_type().deserialize(resolve_ctx,
+                                      var->get_type().is_cursor_type() ?
+                                        package_state->get_pkg_cursor_allocator()
+                                        : package_state->get_pkg_allocator(),
+                                      var_val.get_hex_string().ptr(),
+                                      var_val.get_hex_string().length(),
+                                      new_var_val), K(package_id), K(var_idx), K(var_val));
+    }
+    LOG_DEBUG("deserialize package var", K(package_id), K(var_idx), K(var_val), K(new_var_val));
+  } else {
+    new_var_val = var_val;
+  }
+  if (OB_SUCC(ret) && var->is_not_null() && new_var_val.is_null()) {
     ret = OB_ERR_NUMERIC_OR_VALUE_ERROR;
     LOG_WARN("not null check violated", K(var->is_not_null()), K(var_val.is_null()), K(ret));
   }
-  OZ (package_state->set_package_var_val(var_idx, var_val));
+  OZ (package_state->set_package_var_val(var_idx, new_var_val, resolve_ctx, !need_deserialize));
   OX (need_free_old = true);
+  OX (need_free_new = false);
   if (OB_NOT_NULL(var) && var->get_type().is_cursor_type() && !var->get_type().is_cursor_var()) {
     // package ref cursor variable, refrence outside, do not destruct old var val.
   } else {
+    if (OB_FAIL(ret) && need_free_new) {
+      ObUserDefinedType::destruct_objparam(package_state->get_pkg_allocator(), new_var_val, &(resolve_ctx.session_info_));
+    }
     if (need_free_old) {
-      if (var_val.is_null() &&
+      if (new_var_val.is_null() &&
           old_var_val.is_pl_extend() &&
           var->get_type().get_type() != PL_CURSOR_TYPE &&
           var->get_type().get_type() != PL_REF_CURSOR_TYPE) {
@@ -927,7 +982,10 @@ int ObPLPackageManager::set_package_var_val(const ObPLResolveCtx &resolve_ctx,
       }
     }
   }
-  OX (resolve_ctx.session_info_.set_pl_can_retry(false));
+  if (!need_deserialize) {
+    OZ (package_state->update_changed_vars(var_idx));
+    OX (resolve_ctx.session_info_.set_pl_can_retry(false));
+  }
   return ret;
 }
 
@@ -953,8 +1011,9 @@ int ObPLPackageManager::load_package_spec(const ObPLResolveCtx &resolve_ctx,
   } else if (OB_ISNULL(buf = resolve_ctx.package_guard_.alloc_.alloc(sizeof(ObCacheObjGuard)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate memory.", K(ret));
+  } else if (FALSE_IT(cacheobj_guard = new (buf)ObCacheObjGuard(PACKAGE_SPEC_HANDLE))) {
+    // do nothing
   } else {
-    cacheobj_guard = new (buf)ObCacheObjGuard();
     OZ (ObCacheObjectFactory::alloc(*cacheobj_guard, ObLibCacheNameSpace::NS_PKG));
     OX (package_spec = static_cast<ObPLPackage*>(cacheobj_guard->get_cache_obj()));
     CK (OB_NOT_NULL(package_spec));
@@ -1026,8 +1085,9 @@ int ObPLPackageManager::load_package_body(const ObPLResolveCtx &resolve_ctx,
   } else if (OB_ISNULL(buf = resolve_ctx.package_guard_.alloc_.alloc(sizeof(ObCacheObjGuard)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate memory.", K(ret));
+  } else if (FALSE_IT(cacheobj_guard = new (buf)ObCacheObjGuard(PACKAGE_BODY_HANDLE))) {
+    // do nothing
   } else {
-    cacheobj_guard = new (buf)ObCacheObjGuard();
     OZ (ObCacheObjectFactory::alloc(*cacheobj_guard, ObLibCacheNameSpace::NS_PKG));
     OX (package_body = static_cast<ObPLPackage*>(cacheobj_guard->get_cache_obj()));
     CK (OB_NOT_NULL(package_body));
@@ -1097,6 +1157,50 @@ int ObPLPackageManager::load_package_body(const ObPLResolveCtx &resolve_ctx,
       // pointer should be free manually
       cacheobj_guard->~ObCacheObjGuard();
       package_body = NULL;
+    }
+  }
+  return ret;
+}
+
+int ObPLPackageManager::check_version(const ObPLResolveCtx &resolve_ctx,
+                                      uint64_t package_id,
+                                      const ObPackageStateVersion &state_version,
+                                      bool old_encode_rule,
+                                      bool &match)
+{
+  int ret = OB_SUCCESS;
+  match = true;
+  if (OB_INVALID_ID == package_id
+      || !state_version.is_valid()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("tenant or package id is invalid", K(ret), K(package_id));
+  } else {
+    ObPLPackage *package_spec = NULL;
+    ObPLPackage *package_body = NULL;
+    if (OB_FAIL(get_cached_package(resolve_ctx, package_id, package_spec, package_body))) {
+      LOG_WARN("failed to get cached package", K(ret), K(package_id));
+    } else if (OB_ISNULL(package_spec)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("package spec is null", K(ret));
+    } else if (old_encode_rule) {
+      if (state_version.package_version_ == package_spec->get_version()) {
+        if (OB_NOT_NULL(package_body) && state_version.package_body_version_ != package_body->get_version()) {
+          match = false;
+        }
+      } else {
+        match = false;
+      }
+    } else {
+      ObPackageStateVersion new_state_version(package_spec->get_version(), NULL==package_body?OB_INVALID_VERSION:package_body->get_version());
+      new_state_version.set_merge_version_and_public_syn_cnt(*package_spec, package_body);
+      if (OB_FAIL(ObPLPackageState::check_version(new_state_version,
+                                                  state_version,
+                                                  resolve_ctx.schema_guard_,
+                                                  *package_spec,
+                                                  package_body,
+                                                  match))) {
+        LOG_WARN("fail to check version", K(ret));
+      }
     }
   }
   return ret;
@@ -1301,8 +1405,16 @@ int ObPLPackageManager::get_package_item_state(const ObPLResolveCtx &resolve_ctx
     LOG_WARN("fail to check version", K(ret));
   } else if (!valid) {
     OZ (resolve_ctx.session_info_.del_package_state(package_id));
+    if (OB_SUCC(ret) && !resolve_ctx.is_sync_package_var_) {
+      ObString key;
+      if (OB_FAIL(package_state->encode_pkg_var_key(resolve_ctx.allocator_, key))) {
+        LOG_WARN("fail to encode pkg var key", K(ret));
+      } else if (OB_FAIL(ObPLPackageState::disable_expired_user_variables(resolve_ctx.session_info_, key))) {
+        LOG_WARN("fail to disable expired usr var", K(ret));
+      }
+    }
     if (OB_SUCC(ret)) {
-      LOG_INFO("PLPACKAGE:package state expired, try to reconstruct it", K(package_id));
+      LOG_INFO("PLPACKAGE:package state expired, try to reconstruct it", K(package_id), K(resolve_ctx.is_sync_package_var_));
       package_state->reset(&(resolve_ctx.session_info_));
       package_state->~ObPLPackageState();
       session_allocator.free(package_state);
@@ -1345,7 +1457,7 @@ int ObPLPackageManager::get_package_item_state(const ObPLResolveCtx &resolve_ctx
         }
         int tmp_ret = OB_SUCCESS;
         if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(package.instantiate_package_state(resolve_ctx, exec_ctx, *package_state))) {
+        } else if (OB_FAIL(package.instantiate_package_state(resolve_ctx, exec_ctx, *package_state, spec, body))) {
           if (OB_SUCCESS != (tmp_ret = resolve_ctx.session_info_.del_package_state(package_id))) {
             // Deletion failed, to avoid an unknown state, reinitialize this memory to be in an invalid state
             package_state->reset(&(resolve_ctx.session_info_));
@@ -1464,6 +1576,9 @@ int ObPLPackageManager::add_package_to_plan_cache(const ObPLResolveCtx &resolve_
       pc_ctx.key_.namespace_ = ObLibCacheNameSpace::NS_PKG;
       pc_ctx.key_.db_id_ = database_id;
       pc_ctx.key_.key_id_ = package_id;
+      pc_ctx.key_.sessid_ =
+        (false && resolve_ctx.session_info_.is_pl_debug_on())
+          ? resolve_ctx.session_info_.get_server_sid() : 0;
       pc_ctx.key_.mode_ = resolve_ctx.session_info_.get_pl_profiler() != nullptr
                           ? ObPLObjectKey::ObjectMode::PROFILE : ObPLObjectKey::ObjectMode::NORMAL;
       ObString sql;
@@ -1481,7 +1596,7 @@ int ObPLPackageManager::add_package_to_plan_cache(const ObPLResolveCtx &resolve_
                      K(package_id), K(package->get_mem_size()), K(plan_cache->get_mem_used()), K(ret));
           }
           ret = OB_SUCCESS;
-        } else {
+        } else if (OB_REACH_MAX_CONCURRENT_NUM != ret) { // If it reaches the rate limit upper limit, then throw out the error code
           LOG_WARN("add package to ObPlanCache failed",
                     K(package_id), K(ret), K(package->get_dependency_table()));
           ret = OB_SUCCESS; // add package error, overwrite error code, ensure that plan cache failure does not affect the normal execution path
@@ -1523,6 +1638,9 @@ int ObPLPackageManager::get_package_from_plan_cache(const ObPLResolveCtx &resolv
       pc_ctx.key_.namespace_ = ObLibCacheNameSpace::NS_PKG;
       pc_ctx.key_.db_id_ = database_id;
       pc_ctx.key_.key_id_ = package_id;
+      pc_ctx.key_.sessid_ =
+        (false && resolve_ctx.session_info_.is_pl_debug_on())
+          ? resolve_ctx.session_info_.get_server_sid() : 0;
       pc_ctx.key_.mode_ = resolve_ctx.session_info_.get_pl_profiler() != nullptr
                           ? ObPLObjectKey::ObjectMode::PROFILE : ObPLObjectKey::ObjectMode::NORMAL;
 
@@ -1533,25 +1651,23 @@ int ObPLPackageManager::get_package_from_plan_cache(const ObPLResolveCtx &resolv
       } else if (OB_ISNULL(buf = resolve_ctx.package_guard_.alloc_.alloc(sizeof(ObCacheObjGuard)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to allocate memory.", K(ret));
-      } else {
-        cacheobj_guard = new (buf)ObCacheObjGuard();
-        if (OB_FAIL(ObPLCacheMgr::get_pl_cache(resolve_ctx.session_info_.get_plan_cache(), *cacheobj_guard, pc_ctx))) {
-          LOG_INFO("get pl package from plan cache failed", K(ret), K(package_id));
-          HANDLE_PL_CACHE_RET_VALUE(ret);
+      } else if (FALSE_IT(cacheobj_guard = new (buf)ObCacheObjGuard(GET_PKG_HANDLE))) {
+        // do nothing
+      } else if (OB_FAIL(ObPLCacheMgr::get_pl_cache(resolve_ctx.session_info_.get_plan_cache(), *cacheobj_guard, pc_ctx))) {
+        LOG_INFO("get pl package from plan cache failed", K(ret), K(package_id));
+        HANDLE_PL_CACHE_RET_VALUE(ret);
+      } else if (FALSE_IT(package = static_cast<ObPLPackage*>(cacheobj_guard->get_cache_obj()))) {
+        // do nothing
+      } else if (OB_NOT_NULL(package)) {
+        if (OB_FAIL(resolve_ctx.package_guard_.put(package_id, cacheobj_guard))) {
+          LOG_WARN("failed to put package to package guard", K(ret), K(package_id));
+          // pointer should be free manualy
+          cacheobj_guard->~ObCacheObjGuard();
+          package = NULL;
         } else {
-          package = static_cast<ObPLPackage*>(cacheobj_guard->get_cache_obj());
-          if (OB_NOT_NULL(package)) {
-            if (OB_FAIL(resolve_ctx.package_guard_.put(package_id, cacheobj_guard))) {
-              LOG_WARN("failed to put package to package guard", K(ret), K(package_id));
-              // pointer should be free manualy
-              cacheobj_guard->~ObCacheObjGuard();
-              package = NULL;
-            } else {
-              LOG_DEBUG("get package from plan cache success", K(ret), K(package_id));
-            }
-          }
+          LOG_DEBUG("get package from plan cache success", K(ret), K(package_id));
         }
-      }
+      } else {}
     //}
   }
   return ret;
