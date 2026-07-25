@@ -1085,7 +1085,7 @@ ObHyperLogLogAggCell::ObHyperLogLogAggCell(const ObAggCellBasicInfo &basic_info,
 void ObHyperLogLogAggCell::reset()
 {
   hash_func_ = nullptr;
-  if (OB_ISNULL(ndv_calculator_)) {
+  if (OB_NOT_NULL(ndv_calculator_)) {
     ndv_calculator_->destroy();
     allocator_.free(ndv_calculator_);
     ndv_calculator_ = nullptr;
@@ -1097,7 +1097,7 @@ void ObHyperLogLogAggCell::reset()
 void ObHyperLogLogAggCell::reuse()
 {
   ObAggCell::reuse();
-  if (OB_ISNULL(ndv_calculator_)) {
+  if (OB_NOT_NULL(ndv_calculator_)) {
     ndv_calculator_->reuse();
   }
 }

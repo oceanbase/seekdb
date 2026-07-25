@@ -183,5 +183,4 @@ select not c1 from t1;
 select not c1-1 from t1;
 --echo // 结果为1，且not的子节点上面没有bool expr
 select not (c1 and 0) from t1;
-
 --sleep 2

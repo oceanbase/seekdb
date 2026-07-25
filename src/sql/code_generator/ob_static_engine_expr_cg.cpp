@@ -1524,7 +1524,13 @@ ObStaticEngineExprCG::ObExprBatchSize ObStaticEngineExprCG::get_expr_execute_siz
   bool has_wrapper_inner_expr = false;
   for (int64_t i = 0; i < raw_exprs.count(); i++) {
     ObItemType type = raw_exprs.at(i)->get_expr_type();
-    if (T_OP_GET_USER_VAR == type) {
+    if (T_OP_ASSIGN == type) {
+      // User-variable assignments are stateful across rows. Evaluating a
+      // whole expression batch at once can read the same previous value for
+      // multiple rows before the assignment expression is evaluated.
+      size = ObExprBatchSize::one;
+      break;
+    } else if (T_OP_GET_USER_VAR == type) {
       has_usr_var_expr = true;
     } else if (T_FUN_UDF == type) {
       has_udf_expr = true;

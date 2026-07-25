@@ -320,7 +320,7 @@ bool ObPushDownTopNFilterMsg::check_has_null(ObChunkDatumStore::StoredRow *store
       break;
     }
   }
-  return ret;
+  return has_null;
 }
 
 int ObPushDownTopNFilterMsg::prepare_storage_white_filter_data(

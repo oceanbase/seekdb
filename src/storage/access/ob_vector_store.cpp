@@ -330,7 +330,11 @@ int ObVectorStore::fill_rows(
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
       LOG_WARN("Failed to fill output rows", K(ret));
     }
-  } else if (nullptr != group_by_cell_ && OB_FAIL(group_by_cell_->copy_output_rows(count_, *iter_param_))) {
+  // A pushdown filter may reject the whole scan range.  There is no row to
+  // copy into the legacy group-by cells in that case; passing [0, 0) to them
+  // is treated as OB_INVALID_ARGUMENT.
+  } else if (nullptr != group_by_cell_ && 0 < count_
+             && OB_FAIL(group_by_cell_->copy_output_rows(count_, *iter_param_))) {
     LOG_WARN("Failed to copy output rows", K(ret));
   }
   return ret;

@@ -631,7 +631,6 @@ select /*+ USE_HASH(xy_t1, xy_t2)*/ c1, c2, c1, c2 from xy_t1 where exists (sele
 # ************** end ********
 drop table xy_t1, xy_t2;
 
-
 ## bug:
 drop table if exists xy_x_t, xy_y_t;
 create table xy_x_t(x1 int, x2 varchar(100));
