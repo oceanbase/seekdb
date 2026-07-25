@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX LIB
 
 #include "ob_geo_utils.h"
+#include "share/geo/ob_s2adapter.h"
 #include "share/geo/ob_geo_wkb_visitor.h"
 #include "share/geo/ob_geo_wkb_size_visitor.h"
 #include "share/geo/ob_geo_to_wkt_visitor.h"
@@ -39,7 +40,7 @@
 #include "share/geo/ob_geo_point_location_visitor.h"
 #include "share/geo/ob_geo_zoom_in_visitor.h"
 #include "share/geo/ob_geo_close_ring_visitor.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_tenant_base.h"
 #include "common/mysqlclient/ob_mysql_global.h" // DOUBLE_TO_STRING_CONVERSION_BUFFER_SIZE
 
 namespace oceanbase

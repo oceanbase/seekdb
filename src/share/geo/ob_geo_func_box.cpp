@@ -18,6 +18,7 @@
 
 #include "share/geo/ob_geo_dispatcher.h"
 #include "share/geo/ob_geo_func_box.h"
+#include "share/geo/ob_geo_utils.h"
 
 using namespace oceanbase::common;
 namespace oceanbase

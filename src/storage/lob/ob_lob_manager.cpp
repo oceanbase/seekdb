@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "s2/util/endian/endian.h" // for htonll
 #include "ob_lob_manager.h"
 #include "share/rc/ob_module_provider.h"
 #include "observer/ob_server.h"
@@ -61,10 +62,10 @@ static int is_store_char_len(ObLobAccessParam& param, int64_t store_chunk_size, 
   return ret;
 }
 
-int ObLobManager::server_module_new(ObLobManager *&m) {
+int ObLobManager::mtl_new(ObLobManager *&m) {
   int ret = OB_SUCCESS;
   
-  auto attr = lib::ObMemAttr("LobManager");
+  auto attr = SET_USE_500("LobManager");
   m = OB_NEW(ObLobManager, attr);
   if (OB_ISNULL(m)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;

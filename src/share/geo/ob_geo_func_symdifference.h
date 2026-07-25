@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_LIB_OB_GEO_FUNC_SYMDIFFERENCE_H_
 #define OCEANBASE_LIB_OB_GEO_FUNC_SYMDIFFERENCE_H_
 
-#include "share/geo/ob_geo_func_common.h"
+#include "share/geo/ob_geo_eval_ctx.h"
 
 namespace oceanbase
 {

@@ -440,7 +440,7 @@ ob_set_subtarget(ob_share geo
   geo/ob_geo_point_location_visitor.cpp
 )
 
-ob_set_subtarget(ob_share ALONE
+set(SEEKDB_GIS_HEAVY_SOURCES
   geo/ob_geo_func_difference1.cpp
   geo/ob_geo_func_difference2.cpp
   geo/ob_geo_func_difference3.cpp
@@ -467,6 +467,33 @@ ob_set_subtarget(ob_share ALONE
   geo/ob_geo_func_overlaps2.cpp
   geo/ob_geo_func_overlaps3.cpp
 )
+
+ob_set_subtarget(ob_share ALONE
+  ${SEEKDB_GIS_HEAVY_SOURCES}
+)
+
+if(SEEKDB_COMPACT_GIS)
+  # Source-level options are appended after the build-type optimization flag,
+  # so this overrides the usual -O2 only for the template-heavy GIS units.
+  if(MSVC OR CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")
+    set(_seekdb_gis_size_option /O1)
+  elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    set(_seekdb_gis_size_option -Oz)
+  elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set(_seekdb_gis_size_option -Os)
+  else()
+    message(WARNING
+      "SEEKDB_COMPACT_GIS is enabled, but ${CMAKE_CXX_COMPILER_ID} has no configured size optimization flag")
+  endif()
+
+  if(DEFINED _seekdb_gis_size_option)
+    set_property(SOURCE ${SEEKDB_GIS_HEAVY_SOURCES} APPEND PROPERTY
+      COMPILE_OPTIONS "${_seekdb_gis_size_option}")
+    message(STATUS
+      "SEEKDB_COMPACT_GIS: compiling heavy GIS sources with ${_seekdb_gis_size_option}")
+  endif()
+  unset(_seekdb_gis_size_option)
+endif()
 
 ob_add_new_object_target(ob_share ob_share)
 ob_add_new_object_target(ob_share_extra ob_share_extra)

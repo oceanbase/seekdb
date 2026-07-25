@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX LIB
 
+#include "share/geo/ob_geo_dispatcher.h"
 #include "ob_geo_func_dissolve_polygon.h"
 #include "share/geo/ob_geo_func_register.h"
 

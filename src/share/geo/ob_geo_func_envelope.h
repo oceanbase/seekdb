@@ -17,12 +17,14 @@
 #ifndef OCEANBASE_LIB_GEO_OB_GEO_FUNC_ENVELOPE_
 #define OCEANBASE_LIB_GEO_OB_GEO_FUNC_ENVELOPE_
 
-#include "share/geo/ob_geo_func_common.h"
+#include "share/geo/ob_geo_eval_ctx.h"
 
 namespace oceanbase
 {
 namespace common
 {
+
+class ObCartesianBox;
 
 class ObGeoFuncEnvelope
 {

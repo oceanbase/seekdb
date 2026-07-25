@@ -17,12 +17,16 @@
 #ifndef OCEANBASE_LIB_OB_GEO_FUNC_DISTANCE_SPHERE_
 #define OCEANBASE_LIB_OB_GEO_FUNC_DISTANCE_SPHERE_
 
-#include "share/geo/ob_geo_func_common.h"
+#include "share/geo/ob_geo_eval_ctx.h"
 
 namespace oceanbase
 {
 namespace common
 {
+
+class ObWkbGeomPoint;
+class ObWkbGeogPoint;
+class ObWkbGeogMultiPoint;
 
 class ObGeoFuncDistanceSphereUtil
 {
