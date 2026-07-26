@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX LIB
 
 #include "ob_geo_func_within_helper.ipp"
+#include "share/geo/ob_geo_func_relation.h"
 #include "share/geo/ob_geo_func_utils.h"
 
 using namespace oceanbase::common;
@@ -27,6 +28,23 @@ namespace common
 
 int ob_geo_func_within_eval_wkb_cart(const common::ObGeometry *g1, const common::ObGeometry *g2,
     const ObGeoEvalCtx &context, bool &result);
+
+#ifdef SEEKDB_COMPACT_GIS_ENABLED
+#define OB_GEO_CART_LINEAR_WITHIN(GEO_TYPE1, GEO_TYPE2)                                    \
+  OB_GEO_CART_BINARY_FUNC_BEGIN(ObGeoFuncWithinImpl, GEO_TYPE1, GEO_TYPE2, bool)           \
+  {                                                                                         \
+    UNUSED(context);                                                                        \
+    return eval_cartesian_wkb_linear_relation(                                              \
+        g1, g2, ObGeoRelationPredicate::WITHIN, result);                                    \
+  } OB_GEO_FUNC_END
+
+OB_GEO_CART_LINEAR_WITHIN(ObWkbGeomLineString, ObWkbGeomLineString);
+OB_GEO_CART_LINEAR_WITHIN(ObWkbGeomLineString, ObWkbGeomMultiLineString);
+OB_GEO_CART_LINEAR_WITHIN(ObWkbGeomMultiLineString, ObWkbGeomLineString);
+OB_GEO_CART_LINEAR_WITHIN(ObWkbGeomMultiLineString, ObWkbGeomMultiLineString);
+
+#undef OB_GEO_CART_LINEAR_WITHIN
+#endif
 
 // cart_point
 OB_GEO_CART_BINARY_FUNC_BEGIN(ObGeoFuncWithinImpl, ObWkbGeomPoint, ObWkbGeomCollection, bool)

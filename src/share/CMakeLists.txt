@@ -468,8 +468,23 @@ set(SEEKDB_GIS_HEAVY_SOURCES
   geo/ob_geo_func_overlaps3.cpp
 )
 
+set(SEEKDB_GIS_RELATION_SOURCES)
+if(SEEKDB_COMPACT_GIS)
+  list(APPEND SEEKDB_GIS_RELATION_SOURCES
+    geo/ob_geo_func_relation.cpp
+  )
+  set_property(SOURCE
+    geo/ob_geo_func_relation.cpp
+    geo/ob_geo_func_equals1.cpp
+    geo/ob_geo_func_intersects.cpp
+    geo/ob_geo_func_within1.cpp
+    geo/ob_geo_func_overlaps1.cpp
+    APPEND PROPERTY COMPILE_DEFINITIONS SEEKDB_COMPACT_GIS_ENABLED=1)
+endif()
+
 ob_set_subtarget(ob_share ALONE
   ${SEEKDB_GIS_HEAVY_SOURCES}
+  ${SEEKDB_GIS_RELATION_SOURCES}
 )
 
 if(SEEKDB_COMPACT_GIS)
@@ -487,7 +502,8 @@ if(SEEKDB_COMPACT_GIS)
   endif()
 
   if(DEFINED _seekdb_gis_size_option)
-    set_property(SOURCE ${SEEKDB_GIS_HEAVY_SOURCES} APPEND PROPERTY
+    set_property(SOURCE ${SEEKDB_GIS_HEAVY_SOURCES} ${SEEKDB_GIS_RELATION_SOURCES}
+      APPEND PROPERTY
       COMPILE_OPTIONS "${_seekdb_gis_size_option}")
     message(STATUS
       "SEEKDB_COMPACT_GIS: compiling heavy GIS sources with ${_seekdb_gis_size_option}")
