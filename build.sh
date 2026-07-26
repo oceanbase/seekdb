@@ -41,6 +41,20 @@ function echo_err() {
   echo -e "[build.sh][ERROR] $@" 1>&2
 }
 
+# Keep all native build tools and helper programs on the repository toolchain.
+# In particular, ICU and other source builds execute freshly-built host tools;
+# their runtime loader must see the matching libstdc++ from devtools as well.
+function setup_linux_toolchain_env()
+{
+    if [[ "$(uname -s)" != "Linux" || ! -d "$TOOLS_DIR/bin" ]]; then
+      return 0
+    fi
+    export PATH="$TOOLS_DIR/bin:$PATH"
+    if [[ -d "$TOOLS_DIR/lib64" ]]; then
+      export LD_LIBRARY_PATH="$TOOLS_DIR/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    fi
+}
+
 function usage
 {
     echo -e "Usage:"
@@ -184,13 +198,25 @@ function do_init
       exit 1
     fi
 
+    setup_linux_toolchain_env
+
     local source_cc="${CC:-}"
     local source_cxx="${CXX:-}"
     local source_cmake="${CMAKE_PATH:-}"
+    local source_ar="${AR:-}"
+    local source_ranlib="${RANLIB:-}"
+    local source_nm="${NM:-}"
+    local source_strip="${STRIP:-}"
+    local source_objcopy="${OBJCOPY:-}"
     if [[ "$(uname -s)" == "Linux" ]]; then
       source_cc="${TOOLS_DIR}/bin/gcc"
       source_cxx="${TOOLS_DIR}/bin/g++"
       source_cmake="${TOOLS_DIR}/bin/cmake"
+      source_ar="${TOOLS_DIR}/bin/ar"
+      source_ranlib="${TOOLS_DIR}/bin/ranlib"
+      source_nm="${TOOLS_DIR}/bin/nm"
+      source_strip="${TOOLS_DIR}/bin/strip"
+      source_objcopy="${TOOLS_DIR}/bin/objcopy"
     fi
     if [[ "$ANDROID_BUILD" == true ]]; then
       source_cc=""
@@ -198,10 +224,15 @@ function do_init
       source_cmake=""
     fi
     echo_log "building source SDKs into ${SOURCE_DEPS_DIR}"
-    env CC="$source_cc" CXX="$source_cxx" CMAKE="$source_cmake" \
-      JOBS="$CPU_CORES" \
+    if ! env PATH="$PATH" LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}" \
+      CC="$source_cc" CXX="$source_cxx" CMAKE="$source_cmake" \
+      AR="$source_ar" RANLIB="$source_ranlib" NM="$source_nm" \
+      STRIP="$source_strip" OBJCOPY="$source_objcopy" JOBS="$CPU_CORES" \
       bash "$TOPDIR/deps/dependencies/build.sh" \
-      --platform "$SOURCE_DEPS_PLATFORM" --prefix "$SOURCE_DEPS_DIR"
+      --platform "$SOURCE_DEPS_PLATFORM" --prefix "$SOURCE_DEPS_DIR"; then
+      echo_err "failed to build source SDKs"
+      exit 1
+    fi
     time2_ms=$(get_timestamp_ms)
 
     cost_time_ms=$(($time2_ms - $time1_ms))
@@ -215,6 +246,8 @@ function do_init
 # make build directory && cmake && make (if need)
 function do_build
 {
+    setup_linux_toolchain_env
+
     # Check if cmake exists, compatible with macOS and Linux
     CMAKE_PATH=""
     if [[ "$(uname -s)" == "Darwin" ]]; then
