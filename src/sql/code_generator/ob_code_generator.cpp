@@ -131,9 +131,12 @@ int ObCodeGenerator::detect_batch_size(
                                                      log_plan.get_plan_root()));
     }
     if (OB_FAIL(ret)) {
-    } else if (log_plan.get_optimizer_context().has_var_assign() || !vectorize) {
-      // User-variable assignments are stateful across rows. Use the flag captured before
-      // query transformations, since transformed statements may no longer expose the assignment.
+    } else if (log_plan.get_optimizer_context().has_var_assign()) {
+      // User-variable assignments are stateful across rows and must preserve scalar
+      // expression evaluation order. A batch size of one still uses batch evaluation
+      // and may reuse a user-variable read across batches.
+      batch_size = 0;
+    } else if (!vectorize) {
       // set max_batch_size = 1
       // if all physical operator is not registered as vec op, disable vectorization
       if (rowsets_enabled && has_registered_vec_op) {
