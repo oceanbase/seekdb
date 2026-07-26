@@ -445,6 +445,9 @@ int ObRawExprDeduceType::calc_result_type(ObNonTerminalRawExpr &expr,
     ret = OB_ERR_UNEXPECTED;
     LOG_INFO("not implemented in sql static typing engine, ",
              K(ret), K(op->get_type()), K(op->get_name()));
+  } else if (expr.get_expr_type() == T_FUN_NORMAL_UDF
+             && OB_FAIL(init_normal_udf_expr(expr, op))) {
+    LOG_WARN("failed to init normal udf", K(ret));
   } else if (OB_FAIL(ori_types.assign(types))) {
     LOG_WARN("array assign failed", K(ret));
   } else {
@@ -1429,9 +1432,14 @@ int ObRawExprDeduceType::visit(ObAggFunRawExpr &expr)
         break;
       }
       case T_FUN_SYS_ST_ASMVT: {
+#ifdef SEEKDB_DISABLE_GIS_MVT
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "_ST_AsMVT");
+#else
         if (OB_FAIL(set_asmvt_result_type(expr, result_type))) {
           LOG_WARN("set asmvt result type failed", K(ret));
         }
+#endif
         break;
       }
       case T_FUNC_SYS_ARRAY_AGG: {
@@ -1746,6 +1754,12 @@ int ObRawExprDeduceType::visit(ObAggFunRawExpr &expr)
       case T_FUN_GROUP_ID: {
         result_type.set_int();
         expr.set_result_type(result_type);
+        break;
+      }
+      case T_FUN_AGG_UDF: {
+        if (OB_FAIL(set_agg_udf_result_type(expr))) {
+          LOG_WARN("failed to set agg udf result type", K(ret));
+        }
         break;
       }
       case T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS:
@@ -2790,6 +2804,103 @@ int ObRawExprDeduceType::visit(ObMatchFunRawExpr &expr)
   return ret;
 }
 
+int ObRawExprDeduceType::init_normal_udf_expr(ObNonTerminalRawExpr &expr, ObExprOperator *op)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(expr);
+  UNUSED(op);
+  ObExprDllUdf *normal_udf_op = nullptr;
+  ObNormalDllUdfRawExpr &fun_sys = static_cast<ObNormalDllUdfRawExpr &>(expr);
+  if (OB_ISNULL(op)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid argument", K(ret), K(expr.get_expr_type()));
+  } else {
+    normal_udf_op = static_cast<ObExprDllUdf*>(op);
+    /* set udf meta, load so func */
+    if (OB_FAIL(normal_udf_op->set_udf_meta(fun_sys.get_udf_meta()))) {
+      LOG_WARN("failed to set udf to expr", K(ret));
+    } else if (OB_FAIL(normal_udf_op->init_udf(fun_sys.get_param_exprs()))) {
+      LOG_WARN("failed to init udf", K(ret));
+    } else {
+    }
+  }
+  return ret;
+}
+
+int ObRawExprDeduceType::set_agg_udf_result_type(ObAggFunRawExpr &expr)
+{
+  int ret = OB_SUCCESS;
+  ObIArray<ObRawExpr*> &param_exprs = expr.get_real_param_exprs_for_update();
+  common::ObSEArray<common::ObString, 16> udf_attributes; /* udf's input args' name */
+  common::ObSEArray<ObExprResType, 16> udf_attributes_types; /* udf's attribute type */
+  common::ObSEArray<ObUdfConstArgs, 16> const_results; /* const input expr' result */
+  ObAggUdfFunction udf_func;
+  const share::schema::ObUDFMeta &udf_meta = expr.get_udf_meta();
+  ObExprResType type;
+  ObExprResTypes param_types;
+  ARRAY_FOREACH_X(param_exprs, idx, cnt, OB_SUCC(ret)) {
+    ObRawExpr *expr = param_exprs.at(idx);
+    if (OB_ISNULL(expr)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("the expr is null", K(ret));
+    } else if (expr->is_column_ref_expr()) {
+      //if the input expr is a column, we should set the column name as the expr name.
+      ObColumnRefRawExpr *col_expr = static_cast<ObColumnRefRawExpr *>(expr);
+      const ObString &real_expr_name = col_expr->get_alias_column_name().empty() ? col_expr->get_column_name() : col_expr->get_alias_column_name();
+      expr->set_expr_name(real_expr_name);
+    } else if (expr->is_const_expr()) {
+      //if the input expr is a const expr, we will set the result val to UDF_INIT's args.
+      ObUdfConstArgs const_args;
+      ObConstRawExpr *c_expr = static_cast<ObConstRawExpr*>(expr);
+      ObObj &param_obj = c_expr->get_value();
+      const_args.idx_in_udf_arg_ = idx;
+      UNUSED(param_obj);
+      //FIXME muhang
+      //Here it is simply not possible to compute, unable to generate and calculate the physical expression.
+      // If the user's init strongly depends on the result of a computable expression, then it may happen in calc_udf_result_type
+      // Error.
+      if (OB_FAIL(const_results.push_back(const_args))) {
+        LOG_WARN("failed to push back const args", K(ret));
+      }
+    }
+    OZ(param_types.push_back(expr->get_result_type()));
+    OX(param_types.at(param_types.count() - 1).set_calc_meta(
+            param_types.at(param_types.count() - 1)));
+
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(udf_attributes.push_back(expr->get_expr_name()))) {
+        LOG_WARN("failed to push back", K(ret));
+      } else if (OB_FAIL(udf_attributes_types.push_back(expr->get_result_type()))) {
+        LOG_WARN("failed to push back", K(ret));
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    ObExprTypeCtx type_ctx;
+    type_ctx.set_raw_expr(&expr);
+    ObSQLUtils::init_type_ctx(my_session_, type_ctx);
+    if (OB_FAIL(udf_func.init(udf_meta))) {
+      LOG_WARN("udf function init failed", K(ret));
+    } else if (OB_FAIL(ObUdfUtil::calc_udf_result_type(
+                alloc_, &udf_func, udf_meta,
+                udf_attributes, udf_attributes_types,
+                type,
+                param_types.count() > 0 ? &param_types.at(0) : NULL,
+                param_types.count(),
+                type_ctx))) {
+      LOG_WARN("failed to cale udf result type");
+    } else {
+      expr.set_result_type(type);
+      ObCastMode cast_mode = CM_NONE;
+      OZ(ObSQLUtils::get_default_cast_mode(false, 0, my_session_, cast_mode));
+      for (int64_t idx = 0; OB_SUCC(ret) && idx < param_exprs.count(); idx++) {
+        OZ(try_add_cast_expr(expr, idx, param_types.at(idx), cast_mode));
+      }
+    }
+  }
+  return ret;
+}
+
 int ObRawExprDeduceType::set_agg_group_concat_result_type(ObAggFunRawExpr &expr,
                                                           ObExprResType &result_type)
 {
@@ -3431,7 +3542,8 @@ int ObRawExprDeduceType::try_add_cast_expr_above_for_deduce_type(ObRawExpr &expr
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret), KP(session), KP(exec_ctx));
     } else if (OB_FAIL(ObRawExprUtils::need_wrap_to_string(expr.get_result_type(),
-                                          cast_dst_type.get_type(), false, need_wrap, true))) {
+                                          cast_dst_type.get_type(), false, need_wrap,
+                                          exec_ctx->support_enum_set_type_subschema(*session)))) {
       LOG_WARN("failed to check_need_wrap_to_string", K(ret));
     } else if (need_wrap) {
       OZ(ObRawExprUtils::try_wrap_type_to_str(expr_factory_, my_session_, expr,

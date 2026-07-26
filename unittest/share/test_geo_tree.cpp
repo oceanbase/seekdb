@@ -24,6 +24,11 @@
 #include "share/geo/ob_geo_to_wkt_visitor.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
 #undef private
+#ifdef SEEKDB_DISABLE_GIS_MVT
+#include "sql/code_generator/ob_static_engine_expr_cg.h"
+#include "sql/engine/expr/ob_expr_priv_st_asmvtgeom.h"
+#include "sql/resolver/expr/ob_raw_expr.h"
+#endif
 
 
 namespace bg = boost::geometry;
@@ -802,6 +807,7 @@ TEST_F(TestGeoTree, clip_visitor)
   clip_visitor_test("GEOMETRYCOLLECTION EMPTY", "EMPTY", box1);
 }
 
+#ifndef SEEKDB_DISABLE_GIS_MVT
 void affine_visitor_test(const ObString &wkt, const ObString &wkt_res, ObAffineMatrix &affine)
 {
   ObArenaAllocator allocator(ObModIds::TEST);
@@ -907,6 +913,34 @@ TEST_F(TestGeoTree, simplify_visitor)
 	    "(1 1, 1 5, 5 5, 5 1, 1 1)"
 	    ")", "EMPTY", 100, false);
 }
+#else
+TEST_F(TestGeoTree, mvt_util_disabled)
+{
+  ObAffineMatrix affine{};
+  ObGeoGrid grid{};
+  ASSERT_EQ(OB_NOT_SUPPORTED, ObGeoMVTUtil::affine_transformation(nullptr, affine));
+  ASSERT_EQ(OB_NOT_SUPPORTED, ObGeoMVTUtil::snap_to_grid(nullptr, grid, false));
+  ASSERT_EQ(OB_NOT_SUPPORTED, ObGeoMVTUtil::simplify_geometry(nullptr));
+}
+
+TEST_F(TestGeoTree, mvt_expr_disabled)
+{
+  ObArenaAllocator allocator(ObModIds::TEST);
+  sql::ObExprPrivSTAsMVTGeom op(allocator);
+  sql::ObExprResType result_type;
+  sql::ObExprResType param_types[2];
+  ObExprTypeCtx type_ctx;
+  ASSERT_EQ(OB_NOT_SUPPORTED,
+            op.calc_result_typeN(result_type, param_types, 2, type_ctx));
+
+  sql::ObExprCGCtx cg_ctx(allocator, nullptr, nullptr, 0);
+  sql::ObSysFunRawExpr raw_expr(allocator);
+  sql::ObExpr runtime_expr;
+  ASSERT_EQ(OB_SUCCESS, op.cg_expr(cg_ctx, raw_expr, runtime_expr));
+  ASSERT_TRUE(runtime_expr.eval_func_ ==
+              sql::ObExprPrivSTAsMVTGeom::eval_priv_st_asmvtgeom);
+}
+#endif
 
 TEST_F(TestGeoTree, ewkt_with_null)
 {

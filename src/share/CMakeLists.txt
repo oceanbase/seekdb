@@ -373,6 +373,18 @@ ob_set_subtarget(ob_share semistruct
   semistruct/ob_sub_column_path.cpp
 )
 
+set(SEEKDB_GIS_MVT_SOURCES)
+if(SEEKDB_ENABLE_GIS_MVT)
+  list(APPEND SEEKDB_GIS_MVT_SOURCES
+    geo/ob_geo_mvt_encode_visitor.cpp
+    geo/ob_geo_mvt.cpp
+    geo/ob_vector_tile.pb-c.c
+    geo/ob_geo_affine_visitor.cpp
+    geo/ob_geo_grid_visitor.cpp
+    geo/ob_geo_simplify_visitor.cpp
+  )
+endif()
+
 ob_set_subtarget(ob_share geo
   geo/ob_geo_common.cpp
   geo/ob_geo_bin.cpp
@@ -419,12 +431,7 @@ ob_set_subtarget(ob_share geo
   geo/ob_geo_box_clip_visitor.cpp
   geo/ob_geo_elevation_visitor.cpp
   geo/ob_geo_func_length.cpp
-  geo/ob_geo_mvt_encode_visitor.cpp
-  geo/ob_geo_mvt.cpp
-  geo/ob_vector_tile.pb-c.c
-  geo/ob_geo_affine_visitor.cpp
-  geo/ob_geo_grid_visitor.cpp
-  geo/ob_geo_simplify_visitor.cpp
+  ${SEEKDB_GIS_MVT_SOURCES}
   geo/ob_geo_box_clip_visitor.cpp
   geo/ob_geo_func_dissolve_polygon.cpp
   geo/ob_geo_close_ring_visitor.cpp

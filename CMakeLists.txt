@@ -12,6 +12,13 @@ project("OceanBase"
 option(SEEKDB_COMPACT_GIS
   "Optimize template-heavy GIS translation units for binary size" OFF)
 
+option(SEEKDB_ENABLE_GIS_MVT
+  "Build GIS Mapbox Vector Tile support" ON)
+
+if(NOT SEEKDB_ENABLE_GIS_MVT)
+  add_compile_definitions(SEEKDB_DISABLE_GIS_MVT=1)
+endif()
+
 if(WIN32)
   find_program(LLVM_LIB_PROGRAM llvm-lib)
   if(LLVM_LIB_PROGRAM)

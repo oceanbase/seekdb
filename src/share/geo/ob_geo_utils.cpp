@@ -30,9 +30,11 @@
 #include "share/geo/ob_geo_3d.h"
 #include "share/geo/ob_geo_check_empty_visitor.h"
 #include "share/geo/ob_geo_box_clip_visitor.h"
+#ifndef SEEKDB_DISABLE_GIS_MVT
 #include "share/geo/ob_geo_affine_visitor.h"
 #include "share/geo/ob_geo_simplify_visitor.h"
 #include "share/geo/ob_geo_grid_visitor.h"
+#endif
 #include "share/geo/ob_geo_cache_polygon.h"
 #include "share/geo/ob_geo_cache_point.h"
 #include "share/geo/ob_geo_cache_linestring.h"
@@ -2484,6 +2486,11 @@ int ObGeoTypeUtil::remove_duplicate_geo(ObGeometry *&geo, lib::MemoryContext &me
 
 int ObGeoMVTUtil::affine_transformation(ObGeometry *geo, const ObAffineMatrix &affine)
 {
+#ifdef SEEKDB_DISABLE_GIS_MVT
+  UNUSED(geo);
+  UNUSED(affine);
+  return OB_NOT_SUPPORTED;
+#else
   int ret = OB_SUCCESS;
   if (OB_ISNULL(geo)) {
     ret = OB_INVALID_ARGUMENT;
@@ -2495,6 +2502,7 @@ int ObGeoMVTUtil::affine_transformation(ObGeometry *geo, const ObAffineMatrix &a
     }
   }
   return ret;
+#endif
 }
 
 template<typename CachedGeoType>
@@ -2922,6 +2930,12 @@ int ObGeoTypeUtil::print_double(double val, ObStringBuffer &buf)
 
 int ObGeoMVTUtil::snap_to_grid(ObGeometry *geo, const ObGeoGrid &grid, bool use_floor)
 {
+#ifdef SEEKDB_DISABLE_GIS_MVT
+  UNUSED(geo);
+  UNUSED(grid);
+  UNUSED(use_floor);
+  return OB_NOT_SUPPORTED;
+#else
   int ret = OB_SUCCESS;
   if (OB_ISNULL(geo)) {
     ret = OB_INVALID_ARGUMENT;
@@ -2933,10 +2947,17 @@ int ObGeoMVTUtil::snap_to_grid(ObGeometry *geo, const ObGeoGrid &grid, bool use_
     }
   }
   return ret;
+#endif
 }
 
 int ObGeoMVTUtil::simplify_geometry(ObGeometry *geo, double tolerance, bool keep_collapsed)
 {
+#ifdef SEEKDB_DISABLE_GIS_MVT
+  UNUSED(geo);
+  UNUSED(tolerance);
+  UNUSED(keep_collapsed);
+  return OB_NOT_SUPPORTED;
+#else
   int ret = OB_SUCCESS;
   if (OB_ISNULL(geo)) {
     ret = OB_INVALID_ARGUMENT;
@@ -2948,6 +2969,7 @@ int ObGeoMVTUtil::simplify_geometry(ObGeometry *geo, double tolerance, bool keep
     }
   }
   return ret;
+#endif
 }
 
 ObGeoBoostAllocGuard::~ObGeoBoostAllocGuard()
