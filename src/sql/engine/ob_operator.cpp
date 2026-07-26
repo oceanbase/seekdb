@@ -1086,7 +1086,8 @@ int ObOperator::get_next_row()
     if (OB_ITER_END == ret) {
       row_reach_end_ = true;
     } else if (OB_SUCC(ret)) {
-      if (spec_.get_phy_plan()->is_vectorized()) {
+      if (spec_.get_phy_plan()->is_vectorized()
+          || spec_.get_phy_plan()->is_contains_assignment()) {
         ObDatum *res = NULL;
         FOREACH_CNT_X(e, spec_.output_, OB_SUCC(ret)) {
           if (OB_FAIL((*e)->eval(eval_ctx_, res))) {

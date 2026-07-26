@@ -6691,7 +6691,10 @@ int ObStaticEngineCG::set_properties_post(const ObLogPlan &log_plan, ObPhysicalP
   if (OB_SUCC(ret)) {
     //set other params
     //set user var assignment property
-    phy_plan.set_contains_assignment(log_plan.get_stmt()->is_contains_assignment());
+    // Keep the recursive assignment flag captured before query transformations.
+    // The root statement may no longer expose assignments that remain in a child
+    // query, but scalar execution still has to eagerly evaluate their outputs.
+    phy_plan.set_contains_assignment(log_plan.get_optimizer_context().has_var_assign());
     phy_plan.set_require_local_execution(!log_plan.get_optimizer_context().get_exchange_allocated());
     phy_plan.set_plan_type(log_plan.get_optimizer_context().get_phy_plan_type());
     phy_plan.set_location_type(log_plan.get_optimizer_context().get_location_type());
