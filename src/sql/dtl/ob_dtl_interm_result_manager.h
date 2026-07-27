@@ -25,7 +25,7 @@
 #include "sql/engine/basic/ob_chunk_datum_store.h"
 #include "lib/allocator/ob_allocator.h"
 #include "sql/engine/basic/ob_temp_column_store.h"
-#include "sql/engine/ob_tenant_sql_memory_manager.h"
+#include "sql/engine/ob_sql_memory_manager.h"
 #include "src/sql/engine/ob_sql_mem_mgr_processor.h"
 
 namespace oceanbase
@@ -100,8 +100,8 @@ public:
       mutex_(common::ObLatchIds::SQL_MEMORY_MGR_MUTEX_LOCK) {}
   ~ObDTLMemProfileInfo() {}
 
-  // The local channel and the rpc channel may modify the interm results concurrently,
-  // and these interm results may be linked to the same profile.
+  // Local producer and consumer workers may modify intermediate results concurrently,
+  // and those results may be linked to the same profile.
   // Therefore, access to the profile needs to be protected by locks
   // to prevent concurrent modification issues.
   void alloc(int64_t size)
@@ -406,19 +406,19 @@ public:
   int atomic_append_block(ObDTLIntermResultKey &key, ObAtomicAppendBlockCall &call);
   int atomic_append_part_block(ObDTLIntermResultKey &key, ObAtomicAppendPartBlockCall &call);
   int init();
-  static int mtl_init(ObDTLIntermResultManager* &dtl_interm_result_manager);
+  static int server_module_init(ObDTLIntermResultManager* &dtl_interm_result_manager);
   void destroy();
-  static void mtl_destroy(ObDTLIntermResultManager *&dtl_interm_result_manager);
+  static void server_module_destroy(ObDTLIntermResultManager *&dtl_interm_result_manager);
   int generate_monitor_info_rows(observer::ObDTLIntermResultMonitorInfoGetter &monitor_info_getter);
-  int erase_tenant_interm_result_info();
+  int erase_all_interm_result_info();
   static void free_interm_result_info_store(ObDTLIntermResultInfo *result_info);
   int free_interm_result_info(ObDTLIntermResultInfo *result_info);
   static void inc_interm_result_ref_count(ObDTLIntermResultInfo *result_info);
   int dec_interm_result_ref_count(ObDTLIntermResultInfo *&result_info);
   void runTimerTask();
-  static int mtl_start(ObDTLIntermResultManager *&dtl_interm_result_manager);
-  static void mtl_stop(ObDTLIntermResultManager *&dtl_interm_result_manager);
-  static void mtl_wait(ObDTLIntermResultManager *&dtl_interm_result_manager);
+  static int server_module_start(ObDTLIntermResultManager *&dtl_interm_result_manager);
+  static void server_module_stop(ObDTLIntermResultManager *&dtl_interm_result_manager);
+  static void server_module_wait(ObDTLIntermResultManager *&dtl_interm_result_manager);
   ObDTLIntermResultGCTask &get_gc_task() { return gc_task_; }
   static int init_result_info_store(ObDTLIntermResultInfoGuard &result_info_guard,
                                   ObDtlLinkedBuffer &buffer);

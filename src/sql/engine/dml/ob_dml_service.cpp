@@ -628,12 +628,12 @@ int ObDMLService::process_before_stmt_trigger(const ObDMLBaseCtDef &dml_ctdef,
   dml_rtctx.get_exec_ctx().set_dml_event(dml_event);
   if (dml_ctdef.is_primary_index_ && !dml_ctdef.trig_ctdef_.tg_args_.empty()) {
     if (!dml_rtctx.op_.get_spec().use_dist_das()
-        || dml_rtctx.get_exec_ctx().get_my_session()->is_remote_session()) {
+        || dml_rtctx.get_exec_ctx().get_my_session()->get_is_deserialized()) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "Do before stmt trigger without DAS");
       LOG_WARN("Do before stmt trigger without DAS not supported", K(ret),
                K(dml_rtctx.op_.get_spec().use_dist_das()),
-               K(dml_rtctx.get_exec_ctx().get_my_session()->is_remote_session()));
+               K(dml_rtctx.get_exec_ctx().get_my_session()->get_is_deserialized()));
     } else if (OB_FAIL(TriggerHandle::do_handle_before_stmt(dml_rtctx.op_,
                                                             dml_ctdef.trig_ctdef_,
                                                             dml_rtdef.trig_rtdef_,
@@ -655,12 +655,12 @@ int ObDMLService::process_after_stmt_trigger(const ObDMLBaseCtDef &dml_ctdef,
   dml_rtctx.get_exec_ctx().set_dml_event(dml_event);
   if (dml_ctdef.is_primary_index_ && !dml_ctdef.trig_ctdef_.tg_args_.empty()) {
     if (!dml_rtctx.op_.get_spec().use_dist_das()
-        || dml_rtctx.get_exec_ctx().get_my_session()->is_remote_session()) {
+        || dml_rtctx.get_exec_ctx().get_my_session()->get_is_deserialized()) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "Do after stmt trigger without DAS");
       LOG_WARN("Do after stmt trigger without DAS not supported", K(ret),
                K(dml_rtctx.op_.get_spec().use_dist_das()),
-               K(dml_rtctx.get_exec_ctx().get_my_session()->is_remote_session()));
+               K(dml_rtctx.get_exec_ctx().get_my_session()->get_is_deserialized()));
     } else if (OB_FAIL(TriggerHandle::do_handle_after_stmt(dml_rtctx.op_,
                                                            dml_ctdef.trig_ctdef_,
                                                            dml_rtdef.trig_rtdef_,
@@ -1374,7 +1374,7 @@ int ObDMLService::init_dml_param(const ObDASDMLBaseCtDef &base_ctdef,
   dml_param.tz_info_ = &base_ctdef.tz_info_;
   dml_param.sql_mode_ = base_rtdef.sql_mode_;
   dml_param.table_param_ = &base_ctdef.table_param_;
-  dml_param.tenant_schema_version_ = base_rtdef.tenant_schema_version_;
+  dml_param.runtime_schema_version_ = base_rtdef.runtime_schema_version_;
   dml_param.prelock_ = base_rtdef.prelock_;
   dml_param.is_batch_stmt_ = base_ctdef.is_batch_stmt_;
   dml_param.dml_allocator_ = &das_alloc;
@@ -1421,9 +1421,6 @@ void ObDMLService::init_dml_write_flag(const ObDASDMLBaseCtDef &base_ctdef,
   if (base_ctdef.is_update_pk_with_dop_) {
     write_flag.set_update_pk_dop();
   }
-  if (base_ctdef.table_param_.get_data_table().is_delete_insert()) {
-    write_flag.set_is_delete_insert();
-  }
   if (base_rtdef.is_immediate_row_conflict_check_ && base_ctdef.is_update_pk_) {
     write_flag.set_immediate_row_check();
   }
@@ -1446,7 +1443,7 @@ int ObDMLService::init_das_dml_rtdef(ObDMLRtCtx &dml_rtctx,
   das_rtdef.ctdef_ = &das_ctdef;
   das_rtdef.timeout_ts_ = plan_ctx->get_ps_timeout_timestamp();
   das_rtdef.prelock_ = my_session->get_prelock();
-  das_rtdef.tenant_schema_version_ = plan_ctx->get_tenant_schema_version();
+  das_rtdef.runtime_schema_version_ = plan_ctx->get_runtime_schema_version();
   das_rtdef.sql_mode_ = my_session->get_sql_mode();
   das_rtdef.is_immediate_row_conflict_check_ =  my_session->enable_immediate_row_conflict_check();
   if (OB_ISNULL(das_rtdef.table_loc_ = dml_rtctx.op_.get_input()->get_table_loc())) {
@@ -1627,10 +1624,10 @@ int ObDMLService::init_del_rtdef(ObDMLRtCtx &dml_rtctx,
           LOG_WARN("the root exec ctx is nullptr", K(ret));
         } else {
           DASDelCtxList& del_ctx_list = root_ctx->get_das_ctx().get_das_del_ctx_list();
-          if (ObDMLService::is_nested_dup_table(del_table_id, del_ctx_list)) {
+          if (ObDMLService::has_nested_delete_ctx(del_table_id, del_ctx_list)) {
             // for table deleted at parent session too, no need to create a new hash set
-            if (OB_FAIL(ObDMLService::get_nested_dup_table_ctx(del_table_id, del_ctx_list, del_rtdef.se_rowkey_dist_ctx_))) {
-              LOG_WARN("failed to get nested duplicate delete table ctx for fk nested session", K(ret));
+            if (OB_FAIL(ObDMLService::get_nested_delete_ctx(del_table_id, del_ctx_list, del_rtdef.se_rowkey_dist_ctx_))) {
+              LOG_WARN("failed to get delete context for fk nested session", K(ret));
             }
           } else {
             // for table not deleted at parent session, create a new hash set and add to the list at root ctx
@@ -1681,11 +1678,11 @@ int ObDMLService::init_del_rtdef(ObDMLRtCtx &dml_rtctx,
           LOG_WARN("the root exec ctx is nullptr", K(ret));
         } else {
           DASDelCtxList& del_ctx_list = root_ctx->get_das_ctx().get_das_del_ctx_list();
-          if (ObDMLService::is_nested_dup_table(del_table_id, del_ctx_list)) {
-            // A duplicate table was found
+          if (ObDMLService::has_nested_delete_ctx(del_table_id, del_ctx_list)) {
+            // Reuse the root context when an outer cascade already deletes this table.
             LOG_TRACE("[FOREIGN KEY] get hash set used for checking duplicate rowkey due to cascade delete", K(del_table_id));
-            if (OB_FAIL(ObDMLService::get_nested_dup_table_ctx(del_table_id, del_ctx_list, del_rtdef.se_rowkey_dist_ctx_))) {
-              LOG_WARN("failed to get nested duplicate delete table ctx for fk nested session", K(ret));
+            if (OB_FAIL(ObDMLService::get_nested_delete_ctx(del_table_id, del_ctx_list, del_rtdef.se_rowkey_dist_ctx_))) {
+              LOG_WARN("failed to get delete context for fk nested session", K(ret));
             }
           }
         }
@@ -1786,7 +1783,7 @@ int ObDMLService::init_upd_rtdef(
   }
 
   // Calculate if there exists table cycle.
-  // If there exists duplicate tables in the parent table set, then has_table_cycle = true
+  // A repeated table in the parent set means the cascade contains a cycle.
   // Otherwise it is false.
   if (OB_SUCC(ret) && upd_ctdef.is_primary_index_) {
     ObTableModifyOp &dml_op = dml_rtctx.op_;
@@ -1946,7 +1943,7 @@ int ObDMLService::check_agg_task_state(ObDMLRtCtx &dml_rtctx, ObIDASTaskOp *das_
   ObDasAggregatedTask *agg_task = nullptr;
   reach_mem_limit = false;
   int64_t simulate_buffer_size = - EVENT_CALL(EventTable::EN_DAS_SIMULATE_AGG_TASK_BUFF_LIMIT);
-  int64_t buffer_size_limit = das::OB_DAS_MAX_PACKET_SIZE;
+  int64_t buffer_size_limit = das::OB_DAS_TASK_BUFFER_SIZE;
   if (OB_UNLIKELY(simulate_buffer_size > 0)) {
     buffer_size_limit = simulate_buffer_size;
   }
@@ -2270,14 +2267,13 @@ int ObDMLService::check_nested_sql_legality(ObExecContext &ctx, common::ObTableI
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = ctx.get_my_session();
-  if (session->is_remote_session() && ctx.get_parent_ctx() != nullptr) {
-    //in nested sql, and the sql is remote or distributed
+  if (session->get_is_deserialized() && ctx.get_parent_ctx() != nullptr) {
+    // Nested SQL in a distributed worker lacks transaction scheduler control.
     pl::ObPLContext *pl_ctx = ctx.get_parent_ctx()->get_pl_stack_ctx();
     if (pl_ctx == nullptr || !pl_ctx->in_autonomous()) {
       //this nested sql require transaction scheduler control
-      //but the session is remote, means this sql executing without transaction scheduler control
       ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "Perform a DML operation inside a query or remote/distributed sql");
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "Perform a DML operation inside a distributed query worker");
       LOG_WARN("check nested sql legality failed", K(ret), K(pl_ctx));
     }
   }
@@ -2481,7 +2477,7 @@ int ObDMLService::convert_exprs_to_row(const ExprFixedArray &exprs,
   return ret;
 }
 
-bool ObDMLService::is_nested_dup_table(const uint64_t table_id,  DASDelCtxList& del_ctx_list)
+bool ObDMLService::has_nested_delete_ctx(const uint64_t table_id, DASDelCtxList &del_ctx_list)
 {
   bool ret = false;
   DASDelCtxList::iterator iter = del_ctx_list.begin();
@@ -2494,7 +2490,9 @@ bool ObDMLService::is_nested_dup_table(const uint64_t table_id,  DASDelCtxList& 
   return ret;
 }
 
-int ObDMLService::get_nested_dup_table_ctx(const uint64_t table_id,  DASDelCtxList& del_ctx_list, SeRowkeyDistCtx *&rowkey_dist_ctx)
+int ObDMLService::get_nested_delete_ctx(const uint64_t table_id,
+                                        DASDelCtxList &del_ctx_list,
+                                        SeRowkeyDistCtx *&rowkey_dist_ctx)
 {
   int ret = OB_SUCCESS;
   bool find = false;

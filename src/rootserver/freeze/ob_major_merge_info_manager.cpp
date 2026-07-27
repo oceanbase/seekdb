@@ -254,16 +254,16 @@ int ObMajorMergeInfoManager::get_local_latest_frozen_scn(SCN &frozen_scn)
   return ret;
 }
 
-int ObMajorMergeInfoManager::renew_snapshot_gc_scn(SCN &new_snapshot_gc_scn)
+int ObMajorMergeInfoManager::renew_snapshot_gc_scn()
 {
   int ret = OB_SUCCESS;
 
   SCN cur_snapshot_gc_scn;
   SCN latest_snapshot_gc_scn;
+  SCN new_snapshot_gc_scn;
   int64_t affected_rows = 0;
   ObMySQLTransaction trans;
   ObRecursiveMutexGuard guard(lock_);
-  new_snapshot_gc_scn = SCN::min_scn();
 
   if (OB_FAIL(try_reload())) {
     LOG_WARN("inner error", KR(ret));
@@ -359,6 +359,55 @@ int ObMajorMergeInfoManager::try_reload_merge_info()
 
   if (OB_FAIL(try_reload())) {
     LOG_WARN("fail to check inner stat", KR(ret));
+  }
+  return ret;
+}
+
+int ObMajorMergeInfoManager::check_snapshot_gc_scn()
+{
+  int ret = OB_SUCCESS;
+  SCN cur_gts_scn;
+  int64_t delay = 0;
+  int64_t start_service_time = -1;
+  int64_t total_service_time = -1;
+  SCN snapshot_gc_scn;
+
+  ObRecursiveMutexGuard guard(lock_);
+  if (OB_FAIL(try_reload())) {
+    LOG_WARN("fail to check inner stat", KR(ret));
+  } else if (OB_FAIL(get_gts(cur_gts_scn))) {
+    LOG_WARN("fail to get gts", KR(ret));
+  } else if (FALSE_IT(snapshot_gc_scn = freeze_info_mgr_.get_snapshot_gc_scn())) {
+  } else {
+    if (snapshot_gc_scn > cur_gts_scn) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("fail to check snapshot_gc_scn, snapshot_gc_scn is larger than cur_gts_scn",
+               KR(ret), K(snapshot_gc_scn), K(cur_gts_scn));
+    } else {
+      const int64_t delay = (!snapshot_gc_scn.is_valid_and_not_min()) ? 0 :
+          (ObTimeUtility::current_time() - snapshot_gc_scn.convert_to_ts());
+
+      if (TC_REACH_TIME_INTERVAL(60 * 1000 * 1000)) {
+        if (delay > SNAPSHOT_GC_TS_ERROR) {
+          // Avoid LOG_ERROR while an old snapshot_gc_scn is reloaded after server restart.
+          // LOG_ERROR should satisfy two additional conditions:
+          // 1. start_service_time > 0. start_service_time is initialized to 0 when observer starts.
+          // Then it will be updated to the time when observer starts through heartbeat, which is
+          // scheduled every 2 seconds.
+          // 2. total_service_time > SNAPSHOT_GC_TS_ERROR.
+          if (FALSE_IT(start_service_time = GCTX.start_service_time_)) {
+          } else if (FALSE_IT(total_service_time = ObTimeUtility::current_time() - start_service_time)) {
+          } else if ((start_service_time > 0) && (total_service_time > SNAPSHOT_GC_TS_ERROR)) {
+            LOG_ERROR("rs_monitor_check : snapshot_gc_ts delay for a long time",
+                      K(snapshot_gc_scn), K(delay), K(start_service_time),
+                      K(total_service_time));
+          }
+        } else if (delay > SNAPSHOT_GC_TS_WARN) {
+          LOG_WARN("rs_monitor_check : snapshot_gc_ts delay for a long time",
+                  K(snapshot_gc_scn), K(delay));
+        }
+      }
+    }
   }
   return ret;
 }

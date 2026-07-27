@@ -494,11 +494,9 @@ ObMultiVersionRowIterator::ObMultiVersionRowIterator()
       value_iter_(),
       query_engine_(NULL),
       query_engine_iter_(NULL),
-      tablet_id_(),
       insert_row_count_(0),
       update_row_count_(0),
-      delete_row_count_(0),
-      snapshot_gc_scn_row_count_(0)
+      delete_row_count_(0)
 {
 }
 
@@ -511,8 +509,7 @@ int ObMultiVersionRowIterator::init(
     ObQueryEngine &query_engine,
     ObMvccAccessCtx &ctx,
     const ObVersionRange &version_range,
-    const ObMvccScanRange &range,
-    const ObTabletID &tablet_id)
+    const ObMvccScanRange &range)
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
@@ -528,7 +525,6 @@ int ObMultiVersionRowIterator::init(
     query_engine_ = &query_engine;
     ctx_ = &ctx;
     version_range_ = version_range;
-    tablet_id_ = tablet_id;
     is_inited_ = true;
   }
   return ret;
@@ -557,7 +553,7 @@ int ObMultiVersionRowIterator::get_next_row(
     } else if (NULL == (value = query_engine_iter_->get_value())) {
       TRANS_LOG(ERROR, "unexpected value null pointer", "ctx", *ctx_);
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(try_cleanout_mvcc_row_(tmp_key, value))) {
+    } else if (OB_FAIL(try_cleanout_mvcc_row_(value))) {
       TRANS_LOG(WARN, "try cleanout mvcc row failed", K(ret), "ctx", *ctx_);
     } else if (OB_FAIL(value_iter_.init(ctx_,
                                         version_range_,
@@ -575,21 +571,18 @@ int ObMultiVersionRowIterator::get_next_row(
   return ret;
 }
 
-int ObMultiVersionRowIterator::try_cleanout_mvcc_row_(
-    const ObMemtableKey *key,
-    ObMvccRow *value)
+int ObMultiVersionRowIterator::try_cleanout_mvcc_row_(ObMvccRow *value)
 {
   int ret = OB_SUCCESS;
 
-  if (NULL == key || NULL == value) {
+  if (NULL == value) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "try cleanout mvcc row failed", K(ret), KPC(key), KPC(value));
+    TRANS_LOG(ERROR, "try cleanout mvcc row failed", K(ret), KPC(value));
   } else {
-    const bool is_snapshot_gc_scn_row = is_snapshot_gc_scn_row_(key);
     ObRowLatchGuard guard(value->latch_);
     ObMvccTransNode *iter = value->get_list_head();
     while (NULL != iter && OB_SUCC(ret)) {
-      if (OB_FAIL(try_cleanout_tx_node_(value, iter, is_snapshot_gc_scn_row))) {
+      if (OB_FAIL(try_cleanout_tx_node_(value, iter))) {
         TRANS_LOG(WARN, "try cleanout tx state failed", K(ret), KPC(value), KPC(iter));
       } else {
         iter = iter->prev_;
@@ -600,10 +593,7 @@ int ObMultiVersionRowIterator::try_cleanout_mvcc_row_(
   return ret;
 }
 
-int ObMultiVersionRowIterator::try_cleanout_tx_node_(
-    ObMvccRow *value,
-    ObMvccTransNode *tnode,
-    const bool is_snapshot_gc_scn_row)
+int ObMultiVersionRowIterator::try_cleanout_tx_node_(ObMvccRow *value, ObMvccTransNode *tnode)
 {
   int ret = OB_SUCCESS;
   const ObTransID data_tx_id = tnode->tx_id_;
@@ -621,9 +611,6 @@ int ObMultiVersionRowIterator::try_cleanout_tx_node_(
       ++insert_row_count_;
     } else if (blocksstable::ObDmlFlag::DF_UPDATE == dml_flag) {
       ++update_row_count_;
-      if (is_snapshot_gc_scn_row) {
-        ++snapshot_gc_scn_row_count_;
-      }
     } else if (blocksstable::ObDmlFlag::DF_DELETE == dml_flag) {
       ++delete_row_count_;
     }
@@ -631,32 +618,11 @@ int ObMultiVersionRowIterator::try_cleanout_tx_node_(
   return ret;
 }
 
-bool ObMultiVersionRowIterator::is_snapshot_gc_scn_row_(const ObMemtableKey *key) const
-{
-  const int64_t TABLE_NAME_IDX = 0;
-  const int64_t COLUMN_NAME_IDX = 2;
-  const int64_t CORE_TABLE_ROWKEY_COLUMN_COUNT = 3;
-  bool is_snapshot_gc_scn_row = false;
-  const ObStoreRowkey *rowkey = nullptr;
-  if (OB_ALL_CORE_TABLE_TID == tablet_id_.id()
-      && OB_NOT_NULL(key)
-      && OB_NOT_NULL(rowkey = key->get_rowkey())
-      && rowkey->get_obj_cnt() >= CORE_TABLE_ROWKEY_COLUMN_COUNT) {
-    const ObObj *objs = rowkey->get_obj_ptr();
-    is_snapshot_gc_scn_row = objs[TABLE_NAME_IDX].is_string_type()
-        && objs[COLUMN_NAME_IDX].is_string_type()
-        && 0 == objs[TABLE_NAME_IDX].get_string().compare("__all_global_stat")
-        && 0 == objs[COLUMN_NAME_IDX].get_string().compare("snapshot_gc_scn");
-  }
-  return is_snapshot_gc_scn_row;
-}
-
 void ObMultiVersionRowIterator::get_tnode_dml_stat(storage::ObTransNodeDMLStat &stat) const
 {
   stat.insert_row_count_ += insert_row_count_;
   stat.update_row_count_ += update_row_count_;
   stat.delete_row_count_ += delete_row_count_;
-  stat.snapshot_gc_scn_row_count_ += snapshot_gc_scn_row_count_;
 }
 
 void ObMultiVersionRowIterator::reset()
@@ -672,11 +638,9 @@ void ObMultiVersionRowIterator::reset()
   }
   query_engine_ = NULL;
 
-  tablet_id_.reset();
   insert_row_count_ = 0;
   update_row_count_ = 0;
   delete_row_count_ = 0;
-  snapshot_gc_scn_row_count_ = 0;
 }
 
 

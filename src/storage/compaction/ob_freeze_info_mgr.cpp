@@ -87,7 +87,7 @@ ObFreezeInfoMgr::ObFreezeInfoMgr()
     snapshots_(),
     lock_(),
     cur_idx_(0),
-    snapshot_gc_scn_renewal_state_(),
+    last_change_ts_(0),
     reload_timer_(),
     inited_(false)
 {
@@ -125,6 +125,7 @@ int ObFreezeInfoMgr::init(ObISQLClient &sql_proxy)
   } else if (OB_FAIL(reload_timer_.init("FreInfoReload", ObMemAttr("FreInfoReload")))) {
     STORAGE_LOG(ERROR, "fail to init timer", K(ret));
   } else {
+    last_change_ts_ = ObTimeUtility::current_time();
     inited_ = true;
   }
   return ret;
@@ -538,15 +539,39 @@ int ObFreezeInfoMgr::inner_update_info(
     const common::ObIArray<share::ObSnapshotInfo> &new_snapshots)
 {
   int ret = OB_SUCCESS;
+  bool gc_snapshot_ts_changed = false;
   int64_t snapshot_gc_ts = 0;
   {
     WLockGuard lock_guard(lock_);
+    const int64_t old_snapshot_gc_ts = freeze_info_mgr_.get_snapshot_gc_scn().get_val_for_tx();
+    snapshot_gc_ts = old_snapshot_gc_ts;
     if (OB_FAIL(freeze_info_mgr_.update_freeze_info(new_freeze_infos, new_snapshot_gc_scn))) {
       STORAGE_LOG(WARN, "failed to reload freeze info mgr", K(ret));
     } else if (OB_FAIL(update_next_snapshots(new_snapshots))) {
       STORAGE_LOG(WARN, "fail to update next snapshots", K(ret));
     } else {
       snapshot_gc_ts = freeze_info_mgr_.get_snapshot_gc_scn().get_val_for_tx();
+      gc_snapshot_ts_changed = old_snapshot_gc_ts != snapshot_gc_ts;
+    }
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (gc_snapshot_ts_changed) {
+    last_change_ts_ = ObTimeUtility::current_time();
+  } else {
+    const int64_t last_not_change_interval_us = ObTimeUtility::current_time() - last_change_ts_;
+    if (MAX_GC_SNAPSHOT_TS_REFRESH_TS <= last_not_change_interval_us &&
+        (0 != snapshot_gc_ts && 1 != snapshot_gc_ts)) {
+      if (REACH_THREAD_TIME_INTERVAL(60L * 1000L * 1000L)) {
+        // ignore ret
+        STORAGE_LOG(WARN, "snapshot_gc_ts not refresh too long",
+                    K(snapshot_gc_ts), K(new_snapshots), K(last_change_ts_),
+                    K(last_not_change_interval_us));
+      }
+    } else if (FLUSH_GC_SNAPSHOT_TS_REFRESH_TS <= last_not_change_interval_us) {
+      STORAGE_LOG(WARN, "snapshot_gc_ts not refresh too long",
+                  K(snapshot_gc_ts), K(new_snapshots), K(last_change_ts_),
+                  K(last_not_change_interval_us));
     }
   }
   STORAGE_LOG(DEBUG, "reload freeze info and snapshots", K(snapshot_gc_ts), K(new_snapshots));

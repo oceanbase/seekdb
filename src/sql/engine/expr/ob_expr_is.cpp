@@ -270,20 +270,6 @@ int ObExprIsNot::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObEx
   return ret;
 }
 
-// keep this function for compatibility with server before 4.1
-int ObExprIs::calc_is_date_int_null(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
-{
-  int ret = OB_SUCCESS;
-  ObDatum *param1 = NULL;
-  if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
-    LOG_WARN("eval first param failed", K(ret));
-  } else {
-    bool ret_bool = param1->is_null() || param1->get_int() == 0;
-    expr_datum.set_int32(static_cast<int32_t>(ret_bool));
-  }
-  return ret;
-}
-
 int ObExprIs::calc_is_null(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
 {
   int ret = OB_SUCCESS;

@@ -764,12 +764,6 @@ protected:
   bool need_charset_convert_;
   ObRawExpr *raw_expr_;
   bool is_called_in_sql_; // Used to distinguish if it is called by pl or sql
-  // A subclass if initially does not define its own serialization method, then it cannot add one in later versions, otherwise the beginning of the serialization buf will have an extra subclass serialization length,
-  // Cause incompatibility with the old version.
-  // For subclasses of ObExprOperator that do not define their own serialization method, if a new member is now added and needs to be serialized, it will be affected
-  // above limitations and cannot be achieved. Therefore, add extra_serialize_ in ObExprOperator, each subclass can interpret it.
-  // For example for ObExprCast, its meaning is is_implicit_cast, i.e., whether it is an implicit cast
-  int64_t extra_serialize_;
   bool is_valid_for_generated_col_;
   bool is_internal_for_mysql_;
 };
@@ -802,7 +796,6 @@ inline ObExprOperator::ObExprOperator(common::ObIAllocator &alloc,
       need_charset_convert_(true),
       raw_expr_(NULL),
       is_called_in_sql_(true),
-      extra_serialize_(0),
       is_valid_for_generated_col_(valid_for_generated_col == 1),
       is_internal_for_mysql_(is_internal_for_mysql)
 {

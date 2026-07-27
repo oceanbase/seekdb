@@ -378,24 +378,18 @@ struct ObPlanCacheCtx : public ObILibCacheCtx
       begin_commit_stmt_(false),
       must_be_positive_index_(),
       multi_stmt_fp_results_(allocator),
-      handle_id_(MAX_HANDLE),
-      is_remote_executor_(false),
       is_parameterized_execute_(false),
       ps_need_parameterized_(false),
       fixed_param_idx_(allocator),
       need_add_obj_stat_(true),
       is_inner_sql_(false),
-      is_original_ps_mode_(false),
       ab_params_(NULL),
       new_raw_sql_(),
       need_retry_add_plan_(true),
       insert_batch_opt_info_(allocator),
-      is_max_curr_limit_(false),
       is_batch_insert_opt_(false),
       is_arraybinding_(false),
       exist_local_plan_(false),
-      compare_plan_(nullptr),
-      flag_(0),
       regenerating_expired_plan_(false)
   {
     fp_result_.pc_key_.mode_ = mode_;
@@ -450,21 +444,17 @@ void set_need_retry_add_plan(bool v) { need_retry_add_plan_ = v; }
     K(param_charset_type_),
     K(should_add_plan_),
     K(begin_commit_stmt_),
-    K(is_remote_executor_),
     K(is_parameterized_execute_),
     K(ps_need_parameterized_),
     K(fixed_param_idx_),
     K(need_add_obj_stat_),
     K(is_inner_sql_),
-    K(is_original_ps_mode_),
     K(new_raw_sql_),
     K(need_retry_add_plan_),
     K(insert_batch_opt_info_),
-    K(is_max_curr_limit_),
     K(is_batch_insert_opt_),
     K(is_arraybinding_),
     K(exist_local_plan_),
-    K(flag_),
     K(regenerating_expired_plan_)
     );
   PlanCacheMode mode_; //control use which variables to do match
@@ -499,40 +489,22 @@ void set_need_retry_add_plan(bool v) { need_retry_add_plan_ = v; }
                    common::ModulePageAllocator, true> must_be_positive_index_;
   // used for store fp results for multi_stmt optimization
   common::ObFixedArray<ObFastParserResult, common::ObIAllocator> multi_stmt_fp_results_;
-  CacheRefHandleID handle_id_;
-  bool is_remote_executor_;
   bool is_parameterized_execute_;
   bool ps_need_parameterized_;
   common::ObFixedArray<int64_t, common::ObIAllocator> fixed_param_idx_;
   bool need_add_obj_stat_;
   bool is_inner_sql_;
-  bool is_original_ps_mode_;
   ParamStore *ab_params_;  // arraybinding batch parameters,
   ObString new_raw_sql_;  // values clause rebuild raw sql
 
   // when schema version of cache node is old, whether remove this node and retry add cache obj.
   bool need_retry_add_plan_;
   ObInsertBatchOptInfo insert_batch_opt_info_;
-  bool is_max_curr_limit_;
   bool is_batch_insert_opt_;
 
   bool is_arraybinding_;
   bool exist_local_plan_;
   common::ObBitSet<common::OB_DEFAULT_BITSET_SIZE, common::ModulePageAllocator, true> fmt_int_or_ch_decint_idx_;
-  ObPhysicalPlan *compare_plan_;
-  union
-  {
-    struct
-    {
-      uint16_t try_get_plan_ : 1;
-      uint16_t add_with_compare_ : 1;
-      uint16_t enable_adaptive_plan_cache_ : 1;
-      uint16_t has_inactive_plan_ : 1;
-      uint16_t force_enable_plan_tracing_ : 1;
-      uint16_t reserved_ : 11;
-    };
-    uint16_t flag_;
-  };
   bool regenerating_expired_plan_;
 };
 

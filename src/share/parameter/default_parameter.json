@@ -15,16 +15,11 @@
           "comment": "300 is an empirical value."
         }
       ],
-      "tenant": [
+      "runtime": [
         {
           "name": "_enable_filter_reordering",
           "value": false,
           "comment": "disable filter reordering for simple OLTP workloads"
-        },
-        {
-          "name": "default_table_merge_engine",
-          "value": "PARTIAL_UPDATE",
-          "comment": "use partial_update merge engine for simple oltp workloads"
         }
       ]
     }
@@ -45,16 +40,11 @@
           "comment": "300 is an empirical value."
         }
       ],
-      "tenant": [
+      "runtime": [
         {
           "name": "_enable_filter_reordering",
           "value": false,
           "comment": "disable filter reordering for complex OLTP workloads"
-        },
-        {
-          "name": "default_table_merge_engine",
-          "value": "PARTIAL_UPDATE",
-          "comment": "use partial_update merge engine for complex oltp workloads"
         }
       ]
     }
@@ -75,16 +65,11 @@
           "comment": "300 is an empirical value."
         }
       ],
-      "tenant": [
+      "runtime": [
         {
           "name": "_enable_filter_reordering",
           "value": false,
           "comment": "disable filter reordering for KV mode"
-        },
-        {
-          "name": "default_table_merge_engine",
-          "value": "PARTIAL_UPDATE",
-          "comment": "use partial_update merge engine for kv mode"
         }
       ]
     }
@@ -110,11 +95,6 @@
           "comment": "forbid recording sql and transaction trace event"
         },
         {
-          "name": "ignore_replay_checksum_error",
-          "value": true,
-          "comment": "ignore transaction data checksum validation when submitting redo/commit log"
-        },
-        {
           "name": "micro_block_merge_verify_level",
           "value": 0,
           "comment": "accelating the process of minor/mini merge"
@@ -125,12 +105,7 @@
           "comment": "closing deadlock detecting"
         }
       ],
-      "tenant": [
-        {
-          "name": "default_auto_increment_mode",
-          "value": "noorder",
-          "comment": "adjust the default auto-increment mode to avoid acquiring incremental id with rpc"
-        },
+      "runtime": [
         {
           "name": "_enable_adaptive_compaction",
           "value": false,
@@ -140,11 +115,6 @@
           "name": "_enable_filter_reordering",
           "value": false,
           "comment": "disable filter reordering for simple OLTP_PERF workloads"
-        },
-        {
-          "name": "default_table_merge_engine",
-          "value": "PARTIAL_UPDATE",
-          "comment": "use partial_update merge engine for oltp perf workloads"
         }
       ]
     }

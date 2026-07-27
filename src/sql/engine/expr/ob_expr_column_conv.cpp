@@ -319,10 +319,10 @@ int ObExprColumnConv::calc_enum_set_result_type(ObExprResType &type,
     ObObjType calc_type = get_enumset_calc_type(types[0].get_type(), 4);
     // When the types are inconsistent or it doesn't support enum/set type with subschema,
     // new cast expression is required.
-    const bool support_enum_set_type_subschema = is_enum_set_with_subschema_arg(4);
-    bool need_add_cast = type.get_type() != types[4].get_type() || !support_enum_set_type_subschema;
-    // keep old behavior use session collation
-    coll_type = support_enum_set_type_subschema ? types[1].get_collation_type() : coll_type;
+    const bool has_enum_set_subschema_arg = is_enum_set_with_subschema_arg(4);
+    bool need_add_cast = type.get_type() != types[4].get_type() || !has_enum_set_subschema_arg;
+    // Use the declared collation when subschema metadata is present.
+    coll_type = has_enum_set_subschema_arg ? types[1].get_collation_type() : coll_type;
     if (OB_UNLIKELY(ObMaxType == calc_type)) {
       ret = OB_ERR_UNEXPECTED;
       SQL_ENG_LOG(WARN, "invalid type of parameter ", K(types[4]), K(types), K(ret));
@@ -360,7 +360,6 @@ int ObExprColumnConv::cg_expr(ObExprCGCtx &op_cg_ctx,
 {
   int ret = OB_SUCCESS;
   UNUSED(raw_expr);
-  //compatible with old code
   CK((PARAMS_COUNT_WITHOUT_COLUMN_INFO == rt_expr.arg_cnt_)
     || (PARAMS_COUNT_WITH_COLUMN_INFO == rt_expr.arg_cnt_));
   if (OB_ISNULL(op_cg_ctx.session_)) {

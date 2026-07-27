@@ -60,8 +60,7 @@ public:
   : ObPxCoordSpec(alloc, type),
     all_exprs_(alloc),
     sort_collations_(alloc),
-    sort_cmp_funs_(alloc),
-    is_old_unblock_mode_(true)
+    sort_cmp_funs_(alloc)
   {}
   ~ObPxMSCoordSpec() {}
   virtual const common::ObIArray<ObExpr *> *get_all_exprs() const override { return &all_exprs_; }
@@ -69,7 +68,6 @@ public:
   ExprFixedArray all_exprs_;
   ObSortCollations sort_collations_;
   ObSortFuncs sort_cmp_funs_;
-  bool is_old_unblock_mode_;
 };
 
 class ObPxMSCoordOp : public ObPxCoordOp

@@ -34,7 +34,7 @@
 #include "sql/engine/expr/ob_expr_xml_func_helper.h"
 #include "common/enumset/ob_enum_set_meta.h"
 #include "sql/engine/expr/ob_expr_type_to_str.h"
-#include "observer/omt/ob_tenant_srs.h"
+#include "observer/omt/ob_srs_service.h"
 namespace oceanbase
 {
 namespace sql
@@ -155,7 +155,9 @@ static const int64_t power_of_10[INT32_MAX_DIGITS_LEN] = {
 
 static OB_INLINE int get_cast_ret(const ObCastMode &cast_mode, int ret, int &warning)
 {
-  // compatibility for old ob
+  // Timestamp parsing can produce a valid local datetime before discovering that the
+  // remaining suffix is not a valid time zone.  Treat that as an invalid datetime so
+  // column conversion reports the normal 1292 error instead of storing the partial value.
   if (OB_UNLIKELY(OB_ERR_UNEXPECTED_TZ_TRANSITION == ret) ||
       OB_UNLIKELY(OB_ERR_UNKNOWN_TIME_ZONE == ret)) {
     ret = OB_INVALID_DATE_VALUE;
@@ -1294,128 +1296,6 @@ int ObDataTypeCastUtil::common_string_decimalint_wrap(const ObExpr &expr, const 
   return common_string_decimalint(expr, in_str, user_logging_ctx, res_val);
 }
 
-int ObOdpsDataTypeCastUtil::common_string_decimalint_wrap(const ObExpr &expr, const ObString &in_str,
-                                                      const ObUserLoggingCtx *user_logging_ctx,
-                                                      ObDecimalIntBuilder &res_val) 
-{// TODO: add cases
-#define SET_ZERO(int_type)                                                                         \
-  int_type v = 0;                                                                                  \
-  res_val.from(v);                                                                                 \
-  break
-
-  int ret = OB_SUCCESS;
-  ObObjType in_type = ObVarcharType;
-  int16_t in_scale = 0, in_precision = 0;
-  ObScale out_scale = expr.datum_meta_.scale_;
-  ObPrecision out_prec = expr.datum_meta_.precision_;
-  ObDecimalIntBuilder tmp_alloc;
-  ObDecimalInt *decint = nullptr;
-  int32_t int_bytes = 0;
-  // set default value
-  switch (get_decimalint_type(out_prec)) {
-  case common::DECIMAL_INT_32: {
-    SET_ZERO(int32_t);
-  }
-  case common::DECIMAL_INT_64: {
-    SET_ZERO(int64_t);
-  }
-  case common::DECIMAL_INT_128: {
-    SET_ZERO(int128_t);
-  }
-  case common::DECIMAL_INT_256: {
-    SET_ZERO(int256_t);
-  }
-  case common::DECIMAL_INT_512: {
-    SET_ZERO(int512_t);
-  }
-  default:
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected precision", K(out_prec));
-  }
-  if (OB_FAIL(ret)) {
-  } else {
-    if (ObHexStringType == in_type) {
-      uint64_t in_val = hex_to_uint64(in_str);
-      in_precision = ob_fast_digits10(in_val);
-      if (OB_FAIL(wide::from_integer(in_val, tmp_alloc, decint, int_bytes, in_precision))) {
-        LOG_WARN("from integer failed", K(in_val), K(ret));
-      } else {
-        in_scale = 0;
-      }
-    } else if (0 == in_str.length()) {
-      ret = OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD;
-    } else if (OB_FAIL(wide::from_string(in_str.ptr(), in_str.length(), tmp_alloc, in_scale,
-                                         in_precision, int_bytes, decint))) {
-      LOG_WARN("failed to parse string", K(ret));
-      if (OB_NUMERIC_OVERFLOW == ret) {
-        // bug: 4263211. compatible with mysql behavior when value overflows type range.
-        // select cast('1e500' as decimal);  -> max_val
-        // select cast('-1e500' as decimal); -> min_val
-        int64_t i = 0;
-        while (i < in_str.length() && isspace(in_str[i])) { ++i; }
-        bool is_neg = (in_str[i] == '-');
-        const ObDecimalInt *limit_decint = nullptr;
-        if (is_neg) {
-          limit_decint = wide::ObDecimalIntConstValue::get_min_value(out_prec);
-          int_bytes = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(out_prec);
-        } else {
-          limit_decint = wide::ObDecimalIntConstValue::get_max_value(out_prec);
-          int_bytes = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(out_prec);
-        }
-        in_scale = out_scale;
-        in_precision = out_prec;
-        if (OB_ISNULL(limit_decint)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected null decimal int", K(ret));
-        } else if (OB_ISNULL(decint = (ObDecimalInt *)tmp_alloc.alloc(int_bytes))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to allocate memory", K(ret));
-        } else {
-          MEMCPY(decint, limit_decint, int_bytes);
-        }
-      }
-    }
-    int warning = ret;
-    ret = OB_SUCCESS;
-    if (decint != nullptr && int_bytes != 0) {
-      // Decimal int not null means a valid decimal int was parsed regardless of wether there's
-      // error or not.We then do scale and calculate res_datum as normal in order to be compatible 
-      // with mysql.
-      // e.g.
-      //  OceanBase(root@test)>set sql_mode = '';
-      //  Query OK, 0 rows affected (0.00 sec)
-      //
-      //  OceanBase(root@test)>insert into t2 values ('1ab');
-      //  Query OK, 1 row affected (0.00 sec)
-      //
-      //  OceanBase(root@test)>select * from t2;
-      //  +-------+
-      //  | a     |
-      //  +-------+
-      //  | 1.000 |
-      //  +-------+
-      //  1 row in set (0.01 sec)
-      if (ObDatumCast::need_scale_decimalint(in_scale, in_precision, out_scale, out_prec)) {
-        if (OB_FAIL(ObDatumCast::common_scale_decimalint(decint, int_bytes, in_scale, out_scale,
-                                                         out_prec, expr.extra_, res_val,
-                                                         user_logging_ctx))) {
-          LOG_WARN("scale decimal int failed", K(ret));
-        }
-      } else {
-        res_val.from(decint, int_bytes);
-      }
-    }
-    if (OB_SUCC(ret)) {
-      const ObCastMode cast_mode = expr.extra_;
-      if (CAST_FAIL(warning)) {
-        LOG_WARN("string_decimalint failed", K(ret), K(in_type), K(cast_mode), K(in_str));
-      }
-    }
-  }
-  return ret;
-#undef SET_ZERO
-}
-
 static OB_INLINE int common_string_datetime(const ObExpr &expr,
                                             const ObString &in_str,
                                             ObEvalCtx &ctx,
@@ -1791,83 +1671,6 @@ static int common_string_string(const ObExpr &expr,
   return ret;
 }
 
-int ObOdpsDataTypeCastUtil::common_check_convert_string(const ObExpr &expr,
-                                                        ObEvalCtx &ctx,
-                                                        const ObString &in_str,
-                                                        ObObjType in_type,
-                                                        ObCollationType in_cs_type,
-                                                        ObDatum &res_datum,
-                                                        bool &has_set_res)
-{
-  int ret = OB_SUCCESS;
-  ObObjType out_type = expr.datum_meta_.type_;
-  ObCollationType out_cs_type = expr.datum_meta_.cs_type_;
-  // When convert blob/binary/varbinary to other charset, need to align to mbminlen of destination charset
-  // by add '\0' prefix in mysql mode. (see mysql String::copy)
-  const ObCharsetInfo *cs = NULL;
-  int64_t align_offset = 0;
-  if (CS_TYPE_BINARY == in_cs_type
-      && (NULL != (cs = ObCharset::get_charset(out_cs_type)))) {
-    if (cs->mbminlen > 0 && in_str.length() % cs->mbminlen != 0) {
-      align_offset = cs->mbminlen - in_str.length() % cs->mbminlen;
-    }
-  }
-  if (OB_FAIL(common_copy_string_zf(expr, in_str, ctx, res_datum, align_offset))) {
-    LOG_WARN("common_copy_string_zf failed", K(ret), K(in_str));
-  }
-  return ret;
-}
-
-int ObOdpsDataTypeCastUtil::common_string_string_wrap(const ObExpr &expr,
-                                const ObObjType in_type,
-                                const ObCollationType in_cs_type,
-                                const ObObjType out_type,
-                                const ObCollationType out_cs_type,
-                                const ObString &in_str,
-                                ObEvalCtx &ctx,
-                                ObDatum &res_datum,
-                                bool& has_set_res)
-{
-  int ret = OB_SUCCESS;
-  if (CS_TYPE_BINARY != in_cs_type &&
-      CS_TYPE_BINARY != out_cs_type &&
-      (ObCharset::charset_type_by_coll(in_cs_type) !=
-      ObCharset::charset_type_by_coll(out_cs_type))) {
-    // handle !blob->!blob
-    char *buf = NULL;
-    //latin1 1bytes,utf8mb4 4bytes,the factor should be 4
-    int64_t buf_len = in_str.length() * ObCharset::CharConvertFactorNum;
-    uint32_t result_len = 0;
-    buf = expr.get_str_res_mem(ctx, buf_len);
-    if (OB_ISNULL(buf)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc memory failed", K(ret));
-    } else if (OB_FAIL(ObCharset::charset_convert(in_cs_type, in_str.ptr(),
-                                                  in_str.length(), out_cs_type, buf,
-                                                  buf_len, result_len, true,
-                                                  !CM_IS_IGNORE_CHARSET_CONVERT_ERR(expr.extra_) && CM_IS_IMPLICIT_CAST(expr.extra_),
-                                                  ObCharset::is_cs_unicode(out_cs_type) ? 0xFFFD : '?'))) {
-      LOG_WARN("charset convert failed", K(ret));
-    } else {
-      res_datum.set_string(buf, result_len);
-    }
-  } else {
-    if (CS_TYPE_BINARY == in_cs_type || CS_TYPE_BINARY == out_cs_type) {
-      // just copy string when in_cs_type or out_cs_type is binary
-      if (OB_FAIL(ObOdpsDataTypeCastUtil::common_check_convert_string(expr, ctx, in_str, in_type, in_cs_type, res_datum, has_set_res))) {
-        LOG_WARN("fail to common_check_convert_string", K(ret), K(in_str));
-      }
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("same charset should not be here, just use cast_eval_arg", K(ret),
-          K(in_type), K(out_type), K(in_cs_type), K(out_cs_type));
-    }
-  }
-  LOG_DEBUG("string_string cast", K(ret), K(in_str),
-              K(ObString(res_datum.len_, res_datum.ptr_)));
-  return ret;
-}
-
 static int common_string_otimestamp(const ObExpr &expr,
                                     const ObString &in_str,
                                     ObEvalCtx &ctx,
@@ -2068,53 +1871,6 @@ static int common_string_text(const ObExpr &expr,
       LOG_WARN("pack_to_disk_inrow_lob fail", K(ret), K(expr), K(ctx));
     }
   } else {
-    ObTextStringDatumResult str_result(expr.datum_meta_.type_, &expr, &ctx, &res_datum);
-    if (lob_locator == NULL) {
-      if (OB_FAIL(str_result.init(res_str.length()))) {
-        LOG_WARN("Lob: init lob result failed");
-      } else if (OB_FAIL(str_result.append(res_str.ptr(), res_str.length()))) {
-        LOG_WARN("Lob: append lob result failed");
-      } else { /* do nothing */ }
-    } else if (OB_FAIL(str_result.copy(lob_locator))) {
-      LOG_WARN("Lob: copy lob result failed");
-    } else { /* do nothing*/ }
-    str_result.set_result();
-  }
-
-  return ret;
-}
-
-int ObOdpsDataTypeCastUtil::common_string_text_wrap(const ObExpr &expr,
-                                              const ObString &in_str,
-                                              ObEvalCtx &ctx,
-                                              const ObLobLocatorV2 *lob_locator,
-                                              ObDatum &res_datum,
-                                              ObObjType &in_type,
-                                              ObCollationType &in_cs_type)
-{
-  int ret = OB_SUCCESS;
-  ObObjType out_type = expr.datum_meta_.type_; // ObLongTextType
-  ObCollationType out_cs_type = expr.datum_meta_.cs_type_;
-  ObString res_str = in_str;
-  bool is_final_res = false;
-  bool is_different_charset_type = (ObCharset::charset_type_by_coll(in_cs_type)
-                                    != ObCharset::charset_type_by_coll(out_cs_type));
-  OB_ASSERT(ob_is_text_tc(out_type));
-  if (is_different_charset_type) {
-    if (OB_FAIL(ObOdpsDataTypeCastUtil::common_string_string_wrap(expr, in_type, in_cs_type, out_type,
-                                     out_cs_type, in_str, ctx, res_datum, is_final_res))) {
-      LOG_WARN("Lob: fail to cast string to longtext", K(ret), K(in_str), K(expr));
-    } else if (res_datum.is_null()) {
-      // Charset conversion produced a final NULL result.
-      is_final_res = true;
-    } else if (is_final_res) {
-      // is_final_res = true; // hex to text
-    } else if (OB_FAIL(copy_datum_str_with_tmp_alloc(ctx, res_datum, res_str))) {
-      LOG_WARN("Lob: copy datum str with tmp alloc", K(ret));
-    } else { /* do nothing */ }
-  }
-
-  if (OB_SUCC(ret) && !is_final_res) {
     ObTextStringDatumResult str_result(expr.datum_meta_.type_, &expr, &ctx, &res_datum);
     if (lob_locator == NULL) {
       if (OB_FAIL(str_result.init(res_str.length()))) {
@@ -4555,21 +4311,8 @@ CAST_FUNC_NAME(float, uint)
   EVAL_ARG()
   {
     DEF_IN_OUT_VAL(float, uint64_t, 0);
-    if (in_val <= static_cast<double>(LLONG_MIN) || in_val >= static_cast<double>(ULLONG_MAX)) {
-      out_val = static_cast<uint64_t>(LLONG_MIN);
-      ret = OB_DATA_OUT_OF_RANGE;
-    } else {
-      if (CM_IS_COLUMN_CONVERT(expr.extra_)) {
-        out_val = static_cast<uint64_t>(rint(in_val));
-      } else {
-        out_val = static_cast<uint64_t>(static_cast<int64_t>(rint(in_val)));
-      }
-      if (in_val < 0 && out_val != 0) {
-        // Here processing [LLONG_MIN, 0) range of in, converting to unsigned should report OB_DATA_OUT_OF_RANGE.
-        // out not equal to 0 to avoid values in [-0.5, 0) being misjudged, because their rounded values are 0, which are within the valid range.
-        ret = OB_DATA_OUT_OF_RANGE;
-      }
-    }
+    ret = round_floating_to_uint64(
+        static_cast<double>(in_val), true, CM_IS_COLUMN_CONVERT(expr.extra_), out_val);
     if (CAST_FAIL(ret)) {
       LOG_WARN("cast float to uint failed", K(ret), K(in_val), K(out_val));
     } else if (CM_NEED_RANGE_CHECK(expr.extra_) &&
@@ -4821,7 +4564,8 @@ CAST_FUNC_NAME(float, bit)
   {
     float val_float = child_res->get_float();
     // Here there is no need to call SET_RES_BIT, because ret must be OB_SUCCESS
-    res_datum.set_bit(static_cast<uint64_t>(val_float));
+    res_datum.set_bit(static_cast<uint64_t>(
+        truncate_floating_to_int64_clamped(val_float)));
   }
   return ret;
 }
@@ -4887,26 +4631,8 @@ CAST_FUNC_NAME(double, uint)
   EVAL_ARG()
   {
     DEF_IN_OUT_VAL(double, uint64_t, 0);
-    if (in_val <= static_cast<double>(LLONG_MIN)) {
-      out_val = static_cast<uint64_t>(LLONG_MIN);
-      ret = OB_DATA_OUT_OF_RANGE;
-    } else if (in_val >= static_cast<double>(ULLONG_MAX)) {
-      out_val = static_cast<uint64_t>(LLONG_MAX);
-      ret = OB_DATA_OUT_OF_RANGE;
-    } else {
-      if (CM_IS_COLUMN_CONVERT(expr.extra_)) {
-        out_val = static_cast<uint64_t>(rint(in_val));
-      } else if (in_val >= static_cast<double>(LLONG_MAX)) {
-        out_val = static_cast<uint64_t>(LLONG_MAX);
-      } else {
-        out_val = static_cast<uint64_t>(static_cast<int64_t>(rint(in_val)));
-      }
-      if (in_val < 0 && out_val != 0) {
-        // Here processing [LLONG_MIN, 0) range of in, converting to unsigned should report OB_DATA_OUT_OF_RANGE.
-        // out is not equal to 0 to avoid values in the range [-0.5, 0) being misjudged, because their rounded values are 0, which fall within the valid range.
-        ret = OB_DATA_OUT_OF_RANGE;
-      }
-    }
+    ret = round_floating_to_uint64(
+        in_val, false, CM_IS_COLUMN_CONVERT(expr.extra_), out_val);
     if (CAST_FAIL(ret)) {
       LOG_WARN("cast float to uint failed", K(ret), K(in_val), K(out_val));
     } else if (CM_NEED_RANGE_CHECK(expr.extra_) &&
@@ -5126,7 +4852,8 @@ CAST_FUNC_NAME(double, bit)
 {
   EVAL_ARG()
   {
-    res_datum.set_bit(static_cast<uint64_t>(child_res->get_double()));
+    res_datum.set_bit(static_cast<uint64_t>(
+        truncate_floating_to_int64_clamped(child_res->get_double())));
   }
   return ret;
 }
@@ -10162,7 +9889,8 @@ CAST_ENUMSET_FUNC_NAME(float, enum)
       res_datum.set_null();
     } else {
       int warning = 0;
-      uint64_t val_uint = static_cast<uint64_t>(static_cast<int64_t>(child_res->get_float()));
+      uint64_t val_uint = static_cast<uint64_t>(
+          truncate_floating_to_int64_clamped(child_res->get_float()));
       uint64_t value = 0;
       ret = uint_to_enum(val_uint, str_values, cast_mode, warning, value);
       SET_RES_ENUM(value);
@@ -10175,7 +9903,8 @@ CAST_ENUMSET_FUNC_NAME(float, set)
 {
   EVAL_ARG() {
     int warning = 0;
-    uint64_t val_uint = static_cast<uint64_t>(static_cast<int64_t>(child_res->get_float()));
+    uint64_t val_uint = static_cast<uint64_t>(
+        truncate_floating_to_int64_clamped(child_res->get_float()));
     uint64_t value = 0;
     ret = uint_to_set(val_uint, str_values, cast_mode, warning, value);
     SET_RES_SET(value);
@@ -10190,7 +9919,8 @@ CAST_ENUMSET_FUNC_NAME(double, enum)
       res_datum.set_null();
     } else {
       int warning = 0;
-      uint64_t val_uint = static_cast<uint64_t>(static_cast<int64_t>(child_res->get_double()));
+      uint64_t val_uint = static_cast<uint64_t>(
+          truncate_floating_to_int64_clamped(child_res->get_double()));
       uint64_t value = 0;
       ret = uint_to_enum(val_uint, str_values, cast_mode, warning, value);
       SET_RES_ENUM(value);
@@ -10203,7 +9933,8 @@ CAST_ENUMSET_FUNC_NAME(double, set)
 {
   EVAL_ARG() {
     int warning = 0;
-    uint64_t val_uint = static_cast<uint64_t>(static_cast<int64_t>(child_res->get_double()));
+    uint64_t val_uint = static_cast<uint64_t>(
+        truncate_floating_to_int64_clamped(child_res->get_double()));
     uint64_t value = 0;
     ret = uint_to_set(val_uint, str_values, cast_mode, warning, value);
     SET_RES_SET(value);
@@ -10220,7 +9951,8 @@ CAST_ENUMSET_FUNC_NAME(number, enum)
   } else if (res_datum.is_null()) {
     //do nothing
   } else {
-    uint64_t val_uint = static_cast<uint64_t>(static_cast<int64_t>(res_datum.get_double()));
+    uint64_t val_uint = static_cast<uint64_t>(
+        truncate_floating_to_int64_clamped(res_datum.get_double()));
     uint64_t value = 0;
     ret = uint_to_enum(val_uint, str_values, cast_mode, warning, value);
     SET_RES_ENUM(value);
@@ -10237,7 +9969,8 @@ CAST_ENUMSET_FUNC_NAME(number, set)
   } else if (res_datum.is_null()) {
     //do nothing
   } else {
-    uint64_t val_uint = static_cast<uint64_t>(static_cast<int64_t>(res_datum.get_double()));
+    uint64_t val_uint = static_cast<uint64_t>(
+        truncate_floating_to_int64_clamped(res_datum.get_double()));
     uint64_t value = 0;
     ret = uint_to_set(val_uint, str_values, cast_mode, warning, value);
     SET_RES_SET(value);
@@ -10963,7 +10696,8 @@ CAST_ENUMSET_FUNC_NAME(decimalint, enum)
   } else if (res_datum.is_null()) {
     // do nothing
   } else {
-    uint64_t val_uint = static_cast<uint64_t>(static_cast<int64_t>(res_datum.get_double()));
+    uint64_t val_uint = static_cast<uint64_t>(
+        truncate_floating_to_int64_clamped(res_datum.get_double()));
     uint64_t value = 0;
     ret = uint_to_enum(val_uint, str_values, cast_mode, warning, value);
     SET_RES_ENUM(value);
@@ -10980,7 +10714,8 @@ CAST_ENUMSET_FUNC_NAME(decimalint, set)
   } else if (res_datum.is_null()) {
     // do nothing
   } else {
-    uint64_t val_uint = static_cast<uint64_t>(static_cast<int64_t>(res_datum.get_double()));
+    uint64_t val_uint = static_cast<uint64_t>(
+        truncate_floating_to_int64_clamped(res_datum.get_double()));
     uint64_t value = 0;
     ret = uint_to_set(val_uint, str_values, cast_mode, warning, value);
     SET_RES_SET(value);
@@ -11395,12 +11130,7 @@ int anytype_to_varchar_char_explicit(const sql::ObExpr &expr,
         bool has_result = false;
         int64_t max_allowed_packet = 0;
         if (OB_FAIL(session->get_max_allowed_packet(max_allowed_packet))) {
-          if (OB_ENTRY_NOT_EXIST == ret) { // for compatibility with server before 1470
-            ret = OB_SUCCESS;
-            max_allowed_packet = OB_MAX_VARCHAR_LENGTH;
-          } else {
-            LOG_WARN("Failed to get max allow packet size", K(ret));
-          }
+          LOG_WARN("Failed to get max allow packet size", K(ret));
         } else if (out_acc.get_length() > max_allowed_packet &&
                     out_acc.get_length() <= INT32_MAX) {
           res_datum.set_null();

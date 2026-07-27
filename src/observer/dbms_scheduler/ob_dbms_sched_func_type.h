@@ -15,8 +15,5 @@
  */
 
 FUNCTION_TYPE(STAT_MAINTENANCE_JOB, SHADOW) //Statistics information
-FUNCTION_TYPE(MYSQL_EVENT_JOB) //mysql_event
-FUNCTION_TYPE(NODE_BALANCE_JOB, SHADOW) //load balancing
-FUNCTION_TYPE(EXT_FILE_REFRESH_JOB, SHADOW) //external table refresh
 FUNCTION_TYPE(VECTOR_INDEX_REFRESH_JOB, SHADOW) //vector index refresh
-FUNCTION_TYPE(RESERVED_JOB_6, SHADOW) // persisted ordinal; do not reuse
+FUNCTION_TYPE(DYNAMIC_PARTITION_MANAGE_JOB, SHADOW) // Scheduled dynamic partition management

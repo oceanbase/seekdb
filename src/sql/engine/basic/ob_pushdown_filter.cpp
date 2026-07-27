@@ -1164,35 +1164,6 @@ OB_DEF_SERIALIZE_SIZE(ObPushdownFilter)
   return len;
 }
 
-// filter on lob or topn filter with lob column output is not safe for delete_insert scan
-int ObPushdownFilterNode::check_filter_info(const storage::ObITableReadInfo &read_info,
-                                            bool &is_safe_filter_with_di)
-{
-  int ret = OB_SUCCESS;
-  if (is_logic_op_node()) {
-    for (uint32_t i = 0; OB_SUCC(ret) && is_safe_filter_with_di && i < n_child_; i++) {
-      if (OB_NOT_NULL(childs_[i]) &&
-          OB_FAIL(childs_[i]->check_filter_info(read_info, is_safe_filter_with_di))) {
-        LOG_WARN("Fail to check filter info", K(ret));
-      }
-    }
-  } else {
-    const int64_t col_count = col_ids_.count();
-    const common::ObIArray<ObColDesc> &cols_desc = read_info.get_columns_desc();
-    for (int64_t i = 0; is_safe_filter_with_di && i < col_count; i++) {
-      for (int32_t col_pos = 0; col_pos < cols_desc.count(); col_pos++) {
-        if (col_ids_.at(i) == cols_desc.at(col_pos).col_id_) {
-          if (is_lob_storage(cols_desc.at(col_pos).col_type_.get_type())) {
-            is_safe_filter_with_di = false;
-          }
-          break;
-        }
-      }
-    }
-  }
-  return ret;
-}
-
 //--------------------- start filter executor ----------------------------
 int ObPushdownFilterExecutor::find_evaluated_datums(
     ObExpr *expr, const ObIArray<ObExpr*> &calc_exprs, ObIArray<ObExpr*> &eval_exprs)
@@ -2604,76 +2575,52 @@ ObPushdownExprSpec::ObPushdownExprSpec(ObIAllocator &alloc)
     pd_storage_flag_(0),
     pd_storage_filters_(alloc),
     pd_storage_aggregate_output_(alloc),
-    ext_file_column_exprs_(alloc),
-    ext_column_convert_exprs_(alloc),
-    trans_info_expr_(nullptr),
-    ext_tbl_filter_pd_level_(0)
+    trans_info_expr_(nullptr)
 {
 }
 
 OB_DEF_SERIALIZE(ObPushdownExprSpec)
 {
   int ret = OB_SUCCESS;
-  ExprFixedArray fake_filters_before_index_back(CURRENT_CONTEXT->get_allocator());
-  ObPushdownFilter fake_pd_storage_index_back_filters(CURRENT_CONTEXT->get_allocator());
   LST_DO_CODE(OB_UNIS_ENCODE,
               calc_exprs_,
               access_exprs_,
               max_batch_size_,
               pushdown_filters_,
-              fake_filters_before_index_back, //mock a fake filters to compatible with 4.0
               pd_storage_flag_.pd_flag_,
               pd_storage_filters_,
-              fake_pd_storage_index_back_filters, //mock a fake filters to compatible with 4.0
               pd_storage_aggregate_output_,
-              ext_file_column_exprs_,
-              ext_column_convert_exprs_,
-              trans_info_expr_,
-              ext_tbl_filter_pd_level_);
+              trans_info_expr_);
   return ret;
 }
 
 OB_DEF_DESERIALIZE(ObPushdownExprSpec)
 {
   int ret = OB_SUCCESS;
-  ExprFixedArray fake_filters_before_index_back(CURRENT_CONTEXT->get_allocator());
-  ObPushdownFilter fake_pd_storage_index_back_filters(CURRENT_CONTEXT->get_allocator());
   LST_DO_CODE(OB_UNIS_DECODE,
               calc_exprs_,
               access_exprs_,
               max_batch_size_,
               pushdown_filters_,
-              fake_filters_before_index_back, //mock a fake filters to compatible with 4.0
               pd_storage_flag_.pd_flag_,
               pd_storage_filters_,
-              fake_pd_storage_index_back_filters, //mock a fake filters to compatible with 4.0
               pd_storage_aggregate_output_,
-              ext_file_column_exprs_,
-              ext_column_convert_exprs_,
-              trans_info_expr_,
-              ext_tbl_filter_pd_level_);
+              trans_info_expr_);
   return ret;
 }
 
 OB_DEF_SERIALIZE_SIZE(ObPushdownExprSpec)
 {
   int64_t len = 0;
-  ExprFixedArray fake_filters_before_index_back(CURRENT_CONTEXT->get_allocator());
-  ObPushdownFilter fake_pd_storage_index_back_filters(CURRENT_CONTEXT->get_allocator());
   LST_DO_CODE(OB_UNIS_ADD_LEN,
               calc_exprs_,
               access_exprs_,
               max_batch_size_,
               pushdown_filters_,
-              fake_filters_before_index_back, //mock a fake filters to compatible with 4.0
               pd_storage_flag_.pd_flag_,
               pd_storage_filters_,
-              fake_pd_storage_index_back_filters, //mock a fake filters to compatible with 4.0
               pd_storage_aggregate_output_,
-              ext_file_column_exprs_,
-              ext_column_convert_exprs_,
-              trans_info_expr_,
-              ext_tbl_filter_pd_level_);
+              trans_info_expr_);
   return len;
 }
 
@@ -2838,7 +2785,6 @@ void PushdownFilterInfo::reset()
     allocator_ = nullptr;
   }
   filter_ = nullptr;
-  di_bitmap_ = nullptr;
   param_ = nullptr;
   context_ = nullptr;
   is_inited_ = false;
@@ -2857,7 +2803,6 @@ void PushdownFilterInfo::reuse()
 {
   orig_filter_is_null_ = false;
   filter_ = nullptr;
-  di_bitmap_ = nullptr;
   param_ = nullptr;
   context_ = nullptr;
   start_ = -1;

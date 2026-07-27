@@ -34,13 +34,12 @@ class ObDtlDfoKey
   OB_UNIS_VERSION(1);
 public:
   ObDtlDfoKey() :
-    server_id_(-1), px_sequence_id_(common::OB_INVALID_ID),
-    qc_id_(-1), dfo_id_(common::OB_INVALID_ID)
+    px_sequence_id_(common::OB_INVALID_ID), qc_id_(-1),
+    dfo_id_(common::OB_INVALID_ID)
   {}
   uint64_t hash() const
   {
-    uint64_t val = common::murmurhash(&server_id_, sizeof(server_id_), 0);
-    val = common::murmurhash(&px_sequence_id_, sizeof(px_sequence_id_), val);
+    uint64_t val = common::murmurhash(&px_sequence_id_, sizeof(px_sequence_id_), 0);
     val = common::murmurhash(&qc_id_, sizeof(qc_id_), val);
     val = common::murmurhash(&dfo_id_, sizeof(dfo_id_), val);
     return val;
@@ -49,32 +48,28 @@ public:
 
   bool operator== (const ObDtlDfoKey other) const
   {
-    return server_id_ == other.server_id_
-        && px_sequence_id_ == other.px_sequence_id_
+    return px_sequence_id_ == other.px_sequence_id_
         && qc_id_ == other.qc_id_
         && dfo_id_ == other.dfo_id_;
   }
 
-  void set(int32_t server_id, uint64_t px_sequence_id, int32_t qc_id, int64_t dfo_id)
+  void set(uint64_t px_sequence_id, int32_t qc_id, int64_t dfo_id)
   {
-    server_id_ = server_id;
     px_sequence_id_ = px_sequence_id | PX_SEQ_MASK;
     qc_id_ = qc_id;
     dfo_id_ = dfo_id;
   }
   bool is_valid()
   {
-    return -1 != server_id_
-        && common::OB_INVALID_ID != px_sequence_id_
+    return common::OB_INVALID_ID != px_sequence_id_
         && common::OB_INVALID_ID != dfo_id_;
   }
   int64_t get_dfo_id() { return dfo_id_; }
   uint64_t get_px_sequence_id() { return px_sequence_id_; }
 
-  TO_STRING_KV(K_(server_id), K_(px_sequence_id), K_(qc_id), K_(dfo_id));
+  TO_STRING_KV(K_(px_sequence_id), K_(qc_id), K_(dfo_id));
 public:
   static const uint64_t PX_SEQ_MASK = 0x8000000000000000;
-  int32_t server_id_;
   uint64_t px_sequence_id_;
   int32_t qc_id_;
   int64_t dfo_id_;

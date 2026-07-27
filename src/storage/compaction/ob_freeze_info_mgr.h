@@ -27,7 +27,6 @@
 #include "share/ob_freeze_info_proxy.h"
 #include "rootserver/ob_snapshot_table_proxy.h"
 #include "share/scn.h"
-#include "storage/compaction/ob_snapshot_gc_scn_renewal_state.h"
 
 namespace oceanbase
 {
@@ -124,10 +123,6 @@ public:
   int get_min_dependent_freeze_info(share::ObFreezeInfo &freeze_info);
   int64_t get_snapshot_gc_ts();
   share::SCN get_snapshot_gc_scn();
-  ObSnapshotGcScnRenewalState &get_snapshot_gc_scn_renewal_state()
-  {
-    return snapshot_gc_scn_renewal_state_;
-  }
 
   ObFreezeInfoMgr(const ObFreezeInfoMgr&) = delete;
   ObFreezeInfoMgr& operator=(const ObFreezeInfoMgr&) = delete;
@@ -141,6 +136,9 @@ private:
 
   static const int64_t RELOAD_INTERVAL = 3L * 1000L * 1000L;
   static const int64_t UPDATE_LS_RESERVED_SNAPSHOT_INTERVAL = 10L * 1000L * 1000L;
+  static const int64_t MAX_GC_SNAPSHOT_TS_REFRESH_TS = 10L * 60L * 1000L * 1000L;
+  static const int64_t FLUSH_GC_SNAPSHOT_TS_REFRESH_TS =
+      common::MODIFY_GC_SNAPSHOT_INTERVAL + 10L * 1000L * 1000L;
   static const int64_t MIN_DEPENDENT_FREEZE_INFO_GAP = 2;
   static const int64_t RLOCK_TIMEOUT_US = 2L * 1000L * 1000L; // 2s
 
@@ -190,7 +188,7 @@ private:
   common::ObSEArray<share::ObSnapshotInfo, 8> snapshots_[2]; // snapshots_ maintains multi_version_start for index and others
   common::RWLock lock_;
   int64_t cur_idx_;
-  ObSnapshotGcScnRenewalState snapshot_gc_scn_renewal_state_;
+  int64_t last_change_ts_;
   common::ObTimer reload_timer_;
   bool inited_;
 };

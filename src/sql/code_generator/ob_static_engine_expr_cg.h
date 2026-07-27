@@ -19,7 +19,7 @@
 
 #include "sql/engine/expr/ob_expr.h"
 #include "sql/engine/expr/ob_expr_frame_info.h"
-#include "share/ob_cluster_version.h"
+#include "share/ob_version_parser.h"
 #include "lib/container/ob_fixed_array.h"
 
 namespace oceanbase
@@ -51,10 +51,9 @@ class ObExprCGCtx
 public:
   ObExprCGCtx(common::ObIAllocator &allocator,
               ObSQLSessionInfo *session,
-              share::schema::ObSchemaGetterGuard *schema_guard,
-              const uint64_t cur_cluster_version)
+              share::schema::ObSchemaGetterGuard *schema_guard)
     : allocator_(&allocator), session_(session),
-      schema_guard_(schema_guard), cur_cluster_version_(cur_cluster_version)
+      schema_guard_(schema_guard)
   {}
 
 private:
@@ -64,7 +63,6 @@ public:
   common::ObIAllocator *allocator_;
   ObSQLSessionInfo *session_;
   share::schema::ObSchemaGetterGuard *schema_guard_;
-  uint64_t cur_cluster_version_;
 };
 
 class ObRawExpr;
@@ -99,17 +97,15 @@ public:
                        ObSQLSessionInfo *session,
                        share::schema::ObSchemaGetterGuard *schema_guard,
                        const int64_t original_param_cnt,
-                       int64_t param_cnt,
-                       const uint64_t cur_cluster_version)
+                       int64_t param_cnt)
     : allocator_(allocator),
       original_param_cnt_(original_param_cnt),
       param_cnt_(param_cnt),
-      op_cg_ctx_(allocator_, session, schema_guard, cur_cluster_version),
+      op_cg_ctx_(allocator_, session, schema_guard),
       flying_param_cnt_(0),
       batch_size_(0),
       rt_question_mark_eval_(false),
       need_flatten_gen_col_(true),
-      cur_cluster_version_(cur_cluster_version),
       gen_questionmarks_(allocator, param_cnt),
       contain_dynamic_eval_rt_qm_(false)
   {
@@ -474,7 +470,6 @@ private:
   bool rt_question_mark_eval_;
   //is code generate temp expr witch used in table location
   bool need_flatten_gen_col_;
-  uint64_t cur_cluster_version_;
   common::ObFixedArray<ObRawExpr *, common::ObIAllocator> gen_questionmarks_;
   bool contain_dynamic_eval_rt_qm_;
 };

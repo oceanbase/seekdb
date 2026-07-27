@@ -41,7 +41,6 @@ ObTextRetrievalTokenIter::ObTextRetrievalTokenIter()
     relevance_expr_(nullptr),
     inv_scan_doc_length_col_(nullptr),
     inv_scan_domain_id_col_(nullptr),
-    doc_token_cnt_expr_(nullptr),
     token_weight_expr_(nullptr),
     relevance_calc_exprs_(),
     skip_(nullptr),
@@ -90,9 +89,6 @@ int ObTextRetrievalTokenIter::init(const ObTextRetrievalScanIterParam &iter_para
     LOG_WARN("fwd_idx_agg_iter or fwd_idx_agg_expr is NULL", K(ret), K_(fwd_idx_agg_iter), KPC_(fwd_idx_agg_expr), KPC_(fwd_idx_scan_param));
   } else if (OB_FAIL(init_calc_exprs_in_relevance_expr())) {
     LOG_WARN("failed to init row-wise calc exprs", K(ret));
-  } else if (need_fill_token_cnt() && (OB_ISNULL(doc_token_cnt_expr_) || OB_UNLIKELY(doc_token_cnt_expr_->datum_meta_.get_type() != ObDecimalIntType && doc_token_cnt_expr_->datum_meta_.get_type() != ObNumberType))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null expr", K(ret), KPC_(doc_token_cnt_expr), KPC_(inv_scan_doc_length_col), KPC_(eval_ctx));
   } else if (OB_ISNULL(skip_ = to_bit_vector(allocator_->alloc(ObBitVector::memory_size(max_batch_size_))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate skip bit vector", K(ret));
@@ -141,24 +137,7 @@ int ObTextRetrievalTokenIter::init_calc_exprs_in_relevance_expr()
       }
     }
 
-    if (OB_SUCC(ret) && need_fill_token_cnt()) {
-      sql::ObExpr *doc_token_cnt_param_expr = relevance_expr_->args_[sql::ObExprBM25::DOC_TOKEN_CNT_PARAM_IDX];
-      if (T_FUN_SYS_CAST == doc_token_cnt_param_expr->type_) {
-        doc_token_cnt_param_expr = doc_token_cnt_param_expr->args_[0];
-      }
-      if (OB_UNLIKELY(doc_token_cnt_param_expr->type_ != T_FUN_SUM)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected doc token cnt expr type", K(ret), KPC(doc_token_cnt_param_expr));
-      } else {
-        doc_token_cnt_expr_ = doc_token_cnt_param_expr;
-        // update the locate datums
-        if (max_batch_size_ > 0) {
-          doc_token_cnt_expr_->locate_datums_for_update(*eval_ctx_, max_batch_size_);
-        }
-      }
-    }
-
-    if (OB_SUCC(ret) && !need_fill_token_cnt()) {
+    if (OB_SUCC(ret)) {
       sql::ObExpr *doc_length_param_expr = relevance_expr_->args_[sql::ObExprBM25::DOC_LENGTH_PARAM_IDX];
       if (OB_UNLIKELY(nullptr == doc_length_param_expr || doc_length_param_expr->type_ != T_REF_COLUMN ||
                       doc_length_param_expr != inv_scan_doc_length_col_ ||
@@ -168,7 +147,7 @@ int ObTextRetrievalTokenIter::init_calc_exprs_in_relevance_expr()
                  KP(inv_scan_doc_length_col_));
       }
     }
-    if (OB_SUCC(ret) && need_fill_token_weight()) {
+    if (OB_SUCC(ret)) {
       sql::ObExpr *token_weight_param_expr = relevance_expr_->args_[sql::ObExprBM25::TOKEN_WEIGHT_PARAM_IDX];
       if (OB_UNLIKELY(nullptr == token_weight_param_expr || token_weight_param_expr->type_ != T_PSEUDO_COLUMN)) {
         ret = OB_ERR_UNEXPECTED;
@@ -211,8 +190,6 @@ int ObTextRetrievalTokenIter::get_next_doc_token_cnt(const bool use_fwd_idx_agg)
     } else if (OB_FAIL(do_token_cnt_agg(cur_doc_id))) {
       LOG_WARN("failed to do token count agg on fwd index", K(ret));
     }
-  } else if (need_fill_token_cnt() && OB_FAIL(fill_token_cnt_with_doc_len())) {
-    LOG_WARN("failed to fill token cnt with document length", K(ret));
   }
   return ret;
 }
@@ -287,38 +264,6 @@ int ObTextRetrievalTokenIter::do_token_cnt_agg(const ObDocIdExt &doc_id)
   return ret;
 }
 
-int ObTextRetrievalTokenIter::fill_token_cnt_with_doc_len()
-{
-  int ret = OB_SUCCESS;
-  const sql::ObExpr *agg_expr = doc_token_cnt_expr_;
-  const sql::ObExpr *doc_length_expr = inv_scan_doc_length_col_;
-  ObDatum *doc_length_datum = nullptr;
-  if (OB_ISNULL(agg_expr) || OB_ISNULL(doc_length_expr) || OB_ISNULL(eval_ctx_)
-      || OB_UNLIKELY(agg_expr->datum_meta_.get_type() != ObDecimalIntType && agg_expr->datum_meta_.get_type() != ObNumberType)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null expr", K(ret), KPC(agg_expr), KP(doc_length_expr), KP(eval_ctx_));
-  } else if (OB_FAIL(doc_length_expr->eval(*eval_ctx_, doc_length_datum))) {
-    LOG_WARN("failed to evaluate document length expr", K(ret));
-  } else {
-    ObDatum &agg_datum = agg_expr->locate_datum_for_write(*eval_ctx_);
-    if (agg_expr->datum_meta_.get_type() == ObDecimalIntType) {
-      if(OB_FAIL(set_decimal_int_by_precision(agg_datum, doc_length_datum->get_uint(), agg_expr->datum_meta_.precision_))) {
-        LOG_WARN("fail to set decimal int", K(ret));
-      }
-    } else {
-      const int64_t in_val = doc_length_datum->get_uint64();
-      number::ObNumber nmb;
-      if (OB_FAIL(nmb.from(in_val, mem_context_->get_arena_allocator()))) {
-        LOG_WARN("fail to int_number", K(ret), K(in_val));
-      } else {
-        agg_datum.set_number(nmb);
-      }
-    }
-
-  }
-  return ret;
-}
-
 int ObTextRetrievalTokenIter::fill_token_doc_cnt()
 {
   int ret = OB_SUCCESS;
@@ -378,7 +323,7 @@ int ObTextRetrievalTokenIter::get_next_row()
         LOG_WARN("failed to get next doc token count", K(ret));
       } else if (OB_FAIL(fill_token_doc_cnt())) {
         LOG_WARN("failed to get token doc cnt", K(ret));
-      } else if (need_fill_token_weight() && OB_FAIL(fill_token_weight())) {
+      } else if (OB_FAIL(fill_token_weight())) {
         LOG_WARN("failed to fill token weight", K(ret));
       } else if (OB_FAIL(eval_relevance_expr())) {
         LOG_WARN("failed to evaluate simarity expr", K(ret));
@@ -395,43 +340,6 @@ void ObTextRetrievalTokenIter::clear_batch_wise_evaluated_flag(const int64_t cou
     sql::ObExpr *expr = relevance_calc_exprs_.at(i);
     expr->get_evaluated_flags(*eval_ctx_).reset(count);
   }
-}
-
-int ObTextRetrievalTokenIter::batch_fill_token_cnt_with_doc_len(const int64_t count)
-{
-  int ret = OB_SUCCESS;
-  const sql::ObExpr *agg_expr = doc_token_cnt_expr_;
-  const sql::ObExpr *doc_length_expr = inv_scan_doc_length_col_;
-  if (need_fwd_idx_agg()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unsupported fwd_idx_agg", K(ret));
-  } else if (OB_FAIL(doc_length_expr->eval_batch(*eval_ctx_, *skip_, count))) {
-    LOG_WARN("failed to evaluate document length expr", K(ret));
-  } else if (OB_UNLIKELY(!doc_length_expr->is_batch_result())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected no batch expr", K(ret), KP(doc_length_expr));
-  } else {
-    const ObDatum *datums = doc_length_expr->locate_batch_datums(*eval_ctx_);
-    ObDatum *agg_datum = agg_expr->locate_batch_datums(*eval_ctx_);
-    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-      if (OB_LIKELY(!skip_->at(i))) {
-        if (agg_expr->datum_meta_.get_type() == ObDecimalIntType) {
-          if (OB_FAIL(set_decimal_int_by_precision(agg_datum[i], datums[i].get_uint(), agg_expr->datum_meta_.precision_))) {
-            LOG_WARN("fail to set decimal int", K(ret));
-          }
-        } else {
-          const int64_t in_val = datums[i].get_uint64();
-          number::ObNumber nmb;
-          if (OB_FAIL(nmb.from(in_val, mem_context_->get_arena_allocator()))) {
-            LOG_WARN("fail to int_number", K(ret), K(in_val));
-          } else {
-            agg_datum[i].set_number(nmb);
-          }
-        }
-      }
-    }
-  }
-  return ret;
 }
 
 int ObTextRetrievalTokenIter::batch_eval_relevance_expr(const int64_t count)
@@ -465,11 +373,9 @@ int ObTextRetrievalTokenIter::get_next_batch(const int64_t capacity, int64_t &co
     const ObBitVector *skip = NULL;
     PRINT_VECTORIZED_ROWS(SQL, DEBUG, *eval_ctx_, *inv_idx_scan_param_->output_exprs_, count, skip);
     clear_batch_wise_evaluated_flag(count);
-    if (need_fill_token_cnt() && OB_FAIL(batch_fill_token_cnt_with_doc_len(count))) {
-      LOG_WARN("failed to fill batch token cnt with document length", K(ret));
-    } else if (OB_FAIL(fill_token_doc_cnt())) {
+    if (OB_FAIL(fill_token_doc_cnt())) {
       LOG_WARN("failed to get token doc cnt", K(ret));
-    } else if (need_fill_token_weight() &&OB_FAIL(fill_token_weight())) {
+    } else if (OB_FAIL(fill_token_weight())) {
       LOG_WARN("failed to fill token weight", K(ret));
     } else if (OB_FAIL(batch_eval_relevance_expr(count))) {
       LOG_WARN("failed to evaluate simarity expr", K(ret));
@@ -591,27 +497,6 @@ int ObTextRetrievalTokenIter::update_scan_param(const ObString &token, common::O
     if (OB_SUCC(ret)) {
       reuse();
     }
-  }
-  return ret;
-}
-
-int ObTextRetrievalTokenIter::set_decimal_int_by_precision(ObDatum &result_datum,
-                                                           const uint64_t decint,
-                                                           const ObPrecision precision)
-{
-  int ret = OB_SUCCESS;
-  if (precision <= MAX_PRECISION_DECIMAL_INT_64) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected precision, precision is too short", K(ret), K(precision));
-  } else if (precision <= MAX_PRECISION_DECIMAL_INT_128) {
-    const int128_t result = decint;
-    result_datum.set_decimal_int(result);
-  } else if (precision <= MAX_PRECISION_DECIMAL_INT_256) {
-    const int256_t result = decint;
-    result_datum.set_decimal_int(result);
-  } else {
-    const int512_t result = decint;
-    result_datum.set_decimal_int(result);
   }
   return ret;
 }

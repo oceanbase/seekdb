@@ -49,8 +49,6 @@ namespace sql {
 namespace dtl {
 
 
-class  ObDtlBcastService;
-
 enum DtlWriterType
 {
   CONTROL_WRITER = 0,
@@ -310,7 +308,7 @@ public:
   int start();
   int on_start_fail();
   int on_finish(const bool is_block, const int return_code);
-  // wait async rpc finish and return ret_
+  // Wait for asynchronous local message processing and return ret_.
   int wait();
   int is_block() { return is_block_; }
   void reset_block() { is_block_ = false; }
@@ -330,16 +328,14 @@ private:
   uint64_t ch_id_;
 };
 
-// Rpc channel is "rpc version" of channel. As the name explained,
-// this kind of channel will do exchange between two tasks by using
-// rpc calls.
+// Common in-process data channel implementation shared by PX producers and consumers.
 class ObDtlBasicChannel
     : public ObDtlChannel
 {
   friend class ObDtlChanAgent;
 public:
-  explicit ObDtlBasicChannel(const uint64_t id, const common::ObAddr &peer, DtlChannelType type);
-  explicit ObDtlBasicChannel(const uint64_t id, const common::ObAddr &peer, const int64_t hash_val, DtlChannelType type);
+  explicit ObDtlBasicChannel(const uint64_t id);
+  explicit ObDtlBasicChannel(const uint64_t id, const int64_t hash_val);
   virtual ~ObDtlBasicChannel();
 
   class ObDtlChannelBlockProc : public ObIDltChannelLoopPred
@@ -413,12 +409,10 @@ public:
   int mock_eof_buffer(int64_t timeout_ts);
   ObDtlLinkedBuffer *alloc_buf(const int64_t payload_size);
   
-  void set_bc_service(ObDtlBcastService *bc_service) { bc_service_ = bc_service; }
-
   ObDtlDatumMsgWriter &get_datum_writer() { return datum_msg_writer_; }
   virtual int push_buffer_batch_info() override;
 
-  TO_STRING_KV(KP_(id), K_(peer), K_(peer_id));
+  TO_STRING_KV(KP_(id), K_(peer_id));
 protected:
   int push_back_send_list();
   int wait_unblocking();
@@ -472,8 +466,6 @@ protected:
   ObDtlChannelEncoder *msg_writer_;
   // row/datum store iterator for interm result iteration.
   ObChunkDatumStore::Iterator datum_iter_;
-
-  ObDtlBcastService *bc_service_;
 
   ObDtlChannelBlockProc block_proc_;
   static const int64_t MAX_BUFFER_CNT = 2;

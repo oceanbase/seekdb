@@ -75,7 +75,6 @@ private:
   int pre_process_tx_data_table_merge();
   virtual int update_tablet(
     ObTabletHandle &new_tablet_handle) override;
-  void try_update_snapshot_gc_renew_target();
   void try_schedule_compaction_after_mini(storage::ObTabletHandle &tablet_handle);
   int try_report_tablet_stat_after_mini();
 };

@@ -107,8 +107,6 @@ protected:
   int do_token_cnt_agg(const ObDocIdExt &doc_id, int64_t &token_count);
   int get_inv_idx_scan_doc_id(ObDocIdExt &doc_id);
   int get_next_row_inner();
-  int fill_token_cnt_with_doc_len();
-  int batch_fill_token_cnt_with_doc_len(const int64_t &count);
   int fill_token_doc_cnt();
   int project_relevance_expr();
   int batch_project_relevance_expr(const int64_t &count);
@@ -138,28 +136,6 @@ protected:
   int add_agg_rang_key(const ObNewRange &range);
   int check_inv_idx_scan_and_agg_param();
 
-  // tools method
-  // Use the decimal width derived from precision when filling batch retrieval results.
-  int set_decimal_int_by_precision(ObDatum &result_datum, const uint64_t decint, const ObPrecision precision) const
-  {
-    int ret = OB_SUCCESS;
-    if (precision <= MAX_PRECISION_DECIMAL_INT_64) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected precision, precision is too short", K(ret), K(precision));
-    } else if (precision <= MAX_PRECISION_DECIMAL_INT_128) {
-      const int128_t result = decint;
-      result_datum.set_decimal_int(result);
-    } else if (precision <= MAX_PRECISION_DECIMAL_INT_256) {
-      const int256_t result = decint;
-      result_datum.set_decimal_int(result);
-    } else {
-      const int512_t result = decint;
-      result_datum.set_decimal_int(result);
-    }
-    return ret;
-  }
-  bool need_fill_token_cnt() const;
- 
 protected:
   static const int64_t FWD_IDX_ROWKEY_COL_CNT = 2;
   static const int64_t INV_IDX_ROWKEY_COL_CNT = 2;
@@ -180,7 +156,6 @@ protected:
   ObDASScanIter *inverted_idx_agg_iter_;
   ObDASScanIter *forward_idx_iter_;
   ObObj *fwd_range_objs_;
-  sql::ObExpr *doc_token_cnt_expr_;
   sql::ObBitVector *skip_;
   int64_t token_doc_cnt_;
   int64_t max_batch_size_;

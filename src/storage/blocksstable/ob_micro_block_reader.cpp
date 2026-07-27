@@ -748,9 +748,7 @@ int ObMicroBlockReader::filter_pushdown_filter(
     bool need_reuse_lob_locator = false;
     for (int64_t offset = 0; OB_SUCC(ret) && offset < pd_filter_info.count_; ++offset) {
       row_idx = offset + pd_filter_info.start_;
-      if (pd_filter_info.can_skip_filter_delete_insert(offset)) {
-        continue;
-      } else if (nullptr != parent && parent->can_skip_filter(offset)) {
+      if (nullptr != parent && parent->can_skip_filter(offset)) {
         continue;
       } else if (0 < col_count) {
         for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {

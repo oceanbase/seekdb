@@ -65,8 +65,6 @@ class ObBasicNestedLoopJoinSpec;
 class ObMergeJoinSpec;
 class ObJoinSpec;
 class ObMonitoringDumpSpec;
-class ObLogSequence;
-class ObSequenceSpec;
 class ObJoinFilterSpec;
 class ObGranuleIteratorSpec;
 class ObPxReceiveSpec;
@@ -100,8 +98,6 @@ class ObTableRowStoreSpec;
 class ObRowSampleScanSpec;
 class ObBlockSampleScanSpec;
 class ObDDLBlockSampleScanSpec;
-class ObDirectReceiveSpec;
-class ObDirectTransmitSpec;
 class ObTableScanWithIndexBackSpec;
 class ObPxMultiPartDeleteSpec;
 class ObPxMultiPartInsertSpec;
@@ -167,12 +163,11 @@ public:
   template <int TYPE>
   friend struct GenSpecHelper;
 
-  ObStaticEngineCG(const uint64_t cur_cluster_version)
+  ObStaticEngineCG()
     : phy_plan_(NULL),
       opt_ctx_(nullptr),
       dml_cg_service_(*this),
-      tsc_cg_service_(*this),
-      cur_cluster_version_(cur_cluster_version)
+      tsc_cg_service_(*this)
   {
   }
   // generate physical plan
@@ -190,8 +185,6 @@ public:
                                        bool is_root_job = true);
   inline static void exprs_not_support_vectorize(const ObIArray<ObRawExpr *> &exprs,
                                                  bool &found);
-  inline uint64_t get_cur_cluster_version() { return cur_cluster_version_; }
-
   // detect physical operator type from logic operator.
   static int get_phy_op_type(ObLogicalOperator &op, ObPhyOperatorType &type,
                              const bool in_root_job);
@@ -219,7 +212,7 @@ private:
 
   // Post order visit logic plan and generate operator specification.
   // %in_root_job indicate that the operator is executed in main execution thread,
-  // not scheduled by distributed/remote execution or PX execution.
+  // not scheduled as a distributed or PX worker.
   int postorder_generate_op(ObLogicalOperator &op,
                             ObOpSpec *&spec,
                             const bool in_root_job,
@@ -308,7 +301,7 @@ private:
 
   // generate normal table scan
   int generate_normal_tsc(ObLogTableScan &op, ObTableScanSpec &spec);
-  int get_pushdown_storage_level(ObOptimizerContext &optimizer_context, const int64_t tenant_pd_level, int64_t &level);
+  int get_pushdown_storage_level(ObOptimizerContext &optimizer_context, const int64_t runtime_pd_level, int64_t &level);
   int generate_tsc_flags(ObLogTableScan &op, ObTableScanSpec &spec);
   int generate_param_spec(const common::ObIArray<ObExecParamRawExpr *> &param_raw_exprs,
       ObFixedArray<ObDynamicParamSetter, ObIAllocator> &param_setter);
@@ -356,7 +349,6 @@ private:
 
   int generate_spec(ObLogTopk &op, ObTopKSpec &spec, const bool in_root_job);
 
-  int generate_spec(ObLogSequence &op, ObSequenceSpec &spec, const bool in_root_job);
 
   int generate_spec(ObLogMonitoringDump &op, ObMonitoringDumpSpec &spec, const bool in_root_job);
 
@@ -375,10 +367,6 @@ private:
   int generate_spec(ObLogExchange &op, ObPxFifoCoordSpec &spec, const bool in_root_job);
   int generate_spec(ObLogExchange &op, ObPxOrderedCoordSpec &spec, const bool in_root_job);
   int generate_spec(ObLogExchange &op, ObPxMSCoordSpec &spec, const bool in_root_job);
-
-  // for remote execute
-  int generate_spec(ObLogExchange &op, ObDirectTransmitSpec &spec, const bool in_root_job);
-  int generate_spec(ObLogExchange &op, ObDirectReceiveSpec &spec, const bool in_root_job);
 
   int generate_spec(ObLogWindowFunction &op, ObWindowFunctionSpec &spec, const bool in_root_job);
 
@@ -556,7 +544,6 @@ private:
   common::ObSEArray<ObOpSpec *, 10> fake_cte_specs_;
   ObDmlCgService dml_cg_service_;
   ObTscCgService tsc_cg_service_;
-  uint64_t cur_cluster_version_;
   common::ObSEArray<BatchExecParamCache, 8> batch_exec_param_caches_;
 
 };

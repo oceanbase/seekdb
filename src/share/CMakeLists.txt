@@ -45,11 +45,9 @@ ob_set_subtarget(ob_share vector
 )
 
 ob_set_subtarget(ob_share ALONE
-  ob_tenant_timezone.cpp
-  ob_tenant_timezone_mgr.cpp
+  ob_timezone_mgr.cpp
   ob_sql_client_decorator.cpp
   ob_rpc_struct.cpp
-  ob_tenant_mgr.cpp
   parameter/ob_parameter_attr.cpp
   ob_ddl_args.cpp
   ob_lonely_table_clean_rpc_struct.cpp
@@ -80,8 +78,6 @@ ob_set_subtarget(ob_share cache
 ob_set_subtarget(ob_share common
   ob_autoincrement_param.cpp
   ob_autoincrement_service.cpp
-  ob_cluster_role.cpp
-  ob_cluster_version.cpp
   ob_column_checksum_error_operator.cpp
   ob_core_table_proxy.cpp
   ob_ddl_checksum.cpp
@@ -97,18 +93,17 @@ ob_set_subtarget(ob_share common
   ob_dml_sql_splicer.cpp
   ob_encryption_util.cpp
   ob_errno.cpp
-  ob_all_tenant_info.cpp
+  ob_server_info.cpp
   ob_schema_version_info.cpp
   ob_freeze_info_proxy.cpp
-  ob_gais_msg.cpp
   session/ob_local_session_var.cpp
-  ob_global_autoinc_service.cpp
   ob_global_merge_table_operator.cpp
   ob_global_stat_proxy.cpp
   ob_i_tablet_scan.cpp
   ob_io_device_helper.cpp
   ob_kv_parser.cpp
   ob_lease_struct.cpp
+  ob_ls_id.cpp
   ob_list_parser.cpp
   ob_local_device.cpp
   ob_table_range.cpp
@@ -117,29 +112,26 @@ ob_set_subtarget(ob_share common
   ob_occam_time_guard.cpp
   ob_priv_common.cpp
   ob_proposal_id.cpp
-  ob_resource_limit.cpp
   ob_schema_status_proxy.cpp
-  ob_server_status.cpp
   ob_server_struct.cpp
   ob_share_util.cpp
+  ob_standby_source_util.cpp
   ob_simple_batch.cpp
   ob_simple_mem_limit_getter.cpp
   ob_tablet_autoincrement_param.cpp
-  ob_tablet_checksum_iterator.cpp
   ob_tablet_checksum_operator.cpp
-  ob_tablet_replica_checksum_operator.cpp
+  ob_tablet_local_checksum_operator.cpp
   ob_tablet_meta_table_compaction_operator.cpp
   ob_task_define.cpp
   ob_telemetry.cpp
-  ob_tenant_role.cpp
-  ob_tenant_switchover_status.cpp
-  ob_tenant_memstore_info_operator.cpp
+  ob_server_role.cpp
+  ob_server_switchover_status.cpp
   ob_time_utility2.cpp
   ob_time_zone_info_manager.cpp
   ob_unique_index_row_transformer.cpp
-  ob_unit_getter.cpp
+  ob_version_parser.cpp
   ob_freeze_info_manager.cpp
-  ob_zone_merge_info.cpp
+  ob_merge_info.cpp
   ob_admin_dump_helper.cpp
   ob_inner_kv_table_operator.cpp
   ob_inner_table_operator.cpp
@@ -171,17 +163,12 @@ ob_set_subtarget(ob_share common_mixed
   object/ob_array_cast.cpp
   parameter/ob_parameter_seed.ipp
   rc/ob_context.cpp
-  rc/ob_tenant_base.cpp
-  sequence/ob_sequence_cache.cpp
-  sequence/ob_sequence_dml_proxy.cpp
-  sequence/ob_sequence_option.cpp
-  sequence/ob_sequence_option_builder.cpp
+  rc/ob_server_runtime.cpp
   system_variable/ob_sys_var_meta.cpp
   system_variable/ob_system_variable_init.cpp
   ob_lob_access_utils.cpp
   ob_json_access_utils.cpp
-  tenant_snapshot/ob_tenant_snapshot_id.cpp
-  table/ob_ttl_util.cpp
+  server_snapshot/ob_server_snapshot_id.cpp
   table/ob_table_util.cpp
   compaction/ob_compaction_time_guard.cpp
   compaction/ob_schedule_batch_size_mgr.cpp
@@ -190,12 +177,10 @@ ob_set_subtarget(ob_share common_mixed
   storage/ob_sqlite_connection.cpp
   storage/ob_sqlite_connection_pool.cpp
   storage/ob_deadlock_event_history_table_storage.cpp
-  storage/ob_tablet_replica_checksum_table_storage.cpp
+  storage/ob_tablet_local_checksum_table_storage.cpp
   storage/ob_merge_info_table_storage.cpp
   storage/ob_column_checksum_error_info_table_storage.cpp
   storage/ob_rootservice_job_table_storage.cpp
-  storage_cache_policy/ob_storage_cache_common.cpp
-  storage_cache_policy/ob_storage_cache_partition_sql_helper.cpp
   longops_mgr/ob_i_longops.cpp
   longops_mgr/ob_longops_mgr.cpp
   ob_module_data_arg.cpp
@@ -207,12 +192,11 @@ ob_set_subtarget(ob_share tablet
   tablet/ob_tablet_mapping_operator.cpp
   tablet/ob_tablet_table_iterator.cpp
   tablet/ob_tablet_meta_table_storage.cpp
-  tablet/ob_tablet_filter.cpp
   tablet/ob_tablet_to_table_history_operator.cpp
 )
 
 ob_set_subtarget(ob_share config
-  config/ob_tenant_config_mgr.cpp
+  config/ob_runtime_config.cpp
   config/ob_common_config.cpp
   config/ob_config.cpp
   config/ob_config_helper.cpp
@@ -220,7 +204,6 @@ ob_set_subtarget(ob_share config
   config/ob_reload_config.cpp
   config/ob_server_config.cpp
   config/ob_system_config.cpp
-  config/ob_system_config_key.cpp
   config/ob_config_storage.cpp
 )
 
@@ -240,8 +223,6 @@ ob_set_subtarget(ob_share schema
   schema/ob_database_sql_service.cpp
   schema/ob_ddl_sql_service.cpp
   schema/ob_dependency_info.cpp
-  schema/ob_directory_mgr.cpp
-  schema/ob_directory_sql_service.cpp
   schema/ob_error_info.cpp
   schema/ob_mock_fk_parent_table_mgr.cpp
   schema/ob_multi_version_schema_service.cpp
@@ -264,67 +245,34 @@ ob_set_subtarget(ob_share schema
   schema/ob_schema_service.cpp
   schema/ob_schema_store.cpp
   schema/ob_schema_utils.cpp
-  schema/ob_sequence_mgr.cpp
   schema/ob_sys_variable_mgr.cpp
   schema/ob_sys_variable_sql_service.cpp
   schema/ob_table_iter.cpp
   schema/ob_table_sql_service.cpp
-  schema/ob_tablegroup_sql_service.cpp
-  schema/ob_tenant_schema_service.cpp
-  schema/ob_tenant_sql_service.cpp
+  schema/ob_schema_runtime_service.cpp
   schema/ob_trigger_info.cpp
   schema/ob_trigger_mgr.cpp
   schema/ob_trigger_sql_service.cpp
-  schema/ob_udf.cpp
-  schema/ob_udf_mgr.cpp
-  schema/ob_udf_sql_service.cpp
   schema/ob_user_sql_service.cpp
-  schema/ob_context_sql_service.cpp
-  schema/ob_context_mgr.cpp
-  schema/ob_context_ddl_proxy.cpp
   schema/ob_ddl_epoch.cpp
   schema/ob_ddl_trans_controller.cpp
   schema/ob_schema_getter_guard.cpp
   schema/ob_schema_getter_guard_priv.cpp
-  schema/ob_schema_getter_guard_ccl_rule.cpp
   schema/ob_schema_struct.cpp
-  schema/ob_sequence_sql_service.cpp
   schema/ob_server_schema_service.cpp
   schema/ob_table_schema.cpp
   schema/ob_latest_schema_guard.cpp
   schema/ob_list_row_values.cpp
-  schema/ob_catalog_schema_struct.cpp
-  schema/ob_catalog_mgr.cpp
-  schema/ob_catalog_sql_service.cpp
-  schema/ob_ccl_schema_struct.cpp
-  schema/ob_ccl_rule_mgr.cpp
-  schema/ob_ccl_rule_sql_service.cpp
   schema/ob_schema_guard_wrapper.cpp
   
   schema/ob_ai_model_mgr.cpp
   schema/ob_ai_model_sql_service.cpp
-  schema/ob_location_mgr.cpp
-  schema/ob_location_schema_struct.cpp
-  schema/ob_location_sql_service.cpp
   schema/ob_objpriv_mysql_schema_struct.cpp
-  schema/ob_schema_getter_guard_location.cpp
   schema/ob_schema_getter_guard_objpriv_mysql.cpp
-  schema/ob_location_schema_struct.cpp
-  schema/ob_schema_getter_guard_location.cpp
-)
-
-ob_set_subtarget(ob_share catalog
-  catalog/ob_catalog_properties.cpp
-  catalog/ob_external_object_ctx.cpp
-  catalog/ob_external_catalog.cpp
-  catalog/ob_cached_catalog_meta_getter.cpp
-  catalog/ob_catalog_meta_getter.cpp
-  catalog/ob_catalog_utils.cpp
 )
 
 
 ob_set_subtarget(ob_share io
-  io/ob_backup_io_adapter.cpp
   io/ob_backup_storage_info.cpp
   io/ob_io_define.cpp
   io/io_schedule/ob_io_schedule_v2.cpp
@@ -333,11 +281,10 @@ ob_set_subtarget(ob_share io
   io/ob_io_manager.cpp
 )
 
-ob_set_subtarget(ob_share unit
-  unit/ob_resource_pool.cpp
-  unit/ob_unit_config.cpp
-  unit/ob_unit_resource.cpp
-  unit/ob_unit_info.cpp
+ob_set_subtarget(ob_share resource
+  resource/ob_server_resource.cpp
+  resource/ob_server_resource_config.cpp
+  resource/ob_server_runtime_config.cpp
 )
 
 ob_set_subtarget(ob_share resource_limit_calculator
@@ -345,12 +292,14 @@ ob_set_subtarget(ob_share resource_limit_calculator
   resource_limit_calculator/ob_resource_limit_calculator.cpp
 )
 
+ob_set_subtarget(ob_share errsim_module_mgr
+  errsim_module/ob_errsim_module_mgr.cpp
+)
+
 if (OB_ERRSIM)
- ob_set_subtarget(ob_share errsim_module
-   errsim_module/ob_tenant_errsim_module_mgr.cpp
-   errsim_module/ob_tenant_errsim_event_mgr.cpp
-   errsim_module/ob_errsim_module_interface_imp.cpp
- )
+  ob_set_subtarget(ob_share errsim_module_interface
+    errsim_module/ob_errsim_module_interface_imp.cpp
+  )
 endif()
 
 ob_set_subtarget(ob_share text_analysis
@@ -358,13 +307,6 @@ ob_set_subtarget(ob_share text_analysis
   text_analysis/ob_token_stream.cpp
 )
 
-
-ob_set_subtarget(ob_share object_storage
-  object_storage/ob_device_config_parser.cpp
-  object_storage/ob_device_connectivity.cpp
-  object_storage/ob_device_manifest.cpp
-  object_storage/ob_object_storage_struct.cpp
-)
 
 ob_set_subtarget(ob_share domain_id
 )

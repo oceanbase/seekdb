@@ -18,7 +18,6 @@
 #define OCEANBASE_ENGINE_OB_OPERATOR_REG_H_
 
 #include "sql/engine/ob_phy_operator_type.h"
-#include "share/ob_cluster_version.h"
 #include <type_traits>
 
 namespace oceanbase
@@ -36,7 +35,6 @@ struct ObOpTypeTraits
   constexpr static bool registered_ = false;
   constexpr static bool has_input_ = false;
   constexpr static bool vectorized_ = false;
-  constexpr static uint64_t ob_version_ = 0;
   typedef char LogOp;
   typedef char Spec;
   typedef char Op;
@@ -67,20 +65,18 @@ struct VECTORIZED_OP {};
 #define DEF_OP_INPUT_TRAITS_1(input, type)
 
 
-#define REGISTER_OPERATOR_FULL(log_op, type, spec, op, x, y, z) \
-  REGISTER_OPERATOR_FULL_(log_op, type, spec, op, x, y, z)
+#define REGISTER_OPERATOR_FULL(log_op, type, spec, op, x, y) \
+  REGISTER_OPERATOR_FULL_(log_op, type, spec, op, x, y)
 #define REGISTER_OPERATOR_FULL_(...) REGISTER_OPERATOR_FULL__(__VA_ARGS__)
 
 #define REGISTER_OPERATOR_FULL__(log_op, type, op_spec, op, input_type,        \
-                                 vec_type, ob_version)                         \
+                                 vec_type)                                     \
   namespace op_reg {                                                           \
   template <> struct ObOpTypeTraits<type> {                                    \
     constexpr static bool registered_ = true;                                  \
     constexpr static bool has_input_ = !std::is_same<char, input_type>::value; \
     constexpr static bool vectorized_ =                                        \
         std::is_same<VECTORIZED_OP, vec_type>::value;                          \
-    constexpr static uint64_t ob_version_ =                                    \
-        (ob_version == 0 ? CLUSTER_VERSION_1_0_0_0 : ob_version);              \
     typedef log_op LogOp;                                                      \
     typedef op_spec Spec;                                                      \
     typedef op Op;                                                             \
@@ -94,11 +90,9 @@ struct VECTORIZED_OP {};
   }
 
 #define REGISTER_OPERATOR_5(log_op, type, spec, op, x) \
-    REGISTER_OPERATOR_FULL(log_op, type, spec, op, x, char, 0)
+    REGISTER_OPERATOR_FULL(log_op, type, spec, op, x, char)
 #define REGISTER_OPERATOR_6(log_op, type, spec, op, x, y) \
-    REGISTER_OPERATOR_FULL(log_op, type, spec, op, x, y, 0)
-#define REGISTER_OPERATOR_7(log_op, type, spec, op, x, y, z) \
-    REGISTER_OPERATOR_FULL(log_op, type, spec, op, x, y, z)
+    REGISTER_OPERATOR_FULL(log_op, type, spec, op, x, y)
 
 #define REGISTER_OPERATOR___(n, ...) REGISTER_OPERATOR_ ##n(__VA_ARGS__)
 #define REGISTER_OPERATOR__(...) REGISTER_OPERATOR___(__VA_ARGS__)
@@ -429,12 +423,6 @@ class ObMonitoringDumpOp;
 REGISTER_OPERATOR(ObLogMonitoringDump, PHY_MONITORING_DUMP, ObMonitoringDumpSpec,
                   ObMonitoringDumpOp, NOINPUT, VECTORIZED_OP);
 
-class ObLogSequence;
-class ObSequenceSpec;
-class ObSequenceOp;
-REGISTER_OPERATOR(ObLogSequence, PHY_SEQUENCE, ObSequenceSpec, ObSequenceOp,
-                  NOINPUT);
-
 class ObLogJoinFilter;
 class ObJoinFilterSpec;
 class ObJoinFilterOp;
@@ -511,19 +499,6 @@ class ObPxMSCoordOp;
 class ObPxMSCoordOpInput;
 REGISTER_OPERATOR(ObLogExchange, PHY_PX_MERGE_SORT_COORD, ObPxMSCoordSpec,
                   ObPxMSCoordOp, ObPxMSCoordOpInput, VECTORIZED_OP);
-
-class ObLogExchange;
-class ObDirectReceiveSpec;
-class ObDirectReceiveOp;
-REGISTER_OPERATOR(ObLogExchange, PHY_DIRECT_RECEIVE, ObDirectReceiveSpec,
-                  ObDirectReceiveOp, NOINPUT);
-
-class ObLogExchange;
-class ObDirectTransmitSpec;
-class ObDirectTransmitOp;
-class ObDirectTransmitOpInput;
-REGISTER_OPERATOR(ObLogExchange, PHY_DIRECT_TRANSMIT, ObDirectTransmitSpec,
-                  ObDirectTransmitOp, ObDirectTransmitOpInput);
 
 class ObLogErrLog;
 class ObErrLogSpec;

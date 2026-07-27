@@ -355,13 +355,11 @@ int ObPxTransmitOp::init_channel(ObPxTransmitOpInput &trans_input)
         ch->set_audit(enable_audit);
         ch->set_interm_result(use_interm_result);
         ch->set_enable_channel_sync(true);
-        ch->set_send_by_tenant(true);
         ch->set_batch_id(px_batch_id);
-        ch->set_compression_type(dfc_.get_compressor_type());
         ch->set_operator_owner();
         ch->set_thread_id(thread_id);
       }
-      LOG_TRACE("Transmit channel", K(ch), KP(ch->get_id()), K(ch->get_peer()));
+      LOG_TRACE("transmit channel", K(ch), KP(ch->get_id()));
     }
     LOG_TRACE("Get transmit channel ok",
               "task_id", trans_input.get_task_id(),
@@ -521,7 +519,7 @@ int ObPxTransmitOp::send_eof_row()
           "ch_cnt", task_channels_.count(),
           K(ret));
   if (OB_ISNULL(ch_info_) ||
-      ch_info_->receive_exec_server_.total_task_cnt_ != task_channels_.count()) {
+      ch_info_->receive_task_layout_.total_task_cnt_ != task_channels_.count()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected status: ch info is null", K(ret),
       KP(ch_info_), K(task_channels_.count()));
@@ -709,12 +707,8 @@ int ObPxTransmitOp::link_ch_sets(ObPxTaskChSet &ch_set,
 #endif
         if (OB_FAIL(ch_set.get_channel_info(idx, ci))) {
           LOG_WARN("fail get channel info", K(idx), K(ret));
-        } else if (nullptr != dfc && ci.type_ == DTL_CT_LOCAL) {
-          ch = new((char*)buf + offset) ObDtlLocalChannel(ci.chid_, ci.peer_, hash_val, ObDtlChannel::DtlChannelType::LOCAL_CHANNEL);
         } else {
-          // single-replica: only local (in-process) channels are supported.
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("only local dtl channel is supported", K(ret), K(ci.type_));
+          ch = new((char*)buf + offset) ObDtlLocalChannel(ci.chid_, hash_val);
         }
         if (OB_FAIL(ret)) {
         } else if (nullptr == ch) {

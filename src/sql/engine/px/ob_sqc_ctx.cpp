@@ -19,7 +19,7 @@
 
 using namespace oceanbase::sql;
 
-ObSqcCtx::ObSqcCtx(ObPxRpcInitSqcArgs &sqc_arg) : msg_loop_(),
+ObSqcCtx::ObSqcCtx(ObPxInitSqcArgs &sqc_arg) : msg_loop_(),
       msg_proc_(sqc_arg, *this),
       receive_data_ch_msg_proc_(msg_proc_),
       transmit_data_ch_msg_proc_(msg_proc_),

@@ -34,29 +34,26 @@
 #include "sql/engine/cmd/ob_load_data_rpc.h"
 #include "sql/das/ob_data_access_service.h"
 #include "sql/session/ob_user_resource_mgr.h"
-#include "sql/executor/ob_executor_rpc_impl.h"
 
 #include "pl/ob_pl.h"
 
 
-#include "rootserver/ob_root_service.h"
+#include "rootserver/ob_local_management_service.h"
 
 #include "observer/mysql/ob_diag.h"
 
-#include "observer/omt/ob_multi_tenant.h"
+#include "observer/omt/ob_server_runtime_controller.h"
 #include "observer/omt/ob_worker_processor.h"
 #include "share/rc/ob_module_provider.h"   // ObIModuleProvider / g_mp (ObServer owns modules)
 
 #include "observer/virtual_table/ob_virtual_data_access_service.h"
 
 #include "observer/ob_signal_handle.h"
-#include "observer/ob_tenant_duty_task.h"
+#include "observer/ob_server_duty_task.h"
 #include "observer/ob_inner_sql_connection_pool.h"
-#include "observer/ob_resource_inner_sql_connection_pool.h"
 #include "observer/ob_srv_network_frame.h"
 #include "observer/ob_service.h"
 #include "observer/ob_server_reload_config.h"
-#include "observer/ob_root_service_monitor.h"
 #include "observer/ob_inner_sql_transmit_struct.h"
 #include "observer/ob_startup_accel_task_handler.h"
 #include "storage/ddl/ob_ddl_heart_beat_task.h"
@@ -70,7 +67,7 @@ namespace oceanbase
 {
 namespace omt
 {
-class ObTenantTimezoneMgr;
+class ObTimezoneMgr;
 }
 namespace observer
 {
@@ -177,7 +174,7 @@ public:
   int reload_config();
   bool is_log_dir_empty() const { return is_log_dir_empty_; }
   sql::ObSQLSessionMgr &get_sql_session_mgr() { return session_mgr_; }
-  rootserver::ObRootService &get_root_service() { return root_service_; }
+  rootserver::ObLocalManagementService &get_local_management_service() { return local_management_service_; }
   common::ObMySQLProxy &get_mysql_proxy() { return sql_proxy_; }
   int64_t get_start_time() const { return start_time_; }
   sql::ObConnectResourceMgr& get_conn_res_mgr() { return conn_res_mgr_; }
@@ -199,7 +196,7 @@ private:
   int init_network();
   int init_interrupt();
   int init_fts();
-  int init_multi_tenant();
+  int init_server_runtime();
   int init_sql_proxy();
   int init_io();
   int init_schema();
@@ -209,35 +206,29 @@ private:
   int init_global_kvcache();
   int init_global_session_info();
   int init_ob_service(bool need_bootstrap);
-  int init_root_service();
+  int init_local_management_service(const bool need_bootstrap);
   int init_sql();
   int init_sql_runner();
-  int init_sequence();
   int init_pl();
   int init_global_context();
   int parse_role(const ObServerOptions &opts);
-  int init_version();
   int init_px_target_mgr();
   int init_storage();
   int init_tx_data_cache();
   int init_gc_partition_adapter();
   int init_loaddata_global_stat();
   int init_bandwidth_throttle();
-  int init_table_lock_rpc_client();
   int start_log_mgr();
   int stop_log_mgr();
   int refresh_cpu_frequency();
   int clean_up_invalid_tables();
-  int clean_up_invalid_tables_by_tenant();
   int init_ctas_clean_up_task(); //Regularly clean up the residuals related to querying and building tables and temporary tables
   int init_redef_heart_beat_task();
   int init_ddl_heart_beat_task_container();
   int init_refresh_cpu_frequency();
   int set_running_mode();
-  void check_user_tenant_schema_refreshed(const common::ObIArray<uint64_t> &batch_ids, const int64_t expire_time);
-  void check_log_replay_over(const common::ObIArray<uint64_t> &batch_ids, const int64_t expire_time);
-  int try_update_hidden_sys();
-  int check_if_multi_tenant_synced();
+  int initialize_server_runtime();
+  int wait_for_server_runtime();
   int check_if_schema_ready();
   int check_if_timezone_usable();
   int parse_mode();
@@ -272,17 +263,14 @@ private:
 
   ObInnerSQLConnectionPool sql_conn_pool_;
   ObInnerSQLConnectionPool ddl_conn_pool_;
-  ObResourceInnerSQLConnectionPool res_inner_conn_pool_;
-
   common::ObMySQLProxy sql_proxy_;
   common::ObMySQLProxy ddl_sql_proxy_;
-  sql::ObExecutorRpcImpl executor_rpc_;
 
   // The OceanBase configuration relating to.
   common::ObServerConfig &config_;
   ObServerReloadConfig reload_config_;
   common::ObConfigManager config_mgr_;
-  omt::ObTenantTimezoneMgr &tenant_timezone_mgr_;
+  omt::ObTimezoneMgr &timezone_mgr_;
 
   // The Oceanbase schema relating to.
   share::schema::ObMultiVersionSchemaService &schema_service_;
@@ -308,18 +296,13 @@ private:
   // sql session_mgr
   sql::ObSQLSessionMgr session_mgr_;
 
-  // All operations and processing logic relating to root server is
-  // defined in root_service_.
-  rootserver::ObRootService root_service_;
-  // Start && stop root service.
-
-  ObRootServiceMonitor root_service_monitor_;
-
+  // Process-local schema, DDL, job, freeze and recycle-bin management.
+  rootserver::ObLocalManagementService local_management_service_;
   // All operations and processing logic relating to ob server is
   // defined in oceanbase_service_.
   ObService ob_service_;
 
-  omt::ObMultiTenant multi_tenant_;
+  omt::ObServerRuntimeController server_runtime_controller_;
 
   // virtual table related
   ObVirtualDataAccessService vt_data_service_;
@@ -332,8 +315,8 @@ private:
   common::ObTimer server_gtimer_;
   common::ObTimer sql_mem_timer_;
   common::ObTimer ctas_clean_up_timer_;
-  ObTenantDutyTask duty_task_;
-  ObTenantSqlMemoryTimerTask sql_mem_task_;
+  ObServerDutyTask duty_task_;
+  ObSqlMemoryTimerTask sql_mem_task_;
   ObCTASCleanUpTask ctas_clean_up_task_;     // repeat & no retry
   ObRedefTableHeartBeatTask redef_table_heart_beat_task_;
   ObRefreshCpuFreqTimeTask refresh_cpu_frequency_task_;
@@ -353,32 +336,30 @@ private:
 
 public:
   // ===== ObIModuleProvider impl over ObServer-owned modules =====
-  // Module accessors, order == MTL_MEMBERS.
+  // Module accessors.
   omt::ObSharedTimer * shared_timer() override { return mods_shared_timer_; }
-  oceanbase::sql::ObTenantSQLSessionMgr * tenant_sql_session_mgr() override { return mods_tenant_sql_session_mgr_; }
-  storage::ObTenantMetaMemMgr * tenant_meta_mem_mgr() override { return mods_tenant_meta_mem_mgr_; }
-  ObTxCtxObjPool * part_trans_ctx_obj_pool() override { return mods_part_trans_ctx_obj_pool_; }
-  ObTableScanIteratorObjPool * table_scan_iterator_obj_pool() override { return mods_table_scan_iterator_obj_pool_; }
-  common::ObTenantIOManager * tenant_io_manager() override { return mods_tenant_io_manager_; }
-  storage::mds::ObTenantMdsService * tenant_mds_service() override { return mods_tenant_mds_service_; }
   blocksstable::ObSharedMacroBlockMgr * shared_macro_block_mgr() override { return mods_shared_macro_block_mgr_; }
+  oceanbase::sql::ObSQLSessionPool * sql_session_pool() override { return mods_sql_session_pool_; }
+  storage::ObStorageMetaMemMgr * storage_meta_mem_mgr() override { return mods_storage_meta_mem_mgr_; }
+  ObTableScanIteratorObjPool * table_scan_iterator_obj_pool() override { return mods_table_scan_iterator_obj_pool_; }
+  common::ObIOService * io_service() override { return mods_io_service_; }
+  storage::mds::ObMdsService * mds_service() override { return mods_mds_service_; }
   share::ObSharedMemAllocMgr * shared_mem_alloc_mgr() override { return mods_shared_mem_alloc_mgr_; }
+  share::ObErrsimModuleMgr * errsim_module_mgr() override { return mods_errsim_module_mgr_; }
   transaction::ObTransService * trans_service() override { return mods_trans_service_; }
   logservice::ObLogService * log_service() override { return mods_log_service_; }
   storage::ObLSService * ls_service() override { return mods_ls_service_; }
-  storage::ObTenantStorageMetaService * tenant_storage_meta_service() override { return mods_tenant_storage_meta_service_; }
-  tmp_file::ObTenantTmpFileManager * tenant_tmp_file_manager() override { return mods_tenant_tmp_file_manager_; }
-  compaction::ObTenantCompactionProgressMgr * tenant_compaction_progress_mgr() override { return mods_tenant_compaction_progress_mgr_; }
+  storage::ObLocalStorageMetaService * local_storage_meta_service() override { return mods_local_storage_meta_service_; }
+  tmp_file::ObTmpFileManager * tmp_file_manager() override { return mods_tmp_file_manager_; }
+  compaction::ObCompactionProgressMgr * compaction_progress_mgr() override { return mods_compaction_progress_mgr_; }
   compaction::ObServerCompactionEventHistory * server_compaction_event_history() override { return mods_server_compaction_event_history_; }
-  storage::ObTenantTabletStatMgr * tenant_tablet_stat_mgr() override { return mods_tenant_tablet_stat_mgr_; }
+  storage::ObTabletStatMgr * tablet_stat_mgr() override { return mods_tablet_stat_mgr_; }
   memtable::ObLockWaitMgr * lock_wait_mgr() override { return mods_lock_wait_mgr_; }
   transaction::tablelock::ObTableLockService * table_lock_service() override { return mods_table_lock_service_; }
   rootserver::ObPrimaryMajorFreezeService * primary_major_freeze_service() override { return mods_primary_major_freeze_service_; }
   rootserver::ObRestoreMajorFreezeService * restore_major_freeze_service() override { return mods_restore_major_freeze_service_; }
-  observer::ObTenantMetaChecker * tenant_meta_checker() override { return mods_tenant_meta_checker_; }
-  observer::ObTabletTableUpdater * tablet_table_updater() override { return mods_tablet_table_updater_; }
-  storage::ObStorageHAHandlerService * storage_ha_handler_service() override { return mods_storage_ha_handler_service_; }
-  storage::ObTenantSSTableMergeInfoMgr * tenant_ss_table_merge_info_mgr() override { return mods_tenant_ss_table_merge_info_mgr_; }
+  observer::ObTabletRuntimeMetaUpdater * tablet_runtime_meta_updater() override { return mods_tablet_runtime_meta_updater_; }
+  storage::ObSSTableMergeInfoMgr * sstable_merge_info_mgr() override { return mods_sstable_merge_info_mgr_; }
   share::ObDagWarningHistoryManager * dag_warning_history_manager() override { return mods_dag_warning_history_manager_; }
   compaction::ObScheduleSuspectInfoMgr * schedule_suspect_info_mgr() override { return mods_schedule_suspect_info_mgr_; }
   compaction::ObCompactionSuggestionMgr * compaction_suggestion_mgr() override { return mods_compaction_suggestion_mgr_; }
@@ -386,7 +367,6 @@ public:
   storage::ObLobManager * lob_manager() override { return mods_lob_manager_; }
   common::ObILobReadService * lob_read_service() override;
   int get_lower_bound_freeze_info(const int64_t snapshot_version, share::ObFreezeInfo &freeze_info) override;
-  share::ObGlobalAutoIncService * global_auto_inc_service() override { return mods_global_auto_inc_service_; }
   share::detector::ObDeadLockDetectorMgr * dead_lock_detector_mgr() override { return mods_dead_lock_detector_mgr_; }
   transaction::ObTimestampService * timestamp_service() override { return mods_timestamp_service_; }
   transaction::ObTimestampAccess * timestamp_access() override { return mods_timestamp_access_; }
@@ -394,23 +374,21 @@ public:
   transaction::ObUniqueIDService * unique_id_service() override { return mods_unique_id_service_; }
   sql::ObPsCache * ps_cache() override { return mods_ps_cache_; }
   sql::ObPlanCache * plan_cache() override { return mods_plan_cache_; }
-  sql::dtl::ObTenantDfc * tenant_dfc() override { return mods_tenant_dfc_; }
+  sql::dtl::ObDfc * dfc_manager() override { return mods_dfc_; }
   omt::ObPxPools * px_pools() override { return mods_px_pools_; }
-  sql::ObTenantSqlMemoryManager * tenant_sql_memory_manager() override { return mods_tenant_sql_memory_manager_; }
+  sql::ObSqlMemoryManager * sql_memory_manager() override { return mods_sql_memory_manager_; }
   sql::dtl::ObDTLIntermResultManager * dtl_interm_result_manager() override { return mods_dtl_interm_result_manager_; }
   sql::ObDataAccessService * data_access_service() override { return mods_data_access_service_; }
-  share::schema::ObTenantSchemaService * tenant_schema_service() override { return mods_tenant_schema_service_; }
-  storage::ObTenantFreezer * tenant_freezer() override { return mods_tenant_freezer_; }
+  share::schema::ObSchemaRuntimeService * schema_runtime_service() override { return mods_schema_runtime_service_; }
+  storage::ObMemstoreFreezer * memstore_freezer() override { return mods_memstore_freezer_; }
   storage::checkpoint::ObCheckPointService * check_point_service() override { return mods_check_point_service_; }
   storage::checkpoint::ObTabletGCService * tablet_gc_service() override { return mods_tablet_gc_service_; }
-  compaction::ObTenantTabletScheduler * tenant_tablet_scheduler() override { return mods_tenant_tablet_scheduler_; }
-  compaction::ObTenantMediumChecker * tenant_medium_checker() override { return mods_tenant_medium_checker_; }
-  storage::ObTenantCompactionMemPool * tenant_compaction_mem_pool() override { return mods_tenant_compaction_mem_pool_; }
-  storage::ObDDLMergeBucketLock * ddl_merge_bucket_lock() override { return mods_ddl_merge_bucket_lock_; }
-  storage::ObTenantDirectLoadMgr * tenant_direct_load_mgr() override { return mods_tenant_direct_load_mgr_; }
-  share::ObTenantDagScheduler * tenant_dag_scheduler() override { return mods_tenant_dag_scheduler_; }
-  storage::ObStorageHAService * storage_ha_service() override { return mods_storage_ha_service_; }
-  storage::ObTenantFreezeInfoMgr * tenant_freeze_info_mgr() override { return mods_tenant_freeze_info_mgr_; }
+  compaction::ObTabletScheduler * tablet_scheduler() override { return mods_tablet_scheduler_; }
+  compaction::ObMediumChecker * medium_checker() override { return mods_medium_checker_; }
+  storage::ObCompactionMemPool * compaction_mem_pool() override { return mods_compaction_mem_pool_; }
+  storage::ObDirectLoadMgr * direct_load_mgr() override { return mods_direct_load_mgr_; }
+  share::ObDagScheduler * dag_scheduler() override { return mods_dag_scheduler_; }
+  storage::ObFreezeInfoMgr * freeze_info_mgr() override { return mods_freeze_info_mgr_; }
   transaction::ObTxLoopWorker * tx_loop_worker() override { return mods_tx_loop_worker_; }
   storage::ObAccessService * access_service() override { return mods_access_service_; }
   concurrency_control::ObMultiVersionGarbageCollector * multi_version_garbage_collector() override { return mods_multi_version_garbage_collector_; }
@@ -418,27 +396,18 @@ public:
   storage::ObEmptyReadBucket * empty_read_bucket() override { return mods_empty_read_bucket_; }
   rootserver::ObDBMSSchedService * dbms_sched_service() override { return mods_dbms_sched_service_; }
   oceanbase::common::ObOptStatMonitorManager * opt_stat_monitor_manager() override { return mods_opt_stat_monitor_manager_; }
-  omt::ObTenantSrs * tenant_srs() override { return mods_tenant_srs_; }
-  table::ObHTableLockMgr * h_table_lock_mgr() override { return mods_h_table_lock_mgr_; }
-  table::ObTTLService * ttl_service() override { return mods_ttl_service_; }
-  table::ObTableObjectPoolMgr * table_object_pool_mgr() override { return mods_table_object_pool_mgr_; }
+  omt::ObSrsService * srs_service() override { return mods_srs_service_; }
   storage::ObTabletMemtableMgrPool * tablet_memtable_mgr_pool() override { return mods_tablet_memtable_mgr_pool_; }
   share::ObResourceLimitCalculator * resource_limit_calculator() override { return mods_resource_limit_calculator_; }
   storage::ObGlobalIteratorPool * global_iterator_pool() override { return mods_global_iterator_pool_; }
   common::ObRbMemMgr * rb_mem_mgr() override { return mods_rb_mem_mgr_; }
   share::ObPluginVectorIndexService * plugin_vector_index_service() override { return mods_plugin_vector_index_service_; }
-  observer::ObTenantQueryRespTimeCollector * tenant_query_resp_time_collector() override { return mods_tenant_query_resp_time_collector_; }
-  table::ObTableGroupCommitMgr * table_group_commit_mgr() override { return mods_table_group_commit_mgr_; }
-  observer::ObTableQueryASyncMgr * table_query_a_sync_mgr() override { return mods_table_query_a_sync_mgr_; }
-  table::ObTableClientInfoMgr * table_client_info_mgr() override { return mods_table_client_info_mgr_; }
-  table::ObHTableRowkeyMgr * h_table_rowkey_mgr() override { return mods_h_table_rowkey_mgr_; }
   rootserver::ObDDLServiceLauncher * ddl_service_launcher() override { return mods_ddl_service_launcher_; }
-  rootserver::ObSysTenantLoadSysPackageService * sys_tenant_load_sys_package_service() override { return mods_sys_tenant_load_sys_package_service_; }
+  rootserver::ObSystemPackageLoadService * system_package_load_service() override { return mods_system_package_load_service_; }
   rootserver::ObDDLScheduler * ddl_scheduler() override { return mods_ddl_scheduler_; }
-  sql::ObSQLCCLRuleManager * sqlccl_rule_manager() override { return mods_sqlccl_rule_manager_; }
-  omt::ObTenantAiService * tenant_ai_service() override { return mods_tenant_ai_service_; }
+  omt::ObAiService * ai_service() override { return mods_ai_service_; }
   share::ObChangeStreamMgr * change_stream_mgr() override { return mods_change_stream_mgr_; }
-  // Explicit module lifecycle (ObServer owns modules; defined in ob_multi_tenant.cpp).
+  // Explicit module lifecycle (ObServer owns modules; defined in ob_server_runtime_controller.cpp).
   int obs_construct_modules();
   int obs_init_modules();
   int obs_start_modules();
@@ -450,36 +419,33 @@ private:
   // ===== module instances (ObServer is the sole owner; created by
   // obs_construct_modules() at boot, accessed via the ObIModuleProvider facade) =====
   omt::ObSharedTimer * mods_shared_timer_ = nullptr;
-  oceanbase::sql::ObTenantSQLSessionMgr * mods_tenant_sql_session_mgr_ = nullptr;
-  storage::ObTenantMetaMemMgr * mods_tenant_meta_mem_mgr_ = nullptr;
-  ObTxCtxObjPool * mods_part_trans_ctx_obj_pool_ = nullptr;
-  ObTableScanIteratorObjPool * mods_table_scan_iterator_obj_pool_ = nullptr;
-  common::ObTenantIOManager * mods_tenant_io_manager_ = nullptr;
-  storage::mds::ObTenantMdsService * mods_tenant_mds_service_ = nullptr;
   blocksstable::ObSharedMacroBlockMgr * mods_shared_macro_block_mgr_ = nullptr;
+  oceanbase::sql::ObSQLSessionPool * mods_sql_session_pool_ = nullptr;
+  storage::ObStorageMetaMemMgr * mods_storage_meta_mem_mgr_ = nullptr;
+  ObTableScanIteratorObjPool * mods_table_scan_iterator_obj_pool_ = nullptr;
+  common::ObIOService * mods_io_service_ = nullptr;
+  storage::mds::ObMdsService * mods_mds_service_ = nullptr;
   share::ObSharedMemAllocMgr * mods_shared_mem_alloc_mgr_ = nullptr;
+  share::ObErrsimModuleMgr * mods_errsim_module_mgr_ = nullptr;
   transaction::ObTransService * mods_trans_service_ = nullptr;
   logservice::ObLogService * mods_log_service_ = nullptr;
   storage::ObLSService * mods_ls_service_ = nullptr;
-  storage::ObTenantStorageMetaService * mods_tenant_storage_meta_service_ = nullptr;
-  tmp_file::ObTenantTmpFileManager * mods_tenant_tmp_file_manager_ = nullptr;
-  compaction::ObTenantCompactionProgressMgr * mods_tenant_compaction_progress_mgr_ = nullptr;
+  storage::ObLocalStorageMetaService * mods_local_storage_meta_service_ = nullptr;
+  tmp_file::ObTmpFileManager * mods_tmp_file_manager_ = nullptr;
+  compaction::ObCompactionProgressMgr * mods_compaction_progress_mgr_ = nullptr;
   compaction::ObServerCompactionEventHistory * mods_server_compaction_event_history_ = nullptr;
-  storage::ObTenantTabletStatMgr * mods_tenant_tablet_stat_mgr_ = nullptr;
+  storage::ObTabletStatMgr * mods_tablet_stat_mgr_ = nullptr;
   memtable::ObLockWaitMgr * mods_lock_wait_mgr_ = nullptr;
   transaction::tablelock::ObTableLockService * mods_table_lock_service_ = nullptr;
   rootserver::ObPrimaryMajorFreezeService * mods_primary_major_freeze_service_ = nullptr;
   rootserver::ObRestoreMajorFreezeService * mods_restore_major_freeze_service_ = nullptr;
-  observer::ObTenantMetaChecker * mods_tenant_meta_checker_ = nullptr;
-  observer::ObTabletTableUpdater * mods_tablet_table_updater_ = nullptr;
-  storage::ObStorageHAHandlerService * mods_storage_ha_handler_service_ = nullptr;
-  storage::ObTenantSSTableMergeInfoMgr * mods_tenant_ss_table_merge_info_mgr_ = nullptr;
+  observer::ObTabletRuntimeMetaUpdater * mods_tablet_runtime_meta_updater_ = nullptr;
+  storage::ObSSTableMergeInfoMgr * mods_sstable_merge_info_mgr_ = nullptr;
   share::ObDagWarningHistoryManager * mods_dag_warning_history_manager_ = nullptr;
   compaction::ObScheduleSuspectInfoMgr * mods_schedule_suspect_info_mgr_ = nullptr;
   compaction::ObCompactionSuggestionMgr * mods_compaction_suggestion_mgr_ = nullptr;
   compaction::ObDiagnoseTabletMgr * mods_diagnose_tablet_mgr_ = nullptr;
   storage::ObLobManager * mods_lob_manager_ = nullptr;
-  share::ObGlobalAutoIncService * mods_global_auto_inc_service_ = nullptr;
   share::detector::ObDeadLockDetectorMgr * mods_dead_lock_detector_mgr_ = nullptr;
   transaction::ObTimestampService * mods_timestamp_service_ = nullptr;
   transaction::ObTimestampAccess * mods_timestamp_access_ = nullptr;
@@ -487,23 +453,21 @@ private:
   transaction::ObUniqueIDService * mods_unique_id_service_ = nullptr;
   sql::ObPsCache * mods_ps_cache_ = nullptr;
   sql::ObPlanCache * mods_plan_cache_ = nullptr;
-  sql::dtl::ObTenantDfc * mods_tenant_dfc_ = nullptr;
+  sql::dtl::ObDfc * mods_dfc_ = nullptr;
   omt::ObPxPools * mods_px_pools_ = nullptr;
-  sql::ObTenantSqlMemoryManager * mods_tenant_sql_memory_manager_ = nullptr;
+  sql::ObSqlMemoryManager * mods_sql_memory_manager_ = nullptr;
   sql::dtl::ObDTLIntermResultManager * mods_dtl_interm_result_manager_ = nullptr;
   sql::ObDataAccessService * mods_data_access_service_ = nullptr;
-  share::schema::ObTenantSchemaService * mods_tenant_schema_service_ = nullptr;
-  storage::ObTenantFreezer * mods_tenant_freezer_ = nullptr;
+  share::schema::ObSchemaRuntimeService * mods_schema_runtime_service_ = nullptr;
+  storage::ObMemstoreFreezer * mods_memstore_freezer_ = nullptr;
   storage::checkpoint::ObCheckPointService * mods_check_point_service_ = nullptr;
   storage::checkpoint::ObTabletGCService * mods_tablet_gc_service_ = nullptr;
-  compaction::ObTenantTabletScheduler * mods_tenant_tablet_scheduler_ = nullptr;
-  compaction::ObTenantMediumChecker * mods_tenant_medium_checker_ = nullptr;
-  storage::ObTenantCompactionMemPool * mods_tenant_compaction_mem_pool_ = nullptr;
-  storage::ObDDLMergeBucketLock * mods_ddl_merge_bucket_lock_ = nullptr;
-  storage::ObTenantDirectLoadMgr * mods_tenant_direct_load_mgr_ = nullptr;
-  share::ObTenantDagScheduler * mods_tenant_dag_scheduler_ = nullptr;
-  storage::ObStorageHAService * mods_storage_ha_service_ = nullptr;
-  storage::ObTenantFreezeInfoMgr * mods_tenant_freeze_info_mgr_ = nullptr;
+  compaction::ObTabletScheduler * mods_tablet_scheduler_ = nullptr;
+  compaction::ObMediumChecker * mods_medium_checker_ = nullptr;
+  storage::ObCompactionMemPool * mods_compaction_mem_pool_ = nullptr;
+  storage::ObDirectLoadMgr * mods_direct_load_mgr_ = nullptr;
+  share::ObDagScheduler * mods_dag_scheduler_ = nullptr;
+  storage::ObFreezeInfoMgr * mods_freeze_info_mgr_ = nullptr;
   transaction::ObTxLoopWorker * mods_tx_loop_worker_ = nullptr;
   storage::ObAccessService * mods_access_service_ = nullptr;
   concurrency_control::ObMultiVersionGarbageCollector * mods_multi_version_garbage_collector_ = nullptr;
@@ -511,25 +475,16 @@ private:
   storage::ObEmptyReadBucket * mods_empty_read_bucket_ = nullptr;
   rootserver::ObDBMSSchedService * mods_dbms_sched_service_ = nullptr;
   oceanbase::common::ObOptStatMonitorManager * mods_opt_stat_monitor_manager_ = nullptr;
-  omt::ObTenantSrs * mods_tenant_srs_ = nullptr;
-  table::ObHTableLockMgr * mods_h_table_lock_mgr_ = nullptr;
-  table::ObTTLService * mods_ttl_service_ = nullptr;
-  table::ObTableObjectPoolMgr * mods_table_object_pool_mgr_ = nullptr;
+  omt::ObSrsService * mods_srs_service_ = nullptr;
   storage::ObTabletMemtableMgrPool * mods_tablet_memtable_mgr_pool_ = nullptr;
   share::ObResourceLimitCalculator * mods_resource_limit_calculator_ = nullptr;
   storage::ObGlobalIteratorPool * mods_global_iterator_pool_ = nullptr;
   common::ObRbMemMgr * mods_rb_mem_mgr_ = nullptr;
   share::ObPluginVectorIndexService * mods_plugin_vector_index_service_ = nullptr;
-  observer::ObTenantQueryRespTimeCollector * mods_tenant_query_resp_time_collector_ = nullptr;
-  table::ObTableGroupCommitMgr * mods_table_group_commit_mgr_ = nullptr;
-  observer::ObTableQueryASyncMgr * mods_table_query_a_sync_mgr_ = nullptr;
-  table::ObTableClientInfoMgr * mods_table_client_info_mgr_ = nullptr;
-  table::ObHTableRowkeyMgr * mods_h_table_rowkey_mgr_ = nullptr;
   rootserver::ObDDLServiceLauncher * mods_ddl_service_launcher_ = nullptr;
-  rootserver::ObSysTenantLoadSysPackageService * mods_sys_tenant_load_sys_package_service_ = nullptr;
+  rootserver::ObSystemPackageLoadService * mods_system_package_load_service_ = nullptr;
   rootserver::ObDDLScheduler * mods_ddl_scheduler_ = nullptr;
-  sql::ObSQLCCLRuleManager * mods_sqlccl_rule_manager_ = nullptr;
-  omt::ObTenantAiService * mods_tenant_ai_service_ = nullptr;
+  omt::ObAiService * mods_ai_service_ = nullptr;
   share::ObChangeStreamMgr * mods_change_stream_mgr_ = nullptr;
 }; // end of class ObServer
 

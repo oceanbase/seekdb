@@ -31,11 +31,7 @@ OB_DEF_SERIALIZE(ObRFBloomFilterMsg)
   int ret = OB_SUCCESS;
   BASE_SER((ObRFBloomFilterMsg, ObP2PDatahubMsgBase));
   LST_DO_CODE(OB_UNIS_ENCODE,
-              phase_,
               bloom_filter_,
-              next_peer_addrs_,
-              expect_first_phase_count_,
-              piece_size_,
               use_hash_join_seed_);
   return ret;
 }
@@ -48,11 +44,7 @@ OB_DEF_DESERIALIZE(ObRFBloomFilterMsg)
   bloom_filter_.allocator_.set_label("ObPxBFDESER");
 
   LST_DO_CODE(OB_UNIS_DECODE,
-              phase_,
               bloom_filter_,
-              next_peer_addrs_,
-              expect_first_phase_count_,
-              piece_size_,
               use_hash_join_seed_);
   return ret;
 }
@@ -62,11 +54,7 @@ OB_DEF_SERIALIZE_SIZE(ObRFBloomFilterMsg)
   int64_t len = 0;
   BASE_ADD_LEN((ObRFBloomFilterMsg, ObP2PDatahubMsgBase));
   LST_DO_CODE(OB_UNIS_ADD_LEN,
-              phase_,
               bloom_filter_,
-              next_peer_addrs_,
-              expect_first_phase_count_,
-              piece_size_,
               use_hash_join_seed_);
   return len;
 }
@@ -215,173 +203,12 @@ OB_DEF_SERIALIZE_SIZE(ObRFInFilterMsg)
 
 
 //ObRFBloomFilterMsg
-int ObRFBloomFilterMsg::process_msg_internal(bool &need_free)
-{
-  int ret = OB_SUCCESS;
-  ObP2PDhKey dh_key(p2p_datahub_id_, px_sequence_id_, task_id_);
-  ObP2PDatahubManager::P2PMsgSetCall set_call(dh_key, *this);
-  ObP2PDatahubManager::MsgMap &map = PX_P2P_DH.get_map();
-  start_time_ = ObTimeUtility::current_time();
-
-  bool need_merge = true;
-  if (OB_FAIL(generate_receive_count_array(piece_size_, bloom_filter_.get_begin_idx()))) {
-    need_free = true;
-    LOG_WARN("fail to generate receive count array", K(ret));
-  } else {
-    //set msg
-    ObP2PDatahubMsgGuard guard(this);
-    if (OB_FAIL(map.set_refactored(dh_key, this, 0/*flag*/, 0/*broadcast*/, 0/*overwrite_key*/, &set_call))) {
-      if (OB_HASH_EXIST == ret) {
-        ret = OB_SUCCESS;
-      } else {
-        LOG_WARN("fail to set refactored", K(ret));
-      }
-      need_free = true;
-    } else {
-      need_merge = false; // set success, not need to merge
-    }
-
-    // merge piece bloom filter
-    if (OB_SUCC(ret) && need_merge) {
-      // for bloom filter msg, we can merge several msgs concurrently in an atomic manner without holding the map lock.
-      // thus, we need handle the reference count carefully here to make sure the msg not been destroyed during the merge process.
-      ObP2PDatahubMsgBase *rf_msg_in_map = nullptr;
-      ObRFBloomFilterMsg *bf_msg = nullptr;
-      if (OB_FAIL(PX_P2P_DH.atomic_get_msg(dh_key, rf_msg_in_map))) { // inc ref_count is integrated
-        LOG_WARN("fail to get msg", K(ret));
-      } else if (FALSE_IT(bf_msg = static_cast<ObRFBloomFilterMsg *>(rf_msg_in_map))) {
-      } else if (OB_FAIL(bf_msg->atomic_merge(*this))) {
-        LOG_WARN("fail to merge p2p dh msg", K(ret));
-      }
-      if (OB_NOT_NULL(rf_msg_in_map)) {
-        // after merge, dec ref_count
-        rf_msg_in_map->dec_ref_count();
-      }
-    }
-    if (need_free) {
-       // msg not in map, dec ref count
-      guard.dec_msg_ref_count();
-    }
-  }
-  return ret;
-}
-
-int ObRFBloomFilterMsg::generate_receive_count_array(int64_t piece_size, int64_t cur_begin_idx)
-{
-  int ret = OB_SUCCESS;
-  int64_t bits_array_length = ceil((double)bloom_filter_.get_bits_count() / 64);
-  int64_t count = ceil(bits_array_length / (double)piece_size);
-  int64_t begin_idx = 0;
-  if (OB_FAIL(receive_count_array_.init(count))) {
-    LOG_WARN("fail to init receive_count_array_", K(ret));
-  }
-  for (int i = 0; OB_SUCC(ret) && i < count; ++i) {
-    begin_idx = i * piece_size;
-    if (begin_idx >= bits_array_length) {
-      begin_idx = bits_array_length - 1;
-    }
-    if (cur_begin_idx != begin_idx) {
-      OZ(receive_count_array_.push_back(BloomFilterReceiveCount(begin_idx, 0)));
-    } else {
-      OZ(receive_count_array_.push_back(BloomFilterReceiveCount(begin_idx, 1)));
-    }
-
-  }
-  return ret;
-}
-
 int ObRFBloomFilterMsg::reuse()
 {
   int ret = OB_SUCCESS;
   is_empty_ = true;
   bloom_filter_.reset_filter();
   is_active_ = true;
-  return ret;
-}
-
-int ObRFBloomFilterMsg::process_first_phase_recieve_count(
-    ObRFBloomFilterMsg &msg, bool &first_phase_end)
-{
-  int ret = OB_SUCCESS;
-  CK(msg.get_msg_receive_expect_cnt() > 0 && msg_receive_expect_cnt_ > 0);
-  int64_t begin_idx = msg.bloom_filter_.get_begin_idx();
-  // msg_receive_cur_cnt_ is msg total cnt, msg_receive_expect_cnt_ equals to sqc_count * piece_count
-  int64_t received_cnt = ATOMIC_AAF(&msg_receive_cur_cnt_, 1);
-  if (received_cnt > msg_receive_expect_cnt_) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("fail to process receive count", K(ret), K(received_cnt),
-        K(msg_receive_expect_cnt_));
-  } else if (receive_count_array_.empty()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("emptry receive count array", K(ret));
-  } else {
-    bool find = false;
-    for (int i = 0; OB_SUCC(ret) && i < receive_count_array_.count(); ++i) {
-      if (begin_idx == receive_count_array_.at(i).begin_idx_) {
-        // receive count of a specific piece msg, expect_first_phase_count_ equals to sqc count
-        int64_t cur_count = ATOMIC_AAF(&receive_count_array_.at(i).reciv_count_, 1);
-        first_phase_end = (cur_count == expect_first_phase_count_);
-        find = true;
-        break;
-      }
-    }
-    if (!find) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected process first phase", K(ret), K(receive_count_array_.count()));
-    }
-  }
-  return ret;
-}
-
-int ObRFBloomFilterMsg::process_receive_count(ObP2PDatahubMsgBase &rf_msg)
-{
-  int ret = OB_SUCCESS;
-  bool first_phase_end = false;
-  ObRFBloomFilterMsg &bf_msg = static_cast<ObRFBloomFilterMsg &>(rf_msg);
-  auto process_second_phase = [&](ObRFBloomFilterMsg &bf_msg) {
-    LOG_WARN("process second phase", K(ret));
-    if (OB_FAIL(ObP2PDatahubMsgBase::process_receive_count(bf_msg))) {
-      LOG_WARN("fail to process receive count", K(ret));
-    }
-    return ret;
-  };
-
-  auto process_first_phase = [&](ObRFBloomFilterMsg &bf_msg) {
-    if (OB_FAIL(process_first_phase_recieve_count(
-        bf_msg, first_phase_end))) {
-      LOG_WARN("fail to process receive count", K(ret));
-    }
-    return ret;
-  };
-  if (bf_msg.is_first_phase()) {
-    if (OB_FAIL(process_first_phase(bf_msg))) {
-      LOG_WARN("fail to process first phase", K(ret));
-    } else if (first_phase_end && !bf_msg.get_next_phase_addrs().empty()) {
-      ObRFBloomFilterMsg second_phase_msg;
-      if (OB_FAIL(second_phase_msg.shadow_copy(*this))) {
-        LOG_WARN("fail to shadow copy second phase msg", K(ret));
-      } else {
-        second_phase_msg.phase_ = SECOND_LEVEL;
-        second_phase_msg.set_msg_cur_cnt(expect_first_phase_count_);
-        second_phase_msg.bloom_filter_.set_begin_idx(bf_msg.bloom_filter_.get_begin_idx());
-        second_phase_msg.bloom_filter_.set_end_idx(bf_msg.bloom_filter_.get_end_idx());
-      }
-      // Single-replica seekdb: next_phase_addrs that are not self are unreachable
-      // dead targets; deliver the (loopback) ones in-process via process_msg.
-      for (int i = 0; OB_SUCC(ret) && i < bf_msg.get_next_phase_addrs().count(); ++i) {
-        if (bf_msg.get_next_phase_addrs().at(i) != GCTX.self_addr()) {
-          if (OB_FAIL(PX_P2P_DH.process_msg(second_phase_msg))) {
-            LOG_WARN("fail to process bloom filter locally", K(ret));
-          }
-        }
-      }
-      (void)check_finish_receive();
-    } else if (bf_msg.get_next_phase_addrs().empty()) {
-      (void)check_finish_receive();
-    }
-  } else if (OB_FAIL(process_second_phase(bf_msg))) {
-      LOG_WARN("fail to process second phase", K(ret));
-  }
   return ret;
 }
 
@@ -408,74 +235,11 @@ int ObRFBloomFilterMsg::assign(const ObP2PDatahubMsgBase &msg)
 {
   int ret = OB_SUCCESS;
   const ObRFBloomFilterMsg &other_msg = static_cast<const ObRFBloomFilterMsg &>(msg);
-  phase_ = other_msg.phase_;
-  expect_first_phase_count_ = other_msg.expect_first_phase_count_;
-  piece_size_ = other_msg.piece_size_;
   use_hash_join_seed_ = other_msg.use_hash_join_seed_;
   if (OB_FAIL(ObP2PDatahubMsgBase::assign(msg))) {
     LOG_WARN("failed to assign base data", K(ret));
-  } else if (OB_FAIL(next_peer_addrs_.assign(other_msg.next_peer_addrs_))) {
-    LOG_WARN("fail to assign bf msg", K(ret));
   } else if (OB_FAIL(bloom_filter_.assign(other_msg.bloom_filter_))) {
     LOG_WARN("fail to assign bf msg", K(ret));
-  } else if (OB_FAIL(filter_indexes_.prepare_allocate(other_msg.filter_indexes_.count()))) {
-    LOG_WARN("failed to prepare_allocate filter indexes", K(ret));
-  } else {
-    // The reason we don't use filter_indexes_.assign(other_msg.filter_indexes_) here is that:
-    // channel_ids_ is an ObFixedArray in BloomFilterIndex, we need to set allocator before assign channel_ids_
-    for (int64_t i = 0; i < other_msg.filter_indexes_.count() && OB_SUCC(ret); ++i) {
-      filter_indexes_.at(i).channel_ids_.set_allocator(&allocator_);
-      const BloomFilterIndex &other_filter_index = other_msg.filter_indexes_.at(i);
-      if (OB_FAIL(filter_indexes_.at(i).assign(other_filter_index))) {
-        LOG_WARN("fail to assign BloomFilterIndex", K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObRFBloomFilterMsg::shadow_copy(const ObRFBloomFilterMsg &other_msg)
-{
-  int ret = OB_SUCCESS;
-  phase_ = other_msg.phase_;
-  expect_first_phase_count_ = other_msg.expect_first_phase_count_;
-  piece_size_ = other_msg.piece_size_;
-  use_hash_join_seed_ = other_msg.use_hash_join_seed_;
-  if (OB_FAIL(ObP2PDatahubMsgBase::assign(other_msg))) {
-    LOG_WARN("failed to assign base data", K(ret));
-  } else if (OB_FAIL(bloom_filter_.init(&other_msg.bloom_filter_))) {
-    LOG_WARN("fail to assign bf msg", K(ret));
-  }
-  return ret;
-}
-
-int ObRFBloomFilterMsg::regenerate()
-{
-  int ret = OB_SUCCESS;
-  if (!is_finish_regen_) {
-    if (receive_count_array_.empty()) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to reset receive count array", K(ret));
-    } else if (1 == receive_count_array_.count()) {
-      is_finish_regen_ = true;
-    } else if (OB_FAIL(bloom_filter_.regenerate())) {
-      LOG_WARN("fail to to regnerate bloom filter", K(ret));
-    } else {
-      is_finish_regen_ = true;
-    }
-  }
-  return ret;
-}
-
-int ObRFBloomFilterMsg::atomic_merge(ObP2PDatahubMsgBase &other_msg)
-{
-  int ret = OB_SUCCESS;
-  if (!other_msg.is_empty() && (OB_FAIL(merge(other_msg)))) {
-    LOG_WARN("fail to merge dh msg", K(ret));
-  }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(process_receive_count(other_msg))) {
-    LOG_WARN("fail to process receive count", K(ret));
   }
   return ret;
 }
@@ -497,10 +261,7 @@ int ObRFBloomFilterMsg::merge(ObP2PDatahubMsgBase &msg)
 int ObRFBloomFilterMsg::destroy()
 {
   int ret = OB_SUCCESS;
-  next_peer_addrs_.reset();
   bloom_filter_.reset();
-  filter_indexes_.reset();
-  receive_count_array_.reset();
   allocator_.reset();
   return ret;
 }
@@ -756,126 +517,6 @@ int ObRFBloomFilterMsg::calc_hash_value(
   return ret;
 }
 
-int ObRFBloomFilterMsg::broadcast(ObIArray<ObAddr> &target_addrs)
-{
-  int ret = OB_SUCCESS;
-  int64_t cur_idx = 0;
-  ObRFBloomFilterMsg msg;
-  while (!create_finish_ && OB_SUCC(ret)) {
-    if (OB_FAIL(THIS_WORKER.check_status())) {
-      LOG_WARN("fail to check status", K(ret));
-    }
-    ob_usleep(10);
-  }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(msg.shadow_copy(*this))) {
-    LOG_WARN("fail to shadow copy second phase msg", K(ret));
-  } else {
-    while (filter_idx_ < filter_indexes_.count() && OB_SUCC(ret)) {
-      cur_idx = ATOMIC_FAA(&filter_idx_, 1);
-      if (cur_idx < filter_indexes_.count()) {
-        msg.next_peer_addrs_.reuse();
-        const BloomFilterIndex &addr_filter_idx = filter_indexes_.at(cur_idx);
-        msg.bloom_filter_.set_begin_idx(addr_filter_idx.begin_idx_);
-        msg.bloom_filter_.set_end_idx(addr_filter_idx.end_idx_);
-        if (OB_FAIL(msg.next_peer_addrs_.init(addr_filter_idx.channel_ids_.count()))) {
-          LOG_WARN("fail to init next_peer_addrs_", K(ret));
-        }
-        for (int i = 0; OB_SUCC(ret) && i < addr_filter_idx.channel_ids_.count(); ++i) {
-          if (OB_FAIL(msg.next_peer_addrs_.push_back(
-              target_addrs.at(addr_filter_idx.channel_ids_.at(i))))) {
-            LOG_WARN("failed push back peer addr", K(i), K(ret));
-          }
-        }
-        if (OB_FAIL(ret)) {
-        } else if (addr_filter_idx.channel_id_ >= target_addrs.count()) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected channel id", K(addr_filter_idx.channel_id_), K(target_addrs.count()));
-        } else if (OB_FAIL(PX_P2P_DH.process_msg(msg))) {
-          // Single-replica seekdb: target is loopback, deliver in-process.
-          LOG_WARN("fail to process bloom filter locally", K(ret));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObRFBloomFilterMsg::generate_filter_indexes(
-  int64_t each_group_size,
-  int64_t addr_cnt,
-  int64_t piece_size)
-{
-  int ret = OB_SUCCESS;
-  int64_t filter_len = bloom_filter_.get_bits_array_length();
-  int64_t count = ceil(filter_len / (double)piece_size);
-  int64_t start_idx = 0, end_idx = 0;
-  int64_t group_addr_cnt = each_group_size > addr_cnt ?
-        addr_cnt : each_group_size;
-  lib::ObMemAttr attr("TmpBFIdxAlloc");
-  common::ObArenaAllocator tmp_allocator(attr);
-  BloomFilterIndex filter_index;
-  ObSEArray<BloomFilterIndex *, 64> tmp_filter_indexes;
-  filter_index.channel_ids_.set_allocator(&tmp_allocator);
-  BloomFilterIndex *filter_index_ptr = nullptr;
-  for (int i = 0; OB_SUCC(ret) && i < count; ++i) {
-    start_idx = i * piece_size;
-    end_idx = (i + 1) * piece_size;
-    if (start_idx >= filter_len) {
-      start_idx = filter_len - 1;
-    }
-    if (end_idx >= filter_len) {
-      end_idx = filter_len - 1;
-    }
-    filter_index.begin_idx_ = start_idx;
-    filter_index.end_idx_ = end_idx;
-    int64_t group_count = ceil((double)addr_cnt / group_addr_cnt);
-    int64_t start_channel = ObRandom::rand(0, group_count - 1);
-    start_channel *= group_addr_cnt;
-    int pos = 0;
-    for (int j = start_channel; OB_SUCC(ret) &&
-        j < start_channel + addr_cnt;
-        j += group_addr_cnt) {
-      pos = (j >= addr_cnt ? j - addr_cnt : j);
-      pos = (pos / group_addr_cnt) * group_addr_cnt;
-      filter_index.channel_ids_.reset();
-      if (pos + group_addr_cnt > addr_cnt) {
-        filter_index.channel_id_ = (i % (addr_cnt - pos)) + pos;
-      } else {
-        filter_index.channel_id_ = (i % group_addr_cnt) + pos;
-      }
-      if (OB_FAIL(filter_index.channel_ids_.init(min(addr_cnt, pos + group_addr_cnt) - pos + 1))) {
-        LOG_WARN("failed to init channel_ids_");
-      }
-      for (int k = pos; OB_SUCC(ret) && k < addr_cnt && k < pos + group_addr_cnt; ++k) {
-        OZ(filter_index.channel_ids_.push_back(k));
-      }
-      if (OB_FAIL(ret)) {
-      } else if (OB_ISNULL(filter_index_ptr = OB_NEWx(BloomFilterIndex, &tmp_allocator))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to alloc BloomFilterIndex");
-      } else if (FALSE_IT(filter_index_ptr->channel_ids_.set_allocator(&tmp_allocator))) {
-      } else if (OB_FAIL(filter_index_ptr->assign(filter_index))) {
-        LOG_WARN("failed to assign");
-      } else if (OB_FAIL(tmp_filter_indexes.push_back(filter_index_ptr))) {
-        LOG_WARN("failed to push_back");
-      }
-    }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(filter_indexes_.prepare_allocate(tmp_filter_indexes.count()))) {
-    LOG_WARN("failed to prepare_allocate filter_indexes_", K(tmp_filter_indexes.count()));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < tmp_filter_indexes.count(); ++i) {
-      filter_indexes_.at(i).channel_ids_.set_allocator(&allocator_);
-      if (OB_FAIL(filter_indexes_.at(i).assign(*tmp_filter_indexes.at(i)))) {
-        LOG_WARN("failed to assign filter_indexes", K(i));
-      }
-    }
-  }
-  filter_index.channel_ids_.destroy();
-  return ret;
-}
 //end ObRFBloomFilterMsg
 
 //ObRFRangeFilterMsg
@@ -1737,16 +1378,6 @@ int ObRFInFilterMsg::reuse()
   (void)reuse_query_range();
   is_active_ = true;
   return ret;
-}
-
-void ObRFInFilterMsg::check_finish_receive()
-{
-  if (msg_receive_expect_cnt_ == ATOMIC_LOAD(&msg_receive_cur_cnt_)) {
-    if (ATOMIC_LOAD(&is_active_)) {
-      (void)after_process();
-    }
-    is_ready_ = true;
-  }
 }
 
 int ObRFInFilterMsg::do_might_contain_batch(const ObExpr &expr,

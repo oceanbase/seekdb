@@ -37,8 +37,7 @@ namespace sql
  ((type) == PHY_PX_ORDERED_COORD) || \
  ((type) == PHY_PX_MERGE_SORT_COORD) || \
  ((type) == PHY_TASK_ORDER_RECEIVE) || \
- ((type) == PHY_MERGE_SORT_RECEIVE) || \
- ((type) == PHY_DIRECT_RECEIVE))
+ ((type) == PHY_MERGE_SORT_RECEIVE))
 
 #define IS_TABLE_INSERT(type) \
 (((type) == PHY_INSERT) || \
@@ -105,8 +104,7 @@ public:
 
   virtual int inner_drain_exch() override
   {
-    // Drain exchange is used in parallelism execution,
-    // do nothing for old fashion distributed execution.
+    // The base receive operator has no additional drain work.
     return common::OB_SUCCESS;
   }
 };

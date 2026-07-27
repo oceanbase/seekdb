@@ -19,7 +19,6 @@
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
-using namespace oceanbase::omt;
 
 namespace oceanbase
 {

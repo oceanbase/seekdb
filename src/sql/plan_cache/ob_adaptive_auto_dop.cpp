@@ -223,15 +223,16 @@ int ObAdaptiveAutoDop::build_storage_estimation_tasks(
   return ret;
 }
 
-int ObAdaptiveAutoDop::get_task(ObIArray<ObBatchEstTasks *> &tasks, const ObAddr &addr,
+int ObAdaptiveAutoDop::get_task(ObIArray<ObBatchEstTasks *> &tasks,
                                 ObBatchEstTasks *&task)
 {
   int ret = OB_SUCCESS;
+  task = NULL;
   for (int64_t i = 0; OB_SUCC(ret) && i < tasks.count(); ++i) {
     if (OB_ISNULL(tasks.at(i))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid batch estimation task", K(ret));
-    } else if (tasks.at(i)->addr_ == addr) {
+    } else if (NULL == task) {
       task = tasks.at(i);
     }
   }
@@ -250,7 +251,7 @@ int ObAdaptiveAutoDop::add_estimation_tasks(const ObTableScanSpec &tsc_spec,
   ObSqlCtx *sql_ctx = ctx_.get_sql_ctx();
   common::ObIAllocator &allocator = ctx_.get_allocator();
   obcall::ObEstPartArgElement *index_est_arg = NULL;
-  if (OB_FAIL(get_task(tasks, tablet_loc->server_, task))) {
+  if (OB_FAIL(get_task(tasks, task))) {
     LOG_WARN("failed to get task", K(ret));
   } else if (NULL != task) {
     // do nothing
@@ -266,7 +267,6 @@ int ObAdaptiveAutoDop::add_estimation_tasks(const ObTableScanSpec &tsc_spec,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate index argument", K(ret));
   } else {
-    task->addr_ = tablet_loc->server_;
     task->arg_.schema_version_ = schema_version;
     index_est_arg->index_id_ = cost_tsc_info.get_index_id();
     index_est_arg->scan_flag_ = tsc_spec.get_query_flag();
@@ -342,25 +342,10 @@ int ObAdaptiveAutoDop::do_storage_estimation(ObIArray<ObBatchEstTasks *> &tasks,
 int ObAdaptiveAutoDop::do_storage_estimation(ObBatchEstTasks &tasks)
 {
   int ret = OB_SUCCESS;
-  const ObAddr &addr = tasks.addr_;
   const obcall::ObEstPartArg &arg = tasks.arg_;
   obcall::ObEstPartRes &result = tasks.res_;
-  ObSqlCtx *sql_ctx = ctx_.get_sql_ctx();
-  if (addr == GCTX.self_addr()) {
-    if (OB_FAIL(ObStorageEstimator::estimate_row_count(arg, result))) {
-      LOG_WARN("failed to estimate partition rows", K(ret));
-    }
-  } else {
-    int64_t timeout = -1;
-    if (OB_ISNULL(sql_ctx->session_info_)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("session is null", K(ret), K(sql_ctx->session_info_));
-    } else if (0 >= (timeout = THIS_WORKER.get_timeout_remain())) {
-      ret = OB_TIMEOUT;
-      LOG_WARN("query timeout is reached", K(ret), K(timeout));
-    } else if (OB_FAIL(GCTX.ob_service_->estimate_partition_rows(arg, result))) {
-      LOG_WARN("OPT:[REMOTE STORAGE EST FAILED]", K(ret));
-    }
+  if (OB_FAIL(ObStorageEstimator::estimate_row_count(arg, result))) {
+    LOG_WARN("failed to estimate partition rows", K(ret));
   }
   return ret;
 }
@@ -376,7 +361,7 @@ int ObAdaptiveAutoDop::calculate_tsc_auto_dop(const ObIArray<ObBatchEstTasks *> 
   uint64_t parallel_degree_limit = 0;
   uint64_t parallel_min_scan_time_threshold = 1000;
   uint64_t parallel_servers_target = 0;
-  uint64_t unit_min_cpu = 0;
+  uint64_t min_cpu = 0;
   uint64_t cost_threshold_us = 0;
   const int64_t MAX_EST_TASK_NUM = 10;
   for (int64_t i = 0; i < tasks.count(); ++i) {
@@ -397,17 +382,17 @@ int ObAdaptiveAutoDop::calculate_tsc_auto_dop(const ObIArray<ObBatchEstTasks *> 
     LOG_WARN("failed to get sys variable parallel threshold", K(ret));
   }
   if (OB_SUCC(ret) && 0 == parallel_degree_limit) {
-    const ObTenantBase *tenant = NULL;
+    const ObServerRuntimeState *runtime = NULL;
     int64_t parallel_servers_target = 0;
-    if (OB_ISNULL(tenant = MTL_CTX())) {
+    if (OB_ISNULL(runtime = share::server_runtime())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null", K(ret));
     } else if (sql_ctx->session_info_->is_user_session()
-               && OB_FAIL(ObSchemaUtils::get_tenant_int_variable(
+               && OB_FAIL(ObSchemaUtils::get_runtime_int_variable(
                     SYS_VAR_PARALLEL_SERVERS_TARGET, parallel_servers_target))) {
-      LOG_WARN("fail read tenant variable", K(ret));
+      LOG_WARN("fail to read runtime variable", K(ret));
     } else {
-      unit_min_cpu = std::max(tenant->unit_min_cpu(), 0.0);
+      min_cpu = std::max(runtime->min_cpu(), 0.0);
       parallel_servers_target = std::max(parallel_servers_target, static_cast<int64_t>(0));
     }
   }
@@ -415,10 +400,10 @@ int ObAdaptiveAutoDop::calculate_tsc_auto_dop(const ObIArray<ObBatchEstTasks *> 
     int64_t server_cnt = 1;
     if (0 < parallel_degree_limit) {
       // do nothing
-    } else if (0 >= parallel_servers_target || 0 >= unit_min_cpu || 0 >= server_cnt) {
-      parallel_degree_limit = std::max(parallel_servers_target, server_cnt * unit_min_cpu);
+    } else if (0 >= parallel_servers_target || 0 >= min_cpu || 0 >= server_cnt) {
+      parallel_degree_limit = std::max(parallel_servers_target, server_cnt * min_cpu);
     } else {
-      parallel_degree_limit = std::min(parallel_servers_target, server_cnt * unit_min_cpu);
+      parallel_degree_limit = std::min(parallel_servers_target, server_cnt * min_cpu);
     }
     cost_threshold_us = 1000.0 * std::max(static_cast<uint64_t>(10), parallel_min_scan_time_threshold);
     parallel_degree_limit = std::max(parallel_degree_limit, static_cast<uint64_t>(1));

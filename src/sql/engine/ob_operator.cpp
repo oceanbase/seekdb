@@ -72,8 +72,7 @@ int ObDynamicParamSetter::update_dynamic_param(ObEvalCtx &eval_ctx, ObDatum &dat
     ObDatum &param_datum = dst_->locate_expr_datum(eval_ctx);
     dst_->get_eval_info(eval_ctx).evaluated_ = true;
     if (0 == dst_->res_buf_off_) {
-      // for compat, old server don't have ref buf for dynamic expr,
-      // so keep shallow copy
+      // Fixed-width datums do not reserve an external result buffer.
       param_datum.set_datum(datum);
     } else {
       if (OB_FAIL(dst_->deep_copy_datum(eval_ctx, datum))) {
@@ -577,24 +576,6 @@ int ObOperator::check_stack_once()
   return ret;
 }
 
-int ObOperator::output_expr_sanity_check()
-{
-  int ret = OB_SUCCESS;
-  for (int64_t i = 0; OB_SUCC(ret) && i < spec_.output_.count(); ++i) {
-    ObDatum *datum = NULL;
-    const ObExpr *expr = spec_.output_[i];
-    if (OB_ISNULL(expr)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("error unexpected, expr is nullptr", K(ret));
-    } else if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
-      LOG_WARN("evaluate expression failed", K(ret));
-    } else {
-      SANITY_CHECK_RANGE(datum->ptr_, datum->len_);
-    }
-  }
-  return ret;
-}
-
 int ObOperator::output_expr_decint_datum_len_check()
 {
   int ret = OB_SUCCESS;
@@ -998,13 +979,6 @@ int ObOperator::get_next_row()
   if (OB_FAIL(check_stack_once())) {
     LOG_WARN("too deep recursive", K(ret));
   }
-#ifdef ENABLE_SANITY
-  if (OB_FAIL(ret)) {
-  } else if (OB_UNLIKELY(!enable_get_next_row())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get next row is disabled", K(ret), K(spec_));
-  }
-#endif
   if (OB_FAIL(ret)) {
   } else {
     if (row_reach_end_) {
@@ -1048,13 +1022,6 @@ int ObOperator::get_next_row()
               }
             }
           }
-#ifdef ENABLE_SANITY
-          if (OB_SUCC(ret) && !filtered) {
-            if (OB_FAIL(output_expr_sanity_check())) {
-              LOG_WARN("output expr sanity check failed", K(ret));
-            }
-          }
-#endif
 #ifndef NDEBUG
           if (OB_SUCC(ret) && !filtered) {
             if (OB_FAIL(output_expr_decint_datum_len_check())) {
@@ -1310,8 +1277,6 @@ int ObOperator::get_next_batch(const int64_t max_row_cnt, const ObBatchRows *&ba
   return ret;
 }
 
-// for old -> new(parent) operator, need init_vector for output exprs
-// for new -> old(parent) operator, need cast format of output exprs to uniform
 int ObOperator::filter_row(ObEvalCtx &eval_ctx, const ObIArray<ObExpr *> &exprs, bool &filtered)
 {
   ACTIVE_SESSION_FLAG_SETTER_GUARD(in_filter_rows);
@@ -1513,48 +1478,6 @@ inline int ObOperator::init_dummy_mem_context()
   return ret;
 }
 #endif
-
-bool ObOperator::enable_get_next_row() const
-{
-  int ret = false;
-  if (OB_ISNULL(spec_.plan_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid null plan", K(ret));
-  } else if (!spec_.plan_->is_vectorized()
-             || !ObOperatorFactory::is_vectorized(spec_.type_)
-             || (spec_.get_parent() != NULL && !ObOperatorFactory::is_vectorized(spec_.get_parent()->type_))) { // parent is not vectorized, get_next_row is used
-    ret = true;
-  } else if (spec_.get_parent() != NULL && spec_.get_parent()->type_ == PHY_SUBPLAN_FILTER) {
-    // subquery uses get_next_row for iteration
-    ret = true;
-  } else if ((spec_.type_ == PHY_SORT
-              || spec_.type_ == PHY_PX_MERGE_SORT_COORD
-              || spec_.type_ == PHY_PX_MERGE_SORT_RECEIVE)
-             && spec_.get_parent() != NULL
-             && spec_.get_parent()->type_ == PHY_MERGE_GROUP_BY
-             && !spec_.get_parent()->is_vectorized()) { // if merge group by with listagg/group_concat, sort is called with `get_next_row`
-    ret = true;
-  } else {
-    // if new operator is registered, please update this check and phy operator lists below
-    static_assert(PHY_END == PHY_DDL_BLOCK_SAMPLE_SCAN + 1, "");
-    switch (spec_.type_) {
-    case PHY_TABLE_SCAN: // table scan with multi value index/geometry type
-    case PHY_BLOCK_SAMPLE_SCAN: // sample scan with geometry type
-    case PHY_ROW_SAMPLE_SCAN:
-    case PHY_DDL_BLOCK_SAMPLE_SCAN:
-    case PHY_SUBPLAN_FILTER: // subplan filter with update set
-    case PHY_MERGE_GROUP_BY: // groupby with listagg/group_concat & rollup
-    {
-      ret = true;
-      break;
-    };
-    default: {
-      break;
-    }
-    }
-  }
-  return ret;
-}
 
 int ObBatchRowIter::get_next_row()
 {

@@ -33,10 +33,9 @@ namespace sql
 
 OB_SERIALIZE_MEMBER(ObSelectIntoOpInput, task_id_, sqc_id_);
 OB_SERIALIZE_MEMBER((ObSelectIntoSpec, ObOpSpec), into_type_, user_vars_, outfile_name_,
-    field_str_, // FARM COMPAT WHITELIST FOR filed_str_: renamed
-    line_str_, closed_cht_, is_optional_, select_exprs_, is_single_, max_file_size_,
-    escaped_cht_, cs_type_, parallel_, file_partition_expr_, buffer_size_, is_overwrite_,
-    external_properties_, external_partition_);
+    field_str_, line_str_, closed_cht_, is_optional_, select_exprs_, is_single_, max_file_size_,
+    escaped_cht_, cs_type_, parallel_, buffer_size_, is_overwrite_,
+    external_properties_);
 
 
 int ObSelectIntoOp::inner_open()
@@ -69,11 +68,6 @@ int ObSelectIntoOp::inner_open()
         if (OB_FAIL(init_csv_env())) {
           LOG_WARN("failed to init csv env", K(ret));
         }
-        break;
-      }
-      case ObExternalFileFormat::FormatType::ORC_FORMAT:
-      {
-        ret = OB_NOT_SUPPORTED;
         break;
       }
       default:
@@ -169,7 +163,6 @@ int ObSelectIntoOp::init_env_common()
   ObPhysicalPlanCtx *phy_plan_ctx = NULL;
   bool need_check = false;
   file_name_ = MY_SPEC.outfile_name_;
-  do_partition_ = MY_SPEC.file_partition_expr_ == NULL ? false : true;
   if (OB_ISNULL(phy_plan_ctx = ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get phy_plan_ctx failed", K(ret));
@@ -178,70 +171,30 @@ int ObSelectIntoOp::init_env_common()
                                                  file_name_,
                                                  need_check))) {
     LOG_WARN("get param value failed", K(ret));
-  } else if (OB_FAIL(calc_url_and_set_access_info())) {
-    LOG_WARN("failed to calc basic url and set device handle", K(ret));
+  } else if (OB_FAIL(calc_outfile_path())) {
+    LOG_WARN("failed to calculate outfile path", K(ret));
   } else if (OB_FAIL(check_has_lob_or_json())) {
     LOG_WARN("failed to check has lob", K(ret));
   } else if (has_coll_ && MY_SPEC.into_type_ == T_INTO_VARIABLES) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "select array/map into variables");
-  } else if (do_partition_
-             && OB_FAIL(partition_map_.create(128, ObLabel("SelectInto"), ObLabel("SelectInto")))) {
-    LOG_WARN("failed to create hashmap", K(ret));
   }
   return ret;
 }
 
 //calc first data_writer.url_ and basic_url_
-int ObSelectIntoOp::calc_url_and_set_access_info()
+int ObSelectIntoOp::calc_outfile_path()
 {
   int ret = OB_SUCCESS;
   const ObItemType into_type = MY_SPEC.into_type_;
   ObString path = file_name_.get_varchar().trim();
-  if (path.prefix_match_ci(OB_AZBLOB_PREFIX)) {
-    file_location_ = IntoFileLocation::REMOTE_AZBLOB;
-  } else if (path.prefix_match_ci(OB_OSS_PREFIX)) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "OSS storage");
-    LOG_WARN("OSS storage is not supported", K(ret));
-  } else if (path.prefix_match_ci(OB_COS_PREFIX)) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "COS storage");
-    LOG_WARN("COS storage is not supported", K(ret));
-  } else if (path.prefix_match_ci(OB_HDFS_PREFIX)) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "HDFS storage");
-    LOG_WARN("HDFS storage is not supported", K(ret));
-  } else {
-    file_location_ = IntoFileLocation::SERVER_DISK;
-  }
-  if (file_location_ == IntoFileLocation::SERVER_DISK && do_partition_) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not support partition option on server disk", K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "partition option on server disk");
-  } else if (T_INTO_OUTFILE == into_type && !MY_SPEC.is_single_ && OB_FAIL(calc_first_file_path(path))) {
+  if (T_INTO_OUTFILE == into_type && !MY_SPEC.is_single_ && OB_FAIL(calc_first_file_path(path))) {
     LOG_WARN("failed to calc first file path", K(ret));
-  } else if (file_location_ != IntoFileLocation::SERVER_DISK) {
-    ObString temp_url = path.split_on('?');
-    temp_url.trim();
-    ObString storage_info;
-    if (OB_FAIL(ob_write_string(ctx_.get_allocator(), temp_url, basic_url_, true))) {
-      LOG_WARN("failed to append string", K(ret));
-    } else if (OB_FAIL(ob_write_string(ctx_.get_allocator(), path, storage_info, true))) {
-      LOG_WARN("failed to append string", K(ret));
-    } else if (OB_FAIL(access_info_.set(basic_url_.ptr(), storage_info.ptr()))) {
-      LOG_WARN("failed to set access info", K(ret), K(path));
-    } else if (basic_url_.empty() || !access_info_.is_valid()) {
-      ret = OB_FILE_NOT_EXIST;
-      LOG_WARN("file path not exist", K(ret), K(basic_url_), K(access_info_));
-    }
-  } else { // IntoFileLocation::SERVER_DISK
-    if (OB_FAIL(ob_write_string(ctx_.get_allocator(), path, basic_url_, true))) {
-      LOG_WARN("failed to write string", K(ret));
-    }
+  } else if (OB_FAIL(ob_write_string(ctx_.get_allocator(), path, basic_url_, true))) {
+    LOG_WARN("failed to write string", K(ret));
   }
   if (OB_SUCC(ret) && (T_INTO_OUTFILE == into_type || T_INTO_DUMPFILE == into_type)
-      && IntoFileLocation::SERVER_DISK == file_location_ && OB_FAIL(check_secure_file_path(basic_url_))) {
+      && OB_FAIL(check_secure_file_path(basic_url_))) {
     LOG_WARN("failed to check secure file path", K(ret));
   }
   return ret;
@@ -262,9 +215,8 @@ int ObSelectIntoOp::inner_get_next_row()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get phy_plan_ctx failed", K(ret));
   }
-  //when do_partition is false, create the only data_writer here
   if (OB_SUCC(ret) && ObExternalFileFormat::FormatType::CSV_FORMAT == format_type_
-      && T_INTO_VARIABLES != into_type && !do_partition_
+      && T_INTO_VARIABLES != into_type
       && OB_FAIL(create_the_only_data_writer(data_writer))) {
     LOG_WARN("failed to create the only data writer", K(ret));
   }
@@ -323,8 +275,7 @@ int ObSelectIntoOp::inner_get_next_batch(const int64_t max_row_cnt)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get phy_plan_ctx failed", K(ret));
   }
-  //when do_partition is false, create the only data_writer here
-  if (OB_SUCC(ret) && T_INTO_VARIABLES != into_type && !do_partition_
+  if (OB_SUCC(ret) && T_INTO_VARIABLES != into_type
       && ObExternalFileFormat::FormatType::CSV_FORMAT == format_type_) {
     if (OB_FAIL(create_the_only_data_writer(data_writer))) {
       LOG_WARN("failed to create the only data writer", K(ret));
@@ -356,8 +307,6 @@ int ObSelectIntoOp::inner_get_next_batch(const int64_t max_row_cnt)
             if (OB_FAIL(into_outfile_batch_csv(brs_, data_writer))) {
               LOG_WARN("csv into outfile batch failed", K(ret));
             }
-          } else if (ObExternalFileFormat::FormatType::ORC_FORMAT == format_type_) {
-            ret = OB_NOT_SUPPORTED;
           } else {
             ret = OB_NOT_SUPPORTED;
             LOG_WARN("not support to write into outfile format.", K(ret), K(format_type_));
@@ -411,19 +360,7 @@ int ObSelectIntoOp::inner_rescan()
 int ObSelectIntoOp::inner_close()
 {
   int ret = OB_SUCCESS;
-  ObExternalFileWriter *data_writer = NULL;
-  int64_t estimated_bytes = 0;
-  if (do_partition_) {
-    for (ObPartitionWriterMap::iterator iter = partition_map_.begin();
-         OB_SUCC(ret) && iter != partition_map_.end(); iter++) {
-      if (OB_ISNULL(data_writer = iter->second)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("data writer is unexpected null", K(ret));
-      } else if (OB_FAIL(data_writer->close_data_writer())) {
-        LOG_WARN("failed to close data writer", K(ret));
-      }
-    }
-  } else if (OB_NOT_NULL(data_writer_) && OB_FAIL(data_writer_->close_data_writer())) {
+  if (OB_NOT_NULL(data_writer_) && OB_FAIL(data_writer_->close_data_writer())) {
     LOG_WARN("failed to close data writer", K(ret));
   }
   return ret;
@@ -437,10 +374,7 @@ int ObSelectIntoOp::get_row_str(const int64_t buf_len,
   int ret = OB_SUCCESS;
   const ObObj &field_str = field_str_;
   char closed_cht = char_enclose_;
-  //before 4_1 use output
-  //after 4_1 use select exprs
-  const ObIArray<ObExpr*> &select_exprs = (MY_SPEC.select_exprs_.empty()) ?
-                                           MY_SPEC.output_ : MY_SPEC.select_exprs_;
+  const ObIArray<ObExpr*> &select_exprs = MY_SPEC.select_exprs_;
   if (!is_first_row && line_str_.is_varying_len_char_type()) { // lines terminated by "a"
     ret = databuff_printf(buf, buf_len, pos, "%.*s", line_str_.get_varchar().length(),
                          line_str_.get_varchar().ptr());
@@ -486,9 +420,7 @@ int ObSelectIntoOp::calc_first_file_path(ObString &path)
   ObSqlString file_name_with_suffix;
   ObString file_extension;
   ObSelectIntoOpInput *input = static_cast<ObSelectIntoOpInput*>(input_);
-  ObString input_file_name = file_location_ != IntoFileLocation::SERVER_DISK
-                             ? path.split_on('?').trim()
-                             : path;
+  ObString input_file_name = path;
   if (OB_ISNULL(input)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("op input is null", K(ret));
@@ -515,9 +447,6 @@ int ObSelectIntoOp::calc_first_file_path(ObString &path)
     if (format_type_ == ObExternalFileFormat::FormatType::CSV_FORMAT) {
       OZ(file_name_with_suffix.append(compression_algorithm_to_suffix(external_properties_.csv_format_.compression_algorithm_)));
     }
-    if (file_location_ != IntoFileLocation::SERVER_DISK) {
-      OZ(file_name_with_suffix.append_fmt("?%.*s", path.length(), path.ptr()));
-    }
     if (OB_SUCC(ret) && OB_FAIL(ob_write_string(ctx_.get_allocator(), file_name_with_suffix.string(), path))) {
       LOG_WARN("failed to write string", K(ret));
     }
@@ -531,78 +460,31 @@ int ObSelectIntoOp::calc_next_file_path(ObExternalFileWriter &data_writer)
   ObSqlString url_with_suffix;
   ObString file_path;
   data_writer.split_file_id_++;
-  if (data_writer.split_file_id_ > 0) {
-    if (MY_SPEC.is_single_ && IntoFileLocation::SERVER_DISK != file_location_) {
-      file_path = (data_writer.split_file_id_ > 1)
-                  ? data_writer.url_.split_on(data_writer.url_.reverse_find('.'))
-                  : data_writer.url_;
-      if (OB_FAIL(url_with_suffix.assign(file_path))) {
-        LOG_WARN("failed to assign string", K(ret));
-      } else if (OB_FAIL(url_with_suffix.append_fmt(".extend%ld", data_writer.split_file_id_))) {
-        LOG_WARN("failed to append string", K(ret));
-      }
-    } else if (!MY_SPEC.is_single_) {
-      file_path = data_writer.url_.split_on(data_writer.url_.reverse_find('_'));
-      if (OB_FAIL(url_with_suffix.assign(file_path))) {
-        LOG_WARN("failed to assign string", K(ret));
-      } else if (OB_FAIL(url_with_suffix.append_fmt("_%ld", data_writer.split_file_id_))) {
-        LOG_WARN("failed to append string", K(ret));
-      }
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected single value", K(ret));
+  if (data_writer.split_file_id_ <= 0) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected split file id", K(ret));
+  } else if (MY_SPEC.is_single_) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected single value", K(ret));
+  } else {
+    file_path = data_writer.url_.split_on(data_writer.url_.reverse_find('_'));
+    if (OB_FAIL(url_with_suffix.assign(file_path))) {
+      LOG_WARN("failed to assign string", K(ret));
+    } else if (OB_FAIL(url_with_suffix.append_fmt("_%ld", data_writer.split_file_id_))) {
+      LOG_WARN("failed to append string", K(ret));
     }
-    if (!MY_SPEC.is_single_) {
-      ObString file_extension;
-      OZ(external_properties_.get_format_file_extension(format_type_, file_extension));
-      if (!file_extension.empty() && file_extension.ptr()[0] != '.') {
-        OZ(url_with_suffix.append("."));
-      }
-      OZ(url_with_suffix.append(file_extension));
+    ObString file_extension;
+    OZ(external_properties_.get_format_file_extension(format_type_, file_extension));
+    if (!file_extension.empty() && file_extension.ptr()[0] != '.') {
+      OZ(url_with_suffix.append("."));
     }
-    if (!MY_SPEC.is_single_
-        && format_type_ == ObExternalFileFormat::FormatType::CSV_FORMAT) {
+    OZ(url_with_suffix.append(file_extension));
+    if (format_type_ == ObExternalFileFormat::FormatType::CSV_FORMAT) {
       OZ(url_with_suffix.append(compression_algorithm_to_suffix(external_properties_.csv_format_.compression_algorithm_)));
     }
     if (OB_SUCC(ret) && OB_FAIL(ob_write_string(ctx_.get_allocator(),
                                                 url_with_suffix.string(),
                                                 data_writer.url_, true))) {
-      LOG_WARN("failed to write string", K(ret));
-    }
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected split file id", K(ret));
-  }
-  return ret;
-}
-// Set the current data_writer's url_ based on the incoming partition and basic_url_, each partition only needs to be calculated once, subsequent changes only need to modify the split id
-int ObSelectIntoOp::calc_file_path_with_partition(ObString partition, ObExternalFileWriter &data_writer)
-{
-  int ret = OB_SUCCESS;
-  ObSqlString url_with_partition;
-  ObString dir_path;
-  if (OB_FAIL(ob_write_string(ctx_.get_allocator(), basic_url_, data_writer.url_))) {
-    LOG_WARN("failed to write string", K(ret));
-  } else {
-    dir_path = data_writer.url_.split_on(data_writer.url_.reverse_find('/'));
-    if (OB_FAIL(url_with_partition.assign(dir_path))) {
-      LOG_WARN("failed to assign string", K(ret));
-    } else if (url_with_partition.length() != 0 && OB_FAIL(url_with_partition.append("/"))) {
-      LOG_WARN("failed to append string", K(ret));
-    } else if (partition.length() != 0 && OB_FAIL(url_with_partition.append_fmt("%.*s/",
-                                                                                partition.length(),
-                                                                                partition.ptr()))) {
-      LOG_WARN("failed to append string", K(ret));
-    } else if (partition.length() == 0 && OB_FAIL(url_with_partition.append("__NULL__/"))) {
-      LOG_WARN("failed to append string", K(ret));
-    } else if (OB_FAIL(url_with_partition.append_fmt("%.*s",
-                                                     data_writer.url_.length(),
-                                                     data_writer.url_.ptr()))) {
-      LOG_WARN("failed to append string", K(ret));
-    } else if (OB_FAIL(ob_write_string(ctx_.get_allocator(),
-                                       url_with_partition.string(),
-                                       data_writer.url_,
-                                       true))) {
       LOG_WARN("failed to write string", K(ret));
     }
   }
@@ -1163,23 +1045,10 @@ int ObSelectIntoOp::into_outfile(ObExternalFileWriter *data_writer)
   const ObIArray<ObExpr*> &select_exprs = MY_SPEC.select_exprs_;
   ObDatum *datum = NULL;
   ObObj obj;
-  ObDatum *partition_datum = NULL;
   ObCsvFileWriter *csv_data_writer = NULL;
-  if (do_partition_) {
-    if (OB_FAIL(MY_SPEC.file_partition_expr_->eval(eval_ctx_, partition_datum))) {
-      LOG_WARN("eval expr failed", K(ret));
-    } else if (OB_ISNULL(partition_datum)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
-    } else if (OB_FAIL(get_data_writer_for_partition(partition_datum->get_string(), data_writer))) {
-      LOG_WARN("failed to set data writer for partition", K(ret));
-    }
-  }
-  if (OB_SUCC(ret)) {
-    if (OB_ISNULL(csv_data_writer = static_cast<ObCsvFileWriter *>(data_writer))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null data writer", K(ret));
-    }
+  if (OB_ISNULL(csv_data_writer = static_cast<ObCsvFileWriter *>(data_writer))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null data writer", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < select_exprs.count(); ++i) {
     if (OB_ISNULL(select_exprs.at(i))) {
@@ -1223,7 +1092,6 @@ int ObSelectIntoOp::into_outfile_batch_csv(const ObBatchRows &brs, ObExternalFil
   ObArray<ObDatumVector> datum_vectors;
   ObDatum *datum = NULL;
   ObObj obj;
-  ObDatumVector partition_datum_vector;
   ObCsvFileWriter *csv_data_writer = NULL;
   for (int64_t i = 0; OB_SUCC(ret) && i < select_exprs.count(); ++i) {
     if (OB_FAIL(select_exprs.at(i)->eval_batch(eval_ctx_, *brs.skip_, brs.size_))) {
@@ -1232,23 +1100,9 @@ int ObSelectIntoOp::into_outfile_batch_csv(const ObBatchRows &brs, ObExternalFil
       LOG_WARN("failed to push back datum vector", K(ret));
     }
   }
-
-  if (OB_SUCC(ret) && do_partition_) {
-    if (OB_FAIL(MY_SPEC.file_partition_expr_->eval_batch(eval_ctx_, *brs.skip_, brs.size_))) {
-      LOG_WARN("failed to eval batch", K(ret));
-    } else {
-      partition_datum_vector = MY_SPEC.file_partition_expr_->locate_expr_datumvector(eval_ctx_);
-    }
-  }
   for (int64_t i = 0; OB_SUCC(ret) && i < brs.size_; ++i) {
     if (brs.skip_->contain(i)) {
       // do nothing
-    } else if (do_partition_ && OB_ISNULL(partition_datum_vector.at(i))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
-    } else if (do_partition_ && OB_FAIL(get_data_writer_for_partition(partition_datum_vector.at(i)->get_string(),
-                                                                      data_writer))) {
-      LOG_WARN("failed to set data writer for partition", K(ret));
     } else if (OB_ISNULL(csv_data_writer = static_cast<ObCsvFileWriter *>(data_writer))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null data writer", K(ret));
@@ -1292,11 +1146,7 @@ int ObSelectIntoOp::into_outfile_batch_csv(const ObBatchRows &brs, ObExternalFil
 
 bool ObSelectIntoOp::file_need_split(int64_t file_size)
 {
-  return (file_location_ == IntoFileLocation::SERVER_DISK
-          && !MY_SPEC.is_single_ && file_size > MY_SPEC.max_file_size_)
-        || (file_location_ != IntoFileLocation::SERVER_DISK
-            && ((!MY_SPEC.is_single_ && file_size > min(MY_SPEC.max_file_size_, MAX_OSS_FILE_SIZE))
-                || (MY_SPEC.is_single_ && file_size > MAX_OSS_FILE_SIZE)));
+  return !MY_SPEC.is_single_ && file_size > MY_SPEC.max_file_size_;
 }
 
 int ObSelectIntoOp::into_dumpfile(ObExternalFileWriter *data_writer)
@@ -1330,10 +1180,7 @@ int ObSelectIntoOp::into_dumpfile(ObExternalFileWriter *data_writer)
 int ObSelectIntoOp::into_varlist()
 {
   int ret = OB_SUCCESS;
-  //before 4_1 use output
-  //after 4_1 use select exprs
-  const ObIArray<ObExpr*> &select_exprs = (MY_SPEC.select_exprs_.empty()) ?
-                                           MY_SPEC.output_ : MY_SPEC.select_exprs_;
+  const ObIArray<ObExpr*> &select_exprs = MY_SPEC.select_exprs_;
   const ObIArray<ObString> &user_vars = MY_SPEC.user_vars_;
   ObArenaAllocator lob_tmp_allocator("LobTmp", OB_MALLOC_NORMAL_BLOCK_SIZE);
   if (select_exprs.count() != user_vars.count()) {
@@ -1485,71 +1332,15 @@ int ObSelectIntoOp::check_secure_file_path(ObString file_name)
 #endif
     ret = OB_FILE_NOT_EXIST;
     LOG_WARN("file not exist", K(ret), K(sql_str));
-  } else if (OB_FAIL(ObSchemaUtils::get_tenant_varchar_variable(SYS_VAR_SECURE_FILE_PRIV,
+  } else if (OB_FAIL(ObSchemaUtils::get_runtime_varchar_variable(SYS_VAR_SECURE_FILE_PRIV,
                                                                 ctx_.get_allocator(),
                                                                 secure_file_priv))) {
-    LOG_WARN("fail get tenant variable", K(1UL), K(secure_file_priv), K(ret));
+    LOG_WARN("fail to get runtime variable", K(secure_file_priv), K(ret));
   } else if (OB_FAIL(ObResolverUtils::check_secure_path(secure_file_priv, actual_path))) {
     LOG_WARN("failed to check secure path", K(ret), K(secure_file_priv));
     if (OB_ERR_NO_PRIVILEGE == ret) {
       ret = OB_ERR_NO_PRIV_DIRECT_PATH_ACCESS;
       LOG_ERROR("failed to check secure path", K(ret), K(secure_file_priv));
-    }
-  }
-  return ret;
-}
-
-int ObSelectIntoOp::get_data_writer_for_partition(const ObString &partition_str,
-                                                  ObExternalFileWriter *&data_writer)
-{
-  int ret = OB_SUCCESS;
-  ObString partition;
-  ObExternalFileWriter *value = NULL;
-  ObCsvFileWriter *csv_data_writer = NULL;
-  if (OB_SUCC(partition_map_.get_refactored(partition_str, value))) {
-    if (OB_ISNULL(value)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
-    } else {
-      data_writer = value;
-    }
-  } else if (OB_UNLIKELY(OB_HASH_NOT_EXIST != ret)) {
-    LOG_WARN("get unexpected error", K(ret));
-  } else if (curr_partition_num_ >= OB_MAX_EXTENDED_PARTITION_NUM) {
-    ret = OB_TOO_MANY_PARTITIONS_ERROR;
-    LOG_WARN("too many partitions", K(ret));
-  } else {
-    ret = OB_SUCCESS;
-    bool writer_added = false;
-    if (OB_FAIL(new_data_writer(data_writer))) {
-      LOG_WARN("failed to new data writer", K(ret));
-    } else if (OB_ISNULL(data_writer)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
-    } else if (ObExternalFileFormat::FormatType::CSV_FORMAT == format_type_ && MY_SPEC.buffer_size_ > 0) {
-      csv_data_writer = static_cast<ObCsvFileWriter*>(data_writer);
-      if (OB_FAIL(csv_data_writer->alloc_buf(ctx_.get_allocator(), MY_SPEC.buffer_size_))) {
-        LOG_WARN("failed to alloc buffer", K(ret));
-      }
-    }
-    //add to hashmap
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ob_write_string(ctx_.get_allocator(),
-                                       partition_str,
-                                       partition))) {
-      LOG_WARN("failed to write string", K(ret));
-    } else if (OB_FAIL(partition_map_.set_refactored(partition, data_writer))) {
-      LOG_WARN("failed to add data writer to map", K(ret));
-    } else {
-      curr_partition_num_++;
-      writer_added = true;
-    }
-    if (OB_FAIL(ret) && NULL != data_writer && !writer_added) {
-      data_writer->~ObExternalFileWriter();
-    }
-    //calc file path
-    if (OB_SUCC(ret) && OB_FAIL(calc_file_path_with_partition(partition, *data_writer))) {
-      LOG_WARN("failed to calc file path with partition", K(ret));
     }
   }
   return ret;
@@ -1593,14 +1384,8 @@ int ObSelectIntoOp::new_data_writer(ObExternalFileWriter *&data_writer)
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to allocate data writer", K(ret), K(sizeof(ObCsvFileWriter)));
       } else {
-        data_writer = new(ptr) ObCsvFileWriter(access_info_, file_location_, use_shared_buf_,
-                                               has_compress_, has_lob_, write_offset_);
+        data_writer = new(ptr) ObCsvFileWriter(use_shared_buf_, has_compress_, has_lob_);
       }
-      break;
-    }
-    case ObExternalFileFormat::FormatType::ORC_FORMAT:
-    {
-      ret = OB_NOT_SUPPORTED;
       break;
     }
     default:
@@ -1614,20 +1399,10 @@ int ObSelectIntoOp::new_data_writer(ObExternalFileWriter *&data_writer)
 
 void ObSelectIntoOp::destroy()
 {
-  ObExternalFileWriter *data_writer = NULL;
-  if (do_partition_) {
-    for (ObPartitionWriterMap::iterator iter = partition_map_.begin();
-         iter != partition_map_.end(); iter++) {
-      if (OB_ISNULL(data_writer = iter->second)) {
-      } else {
-        data_writer->~ObExternalFileWriter();
-      }
-    }
-  } else if (OB_NOT_NULL(data_writer_)) {
+  if (OB_NOT_NULL(data_writer_)) {
     data_writer_->~ObExternalFileWriter();
   }
   external_properties_.~ObExternalFileFormat();
-  partition_map_.destroy();
   ObOperator::destroy();
 }
 

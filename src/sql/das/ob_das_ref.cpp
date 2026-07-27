@@ -78,7 +78,7 @@ int DASRefCountContext::acquire_task_execution_resource(int64_t timeout_ts)
   int ret = OB_SUCCESS;
   OB_ASSERT(get_current_concurrency() >= 0);
   set_need_wait(true);
-  if (!is_inited_ && OB_FAIL(cond_.init(ObWaitEventIds::DAS_ASYNC_RPC_LOCK_WAIT))) {
+  if (!is_inited_ && OB_FAIL(cond_.init(ObWaitEventIds::DEFAULT_COND_WAIT))) {
     LOG_WARN("fail to init condition", K(ret));
   } else if (FALSE_IT(is_inited_ = true)) {
     // do nothing
@@ -290,9 +290,8 @@ bool ObDASRef::is_all_local_task() const
   return bret;
 }
 
-// In order to solve the problem that tx_desc will be modified concurrently by concurrent threads,
-// when the remote das_task is sent, the get_serialize_size and serialize of tx_desc will report an error 4019 due to non-atomicity.
-// So we use the SQL main thread to copy a tx_desc_bak_ to remote_das_task for use when submitting the first concurrent task.
+// The worker copy of a DAS task serializes tx_desc while the SQL thread can still modify it.
+// Copy tx_desc in the SQL thread before submitting the first concurrent task.
 // When the savepoint rollback occurs,tx_desc.op_sn_ will change.
 // tx_desc_bak_ must be refreshed to ensure that subsequent execution will not report errors.
 // The refresh_tx_desc_bak function handles the above logic.
@@ -359,7 +358,6 @@ int ObDASRef::retry_all_fail_tasks(common::ObIArray<ObIDASTaskOp *> &failed_task
 int ObDASRef::execute_all_task(DasAggregatedTaskList &agg_task_list)
 {
   int ret = OB_SUCCESS;
-  const bool async = true;
   uint32_t finished_cnt = 0;
   while (finished_cnt < agg_task_list.get_size() && OB_SUCC(ret)) {
     finished_cnt = 0;
@@ -368,10 +366,10 @@ int ObDASRef::execute_all_task(DasAggregatedTaskList &agg_task_list)
       ObDasAggregatedTask* agg_task = curr->get_obj();
       if (agg_task->has_unstart_tasks() && !agg_task->has_parallel_submiitted()) {
         if (get_parallel_type() == DAS_SERIALIZATION) {
-          if (OB_FAIL(share::g_mp->data_access_service()->execute_das_task(*this, *agg_task, async))) {
-            LOG_WARN("failed to execute aggregated das task", K(ret), KPC(agg_task), K(async));
+          if (OB_FAIL(share::g_mp->data_access_service()->execute_das_task(*this, *agg_task))) {
+            LOG_WARN("failed to execute aggregated das task", K(ret), KPC(agg_task));
           } else {
-            LOG_DEBUG("successfully executing aggregated task", "server", agg_task->server_);
+            LOG_DEBUG("successfully executing aggregated task", KPC(agg_task));
           }
         } else {
           if (OB_FAIL(parallel_submit_agg_task(agg_task))) {
@@ -385,8 +383,8 @@ int ObDASRef::execute_all_task(DasAggregatedTaskList &agg_task_list)
 
     // wait all existing tasks to be finished
     int tmp_ret = OB_SUCCESS;
-    if (OB_TMP_FAIL(wait_tasks_and_process_response())) {
-      LOG_WARN("failed to process all async remote tasks", K(ret));
+    if (OB_TMP_FAIL(wait_all_executing_tasks())) {
+      LOG_WARN("failed to wait for concurrent DAS tasks", K(tmp_ret));
     }
     ret = COVER_SUCC(tmp_ret);
     if (OB_FAIL(ret) && check_rcode_can_retry(ret)) {
@@ -474,16 +472,6 @@ int ObDASRef::wait_all_executing_tasks()
   return ret;
 }
 
-int ObDASRef::wait_tasks_and_process_response()
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(wait_all_executing_tasks())) {
-    LOG_WARN("fail to wait all executing tasks", K(ret));
-  }
-
-  return ret;
-}
-
 void ObDASRef::clear_task_map()
 {
   if (task_map_.created()) {
@@ -502,9 +490,8 @@ int ObDASRef::close_all_task()
     ObSQLSessionInfo *session = nullptr;
     int wait_ret = OB_SUCCESS;
     if (get_parallel_type() != DAS_SERIALIZATION) {
-      // parallel submit das_task maybe some task is executing, must wait all task end
-      // and maybe remote_task need mereg_trans_result
-      if (OB_SUCCESS != (wait_ret = wait_tasks_and_process_response())) {
+      // A concurrently submitted DAS task may still be executing.
+      if (OB_SUCCESS != (wait_ret = wait_all_executing_tasks())) {
         LOG_WARN("fail to wait all executing tasks", K(wait_ret));
       }
     }
@@ -554,14 +541,7 @@ int ObDASRef::create_das_task(const ObDASTabletLoc *tablet_loc,
   ObDASTaskFactory &das_factory = get_das_factory();
   ObSQLSessionInfo *session = get_exec_ctx().get_my_session();
   int64_t task_id = 0;
-  bool need_das_id = true;
-  ObPhysicalPlanCtx *plan_ctx = NULL;
-  const ObPhysicalPlan *plan = NULL;
-  if (OB_NOT_NULL(plan_ctx = GET_PHY_PLAN_CTX(get_exec_ctx()))
-      && OB_NOT_NULL(plan = plan_ctx->get_phy_plan())) {
-    need_das_id = !(plan->is_local_plan() && OB_PHY_PLAN_LOCAL == plan->get_location_type());
-  }
-  if (need_das_id && OB_FAIL(share::g_mp->data_access_service()->get_das_task_id(task_id))) {
+  if (OB_FAIL(share::g_mp->data_access_service()->get_das_task_id(task_id))) {
     LOG_WARN("get das task id failed", KR(ret));
   } else if (OB_FAIL(das_factory.create_das_task_op(op_type, task_op))) {
     LOG_WARN("create das task op failed", K(ret), KPC(task_op));
@@ -583,15 +563,14 @@ int ObDASRef::create_das_task(const ObDASTabletLoc *tablet_loc,
   return ret;
 }
 
-int ObDASRef::find_agg_task(const ObDASTabletLoc *tablet_loc, ObDASOpType op_type, ObDasAggregatedTask *&agg_task)
+int ObDASRef::find_agg_task(ObDASOpType op_type, ObDasAggregatedTask *&agg_task)
 {
   int ret = OB_SUCCESS;
   bool aggregated = false;
   if (DAS_OP_TABLE_DELETE == op_type) {
     DLIST_FOREACH_X(curr, del_aggregated_tasks_.get_obj_list(), !aggregated && OB_SUCC(ret)) {
       ObDasAggregatedTask* aggregated_task = curr->get_obj();
-      if (aggregated_task->server_ == tablet_loc->server_ &&
-          aggregated_task->start_status_ == DAS_AGG_TASK_UNSTART) {
+      if (aggregated_task->start_status_ == DAS_AGG_TASK_UNSTART) {
         agg_task = aggregated_task;
         aggregated = true;
       }
@@ -599,8 +578,7 @@ int ObDASRef::find_agg_task(const ObDASTabletLoc *tablet_loc, ObDASOpType op_typ
   } else {
     DLIST_FOREACH_X(curr, aggregated_tasks_.get_obj_list(), !aggregated && OB_SUCC(ret)) {
       ObDasAggregatedTask* aggregated_task = curr->get_obj();
-      if (aggregated_task->server_ == tablet_loc->server_ &&
-          aggregated_task->start_status_ == DAS_AGG_TASK_UNSTART) {
+      if (aggregated_task->start_status_ == DAS_AGG_TASK_UNSTART) {
         agg_task = aggregated_task;
         aggregated = true;
       }
@@ -609,7 +587,7 @@ int ObDASRef::find_agg_task(const ObDASTabletLoc *tablet_loc, ObDASOpType op_typ
   return ret;
 }
 
-int ObDASRef::create_agg_task(ObDASOpType op_type, const ObDASTabletLoc *tablet_loc, ObDasAggregatedTask *&agg_task)
+int ObDASRef::create_agg_task(ObDASOpType op_type, ObDasAggregatedTask *&agg_task)
 {
   int ret = OB_SUCCESS;
   // create agg_task
@@ -628,7 +606,6 @@ int ObDASRef::create_agg_task(ObDASOpType op_type, const ObDASTabletLoc *tablet_
     LOG_WARN("failed to add aggregated tasks", KR(ret));
   } else {
     agg_task = tmp_agg_task;
-    agg_task->server_ = tablet_loc->server_;
   }
   return ret;
 }
@@ -639,7 +616,7 @@ int ObDASRef::add_aggregated_task(ObIDASTaskOp *das_task, ObDASOpType op_type)
   bool aggregated = false;
   ObDasAggregatedTask *agg_task = nullptr;
 
-  if (OB_FAIL(find_agg_task(das_task->tablet_loc_, op_type, agg_task))) {
+  if (OB_FAIL(find_agg_task(op_type, agg_task))) {
     LOG_WARN("fail to find agg_task", K(ret), K(op_type));
   } else if (OB_NOT_NULL(agg_task)) {
     if (OB_FAIL(OB_FAIL(agg_task->push_back_task(das_task)))) {
@@ -647,7 +624,7 @@ int ObDASRef::add_aggregated_task(ObIDASTaskOp *das_task, ObDASOpType op_type)
     }
   } else {
     // create agg_task
-    if (OB_FAIL(create_agg_task(op_type, das_task->tablet_loc_, agg_task))) {
+    if (OB_FAIL(create_agg_task(op_type, agg_task))) {
       LOG_WARN("fail to create agg_task", K(ret), K(op_type));
     } else if (OB_FAIL(agg_task->push_back_task(das_task))) {
       LOG_WARN("fail to push back das_task", K(ret), KPC(das_task));
@@ -707,7 +684,6 @@ void ObDASRef::reuse()
 
 void ObDasAggregatedTask::reset()
 {
-  server_.reset();
   tasks_.reset();
   failed_tasks_.reset();
   success_tasks_.reset();
@@ -715,7 +691,6 @@ void ObDasAggregatedTask::reset()
 
 void ObDasAggregatedTask::reuse()
 {
-  server_.reset();
   tasks_.reset();
   failed_tasks_.reset();
   success_tasks_.reset();
@@ -727,9 +702,6 @@ int ObDasAggregatedTask::push_back_task(ObIDASTaskOp *das_task)
   if (das_task->get_cur_agg_list()) {
     // if task already have linked list (in task retry), remove it first
     das_task->get_cur_agg_list()->remove(&das_task->get_node());
-  }
-  if (tasks_.get_size() == 0) {
-    server_ = das_task->get_tablet_loc()->server_;
   }
   if (OB_UNLIKELY(!tasks_.add_last(&das_task->get_node()))) {
     ret = OB_ERR_UNEXPECTED;

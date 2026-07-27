@@ -18,7 +18,6 @@
 #define OCEANBASE_ENGINE_OB_OPERATOR_FACTORY_H_
 
 #include "lib/allocator/ob_allocator.h"
-#include "share/ob_cluster_version.h"
 #include "sql/engine/ob_phy_operator_type.h"
 
 namespace oceanbase
@@ -78,7 +77,6 @@ public:
 private:
   static AllocFun *G_ALL_ALLOC_FUNS_;
   static bool *G_VECTORIZED_OP_ARRAY_;
-  static uint64_t *G_OB_VERSION_ARRAY_;
 };
 
 } // end namespace sql

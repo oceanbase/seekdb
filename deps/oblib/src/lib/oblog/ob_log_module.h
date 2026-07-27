@@ -49,7 +49,6 @@ LOG_MOD_BEGIN(ROOT)                      // src directory
 DEFINE_LOG_SUB_MOD(CLIENT)               // client
 DEFINE_LOG_SUB_MOD(CLOG)                 // clog
 DEFINE_LOG_SUB_MOD(COMMON)               // observer
-DEFINE_LOG_SUB_MOD(ELECT)                // election
 DEFINE_LOG_SUB_MOD(OCCAM)                // occam tools
 DEFINE_LOG_SUB_MOD(LIB)                  // lib
 DEFINE_LOG_SUB_MOD(OFS)                  // OFS
@@ -73,7 +72,6 @@ DEFINE_LOG_SUB_MOD(FLT)                // trace
 DEFINE_LOG_SUB_MOD(OBTRACE)                // trace
 DEFINE_LOG_SUB_MOD(MDS)                  // multi data source
 DEFINE_LOG_SUB_MOD(MVCC)                 // concurrency_control
-DEFINE_LOG_SUB_MOD(WR)                 // workload repository
 LOG_MOD_END(ROOT)
 
 //statement of WRS's sub_modules
@@ -183,7 +181,6 @@ DEFINE_LOG_SUB_MOD(CG)                   // code_generator
 DEFINE_LOG_SUB_MOD(MONITOR)              // monitor
 DEFINE_LOG_SUB_MOD(DTL)                  // data transfer layer
 DEFINE_LOG_SUB_MOD(DAS)                  // data access service
-DEFINE_LOG_SUB_MOD(QRR)                  // query rewrite rule
 LOG_MOD_END(SQL)
 
 // observer submodules
@@ -351,8 +348,6 @@ LOG_MOD_END(PL)
 #define _CSR_LOG(level, info_string, args...) _OB_SUB_MOD_LOG(CLOG, CSR, level, info_string, ##args)
 #define COMMON_LOG(level, info_string, args...) OB_MOD_LOG(COMMON, level, info_string, ##args)
 #define _COMMON_LOG(level, _fmt_, args...) _OB_MOD_LOG(COMMON, level, _fmt_, ##args)
-#define ELECT_LOG(level, info_string, args...) OB_MOD_LOG(ELECT, level, info_string, ##args)
-#define _ELECT_LOG(level, _fmt_, args...) _OB_MOD_LOG(ELECT, level, _fmt_, ##args)
 #define OCCAM_LOG(level, info_string, args...) OB_MOD_LOG(OCCAM, level, info_string, ##args)
 #define _OCCAM_LOG(level, _fmt_, args...) _OB_MOD_LOG(OCCAM, level, _fmt_, ##args)
 #define IMPS_LOG(level, info_string, args...) OB_MOD_LOG(IMPS, level, info_string, ##args)
@@ -416,8 +411,6 @@ LOG_MOD_END(PL)
 #define _MDS_LOG(level, _fmt_, args...) _OB_MOD_LOG(MDS, level, _fmt_, ##args)
 #define MVCC_LOG(level, info_string, args...) OB_MOD_LOG(MVCC, level, info_string, ##args)
 #define _MVCC_LOG(level, _fmt_, args...) _OB_MOD_LOG(MVCC, level, _fmt_, ##args)
-#define WR_LOG(level, info_string, args...) OB_MOD_LOG(WR, level, info_string, ##args)
-#define _WR_LOG(level, _fmt_, args...) _OB_MOD_LOG(WR, level, _fmt_, ##args)
 
 //dfine ParMod_SubMod_LOG
 #define WRS_CLUSTER_LOG(level, info_string, args...) OB_SUB_MOD_LOG(WRS, CLUSTER, level,        \
@@ -584,10 +577,6 @@ LOG_MOD_END(PL)
 #define OFS_SHARE_LOG(level, info_string, args...) OB_SUB_MOD_LOG(OFS, SHARE, level,             \
                                                                 info_string, ##args)
 #define _OFS_SHARE_LOG(level, _fmt_, args...) _OB_SUB_MOD_LOG(OFS, SHARE, level,                 \
-                                                                _fmt_, ##args)
-#define PL_DEBUG_LOG(level, info_string, args...) OB_SUB_MOD_LOG(PL, DEBUG, level,               \
-                                                                info_string, ##args)
-#define _PL_DEBUG_LOG(level, _fmt_, args...) _OB_SUB_MOD_LOG(PL, DEBUG, level,                   \
                                                                 _fmt_, ##args)
 #define PL_CACHE_LOG(level, info_string, args...) OB_SUB_MOD_LOG(PL, CACHE, level,                 \
                                                                     info_string, ##args)
@@ -767,10 +756,6 @@ LOG_MOD_END(PL)
                                                                     info_string, ##args)
 #define _SQL_DAS_LOG(level, _fmt_, args...) _OB_SUB_MOD_LOG(SQL, DAS, level,                     \
                                                                 _fmt_, ##args)
-#define SQL_QRR_LOG(level, info_string, args...) OB_SUB_MOD_LOG(SQL, QRR, level,                 \
-                                                                    info_string, ##args)
-#define _SQL_QRR_LOG(level, _fmt_, args...) _OB_SUB_MOD_LOG(SQL, QRR, level,                     \
-                                                                _fmt_, ##args)
 #define DETECT_LOG_LOG(level, info_string, args...) OB_SUB_MOD_LOG(DETECT, LOG,level,              \
                                                                 info_string,  ##args)
 #define _DETECT_LOG_LOG(level, _fmt_, args...) _OB_SUB_MOD_LOG(DETECT, LOG,level,                  \
@@ -807,8 +792,6 @@ LOG_MOD_END(PL)
 #define _CSR_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _CSR_LOG(level, ##args); }
 #define COMMON_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; COMMON_LOG(level, ##args); }
 #define _COMMON_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _COMMON_LOG(level, ##args); }
-#define ELECT_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; ELECT_LOG(level, ##args); }
-#define _ELECT_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _ELECT_LOG(level, ##args); }
 #define OCCAM_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; OCCAM_LOG(level, ##args); }
 #define _OCCAM_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _OCCAM_LOG(level, ##args); }
 #define IMPS_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; IMPS_LOG(level, ##args); }
@@ -952,8 +935,6 @@ LOG_MOD_END(PL)
 #define _OFS_LIBS_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _OFS_LIBS_LOG(level, ##args); }
 #define OFS_SHARE_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; OFS_SHARE_LOG(level, ##args); }
 #define _OFS_SHARE_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _OFS_SHARE_LOG(level, ##args); }
-#define PL_DEBUG_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; PL_DEBUG_LOG(level, ##args); }
-#define _PL_DEBUG_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _PL_DEBUG_LOG(level, ##args); }
 #define PL_CACHE_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; PL_CACHE_LOG(level, ##args); }
 #define _PL_CACHE_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _PL_CACHE_LOG(level, ##args); }
 #define RPC_FRAME_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; RPC_FRAME_LOG(level, ##args); }
@@ -1317,7 +1298,7 @@ extern const char *ob_strerror(const int oberr);
 #define ERRNOMSG(num) ::oceanbase::common::ObLogPrintErrNoMsg(num)
 #define KERRNOMSG(num) "errmsg", ::oceanbase::common::ObLogPrintErrNoMsg(num)
 
-// Used to print a string containing sensitive information (object storage secret key) that will be hidden when printed
+// Used to print a sensitive string in redacted form.
 #define KS(x) #x, ::oceanbase::common::ObSensitiveString(x)
 
 

@@ -452,7 +452,7 @@ int ObPLDDLOperator::create_trigger(share::schema::ObTriggerInfo &trigger_info,
     } else if (trigger_info.is_system_type()) {
       const ObUserInfo *user_info = NULL;
       ObSchemaGetterGuard schema_guard;
-      OZ (schema_service_.get_tenant_schema_guard(schema_guard));
+      OZ (schema_service_.get_runtime_schema_guard(schema_guard));
       OZ (schema_guard.get_user_info(base_table_id, user_info));
       OV (OB_NOT_NULL(user_info));
       if (OB_SUCC(ret)) {
@@ -529,7 +529,7 @@ int ObPLDDLOperator::drop_trigger(const share::schema::ObTriggerInfo &trigger_in
       const ObUserInfo *user_info = NULL;
       ObSchemaGetterGuard schema_guard;
       common::ObArray<ObUserInfo> user_array;
-      OZ (schema_service_.get_tenant_schema_guard(schema_guard));
+      OZ (schema_service_.get_runtime_schema_guard(schema_guard));
       OZ (schema_guard.get_user_info(base_table_id, user_info));
       OV (OB_NOT_NULL(user_info));
       OZ (user_array.push_back(*user_info));
@@ -577,7 +577,6 @@ int ObPLDDLOperator::drop_trigger_to_recyclebin(const share::schema::ObTriggerIn
   OX (base_database_id = base_table_schema->get_database_id());
   OX (recyclebin_object.set_database_id(base_database_id));
   OX (recyclebin_object.set_table_id(trigger_info.get_trigger_id()));
-  OX (recyclebin_object.set_tablegroup_id(OB_INVALID_ID));
   OZ (recyclebin_object.set_object_name(new_trigger_name.string()));
   OZ (recyclebin_object.set_original_name(trigger_info.get_trigger_name()));
   OX (recyclebin_object.set_type(ObRecycleObject::TRIGGER));
@@ -613,7 +612,7 @@ int ObPLDDLOperator::alter_trigger(share::schema::ObTriggerInfo &trigger_info,
         const ObUserInfo *user_info = NULL;
         ObSchemaGetterGuard schema_guard;
         common::ObArray<ObUserInfo> user_array;
-        OZ (schema_service_.get_tenant_schema_guard(schema_guard));
+        OZ (schema_service_.get_runtime_schema_guard(schema_guard));
         OZ (schema_guard.get_user_info(base_table_id, user_info));
         OV (OB_NOT_NULL(user_info));
         OZ (user_array.push_back(*user_info));
@@ -752,7 +751,7 @@ int ObPLDDLOperator::drop_trigger_in_drop_database(const ObDatabaseSchema &db_sc
   ObSchemaGetterGuard schema_guard;
   const uint64_t database_id = db_schema.get_database_id();
   ObPLDDLOperator pl_operator(ddl_operator.get_multi_schema_service(), ddl_operator.get_sql_proxy());
-  if (OB_FAIL(pl_operator.schema_service_.get_tenant_schema_guard(schema_guard))) {
+  if (OB_FAIL(pl_operator.schema_service_.get_runtime_schema_guard(schema_guard))) {
     LOG_WARN("failed to get schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_trigger_ids_in_database(database_id, trigger_ids))) {
     LOG_WARN("get trigger infos in database failed", KR(ret), K(database_id));
@@ -760,7 +759,7 @@ int ObPLDDLOperator::drop_trigger_in_drop_database(const ObDatabaseSchema &db_sc
     for (int64_t i = 0; OB_SUCC(ret) && i < trigger_ids.count(); i++) {
       const ObTriggerInfo *tg_info = NULL;
       const uint64_t trigger_id = trigger_ids.at(i);
-      if (OB_FAIL(pl_operator.schema_service_.get_tenant_schema_guard(schema_guard))) {
+      if (OB_FAIL(pl_operator.schema_service_.get_runtime_schema_guard(schema_guard))) {
         LOG_WARN("failed to get schema guard", KR(ret));
       } else if (OB_FAIL(schema_guard.get_trigger_info( trigger_id, tg_info))) {
         LOG_WARN("fail to get trigger info", KR(ret), K(trigger_id));
@@ -800,7 +799,7 @@ int ObPLDDLOperator::drop_trigger_cascade(const share::schema::ObTableSchema &ta
   
   uint64_t trigger_id = OB_INVALID_ID;
   ObPLDDLOperator pl_operator(ddl_operator.get_multi_schema_service(), ddl_operator.get_sql_proxy());
-  OZ (ddl_operator.get_multi_schema_service().get_tenant_schema_guard(schema_guard));
+  OZ (ddl_operator.get_multi_schema_service().get_runtime_schema_guard(schema_guard));
   for (int64_t i = 0; OB_SUCC(ret) && i < trigger_list.count(); i++) {
     OX (trigger_id = trigger_list.at(i));
     OZ (schema_guard.get_trigger_info( trigger_id, trigger_info));

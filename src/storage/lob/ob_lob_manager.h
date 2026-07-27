@@ -66,8 +66,8 @@ private:
   {}
 public:
   ~ObLobManager() { destroy(); }
-  static int mtl_new(ObLobManager *&m);
-  // MTL 
+  static int server_module_new(ObLobManager *&m);
+  // Server module lifecycle.
   int init();
   int start();
   int stop();
@@ -144,7 +144,7 @@ public:
                       int64_t timeout,
                       ObLobLocatorV2 &lob);
 
-  // ===== common::ObILobReadService port implementation(lob-read domain, called through share injection via MTL)=====
+  // ===== common::ObILobReadService port implementation (injected by the server module provider) =====
   virtual int get_outrow_lob_full_data(common::ObLobTextIterCtx &ctx,
                                        common::ObCollationType cs_type,
                                        bool has_lob_header,

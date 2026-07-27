@@ -79,7 +79,6 @@ if(ANDROID)
   target_sources(all_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/rootserver/ob_rs_test_utils.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/rootserver/fake_freeze_info_manager.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/rootserver/fake_zone_merge_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/storage/ob_truncate_info_helper.cpp)
   # Rename each file's main() so only all_tests_main.cpp provides the real one
   target_compile_definitions(all_tests PRIVATE main=disabled_main)

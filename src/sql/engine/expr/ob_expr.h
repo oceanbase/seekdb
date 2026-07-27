@@ -39,7 +39,6 @@ namespace storage
 {
   // forward declaration for friends
   class ObVectorStore;
-  class ObAggregatedStoreVec;
 }
 namespace sql
 {
@@ -130,8 +129,6 @@ struct ObEvalInfo
   }
   DECLARE_TO_STRING;
 
-  inline bool in_frame_notnull() const { return false; }
-
 	union {
 		struct {
 			// is already evaluated
@@ -160,7 +157,6 @@ struct ObEvalCtx
   friend class ObSubPlanFilterOp;
   friend class ObSubQueryIterator;
   friend class oceanbase::storage::ObVectorStore;
-  friend class oceanbase::storage::ObAggregatedStoreVec;
   friend class ObDatumCaster;
   class TempAllocGuard
   {

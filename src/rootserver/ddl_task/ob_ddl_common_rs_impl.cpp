@@ -20,18 +20,16 @@
 #include "share/ob_ex_rpc.h"
 #include "observer/ob_service.h"
 #include "share/ob_ddl_common.h"
-#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind the server_struct include chain, make the dependency explicit
 #include "storage/ob_storage_rpc_arg.h"
 #include "share/ob_rpc_struct.h"
 #include "share/ob_ddl_checksum.h"
 #include "share/ob_ddl_sim_point.h"
 #include "common/object/ob_object.h"
 #include "common/mysqlclient/ob_isql_connection.h"
-#include "share/compaction/ob_shared_storage_compaction_util.h"
 #include "share/tablet/ob_tablet_table_operator.h"
-#include "share/storage/ob_tablet_replica_checksum_table_storage.h"
+#include "share/storage/ob_tablet_local_checksum_table_storage.h"
 #include "rootserver/ddl_task/ob_index_build_task.h"
-#include "rootserver/ob_root_service.h"
+#include "rootserver/ob_local_management_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
 
@@ -57,13 +55,13 @@ int ObDDLUtil::hold_snapshot(
     rootserver::ObDDLTask* task,
     const uint64_t table_id,
     const uint64_t target_table_id,
-    rootserver::ObRootService *root_service,
+    rootserver::ObLocalManagementService *local_management_service,
     const int64_t snapshot_version)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(task) || OB_ISNULL(root_service)) {
+  if (OB_ISNULL(task) || OB_ISNULL(local_management_service)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("invalid argument", K(ret), KP(task), KP(root_service));
+    LOG_WARN("invalid argument", K(ret), KP(task), KP(local_management_service));
   } else if (!task->is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("args have not been inited", K(ret), K(task->get_task_type()));
@@ -83,8 +81,8 @@ int ObDDLUtil::hold_snapshot(
       LOG_WARN("ddl sim failure", K(ret), K(task->get_task_id()));
     } else if (OB_FAIL(snapshot_scn.convert_for_tx(snapshot_version))) {
       LOG_WARN("failed to convert", K(snapshot_version), K(ret));
-    } else if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("get tenant schema guard failed", K(ret));
+    } else if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
+      LOG_WARN("get runtime schema guard failed", K(ret));
     } else if (OB_FAIL(schema_guard.get_table_schema( table_id, data_table_schema))) {
       LOG_WARN("get table schema failed", K(ret), K(table_id));
     } else if (OB_FAIL(schema_guard.get_table_schema( target_table_id, dest_table_schema))) {
@@ -109,7 +107,7 @@ int ObDDLUtil::hold_snapshot(
               OB_FAIL(ObDDLUtil::get_tablets(dest_table_schema->get_aux_lob_piece_tid(), tablet_ids))) {
       LOG_WARN("failed to get dest lob piece table snapshot", K(ret));
     } else {
-      rootserver::ObDDLService &ddl_service = root_service->get_ddl_service();
+      rootserver::ObDDLService &ddl_service = local_management_service->get_ddl_service();
       if (OB_FAIL(ddl_service.get_snapshot_mgr().batch_acquire_snapshot(
           trans, SNAPSHOT_FOR_DDL, schema_version, snapshot_scn, nullptr, tablet_ids))) {
         LOG_WARN("batch acquire snapshot failed", K(ret), K(tablet_ids));
@@ -139,7 +137,7 @@ int ObDDLUtil::hold_snapshot(
   } else if (OB_FAIL(snapshot_scn.convert_for_tx(snapshot))) {
     LOG_WARN("failed to convert", K(snapshot), K(ret));
   } else {
-    rootserver::ObDDLService &ddl_service = GCTX.root_service_->get_ddl_service();
+    rootserver::ObDDLService &ddl_service = GCTX.local_management_service_->get_ddl_service();
     ObSEArray<ObTabletID, 2> tablet_ids;
     bool need_acquire_lob = false;
     if (OB_FAIL(data_table_schema.get_tablet_ids(tablet_ids))) {
@@ -171,10 +169,10 @@ int ObDDLUtil::construct_domain_index_arg(ObSchemaGetterGuard &schema_guard,
     ObDDLType &ddl_type)
 {
   int ret = OB_SUCCESS;
-  rootserver::ObRootService *root_service = GCTX.root_service_;
-  if (OB_ISNULL(root_service)) {
+  rootserver::ObLocalManagementService *local_management_service = GCTX.local_management_service_;
+  if (OB_ISNULL(local_management_service)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, root service must not be nullptr", K(ret));
+    LOG_WARN("error sys, local management service must not be nullptr", K(ret));
   } else if (OB_ISNULL(table_schema) || OB_ISNULL(index_schema)) {
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, table schema must not be nullptr", K(ret));
@@ -274,12 +272,12 @@ int ObDDLUtil::get_domain_index_share_table_snapshot(const ObTableSchema *table_
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard new_schema_guard;
-  rootserver::ObRootService *root_service = GCTX.root_service_;
+  rootserver::ObLocalManagementService *local_management_service = GCTX.local_management_service_;
 
   bool need_update_snapshot = false;
-  if (OB_ISNULL(root_service) || OB_ISNULL(table_schema) || OB_ISNULL(index_schema)) {
+  if (OB_ISNULL(local_management_service) || OB_ISNULL(table_schema) || OB_ISNULL(index_schema)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, root service, table schema, index schema must not be nullptr", K(ret), K(root_service), K(table_schema), K(index_schema));
+    LOG_WARN("error sys, local management service, table schema, index schema must not be nullptr", K(ret), K(local_management_service), K(table_schema), K(index_schema));
   } else if (OB_FAIL(ObDDLUtil::check_need_update_domain_index_share_table_snapshot(
                  table_schema, index_schema, task_id, create_index_arg, need_update_snapshot))) {
     LOG_WARN("fail to check need update domain index share table snapshot", K(ret));
@@ -294,7 +292,7 @@ int ObDDLUtil::get_domain_index_share_table_snapshot(const ObTableSchema *table_
       LOG_WARN("failed to get rowkey doc table id", K(ret));
     } else if (index_schema->is_vec_hnsw_index() && OB_FAIL(table_schema->get_rowkey_vid_tid(domain_index_share_tid))) {
       LOG_WARN("failed to get rowkey vid table id", K(ret));
-    } else if (OB_FAIL(root_service->get_ddl_service().get_tenant_schema_guard_with_version_in_inner_table(new_schema_guard))) {
+    } else if (OB_FAIL(local_management_service->get_ddl_service().get_runtime_schema_guard_with_version_in_inner_table(new_schema_guard))) {
       LOG_WARN("failed to refresh schema guard", K(ret));
     } else if (OB_FAIL(new_schema_guard.get_table_schema( domain_index_share_tid, domain_index_share_schema))) {
       LOG_WARN("get table schema failed", K(ret), K(domain_index_share_tid));
@@ -327,7 +325,6 @@ int ObDDLUtil::get_data_information(const uint64_t task_id,
     share::ObDDLTaskStatus &task_status,
     uint64_t &target_object_id,
     int64_t &schema_version,
-    bool &is_no_logging,
     bool &is_offline_index_rebuild)
 {
   int ret = OB_SUCCESS;
@@ -336,7 +333,6 @@ int ObDDLUtil::get_data_information(const uint64_t task_id,
   task_status = share::ObDDLTaskStatus::PREPARE;
   target_object_id = 0;
   data_format_version = 0;
-  is_no_logging = false;
   is_offline_index_rebuild = false;
   if (OB_UNLIKELY(task_id <= 0
       || nullptr == GCTX.sql_proxy_)) {
@@ -381,7 +377,6 @@ int ObDDLUtil::get_data_information(const uint64_t task_id,
                   LOG_WARN("deserialize from msg failed", K(ret));
                 } else {
                   data_format_version = task.get_data_format_version();
-                  is_no_logging = task.get_is_no_logging();
                   is_offline_index_rebuild = task.is_offline_rebuild();
                 }
               }
@@ -394,7 +389,6 @@ int ObDDLUtil::get_data_information(const uint64_t task_id,
                   LOG_WARN("deserialize from msg failed", K(ret));
                 } else {
                   data_format_version = task.get_data_format_version();
-                  is_no_logging = task.get_is_no_logging();
                   is_offline_index_rebuild = false;
                 }
               }
@@ -408,7 +402,7 @@ int ObDDLUtil::get_data_information(const uint64_t task_id,
   return ret;
 }
 
-int ObDDLUtil::generate_build_replica_sql(const int64_t data_table_id,
+int ObDDLUtil::generate_local_build_sql(const int64_t data_table_id,
     const int64_t dest_table_id,
     const int64_t schema_version,
     const int64_t snapshot_version,
@@ -430,11 +424,11 @@ int ObDDLUtil::generate_build_replica_sql(const int64_t data_table_id,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(data_table_id), K(dest_table_id), K(schema_version),
                                   K(snapshot_version), K(execution_id), K(task_id));
-  } else if (OB_FAIL(DDL_SIM(task_id, GENERATE_BUILD_REPLICA_SQL))) {
+  } else if (OB_FAIL(DDL_SIM(task_id, GENERATE_LOCAL_BUILD_SQL))) {
     LOG_WARN("ddl sim failure", K(ret), K(task_id));
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
+  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
       schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", K(ret), K(data_table_id));
+    LOG_WARN("fail to get runtime schema guard", K(ret), K(data_table_id));
   } else if (OB_FAIL(schema_guard.check_formal_guard())) {
     LOG_WARN("fail to check formal guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( data_table_id, source_table_schema))) {
@@ -592,7 +586,7 @@ int ObDDLUtil::generate_build_replica_sql(const int64_t data_table_id,
       }
     }
 
-    // generate build replica sql
+    // generate local build sql
     if (OB_SUCC(ret)) {
       ObSqlString query_column_sql_string;
       ObSqlString insert_column_sql_string;
@@ -757,7 +751,8 @@ int ObDDLUtil::obtain_snapshot(
         } else if (persisted_snapshot > 0) {
           // found a persisted snapshot, do not hold it again.
           FLOG_INFO("found a persisted snapshot in inner table", "task_id", task->get_task_id(), K(persisted_snapshot), K(new_fetched_snapshot));
-        } else if (OB_FAIL(hold_snapshot(trans, task, table_id, target_table_id, GCTX.root_service_, new_fetched_snapshot))) {
+        } else if (OB_FAIL(hold_snapshot(trans, task, table_id, target_table_id,
+                                         GCTX.local_management_service_, new_fetched_snapshot))) {
           if (OB_SNAPSHOT_DISCARDED == ret) {
             wait_trans_ctx->reset();
           } else {
@@ -871,7 +866,7 @@ int ObDDLUtil::calc_snapshot_with_gts(
   const int64_t timeout_us = ObDDLUtil::get_default_ddl_rpc_timeout();
   ObFreezeInfoProxy freeze_info_proxy{};
   ObFreezeInfo frozen_status;
-  if (OB_UNLIKELY(false || ddl_task_id < 0)) {
+  if (OB_UNLIKELY(ddl_task_id < 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(ddl_task_id));
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
@@ -879,8 +874,6 @@ int ObDDLUtil::calc_snapshot_with_gts(
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else {
     {
-      MAKE_TENANT_SWITCH_SCOPE_GUARD(tenant_guard);
-      tenant_guard.switch_to();
       if (OB_FAIL(OB_TS_MGR.get_gts_sync(timeout_us, curr_ts))) {
         LOG_WARN("fail to get gts sync", K(ret), K(timeout_us), K(curr_ts));
       }
@@ -963,7 +956,7 @@ int ObDDLUtil::write_defensive_and_obtain_snapshot(
     int64_t &new_fetched_snapshot)
 {
   int ret = OB_SUCCESS;
-  if (!true || OB_ISNULL(schema_service)) {
+  if (OB_ISNULL(schema_service)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("there are invalid arg", KP(schema_service));
   } else {
@@ -1002,7 +995,7 @@ int ObDDLUtil::load_ddl_task(
 {
   int ret = OB_SUCCESS;
   rootserver::ObDDLTaskRecord task_record;
-  if (OB_UNLIKELY(!true || task_id <= 0)) {
+  if (OB_UNLIKELY(task_id <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("there are invalid args", K(ret), K(task_id));
   } else if (OB_FAIL(rootserver::ObDDLTaskRecordOperator::get_ddl_task_record(
@@ -1018,7 +1011,7 @@ int ObDDLUtil::load_ddl_task(
   return ret;
 }
 
-int ObDDLUtil::check_and_cancel_single_replica_dag(
+int ObDDLUtil::check_and_cancel_local_build_dag(
     rootserver::ObDDLTask* task,
     const uint64_t table_id,
     const uint64_t target_table_id,
@@ -1066,47 +1059,42 @@ int ObDDLUtil::check_and_cancel_single_replica_dag(
     for (; OB_SUCC(ret) && iter != check_dag_exit_tablets_map.end(); iter++) {
       const common::ObTabletID &src_tablet_id = iter->first;
       const common::ObTabletID &dst_tablet_id = iter->second;
-      {
-        bool is_tablet_dag_exist = false;
-        obcall::ObDDLBuildSingleReplicaRequestArg arg;
-
-
-
-        arg.source_tablet_id_ = src_tablet_id;
-        arg.dest_tablet_id_ = dst_tablet_id;
-        arg.source_table_id_ = table_id;
-        arg.dest_schema_id_ = target_table_id;
-        arg.schema_version_ = task->get_src_schema_version();
-        arg.dest_schema_version_ = task->get_schema_version();
-        arg.snapshot_version_ = 1; // to ensure arg valid only.
-        arg.ddl_type_ = task->get_task_type();
-        arg.task_id_ = task->get_task_id();
-        arg.parallelism_ = 1; // to ensure arg valid only.
-        arg.execution_id_ = 1; // to ensure arg valid only.
-        arg.data_format_version_ = data_format_version; // to ensure arg valid only.
-        arg.tablet_task_id_ = 1; // to ensure arg valid only.
-        int tmp_ret = OB_SUCCESS;
-        bool is_replica_dag_exist = true;
-        if (is_complement_data_dag && OB_TMP_FAIL(
-            GCTX.ob_service_->check_and_cancel_ddl_complement_data_dag(arg, is_replica_dag_exist))) {
-          saved_ret = OB_SUCC(saved_ret) ? tmp_ret : saved_ret;
-          is_tablet_dag_exist = true;
-          LOG_WARN("check and cancel ddl complement dag failed", K(tmp_ret), K(arg));
-        } else if (!is_complement_data_dag && OB_TMP_FAIL(
-            GCTX.ob_service_->check_and_cancel_delete_lob_meta_row_dag(arg, is_replica_dag_exist))) {
-          saved_ret = OB_SUCC(saved_ret) ? tmp_ret : saved_ret;
-          is_tablet_dag_exist = true;
-          LOG_WARN("check and cancel delete lob meta row dag failed", K(tmp_ret), K(arg));
-        } else if (is_replica_dag_exist) {
-          is_tablet_dag_exist = true;
-          if (REACH_COUNT_INTERVAL(1000L)) {
-            LOG_INFO("wait local dag exit", K(arg));
-          }
+      bool is_tablet_dag_exist = false;
+      obcall::ObDDLLocalBuildArg arg;
+      arg.source_tablet_id_ = src_tablet_id;
+      arg.dest_tablet_id_ = dst_tablet_id;
+      arg.source_table_id_ = table_id;
+      arg.dest_schema_id_ = target_table_id;
+      arg.schema_version_ = task->get_src_schema_version();
+      arg.dest_schema_version_ = task->get_schema_version();
+      arg.snapshot_version_ = 1; // to ensure arg valid only.
+      arg.ddl_type_ = task->get_task_type();
+      arg.task_id_ = task->get_task_id();
+      arg.parallelism_ = 1; // to ensure arg valid only.
+      arg.execution_id_ = 1; // to ensure arg valid only.
+      arg.data_format_version_ = data_format_version; // to ensure arg valid only.
+      arg.tablet_task_id_ = 1; // to ensure arg valid only.
+      int tmp_ret = OB_SUCCESS;
+      bool is_dag_exist = true;
+      if (is_complement_data_dag
+          && OB_TMP_FAIL(GCTX.ob_service_->check_and_cancel_ddl_complement_data_dag(arg, is_dag_exist))) {
+        saved_ret = OB_SUCC(saved_ret) ? tmp_ret : saved_ret;
+        is_tablet_dag_exist = true;
+        LOG_WARN("check and cancel ddl complement dag failed", K(tmp_ret), K(arg));
+      } else if (!is_complement_data_dag
+                 && OB_TMP_FAIL(GCTX.ob_service_->check_and_cancel_delete_lob_meta_row_dag(arg, is_dag_exist))) {
+        saved_ret = OB_SUCC(saved_ret) ? tmp_ret : saved_ret;
+        is_tablet_dag_exist = true;
+        LOG_WARN("check and cancel delete lob meta row dag failed", K(tmp_ret), K(arg));
+      } else if (is_dag_exist) {
+        is_tablet_dag_exist = true;
+        if (REACH_COUNT_INTERVAL(1000L)) {
+          LOG_INFO("wait local dag exist", K(arg));
         }
-        if (OB_SUCC(ret) && !is_tablet_dag_exist) {
-          if (OB_FAIL(dag_not_exist_tablets.push_back(src_tablet_id))) {
-            LOG_WARN("push back failed", K(ret));
-          }
+      }
+      if (OB_SUCC(ret) && !is_tablet_dag_exist) {
+        if (OB_FAIL(dag_not_exist_tablets.push_back(src_tablet_id))) {
+          LOG_WARN("push back failed", K(ret));
         }
       }
     }
@@ -1121,9 +1109,9 @@ int ObDDLUtil::check_and_cancel_single_replica_dag(
   }
   if (OB_SUCC(ret)) {
     all_dag_exit = check_dag_exit_tablets_map.empty() ? true : false;
-    task->set_delay_schedule_time(3000L * 1000L);
+    task->set_delay_schedule_time(3000L * 1000L); // 3s, to avoid resubmitting local work too frequently.
   } else if (OB_TABLE_NOT_EXIST == ret
-      || OB_TENANT_NOT_EXIST == ret
+      || OB_RUNTIME_SCHEMA_NOT_READY == ret
       || (++check_dag_exit_retry_cnt >= 10 /*MAX RETRY COUNT IF FAILED*/)) {
     ret = OB_SUCCESS;
     all_dag_exit = true;
@@ -1368,12 +1356,9 @@ int64_t ObDDLUtil::get_real_parallelism(const int64_t parallelism)
 
 int ObCheckTabletDataComplementOp::do_check_tablets_merge_status(const int64_t snapshot_version,
   const ObIArray<ObTabletID> &tablet_ids,
-  hash::ObHashMap<ObTabletID, int32_t> &tablets_commited_map,
   int64_t &tablet_build_succ_count)
 {
   int ret = OB_SUCCESS;
-  tablets_commited_map.reuse();
-
   tablet_build_succ_count = 0;
 
   if (OB_UNLIKELY(tablet_ids.count() <= 0 || OB_INVALID_TIMESTAMP == snapshot_version)) {
@@ -1381,42 +1366,22 @@ int ObCheckTabletDataComplementOp::do_check_tablets_merge_status(const int64_t s
     LOG_WARN("invalid argument", K(ret), K(tablet_ids.count()), K(snapshot_version));
   } else {
     obcall::ObDDLCheckTabletMergeStatusArg arg;
-
     arg.snapshot_version_ = snapshot_version;
-
+    obcall::ObDDLCheckTabletMergeStatusResult result;
     if (OB_FAIL(arg.tablet_ids_.assign(tablet_ids))) {
       LOG_WARN("fail to assign tablet ids", K(ret), K(tablet_ids));
     } else {
-      obcall::ObDDLCheckTabletMergeStatusResult cur_result;
-      int return_ret = GCTX.ob_service_->check_ddl_tablet_merge_status(arg, cur_result);
-      if (OB_SUCCESS == return_ret) {
-        const common::ObSArray<bool> &tablet_rsp_array = cur_result.merge_status_;
-        if (tablet_ids.count() != tablet_rsp_array.count()) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("tablet req count is not equal to tablet rsp count", K(ret), K(tablet_ids), K(tablet_rsp_array));
-        } else {
-          for (int64_t idx = 0; OB_SUCC(ret) && idx < tablet_rsp_array.count(); ++idx) {
-            const common::ObTabletID &tablet_id = tablet_ids.at(idx);
-            const bool tablet_status = tablet_rsp_array.at(idx);
-            if (OB_FAIL(update_replica_merge_status(tablet_id, tablet_status, tablets_commited_map))) {
-              LOG_WARN("fail to update replica merge status", K(ret), K(tablet_id));
-            } else {
-              LOG_INFO("succ to update replica merge status", K(tablet_id), K(tablet_status));
-            }
-          }
+      const int check_ret = GCTX.ob_service_->check_ddl_tablet_merge_status(arg, result);
+      if (OB_SUCCESS != check_ret) {
+        LOG_WARN("check ddl tablet merge status failed", K(check_ret));
+      } else if (result.merge_status_.count() != tablet_ids.count()) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("tablet request and response counts differ", K(ret), K(tablet_ids), K(result));
+      } else {
+        for (int64_t i = 0; i < result.merge_status_.count(); ++i) {
+          tablet_build_succ_count += result.merge_status_.at(i) ? 1 : 0;
         }
-      } else {
-        LOG_WARN("check ddl tablet merge status failed.", K(return_ret));
-      }
-    }
-    // 3. check any commit tablet
-    if (OB_SUCC(ret)) {
-      int64_t build_succ_count = 0;
-      if (OB_FAIL(calculate_build_finish(tablet_ids, tablets_commited_map, build_succ_count))) {
-        LOG_WARN("check and commit tbalets commit log fail.", K(ret), K(tablet_ids), K(build_succ_count));
-      } else {
         DEBUG_SYNC(DDL_CHECK_TABLET_MERGE_STATUS);
-        tablet_build_succ_count += build_succ_count;
       }
     }
   }

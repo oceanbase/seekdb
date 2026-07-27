@@ -33,24 +33,9 @@ using namespace obcall;
 #define WORD_SIZE 64            // WORD_SIZE * FIXED_HASH_COUNT = BF_BLOCK_SIZE
 #define BLOCK_FILTER_HASH_MASK 0x3F3F3F3F // for each 8 bits, we only use the last 6 bits
 
-// before assign, please set allocator for channel_ids_ first
-int BloomFilterIndex::assign(const BloomFilterIndex &other)
-{
-  int ret = OB_SUCCESS;
-  if (this != &other) {
-    channel_id_ = other.channel_id_;
-    begin_idx_ = other.begin_idx_;
-    end_idx_ = other.end_idx_;
-    if (OB_FAIL(channel_ids_.assign(other.channel_ids_))) {
-      LOG_WARN("failed to assign channel_ids_");
-    }
-  }
-  return ret;
-}
-
 ObPxBloomFilter::ObPxBloomFilter() : data_length_(0), max_bit_count_(0), bits_count_(0), fpp_(0.0),
     hash_func_count_(0), is_inited_(false), bits_array_length_(0),
-    bits_array_(NULL), true_count_(0), begin_idx_(0), end_idx_(0), allocator_()
+    bits_array_(NULL), true_count_(0), allocator_()
 {
 
 }
@@ -108,11 +93,9 @@ int ObPxBloomFilter::assign(const ObPxBloomFilter &filter)
   true_count_ = filter.true_count_;
   might_contain_ = filter.might_contain_;
   void *bits_array_buf = NULL;
-  begin_idx_ = filter.get_begin_idx();
-  end_idx_ = filter.get_end_idx();
   if (OB_ISNULL(bits_array_buf = allocator_.alloc((bits_array_length_ + CACHE_LINE_SIZE)* sizeof(int64_t)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc filter", K(bits_array_length_), K(begin_idx_), K(end_idx_), K(ret));
+    LOG_WARN("fail to alloc filter", K(bits_array_length_), K(ret));
   } else {
     int64_t align_addr = ((reinterpret_cast<int64_t>(bits_array_buf)
                           + CACHE_LINE_SIZE - 1) >> LOG_CACHE_LINE_SIZE) << LOG_CACHE_LINE_SIZE;
@@ -126,28 +109,6 @@ void ObPxBloomFilter::set_allocator_attr()
 {
   ObMemAttr attr("PxBfAlloc", ObCtxIds::DEFAULT_CTX_ID);
   allocator_.set_attr(attr);
-}
-
-int ObPxBloomFilter::init(const ObPxBloomFilter *filter)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(filter)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("the filter is null", K(ret));
-  } else {
-    data_length_ = filter->data_length_;
-    max_bit_count_ = filter->max_bit_count_;
-    block_mask_ = filter->block_mask_;
-    bits_count_ = filter->bits_count_;
-    fpp_ = filter->fpp_;
-    hash_func_count_ = filter->hash_func_count_;
-    is_inited_ = filter->is_inited_;
-    bits_array_length_ = filter->bits_array_length_;
-    bits_array_ = filter->bits_array_;
-    true_count_ = filter->true_count_;
-    might_contain_ = filter->might_contain_;
-  }
-  return ret;
 }
 
 void ObPxBloomFilter::reset_filter()
@@ -311,39 +272,11 @@ int ObPxBloomFilter::merge_filter(ObPxBloomFilter *filter)
     int64_t old_v = 0, new_v = 0;
     for (int i = 0; i < filter->bits_array_length_; ++i) {
       do {
-        old_v = bits_array_[i + filter->begin_idx_];
+        old_v = bits_array_[i];
         new_v = old_v | filter->bits_array_[i];
       } while (old_v != new_v // do not write if old is equal to new
-               && ATOMIC_CAS(&bits_array_[i + filter->begin_idx_], old_v, new_v) != old_v);
+               && ATOMIC_CAS(&bits_array_[i], old_v, new_v) != old_v);
     }
-  }
-  return ret;
-}
-
-int ObPxBloomFilter::regenerate()
-{
-  int ret = OB_SUCCESS;
-  int64_t bits_array_length = ceil((double)bits_count_ / 64);
-  void *bits_array_buf = NULL;
-  if (bits_array_length <= 0) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected bits array length", K(ret));
-  } else if (OB_ISNULL(bits_array_buf = allocator_.alloc((bits_array_length + CACHE_LINE_SIZE)* sizeof(int64_t)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc filter", K(bits_array_length), K(ret));
-  } else {
-    // cache line aligned address.
-    int64_t align_addr = ((reinterpret_cast<int64_t>(bits_array_buf)
-                          + CACHE_LINE_SIZE - 1) >> LOG_CACHE_LINE_SIZE) << LOG_CACHE_LINE_SIZE;
-    int64_t *bits_array = reinterpret_cast<int64_t *>(align_addr);
-    MEMSET(bits_array, 0, bits_array_length * sizeof(int64_t));
-    for (int i = 0; i < bits_array_length_; ++i) {
-      bits_array[i + begin_idx_] |= bits_array_[i];
-    }
-    bits_array_length_ = bits_array_length;
-    bits_array_ = bits_array;
-    begin_idx_ = 0;
-    end_idx_ = bits_array_length - 1;
   }
   return ret;
 }
@@ -364,10 +297,8 @@ OB_DEF_SERIALIZE(ObPxBloomFilter)
               hash_func_count_,
               is_inited_,
               bits_array_length_,
-              true_count_,
-              begin_idx_,
-              end_idx_);
-  for (int i = begin_idx_; OB_SUCC(ret) && i <= end_idx_; ++i) {
+              true_count_);
+  for (int i = 0; OB_SUCC(ret) && i < bits_array_length_; ++i) {
     if (OB_FAIL(serialization::encode(buf, buf_len, pos, bits_array_[i]))) {
       LOG_WARN("fail to encode bits data", K(ret), K(bits_array_[i]));
     }
@@ -386,15 +317,12 @@ OB_DEF_DESERIALIZE(ObPxBloomFilter)
               hash_func_count_,
               is_inited_,
               bits_array_length_,
-              true_count_,
-              begin_idx_,
-              end_idx_);
-  int64_t real_len = end_idx_ - begin_idx_ + 1;
-  bits_array_length_ = real_len;
+              true_count_);
+  int64_t real_len = bits_array_length_;
   void *bits_array_buf = NULL;
   if (OB_ISNULL(bits_array_buf = allocator_.alloc((real_len + CACHE_LINE_SIZE)* sizeof(int64_t)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc filter", K(real_len), K(begin_idx_), K(end_idx_), K(ret));
+    LOG_WARN("fail to alloc filter", K(real_len), K(ret));
   } else {
     // cache line aligned address.
     int64_t align_addr = ((reinterpret_cast<int64_t>(bits_array_buf)
@@ -426,10 +354,8 @@ OB_DEF_SERIALIZE_SIZE(ObPxBloomFilter)
         hash_func_count_,
         is_inited_,
         bits_array_length_,
-        true_count_,
-        begin_idx_,
-        end_idx_);
-  for (int i = begin_idx_; i <= end_idx_; ++i) {
+        true_count_);
+  for (int i = 0; i < bits_array_length_; ++i) {
     len += serialization::encoded_length(bits_array_[i]);
   }
   OB_UNIS_ADD_LEN(max_bit_count_);
@@ -438,8 +364,7 @@ OB_DEF_SERIALIZE_SIZE(ObPxBloomFilter)
 
 
 //-------------------------------------division line----------------------------
-int ObPxBFStaticInfo::init(int64_t filter_id,
-    int64_t server_id, bool is_shared,
+int ObPxBFStaticInfo::init(int64_t filter_id, bool is_shared,
     bool skip_subpart, int64_t p2p_dh_id,
     bool is_shuffle, ObLogJoinFilter *log_join_filter_create_op)
 {
@@ -450,7 +375,6 @@ int ObPxBFStaticInfo::init(int64_t filter_id,
   } else {
     
     filter_id_ = filter_id;
-    server_id_ = server_id;
     is_shared_ = is_shared;
     skip_subpart_ = skip_subpart;
     p2p_dh_id_ = p2p_dh_id;
@@ -462,4 +386,4 @@ int ObPxBFStaticInfo::init(int64_t filter_id,
 }
 
 OB_SERIALIZE_MEMBER(ObPxBFStaticInfo, is_inited_, filter_id_,
-    server_id_, is_shared_, skip_subpart_, p2p_dh_id_, is_shuffle_);
+    is_shared_, skip_subpart_, p2p_dh_id_, is_shuffle_);

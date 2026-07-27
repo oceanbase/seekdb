@@ -34,8 +34,6 @@ class ObExecContext;
 struct ObSortFieldCollation;
 class ObExprTopNFilterContext;
 
-// ob_sort_vec_op_impl.ipp is an ipp with variable template
-// move the topn code to the ob_pd_topn_sort_filter.cpp to accelerate the compile speed
 class ObPushDownTopNFilter
 {
 public:

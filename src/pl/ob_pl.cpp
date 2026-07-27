@@ -64,9 +64,6 @@ struct ObPLSPIWrapper<Ret(Args...), func>
 int ObPL::init(common::ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
-  // Native code generation removed: PL no longer initializes a codegen backend. The
-  // interpreter executes the AST and calls spi_* directly.
-
   sql_proxy_ = &sql_proxy;
   OZ (build_lock_.first.init(1024));
   OZ (build_lock_.second.init(1024));
@@ -226,7 +223,7 @@ int ObPL::execute_proc(ObPLExecCtx &ctx,
     } else {
       share::schema::ObSchemaGetterGuard schema_guard;
       
-      if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+      if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
         LOG_WARN("get schema guard failed", K(ret));
       } else {
         ObPL pl;
@@ -361,29 +358,6 @@ int ObPL::unset_implicit_cursor_in_forall(ObPLExecCtx *ctx)
   return ret;
 }
 
-int ObPLContext::check_debug_priv(ObSchemaGetterGuard *guard,
-                                  sql::ObSQLSessionInfo *sess_info,
-                                  ObPLFunction *func)
-{
-  int ret = OB_SUCCESS;
-  UNUSEDx(guard, sess_info, func);
-  return ret;
-}
-
-int ObPLContext::debug_start(ObSQLSessionInfo *sql_session)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(sql_session);
-  return ret;
-}
-
-int ObPLContext::debug_stop(ObSQLSessionInfo *sql_session)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(sql_session);
-  return ret;
-}
-
 void ObPLContext::record_tx_id_before_begin_autonomous_session_for_deadlock_(ObSQLSessionInfo &session_info,
                                                                              ObTransID &last_trans_id)
 {
@@ -427,8 +401,6 @@ int ObPLContext::init(ObSQLSessionInfo &session_info,
 
   // to mark what session status we need to do to rollback if init failed
   bool need_remove_top_stack = false;
-  bool need_debug_stop = false;
-
   int64_t pl_block_timeout = 0;
   int64_t query_start_time = session_info.get_query_start_time();
   CK (OB_NOT_NULL(routine));
@@ -521,8 +493,6 @@ int ObPLContext::init(ObSQLSessionInfo &session_info,
 #ifdef ERRSIM
   OX (ret = OBPLCONTEXT_INIT);
 #endif // ERRSIM
-  OZ (ObPLContext::debug_start(&session_info));
-  OX (need_debug_stop = true);
 #ifdef ERRSIM
   OX (ret = OBPLCONTEXT_INIT);
 #endif // ERRSIM
@@ -575,10 +545,6 @@ int ObPLContext::init(ObSQLSessionInfo &session_info,
       session_info.set_pl_stack_ctx(nullptr);
     }
 
-    // stop debugger
-    if (need_debug_stop) {
-      IGNORE_RETURN ObPLContext::debug_stop(&session_info);
-    }
   }
 
   return ret;
@@ -744,7 +710,6 @@ void ObPLContext::destory(
     session_info.set_pl_stack_ctx(NULL);
     session_info_ = NULL;
 
-    IGNORE_RETURN ObPLContext::debug_stop(&session_info);
   } else if (is_function_or_trigger_) {
     // Non-nested scenario: The inner udf must be inside the expression, submission is guaranteed by spi_calc_expr
     // Nested scenario: Inner UDF is triggered by DML statement, rollback or commit is guaranteed by the outer DML statement
@@ -1192,11 +1157,9 @@ int ObPL::execute(ObExecContext &ctx,
   ObObj local_result(ObMaxType);
   int local_status = OB_SUCCESS;
   ObPLASHGuard guard(routine.get_package_id(), routine.get_routine_id(), routine.get_function_name());
-  ObPLConcurrentGuard concurrent_guard;
   ObArenaAllocator tmp_alloc(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObPLAllocator1 pl_sym_allocator(PL_MOD_IDX::OB_PL_SYMBOL_TABLE, &tmp_alloc);
   OZ (pl_sym_allocator.init(nullptr));
-  OZ (concurrent_guard.set_concurrent_num(routine, ctx, package_guard));
   if (OB_SUCC(ret)) {
     ObPLExecState pl(tmp_alloc,
                     pl_sym_allocator,
@@ -1212,8 +1175,8 @@ int ObPL::execute(ObExecContext &ctx,
                     loc,
                     is_called_from_sql);
     OZ (pl.init(params, is_anonymous));
-    // pl.execute() may unwind via _Unwind_RaiseException when a SIGNAL fires
-    // inside the legacy native-code body. ObPLExecState::~ObPLExecState() is empty
+    // pl.execute() may unwind via _Unwind_RaiseException when a SIGNAL fires.
+    // ObPLExecState::~ObPLExecState() is empty,
     // and pl.final(ret) is the only place that restores exec_ctx_bak_ onto the
     // shared ObExecContext. If the unwind skips final(), the caller's
     // phy_plan_ctx_ is left dangling at this frame's destroyed local
@@ -1253,7 +1216,6 @@ int ObPL::execute(ObExecContext &ctx,
               OX (cursor = reinterpret_cast<ObPLCursorInfo *>(cursor_param.get_ext()));
               OX (params->at(i) = cursor_param);
               if (pl.is_top_call() && OB_NOT_NULL(cursor)) {
-                CK (OB_NOT_NULL(ctx.get_my_session()));
                 if (cursor->is_session_cursor() && !cursor->isopen()) {
                   OZ (ObSPIService::spi_add_ref_cursor_refcount(&pl.get_exec_ctx(), &cursor_param, -1));
                   OX (params->at(i).set_obj_value(static_cast<uint64_t>(0)));  // return closed refcursor as null
@@ -1361,8 +1323,7 @@ int ObPL::execute(ObExecContext &ctx,
   return ret;
 }
 
-struct ObPLExecTraceIdGuard
-{
+struct ObPLExecTraceIdGuard {
   ObPLExecTraceIdGuard(const ObCurTraceId::TraceId &trace_id,
                        uint64_t package_id,
                        uint64_t routine_id)
@@ -1402,7 +1363,6 @@ int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *
   lib::MemoryContext mem_context = NULL;
   lib::ContextParam param;
   ObPLFunction *routine = NULL;
-
   int64_t old_worker_timeout_ts = 0;
   ObPLASHGuard guard(ObPLResolver::ANONYMOUS_VIRTUAL_OBJECT_ID, OB_INVALID_ID);
   /* !!!
@@ -1410,9 +1370,7 @@ int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *
    * !!!
    */
   observer::ObReqTimeGuard req_timeinfo_guard;
-
   OZ (ObPLContext::valid_execute_context(ctx));
-
   OX (param.set_mem_attr(ObModIds::OB_PL_TEMP,
                          ObCtxIds::DEFAULT_CTX_ID));
   OZ (CURRENT_CONTEXT->CREATE_CONTEXT(mem_context, param));
@@ -1431,7 +1389,7 @@ int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *
       OX (THIS_WORKER.set_timeout_ts(query_start_time + pl_block_timeout));
     }
 
-    if (OB_SUCC(ret) && NULL == routine) {
+    if (OB_SUCC(ret)) {
       ObPLBuilder builder(mem_context->get_arena_allocator(),
                           *(ctx.get_my_session()),
                           *(ctx.get_sql_ctx()->schema_guard_),
@@ -1447,12 +1405,12 @@ int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *
 
       // stmt_id is OB_INVALID_ID for anonymous block from text protocol
       OZ (builder.compile(block, OB_INVALID_ID, *routine, &params, false));
-      OX (routine->set_debug_priv());
       if (OB_SUCC(ret) && params.count() != routine->get_params_info().count()) {
         ret = OB_ERR_BIND_VARIABLE_NOT_EXIST;
         LOG_WARN("text anonymous can not contain bind variable", K(ret));
       }
     }
+
     // restore work timeout
     if (old_worker_timeout_ts != 0) {
       THIS_WORKER.set_timeout_ts(old_worker_timeout_ts);
@@ -1510,9 +1468,8 @@ int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *
     }
   }
 
-
 #ifndef NDEBUG
-  if(OB_SUCC(ret)) {
+  if (OB_SUCC(ret)) {
     ctx.get_my_session()->print_all_cursor();
   }
 #endif
@@ -1526,7 +1483,6 @@ int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *
   }
   return ret;
 }
-
 //execute anonymous interface for ps
 int ObPL::execute(ObExecContext &ctx,
                   ParamStore &params,
@@ -1536,7 +1492,7 @@ int ObPL::execute(ObExecContext &ctx,
 {
   int ret = OB_SUCCESS;
   ObPLFunction *routine = NULL;
-  ObCacheObjGuard cacheobj_guard(PL_ANON_HANDLE);
+  ObCacheObjGuard cacheobj_guard;
   int64_t old_worker_timeout_ts = 0;
   ObPLASHGuard guard(ObPLResolver::ANONYMOUS_VIRTUAL_OBJECT_ID, OB_INVALID_ID);
 
@@ -1561,7 +1517,6 @@ int ObPL::execute(ObExecContext &ctx,
   OZ (get_pl_function(ctx, params, stmt_id, sql, cacheobj_guard));
   OX (routine = static_cast<ObPLFunction*>(cacheobj_guard.get_cache_obj()));
   CK (OB_NOT_NULL(routine));
-  OX (routine->set_debug_priv());
   OX (out_args = routine->get_out_args());
   CK (OB_NOT_NULL(ctx.get_package_guard()));
 
@@ -1632,10 +1587,9 @@ int ObPL::execute(ObExecContext &ctx,
                   bool is_called_from_sql)
 {
   int ret = OB_SUCCESS;
-  bool debug_mode = false;
   ObPLFunction *routine = NULL;
   ObPLFunction *local_routine = NULL;
-  ObCacheObjGuard cacheobj_guard(PL_ROUTINE_HANDLE);
+  ObCacheObjGuard cacheobj_guard;
   int64_t old_worker_timeout_ts = 0;
   ObCurTraceId::TraceId parent_trace_id;
   ObPLASHGuard guard(package_id, routine_id);
@@ -1663,7 +1617,6 @@ int ObPL::execute(ObExecContext &ctx,
     observer::ObReqTimeGuard req_timeinfo_guard;
 
     LinkPLStackGuard link_stack_guard(ctx, stack_ctx);
-
     CK (!inner_call || (inner_call && OB_NOT_NULL(status)));
 
     OZ (ObPLContext::valid_execute_context(ctx));
@@ -1712,36 +1665,6 @@ int ObPL::execute(ObExecContext &ctx,
       OZ (ObPLContext::check_routine_legal(*routine, in_function,
                                           ctx.get_my_session()->is_for_trigger_package()));
       OZ (check_trigger_arg(params, *routine, stack_ctx, ctx));
-      if (OB_SUCC(ret) && ctx.get_my_session()->is_pl_debug_on()) {
-        int tmp_ret = OB_SUCCESS;
-        bool need_check = true;
-        ObPLContext *pl_ctx = ctx.get_my_session()->get_pl_context();
-        if (OB_NOT_NULL(pl_ctx)) {
-          ObIArray<pl::ObPLExecState *> &stack = pl_ctx->get_exec_stack();
-          if (stack.count() > 0) {
-            pl::ObPLExecState *frame = stack.at(stack.count() - 1);
-            // look into caller, if caller hasn't debug priv, the callee also has not
-            if (OB_NOT_NULL(frame) && !(frame->get_function().has_debug_priv())) {
-              need_check = false;
-            }
-          }
-        } else {
-        }
-        bool is_nested_routine = OB_NOT_NULL(local_routine) && (!subprogram_path.empty());
-        // routine default has not debug priv, if a routine is not a nested routine, we check it to see
-        // if it has debug priv, and set or clear debug flag.
-        if (need_check) {
-          if (!is_nested_routine) {
-            tmp_ret = ObPLContext::check_debug_priv(ctx.get_sql_ctx()->schema_guard_,
-                                      ctx.get_my_session(), routine);
-          } else {
-            // a nested routine debug priv same as caller, because a nested routine cann't be called
-            // from outside of this routine, to be here, we can see that the caller has debug priv
-            // or the need_check flag is not true;
-            routine->set_debug_priv();
-          }
-        }
-      }
       const ObDatabaseSchema *db_schema = NULL;
       ObString db_name = "";
       ObSchemaGetterGuard *guard = ctx.get_sql_ctx()->schema_guard_;
@@ -1780,7 +1703,6 @@ int ObPL::execute(ObExecContext &ctx,
       stack_ctx.dec_and_check_depth(package_id, routine_id, ret); \
       stack_ctx.destory(*ctx.get_my_session(), ctx, ret); \
     } \
-    if (NULL != routine) routine->clean_debug_priv(); \
     if (OB_INVALID_ID == package_id \
         && subprogram_path.empty() \
         && routine != NULL) { \
@@ -1869,7 +1791,6 @@ int ObPL::get_pl_function(ObExecContext &ctx,
 
     pc_ctx.key_.namespace_ = ObLibCacheNameSpace::NS_ANON;
     pc_ctx.key_.db_id_ = database_id;
-    pc_ctx.key_.sessid_ = ctx.get_my_session()->is_pl_debug_on() ? ctx.get_my_session()->get_server_sid() : 0;
     pc_ctx.key_.mode_ = ctx.get_my_session()->get_pl_profiler() != nullptr
                           ? ObPLObjectKey::ObjectMode::PROFILE : ObPLObjectKey::ObjectMode::NORMAL;
 
@@ -1989,7 +1910,6 @@ int ObPL::get_pl_function(ObExecContext &ctx,
     pc_ctx.key_.namespace_ = ObLibCacheNameSpace::NS_PRCR;
     pc_ctx.key_.db_id_ = database_id;
     pc_ctx.key_.key_id_ = routine_id;
-    pc_ctx.key_.sessid_ = ctx.get_my_session()->is_pl_debug_on() ? ctx.get_my_session()->get_server_sid() : 0;
     pc_ctx.key_.mode_ =  ctx.get_my_session()->get_pl_profiler() != nullptr
                            ? ObPLObjectKey::ObjectMode::PROFILE : ObPLObjectKey::ObjectMode::NORMAL;
     if (OB_FAIL(ret)) {
@@ -2083,10 +2003,8 @@ int ObPL::add_pl_lib_cache(ObPLFunction *pl_func, ObPLCacheCtx &pc_ctx)
       ret = OB_SUCCESS;
       LOG_WARN("plan cache don't support add this kind of plan now",  KPC(pl_func));
     } else {
-      if (OB_REACH_MAX_CONCURRENT_NUM != ret) { //if it reaches the rate limit upper bound, then throw out the error code
-        ret = OB_SUCCESS; // add plan error, overwrite error code, ensure that plan cache failure does not affect the normal execution path
-        LOG_WARN("Failed to add plan to ObPlanCache", K(ret));
-      }
+      ret = OB_SUCCESS; // add plan error, overwrite error code, ensure that plan cache failure does not affect the normal execution path
+      LOG_WARN("Failed to add plan to ObPlanCache", K(ret));
     }
   } else {
     LOG_INFO("add pl function to plan cache success", K(pc_ctx.key_));
@@ -3681,8 +3599,6 @@ int ObPLExecState::check_pl_execute_priv(ObSchemaGetterGuard &guard,
 
 int ObPLExecState::execute()
 {
-  // PL on this branch is executed by the tree-walking interpreter; the
-  // The interpreter executes PL directly here; there is no native-code fallback path.
   ObPLInterpreter interpreter(*this);
   return interpreter.execute();
 }
@@ -3721,7 +3637,7 @@ int ObPLExecutableUnit::get_routine(int64_t routine_idx, ObPLFunction *&routine)
 void ObPLExecutableUnit::reset()
 {
   ObPLCacheObject::reset();
-  tenant_schema_version_ = OB_INVALID_VERSION;
+  runtime_schema_version_ = OB_INVALID_VERSION;
   sys_schema_version_ = OB_INVALID_VERSION;
   dependency_tables_.reset();
 }
@@ -3791,16 +3707,6 @@ ObPLExecutableUnit::ObPLExecutableUnit(sql::ObLibCacheNameSpace ns,
       profiler_unit_info_(std::make_pair(OB_INVALID_ID, INVALID_PROC_TYPE)),
       stack_size_(OB_INVALID_SIZE)
 {
-  // Native code generation removed: no extra helper to initialize.
-}
-
-ObPLFunction::~ObPLFunction()
-{
-  int ret = OB_SUCCESS;
-  if (OB_NOT_NULL(di_buf_)) {
-    allocator_.free(di_buf_);
-    di_buf_ = NULL;
-  }
 }
 
 
@@ -4072,53 +3978,6 @@ int ObPL::check_session_alive(const ObBasicSessionInfo &session) {
     LOG_WARN("session is killed", K(ret));
   }
   return ret;
-}
-
-int ObPLConcurrentGuard::set_concurrent_num(ObPLFunction &routine, ObExecContext &ctx, ObPLPackageGuard &package_guard)
-{
-  int ret = OB_SUCCESS;
-  
-  const uint64_t database_id = ctx.get_my_session()->get_database_id();
-  ObSchemaGetterGuard *schema_guard = ctx.get_sql_ctx()->schema_guard_;
-  CK (OB_NOT_NULL(schema_guard));
-
-  if (OB_SUCC(ret) && OB_INVALID_ID != routine.get_package_id()) {
-    ObPLCacheObject* pl_object = NULL;
-    uint64_t pkg_id = routine.get_package_id();
-    sql::ObCacheObjGuard *package = NULL;
-    if (routine.is_udt_routine()
-      || NESTED_PROCEDURE == routine.get_proc_type()
-      || NESTED_FUNCTION == routine.get_proc_type()) {
-      // TODO: jiabokai.jbk
-      //Adjust the use of udt body id when adding package guard
-    } else {
-      int tmp_ret = package_guard.get(pkg_id, package);
-      if (OB_SUCCESS == tmp_ret && package != NULL) {
-        pl_object = static_cast<ObPLCacheObject*>(package->get_cache_obj());
-      } else {
-        // do not set pl_object and ignore error
-        LOG_TRACE("Can not get cached package obj!", K(tmp_ret), K(package));
-      }
-    }
-    OX (inner_obj_ = pl_object);
-  } else {
-    OX (inner_obj_ = &routine);
-  }
-  if (NULL != inner_obj_ && inner_obj_->is_limited_concurrent_num()) {
-    OZ (inner_obj_->inc_concurrent_num());
-    save_ret_ = ret;
-  }
-  return ret;
-}
-
-
-ObPLConcurrentGuard::~ObPLConcurrentGuard()
-{
-  if (OB_SUCCESS == save_ret_
-    && inner_obj_ != NULL
-    && inner_obj_->is_limited_concurrent_num()) {
-    inner_obj_->dec_concurrent_num();
-  }
 }
 
 ObPLASHGuard::ObPLASHGuard(ObPLASHStatus status)

@@ -393,7 +393,7 @@ int ObHNSWSerializeCallback::operator()(const char *data, const int64_t data_siz
   lob_param.lob_meta_tablet_id_ = vctx->get_lob_meta_tablet_id();
   lob_param.lob_piece_tablet_id_ = vctx->get_lob_piece_tablet_id();
   lob_param.inrow_threshold_ = param.lob_inrow_threshold_;
-   // Data supplementation will not cross tenants
+  // Data supplementation stays within the current runtime.
   lob_param.coll_type_ = CS_TYPE_BINARY;
   lob_param.offset_ = 0;
   lob_param.scan_backward_ = false;

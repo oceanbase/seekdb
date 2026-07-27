@@ -22,7 +22,6 @@
 #include "sql/optimizer/ob_log_group_by.h"
 #include "sql/optimizer/ob_log_sort.h"
 #include "sql/optimizer/ob_log_limit.h"
-#include "sql/optimizer/ob_log_sequence.h"
 #include "sql/optimizer/ob_log_join_filter.h"
 #include "sql/optimizer/ob_log_exchange.h"
 #include "sql/optimizer/ob_log_for_update.h"
@@ -50,7 +49,6 @@
 #include "sql/optimizer/ob_log_group_by.h"
 #include "sql/optimizer/ob_log_sort.h"
 #include "sql/optimizer/ob_log_limit.h"
-#include "sql/optimizer/ob_log_sequence.h"
 #include "sql/optimizer/ob_log_join_filter.h"
 #include "sql/optimizer/ob_log_exchange.h"
 #include "sql/optimizer/ob_log_for_update.h"
@@ -101,7 +99,6 @@
 #include "sql/code_generator/ob_static_engine_cg.h"
 #include "sql/engine/basic/ob_monitoring_dump_op.h"
 #include "sql/engine/join/ob_join_filter_op.h"
-#include "sql/engine/sequence/ob_sequence_op.h"
 #include "sql/engine/px/exchange/ob_px_ms_receive_op.h"
 #include "sql/engine/px/exchange/ob_px_dist_transmit_op.h"
 #include "sql/engine/px/exchange/ob_px_repart_transmit_op.h"
@@ -116,8 +113,6 @@
 #include "sql/engine/table/ob_table_row_store_op.h"
 #include "sql/engine/table/ob_row_sample_scan_op.h"
 #include "sql/engine/table/ob_block_sample_scan_op.h"
-#include "sql/executor/ob_direct_receive_op.h"
-#include "sql/executor/ob_direct_transmit_op.h"
 #include "sql/engine/pdml/static/ob_px_multi_part_delete_op.h"
 #include "sql/engine/pdml/static/ob_px_multi_part_update_op.h"
 #include "sql/engine/basic/ob_temp_table_insert_op.h"
@@ -330,8 +325,6 @@ ObOperatorFactory::AllocFun *ObOperatorFactory::G_ALL_ALLOC_FUNS_ = G_ALLOC_FUNC
 
 static bool G_VECTORIZED_OP_ARRAY[PHY_END];
 bool *ObOperatorFactory::G_VECTORIZED_OP_ARRAY_ = G_VECTORIZED_OP_ARRAY;
-static uint64_t G_OB_VERSION_ARRAY[PHY_END];
-uint64_t *ObOperatorFactory::G_OB_VERSION_ARRAY_ = G_OB_VERSION_ARRAY;
 
 template <int N>
 struct InitAllocFunc
@@ -348,7 +341,6 @@ struct InitAllocFunc
     };
 
     G_VECTORIZED_OP_ARRAY[N] = op_reg::ObOpTypeTraits<N>::vectorized_;
-    G_OB_VERSION_ARRAY[N] = op_reg::ObOpTypeTraits<N>::ob_version_;
   }
 };
 

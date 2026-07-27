@@ -26,7 +26,7 @@ namespace oceanbase {
 namespace sql {
 namespace dtl {
 
-OB_SERIALIZE_MEMBER(ObDtlDfoKey, server_id_, px_sequence_id_, qc_id_, dfo_id_);
+OB_SERIALIZE_MEMBER(ObDtlDfoKey, px_sequence_id_, qc_id_, dfo_id_);
 
 OB_SERIALIZE_MEMBER(ObDtlBatchInfo, batch_id_, start_, end_, rows_);
 

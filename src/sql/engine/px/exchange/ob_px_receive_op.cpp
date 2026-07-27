@@ -197,7 +197,6 @@ int ObPxReceiveOp::init_channel(
   } else if (OB_FAIL(link_ch_sets(task_ch_set, task_channels, &dfc_))) {
     LOG_WARN("Fail to link data channel", K(ret));
   } else {
-    uint64_t min_cluster_version = ctx_.get_physical_plan_ctx()->get_phy_plan()->get_min_cluster_version();
     bool enable_audit = true;
     metric_.init(enable_audit);
     common::ObIArray<dtl::ObDtlChannel*> &channels = task_channels;
@@ -220,13 +219,12 @@ int ObPxReceiveOp::init_channel(
         ch->set_audit(enable_audit);
         ch->set_interm_result(use_interm_result);
         ch->set_enable_channel_sync(true);
-        ch->set_send_by_tenant(true);
         ch->set_ignore_error(recv_input.is_ignore_vtable_error());
         ch->set_batch_id(batch_id);
         ch->set_operator_owner();
         ch->set_thread_id(thread_id);
       }
-      LOG_TRACE("Receive channel",KP(ch->get_id()), K(ch->get_peer()));
+      LOG_TRACE("receive channel", KP(ch->get_id()));
     }
     LOG_TRACE("Get receive channel ok",
               "task_id", recv_input.get_task_id(),
@@ -283,12 +281,8 @@ int ObPxReceiveOp::link_ch_sets(ObPxTaskChSet &ch_set,
 #endif
         if (OB_FAIL(ch_set.get_channel_info(idx, ci))) {
           LOG_WARN("fail get channel info", K(idx), K(ret));
-        } else if (OB_UNLIKELY(ci.type_ != DTL_CT_LOCAL)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("only local dtl channel is supported", K(ret), K(ci.type_));
         } else {
-          // single-replica: only local (in-process) channels are supported.
-          ch = new((char*)buf + offset) ObDtlLocalChannel(ci.chid_, ci.peer_, hash_val, dtl::ObDtlChannel::DtlChannelType::LOCAL_CHANNEL);
+          ch = new((char*)buf + offset) ObDtlLocalChannel(ci.chid_, hash_val);
         }
         if (OB_FAIL(ret)) {
         } else if (nullptr == ch) {

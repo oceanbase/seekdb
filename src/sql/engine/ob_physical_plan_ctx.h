@@ -25,7 +25,6 @@
 #include "lib/container/ob_fixed_array.h"
 #include "lib/container/ob_2d_array.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
-#include "sql/engine/user_defined_function/ob_udf_ctx_mgr.h"
 #include "sql/engine/expr/ob_expr.h"
 #include "common/udt/ob_udt_type.h"
 #include "common/enumset/ob_enum_set_meta.h"
@@ -40,7 +39,6 @@ class ObResultSet;
 class ObSQLSessionInfo;
 class ObPhysicalPlan;
 class ObExecContext;
-class ObUdfCtxMgr;
 struct ObPxDmlRowInfo;
 
 struct PartParamIdxArray
@@ -56,30 +54,6 @@ struct PartParamIdxArray
 };
 typedef common::ObFixedArray<PartParamIdxArray, common::ObIAllocator> BatchParamIdxArray;
 typedef common::ObFixedArray<ObImplicitCursorInfo, common::ObIAllocator> ImplicitCursorInfoArray;
-
-struct ObRemoteSqlInfo
-{
-  ObRemoteSqlInfo() :
-    use_ps_(false),
-    is_batched_stmt_(false),
-    is_original_ps_mode_(false),
-    ps_param_cnt_(0),
-    remote_sql_(),
-    ps_params_(nullptr),
-    sql_from_pl_(false)
-  {
-  }
-
-  DECLARE_TO_STRING;
-
-  bool use_ps_;
-  bool is_batched_stmt_;
-  bool is_original_ps_mode_;
-  int32_t ps_param_cnt_;
-  common::ObString remote_sql_;
-  ParamStore *ps_params_;
-  bool sql_from_pl_;
-};
 
 /* refer to a group of array params
  * values clause using now
@@ -112,11 +86,8 @@ public:
     all_local_session_vars_.destroy();
   }
   
-  inline void set_show_seed(bool show_seed) { is_show_seed_ = show_seed; }
-  
-  inline bool get_show_seed() const { return is_show_seed_; }
-  inline void set_tenant_schema_version(const int64_t version) { tenant_schema_version_ = version; }
-  inline int64_t get_tenant_schema_version() const { return tenant_schema_version_; }
+  inline void set_runtime_schema_version(const int64_t version) { runtime_schema_version_ = version; }
+  inline int64_t get_runtime_schema_version() const { return runtime_schema_version_; }
   /**
    * @brief: set the timestamp when the execution of this plan should time out
    * @param: ts_timeout_us [in] the microseconds timeout
@@ -188,7 +159,6 @@ public:
     }
     return bool_ret;
   }
-  void restore_param_store(const int64_t param_count);
   // param store
   int reserve_param_space(int64_t param_count);
   const ParamStore &get_param_store() const { return param_store_; }
@@ -213,7 +183,6 @@ public:
     original_param_cnt_ = 0;
     param_frame_capacity_ = 0;
   }
-  ObRemoteSqlInfo &get_remote_sql_info() { return remote_sql_info_; }
   bool is_terminate(int &ret) const;
   void set_cur_time(const int64_t &session_val)
   {
@@ -224,15 +193,6 @@ public:
   common::ObObj &get_cur_time() { return cur_time_; }
   int64_t get_cur_time_tardy_value() const { return cur_time_.get_datetime() + DELTA_TARDY_TIME_US; }
   bool has_cur_time() const { return common::ObTimestampType == cur_time_.get_type(); }
-  void set_merging_frozen_time(const common::ObPreciseDateTime &val)
-  {
-    merging_frozen_time_.set_timestamp(val);
-  }
-  const common::ObObj &get_merging_frozen_time() const { return merging_frozen_time_; }
-  bool has_merging_frozen_time() const
-  {
-    return common::ObTimestampType == merging_frozen_time_.get_type();
-  }
   int64_t get_warning_count() const
   {
     return warning_count_;
@@ -430,14 +390,10 @@ public:
   inline void set_bind_array_count(int64_t bind_array_count) { bind_array_count_ = bind_array_count; }
   inline int64_t get_bind_array_count() const { return bind_array_count_; }
 
-  // current index for array binding parameters.
-  // CAUTION: this index only used in static typing engine's operators && expressions,
-  // the old engine get it from ObExprCtx::cur_array_index_
+  // Current index for array binding parameters used by operators and expressions.
   void set_bind_array_idx(const int64_t idx) { bind_array_idx_ = idx; }
   int64_t get_bind_array_idx() const { return bind_array_idx_; }
   void inc_bind_array_idx() { bind_array_idx_++; }
-  // To be compatible with versions 221 and earlier, when the new version sends a request to the old version, it also needs to include worker_count
-  void set_worker_count(int64_t worker_count) { unsed_worker_count_since_222rel_ = worker_count; }
   inline void set_exec_ctx(const ObExecContext *exec_ctx) { exec_ctx_ = exec_ctx; }
   void set_error_ignored(bool ignored) { is_error_ignored_ = ignored; }
   bool is_error_ignored() const { return is_error_ignored_; }
@@ -450,7 +406,7 @@ public:
   inline bool is_affect_found_row() const { return is_affect_found_row_; }
   inline void set_is_affect_found_row(bool is_affect_found_row) { is_affect_found_row_ = is_affect_found_row; }
   int sync_last_value_local();
-  int sync_last_value_global();
+  int sync_last_value_to_store();
   int set_row_matched_count(int64_t row_count);
   inline void add_row_matched_count(int64_t row_count) { row_matched_count_ += row_count; }
   int64_t get_row_matched_count() const { return row_matched_count_; }
@@ -486,7 +442,7 @@ public:
   int64_t get_cur_stmt_id() const { return cur_stmt_id_; }
   int switch_implicit_cursor();
   void add_px_dml_row_info(const ObPxDmlRowInfo &dml_row_info);
-  TO_STRING_KV(K_(tenant_schema_version));
+  TO_STRING_KV(K_(runtime_schema_version));
   void set_field_array(const common::ObIArray<common::ObField> *field_array) { field_array_ = field_array; }
   const common::ObIArray<common::ObField> *get_field_array() { return field_array_;}
   void set_is_ps_protocol(const bool is_ps_protocol) { is_ps_protocol_ = is_ps_protocol; }
@@ -534,8 +490,6 @@ public:
   ObIArray<ObArrayParamGroup> &get_array_param_groups() { return array_param_groups_; }
   int set_all_local_session_vars(ObIArray<ObLocalSessionVar> &all_local_session_vars);
   int get_local_session_vars(int64_t idx, const ObSolidifiedVarsContext *&local_vars);
-  inline void set_enable_adaptive_pc(bool v) { enable_adaptive_pc_ = v; }
-  inline bool enable_adaptive_pc() const { return enable_adaptive_pc_; }
   bool is_param_datum_frame_inited() const { return param_frame_ptrs_.count() > 0; }
 private:
   int init_param_store_after_deserialize();
@@ -567,7 +521,6 @@ private:
   int64_t tsc_snapshot_timestamp_;
   // only used when the sql contains fun like current_time
   common::ObObj cur_time_;//used for session
-  common::ObObj merging_frozen_time_;
   // execution timeout for this round of execution
   int64_t ts_timeout_us_;
   common::ObConsistencyLevel consistency_level_;
@@ -587,25 +540,21 @@ private:
   ObSQLMode sql_mode_;
   common::ObFixedArray<share::AutoincParam, common::ObIAllocator> autoinc_params_;
   share::ObTabletAutoincParam tablet_autoinc_param_;
-  // from session to remote; last_insert_id in session;
+  // Copied from the session into the physical-plan execution context.
   uint64_t last_insert_id_session_;
-  // only for serialize expr_op_size_ in ObExecContext, which is still using old serialize macro,
-  // so we can't add any member in its serialize func because of compat problem.
-  // fortunately, there is no compat problem for ObPhysicalPlanCtx.
+  // Expression-context capacity carried with the physical plan execution state.
   int64_t expr_op_size_;
   bool is_ignore_stmt_;
   int64_t bind_array_count_;
-  // current index for array binding parameters.
-  // CAUTION: this index only used in static typing engine's operators && expressions,
-  // the old engine get it from ObExprCtx::cur_array_index_
+  // Current index for array binding parameters used by operators and expressions.
   int64_t bind_array_idx_;
-  // To distinguish between the tenant_schema_version of ordinary tenant system tables and user tables, two layers of defensive checks will be performed on the system tables when assigning values.
-  // In the SQL layer, if the involved tables contain system tables, tenant_schema_version will be set to OB_INVALID_VERSION to prevent incorrect comparisons at lower layers.
-  // In the storage layer, if table_id is a system table, the check for tenant_schema_version will be skipped, and the original method will still be used to obtain the table schema version (see ObRelativeTables::check_schema_version)
-  int64_t tenant_schema_version_;
+  // System and user tables use different schema-version checks. When a statement
+  // contains system tables, SQL leaves this value invalid so storage falls back
+  // to the table-level check (see ObRelativeTables::check_schema_version).
+  int64_t runtime_schema_version_;
   int64_t orig_question_mark_cnt_;
   common::ObCurTraceId::TraceId last_trace_id_;
-  int64_t tenant_srs_version_;
+  int64_t srs_version_;
   ObSEArray<ObArrayParamGroup, 2> array_param_groups_;
 
 private:
@@ -643,7 +592,6 @@ private:
   bool is_select_into_;
   bool is_result_accurate_;
   bool foreign_key_checks_;
-  int64_t unsed_worker_count_since_222rel_; // Record to each QC operator
   const ObExecContext *exec_ctx_;
   ObTableScanStat table_scan_stat_;
   common::ObFixedArray<ObTableRowCount, common::ObIAllocator> table_row_count_list_; // (table_id, table_row_count) pairs
@@ -658,8 +606,6 @@ private:
   int64_t cur_stmt_id_;
 
   bool is_or_expand_transformed_;
-  bool is_show_seed_;
-
   /*
   ** This variable is used for performance optimization of multi_dml, for the multi_dml plan,
   ** serialization accounts for a large proportion, analysis of the flame graph found that the ParamStore structure occupies the largest portion (mainly insert), but for
@@ -667,7 +613,6 @@ private:
   */
   bool is_multi_dml_;
 
-  ObRemoteSqlInfo remote_sql_info_;
   //used for expr output pack, do encode according to its field
   const common::ObIArray<ObField> *field_array_;
   //used for expr output pack, do binary encode or text encode
@@ -681,7 +626,6 @@ private:
   int64_t total_memstore_read_row_count_;
   int64_t total_ssstore_read_row_count_;
   bool check_pdml_affected_rows_; // now only worked for pdml checking affected_rows
-  bool enable_adaptive_pc_;
 };
 
 }

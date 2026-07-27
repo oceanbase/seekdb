@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_DTL
 #include "ob_dtl_interm_result_manager.h"
-#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind a transitive include(free within sql)
+#include "observer/omt/ob_server_runtime_controller.h"  // previously hidden behind a transitive include(free within sql)
 #include "share/rc/ob_module_provider.h"
 #include "observer/virtual_table/ob_all_virtual_dtl_interm_result_monitor.h"
 
@@ -41,7 +41,7 @@ int ObDTLIntermResultGC::operator() (common::hash::HashMapPair<ObDTLIntermResult
   //   to return immediately, yet for all the existing logics there, they don't care the return
   //   code and wants to continue iteration anyway. So to keep the old behavior and makes everyone
   //   else happy, we have to return OB_SUCCESS here. And we only make this return code thing
-  //   affects the behavior in tenant meta manager washing tablet. If you want to change the
+  //   affects tablet metadata eviction. If you want to change the
   //   behavior in such places, please consult the individual file owners to fully understand the
   //   needs there.
   return common::OB_SUCCESS;
@@ -143,7 +143,7 @@ int ObDTLIntermResultManager::init()
                                  interm_res_hash_buck_attr, interm_res_hash_buck_attr))) {
     LOG_WARN("create interm_res hash table failed", K(ret));
   } else if (OB_FAIL(mem_profile_map_.create(
-                        static_cast<int64_t>(MTL_CPU_COUNT() * cpu_quota_concurrency * 2),
+                        static_cast<int64_t>(share::server_cpu_count() * cpu_quota_concurrency * 2),
                         mem_profile_hash_buck_attr, mem_profile_hash_buck_attr))) {
     LOG_WARN("create mem_profile hash table failed", K(ret));
   } else {
@@ -152,7 +152,7 @@ int ObDTLIntermResultManager::init()
   return ret;
 }
 
-int ObDTLIntermResultManager::mtl_init(ObDTLIntermResultManager *&dtl_interm_result_manager)
+int ObDTLIntermResultManager::server_module_init(ObDTLIntermResultManager *&dtl_interm_result_manager)
 {
   return dtl_interm_result_manager->init();
 }
@@ -160,7 +160,7 @@ int ObDTLIntermResultManager::mtl_init(ObDTLIntermResultManager *&dtl_interm_res
 void ObDTLIntermResultManager::destroy()
 {
   if (IS_INIT) {
-    erase_tenant_interm_result_info();
+    erase_all_interm_result_info();
     interm_res_map_.destroy();
     // In theory, mem_profile_map_ should be empty at this point.
     // This is defensive programming.
@@ -203,7 +203,7 @@ int ObDTLIntermResultManager::clear_mem_profile_map()
   return ret;
 }
 
-void ObDTLIntermResultManager::mtl_destroy(ObDTLIntermResultManager *&dtl_interm_result_manager)
+void ObDTLIntermResultManager::server_module_destroy(ObDTLIntermResultManager *&dtl_interm_result_manager)
 {
   if (nullptr != dtl_interm_result_manager) {
     ob_delete(dtl_interm_result_manager);
@@ -268,7 +268,7 @@ int ObDTLIntermResultManager::insert_interm_result_info(ObDTLIntermResultKey &ke
     // The code here is mainly for the use of the temp_table.
     // For the px module,
     // the dir_id has already been set in the previous access_mem_profile.
-    if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.alloc_dir(dir_id_))) {
+    if (OB_FAIL(SERVER_TMP_FILE_MANAGER.alloc_dir(dir_id_))) {
       LOG_WARN("allocate file directory failed", K(ret));
     } else {
       DTL_IR_STORE_DO(*result_info, set_dir_id, dir_id_);
@@ -427,7 +427,7 @@ int ObDTLIntermResultManager::generate_monitor_info_rows(
   return ret;
 }
 
-int ObDTLIntermResultManager::erase_tenant_interm_result_info()
+int ObDTLIntermResultManager::erase_all_interm_result_info()
 {
   int ret = OB_SUCCESS;
   IntermResMap::bucket_iterator bucket_it = interm_res_map_.bucket_begin();
@@ -449,7 +449,7 @@ int ObDTLIntermResultManager::erase_tenant_interm_result_info()
     ++bucket_it;
   }
   if (OB_SUCC(ret)) {
-    LOG_INFO("erase_tenant_interm_result_info", K(interm_res_map_.size()));
+    LOG_INFO("erased all intermediate result info", K(interm_res_map_.size()));
   }
   return ret;
 }
@@ -646,7 +646,7 @@ void ObDTLIntermResultInfoGuard::reset()
   }
 }
 
-int ObDTLIntermResultManager::mtl_start(ObDTLIntermResultManager *&dtl_interm_result_manager)
+int ObDTLIntermResultManager::server_module_start(ObDTLIntermResultManager *&dtl_interm_result_manager)
 {
   int ret = OB_SUCCESS;
   if (OB_LIKELY(nullptr != dtl_interm_result_manager)) {
@@ -663,7 +663,7 @@ int ObDTLIntermResultManager::mtl_start(ObDTLIntermResultManager *&dtl_interm_re
   return ret;
 }
 
-void ObDTLIntermResultManager::mtl_stop(ObDTLIntermResultManager *&dtl_interm_result_manager)
+void ObDTLIntermResultManager::server_module_stop(ObDTLIntermResultManager *&dtl_interm_result_manager)
 {
   if (OB_LIKELY(nullptr != dtl_interm_result_manager) &&
       dtl_interm_result_manager->get_gc_task().is_start_) {
@@ -671,7 +671,7 @@ void ObDTLIntermResultManager::mtl_stop(ObDTLIntermResultManager *&dtl_interm_re
   }
 }
 
-void ObDTLIntermResultManager::mtl_wait(ObDTLIntermResultManager *&dtl_interm_result_manager)
+void ObDTLIntermResultManager::server_module_wait(ObDTLIntermResultManager *&dtl_interm_result_manager)
 {
   if (OB_LIKELY(nullptr != dtl_interm_result_manager &&
       dtl_interm_result_manager->get_gc_task().is_start_)) {
