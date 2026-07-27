@@ -138,7 +138,6 @@ ObSQLSessionInfo::ObSQLSessionInfo() :
       pl_query_sender_(NULL),
       pl_ps_protocol_(false),
       inner_conn_(NULL),
-      inner_sql_client_key_(0),
       enable_role_array_(),
       in_definer_named_proc_(false),
       priv_user_id_(OB_INVALID_ID),
@@ -256,7 +255,6 @@ void ObSQLSessionInfo::reset(bool skip_sys_var)
       pl_cursor_cache_.reset();
     }
     inner_conn_ = NULL;
-    set_inner_sql_client_key(0);
     session_stat_.reset();
     cached_schema_guard_info_.reset();
     enable_role_array_.reset();

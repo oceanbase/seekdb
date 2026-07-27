@@ -133,7 +133,6 @@ public:
   virtual ~ObInnerSQLConnection();
 
   static int create_connection_with_owned_session(
-      common::ObISQLClient *client_addr,
       const bool use_static_engine,
       const int32_t group_id,
       ObInnerSQLConnection *&conn);
@@ -144,19 +143,16 @@ public:
       sql::ObSQLSessionInfo *session_info,
       ObInnerSQLConnection *&conn);
   static int create_for_proxy(
-      common::ObISQLClient *client_addr,
       bool is_ddl,
       int32_t group_id,
       common::sqlclient::ObISQLConnection *&conn);
   static int release_for_proxy(
       common::sqlclient::ObISQLConnection *conn,
       bool success);
-  static int on_client_inactive(common::ObISQLClient *client_addr);
 
   int init(sql::ObSql *ob_sql,
            ObVTIterCreator *vt_iter_creator,
            sql::ObSQLSessionInfo *extern_session = NULL,
-           common::ObISQLClient *client_addr = NULL,
            ObRestoreSQLModifier *sql_modifer = NULL,
            const bool use_static_engine = false,
            const int32_t group_id = 0);
@@ -348,7 +344,6 @@ private:
   int destroy_inner_session();
   static int create_impl(
                     sql::ObSQLSessionInfo *extern_session,
-                    common::ObISQLClient *client_addr,
                     const bool use_static_engine,
                     const int32_t group_id,
                     const bool use_spi_allocator,

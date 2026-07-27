@@ -298,10 +298,9 @@ int ObPLPackageManager::read_and_exec_package_sql(ObMySQLProxy &sql_proxy,
                                                   ObCharStream &stream)
 {
   int ret = OB_SUCCESS;
-  if (!sql_proxy.is_inited() || !sql_proxy.is_active()) {
+  if (!sql_proxy.is_inited()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("sql_proxy not inited or not active", "sql_proxy inited",
-             sql_proxy.is_inited(), "sql_proxy active", sql_proxy.is_active(), K(ret));
+    LOG_WARN("sql_proxy not inited", K(ret));
   } else {
     int64_t affected_rows = 0;
     if (OB_FAIL(stream.open())) {
@@ -913,18 +912,13 @@ int ObPLPackageManager::set_package_var_val(const ObPLResolveCtx &resolve_ctx,
   }
   OZ (package_state->set_package_var_val(var_idx, var_val));
   OX (need_free_old = true);
-  if (OB_NOT_NULL(var) && var->get_type().is_cursor_type() && !var->get_type().is_cursor_var()) {
-    // package ref cursor variable, refrence outside, do not destruct old var val.
-  } else {
-    if (need_free_old) {
-      if (var_val.is_null() &&
-          old_var_val.is_pl_extend() &&
-          var->get_type().get_type() != PL_CURSOR_TYPE &&
-          var->get_type().get_type() != PL_REF_CURSOR_TYPE) {
-        // do nothing
-      } else {
-        ObUserDefinedType::destruct_objparam(package_state->get_pkg_allocator(), old_var_val, &(resolve_ctx.session_info_));
-      }
+  if (need_free_old) {
+    if (var_val.is_null() &&
+        old_var_val.is_pl_extend() &&
+        var->get_type().get_type() != PL_CURSOR_TYPE) {
+      // do nothing
+    } else {
+      ObUserDefinedType::destruct_objparam(package_state->get_pkg_allocator(), old_var_val, &(resolve_ctx.session_info_));
     }
   }
   OX (resolve_ctx.session_info_.set_pl_can_retry(false));
@@ -1319,7 +1313,7 @@ int ObPLPackageManager::get_package_item_state(const ObPLResolveCtx &resolve_ctx
       LOG_WARN("memory allocate failed", K(ret));
     } else {
       new (package_state)
-        ObPLPackageState(package_id, state_version, package.get_serially_reusable());
+        ObPLPackageState(package_id, state_version);
       ExecCtxBak exec_ctx_bak;
       sql::ObExecEnv exec_env_bak;
       ObArenaAllocator tmp_allocator;
@@ -1351,7 +1345,7 @@ int ObPLPackageManager::get_package_item_state(const ObPLResolveCtx &resolve_ctx
             package_state->reset(&(resolve_ctx.session_info_));
             package_state->~ObPLPackageState();
             new (package_state)
-              ObPLPackageState(package_id, state_version, package.get_serially_reusable());
+              ObPLPackageState(package_id, state_version);
             LOG_WARN("failed to del package state", K(ret), K(package_id), K(tmp_ret));
           } else {
             // Deletion successful will release memory
@@ -1414,7 +1408,7 @@ int ObPLPackageManager::get_package_state(const ObPLResolveCtx &resolve_ctx,
       ObPackageStateVersion state_version(package_spec->get_version(), NULL==package_body?OB_INVALID_VERSION:package_body->get_version());
       ObPLPackageState *package_spec_state = NULL;
       ObPLPackageState *package_body_state = NULL;
-      state_version.set_merge_version_and_public_syn_cnt(*package_spec, package_body);
+      state_version.set_merge_versions(*package_spec, package_body);
       if (OB_FAIL(get_package_item_state(resolve_ctx, exec_ctx, *package_spec, state_version, package_spec_state, package_body))) {
         LOG_WARN("get pacakge spec state failed", K(ret));
       } else if (OB_ISNULL(package_spec_state)) {
@@ -1464,8 +1458,6 @@ int ObPLPackageManager::add_package_to_plan_cache(const ObPLResolveCtx &resolve_
       pc_ctx.key_.namespace_ = ObLibCacheNameSpace::NS_PKG;
       pc_ctx.key_.db_id_ = database_id;
       pc_ctx.key_.key_id_ = package_id;
-      pc_ctx.key_.mode_ = resolve_ctx.session_info_.get_pl_profiler() != nullptr
-                          ? ObPLObjectKey::ObjectMode::PROFILE : ObPLObjectKey::ObjectMode::NORMAL;
       ObString sql;
       if (OB_FAIL(ObPLCacheCtx::assemble_format_routine_name (sql, package))) {
         LOG_WARN("Failed to asseble format routine name!", K(ret));
@@ -1523,8 +1515,6 @@ int ObPLPackageManager::get_package_from_plan_cache(const ObPLResolveCtx &resolv
       pc_ctx.key_.namespace_ = ObLibCacheNameSpace::NS_PKG;
       pc_ctx.key_.db_id_ = database_id;
       pc_ctx.key_.key_id_ = package_id;
-      pc_ctx.key_.mode_ = resolve_ctx.session_info_.get_pl_profiler() != nullptr
-                          ? ObPLObjectKey::ObjectMode::PROFILE : ObPLObjectKey::ObjectMode::NORMAL;
 
       // get package from plan cache
       ObCacheObjGuard* cacheobj_guard = NULL;

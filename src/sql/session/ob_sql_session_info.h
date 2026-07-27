@@ -575,14 +575,6 @@ public:
   {
     inner_conn_ = inner_conn;
   }
-  inline uint64_t get_inner_sql_client_key() const
-  {
-    return ATOMIC_LOAD(&inner_sql_client_key_);
-  }
-  inline void set_inner_sql_client_key(const uint64_t client_key)
-  {
-    ATOMIC_STORE(&inner_sql_client_key_, client_key);
-  }
 
   // show trace
 
@@ -948,7 +940,6 @@ private:
   bool pl_ps_protocol_; // send query result use this protocol
 
   void *inner_conn_;  // ObInnerSQLConnection * will cause .h included from each other.
-  uint64_t inner_sql_client_key_;
 
   ObSessionStat session_stat_;
 

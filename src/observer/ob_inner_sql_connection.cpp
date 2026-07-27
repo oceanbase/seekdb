@@ -147,12 +147,11 @@ ObInnerSQLConnection::~ObInnerSQLConnection()
 }
 
 int ObInnerSQLConnection::create_connection_with_owned_session(
-    ObISQLClient *client_addr,
     const bool use_static_engine,
     const int32_t group_id,
     ObInnerSQLConnection *&conn)
 {
-  return create_impl(NULL, client_addr, use_static_engine, group_id,
+  return create_impl(NULL, use_static_engine, group_id,
                      false, conn);
 }
 
@@ -165,7 +164,7 @@ int ObInnerSQLConnection::create_connection_with_external_session(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("session is null", K(ret));
   } else {
-    ret = create_impl(session_info, NULL, false, 0, false, conn);
+    ret = create_impl(session_info, false, 0, false, conn);
   }
   return ret;
 }
@@ -179,13 +178,12 @@ int ObInnerSQLConnection::create_spi_connection_with_external_session(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("session is null", K(ret));
   } else {
-    ret = create_impl(session_info, NULL, true, 0, true, conn);
+    ret = create_impl(session_info, true, 0, true, conn);
   }
   return ret;
 }
 
 int ObInnerSQLConnection::create_for_proxy(
-    ObISQLClient *client_addr,
     bool is_ddl,
     int32_t group_id,
     common::sqlclient::ObISQLConnection *&conn)
@@ -194,7 +192,7 @@ int ObInnerSQLConnection::create_for_proxy(
   ObInnerSQLConnection *inner_conn = NULL;
   conn = NULL;
   if (OB_FAIL(create_connection_with_owned_session(
-          client_addr, is_ddl, group_id, inner_conn))) {
+          is_ddl, group_id, inner_conn))) {
     LOG_WARN("create inner sql connection failed", K(ret));
   } else {
     conn = inner_conn;
@@ -214,27 +212,8 @@ int ObInnerSQLConnection::release_for_proxy(
   return ret;
 }
 
-int ObInnerSQLConnection::on_client_inactive(ObISQLClient *client_addr)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(client_addr)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("client is null", K(ret));
-  } else if (OB_ISNULL(GCTX.session_mgr_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session mgr is null", K(ret));
-  } else if (OB_FAIL(
-                 GCTX.session_mgr_->kill_inner_sessions_by_client_key(
-                     reinterpret_cast<uint64_t>(client_addr)))) {
-    LOG_WARN("failed to kill inner sql queries by client", K(ret),
-             KP(client_addr));
-  }
-  return ret;
-}
-
 int ObInnerSQLConnection::create_impl(
     ObSQLSessionInfo *extern_session,
-    ObISQLClient *client_addr,
     const bool use_static_engine,
     const int32_t group_id,
     const bool use_spi_allocator,
@@ -267,7 +246,6 @@ int ObInnerSQLConnection::create_impl(
   if (OB_SUCC(ret) && OB_FAIL(new_conn->init(GCTX.sql_engine_,
                                               GCTX.vt_iter_creator_,
                                               extern_session,
-                                              client_addr,
                                               NULL,
                                               use_static_engine,
                                               group_id))) {
@@ -291,7 +269,6 @@ int ObInnerSQLConnection::create_impl(
 int ObInnerSQLConnection::init(ObSql *ob_sql,
                                ObVTIterCreator *vt_iter_creator,
                                sql::ObSQLSessionInfo *extern_session, /* = NULL */
-                               ObISQLClient *client_addr, /* = NULL */
                                ObRestoreSQLModifier *sql_modifier /* = NULL */,
                                const bool use_static_engine /* = false */,
                                const int32_t group_id /* = 0 */)
@@ -321,10 +298,6 @@ int ObInnerSQLConnection::init(ObSql *ob_sql,
         LOG_WARN("Failed to destroy inner session when the session initialization failed, which may result in a session leak.", K(tmp_ret), K(ret));
       }
     } else {
-      if (OB_NOT_NULL(client_addr) && is_inner_session()) {
-        inner_session_->set_inner_sql_client_key(
-            reinterpret_cast<uint64_t>(client_addr));
-      }
       group_id_ = group_id;
       inited_ = true;
     }

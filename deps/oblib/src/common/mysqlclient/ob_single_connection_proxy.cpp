@@ -43,19 +43,11 @@ int ObSingleConnectionProxy::connect(const int32_t group_id, ObISQLClient *sql_c
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("transaction can only be started once", K_(sql_client), K_(conn));
   } else {
-    if (OB_FAIL(sql_client->acquire_connection(conn_, sql_client, group_id))) {
+    if (OB_FAIL(sql_client->acquire_connection(conn_, group_id))) {
       LOG_WARN("acquire connection failed", K(ret), K(sql_client));
     } else if (NULL == conn_) {
       ret = OB_INNER_STAT_ERROR;
       LOG_WARN("connection can not be NULL", K(ret));
-    } else if (!sql_client->is_active()) { // check client active after connection acquired
-      ret = OB_INACTIVE_SQL_CLIENT;
-      LOG_WARN("inactive sql client", K(ret));
-      int tmp_ret = sql_client->release_connection(conn_, OB_SUCCESS == ret);
-      if (OB_SUCCESS != tmp_ret) {
-        LOG_WARN("release connection failed", K(tmp_ret));
-      }
-      conn_ = NULL;
     } else {
       sql_client_ = sql_client;
     }
@@ -69,7 +61,6 @@ int ObSingleConnectionProxy::connect(const int32_t group_id, ObISQLClient *sql_c
 
 int ObSingleConnectionProxy::acquire_connection(
     ObISQLConnection *&conn,
-    ObISQLClient *client_addr,
     const int32_t group_id)
 {
   int ret = OB_SUCCESS;
@@ -77,7 +68,7 @@ int ObSingleConnectionProxy::acquire_connection(
     ret = OB_NOT_INIT;
     LOG_WARN("sql client is null", K(ret));
   } else {
-    ret = sql_client_->acquire_connection(conn, client_addr, group_id);
+    ret = sql_client_->acquire_connection(conn, group_id);
   }
   return ret;
 }
@@ -92,15 +83,6 @@ int ObSingleConnectionProxy::release_connection(
     LOG_WARN("sql client is null", K(ret));
   } else {
     ret = sql_client_->release_connection(conn, success);
-  }
-  return ret;
-}
-
-int ObSingleConnectionProxy::on_client_inactive(ObISQLClient *client_addr)
-{
-  int ret = OB_SUCCESS;
-  if (OB_NOT_NULL(sql_client_)) {
-    ret = sql_client_->on_client_inactive(client_addr);
   }
   return ret;
 }
@@ -138,9 +120,6 @@ int ObSingleConnectionProxy::write(
   } else if (NULL == sql_client_) {
     ret = OB_INACTIVE_SQL_CLIENT;
     LOG_WARN("sql_client_ is NULL", K(ret), KCSTRING(sql));
-  } else if (!sql_client_->is_active()) {
-    ret = OB_INACTIVE_SQL_CLIENT;
-    LOG_WARN("inactive sql client can't execute write sql", K(ret), KCSTRING(sql));
   } else if (OB_FAIL(conn_->execute_write(sql, affected_rows))) {
     errno_ = ret;
     LOG_WARN("execute sql failed", K(ret), KCSTRING(sql), K_(conn));

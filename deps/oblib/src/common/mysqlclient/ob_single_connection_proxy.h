@@ -47,11 +47,9 @@ public:
   int connect(const int32_t group_id, ObISQLClient *sql_client);
   virtual sqlclient::ObISQLConnection *get_connection() override { return conn_; }
   virtual int acquire_connection(sqlclient::ObISQLConnection *&conn,
-                                 ObISQLClient *client_addr,
                                  const int32_t group_id) override;
   virtual int release_connection(sqlclient::ObISQLConnection *conn,
                                  const bool success) override;
-  virtual int on_client_inactive(ObISQLClient *client_addr) override;
 
   // in some situation, it allows continuation of SQL execution after failure in transaction,
   // and last_error should be reset.

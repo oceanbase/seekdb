@@ -1492,13 +1492,11 @@ int ObServer::init_sql_proxy()
   if (OB_FAIL(sql_proxy_.init(
           ObInnerSQLConnection::create_for_proxy,
           ObInnerSQLConnection::release_for_proxy,
-          ObInnerSQLConnection::on_client_inactive,
           false /* is_ddl */))) {
     LOG_ERROR("init sql proxy failed", KR(ret));
   } else if (OB_FAIL(ddl_sql_proxy_.init(
                  ObInnerSQLConnection::create_for_proxy,
                  ObInnerSQLConnection::release_for_proxy,
-                 ObInnerSQLConnection::on_client_inactive,
                  true /* is_ddl */))) {
     LOG_ERROR("init ddl sql proxy failed", KR(ret));
   }

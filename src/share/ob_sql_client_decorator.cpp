@@ -97,14 +97,13 @@ sqlclient::ObISQLConnection *ObSQLClientRetry::get_connection()
 
 int ObSQLClientRetry::acquire_connection(
     sqlclient::ObISQLConnection *&conn,
-    ObISQLClient *client_addr,
     const int32_t group_id)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(sql_client_)) {
     ret = OB_NOT_INIT;
   } else {
-    ret = sql_client_->acquire_connection(conn, client_addr, group_id);
+    ret = sql_client_->acquire_connection(conn, group_id);
   }
   return ret;
 }
@@ -118,15 +117,6 @@ int ObSQLClientRetry::release_connection(
     ret = OB_NOT_INIT;
   } else {
     ret = sql_client_->release_connection(conn, success);
-  }
-  return ret;
-}
-
-int ObSQLClientRetry::on_client_inactive(ObISQLClient *client_addr)
-{
-  int ret = OB_SUCCESS;
-  if (OB_NOT_NULL(sql_client_)) {
-    ret = sql_client_->on_client_inactive(client_addr);
   }
   return ret;
 }

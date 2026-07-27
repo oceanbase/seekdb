@@ -42,7 +42,7 @@ class ObISQLClient
 public:
   class ReadResult;
 
-  ObISQLClient() : active_(true) {}
+  ObISQLClient() {}
   virtual ~ObISQLClient() {}
 
   // sql string escape
@@ -68,11 +68,9 @@ public:
   virtual sqlclient::ObISQLConnection *get_connection() = 0;
 
   virtual int acquire_connection(sqlclient::ObISQLConnection *&conn,
-                                 ObISQLClient *client_addr,
                                  const int32_t group_id);
   virtual int release_connection(sqlclient::ObISQLConnection *conn,
                                  const bool success);
-  virtual int on_client_inactive(ObISQLClient *client_addr);
 
   class ReadResult
   {
@@ -109,11 +107,6 @@ public:
     bool enable_use_result_; // when true, use mysql_use_result() instead of mysql_store_result()
   };
 
-  bool is_active() const { return active_; }
-  void set_active() { active_ = true; }
-  void set_inactive();
-protected:
-  volatile bool active_;
 };
 
 } // end namespace common

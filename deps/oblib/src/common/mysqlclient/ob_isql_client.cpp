@@ -76,21 +76,11 @@ void ObISQLClient::ReadResult::reuse()
   }
 }
 
-void ObISQLClient::set_inactive()
-{
-  active_ = false;
-  int ret = on_client_inactive(this);
-  if (OB_FAIL(ret)) {
-    COMMON_LOG(WARN, "sql client inactive callback failed", K(ret));
-  }
-}
-
 int ObISQLClient::acquire_connection(
     ObISQLConnection *&conn,
-    ObISQLClient *client_addr,
     const int32_t group_id)
 {
-  UNUSEDx(client_addr, group_id);
+  UNUSED(group_id);
   conn = NULL;
   return OB_NOT_SUPPORTED;
 }
@@ -101,12 +91,6 @@ int ObISQLClient::release_connection(
 {
   UNUSEDx(conn, success);
   return OB_NOT_SUPPORTED;
-}
-
-int ObISQLClient::on_client_inactive(ObISQLClient *client_addr)
-{
-  UNUSED(client_addr);
-  return OB_SUCCESS;
 }
 
 } // end namespace common

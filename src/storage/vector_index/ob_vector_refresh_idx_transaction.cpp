@@ -120,11 +120,6 @@ int ObVectorRefreshIdxTransaction::connect(ObSQLSessionInfo *session_info, ObISQ
     } else if (OB_ISNULL(conn)) {
       ret = OB_INNER_STAT_ERROR;
       LOG_WARN("connection can not be NULL", KR(ret));
-    } else if (!sql_client->is_active()) {
-      ret = OB_INACTIVE_SQL_CLIENT;
-      LOG_WARN("inactive sql client", KR(ret));
-      conn->unref();
-      conn = nullptr;
     } else {
       sql_client_ = sql_client;
       conn_ = conn;
