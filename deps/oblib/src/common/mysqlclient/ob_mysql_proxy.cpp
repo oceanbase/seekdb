@@ -21,12 +21,37 @@
 using namespace oceanbase::common;
 using namespace oceanbase::common::sqlclient;
 
+namespace oceanbase
+{
+namespace common
+{
+
+int OB_WEAK_SYMBOL create_inner_sql_connection_for_proxy(
+    bool is_ddl,
+    int32_t group_id,
+    sqlclient::ObISQLConnection *&conn)
+{
+  UNUSEDx(is_ddl, group_id);
+  conn = NULL;
+  return OB_NOT_SUPPORTED;
+}
+
+int OB_WEAK_SYMBOL release_inner_sql_connection_for_proxy(
+    sqlclient::ObISQLConnection *conn,
+    bool success)
+{
+  UNUSEDx(conn, success);
+  return OB_NOT_SUPPORTED;
+}
+
+} // end namespace common
+} // end namespace oceanbase
+
 OB_SERIALIZE_MEMBER(ObSessionDDLInfo, ddl_info_.ddl_info_, // FARM COMPAT WHITELIST
                                       session_id_);
 
 ObCommonSqlProxy::ObCommonSqlProxy()
-    : acquire_func_(NULL),
-      release_func_(NULL),
+    : inited_(false),
       is_ddl_(false),
       stopped_(false)
 {
@@ -36,21 +61,14 @@ ObCommonSqlProxy::~ObCommonSqlProxy()
 {
 }
 
-int ObCommonSqlProxy::init(AcquireConnectionFunc acquire_func,
-                           ReleaseConnectionFunc release_func,
-                           const bool is_ddl)
+int ObCommonSqlProxy::init(const bool is_ddl)
 {
   int ret = OB_SUCCESS;
   if (is_inited()) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_ISNULL(acquire_func)
-             || OB_ISNULL(release_func)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid inner sql connection callbacks", K(ret));
   } else {
-    acquire_func_ = acquire_func;
-    release_func_ = release_func;
+    inited_ = true;
     is_ddl_ = is_ddl;
   }
   return ret;
@@ -59,8 +77,7 @@ int ObCommonSqlProxy::init(AcquireConnectionFunc acquire_func,
 void ObCommonSqlProxy::operator=(const ObCommonSqlProxy &o)
 {
   this->ObISQLClient::operator=(o);
-  acquire_func_ = o.acquire_func_;
-  release_func_ = o.release_func_;
+  inited_ = o.inited_;
   is_ddl_ = o.is_ddl_;
   stopped_ = o.stopped_;
 }
@@ -261,7 +278,7 @@ int ObCommonSqlProxy::acquire_connection(
     ret = OB_INACTIVE_SQL_CLIENT;
     LOG_WARN("sql proxy stopped", K(ret));
   } else {
-    ret = acquire_func_(is_ddl_, group_id, conn);
+    ret = create_inner_sql_connection_for_proxy(is_ddl_, group_id, conn);
   }
   return ret;
 }
@@ -272,11 +289,8 @@ int ObCommonSqlProxy::release_connection(
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(conn)) {
-  } else if (OB_ISNULL(release_func_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("release callback is null", K(ret));
   } else {
-    ret = release_func_(conn, success);
+    ret = release_inner_sql_connection_for_proxy(conn, success);
   }
   return ret;
 }

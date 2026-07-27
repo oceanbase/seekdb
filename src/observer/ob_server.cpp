@@ -25,7 +25,6 @@
 #endif
 #include <thread>
 #include "observer/ob_server.h"
-#include "observer/ob_inner_sql_connection.h"
 #include "storage/lob/ob_lob_manager.h"
 #include "storage/compaction/ob_freeze_info_mgr.h"
 #include "share/ob_freeze_info_proxy.h"
@@ -1489,15 +1488,9 @@ int ObServer::init_pre_setting()
 int ObServer::init_sql_proxy()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(sql_proxy_.init(
-          ObInnerSQLConnection::create_for_proxy,
-          ObInnerSQLConnection::release_for_proxy,
-          false /* is_ddl */))) {
+  if (OB_FAIL(sql_proxy_.init(false /* is_ddl */))) {
     LOG_ERROR("init sql proxy failed", KR(ret));
-  } else if (OB_FAIL(ddl_sql_proxy_.init(
-                 ObInnerSQLConnection::create_for_proxy,
-                 ObInnerSQLConnection::release_for_proxy,
-                 true /* is_ddl */))) {
+  } else if (OB_FAIL(ddl_sql_proxy_.init(true /* is_ddl */))) {
     LOG_ERROR("init ddl sql proxy failed", KR(ret));
   }
   return ret;

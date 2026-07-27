@@ -30,6 +30,13 @@ namespace sqlclient
 class ObISQLConnection;
 }
 
+int create_inner_sql_connection_for_proxy(
+    bool is_ddl,
+    int32_t group_id,
+    sqlclient::ObISQLConnection *&conn);
+int release_inner_sql_connection_for_proxy(
+    sqlclient::ObISQLConnection *conn,
+    bool success);
 
 struct InnerDDLInfo final
 {
@@ -160,12 +167,6 @@ public:
 class ObCommonSqlProxy : public ObISQLClient
 {
 public:
-  typedef int (*AcquireConnectionFunc)(bool is_ddl,
-                                       int32_t group_id,
-                                       sqlclient::ObISQLConnection *&conn);
-  typedef int (*ReleaseConnectionFunc)(sqlclient::ObISQLConnection *conn,
-                                       bool success);
-
   // FIXME baihua: remove this typedef?
   typedef ReadResult MySQLResult;
 
@@ -173,10 +174,7 @@ public:
   virtual ~ObCommonSqlProxy();
 
 
-  // init the connection callbacks
-  int init(AcquireConnectionFunc acquire_func,
-           ReleaseConnectionFunc release_func,
-           const bool is_ddl);
+  int init(const bool is_ddl);
 
   virtual int escape(const char *from, const int64_t from_size,
       char *to, const int64_t to_size, int64_t &out_size) override;
@@ -190,7 +188,7 @@ public:
         const ObSessionParam *session_param = nullptr);
   using ObISQLClient::write;
 
-  bool is_inited() const { return NULL != acquire_func_; }
+  bool is_inited() const { return inited_; }
   virtual sqlclient::ObISQLConnection *get_connection() override { return NULL; }
   virtual int acquire_connection(sqlclient::ObISQLConnection *&conn,
                                  const int32_t group_id) override;
@@ -213,8 +211,7 @@ protected:
   int acquire(sqlclient::ObISQLConnection *&conn, const int32_t group_id);
   int read(sqlclient::ObISQLConnection *conn, ReadResult &result, const char *sql);
 
-  AcquireConnectionFunc acquire_func_;
-  ReleaseConnectionFunc release_func_;
+  bool inited_;
   bool is_ddl_;
   bool stopped_;
 

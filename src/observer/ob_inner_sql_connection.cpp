@@ -18,6 +18,7 @@
 
 #include "lib/allocator/ob_malloc.h"
 #include "lib/objectpool/ob_resource_pool.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "ob_inner_sql_connection.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/rc/ob_module_provider.h"
@@ -179,35 +180,6 @@ int ObInnerSQLConnection::create_spi_connection_with_external_session(
     LOG_WARN("session is null", K(ret));
   } else {
     ret = create_impl(session_info, true, 0, true, conn);
-  }
-  return ret;
-}
-
-int ObInnerSQLConnection::create_for_proxy(
-    bool is_ddl,
-    int32_t group_id,
-    common::sqlclient::ObISQLConnection *&conn)
-{
-  int ret = OB_SUCCESS;
-  ObInnerSQLConnection *inner_conn = NULL;
-  conn = NULL;
-  if (OB_FAIL(create_connection_with_owned_session(
-          is_ddl, group_id, inner_conn))) {
-    LOG_WARN("create inner sql connection failed", K(ret));
-  } else {
-    conn = inner_conn;
-  }
-  return ret;
-}
-
-int ObInnerSQLConnection::release_for_proxy(
-    common::sqlclient::ObISQLConnection *conn,
-    bool success)
-{
-  UNUSED(success);
-  int ret = OB_SUCCESS;
-  if (OB_NOT_NULL(conn)) {
-    static_cast<ObInnerSQLConnection *>(conn)->unref();
   }
   return ret;
 }
@@ -1619,4 +1591,38 @@ ObInnerSQLSessionGuard::~ObInnerSQLSessionGuard()
 }
 
 } // end of namespace observer
+
+namespace common
+{
+
+int create_inner_sql_connection_for_proxy(
+    bool is_ddl,
+    int32_t group_id,
+    sqlclient::ObISQLConnection *&conn)
+{
+  int ret = OB_SUCCESS;
+  observer::ObInnerSQLConnection *inner_conn = NULL;
+  conn = NULL;
+  if (OB_FAIL(observer::ObInnerSQLConnection::create_connection_with_owned_session(
+          is_ddl, group_id, inner_conn))) {
+    LOG_WARN("create inner sql connection failed", K(ret));
+  } else {
+    conn = inner_conn;
+  }
+  return ret;
+}
+
+int release_inner_sql_connection_for_proxy(
+    sqlclient::ObISQLConnection *conn,
+    bool success)
+{
+  UNUSED(success);
+  int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(conn)) {
+    static_cast<observer::ObInnerSQLConnection *>(conn)->unref();
+  }
+  return ret;
+}
+
+} // end of namespace common
 } // end of namespace oceanbase

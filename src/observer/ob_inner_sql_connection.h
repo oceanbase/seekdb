@@ -142,13 +142,6 @@ public:
   static int create_spi_connection_with_external_session(
       sql::ObSQLSessionInfo *session_info,
       ObInnerSQLConnection *&conn);
-  static int create_for_proxy(
-      bool is_ddl,
-      int32_t group_id,
-      common::sqlclient::ObISQLConnection *&conn);
-  static int release_for_proxy(
-      common::sqlclient::ObISQLConnection *conn,
-      bool success);
 
   int init(sql::ObSql *ob_sql,
            ObVTIterCreator *vt_iter_creator,
