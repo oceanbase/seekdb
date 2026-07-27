@@ -26,22 +26,6 @@ using namespace share;
 using namespace share::schema;
 namespace sql
 {
-void ObDASUtils::log_user_error_and_warn(const rpc::frame::ObResultCode &rcode)
-{
-  if (OB_UNLIKELY(OB_SUCCESS != rcode.rcode_)) {
-    FORWARD_USER_ERROR(rcode.rcode_, rcode.msg_);
-  }
-  for (int i = 0; i < rcode.warnings_.count(); ++i) {
-    const common::ObWarningBuffer::WarningItem &warning_item = rcode.warnings_.at(i);
-    if (ObLogger::USER_WARN == warning_item.log_level_) {
-      FORWARD_USER_WARN(warning_item.code_, warning_item.msg_);
-    } else if (ObLogger::USER_NOTE == warning_item.log_level_) {
-      FORWARD_USER_NOTE(warning_item.code_, warning_item.msg_);
-    }
-  }
-}
-
-
 int ObDASUtils::check_nested_sql_mutating(ObTableID ref_table_id, ObExecContext &exec_ctx, bool is_reading)
 {
   int ret = OB_SUCCESS;
@@ -73,8 +57,8 @@ int ObDASUtils::check_nested_sql_mutating(ObTableID ref_table_id, ObExecContext 
         ObSchemaGetterGuard schema_guard;
         const ObTableSchema *table_schema = NULL;
         
-        if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-          LOG_WARN("get tenant schema guard failed", K(ret));
+        if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+          LOG_WARN("get runtime schema guard failed", K(ret));
         } else if (OB_FAIL(schema_guard.get_table_schema( ref_table_id, table_schema))) {
           LOG_WARN("get table schema failed", K(ret), K(ref_table_id));
         } else if (table_schema != nullptr) {

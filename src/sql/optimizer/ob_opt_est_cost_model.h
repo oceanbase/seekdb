@@ -37,7 +37,6 @@ class OptSelectivityCtx;
 class ObOptCostModelParameter;
 class OptSystemStat;
 
-enum RowCountEstMethod { INVALID_METHOD = 0 }; // deprecated
 enum ObBaseTableEstBasicMethod
 {
   EST_INVALID   = 0,
@@ -195,11 +194,9 @@ struct ObCostTableScanInfo
      is_batch_rescan_(false),
      ranges_(),
      total_range_cnt_(0),
-     ss_ranges_(),
      range_columns_(),
      prefix_filters_(),
      pushdown_prefix_filters_(),
-     ss_postfix_range_filters_(),
      postfix_filters_(),
      table_filters_(),
      table_metas_(NULL),
@@ -210,8 +207,6 @@ struct ObCostTableScanInfo
      postfix_filter_sel_(1.0),
      table_filter_sel_(1.0),
      join_filter_sel_(1.0),
-     ss_prefix_ndv_(1.0),
-     ss_postfix_range_filters_sel_(1.0),
      logical_query_range_row_count_(0.0),
      phy_query_range_row_count_(0.0),
      index_back_row_count_(0.0),
@@ -237,7 +232,6 @@ struct ObCostTableScanInfo
                K_(is_das_scan), K_(is_rescan), K_(is_batch_rescan), K_(est_method),
                K_(prefix_filter_sel), K_(pushdown_prefix_filter_sel),
                K_(postfix_filter_sel), K_(table_filter_sel),
-               K_(ss_prefix_ndv), K_(ss_postfix_range_filters_sel),
                K_(limit_rows), K_(total_range_cnt), K_(unique_range_rowcnt),
                K_(batch_type));
   // the following information need to be set before estimating cost
@@ -253,14 +247,12 @@ struct ObCostTableScanInfo
   bool is_batch_rescan_;
   ObRangesArray ranges_;  // all the ranges
   int64_t total_range_cnt_;
-  ObRangesArray ss_ranges_;  // skip scan ranges
   common::ObSEArray<ColumnItem, 4, common::ModulePageAllocator, true> range_columns_; // all the range columns
   common::ObSEArray<ColumnItem, 4, common::ModulePageAllocator, true> access_column_items_; // all the access columns
   common::ObSEArray<ColumnItem, 4, common::ModulePageAllocator, true> index_access_column_items_; // all the access columns
   // The classification of these filters refers to ObJoinOrder::fill_filters()
   common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> prefix_filters_; // filters match index prefix
   common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> pushdown_prefix_filters_; // filters match index prefix along pushed down filter
-  common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> ss_postfix_range_filters_;  // range conditions extract postfix range for skip scan
   common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> postfix_filters_; // filters evaluated before index back, but not index prefix
   common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> table_filters_;  // filters evaluated after index back
   common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> real_range_exprs_; // range conditions constructed by query range, only valid when unprecise_range_filters_ not empty 
@@ -278,8 +270,6 @@ struct ObCostTableScanInfo
   double postfix_filter_sel_;
   double table_filter_sel_;
   double join_filter_sel_;
-  double ss_prefix_ndv_;  // skip scan prefix columns NDV
-  double ss_postfix_range_filters_sel_;
   double logical_query_range_row_count_;// Estimated number of rows contained in the extracted query range (logical)
   double phy_query_range_row_count_;// Estimated number of rows contained in the extracted query range (physical)
   double index_back_row_count_;// Estimated number of rows that need to go back to the table
@@ -713,8 +703,6 @@ public:
 
   double cost_get_rows(double rows);
 
-  double cost_sequence(double rows, double uniq_sequence_cnt);
-
   double cost_material(const double rows, const double average_row_size);
 
   double cost_read_materialized(const double rows);
@@ -861,12 +849,6 @@ protected:
                                 double row_count,
                                 double limit_count,
                                 double &cost);
-  int calc_das_rpc_cost(const ObCostTableScanInfo &est_cost_info,
-                        double &das_rpc_cost);
-  int get_rescan_rpc_cnt(const ObIArray<common::ObAddr> *left_server_list,
-                         const ObIArray<common::ObAddr> *right_server_list,
-                         double &remote_rpc_cnt,
-                         double &local_rpc_cnt);
   // estimate the network transform and rpc cost for global index
   int cost_global_index_back_with_rp(double row_count,
                                     const ObCostTableScanInfo &est_cost_info,

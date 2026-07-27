@@ -79,7 +79,7 @@ public:
     DATA_NOT_COMPLETE,
     NO_MAJOR_SSTABLE,
     INVALID_LS_STATE, // for ss
-    TENANT_SKIP_MERGE,
+    DATABASE_SKIP_MERGE,
     EXECUTE_STATE_MAX,
   };
   static const char *tablet_execute_state_to_str(const TabletExecuteState &state);
@@ -120,7 +120,7 @@ public:
     storage::ObLS &ls,
     const int64_t merge_version,
     const storage::ObTablet &tablet,
-    const bool is_remote_tenant,
+    const bool should_skip_merge,
     const bool ls_could_schedule_new_round);
   int init_for_diagnose(
     storage::ObLS &ls,
@@ -146,7 +146,7 @@ protected:
   int inner_init_state(
     const int64_t merge_version,
     const storage::ObTablet &tablet,
-    const bool is_remote_tenant);
+    const bool should_skip_merge);
   int check_medium_list(
     const storage::ObTablet &tablet,
     const bool normal_schedule);

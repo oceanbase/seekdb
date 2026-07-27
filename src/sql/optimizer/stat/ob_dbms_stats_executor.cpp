@@ -23,7 +23,7 @@
 #include "sql/optimizer/stat/ob_index_stats_estimator.h"
 #include "pl/sys_package/ob_dbms_stats.h"
 #include "sql/optimizer/stat/ob_dbms_stats_gather.h"
-#include "observer/omt/ob_tenant.h"
+#include "observer/omt/ob_server_runtime.h"
 #include "observer/ob_server.h"
 #include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
@@ -847,8 +847,8 @@ int ObDbmsStatsExecutor::check_need_split_gather(const ObTableStatParam &param, 
       LOG_WARN("failed to get max work area size", K(ret));
     } else {
       int64_t max_gather_col_cnt = max_wa_memory_size >= 1 * 1024L * 1024L * 1024L /*1G*/
-                                       ? MAX_GATHER_COLUMN_COUNT_PER_QUERY_FOR_LARGE_TENANT
-                                       : MAX_GATHER_COLUMN_COUNT_PER_QUERY_FOR_SMALL_TENANT;
+                                       ? MAX_GATHER_COLUMN_COUNT_PER_QUERY_HIGH_MEMORY
+                                       : MAX_GATHER_COLUMN_COUNT_PER_QUERY_LOW_MEMORY;
       column_cnt = column_cnt > max_gather_col_cnt ? max_gather_col_cnt : column_cnt;
     }
 
@@ -880,7 +880,7 @@ int ObDbmsStatsExecutor::check_need_split_gather(const ObTableStatParam &param, 
   }
   else {
     gather_helper.maximum_gather_part_cnt_ = partition_cnt;
-    gather_helper.maximum_gather_col_cnt_ = std::min(column_cnt, MAX_GATHER_COLUMN_COUNT_PER_QUERY_FOR_LARGE_TENANT);
+    gather_helper.maximum_gather_col_cnt_ = std::min(column_cnt, MAX_GATHER_COLUMN_COUNT_PER_QUERY_HIGH_MEMORY);
     gather_helper.is_split_gather_ = gather_helper.maximum_gather_part_cnt_ < partition_cnt ||
                                      gather_helper.maximum_gather_col_cnt_ < origin_column_cnt;
   }
@@ -1595,27 +1595,28 @@ int ObDbmsStatsExecutor::prepare_conn_and_store_session_for_online_stats(sql::Ob
     session->set_query_start_time(ObTimeUtility::current_time());
     session->set_inner_session();
     session->set_nested_count(-1);
-    //2.2 modify session database name and database id and catalog id
-    if (OB_FAIL(session->set_internal_catalog_db())) {
-        LOG_WARN("failed to set session catalog and database", K(ret));
+    //2.2 modify session database name and database id
+    if (OB_FAIL(session->set_default_database(OB_SYS_DATABASE_NAME))) {
+      LOG_WARN("failed to set session database", K(ret));
+    } else {
+      session->set_database_id(OB_SYS_DATABASE_ID);
+      //2.3 modify session trx lock timeout
+      old_trx_lock_timeout = session->get_trx_lock_timeout();
+      ObObj trx_lock_timeout;
+      trx_lock_timeout.set_int(0);
+      if (OB_FAIL(session->update_sys_variable(share::SYS_VAR_OB_TRX_LOCK_TIMEOUT, trx_lock_timeout))) {
+        LOG_WARN("failed to update sys variable for trx lock timeout", K(ret));
       } else {
-        //2.3 modify session trx lock timeout
-        old_trx_lock_timeout = session->get_trx_lock_timeout();
-        ObObj trx_lock_timeout;
-        trx_lock_timeout.set_int(0);
-        if (OB_FAIL(session->update_sys_variable(share::SYS_VAR_OB_TRX_LOCK_TIMEOUT, trx_lock_timeout))) {
-          LOG_WARN("failed to update sys variable for trx lock timeout", K(ret));
-        } else {
-          need_reset_trx_lock_timeout = true;
-          //3.get conn to update stats
-          observer::ObInnerSQLConnectionPool *pool = NULL;
-          if (OB_ISNULL(pool = static_cast<observer::ObInnerSQLConnectionPool *>(sql_proxy->get_pool()))) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected error", K(ret), K(pool));
-          } else if (OB_FAIL(pool->acquire(session, conn))) {
-            LOG_WARN("failed to acquire conn", K(ret));
-          }
+        need_reset_trx_lock_timeout = true;
+        //3.get conn to update stats
+        observer::ObInnerSQLConnectionPool *pool = NULL;
+        if (OB_ISNULL(pool = static_cast<observer::ObInnerSQLConnectionPool *>(sql_proxy->get_pool()))) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get unexpected error", K(ret), K(pool));
+        } else if (OB_FAIL(pool->acquire(session, conn))) {
+          LOG_WARN("failed to acquire conn", K(ret));
         }
+      }
     }
   }
   return ret;
@@ -1698,114 +1699,10 @@ int ObDbmsStatsExecutor::fetch_gather_table_snapshot_read(common::sqlclient::ObI
 
 int ObDbmsStatsExecutor::cancel_gather_stats(ObExecContext &ctx, ObString &task_id)
 {
+  UNUSED(ctx);
   int ret = OB_SUCCESS;
-  ObSQLSessionInfo *session = ctx.get_my_session();
-  if (OB_ISNULL(session)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(session));
-  } else {
-    const common::ObAddr &local_addr = ctx.get_addr();
-    
-    char *task_ip = NULL;
-    int32_t task_port = 0;
-    ObArenaAllocator allocator("CancelGather", OB_MALLOC_NORMAL_BLOCK_SIZE);
-    if (OB_FAIL(fetch_gather_task_addr(ctx.get_sql_proxy(), allocator,
-                                       task_id, task_ip, task_port))) {
-      LOG_WARN("failed to fetch gather task addr", K(ret));
-    } else {
-      common::ObAddr rpc_addr(static_cast<common::ObAddr::VER>(local_addr.get_version()), task_ip, task_port);
-      if (local_addr == rpc_addr) {//local
-        if (OB_FAIL(ObOptStatGatherStatList::instance().cancel_gather_stats(task_id))) {
-          LOG_WARN("failed to cancel gather stats", K(ret));
-        } else {/*do nothing*/}
-      } else {//remote
-        int64_t timeout = std::min(static_cast<int64_t>(10000000L), THIS_WORKER.get_timeout_remain());
-        obcall::ObCancelGatherStatsArg arg;
-        
-        
-        arg.task_id_ = task_id;
-        if (OB_UNLIKELY(0 >= timeout)) {
-          ret = OB_TIMEOUT;
-          LOG_WARN("query timeout is reached", K(ret), K(timeout));
-        } else if (OB_FAIL(ex_rpc::sync_call([&]{
-          if (!arg.is_valid()) return OB_INVALID_ARGUMENT;
-          return ObOptStatGatherStatList::instance().cancel_gather_stats(arg.task_id_);
-        }))) {
-          LOG_WARN("failed to cancel gather stats",  K(ret), K(rpc_addr), K(arg));
-        } else {/*do nothing*/}
-      }
-    }
-  }
-  return ret;
-}
-
-int ObDbmsStatsExecutor::fetch_gather_task_addr(ObCommonSqlProxy *sql_proxy,
-                                                ObIAllocator &allcoator,
-                                                const ObString &task_id,
-                                                char *&svr_ip,
-                                                int32_t &svr_port)
-{
-  int ret = OB_SUCCESS;
-  ObSqlString raw_sql;
-  // vtable_route_policy = 'local', so the query only returns tasks running on the local server
-  // Just check if the task exists and return local server address
-  if (OB_FAIL(raw_sql.append_fmt("SELECT 1 FROM %s WHERE task_id = \'%.*s\' LIMIT 1",
-                                 share::OB_ALL_VIRTUAL_OPT_STAT_GATHER_MONITOR_TNAME,
-                                 task_id.length(),
-                                 task_id.ptr()))) {
-    LOG_WARN("failed to append fmt", K(ret));
-  } else {
-    SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
-      sqlclient::ObMySQLResult *client_result = NULL;
-      auto &sql_client_retry_weak = *sql_proxy;
-      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
-        LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
-      } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to execute sql", K(ret));
-      } else {
-        bool got_result = false;
-        while (OB_SUCC(ret) && OB_SUCC(client_result->next())) {
-          if (OB_UNLIKELY(got_result)) {//only one rows
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected error", K(ret), K(task_id), K(task_id), K(svr_port));
-          } else {
-            got_result = true;
-            // Use local server address since vtable only returns local data
-            const ObAddr &self_addr = GCTX.self_addr();
-            char ip_buf[OB_IP_STR_BUFF] = {0};
-            if (!self_addr.ip_to_string(ip_buf, OB_IP_STR_BUFF)) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("failed to convert ip to string", K(ret), K(self_addr));
-            } else {
-              svr_port = self_addr.get_port();
-              int64_t ip_len = strlen(ip_buf);
-              if (OB_ISNULL(svr_ip = static_cast<char*>(allcoator.alloc(ip_len + 1)))) {
-                ret = OB_ALLOCATE_MEMORY_FAILED;
-                LOG_WARN("failed to alloc memory for saved session value", K(ret), K(svr_ip));
-              } else {
-                MEMSET(svr_ip, 0, ip_len + 1);
-                MEMCPY(svr_ip, ip_buf, ip_len);
-                LOG_TRACE("succeed to fetch gather task addr", K(svr_ip), K(svr_port));
-              }
-            }
-          }
-        }
-        ret = OB_ITER_END == ret ? OB_SUCCESS : ret;
-        if (OB_SUCC(ret) && !got_result) {//invalid task id
-          ret = OB_ERR_DBMS_STATS_PL;
-          LOG_WARN("The optimizer stats gather task has ended or the task doesn't exist", K(ret), K(task_id));
-          LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "The optimizer stats gather task has ended or the task doesn't exist");
-        }
-      }
-      int tmp_ret = OB_SUCCESS;
-      if (NULL != client_result) {
-        if (OB_SUCCESS != (tmp_ret = client_result->close())) {
-          LOG_WARN("close result set failed", K(ret), K(tmp_ret));
-          ret = COVER_SUCC(tmp_ret);
-        }
-      }
-    }
+  if (OB_FAIL(ObOptStatGatherStatList::instance().cancel_gather_stats(task_id))) {
+    LOG_WARN("failed to cancel gather stats", K(ret), K(task_id));
   }
   return ret;
 }

@@ -32,12 +32,12 @@ namespace palf
 {
 PalfHandleImpl *PalfHandleImplFactory::alloc()
 {
-  return MTL_NEW(PalfHandleImpl, "palf_env");
+  return SERVER_NEW(PalfHandleImpl, "palf_env");
 }
 
 void PalfHandleImplFactory::free(IPalfHandleImpl *palf_handle_impl)
 {
-  MTL_DELETE(IPalfHandleImpl, "palf_env", palf_handle_impl);
+  SERVER_DELETE(IPalfHandleImpl, "palf_env", palf_handle_impl);
 }
 
 

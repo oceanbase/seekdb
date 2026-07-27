@@ -11,6 +11,18 @@ CREATE TABLE drop_index_articles (
     content TEXT,
     FULLTEXT INDEX ctx(title, content)
 );
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 11;
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 12;
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
 SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 13;
 +----------+
 | count(*) |
@@ -18,18 +30,6 @@ SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_
 |        1 |
 +----------+
 SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
-+----------+
-| count(*) |
-+----------+
-|        1 |
-+----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 15;
-+----------+
-| count(*) |
-+----------+
-|        1 |
-+----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 16;
 +----------+
 | count(*) |
 +----------+
@@ -49,6 +49,18 @@ SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FRO
 +-----------+----------------+
 ====================== drop index =======================
 DROP INDEX ctx ON drop_index_articles;
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 11;
++----------+
+| count(*) |
++----------+
+|        0 |
++----------+
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 12;
++----------+
+| count(*) |
++----------+
+|        0 |
++----------+
 SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 13;
 +----------+
 | count(*) |
@@ -56,18 +68,6 @@ SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_
 |        0 |
 +----------+
 SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
-+----------+
-| count(*) |
-+----------+
-|        0 |
-+----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 15;
-+----------+
-| count(*) |
-+----------+
-|        0 |
-+----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 16;
 +----------+
 | count(*) |
 +----------+
@@ -83,6 +83,18 @@ SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FRO
 +-----------+-------------+
 ====================== add index ========================
 ALTER TABLE drop_index_articles ADD FULLTEXT INDEX ctx(title, content);
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 11;
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 12;
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
 SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 13;
 +----------+
 | count(*) |
@@ -90,18 +102,6 @@ SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_
 |        1 |
 +----------+
 SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
-+----------+
-| count(*) |
-+----------+
-|        1 |
-+----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 15;
-+----------+
-| count(*) |
-+----------+
-|        1 |
-+----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 16;
 +----------+
 | count(*) |
 +----------+
@@ -134,6 +134,18 @@ INSERT INTO drop_index_articles (title, content) VALUES
 ('OceanBase Tutorial', 'This is a tutorial about Oceanbase Fulltext.'),
 ('Fulltext Index', 'Fulltext index can be very useful.'),
 ('OceanBase Test Case', 'Writing test cases helps ensure quality.');
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 11;
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 12;
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
 SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 13;
 +----------+
 | count(*) |
@@ -141,18 +153,6 @@ SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_
 |        1 |
 +----------+
 SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
-+----------+
-| count(*) |
-+----------+
-|        1 |
-+----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 15;
-+----------+
-| count(*) |
-+----------+
-|        1 |
-+----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 16;
 +----------+
 | count(*) |
 +----------+
@@ -172,6 +172,18 @@ SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FRO
 +-----------+----------------+
 ====================== drop index =======================
 ALTER TABLE drop_index_articles DROP INDEX ctx;
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 11;
++----------+
+| count(*) |
++----------+
+|        0 |
++----------+
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 12;
++----------+
+| count(*) |
++----------+
+|        0 |
++----------+
 SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 13;
 +----------+
 | count(*) |
@@ -179,18 +191,6 @@ SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_
 |        0 |
 +----------+
 SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
-+----------+
-| count(*) |
-+----------+
-|        0 |
-+----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 15;
-+----------+
-| count(*) |
-+----------+
-|        0 |
-+----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 16;
 +----------+
 | count(*) |
 +----------+
@@ -206,6 +206,18 @@ SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FRO
 +-----------+-------------+
 ====================== add index ========================
 ALTER TABLE drop_index_articles ADD FULLTEXT INDEX ctx(title, content);
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 11;
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 12;
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
 SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 13;
 +----------+
 | count(*) |
@@ -213,18 +225,6 @@ SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_
 |        1 |
 +----------+
 SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
-+----------+
-| count(*) |
-+----------+
-|        1 |
-+----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 15;
-+----------+
-| count(*) |
-+----------+
-|        1 |
-+----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 16;
 +----------+
 | count(*) |
 +----------+
@@ -257,6 +257,18 @@ INSERT INTO drop_index_articles (title, content) VALUES
 ('OceanBase Tutorial', 'This is a tutorial about Oceanbase Fulltext.'),
 ('Fulltext Index', 'Fulltext index can be very useful.'),
 ('OceanBase Test Case', 'Writing test cases helps ensure quality.');
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 11;
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 12;
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
 SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 13;
 +----------+
 | count(*) |
@@ -264,18 +276,6 @@ SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_
 |        1 |
 +----------+
 SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
-+----------+
-| count(*) |
-+----------+
-|        1 |
-+----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 15;
-+----------+
-| count(*) |
-+----------+
-|        1 |
-+----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 16;
 +----------+
 | count(*) |
 +----------+
@@ -295,6 +295,18 @@ SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FRO
 +-----------+----------------+
 ====================== drop index =======================
 DROP INDEX ctx ON drop_index_articles;
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 11;
++----------+
+| count(*) |
++----------+
+|        0 |
++----------+
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 12;
++----------+
+| count(*) |
++----------+
+|        0 |
++----------+
 SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 13;
 +----------+
 | count(*) |
@@ -302,18 +314,6 @@ SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_
 |        0 |
 +----------+
 SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
-+----------+
-| count(*) |
-+----------+
-|        0 |
-+----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 15;
-+----------+
-| count(*) |
-+----------+
-|        0 |
-+----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 16;
 +----------+
 | count(*) |
 +----------+
@@ -329,6 +329,18 @@ SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FRO
 +-----------+-------------+
 ====================== add index ========================
 ALTER TABLE drop_index_articles ADD FULLTEXT INDEX ctx(title, content);
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 11;
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 12;
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
 SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 13;
 +----------+
 | count(*) |
@@ -336,18 +348,6 @@ SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_
 |        1 |
 +----------+
 SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
-+----------+
-| count(*) |
-+----------+
-|        1 |
-+----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 15;
-+----------+
-| count(*) |
-+----------+
-|        1 |
-+----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 16;
 +----------+
 | count(*) |
 +----------+
@@ -382,25 +382,25 @@ INSERT INTO drop_index_articles (title, content) VALUES
 ('OceanBase Tutorial', 'This is a tutorial about Oceanbase Fulltext.'),
 ('Fulltext Index', 'Fulltext index can be very useful.'),
 ('OceanBase Test Case', 'Writing test cases helps ensure quality.');
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 11;
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 12;
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
 SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 13;
-+----------+
-| count(*) |
-+----------+
-|        1 |
-+----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
-+----------+
-| count(*) |
-+----------+
-|        1 |
-+----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 15;
 +----------+
 | count(*) |
 +----------+
 |        3 |
 +----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 16;
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
 +----------+
 | count(*) |
 +----------+
@@ -426,25 +426,25 @@ SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FRO
 +-----------+----------------+
 ====================== drop index =======================
 DROP INDEX ctx ON drop_index_articles;
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 11;
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 12;
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
 SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 13;
-+----------+
-| count(*) |
-+----------+
-|        1 |
-+----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
-+----------+
-| count(*) |
-+----------+
-|        1 |
-+----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 15;
 +----------+
 | count(*) |
 +----------+
 |        2 |
 +----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 16;
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
 +----------+
 | count(*) |
 +----------+
@@ -473,6 +473,18 @@ SELECT distinct(ddl_stmt_str) FROM oceanbase.__all_ddl_operation WHERE table_id 
 +---------------------------------------+
 ====================== drop index =======================
 ALTER TABLE drop_index_articles DROP INDEX ctx_t;
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 11;
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 12;
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
 SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 13;
 +----------+
 | count(*) |
@@ -480,18 +492,6 @@ SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_
 |        1 |
 +----------+
 SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
-+----------+
-| count(*) |
-+----------+
-|        1 |
-+----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 15;
-+----------+
-| count(*) |
-+----------+
-|        1 |
-+----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 16;
 +----------+
 | count(*) |
 +----------+
@@ -511,6 +511,18 @@ SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FRO
 +-----------+----------------+
 ====================== drop index =======================
 DROP INDEX ctx_c ON drop_index_articles;
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 11;
++----------+
+| count(*) |
++----------+
+|        0 |
++----------+
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 12;
++----------+
+| count(*) |
++----------+
+|        0 |
++----------+
 SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 13;
 +----------+
 | count(*) |
@@ -518,18 +530,6 @@ SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_
 |        0 |
 +----------+
 SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
-+----------+
-| count(*) |
-+----------+
-|        0 |
-+----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 15;
-+----------+
-| count(*) |
-+----------+
-|        0 |
-+----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 16;
 +----------+
 | count(*) |
 +----------+
@@ -545,6 +545,18 @@ SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FRO
 +-----------+-------------+
 ====================== add index ========================
 ALTER TABLE drop_index_articles ADD FULLTEXT INDEX ctx(title, content);
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 11;
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 12;
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
 SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 13;
 +----------+
 | count(*) |
@@ -552,18 +564,6 @@ SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_
 |        1 |
 +----------+
 SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
-+----------+
-| count(*) |
-+----------+
-|        1 |
-+----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 15;
-+----------+
-| count(*) |
-+----------+
-|        1 |
-+----------+
-SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 16;
 +----------+
 | count(*) |
 +----------+

@@ -29,7 +29,6 @@ class AccessPath;
 
 struct ObBatchEstTasks
 {
-  ObAddr addr_;
   obcall::ObEstPartArg arg_;
   obcall::ObEstPartRes res_;
   ObArray<AccessPath *> paths_;
@@ -37,7 +36,7 @@ struct ObBatchEstTasks
 
   bool check_result_reliable() const;
 
-  TO_STRING_KV(K_(addr), K_(arg), K_(res));
+  TO_STRING_KV(K_(arg), K_(res));
 };
 
 struct EstResultHelper
@@ -182,11 +181,6 @@ private:
                                                    bool &can_use,
                                                    ObOptimizerContext &ctx);
 
-  static int choose_leader_replica(const ObCandiTabletLoc &part_loc_info,
-                                   const bool can_use_remote,
-                                   const ObAddr &local_addr,
-                                   EstimatedPartition &best_partition);
-
   static int process_vtable_default_estimation(AccessPath *path);
 
   static int process_table_force_default_estimation(AccessPath *path);
@@ -205,14 +199,12 @@ private:
                                          ObIAllocator &arena,
                                          const ObCandiTabletLoc &partition,
                                          const ObTableMetaInfo &table_meta,
-                                         ObIArray<ObAddr> &prefer_addrs,
                                          ObIArray<ObBatchEstTasks *> &tasks,
-                                         EstimatedPartition &best_index_part,
+                                         EstimatedPartition &local_partition,
                                          ObBatchEstTasks *&task);
 
   static int add_storage_estimation_task(ObOptimizerContext &ctx,
                                          ObIAllocator &arena,
-                                         ObIArray<ObAddr> &prefer_addrs,
                                          AccessPath &ap,
                                          ObIArray<ObBatchEstTasks *> &tasks,
                                          const int64_t partition_limit,
@@ -224,7 +216,6 @@ private:
                                                    ObIAllocator &arena,
                                                    ObExecContext &exec_ctx,
                                                    RangePartitionHelper &calc_range_partition_helper,
-                                                   ObIArray<ObAddr> &prefer_addrs,
                                                    AccessPath &ap,
                                                    ObIArray<ObBatchEstTasks *> &tasks,
                                                    const int64_t partition_limit,
@@ -265,30 +256,10 @@ private:
                                                  bool only_ds_basic_stat,
                                                  bool &is_success);
 
-  static int calc_skip_scan_prefix_ndv(AccessPath &ap, double &prefix_ndv);
-
-  static int get_skip_scan_prefix_exprs(ObIArray<ColumnItem> &column_items,
-                                        int64_t skip_scan_offset,
-                                        ObIArray<ObRawExpr*> &prefix_exprs);
-
-  static int update_use_skip_scan(ObCostTableScanInfo &est_cost_info,
-                                  ObIArray<ObExprSelPair> &all_predicate_sel,
-                                  OptSkipScanState &use_skip_scan);
-
-  static int reset_skip_scan_info(ObCostTableScanInfo &est_cost_info,
-                                  ObIArray<ObExprSelPair> &all_predicate_sel,
-                                  OptSkipScanState &use_skip_scan);
-
-  static int do_storage_estimation(ObOptimizerContext &ctx,
-                                   ObBatchEstTasks &tasks);
+  static int do_storage_estimation(ObBatchEstTasks &tasks);
 
   static int get_task(ObIArray<ObBatchEstTasks *>& tasks,
-                      const ObAddr &addr,
                       ObBatchEstTasks *&task);
-
-  static int create_task(ObIAllocator &allocator,
-                         const ObAddr &addr,
-                         ObBatchEstTasks *&task);
 
 
   static int add_index_info(ObOptimizerContext &ctx,
@@ -309,7 +280,7 @@ private:
   static int estimate_prefix_range_rowcount(
       const double res_logical_row_count,
       const double res_physical_row_count,
-      bool new_range_with_exec_param,
+      bool range_graph_with_exec_param,
       ObCostTableScanInfo &est_cost_info);
 
   static int fill_cost_table_scan_info(ObCostTableScanInfo &est_cost_info);

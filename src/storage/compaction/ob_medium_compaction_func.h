@@ -18,12 +18,11 @@
 
 #include "storage/ls/ob_ls.h"
 #include "storage/compaction/ob_partition_merge_policy.h"
-#include "share/tablet/ob_tablet_filter.h"
 #include "share/ob_tablet_meta_table_compaction_operator.h"
-#include "share/ob_tablet_replica_checksum_operator.h"
+#include "share/ob_tablet_local_checksum_operator.h"
 #include "storage/tablet/ob_tablet.h"
-#include "storage/compaction/ob_tenant_tablet_scheduler.h"
-#include "storage/compaction/ob_tenant_medium_checker.h"
+#include "storage/compaction/ob_tablet_scheduler.h"
+#include "storage/compaction/ob_medium_checker.h"
 #include "storage/compaction/ob_tablet_merge_ctx.h"
 #include "storage/compaction/ob_ckm_error_tablet_info.h"
 
@@ -72,10 +71,9 @@ public:
     ObIArray<ObTabletCheckInfo> &finish_tablet_infos,
     const ObIArray<ObTabletCheckInfo> &tablet_check_infos,
     ObCompactionTimeGuard &time_guard);
-  static int check_replica_checksum_items(
-      const ObReplicaCkmArray &checksum_items,
-      const bool is_medium_checker);
-  int schedule_next_medium(
+  static int process_local_checksum_items(
+      const ObLocalTabletChecksumArray &checksum_items);
+  int schedule_next_medium_for_leader(
     const int64_t major_snapshot,
     bool &medium_clog_submitted);
   static int get_table_id(
@@ -113,17 +111,8 @@ protected:
       ObCompactionTimeGuard &time_guard);
   static int check_medium_meta_table(
       const int64_t medium_snapshot,
-      const ObTabletInfo &tablet_info,
-      const share::ObTabletReplicaFilterHolder &filters,
+      const ObTabletRuntimeInfo &tablet_info,
       bool &merge_finish);
-  static int check_tablet_checksum(
-      const share::ObReplicaCkmArray &checksum_items,
-      const int64_t start_idx,
-      const int64_t end_idx,
-      const bool is_medium_checker,
-      ObTabletDataChecksumChecker &data_checksum_checker,
-      ObIArray<ObCkmErrorTabletInfo> &error_pairs,
-      int &check_ret);
   int choose_medium_snapshot(
       const int64_t max_sync_medium_scn,
       ObMediumCompactionInfo &medium_info,

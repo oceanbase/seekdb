@@ -14,4 +14,5 @@ select Engine, Support, Comment, Transactions, Savepoints from __all_virtual_eng
 #show
 --source mysql_test/include/show_create_table_old_version_replica2.inc
 show create table __all_virtual_engine;
+--replace_column 6 #
 desc __all_virtual_engine;

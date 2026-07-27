@@ -37,7 +37,6 @@ ObExprCast::ObExprCast(ObIAllocator &alloc)
                                              2,
                                              VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
 {
-  extra_serialize_ = 0;
   disable_operand_auto_cast();
 }
 
@@ -208,8 +207,7 @@ int ObExprCast::get_cast_string_len(ObExprResType &type1,
   return ret;
 }
 
-// this is only for engine 3.0. old engine will get cast mode from expr_ctx.
-// only for explicit cast, implicit cast's cm is setup while deduce type(in type_ctx.cast_mode_)
+// Resolve the cast mode for an explicit cast. Implicit cast mode is set during type deduction.
 int ObExprCast::get_explicit_cast_cm(const ObExprResType &src_type,
                               const ObExprResType &dst_type,
                               const ObSQLSessionInfo &session,
@@ -472,7 +470,7 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
       // eg: select cast(18446744073709551615 as signed) -> -1
       //     because exprlicit case need CM_NO_RANGE_CHECK
       type_ctx.set_cast_mode(explicit_cast_cm & ~CM_EXPLICIT_CAST);
-      // in engine 3.0, let implicit cast do the real cast
+      // Let the source or destination helper cast perform the conversion when needed.
       bool need_extra_cast_for_src_type = false;
       bool need_extra_cast_for_dst_type = false;
       ObRawExprUtils::need_extra_cast(type1, type, need_extra_cast_for_src_type,
@@ -490,8 +488,7 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
         if (ob_is_enumset_tc(type1.get_type())) {
           // For enum/set type, need to check whether warp to string is required.
           if (OB_FAIL(ObRawExprUtils::need_wrap_to_string(type1, type1.get_calc_type(),
-                                          false, need_wrap,
-                                          exec_ctx->support_enum_set_type_subschema(*session)))) {
+                                          false, need_wrap, true))) {
             LOG_WARN("need_wrap_to_string failed", K(ret), K(type1));
           } else if (!need_wrap) {
             // need_wrap is false, set calc_type to type1 itself.

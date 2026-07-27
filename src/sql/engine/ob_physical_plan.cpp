@@ -66,8 +66,6 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     contain_table_scan_(false),
     has_nested_sql_(false),
     session_id_(0),
-    concurrent_num_(0),
-    max_concurrent_num_(ObMaxConcurrentParam::UNLIMITED),
     table_locations_(allocator_),
     das_table_locations_(allocator_),
     row_param_map_(allocator_),
@@ -93,7 +91,6 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     use_temp_table_(false),
     has_link_sfd_(false),
     need_serial_exec_(false),
-    temp_sql_can_prepare_(false),
     is_need_trans_(false),
     batch_size_(0),
     contain_pl_udf_or_trigger_(false),
@@ -103,7 +100,6 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     ddl_task_id_(0),
     is_packed_(false),
     has_instead_of_trigger_(false),
-    min_cluster_version_(GET_MIN_CLUSTER_VERSION()),
     need_record_plan_info_(false),
     logical_plan_(),
     use_rich_format_(false),
@@ -117,11 +113,8 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     can_set_feedback_info_(true),
     need_switch_to_table_lock_worker_(false),
     data_complement_gen_doc_id_(false),
-    dml_table_ids_(&allocator_),
-    insertup_can_use_snapshot_opt_(false),
-    px_node_policy_(ObPxNodePolicy::INVALID),
-    px_node_addrs_(&allocator_),
-    px_node_count_(ObPxNodeHint::UNSET_PX_NODE_COUNT),
+    direct_load_need_sort_(false),
+    insertup_can_do_gts_opt_(false),
     px_worker_share_plan_enabled_(false)
 {
 }
@@ -168,8 +161,6 @@ void ObPhysicalPlan::reset()
   contain_table_scan_ = false;
   has_nested_sql_ = false;
   session_id_ = 0;
-  concurrent_num_ = 0;
-  max_concurrent_num_ = ObMaxConcurrentParam::UNLIMITED;
   is_update_uniq_index_ = false;
   contain_index_location_ = false;
   ObPlanCacheObject::reset();
@@ -183,7 +174,6 @@ void ObPhysicalPlan::reset()
   first_array_index_ = OB_INVALID_INDEX;
   need_consistent_snapshot_ = true;
   is_batched_multi_stmt_ = false;
-  temp_sql_can_prepare_ = false;
   is_new_engine_ = false;
 #ifndef NDEBUG
   bit_set_.reset();
@@ -211,11 +201,8 @@ void ObPhysicalPlan::reset()
   can_set_feedback_info_.store(true);
   need_switch_to_table_lock_worker_ = false;
   data_complement_gen_doc_id_ = false;
-  dml_table_ids_.reset();
-  insertup_can_use_snapshot_opt_ = false;
-  px_node_policy_ = ObPxNodePolicy::INVALID;
-  px_node_count_ = ObPxNodeHint::UNSET_PX_NODE_COUNT;
-  px_node_addrs_.reset();
+  direct_load_need_sort_ = false;
+  insertup_can_do_gts_opt_ = false;
   px_worker_share_plan_enabled_ = false;
 }
 void ObPhysicalPlan::destroy()
@@ -405,8 +392,7 @@ int ObPhysicalPlan::init_operator_stats()
 
 void ObPhysicalPlan::update_plan_stat(const ObAuditRecordData &record,
                                       const bool is_first,
-                                      const ObIArray<ObTableRowCount> *table_row_count_list,
-                                      const AdaptivePCConf *adpt_pc_conf)
+                                      const ObIArray<ObTableRowCount> *table_row_count_list)
 {
   const int64_t current_time = ObClockGenerator::getClock();
   int64_t execute_count = 0;
@@ -415,9 +401,6 @@ void ObPhysicalPlan::update_plan_stat(const ObAuditRecordData &record,
     ATOMIC_AAF(&(stat_.total_process_time_), record.get_process_time());
   }
   if (!GCONF.enable_perf_event) { // short route
-    if (nullptr != adpt_pc_conf) {
-      update_adaptive_pc_info(record, adpt_pc_conf);
-    }
     ATOMIC_AAF(&(stat_.elapsed_time_), record.get_elapsed_time());
     ATOMIC_AAF(&(stat_.cpu_time_), record.get_elapsed_time() - record.exec_record_.wait_time_end_
                                    - (record.exec_timestamp_.run_ts_ - record.exec_timestamp_.receive_ts_));
@@ -428,9 +411,6 @@ void ObPhysicalPlan::update_plan_stat(const ObAuditRecordData &record,
       ATOMIC_INC(&(stat_.hit_count_));
     }
   } else { // long route stat begin
-    if (nullptr != adpt_pc_conf) {
-      update_adaptive_pc_info(record, adpt_pc_conf);
-    }
     execute_count = ATOMIC_AAF(&stat_.execute_times_, 1);
     ATOMIC_AAF(&(stat_.total_process_time_), record.get_process_time());
     ATOMIC_AAF(&(stat_.disk_reads_), record.exec_record_.get_io_read_count());
@@ -672,55 +652,9 @@ inline bool ObPhysicalPlan::inner_check_if_is_expired(const int64_t first_exec_r
   return ret_bool;
 }
 
-int ObPhysicalPlan::inc_concurrent_num()
-{
-  int ret = OB_SUCCESS;
-  int64_t concurrent_num = 0;
-  int64_t new_num = 0;
-  bool is_succ = false;
-  if (max_concurrent_num_ == ObMaxConcurrentParam::UNLIMITED) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("current physical plan is unlimit", K(ret), K(max_concurrent_num_));
-  } else {
-    while(OB_SUCC(ret) && false == is_succ) {
-      concurrent_num = ATOMIC_LOAD(&concurrent_num_);
-      if (0 == max_concurrent_num_) {
-        ret = OB_REACH_MAX_CONCURRENT_NUM;
-      } else if (concurrent_num >= max_concurrent_num_) {
-        ret = OB_REACH_MAX_CONCURRENT_NUM;
-      } else {
-        new_num = concurrent_num + 1;
-        is_succ = ATOMIC_BCAS(&concurrent_num_, concurrent_num, new_num);
-      }
-    }
-  }
-  return ret;
-}
-void ObPhysicalPlan::dec_concurrent_num()
-{
-  ATOMIC_DEC(&concurrent_num_);
-}
-
-int ObPhysicalPlan::set_max_concurrent_num(int64_t max_concurrent_num)
-{
-  int ret = OB_SUCCESS;
-  if (max_concurrent_num < 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid max_concurrent_num", K(ret), K(max_concurrent_num));
-  } else {
-    ATOMIC_STORE(&max_concurrent_num_, max_concurrent_num);
-  }
-  return ret;
-}
-
-int64_t ObPhysicalPlan::get_max_concurrent_num()
-{
-  return ATOMIC_LOAD(&max_concurrent_num_);
-}
-
-// Because we haven't seen the handling of force_trace_log for remote execution yet, so we will not serialize it temporarily
+// force_trace_log is coordinator-local and is not serialized with the plan.
 OB_SERIALIZE_MEMBER(ObPhysicalPlan,
-                    tenant_schema_version_, // this field is not used at runtime
+                    runtime_schema_version_, // this field is not used at runtime
                     phy_hint_.query_timeout_,
                     phy_hint_.read_consistency_,
                     is_sfu_,
@@ -737,7 +671,6 @@ OB_SERIALIZE_MEMBER(ObPhysicalPlan,
                     stat_.sql_id_,
                     is_contain_inner_table_,
                     is_update_uniq_index_,
-                    dummy_string_,
                     is_returning_,
                     location_type_,
                     use_px_,
@@ -761,7 +694,6 @@ OB_SERIALIZE_MEMBER(ObPhysicalPlan,
                     ddl_execution_id_,
                     ddl_task_id_,
                     stat_.plan_id_,
-                    min_cluster_version_,
                     need_record_plan_info_,
                     subschema_ctx_,
                     use_rich_format_,
@@ -771,9 +703,6 @@ OB_SERIALIZE_MEMBER(ObPhysicalPlan,
                     need_switch_to_table_lock_worker_,
                     data_complement_gen_doc_id_,
                     px_parallel_rule_,
-                    px_node_policy_,
-                    px_node_addrs_,
-                    px_node_count_,
                     px_worker_share_plan_enabled_);
 
 int ObPhysicalPlan::set_table_locations(const ObTablePartitionInfoArray &infos,
@@ -798,12 +727,10 @@ int ObPhysicalPlan::set_table_locations(const ObTablePartitionInfoArray &infos,
       }
     } else if (OB_FAIL(table_locations_.push_back(tl))) {
       LOG_WARN("fail to push table location", K(ret), K(i));
-    } else if (!is_external_object_id(tl.get_ref_table_id())) {
-      if (OB_FAIL(schema_guard.get_table_schema( tl.get_ref_table_id(), table_schema))) {
-        LOG_WARN("get table schema failed", K(ret), K(tl.get_ref_table_id()));
-      } else {
-        contain_index_location_ |= table_schema->is_index_table();
-      }
+    } else if (OB_FAIL(schema_guard.get_table_schema( tl.get_ref_table_id(), table_schema))) {
+      LOG_WARN("get table schema failed", K(ret), K(tl.get_ref_table_id()));
+    } else {
+      contain_index_location_ |= table_schema->is_index_table();
     }
     LOG_DEBUG("set table location", K(tl), K(tl.use_das()));
   }
@@ -1133,13 +1060,13 @@ int ObPhysicalPlan::update_cache_obj_stat(ObILibCacheCtx &ctx)
   } else  {
     stat_.plan_hash_value_ = get_signature();
     stat_.gen_time_ = ObTimeUtility::current_time();
-    stat_.schema_version_ = get_tenant_schema_version();
+    stat_.schema_version_ = get_runtime_schema_version();
     stat_.hit_count_ = 0;
     stat_.mem_used_ = get_mem_size();
     stat_.slow_count_ = 0;
     stat_.slowest_exec_time_ = 0;
     stat_.slowest_exec_usec_ = 0;
-    int64_t sql_length = pc_ctx.sql_ctx_.session_info_->get_tenant_query_record_size_limit();
+    int64_t sql_length = pc_ctx.sql_ctx_.session_info_->get_query_record_size_limit();
     if (PC_PS_MODE == pc_ctx.mode_ || PC_PL_MODE == pc_ctx.mode_) {
       ObTruncatedString trunc_stmt(pc_ctx.raw_sql_, sql_length);
       if (OB_FAIL(ob_write_string(get_allocator(),
@@ -1439,67 +1366,6 @@ bool ObPhysicalPlan::try_record_plan_info()
   bool expected = true;
   bool b_ret = can_set_feedback_info_.compare_exchange_strong(expected, false);
   return b_ret;
-}
-
-int ObPhysicalPlan::set_px_node_addrs(
-          const common::ObIArray<common::ObAddr> &px_node_addrs)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(px_node_addrs_.assign(px_node_addrs))) {
-    LOG_WARN("failed to assign px_node_addrs", K(ret));
-  }
-  return ret;
-}
-
-int64_t ObPhysicalPlan::get_adaptive_feedback_times() const
-{
-  int64_t feedback_times = 0;
-  if (ObPlanStat::ACTIVE ==  ATOMIC_LOAD(&stat_.adaptive_pc_info_.status_)) {
-    feedback_times = ATOMIC_LOAD(&stat_.adaptive_pc_info_.positive_feedback_times_);
-  } else {
-    feedback_times = ATOMIC_LOAD(&stat_.adaptive_pc_info_.negative_feedback_times_);
-  }
-  return feedback_times;
-}
-
-void ObPhysicalPlan::update_adaptive_pc_info(const ObAuditRecordData &record,
-                                             const AdaptivePCConf *adpt_pc_conf)
-{
-  int ret = OB_SUCCESS;
-  bool is_outline_plan = get_outline_state().outline_version_.is_valid();
-  if (!is_inner_sql_ && (nullptr != adpt_pc_conf) && adpt_pc_conf->enable_adaptive_plan_cache_
-      && !is_outline_plan) {
-    static uint32_t MAX_FEEDBACK_TIMES = 5;
-    int64_t get_plan_t = record.exec_timestamp_.get_plan_t_;
-    int64_t executor_t = record.exec_timestamp_.executor_t_;
-    bool is_positive_feedback =
-      (executor_t >= adpt_pc_conf->pc_adaptive_min_exec_time_threshold_
-       && (get_plan_t > 0
-           && (executor_t / get_plan_t)
-                >= adpt_pc_conf->pc_adaptive_effectiveness_ratio_threshold_));
-    if (ObPlanStat::ACTIVE ==  ATOMIC_LOAD(&stat_.adaptive_pc_info_.status_)) {
-      if (is_positive_feedback) {
-        ATOMIC_STORE(&(stat_.adaptive_pc_info_.negative_feedback_times_), 0);
-        if (ATOMIC_AAF(&stat_.adaptive_pc_info_.positive_feedback_times_, 1) >= MAX_FEEDBACK_TIMES) {
-          ATOMIC_STORE(&(stat_.adaptive_pc_info_.status_), ObPlanStat::INACTIVE);
-          LOG_TRACE("set inactive state", K(object_id_), K(stat_.adaptive_pc_info_));
-          ATOMIC_STORE(&(stat_.adaptive_pc_info_.positive_feedback_times_), 0);
-        }
-      } else {
-        ATOMIC_STORE(&(stat_.adaptive_pc_info_.positive_feedback_times_), 0);
-      }
-    } else {
-      if (is_positive_feedback) {
-        ATOMIC_STORE(&(stat_.adaptive_pc_info_.negative_feedback_times_), 0);
-      } else {
-        if (ATOMIC_AAF(&stat_.adaptive_pc_info_.negative_feedback_times_, 1) >= MAX_FEEDBACK_TIMES) {
-          ATOMIC_STORE(&(stat_.adaptive_pc_info_.status_), ObPlanStat::ACTIVE);
-          LOG_TRACE("set active state", K(object_id_), K(stat_.adaptive_pc_info_));
-          ATOMIC_STORE(&(stat_.adaptive_pc_info_.negative_feedback_times_), 0);
-        }
-      }
-    }
-  }
 }
 
 } //namespace sql

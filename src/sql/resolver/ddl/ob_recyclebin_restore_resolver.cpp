@@ -119,12 +119,6 @@ int ObRecyclebinRestoreDatabaseResolver::resolve(const ParseNode &parser_tree)
   if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session_info is null", K(ret));
-  } else if (OB_UNLIKELY(is_external_catalog_id(session_info_->get_current_default_catalog()))) {
-    // Here we need to intercept additionally because restore database did not go through the resolve ParseNode logic, it was directly assigned
-    // So the interception at resolve is invalid
-    // If we need to support restore database catalog.db this syntax in the future, then we need to follow the resolve ParseNode logic, so the interception here can be removed
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "restore database in catalog is");
   } else if (T_RECYCLEBIN_RESTORE_DATABASE != parser_tree.type_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid parse tree",  K(parser_tree.type_));

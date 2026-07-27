@@ -238,18 +238,15 @@ int ObTxReplayExecutor::try_get_tx_ctx_()
     } else if (OB_TRANS_CTX_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
       bool tx_ctx_existed = false;
-      // since 4.2.4, cluster version in log_block_header
-      const uint64_t cluster_version = log_block_.get_header().get_cluster_version();
       ObTxCreateArg arg(true, /* for_replay */
                         TxCtxSource::REPLAY,
                         tx_id,
-                        cluster_version,
                         0, /*session_id*/
                         INT64_MAX,         /*trans_expired_time_*/
                         ls_tx_srv_->get_trans_service());
       ObTxDataThrottleGuard tx_data_throttle_guard(
           true /* for_replay_ */,
-          ObClockGenerator::getClock() + share::ObThrottleUnit<ObTenantTxDataAllocator>::DEFAULT_MAX_THROTTLE_TIME);
+          ObClockGenerator::getClock() + share::ObThrottleUnit<ObTxDataAllocator>::DEFAULT_MAX_THROTTLE_TIME);
       if (OB_FAIL(ls_tx_srv_->create_tx_ctx(arg, tx_ctx_existed, ctx_))) {
         TRANS_LOG(WARN, "get_tx_ctx error", K(ret), K(tx_id), KP(ctx_));
       } else {
@@ -370,7 +367,7 @@ int ObTxReplayExecutor::replay_rollback_to_()
   const bool pre_barrier = base_header_.need_pre_replay_barrier();
   ObTxDataThrottleGuard tx_data_throttle_guard(
       true /* for_replay_ */,
-      ObClockGenerator::getClock() + share::ObThrottleUnit<ObTenantTxDataAllocator>::DEFAULT_MAX_THROTTLE_TIME);
+      ObClockGenerator::getClock() + share::ObThrottleUnit<ObTxDataAllocator>::DEFAULT_MAX_THROTTLE_TIME);
   if (OB_FAIL(log_block_.deserialize_log_body(log))) {
     TRANS_LOG(WARN, "[Replay Tx] deserialize log body error", KR(ret), "log_type", "RollbackTo",
               K(lsn_), K(log_ts_ns_));
@@ -388,7 +385,7 @@ int ObTxReplayExecutor::replay_multi_source_data_()
 
   ObMdsThrottleGuard mds_throttle_guard(true /* for_replay */,
                                         ObClockGenerator::getClock() +
-                                            share::ObThrottleUnit<ObTenantMdsAllocator>::DEFAULT_MAX_THROTTLE_TIME);
+                                            share::ObThrottleUnit<ObMdsAllocator>::DEFAULT_MAX_THROTTLE_TIME);
 
   if (OB_FAIL(log_block_.deserialize_log_body(log))) {
     TRANS_LOG(WARN, "[Replay Tx] deserialize log body error", KR(ret), K(lsn_), K(log_ts_ns_));
@@ -704,14 +701,8 @@ int ObTxReplayExecutor::replay_row_(storage::ObStoreCtx &store_ctx,
                 K(ret), K(tablet_id), K(log_ts_ns_),
                 K(tx_part_log_no_), K(mmi_ptr->get_row_head()));
     } else if (OB_TABLET_NOT_EXIST == ret) {
-      if (GCONF._allow_skip_replay_redo_after_detete_tablet) {
-        ret = OB_NO_NEED_UPDATE;
-        TRANS_LOG(WARN, "[Replay Tx] tablet does not exist while preparing memtable for replay, allow to skip this clog replaying for emergency",
-            K(ret), K(tablet_id), K_(log_ts_ns));
-      } else {
-        TRANS_LOG(ERROR, "[Replay Tx] tablet does not exist while preparing memtable for replay",
-            K(ret), K(tablet_id), K_(log_ts_ns));
-      }
+      TRANS_LOG(ERROR, "[Replay Tx] tablet does not exist while preparing memtable for replay",
+          K(ret), K(tablet_id), K_(log_ts_ns));
     } else {
       TRANS_LOG(WARN, "[Replay Tx] prepare for replay failed", K(ret), K(tablet_id), KP(mem_ptr), KP(mmi_ptr));
     }

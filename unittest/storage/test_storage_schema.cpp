@@ -21,7 +21,7 @@
 
 #include "src/share/schema/ob_table_schema.h"
 #include "storage/test_schema_prepare.h"
-#include "mtlenv/mock_tenant_module_env.h"
+#include "mtlenv/mock_server_runtime_env.h"
 #include "storage/ob_storage_schema_util.h"
 
 namespace oceanbase
@@ -34,42 +34,40 @@ namespace unittest
 class TestStorageSchema : public ::testing::Test
 {
 public:
-  TestStorageSchema() : allocator_(ObModIds::TEST), tenant_base_(tenant_id) {}
+  TestStorageSchema() : allocator_(ObModIds::TEST), runtime_state_() {}
   virtual ~TestStorageSchema() {}
   bool judge_storage_schema_equal(ObStorageSchema &schema1, ObStorageSchema &schema2);
   virtual void SetUp() override;
   virtual void TearDown() override;
   static void SetUpTestCase();
   static void TearDownTestCase();
-  static const int64_t tenant_id = 1;
   common::ObArenaAllocator allocator_;
-  ObTenantBase tenant_base_;
+  ObServerRuntimeState runtime_state_;
 };
 
 void TestStorageSchema::SetUp()
 {
-  ASSERT_EQ(OB_SUCCESS, tenant_base_.init());
+  ASSERT_EQ(OB_SUCCESS, runtime_state_.init());
 
 }
 void TestStorageSchema::TearDown()
 {
-  ObTenantEnv::set_tenant(nullptr);
+  share::g_server_runtime = &share::g_bootstrap_server_runtime;
 }
 
 void TestStorageSchema::SetUpTestCase()
 {
-  EXPECT_EQ(OB_SUCCESS, MockTenantModuleEnv::get_instance().init());
+  EXPECT_EQ(OB_SUCCESS, MockServerRuntimeEnv::get_instance().init());
 }
 void TestStorageSchema::TearDownTestCase()
 {
-  MockTenantModuleEnv::get_instance().destroy();
+  MockServerRuntimeEnv::get_instance().destroy();
 }
 
 bool TestStorageSchema::judge_storage_schema_equal(ObStorageSchema &schema1, ObStorageSchema &schema2)
 {
   bool equal = false;
-  equal = schema1.is_use_bloomfilter_ == schema2.is_use_bloomfilter_
-      && schema1.table_type_ == schema2.table_type_
+  equal = schema1.table_type_ == schema2.table_type_
       && schema1.table_mode_ == schema2.table_mode_
       && schema1.row_store_type_ == schema2.row_store_type_
       && schema1.schema_version_ == schema2.schema_version_
@@ -77,10 +75,7 @@ bool TestStorageSchema::judge_storage_schema_equal(ObStorageSchema &schema1, ObS
       && schema1.tablet_size_ == schema2.tablet_size_
       && schema1.pctfree_ == schema2.pctfree_
       && schema1.block_size_ == schema2.block_size_
-      && schema1.master_key_id_ == schema2.master_key_id_
       && schema1.compressor_type_ == schema2.compressor_type_
-      && schema1.encryption_ == schema2.encryption_
-      && schema1.encrypt_key_ == schema2.encrypt_key_
       && schema1.rowkey_array_.count() == schema2.rowkey_array_.count()
       && schema1.column_array_.count() == schema2.column_array_.count();
 

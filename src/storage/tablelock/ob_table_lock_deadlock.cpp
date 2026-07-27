@@ -212,10 +212,13 @@ int ObTransLockPartBlockCallBack::operator()(
         //       if a trans is finished now. the get dependency process will fail, and
         //       we need get dependency next time.
         const ObTransID &block_trans_id = *it;
-        binary_key.set_user_key(block_trans_id);
-        ObDependencyResource resource(GCTX.self_addr(), binary_key);
-        if (OB_FAIL(depend_res.push_back(resource))) {
-          LOG_WARN("push into array failed.", K(ret), K(resource));
+        if (OB_FAIL(binary_key.set_user_key(block_trans_id))) {
+          LOG_WARN("set block transaction key failed", K(ret), K(block_trans_id));
+        } else {
+          ObDependencyResource resource(binary_key);
+          if (OB_FAIL(depend_res.push_back(resource))) {
+            LOG_WARN("push into array failed.", K(ret), K(resource));
+          }
         }
         LOG_DEBUG("ObTransLockPartBlockCallBack get dependency", K(ret), K(lock_op_),
                   K(block_trans_id));
@@ -292,25 +295,21 @@ int ObTableLockDeadlockDetectorHelper::unregister_trans_lock_part(
 
 int ObTableLockDeadlockDetectorHelper::add_parent(
     const ObTransLockPartID &tx_lock_part_id,
-    const common::ObAddr &parent_addr,
     const ObTransID &parent_trans_id)
 {
   int ret = OB_SUCCESS;
   if (ObDeadLockDetectorMgr::is_deadlock_enabled()) {
     if (OB_UNLIKELY(!tx_lock_part_id.is_valid()) ||
-        OB_UNLIKELY(!parent_addr.is_valid()) ||
         OB_UNLIKELY(!parent_trans_id.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), K(tx_lock_part_id), K(parent_addr),
-              K(parent_trans_id));
+      LOG_WARN("invalid argument", K(ret), K(tx_lock_part_id), K(parent_trans_id));
     } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->add_parent(tx_lock_part_id,
-                                                              parent_addr,
                                                               parent_trans_id))) {
       LOG_WARN("add lock parent trans failed", K(ret), K(tx_lock_part_id),
               K(parent_trans_id));
     }
     LOG_DEBUG("ObTableLockDeadlockDetectorHelper::add_parent", K(ret), K(tx_lock_part_id),
-              K(parent_addr), K(parent_trans_id));
+              K(parent_trans_id));
   }
   return ret;
 }

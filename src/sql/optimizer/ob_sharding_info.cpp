@@ -923,31 +923,6 @@ int ObShardingInfo::get_all_partition_keys(common::ObIArray<ObRawExpr*> &out_par
   return ret;
 }
 
-int ObShardingInfo::get_remote_addr(ObAddr &remote) const
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_remote()) || OB_ISNULL(phy_table_location_info_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(location_type_), K(phy_table_location_info_), K(ret));
-  } else {
-    share::ObLSReplicaLocation replica_loc;
-    const ObCandiTabletLocIArray &phy_partition_loc =
-        phy_table_location_info_->get_phy_part_loc_info_list();
-    if (OB_UNLIKELY(1 != phy_partition_loc.count())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected partition count", K(phy_partition_loc.count()), K(ret));
-    } else if (OB_FAIL(phy_partition_loc.at(0).get_selected_replica(replica_loc))) {
-      LOG_WARN("fail to get selected replica", K(ret), K(phy_partition_loc.at(0)));
-    } else if (!replica_loc.is_valid()) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("replica location is invalid", K(ret));
-    } else {
-      remote = replica_loc.get_server();
-    }
-  }
-  return ret;
-}
-
 int ObShardingInfo::get_total_part_cnt(int64_t &total_part_cnt) const
 {
   int ret = OB_SUCCESS;
@@ -1056,18 +1031,6 @@ int ObShardingInfo::is_sharding_equal(const ObShardingInfo *left_sharding,
     is_equal = false;
   } else if (left_sharding->get_location_type() != right_sharding->get_location_type()) {
     is_equal = false;
-  } else if (left_sharding->is_remote()) {
-    ObSEArray<common::ObAddr, 2> left_servers;
-    ObSEArray<common::ObAddr, 2> right_servers;
-    if (OB_FAIL(get_serverlist_from_sharding(*left_sharding, left_servers))) {
-      LOG_WARN("failed to get server list from left sharding", K(ret));
-    } else if (OB_FAIL(get_serverlist_from_sharding(*right_sharding, right_servers))) {
-      LOG_WARN("failed to get server list from right sharding", K(ret));
-    } else if (OB_FAIL(is_physically_equal_serverlist(left_servers,
-                                                      right_servers,
-                                                      is_equal))) {
-      LOG_WARN("failed to check equal server list", K(ret));
-    } else { /*do nothing*/ }
   } else if (left_sharding->is_match_all() || left_sharding->is_local()) {
     is_equal = true;
   } else if (!ObOptimizerUtil::is_exprs_equivalent(left_sharding->get_partition_keys(),
@@ -1119,13 +1082,11 @@ int ObShardingInfo::get_serverlist_from_sharding(const ObShardingInfo &sharding,
   } else {
     const ObCandiTabletLocIArray &locations = sharding.phy_table_location_info_->get_phy_part_loc_info_list();
     for (int64_t i = 0; OB_SUCC(ret) && i < locations.count(); ++i) {
-      share::ObLSReplicaLocation replica_loc;
-      if (OB_FAIL(locations.at(i).get_selected_replica(replica_loc))) {
-        LOG_WARN("fail to get selected replica", K(ret), K(locations.at(i)));
-      } else if (!replica_loc.is_valid()) {
+      const ObAddr &server = locations.at(i).get_partition_location().get_server();
+      if (!server.is_valid()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("replica location is invalid", K(ret), K(i), K(replica_loc));
-      } else if (OB_FAIL(server_list.push_back(replica_loc.get_server()))) {
+        LOG_WARN("local tablet server is invalid", K(ret), K(i), K(server));
+      } else if (OB_FAIL(server_list.push_back(server))) {
         LOG_WARN("failed to push back server addr", K(ret));
       }
     }

@@ -26,8 +26,6 @@
 #include "lib/trace/ob_trace_event.h"
 #include "lib/utility/ob_unify_serialize.h"
 #include "lib/container/ob_tuple.h"
-#include "common/ob_role.h"
-#include "share/ob_cluster_version.h"
 #include "share/ob_light_hashmap.h"
 #include "storage/tx/ob_trans_define.h"
 #include "common/ob_simple_iterator.h"
@@ -167,7 +165,6 @@ union ObTxWriteStateFlag
   int64_t flag_val_;
   struct FlagBit
   {
-    unsigned int reserved_ : 1;
     bool is_clean_          : 1; // no Write happended, even rollbacked
     TO_STRING_KV(K_(is_clean));
   } flag_bit_;
@@ -367,32 +364,32 @@ class ObTxExecResult
   friend class ObTransService;
   friend class ObTxDesc;
   OB_UNIS_VERSION(1);
-	  TransModulePageAllocator allocator_;
-	  bool incomplete_;
-	  bool touched_storage_;
-	  bool has_write_state_;
-	  ObTxWriteState write_state_;
-	  ObSArray<ObTransID> conflict_txs_;
-	  ObSArray<storage::ObRowConflictInfo> conflict_info_array_;
+  TransModulePageAllocator allocator_;
+  bool incomplete_;
+  bool touched_storage_;
+  bool has_write_state_;
+  ObTxWriteState write_state_;
+  ObSArray<ObTransID> conflict_txs_;
+  ObSArray<storage::ObRowConflictInfo> conflict_info_array_;
 public:
   ObTxExecResult();
   ~ObTxExecResult();
   void reset();
-	  TO_STRING_KV(K_(incomplete), K_(has_write_state), K_(write_state), K_(touched_storage), K_(conflict_txs));
+  TO_STRING_KV(K_(incomplete), K_(has_write_state), K_(write_state), K_(touched_storage), K_(conflict_txs));
   void set_incomplete() {
     TRANS_LOG(TRACE, "tx result incomplete:", KP(this));
     incomplete_ = true;
   }
-	  int merge_cflict_txs(const common::ObIArray<ObTransID> &txs);
-	  bool is_incomplete() const { return incomplete_; }
-	  bool touches_storage() const { return touched_storage_; }
-	  void mark_touched_storage() { touched_storage_ = true; }
-	  int set_write_state(const ObTxWriteState &part);
-	  int merge_write_state(const ObTxWriteState &part, const bool has_write_state);
-	  bool has_write_state() const { return has_write_state_; }
-	  int merge_result(const ObTxExecResult &r);
-	  int assign(const ObTxExecResult &r);
-	  const ObSArray<ObTransID> &get_conflict_txs() const { return conflict_txs_; }
+  int merge_cflict_txs(const common::ObIArray<ObTransID> &txs);
+  bool is_incomplete() const { return incomplete_; }
+  bool touches_storage() const { return touched_storage_; }
+  void mark_touched_storage() { touched_storage_ = true; }
+  int set_write_state(const ObTxWriteState &part);
+  int merge_write_state(const ObTxWriteState &part, const bool has_write_state);
+  bool has_write_state() const { return has_write_state_; }
+  int merge_result(const ObTxExecResult &r);
+  int assign(const ObTxExecResult &r);
+  const ObSArray<ObTransID> &get_conflict_txs() const { return conflict_txs_; }
   DISABLE_COPY_ASSIGN(ObTxExecResult);
 };
 
@@ -409,7 +406,6 @@ class ObTxDesc final : public share::ObLightHashLink<ObTxDesc>
   OB_UNIS_VERSION(1);
 protected:
   ObTraceInfo trace_info_;
-  uint64_t cluster_version_;  // compatible handle when upgrade
   int64_t seq_base_;          // tx_seq's base value, use to calculate absolute value of tx_seq
   ObTxConsistencyType tx_consistency_type_; // transaction level consistency_type : strong or bounded read
 
@@ -436,11 +432,11 @@ protected:
     ROLLBACK_SAVEPOINT, // rolling back to savepoint
     IN_TERMINATE,       // committing, aborting
     ABORTED,            // internal rolled back
-	    ROLLED_BACK,        // rolled back
-	    COMMIT_TIMEOUT,     // commit timeouted
-	    COMMIT_UNKNOWN,     // commit complted but result unknown, either committed or aborted
-	    COMMITTED,          // committed
-	  } state_;
+    ROLLED_BACK,        // rolled back
+    COMMIT_TIMEOUT,     // commit timeouted
+    COMMIT_UNKNOWN,     // commit complted but result unknown, either committed or aborted
+    COMMITTED,          // committed
+  } state_;
 
   union FLAG                         // flags
   {
@@ -489,8 +485,8 @@ protected:
   bool has_write_state_;
   ObTxWriteState write_state_;
   ObTxSavePointList savepoints_;     // savepoints established
-  // conflict_txs_ is used to store conflict trans id when try acquire row lock failed(meet lock conflict)
-  // this information will used to detect deadlock
+  // Transaction ids observed during row-lock conflicts. The ids are enough to
+  // identify detector nodes because the wait-for graph is process local.
   ObSArray<ObTransID> conflict_txs_;
   ObSArray<storage::ObRowConflictInfo> conflict_info_array_;
 
@@ -503,8 +499,6 @@ protected:
   /* internal abort cause */
   int16_t abort_cause_;              // Tx Aborted cause
   bool unused_can_elr_;
-private:
-  ObSEArray<uint64_t, 1> modified_tables_; // used in cursor test read uncommitted
 private:
   // FOLLOWING are runtime auxiliary fields
   mutable ObSpinLock lock_;
@@ -586,7 +580,6 @@ public:
                K_(commit_version),
                K_(commit_times),
                KP_(commit_cb),
-               K_(cluster_version),
                K_(seq_base),
                K_(flags_.SHADOW),
                K_(flags_.INTERRUPTED),
@@ -595,7 +588,6 @@ public:
                K_(abort_cause),
                K_(commit_expire_ts),
                K(commit_task_.is_registered()),
-               K_(modified_tables),
                K_(last_rc_snapshot_version),
                K_(ref));
   // used by SQL alloc branch_id refer the min branch_id allowed
@@ -606,14 +598,13 @@ public:
   int fetch_conflict_txs(ObIArray<ObTransID> &array);
   void reset_conflict_txs()
   { ObSpinLockGuard guard(lock_); conflict_txs_.reset(); }
-  int add_conflict_tx(const ObTransID conflict_tx);
+  int add_conflict_tx(const ObTransID &conflict_tx);
   int merge_conflict_txs(const ObIArray<ObTransID> &conflict_ids);
   bool has_conflict_txs() const { return conflict_txs_.count() > 0; }
   bool contain(const ObTransID &trans_id) const { return tx_id_ == trans_id; } /*used by TransHashMap*/
 
   uint32_t get_session_id() const { return sess_id_; }
   ObAddr get_addr() const { return addr_; }
-  uint64_t get_cluster_version() const { return cluster_version_; }
   ObTxConsistencyType get_tx_consistency_type() const { return tx_consistency_type_; }
   ObTxIsolationLevel get_isolation_level() const { return isolation_; }
   bool is_RR_or_SERIAL_isolevel() const {
@@ -641,26 +632,26 @@ public:
   bool is_tx_end() {
     return is_committed() || is_rollbacked();
   }
-	  bool is_committing() {
-	    return state_ == State::IN_TERMINATE;
-	  }
+  bool is_committing() {
+    return state_ == State::IN_TERMINATE;
+  }
   bool is_terminated() {
     return state_ == State::ABORTED || is_tx_end();
   }
-	  bool is_committed() {
-	    return state_ == State::COMMITTED
-	      || state_ == State::COMMIT_TIMEOUT
-	      || state_ == State::COMMIT_UNKNOWN;
-	  }
-	  bool is_rollbacked() {
-	    return state_ == State::ROLLED_BACK;
-	  }
+  bool is_committed() {
+    return state_ == State::COMMITTED
+      || state_ == State::COMMIT_TIMEOUT
+      || state_ == State::COMMIT_UNKNOWN;
+  }
+  bool is_rollbacked() {
+    return state_ == State::ROLLED_BACK;
+  }
   bool is_commit_unsucc() {
     return state_ == State::COMMIT_TIMEOUT
       || state_ == State::COMMIT_UNKNOWN
       || state_ == State::ROLLED_BACK;
   }
-	  bool is_aborted() const { return state_ == State::ABORTED; }
+  bool is_aborted() const { return state_ == State::ABORTED; }
   bool is_tx_timeout() { return expire_ts_ > 0 && ObClockGenerator::getClock() > expire_ts_; }
   bool is_tx_commit_timeout() { return commit_expire_ts_ > 0 && ObClockGenerator::getClock() > commit_expire_ts_;}
   void set_sessid(const uint32_t session_id) { sess_id_ = session_id; }
@@ -731,8 +722,6 @@ LST_DO(DEF_FREE_ROUTE_DECODE, (;), static, dynamic, parts, extra);
   ObTxSEQ get_min_tx_seq() const;
   int clear_state_for_autocommit_retry();
   int64_t get_seq_base() const { return seq_base_; }
-  int add_modified_tables(const ObIArray<uint64_t> &tables);
-  bool has_modify_table(const uint64_t table_id) const;
   DISABLE_COPY_ASSIGN(ObTxDesc);
   bool is_write_state_clean() const;
   bool is_write_state_without_valid_write() const;
@@ -787,7 +776,7 @@ public:
    ObTxDesc* alloc_value()
    {
      ATOMIC_INC(&alloc_cnt_);
-     ObTxDesc *it = MTL_NEW(ObTxDesc, "ObTxDesc");
+     ObTxDesc *it = SERVER_NEW(ObTxDesc, "ObTxDesc");
 #ifdef ENABLE_DEBUG_LOG
      if (OB_NOT_NULL(it)) {
        ObSpinLockGuard guard(lk_);
@@ -804,12 +793,12 @@ public:
         ObSpinLockGuard guard(lk_);
         v->alloc_link_.remove();
 #endif
-        MTL_DELETE(ObTxDesc, "ObTxDesc", v);
+        SERVER_DELETE(ObTxDesc, "ObTxDesc", v);
       }
     }
     static void force_free(ObTxDesc *v)
     {
-      MTL_DELETE(ObTxDesc, "ObTxDesc", v);
+      SERVER_DELETE(ObTxDesc, "ObTxDesc", v);
     }
     int64_t get_alloc_cnt() const { return ATOMIC_LOAD(&alloc_cnt_); }
 #ifdef ENABLE_DEBUG_LOG
@@ -867,8 +856,8 @@ typedef lib::ObLockGuardWithTimeout<ObSpinLock> ObSpinLockGuardWithTimeout;
 inline ObTxSEQ ObTxDesc::get_tx_seq(int64_t seq_abs) const
 {
   int64_t seq = seq_abs > 0 ? seq_abs : ObSequence::get_max_seq_no();
-  if (seq < seq_base_) {
-    TRANS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "seq_abs is less seq_base_", K(seq_abs), K(tx_id_), K(seq_base_));
+  if (seq_base_ <= 0 || seq < seq_base_) {
+    TRANS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "invalid transaction sequence base", K(seq_abs), K(tx_id_), K(seq_base_));
     return ObTxSEQ::INVL();
   }
   return ObTxSEQ(seq - seq_base_, 0);
@@ -896,6 +885,10 @@ inline int ObTxDesc::get_and_inc_tx_seq(const int16_t branch,
 inline ObTxSEQ ObTxDesc::inc_and_get_tx_seq(int16_t branch) const
 {
   int64_t seq = ObSequence::inc_and_get_max_seq_no();
+  if (OB_UNLIKELY(seq_base_ <= 0 || seq < seq_base_)) {
+    TRANS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "invalid transaction sequence base", K(seq), K(seq_base_));
+    return ObTxSEQ::INVL();
+  }
   return ObTxSEQ(seq - seq_base_, branch);
 }
 

@@ -413,11 +413,10 @@ public:
   {
     tree_node_.init();
     int ret = common::OB_SUCCESS;
-    // change tenant context
+    // Select the allocator for this memory context.
     ObMemAttr inner_attr = param_.attr_;
     auto *ma = ObMallocAllocator::get_instance();
-    // tenant_allocator is created synchronously when the tenant is built, and 500 tenant memory is used when there is no such tenant
-    auto ta = ma->get_tenant_ctx_allocator(inner_attr.ctx_id_);
+    auto ta = ma->get_ctx_allocator(inner_attr.ctx_id_);
     if (nullptr == ta) {
       
     }
@@ -431,8 +430,7 @@ public:
     ret = init_alloc(alloc_, thread_safe, ablock_size);
     if (OB_SUCC(ret)) {
       // init arena allocator
-      p_arena_alloc_ = new (&arena_alloc_) common::ObArenaAllocator(*p_alloc_, param_.page_size_,
-                                                                    true/*enable_sanity*/);
+      p_arena_alloc_ = new (&arena_alloc_) common::ObArenaAllocator(*p_alloc_, param_.page_size_);
       arena_alloc_.set_attr(attr_);
       p_safe_arena_alloc_ = new (&safe_arena_alloc_) common::ObSafeArenaAllocator(arena_alloc_);
       default_allocator_ = (param_.properties_ & RETURN_MALLOC_DEFAULT) ?

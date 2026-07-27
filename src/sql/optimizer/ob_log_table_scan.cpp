@@ -84,8 +84,6 @@ const char *ObLogTableScan::get_name() const
     name = use_das() ? "DISTRIBUTED VECTOR INDEX SCAN" : "VECTOR INDEX SCAN";
   } else if (is_text_retrieval_scan() || has_es_match()) {
     name = use_das() ? "DISTRIBUTED TEXT RETRIEVAL SCAN" : "TEXT RETRIEVAL SCAN";
-  } else if (is_skip_scan()) {
-    name = use_das() ? "DISTRIBUTED TABLE SKIP SCAN" : "TABLE SKIP SCAN";
   } else if (use_index_merge()) {
     name = use_das() ? "DISTRIBUTED INDEX MERGE SCAN" : "INDEX MERGE SCAN";
   } else if (use_das()) {
@@ -114,7 +112,7 @@ bool ObLogTableScan::use_query_range() const
   const ObRangeNode *head = NULL;
   bool cnt_dynamic_param = false;
   if (range_conds_.count() > 0) {
-    // can extract precise range (for old query range)
+    // range conditions can extract a precise range
     res = true;
   } else {
     if (!ranges_.empty()) {
@@ -133,38 +131,10 @@ bool ObLogTableScan::use_query_range() const
         cnt_dynamic_param = OB_NOT_NULL(filter_exprs_.at(i)) &&
                             filter_exprs_.at(i)->has_flag(CNT_DYNAMIC_PARAM);
       }
-      res = cnt_dynamic_param &&
-            get_pre_range_graph()->get_skip_scan_offset() == -1 &&
-            head->min_offset_ == 0 && !head->always_true_;
+      res = cnt_dynamic_param && head->min_offset_ == 0 && !head->always_true_;
     }
   }
   return res;
-}
-
-int ObLogTableScan::check_is_delete_insert_scan(bool &is_delete_insert_scan) const
-{
-  int ret = OB_SUCCESS;
-  is_delete_insert_scan = false;
-  ObSQLSessionInfo *session = NULL;
-  ObSchemaGetterGuard *schema_guard = nullptr;
-  const ObTableSchema *table_schema = nullptr;
-  const int64_t table_id = is_index_scan() ? index_table_id_ : ref_table_id_;
-  if (OB_ISNULL(get_plan())
-      || OB_ISNULL(session = get_plan()->get_optimizer_context().get_session_info())
-      || OB_ISNULL(schema_guard = get_plan()->get_optimizer_context().get_schema_guard())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get table schema", K(ret));
-  } else if (OB_FAIL(schema_guard->get_table_schema( table_id, table_schema))) {
-    LOG_WARN("failed to get table schema", K(ret));
-  } else if (OB_UNLIKELY(NULL == table_schema)) {
-    // may be fake table, skip
-    LOG_DEBUG("get nullptr table schema", K(ret), K_(table_id), K_(ref_table_id), K(get_stmt()));
-  } else if (table_schema->is_delete_insert_merge_engine()) {
-    if (OB_LIKELY(true)) {
-      is_delete_insert_scan = GCONF._enable_delete_insert_scan;
-    }
-  }
-  return ret;
 }
 
 void ObLogTableScan::set_ref_table_id(uint64_t ref_table_id)
@@ -239,8 +209,7 @@ int ObLogTableScan::do_re_est_cost(EstimateCostInfo &param, double &card, double
     } else if (range_conds_.empty() &&
         ObEnableOptRowGoal::AUTO == get_plan()->get_optimizer_context().get_enable_opt_row_goal() &&
         (!est_cost_info_->postfix_filters_.empty() ||
-        !est_cost_info_->table_filters_.empty() ||
-        !est_cost_info_->ss_postfix_range_filters_.empty())) {
+        !est_cost_info_->table_filters_.empty())) {
       // full scan with table filters
       param.need_row_count_ = -1;
     }
@@ -321,8 +290,6 @@ int ObLogTableScan::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
     LOG_WARN("failed to get index merge calc exprs", K(ret));
   } else if (is_vec_idx_scan() && OB_FAIL(get_vec_idx_calc_exprs(all_exprs))) {
     LOG_WARN("failed to get text retrieval exprs", K(ret));
-  } else if (OB_FAIL(append(all_exprs, pseudo_columnref_exprs_))) {
-    LOG_WARN("failed to append pseudo_columnref_exprs_", K(ret));
   } else if (OB_FAIL(append(all_exprs, access_exprs_))) {
     LOG_WARN("failed to append exprs", K(ret));
   } else if (OB_FAIL(append(all_exprs, pushdown_aggr_exprs_))) {
@@ -354,15 +321,6 @@ int ObLogTableScan::allocate_expr_post(ObAllocExprContext &ctx)
   for (int64_t i = 0; OB_SUCC(ret) && i < pushdown_aggr_exprs_.count(); i++) {
     ObRawExpr *expr = NULL;
     if (OB_ISNULL(expr = pushdown_aggr_exprs_.at(i))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null expr", K(ret));
-    } else if (OB_FAIL(mark_expr_produced(expr, branch_id_, id_, ctx))) {
-      LOG_WARN("failed to mark expr as produced", K(*expr), K(branch_id_), K(id_), K(ret));
-    } else { /*do nothing*/ }
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && i < pseudo_columnref_exprs_.count(); i++) {
-    ObRawExpr *expr = NULL;
-    if (OB_ISNULL(expr = pseudo_columnref_exprs_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get null expr", K(ret));
     } else if (OB_FAIL(mark_expr_produced(expr, branch_id_, id_, ctx))) {
@@ -635,7 +593,7 @@ int ObLogTableScan::generate_access_exprs()
   } else if (OB_FAIL(append_array_no_dup(access_exprs_, domain_exprs_))) {
     LOG_WARN("failed to append domain exprs", K(ret));
   } else if (is_index_global_ && index_back_) {
-    if (OB_FAIL(ObRawExprUtils::extract_column_exprs(filter_exprs_, temp_exprs, false, false))) {
+    if (OB_FAIL(ObRawExprUtils::extract_column_exprs(filter_exprs_, temp_exprs, false))) {
       LOG_WARN("failed to extract column exprs", K(ret));
     } else if (OB_FAIL(append_array_no_dup(access_exprs_, temp_exprs))) {
       LOG_WARN("failed to append array no dup", K(ret));
@@ -651,12 +609,6 @@ int ObLogTableScan::generate_access_exprs()
         //do nothing
       } else if (col_item->expr_->is_only_referred_by_stored_gen_col()) {
         //skip if is only referred by stored generated columns which don't need to be recalculated
-      } else if (col_item->expr_->is_column_ref_expr() &&
-            static_cast<const ObColumnRefRawExpr*>(col_item->expr_)->is_pseudo_column_ref()) {
-        if (OB_FAIL(add_var_to_array_no_dup(pseudo_columnref_exprs_,
-            static_cast<ObRawExpr*>(col_item->expr_)))) {
-          LOG_WARN("fail to push back expr into pseudo_columnref_exprs_", K(ret));
-        }
       } else if (is_index_scan() && !get_index_back() && !col_item->expr_->is_referred_by_normal()) {
         //skip the dependant columns of partkeys and generated columns if index_back is false in index scan
       } else if (OB_FAIL(temp_exprs.push_back(col_item->expr_))) {
@@ -861,7 +813,6 @@ int ObLogTableScan::extract_pushdown_filters(ObIArray<ObRawExpr*> &nonpushdown_f
     //2. data table scan filter when TSC use the data table scan directly
     //lookup_pushdown_filters means that the data table filter when
     //TSC use index scan and lookup the data table
-    bool contains_part_id_columnref = false;
     for (int64_t i = 0; OB_SUCC(ret) && i < filters.count(); ++i) {
       bool add_to_scan_filter = false;
       if (use_batch() && filters.at(i)->has_flag(CNT_DYNAMIC_PARAM)) {
@@ -900,15 +851,6 @@ int ObLogTableScan::extract_pushdown_filters(ObIArray<ObRawExpr*> &nonpushdown_f
         }
       } else if (ignore_pd_filter) {
         //ignore_pd_filter: only extract non-pushdown filters, ignore others
-      } else if (OB_FAIL(ObOptimizerUtil::check_contain_part_id_columnref_expr(filters.at(i),
-                          contains_part_id_columnref))) {
-          LOG_WARN("check_contain_part_id_columnref_expr failed", K(ret));
-      } else if (contains_part_id_columnref) {
-        if (OB_FAIL(nonpushdown_filters.push_back(filters.at(i)))) {
-          LOG_WARN("push variable assign filter store non-pushdown filter failed", K(ret), K(i));
-        } else {
-          LOG_TRACE("check for not pushdown partid columnref filter here");
-        }
       } else if (!get_index_back()) {
         add_to_scan_filter = true;
         if (OB_FAIL(scan_pushdown_filters.push_back(filters.at(i)))) {
@@ -1301,9 +1243,6 @@ int ObLogTableScan::index_back_check()
             static_cast<const ObColumnRefRawExpr*>(expr)->get_column_id());
       }
     } //end for
-    if (pseudo_columnref_exprs_.count() > 0) {
-      column_found = false;
-    }
   }
 
   if (OB_SUCC(ret)) {
@@ -1768,24 +1707,6 @@ int ObLogTableScan::get_plan_item_info(PlanText &plan_text,
     } else if (OB_FAIL(BUF_PRINTF("keep_ordering=%s", das_keep_ordering_ ? "true" : "false"))) {
       LOG_WARN("BUF_PRINTF fails", K(ret));
     } else { /* Do nothing */ }
-
-    bool is_delete_insert_scan = false;
-    if (FAILEDx(check_is_delete_insert_scan(is_delete_insert_scan))) {
-      LOG_WARN("check is delete insert table failed", K(ret));
-    } else if (is_delete_insert_scan) {
-      if (OB_FAIL(BUF_PRINTF(", "))) {
-        LOG_WARN("BUF_PRINTF fails", K(ret));
-      } else if (common::ObQueryFlag::NoOrder == scan_order_
-                 && OB_FAIL(BUF_PRINTF("scan_order=%s", "noorder"))) {
-        LOG_WARN("BUF_PRINTF fails", K(ret));
-      } else if (common::ObQueryFlag::Forward == scan_order_
-                 && OB_FAIL(BUF_PRINTF("scan_order=%s", "forward"))) {
-        LOG_WARN("BUF_PRINTF fails", K(ret));
-      } else if (common::ObQueryFlag::Reverse == scan_order_
-                 && OB_FAIL(BUF_PRINTF("scan_order=%s", "reverse"))) {
-        LOG_WARN("BUF_PRINTF fails", K(ret));
-      }
-    }
 
     if (OB_SUCC(ret) && use_index_merge()) {
       if (OB_FAIL(BUF_PRINTF(", "))) {
@@ -2361,17 +2282,6 @@ int ObLogTableScan::print_range_annotation(char *buf,
       ret = print_ranges(buf, buf_len, pos, ranges_);
     }
 
-    if (OB_SUCC(ret) && is_skip_scan()) {
-      int64_t skip_scan_offset = get_pre_graph()->get_skip_scan_offset();
-      if (OB_FAIL(BUF_PRINTF("\n      prefix_columns_cnt = %ld , skip_scan_range", skip_scan_offset))) {
-        LOG_WARN("BUF_PRINTF fails", K(ret));
-      } else if (ss_ranges_.empty() && OB_FAIL(BUF_PRINTF("(MIN ; MAX)"))) {
-        LOG_WARN("BUF_PRINTF fails", K(ret));
-      } else if (OB_FAIL(print_ranges(buf, buf_len, pos, ss_ranges_))) {
-        LOG_WARN("failed to print index skip ranges", K(ret));
-      } else { /* Do nothing */ }
-    }
-
     if (OB_SUCC(ret)) {
       if (OB_NOT_NULL(est_cost_info_) && !est_cost_info_->real_range_exprs_.empty()) {
         const ObIArray<ObRawExpr*> &range_cond = est_cost_info_->real_range_exprs_;
@@ -2425,13 +2335,10 @@ int ObLogTableScan::print_limit_offset_annotation(char *buf,
   return ret;
 }
 
-int ObLogTableScan::set_query_ranges(ObIArray<ObNewRange> &ranges,
-                                     ObIArray<ObNewRange> &ss_ranges)
+int ObLogTableScan::set_query_ranges(ObIArray<ObNewRange> &ranges)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(append(ranges_, ranges))) {
-    LOG_WARN("Failed to do append to ranges_ in set_query_ranges()", K(ret));
-  } else if (OB_FAIL(append(ss_ranges_, ss_ranges))) {
     LOG_WARN("Failed to do append to ranges_ in set_query_ranges()", K(ret));
   } else { /* Do nothing =*/ }
   return ret;
@@ -2484,13 +2391,6 @@ int ObLogTableScan::print_outline_data(PlanText &plan_text)
   if (OB_FAIL(ret)) {
   } else if (vc_info.is_vec_adaptive_iter_scan()) {
     index_name = &vc_info.get_vec_index_name();
-  } else if (is_skip_scan()) {
-    index_type = use_desc_hint ? T_INDEX_SS_DESC_HINT : T_INDEX_SS_HINT;
-    if (ref_table_id_ == index_table_id_) {
-      index_name = &ObIndexHint::PRIMARY_KEY;
-    } else {
-      index_name = &get_index_name();
-    }
   } else if (ref_table_id_ == index_table_id_ && !use_query_range() && index_prefix < 0 && !use_desc_hint) {
     index_type = T_FULL_HINT;
     index_name = &ObIndexHint::PRIMARY_KEY;
@@ -2597,8 +2497,6 @@ int ObLogTableScan::print_used_hint(PlanText &plan_text)
             || OB_ISNULL(index_hint = static_cast<const ObIndexHint *>(table_hint->index_hints_.at(idx)))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected idx", K(ret), K(idx), K(table_hint->index_list_));
-        } else if (!is_skip_scan() && index_hint->use_skip_scan()) {
-          /* is not index skip scan but exist index_ss hint */
         } else if (index_hint->is_trans_added()) {
           //do nothing
         } else if (OB_FAIL(index_hint->print_hint(plan_text))) {
@@ -5429,21 +5327,7 @@ int ObLogTableScan::try_adjust_scan_direction(const ObIArray<OrderItem> &sort_ke
 int ObLogTableScan::set_scan_order()
 {
   int ret = OB_SUCCESS;
-  bool is_delete_insert_scan = false;
-  if (OB_FAIL(check_is_delete_insert_scan(is_delete_insert_scan))) {
-    LOG_WARN("failed to check is delete insert table", K(ret));
-  } else if (is_delete_insert_scan) {
-    bool order_used = false;
-    if (OB_FAIL(check_op_orderding_used_by_parent(order_used))) {
-      LOG_WARN("fail to check op ordering", K(ret));
-    } else if (order_used || das_keep_ordering_ || is_tsc_with_domain_id()) {
-      scan_order_ = is_descending_direction(scan_direction_) ? ObQueryFlag::Reverse : ObQueryFlag::Forward;
-    } else {
-      scan_order_ = common::ObQueryFlag::NoOrder;
-    }
-  } else {
-    scan_order_ = is_descending_direction(scan_direction_) ? ObQueryFlag::Reverse : ObQueryFlag::Forward;
-  }
+  scan_order_ = is_descending_direction(scan_direction_) ? ObQueryFlag::Reverse : ObQueryFlag::Forward;
   return ret;
 }
 

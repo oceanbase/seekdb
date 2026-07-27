@@ -55,8 +55,6 @@ private:
   int check_candidate_tablet_(const ObTablet &tablet, bool &can_become_shell, bool &need_retry);
   int get_empty_shell_tablet_ids(common::ObTabletIDArray &empty_shell_tablet_ids, bool &need_retry);
   int update_tablets_to_empty_shell(ObLS *ls, const common::ObIArray<common::ObTabletID> &tablet_ids);
-  static int get_readable_scn(share::SCN &readable_scn);
-
 public:
   obsys::ObRWLock wait_lock_;
 

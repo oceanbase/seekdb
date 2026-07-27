@@ -43,7 +43,6 @@ class ObTransID;
 class ObTransCtx;
 class ObTxDesc;
 class ObLSTxCtxMgr;
-class ObTxRetainCtxMgr;
 class ObTransService;
 class ObITxLogAdapter;
 class ObTxCreateArg;
@@ -177,8 +176,8 @@ public:
   // undertake dump
   int traversal_flush();
   virtual share::SCN get_ls_weak_read_ts();
-  int advance_commit_version(share::SCN commit_version);
-  transaction::ObTxRetainCtxMgr *get_retain_ctx_mgr();
+  int check_in_leader_serving_state(bool& bool_ret);
+  int set_max_replay_commit_version(share::SCN commit_version);
   transaction::ObTxLogCbPoolMgr *get_log_cb_pool_mgr();
 
   // check tx ls blocked

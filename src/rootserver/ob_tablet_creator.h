@@ -44,7 +44,7 @@ public:
      data_tablet_id_(),
      table_schemas_(),
      is_create_bind_hidden_tablets_(false),
-     tenant_data_version_(0),
+     data_format_version_(0),
      need_create_empty_majors_(),
      fork_tablet_infos_() {}
   virtual ~ObTabletCreatorArg() {}
@@ -53,7 +53,7 @@ public:
            const common::ObTabletID data_tablet_id,
            const ObIArray<const share::schema::ObTableSchema*> &table_schemas,
            const bool is_create_bind_hidden_tablets,
-           const uint64_t tenant_data_version,
+           const uint64_t data_format_version,
            const ObIArray<bool> &need_create_empty_majors,
            const ObIArray<int64_t> &create_commit_versions,
            const ObIArray<share::ObForkTabletInfo> &fork_tablet_infos);
@@ -61,7 +61,7 @@ public:
            const common::ObTabletID data_tablet_id,
            const ObIArray<const share::schema::ObTableSchema*> &table_schemas,
            const bool is_create_bind_hidden_tablets,
-           const uint64_t tenant_data_version,
+           const uint64_t data_format_version,
            const ObIArray<bool> &need_create_empty_majors,
            const ObIArray<int64_t> &create_commit_versions);
 
@@ -70,7 +70,7 @@ public:
   common::ObTabletID data_tablet_id_;
   common::ObArray<const share::schema::ObTableSchema*> table_schemas_;
   bool is_create_bind_hidden_tablets_;
-  uint64_t tenant_data_version_;
+  uint64_t data_format_version_;
   common::ObArray<bool> need_create_empty_majors_;
   common::ObArray<int64_t> create_commit_versions_;
   common::ObArray<share::ObForkTabletInfo> fork_tablet_infos_;
@@ -90,7 +90,7 @@ public:
   int init(const share::SCN &major_frozen_scn,
            const bool need_check_tablet_cnt);
   int try_add_table_schema(const share::schema::ObTableSchema *table_schema, 
-      const uint64_t tenant_data_version,
+      const uint64_t data_format_version,
       const bool need_create_empty_major_sstable,
       int64_t &index);
   int add_arg_to_batch_arg(const ObTabletCreatorArg &arg);
@@ -109,7 +109,7 @@ public:
   ObBatchCreateTabletHelper *next_;
 private:
   int add_table_schema_(const share::schema::ObTableSchema &table_schema,
-      const uint64_t tenant_data_version,
+      const uint64_t data_format_version,
       const bool need_create_empty_major,
       int64_t &index);
   DISALLOW_COPY_AND_ASSIGN(ObBatchCreateTabletHelper);

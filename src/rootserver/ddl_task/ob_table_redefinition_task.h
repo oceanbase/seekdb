@@ -24,8 +24,6 @@ namespace oceanbase
 {
 namespace rootserver
 {
-class ObRootService;
-
 class ObTableRedefinitionTask : public ObDDLRedefinitionTask
 {
 public:
@@ -40,7 +38,7 @@ public:
       const int64_t parallelism,
       const int32_t sub_task_trace_id,
       const obcall::ObAlterTableArg &alter_table_arg,
-      const uint64_t tenant_data_version,
+      const uint64_t data_format_version,
       const bool ddl_need_retry_at_executor,
       const int64_t task_status = share::ObDDLTaskStatus::PREPARE,
       const int64_t snapshot_version = 0);

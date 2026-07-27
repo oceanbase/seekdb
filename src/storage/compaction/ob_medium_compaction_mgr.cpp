@@ -18,7 +18,7 @@
 
 #include "ob_medium_compaction_mgr.h"
 #include "src/logservice/replayservice/ob_tablet_replay_executor.h"
-#include "storage/compaction/ob_tenant_tablet_scheduler.h"
+#include "storage/compaction/ob_tablet_scheduler.h"
 
 namespace oceanbase
 {
@@ -226,9 +226,6 @@ int ObTabletMediumCompactionInfoRecorder::inner_replay_clog(
   ObMediumCompactionInfo replay_medium_info;
   if (OB_FAIL(replay_medium_info.deserialize(tmp_allocator, buf, size, pos))) {
     LOG_WARN("failed to deserialize medium compaction info", K(ret));
-  } else if (replay_medium_info.should_throw_for_standby_cluster()) {
-    // throw medium compaction clog from other cluster
-    ret = OB_NO_NEED_UPDATE;
   } else { // new mds path
     ObTabletMediumClogReplayExecutor replay_executor(replay_medium_info);
     if (OB_FAIL(replay_executor.init(scn))) {
@@ -558,8 +555,6 @@ int ObMediumCompactionInfoList::deserialize(
 {
   int ret = OB_SUCCESS;
   int64_t new_pos = pos;
-  int64_t deserialize_info = 0;
-  int64_t last_medium_scn = 0;
   int64_t list_count = 0;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
@@ -567,20 +562,9 @@ int ObMediumCompactionInfoList::deserialize(
   } else if (OB_UNLIKELY(nullptr == buf || data_len <= 0 || pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(buf), K(data_len), K(pos));
-  } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, new_pos, &deserialize_info))) {
-    LOG_WARN("failed to deserialize info", K(ret), K(data_len));
-  } else if (0 == deserialize_info) {
-    if (OB_FAIL(serialization::decode_vi64(buf, data_len, new_pos, &list_count))) {
-      LOG_WARN("failed to deserialize list count", K(ret), K(data_len));
-    } else if (OB_UNLIKELY(0 != list_count)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("list count should be zero in old version medium list", K(ret), K(list_count));
-    }
-  } else if (FALSE_IT(extra_info_.info_ = deserialize_info)) {
   } else if (FALSE_IT(allocator_ = &allocator)) { // set allocator to call reset() when deserialize failed
-  } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, new_pos, &last_medium_scn))) {
-    LOG_WARN("failed to deserialize last medium scn", K(ret), K(data_len));
-  } else if (FALSE_IT(extra_info_.last_medium_scn_ = last_medium_scn)) {
+  } else if (OB_FAIL(extra_info_.deserialize(buf, data_len, new_pos))) {
+    LOG_WARN("failed to deserialize extra medium info", K(ret), K(data_len));
   } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, new_pos, &list_count))) {
     LOG_WARN("failed to deserialize list count", K(ret), K(data_len));
   } else if (OB_UNLIKELY(list_count < 0)) {
@@ -616,7 +600,6 @@ int ObMediumCompactionInfoList::deserialize(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("medium info list is invalid", K(ret), KPC(this));
   } else {
-    extra_info_.compat_ = ObExtraMediumInfo::MEDIUM_LIST_VERSION_V1;
     is_inited_ = true;
     pos = new_pos;
   }

@@ -133,17 +133,6 @@ void ObGlobalHint::merge_query_timeout_hint(int64_t hint_time)
 
 
 
-void ObGlobalHint::merge_max_concurrent_hint(int64_t max_concurrent)
-{
-  if (max_concurrent >= 0) {
-    if (UNSET_MAX_CONCURRENT == max_concurrent_) {
-      max_concurrent_ = max_concurrent;
-    } else {
-      max_concurrent_ = std::min(max_concurrent_, max_concurrent);
-    }
-  }
-}
-
 /* global parallel hint priority:
     1. with paralle degree: parallel(8)
     2. enable auto dop: parallel(auto)
@@ -277,19 +266,16 @@ void ObGlobalHint::merge_read_consistency_hint(ObConsistencyLevel read_consisten
   }
 }
 
-// zhanyue todo: try remove this later
 bool ObGlobalHint::has_hint_exclude_concurrent() const
 {
-  bool bret = false;
   return -1 != frozen_version_
          || -1 != topk_precision_
          || 0 != sharding_minimum_row_count_
          || UNSET_QUERY_TIMEOUT != query_timeout_
          || common::INVALID_CONSISTENCY != read_consistency_
          || OB_USE_PLAN_CACHE_INVALID != plan_cache_policy_
-         || false != force_trace_log_
-         || false != enable_lock_early_release_
-         || false != force_refresh_lc_
+         || force_trace_log_
+         || enable_lock_early_release_
          || !log_level_.empty()
          || has_parallel_hint()
          || has_dml_parallel_hint()
@@ -304,8 +290,7 @@ bool ObGlobalHint::has_hint_exclude_concurrent() const
          || has_gather_opt_stat_hint()
          || false != has_dbms_stats_hint_
          || -1 != dynamic_sampling_
-         || ObParallelDASOption::NOT_SPECIFIED != parallel_das_dml_option_
-         || !px_node_hint_.empty();
+         || ObParallelDASOption::NOT_SPECIFIED != parallel_das_dml_option_;
 }
 
 void ObGlobalHint::reset()
@@ -317,9 +302,7 @@ void ObGlobalHint::reset()
   read_consistency_ = common::INVALID_CONSISTENCY;
   plan_cache_policy_ = OB_USE_PLAN_CACHE_INVALID;
   force_trace_log_ = false;
-  max_concurrent_ = UNSET_MAX_CONCURRENT;
   enable_lock_early_release_ = false;
-  force_refresh_lc_ = false;
   log_level_.reset();
   parallel_ = UNSET_PARALLEL;
   dml_parallel_ = UNSET_PARALLEL;
@@ -335,7 +318,6 @@ void ObGlobalHint::reset()
   dynamic_sampling_ = ObGlobalHint::UNSET_DYNAMIC_SAMPLING;
   alloc_op_hints_.reuse();
   parallel_das_dml_option_ = ObParallelDASOption::NOT_SPECIFIED;
-  px_node_hint_.reset();
 }
 
 int ObGlobalHint::merge_global_hint(const ObGlobalHint &other)
@@ -347,11 +329,9 @@ int ObGlobalHint::merge_global_hint(const ObGlobalHint &other)
   enable_lock_early_release_ |= other.enable_lock_early_release_;
   merge_log_level_hint(other.log_level_);
   enable_lock_early_release_ |= other.enable_lock_early_release_;
-  force_refresh_lc_ |= other.force_refresh_lc_;
   merge_plan_cache_hint(other.plan_cache_policy_);
   merge_parallel_dml_hint(other.pdml_option_);
   force_trace_log_ |= other.force_trace_log_;
-  merge_max_concurrent_hint(other.max_concurrent_);
   merge_parallel_hint(other.parallel_);
   merge_dml_parallel_hint(other.dml_parallel_);
   merge_param_option_hint(other.param_option_);
@@ -368,9 +348,7 @@ int ObGlobalHint::merge_global_hint(const ObGlobalHint &other)
   } else if (OB_FAIL(opt_params_.merge_opt_param_hint(other.opt_params_))) {
     LOG_WARN("failed to merge opt param hint", K(ret));
   } else if (OB_FAIL(append(ob_ddl_schema_versions_, other.ob_ddl_schema_versions_))) {
-    LOG_WARN("failed to append ddl_schema_version", K(ret));
-  } else if (OB_FAIL(px_node_hint_.merge_px_node_hint(other.px_node_hint_))) {
-    LOG_WARN("failed to merge px_node_addrs", K(ret));
+    LOG_WARN("failed to append ddl schema version hints", K(ret));
   }
   return ret;
 }
@@ -381,9 +359,6 @@ int ObGlobalHint::assign(const ObGlobalHint &other)
   return merge_global_hint(other);
 }
 
-// hints below not print
-// MAX_CONCURRENT
-// ObDDLSchemaVersionHint
 int ObGlobalHint::print_global_hint(PlanText &plan_text) const
 {
   int ret = OB_SUCCESS;
@@ -458,9 +433,6 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
       LOG_WARN("failed to print hint TRANS_PARAM hint", K(ret));
     }
   }
-  if (OB_SUCC(ret) && force_refresh_lc_) { //FORCE_REFRESH_LOCATION_CACHE
-    PRINT_GLOBAL_HINT_STR("FORCE_REFRESH_LOCATION_CACHE");
-  }
   if (OB_SUCC(ret) && !log_level_.empty()) { //LOG_LEVEL
     if (OB_FAIL(BUF_PRINTF("%sLOG_LEVEL(\"%.*s\")", outline_indent,
                                     log_level_.length(), log_level_.ptr() ))) {
@@ -524,9 +496,6 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
   }
   if (OB_SUCC(ret) && has_dbms_stats_hint()) {
     PRINT_GLOBAL_HINT_STR("DBMS_STATS");
-  }
-  if (OB_SUCC(ret) && OB_FAIL(px_node_hint_.print_px_node_hint(plan_text))) {
-    LOG_WARN("failed to print px node hint", K(ret));
   }
   return ret;
 }
@@ -722,7 +691,6 @@ bool ObOptParamHint::is_param_val_valid(const OptParamType param_type, const ObO
     case OPTIMIZER_SORTMERGE_JOIN_ENABLED:
     case NESTED_LOOP_JOIN_ENABLED:
     case ENABLE_RANGE_EXTRACTION_FOR_NOT_IN:
-    case OPTIMIZER_SKIP_SCAN_ENABLED:
     case OPTIMIZER_BETTER_INLIST_COSTING:
     case OPTIMIZER_GROUP_BY_PLACEMENT:
     case ENABLE_SPF_BATCH_RESCAN:
@@ -786,7 +754,7 @@ bool ObOptParamHint::is_param_val_valid(const OptParamType param_type, const ObO
       break;
     }
     case IO_READ_BATCH_SIZE: {
-      // ref tenant parameter _io_read_batch_size, range: [0K, 16M]
+      // Runtime parameter _io_read_batch_size, range: [0K, 16M].
       if (!val.is_varchar()) {
         is_valid = false;
       } else {
@@ -795,7 +763,7 @@ bool ObOptParamHint::is_param_val_valid(const OptParamType param_type, const ObO
       break;
     }
     case IO_READ_REDUNDANT_LIMIT_PERCENTAGE: {
-      // ref tenant parameter _io_read_redundant_limit_percentage, range: [0, 99]
+      // Runtime parameter _io_read_redundant_limit_percentage, range: [0, 99].
       is_valid = val.is_int() && (0 <= val.get_int() && val.get_int() < 100);
       break;
     }
@@ -803,7 +771,6 @@ bool ObOptParamHint::is_param_val_valid(const OptParamType param_type, const ObO
       is_valid = val.is_int() && (0 <= val.get_int() && val.get_int() <= 2);
       break;
     }
-    case CORRELATION_FOR_CARDINALITY_ESTIMATION:
     case CARDINALITY_ESTIMATION_MODEL: {
       if (val.is_int()) {
         is_valid = 0 <= val.get_int() && val.get_int() < static_cast<int64_t>(ObEstCorrelationType::MAX);
@@ -838,11 +805,6 @@ bool ObOptParamHint::is_param_val_valid(const OptParamType param_type, const ObO
     }
     case LOB_ROWSETS_MAX_ROWS: {
       is_valid = val.is_int() && val.get_int() >= 1 && val.get_int() <= 65535;
-      break;
-    }
-    case ENABLE_ENUM_SET_SUBSCHEMA: {
-      is_valid = val.is_varchar() && (0 == val.get_varchar().case_compare("true")
-                                      || 0 == val.get_varchar().case_compare("false"));
       break;
     }
     case ENABLE_OPTIMIZER_ROWGOAL: {
@@ -1009,7 +971,6 @@ int ObOptParamHint::get_enum_opt_param(const OptParamType param_type, int64_t &v
     val = obj.get_int();
   } else if (obj.is_varchar()) {
     switch (param_type) {
-      case CORRELATION_FOR_CARDINALITY_ESTIMATION:
       case CARDINALITY_ESTIMATION_MODEL: {
         ObSysVarCardinalityEstimationModel sv;
         if (OB_FAIL(sv.find_type(obj.get_varchar(), val))) {
@@ -1213,9 +1174,6 @@ const char* ObHint::get_hint_name(ObItemType type, bool is_enable_hint /* defaul
     case T_NO_INDEX_HINT:       return "NO_INDEX";
     case T_USE_DAS_HINT:        return is_enable_hint ? "USE_DAS" : "NO_USE_DAS";
     case T_UNION_MERGE_HINT:    return "UNION_MERGE";
-    case T_INDEX_SS_HINT:       return "INDEX_SS";
-    case T_INDEX_SS_ASC_HINT:   return "INDEX_SS_ASC";
-    case T_INDEX_SS_DESC_HINT:  return "INDEX_SS_DESC";
     case T_LEADING:             return is_enable_hint ? "LEADING" : "ORDERED";
     case T_USE_MERGE:           return is_enable_hint ? "USE_MERGE" : "NO_USE_MERGE";
     case T_USE_HASH:            return is_enable_hint ? "USE_HASH" : "NO_USE_HASH";
@@ -3167,133 +3125,6 @@ bool ObIndexHint::is_match_index(const ObCollationType cs_type,
     match = false;
   }
   return match;
-}
-
-// use the first px_node_policy hint now.
-void ObPxNodeHint::merge_px_node_policy(ObPxNodePolicy px_node_policy)
-{
-  if (!px_node_addrs_.empty()) {
-    // do nothing
-  } else if (px_node_policy_ == ObPxNodePolicy::INVALID) {
-    px_node_policy_ = px_node_policy;
-  } 
-}
-
-// use the first px_node_addrs hint now.
-int ObPxNodeHint::merge_px_node_addrs(const ObIArray<ObAddr> &px_node_addrs)
-{
-  int ret = OB_SUCCESS;
-  if (!px_node_addrs_.empty() || px_node_addrs.empty()) {
-    // do nothing
-  } else if (OB_FAIL(px_node_addrs_.assign(px_node_addrs))) {
-    LOG_WARN("px_node_addrs failed to assign", K(ret));
-  }
-  return ret;
-}
-
-// use the first px_node_count hint now.
-void ObPxNodeHint::merge_px_node_count(int64_t px_node_count)
-{
-  if (!px_node_addrs_.empty()) {
-    // do nothing
-  } else if (px_node_count_ == UNSET_PX_NODE_COUNT) {
-    px_node_count_ = px_node_count;
-  }
-}
-
-int ObPxNodeHint::merge_px_node_hint(const ObPxNodeHint &other)
-{
-  int ret = OB_SUCCESS;
-  if (!px_node_addrs_.empty()) {
-    // do nothing
-  } else if (other.px_node_addrs_.empty()) {
-    if (px_node_policy_ == ObPxNodePolicy::INVALID) {
-      px_node_policy_ = other.px_node_policy_;
-    } 
-    if (px_node_count_ == UNSET_PX_NODE_COUNT) {
-      px_node_count_ = other.px_node_count_;
-    }
-  } else if (OB_FAIL(px_node_addrs_.assign(other.px_node_addrs_))) {
-    LOG_WARN("px_node_addrs failed to assign", K(ret));
-  }
-  return ret;
-}
-
-int ObPxNodeHint::print_px_node_addrs(PlanText &plan_text) const
-{
-  int ret = OB_SUCCESS;
-  if (!px_node_addrs_.empty()) {
-    char *buf = plan_text.buf_;
-    int64_t &buf_len = plan_text.buf_len_;
-    int64_t &pos = plan_text.pos_;
-    const char *outline_indent = ObQueryHint::get_outline_indent(plan_text.is_oneline_);
-    if (OB_FAIL(BUF_PRINTF("%sPX_NODE_ADDRS(", outline_indent))) {
-      LOG_WARN("Fail to print PX_NODE_ADDRS", K(ret));
-    }
-    char addr_buf[MAX_IP_PORT_LENGTH] = "";
-    for (int i = 0; OB_SUCC(ret) && i < px_node_addrs_.count(); ++i) {
-      if (i != 0) {
-        if (OB_FAIL(BUF_PRINTF(","))) {
-          LOG_WARN("Fail to print ,", K(ret));
-        }
-      }
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(px_node_addrs_.at(i).ip_port_to_string(addr_buf, sizeof(addr_buf)))) {
-        LOG_WARN("Fail to to_string", K(ret));
-      } else if (OB_FAIL(BUF_PRINTF("\'%.*s\'",
-                                    static_cast<int>(sizeof(addr_buf)), addr_buf))) {
-        LOG_WARN("Fail to print addr", K(ret));
-      }
-    }
-    if (OB_SUCC(ret) && OB_FAIL(BUF_PRINTF(")"))) {
-      LOG_WARN("failed to print blocking hint", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObPxNodeHint::print_px_node_hint(PlanText &plan_text) const {
-  int ret = OB_SUCCESS;
-  char *buf = plan_text.buf_;
-  int64_t &buf_len = plan_text.buf_len_;
-  int64_t &pos = plan_text.pos_;
-  const char* outline_indent = ObQueryHint::get_outline_indent(plan_text.is_oneline_);
-  if (OB_SUCC(ret)) {
-    // When PX_NODE_ADDRS is active,
-    // PX_NODE_POLICY and PX_NODE_COUNT do not take effect.
-    if (!px_node_addrs_.empty()) {  // PX_NODE_ADDRS
-      if (OB_FAIL(print_px_node_addrs(plan_text))) {
-        LOG_WARN("failed to print candidate node pool hint", K(ret));
-      }
-    } else {
-      if (px_node_policy_ != ObPxNodePolicy::INVALID) { // PX_NODE_POLICY
-        switch (px_node_policy_) {
-          case ObPxNodePolicy::DATA: {
-            PRINT_GLOBAL_HINT_STR("PX_NODE_POLICY(\'DATA\')");
-            break;
-          }
-          case ObPxNodePolicy::ZONE: {
-            PRINT_GLOBAL_HINT_STR("PX_NODE_POLICY(\'ZONE\')");
-            break;
-          }
-          case ObPxNodePolicy::CLUSTER: {
-            PRINT_GLOBAL_HINT_STR("PX_NODE_POLICY(\'CLUSTER\')");
-            break;
-          }
-          default: {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected px_node_policy", K(px_node_policy_));
-            break;
-          }
-        }
-      }
-      if (OB_SUCC(ret) &&
-          px_node_count_ != UNSET_PX_NODE_COUNT) {  // PX_NODE_COUNT
-        PRINT_GLOBAL_HINT_NUM("PX_NODE_COUNT", px_node_count_);
-      }
-    }
-  }
-  return ret;
 }
 
 }//end of namespace sql

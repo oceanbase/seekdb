@@ -176,7 +176,7 @@ int ObIndexBlockMicroIterator::init(
     STORAGE_LOG(WARN, "Failed to check range include rowkey", K(ret), K(range_), K(endkeys));
   } else {
     ObStorageObjectReadInfo read_info;
-    read_info.offset_ = sstable->get_macro_offset();;
+    read_info.offset_ = sstable->get_macro_offset();
     read_info.size_ = sstable->get_macro_read_size();
     read_info.io_desc_.set_mode(ObIOMode::READ);
     read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_READ);
@@ -193,10 +193,6 @@ int ObIndexBlockMicroIterator::init(
     } else if (OB_FAIL(macro_handle_.wait())) {
       LOG_WARN("io wait failed", K(ret), K(macro_desc), K(read_info));
     } else if (OB_ISNULL(macro_handle_.get_buffer())
-        // shared-nothing mode write one large block file which consists of 2MB blocks.
-        // shared-storage mode write independent files which are 4KB alignment.
-        // cannot check read size in shared-storage mode.
-        // e.g., in shared-storage mode, one 100KB macro file, but try read 2MB, real-read-size is 100KB.
         || (OB_UNLIKELY(macro_handle_.get_data_size() != read_info.size_))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("buf is null or buf size is too small, ",

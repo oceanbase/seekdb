@@ -1560,9 +1560,6 @@ int ObDmlCgService::check_upd_need_all_columns(ObLogDelUpd &op,
   } else if (binlog_row_image == ObBinlogRowImage::FULL || op.has_instead_of_trigger()) {
     // full mode
     need_all_columns = true;
-  } else if (table_schema->is_delete_insert_merge_engine()) {
-    need_all_columns = true;
-    LOG_TRACE("update delete insert table log, need all columns", K(table_schema->get_merge_engine_type()));
   } else if (!is_primary_index) {
     // index_table if update PK, also need record all_columns
     if (OB_FAIL(check_has_upd_rowkey(op, table_schema, upd_cids, is_update_pk))) {
@@ -1714,9 +1711,6 @@ int ObDmlCgService::check_del_need_all_columns(ObLogDelUpd &op,
   } else if (binlog_row_image == ObBinlogRowImage::FULL || op.has_instead_of_trigger()) {
     // full mode
     need_all_columns = true;
-  } else if (table_schema->is_delete_insert_merge_engine()) {
-    need_all_columns = true;
-    LOG_TRACE("delete from delete insert table log, need all columns", K(table_schema->get_merge_engine_type()));
   } else if (table_schema->is_multivalue_index_aux()) {
     // as multivalue need calc is need save rowkey, the save-rowkey policy is dynamic made, need project all columns
     need_all_columns = true;
@@ -2365,7 +2359,7 @@ int ObDmlCgService::fill_table_dml_param(share::schema::ObSchemaGetterGuard *gua
     ret = OB_SCHEMA_ERROR;
     LOG_WARN("table schema is NULL", K(ret));
   } else if (OB_FAIL(guard->get_schema_version(t_version))) {
-    LOG_WARN("get tenant schema version fail", K(ret));
+    LOG_WARN("get runtime schema version failed", K(ret));
   } else if (OB_FAIL(das_dml_ctdef.table_param_.convert(table_schema,
                                                         t_version,
                                                         das_dml_ctdef.column_ids_))) {
@@ -2872,8 +2866,7 @@ int ObDmlCgService::convert_normal_triggers(ObLogDelUpd &log_op,
         trigger_info = trigger_infos.at(i);
         if (trigger_info->is_modifies_sql_data() ||
             trigger_info->is_wps() ||
-            trigger_info->is_rps() ||
-            trigger_info->is_has_sequence()) {
+            trigger_info->is_rps()) {
           is_forbid_parallel = true;
         } else if (trigger_info->is_reads_sql_data()) { // dml + trigger(select) serial execute
           is_forbid_parallel = true;
@@ -3192,19 +3185,13 @@ int ObDmlCgService::generate_table_loc_meta(const IndexDMLInfo &index_dml_info,
                                             ObDASTableLocMeta &loc_meta)
 {
   int ret = OB_SUCCESS;
-  const ObTableSchema *table_schema = nullptr;
-  ObSchemaGetterGuard *schema_guard = nullptr;
-  if (OB_ISNULL(cg_.opt_ctx_)
-      || OB_ISNULL(schema_guard = cg_.opt_ctx_->get_schema_guard())) {
+  if (OB_ISNULL(cg_.opt_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid argument", K(ret), K(cg_.opt_ctx_), K(schema_guard));
-  } else if (OB_FAIL(schema_guard->get_table_schema( index_dml_info.ref_table_id_, table_schema))) {
-    LOG_WARN("get table schema failed", K(ret), K(index_dml_info.ref_table_id_));
+    LOG_WARN("invalid optimizer context", K(ret), K(cg_.opt_ctx_));
   } else {
     loc_meta.table_loc_id_ = index_dml_info.loc_table_id_;
     loc_meta.ref_table_id_ = index_dml_info.ref_table_id_;
-    loc_meta.select_leader_ = 1;
-    //related local index tablet_id pruning only can be used in local plan or remote plan(all operator
+    // Related local index tablet_id pruning can only be used in a local plan (all operators
     //use the same das context),
     //because the distributed plan will pass tablet_id through exchange operator,
     //but the related tablet_id map can not be passed by exchange operator,
@@ -3524,7 +3511,6 @@ int ObDmlCgService::generate_fk_table_loc_info(uint64_t index_table_id,
   } else {
     loc_meta.table_loc_id_ = index_table_id;
     loc_meta.ref_table_id_ = index_table_id;
-    loc_meta.select_leader_ = 1;
     if (PARTITION_LEVEL_ZERO == table_schema->get_part_level()) {
       tablet_id = table_schema->get_tablet_id();
     } else {
@@ -3911,7 +3897,6 @@ int ObDmlCgService::generate_rowkey_domain_ctdef(
     scan_ctdef->ref_table_id_ = rowkey_domain_tid;
     loc_meta->table_loc_id_ = index_dml_info.loc_table_id_;
     loc_meta->ref_table_id_ = rowkey_domain_tid;
-    loc_meta->select_leader_ = 1;
     loc_meta->unuse_related_pruning_ = (OB_PHY_PLAN_DISTRIBUTED == cg_.opt_ctx_->get_phy_plan_type()
                                        && !cg_.opt_ctx_->get_root_stmt()->is_insert_stmt());
     share::ObDasSemanticIndexInfo &semantic_index_info = scan_ctdef->semantic_index_info_;

@@ -67,7 +67,7 @@ class ObMultiVersionGarbageCollector
 public:
   ObMultiVersionGarbageCollector();
   ~ObMultiVersionGarbageCollector();
-  static int mtl_init(ObMultiVersionGarbageCollector *&p_garbage_colloector);
+  static int server_module_init(ObMultiVersionGarbageCollector *&p_garbage_colloector);
 public:
   int init();
   int start();

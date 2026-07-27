@@ -38,12 +38,11 @@ public:
   const static int64_t LOOP_INTERVAL = 5 * 1000 * 1000;                       // 5s
   const static int64_t KEEP_ALIVE_PRINT_INFO_INTERVAL = 5 * 60 * 1000 * 1000; // 5min
   const static int64_t TX_GC_INTERVAL = 5 * 1000 * 1000;                     // 5s
-  const static int64_t TX_RETAIN_CTX_GC_INTERVAL = 5 * 1000 * 1000;           // 5s
   const static int64_t TX_LOG_CB_POOL_ADJUST_INTERVAL = 1 * 60 * 1000 * 1000; // 1min
 public:
   ObTxLoopWorker() { reset(); }
   ~ObTxLoopWorker() {}
-  static int mtl_init(ObTxLoopWorker *&ka);
+  static int server_module_init(ObTxLoopWorker *&ka);
   int init();
   int start();
   void stop();
@@ -55,20 +54,18 @@ public:
   virtual void runTimerTask() override;
 
 private:
-  int maintain_tx_state_(bool can_tx_gc, bool can_gc_retain_ctx, bool can_adjust_log_cb_pool);
+  int maintain_tx_state_(bool can_tx_gc, bool can_adjust_log_cb_pool);
   void do_keep_alive_(ObLS *ls, const share::SCN &min_start_scn, MinStartScnStatus status); // 100ms
   void do_update_ls_weak_read_ts_(ObLS *ls);
   void do_tx_gc_(ObLS *ls, share::SCN &min_start_scn, MinStartScnStatus &status);     // 15s
   void update_max_commit_ts_();
-  void do_retain_ctx_gc_(ObLS * ls);  // 15s
   void do_log_cb_pool_adjust_(ObLS *ls);
-  void refresh_tenant_config_();
+  void refresh_runtime_config_();
 
 private:
   int64_t last_tx_gc_ts_;
-  int64_t last_retain_ctx_gc_ts_;
   int64_t last_log_cb_pool_adjust_ts_;
-  int64_t last_tenant_config_refresh_ts_;
+  int64_t last_runtime_config_refresh_ts_;
   common::ObTimer timer_;
   bool stop_flag_;
 };

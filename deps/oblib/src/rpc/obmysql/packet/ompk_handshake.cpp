@@ -18,11 +18,6 @@
 
 #include "rpc/obmysql/packet/ompk_handshake.h"
 
-ObString OB_WEAK_SYMBOL get_display_mysql_version_cfg()
-{
-  return ObString((DEFAULT_MYSQL_VERSION_CSTR)); // default server version string for mysql mode
-}
-
 using namespace oceanbase::common;
 using namespace oceanbase::obmysql;
 
@@ -37,7 +32,7 @@ OMPKHandshake::OMPKHandshake()
       terminated_(0)
 {
   protocol_version_ = 10; // Protocol::HandshakeV10
-  server_version_ = get_display_mysql_version_cfg();
+  server_version_ = ObString(DEFAULT_MYSQL_VERSION_CSTR);
   thread_id_ = 1;
   memset(scramble_buff_, 'a', 8);
   filler_ = 0;
@@ -188,7 +183,7 @@ int OMPKHandshake::decode()
     ObMySQLUtil::get_uint1(pos, protocol_version_);
 
     int64_t sv_len = strlen(pos);
-    server_version_ = get_display_mysql_version_cfg();
+    server_version_ = ObString(DEFAULT_MYSQL_VERSION_CSTR);
     pos += sv_len + 1;
 
     ObMySQLUtil::get_uint4(pos, thread_id_);

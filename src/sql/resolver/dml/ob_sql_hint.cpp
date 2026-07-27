@@ -112,8 +112,6 @@ int ObQueryHint::set_outline_data_hints(const ObGlobalHint &global_hint,
   } else {
     is_valid_outline_ = true;
     outline_stmt_id_ = stmt_id;
-  }
-  if (OB_SUCC(ret)) {
     ObHint *cur_hint = NULL;
     for (int64_t i = 0; OB_SUCC(ret) && i < hints.count(); ++i) {
       if (OB_ISNULL(cur_hint = hints.at(i))) {
@@ -253,7 +251,7 @@ int ObQueryHint::check_and_set_params_from_hint(const ObResolverParams &params, 
                                             scope_name.length(), scope_name.ptr());
     }
   } else if (OB_FAIL(check_ddl_schema_version_from_hint(stmt))) {
-    LOG_WARN("failed to check ddl schema version", K(ret));
+    LOG_WARN("failed to check ddl schema version from hint", K(ret));
   } else {
     if (global_hint_.query_timeout_ > 0) {
       THIS_WORKER.set_timeout_ts(session_info->get_query_start_time() + global_hint_.query_timeout_);
@@ -262,29 +260,35 @@ int ObQueryHint::check_and_set_params_from_hint(const ObResolverParams &params, 
   return ret;
 }
 
-int ObQueryHint::check_ddl_schema_version_from_hint(const ObDMLStmt &stmt,
-                                                    const ObDDLSchemaVersionHint& ddlSchemaVersionHint) const
+int ObQueryHint::check_ddl_schema_version_from_hint(
+    const ObDMLStmt &stmt,
+    const ObDDLSchemaVersionHint &ddl_schema_version_hint) const
 {
   int ret = OB_SUCCESS;
-  TableItem* item = NULL;
-  if (OB_FAIL(get_basic_table_without_index_by_hint_table(stmt, ddlSchemaVersionHint.table_, item))) {
+  TableItem *item = NULL;
+  if (OB_FAIL(get_basic_table_without_index_by_hint_table(
+          stmt, ddl_schema_version_hint.table_, item))) {
     LOG_WARN("failed to get table item by hint table", K(ret));
   } else if (OB_ISNULL(item)) {
-    ObSEArray<ObSelectStmt*, 8> child_stmts;
+    ObSEArray<ObSelectStmt *, 8> child_stmts;
     if (OB_FAIL(stmt.get_child_stmts(child_stmts))) {
       LOG_WARN("failed to get child stmts", K(ret));
     }
-    for (int64_t index = 0; OB_SUCC(ret) && index < child_stmts.count(); ++index) {
-      if (OB_FAIL(SMART_CALL(check_ddl_schema_version_from_hint(*child_stmts.at(index),
-                                                        ddlSchemaVersionHint)))) {
-        LOG_WARN("failed to check ddl schema version from hint", K(ret));
+    for (int64_t i = 0; OB_SUCC(ret) && i < child_stmts.count(); ++i) {
+      if (OB_ISNULL(child_stmts.at(i))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("child stmt is null", K(ret), K(i));
+      } else if (OB_FAIL(SMART_CALL(check_ddl_schema_version_from_hint(
+                     *child_stmts.at(i), ddl_schema_version_hint)))) {
+        LOG_WARN("failed to check ddl schema version in child stmt", K(ret));
       }
     }
-  } else if (OB_LIKELY(item->ddl_schema_version_ > 0) &&
-             OB_UNLIKELY(ddlSchemaVersionHint.schema_version_ != item->ddl_schema_version_)) {
+  } else if (item->ddl_schema_version_ > 0
+             && ddl_schema_version_hint.schema_version_ != item->ddl_schema_version_) {
     ret = OB_DDL_SCHEMA_VERSION_NOT_MATCH;
     LOG_USER_ERROR(OB_DDL_SCHEMA_VERSION_NOT_MATCH);
-    LOG_WARN("failed to check ddl schema version", K(ret), K(item->ddl_schema_version_), K(ddlSchemaVersionHint.schema_version_));
+    LOG_WARN("ddl schema version does not match", K(ret),
+             K(item->ddl_schema_version_), K(ddl_schema_version_hint.schema_version_));
   }
   return ret;
 }
@@ -292,9 +296,11 @@ int ObQueryHint::check_ddl_schema_version_from_hint(const ObDMLStmt &stmt,
 int ObQueryHint::check_ddl_schema_version_from_hint(const ObDMLStmt &stmt) const
 {
   int ret = OB_SUCCESS;
-  for (int64_t i = 0; OB_SUCC(ret) && i < global_hint_.ob_ddl_schema_versions_.count(); i++) {
-    if (OB_FAIL(check_ddl_schema_version_from_hint(stmt, 
-                                                   global_hint_.ob_ddl_schema_versions_.at(i)))) {
+  for (int64_t i = 0;
+       OB_SUCC(ret) && i < global_hint_.ob_ddl_schema_versions_.count();
+       ++i) {
+    if (OB_FAIL(check_ddl_schema_version_from_hint(
+            stmt, global_hint_.ob_ddl_schema_versions_.at(i)))) {
       LOG_WARN("failed to check ddl schema version from hint", K(ret));
     }
   }
@@ -1827,34 +1833,6 @@ int ObLogPlanHint::check_use_das(uint64_t table_id, bool &force_das, bool &force
 }
 
 
-int ObLogPlanHint::check_use_skip_scan(uint64_t table_id, 
-                                       uint64_t index_id,
-                                       bool &force_skip_scan,
-                                       bool &force_no_skip_scan) const
-{
-  int ret = OB_SUCCESS;
-  force_skip_scan = false;
-  force_no_skip_scan = false;
-  const LogTableHint *log_table_hint = get_log_table_hint(table_id);
-  int64_t pos = OB_INVALID_INDEX;
-  if (NULL != log_table_hint &&
-      ObOptimizerUtil::find_item(log_table_hint->index_list_, index_id, &pos)) {
-    const ObIndexHint *hint = NULL;
-    if (OB_UNLIKELY(pos >= log_table_hint->index_hints_.count() || pos < 0)
-        || OB_ISNULL(hint = log_table_hint->index_hints_.at(pos))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected pos", K(ret), K(pos), K(log_table_hint->index_hints_.count()), K(hint));
-    } else {
-      force_skip_scan = hint->use_skip_scan();
-      force_no_skip_scan = !force_skip_scan && hint->is_use_index_hint();
-    }
-  }
-  if (OB_SUCC(ret) && !force_skip_scan && !force_no_skip_scan && is_outline_data_) {
-    force_no_skip_scan = true;
-  }
-  return ret;
-}
-
 int ObLogPlanHint::check_scan_direction(const ObQueryCtx &ctx,
                                         uint64_t table_id,
                                         uint64_t index_id,
@@ -2421,9 +2399,6 @@ int LogTableHint::init_index_hints(const ObDMLStmt &stmt, ObSqlSchemaGuard &sche
         int64_t index_hint_pos = OB_INVALID_INDEX;
         int64_t index_asc_hint_pos = OB_INVALID_INDEX;
         int64_t index_desc_hint_pos = OB_INVALID_INDEX;
-        int64_t index_ss_hint_pos = OB_INVALID_INDEX;
-        int64_t index_ss_asc_hint_pos = OB_INVALID_INDEX;
-        int64_t index_ss_desc_hint_pos = OB_INVALID_INDEX;
         const uint64_t N = index_hints_.count();
         const ObIndexHint *index_hint = NULL;
         for (int64_t hint_i = 0; OB_SUCC(ret) && hint_i < N; ++hint_i) {
@@ -2437,14 +2412,6 @@ int LogTableHint::init_index_hints(const ObDMLStmt &stmt, ObSqlSchemaGuard &sche
             /* do nothing */
           } else if (T_NO_INDEX_HINT == index_hint->get_hint_type()) {
             no_index_hint_pos = hint_i;
-          } else if (index_hint->use_skip_scan()) {
-            if (index_hint->is_asc_hint()) {
-              index_ss_asc_hint_pos = hint_i;
-            } else if (index_hint->is_desc_hint()) {
-              index_ss_desc_hint_pos = hint_i;
-            } else {
-              index_ss_hint_pos = hint_i;
-            }
           } else {
             if (index_hint->is_asc_hint()) {
               index_asc_hint_pos = hint_i;
@@ -2464,30 +2431,19 @@ int LogTableHint::init_index_hints(const ObDMLStmt &stmt, ObSqlSchemaGuard &sche
           } else if (OB_INVALID_INDEX != index_desc_hint_pos) {
             index_hint_pos = index_desc_hint_pos;
           }
-          if (OB_INVALID_INDEX != index_ss_asc_hint_pos &&
-              OB_INVALID_INDEX != index_ss_desc_hint_pos) {
-            // ignore both asc and desc hint if both are present
-          } else if (OB_INVALID_INDEX != index_ss_asc_hint_pos) {
-            index_ss_hint_pos = index_ss_asc_hint_pos;
-          } else if (OB_INVALID_INDEX != index_ss_desc_hint_pos) {
-            index_ss_hint_pos = index_ss_desc_hint_pos;
-          }
         }
         if (OB_FAIL(ret)) {
         } else if (OB_INVALID_INDEX != no_index_hint_pos
-                   && (OB_INVALID_INDEX != index_ss_hint_pos
-                       || OB_INVALID_INDEX != index_hint_pos)) {
-          /* conflict full/index/index_ss and no_index hint*/
+                   && OB_INVALID_INDEX != index_hint_pos) {
+          /* conflict full/index and no_index hint*/
         } else if (OB_INVALID_INDEX != no_index_hint_pos) {
           if (OB_FAIL(no_index_list.push_back(index_id))) {
             LOG_WARN("fail to push back", K(ret), K(index_id));
           } else if (OB_FAIL(no_index_hints.push_back(index_hints_.at(no_index_hint_pos)))) {
             LOG_WARN("fail to push back", K(ret), K(no_index_hint_pos));
           }
-        } else if (OB_INVALID_INDEX != index_ss_hint_pos
-                   || OB_INVALID_INDEX != index_hint_pos) {
-          int64_t hint_pos = OB_INVALID_INDEX != index_ss_hint_pos
-                             ? index_ss_hint_pos : index_hint_pos;
+        } else if (OB_INVALID_INDEX != index_hint_pos) {
+          int64_t hint_pos = index_hint_pos;
           if (OB_FAIL(index_list.push_back(index_id))) {
             LOG_WARN("fail to push back", K(ret), K(index_id));
           } else if (OB_FAIL(index_hints.push_back(index_hints_.at(hint_pos)))) {

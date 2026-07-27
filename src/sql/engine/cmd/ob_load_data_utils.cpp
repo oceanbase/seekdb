@@ -80,46 +80,6 @@ int ObLoadDataUtils::build_insert_sql_string_head(ObLoadDupActionType insert_mod
 }
 
 
-int ObLoadDataUtils::append_values_in_remote_process(int64_t table_column_count,
-                                                     int64_t append_values_count,
-                                                     const ObExprValueBitSet &expr_bitset,
-                                                     const ObIArray<ObString> &insert_values,
-                                                     ObSqlString &insertsql,
-                                                     ObDataBuffer &data_buffer,
-                                                     int64_t skipped_row_count)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!insertsql.is_valid())
-      || OB_UNLIKELY(append_values_count + skipped_row_count * table_column_count > insert_values.count())
-      || OB_UNLIKELY(0 == table_column_count)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("insert values are invalid", K(ret), K(insertsql), K(append_values_count), K(insert_values.count()));
-  } else {
-    int64_t row_count = append_values_count/table_column_count;
-    if (OB_FAIL(insertsql.append(" values "))) {
-      LOG_WARN("append failed", K(ret), K(insertsql.length()));
-    }
-    for (int64_t row_idx = 0; OB_SUCC(ret) && row_idx < row_count; ++row_idx) {
-      if (OB_FAIL(append_values_for_one_row(table_column_count,
-                                            expr_bitset,
-                                            insert_values,
-                                            insertsql,
-                                            data_buffer,
-                                            row_idx + skipped_row_count))) {
-        LOG_WARN("append values for one row in remote process failed", K(ret));
-      } else {
-        if (row_idx + 1 != row_count) {
-          if (OB_FAIL(insertsql.append(","))) {
-            LOG_WARN("append failed", K(ret), K(insertsql.length()));
-          }
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-
 int ObLoadDataUtils::append_values_for_one_row(const int64_t table_column_count,
                                                const ObExprValueBitSet &expr_value_bitset,
                                                const ObIArray<ObString> &insert_values,
@@ -336,7 +296,6 @@ int ObGlobalLoadDataStatMap::init()
 {
   int ret = OB_SUCCESS;
   ObMemAttr attr(ObModIds::OB_SQL_LOAD_DATA);
-  SET_USE_500(attr);
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
   } else if (OB_FAIL(map_.create(bucket_num,

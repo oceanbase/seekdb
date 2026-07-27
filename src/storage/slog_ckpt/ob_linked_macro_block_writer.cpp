@@ -84,11 +84,7 @@ int ObLinkedMacroBlockWriter::write_block(
     LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));
   } else {
     ObStorageObjectOpt opt;
-    if (snapshot_version_ > 0) {
-      opt.set_ss_share_meta_macro_object_opt(tablet_id_, cur_macro_seq_++);
-    } else {
-      opt.set_private_meta_macro_object_opt(tablet_id_);
-    }
+    opt.set_meta_macro_object_opt();
     
     ObStorageObjectWriteInfo write_info;
     write_info.size_ = buf_len;

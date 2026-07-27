@@ -267,17 +267,16 @@ int ObMicroBlockRowGetter::get_block_row(ObSSTableReadHandle &read_handle,
   } else {
     if (store_row->row_flag_.is_not_exist()) {
       ++context_->table_store_stat_.empty_read_cnt_;
-      EVENT_INC(ObStatEventIds::GET_ROW_EMPTY_READ);
-      if (!context_->query_flag_.is_index_back() && context_->query_flag_.is_use_bloomfilter_cache()
+      EVENT_INC(GET_ROW_EMPTY_READ);
+      if (!context_->query_flag_.is_index_back()
+          && context_->query_flag_.is_use_bloomfilter_cache()
           && !sstable_->is_small_sstable()) {
         (void)OB_STORE_CACHE.get_bf_cache().inc_empty_read(param_->table_id_,
-                                                           sstable_->get_key(),
                                                            read_handle.micro_handle_->macro_block_id_,
-                                                           read_handle.get_rowkey().get_datum_cnt(),
-                                                           &read_handle);
+                                                           read_handle.get_rowkey().get_datum_cnt());
       }
     } else {
-      EVENT_INC(ObStatEventIds::GET_ROW_EFFECT_READ);
+      EVENT_INC(GET_ROW_EFFECT_READ);
     }
   }
 

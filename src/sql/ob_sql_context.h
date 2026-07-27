@@ -27,10 +27,9 @@
 #include "lib/hash_func/murmur_hash.h"
 #include "sql/ob_sql_temp_table.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
-#include "share/config/ob_tenant_config_mgr.h"
+#include "share/config/ob_runtime_config.h"
 #include "sql/monitor/ob_sql_stat_record.h"
 #include "sql/optimizer/stat/ob_opt_ds_stat_cache.h"
-#include "sql/ob_sql_ccl_rule_manager.h"
 
 namespace oceanbase
 {
@@ -41,7 +40,6 @@ class ObPartMgr;
 }
 namespace share
 {
-class ObExternalObject;
 namespace schema
 {
 class ObSchemaGetterGuard;
@@ -147,8 +145,6 @@ class ObRawExpr;
 class ObSQLSessionInfo;
 
 class ObSelectStmt;
-class ObCCLRuleConcurrencyValueWrapper;
-
 class ObMultiStmtItem
 {
 public:
@@ -270,21 +266,6 @@ struct ObInsertRewriteOptCtx
   int64_t row_count_;
 };
 
-// Stub: ASH diagnostic subsystem has been removed.
-struct ObQueryRetryAshInfo
-{
-  void reset() {}
-};
-
-// Stub: ObQueryRetryAshGuard was used for ASH retry diagnostics tracking.
-class ObQueryRetryAshGuard
-{
-public:
-  static ObQueryRetryAshInfo *get_info_ptr() { return nullptr; }
-  static void set_info(ObQueryRetryAshInfo *) {}
-  static void reset_info() {}
-};
-
 class ObQueryRetryInfo
 {
 public:
@@ -292,9 +273,7 @@ public:
     : inited_(false),
       is_rpc_timeout_(false),
       last_query_retry_err_(common::OB_SUCCESS),
-      retry_cnt_(0),
-      query_switch_leader_retry_timeout_ts_(0),
-      query_retry_ash_info_()
+      retry_cnt_(0)
   {
   }
   virtual ~ObQueryRetryInfo() {}
@@ -315,30 +294,11 @@ public:
   {
     last_query_retry_err_ = last_query_retry_err;
   }
-  bool should_fast_fail()
-  {
-    bool fast_fail = false;
-    if (0 == query_switch_leader_retry_timeout_ts_) {
-      query_switch_leader_retry_timeout_ts_ = INT64_MAX;
-      // start timing from first retry, not from query start
-
-      int64_t timeout = GCONF.ob_query_switch_leader_retry_timeout;
-      if (timeout > 0) {
-        query_switch_leader_retry_timeout_ts_ = timeout + common::ObTimeUtility::current_time();
-      }
-
-    }
-    if (query_switch_leader_retry_timeout_ts_ < common::ObTimeUtility::current_time()) {
-      fast_fail = true;
-    }
-    return fast_fail;
-  }
   // 1. In the timeout scenario, try to feedback the error code from the last attempt, so that the reason for the error is understandable
-  // 2. In other scenarios, used to obtain the last error code to decide local retry behavior (such as whether remote plan optimization should proceed)
+  // 2. In other scenarios, used to obtain the last error code to decide local retry behavior.
   int get_last_query_retry_err() const { return last_query_retry_err_; }
   void inc_retry_cnt() { retry_cnt_++; }
   int64_t get_retry_cnt() const { return retry_cnt_; }
-  ObQueryRetryAshInfo& get_retry_ash_info() { return query_retry_ash_info_; }
 
   TO_STRING_KV(K_(inited), K_(is_rpc_timeout), K_(last_query_retry_err));
 
@@ -354,9 +314,6 @@ private:
   int last_query_retry_err_;
   // this value include local retry & packet retry
   int64_t retry_cnt_;
-  // for fast fail, 
-  int64_t query_switch_leader_retry_timeout_ts_;
-  ObQueryRetryAshInfo query_retry_ash_info_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObQueryRetryInfo);
 };
@@ -390,25 +347,6 @@ public:
                        const uint64_t table_id,
                        const share::schema::ObTableSchema *&table_schema,
                        bool is_link = false);
-  int get_catalog_database_schema(const uint64_t catalog_id,
-                                  const ObString &database_name,
-                                  const ObDatabaseSchema *&database_schema);
-  int get_catalog_database_id(const uint64_t catalog_id,
-                              const ObString &database_name,
-                              uint64_t &database_id);
-  int get_catalog_table_schema(const uint64_t catalog_id,
-                               const uint64_t database_id,
-                               const ObString &database_name,
-                               const ObString &tbl_name,
-                               const ObTableSchema *&table_schema);
-  int get_catalog_table_schema(const uint64_t catalog_id,
-                               const uint64_t database_id,
-                               const ObString &tbl_name,
-                               const ObTableSchema *&table_schema);
-  int get_catalog_table_id(const uint64_t catalog_id,
-                           const uint64_t database_id,
-                           const ObString &tbl_name,
-                           uint64_t &table_id);
   int get_column_schema(uint64_t table_id, const common::ObString &column_name,
                         const share::schema::ObColumnSchemaV2 *&column_schema,
                         bool is_link = false) const;
@@ -423,23 +361,10 @@ public:
                                bool with_domain_index = true,
                                bool with_spatial_index = true,
                                bool with_vector_index = true);
-  uint64_t get_next_mocked_schema_id() { return ++mocked_schema_id_counter_; }
-  int get_mocked_table_schema(uint64_t ref_table_id, const share::schema::ObTableSchema *&table_schema) const;
-  int add_mocked_table_schema(const share::schema::ObTableSchema &table_schema);
-  int add_mocked_database_schema(const share::schema::ObDatabaseSchema &database_schema);
-  int recover_schema_from_external_object(const share::ObExternalObject &external_object);
-  int recover_schema_from_external_objects(const ObIArray<share::ObExternalObject> &external_objects);
-  common::ObIArray<const share::schema::ObDatabaseSchema *> &get_mocked_database_schemas();
-  common::ObIArray<const share::schema::ObTableSchema *> &get_mocked_table_schemas();
 public:
 
 private:
   share::schema::ObSchemaGetterGuard *schema_guard_;
-  common::ObArenaAllocator allocator_;
-  common::ObSEArray<const share::schema::ObTableSchema *, 1> table_schemas_;
-  common::ObSEArray<const share::schema::ObDatabaseSchema *, 1> mocked_database_schemas_;
-  uint64_t next_link_table_id_;
-  int64_t mocked_schema_id_counter_;
 };
 
 struct ObSqlPlanKey
@@ -555,7 +480,6 @@ public:
   bool is_dynamic_sql_;
   bool is_dbms_sql_;
   bool is_cursor_;
-  bool is_remote_sql_;
   uint64_t statement_id_;
   common::ObString cur_sql_;
   stmt::StmtType stmt_type_;
@@ -614,11 +538,7 @@ public:
     };
   };
   common::ObString raw_sql_;
-  uint64_t ccl_rule_id_;
-  uint64_t ccl_match_time_;
   common::ObString reconstruct_ps_sql_;
-  common::ObSEArray<ObCCLRuleConcurrencyValueWrapper*, 4> matched_ccl_rule_level_values_;
-  common::ObSEArray<ObCCLRuleConcurrencyValueWrapper*, 4> matched_ccl_format_sqlid_level_values_;
   TO_STRING_KV(K(stmt_type_));
 };
 

@@ -13,11 +13,9 @@ ob_set_subtarget(ob_server common
   ob_inner_sql_transmit_struct.cpp
   ob_inner_sql_connection.cpp
   ob_inner_sql_connection_pool.cpp
-  ob_resource_inner_sql_connection_pool.cpp
   ob_inner_sql_read_context.cpp
   ob_inner_sql_result.cpp
   ob_req_time_service.cpp
-  ob_root_service_monitor.cpp
   ob_server_reload_config.cpp
   ob_server_schema_updater.cpp
   ob_server_utils.cpp
@@ -26,16 +24,15 @@ ob_set_subtarget(ob_server common
   ob_srv_network_frame.cpp
   ob_srv_xlator.cpp
   ob_ex_rpc.cpp
-  ob_tenant_duty_task.cpp
-  ob_sys_tenant_load_sys_package_service.cpp
-  ob_sys_tenant_load_sys_package_task.cpp
+  ob_server_duty_task.cpp
+  ob_system_package_load_service.cpp
+  ob_system_package_load_task.cpp
   ob_uniq_task_queue.cpp
   ob_startup_accel_task_handler.cpp
 )
 
 ob_set_subtarget(ob_server common_mixed
-  report/ob_tablet_table_updater.cpp
-  report/ob_tenant_meta_checker.cpp
+  ob_tablet_runtime_meta_updater.cpp
 )
 
 ob_set_subtarget(ob_server dbms_job
@@ -88,18 +85,17 @@ ob_set_subtarget(ob_server mysql
 )
 
 ob_set_subtarget(ob_server net
-  net/ob_net_queue_traver.cpp
 )
 
 ob_set_subtarget(ob_server omt
-  omt/ob_multi_tenant.cpp
+  omt/ob_server_runtime_controller.cpp
   omt/ob_retry_queue.cpp
-  omt/ob_tenant.cpp
-  omt/ob_tenant_meta.cpp
+  omt/ob_server_runtime.cpp
+  omt/ob_server_runtime_meta.cpp
   omt/ob_th_worker.cpp
   omt/ob_worker_processor.cpp
-  omt/ob_tenant_srs.cpp
-  omt/ob_tenant_ai_service.cpp
+  omt/ob_srs_service.cpp
+  omt/ob_ai_service.cpp
 )
 
 ob_set_subtarget(ob_server ai_service
@@ -121,8 +117,8 @@ ob_set_subtarget(ob_server scheduler
   scheduler/ob_dag_warning_history_mgr.cpp
   scheduler/ob_independent_dag.cpp
   scheduler/ob_sys_task_stat.cpp
-  scheduler/ob_tenant_dag_scheduler.cpp
-  scheduler/ob_tenant_ddl_count_guard.cpp
+  scheduler/ob_dag_scheduler.cpp
+  scheduler/ob_ddl_count_guard.cpp
 )
 
 ob_set_subtarget(ob_server vector_index
@@ -136,7 +132,6 @@ ob_set_subtarget(ob_server vector_index
   vector_index/ob_plugin_vector_index_service.cpp
   vector_index/ob_plugin_vector_index_util.cpp
   vector_index/ob_plugin_vector_index_utils.cpp
-  vector_index/ob_tenant_vector_index_async_task.cpp
   vector_index/ob_vector_embedding_handler.cpp
   vector_index/ob_vector_index_async_task.cpp
   vector_index/ob_vector_index_async_task_util.cpp
@@ -165,9 +160,8 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_dag_warning_history.cpp
   virtual_table/ob_all_virtual_diag_index_scan.cpp
   virtual_table/ob_all_virtual_dtl_channel.cpp
-  virtual_table/ob_all_virtual_dtl_first_cached_buffer.cpp
   virtual_table/ob_all_virtual_dtl_memory.cpp
-  virtual_table/ob_all_virtual_dump_tenant_info.cpp
+  virtual_table/ob_all_virtual_dump_info.cpp
   virtual_table/ob_all_virtual_engine_table.cpp
   virtual_table/ob_all_virtual_files_table.cpp
   virtual_table/ob_all_virtual_id_service.cpp
@@ -217,18 +211,16 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_sys_parameter_stat.cpp
   virtual_table/ob_all_virtual_sys_task_status.cpp
   virtual_table/ob_all_virtual_table_mgr.cpp
-  virtual_table/ob_all_virtual_unit.cpp
   virtual_table/ob_all_virtual_tablet_ddl_kv_info.cpp
   virtual_table/ob_all_virtual_ddl_sim_point_stat.cpp
   virtual_table/ob_all_virtual_tablet_info.cpp
   virtual_table/ob_all_virtual_server.cpp
-  virtual_table/ob_all_virtual_server_storage.cpp
   virtual_table/ob_all_virtual_sqlite_tables.cpp
   virtual_table/ob_all_virtual_tablet_compaction_history.cpp
   virtual_table/ob_all_virtual_tablet_compaction_progress.cpp
   virtual_table/ob_all_virtual_io_status.cpp
-  virtual_table/ob_all_virtual_tenant_ctx_memory_info.cpp
-  virtual_table/ob_all_virtual_tenant_memstore_allocator_info.cpp
+  virtual_table/ob_all_virtual_ctx_memory_info.cpp
+  virtual_table/ob_all_virtual_memstore_allocator_info.cpp
   virtual_table/ob_all_virtual_tx_stat.cpp
   virtual_table/ob_all_virtual_tx_lock_stat.cpp
   virtual_table/ob_all_virtual_tx_scheduler_stat.cpp
@@ -238,10 +230,9 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_log_stat.cpp
   virtual_table/ob_all_virtual_apply_stat.cpp
   virtual_table/ob_all_virtual_replay_stat.cpp
-  virtual_table/ob_all_virtual_ha_diagnose.cpp
   virtual_table/ob_global_variables.cpp
   virtual_table/ob_gv_sql.cpp
-  virtual_table/ob_all_virtual_tenant_memstore_info.cpp
+  virtual_table/ob_all_virtual_memstore_usage.cpp
   virtual_table/ob_information_check_constraints_table.cpp
   virtual_table/ob_information_columns_table.cpp
   virtual_table/ob_information_global_status_table.cpp
@@ -257,35 +248,28 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_information_triggers_table.cpp
   virtual_table/ob_information_user_privileges_table.cpp
   virtual_table/ob_information_schema_enable_roles_table.cpp
-  virtual_table/ob_mem_leak_checker_info.cpp
   virtual_table/ob_mysql_db_table.cpp
   virtual_table/ob_mysql_proc_table.cpp
   virtual_table/ob_mysql_user_table.cpp
   virtual_table/ob_plan_cache_plan_explain.cpp
   virtual_table/ob_session_variables.cpp
-  virtual_table/ob_show_create_catalog.cpp
   virtual_table/ob_show_create_database.cpp
-  virtual_table/ob_show_create_location.cpp
   virtual_table/ob_show_create_procedure.cpp
   virtual_table/ob_show_create_table.cpp
-  virtual_table/ob_show_create_tablegroup.cpp
   virtual_table/ob_show_create_trigger.cpp
   virtual_table/ob_show_database_status.cpp
   virtual_table/ob_show_grants.cpp
   virtual_table/ob_show_processlist.cpp
-  virtual_table/ob_show_tenant_status.cpp
   virtual_table/ob_table_columns.cpp
   virtual_table/ob_table_index.cpp
-  virtual_table/ob_tenant_all_tables.cpp
-  virtual_table/ob_tenant_show_tables.cpp
-  virtual_table/ob_tenant_virtual_charset.cpp
-  virtual_table/ob_tenant_virtual_privilege.cpp
-  virtual_table/ob_tenant_virtual_collation.cpp
-  virtual_table/ob_tenant_virtual_concurrent_limit_sql.cpp
-  virtual_table/ob_tenant_virtual_current_tenant.cpp
-  virtual_table/ob_tenant_virtual_get_object_definition.cpp
-  virtual_table/ob_tenant_virtual_outline.cpp
-  virtual_table/ob_tenant_virtual_warning.cpp
+  virtual_table/ob_show_table_status.cpp
+  virtual_table/ob_show_tables.cpp
+  virtual_table/ob_virtual_charset.cpp
+  virtual_table/ob_virtual_privilege.cpp
+  virtual_table/ob_virtual_collation.cpp
+  virtual_table/ob_virtual_get_object_definition.cpp
+  virtual_table/ob_virtual_outline.cpp
+  virtual_table/ob_virtual_warning.cpp
   virtual_table/ob_virtual_data_access_service.cpp
   virtual_table/ob_virtual_open_cursor_table.cpp
   virtual_table/ob_virtual_sql_plan_statistics.cpp
@@ -298,21 +282,18 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_sql_plan.cpp
   virtual_table/ob_all_virtual_opt_stat_gather_monitor.cpp
   virtual_table/ob_all_virtual_thread.cpp
-  virtual_table/ob_all_virtual_tenant_resource_limit.cpp
-  virtual_table/ob_all_virtual_tenant_resource_limit_detail.cpp
+  virtual_table/ob_all_virtual_resource_limit.cpp
+  virtual_table/ob_all_virtual_resource_limit_detail.cpp
   virtual_table/ob_all_virtual_activity_metrics.cpp
   virtual_table/ob_all_virtual_nic_info.cpp
   virtual_table/ob_all_virtual_sys_variable_default_value.cpp
-  virtual_table/ob_all_virtual_tenant_scheduler_running_job.cpp
+  virtual_table/ob_all_virtual_scheduler_running_job.cpp
   virtual_table/ob_all_virtual_vector_index_info.cpp
   virtual_table/ob_all_virtual_session_ps_info.cpp
   virtual_table/ob_all_virtual_sql_stat.cpp
   virtual_table/ob_all_virtual_tmp_file.cpp
-  virtual_table/ob_all_virtual_plugin_info.cpp
   virtual_table/ob_all_virtual_change_stream_refresh_stat.cpp
-  virtual_table/ob_tenant_show_catalog_databases.cpp
-  virtual_table/ob_all_virtual_tenant_vector_mem_info.cpp
-  virtual_table/ob_all_virtual_ccl_status.cpp
+  virtual_table/ob_all_virtual_vector_mem_info.cpp
 )
 
 ob_server_add_target(ob_server)
@@ -324,7 +305,7 @@ add_library(oceanbase_static
   ${CMAKE_CURRENT_BINARY_DIR}/ob_version.cpp)
 
 target_link_libraries(oceanbase_static
-  PUBLIC ob_base "${ob_objects}" ob_sql_static ob_storage_static ob_share_static oblib ob_plugin)
+  PUBLIC ob_base "${ob_objects}" ob_sql_static ob_storage_static ob_share_static oblib)
 
 if (OB_SO_CACHE)
   add_library(oceanbase SHARED IMPORTED GLOBAL)
@@ -349,7 +330,6 @@ else()
     ob_sql_static
     ob_storage_static
     ob_share_static
-    ob_plugin
     $<$<NOT:$<PLATFORM_ID:Darwin>>:-Wl,--no-whole-archive>
     $<$<PLATFORM_ID:Linux>:-static-libgcc>
     $<$<PLATFORM_ID:Linux>:-static-libstdc++>)
@@ -410,10 +390,6 @@ target_link_libraries(seekdb
   $<$<PLATFORM_ID:Windows>:ob_malloc>
   $<$<PLATFORM_ID:Windows>:synchronization>
   $<$<AND:$<NOT:$<PLATFORM_ID:Darwin>>,$<NOT:$<PLATFORM_ID:Windows>>>:-Wl,--end-group>
-  $<$<AND:$<NOT:$<PLATFORM_ID:Darwin>>,$<NOT:$<PLATFORM_ID:Windows>>>:-Wl,--whole-archive>
-  ob_plugin_export_static
-  $<$<AND:$<NOT:$<PLATFORM_ID:Darwin>>,$<NOT:$<PLATFORM_ID:Windows>>>:-Wl,--no-whole-archive>
-  $<$<AND:$<NOT:$<PLATFORM_ID:Darwin>>,$<NOT:$<PLATFORM_ID:Windows>>>:-Wl,--export-dynamic-symbol=obp_*>
   $<$<PLATFORM_ID:Linux>:-static-libgcc>
   $<$<PLATFORM_ID:Linux>:-static-libstdc++>
   ${link_malloc_hook}

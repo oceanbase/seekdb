@@ -25,7 +25,6 @@ using namespace oceanbase::common;
 using namespace oceanbase::storage;
 using namespace oceanbase::blocksstable;
 using namespace oceanbase::share;
-using namespace oceanbase::table;
 
 ObChunk::~ObChunk() 
 {

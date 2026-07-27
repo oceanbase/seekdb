@@ -290,9 +290,6 @@ public:
     return AND_FILTER == type_ || TRUNCATE_AND_FILTER == type_ ||
         OR_FILTER == type_ || TRUNCATE_OR_FILTER == type_;
   }
-  int check_filter_info(const storage::ObITableReadInfo &read_info,
-                        bool &is_safe_filter_with_di);
-
   VIRTUAL_TO_STRING_KV(K_(type), K_(n_child), K_(col_ids));
 public:
   common::ObIAllocator &alloc_;
@@ -1318,13 +1315,10 @@ public:
   ~ObPushdownExprSpec() = default;
   TO_STRING_KV(K_(calc_exprs),
                K_(access_exprs),
-               K_(ext_file_column_exprs),
-               K_(ext_column_convert_exprs),
                K_(max_batch_size),
                K_(pushdown_filters),
                K_(pd_storage_flag),
-               KPC_(trans_info_expr),
-               K_(ext_tbl_filter_pd_level));
+               KPC_(trans_info_expr));
 
   int set_calc_exprs(const ExprFixedArray &calc_exprs, int64_t max_batch_size)
   {
@@ -1343,11 +1337,7 @@ public:
   ObPushdownFilter pd_storage_filters_;
   // used to pushdown aggregate expression now.
   ExprFixedArray pd_storage_aggregate_output_;
-  // used by external table
-  ExprFixedArray ext_file_column_exprs_;
-  ExprFixedArray ext_column_convert_exprs_;
   ObExpr *trans_info_expr_;
-  int64_t ext_tbl_filter_pd_level_;
 };
 // Push down expression execution dependent op ctx
 class ObPushdownOperator
@@ -1425,7 +1415,6 @@ struct PushdownFilterInfo
       datum_buf_(nullptr),
       tmp_datum_buf_(nullptr),
       filter_(nullptr),
-      di_bitmap_(nullptr),
       cell_data_ptrs_(nullptr),
       row_ids_(nullptr),
       len_array_(nullptr),
@@ -1455,22 +1444,6 @@ struct PushdownFilterInfo
   }
   int init(const storage::ObTableIterParam &iter_param, common::ObIAllocator &alloc);
   int init_bitmap(const int64_t row_count, common::ObBitmap *&bitmap);
-  OB_INLINE void set_delete_insert_bitmap(common::ObBitmap *bitmap)
-  {
-    di_bitmap_ = bitmap;
-  }
-  OB_INLINE void reset_delete_insert_bitmap()
-  {
-    di_bitmap_ = nullptr;
-  }
-  OB_INLINE bool can_skip_filter_delete_insert(int64_t row) const
-  {
-    bool fast_skip = false;
-    if (nullptr != di_bitmap_) {
-      fast_skip = !di_bitmap_->test(row);
-    }
-    return fast_skip;
-  }
   int get_col_datum(ObDatum *&datums) const;
   struct TmpColDatumBuf
   {
@@ -1500,7 +1473,6 @@ struct PushdownFilterInfo
   blocksstable::ObStorageDatum *datum_buf_;
   blocksstable::ObStorageDatum *tmp_datum_buf_;
   sql::ObPushdownFilterExecutor *filter_;
-  common::ObBitmap *di_bitmap_;
   // for black filter vectorize
   const char **cell_data_ptrs_;
   int32_t *row_ids_;

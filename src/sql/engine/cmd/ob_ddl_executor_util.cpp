@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
-#include "rootserver/ob_root_service.h"
+#include "rootserver/ob_local_management_service.h"
 #include "observer/ob_service.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_ddl_executor_util.h"
@@ -42,8 +42,8 @@ int ObDDLExecutorUtil::handle_session_exception(ObSQLSessionInfo &session)
   } else if (OB_UNLIKELY(session.is_zombie())) {
     ret = OB_SESSION_KILLED;
     LOG_WARN("session is killed", K(ret));
-  } else if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_standby( is_standby))) {
-    LOG_WARN("fail to execute mtl_check_if_tenant_role_is_standby", KR(ret));
+  } else if (OB_FAIL(ObShareUtil::check_if_server_role_is_standby( is_standby))) {
+    LOG_WARN("fail to execute check_if_server_role_is_standby", KR(ret));
   } else if (is_standby) {
     ret = OB_SESSION_KILLED;
     LOG_WARN("session is killed", KR(ret));
@@ -75,8 +75,6 @@ int ObDDLExecutorUtil::wait_ddl_finish(const int64_t task_id,
     LOG_INFO("start wait ddl finsih", K(task_id), "ddl_event_info", ObDDLEventInfo());
 
     int tmp_ret = OB_SUCCESS;
-    bool is_tenant_dropped = false;
-    bool is_tenant_standby = false;
     while (OB_SUCC(ret)) {
       if (OB_SUCCESS == ObDDLErrorMessageTableOperator::get_ddl_error_message(task_id, -1 /* target_object_id */, unused_addr, false /* is_ddl_retry_task */, *GCTX.sql_proxy_, error_message, unused_user_msg_len)) {
         ret = error_message.ret_code_;
@@ -87,25 +85,18 @@ int ObDDLExecutorUtil::wait_ddl_finish(const int64_t task_id,
           } else {
             FORWARD_USER_ERROR(ret, error_message.user_message_);
           }
-        } else if (error_message.consensus_schema_version_ != OB_INVALID_VERSION) {
+        } else if (error_message.published_schema_version_ != OB_INVALID_VERSION) {
           ObTimeoutCtx ctx;
-          int64_t consensus_timeout =  30 * 1000 * 1000L; // 30s;
-
-          consensus_timeout = GCONF._wait_interval_after_parallel_ddl;
-
-          if (THIS_WORKER.is_timeout_ts_valid()) {
-            consensus_timeout = min(consensus_timeout, THIS_WORKER.get_timeout_remain());
-          }
           int64_t start_time = ObTimeUtility::current_time();
-          if (OB_FAIL(ctx.set_timeout(consensus_timeout))) {
+          if (OB_FAIL(ctx.set_timeout(THIS_WORKER.get_timeout_remain()))) {
             LOG_WARN("fail to set timeout ctx", KR(ret));
-          } else if (OB_FAIL(ObDDLExecutorUtil::try_check_parallel_ddl_schema_in_sync(
-                      ctx, session, error_message.consensus_schema_version_, false /*skip_consensus*/))) {
-            LOG_WARN("fail to check parallel ddl schema in sync", KR(ret), K_(error_message.consensus_schema_version));
+          } else if (OB_FAIL(ObDDLExecutorUtil::wait_local_schema_visible(
+                      ctx, session, error_message.published_schema_version_))) {
+            LOG_WARN("fail to wait for local schema visibility", KR(ret), K_(error_message.published_schema_version));
           } else {
             int64_t refresh_time = ObTimeUtility::current_time() - start_time;
             LOG_INFO("parallel ddl wait schema", KR(ret), K(refresh_time),
-                                                 K_(error_message.consensus_schema_version));
+                                                 K_(error_message.published_schema_version));
           }
         }
         break;
@@ -149,8 +140,6 @@ int ObDDLExecutorUtil::wait_build_index_finish(const int64_t task_id, bool &is_f
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  bool is_tenant_dropped = false;
-  bool is_tenant_standby = false;
   ObAddr unused_addr;
   int64_t unused_user_msg_len = 0;
   THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + OB_MAX_USER_SPECIFIED_TIMEOUT);
@@ -159,8 +148,7 @@ int ObDDLExecutorUtil::wait_build_index_finish(const int64_t task_id, bool &is_f
   SERVER_EVENT_ADD("ddl", "start wait build index finish",
     "ret", ret,
     "trace_id", *ObCurTraceId::get_trace_id(),
-    "task_id", task_id,
-    "is_tenant_standby", is_tenant_standby);
+    "task_id", task_id);
   LOG_INFO("start wait build index finish", K(task_id), "ddl_event_info", ObDDLEventInfo());
 
   if (OB_UNLIKELY(task_id <= 0)) {
@@ -187,8 +175,7 @@ int ObDDLExecutorUtil::wait_build_index_finish(const int64_t task_id, bool &is_f
   SERVER_EVENT_ADD("ddl", "end wait build index finish",
     "ret", error_message.ret_code_,
     "trace_id", *ObCurTraceId::get_trace_id(),
-    "task_id", task_id,
-    "is_tenant_standby", is_tenant_standby);
+    "task_id", task_id);
   LOG_INFO("finish wait build index", K(ret), "ddl_event_info", ObDDLEventInfo(), K(error_message));
   return ret;
 }
@@ -216,7 +203,7 @@ int ObDDLExecutorUtil::wait_ddl_retry_task_finish(const int64_t task_id,
       "rpc_dest", GCTX.self_addr());
     LOG_INFO("start wait ddl retry task finish", K(task_id), "ddl_event_info", ObDDLEventInfo(), K(error_message));
 
-    bool is_primary_cluster = true;
+    bool is_primary_server = true;
     int tmp_ret = OB_SUCCESS;
     while (OB_SUCC(ret)) {
       if (OB_SUCCESS == ObDDLErrorMessageTableOperator::get_ddl_error_message(task_id, -1 /* target_object_id */, unused_addr, true /* is_ddl_retry_task */, *GCTX.sql_proxy_, error_message, forward_user_msg_len)) {
@@ -253,12 +240,12 @@ int ObDDLExecutorUtil::wait_ddl_retry_task_finish(const int64_t task_id,
         break;
       } else {
         if (OB_FAIL(ret)) {
-        } else if (OB_TMP_FAIL(ObShareUtil::is_primary_cluster(is_primary_cluster))) {
-          LOG_WARN("fail to check whether is primary cluster", KR(ret), K(is_primary_cluster));
-        } else if (!is_primary_cluster) {
-          ret = OB_STANDBY_READ_ONLY;
+        } else if (OB_TMP_FAIL(ObShareUtil::is_primary_server(is_primary_server))) {
+          LOG_WARN("fail to check whether is primary server", KR(ret), K(is_primary_server));
+        } else if (!is_primary_server) {
+          ret = OB_STANDBY_DATABASE_READ_ONLY;
           FORWARD_USER_ERROR(ret, "DDL execution status is undecided, please check later if it finishes successfully or not.");
-          LOG_WARN("tenant is standby now, stop wait", K(ret));
+          LOG_WARN("server is standby now, stop wait", K(ret));
           break;
         }
         if (OB_FAIL(ret)) {
@@ -326,13 +313,13 @@ int ObDDLExecutorUtil::execute_pcreate_table(ObSQLSessionInfo *my_session, const
   ObTimeoutCtx ctx;
   if (OB_FAIL(ctx.set_timeout(THIS_WORKER.get_timeout_remain()))) {
     LOG_WARN("fail to set timeout ctx", KR(ret));
-  } else if (OB_FAIL(GCTX.root_service_->parallel_create_table(arg, res))) {
+  } else if (OB_FAIL(GCTX.local_management_service_->parallel_create_table(arg, res))) {
     LOG_WARN("parallel create table failed", KR(ret), "dst", GCTX.self_addr());
   } else {
     int64_t refresh_time = ObTimeUtility::current_time();
-    if (OB_FAIL(ObDDLExecutorUtil::try_check_parallel_ddl_schema_in_sync(
-        ctx, my_session, res.schema_version_, res.do_nothing_))) {
-      LOG_WARN("fail to check paralleld ddl schema in sync", KR(ret), K(res));
+    if (!res.do_nothing_ && OB_FAIL(ObDDLExecutorUtil::wait_local_schema_visible(
+        ctx, my_session, res.schema_version_))) {
+      LOG_WARN("fail to wait for local schema visibility", KR(ret), K(res));
     }
     int64_t end_time = ObTimeUtility::current_time();
     LOG_INFO(parallel_ddl_type, KR(ret),
@@ -355,7 +342,7 @@ namespace share
 namespace schema
 {
 
-// try_check_parallel_ddl_schema_in_sync moved to the sql namespace at the end of the file(ObDDLExecutorUtil)
+// wait_local_schema_visible moved to the sql namespace at the end of the file(ObDDLExecutorUtil)
 
 }  // namespace schema
 }  // namespace share
@@ -366,54 +353,39 @@ namespace oceanbase
 {
 namespace sql
 {
-int ObDDLExecutorUtil::try_check_parallel_ddl_schema_in_sync(
+int ObDDLExecutorUtil::wait_local_schema_visible(
     const ObTimeoutCtx &ctx,
     sql::ObSQLSessionInfo *session,
-    const int64_t schema_version,
-    const bool skip_consensus)
+    const int64_t schema_version)
 {
   int ret = OB_SUCCESS;
-  int64_t start_time = ObTimeUtility::current_time();
   ObMultiVersionSchemaService *schema_service = NULL;
-  int64_t consensus_timeout = 30 * 1000 * 1000L; // 30s
-  bool is_async = false;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    consensus_timeout = tenant_config->_wait_interval_after_parallel_ddl;
-    is_async = (0 == tenant_config->_publish_schema_mode.case_compare(PUBLISH_SCHEMA_MODE_ASYNC));
-  }
-  if (OB_ISNULL(session) || OB_UNLIKELY(false
-      || schema_version <= 0
-      || consensus_timeout < 0)) {
+  bool schema_visible = false;
+  if (OB_ISNULL(session) || OB_UNLIKELY(schema_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), KP(session), K(schema_version), K(consensus_timeout));
+    LOG_WARN("invalid arg", KR(ret), KP(session), K(schema_version));
   } else if (OB_ISNULL(schema_service = GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema_service is null", KR(ret));
   }
-  while (OB_SUCC(ret) && ctx.get_timeout() > 0 && !is_async) {
+  while (OB_SUCC(ret) && ctx.get_timeout() > 0 && !schema_visible) {
     int64_t refreshed_schema_version = OB_INVALID_VERSION;
-    int64_t consensus_schema_version = OB_INVALID_VERSION;
     if (OB_FAIL(ObDDLExecutorUtil::handle_session_exception(*session))) {
       LOG_WARN("fail to handle session exception", KR(ret));
-    } else if (OB_FAIL(schema_service->get_tenant_refreshed_schema_version(refreshed_schema_version))) {
+    } else if (OB_FAIL(schema_service->get_runtime_refreshed_schema_version(refreshed_schema_version))) {
       LOG_WARN("get refreshed schema_version fail", KR(ret));
-    } else if (OB_FAIL(schema_service->get_tenant_broadcast_consensus_version(consensus_schema_version))) {
-      LOG_WARN("get consensus schema_version fail", KR(ret));
-    } else if (refreshed_schema_version >= schema_version
-                && consensus_schema_version >= schema_version) {
-      break;
-    } else if (refreshed_schema_version >= schema_version
-                && (skip_consensus
-                    || ObTimeUtility::current_time() - start_time >= consensus_timeout)) {
-      break;
+    } else if (refreshed_schema_version >= schema_version) {
+      schema_visible = true;
     } else {
       if (REACH_TIME_INTERVAL(1000 * 1000L)) { // 1s
-        LOG_WARN("schema version not sync", K(consensus_timeout),
-                 K(refreshed_schema_version), K(consensus_schema_version), K(schema_version));
+        LOG_WARN("local schema version not visible", K(refreshed_schema_version), K(schema_version));
       }
       ob_usleep(10 * 1000L); // 10ms
     }
+  }
+  if (OB_SUCC(ret) && !schema_visible) {
+    ret = OB_TIMEOUT;
+    LOG_WARN("wait local schema visible timeout", KR(ret), K(schema_version));
   }
   return ret;
 }

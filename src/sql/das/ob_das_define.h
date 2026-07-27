@@ -18,10 +18,10 @@
 #define OBDEV_SRC_SQL_DAS_OB_DAS_DEFINE_H_
 #include "share/ob_define.h"
 #include "lib/list/ob_list.h"
+#include "share/ob_ls_id.h"
 #include "share/location_cache/ob_location_struct.h"
 #include "common/ob_tablet_id.h"
 #include "sql/ob_phy_table_location.h"
-#include "rpc/frame/ob_result_code.h"
 
 #define DAS_SCAN_OP(_task_op) \
     (::oceanbase::sql::DAS_OP_TABLE_SCAN != (_task_op)->get_type() && \
@@ -43,7 +43,6 @@ namespace oceanbase
 {
 namespace sql
 {
-class ObDASTaskArg;
 class ObIDASTaskOp;
 class ObExecContext;
 class ObPhysicalPlan;
@@ -52,16 +51,9 @@ class ObEvalCtx;
 
 namespace das
 {
-//reserve 8K for das write buffer's another structure
-const int64_t OB_DAS_MAX_PACKET_SIZE = 2 * 1024 * 1024l - 8 * 1024;
-/**
- * Generally, the most common configuration of a cluster is 3 zones.
- * When the leader is randomly distributed,
- * it can be considered that the DAS request will send at most one RPC request to each zone.
- * so OB_DAS_MAX_TOTAL_PACKET_SIZE was defined as:
- */
-const int64_t OB_DAS_MAX_TOTAL_PACKET_SIZE = 1 * OB_DAS_MAX_PACKET_SIZE;
-const int64_t OB_DAS_MAX_META_TENANT_PACKET_SIZE = 1 * 1024 * 1024l - 8 * 1024;
+// Reserve 8 KiB for the DAS write-buffer bookkeeping structures.
+const int64_t OB_DAS_TASK_BUFFER_SIZE = 2 * 1024 * 1024l - 8 * 1024;
+const int64_t OB_DAS_TOTAL_TASK_BUFFER_SIZE = OB_DAS_TASK_BUFFER_SIZE;
 // offset of das parallel thread_pool group_id
 static const int32_t OB_DAS_PARALLEL_POOL_MARK = 1 << 30;
 }  // namespace das
@@ -131,10 +123,8 @@ public:
                K_(ref_table_id),
                K_(related_table_ids),
                K_(use_dist_das),
-               K_(select_leader),
                K_(is_weak_read),
-               K_(unuse_related_pruning),
-               K_(is_external_table));
+               K_(unuse_related_pruning));
 
   uint64_t table_loc_id_; //location object id
   uint64_t ref_table_id_; //table object id
@@ -143,13 +133,10 @@ public:
     uint64_t flags_;
     struct {
       uint64_t use_dist_das_                    : 1; //mark whether this table touch data through distributed DAS
-      uint64_t select_leader_                   : 1; //mark whether this table use leader replica
       uint64_t is_weak_read_                    : 1; //mark if this tale can use weak read consistency
       uint64_t unuse_related_pruning_           : 1; //mark if this table use the related pruning to prune local index tablet_id
-      uint64_t is_external_table_               : 1; //mark if this table is an external table
-      uint64_t is_external_files_on_disk_       : 1; //mark if files in external table are located at local disk
       uint64_t das_empty_part_                  : 1; //mark there is false startup filter on DAS access table
-      uint64_t reserved_                        : 57;
+      uint64_t reserved_                        : 60;
     };
   };
 private:

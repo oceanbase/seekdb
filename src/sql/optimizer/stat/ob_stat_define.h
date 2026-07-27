@@ -88,9 +88,8 @@ const int64_t MAXIMUM_ROWS_OF_ROW_SAMPLE_GATHER_HYBRID_HIST = 10000000;
 const int64_t MINIMUM_BLOCK_CNT_OF_BLOCK_SAMPLE_HYBRID_HIST = 16;
 const static int64_t DEFAULT_AUTO_SAMPLE_ROW_COUNT = 0;
 const static int64_t DEFAULT_ASYNC_SAMPLE_ROW_COUNT = 5000000;
-const static int64_t MAX_GATHER_COLUMN_COUNT_PER_QUERY_FOR_SMALL_TENANT = 24;
-
-const static int64_t MAX_GATHER_COLUMN_COUNT_PER_QUERY_FOR_LARGE_TENANT = 96;
+const static int64_t MAX_GATHER_COLUMN_COUNT_PER_QUERY_LOW_MEMORY = 24;
+const static int64_t MAX_GATHER_COLUMN_COUNT_PER_QUERY_HIGH_MEMORY = 96;
 
 enum StatLevel
 {
@@ -571,7 +570,6 @@ struct ObTableStatParam {
     no_regather_partition_ids_(),
     is_subpart_name_(false),
     stat_category_(),
-    tab_group_(),
     stattype_(StatTypeLocked::NULL_TYPE),
     need_approx_ndv_(true),
     is_index_stat_(false),
@@ -660,7 +658,6 @@ struct ObTableStatParam {
 
   bool is_subpart_name_;
   ObString stat_category_;
-  ObString tab_group_;
   StatTypeLocked stattype_;
   bool need_approx_ndv_;
   bool is_index_stat_;
@@ -715,7 +712,6 @@ struct ObTableStatParam {
                K(no_regather_partition_ids_),
                K(is_subpart_name_),
                K(stat_category_),
-               K(tab_group_),
                K(stattype_),
                K(need_approx_ndv_),
                K(is_index_stat_),

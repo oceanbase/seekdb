@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX TABLELOCK
 #include "storage/tablelock/ob_lock_memtable.h"
 #include "storage/tablelock/ob_lock_memtable_mgr.h"
-#include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
+#include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
 #include "storage/ls/ob_freezer.h"
 
 namespace oceanbase
@@ -64,7 +64,7 @@ void ObLockMemtableMgr::destroy()
 int ObLockMemtableMgr::init(
     const common::ObTabletID &tablet_id,
     ObFreezer *freezer,
-    ObTenantMetaMemMgr *t3m)
+    ObStorageMetaMemMgr *t3m)
 {
   UNUSEDx(tablet_id);
   int ret = OB_SUCCESS;

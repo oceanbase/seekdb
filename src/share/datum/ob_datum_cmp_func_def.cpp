@@ -18,7 +18,7 @@
 
 #include "ob_datum_cmp_func_def.h"
 #include "share/ob_lob_access_utils.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 
 
 using namespace oceanbase;

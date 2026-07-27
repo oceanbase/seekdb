@@ -25,7 +25,7 @@
 #include "sql/plan_cache/ob_id_manager_allocator.h"
 #include "sql/plan_cache/ob_sql_parameterization.h"
 #include "sql/plan_cache/ob_prepare_stmt_struct.h"
-#include "sql/plan_cache/ob_pc_ref_handle.h"
+#include "sql/plan_cache/ob_pre_calc_expr_handler.h"
 #include "sql/plan_cache/ob_lib_cache_key_creator.h"
 #include "sql/plan_cache/ob_lib_cache_node_factory.h"
 #include "sql/plan_cache/ob_lib_cache_object_manager.h"
@@ -60,10 +60,8 @@ class ObLibCacheAtomicOp;
 struct ObKVEntryTraverseOp
 {
   typedef common::hash::HashMapPair<ObILibCacheKey *, ObILibCacheNode *> LibCacheKVEntry;
-  explicit ObKVEntryTraverseOp(LCKeyValueArray *key_val_list,
-                               const CacheRefHandleID ref_handle)
+  explicit ObKVEntryTraverseOp(LCKeyValueArray *key_val_list)
     : total_mem_used_(0),
-      ref_handle_(ref_handle),
       key_value_list_(key_val_list)
   {
   }
@@ -89,18 +87,16 @@ struct ObKVEntryTraverseOp
       if (OB_FAIL(key_value_list_->push_back(ObLCKeyValue(entry.first, entry.second)))) {
         PL_CACHE_LOG(WARN, "fail to push back key", K(ret));
       } else {
-        entry.second->inc_ref_count(ref_handle_);
+        entry.second->inc_ref_count();
         total_mem_used_ += entry.second->get_mem_size();
       }
     }
     return ret;
   }
   int64_t get_total_mem_used() const { return total_mem_used_; }
-  CacheRefHandleID get_ref_handle() { return ref_handle_; } const
   LCKeyValueArray *get_key_value_list() { return key_value_list_; }
 
   int64_t total_mem_used_;
-  const CacheRefHandleID ref_handle_;
   LCKeyValueArray *key_value_list_;
 };
 
@@ -226,14 +222,14 @@ public:
   static const int64_t MAX_PLAN_SIZE = 20*1024*1024; //20M
   static const int64_t MAX_PLAN_CACHE_SIZE = 5*1024LL*1024LL*1024LL; // 5G
   static const int64_t EVICT_KEY_NUM = 8;
-  static const int64_t MAX_TENANT_MEM = ((int64_t)(1) << 40); // 1T
+  static const int64_t MAX_RUNTIME_MEM = ((int64_t)(1) << 40); // 1T
   typedef common::hash::ObHashMap<ObILibCacheKey*, ObILibCacheNode*> CacheKeyNodeMap;
   typedef common::ObSEArray<uint64_t, 1024> PlanIdArray;
 
   ObPlanCache();
   virtual ~ObPlanCache();
-  static int mtl_init(ObPlanCache* &plan_cache);
-  static void mtl_stop(ObPlanCache * &plan_cache);
+  static int server_module_init(ObPlanCache* &plan_cache);
+  static void server_module_stop(ObPlanCache * &plan_cache);
   int init(int64_t hash_bucket);
   bool is_inited() { return inited_; }
 
@@ -258,15 +254,12 @@ public:
    */
   int add_plan(ObPhysicalPlan *plan, ObPlanCacheCtx &pc_ctx);
 
-  static bool is_contains_external_object(const DependenyTableStore &dep_schema_objs);
   /**
    * Add new ps plan to PlanCache
    */
   template<class T>
   int add_ps_plan(T *plan,
                   ObPlanCacheCtx &pc_ctx);
-  int try_get_plan(common::ObIAllocator &allocator, ObPlanCacheCtx &pc_ctx, ObCacheObjGuard &guard);
-  int try_get_ps_plan(ObCacheObjGuard &guard, const ObPsStmtId stmt_id, ObPlanCacheCtx &pc_ctx);
 
   // cache object access functions
   /* Query the execution plan that meets the requirements from the plan cache based on ObPlanCacheKey and parameters */
@@ -290,12 +283,12 @@ public:
   int update_memory_conf();
   int64_t get_mem_limit() const
   {
-    int64_t tenant_mem = get_tenant_memory();
+    int64_t runtime_mem = get_runtime_memory();
     int64_t mem_limit = -1;
-    if (OB_UNLIKELY(0 >= tenant_mem || tenant_mem >= MAX_TENANT_MEM)) {
-      mem_limit = MAX_TENANT_MEM * 0.05;
+    if (OB_UNLIKELY(0 >= runtime_mem || runtime_mem >= MAX_RUNTIME_MEM)) {
+      mem_limit = MAX_RUNTIME_MEM * 0.05;
     } else {
-      mem_limit = get_tenant_memory() / 100 * get_mem_limit_pct();
+      mem_limit = runtime_mem / 100 * get_mem_limit_pct();
     }
     return mem_limit;
   }
@@ -364,8 +357,8 @@ public:
   common::ObAddr &get_host() { return host_; }
   void set_host(common::ObAddr &addr) { host_ = addr; }
   
-  int64_t get_tenant_memory() const {
-    return lib::get_tenant_memory_limit();
+  int64_t get_runtime_memory() const {
+    return lib::get_allocator_memory_limit();
   }
   
   common::ObIAllocator *get_pc_allocator() { return &inner_allocator_; }
@@ -378,7 +371,7 @@ public:
   ObLCObjectManager &get_cache_obj_mgr() { return co_mgr_; }
   ObLCNodeFactory &get_cache_node_factory() { return cn_factory_; }
   int alloc_cache_obj(ObCacheObjGuard& guard, ObLibCacheNameSpace ns);
-  void free_cache_obj(ObILibCacheObject *&cache_obj, const CacheRefHandleID ref_handle);
+  void free_cache_obj(ObILibCacheObject *&cache_obj);
   int destroy_cache_obj(const bool is_leaked, const uint64_t object_id);
   static int construct_fast_parser_result(common::ObIAllocator &allocator,
                                           ObPlanCacheCtx &pc_ctx,
@@ -409,9 +402,6 @@ public:
                K_(mem_limit_pct),
                K_(mem_high_pct),
                K_(mem_low_pct));
-
-  ObCacheRefHandleMgr &get_ref_handle_mgr() { return ref_handle_mgr_; }
-  const ObCacheRefHandleMgr &get_ref_handle_mgr() const { return ref_handle_mgr_; }
 
 public:
   int flush_plan_cache();
@@ -467,8 +457,6 @@ private:
   common::ObMalloc inner_allocator_;
   common::ObAddr host_;
   ObPlanCacheStat pc_stat_;
-  // ref handle infos
-  ObCacheRefHandleMgr ref_handle_mgr_;
   // mark this Plan Cache whether is destroying.
   volatile int64_t destroy_;
   ObLCObjectManager co_mgr_;

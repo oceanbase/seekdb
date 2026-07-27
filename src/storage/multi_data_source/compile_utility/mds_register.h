@@ -13,38 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// ################################### Use multi-source transaction compatibility placeholder notes ##################################
-// # Placeholder code needs to be written within the macro definition block [NEED_GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION]
-// # Placeholder method: Through [comment] placeholder, placeholder requires information: Helper type name/Ctx type name/Enum value/Enum naming
-// #
-// # Note:
-// # 0. Place a placeholder before the 'reserved position'
-// # 1. Always placeholder on master first, ensure the master branch is a superset of all other branches
-// # 2. After the master placeholder is occupied, the corresponding information in the registration macro on the development branch cannot be modified, otherwise FARM will consider it a placeholder conflict. If this scenario occurs, the master placeholder needs to be modified first
-// # 3. All type names are written starting from the global namespace '::oceanbase'
-// # 4. Enum values use an incremental approach for placeholders
-// # 5. Enum naming cannot be the same as previous text
-// # 6. Since the placeholder is done using comments, therefore [do not need] to write the corresponding type definition and include it in [NEED_MDS_REGISTER_DEFINE]
-// ############################################################################################
-// ################################### Use multi-source data compatibility placeholder notes ##################################
-// # Placeholder code needs to be written within the macro definition block [GENERATE_MDS_UNIT], further:
-// # 1. If you want to add tablet level metadata, then add the placeholder information to [GENERATE_NORMAL_MDS_TABLE]
-// # Placeholder method: Through [definition] placeholder, placeholder requires information: Key type name/Value type name/Multi-version semantic support
-// #
-// # Note:
-// # 0. Place a placeholder before the 'reserved position'
-// # 1. Always placeholder on master first, to ensure the master branch is a superset of all other branches
-// # 2. After the master placeholder is occupied, the corresponding information in the registration macro on the development branch cannot be modified, otherwise FARM will consider it a placeholder conflict. If this scenario occurs, the master placeholder needs to be modified first
-// # 3. All type names are written starting from the global namespace '::oceanbase'
-// # 4. If the Key type name is not '::oceanbase::storage::mds::DummyKey', then the corresponding Key type definition needs to be provided, and the corresponding header file should be included in [NEED_MDS_REGISTER_DEFINE]
-// # 5. Need to provide the corresponding Value type definition, and include the corresponding header file in [NEED_MDS_REGISTER_DEFINE]
-// # 6. The type of Key/Value only needs to be declared, without defining member methods and variables, but it needs to implement the interfaces required by the framework to pass the framework's compile-time checks, including (implemented as empty when placeholder):
-// #    a. print function: [int64_t T::to_string(char *, const int64_t) const]
-// #    b. Implementation of some comparison functions, for example: [bool T::operator==(const T &) const] and [bool T::operator<(const T &) const]
-// #    c. Implementation of some serialization functions, for example: [int serialize(char *, const int64_t, int64_t &) const] and [int deserialize(const char *, const int64_t, int64_t &)] and [int64_t get_serialize_size() const]
-// #    d. Copy/move function implementation, for example: [int T::assign(const T &)]
-// ############################################################################################
-
 // the MDS FRAME must know the defination of some class type to generate legal CPP codes, including:
 // 1. DATA type defination if you need multi source data support.
 //    1.a. KEY type defination if you need multi source data support with multi key support.
@@ -86,7 +54,7 @@
 //                                             storage::mds::BufferCtx &ctx);// on follower
 //                     the actual ctx's type is BUFFER_CTX_TYPE user registered.
 // @param BUFFER_CTX_TYPE must inherited from storage::mds::BufferCtx.
-// @param ID for FRAME code reflection reason and compat reason, write the number by INC logic.
+// @param ID is the contiguous current-format identifier used by the frame.
 // @param ENUM_NAME transaction layer needed, will be defined in enum class
 //                  ObTxDataSourceType(ob_multi_data_source.h)
 #define GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION(HELPER_CLASS, BUFFER_CTX_TYPE, ID, ENUM_NAME) \
@@ -125,15 +93,6 @@ _GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION_(HELPER_CLASS, BUFFER_CTX_TYPE, ID, ENU
                                           ::oceanbase::storage::mds::MdsCtx,\
                                           42,\
                                           TABLET_FORK)
-  // GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION(::oceanbase::storage::ObTabletDDLCompleteMdsHelper,\
-  //                                         ::oceanbase::storage::mds::MdsCtx,\
-  //                                         41,\
-  //                                         DDL_COMPLETE_MDS)
-  // GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION(::oceanbase::storage::ObTTLFilterInfoMdsHelper,\
-  //                                         ::oceanbase::storage::mds::MdsCtx, \
-  //                                         43,\
-  //                                         SYNC_TTL_FILTER_INFO)
-  // # Reserved position (placeholder before this line)
 #undef GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION
 #endif
 /**************************************************************************************************/
@@ -189,7 +148,6 @@ _GENERATE_MDS_UNIT_(KEY_TYPE, VALUE_TYPE, NEED_MULTI_VERSION)
   GENERATE_MDS_UNIT(::oceanbase::storage::mds::DummyKey,\
                     ::oceanbase::storage::ObTabletDDLCompleteMdsUserData,\
                     false)
-  // # reserved position (this line is for placeholder)
 #endif
 
 /**************************************************************************************************/

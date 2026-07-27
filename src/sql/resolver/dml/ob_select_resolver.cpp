@@ -1057,7 +1057,6 @@ int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
   OZ( check_group_by() );
   OZ( check_order_by() );
   OZ( check_window_exprs() );
-  OZ( check_sequence_exprs() );
   OZ( check_unsupported_operation_in_recursive_branch() );
   if (OB_SUCC(ret)) {
     //for topk, here we need to indicate whether the select statement meets the requirements for using approximate computation, has group by, has order by and has limit
@@ -1071,7 +1070,6 @@ int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
         && !select_stmt->has_rollup()
         && select_stmt->get_window_func_exprs().empty()
         && select_stmt->has_order_by()
-        && !select_stmt->has_sequence()
         && !select_stmt->has_select_into()
         && (select_stmt->has_limit() && !select_stmt->is_fetch_with_ties() &&
             select_stmt->get_limit_percent_expr() == NULL)
@@ -1137,7 +1135,6 @@ int ObSelectResolver::resolve(const ParseNode &parse_tree)
     {
       
     }
-    select_stmt->set_show_seed(params_.show_seed_);
     /* -----------------------------------------------------------------
      * The later resolve may need some information resolved by the former one,
      * so please follow the resolving orders:
@@ -1465,7 +1462,6 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
   ParseNode *alias_node = NULL;
   bool is_bald_star = false;
   ObSelectStmt *select_stmt = NULL;
-  const bool enable_modify_null_name = true;
   ObExecContext *exec_ctx = NULL;
   //LOG_INFO("resolve_select_1", "usec", ObSQLUtils::get_usec());
   current_scope_ = T_FIELD_LIST_SCOPE;
@@ -1493,8 +1489,7 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
     // col_name1 is ":1", col_name2 is ":2", col_name3 is ":3"
     if (OB_FAIL(prepare_get_child_at(node.children_[i], 0))) {
       LOG_WARN("unexpected parse tree", K(ret));
-    } else if (node.children_[i]->children_[0]->type_ == T_NULL
-               && enable_modify_null_name) {
+    } else if (node.children_[i]->children_[0]->type_ == T_NULL) {
       // MySQL sets the alias of standalone null value("\N","null"...) to "NULL" during projection.
       // Note: when null value is in a composite expression, its alias is not modified.
       ObString alias_name = ObString::make_string("NULL");
@@ -1643,33 +1638,6 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpected select item type", K(select_item), K(ret));
           }
-        } else if (T_FUN_SYS_SEQ_NEXTVAL == sel_expr->get_expr_type()
-                   && OB_FAIL(prepare_get_child_at(project_node, 0))) {
-          LOG_WARN("unexpected nexval parse node", K(ret));
-        } else if (T_FUN_SYS_SEQ_NEXTVAL == sel_expr->get_expr_type()) {
-          // sequence expr, expr is seq_name.nextval or seq_name.currval
-          // but column name displayed should be nextval or currval
-          do {
-            if (T_OP_POS == project_node->type_) {
-              project_node = project_node->children_[0];
-            } else if (T_EXPR_LIST == project_node->type_) {
-              project_node = project_node->children_[0];
-            } else {
-              break;
-            }
-          } while (true);
-          {
-            // mysql mode
-            if (T_COLUMN_REF != project_node->type_ || project_node->num_child_ < 3) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("unexpected select item type",
-                       K(select_item), K(project_node->type_), K(project_node->num_child_), K(ret));
-            } else {
-              alias_node = project_node->children_[2];
-              select_item.alias_name_.assign_ptr(const_cast<char *>(alias_node->str_value_),
-                                                 static_cast<int32_t>(alias_node->str_len_));
-            }
-          }
         } else if (T_FUN_SYS_NAME_CONST == sel_expr->get_expr_type()
                    && OB_FAIL(prepare_get_child_at(project_node, 1))) {
           LOG_WARN("unexpected name const parse node", K(ret));
@@ -1764,8 +1732,7 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
           LOG_WARN("fail to resolve alias in dot notation", K(ret));
         } else {
           if (params_.is_prepare_protocol_
-              || (!session_info_->get_local_ob_enable_plan_cache()
-                  && !session_info_->force_enable_plan_tracing())
+              || !session_info_->get_local_ob_enable_plan_cache()
               || 0 == node.children_[i]->is_val_paramed_item_idx_) {
             // ps do not parameterize columns; plan cache disabled do not parameterize columns
             // do nothing
@@ -1793,18 +1760,6 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
             }
           }
           is_auto_gen = true;
-        }
-      }
-      // If select field list expression includes sequence, then need to determine current
-      // select statement is a subquery, or whether it is a set statement
-      // **Exception**: insert into select xxxxofcaseunder，allow sequence
-      if (OB_SUCC(ret) && sel_expr->has_flag(CNT_SEQ_EXPR)) {
-        if (in_set_query_ ||
-            (params_.resolver_scope_stmt_type_ == ObItemType::T_INSERT  && current_level_ != 0) ||
-            (params_.resolver_scope_stmt_type_ != ObItemType::T_INSERT  && (current_level_ > 1 || is_substmt()))) {
-          // For the scenario of from (select xxxx) a, the current_level_ of this subquery a is the same as the upper level,
-          // But set the parent namespace, hence it can still be distinguished
-          ret = OB_ERR_SEQ_NOT_ALLOWED_HERE;
         }
       }
     }
@@ -3377,69 +3332,28 @@ int ObSelectResolver::resolve_into_file_node(const ParseNode *list_node, ObSelec
   return ret;
 }
 
-int ObSelectResolver::resolve_file_partition_node(const ParseNode *node, ObSelectIntoItem &into_item)
-{
-  int ret = OB_SUCCESS;
-  ObRawExpr *expr = NULL;
-  ObSQLSessionInfo *session_info = params_.session_info_;
-  ObArray<ObQualifiedName> columns;
-  if (OB_ISNULL(node) || OB_ISNULL(session_info) || T_PARTITION_EXPR != node->type_
-      || node->num_child_ != 1 || OB_ISNULL(node->children_[0])) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("partition node is null", K(ret));
-  } else if (OB_FAIL(resolve_sql_expr(*(node->children_[0]), expr, &columns))) {
-    LOG_WARN("fail to resolve const expr", K(ret));
-  } else if (OB_ISNULL(expr)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret), K(node->children_[0]->type_));
-  } else if (OB_FAIL(expr->formalize(session_info))) {
-    LOG_WARN("failed to formalize expr", K(ret), K(*expr));
-  } else if (expr->has_flag(CNT_SUB_QUERY) || expr->has_flag(CNT_AGG)
-             || expr->has_flag(CNT_WINDOW_FUNC)|| expr->has_flag(CNT_PL_UDF)
-             || expr->has_flag(CNT_SO_UDF) || expr->has_flag(CNT_MATCH_EXPR)) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("partition expr should not contain subquery, aggregate, udf or match expr", K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "partition expr contains subquery, aggregate, udf or match expr");
-  } else if (ObVarcharType != expr->get_result_type().get_type()
-             && ObCharType != expr->get_result_type().get_type()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("partition expr should be char or varchar", K(ret), K(expr->get_result_type().get_type()));
-	  LOG_USER_ERROR(OB_NOT_SUPPORTED, "partition by expr whose result type is not char or varchar");
-  } else {
-    into_item.file_partition_expr_ = expr;
-  }
-  return ret;
-}
-
 int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node, ObSelectIntoItem &into_item)
 {
   int ret = OB_SUCCESS;
-  char *buf = NULL;
-  int64_t buf_len = DEFAULT_BUF_LENGTH / 2;
-  int64_t pos = 0;
   bool has_format_type = false;
   bool has_cs_type = false;
   ObExternalFileFormat external_format;
   ParseNode* format_node = NULL;
   ParseNode* option_node = NULL;
-  if (node->num_child_ > 0
-      && OB_FAIL(resolve_into_const_node(node->children_[0], into_item.outfile_name_))) { // name
+  if (node->num_child_ != 3) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected formatted outfile node", K(ret), K(node->num_child_));
+  } else if (OB_FAIL(resolve_into_const_node(node->children_[0], into_item.outfile_name_))) { // name
     LOG_WARN("resolve into outfile name failed", K(ret));
   }
-  if (OB_SUCC(ret) && node->num_child_ > 1 && NULL != node->children_[1]) { // partition by
-    if (OB_FAIL(resolve_file_partition_node(node->children_[1], into_item))) {
-      LOG_WARN("resolve file partition node failed", K(ret));
-    }
-  }
-  if (OB_SUCC(ret) && node->num_child_ > 2 && NULL != (format_node = node->children_[2])) { // format
-    ObResolverUtils::FileFormatContext ff_ctx;
+  if (OB_SUCC(ret) && NULL != (format_node = node->children_[1])) { // format
     for (int i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
       if (OB_ISNULL(option_node = format_node->children_[i])) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(ret), K(format_node->num_child_));
       } else if (T_EXTERNAL_FILE_FORMAT_TYPE == option_node->type_
                  || T_CHARSET == option_node->type_) {
-        if (OB_FAIL(ObResolverUtils::resolve_file_format(option_node, external_format, params_, ff_ctx))) {
+        if (OB_FAIL(ObResolverUtils::resolve_file_format(option_node, external_format, params_))) {
           LOG_WARN("failed to resolve file format", K(ret), K(option_node->type_));
         }
         has_format_type |= (T_EXTERNAL_FILE_FORMAT_TYPE == option_node->type_);
@@ -3463,14 +3377,13 @@ int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node, Ob
         LOG_WARN("failed to init csv format", K(ret));
       }
     }
-    ff_ctx.reset();
     for (int i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
       if (OB_ISNULL(option_node = format_node->children_[i])) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(ret), K(format_node->num_child_));
       } else if (T_EXTERNAL_FILE_FORMAT_TYPE == option_node->type_
                  || T_CHARSET == option_node->type_) {
-      } else if (OB_FAIL(ObResolverUtils::resolve_file_format(option_node, external_format, params_, ff_ctx))) {
+      } else if (OB_FAIL(ObResolverUtils::resolve_file_format(option_node, external_format, params_))) {
         LOG_WARN("failed to resolve file format", K(ret), K(option_node->type_));
       }
     }
@@ -3480,15 +3393,10 @@ int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node, Ob
     }
   }
   // file: single, max_file_size, buffer_size
-  if (OB_SUCC(ret) && node->num_child_ > 3 && NULL != node->children_[3]) {
-    if (OB_FAIL(resolve_into_file_node(node->children_[3], into_item))) {
+  if (OB_SUCC(ret) && NULL != node->children_[2]) {
+    if (OB_FAIL(resolve_into_file_node(node->children_[2], into_item))) {
       LOG_WARN("reosolve into file node failed", K(ret));
     }
-  }
-  if (OB_SUCC(ret) && into_item.is_single_ && NULL != into_item.file_partition_expr_) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not support to use file partition option when single is true", K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "use file partition option when single is true");
   }
   return ret;
 }
@@ -3497,18 +3405,15 @@ int ObSelectResolver::resolve_into_outfile_without_format(const ParseNode *node,
                                                           ObSelectIntoItem &into_item)
 {
   int ret = OB_SUCCESS;
-  if (node->num_child_ > 0
-      && OB_FAIL(resolve_into_const_node(node->children_[0], into_item.outfile_name_))) { // name
+  if (node->num_child_ != 5) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected outfile node", K(ret), K(node->num_child_));
+  } else if (OB_FAIL(resolve_into_const_node(node->children_[0], into_item.outfile_name_))) { // name
     LOG_WARN("resolve into outfile name failed", K(ret));
   }
-  if (OB_SUCC(ret) && node->num_child_ > 1 && NULL != node->children_[1]) { // partition by
-    if (OB_FAIL(resolve_file_partition_node(node->children_[1], into_item))) {
-      LOG_WARN("resolve file partition node failed", K(ret));
-    }
-  }
-  if (OB_SUCC(ret) && node->num_child_ > 2 && NULL != node->children_[2]) { // charset
+  if (OB_SUCC(ret) && NULL != node->children_[1]) { // charset
     ObCharsetType charset_type = CHARSET_INVALID;
-    ObString charset(node->children_[2]->str_len_, node->children_[2]->str_value_);
+    ObString charset(node->children_[1]->str_len_, node->children_[1]->str_value_);
     if (CHARSET_INVALID == (charset_type = ObCharset::charset_type(charset.trim()))) {
       ret = OB_ERR_UNKNOWN_CHARSET;
       LOG_USER_ERROR(OB_ERR_UNKNOWN_CHARSET, charset.length(), charset.ptr());
@@ -3520,26 +3425,21 @@ int ObSelectResolver::resolve_into_outfile_without_format(const ParseNode *node,
       into_item.cs_type_ = ObCharset::get_default_collation(charset_type);
     }
   }
-  if (OB_SUCC(ret) && node->num_child_ > 3 && NULL != node->children_[3]) { // field
-    if (OB_FAIL(resolve_into_field_node(node->children_[3], into_item))) {
+  if (OB_SUCC(ret) && NULL != node->children_[2]) { // field
+    if (OB_FAIL(resolve_into_field_node(node->children_[2], into_item))) {
       LOG_WARN("reosolve into field node failed", K(ret));
     }
   }
-  if (OB_SUCC(ret) && node->num_child_ > 4 && NULL != node->children_[4]) { // line
-    if (OB_FAIL(resolve_into_line_node(node->children_[4], into_item))) {
+  if (OB_SUCC(ret) && NULL != node->children_[3]) { // line
+    if (OB_FAIL(resolve_into_line_node(node->children_[3], into_item))) {
       LOG_WARN("reosolve into line node failed", K(ret));
     }
   }
   // file: single, max_file_size, buffer_size
-  if (OB_SUCC(ret) && node->num_child_ > 5 && NULL != node->children_[5]) {
-    if (OB_FAIL(resolve_into_file_node(node->children_[5], into_item))) {
+  if (OB_SUCC(ret) && NULL != node->children_[4]) {
+    if (OB_FAIL(resolve_into_file_node(node->children_[4], into_item))) {
       LOG_WARN("reosolve into file node failed", K(ret));
     }
-  }
-  if (OB_SUCC(ret) && into_item.is_single_ && NULL != into_item.file_partition_expr_) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not support to use file partition option when single is true", K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "use file partition option when single is true");
   }
   return ret;
 }
@@ -3577,8 +3477,8 @@ int ObSelectResolver::resolve_into_clause(const ParseNode *node)
         if (is_in_set_query()) {
           ret = OB_INAPPROPRIATE_INTO;
           LOG_WARN("select into outfile can not in set query", K(ret));
-        } else if (node->num_child_ > 2 && NULL != node->children_[2]
-            && T_EXTERNAL_FILE_FORMAT == node->children_[2]->type_) { // Handle with `FORMAT`
+        } else if (node->num_child_ == 3 && NULL != node->children_[1]
+            && T_EXTERNAL_FILE_FORMAT == node->children_[1]->type_) { // Handle with `FORMAT`
           if (OB_FAIL(resolve_into_outfile_with_format(node, *into_item))) {
             LOG_WARN("resolve into outfile failed", K(ret));
           }
@@ -3586,11 +3486,6 @@ int ObSelectResolver::resolve_into_clause(const ParseNode *node)
           if (OB_FAIL(resolve_into_outfile_without_format(node, *into_item))) {
             LOG_WARN("resolve into outfile failed", K(ret));
           }
-        }
-        if (OB_SUCC(ret) && into_item->is_single_ && NULL != into_item->file_partition_expr_) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("not support to use file partition option when single is true", K(ret));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "use file partition option when single is true");
         }
       } else if (T_INTO_DUMPFILE  == node->type_) { // into dumpfile
         if (is_in_set_query()) {
@@ -3726,7 +3621,6 @@ int ObSelectResolver::resolve_table_column_ref(const ObQualifiedName &q_name, Ob
   //search order
   //1. joined table column
   //2. basic table column or generated table column
-  //3. object (sequence)
   int ret = OB_SUCCESS;
   if (OB_FAIL(resolve_table_column_expr(q_name, real_ref_expr))) {
     LOG_WARN("resolve table column expr failed", K(ret), K(q_name), K(lbt()));
@@ -4569,32 +4463,6 @@ int ObSelectResolver::check_window_exprs()
     }
   }
 
-  return ret;
-}
-
-/* sequence has the following prohibited usages:
- *  1. cannot be used simultaneously with having, order by, group by, etc.
- *  2. cannot appear anywhere in a subquery (except in insert into select)
- *  3. cannot appear in the where expression (checked by resolve expr)
- **/
-int ObSelectResolver::check_sequence_exprs()
-{
-  int ret = OB_SUCCESS;
-  ObSelectStmt *select_stmt = get_select_stmt();
-  if (OB_ISNULL(select_stmt)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("select stmt is null", K(select_stmt));
-  } else if (select_stmt->has_sequence()) {
-    if (select_stmt->has_order_by() ||
-        select_stmt->has_distinct() ||
-        select_stmt->has_having() ||
-        select_stmt->has_group_by() ||
-        params_.is_from_create_view_) {
-      ret = OB_ERR_SEQ_NOT_ALLOWED_HERE;
-      LOG_WARN("sequence can not be used with create-view/select-subquery/orderby/groupby/distinct", K(ret));
-
-    }
-  }
   return ret;
 }
 

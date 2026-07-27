@@ -18,7 +18,7 @@
 
 #include "ob_vector_index_async_task_util.h"
 #include "share/rc/ob_module_provider.h"
-#include "observer/vector_index/ob_tenant_vector_index_async_task.h"
+#include "observer/vector_index/ob_vector_index_async_task.h"
 #include "observer/vector_index/ob_plugin_vector_index_utils.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "observer/vector_index/ob_hybrid_vector_refresh_task.h"
@@ -27,12 +27,12 @@
 #include "storage/ob_value_row_iterator.h"
 #include "storage/ddl/ob_direct_load_struct.h"
 #include "storage/ob_table_dml_param.h"
-#include "share/table/ob_ttl_util.h"
 #include "share/ob_common_id.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ob_value_row_iterator.h"
 #include "observer/vector_index/ob_ivf_async_task.h"
+#include "share/config/ob_config_helper.h"
 
 namespace oceanbase
 {
@@ -185,14 +185,11 @@ int ObVecIndexAsyncTaskUtil::in_active_time(
 {
   int ret = OB_SUCCESS;
   is_active_time = false;
-  ObTTLDutyDuration duration;
+  ObDutyDuration duration;
 
-  if (!true) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail get tenant_config", KR(ret));
-  } else if (OB_FAIL(ObTTLUtil::parse(GCONF.vector_index_optimize_duty_time, duration))) {
+  if (OB_FAIL(ObDutyDurationUtil::parse(GCONF.vector_index_optimize_duty_time, duration))) {
     LOG_WARN("fail parse vector time duty time", KR(ret));
-  } else if (ObTTLUtil::current_in_duration(duration)) {
+  } else if (ObDutyDurationUtil::current_in_duration(duration)) {
     is_active_time = true;
   }
   return ret;
@@ -202,18 +199,10 @@ int ObVecIndexAsyncTaskUtil::fetch_new_task_id(int64_t &new_task_id)
 {
   int ret = OB_SUCCESS;
   ObCommonID tmp_task_id;
-  MOD_SCOPE {
-    if (OB_FAIL(ObCommonIDUtils::gen_unique_id(tmp_task_id))) {
-      LOG_WARN("failed to gen unique id", K(ret));
-    } else {
-      new_task_id = tmp_task_id.id();
-    }
+  if (OB_FAIL(ObCommonIDUtils::gen_unique_id(tmp_task_id))) {
+    LOG_WARN("failed to gen unique id", K(ret));
   } else {
-    if (OB_FAIL(ObCommonIDUtils::gen_unique_id_by_rpc( tmp_task_id))) {
-      LOG_WARN("failed to gen unique id", K(ret));
-    } else {
-      new_task_id = tmp_task_id.id();
-    }
+    new_task_id = tmp_task_id.id();
   }
   return ret;
 }
@@ -254,10 +243,25 @@ int ObVecIndexAsyncTaskUtil::get_table_id_from_adapter(
   return ret;
 }
 
-// TODO@xiajin: change data_version
-bool ObVecIndexAsyncTaskUtil::check_can_do_work()
+bool ObVecIndexAsyncTaskUtil::check_runtime_ready()
 {
-  return true;
+  return ObMultiVersionSchemaService::get_instance().is_runtime_schema_ready();
+}
+
+int ObVecIndexAsyncTaskUtil::get_table_ids(ObIArray<uint64_t> &table_id_array)
+{
+  int ret = OB_SUCCESS;
+  ObSchemaGetterGuard schema_guard;
+  ObMultiVersionSchemaService &schema_service = ObMultiVersionSchemaService::get_instance();
+  if (!schema_service.is_runtime_schema_ready()) {
+    ret = OB_EAGAIN;
+    LOG_INFO("runtime schema is not ready, retry later", KR(ret));
+  } else if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("failed to get runtime schema guard", KR(ret));
+  } else if (OB_FAIL(schema_guard.get_table_ids_in_runtime(table_id_array))) {
+    LOG_WARN("failed to get table ids", KR(ret));
+  }
+  return ret;
 }
 
 int ObVecIndexAsyncTaskUtil::clear_history_expire_task_record(const int64_t batch_size,
@@ -470,15 +474,15 @@ int ObVecIndexAsyncTaskUtil::resume_task_from_inner_table(
     const char* tname,
     const bool for_update /*false*/,
     const ObVecIndexFieldArray &filters,
-    ObLS *ls, /* null means get all tenant task */
+    ObLS *ls, /* null means get all global tasks */
     common::ObISQLClient &proxy,
     ObVecIndexAsyncTaskOption &async_task_opt)
 {
   int ret = OB_SUCCESS;
-  const bool is_read_tenant_async_task = OB_ISNULL(ls) ? true : false;
+  const bool is_read_global_task = OB_ISNULL(ls);
   ObSqlString sql;
 
-  if (OB_FAIL(construct_read_task_sql(tname, for_update, is_read_tenant_async_task, filters, proxy, sql))) {
+  if (OB_FAIL(construct_read_task_sql(tname, for_update, is_read_global_task, filters, proxy, sql))) {
     LOG_WARN("fail to construct read task sql", K(ret));
   } else {
     ObIAllocator *allocator = async_task_opt.get_allocator();
@@ -502,7 +506,7 @@ int ObVecIndexAsyncTaskUtil::resume_task_from_inner_table(
               ObTabletID tablet_id(task_result.tablet_id_);
               bool inc_new_task = false;
               bool need_resumed = true;
-              if (is_read_tenant_async_task) { // skip ls tablet filtered
+              if (is_read_global_task) { // global tasks are not filtered by LS tablet ownership
               } else if (OB_FAIL(ls->get_tablet_svr()->get_tablet(tablet_id, unused_tablet_handle))) {
                 need_resumed = false;
                 if (OB_TABLET_NOT_EXIST != ret) {
@@ -518,7 +522,7 @@ int ObVecIndexAsyncTaskUtil::resume_task_from_inner_table(
                 need_resumed = false;
               }
 
-              LOG_INFO("resume task", K(ret), K(need_resumed), K(is_read_tenant_async_task), K(task_result));
+              LOG_INFO("resume task", K(ret), K(need_resumed), K(is_read_global_task), K(task_result));
               if (OB_FAIL(ret) || !need_resumed) {  // skip
               } else if (task_result.status_ != ObVecIndexAsyncTaskStatus::OB_VECTOR_ASYNC_TASK_FINISH) { // resume not finish task
                 ObVecIndexAsyncTaskCtx *task_ctx = nullptr;
@@ -565,19 +569,19 @@ int ObVecIndexAsyncTaskUtil::resume_task_from_inner_table(
 int ObVecIndexAsyncTaskUtil::read_vec_tasks(const char* tname,
     const bool for_update /*false*/,
     const ObVecIndexFieldArray& filters,
-    ObLS *ls, /* null means get all tenant task */
+    ObLS *ls, /* null means get all global tasks */
     common::ObISQLClient& proxy,
     ObVecIndexTaskStatusArray& result_arr,
     common::ObIAllocator *allocator /*NULL*/)
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
-  const bool is_read_tenant_async_task = OB_ISNULL(ls) ? true : false;
+  const bool is_read_global_task = OB_ISNULL(ls);
 
-  if (false || OB_ISNULL(allocator)) {
+  if (OB_ISNULL(allocator)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(allocator));
-  } else if (OB_FAIL(construct_read_task_sql(tname, for_update, is_read_tenant_async_task, filters, proxy, sql))) {
+  } else if (OB_FAIL(construct_read_task_sql(tname, for_update, is_read_global_task, filters, proxy, sql))) {
     LOG_WARN("fail to construct read task sql", K(ret));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
@@ -611,7 +615,7 @@ int ObVecIndexAsyncTaskUtil::read_vec_tasks(const char* tname,
 
 int ObVecIndexAsyncTaskUtil::construct_read_task_sql(const char *tname,
     const bool for_update /* select for update*/,
-    const bool is_read_tenant_async_task,
+    const bool is_read_global_task,
     const ObVecIndexFieldArray &filters,
     common::ObISQLClient& proxy,
     ObSqlString &sql)
@@ -648,9 +652,9 @@ int ObVecIndexAsyncTaskUtil::construct_read_task_sql(const char *tname,
     }
   }
   if (OB_SUCC(ret)) {
-    // 1. tenant async task : tablet_id == -1;
+    // 1. Global async task: tablet_id == -1;
     // 2. LS async task: tablet_id != -1;
-    if (is_read_tenant_async_task) {
+    if (is_read_global_task) {
       if (OB_FAIL(sql.append_fmt(" AND tablet_id == -1 "))) {
         LOG_WARN("sql append fmt failed", K(ret));
       }
@@ -869,7 +873,7 @@ int ObVecIndexAsyncTaskHandler::push_task(
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("handler is not init", KR(ret));
-  } else if (OB_UNLIKELY(!true || OB_ISNULL(ctx) || OB_ISNULL(allocator))) {
+  } else if (OB_UNLIKELY(OB_ISNULL(ctx) || OB_ISNULL(allocator))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(ctx), KP(allocator));
   } else if (ctx->task_status_.status_ != ObVecIndexAsyncTaskStatus::OB_VECTOR_ASYNC_TASK_PREPARE) {   // skip not PREPARE status task
@@ -1188,7 +1192,7 @@ int ObVecIndexAsyncTask::do_work()
     LOG_INFO("adapter not complete, need wait", K(ret), KP(adpt_guard.get_adatper()));
   } else if (!check_task_satisfied_memory_limited(*adpt_guard.get_adatper())) {
     ret = OB_EAGAIN; // will retry
-    LOG_INFO("skip to do async task due to tenant memory limit", KR(ret), KPC(ctx_));
+    LOG_INFO("skip async task due to the vector memory limit", KR(ret), KPC(ctx_));
   } else if (FALSE_IT(set_old_adapter(adpt_guard.get_adatper()))) {
   } else {
     adpt_buff = vector_index_service->get_allocator().alloc(sizeof(ObPluginVectorIndexAdaptor));
@@ -1236,7 +1240,7 @@ bool ObVecIndexAsyncTask::check_task_satisfied_memory_limited(ObPluginVectorInde
   bool check_result = true;
   const int64_t snapshot_table_id = adaptor.get_snapshot_table_id();
 
-  if (true && snapshot_table_id != OB_INVALID_ID) {
+  if (snapshot_table_id != OB_INVALID_ID) {
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *index_schema = nullptr;
 
@@ -1250,7 +1254,7 @@ bool ObVecIndexAsyncTask::check_task_satisfied_memory_limited(ObPluginVectorInde
     } else if (OB_FAIL(adaptor.get_snap_index_row_cnt(current_snapshot_count))) {
       LOG_WARN("fail to get snap index number", K(ret));
     } else if (OB_FALSE_IT(estimate_row_count = current_incr_count + current_snapshot_count)) {
-    } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(schema_guard))) {
+    } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
       LOG_WARN("fail to get schema guard", K(ret));
     } else if (OB_FAIL(schema_guard.get_table_schema( snapshot_table_id, index_schema))) {
       LOG_WARN("get table schema failed", K(ret), K(snapshot_table_id));
@@ -1632,7 +1636,7 @@ int ObVecIndexAsyncTask::refresh_snapshot_index_data(ObPluginVectorIndexAdaptor 
   if OB_FAIL(ret) {
   } else {
     HEAP_VARS_2((storage::ObTableScanParam, snap_scan_param), (schema::ObTableParam, snap_table_param, allocator_)) {
-      if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(schema_guard))) {
+      if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
         LOG_WARN("fail to get schema guard", KR(ret));
       } else if (OB_FAIL(schema_guard.get_table_schema( adaptor.get_snapshot_table_id(), snapshot_table_schema))) {
         LOG_WARN("failed to get simple schema", KR(ret), K(adaptor.get_snapshot_table_id()));
@@ -1713,7 +1717,7 @@ int ObVecIndexAsyncTask::refresh_snapshot_index_data(ObPluginVectorIndexAdaptor 
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(table_dml_param.convert(snapshot_table_schema, snapshot_table_schema->get_schema_version(), dml_column_ids))) {
         LOG_WARN("failed to convert table dml param.", K(ret));
-      } else if (OB_FAIL(schema_guard.get_schema_version(dml_param.tenant_schema_version_))) {
+      } else if (OB_FAIL(schema_guard.get_schema_version(dml_param.runtime_schema_version_))) {
         LOG_WARN("failed to get schema version", K(ret));
       } else if (OB_FAIL(delete_column_ids.push_back(key_col_id))) {
         LOG_WARN("fail to push back column id", K(ret), K(key_col_id));
@@ -2067,7 +2071,7 @@ int ObVecIndexAsyncTask::delete_incr_table_data(ObPluginVectorIndexAdaptor &adap
     if (OB_ISNULL(tx_desc) || OB_ISNULL(oas)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to get tx desc or ob access service, get nullptr", K(ret));
-    } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(schema_guard))) {
+    } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
       LOG_WARN("fail to get schema guard", KR(ret));
     } else if (OB_FAIL(schema_guard.get_table_schema( adaptor.get_inc_table_id(), delta_table_schema))) {
       LOG_WARN("failed to get simple schema", KR(ret), K(adaptor.get_inc_table_id()));

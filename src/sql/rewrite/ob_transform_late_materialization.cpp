@@ -362,10 +362,7 @@ int ObTransformLateMaterialization::get_accessible_index(const ObSelectStmt &sel
       /* do nothing */
     } else if (T_INDEX_HINT == index_hint->get_hint_type() ||
                T_INDEX_ASC_HINT == index_hint->get_hint_type() ||
-               T_INDEX_DESC_HINT == index_hint->get_hint_type() ||
-               T_INDEX_SS_HINT == index_hint->get_hint_type() ||
-               T_INDEX_SS_ASC_HINT == index_hint->get_hint_type() ||
-               T_INDEX_SS_DESC_HINT == index_hint->get_hint_type()) {
+               T_INDEX_DESC_HINT == index_hint->get_hint_type()) {
       if (match_index_name(tmp_index_schemas, table_item, *index_hint, query_hint->cs_type_, index_schema_i)) {
         if (OB_FAIL(hint_index_ids.push_back(tmp_index_schemas.at(index_schema_i)->get_table_id()))) {
           LOG_WARN("push back hint index name failed", K(ret));
@@ -985,9 +982,6 @@ int ObTransformLateMaterialization::generate_late_materialization_hint(
           if ((T_INDEX_HINT == index_hint->get_hint_type() ||
                T_INDEX_ASC_HINT == index_hint->get_hint_type() ||
                T_INDEX_DESC_HINT == index_hint->get_hint_type() ||
-               T_INDEX_SS_HINT == index_hint->get_hint_type() ||
-               T_INDEX_SS_ASC_HINT == index_hint->get_hint_type() ||
-               T_INDEX_SS_DESC_HINT == index_hint->get_hint_type() ||
                T_NO_INDEX_HINT == index_hint->get_hint_type() ||
                T_FULL_HINT == index_hint->get_hint_type())) {
             if (OB_FAIL(opt_hints.remove(i))) {
@@ -1007,9 +1001,6 @@ int ObTransformLateMaterialization::generate_late_materialization_hint(
           if ((T_INDEX_HINT == index_hint->get_hint_type() ||
                T_INDEX_ASC_HINT == index_hint->get_hint_type() ||
                T_INDEX_DESC_HINT == index_hint->get_hint_type() ||
-               T_INDEX_SS_HINT == index_hint->get_hint_type() ||
-               T_INDEX_SS_ASC_HINT == index_hint->get_hint_type() ||
-               T_INDEX_SS_DESC_HINT == index_hint->get_hint_type() ||
                T_NO_INDEX_HINT == index_hint->get_hint_type() ||
                T_FULL_HINT == index_hint->get_hint_type())) {
             if (OB_FAIL(view_opt_hints.remove(i))) {

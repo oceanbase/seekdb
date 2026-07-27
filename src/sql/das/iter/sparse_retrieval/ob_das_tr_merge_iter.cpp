@@ -313,7 +313,6 @@ int ObDASTRMergeIter::init_das_iter_scan_param(const ObTabletID &tablet_id,
     
     
     scan_param.key_ranges_.set_attr(ObMemAttr("ScanParamKR"));
-    scan_param.ss_key_ranges_.set_attr(ObMemAttr("ScanParamSSKR"));
     scan_param.tx_lock_timeout_ = rtdef->tx_lock_timeout_;
     scan_param.index_id_ = ctdef->ref_table_id_;
     scan_param.is_get_ = false; // scan
@@ -325,7 +324,6 @@ int ObDASTRMergeIter::init_das_iter_scan_param(const ObTabletID &tablet_id,
     scan_param.scan_allocator_ = &allocator;
     scan_param.sql_mode_ = rtdef->sql_mode_;
     scan_param.frozen_version_ = rtdef->frozen_version_;
-    scan_param.force_refresh_lc_ = rtdef->force_refresh_lc_;
     scan_param.output_exprs_ = &(ctdef->pd_expr_spec_.access_exprs_);
     scan_param.calc_exprs_ = &(ctdef->pd_expr_spec_.calc_exprs_);
     scan_param.aggregate_exprs_ = &(ctdef->pd_expr_spec_.pd_storage_aggregate_output_);
@@ -333,7 +331,7 @@ int ObDASTRMergeIter::init_das_iter_scan_param(const ObTabletID &tablet_id,
     scan_param.op_ = rtdef->p_pd_expr_op_;
     scan_param.row2exprs_projector_ = rtdef->p_row2exprs_projector_;
     scan_param.schema_version_ = ctdef->schema_version_;
-    scan_param.tenant_schema_version_ = rtdef->tenant_schema_version_;
+    scan_param.runtime_schema_version_ = rtdef->runtime_schema_version_;
     scan_param.limit_param_ = rtdef->limit_param_;
     scan_param.need_scn_ = rtdef->need_scn_;
     scan_param.pd_storage_flag_ = ctdef->pd_expr_spec_.pd_storage_flag_.pd_flag_;

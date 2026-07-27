@@ -32,49 +32,34 @@ int ObAllVirtualServerSchemaInfo::inner_get_next_row(common::ObNewRow *&row)
     int64_t refreshed_schema_version = OB_INVALID_VERSION;
     int64_t received_schema_version = OB_INVALID_VERSION;
     int64_t schema_count = OB_INVALID_ID;
-    int64_t schema_size = OB_INVALID_ID;
     share::schema::ObSchemaGetterGuard schema_guard;
-    if (OB_FAIL(schema_service_.get_tenant_refreshed_schema_version(refreshed_schema_version))) {
-      LOG_WARN("fail to get tenant refreshed schema version", K(ret), K(refreshed_schema_version));
-    } else if (OB_FAIL(schema_service_.get_tenant_received_broadcast_version(received_schema_version))) {
-      LOG_WARN("fail to get tenant receieved schema version", K(ret), K(received_schema_version));
+    if (OB_FAIL(schema_service_.get_runtime_refreshed_schema_version(refreshed_schema_version))) {
+      LOG_WARN("fail to get runtime refreshed schema version", K(ret), K(refreshed_schema_version));
+    } else if (OB_FAIL(schema_service_.get_runtime_received_broadcast_version(received_schema_version))) {
+      LOG_WARN("fail to get runtime received schema version", K(ret), K(received_schema_version));
     } else {
       int tmp_ret = OB_SUCCESS;
-      if (OB_SUCCESS != (tmp_ret = schema_service_.get_tenant_schema_guard(schema_guard))) {
+      if (OB_SUCCESS != (tmp_ret = schema_service_.get_runtime_schema_guard(schema_guard))) {
         LOG_WARN("fail to get schema guard", K(tmp_ret));
       } else if (OB_SUCCESS != (tmp_ret = schema_guard.get_schema_count(schema_count))) {
         LOG_WARN("fail to get schema count", K(tmp_ret));
       }
     }
 
-    // Column order after removing svr_ip and svr_port:
-    // OB_APP_MIN_COLUMN_ID (16): refreshed_schema_version
-    // OB_APP_MIN_COLUMN_ID + 1 (17): received_schema_version
-    // OB_APP_MIN_COLUMN_ID + 2 (18): schema_count
-    // OB_APP_MIN_COLUMN_ID + 3 (19): schema_size
-    // OB_APP_MIN_COLUMN_ID + 4 (20): min_sstable_schema_version
     const int64_t col_count = output_column_ids_.count();
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
-        case OB_APP_MIN_COLUMN_ID: { // refreshed_schema_version
+        case REFRESHED_SCHEMA_VERSION: {
           cur_row_.cells_[i].set_int(refreshed_schema_version);
           break;
         }
-        case OB_APP_MIN_COLUMN_ID + 1: { // received_schema_version
+        case RECEIVED_SCHEMA_VERSION: {
           cur_row_.cells_[i].set_int(received_schema_version);
           break;
         }
-        case OB_APP_MIN_COLUMN_ID + 2: { // schema_count
+        case SCHEMA_COUNT: {
           cur_row_.cells_[i].set_int(schema_count);
-          break;
-        }
-        case OB_APP_MIN_COLUMN_ID + 3: { // schema_size
-          cur_row_.cells_[i].set_int(schema_size);
-          break;
-        }
-        case OB_APP_MIN_COLUMN_ID + 4: { // min_sstable_schema_version
-          cur_row_.cells_[i].set_int(OB_INVALID_VERSION);
           break;
         }
         default : {

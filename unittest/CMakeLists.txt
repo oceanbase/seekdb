@@ -54,8 +54,6 @@ if(APPLE)
 endif()
 
 add_subdirectory(sql)
-add_subdirectory(backup)
-# add_subdirectory(archive)
 add_subdirectory(logservice)
 add_subdirectory(storage)
 add_subdirectory(observer)
@@ -63,7 +61,6 @@ add_subdirectory(share)
 add_subdirectory(lib)
 add_subdirectory(rootserver)
 add_subdirectory(tools)
-add_subdirectory(plugin)
 
 # Android: single combined test binary (all TEST() macros in one executable)
 # Uses sources registered by ob_unittest() and friends via ANDROID_TEST_SOURCES property.
@@ -82,7 +79,6 @@ if(ANDROID)
   target_sources(all_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/rootserver/ob_rs_test_utils.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/rootserver/fake_freeze_info_manager.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/rootserver/fake_zone_merge_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/sql/engine/test_op_engine.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/sql/engine/ob_fake_table_scan_vec_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/storage/ob_truncate_info_helper.cpp)
@@ -99,7 +95,7 @@ if(ANDROID)
     ${CMAKE_SOURCE_DIR}/unittest
     ${CMAKE_SOURCE_DIR}/deps/oblib/unittest)
   # Add test subdirectories so relative includes (e.g. ../share/...) resolve
-  set(_android_test_inc_dirs backup lib logservice observer plugin rootserver share sql storage)
+  set(_android_test_inc_dirs backup lib logservice observer rootserver share sql storage)
   foreach(_dir ${_android_test_inc_dirs})
     target_include_directories(all_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/${_dir})
   endforeach()

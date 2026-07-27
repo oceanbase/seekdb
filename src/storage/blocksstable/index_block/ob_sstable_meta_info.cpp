@@ -200,9 +200,9 @@ int ObRootBlockInfo::load_root_block_data(
     } else {
       ObMacroBlockReader reader;
       bool is_compressed = false;
-      if (OB_FAIL(reader.decrypt_and_decompress_data(des_meta, orig_buf,
+      if (OB_FAIL(reader.decompress_data(des_meta, orig_buf,
           addr_.size(), dst_buf, dst_buf_size, is_compressed, true, &allocator))) {
-        LOG_WARN("fail to decrypt and decomp block", K(ret), K(des_meta), K_(addr));
+        LOG_WARN("fail to decompress block", K(ret), K(des_meta), K_(addr));
       }
 
       if (OB_SUCC(ret)) {
@@ -228,15 +228,13 @@ int ObRootBlockInfo::transform_root_block_extra_buf(common::ObArenaAllocator &al
       && OB_NOT_NULL(block_data_.get_buf())) {
     ObIndexBlockDataTransformer transformer;
     char *allocated_buf = nullptr;
+    const ObMicroBlockHeader *micro_header = block_data_.get_micro_header();
     if (addr_.is_memory()
-        && 0 == block_data_.get_micro_header()->original_length_
-        && 0 == block_data_.get_micro_header()->data_zlength_
-        && 0 == block_data_.get_micro_header()->data_length_) {
-      // For micro header bug in version before 4.3, when root block serialized in sstable metas
-      // data length related fileds was lefted to be filled
-      if (OB_FAIL(transformer.fix_micro_header_and_transform(block_data_, block_data_, allocator, allocated_buf))) {
-        LOG_WARN("Fail to fix micro header and transform root block", K(ret), K_(block_data));
-      }
+        && 0 == micro_header->original_length_
+        && 0 == micro_header->data_zlength_
+        && 0 == micro_header->data_length_) {
+      ret = OB_VERSION_NOT_MATCH;
+      LOG_WARN("root block micro header format mismatch", K(ret), KPC(micro_header));
     } else if (OB_FAIL(transformer.transform(block_data_, block_data_, allocator, allocated_buf))) {
       LOG_WARN("Fail to transform root block to memory format", K(ret), K_(block_data));
     }
@@ -275,7 +273,6 @@ int ObRootBlockInfo::read_block_data(
     read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
     read_info.buf_ = buf;
     
-    read_info.bypass_micro_cache_ = true;
     read_info.io_desc_.set_sys_module_id(ObIOModule::ROOT_BLOCK_IO);
     if (OB_FAIL(addr.get_block_addr(read_info.macro_block_id_, read_info.offset_, read_info.size_))) {
       LOG_WARN("fail to get block address", K(ret), K(addr));
@@ -354,9 +351,9 @@ int ObRootBlockInfo::deserialize_(
     } else {
       ObMacroBlockReader reader;
       bool is_compressed = false;
-      if (OB_FAIL(reader.decrypt_and_decompress_data(des_meta, orig_buf,
+      if (OB_FAIL(reader.decompress_data(des_meta, orig_buf,
           addr_.size(), dst_buf, dst_buf_size, is_compressed, true, &allocator))) {
-        LOG_WARN("fail to decrypt and decomp block", K(ret), K(des_meta), K_(addr));
+        LOG_WARN("fail to decompress block", K(ret), K(des_meta), K_(addr));
       }
     }
     if (OB_NOT_NULL(orig_buf)) {
@@ -759,7 +756,7 @@ int ObSSTableMacroInfo::persist_block_ids(
     const int64_t snapshot_version,
     common::ObArenaAllocator &allocator,
     storage::ObSSTableLinkBlockWriteInfo * const link_write_info,
-    ObSharedObjectsWriteCtx &linked_block_write_ctx)
+    ObObjectsWriteCtx &linked_block_write_ctx)
 {
   int ret = OB_SUCCESS;
   ObLinkedMacroBlockItemWriter block_writer;

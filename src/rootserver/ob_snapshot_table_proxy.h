@@ -49,8 +49,7 @@ public:
   ObSnapShotType snapshot_type_;
   SCN snapshot_scn_;
   int64_t schema_version_;
-//tenant=OB_INVALID_ID represent all tenants
-  uint64_t tablet_id_; //tablet_id=OB_INVALID_ID represent all tablets of tenant
+  uint64_t tablet_id_; // OB_INVALID_ID represents all local tablets.
   const char* comment_;
   ObSnapshotInfo();
   ~ObSnapshotInfo() {}
@@ -67,18 +66,6 @@ public:
                K_(tablet_id),
                KP_(comment));
 
-};
-
-struct TenantSnapshot
-{
-public:
-  
-  SCN snapshot_scn_;
-  TenantSnapshot() {}
-  TenantSnapshot(const SCN &snapshot_scn)
-      : snapshot_scn_(snapshot_scn) {}
-  ~TenantSnapshot() {}
-  TO_STRING_KV(K_(snapshot_scn));
 };
 
 class ObSnapshotTableProxy
@@ -113,10 +100,6 @@ public:
                         ObSnapShotType snapshot_type,
                         common::ObIArray<ObSnapshotInfo> &snapshots);
   int get_snapshot(common::ObISQLClient &proxy,
-                   ObSnapShotType snapshot_type,
-                   const char *extra_info,
-                   ObSnapshotInfo &snapshot_info);
-  int get_snapshot(common::ObISQLClient &proxy,
                    const ObSnapShotType snapshot_type,
                    const SCN &snapshot_scn,
                    ObSnapshotInfo &snapshot_info);
@@ -124,15 +107,8 @@ public:
   int get_max_snapshot_info(common::ObISQLClient &proxy,
                             ObSnapshotInfo &snapshot_info);
   int check_snapshot_exist(common::ObISQLClient &proxy,
-                           const int64_t table_id,
-                           ObSnapShotType snapshot_type,
-                           bool &is_exist);
-  int check_snapshot_exist(common::ObISQLClient &proxy,
                            const share::ObSnapShotType snapshot_type,
                            bool &is_exist);
-  int get_snapshot_count(common::ObISQLClient &proxy,
-                         ObSnapShotType snapshot_type,
-                         int64_t &count);
 private:
   int gen_event_ts(int64_t &event_ts);
   int check_snapshot_valid(const SCN &snapshot_gc_scn,

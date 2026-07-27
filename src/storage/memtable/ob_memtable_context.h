@@ -345,8 +345,7 @@ public:
   virtual void old_row_free(void *row) override;
   virtual common::ObIAllocator &get_query_allocator();
   virtual void inc_lock_for_read_retry_count();
-  // When row lock conflict occurs in a remote execution, record the trans id in
-  // transaction context, and carries it back after execution, for dead lock detect use
+  // Record conflicting transaction IDs in the transaction context for deadlock detection.
   virtual int add_conflict_trans_id(const transaction::ObTransID conflict_trans_id);
   void reset_conflict_trans_ids();
   int get_conflict_trans_ids(common::ObIArray<transaction::ObTransID> &array);
@@ -385,7 +384,6 @@ public:
   virtual int trans_replay_end(const bool commit,
                                const share::SCN trans_version,
                                const share::SCN final_scn,
-                               const uint64_t log_cluster_version = 0,
                                const uint64_t checksum = 0);
   //method called when leader takeover
   virtual int replay_to_commit(const bool is_resume);

@@ -30,7 +30,7 @@ namespace sql
 OB_SERIALIZE_MEMBER((ObExprUDF, ObFuncExprOperator),
                      udf_id_, result_type_, params_type_,
                      udf_package_id_, params_desc_, is_udt_udf_,
-                     nocopy_params_, subprogram_path_, call_in_sql_, loc_, is_udt_cons_);
+                     nocopy_params_, subprogram_path_, loc_, is_udt_cons_);
 
 ObExprUDF::ObExprUDF(common::ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUN_UDF, N_UDF, PARAM_NUM_UNKNOWN, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
@@ -43,7 +43,6 @@ ObExprUDF::ObExprUDF(common::ObIAllocator &alloc)
       params_desc_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(alloc)),
       nocopy_params_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(alloc)),
       is_udt_udf_(false),
-      call_in_sql_(true),
       loc_(0),
       is_udt_cons_(false) {}
 
@@ -56,7 +55,6 @@ void ObExprUDF::reset()
   params_type_.reset();
   params_desc_.reset();
   is_udt_udf_ = false;
-  call_in_sql_ = true;
   nocopy_params_.reset();
   loc_ = 0;
   is_udt_cons_ = false;
@@ -606,8 +604,7 @@ int ObExprUDF::process_package_out_param(int64_t idx,
       }
     }
   }
-  OZ (ObSPIService::spi_update_package_change_info(
-    &plctx, params_desc.at(idx).get_package_id(), params_desc.at(idx).get_index()));
+  OX (exec_ctx.get_my_session()->set_pl_can_retry(false));
   OX (dones.at(idx) = true);
   return ret;
 }
@@ -671,10 +668,9 @@ int ObExprUDF::before_calc_result(share::schema::ObSchemaGetterGuard &schema_gua
       || OB_ISNULL(exec_ctx.get_sql_ctx()->schema_guard_)) {
     sql::ObTaskExecutorCtx &task_ctx = exec_ctx.get_task_exec_ctx();
     const observer::ObGlobalContext &gctx = observer::ObServer::get_instance().get_gctx();
-    if (OB_FAIL(gctx.schema_service_->get_tenant_schema_guard(
+    if (OB_FAIL(gctx.schema_service_->get_runtime_schema_guard(
                 schema_guard,
-                task_ctx.get_query_tenant_begin_schema_version(),
-                task_ctx.get_query_sys_begin_schema_version()))) {
+                task_ctx.get_query_begin_schema_version()))) {
       LOG_WARN("get schema guard failed", K(ret));
     }
   }
@@ -984,7 +980,6 @@ OB_DEF_SERIALIZE(ObExprUDFInfo)
               loc_,
               is_udt_cons_,
               is_called_in_sql_,
-              is_result_cache_,
               is_deterministic_);
   return ret;
 }
@@ -1004,7 +999,6 @@ OB_DEF_DESERIALIZE(ObExprUDFInfo)
               loc_,
               is_udt_cons_,
               is_called_in_sql_,
-              is_result_cache_,
               is_deterministic_);
   return ret;
 }
@@ -1024,7 +1018,6 @@ OB_DEF_SERIALIZE_SIZE(ObExprUDFInfo)
               loc_,
               is_udt_cons_,
               is_called_in_sql_,
-              is_result_cache_,
               is_deterministic_);
   return len;
 }

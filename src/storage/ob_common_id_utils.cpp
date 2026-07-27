@@ -35,10 +35,7 @@ int ObCommonIDUtils::gen_unique_id(ObCommonID &id)
 
   id.reset();
 
-  if (OB_UNLIKELY(false)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invaild tenant id", KR(ret));
-  } else if (OB_FAIL(share::ObShareUtil::set_default_timeout_ctx(ctx, DEFAULT_TIMEOUT))) {
+  if (OB_FAIL(share::ObShareUtil::set_default_timeout_ctx(ctx, DEFAULT_TIMEOUT))) {
     LOG_WARN("set default timeout ctx fail", KR(ret), K(DEFAULT_TIMEOUT));
   } else if (OB_FAIL(share::g_mp->unique_id_service()->gen_unique_id(unique_id,
       ctx.get_timeout()))) {
@@ -49,20 +46,6 @@ int ObCommonIDUtils::gen_unique_id(ObCommonID &id)
 
   return ret;
 }
-
-int ObCommonIDUtils::gen_unique_id_by_rpc(ObCommonID &id)
-{
-  int ret = OB_SUCCESS;
-  // seekdb single-node: the log stream leader is local, so generate the ID directly.
-  // Switch tenant context so gen_unique_id's sys tenant check passes.
-  MOD_SCOPE {
-    if (OB_FAIL(gen_unique_id(id))) {
-      LOG_WARN("gen_unique_id local call failed", KR(ret));
-    }
-  }
-  return ret;
-}
-
 
 } // end namespace storage
 } // end namespace oceanbase

@@ -112,8 +112,6 @@ int ObTxCtxTableInfo::serialize_(char *buf,
     TRANS_LOG(WARN, "serialize exec_info fail.", KR(ret), K(pos), K(buf_len));
   } else if (OB_FAIL(table_lock_info_.serialize(buf, buf_len, pos))) {
     TRANS_LOG(WARN, "serialize exec_info fail.", KR(ret), K(pos), K(buf_len));
-  } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, (int64_t)cluster_version_))) {
-    TRANS_LOG(WARN, "encode cluster_version fail", K(buf_len), K(pos), K(ret));
   }
 
   return ret;
@@ -152,8 +150,6 @@ int ObTxCtxTableInfo::deserialize_(const char *buf,
     TRANS_LOG(WARN, "deserialize exec_info fail.", KR(ret), K(pos), K(buf_len));
   } else if (OB_FAIL(table_lock_info_.deserialize(buf, buf_len, pos))) {
     TRANS_LOG(WARN, "deserialize exec_info fail.", KR(ret), K(pos), K(buf_len));
-  } else if (OB_FAIL(serialization::decode_vi64(buf, buf_len, pos, (int64_t*)&cluster_version_))) {
-    TRANS_LOG(WARN, "decode cluster_version fail", K(buf_len), K(pos), K(ret));
   }
 
   return ret;
@@ -175,7 +171,6 @@ int64_t ObTxCtxTableInfo::get_serialize_size_(void) const
 {
   int64_t len = 0;
   len += tx_id_.get_serialize_size();
-  len += serialization::encoded_length_vi64((int64_t)cluster_version_);
   len += (OB_NOT_NULL(tx_data_guard_.tx_data()) ? tx_data_guard_.tx_data()->get_serialize_size() : 0);
   len += exec_info_.get_serialize_size();
   len += table_lock_info_.get_serialize_size();
@@ -188,8 +183,6 @@ bool ObTxCtxTableInfo::is_valid() const
   if (OB_UNLIKELY(!tx_id_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "tx id not valid", K(ret), K(tx_id_));
-  } else {
-    // do nothing
   }
   return OB_SUCC(ret);
 }

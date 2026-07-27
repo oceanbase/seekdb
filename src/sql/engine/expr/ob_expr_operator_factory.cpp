@@ -128,7 +128,6 @@
 #include "sql/engine/expr/ob_expr_func_ceil.h"
 #include "sql/engine/expr/ob_expr_func_dump.h"
 #include "sql/engine/expr/ob_expr_func_sleep.h"
-#include "sql/engine/expr/ob_expr_merging_frozen_time.h"
 #include "sql/engine/expr/ob_expr_repeat.h"
 #include "sql/engine/expr/ob_expr_export_set.h"
 #include "sql/engine/expr/ob_expr_replace.h"
@@ -203,9 +202,8 @@
 #include "sql/engine/expr/ob_expr_time_format.h"
 #include "sql/engine/expr/ob_expr_udf.h"
 #include "sql/engine/expr/ob_expr_week_of_func.h"
-#include "sql/engine/expr/ob_expr_dll_udf.h"
+#include "sql/engine/expr/ob_expr_interval.h"
 #include "sql/engine/expr/ob_expr_timestamp.h"
-#include "sql/engine/expr/ob_expr_seq_nextval.h"
 #include "sql/engine/expr/ob_expr_pl_integer_checker.h"
 #include "sql/engine/expr/ob_expr_pl_get_cursor_attr.h"
 #include "sql/engine/expr/ob_expr_pl_sqlcode_sqlerrm.h"
@@ -417,17 +415,12 @@
 #include "sql/engine/expr/ob_expr_array_union.h"
 #include "sql/engine/expr/ob_expr_map.h"
 #include "sql/engine/expr/ob_expr_map_keys.h"
-#include "sql/engine/expr/ob_expr_current_catalog.h"
-#include "sql/engine/expr/ob_expr_check_catalog_access.h"
 #include "sql/engine/expr/ob_expr_semantic_distance.h"
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_complete.h"
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_embed.h"
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_rerank.h"
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_prompt.h"
 #include "sql/engine/expr/ob_expr_vector_similarity.h"
-#include "sql/engine/expr/ob_expr_check_location_access.h"
-
-
 #include "sql/engine/expr/ob_expr_lock_func.h"
 
 using namespace oceanbase::common;
@@ -648,7 +641,6 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprUtcDate);
     REG_OP(ObExprTimeToUsec);
     REG_OP(ObExprUsecToTime);
-    REG_OP(ObExprMergingFrozenTime);
     REG_OP(ObExprFuncRound);
     REG_OP(ObExprFuncFloor);
     REG_OP(ObExprFuncCeil);
@@ -710,7 +702,6 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprSecToTime);
     REG_OP(ObExprInterval);
     REG_OP(ObExprTruncate);
-    REG_OP(ObExprDllUdf);
     REG_OP(ObExprExp);
     REG_OP(ObExprAnyValue);
     REG_OP(ObExprUuidShort);
@@ -764,7 +755,6 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprYearWeek);
     REG_OP(ObExprWeek);
     REG_OP(ObExprQuarter);
-    REG_OP(ObExprSeqNextval);
     REG_OP(ObExprAesDecrypt);
     REG_OP(ObExprAesEncrypt);
     REG_OP(ObExprBool);
@@ -1055,15 +1045,12 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprInnerInfoColsExtraPrinter);
     REG_OP(ObExprInnerInfoColsDataTypePrinter);
     REG_OP(ObExprInnerInfoColsColumnTypePrinter);
-    REG_OP(ObExprCurrentCatalog);
-    REG_OP(ObExprCheckCatalogAccess);
     REG_OP(ObExprInnerInfoColsColumnKeyPrinter);
     REG_OP(ObExprVectorL2Squared);
     REG_OP(ObExprAIComplete);
     REG_OP(ObExprAIEmbed);
     REG_OP(ObExprAIRerank);
     REG_OP(ObExprAIPrompt);
-    REG_OP(ObExprCheckLocationAccess);
   }();
 }
 

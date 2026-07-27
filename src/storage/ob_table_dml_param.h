@@ -112,7 +112,6 @@ public:
   }
   int is_rowkey_column(const uint64_t column_id, bool &is_rowkey) const;
   int is_column_nullable_for_write(const uint64_t column_id, bool &is_nullable_for_write) const;
-  OB_INLINE bool is_delete_insert() const { return is_delete_insert_; }
   OB_INLINE const common::ObString &get_index_name() const { return index_name_; }
 
   const ObColumnParam * get_column(const uint64_t column_id) const;
@@ -163,8 +162,6 @@ private:
   ObString vec_index_param_;
   int64_t vec_dim_;
   uint64_t vec_vector_col_id_;
-  bool is_delete_insert_;
-  ObMergeEngineType merge_engine_type_;
   uint64_t inc_pk_doc_id_col_id_;
   uint64_t vec_chunk_col_id_;
   uint64_t vec_embedded_col_id_;
@@ -182,7 +179,7 @@ public:
   virtual ~ObTableDMLParam();
   void reset();
   int convert(const ObTableSchema *table_schema,
-              const int64_t tenant_schema_version,
+              const int64_t runtime_schema_version,
               const common::ObIArray<uint64_t> &column_ids);
   // storage param is generated from other param, they won't be serialized.
   // it is called in convert or after deserialization
@@ -202,7 +199,7 @@ private:
 
 private:
   common::ObIAllocator &allocator_;
-  int64_t tenant_schema_version_;
+  int64_t runtime_schema_version_;
   ObTableSchemaParam data_table_;
 
   //generated storage param from columns_ids_ in ObTableModify, for performance improvement

@@ -7,6 +7,5 @@ alter system set max_syslog_file_count=0;
 alter system set _enable_defensive_check=1;
 alter system set _enable_newsort=True;
 alter system set enable_record_trace_log=True;
-alter system set ignore_replay_checksum_error=False;
 alter system set micro_block_merge_verify_level=2;
 alter system set _lcl_op_interval='30ms';

@@ -62,12 +62,6 @@ OB_INLINE bool is_valid_trans_version(const int64_t trans_version)
   return trans_version >= 0;
 }
 
-OB_INLINE bool is_valid_membership_version(const int64_t membership_version)
-{
-  // When the observer does not perform any member changes, membership_version is 0
-  return membership_version >= 0;
-}
-
 OB_INLINE bool is_valid_read_snapshot_version(const int64_t read_snapshot_version)
 {
   // read snapshot version should be greater than 0 and should not be INT64_MAX
@@ -88,12 +82,10 @@ inline bool is_schema_error(int err)
 {
   bool ret = false;
   switch(err) {
-    case OB_TENANT_EXIST:
-    case OB_TENANT_NOT_EXIST:
+    case OB_SERVER_RUNTIME_ALREADY_ACTIVE:
+    case OB_RUNTIME_SCHEMA_NOT_READY:
     case OB_ERR_BAD_DATABASE:
     case OB_DATABASE_EXIST:
-    case OB_TABLEGROUP_NOT_EXIST:
-    case OB_TABLEGROUP_EXIST:
     case OB_TABLE_NOT_EXIST:
     case OB_ERR_TABLE_EXIST:
     case OB_ERR_BAD_FIELD_ERROR:
@@ -114,7 +106,7 @@ inline bool is_schema_error(int err)
     case OB_SCHEMA_NOT_UPTODATE:
     case OB_ERR_PARALLEL_DDL_CONFLICT:
     case OB_NO_PARTITION_FOR_GIVEN_VALUE_SCHEMA_ERROR:
-    case OB_ERR_DDL_RESOURCE_NOT_ENOUGH:
+    case OB_DDL_RESOURCE_NOT_ENOUGH:
       ret = true;
       break;
     default:
@@ -202,9 +194,9 @@ inline bool is_server_status_error(int err)
   return ret;
 }
 
-inline bool is_unit_migrate(int err)
+inline bool is_runtime_not_ready(int err)
 {
-  return OB_TENANT_NOT_IN_SERVER == err;
+  return OB_SERVER_RUNTIME_NOT_READY == err;
 }
 
 inline bool is_process_timeout_error(int err)
@@ -333,14 +325,6 @@ static const bool CAN_ELR = false;
 const int64_t OB_WRS_LEVEL_VALUE_LENGTH = 128; // Maximum length of the level_value field of the __all_weak_read_service internal table
 const int64_t OB_WRS_LEVEL_NAME_LENGTH = 128; // Maximum length of the level_name field of the __all_weak_read_service internal table
 
-//Encryption related macros
-const int64_t OB_MAX_ENCRYPTION_NAME_LENGTH = 128;
-const int64_t OB_MAX_ENCRYPTION_KEY_NAME_LENGTH = 256;
-const char *const OB_MYSQL_ENCRYPTION_DEFAULT_MODE = "aes-128";
-const char *const OB_MYSQL_ENCRYPTION_NONE_MODE = "none";
-//--end---Encryption related macros
-const int64_t OB_MAX_ENCRYPTION_MODE_LENGTH = 64;
-
 /**
  * Review found that in the definitions of internal tables and internal views, OB_MAX_TABLE_NAME_LENGTH is used in many places to limit the field length to 128 bytes,
  * but the semantics of the corresponding fields are not table_name.
@@ -407,8 +391,6 @@ enum ObDmlEventType
   DE_DELETING = (1 << 2)
 };
 
-const char *const NORMAL_MODE_STR = "normal";
-const char *const ARBITRATION_MODE_STR = "arbitration";
 const char *const DISABLED_CLUSTER_MODE_STR = "disabled_cluster";
 const char *const DISABLED_WITH_READONLY_CLUSTER_MODE_STR = "disabled_with_readonly_cluster";
 static const int64_t MODIFY_GC_SNAPSHOT_INTERVAL = 2 * 1000 * 1000; //2s

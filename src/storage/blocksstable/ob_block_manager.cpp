@@ -17,14 +17,13 @@
 #define USING_LOG_PREFIX STORAGE_BLKMGR
 
 #include "ob_block_manager.h"
-#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind a transitive include
 #include "share/rc/ob_module_provider.h"
 #include "observer/ob_server_utils.h"
 #include "storage/blocksstable/ob_shared_macro_block_manager.h"
 #include "storage/tmp_file/ob_tmp_file_manager.h"
-#include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
+#include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
-#include "storage/meta_store/ob_tenant_storage_meta_service.h"
+#include "storage/meta_store/ob_local_storage_meta_service.h"
 #include "storage/tablet/ob_tablet_macro_info_iterator.h"
 #include "share/io/ob_io_calibration.h"  // relocated-definition owner
 #include "share/io/ob_io_struct.h"  // relocated-definition owner
@@ -79,18 +78,6 @@ int ObSuperBlockPreadChecker::do_check(void *read_buf,
 }
 
 /**
- * ------------------------------------ObMacroBlockWriteInfo-------------------------------------
- */
-
-int ObMacroBlockWriteInfo::fill_io_info_for_backup(const blocksstable::MacroBlockId &macro_id, ObIOInfo &io_info) const
-{
-  // Backup removed, backup-mode macro blocks cannot exist
-  UNUSED(macro_id);
-  UNUSED(io_info);
-  return OB_SUCCESS;
-}
-
-/**
  * ------------------------------------ObMacroBlockRewriteSeqGenerator-------------------------------------
  */
 ObMacroBlockRewriteSeqGenerator::ObMacroBlockRewriteSeqGenerator()
@@ -114,8 +101,7 @@ int ObMacroBlockRewriteSeqGenerator::generate_next_sequence(uint64_t &blk_seq) {
     if (OB_UNLIKELY(BLOCK_SEQUENCE_WARNING_LINE < blk_seq)) {
       const int64_t remaining_rewritten_block_count =
           MacroBlockId::MAX_WRITE_SEQ - blk_seq;
-      LOG_ERROR("No rewritten sequence!!! This ObServer needs to migrate data "
-                "and offline!!!",
+      LOG_ERROR("macro block rewrite sequence is close to exhaustion; stop local writes before overflow",
                 K(remaining_rewritten_block_count));
     }
   }
@@ -144,15 +130,15 @@ int ObBlockManager::init(ObIODevice *io_device, const int64_t block_size) {
                          ObServerSuperBlockHeader::OB_MAX_SUPER_BLOCK_SIZE)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument, ", K(ret), KP(io_device), K(block_size));
-  } else if (OB_FAIL(timer_.set_run_wrapper_with_ret(MTL_CTX()))) {
+  } else if (OB_FAIL(timer_.set_run_wrapper_with_ret(share::server_runtime()))) {
     LOG_WARN("fail to set_run_wrapper for timer", K(ret));
   } else if (OB_FAIL(timer_.init("BlkMgr"))) {
     LOG_WARN("fail to init timer", K(ret));
   } else if (OB_FAIL(bucket_lock_.init(DEFAULT_LOCK_BUCKET_COUNT,
                                        ObLatchIds::BLOCK_MANAGER_LOCK))) {
     LOG_WARN("fail to init bucket lock", K(ret));
-  } else if (OB_FAIL(block_map_.init(SET_USE_UNEXPECTED_500(
-                 ObMemAttr("BlockMap"))))) {
+  } else if (OB_FAIL(block_map_.init(
+                 ObMemAttr("BlockMap")))) {
     LOG_WARN("fail to init block map", K(ret));
   } else {
     io_device_ = io_device;
@@ -659,8 +645,7 @@ int ObBlockManager::resize_file(const int64_t new_data_file_size,
         super_block.body_.total_macro_block_count_ = new_macro_block_cnt;
         super_block.body_.modify_timestamp_ = ObTimeUtility::current_time();
       }
-      // super block may have format upgrade. Whatever body changed, reconstruct
-      // header for safe
+      // Keep the super-block header consistent with the changed body.
       if (FAILEDx(super_block.construct_header())) {
         LOG_WARN("fail to construct header", K(ret));
       }
@@ -679,7 +664,7 @@ int ObBlockManager::inc_ref(const MacroBlockId &macro_id) {
   } else if (OB_UNLIKELY(!macro_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("Invalid argument, ", K(ret), K(macro_id));
-  } else if (macro_id.is_local_id()) {
+  } else {
     ObBucketHashWLockGuard lock_guard(bucket_lock_, macro_id.hash());
     if (OB_FAIL(block_map_.get(macro_id, block_info))) {
       if (OB_ENTRY_NOT_EXIST == ret) {
@@ -720,7 +705,7 @@ int ObBlockManager::dec_ref(const MacroBlockId &macro_id) {
   } else if (OB_UNLIKELY(!macro_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("Invalid argument, ", K(ret), K(macro_id));
-  } else if (macro_id.is_local_id()) {
+  } else {
     ObBucketHashWLockGuard lock_guard(bucket_lock_, macro_id.hash());
     if (OB_FAIL(block_map_.get(macro_id, block_info))) {
       LOG_ERROR("get block_info fail", K(ret), K(macro_id));
@@ -801,9 +786,7 @@ void ObBlockManager::update_marker_status(const ObMacroBlockMarkerStatus &tmp_st
     marker_status_.ids_block_count_ = tmp_status.ids_block_count_;
     marker_status_.tmp_file_count_ = tmp_status.tmp_file_count_;
     marker_status_.data_block_count_ = tmp_status.data_block_count_;
-    marker_status_.shared_data_block_count_ = tmp_status.shared_data_block_count_;
     marker_status_.pending_free_count_ = tmp_status.pending_free_count_;
-    marker_status_.shared_meta_block_count_ = tmp_status.shared_meta_block_count_;
     marker_status_.hold_info_ = tmp_status.hold_info_;
   } else {
     // Mark skipped, update marker status with previous result.
@@ -813,9 +796,7 @@ void ObBlockManager::update_marker_status(const ObMacroBlockMarkerStatus &tmp_st
     marker_status_.ids_block_count_ = prev_result.ids_block_count_;
     marker_status_.tmp_file_count_ = prev_result.tmp_file_count_;
     marker_status_.data_block_count_ = prev_result.data_block_count_;
-    marker_status_.shared_data_block_count_ = prev_result.shared_data_block_count_;
     marker_status_.pending_free_count_ = prev_result.pending_free_count_;
-    marker_status_.shared_meta_block_count_ = prev_result.shared_meta_block_count_;
     marker_status_.hold_info_ = prev_result.hold_info_;
   }
 }
@@ -1052,12 +1033,7 @@ int ObBlockManager::mark_macro_blocks(
     ObMacroBlockMarkerStatus &tmp_status)
 {
   int ret = OB_SUCCESS;
-  omt::ObMultiTenant *omt = GCTX.omt_;
-
-  if (OB_ISNULL(omt)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, omt is nullptr", K(ret), KP(omt));
-  } else if (0 == mark_info.count() && 0 == alloc_num_) {
+  if (0 == mark_info.count() && 0 == alloc_num_) {
     tmp_status.mark_finished_ = false;
     LOG_INFO("no block alloc/free, no need to mark blocks", K(ret));
   } else if (OB_FAIL(mark_tmp_file_blocks(mark_info, macro_id_set, tmp_status))) {
@@ -1065,22 +1041,22 @@ int ObBlockManager::mark_macro_blocks(
   } else if (OB_FAIL(mark_server_meta_blocks(mark_info, macro_id_set, tmp_status))) {
     LOG_WARN("fail to mark server meta blocks", K(ret));
   } else {
-    {
-      MacroBlockId macro_id;
-      MOD_SCOPE
-      {
-        if (OB_FAIL(mark_tenant_blocks(mark_info, macro_id_set, tmp_status))) {
-          LOG_WARN("fail to mark tenant blocks", K(ret));
-        } else if (OB_FALSE_IT(share::g_mp->shared_macro_block_mgr()->get_cur_shared_block(macro_id))) {
-        } else if (OB_FAIL(mark_held_shared_block(macro_id, mark_info, macro_id_set, tmp_status))) {
-          LOG_WARN("fail to mark shared block held by shared_macro_block_manager", K(ret), K(macro_id));
-        } else if (OB_FALSE_IT(share::g_mp->tenant_storage_meta_service()
-                                   ->get_shared_object_reader_writer()
-                                   .get_cur_shared_block(macro_id))) {
-        } else if (OB_FAIL(mark_held_shared_block(macro_id, mark_info, macro_id_set, tmp_status))) {
-          LOG_WARN("fail to mark shared block held by shared_reader_writer", K(ret), K(macro_id));
-        }
-      }
+    MacroBlockId macro_id;
+    if (OB_FAIL(mark_local_storage_blocks(mark_info, macro_id_set, tmp_status))) {
+      LOG_WARN("fail to mark local storage blocks", K(ret));
+    } else if (OB_FALSE_IT(
+                   share::g_mp->shared_macro_block_mgr()->get_cur_shared_block(
+                       macro_id))) {
+    } else if (OB_FAIL(
+                   mark_held_block(
+                       macro_id, mark_info, macro_id_set, tmp_status))) {
+      LOG_WARN("fail to mark block held by shared macro block manager",
+               K(ret), K(macro_id));
+    } else if (OB_FALSE_IT(share::g_mp->local_storage_meta_service()
+                               ->get_object_reader_writer()
+                               .get_cur_block(macro_id))) {
+    } else if (OB_FAIL(mark_held_block(macro_id, mark_info, macro_id_set, tmp_status))) {
+      LOG_WARN("fail to mark block held by object reader writer", K(ret), K(macro_id));
     }
     if (OB_SUCC(ret)) {
       tmp_status.mark_finished_ = true;
@@ -1089,7 +1065,7 @@ int ObBlockManager::mark_macro_blocks(
   return ret;
 }
 
-int ObBlockManager::mark_held_shared_block(
+int ObBlockManager::mark_held_block(
     const MacroBlockId &macro_id, MacroBlkIdMap &mark_info,
     common::hash::ObHashSet<MacroBlockId, common::hash::NoPthreadDefendMode>
         &macro_id_set,
@@ -1097,7 +1073,7 @@ int ObBlockManager::mark_held_shared_block(
   int ret = OB_SUCCESS;
 
   if (!macro_id.is_valid()) {
-    // no small sstable, skip the mark
+    // no block is currently held
   } else if (OB_FAIL(update_mark_info(macro_id, mark_info))) {
     LOG_WARN("fail to update mark info", K(ret), K(macro_id));
   } else if (OB_FAIL(
@@ -1114,24 +1090,24 @@ int ObBlockManager::mark_held_shared_block(
   return ret;
 }
 
-int ObBlockManager::mark_tenant_blocks(
+int ObBlockManager::mark_local_storage_blocks(
     MacroBlkIdMap &mark_info,
     common::hash::ObHashSet<MacroBlockId, common::hash::NoPthreadDefendMode>
         &macro_id_set,
     ObMacroBlockMarkerStatus &tmp_status) {
   int ret = OB_SUCCESS;
-  ObTenantStorageMetaService *meta_service = share::g_mp->tenant_storage_meta_service();
-  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
+  ObLocalStorageMetaService *meta_service = share::g_mp->local_storage_meta_service();
+  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
   if (OB_ISNULL(t3m) || OB_ISNULL(meta_service)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, t3m or meta_service of mtl is nullptr", K(ret),
+    LOG_WARN("unexpected null storage metadata service", K(ret),
              KP(t3m), KP(meta_service));
-  } else if (OB_FAIL(mark_tenant_ckpt_blocks(mark_info, macro_id_set,
-                                             *meta_service, tmp_status))) {
-    LOG_WARN("fail to mark tenant meta blocks", K(ret));
+  } else if (OB_FAIL(mark_local_checkpoint_blocks(mark_info, macro_id_set,
+                                                  *meta_service, tmp_status))) {
+    LOG_WARN("fail to mark local checkpoint blocks", K(ret));
   } else {
     ObArenaAllocator iter_allocator("MarkIter", OB_MALLOC_NORMAL_BLOCK_SIZE);
-    ObTenantTabletIterator tablet_iter(*t3m, iter_allocator, nullptr /*no op*/);
+    ObTabletIterator tablet_iter(*t3m, iter_allocator, nullptr /*no op*/);
     ObTabletHandle handle;
     while (OB_SUCC(ret)) {
       handle.reset();
@@ -1229,11 +1205,7 @@ int ObBlockManager::mark_sstable_blocks(
               ret = OB_SUCCESS;
             }
           } else {
-            if (sstable->is_small_sstable()) {
-              tmp_status.shared_data_block_count_++;
-            } else {
-              tmp_status.data_block_count_++;
-            }
+            tmp_status.data_block_count_++;
             tmp_status.hold_count_--;
           }
         }
@@ -1314,7 +1286,7 @@ int ObBlockManager::mark_tablet_meta_blocks(
           ret = OB_SUCCESS;
         }
       } else {
-        tmp_status.shared_meta_block_count_++;
+        tmp_status.index_block_count_++;
         tmp_status.hold_count_--;
       }
     }
@@ -1344,7 +1316,7 @@ int ObBlockManager::mark_sstable_meta_block(
         ret = OB_SUCCESS;
       }
     } else {
-      tmp_status.shared_meta_block_count_++;
+      tmp_status.index_block_count_++;
       tmp_status.hold_count_--;
     }
   }
@@ -1359,7 +1331,7 @@ int ObBlockManager::mark_tablet_block(
   int ret = OB_SUCCESS;
   const ObTablet *tablet = handle.get_obj();
   ObTabletBlockInfo block_info(tablet->get_tablet_addr().block_id(),
-                               ObTabletMacroType::SHARED_META_BLOCK,
+                               ObTabletMacroType::META_BLOCK,
                                0 /*useless param*/);
 
   if (tablet->get_tablet_addr().is_block() &&
@@ -1372,7 +1344,7 @@ int ObBlockManager::mark_tablet_block(
     ObTabletMacroInfo *macro_info = nullptr;
     bool in_memory = true;
     ObMacroInfoIterator macro_iter;
-    if (OB_FAIL(tablet->load_macro_info(0 /* ls_epoch in shared_storage */,
+    if (OB_FAIL(tablet->load_macro_info(0,
                                         allocator, macro_info, in_memory))) {
       LOG_WARN("fail to load macro info", K(ret));
     } else if (OB_FAIL(macro_iter.init(ObTabletMacroType::MAX, *macro_info))) {
@@ -1421,13 +1393,8 @@ int ObBlockManager::do_mark_tablet_block(
       tmp_status.index_block_count_++;
       break;
     case ObTabletMacroType::DATA_BLOCK:
-      tmp_status.data_block_count_++;
-      break;
-    case ObTabletMacroType::SHARED_META_BLOCK:
-      tmp_status.shared_meta_block_count_++;
-      break;
     case ObTabletMacroType::SHARED_DATA_BLOCK:
-      tmp_status.shared_data_block_count_++;
+      tmp_status.data_block_count_++;
       break;
     default:
       ret = OB_INVALID_ARGUMENT;
@@ -1441,11 +1408,11 @@ int ObBlockManager::do_mark_tablet_block(
   return ret;
 }
 
-int ObBlockManager::mark_tenant_ckpt_blocks(
+int ObBlockManager::mark_local_checkpoint_blocks(
     MacroBlkIdMap &mark_info,
     common::hash::ObHashSet<MacroBlockId, common::hash::NoPthreadDefendMode>
         &macro_id_set,
-    ObTenantStorageMetaService &meta_service,
+    ObLocalStorageMetaService &meta_service,
     ObMacroBlockMarkerStatus &tmp_status) {
   int ret = OB_SUCCESS;
   ObArray<MacroBlockId> macro_block_list;
@@ -1453,7 +1420,7 @@ int ObBlockManager::mark_tenant_ckpt_blocks(
   if (OB_FAIL(macro_block_list.reserve(DEFAULT_PENDING_FREE_COUNT))) {
     LOG_WARN("fail to reserve macro block list", K(ret));
   } else if (OB_FAIL(meta_service.get_meta_block_list(macro_block_list))) {
-    LOG_WARN("fail to get tenant checkpoint meta blocks, ", K(ret));
+    LOG_WARN("fail to get local checkpoint metadata blocks", K(ret));
   } else if (OB_FAIL(
                  update_mark_info(macro_block_list, macro_id_set, mark_info))) {
     LOG_WARN("fail to update mark info", K(ret), K(macro_block_list.count()));
@@ -1471,20 +1438,15 @@ int ObBlockManager::mark_tmp_file_blocks(
     ObMacroBlockMarkerStatus &tmp_status) {
   int ret = OB_SUCCESS;
 
-  {
-    MOD_SCOPE {
-      ObArray<MacroBlockId> macro_block_list;
-      if (OB_FAIL(share::g_mp->tenant_tmp_file_manager()->get_sn_file_manager().get_macro_block_list(macro_block_list))) {
-        LOG_WARN("fail to get macro block list", K(ret));
-      } else if (OB_FAIL(update_mark_info(macro_block_list, macro_id_set, mark_info))){
-        LOG_WARN("fail to update mark info", K(ret), K(macro_block_list.count()));
-      } else {
-        tmp_status.tmp_file_count_ += macro_block_list.count();
-        tmp_status.hold_count_ -= macro_block_list.count();
-      }
-    }
+  ObArray<MacroBlockId> macro_block_list;
+  if (OB_FAIL(share::g_mp->tmp_file_manager()->get_sn_file_manager().get_macro_block_list(macro_block_list))) {
+    LOG_WARN("fail to get macro block list", K(ret));
+  } else if (OB_FAIL(update_mark_info(macro_block_list, macro_id_set, mark_info))){
+    LOG_WARN("fail to update mark info", K(ret), K(macro_block_list.count()));
+  } else {
+    tmp_status.tmp_file_count_ += macro_block_list.count();
+    tmp_status.hold_count_ -= macro_block_list.count();
   }
-
   return ret;
 }
 
@@ -1989,6 +1951,7 @@ void ObIOBenchController::run1()
   const int64_t MAX_CALIBRATION_BLOCK_COUNT = 20LL * 1024LL * 1024LL * 1024LL / OB_DEFAULT_MACRO_BLOCK_SIZE;
   int64_t free_block_count = OB_STORAGE_OBJECT_MGR.get_free_macro_block_count();
   int64_t total_block_count = OB_STORAGE_OBJECT_MGR.get_total_macro_block_count();
+
   if (free_block_count <= MIN_CALIBRATION_BLOCK_COUNT
       || 1.0 * free_block_count / total_block_count < MIN_FREE_SPACE_PERCENTAGE) {
     ret = OB_SERVER_OUTOF_DISK_SPACE;

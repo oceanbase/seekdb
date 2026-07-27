@@ -94,7 +94,7 @@ bool ObSSTableMacroBlockHeader::is_valid() const
 
 ObSSTableMacroBlockHeader::FixedHeader::FixedHeader()
   : header_size_(0),
-    version_(SSTABLE_MACRO_BLOCK_HEADER_VERSION_V2),
+    version_(SSTABLE_MACRO_BLOCK_HEADER_VERSION),
     magic_(SSTABLE_MACRO_BLOCK_HEADER_MAGIC),
     tablet_id_(ObTabletID::INVALID_TABLET_ID),
     logical_version_(0),
@@ -112,18 +112,14 @@ ObSSTableMacroBlockHeader::FixedHeader::FixedHeader()
     meta_block_offset_(0),
     meta_block_size_(0),
     data_checksum_(0),
-    encrypt_id_(0),
-    master_key_id_(-1),
     compressor_type_(ObCompressorType::INVALID_COMPRESSOR)
 {
-  MEMSET(encrypt_key_, 0x26, OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH);
 }
 
 bool ObSSTableMacroBlockHeader::FixedHeader::is_valid() const
 {
   return header_size_ > 0
-      && SSTABLE_MACRO_BLOCK_HEADER_VERSION_V1 <= version_
-      && SSTABLE_MACRO_BLOCK_HEADER_VERSION_V2 >= version_
+      && SSTABLE_MACRO_BLOCK_HEADER_VERSION == version_
       && SSTABLE_MACRO_BLOCK_HEADER_MAGIC == magic_
       && 0 != tablet_id_
       && logical_version_ >= 0
@@ -136,15 +132,13 @@ bool ObSSTableMacroBlockHeader::FixedHeader::is_valid() const
       && micro_block_data_offset_ > 0
       && micro_block_data_size_ > 0
       && data_checksum_ >= 0
-      && encrypt_id_ >= 0
-      && master_key_id_ >= -1
       && compressor_type_ > ObCompressorType::INVALID_COMPRESSOR;
 }
 
 void ObSSTableMacroBlockHeader::FixedHeader::reset()
 {
   header_size_ = 0;
-  version_ = SSTABLE_MACRO_BLOCK_HEADER_VERSION_V2;
+  version_ = SSTABLE_MACRO_BLOCK_HEADER_VERSION;
   magic_ = SSTABLE_MACRO_BLOCK_HEADER_MAGIC;
   tablet_id_ = ObTabletID::INVALID_TABLET_ID;
   logical_version_ = 0;
@@ -162,10 +156,7 @@ void ObSSTableMacroBlockHeader::FixedHeader::reset()
   meta_block_offset_ = 0;
   meta_block_size_ = 0;
   data_checksum_ = 0;
-  encrypt_id_ = 0;
-  master_key_id_ = -1;
   compressor_type_ = ObCompressorType::INVALID_COMPRESSOR;
-  MEMSET(encrypt_key_, 0x26, OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH);
 }
 
 int ObSSTableMacroBlockHeader::serialize(char *buf, const int64_t buf_len, int64_t& pos) const
@@ -269,7 +260,7 @@ int ObSSTableMacroBlockHeader::deserialize(const char *buf, const int64_t data_l
 int64_t ObSSTableMacroBlockHeader::get_serialize_size() const
 {
   return get_fixed_header_size() + get_variable_size_in_header(
-    fixed_header_.column_count_, fixed_header_.rowkey_column_count_, fixed_header_.version_);
+    fixed_header_.column_count_, fixed_header_.rowkey_column_count_);
 }
 
 int64_t ObSSTableMacroBlockHeader::get_fixed_header_size()
@@ -279,12 +270,10 @@ int64_t ObSSTableMacroBlockHeader::get_fixed_header_size()
 
 int64_t ObSSTableMacroBlockHeader::get_variable_size_in_header(
     const int64_t column_cnt,
-    const int64_t rowkey_col_cnt,
-    const uint16_t version)
+    const int64_t rowkey_col_cnt)
 {
-  const int64_t col_type_array_cnt = SSTABLE_MACRO_BLOCK_HEADER_VERSION_V2 == version ? rowkey_col_cnt : column_cnt;
-  return col_type_array_cnt * sizeof(ObObjMeta) /* ObObjMeta */
-       + col_type_array_cnt * sizeof(ObOrderType) /* column orders */
+  return rowkey_col_cnt * sizeof(ObObjMeta) /* ObObjMeta */
+       + rowkey_col_cnt * sizeof(ObOrderType) /* column orders */
        + column_cnt * sizeof(int64_t) /* column checksum */;
 }
 
@@ -305,9 +294,9 @@ int ObSSTableMacroBlockHeader::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(desc), KP(col_types), KP(col_orders), KP(col_checksum));
   } else {
-    fixed_header_.version_ = desc.get_fixed_header_version();
+    fixed_header_.version_ = SSTABLE_MACRO_BLOCK_HEADER_VERSION;
     fixed_header_.header_size_ = static_cast<int32_t>(get_fixed_header_size()
-        + get_variable_size_in_header(desc.get_row_column_count(), desc.get_rowkey_column_count(), fixed_header_.version_));
+        + get_variable_size_in_header(desc.get_row_column_count(), desc.get_rowkey_column_count()));
     fixed_header_.tablet_id_ = desc.get_tablet_id().id();
     fixed_header_.logical_version_ = desc.get_logical_version();
     fixed_header_.column_count_ =  static_cast<int32_t>(desc.get_row_column_count());
@@ -315,10 +304,6 @@ int ObSSTableMacroBlockHeader::init(
     fixed_header_.row_store_type_ = static_cast<int32_t>(desc.get_row_store_type());
     fixed_header_.micro_block_data_offset_ = fixed_header_.header_size_
         + static_cast<int32_t>(ObMacroBlockCommonHeader::get_serialize_size());
-    fixed_header_.encrypt_id_ = desc.get_encrypt_id();
-    fixed_header_.master_key_id_ = desc.get_master_key_id();
-    //the length of encrypt_key is always fixed
-    MEMCPY(fixed_header_.encrypt_key_, desc.get_encrypt_key(), desc.get_encrypt_key_size());
     fixed_header_.compressor_type_ = desc.get_compressor_type();
     column_types_ = col_types;
     column_orders_ = col_orders;
@@ -336,7 +321,7 @@ int ObSSTableMacroBlockHeader::init(
         column_orders_[i] = col_descs.at(i).col_order_;
       }
     }
-    //for compatibility, fill 0 to checksum and this will be serialized to disk
+    // This writer does not collect column checksums; persist their initialized value.
     for (int i = 0; i < fixed_header_.column_count_; i++) {
       column_checksum_[i] = 0;
     }

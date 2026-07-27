@@ -27,22 +27,14 @@ namespace oceanbase
 namespace storage
 {
 
-// cross-tenant LOB obcall RPC removed.
-// Previously the cross-tenant LOB read (is_across_tenant()) was issued as the OB_LOB_QUERY
-// streaming obcall RPC which looped back to this same
-// machine and was served by ObLobQueryP::process under MOD_SCOPE. We now run
-// the exact same local LOB query in-process: MTL_SWITCH to the lob's tenant, build the same
-// ObLobAccessParam (from_rpc_ = true), and drive the same ObLobQueryIter (READ) /
-// ObLobManager::getlength (GET_LENGTH). No network / SSHandle stream is involved.
-
 /**********ObLobRemoteQueryCtx****************/
 
 ObLobRemoteQueryCtx::~ObLobRemoteQueryCtx()
 {
   if (OB_NOT_NULL(query_iter_)) {
-    // the iterator was allocated under the lob's tenant; release it there too.
+    // Release the iterator in the same server runtime in which it was allocated.
     int ret = OB_SUCCESS;
-    MOD_SCOPE {
+    SERVER_MODULE_SCOPE {
       query_iter_->reset();
       OB_DELETE(ObLobQueryIter, "unused", query_iter_);
     }
@@ -60,8 +52,8 @@ int ObLobRemoteQueryCtx::get_next_block(ObString &data)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("query iter not inited", K(ret), KP(query_iter_), KP(read_buf_));
   } else {
-    // the iterator reads tenant storage, so it must run under the lob's tenant context.
-    MOD_SCOPE {
+    // The iterator reads local database storage and therefore runs in server runtime scope.
+    SERVER_MODULE_SCOPE {
       ObString out;
       out.assign_buffer(read_buf_, read_buf_len_);
       if (OB_FAIL(query_iter_->get_next_row(out))) {
@@ -88,10 +80,9 @@ int ObLobRemoteUtil::query(ObLobAccessParam& param, const ObLobQueryArg::QueryTy
   } else if (OB_FAIL(remote_query_init_ctx(param, qtype, remote_ctx))) {
     LOG_WARN("fail to init remote query ctx", K(ret));
   } else {
-    // cross-tenant LOB obcall RPC removed: run the same local LOB query the OB_LOB_QUERY
-    // processor (ObLobQueryP::process) ran, in-process under the lob's tenant.
+    // Run the same local LOB query as ObLobQueryP::process, in process.
     
-    MOD_SCOPE {
+    SERVER_MODULE_SCOPE {
       ObLobManager *lob_mngr = share::g_mp->lob_manager();
       if (OB_ISNULL(lob_mngr)) {
         ret = OB_ERR_UNEXPECTED;

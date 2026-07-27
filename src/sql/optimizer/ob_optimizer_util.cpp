@@ -1711,7 +1711,8 @@ int ObOptimizerUtil::extract_equal_exec_params(const ObIArray<ObRawExpr *> &expr
         if (!find_item(my_params, exec_param)) {
           /*
            * Not found in the parameter list, indicating that this is not a parameter related to itself, skip it
-           * For example, in the internal table of NL, there are conditions b1=? and b2=?, where the first ? is a const parameterized during the parser phase, and the second ? is an attribute related to the external table a1
+           * For example, in the inner table of NL, there are conditions b1=? and b2=?, where
+           * the first ? is parameterized during parsing and the second ? belongs to the outer row.
            * Therefore, the first ? will definitely not be found here, so skip it.
            */
         } else if (OB_FAIL(left_key.push_back(exec_param->get_ref_expr()))) {
@@ -6230,7 +6231,7 @@ int ObOptimizerUtil::pushdown_filter_into_subquery(const ObDMLStmt &parent_stmt,
     //expr value plan can not pushdown
   } else {
     has_rollup = subquery.has_rollup();
-    if (subquery.has_limit() || subquery.has_sequence() ||
+    if (subquery.has_limit() ||
                subquery.is_contains_assignment() ||
                has_rollup) {
       //can not pushdown do nothing
@@ -6818,11 +6819,6 @@ int ObOptimizerUtil::check_is_null_qual(const ParamStore *params,
 }
 
 
-bool ObOptimizerUtil::has_psedu_column(const ObRawExpr &expr)
-{
-  return expr.has_flag(CNT_SEQ_EXPR);
-}
-
 int ObOptimizerUtil::compute_ordering_relationship(const bool left_is_interesting,
                                                    const bool right_is_interesting,
                                                    const ObIArray<OrderItem> &left_ordering,
@@ -7024,28 +7020,12 @@ int ObOptimizerUtil::get_range_params(ObLogicalOperator *root,
   return ret;
 }
 
-int ObOptimizerUtil::check_basic_sharding_info(const ObAddr &local_addr,
-                                               const ObIArray<ObLogicalOperator *> &child_ops,
+int ObOptimizerUtil::check_basic_sharding_info(const ObIArray<ObLogicalOperator *> &child_ops,
                                                bool &is_basic)
-{
-  int ret = OB_SUCCESS;
-  bool is_remote = false;
-  is_basic = false;
-  if (OB_FAIL(check_basic_sharding_info(local_addr, child_ops, is_basic, is_remote))) {
-    LOG_WARN("failed to check basic sharding info", K(ret));
-  } else { /*do nothing*/ }
-  return ret;
-}
-
-int ObOptimizerUtil::check_basic_sharding_info(const ObAddr &local_addr,
-                                               const ObIArray<ObLogicalOperator *> &child_ops,
-                                               bool &is_basic,
-                                               bool &is_remote)
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObShardingInfo*, 8> sharding_infos;
   is_basic = false;
-  is_remote = false;
   for (int64_t i = 0; OB_SUCC(ret) && i < child_ops.count(); i++) {
     if (OB_ISNULL(child_ops.at(i)) || OB_ISNULL(child_ops.at(i)->get_sharding())) {
       ret = OB_ERR_UNEXPECTED;
@@ -7056,88 +7036,42 @@ int ObOptimizerUtil::check_basic_sharding_info(const ObAddr &local_addr,
   }
   if (OB_FAIL(ret)) {
     /*do nothing*/
-  } else if (OB_FAIL(check_basic_sharding_info(local_addr, sharding_infos, is_basic, is_remote))) {
+  } else if (OB_FAIL(check_basic_sharding_info(sharding_infos, is_basic))) {
     LOG_WARN("failed to check basic sharding info", K(ret));
   } else { /*do nothing*/ }
 
   return ret;
 }
 
-int ObOptimizerUtil::check_basic_sharding_info(const ObAddr &local_addr,
-                                               const ObIArray<ObShardingInfo*> &input_shardings,
+int ObOptimizerUtil::check_basic_sharding_info(const ObIArray<ObShardingInfo*> &input_shardings,
                                                bool &is_basic)
 {
   int ret = OB_SUCCESS;
-  bool is_remote = false;
   is_basic = false;
-  if (OB_FAIL(check_basic_sharding_info(local_addr, input_shardings, is_basic, is_remote))) {
-    LOG_WARN("failed to check basic sharding info", K(ret));
-  } else { /*do nothing*/ }
-  return ret;
-}
-
-int ObOptimizerUtil::check_basic_sharding_info(const ObAddr &local_addr,
-                                               const ObIArray<ObShardingInfo*> &input_shardings,
-                                               bool &is_basic,
-                                               bool &is_remote)
-{
-  int ret = OB_SUCCESS;
-  ObAddr temp_addr;
-  ObAddr remote_addr;
-  int64_t local_num = 0;
-  int64_t remote_num = 0;
-  int64_t match_all_num = 0;
   const ObShardingInfo *sharding = NULL;
   int64_t input_size = input_shardings.count();
-  UNUSED(local_addr);
-  is_basic = false;
-  is_remote = false;
-  if (input_size <= 1) {
-   if (OB_ISNULL(sharding = input_shardings.at(0))) {
-     ret = OB_ERR_UNEXPECTED;
-     LOG_WARN("get unexpected null", K(ret));
-   } else {
-     is_basic = true;
-     is_remote = sharding->is_remote();
-   }
+  if (input_size == 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("empty input sharding list", K(ret));
+  } else if (input_size == 1) {
+    if (OB_ISNULL(sharding = input_shardings.at(0))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get unexpected null", K(ret));
+    } else {
+      is_basic = true;
+    }
   } else {
     is_basic = true;
     for (int64_t i = 0; OB_SUCC(ret) && is_basic && i < input_size; i++) {
       if (NULL == (sharding = input_shardings.at(i))) {
         is_basic = false;
-      } else if (sharding->is_local()) {
-        local_num++;
-      } else if (sharding->is_remote()) {
-        remote_num++;
-        if (OB_FAIL(sharding->get_remote_addr(temp_addr))) {
-          LOG_WARN("failed to get remote addr", K(ret));
-        } else if (!remote_addr.is_valid()) {
-          remote_addr = temp_addr;
-        } else if (remote_addr != temp_addr) {
-          is_basic = false;
-        } else { /*do nothing*/}
-      } else if (sharding->is_match_all()) {
-        match_all_num++;
-      } else if (sharding->is_distributed()) {
-        is_basic = false;
-      } else { /*do nothing*/
-      }
-    }
-    if (OB_SUCC(ret) && is_basic) {
-      if (local_num > 0 && (local_num + match_all_num == input_size)) {
-        is_basic = true;
-      } else if (remote_num > 0 && (remote_num + match_all_num == input_size)) {
-        is_basic = true;
-        is_remote = true;
-      } else if (match_all_num == input_size) {
-        is_basic = true;
-      } else {
+      } else if (!sharding->is_local() && !sharding->is_match_all()) {
         is_basic = false;
       }
     }
   }
   if (OB_SUCC(ret)) {
-    LOG_TRACE("succeed to check basic sharding info", K(is_basic), K(is_remote));
+    LOG_TRACE("succeed to check basic sharding info", K(is_basic));
   }
   return ret;
 }
@@ -7183,27 +7117,24 @@ int ObOptimizerUtil::compute_basic_sharding_info(const ObAddr &local_addr,
   inherit_sharding_index = 0;
   UNUSED(local_addr);
   UNUSED(allocator);
-  if (input_shardings.count() <= 1) {
+  if (input_shardings.empty()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("empty input sharding list", K(ret));
+  } else if (input_shardings.count() == 1) {
     result_sharding = input_shardings.at(0);
   } else {
     ObShardingInfo *sharding = NULL;
-    for (int64_t i = 0; OB_SUCC(ret) && i < input_shardings.count(); i++) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < input_shardings.count(); ++i) {
       if (OB_ISNULL(sharding = input_shardings.at(i))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(sharding), K(ret));
-      } else if (result_sharding != NULL) {
-        // do nothing
-      } else if (sharding->is_local()) {
-        result_sharding = sharding;
-        inherit_sharding_index = i;
-      } else if (sharding->is_remote()) {
+      } else if (result_sharding == NULL && sharding->is_local()) {
         result_sharding = sharding;
         inherit_sharding_index = i;
       } else { /*do nothing*/ }
     }
-    if (OB_SUCC(ret) && NULL == result_sharding) {
+    if (OB_SUCC(ret) && result_sharding == NULL) {
       result_sharding = input_shardings.at(0);
-      inherit_sharding_index = 0;
     }
   }
   if (OB_SUCC(ret) && NULL != result_sharding) {
@@ -7563,28 +7494,6 @@ int ObOptimizerUtil::check_contain_ora_rowscn_expr(const ObRawExpr *expr,
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && !contains && i < expr->get_param_count(); i++) {
       if (OB_FAIL(check_contain_ora_rowscn_expr(expr->get_param_expr(i), contains))) {
-        LOG_WARN("failed to contain ora_rowscn expr", K(ret));
-      } else { /*do nothing*/}
-    }
-  }
-  return ret;
-}
-
-int ObOptimizerUtil::check_contain_part_id_columnref_expr(const ObRawExpr *expr,
-                                                   bool &contains)
-{
-  int ret = OB_SUCCESS;
-  contains = false;
-  if (OB_ISNULL(expr)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid raw expr", K(expr), K(ret));
-  } else if (expr->is_column_ref_expr() &&
-      static_cast<const ObColumnRefRawExpr*>(expr)->is_pseudo_column_ref()) {
-    contains = true;
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && !contains && i < expr->get_param_count(); i++) {
-      if (OB_FAIL(SMART_CALL(check_contain_part_id_columnref_expr(expr->get_param_expr(i),
-          contains)))) {
         LOG_WARN("failed to contain ora_rowscn expr", K(ret));
       } else { /*do nothing*/}
     }
@@ -8007,7 +7916,7 @@ int ObOptimizerUtil::pushdown_join_filter_into_subquery(const ObDMLStmt &parent_
     //expr value plan can not pushdown
   } else {
     has_rollup = subquery.has_rollup();
-    if (subquery.has_limit() || subquery.has_sequence() ||
+    if (subquery.has_limit() ||
                subquery.is_contains_assignment() ||
                has_rollup) {
       //can not pushdown do nothing
@@ -8905,11 +8814,11 @@ int ObOptimizerUtil::check_can_batch_rescan(const ObLogicalOperator *op,
   } else if (OB_FAIL(check_exec_param_filter_exprs(op->get_startup_exprs(), has_exec_param))) {
     LOG_WARN("failed to check exec param filter exprs", K(ret));
   } else if (has_exec_param && !plan->get_optimizer_context().enable_startup_filter_batch()) {
-    /* startup filter contains exec param, enabled after 4.2.5 */
+    /* startup filters containing exec params are disabled */
   } else if ((log_op_def::LOG_LIMIT == op->get_type()
              || (op->is_table_scan() && NULL != static_cast<const ObLogTableScan*>(op)->get_limit_expr()))
              && !plan->get_optimizer_context().enable_limit_pushdown_batch()) {
-    /* contains limit pushdown, enabled after 4.2.5 */
+    /* limit pushdown batch rescan is disabled */
   } else if (op->is_table_scan()) {
     const ObLogTableScan *table_scan = static_cast<const ObLogTableScan*>(op);
     if (OB_ISNULL(table_scan->get_est_cost_info())) {
@@ -8918,7 +8827,7 @@ int ObOptimizerUtil::check_can_batch_rescan(const ObLogicalOperator *op,
     } else if (!table_scan->can_batch_rescan()) {
       can_batch_rescan = false;
     } else if (!table_scan->use_das() && !plan->get_optimizer_context().enable_normal_scan_batch()) {
-      /* normal table scan, enabled after 4.2.5 */
+      /* normal table scan batch rescan is disabled */
       can_batch_rescan = false;
     } else if (!plan->get_optimizer_context().enable_non_prefix_exec_param_batch()) {
       if (OB_FAIL(check_exec_param_filter_exprs(table_scan->get_est_cost_info()->pushdown_prefix_filters_,
@@ -8934,7 +8843,7 @@ int ObOptimizerUtil::check_can_batch_rescan(const ObLogicalOperator *op,
       LOG_WARN("failed to check can batch rescan for op child", K(ret));
     }
   } else if (!for_nlj && !plan->get_optimizer_context().enable_non_basic_scan_batch()) {
-    /* non table scan/subplan scan for subplan filter, enabled after 4.2.5 */
+    /* non-basic scan batch rescan for subplan filters is disabled */
   } else if (1 == op->get_num_of_child()) {
     if (OB_FAIL(SMART_CALL(check_can_batch_rescan(op->get_child(0), rescan_params, for_nlj, can_batch_rescan)))) {
       LOG_WARN("failed to check can batch rescan for op child", K(ret));
@@ -8944,57 +8853,6 @@ int ObOptimizerUtil::check_can_batch_rescan(const ObLogicalOperator *op,
     for (int64_t i = 0; OB_SUCC(ret) && can_batch_rescan && i < op->get_num_of_child(); ++i) {
       if (OB_FAIL(SMART_CALL(check_can_batch_rescan(op->get_child(i), rescan_params, for_nlj, can_batch_rescan)))) {
         LOG_WARN("failed to check batch rescan", K(ret));
-      } else {/* do nothing */}
-    }
-  } else {
-    // other multi child op use batch is disabled
-    // multi level nlj use batch is disabled
-    can_batch_rescan = false;
-  }
-  return ret;
-}
-
-// check batch rescan for nlj / subplan filter
-// check_can_batch_rescan compatible before 425
-int ObOptimizerUtil::check_can_batch_rescan_compat(ObLogicalOperator *op,
-                                                   const ObIArray<ObExecParamRawExpr*> &rescan_params,
-                                                   bool for_nlj,
-                                                   bool &can_batch_rescan)
-{
-  int ret = OB_SUCCESS;
-  can_batch_rescan = false;
-  bool has_exec_param = false;
-  if (OB_ISNULL(op)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(op));
-  } else if (OB_FAIL(check_exec_param_filter_exprs(op->get_startup_exprs(), has_exec_param))) {
-    LOG_WARN("failed to check exec param filter exprs", K(ret));
-  } else if (has_exec_param) {
-    /* do nothing */
-  } else if (log_op_def::LOG_LIMIT == op->get_type()
-             || (op->is_table_scan() && NULL != static_cast<const ObLogTableScan*>(op)->get_limit_expr())) {
-    /* do nothing */
-  } else if (op->is_table_scan()) {
-    const ObLogTableScan *table_scan = static_cast<const ObLogTableScan*>(op);
-    if (!table_scan->use_das() || !table_scan->can_batch_rescan()
-        || table_scan->get_range_conditions().empty() || NULL == table_scan->get_est_cost_info()) {
-      can_batch_rescan = false;
-    } else if (OB_FAIL(check_exec_param_filter_exprs(table_scan->get_est_cost_info()->pushdown_prefix_filters_,
-                                                     rescan_params,
-                                                     can_batch_rescan))) {
-      LOG_WARN("failed to check exec param filter exprs", K(ret));
-    }
-  } else if (log_op_def::LOG_SUBPLAN_SCAN == op->get_type()) {
-    if (OB_FAIL(SMART_CALL(check_can_batch_rescan_compat(op->get_child(0), rescan_params, for_nlj, can_batch_rescan)))) {
-      LOG_WARN("failed to smart call check check op can batch", K(ret));
-    }
-  } else if (!for_nlj) {
-    /* do nothing */
-  } else if (1 == op->get_num_of_child() || log_op_def::LOG_SET == op->get_type()) {
-    can_batch_rescan = true;
-    for (int64_t i = 0; OB_SUCC(ret) && can_batch_rescan && i < op->get_num_of_child(); ++i) {
-      if (OB_FAIL(SMART_CALL(check_can_batch_rescan_compat(op->get_child(i), rescan_params, for_nlj, can_batch_rescan)))) {
-        LOG_WARN("failed to check batch nlj", K(ret));
       } else {/* do nothing */}
     }
   } else {

@@ -849,7 +849,7 @@ int ObInListResolver::try_merge_inlists(ObExprResolveContext &resolve_ctx,
     } else if (OB_ISNULL(stmt->get_query_ctx())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret));
-    } else {
+    } else if (NULL != stmt) {
       is_prepare_stmt = stmt->get_query_ctx()->is_prepare_stmt();
     }
     if (OB_FAIL(ret)) {

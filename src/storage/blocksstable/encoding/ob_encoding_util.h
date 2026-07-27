@@ -22,7 +22,7 @@
 #include "common/object/ob_object.h"
 #include "common/ob_action_flag.h"
 #include "storage/blocksstable/ob_datum_row.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {

@@ -105,10 +105,6 @@ public:
                          share::schema::ObSchemaGetterGuard *schema_guard,
                          share::schema::DropTableIdHashSet *drop_table_set);
 
-  virtual int update_tablegroup(ObSchemaGetterGuard &schema_guard,
-                                ObTableSchema &new_table_schema,
-                                common::ObISQLClient &sql_client,
-                                const common::ObString *ddl_stmt_str = NULL);
   virtual int log_core_operation(common::ObISQLClient &sql_client,
                                  const int64_t schema_version);
   virtual int log_sys_operation(common::ObISQLClient &sql_client,
@@ -200,10 +196,6 @@ public:
                            const ObTableSchema &ori_table,
                            const ObTableSchema &inc_table,
                            const int64_t schema_version);
-  int alter_inc_part_policy(ObISQLClient &sql_client, const ObTableSchema &table_schema,
-      const ObTableSchema &inc_table_schema, const int64_t new_schema_version);
-  int alter_inc_subpart_policy(ObISQLClient &sql_client, const ObTableSchema &table_schema,
-      const ObTableSchema &inc_table_schema, const int64_t new_schema_version);
   int drop_inc_part_info(
       common::ObISQLClient &sql_client,
       const ObTableSchema &ori_table,
@@ -405,9 +397,6 @@ private:
                     const bool update_object_status_ignore_version,
                     share::ObDMLSqlSplicer &dml,
                     const bool is_history = false);
-  static int check_tenant_data_version_in_gen_table_dml(
-      const ObTableSchema &table,
-      uint64_t &data_version);
   int gen_table_options_dml(const ObTableSchema &table,
                             const bool update_object_status_ignore_version,
                             share::ObDMLSqlSplicer &dml);

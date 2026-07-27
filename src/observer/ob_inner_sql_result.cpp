@@ -18,7 +18,7 @@
 
 #include "ob_inner_sql_result.h"
 
-#include "omt/ob_tenant.h"
+#include "omt/ob_server_runtime.h"
 #include "observer/ob_inner_sql_connection.h"
 
 namespace oceanbase
@@ -44,7 +44,7 @@ inline int ObInnerSQLResult::check_extend_value(const common::ObObj &obj)
   return ret;
 }
 
-ObInnerSQLResult::ObInnerSQLResult(ObSQLSessionInfo &session, bool is_inner_session, ObDiagnosticInfo *di)
+ObInnerSQLResult::ObInnerSQLResult(ObSQLSessionInfo &session, bool is_inner_session)
     : column_map_created_(false), column_indexed_(false), column_map_(),
       mem_context_(nullptr),
       mem_context_destroy_guard_(mem_context_),
@@ -56,17 +56,15 @@ ObInnerSQLResult::ObInnerSQLResult(ObSQLSessionInfo &session, bool is_inner_sess
       store_first_row_(false),
       iter_end_(false),
       is_read_(true),
-      has_tenant_resource_(true),
-      tenant_(nullptr),
+      runtime_(nullptr),
       is_inner_session_(is_inner_session),
-      inner_sql_di_(di),
       interrupt_checker_()
 
 {
   sql_ctx_.exec_type_ = InnerSql;
 }
 
-int ObInnerSQLResult::init(bool has_tenant_resource)
+int ObInnerSQLResult::init()
 {
   int ret = OB_SUCCESS;
   lib::ContextParam param;
@@ -77,19 +75,16 @@ int ObInnerSQLResult::init(bool has_tenant_resource)
     .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
   if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
     LOG_WARN("create memory entity failed", K(ret));
-  } else if (has_tenant_resource) {
-    if (OB_FAIL(GCTX.omt_->get_tenant_with_tenant_lock(tenant_))) {
-      if (OB_IN_STOP_STATE == ret) {
-        ret = OB_TENANT_NOT_IN_SERVER;
-      }
-      LOG_WARN("get tenant lock fail", K(ret));
+  } else if (OB_FAIL(GCTX.server_runtime_controller_->lock_runtime(runtime_))) {
+    if (OB_IN_STOP_STATE == ret) {
+      ret = OB_SERVER_RUNTIME_NOT_READY;
     }
+    LOG_WARN("failed to lock server runtime", K(ret));
   }
   if (OB_SUCC(ret)) {
-    set_has_tenant_resource(has_tenant_resource);
     {
-      // single-replica: inner sql always executes locally (resource RPC removed).
-      MOD_SCOPE {
+      // Inner SQL executes in the server runtime that owns this result.
+      SERVER_MODULE_SCOPE {
         result_set_ = new (buf_) ObResultSet(session_, mem_context_->get_arena_allocator());
         result_set_->set_is_inner_result_set(true);
       }
@@ -99,26 +94,15 @@ int ObInnerSQLResult::init(bool has_tenant_resource)
   return ret;
 }
 
-int ObInnerSQLResult::init()
-{
-  return init(true);
-}
-
 ObInnerSQLResult::~ObInnerSQLResult()
 {
   close();
   if (result_set_ != nullptr) {
-    int ret = OB_SUCCESS;
-    MAKE_TENANT_SWITCH_SCOPE_GUARD(tenant_guard);
-    if (has_tenant_resource() && OB_FAIL(tenant_guard.switch_to(tenant_))) {
-      LOG_WARN("switch tenant fail", K(ret));
-    } else {
-      result_set_->~ObResultSet();
-    }
+    result_set_->~ObResultSet();
   }
-  if (tenant_ != nullptr) {
-    tenant_->unlock();
-    tenant_ = nullptr;
+  if (runtime_ != nullptr) {
+    runtime_->unlock();
+    runtime_ = nullptr;
   }
 }
 
@@ -126,19 +110,14 @@ int ObInnerSQLResult::open()
 {
   int ret = OB_SUCCESS;
   execute_start_ts_ = ObTimeUtility::current_time();
-  MAKE_TENANT_SWITCH_SCOPE_GUARD(tenant_guard);
-  ObInnerSqlWaitGuard guard(is_inner_session(), inner_sql_di_, &session_);
+  ObInnerSqlWaitGuard guard(is_inner_session(), &session_);
   ObInterruptCheckerGuard interrupt_guard(interrupt_checker_);
 
-  if (has_tenant_resource()) {
-    result_set().get_exec_context().set_plan_start_time(execute_start_ts_);
-  }
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (has_tenant_resource() && OB_FAIL(tenant_guard.switch_to(tenant_))) {
-    LOG_WARN("switch tenant failed", K(ret));
   } else {
+    result_set().get_exec_context().set_plan_start_time(execute_start_ts_);
     SQL_INFO_GUARD(session_.get_current_query_string(), session_.get_cur_sql_id());
     ObInnerSQLSessionGuard sess_guard(&session_);
     bool is_select = ObStmt::is_select_stmt(result_set_->get_stmt_type());
@@ -146,7 +125,7 @@ int ObInnerSQLResult::open()
       if (opened_) {
         ret = OB_INIT_TWICE;
         LOG_WARN("result set already open", K(ret));
-      } else if (has_tenant_resource() && OB_FAIL(result_set_->open())) {
+      } else if (OB_FAIL(result_set_->open())) {
         result_set_->refresh_location_cache_by_errno(true, ret);
         LOG_WARN("open result set failed", K(ret));
         // move after precess_retry().
@@ -160,7 +139,7 @@ int ObInnerSQLResult::open()
             ret = OB_SUCCESS;
           } else {
             result_set_->refresh_location_cache_by_errno(true, ret);
-            LOG_WARN("get_next_row failed", K(ret), K(has_tenant_resource()));
+            LOG_WARN("get_next_row failed", K(ret));
           }
         } else {
           store_first_row_ = true;
@@ -206,17 +185,12 @@ int ObInnerSQLResult::inner_close()
   ObInnerSQLSessionGuard sess_guard(&session_);
   ObInterruptCheckerGuard interrupt_guard(interrupt_checker_);
 
-  MAKE_TENANT_SWITCH_SCOPE_GUARD(tenant_guard);
-  ObInnerSqlWaitGuard guard(is_inner_session(), inner_sql_di_, &session_);
+  ObInnerSqlWaitGuard guard(is_inner_session(), &session_);
 
-  if (has_tenant_resource() && OB_FAIL(tenant_guard.switch_to(tenant_))) {
-    LOG_WARN("switch tenant failed", K(ret));
-  } else {
-    WITH_CONTEXT(mem_context_) {
-      if (has_tenant_resource() && OB_FAIL(result_set_->close())) {
-        result_set_->refresh_location_cache_by_errno(true, ret);
-        LOG_WARN("result set close failed", K(ret));
-      }
+  WITH_CONTEXT(mem_context_) {
+    if (OB_FAIL(result_set_->close())) {
+      result_set_->refresh_location_cache_by_errno(true, ret);
+      LOG_WARN("result set close failed", K(ret));
     }
   }
   opened_ = false;
@@ -228,8 +202,7 @@ int ObInnerSQLResult::inner_close()
 int ObInnerSQLResult::next()
 {
   int ret = OB_SUCCESS;
-  MAKE_TENANT_SWITCH_SCOPE_GUARD(tenant_guard);
-  ObInnerSqlWaitGuard guard(is_inner_session(), inner_sql_di_, &session_);
+  ObInnerSqlWaitGuard guard(is_inner_session(), &session_);
   ACTIVE_SESSION_FLAG_SETTER_GUARD(in_sql_execution);
   ObInterruptCheckerGuard interrupt_guard(interrupt_checker_);
   if (!opened_) {
@@ -237,8 +210,6 @@ int ObInnerSQLResult::next()
     LOG_WARN("not opened", K(ret));
   } else if (iter_end_) {
     ret = OB_ITER_END;
-  } else if (has_tenant_resource() && OB_FAIL(tenant_guard.switch_to(tenant_))) {
-    LOG_WARN("switch tenant failed", K(ret));
   } else if (store_first_row_) {
     store_first_row_ = false;
   } else {
@@ -246,7 +217,7 @@ int ObInnerSQLResult::next()
     SQL_INFO_GUARD(session_.get_current_query_string(), session_.get_cur_sql_id());
     ObInnerSQLSessionGuard sess_guard(&session_);
     WITH_CONTEXT(mem_context_) {
-      if (has_tenant_resource() && OB_FAIL(result_set_->get_next_row(row_))) {
+      if (OB_FAIL(result_set_->get_next_row(row_))) {
         if (OB_ITER_END != ret) {
           result_set_->refresh_location_cache_by_errno(true, ret);
           LOG_WARN("get next row failed", K(ret));

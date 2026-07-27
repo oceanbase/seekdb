@@ -38,7 +38,7 @@ namespace storage
 {
 class ObIMemtable;
 class ObFreezer;
-class ObTenantMetaMemMgr;
+class ObStorageMetaMemMgr;
 }
 
 namespace transaction
@@ -59,7 +59,7 @@ public:
   // to alloc the memtable.
   virtual int init(const common::ObTabletID &tablet_id,
                    storage::ObFreezer *freezer,
-                   storage::ObTenantMetaMemMgr *t3m) override;
+                   storage::ObStorageMetaMemMgr *t3m) override;
   virtual void destroy() override;
 
   virtual int create_memtable(const storage::CreateMemtableArg &arg) override;

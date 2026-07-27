@@ -91,11 +91,11 @@ int ObIDService::submit_log_(const int64_t last_id, const int64_t limited_id)
     }
     if (submit_log_ts_ == OB_INVALID_TIMESTAMP) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(WARN, "invalid argument", K(ret), K_(service_type), K_(latest_log_ts), K_(self));
+      TRANS_LOG(WARN, "invalid argument", K(ret), K_(service_type), K_(latest_log_ts));
     } else if (ObTimeUtility::current_time() - submit_log_ts_ > SUBMIT_LOG_ALARM_INTERVAL) {
       if (log_interval_.reach()) {
         // ignore ret
-        TRANS_LOG(ERROR, "submit log callback use too mush time", K_(submit_log_ts), K_(cb), K_(service_type), K_(latest_log_ts), K_(self));
+        TRANS_LOG(ERROR, "submit log callback use too mush time", K_(submit_log_ts), K_(cb), K_(service_type), K_(latest_log_ts));
       }
     }
   } else if (last_id < 0 || limited_id < 0) {
@@ -303,7 +303,7 @@ int ObIDService::get_number(const int64_t range, const int64_t base_id, int64_t 
     submit_log_with_lock_(pre_allocated_id, pre_allocated_id);
   }
   // thread local, 4 seconds
-  // TODO, tenant level
+  // Rate-limit this process-wide diagnostic.
   if (TC_REACH_TIME_INTERVAL(4000000)) {
     TRANS_LOG(INFO, "get number", K(ret), K(service_type_), K(range), K(base_id), K(start_id), K(end_id));
   }

@@ -21,11 +21,11 @@
 #define protected public
 #include "lib/ob_errno.h"
 #include "common/rowkey/ob_store_rowkey.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ls/ob_freezer.h"
 #include "storage/memtable/ob_memtable.h"
 #include "storage/tablet/ob_tablet_memtable_mgr.h"
-#include "storage/tx_storage/ob_tenant_freezer.h"
+#include "storage/tx_storage/ob_memstore_freezer.h"
 #include "storage/blocksstable/ob_datum_row.h"
 #include "storage/memtable/ob_memtable_context.h"
 #include "storage/tx/ob_tx_ctx.h"
@@ -93,7 +93,7 @@ void* ObMemstoreAllocator::alloc(AllocHandle& handle, int64_t size)
 namespace storage
 {
 // override the function make it do nothing
-int ObTenantFreezer::unset_tenant_slow_freeze(const common::ObTabletID &tablet_id)
+int ObMemstoreFreezer::unset_slow_freeze(const common::ObTabletID &tablet_id)
 {
   UNUSED(tablet_id);
   return OB_SUCCESS;
@@ -138,9 +138,9 @@ int check_sequence_set_violation(const concurrent_control::ObWriteFlag ,
 class TestMemtable : public testing::Test
 {
 public:
-  TestMemtable() : tenant_base_(1),tablet_id_(1000),rowkey_cnt_(1) { freezer_.init(&ls_); }
+  TestMemtable() : runtime_state_(),tablet_id_(1000),rowkey_cnt_(1) { freezer_.init(&ls_); }
   void SetUp() override {
-    share::ObTenantEnv::set_tenant(&tenant_base_);
+    share::g_server_runtime = &runtime_state_;
     // mock columns
     EXPECT_EQ(OB_SUCCESS, mock_col_desc());
     // mock iterator parameter
@@ -149,7 +149,7 @@ public:
   void TearDown() override {
     reset_iter_param();
     columns_.reset();
-    share::ObTenantEnv::set_tenant(nullptr);
+    share::g_server_runtime = &share::g_bootstrap_server_runtime;
   }
   int init_memtable(ObMemtable &mt_table)
   {
@@ -214,7 +214,6 @@ public:
   {
     int ret = OB_SUCCESS;
     int64_t micro_block_size = 16 * 1024;
-    const uint64_t tenant_id = 1;
     const uint64_t table_id = 777;
     share::schema::ObColumnSchemaV2 column;
 
@@ -222,8 +221,6 @@ public:
     table_schema.reset();
     ret = table_schema.set_table_name("test_merge_multi_version");
     ASSERT_EQ(OB_SUCCESS, ret);
-    table_schema.set_tenant_id(tenant_id);
-    table_schema.set_tablegroup_id(1);
     table_schema.set_database_id(1);
     table_schema.set_table_id(table_id);
     table_schema.set_rowkey_column_num(3);
@@ -268,7 +265,7 @@ public:
   }
 public:
   ObLS ls_;
-  share::ObTenantBase tenant_base_;
+  share::ObServerRuntimeState runtime_state_;
   storage::ObFreezer freezer_;
   storage::ObTabletMemtableMgr memtable_mgr_;
   ObTabletID tablet_id_;

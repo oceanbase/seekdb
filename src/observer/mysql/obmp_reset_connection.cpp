@@ -57,7 +57,7 @@ int ObMPResetConnection::process()
     session->update_last_active_time();
     session->set_query_start_time(ObTimeUtility::current_time());
     LOG_TRACE("begin reset connection. ", K(session->get_server_sid()));
-    if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(schema_guard))) {
       OB_LOG(WARN,"fail get schema guard", K(ret));
     } else if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_variable_schema))) {
       LOG_WARN("get sys variable schema failed", K(ret));
@@ -98,8 +98,7 @@ int ObMPResetConnection::process()
      *  8. Resets the value of LAST_INSERT_ID() to 0.
      *  9. Releases locks acquired with GET_LOCK(). (OB not support GET_LOCK())
      *  10.OB unique design
-     *      10.1  pl debug
-     *      10.2  package state
+     *      10.1  package state
     */
 
     // 1. Rolls back any active transactions and resets autocommit mode.
@@ -192,14 +191,8 @@ int ObMPResetConnection::process()
 
     // 10. OB unique design
     if (OB_SUCC(ret)) {
-      // 10.1 pl debug function, pl debug does not support distributed debugging, but calling it will have no side effects
-      // 10.2 Non-distributed needs it, distributed also needs it, used for cleaning the global variable values of the package
+      // Non-distributed needs it, distributed also needs it, used for cleaning the global variable values of the package
       session->reset_all_package_state();
-      // 10.3 currval cleanup
-      session->reuse_all_sequence_value();
-      // reuse_context_map does not use malloc free memory, which will lead to memory leaks,
-      // mem_context_ cleanup will generate unfree error log
-      //session->reuse_context_map();
 
       // 10.5 warning buf
       session->reset_warnings_buf();
@@ -207,9 +200,6 @@ int ObMPResetConnection::process()
 
       // 10.6 client identifier
       session->get_client_identifier_for_update().reset();
-
-      // 10.8 clean mem context for context (dbms_session.create_context)
-      session->destory_mem_context();
     }
 
 

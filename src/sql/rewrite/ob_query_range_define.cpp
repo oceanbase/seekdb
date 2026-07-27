@@ -414,9 +414,7 @@ void ObPreRangeGraph::reset()
   column_metas_.reset();
   range_map_.expr_final_infos_.reset();
   range_map_.in_params_.reset();
-  skip_scan_offset_ = -1;
   range_exprs_.reset();
-  ss_range_exprs_.reset();
   unprecise_range_exprs_.reset();
   total_range_sizes_.reset();
   flags_ = 0;
@@ -434,12 +432,9 @@ int ObPreRangeGraph::deep_copy(const ObPreRangeGraph &other)
   is_equal_range_ = other.is_equal_range_;
   is_get_ = other.is_get_;
   contain_exec_param_ = other.contain_exec_param_;
-  skip_scan_offset_ = other.skip_scan_offset_;
   flags_ = other.flags_;
   if (OB_FAIL(range_exprs_.assign(other.range_exprs_))) {
     LOG_WARN("failed to assign range exprs");
-  } else if (OB_FAIL(ss_range_exprs_.assign(other.ss_range_exprs_))) {
-    LOG_WARN("failed to assign ss range exprs");
   } else if (OB_FAIL(unprecise_range_exprs_.assign(other.unprecise_range_exprs_))) {
     LOG_WARN("failed to assign unprecise range exprs");
   } else if (OB_FAIL(total_range_sizes_.assign(other.total_range_sizes_))) {
@@ -687,28 +682,6 @@ int ObPreRangeGraph::get_tablet_ranges(common::ObIAllocator &allocator,
   ObRangeGenerator range_generator(allocator, exec_ctx, this, ranges, all_single_value_ranges, dtc_params, mbr_filters);
   if (OB_FAIL(range_generator.generate_ranges())) {
     LOG_WARN("failed to generate ranges");
-  }
-  return ret;
-}
-
-int ObPreRangeGraph::get_ss_tablet_ranges(common::ObIAllocator &allocator,
-                                          ObExecContext &exec_ctx,
-                                          ObQueryRangeArray &ss_ranges,
-                                          const common::ObDataTypeCastParams &dtc_params) const
-{
-  int ret = OB_SUCCESS;
-  ObMbrFilterArray mbr_filter;
-  ss_ranges.reuse();
-  if (!is_ss_range()) {
-    // do nothing
-  } else {
-    bool dummy_all_single_value = false;
-    ObRangeGenerator range_generator(allocator, exec_ctx, this, ss_ranges, dummy_all_single_value, dtc_params, mbr_filter);
-    if (OB_FAIL(range_generator.generate_ss_ranges())) {
-      LOG_WARN("failed to generate ranges");
-    } else {
-      LOG_DEBUG("get skip range success", K(ss_ranges));
-    }
   }
   return ret;
 }
@@ -1146,7 +1119,6 @@ OB_DEF_SERIALIZE(ObPreRangeGraph)
     }
   }
   OB_UNIS_ENCODE(range_map_);
-  OB_UNIS_ENCODE(skip_scan_offset_);
   OB_UNIS_ENCODE(flags_);
   if (OB_SUCC(ret)) {
     int64_t count = fast_final_pos_arr_.count();
@@ -1200,7 +1172,6 @@ OB_DEF_DESERIALIZE(ObPreRangeGraph)
     }
   }
   OB_UNIS_DECODE(range_map_);
-  OB_UNIS_DECODE(skip_scan_offset_);
   OB_UNIS_DECODE(flags_);
   if (OB_SUCC(ret)) {
     fast_final_pos_arr_.reset();
@@ -1237,7 +1208,6 @@ OB_DEF_SERIALIZE_SIZE(ObPreRangeGraph)
     OB_UNIS_ADD_LEN(*column_metas_.at(i));
   }
   OB_UNIS_ADD_LEN(range_map_);
-  OB_UNIS_ADD_LEN(skip_scan_offset_);
   OB_UNIS_ADD_LEN(flags_);
   count = fast_final_pos_arr_.count();
   OB_UNIS_ADD_LEN(count);

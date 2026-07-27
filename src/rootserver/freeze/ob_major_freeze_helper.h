@@ -16,7 +16,6 @@
 
 #ifndef OCEANBASE_ROOTSERVER_FREEZE_OB_MAJOR_FREEZE_HELPER_H_
 #define OCEANBASE_ROOTSERVER_FREEZE_OB_MAJOR_FREEZE_HELPER_H_
-#include "rootserver/freeze/ob_major_freeze_rpc_define.h"
 #include "share/scn.h"
 #include "rootserver/freeze/ob_major_freeze_util.h"
 
@@ -33,66 +32,22 @@ struct ObMajorFreezeParam
 {
 public:
   ObMajorFreezeParam()
-    : freeze_info_array_(), freeze_all_(false), 
-      freeze_all_user_(false), freeze_all_meta_(false),
-      freeze_reason_(MF_REASON_MAX)
+    : freeze_reason_(MF_REASON_MAX)
   {}
 
   void reset()
   {
-    freeze_info_array_.reset();
-    freeze_all_ = false;
-    freeze_all_user_ = false;
-    freeze_all_meta_ = false;
     freeze_reason_ = MF_REASON_MAX;
   }
 
   bool is_valid() const
   {
-    return true;
+    return is_valid_major_freeze_reason(freeze_reason_);
   }
 
-  int add_freeze_info();
+  TO_STRING_KV("freeze_reason", major_freeze_reason_to_str(freeze_reason_));
 
-  TO_STRING_KV(K_(freeze_info_array), K_(freeze_all), 
-               K_(freeze_all_user), K_(freeze_all_meta),
-               "freeze_reason", major_freeze_reason_to_str(freeze_reason_));
-
-  common::ObArray<obcall::ObSimpleFreezeInfo> freeze_info_array_;
-  bool freeze_all_;
-  bool freeze_all_user_;
-  bool freeze_all_meta_;
   ObMajorFreezeReason freeze_reason_;
-};
-
-struct ObTenantAdminMergeParam
-{
-public:
-  ObTenantAdminMergeParam()
-    : specified_(false), need_all_(false), 
-      need_all_user_(false), need_all_meta_(false)
-  {}
-
-  void reset()
-  {
-    specified_ = false;
-    need_all_ = false;
-    need_all_user_ = false;
-    need_all_meta_ = false;
-  }
-
-  bool is_valid() const
-  {
-    return (specified_ || 
-            (need_all_ || need_all_user_ || need_all_meta_));
-  }
-
-  TO_STRING_KV(K_(specified), K_(need_all), K_(need_all_user), K_(need_all_meta));
-
-  bool specified_;
-  bool need_all_;
-  bool need_all_user_;
-  bool need_all_meta_;
 };
 
 struct ObTabletMajorFreezeParam
@@ -116,20 +71,15 @@ public:
   ObMajorFreezeHelper() {}
   ~ObMajorFreezeHelper() {}
 
-  // @param, contains some tenants which need to launch major freeze
-  // @merge_results, save each tenant's major_freeze result
-  static int major_freeze(const ObMajorFreezeParam &param,
-                          common::ObIArray<int> &merge_results);
-
   static int major_freeze(const ObMajorFreezeParam &param);
 
   static int tablet_major_freeze(const ObTabletMajorFreezeParam &param);
 
-  static int suspend_merge(const ObTenantAdminMergeParam &param);
+  static int suspend_merge();
 
-  static int resume_merge(const ObTenantAdminMergeParam &param);
+  static int resume_merge();
 
-  static int clear_merge_error(const ObTenantAdminMergeParam &param);
+  static int clear_merge_error();
 
   static int get_frozen_status(const share::SCN &frozen_scn, 
                                share::ObFreezeInfo &frozen_status);
@@ -140,34 +90,18 @@ public:
   static int get_frozen_scn(share::SCN &frozen_scn, ObISQLClient *proxy);
 
 private:
-  static int get_freeze_info(
-      const ObMajorFreezeParam &param,
-      common::ObIArray<obcall::ObSimpleFreezeInfo> &freeze_info_array);
-  static int get_all_tenant_freeze_info(
-      common::ObIArray<obcall::ObSimpleFreezeInfo> &freeze_info_array);
-  static int get_specific_tenant_freeze_info( 
-      bool freeze_all, 
-      bool freeze_all_user, 
-      bool freeze_all_meta, 
-      common::ObIArray<obcall::ObSimpleFreezeInfo> &freeze_info_array);
-  static int check_tenant_is_restore(bool &is_restore);
+  enum class AdminMergeType
+  {
+    SUSPEND,
+    RESUME,
+    CLEAR_ERROR,
+  };
 
-  static int do_major_freeze(
-      const ObMajorFreezeReason freeze_reason,
-      const common::ObIArray<obcall::ObSimpleFreezeInfo> &freeze_info_array,
-      common::ObIArray<int> &merge_results);
-  static int do_one_tenant_major_freeze(
-      const ObMajorFreezeReason freeze_reason,
-      const obcall::ObSimpleFreezeInfo &freeze_info);
+  static int check_runtime_ready(bool &is_restore);
+  static int do_local_major_freeze(const ObMajorFreezeReason freeze_reason);
 
-  static int do_tenant_admin_merge(
-      const ObTenantAdminMergeParam &param,
-      const obcall::ObTenantAdminMergeType &admin_type);
-  static int do_one_tenant_admin_merge(const obcall::ObTenantAdminMergeType &admin_type);
-  static int add_user_warning(const char *buf);
-
+  static int do_admin_merge(const AdminMergeType admin_type);
 private:
-  static const int64_t MAX_PROCESS_TIME_US = 10 * 1000 * 1000L;
 };
 
 } // namespace rootserver

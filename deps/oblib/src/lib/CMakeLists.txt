@@ -6,10 +6,12 @@ ob_set_subtarget(oblib_lib downsink_qt
   thread/ob_balance_filter.cpp
 )
 
+ob_set_subtarget(oblib_lib errsim_module_type
+  errsim_module/ob_errsim_module_type.cpp
+)
+
 if (OB_ERRSIM)
-  ob_set_subtarget(oblib_lib errsim_module
-    errsim_module/ob_errsim_module_type.cpp
-    errsim_module/ob_tenant_errsim_event.cpp
+  ob_set_subtarget(oblib_lib errsim_module_interface
     errsim_module/ob_errsim_module_interface.cpp
   )
 endif()
@@ -40,7 +42,6 @@ ob_set_subtarget(oblib_lib common
   ob_define.cpp
   ob_lib_config.cpp
   ob_name_id_def.cpp
-  ob_replica_define.cpp
   ob_running_mode.cpp
   runtime.cpp
   worker.cpp
@@ -190,7 +191,7 @@ ob_set_subtarget(oblib_lib thread
   thread/protected_stack_allocator.cpp
   thread/thread.cpp
   thread/threads.cpp
-  thread/ob_tenant_hook.cpp
+  thread/ob_thread_hook.cpp
   thread/ob_pthread.cpp
   thread/ob_thread_name.cpp
 )
@@ -210,10 +211,6 @@ ob_set_subtarget(oblib_lib utility
 
 ob_set_subtarget(oblib_lib ssl
   ssl/ob_ssl_config.cpp
-)
-
-ob_set_subtarget(oblib_lib vtoa
-  vtoa/ob_vtoa_util.cpp
 )
 
 ob_set_subtarget(oblib_lib ob_vector_util
@@ -240,15 +237,11 @@ ob_set_subtarget(ob_malloc_object_list common_alloc
   alloc/ob_malloc_allocator.cpp
   alloc/ob_malloc_callback.cpp
   alloc/ob_malloc_sample_struct.cpp
-  alloc/ob_tenant_ctx_allocator.cpp
+  alloc/ob_ctx_allocator.cpp
   alloc/object_mgr.cpp
   alloc/object_set.cpp
-  alloc/memory_sanity.cpp
-  alloc/ob_futex_v2.cpp
-  alloc/ob_latch_v2.cpp
   resource/achunk_mgr.cpp
   resource/ob_resource_mgr.cpp
-  resource/ob_affinity_ctrl.cpp
   allocator/ob_allocator_v2.cpp
   allocator/ob_block_alloc_mgr.cpp
   allocator/ob_concurrent_fifo_allocator.cpp
@@ -257,7 +250,6 @@ ob_set_subtarget(ob_malloc_object_list common_alloc
   allocator/ob_fifo_allocator.cpp
   allocator/ob_hazard_ref.cpp
   allocator/ob_malloc.cpp
-  allocator/ob_mem_leak_checker.cpp
   utility/ob_mod_define.cpp
   allocator/ob_page_manager.cpp
   allocator/ob_slice_alloc.cpp
@@ -266,11 +258,6 @@ ob_set_subtarget(ob_malloc_object_list common_alloc
 
 ob_add_new_object_target(ob_malloc_object ob_malloc_object_list)
 target_link_libraries(ob_malloc_object oblib_base_without_pass)
-if (ENABLE_SANITY)
-  if (${ARCHITECTURE} STREQUAL "x86_64" OR ${ARCHITECTURE} STREQUAL "aarch64")
-    target_link_libraries(ob_malloc_object ${DEVTOOLS_DIR}/lib64/libsanity.a)
-  endif()
-endif()
 add_library(ob_malloc STATIC)
 target_link_libraries(ob_malloc ob_malloc_object)
 

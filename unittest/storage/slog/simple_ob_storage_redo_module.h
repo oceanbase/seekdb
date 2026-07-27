@@ -32,7 +32,7 @@
 #include "src/storage/ls/ob_ls.h"
 #include "src/storage/tx_storage/ob_ls_service.h"
 #include "src/storage/tablet/ob_tablet.h"
-#include "src/storage/meta_store/ob_tenant_storage_meta_service.h"
+#include "src/storage/meta_store/ob_local_storage_meta_service.h"
 #include "src/share/rc/ob_module_provider.h"
 
 namespace oceanbase
@@ -197,7 +197,7 @@ int SimpleObStorageModule::replay(const ObRedoModuleReplayParam &param)
   int64_t pos = 0;
   ObIRedoModule::parse_cmd(cmd, main_type, sub_type);
 
-  if (ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE != main_type) {
+  if (ObRedoLogMainType::OB_REDO_LOG_LOCAL_STORAGE != main_type) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_REDO_LOG(WARN, "The main type is wrong.", K(main_type));
   } else if (ObRedoLogSubType::OB_REDO_LOG_UPDATE_TABLET == sub_type) {
@@ -332,7 +332,7 @@ int SimpleObStorageModule::read_from_slog(const ObMetaDiskAddr &addr,
     char *buf, const int64_t buf_len, int64_t &pos)
 {
   int ret = OB_SUCCESS;
-  ObStorageLogger &logger = share::g_mp->tenant_storage_meta_service()->get_slogger();
+  ObStorageLogger &logger = share::g_mp->local_storage_meta_service()->get_slogger();
 
   if (OB_UNLIKELY(!addr.is_valid()
                || !addr.is_file()

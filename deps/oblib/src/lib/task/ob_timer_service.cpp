@@ -21,8 +21,10 @@
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/profile/ob_trace_id.h"
 
-// Weak fallback; strong definition in share/rc/ob_tenant_base.cpp.
-void __attribute__((weak, noinline)) lib_mtl_switch(::oceanbase::lib::IRunWrapper *run_wrapper, std::function<void()> fn)
+// Weak fallback; strong definition in share/rc/ob_server_runtime.cpp.
+void __attribute__((weak, noinline)) lib_server_runtime_dispatch(
+    ::oceanbase::lib::IRunWrapper *run_wrapper,
+    std::function<void()> fn)
 {
   UNUSED(run_wrapper);
   fn();
@@ -35,11 +37,11 @@ namespace common
 using namespace obutil;
 using namespace lib;
 
-uint64_t OB_WEAK_SYMBOL mtl_get_id()
+uint64_t OB_WEAK_SYMBOL server_runtime_id()
 {
   int ret = OB_SUCCESS;
-  OB_LOG(WARN, "call weak mtl_get_id");
-  return OB_SERVER_TENANT_ID;
+  OB_LOG(WARN, "call weak server_runtime_id");
+  return OB_SERVER_RUNTIME_ID;
 }
 
 struct CompareForSet {
@@ -130,7 +132,7 @@ void ObTimerTaskThreadPool::handle(void *task_token)
       token->task_->runTimerTask();
     };
     if (NULL != token->timer_->get_run_wrapper()) {
-      lib_mtl_switch(token->timer_->get_run_wrapper(), fn);
+      lib_server_runtime_dispatch(token->timer_->get_run_wrapper(), fn);
     } else {
       fn();
     }
@@ -202,7 +204,7 @@ void ObTimerTaskThreadPool::clear_ext_tname()
   }
 }
 
-ObTimerService::ObTimerService( /* = OB_SERVER_TENANT_ID */)
+ObTimerService::ObTimerService( /* = OB_SERVER_RUNTIME_ID */)
   : is_never_started_(true),
     is_stopped_(true),
     is_destroyed_(false),

@@ -22,11 +22,11 @@
 #include "sql/engine/ob_phy_operator_type.h"
 #include "sql/engine/table/ob_virtual_table_ctx.h"
 #include "sql/executor/ob_task_executor_ctx.h"
+#include "sql/executor/ob_task_info.h"
 #include "sql/optimizer/ob_log_plan_factory.h"
 #include "sql/monitor/ob_exec_stat.h"
 #include "sql/monitor/ob_exec_stat_collector.h"
 #include "sql/ob_sql_trans_control.h"
-#include "sql/engine/user_defined_function/ob_udf_ctx_mgr.h"
 #include "sql/engine/px/ob_px_dtl_msg.h"
 #include "sql/engine/px/ob_granule_util.h"
 #include "sql/optimizer/ob_pwj_comparer.h"
@@ -302,7 +302,7 @@ public:
   /**
    * @brief get session_mgr.
    */
-  inline ObSQLSessionMgr *get_session_mgr() const;
+  inline ObSQLSessionMgr *gesession_pool() const;
 
   /**
    * @brief get execution stat collector on demand
@@ -318,11 +318,6 @@ public:
    * @brief whether px target was acquired for this query
    */
   bool get_admission_acquired() const;
-
-  /**
-   * @brief get admission addr set
-   */
-  int get_admission_addr_map(hash::ObHashMap<ObAddr, int64_t> *&addr_map);
 
   /**
    * @brief get allocator.
@@ -368,15 +363,6 @@ public:
   int check_status_ignore_interrupt();
   int fast_check_status_ignore_interrupt(const int64_t n = 0xFF);
 
-  void set_outline_params_wrapper(const share::schema::ObOutlineParamsWrapper *params)
-  {
-    outline_params_wrapper_ = params;
-  }
-  const share::schema::ObOutlineParamsWrapper *get_outline_params_wrapper() const
-  {
-    return outline_params_wrapper_;
-  }
-
   void set_execution_id(uint64_t execution_id) { execution_id_ = execution_id; }
   uint64_t get_execution_id() const { return execution_id_; }
 
@@ -387,15 +373,6 @@ public:
   ObSqlCtx *get_sql_ctx() { return sql_ctx_; }
   const ObSqlCtx *get_sql_ctx() const { return sql_ctx_; }
   pl::ObPLContext *get_pl_stack_ctx() { return pl_stack_ctx_; }
-  inline bool use_remote_sql() const
-  {
-    bool bret = false;
-    if (OB_NOT_NULL(phy_plan_ctx_)) {
-      bret = (!phy_plan_ctx_->get_remote_sql_info().remote_sql_.empty());
-    }
-    return bret;
-  }
-
   bool &get_need_disconnect_for_update() { return need_disconnect_; }
   bool need_disconnect() const { return need_disconnect_; }
   void set_need_disconnect(bool need_disconnect) { need_disconnect_ = need_disconnect; }
@@ -412,7 +389,6 @@ public:
 
   ObPartIdRowMapManager& get_part_row_manager() { return part_row_map_manager_; }
 
-  uint64_t get_min_cluster_version() const;
   int reset_one_row_id_list(const common::ObIArray<int64_t> *row_id_list);
   const ObRowIdListArray &get_row_id_list_array() const { return row_id_list_array_; }
   void reset_row_id_list() { row_id_list_array_.reset(); total_row_count_ = 0;}
@@ -541,7 +517,6 @@ public:
   int get_enumset_meta_by_subschema_id(uint16_t subschema_id,
                                        bool is_in_pl,
                                        const ObEnumSetMeta *&meta) const;
-  bool support_enum_set_type_subschema(ObSQLSessionInfo &session);
   int get_subschema_id_by_type_info(const ObObjMeta &obj_meta,
                                     const ObIArray<common::ObString> &type_info,
                                     uint16_t &subschema_id);
@@ -604,7 +579,6 @@ public:
 private:
   int build_temp_expr_ctx(const ObTempExpr &temp_expr, ObTempExprCtx *&temp_expr_ctx);
   int check_extra_status();
-  void release_admission_addr_map();
   void set_pl_stack_ctx(pl::ObPLContext *pl_stack_ctx) { pl_stack_ctx_ = pl_stack_ctx; }
   //set the parent execute context in nested sql
   void set_parent_ctx(ObExecContext *parent_ctx) { parent_ctx_ = parent_ctx; }
@@ -657,7 +631,6 @@ protected:
   ObExecStatCollector *exec_stat_collector_;
   ObStmtFactory *stmt_factory_;
   ObRawExprFactory *expr_factory_;
-  const share::schema::ObOutlineParamsWrapper *outline_params_wrapper_;
   uint64_t execution_id_;
   //common::ObInterruptibleTaskID interrupt_id_;
   bool has_non_trivial_expr_op_ctx_;
@@ -692,10 +665,6 @@ protected:
    * */
   GIPrepareTaskMap *gi_task_map_;
 
-  /*
-   * for dll udf
-   * */
-  ObUdfCtxMgr *udf_ctx_mgr_;
   // for call procedure_;
   ObNewRow *output_row_;
   ColumnsFieldIArray *field_columns_;
@@ -738,7 +707,6 @@ protected:
   int64_t px_batch_id_;
 
   bool admission_acquired_;
-  hash::ObHashMap<ObAddr, int64_t> *admission_addr_map_;
   // used for temp expr ctx manager
   bool use_temp_expr_ctx_cache_;
   hash::ObHashMap<int64_t, int64_t> temp_expr_ctx_map_;
@@ -785,7 +753,6 @@ protected:
   AutoDopHashMap auto_dop_map_;
   bool force_local_plan_;
   ObDiagnosisManager diagnosis_manager_;
-  common::ObArenaAllocator deterministic_udf_cache_allocator_;
   
   // Granule type for current GI task
   ObGranuleType current_granule_type_;
@@ -867,7 +834,7 @@ inline ObTaskExecutorCtx *ObExecContext::get_task_executor_ctx()
   return &task_executor_ctx_;
 }
 
-inline ObSQLSessionMgr *ObExecContext::get_session_mgr() const
+inline ObSQLSessionMgr *ObExecContext::gesession_pool() const
 {
   return GCTX.session_mgr_;
 }
@@ -880,20 +847,6 @@ inline void ObExecContext::set_admission_acquired(bool acquired)
 inline bool ObExecContext::get_admission_acquired() const
 {
   return admission_acquired_;
-}
-
-inline int ObExecContext::get_admission_addr_map(hash::ObHashMap<ObAddr, int64_t> *&addr_map)
-{
-  int ret = OB_SUCCESS;
-  typedef hash::ObHashMap<ObAddr, int64_t> AdmissionAddrMap;
-  if (OB_ISNULL(admission_addr_map_)) {
-    void *buf = ob_malloc(sizeof(AdmissionAddrMap), ObMemAttr("PxAdmAddrMap"));
-    if (OB_NOT_NULL(buf)) {
-      admission_addr_map_ = new (buf) AdmissionAddrMap();
-    }
-  }
-  addr_map = admission_addr_map_;
-  return ret;
 }
 
 struct ObTempExprCtxReplaceGuard

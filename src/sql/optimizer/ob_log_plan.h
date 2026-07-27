@@ -167,10 +167,10 @@ public:
   static const int64_t JOINPATH_SET_HASHBUCKET_SIZE = 3000;
   friend class ::test::ObLogPlanTest_ob_explain_test_Test;
 
-  static int select_replicas(ObExecContext &exec_ctx,
-                             const common::ObIArray<const ObTableLocation*> &tbl_loc_list,
-                             const common::ObAddr &local_server,
-                             common::ObIArray<ObCandiTableLoc*> &phy_tbl_loc_info_list);
+  static int validate_local_tablets(
+      ObExecContext &exec_ctx,
+      const common::ObIArray<const ObTableLocation*> &table_locations,
+      common::ObIArray<ObCandiTableLoc*> &tablet_locations);
 
 public:
   ObLogPlan(ObOptimizerContext &ctx, const ObDMLStmt *stmt);
@@ -354,9 +354,6 @@ public:
                            bool index_back,
                            bool need_set,
                            double &cost);
-  static int select_one_server(const common::ObAddr &selected_server,
-                               common::ObIArray<ObCandiTableLoc*> &phy_tbl_loc_info_list);
-
   int is_partition_in_same_server(const ObIArray<const ObCandiTableLoc *> &phy_location_infos,
                                   bool &is_same,
                                   bool &multi_part_table,
@@ -1022,10 +1019,6 @@ public:
   int is_plan_reliable(const ObLogicalOperator *root,
                        bool &is_reliable);
 
-  /** @brief Allocate sequence op on top of plan candidates */
-  int candi_allocate_sequence();
-  int allocate_sequence_as_top(ObLogicalOperator *&old_top);
-
   int candi_allocate_err_log(const ObDelUpdStmt *stmt);
   int allocate_err_log_as_top(const ObDelUpdStmt *stmt, ObLogicalOperator *&old_top);
 
@@ -1037,8 +1030,7 @@ public:
 
   int check_select_into(bool &has_select_into,
                         bool &is_single,
-                        bool &has_order_by,
-                        ObRawExpr *&file_partition_expr);
+                        bool &has_order_by);
 
   int allocate_expr_values_as_top(ObLogicalOperator *&top,
                                   const ObIArray<ObRawExpr*> *filter_exprs = NULL);
@@ -1761,9 +1753,6 @@ protected:
 private: // member functions
   static int distribute_filters_to_baserels(ObIArray<ObJoinOrder*> &base_level,
                                             ObIArray<ObSEArray<ObRawExpr*,4>> &baserel_filters);
-  static int strong_select_replicas(const common::ObAddr &local_server,
-                                    common::ObIArray<ObCandiTableLoc*> &phy_tbl_loc_info_list,
-                                    bool &is_hit_partition);
   int calc_and_set_exec_pwj_map(ObLocationConstraintContext &location_constraint) const;
 
   int check_pwj_cons(const ObPwjConstraint &pwj_cons,
@@ -1913,7 +1902,7 @@ private:
   bool is_subplan_scan_;  // Is the current plan a subplan scan
   bool is_parent_set_distinct_;
   bool is_rescan_subplan_;    // generate subquery subplan for subplan filter or inner subquery path
-  bool disable_child_batch_rescan_;  // before version 4_2_5, semi/anti join and subplan filter child op can not use batch rescan
+  bool disable_child_batch_rescan_;  // upper plan disables child batch rescan
   ObSqlTempTableInfo *temp_table_info_; // current plan is a temp table
   // Extracted constant expressions from where condition
   common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> const_exprs_;

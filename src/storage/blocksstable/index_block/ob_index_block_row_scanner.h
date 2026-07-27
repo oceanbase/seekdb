@@ -28,7 +28,7 @@
 #include "storage/memtable/mvcc/ob_keybtree.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
 #include "storage/access/ob_simple_rows_merger.h"
-#include "storage/access/ob_index_skip_scanner.h"
+#include "storage/access/ob_advance_scan_helper.h"
 #include "storage/blocksstable/ob_kvcache_pointer_swizzle.h"
 namespace oceanbase
 {
@@ -95,13 +95,6 @@ public:
       char *&allocated_buf,
       const ObITableReadInfo *table_read_info = nullptr);
 
-  // For micro header bug in version before 4.3, when root block serialized in sstable meta,
-  // data length related fileds was lefted to be filled
-int fix_micro_header_and_transform(
-    const ObMicroBlockData &raw_data,
-    ObMicroBlockData &transformed_data,
-    ObIAllocator &allocator,
-    char *&allocated_buf);
   static int get_transformed_upper_mem_size(const ObITableReadInfo *table_read_info, const char *raw_block_data, int64_t &mem_limit);
 private:
   int get_reader(const ObRowStoreType store_type, ObIMicroBlockReader *&micro_reader);
@@ -186,17 +179,17 @@ public:
     datum_utils_ = datum_utils;
     return OB_SUCCESS;
   }
-  OB_INLINE ObIndexSkipState &get_skip_state()
+  OB_INLINE ObAdvanceScanState &get_advance_scan_state()
   {
-    return skip_state_;
+    return advance_scan_state_;
   }
   bool is_inited() { return is_inited_; }
-  VIRTUAL_TO_STRING_KV(K(is_inited_), K(is_reverse_scan_), K_(skip_state), K(iter_step_), KPC(datum_utils_));
+  VIRTUAL_TO_STRING_KV(K(is_inited_), K(is_reverse_scan_), K_(advance_scan_state), K(iter_step_), KPC(datum_utils_));
 
 protected:
   bool is_inited_;
   bool is_reverse_scan_;
-  ObIndexSkipState skip_state_;
+  ObAdvanceScanState advance_scan_state_;
   int64_t iter_step_;
   ObIndexBlockRowParser idx_row_parser_;
   const ObStorageDatumUtils *datum_utils_;
@@ -367,7 +360,7 @@ public:
       ObMicroIndexInfo &idx_block_row,
       const bool is_multi_check = false,
       const bool is_sorted_multi_get = false,
-      storage::ObAdvanceSkipScanner *skip_scanner = nullptr);
+      storage::ObAdvanceScanHelper *advance_scan_helper = nullptr);
   void set_iter_param(const ObSSTable *sstable,
                       const ObTablet *tablet);
   bool end_of_block() const;

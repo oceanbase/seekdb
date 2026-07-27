@@ -262,92 +262,87 @@ TEST_F(TestTabletStatMgr, get_all_tablet_stat)
 TEST_F(TestTabletStatMgr, basic_stream_pool)
 {
   int ret = OB_SUCCESS;
-  const int64_t max_free_list_num = 500;
-  const int64_t up_limit_node_num = 1000;
+  const int64_t up_limit_node_num = 3;
   ObTabletStreamPool pool;
 
-  ret = pool.init(max_free_list_num, up_limit_node_num);
+  ret = pool.init(up_limit_node_num);
   ASSERT_EQ(OB_SUCCESS, ret);
+  ASSERT_EQ(0, pool.get_allocated_num());
 
-  int64_t free_num = pool.get_free_num();
-  ASSERT_EQ(max_free_list_num, free_num);
-
-  ObTabletStreamNode *fixed_node = nullptr;
+  ObTabletStreamNode *node = nullptr;
   bool is_retired = false;
-  ret = pool.alloc(fixed_node, is_retired);
+  ret = pool.alloc(node, is_retired);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ASSERT_TRUE(NULL != fixed_node);
-  ASSERT_EQ(storage::ObTabletStreamPool::NodeAllocType::FIXED_ALLOC, fixed_node->flag_);
-  ASSERT_EQ(max_free_list_num - 1, pool.get_free_num());
-  pool.free(fixed_node);
-  fixed_node = nullptr;
-  ASSERT_EQ(max_free_list_num, pool.get_free_num());
+  ASSERT_FALSE(is_retired);
+  ASSERT_TRUE(NULL != node);
+  ASSERT_EQ(1, pool.get_allocated_num());
+  pool.free(node);
+  node = nullptr;
+  ASSERT_EQ(0, pool.get_allocated_num());
 
-  common::ObSEArray<ObTabletStreamNode *, 500> free_nodes;
-  for (int64_t i = 0; i < max_free_list_num; ++i) {
-    ObTabletStreamNode *free_node = nullptr;
-    ret = pool.alloc(free_node, is_retired);
+  common::ObSEArray<ObTabletStreamNode *, 3> nodes;
+  for (int64_t i = 0; i < up_limit_node_num; ++i) {
+    node = nullptr;
+    ret = pool.alloc(node, is_retired);
     ASSERT_EQ(OB_SUCCESS, ret);
-    ASSERT_TRUE(NULL != free_node);
-    ASSERT_EQ(storage::ObTabletStreamPool::NodeAllocType::FIXED_ALLOC, free_node->flag_);
-    ret = free_nodes.push_back(free_node);
+    ASSERT_FALSE(is_retired);
+    ASSERT_TRUE(NULL != node);
+    ASSERT_EQ(i + 1, pool.get_allocated_num());
+    ret = nodes.push_back(node);
     ASSERT_EQ(OB_SUCCESS, ret);
   }
-  ASSERT_EQ(0, pool.get_free_num());
 
-  ObTabletStreamNode *dynamic_node = nullptr;
-  ret = pool.alloc(dynamic_node, is_retired);
-  ASSERT_EQ(OB_SUCCESS, ret);
-  ASSERT_TRUE(NULL != dynamic_node);
-  ASSERT_EQ(storage::ObTabletStreamPool::NodeAllocType::DYNAMIC_ALLOC, dynamic_node->flag_);
-  pool.free(dynamic_node);
-  dynamic_node = nullptr;
-  ASSERT_EQ(0, pool.get_free_num());
+  // No pre-allocated free list exists. If all allocated nodes are still outside
+  // the LRU list, reaching the upper limit cannot retire any node.
+  node = nullptr;
+  ret = pool.alloc(node, is_retired);
+  ASSERT_EQ(OB_ERR_UNEXPECTED, ret);
+  ASSERT_TRUE(NULL == node);
+  ASSERT_FALSE(is_retired);
+  ASSERT_EQ(up_limit_node_num, pool.get_allocated_num());
 
-  for (int64_t i = 0; i < free_nodes.count(); ++i) {
-    ObTabletStreamNode *node = free_nodes.at(i);
-    ASSERT_TRUE(NULL != node);
-    pool.free(node);
-    ASSERT_EQ(i + 1, pool.get_free_num());
+  for (int64_t i = 0; i < nodes.count(); ++i) {
+    ASSERT_TRUE(NULL != nodes.at(i));
+    pool.free(nodes.at(i));
+    ASSERT_EQ(up_limit_node_num - i - 1, pool.get_allocated_num());
   }
 }
 
 TEST_F(TestTabletStatMgr, check_fetch_node)
 {
   int ret = OB_SUCCESS;
-  const int64_t max_free_list_num = 500;
-  const int64_t up_limit_node_num = 500;
+  const int64_t up_limit_node_num = 3;
   ObTabletStreamPool pool;
-  common::ObDList<ObTabletStreamNode> lru_list_;
 
-  ret = pool.init(max_free_list_num, up_limit_node_num);
+  ret = pool.init(up_limit_node_num);
   ASSERT_EQ(OB_SUCCESS, ret);
 
-  int64_t free_num = pool.get_free_num();
-  ASSERT_EQ(max_free_list_num, free_num);
-
   ObTabletStreamNode *first_node = nullptr;
-  for (int64_t i = 0; i < max_free_list_num; ++i) {
+  for (int64_t i = 0; i < up_limit_node_num; ++i) {
     ObTabletStreamNode *curr_node = nullptr;
-    ret = pool.free_list_.pop(curr_node);
+    bool is_retired = true;
+    ret = pool.alloc(curr_node, is_retired);
     ASSERT_EQ(OB_SUCCESS, ret);
+    ASSERT_FALSE(is_retired);
+    ASSERT_TRUE(NULL != curr_node);
     ASSERT_TRUE(NULL == curr_node->prev_);
     ASSERT_TRUE(NULL == curr_node->next_);
 
-    ASSERT_EQ(true, lru_list_.add_first(curr_node));
+    ASSERT_EQ(true, pool.add_lru_list(curr_node));
     first_node = (NULL == first_node) ? curr_node : first_node;
   }
+  ASSERT_EQ(up_limit_node_num, pool.get_allocated_num());
 
-  ObTabletStreamNode *last_node = nullptr;
-  for (int64_t i = 0; i < max_free_list_num; ++i) {
-    last_node = lru_list_.get_last();
-    ASSERT_EQ(true, lru_list_.move_to_first(last_node));
-    ret = pool.free_list_.push(last_node);
-    ASSERT_EQ(OB_SUCCESS, ret);
-  }
+  ObTabletStreamNode *retired_node = nullptr;
+  bool is_retired = false;
+  ret = pool.alloc(retired_node, is_retired);
+  ASSERT_EQ(OB_SUCCESS, ret);
+  ASSERT_TRUE(is_retired);
+  ASSERT_TRUE(retired_node == first_node);
+  ASSERT_EQ(up_limit_node_num, pool.get_allocated_num());
 
-  last_node = lru_list_.get_last();
-  ASSERT_TRUE(last_node == first_node);
+  ASSERT_EQ(true, pool.update_lru_list(retired_node));
+  ASSERT_TRUE(pool.lru_list_.get_last() != retired_node);
 }
 
 TEST_F(TestTabletStatMgr, basic_tablet_stat_mgr)

@@ -229,19 +229,6 @@ int ObIvfAsyncTaskExector::LoadTaskCallback::operator()(ObIvfAuxTableInfoEntry &
   return ret;
 }
 
-bool ObIvfAsyncTaskExector::check_operation_allow()
-{
-  // NOTE: vector_index_optimize_duty_time (in_active_time) only constrains the
-  // creation of AUTO-triggered per-tablet IVF maintenance tasks (i.e. load_task()).
-  // It must NOT block:
-  //   - loading existing MANUAL tasks from the inner table (load_task_from_inner_table)
-  //   - executing already-loaded tasks (start_task)
-  //   - cleaning up finished/stale task contexts (clear_old_task_ctx_if_need)
-  // Otherwise dbms_vector.rebuild_index and the auto-registered <vidx>_rebuild
-  // sched job would be silently blocked outside the duty window.
-  return true;
-}
-
 int ObIvfAsyncTaskExector::check_and_set_thread_pool()
 {
   int ret = OB_SUCCESS;
@@ -435,11 +422,11 @@ int ObIvfAsyncTaskExector::check_schema_version_changed(bool &schema_changed)
   int64_t schema_version = 0;
   ObSchemaGetterGuard schema_guard;
   
-  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
+  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
           schema_guard))) {
     LOG_WARN("fail to get schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_schema_version(schema_version))) {
-    LOG_WARN("fail to get tenant schema version", K(ret));
+    LOG_WARN("fail to get runtime schema version", K(ret));
   } else if (!ObSchemaService::is_formal_version(schema_version)) {
     ret = OB_EAGAIN;
     LOG_INFO("is not a formal_schema_version", KR(ret), K(schema_version));
@@ -456,8 +443,8 @@ int ObIvfAsyncTaskExector::generate_aux_table_info_map(ObIvfAuxTableInfoMap &aux
   int ret = OB_SUCCESS;
   ObSEArray<uint64_t, DEFAULT_TABLE_ID_ARRAY_SIZE> table_id_array;
   ObMemAttr memattr("IvfTaskExec");
-  if (OB_FAIL(ObTTLUtil::get_tenant_table_ids(table_id_array))) {
-    LOG_WARN("fail to get tenant table ids", KR(ret));
+  if (OB_FAIL(ObVecIndexAsyncTaskUtil::get_table_ids(table_id_array))) {
+    LOG_WARN("fail to get runtime table ids", KR(ret));
   } else if (!table_id_array.empty() &&
              OB_FAIL(aux_table_info_map.create(DEFAULT_TABLE_ID_ARRAY_SIZE, memattr, memattr))) {
     LOG_WARN("fail to create param map", KR(ret));
@@ -469,7 +456,7 @@ int ObIvfAsyncTaskExector::generate_aux_table_info_map(ObIvfAuxTableInfoMap &aux
     start_idx = end_idx;
     end_idx = MIN(table_id_array.count(), start_idx + DEFAULT_TABLE_ID_ARRAY_SIZE);
 
-    if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
+    if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
             schema_guard))) {
       LOG_WARN("fail to get schema guard", KR(ret));
     }
@@ -493,7 +480,6 @@ int ObIvfAsyncTaskExector::load_task(uint64_t &task_trace_base_num)
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("vector async task not init", KR(ret));
-  } else if (!check_operation_allow()) {                 // skip
   // vector_index_optimize_duty_time only constrains AUTO-triggered per-tablet
   // IVF maintenance task creation here. MANUAL tasks (dbms_vector.rebuild_index
   // and the auto-registered <vidx>_rebuild sched job) go through a separate
@@ -507,7 +493,7 @@ int ObIvfAsyncTaskExector::load_task(uint64_t &task_trace_base_num)
   } else if (OB_ISNULL(ls_)) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("invalid null ls", K(ret));
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
+  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
                  schema_guard))) {
     LOG_WARN("fail to get schema guard", KR(ret));
   } else {

@@ -31,7 +31,7 @@ OB_INLINE int64_t &tx_data_throttled_alloc()
   return tx_data_throttled_alloc;
 }
 
-class ObTenantTxDataAllocator {
+class ObTxDataAllocator {
 public:
   using SliceAllocator = ObSliceAlloc;
 
@@ -49,9 +49,9 @@ public:
   DEFINE_CUSTOM_FUNC_FOR_THROTTLE(TxData);
 
 public:
-  ObTenantTxDataAllocator()
+  ObTxDataAllocator()
       : is_inited_(false), throttle_tool_(nullptr), block_alloc_(), slice_allocator_() {}
-  ~ObTenantTxDataAllocator() { reset(); }
+  ~ObTxDataAllocator() { reset(); }
   int init(const char* label);
   void *alloc(const bool enable_throttle = true, const int64_t abs_expire_time = 0);
   void reset();
@@ -80,14 +80,14 @@ private:
   share::TxShareThrottleTool *throttle_tool_;
 };
 
-class ObTenantTxDataOpAllocator : public ObIAllocator {
+class ObTxDataOpAllocator : public ObIAllocator {
 private:
   static const int64_t MDS_ALLOC_CONCURRENCY = 8;
 public:
   DEFINE_CUSTOM_FUNC_FOR_THROTTLE(Mds);
 
 public:
-  ObTenantTxDataOpAllocator() : is_inited_(false), throttle_tool_(nullptr), block_alloc_(), allocator_() {}
+  ObTxDataOpAllocator() : is_inited_(false), throttle_tool_(nullptr), block_alloc_(), allocator_() {}
 
   int init();
   void destroy() { is_inited_ = false; }

@@ -372,9 +372,8 @@ bool ObLockParam::is_valid() const
           !(ObTableLockPriority::NORMAL != lock_priority_ && !is_two_phase_lock_) &&
           (schema_version_ >= 0 ||
            (ObLockOBJType::OBJ_TYPE_COMMON_OBJ == lock_id_.obj_type_
-            || ObLockOBJType::OBJ_TYPE_TENANT == lock_id_.obj_type_
+            || ObLockOBJType::OBJ_TYPE_RUNTIME == lock_id_.obj_type_
             || ObLockOBJType::OBJ_TYPE_LS == lock_id_.obj_type_
-            || ObLockOBJType::OBJ_TYPE_EXTERNAL_TABLE_REFRESH == lock_id_.obj_type_
             || ObLockOBJType::OBJ_TYPE_ONLINE_DDL_TABLE == lock_id_.obj_type_
             || ObLockOBJType::OBJ_TYPE_ONLINE_DDL_TABLET == lock_id_.obj_type_
             || ObLockOBJType::OBJ_TYPE_DATABASE_NAME == lock_id_.obj_type_

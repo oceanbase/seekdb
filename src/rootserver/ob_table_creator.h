@@ -58,7 +58,7 @@ public:
   // @param [in] schemas, tables schema for creating tablets, the first is data table, others are its local indexes
   int add_create_tablets_of_tables_arg(
       const common::ObIArray<const share::schema::ObTableSchema*> &schemas,
-      const uint64_t tenant_data_version,
+      const uint64_t data_format_version,
       const common::ObIArray<bool> &need_create_empty_majors,
       share::schema::ObSchemaGetterGuard *schema_guard = nullptr);
 
@@ -69,28 +69,28 @@ public:
   int add_create_tablets_of_local_aux_tables_arg(
       const common::ObIArray<const share::schema::ObTableSchema*> &schemas,
       const share::schema::ObTableSchema *data_table_schema,
-      const uint64_t tenant_data_version,
+      const uint64_t data_format_version,
       const common::ObIArray<bool> &need_create_empty_majors);
 
   // create tablets of hidden table from original table, used by ddl table redefinition
   int add_create_bind_tablets_of_hidden_table_arg(
       const share::schema::ObTableSchema &orig_table_schema,
       const share::schema::ObTableSchema &hidden_table_schema,
-      const uint64_t tenant_data_version);
+      const uint64_t data_format_version);
 
   // create tablets in a table
   //
   // @param [in] table_schema, table schema for creating tablets
   int add_create_tablets_of_table_arg(
       const share::schema::ObTableSchema &table_schema,
-      const uint64_t tenant_data_version,
+      const uint64_t data_format_version,
       const bool need_create_empty_major_sstable,
       share::schema::ObSchemaGetterGuard *schema_guard = nullptr);
 private:
   int add_create_tablets_of_tables_arg_(
       const common::ObIArray<const share::schema::ObTableSchema*> &schemas,
       const share::schema::ObTableSchema *data_table_schema,
-      const uint64_t tenant_data_version,
+      const uint64_t data_format_version,
       const common::ObIArray<bool> &need_create_empty_majors,
       share::schema::ObSchemaGetterGuard *schema_guard = nullptr);
   int generate_create_tablet_arg_(
@@ -100,7 +100,7 @@ private:
       const int64_t part_idx,
       const int64_t subpart_idx,
       const bool is_create_bind_hidden_tablets,
-      const uint64_t tenant_data_version,
+      const uint64_t data_format_version,
       const common::ObIArray<bool> &need_create_empty_majors,
       ObSchemaGetterGuard *schema_guard = nullptr);
   int get_tablet_list_str_(

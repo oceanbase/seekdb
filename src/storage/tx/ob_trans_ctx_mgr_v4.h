@@ -23,7 +23,7 @@
 #include "common/ob_simple_iterator.h"
 #include "lib/lock/ob_qsync_lock.h"
 #include "storage/tx/ob_trans_ctx.h"
-#include "storage/tx/ob_tx_retain_ctx_mgr.h"
+#include "storage/tx/ob_tx_log_adapter.h"
 #include "storage/tx/ob_tx_log_cb_mgr.h"
 #include "storage/tablelock/ob_lock_table.h"
 #include "storage/tx/ob_keep_alive_ls_handler.h"
@@ -86,14 +86,12 @@ struct ObTxCreateArg
   ObTxCreateArg(const bool for_replay,
                 const TxCtxSource ctx_source,
                 const ObTransID &trans_id,
-                const uint64_t cluster_version,
                 const uint32_t session_id,
                 const int64_t trans_expired_time,
                 ObTransService *trans_service)
       : for_replay_(for_replay),
         ctx_source_(ctx_source),
         tx_id_(trans_id),
-        cluster_version_(cluster_version),
         session_id_(session_id),
         trans_expired_time_(trans_expired_time),
         trans_service_(trans_service) {}
@@ -104,13 +102,11 @@ struct ObTxCreateArg
         && NULL != trans_service_;
   }
   TO_STRING_KV(K_(for_replay), "ctx_source", to_str_ctx_source(ctx_source_), K_(tx_id),
-                 K_(cluster_version),
                  K_(session_id),
                  K_(trans_expired_time), KP_(trans_service));
   bool for_replay_;
   TxCtxSource ctx_source_;
   ObTransID tx_id_;
-  uint64_t cluster_version_;
   uint32_t session_id_;
   int64_t trans_expired_time_;
   ObTransService *trans_service_;
@@ -138,8 +134,7 @@ public:
   typedef RWLock::WLockGuardWithRetryInterval WLockGuardWithRetryInterval;
 
   ObLSTxCtxMgr()
-      : tx_log_adapter_(&log_adapter_def_), rwlock_(ObLatchIds::DEFAULT_SPIN_RWLOCK),
-        minor_merge_lock_(ObLatchIds::DEFAULT_SPIN_RWLOCK)
+      : tx_log_adapter_(&log_adapter_def_), rwlock_(ObLatchIds::DEFAULT_SPIN_RWLOCK)
 
   {
     reset();
@@ -147,8 +142,8 @@ public:
 
   virtual ~ObLSTxCtxMgr() { destroy(); }
 
-  // @param [in] tenant: ls's tenant, currently used by ts_mgr;
-  // @param [in] ts_mgr: transaction timestamp source;
+  // @param [in] ls_id, associated ls_id;
+  // @param [in] ts_mgr: used to get gts, see: update_max_replay_commit_version function;
   // @param [in] txs: transaction service which hold the ObTxCtxMgr;
   // @param [in] log_param: the params which is used to init ObLSTxCtxMgr's log_adapter_def_;
   int init(ObTxTable *tx_table,
@@ -384,18 +379,6 @@ public:
   // TODO Remove
   int get_min_undecided_scn(share::SCN &scn);
 
-  //1. During the minor merge process, the status of uncommitted transactions will be actively
-  //   queried; if ObTxCtx is released due to Rebuild, and the query cannot be performed,
-  //   the minor merge process will record an exception failure log and exit;
-  //2. The high risk point is that in the process of minor merge memtable, it is necessary to
-  //   query the status of uncommitted transactions. At this time, the status of Trans is directly
-  //   queried through the pointer to TransCtx in ObMvccTransNode; the use of this pointer is not
-  //   currently protected by reference counting. If ObTxCtx is released due to Rebuild
-  //   during use, it will cause a wild pointer;
-  //3. The minor_merge_lock_ is used to prevent this from happening
-  int lock_minor_merge_lock() { return minor_merge_lock_.rdlock(); }
-  int unlock_minor_merge_lock() { return minor_merge_lock_.rdunlock(); };
-
   // Iterate all tx ctx in this ls and get the min_start_scn
   int get_min_start_scn(share::SCN &min_start_scn);
 
@@ -403,10 +386,6 @@ public:
   transaction::ObTransService *get_trans_service() { return txs_; }
 
   ObTxLogCbPoolMgr &get_log_cb_pool_mgr() { return log_cb_pool_mgr_;}
-  ObTxRetainCtxMgr &get_retain_ctx_mgr() { return ls_retain_ctx_mgr_; }
-
-  // Get the tenant corresponding to this ObLSTxCtxMgr;
-  
 
   // check is blocked
   bool is_tx_blocked() const { return is_tx_blocked_(); }
@@ -431,7 +410,6 @@ public:
                K_(block_all),
                K_(total_tx_ctx_count),
                K_(active_tx_count),
-               K_(ls_retain_ctx_mgr),
                K_(aggre_rec_scn),
                K_(prev_aggre_rec_scn));
 private:
@@ -481,8 +459,6 @@ private:
   // A thread-safe hashmap, used to find and traverse TxCtx in this ObLSTxCtxMgr
   ObLSTxCtxMap ls_tx_ctx_map_;
 
-  // The tenant ID to which this ObLSTxCtxMgr belongs
-  
 
   // The tx table associated with this ObLSTxCtxMgr
   ObTxTable *tx_table_;
@@ -494,14 +470,7 @@ private:
 
   ObTxLogCbPoolMgr log_cb_pool_mgr_;
 
-  ObTxRetainCtxMgr ls_retain_ctx_mgr_;
-
   mutable RWLock rwlock_;
-  // lock for concurrency between minor merge and remove / rebuild this LS
-  // ATTENTION: the order between locks should be:
-  //                     rwlock_ -> minor_merge_lock_
-  mutable RWLock minor_merge_lock_;
-
   // Total TxCtx count in this ObLSTxCtxMgr
   int64_t total_tx_ctx_count_ CACHE_ALIGNED;
 
@@ -579,8 +548,7 @@ public:
     reset();
   }
   ~ObTxCtxMgr() { destroy(); }
-  // @param [in] tenant: tenant id
-  // @param [in] ts_mgr: transaction timestamp source;
+  // @param [in] ts_mgr: used to get gts, see: update_max_replay_commit_version function;
   // @param [in] txs: transaction service which hold the ObTxCtxMgr;
   int init(ObTsMgr *ts_mgr, ObTransService *txs);
 

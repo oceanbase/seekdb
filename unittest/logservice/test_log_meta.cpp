@@ -17,8 +17,8 @@
 #define private public
 #include "logservice/palf/log_meta.h"
 #undef private
+
 #include <gtest/gtest.h>
-#include "share/ob_cluster_version.h"
 
 namespace oceanbase
 {
@@ -29,6 +29,7 @@ using namespace palf;
 PalfBaseInfo build_base_info()
 {
   PalfBaseInfo base_info;
+  base_info.generate_by_default();
   base_info.prev_log_info_.log_id_ = 1;
   base_info.prev_log_info_.lsn_ = LSN(10000);
   base_info.prev_log_info_.scn_.convert_for_logservice(10);
@@ -37,29 +38,70 @@ PalfBaseInfo build_base_info()
   return base_info;
 }
 
-TEST(TestLogMeta, generate_single_log_meta)
+TEST(TestLogMeta, generate_update_and_serialize)
 {
   const PalfBaseInfo base_info = build_base_info();
-  LogMeta meta;
-  ASSERT_EQ(OB_SUCCESS, meta.generate_by_palf_base_info(base_info, AccessMode::APPEND));
-  EXPECT_TRUE(meta.is_valid());
-  EXPECT_EQ(base_info.curr_lsn_, meta.log_snapshot_meta_.base_lsn_);
-}
 
-TEST(TestLogMeta, serialize_single_log_meta)
-{
   LogMeta meta;
-  ASSERT_EQ(OB_SUCCESS, meta.generate_by_palf_base_info(build_base_info(), AccessMode::APPEND));
-  char buf[4096];
+  EXPECT_FALSE(meta.is_valid());
+  EXPECT_EQ(OB_INVALID_ARGUMENT,
+            meta.generate_by_palf_base_info(base_info, AccessMode::INVALID_ACCESS_MODE));
+  ASSERT_EQ(OB_SUCCESS, meta.generate_by_palf_base_info(base_info, AccessMode::APPEND));
+  ASSERT_TRUE(meta.is_valid());
+
+  const LogModeMeta generated_mode_meta = meta.get_log_mode_meta();
+  EXPECT_EQ(AccessMode::APPEND, generated_mode_meta.access_mode_);
+  EXPECT_EQ(base_info.prev_log_info_.scn_, generated_mode_meta.ref_scn_);
+
+  const LogSnapshotMeta generated_snapshot_meta = meta.get_log_snapshot_meta();
+  EXPECT_EQ(base_info.curr_lsn_, generated_snapshot_meta.base_lsn_);
+  EXPECT_EQ(base_info.prev_log_info_, generated_snapshot_meta.prev_log_info_);
+  EXPECT_EQ(base_info.curr_lsn_, generated_snapshot_meta.prev_log_tail_lsn_);
+
+  LogInfo updated_prev_log_info = base_info.prev_log_info_;
+  updated_prev_log_info.log_id_ = 2;
+  updated_prev_log_info.lsn_ = base_info.curr_lsn_;
+  updated_prev_log_info.scn_.convert_for_logservice(20);
+  updated_prev_log_info.accum_checksum_ = 20;
+  LogSnapshotMeta updated_snapshot_meta;
+  ASSERT_EQ(OB_SUCCESS,
+            updated_snapshot_meta.generate(LSN(30000), updated_prev_log_info, LSN(30000)));
+  EXPECT_EQ(OB_INVALID_ARGUMENT, meta.update_log_snapshot_meta(LogSnapshotMeta()));
+  ASSERT_EQ(OB_SUCCESS, meta.update_log_snapshot_meta(updated_snapshot_meta));
+
+  constexpr int64_t BUF_SIZE = 4096;
+  char buf[BUF_SIZE];
   int64_t pos = 0;
-  ASSERT_EQ(OB_SUCCESS, meta.serialize(buf, sizeof(buf), pos));
+  ASSERT_EQ(OB_SUCCESS, meta.serialize(buf, BUF_SIZE, pos));
   EXPECT_EQ(meta.get_serialize_size(), pos);
 
   LogMeta restored;
-  pos = 0;
-  ASSERT_EQ(OB_SUCCESS, restored.deserialize(buf, sizeof(buf), pos));
-  EXPECT_TRUE(restored.is_valid());
-  EXPECT_EQ(meta.log_mode_meta_.access_mode_, restored.log_mode_meta_.access_mode_);
+  ASSERT_EQ(OB_SUCCESS, restored.load(buf, pos));
+  ASSERT_TRUE(restored.is_valid());
+  const LogModeMeta restored_mode_meta = restored.get_log_mode_meta();
+  EXPECT_EQ(generated_mode_meta.access_mode_, restored_mode_meta.access_mode_);
+  EXPECT_EQ(generated_mode_meta.ref_scn_, restored_mode_meta.ref_scn_);
+  const LogSnapshotMeta restored_snapshot_meta = restored.get_log_snapshot_meta();
+  EXPECT_EQ(updated_snapshot_meta.base_lsn_, restored_snapshot_meta.base_lsn_);
+  EXPECT_EQ(updated_snapshot_meta.prev_log_info_, restored_snapshot_meta.prev_log_info_);
+  EXPECT_EQ(updated_snapshot_meta.prev_log_tail_lsn_, restored_snapshot_meta.prev_log_tail_lsn_);
+
+  LogMeta copied(restored);
+  EXPECT_TRUE(copied.is_valid());
+  EXPECT_EQ(restored.get_log_snapshot_meta().base_lsn_, copied.get_log_snapshot_meta().base_lsn_);
+  copied.reset();
+  EXPECT_FALSE(copied.is_valid());
+}
+
+TEST(TestLogMeta, reject_invalid_base_info)
+{
+  PalfBaseInfo base_info = build_base_info();
+  base_info.curr_lsn_ = LSN(1);
+
+  LogMeta meta;
+  EXPECT_EQ(OB_INVALID_ARGUMENT,
+            meta.generate_by_palf_base_info(base_info, AccessMode::APPEND));
+  EXPECT_FALSE(meta.is_valid());
 }
 
 } // namespace unittest
@@ -69,6 +111,5 @@ int main(int argc, char **argv)
 {
   OB_LOGGER.set_file_name("test_log_meta.log", true);
   ::testing::InitGoogleTest(&argc, argv);
-  oceanbase::ObClusterVersion::get_instance().update_data_version(DATA_CURRENT_VERSION);
   return RUN_ALL_TESTS();
 }

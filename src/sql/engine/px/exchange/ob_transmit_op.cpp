@@ -29,8 +29,6 @@ OB_SERIALIZE_MEMBER(ObTransmitOpInput);
 ObTransmitSpec::ObTransmitSpec(ObIAllocator &alloc, const ObPhyOperatorType type)
 : ObOpSpec(alloc, type),
     split_task_count_(0),
-    parallel_server_count_(0),
-    server_parallel_thread_count_(0),
     px_dop_(0),
     px_single_(false),
     dfo_id_(common::OB_INVALID_ID),
@@ -48,8 +46,6 @@ ObTransmitSpec::ObTransmitSpec(ObIAllocator &alloc, const ObPhyOperatorType type
 
 OB_SERIALIZE_MEMBER((ObTransmitSpec, ObOpSpec),
                     split_task_count_,
-                    parallel_server_count_,
-                    server_parallel_thread_count_,
                     px_dop_,
                     px_single_,
                     dfo_id_,

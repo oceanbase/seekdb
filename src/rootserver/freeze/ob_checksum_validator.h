@@ -17,9 +17,9 @@
 #ifndef OCEANBASE_ROOTSERVER_FREEZE_OB_CHECKSUM_VALIDATOR_H_
 #define OCEANBASE_ROOTSERVER_FREEZE_OB_CHECKSUM_VALIDATOR_H_
 
-#include "share/ob_tablet_checksum_iterator.h"
+#include "share/ob_tablet_checksum_operator.h"
 #include "share/ob_freeze_info_proxy.h"
-#include "share/ob_zone_merge_info.h"
+#include "share/ob_merge_info.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "rootserver/freeze/ob_major_freeze_util.h"
 #include "storage/compaction/ob_table_ckm_items.h"
@@ -33,29 +33,10 @@ class ObTabletChecksumItem;
 }
 namespace rootserver
 {
-class ObZoneMergeManager;
+class ObGlobalMergeManager;
 struct ObFTSGroupArray;
 struct ObFTSGroup;
 struct ObFTSIndexInfo;
-struct ObReplicaCkmItems
-{
-  ObReplicaCkmItems()
-    : array_(),
-      tablet_cnt_(0)
-  {}
-  DELEGATE_WITH_RET(array_, empty, bool);
-  DELEGATE_WITH_RET(array_, count, int64_t);
-  DELEGATE_WITH_RET(array_, at, const share::ObTabletReplicaChecksumItem&);
-  void reuse()
-  {
-    array_.reuse();
-    tablet_cnt_ = 0;
-  }
-  TO_STRING_KV(K_(array), K_(tablet_cnt));
-  ObArray<share::ObTabletReplicaChecksumItem> array_;
-  int64_t tablet_cnt_;
-};
-
 class ObChecksumValidator
 {
 public:
@@ -90,7 +71,7 @@ public:
       schema_guard_(nullptr),
       simple_schema_(nullptr),
       table_compaction_info_(),
-      replica_ckm_items_(false/*need_map*/),
+      local_ckm_items_(false/*need_map*/),
       last_table_ckm_items_{}
   {}
   ~ObChecksumValidator() {}
@@ -114,14 +95,14 @@ public:
     last_table_ckm_items_.clear();
   }
   int push_tablet_ckm_items_with_update(
-    const ObIArray<share::ObTabletReplicaChecksumItem> &replica_ckm_items);
+    const ObIArray<share::ObTabletLocalChecksumItem> &local_ckm_items);
   int push_finish_tablet_ids_with_update(
     const uint64_t table_id,
     const common::ObIArray<common::ObTabletID> &tablet_ids);
   int batch_write_tablet_ckm();
   int batch_update_report_scn();
   static int check_column_checksum(
-    const share::ObReplicaCkmArray &tablet_replica_checksum_items,
+    const share::ObLocalTabletChecksumArray &local_tablet_checksum_items,
     const ObArray<share::ObTabletChecksumItem> &tablet_checksum_items);
   int handle_fts_checksum(
     share::schema::ObSchemaGetterGuard &schema_guard,
@@ -135,12 +116,12 @@ private:
   int get_table_compaction_info(const uint64_t table_id, compaction::ObTableCompactionInfo &table_compaction_info);
   int set_need_validate();
   int get_tablet_ids(const share::schema::ObSimpleTableSchemaV2 &simple_schema);
-  int get_replica_ckm(const bool include_larger_than = false);
-  /* Tablet Replica Checksum Section */
-  int validate_tablet_replica_checksum();
+  int get_local_ckm(const bool include_larger_than = false);
+  /* Local Tablet Checksum Section */
+  int validate_local_tablet_checksum();
   // check table compaction info according to tablet_status_map
   int update_table_compaction_info_by_tablet();
-  int get_tablet_replica_checksum_and_validate(const bool include_larger_than);
+  int get_local_tablet_checksum_and_validate(const bool include_larger_than);
 
   /* Index Checksum Section */
   int validate_index_checksum();
@@ -153,7 +134,7 @@ private:
   /* Cross Cluster Checksum Section */
   int validate_cross_cluster_checksum();
   int check_tablet_checksum_sync_finish(const bool force_check);
-  int validate_replica_and_tablet_checksum();
+  int validate_local_and_tablet_checksum();
   bool check_waiting_tablet_checksum_timeout() const;
   int try_update_tablet_checksum_items();
   /* FTS Checksum Section */
@@ -197,7 +178,7 @@ private:
   const share::schema::ObSimpleTableSchemaV2 *simple_schema_;
   compaction::ObTableCompactionInfo table_compaction_info_;
   ObArray<common::ObTabletID> cur_tablet_ids_;
-  share::ObReplicaCkmArray replica_ckm_items_;
+  share::ObLocalTabletChecksumArray local_ckm_items_;
   compaction::ObTableCkmItems last_table_ckm_items_; // only cached last data table with index
 };
 

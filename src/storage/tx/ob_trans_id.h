@@ -18,6 +18,7 @@
 // plain value types extracted from ob_trans_define.h(no upper-layer dependency;for by-value use by share RPC args,
 // this header is conf logical L2;serialization implementation remains in the trans module cpp and links into the same library)
 #include <stdint.h>
+#include "lib/json/ob_yson.h"
 #include "lib/utility/ob_unify_serialize.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/json/ob_yson.h"

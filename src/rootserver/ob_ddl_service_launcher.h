@@ -22,7 +22,6 @@
 //#include "lib/lock/ob_spin_rwlock.h" // for SpinRWLock
 #include "logservice/ob_log_base_type.h" // for ObILocalLogHandler etc.
 #include "share/scn.h"                   // for SCN
-#include "rootserver/ob_tenant_thread_helper.h" // for DEFINE_MTL_FUNC
 
 namespace oceanbase
 {
@@ -50,15 +49,12 @@ public:
   int activate() override;
   void deactivate() override;
 
-  int start_ddl_service_with_old_logic(
-      const int64_t new_rs_epoch,
-      const int64_t proposal_id_to_check);
   static int get_sys_palf_role_and_epoch(
          common::ObRole &role,
          int64_t &proposal_id);
 
-  // for MTL related
-  static int mtl_init(ObDDLServiceLauncher *&ddl_service_launcher);
+  // Server module lifecycle entry point.
+  static int server_module_init(ObDDLServiceLauncher *&ddl_service_launcher);
 
   // for ObICheckpointSubHandler
   virtual share::SCN get_rec_scn() override { return share::SCN::max_scn(); }
@@ -72,14 +68,8 @@ public:
     return ret;
   }
 private:
-  int inner_start_ddl_service_with_lock_(
-      bool with_new_mode,
-      const int64_t proposal_id_to_check,
-      const int64_t new_rs_epoch);
-  int init_sequence_id_(
-      bool with_new_mode,
-      const int64_t proposal_id,
-      const int64_t new_rs_epoch);
+  int inner_start_ddl_service_with_lock_();
+  int init_sequence_id_(const int64_t proposal_id);
 private:
   bool inited_;
   static bool is_ddl_service_started_;

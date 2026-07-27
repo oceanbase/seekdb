@@ -16,9 +16,9 @@
 
 
 #include "ob_trans_factory.h"
+#include "lib/objectpool/ob_server_object_pool.h"
 #include "share/rc/ob_module_provider.h"
 #include "ob_tx_ctx.h"
-#include "storage/tx/ob_leak_checker.h"
 #include "observer/ob_server.h"
 
 namespace oceanbase
@@ -110,7 +110,7 @@ ObTxCtx *ObTxCtxFactory::alloc()
   if (ATOMIC_LOAD(&active_tx_ctx_count_) > MAX_TX_CTX_COUNT && GCTX.status_ == ObServiceStatus::SS_SERVING) {
     TRANS_LOG_RET(ERROR, tmp_ret, "transaction context memory alloc failed", K_(active_tx_ctx_count));
     tmp_ret = OB_TRANS_CTX_COUNT_REACH_LIMIT;
-  } else if (NULL != (ctx = mtl_sop_borrow(ObTxCtx))) {
+  } else if (NULL != (ctx = sop_borrow(ObTxCtx))) {
     (void)ATOMIC_FAA(&active_tx_ctx_count_, 1);
     TRANS_LOG(DEBUG, "alloc tx ctx success", KP(ctx), K(active_tx_ctx_count_),
               K(total_release_tx_ctx_count_));
@@ -133,7 +133,7 @@ void ObTxCtxFactory::release(ObTransCtx *ctx)
   } else {
     ObTxCtx *tx_ctx = static_cast<ObTxCtx *>(ctx);
     tx_ctx->destroy();
-    mtl_sop_return(ObTxCtx, tx_ctx);
+    sop_return(ObTxCtx, tx_ctx);
     (void)ATOMIC_FAA(&active_tx_ctx_count_, -1);
     (void)ATOMIC_FAA(&total_release_tx_ctx_count_, 1);
     TRANS_LOG(DEBUG, "release tx ctx success", KP(ctx), K(active_tx_ctx_count_),
@@ -230,21 +230,15 @@ MAKE_FACTORY_CLASS_IMPLEMENT_USE_RP_ALLOC(ObPartitionAuditInfo, ObModIds::OB_PAR
 MAKE_FACTORY_CLASS_IMPLEMENT_USE_RP_ALLOC(ObCoreLocalPartitionAuditInfo, ObModIds::OB_CORE_LOCAL_STORAGE)
 MAKE_FACTORY_CLASS_IMPLEMENT_USE_RP_ALLOC(ObTxCommitCallbackTask, ObModIds::OB_END_TRANS_CB_TASK)
 
-void *MultiTxDataFactory::alloc(const int64_t len, const uint64_t arg1, const uint64_t arg2)
+void *MultiTxDataFactory::alloc(const int64_t len)
 {
-  const char *mod_name = "MultiTxData";
-  void *ptr = mtl_malloc(len, mod_name);
-  if (NULL != ptr) {
-    ObLeakChecker::reg((uint64_t)ptr, arg1, arg2, mod_name);
-  }
-  return ptr;
+  return server_malloc(len, "MultiTxData");
 }
 
 void MultiTxDataFactory::free(void *ptr)
 {
   if (NULL != ptr) {
-    ObLeakChecker::unreg((uint64_t)ptr);
-    mtl_free(ptr);
+    server_free(ptr);
   }
 }
 

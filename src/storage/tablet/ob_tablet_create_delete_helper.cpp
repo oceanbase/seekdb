@@ -67,7 +67,7 @@ int ObTabletCreateDeleteHelper::get_tablet(
 #endif
   int ret = OB_SUCCESS;
   static const int64_t SLEEP_TIME_US = 10;
-  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
   const int64_t begin_time = ObClockGenerator::getClock();
   int64_t current_time = 0;
 
@@ -255,8 +255,8 @@ int ObTabletCreateDeleteHelper::check_read_snapshot_for_normal(
   } else if (user_data.create_commit_version_ != ObTransVersion::INVALID_TRANS_VERSION) {
     LOG_INFO("tablet create transaction is committed",
         K(ret), K(tablet_id), K(snapshot_version), K(trans_state), K(user_data));
-    if (OB_FAIL(check_read_snapshot_for_committed_create_tx(tablet, snapshot_version, user_data))) {
-      LOG_WARN("fail to check read snapshot for committed create tx",
+    if (OB_FAIL(check_read_snapshot_for_committed_tablet_tx(tablet, snapshot_version, user_data))) {
+      LOG_WARN("fail to check read snapshot for committed tablet transaction",
           K(ret), K(tablet_id), K(snapshot_version), K(trans_state), K(user_data));
     }
   } else if (OB_FAIL(check_read_snapshot_for_create_tx(
@@ -268,7 +268,7 @@ int ObTabletCreateDeleteHelper::check_read_snapshot_for_normal(
   return ret;
 }
 
-int ObTabletCreateDeleteHelper::check_read_snapshot_for_committed_create_tx(
+int ObTabletCreateDeleteHelper::check_read_snapshot_for_committed_tablet_tx(
     const ObTablet &tablet,
     const int64_t snapshot_version,
     const ObTabletCreateDeleteMdsUserData &user_data)
@@ -310,7 +310,7 @@ int ObTabletCreateDeleteHelper::check_read_snapshot_for_create_tx(
       LOG_WARN("read snapshot is smaller than prepare version",
           K(ret), K(tablet_id), K(trans_state), K(read_snapshot), K(trans_version));
     } else {
-      // primary tenant
+      // Primary database.
       ret = OB_SNAPSHOT_DISCARDED;
       LOG_WARN("tablet creation transaction has not committed",
           K(ret), K(tablet_id), K(trans_state), K(read_snapshot), K(trans_version));
@@ -359,7 +359,7 @@ int ObTabletCreateDeleteHelper::check_read_snapshot_for_deleted(
       // allow to read
     } else {
       ret = OB_TABLET_NOT_EXIST;
-      LOG_INFO("read snapshot is no smaller than prepare version",
+      LOG_INFO("read snapshot is no smaller than prepare version on primary database, should retry",
           K(ret), K(tablet_id), K(trans_state), K(read_snapshot), K(trans_version));
     }
   } else if (mds::TwoPhaseCommitState::ON_COMMIT == trans_state) {
@@ -382,12 +382,14 @@ int ObTabletCreateDeleteHelper::create_tmp_tablet(
     ObTabletHandle &handle)
 {
   int ret = OB_SUCCESS;
-  ObLS *tenant_ls = &ls;
-  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
   if (OB_UNLIKELY(!key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(key));
-  } else if (OB_FAIL(t3m->create_tmp_tablet(WashTabletPriority::WTP_HIGH, key, allocator, tenant_ls, handle))) {
+  } else if (OB_ISNULL(t3m)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("storage meta memory manager is null", K(ret));
+  } else if (OB_FAIL(t3m->create_tmp_tablet(WashTabletPriority::WTP_HIGH, key, allocator, &ls, handle))) {
     LOG_WARN("fail to create temporary tablet", K(ret), K(key));
   } else if (OB_ISNULL(handle.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
@@ -399,7 +401,7 @@ int ObTabletCreateDeleteHelper::create_tmp_tablet(
 int ObTabletCreateDeleteHelper::prepare_create_msd_tablet()
 {
   int ret = OB_SUCCESS;
-  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
   if (OB_FAIL(t3m->get_mstx_tablet_creator().throttle_tablet_creation())) {
     LOG_WARN("fail to prepare full tablet", K(ret));
   }
@@ -413,7 +415,7 @@ int ObTabletCreateDeleteHelper::create_msd_tablet(
   int ret = OB_SUCCESS;
   ObLS *tenant_ls = nullptr;
   ObLSService *ls_service = share::g_mp->ls_service();
-  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
   if (OB_UNLIKELY(!key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(key));
@@ -435,7 +437,7 @@ int ObTabletCreateDeleteHelper::acquire_tmp_tablet(
 {
   TIMEGUARD_INIT(STORAGE, 10_ms);
   int ret = OB_SUCCESS;
-  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
   if (OB_UNLIKELY(!key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(key));
@@ -454,7 +456,7 @@ int ObTabletCreateDeleteHelper::acquire_tablet_from_pool(
     ObTabletHandle &handle)
 {
   int ret = OB_SUCCESS;
-  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
   if (OB_UNLIKELY(!key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(key));

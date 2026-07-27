@@ -46,6 +46,8 @@ namespace blocksstable
 {
 
 class ObMicroBlockTransformDesc;
+struct ObMicroBlockData;
+struct ObMicroBlockHeader;
 class ObIndexBlockRowHeader;
 class ObIndexBlockRowMinorMetaInfo;
 class ObDataMacroBlockMeta;
@@ -75,7 +77,6 @@ public:
   void print_hex_micro_block(const ObMicroBlockData &block_data, char *hex_print_buf, const int64_t buf_size);
   void print_common_header(const ObMacroBlockCommonHeader *common_header);
   void print_macro_block_header(const ObSSTableMacroBlockHeader *sstable_header);
-  void print_macro_block_header(const ObBloomFilterMacroBlockHeader *bf_macro_header);
   void print_macro_block_header(const storage::ObLinkedMacroBlockHeader *linked_macro_header);
   void print_index_row_header(const ObIndexBlockRowHeader *idx_row_header);
   void print_index_minor_meta(const ObIndexBlockRowMinorMetaInfo *minor_meta);
@@ -90,8 +91,6 @@ public:
   void print_store_row_hex(const blocksstable::ObDatumRow *row, const ObObjMeta *obj_metas, const int64_t buf_size, char *hex_print_buf);
   void print_micro_header(const ObMicroBlockHeader *micro_block_header);
   void print_encoding_column_header(const ObColumnHeader *col_header, const int64_t col_id);
-  void print_bloom_filter_micro_header(const ObBloomFilterMicroBlockHeader *micro_block_header);
-  void print_bloom_filter_micro_block(const char* micro_block_buf, const int64_t micro_block_size);
 
   FILE *fd_;
 };

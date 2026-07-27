@@ -28,14 +28,13 @@ enum class LogIOUser {
   DEFAULT = 0,
   REPLAY = 1,
   FETCHLOG = 2,
-  ARCHIVE = 3,
-  RESTORE = 4,
-  CHANGE_STREAM = 5,
-  STANDBY = 6,
-  SHARED_UPLOAD = 7,
-  META_INFO = 8,
-  RESTART = 9,
-  OTHER = 10,
+  RESTORE = 3,
+  CDC = 4,
+  STANDBY = 5,
+  SHARED_UPLOAD = 6,
+  META_INFO = 7,
+  RESTART = 8,
+  OTHER = 9,
 };
 
 inline const char *log_io_user_str(const LogIOUser user_type)
@@ -46,9 +45,8 @@ inline const char *log_io_user_str(const LogIOUser user_type)
     USER_TYPE_STR(DEFAULT);
     USER_TYPE_STR(REPLAY);
     USER_TYPE_STR(FETCHLOG);
-    USER_TYPE_STR(ARCHIVE);
     USER_TYPE_STR(RESTORE);
-    USER_TYPE_STR(CHANGE_STREAM);
+    USER_TYPE_STR(CDC);
     USER_TYPE_STR(STANDBY);
     USER_TYPE_STR(SHARED_UPLOAD);
     USER_TYPE_STR(META_INFO);

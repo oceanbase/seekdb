@@ -62,37 +62,6 @@ INSERT INTO d.t1 PARTITION (p3, p4) VALUES (24, 'Tim', 'Greene', 3, 1),  (26, 'L
 REPLACE INTO d.t1 PARTITION (p0) VALUES (20, 'Jan', 'Jones', 3, 2);
 SELECT e.id, s.city, d.name FROM e JOIN stores PARTITION (p1) ON e.id=s.id JOIN departments PARTITION (p0) ON e.id=d.id;
 alter system major freeze;
-alter system start merge zone = 'z1';
-alter system suspend merge;
-alter system suspend merge tenant = sys;
-alter system suspend merge tenant = all_user;
-alter system suspend merge tenant = all_meta;
-alter system resume merge;
-alter system resume merge tenant = sys;
-alter system resume merge tenant = all_user;
-alter system resume merge tenant = all_meta;
-alter system clear roottable;
-alter system clear roottable tenant = 'xxx';
-alter system modify zone 'z1' set region 'r1'
---error 5001
-alter system start zone 'z1' region 'r1'
-alter system modify zone 'z1' IDC 'idc1'
-alter system modify zone 'z1' set IDC 'idc1', region 'r1'
-alter system add zone 'z1' idc 'idc1', region 'r1'
-alter system add zone 'z1' idc 'idc1'
-alter system modify zone 'z1'
---error 5001
-alter system start zone 'z1' IDC 'idc1'
---error 5001
-alter system start zone 'z1' zone_type 'ReadWrite'
-alter system add zone 'z1' zone_type 'ReadWrite', idc 'idc1', region 'r1'
-alter system add zone 'z1' zone_type 'ReadWrite', idc 'idc1'
-alter system add zone 'z1' zone_type 'ReadWrite', region 'r1'
-alter system add zone 'z1' zone_type 'ReadWrite'
-alter system modify zone 'z1' zone_type 'ReadWrite', idc 'idc1', region 'r1'
-alter system modify zone 'z1' zone_type 'ReadWrite', idc 'idc1'
-alter system modify zone 'z1' zone_type 'ReadWrite', region 'r1'
-alter system modify zone 'z1' zone_type 'ReadWrite'
 select * from t1 where c1>ANY(select c1 from t2 where c2>1);
 select * from t1 where c1>SOME(select c1 from t2 where c2>1);
 select * from t1 where c1>ALL(select c1 from t2 where c2>1);
@@ -163,16 +132,6 @@ create outline out_name on insert /*+ssssss*/ into t1 values(1, 2)  to insert /*
 drop outline out_name;
 drop outline db_name.out_name;
 
-#test create tenant, alter tenant
-create tenant tt1 replica_num = 1, primary_zone = 'zone1', resource_pool_list = ('zone1') set ob_tcp_invited_nodes='%';
-create tenant if not exists tt1 replica_num = 1, primary_zone = 'zone1', resource_pool_list = ('zone1') set ob_tcp_invited_nodes='%';
-create tenant tt1 replica_num = 1, primary_zone = 'zone1', resource_pool_list = ('zone1'), locality = 'auto_locality_strategy' set ob_tcp_invited_nodes='%';
-create tenant if not exists tt1 replica_num = 1, primary_zone = 'zone1', resource_pool_list = ('zone1'), locality = 'auto_locality_strategy' set ob_tcp_invited_nodes='%';
-create tenant tt1 replica_num = 1, primary_zone = 'zone1', resource_pool_list = ('zone1'), logonly_replica_num = 1 set ob_tcp_invited_nodes='%';
-create tenant if not exists tt1 replica_num = 1, primary_zone = 'zone1', resource_pool_list = ('zone1'), logonly_replica_num = 1 set ob_tcp_invited_nodes='%';
-
-select /*+max_concurrent(-10)*/* from t1;
-select /*+max_concurrent(10)*/* from t1;
 
 
 ########################## test for hierarchical query ###################################
@@ -269,9 +228,5 @@ select unique distinct(    max(c1)), c2 from t1;
 --error 5001
 select unique(*) from t1;
 
-############# tablegroup ##################
---sql_mode mysql
-alter tablegroup tg2 add table t1,t2;
 insert into t1 values(X'');
 create table t1(`thedate` date NOT NULL COMMENT '日期');
-alter system bootstrap REGION 'sys_region' ZONE 'zone1' SERVER '10.101.74.122:41425';

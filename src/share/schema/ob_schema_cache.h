@@ -26,7 +26,6 @@
 #include "share/schema/ob_package_info.h"
 #include "share/schema/ob_routine_info.h"
 #include "share/schema/ob_trigger_info.h"
-#include "share/schema/ob_udf.h"
 #include "share/schema/ob_schema_mgr.h"
 
 namespace oceanbase
@@ -113,8 +112,6 @@ public:
   virtual bool operator ==(const ObIKVCacheKey &other) const;
   virtual uint64_t hash() const;
   virtual int64_t size() const;
-  // here tenant is used for alloca memory for kvcache
-  
   virtual int deep_copy(char *buf,
                         const int64_t buf_len,
                         ObIKVCacheKey *&key) const;
@@ -180,7 +177,7 @@ public:
 
 
   // @param[in]:
-  // - key: (tenant, tablet_id, schema_version)
+  // - key: (tablet_id, schema_version)
   // @param[out]:
   // - table_id: table_id is OB_INVALID_ID means that
   //             tablet-table history doesn't exist
@@ -189,7 +186,7 @@ public:
   int get_tablet_cache(const ObTabletCacheKey &key,
                        uint64_t &table_id);
   // @param[in]:
-  // - key: (tenant, tablet_id, schema_version)
+  // - key: (tablet_id, schema_version)
   // - table_id: (table_id)
   int put_tablet_cache(const ObTabletCacheKey &key,
                        const uint64_t table_id);
@@ -207,8 +204,6 @@ private:
   HistoryCache history_cache_;
   bool is_inited_;
   ObTableSchema all_core_table_;
-  ObSimpleTenantSchema simple_gts_tenant_;
-  ObTenantSchema full_gts_tenant_;
   TabletCache tablet_cache_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSchemaCache);
@@ -231,9 +226,9 @@ public:
                    common::ObIAllocator &allocator,
                    ObSchema *&schema);
 private:
-  int fetch_tenant_schema(int64_t schema_version,
+  int fetch_runtime_schema(int64_t schema_version,
                           common::ObIAllocator &allocator,
-                          ObTenantSchema *&tenant_schema);
+                          ObServerRuntimeSchema *&runtime_schema);
   int fetch_sys_variable_schema(
       const ObRefreshSchemaStatus &schema_status,
       int64_t schema_version,
@@ -244,11 +239,6 @@ private:
                             int64_t schema_version,
                             common::ObIAllocator &allocator,
                             ObDatabaseSchema *&database_schema);
-  int fetch_tablegroup_schema(const ObRefreshSchemaStatus &schema_status,
-                              uint64_t tablegroup_id,
-                              int64_t schema_version,
-                              common::ObIAllocator &allocator,
-                              ObTablegroupSchema *&tablegroup_schema);
   int fetch_table_schema(const ObRefreshSchemaStatus &schema_status,
                          uint64_t table_id,
                          int64_t schema_version,
@@ -273,10 +263,7 @@ private:
   DEF_SCHEMA_INFO_FETCHER(package, ObPackageInfo);
   DEF_SCHEMA_INFO_FETCHER(routine, ObRoutineInfo);
   DEF_SCHEMA_INFO_FETCHER(trigger, ObTriggerInfo);
-  DEF_SCHEMA_INFO_FETCHER(udf, ObUDF);
-  DEF_SCHEMA_INFO_FETCHER(sequence, ObSequenceSchema);
   DEF_SCHEMA_INFO_FETCHER(mock_fk_parent_table, ObMockFKParentTableSchema);
-  DEF_SCHEMA_INFO_FETCHER(ccl_rule, ObCCLRuleSchema);
 #undef DEF_SCHEMA_INFO_FETCHER
 #endif
 

@@ -28,12 +28,12 @@ namespace common
 namespace serialization
 {
 template <>
-struct EnumEncoder<false, const sql::ObDASInsCtDef *> : sql::DASCtEncoder<sql::ObDASInsCtDef>
+struct EnumEncoder<false, const sql::ObDASInsCtDef *> : sql::DASCtRefEncoder<sql::ObDASInsCtDef>
 {
 };
 
 template <>
-struct EnumEncoder<false, sql::ObDASInsRtDef *> : sql::DASRtEncoder<sql::ObDASInsRtDef>
+struct EnumEncoder<false, sql::ObDASInsRtDef *> : sql::DASRtRefEncoder<sql::ObDASInsRtDef>
 {
 };
 } // end namespace serialization
@@ -204,7 +204,7 @@ int ObDASInsertOp::insert_row_with_fetch()
     if (das_snapshot_opt_info_.isolation_level_ != transaction::ObTxIsolationLevel::RC) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected isolation_level", K(ret), K(das_snapshot_opt_info_));
-    } else if (OB_ISNULL(txs = MTL_WITH_CHECK(transaction::ObTransService*))) {
+    } else if (OB_ISNULL(txs = share::server_module<transaction::ObTransService*>())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("get_tx_service", K(ret));
     } else if (OB_FAIL(txs->get_read_snapshot(*trans_desc_,
@@ -316,37 +316,6 @@ int ObDASInsertOp::insert_row_with_fetch()
   return ret;
 }
 
-int ObDASInsertOp::store_conflict_row(ObDASInsertResult &ins_result)
-{
-  int ret = OB_SUCCESS;
-  bool added = false;
-  ObDatumRow *dup_row = nullptr;
-  ObDASWriteBuffer &result_buffer = ins_result.get_result_buffer();
-  ObDASWriteBuffer::DmlShadowRow ssr;
-  if (OB_ISNULL(result_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("result_ can't be null", K(ret));
-  }
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(ssr.init(op_alloc_, ins_ctdef_->table_rowkey_types_, false))) {
-      LOG_WARN("init shadow stored row failed", K(ret), K(ins_ctdef_->table_rowkey_types_));
-    }
-  }
-  while (OB_SUCC(ret) && OB_SUCC(result_->get_next_row(dup_row))) {
-    LOG_DEBUG("fetch one conflict row", KPC(dup_row));
-    if (OB_FAIL(ssr.shadow_copy(*dup_row))) {
-      LOG_WARN("shadow copy ObNewRow failed", K(ret));
-    } else if (OB_FAIL(result_buffer.try_add_row(ssr, das::OB_DAS_MAX_PACKET_SIZE, added))) {
-      LOG_WARN("fail to add row to datum_store",K(ret));
-    } else {
-      ssr.reuse();
-    }
-  }
-
-  ret = OB_ITER_END == ret ? OB_SUCCESS : ret;
-  return ret;
-}
-
 int ObDASInsertOp::release_op()
 {
   int ret = OB_SUCCESS;
@@ -378,89 +347,12 @@ int ObDASInsertOp::assign_task_result(ObIDASTaskOp *other)
   return ret;
 }
 
-int ObDASInsertOp::decode_task_result(ObIDASTaskResult *task_result)
-{
-  int ret = OB_SUCCESS;
-#if !defined(NDEBUG)
-  CK(typeid(*task_result) == typeid(ObDASInsertResult));
-  CK(task_id_ == task_result->get_task_id());
-#endif
-
-  if (OB_SUCC(ret)) {
-    ObDASInsertResult *insert_result = static_cast<ObDASInsertResult*>(task_result);
-    if (ins_rtdef_->need_fetch_conflict_) {
-      if (OB_FAIL(insert_result->init_result_newrow_iter(&ins_ctdef_->table_rowkey_types_))) {
-        LOG_WARN("init insert result iterator failed", K(ret));
-      } else {
-        result_ = insert_result;
-        affected_rows_ = insert_result->get_affected_rows();
-        is_duplicated_ = insert_result->is_duplicated();
-        if (das_snapshot_opt_info_.get_specify_snapshot()) {
-          if (OB_FAIL(das_snapshot_opt_info_.get_response_snapshot()->assign(insert_result->get_response_snapshot()))) {
-            LOG_WARN("fail to assign snapshot", K(ret));
-          }
-        }
-      }
-    } else {
-      result_ = insert_result;
-      affected_rows_ = insert_result->get_affected_rows();
-      is_duplicated_ = insert_result->is_duplicated();
-    }
-  }
-  return ret;
-}
-
-int ObDASInsertOp::fill_task_result(ObIDASTaskResult &task_result, bool &has_more, int64_t &memory_limit)
-{
-  int ret = OB_SUCCESS;
-#if !defined(NDEBUG)
-  CK(typeid(task_result) == typeid(ObDASInsertResult));
-#endif
-
-  if (OB_SUCC(ret)) {
-    ObDASInsertResult &ins_result = static_cast<ObDASInsertResult&>(task_result);
-    // Only need fetch conflict row, return conflict row
-    if (ins_rtdef_->need_fetch_conflict_) {
-      if (OB_FAIL(store_conflict_row(ins_result))) {
-        LOG_WARN("fail to fetch conflict row", K(ret));
-      } else {
-        ins_result.set_affected_rows(affected_rows_);
-        ins_result.set_is_duplicated(is_duplicated_);
-        has_more = false;
-        memory_limit -= ins_result.get_result_buffer().get_mem_used();
-        if (das_snapshot_opt_info_.get_specify_snapshot()) {
-          if (OB_FAIL(ins_result.get_response_snapshot().assign(*das_snapshot_opt_info_.get_response_snapshot()))) {
-            LOG_WARN("fail to assign snapshot", K(ret));
-          }
-        }
-      }
-    } else {
-      ins_result.set_affected_rows(affected_rows_);
-      has_more = false;
-    }
-  }
-
-  return ret;
-}
-
 int ObDASInsertOp::init_task_info(uint32_t row_extend_size)
 {
   int ret = OB_SUCCESS;
   if (!insert_buffer_.is_inited()
       && OB_FAIL(insert_buffer_.init(op_alloc_, row_extend_size, "DASInsertBuffer"))) {
     LOG_WARN("init insert buffer failed", K(ret));
-  }
-  return ret;
-}
-
-int ObDASInsertOp::swizzling_remote_task(ObDASRemoteInfo *remote_info)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObIDASTaskOp::swizzling_remote_task(remote_info))) {
-    LOG_WARN("fail to swizzling remote task", K(ret));
-  } else if (remote_info != nullptr) {
-    //DAS insert is executed remotely
-    trans_desc_ = remote_info->trans_desc_;
   }
   return ret;
 }
@@ -484,100 +376,6 @@ OB_SERIALIZE_MEMBER((ObDASInsertOp, ObIDASTaskOp),
                     ins_ctdef_,
                     ins_rtdef_,
                     insert_buffer_);
-
-ObDASInsertResult::ObDASInsertResult()
-  : ObIDASTaskResult(),
-    affected_rows_(0),
-    result_buffer_(),
-    result_newrow_iter_(),
-    output_types_(nullptr),
-    is_duplicated_(false),
-    response_snapshot_()
-{
-}
-
-ObDASInsertResult::~ObDASInsertResult()
-{
-}
-
-int ObDASInsertResult::get_next_row(ObDatumRow *&row)
-{
-  int ret = OB_SUCCESS;
-  ObDatumRow *result_row = NULL;
-  if (OB_FAIL(result_newrow_iter_.get_next_row(result_row))) {
-    if (OB_ITER_END != ret) {
-      LOG_WARN("get next row from result iter failed", K(ret));
-    }
-  } else {
-    row = result_row;
-  }
-  return ret;
-}
-
-int ObDASInsertResult::link_extra_result(ObDASExtraData &extra_result, ObIDASTaskOp *task_op)
-{
-  UNUSED(extra_result);
-  return OB_NOT_IMPLEMENT;
-}
-
-int ObDASInsertResult::init_result_newrow_iter(const ObjMetaFixedArray *output_types)
-{
-  int ret = OB_SUCCESS;
-  output_types_ = output_types;
-  if (OB_ISNULL(output_types_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("output types array is null", K(ret));
-  } else if (OB_FAIL(result_buffer_.begin(result_newrow_iter_, *output_types_))) {
-    LOG_WARN("begin datum result iterator failed", K(ret));
-  }
-  return ret;
-}
-
-void ObDASInsertResult::reset()
-{
-  output_types_ = nullptr;
-}
-
-int ObDASInsertResult::init(const ObIDASTaskOp &op, common::ObIAllocator &alloc)
-{
-  int ret = OB_SUCCESS;
-  const ObDASInsertOp &ins_op = static_cast<const ObDASInsertOp&>(op);
-  
-  const ObDASBaseCtDef *base_ctdef = ins_op.get_ctdef();
-  if (OB_ISNULL(base_ctdef)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("base ctdef is null", K(ret));
-  } else {
-    const ObDASDMLBaseCtDef *ins_ctdef = static_cast<const ObDASDMLBaseCtDef*>(base_ctdef);
-    // replace and insert_up pull back conflict data's das_write_buff temporarily does not need to carry pay_load
-    if (!result_buffer_.is_inited()
-        && OB_FAIL(result_buffer_.init(alloc, 0, "DASInsRsultBuffer"))) {
-      LOG_WARN("init result buffer failed", K(ret));
-    }
-  }
-  return OB_SUCCESS;
-}
-
-int ObDASInsertResult::reuse()
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(0 != result_buffer_.get_row_cnt())) {
-    ret = OB_NOT_SUPPORTED;
-  } else {
-    affected_rows_ = 0;
-    is_duplicated_ = false;
-    result_buffer_.~ObDASWriteBuffer();
-    new(&result_buffer_) ObDASWriteBuffer();
-  }
-  return ret;
-}
-
-OB_SERIALIZE_MEMBER((ObDASInsertResult, ObIDASTaskResult),
-                    affected_rows_,
-                    result_buffer_,
-                    is_duplicated_,
-                    response_snapshot_);
-
 
 void ObDASConflictIterator::reset()
 {

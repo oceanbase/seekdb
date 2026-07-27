@@ -91,11 +91,6 @@ public:
   { return common::OB_SUCCESS; }
   virtual int64_t get_data_size() { return 0; }
   virtual MutatorType get_mutator_type() const; 
-  virtual int get_cluster_version(uint64_t &cluster_version) const
-  {
-    UNUSED(cluster_version);
-    return common::OB_SUCCESS;
-  }
   virtual blocksstable::ObDmlFlag get_dml_flag() const { return blocksstable::ObDmlFlag::DF_NOT_EXIST; }
   virtual void set_not_calc_checksum(const bool not_calc_checksum) { UNUSED(not_calc_checksum); }
   ObITransCallback *get_next() const { return ATOMIC_LOAD(&next_); }

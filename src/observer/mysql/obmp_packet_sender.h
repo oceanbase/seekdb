@@ -175,7 +175,6 @@ protected:
   uint32_t sessid_;
   bool req_has_wokenup_;
   int64_t query_receive_ts_;
-  int nio_protocol_;
   ObSMConnection *conn_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObMPPacketSender);

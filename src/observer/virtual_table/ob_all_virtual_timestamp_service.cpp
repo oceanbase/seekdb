@@ -42,7 +42,7 @@ int ObAllVirtualTimestampService::inner_get_next_row(ObNewRow *&row)
     ret = OB_ITER_END;
   } else {
     start_to_read_ = true;
-    MOD_SCOPE {
+    SERVER_MODULE_SCOPE {
       share::g_mp->timestamp_access()->get_virtual_info(ts_value_);
     }
   }

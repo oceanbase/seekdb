@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "share/schema/ob_col_desc.h"  // ObColDesc complete type(previously hidden behind the ddl_common include chain)
 #include "ob_table_schema.h"
-#include "share/table/ob_ttl_util.h"  // ObKVAttr, previously hidden behind a removed sql include chain, make the dependency explicit(free within share)
 #include "share/schema/ob_part_mgr_util.h"
 #include "share/schema/ob_part_mgr_util.h"
 namespace oceanbase
@@ -138,7 +137,6 @@ int ObSimpleTableSchemaV2::assign(const ObSimpleTableSchemaV2 &other)
       schema_version_ = other.schema_version_;
       max_dependency_version_ = other.max_dependency_version_;
       database_id_ = other.database_id_;
-      tablegroup_id_ = other.tablegroup_id_;
       data_table_id_ = other.data_table_id_;
       table_type_ = other.table_type_;
       name_case_mode_ = other.name_case_mode_;
@@ -151,7 +149,6 @@ int ObSimpleTableSchemaV2::assign(const ObSimpleTableSchemaV2 &other)
       object_status_ = other.object_status_;
       is_force_view_ = other.is_force_view_;
       truncate_version_ = other.truncate_version_;
-      storage_cache_policy_type_ = other.storage_cache_policy_type_;
       if (OB_FAIL(table_mode_.assign(other.table_mode_))) {
         LOG_WARN("Fail to assign table mode", K(ret), K(other.table_mode_));
       } else if (OB_FAIL(deep_copy_str(other.table_name_, table_name_))) {
@@ -161,7 +158,7 @@ int ObSimpleTableSchemaV2::assign(const ObSimpleTableSchemaV2 &other)
       } else if (OB_FAIL(set_simple_constraint_info_array(other.simple_constraint_info_array_))) {
         LOG_WARN("fail to set simple constraint info array", K(ret));
       } else if (OB_FAIL(deep_copy_str(other.origin_index_name_, origin_index_name_))) {
-        LOG_WARN("Fail to deep copy primary_zone", K(ret));
+        LOG_WARN("Fail to deep copy origin index name", K(ret));
       }
     } else {
       ret = error_ret_;
@@ -191,7 +188,6 @@ void ObSimpleTableSchemaV2::reset()
   schema_version_ = 0;
   max_dependency_version_ = OB_INVALID_VERSION;
   database_id_ = OB_INVALID_ID;
-  tablegroup_id_ = OB_INVALID_ID;
   data_table_id_ = 0;
   table_name_.reset();
   origin_index_name_.reset();
@@ -215,7 +211,6 @@ void ObSimpleTableSchemaV2::reset()
   simple_constraint_info_array_.reset();
   truncate_version_ = OB_INVALID_VERSION;
   ObPartitionSchema::reset();
-  storage_cache_policy_type_ = storage::ObStorageCachePolicyType::MAX_POLICY;
 }
 
 bool ObSimpleTableSchemaV2::has_tablet() const
@@ -224,7 +219,6 @@ bool ObSimpleTableSchemaV2::has_tablet() const
            || is_view_table()
            || is_aux_vp_table()
            || is_virtual_table(get_table_id()) // virtual table index
-           || is_external_table()
            );
 }
 
@@ -239,25 +233,6 @@ ObPartitionLevel ObSimpleTableSchemaV2::get_part_level() const
   } else { }//do nothing
 
   return part_level;
-}
-
-int ObSimpleTableSchemaV2::get_zone_list(
-    share::schema::ObSchemaGetterGuard &schema_guard,
-    common::ObIArray<common::ObZone> &zone_list) const
-{
-  int ret = OB_SUCCESS;
-  
-  zone_list.reset();
-  const ObTenantSchema *tenant_schema = NULL;
-  if (OB_FAIL(schema_guard.get_tenant_info(tenant_schema))) {
-    LOG_WARN("fail to get tenant schema", K(ret), K(database_id_));
-  } else if (OB_UNLIKELY(NULL == tenant_schema)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant schema null", K(ret), K(database_id_), KP(tenant_schema));
-  } else if (OB_FAIL(tenant_schema->get_zone_list(zone_list))) {
-    LOG_WARN("fail to get zone list", K(ret));
-  } else {} // no more to do
-  return ret;
 }
 
 int ObSimpleTableSchemaV2::set_simple_foreign_key_info_array(const common::ObIArray<ObSimpleForeignKeyInfo> &simple_fk_info_array)
@@ -403,26 +378,8 @@ int64_t ObSimpleTableSchemaV2::get_convert_size() const
   convert_size += origin_index_name_.length() + 1;
   convert_size += transition_point_.get_deep_copy_size();
   convert_size += interval_range_.get_deep_copy_size();
-  convert_size += sizeof(storage_cache_policy_type_);
   return convert_size;
 }
-
-int ObSimpleTableSchemaV2::get_encryption_id(int64_t &encrypt_id) const
-{
-  int ret = OB_SUCCESS;
-  encrypt_id = 0;
-  return ret;
-}
-
-bool ObSimpleTableSchemaV2::need_encrypt() const {
-  bool ret = false;
-  return ret;
-}
-
-
-
-
-
 
 int ObSimpleTableSchemaV2::check_has_all_server_readonly_replica(
     share::schema::ObSchemaGetterGuard &guard,
@@ -592,7 +549,6 @@ int64_t ObSimpleTableSchemaV2::to_string(char *buf, const int64_t buf_len) const
   int64_t pos = 0;
   J_OBJ_START();
   J_KV(K_(database_id),
-      K_(tablegroup_id),
       K_(table_id),
       K_(association_table_id),
       K_(in_offline_ddl_white_list),
@@ -621,8 +577,7 @@ int64_t ObSimpleTableSchemaV2::to_string(char *buf, const int64_t buf_len) const
     K_(max_dependency_version),
     K_(object_status),
     K_(is_force_view),
-    K_(truncate_version),
-    K_(storage_cache_policy_type)
+    K_(truncate_version)
 );
   J_OBJ_END();
 
@@ -1287,10 +1242,8 @@ ObTableSchema::ObTableSchema(ObIAllocator *allocator)
     lob_inrow_threshold_(OB_DEFAULT_LOB_INROW_THRESHOLD),
     micro_block_format_version_(storage::ObMicroBlockFormatVersionHelper::DEFAULT_VERSION),
     micro_index_clustered_(false),
-    enable_macro_block_bloom_filter_(false),
     index_params_(),
     exec_env_(),
-    storage_cache_policy_(),
     semistruct_encoding_type_()
 {
   reset();
@@ -1339,7 +1292,6 @@ int ObTableSchema::assign(const ObTableSchema &src_schema)
       part_key_column_num_ = src_schema.part_key_column_num_;
       subpart_key_column_num_ = src_schema.subpart_key_column_num_;
       block_size_ = src_schema.block_size_;
-      is_use_bloomfilter_ = src_schema.is_use_bloomfilter_;
       progressive_merge_num_ = src_schema.progressive_merge_num_;
       tablet_size_ = src_schema.tablet_size_;
       pctfree_ = src_schema.pctfree_;
@@ -1351,12 +1303,10 @@ int ObTableSchema::assign(const ObTableSchema &src_schema)
       def_type_ = src_schema.def_type_;
       charset_type_ = src_schema.charset_type_;
       collation_type_ = src_schema.collation_type_;
-      code_version_ = src_schema.code_version_;
       index_attributes_set_ = src_schema.index_attributes_set_;
       row_store_type_ = src_schema.row_store_type_;
       store_format_ = src_schema.store_format_;
       progressive_merge_round_ = src_schema.progressive_merge_round_;
-      storage_format_version_ = src_schema.storage_format_version_;
       table_dop_ = src_schema.table_dop_;
       define_user_id_ = src_schema.define_user_id_;
       aux_lob_meta_tid_ = src_schema.aux_lob_meta_tid_;
@@ -1367,34 +1317,14 @@ int ObTableSchema::assign(const ObTableSchema &src_schema)
       lob_inrow_threshold_ = src_schema.lob_inrow_threshold_;
       auto_increment_cache_size_ = src_schema.auto_increment_cache_size_;
       micro_index_clustered_ = src_schema.micro_index_clustered_;
-      enable_macro_block_bloom_filter_ = src_schema.enable_macro_block_bloom_filter_;
-      catalog_id_ = src_schema.catalog_id_;
-      merge_engine_type_ = src_schema.merge_engine_type_;
-      external_location_id_ = src_schema.external_location_id_;
-      if (OB_FAIL(deep_copy_str(src_schema.tablegroup_name_, tablegroup_name_))) {
-        LOG_WARN("Fail to deep copy tablegroup_name", K(ret));
-      } else if (OB_FAIL(deep_copy_str(src_schema.comment_, comment_))) {
+      if (OB_FAIL(deep_copy_str(src_schema.comment_, comment_))) {
         LOG_WARN("Fail to deep copy comment", K(ret));
       } else if (OB_FAIL(deep_copy_str(src_schema.pk_comment_, pk_comment_))) {
         LOG_WARN("Fail to deep copy primary key comment", K(ret));
-      } else if (OB_FAIL(deep_copy_str(src_schema.expire_info_, expire_info_))) {
-        LOG_WARN("Fail to deep copy expire info string", K(ret));
       } else if (OB_FAIL(deep_copy_str(src_schema.parser_name_, parser_name_))) {
         LOG_WARN("deep copy parser name failed", K(ret));
       } else if (OB_FAIL(deep_copy_str(src_schema.parser_properties_, parser_properties_))) {
         LOG_WARN("fail to deep copy str", K(ret));
-      } else if (OB_FAIL(deep_copy_str(src_schema.external_file_location_, external_file_location_))) {
-        LOG_WARN("deep copy external_file_location failed", K(ret));
-      } else if (OB_FAIL(deep_copy_str(src_schema.external_file_location_access_info_, external_file_location_access_info_))) {
-        LOG_WARN("deep copy external_file_location_access_info failed", K(ret));
-      } else if (OB_FAIL(deep_copy_str(src_schema.external_file_format_, external_file_format_))) {
-        LOG_WARN("deep copy external_file_format failed", K(ret));
-      } else if (OB_FAIL(deep_copy_str(src_schema.external_file_pattern_, external_file_pattern_))) {
-        LOG_WARN("deep copy external_file_pattern failed", K(ret));
-      } else if (OB_FAIL(deep_copy_str(src_schema.external_properties_, external_properties_))) {
-        LOG_WARN("deep copy external_properties failed", K(ret));
-      } else if (OB_FAIL(deep_copy_str(src_schema.external_sub_path_, external_sub_path_))) {
-        LOG_WARN("deep copy external_sub_path failed", K(ret));
       }
       //view schema
       if (OB_SUCC(ret)) {
@@ -1509,10 +1439,6 @@ int ObTableSchema::assign(const ObTableSchema &src_schema)
   }
 
 
-  if (OB_SUCC(ret) && OB_FAIL(deep_copy_str(src_schema.ttl_definition_, ttl_definition_))) {
-    LOG_WARN("deep copy ttl definition failed", K(ret));
-  }
-
   if (OB_SUCC(ret) && OB_FAIL(deep_copy_str(src_schema.index_params_, index_params_))) {
     LOG_WARN("deep copy vector index param failed", K(ret));
   }
@@ -1521,9 +1447,6 @@ int ObTableSchema::assign(const ObTableSchema &src_schema)
     LOG_WARN("deep copy vector exec_env failed", K(ret));
   }
 
-  if (OB_SUCC(ret) && OB_FAIL(deep_copy_str(src_schema.storage_cache_policy_, storage_cache_policy_))) {
-    LOG_WARN("deep copy storage cache policy failed", K(ret));
-  }
   if (OB_SUCC(ret)) {
     semistruct_encoding_type_ = src_schema.semistruct_encoding_type_;
   }
@@ -1667,7 +1590,7 @@ int ObTableSchema::check_valid(const bool count_varchar_size_by_byte) const
           }
 
           // TODO@nijia.nj data_length should be checked according specified charset
-          if ((is_table() || is_tmp_table() || is_external_table()) && !column->is_column_stored_in_sstable()) {
+          if ((is_table() || is_tmp_table()) && !column->is_column_stored_in_sstable()) {
             // When the column is a virtual generated column in the table, the column will not be stored,
             // so there is no need to calculate its length
           } else if (is_storage_index_table() && column->is_fulltext_column()) {
@@ -1719,16 +1642,11 @@ int ObTableSchema::check_valid(const bool count_varchar_size_by_byte) const
       }
 
       if (OB_SUCC(ret)) {
-        //TODO oushen confirm the length
-        //
-        // jiage: inner table shouldn't check VARCHAR length for
-        // compatibility.  VARCHAR length in previous version means
-        // maximum bytes of column, whereas new version changes to chars
-        // of column.
-        bool is_external_object = is_external_object_id(table_id_);
-        const int64_t max_row_length = is_sys_table() || is_vir_table() || is_external_object ?
+        // Internal and virtual schemas are not constrained by user-table row
+        // length limits; their column definitions are owned by the server.
+        const int64_t max_row_length = is_sys_table() || is_vir_table() ?
                                                                 INT64_MAX : OB_MAX_USER_ROW_LENGTH;
-        const int64_t max_rowkey_length = is_sys_table() || is_vir_table() || is_external_object ?
+        const int64_t max_rowkey_length = is_sys_table() || is_vir_table() ?
                                                 OB_MAX_ROW_KEY_LENGTH : OB_MAX_USER_ROW_KEY_LENGTH;
         if (max_row_length < varchar_col_total_length) {
           LOG_WARN_RET(OB_INVALID_ERROR, "total length of varchar columns is larger than the max allowed length",
@@ -2581,14 +2499,7 @@ int ObTableSchema::get_default_row(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("column must not null", K(ret), K(j), K(column_cnt_));
       } else if (column->get_column_id() == column_ids.at(i).col_id_) {
-        if (column->is_identity_column()) {
-          // Identity colunm's orig_default_value and cur_default_val are used to store sequence id
-          // and desc table, it does not have the same semantics as normal default. so here we set
-          // its default value as null to avoid type mismatch.
-          default_row.cells_[i].set_null();
-        } else {
-          default_row.cells_[i] = (column->*func)();
-        }
+        default_row.cells_[i] = (column->*func)();
         found = true;
       }
     }
@@ -2809,10 +2720,8 @@ int64_t ObTableSchema::get_convert_size() const
 
   convert_size += ObSimpleTableSchemaV2::get_convert_size();
   convert_size += sizeof(ObTableSchema) - sizeof(ObSimpleTableSchemaV2);
-  convert_size += tablegroup_name_.length() + 1;
   convert_size += comment_.length() + 1;
   convert_size += pk_comment_.length() + 1;
-  convert_size += expire_info_.length() + 1;
   convert_size += parser_name_.length() + 1;
   convert_size += parser_properties_.length() + 1;
   convert_size += view_schema_.get_convert_size() - sizeof(view_schema_);
@@ -2849,17 +2758,9 @@ int64_t ObTableSchema::get_convert_size() const
     convert_size += simple_index_infos_.at(i).get_convert_size();
   }
 
-  convert_size += external_file_format_.length() + 1;
-  convert_size += external_file_location_.length() + 1;
-  convert_size += external_file_location_access_info_.length() + 1;
-  convert_size += external_file_pattern_.length() + 1;
-  convert_size += ttl_definition_.length() + 1;
   convert_size += index_params_.length() + 1;
 
-  convert_size += external_properties_.length() + 1;
-  convert_size += storage_cache_policy_.length() + 1;
   convert_size += semistruct_encoding_type_.get_deep_copy_size();
-  convert_size += external_sub_path_.length() + 1;
   return convert_size;
 }
 
@@ -2872,7 +2773,6 @@ void ObTableSchema::reset()
   part_key_column_num_ = 0;
   subpart_key_column_num_ = 0;
   block_size_ = common::OB_DEFAULT_SSTABLE_BLOCK_SIZE;
-  is_use_bloomfilter_ = false;
   progressive_merge_num_ = 0;
   tablet_size_ = OB_DEFAULT_TABLET_SIZE;
   pctfree_ = OB_DEFAULT_PCTFREE;
@@ -2884,21 +2784,16 @@ void ObTableSchema::reset()
   def_type_ = TABLE_DEF_TYPE_USER;
   charset_type_ = ObCharset::get_default_charset();
   collation_type_ = ObCharset::get_default_collation(ObCharset::get_default_charset());
-  code_version_ = OB_SCHEMA_CODE_VERSION;
   index_attributes_set_ = OB_DEFAULT_INDEX_ATTRIBUTES_SET;
   row_store_type_ = ObStoreFormat::get_default_row_store_type();
   store_format_ = OB_STORE_FORMAT_INVALID;
   progressive_merge_round_ = 0;
-  storage_format_version_ = OB_STORAGE_FORMAT_VERSION_INVALID;
   define_user_id_ = OB_INVALID_ID;
   aux_lob_meta_tid_ = OB_INVALID_ID;
   aux_lob_piece_tid_ = OB_INVALID_ID;
   compressor_type_ = ObCompressorType::NONE_COMPRESSOR;
-  merge_engine_type_ = ObMergeEngineType::OB_MERGE_ENGINE_PARTIAL_UPDATE;
-  reset_string(tablegroup_name_);
   reset_string(comment_);
   reset_string(pk_comment_);
-  reset_string(expire_info_);
   reset_string(parser_name_);
   reset_string(parser_properties_);
   view_schema_.reset();
@@ -2922,7 +2817,6 @@ void ObTableSchema::reset()
   generated_columns_.reset();
   virtual_column_cnt_ = 0;
   micro_index_clustered_ = false;
-  enable_macro_block_bloom_filter_ = false;
   micro_block_format_version_ = storage::ObMicroBlockFormatVersionHelper::DEFAULT_VERSION;
 
   cst_cnt_ = 0;
@@ -2934,23 +2828,13 @@ void ObTableSchema::reset()
   table_dop_ = 1;
   table_flags_ = 0;
 
-  catalog_id_ = OB_INTERNAL_CATALOG_ID;
-  external_file_format_.reset();
-  external_file_location_.reset();
-  external_file_location_access_info_.reset();
-  external_file_pattern_.reset();
-  external_properties_.reset();
-  ttl_definition_.reset();
   index_params_.reset();
   exec_env_.reset();
   name_generated_type_ = GENERATED_TYPE_UNKNOWN;
   lob_inrow_threshold_ = OB_DEFAULT_LOB_INROW_THRESHOLD;
   auto_increment_cache_size_ = 0;
 
-  storage_cache_policy_.reset();
   semistruct_encoding_type_.reset();
-  external_location_id_ = OB_INVALID_ID;
-  external_sub_path_.reset();
   ObSimpleTableSchemaV2::reset();
 }
 
@@ -3575,7 +3459,7 @@ int ObTableSchema::add_col_to_name_hash_array(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("The column is NULL", K(ret));
   } else {
-    // In some scenarios, the tenant id is not initialized when add_column, 4002 will be reported here,
+    // Some callers add columns before the owning table id is initialized.
     // and the error code will not be processed temporarily.
     ObColumnSchemaHashWrapper column_name_key(column->get_column_name_str());
     if (NULL == name_hash_array_) {
@@ -3649,7 +3533,7 @@ int ObTableSchema::remove_col_from_name_hash_array(
     ret = OB_SCHEMA_ERROR;
     LOG_WARN("name hash array is NULL", K(ret));
   } else {
-    // Tenant id is not initialized when add_column in some scenarios
+    // The owning table id may not be initialized yet.
     ObColumnSchemaHashWrapper column_name_key(column->get_column_name());
     if (OB_SUCCESS != name_hash_array_->get_refactored(column_name_key, column_tmp)) {
       ret = OB_ERR_BAD_FIELD_ERROR;
@@ -3737,7 +3621,7 @@ int ObTableSchema::delete_column_internal(ObColumnSchemaV2 *column_schema, const
     ret = OB_SCHEMA_ERROR;
     LOG_WARN("The column schema does not belong to this table", K(ret));
   } else if (!is_view_table() && !is_user_table() && !is_index_table() && !is_tmp_table()
-             && !is_sys_table() && !is_aux_vp_table() && !is_external_table()) {
+             && !is_sys_table() && !is_aux_vp_table()) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("Only NORMAL table and index table and SYSTEM table and view table are allowed", K(ret));
   } else if (!for_view && ((!is_table_with_hidden_pk_column() && column_cnt_ <= MIN_COLUMN_COUNT_WITH_PK_TABLE)
@@ -4085,15 +3969,9 @@ int ObTableSchema::check_ddl_type_change_rules(const ObColumnSchemaV2 &src_colum
         !((src_meta.is_char() && dst_meta.is_char()) && // char(x) -> char(y) (y>=x) && src_column has no generated column depended on (rowkey or index)
           !src_column.has_generated_column_deps()) &&
         !(src_meta.is_integer_type() && dst_meta.is_integer_type())) {
-      /*
-        Note of the judge of data_version:
-          Determine data_version to avoid mixed deployment problems during the upgrade process.
-          During the upgrade process, the memtable_key.h of the old version of the observer will not have different types of defense rules (common::is_match_alter_integer_column_online_ddl_rules).
-          And, the type dismatch may cause 4016 problems;
-            1. This issue only needs to consider the primary key, index and part_key columns, so put the check here.
-            2. In the online ddl conversion released in 4.2.2 and 4.3, only the column type conversion of integer will involve this issue.
-          Therefore, we make a special case where the integer column is used as the primary key or index column.
-      */
+      // Key and partition columns use the conservative offline conversion path
+      // when their physical types differ, so the memtable key representation
+      // remains consistent throughout the DDL.
       if (is_rowkey || src_column.is_tbl_part_key_column()) {
         is_offline = true;
       }
@@ -4136,8 +4014,6 @@ int ObTableSchema::check_alter_column_in_rowkey(const ObColumnSchemaV2 &src_colu
   return ret;
 }
 
-// check_alter_column_in_index moved definition to sql/resolver/ddl/ob_ddl_resolver.cpp(ObVectorIndexUtil[q isolated zone] real user)
-
 int ObTableSchema::check_alter_column_is_offline(const ObColumnSchemaV2 *src_column,
                                                 ObColumnSchemaV2 *dst_column,
                                                 ObSchemaGetterGuard &schema_guard,
@@ -4154,8 +4030,6 @@ int ObTableSchema::check_alter_column_is_offline(const ObColumnSchemaV2 *src_col
   } else if (get_table_id() != src_column->get_table_id()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("The column does not belong to this table", K(ret));
-  } else if (is_external_table()) {
-    is_offline = false;
   } else if (!is_user_table() && !is_index_table() && !is_tmp_table() && !is_sys_table() && !is_view_table()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Only NORMAL table and INDEX table and SYSTEM table are allowed", K(ret));
@@ -4273,8 +4147,6 @@ int ObTableSchema::check_column_can_be_altered_online(
   } else if (get_table_id() != src_schema->get_table_id()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("The column does not belong to this table", K(ret));
-  } else if (is_external_table()) {
-    // external table canbe altered
   } else if (!is_user_table() && !is_index_table() && !is_tmp_table() && !is_sys_table() && !is_view_table()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Only NORMAL table and INDEX table and SYSTEM table are allowed", K(ret));
@@ -4477,7 +4349,7 @@ int ObTableSchema::check_row_length(
     for (int64_t i = 0; OB_SUCC(ret) && i < column_cnt_; ++i) {
       int64_t length = 0;
       col = (nullptr != src_schema && *src_schema == *column_array_[i]) ? dst_schema : column_array_[i];
-      if ((is_table() || is_tmp_table() || is_external_table()) && !col->is_column_stored_in_sstable()) {
+      if ((is_table() || is_tmp_table()) && !col->is_column_stored_in_sstable()) {
         // The virtual column in the table does not actually store data, and does not count the length
       } else if (is_storage_index_table() && col->is_fulltext_column()) {
         // The full text column in the index only counts the length of one word segment
@@ -4502,7 +4374,7 @@ int ObTableSchema::check_row_length(
     }
     if (OB_SUCC(ret) && nullptr == src_schema) {
       int64_t length = 0;
-      if ((is_table() || is_tmp_table() || is_external_table()) && !dst_schema->is_column_stored_in_sstable()) {
+      if ((is_table() || is_tmp_table()) && !dst_schema->is_column_stored_in_sstable()) {
         // The virtual column in the table does not actually store data, and does not count the length
       } else if (is_storage_index_table() && dst_schema->is_fulltext_column()) {
         // The full text column in the index only counts the length of one word segment
@@ -4544,7 +4416,7 @@ int ObTableSchema::get_column_byte_length(const ObColumnSchemaV2 &col,
 {
   int ret = OB_SUCCESS;
   length = 0;
-  if ((is_table() || is_tmp_table() || is_external_table()) && !col.is_column_stored_in_sstable()) {
+  if ((is_table() || is_tmp_table()) && !col.is_column_stored_in_sstable()) {
     // The virtual column in the table does not actually store data, and does not count the length
   } else if (is_storage_index_table() && col.is_fulltext_column()) {
     // The full text column in the index only counts the length of one word segment
@@ -5677,7 +5549,6 @@ int64_t ObTableSchema::to_string(char *buf, const int64_t buf_len) const
       K_(index_column_num),
       K_(rowkey_split_pos),
       K_(block_size),
-      K_(is_use_bloomfilter),
       K_(progressive_merge_num),
       K_(tablet_size),
       K_(pctfree),
@@ -5689,14 +5560,11 @@ int64_t ObTableSchema::to_string(char *buf, const int64_t buf_len) const
   J_COMMA();
   J_KV("index_status", static_cast<int32_t>(index_status_),
     "partition_status", static_cast<int32_t>(partition_status_),
-    K_(code_version),
     K_(comment),
     K_(pk_comment),
-    K_(tablegroup_name),
     K_(compressor_type),
     K_(row_store_type),
     K_(store_format),
-    K_(expire_info),
     K_(view_schema),
     K_(autoinc_column_id),
     K_(auto_increment),
@@ -5721,8 +5589,6 @@ int64_t ObTableSchema::to_string(char *buf, const int64_t buf_len) const
     K_(auto_increment_cache_size),
     K_(index_params),
     K_(exec_env),
-    K_(storage_cache_policy),
-    K_(merge_engine_type),
     K_(semistruct_encoding_type));
   J_OBJ_END();
 
@@ -5776,7 +5642,6 @@ OB_DEF_SERIALIZE(ObTableSchema)
 
   // !!! begin static check
   OB_UNIS_ENCODE(database_id_);
-  OB_UNIS_ENCODE(tablegroup_id_);
   OB_UNIS_ENCODE(table_id_);
   OB_UNIS_ENCODE(max_used_column_id_);
   OB_UNIS_ENCODE(rowkey_column_num_);
@@ -5784,7 +5649,6 @@ OB_DEF_SERIALIZE(ObTableSchema)
   OB_UNIS_ENCODE(rowkey_split_pos_);
   OB_UNIS_ENCODE(part_key_column_num_);
   OB_UNIS_ENCODE(block_size_);
-  OB_UNIS_ENCODE(is_use_bloomfilter_);
   OB_UNIS_ENCODE(progressive_merge_num_);
   OB_UNIS_ENCODE(autoinc_column_id_);
   OB_UNIS_ENCODE(auto_increment_);
@@ -5798,20 +5662,16 @@ OB_DEF_SERIALIZE(ObTableSchema)
   OB_UNIS_ENCODE(data_table_id_);
   OB_UNIS_ENCODE(index_status_);
   OB_UNIS_ENCODE(name_case_mode_);
-  OB_UNIS_ENCODE(code_version_);
   OB_UNIS_ENCODE(schema_version_);
   OB_UNIS_ENCODE(part_level_);
   OB_UNIS_ENCODE(part_option_);
   OB_UNIS_ENCODE(sub_part_option_);
-  OB_UNIS_ENCODE(tablegroup_name_);
   OB_UNIS_ENCODE(comment_);
   OB_UNIS_ENCODE(table_name_);
   OB_UNIS_ENCODE(compressor_type_);
-  OB_UNIS_ENCODE(expire_info_);
   OB_UNIS_ENCODE(view_schema_);
   OB_UNIS_ENCODE(index_using_type_);
   OB_UNIS_ENCODE(progressive_merge_round_);
-  OB_UNIS_ENCODE(storage_format_version_);
   // !!! FOR STATIC CHECKER BEGIN
   // THE FOLLOWING CODE CANNOT BE DESCRIBED USING SERIALIZE MACROS. THEY ARE EQUIVALENT TO THESE CODES:
   // OB_UNIS_ENCODE_ARRAY_POINTER(column_array_, column_cnt_);
@@ -5855,25 +5715,13 @@ OB_DEF_SERIALIZE(ObTableSchema)
   OB_UNIS_ENCODE(object_status_);
   OB_UNIS_ENCODE(is_force_view_);
   OB_UNIS_ENCODE(truncate_version_);
-  OB_UNIS_ENCODE(external_file_location_);
-  OB_UNIS_ENCODE(external_file_location_access_info_);
-  OB_UNIS_ENCODE(external_file_format_);
-  OB_UNIS_ENCODE(external_file_pattern_);
-  OB_UNIS_ENCODE(ttl_definition_);
   OB_UNIS_ENCODE(name_generated_type_);
   OB_UNIS_ENCODE(lob_inrow_threshold_);
   OB_UNIS_ENCODE(auto_increment_cache_size_);
-  OB_UNIS_ENCODE(external_properties_);
   OB_UNIS_ENCODE(index_params_);
   OB_UNIS_ENCODE(micro_index_clustered_);
-  OB_UNIS_ENCODE(enable_macro_block_bloom_filter_);
   OB_UNIS_ENCODE(parser_properties_);
-  OB_UNIS_ENCODE(storage_cache_policy_type_);
-  OB_UNIS_ENCODE(storage_cache_policy_);
-  OB_UNIS_ENCODE(merge_engine_type_);
   OB_UNIS_ENCODE(semistruct_encoding_type_);
-  OB_UNIS_ENCODE(external_location_id_);
-  OB_UNIS_ENCODE(external_sub_path_);
   OB_UNIS_ENCODE(micro_block_format_version_);
   // !!! end static check
   /*
@@ -5977,7 +5825,6 @@ OB_DEF_DESERIALIZE(ObTableSchema)
   int64_t aux_vp_tid_array_count = 0;
   // !!! begin static check
   OB_UNIS_DECODE(database_id_);
-  OB_UNIS_DECODE(tablegroup_id_);
   OB_UNIS_DECODE(table_id_);
   OB_UNIS_DECODE(max_used_column_id_);
   OB_UNIS_DECODE(rowkey_column_num_);
@@ -5985,7 +5832,6 @@ OB_DEF_DESERIALIZE(ObTableSchema)
   OB_UNIS_DECODE(rowkey_split_pos_);
   OB_UNIS_DECODE(part_key_column_num_);
   OB_UNIS_DECODE(block_size_);
-  OB_UNIS_DECODE(is_use_bloomfilter_);
   OB_UNIS_DECODE(progressive_merge_num_);
   OB_UNIS_DECODE(autoinc_column_id_);
   OB_UNIS_DECODE(auto_increment_);
@@ -5999,20 +5845,16 @@ OB_DEF_DESERIALIZE(ObTableSchema)
   OB_UNIS_DECODE(data_table_id_);
   OB_UNIS_DECODE(index_status_);
   OB_UNIS_DECODE(name_case_mode_);
-  OB_UNIS_DECODE(code_version_);
   OB_UNIS_DECODE(schema_version_);
   OB_UNIS_DECODE(part_level_);
   OB_UNIS_DECODE(part_option_);
   OB_UNIS_DECODE(sub_part_option_);
-  OB_UNIS_DECODE_AND_FUNC(tablegroup_name_, deep_copy_str);
   OB_UNIS_DECODE_AND_FUNC(comment_, deep_copy_str);
   OB_UNIS_DECODE_AND_FUNC(table_name_, deep_copy_str);
   OB_UNIS_DECODE(compressor_type_);
-  OB_UNIS_DECODE_AND_FUNC(expire_info_, deep_copy_str);
   OB_UNIS_DECODE(view_schema_);
   OB_UNIS_DECODE(index_using_type_);
   OB_UNIS_DECODE(progressive_merge_round_);
-  OB_UNIS_DECODE(storage_format_version_);
   // !!! FOR STATIC CHECKER BEGIN
   // THE FOLLOWING CODE CANNOT BE DESCRIBED USING SERIALIZE MACROS. THEY ARE EQUIVALENT TO THESE CODES:
   // OB_UNIS_DECODE_ARRAY_POINTER(column_array_, column_cnt_, add_column);
@@ -6082,25 +5924,13 @@ OB_DEF_DESERIALIZE(ObTableSchema)
   OB_UNIS_DECODE(object_status_);
   OB_UNIS_DECODE(is_force_view_);
   OB_UNIS_DECODE(truncate_version_);
-  OB_UNIS_DECODE_AND_FUNC(external_file_location_, deep_copy_str);
-  OB_UNIS_DECODE_AND_FUNC(external_file_location_access_info_, deep_copy_str);
-  OB_UNIS_DECODE_AND_FUNC(external_file_format_, deep_copy_str);
-  OB_UNIS_DECODE_AND_FUNC(external_file_pattern_, deep_copy_str);
-  OB_UNIS_DECODE_AND_FUNC(ttl_definition_, deep_copy_str);
   OB_UNIS_DECODE(name_generated_type_);
   OB_UNIS_DECODE(lob_inrow_threshold_);
   OB_UNIS_DECODE(auto_increment_cache_size_);
-  OB_UNIS_DECODE_AND_FUNC(external_properties_, deep_copy_str);
   OB_UNIS_DECODE_AND_FUNC(index_params_, deep_copy_str);
   OB_UNIS_DECODE(micro_index_clustered_);
-  OB_UNIS_DECODE(enable_macro_block_bloom_filter_);
   OB_UNIS_DECODE_AND_FUNC(parser_properties_, deep_copy_str);
-  OB_UNIS_DECODE(storage_cache_policy_type_);
-  OB_UNIS_DECODE_AND_FUNC(storage_cache_policy_, deep_copy_str);
-  OB_UNIS_DECODE(merge_engine_type_);
   OB_UNIS_DECODE(semistruct_encoding_type_);
-  OB_UNIS_DECODE(external_location_id_);
-  OB_UNIS_DECODE_AND_FUNC(external_sub_path_, deep_copy_str);
   OB_UNIS_DECODE(micro_block_format_version_);
   // !!! end static check
   /*
@@ -6136,7 +5966,6 @@ OB_DEF_SERIALIZE_SIZE(ObTableSchema)
 
   // !!! begin static check
   OB_UNIS_ADD_LEN(database_id_);
-  OB_UNIS_ADD_LEN(tablegroup_id_);
   OB_UNIS_ADD_LEN(table_id_);
   OB_UNIS_ADD_LEN(max_used_column_id_);
   OB_UNIS_ADD_LEN(rowkey_column_num_);
@@ -6144,7 +5973,6 @@ OB_DEF_SERIALIZE_SIZE(ObTableSchema)
   OB_UNIS_ADD_LEN(rowkey_split_pos_);
   OB_UNIS_ADD_LEN(part_key_column_num_);
   OB_UNIS_ADD_LEN(block_size_);
-  OB_UNIS_ADD_LEN(is_use_bloomfilter_);
   OB_UNIS_ADD_LEN(progressive_merge_num_);
   OB_UNIS_ADD_LEN(autoinc_column_id_);
   OB_UNIS_ADD_LEN(auto_increment_);
@@ -6158,20 +5986,16 @@ OB_DEF_SERIALIZE_SIZE(ObTableSchema)
   OB_UNIS_ADD_LEN(data_table_id_);
   OB_UNIS_ADD_LEN(index_status_);
   OB_UNIS_ADD_LEN(name_case_mode_);
-  OB_UNIS_ADD_LEN(code_version_);
   OB_UNIS_ADD_LEN(schema_version_);
   OB_UNIS_ADD_LEN(part_level_);
   OB_UNIS_ADD_LEN(part_option_);
   OB_UNIS_ADD_LEN(sub_part_option_);
-  OB_UNIS_ADD_LEN(tablegroup_name_);
   OB_UNIS_ADD_LEN(comment_);
   OB_UNIS_ADD_LEN(table_name_);
   OB_UNIS_ADD_LEN(compressor_type_);
-  OB_UNIS_ADD_LEN(expire_info_);
   OB_UNIS_ADD_LEN(view_schema_);
   OB_UNIS_ADD_LEN(index_using_type_);
   OB_UNIS_ADD_LEN(progressive_merge_round_);
-  OB_UNIS_ADD_LEN(storage_format_version_);
   OB_UNIS_ADD_LEN_ARRAY_POINTER(column_array_, column_cnt_);
   OB_UNIS_ADD_LEN_IF(subpart_key_column_num_, (PARTITION_LEVEL_ONE <= part_level_));
   OB_UNIS_ADD_LEN_ARRAY_POINTER_IF(partition_array_, partition_num_, (PARTITION_LEVEL_ONE <= part_level_));
@@ -6209,25 +6033,13 @@ OB_DEF_SERIALIZE_SIZE(ObTableSchema)
   OB_UNIS_ADD_LEN(object_status_);
   OB_UNIS_ADD_LEN(is_force_view_);
   OB_UNIS_ADD_LEN(truncate_version_);
-  OB_UNIS_ADD_LEN(external_file_location_);
-  OB_UNIS_ADD_LEN(external_file_location_access_info_);
-  OB_UNIS_ADD_LEN(external_file_format_);
-  OB_UNIS_ADD_LEN(external_file_pattern_);
-  OB_UNIS_ADD_LEN(ttl_definition_);
   OB_UNIS_ADD_LEN(name_generated_type_);
   OB_UNIS_ADD_LEN(lob_inrow_threshold_);
   OB_UNIS_ADD_LEN(auto_increment_cache_size_);
-  OB_UNIS_ADD_LEN(external_properties_);
   OB_UNIS_ADD_LEN(index_params_);
   OB_UNIS_ADD_LEN(micro_index_clustered_);
-  OB_UNIS_ADD_LEN(enable_macro_block_bloom_filter_);
   OB_UNIS_ADD_LEN(parser_properties_);
-  OB_UNIS_ADD_LEN(storage_cache_policy_type_);
-  OB_UNIS_ADD_LEN(storage_cache_policy_);
-  OB_UNIS_ADD_LEN(merge_engine_type_);
   OB_UNIS_ADD_LEN(semistruct_encoding_type_);
-  OB_UNIS_ADD_LEN(external_location_id_);
-  OB_UNIS_ADD_LEN(external_sub_path_);
   OB_UNIS_ADD_LEN(micro_block_format_version_);
   // !!! end static check
   /*
@@ -7624,7 +7436,6 @@ int64_t ObPrintableTableSchema::to_string(char *buf, const int64_t buf_len) cons
   J_NAME("simple_table_schema");
   J_COLON();
   J_KV(K_(database_id),
-      K_(tablegroup_id),
       K_(table_id),
       K_(table_name),
       K_(session_id),
@@ -7662,7 +7473,6 @@ int64_t ObPrintableTableSchema::to_string(char *buf, const int64_t buf_len) cons
   }
   J_KV(K_(rowkey_split_pos),
       K_(block_size),
-      K_(is_use_bloomfilter),
       K_(progressive_merge_num),
       K_(tablet_size),
       K_(pctfree),
@@ -7677,11 +7487,8 @@ int64_t ObPrintableTableSchema::to_string(char *buf, const int64_t buf_len) cons
   J_COMMA();
   J_KV("index_status", static_cast<int32_t>(index_status_),
     "partition_status", static_cast<int32_t>(partition_status_),
-    K_(code_version),
     K_(comment),
     K_(pk_comment),
-    K_(tablegroup_name),
-    K_(expire_info),
     K_(view_schema),
     K_(autoinc_column_id),
     K_(auto_increment),

@@ -20,7 +20,7 @@
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/tx/ob_ts_mgr.h"
-#include "observer/scheduler/ob_tenant_dag_scheduler.h"
+#include "observer/scheduler/ob_dag_scheduler.h"
 
 #define USING_LOG_PREFIX STORAGE
 
@@ -51,7 +51,7 @@ int ObTxDataTable::init(ObLS *ls, ObTxCtxTable *tx_ctx_table)
     STORAGE_LOG(WARN, "ls tablet service or tx ctx table is nullptr", KR(ret));
   } else if (OB_ISNULL(tx_data_allocator_ = &share::g_mp->shared_mem_alloc_mgr()->tx_data_allocator())) {
     ret = OB_ERR_UNEXPECTED;;
-    STORAGE_LOG(WARN, "unexpected nullptr of mtl object", KR(ret), KP(tx_data_allocator_));
+    STORAGE_LOG(WARN, "unexpected null runtime object", KR(ret), KP(tx_data_allocator_));
   } else if (FALSE_IT(ls_tablet_svr_ = ls->get_tablet_svr())) {
   } else if (OB_FAIL(ls_tablet_svr_->get_tx_data_memtable_mgr(memtable_mgr_handle))) {
     STORAGE_LOG(WARN, "get tx data memtable mgr fail.", KR(ret), K(tablet_id_));
@@ -462,7 +462,7 @@ int ObTxDataTable::check_tx_data_with_cache_once_(const transaction::ObTransID t
                     K(tx_data_guard),
                     KPC(tx_data_guard.tx_data()));
       } else {
-        EVENT_INC(ObStatEventIds::TX_DATA_READ_TX_DATA_MEMTABLE_COUNT);
+        EVENT_INC(TX_DATA_READ_TX_DATA_MEMTABLE_COUNT);
         ret = fn(*tx_data_guard.tx_data());
       }
     } else {
@@ -618,7 +618,7 @@ int ObTxDataTable::check_tx_data_in_sstable_(const ObTransID tx_id,
   } else if (OB_FAIL(get_tx_data_in_sstable_(tx_id, *tx_data_guard.tx_data(), recycled_scn))) {
     STORAGE_LOG(WARN, "get tx data from sstable failed.", KR(ret), K(tx_id));
   } else {
-    EVENT_INC(ObStatEventIds::TX_DATA_READ_TX_DATA_SSTABLE_COUNT);
+    EVENT_INC(TX_DATA_READ_TX_DATA_SSTABLE_COUNT);
     if (OB_FAIL(fn(*tx_data_guard.tx_data()))) {
       STORAGE_LOG(WARN, "check tx data in sstable failed.", KR(ret), KP(this),
                   K(tablet_id_));
@@ -692,7 +692,7 @@ int ObTxDataTable::get_recycle_scn(SCN &recycle_scn)
   } else if (OB_FAIL(ls_tablet_svr_->get_ls_min_end_scn(min_end_scn_from_latest_tablets,
                                                         min_end_scn_from_old_tablets))) {
     STORAGE_LOG(WARN, "fail to get ls min end log ts", KR(ret));
-  } else if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->get_min_end_scn_from_major_dag(min_end_scn_from_major_dag))) {
+  } else if (OB_FAIL(share::g_mp->dag_scheduler()->get_min_end_scn_from_major_dag(min_end_scn_from_major_dag))) {
     STORAGE_LOG(WARN, "fail to get min end log ts from major dag", KR(ret));
   } else if (FALSE_IT(tg.click("iterate tablets finish"))) {
   } else {
@@ -700,9 +700,9 @@ int ObTxDataTable::get_recycle_scn(SCN &recycle_scn)
     min_end_scn = std::min(min_end_scn, min_end_scn_from_major_dag);
     if (!min_end_scn.is_max()) {
       recycle_scn = min_end_scn;
-      // Regardless of whether the primary or standby tenant is unified, refer to GTS.
-      // If the tenant role in memory is deferred,
-      // it may cause the standby tenant to commit and recycle when the primary is switched to standby.
+      // Both primary and standby database roles use the same timestamp source.
+      // A delayed in-memory role transition could otherwise let standby recycle
+      // transaction data while primary is switching to standby.
       SCN snapshot_version;
       MonotonicTs unused_ts(0);
       int tmp_ret = OB_SUCCESS;
@@ -728,10 +728,10 @@ int ObTxDataTable::get_recycle_scn(SCN &recycle_scn)
 
 // This task is used to do freeze by tx data table itself. The following conditions are set to
 // trigger self freeze:
-// 1. Tx data memtable uses more than TX_DATA_FREEZE_TRIGGER_MAX_PERCENTAGE% memory in total tenant
+// 1. Tx-data memtables use more than TX_DATA_FREEZE_TRIGGER_MAX_PERCENTAGE% of runtime memory.
 // memory.
-// 2. The tenant remain memory is than (1 - freeze_trigger_percentage) and the tx data uses more
-// than TX_DATA_FREEZE_TRIGGER_MIN_PERCENTAGE% memory in total tenant memory.
+// 2. Runtime remaining memory is below (1 - freeze_trigger_percentage), and tx data uses more
+// than TX_DATA_FREEZE_TRIGGER_MIN_PERCENTAGE% of runtime memory.
 // 3. FastFreeze would trigger this freeze task more frequently but freeze_freq_controller would slow down freeze
 // frequency
 int ObTxDataTable::self_freeze_task()

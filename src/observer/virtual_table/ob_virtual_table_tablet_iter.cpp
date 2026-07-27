@@ -42,7 +42,7 @@ void ObVirtualTableTabletIter::reset()
 {
   addr_.reset();
   if (OB_NOT_NULL(tablet_iter_)) {
-    tablet_iter_->~ObTenantTabletIterator();
+    tablet_iter_->~ObTabletIterator();
     tablet_iter_ = nullptr;
   }
   if (OB_NOT_NULL(iter_buf_)) {
@@ -65,7 +65,7 @@ int ObVirtualTableTabletIter::init(
   } else if (OB_ISNULL(allocator)) {
     ret = OB_INVALID_ARGUMENT;
     SERVER_LOG(WARN, "invalid argument", K(ret), KP(allocator));
-  } else if (OB_ISNULL(iter_buf_ = allocator->alloc(sizeof(ObTenantTabletIterator)))) {
+  } else if (OB_ISNULL(iter_buf_ = allocator->alloc(sizeof(ObTabletIterator)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     SERVER_LOG(WARN, "fail to alloc tablet iter buf", K(ret));
   } else {
@@ -84,8 +84,8 @@ int ObVirtualTableTabletIter::get_next_tablet()
   tablet_allocator_.reuse();
   if (nullptr == tablet_iter_) {
     
-    ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
-    if (OB_ISNULL(tablet_iter_ = new (iter_buf_) ObTenantTabletIterator(*t3m, tablet_allocator_, nullptr/*no op*/))) {
+    ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+    if (OB_ISNULL(tablet_iter_ = new (iter_buf_) ObTabletIterator(*t3m, tablet_allocator_, nullptr/*no op*/))) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "fail to new tablet_iter_", K(ret));
     }

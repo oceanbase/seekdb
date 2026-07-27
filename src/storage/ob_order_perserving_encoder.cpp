@@ -31,6 +31,7 @@
 #define bswap_64 _byteswap_uint64
 #endif
 #include "lib/utility/ob_target_specific.h"
+#include "sql/parser/parse_node.h"
 #include "storage/blocksstable/encoding/ob_encoding_query_util.h"
 #if OB_USE_MULTITARGET_CODE
 #include <emmintrin.h>

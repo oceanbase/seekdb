@@ -221,7 +221,6 @@ public:
     //allocator_.reset();
     mem_context_->get_arena_allocator().reset();
     result_set_ = new (buf_) ObResultSet(session_info, mem_context_->get_arena_allocator());
-    result_set_->get_exec_context().get_task_exec_ctx().set_min_cluster_version(session_info.get_exec_min_cluster_version());
   }
 
   lib::MemoryContext &get_memory_ctx() { return mem_context_; }
@@ -872,9 +871,6 @@ public:
                              common::ColumnsFieldArray *field_list = NULL);
   static int force_refresh_schema(int64_t refresh_version = OB_INVALID_VERSION);
 
-  static int spi_update_package_change_info(
-    pl::ObPLExecCtx *ctx, uint64_t package_id, uint64_t var_idx);
-
   static int spi_check_composite_not_null(ObObjParam *v);
 
   static int spi_update_location(pl::ObPLExecCtx *ctx, uint64_t location);
@@ -1260,23 +1256,6 @@ struct ObPLSubPLSqlTimeGuard
   pl::ObPLExecState *state_;
   int64_t old_pure_sql_exec_time_;
 };
-
-class ObPLPrepareEnvGuard
-{
-public:
- ObPLPrepareEnvGuard(ObSQLSessionInfo &session_info,
-                     pl::ObPLAstUnit &func,
-                     int &ret);
-  ~ObPLPrepareEnvGuard();
-private:
-  int &ret_;
-  ObSQLSessionInfo &session_info_;
-  ObSqlString old_db_name_;
-  uint64_t old_db_id_;
-  bool need_reset_default_database_;
-  ObArenaAllocator allocator_;
-};
-
 
 }
 }

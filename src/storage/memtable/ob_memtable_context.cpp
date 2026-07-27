@@ -70,9 +70,6 @@ int ObMemtableCtx::init()
 
   if (IS_INIT) { // use is_inited_ to prevent memtable ctx from being inited repeatedly
     ret = OB_INIT_TWICE;
-  } else if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", K(ret));
   } else {
     if (OB_FAIL(query_allocator_.init())) {
       TRANS_LOG(ERROR, "query_allocator init error", K(ret));
@@ -559,7 +556,6 @@ int ObMemtableCtx::trans_replay_begin()
 int ObMemtableCtx::trans_replay_end(const bool commit,
                                     const SCN trans_version,
                                     const SCN final_scn,
-                                    const uint64_t log_cluster_version,
                                     const uint64_t checksum)
 {
   int ret = OB_SUCCESS;
@@ -569,8 +565,7 @@ int ObMemtableCtx::trans_replay_end(const bool commit,
   // the checksum verification is unnecessary. This because the trans table
   // merge may be triggered after clear state in which the callback has already
   if (commit
-      && 0 != checksum // if leader's checksum is skipped, follow skip check
-      && !ObServerConfig::get_instance().ignore_replay_checksum_error) {
+      && 0 != checksum) { // if leader's checksum is skipped, follow skip check
     ObSEArray<uint64_t, 1> replay_checksum;
     if (OB_FAIL(calc_checksum_all(replay_checksum))) {
       TRANS_LOG(WARN, "calc checksum fail", K(ret));

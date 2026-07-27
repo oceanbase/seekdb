@@ -477,8 +477,6 @@ int ObDropTableHelper::operation_before_commit_()
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_FAIL(ddl_service_->get_index_name_checker().reset_cache())) {
-    LOG_ERROR("fail to reset cache", KR(ret));
   }
   return ret;
 }
@@ -488,8 +486,6 @@ int ObDropTableHelper::clean_on_fail_commit_()
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_FAIL(ddl_service_->get_index_name_checker().reset_cache())) {
-    LOG_ERROR("fail to reset cache", KR(ret));
   }
   return ret;
 }
@@ -514,7 +510,7 @@ int ObDropTableHelper::construct_and_adjust_result_(int &return_ret)
   if (OB_ERR_BAD_TABLE == ret) {
     if (arg_.if_exist_) {
       ret = OB_SUCCESS;
-      // skip try_check_parallel_ddl_schema_in_sync
+      // skip wait_local_schema_visible
       res_.do_nothing_ = true;
     } else {
       LOG_USER_ERROR(OB_ERR_BAD_TABLE, static_cast<int>(err_table_list_.length()) - 1, err_table_list_.ptr());
@@ -709,11 +705,6 @@ int ObDropTableHelper::lock_objects_by_id_()
         // triggers
         if (FAILEDx(lock_triggers_by_id_(*table_schema))) {
           LOG_WARN("fail to lock triggers by id", KR(ret), KPC(table_schema));
-        }
-
-        // sequences
-        if (FAILEDx(lock_sequences_by_id_(*table_schema))) {
-          LOG_WARN("fail to lock sequences by id", KR(ret), KPC(table_schema));
         }
 
         // dep views
@@ -1115,11 +1106,6 @@ int ObDropTableHelper::calc_schema_version_cnt_for_table_(
       } 
       schema_version_cnt_ += obj_privs.count();
 
-      // sequence
-      if (FAILEDx(calc_schema_version_cnt_for_sequence_(table_schema))) {
-        LOG_WARN("fail to calc schema version cnt for sequence", KR(ret));
-      }
-
       // sync version for cascade table
       schema_version_cnt_ += table_schema.get_depend_table_ids().count();
       
@@ -1157,41 +1143,6 @@ int ObDropTableHelper::calc_schema_version_cnt_for_dep_objs_() {
             LOG_WARN("view schema is null", KR(ret));
           } else if (ObObjectStatus::INVALID != view_schema->get_object_status()) {
             schema_version_cnt_++;
-          }
-        }
-      }
-    }
-  }
-
-  return ret;
-}
-
-int ObDropTableHelper::calc_schema_version_cnt_for_sequence_(
-    const ObTableSchema &table_schema)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
-  } else {
-    if (table_schema.is_user_table()) {
-      for (ObTableSchema::const_column_iterator iter = table_schema.column_begin();
-           OB_SUCC(ret) && iter != table_schema.column_end(); ++iter) {
-        ObColumnSchemaV2 &column_schema = (**iter);
-        if (column_schema.is_identity_column()) {
-          const uint64_t sequence_id = column_schema.get_sequence_id();
-          if (OB_UNLIKELY(OB_INVALID_ID == sequence_id)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("sequence id is invalid", KR(ret));
-          } else {
-            // sequence
-            schema_version_cnt_++;
-
-            // obj priv
-            ObArray<ObObjPriv> obj_privs;
-            if (OB_FAIL(schema_guard_wrapper_.get_obj_privs(sequence_id, ObObjectType::SEQUENCE, obj_privs))) {
-              LOG_WARN("fail to get obj privs", KR(ret), K(sequence_id));
-            }
-            schema_version_cnt_ += obj_privs.count();
           }
         }
       }
@@ -1280,27 +1231,6 @@ int ObDropTableHelper::lock_triggers_by_id_(const ObTableSchema &table_schema)
   return ret;
 }
 
-int ObDropTableHelper::lock_sequences_by_id_(const ObTableSchema &table_schema)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (table_schema.is_user_table()) {
-    for (ObTableSchema::const_column_iterator iter = table_schema.column_begin();
-        OB_SUCC(ret) && iter != table_schema.column_end(); ++iter) {
-      ObColumnSchemaV2 &column_schema = (**iter);
-      if (column_schema.is_identity_column()) {
-        const uint64_t sequence_id = column_schema.get_sequence_id();
-        if (OB_FAIL(add_lock_object_by_id_(sequence_id, SEQUENCE_SCHEMA, EXCLUSIVE))) {
-          LOG_WARN("fail to lock sequence id", KR(ret), K(sequence_id));
-        }
-      }
-    }
-  }
-
-  return ret;
-}
-
 int ObDropTableHelper::add_table_to_tablet_autoinc_cleaner_(const ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
@@ -1369,8 +1299,6 @@ int ObDropTableHelper::drop_table_(const ObTableSchema &table_schema, const ObSt
       LOG_WARN("fail to gen new schema version", KR(ret));
     } else if (OB_FAIL(ddl_operator.cleanup_autoinc_cache(table_schema))) {
       LOG_WARN("fail to cleanup autoinc cache", KR(ret));
-    } else if (OB_FAIL(drop_sequences_(table_schema))) {
-      LOG_WARN("fail to drop sequences", KR(ret), K(table_schema));
     } else if (OB_FAIL(schema_service_impl->get_table_sql_service().drop_table(
                        table_schema,
                        new_schema_version,
@@ -1456,7 +1384,6 @@ int ObDropTableHelper::drop_table_to_recyclebin_(const ObTableSchema &table_sche
     } else {
       ObSqlString new_table_name;
       new_table_schema.set_database_id(OB_RECYCLEBIN_SCHEMA_ID);
-      new_table_schema.set_tablegroup_id(OB_INVALID_ID);
       new_table_schema.set_schema_version(new_schema_version);
       if (OB_FAIL(ddl_operator.construct_new_name_for_recyclebin(new_table_schema, new_table_name))) {
         LOG_WARN("fail to construct new name for table", KR(ret));
@@ -1469,7 +1396,6 @@ int ObDropTableHelper::drop_table_to_recyclebin_(const ObTableSchema &table_sche
         
         recycle_obj.set_database_id(table_schema.get_database_id());
         recycle_obj.set_table_id(table_schema.get_table_id());
-        recycle_obj.set_tablegroup_id(table_schema.get_tablegroup_id());
         if (OB_FAIL(recycle_obj.set_type_by_table_schema(table_schema))) {
           LOG_WARN("fail to set type by table schema", KR(ret));
         } else if (OB_FAIL(schema_service_impl->insert_recyclebin_object(recycle_obj, get_trans_()))) {
@@ -1584,7 +1510,6 @@ int ObDropTableHelper::drop_trigger_to_recyclebin_(const ObTriggerInfo &trigger_
     
     recyclebin_object.set_database_id(base_table_schema->get_database_id());
     recyclebin_object.set_table_id(trigger_info.get_trigger_id());
-    recyclebin_object.set_tablegroup_id(OB_INVALID_ID);
     recyclebin_object.set_object_name(new_trigger_name.string());
     recyclebin_object.set_original_name(trigger_info.get_trigger_name());
     recyclebin_object.set_type(ObRecycleObject::TRIGGER);
@@ -1628,58 +1553,6 @@ int ObDropTableHelper::drop_obj_privs_(const uint64_t obj_id, const ObObjectType
       }
     }
   }
-  return ret;
-}
-
-int ObDropTableHelper::drop_sequences_(const ObTableSchema &table_schema) 
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (table_schema.is_user_table()) {
-    for (ObTableSchema::const_column_iterator iter = table_schema.column_begin(); OB_SUCC(ret) && iter != table_schema.column_end(); ++iter) {
-      ObColumnSchemaV2 &column_schema = (**iter);
-      if (OB_FAIL(drop_sequence_(column_schema))) {
-        LOG_WARN("fail to drop sequence", KR(ret), K(column_schema));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObDropTableHelper::drop_sequence_(const ObColumnSchemaV2 &column_schema)
-{
-  int ret = OB_SUCCESS;
-  ObSchemaService *schema_service_impl = NULL;
-  int64_t new_schema_version = OB_INVALID_VERSION;
-  if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_ISNULL(schema_service_impl = schema_service_->get_schema_service())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service impl is null", KR(ret));
-  } else if (column_schema.is_identity_column()) {
-    const ObSequenceSchema *sequence_schema = NULL;
-    if (OB_FAIL(schema_guard_wrapper_.get_sequence_schema(column_schema.get_sequence_id(), sequence_schema))) {
-      LOG_WARN("get sequence schema fail", KR(ret), K(column_schema));
-      if (ret == OB_ERR_UNEXPECTED) {
-        // sequence has been deleted externally.
-        // Internally created identity sequences should not be deleted externally.
-        // In the future, it will be solved by adding columns to the internal table,
-        // and then the error code conversion can be removed.
-        ret = OB_SUCCESS;
-      }
-    } else if (OB_ISNULL(sequence_schema)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("sequence not exist", KR(ret), K(column_schema));
-    } else if (OB_FAIL(drop_obj_privs_(sequence_schema->get_sequence_id(), ObObjectType::SEQUENCE))) {
-      LOG_WARN("fail to drop obj privs", KR(ret));
-    } else if (OB_FAIL(schema_service_->gen_new_schema_version(new_schema_version))) {
-      LOG_WARN("fail to gen new schema version", KR(ret));
-    } else if (OB_FAIL(schema_service_impl->get_sequence_sql_service().drop_sequence(*sequence_schema, new_schema_version, &get_trans_()))) {
-      LOG_WARN("fail to drop sequence", KR(ret), KPC(sequence_schema));
-    }
-  }
-
   return ret;
 }
 

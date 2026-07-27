@@ -384,9 +384,6 @@ int ObOptimizerTraceImpl::append(const ObTableLocationType& type)
     case OB_TBL_LOCATION_LOCAL: 
       ret = append("local");
       break;
-    case OB_TBL_LOCATION_REMOTE: 
-      ret = append("remote");
-      break;
     case OB_TBL_LOCATION_DISTRIBUTED: 
       ret = append("distribute");
       break;
@@ -406,9 +403,6 @@ int ObOptimizerTraceImpl::append(const ObPhyPlanType& type)
       break;
     case OB_PHY_PLAN_LOCAL: 
       ret = append("local");
-      break;
-    case OB_PHY_PLAN_REMOTE: 
-      ret = append("remote");
       break;
     case OB_PHY_PLAN_DISTRIBUTED: 
       ret = append("distribute");
@@ -1008,7 +1002,7 @@ int ObOptimizerTraceImpl::trace_parameters()
     
 
     new_line();
-    append("tenant config:");
+    append("runtime config:");
 
     new_line();
     append("system variables:");
@@ -1036,7 +1030,7 @@ int ObOptimizerTraceImpl::trace_session_info()
       LOG_WARN("failed to append msg", K(ret));
     } else if (OB_FAIL(new_line())) {
       LOG_WARN("failed to append msg", K(ret));
-    } else if (OB_FAIL(append_key_value("Tenant Name", session->get_tenant_name()))) {
+    } else if (OB_FAIL(append_key_value("Runtime Name", session->get_runtime_name()))) {
       LOG_WARN("failed to append msg", K(ret));
     } else if (OB_FAIL(new_line())) {
       LOG_WARN("failed to append msg", K(ret));

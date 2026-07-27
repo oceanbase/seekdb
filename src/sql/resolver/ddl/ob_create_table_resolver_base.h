@@ -48,7 +48,7 @@ protected:
                            int64_t &pk_data_length,
                            ObColumnSchemaV2 *&col);
 
-  int resolve_table_organization(common::ObServerConfig *tenant_config, ParseNode *node);
+  int resolve_table_organization(common::ObServerConfig *runtime_config, ParseNode *node);
 };
 
 } // end namespace sql

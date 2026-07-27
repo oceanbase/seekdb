@@ -113,7 +113,7 @@ class ObTransService : public common::ObLinkQueueThreadPool
 public:
   ObTransService();
   virtual ~ObTransService() { destroy(); }
-  static int mtl_init(ObTransService* &trans_service);
+  static int server_module_init(ObTransService* &trans_service);
   int init(const ObAddr &self,
            ObIGtiSource *gti_source,
            ObTsMgr *ts_mgr,

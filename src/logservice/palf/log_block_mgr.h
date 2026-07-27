@@ -79,11 +79,11 @@ public:
 
   TO_STRING_KV(K_(log_dir), K_(dir_fd), K_(min_block_id), K_(max_block_id), K_(curr_writable_block_id));
 private:
-  // @brief this function used to rebuild 'blocks_'
+  // @brief this function used to reconstruct 'blocks_'
   // Firstly, scan the directory, get the name of all blocks;
   // Secondly, construct virtual blocks array;
   // Thirdly, according to virtual blocks array, read the header of each
-  // physical block, rebuild 'blocks_';
+  // physical block, reconstruct 'blocks_';
   // Finally, reopen the last virtual block.
   // int reload_(const block_id_t block_id, const offset_t offset);
   int do_delete_block_(const block_id_t block_id);

@@ -26,6 +26,7 @@ namespace sql
 class ObCandiTableLoc;
 class ObCandiTabletLoc;
 
+
 class ObPhyTableLocation final
 {
   OB_UNIS_VERSION(1);
@@ -48,8 +49,7 @@ public:
   inline uint64_t get_table_location_key() const { return table_location_key_; }
   inline uint64_t get_ref_table_id() const { return ref_table_id_; }
 
-  TO_STRING_KV(K_(table_location_key),
-               K_(ref_table_id));
+  TO_STRING_KV(K_(table_location_key), K_(ref_table_id));
 private:
   /* Used for addressing location by table ID (possibly generated alias id) */
   uint64_t table_location_key_;

@@ -22,7 +22,7 @@
 #include "common/object/ob_object.h"
 #include "share/ob_define.h"
 #include "lib/container/ob_array.h"
-#include "src/share/rc/ob_tenant_base.h"
+#include "src/share/rc/ob_server_runtime.h"
 #include "lib/container/ob_2d_array.h"
 
 namespace oceanbase
@@ -131,7 +131,7 @@ enum ObNameTypeClass
 {
   OB_TABLE_NAME_CLASS = 0, //table name, database names, table alias names ,affected by system variable lower_case_table_names
   OB_COLUMN_NAME_CLASS = 1,// column name,column alias name. index name , stored using lettercase and comparisons are case insensitive
-  OB_USER_NAME_CLASS = 2,// user names, tenant names and other names, stored using lettercase and comparisons are case sensitive
+  OB_USER_NAME_CLASS = 2,// user names and other case-sensitive identifiers
 };
 
 enum ObMatchAgainstMode {
@@ -288,7 +288,6 @@ enum ObTableLocationType
 {
   OB_TBL_LOCATION_UNINITIALIZED = 0,
   OB_TBL_LOCATION_LOCAL,
-  OB_TBL_LOCATION_REMOTE,
   OB_TBL_LOCATION_DISTRIBUTED,
   OB_TBL_LOCATION_ALL//like EXPRESSION, match all
 };
@@ -311,13 +310,10 @@ enum ObRepartitionScope
   OB_REPARTITION_BOTH_SIDE,
 };
 
-// enum ObPLCacheObjectType start wich OB_PHY_PLAN_UNCERTAIN value.
-// if it need add enum value to ObPhyPlanType, need skip ObPLCacheObjectType max value.
 enum ObPhyPlanType
 {
   OB_PHY_PLAN_UNINITIALIZED = 0,
   OB_PHY_PLAN_LOCAL,
-  OB_PHY_PLAN_REMOTE,
   OB_PHY_PLAN_DISTRIBUTED,
   OB_PHY_PLAN_UNCERTAIN
 };
@@ -328,7 +324,6 @@ inline const ObString &ob_plan_type_str(ObPhyPlanType plan_type)
   {
     "UNINITIALIZED",
     "LOCAL",
-    "REMOTE",
     "DISTRIBUTED",
   };
 
@@ -369,14 +364,6 @@ enum OutlineType
   OUTLINE_TYPE_UNINIT = 0,
   USED_HINT,
   OUTLINE_DATA
-};
-
-enum ObPlanLocationType
-{
-  UNINITIALIZED = 0,
-  LOCAL,
-  REMOTE,
-  DISTRIBUTED
 };
 
 struct ObPQDistributeMethod
@@ -495,23 +482,6 @@ enum OrderingCheckScope
 };
 
 
-enum ObExecuteMode
-{
-  EXECUTE_INVALID = 0,
-  EXECUTE_INNER,
-  EXECUTE_LOCAL,
-  EXECUTE_REMOTE,
-  EXECUTE_DIST,
-  EXECUTE_PS_PREPARE,//prepare statement local server
-  EXECUTE_PS_EXECUTE,//prepare statement local server
-  EXECUTE_PS_FETCH,
-  EXECUTE_PS_SEND_PIECE,
-  EXECUTE_PS_GET_PIECE,
-  EXECUTE_PS_SEND_LONG_DATA,
-  EXECUTE_PL_EXECUTE
-};
-
-
 enum PartitionIdCalcType {
   CALC_INVALID = -1,          // invalid calc type
   CALC_NORMAL = 0,            // calc both part id and subpart id
@@ -599,16 +569,6 @@ enum ObIDPAbortType
   IDP_NO_ABORT = 4
 };
 
-enum class PseudoColumnRefType {
-  PSEUDO_PARTITION_ID = 0,
-  PSEUDO_SUB_PARTITION_ID = 1,
-  PSEUDO_PARTITION_NAME = 2,
-  PSEUDO_SUB_PARTITION_NAME = 3,
-  PSEUDO_PARTITION_INDEX = 4,
-  PSEUDO_SUB_PARTITION_INDEX = 5,
-  MAX = 255  // The maximum value not exceeding 8 bits
-};
-
 struct ObSqlDatumArray
 {
   ObSqlDatumArray()
@@ -656,11 +616,10 @@ struct ObWinfuncOptimizationOpt
   };
 };
 
-// class full name: ob tenant memory array.
+// Runtime-local small-vector storage.
 // Used to solve the following problem:
 // the initial memory allocation of ObSEArray is relatively large, leading to memory inflation issues in some scenarios.
-// Default to using the sys tenant tenant,
-// and the lifecycle of this class cannot cross tenants.
+// Its allocator and lifetime must remain within one server runtime.
 template<typename T, typename BlockAllocatorT = ModulePageAllocator, bool auto_free = false>
 class ObTMArray final : public ObSEArrayImpl<T, 0, BlockAllocatorT, auto_free>
 {

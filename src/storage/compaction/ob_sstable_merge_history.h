@@ -17,7 +17,7 @@
 #define OB_STORAGE_COMPACTION_SSTABLE_MERGE_INFO_H_
 #include "common/ob_tablet_id.h"
 #include "storage/compaction/ob_compaction_util.h"
-#include "storage/compaction/ob_tenant_freeze_info_mgr.h"
+#include "storage/compaction/ob_freeze_info_mgr.h"
 #include "storage/compaction/ob_compaction_diagnose.h"
 #include "share/compaction/ob_new_micro_info.h"
 namespace oceanbase
@@ -116,7 +116,6 @@ struct ObMergeStaticInfo
   TO_STRING_KV(K_(tablet_id), "merge_type", merge_type_to_str(merge_type_),
     K_(compaction_scn), K_(is_full_merge), K_(concurrent_cnt),
     "merge_level", merge_level_to_str(merge_level_),
-    "exec_mode", exec_mode_to_str(exec_mode_), 
     "merge_reason", ObAdaptiveMergePolicy::merge_reason_to_str(merge_reason_),
     K_(kept_snapshot_info), K_(participant_table_info), K_(mds_filter_info_str),
     K_(progressive_merge_round), K_(progressive_merge_num), K_(is_fake));
@@ -131,7 +130,6 @@ struct ObMergeStaticInfo
   PartTableInfo participant_table_info_;
   char mds_filter_info_str_[MDS_FILTER_INFO_LENGTH];
   ObMergeLevel merge_level_;
-  ObExecMode exec_mode_;
   ObAdaptiveMergePolicy::AdaptiveMergeReason merge_reason_;
   bool is_full_merge_;
   bool is_fake_;

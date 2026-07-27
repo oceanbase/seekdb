@@ -26,19 +26,13 @@ namespace storage
 {
 class ObLobQueryIter;
 
-// cross-tenant LOB obcall RPC removed: the cross-tenant LOB read used to loop back to
-// this same machine via the OB_LOB_QUERY streaming RPC.
-// It is now executed fully in-process under MTL_SWITCH to the lob's tenant, driving the same
-// local ObLobQueryIter the OB_LOB_QUERY processor used. ObLobRemoteQueryCtx therefore owns the
-// in-process iterator (READ) / cached length (GET_LENGTH) instead of an SSHandle stream.
-
 struct ObLobRemoteQueryCtx
 {
   ObLobRemoteQueryCtx()
     : qtype_(obcall::ObLobQueryArg::QueryType::READ),
       query_iter_(nullptr), length_(0), read_buf_(nullptr), read_buf_len_(0) {}
   ~ObLobRemoteQueryCtx();
-  // get next block of lob data for READ; runs the in-process iterator under the lob's tenant.
+  // Get the next READ block from the in-process iterator in server runtime scope.
   int get_next_block(ObString &data);
 
   obcall::ObLobQueryArg::QueryType qtype_;

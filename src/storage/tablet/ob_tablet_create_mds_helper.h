@@ -68,7 +68,7 @@ class ObLSTabletService;
 enum class ObTabletCreateThrottlingLevel : uint8_t
 {
     STRICT = 0, // throttling by config like 1G2W, used in leader creation
-    SOFT = 1,   // adaptive, could break config to 1G3W, used in HA scene
+    SOFT = 1,   // adaptive, could break config to 1G3W, used for foreground batched creation
     FREE = 2,   // most free, 1G4W is the max creation speed without influcing stability
     MAX
 };

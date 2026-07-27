@@ -177,19 +177,12 @@ public:
       char *to, const int64_t to_size, int64_t &out_size) override;
   // execute query and return data result
   int read(ReadResult &res, const char *sql, const ObSessionParam *session_param, int64_t user_set_timeout = 0);
-  int read(ReadResult &res, const char *sql, const common::ObAddr *sql_exec_addr);
   virtual int read(ReadResult &res, const char *sql, const int32_t group_id) override;
-  //only for across cluster
-  //cluster_id can not GCONF.cluster_id
-  virtual int read(ReadResult &res,
-                   const int64_t cluster_id,
-                   const char *sql) override;
   using ObISQLClient::read;
   // execute update sql
   virtual int write(const char *sql, const int32_t group_id, int64_t &affected_rows) override;
   int write(const ObString sql, int64_t &affected_rows,
-        const ObSessionParam *session_param = nullptr,
-        const common::ObAddr *sql_exec_addr = nullptr);
+        const ObSessionParam *session_param = nullptr);
   using ObISQLClient::write;
 
   bool is_inited() const { return NULL != pool_; }
@@ -206,7 +199,7 @@ public:
 protected:
   int acquire(sqlclient::ObISQLConnection *&conn) { return this->acquire(conn, 0); }
   int acquire(sqlclient::ObISQLConnection *&conn, const int32_t group_id);
-  int read(sqlclient::ObISQLConnection *conn, ReadResult &result, const char *sql, const common::ObAddr *sql_exec_addr = nullptr);
+  int read(sqlclient::ObISQLConnection *conn, ReadResult &result, const char *sql);
 
   sqlclient::ObISQLConnectionPool *pool_;
 

@@ -17,7 +17,7 @@
 #include "storage/multi_data_source/ob_mds_table_merge_task.h"
 #include "storage/tablet/ob_tablet_mds_table_mini_merger.h"
 #include "storage/multi_data_source/ob_mds_table_merge_dag.h"
-#include "storage/compaction/ob_tenant_tablet_scheduler.h"
+#include "storage/compaction/ob_tablet_scheduler.h"
 
 #define USING_LOG_PREFIX MDS
 
@@ -208,11 +208,11 @@ void ObMdsTableMergeTask::try_schedule_compaction_after_mds_mini(compaction::ObT
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(tablet_id), K(tablet_handle), KPC(mds_merge_dag_));
   // when restoring, some log stream may be not ready,
-  // thus the inner sql in ObTenantFreezeInfoMgr::try_update_info may timeout
+  // thus the inner sql in ObFreezeInfoMgr::try_update_info may timeout
   } else if (OB_SUCCESS == ObBasicMergeScheduler::get_merge_scheduler()->during_restore(during_restore) && !during_restore) {
     if (0 == ctx.get_merge_info().get_merge_history().block_info_.macro_block_count_) {
       // no need to schedule mds minor merge
-    } else if (OB_FAIL(ObTenantTabletScheduler::schedule_tablet_minor_merge<ObTabletMergeExecuteDag>(
+    } else if (OB_FAIL(ObTabletScheduler::schedule_tablet_minor_merge<ObTabletMergeExecuteDag>(
         compaction::MDS_MINOR_MERGE, ctx.static_param_.ls_, tablet_handle))) {
       if (OB_SIZE_OVERFLOW != ret) {
         LOG_ERROR("failed to schedule special tablet minor merge which triggle mds",

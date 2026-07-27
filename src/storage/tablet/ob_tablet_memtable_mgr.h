@@ -37,7 +37,7 @@ class ObMemtable;
 namespace storage
 {
 class ObIMemtable;
-class ObTenantMetaMemMgr;
+class ObStorageMetaMemMgr;
 class ObFreezer;
 
 class ObTabletMemtableMgr : public ObIMemtableMgr
@@ -65,7 +65,7 @@ public:
 public: // derived from ObIMemtableMgr
   virtual int init(const common::ObTabletID &tablet_id,
                    ObFreezer *freezer,
-                   ObTenantMetaMemMgr *t3m) override;
+                   ObStorageMetaMemMgr *t3m) override;
 
   virtual int get_active_memtable(ObTableHandleV2 &handle) const override;
   virtual int get_all_memtables(ObTableHdlArray &handle) override;
@@ -126,8 +126,11 @@ public:
   ObTabletMemtableMgrPool()
     : allocator_(sizeof(ObTabletMemtableMgr), lib::ObMemAttr("TltMemtablMgr")),
       count_(0) {}
-  static int mtl_init(ObTabletMemtableMgrPool* &m) { return OB_SUCCESS; }
-  void destroy() {}
+  void destroy()
+  {
+    OB_ASSERT(0 == get_count());
+    allocator_.destroy();
+  }
   ObTabletMemtableMgr* acquire()
   {
     void *ptr = allocator_.alloc();

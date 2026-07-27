@@ -229,8 +229,7 @@ public:
   }
   inline bool is_sharding() const
   {
-    return (OB_TBL_LOCATION_REMOTE == location_type_ ||
-            OB_TBL_LOCATION_DISTRIBUTED == location_type_);
+    return OB_TBL_LOCATION_DISTRIBUTED == location_type_;
   }
   inline bool is_distributed() const
   {
@@ -248,14 +247,6 @@ public:
   {
     location_type_ = OB_TBL_LOCATION_ALL;
   }
-  inline bool is_remote() const
-  {
-    return (OB_TBL_LOCATION_REMOTE == location_type_);
-  }
-  inline void set_remote()
-  {
-    location_type_ = OB_TBL_LOCATION_REMOTE;
-  }
   bool is_local() const
   {
     return OB_TBL_LOCATION_LOCAL == location_type_;
@@ -267,8 +258,7 @@ public:
   bool is_single() const
   {
     return (OB_TBL_LOCATION_LOCAL == location_type_ ||
-            OB_TBL_LOCATION_ALL == location_type_ ||
-            OB_TBL_LOCATION_REMOTE == location_type_);
+            OB_TBL_LOCATION_ALL == location_type_);
   }
   bool is_uninitial() const {
     return OB_TBL_LOCATION_UNINITIALIZED == location_type_;
@@ -302,7 +292,6 @@ public:
 
   int copy_with_part_keys(const ObShardingInfo &other);
   int copy_without_part_keys(const ObShardingInfo &other);
-  int get_remote_addr(ObAddr &remote) const;
   int get_total_part_cnt(int64_t &total_part_cnt) const;
   static int get_all_partition_key(ObOptimizerContext &ctx,
                                    const ObDMLStmt &stmt,

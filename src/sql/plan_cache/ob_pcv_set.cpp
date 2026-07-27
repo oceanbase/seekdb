@@ -50,7 +50,6 @@ int ObPCVSet::init(ObILibCacheCtx &ctx, const ObILibCacheObject *obj)
       LOG_WARN("fail to deep_copy_sql", K(ret), K(pc_ctx.raw_sql_));
     } else {
       is_inited_ = true;
-      min_cluster_version_ = pc_ctx.exec_ctx_.get_min_cluster_version();
       normal_parse_const_cnt_ = pc_ctx.normal_parse_const_cnt_;
       LOG_TRACE("inited pcv set", K(pc_key_), K(ObTimeUtility::current_time()));
     }
@@ -86,7 +85,6 @@ void ObPCVSet::destroy()
     sql_ids_.reset();
     sql_.reset();
     normal_parse_const_cnt_ = 0;
-    min_cluster_version_ = 0;
     plan_num_ = 0;
     need_check_gen_tbl_col_ = false;
     is_inited_ = false;
@@ -120,8 +118,6 @@ int ObPCVSet::inner_get_cache_obj(ObILibCacheCtx &ctx,
     }
   }
   if (OB_FAIL(ret)) {
-  } else if (min_cluster_version_ != pc_ctx.exec_ctx_.get_min_cluster_version()) {
-    ret = OB_OLD_SCHEMA_VERSION;
   } else if (need_check_gen_tbl_col_) {
     // Check for the possibility of generated table projection column name conflicts
     bool contain_dup_col = false;
@@ -139,20 +135,18 @@ int ObPCVSet::inner_get_cache_obj(ObILibCacheCtx &ctx,
              K(ret), K(pc_ctx.sql_ctx_.schema_guard_), K(pc_ctx.sql_ctx_.session_info_));
   } else {
     ObSEArray<PCVSchemaObj, 4> schema_array;
-    // plan cache matching temporary tables should always use the user-created session to ensure the correctness of semantics
-    // When executed remotely, a temporary session object will be created, and its session_id is also temporary,
-    // So here the get_sessid_for_table() rule must be used to determine
+    // Plan-cache matching for temporary tables always uses the user-created session.
     pc_ctx.sql_ctx_.schema_guard_->set_session_id(
         pc_ctx.sql_ctx_.session_info_->get_sessid_for_table());
     ObPlanCacheValue *matched_pcv = NULL;
-    int64_t new_tenant_schema_version = OB_INVALID_VERSION;
+    int64_t new_runtime_schema_version = OB_INVALID_VERSION;
     bool need_check_schema = true;
     DLIST_FOREACH(pcv, pcv_list_) {
       bool is_same = false;
       LOG_DEBUG("get plan, pcv", K(pcv));
       if (OB_FAIL(pcv->get_all_dep_schema(pc_ctx,
                                           pc_ctx.sql_ctx_.session_info_->get_database_id(),
-                                          new_tenant_schema_version,
+                                          new_runtime_schema_version,
                                           need_check_schema,
                                           schema_array))) {
         if (OB_OLD_SCHEMA_VERSION == ret) {
@@ -173,17 +167,17 @@ int ObPCVSet::inner_get_cache_obj(ObILibCacheCtx &ctx,
         break;
       }
     } //end foreach
-    // If tenant schema changes, but table schema has not expired, then update tenant schema
+    // If the runtime schema changes but the table schema remains valid, lift the cached version.
     // plan must not be NULL, because the lower layer may have the behavior of overriding error codes, even if the plan does not match,
-    // ret is still success, at this point tenant schema version will be increased again, which may cause correctness issues
+    // The lower layer may overwrite errors; only lift the version after a plan actually matched.
     // bug link：
     if (OB_SUCC(ret) && NULL != matched_pcv && NULL != plan) {
-      if (OB_FAIL(matched_pcv->lift_tenant_schema_version(new_tenant_schema_version))) {
-        LOG_WARN("failed to lift pcv's tenant schema version", K(ret));
-      } else if (new_tenant_schema_version != OB_INVALID_VERSION
+      if (OB_FAIL(matched_pcv->lift_runtime_schema_version(new_runtime_schema_version))) {
+        LOG_WARN("failed to lift cached runtime schema version", K(ret));
+      } else if (new_runtime_schema_version != OB_INVALID_VERSION
                  && OB_NOT_NULL(pc_ctx.exec_ctx_.get_physical_plan_ctx())) {
-        pc_ctx.exec_ctx_.get_physical_plan_ctx()->set_tenant_schema_version(
-          new_tenant_schema_version);
+        pc_ctx.exec_ctx_.get_physical_plan_ctx()->set_runtime_schema_version(
+          new_runtime_schema_version);
       }
     }
   }

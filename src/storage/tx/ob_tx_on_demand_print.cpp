@@ -90,8 +90,6 @@ IMPL_ON_DEMAND_PRINT_FUNC(ObTxCtx)
 
   TX_PRINT_FUNC_WITH_ERR(runtime_state_.is_valid(), runtime_state_.on_demand_print_, ", ");
 
-  TX_KV_PRINT_WITH_ERR(get_retain_cause() != RetainCause::UNKOWN, retain_cause, retain_cause_, ", ");
-
   // TX_KV_PRINT_WITH_ERR(OB_NOT_NULL(block_frozen_memtable_), block_frozen_memtable,
   //                      block_frozen_memtable_, ", ");
   //

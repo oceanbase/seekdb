@@ -28,6 +28,7 @@
 #include "storage/tx/ob_gti_source.h"
 #include "storage/tx/ob_tx_replay_executor.h"
 #include "storage/tx/ob_tx_ctx.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase {
 using namespace share;
@@ -39,10 +40,10 @@ namespace transaction {
 class ObFakeTxDataTable : public ObTxDataTable {
 public:
   ObSliceAlloc slice_allocator_;
-  ObTenantTxDataAllocator __FAKE_ALLOCATOR_OBJ;
-  ObTenantTxDataAllocator *FAKE_ALLOCATOR = &__FAKE_ALLOCATOR_OBJ;
-  ObTenantTxDataOpAllocator __FAKE_ALLOCATOR_OBJ2;
-  ObTenantTxDataOpAllocator *FAKE_ALLOCATOR2 = &__FAKE_ALLOCATOR_OBJ2;
+  ObTxDataAllocator __FAKE_ALLOCATOR_OBJ;
+  ObTxDataAllocator *FAKE_ALLOCATOR = &__FAKE_ALLOCATOR_OBJ;
+  ObTxDataOpAllocator __FAKE_ALLOCATOR_OBJ2;
+  ObTxDataOpAllocator *FAKE_ALLOCATOR2 = &__FAKE_ALLOCATOR_OBJ2;
 
 public:
   ObFakeTxDataTable() : arena_allocator_(), map_(arena_allocator_, 1 << 20 /*2097152*/)
@@ -157,7 +158,6 @@ public:
   void reset() {
     get_gts_error_ = OB_SUCCESS;
   }
-
   int get_gts(const MonotonicTs stc,
               share::SCN &scn,
               MonotonicTs &receive_gts_ts) override
@@ -212,7 +212,7 @@ class ObFakeTxLogAdapter : public ObITxLogAdapter, public share::ObThreadPool
 public:
   virtual int start() {
     int ret = OB_SUCCESS;
-    ObThreadPool::set_run_wrapper(MTL_CTX());
+    ObThreadPool::set_run_wrapper(share::server_runtime());
     ret = ObThreadPool::start();
     stop_ = false;
     TRANS_LOG(INFO, "start.FakeTxLogAdapter", KP(this));

@@ -43,15 +43,17 @@ class ObAllVirtualSchemaSlot: public common::ObVirtualTableScannerIterator
   };
 public:
   explicit ObAllVirtualSchemaSlot(share::schema::ObMultiVersionSchemaService &schema_service)
-             : slot_idx_(OB_INVALID_INDEX),
+             : loaded_(false), slot_idx_(0),
                schema_service_(schema_service), schema_slot_infos_() {}
   virtual ~ObAllVirtualSchemaSlot() {}
 public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
 private:
-  void reset_slot_infos_(common::ObIAllocator &allocator);
-  int get_next_slot_info_(ObSchemaSlot &schema_slot);
+  void release_slot_infos(common::ObIAllocator &allocator,
+                          common::ObIArray<ObSchemaSlot> &slot_infos);
+  int get_next_slot_info(ObSchemaSlot &schema_slot);
 
+  bool loaded_;
   int64_t slot_idx_;
   const static int64_t DEFAULT_SLOT_NUM = 128;
   share::schema::ObMultiVersionSchemaService &schema_service_;

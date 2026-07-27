@@ -35,7 +35,6 @@ public:
       dfo_id_(common::OB_INVALID_ID),
       px_id_(common::OB_INVALID_ID),
       expected_worker_count_(0),
-      is_remote_(false),
       is_task_order_(false),
       is_merge_sort_(false),
       is_sort_local_order_(false),
@@ -63,7 +62,6 @@ public:
       ddl_slice_id_expr_(NULL),
       random_expr_(NULL),
       need_null_aware_shuffle_(false),
-      is_old_unblock_mode_(true),
       sample_type_(NOT_INIT_SAMPLE_TYPE),
       in_server_cnt_(0),
       px_info_(NULL)
@@ -79,8 +77,8 @@ public:
   inline void set_to_producer() { is_producer_ = true; }
   inline bool is_producer() const { return is_producer_; }
   inline bool is_consumer() const { return !is_producer_; }
-  inline bool is_px_producer() const { return is_producer_ && !is_remote_; }
-  inline bool is_px_consumer() const { return !is_producer_ && !is_remote_; }
+  inline bool is_px_producer() const { return is_producer_; }
+  inline bool is_px_consumer() const { return !is_producer_; }
   inline bool is_px_coord() const { return is_px_consumer() && is_rescanable(); }
   inline void set_rescanable(bool rescan) { is_rescanable_ = rescan; }
   inline bool is_rescanable() const { return is_rescanable_; }
@@ -90,7 +88,6 @@ public:
   inline int64_t get_px_id() const { return px_id_; }
   inline bool is_px_dfo_root() const
   { return dfo_id_ != common::OB_INVALID_ID && px_id_ != common::OB_INVALID_ID; }
-  inline bool get_is_remote() const { return is_remote_; }
   inline bool is_merge_sort() const { return is_merge_sort_; }
   inline bool is_sort_local_order() const { return is_sort_local_order_; }
   inline bool is_block_op() const { return is_sort_local_order_; }
@@ -169,8 +166,6 @@ public:
   common::ObIArray<int64_t> &get_bloom_filter_ids() { return filter_id_array_; }
   int gen_px_pruning_table_locations();
   int allocate_startup_expr_post()override;
-  void set_old_unblock_mode(bool old_unblock_mode) { is_old_unblock_mode_ = old_unblock_mode; }
-  bool is_old_unblock_mode() { return is_old_unblock_mode_; }
   void set_partition_id_expr(ObOpPseudoColumnRawExpr *expr) { partition_id_expr_ = expr; }
   ObOpPseudoColumnRawExpr *get_partition_id_expr() { return partition_id_expr_; }
   void set_ddl_slice_id_expr(ObRawExpr *expr) { ddl_slice_id_expr_ = expr; }
@@ -230,7 +225,6 @@ private:
   int64_t px_id_; // Assign an id to each px's plan before CG
   int64_t expected_worker_count_; // Only for QC node use, other exchange nodes are 0
 
-  bool is_remote_; /* true if the exchange is remote single-server */
   bool is_task_order_; // true if the input data is task order
   bool is_merge_sort_; // true if need merge sort for partition data
   bool is_sort_local_order_; // true if need local order sort
@@ -274,7 +268,6 @@ private:
   // new shuffle method for non-preserved side in naaj
   // broadcast 1st line && null join key
   bool need_null_aware_shuffle_;
-  bool is_old_unblock_mode_;
   // -for pkey range/range
   ObPxSampleType sample_type_;
   // -end pkey range/range

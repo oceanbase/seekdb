@@ -97,7 +97,6 @@ select * from create_index_with_parser_properties where match(a, b) against('2aa
 
 select * from create_index_with_parser_properties where match(a, b) against('3aaa');
 
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table create_index_with_parser_properties;
 
 show index from create_index_with_parser_properties;
@@ -138,7 +137,7 @@ UPDATE fts_basic_article SET title = 'Fulltext Indexing' WHERE id = 2;
 
 DELETE FROM fts_basic_article WHERE id = 1;
 
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g /AUTO_INCREMENT = [0-9]*/AUTO_INCREMENT = auto_increment/g
+--replace_regex /AUTO_INCREMENT = [0-9]*/AUTO_INCREMENT = auto_increment/g
 SHOW CREATE TABLE fts_basic_article;
 
 SHOW INDEX FROM fts_basic_article;
@@ -158,7 +157,6 @@ CREATE TABLE table_create_with_ngram2(text CHAR(255), FULLTEXT(text) WITH PARSER
 CREATE TABLE table_create_with_ngram2(text CHAR(255), FULLTEXT(text) WITH PARSER ngram2 PARSER_PROPERTIES=(min_ngram_size=2, max_ngram_size=4))
 ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin;
 
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 SHOW CREATE TABLE table_create_with_ngram2;
 
 INSERT INTO table_create_with_ngram2 VALUES ('hello world');

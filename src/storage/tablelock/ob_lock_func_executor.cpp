@@ -51,8 +51,10 @@ int ObGetLockExecutor::execute(ObExecContext &ctx,
 
   OZ (ObLockContext::valid_execute_context(ctx));
   // 1. generate lock_id and update DBMS_LOCK_ALLOCATED table
-  // 2. add lock_obj into DETECT_LOCK_INFO table
-  // 3. lock obj
+  // 2. modify inner table
+  // 4.1 add session into CLIENT_TO_SERVER_SESSION_INFO table
+  // 4.2 add lock_obj into DETECT_LOCK_INFO table
+  // 5. lock obj
 
   if (OB_SUCC(ret)) {
     SMART_VAR(ObLockContext, stack_ctx1) {

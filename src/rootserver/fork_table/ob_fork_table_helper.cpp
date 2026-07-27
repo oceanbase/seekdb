@@ -255,7 +255,7 @@ int ObForkTableHelper::execute()
     ret = OB_NOT_INIT;
     LOG_WARN("fork table helper not init", KR(ret));
   } else {
-    MOD_SCOPE {
+    SERVER_MODULE_SCOPE {
       if (OB_FAIL(copy_tablet_autoinc_seq_info_())) {
         LOG_WARN("failed to copy tablet autoinc seq", KR(ret), K(src_table_id_),
                  K(dst_table_id_));
@@ -279,7 +279,7 @@ int ObForkTableHelper::execute()
 int ObForkTableHelper::copy_tablet_autoinc_seq_info_()
 {
   int ret = OB_SUCCESS;
-  ObSEArray<share::ObMigrateTabletAutoincSeqParam, 4> autoinc_params;
+  ObSEArray<share::ObTabletAutoincSeqCopyParam, 4> autoinc_params;
 
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
@@ -297,7 +297,7 @@ int ObForkTableHelper::copy_tablet_autoinc_seq_info_()
       const ObTabletID &dst_tablet_id = dst_tablet_ids_.at(i);
       ObTabletHandle tablet_handle;
       ObTabletAutoincSeq autoinc_seq;
-      share::ObMigrateTabletAutoincSeqParam param;
+      share::ObTabletAutoincSeqCopyParam param;
       param.src_tablet_id_ = src_tablet_id;
       param.dest_tablet_id_ = dst_tablet_id;
       param.ret_code_ = OB_SUCCESS;
@@ -443,31 +443,28 @@ int ObForkTableHelper::copy_table_autoinc_seq_info_()
     LOG_WARN("autoinc column id mismatch", KR(ret), K(src_autoinc_column_id),
              K(dst_autoinc_column_id));
   } else {
-    const bool is_order_mode =
-        src_table_schema_->is_order_auto_increment_mode();
     const int64_t autoinc_version = src_table_schema_->get_truncate_version();
     uint64_t src_sequence_value = 0;
     share::ObAutoincrementService &autoinc_service =
         share::ObAutoincrementService::get_instance();
 
     if (OB_FAIL(autoinc_service.get_sequence_value(
-            src_table_id_, src_autoinc_column_id, is_order_mode,
+            src_table_id_, src_autoinc_column_id,
             autoinc_version, src_sequence_value))) {
       if (OB_ENTRY_NOT_EXIST == ret || OB_SCHEMA_ERROR == ret) {
         ret = OB_SUCCESS;
         LOG_INFO("fork table: source table has no auto increment record",
-                 K(src_table_id_), K(is_order_mode));
+                 K(src_table_id_));
       } else {
         LOG_WARN("failed to get auto increment sequence value from "
                  "ObAutoincrementService",
-                 K(ret), K(src_table_id_), K(src_autoinc_column_id),
-                 K(is_order_mode));
+                 K(ret), K(src_table_id_), K(src_autoinc_column_id));
       }
     } else {
       LOG_INFO("fork table: got sequence value from ObAutoincrementService "
                "(read-only)",
                K(src_table_id_), K(src_autoinc_column_id),
-               K(src_sequence_value), K(is_order_mode));
+               K(src_sequence_value));
     }
 
     if (OB_SUCC(ret) && src_sequence_value > 0) {
@@ -631,11 +628,18 @@ int ObForkTableHelper::get_tablet_handle_(
     storage::ObTabletHandle &tablet_handle) const
 {
   int ret = OB_SUCCESS;
-  ObLS *ls = nullptr;
+  storage::ObLS *ls = nullptr;
+  storage::ObLSService *ls_service = nullptr;
 
-  MOD_SCOPE {
-    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
-      LOG_WARN("get ls failed", K(ret));
+  SERVER_MODULE_SCOPE {
+    if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("ls service is null", K(ret));
+    } else if (OB_FAIL(ls_service->get_ls(ls))) {
+      LOG_WARN("get ls failed", K(ret), K(SYS_LS));
+    } else if (OB_ISNULL(ls)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("ls is null", K(ret), K(SYS_LS));
     } else if (OB_FAIL(ls->get_tablet(tablet_id, tablet_handle))) {
       LOG_WARN("failed to get tablet", K(ret), K(tablet_id));
     }

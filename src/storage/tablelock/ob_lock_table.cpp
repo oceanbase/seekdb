@@ -22,7 +22,7 @@
 #include "storage/ls/ob_ls.h"                  // ObLS
 #include "storage/tablelock/ob_table_lock_iterator.h"
 #include "storage/tablelock/ob_lock_memtable.h"
-#include "storage/tx_storage/ob_tenant_freezer.h"
+#include "storage/tx_storage/ob_memstore_freezer.h"
 
 namespace oceanbase
 {
@@ -218,7 +218,6 @@ int ObLockTable::get_table_schema_(
     LOG_WARN("failed to add column", K(ret), K(value_column));
   } else {
     schema.set_micro_index_clustered(false);
-    schema.set_enable_macro_block_bloom_filter(false);
   }
   return ret;
 }

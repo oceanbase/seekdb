@@ -908,7 +908,7 @@ ObApplyStatusGuard::~ObApplyStatusGuard()
     if (0 == apply_status_->dec_ref()) {
       CLOG_LOG(INFO, "free apply status", KPC(apply_status_));
       apply_status_->~ObApplyStatus();
-      mtl_free(apply_status_);
+      server_free(apply_status_);
     }
     apply_status_ = NULL;
   }
@@ -1039,13 +1039,13 @@ int ObLogApplyService::create_status()
   } else if (false == ATOMIC_LOAD(&is_running_)) {
     ret = OB_STATE_NOT_MATCH;
     CLOG_LOG(ERROR, "apply service has been stopped", K(ret));
-  } else if (NULL == (apply_status = static_cast<ObApplyStatus*>(mtl_malloc(sizeof(ObApplyStatus), attr)))){
+  } else if (NULL == (apply_status = static_cast<ObApplyStatus*>(server_malloc(sizeof(ObApplyStatus), attr)))){
     ret = OB_ALLOCATE_MEMORY_FAILED;
     CLOG_LOG(WARN, "failed to alloc apply status", K(ret));
   } else {
     new (apply_status) ObApplyStatus();
     if (OB_FAIL(apply_status->init(palf_env_, this))) {
-      mtl_free(apply_status);
+      server_free(apply_status);
       apply_status = NULL;
       CLOG_LOG(WARN, "failed to init apply status", K(ret), K(palf_env_), K(this));
     } else {
@@ -1239,7 +1239,7 @@ void ObLogApplyService::revert_apply_status(ObApplyStatus *apply_status)
     if (0 == apply_status->dec_ref()) {
       CLOG_LOG(INFO, "free apply status", KPC(apply_status));
       apply_status->~ObApplyStatus();
-      mtl_free(apply_status);
+      server_free(apply_status);
       apply_status = NULL;
     }
   }

@@ -39,7 +39,6 @@ class ObCreateViewResolver : public ObCreateTableResolverBase
 {
   static const int64_t VIEW_NODE = 0;
   static const int64_t VIEW_COLUMNS_NODE = 1;
-  static const int64_t TABLE_ID_NODE = 2;
   static const int64_t SELECT_STMT_NODE = 3;
   static const int64_t IF_NOT_EXISTS_NODE = 4;
   static const int64_t WITH_OPT_NODE = 5;

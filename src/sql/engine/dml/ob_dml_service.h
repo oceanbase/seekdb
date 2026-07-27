@@ -283,10 +283,10 @@ public:
                                        const ExprFixedArray &row,
                                        const ObDMLBaseCtDef &dml_ctdef,
                                        ObDMLBaseRtDef &dml_rtdef);
-  static bool is_nested_dup_table(const uint64_t table_id,DASDelCtxList& del_ctx_list);
-  static int get_nested_dup_table_ctx(const uint64_t table_id,
-                                      DASDelCtxList& del_ctx_list,
-                                      SeRowkeyDistCtx *&rowkey_dist_ctx);
+  static bool has_nested_delete_ctx(const uint64_t table_id, DASDelCtxList &del_ctx_list);
+  static int get_nested_delete_ctx(const uint64_t table_id,
+                                   DASDelCtxList &del_ctx_list,
+                                   SeRowkeyDistCtx *&rowkey_dist_ctx);
   static int handle_after_processing_single_row(ObDMLModifyRowsList *dml_modify_rows);
   static int handle_after_processing_single_row(ObDMLModifyRowNode &modify_row);
   static int handle_after_processing_multi_row(ObDMLModifyRowsList *dml_modify_rows, ObTableModifyOp *op);
@@ -475,7 +475,7 @@ int ObDASIndexDMLAdaptor<N, DMLIterator>::write_tablet_with_ignore(DMLIterator &
       SQL_DAS_LOG(WARN, "create anonymous savepoint failed", K(ret));
     } else if (OB_FAIL(single_row_buffer.init(*das_allocator_, ObDASWriteBuffer::DAS_ROW_DEFAULT_EXTEND_SIZE))) {
       SQL_DAS_LOG(WARN, "init single row buffer failed", K(ret));
-    } else if (OB_FAIL(single_row_buffer.try_add_row(dsr, das::OB_DAS_MAX_PACKET_SIZE, added, &store_row))) {
+    } else if (OB_FAIL(single_row_buffer.try_add_row(dsr, das::OB_DAS_TASK_BUFFER_SIZE, added, &store_row))) {
       SQL_DAS_LOG(WARN, "try add row to single row buffer failed", K(ret));
     } else if (!added) {
       ret = OB_ERR_UNEXPECTED;

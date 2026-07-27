@@ -16,7 +16,7 @@
 
 #include "ob_tx_timestamp_waiter.h"
 #include "lib/ob_running_mode.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_ts_mgr.h"
 #include "ob_tx_ctx.h"
 
@@ -34,7 +34,7 @@ int ObTxTimestampCallbackWorker::init(ObTxTimestampWaiter *waiter)
   const int64_t thread_count = lib::is_mini_mode() ? 1 : MAX(common::get_cpu_count() / 12, 1L);
 
   waiter_ = waiter;
-  set_run_wrapper(MTL_CTX());
+  set_run_wrapper(share::server_runtime());
   if (OB_FAIL(common::ObSimpleThreadPool::init(thread_count, MAX_TASK_NUM, "TxTsCb"))) {
     TRANS_LOG(WARN, "timestamp callback worker init failed", KR(ret), K(thread_count));
     waiter_ = NULL;
@@ -73,7 +73,7 @@ int ObTxTimestampWaiter::init(ObTsMgr *ts_mgr)
     TRANS_LOG(WARN, "timestamp waiter condition init failed", KR(ret));
   } else if (OB_FAIL(share::ObThreadPool::init())) {
     TRANS_LOG(WARN, "timestamp waiter thread init failed", KR(ret));
-  } else if (FALSE_IT(share::ObThreadPool::set_run_wrapper(MTL_CTX()))) {
+  } else if (FALSE_IT(share::ObThreadPool::set_run_wrapper(share::server_runtime()))) {
   } else if (OB_FAIL(callback_worker_.init(this))) {
     TRANS_LOG(WARN, "timestamp callback worker init failed", KR(ret));
   } else {

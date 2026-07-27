@@ -63,38 +63,12 @@ int ObStaticDataStoreDesc::assign(const ObStaticDataStoreDesc &desc)
   snapshot_version_ = desc.snapshot_version_;
   end_scn_ = desc.end_scn_;
   progressive_merge_round_ = desc.progressive_merge_round_;
-  major_working_cluster_version_ = desc.major_working_cluster_version_;
-  encrypt_id_ = desc.encrypt_id_;
-  master_key_id_ = desc.master_key_id_;
-  MEMCPY(encrypt_key_, desc.encrypt_key_, sizeof(encrypt_key_));
-  exec_mode_ = desc.exec_mode_;
+  data_format_version_ = desc.data_format_version_;
   micro_index_clustered_ = desc.micro_index_clustered_;
-  enable_macro_block_bloom_filter_ = desc.enable_macro_block_bloom_filter_;
   need_submit_io_ = desc.need_submit_io_;
-  is_delete_insert_table_ = desc.is_delete_insert_table_;
   encoding_granularity_ = desc.encoding_granularity_;
   semistruct_encoding_type_ = desc.semistruct_encoding_type_;
   concurrent_cnt_ = desc.concurrent_cnt_;
-  return ret;
-}
-
-int ObStaticDataStoreDesc::init_encryption_info(const ObMergeSchema &merge_schema)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(merge_schema.get_encryption_id(encrypt_id_))) {
-    STORAGE_LOG(WARN, "fail to get encrypt id from table schema", K(ret), K(merge_schema));
-  } else if (merge_schema.need_encrypt() && merge_schema.get_encrypt_key_len() > 0) {
-    const int64_t key_str_len = share::OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH;
-    if (OB_UNLIKELY(merge_schema.get_encrypt_key_len() > key_str_len)) {
-      ret = OB_SIZE_OVERFLOW;
-      STORAGE_LOG(WARN, "encrypt key length overflow", KR(ret),
-        K(merge_schema.get_encrypt_key_len()), K(key_str_len));
-    } else {
-      master_key_id_ = merge_schema.get_master_key_id();
-      MEMCPY(encrypt_key_, merge_schema.get_encrypt_key().ptr(),
-        merge_schema.get_encrypt_key().length());
-    }
-  }
   return ret;
 }
 
@@ -120,8 +94,7 @@ int ObStaticDataStoreDesc::init(
     const compaction::ObMergeType merge_type,
     const int64_t snapshot_version,
     const share::SCN &end_scn,
-    const int64_t cluster_version,
-    const compaction::ObExecMode exec_mode,
+    const int64_t data_format_version,
     const bool micro_index_clustered,
     const int64_t concurrent_cnt,
     const bool need_submit_io,
@@ -130,18 +103,15 @@ int ObStaticDataStoreDesc::init(
   int ret = OB_SUCCESS;
   const bool is_major = compaction::is_major_or_meta_merge_type(merge_type);
   if (OB_UNLIKELY(!merge_schema.is_valid() || !tablet_id.is_valid() || snapshot_version <= 0
-    || (!is_major && !end_scn.is_valid()) || !is_valid_exec_mode(exec_mode))) {
+    || (is_major && data_format_version <= 0) || (!is_major && !end_scn.is_valid()))) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "arguments is invalid", K(ret), K(merge_schema), K(snapshot_version), K(end_scn),
-      "exec_mode", exec_mode_to_str(exec_mode));
+    STORAGE_LOG(WARN, "arguments is invalid", K(ret), K(merge_schema), K(snapshot_version), K(end_scn), K(data_format_version));
   } else {
     reset();
     is_ddl_ = is_ddl;
     merge_type_ = merge_type;
     tablet_id_ = tablet_id;
-    exec_mode_ = exec_mode;
     encoding_granularity_ = encoding_granularity;
-    enable_macro_block_bloom_filter_ = merge_schema.get_enable_macro_block_bloom_filter();
     concurrent_cnt_ = concurrent_cnt;
 
     if (compaction::is_mds_merge(merge_type_)) {
@@ -158,8 +128,7 @@ int ObStaticDataStoreDesc::init(
       STORAGE_LOG(WARN, "fail to convert scn", K(ret), K(snapshot_version));
     }
 
-    if (FAILEDx(init_encryption_info(merge_schema))) {
-      STORAGE_LOG(WARN, "fail to get encrypt info from table schema", K(ret));
+    if (OB_FAIL(ret)) {
     } else if (OB_FAIL(merge_schema.get_semistruct_encoding_type(semistruct_encoding_type_))) {
       STORAGE_LOG(WARN, "Failed to get semistruct encoding option", K(ret));
     } else {
@@ -167,19 +136,9 @@ int ObStaticDataStoreDesc::init(
       snapshot_version_ = snapshot_version;
       progressive_merge_round_ = merge_schema.get_progressive_merge_round();
       compressor_type_ = merge_schema.get_compressor_type();
-      is_delete_insert_table_ = merge_schema.is_delete_insert_merge_engine();
       (void) init_block_size(merge_schema);
       if (is_major) {
-        uint64_t compat_version = 0;
-        if (cluster_version > 0) {
-          major_working_cluster_version_ = cluster_version;
-        } else if (OB_FAIL(GET_MIN_DATA_VERSION(compat_version))) {
-          STORAGE_LOG(WARN, "fail to get data version", K(ret));
-        } else {
-          major_working_cluster_version_ = compat_version;
-          STORAGE_LOG(INFO, "success to set major working cluster version", K(ret), "merge_type", merge_type_to_str(merge_type),
-            K(cluster_version), K(major_working_cluster_version_));
-        }
+        data_format_version_ = data_format_version;
       } else if (compressor_type_ != ObCompressorType::NONE_COMPRESSOR) {
         // for mini/minor, use default compressor
         compressor_type_ = DEFAULT_MINOR_COMPRESSOR_TYPE;
@@ -258,7 +217,7 @@ int ObColDataStoreDesc::assign(const ObColDataStoreDesc &desc)
 int ObColDataStoreDesc::init(
   const bool is_major,
   const ObMergeSchema &merge_schema,
-  const int64_t major_working_cluster_version)
+  const int64_t data_format_version)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(merge_schema.get_store_column_count(full_stored_col_cnt_, true))) {
@@ -274,7 +233,7 @@ int ObColDataStoreDesc::init(
         STORAGE_LOG(WARN, "Failed to reserve column desc array", K(ret));
       } else if (OB_FAIL(merge_schema.get_multi_version_column_descs(col_desc_array_))) {
         STORAGE_LOG(WARN, "Failed to generate multi version column ids", K(ret));
-      } else if (OB_FAIL(generate_skip_index_meta(is_major, merge_schema, major_working_cluster_version))) {
+      } else if (OB_FAIL(generate_skip_index_meta(is_major, merge_schema, data_format_version))) {
         STORAGE_LOG(WARN, "failed to generate skip index meta", K(ret));
       }
     } else {
@@ -282,7 +241,7 @@ int ObColDataStoreDesc::init(
         STORAGE_LOG(WARN, "fail to reserve column desc array", K(ret));
       } else if (OB_FAIL(merge_schema.get_mulit_version_rowkey_column_ids(col_desc_array_))) {
         STORAGE_LOG(WARN, "fail to get rowkey column ids", K(ret));
-      } else if (OB_FAIL(generate_skip_index_meta(is_major, merge_schema, major_working_cluster_version))) {
+      } else if (OB_FAIL(generate_skip_index_meta(is_major, merge_schema, data_format_version))) {
         STORAGE_LOG(WARN, "failed to generate skip index meta", K(ret));
       }
     }
@@ -369,9 +328,9 @@ int ObColDataStoreDesc::init_col_default_checksum_array(
 int ObColDataStoreDesc::generate_skip_index_meta(
     const bool is_major,
     const share::schema::ObMergeSchema &schema,
-    const int64_t major_working_cluster_version)
+    const int64_t data_format_version)
 {
-  UNUSED(major_working_cluster_version);
+  UNUSED(data_format_version);
   int ret = OB_SUCCESS;
   ObArray<ObSkipIndexColumnAttr> skip_idx_attrs;
   if (OB_UNLIKELY(!schema.is_valid())) {
@@ -462,7 +421,6 @@ ObDataStoreDesc::~ObDataStoreDesc()
   reset();
 }
 
-const ObTabletID ObDataStoreDesc::EMERGENCY_TABLET_ID_MAGIC = ObTabletID(0);
 
 int ObDataStoreDesc::get_emergency_row_store_type()
 {
@@ -494,8 +452,7 @@ int ObDataStoreDesc::get_emergency_row_store_type()
           (void)(std::strtoull(endptr, &endptr, 0));
           if (OB_SUCC(ret)) {
             oceanbase::share::ObTaskController::get().allow_next_syslog();
-            if (EMERGENCY_TABLET_ID_MAGIC == emergency_tablet_id
-                || get_tablet_id() == emergency_tablet_id) {
+            if (get_tablet_id() == emergency_tablet_id) {
               STORAGE_LOG(INFO, "Succ to find specified emergency partition to skip encoding",
                   K(emergency_tablet_id), K(*this));
               row_store_type_ = FLAT_ROW_STORE;
@@ -581,11 +538,6 @@ bool ObDataStoreDesc::micro_index_clustered() const
   return static_desc_->micro_index_clustered_;
 }
 
-bool ObDataStoreDesc::enable_macro_block_bloom_filter() const
-{
-  return static_desc_->enable_macro_block_bloom_filter_;
-}
-
 int ObDataStoreDesc::update_basic_info_from_macro_meta(const ObSSTableBasicMeta &meta)
 {
   int ret = OB_SUCCESS;
@@ -595,10 +547,7 @@ int ObDataStoreDesc::update_basic_info_from_macro_meta(const ObSSTableBasicMeta 
   } else {
     row_store_type_ = meta.root_row_store_type_;
     static_desc_->compressor_type_ = meta.compressor_type_;
-    static_desc_->master_key_id_ = meta.master_key_id_;
-    static_desc_->encrypt_id_ = meta.encrypt_id_;
     encoder_opt_.set_store_type(meta.root_row_store_type_);
-    MEMCPY(static_desc_->encrypt_key_, meta.encrypt_key_, share::OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH);
 
     // since the schema is always newer than the original sstable and new cols can
     // only be added to the tail, it's safe to pop back the default checksum of
@@ -726,11 +675,10 @@ int ObWholeDataStoreDesc::init(
     const common::ObTabletID tablet_id,
     const compaction::ObMergeType merge_type,
     const int64_t snapshot_version,
-    const int64_t cluster_version,
+    const int64_t data_format_version,
     const bool micro_index_clustered,
     const int64_t concurrent_cnt,
     const share::SCN &end_scn,
-    const compaction::ObExecMode exec_mode,
     const bool need_submit_io /*=true*/)
 {
   int ret = OB_SUCCESS;
@@ -745,8 +693,8 @@ int ObWholeDataStoreDesc::init(
   }
 
   if (OB_FAIL(static_desc_.init(is_ddl, merge_schema, tablet_id, merge_type,
-                                snapshot_version, end_scn, cluster_version,
-                                exec_mode, micro_index_clustered, concurrent_cnt,
+                                snapshot_version, end_scn, data_format_version,
+                                micro_index_clustered, concurrent_cnt,
                                 need_submit_io, encoding_granularity))) {
     STORAGE_LOG(WARN, "failed to init static desc", KR(ret));
   } else if (OB_FAIL(inner_init(merge_schema))) {
@@ -759,7 +707,7 @@ int ObWholeDataStoreDesc::inner_init(const ObMergeSchema &merge_schema)
 {
   int ret = OB_SUCCESS;
   const bool is_major = compaction::is_major_or_meta_merge_type(static_desc_.merge_type_);
-  if (OB_FAIL(col_desc_.init(is_major, merge_schema, static_desc_.major_working_cluster_version_))) {
+  if (OB_FAIL(col_desc_.init(is_major, merge_schema, static_desc_.data_format_version_))) {
     STORAGE_LOG(WARN, "failed to inner init data desc", K(ret));
   }
   if (FAILEDx(desc_.init(static_desc_, col_desc_, merge_schema,

@@ -106,9 +106,6 @@ int ObPLRouter::analyze(ObString &route_sql, ObIArray<ObDependencyInfo> &dep_inf
 {
   int ret = OB_SUCCESS;
   HEAP_VAR(ObPLFunctionAST, func_ast, inner_allocator_) {
-    if (routine_info_.is_pipelined()) {
-      func_ast.set_pipelined();
-    }
     if (OB_FAIL(simple_resolve(func_ast))) {
       // Compatible with MySQL, some resolve stage errors need to be thrown at creation time
       if (OB_FAIL(check_error_in_resolve(ret))) {
@@ -142,9 +139,6 @@ int ObPLRouter::analyze(ObString &route_sql, ObIArray<ObDependencyInfo> &dep_inf
       }
       if (func_ast.is_rps()) {
         routine_info.set_rps();
-      }
-      if (func_ast.is_has_sequence()) {
-        routine_info.set_has_sequence();
       }
       if (func_ast.is_has_out_param()) {
         routine_info.set_has_out_param();
@@ -211,7 +205,6 @@ int ObPLRouter::simple_resolve(ObPLFunctionAST &func_ast)
   if (OB_SUCC(ret)) {
     ObString body = routine_info_.get_routine_body(); // get body string
     ObPLParser parser(inner_allocator_, session_info_.get_charsets4parser(), session_info_.get_sql_mode());
-
     if (OB_FAIL(ObSQLUtils::convert_sql_text_from_schema_for_resolve(
                   inner_allocator_, session_info_.get_dtc_params(), body))) {
       LOG_WARN("fail to get routine body", K(ret));

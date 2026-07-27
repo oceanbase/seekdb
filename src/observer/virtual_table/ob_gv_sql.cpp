@@ -47,13 +47,7 @@ void ObGVSql::reset()
   plan_cache_ = NULL;
 }
 
-int ObGVSql::inner_open()
-{
-  int ret = OB_SUCCESS;
-  return ret;
-}
-
-int ObGVSql::get_row_from_specified_tenant(bool &is_end)
+int ObGVSql::get_next_plan_row(bool &is_end)
 {
   int ret = OB_SUCCESS;
   // !!! Must add ObReqTimeGuard before referencing plan cache resources
@@ -93,7 +87,7 @@ int ObGVSql::get_row_from_specified_tenant(bool &is_end)
         is_end = false;
         uint64_t plan_id= plan_id_array_.at(plan_id_array_idx_);
         ++plan_id_array_idx_;
-        ObCacheObjGuard guard(PC_DIAG_HANDLE);
+        ObCacheObjGuard guard;
         int tmp_ret = plan_cache_->ref_alloc_obj(plan_id, guard); // increment plan reference count by 1
         // If the plan corresponding to the current plan_id has been phased out, then ignore and continue to get the next plan
         if (OB_HASH_NOT_EXIST == tmp_ret) {
@@ -112,7 +106,7 @@ int ObGVSql::get_row_from_specified_tenant(bool &is_end)
     } //while end
   }
   SERVER_LOG(DEBUG,
-             "add plan from a tenant",
+             "add plan",
              K(ret));
   return ret;
 }
@@ -740,24 +734,9 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
     case share::ALL_VIRTUAL_PLAN_STAT_CDE::OUTLINE_DATA: {
       if (!cache_stat_updated) {
         cells[i].set_null();
-      } else if (cache_obj->is_sql_crsr() || NULL != pl_object) {
+      } else if (cache_obj->is_sql_crsr()) {
         ObString outline_data;
-        if (NULL != pl_object) {
-          int64_t buf_len = ObPlParamInfo::MAX_STR_DES_LEN_PL;
-          char *buf = (char *)allocator_->alloc(buf_len);
-          int64_t pos = 0;
-          if (OB_ISNULL(buf)) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-            SERVER_LOG(WARN, "fail to alloc memory for OUTLINE_DATA", K(ret));
-          } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, 
-                  "/*+max_concurrent(%ld)*/", pl_object->get_max_concurrent_num()))) {
-            SERVER_LOG(WARN, "fail to print string of concurrent", K(ret));  
-          } else if (OB_FAIL(ob_write_string(*allocator_, ObString(pos, buf), outline_data))) {
-            SERVER_LOG(ERROR, "copy outline_data failed", K(ret));
-          }
-        } else if (OB_FAIL(ob_write_string(*allocator_,
-                                    plan->stat_.outline_data_,
-                                    outline_data))) {
+        if (OB_FAIL(ob_write_string(*allocator_, plan->stat_.outline_data_, outline_data))) {
           SERVER_LOG(ERROR, "copy outline_data failed", K(ret));
         }
         if (OB_SUCC(ret)) {
@@ -1041,26 +1020,6 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
       cells[i].set_uint64(compile_time);
       break;
     }
-    case share::ALL_VIRTUAL_PLAN_STAT_CDE::PLAN_STATUS: {
-      if (!cache_stat_updated) {
-        cells[i].set_null();
-      } else if (cache_obj->is_sql_crsr()) {
-        cells[i].set_int(plan->is_active_status() ? 0 : 1);
-      } else {
-        cells[i].set_null();
-      }
-      break;
-    }
-    case share::ALL_VIRTUAL_PLAN_STAT_CDE::ADAPTIVE_FEEDBACK_TIMES: {
-      if (!cache_stat_updated) {
-        cells[i].set_null();
-      } else if (cache_obj->is_sql_crsr()) {
-        cells[i].set_int(plan->get_adaptive_feedback_times());
-      } else {
-        cells[i].set_null();
-      }
-      break;
-    }
     case share::ALL_VIRTUAL_PLAN_STAT_CDE::FIRST_GET_PLAN_TIME:  {
       cells[i].set_null();
       break;
@@ -1084,17 +1043,17 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
   return ret;
 }
 
-int ObGVSql::get_row_from_tenants()
+int ObGVSql::get_row()
 {
   int ret = OB_SUCCESS;
   bool is_sub_end = false;
-  // At most one MOD_SCOPE pass
+  // At most one SERVER_MODULE_SCOPE pass
   if (iter_end_) {
     ret = OB_ITER_END;
   } else {
-    MOD_SCOPE {
-      if (OB_FAIL(get_row_from_specified_tenant(is_sub_end))) {
-        SERVER_LOG(WARN, "fail to insert plan by tenant id", K(ret));
+    SERVER_MODULE_SCOPE {
+      if (OB_FAIL(get_next_plan_row(is_sub_end))) {
+        SERVER_LOG(WARN, "fail to get plan", K(ret));
       } else if (is_sub_end) {
         iter_end_ = true;
         ret = OB_ITER_END;

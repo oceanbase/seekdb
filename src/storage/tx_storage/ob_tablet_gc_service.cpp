@@ -21,7 +21,7 @@
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "logservice/ob_log_service.h"
-#include "storage/meta_store/ob_tenant_storage_meta_service.h"
+#include "storage/meta_store/ob_local_storage_meta_service.h"
 
 namespace oceanbase
 {
@@ -43,7 +43,7 @@ const int64_t ObTabletGCService::GC_CHECK_INTERVAL = 5 * 1000 * 1000L;
 // The time interval for gc tablet and persist tablet whether the tablet_persist_trigger_ is 24 * 720 * 5s = 1d
 const int64_t ObTabletGCService::GLOBAL_GC_CHECK_INTERVAL_TIMES = 24 * 720;
 
-int ObTabletGCService::mtl_init(ObTabletGCService* &m)
+int ObTabletGCService::server_module_init(ObTabletGCService* &m)
 {
   return m->init();
 }
@@ -64,11 +64,11 @@ int ObTabletGCService::start()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(timer_for_tablet_change_.set_run_wrapper_with_ret(MTL_CTX()))) {
+  } else if (OB_FAIL(timer_for_tablet_change_.set_run_wrapper_with_ret(share::server_runtime()))) {
     STORAGE_LOG(ERROR, "fail to set timer's run wrapper", KR(ret));
   } else if (OB_FAIL(timer_for_tablet_change_.init())) {
     STORAGE_LOG(ERROR, "fail to init timer", KR(ret));
-  } else if (OB_FAIL(timer_for_tablet_shell_.set_run_wrapper_with_ret(MTL_CTX()))) {
+  } else if (OB_FAIL(timer_for_tablet_shell_.set_run_wrapper_with_ret(share::server_runtime()))) {
     STORAGE_LOG(ERROR, "fail to set timer's run wrapper", KR(ret));
   } else if (OB_FAIL(timer_for_tablet_shell_.init("TabletShell", ObMemAttr("TabletShell")))) {
     STORAGE_LOG(ERROR, "fail to init timer", KR(ret));
@@ -116,13 +116,17 @@ void ObTabletGCService::ObTabletChangeTask::runTimerTask()
   times = (times + 1) % GLOBAL_GC_CHECK_INTERVAL_TIMES;
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
+  ObLSService *ls_svr = share::g_mp->ls_service();
   bool skip_gc_task = false;
 
   skip_gc_task = (OB_SUCCESS != (OB_E(EventTable::EN_TABLET_GC_TASK_FAILED) OB_SUCCESS));
 
-  if (OB_UNLIKELY(skip_gc_task)) {
+  if (OB_ISNULL(ls_svr)) {
+    ret = OB_ERR_UNEXPECTED;
+    STORAGE_LOG(WARN, "runtime ObLSService should not be null", KR(ret));
+  } else if (OB_UNLIKELY(skip_gc_task)) {
     // do nothing
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+  } else if (OB_FAIL(ls_svr->get_ls(ls))) {
     STORAGE_LOG(WARN, "get log stream failed", KR(ret));
   } else {
     ObTabletGCHandler *const tablet_gc_handler = ls->get_tablet_gc_handler();
@@ -186,18 +190,13 @@ void ObTabletGCService::ObTabletChangeTask::runTimerTask()
             need_retry = true;
             STORAGE_LOG(ERROR, "fail to wait unpersist tablet ids flushed", KR(ret), KPC(tablet_gc_handler->ls_), K(unpersist_tablet_ids));
           }
-          // 6. write ls active tablet array
-          else if (OB_FAIL(TENANT_STORAGE_META_PERSISTER.write_active_tablet_array(ls))) {
-            need_retry = true;
-            STORAGE_LOG(ERROR, "fail to write active tablet array", KR(ret), KPC(ls));
-          }
-          // 7. update tablet_change_checkpoint in log meta
+          // 6. update tablet_change_checkpoint in log meta
           else if (decided_scn > ls->get_tablet_change_checkpoint_scn()
                   && OB_FAIL(tablet_gc_handler->set_tablet_change_checkpoint_scn(decided_scn))) {
             need_retry = true;
             STORAGE_LOG(WARN, "failed to set_tablet_change_checkpoint_scn", KPC(ls), KR(ret), K(decided_scn));
           }
-          // 8. check and gc deleted_tablets
+          // 7. check and gc deleted_tablets
           else if (!only_persist && !deleted_tablets.empty() 
                    && OB_FAIL(tablet_gc_handler->gc_tablets(deleted_tablets))) {
             need_retry = true;

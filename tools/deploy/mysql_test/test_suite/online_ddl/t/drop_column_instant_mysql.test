@@ -1137,11 +1137,11 @@ create table xingrui_xml(col1 xmltype, col2 xmltype);
 
 #验证ddl过程中修改配置项，以进入alter table in trans前的ddl type为准，不因为修改配置项影响最终结果
 connection sys;
-alter system set _enable_drop_column_instant = true tenant = all_user;
+alter system set _enable_drop_column_instant = true;
 alter system set debug_sync_timeout = '100000s';
 sleep 2;
 set ob_global_debug_sync = 'reset';
-set ob_global_debug_sync = 'BEFORE_ALTER_TABLE_IN_TRANS wait_for continue_signal execute 10000';
+set ob_global_debug_sync = 'BEFORE_ALTER_TABLE_IN_TRANS signal ddl_type_decided wait_for continue_signal execute 10000';
 sleep 5;
 
 connection mysql;
@@ -1151,7 +1151,8 @@ create table xingrui_normal_table(col1 blob, col2 int, col3 blob);
 send alter table xingrui_normal_table drop column col3;
 
 connection sys;
-alter system set _enable_drop_column_instant = false tenant = all_user;
+set ob_global_debug_sync = 'now wait_for ddl_type_decided';
+alter system set _enable_drop_column_instant = false;
 set ob_global_debug_sync = 'reset';
 set ob_global_debug_sync = 'now signal continue_signal';
 sleep 5;
@@ -1161,5 +1162,5 @@ reap;
 sleep 2;
 
 connection sys;
-alter system set _enable_drop_column_instant = true tenant = all_user;
+alter system set _enable_drop_column_instant = true;
 sleep 2;

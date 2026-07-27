@@ -172,7 +172,7 @@ int ObKVGlobalCache::get_suitable_bucket_num(int64_t& bucket_num)
 }
 
 int ObKVGlobalCache::init(
-    ObITenantMemLimitGetter *mem_limit_getter,
+    ObIServerMemLimitGetter *mem_limit_getter,
     const int64_t bucket_num,
     const int64_t max_cache_size,
     const int64_t block_size,
@@ -432,7 +432,7 @@ int ObKVGlobalCache::erase_cache()
   return ret;
 }
 
-int ObKVGlobalCache::sync_flush_tenant()
+int ObKVGlobalCache::sync_flush()
 {
   int ret = OB_SUCCESS;
 
@@ -442,20 +442,20 @@ int ObKVGlobalCache::sync_flush_tenant()
   } else if (OB_ISNULL(mem_limit_getter_)) {
     ret = OB_ERR_UNEXPECTED;
     COMMON_LOG(WARN, "Unexpected null mem limit getter", K(ret), KP(mem_limit_getter_));
-  } else if (mem_limit_getter_->has_tenant()) {  // check tenant
+  } else if (mem_limit_getter_->has_memory_limit()) {
     ret = OB_ERR_UNEXPECTED;
-    COMMON_LOG(WARN, "The tenant is still existed", K(ret));
-  } else if (OB_FAIL(insts_.mark_tenant_delete())) {
-    COMMON_LOG(WARN, "Fail to mark tenant cache inst delete", K(ret));
+    COMMON_LOG(WARN, "The server memory limit is still active", K(ret));
+  } else if (OB_FAIL(insts_.mark_all_delete())) {
+    COMMON_LOG(WARN, "Fail to mark cache instances for deletion", K(ret));
   } else if (OB_FAIL(store_.flush_washable_mbs(true /* force flush */))) {
-    COMMON_LOG(WARN, "Fail to erase tenant from store", K(ret));
-  } else if (OB_FAIL(map_.erase_tenant(true /* force_erase */))) {
+    COMMON_LOG(WARN, "Fail to flush cache blocks from store", K(ret));
+  } else if (OB_FAIL(map_.erase_all())) {
     COMMON_LOG(WARN, "Fail to retire cache node from map", K(ret));
-  } else if (OB_FAIL(insts_.erase_tenant())) {
-    COMMON_LOG(WARN, "Fail to erase tenant from insts", K(ret));
+  } else if (OB_FAIL(insts_.erase_all())) {
+    COMMON_LOG(WARN, "Fail to erase cache instances", K(ret));
   }
 
-  COMMON_LOG(INFO, "erase tenant cache details", K(ret));
+  COMMON_LOG(INFO, "flush cache details", K(ret));
 
   return ret;
 }
@@ -632,7 +632,7 @@ int ObKVGlobalCache::get_washable_size(int64_t &washable_size)
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "not init", K(ret));
   } else if (OB_FAIL(store_.get_washable_size(washable_size))) {
-    COMMON_LOG(WARN, "get tenant washable size failed", K(ret), K(washable_size));
+    COMMON_LOG(WARN, "get washable size failed", K(ret), K(washable_size));
   }
   return ret;
 }

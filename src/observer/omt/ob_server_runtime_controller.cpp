@@ -1359,7 +1359,6 @@ int ObServer::obs_construct_modules()
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_tablet_scheduler_))) { SERVER_LOG(WARN, "mods_tablet_scheduler_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_medium_checker_))) { SERVER_LOG(WARN, "mods_medium_checker_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_compaction_mem_pool_))) { SERVER_LOG(WARN, "mods_compaction_mem_pool_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_ddl_merge_bucket_lock_))) { SERVER_LOG(WARN, "mods_ddl_merge_bucket_lock_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_direct_load_mgr_))) { SERVER_LOG(WARN, "mods_direct_load_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_dag_scheduler_))) { SERVER_LOG(WARN, "mods_dag_scheduler_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_freeze_info_mgr_))) { SERVER_LOG(WARN, "mods_freeze_info_mgr_ fail", KR(ret)); }
@@ -1431,7 +1430,6 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(compaction::ObTabletScheduler::server_module_init(mods_tablet_scheduler_))) { SERVER_LOG(WARN, "mods_tablet_scheduler_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(compaction::ObMediumChecker::server_module_init(mods_medium_checker_))) { SERVER_LOG(WARN, "mods_medium_checker_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(storage::ObCompactionMemPool::server_module_init(mods_compaction_mem_pool_))) { SERVER_LOG(WARN, "mods_compaction_mem_pool_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(ObDDLMergeBucketLock::server_module_init(mods_ddl_merge_bucket_lock_))) { SERVER_LOG(WARN, "mods_ddl_merge_bucket_lock_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObDirectLoadMgr::server_module_init(mods_direct_load_mgr_))) { SERVER_LOG(WARN, "mods_direct_load_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObDagScheduler::server_module_init(mods_dag_scheduler_))) { SERVER_LOG(WARN, "mods_dag_scheduler_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObFreezeInfoMgr::server_module_init(mods_freeze_info_mgr_))) { SERVER_LOG(WARN, "mods_freeze_info_mgr_ fail", KR(ret)); }
@@ -1600,7 +1598,6 @@ void ObServer::obs_destroy_modules()
   server_module_destroy_default(mods_freeze_info_mgr_);
   server_module_destroy_default(mods_dag_scheduler_);
   server_module_destroy_default(mods_direct_load_mgr_);
-  server_module_destroy_default(mods_ddl_merge_bucket_lock_);
   server_module_destroy_default(mods_compaction_mem_pool_);
   server_module_destroy_default(mods_medium_checker_);
   server_module_destroy_default(mods_tablet_scheduler_);

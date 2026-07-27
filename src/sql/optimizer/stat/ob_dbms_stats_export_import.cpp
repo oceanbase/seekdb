@@ -95,11 +95,7 @@ int ObDbmsStatsExportImport::create_mysql_stat_table(ObExecContext &ctx,
     LOG_WARN("failed to append format", K(ret));
   } else if (OB_FAIL(raw_sql.append(CREATE_MYSQL_STAT_TABLE))) {
     LOG_WARN("failed to append format", K(ret));
-  } else if (param.tab_group_.empty() && OB_FAIL(raw_sql.append(";"))) {
-    LOG_WARN("failed to append format", K(ret));
-  } else if (!param.tab_group_.empty() &&
-             OB_FAIL(raw_sql.append_fmt(" tablegroup = '%.*s';",
-                                        param.tab_group_.length(), param.tab_group_.ptr()))) {
+  } else if (OB_FAIL(raw_sql.append(";"))) {
     LOG_WARN("failed to append format", K(ret));
   } else if (OB_FAIL(do_execute_sql(ctx, raw_sql))) {
     LOG_WARN("failed to do execute sql", K(ret));

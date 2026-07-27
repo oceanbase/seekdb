@@ -29,7 +29,7 @@
 #include "observer/mysql/obsm_row.h"
 #include "share/ob_time_utility2.h"
 #include "sql/ob_sql.h"
-#include "observer/omt/ob_tenant.h"
+#include "observer/omt/ob_server_runtime.h"
 #include "observer/mysql/ob_sync_plan_driver.h"
 #include "observer/mysql/ob_sync_cmd_driver.h"
 #include "observer/mysql/ob_async_cmd_driver.h"
@@ -37,7 +37,6 @@
 #include "pl/ob_pl_package.h"
 #include "observer/mysql/obmp_stmt_send_piece_data.h"
 #include "sql/plan_cache/ob_ps_cache.h"
-#include "sql/ob_sql_mock_schema_utils.h"
 
 namespace oceanbase
 {
@@ -814,7 +813,7 @@ int ObMPStmtExecute::request_params(ObSQLSessionInfo *session,
   share::schema::ObSchemaGetterGuard schema_guard;
   
 
-  if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(schema_guard))) {
+  if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(schema_guard))) {
     LOG_WARN("get schema guard failed", K(ret));
   } else if (OB_FAIL(session->get_character_set_connection(charset))) {
     LOG_WARN("get charset for client failed", K(ret));
@@ -1238,7 +1237,6 @@ int ObMPStmtExecute::do_process(ObSQLSessionInfo &session,
 
     int64_t execution_id = 0;
     {
-      ObSQLMockSchemaGuard mock_schema_guard;
       {
         audit_record.exec_record_.record_start();
       }
@@ -1256,10 +1254,8 @@ int ObMPStmtExecute::do_process(ObSQLSessionInfo &session,
         LOG_ERROR("task executor ctx can not be NULL", K(task_ctx), K(ret));
       } else {
         task_ctx->schema_service_ = gctx_.schema_service_;
-        task_ctx->set_query_tenant_begin_schema_version(retry_ctrl_.get_tenant_local_schema_version());
+        task_ctx->set_query_begin_schema_version(retry_ctrl_.get_current_local_schema_version());
         task_ctx->set_query_sys_begin_schema_version(retry_ctrl_.get_sys_local_schema_version());
-        task_ctx->set_min_cluster_version(GET_MIN_CLUSTER_VERSION());
-
         ctx_.retry_times_ = retry_ctrl_.get_retry_times();
         session.reset_plsql_exec_time();
         session.reset_plsql_compile_time();
@@ -1358,29 +1354,21 @@ int ObMPStmtExecute::do_process(ObSQLSessionInfo &session,
         audit_record.table_scan_stat_ = plan_ctx->get_table_scan_stat();
       }
       if (NULL != plan) {
-        AdaptivePCConf adpt_pc_conf;
-        bool enable_adaptive_pc = plan_ctx->enable_adaptive_pc();
-        if (enable_adaptive_pc) {
-          adpt_pc_conf = session.get_adaptive_pc_conf();
-        }
         if (!(ctx_.self_add_plan_) && ctx_.plan_cache_hit_) {
           plan->update_plan_stat(audit_record,
               false, // false mean not first update plan stat
-              table_row_count_list,
-              enable_adaptive_pc ? &adpt_pc_conf : nullptr);
+              table_row_count_list);
           plan->update_cache_access_stat(audit_record.table_scan_stat_);
         } else if (ctx_.self_add_plan_ && !ctx_.plan_cache_hit_) {
           plan->update_plan_stat(audit_record,
               true,
-              table_row_count_list,
-              enable_adaptive_pc ? &adpt_pc_conf : nullptr);
+              table_row_count_list);
           plan->update_cache_access_stat(audit_record.table_scan_stat_);
         } else if (ctx_.self_add_plan_ && ctx_.plan_cache_hit_) {
           // First execution of a plan generated during this request.
           plan->update_plan_stat(audit_record,
               true,
-              table_row_count_list,
-              enable_adaptive_pc ? &adpt_pc_conf : nullptr);
+              table_row_count_list);
           plan->update_cache_access_stat(audit_record.table_scan_stat_);
         }
       }
@@ -1501,14 +1489,14 @@ int ObMPStmtExecute::do_process_single(ObSQLSessionInfo &session,
     // Must always be set to OB_SUCCESS, otherwise it may cause a deadlock due to do_process() not being called
     ret = OB_SUCCESS;
     share::schema::ObSchemaGetterGuard schema_guard;
-    int64_t tenant_version = 0;
+    int64_t runtime_schema_version = 0;
     int64_t sys_version = 0;
     retry_ctrl_.clear_state_before_each_retry(session.get_retry_info_for_update());
-    OZ (gctx_.schema_service_->get_tenant_schema_guard(schema_guard));
-    OZ (schema_guard.get_schema_version(tenant_version));
+    OZ (gctx_.schema_service_->get_runtime_schema_guard(schema_guard));
+    OZ (schema_guard.get_schema_version(runtime_schema_version));
     OZ (schema_guard.get_schema_version(sys_version));
     OX (ctx_.schema_guard_ = &schema_guard);
-    OX (retry_ctrl_.set_tenant_local_schema_version(tenant_version));
+    OX (retry_ctrl_.set_current_local_schema_version(runtime_schema_version));
     OX (retry_ctrl_.set_sys_local_schema_version(sys_version));
 
     if (OB_SUCC(ret) && !is_send_long_data()) {
@@ -1558,7 +1546,8 @@ int ObMPStmtExecute::process_execute_stmt(const ObMultiStmtItem &multi_stmt_item
   } else {
     //set session log_level.Must use ObThreadLogLevelUtils::clear() in pair
     ObThreadLogLevelUtils::init(session.get_log_id_level_map());
-    // Refresh the local schema cache up to the session's DDL fence.
+    // Clients may publish a newer schema version through @@last_schema_version;
+    // observer refreshes when its local version is older.
     if (OB_FAIL(check_and_refresh_schema())) {
       LOG_WARN("failed to check_and_refresh_schema", K(ret));
     } else if (OB_FAIL(session.update_timezone_info())) {
@@ -1644,9 +1633,9 @@ int ObMPStmtExecute::process()
   } else if (OB_UNLIKELY(!conn->is_in_authed_phase())) {
     ret = OB_ERR_NO_PRIVILEGE;
     LOG_WARN("receive sql without session", K_(stmt_id), K(ret));
-  } else if (OB_ISNULL(conn->tenant_)) {
+  } else if (OB_ISNULL(conn->runtime_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid tenant", K_(stmt_id), K(conn->tenant_), K(ret));
+    LOG_ERROR("invalid runtime", K_(stmt_id), K(conn->runtime_), K(ret));
   } else if (OB_FAIL(get_session(sess))) {
     LOG_WARN("get session fail", K_(stmt_id), K(ret));
   } else if (OB_ISNULL(sess)) {
@@ -1654,7 +1643,7 @@ int ObMPStmtExecute::process()
     LOG_WARN("session is NULL or invalid", K_(stmt_id), K(sess), K(ret));
   } else {
     ObSQLSessionInfo &session = *sess;
-    int64_t tenant_version = 0;
+    int64_t runtime_schema_version = 0;
     int64_t sys_version = 0;
     THIS_WORKER.set_session(sess);
     ObSQLSessionInfo::LockGuard lock_guard(session.get_query_lock());
@@ -1680,12 +1669,12 @@ int ObMPStmtExecute::process()
       LOG_WARN("fail to check and init retry info", K(ret), K(*cur_trace_id), K(ctx_.cur_sql_));
     } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
       LOG_WARN("fail to get query timeout", K(ret));
-    } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
-                tenant_version))) {
-      LOG_WARN("fail get tenant broadcast version", K(ret));
-    } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
+    } else if (OB_FAIL(gctx_.schema_service_->get_runtime_received_broadcast_version(
+                runtime_schema_version))) {
+      LOG_WARN("fail to get runtime schema broadcast version", K(ret));
+    } else if (OB_FAIL(gctx_.schema_service_->get_runtime_received_broadcast_version(
                 sys_version))) {
-      LOG_WARN("fail get tenant broadcast version", K(ret));
+      LOG_WARN("fail to get system schema broadcast version", K(ret));
     } else if (OB_UNLIKELY(packet_len > session.get_max_packet_size())) {
       //packet size check with session variable max_allowd_packet or net_buffer_length
       ret = OB_ERR_NET_PACKET_TOO_LARGE;
@@ -1696,7 +1685,7 @@ int ObMPStmtExecute::process()
       LOG_WARN("precondition for arraybinding is not satisfied", K(ret));
     } else {
       THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
-      retry_ctrl_.set_tenant_global_schema_version(tenant_version);
+      retry_ctrl_.set_current_global_schema_version(runtime_schema_version);
       retry_ctrl_.set_sys_global_schema_version(sys_version);
       session.set_pl_can_retry(true);
       session.set_enable_mysql_compatible_dates(

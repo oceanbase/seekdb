@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_ROOTSERVER_FREEZE_OB_MAJOR_MERGE_PROGRESS_CHECKER_
 #define OCEANBASE_ROOTSERVER_FREEZE_OB_MAJOR_MERGE_PROGRESS_CHECKER_
 
-#include "share/ob_zone_merge_info.h"
+#include "share/ob_merge_info.h"
 #include "share/tablet/ob_tablet_info.h"
 #include "rootserver/ob_root_utils.h"
 #include "rootserver/freeze/ob_checksum_validator.h"
@@ -68,7 +68,7 @@ public:
   virtual int check_progress() = 0;
   virtual void reset_uncompacted_tablets() {};
   virtual int get_uncompacted_tablets(
-    common::ObArray<share::ObTabletReplica> &uncompacted_tablets,
+    common::ObArray<share::ObTabletRuntimeInfo> &uncompacted_tablets,
     common::ObArray<uint64_t> &uncompacted_table_ids) const
   {
     UNUSEDx(uncompacted_tablets, uncompacted_table_ids);
@@ -95,7 +95,7 @@ public:
     const share::ObFreezeInfo &freeze_info) override; // For each round major_freeze, need invoke this once.
   virtual int clear_cached_info() override;
   virtual int get_uncompacted_tablets(
-    common::ObArray<share::ObTabletReplica> &uncompacted_tablets,
+    common::ObArray<share::ObTabletRuntimeInfo> &uncompacted_tablets,
     common::ObArray<uint64_t> &uncompacted_table_ids) const override;
   OB_INLINE virtual void reset_uncompacted_tablets() override { uncompact_info_.reset(); }
   virtual int check_progress() override;
@@ -150,7 +150,7 @@ private:
   int create_progress_maps();
   void destroy_progress_maps();
   int rebuild_table_compaction_map(const int64_t table_id_count);
-  bool should_ignore_cur_table(const ObSimpleTableSchemaV2 *simple_schema);
+  bool should_ignore_cur_table(const share::schema::ObSimpleTableSchemaV2 *simple_schema);
   int deal_with_rest_data_table();
   bool is_extra_check_round() const { return 0 == (loop_cnt_ % 8); } // check every 8 rounds
   void print_unfinish_info(const int64_t cost_us);
@@ -158,16 +158,16 @@ private:
     share::schema::ObSchemaGetterGuard &schema_guard,
     const uint64_t table_id,
     bool &is_table_valid,
-    ObIArray<const ObSimpleTableSchemaV2 *> &index_schemas);
+    ObIArray<const share::schema::ObSimpleTableSchemaV2 *> &index_schemas);
   int rebuild_tablet_status_map();
   int prepare_fts_group(
     const int64_t table_id,
-    const ObIArray<const ObSimpleTableSchemaV2 *> &index_schemas);
+    const ObIArray<const share::schema::ObSimpleTableSchemaV2 *> &index_schemas);
   int handle_fts_checksum();
   share::SCN get_compaction_scn() const { return freeze_info_.frozen_scn_; }
   int64_t get_compaction_scn_val() const { return get_compaction_scn().get_val_for_tx(); }
 private:
-  static const int64_t ADD_RS_EVENT_INTERVAL = 10L * 60 * 1000 * 1000; // 10m
+  static const int64_t ADD_MANAGEMENT_EVENT_INTERVAL = 10L * 60 * 1000 * 1000; // 10m
   static const int64_t DEAL_REST_TABLE_CNT_THRESHOLD = 100;
   static const int64_t DEAL_REST_TABLE_INTERVAL = 10 * 60 * 1000 * 1000L; // 10m
   static const int64_t ASSGIN_FAILURE_RETRY_TIMES = 10;

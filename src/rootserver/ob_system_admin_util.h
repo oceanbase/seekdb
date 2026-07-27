@@ -31,20 +31,13 @@ namespace oceanbase
 {
 namespace common
 {
-class ObAddr;
 class ObMySQLProxy;
 class ObConfigManager;
 }
 
 namespace obcall
 {
-struct ObServerZoneArg;
-struct ObAdminMergeArg;
-struct ObAdminClearRoottableArg;
-struct ObAdminRefreshSchemaArg;
 struct ObAdminSetConfigArg;
-struct ObAdminFlushCacheArg;
-struct ObFlushCacheArg;
 struct Bool;
 }
 
@@ -61,15 +54,9 @@ class ObSchemaGetterGuard;
 namespace rootserver
 {
 class ObDDLService;
-class ObRootService;
-class ObSchemaSplitExecutor;
-class ObCreateInnerSchemaExecutor;
-class ObRsStatus;
-class ObRsGtsManager;
+class ObLocalManagementService;
 namespace config_error
 {
-const static char * const INVALID_DISK_WATERLEVEL = "cannot specify disk waterlevel to zero when tenant groups matrix is specified";
-const static char * const NOT_ALLOW_MOIDFY_CONFIG_WITHOUT_UPGRADE = "cannot moidfy enable_major_freeze/enable_ddl while enable_upgrade_mode is off";
 const static char * const NOT_ALLOW_ENABLE_ONE_PHASE_COMMIT_FOR_PRIMARY = "Cannot enable one phase commit while the primary cluster has standby cluster";
 const static char * const NOT_ALLOW_ENABLE_ONE_PHASE_COMMIT_FOR_STANDBY = "Cannot enable one phase commit on standby cluster";
 const static char * const NOT_ALLOW_ENABLE_ONE_PHASE_COMMIT_FOR_INVALID = "Cannot enable one phase commit on invalid cluster";
@@ -79,22 +66,19 @@ const static char * const NOT_ALLOW_ENABLE_ONE_PHASE_COMMIT = "enable_one_phase_
 struct ObSystemAdminCtx
 {
   ObSystemAdminCtx()
-      : rs_status_(NULL), sql_proxy_(NULL),
+      : sql_proxy_(NULL),
       schema_service_(NULL),
       ddl_service_(NULL), config_mgr_(NULL),
-      root_service_(NULL),
-      create_inner_schema_executor_(nullptr), inited_(false)
+      local_management_service_(NULL), inited_(false)
   {}
 
   bool is_inited() const { return inited_; }
 
-  ObRsStatus *rs_status_;
   common::ObMySQLProxy *sql_proxy_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
   ObDDLService *ddl_service_;
   common::ObConfigManager *config_mgr_;
-  ObRootService *root_service_;
-  ObCreateInnerSchemaExecutor *create_inner_schema_executor_;
+  ObLocalManagementService *local_management_service_;
   bool inited_;
 };
 
@@ -111,82 +95,6 @@ protected:
     const ObSystemAdminCtx &ctx_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSystemAdminUtil);
-};
-
-class ObAdminCallServer : public ObSystemAdminUtil
-{
-public:
-  explicit ObAdminCallServer(const ObSystemAdminCtx &ctx) : ObSystemAdminUtil(ctx) {}
-  virtual ~ObAdminCallServer() {}
-
-  int get_server_list(const obcall::ObServerZoneArg &arg, ObIArray<ObAddr> &server_list);
-  int call_all(const obcall::ObServerZoneArg &arg);
-
-  virtual int call_server(const common::ObAddr &server) = 0;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminCallServer);
-};
-
-class ObAdminRefreshMemStat : public ObAdminCallServer
-{
-public:
-  explicit ObAdminRefreshMemStat(const ObSystemAdminCtx &ctx) : ObAdminCallServer(ctx) {}
-  virtual ~ObAdminRefreshMemStat() {}
-
-  int execute(const obcall::ObAdminRefreshMemStatArg &arg);
-  virtual int call_server(const common::ObAddr &server);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminRefreshMemStat);
-};
-
-class ObAdminClearMergeError: public ObSystemAdminUtil
-{
-public:
-  explicit ObAdminClearMergeError(const ObSystemAdminCtx &ctx) : ObSystemAdminUtil(ctx) {}
-  virtual ~ObAdminClearMergeError() {}
-
-  int execute(const obcall::ObAdminMergeArg &arg);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminClearMergeError);
-};
-
-class ObAdminMerge : public ObSystemAdminUtil
-{
-public:
-  explicit ObAdminMerge(const ObSystemAdminCtx &ctx) : ObSystemAdminUtil(ctx) {}
-  virtual ~ObAdminMerge() {}
-
-  int execute(const obcall::ObAdminMergeArg &arg);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminMerge);
-};
-
-class ObAdminClearRoottable: public ObSystemAdminUtil
-{
-public:
-  explicit ObAdminClearRoottable(const ObSystemAdminCtx &ctx) : ObSystemAdminUtil(ctx) {}
-  virtual ~ObAdminClearRoottable() {}
-
-  int execute(const obcall::ObAdminClearRoottableArg &arg);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminClearRoottable);
-};
-
-class ObAdminRefreshSchema: public ObAdminCallServer
-{
-public:
-  explicit ObAdminRefreshSchema(const ObSystemAdminCtx &ctx)
-      : ObAdminCallServer(ctx), schema_version_(0), schema_info_() {}
-  virtual ~ObAdminRefreshSchema() {}
-
-  int execute(const obcall::ObAdminRefreshSchemaArg &arg);
-
-  virtual int call_server(const common::ObAddr &server);
-private:
-  int64_t schema_version_;
-  share::schema::ObRefreshSchemaInfo schema_info_;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminRefreshSchema);
 };
 
 class ObAdminSetConfig : public ObSystemAdminUtil
@@ -215,75 +123,10 @@ private:
 #define OB_INNER_JOB_DEF(JOB)                                \
     JOB(INVALID_INNER_JOB, = 0)                              \
     JOB(ROOT_INSPECTION,)                                    \
-    JOB(UPGRADE_STORAGE_FORMAT_VERSION,)                     \
-    JOB(STOP_UPGRADE_STORAGE_FORMAT_VERSION,)                \
-    JOB(CREATE_INNER_SCHEMA,)                                \
-    JOB(IO_CALIBRATION,)                                     \
+    JOB(IO_CALIBRATION,)                                      \
     JOB(MAX_INNER_JOB,)
 
 DECLARE_ENUM(ObInnerJob, inner_job, OB_INNER_JOB_DEF);
-
-class ObAdminRefreshIOCalibration : public ObAdminCallServer
-{
-public:
-  explicit ObAdminRefreshIOCalibration(const ObSystemAdminCtx &ctx)
-    : ObAdminCallServer(ctx) {}
-  virtual ~ObAdminRefreshIOCalibration() {}
-
-  int execute(const obcall::ObAdminRefreshIOCalibrationArg &arg);
-  int call_server(const common::ObAddr &server);
-
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminRefreshIOCalibration);
-};
-
-class ObTenantServerAdminUtil : public ObSystemAdminUtil
-{
-public:
-  explicit ObTenantServerAdminUtil(const ObSystemAdminCtx &ctx)
-            : ObSystemAdminUtil(ctx)
-  {}
-
-  int get_all_servers(common::ObIArray<ObAddr> &servers);
-  int get_tenant_servers(common::ObIArray<ObAddr> &servers);
-
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObTenantServerAdminUtil);
-};
-
-class ObAdminFlushCache : public ObTenantServerAdminUtil
-{
-public:
-  explicit ObAdminFlushCache(const ObSystemAdminCtx &ctx)
-    : ObTenantServerAdminUtil(ctx)
-  {}
-  virtual ~ObAdminFlushCache() {}
-
-  int call_server(const common::ObAddr &addr, const obcall::ObFlushCacheArg &arg);
-
-  int execute(const obcall::ObAdminFlushCacheArg &arg);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminFlushCache);
-};
-
-class ObAdminSetTP : public ObAdminCallServer
-{
-public:
-  explicit ObAdminSetTP(const ObSystemAdminCtx &ctx,
-                        obcall::ObAdminSetTPArg arg)
-     : ObAdminCallServer(ctx),
-       arg_(arg)
-       {}
-  virtual ~ObAdminSetTP() {}
-
-  int execute(const obcall::ObAdminSetTPArg &arg);
-  virtual int call_server(const common::ObAddr &server);
-private:
-  obcall::ObAdminSetTPArg arg_;
-  DISALLOW_COPY_AND_ASSIGN(ObAdminSetTP);
-};
-
-
 
 } // end namespace rootserver
 } // end namespace oceanbase

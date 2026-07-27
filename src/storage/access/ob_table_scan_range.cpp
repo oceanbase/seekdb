@@ -27,7 +27,6 @@ namespace storage
 ObTableScanRange::ObTableScanRange()
   : rowkeys_(),
     ranges_(),
-    skip_scan_ranges_(),
     allocator_(nullptr),
     status_(EMPTY),
     enable_new_false_range_(false),
@@ -35,7 +34,6 @@ ObTableScanRange::ObTableScanRange()
 {
   rowkeys_.set_attr(ObMemAttr("TScanRowkeys"));
   ranges_.set_attr(ObMemAttr("TScanRanges"));
-  skip_scan_ranges_.set_attr(ObMemAttr("TScanSSRanges"));
 }
 
 void ObTableScanRange::reset()
@@ -55,7 +53,6 @@ do {                                                                            
 
   if (nullptr != allocator_) {
     RESET_SCAN_RANGES(ranges_);
-    RESET_SCAN_RANGES(skip_scan_ranges_);
 
     for (int64_t i = 0; i < rowkeys_.count(); i++) {
       if (!rowkeys_.at(i).is_static_rowkey()) {
@@ -65,7 +62,6 @@ do {                                                                            
   }
   rowkeys_.reset();
   ranges_.reset();
-  skip_scan_ranges_.reset();
   allocator_ = nullptr;
   status_ = EMPTY;
   enable_new_false_range_ = false;
@@ -91,16 +87,8 @@ int ObTableScanRange::init(ObTableScanParam &scan_param)
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "Invalid datum utils", K(ret), KPC(scan_param.table_param_));
     } else if (scan_param.is_get_) {
-      if (scan_param.use_index_skip_scan()) {
-        ret = OB_ERR_UNEXPECTED;
-        STORAGE_LOG(WARN, "Index skip scan can only be used in scan", K(ret));
-      } else if (OB_FAIL(init_rowkeys(scan_param.key_ranges_, scan_param.scan_flag_, datum_utils))) {
+      if (OB_FAIL(init_rowkeys(scan_param.key_ranges_, scan_param.scan_flag_, datum_utils))) {
         STORAGE_LOG(WARN, "Failed to init rowkeys", K(ret));
-      }
-    } else if (scan_param.use_index_skip_scan()) {
-      if (OB_FAIL(init_ranges_in_skip_scan(
-          scan_param.key_ranges_, scan_param.ss_key_ranges_, scan_param.scan_flag_, datum_utils))) {
-        STORAGE_LOG(WARN, "Failed to init skip scan ranges", K(ret));
       }
     } else if (OB_FAIL(init_ranges(scan_param.key_ranges_, scan_param.scan_flag_, datum_utils))) {
       STORAGE_LOG(WARN, "Failed to init ranges", K(ret));
@@ -240,56 +228,6 @@ int ObTableScanRange::init_ranges(
         ObDatumComparor<ObDatumRange> comparor(*datum_utils, ret, scan_flag.is_reverse_scan());
         lib::ob_sort(ranges_.begin(), ranges_.end(), comparor);
       }
-    }
-  }
-  return ret;
-}
-
-int ObTableScanRange::init_ranges_in_skip_scan(
-    const common::ObIArray<common::ObNewRange> &ranges,
-    const common::ObIArray<common::ObNewRange> &skip_scan_ranges,
-    const common::ObQueryFlag &scan_flag,
-    const blocksstable::ObStorageDatumUtils *datum_utils)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(nullptr == allocator_
-      || ranges.count() != skip_scan_ranges.count()
-      || ranges.empty())) {
-    ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "Invalid skip scan ranges", K(ret), K(ranges.count()), K(skip_scan_ranges.count()));
-  } else {
-    common::ObSEArray<ObSkipScanWrappedRange, DEFAULT_RANGE_CNT> wrapped_ranges;
-    for (int64_t i = 0; OB_SUCC(ret) && i < ranges.count(); i++) {
-      ObSkipScanWrappedRange wrapped_range;
-      bool is_false = false;
-      if (OB_FAIL(always_false(ranges.at(i), is_false))) {
-        STORAGE_LOG(WARN, "Failed to check range", K(ret), K(ranges.at(i)));
-      } else if (is_false) {
-      } else if (OB_FAIL(wrapped_range.datum_range_.from_range(
-          ranges.at(i), *allocator_, enable_new_false_range_))) {
-        STORAGE_LOG(WARN, "Failed to convert range", K(ret));
-      } else if (OB_FAIL(wrapped_range.datum_skip_range_.from_range(
-          skip_scan_ranges.at(i), *allocator_, enable_new_false_range_))) {
-        STORAGE_LOG(WARN, "Failed to convert skip range", K(ret));
-      } else if (OB_FAIL(wrapped_ranges.push_back(wrapped_range))) {
-        STORAGE_LOG(WARN, "Failed to push range", K(ret));
-      }
-    }
-    if (OB_SUCC(ret) && wrapped_ranges.count() > 1
-        && nullptr != datum_utils && scan_flag.is_support_sort_scan()) {
-      ObDatumComparor<ObSkipScanWrappedRange> comparor(
-          *datum_utils, ret, scan_flag.is_reverse_scan());
-      lib::ob_sort(wrapped_ranges.begin(), wrapped_ranges.end(), comparor);
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < wrapped_ranges.count(); i++) {
-      if (OB_FAIL(ranges_.push_back(wrapped_ranges.at(i).datum_range_))) {
-        STORAGE_LOG(WARN, "Failed to push range", K(ret));
-      } else if (OB_FAIL(skip_scan_ranges_.push_back(wrapped_ranges.at(i).datum_skip_range_))) {
-        STORAGE_LOG(WARN, "Failed to push skip range", K(ret));
-      }
-    }
-    if (OB_SUCC(ret) && ranges_.empty()) {
-      status_ = EMPTY;
     }
   }
   return ret;

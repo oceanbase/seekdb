@@ -1169,8 +1169,6 @@ public:
                                 bool &is_null_qual);
 
 
-  static bool has_psedu_column(const ObRawExpr &expr);
-
   static int check_pushdown_filter_to_base_table(ObLogPlan &plan,
                                                  const uint64_t table_id,
                                                  const ObIArray<ObRawExpr*> &pushdown_filters,
@@ -1211,23 +1209,11 @@ public:
                               ObIArray<ObRawExpr*> &range_exprs,
                               ObIArray<ObRawExpr*> &all_table_filters);
 
-  static int check_basic_sharding_info(const ObAddr &local_addr,
-                                       const ObIArray<ObLogicalOperator *> &child_ops,
+  static int check_basic_sharding_info(const ObIArray<ObLogicalOperator *> &child_ops,
                                        bool &is_basic);
 
-  static int check_basic_sharding_info(const ObAddr &local_addr,
-                                       const ObIArray<ObLogicalOperator *> &child_ops,
-                                       bool &is_basic,
-                                       bool &is_remote);
-
-  static int check_basic_sharding_info(const ObAddr &local_server,
-                                       const ObIArray<ObShardingInfo*> &input_shardings,
+  static int check_basic_sharding_info(const ObIArray<ObShardingInfo*> &input_shardings,
                                        bool &is_basic);
-
-  static int check_basic_sharding_info(const ObAddr &local_server,
-                                       const ObIArray<ObShardingInfo*> &input_shardings,
-                                       bool &is_basic,
-                                       bool &is_remote);
 
   static int compute_basic_sharding_info(const ObAddr &local_addr,
                                          const ObIArray<ObLogicalOperator *> &child_ops,
@@ -1277,8 +1263,6 @@ public:
                                   common::ObIArray<ColumnItem> *column_items = NULL);
 
   static int check_contain_ora_rowscn_expr(const ObRawExpr *expr, bool &contains);
-
-  static int check_contain_part_id_columnref_expr(const ObRawExpr *expr, bool &contains);
 
   static int allocate_group_id_expr(ObLogPlan *log_plan, ObRawExpr *&group_id_expr);
 
@@ -1418,8 +1402,6 @@ public:
 
   static int check_is_static_false_expr(ObOptimizerContext &opt_ctx, ObRawExpr &expr, bool &is_static_false);
 
-  static int check_ancestor_node_support_skip_scan(ObLogicalOperator* op, bool &can_use_batch_nlj);
-
   static int try_split_or_qual(const ObDMLStmt *stmt,
                                ObRawExprFactory &expr_factory,
                                const ObSQLSessionInfo *session_info,
@@ -1461,10 +1443,6 @@ public:
                                     const ObIArray<ObExecParamRawExpr*> &rescan_params,
                                     bool for_nlj,
                                     bool &can_batch_rescan);
-  static int check_can_batch_rescan_compat(ObLogicalOperator *op,
-                                           const ObIArray<ObExecParamRawExpr*> &rescan_params,
-                                           bool for_nlj,
-                                           bool &can_batch_rescan);
   static int check_aggr_can_pre_aggregate(const ObAggFunRawExpr *aggr,
                                           bool &can_pre_aggr);
 

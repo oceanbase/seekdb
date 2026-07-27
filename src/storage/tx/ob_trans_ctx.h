@@ -24,7 +24,6 @@
 #include "lib/oblog/ob_trace_log.h"
 #include "lib/list/ob_dlist.h"
 #include "lib/list/ob_dlink_node.h"
-#include "share/ob_cluster_version.h"
 #include "ob_trans_define.h"
 #include "ob_trans_factory.h"
 #include "ob_trans_timer.h"
@@ -90,7 +89,7 @@ public:
   ObTransCtx()
       : trans_expired_time_(0), ctx_create_time_(0),
       trans_service_(NULL), tlog_(NULL),
-      cluster_version_(0), ls_tx_ctx_mgr_(NULL),
+      ls_tx_ctx_mgr_(NULL),
       session_id_(UINT32_MAX),
       stc_(0), part_trans_action_(ObPartTransAction::UNKNOWN),
       pending_callback_param_(common::OB_SUCCESS), p_mt_ctx_(NULL),
@@ -137,7 +136,6 @@ public:
   int64_t get_trans_expired_time() const { return trans_expired_time_; }
   
   const ObTransID &get_trans_id() const { return trans_id_; }
-  uint64_t get_cluster_version() const { return cluster_version_; }
   int64_t get_ctx_create_time() const { return ctx_create_time_; }
   int64_t get_trans_start_time() const { return ctx_create_time_; }// TODO: return real trans start time
   const ObAddr &get_addr() const { return addr_; }
@@ -154,7 +152,6 @@ public:
                        
                        K_(is_exiting),
                        K_(trans_expired_time),
-                       K_(cluster_version),
                        K_(trans_need_wait_wrap),
                        K_(stc),
                        K_(ctx_create_time));
@@ -228,7 +225,6 @@ protected:
   mutable CtxLock lock_;
   ObTransTraceLog trace_log_;
   ObTransTraceLog *tlog_;
-  uint64_t cluster_version_;
   ObLSTxCtxMgr *ls_tx_ctx_mgr_;
   uint32_t session_id_;
   // set stc only by set_stc_xxx, and

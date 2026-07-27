@@ -1873,8 +1873,7 @@ int ObOptStatSqlService::fetch_table_rowcnt(const uint64_t table_id,
   ObSqlString raw_sql;
   ObSqlString tablet_list_str;
   ObSqlString tablet_tuple_list_str;
-  uint64_t real_table_id = share::is_real_table_mapping_virtual_table(table_id) ?
-                           ObSchemaUtils::get_real_table_mappings_tid(table_id) : table_id;
+  uint64_t real_table_id = table_id;
   if (OB_FAIL(gen_tablet_list_str(all_tablet_ids, tablet_list_str, tablet_tuple_list_str))) {
     LOG_WARN("failed to gen tablet list str", K(ret));
   } else if (OB_FAIL(raw_sql.append_fmt("select /*+opt_param('enable_in_range_optimization','true') opt_param('use_default_opt_stat','true')*/"\

@@ -1820,22 +1820,5 @@ int ObDMLStmtPrinter::print_with()
   }
   return ret;
 }
-// 0. Keep catalog printing disabled unless the cases below explicitly require it.
-// 1. external catalog must be reversed, when external catalog is parsed it means the upgrade is complete
-// 2. internal catalog does not necessarily need to be reversed
-// 2.1 Reverse concatenate view definition without concatenating internal (otherwise refresh case will be triggered and perceived by the user)
-// 2.2 Do not concatenate during upgrade (the old server cannot parse the concatenated sql)
-bool ObDMLStmtPrinter::need_print_catalog_name(const ObString& catalog_name)
-{
-  bool need_print = false;
-  if (!ObCatalogUtils::is_internal_catalog_name(catalog_name)) {
-    need_print = true;
-  } else if (print_params_.not_print_internal_catalog_) {
-  } else {
-    need_print = true;
-  }
-  return need_print;
-}
-
 } //end of namespace sql
 } //end of namespace oceanbase

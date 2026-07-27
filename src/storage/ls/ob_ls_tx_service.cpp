@@ -24,7 +24,7 @@
 #include "storage/tx/ob_tx_replay_executor.h"
 #include "storage/tx/ob_tx_ctx.h"
 #include "storage/tx_storage/ob_ls_service.h"
-#include "storage/tx_storage/ob_tenant_freezer.h"
+#include "storage/tx_storage/ob_memstore_freezer.h"
 
 namespace oceanbase
 {
@@ -196,7 +196,7 @@ int ObLSTxService::get_write_store_ctx(ObTxDesc &tx,
   } else {
     int64_t abs_expire_ts = ObClockGenerator::getClock() + tx.get_timeout_us();
     if (abs_expire_ts < 0) {
-      abs_expire_ts = ObClockGenerator::getClock() + share::ObThrottleUnit<ObTenantTxDataAllocator>::DEFAULT_MAX_THROTTLE_TIME;
+      abs_expire_ts = ObClockGenerator::getClock() + share::ObThrottleUnit<ObTxDataAllocator>::DEFAULT_MAX_THROTTLE_TIME;
     }
 
     ObTxDataThrottleGuard tx_data_throttle_guard(false /* for_replay */, abs_expire_ts);
@@ -629,17 +629,6 @@ SCN ObLSTxService::get_ls_weak_read_ts() {
   return parent_->get_ls_wrs_handler()->get_ls_weak_read_ts();
 }
 
-ObTxRetainCtxMgr *ObLSTxService::get_retain_ctx_mgr()
-{
-  ObTxRetainCtxMgr *retain_ptr = nullptr;
-  if (OB_ISNULL(mgr_)) {
-    retain_ptr = nullptr;
-  } else {
-    retain_ptr = &mgr_->get_retain_ctx_mgr();
-  }
-  return retain_ptr;
-}
-
 ObTxLogCbPoolMgr *ObLSTxService::get_log_cb_pool_mgr()
 {
   ObTxLogCbPoolMgr *log_cb_pool_mgr_ptr = nullptr;
@@ -754,19 +743,6 @@ int ObLSTxService::print_all_tx_ctx(const int64_t print_num)
   } else {
     const bool verbose = true;
     mgr_->print_all_tx_ctx(print_num, verbose);
-  }
-  return ret;
-}
-
-int ObLSTxService::advance_commit_version(share::SCN commit_version)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(mgr_)) {
-    ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "not init", KR(ret));
-  } else {
-    share::g_mp->trans_service()->get_tx_version_mgr().update_max_commit_ts(commit_version, false /*elr*/);
-    TRANS_LOG(INFO, "advance commit version", K(commit_version));
   }
   return ret;
 }

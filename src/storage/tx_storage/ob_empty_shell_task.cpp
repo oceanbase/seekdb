@@ -129,7 +129,7 @@ int ObTabletEmptyShellHandler::init(ObLS *ls)
 int ObTabletEmptyShellHandler::get_empty_shell_tablet_ids(common::ObTabletIDArray &empty_shell_tablet_ids, bool &need_retry)
 {
   int ret = OB_SUCCESS;
-  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
   ObLSTabletIterator tablet_iter(ObMDSGetTabletMode::READ_WITHOUT_CHECK);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -227,7 +227,7 @@ int ObTabletEmptyShellHandler::check_candidate_tablet_(const ObTablet &tablet, b
           // mds table has not been written, do nothing
         } else {
           can_become_shell = true;
-          STORAGE_LOG(INFO, "sys tenant tablet can become shell", KR(ret), K(tablet_id));
+          STORAGE_LOG(INFO, "inner tablet can become shell", KR(ret), K(tablet_id));
         }
       } else {
         STORAGE_LOG(WARN, "failed to get latest tablet status", K(ret), K(tablet_id));
@@ -236,19 +236,10 @@ int ObTabletEmptyShellHandler::check_candidate_tablet_(const ObTablet &tablet, b
       STORAGE_LOG(INFO, "delete tx is committed", K(ret), K(tablet_id), K(trans_stat), K(data));
 
       can_become_shell = true;
-      STORAGE_LOG(INFO, "sys tenant tablet can become shell", KR(ret), K(tablet_id));
+      STORAGE_LOG(INFO, "inner tablet can become shell", KR(ret), K(tablet_id));
     }
   }
 
-  return ret;
-}
-
-int ObTabletEmptyShellHandler::get_readable_scn(share::SCN &readable_scn)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(storage::get_ls_readable_scn(readable_scn))) {
-    LOG_WARN("failed to get_max_decided_scn", KR(ret));
-  }
   return ret;
 }
 

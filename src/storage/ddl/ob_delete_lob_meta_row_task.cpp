@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 #include "ob_delete_lob_meta_row_task.h"
 #include "share/rc/ob_module_provider.h"
-#include "rootserver/ob_root_service.h"
+#include "rootserver/ob_local_management_service.h"
 #include "observer/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/access/ob_table_scan_iterator.h"
 
@@ -35,7 +35,7 @@ using namespace name;
 namespace storage
 {
 
-int ObDeleteLobMetaRowParam::init(const ObDDLBuildSingleReplicaRequestArg &arg)
+int ObDeleteLobMetaRowParam::init(const ObDDLLocalBuildArg &arg)
 {
   int ret = OB_SUCCESS;
   
@@ -74,7 +74,7 @@ ObDeleteLobMetaRowDag::~ObDeleteLobMetaRowDag()
 {
 }
 
-int ObDeleteLobMetaRowDag::init(const ObDDLBuildSingleReplicaRequestArg &arg)
+int ObDeleteLobMetaRowDag::init(const ObDDLLocalBuildArg &arg)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
@@ -196,7 +196,7 @@ int ObDeleteLobMetaRowDag::fill_dag_key(char *buf, const int64_t buf_len) const
   return ret;
 }
 
-int ObDeleteLobMetaRowDag::report_replica_build_status()
+int ObDeleteLobMetaRowDag::report_local_build_status()
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
@@ -208,11 +208,11 @@ int ObDeleteLobMetaRowDag::report_replica_build_status()
   } else {
 #ifdef ERRSIM
     if (OB_SUCC(ret)) {
-      ret = OB_E(EventTable::EN_DDL_REPORT_REPLICA_BUILD_STATUS_FAIL) OB_SUCCESS;
-      LOG_INFO("report DDL build status errsim", K(ret));
+      ret = OB_E(EventTable::EN_DDL_REPORT_LOCAL_BUILD_STATUS_FAIL) OB_SUCCESS;
+      LOG_INFO("report local build status errsim", K(ret));
     }
 #endif
-    obcall::ObDDLBuildSingleReplicaResponseArg arg;
+    obcall::ObDDLLocalBuildResponse arg;
     ObAddr rs_addr = GCTX.self_addr();
     
     
@@ -226,10 +226,10 @@ int ObDeleteLobMetaRowDag::report_replica_build_status()
     arg.task_id_ = param_.task_id_;
     arg.execution_id_ = param_.execution_id_;
     arg.server_addr_ = GCTX.self_addr();
-    FLOG_INFO("send DDL build status response to RS", K(ret), K(arg));
+    FLOG_INFO("send local build status response to RS", K(ret), K(arg));
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(GCTX.root_service_->build_ddl_single_replica_response(arg))) {
-      LOG_WARN("fail to send build ddl single replica response", K(ret), K(arg));
+    } else if (OB_FAIL(GCTX.local_management_service_->handle_ddl_local_build_response(arg))) {
+      LOG_WARN("fail to send build ddl local build response", K(ret), K(arg));
     }
   }
   return ret;
@@ -263,7 +263,7 @@ int ObDeleteLobMetaRowTask::init(ObDeleteLobMetaRowParam &param)
 int ObDeleteLobMetaRowTask::init_scan_param(ObTableScanParam& scan_param)
 {
   int ret = OB_SUCCESS;
-  const ObTenantSchema *tenant_schema = nullptr;
+  const ObServerRuntimeSchema *runtime_schema = nullptr;
   const ObTableSchema *table_schema = nullptr;
   ObSchemaGetterGuard schema_guard;
   if (OB_UNLIKELY(!is_inited_)) {
@@ -273,9 +273,9 @@ int ObDeleteLobMetaRowTask::init_scan_param(ObTableScanParam& scan_param)
     
     const int64_t table_id = param_->table_id_;
     const int64_t schema_version = param_->schema_version_;
-    if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
+    if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
                                             schema_guard))) {
-      LOG_WARN("get tenant schema failed", K(ret));
+      LOG_WARN("get runtime schema failed", K(ret));
     } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
       LOG_WARN("get table schema failed", K(ret), K(table_id));
     } else if (OB_ISNULL(table_schema)) {
@@ -297,7 +297,6 @@ int ObDeleteLobMetaRowTask::init_scan_param(ObTableScanParam& scan_param)
                           );
       scan_param.scan_flag_.flag_ = query_flag.flag_;
       scan_param.key_ranges_.set_attr(ObMemAttr("ScanParamKR"));
-      scan_param.ss_key_ranges_.set_attr(ObMemAttr("ScanParamSSKR"));
       scan_param.index_id_ = 0;
       for (uint32_t i = 0; OB_SUCC(ret) && i < table_schema->get_column_count(); i++) {
         const ObColumnSchemaV2 *column_schema = table_schema->get_column_schema_by_idx(i);
@@ -328,7 +327,6 @@ int ObDeleteLobMetaRowTask::init_scan_param(ObTableScanParam& scan_param)
         scan_param.for_update_wait_timeout_ = scan_param.timeout_;
         scan_param.scan_allocator_ = &(param_->allocator_);
         scan_param.frozen_version_ = -1;
-        scan_param.force_refresh_lc_ = false;
         scan_param.output_exprs_ = nullptr;
         scan_param.aggregate_exprs_ = nullptr;
         scan_param.op_ = nullptr;
@@ -447,10 +445,10 @@ int ObDeleteLobMetaRowTask::process()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("dag is invalid", K(ret), KP(tmp_dag));
       } else if (FALSE_IT(dag = static_cast<ObDeleteLobMetaRowDag *>(tmp_dag))) {
-      } else if (OB_SUCCESS != (tmp_ret = dag->report_replica_build_status())) {
+      } else if (OB_SUCCESS != (tmp_ret = dag->report_local_build_status())) {
         // do not override ret if it has already failed.
         ret = OB_SUCCESS == ret ? tmp_ret : ret;
-        LOG_WARN("fail to report DDL build status", K(ret), K(tmp_ret));
+        LOG_WARN("fail to report local build status", K(ret), K(tmp_ret));
       }
     }
 

@@ -18,7 +18,6 @@
 #define OB_SSTABLE_MACRO_BLOCK_HEADER_H_
 
 #include "lib/utility/ob_print_utils.h"
-#include "share/ob_encryption_util.h"
 #include "lib/compress/ob_compress_util.h"
 #include "storage/blocksstable/ob_macro_block_common_header.h"
 
@@ -40,14 +39,13 @@ private:
     void reset();
     int64_t get_col_type_array_cnt() const
     {
-      return SSTABLE_MACRO_BLOCK_HEADER_VERSION_V2 == version_ ? rowkey_column_count_ : column_count_;
+      return rowkey_column_count_;
     }
     TO_STRING_KV(K_(header_size), K_(version), K_(magic), K_(tablet_id), K_(logical_version),
         K_(data_seq), K_(column_count), K_(rowkey_column_count), K_(row_store_type), K_(row_count),
         K_(occupy_size), K_(micro_block_count), K_(micro_block_data_offset),K_(micro_block_data_size),
         K_(idx_block_offset), K_(idx_block_size), K_(meta_block_offset), K_(meta_block_size),
-        K_(data_checksum), K_(compressor_type), K_(encrypt_id),
-        K_(master_key_id), KPHEX_(encrypt_key, sizeof(encrypt_key_)), "col_type_array_cnt", get_col_type_array_cnt());
+        K_(data_checksum), K_(compressor_type), "col_type_array_cnt", get_col_type_array_cnt());
   public:
     uint32_t header_size_;
     uint16_t version_;
@@ -68,10 +66,7 @@ private:
     int32_t meta_block_offset_;
     int32_t meta_block_size_;
     int64_t data_checksum_;
-    int64_t encrypt_id_;
-    int64_t master_key_id_;
     ObCompressorType compressor_type_;
-    char encrypt_key_[share::OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH];
   };
 public:
   ObSSTableMacroBlockHeader();
@@ -88,22 +83,16 @@ public:
   static int64_t get_fixed_header_size();
   void reset();
   int64_t to_string(char* buf, const int64_t buf_len) const;
-  bool with_full_col_type_array() const {
-    return SSTABLE_MACRO_BLOCK_HEADER_VERSION_V1 == fixed_header_.version_;
-  }
   static int64_t get_variable_size_in_header(
     const int64_t column_cnt,
-    const int64_t rowkey_col_cnt,
-    const uint16_t version);
+    const int64_t rowkey_col_cnt);
 public:
-  static const uint16_t SSTABLE_MACRO_BLOCK_HEADER_VERSION_V1 = 1;
-  static const uint16_t SSTABLE_MACRO_BLOCK_HEADER_VERSION_V2 = 2; // only store rowkey type/order
+  static const uint16_t SSTABLE_MACRO_BLOCK_HEADER_VERSION = 2;
 private:
   static const uint16_t SSTABLE_MACRO_BLOCK_HEADER_MAGIC = 1007;
 public:
   FixedHeader fixed_header_;
-  // only store rowkey in column_types_ & orders_ after 4.1 in mini/minor macros
-  // use fixed_header_.get_col_type_array_cnt() to get actual array cnt
+  // column_types_ and column_orders_ contain rowkey columns only.
   common::ObObjMeta *column_types_;
   common::ObOrderType *column_orders_;
   int64_t *column_checksum_;

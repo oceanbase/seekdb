@@ -210,7 +210,7 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
         }
       }
       if (OB_SUCC(ret) && !is_packed) {
-        // cluster version < 4.1
+        // Compatibility with server versions before 4.1.
         //    use only locator and response routine
         // >= 4.1 with full lob locator v2
         //    1. use extern header if client supports locator

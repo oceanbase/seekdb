@@ -142,26 +142,16 @@ public:
 
   /*--------------------- get schema guard --------------------*/
 
-  // FIXME: ATTENTION!!! This interface will be deprecated soon, don't use this interface again.
-  virtual int get_cluster_schema_guard(
-              ObSchemaGetterGuard &guard,
-              const RefreshSchemaMode refresh_schema_mode = RefreshSchemaMode::NORMAL);
-
-  // After the schema is split, for user tenants, the system table schema is referenced from the system tenant,
-  // so when the guard is taken, the schema_version of the system tenant must be additionally passed in.
-  // 1. tenant_schema_version is the schema_version of the corresponding tenant
-  // 2. sys_schema_version is the schema_version of the system tenant. For system tenants,
-  //  the value will be reset to tenant_schema_version
-  virtual int get_tenant_schema_guard(ObSchemaGetterGuard &guard,
-                                      int64_t tenant_schema_version = common::OB_INVALID_VERSION,
-                                      int64_t sys_schema_version = common::OB_INVALID_VERSION,
+  // Obtain the single server runtime schema at the requested version.
+  virtual int get_runtime_schema_guard(ObSchemaGetterGuard &guard,
+                                      int64_t runtime_schema_version = common::OB_INVALID_VERSION,
                                       const RefreshSchemaMode refresh_schema_mode = RefreshSchemaMode::NORMAL);
 
-  virtual int get_tenant_full_schema_guard(ObSchemaGetterGuard &guard,
+  virtual int get_full_runtime_schema_guard(ObSchemaGetterGuard &guard,
                                            bool check_formal = true);
   // Get schema guard with version from __all_ddl_operation; on OB_SCHEMA_EAGAIN
   // refreshes schema and retries once. Used by DDL and Change Stream Fetcher.
-  int get_tenant_schema_guard_with_version_in_inner_table(
+  int get_runtime_schema_guard_with_version_in_inner_table(
       ObSchemaGetterGuard &schema_guard);
   //retry get schema guard will retry 10 times, it's interval is 100ms
   int retry_get_schema_guard(const int64_t schema_version,
@@ -185,13 +175,12 @@ public:
                         const uint64_t schema_id,
                         const ObSchema *&schema);
 
-  // Get pairs of tablet-table with specific tenant/schema_version.
+  // Get tablet-table pairs at a specific schema version.
   // If local cache miss, this function will fetch pairs of tablet-table from __all_tablet_to_table_history.
   //
   // @param[in]:
-  // - tenant: tenant != 0.
   // - tablet_ids: tablet_ids.count() > 0. tablet_id in tablet_ids should be unique.
-  // - schema_version: schema_version > 0. schema_version should be tenant level to raise cache hit rate
+  // - schema_version: schema_version > 0.
   //
   // @param[out]:
   // - table_ids: There is one-to-one correspondence between tablet_ids and table_ids.
@@ -204,23 +193,20 @@ public:
   // get the latest schema version
   // if core_schema_version = false, return user schema version
   // if core_schema_version = true, and user schema not inited, return core_schema_version
-  virtual int get_tenant_refreshed_schema_version(
+  virtual int get_runtime_refreshed_schema_version(
               int64_t &schema_version,
               const bool core_schema_version = false) const;
-  virtual int get_tenant_received_broadcast_version(int64_t &schema_version, const bool core_schema_version = false) const;
+  virtual int get_runtime_received_broadcast_version(int64_t &schema_version, const bool core_schema_version = false) const;
   virtual int get_last_refreshed_schema_info(ObRefreshSchemaInfo &schema_info);
-  virtual int get_recycle_schema_version(int64_t &schema_version);
   int get_baseline_schema_version(
       const bool auto_update,
       int64_t &baseline_schema_version);
   int get_new_schema_version(int64_t &schema_version);
-  int get_tenant_mem_info(const uint64_t &req_id, common::ObIArray<ObSchemaMemory> &tenant_mem_infos);
-  int get_tenant_slot_info(common::ObIAllocator &allocator, const uint64_t &req_id,
-                           common::ObIArray<ObSchemaSlot> &tenant_slot_infos);
+  int get_runtime_mem_info(const uint64_t &req_id, common::ObIArray<ObSchemaMemory> &runtime_mem_infos);
+  int get_runtime_slot_info(common::ObIAllocator &allocator, const uint64_t &req_id,
+                            common::ObIArray<ObSchemaSlot> &runtime_slot_infos);
 
-  int get_tenant_broadcast_consensus_version(int64_t &consensus_version);
-  int set_tenant_broadcast_consensus_version(const int64_t consensus_version);
-  virtual int set_tenant_received_broadcast_version(const int64_t version);
+  virtual int set_runtime_received_broadcast_version(const int64_t version);
   virtual int set_last_refreshed_schema_info(const ObRefreshSchemaInfo &schema_info);
   int update_baseline_schema_version(const int64_t baseline_schema_version);
   int gen_new_schema_version(int64_t &schema_version);
@@ -230,17 +216,9 @@ public:
   int gen_batch_new_schema_versions(const int64_t version_cnt,
       int64_t &schema_version);
   /*----------- check schema interface -----------------*/
-  bool is_sys_full_schema() const;
-
-  bool is_tenant_full_schema() const;
-
-  bool is_tenant_not_refreshed();
-  bool is_tenant_refreshed() const;
-  int check_all_tenant_schema_refreshed(bool &all_refreshed);
-
-  // sql should retry when tenant is normal but never refresh schema successfully.
-  bool is_schema_error_need_retry(
-       ObSchemaGetterGuard *guard);
+  bool is_runtime_schema_ready() const;
+  bool is_runtime_schema_refreshed() const;
+  int check_runtime_schema_ready(bool &all_refreshed);
 
   int check_table_exist(const uint64_t database_id,
                         const common::ObString &table_name,
@@ -252,11 +230,7 @@ public:
                                 bool &exist);
   int check_database_exist(const common::ObString &database_name,
                            uint64_t &database_id, bool &exist);
-  int check_tablegroup_exist(const common::ObString &tablegroup_name,
-                             uint64_t &tablegroup_id, bool &exist);
-  int check_if_tenant_has_been_dropped(bool &is_dropped);
-  // check user tenant and meta tenant both created by tenant, only used in creating tenant stage
-  int check_if_tenant_schema_has_been_refreshed(bool &is_refreshed);
+  int check_runtime_schema_refreshed(bool &is_refreshed);
   int check_outline_exist_with_name(const uint64_t database_id,
       const common::ObString &outline_name,
       uint64_t &outline_id,
@@ -266,9 +240,6 @@ public:
       const common::ObString &paramlized_sql,
       bool is_format,
       bool &exist) ;
-  int check_udf_exist(const common::ObString &name,
-      bool &exist,
-      uint64_t &udf_id);
   int check_outline_exist_with_sql_id(const uint64_t database_id,
       const common::ObString &sql_id,
       bool is_format,
@@ -287,13 +258,9 @@ public:
   int check_user_exist(const uint64_t user_id,
                        bool &exist);
 
-  int check_tenant_is_restore(ObSchemaGetterGuard *schema_guard,
-                              bool &is_restore);
-  int check_restore_tenant_exist(bool &exist);
-
-  int get_tenant_name_case_mode(ObNameCaseMode &name_case_mode);
+  int get_runtime_name_case_mode(ObNameCaseMode &name_case_mode);
   /*------------- refresh schema interface -----------------*/
-  int broadcast_tenant_schema(const common::ObIArray<share::schema::ObTableSchema> &table_schemas);
+  int broadcast_runtime_schema(const common::ObIArray<share::schema::ObTableSchema> &table_schemas);
 
   // new schema refresh interface
   int refresh_and_add_schema(bool check_bootstrap = false,
@@ -329,7 +296,7 @@ protected:
   virtual int init_multi_version_schema_struct() override;
   virtual int update_schema_cache(common::ObIArray<ObTableSchema*> &schema_array) override;
   virtual int update_schema_cache(common::ObIArray<ObTableSchema> &schema_array) override;
-  virtual int update_schema_cache(const common::ObIArray<ObTenantSchema> &schema_array) override;
+  virtual int update_schema_cache(const common::ObIArray<ObServerRuntimeSchema> &schema_array) override;
   virtual int update_schema_cache(const share::schema::ObSysVariableSchema &schema) override;
 
 private:
@@ -337,9 +304,9 @@ private:
   bool check_inner_stat() const;
 
   int init_original_schema();
-  int init_sys_tenant_user_schema();
+  int init_system_runtime_user_schema();
 
-  int refresh_tenant_schema(common::ObIArray<share::schema::ObTableSchema> *table_schemas = nullptr);
+  int refresh_runtime_schema(common::ObIArray<share::schema::ObTableSchema> *table_schemas = nullptr);
 
   virtual int add_schema_mgr_info(
               ObSchemaGetterGuard &schema_guard,
@@ -349,18 +316,13 @@ private:
               const int64_t latest_local_version,
               const RefreshSchemaMode refresh_schema_mode = RefreshSchemaMode::NORMAL);
 
-  // gc existed tenant schema mgr
-  int try_gc_existed_tenant_schema_mgr();
+  int try_gc_existing_runtime_schema_mgr();
   // try release exist tenant's another allocator
   int try_gc_another_allocator(ObSchemaMemMgr *&mem_mgr,
                                ObSchemaMgrCache *&schema_mgr_cache);
   // try release slot's schema mgr which is in current allocator and without reference
   int try_gc_current_allocator(ObSchemaMemMgr *&mem_mgr,
                                ObSchemaMgrCache *&schema_mgr_cache);
-
-  int get_schema_status(
-      const common::ObArray<ObRefreshSchemaStatus> &schema_status_array,
-      ObRefreshSchemaStatus &schema_status);
 
   int batch_fetch_tablet_to_table_history_(const common::ObIArray<ObTabletID> &tablet_ids,
       const int64_t schema_version,
@@ -371,7 +333,6 @@ private:
 
   virtual int get_schema_version_history(
       const ObRefreshSchemaStatus &fetch_schema_status,
-      const uint64_t req_id,
       const int64_t schema_version,
       const VersionHisKey &key,
       VersionHisVal &val,
@@ -385,7 +346,7 @@ private:
                                   ObSchemaMemMgr &schema_mem_mgr,
                                   ObSchemaMgrHandle &handle);
   // Reconstruct a historical schema_mgr that has aged out of the live cache, used by
-  // FORCE_FALLBACK consumers (change stream async index) that
+  // FORCE_FALLBACK consumers such as the change stream async index that
   // request a schema version which may be older than the oldest cached slot. Replays
   // increment schema operations reversely from the nearest available mgr down to
   // target_version and puts the result into the main schema_mgr_cache.
@@ -415,7 +376,6 @@ private:
   static const int64_t MAX_VERSION_COUNT = 64;
   static const int32_t MAX_RETRY_TIMES = 10;
   static const int64_t RETRY_INTERVAL_US = 1000 * 1000; //1s
-  static const int64_t DEFAULT_TENANT_SET_SIZE = 64;
   static const int64_t RESERVE_SCHEMA_MGR_CNT = 10;
 
   bool init_;

@@ -98,11 +98,10 @@ ServerSuperBlockBody::ServerSuperBlockBody()
 
 bool ServerSuperBlockBody::is_valid() const
 {
-  // TODO (fenggu.yh) distinguish shared-nothing and shared-storage
   return create_timestamp_ > 0 && modify_timestamp_ >= create_timestamp_ &&
     macro_block_size_ > 0 && total_macro_block_count_ > 0 &&
     total_file_size_ >= macro_block_size_ && replay_start_point_.is_valid() &&
-    tenant_meta_entry_.is_valid();
+    runtime_meta_entry_.is_valid();
 }
 
 void ServerSuperBlockBody::reset()
@@ -113,7 +112,7 @@ void ServerSuperBlockBody::reset()
   total_macro_block_count_ = 0;
   total_file_size_ = 0;
   replay_start_point_.reset();
-  tenant_meta_entry_.reset();
+  runtime_meta_entry_.reset();
 }
 
 OB_UNIS_SERIALIZE(ServerSuperBlockBody);                                         
@@ -124,7 +123,7 @@ int ServerSuperBlockBody::serialize_(char *buf, const int64_t buf_len, int64_t &
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE, create_timestamp_,
       modify_timestamp_, macro_block_size_, total_macro_block_count_, total_file_size_,
-      replay_start_point_, tenant_meta_entry_);
+      replay_start_point_, runtime_meta_entry_);
   return ret;
 }
 int ServerSuperBlockBody::deserialize_(const char *buf, const int64_t data_len, int64_t &pos)
@@ -132,7 +131,7 @@ int ServerSuperBlockBody::deserialize_(const char *buf, const int64_t data_len, 
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE, create_timestamp_,
       modify_timestamp_, macro_block_size_, total_macro_block_count_, total_file_size_,
-      replay_start_point_, tenant_meta_entry_);
+      replay_start_point_, runtime_meta_entry_);
   return ret;
 }
 int64_t ServerSuperBlockBody::get_serialize_size_(void) const
@@ -140,7 +139,7 @@ int64_t ServerSuperBlockBody::get_serialize_size_(void) const
   int64_t len = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN, create_timestamp_,
       modify_timestamp_, macro_block_size_, total_macro_block_count_, total_file_size_,
-      replay_start_point_, tenant_meta_entry_);
+      replay_start_point_, runtime_meta_entry_);
   return len;
 }
 
@@ -258,7 +257,7 @@ int ObServerSuperBlock::format_startup_super_block(
     body_.macro_block_size_ = macro_block_size;
     body_.total_macro_block_count_ = data_file_size / macro_block_size;
     body_.total_file_size_ = lower_align(data_file_size, macro_block_size);
-    body_.tenant_meta_entry_ = ObServerSuperBlock::EMPTY_LIST_ENTRY_BLOCK;
+    body_.runtime_meta_entry_ = ObServerSuperBlock::EMPTY_LIST_ENTRY_BLOCK;
     SET_FIRST_VALID_SLOG_CURSOR(body_.replay_start_point_);
 
     if (OB_FAIL(construct_header())) {
@@ -270,105 +269,104 @@ int ObServerSuperBlock::format_startup_super_block(
   return ret;
 }
 
-// ========================== ObTenantSnapshotMetaMeta ==============================
-int ObTenantSnapshotMeta::serialize(char *buf, const int64_t buf_len, int64_t &pos) const
+// ========================== ObServerSnapshotMetaMeta ==============================
+int ObServerSnapshotMeta::serialize(char *buf, const int64_t buf_len, int64_t &pos) const
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE, ls_meta_entry_, snapshot_id_);
   return ret;
 }
 
-int ObTenantSnapshotMeta::deserialize(const char *buf, const int64_t data_len, int64_t &pos)
+int ObServerSnapshotMeta::deserialize(const char *buf, const int64_t data_len, int64_t &pos)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE, ls_meta_entry_, snapshot_id_);
   return ret;
 }
 
-int64_t ObTenantSnapshotMeta::get_serialize_size() const
+int64_t ObServerSnapshotMeta::get_serialize_size() const
 {
   int64_t len = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN, ls_meta_entry_, snapshot_id_);
   return len;
 }
 
-bool ObTenantSnapshotMeta::is_valid() const
+bool ObServerSnapshotMeta::is_valid() const
 {
   return ls_meta_entry_.is_valid()
          && snapshot_id_.is_valid();
 }
 
 
-// ========================== ObTenantSuperBlock ==============================
-ObTenantSuperBlock::ObTenantSuperBlock()
+// ========================== ObServerRuntimeSuperBlock ==============================
+OB_SERIALIZE_MEMBER(ObLSItem, ls_id_, epoch_, status_, min_macro_seq_, max_macro_seq_);
+
+ObServerRuntimeSuperBlock::ObServerRuntimeSuperBlock()
 {
   reset();
 }
 
-ObTenantSuperBlock::ObTenantSuperBlock(const bool is_hidden)
-  : is_hidden_(is_hidden), version_(TENANT_SUPER_BLOCK_VERSION),
-    snapshot_cnt_(0), auto_inc_ls_epoch_(0)
+ObServerRuntimeSuperBlock::ObServerRuntimeSuperBlock(const bool is_hidden)
+  : is_hidden_(is_hidden), version_(SERVER_RUNTIME_SUPER_BLOCK_VERSION),
+    snapshot_cnt_(0), auto_inc_ls_epoch_(0), ls_cnt_(0)
 {
   SET_FIRST_VALID_SLOG_CURSOR(replay_start_point_);
   tablet_meta_entry_ = ObServerSuperBlock::EMPTY_LIST_ENTRY_BLOCK;
   ls_meta_entry_ = ObServerSuperBlock::EMPTY_LIST_ENTRY_BLOCK;
-  preallocated_seqs_.set(
-      ObTenantSeqGenerator::BATCH_PREALLOCATE_NUM,
-      ObTenantSeqGenerator::BATCH_PREALLOCATE_NUM,
-      ObTenantSeqGenerator::BATCH_PREALLOCATE_NUM);
 }
 
-ObTenantSuperBlock::ObTenantSuperBlock(const ObTenantSuperBlock &other)
+ObServerRuntimeSuperBlock::ObServerRuntimeSuperBlock(const ObServerRuntimeSuperBlock &other)
 {
   *this = other;
 }
 
-void ObTenantSuperBlock::reset()
+void ObServerRuntimeSuperBlock::reset()
 {
   
   replay_start_point_.reset();
   ls_meta_entry_.reset();
   tablet_meta_entry_.reset();
   is_hidden_= false;
-  version_ = TENANT_SUPER_BLOCK_VERSION;
+  version_ = SERVER_RUNTIME_SUPER_BLOCK_VERSION;
   snapshot_cnt_ = 0;
-  preallocated_seqs_.reset();
   auto_inc_ls_epoch_ = 0;
+  ls_cnt_ = 0;
 }
 
-void ObTenantSuperBlock::copy_snapshots_from(const ObTenantSuperBlock &other)
+void ObServerRuntimeSuperBlock::copy_snapshots_from(const ObServerRuntimeSuperBlock &other)
 {
   snapshot_cnt_ = other.snapshot_cnt_;
   for (int64_t i = 0; i < snapshot_cnt_; i++) {
-    tenant_snapshots_[i] = other.tenant_snapshots_[i];
+    snapshots_[i] = other.snapshots_[i];
   }
 }
 
-bool ObTenantSuperBlock::is_valid() const
+bool ObServerRuntimeSuperBlock::is_valid() const
 {
   bool is_valid = true
                   && replay_start_point_.is_valid()
                   && ls_meta_entry_.is_valid()
                   && tablet_meta_entry_.is_valid()
-                  && version_ > MIN_SUPER_BLOCK_VERSION
+                  && version_ == SERVER_RUNTIME_SUPER_BLOCK_VERSION
                   && IS_EMPTY_BLOCK_LIST(tablet_meta_entry_)
                   && snapshot_cnt_ >= 0
-                  && auto_inc_ls_epoch_ >= 0;
+                  && auto_inc_ls_epoch_ >= 0
+                  && ls_cnt_ >= 0;
   return is_valid;
 }
 
-int ObTenantSuperBlock::get_snapshot(const ObTenantSnapshotID &snapshot_id, ObTenantSnapshotMeta &snapshot) const
+int ObServerRuntimeSuperBlock::get_snapshot(const ObServerSnapshotID &snapshot_id, ObServerSnapshotMeta &snapshot) const
 {
   int ret = OB_SUCCESS;
   bool found = false;
 
   for (int64_t i = 0; OB_SUCC(ret) && !found && i < snapshot_cnt_; i++) {
-    if (snapshot_id == tenant_snapshots_[i].snapshot_id_) {
-      if (OB_UNLIKELY(!tenant_snapshots_[i].is_valid())) {
+    if (snapshot_id == snapshots_[i].snapshot_id_) {
+      if (OB_UNLIKELY(!snapshots_[i].is_valid())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("snapshot is invalid", K(ret), K(tenant_snapshots_[i]));
+        LOG_WARN("snapshot is invalid", K(ret), K(snapshots_[i]));
       } else {
-        snapshot = tenant_snapshots_[i];
+        snapshot = snapshots_[i];
         found = true;
       }
     }
@@ -380,19 +378,19 @@ int ObTenantSuperBlock::get_snapshot(const ObTenantSnapshotID &snapshot_id, ObTe
   return ret;
 }
 
-int ObTenantSuperBlock::add_snapshot(const ObTenantSnapshotMeta &snapshot)
+int ObServerRuntimeSuperBlock::add_snapshot(const ObServerSnapshotMeta &snapshot)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_new_snapshot(snapshot.snapshot_id_))) {
     LOG_WARN("fail to check new snapshot", K(ret), K(snapshot));
   } else {
-    tenant_snapshots_[snapshot_cnt_] = snapshot;
+    snapshots_[snapshot_cnt_] = snapshot;
     snapshot_cnt_++;
   }
   return ret;
 }
 
-int ObTenantSuperBlock::check_new_snapshot(const ObTenantSnapshotID &snapshot_id) const
+int ObServerRuntimeSuperBlock::check_new_snapshot(const ObServerSnapshotID &snapshot_id) const
 {
   int ret = OB_SUCCESS;
   if (snapshot_cnt_ >= MAX_SNAPSHOT_NUM) {
@@ -400,7 +398,7 @@ int ObTenantSuperBlock::check_new_snapshot(const ObTenantSnapshotID &snapshot_id
     LOG_WARN("num of snapshots has reached the limit", K(ret), K(snapshot_cnt_));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < snapshot_cnt_; i++) {
-      if (snapshot_id == tenant_snapshots_[i].snapshot_id_) {
+      if (snapshot_id == snapshots_[i].snapshot_id_) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("repeated snapshot id", K(ret), K(snapshot_id));
       }
@@ -409,12 +407,12 @@ int ObTenantSuperBlock::check_new_snapshot(const ObTenantSnapshotID &snapshot_id
   return ret;
 }
 
-int ObTenantSuperBlock::delete_snapshot(const ObTenantSnapshotID &snapshot_id)
+int ObServerRuntimeSuperBlock::delete_snapshot(const ObServerSnapshotID &snapshot_id)
 {
   int ret = OB_SUCCESS;
   int64_t index = -1;
   for (int64_t i = 0; -1 == index && i < snapshot_cnt_; i++) {
-    if (tenant_snapshots_[i].snapshot_id_ == snapshot_id) {
+    if (snapshots_[i].snapshot_id_ == snapshot_id) {
       index = i;
     }
   }
@@ -423,14 +421,14 @@ int ObTenantSuperBlock::delete_snapshot(const ObTenantSnapshotID &snapshot_id)
     LOG_WARN("target snapshot desn't exist", K(ret), K(snapshot_id), K(index));
   } else {
     for (int64_t i = index; i < snapshot_cnt_ - 1; i++) {
-      tenant_snapshots_[i] = tenant_snapshots_[i + 1];
+      snapshots_[i] = snapshots_[i + 1];
     }
     snapshot_cnt_--;
   }
   return ret;
 }
 
-int ObTenantSuperBlock::serialize(char *buf, const int64_t buf_len, int64_t &pos) const
+int ObServerRuntimeSuperBlock::serialize(char *buf, const int64_t buf_len, int64_t &pos) const
 {
   int ret = OB_SUCCESS;
   OB_UNIS_ENCODE(UNIS_VERSION);
@@ -453,7 +451,7 @@ int ObTenantSuperBlock::serialize(char *buf, const int64_t buf_len, int64_t &pos
   return ret;
 }
 
-int ObTenantSuperBlock::serialize_(char *buf, const int64_t buf_len, int64_t &pos) const
+int ObServerRuntimeSuperBlock::serialize_(char *buf, const int64_t buf_len, int64_t &pos) const
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE,
@@ -461,14 +459,15 @@ int ObTenantSuperBlock::serialize_(char *buf, const int64_t buf_len, int64_t &po
       ls_meta_entry_,
       tablet_meta_entry_,
       is_hidden_,
-      tenant_snapshots_,
+      snapshots_,
       snapshot_cnt_,
-      preallocated_seqs_,
-      auto_inc_ls_epoch_);
+      auto_inc_ls_epoch_,
+      ls_item_arr_,
+      ls_cnt_);
   return ret;
 }
 
-int ObTenantSuperBlock::deserialize(const char *buf, const int64_t data_len, int64_t &pos)
+int ObServerRuntimeSuperBlock::deserialize(const char *buf, const int64_t data_len, int64_t &pos)
 {
   int ret = OB_SUCCESS;
   int64_t len = 0;
@@ -477,7 +476,7 @@ int ObTenantSuperBlock::deserialize(const char *buf, const int64_t data_len, int
   if (OB_SUCC(ret)) {
     if (UNIS_VERSION != version_) {
       ret = ::oceanbase::common::OB_NOT_SUPPORTED;
-      LOG_WARN("ObTenantSuperBlock object version mismatch", K(ret), K_(version));
+      LOG_WARN("ObServerRuntimeSuperBlock object version mismatch", K(ret), K_(version));
     } else if (len < 0) {
       ret = ::oceanbase::common::OB_ERR_UNEXPECTED;
       LOG_WARN("can't decode object with negative length", K(ret), K(len));
@@ -496,7 +495,7 @@ int ObTenantSuperBlock::deserialize(const char *buf, const int64_t data_len, int
   return ret;
 }
 
-int ObTenantSuperBlock::deserialize_(const char *buf, const int64_t data_len, int64_t &pos)
+int ObServerRuntimeSuperBlock::deserialize_(const char *buf, const int64_t data_len, int64_t &pos)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE,
@@ -505,21 +504,22 @@ int ObTenantSuperBlock::deserialize_(const char *buf, const int64_t data_len, in
       ls_meta_entry_,
       tablet_meta_entry_,
       is_hidden_,
-      tenant_snapshots_,
+      snapshots_,
       snapshot_cnt_,
-      preallocated_seqs_,
-      auto_inc_ls_epoch_);
+      auto_inc_ls_epoch_,
+      ls_item_arr_,
+      ls_cnt_);
   return ret;
 }
 
-int64_t ObTenantSuperBlock::get_serialize_size(void) const
+int64_t ObServerRuntimeSuperBlock::get_serialize_size(void) const
 {
   int64_t len = get_serialize_size_();
   SERIALIZE_SIZE_HEADER(UNIS_VERSION);
   return len;
 }
 
-int64_t ObTenantSuperBlock::get_serialize_size_(void) const
+int64_t ObServerRuntimeSuperBlock::get_serialize_size_(void) const
 {
   int64_t len = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN,
@@ -527,10 +527,11 @@ int64_t ObTenantSuperBlock::get_serialize_size_(void) const
       ls_meta_entry_,
       tablet_meta_entry_,
       is_hidden_,
-      tenant_snapshots_,
+      snapshots_,
       snapshot_cnt_,
-      preallocated_seqs_,
-      auto_inc_ls_epoch_);
+      auto_inc_ls_epoch_,
+      ls_item_arr_,
+      ls_cnt_);
   return len;
 }
 

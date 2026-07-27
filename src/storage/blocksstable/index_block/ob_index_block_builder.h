@@ -30,14 +30,12 @@
 #include "storage/blocksstable/ob_kvcache_pre_warmer.h"
 #include "ob_index_block_aggregator.h"
 #include "storage/blocksstable/ob_data_store_desc.h"
-#include "storage/blocksstable/ob_sstable_private_object_cleaner.h"
 #include "storage/blocksstable/ob_shared_macro_block_manager.h"
 
 namespace oceanbase
 {
 namespace blocksstable
 {
-struct ObBlockInfo;
 struct ObIndexTreeRootCtx;
 class ObIMicroBlockReader;
 class ObIMacroBlockFlushCallback;
@@ -248,8 +246,7 @@ public:
                K_(occupy_size), K_(original_size), K_(data_checksum),
                K_(use_old_macro_block_count), K_(compressor_type),
                K_(root_row_store_type), K_(nested_offset), K_(nested_size),
-               K_(table_backup_flag), K_(root_macro_seq), K_(encrypt_id),
-               K_(master_key_id), KPHEX_(encrypt_key, sizeof(encrypt_key_)));
+               K_(table_backup_flag), K_(root_macro_seq));
 
 public:
   ObIndexTreeRootBlockDesc root_desc_;
@@ -269,14 +266,11 @@ public:
   int64_t use_old_macro_block_count_;
   common::ObSEArray<int64_t, 1> data_column_checksums_;
   common::ObCompressorType compressor_type_;
-  int64_t encrypt_id_;
-  int64_t master_key_id_;
   int64_t nested_offset_;
   int64_t nested_size_;
   ObTableBackupFlag table_backup_flag_;
   ObRowStoreType root_row_store_type_;
   int64_t root_macro_seq_;
-  char encrypt_key_[share::OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH];
   DISALLOW_COPY_AND_ASSIGN(ObSSTableMergeRes);
 };
 
@@ -382,7 +376,6 @@ public:
   int append_macro_block(const ObDataMacroBlockMeta &macro_meta,
                          const ObMicroBlockData *micro_block_data);
   int cal_macro_meta_block_size(const ObDatumRowkey &rowkey,
-                                const int64_t macro_block_bf_size,
                                 int64_t &estimate_block_size);
   int set_parallel_task_idx(const int64_t task_idx);
   inline int64_t get_estimate_index_block_size() const { return estimate_leaf_block_size_; }
@@ -588,18 +581,17 @@ public:
     bool is_inited_;
   };
 
+public:
   enum ObSpaceOptimizationMode
   {
-    ENABLE = 0,   // enable the optimization for small sstable
-    DISABLE = 1,  // disable the optimization
+    ENABLE = 0,
+    DISABLE = 1,
   };
 
-public:
   explicit ObSSTableIndexBuilder(const bool use_double_write_buffer);
   ~ObSSTableIndexBuilder();
-  int init(
-      const ObDataStoreDesc &data_desc,
-      ObSpaceOptimizationMode mode = ENABLE);
+  int init(const ObDataStoreDesc &data_desc,
+           ObSpaceOptimizationMode mode = ENABLE);
   void reset();
   int acquire_index_builder(ObDataIndexBlockBuilder *&builder,
                             const ObDataStoreDesc &data_store_desc,
@@ -635,9 +627,8 @@ public:
   bool is_inited() const { return is_inited_; }
   bool is_closed() const { return is_closed_; }
   bool enable_dump_disk() const { return enable_dump_disk_; }
-  OB_INLINE ObSSTablePrivateObjectCleaner & get_private_object_cleaner() { return object_cleaner_; }
-  bool micro_index_clustered() const;
   OB_INLINE ObSpaceOptimizationMode get_optimization_mode() const { return optimization_mode_; }
+  bool micro_index_clustered() const;
   const compaction::ObMergeBlockInfo &get_merge_block_info() const { return macro_writer_.get_merge_block_info(); }
   TO_STRING_KV(K(roots_.count()));
 
@@ -652,14 +643,15 @@ public:
       const char *buf,
       const int64_t buf_size,
       ObSSTableMacroBlockHeader &macro_header);
-  static int get_single_macro_meta_for_small_sstable(ObIAllocator &allocator,
-                                                     ObIndexBlockLoader &index_block_loader,
-                                                     const ObDataStoreDesc &container_store_desc,
-                                                     const IndexTreeRootCtxList &roots,
-                                                     ObDataMacroBlockMeta &macro_meta);
-  static bool satisfies_small_sstable_pre_requisites(ObSSTableIndexBuilder::ObSpaceOptimizationMode mode,
-                                                     int64_t concurrent_cnt,
-                                                     const ObIODevice *device_handle);
+  static int get_single_macro_meta(ObIAllocator &allocator,
+                                   ObIndexBlockLoader &index_block_loader,
+                                   const ObDataStoreDesc &container_store_desc,
+                                   const IndexTreeRootCtxList &roots,
+                                   ObDataMacroBlockMeta &macro_meta);
+  static bool satisfies_small_sstable_pre_requisites(
+      ObSpaceOptimizationMode mode,
+      int64_t concurrent_cnt,
+      const ObIODevice *device_handle);
 
 private:
   int new_index_builder(ObDataIndexBlockBuilder *&builder,
@@ -732,7 +724,6 @@ private:
   ObIODevice *device_handle_;
   IndexTreeRootCtxList roots_;
   ObSSTableMergeRes res_;
-  ObSSTablePrivateObjectCleaner object_cleaner_;
   ObSpaceOptimizationMode optimization_mode_;
   bool enable_dump_disk_;
   bool is_closed_;

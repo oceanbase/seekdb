@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_partition_merge_progress.h"
 #include "share/rc/ob_module_provider.h"
-#include "ob_tenant_compaction_progress.h"
+#include "ob_compaction_progress.h"
 
 namespace oceanbase
 {
@@ -162,7 +162,7 @@ int ObPartitionMergeProgress::estimate_sstables(
     } else if (FALSE_IT(sstable = static_cast<const ObSSTable *>(table))) {
     } else {
       if (sstable->is_major_sstable()) {
-        // Major SSTable size is accumulated by ObTenantCompactionProgressMgr::init_progress.
+        // Major SSTable size is accumulated by ObCompactionProgressMgr::init_progress.
       } else {
         estimated_total_size_ += sstable->get_occupy_size();
       }
@@ -351,13 +351,13 @@ int ObPartitionMajorMergeProgress::inner_update_progress_mgr(const int64_t total
   const int64_t scan_data_size_delta = (total_scanned_row_cnt - pre_scanned_row_cnt_) * avg_row_length_;
   const bool is_first_update = pre_scanned_row_cnt_ == 0;
 
-  if (OB_FAIL(share::g_mp->tenant_compaction_progress_mgr()->update_progress(
+  if (OB_FAIL(share::g_mp->compaction_progress_mgr()->update_progress(
           ctx_->get_merge_version(),
           is_first_update ? estimated_total_size_ : 0,
           scan_data_size_delta,
           estimated_finish_time_,
           false/*finish_flag*/))) {
-    LOG_WARN("failed to update tenant compaction progress", K(ret),
+    LOG_WARN("failed to update database compaction progress", K(ret),
              K(scan_data_size_delta), K(is_first_update), KPC(this));
   }
   return ret;
@@ -369,7 +369,7 @@ int ObPartitionMajorMergeProgress::finish_progress(
 {
   int ret = OB_SUCCESS;
   estimated_finish_time_ = ObTimeUtility::fast_current_time();
-  if (OB_FAIL(share::g_mp->tenant_compaction_progress_mgr()->update_progress(merge_version,
+  if (OB_FAIL(share::g_mp->compaction_progress_mgr()->update_progress(merge_version,
                                                                    0 == pre_scanned_row_cnt_ ? estimated_total_size_ : 0, // estimate_occupy_size_delta
                                                                    estimated_total_size_ - pre_scanned_row_cnt_ * avg_row_length_,// scanned_data_size_delta
                                                                    estimated_finish_time_,
@@ -394,7 +394,7 @@ int ObPartitionMajorMergeProgress::finish_merge_progress()
   } else if (OB_FAIL(finish_progress(ctx->get_merge_version(),
                                      &ctx->info_collector_.time_guard_))) {
     LOG_WARN("failed to update progress", K(ret), KPC(this));
-  } else if (OB_FAIL(share::g_mp->tenant_compaction_progress_mgr()->update_compression_ratio(
+  } else if (OB_FAIL(share::g_mp->compaction_progress_mgr()->update_compression_ratio(
       ctx->get_merge_version(),
       ctx->get_merge_info().get_merge_history()))) {
     LOG_WARN("failed to update progress", K(ret));

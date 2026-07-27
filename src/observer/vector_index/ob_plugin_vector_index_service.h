@@ -21,19 +21,19 @@
 #include "logservice/ob_log_base_type.h"
 #include "share/scn.h"
 #include "lib/lock/ob_recursive_mutex.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 #include "observer/vector_index/ob_plugin_vector_index_adaptor.h"
 #include "observer/vector_index/ob_plugin_vector_index_scheduler.h"
 #include "observer/vector_index/ob_plugin_vector_index_util.h"
 #include "storage/vector_type/ob_vector_common_util.h"
-#include "observer/vector_index/ob_tenant_vector_index_async_task.h"
+#include "observer/vector_index/ob_vector_index_async_task.h"
 #include "observer/vector_index/ob_vector_index_async_task_util.h"
 #include "ob_vector_kmeans_ctx.h"
 #include "observer/vector_index/ob_vector_index_ivf_cache_mgr.h"
 
-namespace oceanbase 
+namespace oceanbase
 {
-namespace share 
+namespace share
 {
 struct ObIvfHelperKey final
 {
@@ -94,13 +94,13 @@ public:
 struct ObAdapterMapKeyValue
 {
 public:
-  ObAdapterMapKeyValue(ObTabletID tablet_id, ObPluginVectorIndexAdaptor *adapter) 
-      : tablet_id_(tablet_id), 
-        adapter_(adapter) 
+  ObAdapterMapKeyValue(ObTabletID tablet_id, ObPluginVectorIndexAdaptor *adapter)
+      : tablet_id_(tablet_id),
+        adapter_(adapter)
   {}
-  ObAdapterMapKeyValue() 
-      : tablet_id_(), 
-        adapter_(nullptr) 
+  ObAdapterMapKeyValue()
+      : tablet_id_(),
+        adapter_(nullptr)
   {}
   TO_STRING_KV(K_(tablet_id), K_(adapter));
 
@@ -124,7 +124,7 @@ typedef common::hash::ObHashMap<common::ObTabletID, ObIvfCacheMgr*> IvfCacheMgrM
 class ObPluginVectorIndexMgr
 {
 public:
-  ObPluginVectorIndexMgr(lib::MemoryContext &memory_context) 
+  ObPluginVectorIndexMgr(lib::MemoryContext &memory_context)
       : is_inited_(false),
       need_check_(false),
       complete_index_adpt_map_(),
@@ -143,7 +143,7 @@ public:
   virtual ~ObPluginVectorIndexMgr();
 
   int init(lib::MemoryContext &memory_context, uint64_t *all_vsag_use_mem);
-  
+
   ObPluginVectorIndexScheduleCtx& get_task_ctx() { return task_ctx_; }
   VectorIndexAdaptorMap& get_partial_adapter_map() { return partial_index_adpt_map_; }
   VectorIndexAdaptorMap& get_complete_adapter_map() { return complete_index_adpt_map_; }
@@ -203,13 +203,13 @@ public:
                             ObString *vec_index_param,
                             int64_t dim);
   int check_and_merge_partial_inner(ObVecIdxSharedTableInfoMap &info_map, ObIAllocator &allocator);
-  
+
   // maintance interface
   int check_need_mem_data_sync_task(bool &need_sync);
   int erase_complete_adapter(ObTabletID tablet_id);
   int erase_partial_adapter(ObTabletID tablet_id);
   int erase_ivf_build_helper(const ObIvfHelperKey &key);
-  int release_ivf_cache_mgr(ObIvfCacheMgr* &mgr); 
+  int release_ivf_cache_mgr(ObIvfCacheMgr* &mgr);
   int set_ivf_cache_mgr(const ObIvfCacheMgrKey& cachr_mgr_key,
                         ObIvfCacheMgr *cache_mgr,
                         int overwrite = 0);
@@ -257,7 +257,7 @@ private:
 private:
   static const int64_t DEFAULT_ADAPTER_HASH_SIZE = 1000;
   static const int64_t DEFAULT_CANDIDATE_ADAPTER_HASH_SIZE = 1000;
-  
+
   typedef common::RWLock RWLock;
   typedef RWLock::RLockGuard RLockGuard;
   typedef RWLock::WLockGuard WLockGuard;
@@ -270,7 +270,7 @@ private:
   IvfCacheMgrMap ivf_cache_mgr_map_; // map of ivf cache managers
   TCRWLock adapter_map_rwlock_; // lock for adapter maps
   ObPluginVectorIndexScheduleCtx task_ctx_;
-  
+
   uint32_t interval_factor_; // used to expand real execute interval
   ObPluginVectorIndexService *vector_index_service_;
   int64_t local_schema_version_; // detect schema change
@@ -321,7 +321,7 @@ class ObPluginVectorIndexService : public logservice::ObIReplaySubHandler,
                                    public logservice::ObILocalLogHandler
 {
 public:
-  ObPluginVectorIndexService() 
+  ObPluginVectorIndexService()
   : is_inited_(false),
     has_start_(false),
     is_ls_or_tablet_changed_(false),
@@ -330,16 +330,15 @@ public:
     sql_proxy_(NULL),
     memory_context_(NULL),
     all_vsag_use_mem_(NULL),
-    tenant_vec_async_task_sched_(nullptr),
-    is_vec_async_task_started_(false),
-    single_index_mgr_(nullptr)
+    vec_async_task_sched_(nullptr),
+    is_vec_async_task_started_(false)
   {}
   virtual ~ObPluginVectorIndexService();
   int init(schema::ObMultiVersionSchemaService *schema_service,
            ObLSService *ls_service);
   bool is_inited() { return is_inited_; }
-  // mtl interfaces
-  static int mtl_init(ObPluginVectorIndexService *&service);
+  // Server module interfaces.
+  static int server_module_init(ObPluginVectorIndexService *&service);
   int start();
   void stop();
   void wait();
@@ -356,18 +355,18 @@ public:
   int replay(const void *buffer,
              const int64_t buf_size,
              const palf::LSN &lsn,
-             const share::SCN &scn) 
-  { 
+             const share::SCN &scn)
+  {
     UNUSED(buffer);
     UNUSED(buf_size);
     UNUSED(lsn);
     UNUSED(scn);
-    return OB_SUCCESS; 
+    return OB_SUCCESS;
   }
   void inner_switch_to_follower();
   void deactivate() override;
   int activate() override;
-  int alloc_tenant_vec_async_task_sched();
+  int alloc_vec_async_task_sched();
   ObFIFOAllocator &get_allocator() { return allocator_; }
 
   // feature interfaces
@@ -391,7 +390,7 @@ public:
   ObPluginVectorIndexMgr &get_index_mgr() { return *single_index_mgr_; }
   const ObPluginVectorIndexMgr &get_index_mgr() const { return *single_index_mgr_; }
 
-  // user interfaces 
+  // user interfaces
   int acquire_adapter_guard(ObTabletID tablet_id,
                             ObIndexType type,
                             ObPluginVectorIndexAdapterGuard &adapter_guard,
@@ -460,10 +459,10 @@ private:
   common::ObMySQLProxy *sql_proxy_;
   ObFIFOAllocator allocator_;
   // do not use this memory context directly
-  // use wrapped memory context in ob_tenant_vector_allocator.h and init by this memory context
+  // use wrapped memory context in ob_vector_allocator.h and init by this memory context
   lib::MemoryContext memory_context_;
   uint64_t *all_vsag_use_mem_;
-  ObTenantVecAsyncTaskScheduler *tenant_vec_async_task_sched_;
+  ObVecAsyncTaskScheduler *vec_async_task_sched_;
   bool is_vec_async_task_started_;
   ObPluginVectorIndexMgr *single_index_mgr_;
   ObVecIndexAsyncTaskHandler vec_async_task_handle_;

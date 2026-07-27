@@ -82,13 +82,11 @@ STAT_EVENT_ADD_DEF(ABORT_LOG_REPLAY_COUNT, "abort log replay count", ObStatClass
 STAT_EVENT_ADD_DEF(ABORT_LOG_REPLAY_TIME, "abort log replay time", ObStatClassIds::TRANS, 30025, false, true, true)
 STAT_EVENT_ADD_DEF(CLEAR_LOG_REPLAY_COUNT, "clear log replay count", ObStatClassIds::TRANS, 30026, false, true, true)
 STAT_EVENT_ADD_DEF(CLEAR_LOG_REPLAY_TIME, "clear log replay time", ObStatClassIds::TRANS, 30027, false, true, true)
-STAT_EVENT_ADD_DEF(GTS_REQUEST_TOTAL_COUNT, "gts request total count", ObStatClassIds::TRANS, 30053, false, true, true)
 STAT_EVENT_ADD_DEF(GTS_ACQUIRE_TOTAL_TIME, "gts acquire total time", ObStatClassIds::TRANS, 30054, false, true, true)
 STAT_EVENT_ADD_DEF(GTS_ACQUIRE_TOTAL_WAIT_COUNT, "gts acquire total wait count", ObStatClassIds::TRANS, 30056, false, true, true)
 STAT_EVENT_ADD_DEF(GTS_WAIT_ELAPSE_TOTAL_TIME, "gts wait elapse total time", ObStatClassIds::TRANS, 30063, false, true, true)
 STAT_EVENT_ADD_DEF(GTS_WAIT_ELAPSE_TOTAL_COUNT, "gts wait elapse total count", ObStatClassIds::TRANS, 30064, false, true, true)
 STAT_EVENT_ADD_DEF(GTS_WAIT_ELAPSE_TOTAL_WAIT_COUNT, "gts wait elapse total wait count", ObStatClassIds::TRANS, 30065, false, true, true)
-STAT_EVENT_ADD_DEF(GTS_RPC_COUNT, "gts rpc count", ObStatClassIds::TRANS, 30066, false, true, true)
 STAT_EVENT_ADD_DEF(GTS_TRY_ACQUIRE_TOTAL_COUNT, "gts try acquire total count", ObStatClassIds::TRANS, 30067, false, true, true)
 STAT_EVENT_ADD_DEF(GTS_TRY_WAIT_ELAPSE_TOTAL_COUNT, "gts try wait elapse total count", ObStatClassIds::TRANS, 30068, false, true, true)
 STAT_EVENT_ADD_DEF(TRANS_ELR_ENABLE_COUNT, "trans early lock release enable count", ObStatClassIds::TRANS, 30077, false, true, true)
@@ -128,7 +126,6 @@ STAT_EVENT_ADD_DEF(SQL_OPEN_CURSORS_CURRENT, "opened cursors current", ObStatCla
 STAT_EVENT_ADD_DEF(SQL_OPEN_CURSORS_CUMULATIVE, "opened cursors cumulative", ObStatClassIds::SQL, 40031, true, true, true)
 
 STAT_EVENT_ADD_DEF(SQL_LOCAL_COUNT, "sql local count", ObStatClassIds::SQL, 40010, false, true, true)
-STAT_EVENT_ADD_DEF(SQL_REMOTE_COUNT, "sql remote count", ObStatClassIds::SQL, 40011, false, true, true)
 STAT_EVENT_ADD_DEF(SQL_DISTRIBUTED_COUNT, "sql distributed count", ObStatClassIds::SQL, 40012, false, true, true)
 STAT_EVENT_ADD_DEF(ACTIVE_SESSIONS, "active sessions", ObStatClassIds::SQL, 40013, false, true, true)
 STAT_EVENT_ADD_DEF(SQL_SINGLE_QUERY_COUNT, "single query count", ObStatClassIds::SQL, 40014, false, true, true)
@@ -152,11 +149,9 @@ STAT_EVENT_ADD_DEF(SQL_USER_LOGOUTS_CUMULATIVE, "user logouts cumulative", ObSta
 STAT_EVENT_ADD_DEF(SQL_USER_LOGONS_FAILED_CUMULATIVE, "user logons failed cumulative", ObStatClassIds::SQL, 40114, false, true, true)
 STAT_EVENT_ADD_DEF(SQL_USER_LOGONS_COST_TIME_CUMULATIVE, "user logons time cumulative", ObStatClassIds::SQL, 40115, false, true, true)
 STAT_EVENT_ADD_DEF(SQL_LOCAL_TIME, "sql local execute time", ObStatClassIds::SQL, 40116, false, true, true)
-STAT_EVENT_ADD_DEF(SQL_REMOTE_TIME, "sql remote execute time", ObStatClassIds::SQL, 40117, false, true, true)
 STAT_EVENT_ADD_DEF(SQL_DISTRIBUTED_TIME, "sql distributed execute time", ObStatClassIds::SQL, 40118, false, true, true)
 STAT_EVENT_ADD_DEF(SQL_FAIL_COUNT, "sql fail count", ObStatClassIds::SQL, 40119, false, true, true)
 STAT_EVENT_ADD_DEF(SQL_INNER_LOCAL_COUNT, "inner sql local count", ObStatClassIds::SQL, 40120, false, true, true)
-STAT_EVENT_ADD_DEF(SQL_INNER_REMOTE_COUNT, "inner sql remote count", ObStatClassIds::SQL, 40121, false, true, true)
 STAT_EVENT_ADD_DEF(SQL_INNER_DISTRIBUTED_COUNT, "inner sql distributed count", ObStatClassIds::SQL, 40122, false, true, true)
 STAT_EVENT_ADD_DEF(SQL_INSERT_DUPLICATE_COUNT, "try insert duplicate count", ObStatClassIds::SQL, 40126, true, true, true)
 
@@ -312,9 +307,6 @@ STAT_EVENT_ADD_DEF(BACKUP_DELETE_COUNT, "backup delete count", ObStatClassIds::S
 
 STAT_EVENT_ADD_DEF(BACKUP_IO_READ_DELAY, "backup io read delay", ObStatClassIds::STORAGE, 69012, true, true, true)
 STAT_EVENT_ADD_DEF(BACKUP_IO_WRITE_DELAY, "backup io write delay", ObStatClassIds::STORAGE, 69013, true, true, true)
-STAT_EVENT_ADD_DEF(COS_IO_READ_DELAY, "cos io read delay", ObStatClassIds::STORAGE, 69014, true, true, true)
-STAT_EVENT_ADD_DEF(COS_IO_WRITE_DELAY, "cos io write delay", ObStatClassIds::STORAGE, 69015, true, true, true)
-STAT_EVENT_ADD_DEF(COS_IO_LS_DELAY, "cos io list delay", ObStatClassIds::STORAGE, 69016, true, true, true)
 STAT_EVENT_ADD_DEF(BACKUP_DELETE_DELAY, "backup delete delay", ObStatClassIds::STORAGE, 69017, true, true, true)
 
 STAT_EVENT_ADD_DEF(BACKUP_IO_LS_COUNT, "backup io list count", ObStatClassIds::STORAGE, 69019, true, true, true)
@@ -326,14 +318,6 @@ STAT_EVENT_ADD_DEF(BACKUP_IO_LS_FAIL_COUNT, "backup io list failed count", ObSta
 STAT_EVENT_ADD_DEF(BACKUP_TAGGING_COUNT, "backup io tagging count", ObStatClassIds::STORAGE, 69024, true, true, true)
 STAT_EVENT_ADD_DEF(BACKUP_TAGGING_FAIL_COUNT, "backup io tagging failed count", ObStatClassIds::STORAGE, 69025, true, true, true)
 
-STAT_EVENT_ADD_DEF(COS_IO_WRITE_BYTES, "cos io write bytes", ObStatClassIds::STORAGE, 69026, true, true, true)
-STAT_EVENT_ADD_DEF(COS_IO_WRITE_COUNT, "cos io write count", ObStatClassIds::STORAGE, 69027, true, true, true)
-STAT_EVENT_ADD_DEF(COS_DELETE_COUNT, "cos delete count", ObStatClassIds::STORAGE, 69028, true, true, true)
-STAT_EVENT_ADD_DEF(COS_DELETE_DELAY, "cos delete delay", ObStatClassIds::STORAGE, 69029, true, true, true)
-STAT_EVENT_ADD_DEF(COS_IO_LS_LIMIT_COUNT, "cos list io limit count", ObStatClassIds::STORAGE, 69030, true, true, true)
-STAT_EVENT_ADD_DEF(COS_IO_LS_COUNT, "cos io list count", ObStatClassIds::STORAGE, 69031, true, true, true)
-STAT_EVENT_ADD_DEF(COS_IO_READ_COUNT, "cos io read count", ObStatClassIds::STORAGE, 69032, true, true, true)
-STAT_EVENT_ADD_DEF(COS_IO_READ_BYTES, "cos io read bytes", ObStatClassIds::STORAGE, 69033, true, true, true)
 
 // DEBUG
 STAT_EVENT_ADD_DEF(REFRESH_SCHEMA_COUNT, "refresh schema count", ObStatClassIds::DEBUG, 70000, false, true, true)
@@ -354,8 +338,6 @@ STAT_EVENT_ADD_DEF(PALF_READ_IO_COUNT_FROM_DISK, "palf read io count from disk",
 STAT_EVENT_ADD_DEF(PALF_READ_SIZE_FROM_DISK, "palf read size from disk", ObStatClassIds::CLOG, 80008, true, true, true)
 STAT_EVENT_ADD_DEF(PALF_READ_TIME_FROM_DISK, "palf read total time from disk", ObStatClassIds::CLOG, 80009, true, true, true)
 STAT_EVENT_ADD_DEF(PALF_HANDLE_RPC_REQUEST_COUNT, "palf handle rpc request count", ObStatClassIds::CLOG, 80010, true, true, true)
-STAT_EVENT_ADD_DEF(ARCHIVE_READ_LOG_SIZE, "archive read log size", ObStatClassIds::CLOG, 80011, true, true, true)
-STAT_EVENT_ADD_DEF(ARCHIVE_WRITE_LOG_SIZE, "archive write log size", ObStatClassIds::CLOG, 80012, true, true, true)
 STAT_EVENT_ADD_DEF(RESTORE_READ_LOG_SIZE, "restore read log size", ObStatClassIds::CLOG, 80013, true, true, true)
 STAT_EVENT_ADD_DEF(RESTORE_WRITE_LOG_SIZE, "restore write log size", ObStatClassIds::CLOG, 80014, true, true, true)
 STAT_EVENT_ADD_DEF(CLOG_TRANS_LOG_TOTAL_SIZE, "clog trans log total size", ObStatClassIds::CLOG, 80057, false, true, true)
@@ -375,8 +357,6 @@ STAT_EVENT_ADD_DEF(RS_RPC_FAIL_COUNT, "failed rpc process", ObStatClassIds::RS, 
 STAT_EVENT_ADD_DEF(RS_BALANCER_SUCC_COUNT, "balancer succ execute count", ObStatClassIds::RS, 110017, false, true, true)
 STAT_EVENT_ADD_DEF(RS_BALANCER_FAIL_COUNT, "balancer failed execute count", ObStatClassIds::RS, 110018, false, true, true)
 
-// 19xxxx is reserved for removed statistic events.
-
 // sys_time_model related (20xxxx)
 STAT_EVENT_ADD_DEF(SYS_TIME_MODEL_DB_TIME, "DB time", ObStatClassIds::SYS, 200001, false, true, true)
 STAT_EVENT_ADD_DEF(SYS_TIME_MODEL_DB_CPU, "DB CPU", ObStatClassIds::SYS, 200002, false, true, true)
@@ -392,61 +372,12 @@ STAT_EVENT_ADD_DEF(DIAGNOSTIC_INFO_ALLOC_FAIL_COUNT, "diagnostic info object all
 STAT_EVENT_ADD_DEF(DIAGNOSTIC_INFO_RETURN_COUNT, "diagnostic info object returned count", ObStatClassIds::SYS, 200017, false, true, true)
 STAT_EVENT_ADD_DEF(DIAGNOSTIC_INFO_RETURN_FAIL_COUNT, "diagnostic info object return failure count", ObStatClassIds::SYS, 200018, false, true, true)
 
-// wr and ash related  (2100xx)
-STAT_EVENT_ADD_DEF(WR_SNAPSHOT_ELAPSE_TIME, "wr snapshot task elapse time", ObStatClassIds::WR, 210001, false, true, true)
-STAT_EVENT_ADD_DEF(WR_SNAPSHOT_CPU_TIME, "wr snapshot task cpu time", ObStatClassIds::WR, 210002, false, true, true)
-STAT_EVENT_ADD_DEF(WR_PURGE_ELAPSE_TIME, "wr purge task elapse time", ObStatClassIds::WR, 210003, false, true, true)
-STAT_EVENT_ADD_DEF(WR_PURGE_CPU_TIME, "wr purge task cpu time", ObStatClassIds::WR, 210004, false, true, true)
-STAT_EVENT_ADD_DEF(WR_SCHEDULAR_ELAPSE_TIME, "wr schedular elapse time", ObStatClassIds::WR, 210005, false, true, true)
-STAT_EVENT_ADD_DEF(WR_SCHEDULAR_CPU_TIME, "wr schedular cpu time", ObStatClassIds::WR, 210006, false, true, true)
-STAT_EVENT_ADD_DEF(WR_USER_SUBMIT_SNAPSHOT_ELAPSE_TIME, "wr user submit snapshot elapse time", ObStatClassIds::WR, 210007, false, true, true)
-STAT_EVENT_ADD_DEF(WR_USER_SUBMIT_SNAPSHOT_CPU_TIME, "wr user submit snapshot cpu time", ObStatClassIds::WR, 210008, false, true, true)
-STAT_EVENT_ADD_DEF(WR_COLLECTED_ASH_ROW_COUNT, "wr collected active session history row count", ObStatClassIds::WR, 210009, false, true, true)
-STAT_EVENT_ADD_DEF(ASH_SCHEDULAR_ELAPSE_TIME, "ash schedular elapse time", ObStatClassIds::WR, 210010, false, true, true)
-STAT_EVENT_ADD_DEF(ASH_SCHEDULAR_CPU_TIME, "ash schedular cpu time", ObStatClassIds::WR, 210011, false, true, true)
-
 // sqlstat relat (2200xx)
 STAT_EVENT_ADD_DEF(CCWAIT_TIME, "concurrency wait total time", ObStatClassIds::SYS, 220001, true, true, true)
 STAT_EVENT_ADD_DEF(USER_IO_WAIT_TIME, "user io wait total time", ObStatClassIds::SYS, 220002, true, true, true)
 STAT_EVENT_ADD_DEF(APWAIT_TIME, "application wait total time", ObStatClassIds::SYS, 220003, true, true, true)
 STAT_EVENT_ADD_DEF(SCHEDULE_WAIT_TIME, "schedule wait total time", ObStatClassIds::SYS, 220004, true, true, true)
 STAT_EVENT_ADD_DEF(NETWORK_WAIT_TIME, "network wait total time", ObStatClassIds::SYS, 220005, true, true, true)
-
-// shared-storage local_cache(2400xx)
-STAT_EVENT_ADD_DEF(SS_MICRO_CACHE_HIT, "ss_micro_cache hit count", ObStatClassIds::CACHE, 240001, true, true, true)
-STAT_EVENT_ADD_DEF(SS_MICRO_CACHE_MISS, "ss_micro_cache miss count", ObStatClassIds::CACHE, 240002, true, true, true)
-STAT_EVENT_ADD_DEF(SS_MICRO_CACHE_FAIL_ADD, "ss_micro_cache failure count of adding cache", ObStatClassIds::CACHE, 240003, true, true, true)
-STAT_EVENT_ADD_DEF(SS_MICRO_CACHE_FAIL_GET, "ss_micro_cache failure count of getting cache", ObStatClassIds::CACHE, 240004, true, true, true)
-STAT_EVENT_ADD_DEF(SS_MICRO_CACHE_MC_PREWARM, "ss_micro_cache major_compaction prewarm count", ObStatClassIds::CACHE, 240005, true, true, true)
-STAT_EVENT_ADD_DEF(SS_MICRO_CACHE_HA_PREWARM, "ss_micro_cache migrate prewarm count", ObStatClassIds::CACHE, 240006, true, true, true)
-STAT_EVENT_ADD_DEF(SS_MICRO_CACHE_REPLICA_PREWARM, "ss_micro_cache replica prewarm count", ObStatClassIds::CACHE, 240007, true, true, true)
-STAT_EVENT_ADD_DEF(SS_MICRO_CACHE_DDL_PREWARM, "ss_micro_cache ddl prewarm count", ObStatClassIds::CACHE, 240008, true, true, true)
-STAT_EVENT_ADD_DEF(SS_MICRO_CACHE_HOLD_COUNT, "ss_micro_cache total hold micro_block count", ObStatClassIds::CACHE, 240009, true, true, true)
-STAT_EVENT_ADD_DEF(SS_MICRO_CACHE_HOLD_SIZE, "ss_micro_cache total hold micro_block size", ObStatClassIds::CACHE, 240010, true, true, true)
-STAT_EVENT_ADD_DEF(SS_MICRO_CACHE_HIT_BYTES, "ss_micro_cache hit total bytes", ObStatClassIds::CACHE, 240011, true, true, true)
-STAT_EVENT_ADD_DEF(SS_MICRO_CACHE_MISS_BYTES, "ss_micro_cache miss total bytes", ObStatClassIds::CACHE, 240012, true, true, true)
-STAT_EVENT_ADD_DEF(SS_MICRO_CACHE_MC_PREWARM_BYTES, "ss_micro_cache major_compaction prewarm bytes", ObStatClassIds::CACHE, 240013, true, true, true)
-STAT_EVENT_ADD_DEF(SS_MICRO_CACHE_HA_PREWARM_BYTES, "ss_micro_cache migrate prewarm bytes", ObStatClassIds::CACHE, 240014, true, true, true)
-STAT_EVENT_ADD_DEF(SS_MICRO_CACHE_REPLICA_PREWARM_BYTES, "ss_micro_cache replica prewarm bytes", ObStatClassIds::CACHE, 240015, true, true, true)
-STAT_EVENT_ADD_DEF(SS_MICRO_CACHE_DDL_PREWARM_BYTES, "ss_micro_cache ddl prewarm bytes", ObStatClassIds::CACHE, 240016, true, true, true)
-STAT_EVENT_ADD_DEF(SS_TMPFILE_CACHE_HIT, "ss_tmpfile_cache hit count", ObStatClassIds::CACHE, 240017, true, true, true)
-STAT_EVENT_ADD_DEF(SS_TMPFILE_CACHE_MISS, "ss_tmpfile_cache miss count", ObStatClassIds::CACHE, 240018, true, true, true)
-STAT_EVENT_ADD_DEF(SS_MICRO_CACHE_USED_DISK_SIZE, "ss_micro_cache total used disk size", ObStatClassIds::CACHE, 240019, true, true, true)
-STAT_EVENT_ADD_DEF(SS_MAJOR_MACRO_CACHE_HIT, "ss_major_macro_cache hit count", ObStatClassIds::CACHE, 240020, true, true, true)
-STAT_EVENT_ADD_DEF(SS_MAJOR_MACRO_CACHE_MISS, "ss_major_macro_cache miss count", ObStatClassIds::CACHE, 240021, true, true, true)
-
-STAT_EVENT_ADD_DEF(OBJECT_STORAGE_IO_HEAD_COUNT, "object storage io head count", ObStatClassIds::STORAGE, 240022, true, true, true)
-STAT_EVENT_ADD_DEF(OBJECT_STORAGE_IO_HEAD_FAIL_COUNT, "object storage io head fail count", ObStatClassIds::STORAGE, 240023, true, true, true)
-STAT_EVENT_ADD_DEF(SS_MICRO_CACHE_COMMON_ADD_COUNT, "ss_micro_cache add micro_block count of common_io", ObStatClassIds::CACHE, 240024, true, true, true)
-STAT_EVENT_ADD_DEF(SS_MICRO_CACHE_COMMON_GET_COUNT, "ss_micro_cache get micro_block count of common_io", ObStatClassIds::CACHE, 240025, true, true, true)
-STAT_EVENT_ADD_DEF(SS_MICRO_CACHE_NEW_ADD_COUNT, "ss_micro_cache total new added micro_block count", ObStatClassIds::CACHE, 240026, true, true, true)
-STAT_EVENT_ADD_DEF(SS_MICRO_CACHE_COMMON_NEW_ADD_COUNT, "ss_micro_cache new added micro_block count of common_io", ObStatClassIds::CACHE, 240027, true, true, true)
-STAT_EVENT_ADD_DEF(SS_MICRO_CACHE_EVICT_COUNT, "ss_micro_cache total evicted micro_block count", ObStatClassIds::CACHE, 240028, true, true, true)
-STAT_EVENT_ADD_DEF(SS_MICRO_CACHE_DELETE_COUNT, "ss_micro_cache total deleted micro_block count", ObStatClassIds::CACHE, 240029, true, true, true)
-STAT_EVENT_ADD_DEF(SS_MICRO_CACHE_REORGAN_FREE_BLK_COUNT, "ss_micro_cache released phy_block count by reorgan_task", ObStatClassIds::CACHE, 240030, true, true, true)
-
-STAT_EVENT_ADD_DEF(SS_MICRO_CACHE_STORAGE_CACHE_POLICY_PREWARM, "ss_micro_cache storage_cache_policy prewarm count", ObStatClassIds::CACHE, 240031, true, true, true)
-STAT_EVENT_ADD_DEF(SS_MICRO_CACHE_STORAGE_CACHE_POLICY_PREWARM_BYTES, "ss_micro_cache storage_cache_policy prewarm bytes", ObStatClassIds::CACHE, 240032, true, true, true)
 
 //end
 STAT_EVENT_ADD_DEF(STAT_EVENT_ADD_END, "event add end", ObStatClassIds::DEBUG, 1, false, false, true)
@@ -493,8 +424,6 @@ STAT_EVENT_SET_DEF(SYSTEM_MEMORY, "effective system memory", ObStatClassIds::RES
 STAT_EVENT_SET_DEF(MAX_SESSION_NUM, "max session num", ObStatClassIds::RESOURCE, 140017, false, true, true)
 STAT_EVENT_SET_DEF(KV_CACHE_HOLD, "kvcache hold", ObStatClassIds::RESOURCE, 140018, false, true, true)
 STAT_EVENT_SET_DEF(UNMANAGED_MEMORY_SIZE, "unmanaged memory size", ObStatClassIds::RESOURCE, 140019, false, true, true) // FARM COMPAT WHITELIST
-STAT_EVENT_SET_DEF(HIDDEN_SYS_DATA_DISK_SIZE, "hidden sys data disk size", ObStatClassIds::RESOURCE, 140020, false, true, true)
-
 //CLOG
 
 // DEBUG
@@ -532,31 +461,9 @@ STAT_EVENT_SET_DEF(OBSERVER_PARTITION_TABLE_UPATER_CORE_QUEUE_SIZE, "observer pa
 // rootservice
 
 // das
-STAT_EVENT_SET_DEF(DAS_PARALLEL_TENANT_MEMORY_USAGE, "the memory use of all DAS parallel task", ObStatClassIds::SQL, 230001, false, true, true)
-STAT_EVENT_SET_DEF(DAS_PARALLEL_TENANT_TASK_CNT, "the count of DAS parallel task", ObStatClassIds::SQL, 230002, false, true, true)
+STAT_EVENT_SET_DEF(DAS_PARALLEL_MEMORY_USAGE, "the memory use of all DAS parallel tasks", ObStatClassIds::SQL, 230001, false, true, true)
+STAT_EVENT_SET_DEF(DAS_PARALLEL_TASK_CNT, "the count of DAS parallel tasks", ObStatClassIds::SQL, 230002, false, true, true)
 
-// shared-storage local_cache(start from 245001)
-STAT_EVENT_SET_DEF(SS_MICRO_CACHE_USED_MEM_SIZE, "ss_micro_cache micro_meta used memory size", ObStatClassIds::CACHE, 245001, false, true, true)
-STAT_EVENT_SET_DEF(SS_MICRO_CACHE_ALLOC_DISK_SIZE, "ss_micro_cache total alloc disk size", ObStatClassIds::CACHE, 245002, false, true, true)
-STAT_EVENT_SET_DEF(SS_LOCAL_CACHE_TMPFILE_ALLOC_SIZE, "ss_local_cache tmpfile alloc disk size", ObStatClassIds::CACHE, 245003, false, true, true)
-STAT_EVENT_SET_DEF(SS_LOCAL_CACHE_META_ALLOC_SIZE, "ss_local_cache meta file alloc disk size", ObStatClassIds::CACHE, 245004, false, true, true)
-STAT_EVENT_SET_DEF(SS_LOCAL_CACHE_INCREMENTAL_DATA_ALLOC_SIZE, "ss_local_cache incremental data alloc disk size", ObStatClassIds::CACHE, 245005, false, true, true)
-STAT_EVENT_SET_DEF(SS_LOCAL_CACHE_TMPFILE_USED_DISK_SIZE_W, "ss_local_cache tmpfile write cache used disk size", ObStatClassIds::CACHE, 245006, false, true, true)
-STAT_EVENT_SET_DEF(SS_LOCAL_CACHE_TMPFILE_USED_DISK_SIZE_R, "ss_local_cache tmpfile read cache used disk size", ObStatClassIds::CACHE, 245007, false, true, true)
-STAT_EVENT_SET_DEF(SS_LOCAL_CACHE_META_USED_DISK_SIZE, "ss_local_cache meta file used disk size", ObStatClassIds::CACHE, 245008, false, true, true)
-STAT_EVENT_SET_DEF(SS_LOCAL_CACHE_INCREMENTAL_DATA_USED_DISK_SIZE, "ss_local_cache incremental data used disk size", ObStatClassIds::CACHE, 245009, false, true, true)
-STAT_EVENT_SET_DEF(SS_LOCAL_CACHE_MAJOR_MACRO_USED_DISK_SIZE, "ss_local_cache major macro used disk size", ObStatClassIds::CACHE, 245010, false, true, true)
-STAT_EVENT_SET_DEF(SS_MICRO_CACHE_HOT_MICRO_LACK_COUNT, "ss_micro_cache hot micro_block lack count", ObStatClassIds::CACHE, 245011, false, true, true)
-STAT_EVENT_SET_DEF(SS_MICRO_CACHE_COMMON_READ_IOPS, "ss_micro_cache read iops of common_io", ObStatClassIds::CACHE, 245012, false, true, true)
-STAT_EVENT_SET_DEF(SS_MICRO_CACHE_COMMON_READ_THROUGHPUT, "ss_micro_cache read throughput of common_io", ObStatClassIds::CACHE, 245013, false, true, true)
-STAT_EVENT_SET_DEF(SS_MICRO_CACHE_COMMON_WRITE_IOPS, "ss_micro_cache write iops of common_io", ObStatClassIds::CACHE, 245014, false, true, true)
-STAT_EVENT_SET_DEF(SS_MICRO_CACHE_COMMON_WRITE_THROUGHPUT, "ss_micro_cache write throughput of common_io", ObStatClassIds::CACHE, 245015, false, true, true)
-STAT_EVENT_SET_DEF(SS_MICRO_CACHE_PREWARM_READ_IOPS, "ss_micro_cache read iops of prewarm_io", ObStatClassIds::CACHE, 245016, false, true, true)
-STAT_EVENT_SET_DEF(SS_MICRO_CACHE_PREWARM_READ_THROUGHPUT, "ss_micro_cache read throughput of prewarm_io", ObStatClassIds::CACHE, 245017, false, true, true)
-STAT_EVENT_SET_DEF(SS_MICRO_CACHE_PREWARM_WRITE_IOPS, "ss_micro_cache write iops of prewarm_io", ObStatClassIds::CACHE, 245018, false, true, true)
-STAT_EVENT_SET_DEF(SS_MICRO_CACHE_PREWARM_WRITE_THROUGHPUT, "ss_micro_cache write throughput of prewarm_io", ObStatClassIds::CACHE, 245019, false, true, true)
-STAT_EVENT_SET_DEF(SS_MICRO_CACHE_VALID_CNT, "ss_micro_cache valid micro_block count", ObStatClassIds::CACHE, 245020, false, true, true)
-STAT_EVENT_SET_DEF(SS_MICRO_CACHE_VALID_SIZE, "ss_micro_cache valid micro_block size", ObStatClassIds::CACHE, 245021, false, true, true)
 // END
 STAT_EVENT_SET_DEF(STAT_EVENT_SET_END, "event set end", ObStatClassIds::DEBUG, 300000, false, false, true)
 #endif

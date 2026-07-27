@@ -2017,7 +2017,7 @@ int ObSelectLogPlan::get_distribute_distinct_method(ObLogicalOperator *top,
     distinct_dist_methods |= DistAlgo::DIST_HASH_HASH_LOCAL;
     if (!get_optimizer_context().is_partition_wise_plan_enabled()) {
       distinct_dist_methods &= ~DistAlgo::DIST_PARTITION_WISE;
-      OPT_TRACE("ignore partition wise dist distinct by tenant config");
+      OPT_TRACE("ignore partition-wise distributed distinct by runtime config");
     }
     if (!distinct_helper.allow_basic()) {
       distinct_dist_methods &= ~DistAlgo::DIST_BASIC_METHOD;
@@ -2789,8 +2789,7 @@ int ObSelectLogPlan::get_distibute_union_all_method(const ObIArray<ObLogicalOper
   if (OB_SUCC(ret) && (set_dist_methods & DistAlgo::DIST_BASIC_METHOD)) {
     bool is_basic = false;
     OPT_TRACE("check match basic method");
-    if (OB_FAIL(ObOptimizerUtil::check_basic_sharding_info(get_optimizer_context().get_local_server_addr(),
-                                                           child_ops,
+    if (OB_FAIL(ObOptimizerUtil::check_basic_sharding_info(child_ops,
                                                            is_basic))) {
       LOG_WARN("failed to check basic sharding info", K(ret));
     } else if (!is_basic) {
@@ -3334,8 +3333,7 @@ int ObSelectLogPlan::get_recursive_union_all_distribute_method(ObLogicalOperator
   } else if (OB_FAIL(child_ops.push_back(left_child)) ||
              OB_FAIL(child_ops.push_back(right_child))) {
     LOG_WARN("failed to push back operator", K(ret));
-  } else if (OB_FAIL(ObOptimizerUtil::check_basic_sharding_info(get_optimizer_context().get_local_server_addr(),
-                                                                child_ops,
+  } else if (OB_FAIL(ObOptimizerUtil::check_basic_sharding_info(child_ops,
                                                                 is_basic))) {
     LOG_WARN("failed to check basic sharding info", K(ret));
   } else if (is_basic) {
@@ -3618,7 +3616,7 @@ int ObSelectLogPlan::get_distributed_set_methods(const EqualSets &equal_sets,
       set_dist_methods &= ~DistAlgo::DIST_PARTITION_WISE;
       set_dist_methods &= ~DistAlgo::DIST_PARTITION_NONE;
       set_dist_methods &= ~DistAlgo::DIST_NONE_PARTITION;
-      OPT_TRACE("tenant config disable partition wise plan");
+      OPT_TRACE("runtime config disables partition-wise plan");
     }
   } else {
     OPT_TRACE("use dist method with hint");
@@ -3682,8 +3680,7 @@ int ObSelectLogPlan::get_distributed_set_methods(const EqualSets &equal_sets,
   if (OB_SUCC(ret) && (set_dist_methods & DistAlgo::DIST_BASIC_METHOD)) {
     OPT_TRACE("check basic method");
     bool is_basic = false;
-    ObAddr &local_addr = get_optimizer_context().get_local_server_addr();
-    if (OB_FAIL(ObOptimizerUtil::check_basic_sharding_info(local_addr, child_ops, is_basic))) {
+    if (OB_FAIL(ObOptimizerUtil::check_basic_sharding_info(child_ops, is_basic))) {
       LOG_WARN("failed to check basic sharding info", K(ret));
     } else if (is_basic) {
       set_dist_methods = DistAlgo::DIST_BASIC_METHOD;
@@ -5377,16 +5374,6 @@ int ObSelectLogPlan::allocate_plan_top()
           LOG_TRACE("succeed to allocate distinct operator",
               K(candidates_.candidate_plans_.count()));
         }
-      }
-    }
-
-    // step. allocate 'sequence' if needed
-    if (OB_SUCC(ret) && select_stmt->has_sequence()) {
-      if (OB_FAIL(candi_allocate_sequence())) {
-        LOG_WARN("failed to allocate sequence operator", K(ret));
-      } else {
-        LOG_TRACE("succeed to allocate sequence operator",
-            K(candidates_.candidate_plans_.count()));
       }
     }
 
@@ -8574,7 +8561,7 @@ int ObSelectLogPlan::if_index_back_plan_need_late_materialization(ObLogSort *chi
     LOG_WARN("unexpect null op", K(ret));
   } else if (!table_scan->is_index_scan() ||
              !table_scan->get_index_back() ||
-             (!table_scan->is_local() && !table_scan->is_remote())) {
+             !table_scan->is_local()) {
     need = false;
   } else if (OB_FAIL(get_rowkey_exprs(table_scan->get_table_id(),
                                       table_scan->get_ref_table_id(),

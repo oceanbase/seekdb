@@ -60,7 +60,6 @@ int ObVariableSetResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
   ObVariableSetStmt *variable_set_stmt = NULL;
-  const bool check_var_name_length = true;
   if (OB_UNLIKELY(T_VARIABLE_SET != parse_tree.type_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("parse_tree.type_ must be T_VARIABLE_SET", K(ret), K(parse_tree.type_));
@@ -187,11 +186,9 @@ int ObVariableSetResolver::resolve(const ParseNode &parse_tree)
               }
             }
           } else {
-            if (check_var_name_length) {
-              if (OB_FAIL(ObResolverUtils::check_user_variable_length(var_node.variable_name_.ptr(),
-                                                                      var_node.variable_name_.length()))) {
-                LOG_WARN("check user variable length fail", K(ret));
-              }
+            if (OB_FAIL(ObResolverUtils::check_user_variable_length(var_node.variable_name_.ptr(),
+                                                                    var_node.variable_name_.length()))) {
+              LOG_WARN("check user variable length fail", K(ret));
             }
             if (OB_SUCC(ret)) {
               // use WARN_ON_FAIL cast_mode if set user_variable

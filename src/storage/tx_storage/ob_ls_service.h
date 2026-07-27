@@ -34,22 +34,20 @@ class ObSuperBlockMetaEntry;
 namespace storage
 {
 class ObLS;
-struct DiagnoseInfo;
 struct ObLSMeta;
 
-// Maintain the tenant's single log stream.
-// Support log stream meta persistent and checkpoint
+// Maintain the single local log stream and its persistent metadata/checkpoint.
 class ObLSService : public ObIResourceLimitCalculatorHandler
 {
-	  static const int64_t DEFAULT_LOCK_TIMEOUT = 60_s;
-	  static const int64_t SMALL_TENANT_MEMORY_LIMIT = 4LL * 1024 * 1024 * 1024; // 4G
+  static const int64_t DEFAULT_LOCK_TIMEOUT = 60_s;
+  static const int64_t BASE_RUNTIME_MEMORY_LIMIT = 4LL * 1024 * 1024 * 1024; // 4G
 public:
   int64_t break_point = -1; // just for test
 public:
   ObLSService();
   virtual ~ObLSService();
 
-  static int mtl_init(ObLSService* &ls_service);
+  static int server_module_init(ObLSService* &ls_service);
   int init();
   int start();
   int stop();
@@ -63,10 +61,11 @@ public:
   virtual int cal_min_phy_resource_needed(const int64_t num, share::ObMinPhyResourceResult &min_phy_res) override;
 public:
   // create a LS
-  int create_ls();
+  int create_ls(const share::ObServerRole &server_role = share::PRIMARY_SERVER_ROLE);
+  int create_ls_for_restore();
 
   // create a LS for replay or update LS's meta
-  // @param [in] ls_epoch, the epoch increases monotonically in tenant scope when an ls is created
+  // @param [in] ls_epoch, the epoch increases monotonically in database scope when an LS is created
   // @param [in] ls_meta, all the parameters that is needed to create a LS for replay
   int replay_create_ls(const int64_t ls_epoch, const ObLSMeta &ls_meta);
   // replay create ls commit slog.
@@ -79,7 +78,6 @@ public:
 
   // get the only log stream in seekdb.
   int get_ls(ObLS *&ls);
-  int diagnose(DiagnoseInfo &info);
 
   // remove the ls that is creating and write abort slog.
   int gc_ls_after_replay_slog();
@@ -115,8 +113,18 @@ private:
       CREATE_STATE_FINISH = 6
   };
 
-  int create_ls_();
-  int inner_create_ls_(const share::SCN &create_scn, ObLS *&ls);
+  struct ObCreateLSCommonArg
+  {
+    share::ObServerRole server_role_;
+    ObRestoreStatus restore_status_;
+    share::SCN create_scn_;
+    bool need_create_inner_tablet_;
+  };
+
+  int create_ls_(const ObCreateLSCommonArg &arg);
+  int inner_create_ls_(const ObRestoreStatus &restore_status,
+                       const share::SCN &create_scn,
+                       ObLS *&ls);
   int publish_ls_(ObLS *ls);
   void free_ls_(ObLS *ls);
   void remove_ls_(ObLS *ls, const bool remove_from_disk, const bool write_slog);
@@ -124,7 +132,7 @@ private:
   int replay_remove_ls_();
   int replay_create_ls_(const int64_t ls_epoch, const ObLSMeta &ls_meta);
   int replay_update_ls_(const ObLSMeta &ls_meta);
-  int post_create_ls_(ObLS *ls);
+  int post_create_ls_(const bool is_restore, ObLS *ls);
   void del_ls_after_create_ls_failed_(ObLSCreateState& ls_create_state, ObLS *ls);
 
   // for resource limit calculator
@@ -150,7 +158,7 @@ namespace oceanbase
 {
 namespace storage
 {
-int get_ls_readable_scn(share::SCN &readable_scn);
+int get_sys_ls_readable_scn(share::SCN &readable_scn);
 }
 }
 

@@ -64,6 +64,7 @@ protected:
   ObMicroBlockDesMeta des_meta_;
   ObMicroBlockData block_data_;
   ObMetaDiskAddr block_addr_;
+  ObMacroBlockHandle block_handle_;
   ObArenaAllocator allocator_;
 };
 
@@ -74,16 +75,15 @@ TestRootBlockInfo::TestRootBlockInfo()
     des_meta_(),
     block_data_(),
     block_addr_(),
+    block_handle_(),
     allocator_()
 {
 }
 
 void TestRootBlockInfo::SetUp()
 {
-  oceanbase::ObClusterVersion::get_instance().update_data_version(DATA_CURRENT_VERSION);
   TestDataFilePrepare::SetUp();
   prepare_tablet_read_info();
-  des_meta_.encrypt_id_ = ObCipherOpMode::ob_invalid_mode;
   des_meta_.compressor_type_ = ObCompressorType::NONE_COMPRESSOR;
   des_meta_.row_store_type_ = ObRowStoreType::ENCODING_ROW_STORE;
   ASSERT_TRUE(!root_info_.is_valid());
@@ -95,7 +95,8 @@ void TestRootBlockInfo::SetUp()
 void TestRootBlockInfo::TearDown()
 {
   root_info_.reset();
-  ASSERT_TRUE(!root_info_.is_valid());
+  block_handle_.reset();
+  EXPECT_TRUE(!root_info_.is_valid());
   table_read_info_.reset();
   TestDataFilePrepare::TearDown();
 }
@@ -155,7 +156,6 @@ void TestRootBlockInfo::prepare_block_root()
   block_data_.size_ = size;
   block_data_.type_ = ObMicroBlockData::INDEX_BLOCK;
   ObMacroBlockWriteInfo write_info;
-  ObMacroBlockHandle handle;
   const int64_t buf_size = block_size;
   char *io_buf = static_cast<char *>(allocator_.alloc(buf_size));
   ASSERT_TRUE(nullptr != io_buf);
@@ -165,8 +165,12 @@ void TestRootBlockInfo::prepare_block_root()
   write_info.size_ = buf_size;
   write_info.io_timeout_ms_ = DEFAULT_IO_WAIT_TIME_MS;
 
-  ASSERT_EQ(OB_SUCCESS, ObBlockManager::write_block(write_info, handle));
-  block_addr_.second_id_ = handle.get_macro_id().second_id();
+  ASSERT_EQ(OB_SUCCESS, ObBlockManager::write_block(write_info, block_handle_));
+  ASSERT_EQ(OB_SUCCESS,
+            block_addr_.set_block_addr(block_handle_.get_macro_id(),
+                                       block_addr_.offset(),
+                                       block_addr_.size(),
+                                       ObMetaDiskAddr::BLOCK));
   ObRowStoreType row_store_type = ObRowStoreType::ENCODING_ROW_STORE;
   ASSERT_EQ(OB_SUCCESS, root_info_.init_root_block_info(allocator_, block_addr_, block_data_, row_store_type));
   ASSERT_TRUE(root_info_.is_valid());
@@ -233,7 +237,7 @@ void TestSSTableMacroInfo::prepare_create_sstable_param()
   param_.root_block_addr_.set_none_addr();
   param_.data_block_macro_meta_addr_.set_none_addr();
   param_.root_row_store_type_ = ObRowStoreType::FLAT_ROW_STORE;
-  param_.latest_row_store_type_ = ObRowStoreType::DUMMY_ROW_STORE;
+  param_.latest_row_store_type_ = ObRowStoreType::FLAT_ROW_STORE;
   param_.data_index_tree_height_ = 0;
   param_.index_blocks_cnt_ = 0;
   param_.data_blocks_cnt_ = 0;
@@ -247,8 +251,6 @@ void TestSSTableMacroInfo::prepare_create_sstable_param()
   param_.tx_data_recycle_scn_.set_min();
   param_.original_size_ = 0;
   param_.compressor_type_ = ObCompressorType::NONE_COMPRESSOR;
-  param_.encrypt_id_ = 0;
-  param_.master_key_id_ = 0;
   param_.recycle_version_ = 0;
   param_.root_macro_seq_ = 0;
   param_.row_count_ = 0;
@@ -365,8 +367,6 @@ void TestSSTableMeta::prepare_create_sstable_param()
   param_.tx_data_recycle_scn_.set_min();
   param_.original_size_ = 0;
   param_.compressor_type_ = ObCompressorType::NONE_COMPRESSOR;
-  param_.encrypt_id_ = 0;
-  param_.master_key_id_ = 0;
   param_.recycle_version_ = 0;
   param_.root_macro_seq_ = 0;
   param_.row_count_ = 0;
@@ -376,58 +376,36 @@ void TestSSTableMeta::prepare_create_sstable_param()
   ASSERT_EQ(OB_SUCCESS, ObSSTableMergeRes::fill_column_checksum_for_empty_major(param_.column_cnt_, param_.column_checksums_));
 }
 
-class TestMigrationSSTableParam : public TestSSTableMeta
-{
-public:
-  TestMigrationSSTableParam();
-  virtual ~TestMigrationSSTableParam() = default;
-  virtual void SetUp() override;
-  virtual void TearDown() override;
-private:
-  storage::ObStorageSchema storage_schema_;
-  ObSSTableMeta sstable_meta_;
-  storage::ObITable::TableKey table_key_;
-};
-
-TestMigrationSSTableParam::TestMigrationSSTableParam()
-  : storage_schema_(),
-    sstable_meta_(),
-    table_key_()
-{
-}
-
-void TestMigrationSSTableParam::SetUp()
-{
-  TestSSTableMeta::SetUp();
-  ASSERT_EQ(OB_SUCCESS, storage_schema_.init(allocator_, table_schema_));
-  ASSERT_TRUE(!sstable_meta_.is_valid());
-  sstable_meta_.reset();
-  ASSERT_TRUE(!sstable_meta_.is_valid());
-  ASSERT_EQ(OB_SUCCESS, sstable_meta_.init(param_, allocator_));
-  ASSERT_TRUE(sstable_meta_.is_valid());
-  ASSERT_TRUE(sstable_meta_.data_root_info_.is_valid());
-  ASSERT_TRUE(sstable_meta_.macro_info_.is_valid());
-  ASSERT_TRUE(sstable_meta_.get_col_checksum_cnt() > 0);
-  table_key_.table_type_ = ObITable::TableType::MAJOR_SSTABLE;
-  table_key_.tablet_id_ = 1101;
-  table_key_.version_range_.base_version_ = 0;
-  table_key_.version_range_.snapshot_version_ = 11;
-  ASSERT_TRUE(table_key_.is_valid());
-}
-
-void TestMigrationSSTableParam::TearDown()
-{
-  table_key_.reset();
-  sstable_meta_.reset();
-  storage_schema_.reset();
-  TestSSTableMeta::TearDown();
-}
 
 TEST_F(TestRootBlockInfo, test_load_and_transform_root_block)
 {
   ASSERT_TRUE(root_info_.get_addr().is_block());
   ASSERT_EQ(OB_SUCCESS, root_info_.load_root_block_data(allocator_, des_meta_));
   ASSERT_EQ(OB_SUCCESS, root_info_.transform_root_block_extra_buf(allocator_));
+}
+
+TEST_F(TestRootBlockInfo, reject_incomplete_memory_root_block_header)
+{
+  ObMicroBlockHeader *micro_header =
+      const_cast<ObMicroBlockHeader *>(block_data_.get_micro_header());
+  ASSERT_NE(nullptr, micro_header);
+  micro_header->original_length_ = 0;
+  micro_header->data_zlength_ = 0;
+  micro_header->data_length_ = 0;
+  micro_header->set_header_checksum();
+
+  ObMetaDiskAddr memory_addr;
+  ASSERT_EQ(OB_SUCCESS, memory_addr.set_mem_addr(0, block_data_.get_buf_size()));
+  ObMicroBlockData incomplete_block(block_data_.get_buf(), block_data_.get_buf_size());
+  incomplete_block.type_ = ObMicroBlockData::INDEX_BLOCK;
+  ObRootBlockInfo incomplete_root_info;
+  ASSERT_EQ(OB_SUCCESS,
+            incomplete_root_info.init_root_block_info(allocator_,
+                                                      memory_addr,
+                                                      incomplete_block,
+                                                      ObRowStoreType::ENCODING_ROW_STORE));
+  ASSERT_EQ(OB_VERSION_NOT_MATCH,
+            incomplete_root_info.transform_root_block_extra_buf(allocator_));
 }
 
 TEST_F(TestRootBlockInfo, test_serialize_and_deserialize)
@@ -563,8 +541,8 @@ TEST_F(TestSSTableMacroInfo, test_huge_block_ids)
 
   ObTabletID tablet_id(200001); // fake
   ObSSTableLinkBlockWriteInfo link_write_info(1000/*macro_start_seq*/);
-  ObSharedObjectsWriteCtx linked_block_write_ctx;
-  ObSArray<ObSharedObjectsWriteCtx> total_ctxs;
+  ObObjectsWriteCtx linked_block_write_ctx;
+  ObSArray<ObObjectsWriteCtx> total_ctxs;
   ASSERT_EQ(OB_SUCCESS, sstable_macro_info.persist_block_ids(tablet_id,
                                                               0, // snapshot_version
                                                               allocator_,
@@ -622,8 +600,8 @@ TEST_F(TestSSTableMeta, test_common_sstable_persister_linked_block)
   ObTabletID tablet_id(99999);
   blocksstable::ObSSTable sstable;
   ObSSTableMetaHandle meta_handle;
-  ObSArray<ObSharedObjectsWriteCtx> total_write_ctxs;
-  ObSharedObjectsWriteCtx linked_block_write_ctx;
+  ObSArray<ObObjectsWriteCtx> total_write_ctxs;
+  ObObjectsWriteCtx linked_block_write_ctx;
   int64_t macro_start_seq = 100;
   int64_t snapshot_version = 0;
   int64_t block_cnt_threshold = blocksstable::ObSSTableMacroInfo::BLOCK_CNT_THRESHOLD;
@@ -706,8 +684,8 @@ TEST_F(TestSSTableMeta, test_huge_sstable_persister_linked_block)
   ObTabletID tablet_id(99999);
   blocksstable::ObSSTable sstable;
   ObSSTableMetaHandle meta_handle;
-  ObSArray<ObSharedObjectsWriteCtx> total_write_ctxs;
-  ObSharedObjectsWriteCtx linked_block_write_ctx;
+  ObSArray<ObObjectsWriteCtx> total_write_ctxs;
+  ObObjectsWriteCtx linked_block_write_ctx;
   int64_t macro_start_seq = 100;
   int64_t snapshot_version = 0;
   int64_t block_cnt_threshold = blocksstable::ObSSTableMacroInfo::BLOCK_CNT_THRESHOLD;

@@ -101,7 +101,7 @@ class ObKVGlobalCache : public lib::ObICacheWasher
 public:
   static const int64_t DEFAULT_ONCE_BATCH_GET_BUCKET_NUM = 10000;
   static ObKVGlobalCache &get_instance();
-  int init(ObITenantMemLimitGetter *mem_limit_getter,
+  int init(ObIServerMemLimitGetter *mem_limit_getter,
            const int64_t bucket_num = DEFAULT_BUCKET_NUM,
            const int64_t max_cache_size = DEFAULT_MAX_CACHE_SIZE,
            const int64_t block_size = lib::ACHUNK_SIZE,
@@ -115,7 +115,7 @@ public:
   int get_memblock_info(ObIArray<ObKVCacheStoreMemblockInfo> &memblock_infos);
   void print_all_cache_info();
   virtual int erase_cache() override;
-  int sync_flush_tenant();
+  int sync_flush();
   int erase_cache(const char *cache_name);
 
   int get_washable_size(int64_t &washable_size);
@@ -233,7 +233,7 @@ private:
 private:
   bool inited_;
   // mem limit getter
-  ObITenantMemLimitGetter *mem_limit_getter_;
+  ObIServerMemLimitGetter *mem_limit_getter_;
   // map
   ObKVCacheMap map_;
   // store

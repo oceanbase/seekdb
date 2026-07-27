@@ -31,10 +31,10 @@ namespace lib
 void set_hard_memory_limit(int64_t bytes)
 {
   
-  // set tenant allocator hard memory limit
+  // Set the allocator hard memory limit.
   ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
   if (!OB_ISNULL(allocator)) {
-    allocator->set_tenant_hard_limit(bytes);
+    allocator->set_allocator_hard_limit(bytes);
   }
 
   // set chunk manager hard memory limit
@@ -49,10 +49,10 @@ int64_t get_hard_memory_limit()
 void set_memory_limit(int64_t bytes)
 {
   
-  // set tenant allocator memory limit
+  // Set the allocator memory limit.
   ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
   if (!OB_ISNULL(allocator)) {
-    allocator->set_tenant_limit(bytes);
+    allocator->set_allocator_limit(bytes);
   }
 
   // set chunk manager memory limit
@@ -81,78 +81,78 @@ int64_t get_memory_avail()
 
 int64_t get_hard_memory_remain()
 {
-  return get_hard_memory_limit() - get_memory_used() + get_tenant_cache_hold();
+  return get_hard_memory_limit() - get_memory_used() + get_allocator_cache_hold();
 }
 
-void set_tenant_memory_limit(int64_t bytes)
+void set_allocator_memory_limit(int64_t bytes)
 {
-  // set tenant allocator memory limit
+  // Set the allocator memory limit.
   ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
   if (!OB_ISNULL(allocator)) {
-    allocator->set_tenant_limit(bytes);
+    allocator->set_allocator_limit(bytes);
   }
 
   // set chunk manager memory limit
   CHUNK_MGR.set_limit(bytes);
 }
 
-int64_t get_tenant_memory_limit()
+int64_t get_allocator_memory_limit()
 {
   int64_t bytes = 0;
   ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
   if (!OB_ISNULL(allocator)) {
-    bytes = allocator->get_tenant_limit();
+    bytes = allocator->get_total_limit();
   }
   return bytes;
 }
 
-int64_t get_tenant_memory_hold()
+int64_t get_allocator_memory_hold()
 {
   int64_t bytes = 0;
   ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
   if (!OB_ISNULL(allocator)) {
-    bytes = allocator->get_tenant_hold();
+    bytes = allocator->get_total_hold();
   }
   return bytes;
 }
 
-int64_t get_tenant_memory_hold(const uint64_t ctx_id)
+int64_t get_allocator_memory_hold(const uint64_t ctx_id)
 {
   int64_t bytes = 0;
   ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
   if (!OB_ISNULL(allocator)) {
-    bytes = allocator->get_tenant_ctx_hold(ctx_id);
+    bytes = allocator->get_ctx_hold(ctx_id);
   }
   return bytes;
 }
 
-int64_t get_tenant_cache_hold()
+int64_t get_allocator_cache_hold()
 {
   int64_t bytes = 0;
   ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
   if (!OB_ISNULL(allocator)) {
-    bytes = allocator->get_tenant_cache_hold();
+    bytes = allocator->get_allocator_cache_hold();
   }
   return bytes;
 }
 
-int64_t get_tenant_memory_remain()
+int64_t get_allocator_memory_remain()
 {
   int64_t bytes = 0;
   ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
   if (!OB_ISNULL(allocator)) {
-    bytes = allocator->get_tenant_remain();
+    bytes = allocator->get_allocator_remain();
   }
   return bytes;
 }
 
-void get_tenant_label_memory(
+void get_label_memory(
   ObLabel &label,
   common::ObLabelItem &item)
 {
   ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
   if (!OB_ISNULL(allocator)) {
-    allocator->get_tenant_label_usage(label, item);
+    allocator->get_label_usage(label, item);
   }
 }
 
@@ -179,9 +179,9 @@ int set_ctx_limit(uint64_t ctx_id, const int64_t limit)
   int ret = OB_SUCCESS;
   ObMallocAllocator *alloc = ObMallocAllocator::get_instance();
   if (!OB_ISNULL(alloc)) {
-    auto ta = alloc->get_tenant_ctx_allocator(ctx_id);
-    if (OB_NOT_NULL(ta)) {
-      if (OB_FAIL(ta->set_limit(limit))) {
+    auto ctx_allocator = alloc->get_ctx_allocator(ctx_id);
+    if (OB_NOT_NULL(ctx_allocator)) {
+      if (OB_FAIL(ctx_allocator->set_limit(limit))) {
         LIB_LOG(WARN, "set_limit failed", K(ret), K(limit));
       }
     } else {
@@ -195,19 +195,19 @@ int set_ctx_limit(uint64_t ctx_id, const int64_t limit)
 
 int set_wa_limit(int64_t wa_pctg)
 {
-  const int64_t tenant_limit = get_tenant_memory_limit();
-  // For small tenants, work_area may only have dozens of M, which is unavailable. Give work_area a lower limit
+  const int64_t memory_limit = get_allocator_memory_limit();
+  // Keep a practical lower bound for the work area on small servers.
   const int64_t lower_limit = 150L << 20;
   const int64_t wa_limit =
-    std::min(static_cast<int64_t>(tenant_limit*0.8),
-             std::max(lower_limit, (tenant_limit/100) * wa_pctg));
+    std::min(static_cast<int64_t>(memory_limit * 0.8),
+             std::max(lower_limit, (memory_limit / 100) * wa_pctg));
   return set_ctx_limit(common::ObCtxIds::WORK_AREA, wa_limit);
 }
 
 int set_meta_obj_limit(int64_t meta_obj_pct_lmt)
 {
-  const int64_t tenant_limit = get_tenant_memory_limit();
-  const int64_t ctx_limit = 0 == meta_obj_pct_lmt ? tenant_limit : (tenant_limit / 100) * meta_obj_pct_lmt;
+  const int64_t memory_limit = get_allocator_memory_limit();
+  const int64_t ctx_limit = 0 == meta_obj_pct_lmt ? memory_limit : (memory_limit / 100) * meta_obj_pct_lmt;
 
   return set_ctx_limit(common::ObCtxIds::META_OBJ_CTX_ID, ctx_limit);
 }
@@ -235,9 +235,9 @@ int set_req_chunkmgr_parallel(uint64_t ctx_id, int32_t parallel)
   int ret = OB_SUCCESS;
   ObMallocAllocator *ma = ObMallocAllocator::get_instance();
   if (!OB_ISNULL(ma)) {
-    ObTenantCtxAllocatorGuard ta = ma->get_tenant_ctx_allocator(ctx_id);
-    if (OB_NOT_NULL(ta)) {
-      ta->set_req_chunkmgr_parallel(parallel);
+    ObCtxAllocatorGuard ctx_allocator = ma->get_ctx_allocator(ctx_id);
+    if (OB_NOT_NULL(ctx_allocator)) {
+      ctx_allocator->set_req_chunkmgr_parallel(parallel);
     } else {
       ret = OB_INVALID_ARGUMENT;
     }

@@ -86,7 +86,7 @@ public:
       DETECT_LOG(WARN, "get hash holder failed", PRINT_WRAPPER);
     } else if (OB_FAIL(user_key.set_user_key(trans_id))) {
       DETECT_LOG(WARN, "set user key failed", PRINT_WRAPPER);
-    } else if (OB_FAIL(resource.set_args(GCTX.self_addr(), user_key))) {
+    } else if (OB_FAIL(resource.set_args(user_key))) {
       DETECT_LOG(WARN, "resource set args failed", PRINT_WRAPPER);
     } else if (OB_FAIL(resource_array.push_back(resource))) {
       DETECT_LOG(WARN, "fail to push resource to array", PRINT_WRAPPER);
@@ -202,7 +202,7 @@ public:
   ObLockWaitMgr();
   ~ObLockWaitMgr();
 
-  static int mtl_init(ObLockWaitMgr *&lock_wait_mgr);
+  static int server_module_init(ObLockWaitMgr *&lock_wait_mgr);
   int init();
   bool is_inited() { return is_inited_; };
   int start();
@@ -228,13 +228,11 @@ public:
   // needed. And if so, it will push the request into the lock_wait_mgr based on
   // whether request encounters a conflict and needs to retry
   bool post_process(bool need_retry, bool& need_wait);
-  void delay_header_node_run_ts(const uint64_t hash);
   // setup the retry parameter on the request
   int post_lock(const int tmp_ret,
                 const ObTabletID &tablet_id,
                 const ObStoreRowkey &key,
                 const int64_t timeout,
-                const bool is_remote_sql,
                 const int64_t last_compact_cnt,
                 const int64_t total_trans_node_cnt,
                 const uint32_t sess_id,
@@ -245,7 +243,6 @@ public:
                 const ObTabletID &tablet_id,
                 const transaction::tablelock::ObLockID &lock_id,
                 const int64_t timeout,
-                const bool is_remote_sql,
                 const int64_t last_compact_cnt,
                 const int64_t total_trans_node_cnt,
                 const uint32_t sess_id,

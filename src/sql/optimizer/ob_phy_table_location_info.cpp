@@ -28,9 +28,7 @@ namespace sql
 
 ObOptTabletLoc::ObOptTabletLoc()
     : partition_id_(OB_INVALID_INDEX),
-      first_level_part_id_(OB_INVALID_INDEX),
-      tablet_id_(),
-      local_replica_()
+      first_level_part_id_(OB_INVALID_INDEX)
 {
 }
 
@@ -43,7 +41,8 @@ void ObOptTabletLoc::reset()
   partition_id_ = OB_INVALID_INDEX;
   first_level_part_id_ = OB_INVALID_INDEX;
   tablet_id_.reset();
-  local_replica_.reset();
+  ls_id_.reset();
+  server_.reset();
 }
 
 int ObOptTabletLoc::assign(const ObOptTabletLoc &other)
@@ -52,21 +51,29 @@ int ObOptTabletLoc::assign(const ObOptTabletLoc &other)
   tablet_id_ = other.tablet_id_;
   partition_id_ = other.partition_id_;
   first_level_part_id_ = other.first_level_part_id_;
-  local_replica_ = other.local_replica_;
+  ls_id_ = other.ls_id_;
+  server_ = other.server_;
   return ret;
 }
 
-int ObOptTabletLoc::assign_local_replica(const ObObjectID &partition_id,
-                                         const ObObjectID &first_level_part_id,
-                                         const common::ObTabletID &tablet_id,
-                                         const ObLSReplicaLocation &replica)
+int ObOptTabletLoc::assign_local_location(const ObObjectID &partition_id,
+                                          const ObObjectID &first_level_part_id,
+                                          const common::ObTabletID &tablet_id,
+                                          const ObLSLocation &ls_location,
+                                          const ObAddr &local_server)
 {
   int ret = OB_SUCCESS;
   reset();
   partition_id_ = partition_id;
   first_level_part_id_ = first_level_part_id;
   tablet_id_ = tablet_id;
-  local_replica_ = replica;
+  ls_id_ = ls_location.get_ls_id();
+  if (!ls_location.is_valid() || ls_location.get_server() != local_server) {
+    ret = OB_NO_READABLE_REPLICA;
+    LOG_WARN("local LS location is not readable", K(ret), K(local_server), K(ls_location));
+  } else {
+    server_ = ls_location.get_server();
+  }
   return ret;
 }
 
@@ -74,21 +81,17 @@ bool ObOptTabletLoc::is_valid() const
 {
   return OB_INVALID_INDEX != partition_id_
       && tablet_id_.is_valid()
-      && local_replica_.is_valid();
+      && ls_id_.is_valid()
+      && server_.is_valid();
 }
 
-int ObOptTabletLoc::get_strong_leader(ObLSReplicaLocation &replica_location, int64_t &replica_idx) const
+bool ObOptTabletLoc::operator==(const ObOptTabletLoc &other) const
 {
-  int ret = OB_SUCCESS;
-  replica_location = local_replica_;
-  replica_idx = 0;
-  return ret;
-}
-
-int ObOptTabletLoc::get_strong_leader(ObLSReplicaLocation &replica_location) const
-{
-  int64_t replica_idx = OB_INVALID_INDEX;
-  return get_strong_leader(replica_location, replica_idx);
+  return partition_id_ == other.partition_id_
+      && first_level_part_id_ == other.first_level_part_id_
+      && tablet_id_ == other.tablet_id_
+      && ls_id_ == other.ls_id_
+      && server_ == other.server_;
 }
 
 ObCandiTabletLoc::ObCandiTabletLoc()
@@ -110,26 +113,21 @@ int ObCandiTabletLoc::assign(const ObCandiTabletLoc &other)
   return ret;
 }
 
-bool ObCandiTabletLoc::is_local_server(const ObAddr &server) const
+int ObCandiTabletLoc::set_local_location(const ObObjectID &partition_id,
+                                         const ObObjectID &first_level_part_id,
+                                         const common::ObTabletID &tablet_id,
+                                         const ObLSLocation &ls_location,
+                                         const ObAddr &local_server)
 {
-  return opt_tablet_loc_.get_local_replica().get_server() == server;
-}
-
-int ObCandiTabletLoc::get_selected_replica(share::ObLSReplicaLocation &replica_loc) const
-{
-  replica_loc = opt_tablet_loc_.get_local_replica();
-  return OB_SUCCESS;
-}
-
-int ObCandiTabletLoc::set_local_tablet_loc(const ObObjectID &partition_id,
-                                           const ObObjectID &first_level_part_id,
-                                           const common::ObTabletID &tablet_id,
-                                           const ObLSReplicaLocation &replica)
-{
-  return opt_tablet_loc_.assign_local_replica(partition_id,
-                                              first_level_part_id,
-                                              tablet_id,
-                                              replica);
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(opt_tablet_loc_.assign_local_location(partition_id,
+                                                    first_level_part_id,
+                                                    tablet_id,
+                                                    ls_location,
+                                                    local_server))) {
+    LOG_WARN("fail to assign local tablet location", K(ret), K(ls_location), K(local_server));
+  }
+  return ret;
 }
 
 ObCandiTableLoc::ObCandiTableLoc()
@@ -154,43 +152,23 @@ int ObCandiTableLoc::assign(const ObCandiTableLoc &other)
   }
   return ret;
 }
-int ObCandiTableLoc::all_select_leader(bool &is_on_same_server,
-                                              ObAddr &same_server)
-{
-  int ret = OB_SUCCESS;
-  is_on_same_server = true;
-  ObAddr first_server;
-  for (int64_t i = 0; OB_SUCC(ret) && i < candi_tablet_locs_.count(); ++i) {
-    const ObAddr &replica_addr =
-        candi_tablet_locs_.at(i).get_partition_location().get_local_replica().get_server();
-    if (0 == i) {
-      first_server = replica_addr;
-    } else if (first_server != replica_addr) {
-      is_on_same_server = false;
-    }
-  }
-  if (OB_SUCC(ret) && is_on_same_server) {
-    same_server = first_server;
-  }
-  return ret;
-}
 int ObCandiTableLoc::get_all_servers(common::ObIArray<common::ObAddr> &servers) const
 {
   int ret = OB_SUCCESS;
   const ObCandiTabletLocIArray &phy_part_loc_info_list = get_phy_part_loc_info_list();
   FOREACH_CNT_X(it, phy_part_loc_info_list, OB_SUCC(ret)) {
-    share::ObLSReplicaLocation replica_location;
-    if (OB_FAIL((*it).get_selected_replica(replica_location))) {
-      LOG_WARN("fail to get selected replica", K(*it));
-    } else if (!replica_location.is_valid()) {
+    const ObAddr &server = (*it).get_partition_location().get_server();
+    if (!server.is_valid()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("replica location is invalid", K(ret), K(replica_location));
-    } else if (OB_FAIL(add_var_to_array_no_dup(servers, replica_location.get_server()))) {
+      LOG_ERROR("local server is invalid", K(ret), K(server));
+    } else if (OB_FAIL(add_var_to_array_no_dup(servers, server))) {
       LOG_WARN("failed to push back server", K(ret));
     }
   }
   return ret;
 }
+
+
 void ObCandiTableLoc::set_table_location_key(uint64_t table_location_key, uint64_t ref_table_id)
 {
   table_location_key_ = table_location_key;

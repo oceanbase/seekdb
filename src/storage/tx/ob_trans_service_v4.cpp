@@ -878,7 +878,6 @@ int ObTransService::create_tx_ctx_(ObLS *ls,
   ObTxCreateArg arg(false,  /* for_replay */
                     ctx_source,
                     tx.tx_id_,
-                    tx.cluster_version_,
                     tx.sess_id_, /*session_id*/
                     tx.get_expire_ts(),
                     this);
@@ -1052,7 +1051,7 @@ OB_NOINLINE int ObTransService::acquire_local_snapshot_(SCN &snapshot)
   int ret = OB_SUCCESS;
   SCN snapshot0;
   SCN snapshot1;
-  const bool can_elr = MTL_TENANT_ROLE_CACHE_IS_PRIMARY() ? true : false;
+  const bool can_elr = share::server_is_primary();
   if (FALSE_IT(snapshot0 = tx_version_mgr_.get_max_commit_ts(can_elr))) {
   } else if (!snapshot0.is_valid_and_not_min()) {
     ret = OB_EAGAIN;

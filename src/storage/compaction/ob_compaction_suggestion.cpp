@@ -277,17 +277,16 @@ const char* ObCompactionSuggestionMgr::get_suggestion_reason(const int64_t reaso
   return str;
 }
 
-// Indexed by ObDagPrio::ObDagPrioEnum value. HA_MID/HA_LOW were removed and are
-// now aliases of HA_HIGH, so the priorities after HA_HIGH shifted down by two.
+// Indexed by ObDagPrio::ObDagPrioEnum value.
 const char *ObCompactionSuggestionMgr::ObAddWorkerThreadSuggestion[share::ObDagPrio::DAG_PRIO_MAX] =
 {
   "increase compaction_high_thread_score", // COMPACTION_HIGH
-  "",                                       // HA_HIGH
+  "",                                       // STORAGE_HIGH
   "increase compaction_mid_thread_score",  // COMPACTION_MID
   "increase compaction_low_thread_score",  // COMPACTION_LOW
   "",                                       // DDL
   "",                                       // DDL_HIGH
-  ""                                        // TTL
+  ""                                        // VECTOR_INDEX
 };
 
 const char* ObCompactionSuggestionMgr::get_add_thread_suggestion(const int64_t priority)
@@ -303,7 +302,7 @@ const char* ObCompactionSuggestionMgr::get_add_thread_suggestion(const int64_t p
   return str;
 }
 
-int ObCompactionSuggestionMgr::mtl_init(ObCompactionSuggestionMgr *&compaction_suggestion_mgr)
+int ObCompactionSuggestionMgr::server_module_init(ObCompactionSuggestionMgr *&compaction_suggestion_mgr)
 {
   return compaction_suggestion_mgr->init();
 }
@@ -570,19 +569,16 @@ int ObCompactionSuggestionIterator::open()
   if (is_opened_) {
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "The ObCompactionSuggestionIterator has been opened", K(ret));
-  } else if (!true) {
-    ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "invalid argument", K(ret));
   }
   if (OB_SUCC(ret)) {
-    { // skip virtual tenant
-      MOD_SCOPE {
+    {
+      SERVER_MODULE_SCOPE {
         if (OB_FAIL(share::g_mp->compaction_suggestion_mgr()->get_suggestion_list(suggestion_array_))) {
           STORAGE_LOG(WARN, "failed to get suggestion list", K(ret));
         }
       } else {
-        if (OB_TENANT_NOT_IN_SERVER != ret) {
-          STORAGE_LOG(WARN, "switch tenant failed", K(ret));
+        if (OB_SERVER_RUNTIME_NOT_READY != ret) {
+          STORAGE_LOG(WARN, "enter server module scope failed", K(ret));
         } else {
           ret = OB_SUCCESS;
         }

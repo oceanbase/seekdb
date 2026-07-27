@@ -796,11 +796,7 @@ int ObTransformGroupByPullup::get_trans_view(ObDMLStmt *stmt, ObSelectStmt *&vie
     need_create_view = true;
   } else if (stmt->is_select_stmt()) {
     ObSelectStmt *sel_stmt = static_cast<ObSelectStmt *>(stmt);
-    if (sel_stmt->has_sequence()) {
-      // actually we can directly rewrite the sel_stmt;
-      // however, the result stmt is invalid
-      need_create_view = true;
-    } else if (sel_stmt->has_group_by()) {
+    if (sel_stmt->has_group_by()) {
       need_create_view = true;
     }
   }

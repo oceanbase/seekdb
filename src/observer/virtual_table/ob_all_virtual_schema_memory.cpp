@@ -21,17 +21,21 @@ namespace oceanbase
 {
 namespace observer
 {
-int ObAllVirtualSchemaMemory::get_next_mem_info_(ObSchemaMemory &schema_mem)
-{
+int ObAllVirtualSchemaMemory::get_next_mem_info(ObSchemaMemory &schema_mem) {
   int ret = OB_SUCCESS;
-
-  if (OB_INVALID_INDEX == mem_idx_) {
-    if (OB_FAIL(schema_service_.get_tenant_mem_info(1UL, schema_mem_infos_))) {
-      LOG_WARN("fail to get tenant mem info", KR(ret));
-      schema_mem_infos_.reset();
+  if (!loaded_) {
+    schema_mem_infos_.reset();
+    if (OB_FAIL(schema_service_.get_runtime_mem_info(1UL, schema_mem_infos_))) {
+      LOG_WARN("fail to get schema memory info", KR(ret));
     } else {
+      loaded_ = true;
       mem_idx_ = 0;
     }
+  } else if (mem_idx_ >= schema_mem_infos_.count()) {
+    ret = OB_ITER_END;
+  }
+  if (OB_SUCC(ret) && mem_idx_ >= schema_mem_infos_.count()) {
+    ret = OB_ITER_END;
   }
   if (OB_SUCC(ret)) {
     if (mem_idx_ >= schema_mem_infos_.count()) {
@@ -48,9 +52,9 @@ int ObAllVirtualSchemaMemory::inner_get_next_row(common::ObNewRow *&row)
   int ret = OB_SUCCESS;
   ObSchemaMemory schema_mem;
 
-  if (OB_FAIL(get_next_mem_info_(schema_mem))) {
+  if (OB_FAIL(get_next_mem_info(schema_mem))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("fail to get next tenant_mem_info", KR(ret));
+      LOG_WARN("fail to get next schema memory info", KR(ret));
     }
   }
   if (OB_SUCC(ret)) {

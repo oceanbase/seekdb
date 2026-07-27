@@ -49,7 +49,7 @@ int PalfEnv::create_palf_env(
     PalfEnv *&palf_env)
 {
   int ret = OB_SUCCESS;
-  palf_env = MTL_NEW(PalfEnv, "PalfEnv");
+  palf_env = SERVER_NEW(PalfEnv, "PalfEnv");
   if (NULL == palf_env) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(FileDirectoryUtils::delete_tmp_file_or_directory_at(base_dir))) {
@@ -62,7 +62,7 @@ int PalfEnv::create_palf_env(
     PALF_LOG(INFO, "create_palf_handle_impl success", K(base_dir));
   }
   if (NULL != palf_env && OB_FAIL(ret)) {
-    MTL_DELETE(PalfEnv, "PalfEnv", palf_env);
+    SERVER_DELETE(PalfEnv, "PalfEnv", palf_env);
     palf_env = NULL;
   }
   return ret;
@@ -70,7 +70,7 @@ int PalfEnv::create_palf_env(
 
 void PalfEnv::destroy_palf_env(PalfEnv *&palf_env)
 {
-  MTL_DELETE(PalfEnv, "palf_env", palf_env);
+  SERVER_DELETE(PalfEnv, "palf_env", palf_env);
   PALF_LOG_RET(WARN, OB_SUCCESS, "destroy_palf_env success", K(palf_env));
 }
 

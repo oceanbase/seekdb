@@ -19,7 +19,7 @@
 #include "share/rc/ob_module_provider.h"
 #include "storage/tablet/ob_mds_scan_param_helper.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
-#include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
+#include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
 
 namespace oceanbase
 {
@@ -241,7 +241,7 @@ int ObITabletMdsInterface::get_tablet_handle_from_this(
   int ret = OB_SUCCESS;
   const ObTablet *tablet = static_cast<const ObTablet*>(this);
   const common::ObTabletID &tablet_id = get_tablet_meta_().tablet_id_;
-  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
   if (OB_FAIL(t3m->build_tablet_handle_for_mds_scan(const_cast<ObTablet*>(tablet), tablet_handle))) {
     MDS_LOG(WARN, "fail to build tablet handle", K(ret), K(tablet_id));
   } 

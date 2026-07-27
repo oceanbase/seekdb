@@ -67,7 +67,7 @@ public:
   ObAccessService();
   virtual ~ObAccessService();
   int init(ObLSService *ls_service);
-  static int mtl_init(ObAccessService* &access_service);
+  static int server_module_init(ObAccessService* &access_service);
 
   void destroy();
 public:
@@ -200,8 +200,7 @@ public:
   int scan_block_stat(ObBlockStatScanParam &scan_param, ObBlockStatIterator &iter);
 
 protected:
-  int check_tenant_out_of_memstore_limit_(bool &is_out_of_mem);
-  int check_data_disk_full_(bool &is_full);
+  int check_memstore_limit_(bool &is_out_of_mem);
   int get_write_store_ctx_guard_(
       const int64_t timeout,
       transaction::ObTxDesc &tx_desc,

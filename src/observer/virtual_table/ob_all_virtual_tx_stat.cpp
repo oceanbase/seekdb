@@ -49,7 +49,7 @@ int ObGVTxStat::prepare_start_to_read_()
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator is null", K(ret));
   } else {
-    MOD_SCOPE {
+    SERVER_MODULE_SCOPE {
       transaction::ObTransService *txs = share::g_mp->trans_service();
       if (OB_ISNULL(txs)) {
         ret = OB_ERR_UNEXPECTED;

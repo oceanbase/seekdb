@@ -2577,18 +2577,14 @@ int ObPLResolver::set_question_mark_type( ObRawExpr *into_expr,
     OX ((const_cast<ObPLVar*>(var))->set_name(ANONYMOUS_INOUT_ARG));
   }
   if (OB_SUCC(ret) && need_set) {
-    const bool use_original_type = true;
     ObPLDataType dest_type(*type);
-    if (OB_FAIL(ret)) {
-    } else if (use_original_type
-        && !(OB_NOT_NULL(var->get_type().get_data_type())     
+    if (!(OB_NOT_NULL(var->get_type().get_data_type())
         && var->get_type().get_data_type()->get_obj_type() == ObNullType)) {
       OX (dest_type = var->get_type());
     } else {
       OX ((const_cast<ObPLVar*>(var))->set_type(dest_type));
     }
-    if (OB_FAIL(ret)) {
-    } else if (dest_type.is_obj_type()) {
+    if (dest_type.is_obj_type()) {
       CK (OB_NOT_NULL(dest_type.get_data_type()));
       OX (res_type.set_meta(dest_type.get_data_type()->get_meta_type()));
       OX (res_type.set_accuracy(dest_type.get_data_type()->get_accuracy()));
@@ -3157,10 +3153,6 @@ int ObPLResolver::resolve_return(const ObStmtNodeTree *parse_tree, ObPLReturnStm
     } else if (!func.is_function()) {
       ret = OB_ER_SP_BADRETURN;
       LOG_WARN("not allow return expr node is not null in procedure", K(ret), K(func.is_function()));
-    } else if (func.get_pipelined()) {
-      ret = OB_ERR_RETURN_EXPR_ILLEGAL;
-      LOG_WARN("RETURN statement in a pipelined function cannot contain an expression",
-               K(ret), K(func));
     } else if (OB_FAIL(resolve_expr(expr_node, func, expr,
                                     combine_line_and_col(expr_node->stmt_loc_),
                                     true, &func.get_ret_type()))) {
@@ -3217,29 +3209,21 @@ int ObPLResolver::check_and_record_stmt_type(ObPLFunctionAST &func,
     case stmt::T_SHOW_PARAMETERS:
     case stmt::T_SHOW_INDEXES:
     case stmt::T_SHOW_PROCESSLIST:
-    case stmt::T_SHOW_TABLEGROUPS:
     case stmt::T_SHOW_RECYCLEBIN:
-    case stmt::T_SHOW_PROFILE:
-    case stmt::T_SHOW_SEQUENCES:
     case stmt::T_SHOW_STATUS:
-    case stmt::T_SHOW_CREATE_TENANT:
     case stmt::T_SHOW_TRACE:
     case stmt::T_SHOW_ENGINES:
+    case stmt::T_SHOW_PROFILE:
     case stmt::T_SHOW_ENGINE:
     case stmt::T_SHOW_OPEN_TABLES:
     case stmt::T_SHOW_PRIVILEGES:
     case stmt::T_SHOW_CREATE_PROCEDURE:
     case stmt::T_SHOW_CREATE_FUNCTION:
-    case stmt::T_SHOW_PROCEDURE_CODE:
-    case stmt::T_SHOW_FUNCTION_CODE:
     case stmt::T_SHOW_PROCEDURE_STATUS:
     case stmt::T_SHOW_FUNCTION_STATUS:
-    case stmt::T_SHOW_CREATE_TABLEGROUP:
     case stmt::T_SHOW_CREATE_TRIGGER:
     case stmt::T_SHOW_TRIGGERS:
-    case stmt::T_SHOW_CREATE_USER:
-    case stmt::T_SHOW_CATALOGS:
-    case stmt::T_SHOW_CREATE_CATALOG: {
+    case stmt::T_SHOW_CREATE_USER: {
       if (0 == prepare_result.into_exprs_.count()) {
         if (func.is_function() || in_tg) {
           ret = OB_ER_SP_NO_RETSET;
@@ -6822,8 +6806,7 @@ int ObPLResolver::resolve_expr(const ParseNode *node,
                K(ret), K(expected_type->is_obj_type()), K(expr->get_result_type().get_obj_meta().get_type()));
     } else if (expected_type->is_composite_type()
                && expr->get_result_type().get_obj_meta().is_ext()
-               && expected_type->get_user_type_id() != expr->get_result_type().get_udt_id()
-               && expr->get_expr_type() != T_FUN_SYS_PDB_GET_RUNTIME_INFO) {
+               && expected_type->get_user_type_id() != expr->get_result_type().get_udt_id()) {
       bool is_compatible = false;
       if (is_mocked_anonymous_array_id(expr->get_result_type().get_udt_id())) {
         OZ (check_anonymous_array_compatible(current_block_->get_namespace(),
@@ -8492,12 +8475,7 @@ int ObPLResolver::resolve_qualified_name(ObQualifiedName &q_name,
     }
   } else {
     if (OB_FAIL(resolve_var(q_name, unit_ast, expr))) {
-      if (OB_ERR_SP_UNDECLARED_VAR == ret) {
-        pl_reset_warning_buffer();
-        if (OB_FAIL(resolve_sequence_object(q_name, unit_ast, expr))) {
-          LOG_IN_CHECK_MODE("failed to sequence object", K(q_name), K(ret));
-        }
-      } else {
+      if (OB_ERR_SP_UNDECLARED_VAR != ret) {
         LOG_IN_CHECK_MODE("failed to resolve var", K(q_name), K(ret));
       }
     }
@@ -8861,13 +8839,6 @@ int ObPLResolver::check_local_variable_read_only(
   CK (OB_NOT_NULL(symbol_table = ns.get_symbol_table()));
   OV (OB_NOT_NULL(var = symbol_table->get_symbol(var_idx)), OB_ERR_UNEXPECTED, K(var_idx));
   if (OB_SUCC(ret)) {
-#define GET_TRIGGER_INFO  \
-  ObSchemaChecker schema_checker; \
-  const ObTriggerInfo *trg_info = NULL; \
-  OZ (schema_checker.init(resolve_ctx_.schema_guard_, resolve_ctx_.session_info_.get_server_sid())); \
-  OZ (schema_checker.get_trigger_info( ns.get_db_name(), ns.get_package_name(), trg_info)); \
-  CK (OB_NOT_NULL(trg_info));
-  
     // check type udf member function attr readable. etc: a := 5; when a is type object attr
     // and this stmt is inside a object member function, it is not applicable.
     // note: this statement is avaiable inside a member procedure
@@ -8915,74 +8886,7 @@ int ObPLResolver::check_local_variable_read_only(
         LOG_USER_ERROR(OB_ERR_TRIGGER_NO_SUCH_ROW, "NEW", "DELETE");
       }
     }
-#undef GET_TRIGGER_INFO
   }
-  return ret;
-}
-
-int ObPLResolver::restriction_on_result_cache(ObIRoutineInfo *routine_info)
-{
-  int ret = OB_SUCCESS;
-  CK (OB_NOT_NULL(routine_info));
-  /*
-   * RESULT_CACHE is disallowed on functions with OUT or IN OUT parameters
-   * RESULT_CACHE is disallowed on functions with IN or RETURN parameter of (or
-   *  containing) these types:
-   *   – BLOB
-   *   – CLOB
-   *   – NCLOB
-   *   – REF CURSOR
-   *   – Collection
-   *   – Object
-   *   – Record or PL/SQL collection that contains an unsupported return type
-   */
-#define RESTRICTION_ON_TYPE(type) \
-  if (OB_FAIL(ret)) { \
-  } else if (type.is_obj_type() && (ob_is_text_tc(type.get_obj_type()))) { \
-    ret = OB_ERR_IMPL_RESTRICTION; \
-    LOG_USER_ERROR(OB_ERR_IMPL_RESTRICTION, \
-             "RESULT_CACHE is disallowed on subprograms with IN/RETURN" \
-             " parameter of (or containing) LOB type"); \
-  } else if (type.is_cursor_type()) { \
-    ret = OB_ERR_IMPL_RESTRICTION; \
-    LOG_USER_ERROR(OB_ERR_IMPL_RESTRICTION, \
-             "RESULT_CACHE is disallowed on subprograms with IN/RETURN" \
-             " parameter of (or containing) RefCursor type"); \
-  } else if (type.is_collection_type() && !type.is_udt_type()) { \
-    ret = OB_ERR_IMPL_RESTRICTION; \
-    LOG_USER_ERROR(OB_ERR_IMPL_RESTRICTION, \
-             "RESULT_CACHE is disallowed on subprograms with IN/RETURN" \
-             " parameter of (or containing) Collection type"); \
-  } else if (type.is_record_type() && !type.is_udt_type() && !type.is_rowtype_type()) { \
-    ret = OB_ERR_IMPL_RESTRICTION; \
-    LOG_USER_ERROR(OB_ERR_IMPL_RESTRICTION, \
-             "RESULT_CACHE is disallowed on subprograms with IN/RETURN" \
-             " parameter of (or containing) Record type"); \
-  }
-
-  for (int64_t i = 0; OB_SUCC(ret) && i < routine_info->get_param_count(); ++i) {
-    ObIRoutineParam *param = NULL;
-    ObPLRoutineParamMode mode;
-    OZ (routine_info->get_routine_param(i, param));
-    CK (OB_NOT_NULL(param));
-    OX (mode = static_cast<ObPLRoutineParamMode>(param->get_mode()));
-    if (OB_SUCC(ret)) {
-      if (param->is_out_param() || param->is_inout_param()) {
-        ret = OB_ERR_IMPL_RESTRICTION;
-        LOG_USER_ERROR(OB_ERR_IMPL_RESTRICTION,
-                 "RESULT_CACHE is disallowed on subprograms with OUT or IN OUT parameters");
-      } else {
-        RESTRICTION_ON_TYPE(param->get_pl_data_type());
-      }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    const ObIRoutineParam *ret_param = routine_info->get_ret_info();
-    CK (OB_NOT_NULL(ret_param));
-    RESTRICTION_ON_TYPE(ret_param->get_pl_data_type());
-  }
-#undef RESTRICTION_ON_TYPE
-
   return ret;
 }
 
@@ -9307,23 +9211,6 @@ int ObPLResolver::resolve_sf_clause(
             routine_info->set_invoker_right();
           }
         }
-      } else if (T_SP_RESULT_CACHE == child->type_) {
-        /* RELIES_ON is deprecated: the database detects queried data sources while a
-         * result-cached function is running, and RELIES_ON does nothing. */
-        if (routine_info->is_result_cache()) {
-          ret = OB_ERR_DECL_MORE_THAN_ONCE;
-          LOG_USER_ERROR(OB_ERR_DECL_MORE_THAN_ONCE, static_cast<int>(strlen("RESULT_CACHE")), "RESULT_CACHE");
-          LOG_WARN("at most one declaration for 'RESULT_CACHE' is permitted",
-                   K(ret), K(child->type_));
-        } else if (ObProcType::NESTED_FUNCTION == routine_type
-                   || ObProcType::NESTED_PROCEDURE == routine_type) {
-          ret = OB_ERR_IMPL_RESTRICTION;
-          LOG_USER_ERROR(OB_ERR_IMPL_RESTRICTION,
-                         "RESULT_CACHE on subprograms in anonymous blocks is");
-        } else {
-          OZ (restriction_on_result_cache(routine_info));
-          OX (routine_info->set_result_cache());
-        }
       } else if (T_SP_ACCESSIBLE_BY == child->type_) {
         if (routine_info->has_accessible_by_clause()) {
           ret = OB_ERR_DECL_MORE_THAN_ONCE;
@@ -9337,20 +9224,6 @@ int ObPLResolver::resolve_sf_clause(
                    K(ret), K(child->type_));
         } else {
           routine_info->set_accessible_by_clause();
-        }
-      } else if (T_SP_PIPELINED == child->type_) {
-        CK (OB_NOT_NULL(routine_info->get_ret_info()));
-        if (OB_SUCC(ret)) {
-          if (PACKAGE_FUNCTION != routine_type && NESTED_FUNCTION != routine_type
-              && STANDALONE_FUNCTION != routine_type && UDT_FUNCTION != routine_type) {
-            ret = OB_ERR_ONLY_FUNC_CAN_PIPELINED;
-            LOG_WARN("only functions can be declared as PIPELINED", K(ret));
-          } else if (!ret_type.is_nested_table_type() && !ret_type.is_varray_type()) {
-            ret = OB_ERR_PIPE_RETURN_NOT_COLL;
-            LOG_WARN("pipelined functions must have a supported collection return type",
-                     K(ret_type.get_type()), K(ret));
-          }
-          OX (routine_info->set_pipelined());
         }
       } else if (T_COMMENT == child->type_) {
         {
@@ -11265,122 +11138,6 @@ int ObPLResolver::check_duplicate_condition(const ObPLDeclareHandlerStmt &stmt,
   return ret;
 }
 
-// Build sequence_object.currval and sequence_object.nextval expressions.
-int ObPLResolver::build_seq_value_expr(ObRawExpr *&expr,
-                                       const ObQualifiedName &q_name,
-                                       uint64_t seq_id)
-{
-  int ret = OB_SUCCESS;
-  ObSequenceRawExpr *func_expr = NULL;
-  ObConstRawExpr *col_id_expr = NULL;
-  ObSQLSessionInfo& session_info = resolve_ctx_.session_info_;
-
-  if (0 == q_name.col_name_.case_compare("CURRVAL")) {
-    if (OB_FAIL(expr_factory_.create_raw_expr(T_FUN_SYS_SEQ_NEXTVAL, func_expr))) {
-      LOG_WARN("create currval failed", K(ret));
-    } else if (OB_FAIL(expr_factory_.create_raw_expr(T_UINT64, col_id_expr))) {
-      LOG_WARN("create const raw expr failed", K(ret));
-    } else {
-      if (OB_ISNULL(func_expr) || OB_ISNULL(col_id_expr)){
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected to get a null func expr", K(func_expr), K(col_id_expr), K(ret));
-      } else {
-        ObObj col_id;
-        col_id.set_uint64(seq_id);
-        col_id_expr->set_value(col_id);
-        if (OB_FAIL(func_expr->set_sequence_meta(q_name.database_name_, q_name.tbl_name_, q_name.col_name_, seq_id))) {
-          LOG_WARN("failed to set sequence meta", K(ret));
-        } else if (OB_FAIL(func_expr->add_flag(IS_SEQ_EXPR))) {
-          LOG_WARN("failed to add flag", K(ret));
-        } else if (OB_FAIL(func_expr->set_param_expr(col_id_expr))) {
-          LOG_WARN("set funcation param expr failed", K(ret));
-        } else if (OB_FAIL(func_expr->formalize(&session_info))) {
-          LOG_WARN("failed to extract info", K(ret));
-        } else {
-          expr = func_expr;
-        }
-      }
-    }
-  } else if (0 == q_name.col_name_.case_compare("NEXTVAL")) {
-    if (OB_FAIL(expr_factory_.create_raw_expr(T_FUN_SYS_PL_SEQ_NEXT_VALUE, func_expr))) {
-      LOG_WARN("create nextval failed", K(ret));
-    } else if (OB_FAIL(expr_factory_.create_raw_expr(T_UINT64, col_id_expr))) {
-      LOG_WARN("create const raw expr failed", K(ret));
-    } else {
-      if (OB_ISNULL(func_expr) || OB_ISNULL(col_id_expr)){
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected to get a null func expr", K(func_expr), K(col_id_expr), K(ret));
-      } else {
-        ObObj col_id;
-        func_expr->set_sequence_meta(q_name.database_name_, q_name.tbl_name_, q_name.col_name_, seq_id);
-        col_id.set_uint64(seq_id);
-        col_id_expr->set_value(col_id);
-        if (OB_FAIL(func_expr->set_param_expr(col_id_expr))) {
-          LOG_WARN("set funcation param expr failed", K(ret));
-        } else if (OB_FAIL(func_expr->formalize(&session_info))) {
-          LOG_WARN("failed to extract info", K(ret));
-        } else {
-          expr = func_expr;
-        }
-      }
-    }
-  } else {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("resolve failed, invalid sequence field name.", K(ret));
-  }
-  return ret;
-}
-
-
-int ObPLResolver::resolve_sequence_object(const ObQualifiedName &q_name,
-                                          ObPLAstUnit &unit_ast,
-                                          ObRawExpr *&real_ref_expr)
-{
-  int ret = OB_SUCCESS;
-  uint64_t seq_id = OB_INVALID_ID;
-  ObSchemaChecker sc;
-  if (0 == q_name.col_name_.case_compare("NEXTVAL") ||
-      0 == q_name.col_name_.case_compare("CURRVAL")) {
-    if (OB_FAIL(sc.init(resolve_ctx_.schema_guard_, resolve_ctx_.session_info_.get_server_sid()))) {
-      LOG_WARN("init schemachecker failed.");
-    } else {
-      // check if sequence is created. will also check synonym
-      if (OB_FAIL(ob_sequence_ns_checker_.check_sequence_namespace(q_name,
-                                                                  &resolve_ctx_.session_info_,
-                                                                  &sc,
-                                                                  seq_id))) {
-        LOG_WARN_IGNORE_COL_NOTFOUND(ret, "check basic column namespace failed", K(ret), K(q_name));
-      } else if(OB_FAIL(build_seq_value_expr(real_ref_expr, q_name, seq_id))) {
-        LOG_WARN("failed to resolve seq.", K(ret));
-      } else {
-        int64_t schema_version = OB_INVALID_VERSION;
-        ObSchemaObjVersion obj_version;
-        
-        OZ (resolve_ctx_.schema_guard_.get_schema_version(SEQUENCE_SCHEMA,
-                                                          seq_id,
-                                                          schema_version));
-        CK (schema_version != OB_INVALID_VERSION);
-        OX (obj_version.object_id_ = seq_id);
-        OX (obj_version.object_type_ = DEPENDENCY_SEQUENCE);
-        OX (obj_version.version_ = schema_version);
-        OZ (ObPLDependencyUtil::add_dependency_object_impl(unit_ast.get_dependency_table(), obj_version));
-      }
-      if (OB_SUCC(ret)) {
-        unit_ast.set_has_sequence();
-      }
-    }
-  } else {
-    ret = OB_ERR_SP_UNDECLARED_VAR;
-    if (0 < q_name.access_idents_.count()) {
-      LOG_USER_ERROR(OB_ERR_SP_UNDECLARED_VAR,
-                     q_name.access_idents_.at(q_name.access_idents_.count() - 1).access_name_.length(),
-                     q_name.access_idents_.at(q_name.access_idents_.count() - 1).access_name_.ptr());
-    }
-    LOG_WARN("sequence access bad field.", K(ret));
-  }
-  return ret;
-}
-
 /**
   Sanity check for SQLSTATEs. The function does not check if it's really an
   existing SQL-state (there are just too many), it just checks string length and
@@ -12767,10 +12524,8 @@ int ObPLResolver::resolve_routine_decl(const ObStmtNodeTree *parse_tree,
       }
       if (OB_FAIL(ret)) {
       } else if (NULL != parent_routine_info) {  // public routine
-        if (parent_routine_info->is_pipelined() != routine_info->is_pipelined()
-            || (routine_info->is_deterministic() && !parent_routine_info->is_deterministic())
-            || (routine_info->is_parallel_enable() && !parent_routine_info->is_parallel_enable())
-            || (routine_info->is_result_cache() && !parent_routine_info->is_result_cache())) {
+        if ((routine_info->is_deterministic() && !parent_routine_info->is_deterministic())
+            || (routine_info->is_parallel_enable() && !parent_routine_info->is_parallel_enable())) {
           ret = OB_ERR_ITEM_NOT_IN_BODY;
           LOG_USER_ERROR(OB_ERR_ITEM_NOT_IN_BODY,
                      routine_info->get_name().length(), routine_info->get_name().ptr());
@@ -12862,11 +12617,6 @@ int ObPLResolver::resolve_routine_block(const ObStmtNodeTree *parse_tree,
         LOG_WARN("resolve routine block failed", K(routine_block->type_), K(ret));
       } else {
         OX (const_cast<ObPLBlockNS &>(routine_ast.get_body()->get_namespace()).set_external_ns(NULL));
-      }
-    }
-    if (resolve_ctx_.session_info_.is_pl_debug_on()) {
-      if (OB_FAIL(routine_ast.generate_symbol_debuginfo())) {
-        LOG_WARN("failed to generate symbol debuginfo", K(ret));
       }
     }
   }
@@ -12974,9 +12724,6 @@ int ObPLResolver::resolve_routine_def(const ObStmtNodeTree *parse_tree,
       }
       if (routine_ast->is_rps()) {
         unit_ast.set_rps();
-      }
-      if (routine_ast->is_has_sequence()) {
-        unit_ast.set_has_sequence();
       }
       /*if (routine_ast->is_has_out_param()) {
         unit_ast.set_has_out_param();
@@ -13274,21 +13021,11 @@ int ObPLResolver::check_var_type(ObString &name, uint64_t db_id, ObSchemaType &s
   int ret = OB_SUCCESS;
   
   ObSchemaGetterGuard &schema_guard = resolve_ctx_.schema_guard_;
-  bool is_exist = false;
-  uint64_t seq_id = OB_INVALID_ID;
-  bool is_sys_generated = false;
   if (OB_FAIL(schema_guard.get_simple_table_schema( db_id, name, false, schema))) {
     LOG_WARN("failed to get table schema", K(db_id), K(name), K(ret));
   } else if (OB_NOT_NULL(schema)) {
     // return when find a table schema
     schema_type = TABLE_SCHEMA;
-  } else if (OB_FAIL(schema_guard.check_sequence_exist_with_name(db_id, name,
-                                                                 is_exist, seq_id,
-                                                                 is_sys_generated))) {
-    LOG_WARN("fail to check sequence exist", K(db_id), K(name), K(ret));
-  } else if (is_exist) {
-    // return when find a seq id
-    schema_type = SEQUENCE_SCHEMA;
   }
   return ret;
 }
@@ -13314,7 +13051,7 @@ int ObPLResolver::check_var_type(ObString &name1, ObString &name2, uint64_t db_i
           ret = OB_ERR_WRONG_SCHEMA_REF;
           LOG_USER_ERROR(OB_ERR_WRONG_SCHEMA_REF, name1.length(), name1.ptr(), 1, ".",
                          name2.length(), name2.ptr(), 0, "", 0, "");
-          LOG_WARN("Table,View Or Sequence reference not allowed in this context", K(ret));
+          LOG_WARN("table or view reference not allowed in this context", K(ret));
         } else {
           ret = OB_ERR_COMPONENT_UNDECLARED;
           LOG_WARN("component must be declared", K(ret));
@@ -13322,10 +13059,6 @@ int ObPLResolver::check_var_type(ObString &name1, ObString &name2, uint64_t db_i
         }
       }
     }
-  } else if (SEQUENCE_SCHEMA == schema_type) {
-    ret = OB_ERR_COMPONENT_UNDECLARED;
-    LOG_WARN("component must be declared", K(ret));
-    LOG_USER_ERROR(OB_ERR_COMPONENT_UNDECLARED, name2.length(), name2.ptr());
   }
   return ret;
 }

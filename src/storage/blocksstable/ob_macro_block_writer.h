@@ -32,14 +32,13 @@
 #include "ob_micro_block_reader.h"
 #include "ob_micro_block_writer.h"
 #include "share/schema/ob_table_schema.h"
-#include "ob_bloom_filter_cache.h"
 #include "ob_micro_block_reader_helper.h"
 #include "storage/blocksstable/ob_kvcache_pre_warmer.h"
 #include "ob_macro_block_bare_iterator.h"
 #include "ob_micro_block_checksum_helper.h"
 #include "storage/compaction/ob_compaction_memory_context.h"
 #include "storage/blocksstable/ob_macro_seq_generator.h"
-#include "storage/blocksstable/ob_macro_block_bloom_filter.h"
+#include "storage/blocksstable/ob_shared_macro_block_manager.h"
 #include "storage/compaction/ob_compaction_util.h"
 #include "storage/compaction/ob_sstable_merge_history.h"
 #include "storage/blocksstable/ob_batch_datum_rows.h"
@@ -52,7 +51,6 @@ namespace blocksstable
 class ObDataIndexBlockBuilder;
 class ObSSTableIndexBuilder;
 class ObSSTableSecMetaIterator;
-class ObSSTablePrivateObjectCleaner;
 struct ObIndexBlockRowDesc;
 struct ObMacroBlockDesc;
 class ObIMacroBlockFlushCallback;
@@ -75,7 +73,7 @@ public:
   int open(
       const ObDataStoreDesc &data_store_desc,
       common::ObIAllocator &allocator);
-  int compress_encrypt_micro_block(ObMicroBlockDesc &micro_block_desc, const int64_t macro_seq, const int64_t micro_offset);
+  int compress_micro_block(ObMicroBlockDesc &micro_block_desc);
   int dump_micro_block_writer_buffer(const char *buf, const int64_t size);
   void reset();
 private:
@@ -167,16 +165,14 @@ private:
     ObStorageObjectHandle *macro_handle_;
     ObIODevice *device_handle_;
   };
-  /**
-  * --------------------------------------------------------------ObSmallSStableMacroBlockFlusher------------------------------------------------------------
-  */
+
   class ObSmallSStableMacroBlockFlusher : public ObDefaultMacroBlockFlusher
   {
   public:
     ObSmallSStableMacroBlockFlusher();
     virtual ~ObSmallSStableMacroBlockFlusher();
     virtual void reset() override;
-    virtual int write_disk(ObMacroBlock& macro_block, const bool is_close_flush) override;
+    virtual int write_disk(ObMacroBlock &macro_block, const bool is_close_flush) override;
     int init(ObMacroBlockWriter &macro_block_writer,
              ObMacroBlocksWriteCtx &block_write_ctx);
   private:
@@ -193,17 +189,9 @@ public:
       const int64_t parallel_idx,
       const blocksstable::ObMacroSeqParam &macro_seq_param,
       const share::ObPreWarmerParam &pre_warm_param,
-      ObSSTablePrivateObjectCleaner &object_cleaner,
       ObIMacroBlockFlushCallback *callback = nullptr,
       ObIMacroBlockValidator *validator = nullptr,
       ObIODevice *device_handle = nullptr);
-  int open_for_ss_ddl(
-      const ObDataStoreDesc &data_store_desc,
-      const int64_t parallel_idx,
-      const blocksstable::ObMacroSeqParam &macro_seq_param,
-      const share::ObPreWarmerParam &pre_warm_param,
-      ObSSTablePrivateObjectCleaner &object_cleaner,
-      ObIMacroBlockFlushCallback *callback);
   virtual int append_macro_block(const ObMacroBlockDesc &macro_desc,
                                  const ObMicroBlockData *micro_block_data);
   virtual int append_micro_block(const ObMicroBlock &micro_block, const ObMacroBlockDesc *curr_macro_desc = nullptr);
@@ -212,7 +200,6 @@ public:
   virtual int append_row(const ObDatumRow &row, const ObMacroBlockDesc *curr_macro_desc = nullptr);
   virtual int append_batch(const ObBatchDatumRows &datum_rows,
                            const ObMacroBlockDesc *curr_macro_desc = nullptr);
-  // TODO(baichangmin): SSTableRebuilder disabled in SS mode. Finish SN route later.
   int append_macro_block(const ObDataMacroBlockMeta &macro_meta);
   int get_estimate_meta_block_size(const ObDataMacroBlockMeta &macro_meta, int64_t &estimate_size);
   int check_data_macro_block_need_merge(const ObMacroBlockDesc &macro_desc, bool &need_merge) const;
@@ -246,7 +233,6 @@ protected:
       const blocksstable::ObMacroSeqParam &macro_seq_param,
       const share::ObPreWarmerParam &pre_warm_param,
       const bool cluster_micro_index_on_flush,
-      ObSSTablePrivateObjectCleaner &object_cleaner,
       ObIMacroBlockFlushCallback *callback,
       ObIMacroBlockValidator *validator,
       ObIODevice *device_handle);
@@ -331,7 +317,6 @@ protected:
   ObIMacroBlockFlusher *custom_macro_flusher_;
 private:
   ObIMicroBlockWriter *micro_writer_;
-  ObMicroBlockBloomFilter micro_block_bf_;
   ObMicroBlockReaderHelper reader_helper_;
   ObMicroBlockBufferHelper micro_helper_;
   blocksstable::ObMacroSeqGenerator *macro_seq_generator_; // set by sstable layer;
@@ -357,7 +342,6 @@ private:
   ObDataIndexBlockBuilder *builder_;
   ObMicroBlockAdaptiveSplitter micro_block_adaptive_splitter_;
   share::ObIPreWarmer *pre_warmer_;
-  ObSSTablePrivateObjectCleaner *object_cleaner_;
   char *io_buf_;
   ObIMacroBlockValidator *validator_;
   ObDefaultMacroBlockFlusher default_macro_flusher_;

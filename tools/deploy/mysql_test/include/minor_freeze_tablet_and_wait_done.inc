@@ -8,7 +8,7 @@ connection obsys_minor;
 
 let $__tablet_id__=query_get_value(select /*+QUERY_TIMEOUT(10000000)*/ tablet_id from oceanbase.__all_tablet_to_table where table_id = (select /*+QUERY_TIMEOUT(10000000)*/ table_id from oceanbase.__all_table where table_name = $__freeze_table_name__), tablet_id, 1);
 
-eval alter system minor freeze tenant sys tablet_id = $__tablet_id__;
+eval alter system minor freeze tablet_id = $__tablet_id__;
 sleep 5;
 
 let $__i__=180;

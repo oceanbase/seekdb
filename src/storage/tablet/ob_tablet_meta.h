@@ -35,15 +35,13 @@
 #include "storage/tablet/ob_tablet_binding_helper.h"
 #include "storage/tablet/ob_tablet_multi_source_data.h"
 #include "storage/tablet/ob_tablet_mds_data.h"
-#include "storage/tablet/ob_tablet_full_memory_mds_data.h"
 #include "storage/tx/ob_trans_define.h"
-#include "storage/ob_tablet_restore_state.h"
+#include "storage/ob_tablet_local_status.h"
 #include "storage/tablet/ob_tablet_table_store_flag.h"
 #include "share/scn.h"
 #include "storage/tablet/ob_tablet_mds_data.h"
 #include "storage/tablet/ob_tablet_create_delete_mds_user_data.h"
 #include "storage/tablet/ob_tablet_space_usage.h"
-#include "storage/blocksstable/ob_major_checksum_info.h"
 namespace oceanbase
 {
 namespace storage
@@ -115,10 +113,6 @@ public:
       const blocksstable::ObSSTable *sstable,
       const int64_t report_version,
       ObTabletReportStatus &report_status);
-  static int init_report_info(
-      const blocksstable::ObMajorChecksumInfo &major_ckm_info,
-      const int64_t report_version,
-      ObTabletReportStatus &report_status);
   static int update_meta_last_persisted_committed_tablet_status(
     const ObTabletTxMultiSourceDataUnit &tx_data,
     const share::SCN &create_commit_scn,
@@ -135,7 +129,8 @@ public:
                K_(ddl_checkpoint_scn),
                K_(snapshot_version),
                K_(multi_version_start),
-               K_(restore_state),
+               K_(compat_mode),
+               K_(local_status),
                K_(report_status),
                K_(table_store_flag),
                K_(ddl_start_scn),
@@ -166,7 +161,7 @@ public:
   share::SCN ddl_checkpoint_scn_; // alignment: 8B, size: 8B
   int64_t snapshot_version_; // alignment: 8B, size: 8B
   int64_t multi_version_start_; // alignment: 8B, size: 8B
-  ObTabletRestoreState restore_state_; // alignment: 8B, size: 8B
+  ObTabletLocalStatus local_status_; // alignment: 8B, size: 8B
   ObTabletReportStatus report_status_; // alignment: 8B, size: 40B
   ObTabletTableStoreFlag table_store_flag_; // alignment: 8B, size: 8B
   share::SCN ddl_start_scn_; // alignment: 8B, size: 8B
@@ -184,9 +179,9 @@ public:
   share::SCN min_ss_tablet_version_; // alignment: 8B, size: 8B
   compaction::ObExtraMediumInfo extra_medium_info_;
   ObTabletCreateDeleteMdsUserData last_persisted_committed_tablet_status_; // quick access for tablet status in sstables
-  ObTabletSpaceUsage space_usage_;
-                                   // alignment: 8B, size: 48B
-  int64_t create_schema_version_; // add after 4.2, record schema_version when first create tablet. NEED COMPAT
+  ObTabletSpaceUsage space_usage_; // alignment: 8B, size: 48B
+  int64_t create_schema_version_;
+  lib::Worker::CompatMode compat_mode_; // alignment: 1B, size: 4B
   bool has_next_tablet_; // alignment: 1B, size: 2B
   bool is_empty_shell_; // alignment: 1B, size: 2B
   bool micro_index_clustered_; // alignment: 1B, size: 2B
@@ -195,10 +190,6 @@ public:
 private:
   void update_extra_medium_info(
       const compaction::ObMergeType merge_type,
-      const int64_t finish_medium_scn);
-  void update_extra_medium_info(
-      const compaction::ObExtraMediumInfo &src_addr_extra_info,
-      const compaction::ObExtraMediumInfo &src_data_extra_info,
       const int64_t finish_medium_scn);
   inline void set_space_usage_ (const ObTabletSpaceUsage &space_usage) { space_usage_ = space_usage; }
 private:

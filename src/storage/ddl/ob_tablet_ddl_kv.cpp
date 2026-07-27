@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tablet_ddl_kv.h"
-#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind a transitive include
+#include "observer/omt/ob_server_runtime_controller.h"  // previously hidden behind a transitive include
 #include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
@@ -167,7 +167,7 @@ int ObBlockMetaTree::insert_macro_block(const ObDDLMacroHandle &macro_handle,
   } else {
     tree_value = new (buf) ObBlockMetaTreeValue(insert_meta, rowkey);
 
-    tree_value->header_.version_ = ObIndexBlockRowHeader::INDEX_BLOCK_HEADER_V3;
+    tree_value->header_.version_ = ObIndexBlockRowHeader::INDEX_BLOCK_HEADER_VERSION;
     tree_value->header_.row_store_type_ = static_cast<uint8_t>(insert_meta->val_.row_store_type_);
     tree_value->header_.compressor_type_ = static_cast<uint8_t>(insert_meta->val_.compressor_type_);
     tree_value->header_.is_data_index_ = true;
@@ -182,9 +182,6 @@ int ObBlockMetaTree::insert_macro_block(const ObDDLMacroHandle &macro_handle,
     tree_value->header_.block_size_ = insert_meta->val_.block_size_;
     tree_value->header_.macro_block_count_ = 1;
     tree_value->header_.micro_block_count_ = insert_meta->val_.micro_block_count_;
-    tree_value->header_.master_key_id_ = insert_meta->val_.master_key_id_;
-    tree_value->header_.encrypt_id_ = insert_meta->val_.encrypt_id_;
-    MEMCPY(tree_value->header_.encrypt_key_, insert_meta->val_.encrypt_key_, sizeof(tree_value->header_.encrypt_key_));
     tree_value->header_.schema_version_ = insert_meta->val_.schema_version_;
     tree_value->header_.row_count_ = insert_meta->val_.row_count_;
     tree_value->minor_meta_info_.snapshot_version_ = insert_meta->val_.snapshot_version_;
@@ -984,15 +981,15 @@ int ObDDLKV::set_macro_block(
     LOG_WARN("invalid argument", K(ret), K(macro_block), K(data_format_version), K(snapshot_version));
   } else if (can_freeze) {
     
-    ObUnitInfoGetter::ObTenantConfig unit;
+    ObServerRuntimeConfig runtime_config;
     int tmp_ret = OB_SUCCESS;
-    if (OB_TMP_FAIL(GCTX.omt_->get_tenant_unit(unit))) {
-      LOG_WARN("get tenant unit failed", K(tmp_ret));
+    if (OB_TMP_FAIL(GCTX.server_runtime_controller_->get_server_resources(runtime_config))) {
+      LOG_WARN("get server resources failed", K(tmp_ret));
     } else {
-      const int64_t log_allowed_block_count = unit.config_.log_disk_size() * 0.2 / OB_STORAGE_OBJECT_MGR.get_macro_block_size();
+      const int64_t log_allowed_block_count = runtime_config.resource_config_.log_disk_size() * 0.2 / OB_STORAGE_OBJECT_MGR.get_macro_block_size();
       if (log_allowed_block_count <= 0) {
         tmp_ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid macro block count by log disk size", K(tmp_ret), K(unit.config_));
+        LOG_WARN("invalid macro block count by log disk size", K(tmp_ret), K(runtime_config.resource_config_));
       } else {
         freeze_block_count = min(freeze_block_count, log_allowed_block_count);
       }
@@ -1004,8 +1001,7 @@ int ObDDLKV::set_macro_block(
   }
   if (OB_SUCC(ret) && can_freeze && (get_macro_block_cnt() >= freeze_block_count || get_memory_used() >= MEMORY_LIMIT)) {
     ObDDLTableMergeDagParam param;
-    param.direct_load_type_    = data_format_version >= DDL_IDEM_DATA_FORMAT_VERSION ? ObDirectLoadType::SN_IDEM_DIRECT_LOAD_DDL :
-                                                                                       ObDirectLoadType::DIRECT_LOAD_DDL;
+    param.direct_load_type_    = ObDirectLoadType::SN_IDEM_DIRECT_LOAD_DDL;
     param.tablet_id_           = tablet_id_;
     param.start_scn_           = ddl_start_scn_;
     param.data_format_version_ = data_format_version;
@@ -1070,8 +1066,6 @@ int ObDDLKV::set_macro_block(
         LOG_WARN("invalid end key of data macro block meta", K(ret), K(data_macro_meta->end_key_));
       }
       if (OB_FAIL(ret)) {
-      } else if (DDL_MB_SS_EMPTY_DATA_TYPE == macro_block.block_type_) {
-        /* skip, emtpy type do not have data macro*/
       } else if (OB_FAIL(ddl_memtable->insert_block_meta_tree(macro_block.block_handle_, data_macro_meta))) {
         LOG_WARN("insert block meta tree faield", K(ret));
       } else {

@@ -557,10 +557,6 @@ private:
   int record_write_failure();
   void set_device_warning();
   int set_detect_task_io_info_(ObIOInfo &io_info, const ObIOResult &result, const ObIORequest &req);
-  // If executes the detect task in SS mode, checking if it's a read operation on the micro cache file.
-  // In SN mode, always returns true.
-  // In SS mode, returns true if fd == micro cache file fd.
-  bool is_supported_detect_read_(const ObIOFd &fd);
 
 private:
   static const int64_t WRITE_FAILURE_DETECT_EVENT_COUNT = 100;

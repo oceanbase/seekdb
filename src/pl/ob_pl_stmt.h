@@ -21,7 +21,6 @@
 #include "pl/ob_pl_user_type.h"
 #include "sql/resolver/ob_stmt_type.h"
 #include "sql/session/ob_sql_session_info.h"
-#include "pl/ob_pl_object_id_util.h"
 
 namespace oceanbase {
 namespace sql {
@@ -219,44 +218,6 @@ private:
 };
 
 class ObPLStmt;
-class ObPLSymbolDebugInfoTable
-{
-public:
-  ObPLSymbolDebugInfoTable(ObIAllocator &allocator) : variable_debuginfos_(allocator) {}
-
-  inline int reserve(int capcity) { return variable_debuginfos_.reserve(capcity); }
-  inline int64_t get_count() const { return variable_debuginfos_.count(); }
-  inline const ObPLVarDebugInfo* get_symbol(int64_t idx) const
-  {
-    return idx < 0 || idx >= variable_debuginfos_.count() ? NULL : &variable_debuginfos_.at(idx);
-  }
-
-  int add(ObPLVarDebugInfo info)
-  {
-    return variable_debuginfos_.push_back(info);
-  }
-
-  int add(int idx, const ObString &name, ObPLType type, int start, int end)
-  {
-    int ret = OB_SUCCESS;
-    if (idx < 0 && idx > variable_debuginfos_.count()) {
-      ret = OB_ARRAY_OUT_OF_RANGE;
-    } else {
-      variable_debuginfos_.at(idx) =
-        ObPLVarDebugInfo(name, type, ObPLVarDebugInfo::ObPLVarScope(start, end));
-    }
-    return ret;
-  }
-
-  ObIArray<ObPLVarDebugInfo>& get_var_debuginfos() { return variable_debuginfos_; }
-
-  TO_STRING_KV(K_(variable_debuginfos));
-
-private:
-  // All input and output parameters, and all variables used within the PL body (including cursors), correspond one-to-one with the symbol table in ObPLFunction
-  // Mainly used to record the scope of each symbol, and if the symbol is a complex type, whether it is a Collection or Record
-  ObPLSEArray<ObPLVarDebugInfo> variable_debuginfos_;
-};
 
 class ObPLLabelTable
 {
@@ -841,10 +802,8 @@ public:
         ret_info_(NULL),
         params_(allocator),
         compile_flag_(),
-        is_pipelined_(false),
         is_deterministic_(false),
         is_parallel_enable_(false),
-        is_result_cache_(false),
         has_accessible_by_clause_(false),
         is_udt_routine_(false),
         is_private_routine_(false),
@@ -937,9 +896,6 @@ public:
   }
   inline void set_loc(uint64_t loc) { loc_ = loc; }
 
-  inline void set_pipelined() { is_pipelined_ = true; }
-  inline bool is_pipelined() const { return is_pipelined_; }
-
   virtual void set_deterministic() { is_deterministic_ = true; }
   virtual bool is_deterministic() const { return is_deterministic_; }
 
@@ -964,15 +920,10 @@ public:
   virtual bool is_wps() const { return is_wps_; }
   virtual void set_rps() { is_rps_ = true; }
   virtual bool is_rps() const { return is_rps_; }
-  virtual void set_has_sequence() { is_has_sequence_ = true; }
-  virtual bool is_has_sequence() const { return is_has_sequence_; }
   virtual void set_has_out_param() { is_has_out_param_ = true; }
   virtual bool is_has_out_param() const { return is_has_out_param_; }
   virtual void set_external_state() { is_external_state_ = true; }
   virtual bool is_external_state() const { return is_external_state_; }
-
-  virtual void set_result_cache() { is_result_cache_ = true; }
-  virtual bool is_result_cache() const { return is_result_cache_; }
 
   virtual void set_accessible_by_clause() { has_accessible_by_clause_ = true; }
   virtual bool has_accessible_by_clause() const { return has_accessible_by_clause_; }
@@ -1006,7 +957,6 @@ public:
                KPC_(ret_info),
                K_(params),
                K_(compile_flag),
-               K_(is_pipelined),
                K_(is_deterministic),
                K_(is_parallel_enable),
                K_(is_udt_routine),
@@ -1029,10 +979,8 @@ private:
   ObPLRoutineParam *ret_info_;
   ObPLSEArray<ObPLRoutineParam *> params_;
   ObPLCompileFlag compile_flag_;
-  bool is_pipelined_;
   bool is_deterministic_;
   bool is_parallel_enable_;
-  bool is_result_cache_;
   bool has_accessible_by_clause_;
   bool is_udt_routine_;
   bool is_private_routine_;
@@ -1048,10 +996,9 @@ private:
       uint64_t is_contains_sql_ : 1;
       uint64_t is_wps_ : 1;
       uint64_t is_rps_ : 1;
-      uint64_t is_has_sequence_ : 1;
       uint64_t is_has_out_param_ : 1;
       uint64_t is_external_state_ : 1;
-      uint64_t reserved_:54;
+      uint64_t reserved_:55;
     };
   };
 };
@@ -1140,8 +1087,7 @@ public:
     PKG_TYPE,           // custom type in the package
     SELF_ATTRIBUTE,
     UDT_MEMBER_ROUTINE, //
-    TRIGGER,            // Trigger
-    SEQUENCE            // Sequence
+    TRIGGER             // Trigger
   };
 
   ObPLExternalNS(const ObPLResolveCtx &resolve_ctx, const ObPLBlockNS *parent_ns)
@@ -1512,7 +1458,6 @@ public:
        sql_stmts_(allocator),
        expr_factory_(allocator),
        symbol_table_(allocator),
-       symbol_debuginfo_table_(allocator),
        user_type_table_(),
        label_table_(),
        condition_table_(),
@@ -1627,22 +1572,14 @@ public:
   virtual bool is_wps() const { return is_wps_; }
   virtual void set_rps() { is_rps_ = true; }
   virtual bool is_rps() const { return is_rps_; }
-  virtual void set_has_sequence() { is_has_sequence_ = true; }
-  virtual bool is_has_sequence() const { return is_has_sequence_; }
   virtual void set_has_out_param() { is_has_out_param_ = true; }
   virtual bool is_has_out_param() const { return is_has_out_param_; }
   virtual void set_external_state() { is_external_state_ = true; }
   virtual bool is_external_state() const { return is_external_state_; }
 
-  ObPLSymbolDebugInfoTable &get_symbol_debuginfo_table()
-  {
-    return symbol_debuginfo_table_;
-  }
-  int generate_symbol_debuginfo();
-
   static int extract_assoc_index(sql::ObRawExpr &expr, common::ObIArray<sql::ObRawExpr *> &exprs);
 
-  TO_STRING_KV(K_(body), K_(symbol_table), K_(symbol_debuginfo_table), K_(condition_table));
+  TO_STRING_KV(K_(body), K_(symbol_table), K_(condition_table));
 
 private:
 
@@ -1656,7 +1593,6 @@ protected:
   ObPLSEArray<ObPLSqlStmt*> sql_stmts_;
   sql::ObRawExprFactory expr_factory_;
   ObPLSymbolTable symbol_table_;
-  ObPLSymbolDebugInfoTable symbol_debuginfo_table_;
   ObPLUserTypeTable user_type_table_;
   ObPLLabelTable label_table_;
   ObPLConditionTable condition_table_;
@@ -1678,10 +1614,9 @@ protected:
       uint64_t is_contains_sql_ : 1;
       uint64_t is_wps_ : 1;
       uint64_t is_rps_ : 1;
-      uint64_t is_has_sequence_ : 1;
       uint64_t is_has_out_param_ : 1;
       uint64_t is_external_state_ : 1;
-      uint64_t reserved_:54;
+      uint64_t reserved_:55;
     };
   };
 private:
@@ -1697,7 +1632,6 @@ public:
       subprogram_id_(OB_INVALID_ID),
       subprogram_path_(allocator),
       is_all_sql_stmt_(true),
-      is_pipelined_(false),
       has_return_(false),
       has_incomplete_rt_dep_error_(false) {}
   virtual ~ObPLFunctionAST() {}
@@ -1717,7 +1651,7 @@ public:
   inline bool has_parallel_affect_factor() const
   {
     return is_reads_sql_data() || is_modifies_sql_data() || is_wps() ||
-           is_rps() || is_has_sequence() || is_external_state();
+           is_rps() || is_external_state();
   }
   int add_argument(const common::ObString &name, const ObPLDataType &type,
                    const sql::ObRawExpr *expr = NULL,
@@ -1732,9 +1666,6 @@ public:
   virtual uint64_t get_subprogram_id() const { return subprogram_id_; }
   virtual int64_t get_version() const { return OB_INVALID_VERSION; }
   virtual uint64_t get_database_id() const { return ObPLFunctionBase::get_database_id(); }
-
-  void set_pipelined() { is_pipelined_ = true; }
-  bool get_pipelined() const { return is_pipelined_; }
 
   inline void set_return() { has_return_ = true; }
   inline bool has_return() { return has_return_; }
@@ -1752,7 +1683,6 @@ private:
   uint64_t subprogram_id_;
   ObPLSEArray<int64_t> subprogram_path_; // addressing path of subprogram
   bool is_all_sql_stmt_;
-  bool is_pipelined_;
   bool has_return_;
   bool has_incomplete_rt_dep_error_;
 };
@@ -1790,7 +1720,6 @@ enum ObPLStmtType
   PL_FETCH,
   PL_CLOSE,
   PL_NULL,
-  PL_PIPE_ROW,
   PL_ROUTINE_DEF,
   PL_ROUTINE_DECL,
   PL_RAISE_APPLICATION_ERROR,
@@ -1892,7 +1821,6 @@ protected:
 };
 
 class ObPLDeclareHandlerStmt;
-class ObPLSymbolDebugInfoTable;
 class ObPLStmtBlock : public ObPLStmt
 {
 public:
@@ -1962,8 +1890,6 @@ public:
   inline const common::ObIArray<sql::ObRawExpr*> *get_exprs() const { return ns_.get_exprs(); }
   inline const common::ObIArray<ObPLStmt*> &get_cursor_stmts() const
   { return forloop_cursor_stmts_; }
-
-  int generate_symbol_debuginfo(ObPLSymbolDebugInfoTable &symbol_debuginfo_table) const;
 
   TO_STRING_KV(K_(type), K_(label), K_(stmts),
                K_(forloop_cursor_stmts));

@@ -53,7 +53,6 @@ ObDMLRunningCtx::ObDMLRunningCtx(
     schema_guard_(share::schema::ObSchemaMgrItem::MOD_RELATIVE_TABLE),
     is_inited_(false)
 {
-  is_delete_insert_table_ = false;
 }
 
 ObDMLRunningCtx::~ObDMLRunningCtx()
@@ -83,10 +82,10 @@ int ObDMLRunningCtx::init(
     
     const uint64_t table_id = dml_param_.table_param_->get_data_table().get_table_id();
     const int64_t version = dml_param_.schema_version_;
-    const int64_t tenant_schema_version = dml_param_.tenant_schema_version_;
+    const int64_t runtime_schema_version = dml_param_.runtime_schema_version_;
     if (dml_param_.check_schema_version_ && OB_FAIL(check_schema_version(*schema_service, table_id,
-        tenant_schema_version, version, tablet_handle))) {
-      LOG_WARN("failed to check schema version", K(ret), K(tenant_schema_version), K(table_id), K(version));
+        runtime_schema_version, version, tablet_handle))) {
+      LOG_WARN("failed to check schema version", K(ret), K(runtime_schema_version), K(table_id), K(version));
     }
   }
 
@@ -131,14 +130,12 @@ int ObDMLRunningCtx::prepare_relative_table(
     const SCN &read_snapshot)
 {
   int ret = OB_SUCCESS;
-  is_delete_insert_table_ = false;
+  bool need_get_src_split_tables = false;
   if (OB_FAIL(relative_table_.init(&schema, tablet_handle.get_obj()->get_tablet_meta().tablet_id_,
       schema.is_storage_index_table() && !schema.can_read_index()))) {
     LOG_WARN("fail to init relative_table_", K(ret), K(tablet_handle), K(schema.get_index_status()));
   } else if (OB_FAIL(relative_table_.tablet_iter_.set_tablet_handle(tablet_handle))) {
     LOG_WARN("fail to set tablet handle to iter", K(ret), K(relative_table_.tablet_iter_));
-  } else if (OB_FAIL(tablet_handle.get_obj()->check_is_delete_insert_table(is_delete_insert_table_))) {
-    LOG_WARN("fail to check is delete insert table", K(ret));
   } else if (OB_FAIL(relative_table_.tablet_iter_.refresh_read_tables_from_tablet(
       read_snapshot.get_val_for_tx(), 
       relative_table_.allow_not_ready(), 
@@ -267,18 +264,18 @@ int ObDMLRunningCtx::init_cmp_funcs()
 int ObDMLRunningCtx::check_schema_version(
     share::schema::ObMultiVersionSchemaService &schema_service,
     const uint64_t table_id,
-    const int64_t tenant_schema_version,
+    const int64_t runtime_schema_version,
     const int64_t table_version,
     ObTabletHandle &tablet_handle)
 {
   int ret = OB_SUCCESS;
   const ObTableSchema *table_schema = nullptr;
   bool check_formal = !is_inner_table(table_id);
-  int tmp_ret = check_tenant_schema_version(schema_service, table_id, tenant_schema_version);
+  int tmp_ret = check_runtime_schema_version(schema_service, table_id, runtime_schema_version);
   if (OB_SUCCESS == tmp_ret) {
-    // Check tenant schema first. If not pass, then check table level schema version
-  } else if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard_))) {
-    LOG_WARN("failed to get tenant schema guard", K(ret));
+    // The runtime-wide check passed, so no table-level schema check is needed.
+  } else if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard_))) {
+    LOG_WARN("failed to get runtime schema guard", K(ret));
   } else if (check_formal && OB_FAIL(schema_guard_.check_formal_guard())) {
     LOG_WARN("schema_guard is not formal", K(ret));
   } else if (OB_FAIL(schema_guard_.get_table_schema( table_id, table_schema))) {
@@ -298,32 +295,33 @@ int ObDMLRunningCtx::check_schema_version(
   return ret;
 }
 
-int ObDMLRunningCtx::check_tenant_schema_version(
+int ObDMLRunningCtx::check_runtime_schema_version(
     share::schema::ObMultiVersionSchemaService &schema_service,
     const uint64_t table_id,
-    const int64_t tenant_schema_version)
+    const int64_t runtime_schema_version)
 {
   int ret = OB_SUCCESS;
-  int64_t latest_tenant_version = -1;
+  int64_t latest_runtime_schema_version = -1;
   if (is_inner_table(table_id)) {
     //inner table can't skip table schema check
     ret = OB_SCHEMA_EAGAIN;
-  } else if (tenant_schema_version > 0
-             && OB_FAIL(schema_service.get_tenant_refreshed_schema_version(latest_tenant_version))) {
-    LOG_WARN("failed to get tenant schema version", K(ret), K(tenant_schema_version));
-  } else if (tenant_schema_version < 0 || latest_tenant_version < 0) {
+  } else if (runtime_schema_version > 0
+             && OB_FAIL(schema_service.get_runtime_refreshed_schema_version(latest_runtime_schema_version))) {
+    LOG_WARN("failed to get refreshed runtime schema version", K(ret), K(runtime_schema_version));
+  } else if (runtime_schema_version < 0 || latest_runtime_schema_version < 0) {
     ret = OB_SCHEMA_EAGAIN;
-  } else if (!share::schema::ObSchemaService::is_formal_version(latest_tenant_version)) {
+  } else if (!share::schema::ObSchemaService::is_formal_version(latest_runtime_schema_version)) {
     ret = OB_SCHEMA_EAGAIN;
     LOG_INFO("local schema_version is not formal, try again", K(ret),
-             K(tenant_schema_version), K(latest_tenant_version));
-  } else if (latest_tenant_version > 0 && tenant_schema_version == latest_tenant_version) {
+             K(runtime_schema_version), K(latest_runtime_schema_version));
+  } else if (latest_runtime_schema_version > 0
+             && runtime_schema_version == latest_runtime_schema_version) {
     // no schema change, do nothing
     ret = OB_SUCCESS;
   } else {
     ret = OB_SCHEMA_EAGAIN;
     LOG_INFO("need check table schema version", K(ret),
-             K(tenant_schema_version), K(latest_tenant_version));
+             K(runtime_schema_version), K(latest_runtime_schema_version));
   }
   return ret;
 }

@@ -178,7 +178,7 @@ MAKE_FACTORY_CLASS_DEFINE(ObTxCommitCallbackTask)
 class MultiTxDataFactory
 {
 public:
-  static void *alloc(const int64_t len, const uint64_t arg1, const uint64_t arg2);
+  static void *alloc(const int64_t len);
   static void free(void *ptr);
 };
 

@@ -126,7 +126,7 @@ DEF_TO_STRING(ObTxSavePoint)
   return pos;
 }
 OB_SERIALIZE_MEMBER(ObTxExecResult, incomplete_, has_write_state_, write_state_,
-                    conflict_txs_,// FARM COMPAT WHITELIST for cflict_txs_
+                    conflict_txs_, // FARM COMPAT WHITELIST for conflict_txs_
                     conflict_info_array_,
                     touched_storage_);
 OB_SERIALIZE_MEMBER(ObTxSnapshot, tx_id_, version_, scn_, elr_);
@@ -225,8 +225,6 @@ DEFINE_GET_SERIALIZE_SIZE(ObTxDesc::FLAG)
 }
 
 OB_SERIALIZE_MEMBER(ObTxDesc,
-
-                    cluster_version_,
                     sess_id_,
                     addr_,
                     tx_id_,
@@ -250,7 +248,6 @@ OB_SERIALIZE_MEMBER(ObTxParam,
                     isolation_);
 ObTxDesc::ObTxDesc()
   : trace_info_(),
-    cluster_version_(0),
     seq_base_(0),
     tx_consistency_type_(ObTxConsistencyType::INVALID),
     addr_(),
@@ -333,7 +330,6 @@ int ObTxDesc::switch_to_idle()
   cb_tid_ = -1;
   exec_info_reap_ts_ = 0;
   commit_task_.reset();
-  modified_tables_.reset();
   state_ = State::IDLE;
   op_sn_ = 0;
   return OB_SUCCESS;
@@ -368,7 +364,6 @@ void ObTxDesc::reset()
 #endif
 
   trace_info_.reset();
-  cluster_version_ = 0;
   seq_base_ = 0;
   tx_consistency_type_ = ObTxConsistencyType::INVALID;
 
@@ -417,7 +412,6 @@ void ObTxDesc::reset()
   exec_info_reap_ts_ = 0;
   commit_task_.reset();
   tlog_.reset();
-  modified_tables_.reset();
 }
 
 void ObTxDesc::set_tx_id(const ObTransID &tx_id)
@@ -877,7 +871,7 @@ int ObTxDesc::fetch_conflict_txs(ObIArray<ObTransID> &array)
   return ret;
 }
 
-int ObTxDesc::add_conflict_tx(const ObTransID conflict_tx) {
+int ObTxDesc::add_conflict_tx(const ObTransID &conflict_tx) {
   ObSpinLockGuard guard(lock_);
   return add_conflict_tx_(conflict_tx);
 }
@@ -1487,53 +1481,6 @@ int ObTxDesc::clear_state_for_autocommit_retry()
     }
   }
   return OB_SUCCESS;
-}
-
-int ObTxDesc::add_modified_tables(const ObIArray<uint64_t> &dml_table_ids)
-{
-  int ret = OB_SUCCESS;
-  ObSpinLockGuard guard(lock_);
-  if (modified_tables_.count() >= 8) {
-    // go dedup
-    ARRAY_FOREACH(dml_table_ids, i) {
-      if (!is_contain(modified_tables_, dml_table_ids.at(i))) {
-        ret = modified_tables_.push_back(dml_table_ids.at(i));
-      }
-    }
-  } else if (OB_FAIL(append(modified_tables_, dml_table_ids))) {
-    TRANS_LOG(WARN, "append modified_tables fail", K(dml_table_ids), KPC(this));
-  } else {
-    int cnt = modified_tables_.count();
-    if (cnt >= 8) {
-      // dedup itself
-      int last = 0;
-      for (int i = 1; i < cnt; i++) {
-        int j = 0;
-        for (;j <= last; j++) {
-          if (modified_tables_.at(j) == modified_tables_.at(i)) {
-            break;
-          }
-        }
-        if (j == last + 1) {
-          ++last;
-          if (last != i) {
-            modified_tables_.at(last) = modified_tables_.at(i);
-          }
-        }
-      }
-      for (; last < cnt - 1; last++) {
-        modified_tables_.pop_back();
-      }
-    }
-  }
-  LOG_TRACE("record trans dml table_ids", K(modified_tables_), K(tx_id_));
-  return ret;
-}
-
-bool ObTxDesc::has_modify_table(const uint64_t table_id) const
-{
-  ObSpinLockGuard guard(lock_);
-  return is_contain(modified_tables_, table_id);
 }
 
 bool ObTxDesc::is_write_state_clean() const

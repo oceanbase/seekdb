@@ -59,13 +59,13 @@ int ObAllVirtualEngineTable::inner_get_next_row(common::ObNewRow *&row)
           uint64_t col_id = output_column_ids_.at(k);
           switch (col_id) {
           case ENGINE: {
-              cells[cell_idx].set_varchar("OceanBase");
+              cells[cell_idx].set_varchar("InnoDB");
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                      ObCharset::get_default_charset()));
               break;
             }
           case SUPPORT: {
-              cells[cell_idx].set_varchar("YES");
+              cells[cell_idx].set_varchar("DEFAULT");
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                      ObCharset::get_default_charset()));
               break;
@@ -83,7 +83,7 @@ int ObAllVirtualEngineTable::inner_get_next_row(common::ObNewRow *&row)
               break;
             }
           case SAVEPOINTS: {
-              cells[cell_idx].set_varchar("NO");
+              cells[cell_idx].set_varchar("YES");
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                      ObCharset::get_default_charset()));
               break;

@@ -19,7 +19,6 @@
 #include "ob_expr_extra_info_factory.h"
 #include "sql/engine/expr/ob_expr_autoinc_nextval.h"
 #include "sql/engine/expr/ob_expr_type_to_str.h"
-#include "sql/engine/expr/ob_expr_dll_udf.h"
 #include "sql/engine/expr/ob_expr_collection_construct.h"
 #include "sql/engine/expr/ob_expr_obj_access.h"
 #include "sql/engine/expr/ob_expr_subquery_ref.h"
@@ -36,7 +35,6 @@
 #include "sql/engine/expr/ob_expr_lrpad.h"
 #include "sql/engine/expr/ob_expr_json_schema_valid.h"
 #include "sql/engine/expr/ob_expr_json_utils.h"
-#include "sql/engine/expr/ob_expr_get_path.h"
 #include "sql/engine/expr/ob_expr_array_map.h"
 #include "sql/engine/expr/ob_expr_ai/ob_ai_func.h"
 
@@ -86,7 +84,6 @@ void ObExprExtraInfoFactory::register_expr_extra_infos()
   REG_EXTRA_INFO(T_FUN_ENUM_TO_INNER_TYPE, ObEnumSetInfo);
   REG_EXTRA_INFO(T_FUN_SET_TO_INNER_TYPE, ObEnumSetInfo);
   REG_EXTRA_INFO(T_FUN_COLUMN_CONV, ObEnumSetInfo);
-  REG_EXTRA_INFO(T_FUN_NORMAL_UDF, ObNormalDllUdfInfo);
   REG_EXTRA_INFO(T_FUN_PL_COLLECTION_CONSTRUCT, ObExprCollectionConstruct::ExtraInfo);
   REG_EXTRA_INFO(T_OBJ_ACCESS_REF, ObExprObjAccess::ExtraInfo);
   REG_EXTRA_INFO(T_REF_QUERY, ObExprSubQueryRef::ExtraInfo);
@@ -113,7 +110,6 @@ void ObExprExtraInfoFactory::register_expr_extra_infos()
   REG_EXTRA_INFO(T_FUN_SYS_JSON_SCHEMA_VALIDATION_REPORT, ObExprJsonSchemaValidInfo);
   REG_EXTRA_INFO(T_FUN_SYS_JSON_VALUE, ObExprJsonQueryParamInfo);
   REG_EXTRA_INFO(T_FUN_SYS_JSON_QUERY, ObExprJsonQueryParamInfo);
-  REG_EXTRA_INFO(T_PSEUDO_EXTERNAL_FILE_COL, ObDataAccessPathExtraInfo);
   REG_EXTRA_INFO(T_FUNC_SYS_ARRAY_MAP, ObExprArrayMapInfo);
   REG_EXTRA_INFO(T_FUNC_SYS_ARRAY_FIRST, ObExprArrayMapInfo);
   REG_EXTRA_INFO(T_FUNC_SYS_ARRAY_SORTBY, ObExprArrayMapInfo);

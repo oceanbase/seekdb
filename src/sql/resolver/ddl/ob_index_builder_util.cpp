@@ -45,18 +45,11 @@ void ObIndexBuilderUtil::del_column_flags_and_default_value(ObColumnSchemaV2 &co
        !column.is_spatial_generated_column() && 
        !column.is_multivalue_generated_column() &&
        !column.is_multivalue_generated_array_column() &&
-       !column.is_vec_index_column()) 
-      || column.is_identity_column()) {
+       !column.is_vec_index_column())) {
     if (column.is_virtual_generated_column()) {
       column.del_column_flag(VIRTUAL_GENERATED_COLUMN_FLAG);
     } else if (column.is_stored_generated_column()) {
       column.del_column_flag(STORED_GENERATED_COLUMN_FLAG);
-    } else if (column.is_always_identity_column()) {
-      column.del_column_flag(ALWAYS_IDENTITY_COLUMN_FLAG);
-    } else if (column.is_default_identity_column()) {
-      column.del_column_flag(DEFAULT_IDENTITY_COLUMN_FLAG);
-    } else if (column.is_default_on_null_identity_column()) {
-      column.del_column_flag(DEFAULT_ON_NULL_IDENTITY_COLUMN_FLAG);
     }
     ObObj obj;
     obj.set_null();
@@ -666,10 +659,7 @@ int ObIndexBuilderUtil::adjust_expr_index_args(
     ObIArray<ObColumnSchemaV2*> &gen_columns)
 {
   int ret = OB_SUCCESS;
-  if (arg.fulltext_columns_.count() > 0) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fulltext_columns_ is deprecated!", K(ret));
-  } else if (ObSimpleTableSchemaV2::is_spatial_index(arg.index_type_)) {
+  if (ObSimpleTableSchemaV2::is_spatial_index(arg.index_type_)) {
     ObSEArray<ObColumnSchemaV2*, 2>  spatial_cols;
     if (OB_FAIL(adjust_spatial_args(arg, data_schema, allocator, spatial_cols))) {
       LOG_WARN("adjust spatial args failed", K(ret));
@@ -736,7 +726,7 @@ int ObIndexBuilderUtil::adjust_ordinary_index_column_args(
       SMART_VAR(sql::ObSQLSessionInfo, session) {
         SMART_VARS_2((sql::ObExecContext, exec_ctx, allocator), (ObPhysicalPlanCtx, phy_plan_ctx, allocator)) {
           
-          const ObTenantSchema *tenant_schema = NULL;
+          const ObServerRuntimeSchema *runtime_schema = NULL;
           ObSchemaGetterGuard guard;
           ObSchemaChecker schema_checker;
           ObRawExpr *expr = NULL;
@@ -754,14 +744,14 @@ int ObIndexBuilderUtil::adjust_ordinary_index_column_args(
           /* pl resolver will use prefix schema and ignore the default database name */
           } else if (OB_FAIL(session.set_default_database(arg.database_name_))) {
             LOG_WARN("failed to set default session default database name", K(ret));
-          } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(guard))) {
+          } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(guard))) {
             LOG_WARN("get schema guard failed", K(ret));
           } else if (OB_FAIL(schema_checker.init(guard))) {
             LOG_WARN("failed to init schema checker", K(ret));
-          } else if (OB_FAIL(guard.get_tenant_info(tenant_schema))) {
-            LOG_WARN("get tenant_schema failed", K(ret));
-          } else if (OB_FAIL(session.init_tenant(tenant_schema->get_tenant_name_str()))) {
-            LOG_WARN("init tenant failed", K(ret));
+          } else if (OB_FAIL(guard.get_server_runtime_info(runtime_schema))) {
+            LOG_WARN("get runtime_schema failed", K(ret));
+          } else if (OB_FAIL(session.init_runtime(runtime_schema->get_runtime_name_str()))) {
+            LOG_WARN("init server runtime failed", K(ret));
           } else if (OB_FAIL(session.load_all_sys_vars(guard))) {
             LOG_WARN("session load system variable failed", K(ret));
           } else if (OB_FAIL(session.load_default_configs_in_pc())) {
@@ -799,7 +789,7 @@ int ObIndexBuilderUtil::adjust_ordinary_index_column_args(
             } else if (OB_ISNULL(GCTX.schema_service_)) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("unexpected null", K(ret));
-            } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(guard))) {
+            } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(guard))) {
               LOG_WARN("get schema guard failed", K(ret));
             } else if (OB_FAIL(generate_ordinary_generated_column(
                 *expr, session, data_schema, gen_col, &guard))) {
@@ -875,7 +865,7 @@ int ObIndexBuilderUtil::generate_ordinary_generated_column(
 {
   int ret = OB_SUCCESS;
   ObColumnSchemaV2 tmp_gen_col;
-  uint64_t tenant_data_version = 0;
+  uint64_t data_format_version = 0;
   SMART_VAR(char[OB_MAX_DEFAULT_VALUE_LENGTH], expr_def_buf) {
     MEMSET(expr_def_buf, 0, sizeof(expr_def_buf));
     int64_t pos = 0;

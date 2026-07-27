@@ -27,7 +27,7 @@
 #include "storage/tx/ob_trans_define.h"
 #include "storage/ls/ob_ls_tablet_service.h"
 #include "storage/ls/ob_ls.h"
-#include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
+#include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/tablet/ob_tablet_create_delete_helper.h"
 #include "storage/tablet/ob_tablet_obj_load_helper.h"
@@ -99,10 +99,7 @@ inline void TestTabletHelper::prepare_sstable_param(
   param.tx_data_recycle_scn_.set_min();
   param.original_size_ = 0;
   param.compressor_type_ = ObCompressorType::NONE_COMPRESSOR;
-  param.encrypt_id_ = 0;
-  param.master_key_id_ = 0;
   param.table_backup_flag_.reset();
-  param.table_shared_flag_.reset();
   param.recycle_version_ = 0;
   param.root_macro_seq_ = 0;
   param.row_count_ = 0;
@@ -121,7 +118,7 @@ inline int TestTabletHelper::create_tablet(
     ObTabletHandle &handle)
 {
   int ret = OB_SUCCESS;
-  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
   ObLSTabletService *ls_tablet_svr = ls->get_tablet_svr();
   ObArenaAllocator schema_allocator;
   ObCreateTabletSchema create_tablet_schema;
@@ -130,7 +127,7 @@ inline int TestTabletHelper::create_tablet(
   prepare_sstable_param(tablet_id, table_schema, param);
   void *buff = nullptr;
   if (OB_FAIL(create_tablet_schema.init(schema_allocator, table_schema,
-      false/*skip_column_info*/, DATA_VERSION_1_0_0_0))) {
+      false/*skip_column_info*/, cal_version(1, 0, 0, 0)))) {
     STORAGE_LOG(WARN, "failed to init storage schema", KR(ret), K(table_schema));
   } else if (OB_FAIL(ObSSTableMergeRes::fill_column_checksum_for_empty_major(param.column_cnt_, param.column_checksums_))) {
     STORAGE_LOG(WARN, "fill column checksum failed", K(ret), K(param));
@@ -203,7 +200,8 @@ inline int TestTabletHelper::remove_tablet(ObLS *ls, const ObTabletID &tablet_id
 
   ObTabletHandle tablet_handle;
   ls->get_tablet(tablet_id, tablet_handle);
-  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
+
+  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
   ObTabletCreateDeleteMdsUserData data;
   ObTabletStatus status(ObTabletStatus::DELETING);
   data.tablet_status_ = status;

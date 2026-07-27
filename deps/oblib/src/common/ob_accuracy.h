@@ -151,7 +151,6 @@ public:
   static const ObAccuracy MAX_ACCURACY[ObMaxType];
   static const ObAccuracy MAX_ACCURACY2[1][ObMaxType];
   static const ObAccuracy DML_DEFAULT_ACCURACY[ObMaxType];
-  static const ObAccuracy MAX_ACCURACY_OLD[ObMaxType];
 public:
   TO_STRING_KV(N_LENGTH, length_,
                N_PRECISION, precision_,

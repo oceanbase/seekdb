@@ -259,41 +259,6 @@ const ObAccuracy ObAccuracy::DML_DEFAULT_ACCURACY[ObMaxType] = {
   ObAccuracy(0, 6),         // mysql datetime.
 };
 
-const ObAccuracy ObAccuracy::MAX_ACCURACY_OLD[ObMaxType] = {
-  ObAccuracy(),         // null.
-  ObAccuracy(4, 0),     // int8.
-  ObAccuracy(6, 0),     // int16.
-  ObAccuracy(9, 0),     // int24.
-  ObAccuracy(11, 0),    // int32.
-  ObAccuracy(20, 0),    // int64.
-  ObAccuracy(3, 0),     // uint8.
-  ObAccuracy(5, 0),     // uint16.
-  ObAccuracy(8, 0),     // uint24.
-  ObAccuracy(10, 0),    // uint32.
-  ObAccuracy(20, 0),    // uint64.
-  ObAccuracy(255, 30),  // float.
-  ObAccuracy(255, 30),  // double.
-  ObAccuracy(255, 30),  // ufloat.
-  ObAccuracy(255, 30),  // udouble.
-  ObAccuracy(OB_MAX_DECIMAL_PRECISION, OB_MAX_DECIMAL_SCALE),    // number.
-  ObAccuracy(OB_MAX_DECIMAL_PRECISION, OB_MAX_DECIMAL_SCALE),    // unumber.
-  ObAccuracy(19, 6),    // datetime.
-  ObAccuracy(19, 6),    // timestamp.
-  ObAccuracy(10, 0),    // date.
-  ObAccuracy(10, 6),    // time. -838:59:59' to '838:59:59
-  ObAccuracy(4, 0),     // year.
-  ObAccuracy(),         // varchar.
-  ObAccuracy(1),        // char.
-  ObAccuracy(),         // hex_string.
-  ObAccuracy(),         // extend.
-  ObAccuracy(),          // unknown.
-  ObAccuracy(OB_MAX_TINYTEXT_LENGTH),         // tiny_text, todo
-  ObAccuracy(OB_MAX_TEXT_LENGTH),         // text, todo
-  ObAccuracy(OB_MAX_MEDIUMTEXT_LENGTH_OLD),         // medium_text, todo
-  ObAccuracy(OB_MAX_LONGTEXT_LENGTH_OLD),         // long_text, todo
-  ObAccuracy(64, 0)      // bit
-};
-
 OB_SERIALIZE_MEMBER_SIMPLE(ObAccuracy, accuracy_);
 
 }

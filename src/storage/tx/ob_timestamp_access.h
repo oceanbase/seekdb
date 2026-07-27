@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_TRANSACTION_OB_TIMESTAMP_ACCESS_
 #define OCEANBASE_TRANSACTION_OB_TIMESTAMP_ACCESS_
 
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -29,7 +29,7 @@ class ObTimestampAccess
 public:
   ObTimestampAccess() {}
   ~ObTimestampAccess() {}
-  static int mtl_init(ObTimestampAccess *&timestamp_access)
+  static int server_module_init(ObTimestampAccess *&timestamp_access)
   {
     timestamp_access->reset();
     return OB_SUCCESS;

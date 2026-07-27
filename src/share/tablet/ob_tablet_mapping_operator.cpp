@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/tablet/ob_tablet_mapping_operator.h"
+#include "common/mysqlclient/ob_isql_client.h"
+#include "common/mysqlclient/ob_mysql_result.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/ob_dml_sql_splicer.h" // ObDMLSqlSplicer
 
@@ -73,9 +75,9 @@ namespace share
           ObSqlString tablet_list; \
           for (int64_t idx = start_idx; OB_SUCC(ret) && (idx < end_idx); ++idx) { \
             const ObTabletID &tablet_id = tablet_ids.at(idx); \
-            if (OB_UNLIKELY(!tablet_id.is_valid_with_tenant())) { \
+            if (OB_UNLIKELY(!tablet_id.is_valid())) { \
               ret = OB_INVALID_ARGUMENT; \
-              LOG_WARN("invalid tablet_id with tenant", KR(ret), K(tablet_id)); \
+              LOG_WARN("invalid tablet_id with runtime", KR(ret), K(tablet_id)); \
             } else if (OB_FAIL(tablet_list.append_fmt( \
                 "%s%lu", \
                 start_idx == idx ? "" : ",", \
@@ -224,7 +226,8 @@ int ObTabletMappingTableOperator::inner_batch_update_by_sql_(
     int64_t affected_rows = 0;
     for (int64_t idx = start_idx; OB_SUCC(ret) && (idx < end_idx); ++idx) {
       const ObTabletTablePair &info = infos.at(idx);
-      if (OB_UNLIKELY(!info.is_valid())) {
+      if (OB_UNLIKELY(!info.is_valid()
+          || !info.get_tablet_id().is_valid())) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid tablet-table pair", KR(ret), K(info));
       } else if (OB_FAIL(dml_splicer.add_pk_column("tablet_id", info.get_tablet_id().id()))
@@ -300,9 +303,9 @@ int ObTabletMappingTableOperator::inner_batch_remove_by_sql_(
     int64_t affected_rows = 0;
     for (int64_t idx = start_idx; OB_SUCC(ret) && (idx < end_idx); ++idx) {
       const ObTabletID &tablet_id = tablet_ids.at(idx);
-      if (OB_UNLIKELY(!tablet_id.is_valid_with_tenant())) {
+      if (OB_UNLIKELY(!tablet_id.is_valid())) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid tablet_id with tenant", KR(ret), K(tablet_id));
+        LOG_WARN("invalid tablet_id with runtime", KR(ret), K(tablet_id));
       } else if (OB_FAIL(sql.append_fmt("%s %lu", start_idx == idx ? "" : ",", tablet_id.id()))) {
         LOG_WARN("fail to assign sql", KR(ret), K(tablet_id));
       }
@@ -362,7 +365,10 @@ int ObTabletMappingTableOperator::construct_results_(
     EXTRACT_INT_FIELD_MYSQL(res, "tablet_id", tablet_id, int64_t);
     EXTRACT_INT_FIELD_MYSQL(res, "table_id", table_id, uint64_t);
 
-    if (FAILEDx(info.init(ObTabletID(tablet_id), table_id))) {
+    if (OB_UNLIKELY(!ObTabletID(tablet_id).is_valid())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid runtime tablet id in mapping table", KR(ret), K(tablet_id));
+    } else if (FAILEDx(info.init(ObTabletID(tablet_id), table_id))) {
       LOG_WARN("init failed", KR(ret), K(tablet_id), K(table_id));
     } else if (OB_FAIL(infos.push_back(info))) {
       LOG_WARN("fail to push back", KR(ret), K(info));

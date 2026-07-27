@@ -126,10 +126,7 @@ public:
     : ObITableReadInfo(),
       is_inited_(false),
       allocator_(nullptr),
-      schema_column_count_(0),
-      compat_version_(READ_INFO_VERSION_V5),
-      is_delete_insert_table_(false),
-      reserved_(0),
+      info_(0),
       schema_rowkey_cnt_(0),
       rowkey_cnt_(0),
       cols_desc_(),
@@ -195,21 +192,16 @@ public:
     OB_ASSERT_MSG(false, "ObReadInfoStruct dose not promise need truncate filter");
     return false;
   }
-  OB_INLINE bool is_delete_insert_table() const { return is_delete_insert_table_; }
   DECLARE_VIRTUAL_TO_STRING;
   void init_basic_info(const int64_t schema_column_count,
                        const int64_t schema_rowkey_cnt,
-                       const bool is_delete_insert_table,
                        const bool is_global_index_table);
   int prepare_arrays(common::ObIAllocator &allocator,
                      const common::ObIArray<ObColDesc> &cols_desc,
                      const int64_t col_cnt);
-  int init_compat_version();
 protected:
-  static const int64_t READ_INFO_VERSION_V5 = 5;
-  static const int64_t READ_INFO_VERSION_LATEST = READ_INFO_VERSION_V5;
   static const int32_t READ_INFO_ONE_BIT = 1;
-  static const int32_t READ_INFO_RESERVED_BITS = 14;
+  static const int32_t READ_INFO_RESERVED_BITS = 15;
 
   bool is_inited_;
   ObIAllocator *allocator_;
@@ -218,8 +210,6 @@ protected:
     uint64_t info_;
     struct {
       uint32_t schema_column_count_;
-      uint16_t compat_version_;
-      uint16_t is_delete_insert_table_ : READ_INFO_ONE_BIT;
       uint16_t is_global_index_table_  : READ_INFO_ONE_BIT; // only used for rowkey_read_info in ObTablet
       uint16_t reserved_               : READ_INFO_RESERVED_BITS;
     };
@@ -253,8 +243,7 @@ public:
       const common::ObIArray<int32_t> *storage_cols_index,
       const common::ObIArray<ObColumnParam *> *cols_param = nullptr,
       const common::ObIArray<ObColExtend> *cols_extend = nullptr,
-      const bool need_truncate_filter = false,
-      const bool is_delete_insert_table = false);
+      const bool need_truncate_filter = false);
   virtual OB_INLINE bool is_valid() const override
   {
     return ObReadInfoStruct::is_valid()
@@ -336,8 +325,6 @@ public:
       const int64_t schema_column_count,
       const int64_t schema_rowkey_cnt,
       const common::ObIArray<ObColDesc> &rowkey_col_descs,
-      const bool use_default_compat_version = false,
-      const bool is_delete_insert_table = false,
       const bool is_global_index = false);
   OB_INLINE virtual int64_t get_seq_read_column_count() const override
   { return get_request_count(); }
@@ -346,8 +333,6 @@ public:
   virtual int64_t get_request_count() const override;
   OB_INLINE bool is_access_rowkey_only() const override
   { return false; }
-  OB_INLINE bool is_global_index_valid() const { return compat_version_ >= READ_INFO_VERSION_V5; }
-   // accurate when is_global_index_valid() = true
   OB_INLINE bool is_global_index_table() const { return is_global_index_table_; }
   int deep_copy(char *buf, const int64_t buf_len, ObRowkeyReadInfo *&value) const;
   int64_t get_deep_copy_size() const;

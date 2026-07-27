@@ -90,8 +90,9 @@ struct ObQueryHint {
   int init_query_hint(ObIAllocator *allocator, ObSQLSessionInfo *session_info, ObDMLStmt *stmt);
   int check_and_set_params_from_hint(const ObResolverParams &params, const ObDMLStmt &stmt) const;
   int check_ddl_schema_version_from_hint(const ObDMLStmt &stmt) const;
-  int check_ddl_schema_version_from_hint(const ObDMLStmt &stmt,
-                                         const ObDDLSchemaVersionHint& ddlSchemaVersionHint) const;
+  int check_ddl_schema_version_from_hint(
+      const ObDMLStmt &stmt,
+      const ObDDLSchemaVersionHint &ddl_schema_version_hint) const;
   int distribute_hint_to_orig_stmt(ObDMLStmt *stmt);
   int adjust_qb_name_for_stmt(ObIAllocator &allocator,
                               ObDMLStmt &stmt,
@@ -147,9 +148,11 @@ struct ObQueryHint {
   int get_basic_table_without_index_by_hint_table(const ObDMLStmt &stmt,
                                                   const ObTableInHint &table,
                                                   TableItem *&table_item) const;
-  bool has_hint_exclude_concurrent() const {  return !qb_hints_.empty() || !stmt_id_hints_.empty()
-                                                     || global_hint_.has_hint_exclude_concurrent(); }
-
+  bool has_hint_exclude_concurrent() const
+  {
+    return !qb_hints_.empty() || !stmt_id_hints_.empty()
+           || global_hint_.has_hint_exclude_concurrent();
+  }
   // print hint
   int print_stmt_hint(PlanText &plan_text, const ObDMLStmt &stmt, const bool is_first_stmt_for_hint) const;
   int print_outline_data(PlanText &plan_text) const;
@@ -448,9 +451,6 @@ struct ObLogPlanHint
                                      bool config_disable,
                                      JoinFilterPushdownHintInfo& info) const;
   int check_use_das(uint64_t table_id, bool &force_das, bool &force_no_das) const;
-  int check_use_skip_scan(uint64_t table_id,  uint64_t index_id,
-                          bool &force_skip_scan,
-                          bool &force_no_skip_scan) const;
   int check_scan_direction(const ObQueryCtx &ctx,
                            uint64_t table_id,
                            uint64_t index_id,

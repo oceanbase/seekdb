@@ -44,9 +44,10 @@ void ObAllVirtualIDService::reset()
 
 int ObAllVirtualIDService::prepare_start_to_read_()
 {
+  int ret = OB_SUCCESS;
   start_to_read_ = true;
   transaction::ObIDService::get_all_id_service_type(service_type_);
-  return OB_SUCCESS;
+  return ret;
 }
 
 int ObAllVirtualIDService::get_next_info_()
@@ -58,14 +59,16 @@ int ObAllVirtualIDService::get_next_info_()
     service_types_index_++;
   }
   if (OB_SUCC(ret)) {
-    
-    MOD_SCOPE {
-      transaction::ObIDService *id_service = NULL;
-      if (OB_FAIL(transaction::ObIDService::get_id_service(service_type_[service_types_index_], id_service))) {
-         SERVER_LOG(WARN, "get id service fail", K(ret), K(service_type_), K(service_types_index_));
+    SERVER_MODULE_SCOPE {
+      transaction::ObIDService *id_service = nullptr;
+      if (OB_FAIL(transaction::ObIDService::get_id_service(
+              service_type_[service_types_index_], id_service))) {
+        SERVER_LOG(WARN, "get id service failed", K(ret),
+                   K(service_type_[service_types_index_]));
       } else if (OB_ISNULL(id_service)) {
         ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "id service is null", K(ret), K(service_type_[service_types_index_]));
+        SERVER_LOG(WARN, "id service is null", K(ret),
+                   K(service_type_[service_types_index_]));
       } else {
         id_service->get_virtual_info(last_id_, limit_id_, rec_log_ts_, latest_log_ts_,
                                      pre_allocated_range_, submit_log_ts_);

@@ -31,6 +31,7 @@ namespace storage
 class ObLS;
 class ObStorageSchema;
 class ObTabletHandle;
+class ObProtectedMemtableMgrHandle;
 }
 namespace compaction
 {
@@ -65,7 +66,6 @@ struct ObStaticMergeParam final
   }
   OB_INLINE ObMergeType get_merge_type() const { return dag_param_.merge_type_; }
   OB_INLINE const ObTabletID &get_tablet_id() const { return dag_param_.tablet_id_; }
-  OB_INLINE ObExecMode get_exec_mode() const { return dag_param_.exec_mode_; }
   int cal_minor_merge_param(const bool has_compaction_filter);
   int cal_major_merge_param(const bool force_full_merge, ObProgressiveMergeMgr &progressive_mgr);
   OB_INLINE void set_full_merge_and_level(bool is_full_merge)
@@ -81,20 +81,17 @@ public:
   TO_STRING_KV(K_(dag_param), K_(scn_range), K_(version_range),
       K_(is_full_merge), K_(concurrent_cnt), K_(merge_level),
       "merge_reason", ObAdaptiveMergePolicy::merge_reason_to_str(merge_reason_),
-      K_(sstable_logic_seq), K_(tables_handle), K_(is_schema_changed), K_(is_tenant_major_merge),
+      K_(sstable_logic_seq), K_(tables_handle), K_(is_schema_changed), K_(is_database_major_merge),
       K_(read_base_version), K_(merge_scn), K_(need_parallel_minor_merge),
       KP_(schema), "multi_version_column_descs_cnt", multi_version_column_descs_.count(),
-      KP_(ls), K_(snapshot_info), K_(is_backfill), K_(tablet_schema_guard), K_(for_unittest),
-      K_(is_delete_insert_merge), K_(is_restore_complete));
+      KP_(ls), K_(snapshot_info), K_(is_backfill), K_(tablet_schema_guard), K_(for_unittest));
 
   ObTabletMergeDagParam &dag_param_;
   bool is_full_merge_; // full merge or increment merge
   bool is_schema_changed_;
   bool need_parallel_minor_merge_;
-  bool is_tenant_major_merge_;
+  bool is_database_major_merge_;
   bool is_backfill_;
-  bool is_delete_insert_merge_;
-  bool is_restore_complete_; // controls multi-version row recycling while tablet restore is incomplete
   bool for_unittest_;
   ObMergeLevel merge_level_;
   ObAdaptiveMergePolicy::AdaptiveMergeReason merge_reason_;
@@ -253,8 +250,7 @@ public:
   DAG_PARAM_FUNC(ObMergeType, merge_type);
   DAG_PARAM_FUNC(const ObTabletID &, tablet_id);
   DAG_PARAM_FUNC(int64_t, merge_version);
-  DAG_PARAM_FUNC(ObExecMode, exec_mode);
-  STATIC_PARAM_FUNC(bool, is_tenant_major_merge);
+  STATIC_PARAM_FUNC(bool, is_database_major_merge);
   STATIC_PARAM_FUNC(bool, is_full_merge);
   STATIC_PARAM_FUNC(bool, need_parallel_minor_merge);
   STATIC_PARAM_FUNC(int64_t, read_base_version);
@@ -269,7 +265,7 @@ public:
   #undef DAG_PARAM_FUNC
   #undef CTX_DEFINE_FUNC
   OB_INLINE int64_t get_concurrent_cnt() const { return parallel_merge_ctx_.get_concurrent_cnt(); }
-  OB_INLINE ObMergeType get_inner_table_merge_type() const { return get_is_tenant_major_merge() ? MAJOR_MERGE : get_merge_type(); }
+  OB_INLINE ObMergeType get_inner_table_merge_type() const { return get_is_database_major_merge() ? MAJOR_MERGE : get_merge_type(); }
   OB_INLINE const ObStorageSchema *get_schema() const { return static_param_.schema_; }
   OB_INLINE storage::ObLS *get_ls() const { return static_param_.ls_; }
   ObTablet *get_tablet() const { return tablet_handle_.get_obj(); }
@@ -281,7 +277,7 @@ public:
     const ObStorageSchema &schema_on_tablet,
     const ObTablesHandleArray &merge_tables_handle);
   static bool need_swap_tablet(
-    ObProtectedMemtableMgrHandle &memtable_mgr_handle,
+    storage::ObProtectedMemtableMgrHandle &memtable_mgr_handle,
     const int64_t row_count,
     const int64_t macro_count);
   virtual int get_macro_seq_by_stage(const ObGetMacroSeqStage stage,

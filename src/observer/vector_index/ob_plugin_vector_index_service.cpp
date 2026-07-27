@@ -119,7 +119,7 @@ int ObPluginVectorIndexMgr::init(lib::MemoryContext &memory_context,
     task_ctx_.task_id_ = 0;
     task_ctx_.non_memdata_task_cycle_ = 0;
     task_ctx_.need_memdata_sync_ = false;
-    task_ctx_.state_ = OB_TTL_TASK_PREPARE;
+    task_ctx_.state_ = OB_VECTOR_INDEX_TASK_PREPARE;
     need_check_ = false;
 
     memory_context_ = memory_context;
@@ -893,10 +893,10 @@ void ObPluginVectorIndexService::destroy()
     }
 
     // destroy vec async task
-    if (OB_NOT_NULL(tenant_vec_async_task_sched_)) {
-      tenant_vec_async_task_sched_->destroy();
-      ob_free(tenant_vec_async_task_sched_);
-      tenant_vec_async_task_sched_ = nullptr;
+    if (OB_NOT_NULL(vec_async_task_sched_)) {
+      vec_async_task_sched_->destroy();
+      ob_free(vec_async_task_sched_);
+      vec_async_task_sched_ = nullptr;
     }
 
   }
@@ -910,13 +910,12 @@ int ObPluginVectorIndexService::init(schema::ObMultiVersionSchemaService *schema
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
-  } else if (OB_UNLIKELY(false)
-      || OB_ISNULL(schema_service)
+  } else if (OB_ISNULL(schema_service)
       || OB_ISNULL(ls_service)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument to init ObPluginVectorIndexService", KR(ret));
   } else if (OB_FAIL(allocator_.init(nullptr, OB_MALLOC_MIDDLE_BLOCK_SIZE, mem_attr))) {
-    LOG_WARN("ObTenantSrs allocator init failed.", K(ret));
+    LOG_WARN("ObSrsService allocator init failed.", K(ret));
   } else {
     ObSharedMemAllocMgr *shared_mem_mgr = share::g_mp->shared_mem_alloc_mgr();
     memory_context_ = shared_mem_mgr->vector_allocator().get_mem_context();
@@ -954,25 +953,25 @@ int ObPluginVectorIndexService::activate()
     ret = OB_NOT_INIT;
     LOG_WARN("ObPluginVectorIndexService is not inited", K(ret));
   } else {
-    if (OB_ISNULL(tenant_vec_async_task_sched_)) {
-      if (OB_FAIL(alloc_tenant_vec_async_task_sched())) {
-        LOG_WARN("fail to alloc tenant_vec_async_task_sched_", K(ret));
+    if (OB_ISNULL(vec_async_task_sched_)) {
+      if (OB_FAIL(alloc_vec_async_task_sched())) {
+        LOG_WARN("fail to alloc vec_async_task_sched_", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (!is_vec_async_task_started_) {
-        if (OB_FAIL(tenant_vec_async_task_sched_->start())) {
-          LOG_WARN("fail to start tenant_vec_async_task_sched_", K(ret));
+        if (OB_FAIL(vec_async_task_sched_->start())) {
+          LOG_WARN("fail to start vec_async_task_sched_", K(ret));
         } else {
           is_vec_async_task_started_ = true;
         }
       } else {
-        tenant_vec_async_task_sched_->resume();
+        vec_async_task_sched_->resume();
       }
     }
   }
   const int64_t cost_us = ObTimeUtility::current_time() - start_time_us;
-  FLOG_INFO("ObPluginVectorIndexService: finish switch_to_leader", KR(ret), K(cost_us), KP(tenant_vec_async_task_sched_));
+  FLOG_INFO("ObPluginVectorIndexService: finish switch_to_leader", KR(ret), K(cost_us), KP(vec_async_task_sched_));
   return ret;
 }
 
@@ -985,45 +984,45 @@ void ObPluginVectorIndexService::inner_switch_to_follower()
 {
   FLOG_INFO("ObPluginVectorIndexService: switch_to_follower");
   const int64_t start_time_us = ObTimeUtility::current_time();
-  if (OB_NOT_NULL(tenant_vec_async_task_sched_)) {
-    tenant_vec_async_task_sched_->pause();
+  if (OB_NOT_NULL(vec_async_task_sched_)) {
+    vec_async_task_sched_->pause();
   }
   const int64_t cost_us = ObTimeUtility::current_time() - start_time_us;
-  FLOG_INFO("ObPluginVectorIndexService: switch_to_follower", K(cost_us), KP(tenant_vec_async_task_sched_));
+  FLOG_INFO("ObPluginVectorIndexService: switch_to_follower", K(cost_us), KP(vec_async_task_sched_));
 }
 
-int ObPluginVectorIndexService::alloc_tenant_vec_async_task_sched()
+int ObPluginVectorIndexService::alloc_vec_async_task_sched()
 {
   int ret = OB_SUCCESS;
   void *buf = nullptr;
-  int64_t len = sizeof(ObTenantVecAsyncTaskScheduler);
+  int64_t len = sizeof(ObVecAsyncTaskScheduler);
   ObMemAttr attr("VecIdxAsyncTask");
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObPluginVectorIndexService is not inited", K(ret));
-  } else if (OB_NOT_NULL(tenant_vec_async_task_sched_)) {
+  } else if (OB_NOT_NULL(vec_async_task_sched_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant_vec_async_task_sched_ is not null", KR(ret), KP(tenant_vec_async_task_sched_));
-  } else if (OB_ISNULL(buf = ob_malloc(sizeof(ObTenantVecAsyncTaskScheduler), attr))) {
+    LOG_WARN("vec_async_task_sched_ is not null", KR(ret), KP(vec_async_task_sched_));
+  } else if (OB_ISNULL(buf = ob_malloc(sizeof(ObVecAsyncTaskScheduler), attr))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc memory", KR(ret), K(len));
-  } else if (FALSE_IT(tenant_vec_async_task_sched_ = new(buf) ObTenantVecAsyncTaskScheduler())) {
-  } else if (OB_FAIL(tenant_vec_async_task_sched_->init(*GCTX.sql_proxy_))) {
-    LOG_WARN("fail to init tenant_vec_async_task_sched_", K(ret));
+  } else if (FALSE_IT(vec_async_task_sched_ = new(buf) ObVecAsyncTaskScheduler())) {
+  } else if (OB_FAIL(vec_async_task_sched_->init(*GCTX.sql_proxy_))) {
+    LOG_WARN("fail to init vec_async_task_sched_", K(ret));
   }
   if (OB_FAIL(ret)) {
-    if (OB_NOT_NULL(tenant_vec_async_task_sched_)) {
-      tenant_vec_async_task_sched_->destroy();
-      ob_free(tenant_vec_async_task_sched_);
-      tenant_vec_async_task_sched_ = nullptr;
+    if (OB_NOT_NULL(vec_async_task_sched_)) {
+      vec_async_task_sched_->destroy();
+      ob_free(vec_async_task_sched_);
+      vec_async_task_sched_ = nullptr;
     }
   }
-  LOG_DEBUG("finish alloc_tenant_vec_async_task_sched", K(ret));
+  LOG_DEBUG("finish alloc_vec_async_task_sched", K(ret));
   return ret;
 }
 
-int ObPluginVectorIndexService::mtl_init(ObPluginVectorIndexService *&service)
+int ObPluginVectorIndexService::server_module_init(ObPluginVectorIndexService *&service)
 {
   int ret = OB_SUCCESS;
   schema::ObMultiVersionSchemaService *schema_service = &GSCHEMASERVICE;
@@ -1049,8 +1048,8 @@ void ObPluginVectorIndexService::stop()
 {
   if (IS_INIT) {
     LOG_INFO("stop vector index service", K_(is_inited));
-    if (OB_NOT_NULL(tenant_vec_async_task_sched_)) {
-      tenant_vec_async_task_sched_->stop();
+    if (OB_NOT_NULL(vec_async_task_sched_)) {
+      vec_async_task_sched_->stop();
     }
     get_vec_async_task_handle().stop();
     kmeans_build_task_handler_.stop();
@@ -1062,8 +1061,8 @@ void ObPluginVectorIndexService::wait()
 {
   if (IS_INIT) {
     LOG_INFO("wait vector index service");
-    if (OB_NOT_NULL(tenant_vec_async_task_sched_)) {
-      tenant_vec_async_task_sched_->wait();
+    if (OB_NOT_NULL(vec_async_task_sched_)) {
+      vec_async_task_sched_->wait();
     }
     kmeans_build_task_handler_.wait();
     embedding_task_handler_.wait();
@@ -1630,8 +1629,8 @@ int ObPluginVectorIndexService::generate_get_aux_info_sql(
     if (OB_ISNULL(schema_service_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema_service is nullptr", K(ret));
-    } else if (OB_FAIL(schema_service_->get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("failed to get tenant schema guard", K(ret));
+    } else if (OB_FAIL(schema_service_->get_runtime_schema_guard(schema_guard))) {
+      LOG_WARN("failed to get runtime schema guard", K(ret));
     } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
       LOG_WARN("failed to get table schema", K(ret), K(table_id));
     } else if (OB_ISNULL(table_schema)) {

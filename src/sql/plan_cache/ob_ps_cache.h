@@ -82,8 +82,8 @@ public:
 
   ObPsCache();
   virtual ~ObPsCache();
-  static int mtl_init(ObPsCache* &ps_cache);
-  static void mtl_stop(ObPsCache * &ps_cache);
+  static int server_module_init(ObPsCache* &ps_cache);
+  static void server_module_stop(ObPsCache * &ps_cache);
   int init(const int64_t hash_bucket);
   bool is_inited() const { return inited_; }
   int set_mem_conf(const ObPCMemPctConf &conf);
@@ -148,13 +148,13 @@ private:
   int64_t get_mem_limit() const
   {
     const double PS_EVICT_PERCENT_ON_PC = 0.5;
-    const int64_t MAX_TENANT_MEM = ((int64_t)(1) << 40); // 1T
-    int64_t tenant_mem = lib::get_tenant_memory_limit();
+    const int64_t MAX_RUNTIME_MEM = ((int64_t)(1) << 40); // 1T
+    int64_t runtime_mem = lib::get_allocator_memory_limit();
     int64_t mem_limit = -1;
-    if (OB_UNLIKELY(0 >= tenant_mem || tenant_mem >= MAX_TENANT_MEM)) {
-      mem_limit = MAX_TENANT_MEM * PS_EVICT_PERCENT_ON_PC;
+    if (OB_UNLIKELY(0 >= runtime_mem || runtime_mem >= MAX_RUNTIME_MEM)) {
+      mem_limit = MAX_RUNTIME_MEM * PS_EVICT_PERCENT_ON_PC;
     }
-    mem_limit = tenant_mem / 100
+    mem_limit = runtime_mem / 100
                 * get_mem_limit_pct() * PS_EVICT_PERCENT_ON_PC;
     return mem_limit;
   }

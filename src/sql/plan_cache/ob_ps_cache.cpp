@@ -68,16 +68,16 @@ ObPsCache::~ObPsCache()
   LOG_INFO("release ps plan cache", "bt", lbt(), K(ret));
 }
 
-int ObPsCache::mtl_init(ObPsCache* &ps_cache)
+int ObPsCache::server_module_init(ObPsCache* &ps_cache)
 {
   int ret = OB_SUCCESS;
   
-  int64_t mem_limit = lib::get_tenant_memory_limit();
+  int64_t mem_limit = lib::get_allocator_memory_limit();
   ps_cache->inited_ = false;
   return ret;
 }
 
-void ObPsCache::mtl_stop(ObPsCache * &ps_cache)
+void ObPsCache::server_module_stop(ObPsCache * &ps_cache)
 {
   if (OB_LIKELY(nullptr != ps_cache && ps_cache->is_inited())) {
     ps_cache->evict_timer_.cancel(ps_cache->evict_task_);
@@ -365,7 +365,7 @@ int ObPsCache::get_or_add_stmt_info(const PsCacheInfoCtx &info_ctx,
   } else if (OB_FAIL(ref_stmt_info(ps_item->get_ps_stmt_id(), ref_ps_info))) {
     if (OB_HASH_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
-      int64_t tenant_version = OB_INVALID_VERSION;
+      int64_t runtime_schema_version = OB_INVALID_VERSION;
       ObArenaAllocator allocator;
       ObPsStmtInfo tmp_stmt_info(&allocator);
       tmp_stmt_info.assign_sql_key(*ps_item);
@@ -375,9 +375,9 @@ int ObPsCache::get_or_add_stmt_info(const PsCacheInfoCtx &info_ctx,
       uint64_t ps_stmt_checksum = ob_crc64(info_ctx.normalized_sql_.ptr(),
                                            info_ctx.normalized_sql_.length()); // actual is crc32
       tmp_stmt_info.set_ps_stmt_checksum(ps_stmt_checksum);
-      if (OB_FAIL(schema_guard.get_schema_version(tenant_version))) {
-        LOG_WARN("fail to get tenant version", K(ret));
-      } else if (FALSE_IT(tmp_stmt_info.set_tenant_version(tenant_version))) {
+      if (OB_FAIL(schema_guard.get_schema_version(runtime_schema_version))) {
+        LOG_WARN("fail to get runtime schema version", K(ret));
+      } else if (FALSE_IT(tmp_stmt_info.set_runtime_schema_version(runtime_schema_version))) {
         // do nothing
       } else if (OB_FAIL(tmp_stmt_info.assign_no_param_sql(info_ctx.no_param_sql_))) {
         LOG_WARN("fail to assign no param sql", K(ret), K(info_ctx.no_param_sql_));
@@ -823,11 +823,11 @@ int ObPsCache::check_schema_version(ObSchemaGetterGuard &schema_guard,
 {
   int ret = OB_SUCCESS;
   is_expired = false;
-  int64_t new_tenant_version = OB_INVALID_VERSION;
-  if (OB_FAIL(schema_guard.get_schema_version(new_tenant_version))) {
-    LOG_WARN("fail to get tenant version", K(ret));
-  } else if (new_tenant_version != stmt_info.get_tenant_version()) {
-    LOG_TRACE("tenant version change", K(stmt_info), K(new_tenant_version));
+  int64_t new_runtime_schema_version = OB_INVALID_VERSION;
+  if (OB_FAIL(schema_guard.get_schema_version(new_runtime_schema_version))) {
+    LOG_WARN("fail to get runtime schema version", K(ret));
+  } else if (new_runtime_schema_version != stmt_info.get_runtime_schema_version()) {
+    LOG_TRACE("runtime schema version changed", K(stmt_info), K(new_runtime_schema_version));
     for (int64_t i = 0; OB_SUCC(ret) && !is_expired && i < stmt_info.get_dep_objs_cnt(); i++) {
       ObSchemaObjVersion &obj_version = stmt_info.get_dep_objs()[i];
       int64_t new_version = OB_INVALID_VERSION;

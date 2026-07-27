@@ -20,6 +20,7 @@
 #include "sql/plan_cache/ob_sql_parameterization.h"
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "sql/resolver/ob_resolver_utils.h"
+#include "share/ob_encryption_util.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;

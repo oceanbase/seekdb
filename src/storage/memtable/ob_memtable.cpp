@@ -27,8 +27,7 @@
 #include "storage/compaction/ob_schedule_dag_func.h"
 #include "storage/access/ob_sstable_row_getter.h"
 #include "storage/tx/ob_tx_ctx.h"
-#include "storage/tx_storage/ob_tenant_freezer.h"
-#include "storage/tx_storage/ob_tenant_freezer.h"
+#include "storage/tx_storage/ob_memstore_freezer.h"
 #include "storage/access/ob_row_sample_iterator.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
 #include "storage/ob_i_table.h"
@@ -98,7 +97,6 @@ ObMemtable::ObMemtable()
   :   is_inited_(false),
       recommend_snapshot_freeze_flag_(false),
       contain_hotspot_row_(false),
-      is_delete_insert_table_(false),
       ls_(nullptr),
       local_allocator_(*this),
       query_engine_(local_allocator_),
@@ -180,7 +178,7 @@ int ObMemtable::batch_remove_unused_callback_for_uncommited_txn(
 {
   int ret = OB_SUCCESS;
   // NB: Do not use cache here, because the trans_service may be destroyed under
-  // MTL_DESTROY() and the cache is pointing to a broken memory.
+  // SERVER_DESTROY() and the cache is pointing to a broken memory.
   transaction::ObTransService *txs_svr =
     ::oceanbase::share::g_mp->trans_service();
 
@@ -335,11 +333,6 @@ int ObMemtable::multi_set(
                          || param.get_schema_rowkey_count() > columns->count())) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "Invalid param", K(ret), K(param), K(columns->count()));
-#ifdef ENABLE_DEBUG_LOG
-  // TODO: zhanghuidong.zhd, remove defensive code later
-  } else if (OB_FAIL(check_set_row_with_nop_col_(arg))) {
-    TRANS_LOG(ERROR, "get unexpected nop column in delete_insert table", K(ret), K(arg), K(param), K(context));
-#endif
   } else if (OB_FAIL(memtable_key_generator.init())) {
     TRANS_LOG(WARN, "fail to generate memtable keys",
               KPC(context.store_ctx_), KR(ret));
@@ -504,11 +497,6 @@ int ObMemtable::set(
              || (update_idx == NULL && new_row->count_ < columns->count())) {
     TRANS_LOG(WARN, "invalid param", K(param), K(columns->count()), K(new_row->count_));
     ret = OB_INVALID_ARGUMENT;
-#ifdef ENABLE_DEBUG_LOG
-  // TODO: zhanghuidong.zhd, remove defensive code later
-  } else if (OB_FAIL(check_set_row_with_nop_col_(arg))) {
-    TRANS_LOG(ERROR, "get unexpected nop column in delete_insert table", K(ret), K(arg), K(param), K(context));
-#endif
   } else if (OB_FAIL(guard.write_auth(*context.store_ctx_))) {
     TRANS_LOG(WARN, "not allow to write", K(*context.store_ctx_));
   } else {
@@ -1468,8 +1456,8 @@ void ObMemtable::set_allow_freeze(const bool allow_freeze)
   if (get_allow_freeze_() != allow_freeze) {
     const common::ObTabletID tablet_id = key_.tablet_id_;
     const int64_t retire_clock = local_allocator_.get_retire_clock();
-    ObTenantFreezer *freezer = nullptr;
-    freezer = share::g_mp->tenant_freezer();
+    ObMemstoreFreezer *freezer = nullptr;
+    freezer = share::g_mp->memstore_freezer();
 
     if (allow_freeze) {
       set_allow_freeze_();
@@ -1478,12 +1466,12 @@ void ObMemtable::set_allow_freeze(const bool allow_freeze)
     }
 
     if (allow_freeze) {
-      if (OB_FAIL(freezer->unset_tenant_slow_freeze(tablet_id))) {
-        LOG_WARN("unset tenant slow freeze failed.", KPC(this));
+      if (OB_FAIL(freezer->unset_slow_freeze(tablet_id))) {
+        LOG_WARN("unset runtime slow freeze failed", KPC(this));
       }
     } else {
-      if (OB_FAIL(freezer->set_tenant_slow_freeze(tablet_id, retire_clock))) {
-        LOG_WARN("set tenant slow freeze failed.", KPC(this));
+      if (OB_FAIL(freezer->set_slow_freeze(tablet_id, retire_clock))) {
+        LOG_WARN("set runtime slow freeze failed", KPC(this));
       }
     }
   }
@@ -1686,7 +1674,7 @@ int ObMemtable::resolve_snapshot_version_()
   } else if (SCN::invalid_scn() == freeze_snapshot_version) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "fail to get freeze_snapshot_version", K(ret), KPC(this));
-  } else if (has_recommend_snapshot_freeze()) {
+  } else if (is_recommend_freeze()) {
     // freeze_snapshot_version is used for read tables decision which guarantees
     // that all version smaller than the freeze_snapshot_version belongs to
     // table before the memtable. Some replay paths require a smaller boundary,
@@ -1738,7 +1726,7 @@ int ObMemtable::resolve_max_end_scn_()
     TRANS_LOG(ERROR, "fail to get freeze_snapshot_version", K(ret));
   } else if (SCN::invalid_scn() == max_decided_scn) {
     // Pass if not necessary
-  } else if (has_recommend_snapshot_freeze()) {
+  } else if (is_recommend_freeze()) {
     // max_decided_scn is critial for sstable read performance using larger
     // right boundary of memtable(You can learn from the comments that follow
     // the class member). Some replay paths require a smaller right boundary,
@@ -1765,7 +1753,7 @@ int ObMemtable::flush()
     param.tablet_id_ = key_.tablet_id_;
     param.merge_type_ = MINI_MERGE;
     param.merge_version_ = ObVersion::MIN_VERSION;
-    fill_compaction_param_(cur_time, param);
+    fill_compaction_param_(param);
 
     if (OB_FAIL(compaction::ObScheduleDagFunc::schedule_tablet_merge_dag(param))) {
       if (OB_EAGAIN != ret && OB_SIZE_OVERFLOW != ret) {
@@ -1795,16 +1783,11 @@ int ObMemtable::flush()
   return ret;
 }
 
-void ObMemtable::fill_compaction_param_(
-    const int64_t current_time,
-    ObTabletMergeDagParam &param)
+void ObMemtable::fill_compaction_param_(ObTabletMergeDagParam &param)
 {
   ObCompactionParam &compaction_param = param.compaction_param_;
   compaction_param.occupy_size_ = get_occupied_size();
-  compaction_param.replay_interval_ = get_start_scn().get_val_for_tx() - ls_->get_ls_meta().get_clog_checkpoint_scn().get_val_for_tx();
   compaction_param.last_end_scn_ = get_end_scn();
-  compaction_param.add_time_ = current_time;
-  compaction_param.estimate_phy_size_ = mt_stat_.row_size_;
 }
 
 int ObMemtable::estimate_phy_size(const ObStoreRowkey* start_key, const ObStoreRowkey* end_key, int64_t& total_bytes, int64_t& total_rows)
@@ -2323,9 +2306,7 @@ int ObMemtable::set_(
                                       &mtd,                      /*memtable_data*/
                                       old_row_data,              /*heap allocated old row*/
                                       init_timestamp_,           /*memstore_version*/
-                                                                /* for delete_insert table, delete and insert are the continous trans in update*/
-                                                                /* take two seq cnt, delete takes the former, need -1 in write seq*/
-                                      (is_delete_insert_table() && new_row->row_flag_.is_delete()) ? write_seq - 1 : write_seq,
+                                      write_seq,
                                       write_epoch,               /*write_epoch*/
                                       column_cnt                 /*column_cnt*/))) {
     // Step2: build and insert the tx node into the active memtable, it will
@@ -2635,10 +2616,6 @@ int ObMemtable::batch_mvcc_write_(const storage::ObTableIterParam &param,
 
     if (OB_FAIL(ctx.mvcc_acc_ctx_.get_write_seq(write_seq))) {
       TRANS_LOG(WARN, "get write seq failed", K(ret));
-    } else if (is_delete_insert_table() && memtable_set_arg.new_row_[i].row_flag_.is_delete()) {
-      // for delete_insert table, delete and insert are the continous trans in update,
-      // take two seq cnt, delete takes the former, need -1 in write seq
-      write_seq = write_seq - 1;
     }
 
     if (FAILEDx(build_row_data_(mem_ctx,             /*old row allocator*/
@@ -2845,9 +2822,9 @@ int ObMemtable::post_row_write_conflict_(ObMvccAccessCtx &acc_ctx,
     ret = OB_ERR_EXCLUSIVE_LOCK_CONFLICT;
     TRANS_LOG(WARN, "exclusive lock conflict", K(ret), K(row_key),
               K(conflict_tx_id), K(acc_ctx), K(lock_wait_expire_ts));
-  } else if (OB_ISNULL(lock_wait_mgr = MTL_WITH_CHECK(ObLockWaitMgr*))) {
+  } else if (OB_ISNULL(lock_wait_mgr = share::server_module<ObLockWaitMgr*>())) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "can not get tenant lock_wait_mgr MTL");
+    TRANS_LOG(WARN, "can not get server lock_wait_mgr");
   } else {
     mem_ctx->add_conflict_trans_id(conflict_tx_id);
     mem_ctx->on_wlock_retry(row_key, conflict_tx_id);
@@ -2878,7 +2855,6 @@ int ObMemtable::post_row_write_conflict_(ObMvccAccessCtx &acc_ctx,
                                        key_.get_tablet_id(),
                                        *row_key.get_rowkey(),
                                        lock_wait_expire_ts,
-                                       false,
                                        last_compact_cnt,
                                        total_trans_node_cnt,
                                        acc_ctx.tx_desc_->get_session_id(),
@@ -3226,7 +3202,7 @@ void ObMemtable::mvcc_write_statistic_(const ObMvccWriteResult &res)
       ++mt_stat_.delete_row_count_;
     }
 
-    EVENT_ADD(ObStatEventIds::MEMSTORE_WRITE_BYTES,
+    EVENT_ADD(MEMSTORE_WRITE_BYTES,
               res.mtk_.get_rowkey()->get_deep_copy_size() +
               res.tx_node_->get_data_size());
   }

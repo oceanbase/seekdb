@@ -100,7 +100,7 @@ void ObTxLogCb::reset_tx_op_array()
       tx_op_array_->at(idx).release();
     }
     tx_op_array_->~ObTxOpArray();
-    mtl_free(tx_op_array_);
+    server_free(tx_op_array_);
     tx_op_array_ = nullptr;
   }
 }

@@ -49,14 +49,12 @@ public:
 
 public:
   ObKeepAliveLogBody()
-    : compat_bit_(1), min_start_scn_(),
+    : min_start_scn_(),
     min_start_status_(MinStartScnStatus::UNKOWN)
   {}
-  ObKeepAliveLogBody(int64_t compat_bit,
-                     const share::SCN &min_start_scn,
+  ObKeepAliveLogBody(const share::SCN &min_start_scn,
                      MinStartScnStatus min_status)
-    : compat_bit_(compat_bit),
-    min_start_scn_(min_start_scn),
+    : min_start_scn_(min_start_scn),
     min_start_status_(min_status)
   {}
 
@@ -64,10 +62,9 @@ public:
   const share::SCN &get_min_start_scn() const { return min_start_scn_; };
   MinStartScnStatus get_min_start_status() { return min_start_status_; }
 
-  TO_STRING_KV(K_(compat_bit), K_(min_start_scn), K_(min_start_status));
+  TO_STRING_KV(K_(min_start_scn), K_(min_start_status));
 
 private:
-  int64_t compat_bit_; // not used, only for compatibility
   share::SCN min_start_scn_;
   MinStartScnStatus min_start_status_;
 };

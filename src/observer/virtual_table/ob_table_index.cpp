@@ -92,9 +92,7 @@ void ObTableIndex::reset()
 
 int ObTableIndex::init() {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(GET_MIN_DATA_VERSION(min_data_version_))) {
-    LOG_WARN("fail to get min data version", K(ret));
-  }
+  min_data_version_ = DATA_CURRENT_VERSION;
   return ret;
 }
 
@@ -112,8 +110,8 @@ int ObTableIndex::inner_get_next_row(common::ObNewRow *&row)
     if (OB_INVALID_ID == show_table_id_) {
       {
         if (OB_INVALID_ID == static_cast<uint64_t>(database_schema_idx_)) {//first get next row
-          if (OB_FAIL(schema_guard_->get_database_schemas_in_tenant(database_schemas_))) {
-            SERVER_LOG(WARN, "failed to get database schema of tenant");
+          if (OB_FAIL(schema_guard_->get_database_schemas_in_runtime(database_schemas_))) {
+            SERVER_LOG(WARN, "failed to get database schemas");
           } else {
             database_schema_idx_ = 0;
           }

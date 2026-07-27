@@ -67,7 +67,7 @@ namespace common
 {
 using namespace number;
 
-// hook definitions(registered in observer/omt/ob_tenant_srs.cpp and sql ob_expr_json_func_helper.cpp)
+// hook definitions(registered in observer/omt/ob_srs_service.cpp and sql ob_expr_json_func_helper.cpp)
 ObObjCastGetSrsItemFn g_obj_cast_get_srs_item = nullptr;
 ObObjCastJsonMaxDepthFn g_obj_cast_json_max_depth = nullptr;
 
@@ -1444,8 +1444,6 @@ static int common_get_srs_item(ObSrsGuardErased &srs_guard,
 {
   int ret = OB_SUCCESS;
   uint32_t srid = UINT32_MAX;
-  // todo : get effective tenant id
-  
   if (wkb.length() < WKB_GEO_SRID_SIZE) {
     ret = OB_ERR_GIS_INVALID_DATA;
     LOG_WARN("invalid data length", K(ret), K(wkb.length()));
@@ -12441,10 +12439,7 @@ int ob_obj_accuracy_check_only(const ObAccuracy &accuracy, const ObCollationType
 }
 
 // ob_obj_to_ob_time_with_date moved definition to sql/engine/expr/ob_datum_cast.cpp(transitional state)
-// Note: master tenant-elim removed the MTL_ID() argument to ObArenaAllocator, HOST must be synced (see routing item)
-
 // ob_obj_to_ob_time_without_date moved definition to sql/engine/expr/ob_datum_cast.cpp(transitional state)
-// Note: master tenant-elim removed the MTL_ID() argument to ObArenaAllocator, HOST must be synced (see routing item)
 
 int ObObjCaster::to_type(const ObObjType expect_type, ObCastCtx &cast_ctx,
                          const ObObj &in_obj, ObObj &buf_obj, const ObObj *&res_obj)

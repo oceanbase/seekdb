@@ -29,8 +29,29 @@ namespace palf
 class MockLogModeMgr : public LogModeMgr
 {
 public:
-  MockLogModeMgr() {}
-  virtual ~MockLogModeMgr() {}
+  MockLogModeMgr()
+  {
+    LogModeMeta mode_meta;
+    (void) mode_meta.generate(AccessMode::APPEND,
+                              share::SCN::min_scn());
+    applied_mode_meta_ = mode_meta;
+    is_inited_ = true;
+  }
+  ~MockLogModeMgr() override = default;
+
+  void destroy() override {}
+  int get_access_mode(AccessMode &access_mode) const override
+  {
+    access_mode = applied_mode_meta_.access_mode_;
+    return OB_SUCCESS;
+  }
+  int get_access_mode_ref_scn(AccessMode &access_mode,
+                              share::SCN &ref_scn) const override
+  {
+    access_mode = applied_mode_meta_.access_mode_;
+    ref_scn = applied_mode_meta_.ref_scn_;
+    return OB_SUCCESS;
+  }
 };
 
 } // namespace palf

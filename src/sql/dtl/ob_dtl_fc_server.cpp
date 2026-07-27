@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_DTL
 
-#include "observer/omt/ob_multi_tenant.h"
+#include "observer/omt/ob_server_runtime_controller.h"
 #include "ob_dtl_fc_server.h"
 #include "share/rc/ob_module_provider.h"
 
@@ -26,60 +26,60 @@ using namespace oceanbase::sql::dtl;
 using namespace oceanbase::lib;
 using namespace oceanbase::share;
 
-// ObTenantDfc
-ObTenantDfc::ObTenantDfc()
-: tenant_dfc_(), blocked_dfc_cnt_(0), channel_total_cnt_(0), max_parallel_cnt_(0),
-  max_blocked_buffer_size_(0), max_buffer_size_(0), tenant_mem_mgr_{}
+// ObDfc
+ObDfc::ObDfc()
+: aggregate_dfc_(), blocked_dfc_cnt_(0), channel_total_cnt_(0), max_parallel_cnt_(0),
+  max_blocked_buffer_size_(0), max_buffer_size_(0), mem_mgr_{}
 {}
 
-ObTenantDfc::~ObTenantDfc()
+ObDfc::~ObDfc()
 {}
 
-int ObTenantDfc::mtl_new(ObTenantDfc *&tenant_dfc)
+int ObDfc::server_module_new(ObDfc *&dfc_manager)
 {
   int ret = OB_SUCCESS;
   
-  tenant_dfc = static_cast<ObTenantDfc *> (ob_malloc(sizeof(ObTenantDfc), ObMemAttr("SqlDtlDfc")));
-  if (OB_ISNULL(tenant_dfc)) {
+  dfc_manager = static_cast<ObDfc *> (ob_malloc(sizeof(ObDfc), ObMemAttr("SqlDtlDfc")));
+  if (OB_ISNULL(dfc_manager)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc tenant dfc", K(ret));
-  } else if (FALSE_IT(new (tenant_dfc) ObTenantDfc{})) {
+    LOG_WARN("failed to alloc DFC manager", K(ret));
+  } else if (FALSE_IT(new (dfc_manager) ObDfc{})) {
   }
   return ret;
 }
 
 
-int ObTenantDfc::mtl_init(ObTenantDfc *&tenant_dfc)
+int ObDfc::server_module_init(ObDfc *&dfc_manager)
 {
   int ret = OB_SUCCESS;
   
   if (OB_SUCC(ret)) {
-    tenant_dfc->channel_total_cnt_ = 0;
-    tenant_dfc->blocked_dfc_cnt_ = 0;
-    tenant_dfc->max_parallel_cnt_ = 0;
-    tenant_dfc->max_blocked_buffer_size_ = 0;
-    tenant_dfc->max_buffer_size_ = 0;
+    dfc_manager->channel_total_cnt_ = 0;
+    dfc_manager->blocked_dfc_cnt_ = 0;
+    dfc_manager->max_parallel_cnt_ = 0;
+    dfc_manager->max_blocked_buffer_size_ = 0;
+    dfc_manager->max_buffer_size_ = 0;
     
-    if (OB_FAIL(tenant_dfc->tenant_mem_mgr_.init())) {
-      LOG_WARN("failed to init tenant memory manager", K(ret));
+    if (OB_FAIL(dfc_manager->mem_mgr_.init())) {
+      LOG_WARN("failed to init DTL memory manager", K(ret));
     }
-    // tenant_dfc->calc_max_buffer(10);
-    LOG_INFO("init tenant dfc", K(ret));
+    // dfc_manager->calc_max_buffer(10);
+    LOG_INFO("init DFC manager", K(ret));
   }
   return ret;
 }
 
-void ObTenantDfc::mtl_destroy(ObTenantDfc *&tenant_dfc)
+void ObDfc::server_module_destroy(ObDfc *&dfc_manager)
 {
-  if (nullptr != tenant_dfc) {
-    LOG_INFO("trace tenant dfc destroy");
-    tenant_dfc->tenant_mem_mgr_.destroy();
-    common::ob_delete(tenant_dfc);
-    tenant_dfc = nullptr;
+  if (nullptr != dfc_manager) {
+    LOG_INFO("trace DFC manager destroy");
+    dfc_manager->mem_mgr_.destroy();
+    common::ob_delete(dfc_manager);
+    dfc_manager = nullptr;
   }
 }
 
-void ObTenantDfc::check_dtl()
+void ObDfc::check_dtl()
 {
   int ret = OB_SUCCESS;
   {
@@ -87,28 +87,28 @@ void ObTenantDfc::check_dtl()
     clean_on_timeout();
   }
 }
-void ObTenantDfc::check_dtl_buffer_size()
+void ObDfc::check_dtl_buffer_size()
 {
   
   int ret = OB_SUCCESS;
   double min_cpu = 0;
   double max_cpu = 0;
-  if (OB_ISNULL(GCTX.omt_)) {
-  } else if (OB_FAIL(GCTX.omt_->get_tenant_cpu(min_cpu, max_cpu))) {
-    LOG_WARN("fail to get tenant cpu", K(ret));
+  if (OB_ISNULL(GCTX.server_runtime_controller_)) {
+  } else if (OB_FAIL(GCTX.server_runtime_controller_->get_server_cpu(min_cpu, max_cpu))) {
+    LOG_WARN("fail to get CPU capacity", K(ret));
   } else {
     calc_max_buffer(lround(max_cpu) * DFC_CPU_RATIO);
   }
 }
 
-int ObTenantDfc::clean_on_timeout()
+int ObDfc::clean_on_timeout()
 {
   int ret = OB_SUCCESS;
   
-  if (OB_FAIL(tenant_mem_mgr_.auto_free_on_time())) {
+  if (OB_FAIL(mem_mgr_.auto_free_on_time())) {
     LOG_WARN("failed to auto free memory manager", K(ret));
   }
-  LOG_INFO("tenant dfc status", K(ret), K(1UL),
+  LOG_INFO("DFC manager status", K(ret), K(1UL),
     K(get_channel_cnt()),
     K(get_current_buffer_used()),
     K(get_current_blocked_cnt()),
@@ -121,7 +121,7 @@ int ObTenantDfc::clean_on_timeout()
   return ret;
 }
 
-void ObTenantDfc::calc_max_buffer(int64_t max_parallel_cnt)
+void ObDfc::calc_max_buffer(int64_t max_parallel_cnt)
 {
   if (0 == max_parallel_cnt) {
     max_parallel_cnt = 1;
@@ -145,10 +145,10 @@ void ObTenantDfc::calc_max_buffer(int64_t max_parallel_cnt)
     max_blocked_buffer_size_ *= factor;
     ret = OB_SUCCESS;
   }
-  LOG_INFO("trace tenant dfc parameters", K(max_parallel_cnt_), K(max_blocked_buffer_size_), K(max_buffer_size_));
+  LOG_INFO("trace DFC manager parameters", K(max_parallel_cnt_), K(max_blocked_buffer_size_), K(max_buffer_size_));
 }
 
-int ObTenantDfc::register_dfc_channel(ObDtlFlowControl &dfc, ObDtlChannel* ch)
+int ObDfc::register_dfc_channel(ObDtlFlowControl &dfc, ObDtlChannel* ch)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(dfc.register_channel(ch))) {
@@ -159,7 +159,7 @@ int ObTenantDfc::register_dfc_channel(ObDtlFlowControl &dfc, ObDtlChannel* ch)
   return ret;
 }
 
-int ObTenantDfc::unregister_dfc_channel(ObDtlFlowControl &dfc, ObDtlChannel* ch)
+int ObDfc::unregister_dfc_channel(ObDtlFlowControl &dfc, ObDtlChannel* ch)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
@@ -173,7 +173,7 @@ int ObTenantDfc::unregister_dfc_channel(ObDtlFlowControl &dfc, ObDtlChannel* ch)
   return ret;
 }
 
-int ObTenantDfc::deregister_dfc(ObDtlFlowControl &dfc)
+int ObDfc::deregister_dfc(ObDtlFlowControl &dfc)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
@@ -198,7 +198,7 @@ int ObTenantDfc::deregister_dfc(ObDtlFlowControl &dfc)
   return ret;
 }
 
-int ObTenantDfc::enforce_block(ObDtlFlowControl *dfc, int64_t ch_idx)
+int ObDfc::enforce_block(ObDtlFlowControl *dfc, int64_t ch_idx)
 {
   int ret = OB_SUCCESS;
   if (!dfc->is_block(ch_idx)) {
@@ -209,7 +209,7 @@ int ObTenantDfc::enforce_block(ObDtlFlowControl *dfc, int64_t ch_idx)
   return ret;
 }
 
-int ObTenantDfc::try_unblock_tenant_dfc(ObDtlFlowControl *dfc, int64_t ch_idx)
+int ObDfc::try_unblock_dfc(ObDtlFlowControl *dfc, int64_t ch_idx)
 {
   int ret = OB_SUCCESS;
   if (dfc->is_block()) {
@@ -232,11 +232,11 @@ int ObTenantDfc::try_unblock_tenant_dfc(ObDtlFlowControl *dfc, int64_t ch_idx)
         if (dfc->is_qc_coord() && ch->has_less_buffer_cnt()) {
           // For merge sort coord's channel, ensure that each channel's recv_list is not empty, i.e., extend unblock condition
           // Otherwise merge sort receive may deadlock, i.e., the blocked channel cannot send unblocking msg
-          LOG_TRACE("unblock channel on decrease size by self", K(dfc), K(ret), KP(ch->get_id()), K(ch->get_peer()), K(ch_idx),
+          LOG_TRACE("unblock channel on decrease size by self", K(dfc), K(ret), KP(ch->get_id()), K(ch_idx),
             K(ch->get_processed_buffer_cnt()));
           if (OB_FAIL(dfc->notify_channel_unblocking(ch, unblock_cnt))) {
             LOG_WARN("failed to unblock channel",
-              K(dfc), K(ret), KP(ch->get_id()), K(ch->get_peer()), K(ch->belong_to_receive_data()),
+              K(dfc), K(ret), KP(ch->get_id()), K(ch->belong_to_receive_data()),
               K(ch->belong_to_transmit_data()), K(ch->get_processed_buffer_cnt()));
           }
           decrease_blocked_channel_cnt(unblock_cnt);
@@ -248,27 +248,27 @@ int ObTenantDfc::try_unblock_tenant_dfc(ObDtlFlowControl *dfc, int64_t ch_idx)
   return ret;
 }
 
-int ObTenantDfc::unblock_tenant_dfc(ObDtlFlowControl *dfc, int64_t ch_idx, int64_t size)
+int ObDfc::unblock_dfc(ObDtlFlowControl *dfc, int64_t ch_idx, int64_t size)
 {
   int ret = OB_SUCCESS;
   dfc->decrease(size);
   decrease(size);
-  if (OB_FAIL(try_unblock_tenant_dfc(dfc, ch_idx))) {
-    LOG_WARN("failed to try unblock tenant dfc", K(ret));
+  if (OB_FAIL(try_unblock_dfc(dfc, ch_idx))) {
+    LOG_WARN("failed to try unblock DFC manager", K(ret));
   }
   return ret;
 }
 
-int ObTenantDfc::unblock_channel(ObDtlFlowControl *dfc, int64_t ch_idx)
+int ObDfc::unblock_channel(ObDtlFlowControl *dfc, int64_t ch_idx)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(try_unblock_tenant_dfc(dfc, ch_idx))) {
+  if (OB_FAIL(try_unblock_dfc(dfc, ch_idx))) {
     LOG_WARN("failed to unblock all blocked channel", K(dfc), K(ret));
   }
   return ret;
 }
 
-int ObTenantDfc::unblock_channels(ObDtlFlowControl *dfc)
+int ObDfc::unblock_channels(ObDtlFlowControl *dfc)
 {
   int ret = OB_SUCCESS;
   if (dfc->is_block()) {
@@ -284,12 +284,12 @@ int ObTenantDfc::unblock_channels(ObDtlFlowControl *dfc)
   return ret;
 }
 
-int ObTenantDfc::block_tenant_dfc(ObDtlFlowControl *dfc, int64_t ch_idx, int64_t size)
+int ObDfc::block_dfc(ObDtlFlowControl *dfc, int64_t ch_idx, int64_t size)
 {
   int ret = OB_SUCCESS;
   dfc->increase(size);
   increase(size);
-  //LOG_TRACE("tenant dfc size", K(dfc->get_used()), K(dfc->get_total_buffer_cnt()), K(tenant_dfc_.get_used()), K(tenant_dfc_.get_total_buffer_cnt()), K(need_block(dfc)));
+  //LOG_TRACE("DFC manager size", K(dfc->get_used()), K(dfc->get_total_buffer_cnt()), K(aggregate_dfc_.get_used()), K(aggregate_dfc_.get_total_buffer_cnt()), K(need_block(dfc)));
   if (need_block(dfc)) {
     if (OB_FAIL(enforce_block(dfc, ch_idx))) {
       LOG_WARN("failed to block channel", K(size), K(dfc), K(ret), K(ch_idx));
@@ -308,46 +308,46 @@ void ObDfcServer::destroy()
 {
 }
 
-int ObDfcServer::get_current_tenant_dfc(ObTenantDfc *&tenant_dfc)
+int ObDfcServer::get_current_dfc(ObDfc *&dfc_manager)
 {
   int ret = OB_SUCCESS;
-  tenant_dfc = nullptr;
-  tenant_dfc = share::g_mp->tenant_dfc();
-  if (nullptr == tenant_dfc) {
+  dfc_manager = nullptr;
+  dfc_manager = share::g_mp->dfc_manager();
+  if (nullptr == dfc_manager) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to create tenant dfc", K(ret));
+    LOG_WARN("failed to create DFC manager", K(ret));
   } else ;
   return ret;
 }
 
-ObDtlTenantMemManager *ObDfcServer::get_tenant_mem_manager()
+ObDtlMemManager *ObDfcServer::get_mem_manager()
 {
   int ret = OB_SUCCESS;
-  ObDtlTenantMemManager *tenant_mem_manager = nullptr;
-  ObTenantDfc *tenant_dfc = nullptr;
-  if (OB_FAIL(get_current_tenant_dfc(tenant_dfc))) {
-    LOG_WARN("failed to get tenant dfc", K(ret));
-  } else if (OB_ISNULL(tenant_dfc)) {
+  ObDtlMemManager *memory_manager = nullptr;
+  ObDfc *dfc_manager = nullptr;
+  if (OB_FAIL(get_current_dfc(dfc_manager))) {
+    LOG_WARN("failed to get DFC manager", K(ret));
+  } else if (OB_ISNULL(dfc_manager)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant dfc is null", K(ret));
+    LOG_WARN("DFC manager is null", K(ret));
   } else {
-    tenant_mem_manager = tenant_dfc->get_tenant_mem_manager();
+    memory_manager = dfc_manager->get_mem_manager();
   }
-  return tenant_mem_manager;
+  return memory_manager;
 }
 
 int ObDfcServer::block_on_increase_size(ObDtlFlowControl *dfc, int64_t ch_idx, int64_t size)
 {
   int ret = OB_SUCCESS;
   
-  ObTenantDfc *tenant_dfc = nullptr;
-  if (OB_FAIL(get_current_tenant_dfc(tenant_dfc))) {
-    LOG_WARN("failed to get tenant dfc", K(ret));
-  } else if (OB_ISNULL(tenant_dfc)) {
+  ObDfc *dfc_manager = nullptr;
+  if (OB_FAIL(get_current_dfc(dfc_manager))) {
+    LOG_WARN("failed to get DFC manager", K(ret));
+  } else if (OB_ISNULL(dfc_manager)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant dfc is null", K(ret));
-  } else if (OB_FAIL(tenant_dfc->block_tenant_dfc(dfc, ch_idx, size))) {
-    LOG_WARN("failed to block tenant dfc", K(ret));
+    LOG_WARN("DFC manager is null", K(ret));
+  } else if (OB_FAIL(dfc_manager->block_dfc(dfc, ch_idx, size))) {
+    LOG_WARN("failed to block DFC manager", K(ret));
   }
   return ret;
 }
@@ -356,14 +356,14 @@ int ObDfcServer::unblock_on_decrease_size(ObDtlFlowControl *dfc, int64_t ch_idx,
 {
   int ret = OB_SUCCESS;
   
-  ObTenantDfc *tenant_dfc = nullptr;
-  if (OB_FAIL(get_current_tenant_dfc(tenant_dfc))) {
-    LOG_WARN("failed to get tenant dfc", K(ret));
-  } else if (OB_ISNULL(tenant_dfc)) {
+  ObDfc *dfc_manager = nullptr;
+  if (OB_FAIL(get_current_dfc(dfc_manager))) {
+    LOG_WARN("failed to get DFC manager", K(ret));
+  } else if (OB_ISNULL(dfc_manager)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant dfc is null", K(ret));
-  } else if (OB_FAIL(tenant_dfc->unblock_tenant_dfc(dfc, ch_idx, size))) {
-    LOG_WARN("failed to unblock tenant dfc", K(ch_idx), K(ret));
+    LOG_WARN("DFC manager is null", K(ret));
+  } else if (OB_FAIL(dfc_manager->unblock_dfc(dfc, ch_idx, size))) {
+    LOG_WARN("failed to unblock DFC manager", K(ch_idx), K(ret));
   }
   return ret;
 }
@@ -372,11 +372,11 @@ int ObDfcServer::unblock_channel(ObDtlFlowControl *dfc, int64_t ch_idx)
 {
   int ret = OB_SUCCESS;
   
-  ObTenantDfc *tenant_dfc = nullptr;
-  if (OB_FAIL(get_current_tenant_dfc(tenant_dfc))) {
-    LOG_WARN("failed to get tenant dfc", K(ret));
-  } else if (OB_FAIL(tenant_dfc->unblock_channel(dfc, ch_idx))) {
-    LOG_WARN("failed to unblock tenant dfc", K(ret));
+  ObDfc *dfc_manager = nullptr;
+  if (OB_FAIL(get_current_dfc(dfc_manager))) {
+    LOG_WARN("failed to get DFC manager", K(ret));
+  } else if (OB_FAIL(dfc_manager->unblock_channel(dfc, ch_idx))) {
+    LOG_WARN("failed to unblock DFC manager", K(ret));
   }
   return ret;
 }
@@ -385,14 +385,14 @@ int ObDfcServer::unblock_channels(ObDtlFlowControl *dfc)
 {
   int ret = OB_SUCCESS;
   
-  ObTenantDfc *tenant_dfc = nullptr;
-  if (OB_FAIL(get_current_tenant_dfc(tenant_dfc))) {
-    LOG_WARN("failed to get tenant dfc", K(ret));
-  } else if (OB_ISNULL(tenant_dfc)) {
+  ObDfc *dfc_manager = nullptr;
+  if (OB_FAIL(get_current_dfc(dfc_manager))) {
+    LOG_WARN("failed to get DFC manager", K(ret));
+  } else if (OB_ISNULL(dfc_manager)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant dfc is null", K(ret));
-  } else if (OB_FAIL(tenant_dfc->unblock_channels(dfc))) {
-    LOG_WARN("failed to unblock tenant dfc", K(ret));
+    LOG_WARN("DFC manager is null", K(ret));
+  } else if (OB_FAIL(dfc_manager->unblock_channels(dfc))) {
+    LOG_WARN("failed to unblock DFC manager", K(ret));
   }
   return ret;
 }
@@ -401,13 +401,13 @@ int ObDfcServer::register_dfc_channel(ObDtlFlowControl &dfc, ObDtlChannel* ch)
 {
   int ret = OB_SUCCESS;
   
-  ObTenantDfc *tenant_dfc = nullptr;
-  if (OB_FAIL(get_current_tenant_dfc(tenant_dfc))) {
-    LOG_WARN("failed to get tenant dfc", K(ret));
-  } else if (OB_ISNULL(tenant_dfc)) {
+  ObDfc *dfc_manager = nullptr;
+  if (OB_FAIL(get_current_dfc(dfc_manager))) {
+    LOG_WARN("failed to get DFC manager", K(ret));
+  } else if (OB_ISNULL(dfc_manager)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant dfc is null", K(ret));
-  } else if (OB_FAIL(tenant_dfc->register_dfc_channel(dfc, ch))) {
+    LOG_WARN("DFC manager is null", K(ret));
+  } else if (OB_FAIL(dfc_manager->register_dfc_channel(dfc, ch))) {
     LOG_WARN("failed to register dfc", K(ret));
   }
   return ret;
@@ -417,13 +417,13 @@ int ObDfcServer::unregister_dfc_channel(ObDtlFlowControl &dfc, ObDtlChannel* ch)
 {
   int ret = OB_SUCCESS;
   
-  ObTenantDfc *tenant_dfc = nullptr;
-  if (OB_FAIL(get_current_tenant_dfc(tenant_dfc))) {
-    LOG_WARN("failed to get tenant dfc", K(ret));
-  } else if (OB_ISNULL(tenant_dfc)) {
+  ObDfc *dfc_manager = nullptr;
+  if (OB_FAIL(get_current_dfc(dfc_manager))) {
+    LOG_WARN("failed to get DFC manager", K(ret));
+  } else if (OB_ISNULL(dfc_manager)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant dfc is null", K(ret));
-  } else if (OB_FAIL(tenant_dfc->unregister_dfc_channel(dfc, ch))) {
+    LOG_WARN("DFC manager is null", K(ret));
+  } else if (OB_FAIL(dfc_manager->unregister_dfc_channel(dfc, ch))) {
     LOG_WARN("failed to register dfc", K(ret));
   }
   return ret;
@@ -440,13 +440,13 @@ int ObDfcServer::deregister_dfc(ObDtlFlowControl &dfc)
   int ret = OB_SUCCESS;
   if (dfc.is_init()) {
     
-    ObTenantDfc *tenant_dfc = nullptr;
-    if (OB_FAIL(get_current_tenant_dfc(tenant_dfc))) {
-      LOG_WARN("failed to get tenant dfc", K(ret));
-    } else if (OB_ISNULL(tenant_dfc)) {
+    ObDfc *dfc_manager = nullptr;
+    if (OB_FAIL(get_current_dfc(dfc_manager))) {
+      LOG_WARN("failed to get DFC manager", K(ret));
+    } else if (OB_ISNULL(dfc_manager)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tenant dfc is null", K(ret));
-    } else if (OB_FAIL(tenant_dfc->deregister_dfc(dfc))) {
+      LOG_WARN("DFC manager is null", K(ret));
+    } else if (OB_FAIL(dfc_manager->deregister_dfc(dfc))) {
       LOG_WARN("failed to deregister dfc", K(ret));
     }
   }

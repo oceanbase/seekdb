@@ -496,7 +496,7 @@ int ObMacroBlockSliceStore::init(
   } else {
     const ObITable::TableKey &table_key = tablet_direct_load_mgr->get_table_key(); // TODO(cangdi): fix it with right table key
     const int64_t ddl_task_id = tablet_direct_load_mgr->get_ddl_task_id();
-    const uint64_t data_format_version = tablet_direct_load_mgr->get_tenant_data_version();
+    const uint64_t data_format_version = tablet_direct_load_mgr->get_data_format_version();
     const ObDirectLoadType direct_load_type = tablet_direct_load_mgr->get_direct_load_type();
     const ObWholeDataStoreDesc &data_desc = tablet_direct_load_mgr->get_data_block_desc();
     ObDDLRedoLogWriterCallbackInitParam init_param;
@@ -506,31 +506,30 @@ int ObMacroBlockSliceStore::init(
     init_param.start_scn_ = start_scn;
     init_param.task_id_ = ddl_task_id;
     init_param.data_format_version_ = data_format_version;
-    init_param.parallel_cnt_ = tablet_direct_load_mgr->get_task_cnt();
-    init_param.block_type_ = tablet_direct_load_mgr->get_is_no_logging() ? DDL_MB_SS_EMPTY_DATA_TYPE : DDL_MB_DATA_TYPE;
-    if (OB_ISNULL(ddl_redo_callback_ = OB_NEW(ObDDLRedoLogWriterCallback, ObMemAttr("DDL_MBSS")))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc memory", K(ret));
-    } else if (OB_FAIL(static_cast<ObDDLRedoLogWriterCallback *>(ddl_redo_callback_)->init(init_param))) {
-      LOG_WARN("fail to init ddl_redo_callback_", K(ret), K(init_param));
+    if (OB_UNLIKELY(!is_full_direct_load(direct_load_type))) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("only full direct load is supported", KR(ret), K(direct_load_type));
+    } else {
+      init_param.block_type_ = DDL_MB_DATA_TYPE;
+      if (OB_ISNULL(ddl_redo_callback_ = OB_NEW(ObDDLRedoLogWriterCallback, ObMemAttr("DDL_MBSS")))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to alloc memory", K(ret));
+      } else if (OB_FAIL(static_cast<ObDDLRedoLogWriterCallback *>(ddl_redo_callback_)->init(init_param))) {
+        LOG_WARN("fail to init full ddl_redo_callback_", K(ret), K(init_param));
+      }
     }
     if (OB_SUCC(ret)) {
       ObMacroSeqParam macro_seq_param;
       macro_seq_param.seq_type_ = ObMacroSeqParam::SEQ_TYPE_INC;
       macro_seq_param.start_ = data_seq.macro_data_seq_;
       ObPreWarmerParam pre_warm_param;
-      ObSSTablePrivateObjectCleaner *object_cleaner = nullptr;
       if (OB_FAIL(pre_warm_param.init(table_key.tablet_id_))) {
         LOG_WARN("failed to init pre warm param", K(ret), "tablet_id", table_key.tablet_id_);
-      } else if (OB_FAIL(ObSSTablePrivateObjectCleaner::get_cleaner_from_data_store_desc(
-                                 tablet_direct_load_mgr->get_data_block_desc().get_desc(),
-                                 object_cleaner))) {
-        LOG_WARN("failed to get cleaner from data store desc", K(ret));
       } else if (OB_FAIL(macro_block_writer_.open(
                      data_desc.get_desc(), data_seq.get_parallel_idx(),
-                     macro_seq_param, pre_warm_param, *object_cleaner,
+                     macro_seq_param, pre_warm_param,
                      ddl_redo_callback_))) {
-        LOG_WARN("open macro bock writer failed", K(ret), K(macro_seq_param), KPC(object_cleaner));
+        LOG_WARN("open macro bock writer failed", K(ret), K(macro_seq_param));
       } else {
         is_inited_ = true;
       }
@@ -879,7 +878,7 @@ int ObDirectLoadSliceWriter::fill_lob_sstable_slice(
     blocksstable::ObDatumRow &datum_row)
 {
   int ret = OB_SUCCESS;
-  const uint64_t data_format_version = tablet_direct_load_mgr_->get_tenant_data_version();
+  const uint64_t data_format_version = tablet_direct_load_mgr_->get_data_format_version();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObDirectLoadSliceWriter not init", KR(ret), KP(this));
@@ -1087,7 +1086,7 @@ int ObDirectLoadSliceWriter::fill_lob_sstable_slice(
     blocksstable::ObBatchDatumRows &datum_rows)
 {
   int ret = OB_SUCCESS;
-  const uint64_t data_format_version = tablet_direct_load_mgr_->get_tenant_data_version();
+  const uint64_t data_format_version = tablet_direct_load_mgr_->get_data_format_version();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObDirectLoadSliceWriter not init", KR(ret), KP(this));
@@ -1393,9 +1392,9 @@ int ObDirectLoadSliceWriter::report_unique_key_dumplicated(
   report_ret_code = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = nullptr;
-  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
+  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
           schema_guard))) {
-    LOG_WARN("get tenant schema failed", K(ret), K(table_id), K(table_id));
+    LOG_WARN("get runtime schema failed", K(ret), K(table_id), K(table_id));
   } else if (OB_FAIL(schema_guard.get_table_schema(
           table_id, table_schema))) {
     LOG_WARN("get table schema failed", K(ret), K(table_id));
@@ -1432,9 +1431,9 @@ int ObDirectLoadSliceWriter::report_unique_key_dumplicated(
   report_ret_code = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = nullptr;
-  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
+  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
           schema_guard))) {
-    LOG_WARN("get tenant schema failed", K(ret), K(table_id), K(table_id));
+    LOG_WARN("get runtime schema failed", K(ret), K(table_id), K(table_id));
   } else if (OB_FAIL(schema_guard.get_table_schema(
           table_id, table_schema))) {
     LOG_WARN("get table schema failed", K(ret), K(table_id));
@@ -2208,10 +2207,7 @@ int ObVectorIndexSliceStore::serialize_vector_index(
         LOG_INFO("HgraphIndex finish vsag serialize for tablet", K(tablet_id_), K(ctx_.get_vals().count()), K(type));
       }
       if (OB_SUCC(ret)) {
-        if (!true) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("fail get tenant_config", KR(ret));
-        } else if (OB_FAIL(adp->renew_single_snap_index(type == VIAT_HNSW_BQ 
+        if (OB_FAIL(adp->renew_single_snap_index(type == VIAT_HNSW_BQ
             || (GCONF.vector_index_memory_saving_mode && (type == VIAT_HNSW || type == VIAT_HNSW_SQ || type == VIAT_HGRAPH))))) {
           LOG_WARN("fail to renew single snap index", K(ret));
         }
