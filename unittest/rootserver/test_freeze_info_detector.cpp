@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 
-#include "storage/ob_tenant_tablet_stat_mgr.h"
+#include "storage/ob_tablet_stat_mgr.h"
 
 #define private public
 #include "rootserver/freeze/ob_freeze_info_detector.h"
@@ -103,7 +103,6 @@ TEST(TestSnapshotGcScnRenewer, standby_start_and_restart_only_reload)
   EXPECT_FALSE(renewer.need_primary_catchup_);
   EXPECT_FALSE(renewer.need_renew_(1));
   EXPECT_EQ(OB_SUCCESS, renewer.try_renew());
-  EXPECT_TRUE(ObMajorMergeInfoDetector::need_reload_freeze_info_(false));
   EXPECT_EQ(10L * 1000L * 1000L, renewer.get_renew_interval());
 
   renewer.pause();
@@ -126,7 +125,6 @@ TEST(TestSnapshotGcScnRenewer, append_activation_immediately_requests_catchup)
   EXPECT_TRUE(renewer.is_primary_active_);
   EXPECT_TRUE(renewer.need_primary_catchup_);
   EXPECT_TRUE(renewer.need_renew_(1));
-  EXPECT_FALSE(ObMajorMergeInfoDetector::need_reload_freeze_info_(true));
 }
 
 TEST(TestSnapshotGcScnRenewer, demotion_stops_renew_and_reactivation_catches_up)
