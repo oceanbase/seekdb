@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_LIB_OB_GEO_FUNC_REGISTER_
 #define OCEANBASE_LIB_OB_GEO_FUNC_REGISTER_
 
-#include "share/geo/ob_geo_dispatcher.h"
+#include "share/geo/ob_geo_eval_ctx.h"
 #include "share/geo/ob_geo_func_area.h"
 #include "share/geo/ob_geo_func_correct.h"
 #include "share/geo/ob_geo_func_intersects.h"

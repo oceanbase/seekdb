@@ -21,7 +21,7 @@
 #include "share/geo/ob_geo_bin.h"
 #include "share/geo/ob_geo_ibin.h"
 #include "share/geo/ob_srs_info.h"
-#include "share/geo/ob_s2adapter.h"
+#include "share/geo/ob_spatial_mbr.h"
 #include "share/geo/ob_wkt_parser.h"
 #include "lib/hash/ob_hashmap.h"
 #include "common/number/ob_number_v2.h"
@@ -306,7 +306,7 @@ private:
 };
 
 // also used for geom (Cartesian) type
-typedef struct
+struct ObGeogBox
 {
   double xmin;
   double xmax;
@@ -314,7 +314,7 @@ typedef struct
   double ymax;
   double zmin;
   double zmax;
-} ObGeogBox;
+};
 
 typedef struct
 {

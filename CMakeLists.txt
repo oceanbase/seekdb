@@ -9,6 +9,16 @@ project("OceanBase"
   HOMEPAGE_URL "https://www.oceanbase.ai"
   LANGUAGES CXX C ASM)
 
+option(SEEKDB_COMPACT_GIS
+  "Optimize template-heavy GIS translation units for binary size" OFF)
+
+option(SEEKDB_ENABLE_GIS_MVT
+  "Build GIS Mapbox Vector Tile support" ON)
+
+if(NOT SEEKDB_ENABLE_GIS_MVT)
+  add_compile_definitions(SEEKDB_DISABLE_GIS_MVT=1)
+endif()
+
 if(WIN32)
   find_program(LLVM_LIB_PROGRAM llvm-lib)
   if(LLVM_LIB_PROGRAM)
@@ -33,6 +43,11 @@ endif()
 if(FALSE AND ENABLE_DEBUG_LOG)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DENABLE_DEBUG_LOG")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_DEBUG_LOG")
+endif()
+
+if (ENABLE_SANITY)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DENABLE_SANITY")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_SANITY")
 endif()
 
 if (OB_BUILD_PACKAGE)

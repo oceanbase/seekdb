@@ -16,11 +16,44 @@
 
 #define USING_LOG_PREFIX LIB
 #include "ob_s2adapter.h"
+#include "share/geo/ob_geo_to_s2_visitor.h"
 #include "share/geo/ob_geo_func_envelope.h"
 #include "share/geo/ob_geo_3d.h"
 
 namespace oceanbase {
 namespace common {
+
+ObS2Adapter::ObS2Adapter(ObIAllocator *allocator, bool is_geog, bool is_query_window)
+  : allocator_(allocator),
+    visitor_(NULL),
+    geo_(NULL),
+    is_geog_(is_geog),
+    need_buffer_(false),
+    distance_()
+{
+  if (!is_query_window) {
+    options_.set_max_cells(OB_GEO_S2REGION_OPTION_MAX_CELL);
+    options_.set_max_level(OB_GEO_S2REGION_OPTION_MAX_LEVEL);
+    options_.set_level_mod(OB_GEO_S2REGION_OPTION_LEVEL_MOD);
+  } else {
+    options_.set_max_cells(50);
+    options_.set_max_level(30);
+    options_.set_level_mod(OB_GEO_S2REGION_OPTION_LEVEL_MOD);
+  }
+}
+
+ObS2Adapter::ObS2Adapter(ObIAllocator *allocator, bool is_geog, double distance)
+  : allocator_(allocator),
+    visitor_(NULL),
+    geo_(NULL),
+    is_geog_(is_geog),
+    need_buffer_(true),
+    distance_(S1Angle::Radians(distance))
+{
+  options_.set_max_cells(OB_GEO_S2REGION_OPTION_MAX_CELL);
+  options_.set_max_level(OB_GEO_S2REGION_OPTION_MAX_LEVEL);
+  options_.set_level_mod(OB_GEO_S2REGION_OPTION_LEVEL_MOD);
+}
 
 int ObSpatialMBR::filter(const ObSpatialMBR &other, ObDomainOpType type, bool &pass_through) const
 {

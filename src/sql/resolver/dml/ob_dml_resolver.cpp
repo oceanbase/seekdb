@@ -746,6 +746,12 @@ int ObDMLResolver::check_column_json_type(ParseNode *tab_col, bool &is_json_cst,
 int ObDMLResolver::pre_process_mvt_agg(ParseNode &node)
 {
   INIT_SUCC(ret);
+#ifdef SEEKDB_DISABLE_GIS_MVT
+  if (node.type_ == T_FUN_SYS_ST_ASMVT) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "_ST_AsMVT");
+  } else
+#endif
   if (node.type_ == T_FUN_SYS_ST_ASMVT) {
     int ori_param_num = node.num_child_;
     if (ori_param_num < 1) {

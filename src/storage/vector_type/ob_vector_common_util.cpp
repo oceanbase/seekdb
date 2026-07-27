@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 #define USING_LOG_PREFIX SHARE
-#include "share/geo/ob_s2adapter.h" // for htonll
+#include "s2/util/endian/endian.h" // for htonll
 #include "ob_vector_common_util.h"
 #include "observer/ob_inner_sql_connection_pool.h"
 

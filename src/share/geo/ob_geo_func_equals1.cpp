@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX LIB
 
 #include "ob_geo_func_equals_helper.ipp"
+#include "share/geo/ob_geo_func_relation.h"
 #include "share/geo/ob_geo_func_utils.h"
 
 using namespace oceanbase::common;
@@ -42,15 +43,25 @@ OB_GEO_FUNC_END;
 // Geom LineString
 OB_GEO_CART_BINARY_FUNC_BEGIN(ObGeoFuncEqualsImpl, ObWkbGeomLineString, ObWkbGeomLineString, bool)
 {
+#ifdef SEEKDB_COMPACT_GIS_ENABLED
+  return eval_cartesian_wkb_linear_relation(
+      g1, g2, ObGeoRelationPredicate::EQUALS, result);
+#else
   return eval_equals_without_strategy<ObWkbGeomLineString, ObWkbGeomLineString>(g1, g2, result);
+#endif
 }
 OB_GEO_FUNC_END;
 
 OB_GEO_CART_BINARY_FUNC_BEGIN(
     ObGeoFuncEqualsImpl, ObWkbGeomLineString, ObWkbGeomMultiLineString, bool)
 {
+#ifdef SEEKDB_COMPACT_GIS_ENABLED
+  return eval_cartesian_wkb_linear_relation(
+      g1, g2, ObGeoRelationPredicate::EQUALS, result);
+#else
   return eval_equals_without_strategy<ObWkbGeomLineString, ObWkbGeomMultiLineString>(
       g1, g2, result);
+#endif
 }
 OB_GEO_FUNC_END;
 
@@ -84,16 +95,26 @@ OB_GEO_FUNC_END;
 OB_GEO_CART_BINARY_FUNC_BEGIN(
     ObGeoFuncEqualsImpl, ObWkbGeomMultiLineString, ObWkbGeomLineString, bool)
 {
+#ifdef SEEKDB_COMPACT_GIS_ENABLED
+  return eval_cartesian_wkb_linear_relation(
+      g1, g2, ObGeoRelationPredicate::EQUALS, result);
+#else
   return eval_equals_without_strategy<ObWkbGeomMultiLineString, ObWkbGeomLineString>(
       g1, g2, result);
+#endif
 }
 OB_GEO_FUNC_END;
 
 OB_GEO_CART_BINARY_FUNC_BEGIN(
     ObGeoFuncEqualsImpl, ObWkbGeomMultiLineString, ObWkbGeomMultiLineString, bool)
 {
+#ifdef SEEKDB_COMPACT_GIS_ENABLED
+  return eval_cartesian_wkb_linear_relation(
+      g1, g2, ObGeoRelationPredicate::EQUALS, result);
+#else
   return eval_equals_without_strategy<ObWkbGeomMultiLineString, ObWkbGeomMultiLineString>(
       g1, g2, result);
+#endif
 }
 OB_GEO_FUNC_END;
 

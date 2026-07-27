@@ -24,14 +24,14 @@
 #include "common/sql_mode/ob_sql_mode.h"
 #include "lib/container/ob_array_array.h"
 #include "lib/container/ob_se_array.h"
-#include "share/geo/ob_s2adapter.h"
+#include "share/geo/ob_spatial_mbr.h"
 #include "share/ob_i_sql_expression.h"
 #include "share/schema/ob_schema_getter_guard.h"
 namespace oceanbase
 {
 namespace share
 {
-class ObLSID;
+class ObExternalObjectCtx;
 }
 namespace sql
 {
@@ -373,7 +373,7 @@ ObVTableScanParam() :
       sql_mode_(SMO_DEFAULT),
       reserved_cell_count_(-1),
       schema_version_(-1),
-      runtime_schema_version_(-1),
+      tenant_schema_version_(-1),
       projector_size_(0),
       for_update_(false),
       for_update_wait_timeout_(-1),
@@ -381,6 +381,7 @@ ObVTableScanParam() :
       scan_allocator_(&CURRENT_CONTEXT->get_arena_allocator()),
       fb_snapshot_(),
       is_get_(false),
+      force_refresh_lc_(false),
       is_for_foreign_check_(false),
       output_exprs_(NULL),
       calc_exprs_(NULL),
@@ -391,6 +392,7 @@ ObVTableScanParam() :
       pd_storage_flag_(false),
       row2exprs_projector_(NULL),
       table_scan_opt_(),
+      external_object_ctx_(NULL),
       schema_guard_(NULL)
   { }
 
@@ -429,7 +431,7 @@ ObVTableScanParam() :
   ObSQLMode sql_mode_;  // sql mode
   int64_t reserved_cell_count_; // reserved cell of output row
   int64_t schema_version_;
-  int64_t runtime_schema_version_; // Get the latest global schema version when Query starts
+  int64_t tenant_schema_version_; // Get the latest global schema version when Query starts
   int64_t projector_size_;
   ObLimitParam limit_param_;
   bool      for_update_;       // FOR UPDATE clause
@@ -444,6 +446,7 @@ ObVTableScanParam() :
   ObTableScanStatistic idx_table_scan_stat_;
   share::SCN fb_snapshot_;
   bool is_get_;
+  bool force_refresh_lc_;
   bool is_for_foreign_check_;
 
   //
@@ -461,6 +464,9 @@ ObVTableScanParam() :
   // project storage output row to %output_exprs_
   storage::ObRow2ExprsProjector *row2exprs_projector_;
   ObTableScanOption table_scan_opt_;
+
+  // catalog mock schema objects
+  const share::ObExternalObjectCtx *external_object_ctx_;
 
   virtual bool is_valid() const {
     return (tablet_id_.is_valid()

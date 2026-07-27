@@ -315,6 +315,18 @@ ob_set_subtarget(ob_share semistruct
   semistruct/ob_sub_column_path.cpp
 )
 
+set(SEEKDB_GIS_MVT_SOURCES)
+if(SEEKDB_ENABLE_GIS_MVT)
+  list(APPEND SEEKDB_GIS_MVT_SOURCES
+    geo/ob_geo_mvt_encode_visitor.cpp
+    geo/ob_geo_mvt.cpp
+    geo/ob_vector_tile.pb-c.c
+    geo/ob_geo_affine_visitor.cpp
+    geo/ob_geo_grid_visitor.cpp
+    geo/ob_geo_simplify_visitor.cpp
+  )
+endif()
+
 ob_set_subtarget(ob_share geo
   geo/ob_geo_common.cpp
   geo/ob_geo_bin.cpp
@@ -361,12 +373,7 @@ ob_set_subtarget(ob_share geo
   geo/ob_geo_box_clip_visitor.cpp
   geo/ob_geo_elevation_visitor.cpp
   geo/ob_geo_func_length.cpp
-  geo/ob_geo_mvt_encode_visitor.cpp
-  geo/ob_geo_mvt.cpp
-  geo/ob_vector_tile.pb-c.c
-  geo/ob_geo_affine_visitor.cpp
-  geo/ob_geo_grid_visitor.cpp
-  geo/ob_geo_simplify_visitor.cpp
+  ${SEEKDB_GIS_MVT_SOURCES}
   geo/ob_geo_box_clip_visitor.cpp
   geo/ob_geo_func_dissolve_polygon.cpp
   geo/ob_geo_close_ring_visitor.cpp
@@ -382,7 +389,7 @@ ob_set_subtarget(ob_share geo
   geo/ob_geo_point_location_visitor.cpp
 )
 
-ob_set_subtarget(ob_share ALONE
+set(SEEKDB_GIS_HEAVY_SOURCES
   geo/ob_geo_func_difference1.cpp
   geo/ob_geo_func_difference2.cpp
   geo/ob_geo_func_difference3.cpp
@@ -409,6 +416,49 @@ ob_set_subtarget(ob_share ALONE
   geo/ob_geo_func_overlaps2.cpp
   geo/ob_geo_func_overlaps3.cpp
 )
+
+set(SEEKDB_GIS_RELATION_SOURCES)
+if(SEEKDB_COMPACT_GIS)
+  list(APPEND SEEKDB_GIS_RELATION_SOURCES
+    geo/ob_geo_func_relation.cpp
+  )
+  set_property(SOURCE
+    geo/ob_geo_func_relation.cpp
+    geo/ob_geo_func_equals1.cpp
+    geo/ob_geo_func_intersects.cpp
+    geo/ob_geo_func_within1.cpp
+    geo/ob_geo_func_overlaps1.cpp
+    APPEND PROPERTY COMPILE_DEFINITIONS SEEKDB_COMPACT_GIS_ENABLED=1)
+endif()
+
+ob_set_subtarget(ob_share ALONE
+  ${SEEKDB_GIS_HEAVY_SOURCES}
+  ${SEEKDB_GIS_RELATION_SOURCES}
+)
+
+if(SEEKDB_COMPACT_GIS)
+  # Source-level options are appended after the build-type optimization flag,
+  # so this overrides the usual -O2 only for the template-heavy GIS units.
+  if(MSVC OR CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")
+    set(_seekdb_gis_size_option /O1)
+  elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    set(_seekdb_gis_size_option -Oz)
+  elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set(_seekdb_gis_size_option -Os)
+  else()
+    message(WARNING
+      "SEEKDB_COMPACT_GIS is enabled, but ${CMAKE_CXX_COMPILER_ID} has no configured size optimization flag")
+  endif()
+
+  if(DEFINED _seekdb_gis_size_option)
+    set_property(SOURCE ${SEEKDB_GIS_HEAVY_SOURCES} ${SEEKDB_GIS_RELATION_SOURCES}
+      APPEND PROPERTY
+      COMPILE_OPTIONS "${_seekdb_gis_size_option}")
+    message(STATUS
+      "SEEKDB_COMPACT_GIS: compiling heavy GIS sources with ${_seekdb_gis_size_option}")
+  endif()
+  unset(_seekdb_gis_size_option)
+endif()
 
 ob_add_new_object_target(ob_share ob_share)
 ob_add_new_object_target(ob_share_extra ob_share_extra)

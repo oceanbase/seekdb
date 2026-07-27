@@ -132,6 +132,29 @@ if (OB_USE_CLANG)
       -Wno-vla ${VLA_WARN_FLAG})
   endif()
   target_compile_options(oblib_base_without_pass INTERFACE ${OBLIB_COMPILE_DEFINITIONS})
+  if (ENABLE_SANITY)
+    target_compile_options(oblib_pass
+      INTERFACE
+      "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-fpass-plugin=${DEVTOOLS_DIR}/lib64/libsanitypass.so>"
+      -fno-builtin-memset
+      -fno-builtin-bzero
+      -fno-builtin-memcpy
+      -fno-builtin-memmove
+      -fno-builtin-memcmp
+      -fno-builtin-strlen
+      -fno-builtin-strnlen
+      -fno-builtin-strcpy
+      -fno-builtin-strncpy
+      -fno-builtin-strcmp
+      -fno-builtin-strncmp
+      -fno-builtin-strcasecmp
+      -fno-builtin-strncasecmp
+      -fno-builtin-vsprintf
+      -fno-builtin-vsnprintf
+      -fno-builtin-sprintf
+      -fno-builtin-snprintf
+    )
+  endif()
 else()
   target_compile_options(oblib_base_without_pass
     INTERFACE
@@ -238,9 +261,18 @@ if(OB_AIO AND OB_AIO STREQUAL "libaio1t64" AND NOT APPLE)
   endif()
 endif()
 
+set(_oblib_link_protobuf_c TRUE)
+if(DEFINED SEEKDB_ENABLE_GIS_MVT AND NOT SEEKDB_ENABLE_GIS_MVT)
+  set(_oblib_link_protobuf_c FALSE)
+endif()
+
 if(WIN32)
   set(VCPKG_LIB_DIR "${OB_VCPKG_DIR}/lib")
   set(OPENSSL_LIB_DIR "${OB_OPENSSL_DIR}/lib/VC/x64/MD")
+  set(_oblib_protobuf_c_library)
+  if(_oblib_link_protobuf_c)
+    set(_oblib_protobuf_c_library ${VCPKG_LIB_DIR}/protobuf-c.lib)
+  endif()
   target_link_libraries(oblib_base_without_pass
     INTERFACE
     ${VCPKG_LIB_DIR}/libcurl.lib
@@ -261,13 +293,17 @@ if(WIN32)
     ${VCPKG_LIB_DIR}/icuin.lib
     ${VCPKG_LIB_DIR}/icudt.lib
     ${VCPKG_LIB_DIR}/icuuc.lib
-    ${VCPKG_LIB_DIR}/protobuf-c.lib
+    ${_oblib_protobuf_c_library}
     ${VCPKG_LIB_DIR}/sqlite3.lib
     ${VCPKG_LIB_DIR}/pthreadVC3.lib
     ws2_32 crypt32 bcrypt userenv wldap32 advapi32
     ${ARCH_LDFLAGS}
   )
 else()
+  set(_oblib_protobuf_c_library)
+  if(_oblib_link_protobuf_c)
+    set(_oblib_protobuf_c_library ${DEP_DIR}/lib/libprotobuf-c.a)
+  endif()
   target_link_libraries(oblib_base_without_pass
     INTERFACE
     -L${DEP_DIR}/lib
@@ -283,7 +319,7 @@ else()
     ${DEP_DIR}/lib/libicui18n.a
     ${DEP_DIR}/lib/libicustubdata.a
     ${DEP_DIR}/lib/libicuuc.a
-    ${DEP_DIR}/lib/libprotobuf-c.a
+    ${_oblib_protobuf_c_library}
     $<$<PLATFORM_ID:Linux>:-L${DEP_DIR}/var/usr/lib64 -L${DEP_DIR}/var/usr/lib -L${DEP_3RD_DIR}/usr/lib -L${DEP_3RD_DIR}/usr/lib64>
     ${LIBAIO_LINK_OPTION} $<$<NOT:$<BOOL:${ANDROID}>>:-lpthread> -ldl
     $<$<BOOL:${ANDROID}>:-llog>
@@ -292,6 +328,8 @@ else()
     ${ARCH_LDFLAGS}
   )
 endif()
+unset(_oblib_protobuf_c_library)
+unset(_oblib_link_protobuf_c)
 target_link_libraries(oblib_base INTERFACE oblib_base_without_pass oblib_pass)
 
 function(oblib_add_library target)

@@ -19,6 +19,7 @@
 #include "share/geo/ob_geo_dispatcher.h"
 #include "share/geo/ob_geo_func_intersects.h"
 #include "share/geo/ob_geo_func_disjoint.h"
+#include "share/geo/ob_geo_func_relation.h"
 #include "share/geo/ob_geo_utils.h"
 
 using namespace oceanbase::common;
@@ -174,6 +175,23 @@ private:
     return ret;
   }
 };
+
+#ifdef SEEKDB_COMPACT_GIS_ENABLED
+#define OB_GEO_CART_LINEAR_INTERSECTS(GEO_TYPE1, GEO_TYPE2)                                \
+  OB_GEO_CART_BINARY_FUNC_BEGIN(ObGeoFuncIntersectsImpl, GEO_TYPE1, GEO_TYPE2, bool)       \
+  {                                                                                         \
+    UNUSED(context);                                                                        \
+    return eval_cartesian_wkb_linear_relation(                                              \
+        g1, g2, ObGeoRelationPredicate::INTERSECTS, result);                                \
+  } OB_GEO_FUNC_END
+
+OB_GEO_CART_LINEAR_INTERSECTS(ObWkbGeomLineString, ObWkbGeomLineString);
+OB_GEO_CART_LINEAR_INTERSECTS(ObWkbGeomLineString, ObWkbGeomMultiLineString);
+OB_GEO_CART_LINEAR_INTERSECTS(ObWkbGeomMultiLineString, ObWkbGeomLineString);
+OB_GEO_CART_LINEAR_INTERSECTS(ObWkbGeomMultiLineString, ObWkbGeomMultiLineString);
+
+#undef OB_GEO_CART_LINEAR_INTERSECTS
+#endif
 
 // geometrycollection
 OB_GEO_CART_BINARY_FUNC_BEGIN(ObGeoFuncIntersectsImpl, ObWkbGeomCollection, ObWkbGeomCollection, bool)

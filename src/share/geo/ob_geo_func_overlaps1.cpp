@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX LIB
 
 #include "ob_geo_func_overlaps_helper.ipp"
+#include "share/geo/ob_geo_func_relation.h"
 #include "share/geo/ob_geo_func_utils.h"
 
 using namespace oceanbase::common;
@@ -52,8 +53,13 @@ OB_GEO_CART_BINARY_FUNC_BEGIN(
     ObGeoFuncOverlapsImpl, ObWkbGeomLineString, ObWkbGeomLineString, ObGeoFuncResWithNull)
 {
   UNUSED(context);
+#ifdef SEEKDB_COMPACT_GIS_ENABLED
+  return eval_cartesian_wkb_linear_relation(
+      g1, g2, ObGeoRelationPredicate::OVERLAPS, result.bret);
+#else
   return eval_overlaps_without_strategy<ObWkbGeomLineString, ObWkbGeomLineString>(
       g1, g2, result.bret);
+#endif
 }
 OB_GEO_FUNC_END;
 
@@ -61,8 +67,13 @@ OB_GEO_CART_BINARY_FUNC_BEGIN(
     ObGeoFuncOverlapsImpl, ObWkbGeomLineString, ObWkbGeomMultiLineString, ObGeoFuncResWithNull)
 {
   UNUSED(context);
+#ifdef SEEKDB_COMPACT_GIS_ENABLED
+  return eval_cartesian_wkb_linear_relation(
+      g1, g2, ObGeoRelationPredicate::OVERLAPS, result.bret);
+#else
   return eval_overlaps_without_strategy<ObWkbGeomLineString, ObWkbGeomMultiLineString>(
       g1, g2, result.bret);
+#endif
 }
 OB_GEO_FUNC_END;
 
@@ -109,8 +120,13 @@ OB_GEO_CART_BINARY_FUNC_BEGIN(
     ObGeoFuncOverlapsImpl, ObWkbGeomMultiLineString, ObWkbGeomLineString, ObGeoFuncResWithNull)
 {
   UNUSED(context);
+#ifdef SEEKDB_COMPACT_GIS_ENABLED
+  return eval_cartesian_wkb_linear_relation(
+      g1, g2, ObGeoRelationPredicate::OVERLAPS, result.bret);
+#else
   return eval_overlaps_without_strategy<ObWkbGeomMultiLineString, ObWkbGeomLineString>(
       g1, g2, result.bret);
+#endif
 }
 OB_GEO_FUNC_END;
 
@@ -118,8 +134,13 @@ OB_GEO_CART_BINARY_FUNC_BEGIN(
     ObGeoFuncOverlapsImpl, ObWkbGeomMultiLineString, ObWkbGeomMultiLineString, ObGeoFuncResWithNull)
 {
   UNUSED(context);
+#ifdef SEEKDB_COMPACT_GIS_ENABLED
+  return eval_cartesian_wkb_linear_relation(
+      g1, g2, ObGeoRelationPredicate::OVERLAPS, result.bret);
+#else
   return eval_overlaps_without_strategy<ObWkbGeomMultiLineString, ObWkbGeomMultiLineString>(
       g1, g2, result.bret);
+#endif
 }
 OB_GEO_FUNC_END;
 

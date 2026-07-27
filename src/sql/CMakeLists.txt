@@ -439,6 +439,14 @@ ob_set_subtarget(ob_sql engine_dml
   engine/dml/ob_fk_checker.cpp
 )
 
+if(SEEKDB_ENABLE_GIS_MVT)
+  set(SEEKDB_GIS_MVT_EXPR_SOURCE
+    engine/expr/ob_expr_priv_st_asmvtgeom.cpp)
+else()
+  set(SEEKDB_GIS_MVT_EXPR_SOURCE
+    engine/expr/ob_expr_priv_st_asmvtgeom_stub.cpp)
+endif()
+
 ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_batch_eval_util.cpp
   engine/expr/ob_expr.cpp
@@ -663,7 +671,7 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_st_asgeojson.cpp
   engine/expr/ob_expr_st_centroid.cpp
   engine/expr/ob_expr_st_symdifference.cpp
-  engine/expr/ob_expr_priv_st_asmvtgeom.cpp
+  ${SEEKDB_GIS_MVT_EXPR_SOURCE}
   engine/expr/ob_expr_priv_st_makevalid.cpp
   engine/expr/ob_expr_lock_func.cpp
   engine/expr/ob_expr_extract_value.cpp

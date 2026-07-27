@@ -16,11 +16,31 @@
 
 #define USING_LOG_PREFIX LIB
 #include "share/geo/ob_geo_common.h"
+#include "share/geo/ob_geo_eval_ctx.h"
+#include "lib/rc/context.h"
 
 namespace oceanbase
 {
 namespace common
 {
+
+ObGeoEvalCtx::ObGeoEvalCtx(lib::MemoryContext &mem_ctx)
+  : allocator_(&mem_ctx->get_arena_allocator()),
+    srs_(NULL),
+    g_arg_c_(0),
+    v_arg_c_(0),
+    is_called_in_pg_expr_(false),
+    mem_ctx_(mem_ctx)
+{}
+
+ObGeoEvalCtx::ObGeoEvalCtx(lib::MemoryContext &mem_ctx, const ObSrsItem *srs_item)
+  : allocator_(&mem_ctx->get_arena_allocator()),
+    srs_(srs_item),
+    g_arg_c_(0),
+    v_arg_c_(0),
+    is_called_in_pg_expr_(false),
+    mem_ctx_(mem_ctx)
+{}
 
 // ObGeoWkbByteOrderUtil
 template<>
