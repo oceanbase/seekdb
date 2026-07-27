@@ -131,12 +131,16 @@ int ObCodeGenerator::detect_batch_size(
                                                      log_plan.get_plan_root()));
     }
     if (OB_FAIL(ret)) {
-    } else if (log_plan.get_optimizer_context().has_var_assign()) {
-      // User-variable assignments are stateful across rows and must preserve scalar
-      // expression evaluation order. A batch size of one still uses batch evaluation
-      // and may reuse a user-variable read across batches.
+    } else if (log_plan.get_optimizer_context().has_var_assign()
+               && !log_plan.get_optimizer_context().is_var_assign_only_in_root_stmt()) {
+      // Assignments in a child statement may feed a parent statement without being
+      // projected by the child. Keep the whole plan scalar so their row-by-row side
+      // effects cannot be reused by batch evaluation.
       batch_size = 0;
-    } else if (!vectorize) {
+    } else if (log_plan.get_optimizer_context().has_var_assign() || !vectorize) {
+      // Retain the historical single-row batch path for root-statement assignments
+      // when a registered vector operator exists. This preserves evaluation order
+      // without forcing that operator onto an unsupported scalar path.
       // set max_batch_size = 1
       // if all physical operator is not registered as vec op, disable vectorization
       if (rowsets_enabled && has_registered_vec_op) {
